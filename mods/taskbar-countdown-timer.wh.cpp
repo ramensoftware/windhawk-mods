@@ -2,11 +2,11 @@
 // @id              taskbar-countdown-timer
 // @name            Taskbar Countdown Timer
 // @description     A simple countdown timer integrated into the Windows taskbar
-// @version         1.2
+// @version         1.3
 // @author          Richi
 // @github          https://github.com/richilp
 // @include         explorer.exe
-// @architecture    amd64
+// @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -ldwmapi -lgdi32
 // @license         MIT
 // ==/WindhawkMod==
@@ -58,6 +58,9 @@ While the timer is running, the remaining time is shown directly on the taskbar.
 #include <cstdint>
 #include <cstdlib>
 #include <functional>
+#include <list>
+#include <memory>
+#include <cwchar>
 #include <string>
 #include <dwmapi.h>
 #include <windhawk_utils.h>
@@ -87,13 +90,20 @@ static winrt::event_token g_timerTickToken{};
 
 static std::atomic<int> g_secondsRemaining{0};
 static std::atomic<ULONGLONG> g_deadlineTick{0};
-static wchar_t g_reminder[256]{};
+static wchar_t g_reminder[256]{};  // taskbar UI thread only
 
-static HWND g_timerPopup = nullptr;
-static HWND g_finishedPopup = nullptr;
-static DWORD g_timerPopupThreadId = 0;
-static HANDLE g_timerPopupThread = nullptr;
+static std::atomic<HWND> g_timerPopup{nullptr};
+static std::atomic<HWND> g_finishedPopup{nullptr};
+static std::atomic<DWORD> g_timerPopupThreadId{0};
+static std::atomic<HANDLE> g_timerPopupThread{nullptr};
 static HANDLE g_popupThreadReadyEvent = nullptr;
+static std::atomic<HWND> g_taskbarWnd{nullptr};
+static std::atomic_bool g_buttonInjected{false};
+static std::atomic_bool g_systemTrayModuleHooked{false};
+
+[[clang::no_destroy]] static ColumnDefinition g_timerColumn{nullptr};
+[[clang::no_destroy]] static std::list<FrameworkElement::Loaded_revoker>
+    g_loadedRevokers;
 
 static HINSTANCE g_modInstance = nullptr;
 
@@ -101,6 +111,8 @@ static std::atomic_bool g_unloading{false};
 static HANDLE g_retryStopEvent = nullptr;
 static HANDLE g_retryThread = nullptr;
 
+
+static void ApplyTimerButtonIfAvailable();
 
 // -----------------------------------------------------------------------------
 // Modern popup styling
@@ -129,16 +141,12 @@ static void EnsurePopupResources(
 {
     if (!g_popupBackgroundBrush) {
         g_popupBackgroundBrush =
-            CreateSolidBrush(
-                kPopupBackground
-            );
+            CreateSolidBrush(kPopupBackground);
     }
 
     if (!g_popupEditBrush) {
         g_popupEditBrush =
-            CreateSolidBrush(
-                kPopupEditBackground
-            );
+            CreateSolidBrush(kPopupEditBackground);
     }
 
     if (!dpi) {
@@ -148,38 +156,52 @@ static void EnsurePopupResources(
     if (!g_popupFont ||
         g_popupFontDpi != dpi)
     {
-        if (g_popupFont) {
-            DeleteObject(
-                g_popupFont
-            );
-
-            g_popupFont = nullptr;
-        }
-
-        g_popupFont =
+        HFONT newFont =
             CreateFontW(
-                -MulDiv(
-                    12,
-                    dpi,
-                    72
-                ),
-                0,
-                0,
-                0,
+                -MulDiv(12, dpi, 72),
+                0, 0, 0,
                 FW_NORMAL,
-                FALSE,
-                FALSE,
-                FALSE,
+                FALSE, FALSE, FALSE,
                 DEFAULT_CHARSET,
                 OUT_DEFAULT_PRECIS,
                 CLIP_DEFAULT_PRECIS,
                 CLEARTYPE_QUALITY,
-                DEFAULT_PITCH |
-                    FF_DONTCARE,
+                DEFAULT_PITCH | FF_DONTCARE,
                 L"Segoe UI"
             );
 
-        g_popupFontDpi = dpi;
+        if (newFont) {
+            HFONT oldFont = g_popupFont;
+            g_popupFont = newFont;
+            g_popupFontDpi = dpi;
+
+            auto reapply = [](HWND wnd) {
+                if (!wnd || !g_popupFont) {
+                    return;
+                }
+
+                EnumChildWindows(
+                    wnd,
+                    [](HWND child, LPARAM) -> BOOL {
+                        SendMessageW(
+                            child,
+                            WM_SETFONT,
+                            reinterpret_cast<WPARAM>(g_popupFont),
+                            TRUE
+                        );
+                        return TRUE;
+                    },
+                    0
+                );
+            };
+
+            reapply(g_timerPopup.load());
+            reapply(g_finishedPopup.load());
+
+            if (oldFont) {
+                DeleteObject(oldFont);
+            }
+        }
     }
 }
 
@@ -276,6 +298,7 @@ constexpr int IDC_START          = 1004;
 constexpr int IDC_CANCEL_TIMER   = 1005;
 constexpr int IDC_CLOSE_TIMER    = 1006;
 
+constexpr int IDC_FINISHED_REMINDER = 1099;
 constexpr int IDC_SNOOZE_LABEL   = 1100;
 constexpr int IDC_SNOOZE_MINUTES = 1101;
 constexpr int IDC_SNOOZE         = 1102;
@@ -898,8 +921,34 @@ static XamlRoot GetTaskbarXamlRoot(
     }
     else {
         Wh_Log(
-            L"Unsupported TaskbarHost::FrameHeight, using default offset"
+            L"Unsupported TaskbarHost::FrameHeight"
         );
+        std__Ref_count_base__Decref_Original(
+            taskbarHostSharedPtr[1]
+        );
+        return nullptr;
+    }
+#elif defined(_M_ARM64)
+    const DWORD* p =
+        reinterpret_cast<const DWORD*>(
+            TaskbarHost_FrameHeight_Original
+        );
+
+    if (p[0] == 0xD503237F &&
+        (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
+        p[2] == 0x910003FD &&
+        (p[3] & 0xFFF00FE0) == 0xF8400C00)
+    {
+        offset = (p[3] >> 12) & 0xFF;
+    }
+    else {
+        Wh_Log(
+            L"Unsupported TaskbarHost::FrameHeight"
+        );
+        std__Ref_count_base__Decref_Original(
+            taskbarHostSharedPtr[1]
+        );
+        return nullptr;
     }
 #else
 #error "Unsupported architecture"
@@ -1151,7 +1200,8 @@ static void CancelCountdownOnTaskbarThread(
 // -----------------------------------------------------------------------------
 
 static void ResetPopupForNewTimer(
-    HWND hWnd)
+    HWND hWnd,
+    const wchar_t* activeReminder = nullptr)
 {
     SetWindowTextW(
         hWnd,
@@ -1191,8 +1241,8 @@ static void ResetPopupForNewTimer(
     if (timerRunning) {
         SetWindowTextW(
             reminder,
-            g_reminder[0]
-                ? g_reminder
+            activeReminder && activeReminder[0]
+                ? activeReminder
                 : L"Timer"
         );
 
@@ -1254,10 +1304,6 @@ static LRESULT CALLBACK FinishedPopupWndProc(
     WPARAM wParam,
     LPARAM lParam)
 {
-    EnsurePopupResources(
-        96
-    );
-
     switch (msg)
     {
     case WM_ERASEBKGND:
@@ -1420,10 +1466,20 @@ static LRESULT CALLBACK FinishedPopupWndProc(
             request.seconds =
                 minutes * 60;
 
+            wchar_t finishedReminder[256]{};
+            GetWindowTextW(
+                GetDlgItem(
+                    hWnd,
+                    IDC_FINISHED_REMINDER
+                ),
+                finishedReminder,
+                ARRAYSIZE(finishedReminder)
+            );
+
             wcsncpy_s(
                 request.reminder,
-                g_reminder[0]
-                    ? g_reminder
+                finishedReminder[0]
+                    ? finishedReminder
                     : L"Timer finished",
                 _TRUNCATE
             );
@@ -1464,7 +1520,7 @@ static LRESULT CALLBACK FinishedPopupWndProc(
         return 0;
 
     case WM_DESTROY:
-        g_finishedPopup = nullptr;
+        g_finishedPopup.store(nullptr);
         return 0;
     }
 
@@ -1485,21 +1541,16 @@ static LRESULT CALLBACK TimerPopupWndProc(
 
 
 static constexpr wchar_t kTimerPopupClass[] =
-    L"TaskbarCountdownTimerPopup_v12";
+    L"TaskbarCountdownTimerPopup";
 
 static constexpr wchar_t kFinishedPopupClass[] =
-    L"TaskbarCountdownTimerFinishedPopup_v12";
+    L"TaskbarCountdownTimerFinishedPopup";
 
 
 static bool RegisterOnePopupClass(
     const wchar_t* className,
     WNDPROC wndProc)
 {
-    // No window exists yet at class-registration time.
-    EnsurePopupResources(
-        96
-    );
-
     WNDCLASSEXW wc{
         sizeof(wc)
     };
@@ -1593,9 +1644,10 @@ static void UnregisterPopupClasses()
 
 
 static void ShowFinishedPopup(
-    HWND owner)
+    HWND owner,
+    const wchar_t* reminderText)
 {
-    if (g_finishedPopup) {
+    if (g_finishedPopup.load()) {
         SetForegroundWindow(
             g_finishedPopup
         );
@@ -1635,7 +1687,7 @@ static void ShowFinishedPopup(
         hWnd
     );
 
-    g_finishedPopup = hWnd;
+    g_finishedPopup.store(hWnd);
 
     CreateWindowExW(
         0,
@@ -1657,8 +1709,8 @@ static void ShowFinishedPopup(
     CreateWindowExW(
         0,
         L"STATIC",
-        g_reminder[0]
-            ? g_reminder
+        reminderText && reminderText[0]
+            ? reminderText
             : L"Timer finished",
         WS_CHILD |
             WS_VISIBLE |
@@ -2033,8 +2085,14 @@ static LRESULT CALLBACK TimerPopupWndProc(
         break;
 
     case WM_APP_TIMER_SHOW:
+    {
+        std::unique_ptr<std::wstring> activeReminder(
+            reinterpret_cast<std::wstring*>(lParam)
+        );
+
         ResetPopupForNewTimer(
-            hWnd
+            hWnd,
+            activeReminder ? activeReminder->c_str() : nullptr
         );
 
         LayoutTimerPopup(
@@ -2069,18 +2127,25 @@ static LRESULT CALLBACK TimerPopupWndProc(
         );
 
         return 0;
+    }
 
     case WM_APP_TIMER_FINISHED:
+    {
+        std::unique_ptr<std::wstring> finishedReminder(
+            reinterpret_cast<std::wstring*>(lParam)
+        );
         ShowWindow(
             hWnd,
             SW_HIDE
         );
 
         ShowFinishedPopup(
-            FindCurrentProcessTaskbarWnd()
+            g_taskbarWnd.load(),
+            finishedReminder ? finishedReminder->c_str() : L"Timer finished"
         );
 
         return 0;
+    }
 
     case WM_APP_TIMER_SHUTDOWN:
         DestroyWindow(hWnd);
@@ -2095,7 +2160,7 @@ static LRESULT CALLBACK TimerPopupWndProc(
         return 0;
 
     case WM_DESTROY:
-        g_timerPopup = nullptr;
+        g_timerPopup.store(nullptr);
 
         PostQuitMessage(0);
 
@@ -2146,7 +2211,7 @@ static bool ShowTimerPopup(
         hWnd
     );
 
-    g_timerPopup = hWnd;
+    g_timerPopup.store(hWnd);
 
     CreateWindowExW(
         0,
@@ -2284,7 +2349,7 @@ static bool ShowTimerPopup(
 
     ShowWindow(
         hWnd,
-        SW_SHOW
+        SW_HIDE
     );
 
     UpdateWindow(hWnd);
@@ -2293,15 +2358,43 @@ static bool ShowTimerPopup(
 }
 
 
-static DWORD WINAPI TimerPopupThreadProc(
-    LPVOID param)
+static bool PostStringMessage(
+    HWND hWnd,
+    UINT message,
+    const wchar_t* text)
 {
-    HWND taskbar =
-        reinterpret_cast<HWND>(param);
+    if (!hWnd) {
+        return false;
+    }
 
+    auto payload =
+        new (std::nothrow) std::wstring(
+            text ? text : L""
+        );
+
+    if (!payload) {
+        return false;
+    }
+
+    if (!PostMessageW(
+            hWnd,
+            message,
+            0,
+            reinterpret_cast<LPARAM>(payload)))
+    {
+        delete payload;
+        return false;
+    }
+
+    return true;
+}
+
+
+static DWORD WINAPI TimerPopupThreadProc(
+    LPVOID)
+{
     MSG msg{};
 
-    // Force creation of this thread's message queue before signalling readiness.
     PeekMessageW(
         &msg,
         nullptr,
@@ -2311,9 +2404,7 @@ static DWORD WINAPI TimerPopupThreadProc(
     );
 
     if (g_popupThreadReadyEvent) {
-        SetEvent(
-            g_popupThreadReadyEvent
-        );
+        SetEvent(g_popupThreadReadyEvent);
     }
 
     if (g_unloading.load()) {
@@ -2324,54 +2415,50 @@ static DWORD WINAPI TimerPopupThreadProc(
         return 0;
     }
 
-    if (!ShowTimerPopup(taskbar)) {
+    if (!ShowTimerPopup(nullptr)) {
         UnregisterPopupClasses();
         return 0;
     }
 
-    while (!g_unloading.load() &&
-           GetMessageW(
-               &msg,
-               nullptr,
-               0,
-               0) > 0)
-    {
-        HWND dialog =
-            g_finishedPopup
-                ? g_finishedPopup
-                : g_timerPopup;
+    // The configuration window is created up front but remains hidden until
+    // the taskbar button is clicked.
+    if (HWND popup = g_timerPopup.load()) {
+        ShowWindow(popup, SW_HIDE);
+    }
 
-        if (!dialog ||
-            !IsDialogMessageW(
-                dialog,
-                &msg))
-        {
+    while (!g_unloading.load() &&
+           GetMessageW(&msg, nullptr, 0, 0) > 0)
+    {
+        bool handled = false;
+
+        if (HWND finished = g_finishedPopup.load()) {
+            handled = IsDialogMessageW(finished, &msg) != FALSE;
+        }
+
+        if (!handled) {
+            if (HWND timer = g_timerPopup.load()) {
+                handled = IsDialogMessageW(timer, &msg) != FALSE;
+            }
+        }
+
+        if (!handled) {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
     }
 
-    if (g_finishedPopup &&
-        IsWindow(g_finishedPopup))
-    {
-        DestroyWindow(
-            g_finishedPopup
-        );
+    if (HWND finished = g_finishedPopup.load()) {
+        DestroyWindow(finished);
     }
 
-    if (g_timerPopup &&
-        IsWindow(g_timerPopup))
-    {
-        DestroyWindow(
-            g_timerPopup
-        );
+    if (HWND timer = g_timerPopup.load()) {
+        DestroyWindow(timer);
     }
 
-    g_finishedPopup = nullptr;
-    g_timerPopup = nullptr;
+    g_finishedPopup.store(nullptr);
+    g_timerPopup.store(nullptr);
 
     UnregisterPopupClasses();
-
     return 0;
 }
 
@@ -2383,97 +2470,32 @@ static void OpenTimerPopup(
         return;
     }
 
-    if (g_timerPopup &&
-        IsWindow(g_timerPopup))
-    {
-        PostMessageW(
-            g_timerPopup,
+    HWND popup = g_timerPopup.load();
+
+    if (popup) {
+        PostStringMessage(
+            popup,
             WM_APP_TIMER_SHOW,
-            0,
-            0
+            g_secondsRemaining.load() > 0
+                ? g_reminder
+                : L""
         );
-
         return;
     }
 
-    if (g_timerPopupThread) {
-        if (WaitForSingleObject(
-                g_timerPopupThread,
-                0) ==
-            WAIT_OBJECT_0)
-        {
-            CloseHandle(
-                g_timerPopupThread
-            );
-
-            g_timerPopupThread =
-                nullptr;
-
-            g_timerPopupThreadId =
-                0;
-        }
-        else {
-            return;
-        }
-    }
-
-    if (g_popupThreadReadyEvent) {
-        CloseHandle(
-            g_popupThreadReadyEvent
-        );
-
-        g_popupThreadReadyEvent =
-            nullptr;
-    }
-
-    g_popupThreadReadyEvent =
-        CreateEventW(
-            nullptr,
-            TRUE,
-            FALSE,
-            nullptr
-        );
-
-    if (!g_popupThreadReadyEvent) {
-        Wh_Log(
-            L"ERROR: Could not create popup ready event"
-        );
-
+    HANDLE thread = g_timerPopupThread.load();
+    if (!thread) {
+        Wh_Log(L"Popup thread isn't available yet");
         return;
     }
 
-    g_timerPopupThread =
-        CreateThread(
-            nullptr,
-            0,
-            TimerPopupThreadProc,
-            taskbar,
-            0,
-            &g_timerPopupThreadId
-        );
-
-    if (!g_timerPopupThread) {
-        CloseHandle(
-            g_popupThreadReadyEvent
-        );
-
-        g_popupThreadReadyEvent =
-            nullptr;
-
-        g_timerPopupThreadId =
-            0;
-
-        Wh_Log(
-            L"ERROR: Could not create popup thread"
-        );
-
+    // Don't block the taskbar UI thread waiting for the popup thread.
+    if (WaitForSingleObject(thread, 0) == WAIT_OBJECT_0) {
+        Wh_Log(L"Popup thread exited unexpectedly");
         return;
     }
 
-    WaitForSingleObject(
-        g_popupThreadReadyEvent,
-        INFINITE
-    );
+    Wh_Log(L"Popup thread is still starting; try again");
 }
 
 
@@ -2541,6 +2563,8 @@ static void AddTimerButton(
 
     // The current XAML tree already has our button.
     if (existing) {
+        g_taskbarWnd.store(taskbar);
+        g_buttonInjected.store(true);
         return;
     }
 
@@ -2568,6 +2592,7 @@ static void AddTimerButton(
 
     g_timerText =
         nullptr;
+    g_timerColumn = nullptr;
 
     g_timerButton = Button();
     g_timerText = TextBlock();
@@ -2673,11 +2698,11 @@ static void AddTimerButton(
                         g_reminder
                     );
 
-                    if (g_timerPopup &&
-                        IsWindow(g_timerPopup))
+                    if (g_timerPopup.load() &&
+                        IsWindow(g_timerPopup.load()))
                     {
                         PostMessageW(
-                            g_timerPopup,
+            g_timerPopup.load(),
                             WM_APP_TIMER_FINISHED,
                             0,
                             0
@@ -2750,15 +2775,15 @@ static void AddTimerButton(
         auto columns =
             trayGrid.ColumnDefinitions();
 
-        ColumnDefinition timerColumn;
+        g_timerColumn = ColumnDefinition();
 
-        timerColumn.Width(
+        g_timerColumn.Width(
             GridLengthHelper::Auto()
         );
 
         columns.InsertAt(
             0,
-            timerColumn
+            g_timerColumn
         );
 
         for (uint32_t i = 0;
@@ -2823,18 +2848,20 @@ static void AddTimerButton(
             g_deadlineTick.store(0);
             g_secondsRemaining.store(0);
 
-            if (g_timerPopup &&
-                IsWindow(g_timerPopup))
+            if (g_timerPopup.load() &&
+                IsWindow(g_timerPopup.load()))
             {
-                PostMessageW(
-                    g_timerPopup,
+                PostStringMessage(
+                    g_timerPopup.load(),
                     WM_APP_TIMER_FINISHED,
-                    0,
-                    0
+                    g_reminder
                 );
             }
         }
     }
+
+    g_taskbarWnd.store(taskbar);
+    g_buttonInjected.store(true);
 
     Wh_Log(
         L"Timer button added to taskbar"
@@ -2884,42 +2911,51 @@ static void RemoveTimerButton(
             auto parentGrid =
                 parentElement.try_as<Grid>();
 
-            if (parentGrid) {
-                for (uint32_t i = 0;
-                     i < children.Size();
-                     i++)
-                {
-                    auto child =
-                        children.GetAt(i)
-                            .try_as<FrameworkElement>();
-
-                    if (!child) {
-                        continue;
-                    }
-
-                    int currentColumn =
-                        Grid::GetColumn(child);
-
-                    if (currentColumn > 0) {
-                        Grid::SetColumn(
-                            child,
-                            currentColumn - 1
-                        );
-                    }
-                }
-
+            if (parentGrid && g_timerColumn) {
                 auto columns =
                     parentGrid.ColumnDefinitions();
 
-                if (columns.Size() > 0) {
-                    columns.RemoveAt(0);
+                uint32_t columnIndex = 0;
+                if (columns.IndexOf(
+                        g_timerColumn,
+                        columnIndex))
+                {
+                    for (uint32_t i = 0;
+                         i < children.Size();
+                         i++)
+                    {
+                        auto child =
+                            children.GetAt(i)
+                                .try_as<FrameworkElement>();
+
+                        if (!child) {
+                            continue;
+                        }
+
+                        int currentColumn =
+                            Grid::GetColumn(child);
+
+                        if (currentColumn >
+                            static_cast<int>(columnIndex))
+                        {
+                            Grid::SetColumn(
+                                child,
+                                currentColumn - 1
+                            );
+                        }
+                    }
+
+                    columns.RemoveAt(columnIndex);
                 }
             }
         }
     }
 
+    g_loadedRevokers.clear();
+    g_timerColumn = nullptr;
     g_timerText = nullptr;
     g_timerButton = nullptr;
+    g_buttonInjected.store(false);
 }
 
 
@@ -2936,34 +2972,215 @@ static void ApplyTimerButtonIfAvailable()
         return;
     }
 
-    RunFromWindowThread(
-        taskbar,
-        AddTimerButton,
-        taskbar
-    );
+    g_taskbarWnd.store(taskbar);
+
+    if (!RunFromWindowThread(
+            taskbar,
+            AddTimerButton,
+            taskbar))
+    {
+        Wh_Log(L"Could not access taskbar UI thread");
+    }
 }
 
 
 static DWORD WINAPI RetryThreadProc(
     LPVOID)
 {
-    while (!g_unloading.load()) {
-        ApplyTimerButtonIfAvailable();
-
-        DWORD waitResult =
-            WaitForSingleObject(
+    for (int i = 0;
+         i < 5 && !g_unloading.load();
+         i++)
+    {
+        if (WaitForSingleObject(
                 g_retryStopEvent,
-                5000
-            );
-
-        if (waitResult !=
-            WAIT_TIMEOUT)
+                2000) != WAIT_TIMEOUT)
         {
             break;
         }
+
+        if (g_buttonInjected.load() ||
+            g_unloading.load())
+        {
+            break;
+        }
+
+        Wh_Log(L"Taskbar injection retry %d", i + 1);
+        ApplyTimerButtonIfAvailable();
     }
 
     return 0;
+}
+
+
+// -----------------------------------------------------------------------------
+// System tray rebuild hook
+// -----------------------------------------------------------------------------
+
+using IconView_IconView_t =
+    void* (WINAPI*)(void* pThis);
+
+static IconView_IconView_t
+    IconView_IconView_Original = nullptr;
+
+using LoadLibraryExW_t =
+    HMODULE (WINAPI*)(LPCWSTR, HANDLE, DWORD);
+
+static LoadLibraryExW_t
+    LoadLibraryExW_Original = nullptr;
+
+
+static HMODULE GetSystemTrayModuleHandle()
+{
+    if (HMODULE module =
+            GetModuleHandleW(L"SystemTray.dll"))
+    {
+        return module;
+    }
+
+    if (HMODULE module =
+            GetModuleHandleW(L"Taskbar.View.dll"))
+    {
+        return module;
+    }
+
+    return GetModuleHandleW(
+        L"ExplorerExtensions.dll"
+    );
+}
+
+
+static void* WINAPI IconView_IconView_Hook(
+    void* pThis)
+{
+    auto result =
+        IconView_IconView_Original(pThis);
+
+    if (g_unloading.load()) {
+        return result;
+    }
+
+    FrameworkElement iconView = nullptr;
+
+    reinterpret_cast<IUnknown**>(pThis)[1]
+        ->QueryInterface(
+            winrt::guid_of<FrameworkElement>(),
+            winrt::put_abi(iconView)
+        );
+
+    if (!iconView) {
+        return result;
+    }
+
+    g_loadedRevokers.emplace_back();
+    auto it = std::prev(g_loadedRevokers.end());
+
+    *it = iconView.Loaded(
+        winrt::auto_revoke_t{},
+        [it](
+            winrt::Windows::Foundation::IInspectable const&,
+            RoutedEventArgs const&)
+        {
+            g_loadedRevokers.erase(it);
+
+            if (g_unloading.load()) {
+                return;
+            }
+
+            // A new IconView means the tray may have rebuilt its XAML tree.
+            g_buttonInjected.store(false);
+            ApplyTimerButtonIfAvailable();
+        }
+    );
+
+    return result;
+}
+
+
+static bool HookSystemTraySymbols(
+    HMODULE module)
+{
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {{
+        {
+            LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"
+        },
+        &IconView_IconView_Original,
+        IconView_IconView_Hook,
+    }};
+
+    return WindhawkUtils::HookSymbols(
+        module,
+        hooks,
+        ARRAYSIZE(hooks)
+    );
+}
+
+
+static void HandleLoadedModuleIfSystemTray(
+    HMODULE module)
+{
+    if (g_systemTrayModuleHooked.load() ||
+        GetSystemTrayModuleHandle() != module)
+    {
+        return;
+    }
+
+    if (HookSystemTraySymbols(module)) {
+        g_systemTrayModuleHooked.store(true);
+        Wh_ApplyHookOperations();
+    }
+}
+
+
+static HMODULE WINAPI LoadLibraryExW_Hook(
+    LPCWSTR fileName,
+    HANDLE file,
+    DWORD flags)
+{
+    HMODULE module =
+        LoadLibraryExW_Original(
+            fileName,
+            file,
+            flags
+        );
+
+    if (module) {
+        HandleLoadedModuleIfSystemTray(module);
+    }
+
+    return module;
+}
+
+
+static DWORD PumpWaitForThread(
+    HANDLE thread)
+{
+    if (!thread) {
+        return WAIT_OBJECT_0;
+    }
+
+    DWORD result;
+    do {
+        result = MsgWaitForMultipleObjects(
+            1,
+            &thread,
+            FALSE,
+            INFINITE,
+            QS_SENDMESSAGE
+        );
+
+        if (result == WAIT_OBJECT_0 + 1) {
+            MSG message;
+            PeekMessageW(
+                &message,
+                nullptr,
+                0,
+                0,
+                PM_NOREMOVE
+            );
+        }
+    } while (result == WAIT_OBJECT_0 + 1);
+
+    return result;
 }
 
 
@@ -3009,12 +3226,38 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
+    if (HMODULE systemTray = GetSystemTrayModuleHandle()) {
+        if (HookSystemTraySymbols(systemTray)) {
+            g_systemTrayModuleHooked.store(true);
+        }
+    }
+    else {
+        HMODULE kernelbase =
+            GetModuleHandleW(L"kernelbase.dll");
+
+        auto loadLibraryExW = kernelbase
+            ? reinterpret_cast<LoadLibraryExW_t>(
+                  GetProcAddress(kernelbase, "LoadLibraryExW")
+              )
+            : nullptr;
+
+        if (loadLibraryExW) {
+            WindhawkUtils::SetFunctionHook(
+                loadLibraryExW,
+                LoadLibraryExW_Hook,
+                &LoadLibraryExW_Original
+            );
+        }
+    }
+
     return TRUE;
 }
 
 
 void Wh_ModAfterInit()
 {
+    ApplyTimerButtonIfAvailable();
+
     g_retryStopEvent =
         CreateEventW(
             nullptr,
@@ -3023,32 +3266,48 @@ void Wh_ModAfterInit()
             nullptr
         );
 
-    if (!g_retryStopEvent) {
-        Wh_Log(
-            L"ERROR: Could not create retry stop event"
-        );
-
-        ApplyTimerButtonIfAvailable();
-
-        return;
+    if (g_retryStopEvent) {
+        g_retryThread =
+            CreateThread(
+                nullptr,
+                0,
+                RetryThreadProc,
+                nullptr,
+                0,
+                nullptr
+            );
     }
 
-    g_retryThread =
-        CreateThread(
+    g_popupThreadReadyEvent =
+        CreateEventW(
             nullptr,
-            0,
-            RetryThreadProc,
-            nullptr,
-            0,
+            TRUE,
+            FALSE,
             nullptr
         );
 
-    if (!g_retryThread) {
-        Wh_Log(
-            L"ERROR: Could not create taskbar retry thread"
-        );
+    if (g_popupThreadReadyEvent) {
+        DWORD threadId = 0;
+        HANDLE thread =
+            CreateThread(
+                nullptr,
+                0,
+                TimerPopupThreadProc,
+                nullptr,
+                0,
+                &threadId
+            );
 
-        ApplyTimerButtonIfAvailable();
+        if (thread) {
+            g_timerPopupThread.store(thread);
+            g_timerPopupThreadId.store(threadId);
+
+            // Bounded wait: initialization must never block indefinitely.
+            WaitForSingleObject(
+                g_popupThreadReadyEvent,
+                2000
+            );
+        }
     }
 }
 
@@ -3070,136 +3329,105 @@ void Wh_ModUninit()
     g_unloading.store(true);
 
     if (g_retryStopEvent) {
-        SetEvent(
-            g_retryStopEvent
-        );
+        SetEvent(g_retryStopEvent);
     }
 
     if (g_retryThread) {
-        WaitForSingleObject(
-            g_retryThread,
-            INFINITE
-        );
-
-        CloseHandle(
-            g_retryThread
-        );
-
-        g_retryThread =
-            nullptr;
+        PumpWaitForThread(g_retryThread);
+        CloseHandle(g_retryThread);
+        g_retryThread = nullptr;
     }
 
     if (g_retryStopEvent) {
-        CloseHandle(
-            g_retryStopEvent
-        );
-
-        g_retryStopEvent =
-            nullptr;
+        CloseHandle(g_retryStopEvent);
+        g_retryStopEvent = nullptr;
     }
 
-    HWND taskbar =
-        FindCurrentProcessTaskbarWnd();
+    bool removed = false;
 
-    if (taskbar) {
-        RunFromWindowThread(
-            taskbar,
-            RemoveTimerButton,
-            nullptr
-        );
-    }
-
-    if (g_finishedPopup &&
-        IsWindow(g_finishedPopup))
+    for (int attempt = 0;
+         attempt < 5 && !removed;
+         attempt++)
     {
-        PostMessageW(
-            g_finishedPopup,
-            WM_CLOSE,
-            0,
-            0
+        HWND taskbar = g_taskbarWnd.load();
+        if (!taskbar || !IsWindow(taskbar)) {
+            taskbar = FindCurrentProcessTaskbarWnd();
+        }
+
+        if (taskbar) {
+            removed = RunFromWindowThread(
+                taskbar,
+                RemoveTimerButton,
+                nullptr
+            );
+        }
+
+        if (!removed) {
+            Sleep(50);
+        }
+    }
+
+    if (!removed && g_buttonInjected.load()) {
+        Wh_Log(
+            L"ERROR: Could not remove timer XAML objects before unload"
         );
     }
 
-    if (g_timerPopup &&
-        IsWindow(g_timerPopup))
-    {
-        PostMessageW(
-            g_timerPopup,
-            WM_APP_TIMER_SHUTDOWN,
-            0,
-            0
-        );
-    }
+    DWORD popupThreadId =
+        g_timerPopupThreadId.load();
 
-    if (g_timerPopupThread) {
+    if (popupThreadId) {
+        // The queue-ready event is created once and never recycled.
         if (g_popupThreadReadyEvent) {
             WaitForSingleObject(
                 g_popupThreadReadyEvent,
-                INFINITE
+                2000
             );
         }
 
-        if (g_timerPopupThreadId) {
-            PostThreadMessageW(
-                g_timerPopupThreadId,
-                WM_QUIT,
-                0,
-                0
-            );
-        }
-
-        WaitForSingleObject(
-            g_timerPopupThread,
-            INFINITE
+        PostThreadMessageW(
+            popupThreadId,
+            WM_QUIT,
+            0,
+            0
         );
+    }
 
-        CloseHandle(
-            g_timerPopupThread
-        );
+    HANDLE popupThread =
+        g_timerPopupThread.load();
 
-        g_timerPopupThread =
-            nullptr;
+    if (popupThread) {
+        PumpWaitForThread(popupThread);
+        CloseHandle(popupThread);
+        g_timerPopupThread.store(nullptr);
     }
 
     if (g_popupThreadReadyEvent) {
-        CloseHandle(
-            g_popupThreadReadyEvent
-        );
-
-        g_popupThreadReadyEvent =
-            nullptr;
+        CloseHandle(g_popupThreadReadyEvent);
+        g_popupThreadReadyEvent = nullptr;
     }
 
-    g_finishedPopup = nullptr;
-    g_timerPopup = nullptr;
-    g_timerPopupThreadId = 0;
+    g_timerPopupThreadId.store(0);
+    g_finishedPopup.store(nullptr);
+    g_timerPopup.store(nullptr);
 
-    // Popup classes are unregistered by the popup thread before it exits.
-    // GDI objects are destroyed only after that thread is fully joined.
+    // Popup thread is gone, so no controls can still reference these objects.
     if (g_popupFont) {
-        DeleteObject(
-            g_popupFont
-        );
-
+        DeleteObject(g_popupFont);
         g_popupFont = nullptr;
-        g_popupFontDpi = 0;
     }
 
     if (g_popupEditBrush) {
-        DeleteObject(
-            g_popupEditBrush
-        );
-
+        DeleteObject(g_popupEditBrush);
         g_popupEditBrush = nullptr;
     }
 
     if (g_popupBackgroundBrush) {
-        DeleteObject(
-            g_popupBackgroundBrush
-        );
-
+        DeleteObject(g_popupBackgroundBrush);
         g_popupBackgroundBrush = nullptr;
     }
+
+    g_popupFontDpi = 0;
 
     Wh_Log(
         L"Taskbar Countdown Timer unloaded"
