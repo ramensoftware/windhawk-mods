@@ -587,15 +587,12 @@ HRESULT WINAPI HookedDrawThemeBackground(
             else if (iPartId == PP_TRANSPARENTBAR) heightFactor = 1;
 
             radius = (clipRect.bottom - clipRect.top) * heightFactor / 200 + 1;
-        } else {
-            radius = GetCornerRadius(clipRect);
-        }
-
-        if (wcscmp(g_renderingMode, L"visualStyles") != 0) {
+        } else if (wcscmp(g_renderingMode, L"custom") == 0) {
             int inset = (clipRect.bottom - clipRect.top) * (100 - heightFactor) / 200;
 
             clipRect.top = clipRect.top + inset;
             clipRect.bottom = clipRect.bottom - inset;
+            radius = GetCornerRadius(clipRect);
         }
 
         if (iPartId == PP_FILL) {
