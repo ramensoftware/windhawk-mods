@@ -364,6 +364,8 @@ struct Drawer {
     bool gridBackgroundSet = false;
     winrt::event_token enteredToken{};
     winrt::event_token exitedToken{};
+    winrt::event_token captureLostToken{};
+    winrt::event_token canceledToken{};
     winrt::event_token timerToken{};
     DispatcherTimer timer{nullptr};
 };
@@ -898,6 +900,24 @@ void AttachTrigger(std::shared_ptr<Drawer> drawer, FrameworkElement trigger) {
             }
         });
 
+    // If something takes the pointer capture, PointerExited may never arrive
+    // and the drawer would stay open until the next enter/exit pair.
+    drawer->captureLostToken = element.PointerCaptureLost(
+        [weakDrawer](WF::IInspectable const&,
+                     Input::PointerRoutedEventArgs const&) {
+            if (auto drawer = weakDrawer.lock()) {
+                ScheduleTransition(drawer, false);
+            }
+        });
+
+    drawer->canceledToken = element.PointerCanceled(
+        [weakDrawer](WF::IInspectable const&,
+                     Input::PointerRoutedEventArgs const&) {
+            if (auto drawer = weakDrawer.lock()) {
+                ScheduleTransition(drawer, false);
+            }
+        });
+
     drawer->trigger = trigger;
 }
 
@@ -945,10 +965,18 @@ void TearDownDrawer(Drawer& drawer) {
             if (drawer.exitedToken.value) {
                 element.PointerExited(drawer.exitedToken);
             }
+            if (drawer.captureLostToken.value) {
+                element.PointerCaptureLost(drawer.captureLostToken);
+            }
+            if (drawer.canceledToken.value) {
+                element.PointerCanceled(drawer.canceledToken);
+            }
         }
     }
     drawer.enteredToken = {};
     drawer.exitedToken = {};
+    drawer.captureLostToken = {};
+    drawer.canceledToken = {};
 
     for (auto& item : drawer.items) {
         if (item.widthStoryboard) {
@@ -1006,10 +1034,73 @@ void TearDownAllDrawers() {
     g_drawers->clear();
 }
 
-void InitDrawerForGrid(FrameworkElement grid) {
+bool IsCursorOnElement(FrameworkElement element, HWND hWnd) {
+    POINT pt;
+    if (!GetCursorPos(&pt) || !ScreenToClient(hWnd, &pt)) {
+        return false;
+    }
+
+    UINT dpi = GetDpiForWindow(hWnd);
+    if (!dpi) {
+        return false;
+    }
+
+    int logicalX = MulDiv(pt.x, 96, dpi);
+    int logicalY = MulDiv(pt.y, 96, dpi);
+    auto topLeft = element.TransformToVisual(nullptr).TransformPoint({0, 0});
+    float width = (float)element.ActualWidth();
+    float height = (float)element.ActualHeight();
+
+    return logicalX >= topLeft.X && logicalX < topLeft.X + width &&
+           logicalY >= topLeft.Y && logicalY < topLeft.Y + height;
+}
+
+// Collects the enabled groups in tree order, so the stagger cascades in the
+// same direction they are laid out. Existing entries keep their measured
+// widths. Returns true if a group was picked up that was not tracked before,
+// which happens when one appears later - NonActivatableStack, for instance,
+// only exists once a second keyboard layout is added.
+bool RefreshDrawerMembers(Drawer& drawer) {
+    auto grid = drawer.grid.get();
+    if (!grid) {
+        return false;
+    }
+
+    std::vector<DrawerItem> refreshed;
+    bool added = false;
+
+    EnumChildElements(grid, [&drawer, &refreshed,
+                             &added](FrameworkElement child) {
+        if (!IsMemberEnabled(child.Name())) {
+            return false;
+        }
+
+        for (const auto& item : drawer.items) {
+            auto existing = item.element.get();
+            if (existing && existing == child) {
+                refreshed.push_back(item);
+                return false;
+            }
+        }
+
+        Wh_Log(L"Drawer member: %s", child.Name().c_str());
+        refreshed.push_back(DrawerItem{.element = child});
+        added = true;
+        return false;
+    });
+
+    drawer.items = std::move(refreshed);
+    return added;
+}
+
+void InitDrawerForGrid(FrameworkElement grid, HWND hTaskbarWnd) {
     for (auto& existing : *g_drawers) {
         if (auto existingGrid = existing->grid.get()) {
             if (existingGrid == grid) {
+                // A group may have appeared since the drawer was built.
+                if (RefreshDrawerMembers(*existing) && !existing->open) {
+                    SetDrawerOpen(*existing, false, false);
+                }
                 return;
             }
         }
@@ -1018,16 +1109,7 @@ void InitDrawerForGrid(FrameworkElement grid) {
     auto drawer = std::make_shared<Drawer>();
     drawer->grid = grid;
 
-    // Children are enumerated in tree order so the stagger cascades in the same
-    // direction they are laid out.
-    EnumChildElements(grid, [&drawer](FrameworkElement child) {
-        auto name = child.Name();
-        if (IsMemberEnabled(name)) {
-            Wh_Log(L"Drawer member: %s", name.c_str());
-            drawer->items.push_back(DrawerItem{.element = child});
-        }
-        return false;
-    });
+    RefreshDrawerMembers(*drawer);
 
     if (drawer->items.empty()) {
         Wh_Log(L"No drawer members found");
@@ -1057,7 +1139,13 @@ void InitDrawerForGrid(FrameworkElement grid) {
     AttachTrigger(drawer, trigger);
     g_drawers->push_back(drawer);
 
-    SetDrawerOpen(*drawer, false, false);
+    // Starting closed under the pointer would snap the tray shut and leave it
+    // shut until the pointer left and came back, which is what happens when the
+    // mod is enabled or a setting changed while hovering the tray.
+    bool startOpen =
+        hTaskbarWnd && IsCursorOnElement(trigger, hTaskbarWnd);
+
+    SetDrawerOpen(*drawer, startOpen, false);
 }
 
 void InitDrawerFromDescendant(FrameworkElement element) {
@@ -1067,10 +1155,12 @@ void InitDrawerFromDescendant(FrameworkElement element) {
         return;
     }
 
-    InitDrawerForGrid(grid);
+    // No taskbar window to hit test against on this path, so a drawer created
+    // here always starts closed.
+    InitDrawerForGrid(grid, nullptr);
 }
 
-void ApplyToXamlRoot(XamlRoot xamlRoot) {
+void ApplyToXamlRoot(XamlRoot xamlRoot, HWND hTaskbarWnd) {
     auto content = xamlRoot.Content().try_as<FrameworkElement>();
     if (!content) {
         return;
@@ -1089,7 +1179,7 @@ void ApplyToXamlRoot(XamlRoot xamlRoot) {
         return;
     }
 
-    InitDrawerForGrid(grid);
+    InitDrawerForGrid(grid, hTaskbarWnd);
 }
 
 // -----------------------------------------------------------------------------
@@ -1506,7 +1596,7 @@ void ApplySettings() {
                         continue;
                     }
 
-                    ApplyToXamlRoot(xamlRoot);
+                    ApplyToXamlRoot(xamlRoot, taskbarWnd.hWnd);
                 } catch (winrt::hresult_error const& ex) {
                     Wh_Log(L"Apply failed: %s", ex.message().c_str());
                 }
