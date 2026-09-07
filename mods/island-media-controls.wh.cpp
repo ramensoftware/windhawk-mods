@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.10.38
+// @version         0.10.40
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -757,6 +757,7 @@ struct PopupOverlayWgcRenderParameters {
     int targetRadiusPx = 1;
     bool morphing = false;
     bool allowScreenCapture = false;
+    bool transparentMaterial = false;
     bool useLiquidLensWarp = false;
     float blurStdDev = 18.0f;
     float refractionBlurStdDev = 2.0f;
@@ -1821,6 +1822,8 @@ void ApplySettingsMigrations(Settings* settings) {
         if (migratedVersion < 1 && settings->material == L"mica_like") {
             Wh_SetIntValue(kMigrateMicaLikeMaterialValue, 1);
         }
+        // Intentionally read the removed legacy key: Windhawk keeps stored
+        // values available so existing compact-layout users can be migrated.
         if (migratedVersion < 2 && Wh_GetIntSetting(L"Main.Compact") != 0) {
             Wh_SetIntValue(kMigrateLegacyCompactValue, 1);
         }
@@ -1988,8 +1991,19 @@ bool RunFromWindowThread(HWND hwnd,
     }
 
     Payload payload{proc, param};
-    SendMessageW(hwnd, msg, 0, reinterpret_cast<LPARAM>(&payload));
+    // The payload lives on this stack. SMTO_NOTIMEOUTIFNOTHUNG allows the
+    // timeout to abort a thread which never starts dispatching, but once the
+    // hook callback begins it keeps this call blocked until the payload is no
+    // longer in use.
+    DWORD_PTR ignoredResult = 0;
+    BOOL dispatched = SendMessageTimeoutW(
+        hwnd, msg, 0, reinterpret_cast<LPARAM>(&payload),
+        SMTO_ABORTIFHUNG | SMTO_BLOCK | SMTO_NOTIMEOUTIFNOTHUNG,
+        1500, &ignoredResult);
     UnhookWindowsHookEx(hook);
+    if (!dispatched && !payload.invoked) {
+        Wh_Log(L"Island: taskbar-thread dispatch timed out or failed");
+    }
     if (callbackInvoked) {
         *callbackInvoked = payload.invoked;
     }
@@ -2247,25 +2261,18 @@ std::wstring MediaContentKey(MediaState const& state) {
            std::to_wstring(MediaThumbFingerprint(state.thumbnailBytes));
 }
 
-MediaState SnapshotMedia() {
+MediaState SnapshotMediaForWorkerRecovery() {
     std::lock_guard lock(g_mediaMutex);
     return g_media;
-}
-
-bool IsMediaNavigationKnownUnavailable(int direction) {
-    if (direction == 0) {
-        return false;
-    }
-    MediaState state = SnapshotMedia();
-    if (!state.hasSession) {
-        return true;
-    }
-    return direction < 0 ? !state.canSkipPrevious : !state.canSkipNext;
 }
 
 struct MediaProgressSnapshot {
     bool hasSession = false;
     bool isPlaying = false;
+    bool canSeek = false;
+    bool canSkipPrevious = false;
+    bool canSkipNext = false;
+    int64_t timelineStartTicks = 0;
     int64_t positionTicks = 0;
     int64_t durationTicks = 0;
     uint64_t revision = 0;
@@ -2277,10 +2284,44 @@ MediaProgressSnapshot SnapshotMediaProgress() {
     return {
         g_media.hasSession,
         g_media.isPlaying,
+        g_media.canSeek,
+        g_media.canSkipPrevious,
+        g_media.canSkipNext,
+        g_media.timelineStartTicks,
         g_media.positionTicks,
         g_media.durationTicks,
         g_mediaProgressRevision,
         g_mediaStateTimestamp,
+    };
+}
+
+bool IsMediaNavigationKnownUnavailable(int direction) {
+    if (direction == 0) {
+        return false;
+    }
+    MediaProgressSnapshot state = SnapshotMediaProgress();
+    if (!state.hasSession) {
+        return true;
+    }
+    return direction < 0 ? !state.canSkipPrevious : !state.canSkipNext;
+}
+
+struct MediaUiSnapshot {
+    std::wstring title;
+    std::wstring artist;
+    bool hasSession = false;
+    bool isPlaying = false;
+    std::shared_ptr<PreparedArtwork const> preparedArtwork;
+};
+
+MediaUiSnapshot SnapshotMediaForUi() {
+    std::lock_guard lock(g_mediaMutex);
+    return {
+        g_media.title,
+        g_media.artist,
+        g_media.hasSession,
+        g_media.isPlaying,
+        g_media.preparedArtwork,
     };
 }
 
@@ -2544,7 +2585,7 @@ void RefreshMediaState(
         // A transient GSMTC/property failure during a track change must not
         // publish an artificial no-media frame. Keep the last valid snapshot;
         // a successful refresh will still clear it when the session is gone.
-        state = SnapshotMedia();
+        state = SnapshotMediaForWorkerRecovery();
     }
     PrepareMediaArtwork(state);
     SetMedia(std::move(state));
@@ -2563,7 +2604,7 @@ void RunMediaCommand(MediaCommand command) {
 }
 
 void SeekToMediaPosition(double ratio) {
-    MediaState state = SnapshotMedia();
+    MediaProgressSnapshot state = SnapshotMediaProgress();
     if (!state.hasSession || state.durationTicks <= 0) {
         return;
     }
@@ -4635,8 +4676,12 @@ std::wstring FormatMediaTime(int64_t ticks) {
     return buffer;
 }
 
-void UpdatePopupAlbumBitmap(MediaState const& state) {
-    uint64_t hash = ThumbnailHash(state.thumbnailBytes);
+void UpdatePopupAlbumBitmap(MediaUiSnapshot const& state) {
+    static std::vector<uint8_t> const emptyThumbnailBytes;
+    std::vector<uint8_t> const& thumbnailBytes =
+        state.preparedArtwork ? state.preparedArtwork->displayBytes
+                              : emptyThumbnailBytes;
+    uint64_t hash = ThumbnailHash(thumbnailBytes);
     if (hash == g_popupThumbnailHash) {
         return;
     }
@@ -4647,7 +4692,7 @@ void UpdatePopupAlbumBitmap(MediaState const& state) {
         g_popupAlbumBitmap = nullptr;
     }
     if (hash) {
-        g_popupAlbumBitmap = DecodeAlbumBitmap(state.thumbnailBytes, 256);
+        g_popupAlbumBitmap = DecodeAlbumBitmap(thumbnailBytes, 256);
     }
 }
 
@@ -6103,7 +6148,7 @@ void ApplyPopupButtonVisual(Border const& surface, bool hovered = false) {
     surface.BorderThickness({0, 0, 0, 0});
     surface.BorderBrush(Brush(Color(0x00, 0x00, 0x00, 0x00)));
 
-    bool playing = SnapshotMedia().isPlaying;
+    bool playing = SnapshotMediaProgress().isPlaying;
     if (auto icon = surface.Child().try_as<controls::FontIcon>()) {
         icon.Visibility(Visibility::Visible);
         icon.Opacity(1.0);
@@ -6335,7 +6380,7 @@ Border MakePopupXamlButton(const wchar_t* name, void (*onClick)(), bool primary 
             return;
         }
 
-        MediaState state = SnapshotMedia();
+        MediaProgressSnapshot state = SnapshotMediaProgress();
         if (primary && !state.hasSession) {
             TriggerPopupNoMediaPlayBounce(motion);
         } else if (motionDirection != 0 && !state.hasSession) {
@@ -9515,7 +9560,7 @@ void ApplyExpandedState();
 void UpdatePlayerContents();
 
 void UpdatePopupSeekPreview(double ratio) {
-    MediaState state = SnapshotMedia();
+    MediaProgressSnapshot state = SnapshotMediaProgress();
     if (!state.hasSession || state.durationTicks <= 0 || !g_popupXamlProgress) {
         g_popupSeekDragging = false;
         EndPopupSeekFeedback();
@@ -9649,7 +9694,7 @@ void EndPopupSeek(bool commit) {
     EndPopupSeekFeedback();
     if (commit) {
         auto now = std::chrono::steady_clock::now();
-        MediaState state = SnapshotMedia();
+        MediaProgressSnapshot state = SnapshotMediaProgress();
         int64_t targetTicks = state.durationTicks > 0
                                   ? static_cast<int64_t>(std::llround(
                                         static_cast<double>(state.durationTicks) *
@@ -10041,8 +10086,13 @@ LRESULT CALLBACK ExpandedPopupWndProc(HWND hwnd, UINT message, WPARAM wParam, LP
 
 
             if (g_popupXamlRoot) {
-                UpdatePopupLiveProgressFromSnapshot();
-                RenderExpandedPopupLayer();
+                // CompositionTarget::Rendering already performs both updates
+                // while a spring or media transition is active. Let the timer
+                // take over only after that render loop has settled.
+                if (!g_popupRenderingHooked) {
+                    UpdatePopupLiveProgressFromSnapshot();
+                    RenderExpandedPopupLayer();
+                }
                 return 0;
             }
 
@@ -11480,7 +11530,8 @@ void RenderPopupOverlayWgcFrameLocked(
                 g_popupOverlayWgcBackdropLuma.store(
                     0, std::memory_order_release);
             }
-        } else if (IsTransparentMaterial() && !IsDarkModeApprox() &&
+        } else if (renderParameters.transparentMaterial &&
+                   !IsDarkModeApprox() &&
                    g_popupOverlayWgcFrameCount <= 36 &&
                    g_popupOverlayWgcFrameCount % 12 == 0) {
             // Three low-frequency samples are enough to follow the final morph
@@ -11765,8 +11816,6 @@ bool StartPopupOverlayWgcBackdrop(
 
     RequestPopupOverlayWgcBorderlessAccessAsync();
     if (!PopupOverlayWgcBorderlessAccessAllowed()) {
-        if (!PopupOverlayWgcBorderlessAccessPending()) {
-        }
         return false;
     }
 
@@ -12837,6 +12886,7 @@ void UpdatePopupBackdropOverlayWindow() {
     renderParameters.targetRadiusPx = renderRadiusPx;
     renderParameters.morphing = morphing;
     renderParameters.allowScreenCapture = g_settings.allowScreenCapture;
+    renderParameters.transparentMaterial = IsTransparentMaterial();
     renderParameters.useLiquidLensWarp = IsLiquidGlassMaterial();
     renderParameters.blurStdDev = PopupBackdropWgcEffectiveBlurStdDev();
     renderParameters.refractionBlurStdDev =
@@ -12955,16 +13005,16 @@ bool RegisterPopupWindowClass() {
 
 void UnregisterPopupWindowClass() {
     UnregisterPopupBackdropOverlayClass();
-    if (!g_popupClassRegistered) {
-        ReleasePopupPaintFonts();
-        return;
+    if (g_popupClassRegistered) {
+        HINSTANCE moduleInstance = ModInstance();
+        if (moduleInstance &&
+            UnregisterClassW(kPopupClassName, moduleInstance)) {
+            g_popupClassRegistered = false;
+        }
     }
-
-    HINSTANCE moduleInstance = ModInstance();
-    if (moduleInstance && UnregisterClassW(kPopupClassName, moduleInstance)) {
-        g_popupClassRegistered = false;
-        ReleasePopupPaintFonts();
-    }
+    // Paint fonts aren't owned by the window class. Release them even if the
+    // class can't be unregistered because a popup window survived teardown.
+    ReleasePopupPaintFonts();
 }
 
 bool EnsureExpandedPopup() {
@@ -13048,7 +13098,7 @@ void ShowExpandedPopup() {
     if (g_popupXamlRoot) {
         UpdatePlayerContents();
     } else {
-        UpdatePopupAlbumBitmap(SnapshotMedia());
+        UpdatePopupAlbumBitmap(SnapshotMediaForUi());
     }
     ApplyPopupBackdrop(g_expandedPopup);
     PositionExpandedPopup();
@@ -14158,7 +14208,7 @@ void OnCompactNavigationRendering(
                               now - g_lastCompactNavigationFrameTime).count();
         g_lastCompactNavigationFrameTime = now;
         dt = std::clamp(dt, 1.0 / 240.0, 0.05);
-        double speed = Clamp(g_settings.animationSpeed, 0.1, 4.0);
+        double speed = Clamp(g_settings.animationSpeed, 0.25, 2.5);
         bool previousSettled = StepDynamicTransportButtonMotion(
             g_compactPrevMotion, dt, speed);
         bool nextSettled = StepDynamicTransportButtonMotion(
@@ -14809,6 +14859,7 @@ void MediaThreadProc() {
     }
 
     auto lastFallbackPoll = std::chrono::steady_clock::time_point{};
+    HWND mediaTaskbarWnd = nullptr;
     g_mediaRefreshRequested = true;
 
     while (g_mediaThreadRunning) {
@@ -14848,10 +14899,10 @@ void MediaThreadProc() {
             RefreshMediaState(manager);
             lastFallbackPoll = now;
 
-            HWND hwnd = g_taskbarWnd;
-            if (!hwnd || !IsWindow(hwnd)) {
-                hwnd = FindCurrentProcessTaskbarWnd();
+            if (!mediaTaskbarWnd || !IsWindow(mediaTaskbarWnd)) {
+                mediaTaskbarWnd = FindCurrentProcessTaskbarWnd();
             }
+            HWND hwnd = mediaTaskbarWnd;
             if (IsModActive() && hwnd) {
                 RunFromWindowThread(
                     hwnd,
@@ -14911,14 +14962,14 @@ void MediaThreadProc() {
 }
 
 void StartMediaThread() {
-    if (g_mediaThreadRunning.exchange(true)) {
+    // The worker is started once during mod initialization and owned by the
+    // unload path from then on. Never join or replace it from the taskbar UI
+    // thread: the worker can be synchronously dispatching to that same thread.
+    if (g_unloading.load() || g_mediaThread) {
         return;
     }
-    if (g_mediaThread) {
-        if (g_mediaThread->joinable()) {
-            g_mediaThread->join();
-        }
-        g_mediaThread.reset();
+    if (g_mediaThreadRunning.exchange(true)) {
+        return;
     }
     try {
         g_mediaThread.emplace(MediaThreadProc);
@@ -16340,7 +16391,7 @@ Grid BuildIslandGrid() {
         transportControls.Children().Append(MakeDynamicTransportButton(
             L"Island_TransportPrev", L"\uE892",
             [] {
-                MediaState state = SnapshotMedia();
+                MediaProgressSnapshot state = SnapshotMediaProgress();
                 if (!state.hasSession) {
                     TriggerDynamicTransportNavigationFailure(
                         &g_dynamicTransportPrevMotion);
@@ -16364,7 +16415,7 @@ Grid BuildIslandGrid() {
         transportControls.Children().Append(MakeDynamicTransportButton(
             L"Island_TransportPlay", L"\uE768",
             [] {
-                if (!SnapshotMedia().hasSession) {
+                if (!SnapshotMediaProgress().hasSession) {
                     TriggerDynamicTransportNoMediaPlayBounce(
                         &g_dynamicTransportPlayMotion);
                     return;
@@ -16379,7 +16430,7 @@ Grid BuildIslandGrid() {
         transportControls.Children().Append(MakeDynamicTransportButton(
             L"Island_TransportNext", L"\uE893",
             [] {
-                MediaState state = SnapshotMedia();
+                MediaProgressSnapshot state = SnapshotMediaProgress();
                 if (!state.hasSession) {
                     TriggerDynamicTransportNavigationFailure(
                         &g_dynamicTransportNextMotion);
@@ -16659,11 +16710,12 @@ void UpdatePlayerContents() {
         CancelPendingNavigationValidation();
         TriggerNavigationFailureFeedback(failedNavigationDirection);
     }
-    MediaState state = SnapshotMedia();
+    MediaUiSnapshot state = SnapshotMediaForUi();
 
     auto preparedArtwork = state.preparedArtwork;
+    static std::vector<uint8_t> const emptyThumbnailBytes;
     std::vector<uint8_t> const& visualThumbnailBytes =
-        preparedArtwork ? preparedArtwork->visualBytes : state.thumbnailBytes;
+        preparedArtwork ? preparedArtwork->visualBytes : emptyThumbnailBytes;
     std::vector<uint8_t> const& displayThumbnailBytes =
         preparedArtwork ? preparedArtwork->displayBytes : visualThumbnailBytes;
     if (IsDynamicCompactMode() || IsTransparentMaterial()) {
@@ -16738,15 +16790,11 @@ void UpdatePlayerContents() {
         compactTextChanged = false;
     }
 
-    if (auto titleFe = FindChildByName(g_playerGrid, L"Island_Title")) {
-        if (auto title = titleFe.try_as<TextBlock>()) {
-            title.Text(winrt::hstring(compactTitle));
-        }
+    if (g_compactTitleText) {
+        g_compactTitleText.Text(winrt::hstring(compactTitle));
     }
-    if (auto artistFe = FindChildByName(g_playerGrid, L"Island_CompactArtist")) {
-        if (auto artist = artistFe.try_as<TextBlock>()) {
-            artist.Text(winrt::hstring(compactArtist));
-        }
+    if (g_compactArtistText) {
+        g_compactArtistText.Text(winrt::hstring(compactArtist));
     }
 
     if (!g_compactTextInitialized) {
@@ -17425,7 +17473,6 @@ bool InjectIslandGrid() {
         g_playerGrid = island;
         g_injectionParent = target.grid;
         StartTaskbarLayoutMonitor(root, target.grid);
-        StartMediaThread();
         RequestMediaRefresh();
         ApplyExpandedState();
         UpdatePlayerContents();
@@ -17450,12 +17497,13 @@ bool ApplyPendingSettings() {
     }
 
     Settings normalized = *settings;
-    normalized.compactIslandTint = g_settings.compactIslandTint;
-    bool tintOnlyChange =
-        g_settings.compactIslandTint != settings->compactIslandTint &&
-        g_settings == normalized;
+    bool tintOnlyChange = false;
     {
         std::lock_guard settingsLock(g_settingsMutex);
+        normalized.compactIslandTint = g_settings.compactIslandTint;
+        tintOnlyChange =
+            g_settings.compactIslandTint != settings->compactIslandTint &&
+            g_settings == normalized;
         g_settings = std::move(*settings);
     }
     g_themeVisualsValid = false;
@@ -17559,6 +17607,8 @@ void Wh_ModAfterInit() {
     g_modActive = true;
     g_taskbarWnd = FindCurrentProcessTaskbarWnd();
     ApplySettingsOnTaskbarThread();
+    StartMediaThread();
+    RequestMediaRefresh();
 }
 
 void Wh_ModUninit() {
@@ -17586,12 +17636,20 @@ void Wh_ModUninit() {
                 ? g_popupBackdropOverlay
                 : nullptr,
         };
-        HWND previous = nullptr;
+        std::array<HWND, std::size(candidates)> attemptedCandidates{};
+        size_t attemptedCandidateCount = 0;
         for (HWND candidate : candidates) {
-            if (!candidate || candidate == previous) {
+            bool alreadyAttempted = false;
+            for (size_t i = 0; i < attemptedCandidateCount; ++i) {
+                if (attemptedCandidates[i] == candidate) {
+                    alreadyAttempted = true;
+                    break;
+                }
+            }
+            if (!candidate || alreadyAttempted) {
                 continue;
             }
-            previous = candidate;
+            attemptedCandidates[attemptedCandidateCount++] = candidate;
             bool callbackInvoked = false;
             if (RunFromWindowThread(
                     candidate,
