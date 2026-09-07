@@ -16597,7 +16597,7 @@
           1
         ],
         "ratingUsers": 1,
-        "updated": 1788295991000,
+        "updated": 1788803446000,
         "users": 68
       },
       "metadata": {
@@ -16612,7 +16612,7 @@
           "explorer.exe"
         ],
         "name": "Windows 7/8.1 Language Switcher Restorer",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "win7-legacy-applet-restorer": {
