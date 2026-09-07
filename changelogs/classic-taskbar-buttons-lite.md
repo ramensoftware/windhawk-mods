@@ -1,3 +1,7 @@
+## 1.4 ([Sep 7, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ceed0856bcb6fdaa03fcd135bc2a8191bce8e940/mods/classic-taskbar-buttons-lite.wh.cpp))
+
+fix for vertical second taskbar
+
 ## 1.3.1 ([Jan 25, 2025](https://github.com/ramensoftware/windhawk-mods/blob/ed55e57ef882efd1249d4b31fff051db6dca5be0/mods/classic-taskbar-buttons-lite.wh.cpp))
 
 Warning on progress bar

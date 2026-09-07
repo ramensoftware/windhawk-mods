@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-07T17:50:46.000Z</updated>
+    <updated>2026-09-07T17:53:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Taskbar 3D buttons Lite 1.4]]></title>
+        <id>https://windhawk.net/mods/classic-taskbar-buttons-lite#ceed0856bcb6fdaa03fcd135bc2a8191bce8e940</id>
+        <link href="https://windhawk.net/mods/classic-taskbar-buttons-lite"/>
+        <updated>2026-09-07T17:53:27.000Z</updated>
+        <content type="html"><![CDATA[<p>fix for vertical second taskbar</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7/8.1 Language Switcher Restorer 1.1.0]]></title>
         <id>https://windhawk.net/mods/win7-language-switcher-restorer#35fda4cd2f43bdd49f4db1aaf24e750a5ff3498e</id>
@@ -573,20 +584,6 @@ and make sure that <code>LogonUI.exe</code> is in the list.</p>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.4.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-labels#b0553682078854d14adffff2ed5cda1dc4774748</id>
-        <link href="https://windhawk.net/mods/taskbar-labels"/>
-        <updated>2026-09-03T18:13:58.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed compatibility with the latest Windows 11 update. You might need to restart explorer after updating the to the newer version of the mod.</li>
-<li>Fixed a crash in some cases when a progress indicator is shown.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

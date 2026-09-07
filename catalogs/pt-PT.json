@@ -2244,19 +2244,19 @@
           3
         ],
         "ratingUsers": 5,
-        "updated": 1737801083000,
+        "updated": 1788803607000,
         "users": 221
       },
       "metadata": {
         "author": "Anixx",
-        "compilerOptions": "-lgdi32",
-        "description": "Lightweight mod, restoring the 3D buttons in classic theme",
+        "compilerOptions": "-lcomctl32",
+        "description": "Lightweight mod restoring the 3D buttons in classic theme",
         "github": "https://github.com/Anixx",
         "include": [
           "explorer.exe"
         ],
         "name": "Classic Taskbar 3D buttons Lite",
-        "version": "1.3.1"
+        "version": "1.4"
       }
     },
     "classic-taskbar-buttons-lite-vs-without-spacing": {
