@@ -2298,9 +2298,13 @@ void CustomBSDR::DrawSeparator(LPDRAWITEMSTRUCT pDIS) {
             const int srcHalfW = srcW / 2;
             const int dstSideW = MulDiv(dstH, srcHalfW, srcH);
 
-            AlphaBlend(hdcOffscreen, 0, 0, dstSideW, dstH, hdcSep, 0, 0, srcHalfW, srcH, bf);
-            AlphaBlend(hdcOffscreen, dstW - dstSideW, 0, dstSideW, dstH, hdcSep, srcW - srcHalfW, 0, srcHalfW, srcH, bf);
-            AlphaBlend(hdcOffscreen, dstSideW, 0, dstW - dstSideW * 2, dstH, hdcSep, srcHalfW, 0, 1, srcH, bf);
+            if (dstSideW > 0 && dstSideW * 2 <= dstW) {
+                AlphaBlend(hdcOffscreen, 0, 0, dstSideW, dstH, hdcSep, 0, 0, srcHalfW, srcH, bf);
+                AlphaBlend(hdcOffscreen, dstW - dstSideW, 0, dstSideW, dstH, hdcSep, srcW - srcHalfW, 0, srcHalfW, srcH, bf);
+                AlphaBlend(hdcOffscreen, dstSideW, 0, dstW - dstSideW * 2, dstH, hdcSep, srcHalfW, 0, 1, srcH, bf);
+            } else {
+                AlphaBlend(hdcOffscreen, 0, 0, dstW, dstH, hdcSep, 0, 0, srcW, srcH, bf);
+            }
 
             SelectObject(hdcSep, hOldSep);
             DeleteDC(hdcSep);
@@ -2408,9 +2412,13 @@ void CustomBSDR::DrawButton(LPDRAWITEMSTRUCT pDIS, bool isRed) {
                 const int srcHalfW = srcW / 2;
                 const int dstSideW = MulDiv(dstH, srcHalfW, srcH);
 
-                AlphaBlend(hdcOffscreen, 0, 0, dstSideW, dstH, hdcSrc, 0, 0, srcHalfW, srcH, bf);
-                AlphaBlend(hdcOffscreen, dstW - dstSideW, 0, dstSideW, dstH, hdcSrc, srcW - srcHalfW, 0, srcHalfW, srcH, bf);
-                AlphaBlend(hdcOffscreen, dstSideW, 0, dstW - dstSideW * 2, dstH, hdcSrc, srcHalfW, 0, 1, srcH, bf);
+                if (dstSideW > 0 && dstSideW * 2 <= dstW) {
+                    AlphaBlend(hdcOffscreen, 0, 0, dstSideW, dstH, hdcSrc, 0, 0, srcHalfW, srcH, bf);
+                    AlphaBlend(hdcOffscreen, dstW - dstSideW, 0, dstSideW, dstH, hdcSrc, srcW - srcHalfW, 0, srcHalfW, srcH, bf);
+                    AlphaBlend(hdcOffscreen, dstSideW, 0, dstW - dstSideW * 2, dstH, hdcSrc, srcHalfW, 0, 1, srcH, bf);
+                } else {
+                    AlphaBlend(hdcOffscreen, 0, 0, dstW, dstH, hdcSrc, 0, 0, srcW, srcH, bf);
+                }
 
                 SelectObject(hdcSrc, hOldSrc);
                 DeleteDC(hdcSrc);
@@ -2690,7 +2698,7 @@ void CustomBSDR::CreateAppTileControls(IShutdownBlockingApp* blockingApp, bool n
         else if (_logonUIState == LogonUIState_Restarting)
             stringId = IDS_BSDR_BLOCKINGAPP_RESTART;
 
-        wchar_t defaultReason[256] = {};
+        wchar_t defaultReason[512] = {};
         GetString(stringId, defaultReason, _countof(defaultReason), isVista);
         blockReasonText = defaultReason;
     }
@@ -2892,7 +2900,7 @@ void CustomBSDR::UpdateAppListLayout() {
 
     // Set the title text based on the number of apps on the list
     if (hTitleText && !isVista) {
-        wchar_t titleFormat[256] = {};
+        wchar_t titleFormat[512] = {};
         // Redraw the entire title control area to prevent artifacts from previous longer text when the number of apps decreases
         InvalidateRect(hTitleText, nullptr, TRUE);
         if (appTiles.size() == 1) {
@@ -2993,7 +3001,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         if (!hWarningText && !hYesButton && !hNoButton && g_hResDll) {
             // Extra probes using 7-specific strings (Vista includes warning messages in description texts but 7 uses separate strings)
             // Note: Vista bitmaps also exist in 7 winsrv (just unused) so they are not appropriate for probing
-            wchar_t probeText[256] = {};
+            wchar_t probeText[512] = {};
             if (LoadStringW(g_hResDll, IDS_BSDR_WAITINGFOR, probeText, _countof(probeText)) ||
                 LoadStringW(g_hResDll, IDS_BSDR_BLOCKING_BGAPPS, probeText, _countof(probeText)) ||
                 LoadStringW(g_hResDll, IDS_BSDR_WARNING_LOGOFF, probeText, _countof(probeText)) ||
@@ -3190,7 +3198,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         UpdateAppListLayout();
 
         // Load and set the appropriate strings based on the current LogonUI state
-        wchar_t desc[256] = {}, warning[256] = {}, btnText[256] = {};
+        wchar_t desc[512] = {}, warning[512] = {}, btnText[256] = {};
         bool loadedStrings = false;
         switch (_logonUIState) {
         case LogonUIState_LoggingOff:
@@ -4416,6 +4424,12 @@ void RestoreShutdownResolverState() {
     }
 }
 
+
+// Safeguard: check if user read the readme
+// The stock immersive BSDR does not support being displayed on the default desktop, so if it shows,
+// it will get stuck in the invisible secure desktop, and users can become clueless.
+// Pressing ctrl alt del can get out of this state but lets add this minimal safeguard
+
 /*
 Shutdown process in winlogon basically looks like this:
 void ShutdownWindowsWorkerThread(...)
@@ -4454,10 +4468,10 @@ __int64 __fastcall WluiInformLogonUI_hook(int a1, int a2, int a3) {
             g_origResolverDisabledState = *p_g_fShutdownResolverDisabled;
             *p_g_fShutdownResolverDisabled = 1;
             g_resolverDisabledByMod = true;
+            return 0;
         } else {
             Wh_Log(L"LogonUI load check failed!");
         }
-        return 0;
     }
     return WluiInformLogonUI_original(a1, a2, a3);
 }
