@@ -23,6 +23,8 @@
 Turns the right hand side of the Windows 11 taskbar into a drawer. The icons you
 pick are hidden, and slide back into place when you hover the tray.
 
+![The tray icons sliding into place as the pointer enters, and away again as it leaves](https://i.imgur.com/4SVabnu.gif)
+
 Everything is a toggle: pick exactly which groups go into the drawer, whether the
 space they used is kept or reclaimed, what opens the drawer, and how the
 animation feels.
