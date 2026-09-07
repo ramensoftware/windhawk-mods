@@ -48,7 +48,7 @@ This mod tries to restore the Windows 7 window animations on Windows 10 and 11 *
 ## What it does
 
 - **Minimize / restore**: the window shrinks toward its taskbar button with the Windows 7 tilt-and-fade look (a slight 3D perspective, about a quarter of a second), then grows back the same way when you restore it. The real window only appears once the animation has caught up to it, so you never see a flash of the "wrong" state.
-- **Close**: when a window closes, a snapshot of it tilts away and fades out over about a fifth of a second. This runs on the closing app's own UI thread, which is blocked for that time — only sent messages are pumped, so a "save changes?" prompt the app itself puts up first still works exactly as it would without the mod, but the app won't otherwise process input or posted messages until the animation finishes.
+- **Close**: when a window closes, a snapshot of it tilts away and fades out over about a fifth of a second. The frames are rendered on the mod's own overlay thread; the closing app's UI thread only waits for the effect to finish (answering sent messages in the meantime, with a hard deadline), so a "save changes?" prompt the app itself puts up first still works exactly as it would without the mod, but the app won't otherwise process input or posted messages until the animation finishes.
 - **Open**: opening a window is not animated by this mod as Windows handles that on its own (it may be added in a future update).
 
 ## Known Limitations
@@ -56,6 +56,7 @@ This mod tries to restore the Windows 7 window animations on Windows 10 and 11 *
 - Opening a window isn't animated (see above).
 - If a window can't be minimized, its animation is simply skipped.
 - Dialogs without a minimize button aren't animated.
+- MDI child windows (documents inside an MDI frame) are left to Windows: they have no taskbar button to fly to.
 - Some UWP apps may not support the closing animation.
 - Snipping Tool doesn't play the closing animation for stability reasons.
 
@@ -78,9 +79,11 @@ Visual references only (no code was taken from these):
 - **3D Aero Transforms mod** by [kieldbg](https://github.com/kieldbg).
 
 
-- The development of this mod started from [Classic Minimize/Maximize Animations](https://windhawk.net/mods/classic-min-max-animations)
-  by [aubymori](https://github.com/aubymori) (overlay / `user32` hooking architecture) and it was substantially modified. Copyright (c) aubymori, used under the MIT license
-  (https://opensource.org/licenses/MIT).
+- The overall approach (a dedicated overlay thread plus `user32` hooks on the
+  `Def*Proc`/`ShowWindow` family) was inspired by
+  [Classic Minimize/Maximize Animations](https://windhawk.net/mods/classic-min-max-animations)
+  by [aubymori](https://github.com/aubymori). This mod is a from-scratch
+  reimplementation of that idea; no code from that mod is included here.
 - `Mat::Matrix4x4F` is a from-scratch implementation of the public Microsoft
   `D2D1::Matrix4x4F` helper API (`d2d1_1helper.h`).
 
@@ -95,6 +98,15 @@ Visual references only (no code was taken from these):
 - animateClose: true
   $name: Animate closing windows
   $description: This setting enables the Windows 7-like closing animation. It runs after the application itself decides to destroy the window, so it can never discard unsaved work.
+- minimizeDurationMs: 250
+  $name: Minimize animation duration (ms)
+  $description: This setting modifies how long the fly-out to the taskbar takes, from 50 to 1000 ms. Windows 7 used about 250 ms.
+- restoreDurationMs: 210
+  $name: Restore animation duration (ms)
+  $description: This setting modifies how long the fly-in from the taskbar takes, from 50 to 1000 ms. Windows 7 used about 210 ms.
+- closeDurationMs: 200
+  $name: Close animation duration (ms)
+  $description: This setting modifies how long the closing fade takes, from 50 to 1000 ms. Windows 7 used about 200 ms. The closing app waits for this long before the window is really destroyed, so keep it short on slower machines.
 */
 // ==/WindhawkModSettings==
 
@@ -110,6 +122,7 @@ Visual references only (no code was taken from these):
 #include <cstring>
 #include <cwchar>
 #include <deque>
+#include <iterator>
 #include <list>
 #include <memory>
 #include <mutex>
@@ -492,11 +505,26 @@ using ShowWindow_t = decltype(&ShowWindow);
 using ShowWindowAsync_t = decltype(&ShowWindowAsync);
 using DestroyWindow_t = decltype(&DestroyWindow);
 
-constexpr double kShowHideDurationSec = 0.25;
-constexpr double kCloseDurationSec = 0.20;
-constexpr double kRestoreDurationSec = 0.21;
+// Defaults match Windows 7's own timings; the user can retune each one from
+// the settings (see LoadSettings), which matters most for the close animation
+// because it sits on the critical path of closing a window.
+constexpr UINT kDefaultMinimizeDurationMs = 250;
+constexpr UINT kDefaultCloseDurationMs = 200;
+constexpr UINT kDefaultRestoreDurationMs = 210;
+constexpr UINT kMinDurationMs = 50;
+constexpr UINT kMaxDurationMs = 1000;
+static std::atomic<UINT> g_minimizeDurationMs{kDefaultMinimizeDurationMs};
+static std::atomic<UINT> g_closeDurationMs{kDefaultCloseDurationMs};
+static std::atomic<UINT> g_restoreDurationMs{kDefaultRestoreDurationMs};
 
-constexpr int kMaxCaptureSide = 16384;
+// Capture size guard. A window can't usefully exceed the virtual screen, so
+// 8192 px per side already covers anything a real desktop shows edge to
+// edge; the pixel cap on top of it (an 8K frame, ~133 MB of BGRA) is what
+// actually bounds the transient allocation -- the per-side limit alone would
+// still admit 8192x8192 = 256 MB, and the old 16384 limit a full gigabyte.
+// Larger windows just don't animate.
+constexpr int kMaxCaptureSide = 8192;
+constexpr size_t kMaxCapturePixels = size_t(7680) * size_t(4320);
 
 enum class AnimationType {
     None = 0,
@@ -526,14 +554,25 @@ static RECT LerpRect(const RECT& a, const RECT& b, float t) {
     r.bottom = LONG(std::lround(Lerp(float(a.bottom), float(b.bottom), t)));
     return r;
 }
-static RECT AspectCorrectedMinimizeTarget(const RECT& button) {
-    float bw = float(RECTW(button)), bh = float(RECTH(button));
-    if (bw < 1 || bh < 1)
+// The taskbar button rect is wide and short (e.g. 160x48 on Windows 11),
+// nothing like the window that flies into it. Windows 7 shrank the window
+// uniformly, so the final frame is the window's own aspect ratio fitted
+// inside the button rect and centered on it: the capture is never squashed
+// and the last frame still lands on the button itself.
+static RECT AspectCorrectedMinimizeTarget(const RECT& button,
+                                          const RECT& window) {
+    const float bw = float(RECTW(button)), bh = float(RECTH(button));
+    const float ww = float(RECTW(window)), wh = float(RECTH(window));
+    if (bw < 1 || bh < 1 || ww < 1 || wh < 1)
         return button;
-    float ar = bh / bw;
-    RECT t = button;
-    t.right = t.left + LONG(bw * ar);
-    t.bottom = t.top + LONG(bh * ar);
+    const float s = std::min(bw / ww, bh / wh);
+    const LONG tw = std::max<LONG>(1, LONG(std::lround(ww * s))),
+               th = std::max<LONG>(1, LONG(std::lround(wh * s)));
+    RECT t;
+    t.left = button.left + (LONG(bw) - tw) / 2;
+    t.top = button.top + (LONG(bh) - th) / 2;
+    t.right = t.left + tw;
+    t.bottom = t.top + th;
     if (!IsRectUsable(t))
         return button;
     return t;
@@ -595,15 +634,13 @@ static RECT RectFor(AnimationType type, float t, const RECT& win,
     }
 }
 static UINT DurationMsFor(AnimationType type) {
-    double ms = kShowHideDurationSec * 1000.0;
+    UINT ms = g_minimizeDurationMs.load();
     if (type == AnimationType::Close) {
-        ms = kCloseDurationSec * 1000.0;
+        ms = g_closeDurationMs.load();
     } else if (type == AnimationType::RestoreFromMinimized) {
-        ms = kRestoreDurationSec * 1000.0;
+        ms = g_restoreDurationMs.load();
     }
-    if (ms < 16)
-        ms = 16;
-    return UINT(std::lround(ms));
+    return std::clamp(ms, kMinDurationMs, kMaxDurationMs);
 }
 static Matrix4x4F BuildCameraMatrix(float w, float h, float df = 0.8f) {
     float depth = std::fmax(h, 1.f) * df;
@@ -645,9 +682,21 @@ static Matrix4x4F BuildCornerMatrix(
 
 bool g_animateMinimize = true;
 bool g_animateClose = true;
+static UINT LoadDurationSetting(PCWSTR name, UINT def) {
+    int v = Wh_GetIntSetting(name);
+    if (v <= 0)
+        return def;
+    return std::clamp(UINT(v), kMinDurationMs, kMaxDurationMs);
+}
 static void LoadSettings() {
     g_animateMinimize = Wh_GetIntSetting(L"animateMinimize") != 0;
     g_animateClose = Wh_GetIntSetting(L"animateClose") != 0;
+    g_minimizeDurationMs.store(
+        LoadDurationSetting(L"minimizeDurationMs", kDefaultMinimizeDurationMs));
+    g_restoreDurationMs.store(
+        LoadDurationSetting(L"restoreDurationMs", kDefaultRestoreDurationMs));
+    g_closeDurationMs.store(
+        LoadDurationSetting(L"closeDurationMs", kDefaultCloseDurationMs));
 }
 
 typedef BOOL(WINAPI* GetWindowMinimizeRect_t)(HWND, LPRECT);
@@ -667,21 +716,28 @@ struct CaptureBits {
     int LogicalH() const { return srcH ? srcH : height; }
 };
 static const size_t kMaxCachedCaptures = 3;
-static const size_t kMaxCachedBytes = 3u * 1024u * 1024u;
-// The restore overlay is stretched to the animated rect at present time anyway
-// (and the real window is already visible when restore plays), so the cached
-// bitmap never needs full resolution: a small copy is kept and the original
-// size is remembered for geometry checks. This is now a floor rather than a
-// hard cap -- DownscaleForCache scales to half the window's own size when
-// that's larger, so the blur gap on big windows narrows without regressing
-// windows already near this size. Per-process retention stays in the low
-// single-digit MB even with kMaxCachedCaptures entries.
+// Budget for the whole cache. The most recently minimized window is kept at
+// full resolution (up to kMaxFullResCachedBytes: a 4K frame, ~33 MB; a
+// 1080p window is ~8 MB), because minimize-then-immediately-restore is by
+// far the common case and a restore rendered from a half-size source is
+// visibly softer than the minimize was. Anything larger, and every older
+// entry, is stored in the downscaled format (see DemoteOlderLocked), and the
+// full-res entry itself is released the moment the window is restored or
+// destroyed -- so per-process retention is one frame of the last minimized
+// window plus a few MB, no matter how many windows a process cycles through.
+static const size_t kMaxFullResCachedBytes = 3840u * 2160u * 4u;
+static const size_t kMaxCachedBytes = kMaxFullResCachedBytes + 16u * 1024u * 1024u;
+// Downscale floor for the *older* entries: DownscaleForCache scales to half
+// the window's own size when that's larger, so a large window still keeps
+// proportionally more detail than a fixed low cap would give.
 static const int kMaxCachedSide = 384;
 static std::mutex g_cacheMutex;
 struct CacheEntry {
     CaptureBits bits;
     std::list<HWND>::iterator lruIt;
+    bool fullRes = false;
 };
+static CaptureBits DownscaleForCache(const CaptureBits& in);
 static std::unordered_map<HWND, CacheEntry> g_captureCache;
 static std::list<HWND> g_captureLru;
 static size_t g_cacheBytes = 0;
@@ -702,11 +758,50 @@ static void EvictLocked() {
         }
     }
 }
+// Only the LRU head may hold a full-resolution capture: every other entry is
+// shrunk to the compact format so the full-res budget is spent exactly once.
+static void DemoteOlderLocked() {
+    if (g_captureLru.empty())
+        return;
+    auto lit = std::next(g_captureLru.begin());
+    while (lit != g_captureLru.end()) {
+        auto it = g_captureCache.find(*lit);
+        if (it == g_captureCache.end() || !it->second.fullRes) {
+            ++lit;
+            continue;
+        }
+        if (it->second.bits.width <= kMaxCachedSide &&
+            it->second.bits.height <= kMaxCachedSide) {
+            it->second.fullRes = false; // already compact: nothing to shrink
+            ++lit;
+            continue;
+        }
+        CaptureBits small = DownscaleForCache(it->second.bits);
+        g_cacheBytes -= std::min(g_cacheBytes, CaptureBytes(it->second.bits));
+        if (small.empty()) {
+            // Allocation failed: drop the entry rather than keep it oversized.
+            g_captureCache.erase(it);
+            lit = g_captureLru.erase(lit);
+            continue;
+        }
+        it->second.bits = std::move(small);
+        it->second.fullRes = false;
+        g_cacheBytes += CaptureBytes(it->second.bits);
+        ++lit;
+    }
+}
 static void CacheCapture(HWND hwnd, CaptureBits&& bits) {
     if (!hwnd || bits.empty())
         return;
-    if (CaptureBytes(bits) > kMaxCachedBytes)
-        return;
+    // Keep the full-size frame when it fits the full-res budget; otherwise
+    // store the compact form right away.
+    bool fullRes = CaptureBytes(bits) <= kMaxFullResCachedBytes;
+    if (!fullRes) {
+        CaptureBits small = DownscaleForCache(bits);
+        if (small.empty() || CaptureBytes(small) > kMaxCachedBytes)
+            return;
+        bits = std::move(small);
+    }
     try {
         std::lock_guard<std::mutex> lock(g_cacheMutex);
         auto it = g_captureCache.find(hwnd);
@@ -714,16 +809,18 @@ static void CacheCapture(HWND hwnd, CaptureBits&& bits) {
             g_cacheBytes -=
                 std::min(g_cacheBytes, CaptureBytes(it->second.bits));
             it->second.bits = std::move(bits);
+            it->second.fullRes = fullRes;
             g_cacheBytes += CaptureBytes(it->second.bits);
             g_captureLru.splice(g_captureLru.begin(), g_captureLru,
                                 it->second.lruIt);
-            EvictLocked();
-            return;
+        } else {
+            g_captureLru.push_front(hwnd);
+            g_cacheBytes += CaptureBytes(bits);
+            g_captureCache.emplace(
+                hwnd,
+                CacheEntry{std::move(bits), g_captureLru.begin(), fullRes});
         }
-        g_captureLru.push_front(hwnd);
-        g_cacheBytes += CaptureBytes(bits);
-        g_captureCache.emplace(
-            hwnd, CacheEntry{std::move(bits), g_captureLru.begin()});
+        DemoteOlderLocked();
         EvictLocked();
     } catch (...) {
     }
@@ -867,19 +964,16 @@ static bool IsWindowUnoccludedAt(HWND hwnd, const RECT& rc) {
     HWND root = GetAncestor(hwnd, GA_ROOT);
     if (!root)
         root = hwnd;
-    // A fast path is what keeps this cheap on the hot path: minimize/close
-    // almost always target the active window, and the foreground window is
-    // essentially always the one actually drawn at its own rect (short of an
-    // always-on-top window sitting over it -- a rare enough case that it's
-    // not worth paying the WindowFromPoint cost here for every capture).
-    if (root == GetForegroundWindow())
-        return true;
     const int w = RECTW(rc), h = RECTH(rc);
     if (w <= 0 || h <= 0)
         return false;
+    // No foreground fast path: even the active window can have a topmost
+    // window over it (media players, on-screen keyboards, other mods'
+    // overlays), and then the scrape would carry a rectangle of someone
+    // else's content into the animation. Five WindowFromPoint calls are
+    // negligible next to the BitBlt + GetDIBits that follow.
     // 5-point diamond instead of a 3x3 grid: enough coverage to catch a
-    // partially-overlapping window while keeping the non-foreground path
-    // (the only one that pays this cost at all) cheap, and the loop still
+    // partially-overlapping window while staying cheap, and the loop still
     // exits on the very first occluded sample.
     static const float kPts[5][2] = {
         {0.5f, 0.5f}, {0.25f, 0.25f}, {0.75f, 0.25f}, {0.25f, 0.75f}, {0.75f, 0.75f}};
@@ -911,7 +1005,8 @@ static bool CaptureWindowForClose(HWND hwnd, CaptureBits& out,
             return false;
     }
     int w = RECTW(rc), h = RECTH(rc);
-    if (w < 1 || h < 1 || w > 16384 || h > 16384)
+    if (w < 1 || h < 1 || w > kMaxCaptureSide || h > kMaxCaptureSide ||
+        size_t(w) * size_t(h) > kMaxCapturePixels)
         return false;
     {
         ScopedDpiAware dpi; // screen scrape only -- no app code runs here
@@ -986,6 +1081,12 @@ static bool CaptureWindowForClose(HWND hwnd, CaptureBits& out,
         // target window's own WndProc, on this same thread: that is application
         // code, so it must run under the thread's normal DPI awareness context,
         // never under the per-monitor-aware override used for geometry/capture.
+        // Note that on the minimize path this re-enters the app's WndProc from
+        // inside its own DefWindowProc(WM_SYSCOMMAND) call. Well-behaved
+        // windows handle WM_PRINT re-entrantly (the taskbar's own live
+        // thumbnails and Alt+Tab issue it at arbitrary times), and the
+        // screen scrape above is the primary path, so this only runs when
+        // the window is occluded or its surface scraped black.
         BITMAPINFO bmi{};
         bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
         bmi.bmiHeader.biWidth = w;
@@ -1109,25 +1210,63 @@ static bool GetMaximizeRectPhysical(HWND hwnd, RECT* rc) {
     *rc = mi.rcWork;
     return IsRectUsable(*rc);
 }
+// rcNormalPosition of a top-level window without WS_EX_TOOLWINDOW is reported
+// in "workspace coordinates" (MSDN, WINDOWPLACEMENT): screen coordinates
+// shifted by the top/left work-area inset of the monitor the rect lives on,
+// i.e. by the height/width of a taskbar or appbar docked at that monitor's
+// top or left edge. The window itself is minimized (parked at -32000,-32000)
+// when this runs, so MonitorFromWindow is useless for picking that monitor:
+// resolve it from the rect instead. The rect is still in workspace
+// coordinates when it is first resolved, which can pick the wrong monitor
+// when the inset pushes it across a monitor boundary, so resolve once more
+// after the shift (the same double resolution PowerToys FancyZones uses for
+// SetWindowPlacement). Wine, ReactOS and Chromium apply the same per-monitor
+// inset; nothing in this conversion refers specifically to the primary
+// monitor beyond MONITOR_DEFAULTTOPRIMARY as the off-screen fallback.
+static bool WorkAreaInset(HMONITOR hmon, LONG* dx, LONG* dy) {
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(mi);
+    if (!hmon || !GetMonitorInfoW(hmon, &mi))
+        return false;
+    *dx = mi.rcWork.left - mi.rcMonitor.left;
+    *dy = mi.rcWork.top - mi.rcMonitor.top;
+    return true;
+}
+static void WorkspaceToScreen(RECT* rc) {
+    // First guess: the monitor the (still workspace-relative) rect lands on.
+    HMONITOR hmon = MonitorFromRect(rc, MONITOR_DEFAULTTOPRIMARY);
+    LONG dx = 0, dy = 0;
+    if (!WorkAreaInset(hmon, &dx, &dy))
+        return;
+    RECT shifted = *rc;
+    OffsetRect(&shifted, dx, dy);
+    // If the shift carried the rect onto a different monitor, the inset that
+    // actually applies is that monitor's: redo the shift from the original.
+    HMONITOR hmon2 = MonitorFromRect(&shifted, MONITOR_DEFAULTTOPRIMARY);
+    if (hmon2 && hmon2 != hmon && WorkAreaInset(hmon2, &dx, &dy)) {
+        shifted = *rc;
+        OffsetRect(&shifted, dx, dy);
+    }
+    *rc = shifted;
+}
 static bool GetRestoreRectPhysical(HWND hwnd, RECT* rc) {
     if (!rc)
         return false;
-    WINDOWPLACEMENT wp{sizeof(wp)};
+    WINDOWPLACEMENT wp{};
+    wp.length = sizeof(wp);
     if (!GetWindowPlacement(hwnd, &wp))
         return false;
     *rc = wp.rcNormalPosition;
-    LONG style = LONG(GetWindowLongPtrW(hwnd, GWL_STYLE));
-    if (!(style & WS_CHILD)) {
-        HMONITOR hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-        MONITORINFO mi{sizeof(mi)};
-        if (hmon && GetMonitorInfoW(hmon, &mi)) {
-            OffsetRect(rc, -(mi.rcMonitor.left - mi.rcWork.left),
-                       -(mi.rcMonitor.top - mi.rcWork.top));
-        }
-    } else {
-        if (HWND parent = GetParent(hwnd)) {
+    LONG style = LONG(GetWindowLongPtrW(hwnd, GWL_STYLE)),
+         ex = LONG(GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
+    if (style & WS_CHILD) {
+        // Never reached for animated windows (IsAnimateCandidate rejects
+        // WS_CHILD), kept for completeness: a child's placement is relative
+        // to its parent's client area, so map it to the screen.
+        if (HWND parent = GetParent(hwnd))
             MapWindowPoints(parent, HWND_DESKTOP, LPPOINT(rc), 2);
-        }
+    } else if (!(ex & WS_EX_TOOLWINDOW)) {
+        WorkspaceToScreen(rc);
     }
     return IsRectUsable(*rc);
 }
@@ -1212,13 +1351,13 @@ static uint32_t SampleBicubic(const uint32_t* src, int sw, int sh, float u,
     return uint32_t(clampByte(b)) | (uint32_t(clampByte(g)) << 8) |
            (uint32_t(clampByte(r)) << 16);
 }
-// Bilinear downscale to the cache format. Full-size captures are only used
-// live; the copy retained for a later restore is shrunk for storage. The
-// target is half the window's own size, floored at kMaxCachedSide -- so a
-// small window isn't downscaled at all (same as before), while a large one
-// keeps proportionally more detail than a fixed low cap would give, and
-// kMaxCachedBytes/CacheCapture's per-entry check remain the real backstop
-// against unbounded memory for pathologically large windows.
+// Bilinear downscale to the compact cache format, used for every cached
+// capture except the most recent one (which stays full-size, see
+// CacheCapture/DemoteOlderLocked). The target is half the window's own size,
+// floored at kMaxCachedSide -- so a small window isn't downscaled at all,
+// while a large one keeps proportionally more detail than a fixed low cap
+// would give. kMaxCachedBytes remains the real backstop against unbounded
+// memory for pathologically large windows.
 static CaptureBits DownscaleForCache(const CaptureBits& in) {
     if (in.empty())
         return {};
@@ -1499,6 +1638,31 @@ struct AnimRequest {
     CaptureBits capture;
     UINT durationMs = 250;
     std::unique_ptr<PresentGdi> gdi;
+    // Close path only: a manual-reset event the closing app's thread waits
+    // on while the overlay thread runs the timeline. It is signalled from the
+    // destructor, so EVERY way a request can die (FinishQueued, a failed
+    // QueueRun, SafeCleanup draining the queue at unload) wakes the waiter --
+    // an app thread must never be left parked on an event nobody will set.
+    HANDLE hDone = nullptr;
+
+    AnimRequest() = default;
+    AnimRequest(const AnimRequest&) = delete;
+    AnimRequest& operator=(const AnimRequest&) = delete;
+    AnimRequest(AnimRequest&& o) noexcept
+        : hwnd(o.hwnd), type(o.type), rcWindow(o.rcWindow), rcDest(o.rcDest),
+          capture(std::move(o.capture)), durationMs(o.durationMs),
+          gdi(std::move(o.gdi)), hDone(o.hDone) {
+        o.hDone = nullptr;
+    }
+    AnimRequest& operator=(AnimRequest&&) = delete;
+    ~AnimRequest() { SignalDone(); }
+    void SignalDone() noexcept {
+        if (hDone) {
+            SetEvent(hDone);
+            CloseHandle(hDone);
+            hDone = nullptr;
+        }
+    }
 };
 
 static bool PresentOverlay(HWND hwndOverlay, PresentGdi& gdi,
@@ -1621,15 +1785,26 @@ constexpr UINT_PTR kGhostTimer = 0x57A1;
 constexpr ULONGLONG kShellHideToCloseMs = 400;
 static void GhostWatchdog();
 static std::atomic<UINT> g_msgAnim{0};
+// The single animation slot. Whoever holds it (CAS false->true) owns the
+// overlay window until it is released: StartQueuedAnimation/PlayCloseAnimation
+// hand it to the overlay thread (FinishQueued releases it), and
+// ShellPreCaptureForClose holds it across its capture-and-present. That is
+// what makes SendFirstFrame below race-free and, just as importantly, what
+// guarantees the overlay thread is idle in its message loop whenever someone
+// does a blocking SendMessageW to it -- a caller that skipped the slot could
+// otherwise block behind a running animation for its whole duration.
+static std::atomic<bool> g_fAnimating{false};
+static std::atomic<HWND> g_hwndAnim{nullptr}, g_hwndCurrent{nullptr};
+static std::atomic<int> g_typeCurrent{0};
 // AnimMsg::FirstFrame used to carry an AnimRequest* straight in lParam. Both
 // the window class name and the registered message are process-wide public
 // values (any process can FindWindowW + RegisterWindowMessageW the same
 // strings), so anything on the machine could send that message with an
 // arbitrary lParam and make the overlay thread dereference it. The pointer
 // now travels only through this mod-owned, mutex-guarded slot; the message
-// itself carries no payload. The three senders already serialize on
-// g_fAnimating, so there's no real contention -- just don't hold the lock
-// across a cross-thread send.
+// itself carries no payload. Every sender holds g_fAnimating, so there is no
+// contention on the slot -- just don't hold the lock across a cross-thread
+// send.
 static std::mutex g_firstFrameMutex;
 static AnimRequest* g_firstFrameReq = nullptr;  // guarded by g_firstFrameMutex
 static LRESULT SendFirstFrame(HWND hwndAnim, UINT msg, AnimRequest* req) {
@@ -1637,11 +1812,19 @@ static LRESULT SendFirstFrame(HWND hwndAnim, UINT msg, AnimRequest* req) {
     // blocking cross-thread call that waits for AnimWndProc to run, and
     // AnimWndProc needs to take this same mutex to read the pointer back.
     // Holding it here would deadlock the sender against its own receiver.
-    // The three callers already serialize via g_fAnimating, so there's no
+    // Callers serialize via g_fAnimating (asserted below), so there's no
     // race in setting-then-sending-then-clearing without holding the lock
     // across all three steps.
+    if (!g_fAnimating.load()) {
+        Wh_Log(L"SendFirstFrame called without the animation slot -- bug");
+        return 0;
+    }
     {
         std::lock_guard<std::mutex> lock(g_firstFrameMutex);
+        if (g_firstFrameReq) {
+            Wh_Log(L"SendFirstFrame: slot already in use -- bug");
+            return 0;
+        }
         g_firstFrameReq = req;
     }
     LRESULT r = SendMessageW(hwndAnim, msg, WPARAM(AnimMsg::FirstFrame), 0);
@@ -1651,10 +1834,34 @@ static LRESULT SendFirstFrame(HWND hwndAnim, UINT msg, AnimRequest* req) {
     }
     return r;
 }
-static std::atomic<bool> g_fAnimating{false};
-static std::atomic<bool> g_fDisabled{false};
-static std::atomic<HWND> g_hwndAnim{nullptr}, g_hwndCurrent{nullptr};
-static std::atomic<int> g_typeCurrent{0};
+// Availability of the mod in this process. g_stopping is permanent (unload).
+// A failure to bring the overlay thread up is NOT permanent any more: it only
+// disables the mod until g_retryNotBefore, with a backoff that doubles from
+// 2 s to 60 s, so a transient hiccup (RegisterClassW losing a race with a
+// previous instance's teardown, the 1 s startup wait timing out on a loaded
+// machine) no longer silently kills the mod until the app is restarted.
+// Wh_ModSettingsChanged also clears the backoff so the user can force a retry.
+static std::atomic<bool> g_stopping{false};
+static std::atomic<ULONGLONG> g_retryNotBefore{0};
+static std::atomic<DWORD> g_retryBackoffMs{0};
+static bool IsDisabled() {
+    if (g_stopping.load())
+        return true;
+    ULONGLONG t = g_retryNotBefore.load();
+    return t != 0 && GetTickCount64() < t;
+}
+static void NoteOverlayThreadFailure(const wchar_t* why) {
+    DWORD b = g_retryBackoffMs.load();
+    b = b ? std::min<DWORD>(b * 2, 60000) : 2000;
+    g_retryBackoffMs.store(b);
+    g_retryNotBefore.store(GetTickCount64() + b);
+    Wh_Log(L"overlay thread unavailable (%s); animations paused for %u ms",
+           why, b);
+}
+static void ClearOverlayThreadFailure() {
+    g_retryBackoffMs.store(0);
+    g_retryNotBefore.store(0);
+}
 // During a restore-from-minimized fly-in the real window must not be rendered,
 // or the user would see it pop open first and the overlay catch up afterwards.
 // ShowWindow(SW_RESTORE) still changes state synchronously (not iconic, normal
@@ -1684,7 +1891,6 @@ static void UncloakAfterRestore(HWND hwnd) {
     BOOL off = FALSE;
     DwmSetWindowAttribute(hwnd, DWMWA_CLOAK, &off, sizeof(off));
 }
-static std::atomic<bool> g_stopping{false};
 static LONG g_isUninitializing = 0;
 static HINSTANCE g_hinst = nullptr;
 static std::mutex g_animThreadMutex;
@@ -1704,9 +1910,52 @@ static bool PresentFirstFrame(HWND hwndOverlay, AnimRequest& req) {
     PresentTime(hwndOverlay, req, 0.f);
     return true;
 }
-// Runs the overlay timeline, on the animation thread only. No hook ever waits
-// on this: the caller's UI thread is back in application code long before the
-// animation finishes.
+// Frame pacing for RunAnimation. DwmFlush() is the primary pacer (it returns
+// once per composition pass, i.e. per vblank), but it is not reliable: it
+// fails outright while the DWM is restarting or in some RDP sessions, and it
+// can return immediately when composition is idle. Without a floor the loop
+// would then spin, re-rasterizing every iteration and fanning out threadpool
+// workers for frames nobody can see. So each presented frame is stamped, and
+// a new one is not rasterized until at least kMinFramePeriodMs has passed --
+// the remainder is slept instead. 8 ms allows up to 120 Hz displays through
+// while still capping the worst case at ~125 rasterizations per second.
+constexpr DWORD kMinFramePeriodMs = 8;
+// A single DwmFlush that blocks this long means the compositor is not
+// ticking normally (restart, hung, or a session without composition timing);
+// for the rest of that timeline the loop paces on Sleep alone, so one bad
+// call is the most a compositor stall can cost the animation.
+constexpr ULONGLONG kMaxDwmFlushMs = 100;
+static void PaceFrame(ULONGLONG lastPresentTick, bool& useDwmFlush) {
+    HRESULT hr = E_FAIL;
+    if (useDwmFlush) {
+        ULONGLONG before = GetTickCount64();
+        hr = DwmFlush();
+        if (FAILED(hr) || GetTickCount64() - before > kMaxDwmFlushMs)
+            useDwmFlush = false;
+    }
+    ULONGLONG since = GetTickCount64() - lastPresentTick;
+    if (since < kMinFramePeriodMs) {
+        // DwmFlush came back early (or wasn't used): top up to the minimum
+        // period so the loop never rasterizes faster than ~125 fps.
+        Sleep(DWORD(kMinFramePeriodMs - since));
+    } else if (FAILED(hr)) {
+        // No compositor to pace against and a frame is already due: yield
+        // one scheduler tick so a broken DwmFlush can't turn into a hot spin.
+        Sleep(1);
+    }
+}
+// Runs the overlay timeline, on the animation thread only. The minimize and
+// restore hooks never wait on this: the caller's UI thread is back in
+// application code long before the animation finishes. The close path waits
+// on req.hDone (see PlayCloseAnimation), which the request signals as soon as
+// FinishQueued deletes it.
+//
+// The loop is bounded by wall clock, not by frame count: t is derived from
+// the elapsed time and the loop ends `dur` ms after it started no matter how
+// many frames were (or were not) presented in between. That is what keeps
+// the restore path's uncloak (FinishQueued) and the close path's wait
+// predictable even when the pacer misbehaves; the frame floor in PaceFrame
+// only decides how much work is done inside that fixed window.
 static void RunAnimation(HWND hwndOverlay, AnimRequest& req) {
     if (req.capture.empty() || !IsRectUsable(req.rcWindow))
         return;
@@ -1716,28 +1965,32 @@ static void RunAnimation(HWND hwndOverlay, AnimRequest& req) {
     ShowOverlayWindow(hwndOverlay);
     if (req.gdi)
         req.gdi->EnsureSource(req.capture);
-    ULONGLONG start = GetTickCount64(), elapsed = 0;
+    const ULONGLONG start = GetTickCount64();
+    ULONGLONG lastPresent = 0;
+    bool useDwmFlush = true;
     float lastT = -1;
     // A cancellation (g_hwndCurrent no longer pointing at this request, e.g.
     // AfterOrigMinimize clearing it for a synchronous re-minimize) is
     // distinguished from a normal timeout so the cancelled animation doesn't
     // still paint its final frame below.
     bool cancelled = false;
-    while (!g_stopping.load() &&
-           (elapsed = GetTickCount64() - start) < dur) {
+    for (;;) {
+        if (g_stopping.load())
+            break;
         if (g_hwndCurrent.load() != req.hwnd) {
             cancelled = true;
             break;
         }
-        float t =
-            dur == 0 ? 1.f : std::clamp(float(elapsed) / float(dur), 0.f, 1.f);
+        ULONGLONG elapsed = GetTickCount64() - start;
+        if (elapsed >= dur)
+            break;
+        float t = std::clamp(float(elapsed) / float(dur), 0.f, 1.f);
         if (t - lastT >= 0.001f) {
             lastT = t;
             PresentTime(hwndOverlay, req, t);
+            lastPresent = GetTickCount64();
         }
-        if (GetTickCount64() - start >= dur)
-            break;
-        DwmFlush();
+        PaceFrame(lastPresent, useDwmFlush);
     }
     if (!g_stopping.load() && !cancelled)
         PresentTime(hwndOverlay, req, 1.f);
@@ -1758,12 +2011,16 @@ static void FinishQueued(AnimRequest* req) {
     HWND ha = g_hwndAnim.load();
     if (ha && IsWindow(ha))
         HideOverlayWindow(ha);
-    if (req->hwnd && IsWindow(req->hwnd))
+    // Close requests keep DWM transitions disabled: the (hidden) window is
+    // destroyed by the waiting app thread right after this, and re-enabling
+    // now would let the stock DWM close effect play on top of ours.
+    if (req->type != AnimationType::Close && req->hwnd && IsWindow(req->hwnd))
         DisableTransitions(req->hwnd, FALSE);
     if (req->type == AnimationType::Minimize && req->hwnd &&
         IsWindow(req->hwnd) && IsIconic(req->hwnd)) {
-        CaptureBits small = DownscaleForCache(req->capture);
-        CacheCapture(req->hwnd, std::move(small));
+        // CacheCapture keeps this one at full resolution (most recent entry)
+        // and demotes older entries to the compact format itself.
+        CacheCapture(req->hwnd, std::move(req->capture));
     }
     // Only clear g_hwndCurrent if it still points at this request (a newer
     // animation can't have started in the meantime -- g_fAnimating gates
@@ -1892,22 +2149,28 @@ static DWORD CALLBACK AnimWndThreadProc(HANDLE hEvent) {
     UnregisterClassW(kAnimClassName, g_hinst);
     return 0;
 }
+// Makes sure the overlay thread is up, (re)starting it if needed. Failures
+// are reported through NoteOverlayThreadFailure, which pauses the mod for a
+// backoff period instead of latching it off for the life of the process; the
+// next candidate animation after the backoff simply lands here again and
+// retries. Callers check IsDisabled() first so the backoff costs nothing.
 static bool WaitForAnimWndThread() {
-    if (g_stopping.load())
+    if (IsDisabled())
         return false;
     std::lock_guard<std::mutex> lock(g_animThreadMutex);
-    if (g_stopping.load())
+    if (IsDisabled())
         return false;
     if (g_hAnimWndThread) {
         HWND ha = g_hwndAnim.load();
-        if (ha && IsWindow(ha))
+        if (ha && IsWindow(ha)) {
+            ClearOverlayThreadFailure(); // e.g. a slow start that made it after all
             return true;
+        }
         if (g_dwAnimThreadId)
             PostThreadMessageW(g_dwAnimThreadId, WM_QUIT, 0, 0);
         // the handle is kept so StopAnimThread() can still join it at uninit
         if (WaitForSingleObject(g_hAnimWndThread, 2000) != WAIT_OBJECT_0) {
-            g_fDisabled.store(true);
-            Wh_Log(L"overlay thread did not exit in time");
+            NoteOverlayThreadFailure(L"previous overlay thread did not exit");
             return false;
         }
         CloseHandle(g_hAnimWndThread);
@@ -1915,22 +2178,31 @@ static bool WaitForAnimWndThread() {
         g_dwAnimThreadId = 0;
     }
     ScopedHandle hEvent(CreateEventW(nullptr, TRUE, FALSE, nullptr));
-    if (!hEvent)
+    if (!hEvent) {
+        NoteOverlayThreadFailure(L"CreateEvent failed");
         return false;
+    }
     g_hAnimWndThread =
         CreateThread(nullptr, 0, AnimWndThreadProc, hEvent.get(), 0, nullptr);
-    if (!g_hAnimWndThread)
+    if (!g_hAnimWndThread) {
+        NoteOverlayThreadFailure(L"CreateThread failed");
         return false;
+    }
     g_dwAnimThreadId = GetThreadId(g_hAnimWndThread);
     if (WaitForSingleObject(hEvent.get(), 1000) != WAIT_OBJECT_0) {
+        // The thread may still be starting and will SetEvent on this handle
+        // later, so it is leaked on purpose rather than closed under it. If
+        // it does come up late, the next attempt finds g_hwndAnim valid and
+        // succeeds without recreating anything.
         hEvent.release();
-        g_fDisabled.store(true);
+        NoteOverlayThreadFailure(L"overlay thread start timed out");
         return false;
     }
     if (!g_hwndAnim.load()) {
-        g_fDisabled.store(true);
+        NoteOverlayThreadFailure(L"overlay window could not be created");
         return false;
     }
+    ClearOverlayThreadFailure();
     return true;
 }
 static bool QueueRun(AnimRequest&& req) {
@@ -1970,13 +2242,21 @@ static bool IsAnimateCandidate(HWND hwnd) {
         Wh_Log(L"skipped: window of another process");
         return false;
     }
-    if (GetAncestor(hwnd, GA_ROOT) != hwnd) {
-        LONG s = LONG(GetWindowLongPtrW(hwnd, GWL_STYLE));
-        if (!(s & WS_CHILD) || !(s & WS_CAPTION))
-            return false;
-    }
+    // Top-level windows only. This deliberately excludes MDI child windows
+    // (WS_CHILD | WS_CAPTION inside an MDI client): they minimize to an icon
+    // strip at the bottom of the MDI client, not to the taskbar, so flying
+    // them towards a taskbar button -- or trying to capture/close-animate a
+    // child that is clipped by its parent -- is simply wrong. The
+    // DefMDIChildProc hooks are kept for the WM_NCDESTROY cache cleanup they
+    // share with the other Def*Proc hooks; their SC_MINIMIZE/SC_RESTORE
+    // handling ends up here and is skipped. Animating MDI children inside
+    // the client area (as Windows 7 did) is out of scope for now.
     LONG style = LONG(GetWindowLongPtrW(hwnd, GWL_STYLE)),
          ex = LONG(GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
+    if (style & WS_CHILD)
+        return false;
+    if (GetAncestor(hwnd, GA_ROOT) != hwnd)
+        return false;
     if (!(style & WS_CAPTION))
         return false;
     if (ex & WS_EX_TOOLWINDOW)
@@ -2017,7 +2297,7 @@ static bool IsTopLevelCloseCandidate(HWND hwnd) {
     return true;
 }
 static bool ShouldAnimateWindow(HWND hwnd) {
-    if (g_fDisabled.load() || g_fAnimating.load())
+    if (IsDisabled() || g_fAnimating.load())
         return false;
     if (!IsAnimateCandidate(hwnd))
         return false;
@@ -2026,7 +2306,7 @@ static bool ShouldAnimateWindow(HWND hwnd) {
     return true;
 }
 static bool ShouldAnimateClose(HWND hwnd) {
-    if (g_fDisabled.load() || g_fAnimating.load())
+    if (IsDisabled() || g_fAnimating.load())
         return false;
     if (!IsTopLevelCloseCandidate(hwnd))
         return false;
@@ -2163,7 +2443,7 @@ static bool PlayMinimize(HWND hwnd) {
             Wh_Log(L"minimize: no taskbar target");
             return false;
         }
-        rcMin = AspectCorrectedMinimizeTarget(rcMin);
+        rcMin = AspectCorrectedMinimizeTarget(rcMin, rcWin);
     }
     CaptureBits
         cap; // CaptureWindowForClose scopes its own DPI override; it may fall back to PrintWindow, which is app code
@@ -2179,7 +2459,7 @@ static bool PlayRestore(HWND hwnd) {
         return false;
     LONG s = LONG(GetWindowLongPtrW(hwnd, GWL_STYLE));
     if (s & WS_MINIMIZE) {
-        if (g_fDisabled.load() || g_fAnimating.load())
+        if (IsDisabled() || g_fAnimating.load())
             return false;
         if (!HasCachedCapture(hwnd))
             return false;
@@ -2189,8 +2469,8 @@ static bool PlayRestore(HWND hwnd) {
             ScopedDpiAware dpi;
             if (!GetMinimizeRectPhysical(hwnd, &rcMin))
                 return false;
-            rcMin = AspectCorrectedMinimizeTarget(rcMin);
-            WINDOWPLACEMENT wp{sizeof(wp)};
+            WINDOWPLACEMENT wp{};
+            wp.length = sizeof(wp);
             if (GetWindowPlacement(hwnd, &wp))
                 restoreToMax = (wp.flags & WPF_RESTORETOMAXIMIZED) != 0;
             if (!restoreToMax)
@@ -2213,6 +2493,9 @@ static bool PlayRestore(HWND hwnd) {
             rcRest.right = rcRest.left + cap.LogicalW();
             rcRest.bottom = rcRest.top + cap.LogicalH();
         }
+        // Fit the (final) window rect's aspect ratio into the button, so the
+        // fly-in starts from the same shape the fly-out ended on.
+        rcMin = AspectCorrectedMinimizeTarget(rcMin, rcRest);
         // The caller falls through to the original ShowWindow right after this,
         // so the restore happens synchronously and the overlay animates on top --
         // exactly like the minimize path. Nothing is deferred any more.
@@ -2225,33 +2508,68 @@ static bool PlayRestore(HWND hwnd) {
 // The close effect must finish before the real destroy is allowed to proceed,
 // because the overlay lives in the SAME process as the window: with a fully
 // asynchronous handoff, DestroyWindow returns at once and an app whose last
-// window just closed exits within milliseconds -- taking the overlay thread
-// (and the animation) down with it. So the fly-out runs here, but:
-//   - for the duration, this thread only answers SENT messages (SendMessage
-//     from other threads/processes, DWM, IsHungAppWindow) so it never looks
-//     hung; posted messages and input are deliberately left queued and NOT
-//     dispatched, because this runs inside the app's own DestroyWindow call
-//     (from a WM_CLOSE/WM_COMMAND handler, a destructor, possibly under the
-//     app's own locks) -- a point it never expects to be re-entered from;
+// window just closed typically posts WM_QUIT and exits within milliseconds --
+// taking the overlay thread (and the animation) down with it. So the closing
+// thread has to wait for the effect here, inside the app's own DestroyWindow
+// call, but it no longer RUNS the effect:
+//   - the timeline is queued to the overlay thread exactly like minimize and
+//     restore (RunAnimation, with its frame pacing; it ends `duration` ms
+//     after it starts by construction), so the frames are rasterized and
+//     presented off this thread;
+//   - this thread only parks in MsgWaitForMultipleObjectsEx on the request's
+//     completion event, waking for SENT messages (SendMessage from other
+//     threads/processes, DWM, IsHungAppWindow) so it never looks hung.
+//     Posted messages and input are deliberately left queued and NOT
+//     dispatched, because this runs inside DestroyWindow (from a
+//     WM_CLOSE/WM_COMMAND handler, a destructor, possibly under the app's
+//     own locks) -- a point the app never expects to be re-entered from;
 //   - because nothing is removed from the queue, a WM_QUIT already pending
 //     (e.g. PostQuitMessage() called right before DestroyWindow()) is left
 //     completely untouched and is seen by the app's own loop the moment the
 //     effect ends, with its normal semantics -- no special-casing needed;
-//   - the loop bails out within a frame when the mod is unloading
-//     (g_stopping), so disable/settings-reload never wait on the effect;
-//   - the DPI override stays scoped to the geometry/capture and to each
-//     single PresentOverlay call, and is NEVER held while application code
-//     runs (the hide below runs under the thread's own, unmodified
-//     awareness context).
+//   - the wait has a hard deadline (duration + slack): whatever the overlay
+//     thread does, the app gets its thread back on time. The request's
+//     destructor signals the event on every path (normal finish,
+//     cancellation, a drained queue at unload), so the deadline is only the
+//     backstop, not the usual exit;
+//   - the DPI override stays scoped to the geometry/capture and is NEVER held
+//     while application code runs (the hide below runs under the thread's
+//     own, unmodified awareness context).
+// Slack on top of the nominal duration before the app thread stops waiting:
+// covers the final-frame present, FinishQueued and scheduling jitter. Past
+// this the app's thread is released regardless; the overlay thread finishes
+// (or abandons) the timeline on its own.
+constexpr DWORD kCloseWaitSlackMs = 500;
+static void WaitForCloseAnimation(HANDLE hDone, DWORD durationMs) {
+    const ULONGLONG deadline =
+        GetTickCount64() + durationMs + kCloseWaitSlackMs;
+    for (;;) {
+        if (g_stopping.load())
+            break;
+        ULONGLONG now = GetTickCount64();
+        if (now >= deadline)
+            break;
+        DWORD r = MsgWaitForMultipleObjectsEx(1, &hDone, DWORD(deadline - now),
+                                              QS_SENDMESSAGE,
+                                              MWMO_INPUTAVAILABLE);
+        if (r != WAIT_OBJECT_0 + 1)
+            break; // signalled, timed out or failed: all mean "stop waiting"
+        // PM_NOREMOVE with PM_QS_SENDMESSAGE dispatches pending sent
+        // messages without touching posted messages or input.
+        MSG msg;
+        PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE | PM_QS_SENDMESSAGE);
+    }
+}
 static bool PlayCloseAnimation(HWND hwnd, CaptureBits&& preCap,
                                const RECT& preRect) {
     bool exp = false;
     if (!g_fAnimating.compare_exchange_strong(exp, true))
         return false;
-    if (!WaitForAnimWndThread() || g_stopping.load()) {
-        g_fAnimating.store(false);
+    // Released on every early exit below; dismissed once the request has
+    // been handed to the overlay thread (FinishQueued releases it then).
+    ScopedExit releaseSlot([]() { g_fAnimating.store(false); });
+    if (!WaitForAnimWndThread() || g_stopping.load())
         return false;
-    }
     ScopedDwmTransitions transWnd(hwnd);
     transWnd.Disable();
     RECT rcWin = preRect;
@@ -2261,7 +2579,6 @@ static bool PlayCloseAnimation(HWND hwnd, CaptureBits&& preCap,
             ScopedDpiAware dpi;
             if (!GetFrameBoundsPhysical(hwnd, &rcWin)) {
                 Wh_Log(L"close: capture failed");
-                g_fAnimating.store(false);
                 return false;
             }
         }
@@ -2269,14 +2586,18 @@ static bool PlayCloseAnimation(HWND hwnd, CaptureBits&& preCap,
         // PrintWindow, which is app code and must not run under this one.
         if (!CaptureWindowForClose(hwnd, cap, false)) {
             Wh_Log(L"close: capture failed");
-            g_fAnimating.store(false);
             return false;
         }
     }
-    if (cap.empty() || !IsRectUsable(rcWin)) {
-        g_fAnimating.store(false);
+    if (cap.empty() || !IsRectUsable(rcWin))
         return false;
-    }
+    ScopedHandle hDone(CreateEventW(nullptr, TRUE, FALSE, nullptr));
+    if (!hDone)
+        return false;
+    HANDLE hDoneForReq = nullptr;
+    if (!DuplicateHandle(GetCurrentProcess(), hDone.get(), GetCurrentProcess(),
+                         &hDoneForReq, 0, FALSE, DUPLICATE_SAME_ACCESS))
+        return false;
     AnimRequest req;
     req.hwnd = hwnd;
     req.type = AnimationType::Close;
@@ -2284,65 +2605,68 @@ static bool PlayCloseAnimation(HWND hwnd, CaptureBits&& preCap,
     req.rcDest = rcWin;
     req.capture = std::move(cap);
     req.durationMs = DurationMsFor(AnimationType::Close);
+    req.hDone = hDoneForReq; // owned (and signalled) by the request from here
     try {
         req.gdi = std::make_unique<PresentGdi>();
     } catch (...) {
-        g_fAnimating.store(false);
         return false;
     }
     HWND ha = g_hwndAnim.load();
     UINT msg = g_msgAnim.load();
-    if (!ha || !msg || !IsWindow(ha)) {
-        g_fAnimating.store(false);
+    if (!ha || !msg || !IsWindow(ha))
         return false;
-    }
     g_hwndCurrent.store(hwnd);
     g_typeCurrent.store(int(AnimationType::Close));
-    SendFirstFrame(ha, msg, &req);
+    ScopedExit clearCurrent([hwnd]() {
+        if (g_hwndCurrent.load() == hwnd) {
+            g_hwndCurrent.store(nullptr);
+            g_typeCurrent.store(0);
+        }
+    });
+    if (SendFirstFrame(ha, msg, &req) != 1) {
+        // Nothing is on screen yet, so a silent fallback to a plain close is
+        // the right outcome: the window stays visible and DestroyWindow runs.
+        if (IsWindow(ha))
+            HideOverlayWindow(ha);
+        return false;
+    }
     // The hide dispatches WM_SHOWWINDOW & co. inside the app: no DPI override
-    // is held here, so the app runs under its own awareness context.
+    // is held here, so the app runs under its own awareness context. Hiding
+    // ahead of DestroyWindow_orig is what puts the real window out of sight
+    // under the overlay's first frame; DestroyWindow hides the window itself
+    // as its very first step anyway (before WM_DESTROY), so the only change
+    // in the app-visible sequence is that the hide -- and the activation
+    // hand-off to the next window -- happens a couple of hundred
+    // milliseconds earlier than the WM_DESTROY that follows.
     if (IsWindowVisible(hwnd)) {
         if (ShowWindow_orig)
             ShowWindow_orig(hwnd, SW_HIDE);
         else
             ::ShowWindow(hwnd, SW_HIDE);
     }
-ULONGLONG start = GetTickCount64(), elapsed = 0;
-float lastT = -1;
-while (!g_stopping.load() &&
-       (elapsed = GetTickCount64() - start) <= req.durationMs) {
-    float t = req.durationMs == 0 ? 1.f :
-              std::clamp(float(elapsed) / float(req.durationMs), 0.f, 1.f);
-    if (t - lastT >= 0.001f) {
-        lastT = t;
-        auto p = ParamsFor(AnimationType::Close, t, float(RECTH(rcWin)));
-        ScopedDpiAware dpi;
-        PresentOverlay(ha, *req.gdi, req, rcWin, p);
+    const DWORD durationMs = req.durationMs;
+    // From here the overlay thread owns the request, the animation slot and
+    // g_hwndCurrent: FinishQueued clears all three and, by deleting the
+    // request, signals hDone. If QueueRun fails it deletes the request
+    // itself (which also signals the event) and the slot stays ours -- but
+    // the window is already hidden, so report "animated" anyway: that is
+    // what makes DestroyWindow_hook re-show it should the destroy then be
+    // refused. There is simply no animation to wait for in that case.
+    if (!QueueRun(std::move(req))) {
+        Wh_Log(L"close: could not queue the animation");
+        if (IsWindow(ha))
+            HideOverlayWindow(ha);
+        transWnd.Dismiss();
+        return true;
     }
-    // Don't block the DWM
-    MSG msg;
-    PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE | PM_QS_SENDMESSAGE);
-    // DwmFlush() here was a mistake: during DestroyWindow the compositor
-    // isn't reliably ticking (the window is mid-teardown), so a blocking
-    // flush can stall well past one vsync and drag the whole animation out.
-    // A short, deterministic sleep keeps this loop's real-world duration
-    // pinned to req.durationMs regardless of what DWM is doing right now.
-    Sleep(8);
-}
-    {
-        Win7TransformParams pe =
-            ParamsFor(AnimationType::Close, 1.f, float(RECTH(rcWin)));
-        pe.opacity = 0.f;
-        ScopedDpiAware dpi;
-        PresentOverlay(ha, *req.gdi, req, rcWin, pe);
-    }
-    HideOverlayWindow(ha);
-    HWND c = g_hwndCurrent.load();
-    if (c == hwnd) {
-        g_hwndCurrent.store(nullptr);
-        g_typeCurrent.store(0);
-    }
-    g_fAnimating.store(false);
+    releaseSlot.Dismiss();
+    clearCurrent.Dismiss();
+    WaitForCloseAnimation(hDone.get(), durationMs);
+    // DWMWA_TRANSITIONS_FORCEDISABLED is left set on purpose: the window is
+    // about to be destroyed and must not get the stock DWM close transition
+    // on top of ours (FinishQueued skips the re-enable for Close requests for
+    // the same reason; DestroyWindow_hook re-enables it if the destroy is
+    // refused and the window comes back).
     transWnd.Dismiss();
     return true;
 }
@@ -2474,7 +2798,7 @@ static bool CaptureLooksComposed(const CaptureBits& cap) {
 }
 static void ShellPreCaptureForClose(HWND hwnd) {
     try {
-        if (!g_animateClose || g_fDisabled.load() || g_fAnimating.load() ||
+        if (!g_animateClose || IsDisabled() || g_fAnimating.load() ||
             g_stopping.load())
             return;
         if (IsSnippingTool() || !IsShellBrowserWindow(hwnd))
@@ -2513,31 +2837,51 @@ static void ShellPreCaptureForClose(HWND hwnd) {
         // The overlay puts the very same pixels on screen before the window disappears,
         // so the hide-then-destroy sequence never shows a hole where the window was.
         bool ghost = false;
-        if (WaitForAnimWndThread()) {
-            HWND ha = g_hwndAnim.load();
-            UINT msg = g_msgAnim.load();
-            std::unique_ptr<PresentGdi> gdi;
-            try {
-                gdi = std::make_unique<PresentGdi>();
-            } catch (...) {
-                gdi.reset();
-            }
-            if (ha && msg && IsWindow(ha) && gdi && !g_fAnimating.load()) {
-                AnimRequest frame;
-                frame.hwnd = hwnd;
-                frame.type = AnimationType::Close;
-                frame.rcWindow = rc;
-                frame.rcDest = rc;
-                frame.capture = std::move(cap);
-                frame.gdi = std::move(gdi);
-                // The ghost frame is presented by the overlay thread (already
-                // per-monitor DPI-aware), so the DPI override on this thread stays
-                // scoped to the capture above and is never held across presents.
-                ghost = SendFirstFrame(ha, msg, &frame) == 1;
-                if (!ghost)
-                    HideOverlayWindow(
-                        ha); // 1x1 transparent + SWP_HIDEWINDOW: coordinate-free
-                cap = std::move(frame.capture);
+        {
+            // Own the animation slot for the capture-and-present, like every
+            // other SendFirstFrame caller. A plain !g_fAnimating check was a
+            // TOCTOU: an animation started in between would (a) overwrite
+            // g_firstFrameReq under us and (b) leave this Explorer thread
+            // blocked in SendMessageW behind the running timeline. If the
+            // slot is busy the ghost is simply skipped -- the close still
+            // animates from the pre-capture, just without the bridge frame.
+            bool exp = false;
+            bool haveSlot = g_fAnimating.compare_exchange_strong(exp, true);
+            ScopedExit releaseSlot([haveSlot]() {
+                if (haveSlot)
+                    g_fAnimating.store(false);
+            });
+            if (haveSlot && WaitForAnimWndThread() && !g_stopping.load()) {
+                HWND ha = g_hwndAnim.load();
+                UINT msg = g_msgAnim.load();
+                std::unique_ptr<PresentGdi> gdi;
+                try {
+                    gdi = std::make_unique<PresentGdi>();
+                } catch (...) {
+                    gdi.reset();
+                }
+                if (ha && msg && IsWindow(ha) && gdi) {
+                    AnimRequest frame;
+                    frame.hwnd = hwnd;
+                    frame.type = AnimationType::Close;
+                    frame.rcWindow = rc;
+                    frame.rcDest = rc;
+                    frame.capture = std::move(cap);
+                    frame.gdi = std::move(gdi);
+                    // The ghost frame is presented by the overlay thread
+                    // (already per-monitor DPI-aware), so the DPI override on
+                    // this thread stays scoped to the capture above and is
+                    // never held across presents. SendFirstFrame is
+                    // synchronous: once it returns the overlay thread is back
+                    // in its message loop and holds no reference to `frame`,
+                    // so the slot can be released right after (the ghost
+                    // pixels themselves live in the overlay's own surface).
+                    ghost = SendFirstFrame(ha, msg, &frame) == 1;
+                    if (!ghost)
+                        HideOverlayWindow(
+                            ha); // 1x1 transparent + SWP_HIDEWINDOW: coordinate-free
+                    cap = std::move(frame.capture);
+                }
             }
         }
         ScopedExit hideGhost([ghost]() {
@@ -2634,7 +2978,7 @@ static bool PlayClose(HWND hwnd) {
     RECT preRc{};
     bool usePre = false, ghost = false;
     if (!ShouldAnimateClose(hwnd)) {
-        if (g_fDisabled.load() || g_fAnimating.load())
+        if (IsDisabled() || g_fAnimating.load())
             return false;
         if (IsWindowVisible(hwnd) || IsIconic(hwnd))
             return false;
@@ -2657,8 +3001,9 @@ static bool PlayClose(HWND hwnd) {
         if (ghost)
             HideGhostOverlay();
     });
-    // PlayCloseAnimation owns the animation slot from its CAS to its end: the
-    // whole fly-out completes before the real destroy is allowed through.
+    // PlayCloseAnimation takes the animation slot with a CAS, hands the
+    // request (and the slot) to the overlay thread and waits for the fly-out
+    // to complete before the real destroy is allowed through.
     if (PlayCloseAnimation(hwnd, std::move(pre), preRc)) {
         hideGhost.Dismiss();
         return true;
@@ -2731,7 +3076,7 @@ static UINT CmdFromShow(int c) {
     }
 }
 BOOL WINAPI ShowWindow_hook(HWND hWnd, int nCmdShow) {
-    if (g_fDisabled.load() || g_fAnimating.load())
+    if (IsDisabled() || g_fAnimating.load())
         return ShowWindow_orig(hWnd, nCmdShow);
     // ShowWindow is documented as synchronous: start the overlay animation
     // if possible, then let the original run straight away, so the classic
@@ -2770,7 +3115,7 @@ BOOL WINAPI ShowWindow_hook(HWND hWnd, int nCmdShow) {
     return r;
 }
 BOOL WINAPI ShowWindowAsync_hook(HWND hWnd, int nCmdShow) {
-    if (g_fDisabled.load() || g_fAnimating.load())
+    if (IsDisabled() || g_fAnimating.load())
         return ShowWindowAsync_orig(hWnd, nCmdShow);
     // Same reasoning as ShowWindow_hook above: this must never let an
     // exception from our own bookkeeping reach the caller.
@@ -2831,12 +3176,16 @@ BOOL WINAPI DestroyWindow_hook(HWND hWnd) {
         // window that already failed to close could be left invisible too.
         try {
             DisableTransitions(hWnd, FALSE);
-            // Abort any overlay animation still queued for this window before re-showing it.
+            // Abort any overlay animation still running for this window
+            // (possible only if WaitForCloseAnimation hit its deadline)
+            // before re-showing it. Clearing g_hwndCurrent is the cancel
+            // signal RunAnimation polls; the overlay thread's FinishQueued
+            // then hides the overlay and releases the animation slot, so
+            // the slot is deliberately NOT released from here.
             HWND cur = g_hwndCurrent.load();
             if (cur == hWnd) {
                 g_hwndCurrent.store(nullptr);
                 g_typeCurrent.store(0);
-                g_fAnimating.store(false);
             }
             if (ShowWindow_orig)
                 ShowWindow_orig(hWnd, SW_SHOWNA);
@@ -2860,7 +3209,6 @@ static HMODULE GetCurrentModule() {
 static void SafeCleanup() {
     if (InterlockedExchange(&g_isUninitializing, 1))
         return;
-    g_fDisabled.store(true);
     g_stopping.store(true);
     HWND ha = g_hwndAnim.load();
     if (ha && IsWindow(ha)) {
@@ -2880,6 +3228,8 @@ static void SafeCleanup() {
                 continue;
             if (req->hwnd && IsWindow(req->hwnd))
                 DisableTransitions(req->hwnd, FALSE);
+            // ~AnimRequest signals hDone, releasing any app thread parked in
+            // WaitForCloseAnimation on this request.
             delete req;
         }
     }
@@ -2944,6 +3294,11 @@ BOOL Wh_ModInit() {
 void Wh_ModSettingsChanged() {
     try {
         LoadSettings();
+        // A settings change is also the user's way of asking for a retry
+        // after the overlay thread failed to come up: drop the backoff so the
+        // next candidate window tries again immediately.
+        if (!g_stopping.load())
+            ClearOverlayThreadFailure();
     } catch (...) {
         Wh_Log(L"Wh_ModSettingsChanged: unexpected exception");
     }
