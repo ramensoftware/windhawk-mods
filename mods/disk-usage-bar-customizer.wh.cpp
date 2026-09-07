@@ -592,6 +592,7 @@ HRESULT WINAPI HookedDrawThemeBackground(
 
             clipRect.top = clipRect.top + inset;
             clipRect.bottom = clipRect.bottom - inset;
+
             radius = GetCornerRadius(clipRect);
         }
 
