@@ -23,7 +23,7 @@
     * This mod's UX part has no effect if AuthUX BSDR is installed.
 * This mod also optionally restores the logoff sequence of Windows 7 and earlier, where the system would switch to a 'logging off' screen after closing all applications, unlike Windows 8 and newer.
     * This part is compatible with AuthUX BSDR as well.
-* This mod is confirmed to work on Windows 10 LTSC 2021 (22H2) and 11 25H2. It may not work on older Windows 10 versions, and it will not work on versions older than Windows 10 build 1607.
+* This mod is confirmed to work on Windows 10 LTSC 2021 (21H2, 22H2), 11 24H2, and 11 25H2. It may not work on older Windows 10 versions, and it will not work on versions older than Windows 10 build 1607.
 * This mod does not modify any system files. The optional DLL below can be placed anywhere in the file system.
 * Known issues
     * If your user account has no password, enabling the logoff sequence option may make the system automatically log on again after logging off.
@@ -4369,7 +4369,7 @@ HANDLE WINAPI CreateEventW_hook(LPSECURITY_ATTRIBUTES lpEventAttributes, WINBOOL
                     if (!g_hDoModalExitEventDup) {
                         g_hDoModalExitEventDup = duplicated;
                         duplicated = nullptr;
-                        // Works cleanly on LTSC 2021 and 11 25H2
+                        // Works cleanly on LTSC 2021 and 11 24H2/25H2
                         Wh_Log(L"Caught DoModal event");
                     } else {
                         Wh_Log(L"Warning: DoModal event already captured; ignoring the subsequent one...");
