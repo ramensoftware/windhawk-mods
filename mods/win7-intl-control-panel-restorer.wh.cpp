@@ -1,9 +1,9 @@
 // ==WindhawkMod==
-// @id              win7-region-and-language-restorer
+// @id              win7-intl-control-panel-restorer
 // @name            Windows 7 Region and Language Restorer
 // @description     This mod restores the classic Windows 7 Region and Language Control Panel pages on Windows 10 and 11
 // @version         1.0.0
-// @author          babamohammed2022
+// @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
 // @include         control.exe
@@ -28,14 +28,14 @@ This mod restores the classic Windows 7 "Region and Language" Control Panel page
 
 - The mod restores the classic Region page with its four tabs: Formats, Location, Keyboards and Languages, and Administrative.
 - All changes are applied through the standard Windows controls and nothing is simulated.
-- The interface is available in 20 languages and follows the system language automatically.
+- The interface is available in 20 languages and tries to follow the system language automatically.
 
 ---
 
 ## Requirements
 
 - 64-bit Windows 10 or Windows 11 (ARM64 is not supported).
-- On first use, the original Windows 7 component is downloaded automatically from Microsoft and checked before use. An Internet connection is needed only for this step.
+- On first use, the original Windows 7 component (intl.cpl) is downloaded automatically from Microsoft and checked before use. An Internet connection is needed only for this step.
 
 ---
 
@@ -52,7 +52,7 @@ The mod includes a series of settings:
 - This modification has been tested on Windows 10 21H2.
 - Some Windows 7 features no longer exist on modern Windows. In those cases the closest modern equivalent is opened instead (for example, the "Default location" link opens the Location privacy page).
 - Settings that were already applied are kept after the mod is disabled.
-- Windows systems file **are not modified**.
+- Windows systems file **are not modified** and the modern intl.cpl is used as a fallback.
 
 ---
 
