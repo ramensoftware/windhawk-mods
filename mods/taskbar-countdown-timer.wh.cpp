@@ -2,7 +2,7 @@
 // @id              taskbar-countdown-timer
 // @name            Taskbar Countdown Timer
 // @description     A simple countdown timer integrated into the Windows taskbar
-// @version         1.3
+// @version         1.4
 // @author          Richi
 // @github          https://github.com/richilp
 // @include         explorer.exe
@@ -529,7 +529,7 @@ static void PositionPopupNearTaskbar(
         y,
         width,
         height,
-        SWP_SHOWWINDOW
+        SWP_NOACTIVATE
     );
 }
 
@@ -1470,7 +1470,7 @@ static LRESULT CALLBACK FinishedPopupWndProc(
             GetWindowTextW(
                 GetDlgItem(
                     hWnd,
-                    IDC_FINISHED_REMINDER
+                    IDC_FINISHED_TEXT
                 ),
                 finishedReminder,
                 ARRAYSIZE(finishedReminder)
@@ -1647,11 +1647,17 @@ static void ShowFinishedPopup(
     HWND owner,
     const wchar_t* reminderText)
 {
-    if (g_finishedPopup.load()) {
-        SetForegroundWindow(
-            g_finishedPopup
-        );
+    if (HWND existing = g_finishedPopup.load()) {
+        if (HWND text = GetDlgItem(existing, IDC_FINISHED_TEXT)) {
+            SetWindowTextW(
+                text,
+                reminderText && reminderText[0]
+                    ? reminderText
+                    : L"Timer finished"
+            );
+        }
 
+        SetForegroundWindow(existing);
         return;
     }
 
@@ -2090,6 +2096,16 @@ static LRESULT CALLBACK TimerPopupWndProc(
             reinterpret_cast<std::wstring*>(lParam)
         );
 
+        HWND taskbar = g_taskbarWnd.load();
+        if (!taskbar || !IsWindow(taskbar)) {
+            taskbar = FindCurrentProcessTaskbarWnd();
+            if (taskbar) {
+                g_taskbarWnd.store(taskbar);
+            }
+        }
+
+        UINT dpi = GetPopupDpi(taskbar);
+
         ResetPopupForNewTimer(
             hWnd,
             activeReminder ? activeReminder->c_str() : nullptr
@@ -2097,7 +2113,15 @@ static LRESULT CALLBACK TimerPopupWndProc(
 
         LayoutTimerPopup(
             hWnd,
-            GetDpiForWindow(hWnd)
+            dpi
+        );
+
+        PositionPopupNearTaskbar(
+            hWnd,
+            taskbar,
+            380,
+            235,
+            dpi
         );
 
         ShowWindow(
@@ -2336,14 +2360,6 @@ static bool ShowTimerPopup(
 
     LayoutTimerPopup(
         hWnd,
-        dpi
-    );
-
-    PositionPopupNearTaskbar(
-        hWnd,
-        owner,
-        380,
-        235,
         dpi
     );
 
@@ -2701,11 +2717,10 @@ static void AddTimerButton(
                     if (g_timerPopup.load() &&
                         IsWindow(g_timerPopup.load()))
                     {
-                        PostMessageW(
-            g_timerPopup.load(),
+                        PostStringMessage(
+                            g_timerPopup.load(),
                             WM_APP_TIMER_FINISHED,
-                            0,
-                            0
+                            g_reminder
                         );
                     }
 
@@ -3118,15 +3133,17 @@ static bool HookSystemTraySymbols(
 static void HandleLoadedModuleIfSystemTray(
     HMODULE module)
 {
-    if (g_systemTrayModuleHooked.load() ||
-        GetSystemTrayModuleHandle() != module)
-    {
+    if (GetSystemTrayModuleHandle() != module) {
         return;
     }
 
-    if (HookSystemTraySymbols(module)) {
-        g_systemTrayModuleHooked.store(true);
-        Wh_ApplyHookOperations();
+    if (!g_systemTrayModuleHooked.exchange(true)) {
+        if (HookSystemTraySymbols(module)) {
+            Wh_ApplyHookOperations();
+        }
+        else {
+            g_systemTrayModuleHooked.store(false);
+        }
     }
 }
 
@@ -3256,6 +3273,10 @@ BOOL Wh_ModInit()
 
 void Wh_ModAfterInit()
 {
+    if (HMODULE systemTray = GetSystemTrayModuleHandle()) {
+        HandleLoadedModuleIfSystemTray(systemTray);
+    }
+
     ApplyTimerButtonIfAvailable();
 
     g_retryStopEvent =
