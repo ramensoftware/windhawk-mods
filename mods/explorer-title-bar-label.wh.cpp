@@ -48,6 +48,23 @@ Time can use **12-hour or 24-hour format**, with optional seconds.
 This mod does not use XAML Diagnostics, so it can be used together with **Windows 11 File Explorer Styler** and other tools/mods that consume File Explorer XAML diagnostics.
 
 If the mod is enabled while File Explorer windows are already open, the label may only appear in newly opened windows or after Explorer rebuilds the relevant tab UI (for example, after tab activity). This is a limitation of avoiding XAML Diagnostics.
+
+## Credits
+
+Parts of the File Explorer hook and XAML discovery plumbing are adapted from **Explorer Command Bar** by **DanRotaru**, licensed under the MIT License.
+
+<details>
+<summary>MIT license notice for reused code</summary>
+
+Copyright (c) DanRotaru
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE.
+
+</details>
 */
 // ==/WindhawkModReadme==
 
@@ -152,7 +169,8 @@ If the mod is enabled while File Explorer windows are already open, the label ma
   $description: "0 to 100."
 
 - leftMargin: 12
-  $name: Left spacing
+  $name: Left offset
+  $description: "Positive values move the label to the left."
 
 - rightMargin: 12
   $name: Right spacing
@@ -295,14 +313,7 @@ struct Settings
     int verticalOffset = 0;
 };
 
-struct SettingsSnapshot
-{
-    Settings settings;
-    uint64_t generation = 0;
-};
-
 static Settings g_settings;
-static std::atomic<uint64_t> g_settingsGeneration{1};
 static std::mutex g_settingsMutex;
 
 static std::atomic<bool> g_unloading{false};
@@ -537,26 +548,18 @@ static Settings ReadSettingsFromWindhawk()
     return settings;
 }
 
-static void LoadSettings(bool incrementGeneration)
+static void LoadSettings()
 {
     Settings settings = ReadSettingsFromWindhawk();
 
-    {
-        std::lock_guard<std::mutex> lock(g_settingsMutex);
-        g_settings = std::move(settings);
-    }
-
-    if (incrementGeneration)
-    {
-        g_settingsGeneration.fetch_add(1, std::memory_order_release);
-    }
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    g_settings = std::move(settings);
 }
 
-static SettingsSnapshot GetSettingsSnapshot()
+static Settings GetSettings()
 {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
-    return {g_settings,
-            g_settingsGeneration.load(std::memory_order_acquire)};
+    return g_settings;
 }
 
 static std::wstring GetSelectedFontFamily(const Settings &settings)
@@ -1005,6 +1008,7 @@ static double GetCaptionButtonsWidthDip(HWND hwnd)
 
 static void UpdateLabelPosition(muxc::TextBlock const &text,
                                 muxc::Grid const &grid,
+                                int leftOffset,
                                 int verticalOffset)
 {
     double automaticHorizontalCorrection = 0.0;
@@ -1080,7 +1084,7 @@ static void UpdateLabelPosition(muxc::TextBlock const &text,
             }
         }
 
-        translate.X(automaticHorizontalCorrection);
+        translate.X(automaticHorizontalCorrection - static_cast<double>(leftOffset));
         translate.Y(static_cast<double>(verticalOffset) +
                     automaticVerticalCorrection);
     }
@@ -1163,7 +1167,7 @@ static void ApplyTextSettings(muxc::TextBlock const &text,
     }
     text.HorizontalAlignment(mux::HorizontalAlignment::Right);
     text.VerticalAlignment(mux::VerticalAlignment::Center);
-    text.Margin(mux::Thickness{static_cast<double>(settings.leftMargin), 0.0,
+    text.Margin(mux::Thickness{0.0, 0.0,
                                static_cast<double>(settings.rightMargin), 0.0});
     text.IsHitTestVisible(false);
 }
@@ -1202,7 +1206,6 @@ struct LabelEntry
     bool sizeChangedRegistered = false;
     bool cleaned = false;
 
-    uint64_t seenGeneration = 0;
     Settings currentSettings;
     std::wstring lastText;
 };
@@ -1408,6 +1411,87 @@ static bool RunFromWindowThread(HWND hwnd,
 // Title-bar discovery without XAML Diagnostics
 // ============================================================================
 
+static std::chrono::milliseconds GetLabelTimerInterval(
+    const Settings &settings)
+{
+    if (settings.showTime && settings.showSeconds)
+    {
+        return std::chrono::seconds(1);
+    }
+
+    SYSTEMTIME st{};
+    GetLocalTime(&st);
+    DWORD elapsedMs =
+        static_cast<DWORD>(st.wSecond) * 1000u + st.wMilliseconds;
+    DWORD untilNextMinuteMs = 60000u - elapsedMs;
+    if (untilNextMinuteMs == 0)
+    {
+        untilNextMinuteMs = 60000u;
+    }
+
+    return std::chrono::milliseconds(untilNextMinuteMs);
+}
+
+static void ConfigureLabelTimer(const std::shared_ptr<LabelEntry> &entry)
+{
+    if (!entry || entry->cleaned || !entry->timer)
+    {
+        return;
+    }
+
+    entry->timer.Stop();
+
+    if (!entry->currentSettings.showDate &&
+        !entry->currentSettings.showTime)
+    {
+        return;
+    }
+
+    entry->timer.Interval(GetLabelTimerInterval(entry->currentSettings));
+    entry->timer.Start();
+}
+
+static void RefreshLabelEntry(const std::shared_ptr<LabelEntry> &entry,
+                              const Settings &settings)
+{
+    if (!entry || entry->cleaned)
+    {
+        return;
+    }
+
+    auto text = entry->text.get();
+    if (!text)
+    {
+        ReleaseLabelEntry(entry, false);
+        return;
+    }
+
+    entry->currentSettings = settings;
+    ApplyTextSettings(text, entry->currentSettings);
+    entry->lastText = BuildDisplayText(entry->currentSettings);
+
+    if (auto grid = entry->grid.get())
+    {
+        UpdateLabelPosition(text, grid, entry->currentSettings.leftMargin,
+                            entry->currentSettings.verticalOffset);
+    }
+
+    ConfigureLabelTimer(entry);
+}
+
+static void RefreshLabelsForCurrentThread()
+{
+    PruneReleasedLabelEntries();
+    Settings settings = GetSettings();
+
+    for (auto const &entry : g_labelEntries)
+    {
+        RefreshLabelEntry(entry, settings);
+    }
+
+    PruneReleasedLabelEntries();
+}
+
 static void TryInsertTitleText(muxc::Grid const &grid)
 {
     if (!grid || g_unloading.load())
@@ -1429,11 +1513,11 @@ static void TryInsertTitleText(muxc::Grid const &grid)
         return;
 
     PruneReleasedLabelEntries();
-    SettingsSnapshot initialSnapshot = GetSettingsSnapshot();
+    Settings initialSettings = GetSettings();
 
     muxc::TextBlock text;
     text.Name(L"WindhawkExplorerTitleBarLabel");
-    ApplyTextSettings(text, initialSnapshot.settings);
+    ApplyTextSettings(text, initialSettings);
     muxc::Grid::SetColumn(text, muxc::Grid::GetColumn(rightAnchor));
     muxc::Grid::SetRow(text, muxc::Grid::GetRow(rightAnchor));
     muxc::Canvas::SetZIndex(text, 100);
@@ -1446,14 +1530,14 @@ static void TryInsertTitleText(muxc::Grid const &grid)
     catch (...)
     {
     }
-    UpdateLabelPosition(text, grid, initialSnapshot.settings.verticalOffset);
+    UpdateLabelPosition(text, grid, initialSettings.leftMargin,
+                        initialSettings.verticalOffset);
 
     auto entry = std::make_shared<LabelEntry>();
     entry->text = winrt::make_weak(text);
     entry->grid = winrt::make_weak(grid);
-    entry->seenGeneration = initialSnapshot.generation;
-    entry->currentSettings = initialSnapshot.settings;
-    entry->lastText = BuildDisplayText(initialSnapshot.settings);
+    entry->currentSettings = initialSettings;
+    entry->lastText = BuildDisplayText(initialSettings);
     g_labelEntries.push_back(entry);
     std::weak_ptr<LabelEntry> weakEntry = entry;
 
@@ -1469,13 +1553,13 @@ static void TryInsertTitleText(muxc::Grid const &grid)
                 auto grid = entry->grid.get();
                 if (!text || !grid)
                     return;
-                SettingsSnapshot snapshot = GetSettingsSnapshot();
-                UpdateLabelPosition(text, grid, snapshot.settings.verticalOffset);
+                UpdateLabelPosition(text, grid,
+                                    entry->currentSettings.leftMargin,
+                                    entry->currentSettings.verticalOffset);
             });
         entry->sizeChangedRegistered = true;
 
         mux::DispatcherTimer timer;
-        timer.Interval(std::chrono::seconds(1));
         entry->timer = timer;
         entry->tickToken = timer.Tick([weakEntry](auto const &, auto const &)
                                       {
@@ -1485,26 +1569,25 @@ static void TryInsertTitleText(muxc::Grid const &grid)
             if (!text) { ReleaseLabelEntry(entry, false); return; }
             if (g_unloading.load()) { ReleaseLabelEntry(entry, true); return; }
 
-            uint64_t generation = g_settingsGeneration.load(std::memory_order_acquire);
-            if (generation != entry->seenGeneration) {
-                SettingsSnapshot snapshot = GetSettingsSnapshot();
-                entry->seenGeneration = snapshot.generation;
-                entry->currentSettings = snapshot.settings;
-                ApplyTextSettings(text, entry->currentSettings);
-                entry->lastText = BuildDisplayText(entry->currentSettings);
-                if (auto grid = entry->grid.get())
-                    UpdateLabelPosition(text, grid, entry->currentSettings.verticalOffset);
-            }
-
             std::wstring current = BuildDisplayText(entry->currentSettings);
             if (current != entry->lastText) {
                 text.Text(current);
                 entry->lastText = std::move(current);
-                if (auto grid = entry->grid.get())
-                    UpdateLabelPosition(text, grid, entry->currentSettings.verticalOffset);
+                if (auto grid = entry->grid.get()) {
+                    UpdateLabelPosition(text, grid,
+                                        entry->currentSettings.leftMargin,
+                                        entry->currentSettings.verticalOffset);
+                }
+            }
+
+            // Re-align minute-based updates after each tick. Seconds mode
+            // remains a regular one-second timer.
+            if (!(entry->currentSettings.showTime &&
+                  entry->currentSettings.showSeconds)) {
+                ConfigureLabelTimer(entry);
             } });
         entry->tickRegistered = true;
-        timer.Start();
+        ConfigureLabelTimer(entry);
         Wh_Log(L"Title-bar label attached");
     }
     catch (...)
@@ -1518,10 +1601,11 @@ static void TryInsertTitleText(muxc::Grid const &grid)
 static void CollectTitleBarGrids(mux::DependencyObject const &root, int depth,
                                  std::vector<muxc::Grid> *grids)
 {
-    if (!root || depth > 64)
+    if (!root || depth > 64 || !grids || !grids->empty())
         return;
+
     int count = muxm::VisualTreeHelper::GetChildrenCount(root);
-    for (int i = 0; i < count; ++i)
+    for (int i = 0; i < count && grids->empty(); ++i)
     {
         auto child = muxm::VisualTreeHelper::GetChild(root, i);
         if (auto element = child.try_as<mux::FrameworkElement>();
@@ -1530,9 +1614,10 @@ static void CollectTitleBarGrids(mux::DependencyObject const &root, int depth,
             if (auto grid = child.try_as<muxc::Grid>())
             {
                 grids->push_back(std::move(grid));
-                continue;
+                return;
             }
         }
+
         CollectTitleBarGrids(child, depth + 1, grids);
     }
 }
@@ -1849,7 +1934,8 @@ static SymbolHookResult HookFileExplorerExtensionsSymbols(HMODULE module)
 
     Wh_Log(L"Resolving FileExplorerExtensions hooks");
 
-    if (!WindhawkUtils::HookSymbols(module, fileExplorerExtensionsDllHooks, ARRAYSIZE(fileExplorerExtensionsDllHooks)))
+    if (!WindhawkUtils::HookSymbols(module, fileExplorerExtensionsDllHooks,
+                                    ARRAYSIZE(fileExplorerExtensionsDllHooks)))
     {
         Wh_Log(L"HookSymbols(FileExplorerExtensions.dll) failed");
         return SymbolHookResult::ResolutionFailed;
@@ -1921,7 +2007,7 @@ BOOL Wh_ModInit()
     Wh_Log(L"Explorer Title Bar Label 1.0.0 init");
     g_unloading.store(false);
     g_symbolsHooked.store(false);
-    LoadSettings(false);
+    LoadSettings();
 
     if (GetFileExplorerExtensionsModuleHandle())
     {
@@ -1953,7 +2039,19 @@ void Wh_ModAfterInit()
     }
 }
 
-void Wh_ModSettingsChanged() { LoadSettings(true); }
+void Wh_ModSettingsChanged()
+{
+    LoadSettings();
+
+    for (HWND hwnd : GetFileExplorerWindows())
+    {
+        RunFromWindowThread(
+            hwnd,
+            [](PVOID)
+            { RefreshLabelsForCurrentThread(); },
+            nullptr);
+    }
+}
 void Wh_ModBeforeUninit() { g_unloading.store(true); }
 
 void Wh_ModUninit()
@@ -1970,4 +2068,3 @@ void Wh_ModUninit()
         }
     }
 }
-
