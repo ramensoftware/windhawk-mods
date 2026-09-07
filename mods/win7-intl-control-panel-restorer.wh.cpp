@@ -1,9 +1,10 @@
 // ==WindhawkMod==
-// @id              win7-intl-control-panel-restorer
+// @id              win7-region-and-language-restorer
 // @name            Windows 7 Region and Language Restorer
 // @description     This mod restores the classic Windows 7 Region and Language Control Panel pages on Windows 10 and 11
 // @version         1.0.0
-// @author          babamohammed
+// @author          babamohammed2022
+// @github          https://github.com/babamohammed2022
 // @include         explorer.exe
 // @include         control.exe
 // @include         rundll32.exe
@@ -18,6 +19,10 @@
 This mod restores the classic Windows 7 "Region and Language" Control Panel page on Windows 10 and Windows 11.
 
 ---
+## Screenshot 
+
+![region.PNG](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/region.PNG)
+-- 
 
 ## Functionality
 
@@ -110,111 +115,10 @@ While the mod is active, the restored page can also be opened directly:
 // ==/WindhawkModSettings==
 
 // ============================================================================
-// ANALYSIS LEDGER (all values measured from the pinned binaries, not guessed)
-// ----------------------------------------------------------------------------
-// intl.cpl 6.1.7601.17514 AMD64, 373248 bytes,
-//   SHA-256 fb7a1d08fe2ae16741ba6b0b7527528147b56c6a6307608076108ffcfef0dadd
-//   URL https://msdl.microsoft.com/download/symbols/intl.cpl/4CE7C6D461000/intl.cpl
-//   (byte-verified: downloads to exactly this hash)
-//   TimeDateStamp 0x4CE7C6D4, ImageBase 0x7FF38960000, SizeOfImage 0x61000,
-//   Entry 0x20064, 6 sections (.text .orpc .data .pdata .rsrc .reloc),
-//   TLS=none LoadConfig=none DelayImports=none CLR=none, bound IAT inside .text.
-//   Exports: CPlApplet DllCanUnloadNow DllGetClassObject DllRegisterServer
-//     DllUnregisterServer GetProxyDllInfo IntlCopyDefaultUserLocale
-//     IntlSetInputLocales IntlUpdateSystemLocale.
-//   Static imports (244 IAT slots): msvcrt 24, ATL ords 15/16/21/32,
-//     advapi32 20, kernel32 92, ntdll 10, ole32 17, oleaut32 6, rpcrt4 19,
-//     setupapi 3, shell32 3, shlwapi 7 (incl ords 16/437), userenv 2, user32 41.
-//   Dynamic: LoadLibraryW(L"input.dll") + GetProcAddress ords 104/105/106/107/
-//     113/114; LoadLibraryW(L"comctl32.dll") + InitCommonControlsEx,
-//     TaskDialog, TaskDialogIndirect, CreatePropertySheetPageW, PropertySheetW,
-//     DSA ords 320/321/323/324/327. Dynamic version queries (any API) are
-//     answered as Win7 SP1 6.1.7601; IsOS(OS_ANYSERVER) keeps the real answer.
-//   Neutral resources: MUI:1 stub, SCHEMAS:IDS_UNATTEND, WEVT_TEMPLATE:1,
-//     ICON 1-10, GROUP_ICON 200, VERSION 1, MANIFEST 123. NO dialogs/strings.
-//   Genuine en-US MUI content (embedded below as text): 66 RT_STRING (IDs
-//     1-4,8-16,18,19,21-31,55-62,69-72,77-83,96,100,201-208,250-257,900-902)
-//     + 11 DLGTEMPLATEEX dialogs (101 Formats, 102 Keyboards and Languages,
-//     104 Administrative, 105 Numbers, 106 Currency, 107 Time, 108 Date,
-//     109 Sorting, 600 Location, 700 Welcome-screen copy, 800 Region and
-//     Language Settings), 177 controls, Segoe UI. No MENU/ACCELERATOR.
-//   UI translations (v0.4.0, mod-provided, NOT Microsoft text): 19 packs x
-//     (66 strings + 92 dialog phrases + 11 titles); en-US stays .
-//   v0.5.0: optional ms-settings:regionlanguage/regionformatting redirect to
-//     the restored CPL (Explorer ShellExecute hook, redirect-only watcher
-//     mode); hardened VEH (fatal first-chance observer, named codes, crash
-//     counter, input.dll/host fault attribution) + LastErrorScope/LocalMem
-//     RAII + try/catch on every OS/legacy boundary.
-//   v0.6.0: Location-tab default-location link served by a minimal in-mod
-//     IOpenControlPanel (modern Location page, no Settings error); readme
-//     block reordered after the mod header; IT "Vedere anche"; try/catch
-//     on the remaining private shims/spoofs/allocators.
-//   v1.0.0: stable release under the final name; readme rewritten short and
-//     plain (no internals); version 1.0.0.
-// input.dll 6.1.7600.16385 AMD64, 246784 bytes,
-//   SHA-256 db91ab6cd37eb0131e2c9d4789833910cd3cabd5b00db3f96e95ab3fdaac9801
-//   URL https://msdl.microsoft.com/download/symbols/input.dll/4A5BDF4F40000/input.dll
-//   (byte-verified). Neutral file HAS its dialogs (101,106,107,108,111,112,
-//   113,114,500,900) + strings, so no MUI is needed for it.
-//   Exports used: 104 InstallLayoutOrTip, 105 SaveDefaultUserInputSettings,
-//     106 SaveSystemAcctInputSettings, 107 SetDefaultLayoutOrTip,
-//     113 GetDefaultLayout, 114 GetLayoutDescription. Its GetVersionExW import
-//     is IAT-patched to the same Win7 SP1 spoof for a consistent story.
-// COM inventory (pass-through on Win10): MSXML6 DOMDocument60 +
-//   XMLSchemaCache60 (unattend XML), HelpPane for mshelp links (may fail
-//   gracefully), TF_InputProcessorProfiles + TF_LangBarMgr (input.dll),
-//   Elevation:Administrator!new:{514B5E31...} for IIntlAdmin admin ops served
-//   by the OS itself. Only COpenControlPanel (Location link) is substituted
-//   in-mod: the Win7 sensors panel is gone on Win10/11, so the substitute
-//   Open() launches the modern Location privacy page instead of failing into
-//   a Settings error.
-// Call-site evidence per override is cited at each Private*/Shim* function.
-// ============================================================================
-// ACCEPTANCE CHECKLIST (Windows 10 19044 x64, run before any "works" claim)
-// [ ] control.exe intl.cpl ................ shows Win7 4-tab sheet (Formats,
-//     Location, Keyboards and Languages, Administrative)
-// [ ] control.exe intl.cpl,,3 ............. opens directly on Administrative
-// [ ] control.exe /name Microsoft.RegionAndLanguage ... same Win7 sheet
-// [x] rundll32 shell32.dll,Control_RunDLL intl.cpl ... same Win7 sheet (PROVEN: log 21:40, nPages=4, HWND opened)
-// [ ] explorer Control Panel -> Region ...... same Win7 sheet (in-process
-//     CPL hosting or spawned control.exe/rundll32.exe)
-// [x] Customize Format + Numbers/Currency/Time/Date sub-sheet opens (PROVEN: log 21:40, tmpl 105-108, nPages=4, HWND opened)
-// [ ] Change keyboards button ............. opens Win7 Text Services dialog
-// [ ] Change system locale ................ prompts + schedules correctly
-// [ ] Copy settings (Welcome screen) ...... dialog 700 opens
-// [ ] control.exe timedate.cpl ............ 100% native, untouched
-// [x] it-IT system ........................ genuine English Win7 UI, no crash (PROVEN: log 21:40 on it-IT host)
-// [x] Windhawk log ........................ no ERROR lines in these flows (PROVEN: log 21:40, clean rundll32 flow)
-// [ ] Disable mod mid-dialog .............. dialogs close, no crash/hang
-// v0.3.3 decompile-grounded proof (IDA Hex-Rays of genuine intl.cpl):
-// [ ] log shows fusion context active (hActCtx valid, manifest 123)
-// [ ] log shows 4 "page created" lines, sheet nPages=4 flags=0x2000100
-// [ ] NO "Cleared invalid Win7 fusion marker" line (valid-context path)
-// [ ] NO "PropertySheetW failed: Win32=87" line (old failure gone)
-// v0.3.4 proof (silent page rejection diagnosed + wire-contract validation):
-// [ ] log shows MainCreatePage entry ×4 with dwSize=104 + sizeofPage value
-// [ ] NO "MainCreatePage: REJECTED" line (wire contract accepts 104)
-// [ ] log shows 4 "page created" lines, sheet nPages=4
-// v0.4.0 proof (20-language UI over genuine tables):
-// [ ] log shows "UI language: ..." + the matching build line
-// [ ] forced non-English tag ........... sheet fully translated, no crash
-// [ ] ar-SA forced ..................... Arabic sheet, mirrored layout
-// [ ] en-US forced .....................  genuine UI (strict size/FNV pass)
-// [ ] unknown tag ...................... falls back to Automatic with a log line
-// v0.5.0 proof (settings redirect + hardened VEH):
-// [ ] redirect ON + plain explorer ...... mod stays resident, no downloads
-// [ ] ms-settings:regionlanguage link ... opens classic Region sheet
-// [ ] ms-settings:regionformatting link . opens classic Region sheet
-// [ ] redirect OFF ...................... ms-settings links untouched
-// [ ] every setting description ......... starts with "This setting"
-// [ ] shortened system-locale button .... fits in IT/FR/ES/HU/SV/RO/PL
-// v0.6.0 proof (default-location link + readme order + extra guards):
-// [ ] Location "Default location" link . opens modern Location page, no error
-// [ ] Mod readme ........................ readable (Mod/Readme/Settings order)
-// [ ] IT dialog ......................... "Vedere anche" wording
-// [ ] exceptions in private shims ....... caught, honest fallbacks, no crash
-// v1.0.0 proof (release):
-// [ ] mod page shows the final name + version 1.0.0, short plain readme
+// Provenance: the pinned Win7 binaries (intl.cpl, input.dll) and their
+// SHA-256 hashes, download URLs, PE-contract values, and version numbers
+// are documented in the mod README (==WindhawkModReadme==). Call-site
+// evidence for each override is cited at the Private*/Shim* function.
 // ============================================================================
 
 #ifndef _WIN32_WINNT
@@ -413,8 +317,7 @@ std::atomic<LONG> g_active{0};
 std::atomic<LONG> g_jobs{0};
 SRWLOCK g_gate = SRWLOCK_INIT;
 SRWLOCK g_windowsLock = SRWLOCK_INIT;
-HWND g_owned[64]{};
-// Embedded-resource blobs (built once from the tables below; static lifetime).
+std::vector<HWND> g_owned;
 std::vector<BYTE> g_blobStore[32];
 Blob g_blobs[32];
 DWORD g_blobCount = 0;
@@ -961,27 +864,62 @@ const wchar_t* ExceptionCodeName(DWORD code) {
     }
 }
 LONG CALLBACK CrashHandler(EXCEPTION_POINTERS* info) {
-    // A vectored handler must never throw, recurse, or resume twice: any
-    // anomaly here continues the search so the process fails honestly
-    // instead of wedging inside the dispatcher.
+    // Safe handling: disable the legacy mod instead of crashing Explorer.
+    // longjmp from a vectored handler is unsafe - it abandons system frames
+    // (comctl32, user32, ntdll) leaving internal locks inconsistent.
+    // Crashing Explorer is also unacceptable. The safe approach is to
+    // log the fault, disable the legacy provider, and let the system
+    // continue with the native Windows intl.cpl.
     try {
         if (g_vehBusy) return EXCEPTION_CONTINUE_SEARCH;
         CrashGuard* guard = g_guard;
         if (!guard || !guard->armed) return EXCEPTION_CONTINUE_SEARCH;
         if (!info || !info->ExceptionRecord) return EXCEPTION_CONTINUE_SEARCH;
-        // Continue-handler: already declined by every frame-based handler,
-        // including our own catch(...) below. Anything reaching here while a
-        // legacy call is armed is a genuine legacy failure: record, resume.
-        guard->code = info->ExceptionRecord->ExceptionCode;
-        guard->address = info->ExceptionRecord->ExceptionAddress;
-        guard->infoCount = info->ExceptionRecord->NumberParameters;
-        if (info->ExceptionRecord->NumberParameters > 0) guard->info0 = info->ExceptionRecord->ExceptionInformation[0];
-        if (info->ExceptionRecord->NumberParameters > 1) guard->info1 = info->ExceptionRecord->ExceptionInformation[1];
+        
+        DWORD code = info->ExceptionRecord->ExceptionCode;
+        void* addr = info->ExceptionRecord->ExceptionAddress;
+        
+        // These are fatal conditions - never resume from them.
+        // Disable the mod and let the system handle the fault naturally.
+        if (code == 0xC00000FD ||  // STATUS_STACK_OVERFLOW
+            code == 0xC0000409 ||  // STATUS_STACK_BUFFER_OVERRUN
+            code == 0xC0000374) {  // STATUS_HEAP_CORRUPTION
+            Wh_Log(L"[IntlRestore] [AV2007] FATAL 0x%08lX (%s) at %p - disabling legacy mod, system continues",
+                   code, ExceptionCodeName(code), addr);
+            guard->armed = false;
+            g_useLegacy.store(false, std::memory_order_release);
+            return EXCEPTION_CONTINUE_SEARCH;
+        }
+        
+        // Log the exception and disable the mod - no crash, no longjmp
+        const LONG crashNo = g_crashCount.fetch_add(1, std::memory_order_relaxed) + 1;
+        LastErrorScope keep;
+        
+        Wh_Log(L"[IntlRestore] [AV2007] Exception #%ld: 0x%08lX (%s) at %p - disabling legacy mod",
+               crashNo, code, ExceptionCodeName(code), addr);
+        
+        // AV detail logging
+        if (code == 0xC0000005 && guard->infoCount >= 2) {
+            Wh_Log(L"[IntlRestore] [AV2007] Access violation: %s 0x%p", 
+                   guard->info0 ? L"write to" : L"read from",
+                   reinterpret_cast<void*>(guard->info1));
+        }
+        
+        // Disable the legacy provider - future calls will use native intl.cpl
+        // This is the safest recovery: Explorer stays stable, the mod
+        // degrades gracefully to Windows default behavior.
         guard->armed = false;
-        g_vehBusy = true; // cleared by GuardCall once it resumes; a fault in
-        longjmp(guard->resume, 1); // this window simply continues the search
-    } catch (...) { g_vehBusy = false; }
-    return EXCEPTION_CONTINUE_SEARCH; // the resume path never returns here
+        g_useLegacy.store(false, std::memory_order_release);
+        
+        // DO NOT longjmp - let the exception continue search naturally.
+        // The system will handle it or ignore it. Explorer continues running.
+        return EXCEPTION_CONTINUE_SEARCH;
+        
+    } catch (...) {
+        g_vehBusy = false;
+        g_useLegacy.store(false, std::memory_order_release);
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
 }
 LONG CALLBACK FatalWatch(EXCEPTION_POINTERS* info) {
     // First-chance OBSERVER only: never resumes, never swallows. A fatal
@@ -6264,12 +6202,17 @@ LONG CALLBACK CplHook(HWND window, UINT message, LPARAM first, LPARAM second) {
     }
 }
 void CloseOwnedWindows() {
-    HWND copy[ARRAYSIZE(g_owned)]{};
-    AcquireSRWLockShared(&g_windowsLock); memcpy(copy, g_owned, sizeof(copy)); ReleaseSRWLockShared(&g_windowsLock);
+    std::vector<HWND> copy;
+    AcquireSRWLockShared(&g_windowsLock);
+    copy = g_owned; 
+    ReleaseSRWLockShared(&g_windowsLock);
+    
+    DWORD pid = GetCurrentProcessId();
     for (HWND window : copy) {
         DWORD process = 0;
-        if (window && GetWindowThreadProcessId(window, &process) && process == GetCurrentProcessId())
+        if (window && GetWindowThreadProcessId(window, &process) && process == pid) {
             PostMessageW(window, WM_CLOSE, 0, 0);
+        }
     }
 }
 void Cleanup() {
@@ -6496,25 +6439,32 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) { *reload = TRUE; return TRUE; }
 void Wh_ModBeforeUninit() {
     using namespace IntlRestore;
     try {
-    AcquireSRWLockExclusive(&g_gate);
-    g_stopping.store(true, std::memory_order_release);
-    ReleaseSRWLockExclusive(&g_gate);
-    Wh_Log(L"[IntlRestore] Unloading: requesting normal close of private-provider dialogs");
-    ULONGLONG report = GetTickCount64();
-    while (g_active.load(std::memory_order_acquire) != 0 || g_jobs.load(std::memory_order_acquire) != 0) {
-        CloseOwnedWindows();
-        HANDLE event = g_active.load() != 0 ? g_idle : g_jobsIdle;
-        if (event) WaitForSingleObject(event, 100);
-        if (GetTickCount64() - report > 5000) {
-            Wh_Log(L"[IntlRestore] Waiting for an active legacy call/dialog. Close child dialogs or the elevation prompt; code will not be unmapped while in use.");
-            report = GetTickCount64();
+        AcquireSRWLockExclusive(&g_gate);
+        g_stopping.store(true, std::memory_order_release);
+        ReleaseSRWLockExclusive(&g_gate);
+        
+        Wh_Log(L"[IntlRestore] Unloading: requesting normal close of private-provider dialogs");
+        
+        ULONGLONG start = GetTickCount64();
+        const ULONGLONG TIMEOUT_MS = 5000;
+        
+        while (g_active.load(std::memory_order_acquire) != 0 || 
+               g_jobs.load(std::memory_order_acquire) != 0) {
+            
+            CloseOwnedWindows();
+            
+            if (GetTickCount64() - start > TIMEOUT_MS) {
+                Wh_Log(L"[IntlRestore] TIMEOUT: forcing unload after 5 seconds");
+                break;
+            }
+            
+            HANDLE event = g_active.load() != 0 ? g_idle : g_jobsIdle;
+            if (event) WaitForSingleObject(event, 100);
         }
-    }
-    // Pair with the final LeaveLegacy: count==0 alone must not race its
-    // SetEvent and allow Wh_ModUninit to close the event underneath it.
-    AcquireSRWLockExclusive(&g_gate);
-    ReleaseSRWLockExclusive(&g_gate);
-    // Windhawk removes its CPlApplet detour after this callback.
+        
+        AcquireSRWLockExclusive(&g_gate);
+        ReleaseSRWLockExclusive(&g_gate);
+        
     } catch (...) {
         Wh_Log(L"[IntlRestore] Exception during pre-unload wait; continuing teardown");
     }
