@@ -912,25 +912,36 @@ BOOL Wh_ModInit() {
     // it would be placed using a stale one. Rather than misplace an indicator,
     // drop to the main position for everything and say so in the log.
     // Each kind is recognised as long as one of its two entry points resolved.
+    // There are eight entry points but seven kinds, since camera has two, so each
+    // one is named rather than numbered.
     const struct {
+        PCWSTR name;
         const void* ramp;
         const void* thunk;
     } kindRecorders[] = {
-        {(void*)ShowVolumeAsync_Original,
+        {L"volume",
+         (void*)ShowVolumeAsync_Original,
          (void*)ShowVolumeThunk_Original},
-        {(void*)ShowBrightnessAsync_Original,
+        {L"brightness",
+         (void*)ShowBrightnessAsync_Original,
          (void*)ShowBrightnessThunk_Original},
-        {(void*)ShowKeyboardBrightnessAsync_Original,
+        {L"keyboard brightness",
+         (void*)ShowKeyboardBrightnessAsync_Original,
          (void*)ShowKeyboardBrightnessThunk_Original},
-        {(void*)ShowAirplaneModeOnAsync_Original,
+        {L"airplane mode",
+         (void*)ShowAirplaneModeOnAsync_Original,
          (void*)ShowAirplaneModeOnThunk_Original},
-        {(void*)ShowCameraOnAsync_Original,
+        {L"camera on",
+         (void*)ShowCameraOnAsync_Original,
          (void*)ShowCameraOnThunk_Original},
-        {(void*)ShowCameraAccessEnabledAsync_Original,
+        {L"camera access",
+         (void*)ShowCameraAccessEnabledAsync_Original,
          (void*)ShowCameraAccessEnabledThunk_Original},
-        {(void*)ShowMicrophoneMutedAsync_Original,
+        {L"microphone",
+         (void*)ShowMicrophoneMutedAsync_Original,
          (void*)ShowMicrophoneMutedThunk_Original},
-        {(void*)ShowTextAsync_Original,
+        {L"text",
+         (void*)ShowTextAsync_Original,
          (void*)ShowTextThunk_Original},
     };
 
@@ -942,20 +953,21 @@ BOOL Wh_ModInit() {
         }
     }
 
+    // Every one is reported rather than stopping at the first missing entry point,
+    // since a build that moved several names should show all of them.
     for (const auto& recorder : kindRecorders) {
-        Wh_Log(L"Kind %d resolved through ramp=%d thunk=%d",
-               (int)(&recorder - kindRecorders), !!recorder.ramp,
-               !!recorder.thunk);
+        Wh_Log(L"Entry point %s resolved through ramp=%d thunk=%d", recorder.name,
+               !!recorder.ramp, !!recorder.thunk);
 
         if (!recorder.ramp && !recorder.thunk) {
             g_kindUnreliable = true;
-            // Only worth saying to someone who has an override set. With the
-            // shipped defaults there is nothing being ignored to complain about.
-            if (anyPerIndicator) {
-                Wh_Log(L"%s", kKindUnreliableMessage);
-            }
-            break;
         }
+    }
+
+    // Only worth saying to someone who has an override set. With the shipped
+    // defaults there is nothing being ignored to complain about.
+    if (g_kindUnreliable && anyPerIndicator) {
+        Wh_Log(L"%s", kKindUnreliableMessage);
     }
 
     return TRUE;
