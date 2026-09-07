@@ -2,12 +2,114 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-07T19:03:44.000Z</updated>
+    <updated>2026-09-07T21:52:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[TopBar for Windows 1.0.0]]></title>
+        <id>https://windhawk.net/mods/windhawk-topbar#8dcad63f573216788738142dc36cb982536d970a</id>
+        <link href="https://windhawk.net/mods/windhawk-topbar"/>
+        <updated>2026-09-07T21:52:44.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="topbarforwindhawk">TopBar For Windhawk</h1>
+<p><img src="https://i.imgur.com/bryjzKr.png" alt="TopBar screenshot" /></p>
+<p>Adds a <strong>TopBar</strong> at top of your screen with multiple customizations, hosted by a
+dedicated explorer.exe tool process.</p>
+<p><a href="https://www.patreon.com/WasiXGamer/join"><img src="https://i.imgur.com/JJ0TluA.png" alt="Patreon" /></a></p>
+<h2 id="themes">Themes</h2>
+<p>Themes are collections of styles that can be selected from the <strong>Theme</strong> dropdown in the mod settings. The following themes are available:</p>
+<p>| Theme | Preview |
+|-------|---------|
+| <a href="https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/GreenBar">GreenBar</a> | <a href="https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/GreenBar"><img src="https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/main/Themes/GreenBar/screenshot.png" alt="GreenBar" /></a> |
+| <a href="https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/NoIslands">NoIslands</a> | <a href="https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/NoIslands"><img src="https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/main/Themes/NoIslands/screenshot.png" alt="NoIslands" /></a> |</p>
+<p>More themes, stylings, etc can be found and contributed from:
+<strong><a href="https://github.com/wasixgamer/windhawk-topbar-styling-guide">Windhawk TopBar Styling Guide</a></strong></p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Task list</strong> — window icons, titles, click-to-activate, double-click maximize</li>
+<li><strong>Control centre</strong> — Display (brightness, Dark Mode), Sound (volume, per-app mixer, device picker, media controls), Wi-Fi (scan/connect), Bluetooth (connect/disconnect), and Tray (notification area)</li>
+<li><strong>Full styling</strong> via Control styles</li>
+<li><strong>Background translucency</strong> with acrylic/blur</li>
+</ul>
+<h2 id="processmodel">Process model</h2>
+<p>The bar runs in its own Explorer tool process (<code>explorer.exe -tool-mod windhawk-topbar</code>).
+A mutex keeps one bar alive. XAML Islands require a real Explorer host.</p>
+<h2 id="styling">Styling</h2>
+<p>Every element is targetable from <strong>Control styles</strong>, using the plain name, a bare
+class name (<code>Button</code>), <code>ClassName#Name</code>, or a parent chain (<code>StackPanel &gt; TextBlock</code>).
+<code>*</code> matches any intermediate parents, and <code>:root &gt;</code> requires a root element.</p>
+<p>| Name | What it is |
+|------|------------|
+| <code>TopBarRoot</code> | Root <code>Grid</code> spanning the whole bar |
+| <code>LeftPanel</code> | Left strip holding Start and Search |
+| <code>StartButton</code> / <code>StartIcon</code> | Start button and its logo |
+| <code>SearchButton</code> / <code>SearchIcon</code> | Search button (opens native Search) |
+| <code>TaskListPanel</code> / <code>TaskButton</code> | Task strip, and every task button |
+| <code>TaskButtonIcon</code> / <code>TaskButtonText</code> | Icon and label inside a task button |
+| <code>TrayPanel</code> | Right-hand strip holding the status buttons and clock |
+| <code>DisplayButton</code> <code>SoundButton</code> <code>WifiButton</code> <code>BluetoothButton</code> <code>TrayButton</code> | Status buttons |
+| <code>ClockButton</code> / <code>ClockText</code> | Date/time |
+| <code>BatteryButton</code> | Battery button |</p>
+<p>More targets can be discovered with <strong><a href="https://github.com/m417z/UWPSpy/releases/">UWPSpy</a></strong> by Spying the TopBar's <code>explorer.exe</code> process</p>
+<h3 id="keyboardshortcutsforinspectingtheelementsinflyouts">Keyboard shortcuts (For Inspecting the elements in Flyouts)</h3>
+<p>After setting UWPSpy at Sticky mode, the following Shortcuts can be used to trigger the flyouts for stylings:</p>
+<p>| Hotkey | Action |
+|--------|--------|
+| Ctrl+Alt+1 | Toggle Display flyout |
+| Ctrl+Alt+2 | Toggle Sound flyout |
+| Ctrl+Alt+3 | Toggle Wi-Fi flyout |
+| Ctrl+Alt+4 | Toggle Bluetooth flyout |
+| Ctrl+Alt+5 | Toggle Tray flyout |
+| Ctrl+Alt+6 | Show Start button context menu |
+| Ctrl+Alt+7 | Show Task list context menu |</p>
+<p>Style syntax: <code>Property=Value</code>, <code>Property:=&lt;Xaml/&gt;</code>, <code>$name</code> constants.
+<code>TaskButton</code>.</p>
+<h2 id="globaltransparencyandtint">Global transparency and tint</h2>
+<p>The transparency and tint configured in <strong>Top bar background color</strong> and <strong>Top bar background opacity</strong>
+are applied to the top bar, and all flyouts (Display, Sound, Wi‑Fi, Bluetooth, Tray)
+and to all context menus.</p>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>Tray icons dont show up - Will attempted to be fixed in next update.</li>
+<li>Live Wallpapers are NOT supported and topbar background will use default windows wallpaper instead of live wallpaper.</li>
+</ul>]]></content>
+        <author>
+            <name>WasiXGamer</name>
+            <uri>https://github.com/wasixgamer</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows Vista/7 Blocked Shutdown UX & Logoff Sequence 1.1]]></title>
+        <id>https://windhawk.net/mods/win7-bsdr#d7f29f93f17b01ab03c53367f421bdc0fc339ffe</id>
+        <link href="https://windhawk.net/mods/win7-bsdr"/>
+        <updated>2026-09-07T21:52:22.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add support for loading <code>winsrv.dll</code> from Windows Vista<ul>
+<li>Resources for Vista BSDR are not included in the mod source. You must provide the resource DLL if you want to use the Vista style. See the mod readme for the instructions.</li></ul></li>
+<li>Improve the accuracy of app tile layout, image rendering, and scrolling behavior</li>
+<li>Refactor the safety checks to be less janky</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Disk Usage Bar Customizer 1.2.0]]></title>
+        <id>https://windhawk.net/mods/disk-usage-bar-customizer#d2d0c6132a9cdb7deeece76d86a69ca28fb2ea0f</id>
+        <link href="https://windhawk.net/mods/disk-usage-bar-customizer"/>
+        <updated>2026-09-07T21:51:54.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add WinUI-like rendering option</li>
+<li>The "Render using visual styles" option has been replaced with a "Rendering mode" option that allows you to change the rendering mode to one of the following options: Custom, Visual styles and WinUI-like (breaking change)</li>
+</ul>]]></content>
+        <author>
+            <name>Valer100</name>
+            <uri>https://github.com/Valer100</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Adjustable tray icons padding for Win10 taskbar 1.0]]></title>
         <id>https://windhawk.net/mods/dense-tray-icons-padding-old-taskbar#70b2e94eb5a6d619418a6a4b47ad9a164b21b3ab</id>
@@ -522,57 +624,6 @@ attribution look busier than expected.</li>
         <author>
             <name>meteoni</name>
             <uri>https://github.com/Meteoni</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar height and icon size 1.3.9]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-size#c34a28655b833d318fb47fc08d8ec2c5ef939b8c</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
-        <updated>2026-09-04T22:02:35.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed compatibility with older Windows 11 versions such as 23H2 and 24H2. The most noticeable problem was that the taskbar could be cut off when using a custom height.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[On-Screen Indicator Position 1.2.7]]></title>
-        <id>https://windhawk.net/mods/on-screen-indicator-position#c27674120c8e769a26898d151ce4b3a48d0497c0</id>
-        <link href="https://windhawk.net/mods/on-screen-indicator-position"/>
-        <updated>2026-09-04T19:32:45.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the per indicator positions, which had not worked at all since 1.2.6. Whatever you set for volume or brightness on its own was ignored and everything used the main position instead.</li>
-</ul>]]></content>
-        <author>
-            <name>mario0318</name>
-            <uri>https://github.com/mario0318</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Info Bar+ 1.2.0]]></title>
-        <id>https://windhawk.net/mods/explorer-info-bar#2d25f22950c8994476d69ab5728ab2105d476537</id>
-        <link href="https://windhawk.net/mods/explorer-info-bar"/>
-        <updated>2026-09-04T19:29:54.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Adds configurable font family, font size, left padding, and spacing between info sections.</li>
-<li>Adds solid and directional gradient fills for Flat panes and Soft cards.</li>
-<li>Expands single-file details for photos and RAW files with dimensions, camera and lens information, plus optional ISO, aperture, shutter speed, and focal length.</li>
-<li>Expands video and audio details with duration, video resolution, and optional frame rate, sample rate, and channel information.</li>
-<li>Adds separate Off / Standard / Extended detail controls for photos, media files, and other file types.</li>
-<li>Adds optional Windows file type and modified date/time details for other files.</li>
-<li>Enables single-file details by default.</li>
-<li>Improves metadata caching and refresh behavior.</li>
-<li>Reduces unnecessary filesystem access when resolving file type descriptions.</li>
-<li>Improves metadata shutdown/cancellation and settings refresh behavior.</li>
-<li>Fixes custom left-padding and section-spacing values not always applying correctly.</li>
-<li>Fixes stale single-file metadata remaining visible after deselecting a file.</li>
-<li>Fixes leftover file-detail content when switching from a file with longer metadata to one with shorter metadata.</li>
-</ul>]]></content>
-        <author>
-            <name>digART</name>
-            <uri>https://github.com/digart11</uri>
         </author>
     </entry>
 </feed>

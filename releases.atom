@@ -2,12 +2,84 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-07T19:03:44.000Z</updated>
+    <updated>2026-09-07T21:52:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[TopBar for Windows 1.0.0]]></title>
+        <id>https://windhawk.net/mods/windhawk-topbar#8dcad63f573216788738142dc36cb982536d970a</id>
+        <link href="https://windhawk.net/mods/windhawk-topbar"/>
+        <updated>2026-09-07T21:52:44.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="topbarforwindhawk">TopBar For Windhawk</h1>
+<p><img src="https://i.imgur.com/bryjzKr.png" alt="TopBar screenshot" /></p>
+<p>Adds a <strong>TopBar</strong> at top of your screen with multiple customizations, hosted by a
+dedicated explorer.exe tool process.</p>
+<p><a href="https://www.patreon.com/WasiXGamer/join"><img src="https://i.imgur.com/JJ0TluA.png" alt="Patreon" /></a></p>
+<h2 id="themes">Themes</h2>
+<p>Themes are collections of styles that can be selected from the <strong>Theme</strong> dropdown in the mod settings. The following themes are available:</p>
+<p>| Theme | Preview |
+|-------|---------|
+| <a href="https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/GreenBar">GreenBar</a> | <a href="https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/GreenBar"><img src="https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/main/Themes/GreenBar/screenshot.png" alt="GreenBar" /></a> |
+| <a href="https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/NoIslands">NoIslands</a> | <a href="https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/NoIslands"><img src="https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/main/Themes/NoIslands/screenshot.png" alt="NoIslands" /></a> |</p>
+<p>More themes, stylings, etc can be found and contributed from:
+<strong><a href="https://github.com/wasixgamer/windhawk-topbar-styling-guide">Windhawk TopBar Styling Guide</a></strong></p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Task list</strong> — window icons, titles, click-to-activate, double-click maximize</li>
+<li><strong>Control centre</strong> — Display (brightness, Dark Mode), Sound (volume, per-app mixer, device picker, media controls), Wi-Fi (scan/connect), Bluetooth (connect/disconnect), and Tray (notification area)</li>
+<li><strong>Full styling</strong> via Control styles</li>
+<li><strong>Background translucency</strong> with acrylic/blur</li>
+</ul>
+<h2 id="processmodel">Process model</h2>
+<p>The bar runs in its own Explorer tool process (<code>explorer.exe -tool-mod windhawk-topbar</code>).
+A mutex keeps one bar alive. XAML Islands require a real Explorer host.</p>
+<h2 id="styling">Styling</h2>
+<p>Every element is targetable from <strong>Control styles</strong>, using the plain name, a bare
+class name (<code>Button</code>), <code>ClassName#Name</code>, or a parent chain (<code>StackPanel &gt; TextBlock</code>).
+<code>*</code> matches any intermediate parents, and <code>:root &gt;</code> requires a root element.</p>
+<p>| Name | What it is |
+|------|------------|
+| <code>TopBarRoot</code> | Root <code>Grid</code> spanning the whole bar |
+| <code>LeftPanel</code> | Left strip holding Start and Search |
+| <code>StartButton</code> / <code>StartIcon</code> | Start button and its logo |
+| <code>SearchButton</code> / <code>SearchIcon</code> | Search button (opens native Search) |
+| <code>TaskListPanel</code> / <code>TaskButton</code> | Task strip, and every task button |
+| <code>TaskButtonIcon</code> / <code>TaskButtonText</code> | Icon and label inside a task button |
+| <code>TrayPanel</code> | Right-hand strip holding the status buttons and clock |
+| <code>DisplayButton</code> <code>SoundButton</code> <code>WifiButton</code> <code>BluetoothButton</code> <code>TrayButton</code> | Status buttons |
+| <code>ClockButton</code> / <code>ClockText</code> | Date/time |
+| <code>BatteryButton</code> | Battery button |</p>
+<p>More targets can be discovered with <strong><a href="https://github.com/m417z/UWPSpy/releases/">UWPSpy</a></strong> by Spying the TopBar's <code>explorer.exe</code> process</p>
+<h3 id="keyboardshortcutsforinspectingtheelementsinflyouts">Keyboard shortcuts (For Inspecting the elements in Flyouts)</h3>
+<p>After setting UWPSpy at Sticky mode, the following Shortcuts can be used to trigger the flyouts for stylings:</p>
+<p>| Hotkey | Action |
+|--------|--------|
+| Ctrl+Alt+1 | Toggle Display flyout |
+| Ctrl+Alt+2 | Toggle Sound flyout |
+| Ctrl+Alt+3 | Toggle Wi-Fi flyout |
+| Ctrl+Alt+4 | Toggle Bluetooth flyout |
+| Ctrl+Alt+5 | Toggle Tray flyout |
+| Ctrl+Alt+6 | Show Start button context menu |
+| Ctrl+Alt+7 | Show Task list context menu |</p>
+<p>Style syntax: <code>Property=Value</code>, <code>Property:=&lt;Xaml/&gt;</code>, <code>$name</code> constants.
+<code>TaskButton</code>.</p>
+<h2 id="globaltransparencyandtint">Global transparency and tint</h2>
+<p>The transparency and tint configured in <strong>Top bar background color</strong> and <strong>Top bar background opacity</strong>
+are applied to the top bar, and all flyouts (Display, Sound, Wi‑Fi, Bluetooth, Tray)
+and to all context menus.</p>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>Tray icons dont show up - Will attempted to be fixed in next update.</li>
+<li>Live Wallpapers are NOT supported and topbar background will use default windows wallpaper instead of live wallpaper.</li>
+</ul>]]></content>
+        <author>
+            <name>WasiXGamer</name>
+            <uri>https://github.com/wasixgamer</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Adjustable tray icons padding for Win10 taskbar 1.0]]></title>
         <id>https://windhawk.net/mods/dense-tray-icons-padding-old-taskbar#70b2e94eb5a6d619418a6a4b47ad9a164b21b3ab</id>
@@ -1185,80 +1257,6 @@ is licensed under GPLv3 for that reason.</p>]]></content>
         <author>
             <name>Extremenis</name>
             <uri>https://github.com/Extremenis</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Icon Selection Style 1.0.0]]></title>
-        <id>https://windhawk.net/mods/desktop-icon-selection-style#094b5d25a17c63b8b5ce9cd7f4d527bbdd66f10d</id>
-        <link href="https://windhawk.net/mods/desktop-icon-selection-style"/>
-        <updated>2026-08-26T12:21:32.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="desktopiconselectionstyle">Desktop Icon Selection Style</h1>
-<p>The highlight behind a selected desktop icon is a plain slab as wide as the whole
-icon cell, so selections in neighbouring columns run together into one block.
-This mod replaces it with one you can actually style.</p>
-<p><strong>Before</strong> - two selected icons, stock highlight, touching edge to edge:</p>
-<p><img src="https://raw.githubusercontent.com/RiteshKhandekar/my-windhawk-mods/9570a63ad341cef48f91a5b37ad3d72fd95420e5/attachments/desktop-icon-selection-style-before.png" alt="Two selected desktop icons with the stock highlight, a pair of rectangular slabs meeting with no gap between them" /></p>
-<p><strong>After</strong> - narrowed, rounded, with a dashed border and an accent glow:</p>
-<p><img src="https://raw.githubusercontent.com/RiteshKhandekar/my-windhawk-mods/9570a63ad341cef48f91a5b37ad3d72fd95420e5/attachments/desktop-icon-selection-style-after.png" alt="The same two icons with the mod enabled, each highlight narrower than its cell with rounded corners, a dashed white border and a soft accent glow" /></p>
-<p>Everything in the after shot is configurable, and all of it can be turned off.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Narrow it.</strong> Plate width is a percentage of the icon cell, so it looks right
-at any DPI. The stock plate is 100%.</li>
-<li><strong>Transparency.</strong> Any fill colour and opacity, or <code>accent</code> to follow your
-system accent colour.</li>
-<li><strong>Rounded corners.</strong> Any radius, or 0 for sharp corners.</li>
-<li><strong>Borders.</strong> Solid, dashed, dotted or dash-dot, with your own colour, opacity,
-thickness and dash spacing.</li>
-<li><strong>Glow or drop shadow</strong> around the plate, in any colour.</li>
-<li><strong>Hover styling</strong>, with its own opacity. Turn it off to leave plain hover
-looking stock, or keep <em>Border on selection only</em> on so hovered icons get the
-fill but not the border.</li>
-<li><strong>Square shape</strong>, if you would rather have a square than a rectangle.</li>
-</ul>
-<p>Only selected icons are affected. Unselected icons keep their normal look, and
-File Explorer windows are untouched - this is the desktop only.</p>
-<h2 id="notesworthknowing">Notes worth knowing</h2>
-<p><strong>The plate follows the icon height on purpose.</strong> Windows makes a selected icon
-taller so its full file name can wrap onto extra lines, so the same icon needs a
-short plate with a short name and a much taller one with a long name. The plate
-grows with it, so a long name never runs out of the bottom of the highlight.
-Width is a different matter: it is a percentage of the cell, while Windows wraps
-the label to roughly the full cell, so a long name can overhang a narrow plate at
-the sides. Raise <strong>Plate width</strong> if that bothers you. <em>Square</em> shape is
-available, but it is capped at the size of the item, so a very large square comes
-out smaller than requested.</p>
-<p><strong>The glow is a fake, deliberately.</strong> It is stacked translucent rings, not a real
-blur, because a real blur is impossible here - the wallpaper simply is not
-available at the moment the highlight is drawn. It still looks good, but do not
-expect acrylic. It is also limited to roughly 10 pixels beyond the icon, which is
-all Windows repaints around it; a larger glow gets cut off rather than smeared.</p>
-<p><strong>Colours</strong> take <code>accent</code> to follow your system accent colour, or a hex value
-like <code>#3399FF</code> (the <code>#</code> is optional). Anything else is ignored, and the setting
-keeps its default - the mod log says which value it rejected. The accent is read through the immersive colour API, so it is
-the colour you actually picked in Settings rather than the blended colorization
-value. Changing it is picked up as plates are next repainted, so selecting a
-different icon shows the new colour; nothing is forced to redraw on a timer.</p>
-<p><strong>Mixed-DPI setups</strong> are fine, though not because anything is measured
-per-monitor. The pixel settings are scaled by a single DPI, read from the
-desktop's own window - but the icon rectangles the plate is drawn against come
-from that same window, so the plate and the icon are always scaled by the same
-number and stay in proportion to each other. Tested with a second display at a
-different resolution and scale factor.</p>
-<h2 id="credit">Credit</h2>
-<p>The approach for finding the desktop list view and attaching to it - a
-<code>CreateWindowExW</code> hook alongside <code>Wh_ModAfterInit</code> - follows
-<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/hide-desktop-icon-text.wh.cpp">Hide Desktop Icon Text and Shortcut Arrows</a>
-by kivsak.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>Built and tested on Windows 11 build 26200. The highlight is intercepted through
-<code>DrawThemeBackground</code>, which is what the desktop was measured to use. That
-function is a wrapper over <code>DrawThemeBackgroundEx</code>, which is not hooked, so a
-Windows build that called the inner function directly would leave the mod inert.
-Inert, not broken: the stock highlight simply comes back.</p>]]></content>
-        <author>
-            <name>RiteshK</name>
-            <uri>https://github.com/RiteshKhandekar</uri>
         </author>
     </entry>
 </feed>

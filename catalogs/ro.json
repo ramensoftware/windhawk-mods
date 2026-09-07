@@ -4281,7 +4281,7 @@
           16
         ],
         "ratingUsers": 20,
-        "updated": 1785709200000,
+        "updated": 1788817914000,
         "users": 586
       },
       "metadata": {
@@ -4293,7 +4293,7 @@
           "explorer.exe"
         ],
         "name": "Personalizator bară de utilizare discuri",
-        "version": "1.1.0"
+        "version": "1.2.0"
       },
       "metadataEnglish": {
         "description": "Customize everything about the disk usage bar from the This PC section in the File Explorer, including theme-aware colors, height, border, rounded corners and more.",
@@ -16441,7 +16441,7 @@
           1
         ],
         "ratingUsers": 1,
-        "updated": 1788467966000,
+        "updated": 1788817942000,
         "users": 68
       },
       "metadata": {
@@ -16450,7 +16450,7 @@
         ],
         "author": "Ingan121",
         "compilerOptions": "-lgdi32 -lmincore -lwindowscodecs -luxtheme -lmsimg32 -lcomctl32 -lshcore -lshlwapi",
-        "description": "Bring back Windows 7's shutdown experience",
+        "description": "Bring back Windows Vista/7's shutdown experience",
         "github": "https://github.com/Ingan121",
         "homepage": "https://www.ingan121.com/",
         "include": [
@@ -16458,9 +16458,9 @@
           "winlogon.exe"
         ],
         "license": "GPL-3.0-only",
-        "name": "Windows 7 Blocked Shutdown UX & Logoff Sequence",
+        "name": "Windows Vista/7 Blocked Shutdown UX & Logoff Sequence",
         "twitter": "https://twitter.com/Ingan121",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "win7-classic-autoplay-restorer": {
@@ -16949,6 +16949,37 @@
         ],
         "name": "WinDbg No OleFlushClipboard",
         "version": "0.2"
+      }
+    },
+    "windhawk-topbar": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1788817964000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1788817964000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "WasiXGamer",
+        "compilerOptions": "-lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -ladvapi32 -luser32 -lshcore -lcomctl32",
+        "description": "A working TopBar with Flyouts for Windows through Windhawk.",
+        "github": "https://github.com/wasixgamer",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "TopBar for Windows",
+        "version": "1.0.0"
       }
     },
     "window-border-customizer": {
