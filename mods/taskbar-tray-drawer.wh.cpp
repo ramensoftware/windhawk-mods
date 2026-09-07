@@ -202,9 +202,12 @@ without touching each field.
 #include <chrono>
 #include <cmath>
 #include <functional>
+#include <initializer_list>
 #include <list>
 #include <memory>
+#include <optional>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 // windows.h defines GetCurrentTime as a macro, which collides with
@@ -361,11 +364,18 @@ struct Drawer {
     bool gridBackgroundSet = false;
     winrt::event_token enteredToken{};
     winrt::event_token exitedToken{};
+    winrt::event_token timerToken{};
     DispatcherTimer timer{nullptr};
 };
 
 // Only ever touched from the taskbar UI thread.
-std::vector<std::shared_ptr<Drawer>> g_drawers;
+//
+// Wh_ModUninit does not run when explorer.exe itself terminates, so a plain
+// global would release its DispatcherTimers and Storyboards from the CRT
+// shutdown thread, after the XAML core may already be gone. The destructor is
+// suppressed and the real release happens on the UI thread in ApplySettings.
+[[clang::no_destroy]] std::optional<std::vector<std::shared_ptr<Drawer>>>
+    g_drawers{std::in_place};
 
 // -----------------------------------------------------------------------------
 // Animation
@@ -429,6 +439,20 @@ CO::CompositionEasingFunction CreateEasing(CO::Compositor const& compositor) {
         default:
             return compositor.CreateCubicBezierEasingFunction({0.2f, 0.0f},
                                                               {0.0f, 1.0f});
+    }
+}
+
+// The two bezier curves have no XAML easing class. Returns their control
+// points so they can be expressed as a KeySpline, or nullopt for the named
+// easings, which map onto XAML easing classes directly.
+std::optional<std::pair<WF::Point, WF::Point>> XamlEasingSpline() {
+    switch (g_settings.easing) {
+        case Easing::standard:
+            return std::pair{WF::Point{0.2f, 0.0f}, WF::Point{0.0f, 1.0f}};
+        case Easing::decelerate:
+            return std::pair{WF::Point{0.1f, 0.9f}, WF::Point{0.2f, 1.0f}};
+        default:
+            return std::nullopt;
     }
 }
 
@@ -638,6 +662,7 @@ void AnimateVisual(FrameworkElement element,
 }
 
 ANIM::Storyboard MakeWidthStoryboard(FrameworkElement element,
+                                     double from,
                                      double to,
                                      int durationMs,
                                      int delayMs) {
@@ -645,6 +670,7 @@ ANIM::Storyboard MakeWidthStoryboard(FrameworkElement element,
     ANIM::DoubleAnimation animation;
 
     animation.EnableDependentAnimation(true);
+    animation.From(from);
     animation.To(to);
 
     TimeSpan duration = std::chrono::milliseconds(durationMs);
@@ -652,6 +678,40 @@ ANIM::Storyboard MakeWidthStoryboard(FrameworkElement element,
     if (delayMs > 0) {
         TimeSpan delay = std::chrono::milliseconds(delayMs);
         animation.BeginTime(delay);
+    }
+
+    // The two bezier curves have no XAML easing equivalent, so they are
+    // expressed as a KeySpline instead. Without this the width would collapse
+    // on a different curve than the slide it runs alongside.
+    if (auto spline = XamlEasingSpline()) {
+        ANIM::KeySpline keySpline;
+        keySpline.ControlPoint1(spline->first);
+        keySpline.ControlPoint2(spline->second);
+
+        ANIM::SplineDoubleKeyFrame endFrame;
+        endFrame.KeyTime(ANIM::KeyTime{duration});
+        endFrame.Value(to);
+        endFrame.KeySpline(keySpline);
+
+        ANIM::DoubleAnimationUsingKeyFrames keyFrameAnimation;
+        keyFrameAnimation.EnableDependentAnimation(true);
+        if (delayMs > 0) {
+            keyFrameAnimation.BeginTime(
+                TimeSpan{std::chrono::milliseconds(delayMs)});
+        }
+
+        ANIM::DiscreteDoubleKeyFrame startFrame;
+        startFrame.KeyTime(ANIM::KeyTime{TimeSpan{}});
+        startFrame.Value(from);
+
+        keyFrameAnimation.KeyFrames().Append(startFrame);
+        keyFrameAnimation.KeyFrames().Append(endFrame);
+
+        ANIM::Storyboard::SetTarget(keyFrameAnimation, element);
+        ANIM::Storyboard::SetTargetProperty(keyFrameAnimation, L"MaxWidth");
+        storyboard.Children().Append(keyFrameAnimation);
+
+        return storyboard;
     }
 
     if (auto ease = CreateXamlEasing()) {
@@ -670,6 +730,13 @@ void AnimateWidth(DrawerItem& item,
                   bool open,
                   bool animate,
                   int delayMs) {
+    // Sample before stopping. Storyboard::Stop() restores the property's
+    // pre-animation base value, which is the natural width written by the
+    // previous close, so reading ActualWidth afterwards would report the
+    // element as already full size.
+    double current = element.ActualWidth();
+    bool wasAnimating = (bool)item.widthStoryboard;
+
     if (item.widthStoryboard) {
         item.widthStoryboard.Stop();
         item.widthStoryboard = nullptr;
@@ -682,8 +749,13 @@ void AnimateWidth(DrawerItem& item,
             return;
         }
 
-        auto storyboard = MakeWidthStoryboard(
-            element, item.naturalWidth, g_settings.openDuration, delayMs);
+        // Pin the starting point, both for the animation itself and for the
+        // BeginTime delay that precedes it.
+        element.MaxWidth(current);
+
+        auto storyboard =
+            MakeWidthStoryboard(element, current, item.naturalWidth,
+                                g_settings.openDuration, delayMs);
         auto weakElement = item.element;
         storyboard.Completed(
             [weakElement](WF::IInspectable const&, WF::IInspectable const&) {
@@ -698,12 +770,15 @@ void AnimateWidth(DrawerItem& item,
         return;
     }
 
-    // Closing. The element is still at its natural size, so this is the one
-    // moment where its width can be measured accurately.
-    double width = element.ActualWidth();
-    if (width > 0) {
-        item.naturalWidth = width;
-        element.MaxWidth(width);
+    // Closing. A fully open element is at its natural size, so this is the one
+    // moment where that width can be measured, but only trust the reading if
+    // no width animation was in flight, otherwise it is a partial value.
+    if (!wasAnimating && current > 0) {
+        item.naturalWidth = current;
+    }
+
+    if (current > 0) {
+        element.MaxWidth(current);
     }
 
     if (!animate) {
@@ -711,8 +786,8 @@ void AnimateWidth(DrawerItem& item,
         return;
     }
 
-    auto storyboard =
-        MakeWidthStoryboard(element, 0, g_settings.closeDuration, delayMs);
+    auto storyboard = MakeWidthStoryboard(element, current, 0,
+                                          g_settings.closeDuration, delayMs);
     item.widthStoryboard = storyboard;
     storyboard.Begin();
 }
@@ -783,7 +858,7 @@ void ScheduleTransition(std::shared_ptr<Drawer> drawer, bool open) {
     if (!drawer->timer) {
         DispatcherTimer timer;
         std::weak_ptr<Drawer> weakDrawer = drawer;
-        timer.Tick(
+        drawer->timerToken = timer.Tick(
             [weakDrawer](WF::IInspectable const&, WF::IInspectable const&) {
                 auto drawer = weakDrawer.lock();
                 if (!drawer) {
@@ -855,8 +930,12 @@ bool IsMemberEnabled(std::wstring_view name) {
 void TearDownDrawer(Drawer& drawer) {
     if (drawer.timer) {
         drawer.timer.Stop();
+        if (drawer.timerToken.value) {
+            drawer.timer.Tick(drawer.timerToken);
+        }
         drawer.timer = nullptr;
     }
+    drawer.timerToken = {};
 
     if (auto trigger = drawer.trigger.get()) {
         if (auto element = trigger.try_as<UIElement>()) {
@@ -884,7 +963,7 @@ void TearDownDrawer(Drawer& drawer) {
 
         try {
             element.ClearValue(FrameworkElement::MaxWidthProperty());
-            element.IsHitTestVisible(true);
+            element.ClearValue(UIElement::IsHitTestVisibleProperty());
 
             auto visual = ElementCompositionPreview::GetElementVisual(element);
             if (visual) {
@@ -921,14 +1000,14 @@ void TearDownDrawer(Drawer& drawer) {
 }
 
 void TearDownAllDrawers() {
-    for (auto& drawer : g_drawers) {
+    for (auto& drawer : *g_drawers) {
         TearDownDrawer(*drawer);
     }
-    g_drawers.clear();
+    g_drawers->clear();
 }
 
 void InitDrawerForGrid(FrameworkElement grid) {
-    for (auto& existing : g_drawers) {
+    for (auto& existing : *g_drawers) {
         if (auto existingGrid = existing->grid.get()) {
             if (existingGrid == grid) {
                 return;
@@ -976,7 +1055,7 @@ void InitDrawerForGrid(FrameworkElement grid) {
     }
 
     AttachTrigger(drawer, trigger);
-    g_drawers.push_back(drawer);
+    g_drawers->push_back(drawer);
 
     SetDrawerOpen(*drawer, false, false);
 }
@@ -1017,7 +1096,10 @@ void ApplyToXamlRoot(XamlRoot xamlRoot) {
 // Hooks
 // -----------------------------------------------------------------------------
 
-std::list<FrameworkElement::Loaded_revoker> g_autoRevokerList;
+// Same shutdown concern as g_drawers: each revoker's destructor calls back
+// into a FrameworkElement, which is thread affine.
+[[clang::no_destroy]] std::optional<std::list<FrameworkElement::Loaded_revoker>>
+    g_autoRevokerList{std::in_place};
 
 using IconView_IconView_t = void*(WINAPI*)(void* pThis);
 IconView_IconView_t IconView_IconView_Original;
@@ -1034,14 +1116,14 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
         return ret;
     }
 
-    g_autoRevokerList.emplace_back();
-    auto autoRevokerIt = g_autoRevokerList.end();
+    g_autoRevokerList->emplace_back();
+    auto autoRevokerIt = g_autoRevokerList->end();
     --autoRevokerIt;
 
     *autoRevokerIt = iconView.Loaded(
         winrt::auto_revoke_t{},
         [autoRevokerIt](WF::IInspectable const& sender, RoutedEventArgs const&) {
-            g_autoRevokerList.erase(autoRevokerIt);
+            g_autoRevokerList->erase(autoRevokerIt);
 
             if (g_unloading) {
                 return;
@@ -1063,14 +1145,59 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
 }
 
 void* CTaskBand_ITaskListWndSite_vftable;
+void* CSecondaryTaskBand_ITaskListWndSite_vftable;
 
 using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
 CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original;
+
+using CSecondaryTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis,
+                                                           void** result);
+CSecondaryTaskBand_GetTaskbarHost_t CSecondaryTaskBand_GetTaskbarHost_Original;
 
 void* TaskbarHost_FrameHeight_Original;
 
 using std__Ref_count_base__Decref_t = void(WINAPI*)(void* pThis);
 std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original;
+
+XamlRoot XamlRootFromTaskbarHostSharedPtr(void** taskbarHostSharedPtr) {
+    if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) {
+        return nullptr;
+    }
+
+    size_t taskbarElementIUnknownOffset = 0x48;
+
+#if defined(_M_X64)
+    {
+        // 48:83EC 28 | sub rsp,28
+        // 48:83C1 48 | add rcx,48
+        const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
+        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
+            b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
+            taskbarElementIUnknownOffset = b[7];
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+#elif defined(_M_ARM64)
+    // Just use the default offset which will hopefully work in most cases.
+#else
+#error "Unsupported architecture"
+#endif
+
+    auto* taskbarElementIUnknown =
+        *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] +
+                      taskbarElementIUnknownOffset);
+
+    FrameworkElement taskbarElement = nullptr;
+    taskbarElementIUnknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                                           winrt::put_abi(taskbarElement));
+
+    auto result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
+
+    std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
+
+    return result;
+}
 
 XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
     HWND hTaskSwWnd = (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
@@ -1093,37 +1220,37 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
     void* taskbarHostSharedPtr[2]{};
     CTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite,
                                       taskbarHostSharedPtr);
-    if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) {
+
+    return XamlRootFromTaskbarHostSharedPtr(taskbarHostSharedPtr);
+}
+
+// Secondary taskbars keep their task band in a child WorkerW rather than the
+// TaskbandHWND property, and the band is a CSecondaryTaskBand, so neither the
+// vtable comparison nor the accessor above applies to them.
+XamlRoot GetSecondaryTaskbarXamlRoot(HWND hSecondaryTaskbarWnd) {
+    HWND hTaskSwWnd =
+        (HWND)FindWindowEx(hSecondaryTaskbarWnd, nullptr, L"WorkerW", nullptr);
+    if (!hTaskSwWnd) {
         return nullptr;
     }
 
-    size_t taskbarElementIUnknownOffset = 0x48;
-
-    {
-        // 48:83EC 28 | sub rsp,28
-        // 48:83C1 48 | add rcx,48
-        const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
-        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
-            b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
-            taskbarElementIUnknownOffset = b[7];
-        } else {
-            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+    void* taskBand = (void*)GetWindowLongPtr(hTaskSwWnd, 0);
+    void* taskBandForTaskListWndSite = taskBand;
+    for (int i = 0; *(void**)taskBandForTaskListWndSite !=
+                    CSecondaryTaskBand_ITaskListWndSite_vftable;
+         i++) {
+        if (i == 20) {
+            return nullptr;
         }
+
+        taskBandForTaskListWndSite = (void**)taskBandForTaskListWndSite + 1;
     }
 
-    auto* taskbarElementIUnknown =
-        *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] +
-                      taskbarElementIUnknownOffset);
+    void* taskbarHostSharedPtr[2]{};
+    CSecondaryTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite,
+                                               taskbarHostSharedPtr);
 
-    FrameworkElement taskbarElement = nullptr;
-    taskbarElementIUnknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
-                                           winrt::put_abi(taskbarElement));
-
-    auto result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
-
-    std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
-
-    return result;
+    return XamlRootFromTaskbarHostSharedPtr(taskbarHostSharedPtr);
 }
 
 using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
@@ -1181,12 +1308,18 @@ bool RunFromWindowThread(HWND hWnd,
 // Collects the taskbars of the current process. The primary taskbar comes
 // first, followed by the secondary (per monitor) ones, which have their own
 // system tray and so need their own drawer.
-std::vector<HWND> FindCurrentProcessTaskbarWnds() {
-    std::vector<HWND> taskbarWnds;
+struct TaskbarWnd {
+    HWND hWnd;
+    bool secondary;
+};
+
+std::vector<TaskbarWnd> FindCurrentProcessTaskbarWnds() {
+    std::vector<TaskbarWnd> taskbarWnds;
 
     EnumWindows(
         [](HWND hWnd, LPARAM lParam) -> BOOL {
-            auto& taskbarWnds = *reinterpret_cast<std::vector<HWND>*>(lParam);
+            auto& taskbarWnds =
+                *reinterpret_cast<std::vector<TaskbarWnd>*>(lParam);
 
             DWORD dwProcessId;
             WCHAR className[32];
@@ -1197,9 +1330,10 @@ std::vector<HWND> FindCurrentProcessTaskbarWnds() {
             }
 
             if (_wcsicmp(className, L"Shell_TrayWnd") == 0) {
-                taskbarWnds.insert(taskbarWnds.begin(), hWnd);
+                taskbarWnds.insert(taskbarWnds.begin(),
+                                   TaskbarWnd{hWnd, false});
             } else if (_wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0) {
-                taskbarWnds.push_back(hWnd);
+                taskbarWnds.push_back(TaskbarWnd{hWnd, true});
             }
 
             return TRUE;
@@ -1217,16 +1351,13 @@ template <typename T>
 T ReadEnumSetting(PCWSTR name,
                   std::initializer_list<std::pair<PCWSTR, T>> values,
                   T fallback) {
-    PCWSTR value = Wh_GetStringSetting(name);
-    T result = fallback;
+    WindhawkUtils::StringSetting value = WindhawkUtils::StringSetting::make(name);
     for (const auto& [text, enumValue] : values) {
-        if (wcscmp(value, text) == 0) {
-            result = enumValue;
-            break;
+        if (wcscmp(value.get(), text) == 0) {
+            return enumValue;
         }
     }
-    Wh_FreeStringSetting(value);
-    return result;
+    return fallback;
 }
 
 void LoadSettings() {
@@ -1342,9 +1473,14 @@ void ApplySettings() {
     // All taskbars of a process share one UI thread, so the primary taskbar's
     // thread can service the secondary ones too.
     RunFromWindowThread(
-        taskbarWnds.front(),
+        taskbarWnds.front().hWnd,
         [](void* pParam) {
-            auto& taskbarWnds = *(std::vector<HWND>*)pParam;
+            auto& taskbarWnds = *(std::vector<TaskbarWnd>*)pParam;
+
+            // Any IconView that was constructed but never loaded still holds a
+            // Loaded subscription into this image. Drop them here, on the UI
+            // thread, while that is still safe to do.
+            g_autoRevokerList->clear();
 
             try {
                 TearDownAllDrawers();
@@ -1353,12 +1489,18 @@ void ApplySettings() {
             }
 
             if (g_unloading) {
+                // reset() rather than clear(), so the buffers go too.
+                g_autoRevokerList.reset();
+                g_drawers.reset();
                 return;
             }
 
-            for (HWND hTaskbarWnd : taskbarWnds) {
+            for (const auto& taskbarWnd : taskbarWnds) {
                 try {
-                    auto xamlRoot = GetTaskbarXamlRoot(hTaskbarWnd);
+                    auto xamlRoot =
+                        taskbarWnd.secondary
+                            ? GetSecondaryTaskbarXamlRoot(taskbarWnd.hWnd)
+                            : GetTaskbarXamlRoot(taskbarWnd.hWnd);
                     if (!xamlRoot) {
                         Wh_Log(L"Getting XamlRoot failed");
                         continue;
@@ -1486,8 +1628,16 @@ bool HookTaskbarDllSymbols() {
             &CTaskBand_ITaskListWndSite_vftable,
         },
         {
+            {LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
+            &CSecondaryTaskBand_ITaskListWndSite_vftable,
+        },
+        {
             {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
             &CTaskBand_GetTaskbarHost_Original,
+        },
+        {
+            {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
+            &CSecondaryTaskBand_GetTaskbarHost_Original,
         },
         {
             {LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
@@ -1516,9 +1666,19 @@ BOOL Wh_ModInit() {
         Wh_Log(L"System tray module not loaded yet");
 
         HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+        if (!kernelBaseModule) {
+            Wh_Log(L"Failed to get kernelbase.dll");
+            return FALSE;
+        }
+
         auto pKernelBaseLoadLibraryExW =
             (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
                                                       "LoadLibraryExW");
+        if (!pKernelBaseLoadLibraryExW) {
+            Wh_Log(L"Failed to get LoadLibraryExW");
+            return FALSE;
+        }
+
         WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
                                        LoadLibraryExW_Hook,
                                        &LoadLibraryExW_Original);
