@@ -71,7 +71,9 @@ a monitor by number or by interface name. The two work together.
 
 * **Skip the slide out animation** has the indicator disappear rather than slide
   away. Windows has its own no animation path for hiding and the mod asks for that
-  one, so the sliding in and everything outside the indicator are left alone.
+  one, so the sliding in and everything outside the indicator are left alone. If it
+  ever appears to do nothing, the mod's log says so on a build where those entry
+  points have moved.
 * The slide-in animation direction is chosen by Windows from the built-in
   setting, not by this mod. If the animation looks wrong for your new position,
   change the built-in setting to whichever of the three has the animation you
@@ -320,23 +322,19 @@ PCWSTR IndicatorName(Indicator indicator) {
     return i < ARRAYSIZE(kNames) ? kNames[i] : L"unknown";
 }
 
-// Said from two places, so it lives in one.
-void LogKindUnreliable() {
-    Wh_Log(
-        L"An indicator entry point didn't resolve, so the position "
-        L"per indicator settings are ignored and everything uses "
-        L"the main position");
-}
+// Said from two places. The text is shared rather than the call, so the line still
+// reports whichever function actually logged it.
+constexpr PCWSTR kKindUnreliableMessage =
+    L"An indicator entry point didn't resolve, so the position per indicator "
+    L"settings are ignored and everything uses the main position";
 
 // Set when either half of the hide pair didn't resolve, which leaves the skip
 // setting with nothing to do.
 std::atomic<bool> g_hideAnimationUnavailable{false};
 
-void LogHideAnimationUnavailable() {
-    Wh_Log(
-        L"The hide entry points didn't resolve, so the slide out animation "
-        L"is left alone");
-}
+constexpr PCWSTR kHideAnimationUnavailableMessage =
+    L"The hide entry points didn't resolve, so the slide out animation is left "
+    L"alone";
 
 // The position to place the indicator that is being shown right now.
 Position CurrentPosition() {
@@ -590,9 +588,20 @@ using ConfirmatorHostControl_HideWithoutAnimation_t = void(WINAPI*)(void* pThis)
 ConfirmatorHostControl_HideWithoutAnimation_t
     ConfirmatorHostControl_HideWithoutAnimation_Original;
 void WINAPI ConfirmatorHostControl_Hide_Hook(void* pThis) {
-    if (g_settings.skipHideAnimation.load() &&
-        ConfirmatorHostControl_HideWithoutAnimation_Original) {
-        return ConfirmatorHostControl_HideWithoutAnimation_Original(pThis);
+    // Nothing on the builds this was written against calls back the other way,
+    // but a build where HideWithoutAnimation went through Hide would otherwise
+    // turn the redirect into unbounded recursion rather than a dead setting.
+    thread_local bool redirecting = false;
+
+    bool skip = !redirecting && g_settings.skipHideAnimation.load() &&
+                ConfirmatorHostControl_HideWithoutAnimation_Original;
+    Wh_Log(L"> skip=%d", (int)skip);
+
+    if (skip) {
+        redirecting = true;
+        ConfirmatorHostControl_HideWithoutAnimation_Original(pThis);
+        redirecting = false;
+        return;
     }
 
     return ConfirmatorHostControl_Hide_Original(pThis);
@@ -857,9 +866,7 @@ BOOL Wh_ModInit() {
             true,  // optional
         },
         {
-            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowMicrophoneMuted(int,void *))",
-             LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowMicrophoneMuted(enum winrt::Windows::Internal::HardwareConfirmator::MicrophoneMuteState,void *))",
-             LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowMicrophoneMuted(enum winrt::HWConfirmatorUI::MicrophoneMuteState,void *))"},
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowMicrophoneMuted(int,void *))"},
             &ShowMicrophoneMutedThunk_Original,
             ShowMicrophoneMutedThunk_Hook,
             true,  // optional
@@ -931,17 +938,21 @@ BOOL Wh_ModInit() {
         !ConfirmatorHostControl_HideWithoutAnimation_Original) {
         g_hideAnimationUnavailable = true;
         if (g_settings.skipHideAnimation) {
-            LogHideAnimationUnavailable();
+            Wh_Log(L"%s", kHideAnimationUnavailableMessage);
         }
     }
 
     for (const auto& recorder : kindRecorders) {
+        Wh_Log(L"Kind %d resolved through ramp=%d thunk=%d",
+               (int)(&recorder - kindRecorders), !!recorder.ramp,
+               !!recorder.thunk);
+
         if (!recorder.ramp && !recorder.thunk) {
             g_kindUnreliable = true;
             // Only worth saying to someone who has an override set. With the
             // shipped defaults there is nothing being ignored to complain about.
             if (anyPerIndicator) {
-                LogKindUnreliable();
+                Wh_Log(L"%s", kKindUnreliableMessage);
             }
             break;
         }
@@ -972,10 +983,10 @@ void Wh_ModSettingsChanged() {
     // Turning on the first override no longer re-runs Wh_ModInit, so this is the
     // only place the person it concerns can still be told.
     if (g_kindUnreliable && AnyPerIndicator()) {
-        LogKindUnreliable();
+        Wh_Log(L"%s", kKindUnreliableMessage);
     }
 
     if (g_hideAnimationUnavailable && g_settings.skipHideAnimation) {
-        LogHideAnimationUnavailable();
+        Wh_Log(L"%s", kHideAnimationUnavailableMessage);
     }
 }
