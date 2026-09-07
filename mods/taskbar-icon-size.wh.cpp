@@ -2,7 +2,7 @@
 // @id              taskbar-icon-size
 // @name            Taskbar height and icon size
 // @description     Control the taskbar height and icon size, improve icon quality (Windows 11 only)
-// @version         1.3.9
+// @version         1.3.10
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -2109,6 +2109,22 @@ void WINAPI ExperienceToggleButton_UpdateButtonPadding_Hook(void* pThis) {
     }
 }
 
+// The search box sizes the icon next to its text with the same property, so
+// only the icon-only button gets the customized icon size. The template, which
+// the button width code tells the modes apart by, isn't applied when the
+// taskbar first hands the icon height over, so the class name is used here.
+bool IsSearchIconButton(void* pThis) {
+    FrameworkElement buttonElement = nullptr;
+    ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                                           winrt::put_abi(buttonElement));
+    if (!buttonElement) {
+        return false;
+    }
+
+    return winrt::get_class_name(buttonElement) !=
+           L"SearchUx.SearchUI.SearchBoxButton";
+}
+
 // The search button sizes its icon with the icon height it's bound to, which
 // the taskbar hands over as the stock height of the current posture.
 using SearchButtonBase_IconHeight_t = void(WINAPI*)(void* pThis, double height);
@@ -2129,7 +2145,7 @@ void SetSearchButtonIconHeight(void* pThis, double height) {
 void WINAPI SearchButtonBase_IconHeight_Hook(void* pThis, double height) {
     Wh_Log(L"> height=%f", height);
 
-    if (!g_unloading) {
+    if (!g_unloading && IsSearchIconButton(pThis)) {
         double iconSize =
             g_smallIconSize ? g_settings.iconSizeSmall : g_settings.iconSize;
         if (height != iconSize) {
@@ -2225,7 +2241,8 @@ void WINAPI SearchButtonBase_UpdateButtonPadding_Hook(void* pThis) {
     // which the property setter also applies to the icon element, so restore it
     // right after.
     std::optional<double> prevIconHeight;
-    if (!g_unloading && SearchButtonBase_IconHeight_Original) {
+    if (!g_unloading && SearchButtonBase_IconHeight_Original &&
+        IsSearchIconButton(pThis)) {
         double postureIconHeight = g_smallIconSize ? 16 : 24;
         // Every write of the property goes through the hook above, so the
         // customized icon size is the height the button has.
