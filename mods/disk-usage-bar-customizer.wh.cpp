@@ -580,21 +580,24 @@ HRESULT WINAPI HookedDrawThemeBackground(
         int maxBarHeight = clipRect.bottom - clipRect.top;
         int percentageLabelFontHeight = -(maxBarHeight * g_percentageLabelSize / 100);
         int heightFactor = g_heightFactor;
-        int radius;
-
+        int radius = 0;
+        
         if (wcscmp(g_renderingMode, L"winuiLike") == 0) {
             if (iPartId == PP_FILL) heightFactor = 20;
             else if (iPartId == PP_TRANSPARENTBAR) heightFactor = 1;
 
             radius = (clipRect.bottom - clipRect.top) * heightFactor / 200 + 1;
-        } else if (wcscmp(g_renderingMode, L"custom") == 0) {
+        }
+
+        if (wcscmp(g_renderingMode, L"visualStyles") != 0) {
             int inset = (clipRect.bottom - clipRect.top) * (100 - heightFactor) / 200;
 
             clipRect.top = clipRect.top + inset;
             clipRect.bottom = clipRect.bottom - inset;
-
-            radius = GetCornerRadius(clipRect);
         }
+        
+        if (wcscmp(g_renderingMode, L"custom") == 0)
+            radius = GetCornerRadius(clipRect);
 
         if (iPartId == PP_FILL) {
             int progressWidth = clipRect.right - clipRect.left;
