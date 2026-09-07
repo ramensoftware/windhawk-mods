@@ -1,3 +1,7 @@
+## 1.3.10 ([Sep 7, 2026](https://github.com/ramensoftware/windhawk-mods/blob/49b891e1e34d158d345b06f3ac86c8124a7ae129/mods/taskbar-icon-size.wh.cpp))
+
+* Fixed the mod incorrectly affecting the search icon inside the search bar.
+
 ## 1.3.9 ([Sep 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c34a28655b833d318fb47fc08d8ec2c5ef939b8c/mods/taskbar-icon-size.wh.cpp))
 
 * Fixed compatibility with older Windows 11 versions such as 23H2 and 24H2. The most noticeable problem was that the taskbar could be cut off when using a custom height.
