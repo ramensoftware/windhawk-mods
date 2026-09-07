@@ -1790,7 +1790,7 @@ enum class SymbolHookResult
 
 static SymbolHookResult HookFileExplorerExtensionsSymbols(HMODULE module)
 {
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK fileExplorerExtensionsDllHooks[] = {
         {
             {
                 LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarManager::CommandBar(struct winrt::Microsoft::UI::Xaml::Controls::CommandBar const &))",
@@ -1849,7 +1849,7 @@ static SymbolHookResult HookFileExplorerExtensionsSymbols(HMODULE module)
 
     Wh_Log(L"Resolving FileExplorerExtensions hooks");
 
-    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks)))
+    if (!WindhawkUtils::HookSymbols(module, fileExplorerExtensionsDllHooks, ARRAYSIZE(fileExplorerExtensionsDllHooks)))
     {
         Wh_Log(L"HookSymbols(FileExplorerExtensions.dll) failed");
         return SymbolHookResult::ResolutionFailed;
@@ -1970,3 +1970,4 @@ void Wh_ModUninit()
         }
     }
 }
+
