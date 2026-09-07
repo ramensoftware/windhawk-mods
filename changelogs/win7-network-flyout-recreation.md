@@ -1,3 +1,14 @@
+## 5.0.0 ([Sep 7, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f7c5a612538e9b6187778e7718cd96a403c1c554/mods/win7-network-flyout-recreation.wh.cpp))
+
+- Added support for RetroBar
+- Added support for the High contrast theme (credits to OrthodoxToolkits for the suggestion)
+- Fixed the positioning of the flyout (credits to Tails for reporting the problem)
+- Enhanced the interface of the Network Sharing Center
+- Reduced a conflict with the Action Center mod
+- Added the Turkish translation (credits to Cips)
+- Minor UI enhancements
+- Updated the README
+
 ## 4.0.0 ([Jul 31, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d8ebc926f811e8fc405315aceb71d3806135479b/mods/win7-network-flyout-recreation.wh.cpp))
 
 - Restored the Windows 7 Network Sharing Center Control Panel page (along with the classic map)

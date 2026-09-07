@@ -16693,23 +16693,21 @@
           6
         ],
         "ratingUsers": 13,
-        "updated": 1785530524000,
+        "updated": 1788803887000,
         "users": 511
       },
       "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
         "author": "babamohammed",
         "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lgdi32 -ldwmapi -luxtheme -lole32 -lshell32 -luser32 -lcomctl32 -liphlpapi -lwlanapi -luuid -lshlwapi",
-        "description": "This mod recreates the Windows 7 network flyout for Windows 10 and 11 including the Network Sharing Center Control Panel page",
+        "description": "This mod accurately recreates the Windows 7 network flyout for Windows 10 and 11 and it restores the Network Sharing Center Control Panel page",
         "github": "https://github.com/babamohammed2022",
         "include": [
           "explorer.exe",
-          "control.exe"
+          "control.exe",
+          "RetroBar.exe"
         ],
         "name": "Windows 7 Network Flyout Recreation",
-        "version": "4.0.0"
+        "version": "5.0.0"
       }
     },
     "win7-open-with-dialog": {
