@@ -317,6 +317,7 @@ static Settings g_settings;
 static std::mutex g_settingsMutex;
 
 static std::atomic<bool> g_unloading{false};
+static std::atomic<int> g_pendingScans{0};
 
 // ============================================================================
 // Settings helpers
@@ -1211,6 +1212,7 @@ struct LabelEntry
 };
 
 thread_local std::vector<std::shared_ptr<LabelEntry>> g_labelEntries;
+thread_local bool g_threadScanned = false;
 
 static void ReleaseLabelEntry(const std::shared_ptr<LabelEntry> &entry,
                               bool removeElement)
@@ -1300,8 +1302,30 @@ static void PruneReleasedLabelEntries()
     }
 }
 
+static bool HasLiveLabelForCurrentThread()
+{
+    PruneReleasedLabelEntries();
+
+    for (auto const &entry : g_labelEntries)
+    {
+        if (!entry || entry->cleaned)
+        {
+            continue;
+        }
+
+        if (entry->text.get() && entry->grid.get())
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 static void RemoveLabelsForCurrentThread()
 {
+    g_threadScanned = false;
+
     std::vector<std::shared_ptr<LabelEntry>> taken;
     taken.swap(g_labelEntries);
 
@@ -1636,7 +1660,14 @@ try
     std::vector<muxc::Grid> grids;
     CollectTitleBarGrids(content, 0, &grids);
     for (auto const &grid : grids)
+    {
         TryInsertTitleText(grid);
+    }
+
+    if (!grids.empty())
+    {
+        g_threadScanned = true;
+    }
 }
 catch (...)
 {
@@ -1644,22 +1675,46 @@ catch (...)
 }
 
 static void ScheduleXamlRootScan(mux::UIElement const &element)
-try
 {
     if (g_unloading.load() || !element)
-        return;
-    auto queue = winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
-    if (!queue)
     {
-        ScanXamlRootForTitleBars(element);
         return;
     }
-    queue.TryEnqueue([weak = winrt::make_weak(element)]()
-                     {
-        if (auto element = weak.get()) ScanXamlRootForTitleBars(element); });
-}
-catch (...)
-{
+
+    bool pendingAdded = false;
+
+    try
+    {
+        auto queue =
+            winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
+        if (!queue)
+        {
+            ScanXamlRootForTitleBars(element);
+            return;
+        }
+
+        g_pendingScans.fetch_add(1, std::memory_order_acq_rel);
+        pendingAdded = true;
+
+        if (!queue.TryEnqueue([weak = winrt::make_weak(element)]()
+                              {
+                if (auto element = weak.get()) {
+                    ScanXamlRootForTitleBars(element);
+                }
+
+                g_pendingScans.fetch_sub(1, std::memory_order_acq_rel); }))
+        {
+            g_pendingScans.fetch_sub(1, std::memory_order_acq_rel);
+            pendingAdded = false;
+        }
+    }
+    catch (...)
+    {
+        if (pendingAdded)
+        {
+            g_pendingScans.fetch_sub(1, std::memory_order_acq_rel);
+        }
+    }
 }
 
 static void ScanCurrentThreadForTitleBars()
@@ -1687,21 +1742,43 @@ catch (...)
 }
 
 static void ScheduleCurrentThreadScan()
-try
 {
     if (g_unloading.load())
-        return;
-    auto queue = winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
-    if (!queue)
     {
-        ScanCurrentThreadForTitleBars();
         return;
     }
-    queue.TryEnqueue([]()
-                     { ScanCurrentThreadForTitleBars(); });
-}
-catch (...)
-{
+
+    bool pendingAdded = false;
+
+    try
+    {
+        auto queue =
+            winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
+        if (!queue)
+        {
+            ScanCurrentThreadForTitleBars();
+            return;
+        }
+
+        g_pendingScans.fetch_add(1, std::memory_order_acq_rel);
+        pendingAdded = true;
+
+        if (!queue.TryEnqueue([]()
+                              {
+                ScanCurrentThreadForTitleBars();
+                g_pendingScans.fetch_sub(1, std::memory_order_acq_rel); }))
+        {
+            g_pendingScans.fetch_sub(1, std::memory_order_acq_rel);
+            pendingAdded = false;
+        }
+    }
+    catch (...)
+    {
+        if (pendingAdded)
+        {
+            g_pendingScans.fetch_sub(1, std::memory_order_acq_rel);
+        }
+    }
 }
 
 static void DiscoverFromElement(mux::UIElement const &element)
@@ -1783,6 +1860,11 @@ static void WINAPI CommandBarControl_GotFocusHandler_Hook(
         return;
     }
 
+    if (g_threadScanned && HasLiveLabelForCurrentThread())
+    {
+        return;
+    }
+
     try
     {
         auto const &inspectable =
@@ -1826,6 +1908,12 @@ static void WINAPI FileExplorerTabControl_TabView_GotFocus_Hook(
     void *pThis, void *sender, void *args)
 {
     FileExplorerTabControl_TabView_GotFocus_Original(pThis, sender, args);
+
+    if (g_threadScanned && HasLiveLabelForCurrentThread())
+    {
+        return;
+    }
+
     DiscoverFromInspectableParameter(sender);
 }
 
@@ -2058,13 +2146,50 @@ void Wh_ModUninit()
 {
     Wh_Log(L"Explorer Title Bar Label 1.0.0 uninit");
     g_unloading.store(true);
-    for (HWND hwnd : GetFileExplorerWindows())
+
+    auto windows = GetFileExplorerWindows();
+    for (HWND hwnd : windows)
     {
-        if (!RunFromWindowThread(hwnd, [](PVOID)
-                                 { RemoveLabelsForCurrentThread(); }, nullptr))
+        bool cleaned = false;
+
+        // A live Explorer window normally succeeds immediately. Retry briefly
+        // to cover a transient hook/setup failure during shell activity.
+        for (int attempt = 0; attempt < 3 && IsWindow(hwnd); ++attempt)
+        {
+            if (RunFromWindowThread(
+                    hwnd,
+                    [](PVOID)
+                    { RemoveLabelsForCurrentThread(); },
+                    nullptr))
+            {
+                cleaned = true;
+                break;
+            }
+
+            Sleep(10);
+        }
+
+        if (!cleaned && IsWindow(hwnd))
         {
             Wh_Log(L"Couldn't reach Explorer UI thread for window %08X",
                    static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(hwnd)));
         }
+    }
+
+    // DispatcherQueue callbacks contain code from this module. Wait briefly for
+    // all callbacks that were queued before g_unloading became true to finish
+    // before Windhawk is allowed to unmap the DLL.
+    for (int i = 0;
+         i < 200 &&
+         g_pendingScans.load(std::memory_order_acquire) > 0;
+         ++i)
+    {
+        Sleep(10);
+    }
+
+    if (g_pendingScans.load(std::memory_order_acquire) > 0)
+    {
+        Wh_Log(L"Timed out waiting for %d pending XAML scan callback(s)",
+               g_pendingScans.load(std::memory_order_relaxed));
     }
 }
