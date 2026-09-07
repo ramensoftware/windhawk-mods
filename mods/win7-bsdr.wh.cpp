@@ -4424,7 +4424,6 @@ void RestoreShutdownResolverState() {
     }
 }
 
-
 // Safeguard: check if user read the readme
 // The stock immersive BSDR does not support being displayed on the default desktop, so if it shows,
 // it will get stuck in the invisible secure desktop, and users can become clueless.
@@ -4454,7 +4453,7 @@ WluiInformLogonUI_t WluiInformLogonUI_original;
 __int64 __fastcall WluiInformLogonUI_hook(int a1, int a2, int a3) {
     Wh_Log(L"WluiInformLogonUI(%d, %d, %d)", a1, a2, a3);
     if (a1 == 0 && a3 == 0 && p_g_fShutdownResolverDisabled) {
-        const bool noSafetyChecks = Wh_GetIntSetting(L"noSafetyChecks");
+        const bool noSafetyChecks = Wh_GetIntSetting(L"noSafetyChecks") || IsAuthUxInstalled();
         HANDLE readyEvent = noSafetyChecks ? nullptr : OpenEventW(SYNCHRONIZE, FALSE, LOGONUI_READY_EVENT);
 
         if (readyEvent || noSafetyChecks) {
