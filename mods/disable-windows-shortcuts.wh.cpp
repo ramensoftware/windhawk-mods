@@ -731,6 +731,7 @@ bool IsKnownHardcodedHotkey(UINT fsModifiers, UINT vk)
 
 typedef BOOL(WINAPI *RegisterHotKey_t)(HWND hWnd, int id, UINT fsModifiers, UINT vk);
 RegisterHotKey_t RegisterHotKey_Original;
+std::atomic<bool> g_blockedAnyRegistration{false};
 
 BOOL WINAPI RegisterHotKey_Hook(HWND hWnd, int id, UINT fsModifiers, UINT vk)
 {
@@ -747,6 +748,7 @@ BOOL WINAPI RegisterHotKey_Hook(HWND hWnd, int id, UINT fsModifiers, UINT vk)
             return RegisterHotKey_Original(hWnd, id, fsModifiers, vk);
         }
 
+        g_blockedAnyRegistration = true;
         SetLastError(ERROR_HOTKEY_ALREADY_REGISTERED);
         return FALSE;
     }
@@ -1250,8 +1252,12 @@ void Wh_ModUninit()
 
         if (IsMainExplorer())
         {
-            // 2. If standard shortcuts were disabled, prompt user on unload to restore them
-            if (!GetSystemMetrics(SM_SHUTTINGDOWN) && HasAnyStandardShortcutsDisabled())
+            // 2. If we actually blocked Explorer from registering standard shortcuts
+            // in this session, prompt user on unload so Explorer can reclaim them.
+            // If no registrations were blocked (e.g. mod loaded mid-session after
+            // Explorer already registered, or no standard shortcuts toggled), skip
+            // the prompt since Explorer already owns the hotkeys.
+            if (!GetSystemMetrics(SM_SHUTTINGDOWN) && g_blockedAnyRegistration)
             {
                 PromptForExplorerRestart();
             }
