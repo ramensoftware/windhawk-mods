@@ -74,6 +74,11 @@ Every duration and delay is in milliseconds and can be set individually. **Overa
 speed** then scales all of them at once, so the whole animation can be retimed
 without touching each field.
 
+Composition transforms are not clipped by the taskbar, so turning **Fade** off
+while sliding left or up leaves the icons drawn over their neighbours instead of
+disappearing. Sliding right or down takes them off the edge, where there is
+nothing to overlap.
+
 ## Keyboard and assistive technology
 
 The drawer also opens on focus, so tabbing into the tray reveals it the same way
@@ -122,8 +127,10 @@ hidden.
   - collapse: Collapse completely (the rest of the tray slides over)
   - sliver: Collapse to a thin handle
 - sliverWidth: 12
-  $name: Handle width (px)
-  $description: Width of the strip left behind in "Collapse to a thin handle" mode.
+  $name: Handle width
+  $description: >-
+    Width of the strip left behind in "Collapse to a thin handle" mode, in
+    logical units, so it keeps its apparent size at any display scaling.
 - trigger: tray
   $name: Hover target
   $options:
@@ -156,8 +163,10 @@ hidden.
   - up: Up, out of the taskbar
   - none: Do not move, only fade
 - slideDistance: 0
-  $name: Slide distance (px)
-  $description: 0 means each group travels exactly its own width (or height).
+  $name: Slide distance
+  $description: >-
+    In logical units, like the rest of the taskbar. 0 means each group travels
+    exactly its own width (or height).
 - fade: true
   $name: Fade while sliding
 - scaleAmount: 100
@@ -353,6 +362,23 @@ FrameworkElement GetParentElementByClassName(FrameworkElement element,
     return parent;
 }
 
+void SaveLocalValue(DependencyObject object,
+                    DependencyProperty property,
+                    WF::IInspectable& slot) {
+    slot = object.ReadLocalValue(property);
+}
+
+// Puts back exactly what was there, including "nothing was set locally".
+void RestoreLocalValue(DependencyObject object,
+                       DependencyProperty property,
+                       WF::IInspectable const& slot) {
+    if (!slot || slot == DependencyProperty::UnsetValue()) {
+        object.ClearValue(property);
+    } else {
+        object.SetValue(property, slot);
+    }
+}
+
 bool IsCursorOnElement(FrameworkElement element, HWND hWnd) {
     POINT pt;
     if (!GetCursorPos(&pt) || !ScreenToClient(hWnd, &pt)) {
@@ -414,6 +440,12 @@ HWND FindTaskbarWndForXamlRoot(XamlRoot xamlRoot) {
 struct DrawerItem {
     winrt::weak_ref<FrameworkElement> element;
     ANIM::Storyboard widthStoryboard{nullptr};
+    winrt::event_token widthCompletedToken{};
+    // Whatever the shell had set locally on the properties this mod drives,
+    // so teardown can put them back instead of clearing them outright.
+    WF::IInspectable savedMaxWidth{nullptr};
+    WF::IInspectable savedHitTestVisible{nullptr};
+    bool saved = false;
 };
 
 struct Drawer {
@@ -436,6 +468,15 @@ struct Drawer {
     winrt::event_token lostFocusToken{};
     winrt::event_token timerToken{};
     DispatcherTimer timer{nullptr};
+    // Held so the completion handler can be revoked. Its code lives in this
+    // image, and the compositor would otherwise be the only thing keeping the
+    // delegate alive, well past unload.
+    CO::CompositionScopedBatch openBatch{nullptr};
+    winrt::event_token openBatchToken{};
+    WF::IInspectable savedMinWidth{nullptr};
+    // Grows while the cursor poll keeps finding the pointer still inside, so a
+    // pointer parked on the tray does not wake the UI thread indefinitely.
+    int pollIntervalMs = 0;
 };
 
 // Only ever touched from the taskbar UI thread.
@@ -491,9 +532,10 @@ CO::CompositionEasingFunction CreateEasing(CO::Compositor const& compositor,
 
     float strength = g_settings.easingStrength / 100.0f;
 
-    // The named easing factories need ICompositor6 (Windows 10 2004+). Fall
-    // back to the hand-rolled bezier if this build does not have them.
-    try {
+    {
+        // The named factories need ICompositor6, which is Windows 10 2004 and
+        // up. This mod only ever runs against the Windows 11 tray, so there is
+        // no older path to fall back to.
         using Factory = CO::CompositionEasingFunction;
 
         switch (easing) {
@@ -520,17 +562,12 @@ CO::CompositionEasingFunction CreateEasing(CO::Compositor const& compositor,
             default:
                 break;
         }
-    } catch (winrt::hresult_error const& ex) {
-        Wh_Log(L"Easing unavailable, falling back: %s", ex.message().c_str());
     }
 
     switch (easing) {
         case Easing::decelerate:
             return compositor.CreateCubicBezierEasingFunction(kDecelerateCp1,
                                                               kDecelerateCp2);
-        case Easing::overshoot:
-            return compositor.CreateCubicBezierEasingFunction({0.34f, 1.56f},
-                                                              {0.64f, 1.0f});
         case Easing::linear:
             return compositor.CreateLinearEasingFunction();
         case Easing::standard:
@@ -602,12 +639,12 @@ ANIM::EasingFunctionBase CreateXamlEasing() {
             ease.Springiness(3.0);
             return ease;
         }
-        case Easing::linear:
-            return nullptr;
         case Easing::standard:
         case Easing::decelerate:
+            // Handled by XamlEasingSpline, which the only caller checks first.
+        case Easing::linear:
         default:
-            return withMode(ANIM::CubicEase());
+            return nullptr;
     }
 }
 
@@ -776,29 +813,22 @@ ANIM::Storyboard MakeWidthStoryboard(FrameworkElement element,
                                      int durationMs,
                                      int delayMs) {
     ANIM::Storyboard storyboard;
-    ANIM::DoubleAnimation animation;
-
-    animation.EnableDependentAnimation(true);
-    animation.From(from);
-    animation.To(to);
-
     TimeSpan duration = std::chrono::milliseconds(durationMs);
-    // DurationType must be set explicitly. It defaults to Automatic, which
-    // ignores the TimeSpan and runs the animation over XAML's default one
-    // second instead of the configured duration.
-    animation.Duration(Duration{duration, DurationType::TimeSpan});
-    if (delayMs > 0) {
-        TimeSpan delay = std::chrono::milliseconds(delayMs);
-        animation.BeginTime(delay);
-    }
+    TimeSpan delay = std::chrono::milliseconds(delayMs);
 
-    // The two bezier curves have no XAML easing equivalent, so they are
-    // expressed as a KeySpline instead. Without this the width would collapse
-    // on a different curve than the slide it runs alongside.
+    ANIM::Timeline timeline{nullptr};
+
+    // The two bezier curves have no XAML easing class, so they are expressed as
+    // a KeySpline instead. Without this the width would collapse on a different
+    // curve than the slide it runs alongside.
     if (auto spline = XamlEasingSpline()) {
         ANIM::KeySpline keySpline;
         keySpline.ControlPoint1(spline->first);
         keySpline.ControlPoint2(spline->second);
+
+        ANIM::DiscreteDoubleKeyFrame startFrame;
+        startFrame.KeyTime(ANIM::KeyTime{TimeSpan{}});
+        startFrame.Value(from);
 
         ANIM::SplineDoubleKeyFrame endFrame;
         endFrame.KeyTime(ANIM::KeyTime{duration});
@@ -807,32 +837,31 @@ ANIM::Storyboard MakeWidthStoryboard(FrameworkElement element,
 
         ANIM::DoubleAnimationUsingKeyFrames keyFrameAnimation;
         keyFrameAnimation.EnableDependentAnimation(true);
-        if (delayMs > 0) {
-            keyFrameAnimation.BeginTime(
-                TimeSpan{std::chrono::milliseconds(delayMs)});
-        }
-
-        ANIM::DiscreteDoubleKeyFrame startFrame;
-        startFrame.KeyTime(ANIM::KeyTime{TimeSpan{}});
-        startFrame.Value(from);
-
         keyFrameAnimation.KeyFrames().Append(startFrame);
         keyFrameAnimation.KeyFrames().Append(endFrame);
 
-        ANIM::Storyboard::SetTarget(keyFrameAnimation, element);
-        ANIM::Storyboard::SetTargetProperty(keyFrameAnimation, L"MaxWidth");
-        storyboard.Children().Append(keyFrameAnimation);
+        timeline = keyFrameAnimation;
+    } else {
+        ANIM::DoubleAnimation animation;
+        animation.EnableDependentAnimation(true);
+        animation.From(from);
+        animation.To(to);
+        // DurationType must be set explicitly. It defaults to Automatic, which
+        // ignores the TimeSpan and runs the animation over XAML's default one
+        // second instead of the configured duration.
+        animation.Duration(Duration{duration, DurationType::TimeSpan});
+        animation.EasingFunction(CreateXamlEasing());
 
-        return storyboard;
+        timeline = animation;
     }
 
-    if (auto ease = CreateXamlEasing()) {
-        animation.EasingFunction(ease);
+    if (delayMs > 0) {
+        timeline.BeginTime(delay);
     }
 
-    ANIM::Storyboard::SetTarget(animation, element);
-    ANIM::Storyboard::SetTargetProperty(animation, L"MaxWidth");
-    storyboard.Children().Append(animation);
+    ANIM::Storyboard::SetTarget(timeline, element);
+    ANIM::Storyboard::SetTargetProperty(timeline, L"MaxWidth");
+    storyboard.Children().Append(timeline);
 
     return storyboard;
 }
@@ -850,8 +879,10 @@ double MeasureNaturalWidth(FrameworkElement element) {
     bool hadLocalValue = localValue != DependencyProperty::UnsetValue();
 
     element.ClearValue(FrameworkElement::MaxWidthProperty());
+    // Only the width is unconstrained. Measuring with an infinite height too
+    // would leave a cached DesiredSize the parent never asked for.
     element.Measure({std::numeric_limits<float>::infinity(),
-                     std::numeric_limits<float>::infinity()});
+                     (float)element.ActualHeight()});
     double width = element.DesiredSize().Width;
 
     // DesiredSize carries the margin, MaxWidth does not.
@@ -876,6 +907,10 @@ void AnimateWidth(DrawerItem& item,
     double current = element.ActualWidth();
 
     if (item.widthStoryboard) {
+        if (item.widthCompletedToken.value) {
+            item.widthStoryboard.Completed(item.widthCompletedToken);
+            item.widthCompletedToken = {};
+        }
         item.widthStoryboard.Stop();
         item.widthStoryboard = nullptr;
     }
@@ -900,7 +935,8 @@ void AnimateWidth(DrawerItem& item,
     double natural = MeasureNaturalWidth(element);
     if (natural <= 0 || !animate) {
         // Nothing sensible to animate towards, let layout take over.
-        element.ClearValue(FrameworkElement::MaxWidthProperty());
+        RestoreLocalValue(element, FrameworkElement::MaxWidthProperty(),
+                          item.savedMaxWidth);
         return;
     }
 
@@ -909,12 +945,15 @@ void AnimateWidth(DrawerItem& item,
     auto storyboard = MakeWidthStoryboard(element, current, natural,
                                           g_settings.openDuration, delayMs);
     auto weakElement = item.element;
-    storyboard.Completed(
-        [weakElement](WF::IInspectable const&, WF::IInspectable const&) {
+    auto savedMaxWidth = item.savedMaxWidth;
+    item.widthCompletedToken = storyboard.Completed(
+        [weakElement, savedMaxWidth](WF::IInspectable const&,
+                                     WF::IInspectable const&) {
             if (auto element = weakElement.get()) {
-                // Drop the constraint entirely so a later size change, an icon
+                // Drop the constraint so a later size change, an icon
                 // appearing say, is not clipped.
-                element.ClearValue(FrameworkElement::MaxWidthProperty());
+                RestoreLocalValue(element, FrameworkElement::MaxWidthProperty(),
+                                  savedMaxWidth);
             }
         });
     item.widthStoryboard = storyboard;
@@ -929,6 +968,15 @@ void SetItemsHitTestVisible(Drawer& drawer, bool visible) {
     }
 }
 
+// Whether closing actually looks like anything. Every motion can be switched
+// off independently, and a closed state that is pixel-identical to the open one
+// should not quietly swallow clicks - that reads as the tray being broken.
+bool ClosedStateChangesAppearance() {
+    return g_settings.closedMode != ClosedMode::reserved ||
+           g_settings.slide != SlideDir::none || g_settings.fade ||
+           g_settings.scaleAmount != 100 || g_settings.rotateAmount != 0;
+}
+
 void SetDrawerOpen(std::shared_ptr<Drawer> drawer, bool open, bool animate) {
     drawer->open = open;
 
@@ -936,8 +984,23 @@ void SetDrawerOpen(std::shared_ptr<Drawer> drawer, bool open, bool animate) {
     // testing the icons where they will end up, not where they are drawn.
     // Clicks are taken away the moment a close starts, and only handed back
     // once the icons have actually arrived - see the scoped batch below.
-    if (!open) {
+    bool suppressHitTesting = !open && ClosedStateChangesAppearance();
+    if (suppressHitTesting) {
         SetItemsHitTestVisible(*drawer, false);
+    }
+
+    // Never leave a previous batch's handler registered; its only other owner
+    // is the shell's compositor, which outlives this mod.
+    if (drawer->openBatch) {
+        try {
+            if (drawer->openBatchToken.value) {
+                drawer->openBatch.Completed(drawer->openBatchToken);
+            }
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Batch revoke failed: %s", ex.message().c_str());
+        }
+        drawer->openBatch = nullptr;
+        drawer->openBatchToken = {};
     }
 
     CO::CompositionScopedBatch batch{nullptr};
@@ -978,17 +1041,18 @@ void SetDrawerOpen(std::shared_ptr<Drawer> drawer, bool open, bool animate) {
 
     if (batch) {
         std::weak_ptr<Drawer> weakDrawer = drawer;
-        batch.Completed([weakDrawer](WF::IInspectable const&,
-                                     CO::CompositionBatchCompletedEventArgs
-                                         const&) {
-            auto drawer = weakDrawer.lock();
-            // A close may have started while the open was still running.
-            if (drawer && drawer->open) {
-                SetItemsHitTestVisible(*drawer, true);
-            }
-        });
+        drawer->openBatch = batch;
+        drawer->openBatchToken = batch.Completed(
+            [weakDrawer](WF::IInspectable const&,
+                         CO::CompositionBatchCompletedEventArgs const&) {
+                auto drawer = weakDrawer.lock();
+                // A close may have started while the open was still running.
+                if (drawer && drawer->open) {
+                    SetItemsHitTestVisible(*drawer, true);
+                }
+            });
         batch.End();
-    } else if (open) {
+    } else if (!suppressHitTesting) {
         SetItemsHitTestVisible(*drawer, true);
     }
 
@@ -997,7 +1061,8 @@ void SetDrawerOpen(std::shared_ptr<Drawer> drawer, bool open, bool animate) {
             if (g_settings.closedMode == ClosedMode::sliver && !open) {
                 grid.MinWidth(g_settings.sliverWidth);
             } else {
-                grid.ClearValue(FrameworkElement::MinWidthProperty());
+                RestoreLocalValue(grid, FrameworkElement::MinWidthProperty(),
+                                  drawer->savedMinWidth);
             }
         } catch (winrt::hresult_error const& ex) {
             Wh_Log(L"Grid update failed: %s", ex.message().c_str());
@@ -1010,8 +1075,10 @@ void SetDrawerOpen(std::shared_ptr<Drawer> drawer, bool open, bool animate) {
 // -----------------------------------------------------------------------------
 
 // How often to re-check the cursor once a close has been asked for but the
-// pointer turns out to still be over the tray.
+// pointer turns out to still be over the tray. Doubles up to the cap each time
+// the check confirms the same answer, and resets on any real pointer event.
 constexpr int kCursorPollMs = 100;
+constexpr int kMaxCursorPollMs = 1600;
 
 bool DrawerWantsOpen(const Drawer& drawer) {
     return drawer.pointerInside || drawer.focusInside;
@@ -1034,13 +1101,23 @@ void CommitTransition(std::shared_ptr<Drawer> drawer) {
         auto trigger = drawer->trigger.get();
         if (trigger && IsCursorOnElement(trigger, drawer->hTaskbarWnd)) {
             if (drawer->timer) {
-                drawer->timer.Interval(
-                    TimeSpan{std::chrono::milliseconds(kCursorPollMs)});
+                // Back off as the answer keeps coming back the same, so a
+                // pointer left resting on the tray settles to an occasional
+                // check rather than waking the UI thread ten times a second
+                // for as long as it sits there.
+                drawer->pollIntervalMs =
+                    drawer->pollIntervalMs ? std::min(drawer->pollIntervalMs * 2,
+                                                      kMaxCursorPollMs)
+                                           : kCursorPollMs;
+                drawer->timer.Interval(TimeSpan{
+                    std::chrono::milliseconds(drawer->pollIntervalMs)});
                 drawer->timer.Start();
             }
             return;
         }
     }
+
+    drawer->pollIntervalMs = 0;
 
     if (drawer->open != open) {
         SetDrawerOpen(drawer, open, true);
@@ -1095,6 +1172,7 @@ void AttachTrigger(std::shared_ptr<Drawer> drawer, FrameworkElement trigger) {
     auto setPointerInside = [weakDrawer](bool inside) {
         if (auto drawer = weakDrawer.lock()) {
             drawer->pointerInside = inside;
+            drawer->pollIntervalMs = 0;
             ScheduleTransition(drawer);
         }
     };
@@ -1176,6 +1254,21 @@ bool IsMemberEnabled(std::wstring_view name) {
 }
 
 void TearDownDrawer(Drawer& drawer) {
+    // The batch's completion handler is owned by the shell's compositor and
+    // its code lives in this image, so it has to come off before the image can
+    // be unmapped. The weak_ptr inside it guards the state, not the code.
+    try {
+        if (drawer.openBatch) {
+            if (drawer.openBatchToken.value) {
+                drawer.openBatch.Completed(drawer.openBatchToken);
+            }
+            drawer.openBatch = nullptr;
+        }
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Batch teardown failed: %s", ex.message().c_str());
+    }
+    drawer.openBatchToken = {};
+
     // Each step is guarded, so a failure early on cannot skip the handler
     // revocation or the element restore below it.
     try {
@@ -1226,9 +1319,20 @@ void TearDownDrawer(Drawer& drawer) {
 
     for (auto& item : drawer.items) {
         if (item.widthStoryboard) {
-            item.widthStoryboard.Stop();
+            try {
+                // Revoke rather than relying on dropping the reference below,
+                // which only releases the delegate if XAML is not still
+                // holding the storyboard itself.
+                if (item.widthCompletedToken.value) {
+                    item.widthStoryboard.Completed(item.widthCompletedToken);
+                }
+                item.widthStoryboard.Stop();
+            } catch (winrt::hresult_error const& ex) {
+                Wh_Log(L"Storyboard teardown failed: %s", ex.message().c_str());
+            }
             item.widthStoryboard = nullptr;
         }
+        item.widthCompletedToken = {};
 
         auto element = item.element.get();
         if (!element) {
@@ -1236,8 +1340,16 @@ void TearDownDrawer(Drawer& drawer) {
         }
 
         try {
-            element.ClearValue(FrameworkElement::MaxWidthProperty());
-            element.ClearValue(UIElement::IsHitTestVisibleProperty());
+            if (item.saved) {
+                RestoreLocalValue(element, FrameworkElement::MaxWidthProperty(),
+                                  item.savedMaxWidth);
+                RestoreLocalValue(element,
+                                  UIElement::IsHitTestVisibleProperty(),
+                                  item.savedHitTestVisible);
+            } else {
+                element.ClearValue(FrameworkElement::MaxWidthProperty());
+                element.ClearValue(UIElement::IsHitTestVisibleProperty());
+            }
 
             auto visual = ElementCompositionPreview::GetElementVisual(element);
             if (visual) {
@@ -1260,7 +1372,8 @@ void TearDownDrawer(Drawer& drawer) {
 
     if (auto grid = drawer.grid.get()) {
         try {
-            grid.ClearValue(FrameworkElement::MinWidthProperty());
+            RestoreLocalValue(grid, FrameworkElement::MinWidthProperty(),
+                              drawer.savedMinWidth);
             if (drawer.gridBackgroundSet) {
                 if (auto panel = grid.try_as<Controls::Panel>()) {
                     panel.ClearValue(Controls::Panel::BackgroundProperty());
@@ -1318,7 +1431,15 @@ std::vector<FrameworkElement> RefreshDrawerMembers(Drawer& drawer) {
         }
 
         Wh_Log(L"Drawer member: %s", child.Name().c_str());
-        refreshed.push_back(DrawerItem{.element = child});
+
+        DrawerItem item{.element = child};
+        SaveLocalValue(child, FrameworkElement::MaxWidthProperty(),
+                       item.savedMaxWidth);
+        SaveLocalValue(child, UIElement::IsHitTestVisibleProperty(),
+                       item.savedHitTestVisible);
+        item.saved = true;
+
+        refreshed.push_back(std::move(item));
         added.push_back(child);
         return false;
     });
@@ -1364,12 +1485,24 @@ void ApplyStateToNewMembers(Drawer& drawer,
     }
 }
 
-void InitDrawerForGrid(FrameworkElement grid, HWND hTaskbarWnd) {
+// The window is only needed for cursor hit testing, and resolving it walks
+// every window on the desktop, so it is looked up lazily - see
+// InitDrawerFromDescendant, which runs on every tray icon that loads.
+using TaskbarWndResolver = std::function<HWND()>;
+
+void InitDrawerForGrid(FrameworkElement grid,
+                       const TaskbarWndResolver& resolveTaskbarWnd) {
+    // Drawers whose grid has gone stay in the list until the next settings
+    // change; drop them here instead.
+    std::erase_if(*g_drawers, [](const std::shared_ptr<Drawer>& drawer) {
+        return !drawer->grid.get();
+    });
+
     for (auto& existing : *g_drawers) {
         if (auto existingGrid = existing->grid.get()) {
             if (existingGrid == grid) {
                 if (!existing->hTaskbarWnd) {
-                    existing->hTaskbarWnd = hTaskbarWnd;
+                    existing->hTaskbarWnd = resolveTaskbarWnd();
                 }
 
                 // A group may have appeared since the drawer was built.
@@ -1410,15 +1543,18 @@ void InitDrawerForGrid(FrameworkElement grid, HWND hTaskbarWnd) {
         }
     }
 
+    SaveLocalValue(grid, FrameworkElement::MinWidthProperty(),
+                   drawer->savedMinWidth);
+
     AttachTrigger(drawer, trigger);
-    drawer->hTaskbarWnd = hTaskbarWnd;
+    drawer->hTaskbarWnd = resolveTaskbarWnd();
     g_drawers->push_back(drawer);
 
     // Starting closed under the pointer would snap the tray shut and leave it
     // shut until the pointer left and came back, which is what happens when the
     // mod is enabled or a setting changed while hovering the tray.
-    drawer->pointerInside =
-        hTaskbarWnd && IsCursorOnElement(trigger, hTaskbarWnd);
+    drawer->pointerInside = drawer->hTaskbarWnd &&
+                            IsCursorOnElement(trigger, drawer->hTaskbarWnd);
 
     SetDrawerOpen(drawer, DrawerWantsOpen(*drawer), false);
 }
@@ -1430,7 +1566,12 @@ void InitDrawerFromDescendant(FrameworkElement element) {
         return;
     }
 
-    InitDrawerForGrid(grid, FindTaskbarWndForXamlRoot(element.XamlRoot()));
+    // Resolved only if this turns out to be a grid with no drawer yet. This
+    // runs for every tray icon that loads, and the lookup is an EnumWindows
+    // over the desktop plus a vtable walk per taskbar.
+    InitDrawerForGrid(grid, [element] {
+        return FindTaskbarWndForXamlRoot(element.XamlRoot());
+    });
 }
 
 void ApplyToXamlRoot(XamlRoot xamlRoot, HWND hTaskbarWnd) {
@@ -1452,7 +1593,7 @@ void ApplyToXamlRoot(XamlRoot xamlRoot, HWND hTaskbarWnd) {
         return;
     }
 
-    InitDrawerForGrid(grid, hTaskbarWnd);
+    InitDrawerForGrid(grid, [hTaskbarWnd] { return hTaskbarWnd; });
 }
 
 // -----------------------------------------------------------------------------
