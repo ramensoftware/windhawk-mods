@@ -127,7 +127,9 @@ Visual references only (no code was taken from these):
 #include <memory>
 #include <mutex>
 #include <unordered_map>
+#include <utility>
 #include <vector>
+
 
 #ifndef DWMWA_TRANSITIONS_FORCEDISABLED
 #define DWMWA_TRANSITIONS_FORCEDISABLED 3
@@ -760,12 +762,23 @@ static void EvictLocked() {
 }
 // Only the LRU head may hold a full-resolution capture: every other entry is
 // shrunk to the compact format so the full-res budget is spent exactly once.
-static void DemoteOlderLocked() {
+// The shrink is a full bilinear resample (up to ~2M output pixels through
+// SampleBilinear, plus a ForceOpaqueAlpha pass) -- tens of milliseconds of
+// CPU. g_cacheMutex is also taken by ForgetCapture on every WM_NCDESTROY in
+// the process (Explorer alone fires that constantly for menus/tooltips/
+// dialogs) and by HasCachedCapture on the restore path, so that work cannot
+// run while the lock is held. Collect the oversized entries and move their
+// bits out while locked, unlock to do the resample, then relock and store
+// the compact result back -- only if the entry is still exactly the
+// placeholder we left (nobody else touched it while we were unlocked).
+static void DemoteOlder(std::unique_lock<std::mutex>& lock) {
     if (g_captureLru.empty())
         return;
+    std::vector<std::pair<HWND, CaptureBits>> toShrink;
     auto lit = std::next(g_captureLru.begin());
     while (lit != g_captureLru.end()) {
-        auto it = g_captureCache.find(*lit);
+        HWND h = *lit;
+        auto it = g_captureCache.find(h);
         if (it == g_captureCache.end() || !it->second.fullRes) {
             ++lit;
             continue;
@@ -776,18 +789,34 @@ static void DemoteOlderLocked() {
             ++lit;
             continue;
         }
-        CaptureBits small = DownscaleForCache(it->second.bits);
         g_cacheBytes -= std::min(g_cacheBytes, CaptureBytes(it->second.bits));
-        if (small.empty()) {
-            // Allocation failed: drop the entry rather than keep it oversized.
+        toShrink.emplace_back(h, std::move(it->second.bits));
+        it->second.bits = CaptureBits{}; // placeholder while unlocked
+        ++lit;
+    }
+    if (toShrink.empty())
+        return;
+    lock.unlock();
+    for (auto& entry : toShrink)
+        entry.second = DownscaleForCache(entry.second);
+    lock.lock();
+    for (auto& entry : toShrink) {
+        HWND h = entry.first;
+        auto it = g_captureCache.find(h);
+        // Gone (ForgetCapture/TakeCachedCapture ran while unlocked), or
+        // already refreshed by a newer CacheCapture for the same HWND: leave
+        // whatever is there now alone, it owns its own byte accounting.
+        if (it == g_captureCache.end() || !it->second.bits.empty())
+            continue;
+        if (entry.second.empty()) {
+            // Allocation failed: drop the entry rather than leave it empty.
+            g_captureLru.erase(it->second.lruIt);
             g_captureCache.erase(it);
-            lit = g_captureLru.erase(lit);
             continue;
         }
-        it->second.bits = std::move(small);
+        it->second.bits = std::move(entry.second);
         it->second.fullRes = false;
         g_cacheBytes += CaptureBytes(it->second.bits);
-        ++lit;
     }
 }
 static void CacheCapture(HWND hwnd, CaptureBits&& bits) {
@@ -803,7 +832,7 @@ static void CacheCapture(HWND hwnd, CaptureBits&& bits) {
         bits = std::move(small);
     }
     try {
-        std::lock_guard<std::mutex> lock(g_cacheMutex);
+        std::unique_lock<std::mutex> lock(g_cacheMutex);
         auto it = g_captureCache.find(hwnd);
         if (it != g_captureCache.end()) {
             g_cacheBytes -=
@@ -820,7 +849,7 @@ static void CacheCapture(HWND hwnd, CaptureBits&& bits) {
                 hwnd,
                 CacheEntry{std::move(bits), g_captureLru.begin(), fullRes});
         }
-        DemoteOlderLocked();
+        DemoteOlder(lock);
         EvictLocked();
     } catch (...) {
     }
@@ -991,6 +1020,68 @@ static bool IsWindowUnoccludedAt(HWND hwnd, const RECT& rc) {
     }
     return true;
 }
+// The screen scrape reads off the actual display surface via a "DISPLAY" DC:
+// that DC only has real pixels where a monitor is actually present. A window
+// that is only partially on-screen (dragged mostly past the right/bottom edge
+// of the desktop, or spanning past a disconnected/disabled monitor) still
+// reports a full DWM frame-bounds rect, so the scrape silently comes back
+// black for the off-desktop slice while the on-desktop slice looks fine --
+// exactly the "half black, half visible" artifact. Guard against it with the
+// public virtual-screen metrics and require the whole capture rect to sit
+// inside the actual desktop before trusting the scrape at all; otherwise fall
+// through to the PrintWindow path below, which paints the window's own
+// content into an off-screen bitmap and doesn't care where the window sits
+// on screen.
+static bool IsRectFullyOnVirtualScreen(const RECT& rc) {
+    const int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    const int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    const int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    const int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    if (vw <= 0 || vh <= 0)
+        return false; // couldn't query the desktop bounds -- don't trust the scrape
+    const RECT virt{vx, vy, vx + vw, vy + vh};
+    return rc.left >= virt.left && rc.top >= virt.top &&
+           rc.right <= virt.right && rc.bottom <= virt.bottom;
+}
+// A frame where DWM hasn't yet recomposed the window's border/shadow --
+// typically right after DisableTransitions() forces a frame update -- shows
+// up as a solid black run along one or more *edges* of the scrape while the
+// rest of the window is fine: a one-frame compositing race, not real content.
+// Check only a thin 2px strip along each edge (cheap) for a long run of
+// fully-black pixels; a real dark-themed border is extremely unlikely to be
+// perfectly (0,0,0) for most of an edge's length, so this stays specific to
+// the artifact instead of flagging legitimate dark UIs.
+static bool HasBlackBorderArtifact(const uint32_t* p, int w, int h) {
+    if (!p || w <= 4 || h <= 4)
+        return false;
+    auto isBlack = [&](int x, int y) {
+        return (p[size_t(y) * size_t(w) + size_t(x)] & 0x00FFFFFF) == 0;
+    };
+    auto longestRun = [&](int len, auto&& at) {
+        int longest = 0, run = 0;
+        for (int i = 0; i < len; ++i) {
+            if (at(i)) {
+                if (++run > longest)
+                    longest = run;
+            } else {
+                run = 0;
+            }
+        }
+        return longest;
+    };
+    const int topRun = longestRun(
+        w, [&](int x) { return isBlack(x, 0) && isBlack(x, 1); });
+    const int botRun = longestRun(w, [&](int x) {
+        return isBlack(x, h - 1) && isBlack(x, h - 2);
+    });
+    const int leftRun = longestRun(
+        h, [&](int y) { return isBlack(0, y) && isBlack(1, y); });
+    const int rightRun = longestRun(h, [&](int y) {
+        return isBlack(w - 1, y) && isBlack(w - 2, y);
+    });
+    return topRun > w / 2 || botRun > w / 2 || leftRun > h / 2 ||
+           rightRun > h / 2;
+}
 // PrintWindow re-reads the window surface: the DWM-composed border, the rounded
 // corners and the glass are not in it, which is why the shell frames came out
 // borderless. Callers that need the real frame ask for the screen scrape only.
@@ -1015,7 +1106,7 @@ static bool CaptureWindowForClose(HWND hwnd, CaptureBits& out,
         // IsWindowUnoccludedAt above). If occluded, skip straight to the
         // PrintWindow fallback below, which asks the window itself to
         // paint, so it can never show someone else's content.
-        if (IsWindowUnoccludedAt(hwnd, rc)) {
+        if (IsRectFullyOnVirtualScreen(rc) && IsWindowUnoccludedAt(hwnd, rc)) {
             ScopedScreenDc screenDc(rc);
             if (screenDc) {
             ScopedDc memDc(CreateCompatibleDC(screenDc.get()));
@@ -1039,6 +1130,24 @@ static bool CaptureWindowForClose(HWND hwnd, CaptureBits& out,
                             if (GetDIBits(memDc.get(), (HBITMAP)hBmp.get(), 0,
                                           h, out.pixels.data(), &bmi,
                                           DIB_RGB_COLORS)) {
+                                // One frame right after DisableTransitions()
+                                // can land with the border/shadow not yet
+                                // recomposed (see HasBlackBorderArtifact). A
+                                // single immediate re-scrape is enough in
+                                // practice and keeps the retry bounded and
+                                // cheap -- if it's still black we accept it
+                                // rather than loop or add a sleep that would
+                                // delay every capture, not just this rare
+                                // one.
+                                if (HasBlackBorderArtifact(out.pixels.data(),
+                                                           w, h) &&
+                                    BitBlt(memDc.get(), 0, 0, w, h,
+                                           screenDc.get(), rc.left, rc.top,
+                                           SRCCOPY | 0x40000000)) {
+                                    GetDIBits(memDc.get(), (HBITMAP)hBmp.get(),
+                                              0, h, out.pixels.data(), &bmi,
+                                              DIB_RGB_COLORS);
+                                }
                                 size_t nonBlack = 0;
                                 for (size_t i = 0;
                                      i < out.pixels.size() && nonBlack < 100;
