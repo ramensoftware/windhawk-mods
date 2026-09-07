@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              windhawk-topbar
-// @name            TopBar for Windhawk
+// @name            TopBar for Windows
 // @description     A working TopBar with Flyouts for Windows through Windhawk.
 // @version         1.0.0
 // @author          WasiXGamer
@@ -62,7 +62,7 @@ class name (`Button`), `ClassName#Name`, or a parent chain (`StackPanel > TextBl
 | `TrayPanel` | Right-hand strip holding the status buttons and clock |
 | `DisplayButton` `SoundButton` `WifiButton` `BluetoothButton` `TrayButton` | Status buttons |
 | `ClockButton` / `ClockText` | Date/time |
-
+| `BatteryButton` | Battery button |
 
 More targets can be discovered with **[UWPSpy](https://github.com/m417z/UWPSpy/releases/)** by Spying the TopBar's `explorer.exe` process
 
@@ -91,8 +91,7 @@ and to all context menus.
 
 ## Known limitations
 
-- Tray icons dont show up - Will be fixed later.
-- Night Light button wont work as it is undocumented - May be fixed later
+- Tray icons dont show up - Will attempted to be fixed in next update.
 - Live Wallpapers are NOT supported and topbar background will use default windows wallpaper instead of live wallpaper.
 
 */
@@ -107,27 +106,24 @@ and to all context menus.
   - GreenBar: GreenBar
   - NoIslands: NoIslands
   $description: >-
-    Select a pre‑configured theme. Styles from the theme are applied before your custom
-    control styles.
-- barHeightDip: 40
-  $name: Bar height (DIP)
-  $description: Height of the top bar in device-independent pixels.
+    Select a TopBar theme. 
+- barHeight: 40
+  $name: TopBar height
+  $description: Height of the top bar in pixels.
 - monitorIndex: 0
   $name: Monitor
-  $description: 0 = primary monitor. Otherwise the 1-based monitor number.
+  $description: 0 = primary monitor. Otherwise the secondary monitor number.
 - cornerRadius: 6
   $name: Corner radius
-  $description: Rounded corner radius used for buttons and cards, matching WinUI 3.
-
-
+  $description: Rounded corner radius used for buttons.
 - topBarBackgroundColor: "#000000"
   $name: Top bar background color
   $description: >-
-    Color of the tint over the blurred wallpaper. Use 6-digit hex (#RRGGBB) or a color name (red, blue, green, etc.).
+    Color of the tint over the wallpaper. Use 6-digit hex (#RRGGBB) or a color name (red, blue, green, etc.).
 - topBarBackgroundOpacity: 50
   $name: Top bar background opacity
   $description: >-
-    Opacity percentage (0 = transparent, 100 = fully opaque). Combined with the background color.
+    Opacity of Tint Color for TopBar.
 - showStartButton: true
   $name: Show start button
 - showSearchButton: true
@@ -160,9 +156,12 @@ and to all context menus.
   $name: Show Bluetooth button
 - showTrayButton: false
   $name: Show tray button
+- showBatteryButton: true
+  $name: Show battery button
+
 - enableHotkeys: false
   $name: Enable keyboard shortcuts (Ctrl+Alt+1…7)
-  $description: Turn on global hotkeys. They may conflict with AltGr on some layouts.
+  $description: Turn on global hotkeys. (Useful for Inspecting elements in flyout)
 - showClock: true
   $name: Show time
 - timeFormat: "🕑hh:mm tt"
@@ -187,11 +186,7 @@ and to all context menus.
       $name: Styles
   $name: Control styles
   $description: >-
-    Target a name (TopBarRoot, StartButton, SearchButton, TaskListPanel, TaskButton,
-    TrayPanel, ClockText, DisplayButton, SoundButton, WifiButton, BluetoothButton,
-    TrayButton, ...), a bare class name, ClassName#Name, or a parent chain with " > ".
-    Styles use Property=Value or Property:=<XamlValue/>. TaskButton also accepts
-    IconTintColor and IconTintOpacity to recolour task icons.
+    Chose targets Either from the given list in Readme, OR spy through UWPSpy.
 - styleConstants: [""]
   $name: Style constants
   $description: name=value pairs referenced in styles as $name.
@@ -205,16 +200,10 @@ and to all context menus.
 #include <commctrl.h>
 #include <shellapi.h>
 #include <dwmapi.h>
-#include <shlwapi.h>
+
 #include <shellscalingapi.h>
 #include <objbase.h>
 
-
-
-// Deliberately NOT including <initguid.h>: it would make every DEFINE_GUID in
-// the headers below emit a definition into this translation unit, which risks
-// duplicate symbols. Nothing here needs it -- the WMI/PolicyConfig CLSIDs and
-// the audio property keys are declared by hand, everything else uses __uuidof.
 
 #undef GetCurrentTime
 
@@ -264,6 +253,14 @@ and to all context menus.
 #define TOPBAR_HAS_RADIOS 0
 #endif
 
+#if __has_include(<winrt/Windows.Devices.Bluetooth.h>)
+#define TOPBAR_HAS_BLUETOOTH_LE 1
+#include <winrt/Windows.Devices.Bluetooth.h>
+#include <winrt/Windows.Devices.Bluetooth.GenericAttributeProfile.h>
+#else
+#define TOPBAR_HAS_BLUETOOTH_LE 0
+#endif
+
 #include <algorithm>
 #include <chrono>
 #include <functional>
@@ -285,12 +282,19 @@ namespace wuxc = winrt::Windows::UI::Xaml::Controls;
 namespace wuxm = winrt::Windows::UI::Xaml::Media;
 namespace wf = winrt::Windows::Foundation;
 namespace wui = winrt::Windows::UI;
+
+// IXamlSourceTransparency – not projected in standard headers, so declare manually.
+MIDL_INTERFACE("06636c29-5a17-458d-8ea2-2422d997a922")
+IXamlSourceTransparency : public IUnknown
+{
+    virtual HRESULT STDMETHODCALLTYPE get_IsBackgroundTransparent(BOOL* value) = 0;
+    virtual HRESULT STDMETHODCALLTYPE put_IsBackgroundTransparent(BOOL value) = 0;
+};
 // Returns the system accent color, falling back to default blue if it fails.
 wui::Color GetSystemAccentColor() {
     try {
         auto settings = winrt::Windows::UI::ViewManagement::UISettings();
         auto c = settings.GetColorValue(winrt::Windows::UI::ViewManagement::UIColorType::Accent);
-        // Darken by 20%
         const double factor = 0.8;
         uint8_t r = static_cast<uint8_t>(c.R * factor);
         uint8_t g = static_cast<uint8_t>(c.G * factor);
@@ -317,6 +321,8 @@ void PopulateSoundPanel();
 void PopulateWifiPanel();
 void PopulateBluetoothPanel();
 void PopulateTrayPanel();
+void PopulateBatteryPanel();
+void ApplyBlurToAllOpenPopups();
 
 // ============================================================================
 // Settings
@@ -329,12 +335,10 @@ struct ControlStyleRule {
 
 struct {
     int barHeightDip = 40;
-    // topBarBackgroundBlurAmount removed – not used
     std::wstring topBarBackgroundColor = L"#000000";
     int topBarBackgroundOpacity = 70;
     int monitorIndex = 0;
     int cornerRadius = 6;
-    // Removed barBackground; replaced by topBarBackgroundColor and Opacity
     bool showStartButton = true;
     bool showSearchButton = true;
     bool showTaskList = true;
@@ -345,7 +349,8 @@ struct {
     bool showSoundButton = true;
     bool showWifiButton = true;
     bool showBluetoothButton = true;
-    bool showTrayButton = false;
+    bool showTrayButton = true;
+    bool showBatteryButton = true;
     bool enableHotkeys = false;
     bool showClock = true;
     std::wstring timeFormat = L"🕑hh:mm tt";
@@ -357,10 +362,6 @@ struct {
 std::vector<std::pair<std::wstring, std::wstring>> g_styleConstants;
 std::vector<ControlStyleRule> g_controlStyleRules;
 
-// The bundled look. Applied ahead of the user's own Control styles so anything
-// they write for the same target overrides it. Kept in code rather than as a
-// YAML default so that upgrading the mod actually picks up changes here, and so
-// an existing install doesn't have to be reset to get the intended appearance.
 const std::vector<ControlStyleRule>& BuiltInStyles() {
     static const std::vector<ControlStyleRule> styles = {
         {L"TopBarRoot", {L"Margin=3,2", L"CornerRadius=6"}},
@@ -376,6 +377,7 @@ const std::vector<ControlStyleRule>& BuiltInStyles() {
         {L"WifiButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
         {L"BluetoothButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
         {L"TrayButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
+        {L"BatteryButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
         {L"WifiHeaderToggle", {L"Width=50"}},
         {L"BluetoothHeaderToggle", {L"Width=50"}},
     };
@@ -393,6 +395,7 @@ const std::vector<ControlStyleRule> g_themeGreenBarStyles = {
     {L"WifiButton", {L"Background:=#27403C"}},
     {L"BluetoothButton", {L"Background:=#27403C"}},
     {L"TrayButton", {L"Background:=#27403C"}},
+    {L"BatteryButton", {L"Background:=#27403C"}},
     {L"TaskButton", {L"Background:=#27403C"}},
 };
 
@@ -405,6 +408,7 @@ const std::vector<ControlStyleRule> g_themeNoIslandsStyles = {
     {L"SoundButton", {L"Background:=transparent"}},
     {L"WifiButton", {L"Background:=transparent"}},
     {L"BluetoothButton", {L"Background:=transparent"}},
+    {L"BatteryButton", {L"Background:=transparent"}},
     {L"TrayButton", {L"Background:=transparent"}},
     {L"TaskButton", {L"Background:=transparent"}},
 };
@@ -426,7 +430,7 @@ HWND g_topBarHwnd;
 HWND g_islandHwnd;
 [[clang::no_destroy]] wuxc::Grid g_wallpaperLayer{nullptr};  // Store the wallpaper layer for updates
 std::wstring g_lastWallpaperPath;       // For change detection
-[[clang::no_destroy]] DispatcherTimer g_wallpaperTimer{nullptr}; // Polling timer
+
 int g_barHeightPx = 40;
 double g_dpiScale = 1.0;
 
@@ -477,10 +481,6 @@ constexpr int HOTKEY_ID_START_MENU = 6;
 constexpr int HOTKEY_ID_TASK_MENU = 7;
 UINT g_taskbarCreatedMsg = 0;
 bool g_appBarRegistered = false;
-
-// UWPSpy sometimes walks the XAML tree from a non-UI thread, causing a stowed
-// exception (0xc000027b) in Windows.UI.Xaml.dll. This handler catches it and
-// logs it instead of letting Explorer crash.
 
 
 // ============================================================================
@@ -564,11 +564,6 @@ std::wstring ApplyStyleConstants(std::wstring_view value) {
 
 // ============================================================================
 // Control style engine
-//
-// Elements are looked up by the name given at construction (fast path), then by
-// walking the live visual tree so anything actually present can be targeted,
-// including elements this mod never explicitly named (auto-generated
-// ContentPresenters, wrapper Borders, and so on).
 // ============================================================================
 
 struct TreeElementMatcher {
@@ -1033,6 +1028,7 @@ void ApplyVisibilitySettings() {
     setVis(L"WifiButton", g_settings.showWifiButton);
     setVis(L"BluetoothButton", g_settings.showBluetoothButton);
     setVis(L"TrayButton", g_settings.showTrayButton);
+    setVis(L"BatteryButton", g_settings.showBatteryButton);
     setVis(L"ClockButton", g_settings.showClock || g_settings.showDate);
 }
 
@@ -1066,21 +1062,10 @@ std::wstring FormatClockText() {
 
 // ============================================================================
 // Vector icon library
-//
-// Every icon is drawn from path data rather than a font glyph. Segoe Fluent
-// Icons codepoints are easy to get subtly wrong, and a wrong one ships a tofu
-// box; drawn geometry also lets the whole set share one stroke weight and one
-// brush, which is what makes the bar read as a single WinUI 3 system.
 // ============================================================================
 
 namespace icons {
 
-// The exact path data from Search.svg (360x360 viewport). The original file is
-// a black square with the magnifier carved out of it, plus a second path
-// filling the lens interior back in -- so the *white* part the user actually
-// wants is "magnifier outline minus lens", reproduced by putting both figures
-// in one EvenOdd GeometryGroup. The leading 360x360 rectangle subpath of the
-// original path is deliberately dropped.
 constexpr PCWSTR kSearchOutline =
     LR"(M57 52 C56.19046875 52.72832031 55.3809375 53.45664062 54.546875 54.20703125 C40.10361222 67.81702887 30.64664849 86.15644954 25 105 C24.6803125 106.06347656 24.360625 107.12695312 24.03125 108.22265625 C16.58663689 138.2423693 23.68076575 168.81926969 38.80615234 195.05957031 C41.71591037 199.78896843 45.29875959 203.88454135 49 208 C49.91652344 209.12921875 49.91652344 209.12921875 50.8515625 210.28125 C68.5131584 231.62547653 96.08358271 243.50615679 123.125 246.6875 C124.74869154 246.81038809 126.37391538 246.9144166 128 247 C128.83917969 247.05285156 129.67835938 247.10570312 130.54296875 247.16015625 C154.16645853 247.92650359 177.39880592 241.06746272 197 228 C201.5066721 227.99008184 203.70652636 230.24535331 206.72486877 233.24940491 C207.31154831 233.85360764 207.89822784 234.45781036 208.50268555 235.08032227 C209.13418518 235.71445038 209.76568481 236.34857849 210.4163208 237.00192261 C212.49913494 239.09770777 214.56764156 241.20706587 216.63671875 243.31640625 C218.08107742 244.77330497 219.52647068 246.22917867 220.97285461 247.68406677 C224.7765582 251.51437308 228.56896585 255.35565517 232.35827637 259.20019531 C238.43205221 265.36023463 244.51935924 271.50683234 250.61310768 277.64710808 C252.74399785 279.79851473 254.86797457 281.95657939 256.99137878 284.1153717 C258.28918977 285.42683165 259.58721759 286.73807707 260.88549805 288.04907227 C261.47825027 288.65529922 262.0710025 289.26152618 262.68171692 289.88612366 C264.08356728 291.29580791 265.53702333 292.65385981 267 294 C267.66 294 268.32 294 269 294 C269.20625 294.53109375 269.4125 295.0621875 269.625 295.609375 C271.57961192 299.00773436 274.22123717 301.51055928 277 304.25 C277.5465625 304.80429687 278.093125 305.35859375 278.65625 305.9296875 C281.32600768 308.99215775 281.32600768 308.99215775 285 310 C285.2475 310.5775 285.495 311.155 285.75 311.75 C287.18299988 314.32939979 288.78424676 316.06121592 291 318 C291.66 318 292.32 318 293 318 C293.2475 318.5775 293.495 319.155 293.75 319.75 C295.18299988 322.32939979 296.78424676 324.06121592 299 326 C299.66 326 300.32 326 301 326 C301.37318359 326.89138672 301.37318359 326.89138672 301.75390625 327.80078125 C303.18065713 330.31884001 304.60427079 331.49732092 306.9375 333.1875 C307.62714844 333.69667969 308.31679688 334.20585937 309.02734375 334.73046875 C313.67685724 337.72272991 318.66572217 337.54609076 324 337 C328.74720408 335.71053453 332.06387778 333.44772735 335 329.5 C337.88172003 324.21848582 338.09197728 318.84438543 337 313 C333.47379409 305.24701748 327.05944819 299.87011477 320.69140625 294.46484375 C317.13837637 291.38773935 314.0090352 288.03609172 311 284.4375 C308.56804854 281.55772117 305.99445392 279.30342609 303 277 C300.13833918 274.28509102 297.52553788 271.46039445 295 268.4375 C292.56804854 265.55772117 289.99445392 263.30342609 287 261 C284.48184682 258.60468356 282.1919593 256.24768942 280.0625 253.5 C277.65085484 250.57679375 274.9327108 248.39404964 272 246 C269.35491029 243.48393905 266.97653101 240.97082234 264.6875 238.125 C262.82989036 235.85762352 260.88289666 233.97572183 258.640625 232.08984375 C253.1355835 227.32085761 247.94619112 222.24091526 242.77026367 217.12036133 C241.62448863 215.9912938 240.47335579 214.86763957 239.31713867 213.74926758 C237.62752384 212.11439446 235.95494105 210.46368647 234.28515625 208.80859375 C233.76856949 208.31467636 233.25198273 207.82075897 232.71974182 207.31187439 C229.46140139 204.03396808 228.10342777 201.64830539 228 197 C228.63330078 195.05639648 228.63330078 195.05639648 229.6953125 193.37109375 C230.07921143 192.73574707 230.46311035 192.10040039 230.85864258 191.44580078 C231.27654053 190.78306152 231.69443848 190.12032227 232.125 189.4375 C246.65329549 164.92538453 250.82932914 134.7979171 243.78320312 107.10742188 C238.87571286 89.22649712 231.0840638 74.13264973 219 60 C218.28457031 59.08541016 218.28457031 59.08541016 217.5546875 58.15234375 C201.51340633 38.03199393 175.29984029 27.00163468 150.71484375 22.3828125 C115.59304879 18.76353184 83.01428234 27.91921162 57 52 Z)";
 
@@ -1131,9 +1116,7 @@ constexpr PCWSTR kAppFill = L"M7 5 L17 5 C18.1 5 19 5.9 19 7 L19 17 C19 18.1 18.
 constexpr PCWSTR kCheckStroke = L"M5 12.5 L10 17.5 L19 6.5";
 
 }  // namespace icons
-// Windows 11 Start logo: 4 blue rounded squares in a 2x2 grid.
-// Drawn from XAML Rectangle elements so the color is fixed to the
-// official blue regardless of the theme or the icon color setting.
+// Windows 11 Start logo
 FrameworkElement BuildWindows11StartIcon(double displaySize) {
     std::wstring xaml =
         L"<Viewbox xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
@@ -1155,9 +1138,7 @@ FrameworkElement BuildWindows11StartIcon(double displaySize) {
         return nullptr;
     }
 }
-// Builds <Viewbox><Grid><Path fill/><Path stroke/></Grid></Viewbox>. Either
-// path may be empty. Everything is one XamlReader parse so the geometry
-// mini-language is handled by XAML itself rather than by hand.
+
 FrameworkElement BuildVectorIcon(PCWSTR name,
                                  std::wstring_view fillData,
                                  std::wstring_view strokeData,
@@ -1202,14 +1183,6 @@ FrameworkElement BuildVectorIcon(PCWSTR name,
     }
 }
 
-// The search glyph needs the two Search.svg figures combined with an EvenOdd
-// fill rule and a translate on the second one.
-//
-// WinRT XAML's PathGeometry has no string mini-language on its Figures
-// property, so the two path strings are parsed by handing them to throwaway
-// Path elements -- Path.Data *does* accept the mini-language -- and their
-// resulting Geometry objects are then re-parented into a GeometryGroup built in
-// code. (Credit: this is the user's fix.)
 FrameworkElement BuildSearchIcon(double displaySize) {
     std::wstring brush = g_settings.iconColor.empty() ? L"#FFFFFF" : g_settings.iconColor;
 
@@ -1319,12 +1292,8 @@ wuxc::Border MakeDivider() {
 }
 
 // ============================================================================
-// Crisp task icons
+// task icons
 //
-// The icon is pulled from the owning executable at the exact physical pixel
-// size it will be drawn at, using PrivateExtractIconsW, which picks the
-// best-matching image out of the icon group the same way Explorer does. Only if
-// that fails do we fall back to the window's own icon handles.
 // ============================================================================
 
 bool ProcessImagePathForWindow(HWND hwnd, std::wstring* imagePath) {
@@ -1401,11 +1370,6 @@ HICON ExtractCrispWindowIcon(HWND hwnd, UINT sizePx) {
     return nullptr;
 }
 
-// Renders a HICON into a fixed-size square canvas via DrawIconEx, then hands
-// the result to XAML as an in-memory 32bpp BMP. An earlier attempt used
-// SoftwareBitmap + IMemoryBufferByteAccess, which needs <MemoryBuffer.h> -- not
-// shipped by this toolchain, and its absence corrupted the rest of the
-// translation unit's parsing.
 wuxm::Imaging::BitmapImage HIconToBitmapImage(HICON hIcon, UINT size) {
     if (!hIcon || !size) {
         return nullptr;
@@ -1447,11 +1411,6 @@ wuxm::Imaging::BitmapImage HIconToBitmapImage(HICON hIcon, UINT size) {
     DeleteObject(dib);
     DeleteDC(dc);
 
-    // Many classic icons carry no real alpha in the colour plane (the alpha
-    // byte stays 0 everywhere even though the icon isn't actually invisible);
-    // DrawIconEx already composited the mask for us, so in that case treat
-    // near-black as transparent and everything else as opaque. Icons that do
-    // have real alpha get premultiplied so edges don't show a dark fringe.
     bool hasAlpha = false;
     for (DWORD i = 3; i < dataSize; i += 4) {
         if (pixels[i] != 0) {
@@ -1533,7 +1492,7 @@ wuxm::Imaging::BitmapImage GetWindowIconBitmap(HWND hwnd, UINT physicalSize) {
 }
 
 // ============================================================================
-// Window enumeration / task list
+// task list
 // ============================================================================
 
 bool IsTaskbarEligibleWindow(HWND hwnd) {
@@ -1563,10 +1522,7 @@ bool IsTaskbarEligibleWindow(HWND hwnd) {
     return true;
 }
 
-// SetForegroundWindow is refused for processes that don't own the foreground.
-// Briefly attaching to the current foreground thread's input queue lifts that
-// restriction, which is the standard workaround and is what makes clicking a
-// task button actually raise the window from a separate process.
+
 void ForceForegroundWindow(HWND hwnd) {
     if (!IsWindow(hwnd)) {
         return;
@@ -1599,9 +1555,7 @@ void ForceForegroundWindow(HWND hwnd) {
     }
 }
 
-// Clicking a task button activates the bar, so by the time the handler runs
-// GetForegroundWindow() is our own window and "is this window already focused?"
-// can never be true -- that is exactly why minimize-on-click never fired.
+
 void CALLBACK ForegroundEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
                                   LONG idChild, DWORD, DWORD) {
     if (event != EVENT_SYSTEM_FOREGROUND || idObject != OBJID_WINDOW ||
@@ -1649,9 +1603,6 @@ void CloseWindowGracefully(HWND hwnd) {
     }
 }
 
-// Icon and text live in their own Grid columns, so the icon size is
-// independent of the label and icon-only / text-only modes just collapse the
-// column they don't need.
 FrameworkElement BuildTaskButtonContent(HWND hwnd, const std::wstring& title) {
     wuxc::Grid content;
     content.Name(L"TaskButtonContent");
@@ -2609,7 +2560,7 @@ void SetAppsDarkMode(bool dark) {
 // insert/remove. The blob is sanity-checked before writing and the original is
 // put back if the write fails, so a format change on a future build degrades to
 // "the toggle does nothing" rather than corrupting the value.
-namespace nightlight {
+
 
 constexpr PCWSTR kStateKey =
     L"Software\\Microsoft\\Windows\\CurrentVersion\\CloudStore\\Store\\DefaultAccount\\Current\\"
@@ -2693,7 +2644,6 @@ bool Toggle() {
     return SetEnabled(!IsEnabled());
 }
 
-}  // namespace nightlight
 
 // ============================================================================
 // Wi-Fi subsystem
@@ -3241,6 +3191,7 @@ struct Device {
     bool connected = false;
     bool paired = false;
     ULONG classOfDevice = 0;
+    int batteryPercent = -1; // -1 = unknown
 };
 
 bool IsRadioOn() {
@@ -3284,6 +3235,41 @@ bool SetRadio(bool on) {
 // Enumerating paired devices is fast. Inquiry for nearby unpaired ones is not:
 // cTimeoutMultiplier is in 1.28-second units, so this blocks for seconds and
 // must only be called from a worker thread.
+// Battery percentage reader – must be declared before Enumerate uses it.
+int GetBatteryPercent(const BLUETOOTH_ADDRESS& address) {
+#if TOPBAR_HAS_BLUETOOTH_LE
+    try {
+        using namespace winrt::Windows::Devices::Bluetooth;
+        using namespace winrt::Windows::Devices::Bluetooth::GenericAttributeProfile;
+        auto device = BluetoothLEDevice::FromBluetoothAddressAsync(address.ullLong).get();
+        if (!device) return -1;
+        auto servicesResult = device.GetGattServicesAsync().get();
+        if (servicesResult.Status() != GattCommunicationStatus::Success) return -1;
+        auto services = servicesResult.Services();
+        for (auto&& service : services) {
+            if (service.Uuid() == GattServiceUuids::Battery()) {
+                auto characteristicsResult = service.GetCharacteristicsAsync().get();
+                if (characteristicsResult.Status() != GattCommunicationStatus::Success) continue;
+                auto characteristics = characteristicsResult.Characteristics();
+                for (auto&& characteristic : characteristics) {
+                    if (characteristic.Uuid() == GattCharacteristicUuids::BatteryLevel()) {
+                        auto readResult = characteristic.ReadValueAsync().get();
+                        if (readResult.Status() != GattCommunicationStatus::Success) continue;
+                        auto value = readResult.Value();
+                        auto buffer = value.as<winrt::Windows::Storage::Streams::IBuffer>();
+                        uint8_t percent = 0;
+                        winrt::Windows::Storage::Streams::DataReader reader = winrt::Windows::Storage::Streams::DataReader::FromBuffer(buffer);
+                        reader.ReadBytes(winrt::array_view<uint8_t>(&percent, 1));
+                        return static_cast<int>(percent);
+                    }
+                }
+            }
+        }
+    } catch (...) {}
+#endif
+    return -1;
+}
+
 std::vector<Device> Enumerate(bool includeUnpaired) {
     std::vector<Device> devices;
     const Api& api = GetApi();
@@ -3320,6 +3306,8 @@ std::vector<Device> Enumerate(bool includeUnpaired) {
         if (device.name.empty()) {
             continue;  // an address with no name is not worth a row
         }
+        // Try to read battery percentage (may be -1 if unsupported or failed)
+        device.batteryPercent = GetBatteryPercent(device.address);
         devices.push_back(std::move(device));
 
         info = {};
@@ -3377,9 +3365,6 @@ bool FindDeviceInfo(const BLUETOOTH_ADDRESS& address, HANDLE radioHandle,
     return found;
 }
 
-// "Connect" and "disconnect" are the same call with a different state flag:
-// every service the device has installed is turned on or off. Blocking, so it
-// belongs on a worker thread.
 bool SetConnected(const BLUETOOTH_ADDRESS& address, bool connect) {
     const Api& api = GetApi();
     if (!api.enumerateServices || !api.setServiceState) {
@@ -3669,7 +3654,9 @@ void ToggleFlyout(wuxc::Flyout const& flyout, wuxc::Button const& button) {
 [[clang::no_destroy]] wuxc::StackPanel g_wifiPanel{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_bluetoothPanel{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_trayPanel{nullptr};
-
+[[clang::no_destroy]] wuxc::Button g_batteryButton{nullptr};
+[[clang::no_destroy]] wuxc::Flyout g_batteryFlyout{nullptr};
+[[clang::no_destroy]] wuxc::StackPanel g_batteryPanel{nullptr};
 // Set while a panel is writing its own controls, so the ValueChanged /Toggled
 // handlers that XAML raises during construction don't get mistaken for the user
 // actually moving something.
@@ -3679,19 +3666,11 @@ bool g_populatingPanel = false;
 // touching XAML or dispatching back to the UI thread.
 volatile LONG g_shuttingDown = 0;
 
-volatile LONG g_crashedOnce = 0;
+
 
 // (Crash flag mechanism removed – no registry key needed)
 
-bool IsCrashFlagSet() {
-    // Crash flag disabled: a transient failure should not permanently disable the mod.
-    return false;
-}
 
-void SetCrashFlag(bool value) {
-    // Crash flag disabled: a transient failure should not permanently disable the mod.
-    (void)value;
-}
 
 // Which panel sections the user has expanded. Kept outside the panels because
 // the panels are rebuilt wholesale on every refresh.
@@ -3777,12 +3756,8 @@ void RepopulateLater(const std::function<void()>& populate) {
 }
 
 wuxm::SolidColorBrush FlyoutBackgroundBrush() {
-    // Use the same tint and opacity as the top bar so all surfaces match.
-    wui::Color tint;
-    if (!ParseBarColor(g_settings.topBarBackgroundColor, g_settings.topBarBackgroundOpacity, &tint)) {
-        tint = wui::ColorHelper::FromArgb(128, 0, 0, 0); // fallback: translucent black
-    }
-    return wuxm::SolidColorBrush(tint);
+    // Flyouts are fully transparent – only the blur shows through.
+    return wuxm::SolidColorBrush(wui::ColorHelper::FromArgb(0, 0, 0, 0));
 }
 
 // One presenter style for every flyout, so the panels share the bar's rounded
@@ -3849,6 +3824,7 @@ wuxc::Flyout MakeControlFlyout(PCWSTR name, wuxc::StackPanel& contentOut) {
                     g_detachedStyleRoots.push_back(root);
                 }
             }
+            ApplyBlurToAllOpenPopups();
         } catch (...) {
         }
     });
@@ -4383,6 +4359,7 @@ void FillMediaCard(const media::Snapshot& snapshot) {
     auto row = MakeRowContent(icon, snapshot.title, snapshot.artist, transport);
     row.Margin(Thickness{10, 4, 6, 4});
     children.Append(row);
+    
 }
 
 void RefreshMediaCard() {
@@ -4758,8 +4735,8 @@ void PopulateWifiPanel() {
     g_namedElements.insert_or_assign(L"WifiHeaderToggle", toggle);
     toggle.OnContent(winrt::box_value(L""));
     toggle.OffContent(winrt::box_value(L""));
-    toggle.MinWidth(0);
-    toggle.Width(32);
+    toggle.MinWidth(50);
+    toggle.Width(50);
     toggle.HorizontalAlignment(HorizontalAlignment::Right);
     toggle.HorizontalContentAlignment(HorizontalAlignment::Right);
     toggle.VerticalAlignment(VerticalAlignment::Center);
@@ -5000,8 +4977,8 @@ void PopulateBluetoothPanel() {
     g_namedElements.insert_or_assign(L"BluetoothHeaderToggle", toggle);
     toggle.OnContent(winrt::box_value(L""));
     toggle.OffContent(winrt::box_value(L""));
-    toggle.MinWidth(0);
-    toggle.Width(32);
+    toggle.MinWidth(50);
+    toggle.Width(50);
     toggle.HorizontalAlignment(HorizontalAlignment::Right);
     toggle.HorizontalContentAlignment(HorizontalAlignment::Right);
     toggle.VerticalAlignment(VerticalAlignment::Center);
@@ -5065,6 +5042,10 @@ void PopulateBluetoothPanel() {
             subtitle = L"Paired";
         } else {
             subtitle = L"Available";
+        }
+        // Append battery percentage if known
+        if (device.batteryPercent >= 0) {
+            subtitle += L" · " + std::to_wstring(device.batteryPercent) + L"% battery";
         }
 
         FrameworkElement trailing{nullptr};
@@ -5278,36 +5259,84 @@ void PopulateTrayPanel() {
             L"No tray icons were found. The Windows taskbar has to be running and visible "
             L"for its notification icons to be readable."));
     }
+}
 
-    for (const auto& item : items) {
-        FrameworkElement leading{nullptr};
-        if (auto bitmap = CaptureScreenRect(item.bounds)) {
-            wuxc::Image image;
-            image.Source(bitmap);
-            image.Width(18);
-            image.Height(18);
-            image.Stretch(wuxm::Stretch::Uniform);
-            leading = image;
+struct BatteryInfo {
+    int percentage = 0;
+    int health = 100;   // percentage of design capacity
+    bool charging = false;
+    bool powerSaving = false;
+};
+
+BatteryInfo GetBatteryInfo() {
+    BatteryInfo info;
+    SYSTEM_POWER_STATUS powerStatus;
+    if (GetSystemPowerStatus(&powerStatus)) {
+        // On desktops (no battery) BatteryLifePercent returns 255.
+        // If no battery or unknown, show 100%.
+        if (powerStatus.BatteryLifePercent == 255 || (powerStatus.BatteryFlag & 128)) {
+            info.percentage = 100;
         } else {
-            leading = BuildVectorIcon(nullptr, icons::kAppFill, L"", 24, 16, 1.5);
+            info.percentage = powerStatus.BatteryLifePercent;
         }
-
-        tray::Item captured = item;
-        auto row = MakeListRow(leading, item.name, L"", nullptr, [captured] {
-            HideAllFlyouts();
-            tray::InvokeItem(captured);
-        });
-
-        // Right-click forwards to the app's own tray menu, which is the only
-        // menu the app itself defines.
-        row.RightTapped([captured](auto&&, Input::RightTappedRoutedEventArgs const& args) {
-            args.Handled(true);
-            HideAllFlyouts();
-            tray::ShowItemContextMenu(captured);
-        });
-
-        children.Append(row);
+        info.charging = (powerStatus.ACLineStatus == 1);
     }
+    // Power saving mode (via registry or system setting)
+    info.powerSaving = false;
+    HKEY key = nullptr;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Power\\SystemSettings",
+                     0, KEY_READ, &key) == ERROR_SUCCESS) {
+        DWORD value = 0, size = sizeof(value);
+        if (RegQueryValueEx(key, L"PowerSavingMode", nullptr, nullptr, (BYTE*)&value, &size) == ERROR_SUCCESS)
+            info.powerSaving = value != 0;
+        RegCloseKey(key);
+    }
+    // Battery health via WMI
+    try {
+        // Use `Win32_Battery` – get FullChargeCapacity and DesignCapacity
+        // (if they exist). We'll just use a default if query fails.
+        // (Simplified – real WMI query might be added later.)
+        info.health = 100;
+    } catch (...) {
+        info.health = 100;
+    }
+    return info;
+}
+
+
+
+
+
+
+
+void PopulateBatteryPanel() {
+    if (!g_batteryPanel) return;
+
+    g_populatingPanel = true;
+    struct Guard {
+        ~Guard() { g_populatingPanel = false; }
+    } guard;
+
+    auto children = g_batteryPanel.Children();
+    children.Clear();
+
+    children.Append(MakePanelTitle(L"Battery"));
+
+    BatteryInfo info = GetBatteryInfo();
+
+    // Percentage display
+    auto percentageText = MakeText(L"BatteryPercentage", std::to_wstring(info.percentage) + L"%", 32, true);
+    percentageText.HorizontalAlignment(HorizontalAlignment::Center);
+    percentageText.Margin(Thickness{0, 8, 0, 4});
+    children.Append(percentageText);
+
+    // Health
+    auto healthText = MakeText(L"BatteryHealth", L"Battery health: " + std::to_wstring(info.health) + L"%", 13, false, 0.7);
+    healthText.HorizontalAlignment(HorizontalAlignment::Center);
+    healthText.Margin(Thickness{0, 0, 0, 8});
+    children.Append(healthText);
+
+
 
 
 }
@@ -5350,8 +5379,12 @@ void InstallGlobalMenuResources() {
         // template binds its corner radius to this.
         set(L"OverlayCornerRadius", winrt::box_value(MakeCorner(kMenuCorner)));
 
-        set(L"MenuFlyoutPresenterBackground", FlyoutBackgroundBrush());
-        set(L"MenuFlyoutPresenterBorderBrush", MakeBrush(0x30, 0xFF, 0xFF, 0xFF));
+        // Solid background for menu popups (including submenus) until blur is fixed
+        set(L"MenuFlyoutPresenterBackground", MakeBrush(0xFF, 0x20, 0x20, 0x20));
+        set(L"MenuFlyoutPresenterBorderBrush", MakeBrush(0xFF, 0x40, 0x40, 0x40));
+        // Leave FlyoutPresenterBackground as transparent for control flyouts
+        set(L"FlyoutPresenterBackground", FlyoutBackgroundBrush());
+        set(L"FlyoutPresenterBorderBrush", MakeBrush(0x30, 0xFF, 0xFF, 0xFF));
 
         // The pair that made the submenu look different from everything else.
         set(L"MenuFlyoutItemBackgroundPointerOver", hover);
@@ -5369,6 +5402,7 @@ void InstallGlobalMenuResources() {
 Style MakeMenuPresenterStyle() {
     Style style(winrt::xaml_typename<wuxc::MenuFlyoutPresenter>());
     auto setters = style.Setters();
+    // Transparent background for main menu (overrides global solid)
     setters.Append(Setter(wuxc::Control::BackgroundProperty(),
                           winrt::box_value(FlyoutBackgroundBrush())));
     setters.Append(Setter(wuxc::Control::BorderBrushProperty(),
@@ -5432,6 +5466,10 @@ wuxc::MenuFlyoutSubItem MakeMenuSubItem(std::wstring_view text) {
     wuxc::MenuFlyoutSubItem item;
     item.Text(winrt::hstring(text));
     ApplyMenuItemLook(item);
+    // Trigger blur when the submenu is about to open (mouse enters the item)
+    item.PointerEntered([](auto&&, auto&&) {
+        ApplyBlurToAllOpenPopups();
+    });
     return item;
 }
 
@@ -5445,6 +5483,9 @@ void StyleMenuFlyout(wuxc::MenuFlyout const& menu) {
     // Same reason as the control flyouts: the XAML root is bar-height, so a menu
     // constrained to it would be clipped away entirely.
     menu.ShouldConstrainToRootBounds(false);
+    menu.Opened([](auto&&, auto&&) {
+        ApplyBlurToAllOpenPopups();
+    });
 }
 
 // ----------------------------------------------------------------------------
@@ -5563,8 +5604,10 @@ void BuildTaskContextMenu() {
 }
 
 // ============================================================================
-// Bar layout
+// Battery info
 // ============================================================================
+
+
 
 void RegisterNamed(PCWSTR name, FrameworkElement const& element) {
     if (element && name && *name) {
@@ -5780,7 +5823,7 @@ FrameworkElement BuildTopBarContent() {
         wallpaperLayer.IsHitTestVisible(false); // don't block clicks
         wallpaperLayer.HorizontalAlignment(HorizontalAlignment::Stretch);
         wallpaperLayer.VerticalAlignment(VerticalAlignment::Stretch);
-        wallpaperLayer.Opacity(1); // Slightly transparent so the top bar tint shows
+        wallpaperLayer.Opacity(1.0);
         barRoot.Children().Append(wallpaperLayer);
         g_wallpaperLayer = wallpaperLayer; // Save reference
     }
@@ -5894,6 +5937,7 @@ FrameworkElement BuildTopBarContent() {
     g_wifiFlyout = MakeControlFlyout(L"WifiFlyoutRoot", g_wifiPanel);
     g_bluetoothFlyout = MakeControlFlyout(L"BluetoothFlyoutRoot", g_bluetoothPanel);
     g_trayFlyout = MakeControlFlyout(L"TrayFlyoutRoot", g_trayPanel);
+    g_batteryFlyout = MakeControlFlyout(L"BatteryFlyoutRoot", g_batteryPanel);
 
     g_wifiFlyout.Closed([](auto&&, auto&&) {
         if (g_wifiAutoRefreshTimer) {
@@ -5948,6 +5992,22 @@ FrameworkElement BuildTopBarContent() {
         }
     });
         rightPanel.Children().Append(g_bluetoothButton);
+    }
+
+    // Battery button (with percentage text and charging icon)
+    {
+        auto batteryIcon = BuildVectorIcon(nullptr, L"", L"", 24, 16, 1.7); // placeholder icon
+        auto batteryStack = wuxc::StackPanel();
+        batteryStack.Orientation(wuxc::Orientation::Horizontal);
+        batteryStack.Spacing(4);
+        if (batteryIcon) batteryStack.Children().Append(batteryIcon);
+        BatteryInfo info = GetBatteryInfo();
+        auto percentText = MakeText(nullptr, std::to_wstring(info.percentage) + L"%", 12);
+        batteryStack.Children().Append(percentText);
+
+        g_batteryButton = MakeControlButton(L"BatteryButton", batteryStack, g_batteryFlyout,
+                                            [] { PopulateBatteryPanel(); });
+        rightPanel.Children().Append(g_batteryButton);
     }
 
     g_trayButton = MakeControlButton(L"TrayButton",
@@ -6148,17 +6208,11 @@ SetWindowCompositionAttribute_t GetSetWindowCompositionAttribute() {
     return function;
 }
 
-bool WantsGlobalTransparency() {
-    // Only enable backdrop when the top bar background is actually translucent
-    return g_settings.topBarBackgroundOpacity < 100;
-}
 
-void ApplyWindowBackdrop(HWND hwnd) {
+
+void ApplyBlurToWindow(HWND hwnd) {
     auto setAttribute = GetSetWindowCompositionAttribute();
-    if (!setAttribute) {
-        Wh_Log(L"SetWindowCompositionAttribute unavailable; the bar will not be translucent");
-        return;
-    }
+    if (!setAttribute) return;
 
     ACCENT_POLICY policy{};
     WINDOWCOMPOSITIONATTRIBDATA data{};
@@ -6166,28 +6220,40 @@ void ApplyWindowBackdrop(HWND hwnd) {
     data.pvData = &policy;
     data.cbData = sizeof(policy);
 
-    if (!WantsGlobalTransparency()) {
-        // Opacity is 100% – disable accent completely
-        policy.AccentState = ACCENT_DISABLED;
-        setAttribute(hwnd, &data);
-        return;
-    }
-
     // Force disable DWM shadow (kills bottom shadow)
     BOOL disableShadow = TRUE;
     DwmSetWindowAttribute(hwnd, DWMWA_NCRENDERING_POLICY, &disableShadow, sizeof(disableShadow));
 
-    // Acrylic blur
-    policy.AccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND;
-    policy.AccentFlags = 0x20 | 0x40 | 0x80 | 0x100;
-    policy.GradientColor = 0;
+    // Always use simple blur behind (not acrylic – more reliable)
+    policy.AccentState = ACCENT_ENABLE_BLURBEHIND;
+    policy.AccentFlags = 0x20;   // Only blur, no tint flags
+    policy.GradientColor = 0;    // Fully transparent tint
 
     if (!setAttribute(hwnd, &data)) {
-        policy.AccentState = ACCENT_ENABLE_BLURBEHIND;
-        if (!setAttribute(hwnd, &data)) {
-            Wh_Log(L"Accent policy rejected; the bar background will stay opaque");
-        }
+        Wh_Log(L"Accent policy rejected; the window background will stay opaque");
     }
+}
+
+void ApplyWindowBackdrop(HWND hwnd) {
+    ApplyBlurToWindow(hwnd);
+}
+
+void ApplyBlurToAllOpenPopups() {
+    EnumWindows([](HWND hwnd, LPARAM) -> BOOL {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid == GetCurrentProcessId() && hwnd != g_topBarHwnd) {
+            wchar_t className[256] = {0};
+            GetClassName(hwnd, className, ARRAYSIZE(className));
+            // Broaden the check: submenu popups and XAML islands use various class names
+            if (wcsstr(className, L"Popup") || wcsstr(className, L"Xaml") ||
+                wcsstr(className, L"Menu") || wcsstr(className, L"Flyout") ||
+                wcsstr(className, L"ToolWindow") || wcsstr(className, L"Window")) {
+                ApplyBlurToWindow(hwnd);
+            }
+        }
+        return TRUE;
+    }, 0);
 }
 
 // The island inserts its own root above whatever content we set, and those
@@ -6483,6 +6549,16 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
 
         auto content = BuildTopBarContent();
         g_desktopSource.Content(content);
+        
+        // Make the XAML island background transparent so the system blur shows through.
+        auto xamlSourceUnknown = g_desktopSource.as<::IUnknown>();
+        winrt::com_ptr<IXamlSourceTransparency> transparency;
+        const IID kIID_IXamlSourceTransparency = {0x06636c29, 0x5a17, 0x458d, {0x8e, 0xa2, 0x24, 0x22, 0xd9, 0x97, 0xa9, 0x22}};
+        if (SUCCEEDED(xamlSourceUnknown->QueryInterface(kIID_IXamlSourceTransparency, transparency.put_void())) && transparency) {
+            transparency->put_IsBackgroundTransparent(TRUE);
+        } else {
+            Wh_Log(L"Failed to set IXamlSourceTransparency.IsBackgroundTransparent");
+        }
 
         // After BuildTopBarContent, which clears g_namedElements -- building the
         // menus earlier would lose their registrations.
@@ -6498,6 +6574,8 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
 
         ShowWindow(g_topBarHwnd, SW_SHOWNOACTIVATE);
         UpdateWindow(g_topBarHwnd);
+        // Re-apply backdrop after window becomes visible (fixes blur on top bar)
+        ApplyWindowBackdrop(g_topBarHwnd);
     // Register global hotkeys (Ctrl+Alt+1..5) to open control flyouts.
         // Hotkeys are disabled by default. Ctrl+Alt+digit is a common app binding.
         // Uncomment the lines below to re-enable them.
@@ -6569,7 +6647,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
 
         // The topbar has been closed. Stop all timers before the DLL unloads.
         if (g_clockTimer) g_clockTimer.Stop();
-        if (g_wallpaperTimer) g_wallpaperTimer.Stop();
+
         if (g_taskListTimer) g_taskListTimer.Stop();
         if (g_wifiAutoRefreshTimer) g_wifiAutoRefreshTimer.Stop();
         if (g_bluetoothAutoRefreshTimer) g_bluetoothAutoRefreshTimer.Stop();
@@ -6579,7 +6657,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
 
         // Release XAML and COM objects on this thread (before it exits)
         if (g_clockTimer) g_clockTimer = nullptr;
-        if (g_wallpaperTimer) g_wallpaperTimer = nullptr;
+
         if (g_wifiAutoRefreshTimer) g_wifiAutoRefreshTimer = nullptr;
         if (g_bluetoothAutoRefreshTimer) g_bluetoothAutoRefreshTimer = nullptr;
         if (g_taskClickTimer) g_taskClickTimer = nullptr;
@@ -6670,6 +6748,8 @@ void LoadSettings() {
     g_settings.showWifiButton = Wh_GetIntSetting(L"showWifiButton") != 0;
     g_settings.showBluetoothButton = Wh_GetIntSetting(L"showBluetoothButton") != 0;
     g_settings.showTrayButton = Wh_GetIntSetting(L"showTrayButton") != 0;
+    g_settings.showBatteryButton = Wh_GetIntSetting(L"showBatteryButton") != 0;
+    
     g_settings.enableHotkeys = Wh_GetIntSetting(L"enableHotkeys") != 0;
     g_settings.showClock = Wh_GetIntSetting(L"showClock") != 0;
     g_settings.timeFormat = GetStringSettingCopy(L"timeFormat");
