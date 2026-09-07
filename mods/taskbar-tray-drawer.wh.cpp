@@ -7,7 +7,7 @@
 // @github          https://github.com/Sempier
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -lwindowsapp -luser32
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -342,6 +342,60 @@ FrameworkElement GetParentElementByClassName(FrameworkElement element,
     return parent;
 }
 
+bool IsCursorOnElement(FrameworkElement element, HWND hWnd) {
+    POINT pt;
+    if (!GetCursorPos(&pt) || !ScreenToClient(hWnd, &pt)) {
+        return false;
+    }
+
+    UINT dpi = GetDpiForWindow(hWnd);
+    if (!dpi) {
+        return false;
+    }
+
+    int logicalX = MulDiv(pt.x, 96, dpi);
+    int logicalY = MulDiv(pt.y, 96, dpi);
+    auto topLeft = element.TransformToVisual(nullptr).TransformPoint({0, 0});
+    float width = (float)element.ActualWidth();
+    float height = (float)element.ActualHeight();
+
+    return logicalX >= topLeft.X && logicalX < topLeft.X + width &&
+           logicalY >= topLeft.Y && logicalY < topLeft.Y + height;
+}
+
+// Defined further down, alongside the rest of the taskbar plumbing.
+struct TaskbarWnd {
+    HWND hWnd;
+    bool secondary;
+};
+
+std::vector<TaskbarWnd> FindCurrentProcessTaskbarWnds();
+XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd);
+XamlRoot GetSecondaryTaskbarXamlRoot(HWND hSecondaryTaskbarWnd);
+
+// The pointer handlers need a window to hit test the cursor against, and the
+// IconView path only has an element to start from.
+HWND FindTaskbarWndForXamlRoot(XamlRoot xamlRoot) {
+    if (!xamlRoot) {
+        return nullptr;
+    }
+
+    for (const auto& taskbarWnd : FindCurrentProcessTaskbarWnds()) {
+        try {
+            auto candidate = taskbarWnd.secondary
+                                 ? GetSecondaryTaskbarXamlRoot(taskbarWnd.hWnd)
+                                 : GetTaskbarXamlRoot(taskbarWnd.hWnd);
+            if (candidate && candidate == xamlRoot) {
+                return taskbarWnd.hWnd;
+            }
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"XamlRoot lookup failed: %s", ex.message().c_str());
+        }
+    }
+
+    return nullptr;
+}
+
 // -----------------------------------------------------------------------------
 // Drawer state
 // -----------------------------------------------------------------------------
@@ -358,6 +412,7 @@ struct DrawerItem {
 struct Drawer {
     winrt::weak_ref<FrameworkElement> grid;     // SystemTrayFrameGrid
     winrt::weak_ref<FrameworkElement> trigger;  // element carrying the handlers
+    HWND hTaskbarWnd = nullptr;                 // for cursor hit testing
     std::vector<DrawerItem> items;
     bool open = true;
     bool pendingOpen = false;
@@ -737,7 +792,14 @@ void AnimateWidth(DrawerItem& item,
     // previous close, so reading ActualWidth afterwards would report the
     // element as already full size.
     double current = element.ActualWidth();
-    bool wasAnimating = (bool)item.widthStoryboard;
+
+    // The handle outlives the animation - the open storyboard's Completed
+    // handler clears MaxWidth but not the handle itself - so ask the clock
+    // whether it is actually still running. Treating a finished storyboard as
+    // in flight would stop naturalWidth ever being re-measured.
+    bool wasAnimating =
+        item.widthStoryboard &&
+        item.widthStoryboard.GetCurrentState() == ANIM::ClockState::Active;
 
     if (item.widthStoryboard) {
         item.widthStoryboard.Stop();
@@ -867,6 +929,21 @@ void ScheduleTransition(std::shared_ptr<Drawer> drawer, bool open) {
                     return;
                 }
                 drawer->timer.Stop();
+
+                // PointerExited and PointerCaptureLost are bubbling routed
+                // events, so a descendant reports an exit when the pointer
+                // merely moves off an icon onto the tray behind it, or when a
+                // button releases its capture on click. A real exit still
+                // raises the event on the trigger itself, so re-checking where
+                // the cursor actually is drops only the spurious closes.
+                if (!drawer->pendingOpen && drawer->hTaskbarWnd) {
+                    auto trigger = drawer->trigger.get();
+                    if (trigger &&
+                        IsCursorOnElement(trigger, drawer->hTaskbarWnd)) {
+                        return;
+                    }
+                }
+
                 SetDrawerOpen(*drawer, drawer->pendingOpen, true);
             });
         drawer->timer = timer;
@@ -948,30 +1025,40 @@ bool IsMemberEnabled(std::wstring_view name) {
 }
 
 void TearDownDrawer(Drawer& drawer) {
-    if (drawer.timer) {
-        drawer.timer.Stop();
-        if (drawer.timerToken.value) {
-            drawer.timer.Tick(drawer.timerToken);
+    // Each step is guarded, so a failure early on cannot skip the handler
+    // revocation or the element restore below it.
+    try {
+        if (drawer.timer) {
+            drawer.timer.Stop();
+            if (drawer.timerToken.value) {
+                drawer.timer.Tick(drawer.timerToken);
+            }
+            drawer.timer = nullptr;
         }
-        drawer.timer = nullptr;
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Timer teardown failed: %s", ex.message().c_str());
     }
     drawer.timerToken = {};
 
-    if (auto trigger = drawer.trigger.get()) {
-        if (auto element = trigger.try_as<UIElement>()) {
-            if (drawer.enteredToken.value) {
-                element.PointerEntered(drawer.enteredToken);
-            }
-            if (drawer.exitedToken.value) {
-                element.PointerExited(drawer.exitedToken);
-            }
-            if (drawer.captureLostToken.value) {
-                element.PointerCaptureLost(drawer.captureLostToken);
-            }
-            if (drawer.canceledToken.value) {
-                element.PointerCanceled(drawer.canceledToken);
+    try {
+        if (auto trigger = drawer.trigger.get()) {
+            if (auto element = trigger.try_as<UIElement>()) {
+                if (drawer.enteredToken.value) {
+                    element.PointerEntered(drawer.enteredToken);
+                }
+                if (drawer.exitedToken.value) {
+                    element.PointerExited(drawer.exitedToken);
+                }
+                if (drawer.captureLostToken.value) {
+                    element.PointerCaptureLost(drawer.captureLostToken);
+                }
+                if (drawer.canceledToken.value) {
+                    element.PointerCanceled(drawer.canceledToken);
+                }
             }
         }
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Handler revocation failed: %s", ex.message().c_str());
     }
     drawer.enteredToken = {};
     drawer.exitedToken = {};
@@ -1028,31 +1115,18 @@ void TearDownDrawer(Drawer& drawer) {
 }
 
 void TearDownAllDrawers() {
+    // Per drawer, so one failure cannot leave the others hidden with no mod
+    // left to restore them, and so the list is always emptied - the drawers
+    // would otherwise be destroyed later with their pointer handlers still
+    // registered on live XAML elements.
     for (auto& drawer : *g_drawers) {
-        TearDownDrawer(*drawer);
+        try {
+            TearDownDrawer(*drawer);
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Teardown failed: %s", ex.message().c_str());
+        }
     }
     g_drawers->clear();
-}
-
-bool IsCursorOnElement(FrameworkElement element, HWND hWnd) {
-    POINT pt;
-    if (!GetCursorPos(&pt) || !ScreenToClient(hWnd, &pt)) {
-        return false;
-    }
-
-    UINT dpi = GetDpiForWindow(hWnd);
-    if (!dpi) {
-        return false;
-    }
-
-    int logicalX = MulDiv(pt.x, 96, dpi);
-    int logicalY = MulDiv(pt.y, 96, dpi);
-    auto topLeft = element.TransformToVisual(nullptr).TransformPoint({0, 0});
-    float width = (float)element.ActualWidth();
-    float height = (float)element.ActualHeight();
-
-    return logicalX >= topLeft.X && logicalX < topLeft.X + width &&
-           logicalY >= topLeft.Y && logicalY < topLeft.Y + height;
 }
 
 // Collects the enabled groups in tree order, so the stagger cascades in the
@@ -1097,6 +1171,10 @@ void InitDrawerForGrid(FrameworkElement grid, HWND hTaskbarWnd) {
     for (auto& existing : *g_drawers) {
         if (auto existingGrid = existing->grid.get()) {
             if (existingGrid == grid) {
+                if (!existing->hTaskbarWnd) {
+                    existing->hTaskbarWnd = hTaskbarWnd;
+                }
+
                 // A group may have appeared since the drawer was built.
                 if (RefreshDrawerMembers(*existing) && !existing->open) {
                     SetDrawerOpen(*existing, false, false);
@@ -1137,6 +1215,7 @@ void InitDrawerForGrid(FrameworkElement grid, HWND hTaskbarWnd) {
     }
 
     AttachTrigger(drawer, trigger);
+    drawer->hTaskbarWnd = hTaskbarWnd;
     g_drawers->push_back(drawer);
 
     // Starting closed under the pointer would snap the tray shut and leave it
@@ -1155,9 +1234,7 @@ void InitDrawerFromDescendant(FrameworkElement element) {
         return;
     }
 
-    // No taskbar window to hit test against on this path, so a drawer created
-    // here always starts closed.
-    InitDrawerForGrid(grid, nullptr);
+    InitDrawerForGrid(grid, FindTaskbarWndForXamlRoot(element.XamlRoot()));
 }
 
 void ApplyToXamlRoot(XamlRoot xamlRoot, HWND hTaskbarWnd) {
@@ -1203,6 +1280,13 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
     ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
                                            winrt::put_abi(iconView));
     if (!iconView) {
+        return ret;
+    }
+
+    // The hooks stay installed until Wh_ModBeforeUninit returns, but the
+    // globals are released before that. Writing into a disengaged optional
+    // would corrupt the heap, not just fault.
+    if (g_unloading || !g_autoRevokerList) {
         return ret;
     }
 
@@ -1398,11 +1482,6 @@ bool RunFromWindowThread(HWND hWnd,
 // Collects the taskbars of the current process. The primary taskbar comes
 // first, followed by the secondary (per monitor) ones, which have their own
 // system tray and so need their own drawer.
-struct TaskbarWnd {
-    HWND hWnd;
-    bool secondary;
-};
-
 std::vector<TaskbarWnd> FindCurrentProcessTaskbarWnds() {
     std::vector<TaskbarWnd> taskbarWnds;
 
