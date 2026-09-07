@@ -2,13 +2,14 @@
 // @id              taskbar-recent-focus-highlight
 // @name            Taskbar Recent Focus Highlight
 // @description     Visually highlight the most recently focused running apps on the taskbar
-// @version         0.9.3
+// @version         0.9.4
 // @author          Jakub Vlášek
 // @github          https://github.com/jvlasek
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -ladvapi32
 // ==/WindhawkMod==
+// -loleaut32 is required: WinRT hresult_error calls SysFreeString / SysStringLen.
 
 // Source code is published under The GNU General Public License v3.0.
 
@@ -398,9 +399,6 @@ struct Settings {
     int previewDecayMinutes = 15;
     PreviewStyle previewStyle = PreviewStyle::TitleBar;
     std::unordered_set<std::wstring> excludedPrograms;
-    // Resolved on the focus-thread STA (and on DWM/SETTINGCHANGE). Not
-    // queried on every paint.
-    winrt::Windows::UI::Color cachedAccent{255, 0, 120, 215};
     // Bumped in PublishSettings so UVS can skip a no-op repaint.
     uint32_t generation = 0;
 };
@@ -425,6 +423,27 @@ void PublishSettings(Settings s) {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     g_settingsPtr = std::move(next);
 }
+
+// Accent is not inside Settings: ColorValuesChanged must not republish a
+// stale snapshot over a concurrent LoadSettings. Packed ARGB.
+constexpr uint32_t kDefaultAccentPacked = 0xFF0078D7u;  // #0078D7
+std::atomic<uint32_t> g_cachedAccent{kDefaultAccentPacked};
+
+uint32_t PackColor(winrt::Windows::UI::Color c) {
+    return (static_cast<uint32_t>(c.A) << 24) |
+           (static_cast<uint32_t>(c.R) << 16) |
+           (static_cast<uint32_t>(c.G) << 8) | static_cast<uint32_t>(c.B);
+}
+
+winrt::Windows::UI::Color UnpackColor(uint32_t v) {
+    return {static_cast<uint8_t>(v >> 24), static_cast<uint8_t>(v >> 16),
+            static_cast<uint8_t>(v >> 8), static_cast<uint8_t>(v)};
+}
+
+[[clang::no_destroy]] std::optional<
+    winrt::Windows::UI::ViewManagement::UISettings>
+    g_uiSettings;
+winrt::event_token g_colorValuesChangedToken{};
 
 // WM_TIMER may be a leftover from a previous candidate (KillTimer does not
 // flush a message already queued). Immediate confirm skips the deadline.
@@ -529,6 +548,7 @@ struct ButtonPathCacheEntry {
     // Last ApplyAllHighlights assignment: -1 unknown, 0 none, >0 1-based rank.
     int lastPaintRank = -1;
     uint32_t lastPaintSettingsGen = 0;
+    uint32_t lastPaintAccent = 0;
     // ScaleTransform we applied for size boost. Clear only this instance so
     // other mods (taskbar-dock-animation) keep their hover scale.
     winrt::weak_ref<Media::ScaleTransform> ourIconScale;
@@ -536,6 +556,8 @@ struct ButtonPathCacheEntry {
 std::mutex g_buttonPathMutex;
 std::unordered_map<void*, ButtonPathCacheEntry> g_buttonPathCache;
 std::atomic<bool> g_taskbandResolveReady{false};
+HMODULE g_taskbarDll = nullptr;
+bool g_taskbarDllLoadedByUs = false;
 
 // XAML TaskItemThumbnail (model) → native task item (optional hooks).
 struct ThumbnailTaskItemMapping {
@@ -597,6 +619,19 @@ void* InspectableIdentity(winrt::Windows::Foundation::IInspectable const& obj) {
     }
 }
 
+bool WeakIsSameElement(winrt::weak_ref<FrameworkElement> const& weak,
+                       FrameworkElement expected) {
+    if (!expected) {
+        return false;
+    }
+    try {
+        auto live = weak.get();
+        return live && live == expected;
+    } catch (...) {
+        return false;
+    }
+}
+
 // UI-thread tracking of task list buttons (weak refs, keyed by IUnknown*).
 std::mutex g_buttonsMutex;
 std::unordered_map<void*, winrt::weak_ref<FrameworkElement>> g_trackedButtons;
@@ -642,10 +677,8 @@ constexpr UINT WM_APP_REQUEST_APPLY_DEBOUNCED = WM_APP + 4;
 constexpr UINT WM_APP_REFRESH_ACCENT = WM_APP + 5;
 
 // Identity scores. Only exact identity may bind the same rank to many buttons
-// (secondary taskbar / Never Combine). Score 900 is same filename, different
-// folder — 1:1 so two python.exe installs stay distinct.
+// (secondary taskbar / Never Combine). Filename-only is not a match.
 constexpr int kScoreExactIdentity = 1000;
-constexpr int kScoreSameFileDifferentPath = 900;
 constexpr UINT_PTR kMinFocusTimerId = 1;
 constexpr UINT_PTR kDecayTimerId = 2;
 constexpr UINT_PTR kPreviewMinFocusTimerId = 3;
@@ -1715,22 +1748,45 @@ winrt::Windows::UI::Color QuerySystemAccentColor() {
         c.A = 255;
         return c;
     } catch (...) {
-        return {255, 0, 120, 215};
+        return UnpackColor(kDefaultAccentPacked);
     }
 }
 
 void RefreshCachedAccent() {
     winrt::Windows::UI::Color accent = QuerySystemAccentColor();
-    auto cur = SettingsSnap();
-    if (cur->cachedAccent.A == accent.A && cur->cachedAccent.R == accent.R &&
-        cur->cachedAccent.G == accent.G && cur->cachedAccent.B == accent.B) {
+    const uint32_t packed = PackColor(accent);
+    const uint32_t prev =
+        g_cachedAccent.exchange(packed, std::memory_order_relaxed);
+    if (prev != packed) {
+        Wh_Log(L"System accent updated: #%02X%02X%02X", accent.R, accent.G,
+               accent.B);
+    }
+}
+
+void SubscribeAccentChanges() {
+    if (g_uiSettings) {
         return;
     }
-    Settings next = *cur;
-    next.cachedAccent = accent;
-    PublishSettings(std::move(next));
-    Wh_Log(L"System accent updated: #%02X%02X%02X", accent.R, accent.G,
-           accent.B);
+    try {
+        g_uiSettings.emplace();
+        g_colorValuesChangedToken = g_uiSettings->ColorValuesChanged(
+            [](auto&&, auto&&) { PostToHookThread(WM_APP_REFRESH_ACCENT); });
+    } catch (...) {
+        g_uiSettings.reset();
+        g_colorValuesChangedToken = {};
+        Wh_Log(L"UISettings ColorValuesChanged subscribe failed");
+    }
+}
+
+void UnsubscribeAccentChanges() {
+    try {
+        if (g_uiSettings) {
+            g_uiSettings->ColorValuesChanged(g_colorValuesChangedToken);
+        }
+    } catch (...) {
+    }
+    g_colorValuesChangedToken = {};
+    g_uiSettings.reset();
 }
 
 winrt::Windows::UI::Color ResolveGlowBaseColor(const Settings& settings) {
@@ -1738,7 +1794,7 @@ winrt::Windows::UI::Color ResolveGlowBaseColor(const Settings& settings) {
 
     switch (settings.glowColor) {
         case GlowColorMode::Accent:
-            c = settings.cachedAccent;
+            c = UnpackColor(g_cachedAccent.load(std::memory_order_relaxed));
             break;
         case GlowColorMode::Green:
             c = {255, 0, 200, 83};
@@ -1776,6 +1832,7 @@ ButtonIdentity GetCachedButtonIdentity(FrameworkElement button);
 struct PaintCacheState {
     int rank = -1;
     uint32_t settingsGen = 0;
+    uint32_t accent = 0;
 };
 PaintCacheState GetCachedPaintState(FrameworkElement button);
 void SetCachedPaintState(FrameworkElement button, int rank, uint32_t gen);
@@ -1783,6 +1840,10 @@ TaskbarEdge CachedTaskbarEdge(FrameworkElement iconPanel);
 void RememberOurIconScale(FrameworkElement button, Media::ScaleTransform scale);
 void ClearIconScaleIfOurs(FrameworkElement icon, FrameworkElement button);
 void RefreshCachedAccent();
+void SubscribeAccentChanges();
+void UnsubscribeAccentChanges();
+void ScheduleThumbnailRelayout(FrameworkElement thumbView);
+void ClearAllThumbnailHighlights_UIThread();
 bool RunOnUiThread(const winrt::Windows::UI::Core::DispatchedHandler& handler);
 void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb);
 
@@ -1816,6 +1877,10 @@ bool ButtonCountsAsRunning(FrameworkElement button) {
     std::lock_guard<std::mutex> lock(g_buttonPathMutex);
     auto it = id ? g_buttonPathCache.find(id) : g_buttonPathCache.end();
     if (it == g_buttonPathCache.end()) {
+        return running;
+    }
+    if (!WeakIsSameElement(it->second.button, button)) {
+        g_buttonPathCache.erase(it);
         return running;
     }
     auto& e = it->second;
@@ -2061,15 +2126,6 @@ int ScoreButtonForRank(FrameworkElement button,
         }
         return kScoreExactIdentity;
     }
-
-    const bool sameFileName =
-        !ident.pathUpper.empty() && !info.displayName.empty() &&
-        ToUpper(FileNameFromPath(ident.pathUpper)) ==
-            ToUpper(info.displayName);
-    if (sameFileName && !pathKey.empty() && ident.pathUpper != pathKey &&
-        ident.pathUpper != info.key) {
-        return kScoreSameFileDifferentPath;
-    }
     return 0;
 }
 
@@ -2090,7 +2146,7 @@ int FindRankForButton(FrameworkElement button,
             bestRank = static_cast<int>(i) + 1;
         }
     }
-    if (bestScore < kScoreSameFileDifferentPath) {
+    if (bestScore < kScoreExactIdentity) {
         return 0;
     }
     return bestRank;
@@ -2204,77 +2260,6 @@ bool RunningIndicatorLooksLikeHoverPlate(FrameworkElement ri,
             return false;
         }
         return rw > pw * 0.45 && rh > ph * 0.45;
-    } catch (...) {
-        return false;
-    }
-}
-
-std::wstring CurrentRunningIndicatorStateName(FrameworkElement iconPanel,
-                                              FrameworkElement button) {
-    auto from = [](FrameworkElement root) -> std::wstring {
-        if (!root) {
-            return {};
-        }
-        try {
-            for (auto group : VisualStateManager::GetVisualStateGroups(root)) {
-                if (group.Name() != L"RunningIndicatorStates") {
-                    continue;
-                }
-                auto current = group.CurrentState();
-                if (current) {
-                    return std::wstring(current.Name().c_str());
-                }
-            }
-        } catch (...) {
-        }
-        return {};
-    };
-    std::wstring name = from(iconPanel);
-    if (name.empty()) {
-        name = from(button);
-    }
-    return name;
-}
-
-// Only undo Visibility=Collapsed that *we* set. Visual-state setters store
-// Visible as a local value — ClearValue drops it to the template default
-// (Collapsed), and GoToState(InactiveRunningIndicator) is a no-op if already
-// in that state, so the short inactive pill never comes back.
-void RestoreNativeRunningIndicator(FrameworkElement iconPanel,
-                                   FrameworkElement button) {
-    auto indicator = FindRunningIndicator(iconPanel);
-    if (!indicator) {
-        return;
-    }
-    try {
-        if (indicator.ReadLocalValue(UIElement::VisibilityProperty()) ==
-            DependencyProperty::UnsetValue()) {
-            return;
-        }
-        if (indicator.Visibility() != Visibility::Collapsed) {
-            return;
-        }
-        const std::wstring state =
-            CurrentRunningIndicatorStateName(iconPanel, button);
-        if (state == L"NoRunningIndicator") {
-            return;
-        }
-        indicator.Visibility(Visibility::Visible);
-    } catch (...) {
-    }
-}
-
-bool RunningIndicatorHasLocalCollapsed(FrameworkElement iconPanel) {
-    auto indicator = FindRunningIndicator(iconPanel);
-    if (!indicator) {
-        return false;
-    }
-    try {
-        if (indicator.ReadLocalValue(UIElement::VisibilityProperty()) ==
-            DependencyProperty::UnsetValue()) {
-            return false;
-        }
-        return indicator.Visibility() == Visibility::Collapsed;
     } catch (...) {
         return false;
     }
@@ -2523,10 +2508,10 @@ void ClearButtonHighlight(FrameworkElement button) {
 
     auto iconPanelEarly = GetIconPanel(button);
 
-    // Skip no-op clears on every mouse-over. Do not reorder native children
-    // on buttons we never painted — that fights Taskbar Styler / badges and
-    // is not undone on unload. Z-order heal runs only after we remove our host.
-    if (!ButtonHasOurChrome(button) && !g_pendingOverlaySweep.load()) {
+    // Skip no-op clears on every mouse-over, including overlay sweep.
+    // Sweep only removes leftover WhRecentFocusGlow; do not reorder native
+    // children on buttons we never painted.
+    if (!ButtonHasOurChrome(button)) {
         SetCachedPaintState(button, 0, SettingsSnap()->generation);
         return;
     }
@@ -2570,12 +2555,6 @@ void ClearButtonHighlight(FrameworkElement button) {
                 }
             }
         }
-
-        if (RunningIndicatorHasLocalCollapsed(iconPanel)) {
-            RestoreNativeRunningIndicator(iconPanel, button);
-        }
-        // Do not heal Visibility on every clear — that ClearValue thrashing
-        // also flickers the native underline during hover storms.
 
         if (auto icon = FindChildByName(iconPanel, L"Icon")) {
             ClearIconScaleIfOurs(icon, button);
@@ -2748,7 +2727,7 @@ PCWSTR BarSideName(BarSide s) {
     }
 }
 
-bool HasVisualState(FrameworkElement root, PCWSTR stateName) {
+bool IsInVisualState(FrameworkElement root, PCWSTR stateName) {
     if (!root || !stateName) {
         return false;
     }
@@ -2788,18 +2767,18 @@ TaskbarEdge TaskbarEdgeFromAppBar() {
 // paint full-cell underlines of rank-dependent length.
 // Do not use "wider than tall ⇒ horizontal": a left-edge button is 48×32.
 TaskbarEdge DetectTaskbarEdge(FrameworkElement iconPanel) {
-    bool verticalState = HasVisualState(iconPanel, L"VerticalOrientation");
-    bool horizontalState = HasVisualState(iconPanel, L"HorizontalOrientation");
+    bool verticalState = IsInVisualState(iconPanel, L"VerticalOrientation");
+    bool horizontalState = IsInVisualState(iconPanel, L"HorizontalOrientation");
     try {
         auto parent = Media::VisualTreeHelper::GetParent(iconPanel)
                           .try_as<FrameworkElement>();
         if (parent) {
             verticalState =
                 verticalState ||
-                HasVisualState(parent, L"VerticalOrientation");
+                IsInVisualState(parent, L"VerticalOrientation");
             horizontalState =
                 horizontalState ||
-                HasVisualState(parent, L"HorizontalOrientation");
+                IsInVisualState(parent, L"HorizontalOrientation");
         }
     } catch (...) {
     }
@@ -2936,19 +2915,14 @@ void GlowContentBoxSize(FrameworkElement host,
 // Length follows the glow host (padded cell), same for every rank — rank is
 // opacity. Icon-sized underlines on a left taskbar were too short to scan
 // (Windows uses a very small glyph there). Size % still scales the bar.
-double BarLengthForSide(FrameworkElement iconPanel,
-                        double boxW,
+double BarLengthForSide(double boxW,
                         double boxH,
                         BarSide side,
-                        TaskbarEdge edge,
-                        double sizeFrac,
-                        double rankLenScale) {
-    (void)iconPanel;
-    (void)edge;
+                        double sizeFrac) {
     const bool horizontalBar =
         side == BarSide::Top || side == BarSide::Bottom;
     const double cellAlong = horizontalBar ? boxW : boxH;
-    double barLen = cellAlong * sizeFrac * rankLenScale;
+    double barLen = cellAlong * sizeFrac;
     const double maxLen = (std::max)(4.0, cellAlong - 2.0);
     if (barLen > maxLen) {
         barLen = maxLen;
@@ -3097,15 +3071,20 @@ TaskbarEdge CachedTaskbarEdge(FrameworkElement iconPanel) {
     {
         std::lock_guard<std::mutex> lock(g_layoutWatchMutex);
         auto it = id ? g_layoutWatches.find(id) : g_layoutWatches.end();
-        if (it != g_layoutWatches.end() && it->second.haveEdge) {
-            return it->second.lastEdge;
+        if (it != g_layoutWatches.end()) {
+            if (!WeakIsSameElement(it->second.panel, iconPanel)) {
+                g_layoutWatches.erase(it);
+            } else if (it->second.haveEdge) {
+                return it->second.lastEdge;
+            }
         }
     }
     const TaskbarEdge edge = DetectTaskbarEdge(iconPanel);
     if (id) {
         std::lock_guard<std::mutex> lock(g_layoutWatchMutex);
         auto it = g_layoutWatches.find(id);
-        if (it != g_layoutWatches.end()) {
+        if (it != g_layoutWatches.end() &&
+            WeakIsSameElement(it->second.panel, iconPanel)) {
             it->second.lastEdge = edge;
             it->second.haveEdge = true;
         }
@@ -3133,12 +3112,10 @@ void EnsureIconPanelLayoutWatch(FrameworkElement button) {
         std::lock_guard<std::mutex> lock(g_layoutWatchMutex);
         auto it = g_layoutWatches.find(id);
         if (it != g_layoutWatches.end()) {
-            try {
-                if (it->second.panel.get() == iconPanel) {
-                    return;
-                }
-            } catch (...) {
+            if (WeakIsSameElement(it->second.panel, iconPanel)) {
+                return;
             }
+            g_layoutWatches.erase(it);
         }
     }
 
@@ -3242,6 +3219,8 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
         auto painted = GetCachedPaintState(button);
         if (painted.rank == rankOneBased &&
             painted.settingsGen == settings->generation &&
+            painted.accent ==
+                g_cachedAccent.load(std::memory_order_relaxed) &&
             ButtonHasOurChrome(button)) {
             return;
         }
@@ -3318,10 +3297,6 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
 
         HideAllGlowLayers(host);
 
-        if (RunningIndicatorHasLocalCollapsed(iconPanel)) {
-            RestoreNativeRunningIndicator(iconPanel, button);
-        }
-
         if (style == GlowStyle::Frame || style == GlowStyle::Full) {
             const double baseInset =
                 (std::min)(boxW, boxH) * (1.0 - sizeFrac) * 0.5;
@@ -3364,8 +3339,8 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
             // Side bar: left of the icon on a bottom/top taskbar, under the
             // icon on a left/right taskbar — never the native-pill edge.
             const double barT = thickness + 1.0;
-            const double barLen = BarLengthForSide(
-                iconPanel, boxW, boxH, barSide, edge, sizeFrac, 1.0);
+            const double barLen =
+                BarLengthForSide(boxW, boxH, barSide, sizeFrac);
             const int fillBase =
                 static_cast<int>(fillOpacitySetting * 2.55 * (0.55 + 0.45 * t));
             const int nLeft = (std::max)(1, (std::min)(layers, 2));
@@ -3395,8 +3370,8 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
                 static_cast<int>(fillOpacitySetting * 2.55 * (0.6 + 0.4 * t));
             const double barT =
                 (std::max)(2.0, (std::min)(6.0, thickness));
-            const double barLen = BarLengthForSide(
-                iconPanel, boxW, boxH, barSide, edge, sizeFrac, 1.0);
+            const double barLen =
+                BarLengthForSide(boxW, boxH, barSide, sizeFrac);
 
             if (auto rect = FindChildByName(host, kGlowLayerNames[0])
                                 .try_as<Shapes::Rectangle>()) {
@@ -3460,7 +3435,6 @@ void TrackButton_UIThread(FrameworkElement button) {
         std::lock_guard<std::mutex> lock(g_buttonsMutex);
         g_trackedButtons[id] = winrt::make_weak(button);
     }
-    EnsureButtonPathCached(button, /*force=*/false);
 }
 
 // ---------------------------------------------------------------------------
@@ -3736,9 +3710,12 @@ std::wstring EnsureButtonPathCached(FrameworkElement button, bool force) {
     {
         std::lock_guard<std::mutex> lock(g_buttonPathMutex);
         auto it = id ? g_buttonPathCache.find(id) : g_buttonPathCache.end();
-        if (it != g_buttonPathCache.end() && !force &&
-            it->second.resolveAttempted) {
-            return it->second.pathUpper;
+        if (it != g_buttonPathCache.end()) {
+            if (!WeakIsSameElement(it->second.button, button)) {
+                g_buttonPathCache.erase(it);
+            } else if (!force && it->second.resolveAttempted) {
+                return it->second.pathUpper;
+            }
         }
     }
 
@@ -3816,6 +3793,11 @@ std::wstring EnsureButtonPathCached(FrameworkElement button, bool force) {
         ButtonPathCacheEntry* e = nullptr;
         if (id) {
             auto it = g_buttonPathCache.find(id);
+            if (it != g_buttonPathCache.end() &&
+                !WeakIsSameElement(it->second.button, button)) {
+                g_buttonPathCache.erase(it);
+                it = g_buttonPathCache.end();
+            }
             if (it == g_buttonPathCache.end()) {
                 ButtonPathCacheEntry created;
                 created.button = winrt::make_weak(button);
@@ -3870,6 +3852,10 @@ ButtonIdentity GetCachedButtonIdentity(FrameworkElement button) {
     if (it == g_buttonPathCache.end()) {
         return out;
     }
+    if (!WeakIsSameElement(it->second.button, button)) {
+        g_buttonPathCache.erase(it);
+        return out;
+    }
     const auto& e = it->second;
     out.pathUpper = e.pathUpper;
     out.appIdUpper = e.appIdUpper;
@@ -3892,8 +3878,13 @@ PaintCacheState GetCachedPaintState(FrameworkElement button) {
     if (it == g_buttonPathCache.end()) {
         return out;
     }
+    if (!WeakIsSameElement(it->second.button, button)) {
+        g_buttonPathCache.erase(it);
+        return out;
+    }
     out.rank = it->second.lastPaintRank;
     out.settingsGen = it->second.lastPaintSettingsGen;
+    out.accent = it->second.lastPaintAccent;
     return out;
 }
 
@@ -3905,18 +3896,26 @@ void SetCachedPaintState(FrameworkElement button, int rank, uint32_t gen) {
     if (!id) {
         return;
     }
+    const uint32_t accent = g_cachedAccent.load(std::memory_order_relaxed);
     std::lock_guard<std::mutex> lock(g_buttonPathMutex);
     auto it = g_buttonPathCache.find(id);
+    if (it != g_buttonPathCache.end() &&
+        !WeakIsSameElement(it->second.button, button)) {
+        g_buttonPathCache.erase(it);
+        it = g_buttonPathCache.end();
+    }
     if (it == g_buttonPathCache.end()) {
         ButtonPathCacheEntry stub;
         stub.button = winrt::make_weak(button);
         stub.lastPaintRank = rank;
         stub.lastPaintSettingsGen = gen;
+        stub.lastPaintAccent = accent;
         g_buttonPathCache.emplace(id, std::move(stub));
         return;
     }
     it->second.lastPaintRank = rank;
     it->second.lastPaintSettingsGen = gen;
+    it->second.lastPaintAccent = accent;
 }
 
 void RememberOurIconScale(FrameworkElement button, Media::ScaleTransform scale) {
@@ -3929,6 +3928,11 @@ void RememberOurIconScale(FrameworkElement button, Media::ScaleTransform scale) 
     }
     std::lock_guard<std::mutex> lock(g_buttonPathMutex);
     auto it = g_buttonPathCache.find(id);
+    if (it != g_buttonPathCache.end() &&
+        !WeakIsSameElement(it->second.button, button)) {
+        g_buttonPathCache.erase(it);
+        it = g_buttonPathCache.end();
+    }
     if (it == g_buttonPathCache.end()) {
         ButtonPathCacheEntry stub;
         stub.button = winrt::make_weak(button);
@@ -3961,7 +3965,8 @@ void ClearIconScaleIfOurs(FrameworkElement icon, FrameworkElement button) {
             void* id = InspectableIdentity(button);
             std::lock_guard<std::mutex> lock(g_buttonPathMutex);
             auto it = id ? g_buttonPathCache.find(id) : g_buttonPathCache.end();
-            if (it != g_buttonPathCache.end()) {
+            if (it != g_buttonPathCache.end() &&
+                WeakIsSameElement(it->second.button, button)) {
                 try {
                     ours = it->second.ourIconScale.get();
                     if (ours && current == ours) {
@@ -4075,7 +4080,7 @@ void ApplyAllHighlights_UIThread() {
         buttonPaths[bi] = EnsureButtonPathCached(live[bi], /*force=*/false);
         for (size_t ri = 0; ri < ranks.size(); ++ri) {
             int s = ScoreButtonForRank(live[bi], ranks[ri], true);
-            if (s >= kScoreSameFileDifferentPath) {
+            if (s >= kScoreExactIdentity) {
                 cands.push_back({s, ri, bi});
             }
         }
@@ -5033,10 +5038,6 @@ bool GetTitleBottomRelative(FrameworkElement title,
         return false;
     }
     try {
-        try {
-            title.UpdateLayout();
-        } catch (...) {
-        }
         double th = title.ActualHeight();
         if (!(th > 1.0)) {
             th = title.DesiredSize().Height;
@@ -5067,16 +5068,17 @@ bool GetTitleBottomRelative(FrameworkElement title,
 // Deferred re-layout for titleBar/titleBg after the flyout finishes measuring.
 // At most one nested pass (avoids infinite Low-priority loops when title never
 // reports a size).
-std::atomic<bool> g_thumbRelayoutPending{false};
-std::atomic<int> g_thumbRelayoutDepth{0};
+thread_local bool g_thumbRelayoutPending = false;
+thread_local int g_thumbRelayoutDepth = 0;
 
 void ScheduleThumbnailRelayout(FrameworkElement thumbView) {
-    if (!thumbView || g_thumbRelayoutDepth.load() > 0) {
+    if (!thumbView || g_thumbRelayoutDepth > 0) {
         return;  // already inside the deferred pass
     }
-    if (g_thumbRelayoutPending.exchange(true)) {
+    if (g_thumbRelayoutPending) {
         return;
     }
+    g_thumbRelayoutPending = true;
     try {
         auto dispatcher = thumbView.Dispatcher();
         if (!dispatcher) {
@@ -6193,8 +6195,23 @@ void WINAPI HoverFlyoutModel_TargetItemKey_Hook(void* pThis, void* param1) {
     g_inHoverFlyoutModel_TargetItemKey = true;
     HoverFlyoutModel_TargetItemKey_Original(pThis, param1);
     g_inHoverFlyoutModel_TargetItemKey = false;
-    if (SettingsSnap()->previewHighlightEnabled) {
-        RequestApplyPreviewVisuals();
+    if (g_unloading.load() || !SettingsSnap()->previewHighlightEnabled) {
+        return;
+    }
+    // Repeater may not have swapped realized cards yet. Clear leftover chrome
+    // now and paint at Low after layout so new HWNDs are not bound to the
+    // previous app's views.
+    try {
+        ClearAllThumbnailHighlights_UIThread();
+        std::vector<winrt::weak_ref<FrameworkElement>> thumbs;
+        {
+            std::lock_guard<std::mutex> lock(g_thumbViewsMutex);
+            thumbs = g_trackedThumbViews;
+        }
+        ForEachLiveElementOnThisDispatcher(thumbs, [](FrameworkElement el) {
+            ScheduleThumbnailRelayout(el);
+        });
+    } catch (...) {
     }
 }
 
@@ -6203,7 +6220,11 @@ bool HookTaskbarDllSymbols() {
     if (!module) {
         module = LoadLibraryEx(L"taskbar.dll", nullptr,
                                LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (module) {
+            g_taskbarDllLoadedByUs = true;
+        }
     }
+    g_taskbarDll = module;
     if (!module) {
         Wh_Log(L"Could not load taskbar.dll — path cache unavailable");
         return false;
@@ -6916,21 +6937,6 @@ LRESULT CALLBACK HookThreadWndProc(HWND hWnd,
             RequestApplyVisuals();
             RequestApplyPreviewVisuals();
             return 0;
-        case WM_DWMCOLORIZATIONCOLORCHANGED:
-            RefreshCachedAccent();
-            RequestApplyVisuals();
-            RequestApplyPreviewVisuals();
-            return 0;
-        case WM_SETTINGCHANGE:
-            if (!lParam ||
-                _wcsicmp(reinterpret_cast<PCWSTR>(lParam),
-                         L"ImmersiveColorSet") == 0) {
-                RefreshCachedAccent();
-                RequestApplyVisuals();
-                RequestApplyPreviewVisuals();
-                return 0;
-            }
-            break;
         case WM_TIMER:
             if (wParam == kMinFocusTimerId) {
                 KillTimer(hWnd, kMinFocusTimerId);
@@ -7002,6 +7008,8 @@ DWORD WINAPI WinEventHookThread(LPVOID /*param*/) {
     if (FAILED(coHr) && coHr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"Focus thread CoInitializeEx failed %08X", coHr);
     }
+    SubscribeAccentChanges();
+    RefreshCachedAccent();
 
     HWINEVENTHOOK hook =
         SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
@@ -7023,7 +7031,6 @@ DWORD WINAPI WinEventHookThread(LPVOID /*param*/) {
 
     SetTimer(hwnd, kDecayTimerId, kDecayCheckIntervalMs, nullptr);
     RefreshCurrentDesktopId();
-    RefreshCachedAccent();
 
     if (HWND fg = GetForegroundWindow()) {
         PostMessage(hwnd, WM_APP_FOREGROUND_CHANGED,
@@ -7051,6 +7058,7 @@ DWORD WINAPI WinEventHookThread(LPVOID /*param*/) {
     }
 
     ReleaseVdm();
+    UnsubscribeAccentChanges();
 
     g_hookThreadHwnd.store(nullptr, std::memory_order_release);
     DestroyWindow(hwnd);
@@ -7323,8 +7331,6 @@ void LoadSettings() {
         s.excludedPrograms.insert(ToUpper(program.get()));
     }
 
-    s.cachedAccent = SettingsSnap()->cachedAccent;
-
     Wh_Log(L"Settings: style=%s th=%d round=%d%% size=%d%% "
            L"layers=%d fillOp=%d previewFillOp=%d decay=%dmin "
            L"minFocus=%ds promote=%s preview=%d previewCount=%d "
@@ -7347,7 +7353,7 @@ void LoadSettings() {
 // ---------------------------------------------------------------------------
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"> Taskbar Recent Focus Highlight init v0.9.3");
+    Wh_Log(L"> Taskbar Recent Focus Highlight init v0.9.4");
 
     g_unloading = false;
     LoadSettings();
@@ -7456,6 +7462,11 @@ void Wh_ModUninit() {
         std::lock_guard<std::mutex> lock(g_dispatchersMutex);
         g_uiDispatchers.reset();
     }
+    if (g_taskbarDllLoadedByUs && g_taskbarDll) {
+        FreeLibrary(g_taskbarDll);
+    }
+    g_taskbarDll = nullptr;
+    g_taskbarDllLoadedByUs = false;
 }
 
 void Wh_ModSettingsChanged() {
