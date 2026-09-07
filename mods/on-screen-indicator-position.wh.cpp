@@ -2,7 +2,7 @@
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
 // @description     Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, instead of the three positions Windows offers
-// @version         1.3.0
+// @version         1.3.1
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
@@ -438,14 +438,81 @@ void PlaceInArea(const WinrtRect& area,
     }
 }
 
+// The same eight kinds arrive here first. These are the com vtable entries the
+// interface is called through, so they run before the host's own entry points
+// and before the position is worked out, and they are still there on builds
+// where the host's private coroutines have been refactored away. Whichever of
+// the two fires first records the kind, and recording it twice for one showing
+// is harmless since both agree. They return an HRESULT rather than the
+// implementation's own return.
+
+using ShowVolumeThunk_t = int(WINAPI*)(void* pThis, int value);
+ShowVolumeThunk_t ShowVolumeThunk_Original;
+int WINAPI ShowVolumeThunk_Hook(void* pThis, int value) {
+    g_currentIndicator.store(Indicator::volume);
+    return ShowVolumeThunk_Original(pThis, value);
+}
+
+using ShowBrightnessThunk_t = int(WINAPI*)(void* pThis, int value);
+ShowBrightnessThunk_t ShowBrightnessThunk_Original;
+int WINAPI ShowBrightnessThunk_Hook(void* pThis, int value) {
+    g_currentIndicator.store(Indicator::brightness);
+    return ShowBrightnessThunk_Original(pThis, value);
+}
+
+using ShowKeyboardBrightnessThunk_t = int(WINAPI*)(void* pThis, int value);
+ShowKeyboardBrightnessThunk_t ShowKeyboardBrightnessThunk_Original;
+int WINAPI ShowKeyboardBrightnessThunk_Hook(void* pThis, int value) {
+    g_currentIndicator.store(Indicator::keyboardBrightness);
+    return ShowKeyboardBrightnessThunk_Original(pThis, value);
+}
+
+using ShowAirplaneModeOnThunk_t = int(WINAPI*)(void* pThis, bool value);
+ShowAirplaneModeOnThunk_t ShowAirplaneModeOnThunk_Original;
+int WINAPI ShowAirplaneModeOnThunk_Hook(void* pThis, bool value) {
+    g_currentIndicator.store(Indicator::airplaneMode);
+    return ShowAirplaneModeOnThunk_Original(pThis, value);
+}
+
+using ShowCameraOnThunk_t = int(WINAPI*)(void* pThis, bool value);
+ShowCameraOnThunk_t ShowCameraOnThunk_Original;
+int WINAPI ShowCameraOnThunk_Hook(void* pThis, bool value) {
+    g_currentIndicator.store(Indicator::camera);
+    return ShowCameraOnThunk_Original(pThis, value);
+}
+
+using ShowCameraAccessEnabledThunk_t = int(WINAPI*)(void* pThis, bool value);
+ShowCameraAccessEnabledThunk_t ShowCameraAccessEnabledThunk_Original;
+int WINAPI ShowCameraAccessEnabledThunk_Hook(void* pThis, bool value) {
+    g_currentIndicator.store(Indicator::camera);
+    return ShowCameraAccessEnabledThunk_Original(pThis, value);
+}
+
+using ShowMicrophoneMutedThunk_t = int(WINAPI*)(void* pThis,
+                                                int state,
+                                                void* text);
+ShowMicrophoneMutedThunk_t ShowMicrophoneMutedThunk_Original;
+int WINAPI ShowMicrophoneMutedThunk_Hook(void* pThis, int state, void* text) {
+    g_currentIndicator.store(Indicator::microphone);
+    return ShowMicrophoneMutedThunk_Original(pThis, state, text);
+}
+
+using ShowTextThunk_t = int(WINAPI*)(void* pThis, void* text, bool value);
+ShowTextThunk_t ShowTextThunk_Original;
+int WINAPI ShowTextThunk_Hook(void* pThis, void* text, bool value) {
+    g_currentIndicator.store(Indicator::text);
+    return ShowTextThunk_Original(pThis, text, value);
+}
+
 // Each kind of indicator has its own entry point on the host, so the kind is
 // recorded as one is asked for and read back when the position is worked out.
 // They are private coroutines returning winrt::fire_and_forget, an empty struct,
 // so the return is passed through as the single byte it occupies. Every one is
 // hooked as optional, so a name that stops resolving on some build costs the per
 // indicator feature rather than the whole mod. Wh_ModInit checks afterwards that
-// all eight resolved, and if any didn't it ignores the overrides for the session
-// instead of placing one kind using another kind's spot.
+// each kind can still be recognised by one layer or the other, and if any kind
+// has neither it ignores the overrides for the session instead of placing one
+// kind using another kind's spot.
 
 using ShowVolumeAsync_t = char(WINAPI*)(void* pThis, int value);
 ShowVolumeAsync_t ShowVolumeAsync_Original;
@@ -754,6 +821,56 @@ BOOL Wh_ModInit() {
             true,  // optional
         },
         {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowVolume(int))"},
+            &ShowVolumeThunk_Original,
+            ShowVolumeThunk_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowBrightness(int))"},
+            &ShowBrightnessThunk_Original,
+            ShowBrightnessThunk_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowKeyboardBrightness(int))"},
+            &ShowKeyboardBrightnessThunk_Original,
+            ShowKeyboardBrightnessThunk_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowAirplaneModeOn(bool))"},
+            &ShowAirplaneModeOnThunk_Original,
+            ShowAirplaneModeOnThunk_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowCameraOn(bool))"},
+            &ShowCameraOnThunk_Original,
+            ShowCameraOnThunk_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowCameraAccessEnabled(bool))"},
+            &ShowCameraAccessEnabledThunk_Original,
+            ShowCameraAccessEnabledThunk_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowMicrophoneMuted(int,void *))",
+             LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowMicrophoneMuted(enum winrt::Windows::Internal::HardwareConfirmator::MicrophoneMuteState,void *))",
+             LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowMicrophoneMuted(enum winrt::HWConfirmatorUI::MicrophoneMuteState,void *))"},
+            &ShowMicrophoneMutedThunk_Original,
+            ShowMicrophoneMutedThunk_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowText(void *,bool))"},
+            &ShowTextThunk_Original,
+            ShowTextThunk_Hook,
+            true,  // optional
+        },
+        {
             {LR"(public: void __cdecl winrt::HWConfirmatorUI::implementation::ConfirmatorHostControl::Hide(void))"},
             &ConfirmatorHostControl_Hide_Original,
             ConfirmatorHostControl_Hide_Hook,
@@ -787,15 +904,27 @@ BOOL Wh_ModInit() {
     // a null here means that kind would never be recorded and every kind after
     // it would be placed using a stale one. Rather than misplace an indicator,
     // drop to the main position for everything and say so in the log.
-    const void* kindRecorders[] = {
-        (void*)ShowVolumeAsync_Original,
-        (void*)ShowBrightnessAsync_Original,
-        (void*)ShowKeyboardBrightnessAsync_Original,
-        (void*)ShowAirplaneModeOnAsync_Original,
-        (void*)ShowCameraOnAsync_Original,
-        (void*)ShowCameraAccessEnabledAsync_Original,
-        (void*)ShowMicrophoneMutedAsync_Original,
-        (void*)ShowTextAsync_Original,
+    // Each kind is recognised as long as one of its two entry points resolved.
+    const struct {
+        const void* ramp;
+        const void* thunk;
+    } kindRecorders[] = {
+        {(void*)ShowVolumeAsync_Original,
+         (void*)ShowVolumeThunk_Original},
+        {(void*)ShowBrightnessAsync_Original,
+         (void*)ShowBrightnessThunk_Original},
+        {(void*)ShowKeyboardBrightnessAsync_Original,
+         (void*)ShowKeyboardBrightnessThunk_Original},
+        {(void*)ShowAirplaneModeOnAsync_Original,
+         (void*)ShowAirplaneModeOnThunk_Original},
+        {(void*)ShowCameraOnAsync_Original,
+         (void*)ShowCameraOnThunk_Original},
+        {(void*)ShowCameraAccessEnabledAsync_Original,
+         (void*)ShowCameraAccessEnabledThunk_Original},
+        {(void*)ShowMicrophoneMutedAsync_Original,
+         (void*)ShowMicrophoneMutedThunk_Original},
+        {(void*)ShowTextAsync_Original,
+         (void*)ShowTextThunk_Original},
     };
 
     if (!ConfirmatorHostControl_Hide_Original ||
@@ -806,8 +935,8 @@ BOOL Wh_ModInit() {
         }
     }
 
-    for (const void* recorder : kindRecorders) {
-        if (!recorder) {
+    for (const auto& recorder : kindRecorders) {
+        if (!recorder.ramp && !recorder.thunk) {
             g_kindUnreliable = true;
             // Only worth saying to someone who has an override set. With the
             // shipped defaults there is nothing being ignored to complain about.
