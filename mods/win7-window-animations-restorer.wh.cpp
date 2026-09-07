@@ -39,7 +39,7 @@
 
 ## About
 
-This mod tries to bring back the Windows 7 window animations on Windows 10 and 11 — **without modifying the DWM** (the part of Windows that draws window effects).
+This mod tries to restore the Windows 7 window animations on Windows 10 and 11 **without modifying the DWM** (the part of Windows that draws window effects).
 
 ## Sample Animation
 
@@ -48,8 +48,8 @@ This mod tries to bring back the Windows 7 window animations on Windows 10 and 1
 ## What it does
 
 - **Minimize / restore**: the window shrinks toward its taskbar button with the Windows 7 tilt-and-fade look (a slight 3D perspective, about a quarter of a second), then grows back the same way when you restore it. The real window only appears once the animation has caught up to it, so you never see a flash of the "wrong" state.
-- **Close**: when a window closes, a snapshot of it tilts away and fades out over about a fifth of a second. The app itself stays fully in control during this time — it's still processing input normally — so anything like a "save changes?" prompt still works exactly as it would without the mod.
-- **Open**: not animated by this mod — Windows handles that on its own (may be added in a future update).
+- **Close**: when a window closes, a snapshot of it tilts away and fades out over about a fifth of a second. This runs on the closing app's own UI thread, which is blocked for that time — only sent messages are pumped, so a "save changes?" prompt the app itself puts up first still works exactly as it would without the mod, but the app won't otherwise process input or posted messages until the animation finishes.
+- **Open**: opening a window is not animated by this mod as Windows handles that on its own (it may be added in a future update).
 
 ## Known Limitations
 
@@ -57,7 +57,7 @@ This mod tries to bring back the Windows 7 window animations on Windows 10 and 1
 - If a window can't be minimized, its animation is simply skipped.
 - Dialogs without a minimize button aren't animated.
 - Some UWP apps may not support the closing animation.
-- Snipping Tool doesn't play the closing animation, for stability reasons.
+- Snipping Tool doesn't play the closing animation for stability reasons.
 
 ## Which applications are affected
 
@@ -65,8 +65,8 @@ The mod loads into every running program, except for a short list of system, she
 
 ## Notes
 
-This is a best-effort recreation of the Windows 7 look, not a perfect copy — if you run into problems or have suggestions, please reach out to the author.
-It's been tested on Windows 10 21H2, Windows 11 24H2, and Windows 11 25H2. No system files are modified and no Windows component is replaced — it just recreates the Windows 7 timing and motion on top of the current system. Turn on logging in the advanced settings if you want to see why a specific window wasn't animated.
+This is a best-effort recreation of the Windows 7 look, not a perfect copy. If there are problems or suggestions, please reach out to the author.
+The mod has been tested on Windows 10 21H2, Windows 11 24H2, and Windows 11 25H2. System files are not modified and Windows components are not replaced because the modification just recreates the Windows 7 timing and motion on top of the current system. It is recommended to turn on logging in the advanced settings to see why a specific window wasn't animated.
 For best results, avoid running this alongside other window-animation mods.
 
 ## Credits
@@ -508,6 +508,13 @@ enum class AnimationType {
 static float Lerp(float a, float b, float t) {
     return a + (b - a) * t;
 }
+// Windows 7's Aero minimize/restore glide decelerates into place rather than
+// moving at constant speed -- a cubic ease-out reproduces that "settling"
+// feel much better than the raw linear t we used before.
+static float EaseOutCubic(float t) {
+    float f = 1.f - std::clamp(t, 0.f, 1.f);
+    return 1.f - f * f * f;
+}
 static bool IsRectUsable(const RECT& rc) {
     return rc.right > rc.left && rc.bottom > rc.top;
 }
@@ -540,21 +547,24 @@ static Win7TransformParams ParamsFor(AnimationType type, float t, float h = 0) {
     Win7TransformParams p;
     t = std::clamp(t, 0.f, 1.f);
     switch (type) {
-        case AnimationType::Minimize:
-            p.rotX = 5.f * t;
-            p.rotY = 8.f * t;
-            p.transZ = -4.f * t;
-            p.opacity = 1.f - 0.35f * t;
-            p.ease = t;
+        case AnimationType::Minimize: {
+            float e = EaseOutCubic(t);
+            p.rotX = 5.f * e;
+            p.rotY = 8.f * e;
+            p.transZ = -4.f * e;
+            p.opacity = 1.f - 0.35f * e;
+            p.ease = e;
             p.pivotY = h * 0.5f;
             break;
+        }
         case AnimationType::RestoreFromMinimized: {
-            float away = 1.f - t;
+            float e = EaseOutCubic(t);
+            float away = 1.f - e;
             p.rotX = 5.f * away;
             p.rotY = 8.f * away;
             p.transZ = -4.f * away;
-            p.opacity = 0.65f + 0.35f * t;
-            p.ease = t;
+            p.opacity = 0.65f + 0.35f * e;
+            p.ease = e;
             p.pivotY = h * 0.5f;
             break;
         }
@@ -577,9 +587,9 @@ static RECT RectFor(AnimationType type, float t, const RECT& win,
     t = std::clamp(t, 0.f, 1.f);
     switch (type) {
         case AnimationType::Minimize:
-            return LerpRect(win, dest, t);
+            return LerpRect(win, dest, EaseOutCubic(t));
         case AnimationType::RestoreFromMinimized:
-            return LerpRect(dest, win, t);
+            return LerpRect(dest, win, EaseOutCubic(t));
         default:
             return win;
     }
@@ -1604,8 +1614,43 @@ enum class AnimMsg : UINT {
     GhostArm = 4
 };
 constexpr UINT_PTR kGhostTimer = 0x57A1;
+// Explorer and Control Panel hide their frame before destroying it, so at DestroyWindow
+// the window is already invisible; PlayClose can't screen-scrape it there. This is the
+// grace window: a pre-capture taken right before the hide and used if the destroy follows
+// within kShellHideToCloseMs.
+constexpr ULONGLONG kShellHideToCloseMs = 400;
 static void GhostWatchdog();
 static std::atomic<UINT> g_msgAnim{0};
+// AnimMsg::FirstFrame used to carry an AnimRequest* straight in lParam. Both
+// the window class name and the registered message are process-wide public
+// values (any process can FindWindowW + RegisterWindowMessageW the same
+// strings), so anything on the machine could send that message with an
+// arbitrary lParam and make the overlay thread dereference it. The pointer
+// now travels only through this mod-owned, mutex-guarded slot; the message
+// itself carries no payload. The three senders already serialize on
+// g_fAnimating, so there's no real contention -- just don't hold the lock
+// across a cross-thread send.
+static std::mutex g_firstFrameMutex;
+static AnimRequest* g_firstFrameReq = nullptr;  // guarded by g_firstFrameMutex
+static LRESULT SendFirstFrame(HWND hwndAnim, UINT msg, AnimRequest* req) {
+    // g_firstFrameMutex must NOT be held across SendMessageW: it's a
+    // blocking cross-thread call that waits for AnimWndProc to run, and
+    // AnimWndProc needs to take this same mutex to read the pointer back.
+    // Holding it here would deadlock the sender against its own receiver.
+    // The three callers already serialize via g_fAnimating, so there's no
+    // race in setting-then-sending-then-clearing without holding the lock
+    // across all three steps.
+    {
+        std::lock_guard<std::mutex> lock(g_firstFrameMutex);
+        g_firstFrameReq = req;
+    }
+    LRESULT r = SendMessageW(hwndAnim, msg, WPARAM(AnimMsg::FirstFrame), 0);
+    {
+        std::lock_guard<std::mutex> lock(g_firstFrameMutex);
+        g_firstFrameReq = nullptr;
+    }
+    return r;
+}
 static std::atomic<bool> g_fAnimating{false};
 static std::atomic<bool> g_fDisabled{false};
 static std::atomic<HWND> g_hwndAnim{nullptr}, g_hwndCurrent{nullptr};
@@ -1759,15 +1804,13 @@ static LRESULT CALLBACK AnimWndProc(HWND hwnd, UINT uMsg, WPARAM wParam,
         switch (AnimMsg(wParam)) {
         case AnimMsg::FirstFrame:
         {
-            static AnimRequest* lastReq = nullptr;
-            if (!lastReq && lParam) {
-                lastReq = reinterpret_cast<AnimRequest*>(lParam);
+            AnimRequest* req;
+            {
+                std::lock_guard<std::mutex> lock(g_firstFrameMutex);
+                req = g_firstFrameReq;
             }
-            if (lastReq && PresentFirstFrame(hwnd, *lastReq)) {
-                lastReq = nullptr;
+            if (req && PresentFirstFrame(hwnd, *req))
                 return 1;
-            }
-            lastReq = nullptr;
         }
         break;
             case AnimMsg::Drain:
@@ -1777,7 +1820,14 @@ static LRESULT CALLBACK AnimWndProc(HWND hwnd, UINT uMsg, WPARAM wParam,
                 HideOverlayWindow(hwnd);
                 break;
             case AnimMsg::GhostArm:
-                SetTimer(hwnd, kGhostTimer, UINT(lParam), nullptr);
+                // GhostArm's lParam is the same untrusted-message-payload
+                // shape as FirstFrame's was: any process can send this
+                // message. The only legitimate caller always arms for
+                // kShellHideToCloseMs, so ignore the payload and use that
+                // constant directly instead of trusting an attacker-supplied
+                // timer elapse value.
+                SetTimer(hwnd, kGhostTimer, UINT(kShellHideToCloseMs),
+                         nullptr);
                 break;
         }
         return 0;
@@ -2017,8 +2067,13 @@ static bool StartQueuedAnimation(HWND hwnd, AnimationType type,
     }
     g_hwndCurrent.store(hwnd);
     g_typeCurrent.store(int(type));
-    SendMessageW(g_hwndAnim.load(), g_msgAnim.load(),
-                 WPARAM(AnimMsg::FirstFrame), LPARAM(&req));
+    SendFirstFrame(g_hwndAnim.load(), g_msgAnim.load(), &req);
+    // SendFirstFrame above returns once the overlay's first frame is drawn,
+    // not once DWM has actually composited and presented it. Without this
+    // flush, DisableTransitions() below can land on-screen a frame before
+    // the overlay does, showing the real window with its glass/transition
+    // just switched off for a beat -- the "aero flash" during minimize.
+    DwmFlush();
     DisableTransitions(hwnd, TRUE);
     // Cloak here, after g_hwndCurrent is published but before QueueRun makes
     // the request visible to the overlay thread: CloakForRestoreAnim's own
@@ -2243,7 +2298,7 @@ static bool PlayCloseAnimation(HWND hwnd, CaptureBits&& preCap,
     }
     g_hwndCurrent.store(hwnd);
     g_typeCurrent.store(int(AnimationType::Close));
-    SendMessageW(ha, msg, WPARAM(AnimMsg::FirstFrame), LPARAM(&req));
+    SendFirstFrame(ha, msg, &req);
     // The hide dispatches WM_SHOWWINDOW & co. inside the app: no DPI override
     // is held here, so the app runs under its own awareness context.
     if (IsWindowVisible(hwnd)) {
@@ -2267,7 +2322,12 @@ while (!g_stopping.load() &&
     // Don't block the DWM
     MSG msg;
     PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE | PM_QS_SENDMESSAGE);
-    Sleep(16); 
+    // DwmFlush() here was a mistake: during DestroyWindow the compositor
+    // isn't reliably ticking (the window is mid-teardown), so a blocking
+    // flush can stall well past one vsync and drag the whole animation out.
+    // A short, deterministic sleep keeps this loop's real-world duration
+    // pinned to req.durationMs regardless of what DWM is doing right now.
+    Sleep(8);
 }
     {
         Win7TransformParams pe =
@@ -2307,10 +2367,6 @@ static bool CloseIsProgressSafe(
         return false;
     return true;
 }
-// Explorer and Control Panel hide their frame before destroying it, so at DestroyWindow
-// there is nothing left to capture: for those two classes only, the bitmap is taken
-// right before the hide and used if the destroy follows within kShellHideToCloseMs.
-constexpr ULONGLONG kShellHideToCloseMs = 400;
 struct PendingClose {
     RECT rc{};
     CaptureBits cap;
@@ -2477,8 +2533,7 @@ static void ShellPreCaptureForClose(HWND hwnd) {
                 // The ghost frame is presented by the overlay thread (already
                 // per-monitor DPI-aware), so the DPI override on this thread stays
                 // scoped to the capture above and is never held across presents.
-                ghost = SendMessageW(ha, msg, WPARAM(AnimMsg::FirstFrame),
-                                     LPARAM(&frame)) == 1;
+                ghost = SendFirstFrame(ha, msg, &frame) == 1;
                 if (!ghost)
                     HideOverlayWindow(
                         ha); // 1x1 transparent + SWP_HIDEWINDOW: coordinate-free
@@ -2614,28 +2669,40 @@ static bool PlayClose(HWND hwnd) {
 #define DWP_HOOK_(name, defArgs, callArgs)                                     \
     LRESULT(CALLBACK* name##_orig) defArgs;                                    \
     LRESULT CALLBACK name##_hook defArgs {                                     \
-        if (uMsg == WM_NCDESTROY)                                              \
-            /* Catches windows torn down as a side effect of an ancestor's */  \
-            /* destruction, which never go through the DestroyWindow hook. */  \
-            /* Without this, a stale cache entry can survive under a */        \
-            /* recycled HWND value until evicted by the 2-entry cap. */        \
-            ForgetCapture(hWnd);                                               \
-        if (uMsg == WM_SHOWWINDOW && wParam == FALSE && lParam == 0)           \
-            ShellPreCaptureForClose(hWnd);                                     \
-        if (uMsg == WM_SYSCOMMAND) {                                           \
-            UINT cmd = UINT(wParam) & 0xFFF0;                                  \
-            if (cmd == SC_MINIMIZE && PlayMinimize(hWnd)) {                    \
-                LRESULT lr = name##_orig callArgs;                             \
-                AfterOrigMinimize(hWnd, false);                                \
-                return lr;                                                     \
+        /* This runs on every message to every window in every process --   */ \
+        /* nothing our bookkeeping does may ever throw back into the host's */ \
+        /* message loop. calledOrig tracks whether name##_orig already ran  */ \
+        /* inside the try, so the catch handler below never calls it twice. */ \
+        bool calledOrig = false;                                               \
+        LRESULT lr = 0;                                                        \
+        try {                                                                  \
+            if (uMsg == WM_NCDESTROY)                                          \
+                /* Catches windows torn down as a side effect of an ancestor's */ \
+                /* destruction, which never go through the DestroyWindow hook. */ \
+                /* Without this, a stale cache entry can survive under a */    \
+                /* recycled HWND value until evicted by the 2-entry cap. */    \
+                ForgetCapture(hWnd);                                           \
+            if (uMsg == WM_SHOWWINDOW && wParam == FALSE && lParam == 0)       \
+                ShellPreCaptureForClose(hWnd);                                 \
+            if (uMsg == WM_SYSCOMMAND) {                                       \
+                UINT cmd = UINT(wParam) & 0xFFF0;                              \
+                if (cmd == SC_MINIMIZE && PlayMinimize(hWnd)) {                \
+                    lr = name##_orig callArgs;                                 \
+                    calledOrig = true;                                         \
+                    AfterOrigMinimize(hWnd, false);                            \
+                } else if (cmd == SC_RESTORE) {                                \
+                    /* PlayRestore cloaks internally, atomically with queueing */ \
+                    /* the animation -- see StartQueuedAnimation. */           \
+                    if (!PlayRestore(hWnd))                                    \
+                        ForgetCapture(hWnd);                                   \
+                }                                                              \
             }                                                                  \
-            if (cmd == SC_RESTORE) {                                           \
-                /* PlayRestore cloaks internally, atomically with queueing */  \
-                /* the animation -- see StartQueuedAnimation. */               \
-                if (!PlayRestore(hWnd))                                        \
-                    ForgetCapture(hWnd);                                       \
-            }                                                                  \
+        } catch (...) {                                                       \
+            Wh_Log(L"DefWindowProc-style hook: unexpected exception, "        \
+                   L"falling back to original");                               \
         }                                                                      \
+        if (calledOrig)                                                        \
+            return lr;                                                         \
         return name##_orig callArgs;                                           \
     }
 #define DWP_HOOK(name, defArgs, callArgs)                                      \
@@ -2666,53 +2733,72 @@ static UINT CmdFromShow(int c) {
 BOOL WINAPI ShowWindow_hook(HWND hWnd, int nCmdShow) {
     if (g_fDisabled.load() || g_fAnimating.load())
         return ShowWindow_orig(hWnd, nCmdShow);
-    UINT cmd = CmdFromShow(nCmdShow);
     // ShowWindow is documented as synchronous: start the overlay animation
     // if possible, then let the original run straight away, so the classic
     // restore-then-act patterns (SetForegroundWindow, GetWindowRect,
     // IsIconic, WM_SIZE-dependent layout) see a window that is already
     // restored when this call returns.
-    bool playedMin = false, playedRestore = false;
-    if (cmd == SC_MINIMIZE)
-        playedMin = PlayMinimize(hWnd);
-    else if (cmd == SC_RESTORE) {
-        // PlayRestore cloaks internally, atomically with queueing the
-        // animation -- see StartQueuedAnimation.
-        playedRestore = PlayRestore(hWnd);
-        if (!playedRestore)
-            ForgetCapture(hWnd);
+    // This hook fires on the UI thread of every process that calls
+    // ShowWindow -- i.e. nearly everything. Anything our animation setup
+    // throws here must never reach the caller; ShowWindow_orig always runs
+    // regardless of what happens above it.
+    bool playedMin = false;
+    try {
+        UINT cmd = CmdFromShow(nCmdShow);
+        if (cmd == SC_MINIMIZE)
+            playedMin = PlayMinimize(hWnd);
+        else if (cmd == SC_RESTORE) {
+            // PlayRestore cloaks internally, atomically with queueing the
+            // animation -- see StartQueuedAnimation.
+            if (!PlayRestore(hWnd))
+                ForgetCapture(hWnd);
+        }
+        if (nCmdShow == SW_HIDE)
+            ShellPreCaptureForClose(hWnd);
+    } catch (...) {
+        Wh_Log(L"ShowWindow_hook: unexpected exception, falling back to original");
+        playedMin = false;
     }
-    if (nCmdShow == SW_HIDE)
-        ShellPreCaptureForClose(hWnd);
     BOOL r = ShowWindow_orig(hWnd, nCmdShow);
-    if (playedMin)
-        AfterOrigMinimize(hWnd, false);
+    if (playedMin) {
+        try {
+            AfterOrigMinimize(hWnd, false);
+        } catch (...) {
+            Wh_Log(L"ShowWindow_hook: AfterOrigMinimize threw, ignoring");
+        }
+    }
     return r;
 }
 BOOL WINAPI ShowWindowAsync_hook(HWND hWnd, int nCmdShow) {
     if (g_fDisabled.load() || g_fAnimating.load())
         return ShowWindowAsync_orig(hWnd, nCmdShow);
-    UINT cmd = CmdFromShow(nCmdShow);
-    // ShowWindow is documented as synchronous: start the overlay animation
-    // if possible, then let the original run straight away, so the classic
-    // restore-then-act patterns (SetForegroundWindow, GetWindowRect,
-    // IsIconic, WM_SIZE-dependent layout) see a window that is already
-    // restored when this call returns.
-    bool playedMin = false, playedRestore = false;
-    if (cmd == SC_MINIMIZE)
-        playedMin = PlayMinimize(hWnd);
-    else if (cmd == SC_RESTORE) {
-        // PlayRestore cloaks internally, atomically with queueing the
-        // animation -- see StartQueuedAnimation.
-        playedRestore = PlayRestore(hWnd);
-        if (!playedRestore)
-            ForgetCapture(hWnd);
+    // Same reasoning as ShowWindow_hook above: this must never let an
+    // exception from our own bookkeeping reach the caller.
+    bool playedMin = false;
+    try {
+        UINT cmd = CmdFromShow(nCmdShow);
+        if (cmd == SC_MINIMIZE)
+            playedMin = PlayMinimize(hWnd);
+        else if (cmd == SC_RESTORE) {
+            // PlayRestore cloaks internally, atomically with queueing the
+            // animation -- see StartQueuedAnimation.
+            if (!PlayRestore(hWnd))
+                ForgetCapture(hWnd);
+        }
+        if (nCmdShow == SW_HIDE)
+            ShellPreCaptureForClose(hWnd);
+    } catch (...) {
+        Wh_Log(L"ShowWindowAsync_hook: unexpected exception, falling back to original");
+        playedMin = false;
     }
-    if (nCmdShow == SW_HIDE)
-        ShellPreCaptureForClose(hWnd);
     BOOL r = ShowWindowAsync_orig(hWnd, nCmdShow);
-    if (playedMin)
-        AfterOrigMinimize(hWnd, true);
+    if (playedMin) {
+        try {
+            AfterOrigMinimize(hWnd, true);
+        } catch (...) {
+            Wh_Log(L"ShowWindowAsync_hook: AfterOrigMinimize threw, ignoring");
+        }
+    }
     return r;
 }
 // Window prop guards against re-entry; the original DestroyWindow is always called.
@@ -2729,22 +2815,36 @@ BOOL WINAPI DestroyWindow_hook(HWND hWnd) {
             animated = false;
         }
     }
-    ForgetCapture(hWnd);
-    ForgetShellPreCapture(hWnd);
+    // The map/mutex-backed cache cleanup below can't be allowed to stop
+    // DestroyWindow_orig from running -- same rule as the animation above.
+    try {
+        ForgetCapture(hWnd);
+        ForgetShellPreCapture(hWnd);
+    } catch (...) {
+        Wh_Log(L"DestroyWindow_hook: cache cleanup threw, ignoring");
+    }
     BOOL r = DestroyWindow_orig(hWnd);
     if (!r && animated && IsWindow(hWnd)) {
-        DisableTransitions(hWnd, FALSE);
-        // Abort any overlay animation still queued for this window before re-showing it.
-        HWND cur = g_hwndCurrent.load();
-        if (cur == hWnd) {
-            g_hwndCurrent.store(nullptr);
-            g_typeCurrent.store(0);
-            g_fAnimating.store(false);
+        // The real destroy was refused (e.g. WM_CLOSE was cancelled): undo
+        // our own state so the window isn't left cloaked/transition-disabled
+        // forever. This recovery path must itself be exception-safe, or a
+        // window that already failed to close could be left invisible too.
+        try {
+            DisableTransitions(hWnd, FALSE);
+            // Abort any overlay animation still queued for this window before re-showing it.
+            HWND cur = g_hwndCurrent.load();
+            if (cur == hWnd) {
+                g_hwndCurrent.store(nullptr);
+                g_typeCurrent.store(0);
+                g_fAnimating.store(false);
+            }
+            if (ShowWindow_orig)
+                ShowWindow_orig(hWnd, SW_SHOWNA);
+            else
+                ::ShowWindow(hWnd, SW_SHOWNA);
+        } catch (...) {
+            Wh_Log(L"DestroyWindow_hook: recovery path threw, ignoring");
         }
-        if (ShowWindow_orig)
-            ShowWindow_orig(hWnd, SW_SHOWNA);
-        else
-            ::ShowWindow(hWnd, SW_SHOWNA);
     }
     return r;
 }
