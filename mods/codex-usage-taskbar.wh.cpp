@@ -1158,7 +1158,9 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
         }
     }
 #else
-#error This mod currently supports x86-64 only.
+    // The taskbar host layout used by this mod is x64-specific.
+    // Keep the mod compilable on ARM64 while leaving the widget inactive there.
+    return nullptr;
 #endif
 
     auto* unknown = *reinterpret_cast<IUnknown**>(
@@ -1873,7 +1875,7 @@ bool HookTaskbarDllSymbols() {
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
             {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
             &CTaskBand_ITaskListWndSite_vftable,
@@ -1905,7 +1907,7 @@ bool HookTaskbarDllSymbols() {
         },
     };
 
-    return WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
+    return WindhawkUtils::HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
 
 }  // namespace
