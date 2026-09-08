@@ -2,7 +2,7 @@
 // @id              taskbar-auto-hide-keyboard-only
 // @name            Taskbar auto-hide fine tuning
 // @description     Fine-tune taskbar auto-hide: keyboard-only unhide, prevent the taskbar from showing at all, hotkeys and mouse events to show or toggle visibility
-// @version         2.2
+// @version         2.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -229,6 +229,11 @@ std::unordered_map<HWND, void*> g_hwndToWndProcPThis;
 std::unordered_map<HWND, void*> g_hwndToSecondaryPThis;
 // Win11: HWND -> ViewCoordinator pThis.
 std::unordered_map<HWND, void*> g_hwndToViewCoordinator;
+
+// Win11: taskbars unhidden by ShowTaskbarTemporarily awaiting synthetic
+// pointer-leave to trigger auto-hide.
+std::vector<HWND> g_pendingRehides;
+UINT_PTR g_rehideTimerId;
 
 bool IsTaskbarWindow(HWND hWnd) {
     WCHAR szClassName[32];
@@ -712,15 +717,6 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
         return original();
     }
 
-    // Only act if the taskbar is on the bottom edge.
-    APPBARDATA appBarData = {
-        .cbSize = sizeof(APPBARDATA),
-    };
-    if (SHAppBarMessage(ABM_GETTASKBARPOS, &appBarData) &&
-        appBarData.uEdge != ABE_BOTTOM) {
-        return original();
-    }
-
     DWORD processId = 0;
     DWORD threadId = GetWindowThreadProcessId(hwnd, &processId);
     if (!processId || !threadId) {
@@ -739,6 +735,19 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
     }
 
     if (kind == FlyoutKind::None) {
+        return original();
+    }
+
+    // Only act if the taskbar is on the bottom edge.
+    //
+    // Important: This sends a message to the taskbar thread, and may cause a
+    // deadlock in some cases. Calling it only after making sure that the window
+    // is the Start menu or the search menu seems to avoid the deadlock.
+    APPBARDATA appBarData = {
+        .cbSize = sizeof(APPBARDATA),
+    };
+    if (SHAppBarMessage(ABM_GETTASKBARPOS, &appBarData) &&
+        appBarData.uEdge != ABE_BOTTOM) {
         return original();
     }
 
@@ -762,10 +771,10 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
     Wh_Log(L"Taskbar shown: %d", taskbarShown);
 
     if (taskbarShown) {
-        // Taskbar is visible — the system positioned the flyout correctly
+        // Taskbar is visible - the system positioned the flyout correctly
         // relative to the visible taskbar. Nothing to adjust.
     } else {
-        // Taskbar is hidden — snap flyout to monitor bottom and save the
+        // Taskbar is hidden - snap flyout to monitor bottom and save the
         // original gap (DPI-neutral) so we can restore it later.
         int gap = mi.rcMonitor.bottom - rcWindow.bottom;
         if (gap > 0) {
@@ -857,7 +866,7 @@ TrayUI_GetAutoHideFlags_t TrayUI_GetAutoHideFlags_Original;
 void* TrayUI_vftable_ITrayComponentHost;
 void* CSecondaryTray_vftable_ISecondaryTray;
 
-// TrayUI::_Hide hook — block hide in always-show mode.
+// TrayUI::_Hide hook - block hide in always-show mode.
 using TrayUI__Hide_t = void(WINAPI*)(void* pThis);
 TrayUI__Hide_t TrayUI__Hide_Original;
 void WINAPI TrayUI__Hide_Hook(void* pThis) {
@@ -869,7 +878,7 @@ void WINAPI TrayUI__Hide_Hook(void* pThis) {
     TrayUI__Hide_Original(pThis);
 }
 
-// CSecondaryTray::_AutoHide hook — block hide in always-show mode.
+// CSecondaryTray::_AutoHide hook - block hide in always-show mode.
 using CSecondaryTray__AutoHide_t = void(WINAPI*)(void* pThis, bool param1);
 CSecondaryTray__AutoHide_t CSecondaryTray__AutoHide_Original;
 void WINAPI CSecondaryTray__AutoHide_Hook(void* pThis, bool param1) {
@@ -881,7 +890,7 @@ void WINAPI CSecondaryTray__AutoHide_Hook(void* pThis, bool param1) {
     CSecondaryTray__AutoHide_Original(pThis, param1);
 }
 
-// TrayUI::Unhide — block in Never mode (mod calls _Original to bypass).
+// TrayUI::Unhide - block in Never mode (mod calls _Original to bypass).
 using TrayUI_Unhide_t = void(WINAPI*)(void* pThis,
                                       int trayUnhideFlags,
                                       int unhideRequest);
@@ -897,7 +906,7 @@ void WINAPI TrayUI_Unhide_Hook(void* pThis,
     TrayUI_Unhide_Original(pThis, trayUnhideFlags, unhideRequest);
 }
 
-// CSecondaryTray::_Unhide — block in Never mode (mod calls _Original to
+// CSecondaryTray::_Unhide - block in Never mode (mod calls _Original to
 // bypass).
 using CSecondaryTray__Unhide_t = void(WINAPI*)(void* pThis,
                                                int trayUnhideFlags,
@@ -914,7 +923,7 @@ void WINAPI CSecondaryTray__Unhide_Hook(void* pThis,
     CSecondaryTray__Unhide_Original(pThis, trayUnhideFlags, unhideRequest);
 }
 
-// TrayUI::WndProc hook — capture pThis-to-HWND mapping.
+// TrayUI::WndProc hook - capture pThis-to-HWND mapping.
 using TrayUI_WndProc_t = LRESULT(WINAPI*)(void* pThis,
                                           HWND hWnd,
                                           UINT Msg,
@@ -930,6 +939,17 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
                                    bool* flag) {
     if (Msg == WM_NCCREATE || Msg == g_captureThisMsg) {
         g_hwndToWndProcPThis[hWnd] = pThis;
+        Wh_Log(L"%s", [] {
+            APPBARDATA appBarData = {
+                .cbSize = sizeof(APPBARDATA),
+            };
+            if (SHAppBarMessage(ABM_GETSTATE, &appBarData) & ABS_AUTOHIDE) {
+                return L"Taskbar auto-hide is enabled";
+            } else {
+                return L"WARNING: Taskbar auto-hide is disabled in Windows "
+                       L"taskbar settings; the mod expects it to be enabled";
+            }
+        }());
     } else if (Msg == WM_NCDESTROY) {
         g_hwndToWndProcPThis.erase(hWnd);
         g_hwndToViewCoordinator.erase(hWnd);
@@ -938,7 +958,7 @@ LRESULT WINAPI TrayUI_WndProc_Hook(void* pThis,
     return TrayUI_WndProc_Original(pThis, hWnd, Msg, wParam, lParam, flag);
 }
 
-// CSecondaryTray::v_WndProc hook — capture pThis-to-HWND mapping.
+// CSecondaryTray::v_WndProc hook - capture pThis-to-HWND mapping.
 using CSecondaryTray_v_WndProc_t = LRESULT(
     WINAPI*)(void* pThis, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 CSecondaryTray_v_WndProc_t CSecondaryTray_v_WndProc_Original;
@@ -958,6 +978,10 @@ LRESULT WINAPI CSecondaryTray_v_WndProc_Hook(void* pThis,
 }
 
 bool g_isPointerOverTaskbarFrame;
+
+using ViewCoordinator_IsExpanded_t = bool(WINAPI*)(void* pThis,
+                                                   HWND hMMTaskbarWnd);
+ViewCoordinator_IsExpanded_t ViewCoordinator_IsExpanded_Original;
 
 using ViewCoordinator_HandleIsPointerOverTaskbarFrameChanged_t =
     void(WINAPI*)(void* pThis,
@@ -1007,10 +1031,7 @@ bool WINAPI ViewCoordinator_ShouldTaskbarBeExpanded_Hook(void* pThis,
 
     // In Never mode, block all expansion unless the mod triggered it.
     if (g_settings.mode == AutoHideMode::Never && !g_modTriggeredUnhide) {
-        // Returning false here breaks the taskbar layout with the old auto-hide
-        // implementation.
-        // TODO: test this with the new implementation.
-        // return false;
+        return false;
     }
 
     return ViewCoordinator_ShouldTaskbarBeExpanded_Original(
@@ -1035,6 +1056,15 @@ void WINAPI ViewCoordinator_UpdateIsExpanded_Hook(void* pThis,
     }
 
     ViewCoordinator_UpdateIsExpanded_Original(pThis, hMMTaskbarWnd, reason);
+
+    bool isExpanded = ViewCoordinator_IsExpanded_Original(pThis, hMMTaskbarWnd);
+    Wh_Log(L"Taskbar is now %s", isExpanded ? L"expanded" : L"collapsed");
+
+    // Update cloak state if fully hidden.
+    if (g_settings.mode == AutoHideMode::KeyboardOnlyFullyHide ||
+        g_settings.mode == AutoHideMode::Never) {
+        CloakWindow(hMMTaskbarWnd, !isExpanded);
+    }
 }
 
 void UpdateViewCoordinatorIsExpanded(HWND hWnd) {
@@ -1043,8 +1073,67 @@ void UpdateViewCoordinatorIsExpanded(HWND hWnd) {
         if (it != g_hwndToViewCoordinator.end()) {
             ViewCoordinator_UpdateIsExpanded_Original(
                 it->second, hWnd, kReasonIsPointerOverTaskbarFrameChanged);
+
+            bool isExpanded =
+                ViewCoordinator_IsExpanded_Original(it->second, hWnd);
+            Wh_Log(L"Taskbar is now %s",
+                   isExpanded ? L"expanded" : L"collapsed");
+
+            // Update cloak state if fully hidden.
+            if (g_settings.mode == AutoHideMode::KeyboardOnlyFullyHide ||
+                g_settings.mode == AutoHideMode::Never) {
+                CloakWindow(hWnd, !isExpanded);
+            }
         }
     }
+}
+
+bool IsCursorOverPendingRehideTaskbar() {
+    POINT pt;
+    if (!GetCursorPos(&pt)) {
+        return false;
+    }
+    for (HWND hWnd : g_pendingRehides) {
+        RECT rc;
+        if (GetWindowRect(hWnd, &rc) && PtInRect(&rc, pt)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Fires showTemporarilyDurationMs after ShowTaskbarTemporarily to simulate
+// pointer-leave on the Win11 taskbar, triggering auto-hide. The new Win11
+// auto-hide implementation only hides on pointer-leave events. Without this,
+// the taskbar stays expanded indefinitely.
+VOID CALLBACK RehideTaskbarsTimerProc(HWND hwnd,
+                                      UINT msg,
+                                      UINT_PTR idEvent,
+                                      DWORD time) {
+    KillTimer(nullptr, idEvent);
+    g_rehideTimerId = 0;
+
+    // Defer rehide while the user is actively interacting, e.g. with a mouse
+    // over the taskbar. Poll until clear.
+    if (IsCursorOverPendingRehideTaskbar()) {
+        Wh_Log(L"Deferring rehide, cursor is over taskbar");
+        g_rehideTimerId = SetTimer(nullptr, 0, 200, RehideTaskbarsTimerProc);
+        return;
+    }
+
+    Wh_Log(L"Rehiding %zu Win11 taskbar(s)", g_pendingRehides.size());
+
+    for (HWND hWnd : g_pendingRehides) {
+        auto it = g_hwndToViewCoordinator.find(hWnd);
+        if (it == g_hwndToViewCoordinator.end()) {
+            continue;
+        }
+        ViewCoordinator_HandleIsPointerOverTaskbarFrameChanged_Original(
+            it->second, hWnd, false, 0);
+    }
+
+    g_pendingRehides.clear();
+    g_modTriggeredUnhide = false;
 }
 
 void ShowTaskbarTemporarily(bool mainTaskbar = false) {
@@ -1099,6 +1188,18 @@ void ShowTaskbarTemporarily(bool mainTaskbar = false) {
             }
             ViewCoordinator_HandleIsPointerOverTaskbarFrameChanged_Original(
                 pThis, hWnd, true, 0);
+            if (std::find(g_pendingRehides.begin(), g_pendingRehides.end(),
+                          hWnd) == g_pendingRehides.end()) {
+                g_pendingRehides.push_back(hWnd);
+            }
+        }
+
+        if (!g_pendingRehides.empty()) {
+            int delayMs = g_settings.showTemporarilyDurationMs > 0
+                              ? g_settings.showTemporarilyDurationMs
+                              : 500;
+            g_rehideTimerId = SetTimer(nullptr, g_rehideTimerId, delayMs,
+                                       RehideTaskbarsTimerProc);
         }
     }
 }
@@ -1137,12 +1238,6 @@ void ToggleAlwaysShow() {
         }
         for (HWND hWnd : secondaryTaskbarWindows) {
             KillTimer(hWnd, kTrayUITimerHide);
-        }
-
-        // Uncloak if fully hidden.
-        if (g_settings.mode == AutoHideMode::KeyboardOnlyFullyHide ||
-            g_settings.mode == AutoHideMode::Never) {
-            CloakAllTaskbars(FALSE);
         }
 
         // Old auto-hide path.
@@ -1371,6 +1466,11 @@ LRESULT WINAPI CTaskBand_v_WndProc_Hook(void* pThis,
                         ApplySettingsOnUIThread(hWnd);
                         break;
                     case UI_BEFORE_UNINIT:
+                        if (g_rehideTimerId) {
+                            KillTimer(nullptr, g_rehideTimerId);
+                            g_rehideTimerId = 0;
+                        }
+                        g_pendingRehides.clear();
                         if (g_alwaysShowMode) {
                             g_alwaysShowMode = false;
                             HideAllTaskbars();
@@ -1385,13 +1485,29 @@ LRESULT WINAPI CTaskBand_v_WndProc_Hook(void* pThis,
                         break;
                     case UI_SHOW_MAIN_TASKBAR_TEMPORARILY_IF_HIDDEN: {
                         bool shown = false;
-                        for (auto& [hWnd, pThis] : g_hwndToWndProcPThis) {
-                            DWORD flags =
-                                TrayUI_GetAutoHideFlags_Original(pThis);
-                            Wh_Log(L"GetAutoHideFlags: %08X", flags);
-                            if (!(flags & 0x02)) {
-                                shown = true;
-                                break;
+                        if (ViewCoordinator_IsExpanded_Original &&
+                            !g_hwndToViewCoordinator.empty()) {
+                            for (auto& [trayHwnd, pThis] :
+                                 g_hwndToViewCoordinator) {
+                                bool expanded =
+                                    ViewCoordinator_IsExpanded_Original(
+                                        pThis, trayHwnd);
+                                Wh_Log(L"IsExpanded: %d", expanded);
+                                if (expanded) {
+                                    shown = true;
+                                    break;
+                                }
+                            }
+                        } else {
+                            for (auto& [trayHwnd, pThis] :
+                                 g_hwndToWndProcPThis) {
+                                DWORD flags =
+                                    TrayUI_GetAutoHideFlags_Original(pThis);
+                                Wh_Log(L"GetAutoHideFlags: %08X", flags);
+                                if (!(flags & 0x02)) {
+                                    shown = true;
+                                    break;
+                                }
                             }
                         }
 
@@ -1480,36 +1596,124 @@ int TaskbarFrame_OnPointerPressed_Hook(void* pThis, void* pArgs) {
     return 0;
 }
 
+std::optional<bool> IsOsFeatureEnabled(UINT32 featureId) {
+    enum FEATURE_ENABLED_STATE {
+        FEATURE_ENABLED_STATE_DEFAULT = 0,
+        FEATURE_ENABLED_STATE_DISABLED = 1,
+        FEATURE_ENABLED_STATE_ENABLED = 2,
+    };
+
+#pragma pack(push, 1)
+    struct RTL_FEATURE_CONFIGURATION {
+        unsigned int featureId;
+        unsigned __int32 group : 4;
+        FEATURE_ENABLED_STATE enabledState : 2;
+        unsigned __int32 enabledStateOptions : 1;
+        unsigned __int32 unused1 : 1;
+        unsigned __int32 variant : 6;
+        unsigned __int32 variantPayloadKind : 2;
+        unsigned __int32 unused2 : 16;
+        unsigned int payload;
+    };
+#pragma pack(pop)
+
+    using RtlQueryFeatureConfiguration_t =
+        int(NTAPI*)(UINT32, int, INT64*, RTL_FEATURE_CONFIGURATION*);
+    static RtlQueryFeatureConfiguration_t pRtlQueryFeatureConfiguration = []() {
+        HMODULE hNtDll = GetModuleHandle(L"ntdll.dll");
+        return hNtDll ? (RtlQueryFeatureConfiguration_t)GetProcAddress(
+                            hNtDll, "RtlQueryFeatureConfiguration")
+                      : nullptr;
+    }();
+
+    if (!pRtlQueryFeatureConfiguration) {
+        Wh_Log(L"RtlQueryFeatureConfiguration not found");
+        return std::nullopt;
+    }
+
+    RTL_FEATURE_CONFIGURATION feature = {0};
+    INT64 changeStamp = 0;
+    HRESULT hr =
+        pRtlQueryFeatureConfiguration(featureId, 1, &changeStamp, &feature);
+    if (SUCCEEDED(hr)) {
+        Wh_Log(L"RtlQueryFeatureConfiguration result for %u: %d", featureId,
+               feature.enabledState);
+
+        switch (feature.enabledState) {
+            case FEATURE_ENABLED_STATE_DISABLED:
+                return false;
+            case FEATURE_ENABLED_STATE_ENABLED:
+                return true;
+            case FEATURE_ENABLED_STATE_DEFAULT:
+                return std::nullopt;
+        }
+    } else {
+        Wh_Log(L"RtlQueryFeatureConfiguration error for %u: %08X", featureId,
+               hr);
+    }
+
+    return std::nullopt;
+}
+
 bool HookTaskbarViewDllSymbols(HMODULE module) {
+    bool hasNewTaskbarAutoHideAnimation = false;
+
+    constexpr UINT kNewTaskbarAutoHideAnimation = 41356296;
+    if (IsOsFeatureEnabled(kNewTaskbarAutoHideAnimation).value_or(true)) {
+        hasNewTaskbarAutoHideAnimation = true;
+        Wh_Log(L"New taskbar auto-hide animation is enabled");
+    }
+
     // Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK symbolHooksForViewCoordinator[] = {
+        {
+            {LR"(public: bool __cdecl winrt::Taskbar::implementation::ViewCoordinator::IsExpanded(unsigned __int64))"},
+            &ViewCoordinator_IsExpanded_Original,
+            nullptr,
+        },
         {
             {LR"(public: void __cdecl winrt::Taskbar::implementation::ViewCoordinator::HandleIsPointerOverTaskbarFrameChanged(unsigned __int64,bool,enum winrt::WindowsUdk::UI::Shell::InputDeviceKind))"},
             &ViewCoordinator_HandleIsPointerOverTaskbarFrameChanged_Original,
             ViewCoordinator_HandleIsPointerOverTaskbarFrameChanged_Hook,
-            true,
         },
         {
             {LR"(public: bool __cdecl winrt::Taskbar::implementation::ViewCoordinator::ShouldTaskbarBeExpanded(unsigned __int64,bool))"},
             &ViewCoordinator_ShouldTaskbarBeExpanded_Original,
             ViewCoordinator_ShouldTaskbarBeExpanded_Hook,
-            true,
         },
         {
             {LR"(public: void __cdecl winrt::Taskbar::implementation::ViewCoordinator::UpdateIsExpanded(unsigned __int64,enum TaskbarTipTest::TaskbarExpandCollapseReason))"},
             &ViewCoordinator_UpdateIsExpanded_Original,
             ViewCoordinator_UpdateIsExpanded_Hook,
-            true,
         },
+    };
+
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK symbolHooksRest[] = {
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerPressed(void *))"},
             &TaskbarFrame_OnPointerPressed_Original,
             TaskbarFrame_OnPointerPressed_Hook,
-            true,
         },
     };
 
-    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+    // Alias for the extract_mod_symbols.py script.
+    using COMBINED_SH = WindhawkUtils::SYMBOL_HOOK;
+    COMBINED_SH symbolHooks[ARRAYSIZE(symbolHooksForViewCoordinator) +
+                            ARRAYSIZE(symbolHooksRest)];
+    int index = 0;
+
+    if (hasNewTaskbarAutoHideAnimation) {
+        for (auto& hook : symbolHooksForViewCoordinator) {
+            symbolHooks[index++] = std::move(hook);
+        }
+    }
+
+    for (auto& hook : symbolHooksRest) {
+        symbolHooks[index++] = std::move(hook);
+    }
+
+    if (!HookSymbols(module, symbolHooks, index)) {
         Wh_Log(L"HookSymbols failed");
         return false;
     }

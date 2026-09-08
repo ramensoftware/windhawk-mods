@@ -2,7 +2,7 @@
 // @id             native-brightness
 // @name           Native Brightness Shortcut (Always On Top)
 // @description    Use CTRL + ALT + UP/DOWN to change brightness. Runs in a dedicated stable windhawk.exe process (Tool Mode).
-// @version        1.0.0
+// @version        1.1.0
 // @author         Prash
 // @github         https://github.com/prasmit2410
 // @include        windhawk.exe
@@ -12,12 +12,12 @@
 
 // ==WindhawkModReadme==
 /*
-# Brightness Control with OSD (Tool Mode)
-A standalone utility to control your monitor's brightness using keyboard shortcuts.
+This mod allows you to control laptop screen brightness using CTRL + ALT + UP and CTRL + ALT + DOWN.
+It synchronizes with your system's actual brightness level on startup and displays a custom OSD.
+Note: This works for built-in displays (Laptops/Tablets). External monitors may not support WMI brightness.
 
-### Shortcuts:
-* **Ctrl + Alt + Up Arrow:** Increase brightness (+10%)
-* **Ctrl + Alt + Down Arrow:** Decrease brightness (-10%)
+**Update Info**
+The new update has resolved the previous issue of mod not working properly..
 */
 // ==/WindhawkModReadme==
 
@@ -43,20 +43,48 @@ DWORD g_hookThreadId = 0;
 // 1. Hardware Logic
 // ---------------------------------------------------------------------------
 
+int GetHardwareBrightness() {
+    if (!g_wmiInitialized || !pSvc) return 50; 
+    int level = 50;
+    IEnumWbemClassObject* pEnum = NULL;
+    BSTR className = SysAllocString(L"WmiMonitorBrightness");
+    
+    if (SUCCEEDED(pSvc->CreateInstanceEnum(className, 0, NULL, &pEnum))) {
+        IWbemClassObject *pInst = NULL;
+        ULONG ret = 0;
+        pEnum->Next(WBEM_INFINITE, 1, &pInst, &ret);
+        if (ret && pInst) {
+            VARIANT vtProp;
+            VariantInit(&vtProp);
+            if (SUCCEEDED(pInst->Get(L"CurrentBrightness", 0, &vtProp, 0, 0))) {
+                level = vtProp.bVal;
+                VariantClear(&vtProp);
+            }
+            pInst->Release();
+        }
+        pEnum->Release();
+    }
+    SysFreeString(className);
+    return level;
+}
+
 void InitWMI() {
     if (g_wmiInitialized) return;
     CoInitializeEx(0, COINIT_MULTITHREADED);
     CoInitializeSecurity(NULL, -1, NULL, NULL, RPC_C_AUTHN_LEVEL_DEFAULT, RPC_C_IMP_LEVEL_IMPERSONATE, NULL, EOAC_NONE, NULL);
+    
     if (SUCCEEDED(CoCreateInstance(CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER, IID_IWbemLocator, (LPVOID *)&pLoc))) {
         BSTR ns = SysAllocString(L"ROOT\\WMI");
         if (SUCCEEDED(pLoc->ConnectServer(ns, NULL, NULL, 0, NULL, 0, 0, &pSvc))) {
             CoSetProxyBlanket(pSvc, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, NULL, RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, NULL, EOAC_NONE);
             g_wmiInitialized = true;
+            
+            // Fixed the typo here:
+            g_currentBrightness = GetHardwareBrightness();
         }
         SysFreeString(ns);
     }
 }
-
 void SetHardwareBrightness(int level) {
     if (!g_wmiInitialized || !pSvc) return;
     BSTR className = SysAllocString(L"WmiMonitorBrightnessMethods");
@@ -368,4 +396,4 @@ void Wh_ModUninit() {
 
     WhTool_ModUninit();
     ExitProcess(0);
-}
+}    

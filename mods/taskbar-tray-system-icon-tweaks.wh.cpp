@@ -1,15 +1,15 @@
 // ==WindhawkMod==
 // @id              taskbar-tray-system-icon-tweaks
 // @name            Taskbar tray system icon tweaks
-// @description     Allows hiding system icons: volume, network, battery, microphone, location/GPS, Studio Effects, language bar, bell (always or when there are no new notifications), and the "Show desktop" button (hide or set width)
-// @version         1.2.3
+// @description     Allows hiding system icons: volume, network, battery, microphone, location/GPS, Studio Effects, Recall, language bar, bell (always or when there are no new notifications), and the "Show desktop" button (hide or set width)
+// @version         1.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -25,8 +25,9 @@
 # Taskbar tray system icon tweaks
 
 Allows hiding system icons: volume, network, battery, microphone, location/GPS,
-Studio Effects, language bar, bell (always or when there are no new
-notifications), and the "Show desktop" button (hide or set width).
+Studio Effects, Recall, language bar, bell (always or when there are no new
+notifications), and the "Show desktop" button (hide or set width). Also allows
+showing the battery icon in grayscale instead of its colored variant.
 
 Only Windows 11 is supported.
 
@@ -42,12 +43,19 @@ Only Windows 11 is supported.
   $name: Hide network icon
 - hideBatteryIcon: false
   $name: Hide battery icon
+- grayscaleBatteryIcon: false
+  $name: Grayscale battery icon
+  $description: >-
+    Show the battery icon using the standard text color instead of its colored
+    (e.g. green/yellow) variant.
 - hideMicrophoneIcon: false
   $name: Hide microphone icon
 - hideGeolocationIcon: false
   $name: Hide location (e.g. GPS) icon
 - hideStudioEffectsIcon: false
   $name: Hide Studio Effects icon
+- hideRecallIcon: false
+  $name: Hide Recall icon
 - hideLanguageBar: false
   $name: Hide language bar
 - hideLanguageSupplementaryIcons: false
@@ -71,6 +79,7 @@ Only Windows 11 is supported.
 #include <functional>
 #include <list>
 #include <string>
+#include <vector>
 
 #undef GetCurrentTime
 
@@ -94,16 +103,18 @@ struct {
     bool hideVolumeIcon;
     bool hideNetworkIcon;
     bool hideBatteryIcon;
+    bool grayscaleBatteryIcon;
     bool hideMicrophoneIcon;
     bool hideGeolocationIcon;
     bool hideStudioEffectsIcon;
+    bool hideRecallIcon;
     bool hideLanguageBar;
     bool hideLanguageSupplementaryIcons;
     HideBellIcon hideBellIcon;
     int showDesktopButtonWidth;
 } g_settings;
 
-std::atomic<bool> g_taskbarViewDllLoaded;
+std::atomic<bool> g_systemTrayModuleHooked;
 std::atomic<bool> g_unloading;
 
 using FrameworkElementLoadedEventRevoker = winrt::impl::event_revoker<
@@ -117,6 +128,14 @@ int64_t g_mainStackTextChangedToken;
 
 winrt::weak_ref<FrameworkElement> g_bellSystemTrayIconElement;
 int64_t g_bellAutomationNameChangedToken;
+
+struct BatteryTextBlockState {
+    winrt::weak_ref<Controls::TextBlock> textBlock;
+    Media::Brush savedForeground{nullptr};
+    int64_t foregroundChangedToken{0};
+};
+
+std::vector<BatteryTextBlockState> g_batteryTextBlockStates;
 
 HWND FindCurrentProcessTaskbarWnd() {
     HWND hTaskbarWnd = nullptr;
@@ -247,6 +266,7 @@ enum class SystemTrayIconIdent {
     kBellFullDnd,
     kLanguage,
     kStudioEffects,
+    kRecall,
 };
 
 SystemTrayIconIdent IdentifySystemTrayIconFromText(std::wstring_view text) {
@@ -405,7 +425,7 @@ SystemTrayIconIdent IdentifySystemTrayIconFromText(std::wstring_view text) {
         // Language supplementary icons.
         // Found by installing all the built-in input methods from:
         // https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/windows-language-pack-default-values?view=windows-11#input-method-editors
-        // and identify the icon code in the fonts Segoe Fluent and
+        // and identifying the icon code in the fonts Segoe Fluent and
         // AXPIcons.ttf.
         // https://learn.microsoft.com/en-us/windows/apps/design/style/segoe-fluent-icons-font
         // %SystemRoot%\SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy\SystemTray\Assets\AXPIcons.ttf
@@ -432,6 +452,15 @@ SystemTrayIconIdent IdentifySystemTrayIconFromText(std::wstring_view text) {
 
         case L'\uEABC':
             return SystemTrayIconIdent::kStudioEffects;
+
+        // From:
+        // C:\Windows\SystemApps\MicrosoftWindows.Client.Core_cw5n1h2txyewy\SystemTray\Assets\RecallIcons.ttf
+        case L'\uEC83':
+        case L'\uEADD':
+        case L'\uEB16':
+        case L'\uEF97':
+        case L'\uF1C6':
+            return SystemTrayIconIdent::kRecall;
     }
 
     return SystemTrayIconIdent::kUnknown;
@@ -485,6 +514,10 @@ void ApplyMainStackIconViewStyle(FrameworkElement notifyIconViewElement) {
 
                 case SystemTrayIconIdent::kStudioEffects:
                     hide = g_settings.hideStudioEffectsIcon;
+                    break;
+
+                case SystemTrayIconIdent::kRecall:
+                    hide = g_settings.hideRecallIcon;
                     break;
 
                 case SystemTrayIconIdent::kNone:
@@ -612,6 +645,108 @@ void ApplyNonActivatableStackIconViewStyle(
                                           : Visibility::Visible);
 }
 
+// Path inside SystemTray.BatteryIconContent:
+// Grid#ContainerGrid > StackPanel > Grid > TextBlock.
+//
+// The system sets a colored Foreground brush on each battery TextBlock.
+// Clearing the local Foreground value lets the inherited TextFillColorPrimary
+// take over, giving a grayscale look. The system re-applies the colored brush
+// on theme changes (and similar updates), so we listen for ForegroundProperty
+// changes, save the latest value (so we can restore it on disable), and clear
+// it again.
+void ApplyBatteryIconGrayscaleStyle(FrameworkElement batteryIconContent) {
+    bool grayscale = !g_unloading && g_settings.grayscaleBatteryIcon;
+
+    // Drop any state for TextBlocks that no longer exist.
+    std::erase_if(g_batteryTextBlockStates, [](const BatteryTextBlockState& s) {
+        return !s.textBlock.get();
+    });
+
+    // Nothing to apply and nothing to restore - skip the tree traversal.
+    if (!grayscale && g_batteryTextBlockStates.empty()) {
+        return;
+    }
+
+    FrameworkElement grid = nullptr;
+
+    FrameworkElement child = batteryIconContent;
+    if ((child = FindChildByName(child, L"ContainerGrid")) &&
+        (child = FindChildByClassName(
+             child, L"Windows.UI.Xaml.Controls.StackPanel")) &&
+        (child =
+             FindChildByClassName(child, L"Windows.UI.Xaml.Controls.Grid"))) {
+        grid = child;
+    } else {
+        Wh_Log(L"Failed to navigate to battery Grid");
+        return;
+    }
+
+    EnumChildElements(grid, [grayscale](FrameworkElement textChild) {
+        auto textBlock = textChild.try_as<Controls::TextBlock>();
+        if (!textBlock) {
+            return false;
+        }
+
+        auto it = g_batteryTextBlockStates.begin();
+        for (; it != g_batteryTextBlockStates.end(); ++it) {
+            if (it->textBlock.get() == textBlock) {
+                break;
+            }
+        }
+        bool managed = (it != g_batteryTextBlockStates.end());
+
+        if (grayscale && !managed) {
+            auto localForeground =
+                textBlock
+                    .ReadLocalValue(Controls::TextBlock::ForegroundProperty())
+                    .try_as<Media::Brush>();
+            if (!localForeground) {
+                // No local Foreground set, so clearing would be a no-op and
+                // there'd be nothing meaningful to restore later.
+                return false;
+            }
+
+            BatteryTextBlockState state;
+            state.textBlock = textBlock;
+            state.savedForeground = localForeground;
+            state.foregroundChangedToken =
+                textBlock.RegisterPropertyChangedCallback(
+                    Controls::TextBlock::ForegroundProperty(),
+                    [](DependencyObject sender, DependencyProperty) {
+                        auto tb = sender.try_as<Controls::TextBlock>();
+                        if (!tb) {
+                            return;
+                        }
+                        auto fg =
+                            tb.ReadLocalValue(
+                                  Controls::TextBlock::ForegroundProperty())
+                                .try_as<Media::Brush>();
+                        if (!fg) {
+                            return;
+                        }
+                        for (auto& s : g_batteryTextBlockStates) {
+                            if (s.textBlock.get() == tb) {
+                                s.savedForeground = fg;
+                                break;
+                            }
+                        }
+                        tb.as<DependencyObject>().ClearValue(
+                            Controls::TextBlock::ForegroundProperty());
+                    });
+            g_batteryTextBlockStates.push_back(std::move(state));
+            textBlock.as<DependencyObject>().ClearValue(
+                Controls::TextBlock::ForegroundProperty());
+        } else if (!grayscale && managed) {
+            textBlock.UnregisterPropertyChangedCallback(
+                Controls::TextBlock::ForegroundProperty(),
+                it->foregroundChangedToken);
+            textBlock.Foreground(it->savedForeground);
+            g_batteryTextBlockStates.erase(it);
+        }
+        return false;
+    });
+}
+
 void ApplyControlCenterButtonIconStyle(FrameworkElement systemTrayIconElement) {
     FrameworkElement contentGrid = nullptr;
 
@@ -633,6 +768,8 @@ void ApplyControlCenterButtonIconStyle(FrameworkElement systemTrayIconElement) {
         }
 
         Wh_Log(L"System battery tray icon, hide=%d", hide);
+
+        ApplyBatteryIconGrayscaleStyle(systemTrayTextIconContent);
     } else {
         systemTrayTextIconContent =
             FindChildByClassName(contentGrid, L"SystemTray.TextIconContent");
@@ -1351,10 +1488,12 @@ void LoadSettings() {
     g_settings.hideVolumeIcon = Wh_GetIntSetting(L"hideVolumeIcon");
     g_settings.hideNetworkIcon = Wh_GetIntSetting(L"hideNetworkIcon");
     g_settings.hideBatteryIcon = Wh_GetIntSetting(L"hideBatteryIcon");
+    g_settings.grayscaleBatteryIcon = Wh_GetIntSetting(L"grayscaleBatteryIcon");
     g_settings.hideMicrophoneIcon = Wh_GetIntSetting(L"hideMicrophoneIcon");
     g_settings.hideGeolocationIcon = Wh_GetIntSetting(L"hideGeolocationIcon");
     g_settings.hideStudioEffectsIcon =
         Wh_GetIntSetting(L"hideStudioEffectsIcon");
+    g_settings.hideRecallIcon = Wh_GetIntSetting(L"hideRecallIcon");
     g_settings.hideLanguageBar = Wh_GetIntSetting(L"hideLanguageBar");
     g_settings.hideLanguageSupplementaryIcons =
         Wh_GetIntSetting(L"hideLanguageSupplementaryIcons");
@@ -1416,6 +1555,21 @@ void ApplySettings() {
                 g_mainStackTextChangedToken = 0;
             }
 
+            // Unregister and restore battery TextBlock foregrounds. ApplyStyle
+            // below will re-register if grayscale is still enabled. This also
+            // covers stale entries whose icon view was destroyed.
+            for (auto& state : g_batteryTextBlockStates) {
+                auto textBlock = state.textBlock.get();
+                if (!textBlock) {
+                    continue;
+                }
+                textBlock.UnregisterPropertyChangedCallback(
+                    Controls::TextBlock::ForegroundProperty(),
+                    state.foregroundChangedToken);
+                textBlock.Foreground(state.savedForeground);
+            }
+            g_batteryTextBlockStates.clear();
+
             auto xamlRoot = GetTaskbarXamlRoot(param.hTaskbarWnd);
             if (!xamlRoot) {
                 Wh_Log(L"Getting XamlRoot failed");
@@ -1423,14 +1577,14 @@ void ApplySettings() {
             }
 
             if (!ApplyStyle(xamlRoot)) {
-                Wh_Log(L"ApplyStyles failed");
+                Wh_Log(L"ApplyStyle failed");
             }
         },
         &param);
 }
 
-bool HookTaskbarViewDllSymbols(HMODULE module) {
-    // Taskbar.View.dll
+bool HookSystemTraySymbols(HMODULE module) {
+    // SystemTray.dll, Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
@@ -1439,24 +1593,71 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         },
     };
 
-    return HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks));
+    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return false;
+    }
+
+    return true;
 }
 
-HMODULE GetTaskbarViewModuleHandle() {
-    HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
+    void* pFixedFileInfo = nullptr;
+    UINT uPtrLen = 0;
+
+    HRSRC hResource =
+        FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
+    if (hResource) {
+        HGLOBAL hGlobal = LoadResource(hModule, hResource);
+        if (hGlobal) {
+            void* pData = LockResource(hGlobal);
+            if (pData) {
+                if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) ||
+                    uPtrLen == 0) {
+                    pFixedFileInfo = nullptr;
+                    uPtrLen = 0;
+                }
+            }
+        }
+    }
+
+    if (puPtrLen) {
+        *puPtrLen = uPtrLen;
+    }
+
+    return (VS_FIXEDFILEINFO*)pFixedFileInfo;
+}
+
+// Returns the module that hosts winrt::SystemTray::* in the current build.
+// Order matters: SystemTray.dll is the new home (Win11 Insider 26200+);
+// Taskbar.View.dll is kept as fallbacks so this still works on older builds.
+HMODULE GetSystemTrayModuleHandle() {
+    HMODULE module = GetModuleHandle(L"SystemTray.dll");
     if (!module) {
-        module = GetModuleHandle(L"ExplorerExtensions.dll");
+        module = GetModuleHandle(L"Taskbar.View.dll");
+        if (module) {
+            // First known module version without SystemTray is Taskbar.View.dll
+            // 2604.8002.200.6000.
+            VS_FIXEDFILEINFO* fixedFileInfo =
+                GetModuleVersionInfo(module, nullptr);
+            WORD moduleMajor =
+                fixedFileInfo ? HIWORD(fixedFileInfo->dwFileVersionMS) : 0;
+            if (!moduleMajor || moduleMajor >= 2604) {
+                Wh_Log(L"Skipping Taskbar.View.dll version %d", moduleMajor);
+                module = nullptr;
+            }
+        }
     }
 
     return module;
 }
 
-void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
-    if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
-        !g_taskbarViewDllLoaded.exchange(true)) {
+void HandleLoadedModuleIfSystemTray(HMODULE module, LPCWSTR lpLibFileName) {
+    if (!g_systemTrayModuleHooked && GetSystemTrayModuleHandle() == module &&
+        !g_systemTrayModuleHooked.exchange(true)) {
         Wh_Log(L"Loaded %s", lpLibFileName);
 
-        if (HookTaskbarViewDllSymbols(module)) {
+        if (HookSystemTraySymbols(module)) {
             Wh_ApplyHookOperations();
         }
     }
@@ -1469,7 +1670,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
                                    DWORD dwFlags) {
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (module) {
-        HandleLoadedModuleIfTaskbarView(module, lpLibFileName);
+        HandleLoadedModuleIfSystemTray(module, lpLibFileName);
     }
 
     return module;
@@ -1510,21 +1711,21 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-        g_taskbarViewDllLoaded = true;
-        if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
+    if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
+        g_systemTrayModuleHooked = true;
+        if (!HookSystemTraySymbols(systemTrayModule)) {
             return FALSE;
         }
     } else {
-        Wh_Log(L"Taskbar view module not loaded yet");
+        Wh_Log(L"System tray module not loaded yet");
 
         HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
         auto pKernelBaseLoadLibraryExW =
             (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
                                                       "LoadLibraryExW");
-        WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
-                                           LoadLibraryExW_Hook,
-                                           &LoadLibraryExW_Original);
+        WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
+                                       LoadLibraryExW_Hook,
+                                       &LoadLibraryExW_Original);
     }
 
     if (!HookTaskbarDllSymbols()) {
@@ -1537,12 +1738,12 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    if (!g_taskbarViewDllLoaded) {
-        if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-            if (!g_taskbarViewDllLoaded.exchange(true)) {
-                Wh_Log(L"Got Taskbar.View.dll");
+    if (!g_systemTrayModuleHooked) {
+        if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
+            if (!g_systemTrayModuleHooked.exchange(true)) {
+                Wh_Log(L"Got system tray module");
 
-                if (HookTaskbarViewDllSymbols(taskbarViewModule)) {
+                if (HookSystemTraySymbols(systemTrayModule)) {
                     Wh_ApplyHookOperations();
                 }
             }

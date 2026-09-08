@@ -2,7 +2,7 @@
 // @id              restore-explorer-exploring-mode
 // @name            Restore Explorer "Exploring" Mode
 // @description     Reintroduces File Explorer's "Exploring" mode from Windows XP and before
-// @version         1.2.0
+// @version         1.4.0
 // @author          aubymori
 // @github          https://github.com/aubymori
 // @include         *
@@ -51,11 +51,14 @@ Windows Registry Editor Version 5.00
   - unchanged: Unchanged
   - documents: Documents (Windows 2000, Me, XP, Vista)
   - sys_drive_root: Windows drive root (C:\) (Windows 95, 98, NT 4.0)
-- explorer_icon: true
-  $name: Explorer icon
+- explorer_icon: "1"
+  $name: Explorer icon mode
   $description:
-    Changes Explorer windows to have a generic Windows Explorer icon when the folder tree is open. 
-    (Windows XP and before)
+    When the window should have the Explorer icon instead of the folder's icon.
+  $options:
+  - 0: Never (Windows Vista+)
+  - 1: When folder tree open (Windows 98 (IE 5.5) - XP)
+  - ie40: In Explore mode (Windows 95 - 98 (IE 5.0))
 - exploring_text: Exploring
   $name: "\"Exploring\" text"
   $description:
@@ -66,11 +69,15 @@ Windows Registry Editor Version 5.00
   $description:
     When enabled, taking the "Open" action on a folder in an open/save dialog will open
     the folder in a new Explorer window (Windows XP and before).
-- dont_store_tree_state: true
-  $name: Don't store tree view state
+- dont_store_tree_state: "1"
+  $name: Tree view initial state mode
   $description:
-    When enabled, the tree view's initial open state will be based on whether the window was opened in
-    explore mode and will not be carried between windows (Windows XP and before).
+    Changes the behavior of the tree view's initial open state to match the selected
+    OS.
+  $options:
+  - 1: Windows 95 - XP
+  - vista: Windows Vista
+  - 0: Windows 7+
 */
 // ==/WindhawkModSettings==
 
@@ -112,10 +119,20 @@ enum EXE_INVOKE_LOCATION
     EIL_DOCUMENTS,
     EIL_SYSDRIVEROOT,
 } g_exeInvokeLocation = EIL_UNCHANGED;
-bool g_fExplorerIcon = false;
+enum EXPLORER_ICON_MODE
+{
+    EIM_VISTA = 0,
+    EIM_IE55,
+    EIM_IE40,
+} g_explorerIconMode = EIM_VISTA;
+enum TREE_VIEW_MODE
+{
+    TVM_XP = 0,
+    TVM_VISTA,
+    TVM_7,
+} g_treeViewMode = TVM_7;
 WindhawkUtils::StringSetting g_spszExploringText;
 bool g_fOpenInNewWindow = false;
-bool g_fDontStoreTreeState = false;
 
 interface IBrowserEvents : IUnknown
 {
@@ -265,7 +282,34 @@ void CShellBrowser__SetTitle_hook(void *pThis)
 void (*CShellBrowser__SetIcon_orig)(void *);
 void CShellBrowser__SetIcon_hook(void *pThis)
 {
-    if (g_fExplorerIcon && CShellBrowser__IsExplorerBandVisible(pThis))
+    bool fExplorerIcon;
+    switch (g_explorerIconMode)
+    {
+        case EIM_VISTA:
+            fExplorerIcon = false;
+            break;
+        case EIM_IE55:
+            fExplorerIcon = CShellBrowser__IsExplorerBandVisible(pThis);
+            break; 
+        case EIM_IE40:
+        {
+            fExplorerIcon = false;
+            IPropertyBag *pbp = nullptr;
+            IServiceProvider *psp = (IServiceProvider *)((char *)pThis + 40);
+            if (SUCCEEDED(psp->QueryService(SID_ShellBrowserPropStore, &pbp)))
+            {
+                BOOL fInExploreMode;
+                if (SUCCEEDED(PSPropertyBag_ReadBOOL(pbp, L"ExpandInitialNav", &fInExploreMode)))
+                {
+                    fExplorerIcon = fInExploreMode;
+                }
+                pbp->Release();
+            }
+            break;
+        }
+    }
+
+    if (fExplorerIcon)
     {
         IBrowserEvents *pbe = *((IBrowserEvents **)pThis + 78);
         static HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
@@ -323,6 +367,37 @@ HRESULT CMemPropStore_Write_hook(
         if (SUCCEEDED(PSPropertyBag_ReadULONGLONG(pThis, L"WH_ShellBrowserPtr", (ULONGLONG *)&pShellBrowser)))
         {
             CShellBrowser__SetIcon_hook(pShellBrowser);
+        }
+    }
+    else if (g_treeViewMode == TVM_VISTA && !wcscmp(pszPropName, L"ExpandInitialNav"))
+    {
+        if (pVar->boolVal == VARIANT_TRUE)
+        {
+            HKEY hkey;
+            if (ERROR_SUCCESS == RegOpenKeyExW(
+                HKEY_CURRENT_USER,
+                L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Modules\\GlobalSettings\\Sizer",
+                0,
+                KEY_READ | KEY_WRITE,
+                &hkey))
+            {
+                DWORD cbData = 0;
+                if (ERROR_SUCCESS == RegQueryValueExW(hkey, L"PageSpaceControlSizer", nullptr, nullptr, nullptr, &cbData)
+                    && cbData > 4)
+                {
+                    LPBYTE lpData = (LPBYTE)LocalAlloc(LPTR, cbData);
+                    if (lpData)
+                    {
+                        if (ERROR_SUCCESS == RegQueryValueExW(hkey, L"PageSpaceControlSizer", nullptr, nullptr, lpData, &cbData))
+                        {
+                            lpData[4] = 1;
+                            RegSetValueExW(hkey, L"PageSpaceControlSizer", 0, REG_BINARY, lpData, cbData);
+                        }
+                        LocalFree(lpData);
+                    }
+                }
+                RegCloseKey(hkey);
+            }
         }
     }
     return hr;
@@ -388,7 +463,7 @@ HRESULT CDUISizerElement__WriteVisibleToPropBag_hook(
 
             // If we don't want to store the tree state, open tree based on whether or not we are in
             // explore mode. (XP and before)
-            if (g_fDontStoreTreeState)
+            if (g_treeViewMode == TVM_XP)
             {
                 if (SUCCEEDED(PSPropertyBag_ReadBOOL(ppbBrowser, L"ExpandInitialNav", &fProp)))
                     fValue = fProp;
@@ -662,8 +737,34 @@ void Wh_ModSettingsChanged(void)
 {
 #ifdef _WIN64
     g_spszExploringText = WindhawkUtils::StringSetting::make(L"exploring_text");
-    g_fExplorerIcon = Wh_GetIntSetting(L"explorer_icon");
-    g_fDontStoreTreeState = Wh_GetIntSetting(L"dont_store_tree_state");
+    LPCWSTR pszIconMode = Wh_GetStringSetting(L"explorer_icon");
+    if (!wcscmp(pszIconMode, L"1"))
+    {
+        g_explorerIconMode = EIM_IE55;
+    }
+    else if (!wcscmp(pszIconMode, L"ie40"))
+    {
+        g_explorerIconMode = EIM_IE40;
+    }
+    else
+    {
+        g_explorerIconMode = EIM_VISTA;
+    }
+    Wh_FreeStringSetting(pszIconMode);
+    LPCWSTR pszTreeMode = Wh_GetStringSetting(L"dont_store_tree_state");
+    if (!wcscmp(pszTreeMode, L"1"))
+    {
+        g_treeViewMode = TVM_XP;
+    }
+    else if (!wcscmp(pszTreeMode, L"vista"))
+    {
+        g_treeViewMode = TVM_VISTA;
+    }
+    else
+    {
+        g_treeViewMode = TVM_7;
+    }
+    Wh_FreeStringSetting(pszTreeMode);
 #endif
     g_fOpenInNewWindow = Wh_GetIntSetting(L"open_in_new_window");
 }

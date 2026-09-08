@@ -2,7 +2,7 @@
 // @id              virtual-desktop-helper
 // @name            Virtual Desktop Helper
 // @description     Switch virtual desktops, move windows between desktops, and pin windows with customizable hotkeys
-// @version         2.4.1
+// @version         2.4.2
 // @author          u2x1
 // @github          https://github.com/u2x1
 // @include         windhawk.exe
@@ -1323,7 +1323,13 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-  bool isService = false;
+  DWORD sessionId;
+  if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+      sessionId == 0) {
+    return FALSE;
+  }
+
+  bool isExcluded = false;
   bool isToolModProcess = false;
   bool isCurrentToolModProcess = false;
   int argc;
@@ -1334,8 +1340,10 @@ BOOL Wh_ModInit() {
   }
 
   for (int i = 1; i < argc; i++) {
-    if (wcscmp(argv[i], L"-service") == 0) {
-      isService = true;
+    if (wcscmp(argv[i], L"-service") == 0 ||
+        wcscmp(argv[i], L"-service-start") == 0 ||
+        wcscmp(argv[i], L"-service-stop") == 0) {
+      isExcluded = true;
       break;
     }
   }
@@ -1352,7 +1360,7 @@ BOOL Wh_ModInit() {
 
   LocalFree(argv);
 
-  if (isService) {
+  if (isExcluded) {
     return FALSE;
   }
 

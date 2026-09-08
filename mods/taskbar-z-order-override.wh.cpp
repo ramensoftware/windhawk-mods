@@ -2,9 +2,9 @@
 // @id              taskbar-z-order-override
 // @name            Taskbar Z-Order Override
 // @description     Control whether the taskbar stays always on top, always at the bottom, or behaves like a normal window
-// @version         0.7
+// @version         0.8.1
 // @author          meteoni
-// @github          https://github.com/Meteony
+// @github          https://github.com/Meteoni
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lcomctl32
@@ -21,15 +21,16 @@ Control whether the Windows taskbar stays always on top, always at the bottom, o
 
 Makes the taskbar behave like a regular window - like how it was possible pre-Vista. 
 
-![Behaves like a normal window](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/taskbar-z-order-override/interactive.gif)
+![Behaves like a normal window](https://raw.githubusercontent.com/Meteoni/meteoni-assets/main/taskbar-z-order-override/interactive.gif)
 
 ### Always on top
 
-Keeps the taskbar above normal windows - no matter in games or browser fullscreen. 
+Keeps the taskbar above normal windows. 
+Great for games or browser fullscreen. 
 
 This is mainly useful for people who use **auto-hide** and want the taskbar to stay accessible consistently.
 
-![Always on top](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/taskbar-z-order-override/always_on_top_low.gif)
+![Always on top](https://raw.githubusercontent.com/Meteoni/meteoni-assets/main/taskbar-z-order-override/always_on_top_low.gif)
 
 ### Always at bottom
 
@@ -37,13 +38,13 @@ Keeps the taskbar at the bottom of the Z-order.
 
 If you are more of a window enjoyer than a taskbar enjoyer, this is for you. 
 
-![Always at bottom](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/taskbar-z-order-override/always_bottom_low.gif)
+![Always at bottom](https://raw.githubusercontent.com/Meteoni/meteoni-assets/main/taskbar-z-order-override/always_bottom_low.gif)
 
 ## Notes
 
 - Supports the main taskbar and secondary taskbars on multi-monitor setups.
 - Intended for Explorer's standard taskbar windows.
-- Since Windows taskbar behavior differs across versions and builds, some edge cases may vary depending on your system configuration.
+- UWP fullscreen (entered with Shift + Win + Enter) expects Windows to temporarily promote the taskbar. Since Normal window mode & Always at bottom mode are designed to block those changes, the taskbar might not remain visible. If you don't actively use UWP fullscreen, this should not be a concern. 
 
 ## Credits
 
@@ -179,24 +180,36 @@ static BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND hWndInsertAfter, int X,
   return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
 }
 
-// Explorer may try to move the taskbar to a different window band.
-// e.g. opening the Star* menu -> taskbar raised to band 6. 
-// Each call bumps the taskbar to the top of the specified band even 
-// if the band number is identical. 
-//
-// We block that change entirely to make sure Windows doesn't  
-// mess with our own order. 
-//
-// dwBand = 1: normal desktop band?
-// dwBand = 6: normal taskbar band?
-static BOOL WINAPI SetWindowBand_Hook(HWND hWnd, HWND hwndInsertAfter,
+/*
+Explorer may try to move the taskbar to a different window band.
+For example, opening the start menu / full-screen UWP apps
+moves taskbar to band 6. 
+
+Each call bumps the taskbar to the top of the specified band even 
+if the band number is identical. 
+
+In top mode, we allow band promotion so that UWP full screen
+behavior still works.
+
+In bottom & interactive modes: we block that change so Windows
+doesn't override our policy. 
+*/
+static BOOL WINAPI SetWindowBand_Hook(HWND hWnd,
+                                      HWND hwndInsertAfter,
                                       DWORD dwBand) {
-  // Wh_Log(L"Blocked Taskbar band change -> %lu", dwBand);
-  if (IsTrackedTaskbarWindow(hWnd)){
+  if (IsTrackedTaskbarWindow(hWnd)) {
+    //Wh_Log(L"Attempted Taskbar band change -> %lu", dwBand);
+
+    if (g_state.mode == TaskbarZOrder::Top) {
+      /* Allow Top mode to cooperate with UWP 
+      fullscreen. Not so easy for other modes */
+      return SetWindowBand_Original(hWnd, hwndInsertAfter, dwBand);
+    }
+
     return TRUE;
   }
 
-  return SetWindowBand_Original(hWnd,hwndInsertAfter, dwBand);
+  return SetWindowBand_Original(hWnd, hwndInsertAfter, dwBand);
 }
 
 static LRESULT CALLBACK TaskbarSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,

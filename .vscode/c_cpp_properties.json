@@ -1,0 +1,28 @@
+{
+    "configurations": [
+        {
+            "name": "MSVC x64",
+            "includePath": [
+                "${workspaceFolder}/.vscode/windhawk_headers_1.7.3"
+            ],
+            "defines": [
+                "UNICODE",
+                "_UNICODE",
+                "WINVER=0x0A00",
+                "_WIN32_WINNT=0x0A00",
+                "_WIN32_IE=0x0A00",
+                "NTDDI_VERSION=0x0A000008",
+                "__USE_MINGW_ANSI_STDIO=0",
+                "WH_MOD",
+                "WH_EDITING",
+                "NOMINMAX"
+            ],
+            "cppStandard": "c++23",
+            "intelliSenseMode": "windows-msvc-x64",
+            "forcedInclude": [
+                "${workspaceFolder}/.vscode/windhawk_headers_1.7.3/windhawk_api.h"
+            ]
+        }
+    ],
+    "version": 4
+}

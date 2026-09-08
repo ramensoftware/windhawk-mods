@@ -2,7 +2,7 @@
 // @id              taskbar-music-lounge
 // @name            Taskbar Music Lounge
 // @description     A native-style music ticker with media controls.
-// @version         4.0.1
+// @version         4.0.2
 // @author          Hashah2311
 // @github          https://github.com/Hashah2311
 // @include         explorer.exe
@@ -830,8 +830,13 @@ void WhTool_ModUninit() {
 void WhTool_ModSettingsChanged() {
     LoadSettings();
     if (g_hMediaWindow) {
-         SendMessage(g_hMediaWindow, WM_TIMER, IDT_POLL_MEDIA, 0);
-         SendMessage(g_hMediaWindow, WM_SETTINGCHANGE, 0, 0); 
+         PostMessage(g_hMediaWindow, WM_TIMER, IDT_POLL_MEDIA, 0);
+         PostMessage(g_hMediaWindow, WM_SETTINGCHANGE, 0, 0);
+         // Reposition/resize the window to pick up new size and offsets. This
+         // path is normally only triggered by taskbar movement, so without it
+         // changes to Panel Width/Height/Offset wouldn't apply until the mod is
+         // reloaded.
+         PostMessage(g_hMediaWindow, WM_APP + 10, 0, 0);
     }
 }
 

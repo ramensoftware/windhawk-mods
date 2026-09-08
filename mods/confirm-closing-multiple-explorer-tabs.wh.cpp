@@ -2,7 +2,7 @@
 // @id              confirm-closing-multiple-explorer-tabs
 // @name            Confirm Closing Multiple Tabs in File Explorer
 // @description     Shows a confirmation dialog when closing a File Explorer window with multiple tabs open
-// @version         1.0.1
+// @version         1.1
 // @author          Kitsune
 // @github          https://github.com/AromaKitsune
 // @include         explorer.exe
@@ -12,21 +12,30 @@
 // ==WindhawkModReadme==
 /*
 # Confirm Closing Multiple Tabs in File Explorer
-This mod adds a confirmation dialog that spawns when you attempt to close a File Explorer window
-with multiple tabs open, preventing accidental closure of all tabs.
+This mod shows a confirmation dialog when you attempt to close a File Explorer
+window with multiple tabs open, preventing accidental closure of all tabs.
 
-![Preview](https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/confirm-closing-multiple-explorer-tabs.png)
+![](https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/confirm-closing-multiple-explorer-tabs_2026-06-20.png)
 
 ## Configuration
-**Default button**: Choose whether "Close Tabs" or "Cancel" is the default button in the confirmation dialog.
+* **Tab count threshold:** The minimum number of open tabs required to show
+  the confirmation dialog.
+* **Default button:** Choose whether "Close Tabs" or "Cancel" is the default
+  button in the confirmation dialog.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
+- tabCountThreshold: 2
+  $name: Tab count threshold
+  $description: >-
+    The minimum number of open tabs required to show the confirmation dialog
 - defaultButton: cancel
   $name: Default button
-  $description: The button that is selected by default in the confirmation dialog
+  $description: >-
+    Choose whether "Close Tabs" or "Cancel" is the default button in the
+    confirmation dialog
   $options:
     - closeTabs: Close Tabs
     - cancel: Cancel
@@ -35,110 +44,107 @@ with multiple tabs open, preventing accidental closure of all tabs.
 
 #include <windhawk_utils.h>
 #include <windows.h>
+#include <algorithm>
 #include <commctrl.h>
-#include <cstdio>
+#include <cwchar>
 
-// Window class definitions
-#define WC_EXPLORER L"CabinetWClass"
-#define WC_TAB      L"ShellTabWindowClass"
+struct
+{
+    int tabCountThreshold;
+    int defaultButton;
+} settings;
 
-// Helper to count tabs
-// We define a callback for EnumChildWindows to count instances of ShellTabWindowClass
-BOOL CALLBACK CountTabsCallback(HWND hWnd, LPARAM lParam) {
-    int* pCount = (int*)lParam;
-    wchar_t className[256];
-    if (GetClassNameW(hWnd, className, 256)) {
-        if (wcscmp(className, WC_TAB) == 0) {
-            (*pCount)++;
-        }
+// Enumeration callback: Count instances of ShellTabWindowClass
+BOOL CALLBACK CountTabsEnumProc(HWND hChildWnd, LPARAM lParam)
+{
+    auto* pcTabs = reinterpret_cast<int*>(lParam);
+    WCHAR szClassName[32];
+    if (GetClassNameW(hChildWnd, szClassName, ARRAYSIZE(szClassName)) &&
+        _wcsicmp(szClassName, L"ShellTabWindowClass") == 0)
+    {
+        (*pcTabs)++;
     }
     return TRUE;
 }
 
-int GetTabCount(HWND hExplorer) {
-    int count = 0;
-    EnumChildWindows(hExplorer, CountTabsCallback, (LPARAM)&count);
-    return count;
+// Helper: Get the total number of tabs
+int CountExplorerTabs(HWND hExplorerWnd)
+{
+    int cTabs = 0;
+    EnumChildWindows(hExplorerWnd, CountTabsEnumProc,
+        reinterpret_cast<LPARAM>(&cTabs));
+    return cTabs;
 }
 
-// Subclass procedure to intercept WM_CLOSE
-LRESULT CALLBACK ExplorerSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
-    if (uMsg == WM_CLOSE) {
-        int tabCount = GetTabCount(hWnd);
+// Subclass procedure for File Explorer windows: Show a confirmation dialog when
+// closing multiple tabs
+LRESULT CALLBACK ExplorerSubclassProc(HWND hExplorerWnd, UINT uMsg,
+    WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData)
+{
+    if (uMsg == WM_CLOSE)
+    {
+        int cTabs = CountExplorerTabs(hExplorerWnd);
 
-        // Only trigger if 2 or more tabs are open
-        if (tabCount >= 2) {
-            // Prepare the dynamic Main Instruction text
-            wchar_t mainInstruction[64];
-            swprintf_s(mainInstruction, L"Close %d tabs?", tabCount);
+        // Prompt for confirmation if the tab count threshold is met
+        if (cTabs >= settings.tabCountThreshold)
+        {
+            // Prepare the dynamic Main Instruction and button text
+            WCHAR szMainInstructionBuffer[32];
+            PCWSTR pszMainInstruction;
+            PCWSTR pszCloseButtonText;
+            if (cTabs == 1)
+            {
+                pszMainInstruction = L"Close 1 tab?";
+                pszCloseButtonText = L"Close Tab";
+            }
+            else
+            {
+                swprintf_s(szMainInstructionBuffer,
+                    ARRAYSIZE(szMainInstructionBuffer),
+                    L"Close %d tabs?", cTabs);
+                pszMainInstruction = szMainInstructionBuffer;
+                pszCloseButtonText = L"Close Tabs";
+            }
 
             // Define custom buttons
-            const TASKDIALOG_BUTTON buttons[] = {
-                { IDOK, L"Close Tabs" },
+            const TASKDIALOG_BUTTON rgButtons[] =
+            {
+                { IDOK, pszCloseButtonText },
                 { IDCANCEL, L"Cancel" }
             };
 
-            // Determine default button from settings
-            int nDefaultButtonId = IDCANCEL; // Default button fallback
-            PCWSTR defaultButtonSetting = Wh_GetStringSetting(L"defaultButton");
+            // Task Dialog configuration
+            TASKDIALOGCONFIG taskDialogConfig{};
+            taskDialogConfig.cbSize = sizeof(taskDialogConfig);
+            taskDialogConfig.hwndParent = hExplorerWnd;
+            taskDialogConfig.dwFlags = TDF_POSITION_RELATIVE_TO_WINDOW;
+            taskDialogConfig.pszWindowTitle = L"File Explorer";
+            taskDialogConfig.pszMainIcon = TD_INFORMATION_ICON;
+            taskDialogConfig.pszMainInstruction = pszMainInstruction;
+            taskDialogConfig.cButtons = ARRAYSIZE(rgButtons);
+            taskDialogConfig.pButtons = rgButtons;
+            taskDialogConfig.nDefaultButton = settings.defaultButton;
 
-            if (defaultButtonSetting) {
-                if (wcscmp(defaultButtonSetting, L"closeTabs") == 0) {
-                    nDefaultButtonId = IDOK;
-                }
-                Wh_FreeStringSetting(defaultButtonSetting);
-            }
-
-            // Dialog configuration
-            TASKDIALOGCONFIG config = { 0 };
-            config.cbSize = sizeof(config);
-            config.hwndParent = hWnd;
-            config.dwFlags = TDF_POSITION_RELATIVE_TO_WINDOW; // Center over the File Explorer window
-            config.pszWindowTitle = L"File Explorer";         // Title
-            config.pszMainIcon = TD_INFORMATION_ICON;         // Icon
-            config.pszMainInstruction = mainInstruction;      // Main instruction (big blue text)
-
-            // Button configuration
-            config.pButtons = buttons;
-            config.cButtons = ARRAYSIZE(buttons);
-            config.nDefaultButton = nDefaultButtonId; // Default button based on setting
-
-            int nButton = 0;
-            HRESULT hr = TaskDialogIndirect(&config, &nButton, NULL, NULL);
-
-            if (SUCCEEDED(hr)) {
-                if (nButton != IDOK) {
-                    // User clicked "Cancel" or "X", then don't close the File Explorer window
-                    return 0;
-                }
-                // User clicked "Close Tabs", then fall through to DefSubclassProc to close the File Explorer window
+            int idButton = 0;
+            HRESULT hResult = TaskDialogIndirect(&taskDialogConfig, &idButton,
+                nullptr, nullptr);
+            if (SUCCEEDED(hResult) && idButton != IDOK)
+            {
+                return 0;
             }
         }
     }
-
-    if (uMsg == WM_NCDESTROY) {
-        // Remove the subclass when the File Explorer window is destroyed
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, ExplorerSubclassProc);
-        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    else if (uMsg == WM_NCDESTROY)
+    {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hExplorerWnd,
+            ExplorerSubclassProc);
     }
-
-    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    return DefSubclassProc(hExplorerWnd, uMsg, wParam, lParam);
 }
 
-// Hook logic to attach the subclass to File Explorer windows
-void AttachSubclass(HWND hWnd) {
-    WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, ExplorerSubclassProc, 0);
-}
-
-// Hook logic to detach the subclass
-void DetachSubclass(HWND hWnd) {
-    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, ExplorerSubclassProc);
-}
-
-// Hook CreateWindowExW to catch new File Explorer windows
-using CreateWindowExW_t = HWND(WINAPI*)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
+// Hook for CreateWindowExW
+using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_Original;
-
 HWND WINAPI CreateWindowExW_Hook(
     DWORD dwExStyle,
     LPCWSTR lpClassName,
@@ -151,7 +157,8 @@ HWND WINAPI CreateWindowExW_Hook(
     HWND hWndParent,
     HMENU hMenu,
     HINSTANCE hInstance,
-    LPVOID lpParam)
+    LPVOID lpParam
+)
 {
     HWND hWnd = CreateWindowExW_Original(
         dwExStyle,
@@ -167,55 +174,89 @@ HWND WINAPI CreateWindowExW_Hook(
         hInstance,
         lpParam
     );
-
-    if (hWnd && lpClassName && (UINT_PTR)lpClassName > 0xFFFF) {
-        if (wcscmp(lpClassName, WC_EXPLORER) == 0) {
-            AttachSubclass(hWnd);
-        }
+    if (hWnd && lpClassName && !IS_INTRESOURCE(lpClassName) &&
+        _wcsicmp(lpClassName, L"CabinetWClass") == 0)
+    {
+        WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd,
+            ExplorerSubclassProc, 0);
     }
-
     return hWnd;
 }
 
-// Enumeration callback for existing File Explorer windows
-BOOL CALLBACK EnumWindowsCallback(HWND hWnd, LPARAM lParam) {
-    wchar_t className[256];
-    if (GetClassNameW(hWnd, className, 256)) {
-        if (wcscmp(className, WC_EXPLORER) == 0) {
-            AttachSubclass(hWnd);
-        }
+// Enumeration callback: Attach the subclass to existing File Explorer windows
+BOOL CALLBACK InitEnumExplorerWindowsProc(HWND hWnd, LPARAM lParam)
+{
+    DWORD dwProcessId = 0;
+    WCHAR szClassName[16];
+    if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+        dwProcessId == GetCurrentProcessId() &&
+        GetClassNameW(hWnd, szClassName, ARRAYSIZE(szClassName)) &&
+        _wcsicmp(szClassName, L"CabinetWClass") == 0)
+    {
+        WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd,
+            ExplorerSubclassProc, 0);
     }
     return TRUE;
 }
 
-// Enumeration callback for removing subclass
-BOOL CALLBACK EnumWindowsRemoveCallback(HWND hWnd, LPARAM lParam) {
-    wchar_t className[256];
-    if (GetClassNameW(hWnd, className, 256)) {
-        if (wcscmp(className, WC_EXPLORER) == 0) {
-            DetachSubclass(hWnd);
-        }
+// Enumeration callback: Detach the subclass from existing File Explorer windows
+BOOL CALLBACK UninitEnumExplorerWindowsProc(HWND hWnd, LPARAM lParam)
+{
+    DWORD dwProcessId = 0;
+    WCHAR szClassName[16];
+    if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+        dwProcessId == GetCurrentProcessId() &&
+        GetClassNameW(hWnd, szClassName, ARRAYSIZE(szClassName)) &&
+        _wcsicmp(szClassName, L"CabinetWClass") == 0)
+    {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd,
+            ExplorerSubclassProc);
     }
     return TRUE;
+}
+
+// Load settings
+void LoadSettings()
+{
+    settings.tabCountThreshold =
+        std::max(1, Wh_GetIntSetting(L"tabCountThreshold"));
+
+    settings.defaultButton = IDCANCEL;
+    if (wcscmp(WindhawkUtils::StringSetting::make(L"defaultButton").get(),
+            L"closeTabs") == 0)
+    {
+        settings.defaultButton = IDOK;
+    }
 }
 
 // Mod initialization
-BOOL Wh_ModInit() {
+BOOL Wh_ModInit()
+{
     Wh_Log(L"Init");
 
-    // Hook creation of new File Explorer windows
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook, (void**)&CreateWindowExW_Original);
+    LoadSettings();
 
-    // Attach to any currently open File Explorer windows
-    EnumWindows(EnumWindowsCallback, 0);
+    WindhawkUtils::SetFunctionHook(
+        CreateWindowExW,
+        CreateWindowExW_Hook,
+        &CreateWindowExW_Original
+    );
+
+    EnumWindows(InitEnumExplorerWindowsProc, 0);
 
     return TRUE;
 }
 
 // Mod uninitialization
-void Wh_ModUninit() {
+void Wh_ModUninit()
+{
     Wh_Log(L"Uninit");
 
-    // Clean-up: Remove subclass from all File Explorer windows to prevent dangling pointers (aka crash)
-    EnumWindows(EnumWindowsRemoveCallback, 0);
+    EnumWindows(UninitEnumExplorerWindowsProc, 0);
+}
+
+// Reload settings
+void Wh_ModSettingsChanged()
+{
+    LoadSettings();
 }

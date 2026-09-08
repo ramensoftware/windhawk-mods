@@ -2,14 +2,15 @@
 // @id              win7-login-fade
 // @name            Logon & Sleep Fade Restorer
 // @description     Bring back the old logon screen and sleep fade effect
-// @version         1.3
+// @version         1.4
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
 // @homepage        https://www.ingan121.com/
 // @include         winlogon.exe
+// @include         LogonUI.exe
+// @include         LockApp.exe
 // @include         *
-// @architecture    x86-64
 // @compilerOptions -lgdi32
 // ==/WindhawkMod==
 
@@ -47,6 +48,13 @@
 * Turning off the monitor with the power button action (or sleeping on Modern Standby devices) will not trigger the sleep fade effect, as it is handled internally by the kernel without notifying a user-mode component before initiating the action.
   * Monitor off initiated by the idle timer can have fade added as usual.
 * Only `Gamma (Kernel)` and `DWM (Original)` logon/logoff fade types are supported on Windows 8 for now, to avoid critical issues that I have observed. Early Windows 10 versions have not been thoroughly tested, so it is recommended to avoid `None` and `Gamma (Reimplemented)` modes on those versions as a precaution, until I can confirm their stability.
+* The monitor off fade effect in the Windows 10+ lock screen may have a brief flash at the end of the fade when turning off the monitor.
+* On 32-bit systems, only the monitor off and sleep/hibernation fades are supported, as this mod was never tested on 32-bit Windows systems.
+## Miscellaneous
+* To allow fading in the logon screen when turning off the monitor with the idle timer, you must allow Windhawk to inject into the **LogonUI.exe**.
+* To do so, add it to the process inclusion list in the advanced settings.
+
+![Advanced settings screenshot](https://i.imgur.com/LRhREtJ.png)
 */
 // ==/WindhawkModReadme==
 
@@ -113,6 +121,10 @@
 #include <sddl.h>
 #include <versionhelpers.h>
 
+#ifdef _WIN64
+#define ENABLE_WINLOGON_HOOKS
+#endif
+
 #define WM_MONOFFTASK (WM_USER + 1)
 #define OVERLAY_WIN_CLASS L"LogonSleepFadeOverlay"
 
@@ -134,10 +146,12 @@ struct settings {
 } g_settings;
 
 bool g_isWinlogon = false;
+bool g_isLockApp = false;
 HANDLE g_fadeMutex = NULL;
 std::atomic<bool> g_isFadeInProgress = false;
 std::atomic<bool> g_isExiting = false;
 std::atomic<HANDLE> g_monitorOffThread = NULL;
+std::atomic<bool> g_keepOrigWndProc = false;
 
 typedef struct _MONITOR_INFO {
     HDC hDC = NULL;
@@ -147,7 +161,7 @@ typedef struct _MONITOR_INFO {
 struct GlobalFadeData {
     int monitorCount;
     MONITOR_INFO* monitors;
-} g_fadeData;
+} g_monitorOffFadeData, g_sleepFadeData;
 
 bool IsFadeInProgressInThisProcess() {
     return g_isFadeInProgress.load();
@@ -322,6 +336,7 @@ int GetDeviceRefreshRate() {
     return refreshRate;
 }
 
+#ifdef ENABLE_WINLOGON_HOOKS
 // flags: this third argument was introduced in Windows 8, and it apparently controls whether to use the DWM fade or not,
 // but I did not find any code responsible for parsing the flags; only seen it being used by winlogon.exe. Known values:
 // 53: 8.0, 8.1 login
@@ -408,28 +423,46 @@ __int64 __fastcall SwitchDesktopWithFade_hook(HDESK hDesktop, DWORD duration, DW
     // Original SwitchDesktopWithFade usually returns 1; probably it's also WINBOOL like SwitchDesktop
     return result;
 }
+#endif
 
 #pragma region Hooks and functions for monitor off fading
 typedef NTSTATUS (NTAPI* NtPowerInformation_t)(POWER_INFORMATION_LEVEL, PVOID, ULONG, PVOID, ULONG);
 NtPowerInformation_t NtPowerInformation_original;
 
-// Restore the pre-fade gamma ramps and turn off the monitor, and also clean up the monitor info data.
-void RestoreGammaAndMonitorOff() {
-    if (g_fadeData.monitors) {
-        for (int i = 0; i < g_fadeData.monitorCount; i++) {
-            if (g_fadeData.monitors[i].hDC) {
-                SetDeviceGammaRamp(g_fadeData.monitors[i].hDC, g_fadeData.monitors[i].origGamma);
-                DeleteDC(g_fadeData.monitors[i].hDC);
-            }
+bool TurnOffMonitor(HWND initiatorWindow) {
+    NTSTATUS res = NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
+    Wh_Log(L"Called original NtPowerInformation with ScreenOff, result=0x%X", res);
+    if (res != 0) {
+        Wh_Log(L"NtPowerInformation failed to turn off the monitor");
+        if (initiatorWindow && IsWindow(initiatorWindow)) {
+            // Some sandboxed/immersive processes like LockApp.exe may fail to call NtPowerInformation(ScreenOff)
+            g_keepOrigWndProc.store(true);
+            SendMessage(initiatorWindow, WM_SYSCOMMAND, SC_MONITORPOWER, 2);
+            g_keepOrigWndProc.store(false);
+            return true; // Assume it worked lol
         }
-        free(g_fadeData.monitors);
-        g_fadeData.monitors = NULL;
-        g_fadeData.monitorCount = 0;
+        return false;
     }
-    NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
+    return true;
 }
 
-LRESULT OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+// Restore the pre-fade gamma ramps and turn off the monitor, and also clean up the monitor info data.
+void RestoreGammaAndMonitorOff(HWND initiatorWindow) {
+    if (g_monitorOffFadeData.monitors) {
+        for (int i = 0; i < g_monitorOffFadeData.monitorCount; i++) {
+            if (g_monitorOffFadeData.monitors[i].hDC) {
+                SetDeviceGammaRamp(g_monitorOffFadeData.monitors[i].hDC, g_monitorOffFadeData.monitors[i].origGamma);
+                DeleteDC(g_monitorOffFadeData.monitors[i].hDC);
+            }
+        }
+        free(g_monitorOffFadeData.monitors);
+        g_monitorOffFadeData.monitors = NULL;
+        g_monitorOffFadeData.monitorCount = 0;
+    }
+    TurnOffMonitor(initiatorWindow);
+}
+
+LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
         case WM_CREATE:
             Wh_Log(L"OverlayWndProc WM_CREATE");
@@ -437,9 +470,10 @@ LRESULT OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
         case WM_MONOFFTASK:
             Wh_Log(L"OverlayWndProc WM_MONOFFTASK");
             Sleep(100); // Needed to prevent flashing when monitor fade is started multiple times in the same process
-            RestoreGammaAndMonitorOff();
+            RestoreGammaAndMonitorOff((HWND)lParam);
             return 0;
         case WM_LBUTTONDOWN:
+            Wh_Log(L"OverlayWndProc WM_LBUTTONDOWN");
             DestroyWindow(hWnd);
             return 0;
         case WM_SETCURSOR:
@@ -450,6 +484,7 @@ LRESULT OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
             DestroyWindow(hWnd);
             return 0;
         case WM_DESTROY:
+            Wh_Log(L"OverlayWndProc WM_DESTROY");
             PostQuitMessage(0);
             return 0;
         default:
@@ -471,17 +506,20 @@ HWND CreateOverlayWindow() {
     return CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, OVERLAY_WIN_CLASS, L"", WS_POPUP, 0, 0, 0, 0, NULL, NULL, wc.hInstance, NULL);
 }
 
-DWORD MonitorOffThreadProc(LPVOID lpParameter) {
+DWORD WINAPI MonitorOffThreadProc(LPVOID lpParameter) {
+    HWND initiatorWindow = (HWND)lpParameter;
     if (BeginFade()) {
-        Wh_Log(L"Initiating monitor off fade...");
+        Wh_Log(L"Initiating monitor off fade from window 0x%p...", initiatorWindow);
         int refreshRate = GetDeviceRefreshRate();
-        if (!GetMonitorsInfo(&g_fadeData.monitors, &g_fadeData.monitorCount)) {
+        if (!GetMonitorsInfo(&g_monitorOffFadeData.monitors, &g_monitorOffFadeData.monitorCount)) {
             EndFade();
-            NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
+            TurnOffMonitor(initiatorWindow);
             return 1;
         }
 
-        HWND overlayWnd = CreateOverlayWindow();
+        // Disable the overlay mechanism for LockApp.exe as it often gets suspended when the monitor is off or after unlocking
+        // which makes hiding the overlay at the right time hard
+        HWND overlayWnd = g_isLockApp ? NULL : CreateOverlayWindow();
 
         // Unfortunately, monitor off APIs are all asynchronous and there is no reliable way to determine when the monitor is actually off
         // If we immediately restore the gamma right after calling the API, the screen will briefly flash back to normal brightness before turning off
@@ -492,18 +530,18 @@ DWORD MonitorOffThreadProc(LPVOID lpParameter) {
         //
         // I should probably rework this later to delegate the fade to a different process, also avoiding the ExitProcess block below
         if (overlayWnd) {
-            FadeDesktop(refreshRate, g_settings.sleepDuration, true, g_fadeData.monitors, g_fadeData.monitorCount);
+            FadeDesktop(refreshRate, g_settings.sleepDuration, true, g_monitorOffFadeData.monitors, g_monitorOffFadeData.monitorCount);
 
             // Show the overlay after the fade, and schedule it to hide after 1.5 seconds
             SetWindowPos(overlayWnd, HWND_TOPMOST, 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN), SWP_SHOWWINDOW);
             if (!SetTimer(overlayWnd, 1, 1500, NULL)) {
                 Wh_Log(L"SetTimer failed, GLE=%d", GetLastError());
-                RestoreGammaAndMonitorOff();
+                RestoreGammaAndMonitorOff(initiatorWindow);
                 DestroyWindow(overlayWnd);
                 EndFade();
                 return 1;
             }
-            PostMessageW(overlayWnd, WM_MONOFFTASK, 0, 0);
+            PostMessageW(overlayWnd, WM_MONOFFTASK, 0, (LPARAM)initiatorWindow);
 
             // I don't want extra hassle of managing another thread for the overlay window lol; just make sure the following order of operations is correct:
             // Fade out -> Show overlay -> Restore gamma -> Monitor off -> Wait for monitor off with arbitrary delay -> Hide overlay
@@ -516,29 +554,27 @@ DWORD MonitorOffThreadProc(LPVOID lpParameter) {
                 Wh_Log(L"UnregisterClassW failed, GLE=%d", GetLastError());
             }
 
-            if (g_fadeData.monitors) {
+            if (g_monitorOffFadeData.monitors) {
                 // Somehow window message stuff failed
                 Wh_Log(L"Overlay window message loop ended unexpectedly, restoring gamma ramps...");
-                RestoreGammaAndMonitorOff();
+                RestoreGammaAndMonitorOff(initiatorWindow);
             }
         } else {
             Wh_Log(L"Failed to create overlay window, GLE=%d", GetLastError());
             // Just do the fade without the overlay, which will make the screen flash
-            FadeDesktop(refreshRate, g_settings.sleepDuration, true, g_fadeData.monitors, g_fadeData.monitorCount);
-            RestoreGammaAndMonitorOff();
+            FadeDesktop(refreshRate, g_settings.sleepDuration, true, g_monitorOffFadeData.monitors, g_monitorOffFadeData.monitorCount);
+            RestoreGammaAndMonitorOff(initiatorWindow);
         }
         EndFade();
         return 0;
     } else {
-        NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
+        TurnOffMonitor(initiatorWindow);
     }
     return 1;
 }
 
-NTSTATUS NTAPI NtPowerInformation_hook(POWER_INFORMATION_LEVEL InformationLevel, PVOID InputBuffer, ULONG InputBufferLength, PVOID OutputBuffer, ULONG OutputBufferLength) {
-    // Undocumented API introduced in Windows 8, known usermode use cases include StartMenuExperienceHost and Open-Shell Menu (used for the sleep action on Modern Standby devices)
-    // DefWindowProc WM_SYSCOMMAND SC_MONITORPOWER has it's own kernel mode routine and does not use this API, so these two must be hooked separately
-    if (InformationLevel == ScreenOff && g_settings.sleepFadeEnabled && !IsFadeInProgress()) {
+bool CreateMonitorOffThread(HWND initiatorWindow = NULL) {
+    if (g_settings.sleepFadeEnabled && !IsFadeInProgress()) {
         // Both NtPowerInformation and DefWindowProc WM_SYSCOMMAND is asynchronous so do it in a separate thread
         HANDLE monitorOffThread = g_monitorOffThread.exchange(NULL);
         if (monitorOffThread) {
@@ -551,22 +587,36 @@ NTSTATUS NTAPI NtPowerInformation_hook(POWER_INFORMATION_LEVEL InformationLevel,
                     Wh_Log(L"Monitor off thread is still running");
                 }
                 g_monitorOffThread.store(monitorOffThread);
-                return NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
+                return false;
             }
             CloseHandle(monitorOffThread);
         }
-        monitorOffThread = CreateThread(NULL, 0, MonitorOffThreadProc, NULL, 0, NULL);
+        monitorOffThread = CreateThread(NULL, 0, MonitorOffThreadProc, initiatorWindow, 0, NULL);
         if (!monitorOffThread) {
             Wh_Log(L"Failed to create monitor off thread, GLE=%d", GetLastError());
-            return NtPowerInformation_original(ScreenOff, NULL, 0, NULL, 0);
+            return false;
         }
         g_monitorOffThread.store(monitorOffThread);
-        return 0; // STATUS_SUCCESS
+        Wh_Log(L"Created monitor off thread");
+        return true;
+    }
+    return false;
+}
+
+NTSTATUS NTAPI NtPowerInformation_hook(POWER_INFORMATION_LEVEL InformationLevel, PVOID InputBuffer, ULONG InputBufferLength, PVOID OutputBuffer, ULONG OutputBufferLength) {
+    // Undocumented API introduced in Windows 8, known usermode use cases include StartMenuExperienceHost and Open-Shell Menu (used for the sleep action on Modern Standby devices)
+    // DefWindowProc WM_SYSCOMMAND SC_MONITORPOWER has it's own kernel mode routine and does not use this API, so these two must be hooked separately
+    if (InformationLevel == ScreenOff) {
+        Wh_Log(L"NtPowerInformation called with ScreenOff");
+        if (CreateMonitorOffThread()) {
+            return 0; // STATUS_SUCCESS
+        }
     }
     return NtPowerInformation_original(InformationLevel, InputBuffer, InputBufferLength, OutputBuffer, OutputBufferLength);
 };
 
 // From aubymori's MinMax mod
+// Return controls the DWP hook behavior below
 bool SleepFadeWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     if (!g_settings.sleepFadeEnabled) {
@@ -583,9 +633,15 @@ bool SleepFadeWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 case SC_MONITORPOWER:
                 {
                     if (lParam == 2) { // Monitor off
-                        Wh_Log(L"WM_SYSCOMMAND SC_MONITORPOWER received");
-                        NtPowerInformation_hook(ScreenOff, NULL, 0, NULL, 0);
-                        return true;
+                        Wh_Log(L"WM_SYSCOMMAND SC_MONITORPOWER 2 received");
+                        if (g_keepOrigWndProc.load()) {
+                            Wh_Log(L"Bypassing SC_MONITORPOWER hooks as g_keepOrigWndProc is set");
+                            return false;
+                        }
+                        if (CreateMonitorOffThread(hWnd)) {
+                            return true;
+                        }
+                        return false;
                     }
                 }
             }
@@ -694,6 +750,7 @@ NTSTATUS NTAPI NtInitiatePowerAction_hook(POWER_ACTION SystemAction, SYSTEM_POWE
     return NtInitiatePowerAction_original(SystemAction, LightestSystemState, Flags, Asynchronous);
 };
 
+#ifdef ENABLE_WINLOGON_HOOKS
 // Internal Winlogon function for handling power messages sent by win32k (xxxSendWinlogonPowerMessage)
 // a1 known values:
 // 263: Sent before sleeping/hibernating (can block)
@@ -712,27 +769,28 @@ int __cdecl WMsgPSPHandler_hook(unsigned long a1, void* a2, void* a3, long* a4) 
         if (a1 == 263) { // Pre-sleep/hibernate message
             if (BeginFade()) {
                 int refreshRate = GetDeviceRefreshRate();
-                if (GetMonitorsInfo(&g_fadeData.monitors, &g_fadeData.monitorCount)) {
-                    FadeDesktop(refreshRate, g_settings.sleepDuration, true, g_fadeData.monitors, g_fadeData.monitorCount);
+                if (GetMonitorsInfo(&g_sleepFadeData.monitors, &g_sleepFadeData.monitorCount)) {
+                    FadeDesktop(refreshRate, g_settings.sleepDuration, true, g_sleepFadeData.monitors, g_sleepFadeData.monitorCount);
                 }
                 EndFade();
             }
         } else if (a1 == 260) { // Post-monitor-on/wake-up message
-            if (g_fadeData.monitors) {
-                for (int i = 0; i < g_fadeData.monitorCount; i++) {
-                    if (g_fadeData.monitors[i].hDC) {
-                        SetDeviceGammaRamp(g_fadeData.monitors[i].hDC, g_fadeData.monitors[i].origGamma); // Restore gamma
-                        DeleteDC(g_fadeData.monitors[i].hDC);
+            if (g_sleepFadeData.monitors) {
+                for (int i = 0; i < g_sleepFadeData.monitorCount; i++) {
+                    if (g_sleepFadeData.monitors[i].hDC) {
+                        SetDeviceGammaRamp(g_sleepFadeData.monitors[i].hDC, g_sleepFadeData.monitors[i].origGamma); // Restore gamma
+                        DeleteDC(g_sleepFadeData.monitors[i].hDC);
                     }
                 }
-                free(g_fadeData.monitors);
-                g_fadeData.monitors = NULL;
-                g_fadeData.monitorCount = 0;
+                free(g_sleepFadeData.monitors);
+                g_sleepFadeData.monitors = NULL;
+                g_sleepFadeData.monitorCount = 0;
             }
         }
     }
     return WMsgPSPHandler_original(a1, a2, a3, a4);
 };
+#endif
 #pragma endregion
 
 HANDLE CreateFadeMutex() {
@@ -795,55 +853,50 @@ FadeType FadeTypeStringToEnum(LPCWSTR str) {
     }
 }
 
+inline int ClampInt(int value, int min, int max) {
+    if (value < min) {
+        return min;
+    } else if (value > max) {
+        return max;
+    } else {
+        return value;
+    }
+}
+
 void LoadSettings() {
     bool isWin10 = IsWindows10OrGreater();
 
     LPCWSTR logonTypeStr = Wh_GetStringSetting(L"type");
     FadeType logonType = FadeTypeStringToEnum(logonTypeStr);
     Wh_FreeStringSetting(logonTypeStr);
-    if (logonType < None || logonType > DWM) {
-        logonType = Gamma;
-    }
     if (!isWin10 && logonType < Kernel) {
         // On my Win8 machine, somehow calling SwitchDesktop causes weird behavior like repeated SwitchDesktopWithFade calls or winlogon crashes
         // So only allow modes that call SwitchDesktopWithFade_original for now
         logonType = Kernel;
     }
     int logonDuration = Wh_GetIntSetting(L"duration");
-    if (logonDuration < 0) {
-        logonDuration = 0;
+    logonDuration = ClampInt(logonDuration, 0, 10000);
+    if (logonDuration == 0) {
         logonType = None;
-    }
-    if (logonDuration > 10000) {
-        logonDuration = 10000;
     }
 
     LPCWSTR logoffTypeStr = Wh_GetStringSetting(L"logoffType");
     FadeType logoffType = FadeTypeStringToEnum(logoffTypeStr);
     Wh_FreeStringSetting(logoffTypeStr);
-    if (logoffType < None || logoffType > DWM) {
-        logoffType = Gamma;
-    }
     if (!isWin10 && logoffType < Kernel) {
         logoffType = Kernel;
     }
     int logoffDuration = Wh_GetIntSetting(L"logoffDuration");
-    if (logoffDuration < 0) {
-        logoffDuration = 0;
+    logoffDuration = ClampInt(logoffDuration, 0, 10000);
+    if (logoffDuration == 0) {
         logoffType = None;
-    }
-    if (logoffDuration > 10000) {
-        logoffDuration = 10000;
     }
 
     bool sleepFadeEnabled = Wh_GetIntSetting(L"sleepFadeEnabled") != 0;
     int sleepDuration = Wh_GetIntSetting(L"sleepDuration");
-    if (sleepDuration < 0) {
-        sleepDuration = 0;
+    sleepDuration = ClampInt(sleepDuration, 0, 10000);
+    if (sleepDuration == 0) {
         sleepFadeEnabled = false;
-    }
-    if (sleepDuration > 10000) {
-        sleepDuration = 10000;
     }
     bool enhancedSleepIntercept = Wh_GetIntSetting(L"enhancedSleepIntercept") != 0;
 
@@ -875,7 +928,9 @@ BOOL Wh_ModInit() {
     wchar_t exeName[MAX_PATH];
     GetModuleFileNameW(NULL, exeName, MAX_PATH);
     g_isWinlogon = wcsstr(_wcsupr(exeName), L"\\WINLOGON.EXE") != NULL;
+    g_isLockApp = wcsstr(exeName, L"\\LOCKAPP.EXE") != NULL;
     if (g_isWinlogon) {
+#ifdef ENABLE_WINLOGON_HOOKS
         Wh_Log(L"Running in winlogon.exe");
         SwitchDesktopWithFade_t SwitchDesktopWithFade = (SwitchDesktopWithFade_t)GetProcAddress(user32, "SwitchDesktopWithFade");
         if (!SwitchDesktopWithFade) {
@@ -906,6 +961,11 @@ BOOL Wh_ModInit() {
                 Wh_SetIntValue(L"WinlogonHookFailed", 0);
             }
         }
+#else
+        Wh_Log(L"Running in winlogon.exe, but winlogon hooks are disabled in this build");
+        Wh_SetIntValue(L"WinlogonHookFailed", 1);
+        return FALSE;
+#endif
     } else if (!g_settings.sleepFadeEnabled) {
         Wh_Log(L"Sleep fade is disabled and not running in winlogon.exe, unloading...");
         return FALSE;
@@ -985,8 +1045,8 @@ BOOL Wh_ModInit() {
 
 // The mod is being unloaded, free all allocated resources.
 void Wh_ModUninit() {
-    Wh_Log(L"Uninit"); // Prevent new fades
-    g_isExiting.store(true);
+    Wh_Log(L"Uninit");
+    g_isExiting.store(true); // Prevent new fades
     if (IsFadeInProgressInThisProcess()) {
         Wh_Log(L"Fade is in progress during uninit, waiting for it to complete...");
         WaitForFade();

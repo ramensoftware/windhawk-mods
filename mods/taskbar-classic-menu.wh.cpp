@@ -2,7 +2,7 @@
 // @id              taskbar-classic-menu
 // @name            Taskbar classic context menu
 // @description     Show the classic context menu when right-clicking on taskbar items
-// @version         1.0.2
+// @version         1.0.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -29,9 +29,6 @@ the Shift key to show the default jump list.
 
 Only Windows 10 64-bit and Windows 11 are supported. For older Windows versions
 check out [7+ Taskbar Tweaker](https://tweaker.ramensoftware.com/).
-
-**Note:** To customize the old taskbar on Windows 11 (if using ExplorerPatcher
-or a similar tool), enable the relevant option in the mod's settings.
 
 ![Demonstration](https://i.imgur.com/lQEHQyR.png)
 */
@@ -433,7 +430,8 @@ bool HookWin10TaskbarSymbols() {
 }
 
 bool HookWin11TaskbarSymbols() {
-    HMODULE module = LoadLibrary(L"taskbar.dll");
+    HMODULE module =
+        LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) {
         Wh_Log(L"Failed to load taskbar.dll");
         return false;
@@ -449,6 +447,7 @@ bool HookWin11TaskbarSymbols() {
             {LR"(protected: long __cdecl CTaskListWnd::_DisplayExtendedUI(struct ITaskBtnGroup *,int,unsigned long,int))"},
             &CTaskListWnd__DisplayExtendedUI_Original,
             CTaskListWnd__DisplayExtendedUI_Hook,
+            true,  // Removed in 10.0.26100.8313.
         },
         {
             {LR"(public: virtual struct HWND__ * __cdecl CTaskListWnd::GetWindow(void))"},
@@ -506,7 +505,8 @@ HMODULE GetTaskbarViewModuleHandle() {
 }
 
 void HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR lpLibFileName) {
-    if (!g_taskbarViewDllLoaded && GetTaskbarViewModuleHandle() == module &&
+    if (g_winVersion >= WinVersion::Win11 && !g_taskbarViewDllLoaded &&
+        GetTaskbarViewModuleHandle() == module &&
         !g_taskbarViewDllLoaded.exchange(true)) {
         Wh_Log(L"Loaded %s", lpLibFileName);
 
@@ -594,7 +594,7 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    if (!g_taskbarViewDllLoaded) {
+    if (g_winVersion >= WinVersion::Win11 && !g_taskbarViewDllLoaded) {
         if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
             if (!g_taskbarViewDllLoaded.exchange(true)) {
                 Wh_Log(L"Got Taskbar.View.dll");

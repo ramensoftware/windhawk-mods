@@ -5,6 +5,19 @@ from argparse import ArgumentParser
 from enum import StrEnum, auto
 from pathlib import Path
 
+from preprocessor import (
+    Macros,
+    blank_comments,
+    check_literals_are_fully_expanded,
+    concat_adjacent_literals,
+    expand_macros,
+    find_bracket_group_end,
+    get_string_literal_value,
+    iter_top_level_characters,
+    preprocess_conditionals,
+    split_top_level,
+)
+
 
 class Architecture(StrEnum):
     x86 = auto()
@@ -25,16 +38,16 @@ MOD_PATCHES: dict[str, list[tuple[str, str]]] = {
             r'// explorer.exe\n\g<0>'
         ),
     ],
-    'basic-themer/1.1.0.wh.cpp': [
-        (
-            r'^const WindhawkUtils::SYMBOL_HOOK hooks\b',
-            r'// uDWM.dll\n\g<0>'
-        ),
-    ],
     'change-explorer-default-location/1.0.0.wh.cpp': [
         (
             r'^const WindhawkUtils::SYMBOL_HOOK hook\b',
             r'// shell32.dll\n\g<0>'
+        ),
+    ],
+    'classic-explorer-dragdrop/1.1.wh.cpp': [
+        (
+            r'^#if __WIN64$',
+            r'#if _WIN64'
         ),
     ],
     'classic-taskbar-buttons-lite-vs-without-spacing/1.0.wh.cpp': [
@@ -107,22 +120,10 @@ MOD_PATCHES: dict[str, list[tuple[str, str]]] = {
             r'// shell32.dll\n\g<0>'
         ),
     ],
-    'no-taskbar-item-glow/1.0.0.wh.cpp': [
-        (
-            r'^[ \t]*WindhawkUtils::SYMBOL_HOOK hook\b',
-            r'// explorer.exe\n\g<0>'
-        ),
-    ],
     'notepad-remove-launch-new-app-banner/1.0.0.wh.cpp': [
         (
             r'^[ \t]*WindhawkUtils::SYMBOL_HOOK hook\b',
             r'// notepad.exe\n\g<0>'
-        ),
-    ],
-    'old-regedit-tree-icons/1.0.0.wh.cpp': [
-        (
-            r'^' + re.escape('#define STDCALL_STR FOR_64_32(L"__cdecl", L"__stdcall")') + r'$',
-            r'#ifdef _WIN64\n#define STDCALL_STR L"__cdecl"\n#else\n#define STDCALL_STR L"__stdcall"\n#endif'
         ),
     ],
     'regedit-auto-trim-whitespace-on-navigation-bar/1.0.0.wh.cpp': [
@@ -144,12 +145,6 @@ MOD_PATCHES: dict[str, list[tuple[str, str]]] = {
         ),
     ],
     'suppress-run-box-error-message/1.0.0.wh.cpp': [
-        (
-            r'^[ \t]*WindhawkUtils::SYMBOL_HOOK hooks\b',
-            r'// shell32.dll\n\g<0>'
-        ),
-    ],
-    'syslistview32-enabler/1.0.2.wh.cpp': [
         (
             r'^[ \t]*WindhawkUtils::SYMBOL_HOOK hooks\b',
             r'// shell32.dll\n\g<0>'
@@ -188,9 +183,60 @@ MOD_PATCHES: dict[str, list[tuple[str, str]]] = {
 }
 
 SYMBOL_MODULES_SKIP: dict[str, list[str]] = {
+    # https://github.com/ramensoftware/windhawk-mods/pull/2905#issuecomment-3703476284
+    'old-explorer-sysmenu-behavior': ['explorerframe.dll'],
+
     # Win7 only.
     'win7-alttab-loader': ['alttab.dll'],
+
+    # Office mods, use noUndecoratedSymbols.
+    'office-fix-account-disp-name': ['mso30win32client.dll'],
+    'office-ui-reverter-universal': ['mso40uiwin32client.dll'],
+    'word-image-resize-anti-flip': ['oart.dll'],
+    'word-mathtype-dark-fix': ['wwlib.dll'],
+    'word-omath-shade-fix': ['wwlib.dll'],
+    'word-pdf-lossless-export': ['mso.dll'],
 }
+
+# The architecture macros mods are expected to branch on, with the values
+# reported by:
+#
+#   clang++ -dM -E -std=c++23 -target <triple> -x c++ <file including windows.h>
+#
+# for the triples Windhawk compiles mods for: i686-w64-mingw32,
+# x86_64-w64-mingw32 and aarch64-w64-mingw32. The _M_* macros come from the
+# mingw-w64 headers, _WIN64 from clang itself.
+#
+# Deliberately only these spellings, not every macro a mod could branch on. The
+# gcc style __x86_64__ and __aarch64__ are left out so that a mod using them
+# fails to extract and gets changed to the constants above, instead of both
+# spellings being accommodated here. A macro which isn't listed is unknown, so a
+# conditional which depends on one isn't resolved.
+ARCH_PREDEFINED_MACROS: dict[Architecture, dict[str, str]] = {
+    Architecture.x86: {
+        '_M_IX86': '300',
+    },
+    Architecture.amd64: {
+        '_WIN64': '1',
+        '_M_X64': '100',
+    },
+    Architecture.arm64: {
+        '_WIN64': '1',
+        '_M_ARM64': '1',
+    },
+}
+
+
+def get_arch_macros(arch: Architecture):
+    """The macros which are known to be defined, and to be undefined, for an arch.
+
+    An architecture macro that some other architecture predefines is known not to
+    be defined for this one, which is what lets a conditional on it be resolved.
+    """
+    defined = ARCH_PREDEFINED_MACROS[arch]
+    undefined = {name for predefined in ARCH_PREDEFINED_MACROS.values()
+                 for name in predefined} - defined.keys()
+    return defined, undefined
 
 
 def get_mod_metadata(mod_source: str):
@@ -223,22 +269,6 @@ def get_mod_metadata(mod_source: str):
     return {
         'architectures': architectures,
     }
-
-
-def remove_comments_from_code(code: str):
-    added_newline = False
-    if not code.endswith('\n'):
-        code += '\n'
-        added_newline = True
-
-    # https://stackoverflow.com/a/36455937
-    p = r'''(?:\/\/(?:\\\n|[^\n])*\n)|(?:\/\*[\s\S]*?\*\/)|((?:R"([^(\\\s]{0,16})\([^)]*\)\2")|(?:@"[^"]*?")|(?:"(?:\?\?'|\\\\|\\"|\\\n|[^"])*?")|(?:'(?:\\\\|\\'|\\\n|[^'])*?'))'''
-    code = re.sub(p, r'\g<1>', code)
-
-    if added_newline:
-        code = code.rstrip('\n')
-
-    return code
 
 
 def get_target_module_from_symbol_block_name(symbol_block_name: str):
@@ -284,61 +314,165 @@ def deduce_symbol_block_target_modules(mod_source: str, symbol_block_match: re.M
     raise Exception(f'Unknown module ({symbol_block_name=})')
 
 
-def process_symbol_block(mod_source: str, symbol_block_match: re.Match, string_definitions: dict[str, str]):
-    symbol_block = remove_comments_from_code(symbol_block_match.group(0))
+def check_block_is_not_conditional(mod_source: str, symbol_block_match: re.Match,
+                                   unresolved_lines: dict[int, str]):
+    """Reject a symbol block which a condition we couldn't evaluate decides.
 
-    # Make sure there are no preprocessor directives.
+    Covers both a condition around the block, which decides whether it is
+    compiled at all, and one inside it, which decides which of its symbols are.
+    """
+    first = mod_source[:symbol_block_match.start()].count('\n')
+    last = first + symbol_block_match.group(0).count('\n')
+
+    for line in range(first, last + 1):
+        if directive := unresolved_lines.get(line):
+            raise Exception(
+                f'Symbol block under an unresolved condition: {directive}')
+
+
+def one_line(code: str):
+    """A short single line form of a piece of code, for an error message."""
+    code = ' '.join(code.split())
+    return code if len(code) <= 100 else code[:100] + '...'
+
+
+def split_conditional_expression(expression: str):
+    """The two branches of a conditional expression, or None if it isn't one.
+
+    The condition is dropped, since which branch is taken is decided when the mod
+    runs and both branches are therefore reachable.
+    """
+    question = None
+    nested = 0
+
+    for position, character in iter_top_level_characters(expression):
+        if character == '?':
+            if question is None:
+                question = position
+            else:
+                nested += 1
+        elif character == ':' and question is not None:
+            # A colon which belongs to the scope operator is one of a pair, and
+            # never the colon of a conditional.
+            if ':' in (expression[position - 1], expression[position + 1:position + 2]):
+                continue
+
+            if nested == 0:
+                return expression[question + 1:position], expression[position + 1:]
+
+            nested -= 1
+
+    return None
+
+
+def get_symbol_names(expression: str):
+    """The names which a symbol name expression can stand for.
+
+    A conditional picks one of its branches when the mod runs, so each branch
+    holds a name the mod can hook and all of them are taken. Anything else has to
+    be a string literal: every macro has been expanded by now, so an expression
+    which isn't a literal is a name this script can't read, such as a variable
+    holding it, and the symbol would otherwise be left out of the cache without a
+    word.
+    """
+    expression = expression.strip()
+
+    # Parentheses around an expression say nothing about which names it stands
+    # for, and a cast keeps its own since its parentheses don't enclose it.
+    while expression.startswith('('):
+        end = find_bracket_group_end(expression, 0)
+        if end is None or expression[end:].strip() != '':
+            break
+
+        expression = expression[1:end - 1].strip()
+
+    if branches := split_conditional_expression(expression):
+        return [name for branch in branches for name in get_symbol_names(branch)]
+
+    value = get_string_literal_value(expression)
+    if value is None:
+        raise Exception(f'Symbol name is not a string: {one_line(expression)}')
+
+    return [value]
+
+
+def get_brace_group_content(expression: str, description: str):
+    """The content of an expression which is nothing but a single brace group."""
+    end = find_bracket_group_end(expression, 0) if expression.startswith('{') else None
+    if end is None or expression[end:].strip() != '':
+        raise Exception(f'Unsupported {description}: {one_line(expression)}')
+
+    return expression[1:end - 1]
+
+
+def get_symbol_block_symbols(symbol_block: str):
+    """The names of every symbol which a symbol block hooks.
+
+    A block declares either an array of SYMBOL_HOOK entries or a single entry,
+    and the first member of an entry is the braced list of names of the symbol to
+    hook. A block which doesn't have that shape is rejected rather than read as
+    far as it happens to be readable, so that a name this script can't make out
+    is never dropped quietly.
+    """
+    start = symbol_block.find('{')
+    end = find_bracket_group_end(symbol_block, start) if start >= 0 else None
+    if end is None:
+        raise Exception(f'Unsupported symbol block: {one_line(symbol_block)}')
+
+    # A subscript in the declarator is what makes the initializer a list of
+    # entries rather than the members of a single entry.
+    is_array = '[' in symbol_block[:start]
+
+    initializer = symbol_block[start + 1:end - 1]
+    entries = split_top_level(initializer, ',') if is_array else [initializer]
+
+    symbols = []
+
+    for entry in entries:
+        entry = entry.strip()
+        if entry == '':
+            continue
+
+        if is_array:
+            entry = get_brace_group_content(entry, 'symbol hook')
+
+        members = split_top_level(entry, ',')
+        names = get_brace_group_content(members[0].strip(), 'symbol name list')
+
+        entry_symbols = [name
+                         for expression in split_top_level(names, ',')
+                         if expression.strip() != ''
+                         for name in get_symbol_names(expression)]
+        if entry_symbols == []:
+            raise Exception(f'Symbol hook without a name: {one_line(entry)}')
+
+        symbols += entry_symbols
+
+    return symbols
+
+
+def process_symbol_block(mod_source: str, symbol_block_match: re.Match, macros: Macros):
+    symbol_block = blank_comments(symbol_block_match.group(0))
+
+    # Every conditional directive is gone by now, either resolved or rejected,
+    # so anything left here is a directive which isn't supported at all.
     p = r'^[ \t]*#.*'
     if match := re.search(p, symbol_block, flags=re.MULTILINE):
         raise Exception(f'Unsupported preprocessor directive: {match.group(0)}')
 
-    # Merge strings spanning over multiple lines.
-    p = r'"([ \t]*\n)+[ \t]*L?"'
-    symbol_block = re.sub(p, '', symbol_block)
+    symbol_block = expand_macros(symbol_block, macros)
+    symbol_block = concat_adjacent_literals(symbol_block)
+    check_literals_are_fully_expanded(symbol_block)
 
-    # Replace string definitions.
-    def sub_quoted(match):
-        symbol = match.group(1)
-        if symbol is None:
-            symbol = match.group(2)
+    symbols = get_symbol_block_symbols(symbol_block)
 
-        if symbol not in string_definitions:
-            raise Exception(f'Unknown string definition {symbol}')
-
-        return string_definitions[symbol]
-
-    p = r'"\s*(\w+)\s*L"|"\s+(\w+)\s+"'
-    symbol_block = re.sub(p, sub_quoted, symbol_block)
-
-    def sub_braced(match):
-        symbol = match.group(1)
-
-        if symbol not in string_definitions:
-            raise Exception(f'Unknown string definition {symbol}')
-
-        return '{L"' + string_definitions[symbol] + '"}'
-
-    p = r'\{\s*(\w+)\s*\}'
-    symbol_block = re.sub(p, sub_braced, symbol_block)
-
-    # Sanity check.
-    for string_definition in string_definitions:
-        if string_definition in symbol_block:
-            raise Exception(f'String definition wasn\'t replaced: {string_definition}')
-
-    # Extract symbols.
-    p = r'LR"\((.*?)\)"|L"(.*?)"'
-    symbols = re.findall(p, symbol_block)
-    symbols = list(map(lambda x: x[0] if x[0] else x[1], symbols))
-
-    if any('"' in x or '\\' in x for x in symbols):
-        raise Exception(f'Unsupported strings')
-
+    # Every literal of the block is a symbol name, so a string which was given to
+    # any other member is caught here instead of being passed over.
     if len(symbols) * 2 != symbol_block.count('"'):
         raise Exception(f'Unsupported strings')
 
     if symbols == []:
-        return None
+        raise Exception(f'Symbol block without symbols')
 
     modules = deduce_symbol_block_target_modules(mod_source, symbol_block_match)
 
@@ -349,76 +483,26 @@ def process_symbol_block(mod_source: str, symbol_block_match: re.Match, string_d
 
 
 def get_mod_symbol_blocks(mod_source: str, arch: Architecture):
-    # Expand #if architecture conditions.
-    def sub(sub_match):
-        condition1 = sub_match.group(1)
-        body1 = sub_match.group(2)
-        condition2 = sub_match.group(3)
-        body2 = sub_match.group(4)
-
-        condition1 = remove_comments_from_code(condition1).strip()
-        if condition2 is not None:
-            condition2 = remove_comments_from_code(condition2).strip()
-
-        if match := re.fullmatch(r'(?:if defined|ifdef|if)\b(.*)', condition1):
-            expression = match.group(1).strip()
-            negative = False
-        elif match := re.fullmatch(r'(?:|if !defined|ifndef|if !)\b(.*)', condition1):
-            expression = match.group(1).strip()
-            negative = True
-        else:
-            raise Exception(f'Unsupported condition1: {condition1}')
-
-        if condition2 is not None and condition2 != 'else':
-            raise Exception(f'Unsupported condition2: {condition2}')
-
-        if expression.startswith('(') and expression.endswith(')'):
-            expression = expression[1:-1].strip()
-
-        if expression == '_WIN64':
-            condition_matches = arch in [Architecture.amd64, Architecture.arm64]
-        elif expression == '_M_IX86':
-            condition_matches = arch == Architecture.x86
-        elif expression == '_M_X64':
-            condition_matches = arch == Architecture.amd64
-        elif expression == '_M_ARM64':
-            condition_matches = arch == Architecture.arm64
-        else:
-            # Not a supported arch condition, return as is.
-            return sub_match.group(0)
-
-        if negative:
-            condition_matches = not condition_matches
-
-        if condition_matches:
-            return body1
-
-        return body2 or ''
-
-    p = r'^[ \t]*#\s*(if.*)$([\s\S]*?)(?:^[ \t]*#\s*(else.*)$([\s\S]*?))?^[ \t]*#endif[ \t]*$'
-    mod_source = re.sub(p, sub, mod_source, flags=re.MULTILINE)
-
-    # Extract string definitions.
-    p = r'^[ \t]*#[ \t]*define[ \t]+(\w+)[ \t]+L"(.*?)"[ \t]*$'
-    string_definitions = dict(re.findall(p, mod_source, flags=re.MULTILINE))
-    if any('"' in re.sub(r'\\.', '', x) for x in string_definitions.values()):
-        raise Exception(f'Unsupported string definitions')
+    defined, undefined = get_arch_macros(arch)
+    preprocessed = preprocess_conditionals(mod_source, defined, undefined)
+    mod_source = preprocessed.source
 
     # Extract symbol blocks.
     symbol_blocks = []
     p = r'^[ \t]*(?:(?:static|const)[ \t]+)*(?:WindhawkUtils::)?SYMBOL_HOOK[ \t]+(\w+)\s*[\[={][\s\S]*?\};[ \t]*$'
     for match in re.finditer(p, mod_source, flags=re.MULTILINE):
-        symbol_block = process_symbol_block(mod_source, match, string_definitions)
+        check_block_is_not_conditional(mod_source, match,
+                                       preprocessed.unresolved_lines)
+        symbol_block = process_symbol_block(mod_source, match,
+                                           preprocessed.macros)
         symbol_blocks.append(symbol_block)
 
     # Verify that no blocks were missed.
     p = r'SYMBOL_HOOK\s+\w'
     if len(symbol_blocks) != len(
-        re.findall(p, remove_comments_from_code(mod_source), flags=re.MULTILINE)
+        re.findall(p, blank_comments(mod_source), flags=re.MULTILINE)
     ):
         raise Exception(f'Unsupported symbol blocks')
-
-    symbol_blocks = list(filter(lambda x: x is not None, symbol_blocks))
 
     return symbol_blocks
 
