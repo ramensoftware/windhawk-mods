@@ -575,6 +575,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
 #define SWS_HOTKEY_ALTBACKTICK      5
 #define SWS_HOTKEY_WINALTTAB        6
 #define SWS_HOTKEY_WINALTSHIFTTAB   7
+#define SWS_HOTKEY_ALTBACKTICK_UK   8
 #define SWS_HOTKEY_RETRY_TIMER_ID   100
 #define SWS_HOTKEY_RETRY_INTERVAL   2000
 #define SWS_BG_DARK          RGB(32, 32, 32)
@@ -4523,6 +4524,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             isCtrl = true;
             break;
         case SWS_HOTKEY_ALTBACKTICK:
+        case SWS_HOTKEY_ALTBACKTICK_UK:
             if (wcscmp(g_settings.altBacktickBehavior, L"sameApp") == 0) {
                 isAltBacktickTrigger = true;
             } else if (wcscmp(g_settings.altBacktickBehavior, L"backward") == 0 || UseAltBacktickBackward()) {
@@ -4652,6 +4654,11 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 bool shiftDown = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
                 bool backward = UseAltShiftTabBackward() && shiftDown;
                 CycleLinear(backward ? -1 : 1);
+                return 0;
+            }
+            if ((wParam == VK_OEM_3 || wParam == VK_OEM_8) &&
+                (wcscmp(g_settings.altBacktickBehavior, L"backward") == 0 || UseAltBacktickBackward())) {
+                CycleLinear(-1);
                 return 0;
             }
             if (!LayoutIsVertical()) {
@@ -4824,6 +4831,8 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 // Hotkey Helpers
 
 static HANDLE g_hHotkeyMutex = NULL;
+static bool g_altBacktickUsRegistered = false;
+static bool g_altBacktickUkRegistered = false;
 
 static void SWS_RegisterHotkeys() {
     if (g_hotkeysRegistered || !g_hSwitcher) return;
@@ -4832,7 +4841,11 @@ static void SWS_RegisterHotkeys() {
     BOOL r2 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTTAB, MOD_ALT | MOD_SHIFT, VK_TAB);
     BOOL r3 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTCTRLTAB, MOD_ALT | MOD_CONTROL, VK_TAB);
     BOOL r4 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTCTRLTAB, MOD_ALT | MOD_SHIFT | MOD_CONTROL, VK_TAB);
-    BOOL r5 = wantAltBacktick ? RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK, MOD_ALT, VK_OEM_3) : TRUE;
+    BOOL r5_us = wantAltBacktick ? RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK, MOD_ALT, VK_OEM_3) : TRUE;
+    BOOL r5_uk = wantAltBacktick ? RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK_UK, MOD_ALT, VK_OEM_8) : TRUE;
+    g_altBacktickUsRegistered = wantAltBacktick && (r5_us != FALSE);
+    g_altBacktickUkRegistered = wantAltBacktick && (r5_uk != FALSE);
+    BOOL r5 = wantAltBacktick ? (r5_us || r5_uk) : TRUE;
     BOOL r6 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTTAB, MOD_ALT | MOD_WIN, VK_TAB);
     BOOL r7 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTSHIFTTAB, MOD_ALT | MOD_SHIFT | MOD_WIN, VK_TAB);
     if (r1 && r2 && r3 && r4 && r5 && r6 && r7) {
@@ -4841,13 +4854,20 @@ static void SWS_RegisterHotkeys() {
             g_hHotkeyMutex = CreateMutexW(NULL, TRUE, L"Windhawk_SWS_HotkeyMutex");
         }
         KillTimer(g_hSwitcher, SWS_HOTKEY_RETRY_TIMER_ID);
-        Wh_Log(L"All hotkeys registered successfully");
+        Wh_Log(L"All hotkeys registered successfully (Alt+Backtick US: %d, UK: %d)", r5_us, r5_uk);
     } else {
         if (r1) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTTAB);
         if (r2) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTTAB);
         if (r3) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTCTRLTAB);
         if (r4) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTCTRLTAB);
-        if (wantAltBacktick && r5) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK);
+        if (g_altBacktickUsRegistered) {
+            UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK);
+            g_altBacktickUsRegistered = false;
+        }
+        if (g_altBacktickUkRegistered) {
+            UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK_UK);
+            g_altBacktickUkRegistered = false;
+        }
         if (r6) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTTAB);
         if (r7) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTSHIFTTAB);
         SetTimer(g_hSwitcher, SWS_HOTKEY_RETRY_TIMER_ID, SWS_HOTKEY_RETRY_INTERVAL, NULL);
@@ -4861,7 +4881,14 @@ static void SWS_UnregisterHotkeys() {
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTTAB);
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTCTRLTAB);
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTCTRLTAB);
-    UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK);
+    if (g_altBacktickUsRegistered) {
+        UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK);
+        g_altBacktickUsRegistered = false;
+    }
+    if (g_altBacktickUkRegistered) {
+        UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK_UK);
+        g_altBacktickUkRegistered = false;
+    }
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTTAB);
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTSHIFTTAB);
     g_hotkeysRegistered = false;
