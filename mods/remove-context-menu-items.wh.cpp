@@ -7,7 +7,7 @@
 // @github          https://github.com/armaninyow
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -lshlwapi -luuid
+// @compilerOptions -lole32 -lshlwapi -luuid -lpathcch
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -73,8 +73,6 @@ Add an asterisk (*) at the end to match items that start with the given text:
   - Create shortcut (and more, so be careful!)
 
 > **Tip:** Right-click a file/folder, note the exact text of the menu item you want to remove, then add it to Custom Items. Use the asterisk (*) only if you want to remove multiple items with the same prefix.
-
-> **Note:** Case-insensitive matching only applies to English (ASCII) letters. For non-English menu text, type the item with the exact same case shown in the menu.
 
 ## Supported Languages
 
@@ -239,8 +237,6 @@ If you find a mistake and for additional details, please click [here](https://gi
 
     Wildcard Usage (Prefix Match): Add * at the end for prefix matching (e.g., "Open*" removes all items starting with "Open")
 
-    Note: Matching is case-insensitive for English (ASCII) letters only. For non-English text (Cyrillic, Turkish, German, etc.), the case you type must match the menu exactly.
-
 - modifierKeyOverride:
   - enableModifierOverride: false
     $name: Enable Alt key bypass
@@ -295,13 +291,14 @@ If you find a mistake and for additional details, please click [here](https://gi
     $description: Use lowercase with dot (e.g., .zip)
   $name: Extension Filtering
   $description: >-
-    On Windows 11, Notepad and WinRAR items can appear even when right-clicking unrelated files. Use the Extension Filtering to show each only for relevant file types. Note: this only works for the main file list -- right-clicking a file in the left-hand navigation pane tree has no file selection to check, so filtered items are always hidden there. Filtered items may also be hidden in virtual locations like search results or Libraries, since the file's location there isn't always a regular filesystem path. With multiple files selected, a filtered item is shown if ANY selected file matches the whitelist, not only when every selected file matches.
+    On Windows 11, Notepad and WinRAR items can appear even when right-clicking unrelated files. Use the Extension Filtering to show each only for relevant file types.
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <shlwapi.h>
 #include <shlobj.h>
+#include <pathcch.h>
 #include <shobjidl.h>
 #include <exdisp.h>
 #include <shlguid.h>
@@ -378,38 +375,36 @@ IShellBrowser* GetShellBrowser(HWND hwnd) {
     // SHELLDLL_DefView isn't included: it never answers this message and
     // has its own private WM_USER-range messages, risking a misread reply.
     // Progman/WorkerW route to GetDesktopShellBrowser() before this is called.
-    static const wchar_t* kAllowedClasses[] = {
-        L"ShellTabWindowClass",
-        L"CabinetWClass",
-        L"ExploreWClass",
+    struct ShellWindowClass {
+        const wchar_t* name;
+        bool isFrame;  // true if this class also bounds the ancestor walk
     };
-    static const wchar_t* kShellFrameClasses[] = {
-        L"CabinetWClass",
-        L"ExploreWClass",
+    static const ShellWindowClass kShellWindowClasses[] = {
+        {L"ShellTabWindowClass", false},
+        {L"CabinetWClass", true},
+        {L"ExploreWClass", true},
     };
-    
+
     IShellBrowser* pShellBrowser = nullptr;
     for (HWND h = hwnd; h; h = GetAncestor(h, GA_PARENT)) {
         wchar_t className[256] = {0};
         GetClassNameW(h, className, ARRAYSIZE(className));
-        
-        bool isAllowed = false;
-        for (const wchar_t* cls : kAllowedClasses) {
-            if (wcscmp(className, cls) == 0) { isAllowed = true; break; }
-        }
-        
-        if (isAllowed) {
+
+        for (const ShellWindowClass& cls : kShellWindowClasses) {
+            if (wcscmp(className, cls.name) != 0) {
+                continue;
+            }
+
             LRESULT result = SendMessageTimeoutW(h, WM_USER + 7 /* CWM_GETISHELLBROWSER */, 0, 0,
                                                   SMTO_ABORTIFHUNG, 1000, (PDWORD_PTR)&pShellBrowser);
             if (result && pShellBrowser) {
                 return pShellBrowser;
             }
-        }
-        
-        for (const wchar_t* frameClass : kShellFrameClasses) {
-            if (wcscmp(className, frameClass) == 0) {
+
+            if (cls.isFrame) {
                 return nullptr;
             }
+            break;
         }
     }
     return nullptr;
@@ -683,10 +678,11 @@ std::mutex g_settingsMutex;
 
 // Function to get file extension from path
 std::wstring GetFileExtension(const std::wstring& path) {
-    // PathFindExtensionW ignores dots earlier in the path (e.g. a folder
-    // named "v1.0"), unlike a naive find_last_of('.').
-    PCWSTR pExt = PathFindExtensionW(path.c_str());
-    if (!pExt || !*pExt || wcscmp(pExt, L".") == 0) {
+    // PathCchFindExtension ignores dots earlier in the path (e.g. a folder
+    // named "v1.0"), unlike a naive find_last_of('.'), and unlike
+    // PathFindExtensionW isn't limited to MAX_PATH-length input.
+    PCWSTR pExt = nullptr;
+    if (FAILED(PathCchFindExtension(path.c_str(), path.size() + 1, &pExt)) || !pExt || !*pExt) {
         return L"";
     }
     std::wstring ext(pExt);
@@ -2078,11 +2074,10 @@ BOOL Wh_ModInit() {
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L"Settings changed, reloading...");
     LoadSettings();
-    // If nothing is left to remove, request a reload so Wh_ModInit's
-    // early-out (AnyRemovalConfigured() check) unhooks this instance,
+    *bReload = FALSE;
+    // If nothing is left to remove, unload until settings change again
     // instead of an already-loaded mod keeping both hooks forever.
-    *bReload = !AnyRemovalConfigured();
-    return TRUE;
+    return AnyRemovalConfigured();
 }
 
 // Windhawk mod cleanup
