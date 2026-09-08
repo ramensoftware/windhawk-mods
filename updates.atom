@@ -2,12 +2,50 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-07T21:52:44.000Z</updated>
+    <updated>2026-09-08T23:16:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Accent Window Border 1.0.5]]></title>
+        <id>https://windhawk.net/mods/win11-accent-border#426175013e2b141e3b7ff9f4ac0ed012901d8053</id>
+        <link href="https://windhawk.net/mods/win11-accent-border"/>
+        <updated>2026-09-08T23:16:30.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added <em>Hook additional activation events</em> setting that allows the mod to work properly with some applications that handle activation events (e.g. UnigetUI).</li>
+</ul>]]></content>
+        <author>
+            <name>Guerra24</name>
+            <uri>https://github.com/Guerra24</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Clock to Left 2.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-clock-to-left#66142e7d3d98559b85934b8d74a9915b63c8cead</id>
+        <link href="https://windhawk.net/mods/taskbar-clock-to-left"/>
+        <updated>2026-09-08T23:16:12.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarclocktoleft">Taskbar Clock to Left</h1>
+<p>Moves the native Windows 11 notification-center clock button to the left side
+of the taskbar. The clock is hosted in its own left-side layer. Instead of
+adding columns or invisible spacers, the mod preserves the native system-tray
+extent supplied to the taskbar layout engine. Centered Start/app buttons remain
+at their original position and the remaining tray stays flush with the right
+edge. Clock customization mods can load before or after this mod: customized
+text width only changes the left host and never becomes a taskbar-layout input.
+On a centered taskbar, the left host is placed after the Widgets/weather button
+when it is visible. If Windows is configured to left-align Start and app icons,
+the clock stays in its native position to avoid covering those buttons.</p>
+<p><img src="https://i.imgur.com/Wew0LZh.png" alt="Taskbar Clock to Left" /></p>
+<p>Windows 11's modern taskbar is required.</p>
+<h2 id="acknowledgements">Acknowledgements</h2>
+<p>This mod was inspired by <a href="https://windhawk.net/mods/taskbar-clock-customization">Taskbar Clock Customization</a> by <a href="https://github.com/m417z">m417z</a>.</p>]]></content>
+        <author>
+            <name>pleromyst</name>
+            <uri>https://github.com/pleromyst</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[TopBar for Windows 1.0.0]]></title>
         <id>https://windhawk.net/mods/windhawk-topbar#8dcad63f573216788738142dc36cb982536d970a</id>
@@ -589,34 +627,6 @@ attribution look busier than expected.</li>
         <id>https://windhawk.net/mods/prevent-virtual-desktop-stealing#4edd57ac998c0a1d0da4cad434a068b7ba8e8f31</id>
         <link href="https://windhawk.net/mods/prevent-virtual-desktop-stealing"/>
         <updated>2026-09-05T15:13:08.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated the author's GitHub profile URL after the username changed from <code>Meteony</code> to <code>Meteoni</code>.</li>
-<li>Updated screenshot and GIF URLs to use the renamed <code>Meteoni/meteoni-assets</code> repository.</li>
-</ul>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteoni</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MultiWM 1.13.20]]></title>
-        <id>https://windhawk.net/mods/multiwm#de3547deee4febfd63a689621a62b6167c23de5f</id>
-        <link href="https://windhawk.net/mods/multiwm"/>
-        <updated>2026-09-05T15:13:01.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated the author's GitHub profile URL after the username changed from <code>Meteony</code> to <code>Meteoni</code>.</li>
-<li>Updated screenshot and GIF URLs to use the renamed <code>Meteoni/meteoni-assets</code> repository.</li>
-</ul>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteoni</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Faster Virtual Desktop Switching 1.0.1]]></title>
-        <id>https://windhawk.net/mods/faster-virtual-desktop-switching#b7df6a5c2e3bb491dce85d8fe5bc65040f8d91a0</id>
-        <link href="https://windhawk.net/mods/faster-virtual-desktop-switching"/>
-        <updated>2026-09-05T15:12:56.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Updated the author's GitHub profile URL after the username changed from <code>Meteony</code> to <code>Meteoni</code>.</li>
 <li>Updated screenshot and GIF URLs to use the renamed <code>Meteoni/meteoni-assets</code> repository.</li>

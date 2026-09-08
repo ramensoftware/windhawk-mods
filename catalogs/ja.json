@@ -12852,6 +12852,38 @@
         "version": "1.8"
       }
     },
+    "taskbar-clock-to-left": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1788909372000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1788909372000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "pleromyst",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion",
+        "description": "Move the native Windows 11 clock/notification button to the left without shifting centered taskbar apps",
+        "github": "https://github.com/pleromyst",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Taskbar Clock to Left",
+        "version": "2.1"
+      }
+    },
     "taskbar-content-presenter-injector": {
       "details": {
         "defaultSorting": 1700,
@@ -16144,7 +16176,7 @@
           84
         ],
         "ratingUsers": 102,
-        "updated": 1769422270000,
+        "updated": 1788909390000,
         "users": 8179
       },
       "metadata": {
@@ -16159,7 +16191,7 @@
           "*"
         ],
         "name": "Windows 11 Accent Window Border",
-        "version": "1.0.4"
+        "version": "1.0.5"
       }
     },
     "win11-custom-title-bar-colours": {

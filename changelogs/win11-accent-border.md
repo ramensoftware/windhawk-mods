@@ -1,3 +1,7 @@
+## 1.0.5 ([Sep 8, 2026](https://github.com/ramensoftware/windhawk-mods/blob/426175013e2b141e3b7ff9f4ac0ed012901d8053/mods/win11-accent-border.wh.cpp))
+
+* Added *Hook additional activation events* setting that allows the mod to work properly with some applications that handle activation events (e.g. UnigetUI).
+
 ## 1.0.4 ([Jan 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e90d96a05be131b3f3454d75a52cb6dacde99660/mods/win11-accent-border.wh.cpp))
 
 - Added *Target special windows* setting that allows the mod to work properly with some applications that customize their windows (e.g. Flow Launcher).
