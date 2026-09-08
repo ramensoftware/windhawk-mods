@@ -3504,6 +3504,8 @@ static void CancelPendingShow() {
     if (g_hSwitcher) {
         KillTimer(g_hSwitcher, SWS_SHOW_DELAY_TIMER_ID);
         KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
+        DWMNCRENDERINGPOLICY enabled = DWMNCRP_ENABLED;
+        DwmSetWindowAttribute(g_hSwitcher, DWMWA_NCRENDERING_POLICY, &enabled, sizeof(enabled));
     }
 
     g_isPendingShow = false;
@@ -3577,6 +3579,8 @@ static void RevealPendingSwitcher() {
 
     if (!g_isSticky) {
         SetTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID, 50, NULL);
+    } else {
+        KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
     }
 }
 
@@ -3823,7 +3827,6 @@ static void ShowSwitcher(bool sticky) {
 static void HideSwitcher() {
     g_showAllMonitors = false;
     CancelPendingShow();
-    if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
 
     DestroyMirrorSwitchers();
 
@@ -3875,7 +3878,7 @@ static void SwitchToSelected() {
         if (IsWindow(hw) && hw != hT && IsIconic(hw)) {
             ShowWindow(hw, SW_SHOWNOACTIVATE);
             if (IsIconic(hw)) {
-                PostMessage(hw, WM_SYSCOMMAND, SC_RESTORE, 0);
+                ShowWindowAsync(hw, SW_SHOWNOACTIVATE);
             }
         }
     }
@@ -4699,7 +4702,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
         return 0;
     case WM_SWS_SETTINGS_CHANGED:
-        if (g_isVisible) HideSwitcher();
+        if (g_isVisible || g_isPendingShow) HideSwitcher();
         SWS_UnregisterHotkeys();
         LoadSettings();
         SWS_RegisterHotkeys();
@@ -4772,6 +4775,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         return 0;
     }
     case WM_LBUTTONUP: {
+        if (!g_isVisible) return 0;
         int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
         int idx = HitTest(x, y);
         if (idx >= 0) {
@@ -4795,7 +4799,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         return 0;
     }
     case WM_ACTIVATE:
-        if (wParam == WA_INACTIVE && g_isVisible) {
+        if (wParam == WA_INACTIVE && (g_isVisible || g_isPendingShow)) {
             HWND hNewActive = (HWND)lParam;
             if (!IsSwitcherWindow(hNewActive)) {
                 HideSwitcher();
@@ -4804,7 +4808,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
         break;
     case WM_KILLFOCUS:
-        if (g_isVisible) {
+        if (g_isVisible || g_isPendingShow) {
             HWND hNewFocus = (HWND)wParam;
             if (!IsSwitcherWindow(hNewFocus)) {
                 HideSwitcher();
