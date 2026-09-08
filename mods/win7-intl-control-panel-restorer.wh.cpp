@@ -2,7 +2,7 @@
 // @id              win7-intl-control-panel-restorer
 // @name            Windows 7 Region and Language Restorer
 // @description     This mod restores the classic Windows 7 Region and Language Control Panel pages on Windows 10 and 11
-// @version         1.1.0
+// @version         1.0.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
