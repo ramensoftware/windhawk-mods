@@ -2,13 +2,13 @@
 // @id              win7-intl-control-panel-restorer
 // @name            Windows 7 Region and Language Restorer
 // @description     This mod restores the classic Windows 7 Region and Language Control Panel pages on Windows 10 and 11
-// @version         1.0.0
+// @version         1.1.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
 // @include         control.exe
 // @include         rundll32.exe
-// @architecture    x86-64
+// @architecture    amd64
 // @compilerOptions -lbcrypt -lwinhttp -luser32 -lshell32 -ladvapi32 -lole32 -lpsapi -lversion
 // ==/WindhawkMod==
 
@@ -28,7 +28,8 @@ This mod restores the classic Windows 7 "Region and Language" Control Panel page
 
 - The mod restores the classic Region page with its four tabs: Formats, Location, Keyboards and Languages, and Administrative.
 - All changes are applied through the standard Windows controls and nothing is simulated.
-- The interface is available in 20 languages and tries to follow the system language automatically.
+- The restored dialogs use per-monitor DPI awareness on their UI thread, so scaling follows the active monitor without changing Explorer system-wide.
+- The interface is available in 20 languages and tries to follow the system language automatically. This covers the Region pages and the Text Services and Input Languages dialogs (input.dll): its pages and dialogs are rebuilt from verified embedded templates and its runtime strings are served through a LoadStringW hook, so the whole restored UI follows the selected language.
 
 ---
 
@@ -43,13 +44,14 @@ This mod restores the classic Windows 7 "Region and Language" Control Panel page
 
 The mod includes a series of settings:
 - **UI language** (default: Automatic): this setting controls the language of the restored page. Automatic follows the Windows display language.
-- **Redirect Settings pages** (default: off): this setting opens the classic page instead of the modern Settings Region pages.
+- **Redirect Settings pages** (default: off): this setting opens the classic page instead of the modern Settings Region pages. The redirect follows the same defensive, pass-through approach as the reference Settings-to-Control-Panel mod and covers ShellExecuteExW, ShellExecuteW, and CreateProcessW launches from Explorer. Only Region/Language URIs are redirected; unrelated Settings pages pass through unchanged.
 
 ---
 
 ## Notes
 
-- This modification has been tested on Windows 10 21H2.
+- This modification has been tested on Windows 10 21H2 and Windows 11 24H2.
+- AdministratoX tested the mod on Windows 11 25H2.
 - Some Windows 7 features no longer exist on modern Windows. In those cases the closest modern equivalent is opened instead (for example, the "Default location" link opens the Location privacy page).
 - Settings that were already applied are kept after the mod is disabled.
 - Windows systems file **are not modified** and the modern intl.cpl is used as a fallback.
@@ -60,6 +62,7 @@ The mod includes a series of settings:
 
 - This modification is a best-effort reimplementation of a NT 6.1 binary file. Some translations might not be completely accurate to the original files as the mod provides them by itself.
 - Display-language installation is not available. It depends on components that exist only on Windows 7.
+- Inside input.dll, the Chinese IME hotkey-action descriptions and the English fallback keyboard-layout names are not translated; they are rare and mostly language-neutral. Key-cap labels on the Keyboard Layout Preview (Tab, Caps, Shift, Enter, BackSp) intentionally stay English to fit the original geometry.
 
 
 ---
@@ -76,6 +79,7 @@ While the mod is active, the restored page can also be opened directly:
 ## Credits
 
 - Based on the technique of the example restorer mods.
+- AdministratoX – testing on Windows 11 25H2.
 
 ---
 */
@@ -146,6 +150,7 @@ While the mod is active, the restored page can also be opened directly:
 #include <csetjmp>
 #include <cstring>
 #include <cwchar>
+#include <cwctype>
 #include <string>
 #include <vector>
 #include <utility>
@@ -160,6 +165,29 @@ While the mod is active, the restored page can also be opened directly:
 #endif
 
 namespace IntlRestore {
+// DPI awareness is applied per UI thread, never process-wide. This avoids
+// changing Explorer's global DPI policy while ensuring restored dialogs use the
+// monitor's effective scale factor.
+#ifndef DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+#define DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 ((HANDLE)-4)
+#endif
+void TranslateInputWindow(HWND window);
+
+struct DpiScope {
+    DPI_AWARENESS_CONTEXT previous = nullptr;
+    bool changed = false;
+    DpiScope() {
+        previous = SetThreadDpiAwarenessContext(
+            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        changed = previous != nullptr;
+    }
+    ~DpiScope() {
+        if (changed) SetThreadDpiAwarenessContext(previous);
+    }
+    DpiScope(const DpiScope&) = delete;
+    DpiScope& operator=(const DpiScope&) = delete;
+};
+
 // BEGIN PORTABLE_SELECTOR
 // Kept platform-independent so the exact selector can be unit-tested on Linux.
 enum class Host { Control, Rundll32, Explorer, Other };
@@ -306,6 +334,7 @@ HANDLE g_act = INVALID_HANDLE_VALUE, g_idle = nullptr, g_jobsIdle = nullptr;
 CplProc g_nativeCpl = nullptr;
 PSProc g_mainPS = nullptr, g_inputPS = nullptr;
 PageProc g_mainPage = nullptr;
+PageProc g_inputPage = nullptr;
 DialogProc g_inputDialog = nullptr;
 RtlAddTableProc g_rtlAddTable = nullptr;
 RtlDeleteTableProc g_rtlDeleteTable = nullptr;
@@ -318,11 +347,42 @@ std::atomic<LONG> g_jobs{0};
 SRWLOCK g_gate = SRWLOCK_INIT;
 SRWLOCK g_windowsLock = SRWLOCK_INIT;
 std::vector<HWND> g_owned;
+constexpr size_t kMaxOwnedWindows = 64;
+SRWLOCK g_threadsLock = SRWLOCK_INIT;
+std::vector<HANDLE> g_threads;
+constexpr size_t kMaxTrackedThreads = 256;
+void RegisterThread(HANDLE thread) {
+    HANDLE dup = nullptr;
+    if (!DuplicateHandle(GetCurrentProcess(), thread, GetCurrentProcess(), &dup, 0, FALSE,
+                         DUPLICATE_SAME_ACCESS)) return;
+    AcquireSRWLockExclusive(&g_threadsLock);
+    if (g_threads.size() < kMaxTrackedThreads) g_threads.push_back(dup);
+    else { ReleaseSRWLockExclusive(&g_threadsLock); CloseHandle(dup); return; }
+    ReleaseSRWLockExclusive(&g_threadsLock);
+}
+// Waits for every tracked private worker thread to actually return (not just
+// signal EndJob) before the caller unmaps/frees the image those threads'
+// epilogues and thread-start thunks still live in. See finding 4.
+void JoinTrackedThreads() {
+    std::vector<HANDLE> copy;
+    AcquireSRWLockExclusive(&g_threadsLock);
+    copy.swap(g_threads);
+    ReleaseSRWLockExclusive(&g_threadsLock);
+    for (size_t i = 0; i < copy.size(); i += MAXIMUM_WAIT_OBJECTS) {
+        DWORD count = static_cast<DWORD>(std::min<size_t>(MAXIMUM_WAIT_OBJECTS, copy.size() - i));
+        WaitForMultipleObjects(count, &copy[i], TRUE, INFINITE);
+    }
+    for (HANDLE h : copy) CloseHandle(h);
+}
 std::vector<BYTE> g_blobStore[32];
 Blob g_blobs[32];
 DWORD g_blobCount = 0;
 int g_blobForDialog[1024];
 int g_blobForStrBlock[64];
+std::vector<BYTE> g_inpBlobStore[12];   // rebuilt input.dll dialog templates
+Blob g_inpBlobs[12];
+DWORD g_inpBlobCount = 0;
+int g_inpBlobForDialog[1024];
 thread_local unsigned g_uiCreated = 0;
 thread_local bool g_uiFailed = false;
 
@@ -339,7 +399,7 @@ HANDLE WINAPI PrivateCreateThread(LPSECURITY_ATTRIBUTES, SIZE_T, LPTHREAD_START_
 BOOL WINAPI PrivateSHCreateThread(LPTHREAD_START_ROUTINE, void*, DWORD, LPTHREAD_START_ROUTINE);
 BOOL WINAPI PrivateShellExecuteExW(SHELLEXECUTEINFOW*);
 BOOL WINAPI PrivateDisableThreadLibraryCalls(HMODULE);
-void WaitForJobs();
+void WaitForJobs(bool pumpMessages = false);
 
 bool Fail(PCWSTR stage, DWORD error = GetLastError()) {
     Wh_Log(L"[IntlRestore] ERROR: %s; Win32=%lu (0x%08lX)", stage, error, error);
@@ -409,7 +469,7 @@ bool Download(PCWSTR url, std::vector<BYTE>& bytes) {
     parts.lpszUrlPath = object; parts.dwUrlPathLength = ARRAYSIZE(object);
     if (!WinHttpCrackUrl(url, 0, 0, &parts) || parts.nScheme != INTERNET_SCHEME_HTTPS ||
         !Equal(host, L"msdl.microsoft.com")) return Fail(L"Unapproved payload URL", ERROR_INVALID_NAME);
-    HttpHandle session(WinHttpOpen(L"Windhawk-IntlRestore/1.0.0", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+    HttpHandle session(WinHttpOpen(L"Windhawk-IntlRestore/1.1.0", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                                    WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
     if (!session.value) return false;
     WinHttpSetTimeouts(session.value, 10000, 10000, 15000, 15000);
@@ -881,11 +941,13 @@ LONG CALLBACK CrashHandler(EXCEPTION_POINTERS* info) {
         
         // These are fatal conditions - never resume from them.
         // Disable the mod and let the system handle the fault naturally.
+        // Do NOT log here: on STATUS_STACK_OVERFLOW the stack that would run
+        // Wh_Log's formatting/allocation has just overflowed, and on
+        // STATUS_HEAP_CORRUPTION the heap Wh_Log would allocate from is
+        // already corrupt — logging here is very likely to fault again.
         if (code == 0xC00000FD ||  // STATUS_STACK_OVERFLOW
             code == 0xC0000409 ||  // STATUS_STACK_BUFFER_OVERRUN
             code == 0xC0000374) {  // STATUS_HEAP_CORRUPTION
-            Wh_Log(L"[IntlRestore] [AV2007] FATAL 0x%08lX (%s) at %p - disabling legacy mod, system continues",
-                   code, ExceptionCodeName(code), addr);
             guard->armed = false;
             g_useLegacy.store(false, std::memory_order_release);
             return EXCEPTION_CONTINUE_SEARCH;
@@ -933,9 +995,12 @@ LONG CALLBACK FatalWatch(EXCEPTION_POINTERS* info) {
         if (!guard || !guard->armed || !info || !info->ExceptionRecord) return EXCEPTION_CONTINUE_SEARCH;
         DWORD code = info->ExceptionRecord->ExceptionCode;
         switch (code) {
-            case 0xC0000005: case 0xC000001D: case 0xC0000094: case 0xC00000FD:
-            case 0xC0000409: case 0xC0000374: break;
-            default: return EXCEPTION_CONTINUE_SEARCH;
+            case 0xC0000005: case 0xC000001D: case 0xC0000094: case 0xC0000409:
+                break;
+            default: return EXCEPTION_CONTINUE_SEARCH; // includes STATUS_STACK_OVERFLOW /
+                                                         // STATUS_HEAP_CORRUPTION: logging
+                                                         // itself allocates and would likely
+                                                         // fault again on these
         }
         g_watchBusy = true;
         Wh_Log(L"[IntlRestore] First-chance %s (0x%08lX) at %p during armed legacy call; continuing search",
@@ -1738,11 +1803,288 @@ enum LangIndex {
     LangRU, LangZH, LangJA, LangKO, LangTR, LangCS, LangHU, LangRO,
     LangSV, LangUK, LangEL, LangAR, LangCount
 };
+
+// ===== BEGIN GENERATED INPUT RESOURCE TABLES (input.dll) =====
+// Parsed from the pinned Windows 7 input.dll. Dialogs 101, 106, 107, 108,
+// 111, 500, 900 are DLGTEMPLATEEX resources that rebuild byte-identical;
+// 112/113/114 are classic templates rebuilt canonically in EX form
+// (their expectSize/expectFnv describe that canonical rebuild).
+// Phrase maps index kInpDlgTr_*; titles use kInpTitlePhrase (112/113/114
+// reuse the localized sheet title at build time).
+
+static const EmbCtl kInpDlg101Ctl[] = {
+    {0x00000000, 0x00000000, 0x50020000, 7, 7, 194, 10, 4294967295, 0x0082, nullptr, 0xffff, L"Select the language to add using the checkboxes below."},
+    {0x00000000, 0x00000000, 0x50810137, 7, 20, 194, 190, 1001, 0xffff, L"SysTreeView32", 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50010001, 210, 7, 50, 14, 1, 0x0080, nullptr, 0xffff, L"OK"},
+    {0x00000000, 0x00000000, 0x50010000, 210, 24, 50, 14, 2, 0x0080, nullptr, 0xffff, L"Cancel"},
+    {0x00000000, 0x00000000, 0x50010000, 210, 41, 50, 14, 1019, 0x0080, nullptr, 0xffff, L"&Preview..."},
+};
+
+static const EmbCtl kInpDlg106Ctl[] = {
+    {0x00000000, 0x00000000, 0x50020007, 7, 6, 247, 61, 4294967295, 0x0080, nullptr, 0xffff, L"Language Bar "},
+    {0x00000000, 0x00000000, 0x50030009, 17, 16, 142, 14, 1011, 0x0080, nullptr, 0xffff, L"&Floating On Desktop"},
+    {0x00000000, 0x00000000, 0x50010009, 17, 32, 142, 14, 1012, 0x0080, nullptr, 0xffff, L"&Docked in the taskbar"},
+    {0x00000000, 0x00000000, 0x50010009, 17, 50, 142, 14, 1013, 0x0080, nullptr, 0xffff, L"&Hidden"},
+    {0x00000000, 0x00000000, 0x50010003, 7, 73, 246, 10, 1014, 0x0080, nullptr, 0xffff, L"Show the Language bar as transparent when i&nactive"},
+    {0x00000000, 0x00000000, 0x50010003, 7, 90, 246, 10, 1015, 0x0080, nullptr, 0xffff, L"Show add&itional Language bar icons in the taskbar"},
+    {0x00000000, 0x00000000, 0x50010003, 7, 107, 246, 10, 1016, 0x0080, nullptr, 0xffff, L"Show t&ext labels on the Language bar"},
+};
+
+static const EmbCtl kInpDlg107Ctl[] = {
+    {0x00000000, 0x00000000, 0x50000007, 7, 7, 247, 26, 1030, 0x0080, nullptr, 0xffff, L"To turn off Caps Lock"},
+    {0x00000000, 0x00000000, 0x50030009, 14, 17, 121, 11, 1031, 0x0080, nullptr, 0xffff, L"Press the CAPS &LOCK key"},
+    {0x00000000, 0x00000000, 0x50000009, 141, 17, 110, 11, 1032, 0x0080, nullptr, 0xffff, L"Press the SHI&FT key"},
+    {0x00000000, 0x00000000, 0x50000007, 7, 37, 247, 191, 1033, 0x0080, nullptr, 0xffff, L"Hot keys for input languages"},
+    {0x00000000, 0x00000000, 0x50020000, 17, 47, 63, 9, 1034, 0x0082, nullptr, 0xffff, L"Action"},
+    {0x00000000, 0x00000000, 0x50020002, 157, 47, 88, 9, 1035, 0x0082, nullptr, 0xffff, L"&Key sequence"},
+    {0x00000000, 0x00000000, 0x50a10053, 15, 58, 232, 151, 1036, 0x0083, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50030000, 141, 209, 106, 14, 1037, 0x0080, nullptr, 0xffff, L"&Change Key Sequence..."},
+};
+
+static const EmbCtl kInpDlg108Ctl[] = {
+    {0x00000000, 0x00000000, 0x50010001, 214, 63, 50, 14, 1, 0x0080, nullptr, 0xffff, L"OK"},
+    {0x00000000, 0x00000000, 0x50010000, 214, 80, 50, 14, 2, 0x0080, nullptr, 0xffff, L"Cancel"},
+    {0x00000000, 0x00000000, 0x50000007, 7, 14, 94, 80, 4294967295, 0x0080, nullptr, 0xffff, L"Switch Input Language"},
+    {0x00000000, 0x00000000, 0x50030009, 14, 28, 83, 10, 1090, 0x0080, nullptr, 0xffff, L"&Not Assigned"},
+    {0x00000000, 0x00000000, 0x50010009, 14, 43, 83, 10, 1091, 0x0080, nullptr, 0xffff, L"&Ctrl + Shift"},
+    {0x00000000, 0x00000000, 0x50010009, 14, 58, 83, 10, 1092, 0x0080, nullptr, 0xffff, L"&Left Alt + Shift"},
+    {0x00000000, 0x00000000, 0x50010009, 14, 75, 83, 10, 1093, 0x0080, nullptr, 0xffff, L"&Grave Accent (`)"},
+    {0x00000000, 0x00000000, 0x50000007, 112, 15, 94, 80, 4294967295, 0x0080, nullptr, 0xffff, L"Switch Keyboard Layout"},
+    {0x00000000, 0x00000000, 0x50030009, 116, 29, 83, 10, 1094, 0x0080, nullptr, 0xffff, L"N&ot Assigned"},
+    {0x00000000, 0x00000000, 0x50010009, 116, 44, 83, 10, 1095, 0x0080, nullptr, 0xffff, L"C&trl + Shift"},
+    {0x00000000, 0x00000000, 0x50010009, 116, 58, 83, 10, 1096, 0x0080, nullptr, 0xffff, L"Le&ft Alt + Shift"},
+    {0x00000000, 0x00000000, 0x50010009, 116, 76, 83, 10, 1097, 0x0080, nullptr, 0xffff, L"G&rave Accent (`)"},
+};
+
+static const EmbCtl kInpDlg111Ctl[] = {
+    {0x00000000, 0x00000000, 0x50020000, 16, 5, 273, 10, 1080, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 12, 17, 218, 48, 4294967295, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50010003, 17, 17, 85, 8, 1050, 0x0080, nullptr, 0xffff, L"&Enable Key Sequence"},
+    {0x00000000, 0x00000000, 0x50020001, 98, 37, 8, 10, 4294967295, 0x0082, nullptr, 0xffff, L"+"},
+    {0x00000000, 0x00000000, 0x50210003, 24, 35, 80, 80, 1051, 0x0085, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020002, 110, 37, 23, 8, 4294967295, 0x0082, nullptr, 0xffff, L"&Key:"},
+    {0x00000000, 0x00000000, 0x50210003, 137, 35, 81, 60, 1081, 0x0085, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50010001, 239, 25, 50, 14, 1, 0x0080, nullptr, 0xffff, L"OK"},
+    {0x00000000, 0x00000000, 0x50010000, 239, 47, 50, 14, 2, 0x0080, nullptr, 0xffff, L"Cancel"},
+};
+
+static const EmbCtl kInpDlg500Ctl[] = {
+    {0x00000000, 0x00000000, 0x50000007, 7, 7, 248, 53, 4294967295, 0x0080, nullptr, 0xffff, L"Default input &language"},
+    {0x00000000, 0x00000000, 0x50020000, 14, 17, 235, 18, 4294967295, 0x0082, nullptr, 0xffff, L"Select one of the installed input languages to use as the default for all input fields."},
+    {0x00000000, 0x00000000, 0x50210103, 14, 40, 236, 60, 1002, 0x0085, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 7, 65, 248, 159, 4294967295, 0x0080, nullptr, 0xffff, L"&Installed services"},
+    {0x00000000, 0x00000000, 0x50020000, 14, 75, 235, 18, 4294967295, 0x0082, nullptr, 0xffff, L"Select the services that you want for each input language shown in the list. Use the Add and Remove buttons to modify this list."},
+    {0x00000000, 0x00000000, 0x50a10032, 14, 98, 170, 120, 1001, 0xffff, L"SysTreeView32", 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50030000, 187, 133, 64, 14, 1003, 0x0080, nullptr, 0xffff, L"A&dd..."},
+    {0x00000000, 0x00000000, 0x50030000, 187, 151, 64, 14, 1004, 0x0080, nullptr, 0xffff, L"&Remove"},
+    {0x00000000, 0x00000000, 0x50030000, 187, 169, 64, 14, 1019, 0x0080, nullptr, 0xffff, L"&Properties..."},
+    {0x00000000, 0x00000000, 0x50030000, 187, 187, 64, 14, 1020, 0x0080, nullptr, 0xffff, L"Move &Up"},
+    {0x00000000, 0x00000000, 0x50030000, 187, 205, 64, 14, 1021, 0x0080, nullptr, 0xffff, L"Move D&own"},
+};
+
+static const EmbCtl kInpDlg900Ctl[] = {
+    {0x00000000, 0x00000000, 0x50010001, 220, 122, 50, 14, 1, 0x0080, nullptr, 0xffff, L"OK"},
+    {0x00000000, 0x00000000, 0x50010000, 277, 122, 50, 14, 2, 0x0080, nullptr, 0xffff, L"Cancel"},
+    {0x00000000, 0x00000000, 0x50000007, 5, 35, 20, 20, 2000, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 7, 43, 16, 10, 2001, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 27, 35, 20, 20, 2002, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 29, 43, 16, 10, 2003, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 49, 35, 20, 20, 2004, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 51, 43, 16, 10, 2005, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 71, 35, 20, 20, 2006, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 73, 43, 16, 10, 2007, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 93, 35, 20, 20, 2008, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 95, 43, 16, 10, 2009, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 117, 35, 20, 20, 2010, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 119, 43, 16, 10, 2011, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 139, 35, 20, 20, 2012, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 141, 43, 16, 10, 2013, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 161, 35, 20, 20, 2014, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 163, 43, 16, 10, 2015, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 183, 35, 20, 20, 2016, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 185, 43, 16, 10, 2017, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 205, 35, 20, 20, 2018, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 207, 43, 16, 10, 2019, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 227, 35, 20, 20, 2020, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 229, 43, 16, 10, 2021, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 249, 35, 20, 20, 2022, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 251, 43, 16, 10, 2023, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 271, 35, 20, 20, 2024, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 273, 43, 16, 10, 2025, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 37, 55, 20, 20, 2026, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 39, 63, 16, 10, 2027, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 59, 55, 20, 20, 2028, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 61, 63, 16, 10, 2029, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 81, 55, 20, 20, 2030, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 83, 63, 16, 10, 2031, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 103, 55, 20, 20, 2032, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 105, 63, 16, 10, 2033, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 125, 55, 20, 20, 2034, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 127, 63, 16, 10, 2035, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 147, 55, 20, 20, 2036, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 149, 63, 16, 10, 2037, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 169, 55, 20, 20, 2038, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 171, 63, 16, 10, 2039, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 191, 55, 20, 20, 2040, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 193, 63, 16, 10, 2041, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 213, 55, 20, 20, 2042, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 215, 63, 16, 10, 2043, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 235, 55, 20, 20, 2044, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 237, 63, 16, 10, 2045, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 257, 55, 20, 20, 2046, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 259, 63, 16, 10, 2047, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 279, 55, 20, 20, 2048, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 281, 63, 16, 10, 2049, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 301, 55, 26, 20, 2050, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 303, 63, 22, 10, 2051, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 45, 75, 20, 20, 2052, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 47, 83, 16, 10, 2053, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 67, 75, 20, 20, 2054, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 69, 83, 16, 10, 2055, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 89, 75, 20, 20, 2056, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 91, 83, 16, 10, 2057, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 111, 75, 20, 20, 2058, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 113, 83, 16, 10, 2059, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 133, 75, 20, 20, 2060, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 135, 83, 16, 10, 2061, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 155, 75, 20, 20, 2062, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 157, 83, 16, 10, 2063, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 177, 75, 20, 20, 2064, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 179, 83, 16, 10, 2065, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 199, 75, 20, 20, 2066, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 201, 83, 16, 10, 2067, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 221, 75, 20, 20, 2068, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 223, 83, 16, 10, 2069, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 243, 75, 20, 20, 2070, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 245, 83, 16, 10, 2071, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 265, 75, 20, 20, 2072, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 267, 83, 16, 10, 2073, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 56, 95, 20, 20, 2074, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 59, 103, 16, 10, 2075, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 79, 95, 20, 20, 2076, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 81, 103, 16, 10, 2077, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 101, 95, 20, 20, 2078, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 103, 103, 16, 10, 2079, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 123, 95, 20, 20, 2080, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 125, 103, 16, 10, 2081, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 145, 95, 20, 20, 2082, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 147, 103, 16, 10, 2083, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 167, 95, 20, 20, 2084, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 169, 103, 16, 10, 2085, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 189, 95, 20, 20, 2086, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 191, 103, 16, 10, 2087, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 211, 95, 20, 20, 2088, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 213, 103, 16, 10, 2089, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 233, 95, 20, 20, 2090, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 235, 103, 16, 10, 2091, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 255, 95, 20, 20, 2092, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 257, 103, 16, 10, 2093, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000007, 5, 55, 29, 20, 2094, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 7, 63, 25, 10, 2095, 0x0082, nullptr, 0xffff, L"Tab"},
+    {0x00000000, 0x00000000, 0x50000007, 5, 75, 38, 20, 2096, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 7, 83, 34, 10, 2097, 0x0082, nullptr, 0xffff, L"Caps"},
+    {0x00000000, 0x00000000, 0x50000007, 5, 95, 49, 20, 2098, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 7, 103, 45, 10, 2099, 0x0082, nullptr, 0xffff, L"Shift"},
+    {0x00000000, 0x00000000, 0x50000007, 277, 95, 50, 20, 2100, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 279, 103, 46, 10, 2101, 0x0082, nullptr, 0xffff, L"Shift"},
+    {0x00000000, 0x00000000, 0x50000007, 287, 75, 40, 20, 2102, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 289, 83, 36, 10, 2103, 0x0082, nullptr, 0xffff, L"Enter"},
+    {0x00000000, 0x00000000, 0x50000007, 293, 35, 34, 20, 2104, 0x0080, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50020001, 295, 43, 30, 10, 2105, 0x0082, nullptr, 0xffff, L"BackSp"},
+    {0x00000000, 0x00000000, 0x50020000, 7, 16, 50, 10, 4294967295, 0x0082, nullptr, 0xffff, L"Layout Name:"},
+    {0x00000000, 0x00000000, 0x50020000, 60, 16, 140, 10, 901, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50000043, 222, 5, 32, 32, 902, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50010000, 267, 15, 60, 15, 903, 0x0080, nullptr, 0xffff, L"&Change Icon..."},
+};
+
+static const EmbCtl kInpDlg112Ctl[] = {
+    {0x00000000, 0x00000000, 0x50020001, 3, 7, 189, 20, 1100, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50010003, 27, 33, 137, 10, 1101, 0x0080, nullptr, 0xffff, L"&Do not show me this message again."},
+    {0x00000000, 0x00000000, 0x50010001, 30, 47, 50, 14, 1, 0x0080, nullptr, 0xffff, L"OK"},
+    {0x00000000, 0x00000000, 0x50010000, 107, 47, 50, 14, 2, 0x0080, nullptr, 0xffff, L"Cancel"},
+};
+
+static const EmbCtl kInpDlg113Ctl[] = {
+    {0x00000000, 0x00000000, 0x50020001, 3, 7, 250, 60, 1102, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50010003, 60, 73, 130, 10, 1101, 0x0080, nullptr, 0xffff, L"&Do not show me this message again."},
+    {0x00000000, 0x00000000, 0x50010001, 50, 87, 50, 14, 1, 0x0080, nullptr, 0xffff, L"OK"},
+    {0x00000000, 0x00000000, 0x50010000, 150, 87, 50, 14, 2, 0x0080, nullptr, 0xffff, L"Cancel"},
+};
+
+static const EmbCtl kInpDlg114Ctl[] = {
+    {0x00000000, 0x00000000, 0x50020001, 3, 7, 250, 60, 1103, 0x0082, nullptr, 0xfffe, nullptr},
+    {0x00000000, 0x00000000, 0x50010001, 100, 77, 50, 14, 1, 0x0080, nullptr, 0xffff, L"OK"},
+};
+
+static const EmbDlg kInpDialogs[] = {
+    {101, 0x00000000, 0x00000000, 0x80cc00c8, 0, 0, 267, 214, L"Add Input Language", 8, 400, 0, 1, L"MS Shell Dlg", 5, kInpDlg101Ctl, 430, 0xb742b491},
+    {106, 0x00000000, 0x00000000, 0x90c001c4, 0, 0, 263, 236, L"Language Bar", 8, 0, 0, 0, L"MS Shell Dlg", 7, kInpDlg106Ctl, 718, 0x17ee5a32},
+    {107, 0x00000000, 0x00000000, 0x90c001c4, 0, 0, 263, 236, L"Advanced Key Settings", 8, 0, 0, 1, L"MS Shell Dlg", 8, kInpDlg107Ctl, 638, 0x8001910c},
+    {108, 0x00000000, 0x00000000, 0x80c800c8, 0, 0, 271, 103, L"Change Key Sequence", 8, 400, 0, 1, L"MS Shell Dlg", 12, kInpDlg108Ctl, 846, 0x912bfd8f},
+    {111, 0x00000000, 0x00000000, 0x90c801c4, 5, 100, 298, 77, L"Change Key Sequence", 8, 0, 0, 1, L"MS Shell Dlg", 9, kInpDlg111Ctl, 464, 0x434b9344},
+    {500, 0x00000000, 0x00000000, 0x90c001c4, 0, 0, 263, 236, L"General", 8, 400, 0, 1, L"MS Shell Dlg", 11, kInpDlg500Ctl, 1072, 0xeac3d3bf},
+    {900, 0x00000000, 0x00000000, 0x80c800c8, 0, 0, 334, 140, L"Keyboard Layout Preview", 8, 400, 0, 1, L"MS Shell Dlg", 112, kInpDlg900Ctl, 3830, 0x0d1a6b95},
+    {112, 0x00000000, 0x00000000, 0x80c800c0, 0, 0, 196, 63, L"Text Services and Input Languages", 8, 400, 0, 1, L"MS Shell Dlg", 4, kInpDlg112Ctl, 348, 0xc67b55f2},
+    {113, 0x00000000, 0x00000000, 0x80c800c0, 0, 0, 253, 103, L"Text Services and Input Languages", 8, 400, 0, 1, L"MS Shell Dlg", 4, kInpDlg113Ctl, 348, 0x90159673},
+    {114, 0x00000000, 0x00000000, 0x80c800c0, 0, 0, 253, 93, L"Text Services and Input Languages", 8, 400, 0, 1, L"MS Shell Dlg", 2, kInpDlg114Ctl, 200, 0xc04192f0},
+    {0},
+};
+
+static const short kInpDlg101CtlPhr[] = {3,-1,0,1,4};
+
+static const short kInpDlg106CtlPhr[] = {5,6,7,8,9,10,11};
+
+static const short kInpDlg107CtlPhr[] = {13,14,15,16,17,18,-1,19};
+
+static const short kInpDlg108CtlPhr[] = {0,1,21,22,23,24,25,26,27,28,29,30};
+
+static const short kInpDlg111CtlPhr[] = {-1,-1,31,-1,-1,32,-1,0,1};
+
+static const short kInpDlg500CtlPhr[] = {34,35,-1,36,37,-1,38,39,40,41,42};
+
+static const short kInpDlg900CtlPhr[] = {0,1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,44,-1,-1,45};
+
+static const short kInpDlg112CtlPhr[] = {-1,46,0,1};
+
+static const short kInpDlg113CtlPhr[] = {-1,46,0,1};
+
+static const short kInpDlg114CtlPhr[] = {-1,0};
+
+static const short* const kInpPhrMaps[] = {kInpDlg101CtlPhr,kInpDlg106CtlPhr,kInpDlg107CtlPhr,kInpDlg108CtlPhr,kInpDlg111CtlPhr,kInpDlg500CtlPhr,kInpDlg900CtlPhr,kInpDlg112CtlPhr,kInpDlg113CtlPhr,kInpDlg114CtlPhr};
+
+static const short kInpTitlePhrase[] = {2,5,12,20,20,33,43};
+
+// ===== END GENERATED INPUT RESOURCE TABLES =====
 // BCP-47 tags in LangIndex order (settings values + log output).
 static const wchar_t* const kLangTags[LangCount] = {
     L"en-US", L"it-IT", L"de-DE", L"fr-FR", L"es-ES", L"pt-BR", L"nl-NL",
     L"pl-PL", L"ru-RU", L"zh-CN", L"ja-JP", L"ko-KR", L"tr-TR", L"cs-CZ",
     L"hu-HU", L"ro-RO", L"sv-SE", L"uk-UA", L"el-GR", L"ar-SA"
+};
+// Text Services and Input Languages title, localized consistently with the
+// twenty UI packs. This title belongs to the input-language dialog (102), not
+// to the surrounding Region tab caption.
+static const wchar_t* const kInputLanguagesTitle[LangCount] = {
+    L"Text Services and Input Languages",
+    L"Tastiere e lingue",
+    L"Textdienste und Eingabesprachen",
+    L"Services de texte et langues d’entrée",
+    L"Servicios de texto e idiomas de entrada",
+    L"Serviços de texto e idiomas de entrada",
+    L"Tekstservices en invoertalen",
+    L"Usługi tekstowe i języki wprowadzania",
+    L"Текстовые службы и языки ввода",
+    L"文本服务和输入语言",
+    L"テキスト サービスと入力言語",
+    L"텍스트 서비스 및 입력 언어",
+    L"Metin hizmetleri ve giriş dilleri",
+    L"Textové služby a vstupní jazyky",
+    L"Szöveges szolgáltatások és beviteli nyelvek",
+    L"Servicii de text și limbi de intrare",
+    L"Texttjänster och inmatningsspråk",
+    L"Текстові служби та мови введення",
+    L"Υπηρεσίες κειμένου και γλώσσες εισόδου",
+    L"خدمات النصوص ولغات الإدخال"
 };
 static const wchar_t* const kLangNames[LangCount] = {
     L"English (genuine Microsoft)", L"Italiano", L"Deutsch", L"Fran\u00E7ais",
@@ -1871,7 +2213,7 @@ static const wchar_t* const kStrTr_IT[66] = {
     L"Lingua di visualizzazione:",
     L"Lingua di input:",
     L"Formato:",
-    L"Posizione:",
+    L"Località:",
     L"Impossibile leggere l'impostazione",
     L"Contesto",
     L"Mai",
@@ -1889,14 +2231,14 @@ static const wchar_t* const kDlgTr_IT[92] = {
     L"Data estesa:",
     L"Ora breve:",
     L"Ora estesa:",
-    L"&Impostazioni aggiuntive...",
+    L"&Altre impostazioni",
     L"Tastiere e altre lingue di input",
     L"Per cambiare la tastiera o la lingua di input, fai clic su Cambia tastiere.",
     L"&Cambia tastiere...",
     L"Lingua di visualizzazione",
     L"Installa o disinstalla le lingue che Windows pu\u00F2 utilizzare per visualizzare il testo e, dove supportato, riconoscere voce e grafia.",
     L"&Installa/disinstalla lingue...",
-    L"Come utente guest non \u00E8 possibile cambiare la lingua di visualizzazione:",
+    L"Come utente ospite non \u00E8 possibile cambiare la lingua di visualizzazione:",
     L"La selezione della lingua di visualizzazione \u00E8 bloccata dai Criteri di gruppo.",
     L"Scegliere una lingua di &visualizzazione:",
     L"&Alcuni testi non sono tradotti nella lingua selezionata. Selezionare un'altra lingua che Windows utilizzer\u00E0 per visualizzare il testo:",
@@ -1974,13 +2316,13 @@ static const wchar_t* const kDlgTr_IT[92] = {
 static const wchar_t* const kTitleTr_IT[11] = {
     L"Formati",
     L"Tastiere e lingue",
-    L"Amministrazione",
+    L"Opzioni di amministrazione",
     L"Numeri",
     L"Valuta",
     L"Ora",
     L"Data",
     L"Ordinamento",
-    L"Posizione",
+    L"Località",
     L"Impostazioni schermata di benvenuto e nuovi account utente",
     L"Impostazioni paese e lingua",
 };
@@ -5051,6 +5393,1043 @@ static const wchar_t* const* const kTitleMasters[20] = {
 };
 int g_lang = LangEN; // Selected UI language (LangIndex); resolved once in Prepare.
 
+// ================= INPUT.DLL LANGUAGE PACKS (v1.1.0) =================
+// en-US (LangEN) keeps the genuine Microsoft text of the pinned input.dll.
+// The packs below are mod-provided translations of the Text Services and
+// Input Languages UI. kInputText maps runtime LoadStringW ids (verified
+// against the binary's string table and its disassembled call sites);
+// kInpDlgTr_* holds the dialog-template phrases, indexed through
+// kInpPhrMaps/kInpTitlePhrase in kInpDialogs order.
+
+struct InputTextPack { UINT id; const wchar_t* text[LangCount]; };
+// String ids verified against the pinned input.dll: LoadStringW call
+// sites (static ids 2002-2043) plus the dynamically table-driven ids
+// (categories, key names, defaults). Ids that are language-neutral
+// (letters, digits, F-keys, key-cap pseudo-names) are not listed and
+// keep the genuine English original.
+static const InputTextPack kInputText[] = {
+    {1,{L"Text Services and Input Languages",L"Tastiere e lingue",L"Textdienste und Eingabesprachen",L"Services de texte et langues d\u2019entr\u00E9e",L"Servicios de texto e idiomas de entrada",L"Servi\u00E7os de texto e idiomas de entrada",L"Tekstservices en invoertalen",L"Us\u0142ugi tekstowe i j\u0119zyki wprowadzania",L"\u0422\u0435\u043A\u0441\u0442\u043E\u0432\u044B\u0435 \u0441\u043B\u0443\u0436\u0431\u044B \u0438 \u044F\u0437\u044B\u043A\u0438 \u0432\u0432\u043E\u0434\u0430",L"\u6587\u672C\u670D\u52A1\u548C\u8F93\u5165\u8BED\u8A00",L"\u30C6\u30AD\u30B9\u30C8 \u30B5\u30FC\u30D3\u30B9\u3068\u5165\u529B\u8A00\u8A9E",L"\uD14D\uC2A4\uD2B8 \uC11C\uBE44\uC2A4 \uBC0F \uC785\uB825 \uC5B8\uC5B4",L"Metin hizmetleri ve giri\u015F dilleri",L"Textov\u00E9 slu\u017Eby a vstupn\u00ED jazyky",L"Sz\u00F6veges szolg\u00E1ltat\u00E1sok \u00E9s beviteli nyelvek",L"Servicii de text \u0219i limbi de intrare",L"Texttj\u00E4nster och inmatningsspr\u00E5k",L"\u0422\u0435\u043A\u0441\u0442\u043E\u0432\u0456 \u0441\u043B\u0443\u0436\u0431\u0438 \u0442\u0430 \u043C\u043E\u0432\u0438 \u0432\u0432\u0435\u0434\u0435\u043D\u043D\u044F",L"\u03A5\u03C0\u03B7\u03C1\u03B5\u03C3\u03AF\u03B5\u03C2 \u03BA\u03B5\u03B9\u03BC\u03AD\u03BD\u03BF\u03C5 \u03BA\u03B1\u03B9 \u03B3\u03BB\u03CE\u03C3\u03C3\u03B5\u03C2 \u03B5\u03B9\u03C3\u03CC\u03B4\u03BF\u03C5",L"\u062E\u062F\u0645\u0627\u062A \u0627\u0644\u0646\u0635\u0648\u0635 \u0648\u0644\u063A\u0627\u062A \u0627\u0644\u0625\u062F\u062E\u0627\u0644"}},
+    {2,{L"Customizes settings for text input of languages",L"Consente di personalizzare le impostazioni per l\u2019input di testo delle lingue",L"Passt die Einstellungen f\u00FCr die Texteingabe von Sprachen an",L"Personnalise les param\u00E8tres de saisie de texte des langues",L"Personaliza la configuraci\u00F3n de entrada de texto de los idiomas",L"Personaliza as defini\u00E7\u00F5es de entrada de texto dos idiomas",L"Past de instellingen voor tekstinvoer van talen aan",L"Dostosowuje ustawienia wprowadzania tekstu dla j\u0119zyk\u00F3w",L"\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u043E\u0432 \u0432\u0432\u043E\u0434\u0430 \u0442\u0435\u043A\u0441\u0442\u0430 \u0434\u043B\u044F \u044F\u0437\u044B\u043A\u043E\u0432",L"\u81EA\u5B9A\u4E49\u8BED\u8A00\u6587\u672C\u8F93\u5165\u8BBE\u7F6E",L"\u8A00\u8A9E\u306E\u30C6\u30AD\u30B9\u30C8\u5165\u529B\u8A2D\u5B9A\u3092\u30AB\u30B9\u30BF\u30DE\u30A4\u30BA\u3057\u307E\u3059",L"\uC5B8\uC5B4\uC758 \uD14D\uC2A4\uD2B8 \uC785\uB825 \uC124\uC815\uC744 \uC0AC\uC6A9\uC790 \uC9C0\uC815\uD569\uB2C8\uB2E4",L"Dillerin metin giri\u015Fi ayarlar\u0131n\u0131 \u00F6zelle\u015Ftirir",L"P\u0159izp\u016Fsob\u00ED nastaven\u00ED zad\u00E1v\u00E1n\u00ED textu pro jazyky",L"A nyelvek sz\u00F6vegbeviteli be\u00E1ll\u00EDt\u00E1sainak testreszab\u00E1sa",L"Particularizeaz\u0103 set\u0103rile de introducere a textului pentru limbi",L"Anpassar inst\u00E4llningar f\u00F6r textinmatning f\u00F6r spr\u00E5k",L"\u041D\u0430\u043B\u0430\u0448\u0442\u043E\u0432\u0443\u0454 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u0438 \u0432\u0432\u0435\u0434\u0435\u043D\u043D\u044F \u0442\u0435\u043A\u0441\u0442\u0443 \u0434\u043B\u044F \u043C\u043E\u0432",L"\u03A0\u03C1\u03BF\u03C3\u03B1\u03C1\u03BC\u03CC\u03B6\u03B5\u03B9 \u03C4\u03B9\u03C2 \u03C1\u03C5\u03B8\u03BC\u03AF\u03C3\u03B5\u03B9\u03C2 \u03B5\u03B9\u03C3\u03B1\u03B3\u03C9\u03B3\u03AE\u03C2 \u03BA\u03B5\u03B9\u03BC\u03AD\u03BD\u03BF\u03C5 \u03B3\u03B9\u03B1 \u03B3\u03BB\u03CE\u03C3\u03C3\u03B5\u03C2",L"\u062A\u062E\u0635\u064A\u0635 \u0625\u0639\u062F\u0627\u062F\u0627\u062A \u0625\u062F\u062E\u0627\u0644 \u0627\u0644\u0646\u0635 \u0644\u0644\u063A\u0627\u062A"}},
+    {2001,{L"Between input languages",L"Tra le lingue di input",L"Zwischen Eingabesprachen",L"Entre les langues d'entr\u00E9e",L"Entre idiomas de entrada",L"Entre idiomas de entrada",L"Tussen invoertalen",L"Mi\u0119dzy j\u0119zykami wprowadzania",L"\u041C\u0435\u0436\u0434\u0443 \u044F\u0437\u044B\u043A\u0430\u043C\u0438 \u0432\u0432\u043E\u0434\u0430",L"\u8F93\u5165\u8BED\u8A00\u4E4B\u95F4",L"\u5165\u529B\u8A00\u8A9E\u306E\u5207\u308A\u66FF\u3048",L"\uC785\uB825 \uC5B8\uC5B4 \uAC04 \uC804\uD658",L"Giri\u015F dilleri aras\u0131nda",L"Mezi vstupn\u00EDmi jazyky",L"Beviteli nyelvek k\u00F6z\u00F6tt",L"\u00CEntre limbile de intrare",L"Mellan inmatningsspr\u00E5k",L"\u041C\u0456\u0436 \u043C\u043E\u0432\u0430\u043C\u0438 \u0432\u0432\u0435\u0434\u0435\u043D\u043D\u044F",L"\u039C\u03B5\u03C4\u03B1\u03BE\u03CD \u03B3\u03BB\u03C9\u03C3\u03C3\u03CE\u03BD \u03B5\u03B9\u03C3\u03CC\u03B4\u03BF\u03C5",L"\u0628\u064A\u0646 \u0644\u063A\u0627\u062A \u0627\u0644\u0625\u062F\u062E\u0627\u0644"}},
+    {2002,{L"To %s - %s",L"A %s - %s",L"Auf %s - %s",L"Vers %s - %s",L"A %s - %s",L"Para %s - %s",L"Naar %s - %s",L"Na %s - %s",L"\u041D\u0430 %s - %s",L"\u8F6C\u5230 %s - %s",L"%s - %s \u3078",L"%s - %s(\uC73C)\uB85C",L"%s - %s olarak",L"Na %s - %s",L"%s - %s nyelvre",L"C\u0103tre %s - %s",L"Till %s - %s",L"\u041D\u0430 %s - %s",L"\u03A3\u03B5 %s - %s",L"\u0625\u0644\u0649 %s - %s"}},
+    {2003,{L"Ctrl+",L"Ctrl+",L"Strg+",L"Ctrl+",L"Ctrl+",L"Ctrl+",L"Ctrl+",L"Ctrl+",L"Ctrl+",L"Ctrl+",L"Ctrl+",L"Ctrl+",L"Ctrl+",L"Ctrl+",L"Ctrl+",L"Ctrl+",L"Ctrl+",L"Ctrl+",L"Ctrl+",L"Ctrl+"}},
+    {2004,{L"Left Alt+",L"Alt sinistro+",L"Alt links+",L"Alt gauche+",L"Alt izquierdo+",L"Alt esquerdo+",L"Linker Alt+",L"Lewy Alt+",L"\u041B\u0435\u0432\u044B\u0439 Alt+",L"\u5DE6 Alt+",L"\u5DE6 Alt+",L"\uC67C\uCABD Alt+",L"Sol Alt+",L"Lev\u00FD Alt+",L"Bal Alt+",L"Alt st\u00E2nga+",L"V\u00E4nster Alt+",L"\u041B\u0456\u0432\u0438\u0439 Alt+",L"\u0391\u03C1\u03B9\u03C3\u03C4\u03B5\u03C1\u03CC Alt+",L"Alt \u064A\u0633\u0627\u0631+"}},
+    {2005,{L"Shift+",L"Maiusc+",L"Umschalt+",L"Maj+",L"May\u00FAs+",L"Shift+",L"Shift+",L"Shift+",L"Shift+",L"Shift+",L"Shift+",L"Shift+",L"Shift+",L"Shift+",L"Shift+",L"Shift+",L"Skift+",L"Shift+",L"Shift+",L"Shift+"}},
+    {2010,{L"Confirmation",L"Conferma",L"Best\u00E4tigung",L"Confirmation",L"Confirmaci\u00F3n",L"Confirma\u00E7\u00E3o",L"Bevestiging",L"Potwierdzenie",L"\u041F\u043E\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043D\u0438\u0435",L"\u786E\u8BA4",L"\u78BA\u8A8D",L"\uD655\uC778",L"Onay",L"Potvrzen\u00ED",L"Meger\u0151s\u00EDt\u00E9s",L"Confirmare",L"Bekr\u00E4ftelse",L"\u041F\u0456\u0434\u0442\u0432\u0435\u0440\u0434\u0436\u0435\u043D\u043D\u044F",L"\u0395\u03C0\u03B9\u03B2\u03B5\u03B2\u03B1\u03AF\u03C9\u03C3\u03B7",L"\u062A\u0623\u0643\u064A\u062F"}},
+    {2011,{L"There are profiles that will be enabled with your change\r\n",L"Con la modifica apportata verranno abilitati alcuni profili\r\n",L"Es gibt Profile, die durch die \u00C4nderung aktiviert werden\r\n",L"Des profils seront activ\u00E9s par votre modification\r\n",L"Hay perfiles que se habilitar\u00E1n con el cambio\r\n",L"H\u00E1 perfis que ser\u00E3o habilitados com a sua altera\u00E7\u00E3o\r\n",L"Er zijn profielen die met uw wijziging worden ingeschakeld\r\n",L"Istniej\u0105 profile, kt\u00F3re zostan\u0105 w\u0142\u0105czone po wprowadzeniu zmian\r\n",L"\u0412 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u0435 \u0432\u043D\u0435\u0441\u0435\u043D\u043D\u044B\u0445 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0439 \u0431\u0443\u0434\u0443\u0442 \u0432\u043A\u043B\u044E\u0447\u0435\u043D\u044B \u043D\u0435\u043A\u043E\u0442\u043E\u0440\u044B\u0435 \u043F\u0440\u043E\u0444\u0438\u043B\u0438\r\n",L"\u6709\u4E9B\u914D\u7F6E\u6587\u4EF6\u5C06\u968F\u60A8\u7684\u66F4\u6539\u800C\u542F\u7528\r\n",L"\u5909\u66F4\u306B\u3088\u3063\u3066\u6709\u52B9\u306B\u306A\u308B\u30D7\u30ED\u30D5\u30A1\u30A4\u30EB\u304C\u3042\u308A\u307E\u3059\r\n",L"\uBCC0\uACBD \uB0B4\uC6A9\uC73C\uB85C \uC0AC\uC6A9\uB418\uB3C4\uB85D \uC124\uC815\uB420 \uD504\uB85C\uD544\uC774 \uC788\uC2B5\uB2C8\uB2E4\r\n",L"De\u011Fi\u015Fikli\u011Finizle etkinle\u015Ftirilecek profiller var\r\n",L"N\u011Bkter\u00E9 profily budou zm\u011Bnou povoleny\r\n",L"Vannak profilok, amelyek a m\u00F3dos\u00EDt\u00E1ssal enged\u00E9lyezve lesznek\r\n",L"Exist\u0103 profiluri care vor fi activate cu modificarea dumneavoastr\u0103\r\n",L"Det finns profiler som aktiveras n\u00E4r du \u00E4ndrar\r\n",L"\u0404 \u043F\u0440\u043E\u0444\u0456\u043B\u0456, \u044F\u043A\u0456 \u0431\u0443\u0434\u0435 \u0443\u0432\u0456\u043C\u043A\u043D\u0435\u043D\u043E \u0432\u0430\u0448\u043E\u044E \u0437\u043C\u0456\u043D\u043E\u044E\r\n",L"\u03A5\u03C0\u03AC\u03C1\u03C7\u03BF\u03C5\u03BD \u03C0\u03C1\u03BF\u03C6\u03AF\u03BB \u03C0\u03BF\u03C5 \u03B8\u03B1 \u03B5\u03BD\u03B5\u03C1\u03B3\u03BF\u03C0\u03BF\u03B9\u03B7\u03B8\u03BF\u03CD\u03BD \u03BC\u03B5 \u03C4\u03B7\u03BD \u03B1\u03BB\u03BB\u03B1\u03B3\u03AE \u03C3\u03B1\u03C2\r\n",L"\u062A\u0648\u062C\u062F \u0645\u0644\u0641\u0627\u062A \u062A\u0639\u0631\u064A\u0641 \u0633\u064A\u062A\u0645 \u062A\u0645\u0643\u064A\u0646\u0647\u0627 \u0628\u0627\u0644\u062A\u063A\u064A\u064A\u0631 \u0627\u0644\u0630\u064A \u0623\u062C\u0631\u064A\u062A\u0647\r\n"}},
+    {2012,{L"There are profiles that will be disabled with your change\r\n",L"Con la modifica apportata verranno disabilitati alcuni profili\r\n",L"Es gibt Profile, die durch die \u00C4nderung deaktiviert werden\r\n",L"Des profils seront d\u00E9sactiv\u00E9s par votre modification\r\n",L"Hay perfiles que se deshabilitar\u00E1n con el cambio\r\n",L"H\u00E1 perfis que ser\u00E3o desabilitados com a sua altera\u00E7\u00E3o\r\n",L"Er zijn profielen die met uw wijziging worden uitgeschakeld\r\n",L"Istniej\u0105 profile, kt\u00F3re zostan\u0105 wy\u0142\u0105czone po wprowadzeniu zmian\r\n",L"\u0412 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u0435 \u0432\u043D\u0435\u0441\u0435\u043D\u043D\u044B\u0445 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0439 \u0431\u0443\u0434\u0443\u0442 \u043E\u0442\u043A\u043B\u044E\u0447\u0435\u043D\u044B \u043D\u0435\u043A\u043E\u0442\u043E\u0440\u044B\u0435 \u043F\u0440\u043E\u0444\u0438\u043B\u0438\r\n",L"\u6709\u4E9B\u914D\u7F6E\u6587\u4EF6\u5C06\u968F\u60A8\u7684\u66F4\u6539\u800C\u7981\u7528\r\n",L"\u5909\u66F4\u306B\u3088\u3063\u3066\u7121\u52B9\u306B\u306A\u308B\u30D7\u30ED\u30D5\u30A1\u30A4\u30EB\u304C\u3042\u308A\u307E\u3059\r\n",L"\uBCC0\uACBD \uB0B4\uC6A9\uC73C\uB85C \uC0AC\uC6A9\uD558\uC9C0 \uC54A\uB3C4\uB85D \uC124\uC815\uB420 \uD504\uB85C\uD544\uC774 \uC788\uC2B5\uB2C8\uB2E4\r\n",L"De\u011Fi\u015Fikli\u011Finizle devre d\u0131\u015F\u0131 b\u0131rak\u0131lacak profiller var\r\n",L"N\u011Bkter\u00E9 profily budou zm\u011Bnou zak\u00E1z\u00E1ny\r\n",L"Vannak profilok, amelyek a m\u00F3dos\u00EDt\u00E1ssal le lesznek tiltva\r\n",L"Exist\u0103 profiluri care vor fi dezactivate cu modificarea dumneavoastr\u0103\r\n",L"Det finns profiler som inaktiveras n\u00E4r du \u00E4ndrar\r\n",L"\u0404 \u043F\u0440\u043E\u0444\u0456\u043B\u0456, \u044F\u043A\u0456 \u0431\u0443\u0434\u0435 \u0432\u0438\u043C\u043A\u043D\u0435\u043D\u043E \u0432\u0430\u0448\u043E\u044E \u0437\u043C\u0456\u043D\u043E\u044E\r\n",L"\u03A5\u03C0\u03AC\u03C1\u03C7\u03BF\u03C5\u03BD \u03C0\u03C1\u03BF\u03C6\u03AF\u03BB \u03C0\u03BF\u03C5 \u03B8\u03B1 \u03B1\u03C0\u03B5\u03BD\u03B5\u03C1\u03B3\u03BF\u03C0\u03BF\u03B9\u03B7\u03B8\u03BF\u03CD\u03BD \u03BC\u03B5 \u03C4\u03B7\u03BD \u03B1\u03BB\u03BB\u03B1\u03B3\u03AE \u03C3\u03B1\u03C2\r\n",L"\u062A\u0648\u062C\u062F \u0645\u0644\u0641\u0627\u062A \u062A\u0639\u0631\u064A\u0641 \u0633\u064A\u062A\u0645 \u062A\u0639\u0637\u064A\u0644\u0647\u0627 \u0628\u0627\u0644\u062A\u063A\u064A\u064A\u0631 \u0627\u0644\u0630\u064A \u0623\u062C\u0631\u064A\u062A\u0647\r\n"}},
+    {2020,{L"Keyboard",L"Tastiera",L"Tastatur",L"Clavier",L"Teclado",L"Teclado",L"Toetsenbord",L"Klawiatura",L"\u041A\u043B\u0430\u0432\u0438\u0430\u0442\u0443\u0440\u0430",L"\u952E\u76D8",L"\u30AD\u30FC\u30DC\u30FC\u30C9",L"\uD0A4\uBCF4\uB4DC",L"Klavye",L"Kl\u00E1vesnice",L"Billenty\u0171zet",L"Tastatur\u0103",L"Tangentbord",L"\u041A\u043B\u0430\u0432\u0456\u0430\u0442\u0443\u0440\u0430",L"\u03A0\u03BB\u03B7\u03BA\u03C4\u03C1\u03BF\u03BB\u03CC\u03B3\u03B9\u03BF",L"\u0644\u0648\u062D\u0629 \u0627\u0644\u0645\u0641\u0627\u062A\u064A\u062D"}},
+    {2021,{L"Speech",L"Riconoscimento vocale",L"Spracherkennung",L"Reconnaissance vocale",L"Voz",L"Voz",L"Spraak",L"Mowa",L"\u0420\u0435\u0447\u044C",L"\u8BED\u97F3",L"\u97F3\u58F0",L"\uC74C\uC131",L"Konu\u015Fma",L"\u0158e\u010D",L"Besz\u00E9d",L"Vorbire",L"Tal",L"\u041C\u043E\u0432\u043B\u0435\u043D\u043D\u044F",L"\u039F\u03BC\u03B9\u03BB\u03AF\u03B1",L"\u0627\u0644\u0643\u0644\u0627\u0645"}},
+    {2022,{L"Handwriting",L"Scrittura a mano",L"Handschrift",L"\u00C9criture manuscrite",L"Escritura a mano",L"Escrita manual",L"Handschrift",L"Pismo odr\u0119czne",L"\u0420\u0443\u043A\u043E\u043F\u0438\u0441\u043D\u044B\u0439 \u0432\u0432\u043E\u0434",L"\u624B\u5199",L"\u624B\u66F8\u304D",L"\uD544\uAE30",L"El yaz\u0131s\u0131",L"Psan\u00ED rukou",L"K\u00E9z\u00EDr\u00E1s",L"Scriere de m\u00E2n\u0103",L"Handskrift",L"\u0420\u0443\u043A\u043E\u043F\u0438\u0441\u043D\u0435 \u0432\u0432\u0435\u0434\u0435\u043D\u043D\u044F",L"\u03A7\u03B5\u03B9\u03C1\u03CC\u03B3\u03C1\u03B1\u03C6\u03BF",L"\u0627\u0644\u0643\u062A\u0627\u0628\u0629 \u0627\u0644\u064A\u062F\u0648\u064A\u0629"}},
+    {2023,{L"Reference",L"Riferimento",L"Verweis",L"R\u00E9f\u00E9rence",L"Referencia",L"Refer\u00EAncia",L"Verwijzing",L"Odwo\u0142anie",L"\u0421\u043F\u0440\u0430\u0432\u043A\u0430",L"\u53C2\u8003",L"\u30EA\u30D5\u30A1\u30EC\u30F3\u30B9",L"\uCC38\uC870",L"Ba\u015Fvuru",L"Odkaz",L"Hivatkoz\u00E1s",L"Referin\u021B\u0103",L"Referens",L"\u0414\u043E\u0432\u0456\u0434\u043A\u0430",L"\u0391\u03BD\u03B1\u03C6\u03BF\u03C1\u03AC",L"\u0645\u0631\u062C\u0639"}},
+    {2024,{L"Proofing",L"Strumenti di correzione",L"Korrekturhilfen",L"Correction",L"Correcci\u00F3n",L"Revis\u00E3o",L"Controle",L"Korekta",L"\u041F\u0440\u0430\u0432\u043E\u043F\u0438\u0441\u0430\u043D\u0438\u0435",L"\u6821\u5BF9",L"\u6587\u7AE0\u6821\u6B63",L"\uC5B8\uC5B4 \uAD50\uC815",L"Yaz\u0131m denetimi",L"Kontrola pravopisu",L"Nyelvhelyess\u00E9g-ellen\u0151rz\u00E9s",L"Corectare",L"Korrekturl\u00E4sning",L"\u041F\u0440\u0430\u0432\u043E\u043F\u0438\u0441",L"\u0394\u03B9\u03CC\u03C1\u03B8\u03C9\u03C3\u03B7",L"\u062A\u062F\u0642\u064A\u0642"}},
+    {2025,{L"Smart Tag",L"Smart Tag",L"Smarttag",L"Balise active",L"Etiqueta inteligente",L"Marca Inteligente",L"Smarttag",L"Tag inteligentny",L"\u0421\u043C\u0430\u0440\u0442-\u0442\u0435\u0433",L"\u667A\u80FD\u6807\u8BB0",L"\u30B9\u30DE\u30FC\u30C8 \u30BF\u30B0",L"\uC2A4\uB9C8\uD2B8 \uD0DC\uADF8",L"Ak\u0131ll\u0131 Etiket",L"Inteligentn\u00ED zna\u010Dka",L"Intelligens c\u00EDmke",L"Marcaj inteligent",L"Smarttagg",L"\u0421\u043C\u0430\u0440\u0442-\u0442\u0435\u0433",L"\u0388\u03BE\u03C5\u03C0\u03BD\u03B7 \u03B5\u03C4\u03B9\u03BA\u03AD\u03C4\u03B1",L"\u0639\u0644\u0627\u0645\u0629 \u0630\u0643\u064A\u0629"}},
+    {2026,{L"Other",L"Altro",L"Andere",L"Autre",L"Otro",L"Outro",L"Overig",L"Inne",L"\u0414\u0440\u0443\u0433\u043E\u0435",L"\u5176\u4ED6",L"\u305D\u306E\u4ED6",L"\uAE30\uD0C0",L"Di\u011Fer",L"Jin\u00E9",L"Egy\u00E9b",L"Altele",L"\u00D6vrigt",L"\u0406\u043D\u0448\u0435",L"\u0386\u03BB\u03BB\u03BF",L"\u0623\u062E\u0631\u0649"}},
+    {2030,{L" (64Bit Only)",L" (solo a 64 bit)",L" (nur 64 Bit)",L" (64 bits uniquement)",L" (solo 64 bits)",L" (somente 64 bits)",L" (alleen 64-bits)",L" (tylko 64-bitowe)",L" (\u0442\u043E\u043B\u044C\u043A\u043E 64-\u0440\u0430\u0437\u0440\u044F\u0434\u043D\u044B\u0435)",L" (\u4EC5\u9650 64 \u4F4D)",L" (64 \u30D3\u30C3\u30C8\u306E\u307F)",L" (64\uBE44\uD2B8 \uC804\uC6A9)",L" (yaln\u0131zca 64 Bit)",L" (pouze 64bitov\u00E9)",L" (csak 64 bites)",L" (doar 64 de bi\u021Bi)",L" (endast 64 bitar)",L" (\u043B\u0438\u0448\u0435 64-\u0440\u043E\u0437\u0440\u044F\u0434\u043D\u0456)",L" (\u03BC\u03CC\u03BD\u03BF 64 bit)",L" (64 \u0628\u062A \u0641\u0642\u0637)"}},
+    {2031,{L" (32Bit Only)",L" (solo a 32 bit)",L" (nur 32 Bit)",L" (32 bits uniquement)",L" (solo 32 bits)",L" (somente 32 bits)",L" (alleen 32-bits)",L" (tylko 32-bitowe)",L" (\u0442\u043E\u043B\u044C\u043A\u043E 32-\u0440\u0430\u0437\u0440\u044F\u0434\u043D\u044B\u0435)",L" (\u4EC5\u9650 32 \u4F4D)",L" (32 \u30D3\u30C3\u30C8\u306E\u307F)",L" (32\uBE44\uD2B8 \uC804\uC6A9)",L" (yaln\u0131zca 32 Bit)",L" (pouze 32bitov\u00E9)",L" (csak 32 bites)",L" (doar 32 de bi\u021Bi)",L" (endast 32 bitar)",L" (\u043B\u0438\u0448\u0435 32-\u0440\u043E\u0437\u0440\u044F\u0434\u043D\u0456)",L" (\u03BC\u03CC\u03BD\u03BF 32 bit)",L" (32 \u0628\u062A \u0641\u0642\u0637)"}},
+    {2032,{L"%s is available only on 32 bit processes.\r\nDo you want to make this as a default input item?",L"%s \u00E8 disponibile solo in processi a 32 bit.\r\nImpostarlo come elemento di input predefinito?",L"%s ist nur in 32-Bit-Prozessen verf\u00FCgbar.\r\nSoll dies als Standardeingabeelement festgelegt werden?",L"%s est disponible uniquement dans les processus 32 bits.\r\nVoulez-vous en faire l'\u00E9l\u00E9ment d'entr\u00E9e par d\u00E9faut ?",L"%s est\u00E1 disponible solo en procesos de 32 bits.\r\n\u00BFDesea establecerlo como elemento de entrada predeterminado?",L"%s est\u00E1 dispon\u00EDvel somente em processos de 32 bits.\r\nDeseja torn\u00E1-lo o item de entrada padr\u00E3o?",L"%s is alleen beschikbaar in 32-bitsprocessen.\r\nWilt u dit als standaardinvoeritem instellen?",L"%s jest dost\u0119pny tylko w procesach 32-bitowych.\r\nCzy ustawi\u0107 go jako domy\u015Blny element wprowadzania?",L"%s \u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D \u0442\u043E\u043B\u044C\u043A\u043E \u0432 32-\u0440\u0430\u0437\u0440\u044F\u0434\u043D\u044B\u0445 \u043F\u0440\u043E\u0446\u0435\u0441\u0441\u0430\u0445.\r\n\u0421\u0434\u0435\u043B\u0430\u0442\u044C \u0435\u0433\u043E \u044D\u043B\u0435\u043C\u0435\u043D\u0442\u043E\u043C \u0432\u0432\u043E\u0434\u0430 \u043F\u043E \u0443\u043C\u043E\u043B\u0447\u0430\u043D\u0438\u044E?",L"%s \u4EC5\u5728 32 \u4F4D\u8FDB\u7A0B\u4E2D\u53EF\u7528\u3002\r\n\u662F\u5426\u5C06\u5176\u8BBE\u4E3A\u9ED8\u8BA4\u8F93\u5165\u9879?",L"%s \u306F 32 \u30D3\u30C3\u30C8 \u30D7\u30ED\u30BB\u30B9\u3067\u306E\u307F\u4F7F\u7528\u3067\u304D\u307E\u3059\u3002\r\n\u65E2\u5B9A\u306E\u5165\u529B\u9805\u76EE\u3068\u3057\u3066\u8A2D\u5B9A\u3057\u307E\u3059\u304B?",L"%s\uB294(\uC740) 32\uBE44\uD2B8 \uD504\uB85C\uC138\uC2A4\uC5D0\uC11C\uB9CC \uC0AC\uC6A9\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.\r\n\uAE30\uBCF8 \uC785\uB825 \uD56D\uBAA9\uC73C\uB85C \uC124\uC815\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?",L"%s yaln\u0131zca 32 bit i\u015Flemlerde kullan\u0131labilir.\r\nVarsay\u0131lan giri\u015F \u00F6\u011Fesi olarak ayarlamak ister misiniz?",L"%s je dostupn\u00FD jen v 32bitov\u00FDch procesech.\r\nChcete ho nastavit jako v\u00FDchoz\u00ED vstupn\u00ED polo\u017Eku?",L"%s csak 32 bites folyamatokban \u00E9rhet\u0151 el.\r\nSzeretn\u00E9 alap\u00E9rtelmezett beviteli elemk\u00E9nt be\u00E1ll\u00EDtani?",L"%s este disponibil doar \u00EEn procese de 32 de bi\u021Bi.\r\nDori\u021Bi s\u0103 \u00EEl seta\u021Bi ca element de intrare implicit?",L"%s \u00E4r endast tillg\u00E4nglig i 32-bitarsprocesser.\r\nVill du g\u00F6ra den till standardinmatningsobjekt?",L"%s \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0438\u0439 \u043B\u0438\u0448\u0435 \u0432 32-\u0440\u043E\u0437\u0440\u044F\u0434\u043D\u0438\u0445 \u043F\u0440\u043E\u0446\u0435\u0441\u0430\u0445.\r\n\u0417\u0440\u043E\u0431\u0438\u0442\u0438 \u0439\u043E\u0433\u043E \u0435\u043B\u0435\u043C\u0435\u043D\u0442\u043E\u043C \u0432\u0432\u0435\u0434\u0435\u043D\u043D\u044F \u0437\u0430 \u0437\u0430\u043C\u043E\u0432\u0447\u0443\u0432\u0430\u043D\u043D\u044F\u043C?",L"\u03A4\u03BF %s \u03B5\u03AF\u03BD\u03B1\u03B9 \u03B4\u03B9\u03B1\u03B8\u03AD\u03C3\u03B9\u03BC\u03BF \u03BC\u03CC\u03BD\u03BF \u03C3\u03B5 \u03B4\u03B9\u03B1\u03B4\u03B9\u03BA\u03B1\u03C3\u03AF\u03B5\u03C2 32 bit.\r\n\u0398\u03AD\u03BB\u03B5\u03C4\u03B5 \u03BD\u03B1 \u03C4\u03BF \u03BF\u03C1\u03AF\u03C3\u03B5\u03C4\u03B5 \u03C9\u03C2 \u03C0\u03C1\u03BF\u03B5\u03C0\u03B9\u03BB\u03B5\u03B3\u03BC\u03AD\u03BD\u03BF \u03C3\u03C4\u03BF\u03B9\u03C7\u03B5\u03AF\u03BF \u03B5\u03B9\u03C3\u03CC\u03B4\u03BF\u03C5;",L"\u200E%s \u0645\u062A\u0648\u0641\u0631 \u0641\u064A \u0639\u0645\u0644\u064A\u0627\u062A 32 \u0628\u062A \u0641\u0642\u0637.\r\n\u0647\u0644 \u062A\u0631\u064A\u062F \u062A\u0639\u064A\u064A\u0646\u0647 \u0643\u0639\u0646\u0635\u0631 \u0625\u062F\u062E\u0627\u0644 \u0627\u0641\u062A\u0631\u0627\u0636\u064A\u061F"}},
+    {2033,{L"The following input methods are available only on 32 bit processes.\r\n%sDo you want to include them in Default User Account?",L"I metodi di input seguenti sono disponibili solo in processi a 32 bit.\r\n%sIncluderli nell'account utente predefinito?",L"Die folgenden Eingabemethoden sind nur in 32-Bit-Prozessen verf\u00FCgbar.\r\n%sSollen sie in das Standardbenutzerkonto aufgenommen werden?",L"Les m\u00E9thodes d'entr\u00E9e suivantes sont disponibles uniquement dans les processus 32 bits.\r\n%sVoulez-vous les inclure dans le compte d'utilisateur par d\u00E9faut ?",L"Los m\u00E9todos de entrada siguientes solo est\u00E1n disponibles en procesos de 32 bits.\r\n%s\u00BFDesea incluirlos en la cuenta de usuario predeterminada?",L"Os m\u00E9todos de entrada a seguir est\u00E3o dispon\u00EDveis somente em processos de 32 bits.\r\n%sDeseja inclu\u00ED-los na Conta de Usu\u00E1rio Padr\u00E3o?",L"De volgende invoermethoden zijn alleen beschikbaar in 32-bitsprocessen.\r\n%sWilt u deze opnemen in het standaardgebruikersaccount?",L"Nast\u0119puj\u0105ce metody wprowadzania s\u0105 dost\u0119pne tylko w procesach 32-bitowych.\r\n%sCzy do\u0142\u0105czy\u0107 je do domy\u015Blnego konta u\u017Cytkownika?",L"\u0421\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0435 \u043C\u0435\u0442\u043E\u0434\u044B \u0432\u0432\u043E\u0434\u0430 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B \u0442\u043E\u043B\u044C\u043A\u043E \u0432 32-\u0440\u0430\u0437\u0440\u044F\u0434\u043D\u044B\u0445 \u043F\u0440\u043E\u0446\u0435\u0441\u0441\u0430\u0445.\r\n%s\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u0438\u0445 \u0432 \u0443\u0447\u0435\u0442\u043D\u0443\u044E \u0437\u0430\u043F\u0438\u0441\u044C \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u044F \u043F\u043E \u0443\u043C\u043E\u043B\u0447\u0430\u043D\u0438\u044E?",L"\u4EE5\u4E0B\u8F93\u5165\u6CD5\u4EC5\u5728 32 \u4F4D\u8FDB\u7A0B\u4E2D\u53EF\u7528\u3002\r\n%s\u662F\u5426\u5C06\u5B83\u4EEC\u5305\u542B\u5728\u9ED8\u8BA4\u7528\u6237\u5E10\u6237\u4E2D?",L"\u6B21\u306E\u5165\u529B\u30E1\u30BD\u30C3\u30C9\u306F 32 \u30D3\u30C3\u30C8 \u30D7\u30ED\u30BB\u30B9\u3067\u306E\u307F\u4F7F\u7528\u3067\u304D\u307E\u3059\u3002\r\n%s\u65E2\u5B9A\u306E\u30E6\u30FC\u30B6\u30FC \u30A2\u30AB\u30A6\u30F3\u30C8\u306B\u542B\u3081\u307E\u3059\u304B?",L"\uB2E4\uC74C \uC785\uB825 \uBC29\uBC95\uC740 32\uBE44\uD2B8 \uD504\uB85C\uC138\uC2A4\uC5D0\uC11C\uB9CC \uC0AC\uC6A9\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.\r\n%s\uAE30\uBCF8 \uC0AC\uC6A9\uC790 \uACC4\uC815\uC5D0 \uD3EC\uD568\uC2DC\uD0A4\uACA0\uC2B5\uB2C8\uAE4C?",L"A\u015Fa\u011F\u0131daki giri\u015F y\u00F6ntemleri yaln\u0131zca 32 bit i\u015Flemlerde kullan\u0131labilir.\r\n%sBunlar\u0131 Varsay\u0131lan Kullan\u0131c\u0131 Hesab\u0131'na eklemek ister misiniz?",L"N\u00E1sleduj\u00EDc\u00ED metody zad\u00E1v\u00E1n\u00ED jsou dostupn\u00E9 jen v 32bitov\u00FDch procesech.\r\n%sChcete je zahrnout do v\u00FDchoz\u00EDho u\u017Eivatelsk\u00E9ho \u00FA\u010Dtu?",L"A k\u00F6vetkez\u0151 beviteli m\u00F3dok csak 32 bites folyamatokban \u00E9rhet\u0151k el.\r\n%sSzeretn\u00E9 belefoglalni \u0151ket az alap\u00E9rtelmezett felhaszn\u00E1l\u00F3i fi\u00F3kba?",L"Urm\u0103toarele metode de introducere sunt disponibile doar \u00EEn procese de 32 de bi\u021Bi.\r\n%sDori\u021Bi s\u0103 le include\u021Bi \u00EEn Contul de utilizator implicit?",L"F\u00F6ljande inmatningsmetoder \u00E4r endast tillg\u00E4ngliga i 32-bitarsprocesser.\r\n%sVill du inkludera dem i standardanv\u00E4ndarkontot?",L"\u0422\u0430\u043A\u0456 \u043C\u0435\u0442\u043E\u0434\u0438 \u0432\u0432\u0435\u0434\u0435\u043D\u043D\u044F \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0456 \u043B\u0438\u0448\u0435 \u0432 32-\u0440\u043E\u0437\u0440\u044F\u0434\u043D\u0438\u0445 \u043F\u0440\u043E\u0446\u0435\u0441\u0430\u0445.\r\n%s\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u0438 \u0457\u0445 \u0434\u043E \u043E\u0431\u043B\u0456\u043A\u043E\u0432\u043E\u0433\u043E \u0437\u0430\u043F\u0438\u0441\u0443 \u043A\u043E\u0440\u0438\u0441\u0442\u0443\u0432\u0430\u0447\u0430 \u0437\u0430 \u0437\u0430\u043C\u043E\u0432\u0447\u0443\u0432\u0430\u043D\u043D\u044F\u043C?",L"\u039F\u03B9 \u03B1\u03BA\u03CC\u03BB\u03BF\u03C5\u03B8\u03B5\u03C2 \u03BC\u03AD\u03B8\u03BF\u03B4\u03BF\u03B9 \u03B5\u03B9\u03C3\u03B1\u03B3\u03C9\u03B3\u03AE\u03C2 \u03B5\u03AF\u03BD\u03B1\u03B9 \u03B4\u03B9\u03B1\u03B8\u03AD\u03C3\u03B9\u03BC\u03B5\u03C2 \u03BC\u03CC\u03BD\u03BF \u03C3\u03B5 \u03B4\u03B9\u03B1\u03B4\u03B9\u03BA\u03B1\u03C3\u03AF\u03B5\u03C2 32 bit.\r\n%s\u0398\u03AD\u03BB\u03B5\u03C4\u03B5 \u03BD\u03B1 \u03C4\u03B9\u03C2 \u03C3\u03C5\u03BC\u03C0\u03B5\u03C1\u03B9\u03BB\u03AC\u03B2\u03B5\u03C4\u03B5 \u03C3\u03C4\u03BF\u03BD \u03C0\u03C1\u03BF\u03B5\u03C0\u03B9\u03BB\u03B5\u03B3\u03BC\u03AD\u03BD\u03BF \u03BB\u03BF\u03B3\u03B1\u03C1\u03B9\u03B1\u03C3\u03BC\u03CC \u03C7\u03C1\u03AE\u03C3\u03C4\u03B7;",L"\u0623\u0633\u0627\u0644\u064A\u0628 \u0627\u0644\u0625\u062F\u062E\u0627\u0644 \u0627\u0644\u062A\u0627\u0644\u064A\u0629 \u0645\u062A\u0648\u0641\u0631\u0629 \u0641\u064A \u0639\u0645\u0644\u064A\u0627\u062A 32 \u0628\u062A \u0641\u0642\u0637.\r\n%s\u0647\u0644 \u062A\u0631\u064A\u062F \u062A\u0636\u0645\u064A\u0646\u0647\u0627 \u0641\u064A \u062D\u0633\u0627\u0628 \u0627\u0644\u0645\u0633\u062A\u062E\u062F\u0645 \u0627\u0644\u0627\u0641\u062A\u0631\u0627\u0636\u064A\u061F"}},
+    {2034,{L"The following input methods are available only on 32 bit processes.\r\n%sThese can not be applied to System Accounts.",L"I metodi di input seguenti sono disponibili solo in processi a 32 bit.\r\n%sNon \u00E8 possibile applicarli agli account di sistema.",L"Die folgenden Eingabemethoden sind nur in 32-Bit-Prozessen verf\u00FCgbar.\r\n%sSie k\u00F6nnen nicht auf Systemkonten angewendet werden.",L"Les m\u00E9thodes d'entr\u00E9e suivantes sont disponibles uniquement dans les processus 32 bits.\r\n%sElles ne peuvent pas \u00EAtre appliqu\u00E9es aux comptes syst\u00E8me.",L"Los m\u00E9todos de entrada siguientes solo est\u00E1n disponibles en procesos de 32 bits.\r\n%sNo se pueden aplicar a cuentas del sistema.",L"Os m\u00E9todos de entrada a seguir est\u00E3o dispon\u00EDveis somente em processos de 32 bits.\r\n%sEles n\u00E3o podem ser aplicados a Contas do Sistema.",L"De volgende invoermethoden zijn alleen beschikbaar in 32-bitsprocessen.\r\n%sDeze kunnen niet worden toegepast op systeemaccounts.",L"Nast\u0119puj\u0105ce metody wprowadzania s\u0105 dost\u0119pne tylko w procesach 32-bitowych.\r\n%sNie mo\u017Cna ich stosowa\u0107 do kont systemowych.",L"\u0421\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0435 \u043C\u0435\u0442\u043E\u0434\u044B \u0432\u0432\u043E\u0434\u0430 \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u044B \u0442\u043E\u043B\u044C\u043A\u043E \u0432 32-\u0440\u0430\u0437\u0440\u044F\u0434\u043D\u044B\u0445 \u043F\u0440\u043E\u0446\u0435\u0441\u0441\u0430\u0445.\r\n%s\u0418\u0445 \u043D\u0435\u043B\u044C\u0437\u044F \u043F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u044C \u043A \u0441\u0438\u0441\u0442\u0435\u043C\u043D\u044B\u043C \u0443\u0447\u0435\u0442\u043D\u044B\u043C \u0437\u0430\u043F\u0438\u0441\u044F\u043C.",L"\u4EE5\u4E0B\u8F93\u5165\u6CD5\u4EC5\u5728 32 \u4F4D\u8FDB\u7A0B\u4E2D\u53EF\u7528\u3002\r\n%s\u65E0\u6CD5\u5C06\u5B83\u4EEC\u5E94\u7528\u4E8E\u7CFB\u7EDF\u5E10\u6237\u3002",L"\u6B21\u306E\u5165\u529B\u30E1\u30BD\u30C3\u30C9\u306F 32 \u30D3\u30C3\u30C8 \u30D7\u30ED\u30BB\u30B9\u3067\u306E\u307F\u4F7F\u7528\u3067\u304D\u307E\u3059\u3002\r\n%s\u3053\u308C\u3089\u306F\u30B7\u30B9\u30C6\u30E0 \u30A2\u30AB\u30A6\u30F3\u30C8\u306B\u306F\u9069\u7528\u3067\u304D\u307E\u305B\u3093\u3002",L"\uB2E4\uC74C \uC785\uB825 \uBC29\uBC95\uC740 32\uBE44\uD2B8 \uD504\uB85C\uC138\uC2A4\uC5D0\uC11C\uB9CC \uC0AC\uC6A9\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.\r\n%s\uC2DC\uC2A4\uD15C \uACC4\uC815\uC5D0\uB294 \uC801\uC6A9\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.",L"A\u015Fa\u011F\u0131daki giri\u015F y\u00F6ntemleri yaln\u0131zca 32 bit i\u015Flemlerde kullan\u0131labilir.\r\n%sBunlar Sistem Hesaplar\u0131na uygulanamaz.",L"N\u00E1sleduj\u00EDc\u00ED metody zad\u00E1v\u00E1n\u00ED jsou dostupn\u00E9 jen v 32bitov\u00FDch procesech.\r\n%sNejdou pou\u017E\u00EDt pro syst\u00E9mov\u00E9 \u00FA\u010Dty.",L"A k\u00F6vetkez\u0151 beviteli m\u00F3dok csak 32 bites folyamatokban \u00E9rhet\u0151k el.\r\n%sRendszerfi\u00F3kokra nem alkalmazhat\u00F3k.",L"Urm\u0103toarele metode de introducere sunt disponibile doar \u00EEn procese de 32 de bi\u021Bi.\r\n%sNu pot fi aplicate Conturilor de sistem.",L"F\u00F6ljande inmatningsmetoder \u00E4r endast tillg\u00E4ngliga i 32-bitarsprocesser.\r\n%sDe kan inte till\u00E4mpas p\u00E5 systemkonton.",L"\u0422\u0430\u043A\u0456 \u043C\u0435\u0442\u043E\u0434\u0438 \u0432\u0432\u0435\u0434\u0435\u043D\u043D\u044F \u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0456 \u043B\u0438\u0448\u0435 \u0432 32-\u0440\u043E\u0437\u0440\u044F\u0434\u043D\u0438\u0445 \u043F\u0440\u043E\u0446\u0435\u0441\u0430\u0445.\r\n%s\u0407\u0445 \u043D\u0435 \u043C\u043E\u0436\u043D\u0430 \u0437\u0430\u0441\u0442\u043E\u0441\u0443\u0432\u0430\u0442\u0438 \u0434\u043E \u0441\u0438\u0441\u0442\u0435\u043C\u043D\u0438\u0445 \u043E\u0431\u043B\u0456\u043A\u043E\u0432\u0438\u0445 \u0437\u0430\u043F\u0438\u0441\u0456\u0432.",L"\u039F\u03B9 \u03B1\u03BA\u03CC\u03BB\u03BF\u03C5\u03B8\u03B5\u03C2 \u03BC\u03AD\u03B8\u03BF\u03B4\u03BF\u03B9 \u03B5\u03B9\u03C3\u03B1\u03B3\u03C9\u03B3\u03AE\u03C2 \u03B5\u03AF\u03BD\u03B1\u03B9 \u03B4\u03B9\u03B1\u03B8\u03AD\u03C3\u03B9\u03BC\u03B5\u03C2 \u03BC\u03CC\u03BD\u03BF \u03C3\u03B5 \u03B4\u03B9\u03B1\u03B4\u03B9\u03BA\u03B1\u03C3\u03AF\u03B5\u03C2 32 bit.\r\n%s\u0394\u03B5\u03BD \u03BC\u03C0\u03BF\u03C1\u03BF\u03CD\u03BD \u03BD\u03B1 \u03B5\u03C6\u03B1\u03C1\u03BC\u03BF\u03C3\u03C4\u03BF\u03CD\u03BD \u03C3\u03B5 \u03BB\u03BF\u03B3\u03B1\u03C1\u03B9\u03B1\u03C3\u03BC\u03BF\u03CD\u03C2 \u03C3\u03C5\u03C3\u03C4\u03AE\u03BC\u03B1\u03C4\u03BF\u03C2.",L"\u0623\u0633\u0627\u0644\u064A\u0628 \u0627\u0644\u0625\u062F\u062E\u0627\u0644 \u0627\u0644\u062A\u0627\u0644\u064A\u0629 \u0645\u062A\u0648\u0641\u0631\u0629 \u0641\u064A \u0639\u0645\u0644\u064A\u0627\u062A 32 \u0628\u062A \u0641\u0642\u0637.\r\n%s\u0644\u0627 \u064A\u0645\u0643\u0646 \u062A\u0637\u0628\u064A\u0642\u0647\u0627 \u0639\u0644\u0649 \u062D\u0633\u0627\u0628\u0627\u062A \u0627\u0644\u0646\u0638\u0627\u0645."}},
+    {2036,{L"Show More...",L"Mostra altro...",L"Weitere anzeigen...",L"Afficher plus...",L"Mostrar m\u00E1s...",L"Mostrar mais...",L"Meer weergeven...",L"Poka\u017C wi\u0119cej...",L"\u041F\u043E\u043A\u0430\u0437\u0430\u0442\u044C \u0435\u0449\u0435...",L"\u663E\u793A\u66F4\u591A...",L"\u8A73\u7D30\u3092\u8868\u793A...",L"\uB354 \uBCF4\uAE30...",L"Daha fazla g\u00F6ster...",L"Zobrazit dal\u0161\u00ED...",L"Tov\u00E1bbiak megjelen\u00EDt\u00E9se...",L"Afi\u0219a\u021Bi mai multe...",L"Visa mer...",L"\u041F\u043E\u043A\u0430\u0437\u0430\u0442\u0438 \u0431\u0456\u043B\u044C\u0448\u0435...",L"\u0395\u03BC\u03C6\u03AC\u03BD\u03B9\u03C3\u03B7 \u03C0\u03B5\u03C1\u03B9\u03C3\u03C3\u03CC\u03C4\u03B5\u03C1\u03C9\u03BD...",L"\u0625\u0638\u0647\u0627\u0631 \u0627\u0644\u0645\u0632\u064A\u062F..."}},
+    {2037,{L"Close",L"Chiudi",L"Schlie\u00DFen",L"Fermer",L"Cerrar",L"Fechar",L"Sluiten",L"Zamknij",L"\u0417\u0430\u043A\u0440\u044B\u0442\u044C",L"\u5173\u95ED",L"\u9589\u3058\u308B",L"\uB2EB\uAE30",L"Kapat",L"Zav\u0159\u00EDt",L"Bez\u00E1r\u00E1s",L"\u00CEnchidere",L"St\u00E4ng",L"\u0417\u0430\u043A\u0440\u0438\u0442\u0438",L"\u039A\u03BB\u03B5\u03AF\u03C3\u03B9\u03BC\u03BF",L"\u0625\u063A\u0644\u0627\u0642"}},
+    {2038,{L"Text Services and Input Languages",L"Tastiere e lingue",L"Textdienste und Eingabesprachen",L"Services de texte et langues d\u2019entr\u00E9e",L"Servicios de texto e idiomas de entrada",L"Servi\u00E7os de texto e idiomas de entrada",L"Tekstservices en invoertalen",L"Us\u0142ugi tekstowe i j\u0119zyki wprowadzania",L"\u0422\u0435\u043A\u0441\u0442\u043E\u0432\u044B\u0435 \u0441\u043B\u0443\u0436\u0431\u044B \u0438 \u044F\u0437\u044B\u043A\u0438 \u0432\u0432\u043E\u0434\u0430",L"\u6587\u672C\u670D\u52A1\u548C\u8F93\u5165\u8BED\u8A00",L"\u30C6\u30AD\u30B9\u30C8 \u30B5\u30FC\u30D3\u30B9\u3068\u5165\u529B\u8A00\u8A9E",L"\uD14D\uC2A4\uD2B8 \uC11C\uBE44\uC2A4 \uBC0F \uC785\uB825 \uC5B8\uC5B4",L"Metin hizmetleri ve giri\u015F dilleri",L"Textov\u00E9 slu\u017Eby a vstupn\u00ED jazyky",L"Sz\u00F6veges szolg\u00E1ltat\u00E1sok \u00E9s beviteli nyelvek",L"Servicii de text \u0219i limbi de intrare",L"Texttj\u00E4nster och inmatningsspr\u00E5k",L"\u0422\u0435\u043A\u0441\u0442\u043E\u0432\u0456 \u0441\u043B\u0443\u0436\u0431\u0438 \u0442\u0430 \u043C\u043E\u0432\u0438 \u0432\u0432\u0435\u0434\u0435\u043D\u043D\u044F",L"\u03A5\u03C0\u03B7\u03C1\u03B5\u03C3\u03AF\u03B5\u03C2 \u03BA\u03B5\u03B9\u03BC\u03AD\u03BD\u03BF\u03C5 \u03BA\u03B1\u03B9 \u03B3\u03BB\u03CE\u03C3\u03C3\u03B5\u03C2 \u03B5\u03B9\u03C3\u03CC\u03B4\u03BF\u03C5",L"\u062E\u062F\u0645\u0627\u062A \u0627\u0644\u0646\u0635\u0648\u0635 \u0648\u0644\u063A\u0627\u062A \u0627\u0644\u0625\u062F\u062E\u0627\u0644"}},
+    {2039,{L"The property setting for %s is not available.",L"L'impostazione della propriet\u00E0 per %s non \u00E8 disponibile.",L"Die Eigenschaftseinstellung f\u00FCr %s ist nicht verf\u00FCgbar.",L"Le param\u00E8tre de propri\u00E9t\u00E9 de %s n'est pas disponible.",L"La configuraci\u00F3n de la propiedad de %s no est\u00E1 disponible.",L"A configura\u00E7\u00E3o da propriedade para %s n\u00E3o est\u00E1 dispon\u00EDvel.",L"De eigenschapsinstelling voor %s is niet beschikbaar.",L"Ustawienie w\u0142a\u015Bciwo\u015Bci dla %s jest niedost\u0119pne.",L"\u041F\u0430\u0440\u0430\u043C\u0435\u0442\u0440 \u0441\u0432\u043E\u0439\u0441\u0442\u0432\u0430 \u0434\u043B\u044F %s \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D.",L"%s \u7684\u5C5E\u6027\u8BBE\u7F6E\u4E0D\u53EF\u7528\u3002",L"%s \u306E\u30D7\u30ED\u30D1\u30C6\u30A3\u8A2D\u5B9A\u306F\u4F7F\u7528\u3067\u304D\u307E\u305B\u3093\u3002",L"%s\uC758 \uC18D\uC131 \uC124\uC815\uC744 \uC0AC\uC6A9\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.",L"%s i\u00E7in \u00F6zellik ayar\u0131 kullan\u0131lam\u0131yor.",L"Nastaven\u00ED vlastnosti pro %s nen\u00ED dostupn\u00E9.",L"A(z) %s tulajdons\u00E1gbe\u00E1ll\u00EDt\u00E1sa nem \u00E9rhet\u0151 el.",L"Setarea propriet\u0103\u021Bii pentru %s nu este disponibil\u0103.",L"Egenskapsinst\u00E4llningen f\u00F6r %s \u00E4r inte tillg\u00E4nglig.",L"\u041F\u0430\u0440\u0430\u043C\u0435\u0442\u0440 \u0432\u043B\u0430\u0441\u0442\u0438\u0432\u043E\u0441\u0442\u0456 \u0434\u043B\u044F %s \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0438\u0439.",L"\u0397 \u03C1\u03CD\u03B8\u03BC\u03B9\u03C3\u03B7 \u03B9\u03B4\u03B9\u03CC\u03C4\u03B7\u03C4\u03B1\u03C2 \u03B3\u03B9\u03B1 \u03C4\u03BF %s \u03B4\u03B5\u03BD \u03B5\u03AF\u03BD\u03B1\u03B9 \u03B4\u03B9\u03B1\u03B8\u03AD\u03C3\u03B9\u03BC\u03B7.",L"\u0625\u0639\u062F\u0627\u062F \u0627\u0644\u062E\u0627\u0635\u064A\u0629 \u0644\u0640 %s \u063A\u064A\u0631 \u0645\u062A\u0648\u0641\u0631."}},
+    {2040,{L"Ctrl",L"Ctrl",L"Strg",L"Ctrl",L"Ctrl",L"Ctrl",L"Ctrl",L"Ctrl",L"Ctrl",L"Ctrl",L"Ctrl",L"Ctrl",L"Ctrl",L"Ctrl",L"Ctrl",L"Ctrl",L"Ctrl",L"Ctrl",L"Ctrl",L"Ctrl"}},
+    {2041,{L"Ctrl + Shift",L"Ctrl + Maiusc",L"Strg + Umschalt",L"Ctrl + Maj",L"Ctrl + May\u00FAs",L"Ctrl + Shift",L"Ctrl + Shift",L"Ctrl + Shift",L"CTRL + SHIFT",L"Ctrl + Shift",L"Ctrl + Shift",L"Ctrl + Shift",L"Ctrl + Shift",L"Ctrl + Shift",L"Ctrl + Shift",L"Ctrl + Shift",L"Ctrl + Skift",L"CTRL + SHIFT",L"Ctrl + Shift",L"Ctrl + Shift"}},
+    {2042,{L"Left Alt + Shift",L"Alt sinistro + Maiusc",L"Alt links + Umschalt",L"Alt gauche + Maj",L"Alt izquierdo + May\u00FAs",L"Alt esquerdo + Shift",L"Linker Alt + Shift",L"Lewy Alt + Shift",L"\u041B\u0435\u0432\u044B\u0439 ALT + SHIFT",L"\u5DE6 Alt + Shift",L"\u5DE6 Alt + Shift",L"\uC67C\uCABD Alt + Shift",L"Sol Alt + Shift",L"Lev\u00FD Alt + Shift",L"Bal Alt + Shift",L"Alt st\u00E2nga + Shift",L"V\u00E4nster Alt + Skift",L"\u041B\u0456\u0432\u0438\u0439 ALT + SHIFT",L"\u0391\u03C1\u03B9\u03C3\u03C4\u03B5\u03C1\u03CC Alt + Shift",L"Alt \u064A\u0633\u0627\u0631 + Shift"}},
+    {2043,{L"Other Languages",L"Altre lingue",L"Andere Sprachen",L"Autres langues",L"Otros idiomas",L"Outros idiomas",L"Andere talen",L"Inne j\u0119zyki",L"\u0414\u0440\u0443\u0433\u0438\u0435 \u044F\u0437\u044B\u043A\u0438",L"\u5176\u4ED6\u8BED\u8A00",L"\u305D\u306E\u4ED6\u306E\u8A00\u8A9E",L"\uAE30\uD0C0 \uC5B8\uC5B4",L"Di\u011Fer diller",L"Dal\u0161\u00ED jazyky",L"Egy\u00E9b nyelvek",L"Alte limbi",L"Andra spr\u00E5k",L"\u0406\u043D\u0448\u0456 \u043C\u043E\u0432\u0438",L"\u0386\u03BB\u03BB\u03B5\u03C2 \u03B3\u03BB\u03CE\u03C3\u03C3\u03B5\u03C2",L"\u0644\u063A\u0627\u062A \u0623\u062E\u0631\u0649"}},
+    {2200,{L"(None)",L"(Nessuno)",L"(Keine)",L"(Aucune)",L"(Ninguno)",L"(Nenhum)",L"(Geen)",L"(Brak)",L"(\u041D\u0435\u0442)",L"(\u65E0)",L"(\u306A\u3057)",L"(\uC5C6\uC74C)",L"(Yok)",L"(\u017D\u00E1dn\u00E9)",L"(Nincs)",L"(F\u0103r\u0103)",L"(Ingen)",L"(\u041D\u0435\u043C\u0430\u0454)",L"(\u039A\u03B1\u03BC\u03AF\u03B1)",L"(\u0628\u0644\u0627)"}},
+    {2201,{L"Space",L"Spazio",L"Leertaste",L"Espace",L"Espacio",L"Espa\u00E7o",L"Spatie",L"Spacja",L"\u041F\u0440\u043E\u0431\u0435\u043B",L"\u7A7A\u683C\u952E",L"Space",L"Space",L"Bo\u015Fluk",L"Mezern\u00EDk",L"Sz\u00F3k\u00F6z",L"Spa\u021Biu",L"Blanksteg",L"\u041F\u0440\u043E\u0431\u0456\u043B",L"\u0394\u03B9\u03AC\u03C3\u03C4\u03B7\u03BC\u03B1",L"\u0645\u0633\u0627\u0641\u0629"}},
+    {2202,{L"Page_Up",L"Pagina su",L"Bild auf",L"Page pr\u00E9c\u00E9dente",L"Re P\u00E1g",L"Page Up",L"Page Up",L"Page Up",L"Page Up",L"Page Up",L"Page Up",L"Page Up",L"Page Up",L"Page Up",L"Page Up",L"Page Up",L"Page Up",L"Page Up",L"Page Up",L"Page Up"}},
+    {2203,{L"Page_Down",L"Pagina gi\u00F9",L"Bild ab",L"Page suivante",L"Av P\u00E1g",L"Page Down",L"Page Down",L"Page Down",L"Page Down",L"Page Down",L"Page Down",L"Page Down",L"Page Down",L"Page Down",L"Page Down",L"Page Down",L"Page Down",L"Page Down",L"Page Down",L"Page Down"}},
+    {2204,{L"End",L"Fine",L"Ende",L"Fin",L"Fin",L"End",L"End",L"End",L"End",L"End",L"End",L"End",L"End",L"End",L"End",L"End",L"End",L"End",L"End",L"End"}},
+    {2205,{L"Home",L"Home",L"Pos1",L"D\u00E9but",L"Inicio",L"Home",L"Home",L"Home",L"Home",L"Home",L"Home",L"Home",L"Home",L"Home",L"Home",L"Home",L"Home",L"Home",L"Home",L"Home"}},
+    {2255,{L"(None)",L"(Nessuno)",L"(Keine)",L"(Aucune)",L"(Ninguno)",L"(Nenhum)",L"(Geen)",L"(Brak)",L"(\u041D\u0435\u0442)",L"(\u65E0)",L"(\u306A\u3057)",L"(\uC5C6\uC74C)",L"(Yok)",L"(\u017D\u00E1dn\u00E9)",L"(Nincs)",L"(F\u0103r\u0103)",L"(Ingen)",L"(\u041D\u0435\u043C\u0430\u0454)",L"(\u039A\u03B1\u03BC\u03AF\u03B1)",L"(\u0628\u0644\u0627)"}},
+    {2267,{L"Grave Accent",L"Accento grave",L"Gravis",L"Accent grave",L"Acento grave",L"Acento grave",L"Accent grave",L"Akcent gravis",L"\u0421\u0438\u043C\u0432\u043E\u043B \u0443\u0434\u0430\u0440\u0435\u043D\u0438\u044F",L"\u91CD\u97F3\u7B26",L"\u30B0\u30EC\u30FC\u30D6 \u30A2\u30AF\u30BB\u30F3\u30C8",L"\uC5B5\uC74C \uC545\uC13C\uD2B8",L"Vurgu i\u015Fareti",L"P\u0159\u00EDzvuk",L"Visszav\u00E1g\u00F3jel",L"Accent grav",L"Grav accent",L"\u0417\u043D\u0430\u043A \u043D\u0430\u0433\u043E\u043B\u043E\u0441\u0443",L"\u0392\u03B1\u03C1\u03B5\u03AF\u03B1",L"\u0639\u0644\u0627\u0645\u0629 \u0627\u0644\u0646\u0628\u0631"}},
+    {3000,{L"(Default)",L"(predefinito)",L"(Standard)",L"(Par d\u00E9faut)",L"(Predeterminado)",L"(Padr\u00E3o)",L"(Standaard)",L"(Domy\u015Blnie)",L"(\u041F\u043E \u0443\u043C\u043E\u043B\u0447\u0430\u043D\u0438\u044E)",L"(\u9ED8\u8BA4)",L"(\u65E2\u5B9A)",L"(\uAE30\uBCF8\uAC12)",L"(Varsay\u0131lan)",L"(V\u00FDchoz\u00ED)",L"(Alap\u00E9rtelmezett)",L"(Implicit)",L"(Standard)",L"(\u0417\u0430 \u0437\u0430\u043C\u043E\u0432\u0447\u0443\u0432\u0430\u043D\u043D\u044F\u043C)",L"(\u03A0\u03C1\u03BF\u03B5\u03C0\u03B9\u03BB\u03BF\u03B3\u03AE)",L"(\u0627\u0641\u062A\u0631\u0627\u0636\u064A)"}},
+};
+
+const wchar_t* InputText(UINT id) {
+    if (g_lang < LangEN || g_lang >= LangCount) return nullptr;
+    for (const auto& item : kInputText) if (item.id == id) return item.text[g_lang];
+    return nullptr;
+}
+
+// ------- Text Services dialog-template phrases (47, shared by all pages) -------
+static const wchar_t* const kInpDlgTr_IT[47] = {
+    L"OK",
+    L"Annulla",
+    L"Aggiungi lingua di input",
+    L"Selezionare la lingua da aggiungere mediante le caselle di controllo seguenti.",
+    L"&Anteprima...",
+    L"Barra della lingua",
+    L"&Mobile sul desktop",
+    L"Ancorata alla &barra delle applicazioni",
+    L"&Nascosta",
+    L"Mostra la barra della lingua come trasparente quando ina&ttiva",
+    L"Mostra icone &aggiuntive della barra della lingua nella barra delle applicazioni",
+    L"Mostra &etichette di testo sulla barra della lingua",
+    L"Impostazioni avanzate tasti",
+    L"Per disattivare Bloc Maiusc",
+    L"Premere il tasto B&LOC MAIUSC",
+    L"Premere il tasto MAI&USC",
+    L"Tasti di scelta rapida per le lingue di input",
+    L"Azione",
+    L"&Sequenza di tasti",
+    L"&Cambia sequenza di tasti...",
+    L"Cambia sequenza di tasti",
+    L"Cambia lingua di input",
+    L"&Non assegnata",
+    L"&Ctrl + Maiusc",
+    L"&Alt sinistro + Maiusc",
+    L"Accento &grave (`)",
+    L"Cambia layout di tastiera",
+    L"N&on assegnata",
+    L"C&trl + Maiusc",
+    L"Alt sinist&ro + Maiusc",
+    L"Accento grav&e (`)",
+    L"&Attiva sequenza di tasti",
+    L"&Tasto:",
+    L"Generale",
+    L"&Lingua di input predefinita",
+    L"Selezionare una delle lingue di input installate da usare come predefinita per tutti i campi di input.",
+    L"&Servizi installati",
+    L"Selezionare i servizi desiderati per ogni lingua di input visualizzata nell'elenco. Usare i pulsanti Aggiungi e Rimuovi per modificare l'elenco.",
+    L"A&ggiungi...",
+    L"&Rimuovi",
+    L"&Propriet\u00E0...",
+    L"Sposta s&u",
+    L"Sposta g&i\u00F9",
+    L"Anteprima layout di tastiera",
+    L"Nome layout:",
+    L"&Cambia icona...",
+    L"&Non visualizzare pi\u00F9 questo messaggio.",
+};
+
+static const wchar_t* const kInpDlgTr_DE[47] = {
+    L"OK",
+    L"Abbrechen",
+    L"Eingabesprache hinzuf\u00FCgen",
+    L"W\u00E4hlen Sie die hinzuzuf\u00FCgende Sprache anhand der unten angezeigten Kontrollk\u00E4stchen aus.",
+    L"&Vorschau...",
+    L"Sprachleiste",
+    L"&Frei auf dem Desktop",
+    L"In der &Taskleiste angedockt",
+    L"&Ausgeblendet",
+    L"Sprachleiste bei I&naktivit\u00E4t als transparent anzeigen",
+    L"&Zus\u00E4tzliche Sprachleisten-Symbole in der Taskleiste anzeigen",
+    L"Te&xtbezeichnungen auf der Sprachleiste anzeigen",
+    L"Erweiterte Tasteneinstellungen",
+    L"Zum Deaktivieren der Feststelltaste",
+    L"Feststelltaste &dr\u00FCcken",
+    L"Umschalttaste d&r\u00FCcken",
+    L"Tastenkombinationen f\u00FCr Eingabesprachen",
+    L"Aktion",
+    L"&Tastenfolge",
+    L"Tastenfolge &\u00E4ndern...",
+    L"Tastenfolge \u00E4ndern",
+    L"Eingabesprache wechseln",
+    L"&Nicht zugewiesen",
+    L"&STRG + UMSCHALT",
+    L"&Linke ALT + UMSCHALT",
+    L"&Gravis (`)",
+    L"Tastaturlayout wechseln",
+    L"N&icht zugewiesen",
+    L"STRG + U&MSCHALT",
+    L"Linke AL&T + UMSCHALT",
+    L"Gr&avis (`)",
+    L"Tastenfolge &aktivieren",
+    L"&Taste:",
+    L"Allgemein",
+    L"&Standardeingabesprache",
+    L"W\u00E4hlen Sie eine der installierten Eingabesprachen als Standardsprache f\u00FCr alle Eingabefelder aus.",
+    L"&Installierte Dienste",
+    L"W\u00E4hlen Sie die gew\u00FCnschten Dienste f\u00FCr jede in der Liste angezeigte Eingabesprache aus. Verwenden Sie zum \u00C4ndern der Liste die Schaltfl\u00E4chen Hinzuf\u00FCgen und Entfernen.",
+    L"&Hinzuf\u00FCgen...",
+    L"Entfe&rnen",
+    L"&Eigenschaften...",
+    L"Nach &oben",
+    L"Nach &unten",
+    L"Vorschau des Tastaturlayouts",
+    L"Layoutname:",
+    L"S&ymbol \u00E4ndern...",
+    L"Diese Meldung &nicht mehr anzeigen.",
+};
+
+static const wchar_t* const kInpDlgTr_FR[47] = {
+    L"OK",
+    L"Annuler",
+    L"Ajouter une langue d'entr\u00E9e",
+    L"S\u00E9lectionnez la langue \u00E0 ajouter \u00E0 l'aide des cases \u00E0 cocher ci-dessous.",
+    L"&Aper\u00E7u...",
+    L"Barre de langue",
+    L"&Flottante sur le Bureau",
+    L"A&ncr\u00E9e dans la barre des t\u00E2ches",
+    L"&Masqu\u00E9e",
+    L"Afficher la barre de langue comme transparente lorsqu'elle est inacti&ve",
+    L"Afficher les &ic\u00F4nes suppl\u00E9mentaires de la barre de langue dans la barre des t\u00E2ches",
+    L"Afficher les &\u00E9tiquettes de texte sur la barre de langue",
+    L"Param\u00E8tres de touches avanc\u00E9s",
+    L"Pour d\u00E9sactiver Verr. Maj",
+    L"Appuyer sur la touche VERR. &MAJ",
+    L"Appuyer sur la touche MA&J",
+    L"Touches d'acc\u00E8s rapide pour les langues d'entr\u00E9e",
+    L"Action",
+    L"&S\u00E9quence de touches",
+    L"Mod&ifier la s\u00E9quence de touches...",
+    L"Modifier la s\u00E9quence de touches",
+    L"Changer de langue d'entr\u00E9e",
+    L"&Non affect\u00E9e",
+    L"&Ctrl + Maj",
+    L"&Alt gauche + Maj",
+    L"Accent &grave (`)",
+    L"Changer de disposition de clavier",
+    L"N&on affect\u00E9e",
+    L"C&trl + Maj",
+    L"Alt gauche + Ma&j",
+    L"Accent grav&e (`)",
+    L"&Activer la s\u00E9quence de touches",
+    L"&Touche :",
+    L"G\u00E9n\u00E9ral",
+    L"Langue d'entr\u00E9e par &d\u00E9faut",
+    L"S\u00E9lectionnez l'une des langues d'entr\u00E9e install\u00E9es \u00E0 utiliser par d\u00E9faut pour tous les champs de saisie.",
+    L"&Services install\u00E9s",
+    L"S\u00E9lectionnez les services souhait\u00E9s pour chaque langue d'entr\u00E9e affich\u00E9e dans la liste. Utilisez les boutons Ajouter et Supprimer pour modifier cette liste.",
+    L"A&jouter...",
+    L"S&upprimer",
+    L"&Propri\u00E9t\u00E9s...",
+    L"&Monter",
+    L"D&escendre",
+    L"Aper\u00E7u de la disposition du clavier",
+    L"Nom de la disposition :",
+    L"&Modifier l'ic\u00F4ne...",
+    L"Ne plus afficher ce &message.",
+};
+
+static const wchar_t* const kInpDlgTr_ES[47] = {
+    L"Aceptar",
+    L"Cancelar",
+    L"Agregar idioma de entrada",
+    L"Seleccione el idioma que desee agregar mediante las casillas siguientes.",
+    L"Vista &previa...",
+    L"Barra de idioma",
+    L"&Flotante en el escritorio",
+    L"Acoplada en la &barra de tareas",
+    L"&Oculta",
+    L"Mostrar la barra de idioma como transparente cuando est\u00E9 i&nactiva",
+    L"Mostrar iconos &adicionales de la barra de idioma en la barra de tareas",
+    L"Mostrar e&tiquetas de texto en la barra de idioma",
+    L"Configuraci\u00F3n avanzada de teclas",
+    L"Para desactivar Bloq May\u00FAs",
+    L"Presionar la tecla BLOQ &MAY\u00DAS",
+    L"Presionar la tecla MA&Y\u00DAS",
+    L"Teclas de m\u00E9todo abreviado para los idiomas de entrada",
+    L"Acci\u00F3n",
+    L"&Secuencia de teclas",
+    L"&Cambiar secuencia de teclas...",
+    L"Cambiar secuencia de teclas",
+    L"Cambiar idioma de entrada",
+    L"&Sin asignar",
+    L"&Ctrl + May\u00FAs",
+    L"&Alt izquierdo + May\u00FAs",
+    L"Acento g&rave (`)",
+    L"Cambiar dise\u00F1o de teclado",
+    L"S&in asignar",
+    L"C&trl + May\u00FAs",
+    L"Alt izquierd&o + May\u00FAs",
+    L"Acento &grave (`)",
+    L"&Habilitar secuencia de teclas",
+    L"&Tecla:",
+    L"General",
+    L"Idioma de entrada pre&determinado",
+    L"Seleccione uno de los idiomas de entrada instalados que se usar\u00E1 como predeterminado para todos los campos de entrada.",
+    L"&Servicios instalados",
+    L"Seleccione los servicios que desee para cada idioma de entrada mostrado en la lista. Use los botones Agregar y Quitar para modificar esta lista.",
+    L"&Agregar...",
+    L"&Quitar",
+    L"&Propiedades...",
+    L"Su&bir",
+    L"Ba&jar",
+    L"Vista previa del dise\u00F1o de teclado",
+    L"Nombre del dise\u00F1o:",
+    L"&Cambiar icono...",
+    L"&No volver a mostrar este mensaje.",
+};
+
+static const wchar_t* const kInpDlgTr_PT[47] = {
+    L"OK",
+    L"Cancelar",
+    L"Adicionar idioma de entrada",
+    L"Selecione o idioma a ser adicionado usando as caixas de sele\u00E7\u00E3o abaixo.",
+    L"&Visualizar...",
+    L"Barra de idiomas",
+    L"&Flutuante na \u00E1rea de trabalho",
+    L"Encaixada na &barra de tarefas",
+    L"&Oculta",
+    L"Mostrar a barra de idiomas como transparente quando estiver i&nativa",
+    L"Mostrar \u00EDcones &adicionais da barra de idiomas na barra de tarefas",
+    L"Mostrar r\u00F3&tulos de texto na barra de idiomas",
+    L"Defini\u00E7\u00F5es avan\u00E7adas de teclas",
+    L"Para desativar Caps Lock",
+    L"Pressionar a tecla CAPS &LOCK",
+    L"Pressionar a tecla SHI&FT",
+    L"Teclas de atalho para idiomas de entrada",
+    L"A\u00E7\u00E3o",
+    L"&Sequ\u00EAncia de teclas",
+    L"Al&terar sequ\u00EAncia de teclas...",
+    L"Alterar sequ\u00EAncia de teclas",
+    L"Alternar idioma de entrada",
+    L"&N\u00E3o atribu\u00EDdo",
+    L"&Ctrl + Shift",
+    L"&Alt esquerdo + Shift",
+    L"Acento &grave (`)",
+    L"Alternar layout de teclado",
+    L"N&\u00E3o atribu\u00EDdo",
+    L"C&trl + Shift",
+    L"Alt esquerd&o + Shift",
+    L"Acento gra&ve (`)",
+    L"&Habilitar sequ\u00EAncia de teclas",
+    L"&Tecla:",
+    L"Geral",
+    L"&Idioma de entrada padr\u00E3o",
+    L"Selecione um dos idiomas de entrada instalados para ser usado como padr\u00E3o para todos os campos de entrada.",
+    L"&Servi\u00E7os instalados",
+    L"Selecione os servi\u00E7os desejados para cada idioma de entrada mostrado na lista. Use os bot\u00F5es Adicionar e Remover para modificar essa lista.",
+    L"A&dicionar...",
+    L"&Remover",
+    L"&Propriedades...",
+    L"Mover para &cima",
+    L"Mover para &baixo",
+    L"Visualiza\u00E7\u00E3o do layout do teclado",
+    L"Nome do layout:",
+    L"Alterar &\u00EDcone...",
+    L"&N\u00E3o mostrar esta mensagem novamente.",
+};
+
+static const wchar_t* const kInpDlgTr_NL[47] = {
+    L"OK",
+    L"Annuleren",
+    L"Invoertaal toevoegen",
+    L"Selecteer de taal die u wilt toevoegen met behulp van de onderstaande selectievakjes.",
+    L"&Voorbeeld...",
+    L"Taalbalk",
+    L"&Zwevend op het bureaublad",
+    L"Vastgemaakt aan de &taakbalk",
+    L"&Verborgen",
+    L"De taalbalk als transparant weergeven wanneer i&nactief",
+    L"Aanvu&llende taalbalkpictogrammen in de taakbalk weergeven",
+    L"Te&kstlabels op de taalbalk weergeven",
+    L"Geavanceerde toetsinstellingen",
+    L"Voor het uitschakelen van Caps Lock",
+    L"De CAPS &LOCK-toets indrukken",
+    L"De SHI&FT-toets indrukken",
+    L"Sneltoetsen voor invoertalen",
+    L"Actie",
+    L"&Toetsvolgorde",
+    L"Toetsvolgorde &wijzigen...",
+    L"Toetsvolgorde wijzigen",
+    L"Invoertaal wijzigen",
+    L"&Niet toegewezen",
+    L"&Ctrl + Shift",
+    L"&Linker Alt + Shift",
+    L"&Accent grave (`)",
+    L"Toetsenbordindeling wijzigen",
+    L"N&iet toegewezen",
+    L"C&trl + Shift",
+    L"Lin&ker Alt + Shift",
+    L"Accent &grave (`)",
+    L"Toetsvolgorde &inschakelen",
+    L"&Toets:",
+    L"Algemeen",
+    L"Stan&daard invoertaal",
+    L"Selecteer een van de ge\u00EFnstalleerde invoertalen om als standaard voor alle invoervelden te gebruiken.",
+    L"&Ge\u00EFnstalleerde services",
+    L"Selecteer de services die u wilt voor elke invoertaal in de lijst. Gebruik de knoppen Toevoegen en Verwijderen om deze lijst te wijzigen.",
+    L"&Toevoegen...",
+    L"&Verwijderen",
+    L"&Eigenschappen...",
+    L"Naar b&oven",
+    L"Naar be&neden",
+    L"Voorbeeld van toetsenbordindeling",
+    L"Naam indeling:",
+    L"Pictogram &wijzigen...",
+    L"Dit bericht &niet meer tonen.",
+};
+
+static const wchar_t* const kInpDlgTr_PL[47] = {
+    L"OK",
+    L"Anuluj",
+    L"Dodaj j\u0119zyk wprowadzania",
+    L"Wybierz j\u0119zyk, kt\u00F3ry ma zosta\u0107 dodany, za pomoc\u0105 poni\u017Cszych p\u00F3l wyboru.",
+    L"&Podgl\u0105d...",
+    L"Pasek j\u0119zyka",
+    L"&P\u0142ywaj\u0105cy na pulpicie",
+    L"Zadokowany na pasku &zada\u0144",
+    L"&Ukryty",
+    L"Poka\u017C pasek j\u0119zyka jako przezroczysty, gdy jest &nieaktywny",
+    L"Poka\u017C dod&atkowe ikony paska j\u0119zyka na pasku zada\u0144",
+    L"Poka\u017C e&tykiety tekstowe na pasku j\u0119zyka",
+    L"Zaawansowane ustawienia klawiszy",
+    L"Aby wy\u0142\u0105czy\u0107 klawisz Caps Lock",
+    L"Naci\u015Bnij klawisz CAPS &LOCK",
+    L"Naci\u015Bnij klawisz SHI&FT",
+    L"Klawisze skr\u00F3tu dla j\u0119zyk\u00F3w wprowadzania",
+    L"Akcja",
+    L"&Sekwencja klawiszy",
+    L"&Zmie\u0144 sekwencj\u0119 klawiszy...",
+    L"Zmie\u0144 sekwencj\u0119 klawiszy",
+    L"Prze\u0142\u0105cz j\u0119zyk wprowadzania",
+    L"&Nie przypisano",
+    L"&Ctrl + Shift",
+    L"&Lewy Alt + Shift",
+    L"&Akcent gravis (`)",
+    L"Prze\u0142\u0105cz uk\u0142ad klawiatury",
+    L"N&ie przypisano",
+    L"C&trl + Shift",
+    L"Le&wy Alt + Shift",
+    L"Akcent &gravis (`)",
+    L"&W\u0142\u0105cz sekwencj\u0119 klawiszy",
+    L"&Klawisz:",
+    L"Og\u00F3lne",
+    L"Domy\u015Blny &j\u0119zyk wprowadzania",
+    L"Wybierz jeden z zainstalowanych j\u0119zyk\u00F3w wprowadzania, kt\u00F3ry ma by\u0107 u\u017Cywany jako domy\u015Blny dla wszystkich p\u00F3l wprowadzania.",
+    L"&Zainstalowane us\u0142ugi",
+    L"Wybierz us\u0142ugi dla ka\u017Cdego j\u0119zyka wprowadzania widocznego na li\u015Bcie. U\u017Cyj przycisk\u00F3w Dodaj i Usu\u0144, aby zmieni\u0107 t\u0119 list\u0119.",
+    L"D&odaj...",
+    L"&Usu\u0144",
+    L"&W\u0142a\u015Bciwo\u015Bci...",
+    L"Przenie\u015B w &g\u00F3r\u0119",
+    L"Przenie\u015B w &d\u00F3\u0142",
+    L"Podgl\u0105d uk\u0142adu klawiatury",
+    L"Nazwa uk\u0142adu:",
+    L"Zmie\u0144 &ikon\u0119...",
+    L"&Nie pokazuj wi\u0119cej tej wiadomo\u015Bci.",
+};
+
+static const wchar_t* const kInpDlgTr_RU[47] = {
+    L"OK",
+    L"\u041E\u0442\u043C\u0435\u043D\u0430",
+    L"\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u044F\u0437\u044B\u043A \u0432\u0432\u043E\u0434\u0430",
+    L"\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u043E\u0431\u0430\u0432\u043B\u044F\u0435\u043C\u044B\u0439 \u044F\u0437\u044B\u043A \u0441 \u043F\u043E\u043C\u043E\u0449\u044C\u044E \u0444\u043B\u0430\u0436\u043A\u043E\u0432 \u043D\u0438\u0436\u0435.",
+    L"&\u041F\u0440\u0435\u0434\u0432\u0430\u0440\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0439 \u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440...",
+    L"\u042F\u0437\u044B\u043A\u043E\u0432\u0430\u044F \u043F\u0430\u043D\u0435\u043B\u044C",
+    L"&\u041F\u043B\u0430\u0432\u0430\u044E\u0449\u0430\u044F \u043D\u0430 \u0440\u0430\u0431\u043E\u0447\u0435\u043C \u0441\u0442\u043E\u043B\u0435",
+    L"\u0417\u0430\u043A\u0440\u0435\u043F\u043B\u0435\u043D\u0430 \u043D\u0430 \u043F\u0430\u043D\u0435\u043B\u0438 &\u0437\u0430\u0434\u0430\u0447",
+    L"&\u0421\u043A\u0440\u044B\u0442\u0430\u044F",
+    L"\u041E\u0442\u043E\u0431\u0440\u0430\u0436\u0430\u0442\u044C \u044F\u0437\u044B\u043A\u043E\u0432\u0443\u044E \u043F\u0430\u043D\u0435\u043B\u044C \u043A\u0430\u043A \u043F\u0440\u043E\u0437\u0440\u0430\u0447\u043D\u0443\u044E, \u043A\u043E\u0433\u0434\u0430 \u043E\u043D\u0430 &\u043D\u0435\u0430\u043A\u0442\u0438\u0432\u043D\u0430",
+    L"\u041E\u0442\u043E\u0431\u0440\u0430\u0436\u0430\u0442\u044C \u0434\u043E\u043F\u043E&\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0435 \u0437\u043D\u0430\u0447\u043A\u0438 \u044F\u0437\u044B\u043A\u043E\u0432\u043E\u0439 \u043F\u0430\u043D\u0435\u043B\u0438 \u043D\u0430 \u043F\u0430\u043D\u0435\u043B\u0438 \u0437\u0430\u0434\u0430\u0447",
+    L"\u041E\u0442\u043E\u0431\u0440\u0430\u0436\u0430\u0442\u044C \u0442\u0435&\u043A\u0441\u0442\u043E\u0432\u044B\u0435 \u043F\u043E\u0434\u043F\u0438\u0441\u0438 \u043D\u0430 \u044F\u0437\u044B\u043A\u043E\u0432\u043E\u0439 \u043F\u0430\u043D\u0435\u043B\u0438",
+    L"\u0414\u043E\u043F\u043E\u043B\u043D\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0435 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u044B \u043A\u043B\u0430\u0432\u0438\u0448",
+    L"\u0414\u043B\u044F \u0432\u044B\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F \u043A\u043B\u0430\u0432\u0438\u0448\u0438 CAPS LOCK",
+    L"\u041D\u0430\u0436\u0438\u043C\u0430\u0442\u044C \u043A\u043B\u0430\u0432\u0438\u0448\u0443 CAPS &LOCK",
+    L"\u041D\u0430\u0436\u0438\u043C\u0430\u0442\u044C \u043A\u043B\u0430\u0432\u0438\u0448\u0443 SHI&FT",
+    L"\u0421\u043E\u0447\u0435\u0442\u0430\u043D\u0438\u044F \u043A\u043B\u0430\u0432\u0438\u0448 \u0434\u043B\u044F \u044F\u0437\u044B\u043A\u043E\u0432 \u0432\u0432\u043E\u0434\u0430",
+    L"\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435",
+    L"&\u0421\u043E\u0447\u0435\u0442\u0430\u043D\u0438\u0435 \u043A\u043B\u0430\u0432\u0438\u0448",
+    L"&\u0418\u0437\u043C\u0435\u043D\u0438\u0442\u044C \u0441\u043E\u0447\u0435\u0442\u0430\u043D\u0438\u0435 \u043A\u043B\u0430\u0432\u0438\u0448...",
+    L"\u0418\u0437\u043C\u0435\u043D\u0438\u0442\u044C \u0441\u043E\u0447\u0435\u0442\u0430\u043D\u0438\u0435 \u043A\u043B\u0430\u0432\u0438\u0448",
+    L"\u0421\u043C\u0435\u043D\u0438\u0442\u044C \u044F\u0437\u044B\u043A \u0432\u0432\u043E\u0434\u0430",
+    L"&\u041D\u0435 \u043D\u0430\u0437\u043D\u0430\u0447\u0435\u043D\u043E",
+    L"&CTRL + SHIFT",
+    L"&\u041B\u0435\u0432\u044B\u0439 ALT + SHIFT",
+    L"&\u0421\u0438\u043C\u0432\u043E\u043B \u0443\u0434\u0430\u0440\u0435\u043D\u0438\u044F (`)",
+    L"\u0421\u043C\u0435\u043D\u0438\u0442\u044C \u0440\u0430\u0441\u043A\u043B\u0430\u0434\u043A\u0443 \u043A\u043B\u0430\u0432\u0438\u0430\u0442\u0443\u0440\u044B",
+    L"\u041D&\u0435 \u043D\u0430\u0437\u043D\u0430\u0447\u0435\u043D\u043E",
+    L"CTRL + SHIF&T",
+    L"\u041B\u0435\u0432\u044B&\u0439 ALT + SHIFT",
+    L"\u0421\u0438\u043C\u0432\u043E\u043B &\u0443\u0434\u0430\u0440\u0435\u043D\u0438\u044F (`)",
+    L"&\u0412\u043A\u043B\u044E\u0447\u0438\u0442\u044C \u0441\u043E\u0447\u0435\u0442\u0430\u043D\u0438\u0435 \u043A\u043B\u0430\u0432\u0438\u0448",
+    L"&\u041A\u043B\u0430\u0432\u0438\u0448\u0430:",
+    L"\u041E\u0431\u0449\u0438\u0435",
+    L"\u042F\u0437\u044B\u043A \u0432\u0432\u043E\u0434\u0430 \u043F\u043E \u0443\u043C\u043E\u043B&\u0447\u0430\u043D\u0438\u044E",
+    L"\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u043E\u0434\u0438\u043D \u0438\u0437 \u0443\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u043D\u044B\u0445 \u044F\u0437\u044B\u043A\u043E\u0432 \u0432\u0432\u043E\u0434\u0430, \u043A\u043E\u0442\u043E\u0440\u044B\u0439 \u0431\u0443\u0434\u0435\u0442 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u044C\u0441\u044F \u043F\u043E \u0443\u043C\u043E\u043B\u0447\u0430\u043D\u0438\u044E \u0432\u043E \u0432\u0441\u0435\u0445 \u043F\u043E\u043B\u044F\u0445 \u0432\u0432\u043E\u0434\u0430.",
+    L"&\u0423\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u043D\u044B\u0435 \u0441\u043B\u0443\u0436\u0431\u044B",
+    L"\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0441\u043B\u0443\u0436\u0431\u044B \u0434\u043B\u044F \u043A\u0430\u0436\u0434\u043E\u0433\u043E \u044F\u0437\u044B\u043A\u0430 \u0432\u0432\u043E\u0434\u0430 \u0432 \u0441\u043F\u0438\u0441\u043A\u0435. \u0414\u043B\u044F \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F \u0441\u043F\u0438\u0441\u043A\u0430 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u0443\u0439\u0442\u0435 \u043A\u043D\u043E\u043F\u043A\u0438 \u00AB\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C\u00BB \u0438 \u00AB\u0423\u0434\u0430\u043B\u0438\u0442\u044C\u00BB.",
+    L"&\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C...",
+    L"\u0423\u0434\u0430&\u043B\u0438\u0442\u044C",
+    L"&\u0421\u0432\u043E\u0439\u0441\u0442\u0432\u0430...",
+    L"\u0412&\u0432\u0435\u0440\u0445",
+    L"\u0412&\u043D\u0438\u0437",
+    L"\u041F\u0440\u043E\u0441\u043C\u043E\u0442\u0440 \u0440\u0430\u0441\u043A\u043B\u0430\u0434\u043A\u0438 \u043A\u043B\u0430\u0432\u0438\u0430\u0442\u0443\u0440\u044B",
+    L"\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 \u0440\u0430\u0441\u043A\u043B\u0430\u0434\u043A\u0438:",
+    L"\u0421\u043C\u0435\u043D\u0438\u0442\u044C &\u0437\u043D\u0430\u0447\u043E\u043A...",
+    L"&\u0411\u043E\u043B\u044C\u0448\u0435 \u043D\u0435 \u043F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u0442\u044C \u044D\u0442\u043E \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0435.",
+};
+
+static const wchar_t* const kInpDlgTr_ZH[47] = {
+    L"\u786E\u5B9A",
+    L"\u53D6\u6D88",
+    L"\u6DFB\u52A0\u8F93\u5165\u8BED\u8A00",
+    L"\u4F7F\u7528\u4E0B\u9762\u7684\u590D\u9009\u6846\u9009\u62E9\u8981\u6DFB\u52A0\u7684\u8BED\u8A00\u3002",
+    L"\u9884\u89C8(&P)...",
+    L"\u8BED\u8A00\u680F",
+    L"\u60AC\u6D6E\u4E8E\u684C\u9762(&F)",
+    L"\u505C\u9760\u4E8E\u4EFB\u52A1\u680F(&D)",
+    L"\u9690\u85CF(&H)",
+    L"\u8BED\u8A00\u680F\u5728\u975E\u6D3B\u52A8\u65F6\u663E\u793A\u4E3A\u900F\u660E(&N)",
+    L"\u5728\u4EFB\u52A1\u680F\u4E2D\u663E\u793A\u5176\u4ED6\u8BED\u8A00\u680F\u56FE\u6807(&I)",
+    L"\u5728\u8BED\u8A00\u680F\u4E0A\u663E\u793A\u6587\u672C\u6807\u7B7E(&E)",
+    L"\u9AD8\u7EA7\u952E\u8BBE\u7F6E",
+    L"\u82E5\u8981\u5173\u95ED Caps Lock",
+    L"\u6309 CAPS &LOCK \u952E",
+    L"\u6309 SHI&FT \u952E",
+    L"\u8F93\u5165\u8BED\u8A00\u7684\u70ED\u952E",
+    L"\u64CD\u4F5C",
+    L"\u6309\u952E\u987A\u5E8F(&K)",
+    L"\u66F4\u6539\u6309\u952E\u987A\u5E8F(&C)...",
+    L"\u66F4\u6539\u6309\u952E\u987A\u5E8F",
+    L"\u5207\u6362\u8F93\u5165\u8BED\u8A00",
+    L"\u672A\u5206\u914D",
+    L"Ctrl + Shift",
+    L"\u5DE6 Alt + Shift",
+    L"\u91CD\u97F3\u7B26(`)",
+    L"\u5207\u6362\u952E\u76D8\u5E03\u5C40",
+    L"\u672A\u5206\u914D",
+    L"Ctrl + Shift",
+    L"\u5DE6 Alt + Shift",
+    L"\u91CD\u97F3\u7B26(`)",
+    L"\u542F\u7528\u6309\u952E\u987A\u5E8F(&E)",
+    L"\u952E(&K):",
+    L"\u5E38\u89C4",
+    L"\u9ED8\u8BA4\u8F93\u5165\u8BED\u8A00(&L)",
+    L"\u9009\u62E9\u4E00\u79CD\u5DF2\u5B89\u88C5\u7684\u8F93\u5165\u8BED\u8A00\u4F5C\u4E3A\u6240\u6709\u8F93\u5165\u5B57\u6BB5\u7684\u9ED8\u8BA4\u8BED\u8A00\u3002",
+    L"\u5DF2\u5B89\u88C5\u7684\u670D\u52A1(&I)",
+    L"\u4E3A\u5217\u8868\u4E2D\u663E\u793A\u7684\u6BCF\u79CD\u8F93\u5165\u8BED\u8A00\u9009\u62E9\u6240\u9700\u7684\u670D\u52A1\u3002\u4F7F\u7528\u201C\u6DFB\u52A0\u201D\u548C\u201C\u5220\u9664\u201D\u6309\u94AE\u4FEE\u6539\u6B64\u5217\u8868\u3002",
+    L"\u6DFB\u52A0(&D)...",
+    L"\u5220\u9664(&R)",
+    L"\u5C5E\u6027(&P)...",
+    L"\u4E0A\u79FB(&U)",
+    L"\u4E0B\u79FB(&O)",
+    L"\u952E\u76D8\u5E03\u5C40\u9884\u89C8",
+    L"\u5E03\u5C40\u540D\u79F0:",
+    L"\u66F4\u6539\u56FE\u6807(&C)...",
+    L"\u4E0D\u518D\u663E\u793A\u6B64\u6D88\u606F(&D)\u3002",
+};
+
+static const wchar_t* const kInpDlgTr_JA[47] = {
+    L"OK",
+    L"\u30AD\u30E3\u30F3\u30BB\u30EB",
+    L"\u5165\u529B\u8A00\u8A9E\u306E\u8FFD\u52A0",
+    L"\u4E0B\u306E\u30C1\u30A7\u30C3\u30AF \u30DC\u30C3\u30AF\u30B9\u3092\u4F7F\u7528\u3057\u3066\u3001\u8FFD\u52A0\u3059\u308B\u8A00\u8A9E\u3092\u9078\u629E\u3057\u3066\u304F\u3060\u3055\u3044\u3002",
+    L"\u30D7\u30EC\u30D3\u30E5\u30FC(&P)...",
+    L"\u8A00\u8A9E\u30D0\u30FC",
+    L"\u30C7\u30B9\u30AF\u30C8\u30C3\u30D7\u306B\u30D5\u30ED\u30FC\u30C8\u8868\u793A(&F)",
+    L"\u30BF\u30B9\u30AF \u30D0\u30FC\u306B\u30C9\u30C3\u30AD\u30F3\u30B0(&D)",
+    L"\u975E\u8868\u793A(&H)",
+    L"\u30A2\u30AF\u30C6\u30A3\u30D6\u3067\u306A\u3044\u3068\u304D\u306B\u8A00\u8A9E\u30D0\u30FC\u3092\u534A\u900F\u660E\u3067\u8868\u793A(&N)",
+    L"\u30BF\u30B9\u30AF \u30D0\u30FC\u306B\u8FFD\u52A0\u306E\u8A00\u8A9E\u30D0\u30FC \u30A2\u30A4\u30B3\u30F3\u3092\u8868\u793A(&I)",
+    L"\u8A00\u8A9E\u30D0\u30FC\u306B\u30C6\u30AD\u30B9\u30C8 \u30E9\u30D9\u30EB\u3092\u8868\u793A(&E)",
+    L"\u30AD\u30FC\u306E\u8A73\u7D30\u8A2D\u5B9A",
+    L"Caps Lock \u3092\u30AA\u30D5\u306B\u3059\u308B\u306B\u306F",
+    L"CAPS &LOCK \u30AD\u30FC\u3092\u62BC\u3059",
+    L"SHI&FT \u30AD\u30FC\u3092\u62BC\u3059",
+    L"\u5165\u529B\u8A00\u8A9E\u306E\u30DB\u30C3\u30C8 \u30AD\u30FC",
+    L"\u64CD\u4F5C",
+    L"\u30AD\u30FC \u30B7\u30FC\u30B1\u30F3\u30B9(&K)",
+    L"\u30AD\u30FC \u30B7\u30FC\u30B1\u30F3\u30B9\u306E\u5909\u66F4(&C)...",
+    L"\u30AD\u30FC \u30B7\u30FC\u30B1\u30F3\u30B9\u306E\u5909\u66F4",
+    L"\u5165\u529B\u8A00\u8A9E\u306E\u5207\u308A\u66FF\u3048",
+    L"\u5272\u308A\u5F53\u3066\u306A\u3057",
+    L"Ctrl + Shift",
+    L"\u5DE6 Alt + Shift",
+    L"\u30B0\u30EC\u30FC\u30D6 \u30A2\u30AF\u30BB\u30F3\u30C8 (`)",
+    L"\u30AD\u30FC\u30DC\u30FC\u30C9 \u30EC\u30A4\u30A2\u30A6\u30C8\u306E\u5207\u308A\u66FF\u3048",
+    L"\u5272\u308A\u5F53\u3066\u306A\u3057",
+    L"Ctrl + Shift",
+    L"\u5DE6 Alt + Shift",
+    L"\u30B0\u30EC\u30FC\u30D6 \u30A2\u30AF\u30BB\u30F3\u30C8 (`)",
+    L"\u30AD\u30FC \u30B7\u30FC\u30B1\u30F3\u30B9\u3092\u6709\u52B9\u306B\u3059\u308B(&E)",
+    L"\u30AD\u30FC(&K):",
+    L"\u5168\u822C",
+    L"\u65E2\u5B9A\u306E\u5165\u529B\u8A00\u8A9E(&L)",
+    L"\u3059\u3079\u3066\u306E\u5165\u529B\u30D5\u30A3\u30FC\u30EB\u30C9\u3067\u65E2\u5B9A\u3068\u3057\u3066\u4F7F\u7528\u3059\u308B\u3001\u30A4\u30F3\u30B9\u30C8\u30FC\u30EB\u6E08\u307F\u306E\u5165\u529B\u8A00\u8A9E\u3092\u9078\u629E\u3057\u307E\u3059\u3002",
+    L"\u30A4\u30F3\u30B9\u30C8\u30FC\u30EB\u3055\u308C\u3066\u3044\u308B\u30B5\u30FC\u30D3\u30B9(&I)",
+    L"\u4E00\u89A7\u306B\u8868\u793A\u3055\u308C\u308B\u5404\u5165\u529B\u8A00\u8A9E\u3067\u4F7F\u7528\u3059\u308B\u30B5\u30FC\u30D3\u30B9\u3092\u9078\u629E\u3057\u307E\u3059\u3002\u8FFD\u52A0\u30DC\u30BF\u30F3\u3068\u524A\u9664\u30DC\u30BF\u30F3\u3067\u4E00\u89A7\u3092\u5909\u66F4\u3057\u307E\u3059\u3002",
+    L"\u8FFD\u52A0(&D)...",
+    L"\u524A\u9664(&R)",
+    L"\u30D7\u30ED\u30D1\u30C6\u30A3(&P)...",
+    L"\u4E0A\u3078(&U)",
+    L"\u4E0B\u3078(&O)",
+    L"\u30AD\u30FC\u30DC\u30FC\u30C9 \u30EC\u30A4\u30A2\u30A6\u30C8\u306E\u30D7\u30EC\u30D3\u30E5\u30FC",
+    L"\u30EC\u30A4\u30A2\u30A6\u30C8\u540D:",
+    L"\u30A2\u30A4\u30B3\u30F3\u306E\u5909\u66F4(&C)...",
+    L"\u4ECA\u5F8C\u3053\u306E\u30E1\u30C3\u30BB\u30FC\u30B8\u3092\u8868\u793A\u3057\u306A\u3044(&D)\u3002",
+};
+
+static const wchar_t* const kInpDlgTr_KO[47] = {
+    L"\uD655\uC778",
+    L"\uCDE8\uC18C",
+    L"\uC785\uB825 \uC5B8\uC5B4 \uCD94\uAC00",
+    L"\uC544\uB798 \uD655\uC778\uB780\uC744 \uC0AC\uC6A9\uD558\uC5EC \uCD94\uAC00\uD560 \uC5B8\uC5B4\uB97C \uC120\uD0DD\uD558\uC138\uC694.",
+    L"\uBBF8\uB9AC \uBCF4\uAE30(&P)...",
+    L"\uC5B8\uC5B4 \uD45C\uC2DC\uC904",
+    L"\uBC14\uD0D5 \uD654\uBA74\uC5D0 \uD45C\uC2DC(&F)",
+    L"\uC791\uC5C5 \uD45C\uC2DC\uC904\uC5D0 \uD45C\uC2DC(&D)",
+    L"\uC228\uAE30\uAE30(&H)",
+    L"\uBE44\uD65C\uC131 \uC2DC \uC5B8\uC5B4 \uD45C\uC2DC\uC904\uC744 \uD22C\uBA85\uD558\uAC8C \uD45C\uC2DC(&N)",
+    L"\uC791\uC5C5 \uD45C\uC2DC\uC904\uC5D0 \uCD94\uAC00 \uC5B8\uC5B4 \uD45C\uC2DC\uC904 \uC544\uC774\uCF58 \uD45C\uC2DC(&I)",
+    L"\uC5B8\uC5B4 \uD45C\uC2DC\uC904\uC5D0 \uD14D\uC2A4\uD2B8 \uB808\uC774\uBE14 \uD45C\uC2DC(&E)",
+    L"\uACE0\uAE09 \uD0A4 \uC124\uC815",
+    L"Caps Lock \uB044\uAE30",
+    L"CAPS &LOCK \uD0A4 \uB204\uB974\uAE30",
+    L"SHI&FT \uD0A4 \uB204\uB974\uAE30",
+    L"\uC785\uB825 \uC5B8\uC5B4\uC758 \uBC14\uB85C \uAC00\uAE30 \uD0A4",
+    L"\uB3D9\uC791",
+    L"\uD0A4 \uC21C\uC11C(&K)",
+    L"\uD0A4 \uC21C\uC11C \uBCC0\uACBD(&C)...",
+    L"\uD0A4 \uC21C\uC11C \uBCC0\uACBD",
+    L"\uC785\uB825 \uC5B8\uC5B4 \uC804\uD658",
+    L"\uD560\uB2F9 \uC548 \uB428",
+    L"Ctrl + Shift",
+    L"\uC67C\uCABD Alt + Shift",
+    L"\uC5B5\uC74C \uC545\uC13C\uD2B8(`)",
+    L"\uD0A4\uBCF4\uB4DC \uB808\uC774\uC544\uC6C3 \uC804\uD658",
+    L"\uD560\uB2F9 \uC548 \uB428",
+    L"Ctrl + Shift",
+    L"\uC67C\uCABD Alt + Shift",
+    L"\uC5B5\uC74C \uC545\uC13C\uD2B8(`)",
+    L"\uD0A4 \uC21C\uC11C \uC124\uC815(&E)",
+    L"\uD0A4(&K):",
+    L"\uC77C\uBC18",
+    L"\uAE30\uBCF8 \uC785\uB825 \uC5B8\uC5B4(&L)",
+    L"\uBAA8\uB4E0 \uC785\uB825 \uD544\uB4DC\uC5D0 \uAE30\uBCF8\uAC12\uC73C\uB85C \uC0AC\uC6A9\uD560 \uC124\uCE58\uB41C \uC785\uB825 \uC5B8\uC5B4\uB97C \uC120\uD0DD\uD558\uC138\uC694.",
+    L"\uC124\uCE58\uB41C \uC11C\uBE44\uC2A4(&I)",
+    L"\uBAA9\uB85D\uC5D0 \uD45C\uC2DC\uB41C \uAC01 \uC785\uB825 \uC5B8\uC5B4\uC5D0 \uC0AC\uC6A9\uD560 \uC11C\uBE44\uC2A4\uB97C \uC120\uD0DD\uD558\uC138\uC694. \uCD94\uAC00 \uBC0F \uC81C\uAC70 \uB2E8\uCD94\uB97C \uC0AC\uC6A9\uD558\uC5EC \uC774 \uBAA9\uB85D\uC744 \uC218\uC815\uD569\uB2C8\uB2E4.",
+    L"\uCD94\uAC00(&D)...",
+    L"\uC81C\uAC70(&R)",
+    L"\uC18D\uC131(&P)...",
+    L"\uC704\uB85C \uC774\uB3D9(&U)",
+    L"\uC544\uB798\uB85C \uC774\uB3D9(&O)",
+    L"\uD0A4\uBCF4\uB4DC \uB808\uC774\uC544\uC6C3 \uBBF8\uB9AC \uBCF4\uAE30",
+    L"\uB808\uC774\uC544\uC6C3 \uC774\uB984:",
+    L"\uC544\uC774\uCF58 \uBCC0\uACBD(&C)...",
+    L"\uC774 \uBA54\uC2DC\uC9C0\uB97C \uB2E4\uC2DC \uD45C\uC2DC \uC548 \uD568(&D).",
+};
+
+static const wchar_t* const kInpDlgTr_TR[47] = {
+    L"Tamam",
+    L"\u0130ptal",
+    L"Giri\u015F dili ekle",
+    L"Eklemek istedi\u011Finiz dili a\u015Fa\u011F\u0131daki onay kutular\u0131n\u0131 kullanarak se\u00E7in.",
+    L"\u00D6&nizleme...",
+    L"Dil \u00E7ubu\u011Fu",
+    L"Masa\u00FCst\u00FCnde &serbest",
+    L"G\u00F6rev \u00E7ubu\u011Funa &yerle\u015Fik",
+    L"&Gizli",
+    L"&Etkin olmad\u0131\u011F\u0131nda dil \u00E7ubu\u011Funu saydam g\u00F6ster",
+    L"G\u00F6rev \u00E7ubu\u011Funda ek dil \u00E7ubu\u011Fu s&imgelerini g\u00F6ster",
+    L"Dil \u00E7ubu\u011Funda meti&n etiketlerini g\u00F6ster",
+    L"Geli\u015Fmi\u015F tu\u015F ayarlar\u0131",
+    L"Caps Lock'u kapatmak i\u00E7in",
+    L"CAPS &LOCK tu\u015Funa bas",
+    L"SHI&FT tu\u015Funa bas",
+    L"Giri\u015F dilleri i\u00E7in k\u0131sayol tu\u015Flar\u0131",
+    L"Eylem",
+    L"&Tu\u015F dizisi",
+    L"Tu\u015F &dizisini de\u011Fi\u015Ftir...",
+    L"Tu\u015F dizisini de\u011Fi\u015Ftir",
+    L"Giri\u015F dilini de\u011Fi\u015Ftir",
+    L"&Atanmad\u0131",
+    L"&Ctrl + Shift",
+    L"&Sol Alt + Shift",
+    L"&Vurgu i\u015Fareti (`)",
+    L"Klavye d\u00FCzenini de\u011Fi\u015Ftir",
+    L"Atanma&d\u0131",
+    L"C&trl + Shift",
+    L"Sol A&lt + Shift",
+    L"Vurgu &i\u015Fareti (`)",
+    L"Tu\u015F dizisini &etkinle\u015Ftir",
+    L"&Tu\u015F:",
+    L"Genel",
+    L"Varsay\u0131lan giri\u015F &dili",
+    L"T\u00FCm giri\u015F alanlar\u0131nda varsay\u0131lan olarak kullan\u0131lacak y\u00FCkl\u00FC giri\u015F dillerinden birini se\u00E7in.",
+    L"&Y\u00FCkl\u00FC hizmetler",
+    L"Listede g\u00F6sterilen her giri\u015F dili i\u00E7in istedi\u011Finiz hizmetleri se\u00E7in. Listeyi de\u011Fi\u015Ftirmek i\u00E7in Ekle ve Kald\u0131r d\u00FC\u011Fmelerini kullan\u0131n.",
+    L"&Ekle...",
+    L"&Kald\u0131r",
+    L"\u00D6&zellikler...",
+    L"Y&ukar\u0131 Ta\u015F\u0131",
+    L"A\u015Fa\u011F\u0131 T&a\u015F\u0131",
+    L"Klavye D\u00FCzeni \u00D6nizlemesi",
+    L"D\u00FCzen Ad\u0131:",
+    L"S&imge De\u011Fi\u015Ftir...",
+    L"Bu iletiyi bir daha g\u00F6ster&me.",
+};
+
+static const wchar_t* const kInpDlgTr_CS[47] = {
+    L"OK",
+    L"Storno",
+    L"P\u0159idat vstupn\u00ED jazyk",
+    L"Vyberte jazyk, kter\u00FD chcete p\u0159idat, pomoc\u00ED za\u0161krt\u00E1vac\u00EDch pol\u00ED\u010Dek n\u00ED\u017Ee.",
+    L"&N\u00E1hled...",
+    L"Panel jazyk\u016F",
+    L"&Plovouc\u00ED na plo\u0161e",
+    L"Upevn\u011Bno na panelu &\u00FAloh",
+    L"&Skryt\u00FD",
+    L"Zobrazit panel jazyk\u016F jako pr\u016Fhledn\u00FD, pokud nen\u00ED akti&vn\u00ED",
+    L"Zobrazit dop&l\u0148kov\u00E9 ikony panelu jazyk\u016F na panelu \u00FAloh",
+    L"Zobrazit t&extov\u00E9 popisky na panelu jazyk\u016F",
+    L"Up\u0159esnit nastaven\u00ED kl\u00E1ves",
+    L"Chcete-li vypnout kl\u00E1vesu Caps Lock",
+    L"Stisknout kl\u00E1vesu CAPS &LOCK",
+    L"Stisknout kl\u00E1vesu SHI&FT",
+    L"Kl\u00E1vesov\u00E9 zkratky pro vstupn\u00ED jazyky",
+    L"Akce",
+    L"&Kombinace kl\u00E1ves",
+    L"&Zm\u011Bnit kombinaci kl\u00E1ves...",
+    L"Zm\u011Bnit kombinaci kl\u00E1ves",
+    L"P\u0159epnout vstupn\u00ED jazyk",
+    L"&Nep\u0159i\u0159azeno",
+    L"&Ctrl + Shift",
+    L"&Lev\u00FD Alt + Shift",
+    L"&P\u0159\u00EDzvuk (`)",
+    L"P\u0159epnout rozlo\u017Een\u00ED kl\u00E1vesnice",
+    L"N&ep\u0159i\u0159azeno",
+    L"C&trl + Shift",
+    L"Le&v\u00FD Alt + Shift",
+    L"P\u0159\u00ED&zvuk (`)",
+    L"&Povolit kombinaci kl\u00E1ves",
+    L"&Kl\u00E1vesa:",
+    L"Obecn\u00E9",
+    L"V\u00FDchoz\u00ED vstupn\u00ED &jazyk",
+    L"Vyberte jeden z nainstalovan\u00FDch vstupn\u00EDch jazyk\u016F, kter\u00FD se pou\u017Eije jako v\u00FDchoz\u00ED pro v\u0161echna vstupn\u00ED pole.",
+    L"&Nainstalovan\u00E9 slu\u017Eby",
+    L"Vyberte slu\u017Eby pro jednotliv\u00E9 vstupn\u00ED jazyky zobrazen\u00E9 v seznamu. Seznam upravte pomoc\u00ED tla\u010D\u00EDtek P\u0159idat a Odebrat.",
+    L"&P\u0159idat...",
+    L"&Odebrat",
+    L"&Vlastnosti...",
+    L"Posunout v&\u00FD\u0161",
+    L"Posunout n\u00ED&\u017E",
+    L"N\u00E1hled rozlo\u017Een\u00ED kl\u00E1vesnice",
+    L"N\u00E1zev rozlo\u017Een\u00ED:",
+    L"Zm\u011Bnit &ikonu...",
+    L"&Tuto zpr\u00E1vu u\u017E p\u0159\u00ED\u0161t\u011B nezobrazovat.",
+};
+
+static const wchar_t* const kInpDlgTr_HU[47] = {
+    L"OK",
+    L"M\u00E9gse",
+    L"Beviteli nyelv hozz\u00E1ad\u00E1sa",
+    L"V\u00E1lassza ki a hozz\u00E1adand\u00F3 nyelvet az al\u00E1bbi jel\u00F6l\u0151n\u00E9gyzetekkel.",
+    L"&El\u0151n\u00E9zet...",
+    L"Nyelvi eszk\u00F6zt\u00E1r",
+    L"&Lebeg\u0151 az asztalon",
+    L"R\u00F6gz\u00EDtve a &t\u00E1lc\u00E1n",
+    L"&Rejtett",
+    L"A nyelvi eszk\u00F6zt\u00E1r megjelen\u00EDt\u00E9se \u00E1ttetsz\u0151k\u00E9nt, ha i&nakt\u00EDv",
+    L"K&ieg\u00E9sz\u00EDt\u0151 nyelvi eszk\u00F6zt\u00E1r-ikonok megjelen\u00EDt\u00E9se a t\u00E1lc\u00E1n",
+    L"Sz\u00F6veges c\u00ED&mk\u00E9k megjelen\u00EDt\u00E9se a nyelvi eszk\u00F6zt\u00E1ron",
+    L"Speci\u00E1lis billenty\u0171zet-be\u00E1ll\u00EDt\u00E1sok",
+    L"A Caps Lock kikapcsol\u00E1s\u00E1hoz",
+    L"A CAPS &LOCK billenty\u0171 lenyom\u00E1sa",
+    L"A SHI&FT billenty\u0171 lenyom\u00E1sa",
+    L"A beviteli nyelvek gyorsbillenty\u0171i",
+    L"M\u0171velet",
+    L"&Billenty\u0171sorrend",
+    L"Billenty\u0171sorrend &m\u00F3dos\u00EDt\u00E1sa...",
+    L"Billenty\u0171sorrend m\u00F3dos\u00EDt\u00E1sa",
+    L"Beviteli nyelv v\u00E1lt\u00E1sa",
+    L"&Nincs hozz\u00E1rendelve",
+    L"&Ctrl + Shift",
+    L"&Bal Alt + Shift",
+    L"&Visszav\u00E1g\u00F3jel (`)",
+    L"Billenty\u0171zetkioszt\u00E1s v\u00E1lt\u00E1sa",
+    L"N&incs hozz\u00E1rendelve",
+    L"C&trl + Shift",
+    L"B&al Alt + Shift",
+    L"Visszav\u00E1g\u00F3&jel (`)",
+    L"&Billenty\u0171sorrend enged\u00E9lyez\u00E9se",
+    L"Billent&y\u0171:",
+    L"\u00C1ltal\u00E1nos",
+    L"Alap\u00E9rtelmezett beviteli &nyelv",
+    L"V\u00E1lasszon egy telep\u00EDtett beviteli nyelvet, amely alap\u00E9rtelmezettk\u00E9nt haszn\u00E1lhat\u00F3 minden beviteli mez\u0151ben.",
+    L"&Telep\u00EDtett szolg\u00E1ltat\u00E1sok",
+    L"V\u00E1lassza ki a list\u00E1ban szerepl\u0151 beviteli nyelvekhez k\u00EDv\u00E1nt szolg\u00E1ltat\u00E1sokat. A lista m\u00F3dos\u00EDt\u00E1s\u00E1hoz haszn\u00E1lja a Hozz\u00E1ad\u00E1s \u00E9s Elt\u00E1vol\u00EDt\u00E1s gombot.",
+    L"&Hozz\u00E1ad\u00E1s...",
+    L"&Elt\u00E1vol\u00EDt\u00E1s",
+    L"Tulajdons\u00E1&gok...",
+    L"&Feljebb",
+    L"&Lejjebb",
+    L"Billenty\u0171zetkioszt\u00E1s el\u0151n\u00E9zete",
+    L"Kioszt\u00E1s neve:",
+    L"&Ikon m\u00F3dos\u00EDt\u00E1sa...",
+    L"Ne &jelen\u00EDtse meg \u00FAjra ezt az \u00FCzenetet.",
+};
+
+static const wchar_t* const kInpDlgTr_RO[47] = {
+    L"OK",
+    L"Anulare",
+    L"Ad\u0103ugare limb\u0103 de intrare",
+    L"Selecta\u021Bi limba de ad\u0103ugat utiliz\u00E2nd casetele de selectare de mai jos.",
+    L"&Previzualizare...",
+    L"Bara de limbi",
+    L"&Plutind pe desktop",
+    L"Andocat\u0103 \u00EEn &bara de sarcini",
+    L"&Ascuns\u0103",
+    L"Afi\u0219a\u021Bi bara de limbi ca transparent\u0103 c\u00E2nd este i&nactiv\u0103",
+    L"Afi\u0219a\u021Bi icoane s&uplimentare pentru bara de limbi \u00EEn bara de sarcini",
+    L"Afi\u0219a\u021Bi &etichete text pe bara de limbi",
+    L"Set\u0103ri avansate ale tastelor",
+    L"Pentru a dezactiva Caps Lock",
+    L"Ap\u0103sa\u021Bi tasta CAPS &LOCK",
+    L"Ap\u0103sa\u021Bi tasta SHI&FT",
+    L"Taste rapide pentru limbile de intrare",
+    L"Ac\u021Biune",
+    L"&Secven\u021B\u0103 de taste",
+    L"Schim&ba\u021Bi secven\u021Ba de taste...",
+    L"Schimba\u021Bi secven\u021Ba de taste",
+    L"Comutare limb\u0103 de intrare",
+    L"&Neatribuit",
+    L"&Ctrl + Shift",
+    L"&Alt st\u00E2nga + Shift",
+    L"Accent &grav (`)",
+    L"Comutare aspect de tastatur\u0103",
+    L"N&eatribuit",
+    L"C&trl + Shift",
+    L"Alt st\u00E2nga + Shi&ft",
+    L"Accent g&rav (`)",
+    L"&Activa\u021Bi secven\u021Ba de taste",
+    L"&Tasta:",
+    L"General",
+    L"Limba de intrare &implicit\u0103",
+    L"Selecta\u021Bi una dintre limbile de intrare instalate pentru a o utiliza ca implicit\u0103 pentru toate c\u00E2mpurile de intrare.",
+    L"&Servicii instalate",
+    L"Selecta\u021Bi serviciile dorite pentru fiecare limb\u0103 de intrare afi\u0219at\u0103 \u00EEn list\u0103. Folosi\u021Bi butoanele Ad\u0103ugare \u0219i Eliminare pentru a modifica lista.",
+    L"&Ad\u0103ugare...",
+    L"&Eliminare",
+    L"&Propriet\u0103\u021Bi...",
+    L"Mutare \u00EEn s&us",
+    L"Mutare \u00EEn &jos",
+    L"Previzualizare aspect tastatur\u0103",
+    L"Nume aspect:",
+    L"Schimbare i&con\u0103...",
+    L"&Nu mai afi\u0219a\u021Bi acest mesaj.",
+};
+
+static const wchar_t* const kInpDlgTr_SV[47] = {
+    L"OK",
+    L"Avbryt",
+    L"L\u00E4gg till inmatningsspr\u00E5k",
+    L"V\u00E4lj spr\u00E5ket som ska l\u00E4ggas till med kryssrutorna nedan.",
+    L"&F\u00F6rhandsgranska...",
+    L"Spr\u00E5kf\u00E4lt",
+    L"&Flytande p\u00E5 skrivbordet",
+    L"Dockad i &aktivitetsf\u00E4ltet",
+    L"&Dolt",
+    L"Visa spr\u00E5kf\u00E4ltet som genomskinligt n\u00E4r det \u00E4r i&naktivt",
+    L"Visa ytterl&igare spr\u00E5kf\u00E4ltsikoner i aktivitetsf\u00E4ltet",
+    L"Visa t&extetiketter p\u00E5 spr\u00E5kf\u00E4ltet",
+    L"Avancerade tangentinst\u00E4llningar",
+    L"Om du vill st\u00E4nga av Caps Lock",
+    L"Tryck p\u00E5 CAPS &LOCK-tangenten",
+    L"Tryck p\u00E5 SHI&FT-tangenten",
+    L"Snabbtangenter f\u00F6r inmatningsspr\u00E5k",
+    L"\u00C5tg\u00E4rd",
+    L"&Tangentsekvens",
+    L"\u00C4&ndra tangentsekvens...",
+    L"\u00C4ndra tangentsekvens",
+    L"V\u00E4xla inmatningsspr\u00E5k",
+    L"&Inte tilldelad",
+    L"&Ctrl + Skift",
+    L"&V\u00E4nster Alt + Skift",
+    L"&Grav accent (`)",
+    L"V\u00E4xla tangentbordslayout",
+    L"Inte tilld&elad",
+    L"C&trl + Skift",
+    L"V\u00E4&nster Alt + Skift",
+    L"Grav &accent (`)",
+    L"&Aktivera tangentsekvens",
+    L"&Tangent:",
+    L"Allm\u00E4nt",
+    L"Standardinmatnings&spr\u00E5k",
+    L"V\u00E4lj ett av de installerade inmatningsspr\u00E5ken som ska anv\u00E4ndas som standard f\u00F6r alla inmatningsf\u00E4lt.",
+    L"&Installerade tj\u00E4nster",
+    L"V\u00E4lj de tj\u00E4nster du vill anv\u00E4nda f\u00F6r varje inmatningsspr\u00E5k i listan. Anv\u00E4nd knapparna L\u00E4gg till och Ta bort om du vill \u00E4ndra listan.",
+    L"&L\u00E4gg till...",
+    L"&Ta bort",
+    L"&Egenskaper...",
+    L"Flytta &upp",
+    L"Flytta &ned",
+    L"F\u00F6rhandsgranskning av tangentbordslayout",
+    L"Layoutnamn:",
+    L"\u00C4ndra &ikon...",
+    L"&Visa inte detta meddelande igen.",
+};
+
+static const wchar_t* const kInpDlgTr_UK[47] = {
+    L"OK",
+    L"\u0421\u043A\u0430\u0441\u0443\u0432\u0430\u0442\u0438",
+    L"\u0414\u043E\u0434\u0430\u0442\u0438 \u043C\u043E\u0432\u0443 \u0432\u0432\u0435\u0434\u0435\u043D\u043D\u044F",
+    L"\u0412\u0438\u0431\u0435\u0440\u0456\u0442\u044C \u043C\u043E\u0432\u0443 \u0434\u043B\u044F \u0434\u043E\u0434\u0430\u0432\u0430\u043D\u043D\u044F \u0437\u0430 \u0434\u043E\u043F\u043E\u043C\u043E\u0433\u043E\u044E \u043D\u0430\u0432\u0435\u0434\u0435\u043D\u0438\u0445 \u043D\u0438\u0436\u0447\u0435 \u043F\u0440\u0430\u043F\u043E\u0440\u0446\u0456\u0432.",
+    L"&\u041F\u043E\u043F\u0435\u0440\u0435\u0434\u043D\u0456\u0439 \u043F\u0435\u0440\u0435\u0433\u043B\u044F\u0434...",
+    L"\u041C\u043E\u0432\u043D\u0430 \u043F\u0430\u043D\u0435\u043B\u044C",
+    L"&\u041F\u043B\u0430\u0432\u0430\u044E\u0447\u0430 \u043D\u0430 \u0440\u043E\u0431\u043E\u0447\u043E\u043C\u0443 \u0441\u0442\u043E\u043B\u0456",
+    L"\u0417\u0430\u043A\u0440\u0456\u043F\u043B\u0435\u043D\u0430 \u043D\u0430 \u043F\u0430\u043D\u0435\u043B\u0456 &\u0437\u0430\u0432\u0434\u0430\u043D\u044C",
+    L"\u041F\u0440\u0438&\u0445\u043E\u0432\u0430\u043D\u0430",
+    L"\u041F\u043E\u043A\u0430\u0437\u0443\u0432\u0430\u0442\u0438 \u043C\u043E\u0432\u043D\u0443 \u043F\u0430\u043D\u0435\u043B\u044C \u043F\u0440\u043E\u0437\u043E\u0440\u043E\u044E, \u044F\u043A\u0449\u043E \u0432\u043E\u043D\u0430 &\u043D\u0435\u0430\u043A\u0442\u0438\u0432\u043D\u0430",
+    L"\u041F\u043E\u043A\u0430\u0437\u0443\u0432\u0430\u0442\u0438 \u0434\u043E\u043F\u043E&\u043B\u043D\u0456 \u0437\u043D\u0430\u0447\u043A\u0438 \u043C\u043E\u0432\u043D\u043E\u0457 \u043F\u0430\u043D\u0435\u043B\u0456 \u043D\u0430 \u043F\u0430\u043D\u0435\u043B\u0456 \u0437\u0430\u0432\u0434\u0430\u043D\u044C",
+    L"\u041F\u043E\u043A\u0430\u0437\u0443\u0432\u0430\u0442\u0438 \u0442\u0435&\u043A\u0441\u0442\u043E\u0432\u0456 \u043F\u0456\u0434\u043F\u0438\u0441\u0438 \u043D\u0430 \u043C\u043E\u0432\u043D\u0456\u0439 \u043F\u0430\u043D\u0435\u043B\u0456",
+    L"\u0420\u043E\u0437\u0448\u0438\u0440\u0435\u043D\u0456 \u043F\u0430\u0440\u0430\u043C\u0435\u0442\u0440\u0438 \u043A\u043B\u0430\u0432\u0456\u0448",
+    L"\u0429\u043E\u0431 \u0432\u0438\u043C\u043A\u043D\u0443\u0442\u0438 \u043A\u043B\u0430\u0432\u0456\u0448\u0443 Caps Lock",
+    L"\u041D\u0430\u0442\u0438\u0441\u043A\u0430\u0442\u0438 \u043A\u043B\u0430\u0432\u0456\u0448\u0443 CAPS &LOCK",
+    L"\u041D\u0430\u0442\u0438\u0441\u043A\u0430\u0442\u0438 \u043A\u043B\u0430\u0432\u0456\u0448\u0443 SHI&FT",
+    L"\u0421\u043F\u043E\u043B\u0443\u0447\u0435\u043D\u043D\u044F \u043A\u043B\u0430\u0432\u0456\u0448 \u0434\u043B\u044F \u043C\u043E\u0432 \u0432\u0432\u0435\u0434\u0435\u043D\u043D\u044F",
+    L"\u0414\u0456\u044F",
+    L"&\u041F\u043E\u0441\u043B\u0456\u0434\u043E\u0432\u043D\u0456\u0441\u0442\u044C \u043A\u043B\u0430\u0432\u0456\u0448",
+    L"&\u0417\u043C\u0456\u043D\u0438\u0442\u0438 \u043F\u043E\u0441\u043B\u0456\u0434\u043E\u0432\u043D\u0456\u0441\u0442\u044C \u043A\u043B\u0430\u0432\u0456\u0448...",
+    L"\u0417\u043C\u0456\u043D\u0438\u0442\u0438 \u043F\u043E\u0441\u043B\u0456\u0434\u043E\u0432\u043D\u0456\u0441\u0442\u044C \u043A\u043B\u0430\u0432\u0456\u0448",
+    L"\u0417\u043C\u0456\u043D\u0438\u0442\u0438 \u043C\u043E\u0432\u0443 \u0432\u0432\u0435\u0434\u0435\u043D\u043D\u044F",
+    L"&\u041D\u0435 \u043F\u0440\u0438\u0437\u043D\u0430\u0447\u0435\u043D\u043E",
+    L"&CTRL + SHIFT",
+    L"&\u041B\u0456\u0432\u0438\u0439 ALT + SHIFT",
+    L"&\u0417\u043D\u0430\u043A \u043D\u0430\u0433\u043E\u043B\u043E\u0441\u0443 (`)",
+    L"\u0417\u043C\u0456\u043D\u0438\u0442\u0438 \u0440\u043E\u0437\u043A\u043B\u0430\u0434\u043A\u0443 \u043A\u043B\u0430\u0432\u0456\u0430\u0442\u0443\u0440\u0438",
+    L"\u041D&\u0435 \u043F\u0440\u0438\u0437\u043D\u0430\u0447\u0435\u043D\u043E",
+    L"CTR&L + SHIFT",
+    L"\u041B\u0456\u0432\u0438&\u0439 ALT + SHIFT",
+    L"\u0417\u043D\u0430&\u043A \u043D\u0430\u0433\u043E\u043B\u043E\u0441\u0443 (`)",
+    L"&\u0423\u0432\u0456\u043C\u043A\u043D\u0443\u0442\u0438 \u043F\u043E\u0441\u043B\u0456\u0434\u043E\u0432\u043D\u0456\u0441\u0442\u044C \u043A\u043B\u0430\u0432\u0456\u0448",
+    L"&\u041A\u043B\u0430\u0432\u0456\u0448\u0430:",
+    L"\u0417\u0430\u0433\u0430\u043B\u044C\u043D\u0456",
+    L"\u041C\u043E\u0432\u0430 \u0432\u0432\u0435\u0434\u0435\u043D\u043D\u044F \u0437\u0430 &\u0437\u0430\u043C\u043E\u0432\u0447\u0443\u0432\u0430\u043D\u043D\u044F\u043C",
+    L"\u0412\u0438\u0431\u0435\u0440\u0456\u0442\u044C \u043E\u0434\u043D\u0443 \u0437 \u0432\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0445 \u043C\u043E\u0432 \u0432\u0432\u0435\u0434\u0435\u043D\u043D\u044F, \u044F\u043A\u0430 \u0432\u0438\u043A\u043E\u0440\u0438\u0441\u0442\u043E\u0432\u0443\u0432\u0430\u0442\u0438\u043C\u0435\u0442\u044C\u0441\u044F \u0437\u0430 \u0437\u0430\u043C\u043E\u0432\u0447\u0443\u0432\u0430\u043D\u043D\u044F\u043C \u0443 \u0432\u0441\u0456\u0445 \u043F\u043E\u043B\u044F\u0445 \u0432\u0432\u0435\u0434\u0435\u043D\u043D\u044F.",
+    L"&\u0412\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0456 \u0441\u043B\u0443\u0436\u0431\u0438",
+    L"\u0412\u0438\u0431\u0435\u0440\u0456\u0442\u044C \u0441\u043B\u0443\u0436\u0431\u0438 \u0434\u043B\u044F \u043A\u043E\u0436\u043D\u043E\u0457 \u043C\u043E\u0432\u0438 \u0432\u0432\u0435\u0434\u0435\u043D\u043D\u044F \u0443 \u0441\u043F\u0438\u0441\u043A\u0443. \u0414\u043B\u044F \u0437\u043C\u0456\u043D\u0438 \u0441\u043F\u0438\u0441\u043A\u0443 \u0432\u0438\u043A\u043E\u0440\u0438\u0441\u0442\u043E\u0432\u0443\u0439\u0442\u0435 \u043A\u043D\u043E\u043F\u043A\u0438 \u00AB\u0414\u043E\u0434\u0430\u0442\u0438\u00BB \u0442\u0430 \u00AB\u0412\u0438\u0434\u0430\u043B\u0438\u0442\u0438\u00BB.",
+    L"&\u0414\u043E\u0434\u0430\u0442\u0438...",
+    L"\u0412\u0438\u0434\u0430&\u043B\u0438\u0442\u0438",
+    L"\u0412\u043B\u0430\u0441\u0442\u0438\u0432\u043E\u0441&\u0442\u0456...",
+    L"\u0412&\u0433\u043E\u0440\u0443",
+    L"\u0412&\u043D\u0438\u0437",
+    L"\u041F\u0435\u0440\u0435\u0433\u043B\u044F\u0434 \u0440\u043E\u0437\u043A\u043B\u0430\u0434\u043A\u0438 \u043A\u043B\u0430\u0432\u0456\u0430\u0442\u0443\u0440\u0438",
+    L"\u041D\u0430\u0437\u0432\u0430 \u0440\u043E\u0437\u043A\u043B\u0430\u0434\u043A\u0438:",
+    L"\u0417\u043C\u0456\u043D\u0438\u0442\u0438 \u0437&\u043D\u0430\u0447\u043E\u043A...",
+    L"&\u0411\u0456\u043B\u044C\u0448\u0435 \u043D\u0435 \u043F\u043E\u043A\u0430\u0437\u0443\u0432\u0430\u0442\u0438 \u0446\u0435 \u043F\u043E\u0432\u0456\u0434\u043E\u043C\u043B\u0435\u043D\u043D\u044F.",
+};
+
+static const wchar_t* const kInpDlgTr_EL[47] = {
+    L"OK",
+    L"\u0386\u03BA\u03C5\u03C1\u03BF",
+    L"\u03A0\u03C1\u03BF\u03C3\u03B8\u03AE\u03BA\u03B7 \u03B3\u03BB\u03CE\u03C3\u03C3\u03B1\u03C2 \u03B5\u03B9\u03C3\u03CC\u03B4\u03BF\u03C5",
+    L"\u0395\u03C0\u03B9\u03BB\u03AD\u03BE\u03C4\u03B5 \u03C4\u03B7 \u03B3\u03BB\u03CE\u03C3\u03C3\u03B1 \u03C0\u03BF\u03C5 \u03B8\u03B1 \u03C0\u03C1\u03BF\u03C3\u03C4\u03B5\u03B8\u03B5\u03AF \u03C7\u03C1\u03B7\u03C3\u03B9\u03BC\u03BF\u03C0\u03BF\u03B9\u03CE\u03BD\u03C4\u03B1\u03C2 \u03C4\u03B1 \u03C0\u03B1\u03C1\u03B1\u03BA\u03AC\u03C4\u03C9 \u03C0\u03BB\u03B1\u03AF\u03C3\u03B9\u03B1 \u03B5\u03BB\u03AD\u03B3\u03C7\u03BF\u03C5.",
+    L"&\u03A0\u03C1\u03BF\u03B5\u03C0\u03B9\u03C3\u03BA\u03CC\u03C0\u03B7\u03C3\u03B7...",
+    L"\u0393\u03C1\u03B1\u03BC\u03BC\u03AE \u03B3\u03BB\u03CE\u03C3\u03C3\u03B1\u03C2",
+    L"&\u0391\u03B9\u03C9\u03C1\u03BF\u03CD\u03BC\u03B5\u03BD\u03B7 \u03C3\u03C4\u03B7\u03BD \u03B5\u03C0\u03B9\u03C6\u03AC\u03BD\u03B5\u03B9\u03B1 \u03B5\u03C1\u03B3\u03B1\u03C3\u03AF\u03B1\u03C2",
+    L"\u03A0\u03C1\u03BF\u03C3\u03B1\u03C1\u03C4\u03B7\u03BC\u03AD\u03BD\u03B7 \u03C3\u03C4\u03B7 &\u03B3\u03C1\u03B1\u03BC\u03BC\u03AE \u03B5\u03C1\u03B3\u03B1\u03C3\u03B9\u03CE\u03BD",
+    L"&\u039A\u03C1\u03C5\u03C6\u03AE",
+    L"\u0395\u03BC\u03C6\u03AC\u03BD\u03B9\u03C3\u03B7 \u03C4\u03B7\u03C2 \u03B3\u03C1\u03B1\u03BC\u03BC\u03AE\u03C2 \u03B3\u03BB\u03CE\u03C3\u03C3\u03B1\u03C2 \u03C9\u03C2 \u03B4\u03B9\u03B1\u03C6\u03B1\u03BD\u03AE\u03C2 \u03CC\u03C4\u03B1\u03BD \u03B5\u03AF\u03BD\u03B1\u03B9 \u03B1&\u03BD\u03B5\u03BD\u03B5\u03C1\u03B3\u03AE",
+    L"\u0395\u03BC\u03C6\u03AC\u03BD\u03B9\u03C3\u03B7 \u03C0\u03C1\u03CC\u03C3&\u03B8\u03B5\u03C4\u03C9\u03BD \u03B5\u03B9\u03BA\u03BF\u03BD\u03B9\u03B4\u03AF\u03C9\u03BD \u03B3\u03C1\u03B1\u03BC\u03BC\u03AE\u03C2 \u03B3\u03BB\u03CE\u03C3\u03C3\u03B1\u03C2 \u03C3\u03C4\u03B7 \u03B3\u03C1\u03B1\u03BC\u03BC\u03AE \u03B5\u03C1\u03B3\u03B1\u03C3\u03B9\u03CE\u03BD",
+    L"\u0395\u03BC\u03C6\u03AC\u03BD\u03B9\u03C3\u03B7 \u03B5\u03C4\u03B9\u03BA&\u03B5\u03C4\u03CE\u03BD \u03BA\u03B5\u03B9\u03BC\u03AD\u03BD\u03BF\u03C5 \u03C3\u03C4\u03B7 \u03B3\u03C1\u03B1\u03BC\u03BC\u03AE \u03B3\u03BB\u03CE\u03C3\u03C3\u03B1\u03C2",
+    L"\u03A1\u03C5\u03B8\u03BC\u03AF\u03C3\u03B5\u03B9\u03C2 \u03C0\u03BB\u03AE\u03BA\u03C4\u03C1\u03C9\u03BD \u03B3\u03B9\u03B1 \u03C0\u03C1\u03BF\u03C7\u03C9\u03C1\u03B7\u03BC\u03AD\u03BD\u03BF\u03C5\u03C2",
+    L"\u0393\u03B9\u03B1 \u03B1\u03C0\u03B5\u03BD\u03B5\u03C1\u03B3\u03BF\u03C0\u03BF\u03AF\u03B7\u03C3\u03B7 \u03C4\u03BF\u03C5 Caps Lock",
+    L"\u03A0\u03B1\u03C4\u03AE\u03C3\u03C4\u03B5 \u03C4\u03BF \u03C0\u03BB\u03AE\u03BA\u03C4\u03C1\u03BF CAPS &LOCK",
+    L"\u03A0\u03B1\u03C4\u03AE\u03C3\u03C4\u03B5 \u03C4\u03BF \u03C0\u03BB\u03AE\u03BA\u03C4\u03C1\u03BF SHI&FT",
+    L"\u03A0\u03BB\u03AE\u03BA\u03C4\u03C1\u03B1 \u03C3\u03C5\u03BD\u03C4\u03CC\u03BC\u03B5\u03C5\u03C3\u03B7\u03C2 \u03B3\u03B9\u03B1 \u03B3\u03BB\u03CE\u03C3\u03C3\u03B5\u03C2 \u03B5\u03B9\u03C3\u03CC\u03B4\u03BF\u03C5",
+    L"\u0395\u03BD\u03AD\u03C1\u03B3\u03B5\u03B9\u03B1",
+    L"&\u0391\u03BB\u03BB\u03B7\u03BB\u03BF\u03C5\u03C7\u03AF\u03B1 \u03C0\u03BB\u03AE\u03BA\u03C4\u03C1\u03C9\u03BD",
+    L"\u0391&\u03BB\u03BB\u03B1\u03B3\u03AE \u03B1\u03BB\u03BB\u03B7\u03BB\u03BF\u03C5\u03C7\u03AF\u03B1\u03C2 \u03C0\u03BB\u03AE\u03BA\u03C4\u03C1\u03C9\u03BD...",
+    L"\u0391\u03BB\u03BB\u03B1\u03B3\u03AE \u03B1\u03BB\u03BB\u03B7\u03BB\u03BF\u03C5\u03C7\u03AF\u03B1\u03C2 \u03C0\u03BB\u03AE\u03BA\u03C4\u03C1\u03C9\u03BD",
+    L"\u0391\u03BB\u03BB\u03B1\u03B3\u03AE \u03B3\u03BB\u03CE\u03C3\u03C3\u03B1\u03C2 \u03B5\u03B9\u03C3\u03CC\u03B4\u03BF\u03C5",
+    L"&\u039C\u03B7 \u03B5\u03BA\u03C7\u03C9\u03C1\u03B7\u03BC\u03AD\u03BD\u03BF",
+    L"&Ctrl + Shift",
+    L"&\u0391\u03C1\u03B9\u03C3\u03C4\u03B5\u03C1\u03CC Alt + Shift",
+    L"&\u0392\u03B1\u03C1\u03B5\u03AF\u03B1 (`)",
+    L"\u0391\u03BB\u03BB\u03B1\u03B3\u03AE \u03B4\u03B9\u03AC\u03C4\u03B1\u03BE\u03B7\u03C2 \u03C0\u03BB\u03B7\u03BA\u03C4\u03C1\u03BF\u03BB\u03BF\u03B3\u03AF\u03BF\u03C5",
+    L"\u039C&\u03B7 \u03B5\u03BA\u03C7\u03C9\u03C1\u03B7\u03BC\u03AD\u03BD\u03BF",
+    L"C&trl + Shift",
+    L"\u0391\u03C1\u03B9\u03C3\u03C4\u03B5\u03C1&\u03CC Alt + Shift",
+    L"\u0392\u03B1\u03C1\u03B5&\u03AF\u03B1 (`)",
+    L"&\u0395\u03BD\u03B5\u03C1\u03B3\u03BF\u03C0\u03BF\u03AF\u03B7\u03C3\u03B7 \u03B1\u03BB\u03BB\u03B7\u03BB\u03BF\u03C5\u03C7\u03AF\u03B1\u03C2 \u03C0\u03BB\u03AE\u03BA\u03C4\u03C1\u03C9\u03BD",
+    L"&\u03A0\u03BB\u03AE\u03BA\u03C4\u03C1\u03BF:",
+    L"\u0393\u03B5\u03BD\u03B9\u03BA\u03AC",
+    L"\u03A0\u03C1\u03BF\u03B5\u03C0\u03B9\u03BB\u03B5\u03B3\u03BC\u03AD\u03BD\u03B7 \u03B3\u03BB\u03CE\u03C3\u03C3\u03B1 &\u03B5\u03B9\u03C3\u03CC\u03B4\u03BF\u03C5",
+    L"\u0395\u03C0\u03B9\u03BB\u03AD\u03BE\u03C4\u03B5 \u03BC\u03AF\u03B1 \u03B1\u03C0\u03CC \u03C4\u03B9\u03C2 \u03B5\u03B3\u03BA\u03B1\u03C4\u03B5\u03C3\u03C4\u03B7\u03BC\u03AD\u03BD\u03B5\u03C2 \u03B3\u03BB\u03CE\u03C3\u03C3\u03B5\u03C2 \u03B5\u03B9\u03C3\u03CC\u03B4\u03BF\u03C5 \u03B3\u03B9\u03B1 \u03C7\u03C1\u03AE\u03C3\u03B7 \u03C9\u03C2 \u03C0\u03C1\u03BF\u03B5\u03C0\u03B9\u03BB\u03BF\u03B3\u03AE \u03C3\u03B5 \u03CC\u03BB\u03B1 \u03C4\u03B1 \u03C0\u03B5\u03B4\u03AF\u03B1 \u03B5\u03B9\u03C3\u03CC\u03B4\u03BF\u03C5.",
+    L"\u0395\u03B3\u03BA\u03B1&\u03C4\u03B5\u03C3\u03C4\u03B7\u03BC\u03AD\u03BD\u03B5\u03C2 \u03C5\u03C0\u03B7\u03C1\u03B5\u03C3\u03AF\u03B5\u03C2",
+    L"\u0395\u03C0\u03B9\u03BB\u03AD\u03BE\u03C4\u03B5 \u03C4\u03B9\u03C2 \u03C5\u03C0\u03B7\u03C1\u03B5\u03C3\u03AF\u03B5\u03C2 \u03C0\u03BF\u03C5 \u03B8\u03AD\u03BB\u03B5\u03C4\u03B5 \u03B3\u03B9\u03B1 \u03BA\u03AC\u03B8\u03B5 \u03B3\u03BB\u03CE\u03C3\u03C3\u03B1 \u03B5\u03B9\u03C3\u03CC\u03B4\u03BF\u03C5 \u03C3\u03C4\u03B7 \u03BB\u03AF\u03C3\u03C4\u03B1. \u03A7\u03C1\u03B7\u03C3\u03B9\u03BC\u03BF\u03C0\u03BF\u03B9\u03AE\u03C3\u03C4\u03B5 \u03C4\u03B1 \u03BA\u03BF\u03C5\u03BC\u03C0\u03B9\u03AC \u03A0\u03C1\u03BF\u03C3\u03B8\u03AE\u03BA\u03B7 \u03BA\u03B1\u03B9 \u039A\u03B1\u03C4\u03AC\u03C1\u03B3\u03B7\u03C3\u03B7 \u03B3\u03B9\u03B1 \u03BD\u03B1 \u03C4\u03C1\u03BF\u03C0\u03BF\u03C0\u03BF\u03B9\u03AE\u03C3\u03B5\u03C4\u03B5 \u03C4\u03B7 \u03BB\u03AF\u03C3\u03C4\u03B1.",
+    L"\u03A0\u03C1\u03BF\u03C3&\u03B8\u03AE\u03BA\u03B7...",
+    L"&\u039A\u03B1\u03C4\u03AC\u03C1\u03B3\u03B7\u03C3\u03B7",
+    L"&\u0399\u03B4\u03B9\u03CC\u03C4\u03B7\u03C4\u03B5\u03C2...",
+    L"\u039C\u03B5\u03C4\u03B1\u03BA\u03AF\u03BD\u03B7\u03C3\u03B7 \u03B5&\u03C0\u03AC\u03BD\u03C9",
+    L"\u039C\u03B5\u03C4\u03B1\u03BA\u03AF\u03BD&\u03B7\u03C3\u03B7 \u03BA\u03AC\u03C4\u03C9",
+    L"\u03A0\u03C1\u03BF\u03B5\u03C0\u03B9\u03C3\u03BA\u03CC\u03C0\u03B7\u03C3\u03B7 \u03B4\u03B9\u03AC\u03C4\u03B1\u03BE\u03B7\u03C2 \u03C0\u03BB\u03B7\u03BA\u03C4\u03C1\u03BF\u03BB\u03BF\u03B3\u03AF\u03BF\u03C5",
+    L"\u038C\u03BD\u03BF\u03BC\u03B1 \u03B4\u03B9\u03AC\u03C4\u03B1\u03BE\u03B7\u03C2:",
+    L"\u0391&\u03BB\u03BB\u03B1\u03B3\u03AE \u03B5\u03B9\u03BA\u03BF\u03BD\u03B9\u03B4\u03AF\u03BF\u03C5...",
+    L"\u039D\u03B1 \u03BC\u03B7\u03BD \u03B5\u03BC\u03C6\u03B1\u03BD\u03B9\u03C3\u03C4\u03B5\u03AF \u03BE\u03B1\u03BD\u03AC \u03B1\u03C5\u03C4\u03CC \u03C4\u03BF &\u03BC\u03AE\u03BD\u03C5\u03BC\u03B1.",
+};
+
+static const wchar_t* const kInpDlgTr_AR[47] = {
+    L"\u0645\u0648\u0627\u0641\u0642",
+    L"\u0625\u0644\u063A\u0627\u0621 \u0627\u0644\u0623\u0645\u0631",
+    L"\u0625\u0636\u0627\u0641\u0629 \u0644\u063A\u0629 \u0625\u062F\u062E\u0627\u0644",
+    L"\u062D\u062F\u062F \u0627\u0644\u0644\u063A\u0629 \u0627\u0644\u062A\u064A \u062A\u0631\u064A\u062F \u0625\u0636\u0627\u0641\u062A\u0647\u0627 \u0628\u0627\u0633\u062A\u062E\u062F\u0627\u0645 \u062E\u0627\u0646\u0627\u062A \u0627\u0644\u0627\u062E\u062A\u064A\u0627\u0631 \u0623\u062F\u0646\u0627\u0647.",
+    L"&\u0645\u0639\u0627\u064A\u0646\u0629...",
+    L"\u0634\u0631\u064A\u0637 \u0627\u0644\u0644\u063A\u0629",
+    L"&\u0639\u0627\u0626\u0645 \u0639\u0644\u0649 \u0633\u0637\u062D \u0627\u0644\u0645\u0643\u062A\u0628",
+    L"\u0645\u062B\u0628\u062A \u0641\u064A &\u0634\u0631\u064A\u0637 \u0627\u0644\u0645\u0647\u0627\u0645",
+    L"&\u0645\u062E\u0641\u064A",
+    L"\u0625\u0638\u0647\u0627\u0631 \u0634\u0631\u064A\u0637 \u0627\u0644\u0644\u063A\u0629 \u0634\u0641\u0627\u0641\u064B\u0627 \u0639\u0646\u062F\u0645\u0627 \u064A\u0643\u0648\u0646 \u063A\u064A\u0631 &\u0646\u0634\u0637",
+    L"\u0625\u0638\u0647\u0627\u0631 \u0623\u064A\u0642\u0648\u0646\u0627\u062A \u0634\u0631\u064A\u0637 \u0627\u0644\u0644\u063A\u0629 \u0627\u0644\u0625&\u0636\u0627\u0641\u064A\u0629 \u0641\u064A \u0634\u0631\u064A\u0637 \u0627\u0644\u0645\u0647\u0627\u0645",
+    L"&\u062A\u0633\u0645\u064A\u0627\u062A \u0627\u0644\u0646\u0635 \u0639\u0644\u0649 \u0634\u0631\u064A\u0637 \u0627\u0644\u0644\u063A\u0629",
+    L"\u0625\u0639\u062F\u0627\u062F\u0627\u062A \u0627\u0644\u0645\u0641\u0627\u062A\u064A\u062D \u0627\u0644\u0645\u062A\u0642\u062F\u0645\u0629",
+    L"\u0644\u0625\u064A\u0642\u0627\u0641 \u062A\u0634\u063A\u064A\u0644 Caps Lock",
+    L"\u0627\u0636\u063A\u0637 \u0639\u0644\u0649 \u0645\u0641\u062A\u0627\u062D CAPS &LOCK",
+    L"\u0627\u0636\u063A\u0637 \u0639\u0644\u0649 \u0645\u0641\u062A\u0627\u062D SHI&FT",
+    L"\u0645\u0641\u0627\u062A\u064A\u062D \u0627\u0644\u062A\u0634\u063A\u064A\u0644 \u0627\u0644\u0633\u0631\u064A\u0639 \u0644\u0644\u063A\u0627\u062A \u0627\u0644\u0625\u062F\u062E\u0627\u0644",
+    L"\u0627\u0644\u0625\u062C\u0631\u0627\u0621",
+    L"&\u062A\u0633\u0644\u0633\u0644 \u0627\u0644\u0645\u0641\u0627\u062A\u064A\u062D",
+    L"\u062A\u063A&\u064A\u064A\u0631 \u062A\u0633\u0644\u0633\u0644 \u0627\u0644\u0645\u0641\u0627\u062A\u064A\u062D...",
+    L"\u062A\u063A\u064A\u064A\u0631 \u062A\u0633\u0644\u0633\u0644 \u0627\u0644\u0645\u0641\u0627\u062A\u064A\u062D",
+    L"\u062A\u0628\u062F\u064A\u0644 \u0644\u063A\u0629 \u0627\u0644\u0625\u062F\u062E\u0627\u0644",
+    L"&\u063A\u064A\u0631 \u0645\u0639\u064A\u0651\u0646",
+    L"&Ctrl + Shift",
+    L"&\u200EAlt \u0627\u0644\u0623\u064A\u0633\u0631 + Shift",
+    L"\u0639\u0644\u0627\u0645\u0629 \u0627\u0644\u0646\u0628\u0631 (`)",
+    L"\u062A\u0628\u062F\u064A\u0644 \u062A\u062E\u0637\u064A\u0637 \u0644\u0648\u062D\u0629 \u0627\u0644\u0645\u0641\u0627\u062A\u064A\u062D",
+    L"\u063A&\u064A\u0631 \u0645\u0639\u064A\u0651\u0646",
+    L"C&trl + Shift",
+    L"Alt \u0627\u0644\u0623\u064A\u0633\u0631 + Shift",
+    L"\u0639\u0644\u0627\u0645\u0629 \u0627\u0644\u0646&\u0628\u0631 (`)",
+    L"&\u062A\u0645\u0643\u064A\u0646 \u062A\u0633\u0644\u0633\u0644 \u0627\u0644\u0645\u0641\u0627\u062A\u064A\u062D",
+    L"&\u0627\u0644\u0645\u0641\u062A\u0627\u062D:",
+    L"\u0639\u0627\u0645",
+    L"&\u0644\u063A\u0629 \u0627\u0644\u0625\u062F\u062E\u0627\u0644 \u0627\u0644\u0627\u0641\u062A\u0631\u0627\u0636\u064A\u0629",
+    L"\u062D\u062F\u062F \u0625\u062D\u062F\u0649 \u0644\u063A\u0627\u062A \u0627\u0644\u0625\u062F\u062E\u0627\u0644 \u0627\u0644\u0645\u062B\u0628\u062A\u0629 \u0644\u0627\u0633\u062A\u062E\u062F\u0627\u0645\u0647\u0627 \u0643\u0644\u063A\u0629 \u0627\u0641\u062A\u0631\u0627\u0636\u064A\u0629 \u0641\u064A \u062C\u0645\u064A\u0639 \u062D\u0642\u0648\u0644 \u0627\u0644\u0625\u062F\u062E\u0627\u0644.",
+    L"&\u0627\u0644\u062E\u062F\u0645\u0627\u062A \u0627\u0644\u0645\u062B\u0628\u062A\u0629",
+    L"\u062D\u062F\u062F \u0627\u0644\u062E\u062F\u0645\u0627\u062A \u0627\u0644\u0645\u0637\u0644\u0648\u0628\u0629 \u0644\u0643\u0644 \u0644\u063A\u0629 \u0625\u062F\u062E\u0627\u0644 \u0645\u0639\u0631\u0648\u0636\u0629 \u0641\u064A \u0627\u0644\u0642\u0627\u0626\u0645\u0629. \u0627\u0633\u062A\u062E\u062F\u0645 \u0632\u0631\u064A \u0625\u0636\u0627\u0641\u0629 \u0648\u0625\u0632\u0627\u0644\u0629 \u0644\u062A\u0639\u062F\u064A\u0644 \u0647\u0630\u0647 \u0627\u0644\u0642\u0627\u0626\u0645\u0629.",
+    L"&\u0625\u0636\u0627\u0641\u0629...",
+    L"\u0625&\u0632\u0627\u0644\u0629",
+    L"&\u062E\u0635\u0627\u0626\u0635...",
+    L"\u062A\u062D\u0631\u064A\u0643 \u0644\u0623&\u0639\u0644\u0649",
+    L"\u062A\u062D\u0631\u064A\u0643 \u0644\u0623\u0633&\u0641\u0644",
+    L"\u0645\u0639\u0627\u064A\u0646\u0629 \u062A\u062E\u0637\u064A\u0637 \u0644\u0648\u062D\u0629 \u0627\u0644\u0645\u0641\u0627\u062A\u064A\u062D",
+    L"\u0627\u0633\u0645 \u0627\u0644\u062A\u062E\u0637\u064A\u0637:",
+    L"&\u062A\u063A\u064A\u064A\u0631 \u0627\u0644\u0623\u064A\u0642\u0648\u0646\u0629...",
+    L"&\u0639\u062F\u0645 \u0625\u0638\u0647\u0627\u0631 \u0647\u0630\u0647 \u0627\u0644\u0631\u0633\u0627\u0644\u0629 \u0645\u0631\u0629 \u0623\u062E\u0631\u0649.",
+};
+
+static const wchar_t* const* const kInpDlgMasters[20] = {
+    nullptr,
+    kInpDlgTr_IT,
+    kInpDlgTr_DE,
+    kInpDlgTr_FR,
+    kInpDlgTr_ES,
+    kInpDlgTr_PT,
+    kInpDlgTr_NL,
+    kInpDlgTr_PL,
+    kInpDlgTr_RU,
+    kInpDlgTr_ZH,
+    kInpDlgTr_JA,
+    kInpDlgTr_KO,
+    kInpDlgTr_TR,
+    kInpDlgTr_CS,
+    kInpDlgTr_HU,
+    kInpDlgTr_RO,
+    kInpDlgTr_SV,
+    kInpDlgTr_UK,
+    kInpDlgTr_EL,
+    kInpDlgTr_AR,
+};
+
+
 // ===== Embedded-resource builders 
 void PutU16(std::vector<BYTE>& out, WORD v) {
     out.push_back(static_cast<BYTE>(v)); out.push_back(static_cast<BYTE>(v >> 8));
@@ -5086,7 +6465,10 @@ bool BuildDlgTemplate(const EmbDlg& d, std::vector<BYTE>& out) {
     const wchar_t* title = d.title;
     if (tr) {
         const wchar_t* tt = kTitleMasters[g_lang][dlgIdx];
+        if (d.id == 102) tt = kInputLanguagesTitle[g_lang];
         if (tt) title = tt;
+    } else if (d.id == 102) {
+        title = kInputLanguagesTitle[LangEN];
     }
     PutSzW(out, title);
     if (d.style & DS_SETFONT) {
@@ -5196,6 +6578,94 @@ const BYTE* EmbeddedDlgTemplate(WORD id, DWORD& size) {
     if (id < ARRAYSIZE(g_blobForDialog) && g_blobForDialog[id] >= 0) {
         size = g_blobs[g_blobForDialog[id]].size;
         return g_blobs[g_blobForDialog[id]].data;
+    }
+    return nullptr;
+}
+
+// ===== Embedded input.dll resource builders (Text Services translation) =====
+// Mirrors the intl.cpl builders above: templates are rebuilt from the
+// verified kInpDialogs tables and localized with the kInpDlgMasters packs.
+// The seven EX dialogs rebuild byte-identical to the pinned file's own
+// resources (expectSize/expectFnv prove it at English); 112/113/114 are
+// classic templates canonically rebuilt in EX form, which the dialog
+// manager detects by signature.
+bool BuildInputDlgTemplate(const EmbDlg& d, std::vector<BYTE>& out) {
+    out.clear(); out.reserve(d.expectSize);
+    const int dlgIdx = static_cast<int>(&d - kInpDialogs);
+    if (dlgIdx < 0 || dlgIdx >= 10 || &kInpDialogs[dlgIdx] != &d) return false;
+    const bool tr = g_lang > LangEN && g_lang < LangCount;
+    PutU16(out, 1); PutU16(out, 0xFFFF);
+    DWORD exStyle = d.exStyle;
+    if (tr && LangRtl(g_lang)) exStyle |= WS_EX_LAYOUTRTL; // Arabic mirroring
+    PutU32(out, d.helpId); PutU32(out, exStyle); PutU32(out, d.style);
+    PutU16(out, d.count);
+    PutU16(out, static_cast<WORD>(d.x)); PutU16(out, static_cast<WORD>(d.y));
+    PutU16(out, static_cast<WORD>(d.cx)); PutU16(out, static_cast<WORD>(d.cy));
+    PutU16(out, 0); // menu: none (verified for all 10 input dialogs)
+    PutU16(out, 0); // class: none (verified for all 10 input dialogs)
+    const wchar_t* title = d.title;
+    if (dlgIdx >= 7) {
+        // 112/113/114 carry the sheet title; reuse the localized title pack.
+        if (tr) title = kInputLanguagesTitle[g_lang];
+    } else if (tr) {
+        const wchar_t* tt = kInpDlgMasters[g_lang][kInpTitlePhrase[dlgIdx]];
+        if (tt) title = tt;
+    }
+    PutSzW(out, title);
+    if (d.style & DS_SETFONT) {
+        PutU16(out, d.fontPt); PutU16(out, d.fontWeight);
+        out.push_back(d.fontItalic); out.push_back(d.fontCharset);
+        PutSzW(out, d.typeface);
+    }
+    for (WORD i = 0; i < d.count; ++i) {
+        const EmbCtl& c = d.ctls[i];
+        while (out.size() % 4) out.push_back(0);
+        PutU32(out, c.helpId); PutU32(out, c.exStyle); PutU32(out, c.style);
+        PutU16(out, static_cast<WORD>(c.x)); PutU16(out, static_cast<WORD>(c.y));
+        PutU16(out, static_cast<WORD>(c.cx)); PutU16(out, static_cast<WORD>(c.cy));
+        PutU32(out, c.id);
+        PutField(out, c.clsOrd, c.clsText);
+        const wchar_t* text = c.text;
+        if (tr && c.textOrd == 0xFFFF) {
+            const short p = kInpPhrMaps[dlgIdx][i];
+            if (p >= 0 && p < 47) {
+                const wchar_t* t2 = kInpDlgMasters[g_lang][p];
+                if (t2) text = t2;
+            }
+        }
+        PutField(out, c.textOrd, text);
+        PutU16(out, 0); // no creation data (verified for all input controls)
+    }
+    return true;
+}
+bool BuildEmbeddedInputResources() {
+    for (auto& v : g_inpBlobForDialog) v = -1;
+    g_inpBlobCount = 0;
+    for (const EmbDlg* d = kInpDialogs; d->id; ++d) {
+        if (g_inpBlobCount >= ARRAYSIZE(g_inpBlobs)) return Fail(L"Input blob table overflow", ERROR_INSUFFICIENT_BUFFER);
+        if (!BuildInputDlgTemplate(*d, g_inpBlobStore[g_inpBlobCount])) return Fail(L"Build input dialog template", ERROR_BAD_FORMAT);
+        if (g_lang == LangEN) {
+            // English rebuilds must be byte-identical to the pinned input.dll
+            // resources (112/113/114: identical to the canonical EX rebuild).
+            if (g_inpBlobStore[g_inpBlobCount].size() != d->expectSize ||
+                Fnv1a(g_inpBlobStore[g_inpBlobCount]) != d->expectFnv) {
+                Wh_Log(L"[IntlRestore] Input dialog %u rebuild mismatch: not serving a corrupt template", d->id);
+                return Fail(L"Input dialog template verification failed", ERROR_CRC);
+            }
+        } else if (g_inpBlobStore[g_inpBlobCount].empty()) {
+            return Fail(L"Translated input dialog template is empty", ERROR_BAD_FORMAT);
+        }
+        g_inpBlobs[g_inpBlobCount] = {g_inpBlobStore[g_inpBlobCount].data(), static_cast<DWORD>(g_inpBlobStore[g_inpBlobCount].size())};
+        if (d->id < ARRAYSIZE(g_inpBlobForDialog)) g_inpBlobForDialog[d->id] = static_cast<int>(g_inpBlobCount);
+        ++g_inpBlobCount;
+    }
+    Wh_Log(L"[IntlRestore] Embedded input resources ready: 10 Text Services dialogs (%lu blobs) language=%s", g_inpBlobCount, kLangTags[g_lang]);
+    return true;
+}
+const BYTE* EmbeddedInpDlgTemplate(WORD id, DWORD& size) {
+    if (id < ARRAYSIZE(g_inpBlobForDialog) && g_inpBlobForDialog[id] >= 0) {
+        size = g_inpBlobs[g_inpBlobForDialog[id]].size;
+        return g_inpBlobs[g_inpBlobForDialog[id]].data;
     }
     return nullptr;
 }
@@ -5386,7 +6856,11 @@ void Own(HWND window, bool add) {
     if (add) {
         bool exists = false;
         for (HWND w : g_owned) if (w == window) exists = true;
-        if (!exists) for (auto& w : g_owned) if (!w) { w = window; break; }
+        if (!exists) {
+            bool placed = false;
+            for (auto& w : g_owned) if (!w) { w = window; placed = true; break; }
+            if (!placed && g_owned.size() < kMaxOwnedWindows) g_owned.push_back(window);
+        }
     } else for (auto& w : g_owned) if (w == window) w = nullptr;
     ReleaseSRWLockExclusive(&g_windowsLock);
 }
@@ -5397,8 +6871,10 @@ int CALLBACK SheetCallback(HWND window, UINT message, LPARAM parameter) {
         SheetContext* context = g_sheet;
         // Register before the provider callback: at PSCB_INITIALIZED a window
         // already exists, even if the provider's callback subsequently fails.
-        if (context && message == PSCB_INITIALIZED) {
-            context->window = window; Own(window, true); ++g_uiCreated;
+if (context && message == PSCB_INITIALIZED) {
+            context->window = window;
+            TranslateInputWindow(window);
+            Own(window, true); ++g_uiCreated;
             Wh_Log(L"[IntlRestore] Original Windows 7 property sheet initialized: HWND=%p", window);
             if (g_stopping.load()) PostMessageW(window, WM_CLOSE, 0, 0);
         }
@@ -5481,6 +6957,14 @@ INT_PTR ShowSheet(PSProc original, LPCPROPSHEETHEADERW header, bool privateMain)
             }
             copy.ppsp = converted.data();
         }
+    } else if (g_lang != LangEN && copy.hInstance == g_inputModule && copy.pszCaption && IS_INTRESOURCE(copy.pszCaption)) {
+        // Evidence: the Win7 input.dll sets the sheet caption as the int
+        // resource 1 (disasm 0x11CAB stores r14=1 at header+0x20). Win10
+        // comctl32 resolves it with its own LoadStringW, which the private
+        // input.dll IAT hook cannot reach, so the caption is replaced here
+        // before the original call.
+        const wchar_t* text = InputText(LOWORD(copy.pszCaption));
+        if (text) copy.pszCaption = text;
     }
     SheetContext context{(copy.dwFlags & PSH_USECALLBACK) ? copy.pfnCallback : nullptr, nullptr, g_sheet};
     copy.dwFlags |= PSH_USECALLBACK; copy.pfnCallback = SheetCallback;
@@ -5535,6 +7019,38 @@ HPROPSHEETPAGE WINAPI MainCreatePage(LPCPROPSHEETPAGEW page) {
     return result;
     } catch (...) { Wh_Log(L"[IntlRestore] MainCreatePage: EXCEPTION swallowed"); g_uiFailed = true; SetLastError(ERROR_NOT_ENOUGH_MEMORY); return nullptr; }
 }
+// Text Services property-sheet pages: input.dll creates them through its
+// own CreatePropertySheetPageW import with pszTemplate = MAKEINTRESOURCE
+// (500/106/107) and hInstance = its own module handle (disasm 0x11DCC).
+// The wrapper serves the translated indirect template exactly like
+// IndirectPage does for the private intl.cpl; English and unexpected
+// shapes pass the genuine call through untouched.
+HPROPSHEETPAGE WINAPI InputCreatePage(LPCPROPSHEETPAGEW page) {
+    try {
+        if (!g_inputPage) return nullptr;
+        if (!page || page->dwSize < offsetof(PROPSHEETPAGEW, lParam) + sizeof(page->lParam) || page->dwSize > 512)
+            return g_inputPage(page);
+        if (page->hInstance != g_inputModule || (page->dwFlags & PSP_DLGINDIRECT) || !IS_INTRESOURCE(page->pszTemplate))
+            return g_inputPage(page);
+        if (g_lang == LangEN) return g_inputPage(page); // genuine en-US resources
+        DWORD size = 0;
+        const BYTE* tpl = EmbeddedInpDlgTemplate(LOWORD(page->pszTemplate), size);
+        if (!tpl || !size) return g_inputPage(page);    // unknown template: genuine
+        PROPSHEETPAGEW copy{};
+        const size_t wire = std::min<size_t>(page->dwSize, sizeof(copy));
+        memcpy(&copy, page, wire); copy.dwSize = static_cast<DWORD>(wire);
+        copy.dwFlags |= PSP_DLGINDIRECT;
+        copy.pResource = reinterpret_cast<LPCDLGTEMPLATE>(tpl);
+        HPROPSHEETPAGE result = g_inputPage(&copy);
+        if (!result) { g_uiFailed = true; Wh_Log(L"[IntlRestore] Translated input page %u failed: Win32=%lu", LOWORD(page->pszTemplate), GetLastError()); }
+        else Wh_Log(L"[IntlRestore] Windows 7 input page %u served translated: %p", LOWORD(page->pszTemplate), result);
+        return result;
+    } catch (...) {
+        Wh_Log(L"[IntlRestore] InputCreatePage: EXCEPTION swallowed");
+        g_uiFailed = true; return nullptr;
+    }
+}
+
 struct DialogContext { DLGPROC original; LPARAM parameter; HWND window; };
 constexpr PCWSTR kDialogProperty = L"Windhawk.IntlRestore.Dialog.89B30F6D";
 INT_PTR CALLBACK DialogCallback(HWND window, UINT message, WPARAM wparam, LPARAM lparam) {
@@ -5544,6 +7060,7 @@ INT_PTR CALLBACK DialogCallback(HWND window, UINT message, WPARAM wparam, LPARAM
         if (!context) return FALSE;
         if (message == WM_INITDIALOG) {
             context->window = window;
+            TranslateInputWindow(window);
             if (!SetPropW(window, kDialogProperty, context)) {
                 EndDialog(window, -1); g_uiFailed = true; return FALSE;
             }
@@ -5583,6 +7100,26 @@ INT_PTR ShowDialog(DialogProc original, HINSTANCE instance, LPCWSTR name, HWND p
                 Wh_Log(L"[IntlRestore] DialogBoxIndirectParamW failed: %lu", error);
             }
             SetLastError(error); return result;
+        }
+        if (instance == g_inputModule && g_lang != LangEN && IS_INTRESOURCE(name)) {
+            // Text Services modal dialogs (Add Input Language 101, Change
+            // Key Sequence 108/111, Keyboard Layout Preview 900 and the
+            // confirmation dialogs 112-114): serve the translated indirect
+            // template exactly like the private intl.cpl dialogs above.
+            DWORD size = 0;
+            const BYTE* tpl = EmbeddedInpDlgTemplate(LOWORD(name), size);
+            if (tpl && size) {
+                DialogContext context{proc, param, nullptr};
+                INT_PTR result = DialogBoxIndirectParamW(instance, reinterpret_cast<LPCDLGTEMPLATE>(tpl),
+                                                          parent, DialogCallback, reinterpret_cast<LPARAM>(&context));
+                DWORD error = GetLastError();
+                Own(context.window, false);
+                if (result == -1) {
+                    g_uiFailed = true;
+                    Wh_Log(L"[IntlRestore] Translated input dialog %u failed: %lu", LOWORD(name), error);
+                }
+                SetLastError(error); return result;
+            }
         }
         DialogContext context{proc, param, nullptr};
         INT_PTR result = original(instance, name, parent, DialogCallback, reinterpret_cast<LPARAM>(&context));
@@ -5690,6 +7227,8 @@ HANDLE WINAPI PrivateCreateThread(LPSECURITY_ATTRIBUTES attributes, SIZE_T stack
         HANDLE thread = CreateThread(attributes, stack, ThreadBridge, job, flags, id);
         if (!thread) {
             DWORD error = GetLastError(); HeapFree(GetProcessHeap(), 0, job); EndJob(); SetLastError(error);
+        } else {
+            RegisterThread(thread); // teardown joins this before freeing the image
         }
         return thread; // Caller owns this real handle, just as with CreateThread.
 
@@ -5732,12 +7271,15 @@ BOOL WINAPI PrivateDisableThreadLibraryCalls(HMODULE module) {
         return DisableThreadLibraryCalls(module);
     }
 }
-void WaitForJobs() {
+void WaitForJobs(bool pumpMessages) {
     if (!g_jobsIdle || g_jobs.load(std::memory_order_acquire) == 0) return;
     bool quit = false; int quitCode = 0;
     while (g_jobs.load(std::memory_order_acquire) != 0) {
-        DWORD status = MsgWaitForMultipleObjectsEx(1, &g_jobsIdle, 100, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
-        if (status == WAIT_OBJECT_0 + 1) {
+        DWORD flags = pumpMessages ? (QS_ALLINPUT) : 0;
+        DWORD status = pumpMessages
+            ? MsgWaitForMultipleObjectsEx(1, &g_jobsIdle, 100, flags, MWMO_INPUTAVAILABLE)
+            : WaitForSingleObject(g_jobsIdle, 100);
+        if (pumpMessages && status == WAIT_OBJECT_0 + 1) {
             MSG message;
             while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
                 if (message.message == WM_QUIT) { quit = true; quitCode = static_cast<int>(message.wParam); }
@@ -5970,13 +7512,81 @@ bool PatchInputSlot(ULONG_PTR* slot, ULONG_PTR replacement) {
     g_inputPatches.push_back({slot, original, replacement});
     return true;
 }
+using InputLoadStringFn = int (WINAPI*)(HINSTANCE, UINT, LPWSTR, int);
+InputLoadStringFn g_inputLoadString = nullptr;
+
+// input.dll keeps its own resource set; the intl.cpl tables never translate
+// it. Its user-facing text is now translated three ways: dialog templates
+// are rebuilt from the verified kInpDialogs data (property-sheet pages
+// through the patched CreatePropertySheetPageW slot, modal dialogs through
+// ShowDialog below), runtime strings come from the id-verified kInputText
+// pack (defined with the language packs above the builders), and
+// kInputUiLabels below stays as a window-text fallback for anything the
+// templates and the string hook do not cover.
+struct InputUiLabel { const wchar_t* source; const wchar_t* text[LangCount]; };
+static const InputUiLabel kInputUiLabels[] = {
+ {L"General",{L"General",L"Generale",L"Allgemein",L"Général",L"General",L"Geral",L"Algemeen",L"Ogólne",L"Общие",L"常规",L"全般",L"일반",L"Genel",L"Obecné",L"Általános",L"General",L"Allmänt",L"Загальні",L"Γενικά",L"عام"}},
+ {L"Language Bar",{L"Language Bar",L"Barra della lingua",L"Sprachleiste",L"Barre de langue",L"Barra de idioma",L"Barra de idiomas",L"Taalbalk",L"Pasek języka",L"Языковая панель",L"语言栏",L"言語バー",L"언어 표시줄",L"Dil çubuğu",L"Panel jazyků",L"Nyelvi eszköztár",L"Bara de limbi",L"Språkfält",L"Мовна панель",L"Γραμμή γλώσσας",L"شريط اللغة"}},
+ {L"Advanced Key Settings",{L"Advanced Key Settings",L"Impostazioni avanzate tasti",L"Erweiterte Tasteneinstellungen",L"Paramètres de touches avancés",L"Configuración avanzada de teclas",L"Definições avançadas de teclas",L"Geavanceerde toetsinstellingen",L"Zaawansowane ustawienia klawiszy",L"Дополнительные параметры клавиш",L"高级键设置",L"キーの詳細設定",L"고급 키 설정",L"Gelişmiş tuş ayarları",L"Upřesnit nastavení kláves",L"Speciális billentyűzet-beállítások",L"Setări avansate ale tastelor",L"Avancerade tangentinställningar",L"Розширені параметри клавіш",L"Ρυθμίσεις πλήκτρων για προχωρημένους",L"إعدادات المفاتيح المتقدمة"}},
+ {L"Add...",{L"Add...",L"Aggiungi...",L"Hinzufügen...",L"Ajouter...",L"Agregar...",L"Adicionar...",L"Toevoegen...",L"Dodaj...",L"Добавить...",L"添加...",L"追加...",L"추가...",L"Ekle...",L"Přidat...",L"Hozzáadás...",L"Adăugare...",L"Lägg till...",L"Додати...",L"Προσθήκη...",L"إضافة..."}},
+ {L"Remove",{L"Remove",L"Rimuovi",L"Entfernen",L"Supprimer",L"Quitar",L"Remover",L"Verwijderen",L"Usuń",L"Удалить",L"删除",L"削除",L"제거",L"Kaldır",L"Odebrat",L"Eltávolítás",L"Eliminare",L"Ta bort",L"Видалити",L"Κατάργηση",L"إزالة"}},
+ {L"Properties...",{L"Properties...",L"Proprietà...",L"Eigenschaften...",L"Propriétés...",L"Propiedades...",L"Propriedades...",L"Eigenschappen...",L"Właściwości...",L"Свойства...",L"属性...",L"プロパティ...",L"속성...",L"Özellikler...",L"Vlastnosti...",L"Tulajdonságok...",L"Proprietăți...",L"Egenskaper...",L"Властивості...",L"Ιδιότητες...",L"خصائص..."}},
+ {L"Move Up",{L"Move Up",L"Sposta su",L"Nach oben",L"Monter",L"Subir",L"Mover para cima",L"Omhoog",L"Przenieś w górę",L"Вверх",L"上移",L"上へ",L"위로 이동",L"Yukarı Taşı",L"Nahoru",L"Feljebb",L"Mutare în sus",L"Flytta upp",L"Вгору",L"Μετακίνηση επάνω",L"نقل لأعلى"}},
+ {L"Move Down",{L"Move Down",L"Sposta giù",L"Nach unten",L"Descendre",L"Bajar",L"Mover para baixo",L"Omlaag",L"Przenieś w dół",L"Вниз",L"下移",L"下へ",L"아래로 이동",L"Aşağı Taşı",L"Dolů",L"Lejjebb",L"Mutare în jos",L"Flytta ned",L"Вниз",L"Μετακίνηση κάτω",L"نقل لأسفل"}},
+ {L"Select one of the installed input languages to use as the default for all input fields.",{L"Select one of the installed input languages to use as the default for all input fields.",L"Selezionare una delle lingue di input installate da usare come predefinita per tutti i campi di input.",L"Wählen Sie eine der installierten Eingabesprachen als Standardsprache für alle Eingabefelder aus.",L"Sélectionnez l’une des langues d’entrée installées comme langue par défaut pour tous les champs de saisie.",L"Seleccione uno de los idiomas de entrada instalados para usarlo como predeterminado en todos los campos de entrada.",L"Selecione um dos idiomas de entrada instalados para usar como padrão em todos os campos de entrada.",L"Selecteer een van de geïnstalleerde invoertalen als standaard voor alle invoervelden.",L"Wybierz jeden z zainstalowanych języków wprowadzania jako domyślny dla wszystkich pól wprowadzania.",L"Выберите один из установленных языков ввода, который будет использоваться по умолчанию во всех полях ввода.",L"选择一种已安装的输入语言作为所有输入字段的默认语言。",L"すべての入力フィールドで既定として使用する、インストール済みの入力言語を選択します。",L"모든 입력 필드에 기본값으로 사용할 설치된 입력 언어를 선택하세요.",L"Tüm giriş alanlarında varsayılan olarak kullanılacak yüklü giriş dillerinden birini seçin.",L"Vyberte jeden z nainstalovaných vstupních jazyků, který se použije jako výchozí pro všechna vstupní pole.",L"Válasszon egy telepített beviteli nyelvet, amely alapértelmezettként használható minden beviteli mezőben.",L"Selectați una dintre limbile de intrare instalate pentru a o utiliza implicit în toate câmpurile de introducere.",L"Välj ett av de installerade inmatningsspråken som ska användas som standard i alla inmatningsfält.",L"Виберіть одну з установлених мов введення, яка використовуватиметься за замовчуванням у всіх полях введення.",L"Επιλέξτε μία από τις εγκατεστημένες γλώσσες εισόδου για χρήση ως προεπιλογή σε όλα τα πεδία εισόδου.",L"حدد إحدى لغات الإدخال المثبتة لاستخدامها كلغة افتراضية في جميع حقول الإدخال."}},
+ {L"Installed services",{L"Installed services",L"Servizi installati",L"Installierte Dienste",L"Services installés",L"Servicios instalados",L"Serviços instalados",L"Geïnstalleerde services",L"Zainstalowane usługi",L"Установленные службы",L"已安装的服务",L"インストールされているサービス",L"설치된 서비스",L"Yüklü hizmetler",L"Nainstalované služby",L"Telepített szolgáltatások",L"Servicii instalate",L"Installerade tjänster",L"Установлені служби",L"Υπηρεσίες εγκατεστημένες",L"الخدمات المثبتة"}},
+ {L"Select the services that you want for each input language shown in the list. Use the Add and Remove buttons to modify this list.",{L"Select the services that you want for each input language shown in the list. Use the Add and Remove buttons to modify this list.",L"Selezionare i servizi desiderati per ogni lingua di input visualizzata nell'elenco. Usare i pulsanti Aggiungi e Rimuovi per modificare l'elenco.",L"Wählen Sie die gewünschten Dienste für jede in der Liste angezeigte Eingabesprache aus. Verwenden Sie zum Ändern der Liste die Schaltflächen Hinzufügen und Entfernen.",L"Sélectionnez les services souhaités pour chaque langue d’entrée affichée dans la liste. Utilisez les boutons Ajouter et Supprimer pour modifier cette liste.",L"Seleccione los servicios que desea para cada idioma de entrada mostrado en la lista. Use los botones Agregar y Quitar para modificarla.",L"Selecione os serviços desejados para cada idioma de entrada mostrado na lista. Use os botões Adicionar e Remover para alterar esta lista.",L"Selecteer de gewenste services voor elke invoertaal in de lijst. Gebruik de knoppen Toevoegen en Verwijderen om deze lijst te wijzigen.",L"Wybierz usługi dla każdego języka wprowadzania widocznego na liście. Użyj przycisków Dodaj i Usuń, aby zmienić tę listę.",L"Выберите службы для каждого языка ввода в списке. Для изменения списка используйте кнопки «Добавить» и «Удалить».",L"为列表中显示的每种输入语言选择所需的服务。使用“添加”和“删除”按钮修改此列表。",L"一覧に表示される各入力言語で使用するサービスを選択します。追加ボタンと削除ボタンで一覧を変更します。",L"목록에 표시된 각 입력 언어에 사용할 서비스를 선택하세요. 추가 및 제거 단추를 사용하여 이 목록을 수정합니다.",L"Listede gösterilen her giriş dili için istediğiniz hizmetleri seçin. Listeyi değiştirmek için Ekle ve Kaldır düğmelerini kullanın.",L"Vyberte služby pro jednotlivé vstupní jazyky zobrazené v seznamu. Seznam upravte pomocí tlačítek Přidat a Odebrat.",L"Válassza ki a listában szereplő beviteli nyelvekhez kívánt szolgáltatásokat. A lista módosításához használja a Hozzáadás és Eltávolítás gombot.",L"Selectați serviciile dorite pentru fiecare limbă de intrare afișată în listă. Folosiți butoanele Adăugare și Eliminare pentru a modifica lista.",L"Välj de tjänster du vill använda för varje inmatningsspråk i listan. Använd knapparna Lägg till och Ta bort för att ändra listan.",L"Виберіть служби для кожної мови введення у списку. Для зміни списку використовуйте кнопки «Додати» та «Видалити».",L"Επιλέξτε τις υπηρεσίες που θέλετε για κάθε γλώσσα εισόδου στη λίστα. Χρησιμοποιήστε τα κουμπιά Προσθήκη και Κατάργηση για να τροποποιήσετε τη λίστα.",L"حدد الخدمات المطلوبة لكل لغة إدخال معروضة في القائمة. استخدم زري إضافة وإزالة لتعديل هذه القائمة."}}
+};
+bool SameInputText(const wchar_t* a, const wchar_t* b) {
+    // Whitespace- and accelerator-insensitive compare: dialog templates
+    // carry '&' markers that localized texts place at different letters.
+    while (*a && *b) {
+        while (*a && (iswspace(*a) || *a == L'&')) ++a;
+        while (*b && (iswspace(*b) || *b == L'&')) ++b;
+        if (*a != *b) return false;
+        if (*a) { ++a; ++b; }
+    }
+    while (*a && (iswspace(*a) || *a == L'&')) ++a;
+    while (*b && (iswspace(*b) || *b == L'&')) ++b;
+    return !*a && !*b;
+}
+void TranslateInputWindow(HWND window) {
+    // Fallback pass for windows the rebuilt templates do not cover.
+    // Runs at WM_INITDIALOG (all controls exist) and PSCB_INITIALIZED.
+    if (g_lang <= LangEN || g_lang >= LangCount) return;
+    wchar_t title[256]{}; GetWindowTextW(window, title, ARRAYSIZE(title));
+    if (SameInputText(title, kInputLanguagesTitle[LangEN]))
+        SetWindowTextW(window, kInputLanguagesTitle[g_lang]);
+    EnumChildWindows(window, [](HWND child, LPARAM) -> BOOL {
+        wchar_t text[256]{}; GetWindowTextW(child, text, ARRAYSIZE(text));
+        for (const auto& label : kInputUiLabels) {
+            if (SameInputText(text, label.source)) {
+                SetWindowTextW(child, label.text[g_lang]); break;
+            }
+        }
+        return TRUE;
+    }, 0);
+}
+
+int WINAPI InputLoadStringW(HINSTANCE module, UINT id, LPWSTR output, int size) {
+    if (!g_inputLoadString || module != g_inputModule) return g_inputLoadString ? g_inputLoadString(module,id,output,size) : 0;
+    const wchar_t* text = InputText(id);
+    if (!text) return g_inputLoadString(module, id, output, size);
+    size_t n = wcslen(text);
+    if (size == 0) { if (output) *reinterpret_cast<const wchar_t**>(output) = text; return (int)n; }
+    if (!output || size < 0) { SetLastError(ERROR_INVALID_PARAMETER); return 0; }
+    size_t copy = std::min(n, (size_t)(size - 1));
+    memcpy(output, text, copy * sizeof(wchar_t)); output[copy] = 0;
+    return (int)copy;
+}
+
 bool AdaptInputIat() {
     auto* base = reinterpret_cast<BYTE*>(g_inputModule);
     auto* nt = ImageHeaders(base);
     const DWORD imageSize = nt->OptionalHeader.SizeOfImage;
     auto d = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
     if (!Range(d.VirtualAddress, d.Size, imageSize)) return false;
-    bool sheet = false, dialog = false, version = false;
+    bool sheet = false, dialog = false, version = false, loadString = false, page = false;
     for (size_t off = 0; off + sizeof(IMAGE_IMPORT_DESCRIPTOR) <= d.Size; off += sizeof(IMAGE_IMPORT_DESCRIPTOR)) {
         auto* desc = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(base + d.VirtualAddress + off);
         if (!desc->Name) break;
@@ -6005,10 +7615,22 @@ bool AdaptInputIat() {
                 // input.dll asks the OS version; same Win7 SP1 story as intl.cpl.
                 if (!PatchInputSlot(slot, reinterpret_cast<ULONG_PTR>(PrivateGetVersionExW))) return false;
                 version = true;
+            } else if (lib == "user32.dll" && !strcmp(name, "LoadStringW")) {
+                g_inputLoadString = reinterpret_cast<InputLoadStringFn>(*slot);
+                if (!PatchInputSlot(slot, reinterpret_cast<ULONG_PTR>(InputLoadStringW))) return false;
+                loadString = true;
+            } else if (lib == "comctl32.dll" && !strcmp(name, "CreatePropertySheetPageW")) {
+                // Evidence: the three Text Services pages are created through
+                // this import (disasm 0x11E12/0x11E98/0x11F22); serving the
+                // translated indirect template here localizes the pages and
+                // their tab captions before comctl32 ever reads them.
+                g_inputPage = reinterpret_cast<PageProc>(*slot);
+                if (!PatchInputSlot(slot, reinterpret_cast<ULONG_PTR>(InputCreatePage))) return false;
+                page = true;
             }
         }
     }
-    return sheet && dialog && version;
+    return sheet && dialog && version && loadString && page;
 }
 bool SameMappedFile(HMODULE module, HANDLE pin) {
     // Check the file actually backing the image, not merely a user-supplied path.
@@ -6079,6 +7701,7 @@ bool Prepare() {
     if (g_lang < LangEN || g_lang >= LangCount) g_lang = LangEN;
     Wh_Log(L"[IntlRestore] Building embedded resources for language %s (%s)", kLangTags[g_lang], kLangNames[g_lang]);
     if (!BuildEmbeddedResources()) return false;
+    if (!BuildEmbeddedInputResources()) return false;
     HMODULE common = SystemDependency("comctl32.dll");
     if (!common) return false;
     g_mainPS = reinterpret_cast<PSProc>(reinterpret_cast<void*>(GetProcAddress(common, "PropertySheetW")));
@@ -6125,6 +7748,31 @@ bool Prepare() {
     return true;
 }
 
+std::atomic<bool> g_prepareAttempted{false};
+SRWLOCK g_prepareLock = SRWLOCK_INIT;
+// Prepare() does the download/verify/map/DllMain work and is expensive on a
+// cold cache. Wh_ModInit only installs the cheap CPlApplet hook; this runs
+// Prepare() once, on the first real activation, off the Explorer-startup path
+// (finding 5). The CPL hook already has a clean native-fallback path if the
+// provider isn't ready by the time this returns false.
+bool EnsurePrepared() {
+    if (g_legacyInitialized.load(std::memory_order_acquire)) return true;
+    if (g_prepareAttempted.load(std::memory_order_acquire))
+        return g_image.cpl != nullptr && g_act != INVALID_HANDLE_VALUE;
+    AcquireSRWLockExclusive(&g_prepareLock);
+    bool ready;
+    if (g_prepareAttempted.load(std::memory_order_acquire)) {
+        ready = g_image.cpl != nullptr && g_act != INVALID_HANDLE_VALUE;
+    } else {
+        Wh_Log(L"[IntlRestore] First activation: preparing Windows 7 private provider now");
+        ready = Prepare();
+        g_prepareAttempted.store(true, std::memory_order_release);
+        if (!ready) Wh_Log(L"[IntlRestore] Lazy provider preparation failed; falling back to native intl.cpl");
+    }
+    ReleaseSRWLockExclusive(&g_prepareLock);
+    return ready;
+}
+
 bool EnterLegacy() {
     AcquireSRWLockShared(&g_gate);
     bool enter = !g_stopping.load(std::memory_order_acquire);
@@ -6146,8 +7794,10 @@ LONG CALLBACK CplHook(HWND window, UINT message, LPARAM first, LPARAM second) {
         [[clang::musttail]] return g_nativeCpl(window, message, first, second);
     }
     try {
+        DpiScope dpi;
         LegacyCall call;
         SetLastError(entryError);
+        if (g_useLegacy.load() && !g_legacyInitialized.load()) EnsurePrepared();
         ActScope act(g_act);
         g_uiCreated = 0; g_uiFailed = false;
         if (message == CPL_INIT) {
@@ -6217,6 +7867,10 @@ void CloseOwnedWindows() {
 }
 void Cleanup() {
     WaitForJobs();
+    // EndJob() (the job-count signal) fires before ThreadBridge actually
+    // returns, so wait for the real thread handles too before anything below
+    // unmaps the mod image their epilogues still execute in (finding 4).
+    JoinTrackedThreads();
     ActScope act(g_act);
     if (g_legacyInitialized.exchange(false) && g_image.cpl) {
         LONG ignored = 0; DWORD exception = 0;
@@ -6260,7 +7914,11 @@ void Cleanup() {
 Host g_host = Host::Other;
 bool g_envViable = false;
 using ShellExecuteExWFn = BOOL (WINAPI*)(SHELLEXECUTEINFOW*);
+using ShellExecuteWFn = HINSTANCE (WINAPI*)(HWND, LPCWSTR, LPCWSTR, LPCWSTR, LPCWSTR, INT);
+using CreateProcessWFn = BOOL (WINAPI*)(LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES, BOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION);
 ShellExecuteExWFn g_origShellExecuteExW = nullptr;
+ShellExecuteWFn g_origShellExecuteW = nullptr;
+CreateProcessWFn g_origCreateProcessW = nullptr;
 std::wstring g_redirectExe;
 bool SettingsUrlPrefix(const wchar_t* s, const wchar_t* prefix) {
     if (!s || !prefix) return false;
@@ -6308,14 +7966,64 @@ BOOL WINAPI RedirectShellExecuteExW(SHELLEXECUTEINFOW* info) {
     }
     return orig(info);
 }
+HINSTANCE WINAPI RedirectShellExecuteW(HWND hwnd, LPCWSTR verb, LPCWSTR file,
+                                       LPCWSTR parameters, LPCWSTR directory, INT show) {
+    auto orig = g_origShellExecuteW;
+    if (!orig) return FALSE;
+    try {
+        if (IsRegionSettingsUrl(file) || ContainsRegionSettingsUrl(parameters)) {
+            DpiScope dpi;
+            return orig(hwnd, verb, g_redirectExe.c_str(), L"intl.cpl", directory, show);
+        }
+    } catch (...) {}
+    return orig(hwnd, verb, file, parameters, directory, show);
+}
+
+BOOL WINAPI RedirectCreateProcessW(LPCWSTR applicationName, LPWSTR commandLine,
+    LPSECURITY_ATTRIBUTES processAttributes, LPSECURITY_ATTRIBUTES threadAttributes,
+    BOOL inheritHandles, DWORD creationFlags, LPVOID environment,
+    LPCWSTR currentDirectory, LPSTARTUPINFOW startupInfo,
+    LPPROCESS_INFORMATION processInformation) {
+    auto orig = g_origCreateProcessW;
+    if (!orig) return FALSE;
+    try {
+        if (commandLine && ContainsRegionSettingsUrl(commandLine)) {
+            std::wstring replacement = L"\"" + g_redirectExe + L"\" intl.cpl";
+            std::vector<wchar_t> mutableCommand(replacement.begin(), replacement.end());
+            mutableCommand.push_back(L'\0');
+            DpiScope dpi;
+            return orig(nullptr, mutableCommand.data(), processAttributes,
+                        threadAttributes, inheritHandles, creationFlags, environment,
+                        currentDirectory, startupInfo, processInformation);
+        }
+    } catch (...) {}
+    return orig(applicationName, commandLine, processAttributes, threadAttributes,
+                inheritHandles, creationFlags, environment, currentDirectory,
+                startupInfo, processInformation);
+}
+
 bool InstallRedirectHook() {
     if (g_origShellExecuteExW) return true;
     g_redirectExe = g_system + L"\\control.exe";
     HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
-    void* target = shell32 ? reinterpret_cast<void*>(GetProcAddress(shell32, "ShellExecuteExW")) : nullptr;
+    auto target = shell32 ? reinterpret_cast<ShellExecuteExWFn>(reinterpret_cast<void*>(
+                      GetProcAddress(shell32, "ShellExecuteExW")))
+                          : nullptr;
     if (!target) return false;
-    return Wh_SetFunctionHook(target, reinterpret_cast<void*>(RedirectShellExecuteExW),
-                              reinterpret_cast<void**>(&g_origShellExecuteExW)) != FALSE;
+    bool ok = WindhawkUtils::SetFunctionHook(target, RedirectShellExecuteExW,
+                                             &g_origShellExecuteExW);
+    HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
+    auto createProcess = kernel32 ? reinterpret_cast<CreateProcessWFn>(
+        reinterpret_cast<void*>(GetProcAddress(kernel32, "CreateProcessW"))) : nullptr;
+    auto shellExecute = shell32 ? reinterpret_cast<ShellExecuteWFn>(
+        reinterpret_cast<void*>(GetProcAddress(shell32, "ShellExecuteW"))) : nullptr;
+    if (shellExecute)
+        ok = WindhawkUtils::SetFunctionHook(shellExecute, RedirectShellExecuteW,
+                                            &g_origShellExecuteW) && ok;
+    if (createProcess)
+        ok = WindhawkUtils::SetFunctionHook(createProcess, RedirectCreateProcessW,
+                                            &g_origCreateProcessW) && ok;
+    return ok;
 }
 bool Environment() {
     SYSTEM_INFO native{}; GetNativeSystemInfo(&native);
@@ -6395,28 +8103,27 @@ BOOL Wh_ModInit() {
         g_nativeModule = LoadLibraryExW((g_system + L"\\intl.cpl").c_str(), nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (!g_nativeModule) throw std::runtime_error("native intl.cpl unavailable");
         auto native = reinterpret_cast<CplProc>(reinterpret_cast<void*>(GetProcAddress(g_nativeModule, "CPlApplet")));
-        if (!native || !Prepare()) {
-            Wh_Log(L"[IntlRestore] Fallback to native intl.cpl: private provider not prepared; no CPL hook installed");
-            Cleanup();
-            if (g_act != INVALID_HANDLE_VALUE) { ReleaseActCtx(g_act); g_act = INVALID_HANDLE_VALUE; }
+        if (!native) {
+            Wh_Log(L"[IntlRestore] Fallback to native intl.cpl: CPlApplet export missing; no CPL hook installed");
             FreeLibrary(g_nativeModule); g_nativeModule = nullptr;
             CloseHandle(g_idle); g_idle = nullptr;
             CloseHandle(g_jobsIdle); g_jobsIdle = nullptr;
             VehRemove();
             return FALSE;
         }
-        if (!Wh_SetFunctionHook(reinterpret_cast<void*>(native), reinterpret_cast<void*>(CplHook),
-                                reinterpret_cast<void**>(&g_nativeCpl))) {
+        if (!WindhawkUtils::SetFunctionHook(native, CplHook, &g_nativeCpl)) {
             Wh_Log(L"[IntlRestore] CPlApplet hook registration failed; fallback to native");
-            Cleanup();
-            ReleaseActCtx(g_act); g_act = INVALID_HANDLE_VALUE;
             FreeLibrary(g_nativeModule); g_nativeModule = nullptr;
             CloseHandle(g_idle); g_idle = nullptr;
             CloseHandle(g_jobsIdle); g_jobsIdle = nullptr;
             VehRemove();
             return FALSE;
         }
-        Wh_Log(L"[IntlRestore] Region-only CPlApplet dispatch queued; no timedate.cpl hooks");
+        // No download, mapping, or DllMain here: the private Windows 7
+        // provider is prepared lazily by EnsurePrepared() on the first real
+        // CPL_INIT/activation, so a session that never opens the Region page
+        // pays none of that cost (finding 5).
+        Wh_Log(L"[IntlRestore] Region-only CPlApplet dispatch queued; private provider will prepare on first activation");
         if (redirectWanted && g_host == Host::Explorer) {
             if (!InstallRedirectHook())
                 Wh_Log(L"[IntlRestore] WARNING: Settings-redirect hook failed; classic UI still active");
@@ -6446,16 +8153,24 @@ void Wh_ModBeforeUninit() {
         Wh_Log(L"[IntlRestore] Unloading: requesting normal close of private-provider dialogs");
         
         ULONGLONG start = GetTickCount64();
-        const ULONGLONG TIMEOUT_MS = 5000;
+        ULONGLONG lastDiagnostic = start;
+        const ULONGLONG DIAGNOSTIC_INTERVAL_MS = 5000;
         
         while (g_active.load(std::memory_order_acquire) != 0 || 
                g_jobs.load(std::memory_order_acquire) != 0) {
             
             CloseOwnedWindows();
             
-            if (GetTickCount64() - start > TIMEOUT_MS) {
-                Wh_Log(L"[IntlRestore] TIMEOUT: forcing unload after 5 seconds");
-                break;
+            // There is no safe way to force this: the mod image cannot be
+            // unmapped while its code is still on some thread's stack (see
+            // Wh_ModUninit / Cleanup). Keep requesting a normal close and
+            // waiting; only log periodically so a stuck provider is visible
+            // instead of silently hanging the unload.
+            ULONGLONG now = GetTickCount64();
+            if (now - lastDiagnostic > DIAGNOSTIC_INTERVAL_MS) {
+                Wh_Log(L"[IntlRestore] Still waiting for private-provider dialogs/jobs to close (%llu ms elapsed)",
+                       now - start);
+                lastDiagnostic = now;
             }
             
             HANDLE event = g_active.load() != 0 ? g_idle : g_jobsIdle;
