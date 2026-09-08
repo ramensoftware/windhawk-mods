@@ -731,6 +731,8 @@ bool IsKnownHardcodedHotkey(UINT fsModifiers, UINT vk)
 
 typedef BOOL(WINAPI *RegisterHotKey_t)(HWND hWnd, int id, UINT fsModifiers, UINT vk);
 RegisterHotKey_t RegisterHotKey_Original;
+// One-shot in-memory gate: prevents multiple Wh_SetIntValue writes per session.
+std::atomic<bool> g_recordedBlock{false};
 
 BOOL WINAPI RegisterHotKey_Hook(HWND hWnd, int id, UINT fsModifiers, UINT vk)
 {
@@ -747,7 +749,12 @@ BOOL WINAPI RegisterHotKey_Hook(HWND hWnd, int id, UINT fsModifiers, UINT vk)
             return RegisterHotKey_Original(hWnd, id, fsModifiers, vk);
         }
 
-        SetEnvironmentVariableW(L"WINDHAWK_DWS_BLOCKED", L"1");
+        // Record that this Explorer process had a standard registration blocked.
+        // Stored in Windhawk's own storage (invisible to child processes, survives mod reloads).
+        if (!g_recordedBlock.exchange(true))
+        {
+            Wh_SetIntValue(L"blockedInPid", (int)GetCurrentProcessId());
+        }
         SetLastError(ERROR_HOTKEY_ALREADY_REGISTERED);
         return FALSE;
     }
@@ -1212,8 +1219,9 @@ BOOL Wh_ModInit()
 
         // Prompt if Explorer is running mid-session, standard shortcuts are disabled,
         // and this Explorer process hasn't already had them blocked at startup.
-        WCHAR envBuf[4] = {0};
-        bool alreadyBlockedInThisProcess = (GetEnvironmentVariableW(L"WINDHAWK_DWS_BLOCKED", envBuf, ARRAYSIZE(envBuf)) > 0);
+        // Wh_GetIntValue persists across mod reloads; PID mismatch means a new Explorer
+        // process started and genuinely needs a restart to claim the blocked shortcuts.
+        bool alreadyBlockedInThisProcess = (Wh_GetIntValue(L"blockedInPid", 0) == (int)GetCurrentProcessId());
 
         if (IsExplorerMidSession() && !GetSystemMetrics(SM_SHUTTINGDOWN) && 
             HasAnyStandardShortcutsDisabled() && !alreadyBlockedInThisProcess)
@@ -1256,8 +1264,11 @@ void Wh_ModUninit()
 
         if (IsMainExplorer())
         {
-            // 2. If standard shortcuts were disabled, prompt user on unload to restore them
-            if (!GetSystemMetrics(SM_SHUTTINGDOWN) && HasAnyStandardShortcutsDisabled())
+            // 2. Prompt to restore standard shortcuts only if this Explorer process actually
+            // had registrations blocked by the hook. Gated on PID so the prompt is skipped
+            // on reloads where no blocking occurred (e.g. mid-session enable + "No" path).
+            if (!GetSystemMetrics(SM_SHUTTINGDOWN) &&
+                Wh_GetIntValue(L"blockedInPid", 0) == (int)GetCurrentProcessId())
             {
                 PromptForExplorerRestart();
             }
@@ -1299,7 +1310,10 @@ void Wh_ModSettingsChanged()
     {
         if (!HasAnyStandardShortcutsDisabled())
         {
-            SetEnvironmentVariableW(L"WINDHAWK_DWS_BLOCKED", nullptr);
+            // All standard shortcuts turned off — clear the block record so uninit/init
+            // no longer treat this process as having blocked registrations.
+            Wh_SetIntValue(L"blockedInPid", 0);
+            g_recordedBlock = false;
         }
         PromptForExplorerRestart();
     }
