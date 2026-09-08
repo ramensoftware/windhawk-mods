@@ -1091,6 +1091,7 @@ def validate_specific_keywords(path: Path, mod_source: str):
         (r'Wh_FindFirstSymbol', 'Wh_FindFirstSymbol'),
         (r'Wh_FindNextSymbol', 'Wh_FindNextSymbol'),
         (r'Wh_FindCloseSymbol', 'Wh_FindCloseSymbol'),
+        (r'noUndecoratedSymbols', 'noUndecoratedSymbols'),
     ]
 
     for line_num, line in enumerate(mod_source_lines, start=1):

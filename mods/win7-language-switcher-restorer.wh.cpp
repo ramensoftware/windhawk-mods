@@ -2,7 +2,7 @@
 // @id             win7-language-switcher-restorer
 // @name           Windows 7/8.1 Language Switcher Restorer
 // @description    This mod restores the classic Windows 7 and Windows 8.1 language switcher on Windows 10 and 11
-// @version        1.0.0
+// @version        1.1.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -16,10 +16,9 @@
 
 ## About
 
-This mod restores the classic **Windows 7 and 8.1 language switcher** on Windows 10 and Windows 11, enabling rapid switching between keyboard layouts and input languages.
+This mod tries to restore the classic **Windows 7 and 8.1 language switcher** on Windows 10 and Windows 11, enabling rapid switching between keyboard layouts and input languages.
 
-**Important**: This is a **best-effort visual and functional recreation**. The mod intercepts clicks on the taskbar language indicator, as well as the **Win+Space** and **Alt+Shift / Ctrl+Shift** keyboard shortcuts, replacing the modern Windows 10/11 flyout with a fast, lightweight, classic switcher.
-
+**Important**: This is a **best-effort visual and functional recreation**. The mod intercepts clicks on the taskbar language indicator, as well as the **Win+Space** and **Alt+Shift / Ctrl+Shift** keyboard shortcuts, replacing the modern Windows 10/11 flyout with a recreation of the Windows 7/8.1 one. It is important to note that this mod **does not replace the modern Windows language switcher for elevated windows**.
 The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 23H2, and Windows 11 24H2.
 
 ## Screenshots
@@ -35,13 +34,10 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 23H2, an
 
 ## Main Features
 
-- **Two classic styles**: selection between the Windows 7 classic menu and the Windows 8.1 modern flyout.
-- **Light and dark theme support**: automatic adaptation to system colors and theme.
-- **Quick dismissal**: closes upon clicking outside or pressing Escape.
-- **Translated into 27 languages**: fully localized interface.
-- **Win+Space cycling**: holding Win and pressing Space cycles through layouts without popping up the Start Menu.
-- **Alt+Shift and Ctrl+Shift support**: fast switching with auto-repeat suppression and clean modifier sequence tracking.
-- **Robust Multi-Threaded Architecture**: modeled on win7-network-flyout-recreation for rock-solid stability and clean reloading.
+- **Two classic styles**: The mod includes a selection between the Windows 7 classic menu and the Windows 8.1 modern flyout.
+- **Light and dark theme support**: The mod attempts an automatic adaptation to system colors and theme.
+- **Quick dismissal**: The language switcher closes upon clicking outside or pressing Escape.
+- **Translated into 27 languages**: The mod includes 27 languages (such as Italian, Spanish, French, English, etc).
 */
 // ==/WindhawkModReadme==
 
@@ -49,14 +45,14 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 23H2, an
 /*
 - switcherStyle: win8
   $name: Switcher Style
-  $description: This setting chooses between the Windows 8.1 Modern Flyout or the Windows 7 Classic Menu.
+  $description: This setting allows to choose between the Windows 8.1 Modern Flyout or the Windows 7 Classic Menu.
   $options:
     - win8: Windows 8.1 Modern Flyout
     - win7: Windows 7 Classic Menu
 
 - language: auto
   $name: UI Language
-  $description: This setting chooses the interface language for options, links, and shortcut tips.
+  $description: This setting allows to choose the interface language for options, links, and shortcut tips.
   $options:
     - auto: Automatic (Windows display language)
     - it: Italiano (Italian)
@@ -88,7 +84,7 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 23H2, an
 
 - themeMode: win8_purple
   $name: Color Theme
-  $description: This setting chooses the color scheme used for the selected item and flyout styling.
+  $description: This setting allows to choose the color scheme used for the selected item and flyout styling.
   $options:
     - win8_purple: Windows 8.1 Purple (#5B2C82)
     - auto: Follow Windows Accent & Theme
