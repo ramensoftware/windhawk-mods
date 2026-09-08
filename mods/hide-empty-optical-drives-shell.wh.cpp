@@ -96,6 +96,8 @@ std::atomic<bool> g_initialScanRequested{false};
 HANDLE g_notificationThread = nullptr;
 DWORD g_notificationThreadId = 0;
 std::atomic<HWND> g_notificationWindow{nullptr};
+HANDLE g_notificationReadyEvent = nullptr;
+std::atomic<bool> g_notificationReady{false};
 
 HANDLE g_workerThread = nullptr;
 HANDLE g_workerWakeEvent = nullptr;
@@ -159,21 +161,13 @@ static bool SetCachedMediaState(WCHAR letter, MediaState state) {
 
 static bool SetOpticalDrivePresent(WCHAR letter, bool optical) {
     DWORD bit = LetterBit(letter);
-    DWORD oldMask = g_opticalMask.load(std::memory_order_relaxed);
+    DWORD oldMask = optical
+                         ? g_opticalMask.fetch_or(
+                               bit, std::memory_order_acq_rel)
+                         : g_opticalMask.fetch_and(
+                               ~bit, std::memory_order_acq_rel);
 
-    for (;;) {
-        DWORD newMask = optical ? (oldMask | bit) : (oldMask & ~bit);
-
-        if (newMask == oldMask) {
-            return false;
-        }
-
-        if (g_opticalMask.compare_exchange_weak(oldMask, newMask,
-                                                std::memory_order_release,
-                                                std::memory_order_relaxed)) {
-            return true;
-        }
-    }
+    return ((oldMask & bit) != 0) != optical;
 }
 
 static MediaState ProbeOpticalMediaState(WCHAR letter) {
@@ -278,7 +272,8 @@ CDrivesViewCallback_ShouldShow_Hook(void* self,
         return hr;
     }
 
-    if (!IsManagedLetter(letter) || !IsCachedOpticalDrive(letter)) {
+    if (FAILED(hr) || hr == S_FALSE ||
+        !IsManagedLetter(letter) || !IsCachedOpticalDrive(letter)) {
         return hr;
     }
 
@@ -641,6 +636,7 @@ static DWORD WINAPI NotificationThreadProc(void*) {
             CoUninitialize();
         }
 
+        SetEvent(g_notificationReadyEvent);
         return 1;
     }
 
@@ -656,6 +652,7 @@ static DWORD WINAPI NotificationThreadProc(void*) {
             CoUninitialize();
         }
 
+        SetEvent(g_notificationReadyEvent);
         return 1;
     }
 
@@ -669,17 +666,21 @@ static DWORD WINAPI NotificationThreadProc(void*) {
             CoUninitialize();
         }
 
+        SetEvent(g_notificationReadyEvent);
         return 1;
     }
 
     g_notificationWindow.store(hwnd, std::memory_order_release);
+    g_notificationReady.store(true, std::memory_order_release);
+    SetEvent(g_notificationReadyEvent);
 
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         DispatchMessageW(&msg);
     }
 
-    if (IsWindow(hwnd)) {
-        DestroyWindow(hwnd);
+    if (HWND remaining =
+            g_notificationWindow.load(std::memory_order_acquire)) {
+        DestroyWindow(remaining);
     }
 
     CoTaskMemFree(thisPcPidl);
@@ -716,8 +717,8 @@ static bool TryLoadManagedMask(DWORD* mask) {
         }
 
         if (ch < L'A' || ch > L'Z') {
-            Wh_Log(L"Invalid driveLetters character: %c", ch);
-            return false;
+            Wh_Log(L"Ignoring invalid driveLetters character: %c", ch);
+            continue;
         }
 
         parsedMask |= LetterBit(ch);
@@ -797,6 +798,11 @@ static void StopNotificationThread(bool restoreView) {
 }
 
 static void CloseWorkerObjects() {
+    if (g_notificationReadyEvent) {
+        CloseHandle(g_notificationReadyEvent);
+        g_notificationReadyEvent = nullptr;
+    }
+
     if (g_workerWakeEvent) {
         CloseHandle(g_workerWakeEvent);
         g_workerWakeEvent = nullptr;
@@ -821,12 +827,16 @@ BOOL Wh_ModInit() {
             L"keeping the default configuration");
     }
 
+    g_notificationReadyEvent =
+        CreateEventW(nullptr, TRUE, FALSE, nullptr);
+
     g_workerWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
 
     g_workerStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
 
-    if (!g_workerWakeEvent || !g_workerStopEvent) {
-        Wh_Log(L"CreateEvent(worker) failed: %u", GetLastError());
+    if (!g_notificationReadyEvent ||
+        !g_workerWakeEvent || !g_workerStopEvent) {
+        Wh_Log(L"CreateEvent failed: %u", GetLastError());
 
         CloseWorkerObjects();
         return FALSE;
@@ -838,6 +848,16 @@ BOOL Wh_ModInit() {
     if (!g_notificationThread) {
         Wh_Log(L"CreateThread(notification) failed: %u", GetLastError());
 
+        CloseWorkerObjects();
+        return FALSE;
+    }
+
+    WaitForSingleObject(g_notificationReadyEvent, INFINITE);
+
+    if (!g_notificationReady.load(std::memory_order_acquire)) {
+        Wh_Log(L"Notification window creation failed");
+
+        StopNotificationThread(false);
         CloseWorkerObjects();
         return FALSE;
     }
