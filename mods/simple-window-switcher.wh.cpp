@@ -575,6 +575,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
 #define SWS_HOTKEY_ALTBACKTICK      5
 #define SWS_HOTKEY_WINALTTAB        6
 #define SWS_HOTKEY_WINALTSHIFTTAB   7
+#define SWS_HOTKEY_ALTBACKTICK_UK   8
 #define SWS_HOTKEY_RETRY_TIMER_ID   100
 #define SWS_HOTKEY_RETRY_INTERVAL   2000
 #define SWS_BG_DARK          RGB(32, 32, 32)
@@ -699,7 +700,6 @@ static int g_winW = 0, g_winH = 0;
 static int g_activePadDivider = 0;
 static bool g_hotkeysRegistered = false;
 static bool g_isAltBacktickSameApp = false;
-static UINT g_vkBacktick = VK_OEM_3;
 static HMONITOR g_hCurrentMonitor = NULL;
 static Settings g_settings;
 static HANDLE g_hSwitcherThread = NULL;
@@ -3504,8 +3504,6 @@ static void CancelPendingShow() {
     if (g_hSwitcher) {
         KillTimer(g_hSwitcher, SWS_SHOW_DELAY_TIMER_ID);
         KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
-        DWMNCRENDERINGPOLICY enabled = DWMNCRP_ENABLED;
-        DwmSetWindowAttribute(g_hSwitcher, DWMWA_NCRENDERING_POLICY, &enabled, sizeof(enabled));
     }
 
     g_isPendingShow = false;
@@ -3561,10 +3559,6 @@ static void RevealPendingSwitcher() {
     DWMNCRENDERINGPOLICY enabled = DWMNCRP_ENABLED;
     DwmSetWindowAttribute(g_hSwitcher, DWMWA_NCRENDERING_POLICY, &enabled, sizeof(enabled));
 
-    // Clear WS_EX_TRANSPARENT so the switcher receives mouse input once revealed
-    LONG_PTR exStyle = GetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE);
-    SetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE, exStyle & ~WS_EX_TRANSPARENT);
-
     ApplyThemeToWindow(g_hSwitcher);
     ApplySwitcherRegion();
 
@@ -3583,8 +3577,6 @@ static void RevealPendingSwitcher() {
 
     if (!g_isSticky) {
         SetTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID, 50, NULL);
-    } else {
-        KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
     }
 }
 
@@ -3776,10 +3768,9 @@ static void ShowSwitcher(bool sticky) {
         g_isPendingShow = true;
         g_isVisible = false;
 
-        // Ensure WS_EX_LAYERED is active so we can set 100% transparency,
-        // and WS_EX_TRANSPARENT so mouse clicks fall through to background apps
+        // Ensure WS_EX_LAYERED is active so we can set 100% transparency
         LONG_PTR exStyle = GetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE);
-        SetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE, exStyle | WS_EX_LAYERED | WS_EX_TRANSPARENT);
+        SetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
 
         // Suppress DWM frame/shadow so no visual artifact appears anywhere on screen
         DWMNCRENDERINGPOLICY disabled = DWMNCRP_DISABLED;
@@ -3832,6 +3823,7 @@ static void ShowSwitcher(bool sticky) {
 static void HideSwitcher() {
     g_showAllMonitors = false;
     CancelPendingShow();
+    if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
 
     DestroyMirrorSwitchers();
 
@@ -3883,7 +3875,7 @@ static void SwitchToSelected() {
         if (IsWindow(hw) && hw != hT && IsIconic(hw)) {
             ShowWindow(hw, SW_SHOWNOACTIVATE);
             if (IsIconic(hw)) {
-                ShowWindowAsync(hw, SW_SHOWNOACTIVATE);
+                PostMessage(hw, WM_SYSCOMMAND, SC_RESTORE, 0);
             }
         }
     }
@@ -4532,6 +4524,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             isCtrl = true;
             break;
         case SWS_HOTKEY_ALTBACKTICK:
+        case SWS_HOTKEY_ALTBACKTICK_UK:
             if (wcscmp(g_settings.altBacktickBehavior, L"sameApp") == 0) {
                 isAltBacktickTrigger = true;
             } else if (wcscmp(g_settings.altBacktickBehavior, L"backward") == 0 || UseAltBacktickBackward()) {
@@ -4663,7 +4656,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 CycleLinear(backward ? -1 : 1);
                 return 0;
             }
-            if (wParam == g_vkBacktick &&
+            if ((wParam == VK_OEM_3 || wParam == VK_OEM_8) &&
                 (wcscmp(g_settings.altBacktickBehavior, L"backward") == 0 || UseAltBacktickBackward())) {
                 CycleLinear(-1);
                 return 0;
@@ -4706,17 +4699,15 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
         return 0;
     case WM_SWS_SETTINGS_CHANGED:
-        if (g_isVisible || g_isPendingShow) HideSwitcher();
+        if (g_isVisible) HideSwitcher();
         SWS_UnregisterHotkeys();
         LoadSettings();
         SWS_RegisterHotkeys();
         return 0;
     case WM_SETCURSOR:
-        if (!g_isVisible) return DefWindowProcW(hWnd, uMsg, wParam, lParam);
         SetCursor(LoadCursor(NULL, IDC_ARROW));
         return TRUE;
     case WM_MOUSEMOVE: {
-        if (!g_isVisible) return 0;
         int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
         int idx = g_settings.showThumbnails ? HitTestThumb(x, y) : HitTest(x, y);
         if (idx < 0) idx = HitTest(x, y);
@@ -4781,7 +4772,6 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         return 0;
     }
     case WM_LBUTTONUP: {
-        if (!g_isVisible) return 0;
         int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
         int idx = HitTest(x, y);
         if (idx >= 0) {
@@ -4805,7 +4795,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         return 0;
     }
     case WM_ACTIVATE:
-        if (wParam == WA_INACTIVE && (g_isVisible || g_isPendingShow)) {
+        if (wParam == WA_INACTIVE && g_isVisible) {
             HWND hNewActive = (HWND)lParam;
             if (!IsSwitcherWindow(hNewActive)) {
                 HideSwitcher();
@@ -4814,7 +4804,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
         break;
     case WM_KILLFOCUS:
-        if (g_isVisible || g_isPendingShow) {
+        if (g_isVisible) {
             HWND hNewFocus = (HWND)wParam;
             if (!IsSwitcherWindow(hNewFocus)) {
                 HideSwitcher();
@@ -4841,18 +4831,21 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 // Hotkey Helpers
 
 static HANDLE g_hHotkeyMutex = NULL;
+static bool g_altBacktickUsRegistered = false;
+static bool g_altBacktickUkRegistered = false;
 
 static void SWS_RegisterHotkeys() {
     if (g_hotkeysRegistered || !g_hSwitcher) return;
     bool wantAltBacktick = (wcscmp(g_settings.altBacktickBehavior, L"none") != 0) || BackwardShortcutIs(L"altBacktick");
-    UINT vk = MapVirtualKeyExW(0x29, MAPVK_VSC_TO_VK, GetKeyboardLayout(0));
-    g_vkBacktick = vk ? vk : VK_OEM_3;
-
     BOOL r1 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTTAB, MOD_ALT, VK_TAB);
     BOOL r2 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTTAB, MOD_ALT | MOD_SHIFT, VK_TAB);
     BOOL r3 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTCTRLTAB, MOD_ALT | MOD_CONTROL, VK_TAB);
     BOOL r4 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTCTRLTAB, MOD_ALT | MOD_SHIFT | MOD_CONTROL, VK_TAB);
-    BOOL r5 = wantAltBacktick ? RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK, MOD_ALT, g_vkBacktick) : TRUE;
+    BOOL r5_us = wantAltBacktick ? RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK, MOD_ALT, VK_OEM_3) : TRUE;
+    BOOL r5_uk = wantAltBacktick ? RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK_UK, MOD_ALT, VK_OEM_8) : TRUE;
+    g_altBacktickUsRegistered = wantAltBacktick && (r5_us != FALSE);
+    g_altBacktickUkRegistered = wantAltBacktick && (r5_uk != FALSE);
+    BOOL r5 = wantAltBacktick ? (r5_us || r5_uk) : TRUE;
     BOOL r6 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTTAB, MOD_ALT | MOD_WIN, VK_TAB);
     BOOL r7 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTSHIFTTAB, MOD_ALT | MOD_SHIFT | MOD_WIN, VK_TAB);
     if (r1 && r2 && r3 && r4 && r5 && r6 && r7) {
@@ -4861,13 +4854,20 @@ static void SWS_RegisterHotkeys() {
             g_hHotkeyMutex = CreateMutexW(NULL, TRUE, L"Windhawk_SWS_HotkeyMutex");
         }
         KillTimer(g_hSwitcher, SWS_HOTKEY_RETRY_TIMER_ID);
-        Wh_Log(L"All hotkeys registered successfully (Alt+Backtick VK: 0x%02X)", g_vkBacktick);
+        Wh_Log(L"All hotkeys registered successfully (Alt+Backtick US: %d, UK: %d)", r5_us, r5_uk);
     } else {
         if (r1) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTTAB);
         if (r2) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTTAB);
         if (r3) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTCTRLTAB);
         if (r4) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTCTRLTAB);
-        if (wantAltBacktick && r5) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK);
+        if (g_altBacktickUsRegistered) {
+            UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK);
+            g_altBacktickUsRegistered = false;
+        }
+        if (g_altBacktickUkRegistered) {
+            UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK_UK);
+            g_altBacktickUkRegistered = false;
+        }
         if (r6) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTTAB);
         if (r7) UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTSHIFTTAB);
         SetTimer(g_hSwitcher, SWS_HOTKEY_RETRY_TIMER_ID, SWS_HOTKEY_RETRY_INTERVAL, NULL);
@@ -4881,7 +4881,14 @@ static void SWS_UnregisterHotkeys() {
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTTAB);
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTCTRLTAB);
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTCTRLTAB);
-    UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK);
+    if (g_altBacktickUsRegistered) {
+        UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK);
+        g_altBacktickUsRegistered = false;
+    }
+    if (g_altBacktickUkRegistered) {
+        UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTBACKTICK_UK);
+        g_altBacktickUkRegistered = false;
+    }
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTTAB);
     UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_WINALTSHIFTTAB);
     g_hotkeysRegistered = false;
