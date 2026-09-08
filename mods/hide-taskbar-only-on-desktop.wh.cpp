@@ -1,12 +1,11 @@
 // ==WindhawkMod==
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
-// @description     Hides selected taskbars only while their display is showing the desktop
-// @version         4.6.0
+// @description     Desktop-only taskbar hiding using a dedicated Windhawk tool process
+// @version         5.0.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
-// @include         explorer.exe
 // @compilerOptions -ldwmapi
 // ==/WindhawkMod==
 
@@ -105,32 +104,21 @@ Known shell window classes and the relevant Windows shell processes are consider
 
 Shell interaction detection is handled separately from the normal application-window check.
 
-## Explorer Integration
+## Taskbar Visibility
 
-The mod includes a small Explorer-side protection for a specific taskbar visibility transition.
+The taskbar is hidden by adding `WS_EX_LAYERED` and setting its alpha to `0` with `SetLayeredWindowAttributes`. This makes the taskbar fully transparent without changing its normal `ShowWindow` visibility state.
 
-When a secondary taskbar has been hidden by the mod, Windows Explorer may independently attempt to show that taskbar using `ShowWindow(..., SW_SHOWNA)`.
+The transparency approach keeps the taskbar window alive while removing its visible presentation. This allows the dedicated Windhawk tool process to manage taskbar visibility without injecting a `ShowWindow` hook or maintaining an Explorer-side taskbar visibility hook.
 
-The mod blocks that specific transition only while the taskbar is still owned by a running instance of the mod's dedicated tool process.
+The visibility mechanism is intentionally separate from the desktop/application-state decision logic. The display selection, shell interaction handling, hover reveal, taskbar recreation, and event-driven refresh logic remain unchanged.
 
-The protection is intentionally narrow:
+### Transparency Recovery and State Ownership
 
-- It applies only to the secondary taskbar.
-- It applies only to a taskbar marked as hidden by this mod.
-- It applies only to the `SW_SHOWNA` transition.
-- Other Explorer `ShowWindow` calls are passed through normally.
+The dedicated tool process keeps ownership of taskbars it makes transparent in its local taskbar state. A taskbar is restored to normal opacity and has `WS_EX_LAYERED` removed when the mod decides that it should be visible and during normal tool-process shutdown.
 
-This prevents a brief secondary-taskbar flash while leaving unrelated Explorer window behavior unchanged.
+If the taskbar window is recreated, the new window is rediscovered and evaluated again by the same per-display state logic.
 
-### Failure Recovery
-
-The taskbar ownership marker contains the process ID and creation time of the dedicated tool process that hid the taskbar.
-
-If that process is no longer running, the Explorer-side check removes the stale marker and restores the taskbar through Explorer's normal `ShowWindow` path.
-
-This prevents an unexpected tool-process termination from leaving a taskbar hidden or permanently blocking Explorer from restoring it.
-
-Stale hidden-taskbar state is also checked during Explorer initialization and by a low-frequency Explorer-side recovery check for both primary and secondary taskbars.
+The mod runs as a dedicated `windhawk.exe` tool-mod process. The normal Windhawk instance acts as the launcher, while the taskbar-state logic runs in a separate Windhawk process instance. No `ShowWindow` hook or taskbar-show hook is used.
 
 ## Multi-Monitor Example
 
@@ -167,13 +155,9 @@ Display identity is tracked using monitor/device information rather than relying
 
 ## Taskbar Ownership
 
-The mod tracks whether a taskbar was actually hidden by the mod.
+The mod tracks whether a taskbar has been transparent by its own taskbar-state logic.
 
-This prevents the mod from unnecessarily restoring or changing taskbar visibility that it did not cause itself.
-
-Ownership is also associated with the dedicated tool process so that stale ownership can be detected after an unexpected process termination.
-
-When the owning tool process is no longer running, stale ownership can be cleared and the affected taskbar can recover through Explorer's normal visibility path.
+This prevents the mod from unnecessarily restoring or changing a taskbar that it did not make transparent. Ownership is local to the dedicated tool process because the mod does not use a cross-process Explorer marker.
 
 ## Performance
 
@@ -187,11 +171,11 @@ The mod uses:
 - A periodic safety poll for missed or unusual transitions
 - A one-shot timer for hover dismissal
 
-The Explorer-side hook performs only the narrow visibility check required for secondary-taskbar flash prevention. A separate low-frequency Explorer recovery thread only checks for stale mod-owned taskbar state and does not participate in normal taskbar visibility decisions.
+The dedicated `windhawk.exe` tool process performs taskbar visibility changes directly through layered-window transparency. No separate Explorer-side `ShowWindow` or taskbar-show hook is used, and no second recovery thread runs in the launcher instance.
 
 Cursor sampling backs off when hover tracking is not needed and also backs off after repeated cursor-position failures.
 
-The periodic safety poll provides a recovery path for missed or unusual transitions. The current implementation uses a fixed short polling interval; this may be optimized further in a future revision.
+The periodic safety poll provides a recovery path for missed or unusual transitions. The implementation intentionally retains the existing 250 ms interval.
 
 ## Limitations
 
@@ -346,8 +330,6 @@ struct WindowScanResult {
 HWINEVENTHOOK g_foregroundHook = nullptr;
 HWINEVENTHOOK g_minimizeHook = nullptr;
 HWINEVENTHOOK g_moveHook = nullptr;
-HWINEVENTHOOK g_taskbarShowHook = nullptr;
-DWORD g_taskbarShowHookProcessId = 0;
 
 HANDLE g_workerThread = nullptr;
 DWORD g_workerThreadId = 0;
@@ -366,337 +348,99 @@ CursorHoverSnapshot g_cursorHoverSnapshots[kMaxTaskbars] = {};
 size_t g_cursorHoverSnapshotCount = 0;
 SRWLOCK g_cursorHoverSnapshotLock = SRWLOCK_INIT;
 
-constexpr wchar_t kHiddenByModProperty[] =
-    L"Windhawk.HideTaskbarOnlyOnDesktop.HiddenByMod";
-constexpr wchar_t kHiddenByModCreationTimeLowProperty[] =
-    L"Windhawk.HideTaskbarOnlyOnDesktop.HiddenByMod.CreationTimeLow";
-constexpr wchar_t kHiddenByModCreationTimeHighProperty[] =
-    L"Windhawk.HideTaskbarOnlyOnDesktop.HiddenByMod.CreationTimeHigh";
-
-// Explorer-side protection for the secondary-taskbar shell transition.
-// The dedicated tool process remains authoritative for taskbar state. Explorer
-// only consults the per-window property and blocks SW_SHOWNA for an explicitly
-// hidden secondary taskbar while its owning tool process is still alive.
-using ShowWindow_t = decltype(&ShowWindow);
-ShowWindow_t g_explorerShowWindowOriginal = nullptr;
-bool g_isExplorerProcess = false;
-
-DWORD g_hiddenTaskbarOwnerPid = 0;
-HANDLE g_hiddenTaskbarOwnerProcess = nullptr;
-FILETIME g_hiddenTaskbarOwnerCreationTime = {};
-HANDLE g_explorerRecoveryThread = nullptr;
-HANDLE g_explorerRecoveryStopEvent = nullptr;
-SRWLOCK g_hiddenTaskbarOwnerCacheLock = SRWLOCK_INIT;
-
-bool GetProcessCreationTime(
-    HANDLE process,
-    FILETIME* creationTime
-) {
-    if (!process || !creationTime) {
+// A layered window with alpha 0 is used as the physical taskbar visibility
+// mechanism. The taskbar state machine remains in the dedicated
+// Explorer tool process.
+bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
+    if (!hwnd || !IsWindow(hwnd)) {
         return false;
     }
 
-    FILETIME exitTime = {};
-    FILETIME kernelTime = {};
-    FILETIME userTime = {};
-
-    return GetProcessTimes(
-        process,
-        creationTime,
-        &exitTime,
-        &kernelTime,
-        &userTime
-    ) != FALSE;
-}
-
-void RecoverStaleHiddenTaskbars();
-bool SetHiddenTaskbarOwnershipMarker(HWND hwnd);
-void RemoveHiddenTaskbarOwnershipMarker(HWND hwnd);
-void RestoreHiddenTaskbarOwnershipMarker(HWND hwnd);
-
-void ResetHiddenTaskbarOwnerCache() {
-    AcquireSRWLockExclusive(
-        &g_hiddenTaskbarOwnerCacheLock
-    );
-
-    if (g_hiddenTaskbarOwnerProcess) {
-        CloseHandle(
-            g_hiddenTaskbarOwnerProcess
-        );
-        g_hiddenTaskbarOwnerProcess = nullptr;
-    }
-
-    g_hiddenTaskbarOwnerPid = 0;
-    g_hiddenTaskbarOwnerCreationTime = {};
-
-    ReleaseSRWLockExclusive(
-        &g_hiddenTaskbarOwnerCacheLock
-    );
-}
-
-bool IsExplorerTaskbar(HWND hwnd) {
-    if (!hwnd) {
+    LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    if (exStyle == 0 && GetLastError() != ERROR_SUCCESS) {
         return false;
     }
 
-    WCHAR className[128] = {};
-
-    if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0) {
-        return false;
-    }
-
-    return wcscmp(className, L"Shell_TrayWnd") == 0 ||
-           wcscmp(className, L"Shell_SecondaryTrayWnd") == 0;
-}
-
-bool IsExplorerSecondaryTaskbar(HWND hwnd) {
-    if (!hwnd) {
-        return false;
-    }
-
-    WCHAR className[128] = {};
-
-    if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0) {
-        return false;
-    }
-
-    return wcscmp(className, L"Shell_SecondaryTrayWnd") == 0;
-}
-
-bool IsHiddenTaskbarOwnerAlive(HWND hwnd) {
-    if (!IsExplorerTaskbar(hwnd)) {
-        return false;
-    }
-
-    HANDLE marker = GetPropW(hwnd, kHiddenByModProperty);
-    if (!marker) {
-        return false;
-    }
-
-    DWORD ownerPid = static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(marker));
-
-    const bool hasCreationTime =
-        GetPropW(hwnd, kHiddenByModCreationTimeLowProperty) != nullptr &&
-        GetPropW(hwnd, kHiddenByModCreationTimeHighProperty) != nullptr;
-
-    FILETIME markerCreationTime = {};
-    markerCreationTime.dwLowDateTime =
-        static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(
-            GetPropW(hwnd, kHiddenByModCreationTimeLowProperty)));
-    markerCreationTime.dwHighDateTime =
-        static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(
-            GetPropW(hwnd, kHiddenByModCreationTimeHighProperty)));
-
-
-    if (!ownerPid) {
-        RemovePropW(hwnd, kHiddenByModProperty);
-        RemovePropW(hwnd, kHiddenByModCreationTimeLowProperty);
-        RemovePropW(hwnd, kHiddenByModCreationTimeHighProperty);
-        return false;
-    }
-
-    bool ownerAlive = false;
-
-    AcquireSRWLockExclusive(&g_hiddenTaskbarOwnerCacheLock);
-
-    if (ownerPid != g_hiddenTaskbarOwnerPid) {
-        if (g_hiddenTaskbarOwnerProcess) {
-            CloseHandle(g_hiddenTaskbarOwnerProcess);
-            g_hiddenTaskbarOwnerProcess = nullptr;
-        }
-
-        g_hiddenTaskbarOwnerPid = ownerPid;
-        g_hiddenTaskbarOwnerCreationTime = {};
-        g_hiddenTaskbarOwnerProcess =
-            OpenProcess(
-                SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
-                FALSE,
-                ownerPid
+    if (hide) {
+        if (!SetWindowLongPtrW(
+                hwnd,
+                GWL_EXSTYLE,
+                exStyle | WS_EX_LAYERED
+            )) {
+            Wh_Log(
+                L"SetWindowLongPtrW(GWL_EXSTYLE, WS_EX_LAYERED) failed for 0x%p: %lu",
+                hwnd,
+                GetLastError()
             );
+            return false;
+        }
 
-        if (g_hiddenTaskbarOwnerProcess) {
-            GetProcessCreationTime(
-                g_hiddenTaskbarOwnerProcess,
-                &g_hiddenTaskbarOwnerCreationTime
+        if (!SetLayeredWindowAttributes(
+                hwnd,
+                0,
+                0,
+                LWA_ALPHA
+            )) {
+            Wh_Log(
+                L"SetLayeredWindowAttributes(alpha=0) failed for 0x%p: %lu",
+                hwnd,
+                GetLastError()
             );
-        }
-    }
-
-    ownerAlive =
-        g_hiddenTaskbarOwnerProcess &&
-        WaitForSingleObject(g_hiddenTaskbarOwnerProcess, 0) == WAIT_TIMEOUT;
-
-    if (ownerAlive && !hasCreationTime) {
-        // Markers created by older versions contained only a PID. Treat them
-        // as stale once this version is running so a reused PID cannot inherit
-        // hidden-taskbar ownership accidentally. The tool process will rebuild
-        // the marker if the taskbar still needs to remain hidden.
-        ownerAlive = false;
-    } else if (
-        ownerAlive &&
-        CompareFileTime(
-            &markerCreationTime,
-            &g_hiddenTaskbarOwnerCreationTime
-        ) != 0
-    ) {
-        ownerAlive = false;
-    }
-
-
-    if (!ownerAlive) {
-        RemovePropW(hwnd, kHiddenByModProperty);
-        RemovePropW(hwnd, kHiddenByModCreationTimeLowProperty);
-        RemovePropW(hwnd, kHiddenByModCreationTimeHighProperty);
-
-        if (g_hiddenTaskbarOwnerProcess) {
-            CloseHandle(g_hiddenTaskbarOwnerProcess);
-            g_hiddenTaskbarOwnerProcess = nullptr;
+            return false;
         }
 
-        g_hiddenTaskbarOwnerPid = 0;
-        g_hiddenTaskbarOwnerCreationTime = {};
-    }
-
-    ReleaseSRWLockExclusive(&g_hiddenTaskbarOwnerCacheLock);
-
-    return ownerAlive;
-}
-
-
-void RecoverStaleHiddenTaskbar(HWND hwnd) {
-    if (!IsExplorerTaskbar(hwnd) ||
-        !GetPropW(hwnd, kHiddenByModProperty)) {
-        return;
-    }
-
-
-    if (IsHiddenTaskbarOwnerAlive(hwnd)) {
-        return;
-    }
-
-
-    if (g_explorerShowWindowOriginal) {
-        RemoveHiddenTaskbarOwnershipMarker(hwnd);
-        g_explorerShowWindowOriginal(hwnd, SW_SHOWNA);
-    }
-}
-
-void RecoverStaleHiddenTaskbars() {
-    RecoverStaleHiddenTaskbar(FindWindowW(L"Shell_TrayWnd", nullptr));
-
-    HWND secondary = nullptr;
-
-    while ((secondary = FindWindowExW(
-                nullptr,
-                secondary,
-                L"Shell_SecondaryTrayWnd",
-                nullptr)) != nullptr) {
-        RecoverStaleHiddenTaskbar(secondary);
-    }
-}
-
-DWORD WINAPI ExplorerRecoveryThread(LPVOID) {
-    constexpr DWORD kRecoveryCheckIntervalMs = 1000;
-
-    for (;;) {
-        DWORD result = WaitForSingleObject(
-            g_explorerRecoveryStopEvent,
-            kRecoveryCheckIntervalMs
+        SetWindowPos(
+            hwnd,
+            nullptr,
+            0, 0, 0, 0,
+            SWP_NOMOVE |
+            SWP_NOSIZE |
+            SWP_NOZORDER |
+            SWP_NOACTIVATE |
+            SWP_FRAMECHANGED
         );
 
-        if (result != WAIT_TIMEOUT) {
-            break;
-        }
-
-        RecoverStaleHiddenTaskbars();
+        return true;
     }
 
-    return 0;
-}
-
-bool StartExplorerRecoveryThread() {
-    g_explorerRecoveryStopEvent =
-        CreateEventW(nullptr, TRUE, FALSE, nullptr);
-
-    if (!g_explorerRecoveryStopEvent) {
-        Wh_Log(L"CreateEventW(explorer recovery) failed: %lu", GetLastError());
-        return false;
-    }
-
-    g_explorerRecoveryThread = CreateThread(
-        nullptr,
-        0,
-        ExplorerRecoveryThread,
-        nullptr,
-        0,
-        nullptr
-    );
-
-    if (!g_explorerRecoveryThread) {
-        Wh_Log(L"CreateThread(explorer recovery) failed: %lu", GetLastError());
-        CloseHandle(g_explorerRecoveryStopEvent);
-        g_explorerRecoveryStopEvent = nullptr;
-        return false;
-    }
-
-    return true;
-}
-
-void StopExplorerRecoveryThread() {
-    if (g_explorerRecoveryStopEvent) {
-        SetEvent(g_explorerRecoveryStopEvent);
-    }
-
-    if (g_explorerRecoveryThread) {
-        // The thread is executing code from the injected module, so it must be
-        // fully stopped before Explorer unloads the mod.
-        WaitForSingleObject(g_explorerRecoveryThread, INFINITE);
-        CloseHandle(g_explorerRecoveryThread);
-        g_explorerRecoveryThread = nullptr;
-    }
-
-    if (g_explorerRecoveryStopEvent) {
-        CloseHandle(g_explorerRecoveryStopEvent);
-        g_explorerRecoveryStopEvent = nullptr;
-    }
-}
-
-BOOL WINAPI ExplorerShowWindowHook(HWND hwnd, int nCmdShow) {
-    if (nCmdShow == SW_SHOWNA && IsExplorerTaskbar(hwnd)) {
-        const bool marked =
-            GetPropW(hwnd, kHiddenByModProperty) != nullptr;
-
-        if (marked) {
-            const bool ownerAlive = IsHiddenTaskbarOwnerAlive(hwnd);
-
-            if (!ownerAlive && g_explorerShowWindowOriginal) {
-                RemoveHiddenTaskbarOwnershipMarker(hwnd);
-                return g_explorerShowWindowOriginal(hwnd, SW_SHOWNA);
-            }
-
-            if (ownerAlive && IsExplorerSecondaryTaskbar(hwnd)) {
-                return FALSE;
-            }
-        }
-    }
-
-    return g_explorerShowWindowOriginal(hwnd, nCmdShow);
-}
-
-bool InstallExplorerVisibilityHook() {
-
-    if (
-        !WindhawkUtils::SetFunctionHook(
-            ShowWindow,
-            ExplorerShowWindowHook,
-            &g_explorerShowWindowOriginal
-        )
-    ) {
+    // Restore full opacity before removing WS_EX_LAYERED.
+    if (!SetLayeredWindowAttributes(
+            hwnd,
+            0,
+            255,
+            LWA_ALPHA
+        )) {
         Wh_Log(
-            L"Failed to hook Explorer ShowWindow"
+            L"SetLayeredWindowAttributes(alpha=255) failed for 0x%p: %lu",
+            hwnd,
+            GetLastError()
         );
         return false;
     }
+
+    if (!SetWindowLongPtrW(
+            hwnd,
+            GWL_EXSTYLE,
+            exStyle & ~static_cast<LONG_PTR>(WS_EX_LAYERED)
+        )) {
+        Wh_Log(
+            L"SetWindowLongPtrW(remove WS_EX_LAYERED) failed for 0x%p: %lu",
+            hwnd,
+            GetLastError()
+        );
+        return false;
+    }
+
+    SetWindowPos(
+        hwnd,
+        nullptr,
+        0, 0, 0, 0,
+        SWP_NOMOVE |
+        SWP_NOSIZE |
+        SWP_NOZORDER |
+        SWP_NOACTIVATE |
+        SWP_FRAMECHANGED
+    );
 
     return true;
 }
@@ -1487,18 +1231,18 @@ bool IsApplicationWindowCandidate(
         return false;
     }
 
-    BOOL cloaked = FALSE;
+    BOOL transparent = FALSE;
 
     if (
         SUCCEEDED(
             DwmGetWindowAttribute(
                 hwnd,
                 DWMWA_CLOAKED,
-                &cloaked,
-                sizeof(cloaked)
+                &transparent,
+                sizeof(transparent)
             )
         ) &&
-        cloaked
+        transparent
     ) {
         return false;
     }
@@ -1668,7 +1412,7 @@ void ScanWindowsOnce(
             ) &&
             !IsShellChromeClass(className)
         ) {
-            BOOL cloaked = FALSE;
+            BOOL transparent = FALSE;
 
             if (
                 !(
@@ -1676,11 +1420,11 @@ void ScanWindowsOnce(
                         DwmGetWindowAttribute(
                             foreground,
                             DWMWA_CLOAKED,
-                            &cloaked,
-                            sizeof(cloaked)
+                            &transparent,
+                            sizeof(transparent)
                         )
                     ) &&
-                    cloaked
+                    transparent
                 )
             ) {
                 HMONITOR foregroundMonitor =
@@ -1764,11 +1508,7 @@ void RefreshTaskbarMonitorStates(
         }
 
         state.desktopOnly = true;
-        state.hiddenByMod =
-            GetPropW(
-                hwnd,
-                kHiddenByModProperty
-            ) != nullptr;
+        state.hiddenByMod = false;
 
         for (size_t i = 0; i < oldCount; ++i) {
             if (oldStates[i].hwnd == hwnd) {
@@ -1829,78 +1569,6 @@ bool ShouldHideTaskbar(
 }
 
 
-bool SetHiddenTaskbarOwnershipMarker(HWND hwnd) {
-    if (!hwnd) {
-        return false;
-    }
-
-    FILETIME creationTime = {};
-    if (!GetProcessCreationTime(
-            GetCurrentProcess(),
-            &creationTime
-        )) {
-        Wh_Log(L"GetProcessTimes(current process) failed: %lu", GetLastError());
-        return SetPropW(
-            hwnd,
-            kHiddenByModProperty,
-            reinterpret_cast<HANDLE>(
-                static_cast<ULONG_PTR>(GetCurrentProcessId())
-            )
-        ) != FALSE;
-    }
-
-    const bool pidSet = SetPropW(
-        hwnd,
-        kHiddenByModProperty,
-        reinterpret_cast<HANDLE>(
-            static_cast<ULONG_PTR>(GetCurrentProcessId())
-        )
-    ) != FALSE;
-
-    const bool lowSet = SetPropW(
-        hwnd,
-        kHiddenByModCreationTimeLowProperty,
-        reinterpret_cast<HANDLE>(
-            static_cast<ULONG_PTR>(creationTime.dwLowDateTime)
-        )
-    ) != FALSE;
-
-    const bool highSet = SetPropW(
-        hwnd,
-        kHiddenByModCreationTimeHighProperty,
-        reinterpret_cast<HANDLE>(
-            static_cast<ULONG_PTR>(creationTime.dwHighDateTime)
-        )
-    ) != FALSE;
-
-    if (!pidSet || !lowSet || !highSet) {
-        Wh_Log(L"Set hidden taskbar ownership metadata failed for 0x%p: %lu",
-               hwnd, GetLastError());
-        RemovePropW(hwnd, kHiddenByModCreationTimeLowProperty);
-        RemovePropW(hwnd, kHiddenByModCreationTimeHighProperty);
-    }
-
-    return pidSet;
-}
-
-void RemoveHiddenTaskbarOwnershipMarker(HWND hwnd) {
-    if (!hwnd) {
-        return;
-    }
-
-    RemovePropW(hwnd, kHiddenByModProperty);
-    RemovePropW(hwnd, kHiddenByModCreationTimeLowProperty);
-    RemovePropW(hwnd, kHiddenByModCreationTimeHighProperty);
-}
-
-void RestoreHiddenTaskbarOwnershipMarker(HWND hwnd) {
-    if (!hwnd) {
-        return;
-    }
-
-    SetHiddenTaskbarOwnershipMarker(hwnd);
-}
-
 void SetTaskbarState(
     TaskbarMonitorState& state,
     bool show
@@ -1917,58 +1585,25 @@ void SetTaskbarState(
             return;
         }
 
-        // Clear our ownership marker before showing so Explorer is never left
-        // with a hidden taskbar that still looks owned by this mod. Keep the
-        // normal transition synchronous so Explorer cannot queue a stale SHOW
-        // behind our state reconciliation.
-        RemoveHiddenTaskbarOwnershipMarker(state.hwnd);
-
-        ShowWindow(
-            state.hwnd,
-            SW_SHOWNA
-        );
-
-        if (IsWindowVisible(state.hwnd)) {
+        if (MakeTaskbarTransparent(state.hwnd, false)) {
             state.hiddenByMod = false;
-        } else {
-            // Restore the marker if the show operation did not make the taskbar
-            // visible. This keeps ownership explicit rather than leaving a
-            // silently hidden, unowned taskbar behind.
-            RestoreHiddenTaskbarOwnershipMarker(state.hwnd);
-            state.hiddenByMod = true;
         }
 
         return;
     }
 
-    if (!IsWindowVisible(state.hwnd)) {
-        state.hiddenByMod =
-            state.hiddenByMod ||
-            GetPropW(
-                state.hwnd,
-                kHiddenByModProperty
-            ) != nullptr;
+    if (state.hiddenByMod) {
         return;
     }
 
-    if (!SetHiddenTaskbarOwnershipMarker(state.hwnd)) {
-        Wh_Log(
-            L"Set hidden taskbar ownership marker failed for 0x%p: %lu",
-            state.hwnd,
-            GetLastError()
-        );
+    // Do not take ownership of a taskbar that is already hidden by another
+    // mechanism. The mod tracks its own transparency state separately.
+    if (!IsWindowVisible(state.hwnd)) {
+        return;
     }
 
-    ShowWindow(
-        state.hwnd,
-        SW_HIDE
-    );
-
-    if (!IsWindowVisible(state.hwnd)) {
+    if (MakeTaskbarTransparent(state.hwnd, true)) {
         state.hiddenByMod = true;
-    } else {
-        RemoveHiddenTaskbarOwnershipMarker(state.hwnd);
-        state.hiddenByMod = false;
     }
 }
 
@@ -2340,9 +1975,6 @@ void UpdateTaskbarState() {
 
     g_displayTopologySignature = topologySignature;
 
-    for (size_t i = 0; i < monitors.count; ++i) {
-    }
-
     BindConfiguredMonitorSelections(
         monitors
     );
@@ -2569,27 +2201,6 @@ void CancelHoverExpireTimer() {
     }
 }
 
-bool IsTaskbarWindow(HWND hwnd) {
-    if (!hwnd || !IsWindow(hwnd)) {
-        return false;
-    }
-
-    WCHAR className[128] = {};
-
-    if (
-        GetClassNameW(
-            hwnd,
-            className,
-            ARRAYSIZE(className)
-        ) == 0
-    ) {
-        return false;
-    }
-
-    return
-        wcscmp(className, L"Shell_TrayWnd") == 0 ||
-        wcscmp(className, L"Shell_SecondaryTrayWnd") == 0;
-}
 
 bool IsCursorInConfiguredHoverZoneAtPoint(
     POINT pt,
@@ -2776,97 +2387,19 @@ DWORD WINAPI CursorSamplingThread(LPVOID) {
 void CALLBACK WinEventProc(
     HWINEVENTHOOK,
     DWORD event,
-    HWND hwnd,
-    LONG idObject,
+    HWND,
+    LONG,
     LONG,
     DWORD,
     DWORD
 ) {
-    /*
-     * Explorer can re-show a secondary taskbar while the user interacts with
-     * the primary taskbar or other shell UI. Handle only SHOW for the exact
-     * taskbar window classes. The callback never changes Explorer windows
-     * directly; it only schedules the serialized worker update. We intentionally
-     * do not watch HIDE.
-     */
     if (
-        event == EVENT_OBJECT_SHOW &&
-        idObject == OBJID_WINDOW &&
-        IsTaskbarWindow(hwnd)
+        event == EVENT_SYSTEM_FOREGROUND ||
+        event == EVENT_SYSTEM_MINIMIZESTART ||
+        event == EVENT_SYSTEM_MINIMIZEEND ||
+        event == EVENT_SYSTEM_MOVESIZEEND
     ) {
-        /*
-         * While the cursor is already inside the configured hover zone,
-         * Explorer may emit SHOW for more than one taskbar during the same
-         * shell transition. The worker's hover calculation is authoritative,
-         * so don't enqueue an additional refresh that can immediately undo
-         * and repeat the hover visibility transition.
-         *
-         * Outside the hover zone the narrow SHOW hook is retained so an
-         * Explorer re-show is reconciled promptly.
-         */
-        if (IsCursorInConfiguredHoverZone()) {
-            return;
-        }
-
         PostRefresh();
-        return;
-    }
-
-    if (event == EVENT_SYSTEM_FOREGROUND) {
-        PostRefresh();
-        return;
-    }
-
-    if (
-        event != EVENT_SYSTEM_MINIMIZESTART &&
-        event != EVENT_SYSTEM_MINIMIZEEND &&
-        event != EVENT_SYSTEM_MOVESIZEEND
-    ) {
-        return;
-    }
-
-    PostRefresh();
-}
-
-
-void EnsureTaskbarShowHook() {
-    HWND taskbar =
-        FindWindowW(
-            L"Shell_TrayWnd",
-            nullptr
-        );
-
-    DWORD explorerPid = 0;
-    if (taskbar) {
-        GetWindowThreadProcessId(
-            taskbar,
-            &explorerPid
-        );
-    }
-
-    if (explorerPid == g_taskbarShowHookProcessId) {
-        return;
-    }
-
-
-    SafeUnhookWinEvent(g_taskbarShowHook);
-    g_taskbarShowHookProcessId = 0;
-
-    if (explorerPid) {
-        g_taskbarShowHook = SetWinEventHook(
-            EVENT_OBJECT_SHOW,
-            EVENT_OBJECT_SHOW,
-            nullptr,
-            WinEventProc,
-            explorerPid,
-            0,
-            WINEVENT_OUTOFCONTEXT
-        );
-
-        if (g_taskbarShowHook) {
-            g_taskbarShowHookProcessId = explorerPid;
-        } else {
-        }
     }
 }
 
@@ -3051,7 +2584,6 @@ DWORD WINAPI WorkerThread(
             WINEVENT_OUTOFCONTEXT
         );
 
-    EnsureTaskbarShowHook();
     UpdateTaskbarState();
 
     // Keep a true periodic safety poll. It is only a fallback for shell/window
@@ -3086,8 +2618,7 @@ DWORD WINAPI WorkerThread(
                 continue;
             }
 
-            EnsureTaskbarShowHook();
-            UpdateTaskbarState();
+                    UpdateTaskbarState();
 
             continue;
         }
@@ -3101,8 +2632,7 @@ DWORD WINAPI WorkerThread(
                 0
             );
 
-            EnsureTaskbarShowHook();
-            UpdateTaskbarState();
+                    UpdateTaskbarState();
 
             // Do not lose a refresh posted while UpdateTaskbarState() ran.
             if (InterlockedExchange(
@@ -3117,8 +2647,7 @@ DWORD WINAPI WorkerThread(
 
         if (msg.message == WM_APP_SETTINGS) {
             LoadSettings();
-            EnsureTaskbarShowHook();
-            UpdateTaskbarState();
+                    UpdateTaskbarState();
 
 
             continue;
@@ -3141,8 +2670,6 @@ DWORD WINAPI WorkerThread(
     SafeUnhookWinEvent(g_foregroundHook);
     SafeUnhookWinEvent(g_minimizeHook);
     SafeUnhookWinEvent(g_moveHook);
-    SafeUnhookWinEvent(g_taskbarShowHook);
-    g_taskbarShowHookProcessId = 0;
 
     DestroyWorkerMessageWindow();
 
@@ -3409,51 +2936,16 @@ void WhTool_ModSettingsChanged() {
 }
 
 void RestoreAllTaskbars() {
-    auto restoreTaskbarIfMarked = [](HWND hwnd) {
-        if (
-            !hwnd ||
-            !IsWindow(hwnd) ||
-            !GetPropW(
-                hwnd,
-                kHiddenByModProperty
-            )
-        ) {
-            return;
+    for (size_t i = 0; i < g_taskbarStateCount; ++i) {
+        TaskbarMonitorState& state = g_taskbarStates[i];
+
+        if (!state.hwnd || !state.hiddenByMod) {
+            continue;
         }
 
-        // Remove ownership before the restore request so Explorer cannot treat
-        // its own SHOW path as an attempt to violate the mod's hidden state.
-        RemoveHiddenTaskbarOwnershipMarker(hwnd);
-
-        // Teardown must not wait on Explorer's UI thread.
-        if (!ShowWindowAsync(
-                hwnd,
-                SW_SHOWNA
-            )) {
-            // Keep explicit ownership if the asynchronous restore request could
-            // not be queued.
-            SetHiddenTaskbarOwnershipMarker(hwnd);
+        if (MakeTaskbarTransparent(state.hwnd, false)) {
+            state.hiddenByMod = false;
         }
-    };
-
-    restoreTaskbarIfMarked(
-        FindWindowW(
-            L"Shell_TrayWnd",
-            nullptr
-        )
-    );
-
-    HWND secondary = nullptr;
-
-    while (
-        (secondary = FindWindowExW(
-            nullptr,
-            secondary,
-            L"Shell_SecondaryTrayWnd",
-            nullptr
-        )) != nullptr
-    ) {
-        restoreTaskbarIfMarked(secondary);
     }
 }
 
@@ -3555,43 +3047,9 @@ void WhTool_ModUninit() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Explorer is a special target for this hybrid mod. The standard tool-mod
-// launcher is kept below as the documented Windhawk boilerplate; the Explorer
-// branch wraps around it without changing the tool-process logic.
-
-bool IsCurrentProcessExplorer() {
-    WCHAR modulePath[MAX_PATH] = {};
-
-    DWORD length =
-        GetModuleFileNameW(
-            nullptr,
-            modulePath,
-            ARRAYSIZE(modulePath)
-        );
-
-    if (
-        length == 0 ||
-        length >= ARRAYSIZE(modulePath)
-    ) {
-        return false;
-    }
-
-    const WCHAR* moduleName =
-        wcsrchr(
-            modulePath,
-            L'\\'
-        );
-
-    moduleName =
-        moduleName
-            ? moduleName + 1
-            : modulePath;
-
-    return _wcsicmp(
-        moduleName,
-        L"explorer.exe"
-    ) == 0;
-}
+// Standard Windhawk tool-mod launcher. The mod is targeted at windhawk.exe so
+// the launcher can start the state-management logic in a dedicated Windhawk
+// process.
 
 #define Wh_ModInit WindhawkToolModLauncher_Wh_ModInit
 #define Wh_ModAfterInit WindhawkToolModLauncher_Wh_ModAfterInit
@@ -3750,7 +3208,7 @@ void Wh_ModAfterInit() {
         .cb = sizeof(STARTUPINFO),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
     };
-    PROCESS_INFORMATION pi;
+    PROCESS_INFORMATION pi{};
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
                                  nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
                                  nullptr, nullptr, &si, &pi, nullptr)) {
@@ -3786,53 +3244,17 @@ void Wh_ModUninit() {
 #undef Wh_ModUninit
 
 BOOL Wh_ModInit() {
-    if (IsCurrentProcessExplorer()) {
-        g_isExplorerProcess = true;
-        if (!InstallExplorerVisibilityHook()) {
-            return FALSE;
-        }
-
-        Wh_Log(
-    L"Explorer init: original=%p",
-    g_explorerShowWindowOriginal
-);
-
-        RecoverStaleHiddenTaskbars();
-        StartExplorerRecoveryThread();
-
-        Wh_Log(
-    L"Explorer init: original=%p",
-    g_explorerShowWindowOriginal
-);
-        return TRUE;
-    }
-
     return WindhawkToolModLauncher_Wh_ModInit();
 }
 
 void Wh_ModAfterInit() {
-    if (g_isExplorerProcess) {
-        return;
-    }
-
     WindhawkToolModLauncher_Wh_ModAfterInit();
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_isExplorerProcess) {
-        return;
-    }
-
     WindhawkToolModLauncher_Wh_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    if (g_isExplorerProcess) {
-        StopExplorerRecoveryThread();
-        ResetHiddenTaskbarOwnerCache();
-        return;
-    }
-
     WindhawkToolModLauncher_Wh_ModUninit();
 }
-
