@@ -93,7 +93,6 @@ If you find a mistake and for additional details, please click [here](https://gi
 
 // ==WindhawkModSettings==
 /*
-# NOTE: Predefined options below are in English only. For other languages, use Custom Items at the bottom.
 
 - bloatwareItems:
   - removeOneDrive: true
@@ -308,6 +307,7 @@ If you find a mistake and for additional details, please click [here](https://gi
 #include <algorithm>
 #include <unordered_map>
 #include <mutex>
+#include <atomic>
 #include <optional>
 #include <cwctype>
 #include <cwchar>
@@ -395,9 +395,9 @@ IShellBrowser* GetShellBrowser(HWND hwnd) {
                 continue;
             }
 
-            LRESULT result = SendMessageTimeoutW(h, WM_USER + 7 /* CWM_GETISHELLBROWSER */, 0, 0,
-                                                  SMTO_ABORTIFHUNG, 1000, (PDWORD_PTR)&pShellBrowser);
-            if (result && pShellBrowser) {
+            LRESULT result = SendMessageW(h, WM_USER + 7 /* CWM_GETISHELLBROWSER */, 0, 0);
+            pShellBrowser = (IShellBrowser*)result;
+            if (pShellBrowser) {
                 return pShellBrowser;
             }
 
@@ -415,19 +415,10 @@ IShellBrowser* GetShellBrowser(HWND hwnd) {
 // fails closed (hides) on the former -- an error shouldn't hide a match.
 thread_local bool tl_selectionLookupFailed = false;
 
-// Forward declaration of the thread-local desktop IShellBrowser session
-// cache (fully defined further below). Owned by, and released in,
-// ExitMenuTracking() when the current tracking session ends.
-extern thread_local IShellBrowser* tl_sessionDesktopShellBrowser;
-
 // The desktop doesn't expose an IShellBrowser via CWM_GETISHELLBROWSER --
 // use IShellWindows::FindWindowSW(SWC_DESKTOP) then IServiceProvider ->
-// SID_STopLevelBrowser. Cached per-session: a COM pointer can't release cross-thread, and the desktop's view can be reparented.
+// SID_STopLevelBrowser. Returns a new reference; the caller must Release() it.
 IShellBrowser* GetDesktopShellBrowser() {
-    if (tl_sessionDesktopShellBrowser) {
-        return tl_sessionDesktopShellBrowser;
-    }
-    
     IShellWindows* pShellWindows = nullptr;
     if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL,
                                  IID_IShellWindows, (void**)&pShellWindows)) || !pShellWindows) {
@@ -449,13 +440,6 @@ IShellBrowser* GetDesktopShellBrowser() {
     }
     
     pShellWindows->Release();
-    
-    // Only a successful lookup is cached; a nullptr result (lookup failed)
-    // isn't stored, so a later call within the same session simply retries
-    // rather than being stuck with a cached failure.
-    if (pShellBrowser) {
-        tl_sessionDesktopShellBrowser = pShellBrowser;
-    }
     return pShellBrowser;
 }
 
@@ -529,8 +513,10 @@ std::vector<std::wstring> GetSelectedFilesFromExplorer(HWND hwnd, ShellViewKind 
             return files;
         }
         files = GetSelectedFilesFromShellBrowser(pShellBrowser);
-        // Do NOT release here -- ownership belongs to the session-scoped
-        // cache, released exactly once in ExitMenuTracking() when the session ends.
+        // Released here, on the creating thread and still inside the COM
+        // apartment -- no session-scoped caching needed since this is the
+        // only call site per session.
+        pShellBrowser->Release();
         return files;
 
     }
@@ -1566,10 +1552,15 @@ void ProcessMenu(HMENU hMenu) {
                 
                 // Check if this item should be removed
                 if (ShouldRemoveMenuItem(text, isGreyed)) {
-                    // DeleteMenu also destroys an attached submenu, which
-                    // is correct: the parent menu is normally a submenu's
-                    // only real owner, destroyed recursively by Explorer.
-                    DeleteMenu(hMenu, i, MF_BYPOSITION);
+                    // RemoveMenu detaches without destroying the attached
+                    // submenu. DeleteMenu would also destroy it, which is
+                    // correct only when the parent menu is that submenu's
+                    // sole owner; a third-party IContextMenu extension can
+                    // create its own HMENU with CreatePopupMenu and expect
+                    // to manage its own lifetime. Detaching costs a leaked
+                    // submenu handle in the (common) shell-owned case, but
+                    // avoids a use-after-free/double-destroy in the other.
+                    RemoveMenu(hMenu, i, MF_BYPOSITION);
                     deleted = true;
                     anyRemoved = true;
                 }
@@ -1654,6 +1645,13 @@ TrackPopupMenu_t TrackPopupMenu_Original;
 std::mutex g_activeMenuHooksMutex;
 std::vector<HHOOK> g_activeMenuHooks;
 bool g_uninitInProgress = false;
+// MSDN notes that a hook procedure can still be executing on its own
+// thread even after UnhookWindowsHookEx() returns elsewhere. Incremented
+// on entry to MenuCallWndProcRetHook and decremented on exit, so
+// Wh_ModUninit can wait for it to drain to zero before returning --
+// closing the window where the mod's image is unmapped while a hook
+// callback is still running against it.
+std::atomic<int> g_activeHookCalls{0};
 
 // WM_INITMENUPOPUP is a *sent* message delivered straight to the owner
 // window's WndProc during the menu's modal loop, so a thread-local
@@ -1664,10 +1662,6 @@ thread_local int tl_menuDepth = 0;
 // top-level menu and every submenu agree on whether the bypass is active,
 // even if the Alt key state changes while the menu is still open.
 thread_local bool tl_menuBypassed = false;
-// Session-scoped desktop IShellBrowser cache -- see GetDesktopShellBrowser()
-// for why it's scoped to a session, not the whole thread. Populated
-// lazily, released in ExitMenuTracking() on the same thread it was created.
-thread_local IShellBrowser* tl_sessionDesktopShellBrowser = nullptr;
 // True if this session successfully called CoInitializeEx (see
 // EnterMenuTracking) and owns a matching CoUninitialize call in ExitMenuTracking.
 thread_local bool tl_sessionComInitialized = false;
@@ -1677,6 +1671,7 @@ thread_local bool tl_sessionComInitialized = false;
 thread_local bool tl_sessionNeedFiles = false;
 
 LRESULT CALLBACK MenuCallWndProcRetHook(int nCode, WPARAM wParam, LPARAM lParam) {
+    ++g_activeHookCalls;
     if (nCode == HC_ACTION) {
         CWPRETSTRUCT* cwp = (CWPRETSTRUCT*)lParam;
         if (cwp->message == WM_INITMENUPOPUP) {
@@ -1690,7 +1685,9 @@ LRESULT CALLBACK MenuCallWndProcRetHook(int nCode, WPARAM wParam, LPARAM lParam)
             }
         }
     }
-    return CallNextHookEx(nullptr, nCode, wParam, lParam);
+    LRESULT result = CallNextHookEx(nullptr, nCode, wParam, lParam);
+    --g_activeHookCalls;
+    return result;
 }
 
 // Installs the thread-local hook on the outermost TrackPopupMenu(Ex) call
@@ -1745,23 +1742,13 @@ void ExitMenuTracking() {
             bool stillRegistered = false;
             {
                 std::lock_guard<std::mutex> lock(g_activeMenuHooksMutex);
-                auto& hooks = g_activeMenuHooks;
-                auto it = std::remove(hooks.begin(), hooks.end(), hook);
-                stillRegistered = (it != hooks.end());
-                hooks.erase(it, hooks.end());
+                stillRegistered = std::erase(g_activeMenuHooks, hook) > 0;
             }
             // If it wasn't in the registry, Wh_ModUninit already swept and
             // unhooked it -- unhooking again risks hitting a recycled HHOOK.
             if (stillRegistered) {
                 UnhookWindowsHookEx(hook);
             }
-        }
-        if (tl_sessionDesktopShellBrowser) {
-            // Released on the same thread that created it, and *before*
-            // CoUninitialize() below so the apartment is still valid --
-            // this is what makes the session-scoped cache safe.
-            tl_sessionDesktopShellBrowser->Release();
-            tl_sessionDesktopShellBrowser = nullptr;
         }
         if (tl_sessionComInitialized) {
             CoUninitialize();
@@ -2035,7 +2022,6 @@ bool AnyRemovalConfigured() {
 // Windhawk mod initialization
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing context menu cleaner mod");
-    Wh_Log(L"NOTE: Predefined options are in English. For other languages, use Custom Items in settings.");
     
     LoadSettings();
     
@@ -2099,5 +2085,13 @@ void Wh_ModUninit() {
     // keeping even though nothing else currently blocks on this mutex.
     for (HHOOK hook : hooksToUnhook) {
         UnhookWindowsHookEx(hook);
+    }
+
+    // UnhookWindowsHookEx can return while the hook procedure is still
+    // executing on its own thread, so wait for any in-flight calls to
+    // finish before returning -- this is when the mod's image gets
+    // unmapped, and a still-running callback into it would crash.
+    while (g_activeHookCalls.load() > 0) {
+        Sleep(10);
     }
 }
