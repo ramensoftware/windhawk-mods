@@ -83,8 +83,7 @@ constexpr DWORD kRetryIntervalMs = 500;
 constexpr int kMaxRetryAttempts = 20;
 
 constexpr UINT kMsgRefreshThisPc = WM_APP + 1;
-constexpr UINT kMsgShutdown = WM_APP + 2;
-constexpr UINT kMsgQuit = WM_APP + 3;
+constexpr UINT kMsgStop = WM_APP + 2;
 
 std::atomic<DWORD> g_managedMask{kAllDriveBits};
 std::atomic<DWORD> g_opticalMask{0};
@@ -419,6 +418,10 @@ static bool ProcessArrivalMask(DWORD mask,
         MakeRootPath(letter, root);
 
         if (GetDriveTypeW(root) != DRIVE_CDROM) {
+            *retryMask &= ~bit;
+            retryAttempts[letter - L'A'] = 0;
+            changed |= SetOpticalDrivePresent(letter, false);
+            changed |= SetCachedMediaState(letter, MediaState::Unknown);
             continue;
         }
 
@@ -603,12 +606,10 @@ static LRESULT CALLBACK NotificationWindowSubclassProc(HWND hwnd,
             RefreshThisPc(thisPcPidl);
             return 0;
 
-        case kMsgShutdown:
-            RefreshThisPc(thisPcPidl);
-            DestroyWindow(hwnd);
-            return 0;
-
-        case kMsgQuit:
+        case kMsgStop:
+            if (wParam) {
+                RefreshThisPc(thisPcPidl);
+            }
             DestroyWindow(hwnd);
             return 0;
 
@@ -675,6 +676,10 @@ static DWORD WINAPI NotificationThreadProc(void*) {
 
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         DispatchMessageW(&msg);
+    }
+
+    if (IsWindow(hwnd)) {
+        DestroyWindow(hwnd);
     }
 
     CoTaskMemFree(thisPcPidl);
@@ -771,9 +776,13 @@ static void StopNotificationThread(bool restoreView) {
 
     HWND hwnd = g_notificationWindow.load(std::memory_order_acquire);
 
+    bool stopPosted = false;
+
     if (hwnd) {
-        PostMessageW(hwnd, restoreView ? kMsgShutdown : kMsgQuit, 0, 0);
-    } else if (g_notificationThreadId) {
+        stopPosted = PostMessageW(hwnd, kMsgStop, restoreView ? TRUE : FALSE, 0);
+    }
+
+    if (!stopPosted && g_notificationThreadId) {
         while (!PostThreadMessageW(g_notificationThreadId, WM_QUIT, 0, 0) &&
                WaitForSingleObject(g_notificationThread, 50) == WAIT_TIMEOUT) {
         }
@@ -802,26 +811,15 @@ static void CloseWorkerObjects() {
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing Hide Empty Optical Drives");
 
-    for (auto& state : g_mediaState) {
-        state.store(MediaState::Unknown, std::memory_order_relaxed);
-    }
+    DWORD managedMask = g_managedMask.load(std::memory_order_relaxed);
 
-    g_opticalMask.store(0, std::memory_order_relaxed);
-
-    DWORD managedMask = 0;
-
-    if (!TryLoadManagedMask(&managedMask)) {
+    if (TryLoadManagedMask(&managedMask)) {
+        g_managedMask.store(managedMask, std::memory_order_release);
+    } else {
         Wh_Log(
             L"Invalid driveLetters setting at startup; "
-            L"no optical drives will be managed");
-        managedMask = 0;
+            L"keeping the default configuration");
     }
-
-    g_managedMask.store(managedMask, std::memory_order_release);
-
-    g_arrivalRequestMask.store(0, std::memory_order_relaxed);
-    g_removalRequestMask.store(0, std::memory_order_relaxed);
-    g_initialScanRequested.store(false, std::memory_order_relaxed);
 
     g_workerWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
 
