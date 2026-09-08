@@ -20,20 +20,25 @@ Below a separator, **Taskbar items** provides checked toggles for **Search**,
 **Task View**, and **Widgets**. Search remembers its previous visible style;
 if none is saved, it uses the search icon.
 
-Item availability follows Windows Settings. Managed or unavailable
-options are disabled. Task View and Widgets use the native Settings handlers;
-Search uses its native registry value and taskbar notification to preserve
-the visible style independently of Settings' changing dropdown indexes.
+All controls use the native Windows Settings handlers. Managed or unavailable
+options are disabled. Search restores its previous visible choice when that
+choice is still available, otherwise it falls back to the search icon.
 
-Requires Windows 11 with the native **Taskbar position** setting enabled.
-Tested movement on build 26200.9278. This does not add positioning support to
-older Windows versions. The entry is hidden if the native TaskbarLocation
-setting or the current taskbar edge cannot be read.
+Requires the native Windows 11 taskbar context menu. **Move taskbar** additionally
+requires the native **Taskbar position** setting to be available. Tested movement
+on build 26200.9278. This does not add positioning support to older Windows
+versions. If movement is unavailable, **Taskbar items** is still shown.
 
 Changes the same persistent, user-wide settings as Windows Settings, and tells
 Explorer to apply it immediately. No Explorer restart is needed. Unloading the
 mod leaves the chosen position in place.
 
+Position choices reflect the taskbar's actual edge, including positions changed
+by other mods, rather than just its saved Windows preference.
+
+The native menu injection is based on
+[Taskbar Restart Explorer](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-restart-explorer.wh.cpp)
+by [Mgrmjp](https://github.com/Mgrmjp).
 */
 // ==/WindhawkModReadme==
 
@@ -56,7 +61,9 @@ mod leaves the chosen position in place.
 #include <winrt/base.h>
 
 #include <atomic>
-#include <string_view>
+#include <algorithm>
+#include <mutex>
+#include <vector>
 
 namespace wf = winrt::Windows::Foundation;
 namespace wux = winrt::Windows::UI::Xaml;
@@ -96,48 +103,26 @@ constexpr TaskbarOption kItemOptions[] = {
     {L"Widgets", L"SystemSettings.Desktop.Taskbar.DesktopTaskbarDaSetting",
      L"TaskbarDa", false, true},
 };
+constexpr TaskbarOption kLocationOption{
+    L"Move taskbar", L"SystemSettings.Desktop.Taskbar.DesktopTaskbarLoSetting",
+    L"TaskbarLocation", false, false};
 
 static constexpr wchar_t kMoveTaskbarText[] = L"Move taskbar";
 static constexpr wchar_t kItemName[] = L"WindhawkMoveTaskbarItem";
 static constexpr wchar_t kSeparatorName[] = L"WindhawkMoveTaskbarSeparator";
 
 std::atomic<bool> g_taskbarViewModuleHooked = false;
+std::atomic<bool> g_unloading = false;
 
 thread_local int g_taskbarSettingsMenuDepth = 0;
 thread_local bool g_currentMenuInjected = false;
 
-bool HStringEquals(winrt::hstring const& value, const wchar_t* text) {
-    return std::wstring_view(value.c_str(), value.size()) == text;
-}
-
-bool IsNamedItem(wuxc::MenuFlyoutItemBase const& baseItem,
-                 const wchar_t* name) {
-    try {
-        if (auto frameworkElement = baseItem.try_as<wux::FrameworkElement>()) {
-            return HStringEquals(frameworkElement.Name(), name);
-        }
-    } catch (...) {
-    }
-
-    return false;
-}
-
 bool IsSeparator(wuxc::MenuFlyoutItemBase const& baseItem) {
-    try {
-        return !!baseItem.try_as<wuxc::MenuFlyoutSeparator>();
-    } catch (...) {
-    }
-
-    return false;
+    return !!baseItem.try_as<wuxc::MenuFlyoutSeparator>();
 }
 
-// SettingsHandlers_DesktopTaskbar.dll, DesktopTaskbarSettingsSingleton::Location
-// on 26200.9278 writes this DWORD, then sends Shell_TrayWnd 0x5CA, 6, edge.
-// The values match ABE_LEFT/TOP/RIGHT/BOTTOM (0/1/2/3).
 constexpr wchar_t kAdvancedKey[] =
     L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced";
-constexpr UINT kTaskbarSettingChanged = WM_USER + 0x1CA;
-constexpr WPARAM kLocationSetting = 6;
 
 winrt::com_ptr<NativeSettingItem> OpenNativeSetting(const TaskbarOption& option) {
     winrt::hstring name{option.runtimeClass};
@@ -147,13 +132,27 @@ winrt::com_ptr<NativeSettingItem> OpenNativeSetting(const TaskbarOption& option)
     return object.as<NativeSettingItem>();
 }
 
-bool ReadOption(const TaskbarOption& option, DWORD* value) {
+bool ReadPersistedOption(const TaskbarOption& option, DWORD* value) {
     DWORD bytes = sizeof(*value);
     return RegGetValueW(HKEY_CURRENT_USER,
                         option.search ? kSearchKey : kAdvancedKey,
                         option.registryName, RRF_RT_REG_DWORD, nullptr,
                         value, &bytes) == ERROR_SUCCESS;
 }
+
+DWORD ReadOption(NativeSettingItem* setting, const TaskbarOption& option) {
+    winrt::hstring property{L"Value"};
+    wf::IInspectable value{nullptr};
+    winrt::check_hresult(setting->GetValue(
+        reinterpret_cast<HSTRING>(winrt::get_abi(property)),
+        reinterpret_cast<IInspectable**>(winrt::put_abi(value))));
+    return option.booleanValue ? winrt::unbox_value<bool>(value)
+                               : winrt::unbox_value<int32_t>(value);
+}
+
+// DesktopTaskbarLoSetting uses the Settings tile order, not ABE_* order.
+// Verified against LocationModeFromSettingIndex on 26200.9278.
+constexpr DWORD kLocationEdges[] = {ABE_BOTTOM, ABE_TOP, ABE_LEFT, ABE_RIGHT};
 
 bool CanChangeOption(NativeSettingItem* setting) {
     boolean enabled = false, applicable = false, managed = true;
@@ -162,44 +161,49 @@ bool CanChangeOption(NativeSettingItem* setting) {
            SUCCEEDED(setting->get_IsSetByGroupPolicy(&managed)) && !managed;
 }
 
-bool SetOption(const TaskbarOption& option, DWORD value) {
+bool SetOption(const TaskbarOption& option, DWORD value,
+               NativeSettingItem* existingSetting = nullptr) {
     try {
-        auto setting = OpenNativeSetting(option);
+        if (g_unloading) {
+            return false;
+        }
+        auto setting = existingSetting ? winrt::com_ptr<NativeSettingItem>{}
+                                       : OpenNativeSetting(option);
+        if (existingSetting) {
+            setting.copy_from(existingSetting);
+        }
         if (!CanChangeOption(setting.get())) {
             Wh_Log(L"%s is unavailable or managed by Windows", option.text);
             return false;
         }
-        if (option.search) {
-            // The native Search setting's Value is a dropdown index, whose
-            // mapping varies with the available search styles. Use the actual
-            // persisted search mode with the Settings handler's notification.
-            HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
-            if (!taskbar || value > 3) {
-                return false;
-            }
-            auto status = RegSetKeyValueW(HKEY_CURRENT_USER, kSearchKey,
-                                          option.registryName, REG_DWORD,
-                                          &value, sizeof(value));
-            winrt::check_win32(status);
-            DWORD_PTR result;
-            if (!SendMessageTimeoutW(taskbar, kTaskbarSettingChanged, 102,
-                                     value, SMTO_ABORTIFHUNG, 2000, &result)) {
-                Wh_Log(L"Search saved, but taskbar notification failed: %lu",
-                       GetLastError());
-                return false;
-            }
-        } else {
-            winrt::hstring property{L"Value"};
-            auto boxed = option.booleanValue
-                ? winrt::box_value(value != 0)
-                : winrt::box_value(static_cast<int32_t>(value));
-            winrt::check_hresult(setting->SetValue(
-                reinterpret_cast<HSTRING>(winrt::get_abi(property)),
-                reinterpret_cast<IInspectable*>(winrt::get_abi(boxed))));
+        winrt::hstring property{L"Value"};
+        auto boxed = option.booleanValue
+            ? winrt::box_value(value != 0)
+            : winrt::box_value(static_cast<int32_t>(value));
+        winrt::check_hresult(setting->SetValue(
+            reinterpret_cast<HSTRING>(winrt::get_abi(property)),
+            reinterpret_cast<IInspectable*>(winrt::get_abi(boxed))));
+        boolean updating = false;
+        winrt::check_hresult(setting->get_IsUpdating(&updating));
+        if (updating) {
+            // Don't block Explorer's UI thread waiting for work that may need
+            // that thread. The next menu construction reads the effective state.
+            Wh_Log(L"%s: Windows accepted the change; update pending", option.text);
+            return true;
         }
-        // Some Settings handlers swallow a failed registry write. Verify it.
+        // The handlers on the tested build are synchronous. Some swallow a
+        // failed registry write, so verify completed writes as well as the ABI.
         DWORD saved;
-        if (!ReadOption(option, &saved) || saved != value) {
+        bool matches = ReadPersistedOption(option, &saved);
+        if (option.search) {
+            matches = matches && ((saved != 0) == (value != 0));
+        } else if (!option.booleanValue) {
+            matches = matches && value < ARRAYSIZE(kLocationEdges) &&
+                      saved == kLocationEdges[value];
+        } else {
+            matches = matches && saved == value;
+        }
+        if (!matches) {
             Wh_Log(L"%s: Windows did not save the requested value %lu",
                    option.text, value);
             return false;
@@ -214,23 +218,9 @@ bool SetOption(const TaskbarOption& option, DWORD value) {
     return false;
 }
 
-bool IsOptionAvailable(const TaskbarOption& option) {
-    try {
-        return CanChangeOption(OpenNativeSetting(option).get());
-    } catch (...) {
-        return false;
-    }
-}
-
 bool GetCurrentTaskbarEdge(DWORD* edge) {
-    DWORD configuredEdge = 0;
-    DWORD size = sizeof(configuredEdge);
-    if (RegGetValueW(HKEY_CURRENT_USER, kAdvancedKey, L"TaskbarLocation",
-                     RRF_RT_REG_DWORD, nullptr, &configuredEdge, &size) !=
-            ERROR_SUCCESS || configuredEdge > ABE_BOTTOM) {
-        return false;
-    }
-
+    // Use the actual edge rather than the saved preference: another taskbar
+    // mod can move the bar without changing the native registry setting.
     APPBARDATA data = {};
     data.cbSize = sizeof(data);
     if (!SHAppBarMessage(ABM_GETTASKBARPOS, &data) || data.uEdge > ABE_BOTTOM) {
@@ -244,26 +234,150 @@ void MoveTaskbar(DWORD edge) {
     if (edge > ABE_BOTTOM) {
         return;
     }
-    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
     DWORD currentEdge;
-    if (!taskbar || !GetCurrentTaskbarEdge(&currentEdge) || currentEdge == edge) {
+    if (!GetCurrentTaskbarEdge(&currentEdge) || currentEdge == edge) {
         return;
     }
-    LSTATUS status = RegSetKeyValueW(HKEY_CURRENT_USER, kAdvancedKey,
-                                    L"TaskbarLocation", REG_DWORD,
-                                    &edge, sizeof(edge));
-    if (status != ERROR_SUCCESS) {
-        Wh_Log(L"TaskbarLocation write failed: %ld", status);
+    for (DWORD index = 0; index < ARRAYSIZE(kLocationEdges); index++) {
+        if (kLocationEdges[index] == edge) {
+            SetOption(kLocationOption, index);
+            break;
+        }
+    }
+}
+
+struct ClickRegistration {
+    DWORD threadId;
+    winrt::weak_ref<wuxc::MenuFlyoutItem> item;
+    winrt::event_token token;
+};
+std::mutex g_clickMutex;
+std::vector<ClickRegistration> g_clickRegistrations;
+std::atomic<unsigned> g_activeClicks = 0;
+
+struct ActiveClick {
+    ActiveClick() { ++g_activeClicks; }
+    ~ActiveClick() { --g_activeClicks; }
+};
+
+template <typename Item, typename Handler>
+void TrackClick(const Item& item, Handler handler) {
+    std::lock_guard lock(g_clickMutex);
+    if (g_unloading) {
         return;
     }
-    DWORD_PTR result = 0;
-    if (!SendMessageTimeoutW(taskbar, kTaskbarSettingChanged, kLocationSetting,
-                             edge, SMTO_ABORTIFHUNG, 2000, &result)) {
-        Wh_Log(L"Position saved, but Explorer notification failed: %lu",
-               GetLastError());
-        return;
+    DWORD threadId = GetCurrentThreadId();
+    // Resolve XAML weak references only on their owning UI thread.
+    std::erase_if(g_clickRegistrations, [threadId](const auto& registration) {
+        return registration.threadId == threadId && !registration.item.get();
+    });
+    // Allocate tracking storage before attaching anything to a XAML object.
+    g_clickRegistrations.push_back({threadId,
+        winrt::make_weak(item.template as<wuxc::MenuFlyoutItem>()), {}});
+    try {
+        g_clickRegistrations.back().token = item.Click(
+            [handler](wf::IInspectable const& sender, wux::RoutedEventArgs const& args) {
+                ActiveClick active;
+                if (!g_unloading) {
+                    try {
+                        handler(sender, args);
+                    } catch (...) {
+                        Wh_Log(L"Taskbar menu action failed");
+                    }
+                }
+            });
+    } catch (...) {
+        g_clickRegistrations.pop_back();
+        throw;
     }
-    Wh_Log(L"Move taskbar: %lu -> %lu", currentEdge, edge);
+}
+
+void RevokeClicksOnCurrentThread() {
+    std::lock_guard lock(g_clickMutex);
+    DWORD threadId = GetCurrentThreadId();
+    for (auto it = g_clickRegistrations.begin(); it != g_clickRegistrations.end();) {
+        if (it->threadId != threadId) {
+            ++it;
+            continue;
+        }
+        try {
+            if (auto item = it->item.get()) {
+                // ToggleMenuFlyoutItem also implements IMenuFlyoutItem.
+                // Check the ABI HRESULT: the projected Click(token) removal
+                // discards errors, which would hide a failed revocation.
+                auto clickInterface = item.as<wuxc::IMenuFlyoutItem>();
+                auto abi = static_cast<winrt::impl::abi_t<wuxc::IMenuFlyoutItem>*>(
+                    winrt::get_abi(clickInterface));
+                winrt::check_hresult(abi->remove_Click(it->token));
+                try {
+                    item.IsEnabled(false);
+                } catch (...) {
+                    // Cosmetic: the callback has already been revoked.
+                }
+            }
+            it = g_clickRegistrations.erase(it);
+        } catch (...) {
+            // Keep failed revocations tracked so the unload fallback can
+            // retain the module instead of leaving a dangling delegate.
+            ++it;
+        }
+    }
+}
+
+UINT g_revokeMessage;
+LRESULT CALLBACK RevokeClicksHook(int code, WPARAM wp, LPARAM lp) {
+    if (code == HC_ACTION && g_unloading &&
+        reinterpret_cast<CWPSTRUCT*>(lp)->message == g_revokeMessage) {
+        RevokeClicksOnCurrentThread();
+    }
+    return CallNextHookEx(nullptr, code, wp, lp);
+}
+
+void RevokeAllClicks() {
+    std::vector<DWORD> threads;
+    {
+        std::lock_guard lock(g_clickMutex);
+        for (const auto& registration : g_clickRegistrations) {
+            if (std::find(threads.begin(), threads.end(), registration.threadId) == threads.end()) {
+                threads.push_back(registration.threadId);
+            }
+        }
+    }
+    for (DWORD threadId : threads) {
+        if (threadId == GetCurrentThreadId()) {
+            RevokeClicksOnCurrentThread();
+            continue;
+        }
+        HWND window = nullptr;
+        EnumThreadWindows(threadId, [](HWND hwnd, LPARAM data) -> BOOL {
+            *reinterpret_cast<HWND*>(data) = hwnd;
+            return FALSE;
+        }, reinterpret_cast<LPARAM>(&window));
+        if (!window) {
+            continue;
+        }
+        HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC, RevokeClicksHook, nullptr, threadId);
+        if (hook) {
+            // Synchronous: the hook callback must finish before it is unhooked
+            // and before Windhawk is allowed to unload this module.
+            SendMessageW(window, g_revokeMessage, 0, 0);
+            UnhookWindowsHookEx(hook);
+        }
+    }
+    while (g_activeClicks.load() != 0) {
+        Sleep(1);
+    }
+    std::lock_guard lock(g_clickMutex);
+    if (!g_clickRegistrations.empty()) {
+        // A vanished UI thread or failed revocation must never turn a stale
+        // XAML delegate into a call to unmapped code. Retain code only on error.
+        HMODULE module;
+        if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                              GET_MODULE_HANDLE_EX_FLAG_PIN,
+                              reinterpret_cast<LPCWSTR>(&RevokeAllClicks), &module)) {
+            Wh_Log(L"Callback cleanup incomplete; module retained until Explorer exits");
+        }
+    }
 }
 
 using MenuFlyoutItemBaseVector_Append_t =
@@ -271,104 +385,115 @@ using MenuFlyoutItemBaseVector_Append_t =
 MenuFlyoutItemBaseVector_Append_t MenuFlyoutItemBaseVector_Append_Original;
 
 void AppendInjectedItems(void* vectorThis) {
-    // Submenu Items().Append can hit this same hook. Guard before constructing it.
+    // Claim this build before adding our block; do not inject twice.
     g_currentMenuInjected = true;
-    DWORD currentEdge;
-    if (!GetCurrentTaskbarEdge(&currentEdge)) {
-        Wh_Log(L"Skipping Move taskbar: native position setting unavailable");
-        return;
-    }
-
-    wuxc::MenuFlyoutSubItem item;
-    item.Name(kItemName);
-    item.Tag(winrt::box_value(winrt::hstring{kItemName}));
-    item.Text(kMoveTaskbarText);
-
-    struct Position {
-        const wchar_t* text;
-        DWORD edge;
-        const wchar_t* glyph;
-    };
-    constexpr Position positions[] = {
-        {L"Top", ABE_TOP, L"\xE74A"},
-        {L"Bottom", ABE_BOTTOM, L"\xE74B"},
-        {L"Left", ABE_LEFT, L"\xE72B"},
-        {L"Right", ABE_RIGHT, L"\xE72A"},
-    };
-    for (const auto& position : positions) {
-        if (position.edge == currentEdge) {
-            continue;
+    bool addedPositionMenu = false;
+    try {
+        auto location = OpenNativeSetting(kLocationOption);
+        DWORD currentEdge;
+        if (CanChangeOption(location.get()) && GetCurrentTaskbarEdge(&currentEdge)) {
+            wuxc::MenuFlyoutSubItem item;
+            item.Name(kItemName);
+            item.Text(kMoveTaskbarText);
+            struct Position {
+                const wchar_t* text;
+                DWORD edge;
+                const wchar_t* glyph;
+            };
+            constexpr Position positions[] = {
+                {L"Top", ABE_TOP, L"\xE74A"},
+                {L"Bottom", ABE_BOTTOM, L"\xE74B"},
+                {L"Left", ABE_LEFT, L"\xE72B"},
+                {L"Right", ABE_RIGHT, L"\xE72A"},
+            };
+            for (const auto& position : positions) {
+                if (position.edge == currentEdge) {
+                    continue;
+                }
+                wuxc::MenuFlyoutItem child;
+                child.Text(position.text);
+                wuxc::FontIcon icon;
+                icon.FontFamily(wux::Media::FontFamily(L"Segoe Fluent Icons"));
+                icon.Glyph(position.glyph);
+                icon.FontSize(16);
+                child.Icon(icon);
+                TrackClick(child, [edge = position.edge](wf::IInspectable const&,
+                                                        wux::RoutedEventArgs const&) {
+                    MoveTaskbar(edge);
+                });
+                item.Items().Append(child);
+            }
+            MenuFlyoutItemBaseVector_Append_Original(vectorThis, item);
+            addedPositionMenu = true;
         }
-        wuxc::MenuFlyoutItem child;
-        child.Text(position.text);
-        wuxc::FontIcon icon;
-        icon.FontFamily(wux::Media::FontFamily(L"Segoe Fluent Icons"));
-        icon.Glyph(position.glyph);
-        icon.FontSize(16);
-        child.Icon(icon);
-        child.Click([edge = position.edge](wf::IInspectable const&,
-                                           wux::RoutedEventArgs const&) {
-            MoveTaskbar(edge);
-        });
-        item.Items().Append(child);
+    } catch (...) {
+        Wh_Log(L"Move taskbar unavailable; keeping Taskbar items");
     }
 
-    wuxc::MenuFlyoutSeparator separator;
-    separator.Name(kSeparatorName);
-    separator.Tag(winrt::box_value(winrt::hstring{kSeparatorName}));
-    MenuFlyoutItemBaseVector_Append_Original(vectorThis, item);
-
-    wuxc::MenuFlyoutSeparator itemsSeparator;
-    itemsSeparator.Name(L"WindhawkTaskbarItemsSeparator");
-    MenuFlyoutItemBaseVector_Append_Original(vectorThis, itemsSeparator);
+    if (addedPositionMenu) {
+        wuxc::MenuFlyoutSeparator separator;
+        separator.Name(L"WindhawkTaskbarItemsSeparator");
+        MenuFlyoutItemBaseVector_Append_Original(vectorThis, separator);
+    }
 
     wuxc::MenuFlyoutSubItem itemsMenu;
     itemsMenu.Name(L"WindhawkTaskbarItemsMenu");
     itemsMenu.Text(L"Taskbar items");
     for (const auto& option : kItemOptions) {
-        DWORD value = 0;
-        bool readable = ReadOption(option, &value);
         wuxc::ToggleMenuFlyoutItem toggle;
         toggle.Text(option.text);
-        toggle.IsChecked(readable && value != 0);
-        toggle.IsEnabled(readable && IsOptionAvailable(option));
-        toggle.Click([option](wf::IInspectable const& sender,
-                              wux::RoutedEventArgs const&) {
-            auto toggle = sender.as<wuxc::ToggleMenuFlyoutItem>();
-            DWORD current;
-            if (!ReadOption(option, &current)) {
-                toggle.IsChecked(!toggle.IsChecked());
-                return;
-            }
-            DWORD next = toggle.IsChecked() ? 1 : 0;
-            if (option.search) {
-                if (current >= 1 && current <= 3) {
-                    Wh_SetIntValue(L"LastVisibleSearchMode", current);
+        toggle.IsEnabled(false);
+        try {
+            // One activation per option, shared by value and availability reads.
+            // GetValue also supplies Windows' effective default when no registry
+            // value exists. All access stays on this item's owning UI thread.
+            auto setting = OpenNativeSetting(option);
+            DWORD value = ReadOption(setting.get(), option);
+            toggle.IsChecked(value != 0);
+            toggle.IsEnabled(CanChangeOption(setting.get()));
+            TrackClick(toggle, [option, setting](wf::IInspectable const& sender,
+                                                wux::RoutedEventArgs const&) {
+                auto toggle = sender.as<wuxc::ToggleMenuFlyoutItem>();
+                DWORD current = ReadOption(setting.get(), option);
+                DWORD next = toggle.IsChecked() ? 1 : 0;
+                if (option.search) {
+                    if (current >= 1 && current <= 3) {
+                        Wh_SetIntValue(L"LastVisibleSearchSelection", current);
+                    }
+                    if (next != 0) {
+                        auto previous = Wh_GetIntValue(L"LastVisibleSearchSelection", 1);
+                        next = previous >= 1 && previous <= 3 ? previous : 1;
+                    }
                 }
-                if (next != 0) {
-                    auto previous = Wh_GetIntValue(L"LastVisibleSearchMode", 1);
-                    next = previous >= 1 && previous <= 3 ? previous : 1;
+                bool changed = SetOption(option, next, setting.get());
+                if (!changed && option.search && next > 1) {
+                    // Available search styles can change with Windows/build or
+                    // layout. Fall back to the first visible choice if needed.
+                    changed = SetOption(option, 1, setting.get());
                 }
-            }
-            if (!SetOption(option, next)) {
-                toggle.IsChecked(current != 0);
-            }
-        });
+                if (!changed) {
+                    toggle.IsChecked(current != 0);
+                }
+            });
+        } catch (...) {
+            Wh_Log(L"%s setting unavailable", option.text);
+        }
         itemsMenu.Items().Append(toggle);
     }
     MenuFlyoutItemBaseVector_Append_Original(vectorThis, itemsMenu);
+
+    wuxc::MenuFlyoutSeparator separator;
+    separator.Name(kSeparatorName);
     MenuFlyoutItemBaseVector_Append_Original(vectorThis, separator);
-    Wh_Log(L"Injected Move taskbar submenu; current edge=%lu", currentEdge);
+    Wh_Log(L"Injected taskbar menu controls");
 }
 
 void __cdecl MenuFlyoutItemBaseVector_Append_Hook(
     void* pThis,
     wuxc::MenuFlyoutItemBase const& item) {
-    if (g_taskbarSettingsMenuDepth > 0 && !g_currentMenuInjected) {
+    if (!g_unloading && g_taskbarSettingsMenuDepth > 0 && !g_currentMenuInjected) {
         try {
-            if (!IsSeparator(item) &&
-                !IsNamedItem(item, kItemName) &&
-                !IsNamedItem(item, kSeparatorName)) {
+            if (!IsSeparator(item)) {
                 AppendInjectedItems(pThis);
             }
         } catch (...) {
@@ -527,7 +652,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
 void HandleLoadedModuleIfTaskbarView(HMODULE module,
                                      LPCWSTR loadedFileName,
                                      bool applyHookOperations) {
-    if (!module || g_taskbarViewModuleHooked) {
+    if (g_unloading || !module || g_taskbarViewModuleHooked) {
         return;
     }
 
@@ -569,11 +694,14 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
 
-    DWORD build = GetWindowsBuild();
-    if (build && build < 22000) {
-        Wh_Log(L"Skipping injection: unsupported build %lu", build);
-        return TRUE;
+    g_revokeMessage = RegisterWindowMessageW(L"Windhawk.TaskbarMove.RevokeClicks");
+    if (!g_revokeMessage) {
+        return FALSE;
     }
+
+    // Log the version for diagnostics; actual support is determined by the
+    // menu symbols and each native setting's availability, not a build guess.
+    GetWindowsBuild();
 
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
         g_taskbarViewModuleHooked = true;
@@ -623,7 +751,13 @@ void Wh_ModAfterInit() {
     }
 }
 
+void Wh_ModBeforeUninit() {
+    g_unloading = true;
+    RevokeAllClicks();
+}
+
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
 }
+
 
