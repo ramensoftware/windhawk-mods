@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.10.41
+// @version         0.10.43
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -487,6 +487,7 @@ std::array<PopupSeekLayerMotion,
 std::atomic_bool g_unloading = false;
 std::atomic_bool g_modActive = false;
 std::atomic_bool g_mediaThreadRunning = false;
+std::atomic_bool g_mediaThreadStartFailed = false;
 [[clang::no_destroy]] std::optional<std::thread> g_mediaThread;
 std::mutex g_mediaCommandMutex;
 std::condition_variable g_mediaCommandCv;
@@ -1932,7 +1933,8 @@ HWND FindCurrentProcessTaskbarWnd() {
 bool RunFromWindowThread(HWND hwnd,
                          WindowThreadProc proc,
                          void* param,
-                         bool* callbackInvoked = nullptr) {
+                         bool* callbackInvoked = nullptr,
+                         UINT probeTimeoutMs = 200) {
     static const UINT msg = RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
     struct Payload {
         WindowThreadProc proc;
@@ -1965,9 +1967,12 @@ bool RunFromWindowThread(HWND hwnd,
 
     // Probe responsiveness before installing the hook. The probe carries no
     // pointer, so a timeout can't leave caller-owned memory queued elsewhere.
-    if (!SendMessageTimeoutW(hwnd, WM_NULL, 0, 0,
+    // Critical teardown/settings calls can opt into the fully synchronous path
+    // by passing zero, while routine media refreshes keep the short guard.
+    if (probeTimeoutMs != 0 &&
+        !SendMessageTimeoutW(hwnd, WM_NULL, 0, 0,
                              SMTO_ABORTIFHUNG | SMTO_BLOCK,
-                             200, nullptr)) {
+                             probeTimeoutMs, nullptr)) {
         Wh_Log(L"Island: taskbar thread is unresponsive");
         return false;
     }
@@ -9453,12 +9458,31 @@ void OnCompactTextRendering(winrt::Windows::Foundation::IInspectable const&,
             g_compactAlbumArtFade.Opacity(1.0 - artIn);
         }
         double transportWashOpacity = DynamicTransportWashOpacity();
+        bool hasOutgoingTransportWash =
+            g_dynamicTransportWashFade &&
+            g_dynamicTransportWashFade.Source() != nullptr;
+        double incomingWashOpacity =
+            transportWashOpacity *
+            (hasOutgoingTransportWash ? artIn : 1.0);
         if (g_dynamicTransportWash) {
-            g_dynamicTransportWash.Opacity(transportWashOpacity * artIn);
+            // Without an outgoing wash there is nothing to crossfade from.
+            // Keep the new source visible so the dark base never flashes.
+            g_dynamicTransportWash.Opacity(incomingWashOpacity);
         }
         if (g_dynamicTransportWashFade) {
+            // These images are composited with Source-over and the target wash
+            // is intentionally translucent. A simple A*t / A*(1-t) blend
+            // reduces total coverage at the midpoint and exposes the dark base.
+            // Solve oldAlpha from A = newAlpha + oldAlpha*(1-newAlpha) so the
+            // perceived background strength stays constant throughout.
+            double outgoingWashOpacity = 0.0;
+            if (hasOutgoingTransportWash) {
+                outgoingWashOpacity =
+                    (transportWashOpacity - incomingWashOpacity) /
+                    std::max(0.001, 1.0 - incomingWashOpacity);
+            }
             g_dynamicTransportWashFade.Opacity(
-                transportWashOpacity * (1.0 - artIn));
+                Clamp(outgoingWashOpacity, 0.0, transportWashOpacity));
         }
 
         if (g_compactTextProgress >= 1.0) {
@@ -9528,14 +9552,18 @@ void StartCompactTrackTransition(std::wstring const& oldTitle,
         if (g_compactAlbumArtFade) {
             g_compactAlbumArtFade.Opacity(g_compactAlbumArtFade.Source() != nullptr ? 1.0 : 0.0);
         }
+        bool hasOutgoingTransportWash =
+            g_dynamicTransportWashFade &&
+            g_dynamicTransportWashFade.Source() != nullptr;
         if (g_dynamicTransportWash) {
-            g_dynamicTransportWash.Opacity(0.0);
+            g_dynamicTransportWash.Opacity(
+                hasOutgoingTransportWash ? 0.0
+                                         : DynamicTransportWashOpacity());
         }
         if (g_dynamicTransportWashFade) {
             g_dynamicTransportWashFade.Opacity(
-                g_dynamicTransportWashFade.Source() != nullptr
-                    ? DynamicTransportWashOpacity()
-                    : 0.0);
+                hasOutgoingTransportWash ? DynamicTransportWashOpacity()
+                                         : 0.0);
         }
     } else {
         if (g_compactAlbumArtImage) g_compactAlbumArtImage.Opacity(1.0);
@@ -14753,6 +14781,7 @@ void MediaThreadProc() {
         apartmentInitialized = true;
     } catch (...) {
         Wh_Log(L"Island: failed to initialize media thread apartment");
+        g_mediaThreadStartFailed = true;
         g_mediaThreadRunning = false;
         return;
     }
@@ -14844,28 +14873,72 @@ void MediaThreadProc() {
         }
     };
 
-    try {
-        manager = RequestMediaManagerWithTimeout(std::chrono::seconds(3));
+    bool sessionsChangedSubscribed = false;
+    bool currentSessionChangedSubscribed = false;
+
+    auto clearManagerEvents = [&] {
+        clearSessionEvents();
         if (manager) {
+            if (sessionsChangedSubscribed) {
+                try {
+                    manager.SessionsChanged(sessionsChangedToken);
+                } catch (...) {
+                }
+            }
+            if (currentSessionChangedSubscribed) {
+                try {
+                    manager.CurrentSessionChanged(currentSessionChangedToken);
+                } catch (...) {
+                }
+            }
+        }
+        sessionsChangedSubscribed = false;
+        currentSessionChangedSubscribed = false;
+        manager = nullptr;
+    };
+
+    auto tryConnectManager = [&](std::chrono::milliseconds timeout) {
+        clearManagerEvents();
+        try {
+            manager = RequestMediaManagerWithTimeout(timeout);
+            if (!manager) {
+                return false;
+            }
             sessionsChangedToken = manager.SessionsChanged(
                 [&](auto const&, auto const&) {
                     sessionListChanged = true;
                     RequestMediaRefresh();
                 });
+            sessionsChangedSubscribed = true;
             currentSessionChangedToken = manager.CurrentSessionChanged(
                 [](auto const&, auto const&) { RequestMediaRefresh(); });
+            currentSessionChangedSubscribed = true;
             subscribeAllSessionEvents();
             sessionListChanged = false;
+            return true;
+        } catch (...) {
+            clearManagerEvents();
+            return false;
         }
-    } catch (...) {
-        manager = nullptr;
-    }
+    };
 
+    tryConnectManager(std::chrono::seconds(3));
+    auto lastManagerAttempt = std::chrono::steady_clock::now();
     auto lastFallbackPoll = std::chrono::steady_clock::time_point{};
     HWND mediaTaskbarWnd = nullptr;
     g_mediaRefreshRequested = true;
 
     while (g_mediaThreadRunning) {
+        auto now = std::chrono::steady_clock::now();
+        if (!manager &&
+            now - lastManagerAttempt >= std::chrono::seconds(5)) {
+            lastManagerAttempt = now;
+            if (tryConnectManager(std::chrono::seconds(2))) {
+                g_mediaRefreshRequested = true;
+            }
+            now = std::chrono::steady_clock::now();
+        }
+
         std::deque<MediaCommand> commands;
         {
             std::lock_guard lock(g_mediaCommandMutex);
@@ -14888,7 +14961,6 @@ void MediaThreadProc() {
             g_mediaRefreshRequested = true;
         }
 
-        auto now = std::chrono::steady_clock::now();
         bool fallbackPollDue =
             lastFallbackPoll.time_since_epoch().count() == 0 ||
             now - lastFallbackPoll >= std::chrono::seconds(30);
@@ -14936,6 +15008,15 @@ void MediaThreadProc() {
         }
 
         auto navigationWait = PendingNavigationValidationWait();
+        if (!manager) {
+            auto retryNow = std::chrono::steady_clock::now();
+            auto retryAt = lastManagerAttempt + std::chrono::seconds(5);
+            auto managerWait = retryAt <= retryNow
+                ? std::chrono::milliseconds(1)
+                : std::chrono::duration_cast<std::chrono::milliseconds>(
+                      retryAt - retryNow);
+            navigationWait = std::min(navigationWait, managerWait);
+        }
         std::unique_lock lock(g_mediaCommandMutex);
         g_mediaCommandCv.wait_for(
             lock, navigationWait, [] {
@@ -14944,14 +15025,7 @@ void MediaThreadProc() {
             });
     }
 
-    clearSessionEvents();
-    try {
-        if (manager) {
-            manager.SessionsChanged(sessionsChangedToken);
-            manager.CurrentSessionChanged(currentSessionChangedToken);
-        }
-    } catch (...) {
-    }
+    clearManagerEvents();
 
     // Release the GSMTC manager before tearing down the WinRT apartment. Keeping
     // the WinRT/COM object alive across winrt::uninit_apartment() can leave its
@@ -14965,15 +15039,33 @@ void MediaThreadProc() {
 }
 
 void StartMediaThread() {
-    // The worker is created only for a process that owns the taskbar. Serialize
-    // the thread object with teardown, but never wait while holding this mutex.
+    // A failed WinRT apartment initialization leaves a completed std::thread in
+    // the optional. Reap it outside the mutex so a later taskbar start can retry.
+    std::optional<std::thread> failedThread;
+    {
+        std::lock_guard lock(g_mediaCommandMutex);
+        if (g_unloading.load()) {
+            return;
+        }
+        if (g_mediaThread) {
+            if (g_mediaThreadRunning.load() ||
+                !g_mediaThreadStartFailed.load()) {
+                return;
+            }
+            failedThread.emplace(std::move(*g_mediaThread));
+            g_mediaThread.reset();
+        }
+    }
+    if (failedThread && failedThread->joinable()) {
+        failedThread->join();
+    }
+
     std::lock_guard lock(g_mediaCommandMutex);
-    if (g_unloading.load() || g_mediaThread) {
+    if (g_unloading.load() || g_mediaThread ||
+        g_mediaThreadRunning.exchange(true)) {
         return;
     }
-    if (g_mediaThreadRunning.exchange(true)) {
-        return;
-    }
+    g_mediaThreadStartFailed = false;
     try {
         g_mediaThread.emplace(MediaThreadProc);
     } catch (...) {
@@ -15001,6 +15093,7 @@ void StopMediaThread() {
     {
         std::lock_guard lock(g_mediaCommandMutex);
         g_mediaCommands.clear();
+        g_mediaThreadStartFailed = false;
     }
     {
         std::lock_guard lock(g_mediaMutex);
@@ -16877,16 +16970,15 @@ void UpdatePlayerContents() {
     if (g_dynamicTransportWash &&
         (compactArtChanged ||
          (compactArtHash && g_dynamicTransportWash.Source() == nullptr))) {
+        auto oldWashSource = g_dynamicTransportWash.Source();
         bool canAnimateTransportWash =
-            compactWasInitialized && !g_expanded && !g_unloading;
+            compactArtChanged && compactWasInitialized && !g_expanded &&
+            !g_unloading && oldWashSource != nullptr;
         try {
             if (canAnimateTransportWash && g_dynamicTransportWashFade) {
-                auto oldWashSource = g_dynamicTransportWash.Source();
                 g_dynamicTransportWashFade.Source(oldWashSource);
                 g_dynamicTransportWashFade.Opacity(
-                    oldWashSource != nullptr
-                        ? DynamicTransportWashOpacity()
-                        : 0.0);
+                    DynamicTransportWashOpacity());
             } else if (g_dynamicTransportWashFade) {
                 g_dynamicTransportWashFade.Source(nullptr);
                 g_dynamicTransportWashFade.Opacity(0.0);
@@ -16903,7 +16995,9 @@ void UpdatePlayerContents() {
                 canAnimateTransportWash ? 0.0
                                         : DynamicTransportWashOpacity());
         } catch (...) {
-            g_dynamicTransportWash.Source(nullptr);
+            // A failed replacement must not expose the dark transport base.
+            // Restore the last fully decoded wash and end the crossfade.
+            g_dynamicTransportWash.Source(oldWashSource);
             g_dynamicTransportWash.Opacity(DynamicTransportWashOpacity());
             if (g_dynamicTransportWashFade) {
                 g_dynamicTransportWashFade.Source(nullptr);
@@ -17538,15 +17632,25 @@ void ApplySettingsOnTaskbarThread() {
     if (!IsModActive()) {
         return;
     }
-    if (!g_taskbarWnd || !IsWindow(g_taskbarWnd)) {
-        g_taskbarWnd = FindCurrentProcessTaskbarWnd();
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        if (!g_taskbarWnd || !IsWindow(g_taskbarWnd)) {
+            g_taskbarWnd = FindCurrentProcessTaskbarWnd();
+        }
+        if (g_taskbarWnd &&
+            RunFromWindowThread(
+                g_taskbarWnd,
+                [](void*) { ApplyPendingSettingsAndInject(); },
+                nullptr,
+                nullptr,
+                attempt == 2 ? 0 : 200)) {
+            return;
+        }
+        if (attempt < 2) {
+            g_taskbarWnd = nullptr;
+            Sleep(25);
+        }
     }
-    if (g_taskbarWnd) {
-        RunFromWindowThread(
-            g_taskbarWnd,
-            [](void*) { ApplyPendingSettingsAndInject(); },
-            nullptr);
-    }
+    Wh_Log(L"Island: settings update could not be dispatched");
 }
 
 void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
@@ -17665,7 +17769,8 @@ void Wh_ModUninit() {
                     candidate,
                     [](void*) { RemoveIslandGrid(); },
                     nullptr,
-                    &callbackInvoked)) {
+                    &callbackInvoked,
+                    0)) {
                 teardownSucceeded = true;
                 break;
             }
