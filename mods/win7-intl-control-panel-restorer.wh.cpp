@@ -22,7 +22,6 @@ This mod restores the classic Windows 7 "Region and Language" Control Panel page
 ## Screenshot 
 
 ![region.PNG](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/region.PNG)
--- 
 
 ## Functionality
 
@@ -35,7 +34,7 @@ This mod restores the classic Windows 7 "Region and Language" Control Panel page
 
 ## Requirements
 
-- 64-bit Windows 10 or Windows 11 (ARM64 is not supported).
+- 64-bit Windows 10 or Windows 11 (ARM64 and Windows Server are not supported).
 - On first use, the original Windows 7 component (intl.cpl) is downloaded automatically from Microsoft and checked before use. An Internet connection is needed only for this step.
 
 ---
@@ -54,7 +53,7 @@ The mod includes a series of settings:
 - AdministratoX tested the mod on Windows 11 25H2.
 - Some Windows 7 features no longer exist on modern Windows. In those cases the closest modern equivalent is opened instead (for example, the "Default location" link opens the Location privacy page).
 - Settings that were already applied are kept after the mod is disabled.
-- Windows systems file **are not modified** and the modern intl.cpl is used as a fallback.
+- Windows system files **are not modified** and the modern intl.cpl is used as a fallback.
 
 ---
 
@@ -121,7 +120,7 @@ While the mod is active, the restored page can also be opened directly:
 // ============================================================================
 // Provenance: the pinned Win7 binaries (intl.cpl, input.dll) and their
 // SHA-256 hashes, download URLs, PE-contract values, and version numbers
-// are documented in the mod README (==WindhawkModReadme==). Call-site
+// are verified by the mod implementation below. Call-site
 // evidence for each override is cited at the Private*/Shim* function.
 // ============================================================================
 
@@ -135,7 +134,7 @@ While the mod is active, the restored page can also be opened directly:
 #define NOMINMAX
 #endif
 #include <windows.h>
-#include <winternl.h>
+#include <new>
 #include <cpl.h>
 #include <commctrl.h>
 #include <shellapi.h>
@@ -160,10 +159,6 @@ While the mod is active, the restored page can also be opened directly:
 #if !defined(__x86_64__) && !defined(_M_X64)
 #error Only native AMD64 is supported.
 #endif
-#ifndef __clang__
-#error Compile this Windhawk mod with its Clang compiler ([[clang::musttail]] is used).
-#endif
-
 namespace IntlRestore {
 // DPI awareness is applied per UI thread, never process-wide. This avoids
 // changing Explorer's global DPI policy while ensuring restored dialogs use the
@@ -188,8 +183,6 @@ struct DpiScope {
     DpiScope& operator=(const DpiScope&) = delete;
 };
 
-// BEGIN PORTABLE_SELECTOR
-// Kept platform-independent so the exact selector can be unit-tested on Linux.
 enum class Host { Control, Rundll32, Explorer, Other };
 wchar_t Fold(wchar_t c) { return c >= L'A' && c <= L'Z' ? c + (L'a' - L'A') : c; }
 bool Equal(const std::wstring& a, const std::wstring& b) {
@@ -237,8 +230,6 @@ bool SelectedLaunch(Host host, const std::vector<std::wstring>& argv,
     }
     return false;
 }
-// END PORTABLE_SELECTOR
-
 using CplProc = LONG(CALLBACK*)(HWND, UINT, LPARAM, LPARAM);
 using EntryProc = BOOL(WINAPI*)(HINSTANCE, DWORD, LPVOID);
 using PSProc = INT_PTR(WINAPI*)(LPCPROPSHEETHEADERW);
@@ -399,10 +390,10 @@ HANDLE WINAPI PrivateCreateThread(LPSECURITY_ATTRIBUTES, SIZE_T, LPTHREAD_START_
 BOOL WINAPI PrivateSHCreateThread(LPTHREAD_START_ROUTINE, void*, DWORD, LPTHREAD_START_ROUTINE);
 BOOL WINAPI PrivateShellExecuteExW(SHELLEXECUTEINFOW*);
 BOOL WINAPI PrivateDisableThreadLibraryCalls(HMODULE);
-void WaitForJobs(bool pumpMessages = false);
+void WaitForJobs();
 
 bool Fail(PCWSTR stage, DWORD error = GetLastError()) {
-    Wh_Log(L"[IntlRestore] ERROR: %s; Win32=%lu (0x%08lX)", stage, error, error);
+    Wh_Log(L"ERROR: %s; Win32=%lu (0x%08lX)", stage, error, error);
     SetLastError(error);
     return false;
 }
@@ -410,12 +401,18 @@ bool Range(size_t offset, size_t length, size_t total) {
     return offset <= total && length <= total - offset;
 }
 std::wstring FullPath(const std::wstring& input) {
-    wchar_t expanded[32768];
-    DWORD n = ExpandEnvironmentStringsW(input.c_str(), expanded, ARRAYSIZE(expanded));
-    if (!n || n > ARRAYSIZE(expanded)) return {};
-    wchar_t full[32768];
-    n = GetFullPathNameW(expanded, ARRAYSIZE(full), full, nullptr);
-    if (!n || n >= ARRAYSIZE(full)) return {};
+    DWORD n = ExpandEnvironmentStringsW(input.c_str(), nullptr, 0);
+    if (!n) return {};
+    std::wstring expanded(n, L'\0');
+    n = ExpandEnvironmentStringsW(input.c_str(), &expanded[0], n);
+    if (!n) return {};
+    expanded.resize(n - 1);
+    DWORD fullLen = GetFullPathNameW(expanded.c_str(), 0, nullptr, nullptr);
+    if (!fullLen) return {};
+    std::wstring full(fullLen, L'\0');
+    fullLen = GetFullPathNameW(expanded.c_str(), fullLen, &full[0], nullptr);
+    if (!fullLen) return {};
+    full.resize(fullLen);
     return Slashes(full);
 }
 bool LocalAbsolute(const std::wstring& s) {
@@ -455,7 +452,7 @@ std::wstring Hash(const std::vector<BYTE>& data) {
         BCryptCloseAlgorithmProvider(algorithm, 0);
     }
     if (status < 0) {
-        Wh_Log(L"[IntlRestore] SHA256 NTSTATUS=0x%08lX", static_cast<ULONG>(status)); return {};
+        Wh_Log(L"SHA256 NTSTATUS=0x%08lX", static_cast<ULONG>(status)); return {};
     }
     constexpr wchar_t hex[] = L"0123456789abcdef";
     std::wstring result(64, L'0');
@@ -486,7 +483,7 @@ bool Download(PCWSTR url, std::vector<BYTE>& bytes) {
     DWORD status = 0, size = sizeof(status);
     if (!WinHttpQueryHeaders(request.value, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
                             WINHTTP_HEADER_NAME_BY_INDEX, &status, &size, WINHTTP_NO_HEADER_INDEX) || status != 200) {
-        Wh_Log(L"[IntlRestore] Download HTTP=%lu", status); SetLastError(ERROR_BAD_NET_RESP); return false;
+        Wh_Log(L"Download HTTP=%lu", status); SetLastError(ERROR_BAD_NET_RESP); return false;
     }
     bytes.clear();
     BYTE chunk[16384];
@@ -540,11 +537,11 @@ bool EnsurePinned(PCWSTR relative, PCWSTR expected, DWORD expectedSize, PCWSTR u
         if (OpenRead(dest, f) && f.bytes.size() == expectedSize && Hash(f.bytes) == expected) return true;
         if (!f.bytes.empty()) DeleteFileW(dest.c_str()); // Corrupt cache entry: never execute.
     }
-    Wh_Log(L"[IntlRestore] Fetching original Microsoft payload: %s", url);
+    Wh_Log(L"Fetching original Microsoft payload: %s", url);
     std::vector<BYTE> data;
     if (!Download(url, data)) return Fail(L"Download original payload");
     if (data.size() != expectedSize || Hash(data) != expected) {
-        Wh_Log(L"[IntlRestore] Downloaded payload failed size/digest check; not executing it");
+        Wh_Log(L"Downloaded payload failed size/digest check; not executing it");
         return Fail(L"Downloaded payload verification failed", ERROR_CRC);
     }
     if (!WriteAtomic(dest, data)) {
@@ -566,7 +563,7 @@ FARPROC ForwardKernelBase(LPCSTR name) {
     try {
         HMODULE kb = GetModuleHandleW(L"kernelbase.dll");
         FARPROC proc = kb ? GetProcAddress(kb, name) : nullptr;
-        if (!proc) Wh_Log(L"[IntlRestore] kernelbase.dll!%S missing on this build", name);
+        if (!proc) Wh_Log(L"kernelbase.dll!%S missing on this build", name);
         return proc;
 
     } catch (...) {
@@ -716,7 +713,7 @@ struct PEView {
             for (unsigned index : {IMAGE_DIRECTORY_ENTRY_TLS, IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG,
                                    IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT, IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR}) {
                 if (nt->OptionalHeader.DataDirectory[index].VirtualAddress || nt->OptionalHeader.DataDirectory[index].Size) {
-                    Wh_Log(L"[IntlRestore] Unsupported directory %u; no partial/guessed initialization", index); return false;
+                    Wh_Log(L"Unsupported directory %u; no partial/guessed initialization", index); return false;
                 }
             }
         }
@@ -743,7 +740,7 @@ HMODULE SystemDependency(const char* name) {
     for (const auto& d : g_deps) if (d.name == key) return d.module;
     std::wstring wide(key.begin(), key.end());
     HMODULE m = LoadLibraryExW(wide.c_str(), nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!m) { Wh_Log(L"[IntlRestore] Dependency load FAILED: %S, Win32=%lu", name, GetLastError()); return nullptr; }
+    if (!m) { Wh_Log(L"Dependency load FAILED: %S, Win32=%lu", name, GetLastError()); return nullptr; }
     g_deps.push_back({key, m});
     return m;
 }
@@ -777,8 +774,8 @@ bool BindImports(Image& image, bool compatibility) {
             FARPROC target = compatibility ? ResolvePrivate(module, dll, proc) : GetProcAddress(module, proc);
             if (!target) {
                 if (reinterpret_cast<ULONG_PTR>(proc) <= 0xffff)
-                    Wh_Log(L"[IntlRestore] Missing import: %S ordinal #%u", dll, LOWORD(proc));
-                else Wh_Log(L"[IntlRestore] Missing import: %S!%S; no arbitrary stub is provided", dll, proc);
+                    Wh_Log(L"Missing import: %S ordinal #%u", dll, LOWORD(proc));
+                else Wh_Log(L"Missing import: %S!%S; no arbitrary stub is provided", dll, proc);
                 SetLastError(ERROR_PROC_NOT_FOUND); return false;
             }
             *reinterpret_cast<ULONGLONG*>(image.base + write) = reinterpret_cast<ULONGLONG>(target);
@@ -957,12 +954,12 @@ LONG CALLBACK CrashHandler(EXCEPTION_POINTERS* info) {
         const LONG crashNo = g_crashCount.fetch_add(1, std::memory_order_relaxed) + 1;
         LastErrorScope keep;
         
-        Wh_Log(L"[IntlRestore] [AV2007] Exception #%ld: 0x%08lX (%s) at %p - disabling legacy mod",
+        Wh_Log(L"[AV2007] Exception #%ld: 0x%08lX (%s) at %p - disabling legacy mod",
                crashNo, code, ExceptionCodeName(code), addr);
         
         // AV detail logging
         if (code == 0xC0000005 && guard->infoCount >= 2) {
-            Wh_Log(L"[IntlRestore] [AV2007] Access violation: %s 0x%p", 
+            Wh_Log(L"[AV2007] Access violation: %s 0x%p", 
                    guard->info0 ? L"write to" : L"read from",
                    reinterpret_cast<void*>(guard->info1));
         }
@@ -1003,7 +1000,7 @@ LONG CALLBACK FatalWatch(EXCEPTION_POINTERS* info) {
                                                          // fault again on these
         }
         g_watchBusy = true;
-        Wh_Log(L"[IntlRestore] First-chance %s (0x%08lX) at %p during armed legacy call; continuing search",
+        Wh_Log(L"First-chance %s (0x%08lX) at %p during armed legacy call; continuing search",
                ExceptionCodeName(code), code, info->ExceptionRecord->ExceptionAddress);
         g_watchBusy = false;
     } catch (...) { g_watchBusy = false; }
@@ -1055,23 +1052,23 @@ bool GuardCall(Fn&& fn, DWORD& exception) {
         LastErrorScope keep; // diagnostics must not clobber the legacy error
         void* addr = guard.address;
         const BYTE* fault = static_cast<const BYTE*>(addr);
-        Wh_Log(L"[IntlRestore] Legacy crash #%ld: %s (0x%08lX) at %p", crashNo,
+        Wh_Log(L"Legacy crash #%ld: %s (0x%08lX) at %p", crashNo,
                ExceptionCodeName(exception), exception, addr);
         bool inImage = g_image.base && fault >= g_image.base && fault < g_image.base + g_image.size;
         if (inImage) {
-            Wh_Log(L"[IntlRestore] Fault inside private image: RVA 0x%X",
+            Wh_Log(L"Fault inside private image: RVA 0x%X",
                    static_cast<unsigned>(fault - g_image.base));
         } else {
             DWORD rva = 0;
             if (InLoadedModule(g_inputModule, fault, rva))
-                Wh_Log(L"[IntlRestore] Fault inside private input.dll: RVA 0x%X", rva);
+                Wh_Log(L"Fault inside private input.dll: RVA 0x%X", rva);
             else if (InLoadedModule(GetModuleHandleW(nullptr), fault, rva))
-                Wh_Log(L"[IntlRestore] Fault inside host executable: RVA 0x%X", rva);
+                Wh_Log(L"Fault inside host executable: RVA 0x%X", rva);
             else
-                Wh_Log(L"[IntlRestore] Fault inside system code");
+                Wh_Log(L"Fault inside system code");
         }
         if (exception == 0xC0000005 /*STATUS_ACCESS_VIOLATION*/ && guard.infoCount >= 2)
-            Wh_Log(L"[IntlRestore] AV detail: %s address %p", guard.info0 ? L"write to" : L"read from",
+            Wh_Log(L"AV detail: %s address %p", guard.info0 ? L"write to" : L"read from",
                    reinterpret_cast<void*>(guard.info1));
         ok = false;
     }
@@ -1143,7 +1140,7 @@ bool FallbackRemove(void* p) {
 }
 void FallbackLog(bool ok) {
     if (InterlockedIncrement(&g_fallbackLogged) <= 4)
-        Wh_Log(L"[IntlRestore] System CRT allocation failed; process-heap fallback %s (real memory, tracked)",
+        Wh_Log(L"System CRT allocation failed; process-heap fallback %s (real memory, tracked)",
                ok ? L"served" : L"FAILED");
 }
 void* PrivateMalloc(size_t size) {
@@ -1208,8 +1205,7 @@ void* PrivateRealloc(void* p, size_t size) {
 }
 void* PrivateNew(size_t size) {
     if (g_realNew) {
-        try { return g_realNew(size); }
-        catch (const std::bad_alloc&) {} // MSVC matches cross-CRT by type name
+        if (void* p = g_realNew(size)) return p;
     }
     void* f = HeapAlloc(GetProcessHeap(), 0, size ? size : 1);
     if (f && FallbackAdd(f)) return f;
@@ -1400,7 +1396,7 @@ FARPROC VersionSpoof(LPCSTR name) {
     try {     // called only after IsVersionQuery(name)
         auto asProc = [](auto* p) { return reinterpret_cast<FARPROC>(reinterpret_cast<void*>(p)); };
         if (InterlockedIncrement(&g_versionLogged) <= 6)
-            Wh_Log(L"[IntlRestore] Dynamic version query %S answered as Windows 7 SP1", name);
+            Wh_Log(L"Dynamic version query %S answered as Windows 7 SP1", name);
         if (!strcmp(name, "RtlGetVersion")) return asProc(PrivateRtlGetVersion);
         if (!strcmp(name, "GetVersionExW")) return asProc(PrivateGetVersionExW);
         if (!strcmp(name, "GetVersionExA")) return asProc(PrivateGetVersionExA);
@@ -1413,52 +1409,6 @@ FARPROC VersionSpoof(LPCSTR name) {
         return nullptr;
     }
 }
-// One-shot attach diagnostics: proves what the malloc slot was bound to and
-// whether the system CRT heap answers at all. Read-only; never fails closed.
-void DiagnoseCrtHeap() {
-    HMODULE msvcrt = GetModuleHandleW(L"msvcrt.dll");
-    FARPROC realMalloc = msvcrt ? GetProcAddress(msvcrt, "malloc") : nullptr;
-    FARPROC slotValue = nullptr;
-    if (g_image.base) {
-        auto* nt = ImageHeaders(g_image.base);
-        auto dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
-        for (size_t off = 0; off + sizeof(IMAGE_IMPORT_DESCRIPTOR) <= dir.Size; off += sizeof(IMAGE_IMPORT_DESCRIPTOR)) {
-            auto* desc = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(g_image.base + dir.VirtualAddress + off);
-            if (!desc->Name) break;
-            const char* dll = ImageString(g_image.base, g_image.size, desc->Name);
-            if (!dll || LowerDll(dll) != "msvcrt.dll" || !desc->OriginalFirstThunk) continue;
-            for (DWORD i = 0; ; ++i) {
-                size_t read = static_cast<size_t>(desc->OriginalFirstThunk) + i * 8;
-                size_t write = static_cast<size_t>(desc->FirstThunk) + i * 8;
-                if (!Range(read, 8, g_image.size) || !Range(write, 8, g_image.size)) break;
-                ULONGLONG v = *reinterpret_cast<ULONGLONG*>(g_image.base + read);
-                if (!v) break;
-                if (IMAGE_SNAP_BY_ORDINAL64(v) || v > MAXDWORD - 2) continue;
-                const char* name = ImageString(g_image.base, g_image.size, static_cast<DWORD>(v) + 2);
-                if (name && !strcmp(name, "malloc")) {
-                    slotValue = reinterpret_cast<FARPROC>(*reinterpret_cast<ULONG_PTR*>(g_image.base + write));
-                    break;
-                }
-            }
-            break;
-        }
-    }
-    void* probe = nullptr;
-    if (realMalloc)
-        probe = reinterpret_cast<MallocFn>(reinterpret_cast<void*>(realMalloc))(0x100);
-    void* heapProbe = HeapAlloc(GetProcessHeap(), 0, 0x100);
-    auto* ourMalloc = reinterpret_cast<FARPROC>(reinterpret_cast<void*>(PrivateMalloc));
-    Wh_Log(L"[IntlRestore] CRT probe: msvcrt=%p realMalloc=%p slot=%p override=%s probe=%p heapProbe=%p",
-           msvcrt, reinterpret_cast<void*>(realMalloc), reinterpret_cast<void*>(slotValue),
-           slotValue == ourMalloc ? L"installed" : L"MISSING", probe, heapProbe);
-    if (probe) {
-        FARPROC realFree = msvcrt ? GetProcAddress(msvcrt, "free") : nullptr;
-        if (realFree) reinterpret_cast<FreeFn>(reinterpret_cast<void*>(realFree))(probe);
-        // else: leak 256 bytes once rather than cross-free into another heap.
-    }
-    if (heapProbe) HeapFree(GetProcessHeap(), 0, heapProbe);
-}
-// ===== BEGIN GENERATED RESOURCE TABLES =====
 
 struct EmbString { UINT id; const wchar_t* text; };
 static const EmbString kEmbStrings[] = {
@@ -1776,7 +1726,6 @@ static const EmbDlg kEmbDialogs[] = {
     {800, 0x00000000, 0x00000000, 0x80c800cc, 0, 0, 252, 100, L"Region and Language Settings", 9, 0, 0, 0, L"Segoe UI", 6, kDlg800Ctl, 724, 0x65721653},
     {0},
 };
-// ===== END GENERATED RESOURCE TABLES =====
 static const short kDlg101CtlPhr[] = {-1,-1,84,0,1,-1,2,-1,3,-1,4,-1,5,-1,85,6,7,-1,8,-1,9,-1,10,-1,11,86};
 static const short kDlg102CtlPhr[] = {12,13,14,87,15,16,17,18,19,20,-1,21,22,-1,23,24,-1,88};
 static const short kDlg104CtlPhr[] = {25,26,27,89,28,29,30,31,32,90};
@@ -2146,15 +2095,15 @@ int ResolveSelectedLanguage() {
     for (auto& c : value) c = Fold(c);
     if (value.empty() || value == L"auto" || value == L"system") {
         int autoLang = AutoLanguage();
-        Wh_Log(L"[IntlRestore] UI language: auto -> %s (%s)", kLangTags[autoLang], kLangNames[autoLang]);
+        Wh_Log(L"UI language: auto -> %s (%s)", kLangTags[autoLang], kLangNames[autoLang]);
         return autoLang;
     }
     int forced = TagLanguage(value);
     if (forced < 0) {
-        Wh_Log(L"[IntlRestore] Unknown language setting '%s'; using Automatic", value.c_str());
+        Wh_Log(L"Unknown language setting '%s'; using Automatic", value.c_str());
         forced = AutoLanguage();
     }
-    Wh_Log(L"[IntlRestore] UI language: %s (%s)", kLangTags[forced], kLangNames[forced]);
+    Wh_Log(L"UI language: %s (%s)", kLangTags[forced], kLangNames[forced]);
     return forced;
 }
 // ================= ITALIANO (it-IT) =================
@@ -6546,7 +6495,7 @@ bool BuildEmbeddedResources() {
         if (g_lang == LangEN) {
             if (g_blobStore[g_blobCount].size() != d->expectSize ||
                 Fnv1a(g_blobStore[g_blobCount]) != d->expectFnv) {
-                Wh_Log(L"[IntlRestore] Dialog %u rebuild mismatch: not serving a corrupt template", d->id);
+                Wh_Log(L"Dialog %u rebuild mismatch: not serving a corrupt template", d->id);
                 return Fail(L"Dialog template verification failed", ERROR_CRC);
             }
         } else if (g_blobStore[g_blobCount].empty()) {
@@ -6561,7 +6510,7 @@ bool BuildEmbeddedResources() {
         if (!BuildStringBlock(b->block, g_blobStore[g_blobCount])) return Fail(L"Build string block", ERROR_BAD_FORMAT);
         if (g_lang == LangEN) {
             if (g_blobStore[g_blobCount].size() != b->size) {
-                Wh_Log(L"[IntlRestore] String block %u size mismatch", b->block);
+                Wh_Log(L"String block %u size mismatch", b->block);
                 return Fail(L"String block verification failed", ERROR_CRC);
             }
         } else if (g_blobStore[g_blobCount].empty()) {
@@ -6571,7 +6520,7 @@ bool BuildEmbeddedResources() {
         if (b->block < ARRAYSIZE(g_blobForStrBlock)) g_blobForStrBlock[b->block] = static_cast<int>(g_blobCount);
         ++g_blobCount;
     }
-    Wh_Log(L"[IntlRestore] Embedded resources ready: 11 dialogs + string blocks (%lu blobs) language=%s", g_blobCount, kLangTags[g_lang]);
+    Wh_Log(L"Embedded resources ready: 11 dialogs + string blocks (%lu blobs) language=%s", g_blobCount, kLangTags[g_lang]);
     return true;
 }
 const BYTE* EmbeddedDlgTemplate(WORD id, DWORD& size) {
@@ -6649,7 +6598,7 @@ bool BuildEmbeddedInputResources() {
             // resources (112/113/114: identical to the canonical EX rebuild).
             if (g_inpBlobStore[g_inpBlobCount].size() != d->expectSize ||
                 Fnv1a(g_inpBlobStore[g_inpBlobCount]) != d->expectFnv) {
-                Wh_Log(L"[IntlRestore] Input dialog %u rebuild mismatch: not serving a corrupt template", d->id);
+                Wh_Log(L"Input dialog %u rebuild mismatch: not serving a corrupt template", d->id);
                 return Fail(L"Input dialog template verification failed", ERROR_CRC);
             }
         } else if (g_inpBlobStore[g_inpBlobCount].empty()) {
@@ -6659,7 +6608,7 @@ bool BuildEmbeddedInputResources() {
         if (d->id < ARRAYSIZE(g_inpBlobForDialog)) g_inpBlobForDialog[d->id] = static_cast<int>(g_inpBlobCount);
         ++g_inpBlobCount;
     }
-    Wh_Log(L"[IntlRestore] Embedded input resources ready: 10 Text Services dialogs (%lu blobs) language=%s", g_inpBlobCount, kLangTags[g_lang]);
+    Wh_Log(L"Embedded input resources ready: 10 Text Services dialogs (%lu blobs) language=%s", g_inpBlobCount, kLangTags[g_lang]);
     return true;
 }
 const BYTE* EmbeddedInpDlgTemplate(WORD id, DWORD& size) {
@@ -6817,8 +6766,8 @@ HANDLE WINAPI PrivateCreateActCtxW(PCACTCTXW input) {
         fixed.lpSource = g_intlPath.c_str(); fixed.hModule = nullptr;
         HANDLE ctx = CreateActCtxW(&fixed);
         if (ctx && ctx != INVALID_HANDLE_VALUE)
-            Wh_Log(L"[IntlRestore] Private Win7 fusion context active: hActCtx=%p (manifest 123, pinned file)", ctx);
-        else Wh_Log(L"[IntlRestore] Private fusion context failed: Win32=%lu; pages fall back to host comctl32 v6", GetLastError());
+            Wh_Log(L"Private Win7 fusion context active: hActCtx=%p (manifest 123, pinned file)", ctx);
+        else Wh_Log(L"Private fusion context failed: Win32=%lu; pages fall back to host comctl32 v6", GetLastError());
         return ctx;
 
     } catch (...) {
@@ -6839,10 +6788,10 @@ HMODULE WINAPI PrivateLoadLibraryW(LPCWSTR name) {
         HMODULE input = LoadLibraryExW(g_inputPath.c_str(), nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         if (input != g_inputModule) {
             if (input) FreeLibrary(input);
-            Wh_Log(L"[IntlRestore] Private input.dll identity mismatch");
+            Wh_Log(L"Private input.dll identity mismatch");
             SetLastError(ERROR_INVALID_DLL); return nullptr;
         }
-        Wh_Log(L"[IntlRestore] Legacy intl.cpl requested input.dll -> private Windows 7 module %p", input);
+        Wh_Log(L"Legacy intl.cpl requested input.dll -> private Windows 7 module %p", input);
         return input;
     }
     // Only calls made through the private CPL's IAT use this search restriction.
@@ -6864,7 +6813,7 @@ void Own(HWND window, bool add) {
     } else for (auto& w : g_owned) if (w == window) w = nullptr;
     ReleaseSRWLockExclusive(&g_windowsLock);
 }
-struct SheetContext { PFNPROPSHEETCALLBACK original; HWND window; SheetContext* previous; };
+struct SheetContext { PFNPROPSHEETCALLBACK original; HWND window; SheetContext* previous; bool isInput; };
 thread_local SheetContext* g_sheet = nullptr;
 int CALLBACK SheetCallback(HWND window, UINT message, LPARAM parameter) {
     try {
@@ -6873,9 +6822,9 @@ int CALLBACK SheetCallback(HWND window, UINT message, LPARAM parameter) {
         // already exists, even if the provider's callback subsequently fails.
 if (context && message == PSCB_INITIALIZED) {
             context->window = window;
-            TranslateInputWindow(window);
+            if (context->isInput) TranslateInputWindow(window);
             Own(window, true); ++g_uiCreated;
-            Wh_Log(L"[IntlRestore] Original Windows 7 property sheet initialized: HWND=%p", window);
+            Wh_Log(L"Original Windows 7 property sheet initialized: HWND=%p", window);
             if (g_stopping.load()) PostMessageW(window, WM_CLOSE, 0, 0);
         }
         return context && context->original ? context->original(window, message, parameter) : 0;
@@ -6897,7 +6846,7 @@ bool IndirectPage(PROPSHEETPAGEW& page) {
             DWORD size = 0;
             const BYTE* tpl = EmbeddedDlgTemplate(LOWORD(page.pszTemplate), size);
             if (!tpl || !size) {
-                Wh_Log(L"[IntlRestore] Unknown private dialog template %u", LOWORD(page.pszTemplate));
+                Wh_Log(L"Unknown private dialog template %u", LOWORD(page.pszTemplate));
                 SetLastError(ERROR_RESOURCE_NAME_NOT_FOUND); return false;
             }
             page.dwFlags |= PSP_DLGINDIRECT;
@@ -6929,14 +6878,14 @@ INT_PTR ShowSheet(PSProc original, LPCPROPSHEETHEADERW header, bool privateMain)
     try {
     if (!original || !header || header->dwSize < offsetof(PROPSHEETHEADERW, pfnCallback) + sizeof(header->pfnCallback) ||
         header->dwSize > 512 || (header->dwFlags & PSH_MODELESS)) {
-        Wh_Log(L"[IntlRestore] ShowSheet: REJECTED dwSize=%lu flags=0x%lX sizeofHdr=%u",
+        Wh_Log(L"ShowSheet: REJECTED dwSize=%lu flags=0x%lX sizeofHdr=%u",
                header ? header->dwSize : 0, header ? header->dwFlags : 0, (unsigned)sizeof(PROPSHEETHEADERW));
         g_uiFailed = true; SetLastError(ERROR_NOT_SUPPORTED); return -1;
     }
     PROPSHEETHEADERW copy{};
     const size_t hwire = std::min<size_t>(header->dwSize, sizeof(copy));
     memcpy(&copy, header, hwire); copy.dwSize = static_cast<DWORD>(hwire);
-    Wh_Log(L"[IntlRestore] %s sheet: nPages=%u flags=0x%lX", privateMain ? L"Win7 Region" : L"Win7 Input", copy.nPages, copy.dwFlags);
+    Wh_Log(L"%s sheet: nPages=%u flags=0x%lX", privateMain ? L"Win7 Region" : L"Win7 Input", copy.nPages, copy.dwFlags);
     std::vector<PROPSHEETPAGEW> converted; // Outlives the modal call below.
     if (privateMain && IsMain(copy.hInstance)) {
         if (copy.pszCaption && IS_INTRESOURCE(copy.pszCaption)) {
@@ -6966,13 +6915,13 @@ INT_PTR ShowSheet(PSProc original, LPCPROPSHEETHEADERW header, bool privateMain)
         const wchar_t* text = InputText(LOWORD(copy.pszCaption));
         if (text) copy.pszCaption = text;
     }
-    SheetContext context{(copy.dwFlags & PSH_USECALLBACK) ? copy.pfnCallback : nullptr, nullptr, g_sheet};
+    SheetContext context{(copy.dwFlags & PSH_USECALLBACK) ? copy.pfnCallback : nullptr, nullptr, g_sheet, !privateMain || copy.hInstance == g_inputModule};
     copy.dwFlags |= PSH_USECALLBACK; copy.pfnCallback = SheetCallback;
     g_sheet = &context;
     INT_PTR result = original(&copy);
     DWORD error = GetLastError();
     g_sheet = context.previous; Own(context.window, false);
-    if (result == -1) { g_uiFailed = true; Wh_Log(L"[IntlRestore] PropertySheetW failed: Win32=%lu", error); }
+    if (result == -1) { g_uiFailed = true; Wh_Log(L"PropertySheetW failed: Win32=%lu", error); }
     SetLastError(error); return result;
     } catch (...) { g_uiFailed = true; SetLastError(ERROR_NOT_ENOUGH_MEMORY); return -1; }
 }
@@ -6983,19 +6932,19 @@ HPROPSHEETPAGE WINAPI MainCreatePage(LPCPROPSHEETPAGEW page) {
     // v0.3.3 log proved this function exits silently: entry data + the build
     // SDK's struct size are logged so the wire contract, not an SDK guess,
     // decides. A 96-byte SDK struct rejects legacy's 104-byte pages.
-    Wh_Log(L"[IntlRestore] MainCreatePage: entry page=%p dwSize=%lu flags=0x%lX hInstance=%p isMain=%d tmpl=%p sizeofPage=%u",
+    Wh_Log(L"MainCreatePage: entry page=%p dwSize=%lu flags=0x%lX hInstance=%p isMain=%d tmpl=%p sizeofPage=%u",
            page, page ? page->dwSize : 0, page ? page->dwFlags : 0,
            page ? page->hInstance : nullptr, page ? (int)IsMain(page->hInstance) : 0,
            page ? page->pszTemplate : nullptr, (unsigned)sizeof(PROPSHEETPAGEW));
     if (!page || page->dwSize < offsetof(PROPSHEETPAGEW, lParam) + sizeof(page->lParam) || page->dwSize > 512) {
-        Wh_Log(L"[IntlRestore] MainCreatePage: REJECTED dwSize=%lu (wire contract [56,512])", page ? page->dwSize : 0);
+        Wh_Log(L"MainCreatePage: REJECTED dwSize=%lu (wire contract [56,512])", page ? page->dwSize : 0);
         SetLastError(ERROR_INVALID_PARAMETER); g_uiFailed = true; return nullptr;
     }
     PROPSHEETPAGEW copy{};
     const size_t wire = std::min<size_t>(page->dwSize, sizeof(copy));
     memcpy(&copy, page, wire); copy.dwSize = static_cast<DWORD>(wire);
     if (IsMain(copy.hInstance) && !IndirectPage(copy)) {
-        Wh_Log(L"[IntlRestore] MainCreatePage: IndirectPage FAILED tmpl=%p", page->pszTemplate);
+        Wh_Log(L"MainCreatePage: IndirectPage FAILED tmpl=%p", page->pszTemplate);
         g_uiFailed = true; SetLastError(ERROR_RESOURCE_NAME_NOT_FOUND); return nullptr;
     }
     // Decompile 80CDC: legacy sets PSP_USEFUSIONCONTEXT (0x4000) plus
@@ -7010,14 +6959,14 @@ HPROPSHEETPAGE WINAPI MainCreatePage(LPCPROPSHEETPAGEW page) {
         if (!ctx || ctx == INVALID_HANDLE_VALUE) {
             copy.dwFlags &= ~kFusion;
             *reinterpret_cast<HANDLE*>(reinterpret_cast<BYTE*>(&copy) + kActCtxOff) = nullptr;
-            Wh_Log(L"[IntlRestore] Cleared invalid Win7 fusion marker on a page (host comctl32 v6 stays active)");
+            Wh_Log(L"Cleared invalid Win7 fusion marker on a page (host comctl32 v6 stays active)");
         }
     }
     HPROPSHEETPAGE result = g_mainPage(&copy);
-    if (!result) { g_uiFailed = true; Wh_Log(L"[IntlRestore] CreatePropertySheetPageW failed, error=%lu", GetLastError()); }
-    else Wh_Log(L"[IntlRestore] Windows 7 page created: %p", result);
+    if (!result) { g_uiFailed = true; Wh_Log(L"CreatePropertySheetPageW failed, error=%lu", GetLastError()); }
+    else Wh_Log(L"Windows 7 page created: %p", result);
     return result;
-    } catch (...) { Wh_Log(L"[IntlRestore] MainCreatePage: EXCEPTION swallowed"); g_uiFailed = true; SetLastError(ERROR_NOT_ENOUGH_MEMORY); return nullptr; }
+    } catch (...) { Wh_Log(L"MainCreatePage: EXCEPTION swallowed"); g_uiFailed = true; SetLastError(ERROR_NOT_ENOUGH_MEMORY); return nullptr; }
 }
 // Text Services property-sheet pages: input.dll creates them through its
 // own CreatePropertySheetPageW import with pszTemplate = MAKEINTRESOURCE
@@ -7042,16 +6991,16 @@ HPROPSHEETPAGE WINAPI InputCreatePage(LPCPROPSHEETPAGEW page) {
         copy.dwFlags |= PSP_DLGINDIRECT;
         copy.pResource = reinterpret_cast<LPCDLGTEMPLATE>(tpl);
         HPROPSHEETPAGE result = g_inputPage(&copy);
-        if (!result) { g_uiFailed = true; Wh_Log(L"[IntlRestore] Translated input page %u failed: Win32=%lu", LOWORD(page->pszTemplate), GetLastError()); }
-        else Wh_Log(L"[IntlRestore] Windows 7 input page %u served translated: %p", LOWORD(page->pszTemplate), result);
+        if (!result) { g_uiFailed = true; Wh_Log(L"Translated input page %u failed: Win32=%lu", LOWORD(page->pszTemplate), GetLastError()); }
+        else Wh_Log(L"Windows 7 input page %u served translated: %p", LOWORD(page->pszTemplate), result);
         return result;
     } catch (...) {
-        Wh_Log(L"[IntlRestore] InputCreatePage: EXCEPTION swallowed");
+        Wh_Log(L"InputCreatePage: EXCEPTION swallowed");
         g_uiFailed = true; return nullptr;
     }
 }
 
-struct DialogContext { DLGPROC original; LPARAM parameter; HWND window; };
+struct DialogContext { DLGPROC original; LPARAM parameter; HWND window; bool isInput; };
 constexpr PCWSTR kDialogProperty = L"Windhawk.IntlRestore.Dialog.89B30F6D";
 INT_PTR CALLBACK DialogCallback(HWND window, UINT message, WPARAM wparam, LPARAM lparam) {
     try {
@@ -7060,7 +7009,7 @@ INT_PTR CALLBACK DialogCallback(HWND window, UINT message, WPARAM wparam, LPARAM
         if (!context) return FALSE;
         if (message == WM_INITDIALOG) {
             context->window = window;
-            TranslateInputWindow(window);
+            if (context->isInput) TranslateInputWindow(window);
             if (!SetPropW(window, kDialogProperty, context)) {
                 EndDialog(window, -1); g_uiFailed = true; return FALSE;
             }
@@ -7087,17 +7036,17 @@ INT_PTR ShowDialog(DialogProc original, HINSTANCE instance, LPCWSTR name, HWND p
             DWORD size = 0;
             const BYTE* tpl = EmbeddedDlgTemplate(LOWORD(name), size);
             if (!tpl || !size) {
-                Wh_Log(L"[IntlRestore] Unknown private dialog template %u", LOWORD(name));
+                Wh_Log(L"Unknown private dialog template %u", LOWORD(name));
                 g_uiFailed = true; SetLastError(ERROR_RESOURCE_NAME_NOT_FOUND); return -1;
             }
-            DialogContext context{proc, param, nullptr};
+            DialogContext context{proc, param, nullptr, false};
             INT_PTR result = DialogBoxIndirectParamW(instance, reinterpret_cast<LPCDLGTEMPLATE>(tpl),
                                                      parent, DialogCallback, reinterpret_cast<LPARAM>(&context));
             DWORD error = GetLastError();
             Own(context.window, false);
             if (result == -1) {
                 g_uiFailed = true;
-                Wh_Log(L"[IntlRestore] DialogBoxIndirectParamW failed: %lu", error);
+                Wh_Log(L"DialogBoxIndirectParamW failed: %lu", error);
             }
             SetLastError(error); return result;
         }
@@ -7109,23 +7058,23 @@ INT_PTR ShowDialog(DialogProc original, HINSTANCE instance, LPCWSTR name, HWND p
             DWORD size = 0;
             const BYTE* tpl = EmbeddedInpDlgTemplate(LOWORD(name), size);
             if (tpl && size) {
-                DialogContext context{proc, param, nullptr};
+                DialogContext context{proc, param, nullptr, true};
                 INT_PTR result = DialogBoxIndirectParamW(instance, reinterpret_cast<LPCDLGTEMPLATE>(tpl),
                                                           parent, DialogCallback, reinterpret_cast<LPARAM>(&context));
                 DWORD error = GetLastError();
                 Own(context.window, false);
                 if (result == -1) {
                     g_uiFailed = true;
-                    Wh_Log(L"[IntlRestore] Translated input dialog %u failed: %lu", LOWORD(name), error);
+                    Wh_Log(L"Translated input dialog %u failed: %lu", LOWORD(name), error);
                 }
                 SetLastError(error); return result;
             }
         }
-        DialogContext context{proc, param, nullptr};
+        DialogContext context{proc, param, nullptr, (instance == g_inputModule)};
         INT_PTR result = original(instance, name, parent, DialogCallback, reinterpret_cast<LPARAM>(&context));
         DWORD error = GetLastError();
         Own(context.window, false);
-        if (result == -1) { g_uiFailed = true; Wh_Log(L"[IntlRestore] DialogBoxParamW failed: %lu", error); }
+        if (result == -1) { g_uiFailed = true; Wh_Log(L"DialogBoxParamW failed: %lu", error); }
         SetLastError(error); return result;
 
     } catch (...) {
@@ -7153,19 +7102,19 @@ FARPROC WINAPI PrivateGetProcAddress(HMODULE module, LPCSTR name) {
         // and ordinal queries are covered.
         if (proc) {
             if (proc == reinterpret_cast<FARPROC>(reinterpret_cast<void*>(g_mainPS))) {
-                Wh_Log(L"[IntlRestore] Dynamic PropertySheetW routed to the Win7 adapter");
+                Wh_Log(L"Dynamic PropertySheetW routed to the Win7 adapter");
                 return reinterpret_cast<FARPROC>(reinterpret_cast<void*>(MainPropertySheet));
             }
             if (proc == reinterpret_cast<FARPROC>(reinterpret_cast<void*>(g_mainPage))) {
-                Wh_Log(L"[IntlRestore] Dynamic CreatePropertySheetPageW routed to the Win7 adapter");
+                Wh_Log(L"Dynamic CreatePropertySheetPageW routed to the Win7 adapter");
                 return reinterpret_cast<FARPROC>(reinterpret_cast<void*>(MainCreatePage));
             }
         }
         if (!proc) {
             DWORD error = GetLastError();
             if (reinterpret_cast<ULONG_PTR>(name) <= 0xffff)
-                Wh_Log(L"[IntlRestore] Dynamic lookup missing: module=%p ordinal=%u Win32=%lu", module, LOWORD(name), error);
-            else Wh_Log(L"[IntlRestore] Dynamic lookup missing: module=%p name=%S Win32=%lu", module, name, error);
+                Wh_Log(L"Dynamic lookup missing: module=%p ordinal=%u Win32=%lu", module, LOWORD(name), error);
+            else Wh_Log(L"Dynamic lookup missing: module=%p name=%S Win32=%lu", module, name, error);
             SetLastError(error);
         }
         return proc;
@@ -7202,7 +7151,7 @@ DWORD WINAPI ThreadBridge(void* parameter) {
         // A throwing worker must still release its job slot, or teardown
         // would wait for it forever. The notification itself is best-effort.
         LastErrorScope keep;
-        Wh_Log(L"[IntlRestore] Private worker routine threw; job released");
+        Wh_Log(L"Private worker routine threw; job released");
         result = ERROR_NOT_ENOUGH_MEMORY;
     }
     // Both verified Win7 routines return normally. After this point there are
@@ -7243,7 +7192,7 @@ BOOL WINAPI PrivateSHCreateThread(LPTHREAD_START_ROUTINE routine, void* paramete
         // flags 0x11 (CTF_INSIST|CTF_FREELIBANDEXIT) + NULL callback.
         constexpr DWORD insistAndLibraryLifetime = 0x11;
         if (!routine || callback || flags != insistAndLibraryLifetime) {
-            Wh_Log(L"[IntlRestore] Unexpected private SHCreateThread contract: flags=0x%lX", flags);
+            Wh_Log(L"Unexpected private SHCreateThread contract: flags=0x%lX", flags);
             SetLastError(ERROR_NOT_SUPPORTED); return FALSE;
         }
         if (HANDLE thread = PrivateCreateThread(nullptr, 0, routine, parameter, 0, nullptr)) {
@@ -7271,26 +7220,13 @@ BOOL WINAPI PrivateDisableThreadLibraryCalls(HMODULE module) {
         return DisableThreadLibraryCalls(module);
     }
 }
-void WaitForJobs(bool pumpMessages) {
+void WaitForJobs() {
     if (!g_jobsIdle || g_jobs.load(std::memory_order_acquire) == 0) return;
-    bool quit = false; int quitCode = 0;
     while (g_jobs.load(std::memory_order_acquire) != 0) {
-        DWORD flags = pumpMessages ? (QS_ALLINPUT) : 0;
-        DWORD status = pumpMessages
-            ? MsgWaitForMultipleObjectsEx(1, &g_jobsIdle, 100, flags, MWMO_INPUTAVAILABLE)
-            : WaitForSingleObject(g_jobsIdle, 100);
-        if (pumpMessages && status == WAIT_OBJECT_0 + 1) {
-            MSG message;
-            while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
-                if (message.message == WM_QUIT) { quit = true; quitCode = static_cast<int>(message.wParam); }
-                else { TranslateMessage(&message); DispatchMessageW(&message); }
-            }
-        }
+        WaitForSingleObject(g_jobsIdle, 100);
     }
     // Pair with EndJob's final signal before teardown closes the event.
     AcquireSRWLockExclusive(&g_gate); ReleaseSRWLockExclusive(&g_gate);
-    if (quit) PostQuitMessage(quitCode);
-
 }
 BOOL WINAPI PrivateShellExecuteExW(SHELLEXECUTEINFOW* info) {
     try {
@@ -7305,12 +7241,12 @@ BOOL WINAPI PrivateShellExecuteExW(SHELLEXECUTEINFOW* info) {
     if (g_stopping.load()) { SetLastError(ERROR_CANCELLED); return FALSE; }
     std::wstring args = L"shell32.dll,Control_RunDLL \"" + g_inputPath + L"\"";
     SHELLEXECUTEINFOW copy = *info; copy.lpParameters = args.c_str();
-    Wh_Log(L"[IntlRestore] Original Change keyboards action -> built-in rundll32, private Windows 7 input.dll: %s", g_inputPath.c_str());
+    Wh_Log(L"Original Change keyboards action -> built-in rundll32, private Windows 7 input.dll: %s", g_inputPath.c_str());
     BOOL result = ShellExecuteExW(&copy);
     DWORD error = GetLastError();
     info->hInstApp = copy.hInstApp;
     if (info->fMask & SEE_MASK_NOCLOSEPROCESS) info->hProcess = copy.hProcess;
-    if (!result) Wh_Log(L"[IntlRestore] Private Input CPL launch failed: Win32=%lu", error);
+    if (!result) Wh_Log(L"Private Input CPL launch failed: Win32=%lu", error);
     SetLastError(error); return result;
     } catch (...) { return ShellExecuteExW(info); } // our rewrite failed; real call, unmodified args
 }
@@ -7370,7 +7306,7 @@ public:
                 exec.lpFile = L"ms-settings:";
                 ShellExecuteExW(&exec);
             }
-            Wh_Log(L"[IntlRestore] Default-location link -> modern Location settings (Win7 sensors panel is gone)");
+            Wh_Log(L"Default-location link -> modern Location settings (Win7 sensors panel is gone)");
         } catch (...) {}
         return S_OK;
     }
@@ -7404,7 +7340,7 @@ FARPROC ResolvePrivate(HMODULE module, const char* dll, LPCSTR proc) {
             !strcmp(proc, "NlsUpdateSystemLocale")) {
             FARPROC target = ForwardKernelBase(proc);
             if (target) return target;
-            Wh_Log(L"[IntlRestore] Refusing to fake NLS setter %S", proc);
+            Wh_Log(L"Refusing to fake NLS setter %S", proc);
             return nullptr;
         }
         if (!strcmp(proc, "NlsEventDataDescCreate")) {
@@ -7634,11 +7570,16 @@ bool AdaptInputIat() {
 }
 bool SameMappedFile(HMODULE module, HANDLE pin) {
     // Check the file actually backing the image, not merely a user-supplied path.
-    wchar_t device[32768]{};
+    std::vector<wchar_t> device(MAX_PATH);
     DWORD n = GetMappedFileNameW(GetCurrentProcess(), reinterpret_cast<void*>(
-        reinterpret_cast<ULONG_PTR>(module) & ~static_cast<ULONG_PTR>(3)), device, ARRAYSIZE(device));
-    if (!n || n >= ARRAYSIZE(device)) return false;
-    std::wstring path = L"\\\\?\\GLOBALROOT" + std::wstring(device);
+        reinterpret_cast<ULONG_PTR>(module) & ~static_cast<ULONG_PTR>(3)), device.data(), static_cast<DWORD>(device.size()));
+    if (n >= device.size()) {
+        device.resize(32768);
+        n = GetMappedFileNameW(GetCurrentProcess(), reinterpret_cast<void*>(
+            reinterpret_cast<ULONG_PTR>(module) & ~static_cast<ULONG_PTR>(3)), device.data(), static_cast<DWORD>(device.size()));
+    }
+    if (!n || n >= device.size()) return false;
+    std::wstring path = L"\\\\?\\GLOBALROOT" + std::wstring(device.data(), n);
     Handle opened(CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                               nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
     if (!opened) return false;
@@ -7659,9 +7600,9 @@ bool CheckMitigations() {
     return true;
 }
 bool Prepare() {
-    Wh_Log(L"[IntlRestore] Target provider: authentic Windows 7 x64");
+    Wh_Log(L"Target provider: authentic Windows 7 x64");
     g_deps.reserve(64); g_inputPatches.reserve(4);
-    wchar_t storage[32768]{};
+    wchar_t storage[MAX_PATH]{};
     if (!Wh_GetModStoragePath(storage, ARRAYSIZE(storage))) return Fail(L"Windhawk private storage unavailable");
     g_cache = FullPath(std::wstring(storage) + L"\\win7-x64");
     if (!LocalAbsolute(g_cache) || g_cache.size() >= 32000) return Fail(L"Invalid private storage path", ERROR_INVALID_NAME);
@@ -7669,7 +7610,7 @@ bool Prepare() {
     if (g_cache.size() > g_windows.size() && Equal(g_cache.substr(0, g_windows.size() + 1), g_windows + L"\\"))
         return Fail(L"Refusing to write under Windows directory", ERROR_ACCESS_DENIED);
     if (!Directory(g_cache)) return false;
-    Wh_Log(L"[IntlRestore] Private payload storage: %s", g_cache.c_str());
+    Wh_Log(L"Private payload storage: %s", g_cache.c_str());
     if (!EnsurePinned(L"intl.cpl", kIntlSha, kIntlSize, kIntlUrl) ||
         !EnsurePinned(L"input.dll", kInputSha, kInputSize, kInputUrl)) return false;
     g_intlPath = g_cache + L"\\intl.cpl"; g_inputPath = g_cache + L"\\input.dll";
@@ -7683,8 +7624,8 @@ bool Prepare() {
         !VerifyVersion(g_inputPath, 0x00060001, 0x1DB04001, inputVersion))
         return Fail(L"Provider version check failed", ERROR_BAD_EXE_FORMAT);
     if (!CheckMitigations()) return false;
-    Wh_Log(L"[IntlRestore] Verified provider: intl.cpl %s AMD64; input.dll %s AMD64", intlVersion.c_str(), inputVersion.c_str());
-    Wh_Log(L"[IntlRestore] PE analysis: intl ImageBase=%p Size=0x%lX Entry=0x%lX Sections=%u TLS=0 LoadConfig=0 DelayImports=0",
+    Wh_Log(L"Verified provider: intl.cpl %s AMD64; input.dll %s AMD64", intlVersion.c_str(), inputVersion.c_str());
+    Wh_Log(L"PE analysis: intl ImageBase=%p Size=0x%lX Entry=0x%lX Sections=%u TLS=0 LoadConfig=0 DelayImports=0",
         reinterpret_cast<void*>(intl.nt->OptionalHeader.ImageBase), intl.nt->OptionalHeader.SizeOfImage,
         intl.nt->OptionalHeader.AddressOfEntryPoint, intl.nt->FileHeader.NumberOfSections);
     HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
@@ -7699,7 +7640,7 @@ bool Prepare() {
     if (!active.active) return Fail(L"ActivateActCtx");
     g_lang = ResolveSelectedLanguage();
     if (g_lang < LangEN || g_lang >= LangCount) g_lang = LangEN;
-    Wh_Log(L"[IntlRestore] Building embedded resources for language %s (%s)", kLangTags[g_lang], kLangNames[g_lang]);
+    Wh_Log(L"Building embedded resources for language %s (%s)", kLangTags[g_lang], kLangNames[g_lang]);
     if (!BuildEmbeddedResources()) return false;
     if (!BuildEmbeddedInputResources()) return false;
     HMODULE common = SystemDependency("comctl32.dll");
@@ -7718,14 +7659,13 @@ bool Prepare() {
     if (!SameMappedFile(g_inputModule, g_inputFile.pin.value)) return Fail(L"Loaded Input is not the pinned file", ERROR_INVALID_DLL);
     for (WORD ordinal : {100, 101, 104, 105, 106, 107, 113, 114}) {
         if (!GetProcAddress(g_inputModule, MAKEINTRESOURCEA(ordinal))) {
-            Wh_Log(L"[IntlRestore] Win7 input.dll is missing required ordinal %u", ordinal); return false;
+            Wh_Log(L"Win7 input.dll is missing required ordinal %u", ordinal); return false;
         }
     }
     if (!AdaptInputIat()) return Fail(L"Private Input modal-lifetime IAT adaptation failed");
-    Wh_Log(L"[IntlRestore] Private Windows 7 input.dll loaded; original Text Services dialogs available");
+    Wh_Log(L"Private Windows 7 input.dll loaded; original Text Services dialogs available");
     if (!CopyImage(intl, g_image) || !Relocate(g_image) || !BindImports(g_image, true) || !ProtectImage(g_image, intl))
         return Fail(L"Private intl.cpl mapping or import resolution failed");
-    DiagnoseCrtHeap(); // read-only binding/heap proof consumed by the next log on failure
     auto unwind = intl.nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION];
     if (!unwind.Size || unwind.Size % sizeof(RUNTIME_FUNCTION) ||
         !Range(unwind.VirtualAddress, unwind.Size, g_image.size)) return Fail(L"Invalid AMD64 exception directory", ERROR_BAD_EXE_FORMAT);
@@ -7737,13 +7677,13 @@ bool Prepare() {
     BOOL attached = FALSE; DWORD exception = 0;
     if (!GuardEntry(g_image.entry, reinterpret_cast<HINSTANCE>(g_image.base), DLL_PROCESS_ATTACH, attached, exception) || !attached) {
         DWORD attachError = GetLastError(); // whatever DllMain left behind, if anything
-        Wh_Log(L"[IntlRestore] Legacy DllMain failed: exception=0x%08lX result=%d lastError=%lu", exception, attached, attachError);
+        Wh_Log(L"Legacy DllMain failed: exception=0x%08lX result=%d lastError=%lu", exception, attached, attachError);
         return Fail(L"Legacy entry-point initialization failed", ERROR_DLL_INIT_FAILED);
     }
     g_image.attached = true;
     g_image.cpl = reinterpret_cast<CplProc>(reinterpret_cast<void*>(PrivateExport("CPlApplet")));
     if (!g_image.cpl) return Fail(L"Private CPlApplet export missing", ERROR_PROC_NOT_FOUND);
-    Wh_Log(L"[IntlRestore] Legacy provider mapped at %p; CPlApplet=%p; compatibility layer active (UI not yet opened)",
+    Wh_Log(L"Legacy provider mapped at %p; CPlApplet=%p; compatibility layer active (UI not yet opened)",
         g_image.base, reinterpret_cast<void*>(g_image.cpl));
     return true;
 }
@@ -7764,10 +7704,10 @@ bool EnsurePrepared() {
     if (g_prepareAttempted.load(std::memory_order_acquire)) {
         ready = g_image.cpl != nullptr && g_act != INVALID_HANDLE_VALUE;
     } else {
-        Wh_Log(L"[IntlRestore] First activation: preparing Windows 7 private provider now");
+        Wh_Log(L"First activation: preparing Windows 7 private provider now");
         ready = Prepare();
         g_prepareAttempted.store(true, std::memory_order_release);
-        if (!ready) Wh_Log(L"[IntlRestore] Lazy provider preparation failed; falling back to native intl.cpl");
+        if (!ready) Wh_Log(L"Lazy provider preparation failed; falling back to native intl.cpl");
     }
     ReleaseSRWLockExclusive(&g_prepareLock);
     return ready;
@@ -7791,7 +7731,7 @@ LONG CALLBACK CplHook(HWND window, UINT message, LPARAM first, LPARAM second) {
     const bool activation = message == CPL_DBLCLK || message == CPL_STARTWPARMSA || message == CPL_STARTWPARMSW;
     if (!EnterLegacy()) {
         SetLastError(entryError);
-        [[clang::musttail]] return g_nativeCpl(window, message, first, second);
+        return g_nativeCpl(window, message, first, second);
     }
     try {
         DpiScope dpi;
@@ -7808,11 +7748,11 @@ LONG CALLBACK CplHook(HWND window, UINT message, LPARAM first, LPARAM second) {
             if (!native || !g_useLegacy.load() || !act.active) return native;
             LONG legacy = 0; DWORD exception = 0;
             if (!GuardCpl(g_image.cpl, window, message, first, second, legacy, exception) || !legacy) {
-                Wh_Log(L"[IntlRestore] CPlApplet initialization failed: exception=0x%08lX result=%ld; fallback to native intl.cpl", exception, legacy);
+                Wh_Log(L"CPlApplet initialization failed: exception=0x%08lX result=%ld; fallback to native intl.cpl", exception, legacy);
                 g_useLegacy.store(false); return native;
             }
             g_legacyInitialized.store(true);
-            Wh_Log(L"[IntlRestore] CPlApplet initialized: authentic Windows 7 provider");
+            Wh_Log(L"CPlApplet initialized: authentic Windows 7 provider");
             return legacy;
         }
         if (!g_useLegacy.load() || !g_legacyInitialized.load() || !act.active) {
@@ -7825,7 +7765,7 @@ LONG CALLBACK CplHook(HWND window, UINT message, LPARAM first, LPARAM second) {
         LONG result = 0; DWORD exception = 0;
         const bool returned = GuardCpl(g_image.cpl, window, message, first, second, result, exception);
         DWORD error = GetLastError();
-        if (message == CPL_GETCOUNT && returned) Wh_Log(L"[IntlRestore] CPL count = %ld", result);
+        if (message == CPL_GETCOUNT && returned) Wh_Log(L"CPL count = %ld", result);
         if (message == CPL_EXIT) {
             g_legacyInitialized.store(false);
             g_nativeInitialized.store(false);
@@ -7834,7 +7774,7 @@ LONG CALLBACK CplHook(HWND window, UINT message, LPARAM first, LPARAM second) {
             g_nativeCpl(window, message, first, second);
         }
         if (!returned || (activation && g_uiCreated == 0 && g_uiFailed)) {
-            Wh_Log(L"[IntlRestore] Legacy failure: CPL=%u exception=0x%08lX Win32=%lu; fallback to native intl.cpl",
+            Wh_Log(L"Legacy failure: CPL=%u exception=0x%08lX Win32=%lu; fallback to native intl.cpl",
                    message, exception, error);
             g_useLegacy.store(false);
             if (activation) return g_nativeCpl(window, message, first, second);
@@ -7844,7 +7784,7 @@ LONG CALLBACK CplHook(HWND window, UINT message, LPARAM first, LPARAM second) {
         SetLastError(error); return result;
 
     } catch (...) {
-        Wh_Log(L"[IntlRestore] CplHook C++ exception on CPL=%u; legacy disabled, native fallback", message);
+        Wh_Log(L"CplHook C++ exception on CPL=%u; legacy disabled, native fallback", message);
         g_useLegacy.store(false);
         SetLastError(entryError);
         if (activation) return g_nativeCpl(window, message, first, second);
@@ -7875,7 +7815,7 @@ void Cleanup() {
     if (g_legacyInitialized.exchange(false) && g_image.cpl) {
         LONG ignored = 0; DWORD exception = 0;
         GuardCpl(g_image.cpl, nullptr, CPL_EXIT, 0, 0, ignored, exception);
-        if (exception) Wh_Log(L"[IntlRestore] Legacy CPL_EXIT exception=0x%08lX", exception);
+        if (exception) Wh_Log(L"Legacy CPL_EXIT exception=0x%08lX", exception);
     }
     if (g_image.attached && g_image.entry) {
         BOOL ignored = FALSE; DWORD exception = 0;
@@ -7924,7 +7864,7 @@ bool SettingsUrlPrefix(const wchar_t* s, const wchar_t* prefix) {
     if (!s || !prefix) return false;
     while (*s == L' ' || *s == L'\t' || *s == L'"') ++s; // tolerate quoting
     for (; *prefix; ++s, ++prefix) if (Fold(*s) != *prefix) return false;
-    return *s == 0 || *s == L'-' || *s == L'?' || *s == L'/' || *s == L'#' || *s == L'&' || *s == L'"';
+    return *s == 0 || *s == L'?' || *s == L'/' || *s == L'#' || *s == L'&' || *s == L'"';
 }
 bool IsRegionSettingsUrl(const wchar_t* s) {
     return SettingsUrlPrefix(s, L"ms-settings:regionlanguage") ||
@@ -7954,7 +7894,7 @@ BOOL WINAPI RedirectShellExecuteExW(SHELLEXECUTEINFOW* info) {
             BOOL result = orig(&copy);
             {
                 LastErrorScope keep; // the log below must keep the real error
-                Wh_Log(L"[IntlRestore] Settings redirect: Region/Language page -> classic Region dialog");
+                Wh_Log(L"Settings redirect: Region/Language page -> classic Region dialog");
             }
             info->hInstApp = copy.hInstApp;
             if (info->fMask & SEE_MASK_NOCLOSEPROCESS) info->hProcess = copy.hProcess;
@@ -7962,7 +7902,7 @@ BOOL WINAPI RedirectShellExecuteExW(SHELLEXECUTEINFOW* info) {
         }
     } catch (...) {
         LastErrorScope keep;
-        Wh_Log(L"[IntlRestore] Settings redirect failed internally; passing through");
+        Wh_Log(L"Settings redirect failed internally; passing through");
     }
     return orig(info);
 }
@@ -7972,7 +7912,6 @@ HINSTANCE WINAPI RedirectShellExecuteW(HWND hwnd, LPCWSTR verb, LPCWSTR file,
     if (!orig) return FALSE;
     try {
         if (IsRegionSettingsUrl(file) || ContainsRegionSettingsUrl(parameters)) {
-            DpiScope dpi;
             return orig(hwnd, verb, g_redirectExe.c_str(), L"intl.cpl", directory, show);
         }
     } catch (...) {}
@@ -7991,7 +7930,6 @@ BOOL WINAPI RedirectCreateProcessW(LPCWSTR applicationName, LPWSTR commandLine,
             std::wstring replacement = L"\"" + g_redirectExe + L"\" intl.cpl";
             std::vector<wchar_t> mutableCommand(replacement.begin(), replacement.end());
             mutableCommand.push_back(L'\0');
-            DpiScope dpi;
             return orig(nullptr, mutableCommand.data(), processAttributes,
                         threadAttributes, inheritHandles, creationFlags, environment,
                         currentDirectory, startupInfo, processInformation);
@@ -8034,7 +7972,7 @@ bool Environment() {
     if (!rtl || rtl(&version) < 0 || version.dwMajorVersion != 10 || version.dwMinorVersion != 0 ||
         version.dwBuildNumber < 10240 || version.wProductType != VER_NT_WORKSTATION) return false;
     g_build = version.dwBuildNumber;
-    wchar_t system[32768], windows[32768], exe[32768];
+    wchar_t system[MAX_PATH], windows[MAX_PATH], exe[MAX_PATH];
     UINT n = GetSystemDirectoryW(system, ARRAYSIZE(system)); if (!n || n >= ARRAYSIZE(system)) return false;
     n = GetWindowsDirectoryW(windows, ARRAYSIZE(windows)); if (!n || n >= ARRAYSIZE(windows)) return false;
     DWORD e = GetModuleFileNameW(nullptr, exe, ARRAYSIZE(exe)); if (!e || e >= ARRAYSIZE(exe)) return false;
@@ -8053,11 +7991,11 @@ bool Environment() {
     std::vector<std::wstring> args;
     for (int i = 0; i < count; ++i) args.emplace_back(raw[i]);
     if (!SelectedLaunch(host, args, g_system)) {
-        Wh_Log(L"[IntlRestore] Not a selected Region session (Data and Time/other CPL unchanged)");
+        Wh_Log(L"Not a selected Region session (Data and Time/other CPL unchanged)");
         return false;
     }
-    Wh_Log(L"[IntlRestore] Host detected: %s; Windows build=%lu AMD64", exe, g_build);
-    Wh_Log(L"[IntlRestore] Requested applet: intl.cpl (Region / Area geografica)");
+    Wh_Log(L"Host detected: %s; Windows build=%lu AMD64", exe, g_build);
+    Wh_Log(L"Requested applet: intl.cpl (Region / Area geografica)");
     return true;
 }
 } // namespace IntlRestore
@@ -8066,24 +8004,10 @@ BOOL Wh_ModInit() {
     using namespace IntlRestore;
     try {
         const bool redirectWanted = Wh_GetIntSetting(L"redirectSettings") != 0;
-        // This gate deliberately precedes storage, downloads, module loads and hooks.
         if (!Environment()) {
-            // Redirect-only watcher: plain Explorer stays resident with just the
-            // ms-settings hook when the user opted in. No downloads, no mapping.
-            if (redirectWanted && g_envViable && g_host == Host::Explorer && InstallRedirectHook()) {
-                g_idle = CreateEventW(nullptr, TRUE, TRUE, nullptr);
-                g_jobsIdle = CreateEventW(nullptr, TRUE, TRUE, nullptr);
-                if (!g_idle || !g_jobsIdle) {
-                    if (g_idle) { CloseHandle(g_idle); g_idle = nullptr; }
-                    if (g_jobsIdle) { CloseHandle(g_jobsIdle); g_jobsIdle = nullptr; }
-                    return FALSE; // Windhawk removes the hook as ModInit failed
-                }
-                Wh_Log(L"[IntlRestore] Redirect-only mode in Explorer: ms-settings Region/Language pages open the classic Region dialog; no provider loaded");
-                return TRUE;
-            }
             return FALSE;
         }
-        Wh_Log(L"[IntlRestore] Initializing Windows 7 private-provider restoration");
+        Wh_Log(L"Initializing Windows 7 private-provider restoration");
         g_idle = CreateEventW(nullptr, TRUE, TRUE, nullptr);
         g_jobsIdle = CreateEventW(nullptr, TRUE, TRUE, nullptr);
         if (!g_idle || !g_jobsIdle) {
@@ -8095,44 +8019,50 @@ BOOL Wh_ModInit() {
         // A VEH pointing at unloaded mod code would crash the host, so every
         // exit path below removes it (after Cleanup, which still uses guards).
         if (!VehInstall()) {
-            Wh_Log(L"[IntlRestore] Vectored crash guard unavailable; fallback to native intl.cpl");
+            Wh_Log(L"Vectored crash guard unavailable; fallback to native intl.cpl");
             CloseHandle(g_idle); g_idle = nullptr;
             CloseHandle(g_jobsIdle); g_jobsIdle = nullptr;
             return FALSE;
         }
-        g_nativeModule = LoadLibraryExW((g_system + L"\\intl.cpl").c_str(), nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-        if (!g_nativeModule) throw std::runtime_error("native intl.cpl unavailable");
-        auto native = reinterpret_cast<CplProc>(reinterpret_cast<void*>(GetProcAddress(g_nativeModule, "CPlApplet")));
-        if (!native) {
-            Wh_Log(L"[IntlRestore] Fallback to native intl.cpl: CPlApplet export missing; no CPL hook installed");
-            FreeLibrary(g_nativeModule); g_nativeModule = nullptr;
-            CloseHandle(g_idle); g_idle = nullptr;
-            CloseHandle(g_jobsIdle); g_jobsIdle = nullptr;
-            VehRemove();
-            return FALSE;
+
+        // In Control and Rundll32 hosts, intl.cpl is directly loaded and hooked during init.
+        // In Explorer, we do not force-load intl.cpl at startup.
+        if (g_host != Host::Explorer) {
+            g_nativeModule = LoadLibraryExW((g_system + L"\\intl.cpl").c_str(), nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+            if (!g_nativeModule) throw std::runtime_error("native intl.cpl unavailable");
+            auto native = reinterpret_cast<CplProc>(reinterpret_cast<void*>(GetProcAddress(g_nativeModule, "CPlApplet")));
+            if (!native) {
+                Wh_Log(L"Fallback to native intl.cpl: CPlApplet export missing; no CPL hook installed");
+                FreeLibrary(g_nativeModule); g_nativeModule = nullptr;
+                CloseHandle(g_idle); g_idle = nullptr;
+                CloseHandle(g_jobsIdle); g_jobsIdle = nullptr;
+                VehRemove();
+                return FALSE;
+            }
+            if (!WindhawkUtils::SetFunctionHook(native, CplHook, &g_nativeCpl)) {
+                Wh_Log(L"CPlApplet hook registration failed; fallback to native");
+                FreeLibrary(g_nativeModule); g_nativeModule = nullptr;
+                CloseHandle(g_idle); g_idle = nullptr;
+                CloseHandle(g_jobsIdle); g_jobsIdle = nullptr;
+                VehRemove();
+                return FALSE;
+            }
+            // No download, mapping, or DllMain here: the private Windows 7
+            // provider is prepared lazily by EnsurePrepared() on the first real
+            // CPL_INIT/activation, so a session that never opens the Region page
+            // pays none of that cost (finding 5).
+            Wh_Log(L"Region-only CPlApplet dispatch queued; private provider will prepare on first activation");
         }
-        if (!WindhawkUtils::SetFunctionHook(native, CplHook, &g_nativeCpl)) {
-            Wh_Log(L"[IntlRestore] CPlApplet hook registration failed; fallback to native");
-            FreeLibrary(g_nativeModule); g_nativeModule = nullptr;
-            CloseHandle(g_idle); g_idle = nullptr;
-            CloseHandle(g_jobsIdle); g_jobsIdle = nullptr;
-            VehRemove();
-            return FALSE;
-        }
-        // No download, mapping, or DllMain here: the private Windows 7
-        // provider is prepared lazily by EnsurePrepared() on the first real
-        // CPL_INIT/activation, so a session that never opens the Region page
-        // pays none of that cost (finding 5).
-        Wh_Log(L"[IntlRestore] Region-only CPlApplet dispatch queued; private provider will prepare on first activation");
+
         if (redirectWanted && g_host == Host::Explorer) {
             if (!InstallRedirectHook())
-                Wh_Log(L"[IntlRestore] WARNING: Settings-redirect hook failed; classic UI still active");
+                Wh_Log(L"WARNING: Settings-redirect hook failed; classic UI still active");
             else
-                Wh_Log(L"[IntlRestore] Settings redirect active alongside classic UI");
+                Wh_Log(L"Settings redirect active alongside classic UI");
         }
         return TRUE;
     } catch (...) {
-        Wh_Log(L"[IntlRestore] Initialization exception; fallback to native intl.cpl");
+        Wh_Log(L"Initialization exception; fallback to native intl.cpl");
         Cleanup();
         if (g_act != INVALID_HANDLE_VALUE) { ReleaseActCtx(g_act); g_act = INVALID_HANDLE_VALUE; }
         if (g_nativeModule) { FreeLibrary(g_nativeModule); g_nativeModule = nullptr; }
@@ -8150,7 +8080,7 @@ void Wh_ModBeforeUninit() {
         g_stopping.store(true, std::memory_order_release);
         ReleaseSRWLockExclusive(&g_gate);
         
-        Wh_Log(L"[IntlRestore] Unloading: requesting normal close of private-provider dialogs");
+        Wh_Log(L"Unloading: requesting normal close of private-provider dialogs");
         
         ULONGLONG start = GetTickCount64();
         ULONGLONG lastDiagnostic = start;
@@ -8168,7 +8098,7 @@ void Wh_ModBeforeUninit() {
             // instead of silently hanging the unload.
             ULONGLONG now = GetTickCount64();
             if (now - lastDiagnostic > DIAGNOSTIC_INTERVAL_MS) {
-                Wh_Log(L"[IntlRestore] Still waiting for private-provider dialogs/jobs to close (%llu ms elapsed)",
+                Wh_Log(L"Still waiting for private-provider dialogs/jobs to close (%llu ms elapsed)",
                        now - start);
                 lastDiagnostic = now;
             }
@@ -8181,7 +8111,7 @@ void Wh_ModBeforeUninit() {
         ReleaseSRWLockExclusive(&g_gate);
         
     } catch (...) {
-        Wh_Log(L"[IntlRestore] Exception during pre-unload wait; continuing teardown");
+        Wh_Log(L"Exception during pre-unload wait; continuing teardown");
     }
 }
 void Wh_ModUninit() {
@@ -8193,7 +8123,7 @@ void Wh_ModUninit() {
     if (g_nativeModule) { FreeLibrary(g_nativeModule); g_nativeModule = nullptr; }
     if (g_idle) { CloseHandle(g_idle); g_idle = nullptr; }
     if (g_jobsIdle) { CloseHandle(g_jobsIdle); g_jobsIdle = nullptr; }
-    Wh_Log(L"[IntlRestore] Unloaded. Native Region behavior restored for new calls; system files and registration unchanged.");
+    Wh_Log(L"Unloaded. Native Region behavior restored for new calls; system files and registration unchanged.");
     } catch (...) {
         // Unload must never propagate; the host survives with native behavior.
     }
