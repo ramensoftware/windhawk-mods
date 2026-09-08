@@ -1690,19 +1690,21 @@ DWORD WINAPI MediaThreadProc(void*) {
                         static int64_t sLastRawPosition = -1;
                         static int64_t sLastRawEnd = -1;
                         static bool sLastRawPlaying = false;
-                        static std::wstring sLastRawTrack;
+                        static std::wstring sLastRawTitle;
+                        static std::wstring sLastRawArtist;
 
                         // A new track has to re-anchor even when the player
                         // reports the same numbers: two tracks of equal length
                         // starting at the same reported position would
                         // otherwise keep counting from the previous one.
-                        const std::wstring rawTrack = next.title + L"" + next.artist;
-                        const bool trackChanged = rawTrack != sLastRawTrack;
+                        const bool trackChanged = next.title != sLastRawTitle ||
+                                                  next.artist != sLastRawArtist;
 
                         std::lock_guard lock(g_stateMutex);
                         if (trackChanged || np != sLastRawPosition || ne != sLastRawEnd ||
                             npP != sLastRawPlaying) {
-                            sLastRawTrack = rawTrack;
+                            sLastRawTitle = next.title;
+                            sLastRawArtist = next.artist;
                             sLastRawPosition = np;
                             sLastRawEnd = ne;
                             sLastRawPlaying = npP;
