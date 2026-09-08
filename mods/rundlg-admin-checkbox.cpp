@@ -16,6 +16,8 @@
 Task Manager's Create new task dialog has a checkbox to run the command as
 administrator. Win+R does not, even though both dialogs are the same shell32
 code. This mod puts that checkbox on Win+R. Ctrl+Shift+Enter hotkey is also restored.
+
+Tested and works on 10 21H2 and 11 24H2.
 */
 // ==/WindhawkModReadme==
 
