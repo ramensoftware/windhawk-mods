@@ -4,6 +4,7 @@
 // @description     Puts the Create this task with administrative privileges checkbox on the Win+R Run dialog, and restores Ctrl+Shift+Enter
 // @version         1.0.0
 // @author          repensky
+// @github          https://github.com/repensky
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lcomctl32
