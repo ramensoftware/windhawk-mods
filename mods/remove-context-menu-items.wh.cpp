@@ -1552,14 +1552,9 @@ void ProcessMenu(HMENU hMenu) {
                 
                 // Check if this item should be removed
                 if (ShouldRemoveMenuItem(text, isGreyed)) {
-                    // RemoveMenu detaches without destroying the attached
-                    // submenu. DeleteMenu would also destroy it, which is
-                    // correct only when the parent menu is that submenu's
-                    // sole owner; a third-party IContextMenu extension can
-                    // create its own HMENU with CreatePopupMenu and expect
-                    // to manage its own lifetime. Detaching costs a leaked
-                    // submenu handle in the (common) shell-owned case, but
-                    // avoids a use-after-free/double-destroy in the other.
+                    // RemoveMenu detaches without destroying the submenu,
+                    // unlike DeleteMenu, in case a third-party IContextMenu
+                    // extension owns it and expects to destroy it itself.
                     RemoveMenu(hMenu, i, MF_BYPOSITION);
                     deleted = true;
                     anyRemoved = true;
@@ -1645,12 +1640,9 @@ TrackPopupMenu_t TrackPopupMenu_Original;
 std::mutex g_activeMenuHooksMutex;
 std::vector<HHOOK> g_activeMenuHooks;
 bool g_uninitInProgress = false;
-// MSDN notes that a hook procedure can still be executing on its own
-// thread even after UnhookWindowsHookEx() returns elsewhere. Incremented
-// on entry to MenuCallWndProcRetHook and decremented on exit, so
-// Wh_ModUninit can wait for it to drain to zero before returning --
-// closing the window where the mod's image is unmapped while a hook
-// callback is still running against it.
+// MSDN notes a hook procedure can still be executing on its own thread
+// after UnhookWindowsHookEx() returns elsewhere. This counter tracks
+// in-flight calls so Wh_ModUninit can wait for it to drain before unmap.
 std::atomic<int> g_activeHookCalls{0};
 
 // WM_INITMENUPOPUP is a *sent* message delivered straight to the owner
@@ -2088,9 +2080,8 @@ void Wh_ModUninit() {
     }
 
     // UnhookWindowsHookEx can return while the hook procedure is still
-    // executing on its own thread, so wait for any in-flight calls to
-    // finish before returning -- this is when the mod's image gets
-    // unmapped, and a still-running callback into it would crash.
+    // running on its own thread, so wait here until any in-flight calls
+    // finish -- otherwise unmapping the mod's image could crash it.
     while (g_activeHookCalls.load() > 0) {
         Sleep(10);
     }
