@@ -8,7 +8,7 @@
 // @include         explorer.exe
 // @include         control.exe
 // @include         rundll32.exe
-// @architecture    amd64
+// @architecture    x86-64
 // @compilerOptions -lbcrypt -lwinhttp -luser32 -lshell32 -ladvapi32 -lole32 -lpsapi -lversion
 // ==/WindhawkMod==
 
