@@ -30,6 +30,16 @@ third-party file managers are not modified.
 When an empty drive is hidden, Explorer's context-menu **Eject** command is no
 longer available for it. Use the drive's physical eject button instead.
 
+### Compatibility
+
+Tested on:
+- Windows 10 22H2 (build 19045)
+- Windows 11 25H2
+
+Verified behavior includes hiding an empty optical drive, showing it after media
+insertion, hiding it again after eject, and keeping the correct state after
+restarting Explorer.
+
 Media detection is event-driven. There is no permanent polling. After Windows
 reports media insertion, a background worker retries briefly while an optical
 disc spins up.
@@ -346,7 +356,9 @@ static bool ProcessInitialScan(DWORD* retryMask,
     return changed;
 }
 
-static bool ProcessRemovalMask(DWORD mask) {
+static bool ProcessRemovalMask(DWORD mask,
+                               DWORD* retryMask,
+                               int (&retryAttempts)[26]) {
     bool changed = false;
 
     for (WCHAR letter = L'A'; letter <= L'Z'; letter++) {
@@ -356,22 +368,36 @@ static bool ProcessRemovalMask(DWORD mask) {
             continue;
         }
 
+        int index = letter - L'A';
+
         WCHAR root[4];
         MakeRootPath(letter, root);
 
         bool stillOptical = GetDriveTypeW(root) == DRIVE_CDROM;
 
-        if (stillOptical) {
-            Wh_Log(L"%c: media/device removal, drive remains optical", letter);
-
-            changed |= SetOpticalDrivePresent(letter, true);
-            changed |= SetCachedMediaState(letter, MediaState::Empty);
-        } else {
-            Wh_Log(L"%c: optical drive no longer present", letter);
+        if (!stillOptical) {
+            Wh_Log(L"%c: optical drive removed", letter);
+            *retryMask &= ~bit;
+            retryAttempts[index] = 0;
 
             changed |= SetOpticalDrivePresent(letter, false);
             changed |= SetCachedMediaState(letter, MediaState::Unknown);
+            continue;
         }
+
+        Wh_Log(L"%c: volume removal, drive remains optical", letter);
+        changed |= SetOpticalDrivePresent(letter, true);
+
+        MediaState state = ProbeOpticalMediaState(letter);
+
+        if (state == MediaState::Unknown) {
+            *retryMask |= bit;
+        } else {
+            *retryMask &= ~bit;
+        }
+
+        retryAttempts[index] = 0;
+        changed |= SetCachedMediaState(letter, state);
     }
 
     return changed;
@@ -507,15 +533,8 @@ static DWORD WINAPI WorkerThreadProc(void*) {
             g_removalRequestMask.exchange(0, std::memory_order_acq_rel);
 
         if (removalMask) {
-            retryMask &= ~removalMask;
-
-            for (WCHAR letter = L'A'; letter <= L'Z'; letter++) {
-                if (removalMask & LetterBit(letter)) {
-                    retryAttempts[letter - L'A'] = 0;
-                }
-            }
-
-            refresh |= ProcessRemovalMask(removalMask);
+            refresh |=
+                ProcessRemovalMask(removalMask, &retryMask, retryAttempts);
         }
 
         DWORD arrivalMask =
