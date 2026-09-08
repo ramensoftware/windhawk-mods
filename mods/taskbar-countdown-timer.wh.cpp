@@ -2,7 +2,7 @@
 // @id              taskbar-countdown-timer
 // @name            Taskbar Countdown Timer
 // @description     A simple countdown timer integrated into the Windows 11 taskbar (Windows 11 only)
-// @version         1.5
+// @version         1.6
 // @author          Richi
 // @github          https://github.com/richilp
 // @include         explorer.exe
@@ -60,6 +60,7 @@ While the timer is running, the remaining time is shown directly on the taskbar.
 #include <functional>
 #include <list>
 #include <memory>
+#include <optional>
 #include <cwchar>
 #include <string>
 #include <dwmapi.h>
@@ -103,8 +104,9 @@ static std::atomic_bool g_buttonInjected{false};
 static std::atomic_bool g_systemTrayModuleHooked{false};
 
 [[clang::no_destroy]] static ColumnDefinition g_timerColumn{nullptr};
-[[clang::no_destroy]] static std::list<FrameworkElement::Loaded_revoker>
-    g_loadedRevokers;
+[[clang::no_destroy]] static std::optional<
+    std::list<FrameworkElement::Loaded_revoker>>
+    g_loadedRevokers{std::in_place};
 
 static HINSTANCE g_modInstance = nullptr;
 
@@ -1053,6 +1055,7 @@ static bool RunFromWindowThread(
     {
         RunFromWindowThreadProc_t proc;
         void* procParam;
+        bool invoked;
     };
 
     DWORD threadId =
@@ -1092,6 +1095,8 @@ static bool RunFromWindowThread(
                     param->proc(
                         param->procParam
                     );
+
+                    param->invoked = true;
                 }
             }
 
@@ -1112,7 +1117,8 @@ static bool RunFromWindowThread(
 
     Param param{
         proc,
-        procParam
+        procParam,
+        false
     };
 
     SendMessageW(
@@ -1124,7 +1130,7 @@ static bool RunFromWindowThread(
 
     UnhookWindowsHookEx(hook);
 
-    return true;
+    return param.invoked;
 }
 
 
@@ -2558,7 +2564,7 @@ static void OpenTimerPopup(
 // Add/remove taskbar button
 // -----------------------------------------------------------------------------
 
-static void AddTimerButton(
+static void AddTimerButtonImpl(
     void* param)
 {
     if (g_unloading.load()) {
@@ -2922,7 +2928,25 @@ static void AddTimerButton(
     );
 }
 
-static void RemoveTimerButton(
+
+static void AddTimerButton(
+    void* param)
+{
+    try {
+        AddTimerButtonImpl(param);
+    }
+    catch (...) {
+        HRESULT error = winrt::to_hresult();
+
+        Wh_Log(
+            L"Applying timer button failed: %08X",
+            static_cast<unsigned>(error)
+        );
+    }
+}
+
+
+static void RemoveTimerButtonImpl(
     void*)
 {
     if (g_countdownTimer) {
@@ -3005,11 +3029,31 @@ static void RemoveTimerButton(
         }
     }
 
-    g_loadedRevokers.clear();
+    if (g_loadedRevokers) {
+        g_loadedRevokers.reset();
+    }
+
     g_timerColumn = nullptr;
     g_timerText = nullptr;
     g_timerButton = nullptr;
     g_buttonInjected.store(false);
+}
+
+
+static void RemoveTimerButton(
+    void* param)
+{
+    try {
+        RemoveTimerButtonImpl(param);
+    }
+    catch (...) {
+        HRESULT error = winrt::to_hresult();
+
+        Wh_Log(
+            L"Removing timer button failed: %08X",
+            static_cast<unsigned>(error)
+        );
+    }
 }
 
 
@@ -3205,42 +3249,65 @@ static void* WINAPI IconView_IconView_Hook(
     auto result =
         IconView_IconView_Original(pThis);
 
-    if (g_unloading.load()) {
+    if (g_unloading.load() ||
+        !g_loadedRevokers)
+    {
         return result;
     }
 
-    FrameworkElement iconView = nullptr;
+    try {
+        FrameworkElement iconView = nullptr;
 
-    reinterpret_cast<IUnknown**>(pThis)[1]
-        ->QueryInterface(
-            winrt::guid_of<FrameworkElement>(),
-            winrt::put_abi(iconView)
-        );
+        reinterpret_cast<IUnknown**>(pThis)[1]
+            ->QueryInterface(
+                winrt::guid_of<FrameworkElement>(),
+                winrt::put_abi(iconView)
+            );
 
-    if (!iconView) {
-        return result;
-    }
-
-    g_loadedRevokers.emplace_back();
-    auto it = std::prev(g_loadedRevokers.end());
-
-    *it = iconView.Loaded(
-        winrt::auto_revoke_t{},
-        [it](
-            winrt::Windows::Foundation::IInspectable const&,
-            RoutedEventArgs const&)
+        if (!iconView ||
+            !g_loadedRevokers)
         {
-            g_loadedRevokers.erase(it);
-
-            if (g_unloading.load()) {
-                return;
-            }
-
-            // A new IconView means the tray may have rebuilt its XAML tree.
-            g_buttonInjected.store(false);
-            ApplyTimerButtonIfAvailable();
+            return result;
         }
-    );
+
+        g_loadedRevokers->emplace_back();
+        auto it =
+            std::prev(
+                g_loadedRevokers->end()
+            );
+
+        *it = iconView.Loaded(
+            winrt::auto_revoke_t{},
+            [it](
+                winrt::Windows::Foundation::IInspectable const&,
+                RoutedEventArgs const&)
+            {
+                if (!g_loadedRevokers) {
+                    return;
+                }
+
+                g_loadedRevokers->erase(it);
+
+                if (g_unloading.load() ||
+                    !g_loadedRevokers)
+                {
+                    return;
+                }
+
+                // A new IconView means the tray may have rebuilt its XAML tree.
+                g_buttonInjected.store(false);
+                ApplyTimerButtonIfAvailable();
+            }
+        );
+    }
+    catch (...) {
+        HRESULT error = winrt::to_hresult();
+
+        Wh_Log(
+            L"IconView hook XAML work failed: %08X",
+            static_cast<unsigned>(error)
+        );
+    }
 
     return result;
 }
@@ -3525,8 +3592,7 @@ void Wh_ModUninit()
         g_retryStopEvent = nullptr;
     }
 
-    bool removed =
-        !g_buttonInjected.load();
+    bool removed = false;
 
     for (int attempt = 0;
          attempt < 10 && !removed;
@@ -3551,25 +3617,29 @@ void Wh_ModUninit()
     DWORD popupThreadId =
         g_timerPopupThreadId.load();
 
-    if (popupThreadId) {
-        // The queue-ready event is created once and never recycled.
-        if (g_popupThreadReadyEvent) {
-            WaitForSingleObject(
-                g_popupThreadReadyEvent,
-                2000
-            );
-        }
-
-        PostThreadMessageW(
-            popupThreadId,
-            WM_QUIT,
-            0,
-            0
-        );
-    }
-
     HANDLE popupThread =
         g_timerPopupThread.load();
+
+    if (popupThread &&
+        popupThreadId)
+    {
+        // WM_QUIT must be delivered before the infinite join below. If the
+        // thread's message queue isn't ready yet, retry until it is or until
+        // the thread has already exited.
+        while (!PostThreadMessageW(
+                    popupThreadId,
+                    WM_QUIT,
+                    0,
+                    0))
+        {
+            if (WaitForSingleObject(
+                    popupThread,
+                    50) == WAIT_OBJECT_0)
+            {
+                break;
+            }
+        }
+    }
 
     if (popupThread) {
         PumpWaitForThread(popupThread);
