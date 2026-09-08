@@ -1,13 +1,13 @@
 // ==WindhawkMod==
 // @id              taskbar-countdown-timer
 // @name            Taskbar Countdown Timer
-// @description     A simple countdown timer integrated into the Windows taskbar
-// @version         1.4
+// @description     A simple countdown timer integrated into the Windows 11 taskbar (Windows 11 only)
+// @version         1.5
 // @author          Richi
 // @github          https://github.com/richilp
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -ldwmapi -lgdi32
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -ldwmapi -lgdi32 -lversion
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -98,6 +98,7 @@ static std::atomic<DWORD> g_timerPopupThreadId{0};
 static std::atomic<HANDLE> g_timerPopupThread{nullptr};
 static HANDLE g_popupThreadReadyEvent = nullptr;
 static std::atomic<HWND> g_taskbarWnd{nullptr};
+static std::atomic<DWORD> g_taskbarThreadId{0};
 static std::atomic_bool g_buttonInjected{false};
 static std::atomic_bool g_systemTrayModuleHooked{false};
 
@@ -718,6 +719,44 @@ static HWND FindCurrentProcessTaskbarWnd()
             }
 
             return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&result)
+    );
+
+    if (result) {
+        DWORD threadId = GetWindowThreadProcessId(
+            result,
+            nullptr
+        );
+
+        if (threadId) {
+            g_taskbarThreadId.store(threadId);
+        }
+    }
+
+    return result;
+}
+
+
+static HWND FindAnyWindowOnTaskbarThread()
+{
+    DWORD threadId =
+        g_taskbarThreadId.load();
+
+    if (!threadId) {
+        return nullptr;
+    }
+
+    HWND result = nullptr;
+
+    EnumThreadWindows(
+        threadId,
+        [](HWND hWnd, LPARAM lParam) -> BOOL
+        {
+            *reinterpret_cast<HWND*>(lParam) =
+                hWnd;
+
+            return FALSE;
         },
         reinterpret_cast<LPARAM>(&result)
     );
@@ -2974,6 +3013,33 @@ static void RemoveTimerButton(
 }
 
 
+static bool TryRemoveTimerXaml()
+{
+    HWND target =
+        g_taskbarWnd.load();
+
+    if (!target || !IsWindow(target)) {
+        target =
+            FindCurrentProcessTaskbarWnd();
+    }
+
+    if (!target) {
+        target =
+            FindAnyWindowOnTaskbarThread();
+    }
+
+    if (!target) {
+        return false;
+    }
+
+    return RunFromWindowThread(
+        target,
+        RemoveTimerButton,
+        nullptr
+    );
+}
+
+
 static void ApplyTimerButtonIfAvailable()
 {
     if (g_unloading.load()) {
@@ -3044,6 +3110,56 @@ static LoadLibraryExW_t
     LoadLibraryExW_Original = nullptr;
 
 
+static VS_FIXEDFILEINFO* GetModuleVersionInfo(
+    HMODULE module)
+{
+    HRSRC resource =
+        FindResourceW(
+            module,
+            MAKEINTRESOURCEW(VS_VERSION_INFO),
+            RT_VERSION
+        );
+
+    if (!resource) {
+        return nullptr;
+    }
+
+    HGLOBAL loaded =
+        LoadResource(
+            module,
+            resource
+        );
+
+    if (!loaded) {
+        return nullptr;
+    }
+
+    void* data =
+        LockResource(loaded);
+
+    if (!data) {
+        return nullptr;
+    }
+
+    void* fixedInfo = nullptr;
+    UINT fixedInfoSize = 0;
+
+    if (!VerQueryValueW(
+            data,
+            L"\\",
+            &fixedInfo,
+            &fixedInfoSize) ||
+        !fixedInfoSize)
+    {
+        return nullptr;
+    }
+
+    return reinterpret_cast<VS_FIXEDFILEINFO*>(
+        fixedInfo
+    );
+}
+
+
 static HMODULE GetSystemTrayModuleHandle()
 {
     if (HMODULE module =
@@ -3055,7 +3171,26 @@ static HMODULE GetSystemTrayModuleHandle()
     if (HMODULE module =
             GetModuleHandleW(L"Taskbar.View.dll"))
     {
-        return module;
+        // First known Taskbar.View.dll version without SystemTray symbols:
+        // 2604.8002.200.6000. Newer builds use SystemTray.dll instead.
+        VS_FIXEDFILEINFO* fixedInfo =
+            GetModuleVersionInfo(module);
+
+        WORD moduleMajor =
+            fixedInfo
+                ? HIWORD(fixedInfo->dwFileVersionMS)
+                : 0;
+
+        if (moduleMajor &&
+            moduleMajor < 2604)
+        {
+            return module;
+        }
+
+        Wh_Log(
+            L"Skipping Taskbar.View.dll version %u",
+            moduleMajor
+        );
     }
 
     return GetModuleHandleW(
@@ -3114,7 +3249,8 @@ static void* WINAPI IconView_IconView_Hook(
 static bool HookSystemTraySymbols(
     HMODULE module)
 {
-    WindhawkUtils::SYMBOL_HOOK systemTrayDllHooks[] = {{
+    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK systemTrayHooks[] = {{
         {
             LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"
         },
@@ -3124,8 +3260,8 @@ static bool HookSystemTraySymbols(
 
     return WindhawkUtils::HookSymbols(
         module,
-        systemTrayDllHooks,
-        ARRAYSIZE(systemTrayDllHooks)
+        systemTrayHooks,
+        ARRAYSIZE(systemTrayHooks)
     );
 }
 
@@ -3142,7 +3278,9 @@ static void HandleLoadedModuleIfSystemTray(
             Wh_ApplyHookOperations();
         }
         else {
-            g_systemTrayModuleHooked.store(false);
+            Wh_Log(
+                L"ERROR: Failed to hook system tray symbols"
+            );
         }
     }
 }
@@ -3243,12 +3381,26 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
-    if (HMODULE systemTray = GetSystemTrayModuleHandle()) {
-        if (HookSystemTraySymbols(systemTray)) {
-            g_systemTrayModuleHooked.store(true);
+    bool systemTrayHookedAtInit = false;
+
+    if (HMODULE systemTray =
+            GetSystemTrayModuleHandle())
+    {
+        g_systemTrayModuleHooked.store(true);
+
+        systemTrayHookedAtInit =
+            HookSystemTraySymbols(
+                systemTray
+            );
+
+        if (!systemTrayHookedAtInit) {
+            Wh_Log(
+                L"ERROR: Failed to hook system tray symbols"
+            );
         }
     }
-    else {
+
+    if (!systemTrayHookedAtInit) {
         HMODULE kernelbase =
             GetModuleHandleW(L"kernelbase.dll");
 
@@ -3342,6 +3494,15 @@ void Wh_ModBeforeUninit()
             g_retryStopEvent
         );
     }
+
+    // First teardown attempt while taskbar hooks are still available.
+    if (!TryRemoveTimerXaml() &&
+        g_buttonInjected.load())
+    {
+        Wh_Log(
+            L"Timer XAML teardown will be retried in Wh_ModUninit"
+        );
+    }
 }
 
 
@@ -3364,31 +3525,24 @@ void Wh_ModUninit()
         g_retryStopEvent = nullptr;
     }
 
-    bool removed = false;
+    bool removed =
+        !g_buttonInjected.load();
 
     for (int attempt = 0;
-         attempt < 5 && !removed;
+         attempt < 10 && !removed;
          attempt++)
     {
-        HWND taskbar = g_taskbarWnd.load();
-        if (!taskbar || !IsWindow(taskbar)) {
-            taskbar = FindCurrentProcessTaskbarWnd();
-        }
-
-        if (taskbar) {
-            removed = RunFromWindowThread(
-                taskbar,
-                RemoveTimerButton,
-                nullptr
-            );
-        }
+        removed =
+            TryRemoveTimerXaml();
 
         if (!removed) {
             Sleep(50);
         }
     }
 
-    if (!removed && g_buttonInjected.load()) {
+    if (!removed &&
+        g_buttonInjected.load())
+    {
         Wh_Log(
             L"ERROR: Could not remove timer XAML objects before unload"
         );
