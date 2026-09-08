@@ -2,7 +2,7 @@
 // @id              taskbar-recent-focus-highlight
 // @name            Taskbar Recent Focus Highlight
 // @description     Visually highlight the most recently focused running apps on the taskbar
-// @version         0.9.4
+// @version         0.9.6
 // @author          Jakub Vlášek
 // @github          https://github.com/jvlasek
 // @include         explorer.exe
@@ -457,12 +457,13 @@ enum class MinFocusConfirmMode {
 // ---------------------------------------------------------------------------
 
 struct AppFocusInfo {
-    std::wstring key;          // APPID:… or PATH|CLS:class or bare path
+    std::wstring key;          // APPID:… or uppercase image path
     std::wstring displayName;  // e.g. WindowsTerminal.exe
-    std::wstring lastWindowTitle;  // from focused HWND (helps button match)
+    std::wstring lastWindowTitle;  // unmatched-rank logs only
     std::wstring classUpper;   // focused window class (TLister vs TTOTAL_CMD)
     std::wstring appIdUpper;   // window AppUserModelID when present
     HWND lastHwnd = nullptr;
+    DWORD lastPid = 0;  // reject recycled lastHwnd (preview already does this)
     ULONGLONG lastConfirmedFocusTick = 0;
     // True once we saw a TaskListButton for this path (path cache / bind).
     bool seenOnTaskbar = false;
@@ -543,7 +544,7 @@ struct ButtonPathCacheEntry {
     HWND sampleHwnd = nullptr;  // sample from resolve; preview uses window map
     std::vector<HWND> groupHwnds;
     bool resolveAttempted = false;
-    ULONGLONG lastResolveTick = 0;
+    ULONGLONG lastResolveTick = 0;  // empty-identity retry throttle
     ULONGLONG lastRunningTick = 0;  // IsRunning grace (Alt-Tab flicker)
     // Last ApplyAllHighlights assignment: -1 unknown, 0 none, >0 1-based rank.
     int lastPaintRank = -1;
@@ -578,6 +579,7 @@ std::atomic<bool> g_taskbarViewDllLoaded{false};
 // After decay / empty ranks, force-clear overlays on next button touch if
 // RequestApplyVisuals couldn't run (sleep/wake, no dispatcher yet).
 std::atomic<bool> g_pendingOverlaySweep{false};
+std::atomic<bool> g_decayTimerArmed{false};
 
 std::mutex g_winEventHookThreadMutex;
 std::atomic<HANDLE> g_winEventHookThread{nullptr};
@@ -675,6 +677,7 @@ constexpr UINT WM_APP_DESKTOP_SWITCHED = WM_APP + 2;
 constexpr UINT WM_APP_SHUTDOWN = WM_APP + 3;
 constexpr UINT WM_APP_REQUEST_APPLY_DEBOUNCED = WM_APP + 4;
 constexpr UINT WM_APP_REFRESH_ACCENT = WM_APP + 5;
+constexpr UINT WM_APP_PREVIEW_CLICK = WM_APP + 6;
 
 // Identity scores. Only exact identity may bind the same rank to many buttons
 // (secondary taskbar / Never Combine). Filename-only is not a match.
@@ -688,6 +691,8 @@ constexpr ULONGLONG kIsRunningGraceMs = 400;
 // Full identity rebind (all buttons). UVS only re-paints the cached rank;
 // siblings whose visuals Windows cleared without another UVS wait for this.
 constexpr ULONGLONG kFullRebindDebounceMs = 300;
+// Empty identity (pinned, no task item) is retried; successful path/AUMID is not.
+constexpr ULONGLONG kUnresolvedRetryMs = 2000;
 
 // All glow layers live on our overlay (never BackgroundElement — hover/active
 // storyboards own that and constantly wipe our styles).
@@ -961,6 +966,43 @@ void DisarmHookTimer(UINT_PTR id) {
     }
 }
 
+// Requires g_stateMutex.
+bool RecencyMapsEmptyLocked() {
+    for (const auto& [id, desk] : g_desktopMaps) {
+        (void)id;
+        if (!desk.appFocusMap.empty() || !desk.windowFocusMap.empty()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void EnsureDecayTimerArmed() {
+    if (!OnHookThread()) {
+        return;
+    }
+    if (g_decayTimerArmed.exchange(true)) {
+        return;
+    }
+    ArmHookTimer(kDecayTimerId, kDecayCheckIntervalMs);
+    Wh_Log(L"Decay timer armed");
+}
+
+void StopDecayTimerIfIdle() {
+    if (!OnHookThread()) {
+        return;
+    }
+    bool idle = false;
+    {
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        idle = RecencyMapsEmptyLocked() && !g_pendingFocus.valid;
+    }
+    if (idle && g_decayTimerArmed.exchange(false)) {
+        DisarmHookTimer(kDecayTimerId);
+        Wh_Log(L"Decay timer stopped (no tracked apps/windows)");
+    }
+}
+
 std::wstring ToUpper(std::wstring s) {
     if (!s.empty()) {
         LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE, s.data(),
@@ -1051,7 +1093,6 @@ bool IsOwnExplorerProcess(DWORD processId) {
 
 std::wstring PathFromAppKey(const std::wstring& key);
 std::wstring AppIdFromAppKey(const std::wstring& key);
-std::wstring ClassFromAppKey(const std::wstring& key);
 
 bool IsExcludedKey(const std::wstring& keyUpper,
                    const std::wstring& displayNameUpper) {
@@ -1173,8 +1214,7 @@ std::wstring DisplayNameFromAppId(const std::wstring& appIdUpper) {
 }
 
 std::wstring MakeAppKey(const std::wstring& pathUpper,
-                        const std::wstring& appIdUpper,
-                        const std::wstring& /*classUpper*/) {
+                        const std::wstring& appIdUpper) {
     // Win32: path only. Windhawk's editor is VSCodium.exe with AppId
     // RAMENSOFTWARE.WINDHAWK — that is still one taskbar button.
     // UWP hosts (ApplicationFrameHost / WWAHost) share one exe for many
@@ -1189,31 +1229,14 @@ std::wstring PathFromAppKey(const std::wstring& key) {
     if (key.rfind(L"APPID:", 0) == 0) {
         return {};
     }
-    auto pos = key.find(L"|CLS:");
-    if (pos != std::wstring::npos) {
-        return key.substr(0, pos);
-    }
     return key;
-}
-
-std::wstring ClassFromAppKey(const std::wstring& key) {
-    auto pos = key.find(L"|CLS:");
-    if (pos == std::wstring::npos) {
-        return {};
-    }
-    return key.substr(pos + 5);
 }
 
 std::wstring AppIdFromAppKey(const std::wstring& key) {
     if (key.rfind(L"APPID:", 0) != 0) {
         return {};
     }
-    std::wstring rest = key.substr(6);
-    auto pos = rest.find(L"|CLS:");
-    if (pos != std::wstring::npos) {
-        rest.resize(pos);
-    }
-    return rest;
+    return key.substr(6);
 }
 
 bool SamePidAndClass(HWND a, HWND b) {
@@ -1361,7 +1384,7 @@ bool ResolveAppIdentity(HWND hWnd,
         return false;
     }
 
-    const std::wstring key = MakeAppKey(pathUpper, appIdUpper, classUpper);
+    const std::wstring key = MakeAppKey(pathUpper, appIdUpper);
     const std::wstring title = GetWindowTitle(hWnd);
     std::wstring displayName = fileName;
     if (IsUwpHostFileName(fileNameUpper)) {
@@ -1453,10 +1476,12 @@ bool PathAppearsOnTaskbar(const std::wstring& keyOrPath,
     }
 
     std::lock_guard<std::mutex> lock(g_buttonPathMutex);
-    for (const auto& [id, e] : g_buttonPathCache) {
+    for (const auto& [cacheKey, e] : g_buttonPathCache) {
+        (void)cacheKey;
         if (!wantAppId.empty()) {
-            std::wstring id = e.appIdUpper.empty() ? e.autoIdUpper : e.appIdUpper;
-            if (CanonicalAppId(id) == wantAppId) {
+            std::wstring gotId =
+                e.appIdUpper.empty() ? e.autoIdUpper : e.appIdUpper;
+            if (CanonicalAppId(gotId) == wantAppId) {
                 return true;
             }
         }
@@ -1543,9 +1568,12 @@ void StampWindowRecencyLocked(DesktopRecencyState& desk,
                               const std::wstring& windowTitle,
                               ULONGLONG now);
 
-void ConfirmPreviewFocusNow(HWND hwnd) {
+void ConfirmPreviewFocusNow(HWND hwnd, DWORD expectedPid = 0) {
     if (!hwnd || g_unloading.load() ||
         !SettingsSnap()->previewHighlightEnabled) {
+        return;
+    }
+    if (expectedPid && !HwndMatchesStoredPid(hwnd, expectedPid)) {
         return;
     }
     hwnd = NormalizeFocusHwnd(hwnd);
@@ -1579,6 +1607,7 @@ void ConfirmPreviewFocusNow(HWND hwnd) {
                desk.windowFocusMap.size(),
                GuidToLogString(g_currentDesktopId).c_str());
     }
+    EnsureDecayTimerArmed();
     RequestApplyPreviewVisuals();
 }
 
@@ -1817,8 +1846,6 @@ winrt::Windows::UI::Color ResolveGlowBaseColor(const Settings& settings) {
     return c;
 }
 
-// Defined with option-C resolve stack (button → process path).
-std::wstring EnsureButtonPathCached(FrameworkElement button, bool force);
 struct ButtonIdentity {
     std::wstring pathUpper;
     std::wstring appIdUpper;
@@ -1836,14 +1863,8 @@ struct PaintCacheState {
 };
 PaintCacheState GetCachedPaintState(FrameworkElement button);
 void SetCachedPaintState(FrameworkElement button, int rank, uint32_t gen);
-TaskbarEdge CachedTaskbarEdge(FrameworkElement iconPanel);
 void RememberOurIconScale(FrameworkElement button, Media::ScaleTransform scale);
 void ClearIconScaleIfOurs(FrameworkElement icon, FrameworkElement button);
-void RefreshCachedAccent();
-void SubscribeAccentChanges();
-void UnsubscribeAccentChanges();
-void ScheduleThumbnailRelayout(FrameworkElement thumbView);
-void ClearAllThumbnailHighlights_UIThread();
 bool RunOnUiThread(const winrt::Windows::UI::Core::DispatchedHandler& handler);
 void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb);
 
@@ -2060,7 +2081,7 @@ int ScoreTitleToAutomationName(const std::wstring& windowTitle,
 
 // Score this button against one ranked app. Path / AUMID / HWND only — no
 // automation-name fuzzy. 0 = no match. 1000 may bind the same rank to many
-// buttons (secondary taskbar). 900 is 1:1 (same file, different folder).
+// buttons (secondary taskbar).
 int ScoreButtonForRank(FrameworkElement button,
                        const AppFocusInfo& info,
                        bool requireRunning) {
@@ -2072,10 +2093,7 @@ int ScoreButtonForRank(FrameworkElement button,
     }
 
     const ButtonIdentity ident = GetCachedButtonIdentity(button);
-    const std::wstring rankPath = PathFromAppKey(info.key);
-    const std::wstring rankCls = !info.classUpper.empty()
-                                     ? info.classUpper
-                                     : ClassFromAppKey(info.key);
+    const std::wstring& rankCls = info.classUpper;
 
     auto hwndOnButton = [&](HWND h) -> bool {
         if (!h) {
@@ -2097,7 +2115,9 @@ int ScoreButtonForRank(FrameworkElement button,
         return false;
     };
 
-    if (hwndOnButton(info.lastHwnd)) {
+    if (info.lastHwnd && info.lastPid &&
+        HwndMatchesStoredPid(info.lastHwnd, info.lastPid) &&
+        hwndOnButton(info.lastHwnd)) {
         return kScoreExactIdentity;
     }
 
@@ -2112,16 +2132,13 @@ int ScoreButtonForRank(FrameworkElement button,
         return 0;
     }
 
-    const std::wstring pathKey =
-        !rankPath.empty() ? rankPath : PathFromAppKey(info.key);
     const bool exactPath =
-        !ident.pathUpper.empty() &&
-        (ident.pathUpper == info.key || ident.pathUpper == pathKey);
+        !ident.pathUpper.empty() && ident.pathUpper == info.key;
     if (exactPath) {
         if (!rankCls.empty() && !ident.classUpper.empty() &&
             ident.classUpper != rankCls) {
             // Same exe, different window class (e.g. two icons from one
-            // process). Not a replica.
+            // process).
             return 0;
         }
         return kScoreExactIdentity;
@@ -3554,10 +3571,14 @@ HRESULT WINAPI CTaskListWnd_HandleClick_Hook(void* pThis,
                                  pThis, taskGroup, taskItem, launcherOptions)
                            : E_FAIL;
     // Thumbnail (or grouped-icon) click is an explicit "this window".
-    // Confirm it immediately so decay + click does not paint the sibling.
+    // Confirm on the focus thread — ResolveAppIdentity + preview apply must
+    // not run inline on the taskbar UI thread inside HandleClick.
     if (SUCCEEDED(hr) && taskItem) {
         if (HWND clicked = GetWindowFromTaskItem(taskItem)) {
-            ConfirmPreviewFocusNow(clicked);
+            const DWORD pid = PidFromHwnd(clicked);
+            PostToHookThread(WM_APP_PREVIEW_CLICK,
+                             reinterpret_cast<WPARAM>(clicked),
+                             static_cast<LPARAM>(pid));
         }
     }
     return hr;
@@ -3707,6 +3728,7 @@ std::wstring EnsureButtonPathCached(FrameworkElement button, bool force) {
 
     const ULONGLONG now = GetTickCount64();
     void* id = InspectableIdentity(button);
+    bool unresolvedRecent = false;
     {
         std::lock_guard<std::mutex> lock(g_buttonPathMutex);
         auto it = id ? g_buttonPathCache.find(id) : g_buttonPathCache.end();
@@ -3714,9 +3736,19 @@ std::wstring EnsureButtonPathCached(FrameworkElement button, bool force) {
             if (!WeakIsSameElement(it->second.button, button)) {
                 g_buttonPathCache.erase(it);
             } else if (!force && it->second.resolveAttempted) {
-                return it->second.pathUpper;
+                const bool haveIdentity = !it->second.pathUpper.empty() ||
+                                          !it->second.appIdUpper.empty();
+                if (haveIdentity) {
+                    return it->second.pathUpper;
+                }
+                if (now - it->second.lastResolveTick < kUnresolvedRetryMs) {
+                    unresolvedRecent = true;
+                }
             }
         }
+    }
+    if (unresolvedRecent && !TaskListButton_IsRunning(button)) {
+        return {};
     }
 
     DWORD pid = 0;
@@ -4068,9 +4100,9 @@ void ApplyAllHighlights_UIThread() {
         }
     }
 
-    // Path / AUMID / HWND only. 1:1 except exact identity replicas.
+    // Path / AUMID / HWND only. Exact identity may bind the same rank to many
+    // buttons (secondary taskbar / Never Combine).
     struct Cand {
-        int score;
         size_t rankIdx;
         size_t buttonIdx;
     };
@@ -4081,12 +4113,10 @@ void ApplyAllHighlights_UIThread() {
         for (size_t ri = 0; ri < ranks.size(); ++ri) {
             int s = ScoreButtonForRank(live[bi], ranks[ri], true);
             if (s >= kScoreExactIdentity) {
-                cands.push_back({s, ri, bi});
+                cands.push_back({ri, bi});
             }
         }
     }
-    std::sort(cands.begin(), cands.end(),
-              [](const Cand& a, const Cand& b) { return a.score > b.score; });
 
     std::vector<int> buttonRank(live.size(), 0);  // 1-based rank or 0
     std::vector<bool> rankTaken(ranks.size(), false);
@@ -4096,18 +4126,9 @@ void ApplyAllHighlights_UIThread() {
         if (buttonTaken[c.buttonIdx]) {
             continue;
         }
-        const bool replica = c.score >= kScoreExactIdentity;
-        if (replica) {
-            buttonTaken[c.buttonIdx] = true;
-            rankTaken[c.rankIdx] = true;
-            buttonRank[c.buttonIdx] = static_cast<int>(c.rankIdx) + 1;
-        } else if (!rankTaken[c.rankIdx]) {
-            rankTaken[c.rankIdx] = true;
-            buttonTaken[c.buttonIdx] = true;
-            buttonRank[c.buttonIdx] = static_cast<int>(c.rankIdx) + 1;
-        } else {
-            continue;
-        }
+        buttonTaken[c.buttonIdx] = true;
+        rankTaken[c.rankIdx] = true;
+        buttonRank[c.buttonIdx] = static_cast<int>(c.rankIdx) + 1;
 
         {
             std::lock_guard<std::mutex> lock(g_stateMutex);
@@ -4116,9 +4137,9 @@ void ApplyAllHighlights_UIThread() {
                 it->second.seenOnTaskbar = true;
             }
         }
-        Wh_Log(L"  bind rank %zu %s -> \"%s\" (score=%d path=%s)",
+        Wh_Log(L"  bind rank %zu %s -> \"%s\" (path=%s)",
                c.rankIdx + 1, ranks[c.rankIdx].displayName.c_str(),
-               GetButtonAutomationName(live[c.buttonIdx]).c_str(), c.score,
+               GetButtonAutomationName(live[c.buttonIdx]).c_str(),
                buttonPaths[c.buttonIdx].empty()
                    ? L"?"
                    : buttonPaths[c.buttonIdx].c_str());
@@ -4511,6 +4532,7 @@ std::vector<FrameworkElement> CollectRepeaterThumbnailViews(
 }
 
 HWND HwndFromThumbnailsGetAt(int index);
+int ThumbnailsCollectionSize();
 
 void TrackThumbView_UIThread(FrameworkElement thumbView) {
     if (!thumbView) {
@@ -5065,47 +5087,84 @@ bool GetTitleBottomRelative(FrameworkElement title,
     }
 }
 
-// Deferred re-layout for titleBar/titleBg after the flyout finishes measuring.
-// At most one nested pass (avoids infinite Low-priority loops when title never
-// reports a size).
-thread_local bool g_thumbRelayoutPending = false;
+// One Low-priority flyout refresh per UI thread. Title remeasure, hover-switch
+// (TargetItemKey), and OnApplyTemplate all coalesce here. The callback picks a
+// card that still has an ItemsRepeater ancestor — do not reuse the weak_ref
+// captured at schedule time (often the oldest tracked card, already recycled).
+// At most one follow-up when the first pass still sees unmeasured cards.
+thread_local bool g_previewFlyoutRefreshPending = false;
+thread_local bool g_previewFlyoutRefreshNeeded = false;
 thread_local int g_thumbRelayoutDepth = 0;
+thread_local int g_previewFlyoutRefreshFollowUps = 0;
 
-void ScheduleThumbnailRelayout(FrameworkElement thumbView) {
-    if (!thumbView || g_thumbRelayoutDepth > 0) {
-        return;  // already inside the deferred pass
+FrameworkElement PickLiveFlyoutThumbOnThisDispatcher() {
+    FrameworkElement withRepeater = nullptr;
+    FrameworkElement any = nullptr;
+    std::vector<winrt::weak_ref<FrameworkElement>> thumbs;
+    {
+        std::lock_guard<std::mutex> lock(g_thumbViewsMutex);
+        thumbs = g_trackedThumbViews;
     }
-    if (g_thumbRelayoutPending) {
+    ForEachLiveElementOnThisDispatcher(thumbs, [&](FrameworkElement el) {
+        if (!any) {
+            any = el;
+        }
+        if (!withRepeater && FindAncestorItemsRepeater(el)) {
+            withRepeater = el;
+        }
+    });
+    return withRepeater ? withRepeater : any;
+}
+
+void SchedulePreviewFlyoutRefresh(FrameworkElement dispatcherAnchor) {
+    if (!dispatcherAnchor || g_unloading.load()) {
         return;
     }
-    g_thumbRelayoutPending = true;
+    if (g_thumbRelayoutDepth > 0) {
+        g_previewFlyoutRefreshNeeded = true;
+        return;
+    }
+    if (g_previewFlyoutRefreshPending) {
+        return;
+    }
+    g_previewFlyoutRefreshPending = true;
     try {
-        auto dispatcher = thumbView.Dispatcher();
+        auto dispatcher = dispatcherAnchor.Dispatcher();
         if (!dispatcher) {
-            g_thumbRelayoutPending = false;
+            g_previewFlyoutRefreshPending = false;
             return;
         }
-        winrt::weak_ref<FrameworkElement> weak =
-            winrt::make_weak(thumbView);
-        // Low priority so it runs after the current layout pass.
         dispatcher.RunAsync(
-            winrt::Windows::UI::Core::CoreDispatcherPriority::Low,
-            [weak]() {
-                g_thumbRelayoutPending = false;
+            winrt::Windows::UI::Core::CoreDispatcherPriority::Low, []() {
+                g_previewFlyoutRefreshPending = false;
                 try {
-                    FrameworkElement el = weak.get();
-                    if (!el || g_unloading.load()) {
+                    if (g_unloading.load()) {
+                        return;
+                    }
+                    FrameworkElement el = PickLiveFlyoutThumbOnThisDispatcher();
+                    if (!el) {
                         return;
                     }
                     g_thumbRelayoutDepth = 1;
+                    g_previewFlyoutRefreshNeeded = false;
                     RefreshThumbnailFlyout_UIThread(el);
                     g_thumbRelayoutDepth = 0;
+                    const bool again = g_previewFlyoutRefreshNeeded &&
+                                       g_previewFlyoutRefreshFollowUps < 1;
+                    g_previewFlyoutRefreshNeeded = false;
+                    if (again) {
+                        ++g_previewFlyoutRefreshFollowUps;
+                        SchedulePreviewFlyoutRefresh(el);
+                    } else {
+                        g_previewFlyoutRefreshFollowUps = 0;
+                    }
                 } catch (...) {
                     g_thumbRelayoutDepth = 0;
+                    g_previewFlyoutRefreshFollowUps = 0;
                 }
             });
     } catch (...) {
-        g_thumbRelayoutPending = false;
+        g_previewFlyoutRefreshPending = false;
     }
 }
 
@@ -5176,7 +5235,7 @@ void ApplyThumbnailHighlight(FrameworkElement thumbView, int rankOneBased) {
         // 180×120 means layout not ready — bar placement will be wrong until
         // the deferred remeasure runs.
         if (cardSizeFallback) {
-            ScheduleThumbnailRelayout(thumbView);
+            SchedulePreviewFlyoutRefresh(thumbView);
         }
 
         auto title = FindThumbnailTitleElement(thumbView);
@@ -5292,7 +5351,7 @@ void ApplyThumbnailHighlight(FrameworkElement thumbView, int rankOneBased) {
                 stripH = (std::max)(20.0, titleBottom - top + 4.0);
             } else {
                 // Layout not ready — default strip + one deferred remeasure.
-                ScheduleThumbnailRelayout(thumbView);
+                SchedulePreviewFlyoutRefresh(thumbView);
             }
             const double hPad = 8.0;
             const double stripW = (std::max)(24.0, cardW - 2.0 * hPad);
@@ -5324,7 +5383,7 @@ void ApplyThumbnailHighlight(FrameworkElement thumbView, int rankOneBased) {
             if (laidOut) {
                 top = titleBottom + kGapBelowTitle;
             } else {
-                ScheduleThumbnailRelayout(thumbView);
+                SchedulePreviewFlyoutRefresh(thumbView);
             }
             top = (std::max)(18.0, (std::min)(top, cardH * 0.38));
 
@@ -5458,25 +5517,56 @@ void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb) {
     }
 
     // Pass 1: repeater index → GetAt → ctor map HWND.
-    // Index is against allViews (includes snap-group cards), not siblings.
+    // repeaterSourceIndex is the ItemsSource slot (round-3 compacted-vs-source
+    // fix). TaskGroup::Thumbnails is a different collection: a snap-group card
+    // can sit in the repeater and not in Thumbnails. Compare sizes before
+    // using source index as GetAt.
     if (usedRepeater) {
-        size_t si = 0;
-        for (size_t ri = 0; ri < allViews.size() && si < siblings.size();
-             ++ri) {
-            if (IsSnapGroupThumbnailView(allViews[ri])) {
-                continue;
+        const int thumbCount = ThumbnailsCollectionSize();
+        int nSnap = 0;
+        for (const auto& v : allViews) {
+            if (IsSnapGroupThumbnailView(v)) {
+                ++nSnap;
             }
-            const int srcIndex =
-                (ri < repeaterSourceIndex.size())
-                    ? repeaterSourceIndex[ri]
-                    : static_cast<int>(ri);
-            HWND hwnd = HwndFromThumbnailsGetAt(srcIndex);
-            if (hwnd && IsWindow(hwnd) && !usedHwnds.count(hwnd)) {
-                stampRecency(si, hwnd);
-                scored[si].how = ResolveHow::Repeater;
-                usedHwnds.insert(hwnd);
+        }
+        const int nRepeater = static_cast<int>(allViews.size());
+        const int nWindows = nRepeater - nSnap;
+        const bool sizeUnknown = thumbCount < 0;
+        const bool compactSnap =
+            !sizeUnknown && nSnap > 0 && thumbCount == nWindows;
+        const bool sizesAgree =
+            sizeUnknown || thumbCount == nRepeater || compactSnap;
+        if (!sizesAgree) {
+            Wh_Log(L"Preview resolve: repeater/Thumbnails size mismatch "
+                   L"(repeater=%d thumbs=%d snap=%d) — skip index bind",
+                   nRepeater, thumbCount, nSnap);
+        } else {
+            if (compactSnap) {
+                Wh_Log(L"Preview resolve: snap-group extra in repeater "
+                       L"(repeater=%d thumbs=%d) — compact GetAt index",
+                       nRepeater, thumbCount);
             }
-            ++si;
+            size_t si = 0;
+            int windowOrdinal = 0;
+            for (size_t ri = 0; ri < allViews.size() && si < siblings.size();
+                 ++ri) {
+                if (IsSnapGroupThumbnailView(allViews[ri])) {
+                    continue;
+                }
+                const int srcIndex =
+                    (ri < repeaterSourceIndex.size())
+                        ? repeaterSourceIndex[ri]
+                        : static_cast<int>(ri);
+                const int getAtIndex = compactSnap ? windowOrdinal : srcIndex;
+                HWND hwnd = HwndFromThumbnailsGetAt(getAtIndex);
+                if (hwnd && IsWindow(hwnd) && !usedHwnds.count(hwnd)) {
+                    stampRecency(si, hwnd);
+                    scored[si].how = ResolveHow::Repeater;
+                    usedHwnds.insert(hwnd);
+                }
+                ++si;
+                ++windowOrdinal;
+            }
         }
     }
 
@@ -5665,14 +5755,10 @@ void RequestApplyPreviewVisuals() {
     // focus thread — the WM_APP_REQUEST_PREVIEW_APPLY handler used to call
     // this again, which spun at 100% CPU and starved WM_TIMER.
     RunOnUiThread([]() {
-        std::vector<winrt::weak_ref<FrameworkElement>> thumbs;
-        {
-            std::lock_guard<std::mutex> lock(g_thumbViewsMutex);
-            thumbs = g_trackedThumbViews;
+        FrameworkElement el = PickLiveFlyoutThumbOnThisDispatcher();
+        if (el) {
+            SchedulePreviewFlyoutRefresh(el);
         }
-        ForEachLiveElementOnThisDispatcher(thumbs, [](FrameworkElement el) {
-            RefreshThumbnailFlyout_UIThread(el);
-        });
     });
 }
 
@@ -5833,7 +5919,12 @@ void RefreshButtonHighlight(FrameworkElement button) {
             if (ButtonHasOurChrome(button)) {
                 ClearButtonHighlight(button);
             } else {
-                SetCachedPaintState(button, 0, SettingsSnap()->generation);
+                auto ident = GetCachedButtonIdentity(button);
+                if (ident.pathUpper.empty() && ident.appIdUpper.empty()) {
+                    ScheduleRefreshAllHighlights(button);
+                } else {
+                    SetCachedPaintState(button, 0, SettingsSnap()->generation);
+                }
             }
             return;
         }
@@ -5845,7 +5936,12 @@ void RefreshButtonHighlight(FrameworkElement button) {
     } else if (ButtonHasOurChrome(button)) {
         ClearButtonHighlight(button);
     } else {
-        SetCachedPaintState(button, 0, SettingsSnap()->generation);
+        auto ident = GetCachedButtonIdentity(button);
+        if (ident.pathUpper.empty() && ident.appIdUpper.empty()) {
+            ScheduleRefreshAllHighlights(button);
+        } else {
+            SetCachedPaintState(button, 0, SettingsSnap()->generation);
+        }
     }
 }
 
@@ -5907,7 +6003,8 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     TrackButton_UIThread(button);
     RefreshButtonHighlight(button);
     const int rank = GetCachedPaintState(button).rank;
-    if (rank > 0 || g_pendingOverlaySweep.load()) {
+    // rank -1 = identity not resolved yet; do not treat as "unranked".
+    if (rank != 0 || g_pendingOverlaySweep.load()) {
         ScheduleRefreshAllHighlights(button);
     }
 }
@@ -5932,7 +6029,8 @@ void WINAPI TaskItemThumbnailView_OnApplyTemplate_Hook(void* pThis) {
         unknownPtr->QueryInterface(winrt::guid_of<FrameworkElement>(),
                                    winrt::put_abi(element));
         if (element) {
-            RefreshThumbnailFlyout_UIThread(element);
+            TrackThumbView_UIThread(element);
+            SchedulePreviewFlyoutRefresh(element);
         }
     } catch (...) {
         HRESULT hr = winrt::to_hresult();
@@ -6146,6 +6244,27 @@ using TaskItemThumbnail_GetAt_t = void*(WINAPI*)(void* pThis,
                                                  int index);
 TaskItemThumbnail_GetAt_t TaskItemThumbnail_GetAt_Original;
 
+int ThumbnailsCollectionSize() {
+    if (!TaskItemThumbnail_Size_Original) {
+        return -1;
+    }
+    winrt::Windows::Foundation::IInspectable thumbnails = nullptr;
+    try {
+        thumbnails = g_TaskGroup_Thumbnails.get();
+    } catch (...) {
+        return -1;
+    }
+    if (!thumbnails) {
+        return -1;
+    }
+    try {
+        auto* thumbnailsPtr = winrt::get_abi(thumbnails);
+        return TaskItemThumbnail_Size_Original(&thumbnailsPtr);
+    } catch (...) {
+        return -1;
+    }
+}
+
 HWND HwndFromThumbnailsGetAt(int index) {
     if (!TaskItemThumbnail_GetAt_Original || !TaskItemThumbnail_Size_Original ||
         index < 0) {
@@ -6203,14 +6322,10 @@ void WINAPI HoverFlyoutModel_TargetItemKey_Hook(void* pThis, void* param1) {
     // previous app's views.
     try {
         ClearAllThumbnailHighlights_UIThread();
-        std::vector<winrt::weak_ref<FrameworkElement>> thumbs;
-        {
-            std::lock_guard<std::mutex> lock(g_thumbViewsMutex);
-            thumbs = g_trackedThumbViews;
+        FrameworkElement el = PickLiveFlyoutThumbOnThisDispatcher();
+        if (el) {
+            SchedulePreviewFlyoutRefresh(el);
         }
-        ForEachLiveElementOnThisDispatcher(thumbs, [](FrameworkElement el) {
-            ScheduleThumbnailRelayout(el);
-        });
     } catch (...) {
     }
 }
@@ -6478,6 +6593,7 @@ void OnPreviewMinFocusTimerElapsed(MinFocusConfirmMode mode) {
                GuidToLogString(pending.desktopId).c_str());
     }
 
+    EnsureDecayTimerArmed();
     RequestApplyPreviewVisuals();
 }
 
@@ -6564,6 +6680,8 @@ void OnMinFocusTimerElapsed(MinFocusConfirmMode mode) {
             info.lastWindowTitle = pending.windowTitle;
         }
         info.lastHwnd = pending.hwnd;
+        info.lastPid = pending.processId ? pending.processId
+                                         : PidFromHwnd(pending.hwnd);
         info.classUpper = classUpper;
         info.appIdUpper = appIdUpper;
         info.lastConfirmedFocusTick = now;
@@ -6597,6 +6715,8 @@ void OnMinFocusTimerElapsed(MinFocusConfirmMode mode) {
                pending.windowTitle.c_str(),
                GuidToLogString(pending.desktopId).c_str());
     }
+
+    EnsureDecayTimerArmed();
 
     if (alsoConfirmPreviewWindow) {
         RequestApplyPreviewVisuals();
@@ -6884,6 +7004,7 @@ void OnDecayTimer() {
                windowsAfter);
         RequestApplyPreviewVisuals();
     }
+    StopDecayTimerIfIdle();
 }
 
 // ---------------------------------------------------------------------------
@@ -6937,6 +7058,10 @@ LRESULT CALLBACK HookThreadWndProc(HWND hWnd,
             RequestApplyVisuals();
             RequestApplyPreviewVisuals();
             return 0;
+        case WM_APP_PREVIEW_CLICK:
+            ConfirmPreviewFocusNow(reinterpret_cast<HWND>(wParam),
+                                   static_cast<DWORD>(lParam));
+            return 0;
         case WM_TIMER:
             if (wParam == kMinFocusTimerId) {
                 KillTimer(hWnd, kMinFocusTimerId);
@@ -6963,6 +7088,7 @@ LRESULT CALLBACK HookThreadWndProc(HWND hWnd,
 
 DWORD WINAPI WinEventHookThread(LPVOID /*param*/) {
     g_hookThreadId.store(GetCurrentThreadId(), std::memory_order_release);
+    g_decayTimerArmed.store(false);
 
     HMODULE hMod = nullptr;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -7029,7 +7155,6 @@ DWORD WINAPI WinEventHookThread(LPVOID /*param*/) {
         Wh_Log(L"EVENT_SYSTEM_DESKTOPSWITCH hook installed");
     }
 
-    SetTimer(hwnd, kDecayTimerId, kDecayCheckIntervalMs, nullptr);
     RefreshCurrentDesktopId();
 
     if (HWND fg = GetForegroundWindow()) {
@@ -7060,6 +7185,7 @@ DWORD WINAPI WinEventHookThread(LPVOID /*param*/) {
     ReleaseVdm();
     UnsubscribeAccentChanges();
 
+    g_decayTimerArmed.store(false);
     g_hookThreadHwnd.store(nullptr, std::memory_order_release);
     DestroyWindow(hwnd);
     UnregisterClassW(wc.lpszClassName, wc.hInstance);
@@ -7353,7 +7479,7 @@ void LoadSettings() {
 // ---------------------------------------------------------------------------
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"> Taskbar Recent Focus Highlight init v0.9.4");
+    Wh_Log(L"> Taskbar Recent Focus Highlight init v0.9.6");
 
     g_unloading = false;
     LoadSettings();
