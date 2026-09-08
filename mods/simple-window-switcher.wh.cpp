@@ -2,7 +2,7 @@
 // @id              simple-window-switcher
 // @name            Simple Window Switcher
 // @description     Replaces the default Alt+Tab with a lightweight window switcher inspired by ExplorerPatcher's Simple Window Switcher
-// @version         2.1
+// @version         2.2
 // @author          Lone
 // @github          https://github.com/Louis047
 // @include         windhawk.exe
@@ -724,6 +724,7 @@ static void LoadSettings();
 static void SWS_RegisterHotkeys();
 static void SWS_UnregisterHotkeys();
 static void ApplySwitcherRegion();
+static void ApplyThemeToWindow(HWND hWnd);
 static void CreateMirrorSwitchers();
 static void HideSwitcher();
 
@@ -3498,32 +3499,13 @@ static void PaintSwitcher() {
 
 // Switcher Show / Hide / Switch
 
-static void GetOffscreenDelayPosition(int* x, int* y) {
-    // Position the 1x1 window safely far off every monitor by going 32000px past
-    // the virtual screen boundary — arrangement-agnostic and guaranteed
-    // to be off-screen even with multiple 4K displays left/above primary,
-    // avoiding DWM thickframe/shadow artifacts bleeding into (0, 0).
-    *x = GetSystemMetrics(SM_XVIRTUALSCREEN) - 32000;
-    *y = GetSystemMetrics(SM_YVIRTUALSCREEN) - 32000;
-}
-
 static void CancelPendingShow() {
     if (g_hSwitcher) {
         KillTimer(g_hSwitcher, SWS_SHOW_DELAY_TIMER_ID);
+        KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
     }
 
     g_isPendingShow = false;
-}
-
-static void ShowPendingOffscreenWindow() {
-    int x, y;
-    GetOffscreenDelayPosition(&x, &y);
-
-    // Show as 1x1 off-screen. No transparency/style changes needed.
-    SetWindowPos(g_hSwitcher, HWND_TOPMOST, x, y, 1, 1, SWP_NOACTIVATE);
-
-    ShowWindow(g_hSwitcher, SW_SHOWNA);
-    SetForegroundWindow(g_hSwitcher);
 }
 
 static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
@@ -3572,13 +3554,22 @@ static void RevealPendingSwitcher() {
     int w = g_pendingSwitcherRect.right - g_pendingSwitcherRect.left;
     int h = g_pendingSwitcherRect.bottom - g_pendingSwitcherRect.top;
 
-    SetWindowPos(g_hSwitcher, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
+    // Restore standard DWM non-client rendering policy
+    DWMNCRENDERINGPOLICY enabled = DWMNCRP_ENABLED;
+    DwmSetWindowAttribute(g_hSwitcher, DWMWA_NCRENDERING_POLICY, &enabled, sizeof(enabled));
+
+    ApplyThemeToWindow(g_hSwitcher);
     ApplySwitcherRegion();
+
+    SetWindowPos(g_hSwitcher, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED | SWP_NOACTIVATE);
     CreateMirrorSwitchers();
     if (g_hCloseBtnWnd) {
         SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
         ShowWindow(g_hCloseBtnWnd, SW_SHOWNA);
     }
+
+    ShowWindow(g_hSwitcher, SW_SHOWNA);
+    SetForegroundWindow(g_hSwitcher);
 
     RegisterThumbnails();
     PaintSwitcher();
@@ -3599,6 +3590,7 @@ static void ApplyThemeToWindow(HWND hWnd) {
 
     LONG_PTR exs = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
     if (ThemeIs(L"none")) {
+        SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exs & ~WS_EX_LAYERED);
         SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exs | WS_EX_LAYERED);
     } else {
         SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exs & ~WS_EX_LAYERED);
@@ -3762,9 +3754,6 @@ static void ShowSwitcher(bool sticky) {
     int cx, cy;
     GetSwitcherPosition(mi.rcWork, &cx, &cy);
 
-    ApplyThemeToWindow(g_hSwitcher);
-    ApplySwitcherRegion();
-
     g_pendingSwitcherRect = {
         cx,
         cy,
@@ -3778,8 +3767,26 @@ static void ShowSwitcher(bool sticky) {
         g_isPendingShow = true;
         g_isVisible = false;
 
-        ShowPendingOffscreenWindow();
+        // Ensure WS_EX_LAYERED is active so we can set 100% transparency
+        LONG_PTR exStyle = GetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE);
+        SetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
 
+        // Suppress DWM frame/shadow so no visual artifact appears anywhere on screen
+        DWMNCRENDERINGPOLICY disabled = DWMNCRP_DISABLED;
+        DwmSetWindowAttribute(g_hSwitcher, DWMWA_NCRENDERING_POLICY, &disabled, sizeof(disabled));
+
+        // 100% transparent: zero pixels rendered
+        SetLayeredWindowAttributes(g_hSwitcher, 0, 0, LWA_ALPHA);
+
+        // Position directly at target coordinates (no off-screen coordinate guessing)
+        SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
+        ShowWindow(g_hSwitcher, SW_SHOWNA);
+
+        // Establishing foreground ownership ensures UIPI does not block input tracking
+        // (WM_KEYUP, GetAsyncKeyState) when invoked over elevated/Admin windows
+        SetForegroundWindow(g_hSwitcher);
+
+        SetTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID, 50, NULL);
         SetTimer(g_hSwitcher, SWS_SHOW_DELAY_TIMER_ID, g_settings.showDelay, NULL);
         return;
     }
@@ -3789,6 +3796,9 @@ static void ShowSwitcher(bool sticky) {
     if (!g_hMouseHook) {
         g_hMouseHook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, GetModuleHandle(NULL), 0);
     }
+
+    ApplyThemeToWindow(g_hSwitcher);
+    ApplySwitcherRegion();
 
     SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
     ShowWindow(g_hSwitcher, SW_SHOWNA);
@@ -3837,6 +3847,20 @@ static void HideSwitcher() {
     g_isPaginatedView = false;
 }
 
+// Restores a window from iconic (minimized) state.
+// ShowWindow(SW_RESTORE) works for standard windows, but UIPI blocks it
+// for elevated (admin) windows. If the window remains iconic after ShowWindow,
+// PostMessage(WM_SYSCOMMAND, SC_RESTORE) is used as a fallback because
+// PostMessage with SC_RESTORE is permitted across integrity boundaries.
+static void RestoreWindowIfIconic(HWND hWnd) {
+    if (IsIconic(hWnd)) {
+        ShowWindow(hWnd, SW_RESTORE);
+        if (IsIconic(hWnd)) {
+            PostMessage(hWnd, WM_SYSCOMMAND, SC_RESTORE, 0);
+        }
+    }
+}
+
 static void SwitchToSelected() {
     if (g_selectedIndex < 0 || g_selectedIndex >= (int)g_windows.size()) { HideSwitcher(); return; }
     HWND hT = g_windows[g_selectedIndex].hWnd;
@@ -3847,13 +3871,21 @@ static void SwitchToSelected() {
     
     // Restore sibling windows without stealing activation focus from target
     for (HWND hw : groupWindows) {
-        if (IsWindow(hw) && hw != hT && IsIconic(hw)) ShowWindow(hw, SW_SHOWNOACTIVATE);
+        if (IsWindow(hw) && hw != hT && IsIconic(hw)) {
+            ShowWindow(hw, SW_SHOWNOACTIVATE);
+            if (IsIconic(hw)) {
+                PostMessage(hw, WM_SYSCOMMAND, SC_RESTORE, 0);
+            }
+        }
     }
     
     if (IsWindow(hT)) {
         HWND hP = GetLastActivePopup(hT);
         HWND hF = IsWindowVisible(hP) ? hP : hT;
-        if (IsIconic(hF)) ShowWindow(hF, SW_RESTORE);
+        RestoreWindowIfIconic(hT);
+        if (hF != hT) {
+            RestoreWindowIfIconic(hF);
+        }
         if (!SetForegroundWindow(hF)) SwitchToThisWindow(hF, TRUE);
     }
     
@@ -3889,10 +3921,6 @@ static void RecomputeAndReposition() {
     };
 
     if (g_isPendingShow) {
-        int ox, oy;
-        GetOffscreenDelayPosition(&ox, &oy);
-
-        SetWindowPos(g_hSwitcher, HWND_TOPMOST, ox, oy, 1, 1, SWP_NOACTIVATE);
         return;
     }
 
@@ -4567,7 +4595,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             SwitchToSelected();
             return 0;
         }
-        if (wParam == VK_ESCAPE && g_isVisible) {
+        if (wParam == VK_ESCAPE && (g_isVisible || g_isPendingShow)) {
             if (g_consumeEscUp) { g_consumeEscUp = false; return 0; }
             HideSwitcher();
             return 0;
@@ -4589,6 +4617,10 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
         break;
     case WM_SYSKEYDOWN: case WM_KEYDOWN:
+        if (wParam == VK_ESCAPE && g_isPendingShow) {
+            HideSwitcher();
+            return 0;
+        }
         if (g_isVisible) {
             // Ctrl tap: drill into / out of the selected application's windows.
             if ((wParam == VK_CONTROL || wParam == VK_LCONTROL || wParam == VK_RCONTROL)
@@ -5194,7 +5226,7 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     DWORD dwStyle = WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
     DWORD exStyle = WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED;
     g_hSwitcher = CreateWindowExW(exStyle, SWS_CLASSNAME, L"",
-        dwStyle, -9999, -9999, 1, 1, NULL, NULL, GetModuleHandleW(NULL), NULL);
+        dwStyle, 0, 0, 0, 0, NULL, NULL, GetModuleHandleW(NULL), NULL);
     if (!g_hSwitcher) { Wh_Log(L"Failed to create switcher window"); return 1; }
 
     g_hCloseBtnWnd = CreateWindowExW(
@@ -5222,7 +5254,7 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     }
 
     SWS_UnregisterHotkeys();
-    if (g_isVisible) HideSwitcher();
+    if (g_isVisible || g_isPendingShow) HideSwitcher();
     UnregisterThumbnails();
     g_windows.clear();
     if (g_hCloseBtnWnd) { DestroyWindow(g_hCloseBtnWnd); g_hCloseBtnWnd = NULL; }
