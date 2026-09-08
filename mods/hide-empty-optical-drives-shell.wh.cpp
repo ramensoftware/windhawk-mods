@@ -78,7 +78,7 @@ enum class MediaState : LONG {
     Present = 2,
 };
 
-constexpr DWORD kAllDriveBits = 0x03FFFFFFu;
+constexpr DWORD kAllDriveBits = (1u << 26) - 1;
 constexpr DWORD kRetryIntervalMs = 500;
 constexpr int kMaxRetryAttempts = 20;
 
@@ -87,7 +87,17 @@ constexpr UINT kMsgStop = WM_APP + 2;
 
 std::atomic<DWORD> g_managedMask{kAllDriveBits};
 std::atomic<DWORD> g_opticalMask{0};
-std::atomic<MediaState> g_mediaState[26];
+std::atomic<MediaState> g_mediaState[26] = {
+    MediaState::Unknown, MediaState::Unknown, MediaState::Unknown,
+    MediaState::Unknown, MediaState::Unknown, MediaState::Unknown,
+    MediaState::Unknown, MediaState::Unknown, MediaState::Unknown,
+    MediaState::Unknown, MediaState::Unknown, MediaState::Unknown,
+    MediaState::Unknown, MediaState::Unknown, MediaState::Unknown,
+    MediaState::Unknown, MediaState::Unknown, MediaState::Unknown,
+    MediaState::Unknown, MediaState::Unknown, MediaState::Unknown,
+    MediaState::Unknown, MediaState::Unknown, MediaState::Unknown,
+    MediaState::Unknown, MediaState::Unknown,
+};
 
 std::atomic<DWORD> g_arrivalRequestMask{0};
 std::atomic<DWORD> g_removalRequestMask{0};
@@ -272,7 +282,7 @@ CDrivesViewCallback_ShouldShow_Hook(void* self,
         return hr;
     }
 
-    if (FAILED(hr) || hr == S_FALSE ||
+    if (FAILED(hr) ||
         !IsManagedLetter(letter) || !IsCachedOpticalDrive(letter)) {
         return hr;
     }
