@@ -598,10 +598,16 @@ void WINAPI ConfirmatorHostControl_Hide_Hook(void* pThis) {
     Wh_Log(L"> skip=%d", (int)skip);
 
     if (skip) {
+        // Restored however this returns. Hide is an implementation method rather
+        // than an abi thunk, so an hresult_error coming out of it would otherwise
+        // leave the flag latched and the setting dead for the rest of the session.
+        struct Restore {
+            bool& flag;
+            ~Restore() { flag = false; }
+        } restore{redirecting};
+
         redirecting = true;
-        ConfirmatorHostControl_HideWithoutAnimation_Original(pThis);
-        redirecting = false;
-        return;
+        return ConfirmatorHostControl_HideWithoutAnimation_Original(pThis);
     }
 
     return ConfirmatorHostControl_Hide_Original(pThis);
@@ -912,35 +918,35 @@ BOOL Wh_ModInit() {
     // it would be placed using a stale one. Rather than misplace an indicator,
     // drop to the main position for everything and say so in the log.
     // Each kind is recognised as long as one of its two entry points resolved.
-    // There are eight entry points but seven kinds, since camera has two, so each
-    // one is named rather than numbered.
+    // These are named after the symbols rather than the kinds, since there are
+    // eight of them and only seven kinds, camera having two.
     const struct {
         PCWSTR name;
         const void* ramp;
         const void* thunk;
     } kindRecorders[] = {
-        {L"volume",
+        {L"ShowVolume",
          (void*)ShowVolumeAsync_Original,
          (void*)ShowVolumeThunk_Original},
-        {L"brightness",
+        {L"ShowBrightness",
          (void*)ShowBrightnessAsync_Original,
          (void*)ShowBrightnessThunk_Original},
-        {L"keyboard brightness",
+        {L"ShowKeyboardBrightness",
          (void*)ShowKeyboardBrightnessAsync_Original,
          (void*)ShowKeyboardBrightnessThunk_Original},
-        {L"airplane mode",
+        {L"ShowAirplaneModeOn",
          (void*)ShowAirplaneModeOnAsync_Original,
          (void*)ShowAirplaneModeOnThunk_Original},
-        {L"camera on",
+        {L"ShowCameraOn",
          (void*)ShowCameraOnAsync_Original,
          (void*)ShowCameraOnThunk_Original},
-        {L"camera access",
+        {L"ShowCameraAccessEnabled",
          (void*)ShowCameraAccessEnabledAsync_Original,
          (void*)ShowCameraAccessEnabledThunk_Original},
-        {L"microphone",
+        {L"ShowMicrophoneMuted",
          (void*)ShowMicrophoneMutedAsync_Original,
          (void*)ShowMicrophoneMutedThunk_Original},
-        {L"text",
+        {L"ShowText",
          (void*)ShowTextAsync_Original,
          (void*)ShowTextThunk_Original},
     };
