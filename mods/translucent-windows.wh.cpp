@@ -245,6 +245,8 @@ std::wstring g_LastThemePath = GetCurrentWindowsThemePath();
 // Flag to prevent customizing text colors of Task Manager
 BOOL g_InsideTaskMgrProc = FALSE;
 
+BOOL g_InsideExplorerProc = FALSE;
+
 using PUNICODE_STRING = PVOID;
 constexpr auto MENUPOPUP_CLASS = L"#32768";
 constexpr UINT THEMECLS_COMMONPROPS_PART = 0;
@@ -606,7 +608,7 @@ std::wstring GetCurrProcStr() {
     return GetProcStrFromPath(modulePath);
 }
 
-BOOL InExplorerProcess() {
+BOOL CheckExplorerProcess() {
     return GetCurrProcStr() == L"explorer.exe";
 }
 
@@ -5797,11 +5799,11 @@ VOID User32Hooks(BOOL areSysColorsApplied)
 }
 
 // Change Desktop items text and shadow colors in light theme
-int (STDCALL *DrawShadowTextEx_orig)(HDC, LPCWSTR, INT, LPRECT, UINT, COLORREF, COLORREF, INT, INT, BYTE, BOOL);
-int STDCALL HookedDrawShadowTextEx(HDC hdc, LPCWSTR lpchText, INT cchText, LPRECT pRect, UINT uformat, 
+int (__fastcall *DrawShadowTextEx_orig)(HDC, LPCWSTR, INT, LPRECT, UINT, COLORREF, COLORREF, INT, INT, BYTE, BOOL);
+int __fastcall HookedDrawShadowTextEx(HDC hdc, LPCWSTR lpchText, INT cchText, LPRECT pRect, UINT uformat, 
                 COLORREF crText, COLORREF crShadow, INT ixOffset, INT iyOffset, BYTE bAlpha, BOOL InitBufferPaintFlag)
 {
-    if (!g_IsSysThemeDarkMode && InExplorerProcess()) {
+    if (!g_IsSysThemeDarkMode && g_InsideExplorerProc) {
         crText = RGB(0, 0, 0);
         crShadow = RGB(255, 255, 255);
     }
@@ -6537,7 +6539,8 @@ VOID LoadSettings()
 
 BOOL Wh_ModInit(VOID) 
 {
-    if (InExplorerProcess())
+    g_InsideExplorerProc = CheckExplorerProcess();
+    if (g_InsideExplorerProc)
         g_explorerStylerNoBackgroundEffectAtom = AddAtom(L"WindhawkFileExplorerStylerNoBackgroundEffect");
     if (InTaskManagerProcess())
         g_InsideTaskMgrProc = TRUE;
