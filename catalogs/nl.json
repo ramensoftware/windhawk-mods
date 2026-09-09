@@ -16930,6 +16930,59 @@
         "version": "0.1"
       }
     },
+    "win7-window-animations-restorer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1788993748000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1788993748000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "babamohammed",
+        "compilerOptions": "-lgdi32 -lmsimg32 -lshcore -ldwmapi",
+        "description": "This mod restores the Windows 7 Aero minimize, restore and close animations on Windows 10 and Windows 11",
+        "exclude": [
+          "dwm.exe",
+          "ntoskrnl.exe",
+          "smss.exe",
+          "csrss.exe",
+          "wininit.exe",
+          "winlogon.exe",
+          "services.exe",
+          "lsass.exe",
+          "svchost.exe",
+          "fontdrvhost.exe",
+          "audiodg.exe",
+          "LogonUI.exe",
+          "consent.exe",
+          "WerFault.exe",
+          "sihost.exe",
+          "ctfmon.exe",
+          "RuntimeBroker.exe",
+          "ShellExperienceHost.exe",
+          "StartMenuExperienceHost.exe",
+          "SearchHost.exe",
+          "TextInputHost.exe",
+          "windhawk.exe"
+        ],
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "*"
+        ],
+        "license": "MIT",
+        "name": "Windows 7 Window Animations Restorer",
+        "version": "1.0.0"
+      }
+    },
     "win95-nt4-menubars": {
       "details": {
         "defaultSorting": 693,

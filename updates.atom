@@ -2,12 +2,62 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-09T22:22:18.000Z</updated>
+    <updated>2026-09-09T22:42:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Window Animations Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-window-animations-restorer#fd9f9ebfefba8b7839633521bde2f92390574f16</id>
+        <link href="https://windhawk.net/mods/win7-window-animations-restorer"/>
+        <updated>2026-09-09T22:42:28.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows7windowanimationsrestorer">Windows 7 Window Animations Restorer</h1>
+<h2 id="about">About</h2>
+<p>This mod tries to restore the Windows 7 window animations on Windows 10 and 11 <strong>without modifying the DWM</strong> (the part of Windows that draws window effects).</p>
+<h2 id="sampleanimation">Sample Animation</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/bandicam2026-08-3014-19-03-266-ezgif.com-video-to-gif-converter.gif" alt="Demo GIF" /></p>
+<h2 id="whatitdoes">What it does</h2>
+<ul>
+<li><strong>Minimize / restore</strong>: the window shrinks toward its taskbar button with the Windows 7 tilt-and-fade look (a slight 3D perspective, about a quarter of a second), then grows back the same way when you restore it. The real window only appears once the animation has caught up to it, so you never see a flash of the "wrong" state.</li>
+<li><strong>Close</strong>: when a window closes, a snapshot of it tilts away and fades out over about a fifth of a second. The frames are rendered on the mod's own overlay thread; the closing app's UI thread only waits for the effect to finish (answering sent messages in the meantime, with a hard deadline), so a "save changes?" prompt the app itself puts up first still works exactly as it would without the mod, but the app won't otherwise process input or posted messages until the animation finishes.</li>
+<li><strong>Open</strong>: opening a window is not animated by this mod as Windows handles that on its own (it may be added in a future update).</li>
+</ul>
+<h2 id="knownlimitations">Known Limitations</h2>
+<ul>
+<li>Opening a window isn't animated (see above).</li>
+<li>If a window can't be minimized, its animation is simply skipped.</li>
+<li>Dialogs without a minimize button aren't animated.</li>
+<li>MDI child windows (documents inside an MDI frame) are left to Windows: they have no taskbar button to fly to.</li>
+<li>Some UWP apps may not support the closing animation.</li>
+<li>Snipping Tool doesn't play the closing animation for stability reasons.</li>
+</ul>
+<h2 id="whichapplicationsareaffected">Which applications are affected</h2>
+<p>The mod loads into every running program, except for a short list of system, shell, and UWP components that couldn't be animated anyway. It only ever touches a program's own top-level windows. If you want to limit it to specific programs, use the "Custom process inclusion/exclusion list" in the mod's advanced settings.</p>
+<h2 id="notes">Notes</h2>
+<p>This is a best-effort recreation of the Windows 7 look, not a perfect copy. If there are problems or suggestions, please reach out to the author.
+The mod has been tested on Windows 10 21H2, Windows 11 24H2, and Windows 11 25H2. System files are not modified and Windows components are not replaced because the modification just recreates the Windows 7 timing and motion on top of the current system. It is recommended to turn on logging in the advanced settings to see why a specific window wasn't animated.
+For best results, avoid running this alongside other window-animation mods.</p>
+<h2 id="credits">Credits</h2>
+<p>Visual references only (no code was taken from these):</p>
+<ul>
+<li><p><strong>DWM 3D Transforms</strong> by <a href="https://github.com/tetawaves">xalejandro</a>.</p></li>
+<li><p><a href="https://github.com/ALTaleX531/OpenGlass">OpenGlass</a> by ALTaleX.</p></li>
+<li><p><strong>3D Aero Transforms mod</strong> by <a href="https://github.com/kieldbg">kieldbg</a>.</p></li>
+<li><p>The overall approach (a dedicated overlay thread plus <code>user32</code> hooks on the
+<code>Def*Proc</code>/<code>ShowWindow</code> family) was inspired by
+<a href="https://windhawk.net/mods/classic-min-max-animations">Classic Minimize/Maximize Animations</a>
+by <a href="https://github.com/aubymori">aubymori</a>. This mod is a from-scratch
+reimplementation of that idea; no code from that mod is included here.</p></li>
+<li><p><code>Mat::Matrix4x4F</code> is a from-scratch implementation of the public Microsoft
+<code>D2D1::Matrix4x4F</code> helper API (<code>d2d1_1helper.h</code>).</p></li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[File Operation Styler 1.0.0]]></title>
         <id>https://windhawk.net/mods/file-operation-styler#a1c505d677b0f1af43e75a8bf8d8d39e9bb8d388</id>
@@ -635,20 +685,6 @@ attribution look busier than expected.</li>
         <id>https://windhawk.net/mods/taskbar-icon-separators#821a5dc751f6f7a2f74dbf5043556d3b9dbc7c93</id>
         <link href="https://windhawk.net/mods/taskbar-icon-separators"/>
         <updated>2026-09-05T15:13:20.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated the author's GitHub profile URL after the username changed from <code>Meteony</code> to <code>Meteoni</code>.</li>
-<li>Updated screenshot and GIF URLs to use the renamed <code>Meteoni/meteoni-assets</code> repository.</li>
-</ul>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteoni</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Startup App Delay Fix 1.4.1]]></title>
-        <id>https://windhawk.net/mods/startup-app-delay-fix#5dfb0c9fddff47dafe0638de29216812c5b21bee</id>
-        <link href="https://windhawk.net/mods/startup-app-delay-fix"/>
-        <updated>2026-09-05T15:13:14.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Updated the author's GitHub profile URL after the username changed from <code>Meteony</code> to <code>Meteoni</code>.</li>
 <li>Updated screenshot and GIF URLs to use the renamed <code>Meteoni/meteoni-assets</code> repository.</li>

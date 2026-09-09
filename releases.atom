@@ -2,12 +2,62 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-09T22:22:18.000Z</updated>
+    <updated>2026-09-09T22:42:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Window Animations Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-window-animations-restorer#fd9f9ebfefba8b7839633521bde2f92390574f16</id>
+        <link href="https://windhawk.net/mods/win7-window-animations-restorer"/>
+        <updated>2026-09-09T22:42:28.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows7windowanimationsrestorer">Windows 7 Window Animations Restorer</h1>
+<h2 id="about">About</h2>
+<p>This mod tries to restore the Windows 7 window animations on Windows 10 and 11 <strong>without modifying the DWM</strong> (the part of Windows that draws window effects).</p>
+<h2 id="sampleanimation">Sample Animation</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/bandicam2026-08-3014-19-03-266-ezgif.com-video-to-gif-converter.gif" alt="Demo GIF" /></p>
+<h2 id="whatitdoes">What it does</h2>
+<ul>
+<li><strong>Minimize / restore</strong>: the window shrinks toward its taskbar button with the Windows 7 tilt-and-fade look (a slight 3D perspective, about a quarter of a second), then grows back the same way when you restore it. The real window only appears once the animation has caught up to it, so you never see a flash of the "wrong" state.</li>
+<li><strong>Close</strong>: when a window closes, a snapshot of it tilts away and fades out over about a fifth of a second. The frames are rendered on the mod's own overlay thread; the closing app's UI thread only waits for the effect to finish (answering sent messages in the meantime, with a hard deadline), so a "save changes?" prompt the app itself puts up first still works exactly as it would without the mod, but the app won't otherwise process input or posted messages until the animation finishes.</li>
+<li><strong>Open</strong>: opening a window is not animated by this mod as Windows handles that on its own (it may be added in a future update).</li>
+</ul>
+<h2 id="knownlimitations">Known Limitations</h2>
+<ul>
+<li>Opening a window isn't animated (see above).</li>
+<li>If a window can't be minimized, its animation is simply skipped.</li>
+<li>Dialogs without a minimize button aren't animated.</li>
+<li>MDI child windows (documents inside an MDI frame) are left to Windows: they have no taskbar button to fly to.</li>
+<li>Some UWP apps may not support the closing animation.</li>
+<li>Snipping Tool doesn't play the closing animation for stability reasons.</li>
+</ul>
+<h2 id="whichapplicationsareaffected">Which applications are affected</h2>
+<p>The mod loads into every running program, except for a short list of system, shell, and UWP components that couldn't be animated anyway. It only ever touches a program's own top-level windows. If you want to limit it to specific programs, use the "Custom process inclusion/exclusion list" in the mod's advanced settings.</p>
+<h2 id="notes">Notes</h2>
+<p>This is a best-effort recreation of the Windows 7 look, not a perfect copy. If there are problems or suggestions, please reach out to the author.
+The mod has been tested on Windows 10 21H2, Windows 11 24H2, and Windows 11 25H2. System files are not modified and Windows components are not replaced because the modification just recreates the Windows 7 timing and motion on top of the current system. It is recommended to turn on logging in the advanced settings to see why a specific window wasn't animated.
+For best results, avoid running this alongside other window-animation mods.</p>
+<h2 id="credits">Credits</h2>
+<p>Visual references only (no code was taken from these):</p>
+<ul>
+<li><p><strong>DWM 3D Transforms</strong> by <a href="https://github.com/tetawaves">xalejandro</a>.</p></li>
+<li><p><a href="https://github.com/ALTaleX531/OpenGlass">OpenGlass</a> by ALTaleX.</p></li>
+<li><p><strong>3D Aero Transforms mod</strong> by <a href="https://github.com/kieldbg">kieldbg</a>.</p></li>
+<li><p>The overall approach (a dedicated overlay thread plus <code>user32</code> hooks on the
+<code>Def*Proc</code>/<code>ShowWindow</code> family) was inspired by
+<a href="https://windhawk.net/mods/classic-min-max-animations">Classic Minimize/Maximize Animations</a>
+by <a href="https://github.com/aubymori">aubymori</a>. This mod is a from-scratch
+reimplementation of that idea; no code from that mod is included here.</p></li>
+<li><p><code>Mat::Matrix4x4F</code> is a from-scratch implementation of the public Microsoft
+<code>D2D1::Matrix4x4F</code> helper API (<code>d2d1_1helper.h</code>).</p></li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[File Operation Styler 1.0.0]]></title>
         <id>https://windhawk.net/mods/file-operation-styler#a1c505d677b0f1af43e75a8bf8d8d39e9bb8d388</id>
@@ -1174,62 +1224,6 @@ Released under GPL-3.0.</p>]]></content>
         <author>
             <name>Yevhenii Starychenko</name>
             <uri>https://github.com/starychenko</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MuteAlert - Microphone Activity Taskbar Widget 0.9.7]]></title>
-        <id>https://windhawk.net/mods/mutealert#accf687cec4460a68914869c4d7fcd998a626265</id>
-        <link href="https://windhawk.net/mods/mutealert"/>
-        <updated>2026-08-28T20:37:01.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="mutealertforwindhawk">MuteAlert for Windhawk</h1>
-<p>Adds a microphone button to the Windows 11 system tray area.</p>
-<p><img src="https://raw.githubusercontent.com/MuteAlert/windhawk/main/assets/taskbar-widget.png" alt="MuteAlert microphone activity widget" /></p>
-<ul>
-<li>The microphone fills from bottom to top as the default input device detects
-sound.</li>
-<li>Hover to see the default microphone name, input volume, mute state, and
-available mouse controls.</li>
-<li>Scroll over the button to change the input volume.</li>
-<li>Optionally lock the microphone at a chosen volume. Scrolling updates the
-locked target when this is enabled.</li>
-<li>Left-click the button to mute or unmute the microphone.</li>
-<li>A secondary Slack, Teams, or Zoom logo shows the active call microphone
-state and focuses the call window when left-clicked.</li>
-<li>Headset mute synchronization supports Windows hardware mute reporting,
-standard USB HID mute controls, and vendor-specific adapters. SteelSeries
-Arctis Nova Pro Wireless is the first high-confidence vendor adapter.</li>
-<li>If you speak while muted in a Slack huddle, Microsoft Teams call, or Zoom
-meeting, the widget warns you and can play an optional audio cue.</li>
-<li>Right-click the widget to mute or unmute active call apps when that action
-is shown in the tooltip.</li>
-</ul>
-<p>The widget follows the default Windows capture endpoint. Changing the default
-input device in Windows automatically moves the widget to the new device.</p>
-<p>Call-app monitoring and call synchronization are disabled by default. Enable
-only the Slack, Teams, or Zoom features you use. When enabled, MuteAlert first
-checks capture audio sessions and only performs UI Automation scans for an app
-that is recording, has a pending command, or was already detected in a call.</p>
-<p>Headset detection reports one of four methods in the hover tooltip: Windows
-hardware mute, Standard HID mute button, SteelSeries device state, or
-Unsupported/no observable state. Standard HID buttons are events and do not
-prove the position of a latched switch. Purely mechanical disconnect switches
-cannot be observed, and a zero audio level is never interpreted as mute.</p>
-<p>For unsupported headsets, set <strong>Export sanitized headset diagnostics</strong> to a
-full <code>.txt</code> path and apply Settings. The report includes device IDs, HID
-descriptors, provider slots, and changed byte offsets, but excludes device
-paths, serial numbers, and raw report values.</p>
-<p>Windows 11 is required. x64 and ARM64 Explorer are supported.</p>
-<h2 id="howthisdiffersfromexistingmicrophonemods">How this differs from existing microphone mods</h2>
-<p>Unlike <strong>mic-tray-control</strong>, MuteAlert injects a native XAML taskbar widget
-with a live bottom-to-top peak meter and an optional separate call-app badge.
-It also detects speaking while a Slack, Teams, or Zoom call is muted and can
-synchronize observable headset mute controls with Windows and active calls.
-<strong>adaptive-microphone-icon-visibility</strong> controls the visibility of Windows'
-built-in microphone indicator; MuteAlert supplies its own interactive meter,
-volume control, call state, and headset integration.</p>]]></content>
-        <author>
-            <name>Nikolay</name>
-            <uri>https://github.com/Nikolay1243</uri>
         </author>
     </entry>
 </feed>
