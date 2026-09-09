@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.10.44
+// @version         0.10.45
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -163,8 +163,10 @@ play/pause, and next controls.
     $description: "Accepted range: 32–56 px."
   - MarginLeft: 4
     $name: Left margin
+    $description: "Accepted range: 0-48 px."
   - MarginRight: 4
     $name: Right margin
+    $description: "Accepted range: 0-48 px."
   - ExpandedWidth: 360
     $name: Expanded player width
     $description: "Accepted range: 240–640 px."
@@ -173,19 +175,24 @@ play/pause, and next controls.
     $description: "Accepted range: 430–760 px. In Fullsize mode, the smaller width or height limit determines the final player size."
   - ExpandedCornerRadius: 24
     $name: Expanded player corner radius
-    $description: Scales the shared G2 continuous corner profile for the expanded surface, artwork, controls, highlights, and independent blurred backdrop.
+    $description: "Accepted range: 1-80 px. Scales the shared G2 continuous corner profile for the expanded surface, artwork, controls, highlights, and independent blurred backdrop."
   - PopupSpacing: 20
     $name: Expanded player outer spacing
+    $description: "Accepted range: 2-40 px."
   - PopupCardGap: 8
     $name: Expanded player cover-to-controls gap
+    $description: "Accepted range: 0-80 px."
   - PopupShadowDepth: 58
     $name: Expanded player shadow depth
+    $description: "Accepted range: 0-128 px."
   - PopupShadowOpacity: 70
     $name: Expanded player shadow opacity (%)
   - HoverScale: 106
     $name: Hover scale (%)
+    $description: "Accepted range: 100-125%."
   - HoverLerpSpeed: 28
     $name: Hover smoothing
+    $description: "Accepted range: 1-30."
   - AnimationSpeed: 100
     $name: Animation speed (%)
     $description: 100 is normal speed. Use lower values such as 25 for slow-motion animation preview.
@@ -488,6 +495,8 @@ std::atomic_bool g_unloading = false;
 std::atomic_bool g_modActive = false;
 std::atomic_bool g_mediaThreadRunning = false;
 std::atomic_bool g_mediaThreadStartFailed = false;
+std::atomic_bool g_mediaSessionListChanged = true;
+std::atomic_uint g_mediaEventCallbacksInFlight = 0;
 [[clang::no_destroy]] std::optional<std::thread> g_mediaThread;
 std::mutex g_mediaCommandMutex;
 std::condition_variable g_mediaCommandCv;
@@ -757,7 +766,6 @@ std::atomic<unsigned int> g_popupOverlayWgcCallbacksInFlight{0};
 struct PopupOverlayWgcRenderParameters {
     int targetRadiusPx = 1;
     bool morphing = false;
-    bool allowScreenCapture = false;
     bool transparentMaterial = false;
     bool useLiquidLensWarp = false;
     float blurStdDev = 18.0f;
@@ -3181,6 +3189,7 @@ std::vector<uint8_t> CreatePopupG2AlbumCoverBytes(
     IWICImagingFactory* factory = nullptr;
     IWICBitmapDecoder* decoder = nullptr;
     IWICBitmapFrameDecode* frame = nullptr;
+    IWICBitmapClipper* clipper = nullptr;
     IWICBitmapScaler* scaler = nullptr;
     IWICFormatConverter* converter = nullptr;
 
@@ -3202,19 +3211,29 @@ std::vector<uint8_t> CreatePopupG2AlbumCoverBytes(
         hr = frame->GetSize(&sourceWidth, &sourceHeight);
     }
 
-    UINT scaledWidth = size;
-    UINT scaledHeight = size;
-    if (SUCCEEDED(hr) && sourceWidth > 0 && sourceHeight > 0) {
-        double scale = static_cast<double>(size) /
-                       static_cast<double>(std::min(sourceWidth, sourceHeight));
-        scaledWidth = std::max(size, static_cast<UINT>(std::ceil(sourceWidth * scale)));
-        scaledHeight = std::max(size, static_cast<UINT>(std::ceil(sourceHeight * scale)));
+    WICRect cropRect{};
+    if (SUCCEEDED(hr) && sourceWidth > 0 && sourceHeight > 0 &&
+        sourceWidth <= static_cast<UINT>(INT_MAX) &&
+        sourceHeight <= static_cast<UINT>(INT_MAX)) {
+        UINT square = std::min(sourceWidth, sourceHeight);
+        cropRect = {
+            static_cast<INT>((sourceWidth - square) / 2),
+            static_cast<INT>((sourceHeight - square) / 2),
+            static_cast<INT>(square),
+            static_cast<INT>(square),
+        };
+        hr = factory->CreateBitmapClipper(&clipper);
+    } else if (SUCCEEDED(hr)) {
+        hr = E_INVALIDARG;
+    }
+    if (SUCCEEDED(hr)) {
+        hr = clipper->Initialize(frame, &cropRect);
     }
     if (SUCCEEDED(hr)) {
         hr = factory->CreateBitmapScaler(&scaler);
     }
     if (SUCCEEDED(hr)) {
-        hr = scaler->Initialize(frame, scaledWidth, scaledHeight,
+        hr = scaler->Initialize(clipper, size, size,
                                 WICBitmapInterpolationModeFant);
     }
     if (SUCCEEDED(hr)) {
@@ -3226,29 +3245,20 @@ std::vector<uint8_t> CreatePopupG2AlbumCoverBytes(
                                    WICBitmapPaletteTypeCustom);
     }
 
-    std::vector<BYTE> scaledPixels(static_cast<size_t>(scaledWidth) * scaledHeight * 4);
+    std::vector<BYTE> pixels(static_cast<size_t>(size) * size * 4);
     if (SUCCEEDED(hr)) {
-        hr = converter->CopyPixels(nullptr, scaledWidth * 4,
-                                   static_cast<UINT>(scaledPixels.size()),
-                                   scaledPixels.data());
+        hr = converter->CopyPixels(nullptr, size * 4,
+                                   static_cast<UINT>(pixels.size()),
+                                   pixels.data());
     }
     if (SUCCEEDED(hr)) {
-        std::vector<BYTE> pixels(static_cast<size_t>(size) * size * 4);
-        UINT offsetX = (scaledWidth > size) ? (scaledWidth - size) / 2 : 0;
-        UINT offsetY = (scaledHeight > size) ? (scaledHeight - size) / 2 : 0;
-        for (UINT y = 0; y < size; ++y) {
-            BYTE* source = scaledPixels.data() +
-                (static_cast<size_t>(y + offsetY) * scaledWidth + offsetX) * 4;
-            BYTE* target = pixels.data() + static_cast<size_t>(y) * size * 4;
-            std::memcpy(target, source, static_cast<size_t>(size) * 4);
-        }
-
         ApplyPopupCoverG2Mask(pixels, size, expandedCornerRadius);
         output = EncodePbgraPngBytes(size, size, pixels);
     }
 
     if (converter) converter->Release();
     if (scaler) scaler->Release();
+    if (clipper) clipper->Release();
     if (frame) frame->Release();
     if (decoder) decoder->Release();
     if (factory) factory->Release();
@@ -10990,17 +11000,6 @@ bool EnsurePopupOverlayWgcDeviceResourcesLocked(HWND hwnd,
     g_popupOverlayWgcGraphicsDevice =
         graphicsDeviceInspectable.as<direct3d11::IDirect3DDevice>();
 
-    winrt::com_ptr<IDXGIAdapter> adapter;
-    hr = g_popupOverlayWgcDxgiDevice->GetAdapter(adapter.put());
-    if (FAILED(hr)) {
-        return false;
-    }
-    winrt::com_ptr<IDXGIFactory2> factory;
-    hr = adapter->GetParent(__uuidof(IDXGIFactory2), factory.put_void());
-    if (FAILED(hr)) {
-        return false;
-    }
-
     return RecreatePopupOverlayWgcReadbackTextures(widthPx, heightPx);
 }
 
@@ -11877,8 +11876,7 @@ bool StartPopupOverlayWgcBackdrop(
         ShowWindow(g_popupBackdropOverlay, SW_HIDE);
     }
     bool captureAffinityChanged =
-        SetExpandedPopupCaptureExclusion(
-            !renderParameters.allowScreenCapture);
+        SetExpandedPopupCaptureExclusion(true);
     captureAffinityChanged =
         SetPopupWindowCaptureExclusion(g_popupBackdropOverlay, true) ||
         captureAffinityChanged;
@@ -12916,7 +12914,6 @@ void UpdatePopupBackdropOverlayWindow() {
     PopupOverlayWgcRenderParameters renderParameters;
     renderParameters.targetRadiusPx = renderRadiusPx;
     renderParameters.morphing = morphing;
-    renderParameters.allowScreenCapture = g_settings.allowScreenCapture;
     renderParameters.transparentMaterial = IsTransparentMaterial();
     renderParameters.useLiquidLensWarp = IsLiquidGlassMaterial();
     renderParameters.blurStdDev = PopupBackdropWgcEffectiveBlurStdDev();
@@ -14781,6 +14778,18 @@ void StartExpandRenderLoop(bool expanded) {
 
 bool InjectIslandGrid();
 
+void RequestMediaRefreshFromEvent(bool sessionListChanged) noexcept {
+    g_mediaEventCallbacksInFlight.fetch_add(1, std::memory_order_acq_rel);
+    try {
+        if (sessionListChanged) {
+            g_mediaSessionListChanged.store(true, std::memory_order_release);
+        }
+        RequestMediaRefresh();
+    } catch (...) {
+    }
+    g_mediaEventCallbacksInFlight.fetch_sub(1, std::memory_order_acq_rel);
+}
+
 void MediaThreadProc() {
     bool apartmentInitialized = false;
     try {
@@ -14802,7 +14811,7 @@ void MediaThreadProc() {
 
     gsm::GlobalSystemMediaTransportControlsSessionManager manager{nullptr};
     std::vector<SessionEventSubscription> sessionEventSubscriptions;
-    std::atomic_bool sessionListChanged = true;
+    g_mediaSessionListChanged.store(true, std::memory_order_release);
     winrt::event_token sessionsChangedToken{};
     winrt::event_token currentSessionChangedToken{};
 
@@ -14842,18 +14851,18 @@ void MediaThreadProc() {
                 try {
                     subscription.mediaPropertiesChangedToken =
                         session.MediaPropertiesChanged(
-                            [](auto const&, auto const&) {
-                                RequestMediaRefresh();
+                            [](auto const&, auto const&) noexcept {
+                                RequestMediaRefreshFromEvent(false);
                             });
                     subscription.playbackInfoChangedToken =
                         session.PlaybackInfoChanged(
-                            [](auto const&, auto const&) {
-                                RequestMediaRefresh();
+                            [](auto const&, auto const&) noexcept {
+                                RequestMediaRefreshFromEvent(false);
                             });
                     subscription.timelinePropertiesChangedToken =
                         session.TimelinePropertiesChanged(
-                            [](auto const&, auto const&) {
-                                RequestMediaRefresh();
+                            [](auto const&, auto const&) noexcept {
+                                RequestMediaRefreshFromEvent(false);
                             });
                     sessionEventSubscriptions.push_back(
                         std::move(subscription));
@@ -14912,16 +14921,17 @@ void MediaThreadProc() {
                 return false;
             }
             sessionsChangedToken = manager.SessionsChanged(
-                [&](auto const&, auto const&) {
-                    sessionListChanged = true;
-                    RequestMediaRefresh();
+                [](auto const&, auto const&) noexcept {
+                    RequestMediaRefreshFromEvent(true);
                 });
             sessionsChangedSubscribed = true;
             currentSessionChangedToken = manager.CurrentSessionChanged(
-                [](auto const&, auto const&) { RequestMediaRefresh(); });
+                [](auto const&, auto const&) noexcept {
+                    RequestMediaRefreshFromEvent(false);
+                });
             currentSessionChangedSubscribed = true;
             subscribeAllSessionEvents();
-            sessionListChanged = false;
+            g_mediaSessionListChanged.store(false, std::memory_order_release);
             return true;
         } catch (...) {
             clearManagerEvents();
@@ -14936,6 +14946,7 @@ void MediaThreadProc() {
     g_mediaRefreshRequested = true;
 
     while (g_mediaThreadRunning) {
+        try {
         auto now = std::chrono::steady_clock::now();
         if (!manager &&
             now - lastManagerAttempt >= std::chrono::seconds(5)) {
@@ -14975,7 +14986,7 @@ void MediaThreadProc() {
                              fallbackPollDue;
 
         if (shouldRefresh) {
-            if (sessionListChanged.exchange(false)) {
+            if (g_mediaSessionListChanged.exchange(false, std::memory_order_acq_rel)) {
                 subscribeAllSessionEvents();
             }
             RefreshMediaState(manager);
@@ -15030,9 +15041,16 @@ void MediaThreadProc() {
                 return !g_mediaThreadRunning || !g_mediaCommands.empty() ||
                        g_mediaRefreshRequested.load();
             });
+        } catch (...) {
+            Wh_Log(L"Island: exception in media worker iteration");
+            Sleep(10);
+        }
     }
 
     clearManagerEvents();
+    while (g_mediaEventCallbacksInFlight.load(std::memory_order_acquire) != 0) {
+        Sleep(1);
+    }
 
     // Release the GSMTC manager before tearing down the WinRT apartment. Keeping
     // the WinRT/COM object alive across winrt::uninit_apartment() can leave its
@@ -17345,6 +17363,13 @@ void RemoveIslandOsResourcesNoexcept() noexcept {
     try { StopCompactProgressRenderLoop(); } catch (...) {}
     try { StopCompactTintTransition(); } catch (...) {}
     try { StopPopupXamlRenderLoop(); } catch (...) {}
+    try {
+        ClearDynamicTransportCompositionClip(
+            g_dynamicTransportOcclusionHost);
+    } catch (...) {
+    }
+    g_dynamicTransportClipD2dFactory = nullptr;
+    ResetDynamicTransportOcclusionClipCache();
 
     if (g_taskbarLayoutTimerWindow) {
         KillTimer(g_taskbarLayoutTimerWindow,
