@@ -2,7 +2,7 @@
 // @id              mutealert
 // @name            MuteAlert - Microphone Activity Taskbar Widget
 // @description     Shows live microphone activity, call mute state, volume controls, and headset mute synchronization in the Windows 11 taskbar.
-// @version         0.9.9
+// @version         0.9.10
 // @author          Nikolay
 // @github          https://github.com/Nikolay1243
 // @homepage        https://github.com/MuteAlert/windhawk
@@ -19,6 +19,12 @@
 # MuteAlert for Windhawk
 
 Adds a microphone button to the Windows 11 system tray area.
+
+> **Updating from 0.9.8 or earlier:** Version 0.9.9 organized the settings
+> into collapsible sections. Windhawk can't migrate the old flat setting paths,
+> so review and save your settings once after updating. In particular, re-enable
+> headset synchronization and call integrations, restore localized button text,
+> and check the position and locked-volume target.
 
 ![MuteAlert microphone activity widget](https://raw.githubusercontent.com/MuteAlert/windhawk/main/assets/taskbar-widget.png)
 
@@ -754,6 +760,11 @@ static UINT g_removeWidgetsMessage = 0;
 static std::atomic<bool> g_updateQueued{false};
 static std::atomic<unsigned long long> g_audioNameGeneration{0};
 static std::atomic<unsigned long long> g_headsetStatusGeneration{0};
+// These flags belong to the lifetime of the loaded mod, rather than a worker
+// thread. Saving unrelated settings restarts workers and must not re-arm a
+// startup unmute.
+static std::atomic<bool> g_vendorInitialSyncPending{true};
+static std::atomic<bool> g_hardwareInitialSyncPending{true};
 
 static bool IsStopping() {
     return g_unloading.load() ||
@@ -2176,13 +2187,13 @@ static DWORD WINAPI AudioThreadProc(void*) {
         if (endpoint.hardwareMute) {
             bool changed = observedHardwareMuteKnown &&
                            observedHardwareMuted != (muted != FALSE);
-            bool initialMuted = !observedHardwareMuteKnown && muted != FALSE;
+            bool initialSync = g_hardwareInitialSyncPending.exchange(false);
             bool syncMute = g_settings.headsetSyncMode == L"full" ||
                             g_settings.headsetSyncMode == L"muteOnly";
             bool syncUnmute = g_settings.headsetSyncMode == L"full";
             if (g_settings.headsetSyncCalls &&
-                ((muted && (changed || initialMuted) && syncMute) ||
-                 (!muted && changed && syncUnmute))) {
+                ((muted && (changed || initialSync) && syncMute) ||
+                 (!muted && (changed || initialSync) && syncUnmute))) {
                 QueueActiveCallMuteState(muted != FALSE);
                 RecordDiagnosticEvent(
                     std::wstring(L"Windows hardware mute changed to ") +
@@ -3157,6 +3168,8 @@ static DWORD WINAPI HeadsetThreadProc(void*) {
                 UpdateSteelSeriesSource(false, false, L"", L"");
                 nextVendorPoll = now + g_settings.headsetPollInterval;
             } else {
+                bool initialSync =
+                    g_vendorInitialSyncPending.exchange(false);
                 bool stateChanged =
                     !stateKnown || observation.muted != previousMuted;
                 UpdateSteelSeriesSource(true, observation.muted,
@@ -3181,8 +3194,11 @@ static DWORD WINAPI HeadsetThreadProc(void*) {
                         QueueActiveCallMuteState(true);
                     }
                 } else if (!observation.muted && syncUnmute &&
-                           (!stateKnown || previousMuted)) {
-                    if (g_settings.headsetSyncWindows) QueueMuteSet(false);
+                           (initialSync || (stateKnown && previousMuted))) {
+                    if (g_settings.headsetSyncWindows &&
+                        (initialSync || g_audioMuted.load())) {
+                        QueueMuteSet(false);
+                    }
                     if (g_settings.headsetSyncCalls) {
                         QueueActiveCallMuteState(false);
                     }
