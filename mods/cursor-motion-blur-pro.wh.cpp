@@ -1,9 +1,11 @@
 // ==WindhawkMod==
 // @id              cursor-motion-blur-pro
-// @name            Cursor Motion Blur Pro / 光标运动模糊
-// @description     EN: High-performance cursor motion blur with particle effects, 13 color modes, custom function trails, cursor color extraction, and click effects. Direct2D hardware accelerated. / 中文：高性能鼠标运动模糊拖尾，支持粒子特效、13种颜色模式、自定义函数轨迹、光标取色和点击特效，Direct2D 硬件加速。
-// @version         9.1
-// @author          TheatriChris, MCheng404
+// @name            Cursor Motion Blur Pro
+// @name:zh-CN      光标运动模糊
+// @description     High-performance cursor motion blur with particle effects, 13 color modes, custom function trails, cursor color extraction, and click effects. Direct2D hardware accelerated.
+// @description:zh-CN 高性能鼠标运动模糊拖尾，支持粒子特效、13种颜色模式、自定义函数轨迹、光标取色和点击特效，Direct2D 硬件加速。
+// @version         9.2
+// @author          MCheng404
 // @github          https://github.com/MCheng404
 // @license         MIT
 // @include         windhawk.exe
@@ -16,6 +18,8 @@
 **EN:** Smooth motion blur trail for your mouse cursor, rendered with Direct2D hardware acceleration. A heavily enhanced fork of TheatriChris's Cursor Motion Blur.
 
 **中文：** 高速移动鼠标时产生平滑的运动模糊拖尾，Direct2D 硬件加速渲染。基于 TheatriChris 的 Cursor Motion Blur 深度二改增强。
+
+![Trail Effect](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/screenshot_trail.jpg)
 
 ---
 
@@ -59,165 +63,285 @@ Original mod by [TheatriChris](https://github.com/chrisc44890). Enhanced fork by
 // ==WindhawkModSettings==
 /*
 - trigger_velocity: 25
-  $name: 触发速度 / Trigger Velocity
-  $description: 鼠标移动多快时触发拖影（像素/帧）。How fast the mouse must move to trigger the blur (pixels per frame).
+  $name: Trigger Velocity
+  $name:zh-CN: 触发速度
+  $description: How fast the mouse must move to trigger the blur (pixels per frame).
+  $description:zh-CN: 鼠标移动多快时触发拖影（像素/帧）。
 - stop_velocity: 10
-  $name: 停止速度 / Stop Velocity
-  $description: 停止拖影的速度阈值（像素/帧）。必须低于触发速度。Velocity threshold to stop the blur. Must be lower than Trigger Velocity.
+  $name: Stop Velocity
+  $name:zh-CN: 停止速度
+  $description: Velocity threshold to stop the blur. Must be lower than Trigger Velocity.
+  $description:zh-CN: 停止拖影的速度阈值（像素/帧）。必须低于触发速度。
 - tail_offset_x: 6
-  $name: 拖尾 X 偏移 / Tail Offset X
-  $description: 拖尾连接到光标的 X 轴偏移量（像素）。X-axis offset where the tail connects to the cursor.
+  $name: Tail Offset X
+  $name:zh-CN: 拖尾 X 偏移
+  $description: X-axis offset where the tail connects to the cursor.
+  $description:zh-CN: 拖尾连接到光标的 X 轴偏移量（像素）。
 - tail_offset_y: 10
-  $name: 拖尾 Y 偏移 / Tail Offset Y
-  $description: 拖尾连接到光标的 Y 轴偏移量（像素）。Y-axis offset where the tail connects to the cursor.
+  $name: Tail Offset Y
+  $name:zh-CN: 拖尾 Y 偏移
+  $description: Y-axis offset where the tail connects to the cursor.
+  $description:zh-CN: 拖尾连接到光标的 Y 轴偏移量（像素）。
 - tail_length: 10
-  $name: 拖尾长度 / Tail Length
-  $description: 拖影跟随的帧数。最低为 2。How many frames the blur trails behind you. Minimum 2.
+  $name: Tail Length
+  $name:zh-CN: 拖尾长度
+  $description: How many frames the blur trails behind you. Minimum 2.
+  $description:zh-CN: 拖影跟随的帧数。最低为 2。
 - trail_delay: 0
-  $name: 拖尾延迟 / Trail Delay
-  $description: 拖尾头部滞后于光标的程度（0-10，0=关闭）。How much the trail head lags behind the cursor (0-10, 0=off).
-- enable_smooth_gradient: 1
-  $name: 平滑渐变 / Smooth Gradient
-  $description: 拖尾透明度渐变淡出。1=开，0=关。Head-to-tail opacity gradient. 1=on, 0=off.
+  $name: Trail Delay
+  $name:zh-CN: 拖尾延迟
+  $description: How much the trail head lags behind the cursor (0-10, 0=off).
+  $description:zh-CN: 拖尾头部滞后于光标的程度（0-10，0=关闭）。
+- enable_smooth_gradient: true
+  $name: Smooth Gradient
+  $name:zh-CN: 平滑渐变
+  $description: Head-to-tail opacity gradient.
+  $description:zh-CN: 拖尾透明度渐变淡出。
 - fadeout_mode: soft
-  $name: 淡出模式 / Fadeout Mode
-  $description: 鼠标停止后拖尾的消失方式。How the trail disappears when the mouse stops.
+  $name: Fadeout Mode
+  $name:zh-CN: 淡出模式
+  $description: How the trail disappears when the mouse stops.
+  $description:zh-CN: 鼠标停止后拖尾的消失方式。
   $options:
-  - hard: 硬截断 / Hard Cut
-  - accelerate: 加速收缩 / Accelerated Shrink
-  - soft: 软截断 / Soft Fade
-- enable_speed_response: 1
-  $name: 动态宽度 / Dynamic Width
-  $description: 移动速度和加速度影响拖尾宽度，急转时更宽。1=开，0=关。Trail width responds to speed and acceleration. 1=on, 0=off.
-- enhanced_glow: 1
-  $name: 增强发光 / Enhanced Glow
-  $description: 双层光晕（外晕+内辉），发光更柔和自然。需先开启微发光效果。1=开，0=关。Dual-layer halo for softer glow. Requires Micro Glow to be enabled. 1=on, 0=off.
-- enable_head_highlight: 1
-  $name: 头部高光 / Head Highlight
-  $description: 拖尾头部添加明亮中心点，提升质感。仅锥形/函数/波浪形状生效。1=开，0=关。Bright center dot at trail head. Tapered/function/wave shapes only. 1=on, 0=off.
-- enable_trail_shadow: 1
-  $name: 拖尾阴影 / Trail Shadow
-  $description: 拖尾底层绘制暗色阴影，增加立体感。1=开，0=关。Dark underlay shadow for depth. 1=on, 0=off.
+  - hard: Hard Cut
+  - accelerate: Accelerated Shrink
+  - soft: Soft Fade
+  $options:zh-CN:
+  - hard: 硬截断
+  - accelerate: 加速收缩
+  - soft: 软截断
+- enable_speed_response: true
+  $name: Dynamic Width
+  $name:zh-CN: 动态宽度
+  $description: Trail width responds to speed and acceleration.
+  $description:zh-CN: 移动速度和加速度影响拖尾宽度，急转时更宽。
+- enhanced_glow: true
+  $name: Enhanced Glow
+  $name:zh-CN: 增强发光
+  $description: Dual-layer halo for softer glow. Requires Micro Glow to be enabled.
+  $description:zh-CN: 双层光晕（外晕+内辉），发光更柔和自然。需先开启微发光效果。
+- enable_head_highlight: true
+  $name: Head Highlight
+  $name:zh-CN: 头部高光
+  $description: Bright center dot at trail head. Tapered/function/wave shapes only.
+  $description:zh-CN: 拖尾头部添加明亮中心点，提升质感。仅锥形/函数/波浪形状生效。
+- enable_trail_shadow: true
+  $name: Trail Shadow
+  $name:zh-CN: 拖尾阴影
+  $description: Dark underlay shadow for depth.
+  $description:zh-CN: 拖尾底层绘制暗色阴影，增加立体感。
 - trail_shape: tapered
-  $name: 拖尾形状 / Trail Shape
+  $name: Trail Shape
+  $name:zh-CN: 拖尾形状
   $options:
-  - tapered: 锥形 / Tapered
-  - dots: 类锥形圆链 / Dot Chain
-  - function: 函数曲线 / Function Curve
-  - wave: 波浪曲线 / Wave Curve
+  - tapered: Tapered
+  - dots: Dot Chain
+  - function: Function Curve
+  - wave: Wave Curve
+  $options:zh-CN:
+  - tapered: 锥形
+  - dots: 类锥形圆链
+  - function: 函数曲线
+  - wave: 波浪曲线
 - dots_multiplier: 2
-  $name: 圆链密度倍率 / Dot Chain Density
-  $description: 类锥形圆链的小球数量倍率（1-5），越大小球越多且越小。仅圆链形状生效。Dot count multiplier (1-5), higher = more smaller dots. Dot Chain shape only.
+  $name: Dot Chain Density
+  $name:zh-CN: 圆链密度倍率
+  $description: Dot count multiplier (1-5), higher = more smaller dots. Dot Chain shape only.
+  $description:zh-CN: 类锥形圆链的小球数量倍率（1-5），越大小球越多且越小。仅圆链形状生效。
 - function_preset: sine
-  $name: 函数预设 / Function Preset
-  $description: 函数曲线形状的预设公式，选择 custom 时使用下方自定义公式。Preset formula for function curve shape. Choose custom to use your own formula.
+  $name: Function Preset
+  $name:zh-CN: 函数预设
+  $description: Preset formula for function curve shape. Choose custom to use your own formula.
+  $description:zh-CN: 函数曲线形状的预设公式，选择 custom 时使用下方自定义公式。
   $options:
-  - sine: 标准正弦 / Sine Wave
-  - damped: 阻尼衰减 / Damped
-  - beat: 心跳脉冲 / Heartbeat
-  - swirl: 双频漩涡 / Swirl
-  - custom: 自定义公式 / Custom
+  - sine: Sine Wave
+  - damped: Damped
+  - beat: Heartbeat
+  - swirl: Swirl
+  - custom: Custom
+  $options:zh-CN:
+  - sine: 标准正弦
+  - damped: 阻尼衰减
+  - beat: 心跳脉冲
+  - swirl: 双频漩涡
+  - custom: 自定义公式
 - custom_function: "sin(d * 0.15) * 8"
-  $name: 自定义函数公式 / Custom Function
-  $description: "变量 t(0-1) d(距离) time(秒)；函数 sin cos exp sqrt abs；运算符 + - * / ^。Variables: t(0-1) d(distance) time(sec); Functions: sin cos exp sqrt abs; Operators: + - * / ^."
+  $name: Custom Function
+  $name:zh-CN: 自定义函数公式
+  $description: "Variables: t(0-1) d(distance) time(sec); Functions: sin cos exp sqrt abs; Operators: + - * / ^."
+  $description:zh-CN: "变量 t(0-1) d(距离) time(秒)；函数 sin cos exp sqrt abs；运算符 + - * / ^。"
 - wave_amplitude: 8
-  $name: 波浪幅度 / Wave Amplitude
-  $description: 波浪曲线的振幅（像素）。仅波浪形状生效。Wave amplitude in pixels. Wave shape only.
+  $name: Wave Amplitude
+  $name:zh-CN: 波浪幅度
+  $description: Wave amplitude in pixels. Wave shape only.
+  $description:zh-CN: 波浪曲线的振幅（像素）。仅波浪形状生效。
 - wave_frequency: 15
-  $name: 波浪频率 / Wave Frequency
-  $description: 波浪曲线的频率（5-40，越大波浪越密）。仅波浪形状生效。Wave frequency (5-40, higher = denser waves). Wave shape only.
-- enable_glow: 1
-  $name: 微发光效果 / Micro Glow
-  $description: 拖尾外圈柔和发光。1=开，0=关。Soft outer glow around the trail. 1=on, 0=off.
+  $name: Wave Frequency
+  $name:zh-CN: 波浪频率
+  $description: Wave frequency (3-60, higher = denser waves). Wave shape only.
+  $description:zh-CN: 波浪曲线的频率（3-60，越大波浪越密）。仅波浪形状生效。
+- enable_glow: true
+  $name: Micro Glow
+  $name:zh-CN: 微发光效果
+  $description: Soft outer glow around the trail.
+  $description:zh-CN: 拖尾外圈柔和发光。
 - glow_intensity: 40
-  $name: 发光强度 / Glow Intensity
-  $description: 发光范围和亮度（0-100）。Glow radius and brightness (0-100).
+  $name: Glow Intensity
+  $name:zh-CN: 发光强度
+  $description: Glow radius and brightness (0-100).
+  $description:zh-CN: 发光范围和亮度（0-100）。
 - color_mode: classic
-  $name: 颜色模式 / Color Mode
+  $name: Color Mode
+  $name:zh-CN: 颜色模式
   $options:
-  - classic: 经典黑白 / Classic B&W
-  - single: 单色 / Single Color
-  - gradient: 多色渐变 / Gradient
-  - rainbow: 彩虹流动 / Rainbow
-  - warm: 暖色调流动 / Warm Flow
-  - cool: 冷色调流动 / Cool Flow
-  - neon: 霓虹脉冲 / Neon Pulse
-  - velocity: 速度变色 / Velocity Color
-  - stripes: 流动条纹 / Stripes
-  - fire: 火焰 / Fire
-  - aurora: 极光 / Aurora
-  - cursor_extract: 光标取色 / Cursor Extract
-  - cursor_mix: 光标混色 / Cursor Mix
-- enable_cursor_color_shift: 1
-  $name: 取色自动偏移 / Auto Color Shift
-  $description: 光标取色模式下自动将提取的颜色转为互补色（色相+180°）并增强饱和度和亮度，确保拖尾在任何背景上都醒目可见。1=开，0=关（使用原始取色）。Auto complementary-color shift (+180° hue) for cursor extraction modes, ensuring visibility on any background. 1=on, 0=off (raw color).
+  - classic: Classic B&W
+  - single: Single Color
+  - gradient: Gradient
+  - rainbow: Rainbow
+  - warm: Warm Flow
+  - cool: Cool Flow
+  - neon: Neon Pulse
+  - velocity: Velocity Color
+  - stripes: Stripes
+  - fire: Fire
+  - aurora: Aurora
+  - cursor_extract: Cursor Extract
+  - cursor_mix: Cursor Mix
+  $options:zh-CN:
+  - classic: 经典黑白
+  - single: 单色
+  - gradient: 多色渐变
+  - rainbow: 彩虹流动
+  - warm: 暖色调流动
+  - cool: 冷色调流动
+  - neon: 霓虹脉冲
+  - velocity: 速度变色
+  - stripes: 流动条纹
+  - fire: 火焰
+  - aurora: 极光
+  - cursor_extract: 光标取色
+  - cursor_mix: 光标混色
+- enable_cursor_color_shift: true
+  $name: Auto Color Shift
+  $name:zh-CN: 取色自动偏移
+  $description: Auto complementary-color shift (+180° hue) for cursor extraction modes, ensuring visibility on any background.
+  $description:zh-CN: 光标取色模式下自动将提取的颜色转为互补色（色相+180°）并增强饱和度和亮度，确保拖尾在任何背景上都醒目可见。
 - custom_color: "00BFFF"
-  $name: 自定义颜色 / Custom Color
-  $description: 单色/霓虹/条纹/光标混色模式的主色，十六进制 RGB。Primary color for single/neon/stripes/cursor-mix modes. Hex RGB.
+  $name: Custom Color
+  $name:zh-CN: 自定义颜色
+  $description: Primary color for single/neon/cursor-mix modes. Hex RGB.
+  $description:zh-CN: 单色/霓虹/光标混色模式的主色，十六进制 RGB。
 - gradient_colors: "FF6B35,00BFFF,FFD700"
-  $name: 渐变颜色1,2,3 / Gradient Colors 1,2,3
-  $description: 多色渐变/条纹/光标混色模式的颜色，用英文逗号分隔3个十六进制RGB（如 FF6B35,00BFFF,FFD700）。3 colors for gradient/stripes/cursor-mix modes, comma-separated hex RGB.
+  $name: Gradient Colors 1,2,3
+  $name:zh-CN: 渐变颜色1,2,3
+  $description: 3 colors for gradient/stripes modes, comma-separated hex RGB (e.g. FF6B35,00BFFF,FFD700).
+  $description:zh-CN: 多色渐变/条纹模式的颜色，用英文逗号分隔3个十六进制RGB（如 FF6B35,00BFFF,FFD700）。
 - particle_mode: fadeout
-  $name: 粒子消散模式 / Particle Mode
+  $name: Particle Mode
+  $name:zh-CN: 粒子消散模式
   $options:
-  - off: 关闭 / Off
-  - fadeout: 淡出时 / On Fadeout
-  - always: 始终（静止除外）/ Always (except idle)
+  - off: Off
+  - fadeout: On Fadeout
+  - always: Always (except idle)
+  $options:zh-CN:
+  - off: 关闭
+  - fadeout: 淡出时
+  - always: 始终（静止除外）
 - particle_origin: tail
-  $name: 粒子释放位置 / Particle Origin
-  $description: 粒子从拖尾的哪个位置释放。Where on the trail particles are released.
+  $name: Particle Origin
+  $name:zh-CN: 粒子释放位置
+  $description: Where on the trail particles are released.
+  $description:zh-CN: 粒子从拖尾的哪个位置释放。
   $options:
-  - head: 开头（光标处）/ Head (cursor)
-  - middle: 中间 / Middle
-  - tail: 结尾 / Tail
-  - custom: 自定义比例 / Custom Ratio
+  - head: Head (cursor)
+  - middle: Middle
+  - tail: Tail
+  - custom: Custom Ratio
+  $options:zh-CN:
+  - head: 开头（光标处）
+  - middle: 中间
+  - tail: 结尾
+  - custom: 自定义比例
 - particle_origin_ratio: 80
-  $name: 自定义释放比例 / Custom Origin Ratio
-  $description: 沿拖尾的位置比例（0=开头光标，100=结尾）。仅释放位置为自定义时生效。Position along trail (0=head/cursor, 100=tail). Custom origin only.
+  $name: Custom Origin Ratio
+  $name:zh-CN: 自定义释放比例
+  $description: Position along trail (0=head/cursor, 100=tail). Custom origin only.
+  $description:zh-CN: 沿拖尾的位置比例（0=开头光标，100=结尾）。仅释放位置为自定义时生效。
 - particle_attraction: 40
-  $name: 粒子吸附强度 / Particle Attraction
-  $description: 粒子被吸向光标的强度（0=关闭，1-100，非线性曲线：低数值区分度高）。How strongly particles are attracted to cursor (0=off, 1-100, non-linear curve).
-- enable_particle_repel: 1
-  $name: 光标排斥力 / Cursor Repulsion
-  $description: 粒子飞到光标附近时被排斥力弹开，并随机扰乱轨迹，形成振荡绕飞效果。1=开，0=关。Particles near cursor are repelled with random perturbation, creating orbiting motion. 1=on, 0=off.
+  $name: Particle Attraction
+  $name:zh-CN: 粒子吸附强度
+  $description: How strongly particles are attracted to cursor (0=off, 1-100, non-linear curve).
+  $description:zh-CN: 粒子被吸向光标的强度（0=关闭，1-100，非线性曲线：低数值区分度高）。
+- enable_particle_repel: true
+  $name: Cursor Repulsion
+  $name:zh-CN: 光标排斥力
+  $description: Particles near cursor are repelled with random perturbation, creating orbiting motion.
+  $description:zh-CN: 粒子飞到光标附近时被排斥力弹开，并随机扰乱轨迹，形成振荡绕飞效果。
 - particle_repel_radius: 25
-  $name: 排斥范围 / Repulsion Radius
-  $description: 光标周围的排斥半径（像素，5-100）。粒子进入此范围会受到排斥力。Repulsion radius around cursor in pixels (5-100).
+  $name: Repulsion Radius
+  $name:zh-CN: 排斥范围
+  $description: Repulsion radius around cursor in pixels (5-100).
+  $description:zh-CN: 光标周围的排斥半径（像素，5-100）。粒子进入此范围会受到排斥力。
 - particle_repel_force: 30
-  $name: 排斥强度 / Repulsion Force
-  $description: 排斥力和随机扰动的强度（0-100）。数值越大粒子被弹开越远、扰乱越剧烈。Repulsion and random perturbation strength (0-100).
+  $name: Repulsion Force
+  $name:zh-CN: 排斥强度
+  $description: Repulsion and random perturbation strength (0-100).
+  $description:zh-CN: 排斥力和随机扰动的强度（0-100）。数值越大粒子被弹开越远、扰乱越剧烈。
 - particle_density: 3
-  $name: 粒子密度 / Particle Density
-  $description: 每次释放的粒子数量（1-10）。数值越大消散越明显。Number of particles per release (1-10).
+  $name: Particle Density
+  $name:zh-CN: 粒子密度
+  $description: Number of particles per release (1-10).
+  $description:zh-CN: 每次释放的粒子数量（1-10）。数值越大消散越明显。
 - particle_interval: 50
-  $name: 粒子释放间隔 / Particle Interval
-  $description: 粒子释放的最小时间间隔（毫秒，10-2000），越小越密集。Minimum interval between particle releases in ms (10-2000).
-- particle_acceleration: 1
-  $name: 加速度影响 / Acceleration Effect
-  $description: 粒子初速度受鼠标相对加速度影响（速度变化越大粒子飞散越快）。1=开，0=关。Particle initial velocity affected by mouse acceleration. 1=on, 0=off.
+  $name: Particle Interval
+  $name:zh-CN: 粒子释放间隔
+  $description: Minimum interval between particle releases in ms (10-2000).
+  $description:zh-CN: 粒子释放的最小时间间隔（毫秒，10-2000），越小越密集。
+- particle_acceleration: true
+  $name: Acceleration Effect
+  $name:zh-CN: 加速度影响
+  $description: Particle initial velocity affected by mouse acceleration.
+  $description:zh-CN: 粒子初速度受鼠标相对加速度影响（速度变化越大粒子飞散越快）。
 - particle_shape: random
-  $name: 粒子形状 / Particle Shape
-  $description: 粒子消散时的形状。随机混合会同时出现圆形、五角星、六芒星。Particle shape. Random mix includes circle, star, and hexagram.
+  $name: Particle Shape
+  $name:zh-CN: 粒子形状
+  $description: Particle shape. Random mix includes circle, star, and hexagram.
+  $description:zh-CN: 粒子消散时的形状。随机混合会同时出现圆形、五角星、六芒星。
   $options:
-  - random: 随机混合 / Random Mix
-  - circle: 仅圆形 / Circle
-  - star: 仅五角星 / Star
-  - hexagram: 仅六芒星 / Hexagram
-- enable_click_starburst: 1
-  $name: 点击星爆 / Click Starburst
-  $description: 点击时从光标位置迸发粒子。1=开，0=关。Particle burst on mouse click. 1=on, 0=off.
+  - random: Random Mix
+  - circle: Circle
+  - star: Star
+  - hexagram: Hexagram
+  $options:zh-CN:
+  - random: 随机混合
+  - circle: 仅圆形
+  - star: 仅五角星
+  - hexagram: 仅六芒星
+- enable_click_starburst: true
+  $name: Click Starburst
+  $name:zh-CN: 点击星爆
+  $description: Particle burst on mouse click.
+  $description:zh-CN: 点击时从光标位置迸发粒子。
 - starburst_count: 8
-  $name: 星爆粒子数 / Starburst Count
-  $description: 每次点击迸发的粒子数量（4-20）。Number of particles per click burst (4-20).
-- enable_click_effect: 1
-  $name: 点击波纹 / Click Ripple
-  $description: 点击时产生扩散波纹。1=开，0=关。Expanding ripple on mouse click. 1=on, 0=off.
+  $name: Starburst Count
+  $name:zh-CN: 星爆粒子数
+  $description: Number of particles per click burst (4-20).
+  $description:zh-CN: 每次点击迸发的粒子数量（4-20）。
+- enable_click_effect: true
+  $name: Click Ripple
+  $name:zh-CN: 点击波纹
+  $description: Expanding ripple on mouse click.
+  $description:zh-CN: 点击时产生扩散波纹。
 - click_max_radius: 40
-  $name: 波纹最大半径 / Ripple Max Radius
-  $description: 点击波纹扩散的最大半径（像素）。Maximum ripple radius in pixels.
+  $name: Ripple Max Radius
+  $name:zh-CN: 波纹最大半径
+  $description: Maximum ripple radius in pixels.
+  $description:zh-CN: 点击波纹扩散的最大半径（像素）。
 - click_duration: 300
-  $name: 波纹持续时间 / Ripple Duration
-  $description: 点击波纹从出现到消失的时长（毫秒）。Ripple duration in milliseconds.
+  $name: Ripple Duration
+  $name:zh-CN: 波纹持续时间
+  $description: Ripple duration in milliseconds.
+  $description:zh-CN: 点击波纹从出现到消失的时长（毫秒）。
 */
 // ==/WindhawkModSettings==
 #include <windows.h>
@@ -254,6 +378,14 @@ static D2D1_COLOR_F LighterColor(D2D1_COLOR_F c, float amount = 0.55f) {
 }
 static D2D1_COLOR_F ParseHexColor(PCWSTR hex, D2D1_COLOR_F fallback) {
     if (!hex || !*hex) return fallback;
+    // Validate: must be exactly 6 hex digits
+    int len = 0;
+    while (hex[len] && len < 8) {
+        WCHAR c = hex[len];
+        if (!((c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'f') || (c >= L'A' && c <= L'F'))) return fallback;
+        len++;
+    }
+    if (len != 6) return fallback;
     DWORD val = wcstoul(hex, nullptr, 16);
     return D2D1::ColorF(((val >> 16) & 0xFF) / 255.0f, ((val >> 8) & 0xFF) / 255.0f, (val & 0xFF) / 255.0f, 1.0f);
 }
@@ -266,7 +398,8 @@ static void ParseGradientColors(PCWSTR input, D2D1_COLOR_F out[3]) {
     WCHAR* tok = wcstok_s(buf, L",", &ctx);
     while (tok && idx < 3) {
         while (*tok == L' ' || *tok == L'\t') tok++;
-        out[idx++] = ParseHexColor(tok, out[idx]);
+        D2D1_COLOR_F c = ParseHexColor(tok, out[idx]);
+        out[idx++] = c;
         tok = wcstok_s(nullptr, L",", &ctx);
     }
 }
@@ -387,6 +520,7 @@ static float EvalExpression(float t, float d, float time) {
 // ===================== 全局状态 =====================
 HWND g_overlayHwnd = NULL;
 HANDLE g_threadHandle = NULL;
+HANDLE g_readyEvent = NULL;
 std::deque<POINT> g_history;
 POINT g_lastPos = { 0, 0 };
 
@@ -561,8 +695,9 @@ static void UpdateColorBrushes(const GradData& data, D2D1_POINT_2F headPt, D2D1_
 
 static inline float Rand01() { return rand() / (float)RAND_MAX; }
 static inline float Hash01(int n) {
-    n = (n << 13) ^ n;
-    return (float)(((n * (n * n * 15731 + 789221) + 1376312589) & 0x7fffffff) / 2147483647.0);
+    uint32_t u = (uint32_t)n;
+    u = (u << 13) ^ u;
+    return (float)(((u * (u * u * 15731u + 789221u) + 1376312589u) & 0x7fffffffu) / 2147483647.0);
 }
 static void SpawnParticles(float x, float y, int count, float speedMin, float speedMax,
                            float sizeMin, float sizeMax, int lifeMin, int lifeMax,
@@ -607,8 +742,10 @@ static D2D1_POINT_2F GetPointOnPath(const std::vector<D2D1_POINT_2F>& path, floa
 }
 
 static void WStrToUTF8(PCWSTR wstr, char* out, int outSize) {
-    if (!wstr) { out[0] = 0; return; }
-    WideCharToMultiByte(CP_UTF8, 0, wstr, -1, out, outSize, NULL, NULL);
+    if (!wstr || outSize <= 0) { if (outSize > 0) out[0] = 0; return; }
+    out[0] = 0;
+    int written = WideCharToMultiByte(CP_UTF8, 0, wstr, -1, out, outSize, NULL, NULL);
+    if (written <= 0) out[0] = 0;
 }
 
 // ===================== 设置加载 =====================
@@ -643,11 +780,14 @@ void LoadSettings() {
     g_particleAccel = Wh_GetIntSetting(L"particle_acceleration") != 0;
     g_particleOriginRatio = Wh_GetIntSetting(L"particle_origin_ratio");
     int attrVal = Wh_GetIntSetting(L"particle_attraction");
+    if (attrVal < 0) attrVal = 0; if (attrVal > 100) attrVal = 100;
     // 非线性映射：低区间精细区分，高区间压缩。value=1→0.0008（用户舒适值），value=5→0.0065，value=40+→上限0.08
-    g_particleAttraction = fminf(0.0008f * powf((float)attrVal, 1.3f), 0.08f);
+    g_particleAttraction = attrVal > 0 ? fminf(0.0008f * powf((float)attrVal, 1.3f), 0.08f) : 0.0f;
     g_enableParticleRepel = Wh_GetIntSetting(L"enable_particle_repel") != 0;
     g_particleRepelRadius = Wh_GetIntSetting(L"particle_repel_radius");
+    if (g_particleRepelRadius < 5) g_particleRepelRadius = 5; if (g_particleRepelRadius > 100) g_particleRepelRadius = 100;
     int repelVal = Wh_GetIntSetting(L"particle_repel_force");
+    if (repelVal < 0) repelVal = 0; if (repelVal > 100) repelVal = 100;
     g_particleRepelForce = (repelVal / 100.0f) * 3.0f; // 0-100 → 0-3.0 像素/帧
     PCWSTR pstr = Wh_GetStringSetting(L"particle_mode");
     if (pstr) {
@@ -1398,6 +1538,11 @@ static void CreateHexagramGeometry(ID2D1Factory* factory, ID2D1PathGeometry** ge
 }
 
 // ===================== 覆盖层线程 =====================
+static UINT g_reloadMsg = 0;
+static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg == g_reloadMsg) { LoadSettings(); return 0; }
+    return DefWindowProc(hwnd, msg, wParam, lParam);
+}
 DWORD WINAPI OverlayThreadProc(LPVOID) {
     CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -1409,12 +1554,13 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
     }
     HINSTANCE hi = GetModuleHandle(NULL);
     const wchar_t CN[] = L"CursorMotionBlurProClass";
-    WNDCLASS wc = { }; wc.lpfnWndProc = DefWindowProc; wc.hInstance = hi; wc.lpszClassName = CN; RegisterClass(&wc);
+    WNDCLASS wc = { }; wc.lpfnWndProc = OverlayWndProc; wc.hInstance = hi; wc.lpszClassName = CN; RegisterClass(&wc);
     int sx = GetSystemMetrics(SM_XVIRTUALSCREEN), sy = GetSystemMetrics(SM_YVIRTUALSCREEN);
     int sw = GetSystemMetrics(SM_CXVIRTUALSCREEN), sh = GetSystemMetrics(SM_CYVIRTUALSCREEN) - 1;
     g_overlayHwnd = CreateWindowEx(
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         CN, L"CursorMotionBlurProOverlay", WS_POPUP, sx, sy, sw, sh, NULL, NULL, hi, NULL);
+    if (g_readyEvent) SetEvent(g_readyEvent);
     if (!g_overlayHwnd) return 0;
     ShowWindow(g_overlayHwnd, SW_SHOWNA);
     GetCursorPos(&g_lastPos);
@@ -1435,46 +1581,158 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
     return 0;
 }
 
-BOOL WhTool_ModInit() { LoadSettings(); g_threadHandle = CreateThread(NULL, 0, OverlayThreadProc, NULL, 0, NULL); return TRUE; }
-void WhTool_ModUninit() { if (g_overlayHwnd) PostMessage(g_overlayHwnd, WM_QUIT, 0, 0); if (g_threadHandle) { WaitForSingleObject(g_threadHandle, INFINITE); CloseHandle(g_threadHandle); } }
-void WhTool_ModSettingsChanged() { LoadSettings(); }
+BOOL WhTool_ModInit() { LoadSettings(); g_readyEvent = CreateEvent(NULL, TRUE, FALSE, NULL); g_threadHandle = CreateThread(NULL, 0, OverlayThreadProc, NULL, 0, NULL); return TRUE; }
+void WhTool_ModUninit() { if (g_threadHandle) { if (g_readyEvent) WaitForSingleObject(g_readyEvent, INFINITE); if (g_overlayHwnd) PostMessage(g_overlayHwnd, WM_QUIT, 0, 0); WaitForSingleObject(g_threadHandle, INFINITE); CloseHandle(g_threadHandle); g_threadHandle = NULL; } if (g_readyEvent) { CloseHandle(g_readyEvent); g_readyEvent = NULL; } }
+void WhTool_ModSettingsChanged() { if (!g_reloadMsg) g_reloadMsg = RegisterWindowMessageW(L"CursorMotionBlurPro_Reload"); if (g_overlayHwnd) PostMessage(g_overlayHwnd, g_reloadMsg, 0, 0); }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
-void WINAPI EntryPoint_Hook() { Wh_Log(L">"); ExitThread(0); }
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
 BOOL Wh_ModInit() {
-    DWORD sid;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sid) && sid == 0) return FALSE;
-    bool ie = false, itp = false, ictp = false; int argc; LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
-    if (!argv) { Wh_Log(L"CommandLineToArgvW failed"); return FALSE; }
-    for (int i = 1; i < argc; i++) { if (wcscmp(argv[i], L"-service") == 0 || wcscmp(argv[i], L"-service-start") == 0 || wcscmp(argv[i], L"-service-stop") == 0) { ie = true; break; } }
-    for (int i = 1; i < argc - 1; i++) { if (wcscmp(argv[i], L"-tool-mod") == 0) { itp = true; if (wcscmp(argv[i+1], WH_MOD_ID) == 0) ictp = true; break; } }
-    LocalFree(argv); if (ie) return FALSE;
-    if (ictp) {
-        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex) { Wh_Log(L"CreateMutex failed"); ExitProcess(1); }
-        if (GetLastError() == ERROR_ALREADY_EXISTS) { Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID); ExitProcess(1); }
-        if (!WhTool_ModInit()) ExitProcess(1);
-        IMAGE_DOS_HEADER* dh = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
-        IMAGE_NT_HEADERS* nh = (IMAGE_NT_HEADERS*)((BYTE*)dh + dh->e_lfanew);
-        void* ep = (BYTE*)dh + nh->OptionalHeader.AddressOfEntryPoint;
-        Wh_SetFunctionHook(ep, (void*)EntryPoint_Hook, nullptr); return TRUE;
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
     }
-    if (itp) return FALSE; g_isToolModProcessLauncher = true; return TRUE;
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+    LocalFree(argv);
+    if (isExcluded) {
+        return FALSE;
+    }
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+    if (isToolModProcess) {
+        return FALSE;
+    }
+    g_isToolModProcessLauncher = true;
+    return TRUE;
 }
 void Wh_ModAfterInit() {
-    if (!g_isToolModProcessLauncher) return;
-    WCHAR cpp[MAX_PATH];
-    switch (GetModuleFileName(nullptr, cpp, ARRAYSIZE(cpp))) { case 0: case ARRAYSIZE(cpp): Wh_Log(L"GetModuleFileName failed"); return; }
-    WCHAR cl[MAX_PATH + 2 + (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
-    swprintf_s(cl, L"\"%s\" -tool-mod \"%s\"", cpp, WH_MOD_ID);
-    HMODULE km = GetModuleHandle(L"kernelbase.dll"); if (!km) km = GetModuleHandle(L"kernel32.dll"); if (!km) { Wh_Log(L"No kernelbase/kernel32"); return; }
-    using CPIW_t = BOOL(WINAPI*)(HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES, WINBOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION, PHANDLE);
-    CPIW_t p = (CPIW_t)GetProcAddress(km, "CreateProcessInternalW"); if (!p) { Wh_Log(L"No CreateProcessInternalW"); return; }
-    STARTUPINFO si{ .cb = sizeof(STARTUPINFO), .dwFlags = STARTF_FORCEOFFFEEDBACK }; PROCESS_INFORMATION pi;
-    if (!p(nullptr, cpp, cl, nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi, nullptr)) { Wh_Log(L"CreateProcess failed"); return; }
-    CloseHandle(pi.hProcess); CloseHandle(pi.hThread);
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+        (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                  nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                  nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
-void Wh_ModSettingsChanged() { if (g_isToolModProcessLauncher) return; WhTool_ModSettingsChanged(); }
-void Wh_ModUninit() { if (g_isToolModProcessLauncher) return; WhTool_ModUninit(); ExitProcess(0); }
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+    WhTool_ModSettingsChanged();
+}
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+    WhTool_ModUninit();
+    ExitProcess(0);
+}
