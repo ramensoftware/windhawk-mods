@@ -125,13 +125,13 @@ This is caused by default by the AccentBlur API.❕
     Expand the effects to Win32 flyouts (context menus, dropdown menus, tooltips)
      ✨It is recommended to enable this with both background translucent effects and Windows theme custom rendering.
 - RuledPrograms:
-    - - target: "mspaint.exe"
+    - - target: "Notepad.exe"
         $name: 🔶 Process
         $description: >-
          Entries can be process names, paths or subdirectories for example:
-          • Taskmgr.exe
-          • C:\Windows\System32\Taskmgr.exe
-          • C:\Windows
+          • Notepad.exe
+          • C:\Program Files\Microsoft Office\root\Office16\EXCEL.EXE
+          • C:\Users
       - RenderingMod:
           - ThemeBackground: FALSE
             $name: 🔷 Windows theme custom rendering
@@ -227,9 +227,6 @@ static auto DrawTextWithGlow = (pDrawTextWithGlow)GetProcAddress(GetModuleHandle
 typedef BOOL(WINAPI* pShouldSystemUseDarkMode)();
 static auto ShouldSystemUseDarkMode = (pShouldSystemUseDarkMode)GetProcAddress(GetModuleHandle(L"uxtheme.dll"), MAKEINTRESOURCEA(138));
 BOOL g_IsSysThemeDarkMode = ShouldSystemUseDarkMode();
-
-// Treeview window handle used in our CNscTree_DrawDivider() hook to draw our alpha blended navigation pane divider
-thread_local HWND tl_hwndTreeView = nullptr;
 
 // Redirect per ruled program the system colors to hardcoded default ones 
 // when custom system colors are applied in global settings.
@@ -488,11 +485,7 @@ BOOL isWindowFlyout(HWND hWnd)
 }
 
 BOOL IsWindowEligible(HWND hWnd) 
-{   
-    // store the treeview handle for alpha blending when drawing the divider in the navigation pane hook.
-    if (g_settings.FillBg && IsWindowClass(hWnd, L"SysTreeView32"))
-        tl_hwndTreeView = hWnd;
-    
+{       
     if (isWindowFlyout(hWnd) && g_settings.FlyoutsEffects)
         return TRUE;
     
@@ -855,25 +848,125 @@ VOID GenerateTextAlphaGammaLUT()
 {
     for (INT i = 0; i < 256; ++i) 
     {
-        float a = i * (1.0f / 255.0f);
-        float g = powf(a, 1.0f / 1.4f);
+        FLOAT a = i * (1.0f / 255.0f);
+        // a = 1.0 (white luma) -> gamma = 1.5
+        // a = 0.0 (black luma) -> gamma = 1.2
+        FLOAT gamma = 1.2f + (0.3f * a);
+        // Apply the dynamic inverse gamma
+        FLOAT g = powf(a, 1.0f / gamma);
         g_textAlphaGammaLUT[i] = (BYTE)(g * 255.0f + 0.5f);
     }
 }
 
-// BufferedPaintInit must be called once per thread before any BeginBufferedPaint
-struct BPGuard {
-    BPGuard()  { BufferedPaintInit(); }
-    ~BPGuard() { BufferedPaintUnInit(); }
-};
-thread_local BPGuard tl_bpGuard;
+BOOL ExtTextOutBkPaint(HDC hdc, LPCRECT lprect, UINT options)
+{
+    if ((options & ETO_OPAQUE) && lprect) 
+    {
+        // Make opaque highlighted text background rectangle
+        if (GetBkColor(hdc) == GetSysColor(COLOR_HIGHLIGHT)) 
+        {
+            BP_PAINTPARAMS params = { sizeof(BP_PAINTPARAMS) };
+            HDC memDC = nullptr;
+            HPAINTBUFFER hpb = BeginBufferedPaint(hdc, lprect, BPBF_TOPDOWNDIB, &params, &memDC); 
+            if (!hpb) {
+                Wh_Log(L"Failed BeginBufferedPaint error:0x%08x", GetLastError());
+                return FALSE;
+            }
+
+            FillRect(memDC, lprect, GetSysColorBrush(COLOR_HIGHLIGHT));
+            BufferedPaintMakeOpaque(hpb, lprect);
+
+            EndBufferedPaint(hpb, TRUE);
+        }
+        else {
+            HBRUSH brush = CreateSolidBrush(GetBkColor(hdc));
+            FillRect(hdc, lprect, brush);
+            DeleteObject(brush);
+        }
+    }
+    return TRUE;
+}
+
+BOOL ExtTextOutComposition(HDC hdc, HPAINTBUFFER hpb, LPRECT pTextRect, UINT txtOptions)
+{
+    RGBQUAD* pPixels = nullptr;
+    INT rowWidth = 0; // stride
+    if (FAILED(GetBufferedPaintBits(hpb, &pPixels, &rowWidth))) {
+        EndBufferedPaint(hpb, FALSE);
+        Wh_Log(L"Failed GetBufferedPaintBits error:0x%08x", GetLastError());
+        return FALSE;
+    }
+
+    INT txtRcHeight = RECTHEIGHT(pTextRect);
+    INT txtRcWidth = RECTWIDTH(pTextRect);
+    
+    BYTE pxBlue = GetBValue(GetTextColor(hdc));
+    BYTE pxGreen = GetGValue(GetTextColor(hdc));
+    BYTE pxRed = GetRValue(GetTextColor(hdc));
+    
+    // Alpha composition
+    for (INT cy = 0; cy < txtRcHeight; ++cy) {
+        RGBQUAD* row = pPixels + (cy * rowWidth);
+        for (INT cx = 0; cx < txtRcWidth; ++cx) {
+            RGBQUAD& px = row[cx];
+            // Avoid background pixels
+            if ((px.rgbBlue | px.rgbGreen | px.rgbRed) == 0)
+                continue;
+            
+            // Greyscale alpha
+            BYTE luma = (BYTE)((px.rgbBlue + (px.rgbGreen << 1) + px.rgbRed) >> 2);          
+            // Gamma alpha correction
+            BYTE txtA = g_textAlphaGammaLUT[luma];
+            
+            px.rgbBlue     = (pxBlue * txtA) >> 8;
+            px.rgbGreen    = (pxGreen * txtA) >> 8;
+            px.rgbRed      = (pxRed * txtA) >> 8;
+            px.rgbReserved = txtA;
+        }
+    }
+    
+    return TRUE;
+}
+
+// Calculate text boundaries
+BOOL ExtTextOutCalcRect(HDC hdc, POINT point, UINT options, RECT& textRect, LPCRECT lprect, LPCWSTR lpString, UINT c)
+{
+    SIZE textSize = {0};
+
+    if (lprect)
+        textRect = *lprect;
+    else if (options & ETO_GLYPH_INDEX && GetTextExtentPointI(hdc, (WORD*)lpString, c, &textSize))
+    {
+        textRect.left   = point.x;
+        textRect.top    = point.y;
+        textRect.right  = point.x + textSize.cx;
+        textRect.bottom = point.y + textSize.cy;
+    }
+    else if (options == ETO_IGNORELANGUAGE) {
+        if(!GetClipBox(hdc, &textRect))
+            return FALSE;
+    }
+    else if (options && GetTextExtentPoint32W(hdc, lpString, c, &textSize)) {
+        textRect.left   = point.x;
+        textRect.top    = point.y;
+        textRect.right  = point.x + textSize.cx;
+        textRect.bottom = point.y + textSize.cy; 
+    }
+    else
+        return FALSE;
+    
+    if (RECTWIDTH(&textRect) <= 0 || RECTHEIGHT(&textRect) <= 0)
+        return FALSE;
+
+    return TRUE;
+}
 
 BOOL WINAPI HookedExtTextOutW(
     HDC hdc,
     INT x,
     INT y,
     UINT options,
-    const RECT* lprect,
+    LPCRECT lprect,
     LPCWSTR lpString,
     UINT c,
     const INT* lpDx)
@@ -882,51 +975,12 @@ BOOL WINAPI HookedExtTextOutW(
         return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
 
     RECT textRect {0};
-    SIZE textSize = {0};
-    
-    // Boundary calculations
-    if (lprect)
-        textRect = *lprect;
-    else if (options & ETO_GLYPH_INDEX)
-    {
-        if (GetTextExtentPointI(hdc, (WORD*)lpString, c, &textSize))
-        {
-            textRect.left   = x;
-            textRect.top    = y - textSize.cy;
-            textRect.right  = x + textSize.cx;
-            textRect.bottom = textSize.cy + y;
-        }
-        else
-            return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
-    }
-    else if (options == ETO_IGNORELANGUAGE) {
-        if(!GetClipBox(hdc, &textRect))
-            return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
-    }
-    else if (options)
-    {
-        if (GetTextExtentPoint32W(hdc, lpString, c, &textSize))
-        {
-            textRect.left   = x;
-            textRect.top    = y - textSize.cy;
-            textRect.right  = x + textSize.cx;
-            textRect.bottom = textSize.cy + y; 
-        }
-        else
-            return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
-    }
-    else
+    if (!ExtTextOutCalcRect(hdc, {x, y}, options, textRect, lprect, lpString, c))
         return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
-    
-    INT textRectWidth  = RECTWIDTH(&textRect);
-    INT textRectHeight = RECTHEIGHT(&textRect);
-
-    if (textRectWidth <= 0 || textRectHeight <= 0)
-        return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
-
+        
     // https://devblogs.microsoft.com/oldnewthing/20110520-00/?p=10613
     BP_PAINTPARAMS params = { sizeof(BP_PAINTPARAMS) };
-    params.dwFlags = BPPF_ERASE | BPPF_NOCLIP;
+    params.dwFlags = (options & ETO_CLIPPED) ? BPPF_ERASE : BPPF_NOCLIP | BPPF_ERASE;
     HDC memDC = nullptr;
     // Acquire OS cached bitmap
     HPAINTBUFFER hpb = BeginBufferedPaint(hdc, &textRect, BPBF_TOPDOWNDIB, &params, &memDC);
@@ -935,61 +989,30 @@ BOOL WINAPI HookedExtTextOutW(
         return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
     }
 
-    RGBQUAD* pPixels = nullptr;
-    INT rowWidth = 0; // stride in RGBQUADs, not bytes
-    if (FAILED(GetBufferedPaintBits(hpb, &pPixels, &rowWidth))) {
-        EndBufferedPaint(hpb, FALSE); // was missing on this path - leaked hpb
-        Wh_Log(L"Failed GetBufferedPaintBits error:0x%08x", GetLastError());
-        return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
-    }
-
-    // Original DC coloring values
-    COLORREF origTxtClr = GetTextColor(hdc);
-    COLORREF origBkClr = GetBkColor(hdc);
-    COLORREF highlightSysClr = GetSysColor(COLOR_HIGHLIGHT);
-    BOOL HighlightedText = (options & ETO_OPAQUE && origBkClr == highlightSysClr);
-
     SelectObject(memDC, GetCurrentObject(hdc, OBJ_FONT));
     SetTextAlign(memDC, GetTextAlign(hdc));
     SetBkMode(memDC, TRANSPARENT);
     SetTextColor(memDC, RGB(255, 255, 255)); // White text mask
 
-    if ((options & ETO_OPAQUE) && lprect) {
-        HBRUSH brush = CreateSolidBrush(origBkClr);
-        FillRect(hdc, lprect, brush);
-        DeleteObject(brush);
-    }
+    if(!ExtTextOutBkPaint(hdc, lprect, options))
+        return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
 
+    // Remove default background painting operation, as it done by us
     WINBOOL res = ExtTextOutW_orig(memDC, x, y, options & ~ETO_OPAQUE, lprect, lpString, c, lpDx);
 
-    // Compositing
-    for (INT cy = 0; cy < textRectHeight; ++cy) {
-        RGBQUAD* row = pPixels + (cy * rowWidth);
-        for (INT cx = 0; cx < textRectWidth; ++cx) {
-            RGBQUAD& p = row[cx];
-            // Alpha extraction + gamma correction
-            BYTE luma = (BYTE)((p.rgbBlue + (p.rgbGreen << 1) + p.rgbRed) >> 2);
-            BYTE txtA = g_textAlphaGammaLUT[luma];
-            if (txtA == 0 && !(options & ETO_OPAQUE))
-                continue;
-            // handle background transparency only for selected text
-            BYTE bgWeight = HighlightedText ? (255 - txtA) : 0;
-            p.rgbBlue     = (((GetBValue(origTxtClr) * txtA) + (GetBValue(origBkClr) * bgWeight)) >> 8);
-            p.rgbGreen    = (((GetGValue(origTxtClr) * txtA) + (GetGValue(origBkClr) * bgWeight)) >> 8);
-            p.rgbRed      = (((GetRValue(origTxtClr) * txtA) + (GetRValue(origBkClr) * bgWeight)) >> 8);
-            p.rgbReserved = bgWeight ? 255 : txtA;
-        }
-    }
+    // Text greyscale alpha composition
+    if (!ExtTextOutComposition(hdc, hpb, &textRect, options))
+        return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
 
     BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-    AlphaBlend(hdc, textRect.left, textRect.top, textRectWidth, textRectHeight,
-            memDC, textRect.left, textRect.top, textRectWidth, textRectHeight, blend);
+    AlphaBlend(hdc, textRect.left, textRect.top, RECTWIDTH(&textRect), RECTHEIGHT(&textRect),
+            memDC, textRect.left, textRect.top, RECTWIDTH(&textRect), RECTHEIGHT(&textRect), blend);
 
     EndBufferedPaint(hpb, FALSE);
     return res;
 }
 
-// Bypass alpha blending operation done by default (e.g context menus, win32 adressbar) as it is done by our ExtTextOutW hook.
+// Bypass alpha blending operation done by DrawTextWithGlow (e.g context menus, win32 adressbar) as it is done by our ExtTextOutW hook.
 HRESULT WINAPI HookedDrawTextWithGlow(HDC hdcMem, LPWSTR pszText, UINT cch, RECT* pRect, DWORD dwFlags, COLORREF crText,
                                       COLORREF crGlow, UINT nGlowRadius, UINT nGlowIntensity, BOOL fPreMultiply,
                                       DTT_CALLBACK_PROC pfnDrawTextCallback, LPARAM lParam)
@@ -1156,10 +1179,6 @@ constexpr INT SysColorElements[] = {
     COLOR_HOTLIGHT
 };
 
-void ClearSysColorsRegKey() {
-    RegDeleteTreeW(HKEY_CURRENT_USER, L"Control Panel\\Colors");
-}
-
 HTHEME SetThemeHandle(HWND hWnd, HTHEME& hTheme, LPCWSTR themeclass)
 {
     return hTheme = OpenThemeData(hWnd, themeclass);
@@ -1179,8 +1198,6 @@ VOID RevertSysColors()
 
     CloseThemeData(hThemeSysMetrics);
     hThemeSysMetrics = nullptr;
-
-    //ClearSysColorsRegKey();
 }
 
 static COLORREF GetDefaultSysColor(INT nIndex)
@@ -1243,6 +1260,8 @@ static COLORREF GetCustomSysColor(INT nIndex)
         return RGB(96, 96, 96);
     else if (nIndex == COLOR_BTNHIGHLIGHT)
         return RGB(64, 64, 64);
+    else if (nIndex == COLOR_WINDOWTEXT)
+        return RGB(240, 240, 240);
     else if (nIndex == COLOR_WINDOWTEXT || nIndex == COLOR_MENUTEXT || nIndex == COLOR_CAPTIONTEXT ||
              nIndex == COLOR_BTNTEXT || nIndex == COLOR_INFOTEXT || nIndex == COLOR_HIGHLIGHTTEXT)
         return RGB(255, 255, 255);
@@ -1308,8 +1327,13 @@ VOID ColorizeSysColors()
 {   
     // Stop recalling SetSysColors if syscolor changes have been applied.
     // SetSysColors redraws all top level windows causing flickering.
-    if (GetSysColor_orig(COLOR_WINDOW) == RGB(0, 0, 0))
-        return;
+    if (GetSysColor(COLOR_WINDOW) == RGB(0, 0, 0))
+    {
+        if (g_settings.AccentColorize && GetSysColor(COLOR_HIGHLIGHT) == g_settings.AccentColor)
+            return;
+        else if (!g_settings.AccentColorize)
+            return ;
+    }
     
     COLORREF aNewColors[ARRAYSIZE(SysColorElements)];
     for (UINT i = 0; i < ARRAYSIZE(SysColorElements); i++)
@@ -5227,7 +5251,7 @@ void __fastcall Hooked_BorderRect(HDC hdc, COLORREF color, LPRECT pRect, INT cxT
 {
     if (!pRect) return;
 
-    auto ComposeRectBorders = [&](RECT rcBorder)
+    auto BorderComposition = [&](RECT rcBorder)
     {
         BP_PAINTPARAMS params = { sizeof(BP_PAINTPARAMS) };
         params.dwFlags = BPPF_ERASE | BPPF_NONCLIENT;
@@ -5250,22 +5274,23 @@ void __fastcall Hooked_BorderRect(HDC hdc, COLORREF color, LPRECT pRect, INT cxT
     // 1. Bottom Border
     rcBorder = *pRect;
     rcBorder.top = rcBorder.bottom - cyThickness;
-    ComposeRectBorders(rcBorder);
+    BorderComposition(rcBorder);
 
     // 2. Right Border
     rcBorder = *pRect;
     rcBorder.left = rcBorder.right - cxThickness;
-    ComposeRectBorders(rcBorder);
+    BorderComposition(rcBorder);
 
     // 3. Left Border
     rcBorder = *pRect;
     rcBorder.right = rcBorder.left + cxThickness;
-    ComposeRectBorders(rcBorder);
+    BorderComposition(rcBorder);
 
     // 4. Top Border
     rcBorder = *pRect;
     rcBorder.bottom = rcBorder.top + cyThickness;
-    ComposeRectBorders(rcBorder);
+    BorderComposition(rcBorder);
+
     return;
 }
 
@@ -5501,7 +5526,7 @@ BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor)
 // 4688: COLOR_MENUBAR                  4928: COLOR_MENUBAR
 // ---------------------------------------------------------------------------------------------
 
-// A considerable portion of coloring comes from CTL messages, replace the gpsi pointer inside user32 functions with system colors API getters
+// Replace the gpsi pointer inside user32 internal symbols with SysColor APIs (GetSysColor()/GetSysColorBrush())
 LRESULT MyRealDefWindowProcWorker(UINT msg, WPARAM wParam)
 {
     COLORREF sysColorBk = 0;
@@ -5769,13 +5794,25 @@ VOID User32Hooks(BOOL areSysColorsApplied)
     }
 }
 
+// Change Desktop items text and shadow colors in light theme
+int (__fastcall *DrawShadowTextEx_orig)(HDC, LPCWSTR, INT, LPRECT, UINT, COLORREF, COLORREF, INT, INT, BYTE, INT);
+int __fastcall HookedDrawShadowTextEx(HDC hdc, LPCWSTR lpchText, INT dwFlags, LPRECT pRect, UINT format, 
+                COLORREF crText, COLORREF crShadow, INT ixOffset, INT iyOffset, BYTE bAlpha, INT a11)
+{
+    if (!g_IsSysThemeDarkMode) {
+        crText = RGB(0, 0, 0);
+        crShadow = RGB(255, 255, 255);
+    }
+    return DrawShadowTextEx_orig(hdc, lpchText, dwFlags, pRect, format, crText, crShadow, ixOffset, iyOffset, bAlpha, a11);
+}
+
 void (__fastcall *SHThemeDrawText_orig)(void*, HDC, INT, INT, DTTOPTS*, LPCWSTR, LPRECT, INT, UINT, INT, __int64, COLORREF, COLORREF);
-void __fastcall Hooked_SHThemeDrawText(void *a1, HDC a2, INT a3, INT a4, DTTOPTS *a5, LPCWSTR lpString, LPRECT lprc, INT a8, UINT format, INT a10, __int64 a11, COLORREF color, COLORREF a13)
+void __fastcall Hooked_SHThemeDrawText(void *hTheme, HDC hdc, INT iPartId, INT iStateId, DTTOPTS *pOptions, LPCWSTR lpString, LPRECT pRect, INT iLVGroupAlignFlag, UINT uFormat, INT a10, __int64 a11, COLORREF crText, COLORREF crBackground)
 {
     if (!g_InsideTaskMgrProc)
-        color = g_IsSysThemeDarkMode && (color & 0x00ffffff) <= RGB(96, 96, 96) ? RGB(255, 255, 255) : !g_IsSysThemeDarkMode ? RGB(0, 0, 0) : color;
-    
-    SHThemeDrawText_orig(a1, a2, a3, a4, a5, lpString, lprc, a8, format, a10, a11, color, a13);
+        crText = g_IsSysThemeDarkMode && (crText & 0x00ffffff) <= RGB(96, 96, 96) ? RGB(255, 255, 255) : !g_IsSysThemeDarkMode ? RGB(0, 0, 0) : crText;
+
+    SHThemeDrawText_orig(hTheme, hdc, iPartId, iStateId, pOptions, lpString, pRect, iLVGroupAlignFlag, uFormat, a10, a11, crText, crBackground);
     return;
 
 }
@@ -5858,24 +5895,36 @@ void __fastcall HookedComboEx_OnDrawItem(struct COMBOEX *a1, struct tagDRAWITEMS
 VOID Comctl32Hooks()
 {
     WindhawkUtils::SYMBOL_HOOK comctl32_dll_hooks[] =
-    {        
+    {   
+        // 32-bit version contains complex color specification, avoid it.
+        #ifdef _WIN64
         {
             {
-                #ifdef _WIN64
-                    L"SHThemeDrawText"
-                #else
-                    L"_SHThemeDrawText@56"
-                #endif
+                L"SHThemeDrawText"
             },
             &SHThemeDrawText_orig,
             Hooked_SHThemeDrawText,
             FALSE
         },
+        #endif
+        {
+            {
+                #ifdef _WIN64
+                    L"DrawShadowTextEx"
+                #else
+                    L"_DrawShadowTextEx@44"
+                #endif
+            },
+            &DrawShadowTextEx_orig,
+            HookedDrawShadowTextEx,
+            FALSE
+        },
         // Symbols are inlined in ARM64, avoid hooking.
         #ifdef _M_ARM64
         #else
-            // SHThemeFillTextRect is 64-bit only
-            // 32-bit version is implemented inside SHThemeDrawText
+            // SHThemeFillTextRect available only to 64-bit version.
+            // Color specification for the 32-bit version is implemented within SHThemeDrawText()
+            // Color specification for the 64-bit version is implemented within SHThemeDrawText() -> SHThemeComputeTextColors()
             #ifdef _WIN64
             {
                 {
@@ -5964,6 +6013,9 @@ BOOL CThemeCache::CacheNavigationDivider()
     return TRUE;
 }
 
+// Internal symbol returning Systreeview window handle
+__int64 (THISCALL *CNscTree_GetWindowsDDT_orig)(class CNscTree*, HWND *, HWND *);
+
 // Render custom D2D alpha blended navigation pane divider
 void (THISCALL *CNscTree_DrawDivider_orig)(class CNscTree* , HDC, struct _TREEITEM*);
 void THISCALL Hooked_CNscTree_DrawDivider(CNscTree *__this, HDC hdc, struct _TREEITEM *hTreeItem)
@@ -5975,23 +6027,9 @@ void THISCALL Hooked_CNscTree_DrawDivider(CNscTree *__this, HDC hdc, struct _TRE
         return;
     };
 
-    // As of Win11 26200.8737 - hwnd offsets 64-bit: offset 50, 32-bit: offset 61
-    auto GetTreeViewHWND = [&__this]() 
-    {
-        #ifdef _WIN64
-            return reinterpret_cast<HWND*>(__this)[50];
-        #else
-            return reinterpret_cast<HWND>(reinterpret_cast<DWORD*>(__this)[61]);
-        #endif
-    };
-
-    // TreeView window handle retrieved from NtUserCreateWindowEx hook
-    HWND hwndTreeView = tl_hwndTreeView;
-    if (!IsWindow(hwndTreeView) || !IsWindowClass(hwndTreeView, L"SysTreeView32"))
-        hwndTreeView = GetTreeViewHWND();
-    
-    if (!IsWindow(hwndTreeView) || !IsWindowClass(hwndTreeView, L"SysTreeView32"))
-        return Fallback(L"Not valid TreeView window");
+    HWND hwndTreeView = nullptr;
+    if (CNscTree_GetWindowsDDT_orig(__this, &hwndTreeView, &hwndTreeView))
+        return Fallback(L"Failed acquiring treeview window handle");
     
     RECT treeItemRect = {0};
     *reinterpret_cast<HTREEITEM*>(&treeItemRect) = (HTREEITEM)hTreeItem;
@@ -6030,6 +6068,19 @@ VOID ExplorerFrameHooks()
             },
             &CNscTree_DrawDivider_orig,
             Hooked_CNscTree_DrawDivider,
+            FALSE
+        },
+        // We're getting only the symbol address.
+        {
+            {
+                #ifdef _WIN64
+                    L"public: virtual long __cdecl CNscTree::GetWindowsDDT(struct HWND__ * *,struct HWND__ * *)"
+                #else
+                    L"public: virtual long __thiscall CNscTree::GetWindowsDDT(struct HWND__ * *,struct HWND__ * *)"
+                #endif
+            },
+            &CNscTree_GetWindowsDDT_orig,
+            nullptr,
             FALSE
         },          
     };
