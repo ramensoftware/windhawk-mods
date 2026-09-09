@@ -2,7 +2,7 @@
 // @id              mutealert
 // @name            MuteAlert - Microphone Activity Taskbar Widget
 // @description     Shows live microphone activity, call mute state, volume controls, and headset mute synchronization in the Windows 11 taskbar.
-// @version         0.9.8
+// @version         0.9.9
 // @author          Nikolay
 // @github          https://github.com/Nikolay1243
 // @homepage        https://github.com/MuteAlert/windhawk
@@ -90,173 +90,185 @@ volume control, call state, and headset integration.
 
 // ==WindhawkModSettings==
 /*
-- position: beforeClock
-  $name: Position
-  $description: Where to place the microphone widget in the system tray.
-  $options:
-  - beforeIcons: Before notification icons
-  - beforeOmni: Before Wi-Fi, volume, and battery
-  - beforeClock: Before the clock
-  - afterClock: After the clock
-  - afterShowDesktop: After the Show Desktop strip
-- deviceRole: console
-  $name: Default microphone role
-  $description: Which Windows default capture endpoint the widget follows.
-  $options:
-  - console: General/default input
-  - communications: Communications input
-  - multimedia: Multimedia input
-- volumeStep: 2
-  $name: Volume change per wheel notch (%)
-  $description: Scroll up to increase and scroll down to decrease the microphone volume.
-- forceVolume: false
-  $name: Keep microphone at the selected volume
-  $description: Restores the target input volume if Windows or another application changes it. Scrolling the widget changes the target.
-- forcedVolume: 100
-  $name: Locked microphone volume (%)
-  $description: "Target volume while volume lock is enabled. Range: 0-100%."
-- updateInterval: 50
-  $name: Meter update interval (ms)
-  $description: "Lower values make the meter smoother but wake Explorer more often. Range: 25-500 ms."
-- peakSensitivity: 150
-  $name: Meter sensitivity (%)
-  $description: Scales the displayed peak without changing the microphone volume. 100% is the raw Windows peak value.
-- iconSize: 18
-  $name: Microphone icon size (DIPs)
-  $description: "Logical XAML size for the microphone icon. Range: 12-32 DIPs. Windows scales DIPs for display density."
-- buttonWidth: 32
-  $name: Widget width (DIPs)
-  $description: "Logical XAML width reserved for each taskbar button. Range: 20-64 DIPs. Windows scales DIPs for display density."
-- showCallStateIcon: false
-  $name: Show active-call app icon
-  $description: Shows a secondary Slack, Teams, Zoom, or Google Meet logo while a supported call is active. Left-clicking it focuses the call window. Google Meet requires Enable Google Meet integration.
-- headsetSyncMode: off
+- General:
+  - position: beforeClock
+    $name: Position
+    $description: Where to place the microphone widget in the system tray.
+    $options:
+    - beforeIcons: Before notification icons
+    - beforeOmni: Before Wi-Fi, volume, and battery
+    - beforeClock: Before the clock
+    - afterClock: After the clock
+    - afterShowDesktop: After the Show Desktop strip
+  - deviceRole: console
+    $name: Default microphone role
+    $description: Which Windows default capture endpoint the widget follows.
+    $options:
+    - console: General/default input
+    - communications: Communications input
+    - multimedia: Multimedia input
+  - volumeStep: 2
+    $name: Volume change per wheel notch (%)
+    $description: Scroll up to increase and scroll down to decrease the microphone volume.
+  - forceVolume: false
+    $name: Keep microphone at the selected volume
+    $description: Restores the target input volume if Windows or another application changes it. Scrolling the widget changes the target.
+  - forcedVolume: 100
+    $name: Locked microphone volume (%)
+    $description: "Target volume while volume lock is enabled. Range: 0-100%."
+  - updateInterval: 50
+    $name: Meter update interval (ms)
+    $description: "Lower values make the meter smoother but wake Explorer more often. Range: 25-500 ms."
+  - peakSensitivity: 150
+    $name: Meter sensitivity (%)
+    $description: Scales the displayed peak without changing the microphone volume. 100% is the raw Windows peak value.
+  - iconSize: 18
+    $name: Microphone icon size (DIPs)
+    $description: "Logical XAML size for the microphone icon. Range: 12-32 DIPs. Windows scales DIPs for display density."
+  - buttonWidth: 32
+    $name: Widget width (DIPs)
+    $description: "Logical XAML width reserved for each taskbar button. Range: 20-64 DIPs. Windows scales DIPs for display density."
+  - showCallStateIcon: false
+    $name: Show active-call app icon
+    $description: Shows a secondary Slack, Teams, Zoom, or Google Meet logo while a supported call is active. Left-clicking it focuses the call window. Google Meet requires Enable Google Meet integration.
+  $name: General and microphone
+- Headset:
+  - headsetSyncMode: off
+    $name: Headset mute synchronization
+    $description: Uses Windows hardware mute, standard HID mute controls, or a supported vendor adapter. The taskbar tooltip shows the current detection method and confidence. Silence is never interpreted as physical mute.
+    $options:
+    - full: Sync physical mute and unmute changes
+    - muteOnly: Sync only physical mute changes
+    - statusOnly: Show the physical state without changing software mute states
+    - off: Disabled
+  - headsetSyncWindows: true
+    $name: Synchronize headset mute with Windows input
+  - headsetSyncCalls: false
+    $name: Synchronize headset mute with active calls
+    $description: Google Meet requires Enable Google Meet integration. Headset synchronization must be in full or mute-only mode to change call mute states.
+  - headsetPollInterval: 500
+    $name: Headset status interval (ms)
+    $description: "How often to query vendor device state. Range: 200-2000 ms."
+  - headsetDiagnosticsPath: ""
+    $name: Export sanitized headset diagnostics
+    $description: Optional full .txt path. Applying settings exports device IDs, HID descriptors, and provider slots without paths, serial numbers, or raw report values. Sanitized report changes are included only while headset synchronization is enabled.
   $name: Headset mute synchronization
-  $description: Uses Windows hardware mute, standard HID mute controls, or a supported vendor adapter. The taskbar tooltip shows the current detection method and confidence. Silence is never interpreted as physical mute.
-  $options:
-  - full: Sync physical mute and unmute changes
-  - muteOnly: Sync only physical mute changes
-  - statusOnly: Show the physical state without changing software mute states
-  - off: Disabled
-- headsetSyncWindows: true
-  $name: Synchronize headset mute with Windows input
-- headsetSyncCalls: false
-  $name: Synchronize headset mute with active calls
-  $description: Google Meet requires Enable Google Meet integration. Headset synchronization must be in full or mute-only mode to change call mute states.
-- headsetPollInterval: 500
-  $name: Headset status interval (ms)
-  $description: "How often to query vendor device state. Range: 200-2000 ms."
-- headsetDiagnosticsPath: ""
-  $name: Export sanitized headset diagnostics
-  $description: Optional full .txt path. Applying settings exports device IDs, HID descriptors, and provider slots without paths, serial numbers, or raw report values. Sanitized report changes are included only while headset synchronization is enabled.
-- slackWarning: false
-  $name: Warn when speaking while Slack is muted
-  $description: Uses Windows UI Automation to detect a visible muted Slack huddle. No Slack credentials or network access are used.
-- slackAudioCue: false
-  $name: Play Slack muted audio cue
-  $description: Plays the Windows exclamation sound once when the speaking-while-muted warning begins.
-- slackRightClickUnmute: false
-  $name: Right-click to toggle Slack microphone
-  $description: Invokes Slack's accessible Mute or Unmute button when the taskbar microphone is right-clicked during a huddle.
-- slackMutedButtonText: "unmute"
-  $name: Slack muted-button text
-  $description: Case-insensitive text expected in Slack's button while your huddle microphone is muted. Change this for a localized Slack interface.
-- slackUnmutedButtonText: "mute"
-  $name: Slack unmuted-button text
-  $description: Case-insensitive text expected in Slack's button while your huddle microphone is unmuted. Change this for a localized Slack interface.
-- slackCallButtonText: "leave"
-  $name: Slack in-call button text
-  $description: Case-insensitive text expected in Slack's Leave huddle button. Change this for a localized Slack interface.
-- slackSpeechThreshold: 8
-  $name: Slack warning speech threshold (%)
-  $description: Minimum displayed microphone peak considered speech. Raise this if background noise triggers warnings.
-- slackSpeechDelay: 500
-  $name: Slack warning delay (ms)
-  $description: "How long sound must remain above the threshold before showing the warning. Range: 100-3000 ms."
-- teamsWarning: false
-  $name: Warn when speaking while Microsoft Teams is muted
-  $description: Uses Windows UI Automation to detect a visible muted Teams call. No Teams credentials or network access are used.
-- teamsAudioCue: false
-  $name: Play Teams muted audio cue
-  $description: Plays the Windows exclamation sound once when the Teams speaking-while-muted warning begins.
-- teamsRightClickUnmute: false
-  $name: Right-click to toggle Teams microphone
-  $description: Invokes Teams' accessible Mute or Unmute button when the taskbar microphone is right-clicked during a call.
-- teamsMutedButtonText: "unmute"
-  $name: Teams muted-button text
-  $description: Case-insensitive text expected in Teams' button while your call microphone is muted. Change this for a localized Teams interface.
-- teamsUnmutedButtonText: "mute"
-  $name: Teams unmuted-button text
-  $description: Case-insensitive text expected in Teams' button while your call microphone is unmuted. Change this for a localized Teams interface.
-- teamsCallButtonText: "hang up|leave"
-  $name: Teams in-call button text
-  $description: Case-insensitive text expected in Teams' Hang up or Leave button. Separate alternatives with a vertical bar.
-- teamsSpeechThreshold: 8
-  $name: Teams warning speech threshold (%)
-  $description: Minimum displayed microphone peak considered speech. Raise this if background noise triggers warnings.
-- teamsSpeechDelay: 500
-  $name: Teams warning delay (ms)
-  $description: "How long sound must remain above the threshold before showing the warning. Range: 100-3000 ms."
-- zoomWarning: false
-  $name: Warn when speaking while Zoom is muted
-  $description: Uses Windows UI Automation to detect a visible muted Zoom meeting. No Zoom credentials or network access are used.
-- zoomAudioCue: false
-  $name: Play Zoom muted audio cue
-  $description: Plays the Windows exclamation sound once when the Zoom speaking-while-muted warning begins.
-- zoomRightClickUnmute: false
-  $name: Right-click to toggle Zoom microphone
-  $description: Invokes Zoom's accessible Mute or Unmute button when the taskbar microphone is right-clicked during a meeting.
-- zoomShortcutFallback: false
-  $name: Allow Zoom Alt+A fallback
-  $description: When Zoom hides its accessible microphone button, temporarily focuses Zoom and sends Alt+A. This can interrupt typing, is attempted at most three times, and is disabled by default.
-- zoomMutedButtonText: "unmute"
-  $name: Zoom muted-button text
-  $description: Case-insensitive text expected in Zoom's button while your meeting microphone is muted. Change this for a localized Zoom interface.
-- zoomUnmutedButtonText: "mute"
-  $name: Zoom unmuted-button text
-  $description: Case-insensitive text expected in Zoom's button while your meeting microphone is unmuted. Change this for a localized Zoom interface.
-- zoomCallButtonText: "leave|end"
-  $name: Zoom in-meeting button text
-  $description: Case-insensitive text expected in Zoom's Leave or End meeting button. Separate alternatives with a vertical bar.
-- zoomSpeechThreshold: 8
-  $name: Zoom warning speech threshold (%)
-  $description: Minimum displayed microphone peak considered speech. Raise this if background noise triggers warnings.
-- zoomSpeechDelay: 500
-  $name: Zoom warning delay (ms)
-  $description: "How long sound must remain above the threshold before showing the warning. Range: 100-3000 ms."
-- meetEnabled: false
-  $name: Enable Google Meet integration
-  $description: Opt in to browser accessibility scanning. Also enable the call icon, Meet warning, Meet right-click control, or headset call synchronization to use it. Enabling accessibility can increase browser CPU and memory usage until the browser exits.
-- meetWindowTitle: "meet -|meet –|meet —"
-  $name: Google Meet window title text
-  $description: Case-insensitive title fragments. Separate alternatives with a vertical bar. Customize for localized titles or installed Meet app windows.
-- meetBrowserExecutables: "chrome.exe|msedge.exe|firefox.exe|brave.exe|vivaldi.exe|opera.exe|arc.exe"
-  $name: Google Meet browser executables
-  $description: Exact executable filenames separated with a vertical bar. Add your browser if absent. Opera GX uses opera.exe.
-- meetWarning: false
-  $name: Warn when speaking while Google Meet is muted
-  $description: Requires Enable Google Meet integration. Uses Windows UI Automation to detect a muted Google Meet in the active, visible tab of a supported browser. No Google credentials or network access are used.
-- meetAudioCue: false
-  $name: Play Google Meet muted audio cue
-  $description: Requires Enable Google Meet integration and Warn when speaking while Google Meet is muted. Plays the Windows exclamation sound once when the warning begins.
-- meetRightClickUnmute: false
-  $name: Right-click to toggle Google Meet microphone
-  $description: Requires Enable Google Meet integration. Invokes Google Meet's accessible Mute or Unmute button when the taskbar microphone is right-clicked during a meeting.
-- meetMutedButtonText: "turn on microphone"
-  $name: Google Meet muted-button text
-  $description: Case-insensitive text expected in Google Meet's button while your meeting microphone is muted. Separate alternatives with a vertical bar.
-- meetUnmutedButtonText: "turn off microphone"
-  $name: Google Meet unmuted-button text
-  $description: Case-insensitive text expected in Google Meet's button while your meeting microphone is unmuted. Separate alternatives with a vertical bar.
-- meetCallButtonText: "leave call"
-  $name: Google Meet in-meeting button text
-  $description: Case-insensitive text expected in Google Meet's Leave call button. Change this for a localized interface.
-- meetSpeechThreshold: 8
-  $name: Google Meet warning speech threshold (%)
-  $description: Minimum displayed microphone peak considered speech. Raise this if background noise triggers warnings.
-- meetSpeechDelay: 500
-  $name: Google Meet warning delay (ms)
-  $description: "How long sound must remain above the threshold before showing the warning. Range: 100-3000 ms."
+- Slack:
+  - slackWarning: false
+    $name: Warn when speaking while Slack is muted
+    $description: Uses Windows UI Automation to detect a visible muted Slack huddle. No Slack credentials or network access are used.
+  - slackAudioCue: false
+    $name: Play Slack muted audio cue
+    $description: Plays the Windows exclamation sound once when the speaking-while-muted warning begins.
+  - slackRightClickUnmute: false
+    $name: Right-click to toggle Slack microphone
+    $description: Invokes Slack's accessible Mute or Unmute button when the taskbar microphone is right-clicked during a huddle.
+  - slackMutedButtonText: "unmute"
+    $name: Slack muted-button text
+    $description: Case-insensitive text expected in Slack's button while your huddle microphone is muted. Change this for a localized Slack interface.
+  - slackUnmutedButtonText: "mute"
+    $name: Slack unmuted-button text
+    $description: Case-insensitive text expected in Slack's button while your huddle microphone is unmuted. Change this for a localized Slack interface.
+  - slackCallButtonText: "leave"
+    $name: Slack in-call button text
+    $description: Case-insensitive text expected in Slack's Leave huddle button. Change this for a localized Slack interface.
+  - slackSpeechThreshold: 8
+    $name: Slack warning speech threshold (%)
+    $description: Minimum displayed microphone peak considered speech. Raise this if background noise triggers warnings.
+  - slackSpeechDelay: 500
+    $name: Slack warning delay (ms)
+    $description: "How long sound must remain above the threshold before showing the warning. Range: 100-3000 ms."
+  $name: Slack
+- Teams:
+  - teamsWarning: false
+    $name: Warn when speaking while Microsoft Teams is muted
+    $description: Uses Windows UI Automation to detect a visible muted Teams call. No Teams credentials or network access are used.
+  - teamsAudioCue: false
+    $name: Play Teams muted audio cue
+    $description: Plays the Windows exclamation sound once when the Teams speaking-while-muted warning begins.
+  - teamsRightClickUnmute: false
+    $name: Right-click to toggle Teams microphone
+    $description: Invokes Teams' accessible Mute or Unmute button when the taskbar microphone is right-clicked during a call.
+  - teamsMutedButtonText: "unmute"
+    $name: Teams muted-button text
+    $description: Case-insensitive text expected in Teams' button while your call microphone is muted. Change this for a localized Teams interface.
+  - teamsUnmutedButtonText: "mute"
+    $name: Teams unmuted-button text
+    $description: Case-insensitive text expected in Teams' button while your call microphone is unmuted. Change this for a localized Teams interface.
+  - teamsCallButtonText: "hang up|leave"
+    $name: Teams in-call button text
+    $description: Case-insensitive text expected in Teams' Hang up or Leave button. Separate alternatives with a vertical bar.
+  - teamsSpeechThreshold: 8
+    $name: Teams warning speech threshold (%)
+    $description: Minimum displayed microphone peak considered speech. Raise this if background noise triggers warnings.
+  - teamsSpeechDelay: 500
+    $name: Teams warning delay (ms)
+    $description: "How long sound must remain above the threshold before showing the warning. Range: 100-3000 ms."
+  $name: Microsoft Teams
+- Zoom:
+  - zoomWarning: false
+    $name: Warn when speaking while Zoom is muted
+    $description: Uses Windows UI Automation to detect a visible muted Zoom meeting. No Zoom credentials or network access are used.
+  - zoomAudioCue: false
+    $name: Play Zoom muted audio cue
+    $description: Plays the Windows exclamation sound once when the Zoom speaking-while-muted warning begins.
+  - zoomRightClickUnmute: false
+    $name: Right-click to toggle Zoom microphone
+    $description: Invokes Zoom's accessible Mute or Unmute button when the taskbar microphone is right-clicked during a meeting.
+  - zoomShortcutFallback: false
+    $name: Allow Zoom Alt+A fallback
+    $description: When Zoom hides its accessible microphone button, temporarily focuses Zoom and sends Alt+A. This can interrupt typing, is attempted at most three times, and is disabled by default.
+  - zoomMutedButtonText: "unmute"
+    $name: Zoom muted-button text
+    $description: Case-insensitive text expected in Zoom's button while your meeting microphone is muted. Change this for a localized Zoom interface.
+  - zoomUnmutedButtonText: "mute"
+    $name: Zoom unmuted-button text
+    $description: Case-insensitive text expected in Zoom's button while your meeting microphone is unmuted. Change this for a localized Zoom interface.
+  - zoomCallButtonText: "leave|end"
+    $name: Zoom in-meeting button text
+    $description: Case-insensitive text expected in Zoom's Leave or End meeting button. Separate alternatives with a vertical bar.
+  - zoomSpeechThreshold: 8
+    $name: Zoom warning speech threshold (%)
+    $description: Minimum displayed microphone peak considered speech. Raise this if background noise triggers warnings.
+  - zoomSpeechDelay: 500
+    $name: Zoom warning delay (ms)
+    $description: "How long sound must remain above the threshold before showing the warning. Range: 100-3000 ms."
+  $name: Zoom
+- GoogleMeet:
+  - meetEnabled: false
+    $name: Enable Google Meet integration
+    $description: Opt in to browser accessibility scanning. Also enable the call icon, Meet warning, Meet right-click control, or headset call synchronization to use it. Enabling accessibility can increase browser CPU and memory usage until the browser exits.
+  - meetWindowTitle: "meet -|meet –|meet —"
+    $name: Google Meet window title text
+    $description: Case-insensitive title fragments. Separate alternatives with a vertical bar. Customize for localized titles or installed Meet app windows.
+  - meetBrowserExecutables: "chrome.exe|msedge.exe|firefox.exe|brave.exe|vivaldi.exe|opera.exe|arc.exe"
+    $name: Google Meet browser executables
+    $description: Exact executable filenames separated with a vertical bar. Add your browser if absent. Opera GX uses opera.exe.
+  - meetWarning: false
+    $name: Warn when speaking while Google Meet is muted
+    $description: Requires Enable Google Meet integration. Uses Windows UI Automation to detect a muted Google Meet in the active, visible tab of a supported browser. No Google credentials or network access are used.
+  - meetAudioCue: false
+    $name: Play Google Meet muted audio cue
+    $description: Requires Enable Google Meet integration and Warn when speaking while Google Meet is muted. Plays the Windows exclamation sound once when the warning begins.
+  - meetRightClickUnmute: false
+    $name: Right-click to toggle Google Meet microphone
+    $description: Requires Enable Google Meet integration. Invokes Google Meet's accessible Mute or Unmute button when the taskbar microphone is right-clicked during a meeting.
+  - meetMutedButtonText: "turn on microphone"
+    $name: Google Meet muted-button text
+    $description: Case-insensitive text expected in Google Meet's button while your meeting microphone is muted. Separate alternatives with a vertical bar.
+  - meetUnmutedButtonText: "turn off microphone"
+    $name: Google Meet unmuted-button text
+    $description: Case-insensitive text expected in Google Meet's button while your meeting microphone is unmuted. Separate alternatives with a vertical bar.
+  - meetCallButtonText: "leave call"
+    $name: Google Meet in-meeting button text
+    $description: Case-insensitive text expected in Google Meet's Leave call button. Change this for a localized interface.
+  - meetSpeechThreshold: 8
+    $name: Google Meet warning speech threshold (%)
+    $description: Minimum displayed microphone peak considered speech. Raise this if background noise triggers warnings.
+  - meetSpeechDelay: 500
+    $name: Google Meet warning delay (ms)
+    $description: "How long sound must remain above the threshold before showing the warning. Range: 100-3000 ms."
+  $name: Google Meet
 */
 // ==/WindhawkModSettings==
 
@@ -474,12 +486,12 @@ static std::wstring GetStringSetting(PCWSTR name) {
 }
 
 static void LoadSettings() {
-    g_settings.position = GetStringSetting(L"position");
+    g_settings.position = GetStringSetting(L"General.position");
     if (g_settings.position.empty()) {
         g_settings.position = L"beforeClock";
     }
 
-    std::wstring role = GetStringSetting(L"deviceRole");
+    std::wstring role = GetStringSetting(L"General.deviceRole");
     if (role == L"communications") {
         g_settings.deviceRole = eCommunications;
     } else if (role == L"multimedia") {
@@ -489,10 +501,10 @@ static void LoadSettings() {
     }
 
     g_settings.volumeStep =
-        std::clamp(Wh_GetIntSetting(L"volumeStep"), 1, 20);
-    g_settings.forceVolume = Wh_GetIntSetting(L"forceVolume") != 0;
+        std::clamp(Wh_GetIntSetting(L"General.volumeStep"), 1, 20);
+    g_settings.forceVolume = Wh_GetIntSetting(L"General.forceVolume") != 0;
     int configuredForcedVolume =
-        std::clamp(Wh_GetIntSetting(L"forcedVolume"), 0, 100);
+        std::clamp(Wh_GetIntSetting(L"General.forcedVolume"), 0, 100);
     int previousConfiguredVolume =
         Wh_GetIntValue(L"forcedVolumeSettingBaseline", -1);
     if (previousConfiguredVolume != configuredForcedVolume) {
@@ -502,37 +514,37 @@ static void LoadSettings() {
     g_settings.forcedVolume = std::clamp(
         Wh_GetIntValue(L"forcedVolumeTarget", configuredForcedVolume), 0, 100);
     g_settings.updateInterval =
-        std::clamp(Wh_GetIntSetting(L"updateInterval"), 25, 500);
+        std::clamp(Wh_GetIntSetting(L"General.updateInterval"), 25, 500);
     g_settings.peakSensitivity =
-        std::clamp(Wh_GetIntSetting(L"peakSensitivity"), 25, 500);
+        std::clamp(Wh_GetIntSetting(L"General.peakSensitivity"), 25, 500);
     g_settings.iconSize =
-        std::clamp(Wh_GetIntSetting(L"iconSize"), 12, 32);
+        std::clamp(Wh_GetIntSetting(L"General.iconSize"), 12, 32);
     g_settings.buttonWidth =
-        std::clamp(Wh_GetIntSetting(L"buttonWidth"), 20, 64);
+        std::clamp(Wh_GetIntSetting(L"General.buttonWidth"), 20, 64);
     g_settings.showCallStateIcon =
-        Wh_GetIntSetting(L"showCallStateIcon") != 0;
-    g_settings.headsetSyncMode = GetStringSetting(L"headsetSyncMode");
+        Wh_GetIntSetting(L"General.showCallStateIcon") != 0;
+    g_settings.headsetSyncMode = GetStringSetting(L"Headset.headsetSyncMode");
     if (g_settings.headsetSyncMode.empty()) {
         g_settings.headsetSyncMode = L"off";
     }
     g_settings.headsetSyncWindows =
-        Wh_GetIntSetting(L"headsetSyncWindows") != 0;
+        Wh_GetIntSetting(L"Headset.headsetSyncWindows") != 0;
     g_settings.headsetSyncCalls =
-        Wh_GetIntSetting(L"headsetSyncCalls") != 0;
+        Wh_GetIntSetting(L"Headset.headsetSyncCalls") != 0;
     g_settings.headsetPollInterval =
-        std::clamp(Wh_GetIntSetting(L"headsetPollInterval"), 200, 2000);
+        std::clamp(Wh_GetIntSetting(L"Headset.headsetPollInterval"), 200, 2000);
     g_settings.headsetDiagnosticsPath =
-        GetStringSetting(L"headsetDiagnosticsPath");
-    g_settings.slackWarning = Wh_GetIntSetting(L"slackWarning") != 0;
-    g_settings.slackAudioCue = Wh_GetIntSetting(L"slackAudioCue") != 0;
+        GetStringSetting(L"Headset.headsetDiagnosticsPath");
+    g_settings.slackWarning = Wh_GetIntSetting(L"Slack.slackWarning") != 0;
+    g_settings.slackAudioCue = Wh_GetIntSetting(L"Slack.slackAudioCue") != 0;
     g_settings.slackRightClickToggle =
-        Wh_GetIntSetting(L"slackRightClickUnmute") != 0;
+        Wh_GetIntSetting(L"Slack.slackRightClickUnmute") != 0;
     g_settings.slackMutedButtonText =
-        GetStringSetting(L"slackMutedButtonText");
+        GetStringSetting(L"Slack.slackMutedButtonText");
     g_settings.slackUnmutedButtonText =
-        GetStringSetting(L"slackUnmutedButtonText");
+        GetStringSetting(L"Slack.slackUnmutedButtonText");
     g_settings.slackCallButtonText =
-        GetStringSetting(L"slackCallButtonText");
+        GetStringSetting(L"Slack.slackCallButtonText");
     if (g_settings.slackMutedButtonText.empty()) {
         g_settings.slackMutedButtonText = L"unmute";
     }
@@ -543,19 +555,19 @@ static void LoadSettings() {
         g_settings.slackCallButtonText = L"leave";
     }
     g_settings.slackSpeechThreshold =
-        std::clamp(Wh_GetIntSetting(L"slackSpeechThreshold"), 1, 100);
+        std::clamp(Wh_GetIntSetting(L"Slack.slackSpeechThreshold"), 1, 100);
     g_settings.slackSpeechDelay =
-        std::clamp(Wh_GetIntSetting(L"slackSpeechDelay"), 100, 3000);
-    g_settings.teamsWarning = Wh_GetIntSetting(L"teamsWarning") != 0;
-    g_settings.teamsAudioCue = Wh_GetIntSetting(L"teamsAudioCue") != 0;
+        std::clamp(Wh_GetIntSetting(L"Slack.slackSpeechDelay"), 100, 3000);
+    g_settings.teamsWarning = Wh_GetIntSetting(L"Teams.teamsWarning") != 0;
+    g_settings.teamsAudioCue = Wh_GetIntSetting(L"Teams.teamsAudioCue") != 0;
     g_settings.teamsRightClickToggle =
-        Wh_GetIntSetting(L"teamsRightClickUnmute") != 0;
+        Wh_GetIntSetting(L"Teams.teamsRightClickUnmute") != 0;
     g_settings.teamsMutedButtonText =
-        GetStringSetting(L"teamsMutedButtonText");
+        GetStringSetting(L"Teams.teamsMutedButtonText");
     g_settings.teamsUnmutedButtonText =
-        GetStringSetting(L"teamsUnmutedButtonText");
+        GetStringSetting(L"Teams.teamsUnmutedButtonText");
     g_settings.teamsCallButtonText =
-        GetStringSetting(L"teamsCallButtonText");
+        GetStringSetting(L"Teams.teamsCallButtonText");
     if (g_settings.teamsMutedButtonText.empty()) {
         g_settings.teamsMutedButtonText = L"unmute";
     }
@@ -566,21 +578,21 @@ static void LoadSettings() {
         g_settings.teamsCallButtonText = L"hang up|leave";
     }
     g_settings.teamsSpeechThreshold =
-        std::clamp(Wh_GetIntSetting(L"teamsSpeechThreshold"), 1, 100);
+        std::clamp(Wh_GetIntSetting(L"Teams.teamsSpeechThreshold"), 1, 100);
     g_settings.teamsSpeechDelay =
-        std::clamp(Wh_GetIntSetting(L"teamsSpeechDelay"), 100, 3000);
-    g_settings.zoomWarning = Wh_GetIntSetting(L"zoomWarning") != 0;
-    g_settings.zoomAudioCue = Wh_GetIntSetting(L"zoomAudioCue") != 0;
+        std::clamp(Wh_GetIntSetting(L"Teams.teamsSpeechDelay"), 100, 3000);
+    g_settings.zoomWarning = Wh_GetIntSetting(L"Zoom.zoomWarning") != 0;
+    g_settings.zoomAudioCue = Wh_GetIntSetting(L"Zoom.zoomAudioCue") != 0;
     g_settings.zoomRightClickToggle =
-        Wh_GetIntSetting(L"zoomRightClickUnmute") != 0;
+        Wh_GetIntSetting(L"Zoom.zoomRightClickUnmute") != 0;
     g_settings.zoomShortcutFallback =
-        Wh_GetIntSetting(L"zoomShortcutFallback") != 0;
+        Wh_GetIntSetting(L"Zoom.zoomShortcutFallback") != 0;
     g_settings.zoomMutedButtonText =
-        GetStringSetting(L"zoomMutedButtonText");
+        GetStringSetting(L"Zoom.zoomMutedButtonText");
     g_settings.zoomUnmutedButtonText =
-        GetStringSetting(L"zoomUnmutedButtonText");
+        GetStringSetting(L"Zoom.zoomUnmutedButtonText");
     g_settings.zoomCallButtonText =
-        GetStringSetting(L"zoomCallButtonText");
+        GetStringSetting(L"Zoom.zoomCallButtonText");
     if (g_settings.zoomMutedButtonText.empty()) {
         g_settings.zoomMutedButtonText = L"unmute";
     }
@@ -591,12 +603,12 @@ static void LoadSettings() {
         g_settings.zoomCallButtonText = L"leave|end";
     }
     g_settings.zoomSpeechThreshold =
-        std::clamp(Wh_GetIntSetting(L"zoomSpeechThreshold"), 1, 100);
+        std::clamp(Wh_GetIntSetting(L"Zoom.zoomSpeechThreshold"), 1, 100);
     g_settings.zoomSpeechDelay =
-        std::clamp(Wh_GetIntSetting(L"zoomSpeechDelay"), 100, 3000);
-    g_settings.meetEnabled = Wh_GetIntSetting(L"meetEnabled") != 0;
-    g_settings.meetWindowTitle = GetStringSetting(L"meetWindowTitle");
-    g_settings.meetBrowserExecutables = GetStringSetting(L"meetBrowserExecutables");
+        std::clamp(Wh_GetIntSetting(L"Zoom.zoomSpeechDelay"), 100, 3000);
+    g_settings.meetEnabled = Wh_GetIntSetting(L"GoogleMeet.meetEnabled") != 0;
+    g_settings.meetWindowTitle = GetStringSetting(L"GoogleMeet.meetWindowTitle");
+    g_settings.meetBrowserExecutables = GetStringSetting(L"GoogleMeet.meetBrowserExecutables");
     if (g_settings.meetWindowTitle.find_first_not_of(L" |\t\r\n") ==
         std::wstring::npos) {
         g_settings.meetWindowTitle = ModSettings{}.meetWindowTitle;
@@ -619,16 +631,16 @@ static void LoadSettings() {
                        });
         g_settings.meetBrowserNames.push_back(std::move(browserToken));
     }
-    g_settings.meetWarning = Wh_GetIntSetting(L"meetWarning") != 0;
-    g_settings.meetAudioCue = Wh_GetIntSetting(L"meetAudioCue") != 0;
+    g_settings.meetWarning = Wh_GetIntSetting(L"GoogleMeet.meetWarning") != 0;
+    g_settings.meetAudioCue = Wh_GetIntSetting(L"GoogleMeet.meetAudioCue") != 0;
     g_settings.meetRightClickToggle =
-        Wh_GetIntSetting(L"meetRightClickUnmute") != 0;
+        Wh_GetIntSetting(L"GoogleMeet.meetRightClickUnmute") != 0;
     g_settings.meetMutedButtonText =
-        GetStringSetting(L"meetMutedButtonText");
+        GetStringSetting(L"GoogleMeet.meetMutedButtonText");
     g_settings.meetUnmutedButtonText =
-        GetStringSetting(L"meetUnmutedButtonText");
+        GetStringSetting(L"GoogleMeet.meetUnmutedButtonText");
     g_settings.meetCallButtonText =
-        GetStringSetting(L"meetCallButtonText");
+        GetStringSetting(L"GoogleMeet.meetCallButtonText");
     if (g_settings.meetMutedButtonText.empty()) {
         g_settings.meetMutedButtonText = L"turn on microphone";
     }
@@ -639,9 +651,9 @@ static void LoadSettings() {
         g_settings.meetCallButtonText = L"leave call";
     }
     g_settings.meetSpeechThreshold =
-        std::clamp(Wh_GetIntSetting(L"meetSpeechThreshold"), 1, 100);
+        std::clamp(Wh_GetIntSetting(L"GoogleMeet.meetSpeechThreshold"), 1, 100);
     g_settings.meetSpeechDelay =
-        std::clamp(Wh_GetIntSetting(L"meetSpeechDelay"), 100, 3000);
+        std::clamp(Wh_GetIntSetting(L"GoogleMeet.meetSpeechDelay"), 100, 3000);
 
     if (!g_settings.meetEnabled &&
         (g_settings.meetWarning || g_settings.meetRightClickToggle ||
@@ -3168,8 +3180,8 @@ static DWORD WINAPI HeadsetThreadProc(void*) {
                     if (g_settings.headsetSyncCalls) {
                         QueueActiveCallMuteState(true);
                     }
-                } else if (!observation.muted && syncUnmute && stateKnown &&
-                           previousMuted) {
+                } else if (!observation.muted && syncUnmute &&
+                           (!stateKnown || previousMuted)) {
                     if (g_settings.headsetSyncWindows) QueueMuteSet(false);
                     if (g_settings.headsetSyncCalls) {
                         QueueActiveCallMuteState(false);
