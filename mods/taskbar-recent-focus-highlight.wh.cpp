@@ -2,7 +2,7 @@
 // @id              taskbar-recent-focus-highlight
 // @name            Taskbar Recent Focus Highlight
 // @description     Visually highlight the most recently focused running apps on the taskbar
-// @version         0.9.7
+// @version         0.9.8
 // @author          Jakub Vlášek
 // @github          https://github.com/jvlasek
 // @include         explorer.exe
@@ -254,6 +254,8 @@ to clear highlights.
       $description: >-
         How long a window must stay focused before it enters that flyout’s
         recency list. Separate from app ranking min focus (0 = immediate).
+        A click on a thumbnail or grouped-icon flyout confirms that window
+        immediately (does not wait this timer).
     - decayMinutes: 15
       $name: Decay (minutes)
       $description: >-
@@ -418,7 +420,7 @@ std::shared_ptr<const Settings> g_settingsPtr =
 
 std::shared_ptr<const Settings> SettingsSnap() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
-    return g_settingsPtr ? g_settingsPtr : std::make_shared<const Settings>();
+    return g_settingsPtr;
 }
 
 void PublishSettings(Settings s) {
@@ -548,12 +550,16 @@ struct ButtonPathCacheEntry {
     std::vector<HWND> groupHwnds;
     bool resolveAttempted = false;
     bool resolvedWhileRunning = false;  // re-resolve once on pinned → running
+    int emptyResolveAttempts = 0;  // capped while path and AUMID stay empty
     ULONGLONG lastResolveTick = 0;  // empty-identity retry throttle
     ULONGLONG lastRunningTick = 0;  // IsRunning grace (Alt-Tab flicker)
     // Last ApplyAllHighlights assignment: -1 unknown, 0 none, >0 1-based rank.
     int lastPaintRank = -1;
     uint32_t lastPaintSettingsGen = 0;
     uint32_t lastPaintAccent = 0;
+    TaskbarEdge lastPaintEdge = TaskbarEdge::Bottom;
+    int lastPaintBoxW = 0;
+    int lastPaintBoxH = 0;
     // ScaleTransform we applied for size boost. Clear only this instance so
     // other mods (taskbar-dock-animation) keep their hover scale.
     winrt::weak_ref<Media::ScaleTransform> ourIconScale;
@@ -697,6 +703,9 @@ constexpr ULONGLONG kIsRunningGraceMs = 400;
 constexpr ULONGLONG kFullRebindDebounceMs = 300;
 // Empty identity (pinned, no task item) is retried; successful path/AUMID is not.
 constexpr ULONGLONG kUnresolvedRetryMs = 2000;
+// Widgets / Copilot / never-resolving buttons: stop probing after this many
+// empty path+AUMID misses. Pinned→running still forces one more try.
+constexpr int kMaxEmptyResolveAttempts = 8;
 
 // All glow layers live on our overlay (never BackgroundElement — hover/active
 // storyboards own that and constantly wipe our styles).
@@ -742,6 +751,10 @@ struct IconPanelLayoutWatch {
     winrt::event_token sizeChanged{};
     TaskbarEdge lastEdge = TaskbarEdge::Bottom;
     bool haveEdge = false;
+    // Child names in IconPanel before we first moved natives. Restore this
+    // on clear so Taskbar Styler (or a custom template) gets its order back.
+    std::vector<std::wstring> nativeChildNames;
+    bool haveNativeOrder = false;
 };
 std::mutex g_layoutWatchMutex;
 std::unordered_map<void*, IconPanelLayoutWatch> g_layoutWatches;
@@ -1861,9 +1874,17 @@ struct PaintCacheState {
     int rank = -1;
     uint32_t settingsGen = 0;
     uint32_t accent = 0;
+    TaskbarEdge edge = TaskbarEdge::Bottom;
+    int boxW = 0;
+    int boxH = 0;
 };
 PaintCacheState GetCachedPaintState(FrameworkElement button);
-void SetCachedPaintState(FrameworkElement button, int rank, uint32_t gen);
+void SetCachedPaintState(FrameworkElement button,
+                         int rank,
+                         uint32_t gen,
+                         TaskbarEdge edge = TaskbarEdge::Bottom,
+                         int boxW = 0,
+                         int boxH = 0);
 void RememberOurIconScale(FrameworkElement button, Media::ScaleTransform scale);
 void ClearIconScaleIfOurs(FrameworkElement icon, FrameworkElement button);
 bool RunOnUiThread(const winrt::Windows::UI::Core::DispatchedHandler& handler);
@@ -2080,20 +2101,10 @@ int ScoreTitleToAutomationName(const std::wstring& windowTitle,
     return 0;
 }
 
-// Score this button against one ranked app. Path / AUMID / HWND only — no
-// automation-name fuzzy. 0 = no match. 1000 may bind the same rank to many
-// buttons (secondary taskbar).
-int ScoreButtonForRank(FrameworkElement button,
-                       const AppFocusInfo& info,
-                       bool requireRunning) {
-    if (!button) {
-        return 0;
-    }
-    if (requireRunning && !ButtonCountsAsRunning(button)) {
-        return 0;
-    }
-
-    const ButtonIdentity ident = GetCachedButtonIdentity(button);
+// Score a cached identity against one ranked app. Path / AUMID / HWND only.
+// 0 = no match. 1000 may bind the same rank to many buttons (secondary).
+int ScoreCachedIdentityForRank(const ButtonIdentity& ident,
+                               const AppFocusInfo& info) {
     const std::wstring& rankCls = info.classUpper;
 
     auto hwndOnButton = [&](HWND h) -> bool {
@@ -2145,6 +2156,18 @@ int ScoreButtonForRank(FrameworkElement button,
     return 0;
 }
 
+int ScoreButtonForRank(FrameworkElement button,
+                       const AppFocusInfo& info,
+                       bool requireRunning) {
+    if (!button) {
+        return 0;
+    }
+    if (requireRunning && !ButtonCountsAsRunning(button)) {
+        return 0;
+    }
+    return ScoreCachedIdentityForRank(GetCachedButtonIdentity(button), info);
+}
+
 // Best rank for a single button (1-based), or 0.
 int FindRankForButton(FrameworkElement button,
                       const std::vector<AppFocusInfo>& ranks,
@@ -2152,11 +2175,15 @@ int FindRankForButton(FrameworkElement button,
     if (!button || ranks.empty()) {
         return 0;
     }
+    if (requireRunning && !ButtonCountsAsRunning(button)) {
+        return 0;
+    }
 
+    const ButtonIdentity ident = GetCachedButtonIdentity(button);
     int bestRank = 0;
     int bestScore = 0;
     for (size_t i = 0; i < ranks.size(); i++) {
-        int s = ScoreButtonForRank(button, ranks[i], requireRunning);
+        int s = ScoreCachedIdentityForRank(ident, ranks[i]);
         if (s > bestScore) {
             bestScore = s;
             bestRank = static_cast<int>(i) + 1;
@@ -2462,6 +2489,48 @@ void EnsureOverlayIconAboveGlyph(FrameworkElement iconPanel) {
     }
 }
 
+void RememberNativeIconPanelOrder(FrameworkElement iconPanel) {
+    if (!iconPanel) {
+        return;
+    }
+    auto panel = iconPanel.try_as<Controls::Panel>();
+    if (!panel) {
+        return;
+    }
+    void* id = InspectableIdentity(iconPanel);
+    if (!id) {
+        return;
+    }
+    std::vector<std::wstring> names;
+    try {
+        auto children = panel.Children();
+        const uint32_t n = children.Size();
+        names.reserve(n);
+        for (uint32_t i = 0; i < n; ++i) {
+            auto fe = children.GetAt(i).try_as<FrameworkElement>();
+            if (!fe) {
+                continue;
+            }
+            std::wstring name = fe.Name().c_str();
+            if (name.empty() || name == kGlowElementName) {
+                continue;
+            }
+            names.push_back(std::move(name));
+        }
+    } catch (...) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(g_layoutWatchMutex);
+    auto it = g_layoutWatches.find(id);
+    if (it == g_layoutWatches.end() ||
+        !WeakIsSameElement(it->second.panel, iconPanel) ||
+        it->second.haveNativeOrder) {
+        return;
+    }
+    it->second.nativeChildNames = std::move(names);
+    it->second.haveNativeOrder = true;
+}
+
 void RestoreIconPanelNativeZOrder(FrameworkElement iconPanel) {
     if (!iconPanel) {
         return;
@@ -2472,6 +2541,40 @@ void RestoreIconPanelNativeZOrder(FrameworkElement iconPanel) {
     }
     try {
         auto children = panel.Children();
+        std::vector<std::wstring> saved;
+        {
+            void* id = InspectableIdentity(iconPanel);
+            std::lock_guard<std::mutex> lock(g_layoutWatchMutex);
+            auto it = id ? g_layoutWatches.find(id) : g_layoutWatches.end();
+            if (it != g_layoutWatches.end() &&
+                WeakIsSameElement(it->second.panel, iconPanel) &&
+                it->second.haveNativeOrder) {
+                saved = it->second.nativeChildNames;
+            }
+        }
+        if (!saved.empty()) {
+            uint32_t dest = 0;
+            for (const auto& name : saved) {
+                auto el = FindChildByName(iconPanel, name.c_str());
+                if (!el) {
+                    continue;
+                }
+                uint32_t idx = 0;
+                if (!children.IndexOf(el, idx)) {
+                    continue;
+                }
+                if (idx != dest) {
+                    children.RemoveAt(idx);
+                    if (idx < dest) {
+                        --dest;
+                    }
+                    children.InsertAt(dest, el);
+                }
+                ++dest;
+            }
+            return;
+        }
+
         auto indexOfName = [&](PCWSTR name) -> int {
             auto el = FindChildByName(iconPanel, name);
             if (!el) {
@@ -2600,6 +2703,7 @@ Controls::Grid EnsureGlowHost(Controls::Panel panel,
     }
 
     if (!host) {
+        RememberNativeIconPanelOrder(iconPanel);
         PCWSTR xaml =
             LR"(
             <Grid
@@ -3231,17 +3335,6 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
         return;
     }
 
-    {
-        auto painted = GetCachedPaintState(button);
-        if (painted.rank == rankOneBased &&
-            painted.settingsGen == settings->generation &&
-            painted.accent ==
-                g_cachedAccent.load(std::memory_order_relaxed) &&
-            ButtonHasOurChrome(button)) {
-            return;
-        }
-    }
-
     try {
         auto iconPanel = GetIconPanel(button);
         if (!iconPanel) {
@@ -3252,6 +3345,29 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
         auto panel = iconPanel.try_as<Controls::Panel>();
         if (!panel) {
             return;
+        }
+
+        double panelW = iconPanel.ActualWidth();
+        double panelH = iconPanel.ActualHeight();
+        if (!(panelW > 1.0)) {
+            panelW = 44.0;
+        }
+        if (!(panelH > 1.0)) {
+            panelH = 44.0;
+        }
+        const TaskbarEdge edge = CachedTaskbarEdge(iconPanel);
+        const int boxWi = static_cast<int>(panelW + 0.5);
+        const int boxHi = static_cast<int>(panelH + 0.5);
+        {
+            auto painted = GetCachedPaintState(button);
+            if (painted.rank == rankOneBased &&
+                painted.settingsGen == settings->generation &&
+                painted.accent ==
+                    g_cachedAccent.load(std::memory_order_relaxed) &&
+                painted.edge == edge && painted.boxW == boxWi &&
+                painted.boxH == boxHi && ButtonHasOurChrome(button)) {
+                return;
+            }
         }
 
         const int rankIdx = rankOneBased - 1;
@@ -3281,15 +3397,6 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
         const int fillOpacitySetting =
             (std::max)(0, (std::min)(100, settings->glowFillOpacity));
 
-        double panelW = iconPanel.ActualWidth();
-        double panelH = iconPanel.ActualHeight();
-        if (!(panelW > 1.0)) {
-            panelW = 44.0;
-        }
-        if (!(panelH > 1.0)) {
-            panelH = 44.0;
-        }
-
         Controls::Grid host = EnsureGlowHost(panel, iconPanel);
         if (!host) {
             return;
@@ -3299,7 +3406,6 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
         double boxH = panelH;
         GlowContentBoxSize(host, iconPanel, panelW, panelH, boxW, boxH);
 
-        const TaskbarEdge edge = CachedTaskbarEdge(iconPanel);
         const BarSide barSide = BarSideForGlowStyle(style, edge);
 
         // Heal native stacking first (Discord overlay / leftover attention
@@ -3419,7 +3525,8 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
                BarSideName(barSide), boxW, boxH, thickness,
                settings->glowRoundness, settings->glowSize, layers,
                intensity);
-        SetCachedPaintState(button, rankOneBased, settings->generation);
+        SetCachedPaintState(button, rankOneBased, settings->generation, edge,
+                            boxWi, boxHi);
     } catch (...) {
         HRESULT hr = winrt::to_hresult();
         Wh_Log(L"ApplyButtonHighlight error %08X", hr);
@@ -3742,7 +3849,9 @@ std::wstring EnsureButtonPathCached(FrameworkElement button, bool force) {
                 const bool haveIdentity = !it->second.pathUpper.empty() ||
                                           !it->second.appIdUpper.empty();
                 if (haveIdentity ||
-                    now - it->second.lastResolveTick < kUnresolvedRetryMs) {
+                    now - it->second.lastResolveTick < kUnresolvedRetryMs ||
+                    it->second.emptyResolveAttempts >=
+                        kMaxEmptyResolveAttempts) {
                     return it->second.pathUpper;
                 }
             }
@@ -3844,6 +3953,13 @@ std::wstring EnsureButtonPathCached(FrameworkElement button, bool force) {
             e->resolveAttempted = true;
             e->resolvedWhileRunning = running;
             e->lastResolveTick = now;
+            if (e->pathUpper.empty() && e->appIdUpper.empty()) {
+                if (e->emptyResolveAttempts < kMaxEmptyResolveAttempts) {
+                    ++e->emptyResolveAttempts;
+                }
+            } else {
+                e->emptyResolveAttempts = 0;
+            }
         }
         if (g_buttonPathCache.size() > 128) {
             for (auto it = g_buttonPathCache.begin();
@@ -3912,10 +4028,18 @@ PaintCacheState GetCachedPaintState(FrameworkElement button) {
     out.rank = it->second.lastPaintRank;
     out.settingsGen = it->second.lastPaintSettingsGen;
     out.accent = it->second.lastPaintAccent;
+    out.edge = it->second.lastPaintEdge;
+    out.boxW = it->second.lastPaintBoxW;
+    out.boxH = it->second.lastPaintBoxH;
     return out;
 }
 
-void SetCachedPaintState(FrameworkElement button, int rank, uint32_t gen) {
+void SetCachedPaintState(FrameworkElement button,
+                         int rank,
+                         uint32_t gen,
+                         TaskbarEdge edge,
+                         int boxW,
+                         int boxH) {
     if (!button) {
         return;
     }
@@ -3937,12 +4061,18 @@ void SetCachedPaintState(FrameworkElement button, int rank, uint32_t gen) {
         stub.lastPaintRank = rank;
         stub.lastPaintSettingsGen = gen;
         stub.lastPaintAccent = accent;
+        stub.lastPaintEdge = edge;
+        stub.lastPaintBoxW = boxW;
+        stub.lastPaintBoxH = boxH;
         g_buttonPathCache.emplace(id, std::move(stub));
         return;
     }
     it->second.lastPaintRank = rank;
     it->second.lastPaintSettingsGen = gen;
     it->second.lastPaintAccent = accent;
+    it->second.lastPaintEdge = edge;
+    it->second.lastPaintBoxW = boxW;
+    it->second.lastPaintBoxH = boxH;
 }
 
 void RememberOurIconScale(FrameworkElement button, Media::ScaleTransform scale) {
@@ -4103,10 +4233,19 @@ void ApplyAllHighlights_UIThread() {
     };
     std::vector<Cand> cands;
     std::vector<std::wstring> buttonPaths(live.size());
+    std::vector<ButtonIdentity> idents(live.size());
+    std::vector<char> running(live.size(), 0);
     for (size_t bi = 0; bi < live.size(); ++bi) {
         buttonPaths[bi] = EnsureButtonPathCached(live[bi], /*force=*/false);
+        running[bi] = ButtonCountsAsRunning(live[bi]) ? 1 : 0;
+        if (running[bi]) {
+            idents[bi] = GetCachedButtonIdentity(live[bi]);
+        }
         for (size_t ri = 0; ri < ranks.size(); ++ri) {
-            int s = ScoreButtonForRank(live[bi], ranks[ri], true);
+            if (!running[bi]) {
+                continue;
+            }
+            int s = ScoreCachedIdentityForRank(idents[bi], ranks[ri]);
             if (s >= kScoreExactIdentity) {
                 cands.push_back({ri, bi});
             }
@@ -7313,7 +7452,7 @@ void LoadSettings() {
     auto customColor =
         WindhawkUtils::StringSetting::make(L"icons.customGlowColor");
     s.customGlowColor =
-        customColor.get() && *customColor.get() ? customColor.get() : L"#00C853";
+        *customColor.get() ? customColor.get() : L"#00C853";
 
     s.glowIntensity[0] = Wh_GetIntSetting(L"icons.glowIntensityRank1");
     s.glowIntensity[1] = Wh_GetIntSetting(L"icons.glowIntensityRank2");
@@ -7456,7 +7595,7 @@ void LoadSettings() {
     for (int i = 0;; i++) {
         auto program =
             WindhawkUtils::StringSetting::make(L"excludedPrograms[%d]", i);
-        if (!program.get() || !*program.get()) {
+        if (!*program.get()) {
             break;
         }
         s.excludedPrograms.insert(ToUpper(program.get()));
@@ -7484,24 +7623,10 @@ void LoadSettings() {
 // ---------------------------------------------------------------------------
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"> Taskbar Recent Focus Highlight init v0.9.7");
+    Wh_Log(L"> Taskbar Recent Focus Highlight init v0.9.8");
 
     g_unloading = false;
     LoadSettings();
-
-    // Identity resolve (taskband) — optional; no path cache means no icon glow.
-    if (!HookTaskbarDllSymbols()) {
-        Wh_Log(L"Warning: taskbar.dll identity hooks failed — no icon path cache");
-    }
-
-    if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
-        g_taskbarViewDllLoaded = true;
-        if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
-            Wh_Log(L"Warning: Taskbar.View hooks failed — visuals unavailable");
-        }
-    } else {
-        Wh_Log(L"Taskbar view module not loaded yet");
-    }
 
     HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelBaseModule) {
@@ -7517,6 +7642,20 @@ BOOL Wh_ModInit() {
     WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
                                    LoadLibraryExW_Hook,
                                    &LoadLibraryExW_Original);
+
+    // Identity resolve (taskband) — optional; no path cache means no icon glow.
+    if (!HookTaskbarDllSymbols()) {
+        Wh_Log(L"Warning: taskbar.dll identity hooks failed — no icon path cache");
+    }
+
+    if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
+        g_taskbarViewDllLoaded = true;
+        if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
+            Wh_Log(L"Warning: Taskbar.View hooks failed — visuals unavailable");
+        }
+    } else {
+        Wh_Log(L"Taskbar view module not loaded yet");
+    }
 
     StartWinEventHookThread();
     return TRUE;
