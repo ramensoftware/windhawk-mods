@@ -1039,6 +1039,10 @@ static bool ShouldListInAltTab(HWND hwnd) {
     if (!IsReallyVisible(hwnd)) return false;
     if (IsGhosted(hwnd)) return false;
 
+    LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+    if (style & WS_CHILD) return false;
+    if (GetAncestor(hwnd, GA_ROOT) != hwnd) return false;
+
     DWORD ex = (DWORD)GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
 
     // WS_EX_TOOLWINDOW always excludes from alt-tab, regardless of other flags
@@ -1289,14 +1293,18 @@ static bool IsEligibleWindow(HWND hWnd, WindowEntry* outEntry = nullptr) {
     GetWindowTextW(hWnd, title, 256);
     if (!title[0]) InternalGetWindowText(hWnd, title, 256);
 
-    // Reject windows with empty titles or internal XAML island titles
+    // Reject windows with empty titles, internal XAML island titles, or browser helper titles
     if (!title[0]) return false;
     if (_wcsicmp(title, L"DesktopWindowXamlSource") == 0) return false;
+    if (_wcsicmp(title, L"Chrome Legacy Window") == 0) return false;
 
     // Check class name to filter out shell components and framework helper windows
     WCHAR cls[256] = {0};
     GetClassNameW(hWnd, cls, 256);
     if (wcscmp(cls, L"DesktopWindowXamlSource") == 0 ||
+        wcscmp(cls, L"Chrome_RenderWidgetHostHWND") == 0 ||
+        wcscmp(cls, L"Intermediate D3D Window") == 0 ||
+        wcscmp(cls, L"MozillaDropShadowWindowClass") == 0 ||
         wcscmp(cls, L"Shell_TrayWnd") == 0 ||
         wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0 ||
         wcscmp(cls, L"Progman") == 0 ||
@@ -2495,9 +2503,14 @@ static void RegisterThumbnails() {
             p.rcDestination = w.rcThumbActual;
             p.opacity = 255; p.fVisible = TRUE;
             // Only set DWM_TNP_RECTSOURCE when the crop is non-trivial (e.g. maximized
-            // windows with invisible frame borders). Without it, DWM preserves the
-            // window's visual style including rounded corners on Windows 11.
-            bool needsCrop = (w.rcSourceCrop.left != 0 || w.rcSourceCrop.top != 0 ||
+            // windows with invisible frame borders) or when the window is minimized.
+            // For restored non-maximized windows, omitting DWM_TNP_RECTSOURCE preserves
+            // the window's visual style including rounded corners on Windows 11.
+            // For iconic windows, DWM's default style introduces an extraneous drop shadow
+            // halo around the cached thumbnail that spills past rcDestination; setting
+            // RECTSOURCE clips it strictly to rcThumbActual.
+            bool needsCrop = IsIconic(w.hWnd) ||
+                             (w.rcSourceCrop.left != 0 || w.rcSourceCrop.top != 0 ||
                               w.rcSourceCrop.right != w.sourceSize.cx || w.rcSourceCrop.bottom != w.sourceSize.cy);
             if (needsCrop) {
                 p.dwFlags |= DWM_TNP_RECTSOURCE;
@@ -4795,6 +4808,10 @@ static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND
     if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF) return;
     if (!hwnd || !IsWindow(hwnd)) return;
     if (!g_isVisible && !g_isPendingShow) return;
+
+    LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+    if (style & WS_CHILD) return;
+    if (GetAncestor(hwnd, GA_ROOT) != hwnd) return;
 
     if (event == EVENT_OBJECT_SHOW) {
         AddWindowEntry(hwnd);
