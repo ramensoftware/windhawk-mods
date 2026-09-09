@@ -307,7 +307,6 @@ If you find a mistake and for additional details, please click [here](https://gi
 #include <unordered_map>
 #include <mutex>
 #include <optional>
-#include <cwctype>
 #include <cwchar>
 #include <windhawk_utils.h>
 
@@ -539,11 +538,12 @@ std::vector<std::wstring> GetSelectedFilesFromExplorer(HWND hwnd, ShellViewKind 
         return files;
     }
     
+    // CWM_GETISHELLBROWSER returns this pointer without an added reference
+    // (it's owned by the frame window), so take a temporary one for the
+    // duration of use -- cheap insurance against it being released elsewhere mid-call.
+    pShellBrowser->AddRef();
     files = GetSelectedFilesFromShellBrowser(pShellBrowser);
-    
-    // NOTE: Do not call pShellBrowser->Release() here -- WM_USER+7 returns
-    // it without an added reference (a borrowed pointer owned by the frame
-    // window), so releasing it drops a refcount we don't own.
+    pShellBrowser->Release();
     
     return files;
 }
@@ -640,10 +640,10 @@ struct {
 std::wstring RemoveAmpersands(const std::wstring& str);
 std::wstring NormalizeString(const std::wstring& str);
 
-// Forward declaration of the thread-local WM_INITMENUPOPUP hook handle
-// (fully defined further below). ProcessMenu() needs to check whether it's
-// installed, to decide whether an eager recursive pass is worth doing.
-extern thread_local HHOOK tl_hMenuHook;
+// Forward declaration of the thread-local "should ProcessMenu() recurse
+// into submenus itself" flag (fully defined further below, alongside
+// tl_hMenuHook) -- see its own comment for why this isn't just !tl_hMenuHook.
+extern thread_local bool tl_recurseSubmenus;
 
 struct MenuItem {
     std::wstring text;
@@ -1573,9 +1573,9 @@ void ProcessMenu(HMENU hMenu) {
             }
             
             // Recursively process submenus, but only if we didn't just
-            // delete this item, and only when the WM_INITMENUPOPUP hook
-            // isn't installed -- the hook re-filters each submenu itself.
-            if (!deleted && mii.hSubMenu && !tl_hMenuHook) {
+            // delete this item, and only when nothing else will re-filter
+            // this submenu itself (see tl_recurseSubmenus).
+            if (!deleted && mii.hSubMenu && tl_recurseSubmenus) {
                 ProcessMenu(mii.hSubMenu);
             }
         }
@@ -1657,6 +1657,10 @@ bool g_uninitInProgress = false;
 // WH_CALLWNDPROCRET hook is how to intercept it (same as other merged mods).
 thread_local HHOOK tl_hMenuHook = nullptr;
 thread_local int tl_menuDepth = 0;
+// Whether ProcessMenu() should recurse into submenus itself, rather than
+// leaving them to MenuCallWndProcRetHook via WM_INITMENUPOPUP. True when
+// no hook is installed, or when TPM_NONOTIFY means that message won't come.
+thread_local bool tl_recurseSubmenus = true;
 // Decided once per tracking session in EnterMenuTracking(), so the
 // top-level menu and every submenu agree on whether the bypass is active,
 // even if the Alt key state changes while the menu is still open.
@@ -1700,6 +1704,7 @@ void EnterMenuTracking() {
                         g_settings.extensionFiltering.enableWinRARFiltering;
         }
         tl_sessionNeedFiles = needFiles;
+        tl_recurseSubmenus = true;
         if (!tl_menuBypassed) {
             HHOOK hHook = SetWindowsHookEx(WH_CALLWNDPROCRET, MenuCallWndProcRetHook,
                                             nullptr, GetCurrentThreadId());
@@ -1711,6 +1716,10 @@ void EnterMenuTracking() {
                     if (!uninitRacing) {
                         tl_hMenuHook = hHook;
                         g_activeMenuHooks.push_back(hHook);
+                        // The hook will re-filter submenus via
+                        // WM_INITMENUPOPUP; ProcessPopupMenu() flips this
+                        // back if TPM_NONOTIFY means that won't happen.
+                        tl_recurseSubmenus = false;
                     }
                 }
                 // Wh_ModUninit's sweep can't have seen this handle -- it
@@ -1754,11 +1763,9 @@ void ExitMenuTracking() {
         }
         // Runs after TrackPopupMenu(Ex)_Original has returned, so a handle
         // here is already unreachable from the shell's own destroyed tree.
-        // IsMenu() guards the rarer case where a third-party IContextMenu already destroyed its own submenu.
+        // RemoveMenu's contract makes us the sole owner of each handle.
         for (HMENU h : tl_detachedSubmenus) {
-            if (IsMenu(h)) {
-                DestroyMenu(h);
-            }
+            DestroyMenu(h);
         }
         tl_detachedSubmenus.clear();
         tl_filePaths.clear();
@@ -1775,10 +1782,16 @@ struct MenuTrackingGuard {
 // Shared logic for both TrackPopupMenu(Ex) hooks: file lookup and, as a
 // fallback, menu filtering for the top-level menu. kind is the caller's
 // already-computed ClassifyShellView() result, reused to avoid a re-walk.
-void ProcessPopupMenu(HMENU hMenu, HWND hWnd, ShellViewKind kind, const wchar_t* logPrefix) {
+void ProcessPopupMenu(HMENU hMenu, HWND hWnd, UINT uFlags, ShellViewKind kind, const wchar_t* logPrefix) {
     if (tl_menuBypassed) {
         Wh_Log(L"%s: Modifier key bypass active, skipping menu processing", logPrefix);
         return;
+    }
+    
+    // TPM_NONOTIFY suppresses WM_INITMENUPOPUP, so MenuCallWndProcRetHook
+    // will never see this menu's submenus -- fall back to recursing here.
+    if (uFlags & TPM_NONOTIFY) {
+        tl_recurseSubmenus = true;
     }
     
     // Only do the (COM-based) selected-file lookup on the outermost call
@@ -1834,7 +1847,7 @@ BOOL WINAPI TrackPopupMenuEx_Hook(
             // what an outer call already collected before a nested one skips repopulating it.
             tl_filePaths.clear();
         }
-        ProcessPopupMenu(hMenu, hWnd, kind, L"TrackPopupMenuEx");
+        ProcessPopupMenu(hMenu, hWnd, uFlags, kind, L"TrackPopupMenuEx");
     }
     
     BOOL bRes = TrackPopupMenuEx_Original(hMenu, uFlags, x, y, hWnd, lptpm);
@@ -1859,7 +1872,7 @@ BOOL WINAPI TrackPopupMenu_Hook(
         if (tl_menuDepth == 1) {
             tl_filePaths.clear();
         }
-        ProcessPopupMenu(hMenu, hWnd, kind, L"TrackPopupMenu");
+        ProcessPopupMenu(hMenu, hWnd, uFlags, kind, L"TrackPopupMenu");
     }
     
     BOOL bRes = TrackPopupMenu_Original(hMenu, uFlags, x, y, nReserved, hWnd, prcRect);
