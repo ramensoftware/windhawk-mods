@@ -7,7 +7,7 @@
 // @github          https://github.com/armaninyow
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -lshlwapi -luuid -lpathcch
+// @compilerOptions -lole32 -lshlwapi -luuid
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -297,7 +297,6 @@ If you find a mistake and for additional details, please click [here](https://gi
 #include <windows.h>
 #include <shlwapi.h>
 #include <shlobj.h>
-#include <pathcch.h>
 #include <shobjidl.h>
 #include <exdisp.h>
 #include <shlguid.h>
@@ -307,7 +306,6 @@ If you find a mistake and for additional details, please click [here](https://gi
 #include <algorithm>
 #include <unordered_map>
 #include <mutex>
-#include <atomic>
 #include <optional>
 #include <cwctype>
 #include <cwchar>
@@ -667,18 +665,22 @@ std::unordered_map<std::wstring, size_t> g_menuItemsByText;
 // (Explorer UI threads).
 std::mutex g_settingsMutex;
 
+// Forward declaration; full definition (and the reason it exists instead
+// of raw ::towlower) is further below, near the other string-matching helpers.
+std::wstring ToLower(const std::wstring& str);
+
 // Function to get file extension from path
 std::wstring GetFileExtension(const std::wstring& path) {
-    // PathCchFindExtension ignores dots earlier in the path (e.g. a folder
-    // named "v1.0"), unlike a naive find_last_of('.'), and unlike
-    // PathFindExtensionW isn't limited to MAX_PATH-length input.
-    PCWSTR pExt = nullptr;
-    if (FAILED(PathCchFindExtension(path.c_str(), path.size() + 1, &pExt)) || !pExt || !*pExt) {
+    // Only look at the last path component, so a folder named "v1.0"
+    // doesn't get mistaken for an extension. No MAX_PATH limit, unlike
+    // PathFindExtensionW, and no Windows 8+ dependency, unlike PathCchFindExtension.
+    size_t nameStart = path.find_last_of(L"\\/");
+    nameStart = (nameStart == std::wstring::npos) ? 0 : nameStart + 1;
+    size_t dot = path.find_last_of(L'.');
+    if (dot == std::wstring::npos || dot < nameStart || dot + 1 == path.size()) {
         return L"";
     }
-    std::wstring ext(pExt);
-    // Convert to lowercase for comparison
-    std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
+    std::wstring ext = ToLower(path.substr(dot));
     return ext;
 }
 
@@ -1546,15 +1548,10 @@ void ProcessMenu(HMENU hMenu) {
                     haveText = true;
                 }
             } else {
-                // mii.cch == 0 here typically means an owner-drawn
-                // (MFT_OWNERDRAW) item, which doesn't populate MIIM_STRING.
-                // GetMenuStringW is a best-effort fallback, not guaranteed.
-                wchar_t buf[512];
-                int len = GetMenuStringW(hMenu, i, buf, ARRAYSIZE(buf), MF_BYPOSITION);
-                if (len > 0) {
-                    text.assign(buf, len);
-                    haveText = true;
-                }
+                // mii.cch == 0 means a separator or an owner-drawn
+                // (MFT_OWNERDRAW) item; GetMenuStringW returns nothing
+                // useful for either, so there's no text to fall back to.
+                haveText = false;
             }
             
             if (haveText) {
@@ -1654,10 +1651,6 @@ TrackPopupMenu_t TrackPopupMenu_Original;
 std::mutex g_activeMenuHooksMutex;
 std::vector<HHOOK> g_activeMenuHooks;
 bool g_uninitInProgress = false;
-// MSDN notes a hook procedure can still be executing on its own thread
-// after UnhookWindowsHookEx() returns elsewhere. This counter tracks
-// in-flight calls so Wh_ModUninit can wait for it to drain before unmap.
-std::atomic<int> g_activeHookCalls{0};
 
 // WM_INITMENUPOPUP is a *sent* message delivered straight to the owner
 // window's WndProc during the menu's modal loop, so a thread-local
@@ -1677,23 +1670,20 @@ thread_local bool tl_sessionComInitialized = false;
 thread_local bool tl_sessionNeedFiles = false;
 
 LRESULT CALLBACK MenuCallWndProcRetHook(int nCode, WPARAM wParam, LPARAM lParam) {
-    ++g_activeHookCalls;
     if (nCode == HC_ACTION) {
         CWPRETSTRUCT* cwp = (CWPRETSTRUCT*)lParam;
         if (cwp->message == WM_INITMENUPOPUP) {
             HMENU hSubMenu = (HMENU)cwp->wParam;
             if (hSubMenu) {
                 // tl_filePaths was populated before tracking started and
-                // stays valid for the whole session. Don't add back removal
-                // of a submenu's parent item when filtering empties it -- the parent is already displayed, so mutating it risks a handle/layout bug.
+                // stays valid for the whole session. Don't remove the
+                // parent item when filtering empties a submenu -- it's already displayed, so mutating it risks a handle/layout bug.
                 std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
                 ProcessMenu(hSubMenu);
             }
         }
     }
-    LRESULT result = CallNextHookEx(nullptr, nCode, wParam, lParam);
-    --g_activeHookCalls;
-    return result;
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
 // Installs the thread-local hook on the outermost TrackPopupMenu(Ex) call
@@ -1748,19 +1738,13 @@ void ExitMenuTracking() {
     if (tl_menuDepth <= 0) {
         tl_menuDepth = 0;
         if (tl_hMenuHook) {
-            // Removing from the registry under the lock *before* unhooking
-            // closes the window where a concurrent Wh_ModUninit sweep could
-            // see this handle and unhook a since-reissued, unrelated hook.
             HHOOK hook = tl_hMenuHook;
             tl_hMenuHook = nullptr;
-            bool stillRegistered = false;
-            {
-                std::lock_guard<std::mutex> lock(g_activeMenuHooksMutex);
-                stillRegistered = std::erase(g_activeMenuHooks, hook) > 0;
-            }
-            // If it wasn't in the registry, Wh_ModUninit already swept and
-            // unhooked it -- unhooking again risks hitting a recycled HHOOK.
-            if (stillRegistered) {
+            // Unhook while still holding the lock, so the handle is always
+            // either registered-and-hooked or removed-and-unhooked, never
+            // caught in between -- see EnterMenuTracking() for the other half.
+            std::lock_guard<std::mutex> lock(g_activeMenuHooksMutex);
+            if (std::erase(g_activeMenuHooks, hook) > 0) {
                 UnhookWindowsHookEx(hook);
             }
         }
@@ -1768,11 +1752,13 @@ void ExitMenuTracking() {
             CoUninitialize();
             tl_sessionComInitialized = false;
         }
-        // Runs after TrackPopupMenu(Ex)_Original has returned, so each
-        // handle here is already unreachable from the tree the shell
-        // destroyed -- no double-free risk from destroying it now.
+        // Runs after TrackPopupMenu(Ex)_Original has returned, so a handle
+        // here is already unreachable from the shell's own destroyed tree.
+        // IsMenu() guards the rarer case where a third-party IContextMenu already destroyed its own submenu.
         for (HMENU h : tl_detachedSubmenus) {
-            DestroyMenu(h);
+            if (IsMenu(h)) {
+                DestroyMenu(h);
+            }
         }
         tl_detachedSubmenus.clear();
         tl_filePaths.clear();
@@ -1970,9 +1956,8 @@ void LoadSettings() {
     g_settings.extensionFiltering.notepadExtensions.clear();
     for (int i = 0; i < kMaxSettingArrayItems; i++) {
         auto ext = WindhawkUtils::StringSetting::make(L"extensionFiltering.notepadExtensions[%d]", i);
-        if (!*ext) break;
-        std::wstring lowerExt = ext.get();
-        std::transform(lowerExt.begin(), lowerExt.end(), lowerExt.begin(), ::towlower);
+        if (!*ext) continue;
+        std::wstring lowerExt = ToLower(ext.get());
         g_settings.extensionFiltering.notepadExtensions.push_back(lowerExt);
     }
     WarnIfSettingArrayOverflows(L"extensionFiltering.notepadExtensions[%d]", L"Notepad extensions");
@@ -1982,7 +1967,7 @@ void LoadSettings() {
     g_settings.customItems.clear();
     for (int i = 0; i < kMaxSettingArrayItems; i++) {
         auto customItem = WindhawkUtils::StringSetting::make(L"customItems[%d]", i);
-        if (!*customItem) break;
+        if (!*customItem) continue;
         
         // RemoveAmpersands is deliberately NOT applied here: it models
         // Windows' menu-text escaping, which applies to menu text, not to
@@ -1997,6 +1982,15 @@ void LoadSettings() {
             continue;
         }
         
+        // Only a trailing '*' is treated as a wildcard (see
+        // MatchesCustomItem); a '*' anywhere else is matched literally
+        // and will never match real menu text, so flag it for the user.
+        size_t starPos = cleanItem.find(L'*');
+        if (starPos != std::wstring::npos && starPos != cleanItem.length() - 1) {
+            Wh_Log(L"WARNING: Custom item %d ('%s') has '*' before the end; only a trailing '*' is a wildcard, so this will be matched literally",
+                   i, customItem.get());
+        }
+        
         g_settings.customItems.push_back(cleanItem);
         Wh_Log(L"Loaded custom item %d: %s", i, customItem.get());
     }
@@ -2008,9 +2002,8 @@ void LoadSettings() {
     g_settings.extensionFiltering.winrarExtensions.clear();
     for (int i = 0; i < kMaxSettingArrayItems; i++) {
         auto ext = WindhawkUtils::StringSetting::make(L"extensionFiltering.winrarExtensions[%d]", i);
-        if (!*ext) break;
-        std::wstring lowerExt = ext.get();
-        std::transform(lowerExt.begin(), lowerExt.end(), lowerExt.begin(), ::towlower);
+        if (!*ext) continue;
+        std::wstring lowerExt = ToLower(ext.get());
         g_settings.extensionFiltering.winrarExtensions.push_back(lowerExt);
     }
     WarnIfSettingArrayOverflows(L"extensionFiltering.winrarExtensions[%d]", L"WinRAR extensions");
@@ -2094,24 +2087,10 @@ void Wh_ModUninit() {
     // Force-unhook any thread-local menu hooks still installed -- a HHOOK
     // callback pointing into an unloaded mod image is a crash.
     // g_uninitInProgress ensures no new hook can slip past this sweep.
-    std::vector<HHOOK> hooksToUnhook;
-    {
-        std::lock_guard<std::mutex> lock(g_activeMenuHooksMutex);
-        g_uninitInProgress = true;
-        hooksToUnhook.swap(g_activeMenuHooks);
-    }
-    
-    // Unhook outside the lock -- UnhookWindowsHookEx calls into user32, and
-    // the "never call into user32 with a mod lock held" rule is worth
-    // keeping even though nothing else currently blocks on this mutex.
-    for (HHOOK hook : hooksToUnhook) {
+    std::lock_guard<std::mutex> lock(g_activeMenuHooksMutex);
+    g_uninitInProgress = true;
+    for (HHOOK hook : g_activeMenuHooks) {
         UnhookWindowsHookEx(hook);
     }
-
-    // UnhookWindowsHookEx can return while the hook procedure is still
-    // running on its own thread; wait briefly for in-flight calls to
-    // finish, but don't risk hanging on a slow downstream hook forever.
-    for (int waited = 0; g_activeHookCalls.load() > 0 && waited < 500; waited += 10) {
-        Sleep(10);
-    }
+    g_activeMenuHooks.clear();
 }
