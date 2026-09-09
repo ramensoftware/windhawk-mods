@@ -2,7 +2,7 @@
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Desktop-only taskbar hiding using a dedicated Windhawk tool process
-// @version         5.1.0
+// @version         5.2.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -38,21 +38,25 @@ When an application becomes active on the display, or when a relevant Windows sh
 
 The taskbar is hidden directly rather than enabling Windows' native taskbar auto-hide mode. The mod therefore does not intentionally change the Windows desktop work area when hiding the taskbar.
 
-## Difference from Existing Taskbar Auto-Hide Mods
+## Difference from Existing Taskbar Mods
 
-This mod shares some concepts with existing taskbar auto-hide projects, but it is focused on a different user-visible behavior and implementation model.
+This mod overlaps with several taskbar customization mods, but its main purpose is different: **the taskbar is hidden only when its own display is showing only the desktop**. It is also designed around independent per-display control.
 
-**`taskbar-auto-hide-when-maximized`** primarily provides visibility modes based on application-window state, such as maximized or intersected windows. This mod uses a desktop-only predicate: a selected taskbar remains visible whenever its display has a visible, non-minimized application window and hides only when that display has no such application window.
+**`taskbar-fade`** is the closest existing mod. It also uses layered-window transparency, supports hover reveal, and provides a **Smart Idle (Only hide on empty desktop)** option. However, its desktop detection is based on idle/focus-oriented behavior rather than this mod's per-display desktop-only predicate. This mod evaluates each display independently and lets the user choose exactly which displays should hide and which displays should support hover reveal.
 
-This means the behavior is not limited to maximized, snapped, fullscreen, or taskbar-intersecting windows.
+For example, with two displays, an application can remain open on display 1 while the selected taskbar on display 2 hides because display 2 is showing only the desktop. The taskbar on display 1 is unaffected by the state of display 2. The same per-display rule applies when applications span multiple displays.
 
-**`taskbar-auto-hide-per-monitor`** provides per-monitor control over Windows' native taskbar auto-hide behavior. This mod also allows displays to be configured independently, but it directly controls the taskbar window instead of changing Windows' native auto-hide state.
+This distinction is especially important when comparing the mod with `taskbar-fade`: the goal here is not simply to make the taskbar fade or disappear while idle, but to provide **explicit per-display desktop-only visibility**.
 
-**`taskbar-auto-hide-custom-activation-area`** changes the activation area used by Windows' native taskbar auto-hide behavior. This mod instead performs its own desktop/application-state detection and provides its own configurable bottom-edge hover area.
+**`taskbar-auto-hide-when-maximized`** primarily provides visibility based on maximized or intersecting application windows. This mod instead uses a desktop-only predicate and does not require an application to be maximized, fullscreen, snapped, or intersecting the taskbar.
 
-The work-area behavior is also different. The mod directly hides the taskbar window without intentionally modifying the Windows desktop work area.
+**`taskbar-auto-hide-per-monitor`** provides per-monitor control over Windows' native taskbar auto-hide behavior. This mod also allows displays to be configured independently, but directly controls the taskbar window instead of changing Windows' native auto-hide state.
 
-The combination of desktop-only visibility, independent per-display selection, direct taskbar control, custom hover reveal, and shell-interaction handling is the intended focus of this mod.
+**`taskbar-auto-hide-custom-activation-area`** changes the activation area used by Windows' native auto-hide behavior. This mod instead performs its own desktop/application-state detection and provides its own configurable bottom-edge hover area.
+
+The work-area behavior is also different from native auto-hide: the mod hides the taskbar visually without intentionally changing the Windows desktop work area.
+
+The intended focus of this mod is therefore the combination of **desktop-only visibility, explicit per-display selection, stable monitor identity tracking, direct taskbar control, configurable hover reveal, and shell-interaction handling**.
 
 ## Per-Display Configuration
 
@@ -184,6 +188,9 @@ The periodic safety poll provides a recovery path for missed or unusual transiti
 - Display device names can change after display configuration changes.
 - The current display-selection configuration supports up to 16 display entries.
 - The mod intentionally keeps Windows' native taskbar auto-hide setting separate from its own hiding behavior.
+- Hiding the taskbar does not increase the desktop work area; maximized windows may still leave the normal taskbar space reserved.
+- If the dedicated tool process is terminated unexpectedly while a taskbar is hidden, the taskbar may remain invisible until Explorer is restarted.
+- This mod may conflict with other taskbar transparency/customization mods that also modify the taskbar's layered-window style or opacity.
 - Windows shell window classes and processes can change between Windows releases, so shell-interaction detection may require updates for future Windows versions.
 - The mod is designed specifically around Windows' Explorer/taskbar behavior and is not intended to be a general-purpose taskbar customization framework.
 
@@ -350,37 +357,35 @@ SRWLOCK g_cursorHoverSnapshotLock = SRWLOCK_INIT;
 
 // A layered window with alpha 0 is used as the physical taskbar visibility
 // mechanism. The taskbar state machine remains in the dedicated
-// Explorer tool process.
+// Windhawk tool process.
 bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
     if (!hwnd || !IsWindow(hwnd)) {
         return false;
     }
 
+    SetLastError(ERROR_SUCCESS);
     LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
     if (exStyle == 0 && GetLastError() != ERROR_SUCCESS) {
         return false;
     }
 
     if (hide) {
-        if (!SetWindowLongPtrW(
-                hwnd,
-                GWL_EXSTYLE,
-                exStyle | WS_EX_LAYERED
-            )) {
+        SetLastError(ERROR_SUCCESS);
+        LONG_PTR previousExStyle = SetWindowLongPtrW(
+            hwnd,
+            GWL_EXSTYLE,
+            exStyle | WS_EX_LAYERED | WS_EX_TRANSPARENT
+        );
+        if (previousExStyle == 0 && GetLastError() != ERROR_SUCCESS) {
             Wh_Log(
-                L"SetWindowLongPtrW(GWL_EXSTYLE, WS_EX_LAYERED) failed for 0x%p: %lu",
+                L"SetWindowLongPtrW(GWL_EXSTYLE, hide flags) failed for 0x%p: %lu",
                 hwnd,
                 GetLastError()
             );
             return false;
         }
 
-        if (!SetLayeredWindowAttributes(
-                hwnd,
-                0,
-                0,
-                LWA_ALPHA
-            )) {
+        if (!SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA)) {
             Wh_Log(
                 L"SetLayeredWindowAttributes(alpha=0) failed for 0x%p: %lu",
                 hwnd,
@@ -397,19 +402,14 @@ bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
             SWP_NOSIZE |
             SWP_NOZORDER |
             SWP_NOACTIVATE |
-            SWP_FRAMECHANGED
+            SWP_FRAMECHANGED |
+            SWP_ASYNCWINDOWPOS
         );
 
         return true;
     }
 
-    // Restore full opacity before removing WS_EX_LAYERED.
-    if (!SetLayeredWindowAttributes(
-            hwnd,
-            0,
-            255,
-            LWA_ALPHA
-        )) {
+    if (!SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA)) {
         Wh_Log(
             L"SetLayeredWindowAttributes(alpha=255) failed for 0x%p: %lu",
             hwnd,
@@ -418,13 +418,15 @@ bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
         return false;
     }
 
-    if (!SetWindowLongPtrW(
-            hwnd,
-            GWL_EXSTYLE,
-            exStyle & ~static_cast<LONG_PTR>(WS_EX_LAYERED)
-        )) {
+    SetLastError(ERROR_SUCCESS);
+    LONG_PTR previousExStyle = SetWindowLongPtrW(
+        hwnd,
+        GWL_EXSTYLE,
+        exStyle & ~static_cast<LONG_PTR>(WS_EX_LAYERED | WS_EX_TRANSPARENT)
+    );
+    if (previousExStyle == 0 && GetLastError() != ERROR_SUCCESS) {
         Wh_Log(
-            L"SetWindowLongPtrW(remove WS_EX_LAYERED) failed for 0x%p: %lu",
+            L"SetWindowLongPtrW(remove hide flags) failed for 0x%p: %lu",
             hwnd,
             GetLastError()
         );
@@ -439,7 +441,8 @@ bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
         SWP_NOSIZE |
         SWP_NOZORDER |
         SWP_NOACTIVATE |
-        SWP_FRAMECHANGED
+        SWP_FRAMECHANGED |
+        SWP_ASYNCWINDOWPOS
     );
 
     return true;
@@ -814,11 +817,38 @@ MonitorList GetCurrentMonitors() {
             if (keyPrimary != prevPrimary) {
                 shouldMoveBefore = keyPrimary;
             } else {
-                shouldMoveBefore =
-                    wcscmp(
-                        key.deviceName,
-                        list.entries[j - 1].deviceName
-                    ) < 0;
+                const wchar_t* keyNumberText = key.deviceName;
+                const wchar_t* previousNumberText =
+                    list.entries[j - 1].deviceName;
+
+                if (wcsncmp(keyNumberText, L"\\\\.\\DISPLAY", 11) == 0 &&
+                    wcsncmp(previousNumberText, L"\\\\.\\DISPLAY", 11) == 0) {
+                    wchar_t* keyEnd = nullptr;
+                    wchar_t* previousEnd = nullptr;
+                    long keyNumber = wcstol(keyNumberText + 11, &keyEnd, 10);
+                    long previousNumber =
+                        wcstol(previousNumberText + 11, &previousEnd, 10);
+
+                    if (keyEnd != keyNumberText + 11 &&
+                        *keyEnd == L'\0' &&
+                        previousEnd != previousNumberText + 11 &&
+                        *previousEnd == L'\0' &&
+                        keyNumber != previousNumber) {
+                        shouldMoveBefore = keyNumber < previousNumber;
+                    } else {
+                        shouldMoveBefore =
+                            wcscmp(
+                                key.deviceName,
+                                list.entries[j - 1].deviceName
+                            ) < 0;
+                    }
+                } else {
+                    shouldMoveBefore =
+                        wcscmp(
+                            key.deviceName,
+                            list.entries[j - 1].deviceName
+                        ) < 0;
+                }
             }
 
             if (!shouldMoveBefore) {
@@ -1545,6 +1575,29 @@ void RefreshTaskbarMonitorStates(
     ) {
         addTaskbar(secondary);
     }
+
+    // Restore any previously hidden taskbar that was not rediscovered.
+    // A transient enumeration failure must not leave a valid taskbar stranded.
+    for (size_t i = 0; i < oldCount; ++i) {
+        if (!oldStates[i].hiddenByMod ||
+            !oldStates[i].hwnd ||
+            !IsWindow(oldStates[i].hwnd)) {
+            continue;
+        }
+
+        bool rediscovered = false;
+        for (size_t j = 0; j < g_taskbarStateCount; ++j) {
+            if (g_taskbarStates[j].hwnd == oldStates[i].hwnd) {
+                rediscovered = true;
+                break;
+            }
+        }
+
+        if (!rediscovered) {
+            MakeTaskbarTransparent(oldStates[i].hwnd, false);
+        }
+    }
+
 }
 
 bool IsNativeAutoHideEnabled() {
@@ -1582,6 +1635,20 @@ void SetTaskbarState(
 
     if (show) {
         if (!state.hiddenByMod) {
+            return;
+        }
+
+        SetLastError(ERROR_SUCCESS);
+        LONG_PTR exStyle = GetWindowLongPtrW(
+            state.hwnd,
+            GWL_EXSTYLE
+        );
+        if (exStyle == 0 && GetLastError() != ERROR_SUCCESS) {
+            return;
+        }
+
+        if (!(exStyle & WS_EX_LAYERED)) {
+            state.hiddenByMod = false;
             return;
         }
 
@@ -2199,62 +2266,6 @@ void CancelHoverExpireTimer() {
             kHoverExpireTimerId
         );
     }
-}
-
-
-bool IsCursorInConfiguredHoverZoneAtPoint(
-    POINT pt,
-    HMONITOR cursorMonitor
-) {
-    if (!cursorMonitor) {
-        return false;
-    }
-
-    TaskbarMonitorState* cursorState = nullptr;
-
-    for (size_t i = 0; i < g_taskbarStateCount; ++i) {
-        if (
-            g_taskbarStates[i].monitor ==
-            cursorMonitor
-        ) {
-            cursorState = &g_taskbarStates[i];
-            break;
-        }
-    }
-
-    if (
-        !cursorState ||
-        !ShouldRevealOnHover(*cursorState)
-    ) {
-        return false;
-    }
-
-    return
-        cursorState->hwnd &&
-        IsPointNearBottomEdge(
-            cursorState->hwnd,
-            cursorMonitor,
-            pt
-        );
-}
-
-bool IsCursorInConfiguredHoverZone() {
-    POINT pt = {};
-
-    if (!GetCursorPos(&pt)) {
-        return false;
-    }
-
-    HMONITOR cursorMonitor =
-        MonitorFromPoint(
-            pt,
-            MONITOR_DEFAULTTONEAREST
-        );
-
-    return IsCursorInConfiguredHoverZoneAtPoint(
-        pt,
-        cursorMonitor
-    );
 }
 
 
@@ -3069,7 +3080,13 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    bool isService = false;
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
@@ -3080,8 +3097,10 @@ BOOL Wh_ModInit() {
     }
 
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0) {
-            isService = true;
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
             break;
         }
     }
@@ -3098,7 +3117,7 @@ BOOL Wh_ModInit() {
 
     LocalFree(argv);
 
-    if (isService) {
+    if (isExcluded) {
         return FALSE;
     }
 
@@ -3154,10 +3173,9 @@ void Wh_ModAfterInit() {
     }
 
     WCHAR commandLine[MAX_PATH + 2 +
-                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") /
-                       sizeof(WCHAR)) - 1];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"",
-               currentProcessPath, WH_MOD_ID);
+                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
 
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
