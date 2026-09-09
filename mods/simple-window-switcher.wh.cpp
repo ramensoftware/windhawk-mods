@@ -684,6 +684,9 @@ static bool IsSwitcherWindow(HWND hWnd) {
 static IVirtualDesktopManager* g_pVirtualDesktopManager = NULL;
 static bool g_showAllMonitors = false;
 static HHOOK g_hMouseHook = NULL;
+static HWINEVENTHOOK s_hWinEventHook = NULL;
+static void AddWindowEntry(HWND hWnd);
+static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime);
 static std::vector<WindowEntry> g_windows;
 static int g_selectedIndex = 0, g_hoverIndex = -1;
 static bool g_isPaginatedView = false;
@@ -1250,10 +1253,12 @@ static HICON LoadWindowIcon(HWND hWnd) {
     return hIcon;
 }
 
-static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
-    auto* list = reinterpret_cast<std::vector<WindowEntry>*>(lParam);
-    if (hWnd == g_hSwitcher) return TRUE;
-    if (!IsAltTabWindow(hWnd)) return TRUE;
+static void GetWindowGroupKey(HWND hWnd, WCHAR* out, size_t cch);
+
+static bool IsEligibleWindow(HWND hWnd, WindowEntry* outEntry = nullptr) {
+    if (!hWnd || !IsWindow(hWnd) || IsSwitcherWindow(hWnd)) return false;
+    if (!IsAltTabWindow(hWnd)) return false;
+
     BOOL cloaked = FALSE;
     DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
     if (cloaked) {
@@ -1261,23 +1266,62 @@ static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
             BOOL onCurrent = FALSE;
             if (SUCCEEDED(g_pVirtualDesktopManager->IsWindowOnCurrentVirtualDesktop(hWnd, &onCurrent)) && !onCurrent) {
                 // allow cloaked window since it's just on another virtual desktop
-            } else return TRUE;
-        } else return TRUE;
+            } else return false;
+        } else return false;
     }
+
     bool isPrimaryOnly = (wcscmp(g_settings.switcherDisplayBehavior, L"primaryOnly") == 0);
     if (g_settings.perMonitorWindows && !g_showAllMonitors && g_hCurrentMonitor && !isPrimaryOnly) {
-        if (MonitorFromWindow(hWnd, MONITOR_DEFAULTTONULL) != g_hCurrentMonitor) return TRUE;
+        if (MonitorFromWindow(hWnd, MONITOR_DEFAULTTONULL) != g_hCurrentMonitor) return false;
     }
-    WindowEntry e = {};
-    e.hWnd = hWnd;
-    GetWindowTextW(hWnd, e.title, 256);
-    if (!e.title[0]) InternalGetWindowText(hWnd, e.title, 256);
-    
-    bool excluded = false;
+
+    if (g_isAltBacktickSameApp && !g_windows.empty()) {
+        WCHAR activeKey[MAX_PATH] = {0};
+        GetWindowGroupKey(g_windows[0].hWnd, activeKey, ARRAYSIZE(activeKey));
+        if (activeKey[0]) {
+            WCHAR targetKey[MAX_PATH] = {0};
+            GetWindowGroupKey(hWnd, targetKey, ARRAYSIZE(targetKey));
+            if (wcscmp(targetKey, activeKey) != 0) return false;
+        }
+    }
+
+    WCHAR title[256] = {0};
+    GetWindowTextW(hWnd, title, 256);
+    if (!title[0]) InternalGetWindowText(hWnd, title, 256);
+
+    // Reject windows with empty titles or internal XAML island titles
+    if (!title[0]) return false;
+    if (_wcsicmp(title, L"DesktopWindowXamlSource") == 0) return false;
+
+    // Check class name to filter out shell components and framework helper windows
+    WCHAR cls[256] = {0};
+    GetClassNameW(hWnd, cls, 256);
+    if (wcscmp(cls, L"DesktopWindowXamlSource") == 0 ||
+        wcscmp(cls, L"Shell_TrayWnd") == 0 ||
+        wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0 ||
+        wcscmp(cls, L"Progman") == 0 ||
+        wcscmp(cls, L"WorkerW") == 0 ||
+        wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0 ||
+        wcscmp(cls, L"InputNonClientPointerSource") == 0 ||
+        wcsstr(cls, L"DesktopChildSiteBridge") != nullptr ||
+        wcsstr(cls, L"AvaloniaSimpleWindow") != nullptr ||
+        wcsstr(cls, L"AvaloniaMessageWindow") != nullptr ||
+        wcsstr(cls, L"PopupHost") != nullptr) {
+        return false;
+    }
+
+    // Geometry check: non-minimized windows must be at least 32x32 to exclude 1x1 or 0x0 anchor surfaces
+    if (!IsIconic(hWnd)) {
+        RECT r = {0};
+        GetWindowRect(hWnd, &r);
+        if ((r.right - r.left) < 32 || (r.bottom - r.top) < 32) return false;
+    }
+
     for (const auto& pat : g_excludeTitlePatterns) {
-        if (PathMatchSpecW(e.title, pat.c_str())) { excluded = true; break; }
+        if (PathMatchSpecW(title, pat.c_str())) return false;
     }
-    if (!excluded && !g_excludeExePatterns.empty()) {
+
+    if (!g_excludeExePatterns.empty()) {
         DWORD pid = 0;
         GetWindowThreadProcessId(hWnd, &pid);
         if (pid) {
@@ -1288,17 +1332,31 @@ static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
                 if (QueryFullProcessImageNameW(hProc, 0, exePath, &size)) {
                     WCHAR* filename = PathFindFileNameW(exePath);
                     for (const auto& pat : g_excludeExePatterns) {
-                        if (PathMatchSpecW(filename, pat.c_str())) { excluded = true; break; }
+                        if (PathMatchSpecW(filename, pat.c_str())) {
+                            CloseHandle(hProc);
+                            return false;
+                        }
                     }
                 }
                 CloseHandle(hProc);
             }
         }
     }
-    if (excluded) return TRUE;
 
-    e.hIcon = LoadWindowIcon(hWnd);
-    list->push_back(e);
+    if (outEntry) {
+        outEntry->hWnd = hWnd;
+        wcscpy_s(outEntry->title, title);
+        outEntry->hIcon = LoadWindowIcon(hWnd);
+    }
+    return true;
+}
+
+static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
+    auto* list = reinterpret_cast<std::vector<WindowEntry>*>(lParam);
+    WindowEntry e = {};
+    if (IsEligibleWindow(hWnd, &e)) {
+        list->push_back(e);
+    }
     return TRUE;
 }
 
@@ -3591,6 +3649,10 @@ static void CancelPendingShow() {
         DWMNCRENDERINGPOLICY enabled = DWMNCRP_ENABLED;
         DwmSetWindowAttribute(g_hSwitcher, DWMWA_NCRENDERING_POLICY, &enabled, sizeof(enabled));
     }
+    if (s_hWinEventHook) {
+        UnhookWinEvent(s_hWinEventHook);
+        s_hWinEventHook = NULL;
+    }
 
     g_isPendingShow = false;
 }
@@ -3852,6 +3914,15 @@ static void ShowSwitcher(bool sticky) {
 
     CancelPendingShow();
 
+    if (!s_hWinEventHook) {
+        s_hWinEventHook = SetWinEventHook(
+            EVENT_OBJECT_SHOW, EVENT_OBJECT_HIDE,
+            NULL, WinEventShowHideProc,
+            0, 0,
+            WINEVENT_OUTOFCONTEXT
+        );
+    }
+
     if (g_settings.showDelay > 0 && !sticky) {
         g_isPendingShow = true;
         g_isVisible = false;
@@ -3994,6 +4065,31 @@ static bool IsWindowTruncated(int idx) {
 
 // Helper: recompute layout and reposition switcher window
 static void RecomputeAndReposition() {
+    // Purge any destroyed or non-iconic hidden windows that were closed or hidden silently
+    if (!g_windows.empty()) {
+        bool removedAny = false;
+        for (int i = (int)g_windows.size() - 1; i >= 0; i--) {
+            HWND h = g_windows[i].hWnd;
+            if (!IsWindow(h) || (!IsWindowVisible(h) && !IsIconic(h))) {
+                for (const auto& kv : g_windows[i].hThumbs) {
+                    if (kv.second) DwmUnregisterThumbnail(kv.second);
+                }
+                g_windows[i].hThumbs.clear();
+                g_windows.erase(g_windows.begin() + i);
+                removedAny = true;
+            }
+        }
+        if (removedAny) {
+            if (g_windows.empty()) {
+                HideSwitcher();
+                return;
+            }
+            if (g_selectedIndex >= (int)g_windows.size()) {
+                g_selectedIndex = (int)g_windows.size() - 1;
+            }
+        }
+    }
+
     UnregisterThumbnails();
     RegisterThumbnailsEarly();
     HMONITOR hMon = g_hCurrentMonitor
@@ -4498,6 +4594,17 @@ static void UpdateEntryForWindow(WindowEntry& e) {
 static void RemoveWindowEntryByHwnd(HWND hDestroyed) {
     if (!g_isVisible || g_windows.empty()) return;
 
+    if (g_drilledIn) {
+        for (auto& saved : g_savedAppList) {
+            auto& grp = saved.groupWindows;
+            auto it = std::find(grp.begin(), grp.end(), hDestroyed);
+            if (it != grp.end()) {
+                grp.erase(it);
+                break;
+            }
+        }
+    }
+
     for (int i = 0; i < (int)g_windows.size(); i++) {
         if (g_windows[i].hWnd == hDestroyed) {
             if (g_settings.showApplications && g_windows[i].groupWindows.size() > 1) {
@@ -4547,6 +4654,153 @@ static void RemoveWindowEntryByHwnd(HWND hDestroyed) {
                 PaintSwitcher();
                 return;
             }
+        }
+    }
+}
+
+static void AddWindowEntry(HWND hWnd) {
+    if ((!g_isVisible && !g_isPendingShow) || g_windows.empty()) return;
+    if (!hWnd || !IsWindow(hWnd) || IsSwitcherWindow(hWnd)) return;
+
+    // Check if hWnd already exists in g_windows
+    for (size_t i = 0; i < g_windows.size(); i++) {
+        if (g_windows[i].hWnd == hWnd) {
+            WCHAR curTitle[256] = {0};
+            GetWindowTextW(hWnd, curTitle, 256);
+            if (!curTitle[0]) InternalGetWindowText(hWnd, curTitle, 256);
+            if (curTitle[0] && wcscmp(g_windows[i].title, curTitle) != 0) {
+                UpdateEntryForWindow(g_windows[i]);
+                if (g_isVisible) PaintSwitcher();
+            }
+            return;
+        }
+        if (g_settings.showApplications) {
+            auto& grp = g_windows[i].groupWindows;
+            if (std::find(grp.begin(), grp.end(), hWnd) != grp.end()) {
+                return;
+            }
+        }
+    }
+
+    if (g_drilledIn) {
+        for (const auto& w : g_savedAppList) {
+            if (w.hWnd == hWnd) return;
+            auto& grp = w.groupWindows;
+            if (std::find(grp.begin(), grp.end(), hWnd) != grp.end()) return;
+        }
+    }
+
+    WindowEntry e = {};
+    if (!IsEligibleWindow(hWnd, &e)) return;
+
+    // If hideMinimizedWindows is enabled and window is iconic, ignore
+    if (g_settings.hideMinimizedWindows && IsIconic(hWnd)) return;
+
+    HWND currentSelectedWnd = (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size())
+                              ? g_windows[g_selectedIndex].hWnd : NULL;
+
+    if (g_drilledIn) {
+        WCHAR drilledKey[MAX_PATH] = {0};
+        if (!g_windows.empty()) {
+            GetWindowGroupKey(g_windows[0].hWnd, drilledKey, ARRAYSIZE(drilledKey));
+        }
+        WCHAR newKey[MAX_PATH] = {0};
+        GetWindowGroupKey(hWnd, newKey, ARRAYSIZE(newKey));
+
+        if (drilledKey[0] && wcscmp(drilledKey, newKey) == 0) {
+            UpdateEntryForWindow(e);
+            g_windows.push_back(e);
+            for (auto& saved : g_savedAppList) {
+                WCHAR savedKey[MAX_PATH] = {0};
+                GetWindowGroupKey(saved.hWnd, savedKey, ARRAYSIZE(savedKey));
+                if (wcscmp(savedKey, newKey) == 0) {
+                    saved.groupWindows.push_back(hWnd);
+                    break;
+                }
+            }
+        } else {
+            bool foundInSaved = false;
+            for (auto& saved : g_savedAppList) {
+                WCHAR savedKey[MAX_PATH] = {0};
+                GetWindowGroupKey(saved.hWnd, savedKey, ARRAYSIZE(savedKey));
+                if (wcscmp(savedKey, newKey) == 0) {
+                    saved.groupWindows.push_back(hWnd);
+                    foundInSaved = true;
+                    break;
+                }
+            }
+            if (!foundInSaved) {
+                e.groupWindows.push_back(hWnd);
+                UpdateEntryForWindow(e);
+                g_savedAppList.push_back(e);
+            }
+            return;
+        }
+    } else if (g_settings.showApplications) {
+        WCHAR newKey[MAX_PATH] = {0};
+        GetWindowGroupKey(hWnd, newKey, ARRAYSIZE(newKey));
+        for (size_t i = 0; i < g_windows.size(); i++) {
+            WCHAR existingKey[MAX_PATH] = {0};
+            GetWindowGroupKey(g_windows[i].hWnd, existingKey, ARRAYSIZE(existingKey));
+            if (newKey[0] && wcscmp(newKey, existingKey) == 0) {
+                g_windows[i].groupWindows.push_back(hWnd);
+                if (g_isVisible) PaintSwitcher();
+                return;
+            }
+        }
+        e.groupWindows.push_back(hWnd);
+        UpdateEntryForWindow(e);
+
+        auto insertPos = g_windows.end();
+        if (g_settings.sortMinimizedWindowsToEnd && !IsIconic(hWnd)) {
+            for (auto it = g_windows.begin(); it != g_windows.end(); ++it) {
+                if (IsIconic(it->hWnd)) {
+                    insertPos = it;
+                    break;
+                }
+            }
+        }
+        g_windows.insert(insertPos, std::move(e));
+    } else {
+        UpdateEntryForWindow(e);
+
+        auto insertPos = g_windows.end();
+        if (g_settings.sortMinimizedWindowsToEnd && !IsIconic(hWnd)) {
+            for (auto it = g_windows.begin(); it != g_windows.end(); ++it) {
+                if (IsIconic(it->hWnd)) {
+                    insertPos = it;
+                    break;
+                }
+            }
+        }
+        g_windows.insert(insertPos, std::move(e));
+    }
+
+    if (currentSelectedWnd) {
+        for (int idx = 0; idx < (int)g_windows.size(); idx++) {
+            if (g_windows[idx].hWnd == currentSelectedWnd) {
+                g_selectedIndex = idx;
+                break;
+            }
+        }
+    }
+
+    if (g_isVisible) {
+        RecomputeAndReposition();
+        PaintSwitcher();
+    }
+}
+
+static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime) {
+    if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF) return;
+    if (!hwnd || !IsWindow(hwnd)) return;
+    if (!g_isVisible && !g_isPendingShow) return;
+
+    if (event == EVENT_OBJECT_SHOW) {
+        AddWindowEntry(hwnd);
+    } else if (event == EVENT_OBJECT_HIDE) {
+        if (!IsWindowVisible(hwnd) && !IsIconic(hwnd)) {
+            RemoveWindowEntryByHwnd(hwnd);
         }
     }
 }
@@ -4960,7 +5214,13 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
         break;
     case WM_CLOSE: return 0;
-    case WM_DESTROY: UnregisterThumbnails(); return 0;
+    case WM_DESTROY:
+        if (s_hWinEventHook) {
+            UnhookWinEvent(s_hWinEventHook);
+            s_hWinEventHook = NULL;
+        }
+        UnregisterThumbnails();
+        return 0;
     }
 
     if (g_shellHookMsg && uMsg == g_shellHookMsg) {
@@ -4969,6 +5229,9 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             HWND hAct = (HWND)lParam;
             if (hAct && !IsSwitcherWindow(hAct)) {
                 UpdateMruWindow(hAct);
+                if (g_isVisible || g_isPendingShow) {
+                    AddWindowEntry(hAct);
+                }
             }
         } else if (code == HSHELL_WINDOWDESTROYED) {
             HWND hS = (HWND)lParam;
@@ -4979,6 +5242,11 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             }
             if (g_isVisible) {
                 RemoveWindowEntryByHwnd(hS);
+            }
+        } else if (code == HSHELL_WINDOWCREATED || code == HSHELL_REDRAW) {
+            HWND hTarget = (HWND)lParam;
+            if (hTarget && (g_isVisible || g_isPendingShow)) {
+                AddWindowEntry(hTarget);
             }
         }
         return 0;
