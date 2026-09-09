@@ -19,7 +19,7 @@
 
 **中文：** 高速移动鼠标时产生平滑的运动模糊拖尾，Direct2D 硬件加速渲染。基于 TheatriChris 的 Cursor Motion Blur 深度二改增强。
 
-![Trail Effect](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/screenshot_trail.jpg)
+![Trail Effect](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/screenshot_trail.png)
 
 ---
 
