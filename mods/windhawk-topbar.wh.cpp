@@ -2,7 +2,7 @@
 // @id              windhawk-topbar
 // @name            TopBar for Windows
 // @description     A working TopBar with Flyouts for Windows through Windhawk.
-// @version         1.0.0
+// @version         1.1.0
 // @author          WasiXGamer
 // @github          https://github.com/wasixgamer
 // @include         explorer.exe
