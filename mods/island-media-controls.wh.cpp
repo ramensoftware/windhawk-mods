@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.10.43
+// @version         0.10.44
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -543,7 +543,7 @@ auto GetAsyncResultWithTimeout(AsyncOperation const& operation,
     return operation.GetResults();
 }
 
-HWND g_taskbarWnd = nullptr;
+std::atomic<HWND> g_taskbarWnd = nullptr;
 [[clang::no_destroy]] Grid g_playerGrid = nullptr;
 [[clang::no_destroy]] FrameworkElement g_injectionParent = nullptr;
 int g_playerColumn = -1;
@@ -8838,7 +8838,7 @@ bool RefreshTransparentCompactForegroundContrast() {
 }
 
 double PopupDpiScale(HWND hwnd) {
-    HWND source = hwnd ? hwnd : (g_expandedPopup ? g_expandedPopup : g_taskbarWnd);
+    HWND source = hwnd ? hwnd : (g_expandedPopup ? g_expandedPopup : g_taskbarWnd.load());
     UINT dpi = source ? GetDpiForWindow(source) : 96;
     if (dpi == 0) {
         dpi = 96;
@@ -13058,7 +13058,7 @@ bool EnsureExpandedPopup() {
     }
 
     HWND popupOwner = g_taskbarWnd && IsWindow(g_taskbarWnd)
-                          ? g_taskbarWnd
+                          ? g_taskbarWnd.load()
                           : FindCurrentProcessTaskbarWnd();
     RECT ownerRect{};
     int initialX = 0;
@@ -13156,7 +13156,18 @@ void DestroyExpandedPopup() {
     StopPopupXamlRenderLoop();
     UnsubclassPopupXamlChildWindow();
     DestroyPopupBackdropOverlayWindow();
-    SetCompactIslandSuppressed(false);
+    // Destroy the HWND (and therefore its timer/WndProc entry points) before
+    // touching XAML objects that can throw while Explorer is rebuilding the
+    // taskbar island.
+    if (g_expandedPopup) {
+        KillTimer(g_expandedPopup, kPopupTimerId);
+        DestroyWindow(g_expandedPopup);
+        g_expandedPopup = nullptr;
+    }
+    try {
+        SetCompactIslandSuppressed(false);
+    } catch (...) {
+    }
     if (g_popupXamlSource) {
         try {
             g_popupXamlSource.Content(nullptr);
@@ -13251,10 +13262,6 @@ void DestroyExpandedPopup() {
     g_popupXamlThemeMaterial.clear();
     g_popupXamlThemeShadowDepth = -1;
     g_popupXamlThemeShadowOpacity = -1;
-    if (g_expandedPopup) {
-        DestroyWindow(g_expandedPopup);
-        g_expandedPopup = nullptr;
-    }
     if (g_popupAlbumBitmap) {
         DeleteObject(g_popupAlbumBitmap);
         g_popupAlbumBitmap = nullptr;
@@ -14462,7 +14469,7 @@ void DispatchNavigationFailureFeedback(int direction) {
     }
 
     HWND hwnd = g_taskbarWnd && IsWindow(g_taskbarWnd)
-                    ? g_taskbarWnd
+                    ? g_taskbarWnd.load()
                     : FindCurrentProcessTaskbarWnd();
     if (hwnd && RunFromWindowThread(
                     hwnd,
@@ -16671,7 +16678,7 @@ void CALLBACK OnTaskbarLayoutTimer(HWND, UINT, UINT_PTR timerId, DWORD) {
         double oldTaskbarHeight = g_layout.taskbarHeightDip;
 
         HWND hwnd = g_taskbarWnd && IsWindow(g_taskbarWnd)
-                        ? g_taskbarWnd
+                        ? g_taskbarWnd.load()
                         : FindCurrentProcessTaskbarWnd();
         if (!hwnd) {
             return;
@@ -16779,7 +16786,7 @@ void StartTaskbarLayoutMonitor(FrameworkElement const& root,
     g_taskbarLayoutWatchElementsCached = true;
 
     HWND hwnd = g_taskbarWnd && IsWindow(g_taskbarWnd)
-                    ? g_taskbarWnd
+                    ? g_taskbarWnd.load()
                     : FindCurrentProcessTaskbarWnd();
     if (!hwnd ||
         !SetTimer(hwnd,
@@ -17325,19 +17332,69 @@ void UpdatePlayerContents() {
     }
 }
 
-void RemoveIslandGrid() {
-    StopTaskbarLayoutMonitor();
-    StopHoverRenderLoop();
-    StopDynamicCompactRenderLoop();
-    ClearDynamicTransportButtonMotions();
-    StopCompactTextRenderLoop();
-    StopCompactProgressRenderLoop();
-    StopCompactTintTransition();
-    DestroyExpandedPopup();
+void RemoveIslandOsResourcesNoexcept() noexcept {
+    g_popupArtworkPreparationRequested.store(
+        false, std::memory_order_release);
+
+    // Event removals are already internally guarded, but keep this fallback
+    // independently exception-safe: it is also called after a failed full
+    // teardown callback while the module is about to be unloaded.
+    try { StopHoverRenderLoop(); } catch (...) {}
+    try { StopDynamicCompactRenderLoop(); } catch (...) {}
+    try { StopCompactTextRenderLoop(); } catch (...) {}
+    try { StopCompactProgressRenderLoop(); } catch (...) {}
+    try { StopCompactTintTransition(); } catch (...) {}
+    try { StopPopupXamlRenderLoop(); } catch (...) {}
+
+    if (g_taskbarLayoutTimerWindow) {
+        KillTimer(g_taskbarLayoutTimerWindow,
+                  kTaskbarLayoutMonitorTimerId);
+        g_taskbarLayoutTimerWindow = nullptr;
+    }
+
+    if (g_popupXamlChild && g_popupXamlChildSubclassed) {
+        RemoveWindowSubclass(g_popupXamlChild,
+                             PopupXamlChildSubclassProc,
+                             kPopupXamlChildSubclassId);
+        g_popupXamlChildSubclassed = false;
+    }
+
+    HWND backdropOverlay = g_popupBackdropOverlay;
+    g_popupBackdropOverlay = nullptr;
+    if (backdropOverlay && IsWindow(backdropOverlay)) {
+        DestroyWindow(backdropOverlay);
+    }
+
+    HWND expandedPopup = g_expandedPopup;
+    g_expandedPopup = nullptr;
+    if (expandedPopup && IsWindow(expandedPopup)) {
+        KillTimer(expandedPopup, kPopupTimerId);
+        DestroyWindow(expandedPopup);
+    }
+    g_expanded = false;
+
+    try { UnregisterPopupWindowClass(); } catch (...) {}
+}
+
+void RemoveIslandGridImpl() {
+    auto bestEffort = [](auto&& operation) noexcept {
+        try { operation(); } catch (...) {}
+    };
+    bestEffort([] { StopTaskbarLayoutMonitor(); });
+    bestEffort([] { StopHoverRenderLoop(); });
+    bestEffort([] { StopDynamicCompactRenderLoop(); });
+    bestEffort([] { ClearDynamicTransportButtonMotions(); });
+    bestEffort([] { StopCompactTextRenderLoop(); });
+    bestEffort([] { StopCompactProgressRenderLoop(); });
+    bestEffort([] { StopCompactTintTransition(); });
+    bestEffort([] { DestroyExpandedPopup(); });
 
     // Drop the CompositionPath whose geometry-source vtable belongs to this
     // mod while the image is still mapped, then release its UI-thread factory.
-    ClearDynamicTransportCompositionClip(g_dynamicTransportOcclusionHost);
+    bestEffort([] {
+        ClearDynamicTransportCompositionClip(
+            g_dynamicTransportOcclusionHost);
+    });
     g_dynamicTransportClipD2dFactory = nullptr;
     ResetDynamicTransportOcclusionClipCache();
     g_compactBackgroundBorder = nullptr;
@@ -17350,7 +17407,7 @@ void RemoveIslandGrid() {
         g_islandScale = nullptr;
         g_islandPressScale = nullptr;
         g_islandHoverTranslate = nullptr;
-        ResetCompactIslandPressMotion();
+        bestEffort([] { ResetCompactIslandPressMotion(); });
         g_dynamicMainIsland = nullptr;
         g_compactMainTintLayer = nullptr;
         g_dynamicTransportTintLayer = nullptr;
@@ -17444,7 +17501,7 @@ void RemoveIslandGrid() {
     g_islandScale = nullptr;
     g_islandPressScale = nullptr;
     g_islandHoverTranslate = nullptr;
-    ResetCompactIslandPressMotion();
+    bestEffort([] { ResetCompactIslandPressMotion(); });
     g_dynamicMainIsland = nullptr;
     g_compactMainTintLayer = nullptr;
     g_dynamicTransportTintLayer = nullptr;
@@ -17501,8 +17558,17 @@ void RemoveIslandGrid() {
     g_targetHoverScale = 1.0;
 }
 
+void RemoveIslandGrid() noexcept {
+    try {
+        RemoveIslandGridImpl();
+    } catch (...) {
+        Wh_Log(L"Island: exception during full UI teardown; using OS-resource fallback");
+    }
+    RemoveIslandOsResourcesNoexcept();
+}
+
 bool InjectIslandGrid() {
-    HWND hwnd = g_taskbarWnd ? g_taskbarWnd : FindCurrentProcessTaskbarWnd();
+    HWND hwnd = g_taskbarWnd ? g_taskbarWnd.load() : FindCurrentProcessTaskbarWnd();
     if (!hwnd) {
         Wh_Log(L"Island: taskbar window not found");
         return false;
@@ -17633,16 +17699,22 @@ void ApplySettingsOnTaskbarThread() {
         return;
     }
     for (int attempt = 0; attempt < 3; ++attempt) {
-        if (!g_taskbarWnd || !IsWindow(g_taskbarWnd)) {
-            g_taskbarWnd = FindCurrentProcessTaskbarWnd();
+        HWND taskbarWnd = g_taskbarWnd.load();
+        if (!taskbarWnd || !IsWindow(taskbarWnd)) {
+            taskbarWnd = FindCurrentProcessTaskbarWnd();
+            g_taskbarWnd = taskbarWnd;
         }
-        if (g_taskbarWnd &&
-            RunFromWindowThread(
-                g_taskbarWnd,
+        // A missing taskbar is normal during early Explorer startup. The
+        // TrayUI::StartTaskbar hook will consume the pending settings later.
+        if (!taskbarWnd) {
+            return;
+        }
+        if (RunFromWindowThread(
+                taskbarWnd,
                 [](void*) { ApplyPendingSettingsAndInject(); },
                 nullptr,
                 nullptr,
-                attempt == 2 ? 0 : 200)) {
+                attempt == 2 ? 3000 : 200)) {
             return;
         }
         if (attempt < 2) {
@@ -17742,7 +17814,7 @@ void Wh_ModUninit() {
          ++attempt) {
         HWND taskbarWindow = FindCurrentProcessTaskbarWnd();
         HWND candidates[] = {
-            g_taskbarWnd && IsWindow(g_taskbarWnd) ? g_taskbarWnd : nullptr,
+            g_taskbarWnd && IsWindow(g_taskbarWnd) ? g_taskbarWnd.load() : nullptr,
             taskbarWindow && IsWindow(taskbarWindow) ? taskbarWindow : nullptr,
             g_expandedPopup && IsWindow(g_expandedPopup) ? g_expandedPopup : nullptr,
             g_popupXamlChild && IsWindow(g_popupXamlChild) ? g_popupXamlChild : nullptr,
@@ -17775,9 +17847,22 @@ void Wh_ModUninit() {
                 break;
             }
             if (callbackInvoked) {
-                teardownCallbackFailed = true;
-                Wh_Log(L"Island: UI teardown callback threw; not retrying the same thread");
-                break;
+                Wh_Log(L"Island: full UI teardown callback failed; dispatching OS-resource fallback");
+                bool fallbackInvoked = false;
+                if (RunFromWindowThread(
+                        candidate,
+                        [](void*) { RemoveIslandOsResourcesNoexcept(); },
+                        nullptr,
+                        &fallbackInvoked,
+                        0)) {
+                    teardownSucceeded = true;
+                    break;
+                }
+                teardownCallbackFailed = fallbackInvoked;
+                if (teardownCallbackFailed) {
+                    Wh_Log(L"Island: OS-resource fallback callback failed");
+                    break;
+                }
             }
         }
         if (!teardownSucceeded && !teardownCallbackFailed) {
