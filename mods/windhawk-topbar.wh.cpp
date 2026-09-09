@@ -1039,14 +1039,14 @@ const std::vector<ControlStyleRule>& BuiltInStyles() {
         {L"SearchButton", {L"Background:=#15ffffff", L"Width=35", L"Margin=4,2,4,2"}},
         {L"SearchIcon", {L"Width=20", L"Height=20"}},
         {L"TaskButton",
-         {L"Background:=#15ffffff", L"Margin=3,2,3,2", L"Foreground=white"}},
+         {L"Background:=#15ffffff", L"Margin=3,4,3,4", L"Foreground=white"}},
         {L"ClockText", {L"Foreground=white", L"FontSize=14"}},
-        {L"ClockButton", {L"Background:=#15ffffff", L"Margin=3,2,6,2"}},
+        {L"ClockButton", {L"Background:=#15ffffff", L"Margin=3,4,6,4"}},
         {L"DisplayButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
         {L"SoundButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
         {L"WifiButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
         {L"BluetoothButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
-        
+        {L"ResourceButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
         {L"BatteryButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
         {L"WifiHeaderToggle", {L"Width=50"}},
         {L"BluetoothHeaderToggle", {L"Width=50"}},
@@ -1064,7 +1064,7 @@ const std::vector<ControlStyleRule> g_themeGreenBarStyles = {
     {L"SoundButton", {L"Background:=#27403C"}},
     {L"WifiButton", {L"Background:=#27403C"}},
     {L"BluetoothButton", {L"Background:=#27403C"}},
-    
+    {L"ResourceButton", {L"Background:=#27403C"}},
     {L"BatteryButton", {L"Background:=#27403C"}},
     {L"TaskButton", {L"Background:=#27403C"}},
 };
@@ -1079,7 +1079,7 @@ const std::vector<ControlStyleRule> g_themeNoIslandsStyles = {
     {L"WifiButton", {L"Background:=transparent"}},
     {L"BluetoothButton", {L"Background:=transparent"}},
     {L"BatteryButton", {L"Background:=transparent"}},
-    
+    {L"ResourceButton", {L"Background:=transparent"}},
     {L"TaskButton", {L"Background:=transparent"}},
 };
 
