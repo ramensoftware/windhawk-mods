@@ -64,7 +64,10 @@ Detection is conservative:
 
 #include <commctrl.h>
 #include <dbt.h>
+#include <exdisp.h>
+#include <servprov.h>
 #include <shlobj.h>
+#include <shlguid.h>
 #include <shlwapi.h>
 #include <windhawk_utils.h>
 #include <windows.h>
@@ -220,6 +223,15 @@ static ProbeResult ProbeOpticalMediaState(WCHAR letter) {
 
     if (device == INVALID_HANDLE_VALUE) {
         DWORD error = GetLastError();
+
+        if (error == ERROR_NO_MEDIA_IN_DRIVE) {
+            return ProbeResult::Empty;
+        }
+
+        if (error == ERROR_NOT_READY) {
+            return ProbeResult::NotReady;
+        }
+
         Wh_Log(L"%c: unable to open device, error=%u", letter, error);
         return ProbeResult::Unknown;
     }
@@ -341,10 +353,11 @@ static void QueueInitialScan() {
     SetEvent(g_workerWakeEvent);
 }
 
-static void ProcessInitialScan(DWORD* retryMask,
-                               DWORD* graceRetryMask,
-                               DWORD* arrivalRetryMask,
-                               int (&retryAttempts)[26]) {
+static bool ProcessInitialScan(DWORD* retryMask,
+                                DWORD* graceRetryMask,
+                                DWORD* arrivalRetryMask,
+                                int (&retryAttempts)[26]) {
+    bool changed = false;
     DWORD managedMask = g_managedMask.load(std::memory_order_acquire);
     DWORD logicalDrives = GetLogicalDrives();
 
@@ -357,8 +370,10 @@ static void ProcessInitialScan(DWORD* retryMask,
         }
     }
 
-    *graceRetryMask = 0;
-    *arrivalRetryMask = 0;
+    // Do not destroy active arrival grace windows. A device-tree rescan can
+    // happen while an optical drive is still becoming ready.
+    *graceRetryMask &= *retryMask;
+    *arrivalRetryMask &= *retryMask;
 
     for (WCHAR letter = L'A'; letter <= L'Z'; letter++) {
         DWORD bit = LetterBit(letter);
@@ -369,7 +384,7 @@ static void ProcessInitialScan(DWORD* retryMask,
             *graceRetryMask &= ~bit;
             retryAttempts[index] = 0;
             SetOpticalDrivePresent(letter, false);
-            SetCachedMediaState(letter, MediaState::Unknown);
+            changed |= SetCachedMediaState(letter, MediaState::Unknown);
             continue;
         }
 
@@ -378,13 +393,13 @@ static void ProcessInitialScan(DWORD* retryMask,
 
         bool optical = GetDriveTypeW(root) == DRIVE_CDROM;
 
-        SetOpticalDrivePresent(letter, optical);
+        changed |= SetOpticalDrivePresent(letter, optical);
 
         if (!optical) {
             *retryMask &= ~bit;
             *graceRetryMask &= ~bit;
             retryAttempts[index] = 0;
-            SetCachedMediaState(letter, MediaState::Unknown);
+            changed |= SetCachedMediaState(letter, MediaState::Unknown);
             continue;
         }
 
@@ -394,12 +409,16 @@ static void ProcessInitialScan(DWORD* retryMask,
             *retryMask |= bit;
             *graceRetryMask &= ~bit;
             retryAttempts[index] = 0;
-            SetCachedMediaState(letter, MediaState::Unknown);
+            changed |= SetCachedMediaState(letter, MediaState::Unknown);
         } else if (result == ProbeResult::NotReady) {
+            // On this hardware an actually empty optical drive reports
+            // ERROR_NOT_READY. Hide it immediately, but keep the full grace
+            // retry window so a disc that's still spinning up can recover to
+            // Present without another device event.
             *retryMask |= bit;
             *graceRetryMask |= bit;
             retryAttempts[index] = 0;
-            SetCachedMediaState(letter, MediaState::Unknown);
+            changed |= SetCachedMediaState(letter, MediaState::Empty);
         } else if (result == ProbeResult::Empty) {
             // An optical drive can transiently report NO_MEDIA while media is
             // becoming ready during Explorer startup/resume. Hide it now, but
@@ -408,12 +427,12 @@ static void ProcessInitialScan(DWORD* retryMask,
             *retryMask |= bit;
             *graceRetryMask |= bit;
             retryAttempts[index] = 0;
-            SetCachedMediaState(letter, MediaState::Empty);
+            changed |= SetCachedMediaState(letter, MediaState::Empty);
         } else {
             *retryMask &= ~bit;
             *graceRetryMask &= ~bit;
             retryAttempts[index] = 0;
-            SetCachedMediaState(letter, MediaState::Present);
+            changed |= SetCachedMediaState(letter, MediaState::Present);
         }
     }
 
@@ -457,17 +476,19 @@ static bool ProcessRemovalMask(DWORD mask,
 
         ProbeResult result = ProbeOpticalMediaState(letter);
 
-        if (result == ProbeResult::NotReady) {
-            *retryMask |= bit;
-        } else if (result == ProbeResult::Unknown) {
+        if (result == ProbeResult::Present) {
+            *retryMask &= ~bit;
+            changed |= SetCachedMediaState(letter, MediaState::Present);
+        } else if (result == ProbeResult::Empty ||
+                   result == ProbeResult::NotReady) {
+            // Removal is strong evidence that the medium is gone.
+            *retryMask &= ~bit;
+            changed |= SetCachedMediaState(letter, MediaState::Empty);
+        } else {
+            // Preserve fail-open semantics: an inconclusive probe must not
+            // hide the drive.
             *retryMask |= bit;
             changed |= SetCachedMediaState(letter, MediaState::Unknown);
-        } else {
-            *retryMask &= ~bit;
-            changed |= SetCachedMediaState(
-                letter, result == ProbeResult::Present
-                            ? MediaState::Present
-                            : MediaState::Empty);
         }
 
         retryAttempts[index] = 0;
@@ -606,15 +627,20 @@ static bool ProcessRetryMask(DWORD* retryMask,
             *arrivalRetryMask &= ~bit;
             retryAttempts[index] = 0;
 
-            if (result == ProbeResult::Empty) {
+            if (result == ProbeResult::Empty ||
+                result == ProbeResult::NotReady) {
+                // Some optical drives report ERROR_NOT_READY while genuinely
+                // empty. After the full spin-up grace window, treat a
+                // persistent NOT_READY the same as NO_MEDIA so an empty drive
+                // doesn't remain visible forever.
                 changed |= SetCachedMediaState(letter, MediaState::Empty);
-            } else if (result == ProbeResult::NotReady) {
+            } else {
                 changed |= SetCachedMediaState(letter, MediaState::Unknown);
             }
 
             Wh_Log(
                 L"%c: media-ready retry window expired; "
-                L"using the latest conservative state",
+                L"using the latest settled state",
                 letter);
         }
     }
@@ -721,13 +747,121 @@ static DWORD WINAPI WorkerThreadProc(void*) {
     return 0;
 }
 
+static bool RefreshOneThisPcView(IDispatch* dispatch,
+                                 PIDLIST_ABSOLUTE thisPcPidl) {
+    if (!dispatch || !thisPcPidl) {
+        return false;
+    }
+
+    IServiceProvider* serviceProvider = nullptr;
+    HRESULT hr =
+        dispatch->QueryInterface(IID_PPV_ARGS(&serviceProvider));
+
+    if (FAILED(hr) || !serviceProvider) {
+        return false;
+    }
+
+    IShellBrowser* shellBrowser = nullptr;
+    hr = serviceProvider->QueryService(
+        SID_STopLevelBrowser, IID_PPV_ARGS(&shellBrowser));
+    serviceProvider->Release();
+
+    if (FAILED(hr) || !shellBrowser) {
+        return false;
+    }
+
+    IShellView* shellView = nullptr;
+    hr = shellBrowser->QueryActiveShellView(&shellView);
+    shellBrowser->Release();
+
+    if (FAILED(hr) || !shellView) {
+        return false;
+    }
+
+    IFolderView* folderView = nullptr;
+    hr = shellView->QueryInterface(IID_PPV_ARGS(&folderView));
+
+    if (FAILED(hr) || !folderView) {
+        shellView->Release();
+        return false;
+    }
+
+    IPersistFolder2* persistFolder = nullptr;
+    hr = folderView->GetFolder(IID_PPV_ARGS(&persistFolder));
+    folderView->Release();
+
+    if (FAILED(hr) || !persistFolder) {
+        shellView->Release();
+        return false;
+    }
+
+    PIDLIST_ABSOLUTE currentFolderPidl = nullptr;
+    hr = persistFolder->GetCurFolder(&currentFolderPidl);
+    persistFolder->Release();
+
+    bool isThisPc =
+        SUCCEEDED(hr) && currentFolderPidl &&
+        ILIsEqual(currentFolderPidl, thisPcPidl);
+
+    if (currentFolderPidl) {
+        CoTaskMemFree(currentFolderPidl);
+    }
+
+    if (!isThisPc) {
+        shellView->Release();
+        return false;
+    }
+
+    hr = shellView->Refresh();
+    shellView->Release();
+
+    if (FAILED(hr)) {
+        Wh_Log(L"IShellView::Refresh failed: 0x%08X", hr);
+        return false;
+    }
+
+    return true;
+}
+
 static void RefreshThisPc(PIDLIST_ABSOLUTE thisPcPidl) {
     if (!thisPcPidl) {
         return;
     }
 
-    SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_IDLIST | SHCNF_FLUSHNOWAIT,
-                   thisPcPidl, nullptr);
+    IShellWindows* shellWindows = nullptr;
+    HRESULT hr = CoCreateInstance(
+        CLSID_ShellWindows, nullptr, CLSCTX_LOCAL_SERVER,
+        IID_PPV_ARGS(&shellWindows));
+
+    if (FAILED(hr) || !shellWindows) {
+        Wh_Log(L"Failed to get IShellWindows: 0x%08X", hr);
+        return;
+    }
+
+    LONG count = 0;
+    hr = shellWindows->get_Count(&count);
+
+    if (FAILED(hr)) {
+        Wh_Log(L"IShellWindows::get_Count failed: 0x%08X", hr);
+        shellWindows->Release();
+        return;
+    }
+
+    for (LONG i = 0; i < count; i++) {
+        VARIANT index = {};
+        index.vt = VT_I4;
+        index.lVal = i;
+
+        IDispatch* dispatch = nullptr;
+        hr = shellWindows->Item(index, &dispatch);
+
+        if (SUCCEEDED(hr) && dispatch) {
+            RefreshOneThisPcView(dispatch, thisPcPidl);
+            dispatch->Release();
+        }
+    }
+
+    shellWindows->Release();
 }
 
 static LRESULT CALLBACK NotificationWindowSubclassProc(HWND hwnd,
