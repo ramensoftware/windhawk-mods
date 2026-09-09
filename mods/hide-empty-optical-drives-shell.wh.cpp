@@ -436,6 +436,7 @@ static bool ProcessInitialScan(DWORD* retryMask,
         }
     }
 
+    return changed;
 }
 
 static bool ProcessRemovalMask(DWORD mask,
