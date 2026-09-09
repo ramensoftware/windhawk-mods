@@ -146,7 +146,6 @@ While the mod is active, the restored page can also be opened directly:
 #include <winver.h>
 #include <algorithm>
 #include <atomic>
-#include <csetjmp>
 #include <cstring>
 #include <cwchar>
 #include <cwctype>
@@ -168,16 +167,31 @@ namespace IntlRestore {
 #endif
 void TranslateInputWindow(HWND window);
 
+// SetThreadDpiAwarenessContext is a static user32 import only from build
+// 14393 (1607) onward, but Environment() accepts builds from 10240, so a
+// static reference would fail the whole mod DLL to load on 10240-14392.
+// Resolve it dynamically instead; on builds where it's missing this is a
+// silent no-op, same as when the API is present but PER_MONITOR_AWARE_V2
+// isn't understood yet (finding 7).
+using SetThreadDpiAwarenessContextProc = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
+SetThreadDpiAwarenessContextProc ResolveSetThreadDpiAwarenessContext() {
+    static SetThreadDpiAwarenessContextProc proc = reinterpret_cast<SetThreadDpiAwarenessContextProc>(
+        reinterpret_cast<void*>(GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext")));
+    return proc;
+}
 struct DpiScope {
     DPI_AWARENESS_CONTEXT previous = nullptr;
     bool changed = false;
     DpiScope() {
-        previous = SetThreadDpiAwarenessContext(
-            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-        changed = previous != nullptr;
+        if (auto proc = ResolveSetThreadDpiAwarenessContext()) {
+            previous = proc(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+            changed = previous != nullptr;
+        }
     }
     ~DpiScope() {
-        if (changed) SetThreadDpiAwarenessContext(previous);
+        if (changed) {
+            if (auto proc = ResolveSetThreadDpiAwarenessContext()) proc(previous);
+        }
     }
     DpiScope(const DpiScope&) = delete;
     DpiScope& operator=(const DpiScope&) = delete;
@@ -271,6 +285,28 @@ struct HttpHandle {
     explicit HttpHandle(HINTERNET h) : value(h) {}
     ~HttpHandle() { if (value) WinHttpCloseHandle(value); }
 };
+// Tracks the WinHTTP session handle currently owned by Download(), so an
+// unload request can close it out from under a blocked call instead of
+// waiting out its connect/send/receive timeouts (finding 3).
+SRWLOCK g_downloadLock = SRWLOCK_INIT;
+HINTERNET g_activeSession = nullptr;
+struct ActiveSessionScope {
+    explicit ActiveSessionScope(HINTERNET h) {
+        AcquireSRWLockExclusive(&g_downloadLock);
+        g_activeSession = h;
+        ReleaseSRWLockExclusive(&g_downloadLock);
+    }
+    ~ActiveSessionScope() {
+        AcquireSRWLockExclusive(&g_downloadLock);
+        g_activeSession = nullptr;
+        ReleaseSRWLockExclusive(&g_downloadLock);
+    }
+};
+void CancelInFlightDownload() {
+    AcquireSRWLockExclusive(&g_downloadLock);
+    if (g_activeSession) { WinHttpCloseHandle(g_activeSession); g_activeSession = nullptr; }
+    ReleaseSRWLockExclusive(&g_downloadLock);
+}
 struct ActScope {
     ULONG_PTR cookie = 0;
     bool active = false;
@@ -321,6 +357,11 @@ std::vector<Dep> g_deps;
 std::vector<IatPatch> g_inputPatches;
 Image g_image;
 HMODULE g_nativeModule = nullptr, g_inputModule = nullptr;
+// Balances the extra references PrivateLoadLibraryW hands to the legacy
+// provider for "input.dll" (each call bumps input.dll's refcount via
+// LoadLibraryExW). PrivateFreeLibrary decrements when the legacy code
+// releases one; Cleanup() releases whatever the legacy code never gave back.
+std::atomic<LONG> g_inputExtraRefs{0};
 HANDLE g_act = INVALID_HANDLE_VALUE, g_idle = nullptr, g_jobsIdle = nullptr;
 CplProc g_nativeCpl = nullptr;
 PSProc g_mainPS = nullptr, g_inputPS = nullptr;
@@ -330,6 +371,11 @@ DialogProc g_inputDialog = nullptr;
 RtlAddTableProc g_rtlAddTable = nullptr;
 RtlDeleteTableProc g_rtlDeleteTable = nullptr;
 std::atomic<bool> g_stopping{false};
+// Thread ID that ran the legacy CPL_INIT (and therefore owns whatever
+// thread-affine COM/TSF state the Win7 provider created there). Cleanup()
+// marshals its CPL_EXIT/DLL_PROCESS_DETACH calls to this thread instead of
+// running them on the arbitrary Windhawk unload thread (finding 5).
+std::atomic<DWORD> g_cplInitThreadId{0};
 std::atomic<bool> g_legacyInitialized{false};
 std::atomic<bool> g_nativeInitialized{false};
 std::atomic<bool> g_useLegacy{true};
@@ -466,9 +512,13 @@ bool Download(PCWSTR url, std::vector<BYTE>& bytes) {
     parts.lpszUrlPath = object; parts.dwUrlPathLength = ARRAYSIZE(object);
     if (!WinHttpCrackUrl(url, 0, 0, &parts) || parts.nScheme != INTERNET_SCHEME_HTTPS ||
         !Equal(host, L"msdl.microsoft.com")) return Fail(L"Unapproved payload URL", ERROR_INVALID_NAME);
+    if (g_stopping.load(std::memory_order_acquire)) { SetLastError(ERROR_SHUTDOWN_IN_PROGRESS); return false; }
     HttpHandle session(WinHttpOpen(L"Windhawk-IntlRestore/1.1.0", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
                                    WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0));
     if (!session.value) return false;
+    // Published for the unload path (CancelInFlightDownload) so a blocked
+    // WinHTTP call fails immediately instead of waiting out its timeout.
+    ActiveSessionScope activeSession(session.value);
     WinHttpSetTimeouts(session.value, 10000, 10000, 15000, 15000);
     HttpHandle connect(WinHttpConnect(session.value, host, parts.nPort, 0));
     if (!connect.value) return false;
@@ -865,33 +915,30 @@ bool ProtectImage(Image& image, const PEView& pe) {
     }
     return FlushInstructionCache(GetCurrentProcess(), image.base, image.size) != FALSE;
 }
-// Crash guards without SEH keywords: the Windhawk editor's clangd does not
-// enable Microsoft extensions, so __try/__except show as undeclared there.
-// A plain C++ try/catch alone canNOT catch hardware faults (access violation,
-// divide-by-zero, ...), which is exactly what these guards must survive. The
-// real protection therefore comes from a vectored CONTINUE handler (ordinary
-// C API, no keywords): it only runs after every frame-based handler declined,
-// so exceptions that system/legacy code handles internally (e.g. the
-// 0x4001000A probe seen during CPL_DBLCLK) flow normally and only truly
-// unhandled faults reach us. A first-chance vectored handler would steal
-// those handled exceptions and break normal control flow. While a legacy
-// call is armed, an unhandled fault records code/address and longjmps back
-// to the setjmp point with __except-like semantics (no unwinding, no
-// destructors). The C++ catch(...) additionally covers genuine C++
-// exceptions. Same-thread nesting chains via the previous pointer.
+// IMPORTANT: this does NOT contain hardware faults. A plain C++ try/catch
+// cannot catch an access violation or similar, and a vectored CONTINUE
+// handler only runs after every frame-based handler in the process has
+// already declined the exception — by definition too late to stop the
+// unwind, and every path below returns EXCEPTION_CONTINUE_SEARCH, so an
+// unhandled fault inside the mapped Win7 intl.cpl still takes the host
+// process down. What this guard actually provides: (1) it observes an
+// unhandled fault while a legacy call is "armed" and disables future legacy
+// calls (g_useLegacy) before the crash propagates, so if the host process
+// survives (e.g. Explorer's own crash recovery restarts it) subsequent CPL
+// activations fall back to native intl.cpl instead of re-entering the same
+// fault; and (2) GuardCall's try/catch(...) still catches genuine C++
+// exceptions the legacy code (or this mod) throws, which is a real recovery
+// path. Real containment of a hardware fault would need frame-based
+// __try/__except around the legacy call (the Windhawk editor's clangd does
+// not enable Microsoft extensions, so __try/__except show as undeclared
+// there, but -fms-extensions is an accepted @compilerOptions value); that is
+// not implemented here.
 struct CrashGuard {
-    jmp_buf resume;
-    volatile DWORD code = 0;
     volatile bool armed = false;
-    void* volatile address = nullptr;
-    volatile ULONG_PTR info0 = 0;
-    volatile ULONG_PTR info1 = 0;
-    volatile ULONG infoCount = 0;
 };
 thread_local CrashGuard* g_guard = nullptr;
 PVOID g_veh = nullptr;
 PVOID g_watch = nullptr;
-thread_local bool g_vehBusy = false;
 thread_local bool g_watchBusy = false;
 std::atomic<LONG> g_crashCount{0};
 const wchar_t* ExceptionCodeName(DWORD code) {
@@ -921,14 +968,10 @@ const wchar_t* ExceptionCodeName(DWORD code) {
     }
 }
 LONG CALLBACK CrashHandler(EXCEPTION_POINTERS* info) {
-    // Safe handling: disable the legacy mod instead of crashing Explorer.
-    // longjmp from a vectored handler is unsafe - it abandons system frames
-    // (comctl32, user32, ntdll) leaving internal locks inconsistent.
-    // Crashing Explorer is also unacceptable. The safe approach is to
-    // log the fault, disable the legacy provider, and let the system
-    // continue with the native Windows intl.cpl.
+    // This does not stop the fault (see the comment on CrashGuard above): it
+    // logs and disables future legacy calls, then always defers to normal
+    // exception search, which is how AddVectoredContinueHandler works.
     try {
-        if (g_vehBusy) return EXCEPTION_CONTINUE_SEARCH;
         CrashGuard* guard = g_guard;
         if (!guard || !guard->armed) return EXCEPTION_CONTINUE_SEARCH;
         if (!info || !info->ExceptionRecord) return EXCEPTION_CONTINUE_SEARCH;
@@ -950,32 +993,26 @@ LONG CALLBACK CrashHandler(EXCEPTION_POINTERS* info) {
             return EXCEPTION_CONTINUE_SEARCH;
         }
         
-        // Log the exception and disable the mod - no crash, no longjmp
+        // Log the exception and disable the legacy provider
         const LONG crashNo = g_crashCount.fetch_add(1, std::memory_order_relaxed) + 1;
         LastErrorScope keep;
         
-        Wh_Log(L"[AV2007] Exception #%ld: 0x%08lX (%s) at %p - disabling legacy mod",
+        Wh_Log(L"[AV2007] Exception #%ld: 0x%08lX (%s) at %p - disabling legacy mod, "
+               L"but this does not stop the fault; the host may still go down",
                crashNo, code, ExceptionCodeName(code), addr);
-        
-        // AV detail logging
-        if (code == 0xC0000005 && guard->infoCount >= 2) {
-            Wh_Log(L"[AV2007] Access violation: %s 0x%p", 
-                   guard->info0 ? L"write to" : L"read from",
-                   reinterpret_cast<void*>(guard->info1));
-        }
-        
-        // Disable the legacy provider - future calls will use native intl.cpl
-        // This is the safest recovery: Explorer stays stable, the mod
-        // degrades gracefully to Windows default behavior.
+
+        // Disable the legacy provider so any activation that survives this
+        // fault (e.g. a subsequent CPL call, or the host process being
+        // restarted) uses native intl.cpl instead of the faulting code path.
         guard->armed = false;
         g_useLegacy.store(false, std::memory_order_release);
-        
-        // DO NOT longjmp - let the exception continue search naturally.
-        // The system will handle it or ignore it. Explorer continues running.
+
+        // Always defer to normal exception search: a vectored continue
+        // handler cannot recover from this, only observe it (see the
+        // CrashGuard comment above).
         return EXCEPTION_CONTINUE_SEARCH;
-        
+
     } catch (...) {
-        g_vehBusy = false;
         g_useLegacy.store(false, std::memory_order_release);
         return EXCEPTION_CONTINUE_SEARCH;
     }
@@ -1016,14 +1053,6 @@ void VehRemove() {
     if (g_veh) { RemoveVectoredContinueHandler(g_veh); g_veh = nullptr; }
     if (g_watch) { RemoveVectoredExceptionHandler(g_watch); g_watch = nullptr; }
 }
-bool InLoadedModule(HMODULE module, const BYTE* fault, DWORD& rva) {
-    if (!module || !fault) return false;
-    const BYTE* base = reinterpret_cast<const BYTE*>(module);
-    DWORD size = ImageHeaders(const_cast<BYTE*>(base))->OptionalHeader.SizeOfImage;
-    if (!size || fault < base || fault >= base + size) return false;
-    rva = static_cast<DWORD>(fault - base);
-    return true;
-}
 template <typename Fn>
 bool GuardCall(Fn&& fn, DWORD& exception) {
     exception = 0;
@@ -1031,47 +1060,23 @@ bool GuardCall(Fn&& fn, DWORD& exception) {
         try { fn(); } catch (...) { exception = 0xE06D7363; return false; }
         return true;
     }
+    // NOTE: this only catches C++ exceptions (catch(...) below) and, via
+    // CrashHandler, observes+logs an unhandled hardware fault while `armed`
+    // is set — it does not resume execution after one (see the CrashGuard
+    // comment above). A hardware fault here still takes the host down;
+    // CrashHandler's job is only to have disabled g_useLegacy first.
     CrashGuard guard;
     CrashGuard* previous = g_guard;
     g_guard = &guard;
     bool ok = true;
-    if (setjmp(guard.resume) == 0) {
-        guard.armed = true;
-        try {
-            fn();
-        } catch (...) {
-            exception = 0xE06D7363; // a real C++ exception, not a crash code
-            ok = false;
-        }
-        guard.armed = false;
-        g_vehBusy = false;
-    } else {
-        exception = guard.code; // unhandled fault; resumed without unwinding
-        g_vehBusy = false;
-        const LONG crashNo = g_crashCount.fetch_add(1, std::memory_order_relaxed) + 1;
-        LastErrorScope keep; // diagnostics must not clobber the legacy error
-        void* addr = guard.address;
-        const BYTE* fault = static_cast<const BYTE*>(addr);
-        Wh_Log(L"Legacy crash #%ld: %s (0x%08lX) at %p", crashNo,
-               ExceptionCodeName(exception), exception, addr);
-        bool inImage = g_image.base && fault >= g_image.base && fault < g_image.base + g_image.size;
-        if (inImage) {
-            Wh_Log(L"Fault inside private image: RVA 0x%X",
-                   static_cast<unsigned>(fault - g_image.base));
-        } else {
-            DWORD rva = 0;
-            if (InLoadedModule(g_inputModule, fault, rva))
-                Wh_Log(L"Fault inside private input.dll: RVA 0x%X", rva);
-            else if (InLoadedModule(GetModuleHandleW(nullptr), fault, rva))
-                Wh_Log(L"Fault inside host executable: RVA 0x%X", rva);
-            else
-                Wh_Log(L"Fault inside system code");
-        }
-        if (exception == 0xC0000005 /*STATUS_ACCESS_VIOLATION*/ && guard.infoCount >= 2)
-            Wh_Log(L"AV detail: %s address %p", guard.info0 ? L"write to" : L"read from",
-                   reinterpret_cast<void*>(guard.info1));
+    guard.armed = true;
+    try {
+        fn();
+    } catch (...) {
+        exception = 0xE06D7363; // a real C++ exception, not a crash code
         ok = false;
     }
+    guard.armed = false;
     g_guard = previous;
     return ok;
 }
@@ -6743,6 +6748,16 @@ BOOL WINAPI PrivateFreeLibrary(HMODULE module) {
     try {
         // The private executable image is owned by this mod, never by the shell.
         if (IsMain(module)) { SetLastError(ERROR_INVALID_HANDLE); return FALSE; }
+        if (module == g_inputModule) {
+            // Balance a reference PrivateLoadLibraryW handed out (finding 6):
+            // let the legacy code's own refcounting drop the extra reference
+            // we took on its behalf, but keep the module itself resident
+            // (Cleanup() owns the base reference and frees it once).
+            LONG prior = g_inputExtraRefs.load(std::memory_order_acquire);
+            while (prior > 0 && !g_inputExtraRefs.compare_exchange_weak(
+                       prior, prior - 1, std::memory_order_acq_rel)) {}
+            if (prior > 0) { FreeLibrary(module); return TRUE; }
+        }
         return FreeLibrary(module);
 
     } catch (...) {
@@ -6791,6 +6806,9 @@ HMODULE WINAPI PrivateLoadLibraryW(LPCWSTR name) {
             Wh_Log(L"Private input.dll identity mismatch");
             SetLastError(ERROR_INVALID_DLL); return nullptr;
         }
+        // This reference is handed to the legacy code; track it so Cleanup()
+        // can release it if the legacy code never balances it (finding 6).
+        g_inputExtraRefs.fetch_add(1, std::memory_order_acq_rel);
         Wh_Log(L"Legacy intl.cpl requested input.dll -> private Windows 7 module %p", input);
         return input;
     }
@@ -7223,7 +7241,17 @@ BOOL WINAPI PrivateDisableThreadLibraryCalls(HMODULE module) {
 void WaitForJobs() {
     if (!g_jobsIdle || g_jobs.load(std::memory_order_acquire) == 0) return;
     while (g_jobs.load(std::memory_order_acquire) != 0) {
-        WaitForSingleObject(g_jobsIdle, 100);
+        // Plain WaitForSingleObject does not service cross-thread
+        // SendMessage calls, so a worker that sends to this (UI) thread
+        // while it waits here would deadlock or stall it (finding 2).
+        // Wake for inbound sends and let PeekMessage's internal dispatch
+        // answer them, without pumping posted messages (which would
+        // re-enter arbitrary window procs).
+        DWORD wait = MsgWaitForMultipleObjectsEx(1, &g_jobsIdle, 100, QS_SENDMESSAGE, MWMO_INPUTAVAILABLE);
+        if (wait == WAIT_OBJECT_0 + 1) {
+            MSG msg;
+            PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);
+        }
     }
     // Pair with EndJob's final signal before teardown closes the event.
     AcquireSRWLockExclusive(&g_gate); ReleaseSRWLockExclusive(&g_gate);
@@ -7611,8 +7639,9 @@ bool Prepare() {
         return Fail(L"Refusing to write under Windows directory", ERROR_ACCESS_DENIED);
     if (!Directory(g_cache)) return false;
     Wh_Log(L"Private payload storage: %s", g_cache.c_str());
-    if (!EnsurePinned(L"intl.cpl", kIntlSha, kIntlSize, kIntlUrl) ||
-        !EnsurePinned(L"input.dll", kInputSha, kInputSize, kInputUrl)) return false;
+    if (!EnsurePinned(L"intl.cpl", kIntlSha, kIntlSize, kIntlUrl)) return false;
+    if (g_stopping.load(std::memory_order_acquire)) { SetLastError(ERROR_SHUTDOWN_IN_PROGRESS); return false; }
+    if (!EnsurePinned(L"input.dll", kInputSha, kInputSize, kInputUrl)) return false;
     g_intlPath = g_cache + L"\\intl.cpl"; g_inputPath = g_cache + L"\\input.dll";
     if (!OpenRead(g_intlPath, g_intlFile) || g_intlFile.bytes.size() != kIntlSize || Hash(g_intlFile.bytes) != kIntlSha ||
         !OpenRead(g_inputPath, g_inputFile) || g_inputFile.bytes.size() != kInputSize || Hash(g_inputFile.bytes) != kInputSha)
@@ -7713,14 +7742,30 @@ bool EnsurePrepared() {
     return ready;
 }
 
+// Threads currently inside a legacy call, so the unload path can close
+// windows the legacy provider raised that the mod never tracked in g_owned
+// (a MessageBoxW, an elevation prompt) instead of relying on g_owned alone
+// (finding 3).
+std::vector<DWORD> g_legacyThreads;
 bool EnterLegacy() {
     AcquireSRWLockShared(&g_gate);
     bool enter = !g_stopping.load(std::memory_order_acquire);
     if (enter && g_active.fetch_add(1, std::memory_order_acq_rel) == 0) ResetEvent(g_idle);
     ReleaseSRWLockShared(&g_gate);
+    if (enter) {
+        AcquireSRWLockExclusive(&g_windowsLock);
+        g_legacyThreads.push_back(GetCurrentThreadId());
+        ReleaseSRWLockExclusive(&g_windowsLock);
+    }
     return enter;
 }
 void LeaveLegacy() {
+    AcquireSRWLockExclusive(&g_windowsLock);
+    DWORD tid = GetCurrentThreadId();
+    for (auto it = g_legacyThreads.begin(); it != g_legacyThreads.end(); ++it) {
+        if (*it == tid) { g_legacyThreads.erase(it); break; }
+    }
+    ReleaseSRWLockExclusive(&g_windowsLock);
     AcquireSRWLockExclusive(&g_gate);
     if (g_active.fetch_sub(1, std::memory_order_acq_rel) == 1) SetEvent(g_idle);
     ReleaseSRWLockExclusive(&g_gate);
@@ -7752,6 +7797,7 @@ LONG CALLBACK CplHook(HWND window, UINT message, LPARAM first, LPARAM second) {
                 g_useLegacy.store(false); return native;
             }
             g_legacyInitialized.store(true);
+            g_cplInitThreadId.store(GetCurrentThreadId(), std::memory_order_release);
             Wh_Log(L"CPlApplet initialized: authentic Windows 7 provider");
             return legacy;
         }
@@ -7768,6 +7814,7 @@ LONG CALLBACK CplHook(HWND window, UINT message, LPARAM first, LPARAM second) {
         if (message == CPL_GETCOUNT && returned) Wh_Log(L"CPL count = %ld", result);
         if (message == CPL_EXIT) {
             g_legacyInitialized.store(false);
+            g_cplInitThreadId.store(0, std::memory_order_release);
             g_nativeInitialized.store(false);
             g_nativeCpl(window, message, first, second);
         } else if (message == CPL_STOP) {
@@ -7792,17 +7839,103 @@ LONG CALLBACK CplHook(HWND window, UINT message, LPARAM first, LPARAM second) {
     }
 }
 void CloseOwnedWindows() {
-    std::vector<HWND> copy;
-    AcquireSRWLockShared(&g_windowsLock);
-    copy = g_owned; 
-    ReleaseSRWLockShared(&g_windowsLock);
-    
-    DWORD pid = GetCurrentProcessId();
-    for (HWND window : copy) {
-        DWORD process = 0;
-        if (window && GetWindowThreadProcessId(window, &process) && process == pid) {
-            PostMessageW(window, WM_CLOSE, 0, 0);
+    // Called in a loop from Wh_ModBeforeUninit's unload wait; an exception
+    // here must not abort that loop early and skip requesting the close.
+    try {
+        std::vector<HWND> copy;
+        std::vector<DWORD> legacyThreads;
+        AcquireSRWLockShared(&g_windowsLock);
+        copy = g_owned;
+        legacyThreads = g_legacyThreads;
+        ReleaseSRWLockShared(&g_windowsLock);
+
+        DWORD pid = GetCurrentProcessId();
+        for (HWND window : copy) {
+            DWORD process = 0;
+            if (window && GetWindowThreadProcessId(window, &process) && process == pid) {
+                PostMessageW(window, WM_CLOSE, 0, 0);
+            }
         }
+        // Also reach top-level windows the legacy provider raised itself (a
+        // MessageBoxW, the out-of-process elevation prompt) that never went
+        // through the mod's window tracking (finding 3).
+        for (DWORD tid : legacyThreads) {
+            EnumThreadWindows(tid, [](HWND window, LPARAM) -> BOOL {
+                PostMessageW(window, WM_CLOSE, 0, 0);
+                return TRUE;
+            }, 0);
+        }
+    } catch (...) {
+        // Best-effort: the outer unload loop keeps retrying regardless.
+    }
+}
+HHOOK g_shutdownHook = nullptr;
+HANDLE g_shutdownDone = nullptr;
+// The actual legacy teardown; must run on the thread that ran CPL_INIT.
+void ShutdownLegacyOnCurrentThread() {
+    if (g_legacyInitialized.exchange(false) && g_image.cpl) {
+        LONG ignored = 0; DWORD exception = 0;
+        GuardCpl(g_image.cpl, nullptr, CPL_EXIT, 0, 0, ignored, exception);
+        if (exception) Wh_Log(L"Legacy CPL_EXIT exception=0x%08lX", exception);
+    }
+    g_cplInitThreadId.store(0, std::memory_order_release);
+    if (g_image.attached && g_image.entry) {
+        BOOL ignored = FALSE; DWORD exception = 0;
+        GuardEntry(g_image.entry, reinterpret_cast<HINSTANCE>(g_image.base), DLL_PROCESS_DETACH, ignored, exception);
+        g_image.attached = false;
+    }
+}
+LRESULT CALLBACK ShutdownHookProc(int code, WPARAM wParam, LPARAM lParam) {
+    // A hook callback must never let a C++ exception cross back into the
+    // system hook-chain dispatcher; make sure the waiting unload thread is
+    // always released even if ShutdownLegacyOnCurrentThread() throws.
+    if (code == HC_ACTION) {
+        try {
+            ShutdownLegacyOnCurrentThread();
+        } catch (...) {
+            Wh_Log(L"Exception during marshaled legacy shutdown; continuing teardown");
+        }
+        if (g_shutdownHook) { HHOOK h = g_shutdownHook; g_shutdownHook = nullptr; UnhookWindowsHookEx(h); }
+        if (g_shutdownDone) SetEvent(g_shutdownDone);
+    }
+    return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+// Marshals the legacy CPL_EXIT/DLL_PROCESS_DETACH teardown to the thread
+// that ran CPL_INIT: that thread's Cicero/TSF and COM objects have thread
+// affinity there, while Wh_ModUninit runs on an arbitrary Windhawk thread
+// with no COM apartment initialized (finding 5). Bounded: if the init
+// thread is gone or wedged, falls back to running inline rather than
+// hanging the unload.
+void ShutdownLegacyOnInitThread() {
+    DWORD tid = g_cplInitThreadId.load(std::memory_order_acquire);
+    if (!tid || tid == GetCurrentThreadId()) { ShutdownLegacyOnCurrentThread(); return; }
+    try {
+        g_shutdownDone = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!g_shutdownDone) { ShutdownLegacyOnCurrentThread(); return; }
+        HMODULE self = nullptr;
+        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+            reinterpret_cast<LPCWSTR>(&ShutdownHookProc), &self);
+        g_shutdownHook = SetWindowsHookExW(WH_GETMESSAGE, ShutdownHookProc, self, tid);
+        if (!g_shutdownHook) {
+            CloseHandle(g_shutdownDone); g_shutdownDone = nullptr;
+            Wh_Log(L"Could not marshal legacy shutdown to init thread %lu; running inline", tid);
+            ShutdownLegacyOnCurrentThread();
+            return;
+        }
+        PostThreadMessageW(tid, WM_NULL, 0, 0);
+        DWORD wait = WaitForSingleObject(g_shutdownDone, 5000);
+        CloseHandle(g_shutdownDone); g_shutdownDone = nullptr;
+        if (g_shutdownHook) { HHOOK h = g_shutdownHook; g_shutdownHook = nullptr; UnhookWindowsHookEx(h); }
+        if (wait != WAIT_OBJECT_0) {
+            Wh_Log(L"Legacy shutdown marshal to init thread %lu timed out; running inline", tid);
+            ShutdownLegacyOnCurrentThread();
+        }
+    } catch (...) {
+        // Make sure the handle/hook never leak and the teardown still runs.
+        if (g_shutdownHook) { HHOOK h = g_shutdownHook; g_shutdownHook = nullptr; UnhookWindowsHookEx(h); }
+        if (g_shutdownDone) { CloseHandle(g_shutdownDone); g_shutdownDone = nullptr; }
+        Wh_Log(L"Exception marshaling legacy shutdown; running inline");
+        ShutdownLegacyOnCurrentThread();
     }
 }
 void Cleanup() {
@@ -7812,16 +7945,7 @@ void Cleanup() {
     // unmaps the mod image their epilogues still execute in (finding 4).
     JoinTrackedThreads();
     ActScope act(g_act);
-    if (g_legacyInitialized.exchange(false) && g_image.cpl) {
-        LONG ignored = 0; DWORD exception = 0;
-        GuardCpl(g_image.cpl, nullptr, CPL_EXIT, 0, 0, ignored, exception);
-        if (exception) Wh_Log(L"Legacy CPL_EXIT exception=0x%08lX", exception);
-    }
-    if (g_image.attached && g_image.entry) {
-        BOOL ignored = FALSE; DWORD exception = 0;
-        GuardEntry(g_image.entry, reinterpret_cast<HINSTANCE>(g_image.base), DLL_PROCESS_DETACH, ignored, exception);
-        g_image.attached = false;
-    }
+    ShutdownLegacyOnInitThread();
     // Restore only slots we own, after legacy modal calls have left.
     for (auto it = g_inputPatches.rbegin(); it != g_inputPatches.rend(); ++it) {
         DWORD old = 0, ignored = 0;
@@ -7835,7 +7959,14 @@ void Cleanup() {
     if (g_image.functionTable && g_rtlDeleteTable) { g_rtlDeleteTable(g_image.functions); g_image.functionTable = false; }
     if (g_image.base) VirtualFree(g_image.base, 0, MEM_RELEASE);
     g_image = {};
-    if (g_inputModule) { FreeLibrary(g_inputModule); g_inputModule = nullptr; }
+    if (g_inputModule) {
+        // Release any extra references handed to the legacy code that it
+        // never balanced itself (finding 6), then the base reference.
+        LONG extra = g_inputExtraRefs.exchange(0, std::memory_order_acq_rel);
+        for (LONG i = 0; i < extra; ++i) FreeLibrary(g_inputModule);
+        FreeLibrary(g_inputModule);
+        g_inputModule = nullptr;
+    }
     for (auto it = g_deps.rbegin(); it != g_deps.rend(); ++it) FreeLibrary(it->module);
     g_deps.clear();
     for (auto& store : g_blobStore) { std::vector<BYTE> empty; store.swap(empty); }
@@ -7963,6 +8094,87 @@ bool InstallRedirectHook() {
                                             &g_origCreateProcessW) && ok;
     return ok;
 }
+// ===== Explorer in-process Control Panel hook (finding 1) =====
+// In Explorer, intl.cpl is not force-loaded at startup (that would make the
+// mod resident for nothing when the Region page is never opened). Instead,
+// hook the loader itself so the CPlApplet hook is installed the moment
+// Explorer loads intl.cpl for its own in-process
+// shell32!Control_RunDLLW path — the classic "Control Panel > Region" route,
+// which is the mod's headline scenario.
+using LoadLibraryExWProc = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
+LoadLibraryExWProc g_origLoadLibraryExW = nullptr;
+std::atomic<bool> g_explorerCplHooked{false};
+// Shared with the eager Control/Rundll32 path in Wh_ModInit.
+bool HookNativeCpl(HMODULE module) {
+    try {
+        auto native = reinterpret_cast<CplProc>(reinterpret_cast<void*>(GetProcAddress(module, "CPlApplet")));
+        if (!native) {
+            Wh_Log(L"Fallback to native intl.cpl: CPlApplet export missing; no CPL hook installed");
+            return false;
+        }
+        if (!WindhawkUtils::SetFunctionHook(native, CplHook, &g_nativeCpl)) {
+            Wh_Log(L"CPlApplet hook registration failed; fallback to native");
+            return false;
+        }
+        g_nativeModule = module;
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+HMODULE WINAPI LoadLibraryExW_hook(LPCWSTR name, HANDLE file, DWORD flags) {
+    HMODULE result = g_origLoadLibraryExW ? g_origLoadLibraryExW(name, file, flags)
+                                           : LoadLibraryExW(name, file, flags);
+    try {
+        if (result && name && !g_explorerCplHooked.load(std::memory_order_acquire)) {
+            std::wstring requested = Slashes(name);
+            size_t slash = requested.rfind(L'\\');
+            std::wstring leaf = requested.substr(slash == std::wstring::npos ? 0 : slash + 1);
+            if (Equal(leaf, L"intl.cpl")) {
+                // Take our own reference so the module stays resident once
+                // hooked: Explorer releases its own reference on CPL_EXIT,
+                // and the hooked CPlApplet export must stay valid for later
+                // activations in the same Explorer process.
+                HMODULE pinned = g_origLoadLibraryExW
+                    ? g_origLoadLibraryExW(name, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32)
+                    : LoadLibraryExW(name, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+                if (pinned && HookNativeCpl(pinned)) {
+                    g_explorerCplHooked.store(true, std::memory_order_release);
+                    Wh_Log(L"intl.cpl loaded in Explorer; CPlApplet hook installed");
+                } else if (pinned) {
+                    FreeLibrary(pinned);
+                }
+            }
+        }
+    } catch (...) {
+        // Never let a bookkeeping failure here affect the real load.
+    }
+    return result;
+}
+bool InstallExplorerCplHook() {
+    // Already loaded before we got here (e.g. a Region page opened earlier
+    // this session, before the mod initialized): hook it directly rather
+    // than waiting for a future load that may never come.
+    HMODULE already = GetModuleHandleW(L"intl.cpl");
+    if (already) {
+        HMODULE pinned = LoadLibraryExW((g_system + L"\\intl.cpl").c_str(), nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (pinned && HookNativeCpl(pinned)) {
+            g_explorerCplHooked.store(true, std::memory_order_release);
+            Wh_Log(L"intl.cpl already loaded in Explorer; CPlApplet hook installed");
+            return true;
+        }
+        if (pinned) FreeLibrary(pinned);
+    }
+    // Resolve from kernelbase.dll, not the kernel32 import: internal loader
+    // callers (including the ones that bring in intl.cpl) go straight to
+    // kernelbase.
+    HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+    if (!kernelBase) return false;
+    auto real = reinterpret_cast<LoadLibraryExWProc>(
+        reinterpret_cast<void*>(GetProcAddress(kernelBase, "LoadLibraryExW")));
+    if (!real) return false;
+    return WindhawkUtils::SetFunctionHook(real, LoadLibraryExW_hook, &g_origLoadLibraryExW);
+}
 bool Environment() {
     SYSTEM_INFO native{}; GetNativeSystemInfo(&native);
     if (native.wProcessorArchitecture != PROCESSOR_ARCHITECTURE_AMD64) return false;
@@ -8026,21 +8238,12 @@ BOOL Wh_ModInit() {
         }
 
         // In Control and Rundll32 hosts, intl.cpl is directly loaded and hooked during init.
-        // In Explorer, we do not force-load intl.cpl at startup.
+        // In Explorer, we do not force-load intl.cpl at startup: instead we hook the
+        // loader so the in-process shell32!Control_RunDLLW path gets caught too (finding 1).
         if (g_host != Host::Explorer) {
             g_nativeModule = LoadLibraryExW((g_system + L"\\intl.cpl").c_str(), nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
             if (!g_nativeModule) throw std::runtime_error("native intl.cpl unavailable");
-            auto native = reinterpret_cast<CplProc>(reinterpret_cast<void*>(GetProcAddress(g_nativeModule, "CPlApplet")));
-            if (!native) {
-                Wh_Log(L"Fallback to native intl.cpl: CPlApplet export missing; no CPL hook installed");
-                FreeLibrary(g_nativeModule); g_nativeModule = nullptr;
-                CloseHandle(g_idle); g_idle = nullptr;
-                CloseHandle(g_jobsIdle); g_jobsIdle = nullptr;
-                VehRemove();
-                return FALSE;
-            }
-            if (!WindhawkUtils::SetFunctionHook(native, CplHook, &g_nativeCpl)) {
-                Wh_Log(L"CPlApplet hook registration failed; fallback to native");
+            if (!HookNativeCpl(g_nativeModule)) {
                 FreeLibrary(g_nativeModule); g_nativeModule = nullptr;
                 CloseHandle(g_idle); g_idle = nullptr;
                 CloseHandle(g_jobsIdle); g_jobsIdle = nullptr;
@@ -8052,6 +8255,13 @@ BOOL Wh_ModInit() {
             // CPL_INIT/activation, so a session that never opens the Region page
             // pays none of that cost (finding 5).
             Wh_Log(L"Region-only CPlApplet dispatch queued; private provider will prepare on first activation");
+        } else {
+            if (!InstallExplorerCplHook()) {
+                Wh_Log(L"WARNING: could not install the Explorer intl.cpl loader hook; "
+                       L"in-process Control Panel > Region will show the modern page");
+            } else {
+                Wh_Log(L"Explorer intl.cpl loader hook active; CPlApplet will be hooked once intl.cpl loads");
+            }
         }
 
         if (redirectWanted && g_host == Host::Explorer) {
@@ -8079,7 +8289,12 @@ void Wh_ModBeforeUninit() {
         AcquireSRWLockExclusive(&g_gate);
         g_stopping.store(true, std::memory_order_release);
         ReleaseSRWLockExclusive(&g_gate);
-        
+
+        // A first-use setup blocked in WinHTTP (connect/send/receive, or
+        // between the two pinned payloads) must not sit out its timeouts
+        // during unload (finding 3).
+        CancelInFlightDownload();
+
         Wh_Log(L"Unloading: requesting normal close of private-provider dialogs");
         
         ULONGLONG start = GetTickCount64();
