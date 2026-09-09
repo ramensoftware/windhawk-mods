@@ -316,6 +316,11 @@ If you find a mistake and for additional details, please click [here](https://gi
 // Thread-local storage for file paths
 thread_local std::vector<std::wstring> tl_filePaths;
 
+// RemoveMenu() detaches a filtered submenu without destroying it, passing
+// ownership to us. We stash the handle here and destroy it in
+// ExitMenuTracking(), after the session's tracking call has returned.
+thread_local std::vector<HMENU> tl_detachedSubmenus;
+
 // Result of a single ancestor-chain classification of a popup menu's owner
 // window: whether to filter the menu at all, and (for ShellDefView) enough
 // to skip a redundant re-walk later when looking up the selected files.
@@ -1369,8 +1374,13 @@ std::wstring RemoveAmpersands(const std::wstring& str) {
 
 // Utility function to convert string to lowercase
 std::wstring ToLower(const std::wstring& str) {
+    // CharLowerBuffW covers the full Unicode range, unlike ::towlower in
+    // the CRT's default "C" locale, which only maps ASCII A-Z -- needed
+    // so non-Latin Custom Items (Cyrillic, Greek, Turkish, etc.) can match.
     std::wstring result = str;
-    std::transform(result.begin(), result.end(), result.begin(), ::towlower);
+    if (!result.empty()) {
+        CharLowerBuffW(result.data(), (DWORD)result.size());
+    }
     return result;
 }
 
@@ -1552,10 +1562,14 @@ void ProcessMenu(HMENU hMenu) {
                 
                 // Check if this item should be removed
                 if (ShouldRemoveMenuItem(text, isGreyed)) {
-                    // RemoveMenu detaches without destroying the submenu,
-                    // unlike DeleteMenu, in case a third-party IContextMenu
-                    // extension owns it and expects to destroy it itself.
+                    // RemoveMenu detaches (doesn't destroy) the submenu so a
+                    // third-party owner can still manage it; we now own the
+                    // handle otherwise, so stash it for ExitMenuTracking().
+                    HMENU hDetached = mii.hSubMenu;
                     RemoveMenu(hMenu, i, MF_BYPOSITION);
+                    if (hDetached) {
+                        tl_detachedSubmenus.push_back(hDetached);
+                    }
                     deleted = true;
                     anyRemoved = true;
                 }
@@ -1683,8 +1697,8 @@ LRESULT CALLBACK MenuCallWndProcRetHook(int nCode, WPARAM wParam, LPARAM lParam)
 }
 
 // Installs the thread-local hook on the outermost TrackPopupMenu(Ex) call
-// (nested calls bump the depth counter). SetWindowsHookEx runs under
-// g_activeMenuHooksMutex; COM inits once per session outside that lock.
+// (nested calls bump the depth counter). SetWindowsHookEx runs outside
+// g_activeMenuHooksMutex; COM inits once per session outside that lock too.
 void EnterMenuTracking() {
     if (tl_menuDepth == 0) {
         tl_selectionLookupFailed = false;
@@ -1697,18 +1711,26 @@ void EnterMenuTracking() {
         }
         tl_sessionNeedFiles = needFiles;
         if (!tl_menuBypassed) {
-            {
-                std::lock_guard<std::mutex> lock(g_activeMenuHooksMutex);
-                if (!g_uninitInProgress) {
-                    tl_hMenuHook = SetWindowsHookEx(WH_CALLWNDPROCRET, MenuCallWndProcRetHook,
-                                                     nullptr, GetCurrentThreadId());
-                    if (tl_hMenuHook) {
-                        g_activeMenuHooks.push_back(tl_hMenuHook);
-                    } else {
-                        Wh_Log(L"SetWindowsHookEx failed (err %lu); submenus won't be filtered",
-                               GetLastError());
+            HHOOK hHook = SetWindowsHookEx(WH_CALLWNDPROCRET, MenuCallWndProcRetHook,
+                                            nullptr, GetCurrentThreadId());
+            if (hHook) {
+                bool uninitRacing = false;
+                {
+                    std::lock_guard<std::mutex> lock(g_activeMenuHooksMutex);
+                    uninitRacing = g_uninitInProgress;
+                    if (!uninitRacing) {
+                        tl_hMenuHook = hHook;
+                        g_activeMenuHooks.push_back(hHook);
                     }
                 }
+                // Wh_ModUninit's sweep can't have seen this handle -- it
+                // wasn't in the registry yet -- so unhook it ourselves.
+                if (uninitRacing) {
+                    UnhookWindowsHookEx(hHook);
+                }
+            } else {
+                Wh_Log(L"SetWindowsHookEx failed (err %lu); submenus won't be filtered",
+                       GetLastError());
             }
             if (needFiles) {
                 HRESULT hrCom = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -1746,6 +1768,13 @@ void ExitMenuTracking() {
             CoUninitialize();
             tl_sessionComInitialized = false;
         }
+        // Runs after TrackPopupMenu(Ex)_Original has returned, so each
+        // handle here is already unreachable from the tree the shell
+        // destroyed -- no double-free risk from destroying it now.
+        for (HMENU h : tl_detachedSubmenus) {
+            DestroyMenu(h);
+        }
+        tl_detachedSubmenus.clear();
         tl_filePaths.clear();
     }
 }
@@ -1784,10 +1813,10 @@ void ProcessPopupMenu(HMENU hMenu, HWND hWnd, ShellViewKind kind, const wchar_t*
         }
     }
     
-    // MenuCallWndProcRetHook processes this same top-level menu too (via
-    // WM_INITMENUPOPUP) after Explorer finishes populating it -- better
-    // positioned than here. Only fall back if the hook wasn't installed.
-    if (!tl_hMenuHook) {
+    // MenuCallWndProcRetHook re-processes this menu via WM_INITMENUPOPUP,
+    // but TPM_NONOTIFY can suppress that message, so run this pass
+    // unconditionally too -- cheap, since an already-filtered menu removes nothing.
+    {
         std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
         ProcessMenu(hMenu);
     }
@@ -2080,9 +2109,9 @@ void Wh_ModUninit() {
     }
 
     // UnhookWindowsHookEx can return while the hook procedure is still
-    // running on its own thread, so wait here until any in-flight calls
-    // finish -- otherwise unmapping the mod's image could crash it.
-    while (g_activeHookCalls.load() > 0) {
+    // running on its own thread; wait briefly for in-flight calls to
+    // finish, but don't risk hanging on a slow downstream hook forever.
+    for (int waited = 0; g_activeHookCalls.load() > 0 && waited < 500; waited += 10) {
         Sleep(10);
     }
 }
