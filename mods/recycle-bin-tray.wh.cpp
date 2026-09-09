@@ -30,13 +30,13 @@ The mod is designed to remain lightweight and self-contained while integrating w
 * **Automatic recovery** — a configurable fallback timer periodically checks the Recycle Bin state in case a Shell notification is missed.
 * **Taskbar restart recovery** — the tray icon is recreated after Explorer or the Windows taskbar is restarted.
 * **Light / dark theme support** — vector and font rendering adapt to the current Windows system theme; custom icons use Light-theme source files, optional Dark-theme alternatives, and can automatically adapt transparent monochrome image colors to the active theme.
-* **DPI-aware rendering** — the icon size follows the tray's DPI and vector icons are rendered at high internal resolution for smoother results.
+* **DPI-aware rendering** — the render target follows the tray's DPI, while Shell-reported tray geometry is tracked separately for layout changes. Vector icons are rendered at high internal resolution for smoother results.
 * **Four icon styles**:
   * `system` — use the native Windows Recycle Bin icon.
   * `vector` — render a lightweight custom vector Windows 11-style icon.
   * `font` — render a glyph from an installed font family.
   * `custom` — load an `.ico`, `.png`, `.bmp`, or `.jpg` file.
-* **Two vector variants** — choose between a rounded/straight style and a Fluent-inspired trapezoidal style optimized for the system tray.
+* **Three vector variants** — choose between a minimal geometric style with a lifted-lid full state, a Fluent-inspired trapezoidal style, and a compact symbolic style.
 * **Separate icons for states and themes** — custom mode uses Empty/Full Light-theme files with optional Empty/Full Dark-theme alternatives.
 * **Configurable mouse actions** — independently configure left click, double-click, middle click, and right click.
 * **Recycle Bin context menu** — open, empty, or open Properties using Windows Shell-provided localized labels when available.
@@ -178,10 +178,11 @@ The icon is generated at runtime with GDI+ instead of loading an image file.
 
 It is designed for a clean Windows 11-style appearance and is rendered at a **4× internal resolution** before being reduced to the final tray size for smoother edges.
 
-Two variants are available:
+Three variants are available:
 
-* **Style 1** — straight/rounded body.
+* **Style 1** — minimal geometric 24×24 silhouette. The empty state uses a closed lid; the full state lifts the lid and exposes two compact content shapes while keeping the body unchanged.
 * **Style 2** — Fluent-inspired trapezoidal body optimized for tray-size rendering. The empty state uses a clean outline, while the full state uses the same silhouette with a filled body.
+* **Style 3** — compact symbolic silhouette with a simple lid, handle, and body. The empty state uses an outlined body, while the full state uses the same silhouette with a filled body.
 
 ### Font
 
@@ -243,9 +244,9 @@ Custom mode accepts:
 
 Images are automatically resized to match the current system tray icon target size.
 
-For the cleanest raster result, prefer source images designed for small icon sizes, ideally matching the active tray target size or a clean integer multiple of it (for example 16×16, 32×32, 48×48, or 64×64 when appropriate). The actual tray target depends on the Windows display scale factor; refer to the **Theme and DPI Handling** table below. Very thin or diagonal strokes can still show some aliasing at small tray sizes because they cannot always map perfectly to the pixel grid, even with coverage-aware alpha downsampling.
+For the cleanest raster result, use artwork designed to remain readable at small tray sizes. Ideally, use a source close to the active tray target size or a clean integer multiple of it (for example 16×16, 32×32, 48×48, or 64×64 when appropriate). Avoid oversized raster artwork with hairline details: a stroke that looks clean in the source can become sub-pixel when Windows renders the tray at 16 px (100% scaling), where no resampling method can fully reconstruct the original visual weight. The actual tray target depends on the Windows display scale factor; refer to the **Theme and DPI Handling** table below.
 
-Custom Icon color handling can either preserve the colors stored in the selected source image or **Automatically adapt monochrome image colors to the active theme**. Theme adaptation reads the selected image's alpha channel, downsamples it by exact pixel-area coverage, and recolors the resulting mask in memory for the active Light or Dark theme. No source file is modified. Native `.ico` files and images without an alpha channel keep their original colors.
+Custom Icon color handling can either preserve the colors stored in the selected source image or **Automatically adapt monochrome image colors to the active theme**. Theme adaptation reads the selected image's alpha channel, downsamples it by exact pixel-area coverage, and recolors the resulting mask in memory for the active Light or Dark theme. At the smallest 16 px Dark-theme target, a small stroke-preservation and coverage adjustment helps thin monochrome artwork retain more visual weight. For best results, still use simple transparent monochrome artwork designed to remain readable at small sizes; very fine raster details can remain softer at 100% display scaling. No source file is modified. Native `.ico` files and images without an alpha channel keep their original colors.
 
 For transparent monochrome images, the **Light theme** Empty and Full files are normally enough. If a Dark-theme field is blank, the corresponding Light-theme file is reused automatically. The optional **Dark theme** section is only needed when you want different source artwork in Dark theme.
 
@@ -298,7 +299,7 @@ A one-second startup timer performs an additional initial state check after the 
 
 The tray icon is regenerated when Windows reports a relevant theme or display configuration change.
 
-System tray icon sizes in Windows 11 are not fixed; they scale dynamically based on your display's DPI scale factor.
+The mod derives its icon render target from the tray/display DPI.
 
 | Scale Factor | Icon Size |
 | ------------ | --------- |
@@ -310,7 +311,7 @@ System tray icon sizes in Windows 11 are not fixed; they scale dynamically based
 | 300%         | 48×48 px  |
 | 400%         | 64×64 px  |
 
-Its size is obtained from the current tray/display DPI when the relevant DPI APIs are available.
+The target size is obtained from the current tray/display DPI when the relevant DPI APIs are available. The rectangle returned by `Shell_NotifyIconGetRect` is tracked separately as a geometry-change signal; its slot bounds are not treated as a documented HICON target size.
 
 Vector icons are rendered internally at **4× the target resolution** before being downsampled with high-quality interpolation to fit the active tray size. This reduces jagged edges while keeping rendering and memory usage low.
 
@@ -324,14 +325,14 @@ This allows the icon to recover without requiring the Windhawk mod to be manuall
 
 ## Technical Notes
 
-* The tray icon is hosted by a hidden message-only window owned by the mod's dedicated tray thread.
+* The tray icon is hosted by a hidden top-level tool window owned by the mod's dedicated tray thread.
 * Drag & drop uses the standard Windows OLE `IDropTarget` mechanism and accepts dropped file lists exposed through `CF_HDROP`.
 * The mod does not create a separate executable or Windows service.
 * GDI+ is initialized lazily only when vector rendering or custom raster-image loading requires it; native `.ico` loading can bypass GDI+. It is shut down after the tray thread has terminated.
 * Tray timers are explicitly cancelled during window destruction before icon and Shell resources are released.
-* Explorer/taskbar restarts are detected through the standard `TaskbarCreated` broadcast, relayed by the invisible top-level helper window to the message-only tray host.
+* Explorer/taskbar restarts are detected through the standard `TaskbarCreated` broadcast received by the hidden tray host.
 * The current icon handle is explicitly destroyed whenever the icon is replaced or the mod unloads.
-* The tray thread uses Per-Monitor V2 DPI awareness and follows the rectangle reported by `Shell_NotifyIconGetRect`.
+* The tray thread uses Per-Monitor V2 DPI awareness, follows the rectangle reported by `Shell_NotifyIconGetRect`, and tracks slot geometry changes independently from the DPI-derived render size.
 * A transparent top-level helper window provides the physical per-monitor DPI reference and is also used as the OLE drop overlay when drag & drop is enabled.
 * Explorer owns notification-area placement. If Windows exposes the tray on multiple taskbars, drag & drop follows the single icon rectangle returned by the Shell API.
 * A low-level mouse hook is used only while drag & drop support is enabled to detect the beginning and end of a potential drag; OLE `IDropTarget` remains responsible for the actual drop.
@@ -443,14 +444,16 @@ This project is licensed under the GNU General Public License Version 3.0.
   - style: style1
     $name: "Style variant"
     $name:fr-FR: "Variante du style"
-    $description: "Style 1 uses a rounded straight-sided body. Style 2 uses a Fluent-inspired trapezoidal silhouette optimized for the system tray, with an outlined empty state and filled full state."
-    $description:fr-FR: "Le Style 1 utilise un corps droit aux coins arrondis. Le Style 2 utilise une silhouette trapézoïdale inspirée de Fluent et optimisée pour la zone de notification, avec un contour à l'état vide et un corps rempli lorsqu'elle contient des éléments."
+    $description: "Style 1 uses a minimal geometric 24x24 silhouette with a lifted lid and visible contents for the full state. Style 2 uses a Fluent-inspired trapezoidal silhouette. Style 3 uses a compact symbolic silhouette with a simple lid, handle, and body."
+    $description:fr-FR: "Le Style 1 utilise une silhouette géométrique minimale sur une grille 24x24, avec couvercle soulevé et contenu visible lorsque la corbeille est pleine. Le Style 2 utilise une silhouette trapézoïdale inspirée de Fluent. Le Style 3 utilise une silhouette symbolique compacte avec un couvercle, une poignée et un corps simples."
     $options:
-      - style1: Style 1 (Straight / Rounded)
+      - style1: Style 1 (Minimal / Geometric)
       - style2: Style 2 (Fluent / Trapezoidal)
+      - style3: Style 3 (Symbolic / Simple)
     $options:fr-FR:
-      - style1: Style 1 (Droit / Arrondi)
+      - style1: Style 1 (Minimal / Géométrique)
       - style2: Style 2 (Fluent / Trapézoïdal)
+      - style3: Style 3 (Symbolique / Simple)
   $name: "Vector"
   $name:fr-FR: "Vectoriel"
   $description: "Used only when Icon style is set to Vector."
@@ -506,8 +509,8 @@ This project is licensed under the GNU General Public License Version 3.0.
   - colorMode: original
     $name: "Color handling"
     $name:fr-FR: "Gestion des couleurs"
-    $description: "Choose whether to preserve the source image colors or automatically adapt transparent monochrome images to the current Light or Dark theme. Native .ico files and images without transparency keep their original colors."
-    $description:fr-FR: "Choisissez de conserver les couleurs de l'image source ou d'adapter automatiquement les images monochromes transparentes au thème clair ou sombre actif. Les fichiers .ico natifs et les images sans transparence conservent leurs couleurs d'origine."
+    $description: "Choose whether to preserve the source image colors or automatically adapt transparent monochrome images to the current Light or Dark theme. For theme adaptation, use simple artwork designed for small icon sizes; very thin raster details may look softer at 16 px / 100% scaling. Native .ico files and images without transparency keep their original colors."
+    $description:fr-FR: "Choisissez de conserver les couleurs de l'image source ou d'adapter automatiquement les images monochromes transparentes au thème clair ou sombre actif. Pour l'adaptation au thème, privilégiez un dessin simple conçu pour les petites tailles d'icône ; les détails raster très fins peuvent paraître plus doux à 16 px / 100 %. Les fichiers .ico natifs et les images sans transparence conservent leurs couleurs d'origine."
     $options:
       - original: Keep original image colors
       - themeTint: Automatically adapt monochrome image colors to theme
@@ -550,7 +553,7 @@ This project is licensed under the GNU General Public License Version 3.0.
   $description:fr-FR: "Utilisé uniquement lorsque le style d'icône est Fichiers personnalisés."
 
 - actions:
-  - leftClick: open
+  - leftClick: none
     $name: "Left click"
     $name:fr-FR: "Clic gauche"
     $options:
@@ -642,7 +645,6 @@ This project is licensed under the GNU General Public License Version 3.0.
 #define INITGUID
 #include <algorithm>
 #include <atomic>
-#include <cwctype>
 #include <cmath>
 #include <memory>
 #include <new>
@@ -669,7 +671,7 @@ constexpr UINT WM_USER_START_DRAG_POLL = WM_USER + 101;
 constexpr UINT WM_USER_STOP_DRAG_POLL = WM_USER + 102;
 constexpr UINT WM_USER_END_OLE_DRAG = WM_USER + 103;
 constexpr UINT WM_USER_TRAY_DPI_CHANGED = WM_USER + 104;
-constexpr UINT WM_USER_DISPLAY_CHANGE = WM_USER + 105;
+constexpr UINT WM_USER_SHUTDOWN = WM_USER + 105;
 constexpr int VECTOR_SUPERSAMPLE = 4;
 constexpr wchar_t TRAY_WINDOW_CLASS[] = L"WindhawkRecycleTrayClass";
 constexpr wchar_t DROP_OVERLAY_CLASS[] = L"WindhawkBinDropOverlay";
@@ -797,6 +799,8 @@ constexpr UINT TIMER_STARTUP_ID = 103;
 constexpr UINT TIMER_DRAG_POLL_ID = 104;
 constexpr UINT TIMER_DPI_CHECK_ID = 105;
 constexpr UINT TIMER_DISPLAY_SETTLE_ID = 106;
+constexpr UINT TIMER_SHELL_COALESCE_ID = 107;
+constexpr UINT TIMER_DPI_REINSTALL_ID = 108;
 
 // Active drag polling runs only while a physical left-button gesture is in progress.
 constexpr UINT DRAG_POLL_INTERVAL_ACTIVE_MS = 20;
@@ -804,6 +808,12 @@ constexpr UINT DRAG_POLL_INTERVAL_ACTIVE_MS = 20;
 // Display changes are debounced, then sampled until the tray rectangle is stable.
 constexpr UINT DISPLAY_SETTLE_INTERVAL_MS = 200;
 constexpr UINT DISPLAY_SETTLE_MAX_ATTEMPTS = 10;
+
+// Coalesce bursts of per-item Shell notifications into one Recycle Bin query.
+constexpr UINT SHELL_COALESCE_INTERVAL_MS = 300;
+
+// Give the Shell a short one-shot settle window after the tray owner changes DPI.
+constexpr UINT DPI_REINSTALL_DELAY_MS = 250;
 
 constexpr UINT IDM_OPEN = 201;
 constexpr UINT IDM_EMPTY = 202;
@@ -868,6 +878,7 @@ struct TrayState {
     bool isIconRectValid = false;
     bool dragPollTimerActive = false;
     bool displaySettleTimerActive = false;
+    bool shellCoalesceTimerActive = false;
     RECT displaySettleLastRect = { 0 };
     bool displaySettleHasRect = false;
     bool displaySettleProbedStableRect = false;
@@ -888,14 +899,16 @@ inline std::atomic_bool g_dropOverlayArmed{false};
 // Suppresses the nested DPI notification while a display-settle probe handles it synchronously.
 inline bool g_displayDpiProbeActive = false;
 
-struct TrayIconSizeCache {
-    int size = 0;
+struct TrayGeometryCache {
+    int renderSize = 0;
+    int slotWidth = 0;
+    int slotHeight = 0;
     UINT dpi = 0;
     HMONITOR monitor = NULL;
     bool isValid = false;
 };
 
-static TrayIconSizeCache g_iconSizeCache;
+static TrayGeometryCache g_trayGeometryCache;
 
 // Cache invalidation
 
@@ -904,15 +917,15 @@ void InvalidateIconRectCache() {
     g_trayState.isIconRectValid = false;
 }
 
-// Invalidates only the cached tray DPI and icon size.
-void InvalidateIconSizeCache() {
-    g_iconSizeCache.isValid = false;
+// Invalidates cached tray geometry, DPI and render size.
+void InvalidateTrayGeometryCache() {
+    g_trayGeometryCache.isValid = false;
 }
 
 // Invalidates geometry and DPI caches together.
 void InvalidateAllCaches() {
     InvalidateIconRectCache();
-    InvalidateIconSizeCache();
+    InvalidateTrayGeometryCache();
 }
 
 // User settings
@@ -999,20 +1012,58 @@ bool g_ignoreNextLeftUp = false;
 bool g_trayVersion4 = false;
 bool g_loggedInitialState = false;
 std::atomic_bool g_shutdownRequested{false};
+bool g_hostDpiProbeActive = false;
+bool g_pendingDpiShellReinstall = false;
 bool QueryTrayIconRect(HWND hWnd, RECT& rect, bool forceRefresh);
 bool RefreshTrayDpiFromIconRect(HWND hWnd, bool forceRegeneration);
 static HWND GetSafeHwnd();
 const WCHAR* TimerName(UINT timerId);
 bool SetLoggedTimer(HWND hWnd, UINT timerId, UINT intervalMs);
 bool KillLoggedTimer(HWND hWnd, UINT timerId);
-#if defined(__clang__)
-[[clang::no_destroy]]
-#endif
+LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam);
 UniqueIcon g_hCurrentIcon;
 bool g_forceIconRegen = true;
 ULONG_PTR g_gdiplusToken = 0;
 bool g_gdiplusInitialized = false;
 UINT g_wmTaskbarCreated = 0;
+
+static bool SuspendMouseHookForBlockingRecycle() {
+    if (!g_hMouseHook) {
+        return false;
+    }
+
+    HHOOK hook = g_hMouseHook;
+    if (!UnhookWindowsHookEx(hook)) {
+        Wh_Log(L"D&D: failed to suspend WH_MOUSE_LL hook before recycle: %lu",
+               GetLastError());
+        return false;
+    }
+
+    g_hMouseHook = NULL;
+    Wh_Log(L"D&D: WH_MOUSE_LL hook suspended during synchronous recycle");
+    return true;
+}
+
+static void RestoreMouseHookAfterBlockingRecycle(bool wasSuspended) {
+    if (!wasSuspended || g_hMouseHook || !g_settings.enableDragDrop ||
+        g_shutdownRequested.load()) {
+        return;
+    }
+
+    g_hMouseHook = SetWindowsHookExW(
+        WH_MOUSE_LL,
+        LowLevelMouseProc,
+        g_hThisModule,
+        0);
+
+    if (!g_hMouseHook) {
+        Wh_Log(L"D&D: failed to restore WH_MOUSE_LL hook after recycle: %lu",
+               GetLastError());
+        return;
+    }
+
+    Wh_Log(L"D&D: WH_MOUSE_LL hook restored after synchronous recycle");
+}
 
 // OLE drop target
 class RecycleBinDropTarget : public IDropTarget {
@@ -1202,7 +1253,15 @@ private:
 
         bool completed = false;
         if (allQueued) {
+            const bool mouseHookSuspended =
+                SuspendMouseHookForBlockingRecycle();
+
+            // Keep the validated synchronous OLE flow.
+            // Suspend the low-level hook while this call blocks.
             hr = pfo->PerformOperations();
+
+            RestoreMouseHookAfterBlockingRecycle(mouseHookSuspended);
+
             if (FAILED(hr)) {
                 Wh_Log(L"D&D: PerformOperations failed: 0x%08X", hr);
             } else {
@@ -1335,8 +1394,8 @@ public:
                 (void)GlobalUnlock(medium.hGlobal);
 
                 if (completed) {
-                    // IFileOperation already removed the original. Report an optimized
-                    // move so Explorer doesn't try to delete the source item again.
+                    // The target already recycled the items; report NONE as the performed
+                    // effect so the source doesn't delete them again.
                     const bool effectReported =
                         ReportPerformedDropEffect(pDataObj, DROPEFFECT_NONE);
                     *pdwEffect = DROPEFFECT_NONE;
@@ -1385,34 +1444,20 @@ static bool EnsureGdiplusInitialized() {
     return g_gdiplusInitialized;
 }
 
-// Window procedure for the transparent overlay window
-LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
-    // Message-only windows don't receive desktop broadcasts. Relay the ones
-    // needed by tray state through this top-level overlay window.
-    if (g_wmTaskbarCreated && message == g_wmTaskbarCreated) {
-        HWND hMainWnd = GetSafeHwnd();
-        if (hMainWnd) {
-            Wh_Log(L"Tray: TaskbarCreated received via overlay.");
-            (void)PostMessageW(hMainWnd, g_wmTaskbarCreated, 0, 0);
-        }
-        return 0;
-    }
+static void ShutdownGdiplusIfInitialized() {
+    if (!g_gdiplusInitialized) return;
 
+    Gdiplus::GdiplusShutdown(g_gdiplusToken);
+    g_gdiplusToken = 0;
+    g_gdiplusInitialized = false;
+}
+
+// Window procedure for the transparent DPI and drag-and-drop overlay.
+LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
     case WM_NCHITTEST:
         // Keep hit-testing deterministic; CheckDragStatus owns overlay visibility.
         return HTCLIENT;
-
-    case WM_DISPLAYCHANGE: {
-        // The Shell can move the tray after this broadcast; let the host debounce
-        // the transition instead of sampling a potentially stale DPI immediately.
-        HWND hMainWnd = GetSafeHwnd();
-        if (hMainWnd) {
-            Wh_Log(L"DPI: WM_DISPLAYCHANGE received via overlay.");
-            (void)PostMessageW(hMainWnd, WM_USER_DISPLAY_CHANGE, 0, 0);
-        }
-        return 0;
-    }
 
     case WM_DPICHANGED: {
         // Apply Windows' suggested bounds so the hidden reference window
@@ -1506,6 +1551,25 @@ static bool ProbeDpiReferenceAtTray(const RECT& rect) {
     }
 
     return positioned;
+}
+
+// Keep the notification-icon owner on the same physical DPI as the tray.
+static bool ProbeTrayHostDpiAtRect(HWND hWnd, const RECT& rect) {
+    if (!hWnd) return false;
+
+    const bool wasVisible = IsWindowVisible(hWnd) != FALSE;
+
+    g_hostDpiProbeActive = true;
+    const BOOL positioned = SetWindowPos(
+        hWnd, NULL, rect.left, rect.top, 1, 1,
+        SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
+    g_hostDpiProbeActive = false;
+
+    if (!wasVisible) {
+        (void)ShowWindow(hWnd, SW_HIDE);
+    }
+
+    return positioned != FALSE;
 }
 
 // Overlay visibility is derived from the current tray and D&D state.
@@ -1640,7 +1704,9 @@ void LoadSettingsInto(ModSettings& s) {
 
     // Accept only known vector variants.
     ReadStringSetting(L"vector.style", s.vectorStyle, ARRAYSIZE(s.vectorStyle), L"style1");
-    if (_wcsicmp(s.vectorStyle, L"style1") != 0 && _wcsicmp(s.vectorStyle, L"style2") != 0) {
+    if (_wcsicmp(s.vectorStyle, L"style1") != 0 &&
+        _wcsicmp(s.vectorStyle, L"style2") != 0 &&
+        _wcsicmp(s.vectorStyle, L"style3") != 0) {
         StringCchCopyW(s.vectorStyle, ARRAYSIZE(s.vectorStyle), L"style1");
     }
 
@@ -1665,7 +1731,7 @@ void LoadSettingsInto(ModSettings& s) {
     LoadPathSetting(L"customIcon.dark.full",  s.customIconFullDark);
 
     // Parse all mouse actions through one helper.
-    s.leftClickAction   = ReadActionSetting(L"actions.leftClick",   L"open");
+    s.leftClickAction   = ReadActionSetting(L"actions.leftClick",   L"none");
     s.doubleClickAction = ReadActionSetting(L"actions.doubleClick", L"open");
     s.middleClickAction = ReadActionSetting(L"actions.middleClick", L"empty");
     s.rightClickAction  = ReadActionSetting(L"actions.rightClick",  L"contextMenu");
@@ -1737,19 +1803,21 @@ static int GetSmallIconMetricForDpi(UINT dpi) {
 }
 
 int GetTrayIconSize(HWND hWnd) {
-    if (g_iconSizeCache.isValid) {
-        return g_iconSizeCache.size;
+    if (g_trayGeometryCache.isValid) {
+        return g_trayGeometryCache.renderSize;
     }
 
-    // The message-only host has no physical monitor; use the positioned overlay once available.
+    // The hidden host isn't positioned at the tray; use the physical overlay once available.
     HWND dpiReferenceWnd = g_hOverlayWnd ? g_hOverlayWnd : hWnd;
     const UINT dpi = GetDpiForReferenceWindow(dpiReferenceWnd);
 
-    g_iconSizeCache.size = GetSmallIconMetricForDpi(dpi);
-    g_iconSizeCache.dpi = dpi;
-    g_iconSizeCache.monitor = NULL;
-    g_iconSizeCache.isValid = true;
-    return g_iconSizeCache.size;
+    g_trayGeometryCache.renderSize = GetSmallIconMetricForDpi(dpi);
+    g_trayGeometryCache.slotWidth = 0;
+    g_trayGeometryCache.slotHeight = 0;
+    g_trayGeometryCache.dpi = dpi;
+    g_trayGeometryCache.monitor = NULL;
+    g_trayGeometryCache.isValid = true;
+    return g_trayGeometryCache.renderSize;
 }
 
 static bool TryParseGlyph(std::wstring_view str, std::wstring& glyph) {
@@ -1884,7 +1952,12 @@ static HICON CreateIconFromAlphaMask(
             value;
     }
 
-    UniqueBitmap maskBitmap(CreateBitmap(iconSize, iconSize, 1, 1, NULL));
+    const size_t maskStrideBytes =
+        ((static_cast<size_t>(iconSize) + 15) / 16) * 2;
+    std::vector<BYTE> maskBits(maskStrideBytes * iconSize, 0);
+
+    UniqueBitmap maskBitmap(
+        CreateBitmap(iconSize, iconSize, 1, 1, maskBits.data()));
     if (!maskBitmap) return NULL;
 
     ICONINFO iconInfo = {
@@ -1940,6 +2013,9 @@ HICON CreateFontIcon(int iconSize, const std::wstring& glyphStr, std::wstring_vi
     RECT rc = {0, 0, cx, cy};
     DrawTextW(hdcMem.get(), glyphStr.c_str(), -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
+    // GDI may batch DrawTextW; flush before reading CreateDIBSection bits.
+    GdiFlush();
+
     std::vector<BYTE> alphaMask(static_cast<size_t>(cx) * cy);
     for (int i = 0; i < cx * cy; ++i) {
         const DWORD pixel = pBits[i];
@@ -1963,17 +2039,17 @@ static void AddRoundedRect(Gdiplus::GraphicsPath& path, float x, float y, float 
     path.CloseFigure();
 }
 
-static void BuildHandlePath_Style1(Gdiplus::GraphicsPath& path, float s) {
+static void BuildHandlePath_Style3(Gdiplus::GraphicsPath& path, float s) {
     path.Reset();
     AddRoundedRect(path, 6.3f * s, 1.0f * s, 3.4f * s, 2.2f * s, 0.5f * s);
 }
 
-static void BuildLidPath_Style1(Gdiplus::GraphicsPath& path, float s) {
+static void BuildLidPath_Style3(Gdiplus::GraphicsPath& path, float s) {
     path.Reset();
     AddRoundedRect(path, 2.0f * s, 2.6f * s, 12.0f * s, 1.8f * s, 0.7f * s);
 }
 
-static void BuildBodyPath_Style1(Gdiplus::GraphicsPath& path, float s, float inset = 0.0f) {
+static void BuildBodyPath_Style3(Gdiplus::GraphicsPath& path, float s, float inset = 0.0f) {
     float x = (3.4f + inset) * s;
     float y = (5.6f + inset) * s;
     float w = (12.6f - 3.4f - 2.0f * inset) * s;
@@ -2053,6 +2129,73 @@ static void BuildBodyFill_Style2(Gdiplus::GraphicsPath& path, float s) {
     path.CloseFigure();
 }
 
+// Style 1 uses a 24x24 logical coordinate system. The empty silhouette follows
+// the compact geometric trash glyph, while the full state keeps the exact same
+// body and lifts the lid to expose two simple pieces of contents.
+//
+// Keeping all geometry in logical coordinates and applying one scale factor makes
+// the result independent of the final tray size. The existing 4x supersampling
+// then handles 16/20/24/32/40/48/64 px targets consistently across DPI changes.
+static void BuildBodyPath_Style1(Gdiplus::GraphicsPath& path, float s) {
+    path.Reset();
+    const Gdiplus::PointF points[] = {
+        { 4.66675f * s,  9.33325f * s },
+        {19.33340f * s,  9.33325f * s },
+        {18.00010f * s, 21.33330f * s },
+        { 6.00008f * s, 21.33330f * s },
+    };
+    path.AddPolygon(points, ARRAYSIZE(points));
+}
+
+static void BuildLidPath_Style1(Gdiplus::GraphicsPath& path, float s) {
+    path.Reset();
+    const Gdiplus::PointF points[] = {
+        {16.00010f * s, 3.99992f * s },
+        {14.66670f * s, 1.33325f * s },
+        { 9.33342f * s, 1.33325f * s },
+        { 8.00008f * s, 3.99992f * s },
+        { 2.66675f * s, 3.99992f * s },
+        { 2.66675f * s, 6.66659f * s },
+        {21.33340f * s, 6.66659f * s },
+        {21.33340f * s, 3.99992f * s },
+    };
+    path.AddPolygon(points, ARRAYSIZE(points));
+}
+
+static void BuildContentsPath_Style1(Gdiplus::GraphicsPath& path, float s) {
+    path.Reset();
+
+    // Small left piece. Its bottom remains slightly above the body opening so it
+    // doesn't visually merge with the bin after downsampling at 16 px.
+    const Gdiplus::PointF leftPiece[] = {
+        { 8.20f * s, 8.88f * s },
+        { 8.55f * s, 7.72f * s },
+        {10.72f * s, 8.02f * s },
+        {11.05f * s, 8.88f * s },
+    };
+    path.AddPolygon(leftPiece, ARRAYSIZE(leftPiece));
+
+    // Taller right piece. The top is deliberately close to the lifted lid while
+    // preserving a small optical gap, matching the compact taskbar rendition.
+    const Gdiplus::PointF rightPiece[] = {
+        {13.20f * s, 8.88f * s },
+        {13.45f * s, 7.35f * s },
+        {15.20f * s, 6.68f * s },
+        {16.65f * s, 7.58f * s },
+        {16.35f * s, 8.88f * s },
+    };
+    path.AddPolygon(rightPiece, ARRAYSIZE(rightPiece));
+}
+
+static void TiltLidPath_Style1(Gdiplus::GraphicsPath& path, float s) {
+    // Negative angle raises the right side in GDI+'s screen coordinate system.
+    // The pivot is near the visual center of the closed lid, keeping the full
+    // state inside the original 24x24 logical bounds.
+    Gdiplus::Matrix matrix;
+    matrix.RotateAt(-8.0f, Gdiplus::PointF(12.0f * s, 5.0f * s));
+    path.Transform(&matrix);
+}
+
 HICON CreateVectorTrashIcon(int iconSize, bool isEmpty, bool isDarkTheme, std::wstring_view vectorStyle) {
     if (!EnsureGdiplusInitialized()) return NULL;
 
@@ -2062,6 +2205,7 @@ HICON CreateVectorTrashIcon(int iconSize, bool isEmpty, bool isDarkTheme, std::w
     const int bigW = cx * VECTOR_SUPERSAMPLE;
     const int bigH = cy * VECTOR_SUPERSAMPLE;
     const float s = static_cast<float>(bigW) / 16.0f;
+    const float s24 = static_cast<float>(bigW) / 24.0f;
 
     Gdiplus::Bitmap bigBmp(bigW, bigH, PixelFormat32bppARGB);
     {
@@ -2070,17 +2214,42 @@ HICON CreateVectorTrashIcon(int iconSize, bool isEmpty, bool isDarkTheme, std::w
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
 
+        const bool useStyle1 = (vectorStyle.compare(L"style1") == 0);
         const bool useStyle2 = (vectorStyle.compare(L"style2") == 0);
 
-        // Style 2 targets the same bright foreground as Windows tray glyphs.
+        // Styles 1 and 2 target the same bright foreground as Windows tray glyphs.
+        const bool useBrightTrayColor = useStyle1 || useStyle2;
         const Gdiplus::Color color =
-            (isDarkTheme && useStyle2)
+            (isDarkTheme && useBrightTrayColor)
                 ? Gdiplus::Color(255, 255, 255, 255)
                 : (isDarkTheme ? Gdiplus::Color(255, 240, 240, 240)
                                : Gdiplus::Color(255, 30, 30, 30));
         const Gdiplus::SolidBrush brush(color);
 
-        if (useStyle2) {
+        if (useStyle1) {
+            // Body is intentionally identical in both states. The state change is
+            // communicated only by the lid and contents, preserving a stable tray
+            // silhouette and avoiding size/weight jumps between empty and full.
+            Gdiplus::GraphicsPath bodyPath;
+            BuildBodyPath_Style1(bodyPath, s24);
+            g.FillPath(&brush, &bodyPath);
+
+            if (isEmpty) {
+                Gdiplus::GraphicsPath lidPath;
+                BuildLidPath_Style1(lidPath, s24);
+                g.FillPath(&brush, &lidPath);
+            } else {
+                // Contents are painted before the lid so they appear behind it.
+                Gdiplus::GraphicsPath contentsPath;
+                BuildContentsPath_Style1(contentsPath, s24);
+                g.FillPath(&brush, &contentsPath);
+
+                Gdiplus::GraphicsPath lidPath;
+                BuildLidPath_Style1(lidPath, s24);
+                TiltLidPath_Style1(lidPath, s24);
+                g.FillPath(&brush, &lidPath);
+            }
+        } else if (useStyle2) {
             // A one-unit stroke is about 2 px at the common 32 px tray size.
             Gdiplus::Pen pen(color, 1.35f * s);
             pen.SetLineJoin(Gdiplus::LineJoinRound);
@@ -2116,20 +2285,21 @@ HICON CreateVectorTrashIcon(int iconSize, bool isEmpty, bool isDarkTheme, std::w
             BuildLidPath_Style2(lidPath, s);
             g.FillPath(&brush, &lidPath);
         } else {
+            // Style 3 is the compact symbolic renderer.
             Gdiplus::GraphicsPath handlePath;
-            BuildHandlePath_Style1(handlePath, s);
+            BuildHandlePath_Style3(handlePath, s);
             g.FillPath(&brush, &handlePath);
 
             Gdiplus::GraphicsPath lidPath;
-            BuildLidPath_Style1(lidPath, s);
+            BuildLidPath_Style3(lidPath, s);
             g.FillPath(&brush, &lidPath);
 
             if (isEmpty) {
                 const float wall = 1.4f;
                 Gdiplus::GraphicsPath outerPath;
-                BuildBodyPath_Style1(outerPath, s, 0.0f);
+                BuildBodyPath_Style3(outerPath, s, 0.0f);
                 Gdiplus::GraphicsPath innerPath;
-                BuildBodyPath_Style1(innerPath, s, wall);
+                BuildBodyPath_Style3(innerPath, s, wall);
 
                 Gdiplus::Region region(&outerPath);
                 region.Exclude(&innerPath);
@@ -2143,7 +2313,7 @@ HICON CreateVectorTrashIcon(int iconSize, bool isEmpty, bool isDarkTheme, std::w
                 g.FillRegion(&brush, &region);
             } else {
                 Gdiplus::GraphicsPath bodyPath;
-                BuildBodyPath_Style1(bodyPath, s, 0.0f);
+                BuildBodyPath_Style3(bodyPath, s, 0.0f);
                 g.FillPath(&brush, &bodyPath);
             }
         }
@@ -2207,7 +2377,10 @@ bool IsIcoExtension(std::wstring_view path) {
 
 // Downsample source alpha by exact pixel-area coverage instead of interpolation.
 static bool BuildAreaResampledAlphaMask(
-    Gdiplus::Bitmap& source, int iconSize, std::vector<BYTE>& alphaMask) {
+    Gdiplus::Bitmap& source,
+    int iconSize,
+    bool preserveThinStrokes,
+    std::vector<BYTE>& alphaMask) {
     const int srcWidth = static_cast<int>(source.GetWidth());
     const int srcHeight = static_cast<int>(source.GetHeight());
     if (srcWidth <= 0 || srcHeight <= 0 || iconSize <= 0) {
@@ -2239,6 +2412,45 @@ static bool BuildAreaResampledAlphaMask(
     }
 
     source.UnlockBits(&sourceData);
+
+    if (preserveThinStrokes) {
+        std::vector<BYTE> expandedAlpha(sourceAlpha);
+
+        for (int y = 0; y < srcHeight; ++y) {
+            for (int x = 0; x < srcWidth; ++x) {
+                BYTE neighborMax = 0;
+
+                for (int dy = -1; dy <= 1; ++dy) {
+                    const int ny = y + dy;
+                    if (ny < 0 || ny >= srcHeight) continue;
+
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        const int nx = x + dx;
+                        if (nx < 0 || nx >= srcWidth ||
+                            (dx == 0 && dy == 0)) {
+                            continue;
+                        }
+
+                        neighborMax = std::max(
+                            neighborMax,
+                            sourceAlpha[
+                                static_cast<size_t>(ny) * srcWidth + nx]);
+                    }
+                }
+
+                // Preserve some subpixel stroke weight before 16 px reduction
+                // without adding a full destination pixel of dilation.
+                const BYTE spread = static_cast<BYTE>(
+                    (static_cast<UINT>(neighborMax) * 45u + 50u) / 100u);
+
+                BYTE& dstAlpha =
+                    expandedAlpha[static_cast<size_t>(y) * srcWidth + x];
+                dstAlpha = std::max(dstAlpha, spread);
+            }
+        }
+
+        sourceAlpha.swap(expandedAlpha);
+    }
 
     const double scale = std::min(
         static_cast<double>(iconSize) / srcWidth,
@@ -2322,6 +2534,38 @@ static bool BuildAreaResampledAlphaMask(
     return true;
 }
 
+// Thin monochrome raster strokes can become too faint at the 16 px tray
+// target. Dark theme tint gets a small coverage remap after resampling.
+static BYTE RemapSmallDarkTintAlpha(BYTE alpha) {
+    const UINT a = alpha;
+
+    if (a <= 28u) return 0;
+    if (a >= 160u) return 255;
+
+    UINT out;
+    if (a < 96u) {
+        // Keep a narrow antialiasing fringe below the main stroke.
+        out = static_cast<UINT>((a - 28u) * 145u / 100u);
+    } else {
+        // Strong coverage becomes opaque sooner for a cleaner small-icon core.
+        out = 100u +
+              static_cast<UINT>((a - 96u) * 240u / 100u);
+    }
+
+    return static_cast<BYTE>(std::min<UINT>(255u, out));
+}
+
+static void StrengthenSmallDarkTintCoverage(
+    int iconSize, bool isDarkTheme, std::vector<BYTE>& alphaMask) {
+    if (iconSize != 16 || !isDarkTheme) {
+        return;
+    }
+
+    for (BYTE& alpha : alphaMask) {
+        alpha = RemapSmallDarkTintAlpha(alpha);
+    }
+}
+
 HICON LoadCustomIcon(
     int iconSize, std::wstring_view path, bool isDarkTheme, bool themeTint) {
     if (path.empty()) return NULL;
@@ -2353,7 +2597,11 @@ HICON LoadCustomIcon(
 
     if (applyTint) {
         std::vector<BYTE> alphaMask;
-        if (BuildAreaResampledAlphaMask(srcBmp, size, alphaMask)) {
+        const bool preserveThinStrokes = isDarkTheme && size == 16;
+        if (BuildAreaResampledAlphaMask(
+                srcBmp, size, preserveThinStrokes, alphaMask)) {
+            StrengthenSmallDarkTintCoverage(size, isDarkTheme, alphaMask);
+
             HICON tintedIcon = CreateIconFromAlphaMask(
                 size, alphaMask, GetThemeIconIntensity(isDarkTheme, 255));
             if (tintedIcon) {
@@ -2965,22 +3213,43 @@ bool RefreshTrayDpiFromIconRect(HWND hWnd, bool forceRegeneration) {
 
     UINT dpi = GetDpiForReferenceWindow(g_hOverlayWnd);
 
+    const UINT oldHostDpi = GetDpiForReferenceWindow(hWnd);
+    if (oldHostDpi != dpi && ProbeTrayHostDpiAtRect(hWnd, iconRect)) {
+        const UINT newHostDpi = GetDpiForReferenceWindow(hWnd);
+        Wh_Log(L"DPI: tray host synchronized %u -> %u (tray=%u)",
+               oldHostDpi, newHostDpi, dpi);
+
+        if (newHostDpi == dpi) {
+            g_pendingDpiShellReinstall = true;
+            (void)SetLoggedTimer(
+                hWnd, TIMER_DPI_REINSTALL_ID, DPI_REINSTALL_DELAY_MS);
+        }
+    }
+
     const int expectedSize = GetSmallIconMetricForDpi(dpi);
+    const int slotWidth = iconRect.right - iconRect.left;
+    const int slotHeight = iconRect.bottom - iconRect.top;
 
+    // The Shell rectangle is a geometry signal, not a documented HICON target size.
+    // Keep render size DPI-derived, but regenerate when Explorer changes the slot.
     const bool changed =
-        !g_iconSizeCache.isValid ||
-        g_iconSizeCache.monitor != monitor ||
-        g_iconSizeCache.dpi != dpi ||
-        g_iconSizeCache.size != expectedSize;
+        !g_trayGeometryCache.isValid ||
+        g_trayGeometryCache.monitor != monitor ||
+        g_trayGeometryCache.dpi != dpi ||
+        g_trayGeometryCache.renderSize != expectedSize ||
+        g_trayGeometryCache.slotWidth != slotWidth ||
+        g_trayGeometryCache.slotHeight != slotHeight;
 
-    g_iconSizeCache.monitor = monitor;
-    g_iconSizeCache.dpi = dpi;
-    g_iconSizeCache.size = expectedSize;
-    g_iconSizeCache.isValid = true;
+    g_trayGeometryCache.monitor = monitor;
+    g_trayGeometryCache.dpi = dpi;
+    g_trayGeometryCache.renderSize = expectedSize;
+    g_trayGeometryCache.slotWidth = slotWidth;
+    g_trayGeometryCache.slotHeight = slotHeight;
+    g_trayGeometryCache.isValid = true;
 
     if (changed) {
-        Wh_Log(L"DPI: trayMonitor=0x%p dpi=%u size=%d",
-               monitor, dpi, expectedSize);
+        Wh_Log(L"DPI: trayMonitor=0x%p dpi=%u size=%d slot=%dx%d",
+               monitor, dpi, expectedSize, slotWidth, slotHeight);
     }
 
     if (changed && forceRegeneration) {
@@ -2998,6 +3267,8 @@ const WCHAR* TimerName(UINT timerId) {
         case TIMER_DRAG_POLL_ID: return L"DRAG_POLL";
         case TIMER_DPI_CHECK_ID: return L"DPI_CHECK";
         case TIMER_DISPLAY_SETTLE_ID: return L"DISPLAY_SETTLE";
+        case TIMER_SHELL_COALESCE_ID: return L"SHELL_COALESCE";
+        case TIMER_DPI_REINSTALL_ID: return L"DPI_REINSTALL";
         default: return L"UNKNOWN";
     }
 }
@@ -3042,6 +3313,38 @@ void UpdateDpiCheckTimer(HWND hWnd) {
     (void)SetLoggedTimer(hWnd, TIMER_DPI_CHECK_ID, g_settings.dpiCheckInterval * 1000);
 }
 
+static void StopShellCoalesceTimer(HWND hWnd) {
+    if (!g_trayState.shellCoalesceTimerActive) {
+        return;
+    }
+
+    (void)KillLoggedTimer(hWnd, TIMER_SHELL_COALESCE_ID);
+    g_trayState.shellCoalesceTimerActive = false;
+}
+
+static void ArmShellCoalesceTimer(HWND hWnd) {
+    if (!g_trayState.shellCoalesceTimerActive) {
+        g_trayState.shellCoalesceTimerActive =
+            SetLoggedTimer(
+                hWnd,
+                TIMER_SHELL_COALESCE_ID,
+                SHELL_COALESCE_INTERVAL_MS);
+        return;
+    }
+
+    // SetTimer with the same HWND/ID resets the countdown. Keep re-arms quiet
+    // so a bulk Shell event burst doesn't become a log burst.
+    if (!SetTimer(
+            hWnd,
+            TIMER_SHELL_COALESCE_ID,
+            SHELL_COALESCE_INTERVAL_MS,
+            NULL)) {
+        Wh_Log(L"Timer REARM SHELL_COALESCE FAILED: error=%lu",
+               GetLastError());
+        g_trayState.shellCoalesceTimerActive = false;
+    }
+}
+
 static void StopDisplaySettleTimer(HWND hWnd) {
     if (g_trayState.displaySettleTimerActive) {
         (void)KillLoggedTimer(hWnd, TIMER_DISPLAY_SETTLE_ID);
@@ -3068,6 +3371,53 @@ static void StartDisplaySettleTimer(HWND hWnd) {
         SetLoggedTimer(hWnd, TIMER_DISPLAY_SETTLE_ID, DISPLAY_SETTLE_INTERVAL_MS);
 }
 
+static void UnregisterShellNotifications() {
+    if (!g_shellNotifyLock) {
+        return;
+    }
+
+    if (!SHChangeNotifyDeregister(g_shellNotifyLock)) {
+        Wh_Log(L"Shell notify: deregistration failed for id=%lu",
+               g_shellNotifyLock);
+    }
+
+    g_shellNotifyLock = 0;
+}
+
+static bool RegisterShellNotifications(HWND hWnd) {
+    UnregisterShellNotifications();
+
+    PIDLIST_ABSOLUTE pidlBin = NULL;
+    const HRESULT hr =
+        SHGetKnownFolderIDList(FOLDERID_RecycleBinFolder, 0, NULL, &pidlBin);
+    if (FAILED(hr) || !pidlBin) {
+        Wh_Log(L"Shell notify: failed to resolve Recycle Bin PIDL: 0x%08lX",
+               static_cast<unsigned long>(hr));
+        return false;
+    }
+
+    // Include child changes so restores trigger promptly.
+    SHChangeNotifyEntry entry = { pidlBin, TRUE };
+    const ULONG registration = SHChangeNotifyRegister(
+        hWnd,
+        SHCNRF_InterruptLevel | SHCNRF_ShellLevel,
+        SHCNE_ALLEVENTS,
+        WM_SHELLNOTIFY,
+        1,
+        &entry);
+
+    CoTaskMemFree(pidlBin);
+
+    if (!registration) {
+        Wh_Log(L"Shell notify: registration failed");
+        return false;
+    }
+
+    g_shellNotifyLock = registration;
+    Wh_Log(L"Shell notify: registered id=%lu", g_shellNotifyLock);
+    return true;
+}
+
 static void ApplyPendingSettings(HWND hWnd) {
     if (!ConsumePendingSettings()) return;
 
@@ -3076,12 +3426,32 @@ static void ApplyPendingSettings(HWND hWnd) {
     UpdateDpiCheckTimer(hWnd);
     (void)SetDragDropEnabled(hWnd, g_settings.enableDragDrop);
     UpdateTrayState();
+
+    // System and Font rendering do not need GDI+. Release its process-wide
+    // state after the new icon has been fully rendered and installed.
+    if (g_settings.iconStyle == IconStyle::System ||
+        g_settings.iconStyle == IconStyle::Font) {
+        ShutdownGdiplusIfInitialized();
+    }
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg == WM_DPICHANGED && g_hostDpiProbeActive) {
+        Wh_Log(L"DPI: tray host WM_DPICHANGED during sync dpi=%u x %u",
+               LOWORD(wParam), HIWORD(wParam));
+        return 0;
+    }
+
     if (g_wmTaskbarCreated && msg == g_wmTaskbarCreated) {
         g_iconVisible = false;
+        g_pendingDpiShellReinstall = false;
+        (void)KillLoggedTimer(hWnd, TIMER_DPI_REINSTALL_ID);
         InvalidateAllCaches();
+
+        // Shell-level change-notification registrations can become stale when
+        // Explorer is recreated. Re-establish ours after the Shell settles.
+        StopShellCoalesceTimer(hWnd);
+        UnregisterShellNotifications();
 
         // Hide stale drag feedback after an Explorer/taskbar restart.
         HideDropOverlay();
@@ -3163,7 +3533,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         }
 
-        case WM_USER_DISPLAY_CHANGE:
         case WM_DISPLAYCHANGE:
             StartDisplaySettleTimer(hWnd);
             return 0;
@@ -3204,15 +3573,58 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 // has its own independently configurable timer.
                 UpdateTrayState();
             } else if (wParam == TIMER_STARTUP_ID) {
+                if (!g_shellNotifyLock) {
+                    (void)RegisterShellNotifications(hWnd);
+                }
+
                 if (UpdateTrayState()) {
-                    (void)KillLoggedTimer(hWnd, TIMER_STARTUP_ID);          
+                    (void)KillLoggedTimer(hWnd, TIMER_STARTUP_ID);
                 }
             } else if (wParam == TIMER_DRAG_POLL_ID) {
                 CheckDragStatus(hWnd);
+            } else if (wParam == TIMER_SHELL_COALESCE_ID) {
+                StopShellCoalesceTimer(hWnd);
+                UpdateTrayState();
+            } else if (wParam == TIMER_DPI_REINSTALL_ID) {
+                (void)KillLoggedTimer(hWnd, TIMER_DPI_REINSTALL_ID);
+
+                if (!g_pendingDpiShellReinstall) {
+                    return 0;
+                }
+
+                // Do not disturb an active drag/drop gesture. Retry the one-shot
+                // commit once input ownership has returned to the tray thread.
+                if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 ||
+                    g_oleDragActive.load() || g_dropOverlayArmed.load()) {
+                    (void)SetLoggedTimer(
+                        hWnd, TIMER_DPI_REINSTALL_ID, DPI_REINSTALL_DELAY_MS);
+                    return 0;
+                }
+
+                g_pendingDpiShellReinstall = false;
+
+                if (g_iconVisible) {
+                    HideDropOverlay();
+
+                    if (Shell_NotifyIconW(NIM_DELETE, &g_nid)) {
+                        g_iconVisible = false;
+                        g_trayVersion4 = false;
+                        InvalidateIconRectCache();
+                        g_forceIconRegen = true;
+
+                        Wh_Log(L"DPI: reinstalling tray icon after host DPI settle");
+                        if (!UpdateTrayState()) {
+                            Wh_Log(L"DPI: delayed tray icon reinstall failed");
+                        }
+                    } else {
+                        Wh_Log(L"DPI: delayed NIM_DELETE failed: %lu",
+                               GetLastError());
+                    }
+                }
             } else if (wParam == TIMER_DPI_CHECK_ID) {
                 const bool changed = RefreshTrayDpiFromIconRect(hWnd, false);
                 if (changed) {
-                    Wh_Log(L"DPI_CHECK: tray DPI/monitor changed; regenerating icon");
+                    Wh_Log(L"DPI_CHECK: tray geometry/DPI/monitor changed; regenerating icon");
                     g_forceIconRegen = true;
                     UpdateTrayState();
                 }
@@ -3238,7 +3650,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                             g_trayState.displaySettleProbedStableRect = true;
 
                             if (RefreshTrayDpiFromIconRect(hWnd, false)) {
-                                Wh_Log(L"DPI: display settle detected a tray DPI/monitor change; regenerating icon");
+                                Wh_Log(L"DPI: display settle detected a tray geometry/DPI/monitor change; regenerating icon");
                                 g_forceIconRegen = true;
                                 UpdateTrayState();
                                 StopDisplaySettleTimer(hWnd);
@@ -3257,11 +3669,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     }
 
                     if (changed) {
-                        Wh_Log(L"DPI: display settle final probe detected a tray DPI/monitor change; regenerating icon");
+                        Wh_Log(L"DPI: display settle final probe detected a tray geometry/DPI/monitor change; regenerating icon");
                         g_forceIconRegen = true;
                         UpdateTrayState();
                     } else {
-                        Wh_Log(L"DPI: display settle complete; no DPI/icon-size change detected");
+                        Wh_Log(L"DPI: display settle complete; no tray geometry/DPI/icon-size change detected");
                     }
 
                     StopDisplaySettleTimer(hWnd);
@@ -3270,11 +3682,23 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
 
         case WM_SHELLNOTIFY:
-            UpdateTrayState();
+            ArmShellCoalesceTimer(hWnd);
             return 0;
 
         case WM_APPLY_SETTINGS:
             ApplyPendingSettings(hWnd);
+            return 0;
+
+        case WM_USER_SHUTDOWN:
+            // EndMenu affects the calling thread's active menu, so it must run
+            // here on the tray thread rather than in WhTool_ModUninit().
+            if (EndMenu()) {
+                Wh_Log(L"Shutdown: active tray menu cancelled");
+            }
+
+            // Queue normal teardown after a nested TrackPopupMenuEx loop has
+            // had a chance to unwind.
+            (void)PostMessageW(hWnd, WM_CLOSE, 0, 0);
             return 0;
 
         case WM_CLOSE:
@@ -3292,16 +3716,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             (void)KillLoggedTimer(hWnd, TIMER_STARTUP_ID);
             (void)KillLoggedTimer(hWnd, TIMER_DRAG_POLL_ID);
             (void)KillLoggedTimer(hWnd, TIMER_DPI_CHECK_ID);
+            StopShellCoalesceTimer(hWnd);
             (void)KillLoggedTimer(hWnd, TIMER_DISPLAY_SETTLE_ID);
+            (void)KillLoggedTimer(hWnd, TIMER_DPI_REINSTALL_ID);
+            g_pendingDpiShellReinstall = false;
             g_trayState.displaySettleTimerActive = false;
             g_ignoreNextLeftUp = false;
             g_oleDragActive.store(false);
             g_dropOverlayArmed.store(false);
 
-            if (g_shellNotifyLock) {
-                (void)SHChangeNotifyDeregister(g_shellNotifyLock);
-                g_shellNotifyLock = 0;
-            }
+            UnregisterShellNotifications();
             if (g_iconVisible) {
                 (void)Shell_NotifyIconW(NIM_DELETE, &g_nid);
                 g_iconVisible = false;
@@ -3335,10 +3759,37 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
 
     g_wmTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
 
-    HWND hWndNew = CreateWindowExW(0, TRAY_WINDOW_CLASS, L"WindhawkRecycleTrayWindow", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, hInstance, NULL);
+    // Use a real hidden top-level owner for broadcasts and tray UI.
+    // Layered alpha keeps DPI synchronization visually hidden.
+    HWND hWndNew = CreateWindowExW(
+        WS_EX_TOOLWINDOW | WS_EX_LAYERED,
+        TRAY_WINDOW_CLASS,
+        L"WindhawkRecycleTrayWindow",
+        WS_POPUP,
+        0, 0, 0, 0,
+        NULL, NULL, hInstance, NULL);
     if (!hWndNew) {
         Wh_Log(L"Tray: Failed to create host window: %lu", GetLastError());
         return 0; // OleInitGuard handles OleUninitialize().
+    }
+
+    (void)SetLayeredWindowAttributes(hWndNew, 0, 1, LWA_ALPHA);
+
+    // SHChangeNotify can originate in the medium-integrity Shell while this
+    // tool process is elevated. Allow only our Shell callback through UIPI.
+    if (!ChangeWindowMessageFilterEx(
+            hWndNew, WM_SHELLNOTIFY, MSGFLT_ALLOW, nullptr)) {
+        Wh_Log(L"Shell notify: ChangeWindowMessageFilterEx failed: %lu",
+               GetLastError());
+    }
+
+    // Explorer can broadcast TaskbarCreated from a lower-integrity process.
+    // Allow only this registered restart notification through UIPI.
+    if (g_wmTaskbarCreated &&
+        !ChangeWindowMessageFilterEx(
+            hWndNew, g_wmTaskbarCreated, MSGFLT_ALLOW, nullptr)) {
+        Wh_Log(L"Tray: TaskbarCreated message filter failed: %lu",
+               GetLastError());
     }
 
     InterlockedExchangePointer((PVOID volatile*)&g_hWnd, (PVOID)hWndNew);
@@ -3381,19 +3832,7 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
     g_nid.uCallbackMessage = WM_TRAYICON;
     g_nid.uVersion = NOTIFYICON_VERSION_4;
 
-    PIDLIST_ABSOLUTE pidlBin = NULL;
-    if (SUCCEEDED(SHGetKnownFolderIDList(FOLDERID_RecycleBinFolder, 0, NULL, &pidlBin))) {
-        SHChangeNotifyEntry entry = { pidlBin, FALSE };
-        g_shellNotifyLock = SHChangeNotifyRegister(
-            hWndNew,
-            SHCNRF_InterruptLevel | SHCNRF_ShellLevel,
-            SHCNE_ALLEVENTS,
-            WM_SHELLNOTIFY,
-            1,
-            &entry
-        );
-        CoTaskMemFree(pidlBin);
-    }
+    (void)RegisterShellNotifications(hWndNew);
 
     UpdateRefreshTimer(hWndNew);
     UpdateDpiCheckTimer(hWndNew);
@@ -3420,10 +3859,7 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
     }
 
     // Fallback cleanup if the message loop exited unexpectedly.
-    if (g_shellNotifyLock) {
-        SHChangeNotifyDeregister(g_shellNotifyLock);
-        g_shellNotifyLock = 0;
-    }
+    UnregisterShellNotifications();
 
     // Fallback cleanup if WM_DESTROY wasn't reached.
     (void)SetDragDropEnabled(hWndNew, false);
@@ -3480,7 +3916,7 @@ void WhTool_ModUninit() {
     g_shutdownRequested.store(true);
     HWND hWnd = GetSafeHwnd();
     if (hWnd) {
-        PostMessageW(hWnd, WM_CLOSE, 0, 0);
+        (void)PostMessageW(hWnd, WM_USER_SHUTDOWN, 0, 0);
     }
     if (g_hThread) {
         WaitForSingleObject(g_hThread, INFINITE);
@@ -3490,11 +3926,7 @@ void WhTool_ModUninit() {
 
     delete TakePendingSettings();
 
-    if (g_gdiplusInitialized) {
-        Gdiplus::GdiplusShutdown(g_gdiplusToken);
-        g_gdiplusToken = 0;
-        g_gdiplusInitialized = false;
-    }
+    ShutdownGdiplusIfInitialized();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3673,11 +4105,5 @@ void Wh_ModUninit() {
     }
 
     WhTool_ModUninit();
-
-    if (g_toolModProcessMutex) {
-        CloseHandle(g_toolModProcessMutex);
-        g_toolModProcessMutex = NULL;
-    }
-
     ExitProcess(0);
 }
