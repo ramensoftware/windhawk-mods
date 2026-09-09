@@ -1,13 +1,12 @@
 // ==WindhawkMod==
 // @id              rundlg-admin-checkbox
 // @name            Run Dialog Admin Checkbox
-// @description     Puts the Create this task with administrative privileges checkbox on the Win+R Run dialog, and restores Ctrl+Shift+Enter
+// @description     Puts the Create this task with administrative privileges checkbox on the Win+R Run dialog
 // @version         1.0.0
 // @author          repensky
-// @github          https://github.com/repensky
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32
+// @compilerOptions -lcomctl32 -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -24,16 +23,25 @@ Tested and works on 10 21H2 and 11 24H2.
 
 // ==WindhawkModSettings==
 /*
+- consentHotkey: false
+  $name: Also accept Ctrl+Shift+Enter
+  $description: Ask Windows to accept Ctrl+Shift+Enter as well as the checkbox. Unrelated to the checkbox, which works either way. Only useful on a Windows 7 shell, where the shortcut does nothing on its own, since every later shell already enables it.
 - label: ""
   $name: Checkbox label
   $description: Wording for the checkbox. Leave empty to use the text Windows already ships in its own admin dialog.
-- edgeMargin: 6
+- edgeMargin: 2
   $name: Gap from the screen edge
-  $description: Pixels kept between the dialog and the taskbar when the taller dialog has to be nudged back on screen. Set to 0 to sit flush against it.
+  $description: Gap kept between the dialog and the taskbar when the taller dialog has to be nudged back on screen. Measured in dialog units so it follows the display scaling, 3 is about 6 pixels at 100 percent. Set to 0 to sit flush against it.
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
+
+#include <shlwapi.h>
+
+#include <atomic>
+#include <mutex>
+#include <string>
 
 //---Dialog ids---------------------------------------------
 
@@ -46,7 +54,8 @@ Tested and works on 10 21H2 and 11 24H2.
 #define IDC_RUN_BROWSE   12288
 
 // Asks the Run dialog to keep its Ctrl+Shift+Enter handling
-#define RFF_OPTRUNAS     0x100
+// Community name, Microsoft does not publish one for this bit
+#define RFD_CONSENTHOTKEY 0x100
 
 // Template 1011 geometry in dialog units, measured from the checkbox top
 #define SEPMEM_TOP_UNITS  12
@@ -55,53 +64,71 @@ Tested and works on 10 21H2 and 11 24H2.
 
 //---Mod state----------------------------------------------
 
-static WCHAR g_szLabel[256] = L"";
+static std::wstring g_strLabel;
+static std::mutex g_lockLabel;
 
-static int g_nEdgeMargin = 6;
+static std::atomic<int> g_nEdgeMargin{ 3 };
+
+static std::atomic<bool> g_fConsentHotkey{ false };
 
 // Thread that is handing an OK press to shell32 with the box ticked
-static volatile LONG g_dwRunAsThread = 0;
+static std::atomic<DWORD> g_dwRunAsThread{ 0 };
 
-static HWND g_hwndRunDlg = NULL;
+// Asks a dialog on its own thread to put itself back the way it was
+static UINT g_uRevertMsg = 0;
 
-// Marks a dialog the mod has already taken over
-static const WCHAR kAdoptedProp[] = L"WhRunDlgAdminCheckbox";
+// Holds what one dialog looked like before the mod touched it
+static const WCHAR kStateProp[] = L"WhRunDlgAdminCheckbox";
+
+struct RUNDLG_STATE
+{
+    RECT rcWindow;
+    int  nSepMemTop;
+    int  nButtonTop;
+    bool fCaptured;
+};
 
 //---Settings-----------------------------------------------
 
 static void LoadSettings()
 {
-    g_szLabel[0] = 0;
+    // Wh_GetStringSetting hands back an empty string when nothing is set
+    auto label = WindhawkUtils::StringSetting::make(L"label");
 
-    PCWSTR psz = Wh_GetStringSetting(L"label");
-    if (psz) {
-        lstrcpynW(g_szLabel, psz, ARRAYSIZE(g_szLabel));
-        Wh_FreeStringSetting(psz);
-    }
+    int nMargin = Wh_GetIntSetting(L"edgeMargin");
+    if (nMargin < 0)
+        nMargin = 0;
 
-    g_nEdgeMargin = Wh_GetIntSetting(L"edgeMargin");
-    if (g_nEdgeMargin < 0)
-        g_nEdgeMargin = 0;
+    g_nEdgeMargin.store(nMargin);
+    g_fConsentHotkey.store(Wh_GetIntSetting(L"consentHotkey") != 0);
+
+    std::lock_guard<std::mutex> guard(g_lockLabel);
+    g_strLabel = label.get();
 }
 
 //---Dialog template text-----------------------------------
 
-// Steps over a name or ordinal field in a dialog template
-static const WORD *SkipNameOrOrdinal(const WORD *p)
+// Steps over a name or ordinal field, never past the end of the resource
+static const WORD *SkipNameOrOrdinal(const WORD *p, const WORD *pLimit)
 {
+    if (p >= pLimit)
+        return pLimit;
+
     if (*p == 0)
         return p + 1;
-    if (*p == 0xFFFF)
-        return p + 2;
 
-    while (*p)
+    if (*p == 0xFFFF)
+        return (pLimit - p >= 2) ? p + 2 : pLimit;
+
+    while (p < pLimit && *p)
         p++;
-    return p + 1;
+
+    return (p < pLimit) ? p + 1 : pLimit;
 }
 
 // Reads the admin checkbox wording out of shell32's own template
 // The resource loader picks the right language file, so this stays localised
-static bool ReadShellCheckboxText(WCHAR *pszOut, int cchOut)
+static bool ReadShellCheckboxText(std::wstring &strOut)
 {
     HMODULE hShell = GetModuleHandleW(L"shell32.dll");
     if (!hShell)
@@ -112,69 +139,89 @@ static bool ReadShellCheckboxText(WCHAR *pszOut, int cchOut)
     if (!hRes)
         return false;
 
+    DWORD cbRes = SizeofResource(hShell, hRes);
     HGLOBAL hMem = LoadResource(hShell, hRes);
-    if (!hMem)
+    const WORD *p = hMem ? (const WORD *)LockResource(hMem) : nullptr;
+    if (!p || cbRes < 2 * sizeof(WORD))
         return false;
 
-    const WORD *p = (const WORD *)LockResource(hMem);
-    if (!p)
-        return false;
+    const WORD *pLimit = p + cbRes / sizeof(WORD);
 
     // Only the extended template shape is used by shell32
-    if (p[0] != 1 || p[1] != 0xFFFF)
+    if (pLimit - p < 13 || p[0] != 1 || p[1] != 0xFFFF)
         return false;
 
-    DWORD style  = *(const DWORD *)(p + 6);
-    WORD  cItems = p[8];
+    DWORD dwStyle = *(const DWORD *)(p + 6);
+    WORD  cItems  = p[8];
 
     p += 13;
-    p = SkipNameOrOrdinal(p);
-    p = SkipNameOrOrdinal(p);
-    p = SkipNameOrOrdinal(p);
+    p = SkipNameOrOrdinal(p, pLimit);
+    p = SkipNameOrOrdinal(p, pLimit);
+    p = SkipNameOrOrdinal(p, pLimit);
 
-    if (style & DS_SETFONT) {
+    if (dwStyle & DS_SETFONT) {
+        if (pLimit - p < 3)
+            return false;
         p += 3;
-        p = SkipNameOrOrdinal(p);
+        p = SkipNameOrOrdinal(p, pLimit);
     }
 
     for (WORD i = 0; i < cItems; i++) {
         p = (const WORD *)(((ULONG_PTR)p + 3) & ~(ULONG_PTR)3);
+        if (p >= pLimit || pLimit - p < 13)
+            return false;
 
-        DWORD id = *(const DWORD *)(p + 10);
-        const WORD *pTitle = SkipNameOrOrdinal(p + 12);
-        const WORD *pEnd   = SkipNameOrOrdinal(pTitle);
+        DWORD dwId = *(const DWORD *)(p + 10);
+        const WORD *pTitle = SkipNameOrOrdinal(p + 12, pLimit);
+        const WORD *pTail  = SkipNameOrOrdinal(pTitle, pLimit);
 
-        if (id == IDC_RUN_ADMIN && *pTitle != 0 && *pTitle != 0xFFFF) {
-            lstrcpynW(pszOut, (LPCWSTR)pTitle, cchOut);
+        if (dwId == IDC_RUN_ADMIN) {
+            if (pTitle >= pLimit || *pTitle == 0 || *pTitle == 0xFFFF)
+                return false;
+
+            const WORD *q = pTitle;
+            while (q < pLimit && *q)
+                q++;
+
+            // A caption running off the end means the walk went wrong
+            if (q >= pLimit)
+                return false;
+
+            strOut.assign((PCWSTR)pTitle, (size_t)(q - pTitle));
             return true;
         }
 
-        p = pEnd + 1 + (*pEnd + 1) / 2;
+        if (pTail >= pLimit)
+            return false;
+
+        p = pTail + 1 + (*pTail + 1) / 2;
     }
 
     return false;
 }
 
 // Picks the wording, the setting wins over what shell32 ships
-static void ChooseCheckboxText(WCHAR *pszOut, int cchOut)
+static std::wstring ChooseCheckboxText()
 {
-    if (g_szLabel[0]) {
-        Wh_Log(L"Caption came from the mod setting");
-        lstrcpynW(pszOut, g_szLabel, cchOut);
-        return;
+    {
+        std::lock_guard<std::mutex> guard(g_lockLabel);
+        if (!g_strLabel.empty()) {
+            Wh_Log(L"Caption came from the mod setting");
+            return g_strLabel;
+        }
     }
 
-    if (ReadShellCheckboxText(pszOut, cchOut)) {
+    std::wstring strText;
+    if (ReadShellCheckboxText(strText)) {
         Wh_Log(L"Caption came from the shell32 template");
-        return;
+        return strText;
     }
 
     Wh_Log(L"Caption came from the built in English text");
-    lstrcpynW(pszOut, L"Create this task with administrative privileges.",
-              cchOut);
+    return L"Create this task with administrative privileges.";
 }
 
-//---Checkbox-----------------------------------------------
+//---Layout-------------------------------------------------
 
 // Reads a control rectangle in the coordinates of the dialog it sits on
 static bool GetChildRect(HWND hDlg, HWND hCtl, RECT *prc)
@@ -210,9 +257,12 @@ static void KeepInsideWorkArea(HWND hDlg)
     if (!hMon || !GetMonitorInfoW(hMon, &mi) || !GetWindowRect(hDlg, &rc))
         return;
 
-    // The gap the dialog keeps off whichever edge the taskbar is on
+    // Dialog units keep the gap even across display scalings
+    RECT rcMargin = { 0, 0, g_nEdgeMargin.load(), g_nEdgeMargin.load() };
+    MapDialogRect(hDlg, &rcMargin);
+
     RECT rcFit = mi.rcWork;
-    InflateRect(&rcFit, -g_nEdgeMargin, -g_nEdgeMargin);
+    InflateRect(&rcFit, -rcMargin.right, -rcMargin.bottom);
 
     int x = rc.left;
     int y = rc.top;
@@ -279,29 +329,44 @@ static void RelayoutAdminDialog(HWND hDlg)
         ApplyAdminLayout(hDlg, &rc);
 }
 
+//---Checkbox-----------------------------------------------
+
 // Builds the checkbox on the row the Run dialog keeps for the hidden option
 static bool AddAdminCheckbox(HWND hDlg)
 {
     if (GetDlgItem(hDlg, IDC_RUN_ADMIN))
         return false;
 
+    RUNDLG_STATE *pState = (RUNDLG_STATE *)GetPropW(hDlg, kStateProp);
+    if (!pState)
+        return false;
+
     HWND hSepMem = GetDlgItem(hDlg, IDC_RUN_SEPMEM);
 
     RECT rc;
-    if (!GetChildRect(hDlg, hSepMem, &rc))
+    RECT rcOK;
+    if (!GetChildRect(hDlg, hSepMem, &rc)
+        || !GetChildRect(hDlg, GetDlgItem(hDlg, IDOK), &rcOK)
+        || !GetWindowRect(hDlg, &pState->rcWindow))
         return false;
 
-    WCHAR szText[256];
-    ChooseCheckboxText(szText, ARRAYSIZE(szText));
+    // Remembered so an unload can put the dialog back
+    pState->nSepMemTop = rc.top;
+    pState->nButtonTop = rcOK.top;
+    pState->fCaptured = true;
+
+    std::wstring strText = ChooseCheckboxText();
 
     HWND hCheck = CreateWindowExW(
-        0, L"BUTTON", szText,
+        0, L"BUTTON", strText.c_str(),
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
         rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top,
         hDlg, (HMENU)(UINT_PTR)IDC_RUN_ADMIN, NULL, NULL);
 
-    if (!hCheck)
+    if (!hCheck) {
+        pState->fCaptured = false;
         return false;
+    }
 
     HFONT hFont = (HFONT)SendMessageW(hDlg, WM_GETFONT, 0, 0);
     if (hFont)
@@ -315,11 +380,49 @@ static bool AddAdminCheckbox(HWND hDlg)
     return true;
 }
 
+// Puts the dialog back the way it was found, runs on the dialog's own thread
+static void RevertDialog(HWND hDlg)
+{
+    RUNDLG_STATE *pState = (RUNDLG_STATE *)GetPropW(hDlg, kStateProp);
+    RemovePropW(hDlg, kStateProp);
+    if (!pState)
+        return;
+
+    if (pState->fCaptured) {
+        HWND hCheck = GetDlgItem(hDlg, IDC_RUN_ADMIN);
+        if (hCheck) {
+            // Focus would be left nowhere if the box still held it
+            if (GetFocus() == hCheck)
+                SetFocus(GetDlgItem(hDlg, IDC_RUN_COMBO));
+            DestroyWindow(hCheck);
+        }
+
+        MoveChildTo(hDlg, IDC_RUN_SEPMEM, pState->nSepMemTop);
+        MoveChildTo(hDlg, IDOK, pState->nButtonTop);
+        MoveChildTo(hDlg, IDCANCEL, pState->nButtonTop);
+        MoveChildTo(hDlg, IDC_RUN_BROWSE, pState->nButtonTop);
+
+        SetWindowPos(hDlg, NULL,
+                     pState->rcWindow.left, pState->rcWindow.top,
+                     pState->rcWindow.right - pState->rcWindow.left,
+                     pState->rcWindow.bottom - pState->rcWindow.top,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+
+    delete pState;
+    Wh_Log(L"Put the Run dialog back");
+}
+
 //---Dialog subclass----------------------------------------
 
 LRESULT CALLBACK RunDlgSubclass(HWND hWnd, UINT uMsg, WPARAM wParam,
                                 LPARAM lParam, DWORD_PTR ref)
 {
+    if (g_uRevertMsg && uMsg == g_uRevertMsg) {
+        RevertDialog(hWnd);
+        return 0;
+    }
+
     switch (uMsg)
     {
     case WM_INITDIALOG:
@@ -337,26 +440,98 @@ LRESULT CALLBACK RunDlgSubclass(HWND hWnd, UINT uMsg, WPARAM wParam,
         break;
 
     case WM_COMMAND:
-        if (LOWORD(wParam) == IDOK
-            && IsDlgButtonChecked(hWnd, IDC_RUN_ADMIN) == BST_CHECKED) {
+        if (LOWORD(wParam) == IDOK) {
+            // shell32 does the whole launch inside this one message
+            DWORD dwWant = 0;
+            if (IsDlgButtonChecked(hWnd, IDC_RUN_ADMIN) == BST_CHECKED)
+                dwWant = GetCurrentThreadId();
 
-            // shell32 reads the keyboard while it works through this message
-            InterlockedExchange(&g_dwRunAsThread, (LONG)GetCurrentThreadId());
+            // Saved and put back, so a nested OK cannot clear the outer one
+            DWORD dwPrev = g_dwRunAsThread.exchange(dwWant);
             LRESULT lr = DefSubclassProc(hWnd, uMsg, wParam, lParam);
-            InterlockedExchange(&g_dwRunAsThread, 0);
+            g_dwRunAsThread.store(dwPrev);
             return lr;
         }
         break;
 
     case WM_NCDESTROY:
-        if (g_hwndRunDlg == hWnd)
-            g_hwndRunDlg = NULL;
-        RemovePropW(hWnd, kAdoptedProp);
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, RunDlgSubclass);
+    {
+        // Windhawk drops the subclass itself here, only the state is ours
+        RUNDLG_STATE *pState = (RUNDLG_STATE *)GetPropW(hWnd, kStateProp);
+        RemovePropW(hWnd, kStateProp);
+        delete pState;
         break;
+    }
     }
 
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+//---Dialog watch-------------------------------------------
+
+struct WATCH_SLOT
+{
+    DWORD dwThreadId;
+    HHOOK hHook;
+};
+
+static WATCH_SLOT g_watch[8] = {};
+static std::mutex g_lockWatch;
+
+// Notes the message hook a thread has just put up
+static bool AddWatch(DWORD dwThreadId, HHOOK hHook)
+{
+    std::lock_guard<std::mutex> guard(g_lockWatch);
+
+    for (WATCH_SLOT &slot : g_watch) {
+        if (!slot.hHook) {
+            slot.dwThreadId = dwThreadId;
+            slot.hHook = hHook;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// Takes one thread's hook down, safe to call when there is nothing to take
+static void DropWatch(DWORD dwThreadId)
+{
+    HHOOK hHook = NULL;
+
+    {
+        std::lock_guard<std::mutex> guard(g_lockWatch);
+        for (WATCH_SLOT &slot : g_watch) {
+            if (slot.hHook && slot.dwThreadId == dwThreadId) {
+                hHook = slot.hHook;
+                slot.hHook = NULL;
+                break;
+            }
+        }
+    }
+
+    if (hHook)
+        UnhookWindowsHookEx(hHook);
+}
+
+// Leaves no callback of ours registered anywhere, used on the way out
+static void DropAllWatches()
+{
+    HHOOK rgHooks[ARRAYSIZE(g_watch)] = {};
+    int cHooks = 0;
+
+    {
+        std::lock_guard<std::mutex> guard(g_lockWatch);
+        for (WATCH_SLOT &slot : g_watch) {
+            if (slot.hHook) {
+                rgHooks[cHooks++] = slot.hHook;
+                slot.hHook = NULL;
+            }
+        }
+    }
+
+    for (int i = 0; i < cHooks; i++)
+        UnhookWindowsHookEx(rgHooks[i]);
 }
 
 //---Dialog pickup------------------------------------------
@@ -365,10 +540,16 @@ LRESULT CALLBACK RunDlgSubclass(HWND hWnd, UINT uMsg, WPARAM wParam,
 // Windows draws its own checkbox on an elevated shell, so that one is left be
 static bool IsPlainRunDialog(HWND hWnd)
 {
-    if (!hWnd || GetPropW(hWnd, kAdoptedProp))
+    if (!hWnd)
         return false;
 
-    if (GetDlgItem(hWnd, IDC_RUN_ADMIN))
+    // Cheapest test first, this runs for every message on a busy shell thread
+    WCHAR szClass[16];
+    if (!GetClassNameW(hWnd, szClass, ARRAYSIZE(szClass))
+        || lstrcmpW(szClass, L"#32770") != 0)
+        return false;
+
+    if (GetPropW(hWnd, kStateProp) || GetDlgItem(hWnd, IDC_RUN_ADMIN))
         return false;
 
     return GetDlgItem(hWnd, IDC_RUN_COMBO)
@@ -383,18 +564,22 @@ LRESULT CALLBACK RunDlgWatchProc(int nCode, WPARAM wParam, LPARAM lParam)
         CWPSTRUCT *pcw = (CWPSTRUCT *)lParam;
 
         if (pcw && IsPlainRunDialog(pcw->hwnd)) {
-            SetPropW(pcw->hwnd, kAdoptedProp, (HANDLE)1);
+            RUNDLG_STATE *pState = new RUNDLG_STATE{};
+            SetPropW(pcw->hwnd, kStateProp, (HANDLE)pState);
 
             if (WindhawkUtils::SetWindowSubclassFromAnyThread(
                     pcw->hwnd, RunDlgSubclass, 0)) {
-                g_hwndRunDlg = pcw->hwnd;
                 Wh_Log(L"Took over the Run dialog");
+
+                // Nothing left to watch for, so stop running on every message
+                DropWatch(GetCurrentThreadId());
 
                 // Setup is handled in the subclass, after shell32 has laid out
                 if (pcw->message != WM_INITDIALOG)
                     AddAdminCheckbox(pcw->hwnd);
             } else {
-                RemovePropW(pcw->hwnd, kAdoptedProp);
+                RemovePropW(pcw->hwnd, kStateProp);
+                delete pState;
             }
         }
     }
@@ -402,18 +587,37 @@ LRESULT CALLBACK RunDlgWatchProc(int nCode, WPARAM wParam, LPARAM lParam)
     return CallNextHookEx(NULL, nCode, wParam, lParam);
 }
 
-//---Key state hook-----------------------------------------
+//---Launch hook--------------------------------------------
 
-using GetKeyState_t = decltype(&GetKeyState);
-static GetKeyState_t GetKeyState_Original;
-
-SHORT WINAPI GetKeyState_Hook(int nVirtKey)
+// The test shell32 makes before it trusts the verb, same call and same rules
+// A folder or a URL has no runas verb, and asking for one there would fail
+static bool CanRunAs(PCWSTR pszFile)
 {
-    if ((nVirtKey == VK_SHIFT || nVirtKey == VK_CONTROL)
-        && (LONG)GetCurrentThreadId() == g_dwRunAsThread)
-        return (SHORT)0x8000;
+    if (!pszFile || !*pszFile)
+        return false;
 
-    return GetKeyState_Original(nVirtKey);
+    DWORD cchOut = 0;
+    HRESULT hr = AssocQueryStringW(ASSOCF_NONE, ASSOCSTR_COMMAND, pszFile,
+                                   L"runas", NULL, &cchOut);
+
+    return SUCCEEDED(hr) && cchOut != 0;
+}
+
+using ShellExecuteExW_t = decltype(&ShellExecuteExW);
+static ShellExecuteExW_t ShellExecuteExW_Original;
+
+BOOL WINAPI ShellExecuteExW_Hook(SHELLEXECUTEINFOW *pExecInfo)
+{
+    // Only the one launch the ticked Run dialog is in the middle of making
+    if (pExecInfo && g_dwRunAsThread.load() == GetCurrentThreadId()
+        && (!pExecInfo->lpVerb || !*pExecInfo->lpVerb)
+        && CanRunAs(pExecInfo->lpFile)) {
+
+        Wh_Log(L"Elevating the Run dialog command");
+        pExecInfo->lpVerb = L"runas";
+    }
+
+    return ShellExecuteExW_Original(pExecInfo);
 }
 
 //---Run dialog hook----------------------------------------
@@ -430,17 +634,44 @@ void WINAPI RunFileDlg_Hook(HWND hwndParent, HICON hIcon,
     Wh_Log(L"RunFileDlg flags 0x%X", dwFlags);
 
     // The dialog is built and run on this thread, so watch it from here
+    DWORD dwThreadId = GetCurrentThreadId();
     HHOOK hWatch = SetWindowsHookExW(WH_CALLWNDPROC, RunDlgWatchProc, NULL,
-                                     GetCurrentThreadId());
+                                     dwThreadId);
+
+    if (hWatch && !AddWatch(dwThreadId, hWatch)) {
+        UnhookWindowsHookEx(hWatch);
+        Wh_Log(L"No free watch slot, this dialog gets no checkbox");
+    }
+
+    // Only ever added, so leaving the setting off cannot disable the shortcut
+    if (g_fConsentHotkey.load())
+        dwFlags |= RFD_CONSENTHOTKEY;
 
     RunFileDlg_Original(hwndParent, hIcon, pszWorkingDir, pszTitle,
-                        pszPrompt, dwFlags | RFF_OPTRUNAS);
+                        pszPrompt, dwFlags);
 
-    if (hWatch)
-        UnhookWindowsHookEx(hWatch);
+    // Usually gone already, the watcher drops itself once it finds the dialog
+    DropWatch(dwThreadId);
 }
 
 //---Mod lifetime-------------------------------------------
+
+// Reverts and releases every dialog the mod is still holding
+static BOOL CALLBACK ReleaseDialogProc(HWND hWnd, LPARAM lParam)
+{
+    DWORD dwPid = 0;
+    GetWindowThreadProcessId(hWnd, &dwPid);
+
+    if (dwPid != GetCurrentProcessId() || !GetPropW(hWnd, kStateProp))
+        return TRUE;
+
+    DWORD_PTR dwResult = 0;
+    SendMessageTimeoutW(hWnd, g_uRevertMsg, 0, 0,
+                        SMTO_ABORTIFHUNG | SMTO_NORMAL, 2000, &dwResult);
+
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, RunDlgSubclass);
+    return TRUE;
+}
 
 BOOL Wh_ModInit()
 {
@@ -448,9 +679,12 @@ BOOL Wh_ModInit()
 
     LoadSettings();
 
-    HMODULE hShell = LoadLibraryW(L"shell32.dll");
+    g_uRevertMsg = RegisterWindowMessageW(L"WhRunDlgAdminCheckboxRevert");
+
+    // shell32 is always mapped in explorer, so no reference is taken
+    HMODULE hShell = GetModuleHandleW(L"shell32.dll");
     if (!hShell) {
-        Wh_Log(L"Failed to load shell32.dll");
+        Wh_Log(L"shell32.dll is not loaded");
         return FALSE;
     }
 
@@ -464,8 +698,8 @@ BOOL Wh_ModInit()
 
     WindhawkUtils::SetFunctionHook(pfnRunFileDlg, RunFileDlg_Hook,
                                    &RunFileDlg_Original);
-    WindhawkUtils::SetFunctionHook(GetKeyState, GetKeyState_Hook,
-                                   &GetKeyState_Original);
+    WindhawkUtils::SetFunctionHook(ShellExecuteExW, ShellExecuteExW_Hook,
+                                   &ShellExecuteExW_Original);
 
     return TRUE;
 }
@@ -475,16 +709,19 @@ void Wh_ModSettingsChanged()
     LoadSettings();
 }
 
+void Wh_ModBeforeUninit()
+{
+    Wh_Log(L"Before uninit");
+
+    // Message hooks go first, so no new dialog can be taken over meanwhile
+    DropAllWatches();
+
+    EnumWindows(ReleaseDialogProc, 0);
+
+    g_dwRunAsThread.store(0);
+}
+
 void Wh_ModUninit()
 {
     Wh_Log(L"Uninit");
-
-    InterlockedExchange(&g_dwRunAsThread, 0);
-
-    if (g_hwndRunDlg) {
-        RemovePropW(g_hwndRunDlg, kAdoptedProp);
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_hwndRunDlg,
-                                                         RunDlgSubclass);
-        g_hwndRunDlg = NULL;
-    }
 }
