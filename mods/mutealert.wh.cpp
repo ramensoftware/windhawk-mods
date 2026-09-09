@@ -141,7 +141,7 @@ volume control, call state, and headset integration.
 - Headset:
   - headsetSyncMode: off
     $name: Headset mute synchronization
-    $description: Uses Windows hardware mute, standard HID mute controls, or a supported vendor adapter. In full mode, the Windows input and detected active calls are reconciled to the first observable physical state whenever the mod loads. The taskbar tooltip shows the current detection method and confidence. Silence is never interpreted as physical mute.
+    $description: Uses Windows hardware mute, standard HID mute controls, or a supported vendor adapter. In full mode, the Windows input is reconciled to the first observable vendor state whenever the mod loads; call apps change only after a physical transition. While a physical mute remains observable, mute-only and full modes re-apply it if software is manually unmuted. The taskbar tooltip shows the current detection method and confidence. Silence is never interpreted as physical mute.
     $options:
     - full: Sync physical mute and unmute changes
     - muteOnly: Sync only physical mute changes
@@ -762,13 +762,9 @@ static std::atomic<unsigned long long> g_audioNameGeneration{0};
 static std::atomic<unsigned long long> g_headsetStatusGeneration{0};
 // These flags belong to the lifetime of the loaded mod, rather than a worker
 // thread. Saving unrelated settings restarts workers and must not re-arm a
-// startup reconciliation. Each destination has its own flag so an early audio
-// or vendor sample can't consume call synchronization before the first call
-// scan has published its result.
+// startup reconciliation. Active calls deliberately remain transition-driven:
+// load-time call unmute could create a hot mic after an Explorer restart.
 static std::atomic<bool> g_vendorWindowsInitialSyncPending{true};
-static std::atomic<bool> g_vendorCallsInitialSyncPending{true};
-static std::atomic<bool> g_hardwareCallsInitialSyncPending{true};
-static std::atomic<bool> g_callAppsInitialScanComplete{false};
 
 static bool IsStopping() {
     return g_unloading.load() ||
@@ -1942,11 +1938,6 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
             publishWindow(g_meetCallWindow, callWindow);
         }
 
-        // All enabled integrations have now had an opportunity to publish
-        // their initial state. Headset workers can safely consume their
-        // call-sync one-shot after this point.
-        g_callAppsInitialScanComplete.store(true);
-
         int focusRequest = g_pendingFocusCall.exchange(-1);
         if (focusRequest >= 0) {
             HWND callWindow =
@@ -2035,7 +2026,6 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
     g_meetWarningActive.store(false);
     g_meetCallWindow.store(nullptr);
     g_pendingFocusCall.store(-1);
-    g_callAppsInitialScanComplete.store(false);
     g_processImageCache.clear();
     g_meetCaptureProcesses.clear();
     g_captureProcessParents.clear();
@@ -2200,21 +2190,11 @@ static DWORD WINAPI AudioThreadProc(void*) {
             bool syncMute = g_settings.headsetSyncMode == L"full" ||
                             g_settings.headsetSyncMode == L"muteOnly";
             bool syncUnmute = g_settings.headsetSyncMode == L"full";
-            bool stateEligible = (muted && syncMute) ||
-                                 (!muted && syncUnmute);
-            bool initialSync = false;
-            if (g_settings.headsetSyncCalls && stateEligible &&
-                g_callAppsInitialScanComplete.load()) {
-                initialSync =
-                    g_hardwareCallsInitialSyncPending.exchange(false);
-            }
-            if (g_settings.headsetSyncCalls && stateEligible &&
-                (changed || initialSync)) {
+            if (g_settings.headsetSyncCalls && changed &&
+                ((muted && syncMute) || (!muted && syncUnmute))) {
                 QueueActiveCallMuteState(muted != FALSE);
                 RecordDiagnosticEvent(
-                    std::wstring(initialSync
-                                     ? L"Windows hardware mute initial state: "
-                                     : L"Windows hardware mute changed to ") +
+                    std::wstring(L"Windows hardware mute changed to ") +
                     (muted ? L"muted" : L"unmuted"));
             }
         }
@@ -3203,20 +3183,6 @@ static DWORD WINAPI HeadsetThreadProc(void*) {
                 bool syncMute = g_settings.headsetSyncMode == L"full" ||
                                 g_settings.headsetSyncMode == L"muteOnly";
                 bool syncUnmute = g_settings.headsetSyncMode == L"full";
-                bool stateEligible =
-                    (observation.muted && syncMute) ||
-                    (!observation.muted && syncUnmute);
-                bool initialWindowsSync = false;
-                if (g_settings.headsetSyncWindows && stateEligible) {
-                    initialWindowsSync =
-                        g_vendorWindowsInitialSyncPending.exchange(false);
-                }
-                bool initialCallsSync = false;
-                if (g_settings.headsetSyncCalls && stateEligible &&
-                    g_callAppsInitialScanComplete.load()) {
-                    initialCallsSync =
-                        g_vendorCallsInitialSyncPending.exchange(false);
-                }
                 if (observation.muted && syncMute) {
                     if (g_settings.headsetSyncWindows &&
                         !g_audioMuted.load()) {
@@ -3226,12 +3192,14 @@ static DWORD WINAPI HeadsetThreadProc(void*) {
                         QueueActiveCallMuteState(true);
                     }
                 } else if (!observation.muted && syncUnmute) {
+                    bool initialWindowsSync =
+                        g_settings.headsetSyncWindows &&
+                        g_vendorWindowsInitialSyncPending.exchange(false);
                     if (g_settings.headsetSyncWindows &&
                         (initialWindowsSync || stateTransition)) {
                         QueueMuteSet(false);
                     }
-                    if (g_settings.headsetSyncCalls &&
-                        (initialCallsSync || stateTransition)) {
+                    if (g_settings.headsetSyncCalls && stateTransition) {
                         QueueActiveCallMuteState(false);
                     }
                 }
@@ -3328,7 +3296,6 @@ static bool StartAudioThread() {
         g_settings.teamsWarning || g_settings.teamsRightClickToggle ||
         g_settings.zoomWarning || g_settings.zoomRightClickToggle ||
         MeetMonitoringEnabled()) {
-        g_callAppsInitialScanComplete.store(false);
         g_callAppsThread = CreateThread(
             nullptr, 0, CallAppsThreadProc, nullptr, 0, nullptr);
         if (!g_callAppsThread) {
