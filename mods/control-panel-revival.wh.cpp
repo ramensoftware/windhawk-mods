@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              control-panel-revival
 // @name            Control Panel Revival
-// @description     Prevents Control Panel applets from redirecting to the modern Settings app on Windows 11 23H2+ by unhiding legacy elements safely.
+// @description     Prevents Control Panel applets from redirecting to the modern Settings app on Windows 11 23H2+ by unhiding legacy elements safely
 // @version         1.0.0
 // @author          AdmXP8
 // @github          https://github.com/AdmXP8
@@ -20,7 +20,9 @@ This mod restores Control Panel applets - Troubleshooting, Installed Updates,
 Default Programs, Devices and Printers, Fonts, and System - that Windows 11
 (23H2 and later) redirects to the Settings app instead of opening directly,
 even when launched via a shell command. You can also add your own applet IDs
-to protect them from being redirected.
+to protect them from being redirected. Each of the six built-in applets can
+also be individually toggled off in the settings if you don't want this mod
+to affect it.
 
 **Note:** This mod does not reveal hidden Control Panel applets. It only
 restores applets that are already present in Control Panel but currently
@@ -41,7 +43,9 @@ redirect to Settings(e.g troubleshooting,default programs,installed updates and 
 
 **Difference from other mods** Other mods hook this same function but within a new window, so they cannot intercept new applet redirects—such as those for troubleshooting, installed updates, default programs, and so on.
 
-**Known limitations**  Clicking on task links that lead to applets currently in the mod results in no action being taken. This issue will be fixed in future versions
+**Relationship to `settings-to-control-panel` ("Redirect Settings to Control Panel"):** that mod also hooks the same private `COpenControlPanel::_MapLegacyName` function, but opens its targeted applets in a **new, separate window** rather than preventing the redirect entirely. This mod loads the applet **in-place, inside the existing Control Panel window**, which is what allows it to also cover Troubleshooting, Installed Updates, and Default Programs - three applets that, on 23H2+, can no longer be launched in a new window at all (not even via `shell:::`), so `settings-to-control-panel`'s mechanism cannot restore them. Both mods hooking the same private symbol is expected; if you run both together, only one mod's outcome will apply for any applet targeted by both.
+
+**Known limitations**  Clicking on task links that lead to applets currently in the mod results in no action being taken. This issue will be fixed in future versions.
 
 **If there are any bugs in the mod, please report them to me**
 
@@ -50,6 +54,36 @@ redirect to Settings(e.g troubleshooting,default programs,installed updates and 
 
 // ==WindhawkModSettings==
 /*
+- EnableSystem: true
+  $name: System
+  $description: >-
+    Prevent the System applet (::{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}) from
+    redirecting to Settings.
+- EnableDevicesAndPrinters: true
+  $name: Devices and Printers
+  $description: >-
+    Prevent the Devices and Printers applet
+    (::{A8A91A66-3A7D-4424-8D24-04E180695C7A}) from redirecting to Settings.
+- EnableInstalledUpdates: true
+  $name: Installed Updates
+  $description: >-
+    Prevent the Installed Updates applet
+    (::{D450A8A1-9568-45C7-9C0E-B4F9FB4537BD}) from redirecting to Settings.
+- EnableDefaultPrograms: true
+  $name: Default Programs
+  $description: >-
+    Prevent the Default Programs applet
+    (::{17CD9488-1228-4B2F-88CE-4298E93E0966}) from redirecting to Settings.
+- EnableTroubleshooting: true
+  $name: Troubleshooting
+  $description: >-
+    Prevent the Troubleshooting applet
+    (::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}) from redirecting to Settings.
+- EnableFonts: true
+  $name: Fonts
+  $description: >-
+    Prevent the Fonts applet (::{BD84B380-8CA2-1069-AB1D-08000948F534}) from
+    redirecting to Settings.
 - CustomApplets: [""]
   $name: Custom applet IDs
   $description: >-
@@ -74,39 +108,42 @@ redirect to Settings(e.g troubleshooting,default programs,installed updates and 
 #include <cwctype>
 #include <exception>
 
-// These applets exist but they redirect to the modern Settings app on 23H2+.
-// constexpr std::wstring_view (rather than LPCWSTR) so .size() is computed
-// once at compile time instead of via wcslen() on every single
-// CompareStringOrdinal call in the process (see MatchesBuiltInList below).
-constexpr std::wstring_view g_szAppletsToUnhide[] = {
-    L"::{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}", // System
-    L"::{A8A91A66-3A7D-4424-8D24-04E180695C7A}", // Devices and Printers
-    L"::{D450A8A1-9568-45C7-9C0E-B4F9FB4537BD}", // Installed Updates
-    L"::{17CD9488-1228-4B2F-88CE-4298E93E0966}", // Default Programs
-    L"::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}", // Troubleshooting
-    L"::{BD84B380-8CA2-1069-AB1D-08000948F534}", // Fonts
+// Each built-in applet this mod can unhide, bundled with an `enabled` flag
+// loaded from its own on/off setting (see LoadAppletToggleSettings below).
+// Not constexpr anymore since `enabled` is only known at runtime, but the
+// three identifier forms (GUID, canonical name, bare legacy keyword) are
+// still fixed string literals.
+struct BuiltInApplet {
+    std::wstring_view guid;
+    std::wstring_view canonicalName;
+    std::wstring_view bareName;
+    bool enabled;
 };
 
-constexpr std::wstring_view g_szCanonicalNames[] = {
-    L"Microsoft.Troubleshooting",
-    L"Microsoft.DevicesAndPrinters",
-    L"Microsoft.System",
-    L"Microsoft.InstalledUpdates",
-    L"Microsoft.DefaultPrograms",
-    L"Microsoft.Fonts"
+BuiltInApplet g_builtInApplets[] = {
+    { L"::{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}", L"Microsoft.System",             L"system",             true }, // System
+    { L"::{A8A91A66-3A7D-4424-8D24-04E180695C7A}", L"Microsoft.DevicesAndPrinters", L"devicesandprinters", true }, // Devices and Printers
+    { L"::{D450A8A1-9568-45C7-9C0E-B4F9FB4537BD}", L"Microsoft.InstalledUpdates",   L"installedupdates",   true }, // Installed Updates
+    { L"::{17CD9488-1228-4B2F-88CE-4298E93E0966}", L"Microsoft.DefaultPrograms",    L"defaultprograms",    true }, // Default Programs
+    { L"::{C58C4893-3BE0-4B45-ABB5-A63E4B8C8651}", L"Microsoft.Troubleshooting",    L"troubleshooting",    true }, // Troubleshooting
+    { L"::{BD84B380-8CA2-1069-AB1D-08000948F534}", L"Microsoft.Fonts",              L"fonts",              true }, // Fonts
 };
 
-// Bare legacy keywords Control Panel can also hand to _MapLegacyName for
-// these same six applets, alongside (or instead of) the canonical/GUID
-// forms above.
-constexpr std::wstring_view g_szBareLegacyNames[] = {
-    L"troubleshooting",
-    L"installedupdates",
-    L"defaultprograms",
-    L"devicesandprinters",
-    L"fonts",
-    L"system",
-};
+// Reads the six EnableXxx toggle settings and updates g_builtInApplets in
+// place. A disabled applet is skipped entirely by both hooks below, exactly
+// as if it had never been in the built-in list to begin with.
+void LoadAppletToggleSettings() {
+    g_builtInApplets[0].enabled = Wh_GetIntSetting(L"EnableSystem") != 0;
+    g_builtInApplets[1].enabled = Wh_GetIntSetting(L"EnableDevicesAndPrinters") != 0;
+    g_builtInApplets[2].enabled = Wh_GetIntSetting(L"EnableInstalledUpdates") != 0;
+    g_builtInApplets[3].enabled = Wh_GetIntSetting(L"EnableDefaultPrograms") != 0;
+    g_builtInApplets[4].enabled = Wh_GetIntSetting(L"EnableTroubleshooting") != 0;
+    g_builtInApplets[5].enabled = Wh_GetIntSetting(L"EnableFonts") != 0;
+
+    Wh_Log(L"Applet toggles: System=%d DevicesAndPrinters=%d InstalledUpdates=%d DefaultPrograms=%d Troubleshooting=%d Fonts=%d",
+           g_builtInApplets[0].enabled, g_builtInApplets[1].enabled, g_builtInApplets[2].enabled,
+           g_builtInApplets[3].enabled, g_builtInApplets[4].enabled, g_builtInApplets[5].enabled);
+}
 
 // User-provided applet GUIDs / canonical names / bare keywords, loaded from
 // the "CustomApplets" array setting. Only ever checked against
@@ -229,6 +266,11 @@ static bool NameMatches(const std::wstring_view& candidate, LPCWSTR name, size_t
 // this mod doesn't care about, and avoids clobbering whatever
 // settings-to-control-panel's own whitelist is doing if both mods are
 // enabled together. All comparisons are case-insensitive.
+//
+// Each built-in applet is skipped entirely if its EnableXxx setting is off
+// (see g_builtInApplets/LoadAppletToggleSettings) - a disabled applet's
+// GUID/canonical-name/bare-keyword forms are treated as if they weren't in
+// the list at all, so its real (redirecting) behavior is left untouched.
 bool COpenControlPanel__MapLegacyName_hook(void *pThis, LPCWSTR pszLegacyName, LPWSTR pszNewName, UINT uUnused, bool *nameChanged) {
     try {
         bool isTargeted = false;
@@ -236,17 +278,13 @@ bool COpenControlPanel__MapLegacyName_hook(void *pThis, LPCWSTR pszLegacyName, L
         if (pszLegacyName) {
             size_t legacyLen = wcslen(pszLegacyName);
 
-            for (const auto& applet : g_szAppletsToUnhide) {
-                if (NameMatches(applet, pszLegacyName, legacyLen)) { isTargeted = true; break; }
-            }
-            if (!isTargeted) {
-                for (const auto& name : g_szCanonicalNames) {
-                    if (NameMatches(name, pszLegacyName, legacyLen)) { isTargeted = true; break; }
-                }
-            }
-            if (!isTargeted) {
-                for (const auto& name : g_szBareLegacyNames) {
-                    if (NameMatches(name, pszLegacyName, legacyLen)) { isTargeted = true; break; }
+            for (const auto& applet : g_builtInApplets) {
+                if (!applet.enabled) continue;
+                if (NameMatches(applet.guid, pszLegacyName, legacyLen) ||
+                    NameMatches(applet.canonicalName, pszLegacyName, legacyLen) ||
+                    NameMatches(applet.bareName, pszLegacyName, legacyLen)) {
+                    isTargeted = true;
+                    break;
                 }
             }
             if (!isTargeted) {
@@ -279,7 +317,8 @@ static int GetEffectiveLength(LPCWCH str, int cch) {
 }
 
 // Checks ONLY the built-in, vetted list (GUIDs + canonical names + bare
-// keywords) - deliberately excludes g_customApplets. This is the list
+// keywords), skipping any applet whose EnableXxx setting is off - and
+// deliberately excludes g_customApplets, same as before. This is the list
 // CompareStringOrdinal_hook is allowed to influence; user-supplied strings
 // are only ever matched against _MapLegacyName's legacy-name parameter,
 // never against this process-wide comparison primitive.
@@ -288,17 +327,17 @@ static bool MatchesBuiltInList(LPCWCH str, int cch) {
     int len = GetEffectiveLength(str, cch);
     if (len <= 0) return false;
 
-    auto checkList = [&](const std::wstring_view* list, size_t count) -> bool {
-        for (size_t i = 0; i < count; i++) {
-            if ((size_t)len != list[i].size()) continue;
-            if (_wcsnicmp(str, list[i].data(), list[i].size()) == 0) return true;
-        }
-        return false;
+    auto matchesOne = [&](const std::wstring_view& candidate) -> bool {
+        return (size_t)len == candidate.size() && _wcsnicmp(str, candidate.data(), candidate.size()) == 0;
     };
 
-    return checkList(g_szAppletsToUnhide, ARRAYSIZE(g_szAppletsToUnhide)) ||
-           checkList(g_szCanonicalNames, ARRAYSIZE(g_szCanonicalNames)) ||
-           checkList(g_szBareLegacyNames, ARRAYSIZE(g_szBareLegacyNames));
+    for (const auto& applet : g_builtInApplets) {
+        if (!applet.enabled) continue;
+        if (matchesOne(applet.guid) || matchesOne(applet.canonicalName) || matchesOne(applet.bareName)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // FIX: only ever overrides a result that was genuinely CSTR_EQUAL for one
@@ -438,6 +477,7 @@ BOOL Wh_ModInit(void) {
     try {
         Wh_Log(L"Initializing v%s", WH_MOD_VERSION);
 
+        LoadAppletToggleSettings();
         LoadCustomAppletSettings();
 
         HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
@@ -493,28 +533,3 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     *bReload = TRUE;
     return TRUE;
 }
-//The AI reviewer is right that an unscoped CompareStringOrdinal hook isn't ideal — I want to explain why it's shipping this way instead of just disagreeing with the finding.
-
-//Four different scoping attempts were made, and each one broke the mod's actual functionality:
-
-//Caller check restricted to shell32.dll (return-address matching).
-//Same, widened to shell32.dll or windows.storage.dll.
-//A multi-frame stack walk that empirically found explorerframe.dll as a real caller (confirmed via logs) and added it — still broke things.
-//A thread_local flag armed only during the _MapLegacyName call (temporal instead of spatial scoping) — also broke things.
-
-//Attempt 3 failing despite real evidence, and attempt 4 failing too, suggests the actual redirect-check comparison isn't confined to a single module or a synchronous call chain nested inside _MapLegacyName — it may be deferred or reached through a path I can't identify without a live debugger session (breakpoint on CompareStringOrdinal, conditioned on the target strings). I'd welcome a properly scoped fix from anyone who can pin down the real call site.
-
-//Why I think the current version is a reasonable trade-off meanwhile:
-
-//It only overrides a comparison that was already CSTR_EQUAL — never touches a "not equal" result.
-//It requires an exact, full-length, case-insensitive match against a small fixed list (6 GUIDs + 6 canonical names + 6 bare keywords) — no substring/prefix matching.
-//User-supplied CustomApplets entries are excluded from this hook entirely — only matched against _MapLegacyName, which is safe to fall through on a miss.
-
-//I'm keeping this as-is rather than shipping a "safer-looking" scoped version that's actually broken. Happy to revisit the moment a real call site is identified
-
-//Known limitation: one of the two hooks this mod installs
-//(`CompareStringOrdinal`) is not scoped to a specific caller - see the code
-//comments for the technical detail and the scoping attempts that were tried.
-//In practice this only ever changes the outcome of a comparison that was
-//already reporting two specific applet-identifier strings as equal, so the
-//practical risk is low, but it isn't a hard guarantee.
