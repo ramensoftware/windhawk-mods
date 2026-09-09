@@ -887,7 +887,7 @@ BOOL ExtTextOutBkPaint(HDC hdc, LPCRECT lprect, UINT options)
     return TRUE;
 }
 
-BOOL ExtTextOutComposition(HDC hdc, HPAINTBUFFER hpb, LPRECT pTextRect, UINT txtOptions)
+BOOL ExtTextOutComposition(HDC hdc, HPAINTBUFFER hpb, LPCRECT pTextRect)
 {
     RGBQUAD* pPixels = nullptr;
     INT rowWidth = 0; // stride
@@ -994,14 +994,16 @@ BOOL WINAPI HookedExtTextOutW(
     SetBkMode(memDC, TRANSPARENT);
     SetTextColor(memDC, RGB(255, 255, 255)); // White text mask
 
-    if(!ExtTextOutBkPaint(hdc, lprect, options))
+    if (!ExtTextOutBkPaint(hdc, lprect, options)) {
+        EndBufferedPaint(hpb, FALSE);
         return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
+    }
 
     // Remove default background painting operation, as it done by us
     WINBOOL res = ExtTextOutW_orig(memDC, x, y, options & ~ETO_OPAQUE, lprect, lpString, c, lpDx);
 
     // Text greyscale alpha composition
-    if (!ExtTextOutComposition(hdc, hpb, &textRect, options))
+    if (!ExtTextOutComposition(hdc, hpb, &textRect))
         return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
 
     BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
@@ -5707,8 +5709,8 @@ void __fastcall HookedRenderTooltip(HWND hWnd, HDC hdc, HGDIOBJ *a3)
         GetClientRect(hWnd, &clientRect);
     }
 
-    COLORREF oldTextClr = SetTextColor(hdc, g_IsSysThemeDarkMode ? RGB(255, 255, 255) : RGB(0, 0, 0)); // Default: gpsi + 4660 (COLOR_WINDOWTEXT)
-    COLORREF oldBkClr = SetBkColor(hdc, RGB(0, 0, 0)); // Default: gpsi + 4888 (COLOR_INFOTEXT)
+    COLORREF oldTextClr = SetTextColor(hdc, g_IsSysThemeDarkMode ? RGB(255, 255, 255) : RGB(0, 0, 0));  // Default: gpsi + 4660 (COLOR_WINDOWTEXT)
+    COLORREF oldBkClr = SetBkColor(hdc, RGB(0, 0, 0));                                                  // Default: gpsi + 4888 (COLOR_INFOTEXT)
 
     INT textX = (clientRect.right - textSize.cx) / 2;
     INT textY = (clientRect.bottom - textSize.cy) / 2;
@@ -5795,15 +5797,15 @@ VOID User32Hooks(BOOL areSysColorsApplied)
 }
 
 // Change Desktop items text and shadow colors in light theme
-int (__fastcall *DrawShadowTextEx_orig)(HDC, LPCWSTR, INT, LPRECT, UINT, COLORREF, COLORREF, INT, INT, BYTE, INT);
-int __fastcall HookedDrawShadowTextEx(HDC hdc, LPCWSTR lpchText, INT dwFlags, LPRECT pRect, UINT format, 
-                COLORREF crText, COLORREF crShadow, INT ixOffset, INT iyOffset, BYTE bAlpha, INT a11)
+int (STDCALL *DrawShadowTextEx_orig)(HDC, LPCWSTR, INT, LPRECT, UINT, COLORREF, COLORREF, INT, INT, BYTE, BOOL);
+int STDCALL HookedDrawShadowTextEx(HDC hdc, LPCWSTR lpchText, INT cchText, LPRECT pRect, UINT uformat, 
+                COLORREF crText, COLORREF crShadow, INT ixOffset, INT iyOffset, BYTE bAlpha, BOOL InitBufferPaintFlag)
 {
-    if (!g_IsSysThemeDarkMode) {
+    if (!g_IsSysThemeDarkMode && InExplorerProcess()) {
         crText = RGB(0, 0, 0);
         crShadow = RGB(255, 255, 255);
     }
-    return DrawShadowTextEx_orig(hdc, lpchText, dwFlags, pRect, format, crText, crShadow, ixOffset, iyOffset, bAlpha, a11);
+    return DrawShadowTextEx_orig(hdc, lpchText, cchText, pRect, uformat, crText, crShadow, ixOffset, iyOffset, bAlpha, InitBufferPaintFlag);
 }
 
 void (__fastcall *SHThemeDrawText_orig)(void*, HDC, INT, INT, DTTOPTS*, LPCWSTR, LPRECT, INT, UINT, INT, __int64, COLORREF, COLORREF);
@@ -5825,7 +5827,6 @@ void __fastcall HookedSHThemeFillTextRect(HDC hDC, LPRECT lprc, COLORREF color, 
         return SHThemeFillTextRect_orig(hDC, lprc, color, sysColorCode);
     
     BP_PAINTPARAMS params = { sizeof(BP_PAINTPARAMS) };
-    params.dwFlags = BPPF_ERASE;
 
     HDC memDC = nullptr;
     HPAINTBUFFER hpb = BeginBufferedPaint(hDC, lprc, BPBF_TOPDOWNDIB, &params, &memDC); 
@@ -5848,7 +5849,6 @@ COLORREF __fastcall HookedFillRectClr(HDC hdc, LPRECT lprect, COLORREF color)
         return FillRectClr_orig(hdc, lprect, color);
         
     BP_PAINTPARAMS params = { sizeof(BP_PAINTPARAMS) };
-    params.dwFlags = BPPF_ERASE;
 
     HDC memDC = nullptr;
     HPAINTBUFFER hpb = BeginBufferedPaint(hdc, lprect, BPBF_TOPDOWNDIB, &params, &memDC);
@@ -6028,7 +6028,8 @@ void THISCALL Hooked_CNscTree_DrawDivider(CNscTree *__this, HDC hdc, struct _TRE
     };
 
     HWND hwndTreeView = nullptr;
-    if (CNscTree_GetWindowsDDT_orig(__this, &hwndTreeView, &hwndTreeView))
+    // CNscTree_GetWindowsDDT returns 0 if succeeded
+    if (CNscTree_GetWindowsDDT_orig && CNscTree_GetWindowsDDT_orig(__this, &hwndTreeView, &hwndTreeView))
         return Fallback(L"Failed acquiring treeview window handle");
     
     RECT treeItemRect = {0};
