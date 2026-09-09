@@ -2,7 +2,7 @@
 // @id              taskbar-recent-focus-highlight
 // @name            Taskbar Recent Focus Highlight
 // @description     Visually highlight the most recently focused running apps on the taskbar
-// @version         0.9.6
+// @version         0.9.7
 // @author          Jakub Vlášek
 // @github          https://github.com/jvlasek
 // @include         explorer.exe
@@ -45,8 +45,9 @@ that flyout gets its own recency ladder (independent of icon ranks). The
 last focused window of that app is rank 1 in the flyout even if you used
 other apps more recently. Single-window flyouts are left alone.
 
-Preview styles: a thin bar under the title, a soft title tint, a whole-card
-plate, hybrid (plate for rank 1, title tint for the rest), or a ring.
+Preview styles (default **hybrid**): whole-card plate for rank 1 and a title
+tint for ranks 2+; or a thin bar under the title, a soft title tint, a
+whole-card plate, or a ring.
 
 ## Settings (short)
 
@@ -76,6 +77,10 @@ to clear highlights.
   app.
 - Verbose bind / preview-resolve lines go to Windhawk’s **Mod logs** (Advanced
   tab). There is no extra in-mod debug toggle.
+- Taskband identity resolve is adapted from
+  [taskbar-volume-control-per-app](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-volume-control-per-app.wh.cpp);
+  thumbnail HWND mapping from
+  [taskbar-thumbnail-reorder](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-thumbnail-reorder.wh.cpp).
 */
 // ==/WindhawkModReadme==
 
@@ -214,12 +219,12 @@ to clear highlights.
         Ranking is local to that flyout: the last focused window of this app is
         rank 1 even if other apps were used more recently. Set to 1 to mark only
         the latest window.
-    - style: titleBar
+    - style: plateTitle
       $name: Highlight style
       $description: >-
-        How to mark ranked windows. Title bar = thin line under the title.
+        How to mark ranked windows. Hybrid (default) = whole plate for rank 1,
+        title wash for ranks 2+. Title bar = thin line under the title.
         Title background = soft wash behind the title. Plate = tint the whole card.
-        Hybrid = whole plate for rank 1, title wash for ranks 2+.
         Ring = hollow border around the card.
       $options:
       - titleBar: Bar under window title
@@ -397,7 +402,7 @@ struct Settings {
     int previewIntensity[3] = {100, 70, 45};
     int previewMinFocusSeconds = 1;
     int previewDecayMinutes = 15;
-    PreviewStyle previewStyle = PreviewStyle::TitleBar;
+    PreviewStyle previewStyle = PreviewStyle::PlateTitle;
     std::unordered_set<std::wstring> excludedPrograms;
     // Bumped in PublishSettings so UVS can skip a no-op repaint.
     uint32_t generation = 0;
@@ -539,11 +544,10 @@ struct ButtonPathCacheEntry {
     std::wstring pathUpper;  // empty if resolve failed / not yet tried
     std::wstring appIdUpper;
     std::wstring classUpper;
-    std::wstring autoIdUpper;  // AutomationId, often "APPID: …"
-    DWORD pid = 0;
     HWND sampleHwnd = nullptr;  // sample from resolve; preview uses window map
     std::vector<HWND> groupHwnds;
     bool resolveAttempted = false;
+    bool resolvedWhileRunning = false;  // re-resolve once on pinned → running
     ULONGLONG lastResolveTick = 0;  // empty-identity retry throttle
     ULONGLONG lastRunningTick = 0;  // IsRunning grace (Alt-Tab flicker)
     // Last ApplyAllHighlights assignment: -1 unknown, 0 none, >0 1-based rank.
@@ -576,8 +580,8 @@ std::vector<winrt::weak_ref<FrameworkElement>> g_trackedThumbViews;
 
 std::atomic<bool> g_unloading{false};
 std::atomic<bool> g_taskbarViewDllLoaded{false};
-// After decay / empty ranks, force-clear overlays on next button touch if
-// RequestApplyVisuals couldn't run (sleep/wake, no dispatcher yet).
+// After decay / empty ranks / desktop switch: ApplyAllHighlights must visit
+// every button. UVS must not clear chrome just because this is set (flicker).
 std::atomic<bool> g_pendingOverlaySweep{false};
 std::atomic<bool> g_decayTimerArmed{false};
 
@@ -727,6 +731,7 @@ void OnMinFocusTimerElapsed(MinFocusConfirmMode mode = MinFocusConfirmMode::From
 void OnPreviewMinFocusTimerElapsed(
     MinFocusConfirmMode mode = MinFocusConfirmMode::FromTimer);
 void RequestApplyVisuals();
+void RequestApplyVisualsDebounced();
 void RequestApplyPreviewVisuals();
 void RefreshButtonHighlight(FrameworkElement button);
 void ScheduleRefreshAllHighlights(FrameworkElement dispatcherAnchor);
@@ -1479,9 +1484,7 @@ bool PathAppearsOnTaskbar(const std::wstring& keyOrPath,
     for (const auto& [cacheKey, e] : g_buttonPathCache) {
         (void)cacheKey;
         if (!wantAppId.empty()) {
-            std::wstring gotId =
-                e.appIdUpper.empty() ? e.autoIdUpper : e.appIdUpper;
-            if (CanonicalAppId(gotId) == wantAppId) {
+            if (CanonicalAppId(e.appIdUpper) == wantAppId) {
                 return true;
             }
         }
@@ -1850,8 +1853,6 @@ struct ButtonIdentity {
     std::wstring pathUpper;
     std::wstring appIdUpper;
     std::wstring classUpper;
-    std::wstring autoIdUpper;
-    DWORD pid = 0;
     HWND sampleHwnd = nullptr;
     std::vector<HWND> groupHwnds;
 };
@@ -2123,9 +2124,7 @@ int ScoreButtonForRank(FrameworkElement button,
 
     if (IsAppIdKey(info.key)) {
         const std::wstring want = AppIdFromAppKey(info.key);
-        std::wstring got =
-            ident.appIdUpper.empty() ? ident.autoIdUpper : ident.appIdUpper;
-        got = CanonicalAppId(got);
+        const std::wstring got = CanonicalAppId(ident.appIdUpper);
         if (!want.empty() && got == want) {
             return kScoreExactIdentity;
         }
@@ -3727,28 +3726,27 @@ std::wstring EnsureButtonPathCached(FrameworkElement button, bool force) {
     }
 
     const ULONGLONG now = GetTickCount64();
+    const bool running = TaskListButton_IsRunning(button);
     void* id = InspectableIdentity(button);
-    bool unresolvedRecent = false;
     {
         std::lock_guard<std::mutex> lock(g_buttonPathMutex);
         auto it = id ? g_buttonPathCache.find(id) : g_buttonPathCache.end();
         if (it != g_buttonPathCache.end()) {
             if (!WeakIsSameElement(it->second.button, button)) {
                 g_buttonPathCache.erase(it);
-            } else if (!force && it->second.resolveAttempted) {
+            } else if (!force && it->second.resolveAttempted &&
+                       !(running && !it->second.resolvedWhileRunning)) {
+                // AutomationId on a pinned button is not a finished Win32
+                // resolve (rank key is the image path). Re-resolve once when
+                // the same TaskListButton flips to running.
                 const bool haveIdentity = !it->second.pathUpper.empty() ||
                                           !it->second.appIdUpper.empty();
-                if (haveIdentity) {
+                if (haveIdentity ||
+                    now - it->second.lastResolveTick < kUnresolvedRetryMs) {
                     return it->second.pathUpper;
-                }
-                if (now - it->second.lastResolveTick < kUnresolvedRetryMs) {
-                    unresolvedRecent = true;
                 }
             }
         }
-    }
-    if (unresolvedRecent && !TaskListButton_IsRunning(button)) {
-        return {};
     }
 
     DWORD pid = 0;
@@ -3841,11 +3839,10 @@ std::wstring EnsureButtonPathCached(FrameworkElement button, bool force) {
             e->pathUpper = pathUpper;
             e->appIdUpper = appIdUpper;
             e->classUpper = classUpper;
-            e->autoIdUpper = autoIdUpper;
-            e->pid = pid;
             e->sampleHwnd = hwnd;
             e->groupHwnds = std::move(groupHwnds);
             e->resolveAttempted = true;
+            e->resolvedWhileRunning = running;
             e->lastResolveTick = now;
         }
         if (g_buttonPathCache.size() > 128) {
@@ -3892,8 +3889,6 @@ ButtonIdentity GetCachedButtonIdentity(FrameworkElement button) {
     out.pathUpper = e.pathUpper;
     out.appIdUpper = e.appIdUpper;
     out.classUpper = e.classUpper;
-    out.autoIdUpper = e.autoIdUpper;
-    out.pid = e.pid;
     out.sampleHwnd = e.sampleHwnd;
     out.groupHwnds = e.groupHwnds;
     return out;
@@ -4247,16 +4242,10 @@ void AddThumbnailTaskItemMapping(
 }
 
 HWND HwndFromMappingEntry(const ThumbnailTaskItemMapping& item) {
-    if (item.hwnd && IsWindow(item.hwnd)) {
-        return item.hwnd;
-    }
-    if (item.taskItem) {
-        HWND h = GetWindowFromTaskItem(item.taskItem);
-        if (h && IsWindow(h)) {
-            return h;
-        }
-    }
-    return nullptr;
+    // HWND was read in the ctor hook while taskItem was live. Do not
+    // dereference the raw ITaskItem* later — thumbnail-reorder only compares
+    // that pointer, and the native object is gone when IsWindow fails.
+    return (item.hwnd && IsWindow(item.hwnd)) ? item.hwnd : nullptr;
 }
 
 // True if two WinRT objects are the same COM identity (different projections
@@ -5134,14 +5123,26 @@ void SchedulePreviewFlyoutRefresh(FrameworkElement dispatcherAnchor) {
             g_previewFlyoutRefreshPending = false;
             return;
         }
+        winrt::weak_ref<FrameworkElement> weak =
+            winrt::make_weak(dispatcherAnchor);
         dispatcher.RunAsync(
-            winrt::Windows::UI::Core::CoreDispatcherPriority::Low, []() {
+            winrt::Windows::UI::Core::CoreDispatcherPriority::Low, [weak]() {
                 g_previewFlyoutRefreshPending = false;
                 try {
                     if (g_unloading.load()) {
                         return;
                     }
-                    FrameworkElement el = PickLiveFlyoutThumbOnThisDispatcher();
+                    FrameworkElement el = nullptr;
+                    try {
+                        el = weak.get();
+                    } catch (...) {
+                    }
+                    if (el && !FindAncestorItemsRepeater(el)) {
+                        el = nullptr;
+                    }
+                    if (!el) {
+                        el = PickLiveFlyoutThumbOnThisDispatcher();
+                    }
                     if (!el) {
                         return;
                     }
@@ -5547,7 +5548,6 @@ void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb) {
                        nRepeater, thumbCount);
             }
             size_t si = 0;
-            int windowOrdinal = 0;
             for (size_t ri = 0; ri < allViews.size() && si < siblings.size();
                  ++ri) {
                 if (IsSnapGroupThumbnailView(allViews[ri])) {
@@ -5557,7 +5557,8 @@ void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb) {
                     (ri < repeaterSourceIndex.size())
                         ? repeaterSourceIndex[ri]
                         : static_cast<int>(ri);
-                const int getAtIndex = compactSnap ? windowOrdinal : srcIndex;
+                const int getAtIndex =
+                    compactSnap ? static_cast<int>(si) : srcIndex;
                 HWND hwnd = HwndFromThumbnailsGetAt(getAtIndex);
                 if (hwnd && IsWindow(hwnd) && !usedHwnds.count(hwnd)) {
                     stampRecency(si, hwnd);
@@ -5565,7 +5566,6 @@ void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb) {
                     usedHwnds.insert(hwnd);
                 }
                 ++si;
-                ++windowOrdinal;
             }
         }
     }
@@ -5880,6 +5880,13 @@ void RequestApplyVisuals() {
     }
 }
 
+void RequestApplyVisualsDebounced() {
+    if (g_unloading.load()) {
+        return;
+    }
+    PostToHookThread(WM_APP_REQUEST_APPLY_DEBOUNCED);
+}
+
 // ---------------------------------------------------------------------------
 // Taskbar.View.dll hooks
 // ---------------------------------------------------------------------------
@@ -5903,11 +5910,8 @@ void RefreshButtonHighlight(FrameworkElement button) {
         return;
     }
 
-    if (g_pendingOverlaySweep.load()) {
-        ClearButtonHighlight(button);
-        return;
-    }
-
+    // Sweep is ApplyAllHighlights. Clearing here blanks ranked icons until
+    // that pass (desktop switch / decay flicker).
     int rank = GetCachedPaintState(button).rank;
     if (rank < 0) {
         std::vector<AppFocusInfo> ranks;
@@ -6824,7 +6828,7 @@ void HandleForegroundChanged(HWND hWnd) {
             ranksNonEmpty = !CurrentDeskLocked().rankedApps.empty();
         }
         if (ranksNonEmpty) {
-            RequestApplyVisuals();
+            RequestApplyVisualsDebounced();
         }
         return;
     }
@@ -6862,7 +6866,7 @@ void HandleForegroundChanged(HWND hWnd) {
         }
         // Still repaint ranks — taskbar active states changed.
         if (ranksNonEmpty) {
-            RequestApplyVisuals();
+            RequestApplyVisualsDebounced();
         }
         return;
     }
@@ -6895,8 +6899,9 @@ void HandleForegroundChanged(HWND hWnd) {
 
     // Always repaint existing ranks on any focus change (Alt-Tab must not
     // leave other ranked icons unstyled until the min-focus timer fires).
+    // Debounce: transient FG + landed app would otherwise full-rebind twice.
     if (ranksNonEmpty || alreadyTracked) {
-        RequestApplyVisuals();
+        RequestApplyVisualsDebounced();
     }
 
     bool sameAppPending = false;
@@ -7434,17 +7439,17 @@ void LoadSettings() {
     }
 
     auto previewStyle = WindhawkUtils::StringSetting::make(L"previews.style");
-    s.previewStyle = PreviewStyle::TitleBar;
+    s.previewStyle = PreviewStyle::PlateTitle;
     if (wcscmp(previewStyle.get(), L"ring") == 0) {
         s.previewStyle = PreviewStyle::Ring;
     } else if (wcscmp(previewStyle.get(), L"titleBg") == 0) {
         s.previewStyle = PreviewStyle::TitleBg;
     } else if (wcscmp(previewStyle.get(), L"plate") == 0) {
         s.previewStyle = PreviewStyle::Plate;
-    } else if (wcscmp(previewStyle.get(), L"plateTitle") == 0) {
-        s.previewStyle = PreviewStyle::PlateTitle;
     } else if (wcscmp(previewStyle.get(), L"titleBar") == 0) {
         s.previewStyle = PreviewStyle::TitleBar;
+    } else if (wcscmp(previewStyle.get(), L"plateTitle") == 0) {
+        s.previewStyle = PreviewStyle::PlateTitle;
     }
 
     s.excludedPrograms.clear();
@@ -7479,7 +7484,7 @@ void LoadSettings() {
 // ---------------------------------------------------------------------------
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"> Taskbar Recent Focus Highlight init v0.9.6");
+    Wh_Log(L"> Taskbar Recent Focus Highlight init v0.9.7");
 
     g_unloading = false;
     LoadSettings();
