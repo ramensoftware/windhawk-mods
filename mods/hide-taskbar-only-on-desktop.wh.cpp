@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              hide-taskbar-only-on-desktop
-// @name            Hide Taskbar Only on Desktop
+// @name            Hide Taskbar Only on Desktop 
 // @description     Desktop-only taskbar hiding using a dedicated Windhawk tool process
-// @version         5.2.0
+// @version         5.3.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -159,9 +159,9 @@ Display identity is tracked using monitor/device information rather than relying
 
 ## Taskbar Ownership
 
-The mod tracks whether a taskbar has been transparent by its own taskbar-state logic.
+The mod tracks whether a taskbar has been made transparent by its own taskbar-state logic.
 
-This prevents the mod from unnecessarily restoring or changing a taskbar that it did not make transparent. Ownership is local to the dedicated tool process because the mod does not use a cross-process Explorer marker.
+A window property marker is stored on taskbars hidden by the mod so a newly started dedicated tool process can reclaim and restore a taskbar left hidden by an unexpected previous-process termination. The marker is attached to the taskbar window itself; the mod still does not inject into Explorer.
 
 ## Performance
 
@@ -189,7 +189,7 @@ The periodic safety poll provides a recovery path for missed or unusual transiti
 - The current display-selection configuration supports up to 16 display entries.
 - The mod intentionally keeps Windows' native taskbar auto-hide setting separate from its own hiding behavior.
 - Hiding the taskbar does not increase the desktop work area; maximized windows may still leave the normal taskbar space reserved.
-- If the dedicated tool process is terminated unexpectedly while a taskbar is hidden, the taskbar may remain invisible until Explorer is restarted.
+- If the dedicated tool process is terminated unexpectedly while a taskbar is hidden, the next instance of this mod can reclaim the marked taskbar; if the taskbar itself is recreated before recovery, the old window marker is naturally discarded.
 - This mod may conflict with other taskbar transparency/customization mods that also modify the taskbar's layered-window style or opacity.
 - Windows shell window classes and processes can change between Windows releases, so shell-interaction detection may require updates for future Windows versions.
 - The mod is designed specifically around Windows' Explorer/taskbar behavior and is not intended to be a general-purpose taskbar customization framework.
@@ -358,6 +358,65 @@ SRWLOCK g_cursorHoverSnapshotLock = SRWLOCK_INIT;
 // A layered window with alpha 0 is used as the physical taskbar visibility
 // mechanism. The taskbar state machine remains in the dedicated
 // Windhawk tool process.
+//
+// The properties below are deliberately stored on the taskbar window itself so
+// a newly started tool process can reclaim a taskbar hidden by an older process.
+constexpr wchar_t kTaskbarOwnershipProp[] =
+    L"windhawk-hide-taskbar-only-on-desktop-ownership";
+constexpr wchar_t kTaskbarOriginalExStyleProp[] =
+    L"windhawk-hide-taskbar-only-on-desktop-original-exstyle";
+constexpr wchar_t kTaskbarOriginalLayeredColorKeyProp[] =
+    L"windhawk-hide-taskbar-only-on-desktop-original-color-key";
+constexpr wchar_t kTaskbarOriginalLayeredAlphaProp[] =
+    L"windhawk-hide-taskbar-only-on-desktop-original-alpha";
+constexpr wchar_t kTaskbarOriginalLayeredFlagsProp[] =
+    L"windhawk-hide-taskbar-only-on-desktop-original-layered-flags";
+constexpr wchar_t kTaskbarOriginalLayeredAttributesValidProp[] =
+    L"windhawk-hide-taskbar-only-on-desktop-original-layered-valid";
+
+bool GetWindowUlongPtrProp(
+    HWND hwnd,
+    const wchar_t* name,
+    ULONG_PTR* value
+) {
+    if (!hwnd || !name || !value) {
+        return false;
+    }
+
+    HANDLE prop = GetPropW(hwnd, name);
+    if (!prop) {
+        return false;
+    }
+
+    *value = reinterpret_cast<ULONG_PTR>(prop) - 1;
+    return true;
+}
+
+bool SetWindowUlongPtrProp(
+    HWND hwnd,
+    const wchar_t* name,
+    ULONG_PTR value
+) {
+    return SetPropW(
+        hwnd,
+        name,
+        reinterpret_cast<HANDLE>(value + 1)
+    ) != 0;
+}
+
+void RemoveTaskbarOwnershipProperties(HWND hwnd) {
+    if (!hwnd) {
+        return;
+    }
+
+    RemovePropW(hwnd, kTaskbarOwnershipProp);
+    RemovePropW(hwnd, kTaskbarOriginalExStyleProp);
+    RemovePropW(hwnd, kTaskbarOriginalLayeredColorKeyProp);
+    RemovePropW(hwnd, kTaskbarOriginalLayeredAlphaProp);
+    RemovePropW(hwnd, kTaskbarOriginalLayeredFlagsProp);
+    RemovePropW(hwnd, kTaskbarOriginalLayeredAttributesValidProp);
+}
+
 bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
     if (!hwnd || !IsWindow(hwnd)) {
         return false;
@@ -370,6 +429,64 @@ bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
     }
 
     if (hide) {
+        // Do not overwrite the original state when a taskbar is already owned
+        // by this mod (for example after a refresh in the same process).
+        if (GetPropW(hwnd, kTaskbarOwnershipProp) != nullptr) {
+            return SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA) != 0;
+        }
+
+        COLORREF colorKey = 0;
+        BYTE alpha = 255;
+        DWORD layeredFlags = 0;
+        const bool originalLayered =
+            (exStyle & WS_EX_LAYERED) != 0;
+        const bool originalLayeredAttributesValid =
+            originalLayered &&
+            GetLayeredWindowAttributes(
+                hwnd,
+                &colorKey,
+                &alpha,
+                &layeredFlags
+            ) != FALSE;
+
+        if (!SetWindowUlongPtrProp(
+                hwnd,
+                kTaskbarOriginalExStyleProp,
+                static_cast<ULONG_PTR>(exStyle))) {
+            Wh_Log(L"Failed to save original taskbar extended style for 0x%p", hwnd);
+            return false;
+        }
+
+        if (!SetWindowUlongPtrProp(
+                hwnd,
+                kTaskbarOriginalLayeredColorKeyProp,
+                static_cast<ULONG_PTR>(colorKey)) ||
+            !SetWindowUlongPtrProp(
+                hwnd,
+                kTaskbarOriginalLayeredAlphaProp,
+                static_cast<ULONG_PTR>(alpha)) ||
+            !SetWindowUlongPtrProp(
+                hwnd,
+                kTaskbarOriginalLayeredFlagsProp,
+                static_cast<ULONG_PTR>(layeredFlags)) ||
+            !SetWindowUlongPtrProp(
+                hwnd,
+                kTaskbarOriginalLayeredAttributesValidProp,
+                originalLayeredAttributesValid ? 1 : 0)) {
+            RemoveTaskbarOwnershipProperties(hwnd);
+            Wh_Log(L"Failed to save original layered attributes for 0x%p", hwnd);
+            return false;
+        }
+
+        // Mark ownership before changing the window so another tool process
+        // can reclaim the taskbar even if this process terminates immediately
+        // after this point.
+        if (!SetPropW(hwnd, kTaskbarOwnershipProp, reinterpret_cast<HANDLE>(1))) {
+            RemoveTaskbarOwnershipProperties(hwnd);
+            Wh_Log(L"Failed to mark taskbar ownership for 0x%p", hwnd);
+            return false;
+        }
+
         SetLastError(ERROR_SUCCESS);
         LONG_PTR previousExStyle = SetWindowLongPtrW(
             hwnd,
@@ -377,6 +494,7 @@ bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
             exStyle | WS_EX_LAYERED | WS_EX_TRANSPARENT
         );
         if (previousExStyle == 0 && GetLastError() != ERROR_SUCCESS) {
+            RemoveTaskbarOwnershipProperties(hwnd);
             Wh_Log(
                 L"SetWindowLongPtrW(GWL_EXSTYLE, hide flags) failed for 0x%p: %lu",
                 hwnd,
@@ -386,6 +504,9 @@ bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
         }
 
         if (!SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA)) {
+            // Restore the original style if applying the hiding operation failed.
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, exStyle);
+            RemoveTaskbarOwnershipProperties(hwnd);
             Wh_Log(
                 L"SetLayeredWindowAttributes(alpha=0) failed for 0x%p: %lu",
                 hwnd,
@@ -409,9 +530,91 @@ bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
         return true;
     }
 
-    if (!SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA)) {
+    if (GetPropW(hwnd, kTaskbarOwnershipProp) == nullptr) {
+        return false;
+    }
+
+    ULONG_PTR originalExStyleValue = 0;
+    ULONG_PTR originalColorKeyValue = 0;
+    ULONG_PTR originalAlphaValue = 255;
+    ULONG_PTR originalFlagsValue = 0;
+    ULONG_PTR originalLayeredAttributesValidValue = 0;
+
+    const bool haveOriginalExStyle = GetWindowUlongPtrProp(
+        hwnd,
+        kTaskbarOriginalExStyleProp,
+        &originalExStyleValue
+    );
+    const bool haveOriginalColorKey = GetWindowUlongPtrProp(
+        hwnd,
+        kTaskbarOriginalLayeredColorKeyProp,
+        &originalColorKeyValue
+    );
+    const bool haveOriginalAlpha = GetWindowUlongPtrProp(
+        hwnd,
+        kTaskbarOriginalLayeredAlphaProp,
+        &originalAlphaValue
+    );
+    const bool haveOriginalFlags = GetWindowUlongPtrProp(
+        hwnd,
+        kTaskbarOriginalLayeredFlagsProp,
+        &originalFlagsValue
+    );
+    const bool haveOriginalLayeredValid = GetWindowUlongPtrProp(
+        hwnd,
+        kTaskbarOriginalLayeredAttributesValidProp,
+        &originalLayeredAttributesValidValue
+    );
+
+    if (!haveOriginalExStyle) {
+        Wh_Log(L"Missing original taskbar style for owned taskbar 0x%p", hwnd);
+        return false;
+    }
+
+    const LONG_PTR originalExStyle =
+        static_cast<LONG_PTR>(originalExStyleValue);
+    const bool originalLayered =
+        (originalExStyle & WS_EX_LAYERED) != 0;
+    const bool originalAttributesValid =
+        haveOriginalLayeredValid &&
+        originalLayeredAttributesValidValue != 0 &&
+        haveOriginalColorKey &&
+        haveOriginalAlpha &&
+        haveOriginalFlags;
+
+    bool restoredAttributes = true;
+    if (originalLayered) {
+        if (originalAttributesValid) {
+            restoredAttributes = SetLayeredWindowAttributes(
+                hwnd,
+                static_cast<COLORREF>(originalColorKeyValue),
+                static_cast<BYTE>(originalAlphaValue),
+                static_cast<DWORD>(originalFlagsValue)
+            ) != FALSE;
+        } else {
+            // GetLayeredWindowAttributes can fail for a layered window that was
+            // not configured through SetLayeredWindowAttributes. In that case
+            // the exact original alpha state is unknowable, so prefer restoring
+            // visibility rather than leaving the taskbar at the mod's alpha=0.
+            restoredAttributes = SetLayeredWindowAttributes(
+                hwnd,
+                0,
+                255,
+                LWA_ALPHA
+            ) != FALSE;
+        }
+    } else {
+        restoredAttributes = SetLayeredWindowAttributes(
+            hwnd,
+            0,
+            255,
+            LWA_ALPHA
+        ) != FALSE;
+    }
+
+    if (!restoredAttributes) {
         Wh_Log(
-            L"SetLayeredWindowAttributes(alpha=255) failed for 0x%p: %lu",
+            L"Failed to restore layered attributes for owned taskbar 0x%p: %lu",
             hwnd,
             GetLastError()
         );
@@ -422,11 +625,11 @@ bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
     LONG_PTR previousExStyle = SetWindowLongPtrW(
         hwnd,
         GWL_EXSTYLE,
-        exStyle & ~static_cast<LONG_PTR>(WS_EX_LAYERED | WS_EX_TRANSPARENT)
+        originalExStyle
     );
     if (previousExStyle == 0 && GetLastError() != ERROR_SUCCESS) {
         Wh_Log(
-            L"SetWindowLongPtrW(remove hide flags) failed for 0x%p: %lu",
+            L"SetWindowLongPtrW(restore original style) failed for 0x%p: %lu",
             hwnd,
             GetLastError()
         );
@@ -445,6 +648,7 @@ bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
         SWP_ASYNCWINDOWPOS
     );
 
+    RemoveTaskbarOwnershipProperties(hwnd);
     return true;
 }
 
@@ -1175,9 +1379,12 @@ bool IsShellSurfaceWindow(
         &pid
     );
 
-    if (IsTaskbarPopupClass(className)) {
-        return true;
-    }
+    if (
+    IsTaskbarPopupClass(className) &&
+    (IsExplorerProcess(pid) || IsKnownShellProcess(pid))
+) {
+    return true;
+}
 
     if (
         IsAltTabClass(className) &&
@@ -1674,30 +1881,36 @@ void SetTaskbarState(
     }
 }
 
-struct VisibleShellPopupContext {
-    HMONITOR monitor;
-    bool found;
+struct ShellPopupScanResult {
+    bool visibleOnMonitor[kMaxMonitorNumbers];
 };
 
-BOOL CALLBACK FindVisibleShellPopupOnMonitorProc(
+struct PopupScanContext {
+    const MonitorList* monitors;
+    ShellPopupScanResult* result;
+};
+
+BOOL CALLBACK ScanVisibleShellPopupsProc(
     HWND hwnd,
     LPARAM lParam
 ) {
-    auto* context =
-        reinterpret_cast<VisibleShellPopupContext*>(lParam);
-
-    if (!context || context->found || !IsWindowVisible(hwnd)) {
-        return context && context->found ? FALSE : TRUE;
-    }
-
-    WCHAR className[256] = {};
-    if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0) {
+    auto* context = reinterpret_cast<PopupScanContext*>(lParam);
+    if (!context || !context->monitors || !context->result ||
+        !IsWindowVisible(hwnd)) {
         return TRUE;
     }
 
-    if (!IsTaskbarPopupClass(className) ||
+    WCHAR className[256] = {};
+    if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0 ||
+        !IsTaskbarPopupClass(className) ||
         IsShellChromeClass(className) ||
         IsDesktopInfrastructureWindow(hwnd, className)) {
+        return TRUE;
+    }
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (!(IsExplorerProcess(pid) || IsKnownShellProcess(pid))) {
         return TRUE;
     }
 
@@ -1706,36 +1919,31 @@ BOOL CALLBACK FindVisibleShellPopupOnMonitorProc(
         return TRUE;
     }
 
-    MONITORINFO mi = {};
-    mi.cbSize = sizeof(mi);
-    if (!context->monitor ||
-        !GetMonitorInfoW(context->monitor, &mi)) {
-        return TRUE;
-    }
-
-    RECT intersection = {};
-    if (IntersectRect(&intersection, &rect, &mi.rcMonitor)) {
-        context->found = true;
-        return FALSE;
+    for (size_t i = 0; i < context->monitors->count; ++i) {
+        RECT intersection = {};
+        if (IntersectRect(
+                &intersection,
+                &rect,
+                &context->monitors->entries[i].rect)) {
+            context->result->visibleOnMonitor[i] = true;
+        }
     }
 
     return TRUE;
 }
 
-bool IsVisibleShellPopupOnMonitor(HMONITOR monitor) {
-    if (!monitor) {
-        return false;
-    }
+void ScanVisibleShellPopupsOnce(
+    const MonitorList& monitors,
+    ShellPopupScanResult& result
+) {
+    result = {};
 
-    VisibleShellPopupContext context = {};
-    context.monitor = monitor;
+    PopupScanContext context = {&monitors, &result};
 
     EnumWindows(
-        FindVisibleShellPopupOnMonitorProc,
+        ScanVisibleShellPopupsProc,
         reinterpret_cast<LPARAM>(&context)
     );
-
-    return context.found;
 }
 
 void ApplyBaseTaskbarState() {
@@ -2012,6 +2220,47 @@ bool IsCursorInConfiguredHoverZoneAtSnapshot(
     return result;
 }
 
+bool IsStableDeviceIdPresent(
+    const MonitorList& monitors,
+    const wchar_t* stableDeviceId
+) {
+    if (!stableDeviceId || stableDeviceId[0] == L'\0') {
+        return false;
+    }
+
+    for (size_t i = 0; i < monitors.count; ++i) {
+        if (StableDeviceIdsMatch(
+                stableDeviceId,
+                monitors.entries[i].stableDeviceId)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void ReconcileStaleMonitorSelectionBindings(
+    const MonitorList& monitors
+) {
+    for (int configuredNumber = 1;
+         configuredNumber <= static_cast<int>(kMaxMonitorNumbers);
+         ++configuredNumber) {
+        if (g_hideMonitorBindings[configuredNumber].configured &&
+            !IsStableDeviceIdPresent(
+                monitors,
+                g_hideMonitorBindings[configuredNumber].stableDeviceId)) {
+            g_hideMonitorBindings[configuredNumber] = {};
+        }
+
+        if (g_hoverMonitorBindings[configuredNumber].configured &&
+            !IsStableDeviceIdPresent(
+                monitors,
+                g_hoverMonitorBindings[configuredNumber].stableDeviceId)) {
+            g_hoverMonitorBindings[configuredNumber] = {};
+        }
+    }
+}
+
 void UpdateTaskbarState() {
 
     MonitorList monitors =
@@ -2038,6 +2287,8 @@ void UpdateTaskbarState() {
         g_hoverMonitor = nullptr;
         g_hoverDeadline = 0;
         CancelHoverExpireTimer();
+
+        ReconcileStaleMonitorSelectionBindings(monitors);
     }
 
     g_displayTopologySignature = topologySignature;
@@ -2056,10 +2307,16 @@ void UpdateTaskbarState() {
         IsNativeAutoHideEnabled();
 
     WindowScanResult scan = {};
+    ShellPopupScanResult shellPopups = {};
 
     ScanWindowsOnce(
         monitors,
         scan
+    );
+
+    ScanVisibleShellPopupsOnce(
+        monitors,
+        shellPopups
     );
 
     for (size_t i = 0; i < g_taskbarStateCount; ++i) {
@@ -2188,8 +2445,14 @@ void UpdateTaskbarState() {
         bool shellPopupPresent = false;
         for (size_t i = 0; i < g_taskbarStateCount; ++i) {
             TaskbarMonitorState& state = g_taskbarStates[i];
-            if (IsVisibleShellPopupOnMonitor(state.monitor)) {
-                shellPopupPresent = true;
+            for (size_t monitorIndex = 0; monitorIndex < monitors.count; ++monitorIndex) {
+                if (monitors.entries[monitorIndex].monitor == state.monitor &&
+                    shellPopups.visibleOnMonitor[monitorIndex]) {
+                    shellPopupPresent = true;
+                    break;
+                }
+            }
+            if (shellPopupPresent) {
                 break;
             }
         }
@@ -2202,11 +2465,20 @@ void UpdateTaskbarState() {
                 TaskbarMonitorState& state =
                     g_taskbarStates[i];
 
+                bool shellPopupOnMonitor = false;
+                for (size_t monitorIndex = 0; monitorIndex < monitors.count; ++monitorIndex) {
+                    if (monitors.entries[monitorIndex].monitor == state.monitor) {
+                        shellPopupOnMonitor =
+                            shellPopups.visibleOnMonitor[monitorIndex];
+                        break;
+                    }
+                }
+
                 SetTaskbarState(
                     state,
                     !state.desktopOnly ||
                     !ShouldHideTaskbar(state) ||
-                    IsVisibleShellPopupOnMonitor(state.monitor)
+                    shellPopupOnMonitor
                 );
             }
 
@@ -2838,6 +3110,10 @@ BOOL WhTool_ModInit() {
     // ShouldHideMonitor() returns false even when the UI says "All displays".
     LoadSettings();
 
+    // Recover ownership left by an unexpectedly terminated previous tool
+    // process before the new worker starts making visibility decisions.
+    RestoreAllTaskbars();
+
     g_workerReadyEvent =
         CreateEventW(
             nullptr,
@@ -2946,6 +3222,15 @@ void WhTool_ModSettingsChanged() {
     }
 }
 
+BOOL CALLBACK RestoreMarkedTaskbarProc(HWND hwnd, LPARAM) {
+    if (!hwnd || GetPropW(hwnd, kTaskbarOwnershipProp) == nullptr) {
+        return TRUE;
+    }
+
+    MakeTaskbarTransparent(hwnd, false);
+    return TRUE;
+}
+
 void RestoreAllTaskbars() {
     for (size_t i = 0; i < g_taskbarStateCount; ++i) {
         TaskbarMonitorState& state = g_taskbarStates[i];
@@ -2958,6 +3243,14 @@ void RestoreAllTaskbars() {
             state.hiddenByMod = false;
         }
     }
+
+    // Reclaim taskbars hidden by a previous dedicated tool-process instance.
+    // This also covers taskbars that were hidden shortly before an unexpected
+    // process termination and therefore never reached the local state table.
+    EnumWindows(
+        RestoreMarkedTaskbarProc,
+        0
+    );
 }
 
 bool WaitForThreadWithTimeout(
