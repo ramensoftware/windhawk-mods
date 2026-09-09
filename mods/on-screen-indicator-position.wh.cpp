@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
-// @description     Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, instead of the three positions Windows offers
+// @description     Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, and optionally skip the slide out animation
 // @version         1.3.1
 // @author          mario0318
 // @github          https://github.com/mario0318
@@ -60,6 +60,14 @@ ever on screen at a time, so this is the same desktop photographed twice:
 
 ![Volume top left, brightness center](https://raw.githubusercontent.com/mario0318/windhawk-mods/628f80317652209d3feed54eadf9c329e77b04a7/on-screen-indicator-position/per-indicator.jpg)
 
+## Skip the slide out animation
+
+The indicator normally slides off screen when it's done. With **Skip the slide out
+animation** on, it just disappears. Windows already has a no-animation hide path
+and the mod asks for that one instead, so the slide in and everything outside the
+indicator are left alone. If the setting ever appears to do nothing, the mod's log
+says so on a build where the entry points have moved.
+
 ## Choosing a monitor
 
 This mod only changes where the indicator sits on a screen, not which screen it
@@ -69,11 +77,6 @@ a monitor by number or by interface name. The two work together.
 
 ## Notes
 
-* **Skip the slide out animation** has the indicator disappear rather than slide
-  away. Windows has its own no animation path for hiding and the mod asks for that
-  one, so the sliding in and everything outside the indicator are left alone. If it
-  ever appears to do nothing, the mod's log says so on a build where those entry
-  points have moved.
 * The slide-in animation direction is chosen by Windows from the built-in
   setting, not by this mod. If the animation looks wrong for your new position,
   change the built-in setting to whichever of the three has the animation you
@@ -283,10 +286,7 @@ std::atomic<bool> g_kindUnreliable{false};
 constexpr Position kDefaultPosition = Position::topRight;
 
 // Written from Wh_ModSettingsChanged on an arbitrary thread and read on the
-// confirmator's UI thread, so the members are atomic. Each field is still read
-// separately, so a settings change landing mid-placement can put one indicator
-// on screen with a mix of old and new values. That was true before the atomics
-// too, and one misplaced indicator is the whole cost.
+// confirmator's UI thread, so the members are atomic.
 struct {
     std::atomic<Position> position;
     std::atomic<int> offsetX;
@@ -328,9 +328,8 @@ constexpr PCWSTR kKindUnreliableMessage =
     L"An indicator entry point didn't resolve, so the position per indicator "
     L"settings are ignored and everything uses the main position";
 
-// Set when either half of the hide pair didn't resolve, which leaves the skip
-// setting with nothing to do.
-std::atomic<bool> g_hideAnimationUnavailable{false};
+// Set once in Wh_ModInit when either half of the hide pair didn't resolve.
+bool g_hideAnimationUnavailable = false;
 
 constexpr PCWSTR kHideAnimationUnavailableMessage =
     L"The hide entry points didn't resolve, so the slide out animation is left "
@@ -613,32 +612,30 @@ void WINAPI ConfirmatorHostControl_Hide_Hook(void* pThis) {
     return ConfirmatorHostControl_Hide_Original(pThis);
 }
 
+// Declared with the platform's own return convention so the compiler produces
+// the hidden-pointer form on x64 and the HFA-in-registers form on ARM64.
+// Hand-rolling the hidden pointer worked on x64 but shifted every argument on
+// ARM64, where four floats are a homogeneous aggregate returned in s0-s3.
 using HardwareConfirmatorHost_GetPositionRect_t =
-    WinrtRect*(WINAPI*)(void* pThis, WinrtRect* retval, const WinrtRect* rect);
+    WinrtRect(WINAPI*)(void* pThis, const WinrtRect& rect);
 HardwareConfirmatorHost_GetPositionRect_t
     HardwareConfirmatorHost_GetPositionRect_Original;
-WinrtRect* WINAPI
+WinrtRect WINAPI
 HardwareConfirmatorHost_GetPositionRect_Hook(void* pThis,
-                                             WinrtRect* retval,
-                                             const WinrtRect* rect) {
+                                             const WinrtRect& rect) {
     Wh_Log(L"> indicator=%s", IndicatorName(g_currentIndicator.load()));
 
-    // Read the offsets once so the placement below uses one consistent pair.
     int offsetSettingX = g_settings.offsetX.load();
     int offsetSettingY = g_settings.offsetY.load();
 
-    // The rect is in the target monitor's physical pixels, so a raw offset would
-    // cover less ground the more that monitor is scaled up. Scaling by its DPI
-    // keeps the setting meaning the same distance everywhere. Both offsets are
-    // zero by default, and then there is nothing to scale and no reason to look
-    // the monitor up on every showing. Resolve it before the origin is shifted
-    // away.
+    // Scale the offsets to the target monitor's DPI so the same number moves
+    // the same distance everywhere.
     if (offsetSettingX || offsetSettingY) {
         RECT areaRect{
-            .left = (LONG)rect->X,
-            .top = (LONG)rect->Y,
-            .right = (LONG)(rect->X + rect->Width),
-            .bottom = (LONG)(rect->Y + rect->Height),
+            .left = (LONG)rect.X,
+            .top = (LONG)rect.Y,
+            .right = (LONG)(rect.X + rect.Width),
+            .bottom = (LONG)(rect.Y + rect.Height),
         };
         HMONITOR monitor = MonitorFromRect(&areaRect, MONITOR_DEFAULTTONEAREST);
         UINT dpiX = 96;
@@ -651,34 +648,26 @@ HardwareConfirmatorHost_GetPositionRect_Hook(void* pThis,
     }
 
     // Shift the input rect to 0,0 since the original function assumes that.
-    WinrtRect shiftedRect = *rect;
+    WinrtRect shiftedRect = rect;
     float offsetX = shiftedRect.X;
     float offsetY = shiftedRect.Y;
     shiftedRect.X = 0;
     shiftedRect.Y = 0;
 
-    WinrtRect* result = HardwareConfirmatorHost_GetPositionRect_Original(
-        pThis, retval, &shiftedRect);
+    WinrtRect result = HardwareConfirmatorHost_GetPositionRect_Original(
+        pThis, shiftedRect);
 
-    // Nothing to place happens for a kind left on the main position while that is
-    // on Windows default, and for someone who only wanted the animation setting.
-    // The edge clamp inside PlaceInArea would still be free to move the indicator
-    // off the spot Windows picked, so it is skipped rather than run with nothing to
-    // do. The shift above stays either way, since the original needs it.
     Position position = CurrentPosition();
     bool anyPlacement = position != Position::windowsDefault || offsetSettingX ||
                         offsetSettingY;
 
-    if (result && anyPlacement) {
+    if (anyPlacement) {
         PlaceInArea(shiftedRect, position, offsetSettingX, offsetSettingY,
-                    result);
+                    &result);
     }
 
-    if (result) {
-        // Shift the result back.
-        result->X += offsetX;
-        result->Y += offsetY;
-    }
+    result.X += offsetX;
+    result.Y += offsetY;
 
     return result;
 }
@@ -872,7 +861,8 @@ BOOL Wh_ModInit() {
             true,  // optional
         },
         {
-            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowMicrophoneMuted(int,void *))"},
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowMicrophoneMuted(int,void *))",
+             LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowMicrophoneMuted(int))"},
             &ShowMicrophoneMutedThunk_Original,
             ShowMicrophoneMutedThunk_Hook,
             true,  // optional
@@ -897,12 +887,8 @@ BOOL Wh_ModInit() {
         },
     };
 
-    // The whole set goes in every time. The eight that record which kind is being
-    // shown are coroutine ramps that store a value and tail-call the original, so
-    // patching them when no kind has a spot of its own costs nothing worth
-    // measuring, and installing the same set every time keeps the symbol cache
-    // from being resolved again the first time someone turns an override on. The
-    // same goes for the hide pair and the animation setting.
+    // The whole set goes in every time so the symbol cache doesn't need to be
+    // resolved again when someone turns a setting on later.
     if (!HookSymbols(g_hardwareConfirmatorModule, symbolHooks,
                      ARRAYSIZE(symbolHooks))) {
         Wh_Log(L"HookSymbols failed");
@@ -913,13 +899,8 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    // An optional symbol that isn't found leaves its original pointer alone, so
-    // a null here means that kind would never be recorded and every kind after
-    // it would be placed using a stale one. Rather than misplace an indicator,
-    // drop to the main position for everything and say so in the log.
     // Each kind is recognised as long as one of its two entry points resolved.
-    // These are named after the symbols rather than the kinds, since there are
-    // eight of them and only seven kinds, camera having two.
+    // Named after the symbols, not the kinds, since camera has two.
     const struct {
         PCWSTR name;
         const void* ramp;
@@ -959,8 +940,7 @@ BOOL Wh_ModInit() {
         }
     }
 
-    // Every one is reported rather than stopping at the first missing entry point,
-    // since a build that moved several names should show all of them.
+    // Report all of them before deciding, so a build that moved several shows all.
     for (const auto& recorder : kindRecorders) {
         Wh_Log(L"Entry point %s resolved through ramp=%d thunk=%d", recorder.name,
                !!recorder.ramp, !!recorder.thunk);
@@ -982,9 +962,6 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    // The hooks are already gone by this point, so handing back the reference
-    // taken in Wh_ModInit is safe. Without this every enable and disable cycle
-    // leaves one behind.
     if (g_hardwareConfirmatorModule) {
         FreeLibrary(g_hardwareConfirmatorModule);
         g_hardwareConfirmatorModule = nullptr;
@@ -994,12 +971,7 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
-    // Every hook is installed either way now, so nothing here needs a reload and
-    // a change takes effect on the next indicator.
     LoadSettings();
-
-    // Turning on the first override no longer re-runs Wh_ModInit, so this is the
-    // only place the person it concerns can still be told.
     if (g_kindUnreliable && AnyPerIndicator()) {
         Wh_Log(L"%s", kKindUnreliableMessage);
     }
