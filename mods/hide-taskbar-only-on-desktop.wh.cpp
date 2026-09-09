@@ -2,7 +2,7 @@
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Desktop-only taskbar hiding using a dedicated Windhawk tool process
-// @version         5.0.0
+// @version         5.1.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -3047,16 +3047,6 @@ void WhTool_ModUninit() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Standard Windhawk tool-mod launcher. The mod is targeted at windhawk.exe so
-// the launcher can start the state-management logic in a dedicated Windhawk
-// process.
-
-#define Wh_ModInit WindhawkToolModLauncher_Wh_ModInit
-#define Wh_ModAfterInit WindhawkToolModLauncher_Wh_ModAfterInit
-#define Wh_ModSettingsChanged WindhawkToolModLauncher_Wh_ModSettingsChanged
-#define Wh_ModUninit WindhawkToolModLauncher_Wh_ModUninit
-
-////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
@@ -3079,12 +3069,6 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    DWORD sessionId;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
-        sessionId == 0) {
-        return FALSE;
-    }
-
     bool isService = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
@@ -3096,9 +3080,7 @@ BOOL Wh_ModInit() {
     }
 
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0 ||
-            wcscmp(argv[i], L"-service-start") == 0 ||
-            wcscmp(argv[i], L"-service-stop") == 0) {
+        if (wcscmp(argv[i], L"-service") == 0) {
             isService = true;
             break;
         }
@@ -3119,7 +3101,6 @@ BOOL Wh_ModInit() {
     if (isService) {
         return FALSE;
     }
-
 
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
@@ -3172,12 +3153,11 @@ void Wh_ModAfterInit() {
             return;
     }
 
-    WCHAR
-    commandLine[MAX_PATH + 2 +
-                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
-               WH_MOD_ID);
-
+    WCHAR commandLine[MAX_PATH + 2 +
+                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") /
+                       sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"",
+               currentProcessPath, WH_MOD_ID);
 
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
@@ -3208,14 +3188,13 @@ void Wh_ModAfterInit() {
         .cb = sizeof(STARTUPINFO),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
     };
-    PROCESS_INFORMATION pi{};
+    PROCESS_INFORMATION pi;
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
-                                 nullptr, nullptr, &si, &pi, nullptr)) {
+                                  nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                  nullptr, nullptr, &si, &pi, nullptr)) {
         Wh_Log(L"CreateProcess failed");
         return;
     }
-
 
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
@@ -3236,25 +3215,4 @@ void Wh_ModUninit() {
 
     WhTool_ModUninit();
     ExitProcess(0);
-}
-
-#undef Wh_ModInit
-#undef Wh_ModAfterInit
-#undef Wh_ModSettingsChanged
-#undef Wh_ModUninit
-
-BOOL Wh_ModInit() {
-    return WindhawkToolModLauncher_Wh_ModInit();
-}
-
-void Wh_ModAfterInit() {
-    WindhawkToolModLauncher_Wh_ModAfterInit();
-}
-
-void Wh_ModSettingsChanged() {
-    WindhawkToolModLauncher_Wh_ModSettingsChanged();
-}
-
-void Wh_ModUninit() {
-    WindhawkToolModLauncher_Wh_ModUninit();
 }
