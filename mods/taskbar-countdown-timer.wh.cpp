@@ -2,7 +2,7 @@
 // @id              taskbar-countdown-timer
 // @name            Taskbar Countdown Timer
 // @description     A simple countdown timer integrated into the Windows 11 taskbar (Windows 11 only)
-// @version         1.6
+// @version         1.7
 // @author          Richi
 // @github          https://github.com/richilp
 // @include         explorer.exe
@@ -91,7 +91,10 @@ static winrt::event_token g_timerTickToken{};
 
 static std::atomic<int> g_secondsRemaining{0};
 static std::atomic<ULONGLONG> g_deadlineTick{0};
-static wchar_t g_reminder[256]{};  // taskbar UI thread only
+static SRWLOCK g_reminderLock = SRWLOCK_INIT;
+static wchar_t g_reminder[256]{};
+
+static UINT_PTR g_deadlineThreadTimerId = 0;
 
 static std::atomic<HWND> g_timerPopup{nullptr};
 static std::atomic<HWND> g_finishedPopup{nullptr};
@@ -311,13 +314,6 @@ constexpr int IDC_FINISHED_TEXT   = 1105;
 
 constexpr UINT WM_APP_TIMER_SHOW =
     WM_APP + 1;
-
-constexpr UINT WM_APP_TIMER_FINISHED =
-    WM_APP + 2;
-
-constexpr UINT WM_APP_TIMER_SHUTDOWN =
-    WM_APP + 3;
-
 
 // -----------------------------------------------------------------------------
 // Popup DPI/layout helpers
@@ -1138,6 +1134,44 @@ static bool RunFromWindowThread(
 // Countdown
 // -----------------------------------------------------------------------------
 
+static void SetSharedReminder(
+    const wchar_t* reminder)
+{
+    AcquireSRWLockExclusive(
+        &g_reminderLock
+    );
+
+    wcsncpy_s(
+        g_reminder,
+        reminder ? reminder : L"",
+        _TRUNCATE
+    );
+
+    ReleaseSRWLockExclusive(
+        &g_reminderLock
+    );
+}
+
+
+static void GetSharedReminder(
+    wchar_t (&buffer)[256])
+{
+    AcquireSRWLockShared(
+        &g_reminderLock
+    );
+
+    wcsncpy_s(
+        buffer,
+        g_reminder,
+        _TRUNCATE
+    );
+
+    ReleaseSRWLockShared(
+        &g_reminderLock
+    );
+}
+
+
 static std::wstring FormatCountdown(
     int totalSeconds)
 {
@@ -1161,18 +1195,20 @@ static std::wstring FormatCountdown(
 }
 
 
-struct StartTimerRequest
+struct DisplayTimerRequest
 {
+    bool running;
     int seconds;
     wchar_t reminder[256];
+    bool succeeded;
 };
 
 
-static void StartCountdownOnTaskbarThread(
+static void UpdateCountdownDisplayOnTaskbarThread(
     void* param)
 {
     auto* request =
-        reinterpret_cast<StartTimerRequest*>(
+        reinterpret_cast<DisplayTimerRequest*>(
             param
         );
 
@@ -1185,57 +1221,278 @@ static void StartCountdownOnTaskbarThread(
 
     g_countdownTimer.Stop();
 
-    g_secondsRemaining.store(
-        request->seconds
-    );
+    if (request->running) {
+        g_timerText.Text(
+            FormatCountdown(
+                request->seconds
+            )
+        );
 
-    g_deadlineTick.store(
-        GetTickCount64() +
-        static_cast<ULONGLONG>(
-            request->seconds
-        ) * 1000ULL
-    );
-
-    wcsncpy_s(
-        g_reminder,
-        request->reminder,
-        _TRUNCATE
-    );
-
-    g_timerText.Text(
-        FormatCountdown(
-            request->seconds
-        )
-    );
-
-    g_countdownTimer.Start();
-
-    Wh_Log(
-        L"Timer started: '%s' - %d seconds",
-        g_reminder,
-        request->seconds
-    );
-}
-
-
-static void CancelCountdownOnTaskbarThread(
-    void*)
-{
-    if (g_countdownTimer) {
-        g_countdownTimer.Stop();
+        g_countdownTimer.Start();
     }
-
-    g_secondsRemaining.store(0);
-    g_deadlineTick.store(0);
-
-    if (g_timerText) {
+    else {
         g_timerText.Text(
             L"⏱ Timer"
         );
     }
 
+    request->succeeded = true;
+}
+
+
+static bool SyncCountdownDisplayToTaskbar(
+    bool running,
+    int seconds,
+    const wchar_t* reminder)
+{
+    HWND taskbar =
+        g_taskbarWnd.load();
+
+    if (!taskbar ||
+        !IsWindow(taskbar))
+    {
+        taskbar =
+            FindCurrentProcessTaskbarWnd();
+
+        if (taskbar) {
+            g_taskbarWnd.store(taskbar);
+        }
+    }
+
+    if (!taskbar) {
+        return false;
+    }
+
+    DisplayTimerRequest request{};
+    request.running = running;
+    request.seconds = seconds;
+    request.succeeded = false;
+
+    wcsncpy_s(
+        request.reminder,
+        reminder ? reminder : L"",
+        _TRUNCATE
+    );
+
+    if (!RunFromWindowThread(
+            taskbar,
+            UpdateCountdownDisplayOnTaskbarThread,
+            &request))
+    {
+        return false;
+    }
+
+    return request.succeeded;
+}
+
+
+static void ShowFinishedPopup(
+    HWND owner,
+    const wchar_t* reminderText);
+
+
+static bool StartAuthoritativeTimer(
+    int seconds,
+    const wchar_t* reminder)
+{
+    if (seconds <= 0 ||
+        g_unloading.load())
+    {
+        return false;
+    }
+
+    if (g_deadlineThreadTimerId) {
+        KillTimer(
+            nullptr,
+            g_deadlineThreadTimerId
+        );
+
+        g_deadlineThreadTimerId = 0;
+    }
+
+    ULONGLONG deadline =
+        GetTickCount64() +
+        static_cast<ULONGLONG>(
+            seconds
+        ) * 1000ULL;
+
+    g_deadlineTick.store(
+        deadline
+    );
+
+    g_secondsRemaining.store(
+        seconds
+    );
+
+    SetSharedReminder(
+        reminder && reminder[0]
+            ? reminder
+            : L"Timer finished"
+    );
+
+    g_deadlineThreadTimerId =
+        SetTimer(
+            nullptr,
+            0,
+            250,
+            nullptr
+        );
+
+    if (!g_deadlineThreadTimerId) {
+        g_deadlineTick.store(0);
+        g_secondsRemaining.store(0);
+
+        Wh_Log(
+            L"ERROR: Could not create authoritative timer"
+        );
+
+        return false;
+    }
+
+    wchar_t reminderCopy[256]{};
+    GetSharedReminder(
+        reminderCopy
+    );
+
+    if (!SyncCountdownDisplayToTaskbar(
+            true,
+            seconds,
+            reminderCopy))
+    {
+        Wh_Log(
+            L"WARNING: Timer armed, but taskbar display couldn't be updated"
+        );
+    }
+
+    Wh_Log(
+        L"Timer started: '%s' - %d seconds",
+        reminderCopy,
+        seconds
+    );
+
+    return true;
+}
+
+
+static bool CancelAuthoritativeTimer()
+{
+    if (g_deadlineThreadTimerId) {
+        KillTimer(
+            nullptr,
+            g_deadlineThreadTimerId
+        );
+
+        g_deadlineThreadTimerId = 0;
+    }
+
+    g_deadlineTick.store(0);
+    g_secondsRemaining.store(0);
+
+    wchar_t reminderCopy[256]{};
+    GetSharedReminder(
+        reminderCopy
+    );
+
+    if (!SyncCountdownDisplayToTaskbar(
+            false,
+            0,
+            reminderCopy))
+    {
+        Wh_Log(
+            L"WARNING: Timer cancelled, but taskbar display couldn't be updated"
+        );
+    }
+
     Wh_Log(
         L"Timer cancelled"
+    );
+
+    return true;
+}
+
+
+static void HandleAuthoritativeTimerTick()
+{
+    ULONGLONG deadline =
+        g_deadlineTick.load();
+
+    if (!deadline) {
+        if (g_deadlineThreadTimerId) {
+            KillTimer(
+                nullptr,
+                g_deadlineThreadTimerId
+            );
+
+            g_deadlineThreadTimerId = 0;
+        }
+
+        return;
+    }
+
+    ULONGLONG now =
+        GetTickCount64();
+
+    if (now < deadline) {
+        int remaining =
+            static_cast<int>(
+                (deadline -
+                 now +
+                 999ULL) /
+                1000ULL
+            );
+
+        g_secondsRemaining.store(
+            remaining
+        );
+
+        return;
+    }
+
+    if (g_deadlineThreadTimerId) {
+        KillTimer(
+            nullptr,
+            g_deadlineThreadTimerId
+        );
+
+        g_deadlineThreadTimerId = 0;
+    }
+
+    g_deadlineTick.store(0);
+    g_secondsRemaining.store(0);
+
+    wchar_t reminderCopy[256]{};
+    GetSharedReminder(
+        reminderCopy
+    );
+
+    // The alarm is owned by the popup thread. XAML is display-only now.
+    if (!SyncCountdownDisplayToTaskbar(
+            false,
+            0,
+            reminderCopy))
+    {
+        Wh_Log(
+            L"WARNING: Timer finished while taskbar display was unavailable"
+        );
+    }
+
+    Wh_Log(
+        L"Timer finished: '%s'",
+        reminderCopy
+    );
+
+    if (HWND timerPopup = g_timerPopup.load()) {
+        ShowWindow(
+            timerPopup,
+            SW_HIDE
+        );
+    }
+
+    ShowFinishedPopup(
+        g_taskbarWnd.load(),
+        reminderCopy[0]
+            ? reminderCopy
+            : L"Timer finished"
     );
 }
 
@@ -1496,21 +1753,6 @@ static LRESULT CALLBACK FinishedPopupWndProc(
                 L"Snooze minutes:"
             );
 
-            HWND taskbar =
-                FindCurrentProcessTaskbarWnd();
-
-            if (!taskbar) {
-                Wh_Log(
-                    L"ERROR: Taskbar not found while snoozing timer"
-                );
-
-                return 0;
-            }
-
-            StartTimerRequest request{};
-            request.seconds =
-                minutes * 60;
-
             wchar_t finishedReminder[256]{};
             GetWindowTextW(
                 GetDlgItem(
@@ -1521,18 +1763,11 @@ static LRESULT CALLBACK FinishedPopupWndProc(
                 ARRAYSIZE(finishedReminder)
             );
 
-            wcsncpy_s(
-                request.reminder,
-                finishedReminder[0]
-                    ? finishedReminder
-                    : L"Timer finished",
-                _TRUNCATE
-            );
-
-            if (!RunFromWindowThread(
-                    taskbar,
-                    StartCountdownOnTaskbarThread,
-                    &request))
+            if (!StartAuthoritativeTimer(
+                    minutes * 60,
+                    finishedReminder[0]
+                        ? finishedReminder
+                        : L"Timer finished"))
             {
                 Wh_Log(
                     L"ERROR: Could not snooze timer"
@@ -2047,34 +2282,12 @@ static LRESULT CALLBACK TimerPopupWndProc(
                 );
             }
 
-            HWND taskbar =
-                FindCurrentProcessTaskbarWnd();
-
-            if (!taskbar) {
-                Wh_Log(
-                    L"ERROR: Taskbar not found while starting timer"
-                );
-
-                return 0;
-            }
-
-            StartTimerRequest request{};
-            request.seconds =
-                minutes * 60;
-
-            wcsncpy_s(
-                request.reminder,
-                reminder,
-                _TRUNCATE
-            );
-
-            if (!RunFromWindowThread(
-                    taskbar,
-                    StartCountdownOnTaskbarThread,
-                    &request))
+            if (!StartAuthoritativeTimer(
+                    minutes * 60,
+                    reminder))
             {
                 Wh_Log(
-                    L"ERROR: Could not start timer on taskbar thread"
+                    L"ERROR: Could not start timer"
                 );
 
                 return 0;
@@ -2102,22 +2315,7 @@ static LRESULT CALLBACK TimerPopupWndProc(
         if (LOWORD(wParam) == IDC_CANCEL_TIMER &&
             HIWORD(wParam) == BN_CLICKED)
         {
-            HWND taskbar =
-                FindCurrentProcessTaskbarWnd();
-
-            if (!taskbar) {
-                Wh_Log(
-                    L"ERROR: Taskbar not found while cancelling timer"
-                );
-
-                return 0;
-            }
-
-            if (!RunFromWindowThread(
-                    taskbar,
-                    CancelCountdownOnTaskbarThread,
-                    nullptr))
-            {
+            if (!CancelAuthoritativeTimer()) {
                 Wh_Log(
                     L"ERROR: Could not cancel timer"
                 );
@@ -2197,28 +2395,6 @@ static LRESULT CALLBACK TimerPopupWndProc(
 
         return 0;
     }
-
-    case WM_APP_TIMER_FINISHED:
-    {
-        std::unique_ptr<std::wstring> finishedReminder(
-            reinterpret_cast<std::wstring*>(lParam)
-        );
-        ShowWindow(
-            hWnd,
-            SW_HIDE
-        );
-
-        ShowFinishedPopup(
-            g_taskbarWnd.load(),
-            finishedReminder ? finishedReminder->c_str() : L"Timer finished"
-        );
-
-        return 0;
-    }
-
-    case WM_APP_TIMER_SHUTDOWN:
-        DestroyWindow(hWnd);
-        return 0;
 
     case WM_CLOSE:
         ShowWindow(
@@ -2490,6 +2666,15 @@ static DWORD WINAPI TimerPopupThreadProc(
     while (!g_unloading.load() &&
            GetMessageW(&msg, nullptr, 0, 0) > 0)
     {
+        if (!msg.hwnd &&
+            msg.message == WM_TIMER &&
+            g_deadlineThreadTimerId &&
+            msg.wParam == g_deadlineThreadTimerId)
+        {
+            HandleAuthoritativeTimerTick();
+            continue;
+        }
+
         bool handled = false;
 
         if (HWND finished = g_finishedPopup.load()) {
@@ -2506,6 +2691,15 @@ static DWORD WINAPI TimerPopupThreadProc(
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
+    }
+
+    if (g_deadlineThreadTimerId) {
+        KillTimer(
+            nullptr,
+            g_deadlineThreadTimerId
+        );
+
+        g_deadlineThreadTimerId = 0;
     }
 
     if (HWND finished = g_finishedPopup.load()) {
@@ -2534,13 +2728,20 @@ static void OpenTimerPopup(
     HWND popup = g_timerPopup.load();
 
     if (popup) {
+        wchar_t reminderCopy[256]{};
+
+        if (g_secondsRemaining.load() > 0) {
+            GetSharedReminder(
+                reminderCopy
+            );
+        }
+
         PostStringMessage(
             popup,
             WM_APP_TIMER_SHOW,
-            g_secondsRemaining.load() > 0
-                ? g_reminder
-                : L""
+            reminderCopy
         );
+
         return;
     }
 
@@ -2734,6 +2935,12 @@ static void AddTimerButtonImpl(
                         g_countdownTimer.Stop();
                     }
 
+                    if (g_timerText) {
+                        g_timerText.Text(
+                            L"⏱ Timer"
+                        );
+                    }
+
                     return;
                 }
 
@@ -2741,9 +2948,6 @@ static void AddTimerButtonImpl(
                     GetTickCount64();
 
                 if (now >= deadline) {
-                    g_deadlineTick.store(0);
-                    g_secondsRemaining.store(0);
-
                     if (g_countdownTimer) {
                         g_countdownTimer.Stop();
                     }
@@ -2751,21 +2955,6 @@ static void AddTimerButtonImpl(
                     if (g_timerText) {
                         g_timerText.Text(
                             L"⏱ Timer"
-                        );
-                    }
-
-                    Wh_Log(
-                        L"Timer finished: '%s'",
-                        g_reminder
-                    );
-
-                    if (g_timerPopup.load() &&
-                        IsWindow(g_timerPopup.load()))
-                    {
-                        PostStringMessage(
-                            g_timerPopup.load(),
-                            WM_APP_TIMER_FINISHED,
-                            g_reminder
                         );
                     }
 
@@ -2905,18 +3094,10 @@ static void AddTimerButtonImpl(
             g_countdownTimer.Start();
         }
         else {
-            g_deadlineTick.store(0);
-            g_secondsRemaining.store(0);
-
-            if (g_timerPopup.load() &&
-                IsWindow(g_timerPopup.load()))
-            {
-                PostStringMessage(
-                    g_timerPopup.load(),
-                    WM_APP_TIMER_FINISHED,
-                    g_reminder
-                );
-            }
+            // The popup thread is authoritative and will deliver the alarm.
+            g_timerText.Text(
+                L"⏱ Timer"
+            );
         }
     }
 
