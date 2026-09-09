@@ -2428,25 +2428,13 @@ void CALLBACK ForegroundEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG id
     }
     g_lastForegroundHwnd = hwnd;
 
-    // Detect fullscreen apps by comparing the foreground window's rect to the monitor
-    RECT fgRect;
-    if (GetWindowRect(hwnd, &fgRect)) {
-        HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-        MONITORINFO mi{ sizeof(mi) };
-        if (GetMonitorInfo(monitor, &mi)) {
-            bool fullscreen = (fgRect.left == mi.rcMonitor.left &&
-                               fgRect.top == mi.rcMonitor.top &&
-                               fgRect.right == mi.rcMonitor.right &&
-                               fgRect.bottom == mi.rcMonitor.bottom);
-            g_fullScreenAppActive = fullscreen;
-        }
-    }
-
     // Check if the foreground window is the desktop
     wchar_t className[256] = {0};
     if (GetClassName(hwnd, className, ARRAYSIZE(className))) {
-        if ((wcscmp(className, L"Progman") == 0 || wcscmp(className, L"WorkerW") == 0) &&
-            !g_fullScreenAppActive) {
+        if ((wcscmp(className, L"Progman") == 0 || wcscmp(className, L"WorkerW") == 0)) {
+            // When desktop is shown, always clear fullscreen flag
+            g_fullScreenAppActive = false;
+
             // Restore the top bar immediately (minimized, hidden, or cloaked)
             if (g_topBarHwnd) {
                 if (IsIconic(g_topBarHwnd)) {
@@ -2455,12 +2443,11 @@ void CALLBACK ForegroundEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG id
                 if (!IsWindowVisible(g_topBarHwnd)) {
                     ShowWindow(g_topBarHwnd, SW_SHOWNOACTIVATE);
                 }
-                // Uncloak if DWM cloaked it
                 BOOL cloaked = FALSE;
                 if (SUCCEEDED(DwmGetWindowAttribute(g_topBarHwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked) {
                     DwmSetWindowAttribute(g_topBarHwnd, DWMWA_CLOAK, FALSE, sizeof(BOOL));
                 }
-                // Reposition to ensure it stays at the top
+                // Reposition
                 PositionAppBar(g_topBarHwnd, g_barHeightPx);
             }
         }
@@ -7922,13 +7909,10 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
 
 
         case WM_SHOWWINDOW:
-            // If the window is being hidden and we are not shutting down,
-            // and we are not in a fullscreen app, force it to show again.
             if (wParam == FALSE && !g_allowHide && !g_fullScreenAppActive) {
                 ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-                // Also uncloak in case DWM cloaked it
                 DwmSetWindowAttribute(hwnd, DWMWA_CLOAK, FALSE, sizeof(BOOL));
-                // Ensure it is above the desktop
+                // Immediately reapply topmost
                 SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                              SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                 return 0;
@@ -7944,6 +7928,16 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             UnregisterHotKey(hwnd, HOTKEY_ID_BATTERY);
             UnregisterAppBar(hwnd);
             PostQuitMessage(0);
+            return 0;
+
+        case WM_WINDOWPOSCHANGING:
+            {
+                WINDOWPOS* wp = reinterpret_cast<WINDOWPOS*>(lParam);
+                // Block hide when not fullscreen and not shutting down
+                if ((wp->flags & SWP_HIDEWINDOW) && !g_allowHide && !g_fullScreenAppActive) {
+                    wp->flags &= ~SWP_HIDEWINDOW; // cancel the hide
+                }
+            }
             return 0;
     }
 
@@ -8145,32 +8139,44 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
 
         // Timer to restore the top bar if it gets minimized/hidden/cloaked by Show Desktop
         g_restoreTimer = DispatcherTimer();
-        g_restoreTimer.Interval(std::chrono::milliseconds(500));
+        g_restoreTimer.Interval(std::chrono::milliseconds(100));
+
         g_restoreTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
             try {
+                // If the current foreground window is the desktop, clear fullscreen flag
+                HWND fg = GetForegroundWindow();
+                if (fg) {
+                    wchar_t fgClass[256] = {0};
+                    GetClassName(fg, fgClass, ARRAYSIZE(fgClass));
+                    if (wcscmp(fgClass, L"Progman") == 0 || wcscmp(fgClass, L"WorkerW") == 0) {
+                        g_fullScreenAppActive = false;
+                    }
+                }
+
                 if (g_topBarHwnd && !g_fullScreenAppActive && !g_allowHide) {
-                    // Restore if minimized
+                    // 1. If minimized, restore
                     if (IsIconic(g_topBarHwnd)) {
                         ShowWindow(g_topBarHwnd, SW_RESTORE);
                     }
-                    // Ensure visible
+                    // 2. If hidden (not visible), force show
                     if (!IsWindowVisible(g_topBarHwnd)) {
                         ShowWindow(g_topBarHwnd, SW_SHOWNOACTIVATE);
                     }
-                    // Uncloak if DWM cloaked it (hidden from taskbar / desktop)
+                    // 3. Uncloak if DWM cloaked it
                     BOOL cloaked = FALSE;
                     if (SUCCEEDED(DwmGetWindowAttribute(g_topBarHwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked) {
                         DwmSetWindowAttribute(g_topBarHwnd, DWMWA_CLOAK, FALSE, sizeof(BOOL));
                     }
-                    // Force topmost to stay above desktop (but not over fullscreen apps)
+                    // 4. Force topmost (so it stays above desktop)
                     SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
                                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                    // Reposition to keep it at the top of the work area
+                    // 5. Reposition to the correct top‑bar position (in case it moved)
                     PositionAppBar(g_topBarHwnd, g_barHeightPx);
                 }
             } catch (...) {
             }
         });
+
         g_restoreTimer.Start();
 
         // Wallpaper updates are handled by WM_SETTINGCHANGE – no timer needed.
