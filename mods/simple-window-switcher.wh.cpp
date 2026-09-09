@@ -671,6 +671,15 @@ static std::vector<HWND> g_hMirrorSwitchers;
 
 static HWND g_hSwitcher = NULL;
 static HWND g_hCloseBtnWnd = NULL;
+
+static bool IsSwitcherWindow(HWND hWnd) {
+    if (!hWnd) return false;
+    if (hWnd == g_hSwitcher || hWnd == g_hCloseBtnWnd) return true;
+    for (HWND h : g_hMirrorSwitchers) {
+        if (hWnd == h) return true;
+    }
+    return false;
+}
 static IVirtualDesktopManager* g_pVirtualDesktopManager = NULL;
 static bool g_showAllMonitors = false;
 static HHOOK g_hMouseHook = NULL;
@@ -1054,6 +1063,43 @@ static bool IsAltTabWindow(HWND h) {
     if (g_IsShellManagedWindow && g_IsShellManagedWindow(h) && !GetPropW(h, L"Microsoft.Windows.ShellManagedWindowAsNormalWindow")) return false;
     if (GetPropW(h, L"valinet.ExplorerPatcher.ShellManagedWindow")) return false;
     return ShouldListInAltTab(h);
+}
+
+// Activation MRU (Most Recently Used) tracking
+static std::vector<HWND> g_mruWindows;
+
+static void UpdateMruWindow(HWND hWnd) {
+    if (!hWnd || IsSwitcherWindow(hWnd)) return;
+    HWND hTarget = hWnd;
+    if (!IsAltTabWindow(hTarget)) {
+        HWND own = GetWindow(hTarget, GW_OWNER);
+        if (own && IsAltTabWindow(own)) {
+            hTarget = own;
+        } else {
+            HWND root = GetAncestor(hTarget, GA_ROOTOWNER);
+            if (root && IsAltTabWindow(root)) {
+                hTarget = root;
+            } else {
+                return;
+            }
+        }
+    }
+    if (!hTarget || IsSwitcherWindow(hTarget)) return;
+
+    auto it = std::find(g_mruWindows.begin(), g_mruWindows.end(), hTarget);
+    if (it != g_mruWindows.end()) {
+        g_mruWindows.erase(it);
+    }
+    g_mruWindows.insert(g_mruWindows.begin(), hTarget);
+    if (g_mruWindows.size() > 128) {
+        g_mruWindows.resize(128);
+    }
+}
+
+static void RemoveMruWindow(HWND hWnd) {
+    if (!hWnd) return;
+    auto it = std::remove(g_mruWindows.begin(), g_mruWindows.end(), hWnd);
+    g_mruWindows.erase(it, g_mruWindows.end());
 }
 
 
@@ -1611,6 +1657,30 @@ static void BuildWindowList() {
     }
     g_windows.clear();
     EnumWindows(EnumWindowsProc, (LPARAM)&g_windows);
+
+    // Prune destroyed windows from MRU history
+    g_mruWindows.erase(
+        std::remove_if(g_mruWindows.begin(), g_mruWindows.end(), [](HWND h) {
+            return !IsWindow(h);
+        }),
+        g_mruWindows.end()
+    );
+
+    // Reorder g_windows based on activation MRU history:
+    // 1. Windows present in g_mruWindows appear first in their MRU order (most recently activated first).
+    // 2. Untracked normal windows follow in their EnumWindows Z-order.
+    // 3. Untracked WS_EX_TOPMOST windows appear last, preventing inactive "always on top" windows from hijacking index 0.
+    std::stable_sort(g_windows.begin(), g_windows.end(), [](const WindowEntry& a, const WindowEntry& b) {
+        auto getRank = [](HWND h) -> int {
+            for (size_t i = 0; i < g_mruWindows.size(); i++) {
+                if (g_mruWindows[i] == h) return (int)i;
+            }
+            bool isTopmost = (GetWindowLongPtrW(h, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+            return isTopmost ? 20000 : 10000;
+        };
+        return getRank(a.hWnd) < getRank(b.hWnd);
+    });
+
     // App grouping: keep one entry per application. EnumWindows yields windows in
     // Z-order (top to bottom), so the first window seen for each app is its most
     // recently used one, which becomes the representative entry.
@@ -3891,6 +3961,7 @@ static void SwitchToSelected() {
             RestoreWindowIfIconic(hF);
         }
         if (!SetForegroundWindow(hF)) SwitchToThisWindow(hF, TRUE);
+        UpdateMruWindow(hT);
     }
     
     HideSwitcher();
@@ -4417,11 +4488,13 @@ static void CloseSwitcherEntry(int idx) {
         if (wcscmp(g_settings.groupCloseBehavior, L"closeAll") == 0) {
             for (HWND hw : g_windows[idx].groupWindows) {
                 PostMessage(hw, WM_SYSCOMMAND, SC_CLOSE, 0);
+                RemoveMruWindow(hw);
             }
         } else {
             // closeRecent (Default)
             HWND closedHwnd = g_windows[idx].hWnd;
             PostMessage(closedHwnd, WM_SYSCOMMAND, SC_CLOSE, 0);
+            RemoveMruWindow(closedHwnd);
             
             auto& group = g_windows[idx].groupWindows;
             group.erase(std::remove(group.begin(), group.end(), closedHwnd), group.end());
@@ -4437,6 +4510,7 @@ static void CloseSwitcherEntry(int idx) {
             }
         }
     } else {
+        RemoveMruWindow(g_windows[idx].hWnd);
         PostMessage(g_windows[idx].hWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
     }
 
@@ -4458,15 +4532,6 @@ static void CloseSwitcherEntry(int idx) {
     g_hoverWnd = NULL;
     g_isCloseHovered = false;
     PaintSwitcher();
-}
-
-static bool IsSwitcherWindow(HWND hWnd) {
-    if (!hWnd) return false;
-    if (hWnd == g_hSwitcher) return true;
-    for (HWND h : g_hMirrorSwitchers) {
-        if (hWnd == h) return true;
-    }
-    return false;
 }
 
 static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -4541,6 +4606,10 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
 
         if (!g_isVisible && !g_isPendingShow) {
+            HWND hFg = GetForegroundWindow();
+            if (hFg && !IsSwitcherWindow(hFg)) {
+                UpdateMruWindow(hFg);
+            }
             if (isAltBacktickTrigger) g_isAltBacktickSameApp = true;
             ShowSwitcher(isCtrl);
 
@@ -4622,6 +4691,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
         break;
     case WM_SYSKEYDOWN: case WM_KEYDOWN:
+        if (wParam == VK_F4) return 0;
         if (wParam == VK_ESCAPE && g_isPendingShow) {
             HideSwitcher();
             return 0;
@@ -4817,15 +4887,29 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
         break;
     case WM_ERASEBKGND: return 1;
+    case WM_SYSCOMMAND:
+        if ((wParam & 0xFFF0) == SC_CLOSE || (wParam & 0xFFF0) == SC_KEYMENU) {
+            return 0;
+        }
+        break;
+    case WM_CLOSE: return 0;
     case WM_DESTROY: UnregisterThumbnails(); return 0;
     }
 
-    if (g_shellHookMsg && uMsg == g_shellHookMsg && g_isVisible) {
+    if (g_shellHookMsg && uMsg == g_shellHookMsg) {
         int code = (int)(wParam & 0x7FFF);
-        if (code == HSHELL_WINDOWDESTROYED) {
+        if (code == HSHELL_WINDOWACTIVATED || code == 4) {
+            HWND hAct = (HWND)lParam;
+            if (hAct && !IsSwitcherWindow(hAct)) {
+                UpdateMruWindow(hAct);
+            }
+        } else if (code == HSHELL_WINDOWDESTROYED) {
             HWND hS = (HWND)lParam;
-            for (int i = 0; i < (int)g_windows.size(); i++)
-                if (g_windows[i].hWnd == hS) { ShowSwitcher(g_isSticky); break; }
+            RemoveMruWindow(hS);
+            if (g_isVisible) {
+                for (int i = 0; i < (int)g_windows.size(); i++)
+                    if (g_windows[i].hWnd == hS) { ShowSwitcher(g_isSticky); break; }
+            }
         }
         return 0;
     }
@@ -5272,6 +5356,11 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     g_shellHookMsg = RegisterWindowMessageW(L"SHELLHOOK");
     RegisterShellHookWindow(g_hSwitcher);
 
+    HWND hFgInit = GetForegroundWindow();
+    if (hFgInit && !IsSwitcherWindow(hFgInit)) {
+        UpdateMruWindow(hFgInit);
+    }
+
     g_hFont = CreateScaledFont(96);
 
     SWS_RegisterHotkeys();
@@ -5288,6 +5377,7 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     if (g_isVisible || g_isPendingShow) HideSwitcher();
     UnregisterThumbnails();
     g_windows.clear();
+    g_mruWindows.clear();
     if (g_hCloseBtnWnd) { DestroyWindow(g_hCloseBtnWnd); g_hCloseBtnWnd = NULL; }
     if (g_hSwitcher) { DeregisterShellHookWindow(g_hSwitcher); DestroyWindow(g_hSwitcher); g_hSwitcher = NULL; }
     UnregisterClassW(SWS_CLASSNAME, GetModuleHandleW(NULL));
