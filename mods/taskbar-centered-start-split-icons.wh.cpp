@@ -3420,6 +3420,17 @@ DWORD WINAPI BackgroundWorkerThreadProc(LPVOID) {
     // ArmButtonHwndResolveTimer keep it armed afterward only as needed.
     g_buttonHwndResolveTimerId =
         SetTimer(nullptr, 0, 100, ButtonHwndResolveTimerProc);
+    if (!g_buttonHwndResolveTimerId) {
+        // Nothing to reorder here the way SetDragFollowPollInterval
+        // needed: this recovers on its own, since the id stays 0 and the
+        // next kArmResolveNowMsg arms a fresh timer. Logged anyway so a
+        // session whose initial resolve pass simply never happened has an
+        // explanation rather than looking like the resolve chain silently
+        // doing nothing.
+        Wh_Log(L"BackgroundWorkerThreadProc: initial resolve SetTimer "
+               L"failed, error=%lu - waiting for the next arm request",
+               GetLastError());
+    }
 
     // Runs for as long as this thread does, switching between the fast
     // and idle cadences on its own - see DragFollowPollTimerProc's tail.
@@ -3453,9 +3464,21 @@ DWORD WINAPI BackgroundWorkerThreadProc(LPVOID) {
             UINT_PTR newResolveTimerId = SetTimer(
                 nullptr, 0, (UINT)msg.lParam, ButtonHwndResolveTimerProc);
             if (!newResolveTimerId) {
-                Wh_Log(L"kArmResolveNowMsg: SetTimer failed, error=%lu - "
-                       L"keeping the existing resolve timer",
-                       GetLastError());
+                // Both outcomes are genuinely reachable, so the message
+                // says which one happened rather than assuming. On the
+                // ordinary tick -> re-arm path there is nothing to keep:
+                // ButtonHwndResolveTimerProc is a one-shot that kills
+                // itself and zeroes the id, then lets
+                // ResolvePendingButtonHwnds' ScheduleNextResolveTick
+                // request the next arm. On the event-driven arms - the
+                // UpdateVisualStates debounce, an ArrangeOverride count
+                // change, a subclass install - a timer usually is still
+                // pending, and that one does survive this failure.
+                Wh_Log(L"kArmResolveNowMsg: SetTimer failed, error=%lu - %s",
+                       GetLastError(),
+                       g_buttonHwndResolveTimerId
+                           ? L"keeping the existing resolve timer"
+                           : L"no resolve timer is currently armed");
                 continue;
             }
             if (g_buttonHwndResolveTimerId) {
