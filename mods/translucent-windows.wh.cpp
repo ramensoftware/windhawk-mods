@@ -1262,7 +1262,7 @@ static COLORREF GetCustomSysColor(INT nIndex)
         return RGB(64, 64, 64);
     else if (nIndex == COLOR_WINDOWTEXT)
         return RGB(240, 240, 240);
-    else if (nIndex == COLOR_WINDOWTEXT || nIndex == COLOR_MENUTEXT || nIndex == COLOR_CAPTIONTEXT ||
+    else if (nIndex == COLOR_MENUTEXT || nIndex == COLOR_CAPTIONTEXT ||
              nIndex == COLOR_BTNTEXT || nIndex == COLOR_INFOTEXT || nIndex == COLOR_HIGHLIGHTTEXT)
         return RGB(255, 255, 255);
     else if (nIndex == COLOR_APPWORKSPACE)
