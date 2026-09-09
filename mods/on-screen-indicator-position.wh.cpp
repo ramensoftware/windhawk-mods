@@ -2,12 +2,12 @@
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
 // @description     Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, and optionally skip the slide out animation
-// @version         1.3.1
+// @version         1.4.0
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lshcore
+// @compilerOptions -lshcore -lpsapi
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -49,11 +49,12 @@ nudge one of the built-in positions.
 
 ## A different spot per indicator
 
-Volume, brightness, keyboard brightness, airplane mode, camera, microphone and the
-plain text indicator can each be given their own position. Anything left on **Same
-as the main position** follows the setting above, so you only have to touch the ones
-you want somewhere else. Handy if you want the volume indicator out of the way at the
-bottom but still want the camera one where you will notice it.
+Volume, brightness, keyboard brightness, airplane mode, camera, microphone, the
+virtual desktop name popup and the plain text indicator can each be given their own
+position. Anything left on **Same as the main position** follows the setting above,
+so you only have to touch the ones you want somewhere else. Handy if you want the
+volume indicator out of the way at the bottom but still want the camera one where
+you will notice it.
 
 Volume kept at the top left while brightness sits in the middle. Only one of them is
 ever on screen at a time, so this is the same desktop photographed twice:
@@ -227,16 +228,31 @@ both target the same function and work out the origin handling.
     - bottomLeft: Bottom left
     - bottomCenter: Bottom center
     - bottomRight: Bottom right
+  - virtualDesktop: same
+    $name: Virtual desktop name
+    $options:
+    - same: Same as the main position
+    - topLeft: Top left
+    - topCenter: Top center
+    - topRight: Top right
+    - middleLeft: Middle left
+    - center: Center
+    - middleRight: Middle right
+    - bottomLeft: Bottom left
+    - bottomCenter: Bottom center
+    - bottomRight: Bottom right
   $name: Position per indicator
   $description: >-
-    Give one kind of indicator a spot of its own. Anything left on "Same as the
-    main position" follows the Position setting above. The offsets apply to all
-    of them either way.
+    Give one kind of indicator a spot of its own. The virtual desktop name popup
+    is separated from other text indicators so it can be placed independently.
+    Anything left on "Same as the main position" follows the Position setting
+    above. The offsets apply to all of them either way.
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 
+#include <psapi.h>
 #include <shellscalingapi.h>
 
 #include <atomic>
@@ -265,6 +281,7 @@ enum class Indicator {
     camera,
     microphone,
     text,
+    virtualDesktop,
     count,
     // Nothing has been shown yet, so there is no kind to look up and the main
     // position is used.
@@ -313,8 +330,9 @@ bool AnyPerIndicator() {
 // rather than a number to count enum members against.
 PCWSTR IndicatorName(Indicator indicator) {
     static constexpr PCWSTR kNames[] = {
-        L"volume",     L"brightness", L"keyboardBrightness", L"airplaneMode",
-        L"camera",     L"microphone", L"text",
+        L"volume",     L"brightness",      L"keyboardBrightness",
+        L"airplaneMode", L"camera",        L"microphone",
+        L"text",       L"virtualDesktop",
     };
     static_assert(ARRAYSIZE(kNames) == (size_t)Indicator::count);
 
@@ -494,11 +512,51 @@ int WINAPI ShowMicrophoneMutedThunk_Hook(void* pThis, int state, void* text) {
     return ShowMicrophoneMutedThunk_Original(pThis, state, text);
 }
 
+// The virtual desktop name popup goes through the same ShowText entry point as
+// every other text indicator. The only thing that tells them apart at hook time
+// is who called it: twinui.dll for the virtual desktop switch, the aeh module
+// for everything else. Hooking twinui.dll directly crashes the shell, so the
+// caller module is looked up from the return address instead. Cheap, no other
+// module touched, no chance of conflicting with another mod that hooks the same
+// twinui function.
+HMODULE g_twinuiModule = nullptr;
+uintptr_t g_twinuiBase = 0;
+uintptr_t g_twinuiEnd = 0;
+
+bool ReturnAddressIsTwinui(void* returnAddress) {
+    if (!g_twinuiBase) {
+        return false;
+    }
+    uintptr_t ra = reinterpret_cast<uintptr_t>(returnAddress);
+    return ra >= g_twinuiBase && ra < g_twinuiEnd;
+}
+
+// A ShowText call from twinui goes through the thunk first, and the thunk then
+// calls into the async ramp internally. That means the ramp's own return
+// address sits inside the thunk, not inside twinui, so a naive return-address
+// check would classify the ramp as a plain text indicator and clobber the
+// virtualDesktop classification the thunk just made. The thunk sets this
+// thread_local before it dispatches, the ramp inherits it, and the thunk
+// clears it after the call returns so it doesn't leak into a later text show
+// on the same thread.
+thread_local bool g_textCallFromTwinui = false;
+
+Indicator ClassifyTextCall(void* returnAddress) {
+    return (g_textCallFromTwinui || ReturnAddressIsTwinui(returnAddress))
+               ? Indicator::virtualDesktop
+               : Indicator::text;
+}
+
 using ShowTextThunk_t = int(WINAPI*)(void* pThis, void* text, bool value);
 ShowTextThunk_t ShowTextThunk_Original;
 int WINAPI ShowTextThunk_Hook(void* pThis, void* text, bool value) {
-    g_currentIndicator.store(Indicator::text);
-    return ShowTextThunk_Original(pThis, text, value);
+    bool fromTwinui = ReturnAddressIsTwinui(__builtin_return_address(0));
+    g_textCallFromTwinui = fromTwinui;
+    g_currentIndicator.store(fromTwinui ? Indicator::virtualDesktop
+                                        : Indicator::text);
+    int result = ShowTextThunk_Original(pThis, text, value);
+    g_textCallFromTwinui = false;
+    return result;
 }
 
 // Each kind of indicator has its own entry point on the host, so the kind is
@@ -571,7 +629,7 @@ char WINAPI ShowMicrophoneMutedAsync_Hook(void* pThis, int value, void* text) {
 using ShowTextAsync_t = char(WINAPI*)(void* pThis, void* text, bool value);
 ShowTextAsync_t ShowTextAsync_Original;
 char WINAPI ShowTextAsync_Hook(void* pThis, void* text, bool value) {
-    g_currentIndicator.store(Indicator::text);
+    g_currentIndicator.store(ClassifyTextCall(__builtin_return_address(0)));
     return ShowTextAsync_Original(pThis, text, value);
 }
 
@@ -616,6 +674,25 @@ void WINAPI ConfirmatorHostControl_Hide_Hook(void* pThis) {
 // the hidden-pointer form on x64 and the HFA-in-registers form on ARM64.
 // Hand-rolling the hidden pointer worked on x64 but shifted every argument on
 // ARM64, where four floats are a homogeneous aggregate returned in s0-s3.
+// WinrtRect is four floats = 16 bytes. The calling convention for a 16-byte
+// aggregate return differs by architecture, and worse, differs by *compiler* on
+// x64:
+//
+//   - MSVC on x64 uses the MS ABI: a hidden first pointer, the callee writes
+//     the result through it and returns the pointer in RAX.
+//   - Clang/mingw targeting x86_64-w64-mingw32 does NOT reliably generate that
+//     hidden-pointer form for a return-by-value 16-byte aggregate; it splits
+//     the return into XMM0/XMM1 registers, which does not match what the
+//     MSVC-compiled explorer.exe caller expects. The mismatch corrupts the
+//     return path and crashes the shell on the first call.
+//   - ARM64 uses AAPCS64: four floats are a Homogeneous Floating-point
+//     Aggregate returned in s0-s3, and a hidden pointer would shift every
+//     other argument by one slot and pass garbage through.
+//
+// So the signature is declared per architecture: hand-rolled hidden pointer on
+// x64 to match MSVC exactly, compiler-managed return by value on ARM64 so the
+// compiler emits the HFA form.
+#if defined(_M_ARM64) || defined(__aarch64__)
 using HardwareConfirmatorHost_GetPositionRect_t =
     WinrtRect(WINAPI*)(void* pThis, const WinrtRect& rect);
 HardwareConfirmatorHost_GetPositionRect_t
@@ -671,6 +748,66 @@ HardwareConfirmatorHost_GetPositionRect_Hook(void* pThis,
 
     return result;
 }
+#else
+using HardwareConfirmatorHost_GetPositionRect_t =
+    WinrtRect*(WINAPI*)(void* pThis, WinrtRect* retval, const WinrtRect* rect);
+HardwareConfirmatorHost_GetPositionRect_t
+    HardwareConfirmatorHost_GetPositionRect_Original;
+WinrtRect* WINAPI
+HardwareConfirmatorHost_GetPositionRect_Hook(void* pThis,
+                                             WinrtRect* retval,
+                                             const WinrtRect* rect) {
+    Wh_Log(L"> indicator=%s", IndicatorName(g_currentIndicator.load()));
+
+    int offsetSettingX = g_settings.offsetX.load();
+    int offsetSettingY = g_settings.offsetY.load();
+
+    // Scale the offsets to the target monitor's DPI so the same number moves
+    // the same distance everywhere.
+    if (offsetSettingX || offsetSettingY) {
+        RECT areaRect{
+            .left = (LONG)rect->X,
+            .top = (LONG)rect->Y,
+            .right = (LONG)(rect->X + rect->Width),
+            .bottom = (LONG)(rect->Y + rect->Height),
+        };
+        HMONITOR monitor = MonitorFromRect(&areaRect, MONITOR_DEFAULTTONEAREST);
+        UINT dpiX = 96;
+        UINT dpiY = 96;
+        if (SUCCEEDED(GetDpiForMonitor(monitor, MDT_DEFAULT, &dpiX, &dpiY)) &&
+            dpiX && dpiY) {
+            offsetSettingX = MulDiv(offsetSettingX, dpiX, 96);
+            offsetSettingY = MulDiv(offsetSettingY, dpiY, 96);
+        }
+    }
+
+    // Shift the input rect to 0,0 since the original function assumes that.
+    WinrtRect shiftedRect = *rect;
+    float offsetX = shiftedRect.X;
+    float offsetY = shiftedRect.Y;
+    shiftedRect.X = 0;
+    shiftedRect.Y = 0;
+
+    WinrtRect* result = HardwareConfirmatorHost_GetPositionRect_Original(
+        pThis, retval, &shiftedRect);
+
+    if (result) {
+        Position position = CurrentPosition();
+        bool anyPlacement = position != Position::windowsDefault ||
+                            offsetSettingX || offsetSettingY;
+
+        if (anyPlacement) {
+            PlaceInArea(shiftedRect, position, offsetSettingX,
+                        offsetSettingY, result);
+        }
+
+        result->X += offsetX;
+        result->Y += offsetY;
+    }
+
+    return result;
+}
+#endif
 
 Position PositionFromString(PCWSTR value) {
     if (wcscmp(value, L"topLeft") == 0) {
@@ -728,6 +865,7 @@ void LoadSettings() {
         L"perIndicator.camera",
         L"perIndicator.microphone",
         L"perIndicator.text",
+        L"perIndicator.virtualDesktop",
     };
     static_assert(ARRAYSIZE(kIndicatorSettings) == (size_t)Indicator::count);
 
@@ -954,6 +1092,29 @@ BOOL Wh_ModInit() {
     // defaults there is nothing being ignored to complain about.
     if (g_kindUnreliable && anyPerIndicator) {
         Wh_Log(L"%s", kKindUnreliableMessage);
+    }
+
+    // Resolve twinui.dll's loaded range so ShowText can tell a virtual desktop
+    // switch popup apart from other text indicators by checking the return
+    // address. Nothing in twinui is hooked, just its address range is read.
+    // If twinui isn't loaded yet or the query fails, the popup falls back to
+    // the plain text position, same as before.
+    g_twinuiModule = GetModuleHandleW(L"twinui.dll");
+    if (g_twinuiModule) {
+        MODULEINFO mi{};
+        if (GetModuleInformation(GetCurrentProcess(), g_twinuiModule, &mi,
+                                 sizeof(mi))) {
+            g_twinuiBase = reinterpret_cast<uintptr_t>(mi.lpBaseOfDll);
+            g_twinuiEnd = g_twinuiBase + mi.SizeOfImage;
+            Wh_Log(L"twinui.dll range 0x%p - 0x%p", (void*)g_twinuiBase,
+                   (void*)g_twinuiEnd);
+        } else {
+            Wh_Log(L"twinui.dll present but GetModuleInformation failed, "
+                   L"virtual desktop indicator uses text position");
+        }
+    } else {
+        Wh_Log(L"twinui.dll not loaded, virtual desktop indicator uses text "
+               L"position");
     }
 
     return TRUE;
