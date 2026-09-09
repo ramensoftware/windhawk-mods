@@ -49,8 +49,8 @@ The mod includes a series of settings:
 
 ## Notes
 
-- This modification has been tested on Windows 10 21H2 and Windows 11 24H2.
-- AdministratoX tested the mod on Windows 11 25H2.
+- This modification has been tested on Windows 10 21H2 , Windows 11 24H2 and Windows 11 25H2.
+- This modification is a best-effort reimplementation of the Windows 7 intl.cpl (Region and Language Control Panel) on Windows 10/11. While it aims to restore the classic experience, 100% feature parity with the original Windows 7 component is not guaranteed. Some Windows 7 features no longer exist on modern Windows and are redirected to their closest modern equivalents.
 - Some Windows 7 features no longer exist on modern Windows. In those cases the closest modern equivalent is opened instead (for example, the "Default location" link opens the Location privacy page).
 - Settings that were already applied are kept after the mod is disabled.
 - Windows system files **are not modified** and the modern intl.cpl is used as a fallback.
@@ -77,8 +77,8 @@ While the mod is active, the restored page can also be opened directly:
 
 ## Credits
 
-- Based on the technique of the example restorer mods.
-- AdministratoX – testing on Windows 11 25H2.
+- AdministratoX – Testing on Windows 11 25H2
+- m417z - Code review
 
 ---
 */
@@ -7294,6 +7294,12 @@ constexpr GUID kIidUnknown = { 0x00000000, 0x0000, 0x0000,
     { 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } };
 struct IOpenPanel : public IUnknown {
     virtual HRESULT STDMETHODCALLTYPE Open(PCWSTR name, PCWSTR page, IUnknown* site) = 0;
+    // Real IOpenControlPanel also declares GetPath/GetCurrentView. QueryInterface
+    // hands this object out for IID_IOpenControlPanel, so the vtable must be as
+    // long as the real interface or a call to either of these two jumps past the
+    // end of the emitted vtable into whatever memory follows it (finding 6).
+    virtual HRESULT STDMETHODCALLTYPE GetPath(PCWSTR name, PWSTR path, UINT count, PVOID reserved) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetCurrentView(DWORD flags, REFIID riid, void** out) = 0;
 };
 class FakeControlPanel : public IOpenPanel {
     std::atomic<LONG> refs_{ 1 };
@@ -7317,6 +7323,13 @@ public:
     ULONG STDMETHODCALLTYPE Release() override {
         LONG left = refs_.fetch_sub(1, std::memory_order_acq_rel) - 1;
         return static_cast<ULONG>(left < 0 ? 0 : left); // static lifetime; never freed
+    }
+    HRESULT STDMETHODCALLTYPE GetPath(PCWSTR /*name*/, PWSTR /*path*/, UINT /*count*/, PVOID /*reserved*/) override {
+        return E_NOTIMPL;
+    }
+    HRESULT STDMETHODCALLTYPE GetCurrentView(DWORD /*flags*/, REFIID /*riid*/, void** out) override {
+        if (out) *out = nullptr;
+        return E_NOTIMPL;
     }
     HRESULT STDMETHODCALLTYPE Open(PCWSTR name, PCWSTR page, IUnknown* site) override {
         (void)name; (void)page; (void)site;
@@ -7746,15 +7759,21 @@ bool EnsurePrepared() {
 // windows the legacy provider raised that the mod never tracked in g_owned
 // (a MessageBoxW, an elevation prompt) instead of relying on g_owned alone
 // (finding 3).
-std::vector<DWORD> g_legacyThreads;
-bool EnterLegacy() {
+// Pairs a legacy-call thread with the host window CplHook was invoked with,
+// so the unload path can identify windows the legacy provider raised itself
+// (a MessageBoxW, a modal child) without broadcasting WM_CLOSE to every
+// top-level window that thread happens to own (finding 3): RedirectShellExecuteExW
+// also calls EnterLegacy for ordinary ShellExecuteExW calls from Explorer's
+// taskbar/desktop threads, so g_legacyThreads alone is not a safe filter.
+std::vector<std::pair<DWORD, HWND>> g_legacyThreads;
+bool EnterLegacy(HWND host = nullptr) {
     AcquireSRWLockShared(&g_gate);
     bool enter = !g_stopping.load(std::memory_order_acquire);
     if (enter && g_active.fetch_add(1, std::memory_order_acq_rel) == 0) ResetEvent(g_idle);
     ReleaseSRWLockShared(&g_gate);
     if (enter) {
         AcquireSRWLockExclusive(&g_windowsLock);
-        g_legacyThreads.push_back(GetCurrentThreadId());
+        g_legacyThreads.emplace_back(GetCurrentThreadId(), host);
         ReleaseSRWLockExclusive(&g_windowsLock);
     }
     return enter;
@@ -7763,7 +7782,7 @@ void LeaveLegacy() {
     AcquireSRWLockExclusive(&g_windowsLock);
     DWORD tid = GetCurrentThreadId();
     for (auto it = g_legacyThreads.begin(); it != g_legacyThreads.end(); ++it) {
-        if (*it == tid) { g_legacyThreads.erase(it); break; }
+        if (it->first == tid) { g_legacyThreads.erase(it); break; }
     }
     ReleaseSRWLockExclusive(&g_windowsLock);
     AcquireSRWLockExclusive(&g_gate);
@@ -7843,10 +7862,14 @@ void CloseOwnedWindows() {
     // here must not abort that loop early and skip requesting the close.
     try {
         std::vector<HWND> copy;
-        std::vector<DWORD> legacyThreads;
+        std::vector<DWORD> legacyThreadIds;  
         AcquireSRWLockShared(&g_windowsLock);
         copy = g_owned;
-        legacyThreads = g_legacyThreads;
+        legacyThreadIds.clear();
+        legacyThreadIds.reserve(g_legacyThreads.size());
+        for (const auto& entry : g_legacyThreads) {
+            legacyThreadIds.push_back(entry.first);
+        }
         ReleaseSRWLockShared(&g_windowsLock);
 
         DWORD pid = GetCurrentProcessId();
@@ -7859,7 +7882,7 @@ void CloseOwnedWindows() {
         // Also reach top-level windows the legacy provider raised itself (a
         // MessageBoxW, the out-of-process elevation prompt) that never went
         // through the mod's window tracking (finding 3).
-        for (DWORD tid : legacyThreads) {
+        for (DWORD tid : legacyThreadIds) {
             EnumThreadWindows(tid, [](HWND window, LPARAM) -> BOOL {
                 PostMessageW(window, WM_CLOSE, 0, 0);
                 return TRUE;
