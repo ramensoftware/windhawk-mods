@@ -2,7 +2,7 @@
 // @id              taskbar-volume-percentage
 // @name            Taskbar Volume Percentage Indicator
 // @description     Displays the exact master volume percentage in the system tray natively inside the Windows 11 volume button with real-time sync.
-// @version         1.1.0
+// @version         1.2.0
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
@@ -14,37 +14,16 @@
 /*
 # Taskbar Volume Percentage Indicator
 
-Displays the master volume percentage directly inside the Windows 11 system tray volume icon in real time.
+Replaces the Windows 11 taskbar volume icon with the current volume level in real time.
 
-## Display styles
+## Features
 
-- **Percentage**: Displays the volume percentage (e.g. `50%`).
-- **Number only**: Displays the numerical volume level (e.g. `50`).
-- **Prefix and Percentage**: Displays a custom prefix before the percentage (e.g. `Vol 50%`).
-- **Icon and Percentage**: Displays a speaker icon with the percentage (e.g. `🔊 50%`).
-- **Windows Default**: Displays the vanilla native Windows 11 speaker icon with volume waves.
-
-## Jitter Prevention (Padding)
-
-Stabilizes the button width and prevents adjacent tray icons (Wi-Fi, Battery, Clock) from shifting when the volume level changes between 1, 2, or 3 digits:
-- **None**: Standard variable width (e.g. `5%`, `50%`, `100%`).
-- **Zero-padded**: Fixed 2-digit format (e.g. `05%`, `50%`, `100%`).
-- **Space-padded**: Balanced space format (e.g. ` 5%`, `50%`, `100%`).
-
-## Mute Display Styles
-
-Choose how the muted state is represented:
-- **MUT**: Standard abbreviation (`MUT`).
-- **Mute**: Full word (`Mute`).
-- **0%**: Zero volume representation (`0%` / `00%`).
-- **✕**: Modern fine cross symbol (`✕`).
-- **🔇**: Mute speaker emoji (`🔇`).
-- **Native Glyph**: Windows 11 Segoe Fluent crossed-out speaker glyph.
-- **Custom Text**: Custom user-defined string.
+- **Display styles**: Percentage (`50%`), number only (`50`), custom prefix (`Vol 50%`), emoji (`🔊 50%`), or default icon.
+- **Mute indicator**: Customizable mute display (`MUT`, `Mute`, `0%`, `✕`, `🔇`, or native glyph).
 
 ## Credits
 
-- Based on the [Windows 11 Taskbar Styler](https://windhawk.net/mods/windows-11-taskbar-styler) mod by [m417z](https://github.com/m417z).
+- Inspired by the taskbar visual customization concepts from [m417z](https://github.com/m417z).
 */
 // ==/WindhawkModReadme==
 
@@ -62,13 +41,6 @@ Choose how the muted state is represented:
 - customPrefix: "Vol "
   $name: Custom Prefix
   $description: Prefix text used when the display style is set to 'Prefix and Percentage'.
-- paddingMode: none
-  $name: Jitter Prevention (Padding)
-  $description: Stabilizes taskbar button width and prevents adjacent tray icons from shifting when volume changes between 1 and 2 digits.
-  $options:
-    - none: None (Standard width, e.g. 5%, 50%, 100%)
-    - zero: Zero-padded (Fixed 2 digits, e.g. 05%, 50%, 100%)
-    - space: Space-padded (Balanced space, e.g. ' 5%', '50%', '100%')
 - muteStyle: mut
   $name: Mute Display Style
   $description: Format shown when system master volume is muted.
@@ -116,6 +88,8 @@ struct shared_hstring_header : hstring_header {
     wchar_t buffer[1];
 };
 
+constexpr uint32_t MOD_HSTRING_MAGIC = 0x57484F4B; // "WHOK" tag to verify ownership before HeapFree
+
 static shared_hstring_header* CreateSharedHString(const std::wstring& str) {
     uint32_t len = static_cast<uint32_t>(str.length());
     size_t bytes = sizeof(shared_hstring_header) + sizeof(wchar_t) * len;
@@ -126,7 +100,7 @@ static shared_hstring_header* CreateSharedHString(const std::wstring& str) {
     }
     header->flags = 0;
     header->length = len;
-    header->padding1 = 0;
+    header->padding1 = MOD_HSTRING_MAGIC;
     header->padding2 = 0;
     header->ptr = header->buffer;
     header->count = 1;
@@ -138,9 +112,7 @@ static void ReleaseSharedHString(shared_hstring_header* header) {
     if (!header) {
         return;
     }
-    // Only heap-allocated strings (flags == 0) have an allocated reference count.
-    // Fast-pass / static string references (flags != 0) must never be freed.
-    if (header->flags != 0) {
+    if (header->flags != 0 || header->padding1 != MOD_HSTRING_MAGIC) {
         return;
     }
     if (InterlockedDecrement(reinterpret_cast<volatile LONG*>(&header->count)) == 0) {
@@ -156,12 +128,6 @@ enum class DisplayStyle {
     Vanilla,
 };
 
-enum class PaddingMode {
-    None,
-    Zero,
-    Space,
-};
-
 enum class MuteStyle {
     Mut,
     Mute,
@@ -172,125 +138,89 @@ enum class MuteStyle {
     Custom,
 };
 
-struct ModSettings {
+struct Settings {
     DisplayStyle displayStyle;
     std::wstring customPrefix;
-    PaddingMode paddingMode;
     MuteStyle muteStyle;
     std::wstring customMuteText;
 };
 
-static ModSettings g_settings;
+static Settings g_settings;
+
+// Segoe Fluent Icons volume glyphs
+constexpr wchar_t GLYPH_MUTE  = 0xE74F; // Crossed-out speaker
+constexpr wchar_t GLYPH_VOL_0 = 0xE992; // 0 bars
+constexpr wchar_t GLYPH_VOL_1 = 0xE993; // 1 bar
+constexpr wchar_t GLYPH_VOL_2 = 0xE994; // 2 bars
+constexpr wchar_t GLYPH_VOL_3 = 0xE995; // 3 bars
+
+static void* g_pVolumeDataModel = nullptr;
+static float g_lastVolumeLevel = 0.5f;
+static bool  g_lastIsMuted = false;
 static std::mutex g_dataModelMutex;
 static std::atomic<bool> g_unloading{false};
 static std::atomic<bool> g_systemTrayModuleHooked{false};
-static void* g_pVolumeDataModel = nullptr;
-static float g_lastVolumeLevel = 0.50f;
-static bool g_lastIsMuted = false;
 
-// Windows 11 Segoe Fluent Icons volume glyphs
-constexpr wchar_t GLYPH_MUTE = 0xE74F;
-constexpr wchar_t GLYPH_VOL_3 = 0xE995;
-
-static wchar_t GetVanillaVolumeGlyph(int percentage, bool isMuted) {
-    if (isMuted) {
-        return GLYPH_MUTE;
+static std::wstring FormatMuteString(MuteStyle style, const std::wstring& customText) {
+    switch (style) {
+        case MuteStyle::Mute:
+            return L"Mute";
+        case MuteStyle::Zero:
+            return L"0%";
+        case MuteStyle::Cross:
+            return L"\u2715";
+        case MuteStyle::Emoji:
+            return L"\xD83D\xDD07";
+        case MuteStyle::Glyph:
+            return std::wstring(1, GLYPH_MUTE);
+        case MuteStyle::Custom:
+            return customText.empty() ? L"Mute" : customText;
+        case MuteStyle::Mut:
+        default:
+            return L"MUT";
     }
-    if (percentage <= 0) {
-        return 0xE992;
-    }
-    if (percentage <= 33) {
-        return 0xE993;
-    }
-    if (percentage <= 66) {
-        return 0xE994;
-    }
-    return GLYPH_VOL_3;
 }
 
 static std::wstring FormatVolumeText(int percentage, bool isMuted) {
-    if (isMuted) {
-        if (g_settings.displayStyle == DisplayStyle::Vanilla) {
-            return std::wstring(1, GLYPH_MUTE);
-        }
-
-        std::wstring muteText;
-        switch (g_settings.muteStyle) {
-            case MuteStyle::Mute:
-                muteText = L"Mute";
-                break;
-            case MuteStyle::Zero:
-                if (g_settings.displayStyle == DisplayStyle::Number) {
-                    muteText = (g_settings.paddingMode == PaddingMode::Zero) ? L"00" :
-                               ((g_settings.paddingMode == PaddingMode::Space) ? L" 0" : L"0");
-                } else {
-                    muteText = (g_settings.paddingMode == PaddingMode::Zero) ? L"00%" :
-                               ((g_settings.paddingMode == PaddingMode::Space) ? L" 0%" : L"0%");
-                }
-                break;
-            case MuteStyle::Cross:
-                muteText = L"\x2715"; // ✕
-                break;
-            case MuteStyle::Emoji:
-                muteText = L"\xD83D\xDD07"; // 🔇
-                break;
-            case MuteStyle::Glyph:
-                muteText = std::wstring(1, GLYPH_MUTE);
-                break;
-            case MuteStyle::Custom:
-                muteText = g_settings.customMuteText;
-                break;
-            case MuteStyle::Mut:
-            default:
-                muteText = L"MUT";
-                break;
-        }
-
-        if (g_settings.displayStyle == DisplayStyle::Prefix) {
-            return g_settings.customPrefix + muteText;
-        }
-        if (g_settings.displayStyle == DisplayStyle::Emoji && g_settings.muteStyle != MuteStyle::Emoji) {
-            return L"\xD83D\xDD07 " + muteText;
-        }
-        return muteText;
+    if (isMuted && g_settings.displayStyle != DisplayStyle::Vanilla) {
+        return FormatMuteString(g_settings.muteStyle, g_settings.customMuteText);
     }
 
-    if (g_settings.displayStyle == DisplayStyle::Vanilla) {
-        return std::wstring(1, GetVanillaVolumeGlyph(percentage, false));
-    }
-
-    std::wstring numStr = std::to_wstring(percentage);
-    if (percentage < 10) {
-        if (g_settings.paddingMode == PaddingMode::Zero) {
-            numStr = L"0" + numStr;
-        } else if (g_settings.paddingMode == PaddingMode::Space) {
-            numStr = L" " + numStr;
-        }
-    }
+    std::wstring s = std::to_wstring(percentage);
 
     switch (g_settings.displayStyle) {
+        case DisplayStyle::Vanilla: {
+            wchar_t glyph = GLYPH_MUTE;
+            if (!isMuted) {
+                if (percentage == 0)      glyph = GLYPH_VOL_0;
+                else if (percentage < 33) glyph = GLYPH_VOL_1;
+                else if (percentage < 66) glyph = GLYPH_VOL_2;
+                else                      glyph = GLYPH_VOL_3;
+            }
+            return std::wstring(1, glyph);
+        }
+
         case DisplayStyle::Number:
-            return numStr;
+            return s;
 
         case DisplayStyle::Prefix:
-            return g_settings.customPrefix + numStr + L"%";
+            return g_settings.customPrefix + s + L"%";
 
         case DisplayStyle::Emoji: {
-            std::wstring s;
-            if (percentage <= 0) {
-                s = L"\xD83D\xDD08 ";
+            std::wstring prefix;
+            if (percentage == 0) {
+                prefix = L"\xD83D\xDD08 ";
             } else if (percentage <= 50) {
-                s = L"\xD83D\xDD09 ";
+                prefix = L"\xD83D\xDD09 ";
             } else {
-                s = L"\xD83D\xDD0A ";
+                prefix = L"\xD83D\xDD0A ";
             }
-            s += numStr + L"%";
-            return s;
+            return prefix + s + L"%";
         }
 
         case DisplayStyle::Percentage:
         default:
-            return numStr + L"%";
+            return s + L"%";
     }
 }
 
@@ -306,16 +236,17 @@ static size_t GetIconTextOffset(void* pThis) {
         if (h->flags > 1) {
             return false;
         }
-        if (h->length == 0 || h->length > 64) {
+        if (h->length > 256) {
             return false;
         }
-        if (h->ptr != h->buffer) {
+        if (!h->ptr) {
             return false;
         }
         return true;
     };
 
-    const size_t defaultOffset = sizeof(void*) == 8 ? 0x90 : 0x48;
+    // Primary offset in standard Windows 11 SystemTray builds is 0xB8
+    constexpr size_t defaultOffset = 0xB8;
     shared_hstring_header* defaultCandidate = *reinterpret_cast<shared_hstring_header**>(
         reinterpret_cast<char*>(pThis) + defaultOffset);
     if (isValidHeader(defaultCandidate)) {
@@ -332,6 +263,7 @@ static size_t GetIconTextOffset(void* pThis) {
                 (firstChar >= L'a' && firstChar <= L'z') ||
                 (firstChar >= L'A' && firstChar <= L'Z') ||
                 firstChar == L' ' || firstChar == 0x2715 ||
+                firstChar == 0x2007 || firstChar == 0x00A0 ||
                 firstChar == 0xD83D) {
                 return offset;
             }
@@ -374,110 +306,82 @@ static void ApplyCustomVolumeText(void* pThis, float volumeLevel, bool isMuted) 
     }
 }
 
-static void QueryInitialSystemVolume(float* pVolumeLevel, bool* pIsMuted) {
-    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+static void QueryInitialSystemVolume(float* pLevel, bool* pMuted) {
+    *pLevel = 0.5f;
+    *pMuted = false;
 
     IMMDeviceEnumerator* pEnumerator = nullptr;
-    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
-                                  __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
-    if (SUCCEEDED(hr) && pEnumerator) {
-        IMMDevice* pDevice = nullptr;
-        hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDevice);
-        if (SUCCEEDED(hr) && pDevice) {
-            IAudioEndpointVolume* pEndpointVolume = nullptr;
-            hr = pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr, (void**)&pEndpointVolume);
-            if (SUCCEEDED(hr) && pEndpointVolume) {
-                float vol = 0.0f;
-                if (SUCCEEDED(pEndpointVolume->GetMasterVolumeLevelScalar(&vol))) {
-                    *pVolumeLevel = vol;
-                }
-                BOOL mute = FALSE;
-                if (SUCCEEDED(pEndpointVolume->GetMute(&mute))) {
-                    *pIsMuted = (mute != FALSE);
-                }
-                pEndpointVolume->Release();
+    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+                                  CLSCTX_INPROC_SERVER,
+                                  __uuidof(IMMDeviceEnumerator),
+                                  reinterpret_cast<void**>(&pEnumerator));
+    if (FAILED(hr) || !pEnumerator) {
+        return;
+    }
+
+    IMMDevice* pDevice = nullptr;
+    hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &pDevice);
+    if (SUCCEEDED(hr) && pDevice) {
+        IAudioEndpointVolume* pEndpoint = nullptr;
+        hr = pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_INPROC_SERVER,
+                               nullptr, reinterpret_cast<void**>(&pEndpoint));
+        if (SUCCEEDED(hr) && pEndpoint) {
+            float masterVol = 0.5f;
+            BOOL bMute = FALSE;
+            if (SUCCEEDED(pEndpoint->GetMasterVolumeLevelScalar(&masterVol))) {
+                *pLevel = masterVol;
             }
-            pDevice->Release();
+            if (SUCCEEDED(pEndpoint->GetMute(&bMute))) {
+                *pMuted = (bMute != FALSE);
+            }
+            pEndpoint->Release();
         }
-        pEnumerator->Release();
+        pDevice->Release();
     }
-
-    if (SUCCEEDED(hrCo)) {
-        CoUninitialize();
-    }
-}
-
-static VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
-    HRSRC hResource = FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
-    if (!hResource) {
-        return nullptr;
-    }
-    HGLOBAL hGlobal = LoadResource(hModule, hResource);
-    if (!hGlobal) {
-        return nullptr;
-    }
-    void* pData = LockResource(hGlobal);
-    if (!pData) {
-        return nullptr;
-    }
-    void* pFixedFileInfo = nullptr;
-    UINT uPtrLen = 0;
-    if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) || uPtrLen == 0) {
-        return nullptr;
-    }
-    if (puPtrLen) {
-        *puPtrLen = uPtrLen;
-    }
-    return static_cast<VS_FIXEDFILEINFO*>(pFixedFileInfo);
-}
-
-// Window thread marshaling to ensure 100% thread affinity with Explorer's taskbar UI
-static BOOL CALLBACK EnumWindowsTaskbarProc(HWND hWnd, LPARAM lParam) {
-    DWORD dwProcessId = 0;
-    WCHAR className[64];
-    if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
-        dwProcessId == GetCurrentProcessId() &&
-        GetClassName(hWnd, className, ARRAYSIZE(className)) &&
-        _wcsicmp(className, L"Shell_TrayWnd") == 0) {
-        *reinterpret_cast<HWND*>(lParam) = hWnd;
-        return FALSE;
-    }
-    return TRUE;
+    pEnumerator->Release();
 }
 
 static HWND FindCurrentProcessTaskbarWnd() {
+    DWORD currentProcessId = GetCurrentProcessId();
     HWND hTaskbarWnd = nullptr;
-    EnumWindows(EnumWindowsTaskbarProc, reinterpret_cast<LPARAM>(&hTaskbarWnd));
-    return hTaskbarWnd;
+
+    while ((hTaskbarWnd = FindWindowEx(nullptr, hTaskbarWnd, L"Shell_TrayWnd", nullptr)) != nullptr) {
+        DWORD processId = 0;
+        GetWindowThreadProcessId(hTaskbarWnd, &processId);
+        if (processId == currentProcessId) {
+            return hTaskbarWnd;
+        }
+    }
+
+    return nullptr;
 }
 
-using RunFromWindowThreadProc_t = void (*)(void* parameter);
+using RunFromWindowThreadProc_t = void (*)(void* param);
 
 struct RUN_FROM_WINDOW_THREAD_PARAM {
     RunFromWindowThreadProc_t proc;
     void* procParam;
 };
 
-static UINT g_runFromWindowThreadRegisteredMsg = 0;
+static UINT g_runFromWindowThreadMsg = 0;
 
-static LRESULT CALLBACK CallWndProcHook(int nCode, WPARAM wParam, LPARAM lParam) {
-    (void)wParam;
-    if (nCode == HC_ACTION) {
+static LRESULT CALLBACK RunFromWindowThreadHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HC_ACTION && g_runFromWindowThreadMsg != 0) {
         const CWPSTRUCT* cwp = reinterpret_cast<const CWPSTRUCT*>(lParam);
-        if (cwp->message == g_runFromWindowThreadRegisteredMsg) {
+        if (cwp->message == g_runFromWindowThreadMsg) {
             auto* param = reinterpret_cast<RUN_FROM_WINDOW_THREAD_PARAM*>(cwp->lParam);
-            param->proc(param->procParam);
+            if (param && param->proc) {
+                param->proc(param->procParam);
+            }
         }
     }
-    return CallNextHookEx(nullptr, nCode, 0, lParam);
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
-static bool RunFromWindowThread(HWND hWnd,
-                                RunFromWindowThreadProc_t proc,
-                                void* procParam) {
-    if (g_runFromWindowThreadRegisteredMsg == 0) {
-        g_runFromWindowThreadRegisteredMsg =
-            RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+static bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* procParam) {
+    if (g_runFromWindowThreadMsg == 0) {
+        g_runFromWindowThreadMsg = RegisterWindowMessage(
+            L"Windhawk_RunFromWindowThread_taskbar-volume-percentage");
     }
 
     DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
@@ -492,64 +396,89 @@ static bool RunFromWindowThread(HWND hWnd,
 
     HHOOK hook = SetWindowsHookEx(
         WH_CALLWNDPROC,
-        CallWndProcHook,
+        RunFromWindowThreadHookProc,
         nullptr,
         dwThreadId);
-
     if (!hook) {
         return false;
     }
 
-    RUN_FROM_WINDOW_THREAD_PARAM param = {proc, procParam};
-    SendMessage(hWnd, g_runFromWindowThreadRegisteredMsg, 0, reinterpret_cast<LPARAM>(&param));
+    RUN_FROM_WINDOW_THREAD_PARAM param;
+    param.proc = proc;
+    param.procParam = procParam;
+    SendMessage(hWnd, g_runFromWindowThreadMsg, 0, reinterpret_cast<LPARAM>(&param));
+
     UnhookWindowsHookEx(hook);
     return true;
 }
 
-// Hooks
+static VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
+    void* pFixedFileInfo = nullptr;
+    UINT uPtrLen = 0;
 
-using VolumeSystemTrayIconDataModel_dtor_t = void(WINAPI*)(void* pThis);
-static VolumeSystemTrayIconDataModel_dtor_t VolumeSystemTrayIconDataModel_dtor_Original = nullptr;
+    HRSRC hResource =
+        FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
+    if (hResource) {
+        HGLOBAL hGlobal = LoadResource(hModule, hResource);
+        if (hGlobal) {
+            void* pData = LockResource(hGlobal);
+            if (pData) {
+                if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) ||
+                    uPtrLen == 0) {
+                    pFixedFileInfo = nullptr;
+                    uPtrLen = 0;
+                }
+            }
+        }
+    }
 
-static void WINAPI VolumeSystemTrayIconDataModel_dtor_Hook(void* pThis) {
+    if (puPtrLen) {
+        *puPtrLen = uPtrLen;
+    }
+
+    return reinterpret_cast<VS_FIXEDFILEINFO*>(pFixedFileInfo);
+}
+
+// ---------------------------------------------------------------------------
+// VolumeSystemTrayIconDataModel hooks
+// ---------------------------------------------------------------------------
+
+using VolumeSystemTrayIconDataModel_UpdateVolume_t = void(__cdecl*)(
+    void* pThis, float volumeLevel, bool isMuted, void* hstringIcon);
+static VolumeSystemTrayIconDataModel_UpdateVolume_t
+    VolumeSystemTrayIconDataModel_UpdateVolume_Original = nullptr;
+
+using VolumeSystemTrayIconDataModel_OnDataModelChanged_t = void(__cdecl*)(
+    void* pThis, const std::wstring_view* propertyName);
+static VolumeSystemTrayIconDataModel_OnDataModelChanged_t
+    VolumeSystemTrayIconDataModel_OnDataModelChanged_Original = nullptr;
+
+using VolumeSystemTrayIconDataModel_dtor_t = void(__cdecl*)(void* pThis);
+static VolumeSystemTrayIconDataModel_dtor_t
+    VolumeSystemTrayIconDataModel_dtor_Original = nullptr;
+
+static void __cdecl VolumeSystemTrayIconDataModel_dtor_Hook(void* pThis) {
     {
         std::lock_guard<std::mutex> lock(g_dataModelMutex);
         if (g_pVolumeDataModel == pThis) {
             g_pVolumeDataModel = nullptr;
         }
     }
-    VolumeSystemTrayIconDataModel_dtor_Original(pThis);
+    if (VolumeSystemTrayIconDataModel_dtor_Original) {
+        VolumeSystemTrayIconDataModel_dtor_Original(pThis);
+    }
 }
 
-using VolumeSystemTrayIconDataModel_UpdateVolume_t = void(WINAPI*)(
-    void* pThis,
-    float volumeLevel,
-    bool isMuted,
-    void* deviceName
-);
-static VolumeSystemTrayIconDataModel_UpdateVolume_t VolumeSystemTrayIconDataModel_UpdateVolume_Original = nullptr;
-
-using VolumeSystemTrayIconDataModel_OnDataModelChanged_t = void(WINAPI*)(
-    void* pThis,
-    const void* propertyName
-);
-static VolumeSystemTrayIconDataModel_OnDataModelChanged_t VolumeSystemTrayIconDataModel_OnDataModelChanged_Original = nullptr;
-
-static void WINAPI VolumeSystemTrayIconDataModel_UpdateVolume_Hook(
-    void* pThis,
-    float volumeLevel,
-    bool isMuted,
-    void* deviceName)
-{
+static void __cdecl VolumeSystemTrayIconDataModel_UpdateVolume_Hook(
+    void* pThis, float volumeLevel, bool isMuted, void* hstringIcon) {
     static thread_local bool s_inHook = false;
-    if (s_inHook) {
-        VolumeSystemTrayIconDataModel_UpdateVolume_Original(pThis, volumeLevel, isMuted, deviceName);
-        return;
+
+    if (VolumeSystemTrayIconDataModel_UpdateVolume_Original) {
+        VolumeSystemTrayIconDataModel_UpdateVolume_Original(
+            pThis, volumeLevel, isMuted, hstringIcon);
     }
 
-    VolumeSystemTrayIconDataModel_UpdateVolume_Original(pThis, volumeLevel, isMuted, deviceName);
-
-    if (g_unloading.load(std::memory_order_relaxed)) {
+    if (s_inHook || g_unloading.load(std::memory_order_relaxed)) {
         return;
     }
 
@@ -562,7 +491,7 @@ static void WINAPI VolumeSystemTrayIconDataModel_UpdateVolume_Hook(
         ApplyCustomVolumeText(pThis, volumeLevel, isMuted);
     }
 
-    // Trigger UI redraw via CurrentData property notification
+    // Trigger UI redraw via CurrentData property notification with recursion guard
     if (VolumeSystemTrayIconDataModel_OnDataModelChanged_Original) {
         s_inHook = true;
         std::wstring_view propName = L"CurrentData";
@@ -573,7 +502,7 @@ static void WINAPI VolumeSystemTrayIconDataModel_UpdateVolume_Hook(
 
 static bool HookSystemTraySymbols(HMODULE module) {
     // SystemTray.dll, Taskbar.View.dll
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK systemTrayHooks[] = {
         {
             {
                 LR"(public: void __cdecl winrt::SystemTray::implementation::VolumeSystemTrayIconDataModel::UpdateVolume(float,bool,struct winrt::hstring))",
@@ -581,8 +510,8 @@ static bool HookSystemTraySymbols(HMODULE module) {
                 LR"(?UpdateVolume@VolumeSystemTrayIconDataModel@implementation@SystemTray@winrt@@QEAAXM_NUhstring@4@@Z)",
                 LR"(winrt::SystemTray::implementation::VolumeSystemTrayIconDataModel::UpdateVolume)",
             },
-            &VolumeSystemTrayIconDataModel_UpdateVolume_Original,
-            VolumeSystemTrayIconDataModel_UpdateVolume_Hook,
+            reinterpret_cast<void**>(&VolumeSystemTrayIconDataModel_UpdateVolume_Original),
+            reinterpret_cast<void*>(VolumeSystemTrayIconDataModel_UpdateVolume_Hook),
             false,
         },
         {
@@ -592,9 +521,9 @@ static bool HookSystemTraySymbols(HMODULE module) {
                 LR"(?OnDataModelChanged@VolumeSystemTrayIconDataModel@implementation@SystemTray@winrt@@AEAAXAEBV?$basic_string_view@_WU?$char_traits@_W@std@@@std@@@Z)",
                 LR"(winrt::SystemTray::implementation::VolumeSystemTrayIconDataModel::OnDataModelChanged)",
             },
-            &VolumeSystemTrayIconDataModel_OnDataModelChanged_Original,
+            reinterpret_cast<void**>(&VolumeSystemTrayIconDataModel_OnDataModelChanged_Original),
             nullptr, // Resolved for invocation only, not hooked
-            false,
+            true,
         },
         {
             {
@@ -603,13 +532,13 @@ static bool HookSystemTraySymbols(HMODULE module) {
                 LR"(??1VolumeSystemTrayIconDataModel@implementation@SystemTray@winrt@@UEAA@XZ)",
                 LR"(winrt::SystemTray::implementation::VolumeSystemTrayIconDataModel::~VolumeSystemTrayIconDataModel)",
             },
-            &VolumeSystemTrayIconDataModel_dtor_Original,
-            VolumeSystemTrayIconDataModel_dtor_Hook,
+            reinterpret_cast<void**>(&VolumeSystemTrayIconDataModel_dtor_Original),
+            reinterpret_cast<void*>(VolumeSystemTrayIconDataModel_dtor_Hook),
             true,
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+    if (!WindhawkUtils::HookSymbols(module, systemTrayHooks, ARRAYSIZE(systemTrayHooks))) {
         Wh_Log(L"Failed to hook SystemTray volume symbols");
         return false;
     }
@@ -623,9 +552,6 @@ static HMODULE GetSystemTrayModuleHandle() {
     if (!module) {
         module = GetModuleHandle(L"Taskbar.View.dll");
         if (module) {
-            // Starting with Taskbar.View.dll 2604.8002.200.6000, the SystemTray
-            // types moved out of Taskbar.View.dll into SystemTray.dll, so don't
-            // hook Taskbar.View.dll at this version and above.
             VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(module, nullptr);
             WORD moduleMajor = fixedFileInfo ? HIWORD(fixedFileInfo->dwFileVersionMS) : 0;
             if (!moduleMajor || moduleMajor >= 2604) {
@@ -680,10 +606,13 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
     return hModule;
 }
 
+// ---------------------------------------------------------------------------
 // Settings & lifecycle
+// ---------------------------------------------------------------------------
 
 static void LoadSettings() {
-    PCWSTR displayStyleStr = Wh_GetStringSetting(L"displayStyle");
+    auto displayStyleSetting = WindhawkUtils::StringSetting::make(L"displayStyle");
+    PCWSTR displayStyleStr = displayStyleSetting.get();
     if (displayStyleStr) {
         if (wcscmp(displayStyleStr, L"vanilla") == 0 ||
             wcscmp(displayStyleStr, L"default") == 0 ||
@@ -702,34 +631,19 @@ static void LoadSettings() {
         } else {
             g_settings.displayStyle = DisplayStyle::Percentage;
         }
-        Wh_FreeStringSetting(displayStyleStr);
     } else {
         g_settings.displayStyle = DisplayStyle::Percentage;
     }
 
-    PCWSTR prefixStr = Wh_GetStringSetting(L"customPrefix");
-    if (prefixStr) {
-        g_settings.customPrefix = prefixStr;
-        Wh_FreeStringSetting(prefixStr);
+    auto prefixSetting = WindhawkUtils::StringSetting::make(L"customPrefix");
+    if (prefixSetting.get()) {
+        g_settings.customPrefix = prefixSetting.get();
     } else {
         g_settings.customPrefix = L"Vol ";
     }
 
-    PCWSTR paddingModeStr = Wh_GetStringSetting(L"paddingMode");
-    if (paddingModeStr) {
-        if (wcscmp(paddingModeStr, L"zero") == 0) {
-            g_settings.paddingMode = PaddingMode::Zero;
-        } else if (wcscmp(paddingModeStr, L"space") == 0) {
-            g_settings.paddingMode = PaddingMode::Space;
-        } else {
-            g_settings.paddingMode = PaddingMode::None;
-        }
-        Wh_FreeStringSetting(paddingModeStr);
-    } else {
-        g_settings.paddingMode = PaddingMode::None;
-    }
-
-    PCWSTR muteStyleStr = Wh_GetStringSetting(L"muteStyle");
+    auto muteStyleSetting = WindhawkUtils::StringSetting::make(L"muteStyle");
+    PCWSTR muteStyleStr = muteStyleSetting.get();
     if (muteStyleStr) {
         if (wcscmp(muteStyleStr, L"mute") == 0) {
             g_settings.muteStyle = MuteStyle::Mute;
@@ -746,15 +660,13 @@ static void LoadSettings() {
         } else {
             g_settings.muteStyle = MuteStyle::Mut;
         }
-        Wh_FreeStringSetting(muteStyleStr);
     } else {
         g_settings.muteStyle = MuteStyle::Mut;
     }
 
-    PCWSTR customMuteStr = Wh_GetStringSetting(L"customMuteText");
-    if (customMuteStr) {
-        g_settings.customMuteText = customMuteStr;
-        Wh_FreeStringSetting(customMuteStr);
+    auto customMuteSetting = WindhawkUtils::StringSetting::make(L"customMuteText");
+    if (customMuteSetting.get()) {
+        g_settings.customMuteText = customMuteSetting.get();
     } else {
         g_settings.customMuteText = L"Mute";
     }
@@ -843,7 +755,6 @@ void Wh_ModBeforeUninit() {
 
     g_unloading = true;
 
-    // Restore original native volume glyph safely on the UI thread before unloading
     HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (hTaskbarWnd) {
         RunFromWindowThread(hTaskbarWnd, BeforeUninitOnUIThread, nullptr);
