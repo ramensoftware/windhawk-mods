@@ -14,15 +14,15 @@
 /*
 # TopBar For Windhawk
 
-![TopBar screenshot](https://i.imgur.com/bryjzKr.png)
-
+![TopBar screenshot](https://i.imgur.com/nMvk2r9.png)
+![Flyouts screenshot](https://i.imgur.com/1WYUMqX.png)
 Adds a **TopBar** at top of your screen with multiple customizations, hosted by a
 dedicated explorer.exe tool process.
 
+# Support my Work:
 [![Patreon](https://i.imgur.com/JJ0TluA.png)](https://www.patreon.com/WasiXGamer/join)
 
 ## Themes
-
 Themes are collections of styles that can be selected from the **Theme** dropdown in the mod settings. The following themes are available:
 
 | Theme | Preview |
@@ -36,9 +36,9 @@ More themes, stylings, etc can be found and contributed from:
 ## Features
 
 - **Task list** — window icons, titles, click-to-activate, double-click maximize
-- **Control centre** — Display (brightness, Dark Mode), Sound (volume, per-app mixer, device picker, media controls), Wi-Fi (scan/connect), Bluetooth (connect/disconnect), and Tray (notification area)
+- **Control centre** — Display (brightness, Dark Mode), Sound (volume, per-app mixer, device picker, media controls), Wi-Fi (scan/connect), Bluetooth (connect/disconnect)
 - **Full styling** via Control styles
-- **Background translucency** with acrylic/blur
+- **Background translucency** tinting for TopBar, BlurBehind for Flyouts.
 
 ## Process model
 
@@ -87,7 +87,7 @@ Style syntax: `Property=Value`, `Property:=<Xaml/>`, `$name` constants.
 ## Global transparency and tint
 
 The transparency and tint configured in **Top bar background color** and **Top bar background opacity**
-are applied to the top bar, and all flyouts (Display, Sound, Wi‑Fi, Bluetooth, Tray)
+are applied to the top bar.
 and to all context menus.
 
 ## Known limitations
@@ -346,9 +346,7 @@ namespace resource {
     bool g_gpuQueryInitialized = false;
     bool g_gpuSecondPollDone = false;
 
-    // GPU VRAM used via PDH "GPU Adapter Memory" counters
-    PDH_HQUERY g_vramQuery = nullptr;
-    std::vector<PDH_HCOUNTER> g_vramCounters;
+    // (GPU Adapter Memory counters are handled by GetVramUsed() with its own query)
 
     // Expands a wildcard PDH path into specific localized counters (from m417z's approach)
     std::vector<std::wstring> ExpandGpuWildcard(PCWSTR wildcard_path) {
@@ -412,16 +410,7 @@ namespace resource {
             }
         }
 
-        // Initialize GPU Adapter Memory counters (Summing all instances)
-        if (PdhOpenQuery(nullptr, 0, &g_vramQuery) == ERROR_SUCCESS) {
-            auto paths = ExpandGpuWildcard(L"\\GPU Adapter Memory(*)\\Dedicated Usage");
-            for (const auto& path : paths) {
-                PDH_HCOUNTER counter;
-                if (PdhAddCounter(g_vramQuery, path.c_str(), 0, &counter) == ERROR_SUCCESS) {
-                    g_vramCounters.push_back(counter);
-                }
-            }
-        }
+        // (GPU Adapter Memory counters are handled by GetVramUsed() with its own query)
     }
 
     int GetCpu() {
@@ -678,6 +667,11 @@ namespace resource {
     };
 
     RamInfo GetRamInfo() {
+        static RamInfo cached;
+        static bool cachedInitialized = false;
+        if (cachedInitialized) {
+            return cached;
+        }
         RamInfo info;
         static const CLSID kCLSID_WbemLocator = {0x4590f811, 0x1d3a, 0x11d0, {0x89, 0x1f, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
         static const IID kIID_IWbemLocator = {0xdc12a687, 0x737f, 0x11cf, {0x88, 0x4d, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
@@ -744,6 +738,8 @@ namespace resource {
                 info.totalCapacity = memInfo.ullTotalPhys;
             }
         }
+        cached = info;
+        cachedInitialized = true;
         return info;
     }
 
@@ -793,28 +789,40 @@ namespace resource {
     }
 
     std::wstring GetGpuName(int gpuIndex = 0) {
-        auto names = GetAllGpuNames();
-        if (gpuIndex >= 0 && gpuIndex < (int)names.size()) {
-            return names[gpuIndex];
+        static std::vector<std::wstring> cachedNames;
+        static bool initialized = false;
+        if (!initialized) {
+            cachedNames = GetAllGpuNames();
+            initialized = true;
+        }
+        if (gpuIndex >= 0 && gpuIndex < (int)cachedNames.size()) {
+            return cachedNames[gpuIndex];
         }
         return L"";
     }
 
     // GPU VRAM total via DXGI (with GPU index)
     uint64_t GetVramTotal(int gpuIndex = 0) {
-        winrt::com_ptr<IDXGIFactory1> factory;
-        if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)factory.put()))) return 0;
-        winrt::com_ptr<IDXGIAdapter1> adapter;
-        int current = 0;
-        for (UINT i = 0; factory->EnumAdapters1(i, adapter.put()) != DXGI_ERROR_NOT_FOUND; ++i) {
-            DXGI_ADAPTER_DESC1 desc;
-            if (SUCCEEDED(adapter->GetDesc1(&desc))) {
-                if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) continue;
-                if (current == gpuIndex) {
-                    return desc.DedicatedVideoMemory;
-                }
-                current++;
+        static std::vector<uint64_t> cachedVram;
+        static bool initialized = false;
+        if (!initialized) {
+            winrt::com_ptr<IDXGIFactory1> factory;
+            if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)factory.put()))) {
+                initialized = true;
+                return 0;
             }
+            winrt::com_ptr<IDXGIAdapter1> adapter;
+            for (UINT i = 0; factory->EnumAdapters1(i, adapter.put()) != DXGI_ERROR_NOT_FOUND; ++i) {
+                DXGI_ADAPTER_DESC1 desc;
+                if (SUCCEEDED(adapter->GetDesc1(&desc))) {
+                    if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) continue;
+                    cachedVram.push_back(desc.DedicatedVideoMemory);
+                }
+            }
+            initialized = true;
+        }
+        if (gpuIndex >= 0 && gpuIndex < (int)cachedVram.size()) {
+            return cachedVram[gpuIndex];
         }
         return 0;
     }
@@ -913,7 +921,7 @@ namespace resource {
         if (info.cpuClockMHz <= 0) info.cpuClockMHz = GetCpuClockMHz(); // fallback if API fails
         info.cpuCores = GetCpuCoreCount();
         info.cpuThreads = GetCpuThreadCount();
-        info.processCount = GetProcessCount();
+        // processCount is not displayed; omitted to avoid per-second toolhelp snapshot
         info.ramSpeedMHz = GetRamSpeedMHz();
         info.virtualMemoryTotal = GetVirtualMemoryTotal();
         info.virtualMemoryUsed = GetVirtualMemoryUsed(); // live used
@@ -939,11 +947,7 @@ namespace resource {
             g_gpuQuery = nullptr;
             g_gpuCounters.clear();
         }
-        if (g_vramQuery) {
-            PdhCloseQuery(g_vramQuery);
-            g_vramQuery = nullptr;
-            g_vramCounters.clear();
-        }
+        // (g_vramQuery is no longer used; see GetVramUsed())
     }
 }
 // IXamlSourceTransparency – not projected in standard headers, so declare manually.
@@ -1158,8 +1162,14 @@ int g_currentTab = 0; // 0=CPU, 1=RAM, 2=GPU
 [[clang::no_destroy]] std::map<HWND, std::wstring> g_taskButtonLastTitle;
 // Helper to resize task buttons so they fit within the available width
 void AdjustTaskButtonWidths() {
+    static bool s_adjusting = false;
+    if (s_adjusting) return;
     if (!g_taskListPanel) return;
     if (g_taskListPanel.Children().Size() == 0) return;
+    s_adjusting = true;
+    struct Guard {
+        ~Guard() { s_adjusting = false; }
+    } guard;
 
     // Determine available width for the task list column.
     double availableWidth = 0.0;
@@ -1182,6 +1192,7 @@ void AdjustTaskButtonWidths() {
     std::vector<double> naturalWidths;
     for (auto&& child : g_taskListPanel.Children()) {
         if (auto button = child.try_as<wuxc::Button>()) {
+            button.ClearValue(FrameworkElement::WidthProperty());
             button.Measure(winrt::Windows::Foundation::Size{
                 std::numeric_limits<float>::max(),
                 std::numeric_limits<float>::max()
@@ -1189,8 +1200,7 @@ void AdjustTaskButtonWidths() {
             double natural = button.DesiredSize().Width;
             naturalWidths.push_back(natural);
             sumNaturalWidths += natural;
-            double margin = button.Margin().Left + button.Margin().Right;
-            sumMargins += margin;
+            sumMargins += (button.Margin().Left + button.Margin().Right);
         }
     }
     if (sumNaturalWidths <= 0) return;
@@ -2021,36 +2031,40 @@ FrameworkElement BuildSearchIcon(double displaySize) {
 // Battery icon builder
 // ============================================================================
 
-FrameworkElement BuildBatteryIcon(double displaySize, bool charging) {
+FrameworkElement BuildBatteryIcon(double displaySize, int percentage, bool charging) {
     const double internalWidth = 108.809;
     const double internalHeight = 55.6796;
     double viewboxWidth = displaySize * (internalWidth / internalHeight);
     double viewboxHeight = displaySize;
 
+    // Clamp percentage to 0-100
+    percentage = std::clamp(percentage, 0, 100);
+    
+    // Fill color: green when charging, white otherwise
+    std::wstring fillColor = charging ? L"#34C759" : L"#FFFFFF";
+    // Body background: dark interior (opaque black)
+    std::wstring bodyFill = L"#FF1A1A1A";
+    // Outline stroke color: white (always)
+    std::wstring bodyStroke = L"#FFFFFFFF";
+    // Terminal color: white
+    std::wstring terminalColor = L"#FFFFFFFF";
+
+    // Calculate fill width inside the battery body (inset by 4px on each side)
+    double fillMaxWidth = 88.0;  // 100 - 4 left - 4 right - 2*2 border = 88
+    double fillWidth = fillMaxWidth * percentage / 100.0;
+    if (fillWidth < 4.0) fillWidth = 4.0; // minimum visible fill
+    
     std::wstring xaml;
-    if (charging) {
-        xaml = L"<Viewbox xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
-               L"Stretch=\"Uniform\" Width=\"" + std::to_wstring(viewboxWidth) + L"\" Height=\"" + std::to_wstring(viewboxHeight) + L"\">"
-               L"<Grid Width=\"" + std::to_wstring(internalWidth) + L"\" Height=\"" + std::to_wstring(internalHeight) + L"\">"
-               // Battery body (grey outline with rounded left corners)
-               L"<Rectangle Width=\"100\" Height=\"44\" RadiusX=\"8\" RadiusY=\"8\" Fill=\"#D1D1D1\" HorizontalAlignment=\"Left\" VerticalAlignment=\"Center\" Margin=\"0,0,8,0\"/>"
-               // Terminal (right notch)
-               L"<Rectangle Width=\"8\" Height=\"20\" Fill=\"#D1D1D1\" HorizontalAlignment=\"Right\" VerticalAlignment=\"Center\" Margin=\"0,0,-4,0\"/>"
-               // White fill area
-               L"<Rectangle Width=\"80\" Height=\"40\" RadiusX=\"6\" RadiusY=\"6\" Fill=\"White\" HorizontalAlignment=\"Left\" VerticalAlignment=\"Center\" Margin=\"4,2,20,2\"/>"
-               // Lightning bolt
-               L"<Path Data=\"M30.8087 30.1776L45.0206 11.8398L42.7283 25.2876H54.9535L35.2404 44.6951L41.5058 30.1776H30.8087Z\" Fill=\"Black\" Stretch=\"Uniform\" HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\" Width=\"30\" Height=\"40\"/>"
-               L"</Grid></Viewbox>";
-    } else {
-        xaml = L"<Viewbox xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
-               L"Stretch=\"Uniform\" Width=\"" + std::to_wstring(viewboxWidth) + L"\" Height=\"" + std::to_wstring(viewboxHeight) + L"\">"
-               L"<Grid Width=\"" + std::to_wstring(internalWidth) + L"\" Height=\"" + std::to_wstring(internalHeight) + L"\">"
-               // Battery body (green, rounded left corners)
-               L"<Rectangle Width=\"100\" Height=\"44\" RadiusX=\"8\" RadiusY=\"8\" Fill=\"#34C759\" HorizontalAlignment=\"Left\" VerticalAlignment=\"Center\" Margin=\"0,0,8,0\"/>"
-               // Terminal (right notch)
-               L"<Rectangle Width=\"8\" Height=\"20\" Fill=\"#34C759\" HorizontalAlignment=\"Right\" VerticalAlignment=\"Center\" Margin=\"0,0,-4,0\"/>"
-               L"</Grid></Viewbox>";
-    }
+    xaml = L"<Viewbox xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
+           L"Stretch=\"Uniform\" Width=\"" + std::to_wstring(viewboxWidth) + L"\" Height=\"" + std::to_wstring(viewboxHeight) + L"\">"
+           L"<Grid Width=\"" + std::to_wstring(internalWidth) + L"\" Height=\"" + std::to_wstring(internalHeight) + L"\">"
+           // Battery body (dark fill with white outline)
+           L"<Border Width=\"100\" Height=\"44\" CornerRadius=\"8\" Background=\"" + bodyFill + L"\" BorderBrush=\"" + bodyStroke + L"\" BorderThickness=\"2\" HorizontalAlignment=\"Left\" VerticalAlignment=\"Center\" Margin=\"0,0,8,0\"/>"
+           // Terminal (white rectangle)
+           L"<Rectangle Width=\"8\" Height=\"20\" Fill=\"" + terminalColor + L"\" HorizontalAlignment=\"Right\" VerticalAlignment=\"Center\" Margin=\"0,0,0,0\"/>"
+           // Fill area (white/green portion) - inset from the body edges
+           L"<Rectangle Width=\"" + std::to_wstring(fillWidth) + L"\" Height=\"40\" RadiusX=\"6\" RadiusY=\"6\" Fill=\"" + fillColor + L"\" HorizontalAlignment=\"Left\" VerticalAlignment=\"Center\" Margin=\"4,2,4,2\"/>"
+           L"</Grid></Viewbox>";
 
     try {
         auto element = Markup::XamlReader::Load(xaml).as<FrameworkElement>();
@@ -4351,15 +4365,18 @@ wifi::Network g_wifiPromptNetwork;
 std::wstring g_wifiPromptError;
 
 std::vector<bluetooth::Device> g_bluetoothDevices;
-bool g_bluetoothScanning = false;
 
-unsigned long long g_bluetoothConnectingAddress = 0; // for connect/disconnect
-unsigned long long g_pairingDeviceAddress = 0; // for pairing progress
+
+
 
 std::vector<wifi::Network> g_wifiNetworks;
-bool g_wifiScanning = false;
+std::atomic<bool> g_wifiScanning{false};
+std::atomic<bool> g_bluetoothScanning{false};
+std::atomic<int> g_bluetoothConnectingState{0};
+std::atomic<unsigned long long> g_bluetoothConnectingAddress{0};
+std::atomic<unsigned long long> g_pairingDeviceAddress{0};
 std::wstring g_wifiConnectingSSID;
-int g_bluetoothConnectingState = 0; // 0=None, 1=Connecting, 2=Disconnecting
+
 
 // bool g_bluetoothRadioOn = false;   // moved inside bluetooth namespace
 // std::mutex g_bluetoothRadioMutex;  // moved inside bluetooth namespace
@@ -4404,6 +4421,18 @@ std::mutex g_workerThreadsMutex;
 void RunInBackground(std::function<void()> work) {
     if (InterlockedCompareExchange(&g_shuttingDown, 0, 0) != 0) {
         return;
+    }
+    // Reap finished threads to avoid accumulating handles
+    {
+        std::lock_guard<std::mutex> lock(g_workerThreadsMutex);
+        for (auto it = g_workerThreads.begin(); it != g_workerThreads.end();) {
+            if (WaitForSingleObject(*it, 0) == WAIT_OBJECT_0) {
+                CloseHandle(*it);
+                it = g_workerThreads.erase(it);
+            } else {
+                ++it;
+            }
+        }
     }
     g_backgroundJobs.fetch_add(1);
     auto* workPtr = new std::function<void()>(std::move(work));
@@ -5395,19 +5424,17 @@ void PopulateWifiPanel() {
 
     auto status = wifi::GetStatus();
 
-    // 2-Column Header: Left (Title + Spinner) | Right (Toggle)
+    // 2-Column Header: Left (Title + Spinner) | Right (Refresh + Toggle)
     wuxc::Grid headerGrid;
     headerGrid.Margin(Thickness{4, 2, 0, 6});
- // Forces the right column to be 12px from the edge
     headerGrid.HorizontalAlignment(HorizontalAlignment::Stretch);
 
     // Column 0: Title + Spinner
     wuxc::ColumnDefinition leftColumn;
     leftColumn.Width(GridLength{1, GridUnitType::Star});
     headerGrid.ColumnDefinitions().Append(leftColumn);
-    
 
-    // Column 1: Toggle (auto width, pushed far right)
+    // Column 1: Right controls (auto width, pushed far right)
     wuxc::ColumnDefinition rightColumn;
     rightColumn.Width(GridLength{0, GridUnitType::Auto});
     headerGrid.ColumnDefinitions().Append(rightColumn);
@@ -5434,7 +5461,22 @@ void PopulateWifiPanel() {
     wuxc::Grid::SetColumn(leftStack, 0);
     headerGrid.Children().Append(leftStack);
 
-    // Toggle (hard forced right)
+    // Right stack: refresh button + toggle
+    wuxc::StackPanel rightStack;
+    rightStack.Orientation(wuxc::Orientation::Horizontal);
+    rightStack.Spacing(4);
+    rightStack.VerticalAlignment(VerticalAlignment::Center);
+
+    // Refresh button (manual scan trigger)
+    auto refreshButton = MakeGhostButton(L"WifiRefreshButton", kRowCorner);
+    refreshButton.Padding(Thickness{6, 6, 6, 6});
+    refreshButton.Content(BuildVectorIcon(nullptr, L"M12 20c-2.21665 0 -4.10415 -0.77915 -5.6625 -2.3375C4.779165 16.10415 4 14.21665 4 12c0 -2.21665 0.779165 -4.10415 2.3375 -5.6625C7.89585 4.779165 9.78335 4 12 4c1.41665 0 2.65835 0.2875 3.725 0.8625 1.06665 0.575 1.99165 1.3625 2.775 2.3625V4h1.5v6.35H13.65v-1.5h4.2c-0.63335 -1 -1.44165 -1.80835 -2.425 -2.425C14.44165 5.80835 13.3 5.5 12 5.5c-1.81665 0 -3.35415 0.62915 -4.6125 1.8875C6.12915 8.64585 5.5 10.18335 5.5 12c0 1.81665 0.62915 3.35415 1.8875 4.6125C8.64585 17.87085 10.18335 18.5 12 18.5c1.38335 0 2.65 -0.39585 3.8 -1.1875s1.95 -1.8375 2.4 -3.1375h1.55c-0.48335 1.75 -1.44165 3.15835 -2.875 4.225C15.44165 19.46665 13.81665 20 12 20Z", L"", 24, 20, 1.7));
+    refreshButton.Click([](auto&&, auto&&) {
+        StartWifiScan();
+    });
+    rightStack.Children().Append(refreshButton);
+
+    // Toggle switch
     wuxc::ToggleSwitch toggle;
     toggle.Name(L"WifiHeaderToggle");
     g_namedElements.insert_or_assign(L"WifiHeaderToggle", toggle);
@@ -5445,6 +5487,7 @@ void PopulateWifiPanel() {
     toggle.HorizontalAlignment(HorizontalAlignment::Right);
     toggle.HorizontalContentAlignment(HorizontalAlignment::Right);
     toggle.VerticalAlignment(VerticalAlignment::Center);
+    toggle.Margin(Thickness{0, 0, 4, 0});
     toggle.IsOn(status.radioOn);
     toggle.Toggled([](auto&& sender, auto&&) {
         if (g_populatingPanel) return;
@@ -5460,15 +5503,10 @@ void PopulateWifiPanel() {
             });
         });
     });
+    rightStack.Children().Append(toggle);
 
-    // WRAPPER: The Margin MUST go on a container, not the ToggleSwitch itself!
-    wuxc::Border toggleContainer;
-    toggleContainer.HorizontalAlignment(HorizontalAlignment::Center);
-    toggleContainer.Margin(Thickness{12, 0, 24, 0}); // Push this 12px away from the right edge
-    toggleContainer.Child(toggle);
-    
-    wuxc::Grid::SetColumn(toggleContainer, 1);
-    headerGrid.Children().Append(toggleContainer);
+    wuxc::Grid::SetColumn(rightStack, 1);
+    headerGrid.Children().Append(rightStack);
 
     children.Append(headerGrid);
 
@@ -6127,7 +6165,7 @@ BatteryInfo GetBatteryInfo() {
 void UpdateBatteryButton() {
     if (!g_batteryButton) return;
     BatteryInfo info = GetBatteryInfo();
-    auto batteryIcon = BuildBatteryIcon(16, info.charging);
+    auto batteryIcon = BuildBatteryIcon(16, info.percentage, info.charging);
     auto batteryStack = wuxc::StackPanel();
     batteryStack.Orientation(wuxc::Orientation::Horizontal);
     batteryStack.Spacing(4);
@@ -6374,20 +6412,32 @@ void UpdateResourceFlyoutContent() {
     if (g_statValue3) g_statValue3.Text(winrt::hstring(value4));
 
     // Highlight active tab - WinUI pill style with graph color tint
-    wui::Color tabColor;
+    wui::Color tabBorderColor;
+    wui::Color tabBackgroundColor;
     if (g_currentTab == 0) {
-        // CPU graph color (#34C759)
-        tabColor = wui::ColorHelper::FromArgb(255, 0x34, 0xC7, 0x59);
+        // CPU graph colors: line #34C759, fill #288A5D
+        tabBorderColor = wui::ColorHelper::FromArgb(255, 0x34, 0xC7, 0x59);
+        tabBackgroundColor = wui::ColorHelper::FromArgb(80, 0x28, 0x8A, 0x5D);
     } else if (g_currentTab == 1) {
-        // RAM graph color (#5C9EFA)
-        tabColor = wui::ColorHelper::FromArgb(255, 0x5C, 0x9E, 0xFA);
+        // RAM graph colors: line #5C9EFA, fill #3E6F9E
+        tabBorderColor = wui::ColorHelper::FromArgb(255, 0x5C, 0x9E, 0xFA);
+        tabBackgroundColor = wui::ColorHelper::FromArgb(80, 0x3E, 0x6F, 0x9E);
     } else {
-        // GPU graph color (#E81123)
-        tabColor = wui::ColorHelper::FromArgb(255, 0xE8, 0x11, 0x23);
+        // GPU graph colors: line #E81123, fill #800000
+        tabBorderColor = wui::ColorHelper::FromArgb(255, 0xE8, 0x11, 0x23);
+        tabBackgroundColor = wui::ColorHelper::FromArgb(80, 0x80, 0x00, 0x00);
     }
 
-        for (size_t i = 0; i < g_tabButtons.size(); i++) {
-                if (g_tabButtons[i]) {
+    for (size_t i = 0; i < g_tabButtons.size(); i++) {
+        if (!g_tabButtons[i]) continue;
+        if (static_cast<int>(i) == g_currentTab) {
+            g_tabButtons[i].Background(MakeBrush(tabBackgroundColor.A, tabBackgroundColor.R, tabBackgroundColor.G, tabBackgroundColor.B));
+            g_tabButtons[i].BorderBrush(MakeBrush(tabBorderColor.A, tabBorderColor.R, tabBorderColor.G, tabBorderColor.B));
+            g_tabButtons[i].BorderThickness(Thickness{2, 2, 2, 2});
+        } else {
+            g_tabButtons[i].Background(MakeBrush(0, 0, 0, 0));
+            g_tabButtons[i].BorderBrush(MakeBrush(0, 0, 0, 0));
+            g_tabButtons[i].BorderThickness(Thickness{0, 0, 0, 0});
         }
     }
 
@@ -7379,7 +7429,7 @@ RunOnUiThread([status, networks = std::move(networks)]() mutable {
     // Battery button (with percentage text and charging icon)
     {
         BatteryInfo info = GetBatteryInfo();
-        auto batteryIcon = BuildBatteryIcon(16, info.charging);
+        auto batteryIcon = BuildBatteryIcon(16, info.percentage, info.charging);
         auto batteryStack = wuxc::StackPanel();
         batteryStack.Orientation(wuxc::Orientation::Horizontal);
         batteryStack.Spacing(4);
@@ -7805,7 +7855,7 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                     PositionAppBar(hwnd, g_barHeightPx);
                     break;
                 case ABN_FULLSCREENAPP:
-                    g_fullScreenAppActive = (wParam != 0);
+                    g_fullScreenAppActive = (lParam != 0);
                     // When fullscreen app starts, drop topmost; when ends, restore topmost.
                     SetWindowPos(hwnd,
                                  g_fullScreenAppActive ? HWND_NOTOPMOST : HWND_TOPMOST,
@@ -8139,7 +8189,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
 
         // Timer to restore the top bar if it gets minimized/hidden/cloaked by Show Desktop
         g_restoreTimer = DispatcherTimer();
-        g_restoreTimer.Interval(std::chrono::milliseconds(100));
+        g_restoreTimer.Interval(std::chrono::milliseconds(1000));
 
         g_restoreTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
             try {
@@ -8170,8 +8220,15 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                     // 4. Force topmost (so it stays above desktop)
                     SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
                                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                    // 5. Reposition to the correct top‑bar position (in case it moved)
-                    PositionAppBar(g_topBarHwnd, g_barHeightPx);
+                    // 5. Reposition only if the bar actually moved
+                    RECT wanted = GetBarMonitorRect();
+                    wanted.bottom = wanted.top + g_barHeightPx;
+                    RECT current;
+                    GetWindowRect(g_topBarHwnd, &current);
+                    if (current.left != wanted.left || current.top != wanted.top ||
+                        current.right != wanted.right || current.bottom != wanted.bottom) {
+                        PositionAppBar(g_topBarHwnd, g_barHeightPx);
+                    }
                 }
             } catch (...) {
             }
@@ -8483,7 +8540,11 @@ void WhTool_ModUninit() {
         handles = g_workerThreads;
     }
     if (!handles.empty()) {
-        WaitForMultipleObjects(static_cast<DWORD>(handles.size()), handles.data(), TRUE, 10000);
+        const size_t kMaxWaitObjects = 64;
+        for (size_t offset = 0; offset < handles.size(); offset += kMaxWaitObjects) {
+            size_t batchCount = std::min<size_t>(handles.size() - offset, kMaxWaitObjects);
+            WaitForMultipleObjects(static_cast<DWORD>(batchCount), handles.data() + offset, TRUE, 10000);
+        }
     }
     // Close all worker handles
     for (HANDLE h : handles) {
