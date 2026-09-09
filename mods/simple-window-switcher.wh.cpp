@@ -586,6 +586,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
 #define SWS_TEXT_LIGHT        RGB(0, 0, 0)
 #define SWS_SHOW_DELAY_TIMER_ID 101
 #define SWS_ALT_POLL_TIMER_ID   102
+#define SWS_CLOSE_VERIFY_TIMER_ID 103
 // Posted by the low-level mouse hook so the heavy CycleLinear work runs in the
 // wndproc instead of on the synchronous raw-input path. WPARAM is the direction.
 #define WM_SWS_SCROLL           (WM_APP + 1)
@@ -1064,6 +1065,19 @@ static bool IsAltTabWindow(HWND h) {
     if (GetPropW(h, L"valinet.ExplorerPatcher.ShellManagedWindow")) return false;
     return ShouldListInAltTab(h);
 }
+
+static bool CanCloseWindow(HWND hWnd) {
+    if (!IsWindow(hWnd)) return false;
+    if (!IsWindowEnabled(hWnd)) return false;
+    if (GetWindowLongPtrW(hWnd, GWL_STYLE) & WS_DISABLED) return false;
+    HWND hPopup = GetLastActivePopup(hWnd);
+    if (hPopup && hPopup != hWnd && IsWindow(hPopup) && IsWindowVisible(hPopup)) {
+        return false;
+    }
+    return true;
+}
+
+static std::vector<HWND> s_pendingCloseWindows;
 
 // Activation MRU (Most Recently Used) tracking
 static std::vector<HWND> g_mruWindows;
@@ -3919,6 +3933,10 @@ static void HideSwitcher() {
     g_savedAppList.clear();
     g_consumeEscUp = false;
     g_isPaginatedView = false;
+    if (g_hSwitcher) {
+        KillTimer(g_hSwitcher, SWS_CLOSE_VERIFY_TIMER_ID);
+    }
+    s_pendingCloseWindows.clear();
 }
 
 // Restores a window from iconic (minimized) state.
@@ -4477,61 +4495,93 @@ static void UpdateEntryForWindow(WindowEntry& e) {
     }
 }
 
+static void RemoveWindowEntryByHwnd(HWND hDestroyed) {
+    if (!g_isVisible || g_windows.empty()) return;
+
+    for (int i = 0; i < (int)g_windows.size(); i++) {
+        if (g_windows[i].hWnd == hDestroyed) {
+            if (g_settings.showApplications && g_windows[i].groupWindows.size() > 1) {
+                auto& group = g_windows[i].groupWindows;
+                group.erase(std::remove(group.begin(), group.end(), hDestroyed), group.end());
+                if (!group.empty()) {
+                    g_windows[i].hWnd = group[0];
+                    UpdateEntryForWindow(g_windows[i]);
+                    for (const auto& kv : g_windows[i].hThumbs) {
+                        if (kv.second) DwmUnregisterThumbnail(kv.second);
+                    }
+                    g_windows[i].hThumbs.clear();
+                    RecomputeAndReposition();
+                    PaintSwitcher();
+                    return;
+                }
+            }
+
+            for (const auto& kv : g_windows[i].hThumbs) {
+                if (kv.second) DwmUnregisterThumbnail(kv.second);
+            }
+            g_windows[i].hThumbs.clear();
+
+            g_windows.erase(g_windows.begin() + i);
+
+            if (g_windows.empty()) {
+                HideSwitcher();
+                return;
+            }
+
+            if (g_selectedIndex >= (int)g_windows.size()) {
+                g_selectedIndex = (int)g_windows.size() - 1;
+            }
+
+            RecomputeAndReposition();
+            g_hoverIndex = -1;
+            g_hoverWnd = NULL;
+            g_isCloseHovered = false;
+            PaintSwitcher();
+            return;
+        } else if (g_settings.showApplications) {
+            auto& group = g_windows[i].groupWindows;
+            auto it = std::find(group.begin(), group.end(), hDestroyed);
+            if (it != group.end()) {
+                group.erase(it);
+                UpdateEntryForWindow(g_windows[i]);
+                PaintSwitcher();
+                return;
+            }
+        }
+    }
+}
+
 // Close the window for the entry at idx (posts SC_CLOSE, same as the close
-// button), remove it from the list and relayout. Shared by the close button,
-// middle-click, Q, Ctrl+W and Del.
+// button). Window removal happens reactively when the window actually destroys
+// or hides, preventing premature removal if the window asks to save or has
+// an active modal dialog. Shared by the close button, middle-click, Q, Ctrl+W and Del.
 static void CloseSwitcherEntry(int idx) {
     if (idx < 0 || idx >= (int)g_windows.size()) return;
     
-    bool eraseEntry = true;
+    HWND targetWnd = g_windows[idx].hWnd;
+    if (!CanCloseWindow(targetWnd)) return;
+
     if (g_settings.showApplications && g_windows[idx].groupWindows.size() > 1) {
         if (wcscmp(g_settings.groupCloseBehavior, L"closeAll") == 0) {
             for (HWND hw : g_windows[idx].groupWindows) {
-                PostMessage(hw, WM_SYSCOMMAND, SC_CLOSE, 0);
-                RemoveMruWindow(hw);
+                if (CanCloseWindow(hw)) {
+                    PostMessage(hw, WM_SYSCOMMAND, SC_CLOSE, 0);
+                    s_pendingCloseWindows.push_back(hw);
+                }
             }
         } else {
             // closeRecent (Default)
-            HWND closedHwnd = g_windows[idx].hWnd;
-            PostMessage(closedHwnd, WM_SYSCOMMAND, SC_CLOSE, 0);
-            RemoveMruWindow(closedHwnd);
-            
-            auto& group = g_windows[idx].groupWindows;
-            group.erase(std::remove(group.begin(), group.end(), closedHwnd), group.end());
-            
-            if (!group.empty()) {
-                eraseEntry = false;
-                g_windows[idx].hWnd = group[0];
-                UpdateEntryForWindow(g_windows[idx]);
-                for (const auto& kv : g_windows[idx].hThumbs) {
-                    if (kv.second) DwmUnregisterThumbnail(kv.second);
-                }
-                g_windows[idx].hThumbs.clear();
-            }
+            PostMessage(targetWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
+            s_pendingCloseWindows.push_back(targetWnd);
         }
     } else {
-        RemoveMruWindow(g_windows[idx].hWnd);
-        PostMessage(g_windows[idx].hWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
+        PostMessage(targetWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
+        s_pendingCloseWindows.push_back(targetWnd);
     }
 
-    if (eraseEntry) {
-        for (const auto& kv : g_windows[idx].hThumbs) {
-            if (kv.second) DwmUnregisterThumbnail(kv.second);
-        }
-        g_windows[idx].hThumbs.clear();
-
-        g_windows.erase(g_windows.begin() + idx);
+    if (!s_pendingCloseWindows.empty() && g_hSwitcher) {
+        SetTimer(g_hSwitcher, SWS_CLOSE_VERIFY_TIMER_ID, 200, NULL);
     }
-
-    if (g_windows.empty()) { HideSwitcher(); return; }
-    if (g_selectedIndex >= (int)g_windows.size()) g_selectedIndex = (int)g_windows.size() - 1;
-
-    RecomputeAndReposition();
-
-    g_hoverIndex = -1;
-    g_hoverWnd = NULL;
-    g_isCloseHovered = false;
-    PaintSwitcher();
 }
 
 static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -4558,6 +4608,23 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             if (!g_isSticky && (GetAsyncKeyState(VK_MENU) & 0x8000) == 0) {
                 KillTimer(hWnd, SWS_ALT_POLL_TIMER_ID);
                 SwitchToSelected();
+            }
+            return 0;
+        }
+
+        if (wParam == SWS_CLOSE_VERIFY_TIMER_ID) {
+            KillTimer(hWnd, SWS_CLOSE_VERIFY_TIMER_ID);
+            std::vector<HWND> toRemove;
+            for (auto it = s_pendingCloseWindows.begin(); it != s_pendingCloseWindows.end(); ) {
+                HWND h = *it;
+                if (!IsWindow(h) || !IsWindowVisible(h)) {
+                    toRemove.push_back(h);
+                }
+                it = s_pendingCloseWindows.erase(it);
+            }
+            for (HWND h : toRemove) {
+                RemoveMruWindow(h);
+                RemoveWindowEntryByHwnd(h);
             }
             return 0;
         }
@@ -4906,9 +4973,12 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         } else if (code == HSHELL_WINDOWDESTROYED) {
             HWND hS = (HWND)lParam;
             RemoveMruWindow(hS);
+            auto it = std::find(s_pendingCloseWindows.begin(), s_pendingCloseWindows.end(), hS);
+            if (it != s_pendingCloseWindows.end()) {
+                s_pendingCloseWindows.erase(it);
+            }
             if (g_isVisible) {
-                for (int i = 0; i < (int)g_windows.size(); i++)
-                    if (g_windows[i].hWnd == hS) { ShowSwitcher(g_isSticky); break; }
+                RemoveWindowEntryByHwnd(hS);
             }
         }
         return 0;
