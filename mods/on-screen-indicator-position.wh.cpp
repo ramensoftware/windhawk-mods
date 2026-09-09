@@ -7,7 +7,7 @@
 // @github          https://github.com/mario0318
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lshcore -lpsapi
+// @compilerOptions -lshcore
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -92,6 +92,8 @@ a monitor by number or by interface name. The two work together.
   lands at the new spot is the tail end of the previous indicator instead of an
   empty frame.
 * Tested on Windows 11 build 26200 (25H2) x64, on a 100% and a 150% display.
+  ARM64 hasn't been tested; the position lookup follows a different calling
+  convention there, so if you run it on ARM64 please let me know how it goes.
 
 ## Credits
 
@@ -252,7 +254,6 @@ both target the same function and work out the origin handling.
 
 #include <windhawk_utils.h>
 
-#include <psapi.h>
 #include <shellscalingapi.h>
 
 #include <atomic>
@@ -518,34 +519,27 @@ int WINAPI ShowMicrophoneMutedThunk_Hook(void* pThis, int state, void* text) {
 // for everything else. Hooking twinui.dll directly crashes the shell, so the
 // caller module is looked up from the return address instead. Cheap, no other
 // module touched, no chance of conflicting with another mod that hooks the same
-// twinui function.
-HMODULE g_twinuiModule = nullptr;
-uintptr_t g_twinuiBase = 0;
-uintptr_t g_twinuiEnd = 0;
-
+// twinui function. GetModuleHandleEx is used at call time rather than caching a
+// range at init, since Wh_ModInit runs before the target process begins and
+// twinui isn't loaded yet on a fresh explorer start.
 bool ReturnAddressIsTwinui(void* returnAddress) {
-    if (!g_twinuiBase) {
+    HMODULE fromModule = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            reinterpret_cast<PCWSTR>(returnAddress),
+                            &fromModule)) {
         return false;
     }
-    uintptr_t ra = reinterpret_cast<uintptr_t>(returnAddress);
-    return ra >= g_twinuiBase && ra < g_twinuiEnd;
+    return fromModule == GetModuleHandleW(L"twinui.dll");
 }
 
 // A ShowText call from twinui goes through the thunk first, and the thunk then
-// calls into the async ramp internally. That means the ramp's own return
-// address sits inside the thunk, not inside twinui, so a naive return-address
-// check would classify the ramp as a plain text indicator and clobber the
-// virtualDesktop classification the thunk just made. The thunk sets this
-// thread_local before it dispatches, the ramp inherits it, and the thunk
-// clears it after the call returns so it doesn't leak into a later text show
-// on the same thread.
+// calls into the async ramp internally. The ramp is a private coroutine only
+// reachable from inside the confirmator DLL, so its own return address can
+// never be in twinui. The thunk records the decision in this thread_local and
+// the ramp reads it back. Cleared when the thunk returns so it doesn't leak
+// into a later plain text show on the same thread.
 thread_local bool g_textCallFromTwinui = false;
-
-Indicator ClassifyTextCall(void* returnAddress) {
-    return (g_textCallFromTwinui || ReturnAddressIsTwinui(returnAddress))
-               ? Indicator::virtualDesktop
-               : Indicator::text;
-}
 
 using ShowTextThunk_t = int(WINAPI*)(void* pThis, void* text, bool value);
 ShowTextThunk_t ShowTextThunk_Original;
@@ -629,7 +623,8 @@ char WINAPI ShowMicrophoneMutedAsync_Hook(void* pThis, int value, void* text) {
 using ShowTextAsync_t = char(WINAPI*)(void* pThis, void* text, bool value);
 ShowTextAsync_t ShowTextAsync_Original;
 char WINAPI ShowTextAsync_Hook(void* pThis, void* text, bool value) {
-    g_currentIndicator.store(ClassifyTextCall(__builtin_return_address(0)));
+    g_currentIndicator.store(g_textCallFromTwinui ? Indicator::virtualDesktop
+                                                  : Indicator::text);
     return ShowTextAsync_Original(pThis, text, value);
 }
 
@@ -674,24 +669,24 @@ void WINAPI ConfirmatorHostControl_Hide_Hook(void* pThis) {
 // the hidden-pointer form on x64 and the HFA-in-registers form on ARM64.
 // Hand-rolling the hidden pointer worked on x64 but shifted every argument on
 // ARM64, where four floats are a homogeneous aggregate returned in s0-s3.
-// WinrtRect is four floats = 16 bytes. The calling convention for a 16-byte
-// aggregate return differs by architecture, and worse, differs by *compiler* on
-// x64:
+// WinrtRect is four floats = 16 bytes. Both x64 and ARM64 return it via
+// hidden pointer, but the pointer slot differs by architecture and, on x64,
+// by compiler:
 //
-//   - MSVC on x64 uses the MS ABI: a hidden first pointer, the callee writes
-//     the result through it and returns the pointer in RAX.
-//   - Clang/mingw targeting x86_64-w64-mingw32 does NOT reliably generate that
-//     hidden-pointer form for a return-by-value 16-byte aggregate; it splits
-//     the return into XMM0/XMM1 registers, which does not match what the
-//     MSVC-compiled explorer.exe caller expects. The mismatch corrupts the
-//     return path and crashes the shell on the first call.
+//   - MSVC treats this as a non-static member function: RCX carries `this`,
+//     the hidden retval pointer goes in RDX, and the rect argument follows.
+//   - Clang targeting x86_64-w64-mingw32 sees the WINAPI-declared type as a
+//     free function and puts the hidden retval pointer in RCX with `this` in
+//     RDX. The MSVC-compiled explorer.exe caller expects the MSVC layout, so
+//     the compiler-managed return-by-value form writes the result to what the
+//     caller was using as `this`. The shell crashes on the first call.
 //   - ARM64 uses AAPCS64: four floats are a Homogeneous Floating-point
-//     Aggregate returned in s0-s3, and a hidden pointer would shift every
-//     other argument by one slot and pass garbage through.
+//     Aggregate returned in s0-s3 with no hidden pointer at all, so the
+//     compiler-managed form emits exactly what the target expects.
 //
 // So the signature is declared per architecture: hand-rolled hidden pointer on
-// x64 to match MSVC exactly, compiler-managed return by value on ARM64 so the
-// compiler emits the HFA form.
+// x64 to match MSVC's placement, compiler-managed return by value on ARM64 so
+// the compiler emits the HFA form.
 #if defined(_M_ARM64) || defined(__aarch64__)
 using HardwareConfirmatorHost_GetPositionRect_t =
     WinrtRect(WINAPI*)(void* pThis, const WinrtRect& rect);
@@ -1094,27 +1089,17 @@ BOOL Wh_ModInit() {
         Wh_Log(L"%s", kKindUnreliableMessage);
     }
 
-    // Resolve twinui.dll's loaded range so ShowText can tell a virtual desktop
-    // switch popup apart from other text indicators by checking the return
-    // address. Nothing in twinui is hooked, just its address range is read.
-    // If twinui isn't loaded yet or the query fails, the popup falls back to
-    // the plain text position, same as before.
-    g_twinuiModule = GetModuleHandleW(L"twinui.dll");
-    if (g_twinuiModule) {
-        MODULEINFO mi{};
-        if (GetModuleInformation(GetCurrentProcess(), g_twinuiModule, &mi,
-                                 sizeof(mi))) {
-            g_twinuiBase = reinterpret_cast<uintptr_t>(mi.lpBaseOfDll);
-            g_twinuiEnd = g_twinuiBase + mi.SizeOfImage;
-            Wh_Log(L"twinui.dll range 0x%p - 0x%p", (void*)g_twinuiBase,
-                   (void*)g_twinuiEnd);
-        } else {
-            Wh_Log(L"twinui.dll present but GetModuleInformation failed, "
-                   L"virtual desktop indicator uses text position");
-        }
-    } else {
-        Wh_Log(L"twinui.dll not loaded, virtual desktop indicator uses text "
-               L"position");
+    // The thread_local flag that tells virtual desktop popups apart from other
+    // text indicators is set from ShowText's thunk, so if the thunk didn't
+    // resolve, virtual desktop popups silently follow the plain text position.
+    // The ramp resolving on its own is enough to keep text detection working,
+    // so it wouldn't trip the recorder check above. Only worth saying if the
+    // user has actually set a per-kind position for the virtual desktop popup.
+    if (!ShowTextThunk_Original && ShowTextAsync_Original &&
+        g_settings.perIndicator[(size_t)Indicator::virtualDesktop].load() !=
+            Position::windowsDefault) {
+        Wh_Log(L"ShowText thunk did not resolve, virtual desktop popup will "
+               L"use the plain text position");
     }
 
     return TRUE;
