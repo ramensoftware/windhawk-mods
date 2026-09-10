@@ -100,6 +100,7 @@ std::atomic<DWORD> g_arrivalRequestMask{0};
 std::atomic<DWORD> g_removalRequestMask{0};
 std::atomic<bool> g_initialScanRequested{false};
 std::atomic<bool> g_initialScanAllowGrace{false};
+std::atomic<bool> g_topologyScanRequested{false};
 
 HANDLE g_notificationThread = nullptr;
 DWORD g_notificationThreadId = 0;
@@ -375,6 +376,74 @@ static void QueueInitialScan(bool allowGrace = false) {
 
     g_initialScanRequested.store(true, std::memory_order_release);
     SetEvent(g_workerWakeEvent);
+}
+
+static void QueueTopologyScan() {
+    g_topologyScanRequested.store(true, std::memory_order_release);
+    SetEvent(g_workerWakeEvent);
+}
+
+static bool ProcessTopologyScan(DWORD* retryMask,
+                                DWORD* graceRetryMask,
+                                DWORD* arrivalRetryMask,
+                                int (&retryAttempts)[26],
+                                DWORD* newlyOpticalMask) {
+    bool changed = false;
+    DWORD managedMask = g_managedMask.load(std::memory_order_acquire);
+    DWORD logicalDrives = GetLogicalDrives();
+
+    if (newlyOpticalMask) {
+        *newlyOpticalMask = 0;
+    }
+
+    if (logicalDrives == 0) {
+        Wh_Log(L"GetLogicalDrives returned no drives; falling back to full topology scan");
+        logicalDrives = kAllDriveBits;
+    }
+
+    for (WCHAR letter = L'A'; letter <= L'Z'; letter++) {
+        if (IsWorkerStopRequested()) {
+            return changed;
+        }
+
+        DWORD bit = LetterBit(letter);
+        int index = letter - L'A';
+        bool wasOptical = IsCachedOpticalDrive(letter);
+
+        if (!(managedMask & bit) || !(logicalDrives & bit)) {
+            *retryMask &= ~bit;
+            *graceRetryMask &= ~bit;
+            *arrivalRetryMask &= ~bit;
+            retryAttempts[index] = 0;
+            changed |= SetOpticalDrivePresent(letter, false);
+            changed |= SetCachedMediaState(letter, MediaState::Unknown);
+            continue;
+        }
+
+        WCHAR root[4];
+        MakeRootPath(letter, root);
+
+        bool optical = GetDriveTypeW(root) == DRIVE_CDROM;
+        changed |= SetOpticalDrivePresent(letter, optical);
+
+        if (!optical) {
+            *retryMask &= ~bit;
+            *graceRetryMask &= ~bit;
+            *arrivalRetryMask &= ~bit;
+            retryAttempts[index] = 0;
+            changed |= SetCachedMediaState(letter, MediaState::Unknown);
+            continue;
+        }
+
+        // DBT_DEVNODES_CHANGED is a topology signal, not a media signal.
+        // Existing optical drives keep their cached media state and any active
+        // retry window. Only a newly discovered optical drive needs probing.
+        if (!wasOptical && newlyOpticalMask) {
+            *newlyOpticalMask |= bit;
+        }
+    }
+
+    return changed;
 }
 
 static bool ProcessInitialScan(DWORD* retryMask,
@@ -807,10 +876,27 @@ static DWORD WINAPI WorkerThreadProc(void*) {
             break;
         }
 
-        // Event-specific media arrival/removal handling must run before a
-        // broad device-tree scan. In particular, arrival establishes its grace
-        // window first, so a simultaneous DBT_DEVNODES_CHANGED can't settle a
-        // spinning-up disc as Empty.
+        // Event-specific media arrival/removal handling must run before
+        // topology or broad scans. If DBT_DEVNODES_CHANGED accompanied a real
+        // media arrival, the arrival path establishes its grace window first.
+        if (g_topologyScanRequested.exchange(false,
+                                             std::memory_order_acq_rel)) {
+            DWORD newlyOpticalMask = 0;
+            refresh |= ProcessTopologyScan(
+                &retryMask, &graceRetryMask, &arrivalRetryMask,
+                retryAttempts, &newlyOpticalMask);
+
+            // A topology-only event must never wake/probe already known optical
+            // drives. Probe only newly discovered drives, using arrival-style
+            // grace semantics because a hot-plugged drive can still be
+            // spinning up when its device node first appears.
+            if (newlyOpticalMask) {
+                refresh |= ProcessArrivalMask(
+                    newlyOpticalMask, &retryMask, &graceRetryMask,
+                    &arrivalRetryMask, retryAttempts);
+            }
+        }
+
         if (g_initialScanRequested.exchange(false, std::memory_order_acq_rel)) {
             bool allowGrace = g_initialScanAllowGrace.exchange(
                 false, std::memory_order_acq_rel);
@@ -896,16 +982,14 @@ static LRESULT CALLBACK NotificationWindowSubclassProc(HWND hwnd,
                                                        WPARAM wParam,
                                                        LPARAM lParam,
                                                        UINT_PTR,
-                                                       DWORD_PTR refData) {
-    auto thisPcPidl = reinterpret_cast<PIDLIST_ABSOLUTE>(refData);
-
+                                                       DWORD_PTR) {
     switch (message) {
         case WM_DEVICECHANGE:
             if (wParam == DBT_DEVNODES_CHANGED) {
-                // Device-tree changes are broadcast even when an optical drive
-                // has no mounted volume. Re-scan so hot-plugged or removed
-                // external optical drives are reflected in the cache.
-                QueueInitialScan();
+                // This is a topology notification for the whole device tree,
+                // not evidence that optical media changed. Refresh drive types
+                // without issuing media IOCTLs to already known optical drives.
+                QueueTopologyScan();
                 break;
             }
 
@@ -939,9 +1023,24 @@ static LRESULT CALLBACK NotificationWindowSubclassProc(HWND hwnd,
             }
             break;
 
-        case kMsgRefreshThisPc:
+        case kMsgRefreshThisPc: {
+            // The notification window must remain alive even if resolving the
+            // This PC PIDL transiently fails during early Explorer startup.
+            // Resolve lazily and retry on the next refresh request.
+            PIDLIST_ABSOLUTE thisPcPidl =
+                g_thisPcPidl.load(std::memory_order_acquire);
+
+            if (!thisPcPidl) {
+                thisPcPidl = AcquireThisPcPidl();
+                if (thisPcPidl) {
+                    g_thisPcPidl.store(thisPcPidl,
+                                       std::memory_order_release);
+                }
+            }
+
             NotifyThisPcUpdated(thisPcPidl);
             return 0;
+        }
 
         case kMsgStop:
             DestroyWindow(hwnd);
@@ -963,17 +1062,10 @@ static DWORD WINAPI NotificationThreadProc(void*) {
     MSG msg = {};
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
-    // Build the This PC PIDL before creating the window. If this shell lookup
-    // ever stalls, there is no window yet to stall WM_DEVICECHANGE broadcasts,
-    // and Wh_ModInit doesn't wait for this thread.
-    PIDLIST_ABSOLUTE thisPcPidl = AcquireThisPcPidl();
-
-    if (!thisPcPidl) {
-        return 1;
-    }
-
-    g_thisPcPidl.store(thisPcPidl, std::memory_order_release);
-
+    // Create the notification window without depending on shell PIDL
+    // resolution. The PIDL is only needed for refresh and is acquired lazily,
+    // so a transient shell failure can't disable device notifications for the
+    // entire Explorer session.
     if (g_notificationStopRequested.load(std::memory_order_acquire)) {
         return 0;
     }
@@ -987,8 +1079,7 @@ static DWORD WINAPI NotificationThreadProc(void*) {
         return 1;
     }
 
-    if (!SetWindowSubclass(hwnd, NotificationWindowSubclassProc, 1,
-                           reinterpret_cast<DWORD_PTR>(thisPcPidl))) {
+    if (!SetWindowSubclass(hwnd, NotificationWindowSubclassProc, 1, 0)) {
         Wh_Log(L"Notification window subclass failed: %u", GetLastError());
         DestroyWindow(hwnd);
         return 1;
@@ -1235,6 +1326,7 @@ BOOL Wh_ModInit() {
     g_removalRequestMask.store(0, std::memory_order_relaxed);
     g_initialScanRequested.store(false, std::memory_order_relaxed);
     g_initialScanAllowGrace.store(false, std::memory_order_relaxed);
+    g_topologyScanRequested.store(false, std::memory_order_relaxed);
     g_refreshPending.store(false, std::memory_order_relaxed);
     g_notificationStopRequested.store(false, std::memory_order_relaxed);
     g_thisPcPidl.store(nullptr, std::memory_order_relaxed);
