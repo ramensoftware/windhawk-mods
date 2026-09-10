@@ -1711,7 +1711,9 @@ static void NativeRenderTrail(const std::vector<D2D1_POINT_2F>& smoothed, float 
                          1,1,1, fadeAlpha, ratio});
     }
 
-    // 更新顶点缓冲
+    // 更新顶点缓冲（限制最大顶点数，防止溢出）
+    const int maxVerts = 4096;
+    if ((int)verts.size() > maxVerts) verts.resize(maxVerts);
     D3D11_MAPPED_SUBRESOURCE mapped;
     if (FAILED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
     memcpy(mapped.pData, verts.data(), verts.size() * sizeof(VertexPosColor));
@@ -2071,6 +2073,9 @@ static bool NativeRenderFrame(int screenW, int screenH, const std::vector<D2D1_P
                               bool tailVisible, const GradData& cols, float widthMul, float fadeAlpha,
                               DWORD dwTime, int vX, int vY) {
     if (!g_pNativeVS || !g_pD3DContext || !g_pD2DTargetBitmap) return false;
+
+    // 确保 D2D 操作完成，再用 D3D 原生渲染到同一 surface
+    if (g_pD2DDC) g_pD2DDC->Flush();
 
     // 获取 D3D11 渲染目标视图（从 D2D1 bitmap 获取底层 DXGI surface）
     IDXGISurface* pSurface = nullptr;
