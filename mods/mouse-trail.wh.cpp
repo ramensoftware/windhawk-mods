@@ -2,8 +2,8 @@
 // @id              mouse-trail
 // @name            Mouse Trail
 // @name:zh-CN      鼠标拖尾
-// @description     A highly customizable mouse cursor trail with particle effects, 10 color modes, custom function trails, cursor color extraction, and click effects. Direct2D hardware accelerated.
-// @description:zh-CN 高度可定制的鼠标拖尾特效，支持粒子系统、10种颜色模式、自定义函数轨迹、光标取色和点击特效，Direct2D 硬件加速。
+// @description     A highly customizable mouse cursor trail with particle effects, 12 color modes, custom function trails, cursor color extraction, and click effects. Direct2D hardware accelerated.
+// @description:zh-CN 高度可定制的鼠标拖尾特效，支持粒子系统、12种颜色模式、自定义函数轨迹、光标取色和点击特效，Direct2D 硬件加速。
 // @version         1.0
 // @author          MCheng404
 // @github          https://github.com/MCheng404
@@ -19,14 +19,16 @@
 
 **中文：** 高度可定制的鼠标拖尾特效，支持粒子系统、多种颜色模式、自定义函数轨迹、光标取色和点击特效。Direct2D 硬件加速，独立进程运行，静止时零 CPU 占用。
 
-![Trail Effect](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/screenshot_trail.png)
+![Trail Effect](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail.gif)
+
+![Trail Screenshot](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/screenshot_trail.png)
 
 ---
 
 ### Features / 功能特性
 
 * **4 Trail Shapes / 4 种拖尾形状：** Tapered ribbon / Tapered dot chain / Function curve / Sine wave. / 锥形带 / 类锥形圆链 / 函数曲线 / 正弦波浪。
-* **13 Color Modes / 13 种颜色模式：** Classic / Single / Gradient (3-color) / Rainbow / Warm / Cool / Neon / Velocity / Stripes / Fire / Aurora / Cursor Extract / Cursor Mix.
+* **12 Color Modes / 12 种颜色模式：** Single / Gradient (3-color) / Rainbow / Warm / Cool / Neon / Velocity / Stripes / Fire / Aurora / Cursor Extract / Cursor Mix.
 * **Particle System / 粒子系统：** Mini particles released from the trail, attracted back to cursor with configurable origin (head/middle/tail/custom), attraction strength, and cursor repulsion force. Shapes: circle / star / hexagram / random mix. Colors fade over lifetime. / 拖尾释放迷你粒子，全程吸附回光标。释放位置、吸附强度、光标排斥力均可调。支持圆形/五角星/六芒星/随机混合形状，颜色随生命周期渐变。
 * **Click Effects / 点击特效：** Starburst particle burst + expanding ripple on left/right click (both toggleable). / 点击时迸发星爆粒子 + 扩散波纹（均可开关）。
 * **Cursor Color Extraction / 光标取色：** Real-time pixel color sampling under the cursor (2 modes), with auto complementary-color shift for visibility. / 实时提取光标下方像素颜色（2种模式），支持自动互补色偏移确保醒目。
@@ -184,11 +186,10 @@ Inspired by [TheatriChris](https://github.com/chrisc44890)'s Cursor Motion Blur 
   $name:zh-CN: 发光强度
   $description: Glow radius and brightness (0-100).
   $description:zh-CN: 发光范围和亮度（0-100）。
-- color_mode: classic
+- color_mode: single
   $name: Color Mode
   $name:zh-CN: 颜色模式
   $options:
-  - classic: Classic B&W
   - single: Single Color
   - gradient: Gradient
   - rainbow: Rainbow
@@ -202,7 +203,6 @@ Inspired by [TheatriChris](https://github.com/chrisc44890)'s Cursor Motion Blur 
   - cursor_extract: Cursor Extract
   - cursor_mix: Cursor Mix
   $options:zh-CN:
-  - classic: 经典黑白
   - single: 单色
   - gradient: 多色渐变
   - rainbow: 彩虹流动
@@ -612,37 +612,36 @@ static void ComputeColors(int mode, DWORD time, float velocity, GradData& out) {
     float t = time / 1000.0f;
     D2D1_COLOR_F headOuter, headInner, tailOuter, tailInner;
     switch (mode) {
-        case 0: headOuter = tailOuter = D2D1::ColorF(0,0,0,1); headInner = tailInner = D2D1::ColorF(1,1,1,1); break;
-        case 1: headOuter = tailOuter = g_customColor; headInner = tailInner = LighterColor(g_customColor); break;
-        case 2: headOuter = g_gradColors[0]; tailOuter = g_gradColors[2]; headInner = LighterColor(g_gradColors[0]); tailInner = LighterColor(g_gradColors[2]); break;
-        case 3: { float h = fmodf(t*80,360); headOuter=HSVtoRGB(h,.9f,1); tailOuter=HSVtoRGB(fmodf(h+140,360),.9f,1); headInner=HSVtoRGB(h,.45f,1); tailInner=HSVtoRGB(fmodf(h+140,360),.45f,1); break; }
-        case 4: { float h = fmodf(t*40,60); headOuter=HSVtoRGB(h,.95f,1); tailOuter=HSVtoRGB(fmodf(h+35,60),.95f,1); headInner=HSVtoRGB(h,.5f,1); tailInner=HSVtoRGB(fmodf(h+35,60),.5f,1); break; }
-        case 5: { float h = 180+fmodf(t*40,120); headOuter=HSVtoRGB(h,.9f,1); tailOuter=HSVtoRGB(fmodf(h+70,360),.9f,1); headInner=HSVtoRGB(h,.45f,1); tailInner=HSVtoRGB(fmodf(h+70,360),.45f,1); break; }
-        case 6: { float p = .6f+.4f*sinf(t*4); D2D1_COLOR_F c=g_customColor; headOuter=D2D1::ColorF(c.r*p,c.g*p,c.b*p,1); tailOuter=D2D1::ColorF(c.r*p*.4f,c.g*p*.4f,c.b*p*.4f,1); headInner=LighterColor(headOuter,.6f); tailInner=LighterColor(tailOuter,.6f); break; }
-        case 7: { float sn=fminf(velocity/60.0f,1.0f); float h=240-sn*240; headOuter=HSVtoRGB(h,.9f,1); tailOuter=HSVtoRGB(fmodf(h+60,360),.7f,.8f); headInner=HSVtoRGB(h,.4f,1); tailInner=HSVtoRGB(fmodf(h+60,360),.3f,.9f); break; }
-        case 8: headOuter=g_gradColors[0]; tailOuter=g_gradColors[1]; headInner=LighterColor(g_gradColors[0]); tailInner=LighterColor(g_gradColors[1]); break;
-        case 9: { float f=.85f+.15f*sinf(t*15)*sinf(t*7.3f); headOuter=D2D1::ColorF(1*f,.9f*f,.2f,1); tailOuter=D2D1::ColorF(.7f,.1f,0,1); headInner=D2D1::ColorF(1,1,.7f,1); tailInner=D2D1::ColorF(.9f,.3f,0,1); break; }
-        case 10: { float h1=140+30*sinf(t*.8f); float h2=280+40*sinf(t*.6f+1); headOuter=HSVtoRGB(h1,.8f,.9f); tailOuter=HSVtoRGB(h2,.8f,.9f); headInner=HSVtoRGB(190,.5f,1); tailInner=HSVtoRGB(fmodf(h2+30,360),.4f,1); break; }
-        case 11: { D2D1_COLOR_F ec = g_cursorExtractedColor; headOuter = tailOuter = ec; headInner = tailInner = LighterColor(ec, 0.6f); break; }
-        case 12: { D2D1_COLOR_F mixed = LerpColor(g_cursorExtractedColor, g_customColor, 0.5f); D2D1_COLOR_F mixedTail = LerpColor(g_cursorExtractedColor, g_gradColors[2], 0.5f); headOuter = mixed; tailOuter = mixedTail; headInner = LighterColor(mixed, 0.55f); tailInner = LighterColor(mixedTail, 0.55f); break; }
-        default: headOuter=tailOuter=D2D1::ColorF(0,0,0,1); headInner=tailInner=D2D1::ColorF(1,1,1,1); break;
+        case 0: headOuter = tailOuter = g_customColor; headInner = tailInner = LighterColor(g_customColor); break;
+        case 1: headOuter = g_gradColors[0]; tailOuter = g_gradColors[2]; headInner = LighterColor(g_gradColors[0]); tailInner = LighterColor(g_gradColors[2]); break;
+        case 2: { float h = fmodf(t*80,360); headOuter=HSVtoRGB(h,.9f,1); tailOuter=HSVtoRGB(fmodf(h+140,360),.9f,1); headInner=HSVtoRGB(h,.45f,1); tailInner=HSVtoRGB(fmodf(h+140,360),.45f,1); break; }
+        case 3: { float h = fmodf(t*40,60); headOuter=HSVtoRGB(h,.95f,1); tailOuter=HSVtoRGB(fmodf(h+35,60),.95f,1); headInner=HSVtoRGB(h,.5f,1); tailInner=HSVtoRGB(fmodf(h+35,60),.5f,1); break; }
+        case 4: { float h = 180+fmodf(t*40,120); headOuter=HSVtoRGB(h,.9f,1); tailOuter=HSVtoRGB(fmodf(h+70,360),.9f,1); headInner=HSVtoRGB(h,.45f,1); tailInner=HSVtoRGB(fmodf(h+70,360),.45f,1); break; }
+        case 5: { float p = .6f+.4f*sinf(t*4); D2D1_COLOR_F c=g_customColor; headOuter=D2D1::ColorF(c.r*p,c.g*p,c.b*p,1); tailOuter=D2D1::ColorF(c.r*p*.4f,c.g*p*.4f,c.b*p*.4f,1); headInner=LighterColor(headOuter,.6f); tailInner=LighterColor(tailOuter,.6f); break; }
+        case 6: { float sn=fminf(velocity/60.0f,1.0f); float h=240-sn*240; headOuter=HSVtoRGB(h,.9f,1); tailOuter=HSVtoRGB(fmodf(h+60,360),.7f,.8f); headInner=HSVtoRGB(h,.4f,1); tailInner=HSVtoRGB(fmodf(h+60,360),.3f,.9f); break; }
+        case 7: headOuter=g_gradColors[0]; tailOuter=g_gradColors[1]; headInner=LighterColor(g_gradColors[0]); tailInner=LighterColor(g_gradColors[1]); break;
+        case 8: { float f=.85f+.15f*sinf(t*15)*sinf(t*7.3f); headOuter=D2D1::ColorF(1*f,.9f*f,.2f,1); tailOuter=D2D1::ColorF(.7f,.1f,0,1); headInner=D2D1::ColorF(1,1,.7f,1); tailInner=D2D1::ColorF(.9f,.3f,0,1); break; }
+        case 9: { float h1=140+30*sinf(t*.8f); float h2=280+40*sinf(t*.6f+1); headOuter=HSVtoRGB(h1,.8f,.9f); tailOuter=HSVtoRGB(h2,.8f,.9f); headInner=HSVtoRGB(190,.5f,1); tailInner=HSVtoRGB(fmodf(h2+30,360),.4f,1); break; }
+        case 10: { D2D1_COLOR_F ec = g_cursorExtractedColor; headOuter = tailOuter = ec; headInner = tailInner = LighterColor(ec, 0.6f); break; }
+        case 11: { D2D1_COLOR_F mixed = LerpColor(g_cursorExtractedColor, g_customColor, 0.5f); D2D1_COLOR_F mixedTail = LerpColor(g_cursorExtractedColor, g_gradColors[2], 0.5f); headOuter = mixed; tailOuter = mixedTail; headInner = LighterColor(mixed, 0.55f); tailInner = LighterColor(mixedTail, 0.55f); break; }
+        default: headOuter = tailOuter = g_customColor; headInner = tailInner = LighterColor(g_customColor); break;
     }
     out.solidOuter = headOuter; out.solidInner = headInner;
     for (int i = 0; i < GRAD_STOPS; i++) {
         float ratio = (float)i / (GRAD_STOPS - 1);
         float alpha = 0.86f * powf(1.0f - ratio, 1.4f);
-        if (mode == 8) {
+        if (mode == 7) {
             float phase = fmodf(ratio * 4.0f + t * 2.0f, 1.0f);
             bool stripe = phase < 0.5f;
             D2D1_COLOR_F co = stripe ? headOuter : tailOuter, ci = stripe ? headInner : tailInner;
             out.outer[i] = { ratio, D2D1::ColorF(co.r, co.g, co.b, alpha) };
             out.inner[i] = { ratio, D2D1::ColorF(ci.r, ci.g, ci.b, alpha) };
-        } else if (mode == 9) {
+        } else if (mode == 8) {
             float fr = ratio * ratio;
             D2D1_COLOR_F co = LerpColor(headOuter, tailOuter, fr), ci = LerpColor(headInner, tailInner, fr);
             out.outer[i] = { ratio, D2D1::ColorF(co.r, co.g, co.b, alpha) };
             out.inner[i] = { ratio, D2D1::ColorF(ci.r, ci.g, ci.b, alpha) };
-        } else if (mode == 2) {
+        } else if (mode == 1) {
             // 三色渐变：color1 → color2 → color3
             float t2 = ratio * 2.0f;
             D2D1_COLOR_F co, ci;
@@ -825,18 +824,18 @@ void LoadSettings() {
     if (str) { WStrToUTF8(str, g_customFunction, 256); Wh_FreeStringSetting(str); }
     str = Wh_GetStringSetting(L"color_mode");
     if (str) {
-        if (wcscmp(str, L"single") == 0) g_colorMode = 1;
-        else if (wcscmp(str, L"gradient") == 0) g_colorMode = 2;
-        else if (wcscmp(str, L"rainbow") == 0) g_colorMode = 3;
-        else if (wcscmp(str, L"warm") == 0) g_colorMode = 4;
-        else if (wcscmp(str, L"cool") == 0) g_colorMode = 5;
-        else if (wcscmp(str, L"neon") == 0) g_colorMode = 6;
-        else if (wcscmp(str, L"velocity") == 0) g_colorMode = 7;
-        else if (wcscmp(str, L"stripes") == 0) g_colorMode = 8;
-        else if (wcscmp(str, L"fire") == 0) g_colorMode = 9;
-        else if (wcscmp(str, L"aurora") == 0) g_colorMode = 10;
-        else if (wcscmp(str, L"cursor_extract") == 0) g_colorMode = 11;
-        else if (wcscmp(str, L"cursor_mix") == 0) g_colorMode = 12;
+        if (wcscmp(str, L"single") == 0) g_colorMode = 0;
+        else if (wcscmp(str, L"gradient") == 0) g_colorMode = 1;
+        else if (wcscmp(str, L"rainbow") == 0) g_colorMode = 2;
+        else if (wcscmp(str, L"warm") == 0) g_colorMode = 3;
+        else if (wcscmp(str, L"cool") == 0) g_colorMode = 4;
+        else if (wcscmp(str, L"neon") == 0) g_colorMode = 5;
+        else if (wcscmp(str, L"velocity") == 0) g_colorMode = 6;
+        else if (wcscmp(str, L"stripes") == 0) g_colorMode = 7;
+        else if (wcscmp(str, L"fire") == 0) g_colorMode = 8;
+        else if (wcscmp(str, L"aurora") == 0) g_colorMode = 9;
+        else if (wcscmp(str, L"cursor_extract") == 0) g_colorMode = 10;
+        else if (wcscmp(str, L"cursor_mix") == 0) g_colorMode = 11;
         else g_colorMode = 0;
         Wh_FreeStringSetting(str);
     }
@@ -999,7 +998,7 @@ VOID CALLBACK SmearTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTim
     float velocity = sqrtf((float)(dx*dx + dy*dy));
     g_lastPos = pt;
 
-    if (g_colorMode == 11 || g_colorMode == 12) ExtractCursorColor(pt, dwTime);
+    if (g_colorMode == 10 || g_colorMode == 11) ExtractCursorColor(pt, dwTime);
 
     POINT renderPos = pt;
     if (g_trailDelay > 0) {
