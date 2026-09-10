@@ -2,7 +2,7 @@
 // @id              mouse-trail
 // @name            Mouse Trail
 // @name:zh-CN      鼠标拖尾
-// @description     Highly customizable cursor trail with native D3D11 rendering, 18 color modes, 10 trail shapes, 2.5D depth effects, particle system, click effects, and cursor color extraction. DirectComposition hardware acceleration, low idle CPU.
+// @description     Highly customizable cursor trail with native D3D11 rendering, 18 color modes, 10 trail shapes, 2.5D particle effects, particle system, click effects, and cursor color extraction. DirectComposition hardware acceleration, low idle CPU.
 // @description:zh-CN 高度可定制的鼠标拖尾，原生 D3D11 渲染，18种颜色模式，10种拖尾形状，2.5D 立体效果，粒子系统，点击特效，光标取色。DirectComposition 硬件加速，闲置低 CPU。
 // @version         3.3
 // @author          MCheng404
@@ -15,7 +15,7 @@
 /*
 # Mouse Trail
 
-A highly customizable mouse cursor trail with native D3D11 rendering, 18 color modes, 10 trail shapes, 2.5D depth effects, particle system, click effects, and cursor color extraction. DirectComposition hardware accelerated, runs as a dedicated process with low CPU usage when idle.
+A highly customizable mouse cursor trail with native D3D11 rendering, 18 color modes, 10 trail shapes, 2.5D particle effects, particle system, click effects, and cursor color extraction. DirectComposition hardware accelerated, runs as a dedicated process with low CPU usage when idle.
 
 🎬 Demo
 
@@ -28,7 +28,7 @@ A highly customizable mouse cursor trail with native D3D11 rendering, 18 color m
 ### Rendering Architecture
 
 * **Native D3D11 Rendering:** Custom HLSL vertex/pixel shaders with instanced particle rendering. No D2D1 dependency for core trail/particle/shape rendering.
-* **2.5D Depth Effects:** Per-vertex z-coordinate with perspective projection and simple lighting. Trail ribbons bulge in the middle, particles and shapes have random depth, shape trails rotate on Y-axis.
+* **2.5D Particle Effects:** Particles have per-instance z-depth with perspective projection and simple lighting. Particles scale with depth (near = larger, far = smaller) for a 3D feel.
 * **DXGI Flip Swap Chain:** Premultiplied alpha for tear-free composition with DirectComposition.
 * **Dual-Thread Design:** UI thread handles window/message pump, render thread handles all D3D11/DComp work — mouse input never blocks.
 * **Device Loss Recovery:** Auto-rebuilds entire D3D/DComp stack on GPU TDR, driver update, or GPU switch.
@@ -109,7 +109,7 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 ### 渲染架构
 
 * **原生 D3D11 渲染：** 自定义 HLSL 顶点/像素着色器，粒子实例化渲染。核心拖尾/粒子/形状渲染不依赖 D2D1。
-* **2.5D 立体效果：** 逐顶点 z 坐标 + 透视投影 + 简单光照。拖尾带中间凸起，粒子和形状有随机深度，形状拖尾 Y 轴旋转。
+* **2.5D 粒子效果：** 粒子具有实例级 z 深度 + 透视投影 + 简单光照。粒子随深度缩放（近大远小），营造 3D 空间感。
 * **DXGI 翻转交换链：** 预乘 alpha，与 DirectComposition 无撕裂合成。
 * **双线程设计：** UI 线程处理窗口/消息泵，渲染线程处理所有 D3D11/DComp 工作——鼠标输入永不阻塞。
 * **设备丢失恢复：** GPU TDR、驱动更新或显卡切换时自动重建整个 D3D/DComp 栈。
@@ -1418,6 +1418,7 @@ struct VS_INPUT {
     float3 instancePos : TEXCOORD0; // x, y, z
     float4 instanceColor : TEXCOORD1;
     float instanceSize : TEXCOORD2;
+    float instanceShape : TEXCOORD3;
 };
 
 struct VS_OUTPUT {
@@ -1425,6 +1426,7 @@ struct VS_OUTPUT {
     float2 uv : TEXCOORD0;
     float4 color : COLOR;
     float depth : TEXCOORD1;
+    float shape : TEXCOORD2;
 };
 
 VS_OUTPUT VSMain(VS_INPUT input) {
@@ -1440,6 +1442,7 @@ VS_OUTPUT VSMain(VS_INPUT input) {
     output.uv = input.quadPos * 0.5 + 0.5;
     output.color = input.instanceColor;
     output.depth = input.instancePos.z;
+    output.shape = input.instanceShape;
     return output;
 }
 )";
@@ -1450,12 +1453,41 @@ struct PS_INPUT {
     float2 uv : TEXCOORD0;
     float4 color : COLOR;
     float depth : TEXCOORD1;
+    float shape : TEXCOORD2;
 };
+
+// 星形遮罩：5角星
+bool starMask(float2 uv) {
+    float2 p = uv - 0.5;
+    float r = length(p);
+    if (r > 0.5) return false;
+    float a = atan2(p.y, p.x);
+    float starR = 0.5 * (0.4 + 0.6 * abs(cos(a * 2.5)));
+    return r < starR;
+}
+
+// 六芒星遮罩
+bool hexagramMask(float2 uv) {
+    float2 p = uv - 0.5;
+    float r = length(p);
+    if (r > 0.5) return false;
+    float a = atan2(p.y, p.x);
+    float hexR = 0.5 * (0.5 + 0.5 * abs(cos(a * 3.0)));
+    return r < hexR;
+}
 
 float4 PSMain(PS_INPUT input) : SV_TARGET {
     float2 center = input.uv - 0.5;
     float dist = length(center);
-    if (dist > 0.5) discard;
+    bool inside = false;
+    if (input.shape < 0.5) {
+        inside = dist < 0.5;
+    } else if (input.shape < 1.5) {
+        inside = starMask(input.uv);
+    } else {
+        inside = hexagramMask(input.uv);
+    }
+    if (!inside) discard;
     float alpha = input.color.a * smoothstep(0.5, 0.42, dist);
     // 2.5D 光照
     float light = 1.0 + input.depth * 0.25;
@@ -1537,6 +1569,7 @@ static bool InitNativeRendering() {
         {"TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 1},
         {"TEXCOORD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 12, D3D11_INPUT_PER_INSTANCE_DATA, 1},
         {"TEXCOORD", 2, DXGI_FORMAT_R32_FLOAT, 1, 28, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+        {"TEXCOORD", 3, DXGI_FORMAT_R32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 1},
     };
     g_pD3DDevice->CreateInputLayout(particleLayout, 4, pvsBlob->GetBufferPointer(), pvsBlob->GetBufferSize(), &g_pParticleLayout);
 
@@ -1674,6 +1707,7 @@ static void NativeRenderParticles(int screenW, int screenH) {
         // 粒子大小随生命周期变化：出生小，中间大，死亡小
         float sizeScale = sinf(progress * 3.14159f) * 0.7f + 0.3f;
         instances[count].size = p.size * 2.0f * (g_particleSizeMultiplier / 100.0f) * sizeScale;
+        instances[count].shapeType = (float)p.shapeType;
         count++;
         if (count >= 2000) break;
     }
@@ -1766,12 +1800,22 @@ static void NativeRenderTrail(const std::vector<D2D1_POINT_2F>& smoothed, float 
         }
     };
 
-    // 1. 外发光层（宽、半透明）
-    drawBand(buildBand(2.2f, 1, 1, 1, 0.12f));
+    // 1. 外发光层（受 enable_glow 和 glow_intensity 控制）
+    if (g_enableGlow) {
+        float glowAlpha = 0.08f + (g_glowIntensity / 100.0f) * 0.15f;
+        float glowWidth = 1.8f + (g_glowIntensity / 100.0f) * 1.0f;
+        drawBand(buildBand(glowWidth, 1, 1, 1, glowAlpha));
+        // 增强发光（第二层更宽更淡）
+        if (g_enhancedGlow) {
+            drawBand(buildBand(glowWidth * 1.6f, 1, 1, 1, glowAlpha * 0.5f));
+        }
+    }
     // 2. 外带（主色，渐变）
     drawBand(buildBand(1.0f, 1, 1, 1, 1.0f));
-    // 3. 内带（核心高亮，更窄更亮）
-    drawBand(buildBand(0.35f, 1.2f, 1.2f, 1.2f, 0.7f));
+    // 3. 内带（核心高亮，受 enable_head_highlight 控制）
+    if (g_enableHeadHighlight) {
+        drawBand(buildBand(0.35f, 1.25f, 1.25f, 1.25f, 0.75f));
+    }
 }
 
 // 形状拖尾原生渲染（v3）：直接生成世界坐标顶点，一次绘制
@@ -2178,8 +2222,19 @@ static void SpawnParticles(float x, float y, int count, float speedMin, float sp
         float spawnRadius = Rand01() * 8.0f;  // 0-8 像素的随机偏移
         float px = x + cosf(spawnAngle) * spawnRadius;
         float py = y + sinf(spawnAngle) * spawnRadius;
-        g_particles.push_back({px, py, cosf(angle) * speed, sinf(angle) * speed, sizeMin + Rand01() * (sizeMax - sizeMin),
-                               time, lifeMin + (int)(Rand01() * (lifeMax - lifeMin)), color, endCol, st});
+        Particle p;
+        p.x = px; p.y = py;
+        p.vx = cosf(angle) * speed; p.vy = sinf(angle) * speed;
+        p.size = sizeMin + Rand01() * (sizeMax - sizeMin);
+        p.startTime = time;
+        p.lifetime = lifeMin + (int)(Rand01() * (lifeMax - lifeMin));
+        p.color = color;
+        p.endColor = endCol;
+        p.shapeType = st;
+        p.colorOffset[0] = (Rand01() - 0.5f) * 0.16f;
+        p.colorOffset[1] = (Rand01() - 0.5f) * 0.16f;
+        p.colorOffset[2] = (Rand01() - 0.5f) * 0.16f;
+        g_particles.push_back(p);
     }
 }
 
@@ -2254,7 +2309,6 @@ void LoadSettings() {
     g_tailOffsetY = Wh_GetIntSetting(L"tail_offset_y");
     g_tailLength = Wh_GetIntSetting(L"tail_length");
     g_trailDelay = Wh_GetIntSetting(L"trail_delay");
-    g_enableSmoothGradient = Wh_GetIntSetting(L"enable_smooth_gradient") != 0;
     {
         PCWSTR fstr = Wh_GetStringSetting(L"fadeout_mode");
         if (fstr) {
@@ -2270,7 +2324,6 @@ void LoadSettings() {
     g_enableSpeedResponse = Wh_GetIntSetting(L"enable_speed_response") != 0;
     g_enhancedGlow = Wh_GetIntSetting(L"enhanced_glow") != 0;
     g_enableHeadHighlight = Wh_GetIntSetting(L"enable_head_highlight") != 0;
-    g_enableTrailShadow = Wh_GetIntSetting(L"enable_trail_shadow") != 0;
     g_dotsMultiplier = Wh_GetIntSetting(L"dots_multiplier");
     g_waveAmplitude = Wh_GetIntSetting(L"wave_amplitude");
     g_waveFrequency = Wh_GetIntSetting(L"wave_frequency");
