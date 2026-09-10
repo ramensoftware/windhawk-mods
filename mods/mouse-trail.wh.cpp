@@ -19,9 +19,9 @@ A highly customizable mouse cursor trail with native D3D11 rendering, 18 color m
 
 🎬 Demo
 
-| Tapered Trail | Shape Trail | Particle Effects |
-|---|---|---|
-| ![Tapered](https://i.imgur.com/IRU13YW.gif) | ![Shapes](https://i.imgur.com/2rdA6uq.gif) | ![Particles](https://i.imgur.com/ZztfvkS.gif) |
+| Tapered Trail | Shape Trail | Particle Effects | Click Effects |
+|---|---|---|---|
+| ![Tapered](https://i.imgur.com/6pJjvT7.gif) | ![Shapes](https://i.imgur.com/vtTCnuw.gif) | ![Particles](https://i.imgur.com/vieAvyG.gif) | ![Click](https://i.imgur.com/bK1UC7g.gif) |
 
 ---
 
