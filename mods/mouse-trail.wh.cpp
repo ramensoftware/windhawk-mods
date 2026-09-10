@@ -1646,8 +1646,7 @@ ID3D11Buffer* g_pParticleQuadVB = nullptr; // 粒子四边形顶点缓冲
 ID3D11Buffer* g_pParticleInstanceBuf = nullptr; // 粒子实例缓冲（动态）
 ID3D11BlendState* g_pAlphaBlend = nullptr;
 ID3D11RasterizerState* g_pRasterState = nullptr;
-int g_nativeTrailVerts = 0;  // 当前拖尾带顶点数
-int g_nativeParticleCount = 0; // 当前粒子实例数
+
 
 static bool CompileShader(const char* source, const char* entry, const char* target, ID3DBlob** blob) {
     ID3DBlob* error = nullptr;
@@ -2438,7 +2437,11 @@ void LoadSettings() {
     g_tailOffsetX = Wh_GetIntSetting(L"tail_offset_x");
     g_tailOffsetY = Wh_GetIntSetting(L"tail_offset_y");
     g_tailLength = Wh_GetIntSetting(L"tail_length");
+    if (g_tailLength < 2) g_tailLength = 10;
+    if (g_tailLength > 200) g_tailLength = 200;
     g_trailDelay = Wh_GetIntSetting(L"trail_delay");
+    if (g_trailDelay < 0) g_trailDelay = 0;
+    if (g_trailDelay > 10) g_trailDelay = 10;
     {
         PCWSTR fstr = Wh_GetStringSetting(L"fadeout_mode");
         if (fstr) {
@@ -2455,14 +2458,30 @@ void LoadSettings() {
     g_enhancedGlow = Wh_GetIntSetting(L"enhanced_glow") != 0;
     g_enableHeadHighlight = Wh_GetIntSetting(L"enable_head_highlight") != 0;
     g_dotsMultiplier = Wh_GetIntSetting(L"dots_multiplier");
+    if (g_dotsMultiplier < 1) g_dotsMultiplier = 1;
+    if (g_dotsMultiplier > 10) g_dotsMultiplier = 10;
     g_waveAmplitude = Wh_GetIntSetting(L"wave_amplitude");
+    if (g_waveAmplitude < 0) g_waveAmplitude = 0;
+    if (g_waveAmplitude > 50) g_waveAmplitude = 50;
     g_waveFrequency = Wh_GetIntSetting(L"wave_frequency");
+    if (g_waveFrequency < 1) g_waveFrequency = 1;
+    if (g_waveFrequency > 50) g_waveFrequency = 50;
     g_enableGlow = Wh_GetIntSetting(L"enable_glow") != 0;
     g_glowIntensity = Wh_GetIntSetting(L"glow_intensity");
+    if (g_glowIntensity < 0) g_glowIntensity = 0;
+    if (g_glowIntensity > 100) g_glowIntensity = 100;
+    g_enableSmoothGradient = Wh_GetIntSetting(L"enable_smooth_gradient") != 0;
+    g_enableTrailShadow = Wh_GetIntSetting(L"enable_trail_shadow") != 0;
     g_particleDensity = Wh_GetIntSetting(L"particle_density");
+    if (g_particleDensity < 1) g_particleDensity = 1;
+    if (g_particleDensity > 50) g_particleDensity = 50;
     g_particleInterval = Wh_GetIntSetting(L"particle_interval");
+    if (g_particleInterval < 0) g_particleInterval = 0;
+    if (g_particleInterval > 100) g_particleInterval = 100;
     g_particleAccel = Wh_GetIntSetting(L"particle_acceleration") != 0;
     g_particleOriginRatio = Wh_GetIntSetting(L"particle_origin_ratio");
+    if (g_particleOriginRatio < 0) g_particleOriginRatio = 0;
+    if (g_particleOriginRatio > 100) g_particleOriginRatio = 100;
     int attrVal = Wh_GetIntSetting(L"particle_attraction");
     if (attrVal < 0)
         attrVal = 0;
@@ -2527,9 +2546,15 @@ void LoadSettings() {
     g_interParticleRepelForce = interRepelVal / 100.0f;
     g_enableClickStarburst = Wh_GetIntSetting(L"enable_click_starburst") != 0;
     g_starburstCount = Wh_GetIntSetting(L"starburst_count");
+    if (g_starburstCount < 1) g_starburstCount = 1;
+    if (g_starburstCount > 100) g_starburstCount = 100;
     g_enableClickEffect = Wh_GetIntSetting(L"enable_click_effect") != 0;
     g_clickMaxRadius = Wh_GetIntSetting(L"click_max_radius");
+    if (g_clickMaxRadius <= 0) g_clickMaxRadius = 40;
+    if (g_clickMaxRadius > 500) g_clickMaxRadius = 500;
     g_clickDuration = Wh_GetIntSetting(L"click_duration");
+    if (g_clickDuration <= 0) g_clickDuration = 300;
+    if (g_clickDuration > 3000) g_clickDuration = 3000;
 
     PCWSTR str = Wh_GetStringSetting(L"trail_shape");
     if (str) {
@@ -2589,8 +2614,12 @@ void LoadSettings() {
     g_motionBlurStrength = Wh_GetIntSetting(L"motion_blur_strength");
     if (g_motionBlurStrength < 1) g_motionBlurStrength = 1;
     if (g_motionBlurStrength > 5) g_motionBlurStrength = 5;
+    if (g_motionBlurStrength < 1) g_motionBlurStrength = 1;
+    if (g_motionBlurStrength > 5) g_motionBlurStrength = 5;
     g_enable25DEffect = Wh_GetIntSetting(L"enable_25d_effect") != 0;
     g_perspectiveStrength = Wh_GetIntSetting(L"perspective_strength");
+    if (g_perspectiveStrength < 0) g_perspectiveStrength = 0;
+    if (g_perspectiveStrength > 50) g_perspectiveStrength = 50;
     if (g_perspectiveStrength < 0) g_perspectiveStrength = 0;
     if (g_perspectiveStrength > 50) g_perspectiveStrength = 50;
     str = Wh_GetStringSetting(L"function_preset");
@@ -2681,6 +2710,8 @@ void LoadSettings() {
         Wh_FreeStringSetting(str);
     }
     g_colorShiftAngle = Wh_GetIntSetting(L"color_shift_angle");
+    if (g_colorShiftAngle < 0) g_colorShiftAngle = 0;
+    if (g_colorShiftAngle > 360) g_colorShiftAngle = 360;
     if (g_colorShiftAngle < 0) g_colorShiftAngle = 0;
     if (g_colorShiftAngle > 360) g_colorShiftAngle = 360;
     str = Wh_GetStringSetting(L"custom_color");
@@ -3653,7 +3684,7 @@ static void RenderFrame() {
         }
         p.x += p.vx;
         p.y += p.vy;
-        p.rotation += p.spinSpeed;  // 自旋转（总是启用，确保效果可见）
+        if (g_enableParticleSpin) p.rotation += p.spinSpeed;  // 自旋转
         if (g_particleAttraction > 0) {
             p.x += (attractTargetX - p.x) * g_particleAttraction;
             p.y += (attractTargetY - p.y) * g_particleAttraction;
