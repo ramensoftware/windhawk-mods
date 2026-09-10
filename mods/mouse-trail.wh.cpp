@@ -72,20 +72,6 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 
 高度可定制的鼠标拖尾特效，支持粒子系统、多种颜色模式、自定义函数轨迹、光标取色和点击特效。D3D11 + DirectComposition 硬件加速，独立进程运行，静止时低 CPU 占用。
 
-![拖尾效果](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail.gif)
-
-### 更多展示
-
-![演示 2](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail_2.gif)
-
-![演示 3](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail_3.gif)
-
-![演示 4](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail_4.gif)
-
-![演示 5](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail_5.gif)
-
-![拖尾截图](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/screenshot_trail.png)
-
 ---
 
 ### 功能特性
@@ -800,6 +786,7 @@ ID2D1Mesh *g_pOuterMesh = nullptr;
 ID2D1Mesh *g_pInnerMesh = nullptr;
 
 int g_cachedVW = 0, g_cachedVH = 0;
+int g_virtX = 0, g_virtY = 0, g_virtW = 0, g_virtH = 0;  // 虚拟屏幕尺寸缓存，WM_DISPLAYCHANGE 时更新
 
 // ===================== 设置缓存 =====================
 float g_triggerVelocity = 25.0f, g_stopVelocity = 10.0f;
@@ -1462,7 +1449,15 @@ bool IsGameRunning() {
     HWND hwnd = GetForegroundWindow();
     if (!hwnd || hwnd == GetDesktopWindow())
         return false;
-    static HWND s_pm = FindWindowW(L"Progman", NULL), s_ww = FindWindowW(L"WorkerW", NULL);
+    // 每 500ms 重新查询桌面窗口句柄，避免 Explorer 重启后句柄失效
+    static DWORD lastDesktopCheck = 0;
+    static HWND s_pm = nullptr, s_ww = nullptr;
+    DWORD now = GetTickCount();
+    if (now - lastDesktopCheck > 500 || !s_pm || !s_ww) {
+        s_pm = FindWindowW(L"Progman", NULL);
+        s_ww = FindWindowW(L"WorkerW", NULL);
+        lastDesktopCheck = now;
+    }
     if (hwnd == s_pm || hwnd == s_ww)
         return false;
     QUERY_USER_NOTIFICATION_STATE state;
@@ -1941,7 +1936,7 @@ static void RenderFrame() {
         widthMul = 1.0f + sf * 0.3f + af * 0.15f;
     }
 
-    int vX = GetSystemMetrics(SM_XVIRTUALSCREEN), vY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    int vX = g_virtX, vY = g_virtY;
 
     bool lDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
     bool rDown = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
@@ -1967,13 +1962,14 @@ static void RenderFrame() {
 
     static DWORD lastFsCheck = 0;
     static bool isGameCached = false, isSmearing = false;
-    static int lowVelFrames = 0, needsClear = false, fadeoutFrame = 0;
+    static int lowVelFrames = 0, fadeoutFrame = 0;
+    static bool needsClear = false;
     if (dwTime - lastFsCheck > 500) {
         isGameCached = IsGameRunning();
         lastFsCheck = dwTime;
     }
 
-    int vW = GetSystemMetrics(SM_CXVIRTUALSCREEN), vH = GetSystemMetrics(SM_CYVIRTUALSCREEN) - 1;
+    int vW = g_virtW, vH = g_virtH;
 
     if (isGameCached) {
         if (isSmearing || !g_history.empty() || !g_ripples.empty() || !g_particles.empty() || needsClear) {
@@ -1991,8 +1987,10 @@ static void RenderFrame() {
             lowVelFrames = 0;
         } else if (velocity < g_stopVelocity && isSmearing) {
             lowVelFrames++;
-            if (lowVelFrames > 2)
+            if (lowVelFrames > 2) {
                 isSmearing = false;
+                g_hasLastShapePos = false;  // 重置形状拖尾位置，避免重新开始时第一个形状飞偏
+            }
         } else if (velocity >= g_stopVelocity && isSmearing)
             lowVelFrames = 0;
         if (isSmearing) {
@@ -2599,6 +2597,8 @@ static void ReleaseAllRenderResources() {
     if (g_pDXGIDevice) { g_pDXGIDevice->Release(); g_pDXGIDevice = nullptr; }
     if (g_pD3DContext) { g_pD3DContext->Release(); g_pD3DContext = nullptr; }
     if (g_pD3DDevice) { g_pD3DDevice->Release(); g_pD3DDevice = nullptr; }
+    g_cachedVW = 0;
+    g_cachedVH = 0;
 }
 
 static bool InitAllRenderResources() {
@@ -2647,21 +2647,23 @@ static bool InitAllRenderResources() {
     }
 
     // ---- 交换链 ----
-    int sw = GetSystemMetrics(SM_CXVIRTUALSCREEN), sh = GetSystemMetrics(SM_CYVIRTUALSCREEN) - 1;
-    RecreateSwapChain(sw, sh);
+    RecreateSwapChain(g_virtW, g_virtH);
     Wh_Log(L"Recover: resources reinitialized");
     return true;
 }
 
 // ===================== 覆盖层线程 =====================
+static void UpdateVirtualScreenCache() {
+    g_virtX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    g_virtY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    g_virtW = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    g_virtH = GetSystemMetrics(SM_CYVIRTUALSCREEN) - 1;
+}
 static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_DISPLAYCHANGE) {
-        // 分辨率/显示器变化时调整窗口大小和位置
-        int vX = GetSystemMetrics(SM_XVIRTUALSCREEN);
-        int vY = GetSystemMetrics(SM_YVIRTUALSCREEN);
-        int vW = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-        int vH = GetSystemMetrics(SM_CYVIRTUALSCREEN) - 1;
-        SetWindowPos(hwnd, HWND_TOPMOST, vX, vY, vW, vH, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        // 分辨率/显示器变化时更新缓存并调整窗口大小和位置
+        UpdateVirtualScreenCache();
+        SetWindowPos(hwnd, HWND_TOPMOST, g_virtX, g_virtY, g_virtW, g_virtH, SWP_NOACTIVATE | SWP_SHOWWINDOW);
         return 0;
     }
     if (msg == WM_NCHITTEST) {
@@ -2684,8 +2686,9 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
     wc.lpszClassName = CN;
     wc.hbrBackground = nullptr;
     RegisterClass(&wc);
-    int sx = GetSystemMetrics(SM_XVIRTUALSCREEN), sy = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    int sw = GetSystemMetrics(SM_CXVIRTUALSCREEN), sh = GetSystemMetrics(SM_CYVIRTUALSCREEN) - 1;
+    UpdateVirtualScreenCache();
+    int sx = g_virtX, sy = g_virtY;
+    int sw = g_virtW, sh = g_virtH;
     g_overlayHwnd = CreateWindowEx(
         WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, CN,
         L"MouseTrailOverlay", WS_POPUP, sx, sy, sw, sh, NULL, NULL, hi, NULL);
@@ -2697,6 +2700,8 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
     }
     // 分层窗口整体不透明（per-pixel alpha 由 DirectComposition 处理）
     SetLayeredWindowAttributes(g_overlayHwnd, 0, 255, LWA_ALPHA);
+    // 从屏幕捕获中排除覆盖层，避免光标取色时采样到自己的拖尾
+    SetWindowDisplayAffinity(g_overlayHwnd, WDA_EXCLUDEFROMCAPTURE);
     Wh_Log(L"OverlayThread: window created (%dx%d at %d,%d)", sw, sh, sx, sy);
     ShowWindow(g_overlayHwnd, SW_SHOWNA);
 
@@ -2807,8 +2812,7 @@ DWORD WINAPI RenderThreadProc(LPVOID) {
     }
 
     // ---- 交换链 ----
-    int sw = GetSystemMetrics(SM_CXVIRTUALSCREEN), sh = GetSystemMetrics(SM_CYVIRTUALSCREEN) - 1;
-    RecreateSwapChain(sw, sh);
+    RecreateSwapChain(g_virtW, g_virtH);
     GetCursorPos(&g_lastPos);
 
     Wh_Log(L"RenderThread: entering render loop");
