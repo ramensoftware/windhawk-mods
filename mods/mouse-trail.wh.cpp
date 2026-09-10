@@ -551,6 +551,11 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
   $name:zh-CN: 粒子自旋转
   $description: Enable random self-rotation for particles.
   $description:zh-CN: 启用粒子随机自旋转效果。
+- particle_spin_speed: 30
+  $name: Spin Speed
+  $name:zh-CN: 自旋速度
+  $description: Base rotation speed for particles (0-100). Each particle gets random variation ±50%.
+  $description:zh-CN: 粒子基础自旋转速度（0-100），每个粒子有 ±50% 的随机差异。
 - enable_particle_interaction: true
   $name: Particle Interaction
   $name:zh-CN: 粒子间相互作用
@@ -1039,6 +1044,7 @@ int g_particleInterval = 50;
 bool g_particleAccel = true;
 int g_particleShape = 0;  // 0=random, 1=circle, 2=star, 3=hexagram
 bool g_enableParticleSpin = true;  // 粒子自旋转
+int g_particleSpinSpeed = 30;  // 粒子自旋速度（0-100）
 bool g_enableParticleInteraction = true;  // 粒子间相互作用
 int g_interParticleRepelDistance = 25;  // 粒子间排斥距离（像素）
 float g_interParticleRepelForce = 0.15f;  // 粒子间排斥力强度
@@ -2360,7 +2366,10 @@ static void SpawnParticles(float x, float y, int count, float speedMin, float sp
         p.shapeType = st;
         p.z = (Rand01() - 0.5f) * 0.8f;  // 生成时随机深度，避免每帧闪烁
         p.rotation = Rand01() * 6.28318f;  // 随机初始旋转角度
-        p.spinSpeed = (Rand01() - 0.5f) * 0.6f;  // 随机自旋转速度 ±0.3 rad/帧
+        // 基础速度由设置控制，每个粒子有 ±50% 的随机差异，确保旋转速度存在差异
+        float baseSpin = (float)g_particleSpinSpeed / 100.0f * 0.6f;  // 最大 ±0.3 rad/帧
+        float variation = (Rand01() - 0.5f) * baseSpin;  // ±50% 随机差异
+        p.spinSpeed = baseSpin + variation;  // 随机自旋转速度，每个粒子不同
         p.colorOffset[0] = (Rand01() - 0.5f) * 0.16f;
         p.colorOffset[1] = (Rand01() - 0.5f) * 0.16f;
         p.colorOffset[2] = (Rand01() - 0.5f) * 0.16f;
@@ -2537,6 +2546,9 @@ void LoadSettings() {
         Wh_FreeStringSetting(pshape);
     }
     g_enableParticleSpin = Wh_GetIntSetting(L"enable_particle_spin") != 0;
+    g_particleSpinSpeed = Wh_GetIntSetting(L"particle_spin_speed");
+    if (g_particleSpinSpeed < 0) g_particleSpinSpeed = 0;
+    if (g_particleSpinSpeed > 100) g_particleSpinSpeed = 100;
     g_enableParticleInteraction = Wh_GetIntSetting(L"enable_particle_interaction") != 0;
     g_interParticleRepelDistance = Wh_GetIntSetting(L"particle_repel_distance");
     if (g_interParticleRepelDistance < 5) g_interParticleRepelDistance = 5;
