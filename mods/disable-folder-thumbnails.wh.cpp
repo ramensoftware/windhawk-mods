@@ -3,10 +3,9 @@
 // @name            Disable Folder Thumbnails
 // @description     Disable Explorer folder thumbnails while preserving file thumbnails.
 // @version         1.0
-// @author          Anixx
-// @github          https://github.com/Anixx
+// @author          Local
 // @include         explorer.exe
-// @compilerOptions -lole32 -luuid
+// @compilerOptions -lole32 -luuid -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -37,6 +36,7 @@ that setting would disable file thumbnails as well.
 #include <windows.h>
 #include <shobjidl.h>
 #include <thumbcache.h>
+#include <shlobj.h>
 
 using GetThumbnail_t = HRESULT(STDMETHODCALLTYPE*)(
     IThumbnailCache* self,
@@ -50,28 +50,98 @@ using GetThumbnail_t = HRESULT(STDMETHODCALLTYPE*)(
 
 static GetThumbnail_t g_originalGetThumbnail = nullptr;
 
+static bool IsPlainFilesystemFolder(IShellItem* item)
+{
+    if (!item) {
+        return false;
+    }
+
+    constexpr SFGAOF mask =
+        SFGAO_FOLDER | SFGAO_FILESYSTEM | SFGAO_STREAM | SFGAO_LINK;
+
+    SFGAOF attributes = 0;
+    if (FAILED(item->GetAttributes(mask, &attributes))) {
+        return false;
+    }
+
+    return (attributes & (SFGAO_FOLDER | SFGAO_FILESYSTEM)) ==
+               (SFGAO_FOLDER | SFGAO_FILESYSTEM) &&
+           !(attributes & (SFGAO_STREAM | SFGAO_LINK));
+}
+
+// True for ordinary filesystem folders and shortcuts targeting them.
 static bool IsFilesystemFolder(IShellItem* item)
 {
     if (!item) {
         return false;
     }
 
-    // SFGAO_STREAM distinguishes file-like items, including archives
-    // exposed by the shell as browsable folders.
-    constexpr SFGAOF mask =
-        SFGAO_FOLDER | SFGAO_FILESYSTEM | SFGAO_STREAM;
+    if (IsPlainFilesystemFolder(item)) {
+        return true;
+    }
 
     SFGAOF attributes = 0;
-    HRESULT hr = item->GetAttributes(mask, &attributes);
-
-    if (FAILED(hr)) {
-        // If classification fails, preserve the normal behavior.
+    if (FAILED(item->GetAttributes(SFGAO_LINK, &attributes)) ||
+        !(attributes & SFGAO_LINK)) {
         return false;
     }
 
-    return (attributes & (SFGAO_FOLDER | SFGAO_FILESYSTEM)) ==
-               (SFGAO_FOLDER | SFGAO_FILESYSTEM) &&
-           !(attributes & SFGAO_STREAM);
+    // Load the shortcut itself, without executing it.
+    PWSTR shortcutPath = nullptr;
+    if (FAILED(item->GetDisplayName(
+            SIGDN_FILESYSPATH, &shortcutPath))) {
+        return false;
+    }
+
+    IShellLinkW* link = nullptr;
+    HRESULT hr = CoCreateInstance(
+        CLSID_ShellLink,
+        nullptr,
+        CLSCTX_INPROC_SERVER,
+        IID_PPV_ARGS(&link)
+    );
+
+    if (FAILED(hr)) {
+        CoTaskMemFree(shortcutPath);
+        return false;
+    }
+
+    IPersistFile* persistFile = nullptr;
+    hr = link->QueryInterface(IID_PPV_ARGS(&persistFile));
+
+    if (SUCCEEDED(hr)) {
+        hr = persistFile->Load(shortcutPath, STGM_READ);
+        persistFile->Release();
+    }
+
+    CoTaskMemFree(shortcutPath);
+
+    bool targetIsFolder = false;
+
+    if (SUCCEEDED(hr)) {
+        // Use the stored target. Don't call Resolve(), which could
+        // search for missing targets or introduce delays and UI.
+        PIDLIST_ABSOLUTE targetIdList = nullptr;
+        hr = link->GetIDList(&targetIdList);
+
+        if (SUCCEEDED(hr) && targetIdList) {
+            IShellItem* targetItem = nullptr;
+            hr = SHCreateItemFromIDList(
+                targetIdList,
+                IID_PPV_ARGS(&targetItem)
+            );
+
+            if (SUCCEEDED(hr)) {
+                targetIsFolder = IsPlainFilesystemFolder(targetItem);
+                targetItem->Release();
+            }
+        }
+
+        CoTaskMemFree(targetIdList);
+    }
+
+    link->Release();
+    return targetIsFolder;
 }
 
 static HRESULT STDMETHODCALLTYPE GetThumbnail_Hook(
