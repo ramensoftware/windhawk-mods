@@ -3,7 +3,8 @@
 // @name            Disable Folder Thumbnails
 // @description     Disable Explorer folder thumbnails while preserving file thumbnails.
 // @version         1.0
-// @author          Local
+// @author          Anixx
+// @github          https://github.com/Anixx
 // @include         explorer.exe
 // @compilerOptions -lole32 -luuid -lshell32
 // ==/WindhawkMod==
