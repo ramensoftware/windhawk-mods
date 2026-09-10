@@ -23,15 +23,9 @@
 
 ### More Demos / 更多展示
 
-![Demo 2](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail_2.gif)
+![Demo 2](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail_3.gif)
 
-![Demo 3](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail_3.gif)
-
-![Demo 4](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail_4.gif)
-
-![Demo 5](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail_5.gif)
-
-![Trail Screenshot](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/screenshot_trail.png)
+![Demo 3](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail_5.gif)
 
 ---
 
@@ -61,9 +55,9 @@ Examples / 示例：`sin(d * 0.15) * 8`, `sin(d * 0.25) * exp(0 - t * 2.5) * 10`
 **EN:** Hex RGB, e.g. `FF0000`=red, `00FF00`=green, `0000FF`=blue, `FFD700`=gold.
 **中文：** 自定义颜色使用十六进制 RGB，例如：`FF0000`=红，`00FF00`=绿，`0000FF`=蓝，`FFD700`=金。
 
-### Author / 作者
-Developed by [MCheng404](https://github.com/MCheng404).
-开发者 [MCheng404](https://github.com/MCheng404)。
+### Credits / 致谢
+Based on [TheatriChris](https://github.com/chrisc44890)'s Cursor Motion Blur mod (MIT License). Developed by [MCheng404](https://github.com/MCheng404).
+基于 [TheatriChris](https://github.com/chrisc44890) 的 Cursor Motion Blur mod（MIT 许可证）。开发者 [MCheng404](https://github.com/MCheng404)。
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
@@ -349,6 +343,7 @@ Developed by [MCheng404](https://github.com/MCheng404).
 */
 // ==/WindhawkModSettings==
 #include <windows.h>
+#include <stdint.h>
 #include <d2d1.h>
 #include <math.h>
 #include <shellapi.h>
@@ -525,6 +520,7 @@ static float EvalExpression(float t, float d, float time) {
 HWND g_overlayHwnd = NULL;
 HANDLE g_threadHandle = NULL;
 HANDLE g_readyEvent = NULL;
+DWORD g_startTick = 0;
 std::deque<POINT> g_history;
 POINT g_lastPos = { 0, 0 };
 
@@ -1003,6 +999,7 @@ struct DotInfo { D2D1_POINT_2F pos; float radius; D2D1_COLOR_F outer; D2D1_COLOR
 
 // ===================== 主绘制循环 =====================
 VOID CALLBACK SmearTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
+    DWORD animTime = dwTime - g_startTick; // relative tick for animation (avoids float precision loss on long uptime)
     POINT pt; GetCursorPos(&pt);
     int dx = pt.x - g_lastPos.x, dy = pt.y - g_lastPos.y;
     float velocity = sqrtf((float)(dx*dx + dy*dy));
@@ -1021,7 +1018,7 @@ VOID CALLBACK SmearTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTim
     } else g_lagInited = false;
 
     GradData cols;
-    ComputeColors(g_colorMode, dwTime, velocity, cols);
+    ComputeColors(g_colorMode, animTime, velocity, cols);
 
     float widthMul = 1.0f;
     if (g_enableSpeedResponse) {
@@ -1052,7 +1049,8 @@ VOID CALLBACK SmearTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTim
 
     static DWORD lastFsCheck = 0;
     static bool isGameCached = false, isSmearing = false;
-    static int lowVelFrames = 0, needsClear = false, fadeoutFrame = 0;
+    static int lowVelFrames = 0, fadeoutFrame = 0;
+    static bool needsClear = false;
     if (dwTime - lastFsCheck > 500) { isGameCached = IsGameRunning(); lastFsCheck = dwTime; }
 
     int vW = GetSystemMetrics(SM_CXVIRTUALSCREEN), vH = GetSystemMetrics(SM_CYVIRTUALSCREEN) - 1;
@@ -1124,8 +1122,8 @@ VOID CALLBACK SmearTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTim
             ns.push_back(smoothed.back());
             smoothed = ns;
         }
-        if (g_trailShape == 2) ApplyFunctionDeformation(smoothed, dwTime);
-        else if (g_trailShape == 3) ApplyWaveDeformation(smoothed, dwTime);
+        if (g_trailShape == 2) ApplyFunctionDeformation(smoothed, animTime);
+        else if (g_trailShape == 3) ApplyWaveDeformation(smoothed, animTime);
     }
 
     // ===== 粒子释放（基于 smoothed 路径的指定位置）=====
@@ -1210,8 +1208,8 @@ VOID CALLBACK SmearTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTim
 
     HDC hdcScreen = GetDC(NULL);
     if (!g_hBitmap || g_cachedVW != vW || g_cachedVH != vH) {
+        if (g_hdcMem) DeleteDC(g_hdcMem); // delete DC first to deselect bitmap
         if (g_hBitmap) DeleteObject(g_hBitmap);
-        if (g_hdcMem) DeleteDC(g_hdcMem);
         g_hdcMem = CreateCompatibleDC(hdcScreen);
         g_hBitmap = CreateCompatibleBitmap(hdcScreen, vW, vH);
         SelectObject(g_hdcMem, g_hBitmap);
@@ -1564,7 +1562,15 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         CN, L"MouseTrailOverlay", WS_POPUP, sx, sy, sw, sh, NULL, NULL, hi, NULL);
     if (g_readyEvent) SetEvent(g_readyEvent);
-    if (!g_overlayHwnd) return 0;
+    if (!g_overlayHwnd) {
+        Wh_Log(L"CreateWindowEx failed for overlay window");
+        if (g_pStarGeom) { g_pStarGeom->Release(); g_pStarGeom = nullptr; }
+        if (g_pHexagramGeom) { g_pHexagramGeom->Release(); g_pHexagramGeom = nullptr; }
+        if (g_pD2DFactory) { g_pD2DFactory->Release(); g_pD2DFactory = nullptr; }
+        UnregisterClass(CN, hi);
+        CoUninitialize();
+        return 0;
+    }
     ShowWindow(g_overlayHwnd, SW_SHOWNA);
     GetCursorPos(&g_lastPos);
     SetTimer(g_overlayHwnd, 1, USER_TIMER_MINIMUM, SmearTimerProc);
@@ -1578,13 +1584,15 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
     if (g_pStarGeom) { g_pStarGeom->Release(); g_pStarGeom = nullptr; }
     if (g_pHexagramGeom) { g_pHexagramGeom->Release(); g_pHexagramGeom = nullptr; }
     if (g_pD2DFactory) { g_pD2DFactory->Release(); g_pD2DFactory = nullptr; }
-    if (g_hBitmap) DeleteObject(g_hBitmap);
     if (g_hdcMem) DeleteDC(g_hdcMem);
+    if (g_hBitmap) DeleteObject(g_hBitmap);
     DestroyWindow(g_overlayHwnd); UnregisterClass(CN, hi); CoUninitialize();
     return 0;
 }
 
 BOOL WhTool_ModInit() {
+    g_reloadMsg = RegisterWindowMessageW(L"MouseTrail_Reload");
+    g_startTick = GetTickCount();
     LoadSettings();
     g_readyEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     g_threadHandle = CreateThread(NULL, 0, OverlayThreadProc, NULL, 0, NULL);
@@ -1604,7 +1612,7 @@ void WhTool_ModUninit() {
         g_readyEvent = NULL;
     }
 }
-void WhTool_ModSettingsChanged() { if (!g_reloadMsg) g_reloadMsg = RegisterWindowMessageW(L"MouseTrail_Reload"); if (g_overlayHwnd) PostMessage(g_overlayHwnd, g_reloadMsg, 0, 0); }
+void WhTool_ModSettingsChanged() { if (g_overlayHwnd) PostMessage(g_overlayHwnd, g_reloadMsg, 0, 0); }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
