@@ -1687,14 +1687,14 @@ static bool InitNativeRendering() {
     };
     g_pD3DDevice->CreateInputLayout(layoutDesc, 3, vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), &g_pNativeLayout);
 
-    // 输入布局：粒子实例（位置+深度+颜色+大小）
+    // 输入布局：粒子实例（位置+深度+颜色+大小+形状+旋转）
     D3D11_INPUT_ELEMENT_DESC particleLayout[] = {
         {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
         {"TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 1},
-        {"TEXCOORD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 12, D3D11_INPUT_PER_INSTANCE_DATA, 1},
-        {"TEXCOORD", 2, DXGI_FORMAT_R32_FLOAT, 1, 28, D3D11_INPUT_PER_INSTANCE_DATA, 1},
-        {"TEXCOORD", 3, DXGI_FORMAT_R32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 1},
-        {"TEXCOORD", 4, DXGI_FORMAT_R32_FLOAT, 1, 36, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+        {"TEXCOORD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+        {"TEXCOORD", 2, DXGI_FORMAT_R32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+        {"TEXCOORD", 3, DXGI_FORMAT_R32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+        {"TEXCOORD", 4, DXGI_FORMAT_R32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
     };
     g_pD3DDevice->CreateInputLayout(particleLayout, 6, pvsBlob->GetBufferPointer(), pvsBlob->GetBufferSize(), &g_pParticleLayout);
 
@@ -2359,7 +2359,7 @@ static void SpawnParticles(float x, float y, int count, float speedMin, float sp
         p.shapeType = st;
         p.z = (Rand01() - 0.5f) * 0.8f;  // 生成时随机深度，避免每帧闪烁
         p.rotation = Rand01() * 6.28318f;  // 随机初始旋转角度
-        p.spinSpeed = (Rand01() - 0.5f) * 0.6f;  // 随机自旋转速度 ±0.3 rad/帧（更明显）
+        p.spinSpeed = (Rand01() - 0.5f) * 1.0f;  // 随机自旋转速度 ±0.5 rad/帧
         p.colorOffset[0] = (Rand01() - 0.5f) * 0.16f;
         p.colorOffset[1] = (Rand01() - 0.5f) * 0.16f;
         p.colorOffset[2] = (Rand01() - 0.5f) * 0.16f;
@@ -3684,7 +3684,7 @@ static void RenderFrame() {
         }
         p.x += p.vx;
         p.y += p.vy;
-        if (g_enableParticleSpin) p.rotation += p.spinSpeed;  // 自旋转
+        p.rotation += p.spinSpeed;  // 自旋转（总是启用，用于诊断）
         if (g_particleAttraction > 0) {
             p.x += (attractTargetX - p.x) * g_particleAttraction;
             p.y += (attractTargetY - p.y) * g_particleAttraction;
