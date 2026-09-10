@@ -1457,9 +1457,9 @@ ID3D11RasterizerState* g_pRasterState = nullptr;
 int g_nativeTrailVerts = 0;  // 当前拖尾带顶点数
 int g_nativeParticleCount = 0; // 当前粒子实例数
 
-static bool CompileShader(const char* source, const char* target, ID3DBlob** blob) {
+static bool CompileShader(const char* source, const char* entry, const char* target, ID3DBlob** blob) {
     ID3DBlob* error = nullptr;
-    HRESULT hr = D3DCompile(source, strlen(source), nullptr, nullptr, nullptr, "main", target,
+    HRESULT hr = D3DCompile(source, strlen(source), nullptr, nullptr, nullptr, entry, target,
                             D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, blob, &error);
     if (FAILED(hr)) {
         if (error) {
@@ -1477,14 +1477,14 @@ static bool InitNativeRendering() {
 
     // 编译着色器
     ID3DBlob* vsBlob = nullptr, *psBlob = nullptr;
-    if (!CompileShader(g_vsShader, "vs_4_0", &vsBlob)) return false;
-    if (!CompileShader(g_psShader, "ps_4_0", &psBlob)) return false;
+    if (!CompileShader(g_vsShader, "VSMain", "vs_4_0", &vsBlob)) return false;
+    if (!CompileShader(g_psShader, "PSMain", "ps_4_0", &psBlob)) return false;
     g_pD3DDevice->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, &g_pNativeVS);
     g_pD3DDevice->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &g_pNativePS);
 
     ID3DBlob* pvsBlob = nullptr, *ppsBlob = nullptr;
-    if (!CompileShader(g_particleVS, "vs_4_0", &pvsBlob)) return false;
-    if (!CompileShader(g_particlePS, "ps_4_0", &ppsBlob)) return false;
+    if (!CompileShader(g_particleVS, "VSMain", "vs_4_0", &pvsBlob)) return false;
+    if (!CompileShader(g_particlePS, "PSMain", "ps_4_0", &ppsBlob)) return false;
     g_pD3DDevice->CreateVertexShader(pvsBlob->GetBufferPointer(), pvsBlob->GetBufferSize(), nullptr, &g_pParticleVS);
     g_pD3DDevice->CreatePixelShader(ppsBlob->GetBufferPointer(), ppsBlob->GetBufferSize(), nullptr, &g_pParticlePS);
 
@@ -1586,15 +1586,15 @@ static void UpdateConstantBuffer(int width, int height, const GradData* cols = n
     D3D11_MAPPED_SUBRESOURCE mapped;
     if (SUCCEEDED(g_pD3DContext->Map(g_pConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
         float* data = (float*)mapped.pData;
-        // screenSize (offset 0)
+        // screenSize (offset 0, bytes 0-7)
         data[0] = (float)width;
         data[1] = (float)height;
-        // perspective (offset 2)
+        // perspective (offset 2, bytes 8-11)
         data[2] = 0.15f;  // 2.5D 透视强度
-        // lightDir (offset 3-4)
-        data[3] = 0.5f;
-        data[4] = -0.5f;
-        // gradient[16] (offset 8-71)
+        // lightDir (offset 4, bytes 16-23) — float2 不能跨越 16 字节边界
+        data[4] = 0.5f;
+        data[5] = -0.5f;
+        // gradient[16] (offset 8, bytes 32-287)
         int gradCount = 0;
         if (cols) {
             for (int i = 0; i < GRAD_STOPS; i++) {
@@ -1605,8 +1605,8 @@ static void UpdateConstantBuffer(int width, int height, const GradData* cols = n
             }
             gradCount = GRAD_STOPS;
         }
-        // gradientCount (offset 72)
-        data[72] = (float)gradCount;
+        // gradientCount (offset 72, bytes 288-291) — int 类型，用整数写入
+        ((int*)data)[72] = gradCount;
         g_pD3DContext->Unmap(g_pConstantBuffer, 0);
     }
 }
@@ -1648,6 +1648,7 @@ static void NativeRenderParticles(int screenW, int screenH) {
     g_pD3DContext->VSSetShader(g_pParticleVS, nullptr, 0);
     g_pD3DContext->PSSetShader(g_pParticlePS, nullptr, 0);
     g_pD3DContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    g_pD3DContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
     g_pD3DContext->RSSetState(g_pRasterState);
     g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
 
@@ -1722,6 +1723,7 @@ static void NativeRenderTrail(const std::vector<D2D1_POINT_2F>& smoothed, float 
     g_pD3DContext->VSSetShader(g_pNativeVS, nullptr, 0);
     g_pD3DContext->PSSetShader(g_pNativePS, nullptr, 0);
     g_pD3DContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    g_pD3DContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
     g_pD3DContext->RSSetState(g_pRasterState);
     g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
 
@@ -1866,6 +1868,7 @@ static void NativeRenderShapes(int screenW, int screenH, DWORD dwTime) {
     g_pD3DContext->VSSetShader(g_pParticleVS, nullptr, 0);
     g_pD3DContext->PSSetShader(g_pParticlePS, nullptr, 0);
     g_pD3DContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    g_pD3DContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
     g_pD3DContext->RSSetState(g_pRasterState);
     g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
 
@@ -1986,6 +1989,7 @@ static void NativeRenderTrailShapes(int screenW, int screenH, DWORD dwTime) {
     g_pD3DContext->VSSetShader(g_pNativeVS, nullptr, 0);
     g_pD3DContext->PSSetShader(g_pNativePS, nullptr, 0);
     g_pD3DContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    g_pD3DContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
     g_pD3DContext->RSSetState(g_pRasterState);
     g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
 
@@ -2001,41 +2005,13 @@ static void NativeRenderTrailShapes(int screenW, int screenH, DWORD dwTime) {
 static void NativeRenderRipples(int screenW, int screenH, DWORD dwTime, const GradData& cols, int vX, int vY) {
     if (g_ripples.empty() || !g_pTrailVB) return;
 
-    // 构建波纹环顶点（每个波纹用三角形带渲染圆环）
-    std::vector<VertexPosColor> verts;
-    const int segments = 48;
-    for (auto &r : g_ripples) {
-        float progress = (float)(dwTime - r.startTime) / g_clickDuration;
-        if (progress < 0 || progress >= 1) continue;
-        float radius = g_clickMaxRadius * progress;
-        float alpha = (1.0f - progress) * 0.6f;
-        float ringWidth = 3.0f + progress * 2.0f;
-        D2D1_COLOR_F rc = cols.outer[GRAD_STOPS / 2].color;
-        for (int i = 0; i <= segments; i++) {
-            float a = (i / (float)segments) * 6.28318f;
-            float cosA = cosf(a), sinA = sinf(a);
-            // 外圈
-            verts.push_back({r.pos.x + cosA * (radius + ringWidth), r.pos.y + sinA * (radius + ringWidth), 0,
-                             rc.r, rc.g, rc.b, alpha, 0.5f});
-            // 内圈
-            verts.push_back({r.pos.x + cosA * radius, r.pos.y + sinA * radius, 0,
-                             rc.r, rc.g, rc.b, 0, 0.5f});
-        }
-    }
-    if (verts.empty()) return;
-
-    // 更新顶点缓冲
-    D3D11_MAPPED_SUBRESOURCE mapped;
-    if (FAILED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
-    memcpy(mapped.pData, verts.data(), verts.size() * sizeof(VertexPosColor));
-    g_pD3DContext->Unmap(g_pTrailVB, 0);
-
     // 设置渲染状态
     UpdateConstantBuffer(screenW, screenH, &cols);
     g_pD3DContext->IASetInputLayout(g_pNativeLayout);
     g_pD3DContext->VSSetShader(g_pNativeVS, nullptr, 0);
     g_pD3DContext->PSSetShader(g_pNativePS, nullptr, 0);
     g_pD3DContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    g_pD3DContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
     g_pD3DContext->RSSetState(g_pRasterState);
     g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
 
@@ -2044,8 +2020,49 @@ static void NativeRenderRipples(int screenW, int screenH, DWORD dwTime, const Gr
     g_pD3DContext->IASetVertexBuffers(0, 1, &g_pTrailVB, &stride, &offset);
     g_pD3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
-    // 绘制每个波纹环（需要按环分段绘制，简化为一次绘制所有顶点）
-    g_pD3DContext->Draw((UINT)verts.size(), 0);
+    const int segments = 48;
+    const int maxVerts = 4096;
+    int totalVerts = 0;
+
+    for (auto &r : g_ripples) {
+        float progress = (float)(dwTime - r.startTime) / g_clickDuration;
+        if (progress < 0 || progress >= 1) continue;
+        float radius = g_clickMaxRadius * progress;
+        float alpha = (1.0f - progress) * 0.6f;
+        float ringWidth = 3.0f + progress * 2.0f;
+        D2D1_COLOR_F rc = cols.outer[GRAD_STOPS / 2].color;
+
+        // 检查顶点缓冲是否足够
+        int ringVerts = (segments + 1) * 2;
+        if (totalVerts + ringVerts > maxVerts) break;
+
+        // 构建单个波纹环顶点
+        VertexPosColor ringVertsArr[100]; // (48+1)*2 = 98
+        int idx = 0;
+        for (int i = 0; i <= segments; i++) {
+            float a = (i / (float)segments) * 6.28318f;
+            float cosA = cosf(a), sinA = sinf(a);
+            // 减去虚拟屏幕原点偏移
+            float px = r.pos.x - vX;
+            float py = r.pos.y - vY;
+            // 外圈
+            ringVertsArr[idx++] = {px + cosA * (radius + ringWidth), py + sinA * (radius + ringWidth), 0,
+                                   rc.r, rc.g, rc.b, alpha, 0.5f};
+            // 内圈
+            ringVertsArr[idx++] = {px + cosA * radius, py + sinA * radius, 0,
+                                   rc.r, rc.g, rc.b, 0, 0.5f};
+        }
+
+        // 更新顶点缓冲（只写当前环）
+        D3D11_MAPPED_SUBRESOURCE mapped;
+        if (FAILED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
+        memcpy(mapped.pData, ringVertsArr, ringVerts * sizeof(VertexPosColor));
+        g_pD3DContext->Unmap(g_pTrailVB, 0);
+
+        // 绘制当前环
+        g_pD3DContext->Draw(ringVerts, 0);
+        totalVerts += ringVerts;
+    }
 }
 
 static D2D1_POINT_2F GetPointOnPath(const std::vector<D2D1_POINT_2F> &path, float ratio);
@@ -2533,6 +2550,14 @@ void LoadSettings() {
     s_gradValid = false;
     g_lagInited = false;
     g_fadeAlpha = 1.0f;
+
+    // 根据颜色模式动态设置屏幕捕获排除（仅光标取色模式需要排除自己）
+    if (g_overlayHwnd) {
+        if (g_colorMode == 10 || g_colorMode == 11)  // cursor_extract or cursor_mix
+            SetWindowDisplayAffinity(g_overlayHwnd, WDA_EXCLUDEFROMCAPTURE);
+        else
+            SetWindowDisplayAffinity(g_overlayHwnd, WDA_NONE);
+    }
 }
 
 // ===================== 游戏检测 =====================
@@ -3931,8 +3956,7 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
     }
     // 分层窗口整体不透明（per-pixel alpha 由 DirectComposition 处理）
     SetLayeredWindowAttributes(g_overlayHwnd, 0, 255, LWA_ALPHA);
-    // 从屏幕捕获中排除覆盖层，避免光标取色时采样到自己的拖尾
-    SetWindowDisplayAffinity(g_overlayHwnd, WDA_EXCLUDEFROMCAPTURE);
+    // 屏幕捕获排除在 LoadSettings 中根据颜色模式动态设置
     Wh_Log(L"OverlayThread: window created (%dx%d at %d,%d), initially hidden", sw, sh, sx, sy);
     // 不立即 ShowWindow，等渲染线程首次有内容绘制时再显示，避免渲染失败时全屏透明窗口残留
 
