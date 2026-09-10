@@ -12,6 +12,27 @@
 // ==/WindhawkMod==
 
 // Source code is published under the GNU General Public License v3.0.
+// Portions of the File Explorer hook and XAML discovery code are adapted
+// from Explorer Command Bar by DanRotaru, licensed under the MIT License.
+//
+// Copyright (c) DanRotaru
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE.
 
 // ==WindhawkModReadme==
 /*
@@ -53,18 +74,6 @@ If the mod is enabled while File Explorer windows are already open, the label ma
 
 Parts of the File Explorer hook and XAML discovery plumbing are adapted from **Explorer Command Bar** by **DanRotaru**, licensed under the MIT License.
 
-<details>
-<summary>MIT license notice for reused code</summary>
-
-Copyright (c) DanRotaru
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE.
-
-</details>
 */
 // ==/WindhawkModReadme==
 
@@ -1964,61 +1973,55 @@ enum class SymbolHookResult
 static SymbolHookResult HookFileExplorerExtensionsSymbols(HMODULE module)
 {
     WindhawkUtils::SYMBOL_HOOK fileExplorerExtensionsDllHooks[] = {
+    {
         {
-            {
-                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarManager::CommandBar(struct winrt::Microsoft::UI::Xaml::Controls::CommandBar const &))",
-                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarManager::CommandBar(struct winrt::Microsoft::UI::Xaml::Controls::CommandBar const & __ptr64) __ptr64)",
-            },
-            &CommandBarManager_CommandBar_Original,
-            CommandBarManager_CommandBar_Hook,
-            true,
+            LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarManager::CommandBar(struct winrt::Microsoft::UI::Xaml::Controls::CommandBar const &))",
         },
+        &CommandBarManager_CommandBar_Original,
+        CommandBarManager_CommandBar_Hook,
+        true,
+    },
+    {
         {
-            {
-                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_Loaded(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const &))",
-                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_Loaded(struct winrt::Windows::Foundation::IInspectable const & __ptr64,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const & __ptr64) __ptr64)",
-            },
-            &FileExplorerTabControl_TabView_Loaded_Original,
-            FileExplorerTabControl_TabView_Loaded_Hook,
-            true,
+            LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_Loaded(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const &))",
         },
+        &FileExplorerTabControl_TabView_Loaded_Original,
+        FileExplorerTabControl_TabView_Loaded_Hook,
+        true,
+    },
+    {
         {
-            {
-                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_GotFocus(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const &))",
-                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_GotFocus(struct winrt::Windows::Foundation::IInspectable const & __ptr64,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const & __ptr64) __ptr64)",
-            },
-            &FileExplorerTabControl_TabView_GotFocus_Original,
-            FileExplorerTabControl_TabView_GotFocus_Hook,
-            true,
+            LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_GotFocus(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const &))",
         },
+        &FileExplorerTabControl_TabView_GotFocus_Original,
+        FileExplorerTabControl_TabView_GotFocus_Hook,
+        true,
+    },
+    {
         {
-            {
-                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_SelectionChanged(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const &))",
-                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_SelectionChanged(struct winrt::Windows::Foundation::IInspectable const & __ptr64,struct winrt::Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const & __ptr64) __ptr64)",
-            },
-            &FileExplorerTabControl_TabView_SelectionChanged_Original,
-            FileExplorerTabControl_TabView_SelectionChanged_Hook,
-            true,
+            LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_SelectionChanged(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const &))",
         },
+        &FileExplorerTabControl_TabView_SelectionChanged_Original,
+        FileExplorerTabControl_TabView_SelectionChanged_Hook,
+        true,
+    },
+    {
         {
-            {
-                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_TabItemsChanged(struct winrt::Microsoft::UI::Xaml::Controls::TabView const &,struct winrt::Windows::Foundation::Collections::IVectorChangedEventArgs const &))",
-                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_TabItemsChanged(struct winrt::Microsoft::UI::Xaml::Controls::TabView const & __ptr64,struct winrt::Windows::Foundation::Collections::IVectorChangedEventArgs const & __ptr64) __ptr64)",
-            },
-            &FileExplorerTabControl_TabView_TabItemsChanged_Original,
-            FileExplorerTabControl_TabView_TabItemsChanged_Hook,
-            true,
+            LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::FileExplorerTabControl::TabView_TabItemsChanged(struct winrt::Microsoft::UI::Xaml::Controls::TabView const &,struct winrt::Windows::Foundation::Collections::IVectorChangedEventArgs const &))",
         },
+        &FileExplorerTabControl_TabView_TabItemsChanged_Original,
+        FileExplorerTabControl_TabView_TabItemsChanged_Hook,
+        true,
+    },
+    {
         {
-            {
-                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarControl::CommandBarControlGotFocusHandler(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const &))",
-                LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarControl::CommandBarControlGotFocusHandler(struct winrt::Windows::Foundation::IInspectable const & __ptr64,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const & __ptr64) __ptr64)",
-            },
-            &CommandBarControl_GotFocusHandler_Original,
-            CommandBarControl_GotFocusHandler_Hook,
-            true,
+            LR"(public: void __cdecl winrt::FileExplorerExtensions::implementation::CommandBarControl::CommandBarControlGotFocusHandler(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Microsoft::UI::Xaml::RoutedEventArgs const &))",
         },
-    };
+        &CommandBarControl_GotFocusHandler_Original,
+        CommandBarControl_GotFocusHandler_Hook,
+        true,
+    },
+};
 
     Wh_Log(L"Resolving FileExplorerExtensions hooks");
 
