@@ -8,7 +8,7 @@
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -lshell32 -lshlwapi -lcomctl32 -luuid
+// @compilerOptions -lshell32 -lshlwapi -lcomctl32 -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -44,10 +44,10 @@ Media detection is event-driven. There is no permanent polling. After Windows
 reports media insertion, a background worker retries briefly while an optical
 disc spins up.
 
-Detection is conservative:
+Detection behavior:
 - media confirmed present -> show;
-- media confirmed absent -> hide;
-- inconclusive device state -> show (fail open).
+- no media, or a drive that remains not ready after the spin-up grace window -> hide;
+- other inconclusive probe failures -> show (fail open).
 */
 // ==/WindhawkModReadme==
 
@@ -64,10 +64,7 @@ Detection is conservative:
 
 #include <commctrl.h>
 #include <dbt.h>
-#include <exdisp.h>
-#include <servprov.h>
 #include <shlobj.h>
-#include <shlguid.h>
 #include <shlwapi.h>
 #include <windhawk_utils.h>
 #include <windows.h>
@@ -97,38 +94,19 @@ constexpr UINT kMsgStop = WM_APP + 2;
 
 std::atomic<DWORD> g_managedMask{kAllDriveBits};
 std::atomic<DWORD> g_opticalMask{0};
-std::atomic<MediaState> g_mediaState[26] = {
-    MediaState::Unknown, MediaState::Unknown, MediaState::Unknown,
-    MediaState::Unknown, MediaState::Unknown, MediaState::Unknown,
-    MediaState::Unknown, MediaState::Unknown, MediaState::Unknown,
-    MediaState::Unknown, MediaState::Unknown, MediaState::Unknown,
-    MediaState::Unknown, MediaState::Unknown, MediaState::Unknown,
-    MediaState::Unknown, MediaState::Unknown, MediaState::Unknown,
-    MediaState::Unknown, MediaState::Unknown, MediaState::Unknown,
-    MediaState::Unknown, MediaState::Unknown, MediaState::Unknown,
-    MediaState::Unknown, MediaState::Unknown,
-};
+std::atomic<MediaState> g_mediaState[26]{};
 
 std::atomic<DWORD> g_arrivalRequestMask{0};
 std::atomic<DWORD> g_removalRequestMask{0};
 std::atomic<bool> g_initialScanRequested{false};
-std::atomic<LONG> g_hookCallCount{0};
-
-struct HookCallGuard {
-    HookCallGuard() {
-        g_hookCallCount.fetch_add(1, std::memory_order_acq_rel);
-    }
-
-    ~HookCallGuard() {
-        g_hookCallCount.fetch_sub(1, std::memory_order_acq_rel);
-    }
-};
+std::atomic<bool> g_initialScanAllowGrace{false};
 
 HANDLE g_notificationThread = nullptr;
 DWORD g_notificationThreadId = 0;
 std::atomic<HWND> g_notificationWindow{nullptr};
-HANDLE g_notificationReadyEvent = nullptr;
-std::atomic<bool> g_notificationReady{false};
+std::atomic<PIDLIST_ABSOLUTE> g_thisPcPidl{nullptr};
+std::atomic<bool> g_refreshPending{false};
+std::atomic<bool> g_notificationStopRequested{false};
 
 HANDLE g_workerThread = nullptr;
 HANDLE g_workerWakeEvent = nullptr;
@@ -139,6 +117,11 @@ using CDrivesViewCallback_ShouldShow_t = HRESULT(
 
 CDrivesViewCallback_ShouldShow_t CDrivesViewCallback_ShouldShow_Original =
     nullptr;
+
+static bool IsWorkerStopRequested() {
+    return g_workerStopEvent &&
+           WaitForSingleObject(g_workerStopEvent, 0) == WAIT_OBJECT_0;
+}
 
 static DWORD LetterBit(WCHAR letter) {
     if (letter < L'A' || letter > L'Z') {
@@ -182,6 +165,10 @@ static MediaState GetCachedMediaState(WCHAR letter) {
 }
 
 static bool SetCachedMediaState(WCHAR letter, MediaState state) {
+    if (letter < L'A' || letter > L'Z') {
+        return false;
+    }
+
     MediaState old =
         g_mediaState[letter - L'A'].exchange(state, std::memory_order_acq_rel);
 
@@ -195,6 +182,10 @@ static bool SetCachedMediaState(WCHAR letter, MediaState state) {
 }
 
 static bool SetOpticalDrivePresent(WCHAR letter, bool optical) {
+    if (letter < L'A' || letter > L'Z') {
+        return false;
+    }
+
     DWORD bit = LetterBit(letter);
     DWORD oldMask = optical
                          ? g_opticalMask.fetch_or(
@@ -206,6 +197,10 @@ static bool SetOpticalDrivePresent(WCHAR letter, bool optical) {
 }
 
 static ProbeResult ProbeOpticalMediaState(WCHAR letter) {
+    if (IsWorkerStopRequested()) {
+        return ProbeResult::Unknown;
+    }
+
     WCHAR root[4];
     MakeRootPath(letter, root);
 
@@ -232,7 +227,16 @@ static ProbeResult ProbeOpticalMediaState(WCHAR letter) {
             return ProbeResult::NotReady;
         }
 
+        if (error == ERROR_OPERATION_ABORTED && IsWorkerStopRequested()) {
+            return ProbeResult::Unknown;
+        }
+
         Wh_Log(L"%c: unable to open device, error=%u", letter, error);
+        return ProbeResult::Unknown;
+    }
+
+    if (IsWorkerStopRequested()) {
+        CloseHandle(device);
         return ProbeResult::Unknown;
     }
 
@@ -254,6 +258,10 @@ static ProbeResult ProbeOpticalMediaState(WCHAR letter) {
             return ProbeResult::NotReady;
         }
 
+        if (error == ERROR_OPERATION_ABORTED && IsWorkerStopRequested()) {
+            return ProbeResult::Unknown;
+        }
+
         Wh_Log(L"%c: media probe inconclusive, error=%u", letter, error);
         return ProbeResult::Unknown;
     }
@@ -263,10 +271,24 @@ static ProbeResult ProbeOpticalMediaState(WCHAR letter) {
 }
 
 static void RequestThisPcRefresh() {
-    HWND hwnd = g_notificationWindow.load(std::memory_order_acquire);
+    // Set the pending bit before publishing/looking up the window. This avoids
+    // a lost-wakeup race if the notification thread becomes ready at exactly
+    // the same time as the worker requests the first refresh.
+    g_refreshPending.store(true, std::memory_order_release);
 
-    if (hwnd) {
-        PostMessageW(hwnd, kMsgRefreshThisPc, 0, 0);
+    HWND hwnd = g_notificationWindow.load(std::memory_order_acquire);
+    if (!hwnd) {
+        return;
+    }
+
+    // Multiple state changes can be coalesced into one folder update.
+    if (!g_refreshPending.exchange(false, std::memory_order_acq_rel)) {
+        return;
+    }
+
+    if (!PostMessageW(hwnd, kMsgRefreshThisPc, 0, 0)) {
+        // The window can disappear during teardown between the load and post.
+        g_refreshPending.store(true, std::memory_order_release);
     }
 }
 
@@ -307,8 +329,6 @@ CDrivesViewCallback_ShouldShow_Hook(void* self,
                                     IShellFolder* folder,
                                     LPCITEMIDLIST pidlFolder,
                                     LPCITEMIDLIST pidlItem) {
-    HookCallGuard hookCallGuard;
-
     HRESULT hr = CDrivesViewCallback_ShouldShow_Original(self, folder,
                                                          pidlFolder, pidlItem);
 
@@ -348,42 +368,43 @@ static void QueueRemovalMask(DWORD mask) {
     SetEvent(g_workerWakeEvent);
 }
 
-static void QueueInitialScan() {
+static void QueueInitialScan(bool allowGrace = false) {
+    if (allowGrace) {
+        g_initialScanAllowGrace.store(true, std::memory_order_release);
+    }
+
     g_initialScanRequested.store(true, std::memory_order_release);
     SetEvent(g_workerWakeEvent);
 }
 
 static bool ProcessInitialScan(DWORD* retryMask,
-                                DWORD* graceRetryMask,
-                                DWORD* arrivalRetryMask,
-                                int (&retryAttempts)[26]) {
+                               DWORD* graceRetryMask,
+                               DWORD* arrivalRetryMask,
+                               int (&retryAttempts)[26],
+                               bool allowGrace) {
     bool changed = false;
     DWORD managedMask = g_managedMask.load(std::memory_order_acquire);
     DWORD logicalDrives = GetLogicalDrives();
 
     if (logicalDrives == 0) {
-        DWORD error = GetLastError();
-        if (error != ERROR_SUCCESS) {
-            Wh_Log(L"GetLogicalDrives failed: %u; falling back to full scan",
-                   error);
-            logicalDrives = kAllDriveBits;
-        }
+        Wh_Log(L"GetLogicalDrives returned no drives; falling back to full scan");
+        logicalDrives = kAllDriveBits;
     }
 
-    // Do not destroy active arrival grace windows. A device-tree rescan can
-    // happen while an optical drive is still becoming ready.
-    *graceRetryMask &= *retryMask;
-    *arrivalRetryMask &= *retryMask;
-
     for (WCHAR letter = L'A'; letter <= L'Z'; letter++) {
+        if (IsWorkerStopRequested()) {
+            return changed;
+        }
+
         DWORD bit = LetterBit(letter);
         int index = letter - L'A';
 
         if (!(managedMask & bit) || !(logicalDrives & bit)) {
             *retryMask &= ~bit;
             *graceRetryMask &= ~bit;
+            *arrivalRetryMask &= ~bit;
             retryAttempts[index] = 0;
-            SetOpticalDrivePresent(letter, false);
+            changed |= SetOpticalDrivePresent(letter, false);
             changed |= SetCachedMediaState(letter, MediaState::Unknown);
             continue;
         }
@@ -392,47 +413,90 @@ static bool ProcessInitialScan(DWORD* retryMask,
         MakeRootPath(letter, root);
 
         bool optical = GetDriveTypeW(root) == DRIVE_CDROM;
-
         changed |= SetOpticalDrivePresent(letter, optical);
 
         if (!optical) {
             *retryMask &= ~bit;
             *graceRetryMask &= ~bit;
+            *arrivalRetryMask &= ~bit;
             retryAttempts[index] = 0;
             changed |= SetCachedMediaState(letter, MediaState::Unknown);
             continue;
         }
 
+        // Arrival can be queued concurrently after WorkerThreadProc takes its
+        // current arrival-mask snapshot. Let the event-specific path handle
+        // that letter instead of racing it with a broad device-tree scan.
+        if (g_arrivalRequestMask.load(std::memory_order_acquire) & bit) {
+            continue;
+        }
+
+        // An existing bounded grace window owns this drive's probe cadence and
+        // retry budget. Neither a broad device-tree rescan nor a repeated
+        // startup/resume scan should cancel or restart it.
+        if (*graceRetryMask & bit) {
+            continue;
+        }
+
+        // A non-grace retry (currently used after an inconclusive removal
+        // probe) also owns its retry budget. A generic DBT_DEVNODES_CHANGED
+        // rescan must not replace that bounded retry series with one probe.
+        if (!allowGrace && (*retryMask & bit)) {
+            continue;
+        }
+
         ProbeResult result = ProbeOpticalMediaState(letter);
 
-        if (result == ProbeResult::Unknown) {
-            *retryMask |= bit;
+        if (IsWorkerStopRequested()) {
+            return changed;
+        }
+
+        if (!allowGrace) {
+            // A generic device-tree change gets exactly one probe. In
+            // particular, a settled empty/not-ready drive must not be poked
+            // every 500 ms for ten seconds because an unrelated USB/Bluetooth
+            // device changed elsewhere in the system.
+            *retryMask &= ~bit;
             *graceRetryMask &= ~bit;
+            *arrivalRetryMask &= ~bit;
             retryAttempts[index] = 0;
-            changed |= SetCachedMediaState(letter, MediaState::Unknown);
-        } else if (result == ProbeResult::NotReady) {
-            // On this hardware an actually empty optical drive reports
-            // ERROR_NOT_READY. Hide it immediately, but keep the full grace
-            // retry window so a disc that's still spinning up can recover to
-            // Present without another device event.
-            *retryMask |= bit;
-            *graceRetryMask |= bit;
+
+            if (result == ProbeResult::Present) {
+                changed |= SetCachedMediaState(letter, MediaState::Present);
+            } else if (result == ProbeResult::Empty ||
+                       result == ProbeResult::NotReady) {
+                // Optical drives are allowed to report ERROR_NOT_READY while
+                // genuinely empty. Outside a startup/resume/arrival grace
+                // window, treat that settled result the same as NO_MEDIA.
+                changed |= SetCachedMediaState(letter, MediaState::Empty);
+            } else {
+                changed |= SetCachedMediaState(letter, MediaState::Unknown);
+            }
+
+            continue;
+        }
+
+        // Startup/resume can race disc spin-up. These scans are the cases where
+        // a bounded retry window is useful.
+        if (result == ProbeResult::Present) {
+            *retryMask &= ~bit;
+            *graceRetryMask &= ~bit;
+            *arrivalRetryMask &= ~bit;
             retryAttempts[index] = 0;
-            changed |= SetCachedMediaState(letter, MediaState::Empty);
-        } else if (result == ProbeResult::Empty) {
-            // An optical drive can transiently report NO_MEDIA while media is
-            // becoming ready during Explorer startup/resume. Hide it now, but
-            // keep probing for the full grace window so a present disc can
-            // recover without waiting for another device event.
+            changed |= SetCachedMediaState(letter, MediaState::Present);
+        } else if (result == ProbeResult::Empty ||
+                   result == ProbeResult::NotReady) {
             *retryMask |= bit;
             *graceRetryMask |= bit;
             retryAttempts[index] = 0;
             changed |= SetCachedMediaState(letter, MediaState::Empty);
         } else {
-            *retryMask &= ~bit;
-            *graceRetryMask &= ~bit;
+            // An inconclusive probe fails open, but retry briefly so a
+            // transient startup/resume failure can still settle.
+            *retryMask |= bit;
+            *graceRetryMask |= bit;
             retryAttempts[index] = 0;
-            changed |= SetCachedMediaState(letter, MediaState::Present);
+            changed |= SetCachedMediaState(letter, MediaState::Unknown);
         }
     }
 
@@ -447,6 +511,10 @@ static bool ProcessRemovalMask(DWORD mask,
     bool changed = false;
 
     for (WCHAR letter = L'A'; letter <= L'Z'; letter++) {
+        if (IsWorkerStopRequested()) {
+            return changed;
+        }
+
         DWORD bit = LetterBit(letter);
 
         if (!(mask & bit) || !IsManagedLetter(letter)) {
@@ -460,10 +528,13 @@ static bool ProcessRemovalMask(DWORD mask,
         WCHAR root[4];
         MakeRootPath(letter, root);
 
+        bool wasOptical = IsCachedOpticalDrive(letter);
         bool stillOptical = GetDriveTypeW(root) == DRIVE_CDROM;
 
         if (!stillOptical) {
-            Wh_Log(L"%c: optical drive removed", letter);
+            if (wasOptical) {
+                Wh_Log(L"%c: optical drive removed", letter);
+            }
             *retryMask &= ~bit;
             retryAttempts[index] = 0;
 
@@ -476,6 +547,10 @@ static bool ProcessRemovalMask(DWORD mask,
         changed |= SetOpticalDrivePresent(letter, true);
 
         ProbeResult result = ProbeOpticalMediaState(letter);
+
+        if (IsWorkerStopRequested()) {
+            return changed;
+        }
 
         if (result == ProbeResult::Present) {
             *retryMask &= ~bit;
@@ -506,6 +581,10 @@ static bool ProcessArrivalMask(DWORD mask,
     bool changed = false;
 
     for (WCHAR letter = L'A'; letter <= L'Z'; letter++) {
+        if (IsWorkerStopRequested()) {
+            return changed;
+        }
+
         DWORD bit = LetterBit(letter);
 
         if (!(mask & bit) || !IsManagedLetter(letter)) {
@@ -528,6 +607,10 @@ static bool ProcessArrivalMask(DWORD mask,
         changed |= SetOpticalDrivePresent(letter, true);
 
         ProbeResult result = ProbeOpticalMediaState(letter);
+
+        if (IsWorkerStopRequested()) {
+            return changed;
+        }
 
         if (result == ProbeResult::Present) {
             *retryMask &= ~bit;
@@ -568,6 +651,10 @@ static bool ProcessRetryMask(DWORD* retryMask,
     DWORD pending = *retryMask;
 
     for (WCHAR letter = L'A'; letter <= L'Z'; letter++) {
+        if (IsWorkerStopRequested()) {
+            return changed;
+        }
+
         DWORD bit = LetterBit(letter);
 
         if (!(pending & bit)) {
@@ -599,6 +686,10 @@ static bool ProcessRetryMask(DWORD* retryMask,
         }
 
         ProbeResult result = ProbeOpticalMediaState(letter);
+
+        if (IsWorkerStopRequested()) {
+            return changed;
+        }
         bool graceRetry = (*graceRetryMask & bit) != 0;
 
         if (result == ProbeResult::Present) {
@@ -670,10 +761,7 @@ static DWORD WINAPI WorkerThreadProc(void*) {
             if (nextRetryTick <= now) {
                 timeout = 0;
             } else {
-                ULONGLONG remaining = nextRetryTick - now;
-                timeout = remaining >= MAXDWORD
-                              ? MAXDWORD - 1
-                              : static_cast<DWORD>(remaining);
+                timeout = static_cast<DWORD>(nextRetryTick - now);
             }
         }
 
@@ -691,18 +779,6 @@ static DWORD WINAPI WorkerThreadProc(void*) {
 
         bool refresh = false;
 
-        if (g_initialScanRequested.exchange(false, std::memory_order_acq_rel)) {
-            retryMask = 0;
-            graceRetryMask = 0;
-            arrivalRetryMask = 0;
-            nextRetryTick = 0;
-            ZeroMemory(retryAttempts, sizeof(retryAttempts));
-
-            ProcessInitialScan(&retryMask, &graceRetryMask,
-                               &arrivalRetryMask, retryAttempts);
-            refresh = true;
-        }
-
         DWORD removalMask =
             g_removalRequestMask.exchange(0, std::memory_order_acq_rel);
 
@@ -712,6 +788,10 @@ static DWORD WINAPI WorkerThreadProc(void*) {
                 &arrivalRetryMask, retryAttempts);
         }
 
+        if (IsWorkerStopRequested()) {
+            break;
+        }
+
         DWORD arrivalMask =
             g_arrivalRequestMask.exchange(0, std::memory_order_acq_rel);
 
@@ -719,6 +799,27 @@ static DWORD WINAPI WorkerThreadProc(void*) {
             refresh |= ProcessArrivalMask(
                 arrivalMask, &retryMask, &graceRetryMask,
                 &arrivalRetryMask, retryAttempts);
+        }
+
+        if (IsWorkerStopRequested()) {
+            break;
+        }
+
+        // Event-specific media arrival/removal handling must run before a
+        // broad device-tree scan. In particular, arrival establishes its grace
+        // window first, so a simultaneous DBT_DEVNODES_CHANGED can't settle a
+        // spinning-up disc as Empty.
+        if (g_initialScanRequested.exchange(false, std::memory_order_acq_rel)) {
+            bool allowGrace = g_initialScanAllowGrace.exchange(
+                false, std::memory_order_acq_rel);
+
+            refresh |= ProcessInitialScan(&retryMask, &graceRetryMask,
+                                           &arrivalRetryMask, retryAttempts,
+                                           allowGrace);
+        }
+
+        if (IsWorkerStopRequested()) {
+            break;
         }
 
         if (retryMask) {
@@ -740,6 +841,10 @@ static DWORD WINAPI WorkerThreadProc(void*) {
             nextRetryTick = 0;
         }
 
+        if (IsWorkerStopRequested()) {
+            break;
+        }
+
         if (refresh) {
             RequestThisPcRefresh();
         }
@@ -748,121 +853,40 @@ static DWORD WINAPI WorkerThreadProc(void*) {
     return 0;
 }
 
-static bool RefreshOneThisPcView(IDispatch* dispatch,
-                                 PIDLIST_ABSOLUTE thisPcPidl) {
-    if (!dispatch || !thisPcPidl) {
-        return false;
+static PIDLIST_ABSOLUTE AcquireThisPcPidl() {
+    PIDLIST_ABSOLUTE thisPcPidl = nullptr;
+    HRESULT hr = SHGetKnownFolderIDList(FOLDERID_ComputerFolder, 0, nullptr,
+                                        &thisPcPidl);
+
+    if (SUCCEEDED(hr) && thisPcPidl) {
+        return thisPcPidl;
     }
 
-    IServiceProvider* serviceProvider = nullptr;
-    HRESULT hr =
-        dispatch->QueryInterface(IID_PPV_ARGS(&serviceProvider));
+    Wh_Log(L"SHGetKnownFolderIDList failed: 0x%08X; trying CSIDL_DRIVES", hr);
 
-    if (FAILED(hr) || !serviceProvider) {
-        return false;
+    PIDLIST_ABSOLUTE legacyPidl = nullptr;
+    hr = SHGetSpecialFolderLocation(nullptr, CSIDL_DRIVES, &legacyPidl);
+
+    if (SUCCEEDED(hr) && legacyPidl) {
+        return legacyPidl;
     }
 
-    IShellBrowser* shellBrowser = nullptr;
-    hr = serviceProvider->QueryService(
-        SID_STopLevelBrowser, IID_PPV_ARGS(&shellBrowser));
-    serviceProvider->Release();
-
-    if (FAILED(hr) || !shellBrowser) {
-        return false;
-    }
-
-    IShellView* shellView = nullptr;
-    hr = shellBrowser->QueryActiveShellView(&shellView);
-    shellBrowser->Release();
-
-    if (FAILED(hr) || !shellView) {
-        return false;
-    }
-
-    IFolderView* folderView = nullptr;
-    hr = shellView->QueryInterface(IID_PPV_ARGS(&folderView));
-
-    if (FAILED(hr) || !folderView) {
-        shellView->Release();
-        return false;
-    }
-
-    IPersistFolder2* persistFolder = nullptr;
-    hr = folderView->GetFolder(IID_PPV_ARGS(&persistFolder));
-    folderView->Release();
-
-    if (FAILED(hr) || !persistFolder) {
-        shellView->Release();
-        return false;
-    }
-
-    PIDLIST_ABSOLUTE currentFolderPidl = nullptr;
-    hr = persistFolder->GetCurFolder(&currentFolderPidl);
-    persistFolder->Release();
-
-    bool isThisPc =
-        SUCCEEDED(hr) && currentFolderPidl &&
-        ILIsEqual(currentFolderPidl, thisPcPidl);
-
-    if (currentFolderPidl) {
-        CoTaskMemFree(currentFolderPidl);
-    }
-
-    if (!isThisPc) {
-        shellView->Release();
-        return false;
-    }
-
-    hr = shellView->Refresh();
-    shellView->Release();
-
-    if (FAILED(hr)) {
-        Wh_Log(L"IShellView::Refresh failed: 0x%08X", hr);
-        return false;
-    }
-
-    return true;
+    Wh_Log(L"Unable to resolve This PC PIDL: 0x%08X", hr);
+    return nullptr;
 }
 
-static void RefreshThisPc(PIDLIST_ABSOLUTE thisPcPidl) {
+static void NotifyThisPcUpdated(PIDLIST_ABSOLUTE thisPcPidl) {
     if (!thisPcPidl) {
         return;
     }
 
-    IShellWindows* shellWindows = nullptr;
-    HRESULT hr = CoCreateInstance(
-        CLSID_ShellWindows, nullptr, CLSCTX_LOCAL_SERVER,
-        IID_PPV_ARGS(&shellWindows));
-
-    if (FAILED(hr) || !shellWindows) {
-        Wh_Log(L"Failed to get IShellWindows: 0x%08X", hr);
-        return;
-    }
-
-    LONG count = 0;
-    hr = shellWindows->get_Count(&count);
-
-    if (FAILED(hr)) {
-        Wh_Log(L"IShellWindows::get_Count failed: 0x%08X", hr);
-        shellWindows->Release();
-        return;
-    }
-
-    for (LONG i = 0; i < count; i++) {
-        VARIANT index = {};
-        index.vt = VT_I4;
-        index.lVal = i;
-
-        IDispatch* dispatch = nullptr;
-        hr = shellWindows->Item(index, &dispatch);
-
-        if (SUCCEEDED(hr) && dispatch) {
-            RefreshOneThisPcView(dispatch, thisPcPidl);
-            dispatch->Release();
-        }
-    }
-
-    shellWindows->Release();
+    // Let Explorer refresh its own This PC views on their owning threads.
+    // Unlike the previous IShellWindows/IShellView COM walk, this doesn't make
+    // the device-notification thread synchronously enter another apartment.
+    SHChangeNotify(SHCNE_UPDATEDIR,
+                   SHCNF_IDLIST | SHCNF_FLUSHNOWAIT,
+                   thisPcPidl,
+                   nullptr);
 }
 
 static LRESULT CALLBACK NotificationWindowSubclassProc(HWND hwnd,
@@ -909,18 +933,15 @@ static LRESULT CALLBACK NotificationWindowSubclassProc(HWND hwnd,
 
         case WM_POWERBROADCAST:
             if (wParam == PBT_APMRESUMEAUTOMATIC) {
-                QueueInitialScan();
+                QueueInitialScan(true);
             }
             break;
 
         case kMsgRefreshThisPc:
-            RefreshThisPc(thisPcPidl);
+            NotifyThisPcUpdated(thisPcPidl);
             return 0;
 
         case kMsgStop:
-            if (wParam) {
-                RefreshThisPc(thisPcPidl);
-            }
             DestroyWindow(hwnd);
             return 0;
 
@@ -935,27 +956,24 @@ static LRESULT CALLBACK NotificationWindowSubclassProc(HWND hwnd,
 }
 
 static DWORD WINAPI NotificationThreadProc(void*) {
-    HRESULT coHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    // Establish the thread message queue immediately. StopNotificationThread
+    // can then queue WM_QUIT even if the window hasn't been created yet.
+    MSG msg = {};
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
-    if (FAILED(coHr)) {
-        Wh_Log(L"CoInitializeEx failed: 0x%08X", coHr);
-        SetEvent(g_notificationReadyEvent);
+    // Build the This PC PIDL before creating the window. If this shell lookup
+    // ever stalls, there is no window yet to stall WM_DEVICECHANGE broadcasts,
+    // and Wh_ModInit doesn't wait for this thread.
+    PIDLIST_ABSOLUTE thisPcPidl = AcquireThisPcPidl();
+
+    if (!thisPcPidl) {
         return 1;
     }
 
-    MSG msg = {};
+    g_thisPcPidl.store(thisPcPidl, std::memory_order_release);
 
-    PIDLIST_ABSOLUTE thisPcPidl = nullptr;
-
-    HRESULT hr = SHGetKnownFolderIDList(FOLDERID_ComputerFolder, 0, nullptr,
-                                        &thisPcPidl);
-
-    if (FAILED(hr) || !thisPcPidl) {
-        Wh_Log(L"SHGetKnownFolderIDList failed: 0x%08X", hr);
-        CoUninitialize();
-
-        SetEvent(g_notificationReadyEvent);
-        return 1;
+    if (g_notificationStopRequested.load(std::memory_order_acquire)) {
+        return 0;
     }
 
     HWND hwnd = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, L"STATIC",
@@ -964,29 +982,27 @@ static DWORD WINAPI NotificationThreadProc(void*) {
 
     if (!hwnd) {
         Wh_Log(L"Notification window creation failed: %u", GetLastError());
-
-        CoTaskMemFree(thisPcPidl);
-        CoUninitialize();
-
-        SetEvent(g_notificationReadyEvent);
         return 1;
     }
 
     if (!SetWindowSubclass(hwnd, NotificationWindowSubclassProc, 1,
                            reinterpret_cast<DWORD_PTR>(thisPcPidl))) {
         Wh_Log(L"Notification window subclass failed: %u", GetLastError());
-
         DestroyWindow(hwnd);
-        CoTaskMemFree(thisPcPidl);
-        CoUninitialize();
-
-        SetEvent(g_notificationReadyEvent);
         return 1;
     }
 
     g_notificationWindow.store(hwnd, std::memory_order_release);
-    g_notificationReady.store(true, std::memory_order_release);
-    SetEvent(g_notificationReadyEvent);
+
+    if (g_notificationStopRequested.load(std::memory_order_acquire)) {
+        DestroyWindow(hwnd);
+        return 0;
+    }
+
+    if (g_refreshPending.exchange(false, std::memory_order_acq_rel) &&
+        !PostMessageW(hwnd, kMsgRefreshThisPc, 0, 0)) {
+        g_refreshPending.store(true, std::memory_order_release);
+    }
 
     for (;;) {
         BOOL result = GetMessageW(&msg, nullptr, 0, 0);
@@ -1007,10 +1023,6 @@ static DWORD WINAPI NotificationThreadProc(void*) {
             g_notificationWindow.load(std::memory_order_acquire)) {
         DestroyWindow(remaining);
     }
-
-    CoTaskMemFree(thisPcPidl);
-
-    CoUninitialize();
 
     return 0;
 }
@@ -1087,47 +1099,121 @@ static void StopWorkerThread() {
     SetEvent(g_workerStopEvent);
     SetEvent(g_workerWakeEvent);
 
-    WaitForSingleObject(g_workerThread, INFINITE);
+    // Keep cancelling until the worker has actually exited. A single
+    // CancelSynchronousIo only affects I/O that is pending at that instant;
+    // without the stop checks in the probe/scan loops the worker could
+    // otherwise start another blocking drive operation immediately after it.
+    ULONGLONG waitStarted = GetTickCount64();
+    ULONGLONG nextWarning = waitStarted + 5000;
+
+    for (;;) {
+        CancelSynchronousIo(g_workerThread);
+
+        DWORD waitResult = WaitForSingleObject(g_workerThread, 100);
+        if (waitResult == WAIT_OBJECT_0) {
+            break;
+        }
+
+        if (waitResult == WAIT_FAILED) {
+            Wh_Log(L"Worker join failed: %u", GetLastError());
+            WaitForSingleObject(g_workerThread, INFINITE);
+            break;
+        }
+
+        ULONGLONG now = GetTickCount64();
+        if (now >= nextWarning) {
+            Wh_Log(L"Worker thread is still stopping after %llu ms; "
+                   L"a drive I/O request may be stuck",
+                   static_cast<unsigned long long>(now - waitStarted));
+            nextWarning = now + 5000;
+        }
+    }
 
     CloseHandle(g_workerThread);
     g_workerThread = nullptr;
 }
 
 static void StopNotificationThread(bool restoreView) {
-    if (!g_notificationThread) {
-        return;
-    }
+    if (g_notificationThread) {
+        g_notificationStopRequested.store(true, std::memory_order_release);
 
-    HWND hwnd = g_notificationWindow.load(std::memory_order_acquire);
+        HWND hwnd = g_notificationWindow.load(std::memory_order_acquire);
+        bool stopPosted = false;
 
-    bool stopPosted = false;
-
-    if (hwnd) {
-        stopPosted = PostMessageW(hwnd, kMsgStop, restoreView ? TRUE : FALSE, 0);
-    }
-
-    if (!stopPosted && g_notificationThreadId &&
-        WaitForSingleObject(g_notificationThread, 0) == WAIT_TIMEOUT) {
-        while (WaitForSingleObject(g_notificationThread, 0) == WAIT_TIMEOUT &&
-               !PostThreadMessageW(g_notificationThreadId, WM_QUIT, 0, 0)) {
-            Sleep(50);
+        if (hwnd) {
+            stopPosted = PostMessageW(hwnd, kMsgStop, 0, 0) != FALSE;
         }
+
+        if (!stopPosted && g_notificationThreadId &&
+            WaitForSingleObject(g_notificationThread, 0) == WAIT_TIMEOUT) {
+            // Usually this means the thread is still before window creation.
+            // Best-effort cancellation avoids waiting on synchronous shell I/O;
+            // WM_QUIT is also queued once the thread has a message queue.
+            CancelSynchronousIo(g_notificationThread);
+            PostThreadMessageW(g_notificationThreadId, WM_QUIT, 0, 0);
+        }
+
+        ULONGLONG waitStarted = GetTickCount64();
+        ULONGLONG nextWarning = waitStarted + 5000;
+
+        for (;;) {
+            DWORD waitResult = WaitForSingleObject(g_notificationThread, 250);
+
+            if (waitResult == WAIT_OBJECT_0) {
+                break;
+            }
+
+            if (waitResult == WAIT_FAILED) {
+                Wh_Log(L"Notification-thread join failed: %u", GetLastError());
+                WaitForSingleObject(g_notificationThread, INFINITE);
+                break;
+            }
+
+            // If the thread is still resolving the shell PIDL, this is
+            // best-effort only: CancelSynchronousIo won't cancel every kind of
+            // shell/RPC wait, but retrying it can abort cancellable I/O.
+            CancelSynchronousIo(g_notificationThread);
+
+            ULONGLONG now = GetTickCount64();
+            if (now >= nextWarning) {
+                Wh_Log(L"Notification thread is still stopping after %llu ms; "
+                       L"shell PIDL resolution may be stuck",
+                       static_cast<unsigned long long>(now - waitStarted));
+                nextWarning = now + 5000;
+            }
+        }
+
+        CloseHandle(g_notificationThread);
+        g_notificationThread = nullptr;
+        g_notificationThreadId = 0;
+        g_notificationWindow.store(nullptr, std::memory_order_release);
     }
 
-    WaitForSingleObject(g_notificationThread, INFINITE);
+    // Restoration is intentionally centralized here, after the notification
+    // thread is gone. This covers normal shutdown, early thread failure, and
+    // the window-publication/WM_QUIT race with one identical path.
+    PIDLIST_ABSOLUTE thisPcPidl =
+        g_thisPcPidl.exchange(nullptr, std::memory_order_acq_rel);
+    PIDLIST_ABSOLUTE temporaryPidl = nullptr;
 
-    CloseHandle(g_notificationThread);
-    g_notificationThread = nullptr;
-    g_notificationThreadId = 0;
-    g_notificationWindow.store(nullptr, std::memory_order_release);
+    if (restoreView) {
+        if (!thisPcPidl) {
+            temporaryPidl = AcquireThisPcPidl();
+        }
+
+        NotifyThisPcUpdated(thisPcPidl ? thisPcPidl : temporaryPidl);
+    }
+
+    if (temporaryPidl) {
+        ILFree(temporaryPidl);
+    }
+
+    if (thisPcPidl) {
+        ILFree(thisPcPidl);
+    }
 }
 
 static void CloseWorkerObjects() {
-    if (g_notificationReadyEvent) {
-        CloseHandle(g_notificationReadyEvent);
-        g_notificationReadyEvent = nullptr;
-    }
-
     if (g_workerWakeEvent) {
         CloseHandle(g_workerWakeEvent);
         g_workerWakeEvent = nullptr;
@@ -1142,11 +1228,14 @@ static void CloseWorkerObjects() {
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing Hide Empty Optical Drives");
 
-    g_notificationReady.store(false, std::memory_order_relaxed);
     g_opticalMask.store(0, std::memory_order_relaxed);
     g_arrivalRequestMask.store(0, std::memory_order_relaxed);
     g_removalRequestMask.store(0, std::memory_order_relaxed);
     g_initialScanRequested.store(false, std::memory_order_relaxed);
+    g_initialScanAllowGrace.store(false, std::memory_order_relaxed);
+    g_refreshPending.store(false, std::memory_order_relaxed);
+    g_notificationStopRequested.store(false, std::memory_order_relaxed);
+    g_thisPcPidl.store(nullptr, std::memory_order_relaxed);
 
     for (auto& state : g_mediaState) {
         state.store(MediaState::Unknown, std::memory_order_relaxed);
@@ -1162,44 +1251,13 @@ BOOL Wh_ModInit() {
             L"keeping the default configuration");
     }
 
-    g_notificationReadyEvent =
-        CreateEventW(nullptr, TRUE, FALSE, nullptr);
-
     g_workerWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
 
     g_workerStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
 
-    if (!g_notificationReadyEvent ||
-        !g_workerWakeEvent || !g_workerStopEvent) {
+    if (!g_workerWakeEvent || !g_workerStopEvent) {
         Wh_Log(L"CreateEvent failed: %u", GetLastError());
 
-        CloseWorkerObjects();
-        return FALSE;
-    }
-
-    g_notificationThread = CreateThread(nullptr, 0, NotificationThreadProc,
-                                        nullptr, 0, &g_notificationThreadId);
-
-    if (!g_notificationThread) {
-        Wh_Log(L"CreateThread(notification) failed: %u", GetLastError());
-
-        CloseWorkerObjects();
-        return FALSE;
-    }
-
-    DWORD notificationWaitResult =
-        WaitForSingleObject(g_notificationReadyEvent, INFINITE);
-
-    if (notificationWaitResult != WAIT_OBJECT_0 ||
-        !g_notificationReady.load(std::memory_order_acquire)) {
-        if (notificationWaitResult == WAIT_FAILED) {
-            Wh_Log(L"Waiting for notification thread failed: %u",
-                   GetLastError());
-        } else {
-            Wh_Log(L"Notification window initialization failed");
-        }
-
-        StopNotificationThread(false);
         CloseWorkerObjects();
         return FALSE;
     }
@@ -1209,8 +1267,6 @@ BOOL Wh_ModInit() {
 
     if (!g_workerThread) {
         Wh_Log(L"CreateThread(worker) failed: %u", GetLastError());
-
-        StopNotificationThread(false);
         CloseWorkerObjects();
         return FALSE;
     }
@@ -1221,7 +1277,21 @@ BOOL Wh_ModInit() {
             L"CDrivesViewCallback::ShouldShow");
 
         StopWorkerThread();
-        StopNotificationThread(false);
+        CloseWorkerObjects();
+        return FALSE;
+    }
+
+    // Don't wait for notification-window initialization here. Wh_ModInit can
+    // run on Explorer's main thread during process startup; an unbounded (or a
+    // teardown-followed) wait would make a shell-side initialization problem
+    // prevent Explorer from starting. Refresh requests are coalesced until the
+    // notification window becomes available.
+    g_notificationThread = CreateThread(nullptr, 0, NotificationThreadProc,
+                                        nullptr, 0, &g_notificationThreadId);
+
+    if (!g_notificationThread) {
+        Wh_Log(L"CreateThread(notification) failed: %u", GetLastError());
+        StopWorkerThread();
         CloseWorkerObjects();
         return FALSE;
     }
@@ -1230,9 +1300,9 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    // Hooks are active at this point. Perform the initial scan and then
-    // refresh This PC unconditionally so the hooked view reflects the cache.
-    QueueInitialScan();
+    // Explorer startup can race optical-media spin-up, so the initial scan gets
+    // the bounded grace window. Refresh only occurs if the cached state changes.
+    QueueInitialScan(true);
 }
 
 void Wh_ModSettingsChanged() {
@@ -1247,21 +1317,19 @@ void Wh_ModSettingsChanged() {
 
     g_managedMask.store(managedMask, std::memory_order_release);
 
-    QueueInitialScan();
+    // A settings change is rare and can happen while an optical drive is
+    // waking up or busy. Give this rescan the same bounded grace window as
+    // startup/resume so a transient NOT_READY doesn't hide inserted media.
+    QueueInitialScan(true);
 }
 
 void Wh_ModUninit() {
     Wh_Log(L"Uninitializing Hide Empty Optical Drives");
 
-    // Windhawk has already removed the symbol hook before Wh_ModUninit, so no
-    // new hook calls can start. Wait for any call that was already in flight
-    // to leave the detour before the mod DLL can be unloaded.
-    while (g_hookCallCount.load(std::memory_order_acquire) > 0) {
-        Sleep(10);
-    }
-
-    // Stop device probing first, then refresh This PC while shutting down
-    // the notification window so items hidden by the mod reappear.
+    // Windhawk calls Wh_ModUninit after removing the hooks. Stop device
+    // probing first, then send one final asynchronous shell update after
+    // shutting down the notification window so previously hidden items are
+    // re-enumerated without the ShouldShow hook.
     StopWorkerThread();
     StopNotificationThread(true);
     CloseWorkerObjects();
