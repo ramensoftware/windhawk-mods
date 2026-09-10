@@ -29,6 +29,8 @@
 
 ![Demo 4](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail_4.gif)
 
+![Demo 5](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail_5.gif)
+
 ![Trail Screenshot](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/screenshot_trail.png)
 
 ---
