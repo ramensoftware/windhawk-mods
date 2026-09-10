@@ -51,9 +51,9 @@ Examples / 示例：`sin(d * 0.15) * 8`, `sin(d * 0.25) * exp(0 - t * 2.5) * 10`
 **EN:** Hex RGB, e.g. `FF0000`=red, `00FF00`=green, `0000FF`=blue, `FFD700`=gold.
 **中文：** 自定义颜色使用十六进制 RGB，例如：`FF0000`=红，`00FF00`=绿，`0000FF`=蓝，`FFD700`=金。
 
-### Credits / 致谢
-Inspired by [TheatriChris](https://github.com/chrisc44890)'s Cursor Motion Blur mod. Developed by [MCheng404](https://github.com/MCheng404).
-灵感来自 [TheatriChris](https://github.com/chrisc44890) 的 Cursor Motion Blur mod。开发者 [MCheng404](https://github.com/MCheng404)。
+### Author / 作者
+Developed by [MCheng404](https://github.com/MCheng404).
+开发者 [MCheng404](https://github.com/MCheng404)。
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
