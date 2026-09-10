@@ -529,11 +529,23 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
   - circle: Circle
   - star: Star
   - hexagram: Hexagram
+  - heart: Heart
+  - diamond: Diamond
+  - triangle: Triangle
+  - flower: Flower
+  - pentagon: Pentagon
+  - hexagon: Hexagon
   $options:zh-CN:
   - random: 随机混合
   - circle: 仅圆形
   - star: 仅五角星
   - hexagram: 仅六芒星
+  - heart: 仅心形
+  - diamond: 仅菱形
+  - triangle: 仅三角形
+  - flower: 仅花朵
+  - pentagon: 仅五边形
+  - hexagon: 仅六边形
 - particle_attraction: 40
   $name: Particle Attraction
   $name:zh-CN: 粒子吸附强度
