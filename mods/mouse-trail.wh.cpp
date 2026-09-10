@@ -2073,15 +2073,15 @@ static void RenderFrame() {
             ApplyWaveDeformation(smoothed, dwTime);
     }
 
-    // ===== 运动模糊：保存当前路径到历史缓冲区 =====
-    if (g_enableMotionBlur && havePath) {
+    // ===== 运动模糊：保存当前路径到历史缓冲区（仅锥形带模式，避免切换形状后残留旧帧）=====
+    if (g_enableMotionBlur && havePath && g_trailShape == 0) {
         TrailFrame frame;
         frame.path = smoothed;
         frame.time = dwTime;
         g_trailHistory.push_back(frame);
         while ((int)g_trailHistory.size() > g_motionBlurStrength)
             g_trailHistory.erase(g_trailHistory.begin());
-    } else if (!g_enableMotionBlur && !g_trailHistory.empty()) {
+    } else if ((!g_enableMotionBlur || g_trailShape != 0) && !g_trailHistory.empty()) {
         g_trailHistory.clear();
     }
 
