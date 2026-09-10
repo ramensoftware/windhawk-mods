@@ -967,6 +967,8 @@ bool g_enableHeadHighlight = true;
 bool g_enableTrailShadow = true;
 int g_trailShape = 0;
 int g_dotsMultiplier = 2;
+int g_dotChainSize = 100;         // 圆点链大小倍数（百分比）
+int g_particleSizeMultiplier = 100; // 粒子大小倍数（百分比）
 int g_functionPreset = 0;
 char g_customFunction[256] = "sin(d * 0.15) * 8";
 int g_waveAmplitude = 8, g_waveFrequency = 15;
@@ -1654,7 +1656,7 @@ static void NativeRenderParticles(int screenW, int screenH) {
         instances[count].g = pc.g;
         instances[count].b = pc.b;
         instances[count].a = lifeAlpha * 0.65f;
-        instances[count].size = p.size * 2.0f;
+        instances[count].size = p.size * 2.0f * (g_particleSizeMultiplier / 100.0f);
         count++;
         if (count >= 2000) break;
     }
@@ -1949,7 +1951,7 @@ static bool NativeRenderFrame(int screenW, int screenH, const std::vector<D2D1_P
                 D2D1_POINT_2F p = GetPointOnPath(smoothed, t);
                 dots.push_back(p);
             }
-            NativeRenderTrail(dots, widthMul * 0.6f, cols, fadeAlpha, screenW, screenH, dwTime);
+            NativeRenderTrail(dots, widthMul * 0.6f * (g_dotChainSize / 100.0f), cols, fadeAlpha, screenW, screenH, dwTime);
         } else if (g_trailShape == 5) {
             // 双线拖尾：渲染两条偏移的带
             std::vector<D2D1_POINT_2F> line1, line2;
@@ -2368,6 +2370,12 @@ void LoadSettings() {
         g_dotsMultiplier = 1;
     if (g_dotsMultiplier > 5)
         g_dotsMultiplier = 5;
+    g_dotChainSize = Wh_GetIntSetting(L"dot_chain_size");
+    if (g_dotChainSize < 50) g_dotChainSize = 50;
+    if (g_dotChainSize > 300) g_dotChainSize = 300;
+    g_particleSizeMultiplier = Wh_GetIntSetting(L"particle_size_multiplier");
+    if (g_particleSizeMultiplier < 50) g_particleSizeMultiplier = 50;
+    if (g_particleSizeMultiplier > 300) g_particleSizeMultiplier = 300;
     if (g_waveAmplitude < 1)
         g_waveAmplitude = 1;
     if (g_waveAmplitude > 40)
