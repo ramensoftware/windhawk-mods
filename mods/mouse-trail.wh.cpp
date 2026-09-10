@@ -1097,45 +1097,45 @@ static void ComputeColors(int mode, DWORD time, float velocity, GradData &out) {
             tailInner = LighterColor(g_gradColors[2]);
             break;
         case 2: {
-            float h = fmodf(t * 80, 360);
-            headOuter = HSVtoRGB(h, .9f, 1);
-            tailOuter = HSVtoRGB(fmodf(h + 140, 360), .9f, 1);
-            headInner = HSVtoRGB(h, .45f, 1);
-            tailInner = HSVtoRGB(fmodf(h + 140, 360), .45f, 1);
+            float h = fmodf(t * 50, 360);
+            headOuter = HSVtoRGB(h, .85f, 1);
+            tailOuter = HSVtoRGB(fmodf(h + 180, 360), .85f, 1);
+            headInner = HSVtoRGB(h, .4f, 1);
+            tailInner = HSVtoRGB(fmodf(h + 180, 360), .4f, 1);
             break;
         }
         case 3: {
-            float h = fmodf(t * 40, 60);
-            headOuter = HSVtoRGB(h, .95f, 1);
-            tailOuter = HSVtoRGB(fmodf(h + 35, 60), .95f, 1);
-            headInner = HSVtoRGB(h, .5f, 1);
-            tailInner = HSVtoRGB(fmodf(h + 35, 60), .5f, 1);
+            float h = fmodf(t * 30, 50) - 10;  // -10~40: 红-橙-黄
+            headOuter = HSVtoRGB(h, .9f, 1);
+            tailOuter = HSVtoRGB(fmodf(h + 30, 360), .85f, .95f);
+            headInner = HSVtoRGB(h, .45f, 1);
+            tailInner = HSVtoRGB(fmodf(h + 30, 360), .4f, .95f);
             break;
         }
         case 4: {
-            float h = 180 + fmodf(t * 40, 120);
-            headOuter = HSVtoRGB(h, .9f, 1);
-            tailOuter = HSVtoRGB(fmodf(h + 70, 360), .9f, 1);
-            headInner = HSVtoRGB(h, .45f, 1);
-            tailInner = HSVtoRGB(fmodf(h + 70, 360), .45f, 1);
+            float h = 170 + fmodf(t * 25, 110);  // 170~280: 青-蓝-紫
+            headOuter = HSVtoRGB(h, .8f, 1);
+            tailOuter = HSVtoRGB(fmodf(h + 60, 360), .75f, .95f);
+            headInner = HSVtoRGB(h, .4f, 1);
+            tailInner = HSVtoRGB(fmodf(h + 60, 360), .35f, .95f);
             break;
         }
         case 5: {
-            float p = .6f + .4f * sinf(t * 4);
+            float p = .5f + .5f * sinf(t * 3.5f);
             D2D1_COLOR_F c = g_customColor;
-            headOuter = D2D1::ColorF(c.r * p, c.g * p, c.b * p, 1);
-            tailOuter = D2D1::ColorF(c.r * p * .4f, c.g * p * .4f, c.b * p * .4f, 1);
-            headInner = LighterColor(headOuter, .6f);
-            tailInner = LighterColor(tailOuter, .6f);
+            headOuter = D2D1::ColorF(c.r * (0.4f + p * 0.6f), c.g * (0.4f + p * 0.6f), c.b * (0.4f + p * 0.6f), 1);
+            tailOuter = D2D1::ColorF(c.r * p * 0.3f, c.g * p * 0.3f, c.b * p * 0.3f, 1);
+            headInner = LighterColor(headOuter, .5f);
+            tailInner = LighterColor(tailOuter, .5f);
             break;
         }
         case 6: {
-            float sn = fminf(velocity / 60.0f, 1.0f);
-            float h = 240 - sn * 240;
-            headOuter = HSVtoRGB(h, .9f, 1);
-            tailOuter = HSVtoRGB(fmodf(h + 60, 360), .7f, .8f);
+            float sn = fminf(powf(velocity / 80.0f, 0.7f), 1.0f);
+            float h = 220 - sn * 220;  // 蓝→绿→黄→红
+            headOuter = HSVtoRGB(h, .85f, 1);
+            tailOuter = HSVtoRGB(fmodf(h + 50, 360), .7f, .85f);
             headInner = HSVtoRGB(h, .4f, 1);
-            tailInner = HSVtoRGB(fmodf(h + 60, 360), .3f, .9f);
+            tailInner = HSVtoRGB(fmodf(h + 50, 360), .3f, .9f);
             break;
         }
         case 7:
@@ -1145,20 +1145,20 @@ static void ComputeColors(int mode, DWORD time, float velocity, GradData &out) {
             tailInner = LighterColor(g_gradColors[1]);
             break;
         case 8: {
-            float f = .85f + .15f * sinf(t * 15) * sinf(t * 7.3f);
-            headOuter = D2D1::ColorF(1 * f, .9f * f, .2f, 1);
-            tailOuter = D2D1::ColorF(.7f, .1f, 0, 1);
-            headInner = D2D1::ColorF(1, 1, .7f, 1);
-            tailInner = D2D1::ColorF(.9f, .3f, 0, 1);
+            float f = .8f + .2f * sinf(t * 12) * sinf(t * 6.7f) + .1f * sinf(t * 23);
+            headOuter = D2D1::ColorF(1.0f * f, 0.75f * f, 0.15f, 1);
+            tailOuter = D2D1::ColorF(0.8f, 0.15f, 0.0f, 1);
+            headInner = D2D1::ColorF(1.0f, 0.95f, 0.6f, 1);
+            tailInner = D2D1::ColorF(0.95f, 0.4f, 0.05f, 1);
             break;
         }
         case 9: {
-            float h1 = 140 + 30 * sinf(t * .8f);
-            float h2 = 280 + 40 * sinf(t * .6f + 1);
-            headOuter = HSVtoRGB(h1, .8f, .9f);
-            tailOuter = HSVtoRGB(h2, .8f, .9f);
-            headInner = HSVtoRGB(190, .5f, 1);
-            tailInner = HSVtoRGB(fmodf(h2 + 30, 360), .4f, 1);
+            float h1 = 130 + 40 * sinf(t * 0.6f) + 20 * sinf(t * 1.3f);
+            float h2 = 260 + 50 * sinf(t * 0.5f + 1.5f) + 15 * sinf(t * 1.1f);
+            headOuter = HSVtoRGB(h1, .7f, .95f);
+            tailOuter = HSVtoRGB(h2, .7f, .9f);
+            headInner = HSVtoRGB(180, .35f, 1);
+            tailInner = HSVtoRGB(fmodf(h2 + 40, 360), .3f, .95f);
             break;
         }
         case 10: {
@@ -1177,55 +1177,58 @@ static void ComputeColors(int mode, DWORD time, float velocity, GradData &out) {
             break;
         }
         case 12: { // 金属金色
-            float shine = 0.7f + 0.3f * sinf(t * 3.0f);
-            headOuter = D2D1::ColorF(1.0f * shine, 0.84f * shine, 0.0f, 1);
-            tailOuter = D2D1::ColorF(0.6f, 0.4f, 0.05f, 1);
-            headInner = D2D1::ColorF(1.0f, 0.95f, 0.6f, 1);
-            tailInner = D2D1::ColorF(0.8f, 0.6f, 0.2f, 1);
+            float shine = 0.65f + 0.35f * sinf(t * 2.5f) + 0.1f * sinf(t * 7.0f);
+            headOuter = D2D1::ColorF(1.0f * shine, 0.82f * shine, 0.1f * shine, 1);
+            tailOuter = D2D1::ColorF(0.55f, 0.38f, 0.05f, 1);
+            headInner = D2D1::ColorF(1.0f, 0.92f, 0.55f, 1);
+            tailInner = D2D1::ColorF(0.85f, 0.65f, 0.25f, 1);
             break;
         }
         case 13: { // 赛博朋克（紫青渐变）
-            float pulse = 0.5f + 0.5f * sinf(t * 5.0f);
-            headOuter = HSVtoRGB(280 + pulse * 40, 0.9f, 1.0f);
-            tailOuter = HSVtoRGB(180 - pulse * 20, 0.9f, 1.0f);
-            headInner = HSVtoRGB(300, 0.5f, 1.0f);
-            tailInner = HSVtoRGB(170, 0.5f, 1.0f);
+            float pulse = 0.5f + 0.5f * sinf(t * 4.0f);
+            float pulse2 = 0.5f + 0.5f * sinf(t * 4.0f + 1.5f);
+            headOuter = HSVtoRGB(290 + pulse * 30, 0.85f, 1.0f);
+            tailOuter = HSVtoRGB(175 - pulse2 * 15, 0.85f, 1.0f);
+            headInner = HSVtoRGB(310, 0.45f, 1.0f);
+            tailInner = HSVtoRGB(165, 0.45f, 1.0f);
             break;
         }
         case 14: { // 粉彩
-            float h = fmodf(t * 30, 360);
-            headOuter = HSVtoRGB(h, 0.35f, 1.0f);
-            tailOuter = HSVtoRGB(fmodf(h + 60, 360), 0.35f, 1.0f);
-            headInner = HSVtoRGB(h, 0.2f, 1.0f);
-            tailInner = HSVtoRGB(fmodf(h + 60, 360), 0.2f, 1.0f);
+            float h = fmodf(t * 20, 360);
+            headOuter = HSVtoRGB(h, 0.3f, 1.0f);
+            tailOuter = HSVtoRGB(fmodf(h + 80, 360), 0.3f, 1.0f);
+            headInner = HSVtoRGB(h, 0.15f, 1.0f);
+            tailInner = HSVtoRGB(fmodf(h + 80, 360), 0.15f, 1.0f);
             break;
         }
         case 15: { // 色相旋转（基于自定义颜色）
             float h, s, v;
             RGBtoHSV(g_customColor, h, s, v);
-            float h1 = fmodf(h + t * 60, 360);
-            float h2 = fmodf(h1 + 120, 360);
+            float h1 = fmodf(h + t * 45, 360);
+            float h2 = fmodf(h1 + 140, 360);
             headOuter = HSVtoRGB(h1, s, v);
             tailOuter = HSVtoRGB(h2, s, v);
-            headInner = HSVtoRGB(h1, s * 0.5f, v);
-            tailInner = HSVtoRGB(h2, s * 0.5f, v);
+            headInner = HSVtoRGB(h1, s * 0.45f, v);
+            tailInner = HSVtoRGB(h2, s * 0.45f, v);
             break;
         }
         case 16: { // 双色脉冲
-            float pulse = 0.5f + 0.5f * sinf(t * 4.0f);
-            headOuter = LerpColor(g_gradColors[0], g_gradColors[2], pulse);
-            tailOuter = LerpColor(g_gradColors[2], g_gradColors[0], pulse);
-            headInner = LighterColor(headOuter, 0.5f);
-            tailInner = LighterColor(tailOuter, 0.5f);
+            float pulse = 0.5f + 0.5f * sinf(t * 3.0f);
+            float smoothPulse = pulse * pulse * (3 - 2 * pulse);  // smoothstep
+            headOuter = LerpColor(g_gradColors[0], g_gradColors[2], smoothPulse);
+            tailOuter = LerpColor(g_gradColors[2], g_gradColors[0], smoothPulse);
+            headInner = LighterColor(headOuter, 0.45f);
+            tailInner = LighterColor(tailOuter, 0.45f);
             break;
         }
         case 17: { // 随机闪烁
             float sparkle = (rand() % 100) / 100.0f;
-            float baseH = fmodf(t * 50, 360);
-            headOuter = HSVtoRGB(baseH, 0.8f, 0.6f + sparkle * 0.4f);
-            tailOuter = HSVtoRGB(fmodf(baseH + 90, 360), 0.8f, 0.5f + sparkle * 0.3f);
-            headInner = HSVtoRGB(baseH, 0.4f, 1.0f);
-            tailInner = HSVtoRGB(fmodf(baseH + 90, 360), 0.4f, 1.0f);
+            float sparkle2 = (rand() % 100) / 100.0f;
+            float baseH = fmodf(t * 40, 360);
+            headOuter = HSVtoRGB(baseH, 0.75f, 0.5f + sparkle * 0.5f);
+            tailOuter = HSVtoRGB(fmodf(baseH + 100, 360), 0.75f, 0.4f + sparkle2 * 0.4f);
+            headInner = HSVtoRGB(baseH, 0.35f, 1.0f);
+            tailInner = HSVtoRGB(fmodf(baseH + 100, 360), 0.35f, 1.0f);
             break;
         }
         default:
