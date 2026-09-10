@@ -2,21 +2,20 @@
 // @id              mouse-trail
 // @name            Mouse Trail
 // @name:zh-CN      鼠标拖尾
-// @description     High-performance cursor motion blur with particle effects, 12 color modes, custom function trails, cursor color extraction, and click effects. D3D11 + DirectComposition hardware accelerated, 64-bit host preferred.
-// @description:zh-CN 高性能鼠标运动模糊拖尾，支持粒子特效、12种颜色模式、自定义函数轨迹、光标取色和点击特效。D3D11 + DirectComposition 硬件加速，优先 64 位宿主进程。
+// @description     High-performance cursor motion blur with particle effects, 12 color modes, custom function trails, cursor color extraction, and click effects. D3D11 + DirectComposition hardware accelerated.
+// @description:zh-CN 高性能鼠标运动模糊拖尾，支持粒子特效、12种颜色模式、自定义函数轨迹、光标取色和点击特效。D3D11 + DirectComposition 硬件加速。
 // @version         2.3
 // @author          MCheng404
 // @github          https://github.com/MCheng404
 // @license         MIT
 // @include         windhawk.exe
-// @include         windhawk-x64-helper.exe
 // @compilerOptions -ld2d1 -ld3d11 -ldxgi -ldcomp -lole32 -lgdi32 -lshell32
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
 # Mouse Trail
 
-A highly customizable mouse cursor trail with particle effects, multiple color modes, custom function trails, cursor color extraction, and click effects. D3D11 + DirectComposition hardware accelerated, runs as a dedicated process (64-bit helper preferred, 32-bit fallback) with low CPU usage when idle.
+A highly customizable mouse cursor trail with particle effects, multiple color modes, custom function trails, cursor color extraction, and click effects. D3D11 + DirectComposition hardware accelerated, runs as a dedicated process with low CPU usage when idle.
 
 ![Trail Effect](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail.gif)
 
@@ -36,7 +35,7 @@ A highly customizable mouse cursor trail with particle effects, multiple color m
 
 ### Features
 
-* **Hardware Acceleration:** D3D11 device + ID2D1DeviceContext + DXGI flip swap chain + DirectComposition visual, fully GPU-rendered with zero CPU framebuffer copies. Prefers the 64-bit `windhawk-x64-helper.exe` host process when available; falls back to 32-bit `windhawk.exe` if the helper is not present.
+* **Hardware Acceleration:** D3D11 device + ID2D1DeviceContext + DXGI flip swap chain + DirectComposition visual, fully GPU-rendered with zero CPU framebuffer copies. Runs in a dedicated windhawk.exe process for stability.
 * **4 Trail Shapes:** Tapered ribbon / Tapered dot chain / Function curve / Sine wave.
 * **12 Color Modes:** Single / Gradient (3-color) / Rainbow / Warm / Cool / Neon / Velocity / Stripes / Fire / Aurora / Cursor Extract / Cursor Mix.
 * **Particle System:** Mini particles released from the trail, attracted back to cursor with configurable origin (head/middle/tail/custom), attraction strength, and cursor repulsion force. Shapes: circle / star / hexagram / random mix. Colors fade over lifetime.
@@ -65,12 +64,13 @@ Hex RGB, e.g. `FF0000`=red, `00FF00`=green, `0000FF`=blue, `FFD700`=gold.
 ### Credits
 
 Developed by [MCheng404](https://github.com/MCheng404).
+Original overlay/smear architecture inspired by [TheatriChris](https://github.com/TheatriChris)'s cursor-motion-blur mod (MIT licensed).
 
 ---
 
 # 鼠标拖尾
 
-高度可定制的鼠标拖尾特效，支持粒子系统、多种颜色模式、自定义函数轨迹、光标取色和点击特效。D3D11 + DirectComposition 硬件加速，独立进程运行（优先 64 位 helper，不存在时回退 32 位），静止时低 CPU 占用。
+高度可定制的鼠标拖尾特效，支持粒子系统、多种颜色模式、自定义函数轨迹、光标取色和点击特效。D3D11 + DirectComposition 硬件加速，独立进程运行，静止时低 CPU 占用。
 
 ![拖尾效果](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail.gif)
 
@@ -90,7 +90,7 @@ Developed by [MCheng404](https://github.com/MCheng404).
 
 ### 功能特性
 
-* **硬件加速：** D3D11 设备 + ID2D1DeviceContext + DXGI 翻转交换链 + DirectComposition 视觉对象，纯 GPU 渲染，零 CPU 帧缓冲拷贝。优先使用 64 位 `windhawk-x64-helper.exe` 宿主进程；若 helper 不存在则回退到 32 位 `windhawk.exe`。
+* **硬件加速：** D3D11 设备 + ID2D1DeviceContext + DXGI 翻转交换链 + DirectComposition 视觉对象，纯 GPU 渲染，零 CPU 帧缓冲拷贝。独立 windhawk.exe 进程运行，稳定性更高。
 * **4 种拖尾形状：** 锥形带 / 类锥形圆链 / 函数曲线 / 正弦波浪。
 * **12 种颜色模式：** 单色 / 多色渐变（三色） / 彩虹流动 / 暖色调 / 冷色调 / 霓虹脉冲 / 速度变色 / 流动条纹 / 火焰 / 极光 / 光标取色 / 光标混色。
 * **粒子系统：** 拖尾释放迷你粒子，全程吸附回光标。释放位置（开头/中间/结尾/自定义）、吸附强度、光标排斥力均可调。支持圆形/五角星/六芒星/随机混合形状，颜色随生命周期渐变。
@@ -119,6 +119,7 @@ Developed by [MCheng404](https://github.com/MCheng404).
 ### 致谢
 
 开发者 [MCheng404](https://github.com/MCheng404)。
+原始覆盖层/拖尾架构灵感来自 [TheatriChris](https://github.com/TheatriChris) 的 cursor-motion-blur mod（MIT 许可证）。
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
@@ -146,8 +147,8 @@ Developed by [MCheng404](https://github.com/MCheng404).
 - tail_length: 10
   $name: Tail Length
   $name:zh-CN: 拖尾长度
-  $description: How many frames the blur trails behind you. Minimum 2.
-  $description:zh-CN: 拖影跟随的帧数。最低为 2。
+  $description: How many frames the blur trails behind you. Range 2-200.
+  $description:zh-CN: 拖影跟随的帧数。范围 2-200。
 - trail_delay: 0
   $name: Trail Delay
   $name:zh-CN: 拖尾延迟
@@ -440,13 +441,13 @@ Developed by [MCheng404](https://github.com/MCheng404).
 - click_max_radius: 40
   $name: Ripple Max Radius
   $name:zh-CN: 波纹最大半径
-  $description: Maximum ripple radius in pixels.
-  $description:zh-CN: 点击波纹扩散的最大半径（像素）。
+  $description: Maximum ripple radius in pixels. Range 1-500.
+  $description:zh-CN: 点击波纹扩散的最大半径（像素）。范围 1-500。
 - click_duration: 300
   $name: Ripple Duration
   $name:zh-CN: 波纹持续时间
-  $description: Ripple duration in milliseconds.
-  $description:zh-CN: 点击波纹从出现到消失的时长（毫秒）。
+  $description: Ripple duration in milliseconds. Range 1-3000.
+  $description:zh-CN: 点击波纹从出现到消失的时长（毫秒）。范围 1-3000。
 - super_performance_mode: false
   $name: Super Performance Mode
   $name:zh-CN: 超级性能模式
@@ -1393,6 +1394,8 @@ void LoadSettings() {
         g_stopVelocity = 10;
     if (g_tailLength < 2)
         g_tailLength = 10;
+    if (g_tailLength > 200)
+        g_tailLength = 200;
     if (g_trailDelay < 0)
         g_trailDelay = 0;
     if (g_trailDelay > 10)
@@ -1431,8 +1434,12 @@ void LoadSettings() {
         g_starburstCount = 20;
     if (g_clickMaxRadius <= 0)
         g_clickMaxRadius = 40;
+    if (g_clickMaxRadius > 500)
+        g_clickMaxRadius = 500;
     if (g_clickDuration <= 0)
         g_clickDuration = 300;
+    if (g_clickDuration > 3000)
+        g_clickDuration = 3000;
 
     const char *presetExprs[] = {
         "sin(d * 0.15) * 8",
@@ -2982,25 +2989,10 @@ void Wh_ModAfterInit() {
             Wh_Log(L"GetModuleFileName failed");
             return;
     }
-    // 优先使用 64 位 helper 进程运行 Tool Mod，提升大地址空间和 GPU 驱动稳定性
-    WCHAR toolProcessPath[MAX_PATH];
-    wcscpy_s(toolProcessPath, currentProcessPath);
-    WCHAR *lastSlash = wcsrchr(toolProcessPath, L'\\');
-    bool useX64Helper = false;
-    if (lastSlash) {
-        wcscpy_s(lastSlash + 1, MAX_PATH - (lastSlash - toolProcessPath) - 1, L"windhawk-x64-helper.exe");
-        DWORD attr = GetFileAttributesW(toolProcessPath);
-        if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
-            useX64Helper = true;
-        }
-    }
-    if (!useX64Helper) {
-        wcscpy_s(toolProcessPath, currentProcessPath);
-    }
-    Wh_Log(L"Tool mod host: %s (x64 helper: %s)", toolProcessPath, useX64Helper ? L"yes" : L"no");
+    Wh_Log(L"Tool mod host: %s", currentProcessPath);
     WCHAR
     commandLine[MAX_PATH + 2 + (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", toolProcessPath, WH_MOD_ID);
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
         kernelModule = GetModuleHandle(L"kernel32.dll");
