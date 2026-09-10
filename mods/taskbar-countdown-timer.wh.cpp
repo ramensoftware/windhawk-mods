@@ -2,7 +2,7 @@
 // @id              taskbar-countdown-timer
 // @name            Taskbar Countdown Timer
 // @description     A simple countdown timer integrated into the Windows 11 taskbar (Windows 11 only)
-// @version         1.10
+// @version         1.11
 // @author          Richi
 // @github          https://github.com/richilp
 // @include         explorer.exe
@@ -58,7 +58,7 @@ The mod supports one active timer at a time and currently places its button on t
 
 - maximumMinutes: 1440
   $name: Maximum duration (minutes)
-  $description: Maximum value accepted for timers and snoozes.
+  $description: Maximum value accepted for timers and snoozes, up to 10080 minutes (7 days).
 
 - buttonLabel: "⏱ Timer"
   $name: Idle taskbar button label
@@ -92,6 +92,7 @@ The mod supports one active timer at a time and currently places its button on t
 #include <cstdlib>
 #include <functional>
 #include <list>
+#include <memory>
 #include <optional>
 #include <cwchar>
 #include <string>
@@ -170,8 +171,6 @@ static std::atomic_bool g_systemTrayModuleHooked{false};
 static std::atomic<HMODULE> g_systemTrayModuleAttempted{nullptr};
 
 static std::atomic_bool g_unloading{false};
-static HANDLE g_retryStopEvent = nullptr;
-static HANDLE g_retryThread = nullptr;
 
 static void ApplyTimerButtonIfAvailable();
 static bool EnsureTimerWorkerStarted();
@@ -328,6 +327,26 @@ static void* CTaskBand_ITaskListWndSite_vftable =
     nullptr;
 
 
+
+using TrayUI_StartTaskbar_t =
+    void(WINAPI*)(void* pThis);
+
+static TrayUI_StartTaskbar_t
+    TrayUI_StartTaskbar_Original = nullptr;
+
+static void WINAPI TrayUI_StartTaskbar_Hook(
+    void* pThis)
+{
+    TrayUI_StartTaskbar_Original(
+        pThis
+    );
+
+    if (!g_unloading.load()) {
+        ApplyTimerButtonIfAvailable();
+    }
+}
+
+
 static bool HookTaskbarDllSymbols()
 {
     HMODULE module = LoadLibraryExW(
@@ -345,6 +364,13 @@ static bool HookTaskbarDllSymbols()
     }
 
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+        {
+            {
+                LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))",
+            },
+            &TrayUI_StartTaskbar_Original,
+            TrayUI_StartTaskbar_Hook,
+        },
         {
             {
                 LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"
@@ -709,14 +735,15 @@ static void LoadSettings()
     updated.completionSound =
         Wh_GetIntSetting(L"completionSound") != 0;
 
-    PCWSTR label =
-        Wh_GetStringSetting(L"buttonLabel");
+    auto label =
+        WindhawkUtils::StringSetting::make(
+            L"buttonLabel"
+        );
 
-    if (label[0]) {
-        updated.buttonLabel = label;
+    if (*label) {
+        updated.buttonLabel =
+            label.get();
     }
-
-    Wh_FreeStringSetting(label);
 
     AcquireSRWLockExclusive(&g_settingsLock);
     g_settings = updated;
@@ -2272,9 +2299,12 @@ static void HandleTimerExpiredFromWorker()
     ULONGLONG expected =
         g_deadlineUtc100ns.load();
 
-    if (!expected ||
-        GetUtcFileTimeNow() < expected)
-    {
+    if (!expected) {
+        return;
+    }
+
+    if (GetUtcFileTimeNow() < expected) {
+        SignalTimerWorker();
         return;
     }
 
@@ -2717,6 +2747,14 @@ static void AddTimerButtonImpl(
     void* param)
 {
     if (g_unloading.load()) {
+        return;
+    }
+
+    if (g_timerButton &&
+        VisualTreeHelper::GetParent(
+            g_timerButton))
+    {
+        g_buttonInjected.store(true);
         return;
     }
 
@@ -3193,37 +3231,6 @@ static void ApplyTimerButtonIfAvailable()
 }
 
 
-static DWORD WINAPI RetryThreadProc(
-    LPVOID)
-{
-    for (int i = 0;
-         i < 5 &&
-         !g_unloading.load();
-         i++)
-    {
-        if (WaitForSingleObject(
-                g_retryStopEvent,
-                2000) != WAIT_TIMEOUT)
-        {
-            break;
-        }
-
-        if (g_buttonInjected.load() ||
-            g_unloading.load())
-        {
-            break;
-        }
-
-        Wh_Log(
-            L"Taskbar injection retry %d",
-            i + 1
-        );
-
-        ApplyTimerButtonIfAvailable();
-    }
-
-    return 0;
-}
 
 // -----------------------------------------------------------------------------
 // System tray rebuild hook
@@ -3534,10 +3541,13 @@ BOOL Wh_ModInit()
     }
 
     bool systemTrayHookedAtInit = false;
+    bool systemTrayModuleLoadedAtInit = false;
 
     if (HMODULE systemTray =
             GetSystemTrayModuleHandle())
     {
+        systemTrayModuleLoadedAtInit = true;
+
         g_systemTrayModuleAttempted.store(
             systemTray
         );
@@ -3559,7 +3569,7 @@ BOOL Wh_ModInit()
         }
     }
 
-    if (!systemTrayHookedAtInit) {
+    if (!systemTrayModuleLoadedAtInit) {
         HMODULE kernelbase =
             GetModuleHandleW(
                 L"kernelbase.dll"
@@ -3600,28 +3610,6 @@ void Wh_ModAfterInit()
     }
 
     ApplyTimerButtonIfAvailable();
-
-    g_retryStopEvent =
-        CreateEventW(
-            nullptr,
-            TRUE,
-            FALSE,
-            nullptr
-        );
-
-    if (g_retryStopEvent &&
-        !g_buttonInjected.load())
-    {
-        g_retryThread =
-            CreateThread(
-                nullptr,
-                0,
-                RetryThreadProc,
-                nullptr,
-                0,
-                nullptr
-            );
-    }
 }
 
 
@@ -3639,12 +3627,6 @@ void Wh_ModBeforeUninit()
 {
     g_unloading.store(true);
 
-    if (g_retryStopEvent) {
-        SetEvent(
-            g_retryStopEvent
-        );
-    }
-
     StopTimerWorker();
 
     // First teardown attempt while the taskbar thread is still available.
@@ -3660,26 +3642,9 @@ void Wh_ModUninit()
 {
     g_unloading.store(true);
 
-    if (g_retryStopEvent) {
-        SetEvent(
-            g_retryStopEvent
-        );
-    }
-
     StopTimerWorker();
 
     // First stop and join every thread that can still create/use alert UI.
-    if (g_retryThread) {
-        PumpWaitForThread(
-            g_retryThread
-        );
-
-        CloseHandle(
-            g_retryThread
-        );
-
-        g_retryThread = nullptr;
-    }
 
     if (g_timerWorkerThread) {
         PumpWaitForThread(
@@ -3781,13 +3746,6 @@ void Wh_ModUninit()
             g_finishedAlertBackgroundBrush
         );
         g_finishedAlertBackgroundBrush = nullptr;
-    }
-
-    if (g_retryStopEvent) {
-        CloseHandle(
-            g_retryStopEvent
-        );
-        g_retryStopEvent = nullptr;
     }
 
     UnregisterFinishedAlertClass();
