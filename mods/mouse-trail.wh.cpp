@@ -561,9 +561,9 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
   $name:zh-CN: 排斥距离
   $description: Distance (pixels) within which particles repel each other.
   $description:zh-CN: 粒子之间产生排斥力的距离（像素）。
-- particle_repel_force: 15
-  $name: Repel Force
-  $name:zh-CN: 排斥力强度
+- particle_inter_repel_force: 15
+  $name: Inter Repel Force
+  $name:zh-CN: 粒子间排斥强度
   $description: Strength of inter-particle repulsion force.
   $description:zh-CN: 粒子之间排斥力的强度。
 - particle_attraction: 40
@@ -2541,7 +2541,7 @@ void LoadSettings() {
     g_interParticleRepelDistance = Wh_GetIntSetting(L"particle_repel_distance");
     if (g_interParticleRepelDistance < 5) g_interParticleRepelDistance = 5;
     if (g_interParticleRepelDistance > 100) g_interParticleRepelDistance = 100;
-    int interRepelVal = Wh_GetIntSetting(L"particle_repel_force");
+    int interRepelVal = Wh_GetIntSetting(L"particle_inter_repel_force");
     if (interRepelVal < 1) interRepelVal = 1;
     if (interRepelVal > 50) interRepelVal = 50;
     g_interParticleRepelForce = interRepelVal / 100.0f;
