@@ -1053,6 +1053,7 @@ int g_clickMaxRadius = 40, g_clickDuration = 300;
 // ===================== 粒子系统 =====================
 struct Particle {
     float x, y, vx, vy, size;
+    float z;            // 3D 深度（生成时随机，避免每帧闪烁）
     DWORD startTime;
     int lifetime;
     D2D1_COLOR_F color;
@@ -1484,16 +1485,82 @@ bool hexagramMask(float2 uv) {
     return r < hexR;
 }
 
+// 心形遮罩
+bool heartMask(float2 uv) {
+    float2 p = (uv - 0.5) * 2.0;
+    p.y = -p.y;
+    float x = p.x, y = p.y;
+    // 心形方程
+    float heart = pow(x*x + y*y - 1.0, 3.0) - x*x * y*y*y;
+    return heart < 0.0;
+}
+
+// 菱形遮罩
+bool diamondMask(float2 uv) {
+    float2 p = uv - 0.5;
+    return abs(p.x) + abs(p.y) < 0.5;
+}
+
+// 三角形遮罩
+bool triangleMask(float2 uv) {
+    float2 p = (uv - 0.5) * 2.0;
+    p.y = -p.y;
+    // 等边三角形
+    return p.y > -0.8 && p.y < 1.0 - 1.732 * abs(p.x);
+}
+
+// 花朵遮罩（5瓣）
+bool flowerMask(float2 uv) {
+    float2 p = uv - 0.5;
+    float r = length(p);
+    if (r > 0.5) return false;
+    float a = atan2(p.y, p.x);
+    float flowerR = 0.5 * (0.6 + 0.4 * cos(a * 5.0));
+    return r < flowerR;
+}
+
+// 五边形遮罩
+bool pentagonMask(float2 uv) {
+    float2 p = uv - 0.5;
+    float r = length(p);
+    if (r > 0.5) return false;
+    float a = atan2(p.y, p.x);
+    float pentR = 0.5 * 0.85 / cos(fmod(a + 3.14159, 2.0 * 3.14159 / 5.0) - 3.14159 / 5.0);
+    return r < pentR;
+}
+
+// 六边形遮罩
+bool hexagonMask(float2 uv) {
+    float2 p = uv - 0.5;
+    float r = length(p);
+    if (r > 0.5) return false;
+    float a = atan2(p.y, p.x);
+    float hexR = 0.5 * 0.87 / cos(fmod(a + 3.14159, 3.14159 / 3.0) - 3.14159 / 6.0);
+    return r < hexR;
+}
+
 float4 PSMain(PS_INPUT input) : SV_TARGET {
     float2 center = input.uv - 0.5;
     float dist = length(center);
     bool inside = false;
     if (input.shape < 1.5) {
-        inside = dist < 0.5;
+        inside = dist < 0.5;           // circle
     } else if (input.shape < 2.5) {
-        inside = starMask(input.uv);
+        inside = starMask(input.uv);   // star
+    } else if (input.shape < 3.5) {
+        inside = hexagramMask(input.uv); // hexagram
+    } else if (input.shape < 4.5) {
+        inside = heartMask(input.uv);  // heart
+    } else if (input.shape < 5.5) {
+        inside = diamondMask(input.uv); // diamond
+    } else if (input.shape < 6.5) {
+        inside = triangleMask(input.uv); // triangle
+    } else if (input.shape < 7.5) {
+        inside = flowerMask(input.uv);  // flower
+    } else if (input.shape < 8.5) {
+        inside = pentagonMask(input.uv); // pentagon
     } else {
-        inside = hexagramMask(input.uv);
+        inside = hexagonMask(input.uv); // hexagon
     }
     if (!inside) discard;
     float alpha = input.color.a * smoothstep(0.5, 0.42, dist);
@@ -1708,7 +1775,7 @@ static void NativeRenderParticles(int screenW, int screenH) {
             p.color.b + (p.endColor.b - p.color.b) * progress + p.colorOffset[2], 1.0f);
         instances[count].x = p.x;
         instances[count].y = p.y;
-        instances[count].z = (rand()/(float)RAND_MAX - 0.5f) * 0.8f;  // 3D 随机深度
+        instances[count].z = p.z;  // 使用生成时的随机深度，避免闪烁
         instances[count].r = pc.r;
         instances[count].g = pc.g;
         instances[count].b = pc.b;
@@ -2224,7 +2291,7 @@ static void SpawnParticles(float x, float y, int count, float speedMin, float sp
         if (st < 0) {
             st = g_particleShape;
             if (st == 0)
-                st = (int)(Rand01() * 3.0f) + 1;  // random: 1=circle,2=star,3=hexagram
+                st = (int)(Rand01() * 9.0f) + 1;  // random: 1-9 shapes
         }
         // 生成位置随机偏移：在生成点周围分布，避免所有粒子从同一点发射
         float spawnAngle = Rand01() * 6.28318f;
@@ -2240,6 +2307,7 @@ static void SpawnParticles(float x, float y, int count, float speedMin, float sp
         p.color = color;
         p.endColor = endCol;
         p.shapeType = st;
+        p.z = (Rand01() - 0.5f) * 0.8f;  // 生成时随机深度，避免每帧闪烁
         p.colorOffset[0] = (Rand01() - 0.5f) * 0.16f;
         p.colorOffset[1] = (Rand01() - 0.5f) * 0.16f;
         p.colorOffset[2] = (Rand01() - 0.5f) * 0.16f;
@@ -2379,6 +2447,18 @@ void LoadSettings() {
             g_particleShape = 2;
         else if (wcscmp(pshape, L"hexagram") == 0)
             g_particleShape = 3;
+        else if (wcscmp(pshape, L"heart") == 0)
+            g_particleShape = 4;
+        else if (wcscmp(pshape, L"diamond") == 0)
+            g_particleShape = 5;
+        else if (wcscmp(pshape, L"triangle") == 0)
+            g_particleShape = 6;
+        else if (wcscmp(pshape, L"flower") == 0)
+            g_particleShape = 7;
+        else if (wcscmp(pshape, L"pentagon") == 0)
+            g_particleShape = 8;
+        else if (wcscmp(pshape, L"hexagon") == 0)
+            g_particleShape = 9;
         else
             g_particleShape = 0;  // random
         Wh_FreeStringSetting(pshape);
