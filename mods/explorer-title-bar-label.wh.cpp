@@ -1373,7 +1373,9 @@ static void PruneReleasedLabelEntries()
 
         if (!entry->cleaned && !entry->text.get())
         {
-            ReleaseLabelEntry(entry, removeElement);
+            // The XAML element is already gone, so there's nothing left to
+            // remove from the tree. Just release delegates/timer state.
+            ReleaseLabelEntry(entry, false);
         }
 
         if (entry->cleaned)
@@ -1430,10 +1432,10 @@ static void RemoveLabelsForWindowOnCurrentThread(HWND hwnd, bool removeElement)
 
         if (entry && entry->hwnd == hwnd)
         {
-            // The native window is already going away, so there's no reason
-            // to mutate the XAML children collection. Just revoke delegates
-            // and release the strong DispatcherTimer reference.
-            ReleaseLabelEntry(entry, false);
+            // WM_NCDESTROY passes false because the native window is already
+            // going away. Explicit mod unload passes true so the visible XAML
+            // element is removed from a still-live Explorer window.
+            ReleaseLabelEntry(entry, removeElement);
             it = g_labelEntries.erase(it);
         }
         else
