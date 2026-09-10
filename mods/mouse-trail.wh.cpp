@@ -554,8 +554,8 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 - particle_spin_speed: 30
   $name: Spin Speed
   $name:zh-CN: 自旋速度
-  $description: Base rotation speed for particles (0-100). Each particle gets random variation ±50%. Note: very high speed makes asymmetric shapes (triangle, star) appear round due to motion blur.
-  $description:zh-CN: 粒子基础自旋转速度（0-100），每个粒子有 ±50% 的随机差异。注意：速度过高会导致三角形/星形等非对称形状因运动模糊看起来像圆形。
+  $description: Base rotation speed for particles (0-100). Each particle gets random variation ±50%. Very high speed can make asymmetric shapes appear round due to motion blur.
+  $description:zh-CN: 粒子基础自旋转速度（0-100），每个粒子有 ±50% 的随机差异。速度过高会导致三角形/星形等非对称形状因运动模糊看起来像圆形。
 - enable_particle_interaction: true
   $name: Particle Interaction
   $name:zh-CN: 粒子间相互作用
