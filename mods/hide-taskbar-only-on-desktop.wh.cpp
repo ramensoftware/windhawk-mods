@@ -2,7 +2,7 @@
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Desktop-only taskbar hiding using a dedicated Windhawk tool process
-// @version         5.6.0
+// @version         5.7.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -206,6 +206,7 @@ constexpr size_t kMaxTaskbars = 16;
 
 constexpr UINT WM_APP_REFRESH = WM_APP + 1;
 constexpr UINT WM_APP_SETTINGS = WM_APP + 2;
+constexpr UINT WM_APP_NATIVE_AUTOHIDE = WM_APP + 3;
 constexpr UINT_PTR kSafetyTimerId = 1;
 constexpr UINT_PTR kHoverExpireTimerId = 2;
 
@@ -581,6 +582,7 @@ UINT g_taskbarCreatedMessage = 0;
 TaskbarMonitorState g_taskbarStates[kMaxTaskbars] = {};
 size_t g_taskbarStateCount = 0;
 bool g_nativeAutoHideEnabled = false;
+bool g_appBarRegistered = false;
 
 bool g_hoverActive = false;
 HMONITOR g_hoverMonitor = nullptr;
@@ -1392,7 +1394,45 @@ void SetTaskbarState(
     }
 
     if (state.hiddenByMod) {
-        return;
+        SetLastError(ERROR_SUCCESS);
+        LONG_PTR exStyle = GetWindowLongPtrW(
+            state.hwnd,
+            GWL_EXSTYLE
+        );
+        if (exStyle == 0 && GetLastError() != ERROR_SUCCESS) {
+            return;
+        }
+
+        if (!(exStyle & WS_EX_LAYERED) ||
+            GetPropW(state.hwnd, kTaskbarOwnershipProp) == nullptr) {
+            RemoveTaskbarOwnershipProperties(state.hwnd);
+            state.hiddenByMod = false;
+        } else {
+            COLORREF colorKey = 0;
+            BYTE alpha = 0;
+            DWORD layeredFlags = 0;
+
+            const bool attributesAvailable =
+                GetLayeredWindowAttributes(
+                    state.hwnd,
+                    &colorKey,
+                    &alpha,
+                    &layeredFlags
+                ) != FALSE;
+
+            if (!attributesAvailable ||
+                !(layeredFlags & LWA_ALPHA) ||
+                alpha != 0) {
+                SetLayeredWindowAttributes(
+                    state.hwnd,
+                    0,
+                    0,
+                    LWA_ALPHA
+                );
+            }
+
+            return;
+        }
     }
 
     // Do not take ownership of a taskbar that is already hidden by another
@@ -1427,9 +1467,7 @@ BOOL CALLBACK ScanVisibleShellPopupsProc(
 
     WCHAR className[256] = {};
     if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0 ||
-        !IsTaskbarPopupClass(className) ||
-        IsShellChromeClass(className) ||
-        IsDesktopInfrastructureWindow(hwnd, className)) {
+        !IsTaskbarPopupClass(className)) {
         return TRUE;
     }
 
@@ -2037,9 +2075,8 @@ bool HasHoverSnapshots() {
         &g_cursorHoverSnapshotLock
     );
 
-    bool result = false;
-
-    result = g_cursorHoverSnapshotCount != 0;
+    const bool result =
+        g_cursorHoverSnapshotCount != 0;
 
     ReleaseSRWLockShared(
         &g_cursorHoverSnapshotLock
@@ -2151,6 +2188,14 @@ LRESULT CALLBACK WorkerMessageWindowProc(
         return 0;
     }
 
+    if (message == WM_APP_NATIVE_AUTOHIDE) {
+        if (wParam == ABN_STATECHANGE) {
+            RefreshNativeAutoHideState();
+            PostRefresh();
+        }
+        return 0;
+    }
+
     if (
         message == g_taskbarCreatedMessage ||
         message == WM_DISPLAYCHANGE ||
@@ -2236,10 +2281,30 @@ bool CreateWorkerMessageWindow() {
         return false;
     }
 
+    APPBARDATA appBar = {};
+    appBar.cbSize = sizeof(appBar);
+    appBar.hWnd = g_workerMessageWindow;
+    appBar.uCallbackMessage = WM_APP_NATIVE_AUTOHIDE;
+
+    g_appBarRegistered =
+        SHAppBarMessage(ABM_NEW, &appBar) != 0;
+
+    if (!g_appBarRegistered) {
+        Wh_Log(L"SHAppBarMessage(ABM_NEW) failed; native auto-hide state-change notifications unavailable");
+    }
+
     return true;
 }
 
 void DestroyWorkerMessageWindow() {
+    if (g_appBarRegistered && g_workerMessageWindow) {
+        APPBARDATA appBar = {};
+        appBar.cbSize = sizeof(appBar);
+        appBar.hWnd = g_workerMessageWindow;
+        SHAppBarMessage(ABM_REMOVE, &appBar);
+        g_appBarRegistered = false;
+    }
+
     if (g_workerMessageWindow) {
         DestroyWindow(g_workerMessageWindow);
         g_workerMessageWindow = nullptr;
@@ -2805,9 +2870,7 @@ void WhTool_ModUninit() {
         SafeCloseHandle(g_workerThread);
     }
 
-    if (g_workerReadyEvent) {
-        SafeCloseHandle(g_workerReadyEvent);
-    }
+    SafeCloseHandle(g_workerReadyEvent);
 
     /*
      * Restore all currently discoverable taskbars when the tool exits.
@@ -2986,6 +3049,9 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModUninit() {
     if (g_isToolModProcessLauncher) {
+        // Recover taskbars left transparent if the dedicated tool process
+        // terminated before its normal cleanup path could run.
+        RestoreAllTaskbars();
         return;
     }
 
