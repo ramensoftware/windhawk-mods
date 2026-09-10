@@ -557,7 +557,6 @@ bool HookSnapLayoutDll(
         Wh_Log(
             L"Failed to resolve one or more SnapLayout.dll symbols");
 
-        g_snapLayoutHookClaimed = false;
         return false;
     }
 
