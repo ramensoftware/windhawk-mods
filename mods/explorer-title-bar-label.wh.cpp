@@ -206,7 +206,6 @@ Parts of the File Explorer hook and XAML discovery plumbing are adapted from **E
 
 #include <winrt/Microsoft.UI.h>
 #include <winrt/Microsoft.UI.Content.h>
-#include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.Input.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
@@ -219,6 +218,8 @@ Parts of the File Explorer hook and XAML discovery plumbing are adapted from **E
 #include <mutex>
 #include <string>
 #include <utility>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <windhawk_utils.h>
@@ -327,23 +328,9 @@ static Settings g_settings;
 static std::mutex g_settingsMutex;
 
 static std::atomic<bool> g_unloading{false};
-static std::atomic<int> g_pendingScans{0};
 
-struct PendingScan
-{
-    PendingScan()
-    {
-        g_pendingScans.fetch_add(1, std::memory_order_acq_rel);
-    }
-
-    PendingScan(const PendingScan &) = delete;
-    PendingScan &operator=(const PendingScan &) = delete;
-
-    ~PendingScan()
-    {
-        g_pendingScans.fetch_sub(1, std::memory_order_acq_rel);
-    }
-};
+static std::mutex g_subclassedWindowsMutex;
+static std::unordered_set<HWND> g_subclassedWindows;
 
 // ============================================================================
 // Settings helpers
@@ -1240,6 +1227,63 @@ struct LabelEntry
 
 thread_local std::vector<std::shared_ptr<LabelEntry>> g_labelEntries;
 thread_local bool g_threadScanned = false;
+thread_local std::unordered_map<HWND, winrt::weak_ref<mux::UIElement>>
+    g_pendingScanElements;
+
+static void ScanXamlRootForTitleBars(mux::UIElement const &element);
+static LRESULT CALLBACK ExplorerWindowSubclassProc(
+    HWND hwnd,
+    UINT message,
+    WPARAM wParam,
+    LPARAM lParam,
+    DWORD_PTR refData);
+
+static UINT GetScanMessage()
+{
+    static const UINT message =
+        RegisterWindowMessageW(L"Windhawk_ExplorerTitleBarLabel_Scan_" WH_MOD_ID);
+    return message;
+}
+
+static bool EnsureExplorerWindowSubclassed(HWND hwnd)
+{
+    if (!hwnd || g_unloading.load())
+    {
+        return false;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_subclassedWindowsMutex);
+        if (g_subclassedWindows.find(hwnd) != g_subclassedWindows.end())
+        {
+            return true;
+        }
+    }
+
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+            hwnd, ExplorerWindowSubclassProc, 1))
+    {
+        return false;
+    }
+
+    bool keepSubclass = false;
+    {
+        std::lock_guard<std::mutex> lock(g_subclassedWindowsMutex);
+        if (!g_unloading.load())
+        {
+            g_subclassedWindows.insert(hwnd);
+            keepSubclass = true;
+        }
+    }
+
+    if (!keepSubclass)
+    {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            hwnd, ExplorerWindowSubclassProc);
+    }
+
+    return keepSubclass;
+}
 
 static void ReleaseLabelEntry(const std::shared_ptr<LabelEntry> &entry,
                               bool removeElement)
@@ -1378,6 +1422,8 @@ static void RemoveLabelsForCurrentThread()
 
 static void RemoveLabelsForWindowOnCurrentThread(HWND hwnd)
 {
+    g_pendingScanElements.erase(hwnd);
+
     for (auto it = g_labelEntries.begin(); it != g_labelEntries.end();)
     {
         auto entry = *it;
@@ -1409,9 +1455,35 @@ static LRESULT CALLBACK ExplorerWindowSubclassProc(
     LPARAM lParam,
     DWORD_PTR)
 {
+    if (message == GetScanMessage())
+    {
+        auto it = g_pendingScanElements.find(hwnd);
+        if (it != g_pendingScanElements.end())
+        {
+            auto weakElement = it->second;
+            g_pendingScanElements.erase(it);
+
+            if (!g_unloading.load())
+            {
+                if (auto element = weakElement.get())
+                {
+                    ScanXamlRootForTitleBars(element);
+                }
+            }
+        }
+
+        return 0;
+    }
+
     if (message == WM_NCDESTROY)
     {
         RemoveLabelsForWindowOnCurrentThread(hwnd);
+
+        {
+            std::lock_guard<std::mutex> lock(g_subclassedWindowsMutex);
+            g_subclassedWindows.erase(hwnd);
+        }
+
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(
             hwnd, ExplorerWindowSubclassProc);
     }
@@ -1626,11 +1698,9 @@ static void TryInsertTitleText(muxc::Grid const &grid)
         return;
     }
 
-    // Install the native-window teardown hook before creating XAML delegates.
-    // If the window closes, WM_NCDESTROY will synchronously release this
-    // window's entries on the same UI thread.
-    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
-            hwnd, ExplorerWindowSubclassProc, 1))
+    // The scan path normally installs this before insertion. Keep this check
+    // here as a safety net for any synchronous discovery path.
+    if (!EnsureExplorerWindowSubclassed(hwnd))
     {
         Wh_Log(L"Failed to subclass Explorer window %08X",
                static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(hwnd)));
@@ -1785,27 +1855,44 @@ static void ScheduleXamlRootScan(mux::UIElement const &element)
 
     try
     {
-        auto queue =
-            winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
-        if (!queue)
+        auto frameworkElement = element.try_as<mux::FrameworkElement>();
+        HWND hwnd = frameworkElement
+                        ? GetExplorerWindowForElement(frameworkElement)
+                        : nullptr;
+
+        if (!hwnd)
         {
+            // No native host to post to. Scan synchronously so no callback can
+            // outlive the mod.
             ScanXamlRootForTitleBars(element);
             return;
         }
 
-        auto pending = std::make_shared<PendingScan>();
+        // Install the subclass on first discovery, before posting any message.
+        if (!EnsureExplorerWindowSubclassed(hwnd))
+        {
+            Wh_Log(L"Failed to subclass Explorer window %08X for scan",
+                   static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(hwnd)));
+            return;
+        }
 
-        queue.TryEnqueue(
-            [pending, weak = winrt::make_weak(element)]()
-            {
-                if (auto element = weak.get())
-                {
-                    ScanXamlRootForTitleBars(element);
-                }
-            });
+        // Keep only a weak XAML reference in thread-local state. Multiple
+        // requests for the same window coalesce naturally to the newest root.
+        g_pendingScanElements[hwnd] = winrt::make_weak(element);
+
+        if (!PostMessageW(hwnd, GetScanMessage(), 0, 0))
+        {
+            g_pendingScanElements.erase(hwnd);
+
+            // Posting failed, so run synchronously rather than leaving work
+            // outstanding.
+            ScanXamlRootForTitleBars(element);
+        }
     }
     catch (...)
     {
+        Wh_Log(L"Failed to schedule XAML scan hr=0x%08X",
+               winrt::to_hresult());
     }
 }
 
@@ -1831,36 +1918,6 @@ try
 }
 catch (...)
 {
-}
-
-static void ScheduleCurrentThreadScan()
-{
-    if (g_unloading.load())
-    {
-        return;
-    }
-
-    try
-    {
-        auto queue =
-            winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
-        if (!queue)
-        {
-            ScanCurrentThreadForTitleBars();
-            return;
-        }
-
-        auto pending = std::make_shared<PendingScan>();
-
-        queue.TryEnqueue(
-            [pending]()
-            {
-                ScanCurrentThreadForTitleBars();
-            });
-    }
-    catch (...)
-    {
-    }
 }
 
 static void DiscoverFromElement(mux::UIElement const &element)
@@ -2226,20 +2283,37 @@ void Wh_ModUninit()
     Wh_Log(L"Explorer Title Bar Label 1.0.0 uninit");
     g_unloading.store(true);
 
-    auto windows = GetFileExplorerWindows();
-    for (HWND hwnd : windows)
+    // Tear down only windows that this mod actually subclassed. Copy and clear
+    // under the lock, then release it before any cross-thread SendMessage-based
+    // helper calls.
+    std::vector<HWND> subclassedWindows;
     {
+        std::lock_guard<std::mutex> lock(g_subclassedWindowsMutex);
+        subclassedWindows.assign(g_subclassedWindows.begin(),
+                                 g_subclassedWindows.end());
+        g_subclassedWindows.clear();
+    }
+
+    for (HWND hwnd : subclassedWindows)
+    {
+        if (!IsWindow(hwnd))
+        {
+            continue;
+        }
+
         bool cleaned = false;
 
-        // A live Explorer window normally succeeds immediately. Retry briefly
-        // to cover a transient hook/setup failure during shell activity.
+        // Release this window's XAML objects on its owning UI thread.
         for (int attempt = 0; attempt < 3 && IsWindow(hwnd); ++attempt)
         {
             if (RunFromWindowThread(
                     hwnd,
-                    [](PVOID)
-                    { RemoveLabelsForCurrentThread(); },
-                    nullptr))
+                    [](PVOID parameter)
+                    {
+                        RemoveLabelsForWindowOnCurrentThread(
+                            reinterpret_cast<HWND>(parameter));
+                    },
+                    hwnd))
             {
                 cleaned = true;
                 break;
@@ -2254,26 +2328,9 @@ void Wh_ModUninit()
                    static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(hwnd)));
         }
 
-        // The subclass callback lives in this DLL, so it must be removed before
-        // Windhawk can unmap the mod.
+        // Remove synchronously. Any already-posted scan message then becomes a
+        // normal unhandled window message and can no longer call into this DLL.
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(
             hwnd, ExplorerWindowSubclassProc);
-    }
-
-    // DispatcherQueue callbacks contain code from this module. Wait briefly for
-    // all callbacks that were queued before g_unloading became true to finish
-    // or be discarded. PendingScan decrements in either case.
-    for (int i = 0;
-         i < 200 &&
-         g_pendingScans.load(std::memory_order_acquire) > 0;
-         ++i)
-    {
-        Sleep(10);
-    }
-
-    if (g_pendingScans.load(std::memory_order_acquire) > 0)
-    {
-        Wh_Log(L"Timed out waiting for %d pending XAML scan callback(s)",
-               g_pendingScans.load(std::memory_order_relaxed));
     }
 }
