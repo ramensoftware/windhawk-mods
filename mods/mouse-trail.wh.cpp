@@ -546,6 +546,11 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
   - flower: 仅花朵
   - pentagon: 仅五边形
   - hexagon: 仅六边形
+- enable_particle_spin: true
+  $name: Particle Spin
+  $name:zh-CN: 粒子自旋转
+  $description: Enable random self-rotation for particles.
+  $description:zh-CN: 启用粒子随机自旋转效果。
 - particle_attraction: 40
   $name: Particle Attraction
   $name:zh-CN: 粒子吸附强度
@@ -1018,6 +1023,7 @@ int g_particleDensity = 3;
 int g_particleInterval = 50;
 bool g_particleAccel = true;
 int g_particleShape = 0;  // 0=random, 1=circle, 2=star, 3=hexagram
+bool g_enableParticleSpin = true;  // 粒子自旋转
 ID2D1PathGeometry *g_pStarGeom = nullptr;
 ID2D1PathGeometry *g_pHexagramGeom = nullptr;
 ID2D1PathGeometry *g_pHeartGeom = nullptr;
@@ -1066,6 +1072,8 @@ int g_clickMaxRadius = 40, g_clickDuration = 300;
 struct Particle {
     float x, y, vx, vy, size;
     float z;            // 3D 深度（生成时随机，避免每帧闪烁）
+    float rotation;     // 当前旋转角度（弧度）
+    float spinSpeed;    // 自旋转速度（弧度/帧）
     DWORD startTime;
     int lifetime;
     D2D1_COLOR_F color;
@@ -1440,6 +1448,7 @@ struct VS_INPUT {
     float4 instanceColor : TEXCOORD1;
     float instanceSize : TEXCOORD2;
     float instanceShape : TEXCOORD3;
+    float instanceRot : TEXCOORD4;
 };
 
 struct VS_OUTPUT {
@@ -1454,7 +1463,14 @@ VS_OUTPUT VSMain(VS_INPUT input) {
     VS_OUTPUT output;
     // 2.5D 透视
     float scale = 1.0 + input.instancePos.z * perspective;
-    float2 worldPos = input.instancePos.xy + input.quadPos * input.instanceSize * scale;
+    // 自旋转：旋转四边形顶点
+    float cosR = cos(input.instanceRot);
+    float sinR = sin(input.instanceRot);
+    float2 rotatedPos = float2(
+        input.quadPos.x * cosR - input.quadPos.y * sinR,
+        input.quadPos.x * sinR + input.quadPos.y * cosR
+    );
+    float2 worldPos = input.instancePos.xy + rotatedPos * input.instanceSize * scale;
     float2 ndc = float2(
         (worldPos.x / screenSize.x) * 2.0 - 1.0,
         1.0 - (worldPos.y / screenSize.y) * 2.0
@@ -1594,6 +1610,7 @@ struct ParticleInstance {
     float r, g, b, a; // 颜色
     float size;       // 大小（半径）
     float shapeType;  // 0=circle, 1=star, 2=hexagram
+    float rotation;   // 旋转角度（弧度）
 };
 
 // ---- 原生渲染资源 ----
@@ -1658,8 +1675,9 @@ static bool InitNativeRendering() {
         {"TEXCOORD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 12, D3D11_INPUT_PER_INSTANCE_DATA, 1},
         {"TEXCOORD", 2, DXGI_FORMAT_R32_FLOAT, 1, 28, D3D11_INPUT_PER_INSTANCE_DATA, 1},
         {"TEXCOORD", 3, DXGI_FORMAT_R32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+        {"TEXCOORD", 4, DXGI_FORMAT_R32_FLOAT, 1, 36, D3D11_INPUT_PER_INSTANCE_DATA, 1},
     };
-    g_pD3DDevice->CreateInputLayout(particleLayout, 5, pvsBlob->GetBufferPointer(), pvsBlob->GetBufferSize(), &g_pParticleLayout);
+    g_pD3DDevice->CreateInputLayout(particleLayout, 6, pvsBlob->GetBufferPointer(), pvsBlob->GetBufferSize(), &g_pParticleLayout);
 
     vsBlob->Release(); psBlob->Release(); pvsBlob->Release(); ppsBlob->Release();
 
@@ -1796,6 +1814,7 @@ static void NativeRenderParticles(int screenW, int screenH) {
         float sizeScale = sinf(progress * 3.14159f) * 0.7f + 0.3f;
         instances[count].size = p.size * 2.0f * (g_particleSizeMultiplier / 100.0f) * sizeScale;
         instances[count].shapeType = (float)p.shapeType;
+        instances[count].rotation = p.rotation;
         count++;
         if (count >= 2000) break;
     }
@@ -2475,6 +2494,7 @@ void LoadSettings() {
             g_particleShape = 0;  // random
         Wh_FreeStringSetting(pshape);
     }
+    g_enableParticleSpin = Wh_GetIntSetting(L"enable_particle_spin") != 0;
     g_enableClickStarburst = Wh_GetIntSetting(L"enable_click_starburst") != 0;
     g_starburstCount = Wh_GetIntSetting(L"starburst_count");
     g_enableClickEffect = Wh_GetIntSetting(L"enable_click_effect") != 0;
@@ -3577,6 +3597,7 @@ static void RenderFrame() {
         }
         p.x += p.vx;
         p.y += p.vy;
+        if (g_enableParticleSpin) p.rotation += p.spinSpeed;  // 自旋转
         if (g_particleAttraction > 0) {
             p.x += (attractTargetX - p.x) * g_particleAttraction;
             p.y += (attractTargetY - p.y) * g_particleAttraction;
