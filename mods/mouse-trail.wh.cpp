@@ -17,20 +17,6 @@
 
 A highly customizable mouse cursor trail with particle effects, multiple color modes, custom function trails, cursor color extraction, and click effects. D3D11 + DirectComposition hardware accelerated, runs as a dedicated process with low CPU usage when idle.
 
-![Trail Effect](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail.gif)
-
-### More Demos
-
-![Demo 2](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail_2.gif)
-
-![Demo 3](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail_3.gif)
-
-![Demo 4](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail_4.gif)
-
-![Demo 5](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail_5.gif)
-
-![Trail Screenshot](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/screenshot_trail.png)
-
 ---
 
 ### Features
