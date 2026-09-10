@@ -1481,7 +1481,8 @@ VS_OUTPUT VSMain(VS_INPUT input) {
     VS_OUTPUT output;
     // 2.5D 透视
     float scale = 1.0 + input.instancePos.z * perspective;
-    // 自旋转：旋转四边形顶点和 uv 坐标
+    // 自旋转：只旋转顶点位置，不旋转 uv
+    // 如果同时旋转顶点位置和 uv，旋转效果会相互抵消，屏幕上看起来没转
     float rotAngle = input.instanceRot;
     float cosR = cos(rotAngle);
     float sinR = sin(rotAngle);
@@ -1495,8 +1496,8 @@ VS_OUTPUT VSMain(VS_INPUT input) {
         1.0 - (worldPos.y / screenSize.y) * 2.0
     );
     output.pos = float4(ndc, 0.0, 1.0);
-    // uv 也需要旋转，否则像素着色器中的形状遮罩不会旋转
-    output.uv = rotatedPos * 0.5 + 0.5;
+    // uv 不旋转，使用原始 quadPos，这样形状遮罩会随着四边形的旋转而在屏幕上显示为旋转
+    output.uv = input.quadPos * 0.5 + 0.5;
     output.color = input.instanceColor;
     output.depth = input.instancePos.z;
     output.shape = input.instanceShape;
@@ -1833,8 +1834,7 @@ static void NativeRenderParticles(int screenW, int screenH) {
         float sizeScale = sinf(progress * 3.14159f) * 0.7f + 0.3f;
         instances[count].size = p.size * 2.0f * (g_particleSizeMultiplier / 100.0f) * sizeScale;
         instances[count].shapeType = (float)p.shapeType;
-        // 调试：使用基于索引的旋转角度 + 粒子自身的 rotation，确认数据传递正常
-        instances[count].rotation = p.rotation + (float)count * 0.3f;
+        instances[count].rotation = p.rotation;
         count++;
         if (count >= 2000) break;
     }
@@ -2360,7 +2360,7 @@ static void SpawnParticles(float x, float y, int count, float speedMin, float sp
         p.shapeType = st;
         p.z = (Rand01() - 0.5f) * 0.8f;  // 生成时随机深度，避免每帧闪烁
         p.rotation = Rand01() * 6.28318f;  // 随机初始旋转角度
-        p.spinSpeed = (Rand01() - 0.5f) * 1.0f;  // 随机自旋转速度 ±0.5 rad/帧
+        p.spinSpeed = (Rand01() - 0.5f) * 0.6f;  // 随机自旋转速度 ±0.3 rad/帧
         p.colorOffset[0] = (Rand01() - 0.5f) * 0.16f;
         p.colorOffset[1] = (Rand01() - 0.5f) * 0.16f;
         p.colorOffset[2] = (Rand01() - 0.5f) * 0.16f;
@@ -3685,7 +3685,7 @@ static void RenderFrame() {
         }
         p.x += p.vx;
         p.y += p.vy;
-        p.rotation += p.spinSpeed;  // 自旋转（总是启用，用于诊断）
+        if (g_enableParticleSpin) p.rotation += p.spinSpeed;  // 自旋转
         if (g_particleAttraction > 0) {
             p.x += (attractTargetX - p.x) * g_particleAttraction;
             p.y += (attractTargetY - p.y) * g_particleAttraction;
