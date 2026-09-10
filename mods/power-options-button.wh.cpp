@@ -110,6 +110,8 @@ static DWORD g_mouseHookThreadId = 0;
 
 static SRWLOCK g_trayStateLock = SRWLOCK_INIT;
 static RECT g_trayIconRect = {};
+static RECT g_trayFallbackAreas[2] = {};
+static int g_trayFallbackAreaCount = 0;
 static DWORD g_lastTrayMouseMoveTime = 0;
 static DWORD g_lastScrollTime = 0;
 static GUID g_lastSeenPowerSchemeGuid = {};
@@ -1209,7 +1211,7 @@ HICON CreatePowerTrayIcon(int planIndex) {
     RECT shadowRect = textRect;
     OffsetRect(&shadowRect, 1, 1);
 
-    SetTextColor(iconHdc, RGB(0, 0, 0));
+    SetTextColor(iconHdc, RGB(1, 1, 1));
     DrawTextW(
         iconHdc,
         text,
@@ -1272,6 +1274,28 @@ void SetTrayIconRectSnapshot(const RECT& rect) {
     ReleaseSRWLockExclusive(&g_trayStateLock);
 }
 
+void SetTrayFallbackAreaSnapshot(const RECT* areas, int count) {
+    AcquireSRWLockExclusive(&g_trayStateLock);
+
+    g_trayFallbackAreaCount = 0;
+    ZeroMemory(g_trayFallbackAreas, sizeof(g_trayFallbackAreas));
+
+    if (areas && count > 0) {
+        int copyCount = count;
+        if (copyCount > static_cast<int>(ARRAYSIZE(g_trayFallbackAreas))) {
+            copyCount = static_cast<int>(ARRAYSIZE(g_trayFallbackAreas));
+        }
+
+        for (int i = 0; i < copyCount; i++) {
+            g_trayFallbackAreas[i] = areas[i];
+        }
+
+        g_trayFallbackAreaCount = copyCount;
+    }
+
+    ReleaseSRWLockExclusive(&g_trayStateLock);
+}
+
 RECT GetTrayIconRectSnapshot() {
     RECT rect = {};
 
@@ -1282,7 +1306,12 @@ RECT GetTrayIconRectSnapshot() {
     return rect;
 }
 
-void GetTrayMouseStateSnapshot(RECT* rect, DWORD* lastMouseMoveTime) {
+void GetTrayMouseStateSnapshot(
+    RECT* rect,
+    DWORD* lastMouseMoveTime,
+    RECT* fallbackAreas,
+    int* fallbackAreaCount
+) {
     AcquireSRWLockShared(&g_trayStateLock);
 
     if (rect) {
@@ -1293,6 +1322,22 @@ void GetTrayMouseStateSnapshot(RECT* rect, DWORD* lastMouseMoveTime) {
         *lastMouseMoveTime = g_lastTrayMouseMoveTime;
     }
 
+    if (fallbackAreaCount) {
+        int copyCount = g_trayFallbackAreaCount;
+
+        if (!fallbackAreas) {
+            copyCount = 0;
+        } else if (copyCount > 2) {
+            copyCount = 2;
+        }
+
+        for (int i = 0; i < copyCount; i++) {
+            fallbackAreas[i] = g_trayFallbackAreas[i];
+        }
+
+        *fallbackAreaCount = copyCount;
+    }
+
     ReleaseSRWLockShared(&g_trayStateLock);
 }
 
@@ -1300,6 +1345,31 @@ void SetLastTrayMouseMoveTime(DWORD value) {
     AcquireSRWLockExclusive(&g_trayStateLock);
     g_lastTrayMouseMoveTime = value;
     ReleaseSRWLockExclusive(&g_trayStateLock);
+}
+
+void RefreshTrayFallbackAreas() {
+    RECT areas[2] = {};
+    int count = 0;
+
+    const PCWSTR classes[] = {
+        L"NotifyIconOverflowWindow",
+        L"TopLevelWindowForOverflowXamlIsland",
+    };
+
+    for (size_t i = 0; i < ARRAYSIZE(classes); i++) {
+        HWND hwnd = FindWindowW(classes[i], nullptr);
+        RECT rect = {};
+
+        if (hwnd && GetWindowRect(hwnd, &rect) && !IsRectEmpty(&rect)) {
+            areas[count++] = rect;
+
+            if (count >= static_cast<int>(ARRAYSIZE(areas))) {
+                break;
+            }
+        }
+    }
+
+    SetTrayFallbackAreaSnapshot(areas, count);
 }
 
 void RefreshTrayIconRect() {
@@ -1316,12 +1386,11 @@ void RefreshTrayIconRect() {
     HRESULT hr = Shell_NotifyIconGetRect(&nii, &rect);
     if (FAILED(hr)) {
         SetRectEmpty(&rect);
-        SetTrayIconRectSnapshot(rect);
         Wh_Log(L"Shell_NotifyIconGetRect failed. HRESULT: 0x%08X", hr);
-        return;
     }
 
     SetTrayIconRectSnapshot(rect);
+    RefreshTrayFallbackAreas();
 }
 
 void StartTrayRectRefreshTimer() {
@@ -1406,6 +1475,13 @@ void RefreshActivePowerPlanStatusIfChanged() {
     g_hasLastSeenPowerSchemeGuid = true;
 
     int newIndex = FindPlanIndexByGuid(activeGuid);
+
+    // If an Ultimate Performance plan was created or activated outside this
+    // mod, refresh detection before treating it as a custom power plan.
+    if (newIndex < 0) {
+        RefreshUltimatePerformanceAvailability();
+        newIndex = FindPlanIndexByGuid(activeGuid);
+    }
 
     if (newIndex == g_currentPlanIndex) {
         return;
@@ -1540,26 +1616,22 @@ bool IsPointNearTrayIcon(POINT pt, const RECT& cachedRect) {
     return PtInRect(&rect, pt) != FALSE;
 }
 
-bool IsPointOverTrayArea(POINT pt) {
-    HWND window = WindowFromPoint(pt);
-    if (!window) {
+bool IsPointInTrayFallbackAreas(
+    POINT pt,
+    const RECT* fallbackAreas,
+    int fallbackAreaCount
+) {
+    if (!fallbackAreas || fallbackAreaCount <= 0) {
         return false;
     }
 
-    HWND root = GetAncestor(window, GA_ROOT);
-    if (!root) {
-        root = window;
+    for (int i = 0; i < fallbackAreaCount; i++) {
+        if (PtInRect(&fallbackAreas[i], pt)) {
+            return true;
+        }
     }
 
-    WCHAR className[64] = {};
-    if (!GetClassNameW(root, className, ARRAYSIZE(className))) {
-        return false;
-    }
-
-    return wcscmp(className, L"Shell_TrayWnd") == 0 ||
-           wcscmp(className, L"Shell_SecondaryTrayWnd") == 0 ||
-           wcscmp(className, L"NotifyIconOverflowWindow") == 0 ||
-           wcscmp(className, L"TopLevelWindowForOverflowXamlIsland") == 0;
+    return false;
 }
 
 LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
@@ -1572,19 +1644,30 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
         DWORD now = GetTickCount();
 
         RECT trayRect = {};
+        RECT fallbackAreas[2] = {};
+        int fallbackAreaCount = 0;
         DWORD lastTrayMouseMoveTime = 0;
-        GetTrayMouseStateSnapshot(&trayRect, &lastTrayMouseMoveTime);
+        GetTrayMouseStateSnapshot(
+            &trayRect,
+            &lastTrayMouseMoveTime,
+            fallbackAreas,
+            &fallbackAreaCount
+        );
 
         BOOL inside = IsPointNearTrayIcon(ms->pt, trayRect);
 
         // Fallback for cases where Shell_NotifyIconGetRect can't resolve the
-        // icon (for example in an overflow flyout). Never let this fallback
-        // consume a wheel event after the pointer has already left the tray.
+        // icon in the notification overflow flyout. The hook only checks
+        // cached rectangles; it never calls WindowFromPoint or sends messages
+        // to Explorer from inside the low-level callback.
         if (!inside &&
             IsRectEmpty(&trayRect) &&
             lastTrayMouseMoveTime != 0 &&
             now - lastTrayMouseMoveTime < 500 &&
-            IsPointOverTrayArea(ms->pt)) {
+            IsPointInTrayFallbackAreas(
+                ms->pt,
+                fallbackAreas,
+                fallbackAreaCount)) {
             inside = TRUE;
         }
 
@@ -1936,23 +2019,23 @@ LRESULT CALLBACK HiddenWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             return 0;
         }
 
-            if (wParam == TIMER_POST_START_ICON_SYNC) {
-                KillTimer(hwnd, TIMER_POST_START_ICON_SYNC);
+        if (wParam == TIMER_POST_START_ICON_SYNC) {
+            KillTimer(hwnd, TIMER_POST_START_ICON_SYNC);
 
-                Wh_Log(L"Post-start tray icon sync running.");
+            Wh_Log(L"Post-start tray icon sync running.");
 
-                UpdateTrayIcon();
-                RefreshTrayIconRect();
+            UpdateTrayIcon();
+            RefreshTrayIconRect();
 
-                Wh_Log(L"Post-start tray icon sync completed.");
+            Wh_Log(L"Post-start tray icon sync completed.");
 
-                return 0;
-            }
+            return 0;
+        }
 
-            if (wParam == TIMER_ACTIVE_POWER_PLAN_REFRESH) {
-                RefreshActivePowerPlanStatusIfChanged();
-                return 0;
-            }
+        if (wParam == TIMER_ACTIVE_POWER_PLAN_REFRESH) {
+            RefreshActivePowerPlanStatusIfChanged();
+            return 0;
+        }
 
         break;
 
@@ -2164,9 +2247,11 @@ BOOL WhTool_ModInit() {
     g_currentPlanIndex = GetCurrentPowerPlanIndex();
 
     if (!StartMouseHookThread()) {
-        Wh_Log(L"Failed to start dedicated mouse hook thread.");
+        Wh_Log(
+            L"Failed to start dedicated mouse hook thread. "
+            L"Continuing without mouse-wheel support."
+        );
         StopMouseHookThread();
-        return FALSE;
     }
 
     g_uiThread = CreateThread(
