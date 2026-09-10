@@ -1,11 +1,11 @@
 // ==WindhawkMod==
 // @id              disable-folder-thumbnails
 // @name            Disable Folder Thumbnails
-// @description     Disable Explorer folder thumbnails while preserving file thumbnails.
+// @description     Disable folder thumbnails while preserving file thumbnails.
 // @version         1.0
 // @author          Anixx
 // @github          https://github.com/Anixx
-// @include         explorer.exe
+// @include         *
 // @compilerOptions -lole32 -luuid -lshell32
 // ==/WindhawkMod==
 
@@ -14,23 +14,11 @@
 # Disable Folder Thumbnails
 
 Disables thumbnail extraction and retrieval for ordinary filesystem
-folders through Explorer's IThumbnailCache interface.
+folders both in Explorer and file choosing dialogs. 
+This mod is particularly useful if you are using a custom folder icon.
 
-File thumbnail requests are passed through unchanged.
+File thumbnail requests are passed through unchanged. Not-thumbnail icon overlays are unaffected.
 
-## Usage
-
-Enable the mod, then restart Windows Explorer using Task Manager.
-
-Leave Explorer's "Always show icons, never thumbnails" setting unchecked;
-that setting would disable file thumbnails as well.
-
-## Limitations
-
-- Targets Explorer's IThumbnailCache implementation.
-- Does not target virtual folders or archive files exposed as folders.
-- Folder previews rendered through other shell mechanisms may be unaffected.
-- Does not erase the thumbnail cache or modify folder customization.
 */
 // ==/WindhawkModReadme==
 
