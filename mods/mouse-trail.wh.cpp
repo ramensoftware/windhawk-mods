@@ -1314,9 +1314,10 @@ struct VS_OUTPUT {
 
 VS_OUTPUT VSMain(VS_INPUT input) {
     VS_OUTPUT output;
-    // 2.5D 透视：根据深度 z 缩放位置
+    // 2.5D 透视：根据深度 z 相对于屏幕中心缩放
     float scale = 1.0 + input.pos.z * perspective;
-    float2 screenPos = float2(input.pos.x * scale, input.pos.y * scale);
+    float2 center = screenSize * 0.5;
+    float2 screenPos = center + (input.pos.xy - center) * scale;
     // 屏幕坐标 → 裁剪空间
     float2 ndc = float2(
         (screenPos.x / screenSize.x) * 2.0 - 1.0,
