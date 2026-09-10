@@ -554,8 +554,8 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 - particle_spin_speed: 30
   $name: Spin Speed
   $name:zh-CN: 自旋速度
-  $description: Base rotation speed for particles (0-100). Each particle gets random variation ±50%.
-  $description:zh-CN: 粒子基础自旋转速度（0-100），每个粒子有 ±50% 的随机差异。
+  $description: Base rotation speed for particles (0-100). Each particle gets random variation ±50%. Note: very high speed makes asymmetric shapes (triangle, star) appear round due to motion blur.
+  $description:zh-CN: 粒子基础自旋转速度（0-100），每个粒子有 ±50% 的随机差异。注意：速度过高会导致三角形/星形等非对称形状因运动模糊看起来像圆形。
 - enable_particle_interaction: true
   $name: Particle Interaction
   $name:zh-CN: 粒子间相互作用
@@ -2367,7 +2367,8 @@ static void SpawnParticles(float x, float y, int count, float speedMin, float sp
         p.z = (Rand01() - 0.5f) * 0.8f;  // 生成时随机深度，避免每帧闪烁
         p.rotation = Rand01() * 6.28318f;  // 随机初始旋转角度
         // 基础速度由设置控制，每个粒子有 ±50% 的随机差异，确保旋转速度存在差异
-        float baseSpin = (float)g_particleSpinSpeed / 100.0f * 0.6f;  // 最大 ±0.3 rad/帧
+        // 注意：速度过快会导致非对称形状（三角形/星形等）因运动模糊看起来像圆形
+        float baseSpin = (float)g_particleSpinSpeed / 100.0f * 0.3f;  // 最大 ±0.15 rad/帧
         float variation = (Rand01() - 0.5f) * baseSpin;  // ±50% 随机差异
         p.spinSpeed = baseSpin + variation;  // 随机自旋转速度，每个粒子不同
         p.colorOffset[0] = (Rand01() - 0.5f) * 0.16f;
