@@ -6,7 +6,7 @@
 // @author       Hoffelhas
 // @github       https://github.com/Hoffelhas
 // @include      explorer.exe
-// @architecture amd64
+// @architecture x86-64
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
