@@ -1666,7 +1666,9 @@ static void NativeRenderParticles(int screenW, int screenH) {
         instances[count].g = pc.g;
         instances[count].b = pc.b;
         instances[count].a = lifeAlpha * 0.65f;
-        instances[count].size = p.size * 2.0f * (g_particleSizeMultiplier / 100.0f);
+        // 粒子大小随生命周期变化：出生小，中间大，死亡小
+        float sizeScale = sinf(progress * 3.14159f) * 0.7f + 0.3f;
+        instances[count].size = p.size * 2.0f * (g_particleSizeMultiplier / 100.0f) * sizeScale;
         count++;
         if (count >= 2000) break;
     }
@@ -1879,32 +1881,72 @@ static void NativeRenderRipples(int screenW, int screenH, DWORD dwTime, const Gr
         int ringVerts = (segments + 1) * 2;
         if (totalVerts + ringVerts > maxVerts) break;
 
-        // 构建单个波纹环顶点
-        VertexPosColor ringVertsArr[100]; // (48+1)*2 = 98
-        int idx = 0;
-        for (int i = 0; i <= segments; i++) {
-            float a = (i / (float)segments) * 6.28318f;
-            float cosA = cosf(a), sinA = sinf(a);
-            // 减去虚拟屏幕原点偏移
-            float px = r.pos.x - vX;
-            float py = r.pos.y - vY;
-            // 外圈
-            ringVertsArr[idx++] = {px + cosA * (radius + ringWidth), py + sinA * (radius + ringWidth), 0,
-                                   rc.r, rc.g, rc.b, alpha, 0.5f};
-            // 内圈
-            ringVertsArr[idx++] = {px + cosA * radius, py + sinA * radius, 0,
-                                   rc.r, rc.g, rc.b, 0, 0.5f};
+        // 减去虚拟屏幕原点偏移
+        float px = r.pos.x - vX;
+        float py = r.pos.y - vY;
+
+        // 1. 外发光层（宽、半透明）
+        {
+            VertexPosColor glowVerts[100];
+            int idx = 0;
+            float glowWidth = ringWidth * 2.5f;
+            for (int i = 0; i <= segments; i++) {
+                float a = (i / (float)segments) * 6.28318f;
+                float cosA = cosf(a), sinA = sinf(a);
+                glowVerts[idx++] = {px + cosA * (radius + glowWidth), py + sinA * (radius + glowWidth), 0,
+                                    rc.r, rc.g, rc.b, alpha * 0.2f, 0.5f};
+                glowVerts[idx++] = {px + cosA * radius, py + sinA * radius, 0,
+                                    rc.r, rc.g, rc.b, 0, 0.5f};
+            }
+            D3D11_MAPPED_SUBRESOURCE mapped;
+            if (SUCCEEDED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
+                memcpy(mapped.pData, glowVerts, ringVerts * sizeof(VertexPosColor));
+                g_pD3DContext->Unmap(g_pTrailVB, 0);
+                g_pD3DContext->Draw(ringVerts, 0);
+            }
         }
 
-        // 更新顶点缓冲（只写当前环）
-        D3D11_MAPPED_SUBRESOURCE mapped;
-        if (FAILED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
-        memcpy(mapped.pData, ringVertsArr, ringVerts * sizeof(VertexPosColor));
-        g_pD3DContext->Unmap(g_pTrailVB, 0);
+        // 2. 主环（外圈亮，内圈半透明填充）
+        {
+            VertexPosColor ringVertsArr[100];
+            int idx = 0;
+            for (int i = 0; i <= segments; i++) {
+                float a = (i / (float)segments) * 6.28318f;
+                float cosA = cosf(a), sinA = sinf(a);
+                ringVertsArr[idx++] = {px + cosA * (radius + ringWidth), py + sinA * (radius + ringWidth), 0,
+                                       rc.r, rc.g, rc.b, alpha, 0.5f};
+                ringVertsArr[idx++] = {px + cosA * radius, py + sinA * radius, 0,
+                                       rc.r, rc.g, rc.b, alpha * 0.3f, 0.5f};
+            }
+            D3D11_MAPPED_SUBRESOURCE mapped;
+            if (SUCCEEDED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
+                memcpy(mapped.pData, ringVertsArr, ringVerts * sizeof(VertexPosColor));
+                g_pD3DContext->Unmap(g_pTrailVB, 0);
+                g_pD3DContext->Draw(ringVerts, 0);
+            }
+        }
 
-        // 绘制当前环
-        g_pD3DContext->Draw(ringVerts, 0);
-        totalVerts += ringVerts;
+        // 3. 内圈高亮（更亮更窄）
+        {
+            VertexPosColor innerVerts[100];
+            int idx = 0;
+            float innerWidth = ringWidth * 0.4f;
+            for (int i = 0; i <= segments; i++) {
+                float a = (i / (float)segments) * 6.28318f;
+                float cosA = cosf(a), sinA = sinf(a);
+                innerVerts[idx++] = {px + cosA * (radius + innerWidth), py + sinA * (radius + innerWidth), 0,
+                                     1.0f, 1.0f, 1.0f, alpha * 0.5f, 0.5f};
+                innerVerts[idx++] = {px + cosA * (radius - innerWidth * 0.5f), py + sinA * (radius - innerWidth * 0.5f), 0,
+                                     1.0f, 1.0f, 1.0f, 0, 0.5f};
+            }
+            D3D11_MAPPED_SUBRESOURCE mapped;
+            if (SUCCEEDED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
+                memcpy(mapped.pData, innerVerts, ringVerts * sizeof(VertexPosColor));
+                g_pD3DContext->Unmap(g_pTrailVB, 0);
+                g_pD3DContext->Draw(ringVerts, 0);
+            }
+        }
+        totalVerts += ringVerts * 3;
     }
 }
 
