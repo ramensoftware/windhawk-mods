@@ -64,17 +64,10 @@ struct RawVector {
     void* end;
 };
 
-// The Snap Bar asks SnapModel::Layouts() more than once while loading.
-// These thread-local flags distinguish that path from the Win+Z/maximize
-// flyout path and avoid appending the custom layout more than once per load.
 thread_local bool g_inSnapBarLoad = false;
 thread_local bool g_snapBarCustomAdded = false;
-
-// Set after the normal flyout path successfully appends the custom layout.
 thread_local bool g_flyoutCustomAdded = false;
 
-// Keep track of SnapLayout.dll so a reference acquired by this mod can be
-// released when the mod unloads.
 HMODULE g_snapLayoutModule = nullptr;
 bool g_loadedSnapLayoutModule = false;
 
@@ -112,8 +105,6 @@ using SnapBarLoadLayouts_t = void (__cdecl*)(
 
 SnapBarLoadLayouts_t SnapBarLoadLayouts_Original = nullptr;
 
-// This pass-through hook exists so Windhawk resolves the private vector helper
-// and exposes a callable original/trampoline pointer.
 void* __cdecl EmplaceLayout_Hook(
     void* vectorThis,
     const void* sourceLayout)
@@ -134,9 +125,6 @@ int __cdecl PickerHeight_Hook(
             value
         );
 
-    // The extra flyout item occupies one more row.
-    // Only adjust the exact native height observed on the supported build,
-    // and only after the custom flyout layout was actually added.
     if (hr == 0 &&
         value &&
         g_flyoutCustomAdded &&
@@ -246,14 +234,10 @@ SIZE_T GetZoneCount(
     }
 
     const auto* firstBytes =
-        reinterpret_cast<const BYTE*>(
-            first
-        );
+        reinterpret_cast<const BYTE*>(first);
 
     const auto* lastBytes =
-        reinterpret_cast<const BYTE*>(
-            last
-        );
+        reinterpret_cast<const BYTE*>(last);
 
     if (lastBytes < firstBytes) {
         return 0;
@@ -349,23 +333,9 @@ bool PatchToFourColumns(
         return false;
     }
 
-    // SnapLayout grid: four columns, one row.
     WriteU32(layout, 0x20, 4);
     WriteU32(layout, 0x24, 1);
 
-    // Relevant SnapZone fields:
-    //
-    // +0x20 OriginColumn
-    // +0x24 OriginRow
-    // +0x28 ColumnSpan
-    // +0x2C RowSpan
-    // +0x30 GridUnitType (preserved)
-    //
-    // Result:
-    //
-    // | 0 | 1 | 2 | 3 |
-    //
-    // Each zone occupies one equal column.
     for (unsigned int i = 0; i < 4; i++) {
         BYTE* zone =
             reinterpret_cast<BYTE*>(zoneFirst) +
@@ -400,8 +370,6 @@ bool CloneAndAppendFourColumn(
             kSnapLayoutSize
         );
 
-    // Safety check:
-    // the supported build is expected to return six native layouts.
     if (count != kNativeLayoutCount ||
         sourceIndex >= count)
     {
@@ -418,11 +386,6 @@ bool CloneAndAppendFourColumn(
         return false;
     }
 
-    // Use SnapLayout.dll's own vector insertion helper.
-    //
-    // SnapLayout contains non-trivial members such as std::wstring and
-    // std::vector<SnapZone>, so a raw memcpy clone would duplicate ownership
-    // pointers and would be unsafe.
     void* newLayout =
         EmplaceLayout_Original(
             vec,
@@ -465,18 +428,6 @@ RawVector* __cdecl Layouts_Hook(
     }
 
     if (g_inSnapBarLoad) {
-
-        // Snap Bar ordering observed on the supported build:
-        //
-        // 0: 2x1 / 2 zones
-        // 1: 3x1 / 2 zones
-        // 2: 2x2 / 3 zones
-        // 3: 2x2 / 4 zones  <-- source
-        // 4: 3x1 / 3 zones
-        // 5: 4x1 / 3 zones
-        //
-        // SnapBar asks for SnapModel::Layouts() more than once while loading,
-        // so append the custom layout only once for that load.
         if (!g_snapBarCustomAdded &&
             CloneAndAppendFourColumn(
                 returnBuffer,
@@ -488,9 +439,6 @@ RawVector* __cdecl Layouts_Hook(
         return result;
     }
 
-    // Win+Z / maximize-hover ordering observed on the supported build:
-    //
-    // Element 4 is the native 2x2 / four-zone source layout.
     if (CloneAndAppendFourColumn(
             returnBuffer,
             4))
@@ -503,10 +451,6 @@ RawVector* __cdecl Layouts_Hook(
 
 }  // namespace
 
-// -----------------------------------------------------------------------------
-// Windhawk lifecycle
-// -----------------------------------------------------------------------------
-
 BOOL Wh_ModInit()
 {
     g_snapLayoutModule =
@@ -515,12 +459,6 @@ BOOL Wh_ModInit()
         );
 
     if (!g_snapLayoutModule) {
-
-        // On the tested Windows 11 build, SnapLayout.dll is part of the
-        // MicrosoftWindows.Client.Core system app.
-        //
-        // Load it explicitly if Explorer hasn't loaded it yet so Windhawk can
-        // resolve and install the private-symbol hooks.
         g_snapLayoutModule =
             LoadLibraryExW(
                 L"C:\\WINDOWS\\SystemApps\\MicrosoftWindows.Client.Core_cw5n1h2txyewy\\SnapLayout.dll",
@@ -541,40 +479,32 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
-    WindhawkUtils::SYMBOL_HOOK snapLayoutHooks[] = {
-
+    WindhawkUtils::SYMBOL_HOOK snapLayoutDllHooks[] = {
         {
             {
                 LR"(public: class std::vector<struct SnapLayout,class std::allocator<struct SnapLayout> > __cdecl SnapModel::Layouts(void)const )",
             },
-
             &Layouts_Original,
             Layouts_Hook,
         },
-
         {
             {
                 LR"(private: struct SnapLayout & __cdecl std::vector<struct SnapLayout,class std::allocator<struct SnapLayout> >::_Emplace_one_at_back<struct SnapLayout const &>(struct SnapLayout const &))",
             },
-
             &EmplaceLayout_Original,
             EmplaceLayout_Hook,
         },
-
         {
             {
                 LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SnapLayout::implementation::SnapLayoutPickerViewModel,struct winrt::SnapLayout::ISnapLayoutPickerViewModel>::get_PickerHeight(int *))",
             },
-
             &PickerHeight_Original,
             PickerHeight_Hook,
         },
-
         {
             {
                 LR"(public: void __cdecl winrt::SnapLayout::implementation::SnapBarViewModel::LoadLayouts(double,enum winrt::SnapLayout::SnapModelOptions,bool))",
             },
-
             &SnapBarLoadLayouts_Original,
             SnapBarLoadLayouts_Hook,
         },
@@ -582,8 +512,8 @@ BOOL Wh_ModInit()
 
     if (!WindhawkUtils::HookSymbols(
             g_snapLayoutModule,
-            snapLayoutHooks,
-            ARRAYSIZE(snapLayoutHooks)))
+            snapLayoutDllHooks,
+            ARRAYSIZE(snapLayoutDllHooks)))
     {
         Wh_Log(
             L"Failed to resolve one or more SnapLayout.dll symbols"
