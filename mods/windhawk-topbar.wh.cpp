@@ -996,7 +996,7 @@ void PopulateBatteryPanel();
 void ApplyBlurToAllOpenPopups();
 void StripInheritedIslandBackgrounds();
 void ApplyWindowBackdrop(HWND hwnd);
-std::wstring ReadTrayOrderFromRegistry();
+std::wstring ReadTrayOrder();
 
 // ============================================================================
 // Settings
@@ -1133,6 +1133,7 @@ double g_dpiScale = 1.0;
 [[clang::no_destroy]] winrt::Windows::System::DispatcherQueue g_uiDispatcherQueue{nullptr};
 
 [[clang::no_destroy]] DispatcherTimer g_clockTimer{nullptr};
+[[clang::no_destroy]] DispatcherTimer g_taskRefreshTimer{nullptr};
 [[clang::no_destroy]] DispatcherTimer g_taskListTimer{nullptr};
 [[clang::no_destroy]] DispatcherTimer g_wifiAutoRefreshTimer{nullptr};
 [[clang::no_destroy]] DispatcherTimer g_bluetoothAutoRefreshTimer{nullptr};
@@ -2829,30 +2830,34 @@ std::wstring DeviceId(IMMDevice* device) {
 // feel sticky. Dropped whenever a call fails, which covers the default endpoint
 // changing underneath us.
 [[clang::no_destroy]] winrt::com_ptr<IAudioEndpointVolume> g_cachedEndpointVolume;
+std::wstring g_cachedEndpointDeviceId;
+std::mutex g_endpointMutex;
 
 void InvalidateEndpointCache() {
+    std::lock_guard<std::mutex> lock(g_endpointMutex);
     g_cachedEndpointVolume = nullptr;
+    g_cachedEndpointDeviceId.clear();
 }
 
 winrt::com_ptr<IAudioEndpointVolume> EndpointVolume() {
-    if (g_cachedEndpointVolume) {
-        float probe = 0.0f;
-        if (SUCCEEDED(g_cachedEndpointVolume->GetMasterVolumeLevelScalar(&probe))) {
-            return g_cachedEndpointVolume;
-        }
-        g_cachedEndpointVolume = nullptr;
-    }
-
     auto device = DefaultRenderDevice();
     if (!device) {
         return nullptr;
     }
+    std::wstring deviceId = DeviceId(device.get());
+
+    std::lock_guard<std::mutex> lock(g_endpointMutex);
+    if (g_cachedEndpointVolume && g_cachedEndpointDeviceId == deviceId) {
+        return g_cachedEndpointVolume;
+    }
+
     winrt::com_ptr<IAudioEndpointVolume> volume;
     if (FAILED(device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr,
                                 volume.put_void()))) {
         return nullptr;
     }
     g_cachedEndpointVolume = volume;
+    g_cachedEndpointDeviceId = deviceId;
     return volume;
 }
 
@@ -4479,6 +4484,66 @@ void RunInBackground(std::function<void()> work) {
     }
 }
 
+std::mutex g_volumeCoalesceMutex;
+int g_pendingVolumeValue = -1;
+bool g_volumeWorkerRunning = false;
+
+void SetMasterVolumeCoalesced(int value) {
+    {
+        std::lock_guard<std::mutex> lock(g_volumeCoalesceMutex);
+        g_pendingVolumeValue = value;
+        if (g_volumeWorkerRunning) {
+            return;
+        }
+        g_volumeWorkerRunning = true;
+    }
+    RunInBackground([] {
+        for (;;) {
+            int v;
+            {
+                std::lock_guard<std::mutex> lock(g_volumeCoalesceMutex);
+                if (g_pendingVolumeValue < 0) {
+                    g_volumeWorkerRunning = false;
+                    return;
+                }
+                v = g_pendingVolumeValue;
+                g_pendingVolumeValue = -1;
+            }
+            audio::SetMasterVolume(v);
+        }
+    });
+}
+
+std::mutex g_brightnessCoalesceMutex;
+int g_pendingBrightnessValue = -1;
+bool g_brightnessWorkerRunning = false;
+
+void SetBrightnessCoalesced(int value) {
+    {
+        std::lock_guard<std::mutex> lock(g_brightnessCoalesceMutex);
+        g_pendingBrightnessValue = value;
+        if (g_brightnessWorkerRunning) {
+            return;
+        }
+        g_brightnessWorkerRunning = true;
+    }
+    RunInBackground([] {
+        for (;;) {
+            int v;
+            {
+                std::lock_guard<std::mutex> lock(g_brightnessCoalesceMutex);
+                if (g_pendingBrightnessValue < 0) {
+                    g_brightnessWorkerRunning = false;
+                    return;
+                }
+                v = g_pendingBrightnessValue;
+                g_pendingBrightnessValue = -1;
+            }
+            brightness::Set(v);
+        }
+    });
+}
+
 // Panels tear themselves down from inside their own click handlers, which would
 // destroy the very button that is still dispatching. Rebuilding on the next
 // dispatcher turn avoids that.
@@ -4885,7 +4950,7 @@ void PopulateDisplayPanel() {
     if (brightness::Available()) {
         auto icon = BuildVectorIcon(nullptr, L"", icons::kBrightnessStroke, 24, 18, 1.6);
         children.Append(MakeSliderRow(icon, brightness::Get(),
-                                      [](int value) { RunInBackground([value] { brightness::Set(value); }); }));
+                                      [](int value) { SetBrightnessCoalesced(value); }));
     } else {
         children.Append(MakeStatusText(L"Brightness control isn't available on this display."));
     }
@@ -5144,7 +5209,7 @@ void PopulateSoundPanel() {
     });
 
     children.Append(MakeSliderRow(muteButton, masterVolume, [](int value) {
-        RunInBackground([value] { audio::SetMasterVolume(value); });
+        SetMasterVolumeCoalesced(value);
         RunOnUiThread([] { RefreshSoundButtonIcon(); });
     }));
 
@@ -5333,7 +5398,7 @@ void ConnectToWifi(const wifi::Network& network, const std::wstring& password) {
             }
         }
 
-        if (!connected) {
+        if (!connected && !network.hasProfile) {
             wifi::ForgetProfile(network.ssid);
         }
 
@@ -5548,10 +5613,6 @@ void PopulateWifiPanel() {
         error.TextWrapping(TextWrapping::Wrap);
         error.Margin(Thickness{10, 0, 10, 4});
         children.Append(error);
-    }
-
-    if (g_wifiNetworks.empty()) {
-        g_wifiNetworks = wifi::EnumerateNetworks();
     }
 
     if (g_wifiNetworks.empty()) {
@@ -5816,10 +5877,6 @@ void PopulateBluetoothPanel() {
 
 
 
-
-    if (g_bluetoothDevices.empty()) {
-        g_bluetoothDevices = bluetooth::Enumerate(false);
-    }
 
     if (g_bluetoothDevices.empty()) {
         children.Append(MakeStatusText(L"No paired devices."));
@@ -6978,25 +7035,26 @@ void RegisterNamed(PCWSTR name, FrameworkElement const& element) {
 // Gets the current desktop wallpaper and returns an ImageBrush from it.
 // Returns an empty brush if wallpaper is missing or fails to load.
 wuxm::ImageBrush GetWallpaperBrush() {
-    
     wuxm::ImageBrush brush;
 
     wchar_t wallpaperPath[MAX_PATH] = {0};
     if (SystemParametersInfo(SPI_GETDESKWALLPAPER, MAX_PATH, wallpaperPath, 0) && wallpaperPath[0]) {
-        // Convert Windows path to a file URI: replace '\' with '/'
         std::wstring uriPath = wallpaperPath;
         std::replace(uriPath.begin(), uriPath.end(), L'\\', L'/');
-        uriPath = L"file:///" + uriPath;
+        // Cache-busting query so WinRT re-decodes when the file content changes
+        // at the same path (e.g. TranscodedWallpaper).
+        wchar_t suffix[32];
+        swprintf_s(suffix, L"?v=%llu", static_cast<unsigned long long>(GetTickCount64()));
+        uriPath = L"file:///" + uriPath + suffix;
 
         try {
             wuxm::Imaging::BitmapImage bitmap;
             bitmap.UriSource(wf::Uri(winrt::hstring(uriPath)));
             brush.ImageSource(bitmap);
             brush.Stretch(wuxm::Stretch::UniformToFill);
-            brush.AlignmentX(wuxm::AlignmentX::Left);   // Show the left side (optional)
-            brush.AlignmentY(wuxm::AlignmentY::Top);    // Show the top portion
+            brush.AlignmentX(wuxm::AlignmentX::Left);
+            brush.AlignmentY(wuxm::AlignmentY::Top);
         } catch (...) {
-            // Failed to parse or load, leave brush empty
         }
     }
     return brush;
@@ -7007,13 +7065,24 @@ void UpdateWallpaperIfChanged() {
     if (!g_wallpaperLayer) return;
 
     wchar_t wallpaperPath[MAX_PATH] = {0};
-    if (SystemParametersInfo(SPI_GETDESKWALLPAPER, MAX_PATH, wallpaperPath, 0) && wallpaperPath[0]) {
-        std::wstring currentPath = wallpaperPath;
-        if (currentPath != g_lastWallpaperPath) {
-            g_lastWallpaperPath = currentPath;
-            g_wallpaperLayer.Background(GetWallpaperBrush());
-            Wh_Log(L"TopBar: Wallpaper updated: %s", currentPath.c_str());
-        }
+    if (!SystemParametersInfo(SPI_GETDESKWALLPAPER, MAX_PATH, wallpaperPath, 0) || !wallpaperPath[0]) {
+        return;
+    }
+    std::wstring currentPath = wallpaperPath;
+    unsigned long long stamp = 0;
+    WIN32_FILE_ATTRIBUTE_DATA fad{};
+    if (GetFileAttributesExW(currentPath.c_str(), GetFileExInfoStandard, &fad)) {
+        stamp = (static_cast<unsigned long long>(fad.ftLastWriteTime.dwHighDateTime) << 32) |
+                fad.ftLastWriteTime.dwLowDateTime;
+    }
+    static std::wstring s_lastPath;
+    static unsigned long long s_lastStamp = 0;
+    if (currentPath != s_lastPath || stamp != s_lastStamp) {
+        s_lastPath = currentPath;
+        s_lastStamp = stamp;
+        g_lastWallpaperPath = currentPath;
+        g_wallpaperLayer.Background(GetWallpaperBrush());
+        Wh_Log(L"TopBar: Wallpaper updated: %s", currentPath.c_str());
     }
 }
 // Wheel over the Display and Sound buttons adjusts brightness and volume in
@@ -7054,7 +7123,7 @@ void AttachWheelHandler(wuxc::Button const& button, bool isVolume) {
 
                 if (isVolume) {
                     int newVolume = std::clamp(audio::GetMasterVolume() + step * direction, 0, 100);
-                    RunInBackground([newVolume] { audio::SetMasterVolume(newVolume); });
+                    SetMasterVolumeCoalesced(newVolume);
                     ShowVolumePercent(newVolume);
 
                     if (!g_volumeRevertTimer) {
@@ -7068,14 +7137,8 @@ void AttachWheelHandler(wuxc::Button const& button, bool isVolume) {
                     g_volumeRevertTimer.Stop();
                     g_volumeRevertTimer.Start();
                 } else {
-                    static bool brightnessPending = false;
-                    if (brightnessPending) return;
-                    brightnessPending = true;
                     int newBrightness = std::clamp(brightness::GetFast() + step * direction, 0, 100);
-                    RunInBackground([newBrightness] {
-                        brightness::Set(newBrightness);
-                        brightnessPending = false;
-                    });
+                    SetBrightnessCoalesced(newBrightness);
                     ShowBrightnessPercent(newBrightness);
 
                     if (!g_brightnessRevertTimer) {
@@ -7126,35 +7189,14 @@ wuxc::Button MakeControlButton(PCWSTR name,
     RegisterNamed(name, button);
     return button;
 }
-std::wstring ReadTrayOrderFromRegistry() {
-    HKEY key = nullptr;
-    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\WindhawkTopBar", 0, KEY_READ, &key) !=
-        ERROR_SUCCESS) {
-        return L"";
-    }
-    wchar_t buffer[1024]{};
-    DWORD size = sizeof(buffer);
-    DWORD type = 0;
-    std::wstring result;
-    if (RegQueryValueEx(key, L"TrayOrder", nullptr, &type,
-                        reinterpret_cast<BYTE*>(buffer), &size) == ERROR_SUCCESS &&
-        type == REG_SZ) {
-        result = buffer;
-    }
-    RegCloseKey(key);
-    return result;
+std::wstring ReadTrayOrder() {
+    std::vector<wchar_t> buffer(1024);
+    size_t length = Wh_GetStringValue(L"trayOrder", buffer.data(), buffer.size());
+    return std::wstring(buffer.data(), length);
 }
 
-void WriteTrayOrderToRegistry(const std::wstring& value) {
-    HKEY key = nullptr;
-    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\WindhawkTopBar", 0, nullptr, 0,
-                       KEY_SET_VALUE, nullptr, &key, nullptr) != ERROR_SUCCESS) {
-        return;
-    }
-    RegSetValueEx(key, L"TrayOrder", 0, REG_SZ,
-                  reinterpret_cast<const BYTE*>(value.c_str()),
-                  static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t)));
-    RegCloseKey(key);
+void WriteTrayOrder(const std::wstring& value) {
+    Wh_SetStringValue(L"trayOrder", value.c_str());
 }
 
 void ApplyTrayOrderToPanel() {
@@ -7203,7 +7245,7 @@ void MoveTrayItem(const std::wstring& name, int direction) {
         }
         serialized += g_trayOrder[i];
     }
-    WriteTrayOrderToRegistry(serialized);
+    WriteTrayOrder(serialized);
     g_settings.trayOrder = serialized;
 
     ApplyTrayOrderToPanel();
@@ -7235,7 +7277,7 @@ void MoveTrayItemTo(const std::wstring& draggedName, const std::wstring& targetN
         }
         serialized += g_trayOrder[i];
     }
-    WriteTrayOrderToRegistry(serialized);
+    WriteTrayOrder(serialized);
     g_settings.trayOrder = serialized;
 
     ApplyTrayOrderToPanel();
@@ -7472,7 +7514,7 @@ g_taskListPanel.SizeChanged([](auto&&, auto&&) {
                     if (available) {
                         auto icon = BuildVectorIcon(nullptr, L"", icons::kBrightnessStroke, 24, 18, 1.6);
                         children.Append(MakeSliderRow(icon, brightnessValue,
-                            [](int value) { RunInBackground([value] { brightness::Set(value); }); }));
+                            [](int value) { SetBrightnessCoalesced(value); }));
                     } else {
                         children.Append(MakeStatusText(L"Brightness control isn't available on this display."));
                     }
@@ -7988,7 +8030,18 @@ void CALLBACK WindowEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObje
     if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF) return;
     if (event == EVENT_OBJECT_CREATE || event == EVENT_OBJECT_DESTROY ||
         event == EVENT_OBJECT_NAMECHANGE || event == EVENT_OBJECT_SHOW || event == EVENT_OBJECT_HIDE) {
-        RunOnUiThread([] { RefreshTaskList(false); });
+        RunOnUiThread([] {
+            if (!g_taskRefreshTimer) {
+                g_taskRefreshTimer = DispatcherTimer();
+                g_taskRefreshTimer.Interval(std::chrono::milliseconds(200));
+                g_taskRefreshTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+                    g_taskRefreshTimer.Stop();
+                    RefreshTaskList(false);
+                });
+            }
+            g_taskRefreshTimer.Stop();
+            g_taskRefreshTimer.Start();
+        });
     }
 }
 
@@ -8364,6 +8417,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
             try {
                 UpdateClockText();
                 UpdateBatteryButton();
+                UpdateWallpaperIfChanged();
             } catch (...) {
             }
         });
@@ -8504,10 +8558,14 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
             UnhookWinEvent(g_foregroundHook);
             g_foregroundHook = nullptr;
         }
+        if (g_windowEventHook) {
+            UnhookWinEvent(g_windowEventHook);
+            g_windowEventHook = nullptr;
+        }
 
         // The topbar has been closed. Stop all timers before the DLL unloads.
         if (g_clockTimer) g_clockTimer.Stop();
-
+        if (g_taskRefreshTimer) g_taskRefreshTimer.Stop();
         if (g_taskListTimer) g_taskListTimer.Stop();
         if (g_wifiAutoRefreshTimer) g_wifiAutoRefreshTimer.Stop();
         if (g_bluetoothAutoRefreshTimer) g_bluetoothAutoRefreshTimer.Stop();
@@ -8518,6 +8576,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         g_allowHide = true;  // allow hiding during final teardown
         // Release XAML and COM objects on this thread (before it exits)
         if (g_clockTimer) g_clockTimer = nullptr;
+        if (g_taskRefreshTimer) g_taskRefreshTimer = nullptr;
 
         if (g_wifiAutoRefreshTimer) g_wifiAutoRefreshTimer = nullptr;
         if (g_bluetoothAutoRefreshTimer) g_bluetoothAutoRefreshTimer = nullptr;
@@ -8625,7 +8684,7 @@ void LoadSettings() {
         g_settings.iconColor = L"#FFFFFF";
     }
 
-    g_settings.trayOrder = ReadTrayOrderFromRegistry();
+    g_settings.trayOrder = ReadTrayOrder();
     g_trayOrder.clear();
     {
         size_t pos = 0;
