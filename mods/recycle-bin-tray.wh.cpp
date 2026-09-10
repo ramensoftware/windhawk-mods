@@ -6,6 +6,7 @@
 // @version         1.0.0
 // @author          Wildstyle23
 // @github          https://github.com/wildstyle23
+// @donateUrl       https://ko-fi.com/wildstyle23
 // @license         GPL-3.0
 // @include         windhawk.exe
 // @compilerOptions -lshell32 -ladvapi32 -luser32 -lole32 -lgdi32 -lgdiplus -lshlwapi
@@ -41,7 +42,7 @@ The mod is designed to remain lightweight and self-contained while integrating w
 * **Configurable mouse actions** — independently configure left click, double-click, middle click, and right click.
 * **Recycle Bin context menu** — open, empty, or open Properties using Windows Shell-provided localized labels when available.
 * **Optional empty confirmation** — keep or disable the confirmation dialog before emptying the Recycle Bin.
-* **Drag & Drop to Recycle Bin** — drag files and folders directly from the Desktop, File Explorer, or other applications that expose dropped files through the standard Windows `CF_HDROP` format.
+* **Drag & Drop to Recycle Bin** — drag files and folders directly from the Desktop, File Explorer, or other applications that expose dropped files through the standard Windows `CF_HDROP` format. If the icon is in the `^` notification-area overflow menu, you can drop directly onto `^`, or onto the Recycle Bin icon while the overflow panel is open.
 
 ## Installation
 
@@ -102,15 +103,20 @@ and drop them directly onto the Recycle Bin tray icon.
 
 The mod receives the dropped items through the standard Windows OLE drag & drop mechanism and moves them to the Windows Recycle Bin.
 
-### Requirements
+### Visibility and overflow menu
 
-For reliable drag & drop operation:
+For drag & drop to remain available, **Hide when empty** must be turned off so the Recycle Bin icon continues to exist as a target.
 
-* The Recycle Bin tray icon must be **visible directly in the system tray**.
-* The icon should not be located inside the `^` notification-area overflow menu.
-* Windows must be able to identify the tray icon as the active drop target.
+Windows may place the icon in the `^` notification-area overflow menu when it first appears.
 
-To ensure the icon is always visible and available as a drop target:
+Keeping it visible is recommended for quicker access.
+
+The icon does not need to stay permanently visible in the main system tray.
+
+* If it is visible directly in the tray, drop files and folders onto it normally.
+* If it is in the `^` overflow menu, you can drop directly onto `^`. If the overflow panel is open, you can also drop directly onto the Recycle Bin icon itself.
+
+If you want to keep the icon permanently visible, move it out of the overflow menu:
 
 * **Manual placement:** Drag the icon out of the overflow menu and place it directly in the main system tray area. Windows will remember this placement.
 * **Windows Settings (if available):** Go to **Settings → Personalization → Taskbar → Other system tray icons** and toggle the icon to **On**.
@@ -291,7 +297,7 @@ Shell notifications allow the icon to react quickly when items are added to or r
 
 Because Shell notifications can occasionally be missed, a configurable fallback timer periodically checks the actual Recycle Bin state.
 
-The default fallback interval is **60 seconds** and can be changed in the Windhawk settings.
+The default fallback interval is **300 seconds** and can be changed in the Windhawk settings. Tray position / DPI polling is disabled by default and remains available as an optional fallback.
 
 Initialization checks the Shell and tray immediately. A one-second startup retry is armed only if Shell notification registration or tray creation is not ready yet.
 
@@ -335,7 +341,7 @@ This allows the icon to recover without requiring the Windhawk mod to be manuall
 * The tray thread uses Per-Monitor V2 DPI awareness, follows the rectangle reported by `Shell_NotifyIconGetRect`, and tracks slot geometry changes independently from the DPI-derived render size.
 * A transparent top-level helper window provides the physical per-monitor DPI reference and is also used as the OLE drop overlay when drag & drop is enabled.
 * Explorer owns notification-area placement. If Windows exposes the tray on multiple taskbars, drag & drop follows the single icon rectangle returned by the Shell API.
-* A low-level mouse hook is used only while drag & drop support is enabled to detect the beginning and end of a potential drag; OLE `IDropTarget` remains responsible for the actual drop.
+* A low-level mouse hook runs on a dedicated message-pump thread only while drag & drop support is enabled to detect the beginning and end of a potential drag; OLE `IDropTarget` remains responsible for the actual drop.
 
 ## Settings Reference
 
@@ -364,12 +370,12 @@ If the icon is still missing:
 2. Try restarting Windhawk.
 3. Check whether Windows has moved the icon into the notification-area overflow menu (`^`).
 
-If necessary, drag the icon from the overflow menu into the main system tray area. Windows will remember the placement.
+Windows may place the icon in the overflow menu when it first appears. This is normal. If you want it permanently visible, drag it from the overflow menu into the main system tray area; Windows will remember the placement.
 
 ### Drag & Drop does not work
 
-1. Check the mod's settings to ensure that Drag & Drop is enabled.
-2. Make sure the tray icon is visible directly on the taskbar and is not inside the `^` overflow menu.
+1. Check the mod's settings to ensure that Drag & Drop is enabled and **Hide when empty** is turned off.
+2. If the icon is in the `^` overflow menu, drop directly onto `^`, or open the overflow panel and drop onto the Recycle Bin icon itself.
 3. Make sure the source application provides dropped files through the standard Windows `CF_HDROP` format.
 
 If dragging from the Desktop does not work, check whether another application currently has the input focus.
@@ -418,8 +424,8 @@ This project is licensed under the GNU General Public License Version 3.0.
   - enableDragDrop: true
     $name: "Enable drag & drop"
     $name:fr-FR: "Autoriser le glisser-déposer"
-    $description: "Allow dropping files onto the tray icon to move them to the Recycle Bin. ⚠ Requires \"Hide when empty\" to be turned off."
-    $description:fr-FR: "Permet de glisser des fichiers et dossiers directement sur l'icône de la corbeille. ⚠ Nécessite que \"Masquer si vide\" soit désactivé."
+    $description: "Allow dropping files and folders onto the tray icon to move them to the Recycle Bin. Windows may place the icon in the ^ notification-area overflow menu when it first appears. Keeping it visible is recommended for quicker access. The icon does not need to stay permanently visible in the main system tray. If it is in the ^ overflow menu, drop directly onto ^ or onto the Recycle Bin icon while the overflow panel is open. ⚠ Requires \"Hide when empty\" to be turned off."
+    $description:fr-FR: "Permet de glisser des fichiers et dossiers sur l'icône de la Corbeille pour les déplacer dans la Corbeille. Windows peut placer l'icône dans le menu ^ des icônes masquées de la zone de notification lors de sa première apparition. Il est recommandé de la garder visible pour un accès plus rapide. L'icône n'a pas besoin de rester visible en permanence dans la zone de notification principale. Si elle se trouve dans le menu ^, déposez directement sur ^ ou sur l'icône de la Corbeille lorsque le panneau est ouvert. ⚠ Nécessite que \"Masquer si vide\" soit désactivé."
   - iconStyle: system
     $name: "Icon style"
     $name:fr-FR: "Style d'icône"
@@ -662,12 +668,12 @@ This project is licensed under the GNU General Public License Version 3.0.
   $description:fr-FR: "Comportement des boutons de la souris et confirmation du vidage."
 
 - system:
-  - fallbackTimerInterval: 60
+  - fallbackTimerInterval: 300
     $name: "Fallback timer interval (seconds)"
     $name:fr-FR: "Intervalle de vérification de secours (secondes)"
     $description: "Safety polling interval in seconds to refresh state if Shell events are missed. Set to 0 to disable."
     $description:fr-FR: "Intervalle utilisé pour vérifier l'état de la Corbeille si une notification Windows est manquée. Régler sur 0 pour désactiver."
-  - dpiCheckInterval: 30
+  - dpiCheckInterval: 0
     $name: "Tray position / DPI check interval (seconds)"
     $name:fr-FR: "Intervalle de vérification de la position / du DPI de l'icône (secondes)"
     $description: "How often the mod checks the real tray icon position and DPI. Set to 0 to disable."
@@ -691,11 +697,9 @@ This project is licensed under the GNU General Public License Version 3.0.
 #include <string>
 #include <utility>
 #include <string_view>
-#include <type_traits>
 #include <vector>
 #include <initguid.h>
 #include <windows.h>
-#include <cguid.h>
 #include <ole2.h>
 #include <shellapi.h>
 #include <shlobj.h>
@@ -718,7 +722,11 @@ constexpr int VECTOR_SUPERSAMPLE = 4;
 constexpr wchar_t TRAY_WINDOW_CLASS[] = L"WindhawkRecycleTrayClass";
 constexpr wchar_t DROP_OVERLAY_CLASS[] = L"WindhawkBinDropOverlay";
 
-HHOOK g_hMouseHook = NULL;
+HANDLE g_hMouseHookThread = NULL;
+DWORD g_mouseHookThreadId = 0;
+HANDLE g_hMouseHookReadyEvent = NULL;
+std::atomic_bool g_mouseHookInstalled{false};
+std::atomic_bool g_mouseHookStopRequested{false};
 POINT g_dragStartPt = { 0, 0 };
 HMODULE g_hThisModule = NULL;
 
@@ -831,6 +839,9 @@ class SelectObjectScope {
 };
 
 constexpr UINT TRAY_ICON_ID = 1001;
+// Stable GUID gives this tray icon its own Shell identity across tool mods.
+static const GUID TRAY_ICON_GUID =
+    {0x4173737d, 0xce0b, 0x4c73, {0x96, 0x57, 0xa8, 0x69, 0x63, 0x05, 0x5a, 0x98}};
 constexpr UINT WM_TRAYICON = WM_USER + 1;
 constexpr UINT WM_SHELLNOTIFY = WM_USER + 2;
 constexpr UINT WM_APPLY_SETTINGS = WM_USER + 3;
@@ -845,7 +856,7 @@ constexpr UINT TIMER_SHELL_COALESCE_ID = 107;
 constexpr UINT TIMER_DPI_REINSTALL_ID = 108;
 
 // Active drag polling runs only while a physical left-button gesture is in progress.
-constexpr UINT DRAG_POLL_INTERVAL_ACTIVE_MS = 20;
+constexpr UINT DRAG_POLL_INTERVAL_ACTIVE_MS = 40;
 
 // Display changes are debounced, then sampled until the tray rectangle is stable.
 constexpr UINT DISPLAY_SETTLE_INTERVAL_MS = 200;
@@ -902,18 +913,7 @@ struct IconCacheKey {
     int fontWeight = FW_NORMAL;
     bool customThemeTint = false;
 
-    bool operator==(const IconCacheKey& other) const {
-        return style == other.style &&
-               empty == other.empty &&
-               dark == other.dark &&
-               iconSize == other.iconSize &&
-               vectorStyle == other.vectorStyle &&
-               fontName == other.fontName &&
-               glyph == other.glyph &&
-               customPath == other.customPath &&
-               fontWeight == other.fontWeight &&
-               customThemeTint == other.customThemeTint;
-    }
+    bool operator==(const IconCacheKey& other) const = default;
 
 };
 
@@ -2013,14 +2013,14 @@ void LoadSettingsInto(ModSettings& s) {
     // Clamp fallback polling to 0..24 hours.
     int interval = Wh_GetIntSetting(L"system.fallbackTimerInterval");
     if (interval < 0) {
-        s.fallbackTimerInterval = 60;
+        s.fallbackTimerInterval = 300;
     } else {
         s.fallbackTimerInterval = static_cast<UINT>(std::min(interval, 86400));
     }
 
     int dpiInterval = Wh_GetIntSetting(L"system.dpiCheckInterval");
     if (dpiInterval < 0) {
-        s.dpiCheckInterval = 30;
+        s.dpiCheckInterval = 0;
     } else {
         s.dpiCheckInterval = static_cast<UINT>(std::min(dpiInterval, 86400));
     }
@@ -3140,50 +3140,208 @@ void OpenPropertiesAction(HWND hWnd) {
 
 LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
-        if (wParam == WM_LBUTTONDOWN) {
-            const MSLLHOOKSTRUCT* pMouse = reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
-            g_dragStartPt = pMouse->pt;
-            if (g_hWnd) {
-                (void)PostMessageW(g_hWnd, WM_USER_START_DRAG_POLL, 0, 0);
-            }
-        } else if (wParam == WM_LBUTTONUP) {
-            if (g_hWnd) {
-                (void)PostMessageW(g_hWnd, WM_USER_STOP_DRAG_POLL, 0, 0);
+        HWND hWnd = GetSafeHwnd();
+        if (hWnd) {
+            if (wParam == WM_LBUTTONDOWN) {
+                const MSLLHOOKSTRUCT* pMouse =
+                    reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
+
+                // Marshal the start point to the tray thread instead of sharing
+                // mutable POINT state between the hook and tray threads.
+                (void)PostMessageW(
+                    hWnd,
+                    WM_USER_START_DRAG_POLL,
+                    static_cast<WPARAM>(
+                        static_cast<LONG_PTR>(pMouse->pt.x)),
+                    static_cast<LPARAM>(pMouse->pt.y));
+            } else if (wParam == WM_LBUTTONUP) {
+                (void)PostMessageW(hWnd, WM_USER_STOP_DRAG_POLL, 0, 0);
             }
         }
     }
-    return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
+
+    // The hook handle is owned entirely by the dedicated hook thread.
+    return CallNextHookEx(NULL, nCode, wParam, lParam);
 }
 
-void UpdateDragDropHookState(bool enable) {
-    if (enable) {
-        if (!g_hMouseHook) {
-            g_hMouseHook = SetWindowsHookExW(
-                WH_MOUSE_LL,
-                LowLevelMouseProc,
-                g_hThisModule,
-                0
-            );
-            if (!g_hMouseHook) {
-                Wh_Log(L"Failed to install WH_MOUSE_LL hook: %lu", GetLastError());
+// Own WH_MOUSE_LL on a thread that does nothing except service its message pump.
+// Blocking Shell/render work stays on the tray thread, so LowLevelHooksTimeout
+// can't silently remove the hook while that work is in progress.
+static DWORD WINAPI MouseHookThreadProc(LPVOID) {
+    ThreadDpiAwarenessGuard dpiAwareness;
+    if (!dpiAwareness) {
+        Wh_Log(L"D&D hook: failed to enable Per-Monitor V2 awareness: %lu",
+               GetLastError());
+    }
+
+    HHOOK hook = SetWindowsHookExW(
+        WH_MOUSE_LL,
+        LowLevelMouseProc,
+        g_hThisModule,
+        0);
+    g_mouseHookInstalled.store(hook != NULL);
+    if (!hook) {
+        Wh_Log(L"D&D hook: SetWindowsHookEx failed: %lu", GetLastError());
+    }
+
+    // Create the thread message queue before signalling readiness so WM_QUIT
+    // cannot race the first GetMessageW after a settings change or shutdown.
+    MSG msg;
+    (void)PeekMessageW(&msg, NULL, WM_USER, WM_USER, PM_NOREMOVE);
+    if (g_hMouseHookReadyEvent) {
+        (void)SetEvent(g_hMouseHookReadyEvent);
+    }
+
+    // Covers the rare case where shutdown beats message-queue readiness and the
+    // caller's PostThreadMessage(WM_QUIT) couldn't be delivered yet.
+    if (g_mouseHookStopRequested.load()) {
+        if (hook) {
+            (void)UnhookWindowsHookEx(hook);
+        }
+        g_mouseHookInstalled.store(false);
+        Wh_Log(L"D&D hook: thread stopped");
+        return 0;
+    }
+
+    if (hook) {
+        for (;;) {
+            const BOOL result = GetMessageW(&msg, NULL, 0, 0);
+            if (result <= 0) {
+                if (result == -1) {
+                    Wh_Log(L"D&D hook: GetMessageW failed: %lu", GetLastError());
+                }
+                break;
+            }
+
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+
+        (void)UnhookWindowsHookEx(hook);
+    }
+
+    g_mouseHookInstalled.store(false);
+    Wh_Log(L"D&D hook: thread stopped");
+    return 0;
+}
+
+static void StopMouseHookThread() {
+    g_mouseHookStopRequested.store(true);
+
+    if (!g_hMouseHookThread) {
+        g_mouseHookInstalled.store(false);
+        g_mouseHookThreadId = 0;
+        return;
+    }
+
+    if (g_mouseHookThreadId) {
+        if (!PostThreadMessageW(g_mouseHookThreadId, WM_QUIT, 0, 0)) {
+            const DWORD error = GetLastError();
+            if (WaitForSingleObject(g_hMouseHookThread, 0) == WAIT_TIMEOUT) {
+                Wh_Log(L"D&D hook: failed to post WM_QUIT: %lu", error);
             }
         }
-    } else {
-        if (g_hMouseHook) {
-            (void)UnhookWindowsHookEx(g_hMouseHook);
-            g_hMouseHook = NULL;
+    }
+
+    const DWORD waitResult =
+        WaitForSingleObject(g_hMouseHookThread, TOOL_THREAD_SHUTDOWN_TIMEOUT_MS);
+    if (waitResult == WAIT_TIMEOUT) {
+        Wh_Log(L"D&D hook: thread did not exit within %lu ms; process exit will complete teardown",
+               TOOL_THREAD_SHUTDOWN_TIMEOUT_MS);
+        return;
+    }
+    if (waitResult == WAIT_FAILED) {
+        Wh_Log(L"D&D hook: thread wait failed: %lu", GetLastError());
+        return;
+    }
+
+    CloseHandle(g_hMouseHookThread);
+    g_hMouseHookThread = NULL;
+    g_mouseHookThreadId = 0;
+    g_mouseHookInstalled.store(false);
+}
+
+static bool StartMouseHookThread() {
+    if (g_hMouseHookThread) {
+        if (WaitForSingleObject(g_hMouseHookThread, 0) == WAIT_OBJECT_0) {
+            CloseHandle(g_hMouseHookThread);
+            g_hMouseHookThread = NULL;
+            g_mouseHookThreadId = 0;
+            g_mouseHookInstalled.store(false);
+        } else {
+            return g_mouseHookInstalled.load();
         }
-        if (g_hWnd) {
-            (void)PostMessageW(g_hWnd, WM_USER_STOP_DRAG_POLL, 0, 0);
+    }
+
+    g_mouseHookStopRequested.store(false);
+    g_mouseHookInstalled.store(false);
+    g_hMouseHookReadyEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!g_hMouseHookReadyEvent) {
+        Wh_Log(L"D&D hook: CreateEvent failed: %lu", GetLastError());
+        return false;
+    }
+
+    g_hMouseHookThread = CreateThread(
+        NULL, 0, MouseHookThreadProc, NULL, 0, &g_mouseHookThreadId);
+    if (!g_hMouseHookThread) {
+        Wh_Log(L"D&D hook: CreateThread failed: %lu", GetLastError());
+        CloseHandle(g_hMouseHookReadyEvent);
+        g_hMouseHookReadyEvent = NULL;
+        g_mouseHookThreadId = 0;
+        return false;
+    }
+
+    const DWORD waitResult = WaitForSingleObject(
+        g_hMouseHookReadyEvent, TOOL_THREAD_SHUTDOWN_TIMEOUT_MS);
+    CloseHandle(g_hMouseHookReadyEvent);
+    g_hMouseHookReadyEvent = NULL;
+
+    if (waitResult != WAIT_OBJECT_0 || !g_mouseHookInstalled.load()) {
+        if (waitResult == WAIT_TIMEOUT) {
+            Wh_Log(L"D&D hook: startup timed out");
+        } else if (waitResult == WAIT_FAILED) {
+            Wh_Log(L"D&D hook: startup wait failed: %lu", GetLastError());
+        }
+
+        StopMouseHookThread();
+        return false;
+    }
+
+    Wh_Log(L"D&D hook: dedicated thread started (tid=%lu)",
+           g_mouseHookThreadId);
+    return true;
+}
+
+// Open the overlay UIPI exceptions only while OLE drag & drop is enabled.
+static void SetDragDropMessageFilters(bool allow) {
+    if (!g_hOverlayWnd) {
+        return;
+    }
+
+    constexpr UINT kWmCopyGlobalData = 0x0049;
+    const UINT dragDropMessages[] = { WM_DROPFILES, WM_COPYDATA, kWmCopyGlobalData };
+    const DWORD action = allow ? MSGFLT_ALLOW : MSGFLT_DISALLOW;
+
+    for (UINT message : dragDropMessages) {
+        if (!ChangeWindowMessageFilterEx(
+                g_hOverlayWnd, message, action, nullptr)) {
+            Wh_Log(L"D&D: message filter %s failed for 0x%04X: %lu",
+                   allow ? L"allow" : L"disallow", message, GetLastError());
         }
     }
 }
 
 // The overlay window stays alive as the physical per-monitor DPI reference.
-// Only the OLE drop target and global mouse hook are enabled on demand.
+// Only the OLE drop target and dedicated mouse-hook thread are enabled on demand.
 static bool SetDragDropEnabled(HWND hWnd, bool enable) {
     if (!enable) {
-        UpdateDragDropHookState(false);
+        StopMouseHookThread();
+
+        HWND trayWnd = GetSafeHwnd();
+        if (trayWnd) {
+            (void)PostMessageW(trayWnd, WM_USER_STOP_DRAG_POLL, 0, 0);
+        }
+
         g_dropOverlayArmed.store(false);
         g_trayState.dragRectRefreshed = false;
         HideDropOverlay();
@@ -3199,13 +3357,14 @@ static bool SetDragDropEnabled(HWND hWnd, bool enable) {
             g_pDropTarget = nullptr;
         }
 
+        SetDragDropMessageFilters(false);
         g_oleDragActive.store(false);
         return true;
     }
 
     if (!g_hOverlayWnd) {
         Wh_Log(L"D&D: cannot enable without overlay window");
-        UpdateDragDropHookState(false);
+        StopMouseHookThread();
         return false;
     }
 
@@ -3213,7 +3372,7 @@ static bool SetDragDropEnabled(HWND hWnd, bool enable) {
         RecycleBinDropTarget* target = new (std::nothrow) RecycleBinDropTarget(hWnd);
         if (!target) {
             Wh_Log(L"D&D: failed to allocate drop target");
-            UpdateDragDropHookState(false);
+            StopMouseHookThread();
             return false;
         }
 
@@ -3221,7 +3380,7 @@ static bool SetDragDropEnabled(HWND hWnd, bool enable) {
         if (FAILED(hr)) {
             Wh_Log(L"D&D: RegisterDragDrop failed: 0x%08X", hr);
             target->Release();
-            UpdateDragDropHookState(false);
+            StopMouseHookThread();
             return false;
         }
 
@@ -3229,14 +3388,16 @@ static bool SetDragDropEnabled(HWND hWnd, bool enable) {
         Wh_Log(L"D&D: RegisterDragDrop succeeded.");
     }
 
-    UpdateDragDropHookState(true);
-    if (!g_hMouseHook) {
+    SetDragDropMessageFilters(true);
+
+    if (!StartMouseHookThread()) {
         const HRESULT hr = RevokeDragDrop(g_hOverlayWnd);
         if (FAILED(hr) && hr != DRAGDROP_E_NOTREGISTERED) {
             Wh_Log(L"D&D: rollback RevokeDragDrop failed: 0x%08X", hr);
         }
         g_pDropTarget->Release();
         g_pDropTarget = nullptr;
+        SetDragDropMessageFilters(false);
         return false;
     }
 
@@ -3522,6 +3683,7 @@ bool QueryTrayIconRect(HWND hWnd, RECT& rect, bool forceRefresh) {
     NOTIFYICONIDENTIFIER nid = { sizeof(nid) };
     nid.hWnd = hWnd;
     nid.uID = TRAY_ICON_ID;
+    nid.guidItem = TRAY_ICON_GUID;
 
     RECT fresh = {};
     const HRESULT hr = Shell_NotifyIconGetRect(&nid, &fresh);
@@ -3879,6 +4041,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
     switch (msg) {
         case WM_USER_START_DRAG_POLL:
+            g_dragStartPt.x = static_cast<LONG>(static_cast<LONG_PTR>(wParam));
+            g_dragStartPt.y = static_cast<LONG>(lParam);
             g_dragGestureSawOle = false;
             g_trayState.dragRectRefreshed = false;
             if (g_settings.enableDragDrop && !g_trayState.dragPollTimerActive) {
@@ -4188,7 +4352,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     return DefWindowProcW(hWnd, msg, wParam, lParam);
 }
 
-DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
+DWORD WINAPI TrayThreadProc(LPVOID) {
     const HINSTANCE hInstance = g_hThisModule;
     ThreadDpiAwarenessGuard dpiAwareness;
     if (!dpiAwareness) {
@@ -4206,7 +4370,11 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
     wc.lpszClassName = TRAY_WINDOW_CLASS;
-    RegisterClassW(&wc);
+    if (!RegisterClassW(&wc)) {
+        Wh_Log(L"Tray: host window class registration failed: %lu",
+               GetLastError());
+        return 0;
+    }
 
     g_wmTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
 
@@ -4261,7 +4429,13 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
     wcOverlay.hInstance = hInstance;
     wcOverlay.hCursor = LoadCursor(NULL, IDC_ARROW);
     wcOverlay.lpszClassName = DROP_OVERLAY_CLASS;
-    RegisterClassW(&wcOverlay);
+    if (!RegisterClassW(&wcOverlay)) {
+        Wh_Log(L"DPI: overlay window class registration failed: %lu",
+               GetLastError());
+        (void)DestroyWindow(hWndNew);
+        (void)UnregisterClassW(TRAY_WINDOW_CLASS, hInstance);
+        return 0;
+    }
 
     g_hOverlayWnd = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
@@ -4272,17 +4446,6 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
     if (g_hOverlayWnd) {
         Wh_Log(L"DPI: reference overlay created (HWND: 0x%p)", g_hOverlayWnd);
         SetLayeredWindowAttributes(g_hOverlayWnd, 0, 1, LWA_ALPHA);
-
-        // Allow OLE drag/drop data messages from a lower-integrity Shell.
-        constexpr UINT kWmCopyGlobalData = 0x0049;
-        const UINT dragDropMessages[] = { WM_DROPFILES, WM_COPYDATA, kWmCopyGlobalData };
-        for (UINT message : dragDropMessages) {
-            if (!ChangeWindowMessageFilterEx(
-                    g_hOverlayWnd, message, MSGFLT_ALLOW, nullptr)) {
-                Wh_Log(L"D&D: message filter failed for 0x%04X: %lu",
-                       message, GetLastError());
-            }
-        }
     } else {
         Wh_Log(L"DPI: reference overlay creation failed: %lu", GetLastError());
     }
@@ -4290,7 +4453,8 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
     g_nid.cbSize = sizeof(NOTIFYICONDATAW);
     g_nid.hWnd = hWndNew;
     g_nid.uID = TRAY_ICON_ID;
-    g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_SHOWTIP;
+    g_nid.guidItem = TRAY_ICON_GUID;
+    g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_GUID | NIF_SHOWTIP;
     g_nid.uCallbackMessage = WM_TRAYICON;
     g_nid.uVersion = NOTIFYICON_VERSION_4;
 
@@ -4338,7 +4502,7 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
 
     UnregisterClassW(DROP_OVERLAY_CLASS, hInstance);
     UnregisterClassW(TRAY_WINDOW_CLASS, hInstance);
-    
+
     return 0; // OleInitGuard handles OleUninitialize().
 }
 
