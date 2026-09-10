@@ -1488,9 +1488,9 @@ float4 PSMain(PS_INPUT input) : SV_TARGET {
     float2 center = input.uv - 0.5;
     float dist = length(center);
     bool inside = false;
-    if (input.shape < 0.5) {
+    if (input.shape < 1.5) {
         inside = dist < 0.5;
-    } else if (input.shape < 1.5) {
+    } else if (input.shape < 2.5) {
         inside = starMask(input.uv);
     } else {
         inside = hexagramMask(input.uv);
