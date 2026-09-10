@@ -4,7 +4,7 @@
 // @name:zh-CN      鼠标拖尾
 // @description     High-performance cursor motion blur with particle effects, 12 color modes, custom function trails, cursor color extraction, and click effects. D3D11 + DirectComposition hardware accelerated, 64-bit host.
 // @description:zh-CN 高性能鼠标运动模糊拖尾，支持粒子特效、12种颜色模式、自定义函数轨迹、光标取色和点击特效。D3D11 + DirectComposition 硬件加速，64 位宿主进程。
-// @version         2.2
+// @version         2.3
 // @author          MCheng404
 // @github          https://github.com/MCheng404
 // @license         MIT
@@ -456,6 +456,21 @@ Inspired by and based on the core overlay/ribbon architecture of [Cursor Motion 
   $name:zh-CN: 超级性能模式
   $description: Remove all performance limits (particle cap, shape cap, fast-path downgrade). Use on high-end PCs only.
   $description:zh-CN: 解除所有性能上限（粒子数量、形状数量、快速降级阈值）。仅在高性能电脑上启用。
+- enable_bezier_smooth: true
+  $name: Bezier Smoothing
+  $name:zh-CN: 贝塞尔曲线平滑
+  $description: Use Catmull-Rom spline interpolation for smoother trail curves.
+  $description:zh-CN: 使用 Catmull-Rom 样条插值，拖尾曲线更顺滑。
+- enable_motion_blur: false
+  $name: Motion Blur
+  $name:zh-CN: 运动模糊
+  $description: Overlay previous trail frames with decreasing opacity for motion blur effect.
+  $description:zh-CN: 以递减透明度叠加历史拖尾帧，制造运动模糊效果。
+- motion_blur_strength: 3
+  $name: Motion Blur Strength
+  $name:zh-CN: 运动模糊强度
+  $description: Number of history frames to overlay (1-5). Motion blur only.
+  $description:zh-CN: 叠加的历史帧数（1-5）。仅运动模糊生效时。
 */
 // ==/WindhawkModSettings==
 #include <windows.h>
@@ -842,6 +857,15 @@ int g_shapeCount = 1;         // 每次生成数量
 float g_shapeSize = 12.0f;
 int g_shapeLifetime = 800;    // 存活时间 ms
 bool g_superPerformanceMode = false;  // 超级性能模式：无视性能上限
+bool g_enableBezierSmooth = true;     // 贝塞尔曲线平滑
+bool g_enableMotionBlur = false;      // 运动模糊
+int g_motionBlurStrength = 3;         // 运动模糊强度（叠加帧数）
+// 运动模糊历史帧缓冲区
+struct TrailFrame {
+    std::vector<D2D1_POINT_2F> path;
+    DWORD time;
+};
+std::vector<TrailFrame> g_trailHistory;
 DWORD g_lastParticleTime = 0;
 float g_prevVelocity = 0;
 bool g_enableClickStarburst = true;
@@ -1098,6 +1122,29 @@ static void SpawnParticles(float x, float y, int count, float speedMin, float sp
 }
 
 // 沿路径获取指定比例（0=头，1=尾）的坐标
+// Catmull-Rom 样条插值：生成更平滑的曲线
+static void CatmullRomSmooth(const std::vector<D2D1_POINT_2F> &input, std::vector<D2D1_POINT_2F> &output, int segments = 4) {
+    if (input.size() < 3) {
+        output = input;
+        return;
+    }
+    output.clear();
+    output.push_back(input.front());
+    for (size_t i = 0; i < input.size() - 1; i++) {
+        D2D1_POINT_2F p0 = (i > 0) ? input[i - 1] : input[i];
+        D2D1_POINT_2F p1 = input[i];
+        D2D1_POINT_2F p2 = input[i + 1];
+        D2D1_POINT_2F p3 = (i + 2 < input.size()) ? input[i + 2] : input[i + 1];
+        for (int s = 1; s <= segments; s++) {
+            float t = (float)s / segments;
+            float t2 = t * t, t3 = t2 * t;
+            float x = 0.5f * ((2 * p1.x) + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3);
+            float y = 0.5f * ((2 * p1.y) + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3);
+            output.push_back(D2D1::Point2F(x, y));
+        }
+    }
+}
+
 static D2D1_POINT_2F GetPointOnPath(const std::vector<D2D1_POINT_2F> &path, float ratio) {
     if (path.empty())
         return D2D1::Point2F(0, 0);
@@ -1261,6 +1308,11 @@ void LoadSettings() {
     if (g_shapeLifetime < 200) g_shapeLifetime = 200;
     if (g_shapeLifetime > 2000) g_shapeLifetime = 2000;
     g_superPerformanceMode = Wh_GetIntSetting(L"super_performance_mode") != 0;
+    g_enableBezierSmooth = Wh_GetIntSetting(L"enable_bezier_smooth") != 0;
+    g_enableMotionBlur = Wh_GetIntSetting(L"enable_motion_blur") != 0;
+    g_motionBlurStrength = Wh_GetIntSetting(L"motion_blur_strength");
+    if (g_motionBlurStrength < 1) g_motionBlurStrength = 1;
+    if (g_motionBlurStrength > 5) g_motionBlurStrength = 5;
     str = Wh_GetStringSetting(L"function_preset");
     if (str) {
         if (wcscmp(str, L"damped") == 0)
@@ -1862,23 +1914,43 @@ static void RenderFrame() {
     if (havePath) {
         for (auto &p : g_history)
             smoothed.push_back(D2D1::Point2F((float)p.x + g_tailOffsetX, (float)p.y + g_tailOffsetY));
-        for (int iter = 0; iter < 2; ++iter) {
-            if (smoothed.size() < 3)
-                break;
-            std::vector<D2D1_POINT_2F> ns;
-            ns.push_back(smoothed.front());
-            for (size_t i = 0; i < smoothed.size() - 1; ++i) {
-                D2D1_POINT_2F p0 = smoothed[i], p1 = smoothed[i + 1];
-                ns.push_back(D2D1::Point2F(.75f * p0.x + .25f * p1.x, .75f * p0.y + .25f * p1.y));
-                ns.push_back(D2D1::Point2F(.25f * p0.x + .75f * p1.x, .25f * p0.y + .75f * p1.y));
+        if (g_enableBezierSmooth) {
+            // Catmull-Rom 样条平滑（更顺滑的曲线）
+            std::vector<D2D1_POINT_2F> bezierOut;
+            CatmullRomSmooth(smoothed, bezierOut, 4);
+            smoothed = bezierOut;
+        } else {
+            // 原线性插值平滑
+            for (int iter = 0; iter < 2; ++iter) {
+                if (smoothed.size() < 3)
+                    break;
+                std::vector<D2D1_POINT_2F> ns;
+                ns.push_back(smoothed.front());
+                for (size_t i = 0; i < smoothed.size() - 1; ++i) {
+                    D2D1_POINT_2F p0 = smoothed[i], p1 = smoothed[i + 1];
+                    ns.push_back(D2D1::Point2F(.75f * p0.x + .25f * p1.x, .75f * p0.y + .25f * p1.y));
+                    ns.push_back(D2D1::Point2F(.25f * p0.x + .75f * p1.x, .25f * p0.y + .75f * p1.y));
+                }
+                ns.push_back(smoothed.back());
+                smoothed = ns;
             }
-            ns.push_back(smoothed.back());
-            smoothed = ns;
         }
         if (g_trailShape == 2)
             ApplyFunctionDeformation(smoothed, dwTime);
         else if (g_trailShape == 3)
             ApplyWaveDeformation(smoothed, dwTime);
+    }
+
+    // ===== 运动模糊：保存当前路径到历史缓冲区 =====
+    if (g_enableMotionBlur && havePath) {
+        TrailFrame frame;
+        frame.path = smoothed;
+        frame.time = dwTime;
+        g_trailHistory.push_back(frame);
+        while ((int)g_trailHistory.size() > g_motionBlurStrength)
+            g_trailHistory.erase(g_trailHistory.begin());
+    } else if (!g_enableMotionBlur && !g_trailHistory.empty()) {
+        g_trailHistory.clear();
     }
 
     // ===== 粒子释放（基于 smoothed 路径的指定位置）=====
@@ -2119,6 +2191,41 @@ static void RenderFrame() {
         }
         g_pSolidOuterBrush->SetOpacity(1.0f);
         needsClear = true;
+    }
+
+    // ===== 运动模糊：渲染历史帧拖尾（仅锥形带，简化外带，透明度递减）=====
+    if (g_enableMotionBlur && tailVisible && havePath && g_trailShape == 0 && g_trailHistory.size() > 1) {
+        g_pD2DDC->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
+        for (size_t h = 0; h < g_trailHistory.size() - 1; h++) {
+            auto &histPath = g_trailHistory[h].path;
+            if (histPath.size() < 2) continue;
+            float histAlpha = 0.22f * (1.0f - (float)h / g_trailHistory.size()) * g_fadeAlpha;
+            std::vector<D2D1_POINT_2F> hlo, hro;
+            for (size_t i = 0; i < histPath.size(); i++) {
+                float ddx, ddy;
+                if (i == 0) { ddx = histPath[0].x - histPath[1].x; ddy = histPath[0].y - histPath[1].y; }
+                else if (i == histPath.size() - 1) { ddx = histPath[i-1].x - histPath[i].x; ddy = histPath[i-1].y - histPath[i].y; }
+                else { ddx = histPath[i-1].x - histPath[i+1].x; ddy = histPath[i-1].y - histPath[i+1].y; }
+                float ln = sqrtf(ddx*ddx + ddy*ddy);
+                if (ln > 0) { ddx /= ln; ddy /= ln; } else { ddx = 1; ddy = 0; }
+                float nx = -ddy, ny = ddx;
+                float ratio = (float)i / (histPath.size() - 1);
+                float ow = 10.0f * powf(1.0f - ratio, 1.3f) * widthMul;
+                if (i == histPath.size() - 1) ow = 0;
+                hlo.push_back(D2D1::Point2F(histPath[i].x + nx*ow, histPath[i].y + ny*ow));
+                hro.push_back(D2D1::Point2F(histPath[i].x - nx*ow, histPath[i].y - ny*ow));
+            }
+            ID2D1Mesh *pHistMesh = nullptr;
+            CreateMeshFromQuadStrip(g_pD2DDC, &pHistMesh, hlo, hro);
+            if (pHistMesh) {
+                g_pSolidOuterBrush->SetColor(cols.solidOuter);
+                g_pSolidOuterBrush->SetOpacity(histAlpha);
+                g_pD2DDC->FillMesh(pHistMesh, g_pSolidOuterBrush);
+                pHistMesh->Release();
+            }
+        }
+        g_pSolidOuterBrush->SetOpacity(1.0f);
+        g_pD2DDC->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
     }
 
     // ===== 拖尾（复用已计算的 smoothed 路径）=====
