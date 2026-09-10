@@ -1040,8 +1040,8 @@ bool g_particleAccel = true;
 int g_particleShape = 0;  // 0=random, 1=circle, 2=star, 3=hexagram
 bool g_enableParticleSpin = true;  // 粒子自旋转
 bool g_enableParticleInteraction = true;  // 粒子间相互作用
-int g_particleRepelDistance = 25;  // 排斥距离（像素）
-float g_particleRepelForce = 0.15f;  // 排斥力强度
+int g_interParticleRepelDistance = 25;  // 粒子间排斥距离（像素）
+float g_interParticleRepelForce = 0.15f;  // 粒子间排斥力强度
 ID2D1PathGeometry *g_pStarGeom = nullptr;
 ID2D1PathGeometry *g_pHexagramGeom = nullptr;
 ID2D1PathGeometry *g_pHeartGeom = nullptr;
@@ -2515,13 +2515,13 @@ void LoadSettings() {
     }
     g_enableParticleSpin = Wh_GetIntSetting(L"enable_particle_spin") != 0;
     g_enableParticleInteraction = Wh_GetIntSetting(L"enable_particle_interaction") != 0;
-    g_particleRepelDistance = Wh_GetIntSetting(L"particle_repel_distance");
-    if (g_particleRepelDistance < 5) g_particleRepelDistance = 5;
-    if (g_particleRepelDistance > 100) g_particleRepelDistance = 100;
-    int repelVal = Wh_GetIntSetting(L"particle_repel_force");
-    if (repelVal < 1) repelVal = 1;
-    if (repelVal > 50) repelVal = 50;
-    g_particleRepelForce = repelVal / 100.0f;
+    g_interParticleRepelDistance = Wh_GetIntSetting(L"particle_repel_distance");
+    if (g_interParticleRepelDistance < 5) g_interParticleRepelDistance = 5;
+    if (g_interParticleRepelDistance > 100) g_interParticleRepelDistance = 100;
+    int interRepelVal = Wh_GetIntSetting(L"particle_repel_force");
+    if (interRepelVal < 1) interRepelVal = 1;
+    if (interRepelVal > 50) interRepelVal = 50;
+    g_interParticleRepelForce = interRepelVal / 100.0f;
     g_enableClickStarburst = Wh_GetIntSetting(L"enable_click_starburst") != 0;
     g_starburstCount = Wh_GetIntSetting(L"starburst_count");
     g_enableClickEffect = Wh_GetIntSetting(L"enable_click_effect") != 0;
