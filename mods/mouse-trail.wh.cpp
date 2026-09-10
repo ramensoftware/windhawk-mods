@@ -1481,7 +1481,7 @@ VS_OUTPUT VSMain(VS_INPUT input) {
     VS_OUTPUT output;
     // 2.5D 透视
     float scale = 1.0 + input.instancePos.z * perspective;
-    // 自旋转：旋转四边形顶点
+    // 自旋转：旋转四边形顶点和 uv 坐标
     float cosR = cos(input.instanceRot);
     float sinR = sin(input.instanceRot);
     float2 rotatedPos = float2(
@@ -1494,7 +1494,8 @@ VS_OUTPUT VSMain(VS_INPUT input) {
         1.0 - (worldPos.y / screenSize.y) * 2.0
     );
     output.pos = float4(ndc, 0.0, 1.0);
-    output.uv = input.quadPos * 0.5 + 0.5;
+    // uv 也需要旋转，否则像素着色器中的形状遮罩不会旋转
+    output.uv = rotatedPos * 0.5 + 0.5;
     output.color = input.instanceColor;
     output.depth = input.instancePos.z;
     output.shape = input.instanceShape;
