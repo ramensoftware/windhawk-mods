@@ -14,7 +14,7 @@
 /*
 # Windows 11 Native Four Column Snap Layout
 
-Adds an extra native Windows 11 Snap Layout with four equal vertical columns:
+Add an extra native Windows 11 Snap Layout with four equal vertical columns
 
 ![Windows 11 four-column Snap Layout](https://i.imgur.com/a3sGZSk.png)
 
