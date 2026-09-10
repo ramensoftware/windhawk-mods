@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.10.45
+// @version         0.10.46
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -181,7 +181,7 @@ play/pause, and next controls.
     $description: "Accepted range: 2-40 px."
   - PopupCardGap: 8
     $name: Expanded player cover-to-controls gap
-    $description: "Accepted range: 0-80 px."
+    $description: "Accepted range: 0-40 px."
   - PopupShadowDepth: 58
     $name: Expanded player shadow depth
     $description: "Accepted range: 0-128 px."
@@ -192,7 +192,7 @@ play/pause, and next controls.
     $description: "Accepted range: 100-125%."
   - HoverLerpSpeed: 28
     $name: Hover smoothing
-    $description: "Accepted range: 1-30."
+    $description: "Accepted range: 1-80."
   - AnimationSpeed: 100
     $name: Animation speed (%)
     $description: 100 is normal speed. Use lower values such as 25 for slow-motion animation preview.
@@ -236,6 +236,9 @@ play/pause, and next controls.
 static constexpr GUID kIID_IGraphicsCaptureItemInterop{
     0x3628E81B, 0x3CAC, 0x4C60,
     {0xB7, 0xF4, 0x23, 0xCE, 0x0E, 0x0C, 0x33, 0x56}};
+static constexpr GUID kIID_IBufferByteAccess{
+    0x905A0FEF, 0xBC53, 0x11DF,
+    {0x8C, 0x49, 0x00, 0x1E, 0x4F, 0xC6, 0x86, 0xDA}};
 static constexpr GUID kIID_IDirect3DDxgiInterfaceAccess{
     0xA9B3D012, 0x3DF2, 0x4EE3,
     {0xB8, 0xD1, 0x86, 0x95, 0xF4, 0x57, 0xD3, 0xC1}};
@@ -250,6 +253,10 @@ struct IGraphicsCaptureItemInterop : ::IUnknown {
     virtual HRESULT __stdcall CreateForMonitor(HMONITOR monitor,
                                                REFIID riid,
                                                void** result) = 0;
+};
+
+struct IBufferByteAccess : ::IUnknown {
+    virtual HRESULT __stdcall Buffer(BYTE** value) = 0;
 };
 
 struct IDirect3DDxgiInterfaceAccess : ::IUnknown {
@@ -401,6 +408,12 @@ struct RuntimeLayout {
     double progressMarginLeft = 8.0;
 };
 
+struct PreparedBitmap {
+    UINT width = 0;
+    UINT height = 0;
+    std::vector<uint8_t> pixels;
+};
+
 struct PreparedArtwork {
     bool ready = false;
     bool popupReady = false;
@@ -420,6 +433,14 @@ struct PreparedArtwork {
     std::vector<uint8_t> popupBackdropBytes;
     std::vector<uint8_t> popupBackdropTopBytes;
     std::vector<uint8_t> popupPanelBytes;
+    PreparedBitmap compactArtBitmap;
+    PreparedBitmap popupFallbackArtBitmap;
+    PreparedBitmap transportWashBitmap;
+    PreparedBitmap mainWashBitmap;
+    PreparedBitmap popupArtBitmap;
+    PreparedBitmap popupBackdropBitmap;
+    PreparedBitmap popupBackdropTopBitmap;
+    PreparedBitmap popupPanelBitmap;
     winrt::Windows::UI::Color accent{0xFF, 0x4F, 0x7D, 0xE8};
     bool accentValid = false;
     std::chrono::steady_clock::time_point transientHoldUntil{};
@@ -511,7 +532,6 @@ bool IsModActive() {
 constexpr auto kMediaPropertiesAsyncTimeout = std::chrono::milliseconds(1500);
 constexpr auto kThumbnailAsyncTimeout = std::chrono::milliseconds(900);
 constexpr auto kMediaCommandAsyncTimeout = std::chrono::milliseconds(1500);
-constexpr auto kUiLocalAsyncTimeout = std::chrono::milliseconds(500);
 constexpr auto kPopupOverlayWgcBorderlessAccessTimeout =
     std::chrono::milliseconds(5000);
 
@@ -1007,9 +1027,6 @@ RECT g_lastPopupWindowRect{LONG_MIN, LONG_MIN, LONG_MIN, LONG_MIN};
 [[clang::no_destroy]] Image g_dynamicTransportWash = nullptr;
 [[clang::no_destroy]] Image g_dynamicTransportWashFade = nullptr;
 [[clang::no_destroy]] ProgressBar g_compactProgress = nullptr;
-winrt::event_token g_compactProgressRenderingToken{};
-bool g_compactProgressRenderingHooked = false;
-std::chrono::steady_clock::time_point g_lastCompactProgressFrameTime;
 winrt::event_token g_compactTextRenderingToken{};
 bool g_compactTextRenderingHooked = false;
 double g_compactTextProgress = 1.0;
@@ -2752,6 +2769,21 @@ HBITMAP DecodeAlbumBitmap(std::vector<uint8_t> const& bytes, UINT size) {
     return bitmap;
 }
 
+PreparedBitmap DecodePreparedBitmap(std::vector<uint8_t> const& bytes, UINT size) {
+    PreparedBitmap output;
+    HBITMAP bitmap = DecodeAlbumBitmap(bytes, size);
+    if (!bitmap) return output;
+    DIBSECTION section{};
+    if (GetObjectW(bitmap, sizeof(section), &section) == sizeof(section) && section.dsBm.bmBits) {
+        output.width = size;
+        output.height = size;
+        auto first = static_cast<uint8_t const*>(section.dsBm.bmBits);
+        output.pixels.assign(first, first + static_cast<size_t>(size) * size * 4);
+    }
+    DeleteObject(bitmap);
+    return output;
+}
+
 bool ReadCommittedHGlobalStreamBytes(
     IStream* stream,
     std::vector<uint8_t>& output) {
@@ -3179,7 +3211,7 @@ void ApplyPopupCoverG2Mask(std::vector<BYTE>& pixels,
 std::vector<uint8_t> CreatePopupG2AlbumCoverBytes(
     std::vector<uint8_t> const& bytes,
     int expandedCornerRadius,
-    UINT size = 512) {
+    UINT size = 320) {
     std::vector<uint8_t> output;
     if (bytes.empty() || size == 0) {
         return output;
@@ -4421,6 +4453,8 @@ void PrepareMediaArtwork(MediaState& state) {
         shouldUseAbstractArtwork,
         artworkSettings.artworkAbstractMode);
     prepared->displayHash = ThumbnailHash(prepared->displayBytes);
+    prepared->compactArtBitmap = DecodePreparedBitmap(prepared->displayBytes, 96);
+    prepared->popupFallbackArtBitmap = DecodePreparedBitmap(prepared->displayBytes, 320);
 
     std::vector<uint8_t> const& accentSourceBytes =
         prepared->displayBytes.empty() ? prepared->visualBytes
@@ -4443,6 +4477,8 @@ void PrepareMediaArtwork(MediaState& state) {
     } else {
         prepared->tintAssetsReady = needsTintAssets;
     }
+    prepared->transportWashBitmap = DecodePreparedBitmap(prepared->transportWashBytes, 20);
+    prepared->mainWashBitmap = DecodePreparedBitmap(prepared->mainWashBytes, 20);
 
     if (popupRequested) {
         if (prepared->visualBytes.empty()) {
@@ -4481,6 +4517,10 @@ void PrepareMediaArtwork(MediaState& state) {
             prepared->popupPanelBytes =
                 CreateResilientLowDetailAlbumCoverBytes(popupBlurSource);
         }
+        prepared->popupArtBitmap = DecodePreparedBitmap(prepared->popupArtBytes, 320);
+        prepared->popupBackdropBitmap = DecodePreparedBitmap(prepared->popupBackdropBytes, 20);
+        prepared->popupBackdropTopBitmap = DecodePreparedBitmap(prepared->popupBackdropTopBytes, 20);
+        prepared->popupPanelBitmap = DecodePreparedBitmap(prepared->popupPanelBytes, 20);
         prepared->popupReady = true;
     }
 
@@ -9180,7 +9220,6 @@ void SetCompactIslandSuppressed(bool suppressed);
 void StartPopupXamlRenderLoop();
 void StopHoverRenderLoop();
 void StopCompactTextRenderLoop();
-void StopCompactProgressRenderLoop();
 
 bool UpdateCompactProgressFromSnapshot() {
     if (!g_compactProgress) {
@@ -9213,55 +9252,6 @@ bool UpdateCompactProgressFromSnapshot() {
     }
     g_compactProgress.Value(value);
     return state.hasSession && state.isPlaying && state.durationTicks > 0;
-}
-
-void StopCompactProgressRenderLoop() {
-    if (!g_compactProgressRenderingHooked) {
-        return;
-    }
-    try {
-        mediax::CompositionTarget::Rendering(
-            g_compactProgressRenderingToken);
-    } catch (...) {
-    }
-    g_compactProgressRenderingHooked = false;
-    g_lastCompactProgressFrameTime = {};
-}
-
-void OnCompactProgressRendering(
-    winrt::Windows::Foundation::IInspectable const&,
-    winrt::Windows::Foundation::IInspectable const&) {
-    try {
-        if (!g_playerGrid || !g_compactProgress || g_expanded || g_unloading) {
-            StopCompactProgressRenderLoop();
-            return;
-        }
-
-        auto now = std::chrono::steady_clock::now();
-        if (g_lastCompactProgressFrameTime.time_since_epoch().count() != 0 &&
-            now - g_lastCompactProgressFrameTime <
-                std::chrono::milliseconds(33)) {
-            return;
-        }
-        g_lastCompactProgressFrameTime = now;
-
-        if (!UpdateCompactProgressFromSnapshot()) {
-            StopCompactProgressRenderLoop();
-        }
-    } catch (...) {
-        StopCompactProgressRenderLoop();
-    }
-}
-
-void StartCompactProgressRenderLoop() {
-    if (!g_compactProgress || g_compactProgressRenderingHooked ||
-        g_expanded || g_unloading) {
-        return;
-    }
-    g_lastCompactProgressFrameTime = {};
-    g_compactProgressRenderingToken =
-    mediax::CompositionTarget::Rendering(OnCompactProgressRendering);
-    g_compactProgressRenderingHooked = true;
 }
 
 void SetCompactTextEdgeFadeOpacity(double opacity) {
@@ -9826,7 +9816,6 @@ void SetCompactIslandSuppressed(bool suppressed) {
 
     if (suppressed) {
         StopCompactTextRenderLoop();
-        StopCompactProgressRenderLoop();
         ResetCompactTextAnimationVisuals();
     }
 
@@ -13588,7 +13577,7 @@ public:
             return E_POINTER;
         }
         *name = nullptr;
-        return S_OK;
+        return E_NOTIMPL;
     }
 
     HRESULT STDMETHODCALLTYPE GetTrustLevel(TrustLevel* level) override {
@@ -16690,6 +16679,9 @@ void CALLBACK OnTaskbarLayoutTimer(HWND, UINT, UINT_PTR timerId, DWORD) {
         }
 
         RepairExpandedPopupStateIfHidden();
+        if (g_compactProgress && !g_expanded) {
+            UpdateCompactProgressFromSnapshot();
+        }
 
         double oldHeight = g_layout.compactHeight;
         double oldWidth = g_layout.compactWidth;
@@ -16857,38 +16849,20 @@ void UpdatePlayerContents() {
     }
     UpdateThemeVisuals();
 
-    auto makeBitmap = [](std::vector<uint8_t> const& bytes,
-                         bool decodeSynchronously = false,
-                         int32_t decodePixelWidth = 0) -> imaging::BitmapImage {
-        imaging::BitmapImage bitmap;
-        if (bytes.empty()) {
-            return imaging::BitmapImage{nullptr};
-        }
-        streams::InMemoryRandomAccessStream stream;
-        streams::DataWriter writer(stream);
-        writer.WriteBytes(winrt::array_view<const uint8_t>(bytes));
-        try {
-            GetAsyncResultWithTimeout(writer.StoreAsync(),
-                                      kUiLocalAsyncTimeout,
-                                      L"DataWriter.StoreAsync");
-        } catch (...) {
-            return imaging::BitmapImage{nullptr};
-        }
-        writer.DetachStream();
-        stream.Seek(0);
-        if (decodePixelWidth > 0) {
-            bitmap.DecodePixelWidth(decodePixelWidth);
-        }
-        if (decodeSynchronously) {
-            // Decode visible transition sources before fading out their old
-            // layer, so the placeholder can never show through a blank frame.
-            bitmap.SetSource(stream);
-        } else {
-            bitmap.SetSourceAsync(stream);
-        }
+    auto makeBitmap = [](PreparedBitmap const& prepared) -> mediax::ImageSource {
+        if (prepared.pixels.empty()) return nullptr;
+        imaging::WriteableBitmap bitmap(static_cast<int32_t>(prepared.width),
+                                        static_cast<int32_t>(prepared.height));
+        auto buffer = bitmap.PixelBuffer();
+        winrt::com_ptr<IBufferByteAccess> access;
+        winrt::check_hresult(winrt::get_unknown(buffer)->QueryInterface(
+            kIID_IBufferByteAccess, access.put_void()));
+        BYTE* destination = nullptr;
+        winrt::check_hresult(access->Buffer(&destination));
+        std::memcpy(destination, prepared.pixels.data(), prepared.pixels.size());
+        bitmap.Invalidate();
         return bitmap;
     };
-
     std::wstring compactTitle = state.hasSession ? state.title : std::wstring(L"No media");
     std::wstring compactArtist = state.artist.empty()
                                      ? std::wstring(state.isPlaying ? L"Playing" : L"Paused")
@@ -16943,12 +16917,7 @@ void UpdatePlayerContents() {
     updatePlayGlyph(L"Island_Play");
     updatePlayGlyph(L"Island_TransportPlay");
     if (g_compactProgress) {
-        bool shouldInterpolate = UpdateCompactProgressFromSnapshot();
-        if (shouldInterpolate && !g_expanded) {
-            StartCompactProgressRenderLoop();
-        } else {
-            StopCompactProgressRenderLoop();
-        }
+        UpdateCompactProgressFromSnapshot();
     }
     bool compactArtChanged = false;
     uint64_t compactArtHash = ThumbnailHash(displayThumbnailBytes);
@@ -16974,7 +16943,7 @@ void UpdatePlayerContents() {
                         g_compactAlbumArtFade.Opacity(oldSource != nullptr ? 1.0 : 0.0);
                     }
                     if (compactArtHash) {
-                        image.Source(makeBitmap(displayThumbnailBytes, true, 96));
+                        image.Source(makeBitmap(preparedArtwork->compactArtBitmap));
                     } else {
                         image.Source(nullptr);
                     }
@@ -17012,7 +16981,7 @@ void UpdatePlayerContents() {
             if (compactArtHash && preparedArtwork &&
                 !preparedArtwork->transportWashBytes.empty()) {
                 g_dynamicTransportWash.Source(
-                    makeBitmap(preparedArtwork->transportWashBytes, true));
+                    makeBitmap(preparedArtwork->transportWashBitmap));
             } else {
                 g_dynamicTransportWash.Source(nullptr);
             }
@@ -17038,7 +17007,7 @@ void UpdatePlayerContents() {
             if (compactArtHash && preparedArtwork &&
                 !preparedArtwork->mainWashBytes.empty()) {
                 g_dynamicMainWash.Source(
-                    makeBitmap(preparedArtwork->mainWashBytes, true));
+                    makeBitmap(preparedArtwork->mainWashBitmap));
             } else {
                 g_dynamicMainWash.Source(nullptr);
             }
@@ -17180,7 +17149,7 @@ void UpdatePlayerContents() {
                         g_popupXamlArt.Source(
                             displayThumbnailBytes.empty()
                                 ? nullptr
-                                : makeBitmap(displayThumbnailBytes, true, 320));
+                                : makeBitmap(preparedArtwork->popupFallbackArtBitmap));
                     }
                     if (g_popupXamlArtFade) {
                         g_popupXamlArtFade.Source(nullptr);
@@ -17233,30 +17202,26 @@ void UpdatePlayerContents() {
 
                         if (g_popupXamlArt) {
                             g_popupXamlArt.Source(
-                                preparedArtwork->popupArtBytes.empty()
+                                preparedArtwork->popupArtBitmap.pixels.empty()
                                     ? nullptr
-                                    : makeBitmap(
-                                          preparedArtwork->popupArtBytes,
-                                          true, 320));
+                                    : makeBitmap(preparedArtwork->popupArtBitmap));
                         }
                         if (g_popupXamlBackdropCover) {
                             bool fadeFromTop =
                                 g_settings.compact || g_taskbarAtTop;
-                            auto const& backdropBytes = fadeFromTop
-                                ? preparedArtwork->popupBackdropTopBytes
-                                : preparedArtwork->popupBackdropBytes;
+                            auto const& backdropBitmap = fadeFromTop
+                                ? preparedArtwork->popupBackdropTopBitmap
+                                : preparedArtwork->popupBackdropBitmap;
                             g_popupXamlBackdropCover.Source(
-                                useBackdropCover && !backdropBytes.empty()
-                                    ? makeBitmap(backdropBytes, true)
+                                useBackdropCover && !backdropBitmap.pixels.empty()
+                                    ? makeBitmap(backdropBitmap)
                                     : nullptr);
                         }
                         if (g_popupXamlPanelCover) {
                             g_popupXamlPanelCover.Source(
-                                preparedArtwork->popupPanelBytes.empty()
+                                preparedArtwork->popupPanelBitmap.pixels.empty()
                                     ? nullptr
-                                    : makeBitmap(
-                                          preparedArtwork->popupPanelBytes,
-                                          true));
+                                    : makeBitmap(preparedArtwork->popupPanelBitmap));
                         }
 
                         if (canAnimateCover) {
@@ -17360,7 +17325,6 @@ void RemoveIslandOsResourcesNoexcept() noexcept {
     try { StopHoverRenderLoop(); } catch (...) {}
     try { StopDynamicCompactRenderLoop(); } catch (...) {}
     try { StopCompactTextRenderLoop(); } catch (...) {}
-    try { StopCompactProgressRenderLoop(); } catch (...) {}
     try { StopCompactTintTransition(); } catch (...) {}
     try { StopPopupXamlRenderLoop(); } catch (...) {}
     try {
@@ -17410,7 +17374,6 @@ void RemoveIslandGridImpl() {
     bestEffort([] { StopDynamicCompactRenderLoop(); });
     bestEffort([] { ClearDynamicTransportButtonMotions(); });
     bestEffort([] { StopCompactTextRenderLoop(); });
-    bestEffort([] { StopCompactProgressRenderLoop(); });
     bestEffort([] { StopCompactTintTransition(); });
     bestEffort([] { DestroyExpandedPopup(); });
 
