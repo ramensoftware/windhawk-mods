@@ -8,7 +8,7 @@
 // @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -ldwmapi
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -ldwmapi -lcomctl32
 // ==/WindhawkMod==
 
 // Source code is published under the GNU General Public License v3.0.
@@ -191,6 +191,7 @@ Parts of the File Explorer hook and XAML discovery plumbing are adapted from **E
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <commctrl.h>
 #include <dwmapi.h>
 
 #undef GetCurrentTime
@@ -327,6 +328,22 @@ static std::mutex g_settingsMutex;
 
 static std::atomic<bool> g_unloading{false};
 static std::atomic<int> g_pendingScans{0};
+
+struct PendingScan
+{
+    PendingScan()
+    {
+        g_pendingScans.fetch_add(1, std::memory_order_acq_rel);
+    }
+
+    PendingScan(const PendingScan &) = delete;
+    PendingScan &operator=(const PendingScan &) = delete;
+
+    ~PendingScan()
+    {
+        g_pendingScans.fetch_sub(1, std::memory_order_acq_rel);
+    }
+};
 
 // ============================================================================
 // Settings helpers
@@ -1210,6 +1227,7 @@ struct LabelEntry
     winrt::weak_ref<muxc::TextBlock> text;
     winrt::weak_ref<muxc::Grid> grid;
     mux::DispatcherTimer timer{nullptr};
+    HWND hwnd = nullptr;
     winrt::event_token tickToken{};
     winrt::event_token sizeChangedToken{};
     bool tickRegistered = false;
@@ -1233,22 +1251,36 @@ static void ReleaseLabelEntry(const std::shared_ptr<LabelEntry> &entry,
 
     entry->cleaned = true;
 
-    try
+    if (entry->timer)
     {
-        if (entry->timer)
+        try
         {
             entry->timer.Stop();
-            if (entry->tickRegistered)
+        }
+        catch (...)
+        {
+            Wh_Log(L"Failed to stop title-bar timer hr=0x%08X",
+                   winrt::to_hresult());
+        }
+
+        if (entry->tickRegistered)
+        {
+            try
             {
                 entry->timer.Tick(entry->tickToken);
                 entry->tickRegistered = false;
             }
+            catch (...)
+            {
+                Wh_Log(L"Failed to revoke title-bar timer hr=0x%08X",
+                       winrt::to_hresult());
+            }
         }
-    }
-    catch (...)
-    {
-        Wh_Log(L"Failed to release title-bar timer hr=0x%08X",
-               winrt::to_hresult());
+
+        // Drop the final strong XAML reference while still on the owning UI
+        // thread. The thread_local container can then safely outlive the XAML
+        // object itself.
+        entry->timer = nullptr;
     }
 
     auto grid = entry->grid.get();
@@ -1342,6 +1374,50 @@ static void RemoveLabelsForCurrentThread()
     {
         ReleaseLabelEntry(entry, true);
     }
+}
+
+static void RemoveLabelsForWindowOnCurrentThread(HWND hwnd)
+{
+    for (auto it = g_labelEntries.begin(); it != g_labelEntries.end();)
+    {
+        auto entry = *it;
+
+        if (entry && entry->hwnd == hwnd)
+        {
+            // The native window is already going away, so there's no reason
+            // to mutate the XAML children collection. Just revoke delegates
+            // and release the strong DispatcherTimer reference.
+            ReleaseLabelEntry(entry, false);
+            it = g_labelEntries.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+
+    if (g_labelEntries.empty())
+    {
+        g_threadScanned = false;
+    }
+}
+
+static LRESULT CALLBACK ExplorerWindowSubclassProc(
+    HWND hwnd,
+    UINT message,
+    WPARAM wParam,
+    LPARAM lParam,
+    UINT_PTR,
+    DWORD_PTR)
+{
+    if (message == WM_NCDESTROY)
+    {
+        RemoveLabelsForWindowOnCurrentThread(hwnd);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            hwnd, ExplorerWindowSubclassProc);
+    }
+
+    return DefSubclassProc(hwnd, message, wParam, lParam);
 }
 
 static bool IsFileExplorerWindow(HWND hwnd)
@@ -1545,6 +1621,23 @@ static void TryInsertTitleText(muxc::Grid const &grid)
     if (!rightAnchor)
         return;
 
+    HWND hwnd = GetExplorerWindowForElement(grid);
+    if (!hwnd)
+    {
+        return;
+    }
+
+    // Install the native-window teardown hook before creating XAML delegates.
+    // If the window closes, WM_NCDESTROY will synchronously release this
+    // window's entries on the same UI thread.
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+            hwnd, ExplorerWindowSubclassProc, 1))
+    {
+        Wh_Log(L"Failed to subclass Explorer window %08X",
+               static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(hwnd)));
+        return;
+    }
+
     PruneReleasedLabelEntries();
     Settings initialSettings = GetSettings();
 
@@ -1569,6 +1662,7 @@ static void TryInsertTitleText(muxc::Grid const &grid)
     auto entry = std::make_shared<LabelEntry>();
     entry->text = winrt::make_weak(text);
     entry->grid = winrt::make_weak(grid);
+    entry->hwnd = hwnd;
     entry->currentSettings = initialSettings;
     entry->lastText = BuildDisplayText(initialSettings);
     g_labelEntries.push_back(entry);
@@ -1690,8 +1784,6 @@ static void ScheduleXamlRootScan(mux::UIElement const &element)
         return;
     }
 
-    bool pendingAdded = false;
-
     try
     {
         auto queue =
@@ -1702,27 +1794,19 @@ static void ScheduleXamlRootScan(mux::UIElement const &element)
             return;
         }
 
-        g_pendingScans.fetch_add(1, std::memory_order_acq_rel);
-        pendingAdded = true;
+        auto pending = std::make_shared<PendingScan>();
 
-        if (!queue.TryEnqueue([weak = winrt::make_weak(element)]()
-                              {
-                if (auto element = weak.get()) {
+        queue.TryEnqueue(
+            [pending, weak = winrt::make_weak(element)]()
+            {
+                if (auto element = weak.get())
+                {
                     ScanXamlRootForTitleBars(element);
                 }
-
-                g_pendingScans.fetch_sub(1, std::memory_order_acq_rel); }))
-        {
-            g_pendingScans.fetch_sub(1, std::memory_order_acq_rel);
-            pendingAdded = false;
-        }
+            });
     }
     catch (...)
     {
-        if (pendingAdded)
-        {
-            g_pendingScans.fetch_sub(1, std::memory_order_acq_rel);
-        }
     }
 }
 
@@ -1757,8 +1841,6 @@ static void ScheduleCurrentThreadScan()
         return;
     }
 
-    bool pendingAdded = false;
-
     try
     {
         auto queue =
@@ -1769,24 +1851,16 @@ static void ScheduleCurrentThreadScan()
             return;
         }
 
-        g_pendingScans.fetch_add(1, std::memory_order_acq_rel);
-        pendingAdded = true;
+        auto pending = std::make_shared<PendingScan>();
 
-        if (!queue.TryEnqueue([]()
-                              {
+        queue.TryEnqueue(
+            [pending]()
+            {
                 ScanCurrentThreadForTitleBars();
-                g_pendingScans.fetch_sub(1, std::memory_order_acq_rel); }))
-        {
-            g_pendingScans.fetch_sub(1, std::memory_order_acq_rel);
-            pendingAdded = false;
-        }
+            });
     }
     catch (...)
     {
-        if (pendingAdded)
-        {
-            g_pendingScans.fetch_sub(1, std::memory_order_acq_rel);
-        }
     }
 }
 
@@ -2047,6 +2121,7 @@ static SymbolHookResult HookFileExplorerExtensionsSymbols(HMODULE module)
 }
 
 static HMODULE GetFileExplorerExtensionsModuleHandle() { return GetModuleHandleW(L"FileExplorerExtensions.dll"); }
+
 static bool HookFileExplorerExtensionsIfLoaded(bool applyHooks)
 {
     if (g_symbolsHooked.load())
@@ -2074,6 +2149,7 @@ static bool HookFileExplorerExtensionsIfLoaded(bool applyHooks)
 
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 static LoadLibraryExW_t LoadLibraryExW_Original;
+
 static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD flags)
 {
     HMODULE module = LoadLibraryExW_Original(fileName, file, flags);
@@ -2143,6 +2219,7 @@ void Wh_ModSettingsChanged()
             nullptr);
     }
 }
+
 void Wh_ModBeforeUninit() { g_unloading.store(true); }
 
 void Wh_ModUninit()
@@ -2177,11 +2254,16 @@ void Wh_ModUninit()
             Wh_Log(L"Couldn't reach Explorer UI thread for window %08X",
                    static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(hwnd)));
         }
+
+        // The subclass callback lives in this DLL, so it must be removed before
+        // Windhawk can unmap the mod.
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            hwnd, ExplorerWindowSubclassProc);
     }
 
     // DispatcherQueue callbacks contain code from this module. Wait briefly for
     // all callbacks that were queued before g_unloading became true to finish
-    // before Windhawk is allowed to unmap the DLL.
+    // or be discarded. PendingScan decrements in either case.
     for (int i = 0;
          i < 200 &&
          g_pendingScans.load(std::memory_order_acquire) > 0;
