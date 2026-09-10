@@ -1,3 +1,9 @@
+## 1.8.1 ([Sep 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6379a92608ab0d1a78ed556a326c30f1b3a6c942/mods/translucent-windows.wh.cpp))
+
+* Fixed an issue where explorer.exe would crash when middle-clicking items in the navigation pane.
+* Fixed the opaque text rectangle on ListView group items in 32-bit applications.
+* Dynamic desktop text color depending system theme mode.
+
 ## 1.8.0 ([Jul 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/109589023dde428deaee2fe80e4ce446283a7935/mods/translucent-windows.wh.cpp))
 
 * Some settings that can be considered outside the scope of translucent effects are removed due to my limited free time to maintain these features, fortunately the Windhawk community has provided some separate mods for those listed below.

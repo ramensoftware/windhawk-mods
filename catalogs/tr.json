@@ -15027,7 +15027,7 @@
           1658
         ],
         "ratingUsers": 2387,
-        "updated": 1785091692000,
+        "updated": 1789047744000,
         "users": 135026
       },
       "metadata": {
@@ -15039,7 +15039,7 @@
           "*"
         ],
         "name": "Translucent Windows",
-        "version": "1.8.0"
+        "version": "1.8.1"
       }
     },
     "transparent-desktop-icons-spotlight": {

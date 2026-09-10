@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-10T13:30:45.000Z</updated>
+    <updated>2026-09-10T13:42:24.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Translucent Windows 1.8.1]]></title>
+        <id>https://windhawk.net/mods/translucent-windows#6379a92608ab0d1a78ed556a326c30f1b3a6c942</id>
+        <link href="https://windhawk.net/mods/translucent-windows"/>
+        <updated>2026-09-10T13:42:24.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed an issue where explorer.exe would crash when middle-clicking items in the navigation pane.</li>
+<li>Fixed the opaque text rectangle on ListView group items in 32-bit applications.</li>
+<li>Dynamic desktop text color depending system theme mode.</li>
+</ul>]]></content>
+        <author>
+            <name>Undisputed00x</name>
+            <uri>https://github.com/Undisputed00x</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Start Button Centered Origin 1.0.0]]></title>
         <id>https://windhawk.net/mods/taskbar-centered-start-split-icons#272c8e5c94ca8de5f6cae88ab69698695abb927b</id>
@@ -669,50 +684,6 @@ not the same shortcut as Win+1 on the number row. That is OS behavior.</li>
         <author>
             <name>tonythethompson</name>
             <uri>https://github.com/tonythethompson</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Network Speed Indicator 1.6]]></title>
-        <id>https://windhawk.net/mods/net-speed-taskbar#e7faca32a6b7a3166a709ac824ec060b54070fc6</id>
-        <link href="https://windhawk.net/mods/net-speed-taskbar"/>
-        <updated>2026-09-05T16:04:35.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarnetworkspeedindicator">Taskbar Network Speed Indicator</h1>
-<p>A free-floating widget docked to the taskbar, featuring a real-time sparkline
-chart and multiple visual layouts. Shows current download/upload speed,
-refreshed every second.</p>
-<p>Runs as a dedicated, isolated <code>explorer.exe</code> helper process (not the real
-shell) using the "mods as tools" pattern, so a bug in it can't take down your
-actual desktop. It targets <code>explorer.exe</code> rather than <code>windhawk.exe</code> because
-the taskbar's own content lives in DWM's immersive Z-band
-(<code>ZBID_IMMERSIVE_NOTIFICATION</code>), and <code>CreateWindowInBand</code> -- the only way to
-place a window in that band -- appears to require the calling process to
-actually be an <code>explorer.exe</code> image.</p>
-<p><img src="https://raw.githubusercontent.com/NarayanChetri/Files/main/taskbar-internet-speed-mod.gif" alt="Demo" /></p>
-<ul>
-<li>Choose from different looks: Side-by-Side, Top-Down, Chart, or Minimal.</li>
-<li>Move the widget anywhere along your taskbar using the Horizontal Position setting.</li>
-<li>Click-through: it won't get in the way of your taskbar buttons.</li>
-<li>Recovers automatically on an Explorer crash/restart, not just a clean shell exit.</li>
-<li>Hides while a full-screen app or game covers the taskbar's monitor.</li>
-</ul>
-<p>Note: <a href="https://windhawk.net/mods/taskbar-clock-customization">Taskbar Clock Customization</a>
-and <a href="https://windhawk.net/mods/taskbar-system-info">Taskbar System Info</a> both
-offer similar taskbar network readouts. This mod's differentiators are the
-free horizontal placement anywhere along the taskbar and the sparkline chart
-layouts.</p>
-<p>A few consequences of running as a dedicated <code>explorer.exe</code> helper process,
-worth knowing:</p>
-<ul>
-<li>A second <strong>"Windows Explorer"</strong> entry appears in Task Manager. Ending it
-won't relaunch the widget until the shell restarts or the mod is reloaded.</li>
-<li>Any other mod you have enabled with <code>@include explorer.exe</code> gets injected
-into this helper process too, since it genuinely is an <code>explorer.exe</code>. Most
-mods no-op there, but it can make Windhawk's per-process mod list and crash
-attribution look busier than expected.</li>
-</ul>]]></content>
-        <author>
-            <name>Narayan</name>
-            <uri>https://github.com/NarayanChetri</uri>
         </author>
     </entry>
 </feed>
