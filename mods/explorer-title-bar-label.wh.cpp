@@ -1373,7 +1373,7 @@ static void PruneReleasedLabelEntries()
 
         if (!entry->cleaned && !entry->text.get())
         {
-            ReleaseLabelEntry(entry, false);
+            ReleaseLabelEntry(entry, removeElement);
         }
 
         if (entry->cleaned)
@@ -1420,7 +1420,7 @@ static void RemoveLabelsForCurrentThread()
     }
 }
 
-static void RemoveLabelsForWindowOnCurrentThread(HWND hwnd)
+static void RemoveLabelsForWindowOnCurrentThread(HWND hwnd, bool removeElement)
 {
     g_pendingScanElements.erase(hwnd);
 
@@ -1477,7 +1477,7 @@ static LRESULT CALLBACK ExplorerWindowSubclassProc(
 
     if (message == WM_NCDESTROY)
     {
-        RemoveLabelsForWindowOnCurrentThread(hwnd);
+        RemoveLabelsForWindowOnCurrentThread(hwnd, false);
 
         {
             std::lock_guard<std::mutex> lock(g_subclassedWindowsMutex);
@@ -1666,7 +1666,15 @@ static void RefreshLabelsForCurrentThread()
 
     for (auto const &entry : g_labelEntries)
     {
-        RefreshLabelEntry(entry, settings);
+        try
+        {
+            RefreshLabelEntry(entry, settings);
+        }
+        catch (...)
+        {
+            Wh_Log(L"RefreshLabelEntry failed hr=0x%08X",
+                   winrt::to_hresult());
+        }
     }
 
     PruneReleasedLabelEntries();
@@ -1679,15 +1687,30 @@ static void TryInsertTitleText(muxc::Grid const &grid)
 
     auto children = grid.Children();
     mux::FrameworkElement rightAnchor{nullptr};
-    for (uint32_t i = 0; i < children.Size(); ++i)
+    for (uint32_t i = 0; i < children.Size();)
     {
         auto child = children.GetAt(i).try_as<mux::FrameworkElement>();
         if (!child)
+        {
+            ++i;
             continue;
+        }
+
         if (child.Name() == L"WindhawkExplorerTitleBarLabel")
-            return;
+        {
+            // Recover from a stale label left by an earlier instance that
+            // couldn't remove its XAML element during teardown. Don't advance
+            // the index because the next child shifts into this slot.
+            children.RemoveAt(i);
+            continue;
+        }
+
         if (child.Name() == L"RightContentPresenter")
+        {
             rightAnchor = child;
+        }
+
+        ++i;
     }
     if (!rightAnchor)
         return;
@@ -2311,7 +2334,7 @@ void Wh_ModUninit()
                     [](PVOID parameter)
                     {
                         RemoveLabelsForWindowOnCurrentThread(
-                            reinterpret_cast<HWND>(parameter));
+                            reinterpret_cast<HWND>(parameter), true);
                     },
                     hwnd))
             {
