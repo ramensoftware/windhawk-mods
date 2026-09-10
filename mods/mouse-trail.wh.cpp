@@ -2164,8 +2164,8 @@ static void RenderFrame() {
     g_prevVelocity = velocity;
 
     // ===== 粒子物理：摩擦 + 光标排斥力 + 随机扰动 + 全程吸附光标 =====
-    float attractTargetX = (float)(pt.x - vX + g_tailOffsetX);
-    float attractTargetY = (float)(pt.y - vY + g_tailOffsetY);
+    float attractTargetX = (float)(renderPos.x - vX + g_tailOffsetX);
+    float attractTargetY = (float)(renderPos.y - vY + g_tailOffsetY);
     for (auto &p : g_particles) {
         p.vx *= 0.93f;
         p.vy *= 0.93f;
@@ -2601,11 +2601,18 @@ static void ReleaseAllRenderResources() {
 }
 
 static bool InitAllRenderResources() {
-    // ---- D3D11 设备 ----
+    // ---- D3D11 设备（硬件优先，WARP 回退）----
     D3D_FEATURE_LEVEL fl;
-    D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
-                      D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_SINGLETHREADED,
-                      nullptr, 0, D3D11_SDK_VERSION, &g_pD3DDevice, &fl, &g_pD3DContext);
+    UINT createFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_SINGLETHREADED;
+    D3D_FEATURE_LEVEL featureLevels[] = {
+        D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0,
+        D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_10_0,
+    };
+    if (FAILED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, createFlags, featureLevels,
+                                 ARRAYSIZE(featureLevels), D3D11_SDK_VERSION, &g_pD3DDevice, &fl, &g_pD3DContext))) {
+        D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, createFlags, featureLevels, ARRAYSIZE(featureLevels),
+                          D3D11_SDK_VERSION, &g_pD3DDevice, &fl, &g_pD3DContext);
+    }
     if (!g_pD3DDevice) {
         Wh_Log(L"Recover: D3D11 device creation FAILED");
         return false;
@@ -2662,7 +2669,8 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
     if (msg == WM_DISPLAYCHANGE) {
         // 分辨率/显示器变化时更新缓存并调整窗口大小和位置
         UpdateVirtualScreenCache();
-        SetWindowPos(hwnd, HWND_TOPMOST, g_virtX, g_virtY, g_virtW, g_virtH, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        // 不用 SWP_SHOWWINDOW，避免空闲隐藏状态下被意外显示
+        SetWindowPos(hwnd, HWND_TOPMOST, g_virtX, g_virtY, g_virtW, g_virtH, SWP_NOACTIVATE | SWP_NOZORDER);
         return 0;
     }
     if (msg == WM_NCHITTEST) {
