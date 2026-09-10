@@ -2,13 +2,13 @@
 // @id              taskbar-countdown-timer
 // @name            Taskbar Countdown Timer
 // @description     A simple countdown timer integrated into the Windows 11 taskbar (Windows 11 only)
-// @version         1.9.1
+// @version         1.10
 // @author          Richi
 // @github          https://github.com/richilp
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion -ldwmapi -lgdi32 -luxtheme
-// @license         MIT
+// @license         GPL-3.0
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -71,6 +71,13 @@ The mod supports one active timer at a time and currently places its button on t
 // ==/WindhawkModSettings==
 
 
+
+// Portions of the taskbar/XAML integration are adapted from Windhawk's
+// taskbar-multirow and taskbar-notification-icon-spacing mods by m417z,
+// both licensed under GPL-3.0:
+// https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-multirow.wh.cpp
+// https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-notification-icon-spacing.wh.cpp
+
 #ifdef GetCurrentTime
 #undef GetCurrentTime
 #endif
@@ -124,10 +131,10 @@ namespace Controls = winrt::Windows::UI::Xaml::Controls;
 
 static winrt::event_token g_timerButtonClickToken{};
 static winrt::event_token g_timerTickToken{};
+static winrt::event_token g_timerStartButtonClickToken{};
+static winrt::event_token g_timerCancelButtonClickToken{};
 
-static std::atomic<int> g_secondsRemaining{0};
 static std::atomic<ULONGLONG> g_deadlineUtc100ns{0};
-static std::atomic_bool g_pendingFinished{false};
 
 static SRWLOCK g_reminderLock = SRWLOCK_INIT;
 static wchar_t g_reminder[256]{};
@@ -153,6 +160,8 @@ static std::atomic_bool g_timerWorkerStarted{false};
 static std::atomic<HWND> g_finishedAlertWnd{nullptr};
 static std::atomic<HANDLE> g_finishedAlertThread{nullptr};
 static HANDLE g_finishedAlertStopEvent = nullptr;
+static HINSTANCE g_modInstance = nullptr;
+static bool g_finishedAlertClassRegistered = false;
 
 static std::atomic<HWND> g_taskbarWnd{nullptr};
 static std::atomic<DWORD> g_taskbarThreadId{0};
@@ -465,7 +474,7 @@ static XamlRoot GetTaskbarXamlRoot(
         return nullptr;
     }
 
-    size_t offset = 0x48;
+    size_t offset;
 
 #if defined(_M_X64)
     const BYTE* code =
@@ -676,20 +685,6 @@ static void LoadSettings()
 {
     ModSettings updated;
 
-    updated.defaultMinutes =
-        std::clamp(
-            Wh_GetIntSetting(L"defaultMinutes"),
-            1,
-            1440
-        );
-
-    updated.defaultSnoozeMinutes =
-        std::clamp(
-            Wh_GetIntSetting(L"defaultSnoozeMinutes"),
-            1,
-            1440
-        );
-
     updated.maximumMinutes =
         std::clamp(
             Wh_GetIntSetting(L"maximumMinutes"),
@@ -697,13 +692,19 @@ static void LoadSettings()
             10080
         );
 
-    if (updated.defaultMinutes > updated.maximumMinutes) {
-        updated.defaultMinutes = updated.maximumMinutes;
-    }
+    updated.defaultMinutes =
+        std::clamp(
+            Wh_GetIntSetting(L"defaultMinutes"),
+            1,
+            updated.maximumMinutes
+        );
 
-    if (updated.defaultSnoozeMinutes > updated.maximumMinutes) {
-        updated.defaultSnoozeMinutes = updated.maximumMinutes;
-    }
+    updated.defaultSnoozeMinutes =
+        std::clamp(
+            Wh_GetIntSetting(L"defaultSnoozeMinutes"),
+            1,
+            updated.maximumMinutes
+        );
 
     updated.completionSound =
         Wh_GetIntSetting(L"completionSound") != 0;
@@ -711,7 +712,7 @@ static void LoadSettings()
     PCWSTR label =
         Wh_GetStringSetting(L"buttonLabel");
 
-    if (label && label[0]) {
+    if (label[0]) {
         updated.buttonLabel = label;
     }
 
@@ -896,8 +897,6 @@ static void RefreshTaskbarCountdown()
     int remaining =
         RemainingSeconds(deadline);
 
-    g_secondsRemaining.store(remaining);
-
     if (remaining > 0) {
         g_timerText.Text(
             FormatCountdown(remaining)
@@ -911,6 +910,19 @@ static void RefreshTaskbarCountdown()
 
 static void HideAndReleaseFlyouts()
 {
+    // Revoke delegates before hiding/releasing the flyout tree.
+    if (g_timerStartButton) {
+        g_timerStartButton.Click(
+            g_timerStartButtonClickToken
+        );
+    }
+
+    if (g_timerCancelButton) {
+        g_timerCancelButton.Click(
+            g_timerCancelButtonClickToken
+        );
+    }
+
     if (g_timerFlyout) {
         g_timerFlyout.Hide();
     }
@@ -1005,16 +1017,6 @@ static bool ArmTimer(
     SetSharedReminder(reminderToUse);
 
     g_deadlineUtc100ns.store(deadline);
-    g_secondsRemaining.store(
-        static_cast<int>(
-            std::min<ULONGLONG>(
-                seconds,
-                static_cast<ULONGLONG>(INT_MAX)
-            )
-        )
-    );
-
-    g_pendingFinished.store(false);
 
     PersistTimer(
         deadline,
@@ -1066,8 +1068,6 @@ static bool ArmTimer(
 static void CancelTimer()
 {
     g_deadlineUtc100ns.store(0);
-    g_secondsRemaining.store(0);
-    g_pendingFinished.store(false);
 
     ClearPersistedTimer();
     SignalTimerWorker();
@@ -1190,7 +1190,8 @@ static void BuildTimerFlyout()
         actions
     );
 
-    startButton.Click(
+    g_timerStartButtonClickToken =
+        startButton.Click(
         [](
             auto const&,
             RoutedEventArgs const&)
@@ -1235,7 +1236,8 @@ static void BuildTimerFlyout()
         }
     );
 
-    cancelButton.Click(
+    g_timerCancelButtonClickToken =
+        cancelButton.Click(
         [](
             auto const&,
             RoutedEventArgs const&)
@@ -1356,6 +1358,9 @@ constexpr int IDC_ALERT_DISMISS = 2104;
 
 static constexpr wchar_t kFinishedAlertClass[] =
     L"TaskbarCountdownTimerFinishedAlert";
+
+static bool RegisterFinishedAlertClass();
+static void UnregisterFinishedAlertClass();
 
 static HFONT g_finishedAlertFont = nullptr;
 static HBRUSH g_finishedAlertBackgroundBrush = nullptr;
@@ -1917,14 +1922,11 @@ static LRESULT CALLBACK FinishedAlertWndProc(
                 MessageBeep(MB_ICONERROR);
                 return 0;
             }
-
-            g_pendingFinished.store(false);
             DestroyWindow(hWnd);
             return 0;
         }
 
         if (id == IDC_ALERT_DISMISS) {
-            g_pendingFinished.store(false);
             DestroyWindow(hWnd);
             return 0;
         }
@@ -1933,7 +1935,6 @@ static LRESULT CALLBACK FinishedAlertWndProc(
     }
 
     case WM_CLOSE:
-        g_pendingFinished.store(false);
         DestroyWindow(hWnd);
         return 0;
 
@@ -1946,20 +1947,28 @@ static LRESULT CALLBACK FinishedAlertWndProc(
     return DefWindowProcW(hWnd, msg, wParam, lParam);
 }
 
-static DWORD WINAPI FinishedAlertThreadProc(LPVOID param)
+static bool RegisterFinishedAlertClass()
 {
-    std::unique_ptr<FinishedAlertData> data(
-        reinterpret_cast<FinishedAlertData*>(param)
-    );
+    if (g_finishedAlertClassRegistered) {
+        return true;
+    }
 
     HMODULE modInstance = nullptr;
 
-    GetModuleHandleExW(
-        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-        reinterpret_cast<LPCWSTR>(FinishedAlertWndProc),
-        &modInstance
-    );
+    if (!GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(
+                FinishedAlertWndProc
+            ),
+            &modInstance))
+    {
+        Wh_Log(
+            L"ERROR: Could not get mod module handle for alert class"
+        );
+
+        return false;
+    }
 
     WNDCLASSEXW wc{sizeof(wc)};
     wc.lpfnWndProc = FinishedAlertWndProc;
@@ -1967,18 +1976,61 @@ static DWORD WINAPI FinishedAlertThreadProc(LPVOID param)
     wc.lpszClassName = kFinishedAlertClass;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.hbrBackground =
-        reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+        reinterpret_cast<HBRUSH>(
+            COLOR_WINDOW + 1
+        );
 
     if (!RegisterClassExW(&wc)) {
-        DWORD error = GetLastError();
+        Wh_Log(
+            L"ERROR: Could not register completion alert class: %u",
+            GetLastError()
+        );
 
-        if (error != ERROR_CLASS_ALREADY_EXISTS) {
-            Wh_Log(
-                L"ERROR: Could not register completion alert class: %u",
-                error
-            );
-            return 0;
-        }
+        return false;
+    }
+
+    g_modInstance = modInstance;
+    g_finishedAlertClassRegistered = true;
+    return true;
+}
+
+
+static void UnregisterFinishedAlertClass()
+{
+    if (!g_finishedAlertClassRegistered ||
+        !g_modInstance)
+    {
+        return;
+    }
+
+    if (!UnregisterClassW(
+            kFinishedAlertClass,
+            g_modInstance))
+    {
+        Wh_Log(
+            L"ERROR: Could not unregister completion alert class: %u",
+            GetLastError()
+        );
+    }
+
+    g_finishedAlertClassRegistered = false;
+    g_modInstance = nullptr;
+}
+
+
+static DWORD WINAPI FinishedAlertThreadProc(LPVOID param)
+{
+    std::unique_ptr<FinishedAlertData> data(
+        reinterpret_cast<FinishedAlertData*>(param)
+    );
+    if (!g_finishedAlertClassRegistered ||
+        !g_modInstance)
+    {
+        Wh_Log(
+            L"ERROR: Completion alert class isn't registered"
+        );
+
+        return 0;
     }
 
     HWND taskbar = g_taskbarWnd.load();
@@ -2000,7 +2052,7 @@ static DWORD WINAPI FinishedAlertThreadProc(LPVOID param)
             ScaleAlertValue(220, dpi),
             nullptr,
             nullptr,
-            modInstance,
+            g_modInstance,
             data.get()
         );
 
@@ -2010,7 +2062,6 @@ static DWORD WINAPI FinishedAlertThreadProc(LPVOID param)
             GetLastError()
         );
 
-        UnregisterClassW(kFinishedAlertClass, modInstance);
         return 0;
     }
 
@@ -2072,7 +2123,6 @@ ExitLoop:
     }
 
     g_finishedAlertWnd.store(nullptr);
-    UnregisterClassW(kFinishedAlertClass, modInstance);
     return 0;
 }
 
@@ -2098,6 +2148,10 @@ static void CloseFinishedAlertThreadIfExited()
 
 static bool ShowFinishedAlert(const wchar_t* reminder)
 {
+    if (g_unloading.load()) {
+        return false;
+    }
+
     CloseFinishedAlertThreadIfExited();
 
     if (HWND existing = g_finishedAlertWnd.load()) {
@@ -2225,8 +2279,6 @@ static void HandleTimerExpiredFromWorker()
     }
 
     g_deadlineUtc100ns.store(0);
-    g_secondsRemaining.store(0);
-    g_pendingFinished.store(true);
 
     ClearPersistedTimer();
 
@@ -2386,12 +2438,6 @@ static void RestorePersistedTimer()
             deadline
         );
 
-        g_secondsRemaining.store(
-            remaining
-        );
-
-        g_pendingFinished.store(false);
-
         SignalTimerWorker();
 
         Wh_Log(
@@ -2401,8 +2447,22 @@ static void RestorePersistedTimer()
     }
     else {
         g_deadlineUtc100ns.store(0);
-        g_secondsRemaining.store(0);
-        g_pendingFinished.store(true);
+
+        ULONGLONG now = GetUtcFileTimeNow();
+        constexpr ULONGLONG kRestoreStaleCutoff =
+            6ULL * 60ULL * 60ULL * 10000000ULL;
+
+        if (now > deadline &&
+            now - deadline > kRestoreStaleCutoff)
+        {
+            ClearPersistedTimer();
+
+            Wh_Log(
+                L"Ignoring stale expired timer from more than 6 hours ago"
+            );
+
+            return;
+        }
 
         ClearPersistedTimer();
 
@@ -2527,6 +2587,29 @@ static bool EnsureTimerWorkerStarted()
 // -----------------------------------------------------------------------------
 // Add/remove taskbar button
 // -----------------------------------------------------------------------------
+
+
+template <typename T1, typename T2>
+static bool SameWinrtObject(
+    T1 const& a,
+    T2 const& b)
+{
+    if (!a || !b) {
+        return false;
+    }
+
+    auto aUnknown =
+        a.template as<
+            winrt::Windows::Foundation::IUnknown>();
+
+    auto bUnknown =
+        b.template as<
+            winrt::Windows::Foundation::IUnknown>();
+
+    return winrt::get_abi(aUnknown) ==
+           winrt::get_abi(bUnknown);
+}
+
 
 static void ReleaseOwnedXamlForRebuild()
 {
@@ -2701,7 +2784,9 @@ static void AddTimerButtonImpl(
 
     if (existing &&
         g_timerButton &&
-        existing == g_timerButton)
+        SameWinrtObject(
+            existing,
+            g_timerButton))
     {
         g_taskbarWnd.store(taskbar);
         g_buttonInjected.store(true);
@@ -2785,10 +2870,6 @@ static void AddTimerButtonImpl(
                     RemainingSeconds(
                         g_deadlineUtc100ns.load()
                     );
-
-                g_secondsRemaining.store(
-                    remaining
-                );
 
                 if (remaining > 0) {
                     if (g_timerText) {
@@ -2891,10 +2972,6 @@ static void AddTimerButtonImpl(
         RemainingSeconds(
             g_deadlineUtc100ns.load()
         );
-
-    g_secondsRemaining.store(
-        remaining
-    );
 
     if (remaining > 0 &&
         g_countdownTimer)
@@ -3443,7 +3520,12 @@ BOOL Wh_ModInit()
 
     LoadSettings();
 
+    if (!RegisterFinishedAlertClass()) {
+        return FALSE;
+    }
+
     if (!HookTaskbarDllSymbols()) {
+        UnregisterFinishedAlertClass();
         Wh_Log(
             L"ERROR: Failed to resolve taskbar.dll symbols"
         );
@@ -3586,21 +3668,7 @@ void Wh_ModUninit()
 
     StopTimerWorker();
 
-    if (g_finishedAlertStopEvent) {
-        SetEvent(g_finishedAlertStopEvent);
-    }
-
-    if (HWND alert = g_finishedAlertWnd.load()) {
-        PostMessageW(alert, WM_CLOSE, 0, 0);
-    }
-
-    if (HANDLE alertThread =
-            g_finishedAlertThread.exchange(nullptr))
-    {
-        PumpWaitForThread(alertThread);
-        CloseHandle(alertThread);
-    }
-
+    // First stop and join every thread that can still create/use alert UI.
     if (g_retryThread) {
         PumpWaitForThread(
             g_retryThread
@@ -3627,27 +3695,42 @@ void Wh_ModUninit()
 
     g_timerWorkerStarted.store(false);
 
-    // Retry after all worker activity has stopped. We don't use
-    // g_buttonInjected as a shortcut because Loaded revokers can exist even
-    // when button injection never completed.
-    bool removed = false;
-
-    for (int attempt = 0;
-         attempt < 10 &&
-         !removed;
-         attempt++)
-    {
-        removed =
-            TryRemoveTimerXaml();
-
-        if (!removed) {
-            Sleep(50);
-        }
+    // Only after the timer worker is gone can no new alert thread be created.
+    if (g_finishedAlertStopEvent) {
+        SetEvent(
+            g_finishedAlertStopEvent
+        );
     }
 
-    if (!removed) {
+    if (HWND alert =
+            g_finishedAlertWnd.load())
+    {
+        PostMessageW(
+            alert,
+            WM_CLOSE,
+            0,
+            0
+        );
+    }
+
+    if (HANDLE alertThread =
+            g_finishedAlertThread.exchange(
+                nullptr
+            ))
+    {
+        PumpWaitForThread(
+            alertThread
+        );
+
+        CloseHandle(
+            alertThread
+        );
+    }
+
+    // Final best-effort XAML teardown after all worker activity is stopped.
+    if (!TryRemoveTimerXaml()) {
         Wh_Log(
-            L"ERROR: Could not verify timer XAML teardown before unload"
+            L"ERROR: Could not dispatch final timer XAML teardown"
         );
     }
 
@@ -3673,22 +3756,30 @@ void Wh_ModUninit()
     }
 
     if (g_finishedAlertStopEvent) {
-        CloseHandle(g_finishedAlertStopEvent);
+        CloseHandle(
+            g_finishedAlertStopEvent
+        );
         g_finishedAlertStopEvent = nullptr;
     }
 
     if (g_finishedAlertFont) {
-        DeleteObject(g_finishedAlertFont);
+        DeleteObject(
+            g_finishedAlertFont
+        );
         g_finishedAlertFont = nullptr;
     }
 
     if (g_finishedAlertEditBrush) {
-        DeleteObject(g_finishedAlertEditBrush);
+        DeleteObject(
+            g_finishedAlertEditBrush
+        );
         g_finishedAlertEditBrush = nullptr;
     }
 
     if (g_finishedAlertBackgroundBrush) {
-        DeleteObject(g_finishedAlertBackgroundBrush);
+        DeleteObject(
+            g_finishedAlertBackgroundBrush
+        );
         g_finishedAlertBackgroundBrush = nullptr;
     }
 
@@ -3698,6 +3789,8 @@ void Wh_ModUninit()
         );
         g_retryStopEvent = nullptr;
     }
+
+    UnregisterFinishedAlertClass();
 
     Wh_Log(
         L"Taskbar Countdown Timer unloaded"
@@ -3736,3 +3829,4 @@ void Wh_ModSettingsChanged()
         );
     }
 }
+
