@@ -580,6 +580,16 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
   $name:zh-CN: 运动模糊强度
   $description: Number of history frames to overlay (1-5).
   $description:zh-CN: 叠加的历史帧数（1-5）。
+- enable_25d_effect: true
+  $name: 2.5D Depth Effect
+  $name:zh-CN: 2.5D 立体效果
+  $description: Add per-vertex depth with perspective projection for a 2.5D look.
+  $description:zh-CN: 为顶点添加深度坐标和透视投影，营造 2.5D 立体感。
+- perspective_strength: 15
+  $name: Perspective Strength
+  $name:zh-CN: 透视强度
+  $description: Strength of 2.5D perspective scaling (0-50). Higher = more depth.
+  $description:zh-CN: 2.5D 透视缩放强度（0-50），数值越大立体感越强。
 
 # ===== 性能设置 =====
 - super_performance_mode: false
@@ -1003,6 +1013,8 @@ bool g_superPerformanceMode = false;  // 超级性能模式：无视性能上限
 bool g_enableBezierSmooth = true;     // 贝塞尔曲线平滑
 bool g_enableMotionBlur = false;      // 运动模糊
 int g_motionBlurStrength = 3;         // 运动模糊强度（叠加帧数）
+bool g_enable25DEffect = true;        // 2.5D 立体效果
+int g_perspectiveStrength = 15;       // 透视强度（0-50）
 // 运动模糊历史帧缓冲区
 struct TrailFrame {
     std::vector<D2D1_POINT_2F> path;
@@ -1597,7 +1609,7 @@ static void UpdateConstantBuffer(int width, int height, const GradData* cols = n
         data[0] = (float)width;
         data[1] = (float)height;
         // perspective (offset 2, bytes 8-11)
-        data[2] = 0.15f;  // 2.5D 透视强度
+        data[2] = g_enable25DEffect ? (float)g_perspectiveStrength / 100.0f : 0.0f;
         // lightDir (offset 4, bytes 16-23) — float2 不能跨越 16 字节边界
         data[4] = 0.5f;
         data[5] = -0.5f;
@@ -1694,22 +1706,25 @@ static void NativeRenderTrail(const std::vector<D2D1_POINT_2F>& smoothed, float 
         float taper = powf(1.0f - ratio, 1.3f);
         float ow = (i == sl - 1) ? 0 : 10.0f * taper * widthMul;
         // 2.5D 深度：根据拖尾形状类型使用不同的深度模式
+        // 深度衰减：拖尾末端深度更小，避免末端突兀
+        float depthFade = 1.0f - powf(ratio, 2.0f) * 0.5f;
         float depth = 0.0f;
         if (g_trailShape == 0 || g_trailShape == 5 || g_trailShape == 6) {
-            // 锥形/双线/虚线：中间高两端低
-            depth = sinf(ratio * 3.14159f) * 0.25f;
+            // 锥形/双线/虚线：中间高两端低，平滑弧形
+            depth = sinf(ratio * 3.14159f) * 0.2f * depthFade;
         } else if (g_trailShape == 1) {
-            // 点链：离散深度波动
-            depth = sinf(ratio * 3.14159f * 8.0f) * 0.15f;
+            // 点链：离散深度波动，模拟珠子起伏
+            depth = sinf(ratio * 3.14159f * 6.0f) * 0.12f * depthFade;
         } else if (g_trailShape == 2 || g_trailShape == 7) {
             // 函数曲线/螺旋：动态波动深度
-            depth = sinf(ratio * 3.14159f * 4.0f + dwTime * 0.003f) * 0.2f;
+            depth = sinf(ratio * 3.14159f * 3.0f + dwTime * 0.002f) * 0.15f * depthFade;
         } else if (g_trailShape == 3 || g_trailShape == 8) {
             // 波形/闪电：波浪深度
-            depth = sinf(ratio * 3.14159f * 6.0f - dwTime * 0.005f) * 0.2f;
+            depth = sinf(ratio * 3.14159f * 5.0f - dwTime * 0.003f) * 0.15f * depthFade;
         } else if (g_trailShape == 9) {
             // 羽毛：随机毛刺深度
-            depth = (rand() % 100 / 100.0f - 0.5f) * 0.3f;
+            float r = (float)(rand() % 1000) / 1000.0f;
+            depth = (r - 0.5f) * 0.25f * depthFade;
         }
         // 颜色从渐变采样（u 坐标传递到着色器）
         verts.push_back({smoothed[i].x + nx*ow, smoothed[i].y + ny*ow, depth,
@@ -2259,6 +2274,10 @@ void LoadSettings() {
     g_motionBlurStrength = Wh_GetIntSetting(L"motion_blur_strength");
     if (g_motionBlurStrength < 1) g_motionBlurStrength = 1;
     if (g_motionBlurStrength > 5) g_motionBlurStrength = 5;
+    g_enable25DEffect = Wh_GetIntSetting(L"enable_25d_effect") != 0;
+    g_perspectiveStrength = Wh_GetIntSetting(L"perspective_strength");
+    if (g_perspectiveStrength < 0) g_perspectiveStrength = 0;
+    if (g_perspectiveStrength > 50) g_perspectiveStrength = 50;
     str = Wh_GetStringSetting(L"function_preset");
     if (str) {
         if (wcscmp(str, L"damped") == 0)
