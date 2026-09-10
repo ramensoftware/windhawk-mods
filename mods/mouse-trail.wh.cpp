@@ -21,6 +21,14 @@
 
 ![Trail Effect](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail.gif)
 
+### More Demos / 更多展示
+
+![Demo 2](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail_2.gif)
+
+![Demo 3](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail_3.gif)
+
+![Demo 4](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail_4.gif)
+
 ![Trail Screenshot](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/screenshot_trail.png)
 
 ---
