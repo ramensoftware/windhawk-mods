@@ -249,6 +249,7 @@ and to all context menus.
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Storage.Streams.h>
+#include <winrt/Windows.ApplicationModel.DataTransfer.h>
 #include <windows.ui.xaml.hosting.desktopwindowxamlsource.h>
 
 #if __has_include(<winrt/Windows.Media.Control.h>)
@@ -993,6 +994,9 @@ void RefreshBluetoothRadioState();
 void PopulateTrayPanel();
 void PopulateBatteryPanel();
 void ApplyBlurToAllOpenPopups();
+void StripInheritedIslandBackgrounds();
+void ApplyWindowBackdrop(HWND hwnd);
+std::wstring ReadTrayOrderFromRegistry();
 
 // ============================================================================
 // Settings
@@ -1031,7 +1035,23 @@ struct {
     bool showDate = true;
     std::wstring dateFormat = L"📅ddd, MMM dd";
     std::wstring iconColor = L"#FFFFFF";
+    std::wstring trayOrder;
 } g_settings;
+
+std::vector<std::wstring> g_trayOrder;
+const std::vector<std::wstring> kDefaultTrayOrder = {
+    L"DisplayButton", L"SoundButton", L"WifiButton", L"BluetoothButton",
+    L"BatteryButton", L"ResourceButton", L"ClockButton"};
+
+[[clang::no_destroy]] wuxc::StackPanel g_trayPanel{nullptr};
+
+struct TrayDragState {
+    std::wstring itemName;
+    bool tracking = false;
+    double startPanelX = 0.0;
+    FrameworkElement draggedElement{nullptr};
+};
+TrayDragState g_trayDragState;
 
 std::vector<std::pair<std::wstring, std::wstring>> g_styleConstants;
 std::vector<ControlStyleRule> g_controlStyleRules;
@@ -2461,6 +2481,9 @@ void CALLBACK ForegroundEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG id
                 if (SUCCEEDED(DwmGetWindowAttribute(g_topBarHwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked) {
                     DwmSetWindowAttribute(g_topBarHwnd, DWMWA_CLOAK, FALSE, sizeof(BOOL));
                 }
+                // Force topmost so the desktop can't cover the bar
+                SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                 // Reposition
                 PositionAppBar(g_topBarHwnd, g_barHeightPx);
             }
@@ -7103,6 +7126,137 @@ wuxc::Button MakeControlButton(PCWSTR name,
     RegisterNamed(name, button);
     return button;
 }
+std::wstring ReadTrayOrderFromRegistry() {
+    HKEY key = nullptr;
+    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\WindhawkTopBar", 0, KEY_READ, &key) !=
+        ERROR_SUCCESS) {
+        return L"";
+    }
+    wchar_t buffer[1024]{};
+    DWORD size = sizeof(buffer);
+    DWORD type = 0;
+    std::wstring result;
+    if (RegQueryValueEx(key, L"TrayOrder", nullptr, &type,
+                        reinterpret_cast<BYTE*>(buffer), &size) == ERROR_SUCCESS &&
+        type == REG_SZ) {
+        result = buffer;
+    }
+    RegCloseKey(key);
+    return result;
+}
+
+void WriteTrayOrderToRegistry(const std::wstring& value) {
+    HKEY key = nullptr;
+    if (RegCreateKeyEx(HKEY_CURRENT_USER, L"Software\\WindhawkTopBar", 0, nullptr, 0,
+                       KEY_SET_VALUE, nullptr, &key, nullptr) != ERROR_SUCCESS) {
+        return;
+    }
+    RegSetValueEx(key, L"TrayOrder", 0, REG_SZ,
+                  reinterpret_cast<const BYTE*>(value.c_str()),
+                  static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t)));
+    RegCloseKey(key);
+}
+
+void ApplyTrayOrderToPanel() {
+    if (!g_trayPanel) {
+        return;
+    }
+    std::map<std::wstring, UIElement> byName;
+    for (auto&& child : g_trayPanel.Children()) {
+        if (auto fe = child.try_as<FrameworkElement>()) {
+            std::wstring childName(fe.Name());
+            if (!childName.empty()) {
+                byName.insert_or_assign(childName, child);
+            }
+        }
+    }
+    g_trayPanel.Children().Clear();
+    for (const auto& childName : g_trayOrder) {
+        auto found = byName.find(childName);
+        if (found != byName.end()) {
+            g_trayPanel.Children().Append(found->second);
+            byName.erase(found);
+        }
+    }
+    for (auto& leftover : byName) {
+        g_trayPanel.Children().Append(leftover.second);
+    }
+}
+
+void MoveTrayItem(const std::wstring& name, int direction) {
+    auto it = std::find(g_trayOrder.begin(), g_trayOrder.end(), name);
+    if (it == g_trayOrder.end()) {
+        return;
+    }
+    int index = static_cast<int>(it - g_trayOrder.begin());
+    int target = index + direction;
+    if (target < 0 || target >= static_cast<int>(g_trayOrder.size())) {
+        return;
+    }
+
+    std::swap(g_trayOrder[index], g_trayOrder[target]);
+
+    std::wstring serialized;
+    for (size_t i = 0; i < g_trayOrder.size(); i++) {
+        if (i > 0) {
+            serialized += L",";
+        }
+        serialized += g_trayOrder[i];
+    }
+    WriteTrayOrderToRegistry(serialized);
+    g_settings.trayOrder = serialized;
+
+    ApplyTrayOrderToPanel();
+}
+
+void MoveTrayItemTo(const std::wstring& draggedName, const std::wstring& targetName) {
+    if (draggedName.empty() || draggedName == targetName) {
+        return;
+    }
+    auto fromIt = std::find(g_trayOrder.begin(), g_trayOrder.end(), draggedName);
+    auto toIt = std::find(g_trayOrder.begin(), g_trayOrder.end(), targetName);
+    if (fromIt == g_trayOrder.end() || toIt == g_trayOrder.end()) {
+        return;
+    }
+
+    int fromIdx = static_cast<int>(fromIt - g_trayOrder.begin());
+    int toIdx = static_cast<int>(toIt - g_trayOrder.begin());
+    std::wstring item = g_trayOrder[fromIdx];
+    g_trayOrder.erase(g_trayOrder.begin() + fromIdx);
+    if (fromIdx < toIdx) {
+        toIdx--;
+    }
+    g_trayOrder.insert(g_trayOrder.begin() + toIdx, item);
+
+    std::wstring serialized;
+    for (size_t i = 0; i < g_trayOrder.size(); i++) {
+        if (i > 0) {
+            serialized += L",";
+        }
+        serialized += g_trayOrder[i];
+    }
+    WriteTrayOrderToRegistry(serialized);
+    g_settings.trayOrder = serialized;
+
+    ApplyTrayOrderToPanel();
+}
+
+void AttachTrayReorderMenu(wuxc::Button const& button, std::wstring name) {
+    button.RightTapped([name](wf::IInspectable const& sender,
+                              Input::RightTappedRoutedEventArgs const& args) {
+        try {
+            args.Handled(true);
+            wuxc::MenuFlyout menu;
+            StyleMenuFlyout(menu);
+            auto items = menu.Items();
+            items.Append(MakeMenuItem(L"Move left", [name]() { MoveTrayItem(name, -1); }));
+            items.Append(MakeMenuItem(L"Move right", [name]() { MoveTrayItem(name, 1); }));
+            menu.ShowAt(sender.as<FrameworkElement>());
+        } catch (...) {
+        }
+    });
+}
+
 void EnsureAutoRefreshTimers() {
     if (!g_wifiAutoRefreshTimer) {
         g_wifiAutoRefreshTimer = DispatcherTimer();
@@ -7519,6 +7673,20 @@ rightPanel.Children().Append(resourceButton);
         rightPanel.Children().Append(clockButton);
     }
 
+    g_trayPanel = rightPanel;
+    ApplyTrayOrderToPanel();
+
+    for (auto&& child : rightPanel.Children()) {
+        if (auto button = child.try_as<wuxc::Button>()) {
+            std::wstring childName(button.Name());
+            if (!childName.empty() &&
+                std::find(kDefaultTrayOrder.begin(), kDefaultTrayOrder.end(), childName) !=
+                    kDefaultTrayOrder.end()) {
+                AttachTrayReorderMenu(button, childName);
+            }
+        }
+    }
+
     wuxc::Grid::SetColumn(rightPanel, 2);
     root.Children().Append(rightPanel);
     RegisterNamed(L"TrayPanel", rightPanel);
@@ -7855,20 +8023,54 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                     PositionAppBar(hwnd, g_barHeightPx);
                     break;
                 case ABN_FULLSCREENAPP:
-                    g_fullScreenAppActive = (lParam != 0);
-                    // When fullscreen app starts, drop topmost; when ends, restore topmost.
-                    SetWindowPos(hwnd,
-                                 g_fullScreenAppActive ? HWND_NOTOPMOST : HWND_TOPMOST,
-                                 0, 0, 0, 0,
-                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                    {
+                        // The shell sends TRUE via wParam (not lParam).
+                        // Win+D (Show Desktop) makes the shell incorrectly report
+                        // ABN_FULLSCREENAPP = TRUE even though it's really the
+                        // desktop being shown. Verify the foreground window is
+                        // actually a fullscreen app covering the whole monitor.
+                        bool isFullscreen = (wParam != 0);
+                        if (isFullscreen) {
+                            HWND fg = GetForegroundWindow();
+                            bool verified = false;
+                            if (fg) {
+                                wchar_t cls[256] = {0};
+                                GetClassName(fg, cls, ARRAYSIZE(cls));
+                                if (wcscmp(cls, L"Progman") != 0 &&
+                                    wcscmp(cls, L"WorkerW") != 0) {
+                                    RECT fgRect{};
+                                    HMONITOR mon = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
+                                    MONITORINFO mi{};
+                                    mi.cbSize = sizeof(mi);
+                                    if (GetWindowRect(fg, &fgRect) &&
+                                        GetMonitorInfo(mon, &mi)) {
+                                        if (fgRect.left <= mi.rcMonitor.left &&
+                                            fgRect.top <= mi.rcMonitor.top &&
+                                            fgRect.right >= mi.rcMonitor.right &&
+                                            fgRect.bottom >= mi.rcMonitor.bottom) {
+                                            verified = true;
+                                        }
+                                    }
+                                }
+                            }
+                            isFullscreen = verified;
+                        }
+                        g_fullScreenAppActive = isFullscreen;
+                        SetWindowPos(hwnd,
+                                     isFullscreen ? HWND_NOTOPMOST : HWND_TOPMOST,
+                                     0, 0, 0, 0,
+                                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                    }
                     break;
             }
             return 0;
 
         case WM_SIZE:
-            // If we get minimized, restore immediately (unless shutting down)
+            // If we get minimized, restore immediately (unless shutting down).
+            // Never allow the shell to minimize the bar via Win+D.
             if (wParam == SIZE_MINIMIZED && !g_allowHide) {
                 ShowWindow(hwnd, SW_RESTORE);
+                ShowWindow(hwnd, SW_SHOWNOACTIVATE);
                 return 0;
             }
             if (g_islandHwnd) {
@@ -7983,8 +8185,9 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
         case WM_WINDOWPOSCHANGING:
             {
                 WINDOWPOS* wp = reinterpret_cast<WINDOWPOS*>(lParam);
-                // Block hide when not fullscreen and not shutting down
-                if ((wp->flags & SWP_HIDEWINDOW) && !g_allowHide && !g_fullScreenAppActive) {
+                // Block hide whenever not shutting down. Fullscreen apps should
+                // cover the bar via z-order, never hide it.
+                if ((wp->flags & SWP_HIDEWINDOW) && !g_allowHide) {
                     wp->flags &= ~SWP_HIDEWINDOW; // cancel the hide
                 }
             }
@@ -8193,42 +8396,78 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
 
         g_restoreTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
             try {
-                // If the current foreground window is the desktop, clear fullscreen flag
+                if (!g_topBarHwnd || g_allowHide) {
+                    return;
+                }
+
+                // Always ensure visible.
+                if (IsIconic(g_topBarHwnd)) {
+                    ShowWindow(g_topBarHwnd, SW_RESTORE);
+                }
+                BOOL cloaked = FALSE;
+                if (SUCCEEDED(DwmGetWindowAttribute(g_topBarHwnd, DWMWA_CLOAKED,
+                                                    &cloaked, sizeof(cloaked))) &&
+                    cloaked) {
+                    DwmSetWindowAttribute(g_topBarHwnd, DWMWA_CLOAK, FALSE, sizeof(BOOL));
+                }
+                if (!IsWindowVisible(g_topBarHwnd)) {
+                    ShowWindow(g_topBarHwnd, SW_SHOWNOACTIVATE);
+                }
+
+                // Classify the current foreground window.
                 HWND fg = GetForegroundWindow();
-                if (fg) {
-                    wchar_t fgClass[256] = {0};
-                    GetClassName(fg, fgClass, ARRAYSIZE(fgClass));
-                    if (wcscmp(fgClass, L"Progman") == 0 || wcscmp(fgClass, L"WorkerW") == 0) {
-                        g_fullScreenAppActive = false;
+                bool desktopFg = false;
+                bool fullscreenFg = false;
+                if (fg && fg != g_topBarHwnd) {
+                    wchar_t cls[256] = {0};
+                    GetClassName(fg, cls, ARRAYSIZE(cls));
+                    desktopFg = (wcscmp(cls, L"Progman") == 0 ||
+                                 wcscmp(cls, L"WorkerW") == 0);
+                    if (!desktopFg) {
+                        RECT r{};
+                        HMONITOR mon = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
+                        MONITORINFO mi{};
+                        mi.cbSize = sizeof(mi);
+                        if (GetWindowRect(fg, &r) && GetMonitorInfo(mon, &mi)) {
+                            if (r.left   <= mi.rcMonitor.left &&
+                                r.top    <= mi.rcMonitor.top &&
+                                r.right  >= mi.rcMonitor.right &&
+                                r.bottom >= mi.rcMonitor.bottom) {
+                                fullscreenFg = true;
+                            }
+                        }
                     }
                 }
 
-                if (g_topBarHwnd && !g_fullScreenAppActive && !g_allowHide) {
-                    // 1. If minimized, restore
-                    if (IsIconic(g_topBarHwnd)) {
-                        ShowWindow(g_topBarHwnd, SW_RESTORE);
-                    }
-                    // 2. If hidden (not visible), force show
-                    if (!IsWindowVisible(g_topBarHwnd)) {
-                        ShowWindow(g_topBarHwnd, SW_SHOWNOACTIVATE);
-                    }
-                    // 3. Uncloak if DWM cloaked it
-                    BOOL cloaked = FALSE;
-                    if (SUCCEEDED(DwmGetWindowAttribute(g_topBarHwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked) {
-                        DwmSetWindowAttribute(g_topBarHwnd, DWMWA_CLOAK, FALSE, sizeof(BOOL));
-                    }
-                    // 4. Force topmost (so it stays above desktop)
+                if (fullscreenFg) {
+                    // Place the bar DIRECTLY BEHIND the fullscreen window.
+                    // Works whether the fullscreen app is topmost or not.
+                    g_fullScreenAppActive = true;
+                    SetWindowPos(g_topBarHwnd, fg, 0, 0, 0, 0,
+                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                                 SWP_NOOWNERZORDER);
+                } else if (desktopFg) {
+                    // Win+D: re-stack above the desktop (which is itself topmost).
+                    g_fullScreenAppActive = false;
+                    SetWindowPos(g_topBarHwnd, HWND_BOTTOM, 0, 0, 0, 0,
+                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                    SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                } else {
+                    // Normal window foreground: keep ourselves above it.
+                    g_fullScreenAppActive = false;
                     SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
                                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                    // 5. Reposition only if the bar actually moved
-                    RECT wanted = GetBarMonitorRect();
-                    wanted.bottom = wanted.top + g_barHeightPx;
-                    RECT current;
-                    GetWindowRect(g_topBarHwnd, &current);
-                    if (current.left != wanted.left || current.top != wanted.top ||
-                        current.right != wanted.right || current.bottom != wanted.bottom) {
-                        PositionAppBar(g_topBarHwnd, g_barHeightPx);
-                    }
+                }
+
+                // Reposition if drifted.
+                RECT wanted = GetBarMonitorRect();
+                wanted.bottom = wanted.top + g_barHeightPx;
+                RECT current{};
+                GetWindowRect(g_topBarHwnd, &current);
+                if (current.left != wanted.left || current.top != wanted.top ||
+                    current.right != wanted.right || current.bottom != wanted.bottom) {
+                    PositionAppBar(g_topBarHwnd, g_barHeightPx);
                 }
             } catch (...) {
             }
@@ -8384,6 +8623,29 @@ void LoadSettings() {
     g_settings.iconColor = GetStringSettingCopy(L"iconColor");
     if (g_settings.iconColor.empty()) {
         g_settings.iconColor = L"#FFFFFF";
+    }
+
+    g_settings.trayOrder = ReadTrayOrderFromRegistry();
+    g_trayOrder.clear();
+    {
+        size_t pos = 0;
+        while (pos <= g_settings.trayOrder.size()) {
+            size_t comma = g_settings.trayOrder.find(L',', pos);
+            std::wstring token = TrimWs(g_settings.trayOrder.substr(
+                pos, comma == std::wstring::npos ? std::wstring::npos : comma - pos));
+            if (!token.empty()) {
+                g_trayOrder.push_back(token);
+            }
+            if (comma == std::wstring::npos) {
+                break;
+            }
+            pos = comma + 1;
+        }
+    }
+    for (const auto& known : kDefaultTrayOrder) {
+        if (std::find(g_trayOrder.begin(), g_trayOrder.end(), known) == g_trayOrder.end()) {
+            g_trayOrder.push_back(known);
+        }
     }
 
     g_styleConstants.clear();
