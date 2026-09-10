@@ -1050,6 +1050,7 @@ struct Particle {
     D2D1_COLOR_F color;
     D2D1_COLOR_F endColor;
     int shapeType;
+    float colorOffset[3]; // 随机偏色（RGB，约 ±20/255）
 };
 std::vector<Particle> g_particles;
 struct Ripple {
@@ -1656,9 +1657,10 @@ static void NativeRenderParticles(int screenW, int screenH) {
         float progress = (float)(now - p.startTime) / p.lifetime;
         if (progress < 0 || progress >= 1) continue;
         float lifeAlpha = (1.0f - progress);
-        D2D1_COLOR_F pc = D2D1::ColorF(p.color.r + (p.endColor.r - p.color.r) * progress,
-                                       p.color.g + (p.endColor.g - p.color.g) * progress,
-                                       p.color.b + (p.endColor.b - p.color.b) * progress, 1.0f);
+        D2D1_COLOR_F pc = D2D1::ColorF(
+            p.color.r + (p.endColor.r - p.color.r) * progress + p.colorOffset[0],
+            p.color.g + (p.endColor.g - p.color.g) * progress + p.colorOffset[1],
+            p.color.b + (p.endColor.b - p.color.b) * progress + p.colorOffset[2], 1.0f);
         instances[count].x = p.x;
         instances[count].y = p.y;
         instances[count].z = (rand()/(float)RAND_MAX - 0.5f) * 0.8f;  // 3D 随机深度
@@ -1702,39 +1704,39 @@ static void NativeRenderTrail(const std::vector<D2D1_POINT_2F>& smoothed, float 
                               const GradData& cols, float fadeAlpha, int screenW, int screenH, DWORD dwTime = 0) {
     if (!g_pNativeVS || !g_pNativePS || !g_pTrailVB || smoothed.size() < 2) return;
 
-    // 构建顶点（外带 + 内带，三角形带）
-    std::vector<VertexPosColor> verts;
-    verts.reserve(smoothed.size() * 4);
     size_t sl = smoothed.size();
 
-    // 外带
+    // 预计算每个点的法线和宽度
+    std::vector<float> nx(sl), ny(sl), widths(sl);
     for (size_t i = 0; i < sl; ++i) {
         float ddx, ddy;
-        if (i == 0) { ddx = smoothed[0].x - smoothed[1].x; ddy = smoothed[0].y - smoothed[1].y; }
-        else if (i == sl - 1) { ddx = smoothed[i-1].x - smoothed[i].x; ddy = smoothed[i-1].y - smoothed[i].y; }
-        else { ddx = smoothed[i-1].x - smoothed[i+1].x; ddy = smoothed[i-1].y - smoothed[i+1].y; }
+        if (i == 0) { ddx = smoothed[1].x - smoothed[0].x; ddy = smoothed[1].y - smoothed[0].y; }
+        else if (i == sl - 1) { ddx = smoothed[i].x - smoothed[i-1].x; ddy = smoothed[i].y - smoothed[i-1].y; }
+        else { ddx = smoothed[i+1].x - smoothed[i-1].x; ddy = smoothed[i+1].y - smoothed[i-1].y; }
         float ln = sqrtf(ddx*ddx + ddy*ddy);
         if (ln > 0) { ddx /= ln; ddy /= ln; } else { ddx = 1; ddy = 0; }
-        float nx = -ddy, ny = ddx;
+        nx[i] = -ddy; ny[i] = ddx;
         float ratio = (float)i / (sl - 1);
         float taper = powf(1.0f - ratio, 1.3f);
-        float ow = (i == sl - 1) ? 0 : 10.0f * taper * widthMul;
-        // 拖尾带使用平面渲染（2.5D 效果仅用于粒子和形状拖尾）
-        float depth = 0.0f;
-        // 颜色从渐变采样（u 坐标传递到着色器）
-        verts.push_back({smoothed[i].x + nx*ow, smoothed[i].y + ny*ow, depth,
-                         1,1,1, fadeAlpha, ratio});
-        verts.push_back({smoothed[i].x - nx*ow, smoothed[i].y - ny*ow, depth,
-                         1,1,1, fadeAlpha, ratio});
+        widths[i] = (i == sl - 1) ? 0.5f : 10.0f * taper * widthMul;
     }
 
-    // 更新顶点缓冲
-    D3D11_MAPPED_SUBRESOURCE mapped;
-    if (FAILED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
-    memcpy(mapped.pData, verts.data(), verts.size() * sizeof(VertexPosColor));
-    g_pD3DContext->Unmap(g_pTrailVB, 0);
+    // 辅助函数：生成带的顶点
+    auto buildBand = [&](float widthScale, float r, float g, float b, float aMul) {
+        std::vector<VertexPosColor> bandVerts;
+        bandVerts.reserve(sl * 2);
+        for (size_t i = 0; i < sl; ++i) {
+            float ratio = (float)i / (sl - 1);
+            float ow = widths[i] * widthScale;
+            bandVerts.push_back({smoothed[i].x + nx[i]*ow, smoothed[i].y + ny[i]*ow, 0.0f,
+                                 r, g, b, fadeAlpha * aMul, ratio});
+            bandVerts.push_back({smoothed[i].x - nx[i]*ow, smoothed[i].y - ny[i]*ow, 0.0f,
+                                 r, g, b, fadeAlpha * aMul, ratio});
+        }
+        return bandVerts;
+    };
 
-    // 设置渲染状态（传递渐变数据到着色器，实现平滑颜色过渡）
+    // 设置渲染状态
     UpdateConstantBuffer(screenW, screenH, &cols);
     g_pD3DContext->IASetInputLayout(g_pNativeLayout);
     g_pD3DContext->VSSetShader(g_pNativeVS, nullptr, 0);
@@ -1749,8 +1751,24 @@ static void NativeRenderTrail(const std::vector<D2D1_POINT_2F>& smoothed, float 
     g_pD3DContext->IASetVertexBuffers(0, 1, &g_pTrailVB, &stride, &offset);
     g_pD3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
-    // 绘制外带
-    g_pD3DContext->Draw((UINT)verts.size(), 0);
+    auto drawBand = [&](const std::vector<VertexPosColor>& bandVerts) {
+        if (bandVerts.empty()) return;
+        std::vector<VertexPosColor> v = bandVerts;
+        if ((int)v.size() > 4096) v.resize(4096);
+        D3D11_MAPPED_SUBRESOURCE mapped;
+        if (SUCCEEDED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
+            memcpy(mapped.pData, v.data(), v.size() * sizeof(VertexPosColor));
+            g_pD3DContext->Unmap(g_pTrailVB, 0);
+            g_pD3DContext->Draw((UINT)v.size(), 0);
+        }
+    };
+
+    // 1. 外发光层（宽、半透明）
+    drawBand(buildBand(2.2f, 1, 1, 1, 0.12f));
+    // 2. 外带（主色，渐变）
+    drawBand(buildBand(1.0f, 1, 1, 1, 1.0f));
+    // 3. 内带（核心高亮，更窄更亮）
+    drawBand(buildBand(0.35f, 1.2f, 1.2f, 1.2f, 0.7f));
 }
 
 // 形状拖尾原生渲染（v3）：直接生成世界坐标顶点，一次绘制
