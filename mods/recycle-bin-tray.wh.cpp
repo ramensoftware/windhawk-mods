@@ -1,14 +1,14 @@
 // ==WindhawkMod==
 // @id              recycle-bin-tray
 // @name            Recycle Bin Tray Icon
-// @description     Adds an interactive Recycle Bin icon to the system tray with live state updates, drag-and-drop support, theme-aware rendering, multiple icon styles, and configurable mouse actions.
-// @description:fr-FR Ajoute une icône interactive de la Corbeille près de l'horloge dans la barre des tâches, avec mise à jour en temps réel, glisser-déposer, adaptation au thème, plusieurs styles d'icône et actions de souris configurables.
+// @description     Adds an interactive Recycle Bin icon to the Windows 11 system tray with live state updates, drag-and-drop support, theme-aware rendering, multiple icon styles, and configurable mouse actions.
+// @description:fr-FR Ajoute une icône interactive de la Corbeille à la zone de notification de Windows 11, avec mise à jour en temps réel, glisser-déposer, adaptation au thème, plusieurs styles d'icône et actions de souris configurables.
 // @version         1.0.0
 // @author          Wildstyle23
 // @github          https://github.com/wildstyle23
 // @license         GPL-3.0
 // @include         windhawk.exe
-// @compilerOptions -lshell32 -ladvapi32 -luser32 -lole32 -luuid -lgdi32 -lgdiplus -lshlwapi
+// @compilerOptions -lshell32 -ladvapi32 -luser32 -lole32 -lgdi32 -lgdiplus -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -188,11 +188,11 @@ Three variants are available:
 
 The icon is drawn from glyphs provided by installed font families.
 
-The empty and full states have separate **font family**, **glyph**, and **bold-weight** settings. Font and glyph fields are intentionally blank by default: if Font mode is selected without a usable configuration, the mod falls back to the native Windows Recycle Bin icon.
+The empty and full states have separate **font family / typeface**, **glyph**, and **font weight** settings. Font and glyph fields are intentionally blank by default: if Font mode is selected without a usable configuration, the mod falls back to the native Windows Recycle Bin icon.
 
-Font family names are matched against the fonts installed in Windows. Leading/trailing whitespace and surrounding quotation marks are ignored when settings are loaded.
+Font names are matched against GDI font/typeface names exposed by Windows. Leading/trailing whitespace and surrounding quotation marks are ignored when settings are loaded. GDI limits the requested typeface name to **31 characters** (`LF_FACESIZE - 1`); longer names are rejected instead of being silently truncated.
 
-The **Bold weight** option is available independently for the Empty and Full states. Leave it disabled for the normal font weight; enable it when the selected font provides a heavier bold variant or when the glyph looks too light at tray size. Internally, the mod uses the standard Windows font weights **FW_NORMAL (400)** and **FW_BOLD (700)**.
+The **Font weight** option is available independently for the Empty and Full states and supports the standard Windows range from **Thin (100)** to **Black (900)**. Use the base family/typeface name with the desired weight when Windows exposes the family through normal weight matching. If Windows exposes a variant as a separate typeface (for example **Font Awesome 7 Free Solid** or **Arial Narrow**), enter that exact Windows typeface name instead. When an exact weight is unavailable, Windows can select the nearest available weight in the requested family.
 
 #### Fallback behavior
 
@@ -293,7 +293,7 @@ Because Shell notifications can occasionally be missed, a configurable fallback 
 
 The default fallback interval is **60 seconds** and can be changed in the Windhawk settings.
 
-A one-second startup timer performs an additional initial state check after the tray window has been created.
+Initialization checks the Shell and tray immediately. A one-second startup retry is armed only if Shell notification registration or tray creation is not ready yet.
 
 ## Theme and DPI Handling
 
@@ -311,7 +311,7 @@ The mod derives its icon render target from the tray/display DPI.
 | 300%         | 48×48 px  |
 | 400%         | 64×64 px  |
 
-The target size is obtained from the current tray/display DPI when the relevant DPI APIs are available. The rectangle returned by `Shell_NotifyIconGetRect` is tracked separately as a geometry-change signal; its slot bounds are not treated as a documented HICON target size.
+The target size is obtained from the current tray/display DPI. The rectangle returned by `Shell_NotifyIconGetRect` is tracked separately as a geometry-change signal; its slot bounds are not treated as a documented HICON target size.
 
 Vector icons are rendered internally at **4× the target resolution** before being downsampled with high-quality interpolation to fit the active tray size. This reduces jagged edges while keeping rendering and memory usage low.
 
@@ -328,7 +328,7 @@ This allows the icon to recover without requiring the Windhawk mod to be manuall
 * The tray icon is hosted by a hidden top-level tool window owned by the mod's dedicated tray thread.
 * Drag & drop uses the standard Windows OLE `IDropTarget` mechanism and accepts dropped file lists exposed through `CF_HDROP`.
 * The mod does not create a separate executable or Windows service.
-* GDI+ is initialized lazily only when vector rendering or custom raster-image loading requires it; native `.ico` loading can bypass GDI+. It is shut down after the tray thread has terminated.
+* GDI+ is initialized lazily only when vector rendering or custom raster-image loading requires it; native `.ico` loading can bypass GDI+. It is released opportunistically when no rendered icon needs it and again during final teardown.
 * Tray timers are explicitly cancelled during window destruction before icon and Shell resources are released.
 * Explorer/taskbar restarts are detected through the standard `TaskbarCreated` broadcast received by the hidden tray host.
 * The current icon handle is explicitly destroyed whenever the icon is replaced or the mod unloads.
@@ -418,8 +418,8 @@ This project is licensed under the GNU General Public License Version 3.0.
   - enableDragDrop: true
     $name: "Enable drag & drop"
     $name:fr-FR: "Autoriser le glisser-déposer"
-    $description: "Allow dropping files onto the tray icon to move them to the Recycle Bin."
-    $description:fr-FR: "Permet de glisser des fichiers et dossiers directement sur l'icône de la corbeille."
+    $description: "Allow dropping files onto the tray icon to move them to the Recycle Bin. ⚠ Requires \"Hide when empty\" to be turned off."
+    $description:fr-FR: "Permet de glisser des fichiers et dossiers directement sur l'icône de la corbeille. ⚠ Nécessite que \"Masquer si vide\" soit désactivé."
   - iconStyle: system
     $name: "Icon style"
     $name:fr-FR: "Style d'icône"
@@ -462,48 +462,88 @@ This project is licensed under the GNU General Public License Version 3.0.
 - font:
   - empty:
     - name: ""
-      $name: "Font family"
-      $name:fr-FR: "Police"
-      $description: "Exact installed font family name. e.g. Font Awesome 7 Free."
-      $description:fr-FR: "Nom exact d'une famille de polices installée. ex. : Font Awesome 7 Free."
+      $name: "Font family / typeface"
+      $name:fr-FR: "Famille / nom de police"
+      $description: "Exact Windows GDI font/typeface name, maximum 31 characters. Use Font weight for standard Thin-to-Black variants; if Windows exposes a variant as a separate typeface (e.g. Font Awesome 7 Free Solid), enter that exact name."
+      $description:fr-FR: "Nom exact de la police/typeface GDI exposée par Windows, 31 caractères maximum. Utilisez Épaisseur de la police pour les variantes standard de Thin à Black ; si Windows expose une variante comme un type distinct (ex. Font Awesome 7 Free Solid), saisissez ce nom exact."
     - code: ""
       $name: "Glyph (hex)"
       $name:fr-FR: "Glyphe (hex)"
       $description: "Unicode code point in hexadecimal. e.g. 0xF014."
       $description:fr-FR: "Code Unicode hexadécimal. ex. : 0xF014."
-    - bold: false
-      $name: "Bold weight"
-      $name:fr-FR: "Style gras"
-      $description: "Use the bold font weight when available."
-      $description:fr-FR: "Utiliser la variante en gras lorsqu'elle est disponible."
+    - weight: regular
+      $name: "Font weight"
+      $name:fr-FR: "Épaisseur de la police"
+      $description: "Select the Windows font weight used for this glyph. If the exact weight is unavailable, Windows may select the nearest available weight."
+      $description:fr-FR: "Sélectionnez l'épaisseur de la police Windows utilisée pour ce glyphe. Si cette épaisseur exacte n'est pas disponible, Windows peut sélectionner l'épaisseur disponible la plus proche."
+      $options:
+        - thin: Thin (100)
+        - extraLight: Extra Light (200)
+        - light: Light (300)
+        - regular: Regular (400)
+        - medium: Medium (500)
+        - semiBold: Semi Bold (600)
+        - bold: Bold (700)
+        - extraBold: Extra Bold (800)
+        - black: Black (900)
+      $options:fr-FR:
+        - thin: Thin (100)
+        - extraLight: Extra Light (200)
+        - light: Light (300)
+        - regular: Regular (400)
+        - medium: Medium (500)
+        - semiBold: Semi Bold (600)
+        - bold: Bold (700)
+        - extraBold: Extra Bold (800)
+        - black: Black (900)
     $name: "Empty bin"
     $name:fr-FR: "Corbeille vide"
     $description: "⚠ Fallback: If the Empty font or glyph is invalid or blank, the Full-bin configuration is used automatically."
     $description:fr-FR: "⚠ Repli : si la police ou le glyphe de la corbeille vide est invalide ou non renseigné, la configuration de la corbeille pleine est utilisée automatiquement."
   - full:
     - name: ""
-      $name: "Font family"
-      $name:fr-FR: "Police"
-      $description: "Exact installed font family name. e.g. Font Awesome 7 Free Solid."
-      $description:fr-FR: "Nom exact d'une famille de polices installée. ex. : Font Awesome 7 Free Solid."
+      $name: "Font family / typeface"
+      $name:fr-FR: "Famille / nom de police"
+      $description: "Exact Windows GDI font/typeface name, maximum 31 characters. Use Font weight for standard Thin-to-Black variants; if Windows exposes a variant as a separate typeface (e.g. Font Awesome 7 Free Solid), enter that exact name."
+      $description:fr-FR: "Nom exact de la police/typeface GDI exposée par Windows, 31 caractères maximum. Utilisez Épaisseur de la police pour les variantes standard de Thin à Black ; si Windows expose une variante comme un type distinct (ex. Font Awesome 7 Free Solid), saisissez ce nom exact."
     - code: ""
       $name: "Glyph (hex)"
       $name:fr-FR: "Glyphe (hex)"
       $description: "Unicode code point in hexadecimal. e.g. 0xF014."
       $description:fr-FR: "Code Unicode hexadécimal. ex. : 0xF014."
-    - bold: false
-      $name: "Bold weight"
-      $name:fr-FR: "Style gras"
-      $description: "Use the bold font weight when available."
-      $description:fr-FR: "Utiliser la variante en gras lorsqu'elle est disponible."
+    - weight: regular
+      $name: "Font weight"
+      $name:fr-FR: "Épaisseur de la police"
+      $description: "Select the Windows font weight used for this glyph. If the exact weight is unavailable, Windows may select the nearest available weight."
+      $description:fr-FR: "Sélectionnez l'épaisseur de la police Windows utilisée pour ce glyphe. Si cette épaisseur exacte n'est pas disponible, Windows peut sélectionner l'épaisseur disponible la plus proche."
+      $options:
+        - thin: Thin (100)
+        - extraLight: Extra Light (200)
+        - light: Light (300)
+        - regular: Regular (400)
+        - medium: Medium (500)
+        - semiBold: Semi Bold (600)
+        - bold: Bold (700)
+        - extraBold: Extra Bold (800)
+        - black: Black (900)
+      $options:fr-FR:
+        - thin: Thin (100)
+        - extraLight: Extra Light (200)
+        - light: Light (300)
+        - regular: Regular (400)
+        - medium: Medium (500)
+        - semiBold: Semi Bold (600)
+        - bold: Bold (700)
+        - extraBold: Extra Bold (800)
+        - black: Black (900)
     $name: "Full bin"
     $name:fr-FR: "Corbeille pleine"
     $description: "⚠ Fallback: If the Full font or glyph is invalid or blank, the native Windows Recycle Bin icon is used."
     $description:fr-FR: "⚠ Repli : si la police ou le glyphe de la corbeille pleine est invalide ou non renseigné, l'icône système Windows de la Corbeille est utilisée."
   $name: "Font"
   $name:fr-FR: "Police"
-  $description: "Used only when Icon style is set to Font."
-  $description:fr-FR: "Utilisé uniquement lorsque le style d'icône est Police."
+  $description: "Used only when Icon style is set to Font. Glyphs keep the normal tray size and are reduced only if their rendered ink would otherwise be clipped."
+  $description:fr-FR: "Utilisé uniquement lorsque le style d'icône est Police. Les glyphes conservent la taille normale de la zone de notification et ne sont réduits que si leur tracé serait autrement rogné."
 
 - customIcon:
   - colorMode: original
@@ -627,7 +667,7 @@ This project is licensed under the GNU General Public License Version 3.0.
     $name:fr-FR: "Intervalle de vérification de secours (secondes)"
     $description: "Safety polling interval in seconds to refresh state if Shell events are missed. Set to 0 to disable."
     $description:fr-FR: "Intervalle utilisé pour vérifier l'état de la Corbeille si une notification Windows est manquée. Régler sur 0 pour désactiver."
-  - dpiCheckInterval: 10
+  - dpiCheckInterval: 30
     $name: "Tray position / DPI check interval (seconds)"
     $name:fr-FR: "Intervalle de vérification de la position / du DPI de l'icône (secondes)"
     $description: "How often the mod checks the real tray icon position and DPI. Set to 0 to disable."
@@ -672,6 +712,8 @@ constexpr UINT WM_USER_STOP_DRAG_POLL = WM_USER + 102;
 constexpr UINT WM_USER_END_OLE_DRAG = WM_USER + 103;
 constexpr UINT WM_USER_TRAY_DPI_CHANGED = WM_USER + 104;
 constexpr UINT WM_USER_SHUTDOWN = WM_USER + 105;
+constexpr UINT WM_USER_REFRESH_AFTER_TRAY_ADD = WM_USER + 106;
+constexpr UINT WM_USER_RECYCLE_WORK_COMPLETE = WM_USER + 107;
 constexpr int VECTOR_SUPERSAMPLE = 4;
 constexpr wchar_t TRAY_WINDOW_CLASS[] = L"WindhawkRecycleTrayClass";
 constexpr wchar_t DROP_OVERLAY_CLASS[] = L"WindhawkBinDropOverlay";
@@ -815,6 +857,9 @@ constexpr UINT SHELL_COALESCE_INTERVAL_MS = 300;
 // Give the Shell a short one-shot settle window after the tray owner changes DPI.
 constexpr UINT DPI_REINSTALL_DELAY_MS = 250;
 
+// Tool-mod shutdown must not wait forever on nested Shell UI.
+constexpr DWORD TOOL_THREAD_SHUTDOWN_TIMEOUT_MS = 5000;
+
 constexpr UINT IDM_OPEN = 201;
 constexpr UINT IDM_EMPTY = 202;
 constexpr UINT IDM_PROPERTIES = 203;
@@ -877,6 +922,7 @@ struct TrayState {
     RECT cachedIconRect = { 0 };
     bool isIconRectValid = false;
     bool dragPollTimerActive = false;
+    bool dragRectRefreshed = false;
     bool displaySettleTimerActive = false;
     bool shellCoalesceTimerActive = false;
     RECT displaySettleLastRect = { 0 };
@@ -903,12 +949,18 @@ struct TrayGeometryCache {
     int renderSize = 0;
     int slotWidth = 0;
     int slotHeight = 0;
-    UINT dpi = 0;
-    HMONITOR monitor = NULL;
-    bool isValid = false;
+    bool renderSizeValid = false;
+    bool hasShellGeometry = false;
 };
 
 static TrayGeometryCache g_trayGeometryCache;
+
+struct SystemThemeCache {
+    bool dark = false;
+    bool valid = false;
+};
+
+static SystemThemeCache g_systemThemeCache;
 
 // Cache invalidation
 
@@ -917,15 +969,16 @@ void InvalidateIconRectCache() {
     g_trayState.isIconRectValid = false;
 }
 
-// Invalidates cached tray geometry, DPI and render size.
-void InvalidateTrayGeometryCache() {
-    g_trayGeometryCache.isValid = false;
+// Re-sample the render size while preserving the last Shell slot dimensions as
+// a baseline for detecting real layout changes.
+void InvalidateTrayRenderSize() {
+    g_trayGeometryCache.renderSizeValid = false;
 }
 
-// Invalidates geometry and DPI caches together.
-void InvalidateAllCaches() {
+// Invalidates transient tray position and render size while preserving the last Shell slot baseline.
+void InvalidateTrayPositionAndRenderSize() {
     InvalidateIconRectCache();
-    InvalidateTrayGeometryCache();
+    InvalidateTrayRenderSize();
 }
 
 // User settings
@@ -934,12 +987,12 @@ struct ModSettings {
     bool enableDragDrop;
     IconStyle iconStyle;
     WCHAR vectorStyle[32];
-    WCHAR fontNameEmpty[64];
+    WCHAR fontNameEmpty[LF_FACESIZE];
     WCHAR fontCodeEmpty[16];
-    bool fontBoldEmpty;
-    WCHAR fontNameFull[64];
+    int fontWeightEmpty;
+    WCHAR fontNameFull[LF_FACESIZE];
     WCHAR fontCodeFull[16];
-    bool fontBoldFull;
+    int fontWeightFull;
     bool customIconThemeTint;
     std::wstring customIconEmpty;
     std::wstring customIconFull;
@@ -974,11 +1027,11 @@ static bool ConsumePendingSettings() {
     std::unique_ptr<ModSettings> pending(TakePendingSettings());
     if (!pending) return false;
 
-    g_settings = *pending;
+    g_settings = std::move(*pending);
     return true;
 }
 
-bool IsSystemDarkTheme() {
+static bool ReadSystemDarkTheme() {
     HKEY hKey;
     DWORD data = 1;
     DWORD dataSize = sizeof(data);
@@ -995,12 +1048,45 @@ bool IsSystemDarkTheme() {
         RegCloseKey(hKey);
     }
 
-    return (data == 0);
+    return data == 0;
+}
+
+static bool GetSystemDarkTheme() {
+    if (!g_systemThemeCache.valid) {
+        g_systemThemeCache.dark = ReadSystemDarkTheme();
+        g_systemThemeCache.valid = true;
+    }
+    return g_systemThemeCache.dark;
+}
+
+static bool RefreshSystemThemeCache() {
+    const bool dark = ReadSystemDarkTheme();
+    const bool changed =
+        !g_systemThemeCache.valid || g_systemThemeCache.dark != dark;
+    g_systemThemeCache.dark = dark;
+    g_systemThemeCache.valid = true;
+    return changed;
+}
+
+static void InvalidateSystemThemeCache() {
+    g_systemThemeCache.valid = false;
 }
 
 
 // Shared tray resources. The drop-target type is forward-declared for its global pointer.
 class RecycleBinDropTarget;
+
+struct RecycleDroppedItem {
+    std::wstring path;
+    std::wstring parentPath;
+    bool isDirectory = false;
+};
+
+struct RecycleWorkerJob {
+    HWND owner = NULL;
+    std::vector<std::wstring> paths;
+};
+
 HANDLE g_hThread = NULL;
 HWND g_hWnd = NULL;
 HWND g_hOverlayWnd = NULL;
@@ -1012,10 +1098,11 @@ bool g_ignoreNextLeftUp = false;
 bool g_trayVersion4 = false;
 bool g_loggedInitialState = false;
 std::atomic_bool g_shutdownRequested{false};
+UINT g_shellModalDepth = 0; // Tray-thread only; protects the hidden Shell UI owner.
 bool g_hostDpiProbeActive = false;
 bool g_pendingDpiShellReinstall = false;
 bool QueryTrayIconRect(HWND hWnd, RECT& rect, bool forceRefresh);
-bool RefreshTrayDpiFromIconRect(HWND hWnd, bool forceRegeneration);
+bool RefreshTrayGeometry(HWND hWnd, bool forceRegeneration);
 static HWND GetSafeHwnd();
 const WCHAR* TimerName(UINT timerId);
 bool SetLoggedTimer(HWND hWnd, UINT timerId, UINT intervalMs);
@@ -1027,42 +1114,359 @@ ULONG_PTR g_gdiplusToken = 0;
 bool g_gdiplusInitialized = false;
 UINT g_wmTaskbarCreated = 0;
 
-static bool SuspendMouseHookForBlockingRecycle() {
-    if (!g_hMouseHook) {
+// Recycle work runs outside IDropTarget::Drop so the source's DoDragDrop can
+// return immediately even if Shell needs slow I/O or user confirmation.
+HANDLE g_hRecycleWorkerThread = NULL;
+HANDLE g_hRecycleWorkerEvent = NULL;
+RecycleWorkerJob* g_pendingRecycleWorkerJob = nullptr;
+std::atomic_bool g_recycleWorkerStop{false};
+std::atomic_bool g_recycleWorkerBusy{false};
+
+static RecycleWorkerJob* TakePendingRecycleWorkerJob() {
+    return static_cast<RecycleWorkerJob*>(InterlockedExchangePointer(
+        reinterpret_cast<PVOID volatile*>(&g_pendingRecycleWorkerJob), nullptr));
+}
+
+static bool CanCloseTrayHost() {
+    // The hidden host can own Shell UI on either the tray thread or the recycle
+    // worker. Keep it alive until both paths have unwound.
+    return g_shellModalDepth == 0 && !g_recycleWorkerBusy.load();
+}
+
+// Shell APIs can enter nested modal message loops. Keep the hidden owner alive
+// until the outermost tray-thread call returns, then finish a pending shutdown.
+class ShellModalScope {
+public:
+    explicit ShellModalScope(HWND owner) : m_owner(owner) {
+        ++g_shellModalDepth;
+    }
+
+    ~ShellModalScope() {
+        if (g_shellModalDepth > 0) {
+            --g_shellModalDepth;
+        }
+
+        if (CanCloseTrayHost() && g_shutdownRequested.load() &&
+            m_owner && IsWindow(m_owner)) {
+            (void)PostMessageW(m_owner, WM_CLOSE, 0, 0);
+        }
+    }
+
+    ShellModalScope(const ShellModalScope&) = delete;
+    ShellModalScope& operator=(const ShellModalScope&) = delete;
+
+private:
+    HWND m_owner;
+};
+
+static std::wstring GetParentPath(const std::wstring& path) {
+    if (path.empty()) return {};
+
+    std::wstring parent = path;
+    if (!PathRemoveFileSpecW(parent.data())) {
+        return {};
+    }
+
+    parent.resize(wcslen(parent.c_str()));
+    return parent;
+}
+
+static void NotifyShellSourceChanged(const std::vector<RecycleDroppedItem>& items) {
+    std::vector<std::wstring> notifiedParents;
+    notifiedParents.reserve(items.size());
+
+    for (const auto& item : items) {
+        SHChangeNotify(
+            item.isDirectory ? SHCNE_RMDIR : SHCNE_DELETE,
+            SHCNF_PATHW | SHCNF_FLUSH,
+            item.path.c_str(),
+            NULL);
+
+        if (!item.parentPath.empty() &&
+            std::find(notifiedParents.begin(), notifiedParents.end(),
+                      item.parentPath) == notifiedParents.end()) {
+            SHChangeNotify(
+                SHCNE_UPDATEDIR,
+                SHCNF_PATHW | SHCNF_FLUSH,
+                item.parentPath.c_str(),
+                NULL);
+            notifiedParents.push_back(item.parentPath);
+        }
+    }
+
+    Wh_Log(L"D&D: Shell source refresh notifications sent (%u item(s), %u parent(s))",
+           static_cast<UINT>(items.size()),
+           static_cast<UINT>(notifiedParents.size()));
+}
+
+static bool PerformRecycleWorkerJob(RecycleWorkerJob& job) {
+    if (job.paths.empty()) {
         return false;
     }
 
-    HHOOK hook = g_hMouseHook;
-    if (!UnhookWindowsHookEx(hook)) {
-        Wh_Log(L"D&D: failed to suspend WH_MOUSE_LL hook before recycle: %lu",
+    std::vector<RecycleDroppedItem> items;
+    items.reserve(job.paths.size());
+
+    // Resolve attributes on the worker as well; network/removable paths must
+    // not turn IDropTarget::Drop into a blocking filesystem operation.
+    for (auto& path : job.paths) {
+        const DWORD attributes = GetFileAttributesW(path.c_str());
+        if (attributes == INVALID_FILE_ATTRIBUTES) {
+            Wh_Log(L"D&D worker: GetFileAttributes failed for '%s': %lu",
+                   path.c_str(), GetLastError());
+            return false;
+        }
+
+        RecycleDroppedItem item;
+        item.parentPath = GetParentPath(path);
+        item.isDirectory = (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        item.path = std::move(path);
+        items.push_back(std::move(item));
+    }
+
+    // Only the enriched item list is needed from here; release the moved-from
+    // path-vector storage before a potentially long Shell operation.
+    std::vector<std::wstring>().swap(job.paths);
+
+    IFileOperation* pfo = NULL;
+    HRESULT hr = CoCreateInstance(
+        CLSID_FileOperation, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfo));
+    if (FAILED(hr)) {
+        Wh_Log(L"D&D worker: CoCreateInstance(CLSID_FileOperation) failed: 0x%08X", hr);
+        return false;
+    }
+
+    if (job.owner && IsWindow(job.owner)) {
+        hr = pfo->SetOwnerWindow(job.owner);
+        if (FAILED(hr)) {
+            Wh_Log(L"D&D worker: SetOwnerWindow failed: 0x%08X", hr);
+        }
+    }
+
+    hr = pfo->SetOperationFlags(
+        FOFX_RECYCLEONDELETE |
+        FOFX_ADDUNDORECORD |
+        FOF_NOCONFIRMATION |
+        FOF_SILENT |
+        FOF_WANTNUKEWARNING);
+    if (FAILED(hr)) {
+        Wh_Log(L"D&D worker: SetOperationFlags failed: 0x%08X", hr);
+        pfo->Release();
+        return false;
+    }
+
+    bool allQueued = true;
+    for (const auto& item : items) {
+        IShellItem* psi = NULL;
+        hr = SHCreateItemFromParsingName(
+            item.path.c_str(), NULL, IID_PPV_ARGS(&psi));
+        if (FAILED(hr)) {
+            Wh_Log(L"D&D worker: SHCreateItemFromParsingName failed for '%s': 0x%08X",
+                   item.path.c_str(), hr);
+            allQueued = false;
+            break;
+        }
+
+        hr = pfo->DeleteItem(psi, NULL);
+        psi->Release();
+        if (FAILED(hr)) {
+            Wh_Log(L"D&D worker: DeleteItem failed for '%s': 0x%08X",
+                   item.path.c_str(), hr);
+            allQueued = false;
+            break;
+        }
+    }
+
+    bool completed = false;
+    if (allQueued) {
+        // This may show Shell UI (for example a permanent-delete warning), but
+        // it no longer runs inside the source application's DoDragDrop call.
+        hr = pfo->PerformOperations();
+
+        if (FAILED(hr)) {
+            Wh_Log(L"D&D worker: PerformOperations failed: 0x%08X", hr);
+        } else {
+            BOOL aborted = FALSE;
+            const HRESULT hrAborted = pfo->GetAnyOperationsAborted(&aborted);
+            if (FAILED(hrAborted)) {
+                Wh_Log(L"D&D worker: GetAnyOperationsAborted failed: 0x%08X", hrAborted);
+            } else if (aborted) {
+                Wh_Log(L"D&D worker: one or more file operations were aborted");
+            } else {
+                completed = true;
+                Wh_Log(L"D&D worker: %u item(s) sent to Recycle Bin asynchronously",
+                       static_cast<UINT>(items.size()));
+                NotifyShellSourceChanged(items);
+            }
+        }
+    }
+
+    pfo->Release();
+    return completed;
+}
+
+static DWORD WINAPI RecycleWorkerProc(LPVOID) {
+    ThreadDpiAwarenessGuard dpiAwareness;
+    if (!dpiAwareness) {
+        Wh_Log(L"D&D worker: failed to enable Per-Monitor V2 awareness: %lu",
                GetLastError());
+    }
+
+    OleInitGuard oleInit;
+    if (!oleInit) {
+        Wh_Log(L"D&D worker: OleInitialize failed: 0x%08X", oleInit.GetResult());
+        return 0;
+    }
+
+    Wh_Log(L"D&D worker: started");
+
+    for (;;) {
+        const DWORD waitResult = WaitForSingleObject(g_hRecycleWorkerEvent, INFINITE);
+        if (waitResult != WAIT_OBJECT_0) {
+            if (waitResult == WAIT_FAILED) {
+                Wh_Log(L"D&D worker: wait failed: %lu", GetLastError());
+            } else {
+                Wh_Log(L"D&D worker: unexpected wait result: %lu", waitResult);
+            }
+            break;
+        }
+
+        std::unique_ptr<RecycleWorkerJob> job(TakePendingRecycleWorkerJob());
+        if (job) {
+            const bool completed = PerformRecycleWorkerJob(*job);
+            g_recycleWorkerBusy.store(false);
+
+            HWND hWnd = GetSafeHwnd();
+            if (hWnd && IsWindow(hWnd)) {
+                // Refresh state regardless of success/abort; Shell may have
+                // completed only part of a multi-item operation.
+                (void)PostMessageW(hWnd, WM_SHELLNOTIFY, 0, 0);
+                (void)PostMessageW(
+                    hWnd, WM_USER_RECYCLE_WORK_COMPLETE,
+                    completed ? TRUE : FALSE, 0);
+            }
+        }
+
+        if (g_recycleWorkerStop.load()) {
+            break;
+        }
+    }
+
+    delete TakePendingRecycleWorkerJob();
+    g_recycleWorkerBusy.store(false);
+    Wh_Log(L"D&D worker: stopped");
+    return 0;
+}
+
+static bool InitializeRecycleWorker() {
+    g_recycleWorkerStop.store(false);
+    g_recycleWorkerBusy.store(false);
+    delete TakePendingRecycleWorkerJob();
+
+    g_hRecycleWorkerEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
+    if (!g_hRecycleWorkerEvent) {
+        Wh_Log(L"D&D worker: CreateEvent failed: %lu", GetLastError());
         return false;
     }
 
-    g_hMouseHook = NULL;
-    Wh_Log(L"D&D: WH_MOUSE_LL hook suspended during synchronous recycle");
+    g_hRecycleWorkerThread = CreateThread(
+        NULL, 0, RecycleWorkerProc, NULL, 0, NULL);
+    if (!g_hRecycleWorkerThread) {
+        Wh_Log(L"D&D worker: CreateThread failed: %lu", GetLastError());
+        CloseHandle(g_hRecycleWorkerEvent);
+        g_hRecycleWorkerEvent = NULL;
+        return false;
+    }
+
     return true;
 }
 
-static void RestoreMouseHookAfterBlockingRecycle(bool wasSuspended) {
-    if (!wasSuspended || g_hMouseHook || !g_settings.enableDragDrop ||
-        g_shutdownRequested.load()) {
-        return;
+static void RequestRecycleWorkerStop() {
+    g_recycleWorkerStop.store(true);
+    if (g_hRecycleWorkerEvent) {
+        (void)SetEvent(g_hRecycleWorkerEvent);
+    }
+}
+
+static bool QueueRecycleWorkerJob(HWND owner, std::vector<std::wstring> paths) {
+    if (paths.empty() || g_shutdownRequested.load() ||
+        !g_hRecycleWorkerThread || !g_hRecycleWorkerEvent) {
+        return false;
     }
 
-    g_hMouseHook = SetWindowsHookExW(
-        WH_MOUSE_LL,
-        LowLevelMouseProc,
-        g_hThisModule,
-        0);
-
-    if (!g_hMouseHook) {
-        Wh_Log(L"D&D: failed to restore WH_MOUSE_LL hook after recycle: %lu",
-               GetLastError());
-        return;
+    const DWORD workerState = WaitForSingleObject(g_hRecycleWorkerThread, 0);
+    if (workerState != WAIT_TIMEOUT) {
+        if (workerState == WAIT_FAILED) {
+            Wh_Log(L"D&D worker: state check failed: %lu", GetLastError());
+        } else {
+            Wh_Log(L"D&D worker: thread is not running");
+        }
+        return false;
     }
 
-    Wh_Log(L"D&D: WH_MOUSE_LL hook restored after synchronous recycle");
+    if (g_recycleWorkerBusy.exchange(true)) {
+        Wh_Log(L"D&D: recycle worker is busy; rejecting concurrent drop");
+        return false;
+    }
+
+    auto job = std::make_unique<RecycleWorkerJob>();
+    job->owner = owner;
+    job->paths = std::move(paths);
+
+    // Transfer ownership to the atomic pending slot. If the slot is already
+    // occupied, immediately reclaim the object locally before returning.
+    RecycleWorkerJob* raw = job.release();
+    PVOID previous = InterlockedCompareExchangePointer(
+        reinterpret_cast<PVOID volatile*>(&g_pendingRecycleWorkerJob),
+        raw,
+        nullptr);
+    if (previous != nullptr) {
+        std::unique_ptr<RecycleWorkerJob> rejectedJob(raw);
+        g_recycleWorkerBusy.store(false);
+        Wh_Log(L"D&D worker: pending job slot unexpectedly occupied");
+        return false;
+    }
+
+    if (!SetEvent(g_hRecycleWorkerEvent)) {
+        std::unique_ptr<RecycleWorkerJob> failedJob(TakePendingRecycleWorkerJob());
+        g_recycleWorkerBusy.store(false);
+        Wh_Log(L"D&D worker: SetEvent failed: %lu", GetLastError());
+        return false;
+    }
+
+    return true;
+}
+
+static bool ExtractDroppedPaths(HDROP hDrop, std::vector<std::wstring>& paths) {
+    paths.clear();
+
+    const UINT fileCount = DragQueryFileW(hDrop, 0xFFFFFFFF, NULL, 0);
+    if (fileCount == 0) {
+        Wh_Log(L"D&D: Drop received but CF_HDROP contains no files");
+        return false;
+    }
+
+    paths.reserve(fileCount);
+    for (UINT i = 0; i < fileCount; ++i) {
+        const UINT cchNeeded = DragQueryFileW(hDrop, i, NULL, 0);
+        if (cchNeeded == 0) {
+            Wh_Log(L"D&D: DragQueryFileW size query failed for item %u", i);
+            return false;
+        }
+
+        std::wstring path(cchNeeded + 1, L'\0');
+        const UINT cchCopied = DragQueryFileW(
+            hDrop, i, path.data(), static_cast<UINT>(path.size()));
+        if (cchCopied == 0) {
+            Wh_Log(L"D&D: DragQueryFileW failed for item %u", i);
+            return false;
+        }
+
+        path.resize(cchCopied);
+        paths.push_back(std::move(path));
+    }
+
+    return true;
 }
 
 // OLE drop target
@@ -1116,178 +1520,6 @@ private:
         return true;
     }
 
-    struct DroppedItem {
-        std::wstring path;
-        std::wstring parentPath;
-        bool isDirectory = false;
-    };
-
-    static std::wstring GetParentPath(const std::wstring& path) {
-        if (path.empty()) return {};
-
-        std::wstring parent = path;
-        if (!PathRemoveFileSpecW(parent.data())) {
-            return {};
-        }
-
-        parent.resize(wcslen(parent.c_str()));
-        return parent;
-    }
-
-    static void NotifyShellSourceChanged(const std::vector<DroppedItem>& items) {
-        std::vector<std::wstring> notifiedParents;
-        notifiedParents.reserve(items.size());
-
-        for (const auto& item : items) {
-            SHChangeNotify(
-                item.isDirectory ? SHCNE_RMDIR : SHCNE_DELETE,
-                SHCNF_PATHW | SHCNF_FLUSH,
-                item.path.c_str(),
-                NULL);
-
-            if (!item.parentPath.empty() &&
-                std::find(notifiedParents.begin(), notifiedParents.end(),
-                          item.parentPath) == notifiedParents.end()) {
-                SHChangeNotify(
-                    SHCNE_UPDATEDIR,
-                    SHCNF_PATHW | SHCNF_FLUSH,
-                    item.parentPath.c_str(),
-                    NULL);
-                notifiedParents.push_back(item.parentPath);
-            }
-        }
-
-        Wh_Log(L"D&D: Shell source refresh notifications sent (%u item(s), %u parent(s))",
-               static_cast<UINT>(items.size()),
-               static_cast<UINT>(notifiedParents.size()));
-    }
-
-    bool MoveHDropToRecycleBinSync(HDROP hDrop) {
-        const UINT fileCount = DragQueryFileW(hDrop, 0xFFFFFFFF, NULL, 0);
-        if (fileCount == 0) {
-            Wh_Log(L"D&D: Drop received but CF_HDROP contains no files");
-            return false;
-        }
-
-        std::vector<DroppedItem> items;
-        items.reserve(fileCount);
-
-        for (UINT i = 0; i < fileCount; i++) {
-            // The required count excludes the terminating NUL.
-            const UINT cchNeeded = DragQueryFileW(hDrop, i, NULL, 0);
-            if (cchNeeded == 0) {
-                Wh_Log(L"D&D: DragQueryFileW size query failed for item %u", i);
-                return false;
-            }
-
-            std::wstring filePath(cchNeeded + 1, L'\0');
-            const UINT cchCopied = DragQueryFileW(
-                hDrop, i, filePath.data(), static_cast<UINT>(filePath.size()));
-            if (cchCopied == 0) {
-                Wh_Log(L"D&D: DragQueryFileW failed for item %u", i);
-                return false;
-            }
-
-            filePath.resize(cchCopied);
-
-            const DWORD attributes = GetFileAttributesW(filePath.c_str());
-            if (attributes == INVALID_FILE_ATTRIBUTES) {
-                Wh_Log(L"D&D: GetFileAttributes failed for '%s': %lu",
-                       filePath.c_str(), GetLastError());
-                return false;
-            }
-
-            DroppedItem item;
-            item.path = std::move(filePath);
-            item.parentPath = GetParentPath(item.path);
-            item.isDirectory = (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-            items.push_back(std::move(item));
-        }
-
-        IFileOperation* pfo = NULL;
-        HRESULT hr = CoCreateInstance(
-            CLSID_FileOperation, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfo));
-        if (FAILED(hr)) {
-            Wh_Log(L"D&D: CoCreateInstance(CLSID_FileOperation) failed: 0x%08X", hr);
-            return false;
-        }
-
-        hr = pfo->SetOwnerWindow(m_hMainWnd);
-        if (FAILED(hr)) {
-            Wh_Log(L"D&D: SetOwnerWindow failed: 0x%08X", hr);
-        }
-
-        hr = pfo->SetOperationFlags(
-            FOFX_RECYCLEONDELETE |
-            FOFX_ADDUNDORECORD |
-            FOF_NOCONFIRMATION |
-            FOF_SILENT |
-            FOF_WANTNUKEWARNING);
-        if (FAILED(hr)) {
-            Wh_Log(L"D&D: SetOperationFlags failed: 0x%08X", hr);
-            pfo->Release();
-            return false;
-        }
-
-        bool allQueued = true;
-        for (const auto& item : items) {
-            IShellItem* psi = NULL;
-            hr = SHCreateItemFromParsingName(
-                item.path.c_str(), NULL, IID_PPV_ARGS(&psi));
-            if (FAILED(hr)) {
-                Wh_Log(L"D&D: SHCreateItemFromParsingName failed for '%s': 0x%08X",
-                       item.path.c_str(), hr);
-                allQueued = false;
-                break;
-            }
-
-            hr = pfo->DeleteItem(psi, NULL);
-            psi->Release();
-            if (FAILED(hr)) {
-                Wh_Log(L"D&D: DeleteItem failed for '%s': 0x%08X",
-                       item.path.c_str(), hr);
-                allQueued = false;
-                break;
-            }
-        }
-
-        bool completed = false;
-        if (allQueued) {
-            const bool mouseHookSuspended =
-                SuspendMouseHookForBlockingRecycle();
-
-            // Keep the validated synchronous OLE flow.
-            // Suspend the low-level hook while this call blocks.
-            hr = pfo->PerformOperations();
-
-            RestoreMouseHookAfterBlockingRecycle(mouseHookSuspended);
-
-            if (FAILED(hr)) {
-                Wh_Log(L"D&D: PerformOperations failed: 0x%08X", hr);
-            } else {
-                BOOL aborted = FALSE;
-                const HRESULT hrAborted = pfo->GetAnyOperationsAborted(&aborted);
-                if (FAILED(hrAborted)) {
-                    Wh_Log(L"D&D: GetAnyOperationsAborted failed: 0x%08X", hrAborted);
-                } else if (aborted) {
-                    Wh_Log(L"D&D: one or more file operations were aborted");
-                } else {
-                    completed = true;
-                    Wh_Log(L"D&D: %u item(s) sent to Recycle Bin synchronously",
-                           fileCount);
-                    NotifyShellSourceChanged(items);
-                }
-            }
-        }
-
-        pfo->Release();
-
-        if (m_hMainWnd) {
-            (void)PostMessageW(m_hMainWnd, WM_SHELLNOTIFY, 0, 0);
-        }
-
-        return completed;
-    }
 
 public:
     RecycleBinDropTarget(HWND hMainWnd) : m_cRef(1), m_hMainWnd(hMainWnd) {}
@@ -1325,7 +1557,11 @@ public:
         }
 
         FORMATETC fmt = { CF_HDROP, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
-        m_hasValidFormat = (pDataObj->QueryGetData(&fmt) == S_OK);
+        const bool hasDropData = (pDataObj->QueryGetData(&fmt) == S_OK);
+        m_hasValidFormat = hasDropData && !g_recycleWorkerBusy.load();
+        if (hasDropData && !m_hasValidFormat) {
+            Wh_Log(L"D&D: DragEnter rejected while recycle worker is busy");
+        }
 
         // Once entered, OLE owns the session; the mouse hook must not hide the target before Drop().
         const ULONGLONG generation = g_oleDragGeneration.fetch_add(1) + 1;
@@ -1390,18 +1626,21 @@ public:
         if (SUCCEEDED(hr)) {
             HDROP hDrop = static_cast<HDROP>(GlobalLock(medium.hGlobal));
             if (hDrop) {
-                const bool completed = MoveHDropToRecycleBinSync(hDrop);
+                std::vector<std::wstring> paths;
+                const bool extracted = ExtractDroppedPaths(hDrop, paths);
                 (void)GlobalUnlock(medium.hGlobal);
 
-                if (completed) {
-                    // The target already recycled the items; report NONE as the performed
-                    // effect so the source doesn't delete them again.
+                const bool queued = extracted &&
+                    QueueRecycleWorkerJob(m_hMainWnd, std::move(paths));
+                if (queued) {
+                    // Ownership of the operation is now ours. Report NONE so the
+                    // source returns from DoDragDrop without deleting the items itself.
                     const bool effectReported =
                         ReportPerformedDropEffect(pDataObj, DROPEFFECT_NONE);
                     *pdwEffect = DROPEFFECT_NONE;
                     Wh_Log(
-                        L"D&D: Drop completed synchronously (CF_HDROP); "
-                        L"optimized move%s",
+                        L"D&D: Drop queued for asynchronous recycle (CF_HDROP); "
+                        L"performed effect%s",
                         effectReported ? L" reported" : L" fallback via pdwEffect");
                 } else {
                     *pdwEffect = DROPEFFECT_NONE;
@@ -1616,15 +1855,46 @@ static std::wstring TrimAndUnquote(std::wstring_view value) {
 
 static void ReadStringSetting(PCWSTR key, WCHAR* target, size_t maxCount, PCWSTR defaultValue) {
     PCWSTR val = Wh_GetStringSetting(key);
-    StringCchCopyW(target, maxCount, (val && *val) ? val : defaultValue);
+    StringCchCopyW(target, maxCount, *val ? val : defaultValue);
     Wh_FreeStringSetting(val);
 }
 
 static void ReadTrimmedStringSetting(PCWSTR key, WCHAR* target, size_t maxCount) {
     PCWSTR value = Wh_GetStringSetting(key);
-    const std::wstring normalized = TrimAndUnquote(value ? value : L"");
+    const std::wstring normalized = TrimAndUnquote(value);
     StringCchCopyW(target, maxCount, normalized.c_str());
     Wh_FreeStringSetting(value);
+}
+
+static void ReadFontNameSetting(PCWSTR key, WCHAR* target, size_t maxCount) {
+    PCWSTR value = Wh_GetStringSetting(key);
+    const std::wstring normalized = TrimAndUnquote(value);
+    Wh_FreeStringSetting(value);
+
+    target[0] = L'\0';
+    if (normalized.empty()) {
+        return;
+    }
+
+    if (normalized.size() >= maxCount) {
+        Wh_Log(L"Font: setting '%s' exceeds the GDI typeface-name limit of %u characters",
+               key, static_cast<UINT>(maxCount - 1));
+        return;
+    }
+
+    (void)StringCchCopyW(target, maxCount, normalized.c_str());
+}
+
+static int ParseFontWeightSetting(PCWSTR value) {
+    if (_wcsicmp(value, L"thin") == 0) return 100;
+    if (_wcsicmp(value, L"extraLight") == 0) return 200;
+    if (_wcsicmp(value, L"light") == 0) return 300;
+    if (_wcsicmp(value, L"medium") == 0) return 500;
+    if (_wcsicmp(value, L"semiBold") == 0) return 600;
+    if (_wcsicmp(value, L"bold") == 0) return 700;
+    if (_wcsicmp(value, L"extraBold") == 0) return 800;
+    if (_wcsicmp(value, L"black") == 0) return 900;
+    return FW_NORMAL;
 }
 
 static std::wstring SanitizePath(std::wstring_view path) {
@@ -1677,10 +1947,8 @@ static const RecycleBinTooltipLabels& GetRecycleBinTooltipLabels() {
 
 void LoadPathSetting(PCWSTR settingName, std::wstring& outPath) {
     PCWSTR value = Wh_GetStringSetting(settingName);
-    std::wstring raw = value ? value : L"";
-    if (value) {
-        Wh_FreeStringSetting(value);
-    }
+    const std::wstring raw(value);
+    Wh_FreeStringSetting(value);
     outPath = SanitizePath(raw);
 }
 
@@ -1711,13 +1979,17 @@ void LoadSettingsInto(ModSettings& s) {
     }
 
     // Font mode starts unconfigured; examples live in the settings descriptions.
-    ReadTrimmedStringSetting(L"font.empty.name", s.fontNameEmpty, ARRAYSIZE(s.fontNameEmpty));
+    ReadFontNameSetting(L"font.empty.name", s.fontNameEmpty, ARRAYSIZE(s.fontNameEmpty));
     ReadTrimmedStringSetting(L"font.empty.code", s.fontCodeEmpty, ARRAYSIZE(s.fontCodeEmpty));
-    s.fontBoldEmpty = Wh_GetIntSetting(L"font.empty.bold") != 0;
+    WCHAR emptyWeight[16];
+    ReadStringSetting(L"font.empty.weight", emptyWeight, ARRAYSIZE(emptyWeight), L"regular");
+    s.fontWeightEmpty = ParseFontWeightSetting(emptyWeight);
 
-    ReadTrimmedStringSetting(L"font.full.name", s.fontNameFull, ARRAYSIZE(s.fontNameFull));
+    ReadFontNameSetting(L"font.full.name", s.fontNameFull, ARRAYSIZE(s.fontNameFull));
     ReadTrimmedStringSetting(L"font.full.code", s.fontCodeFull, ARRAYSIZE(s.fontCodeFull));
-    s.fontBoldFull = Wh_GetIntSetting(L"font.full.bold") != 0;
+    WCHAR fullWeight[16];
+    ReadStringSetting(L"font.full.weight", fullWeight, ARRAYSIZE(fullWeight), L"regular");
+    s.fontWeightFull = ParseFontWeightSetting(fullWeight);
 
     WCHAR customColorMode[32];
     ReadStringSetting(
@@ -1748,7 +2020,7 @@ void LoadSettingsInto(ModSettings& s) {
 
     int dpiInterval = Wh_GetIntSetting(L"system.dpiCheckInterval");
     if (dpiInterval < 0) {
-        s.dpiCheckInterval = 10;
+        s.dpiCheckInterval = 30;
     } else {
         s.dpiCheckInterval = static_cast<UINT>(std::min(dpiInterval, 86400));
     }
@@ -1760,11 +2032,7 @@ void LoadSettings() {
 }
 
 static UINT GetSystemFallbackDpi() {
-    typedef UINT (WINAPI *pfnGetDpiForSystem)(void);
-    static pfnGetDpiForSystem pGetDpiForSystem = (pfnGetDpiForSystem)GetProcAddress(
-        GetModuleHandleW(L"user32.dll"), "GetDpiForSystem");
-
-    UINT dpi = pGetDpiForSystem ? pGetDpiForSystem() : 0;
+    UINT dpi = GetDpiForSystem();
 
     if (dpi == 0) {
         ScreenDC screenDC;
@@ -1777,12 +2045,8 @@ static UINT GetSystemFallbackDpi() {
 }
 
 static UINT GetDpiForReferenceWindow(HWND hWnd) {
-    typedef UINT (WINAPI *pfnGetDpiForWindow)(HWND);
-    static pfnGetDpiForWindow pGetDpiForWindow = (pfnGetDpiForWindow)GetProcAddress(
-        GetModuleHandleW(L"user32.dll"), "GetDpiForWindow");
-
-    if (pGetDpiForWindow && hWnd) {
-        UINT dpi = pGetDpiForWindow(hWnd);
+    if (hWnd) {
+        const UINT dpi = GetDpiForWindow(hWnd);
         if (dpi) {
             return dpi;
         }
@@ -1792,18 +2056,12 @@ static UINT GetDpiForReferenceWindow(HWND hWnd) {
 }
 
 static int GetSmallIconMetricForDpi(UINT dpi) {
-    using GetSystemMetricsForDpiFn = int (WINAPI*)(int, UINT);
-    static const auto getSystemMetricsForDpi = reinterpret_cast<GetSystemMetricsForDpiFn>(
-        GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetSystemMetricsForDpi"));
-
-    const int size = getSystemMetricsForDpi
-        ? getSystemMetricsForDpi(SM_CXSMICON, dpi)
-        : MulDiv(16, static_cast<int>(dpi), 96);
-    return size > 0 ? size : 16;
+    const int size = GetSystemMetricsForDpi(SM_CXSMICON, dpi);
+    return size > 0 ? size : MulDiv(16, static_cast<int>(dpi), 96);
 }
 
-int GetTrayIconSize(HWND hWnd) {
-    if (g_trayGeometryCache.isValid) {
+int GetTrayRenderSize(HWND hWnd) {
+    if (g_trayGeometryCache.renderSizeValid) {
         return g_trayGeometryCache.renderSize;
     }
 
@@ -1811,12 +2069,10 @@ int GetTrayIconSize(HWND hWnd) {
     HWND dpiReferenceWnd = g_hOverlayWnd ? g_hOverlayWnd : hWnd;
     const UINT dpi = GetDpiForReferenceWindow(dpiReferenceWnd);
 
+    // Cache only the provisional render size here. Shell slot geometry becomes
+    // authoritative after Shell_NotifyIconGetRect succeeds.
     g_trayGeometryCache.renderSize = GetSmallIconMetricForDpi(dpi);
-    g_trayGeometryCache.slotWidth = 0;
-    g_trayGeometryCache.slotHeight = 0;
-    g_trayGeometryCache.dpi = dpi;
-    g_trayGeometryCache.monitor = NULL;
-    g_trayGeometryCache.isValid = true;
+    g_trayGeometryCache.renderSizeValid = true;
     return g_trayGeometryCache.renderSize;
 }
 
@@ -1886,22 +2142,53 @@ static bool FontHasGlyph(std::wstring_view fontName, const std::wstring& glyph, 
     });
 }
 
+struct FontConfigCacheEntry {
+    WCHAR glyph[3] = {};
+    bool initialized = false;
+    bool valid = false;
+};
+
+static FontConfigCacheEntry g_fontConfigCache[2];
+
+static void InvalidateFontConfigCache() {
+    g_fontConfigCache[0] = {};
+    g_fontConfigCache[1] = {};
+}
+
 static bool ResolveFontConfig(bool emptyState, std::wstring& fontName,
                               std::wstring& glyph, int& weight) {
-    const WCHAR* configuredFont = emptyState ? g_settings.fontNameEmpty : g_settings.fontNameFull;
-    const WCHAR* configuredCode = emptyState ? g_settings.fontCodeEmpty : g_settings.fontCodeFull;
+    const size_t index = emptyState ? 0 : 1;
+    FontConfigCacheEntry& cache = g_fontConfigCache[index];
+
+    const WCHAR* configuredFont =
+        emptyState ? g_settings.fontNameEmpty : g_settings.fontNameFull;
+    const WCHAR* configuredCode =
+        emptyState ? g_settings.fontCodeEmpty : g_settings.fontCodeFull;
 
     fontName = configuredFont;
+    weight = emptyState ? g_settings.fontWeightEmpty : g_settings.fontWeightFull;
 
-    // Bold setting maps directly to the standard Win32 weights:
-    // FW_NORMAL = 400, FW_BOLD = 700.
-    weight = emptyState
-        ? (g_settings.fontBoldEmpty ? FW_BOLD : FW_NORMAL)
-        : (g_settings.fontBoldFull ? FW_BOLD : FW_NORMAL);
+    if (!cache.initialized) {
+        cache.initialized = true;
+        std::wstring parsedGlyph;
+        cache.valid =
+            !fontName.empty() &&
+            TryParseGlyph(configuredCode, parsedGlyph) &&
+            FontHasGlyph(fontName, parsedGlyph, weight);
 
-    return !fontName.empty() &&
-           TryParseGlyph(configuredCode, glyph) &&
-           FontHasGlyph(fontName, glyph, weight);
+        if (cache.valid) {
+            (void)StringCchCopyW(
+                cache.glyph, ARRAYSIZE(cache.glyph), parsedGlyph.c_str());
+        }
+    }
+
+    if (!cache.valid) {
+        glyph.clear();
+        return false;
+    }
+
+    glyph.assign(cache.glyph);
+    return true;
 }
 
 static BYTE GetThemeIconIntensity(bool isDarkTheme, BYTE darkIntensity = 240) {
@@ -1966,6 +2253,103 @@ static HICON CreateIconFromAlphaMask(
     return CreateIconIndirect(&iconInfo);
 }
 
+// Find the largest GDI font height whose actual rasterized ink fits the icon.
+// The normal size is returned unchanged unless the glyph would be clipped.
+static int GetFontHeightToFit(
+    HDC screenDC, int iconSize, const std::wstring& glyphStr,
+    std::wstring_view fontName, int weight) {
+    if (!screenDC || iconSize <= 1 || glyphStr.empty() || fontName.empty()) {
+        return iconSize;
+    }
+
+    // Keep the normal icon-sized layout rectangle, but render it without clipping
+    // into a padded temporary surface so overhanging ink remains measurable.
+    const int padding = iconSize * 2;
+    const int probeSize = iconSize + padding * 2;
+
+    UniqueMemDC probeDC(CreateCompatibleDC(screenDC));
+    if (!probeDC) {
+        return iconSize;
+    }
+
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = probeSize;
+    bmi.bmiHeader.biHeight = -probeSize;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    DWORD* probeBits = NULL;
+    UniqueBitmap probeBitmap(CreateDIBSection(
+        probeDC.get(), &bmi, DIB_RGB_COLORS,
+        reinterpret_cast<void**>(&probeBits), NULL, 0));
+    if (!probeBitmap || !probeBits) {
+        return iconSize;
+    }
+
+    SelectObjectScope bitmapSelect(probeDC.get(), probeBitmap.get());
+    SetBkMode(probeDC.get(), TRANSPARENT);
+    SetTextColor(probeDC.get(), RGB(255, 255, 255));
+
+    const RECT targetRect = {
+        padding, padding, padding + iconSize, padding + iconSize
+    };
+    const std::wstring requestedFont(fontName);
+
+    for (int fontHeight = iconSize; fontHeight >= 1; --fontHeight) {
+        ZeroMemory(
+            probeBits,
+            static_cast<size_t>(probeSize) * probeSize * sizeof(DWORD));
+
+        LOGFONTW lf = {};
+        lf.lfHeight = -fontHeight;
+        lf.lfWeight = weight;
+        lf.lfCharSet = DEFAULT_CHARSET;
+        lf.lfQuality = ANTIALIASED_QUALITY;
+        StringCchCopyW(
+            lf.lfFaceName, ARRAYSIZE(lf.lfFaceName), requestedFont.c_str());
+
+        UniqueFont font(CreateFontIndirectW(&lf));
+        if (!font) {
+            return iconSize;
+        }
+
+        {
+            SelectObjectScope fontSelect(probeDC.get(), font.get());
+            RECT drawRect = targetRect;
+            DrawTextW(
+                probeDC.get(), glyphStr.c_str(), -1, &drawRect,
+                DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+
+            // GDI may batch DrawTextW; flush before reading CreateDIBSection bits.
+            GdiFlush();
+        }
+
+        bool inkOutsideTarget = false;
+        for (int y = 0; y < probeSize && !inkOutsideTarget; ++y) {
+            const bool outsideY = y < targetRect.top || y >= targetRect.bottom;
+            for (int x = 0; x < probeSize; ++x) {
+                if ((probeBits[static_cast<size_t>(y) * probeSize + x] &
+                     0x00FFFFFF) == 0) {
+                    continue;
+                }
+
+                if (outsideY || x < targetRect.left || x >= targetRect.right) {
+                    inkOutsideTarget = true;
+                    break;
+                }
+            }
+        }
+
+        if (!inkOutsideTarget) {
+            return fontHeight;
+        }
+    }
+
+    return 1;
+}
+
 // Font icon renderer
 HICON CreateFontIcon(int iconSize, const std::wstring& glyphStr, std::wstring_view fontName, bool isDarkTheme, int weight) {
     const int cx = iconSize;
@@ -1993,8 +2377,15 @@ HICON CreateFontIcon(int iconSize, const std::wstring& glyphStr, std::wstring_vi
     SelectObjectScope bmpSelect(hdcMem.get(), hbmColor.get());
     ZeroMemory(pBits, cx * cy * sizeof(DWORD));
 
+    const int fontHeight =
+        GetFontHeightToFit(screenDC.get(), cy, glyphStr, fontName, weight);
+    if (fontHeight < cy) {
+        Wh_Log(L"Font: glyph reduced from %d to %d px to avoid clipping",
+               cy, fontHeight);
+    }
+
     LOGFONTW lf = {};
-    lf.lfHeight = -cy;
+    lf.lfHeight = -fontHeight;
     lf.lfWeight = weight;
     lf.lfCharSet = DEFAULT_CHARSET;
     lf.lfQuality = ANTIALIASED_QUALITY;
@@ -2706,6 +3097,7 @@ HICON LoadDesiredIcon(const IconCacheKey& key) {
 
 // Shell actions and Recycle Bin commands
 bool SafeShellExecute(HWND hWnd, PCWSTR verb, PCWSTR file, PCWSTR params = NULL, INT nShowCmd = SW_SHOWNORMAL) {
+    ShellModalScope modalScope(hWnd);
     HINSTANCE hInst = ShellExecuteW(hWnd, verb, file, params, NULL, nShowCmd);
     const INT_PTR result = reinterpret_cast<INT_PTR>(hInst);
 
@@ -2735,6 +3127,7 @@ void EmptyRecycleBinAction(HWND hWnd) {
     }
 
     const DWORD flags = g_settings.confirmEmpty ? 0 : SHERB_NOCONFIRMATION;
+    ShellModalScope modalScope(hWnd);
     const HRESULT hr = SHEmptyRecycleBinW(hWnd, NULL, flags);
     if (FAILED(hr) && hr != E_ABORT && hr != HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
         Wh_Log(L"SHEmptyRecycleBinW failed: 0x%08X", hr);
@@ -2792,6 +3185,7 @@ static bool SetDragDropEnabled(HWND hWnd, bool enable) {
     if (!enable) {
         UpdateDragDropHookState(false);
         g_dropOverlayArmed.store(false);
+        g_trayState.dragRectRefreshed = false;
         HideDropOverlay();
 
         if (g_pDropTarget) {
@@ -2874,8 +3268,9 @@ static bool AddTrayIconAndNegotiateVersion(HWND hWnd, bool reInstantiation) {
     g_iconVisible = true;
     InvalidateIconRectCache();
 
-    if (RefreshTrayDpiFromIconRect(hWnd, true)) {
-        (void)SetLoggedTimer(hWnd, TIMER_STARTUP_ID, 1);
+    if (RefreshTrayGeometry(hWnd, true)) {
+        // Refresh once after the Shell has assigned the icon its real tray geometry.
+        (void)PostMessageW(hWnd, WM_USER_REFRESH_AFTER_TRAY_ADD, 0, 0);
     }
 
     return true;
@@ -2916,16 +3311,18 @@ bool UpdateTrayState() {
             InvalidateIconRectCache();
         }
         g_hCurrentIcon.reset();
-        
+        g_trayState.lastKey = {};
+        ShutdownGdiplusIfInitialized();
+
         UpdateOverlayState();
         return true;
     }
 
     // System stock icons do not depend on the app light/dark theme.
-    const bool isDark = g_settings.iconStyle != IconStyle::System && IsSystemDarkTheme();
+    const bool isDark = g_settings.iconStyle != IconStyle::System && GetSystemDarkTheme();
 
-    // Recycle Bin polling reuses the last validated DPI; DPI_CHECK and display events refresh that cache.
-    const int iconSize = GetTrayIconSize(hWnd);
+    // Recycle Bin polling reuses the last validated render size; geometry probes refresh it.
+    const int iconSize = GetTrayRenderSize(hWnd);
 
     const IconCacheKey currentKey = BuildIconCacheKey(isEmpty, isDark, iconSize);
 
@@ -3125,7 +3522,6 @@ bool QueryTrayIconRect(HWND hWnd, RECT& rect, bool forceRefresh) {
     NOTIFYICONIDENTIFIER nid = { sizeof(nid) };
     nid.hWnd = hWnd;
     nid.uID = TRAY_ICON_ID;
-    nid.guidItem = GUID_NULL;
 
     RECT fresh = {};
     const HRESULT hr = Shell_NotifyIconGetRect(&nid, &fresh);
@@ -3140,7 +3536,8 @@ bool QueryTrayIconRect(HWND hWnd, RECT& rect, bool forceRefresh) {
 }
 
 void CheckDragStatus(HWND hWnd) {
-    if (!g_settings.enableDragDrop || !g_iconVisible || !g_hOverlayWnd) {
+    if (!g_settings.enableDragDrop || !g_iconVisible || !g_hOverlayWnd ||
+        g_recycleWorkerBusy.load()) {
         g_dropOverlayArmed.store(false);
         HideDropOverlay();
         return;
@@ -3169,15 +3566,22 @@ void CheckDragStatus(HWND hWnd) {
     const bool movedEnoughToBeDrag =
         (abs(pt.x - g_dragStartPt.x) > dragThresholdX) ||
         (abs(pt.y - g_dragStartPt.y) > dragThresholdY);
-
-    RECT iconRect = { 0 };
-    if (!QueryTrayIconRect(hWnd, iconRect, false)) {
+    if (!movedEnoughToBeDrag) {
         return;
     }
 
+    RECT iconRect = { 0 };
+    // A real drag gets one fresh Shell rectangle so manual tray rearrangement
+    // is observed without making ordinary clicks query Explorer.
+    const bool forceRectRefresh = !g_trayState.dragRectRefreshed;
+    if (!QueryTrayIconRect(hWnd, iconRect, forceRectRefresh)) {
+        return;
+    }
+    g_trayState.dragRectRefreshed = true;
+
     const bool isOverIcon = PtInRect(&iconRect, pt) != FALSE;
 
-    if (isOverIcon && movedEnoughToBeDrag) {
+    if (isOverIcon) {
         RECT currentRect = { 0 };
         GetWindowRect(g_hOverlayWnd, &currentRect);
 
@@ -3196,22 +3600,17 @@ void CheckDragStatus(HWND hWnd) {
     }
 }
 
-bool RefreshTrayDpiFromIconRect(HWND hWnd, bool forceRegeneration) {
-    if (!hWnd || !g_iconVisible) {
+static bool RefreshTrayGeometryFromRect(
+    HWND hWnd, const RECT& iconRect, bool forceRegeneration) {
+    if (!hWnd || !g_iconVisible ||
+        iconRect.right <= iconRect.left || iconRect.bottom <= iconRect.top) {
         return false;
     }
-
-    RECT iconRect = {};
-    if (!QueryTrayIconRect(hWnd, iconRect, true)) {
-        return false;
-    }
-
-    HMONITOR monitor = MonitorFromRect(&iconRect, MONITOR_DEFAULTTONEAREST);
 
     // Position the overlay on the real tray rectangle so GetDpiForWindow() uses that monitor.
     (void)PositionDropOverlay(iconRect, false);
 
-    UINT dpi = GetDpiForReferenceWindow(g_hOverlayWnd);
+    const UINT dpi = GetDpiForReferenceWindow(g_hOverlayWnd);
 
     const UINT oldHostDpi = GetDpiForReferenceWindow(hWnd);
     if (oldHostDpi != dpi && ProbeTrayHostDpiAtRect(hWnd, iconRect)) {
@@ -3231,25 +3630,25 @@ bool RefreshTrayDpiFromIconRect(HWND hWnd, bool forceRegeneration) {
     const int slotHeight = iconRect.bottom - iconRect.top;
 
     // The Shell rectangle is a geometry signal, not a documented HICON target size.
-    // Keep render size DPI-derived, but regenerate when Explorer changes the slot.
-    const bool changed =
-        !g_trayGeometryCache.isValid ||
-        g_trayGeometryCache.monitor != monitor ||
-        g_trayGeometryCache.dpi != dpi ||
-        g_trayGeometryCache.renderSize != expectedSize ||
-        g_trayGeometryCache.slotWidth != slotWidth ||
-        g_trayGeometryCache.slotHeight != slotHeight;
+    // Initial Shell geometry establishes a baseline; it isn't itself a layout change.
+    const bool renderSizeChanged =
+        !g_trayGeometryCache.renderSizeValid ||
+        g_trayGeometryCache.renderSize != expectedSize;
+    const bool shellGeometryChanged =
+        g_trayGeometryCache.hasShellGeometry &&
+        (g_trayGeometryCache.slotWidth != slotWidth ||
+         g_trayGeometryCache.slotHeight != slotHeight);
+    const bool changed = renderSizeChanged || shellGeometryChanged;
 
-    g_trayGeometryCache.monitor = monitor;
-    g_trayGeometryCache.dpi = dpi;
     g_trayGeometryCache.renderSize = expectedSize;
     g_trayGeometryCache.slotWidth = slotWidth;
     g_trayGeometryCache.slotHeight = slotHeight;
-    g_trayGeometryCache.isValid = true;
+    g_trayGeometryCache.renderSizeValid = true;
+    g_trayGeometryCache.hasShellGeometry = true;
 
     if (changed) {
-        Wh_Log(L"DPI: trayMonitor=0x%p dpi=%u size=%d slot=%dx%d",
-               monitor, dpi, expectedSize, slotWidth, slotHeight);
+        Wh_Log(L"DPI: tray dpi=%u size=%d slot=%dx%d",
+               dpi, expectedSize, slotWidth, slotHeight);
     }
 
     if (changed && forceRegeneration) {
@@ -3257,6 +3656,19 @@ bool RefreshTrayDpiFromIconRect(HWND hWnd, bool forceRegeneration) {
     }
 
     return changed;
+}
+
+bool RefreshTrayGeometry(HWND hWnd, bool forceRegeneration) {
+    if (!hWnd || !g_iconVisible) {
+        return false;
+    }
+
+    RECT iconRect = {};
+    if (!QueryTrayIconRect(hWnd, iconRect, true)) {
+        return false;
+    }
+
+    return RefreshTrayGeometryFromRect(hWnd, iconRect, forceRegeneration);
 }
 
 const WCHAR* TimerName(UINT timerId) {
@@ -3421,6 +3833,8 @@ static bool RegisterShellNotifications(HWND hWnd) {
 static void ApplyPendingSettings(HWND hWnd) {
     if (!ConsumePendingSettings()) return;
 
+    InvalidateSystemThemeCache();
+    InvalidateFontConfigCache();
     g_forceIconRegen = true;
     UpdateRefreshTimer(hWnd);
     UpdateDpiCheckTimer(hWnd);
@@ -3446,7 +3860,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         g_iconVisible = false;
         g_pendingDpiShellReinstall = false;
         (void)KillLoggedTimer(hWnd, TIMER_DPI_REINSTALL_ID);
-        InvalidateAllCaches();
+        InvalidateTrayPositionAndRenderSize();
 
         // Shell-level change-notification registrations can become stale when
         // Explorer is recreated. Re-establish ours after the Shell settles.
@@ -3466,7 +3880,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_USER_START_DRAG_POLL:
             g_dragGestureSawOle = false;
-            InvalidateIconRectCache(); // Manual tray rearrangement must not wait for DPI polling.
+            g_trayState.dragRectRefreshed = false;
             if (g_settings.enableDragDrop && !g_trayState.dragPollTimerActive) {
                 (void)SetLoggedTimer(hWnd, TIMER_DRAG_POLL_ID, DRAG_POLL_INTERVAL_ACTIVE_MS);
                 g_trayState.dragPollTimerActive = true;
@@ -3481,6 +3895,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 (void)KillLoggedTimer(hWnd, TIMER_DRAG_POLL_ID);
                 g_trayState.dragPollTimerActive = false;
             }
+            g_trayState.dragRectRefreshed = false;
             // Button-up is final only when OLE is no longer inside the target.
             if (!g_oleDragActive.load()) {
                 g_dropOverlayArmed.store(false);
@@ -3497,6 +3912,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
             g_oleDragActive.store(false);
             g_dropOverlayArmed.store(false);
+            g_trayState.dragRectRefreshed = false;
             HideDropOverlay();
             if (g_trayState.dragPollTimerActive) {
                 (void)KillLoggedTimer(hWnd, TIMER_DRAG_POLL_ID);
@@ -3504,6 +3920,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             return 0;
         }
+
+        case WM_USER_REFRESH_AFTER_TRAY_ADD:
+            // The add path may discover the final tray DPI only after NIM_ADD.
+            UpdateTrayState();
+            return 0;
 
         case WM_TRAYICON: {
             // Decode callbacks according to the negotiated notification-icon version.
@@ -3541,14 +3962,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_DPICHANGED:
             // A real DPI transition means display settling has completed.
             StopDisplaySettleTimer(hWnd);
-            InvalidateAllCaches();
-            (void)RefreshTrayDpiFromIconRect(hWnd, true);
+            InvalidateTrayPositionAndRenderSize();
+            (void)RefreshTrayGeometry(hWnd, true);
             g_forceIconRegen = true;
             UpdateTrayState();
             return 0;
 
         case WM_THEMECHANGED:
-            if (g_settings.iconStyle != IconStyle::System) {
+            if (g_settings.iconStyle == IconStyle::System) {
+                InvalidateSystemThemeCache();
+            } else if (RefreshSystemThemeCache()) {
                 g_forceIconRegen = true;
                 UpdateTrayState();
             }
@@ -3556,11 +3979,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         case WM_SETTINGCHANGE:
             // Avoid turning every unrelated system-setting broadcast into a
-            // DPI probe. ImmersiveColorSet is the relevant theme notification.
-            if (g_settings.iconStyle != IconStyle::System && lParam &&
+            // theme read. ImmersiveColorSet is the relevant notification.
+            if (lParam &&
                 wcscmp(reinterpret_cast<LPCWSTR>(lParam), L"ImmersiveColorSet") == 0) {
-                g_forceIconRegen = true;
-                UpdateTrayState();
+                if (g_settings.iconStyle == IconStyle::System) {
+                    InvalidateSystemThemeCache();
+                } else if (RefreshSystemThemeCache()) {
+                    g_forceIconRegen = true;
+                    UpdateTrayState();
+                }
             }
             return 0;
 
@@ -3569,15 +3996,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 (void)KillLoggedTimer(hWnd, TIMER_CLICK_ID);
                 ExecuteAction(g_settings.leftClickAction, hWnd);
             } else if (wParam == TIMER_REFRESH_ID) {
-                // Safety polling for Recycle Bin state only. DPI/monitor polling
-                // has its own independently configurable timer.
+                // Safety polling also rechecks the theme in case a broadcast was missed.
+                if (g_settings.iconStyle != IconStyle::System &&
+                    RefreshSystemThemeCache()) {
+                    g_forceIconRegen = true;
+                }
                 UpdateTrayState();
             } else if (wParam == TIMER_STARTUP_ID) {
-                if (!g_shellNotifyLock) {
-                    (void)RegisterShellNotifications(hWnd);
+                bool shellReady = g_shellNotifyLock != 0;
+                if (!shellReady) {
+                    shellReady = RegisterShellNotifications(hWnd);
                 }
 
-                if (UpdateTrayState()) {
+                const bool trayReady = UpdateTrayState();
+                if (shellReady && trayReady) {
                     (void)KillLoggedTimer(hWnd, TIMER_STARTUP_ID);
                 }
             } else if (wParam == TIMER_DRAG_POLL_ID) {
@@ -3622,9 +4054,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     }
                 }
             } else if (wParam == TIMER_DPI_CHECK_ID) {
-                const bool changed = RefreshTrayDpiFromIconRect(hWnd, false);
+                const bool changed = RefreshTrayGeometry(hWnd, false);
                 if (changed) {
-                    Wh_Log(L"DPI_CHECK: tray geometry/DPI/monitor changed; regenerating icon");
+                    Wh_Log(L"DPI_CHECK: tray geometry/render size changed; regenerating icon");
                     g_forceIconRegen = true;
                     UpdateTrayState();
                 }
@@ -3649,8 +4081,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                         if (ProbeDpiReferenceAtTray(iconRect)) {
                             g_trayState.displaySettleProbedStableRect = true;
 
-                            if (RefreshTrayDpiFromIconRect(hWnd, false)) {
-                                Wh_Log(L"DPI: display settle detected a tray geometry/DPI/monitor change; regenerating icon");
+                            if (RefreshTrayGeometryFromRect(hWnd, iconRect, false)) {
+                                Wh_Log(L"DPI: display settle detected a tray geometry/render-size change; regenerating icon");
                                 g_forceIconRegen = true;
                                 UpdateTrayState();
                                 StopDisplaySettleTimer(hWnd);
@@ -3665,11 +4097,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     // tray rectangle itself did not visibly move.
                     bool changed = false;
                     if (haveRect && ProbeDpiReferenceAtTray(iconRect)) {
-                        changed = RefreshTrayDpiFromIconRect(hWnd, false);
+                        changed = RefreshTrayGeometryFromRect(hWnd, iconRect, false);
                     }
 
                     if (changed) {
-                        Wh_Log(L"DPI: display settle final probe detected a tray geometry/DPI/monitor change; regenerating icon");
+                        Wh_Log(L"DPI: display settle final probe detected a tray geometry/render-size change; regenerating icon");
                         g_forceIconRegen = true;
                         UpdateTrayState();
                     } else {
@@ -3689,11 +4121,26 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             ApplyPendingSettings(hWnd);
             return 0;
 
+        case WM_USER_RECYCLE_WORK_COMPLETE:
+            // The worker has released the hidden owner. Complete a shutdown that
+            // was deferred while IFileOperation was active.
+            if (g_shutdownRequested.load() && CanCloseTrayHost()) {
+                (void)PostMessageW(hWnd, WM_CLOSE, 0, 0);
+            }
+            return 0;
+
         case WM_USER_SHUTDOWN:
             // EndMenu affects the calling thread's active menu, so it must run
             // here on the tray thread rather than in WhTool_ModUninit().
             if (EndMenu()) {
                 Wh_Log(L"Shutdown: active tray menu cancelled");
+            }
+
+            // Shell APIs can pump this message from nested modal loops. Do not
+            // destroy their owner while the call is still on the stack.
+            if (!CanCloseTrayHost()) {
+                Wh_Log(L"Shutdown: deferred while Shell UI or recycle worker is active");
+                return 0;
             }
 
             // Queue normal teardown after a nested TrackPopupMenuEx loop has
@@ -3702,6 +4149,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
 
         case WM_CLOSE:
+            if (!CanCloseTrayHost()) {
+                Wh_Log(L"Shutdown: WM_CLOSE deferred while Shell UI or recycle worker is active");
+                return 0;
+            }
             (void)DestroyWindow(hWnd);
             return 0;
 
@@ -3821,6 +4272,17 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
     if (g_hOverlayWnd) {
         Wh_Log(L"DPI: reference overlay created (HWND: 0x%p)", g_hOverlayWnd);
         SetLayeredWindowAttributes(g_hOverlayWnd, 0, 1, LWA_ALPHA);
+
+        // Allow OLE drag/drop data messages from a lower-integrity Shell.
+        constexpr UINT kWmCopyGlobalData = 0x0049;
+        const UINT dragDropMessages[] = { WM_DROPFILES, WM_COPYDATA, kWmCopyGlobalData };
+        for (UINT message : dragDropMessages) {
+            if (!ChangeWindowMessageFilterEx(
+                    g_hOverlayWnd, message, MSGFLT_ALLOW, nullptr)) {
+                Wh_Log(L"D&D: message filter failed for 0x%04X: %lu",
+                       message, GetLastError());
+            }
+        }
     } else {
         Wh_Log(L"DPI: reference overlay creation failed: %lu", GetLastError());
     }
@@ -3832,13 +4294,17 @@ DWORD WINAPI TrayThreadProc(LPVOID lpParam) {
     g_nid.uCallbackMessage = WM_TRAYICON;
     g_nid.uVersion = NOTIFYICON_VERSION_4;
 
-    (void)RegisterShellNotifications(hWndNew);
+    const bool shellReady = RegisterShellNotifications(hWndNew);
 
     UpdateRefreshTimer(hWndNew);
     UpdateDpiCheckTimer(hWndNew);
     (void)SetDragDropEnabled(hWndNew, g_settings.enableDragDrop);
-    (void)SetLoggedTimer(hWndNew, TIMER_STARTUP_ID, 1000);
-    UpdateTrayState();
+    const bool trayReady = UpdateTrayState();
+
+    // A healthy startup needs no retry timer. Keep it only for Shell/tray recovery.
+    if (!shellReady || !trayReady) {
+        (void)SetLoggedTimer(hWndNew, TIMER_STARTUP_ID, 1000);
+    }
 
     MSG msg;
     for (;;) {
@@ -3888,10 +4354,20 @@ BOOL WhTool_ModInit() {
 
     LoadSettings();
 
+    if (!InitializeRecycleWorker()) {
+        return FALSE;
+    }
+
     // Dedicated UI/tray thread.
     g_hThread = CreateThread(NULL, 0, TrayThreadProc, NULL, 0, NULL);
     if (!g_hThread) {
         Wh_Log(L"CreateThread failed");
+        RequestRecycleWorkerStop();
+        (void)WaitForSingleObject(g_hRecycleWorkerThread, INFINITE);
+        CloseHandle(g_hRecycleWorkerThread);
+        g_hRecycleWorkerThread = NULL;
+        CloseHandle(g_hRecycleWorkerEvent);
+        g_hRecycleWorkerEvent = NULL;
         return FALSE;
     }
 
@@ -3914,16 +4390,69 @@ void WhTool_ModSettingsChanged() {
 
 void WhTool_ModUninit() {
     g_shutdownRequested.store(true);
+    RequestRecycleWorkerStop();
+
     HWND hWnd = GetSafeHwnd();
     if (hWnd) {
         (void)PostMessageW(hWnd, WM_USER_SHUTDOWN, 0, 0);
     }
+
+    HANDLE waitHandles[2] = {};
+    DWORD waitCount = 0;
     if (g_hThread) {
-        WaitForSingleObject(g_hThread, INFINITE);
+        waitHandles[waitCount++] = g_hThread;
+    }
+    if (g_hRecycleWorkerThread) {
+        waitHandles[waitCount++] = g_hRecycleWorkerThread;
+    }
+
+    if (waitCount != 0) {
+        const DWORD waitResult = WaitForMultipleObjects(
+            waitCount, waitHandles, TRUE, TOOL_THREAD_SHUTDOWN_TIMEOUT_MS);
+        if (waitResult == WAIT_TIMEOUT) {
+            Wh_Log(L"Shutdown: tool threads did not exit within %lu ms; process exit will complete teardown",
+                   TOOL_THREAD_SHUTDOWN_TIMEOUT_MS);
+
+            if (g_hThread) {
+                CloseHandle(g_hThread);
+                g_hThread = NULL;
+            }
+            if (g_hRecycleWorkerThread) {
+                CloseHandle(g_hRecycleWorkerThread);
+                g_hRecycleWorkerThread = NULL;
+            }
+            return;
+        }
+        if (waitResult == WAIT_FAILED) {
+            Wh_Log(L"Shutdown: tool thread wait failed: %lu; process exit will complete teardown",
+                   GetLastError());
+
+            if (g_hThread) {
+                CloseHandle(g_hThread);
+                g_hThread = NULL;
+            }
+            if (g_hRecycleWorkerThread) {
+                CloseHandle(g_hRecycleWorkerThread);
+                g_hRecycleWorkerThread = NULL;
+            }
+            return;
+        }
+    }
+
+    if (g_hThread) {
         CloseHandle(g_hThread);
         g_hThread = NULL;
     }
+    if (g_hRecycleWorkerThread) {
+        CloseHandle(g_hRecycleWorkerThread);
+        g_hRecycleWorkerThread = NULL;
+    }
+    if (g_hRecycleWorkerEvent) {
+        CloseHandle(g_hRecycleWorkerEvent);
+        g_hRecycleWorkerEvent = NULL;
+    }
 
+    delete TakePendingRecycleWorkerJob();
     delete TakePendingSettings();
 
     ShutdownGdiplusIfInitialized();
