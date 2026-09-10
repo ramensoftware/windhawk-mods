@@ -2,7 +2,7 @@
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Desktop-only taskbar hiding using a dedicated Windhawk tool process
-// @version         5.5.0
+// @version         5.6.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -45,7 +45,7 @@ You can configure independently:
 
 You can select all displays or individual logical display numbers. The settings use the current logical monitor order rather than the internal Windows `DISPLAYn` device identifier.
 
-The mod keeps a stable monitor/device association when Windows changes its internal `DISPLAYn` numbering during the current session. When a display topology change invalidates an old association, stale selection bindings are reconciled instead of silently following an unrelated monitor.
+Display selections are evaluated using the current logical monitor numbering each time the display list is refreshed. If Windows changes the logical display order after a display is added, removed, or rearranged, the configured display numbers follow the new current numbering.
 
 ## Hover Reveal
 
@@ -87,7 +87,7 @@ Each selected display is evaluated independently. For example, an application ca
 
 An application spanning multiple displays keeps the taskbars on every intersected display visible. A taskbar can also be revealed independently by hovering its own configured bottom-edge area.
 
-The mod supports up to 16 display/taskbar entries and retains the existing logical display numbering system used by the settings UI.
+The mod supports up to 16 display/taskbar entries and uses the current logical display numbering reported by monitor enumeration.
 
 ## Performance and Refreshing
 
@@ -170,9 +170,9 @@ When no displays are configured for desktop-based hiding, the mod skips the appl
     These numbers may differ from the display numbers shown in Windows Display
     Settings. Choose All displays to hide every connected display. Only
     bottom-docked taskbars participate in desktop-based hiding. Use Add to
-    select multiple displays. When a physical display is reconnected and Windows
-    renumbers DISPLAYn, the mod keeps the selection bound to the same detected
-    monitor device when possible.
+    select multiple displays. Selections use the current logical display
+    numbering, so the selected number may refer to a different physical
+    display after Windows changes the display order.
   $options:
   - all: All displays
   - monitor1: Display 1
@@ -221,8 +221,6 @@ struct {
 struct MonitorEntry {
     HMONITOR monitor;
     RECT rect;
-    wchar_t deviceName[32];
-    wchar_t stableDeviceId[256];
 };
 
 struct MonitorList {
@@ -234,14 +232,8 @@ struct TaskbarMonitorState {
     HWND hwnd;
     HMONITOR monitor;
     int monitorNumber;
-    wchar_t stableDeviceId[256];
     bool desktopOnly;
     bool hiddenByMod;
-};
-
-struct MonitorSelectionBinding {
-    bool configured;
-    wchar_t stableDeviceId[256];
 };
 
 struct WindowScanResult {
@@ -540,11 +532,23 @@ bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
         return false;
     }
 
+    constexpr LONG_PTR kModExStyleBits =
+        WS_EX_LAYERED | WS_EX_TRANSPARENT;
+
     SetLastError(ERROR_SUCCESS);
+    LONG_PTR currentExStyle = GetWindowLongPtrW(
+        hwnd,
+        GWL_EXSTYLE
+    );
+    if (currentExStyle == 0 && GetLastError() != ERROR_SUCCESS) {
+        return false;
+    }
+
     LONG_PTR previousExStyle = SetWindowLongPtrW(
         hwnd,
         GWL_EXSTYLE,
-        originalExStyle
+        (currentExStyle & ~kModExStyleBits) |
+        (originalExStyle & kModExStyleBits)
     );
     if (previousExStyle == 0 && GetLastError() != ERROR_SUCCESS) {
         Wh_Log(
@@ -574,16 +578,9 @@ bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
 HWND g_workerMessageWindow = nullptr;
 ATOM g_workerWindowClassAtom = 0;
 UINT g_taskbarCreatedMessage = 0;
-ULONGLONG g_displayTopologySignature = 0;
-
 TaskbarMonitorState g_taskbarStates[kMaxTaskbars] = {};
 size_t g_taskbarStateCount = 0;
 bool g_nativeAutoHideEnabled = false;
-
-MonitorSelectionBinding
-    g_hideMonitorBindings[kMaxMonitorNumbers + 1] = {};
-MonitorSelectionBinding
-    g_hoverMonitorBindings[kMaxMonitorNumbers + 1] = {};
 
 bool g_hoverActive = false;
 HMONITOR g_hoverMonitor = nullptr;
@@ -649,220 +646,6 @@ bool IsDesktopInfrastructureWindow(
     return shellWindow && shellWindow == hwnd;
 }
 
-struct StableMonitorDeviceCacheEntry {
-    bool valid;
-    wchar_t deviceName[32];
-    wchar_t stableDeviceId[256];
-};
-
-StableMonitorDeviceCacheEntry
-    g_stableMonitorDeviceCache[kMaxMonitorNumbers] = {};
-
-void ClearStableMonitorDeviceIdCache() {
-    for (auto& entry : g_stableMonitorDeviceCache) {
-        entry = {};
-    }
-}
-
-bool GetStableMonitorDeviceId(
-    const wchar_t* deviceName,
-    wchar_t* output,
-    size_t outputCount
-) {
-    if (
-        !deviceName ||
-        !output ||
-        outputCount == 0
-    ) {
-        return false;
-    }
-
-    output[0] = L'\0';
-
-    for (const auto& entry : g_stableMonitorDeviceCache) {
-        if (
-            entry.valid &&
-            wcscmp(
-                entry.deviceName,
-                deviceName
-            ) == 0
-        ) {
-            wcsncpy_s(
-                output,
-                outputCount,
-                entry.stableDeviceId,
-                _TRUNCATE
-            );
-            return output[0] != L'\0';
-        }
-    }
-
-    wchar_t stableDeviceId[256] = {};
-    DISPLAY_DEVICEW adapter = {};
-    adapter.cb = sizeof(adapter);
-
-    for (
-        DWORD adapterIndex = 0;
-        EnumDisplayDevicesW(
-            nullptr,
-            adapterIndex,
-            &adapter,
-            0
-        );
-        ++adapterIndex
-    ) {
-        if (
-            wcscmp(
-                adapter.DeviceName,
-                deviceName
-            ) != 0
-        ) {
-            adapter = {};
-            adapter.cb = sizeof(adapter);
-            continue;
-        }
-
-        DISPLAY_DEVICEW monitor = {};
-        monitor.cb = sizeof(monitor);
-
-        if (
-            EnumDisplayDevicesW(
-                adapter.DeviceName,
-                0,
-                &monitor,
-                0
-            ) &&
-            monitor.DeviceID[0] != L'\0'
-        ) {
-            wcsncpy_s(
-                stableDeviceId,
-                ARRAYSIZE(stableDeviceId),
-                monitor.DeviceID,
-                _TRUNCATE
-            );
-        } else if (adapter.DeviceID[0] != L'\0') {
-            wcsncpy_s(
-                stableDeviceId,
-                ARRAYSIZE(stableDeviceId),
-                adapter.DeviceID,
-                _TRUNCATE
-            );
-        }
-
-        break;
-    }
-
-    if (stableDeviceId[0] == L'\0') {
-        return false;
-    }
-
-    for (auto& entry : g_stableMonitorDeviceCache) {
-        if (!entry.valid) {
-            entry.valid = true;
-
-            wcsncpy_s(
-                entry.deviceName,
-                ARRAYSIZE(entry.deviceName),
-                deviceName,
-                _TRUNCATE
-            );
-
-            wcsncpy_s(
-                entry.stableDeviceId,
-                ARRAYSIZE(entry.stableDeviceId),
-                stableDeviceId,
-                _TRUNCATE
-            );
-
-            break;
-        }
-    }
-
-    wcsncpy_s(
-        output,
-        outputCount,
-        stableDeviceId,
-        _TRUNCATE
-    );
-
-    return output[0] != L'\0';
-}
-
-void ResetMonitorSelectionBindings() {
-    for (
-        size_t i = 0;
-        i <= kMaxMonitorNumbers;
-        ++i
-    ) {
-        g_hideMonitorBindings[i] = {};
-        g_hoverMonitorBindings[i] = {};
-    }
-}
-
-void BindSelectionIdentity(
-    int configuredNumber,
-    const MonitorList& monitors,
-    const bool* selected,
-    MonitorSelectionBinding* bindings
-) {
-    if (
-        configuredNumber < 1 ||
-        configuredNumber > static_cast<int>(kMaxMonitorNumbers) ||
-        !selected ||
-        !bindings ||
-        !selected[configuredNumber] ||
-        bindings[configuredNumber].configured
-    ) {
-        return;
-    }
-
-    for (size_t i = 0; i < monitors.count; ++i) {
-        // Settings use the logical order of the currently connected
-        // monitors rather than the Windows DISPLAYn device identifier.
-        // This keeps "Display 2" usable even when Windows happens to name
-        // that monitor DISPLAY25, DISPLAY9, or another non-sequential value.
-        if (static_cast<int>(i + 1) == configuredNumber) {
-            if (monitors.entries[i].stableDeviceId[0] != L'\0') {
-                bindings[configuredNumber].configured = true;
-                wcsncpy_s(
-                    bindings[configuredNumber].stableDeviceId,
-                    ARRAYSIZE(
-                        bindings[configuredNumber].stableDeviceId
-                    ),
-                    monitors.entries[i].stableDeviceId,
-                    _TRUNCATE
-                );
-            }
-
-            return;
-        }
-    }
-}
-
-void BindConfiguredMonitorSelections(
-    const MonitorList& monitors
-) {
-    for (
-        int configuredNumber = 1;
-        configuredNumber <= static_cast<int>(kMaxMonitorNumbers);
-        ++configuredNumber
-    ) {
-        BindSelectionIdentity(
-            configuredNumber,
-            monitors,
-            g_settings.hideMonitor,
-            g_hideMonitorBindings
-        );
-
-        BindSelectionIdentity(
-            configuredNumber,
-            monitors,
-            g_settings.hoverMonitor,
-            g_hoverMonitorBindings
-        );
-    }
-}
-
 BOOL CALLBACK CollectMonitorProc(
     HMONITOR monitor,
     HDC,
@@ -888,18 +671,6 @@ BOOL CALLBACK CollectMonitorProc(
 
     entry.monitor = monitor;
     entry.rect = info.rcMonitor;
-    wcsncpy_s(
-        entry.deviceName,
-        ARRAYSIZE(entry.deviceName),
-        info.szDevice,
-        _TRUNCATE
-    );
-
-    GetStableMonitorDeviceId(
-        entry.deviceName,
-        entry.stableDeviceId,
-        ARRAYSIZE(entry.stableDeviceId)
-    );
 
     return TRUE;
 }
@@ -914,118 +685,7 @@ MonitorList GetCurrentMonitors() {
         reinterpret_cast<LPARAM>(&list)
     );
 
-    // Give the settings UI a deterministic, user-friendly numbering: the
-    // primary display is Display 1, followed by the remaining active displays
-    // ordered by their Windows device name. The actual device number is only
-    // an internal identifier and is never used as the selection index.
-    for (size_t i = 1; i < list.count; ++i) {
-        MonitorEntry key = list.entries[i];
-        MONITORINFO miKey = {};
-        miKey.cbSize = sizeof(miKey);
-        const bool keyPrimary =
-            key.monitor &&
-            GetMonitorInfoW(key.monitor, &miKey) &&
-            (miKey.dwFlags & MONITORINFOF_PRIMARY) != 0;
-
-        size_t j = i;
-        while (j > 0) {
-            MONITORINFO miPrev = {};
-            miPrev.cbSize = sizeof(miPrev);
-            const bool prevPrimary =
-                list.entries[j - 1].monitor &&
-                GetMonitorInfoW(list.entries[j - 1].monitor, &miPrev) &&
-                (miPrev.dwFlags & MONITORINFOF_PRIMARY) != 0;
-
-            bool shouldMoveBefore = false;
-            if (keyPrimary != prevPrimary) {
-                shouldMoveBefore = keyPrimary;
-            } else {
-                const wchar_t* keyNumberText = key.deviceName;
-                const wchar_t* previousNumberText =
-                    list.entries[j - 1].deviceName;
-
-                if (wcsncmp(keyNumberText, L"\\\\.\\DISPLAY", 11) == 0 &&
-                    wcsncmp(previousNumberText, L"\\\\.\\DISPLAY", 11) == 0) {
-                    wchar_t* keyEnd = nullptr;
-                    wchar_t* previousEnd = nullptr;
-                    long keyNumber = wcstol(keyNumberText + 11, &keyEnd, 10);
-                    long previousNumber =
-                        wcstol(previousNumberText + 11, &previousEnd, 10);
-
-                    if (keyEnd != keyNumberText + 11 &&
-                        *keyEnd == L'\0' &&
-                        previousEnd != previousNumberText + 11 &&
-                        *previousEnd == L'\0' &&
-                        keyNumber != previousNumber) {
-                        shouldMoveBefore = keyNumber < previousNumber;
-                    } else {
-                        shouldMoveBefore =
-                            wcscmp(
-                                key.deviceName,
-                                list.entries[j - 1].deviceName
-                            ) < 0;
-                    }
-                } else {
-                    shouldMoveBefore =
-                        wcscmp(
-                            key.deviceName,
-                            list.entries[j - 1].deviceName
-                        ) < 0;
-                }
-            }
-
-            if (!shouldMoveBefore) {
-                break;
-            }
-
-            list.entries[j] = list.entries[j - 1];
-            --j;
-        }
-        list.entries[j] = key;
-    }
-
     return list;
-}
-
-ULONGLONG HashDisplayTopology(
-    const MonitorList& monitors
-) {
-    // FNV-1a style hash over monitor device names and geometry. The signature
-    // is only used to detect that the topology changed, not as a stable ID.
-    ULONGLONG hash = 1469598103934665603ull;
-
-    auto mixByte = [&](unsigned char value) {
-        hash ^= value;
-        hash *= 1099511628211ull;
-    };
-
-    auto mixInt = [&](LONG value) {
-        unsigned long v = static_cast<unsigned long>(value);
-        for (int shift = 0; shift < 32; shift += 8) {
-            mixByte(static_cast<unsigned char>((v >> shift) & 0xff));
-        }
-    };
-
-    mixInt(static_cast<LONG>(monitors.count));
-
-    for (size_t i = 0; i < monitors.count; ++i) {
-        const MonitorEntry& entry = monitors.entries[i];
-
-        mixInt(entry.rect.left);
-        mixInt(entry.rect.top);
-        mixInt(entry.rect.right);
-        mixInt(entry.rect.bottom);
-
-        for (const wchar_t* pName = entry.deviceName; *pName; ++pName) {
-            wchar_t ch = *pName;
-            mixByte(static_cast<unsigned char>(ch & 0xff));
-            mixByte(static_cast<unsigned char>((ch >> 8) & 0xff));
-        }
-
-        mixByte(0);
-    }
-
-    return hash;
 }
 
 int GetMonitorNumber(
@@ -1045,55 +705,15 @@ int GetMonitorNumber(
 
 bool IsBottomDockedTaskbar(HWND hTaskbar, HMONITOR monitor);
 
-bool StableDeviceIdsMatch(
-    const wchar_t* left,
-    const wchar_t* right
-) {
-    return
-        left &&
-        right &&
-        left[0] != L'\0' &&
-        right[0] != L'\0' &&
-        wcscmp(left, right) == 0;
-}
-
 bool IsMonitorSelected(
     int monitorNumber,
-    const wchar_t* stableDeviceId,
-    const bool* selected,
-    const MonitorSelectionBinding* bindings
+    const bool* selected
 ) {
-    if (!selected || !bindings) {
-        return false;
-    }
-
-    if (
+    return
+        selected &&
         monitorNumber >= 1 &&
         monitorNumber <= static_cast<int>(kMaxMonitorNumbers) &&
-        selected[monitorNumber] &&
-        !bindings[monitorNumber].configured
-    ) {
-        return true;
-    }
-
-    for (
-        int configuredNumber = 1;
-        configuredNumber <= static_cast<int>(kMaxMonitorNumbers);
-        ++configuredNumber
-    ) {
-        if (
-            selected[configuredNumber] &&
-            bindings[configuredNumber].configured &&
-            StableDeviceIdsMatch(
-                stableDeviceId,
-                bindings[configuredNumber].stableDeviceId
-            )
-        ) {
-            return true;
-        }
-    }
-
-    return false;
+        selected[monitorNumber];
 }
 
 bool ShouldHideMonitor(
@@ -1105,9 +725,7 @@ bool ShouldHideMonitor(
 
     return IsMonitorSelected(
         state.monitorNumber,
-        state.stableDeviceId,
-        g_settings.hideMonitor,
-        g_hideMonitorBindings
+        g_settings.hideMonitor
     );
 }
 
@@ -1120,9 +738,7 @@ bool ShouldRevealOnHover(
 
     return IsMonitorSelected(
         state.monitorNumber,
-        state.stableDeviceId,
-        g_settings.hoverMonitor,
-        g_hoverMonitorBindings
+        g_settings.hoverMonitor
     );
 }
 
@@ -1644,24 +1260,6 @@ void RefreshTaskbarMonitorStates(
                 monitor
             );
 
-        for (
-            size_t monitorIndex = 0;
-            monitorIndex < monitors.count;
-            ++monitorIndex
-        ) {
-            if (
-                monitors.entries[monitorIndex].monitor ==
-                monitor
-            ) {
-                wcsncpy_s(
-                    state.stableDeviceId,
-                    ARRAYSIZE(state.stableDeviceId),
-                    monitors.entries[monitorIndex].stableDeviceId,
-                    _TRUNCATE
-                );
-                break;
-            }
-        }
 
         state.desktopOnly = true;
         state.hiddenByMod = false;
@@ -2127,82 +1725,10 @@ bool IsCursorInConfiguredHoverZoneAtSnapshot(
     return result;
 }
 
-bool IsStableDeviceIdPresent(
-    const MonitorList& monitors,
-    const wchar_t* stableDeviceId
-) {
-    if (!stableDeviceId || stableDeviceId[0] == L'\0') {
-        return false;
-    }
-
-    for (size_t i = 0; i < monitors.count; ++i) {
-        if (StableDeviceIdsMatch(
-                stableDeviceId,
-                monitors.entries[i].stableDeviceId)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-void ReconcileStaleMonitorSelectionBindings(
-    const MonitorList& monitors
-) {
-    for (int configuredNumber = 1;
-         configuredNumber <= static_cast<int>(kMaxMonitorNumbers);
-         ++configuredNumber) {
-        if (g_hideMonitorBindings[configuredNumber].configured &&
-            !IsStableDeviceIdPresent(
-                monitors,
-                g_hideMonitorBindings[configuredNumber].stableDeviceId)) {
-            g_hideMonitorBindings[configuredNumber] = {};
-        }
-
-        if (g_hoverMonitorBindings[configuredNumber].configured &&
-            !IsStableDeviceIdPresent(
-                monitors,
-                g_hoverMonitorBindings[configuredNumber].stableDeviceId)) {
-            g_hoverMonitorBindings[configuredNumber] = {};
-        }
-    }
-}
-
 void UpdateTaskbarState() {
 
     MonitorList monitors =
         GetCurrentMonitors();
-
-    ULONGLONG topologySignature =
-        HashDisplayTopology(monitors);
-
-    if (
-        g_displayTopologySignature != 0 &&
-        topologySignature != g_displayTopologySignature
-    ) {
-        ClearStableMonitorDeviceIdCache();
-
-        // Rebuild the monitor list after clearing the cache so every current
-        // monitor gets a fresh stable device identity before selection binding.
-        monitors = GetCurrentMonitors();
-        topologySignature = HashDisplayTopology(monitors);
-
-        // A display add/remove, arrangement change, or geometry/DPI transition
-        // can invalidate the current hover monitor. Reconcile from the base
-        // state instead of carrying old hover state across the transition.
-        g_hoverActive = false;
-        g_hoverMonitor = nullptr;
-        g_hoverDeadline = 0;
-        CancelHoverExpireTimer();
-
-        ReconcileStaleMonitorSelectionBindings(monitors);
-    }
-
-    g_displayTopologySignature = topologySignature;
-
-    BindConfiguredMonitorSelections(
-        monitors
-    );
 
     RefreshTaskbarMonitorStates(
         monitors
@@ -2882,7 +2408,6 @@ DWORD WINAPI WorkerThread(
 }
 
 void LoadSettings() {
-    ResetMonitorSelectionBindings();
 
     int hoverMargin =
         Wh_GetIntSetting(
