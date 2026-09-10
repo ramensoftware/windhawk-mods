@@ -463,12 +463,14 @@ static bool ProcessInitialScan(DWORD* retryMask,
 
             if (result == ProbeResult::Present) {
                 changed |= SetCachedMediaState(letter, MediaState::Present);
-            } else if (result == ProbeResult::Empty ||
-                       result == ProbeResult::NotReady) {
-                // Optical drives are allowed to report ERROR_NOT_READY while
-                // genuinely empty. Outside a startup/resume/arrival grace
-                // window, treat that settled result the same as NO_MEDIA.
+            } else if (result == ProbeResult::Empty) {
                 changed |= SetCachedMediaState(letter, MediaState::Empty);
+            } else if (result == ProbeResult::NotReady) {
+                // ERROR_NOT_READY is inconclusive. Some optical drives return
+                // it while spinning up or waking from idle even with media
+                // inserted. Do not hide a previously visible disc after a
+                // single generic device-tree probe.
+                *retryMask |= bit;
             } else {
                 changed |= SetCachedMediaState(letter, MediaState::Unknown);
             }
