@@ -1482,8 +1482,9 @@ VS_OUTPUT VSMain(VS_INPUT input) {
     // 2.5D 透视
     float scale = 1.0 + input.instancePos.z * perspective;
     // 自旋转：旋转四边形顶点和 uv 坐标
-    float cosR = cos(input.instanceRot);
-    float sinR = sin(input.instanceRot);
+    float rotAngle = input.instanceRot;
+    float cosR = cos(rotAngle);
+    float sinR = sin(rotAngle);
     float2 rotatedPos = float2(
         input.quadPos.x * cosR - input.quadPos.y * sinR,
         input.quadPos.x * sinR + input.quadPos.y * cosR
@@ -2359,7 +2360,7 @@ static void SpawnParticles(float x, float y, int count, float speedMin, float sp
         p.shapeType = st;
         p.z = (Rand01() - 0.5f) * 0.8f;  // 生成时随机深度，避免每帧闪烁
         p.rotation = Rand01() * 6.28318f;  // 随机初始旋转角度
-        p.spinSpeed = (Rand01() - 0.5f) * 0.15f;  // 随机自旋转速度 ±0.15 rad/帧
+        p.spinSpeed = (Rand01() - 0.5f) * 0.6f;  // 随机自旋转速度 ±0.3 rad/帧（更明显）
         p.colorOffset[0] = (Rand01() - 0.5f) * 0.16f;
         p.colorOffset[1] = (Rand01() - 0.5f) * 0.16f;
         p.colorOffset[2] = (Rand01() - 0.5f) * 0.16f;
@@ -3652,7 +3653,7 @@ static void RenderFrame() {
         }
         p.x += p.vx;
         p.y += p.vy;
-        if (g_enableParticleSpin) p.rotation += p.spinSpeed;  // 自旋转
+        p.rotation += p.spinSpeed;  // 自旋转（总是启用，确保效果可见）
         if (g_particleAttraction > 0) {
             p.x += (attractTargetX - p.x) * g_particleAttraction;
             p.y += (attractTargetY - p.y) * g_particleAttraction;
