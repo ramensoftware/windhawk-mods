@@ -1925,18 +1925,33 @@ static void RenderFrame() {
 
     int vX = g_virtX, vY = g_virtY;
 
+    static DWORD lastFsCheck = 0;
+    static bool isGameCached = false, isSmearing = false;
+    static int lowVelFrames = 0, fadeoutFrame = 0;
+    static bool needsClear = false;
+    static bool gameHidden = false;
+    static bool isWindowVisible = false;  // 窗口初始隐藏，首次有内容绘制时才显示
+    static int hideDelayCounter = 0;
+    if (dwTime - lastFsCheck > 500) {
+        isGameCached = IsGameRunning();
+        lastFsCheck = dwTime;
+    }
+
+    // 点击检测（游戏中跳过，避免全屏游戏内生成不必要的效果）
     bool lDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
     bool rDown = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
-    if (g_enableClickEffect) {
-        if (lDown && !g_prevLButton)
-            g_ripples.push_back({pt, dwTime});
-        if (rDown && !g_prevRButton)
-            g_ripples.push_back({pt, dwTime});
-    }
-    if (g_enableClickStarburst) {
-        if ((lDown && !g_prevLButton) || (rDown && !g_prevRButton)) {
-            SpawnParticles((float)(pt.x - vX), (float)(pt.y - vY), g_starburstCount, 2.5f, 5.5f, 1.5f, 3.0f, 250, 450,
-                           cols.solidOuter, dwTime, true);
+    if (!isGameCached) {
+        if (g_enableClickEffect) {
+            if (lDown && !g_prevLButton)
+                g_ripples.push_back({pt, dwTime});
+            if (rDown && !g_prevRButton)
+                g_ripples.push_back({pt, dwTime});
+        }
+        if (g_enableClickStarburst) {
+            if ((lDown && !g_prevLButton) || (rDown && !g_prevRButton)) {
+                SpawnParticles((float)(pt.x - vX), (float)(pt.y - vY), g_starburstCount, 2.5f, 5.5f, 1.5f, 3.0f, 250, 450,
+                               cols.solidOuter, dwTime, true);
+            }
         }
     }
     g_prevLButton = lDown;
@@ -1947,16 +1962,6 @@ static void RenderFrame() {
                                        [&](const Ripple &r) { return dwTime - r.startTime > (DWORD)g_clickDuration; }),
                         g_ripples.end());
 
-    static DWORD lastFsCheck = 0;
-    static bool isGameCached = false, isSmearing = false;
-    static int lowVelFrames = 0, fadeoutFrame = 0;
-    static bool needsClear = false;
-    static bool gameHidden = false;
-    if (dwTime - lastFsCheck > 500) {
-        isGameCached = IsGameRunning();
-        lastFsCheck = dwTime;
-    }
-
     int vW = g_virtW, vH = g_virtH;
 
     if (isGameCached) {
@@ -1964,6 +1969,7 @@ static void RenderFrame() {
         if (!gameHidden) {
             ShowWindowAsync(g_overlayHwnd, SW_HIDE);
             gameHidden = true;
+            isWindowVisible = false;  // 同步窗口可见状态，避免退出游戏后窗口不显示
         }
         if (isSmearing || !g_history.empty() || !g_ripples.empty() || !g_particles.empty() || needsClear) {
             isSmearing = false;
@@ -2209,8 +2215,6 @@ static void RenderFrame() {
     bool tailVisible = (isSmearing || g_history.size() >= 2) && g_fadeAlpha > 0.02f;
     bool isDrawing = tailVisible || !g_ripples.empty() || !g_particles.empty() || !g_trailShapes.empty();
 
-    static bool isWindowVisible = false;  // 窗口初始隐藏，首次有内容绘制时才显示
-    static int hideDelayCounter = 0;
     if (isDrawing) {
         hideDelayCounter = 0;
         if (!isWindowVisible) {
@@ -2593,6 +2597,7 @@ static void ReleaseAllRenderResources() {
     if (g_pD3DDevice) { g_pD3DDevice->Release(); g_pD3DDevice = nullptr; }
     g_cachedVW = 0;
     g_cachedVH = 0;
+    g_trailHistory.clear();  // 清除运动模糊历史帧，避免恢复后渲染旧坐标
 }
 
 static bool InitAllRenderResources() {
