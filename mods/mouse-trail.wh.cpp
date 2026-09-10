@@ -421,6 +421,11 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
   $name:zh-CN: 圆点链密度
   $description: Dot count multiplier (1-5), higher = more smaller dots.
   $description:zh-CN: 圆点链的小球数量倍率（1-5），越大小球越多越密。
+- dot_chain_size: 100
+  $name: Dot Chain Size
+  $name:zh-CN: 圆点大小
+  $description: Size multiplier for dot chain trail (50-300).
+  $description:zh-CN: 圆点链拖尾的大小倍数（50-300）。
 - function_preset: sine
   $name: Function Preset
   $name:zh-CN: 函数预设
@@ -493,6 +498,11 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
   $name:zh-CN: 粒子密度
   $description: Number of particles per release (1-10).
   $description:zh-CN: 每次释放的粒子数量（1-10）。
+- particle_size_multiplier: 100
+  $name: Particle Size
+  $name:zh-CN: 粒子大小
+  $description: Size multiplier for particles (50-300).
+  $description:zh-CN: 粒子大小倍数（50-300）。
 - particle_interval: 50
   $name: Particle Interval
   $name:zh-CN: 粒子释放间隔
