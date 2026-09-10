@@ -3126,6 +3126,38 @@
         "version": "1.0"
       }
     },
+    "control-panel-revival": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1789046774000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1789046774000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "AdmXP8",
+        "compilerOptions": "-lcomctl32",
+        "description": "Prevents Control Panel applets from redirecting to the modern Settings app on Windows 11 23H2+ by unhiding legacy elements safely",
+        "github": "https://github.com/AdmXP8",
+        "include": [
+          "explorer.exe",
+          "control.exe"
+        ],
+        "name": "Control Panel Revival",
+        "version": "1.0.0"
+      }
+    },
     "copy-queue": {
       "details": {
         "defaultSorting": 2580,

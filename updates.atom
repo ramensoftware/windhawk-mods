@@ -2,12 +2,47 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-10T00:57:48.000Z</updated>
+    <updated>2026-09-10T13:26:14.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Control Panel Revival 1.0.0]]></title>
+        <id>https://windhawk.net/mods/control-panel-revival#45a16be6974ea488dcd5464d0a8bd3aebd01bae7</id>
+        <link href="https://windhawk.net/mods/control-panel-revival"/>
+        <updated>2026-09-10T13:26:14.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="controlpanelrevival">Control Panel Revival</h1>
+<h3 id="whatdoesthismoddo">What does this mod do?</h3>
+<p>This mod restores Control Panel applets - Troubleshooting, Installed Updates,
+Default Programs, Devices and Printers, Fonts, and System - that Windows 11
+(23H2 and later) redirects to the Settings app instead of opening directly,
+even when launched via a shell command. You can also add your own applet IDs
+to protect them from being redirected. Each of the six built-in applets can
+also be individually toggled off in the settings if you don't want this mod
+to affect it.</p>
+<p><strong>Note:</strong> This mod does not reveal hidden Control Panel applets. It only
+restores applets that are already present in Control Panel but currently
+redirect to Settings(e.g troubleshooting,default programs,installed updates and more).</p>
+<h3 id="examplecustomappletsconfiguration">Example CustomApplets configuration:</h3>
+<pre><code class="yaml language-yaml">- "{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}"  # System
+- "Microsoft.Troubleshooting"              # Troubleshooting
+- "BB06C0E4-D293-4f75-8A90-CB05B6477EEE"    # System (bare GUID, no braces)
+</code></pre>
+<p><strong>Before:</strong>
+<img src="https://raw.githubusercontent.com/AdmXP8/assets/main/Screen%20Recording%202026-08-27%20124304.gif" alt="Before" /></p>
+<p><strong>After:</strong>
+<img src="https://raw.githubusercontent.com/AdmXP8/assets/main/Screen%20Recording%202026-08-27%20124458.gif" alt="After" /></p>
+<p><strong>Difference from other mods</strong> Other mods hook this same function but within a new window, so they cannot intercept new applet redirects—such as those for troubleshooting, installed updates, default programs, and so on.</p>
+<p><strong>Relationship to <code>settings-to-control-panel</code> ("Redirect Settings to Control Panel"):</strong> that mod also hooks the same private <code>COpenControlPanel::_MapLegacyName</code> function, but opens its targeted applets in a <strong>new, separate window</strong> rather than preventing the redirect entirely. This mod loads the applet <strong>in-place, inside the existing Control Panel window</strong>, which is what allows it to also cover Troubleshooting, Installed Updates, and Default Programs - three applets that, on 23H2+, can no longer be launched in a new window at all (not even via <code>shell:::</code>), so <code>settings-to-control-panel</code>'s mechanism cannot restore them. Both mods hooking the same private symbol is expected; if you run both together, only one mod's outcome will apply for any applet targeted by both.</p>
+<p><strong>Known limitations</strong>  Clicking on task links that lead to applets currently in the mod results in no action being taken. This issue will be fixed in future versions.</p>
+<p><strong>If there are any bugs in the mod, please report them to me</strong></p>]]></content>
+        <author>
+            <name>AdmXP8</name>
+            <uri>https://github.com/AdmXP8</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Live Overlay 1.2]]></title>
         <id>https://windhawk.net/mods/desktop-live-overlay#4cfbf496f2cde4f5cffb0433050f3e7f1ebeacfc</id>
@@ -672,20 +707,6 @@ attribution look busier than expected.</li>
         <id>https://windhawk.net/mods/widget-board-size-position#f157de8be1492b6a69025eda9e8a22f5caad47b7</id>
         <link href="https://windhawk.net/mods/widget-board-size-position"/>
         <updated>2026-09-05T15:13:31.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated the author's GitHub profile URL after the username changed from <code>Meteony</code> to <code>Meteoni</code>.</li>
-<li>Updated screenshot and GIF URLs to use the renamed <code>Meteoni/meteoni-assets</code> repository.</li>
-</ul>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteoni</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Z-Order Override 0.8.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-z-order-override#47bd3790bfa3878f9eaba84661f0cbc623f1c2b7</id>
-        <link href="https://windhawk.net/mods/taskbar-z-order-override"/>
-        <updated>2026-09-05T15:13:25.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Updated the author's GitHub profile URL after the username changed from <code>Meteony</code> to <code>Meteoni</code>.</li>
 <li>Updated screenshot and GIF URLs to use the renamed <code>Meteoni/meteoni-assets</code> repository.</li>
