@@ -1649,12 +1649,12 @@ static void NativeRenderParticles(int screenW, int screenH) {
                                        p.color.b + (p.endColor.b - p.color.b) * progress, 1.0f);
         instances[count].x = p.x;
         instances[count].y = p.y;
-        instances[count].z = (rand()/(float)RAND_MAX - 0.5f) * 0.3f;  // 2.5D 随机深度
+        instances[count].z = (rand()/(float)RAND_MAX - 0.5f) * 0.8f;  // 3D 随机深度
         instances[count].r = pc.r;
         instances[count].g = pc.g;
         instances[count].b = pc.b;
         instances[count].a = lifeAlpha * 0.65f;
-        instances[count].size = p.size * 1.6f;
+        instances[count].size = p.size * 2.0f;
         count++;
         if (count >= 2000) break;
     }
@@ -1949,7 +1949,7 @@ static bool NativeRenderFrame(int screenW, int screenH, const std::vector<D2D1_P
                 D2D1_POINT_2F p = GetPointOnPath(smoothed, t);
                 dots.push_back(p);
             }
-            NativeRenderTrail(dots, widthMul * 0.3f, cols, fadeAlpha, screenW, screenH, dwTime);
+            NativeRenderTrail(dots, widthMul * 0.6f, cols, fadeAlpha, screenW, screenH, dwTime);
         } else if (g_trailShape == 5) {
             // 双线拖尾：渲染两条偏移的带
             std::vector<D2D1_POINT_2F> line1, line2;
