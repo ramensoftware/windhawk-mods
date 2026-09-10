@@ -1705,27 +1705,8 @@ static void NativeRenderTrail(const std::vector<D2D1_POINT_2F>& smoothed, float 
         float ratio = (float)i / (sl - 1);
         float taper = powf(1.0f - ratio, 1.3f);
         float ow = (i == sl - 1) ? 0 : 10.0f * taper * widthMul;
-        // 2.5D 深度：根据拖尾形状类型使用不同的深度模式
-        // 深度衰减：拖尾末端深度更小，避免末端突兀
-        float depthFade = 1.0f - powf(ratio, 2.0f) * 0.5f;
+        // 拖尾带使用平面渲染（2.5D 效果仅用于粒子和形状拖尾）
         float depth = 0.0f;
-        if (g_trailShape == 0 || g_trailShape == 5 || g_trailShape == 6) {
-            // 锥形/双线/虚线：中间高两端低，平滑弧形
-            depth = sinf(ratio * 3.14159f) * 0.2f * depthFade;
-        } else if (g_trailShape == 1) {
-            // 点链：离散深度波动，模拟珠子起伏
-            depth = sinf(ratio * 3.14159f * 6.0f) * 0.12f * depthFade;
-        } else if (g_trailShape == 2 || g_trailShape == 7) {
-            // 函数曲线/螺旋：动态波动深度
-            depth = sinf(ratio * 3.14159f * 3.0f + dwTime * 0.002f) * 0.15f * depthFade;
-        } else if (g_trailShape == 3 || g_trailShape == 8) {
-            // 波形/闪电：波浪深度
-            depth = sinf(ratio * 3.14159f * 5.0f - dwTime * 0.003f) * 0.15f * depthFade;
-        } else if (g_trailShape == 9) {
-            // 羽毛：随机毛刺深度
-            float r = (float)(rand() % 1000) / 1000.0f;
-            depth = (r - 0.5f) * 0.25f * depthFade;
-        }
         // 颜色从渐变采样（u 坐标传递到着色器）
         verts.push_back({smoothed[i].x + nx*ow, smoothed[i].y + ny*ow, depth,
                          1,1,1, fadeAlpha, ratio});
