@@ -152,18 +152,17 @@ pair-programmers Claude and Big-Pickle (opencode).
 - rotateSeconds: 300
   $name: Rotation interval (seconds)
   $description: Clamped to 10-7200.
-- amount: 2
+- amount: balanced
   $name: Amount
   $description: >-
     Starting amount notch -- how much information is on screen. Right click the
-    overlay to step it. 0 = minimal, 1 = sparse, 2 = balanced, 3 = dense,
-    4 = maximal.
+    overlay to step it.
   $options:
-  - 0: Minimal
-  - 1: Sparse
-  - 2: Balanced
-  - 3: Dense
-  - 4: Maximal
+  - minimal: Minimal
+  - sparse: Sparse
+  - balanced: Balanced
+  - dense: Dense
+  - maximal: Maximal
 - parameter: 50
   $name: Parameter (%)
   $description: >-
@@ -2226,6 +2225,19 @@ static std::wstring GetStringSetting(PCWSTR name) {
     return s;
 }
 
+// The amount notch is stored by name so the setting can carry $options.
+static int AmountFromName(const std::wstring& name) {
+    static const wchar_t* kNames[kAmountCount] = {L"minimal", L"sparse",
+                                                  L"balanced", L"dense",
+                                                  L"maximal"};
+    for (int i = 0; i < kAmountCount; i++) {
+        if (name == kNames[i]) {
+            return i;
+        }
+    }
+    return 2;   // balanced
+}
+
 static void LoadSettings() {
     g_settings.monitor = GetStringSetting(L"monitor");
     g_settings.enable[kStyleFlow] = Wh_GetIntSetting(L"enableFlow") != 0;
@@ -2244,7 +2256,7 @@ static void LoadSettings() {
     g_settings.rotate = Wh_GetIntSetting(L"rotate") != 0;
     g_settings.rotateSeconds =
         ClampT(Wh_GetIntSetting(L"rotateSeconds"), 10, 7200);
-    g_settings.amount = ClampT(Wh_GetIntSetting(L"amount"), 0, kAmountCount - 1);
+    g_settings.amount = AmountFromName(GetStringSetting(L"amount"));
     g_settings.parameter = ClampT(Wh_GetIntSetting(L"parameter"), 0, 100);
     g_settings.palette = GetStringSetting(L"palette");
     g_settings.customColors = GetStringSetting(L"customColors");
