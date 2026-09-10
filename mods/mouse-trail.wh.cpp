@@ -9,7 +9,7 @@
 // @github          https://github.com/MCheng404
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -ld2d1 -ld3d11 -ldxgi -ldcomp -lole32 -lgdi32 -lshell32
+// @compilerOptions -ld2d1 -ld3d11 -ldxgi -ldcomp -ldwmapi -lole32 -lgdi32 -lshell32
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
@@ -447,6 +447,7 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 #include <d3d11.h>
 #include <dxgi1_2.h>
 #include <dcomp.h>
+#include <dwmapi.h>
 #include <math.h>
 #include <shellapi.h>
 #include <stdlib.h>
@@ -1950,6 +1951,7 @@ static void RenderFrame() {
     static bool isGameCached = false, isSmearing = false;
     static int lowVelFrames = 0, fadeoutFrame = 0;
     static bool needsClear = false;
+    static bool gameHidden = false;
     if (dwTime - lastFsCheck > 500) {
         isGameCached = IsGameRunning();
         lastFsCheck = dwTime;
@@ -1958,6 +1960,11 @@ static void RenderFrame() {
     int vW = g_virtW, vH = g_virtH;
 
     if (isGameCached) {
+        // 游戏中隐藏覆盖层窗口，避免全屏顶层窗口阻挡游戏的独立翻转/MPO
+        if (!gameHidden) {
+            ShowWindowAsync(g_overlayHwnd, SW_HIDE);
+            gameHidden = true;
+        }
         if (isSmearing || !g_history.empty() || !g_ripples.empty() || !g_particles.empty() || needsClear) {
             isSmearing = false;
             g_history.clear();
@@ -1968,6 +1975,7 @@ static void RenderFrame() {
         } else
             return;
     } else {
+        gameHidden = false;  // 退出游戏后重置，允许窗口重新显示
         if (velocity > g_triggerVelocity && !isSmearing) {
             isSmearing = true;
             lowVelFrames = 0;
@@ -2201,18 +2209,18 @@ static void RenderFrame() {
     bool tailVisible = (isSmearing || g_history.size() >= 2) && g_fadeAlpha > 0.02f;
     bool isDrawing = tailVisible || !g_ripples.empty() || !g_particles.empty() || !g_trailShapes.empty();
 
-    static bool isWindowVisible = true;
+    static bool isWindowVisible = false;  // 窗口初始隐藏，首次有内容绘制时才显示
     static int hideDelayCounter = 0;
     if (isDrawing) {
         hideDelayCounter = 0;
         if (!isWindowVisible) {
-            ShowWindow(g_overlayHwnd, SW_SHOWNA);
+            ShowWindowAsync(g_overlayHwnd, SW_SHOWNA);
             isWindowVisible = true;
         }
     } else if (!needsClear) {
         hideDelayCounter++;
         if (hideDelayCounter >= 3 && isWindowVisible) {
-            ShowWindow(g_overlayHwnd, SW_HIDE);
+            ShowWindowAsync(g_overlayHwnd, SW_HIDE);
             isWindowVisible = false;
         }
     } else {
@@ -2487,7 +2495,7 @@ static void RenderFrame() {
         return;
     }
     if (g_pSwapChain) {
-        HRESULT presHr = g_pSwapChain->Present(0, 0);
+        HRESULT presHr = g_pSwapChain->Present(1, 0);  // 1 = 等待 vsync，避免帧率不稳定
         if (presHr == DXGI_ERROR_DEVICE_REMOVED || presHr == DXGI_ERROR_DEVICE_RESET) {
             Wh_Log(L"RenderFrame: Present device lost (0x%08X), scheduling recovery", presHr);
             g_deviceLost.store(true);
@@ -2688,8 +2696,8 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
     SetLayeredWindowAttributes(g_overlayHwnd, 0, 255, LWA_ALPHA);
     // 从屏幕捕获中排除覆盖层，避免光标取色时采样到自己的拖尾
     SetWindowDisplayAffinity(g_overlayHwnd, WDA_EXCLUDEFROMCAPTURE);
-    Wh_Log(L"OverlayThread: window created (%dx%d at %d,%d)", sw, sh, sx, sy);
-    ShowWindow(g_overlayHwnd, SW_SHOWNA);
+    Wh_Log(L"OverlayThread: window created (%dx%d at %d,%d), initially hidden", sw, sh, sx, sy);
+    // 不立即 ShowWindow，等渲染线程首次有内容绘制时再显示，避免渲染失败时全屏透明窗口残留
 
     // 通知渲染线程窗口已就绪
     if (g_readyEvent) SetEvent(g_readyEvent);
@@ -2818,8 +2826,12 @@ DWORD WINAPI RenderThreadProc(LPVOID) {
             Wh_Log(L"RenderThread: recovery complete");
         }
         RenderFrame();
-        // 空闲退避：有拖尾/粒子/效果时 1ms，空闲时 16ms（~60fps 响应）
+        // 显式 vsync 同步：Present(1,0) 已等待 vsync，DwmFlush 确保与 DWM 合成器同步
         bool isActive = !g_history.empty() || !g_particles.empty() || !g_ripples.empty() || !g_trailShapes.empty();
+        if (isActive) {
+            DwmFlush();
+        }
+        // 空闲退避：有拖尾/粒子/效果时 1ms，空闲时 16ms（~60fps 响应）
         waitMs = isActive ? 1 : 16;
     }
 
@@ -2860,9 +2872,10 @@ BOOL WhTool_ModInit() {
     g_threadHandle = CreateThread(NULL, 0, OverlayThreadProc, NULL, 0, NULL);
     if (!g_threadHandle) {
         Wh_Log(L"WhTool_ModInit: CreateThread failed: %d", GetLastError());
-    } else {
-        Wh_Log(L"WhTool_ModInit: thread created");
+        if (g_readyEvent) { CloseHandle(g_readyEvent); g_readyEvent = NULL; }
+        return FALSE;
     }
+    Wh_Log(L"WhTool_ModInit: thread created");
     return TRUE;
 }
 void WhTool_ModUninit() {
