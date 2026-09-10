@@ -2,8 +2,8 @@
 // @id              mouse-trail
 // @name            Mouse Trail
 // @name:zh-CN      鼠标拖尾
-// @description     High-performance cursor motion blur with particle effects, 12 color modes, custom function trails, cursor color extraction, and click effects. D3D11 + DirectComposition hardware accelerated, 64-bit host.
-// @description:zh-CN 高性能鼠标运动模糊拖尾，支持粒子特效、12种颜色模式、自定义函数轨迹、光标取色和点击特效。D3D11 + DirectComposition 硬件加速，64 位宿主进程。
+// @description     High-performance cursor motion blur with particle effects, 12 color modes, custom function trails, cursor color extraction, and click effects. D3D11 + DirectComposition hardware accelerated, 64-bit host preferred.
+// @description:zh-CN 高性能鼠标运动模糊拖尾，支持粒子特效、12种颜色模式、自定义函数轨迹、光标取色和点击特效。D3D11 + DirectComposition 硬件加速，优先 64 位宿主进程。
 // @version         2.3
 // @author          MCheng404
 // @github          https://github.com/MCheng404
@@ -16,7 +16,7 @@
 /*
 # Mouse Trail
 
-A highly customizable mouse cursor trail with particle effects, multiple color modes, custom function trails, cursor color extraction, and click effects. D3D11 + DirectComposition hardware accelerated, runs as a dedicated 64-bit process with zero CPU usage when idle.
+A highly customizable mouse cursor trail with particle effects, multiple color modes, custom function trails, cursor color extraction, and click effects. D3D11 + DirectComposition hardware accelerated, runs as a dedicated process (64-bit helper preferred, 32-bit fallback) with low CPU usage when idle.
 
 ![Trail Effect](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail.gif)
 
@@ -36,7 +36,7 @@ A highly customizable mouse cursor trail with particle effects, multiple color m
 
 ### Features
 
-* **Hardware Acceleration:** D3D11 device + ID2D1DeviceContext + DXGI flip swap chain + DirectComposition visual, fully GPU-rendered with zero CPU framebuffer copies. Runs in a dedicated 64-bit host process for stability.
+* **Hardware Acceleration:** D3D11 device + ID2D1DeviceContext + DXGI flip swap chain + DirectComposition visual, fully GPU-rendered with zero CPU framebuffer copies. Prefers the 64-bit `windhawk-x64-helper.exe` host process when available; falls back to 32-bit `windhawk.exe` if the helper is not present.
 * **4 Trail Shapes:** Tapered ribbon / Tapered dot chain / Function curve / Sine wave.
 * **12 Color Modes:** Single / Gradient (3-color) / Rainbow / Warm / Cool / Neon / Velocity / Stripes / Fire / Aurora / Cursor Extract / Cursor Mix.
 * **Particle System:** Mini particles released from the trail, attracted back to cursor with configurable origin (head/middle/tail/custom), attraction strength, and cursor repulsion force. Shapes: circle / star / hexagram / random mix. Colors fade over lifetime.
@@ -66,13 +66,11 @@ Hex RGB, e.g. `FF0000`=red, `00FF00`=green, `0000FF`=blue, `FFD700`=gold.
 
 Developed by [MCheng404](https://github.com/MCheng404).
 
-Inspired by and based on the core overlay/ribbon architecture of [Cursor Motion Blur](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/cursor-motion-blur.wh.cpp) by TheatriChris (MIT License).
-
 ---
 
 # 鼠标拖尾
 
-高度可定制的鼠标拖尾特效，支持粒子系统、多种颜色模式、自定义函数轨迹、光标取色和点击特效。D3D11 + DirectComposition 硬件加速，独立 64 位进程运行，静止时零 CPU 占用。
+高度可定制的鼠标拖尾特效，支持粒子系统、多种颜色模式、自定义函数轨迹、光标取色和点击特效。D3D11 + DirectComposition 硬件加速，独立进程运行（优先 64 位 helper，不存在时回退 32 位），静止时低 CPU 占用。
 
 ![拖尾效果](https://raw.githubusercontent.com/MCheng404/cursor-motion-blur-enhanced/main/assets/demo_trail.gif)
 
@@ -92,7 +90,7 @@ Inspired by and based on the core overlay/ribbon architecture of [Cursor Motion 
 
 ### 功能特性
 
-* **硬件加速：** D3D11 设备 + ID2D1DeviceContext + DXGI 翻转交换链 + DirectComposition 视觉对象，纯 GPU 渲染，零 CPU 帧缓冲拷贝。独立 64 位宿主进程运行，稳定性更高。
+* **硬件加速：** D3D11 设备 + ID2D1DeviceContext + DXGI 翻转交换链 + DirectComposition 视觉对象，纯 GPU 渲染，零 CPU 帧缓冲拷贝。优先使用 64 位 `windhawk-x64-helper.exe` 宿主进程；若 helper 不存在则回退到 32 位 `windhawk.exe`。
 * **4 种拖尾形状：** 锥形带 / 类锥形圆链 / 函数曲线 / 正弦波浪。
 * **12 种颜色模式：** 单色 / 多色渐变（三色） / 彩虹流动 / 暖色调 / 冷色调 / 霓虹脉冲 / 速度变色 / 流动条纹 / 火焰 / 极光 / 光标取色 / 光标混色。
 * **粒子系统：** 拖尾释放迷你粒子，全程吸附回光标。释放位置（开头/中间/结尾/自定义）、吸附强度、光标排斥力均可调。支持圆形/五角星/六芒星/随机混合形状，颜色随生命周期渐变。
@@ -106,7 +104,7 @@ Inspired by and based on the core overlay/ribbon architecture of [Cursor Motion 
 * **头部高光：** 拖尾头部明亮中心点。
 * **拖尾阴影：** 底层暗色阴影增加立体感。
 * **游戏检测：** 全屏 DirectX 游戏时自动禁用。
-* **零 CPU 待机：** 鼠标静止且无特效时窗口隐藏，CPU 占用为 0%。
+* **低功耗待机：** 鼠标静止且无特效时渲染线程退避到 16ms 轮询，CPU 占用极低。
 
 ### 函数轨迹变量
 
@@ -121,8 +119,6 @@ Inspired by and based on the core overlay/ribbon architecture of [Cursor Motion 
 ### 致谢
 
 开发者 [MCheng404](https://github.com/MCheng404)。
-
-核心覆盖层/锥形带架构灵感来源于 TheatriChris 的 [Cursor Motion Blur](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/cursor-motion-blur.wh.cpp)（MIT 许可证）。
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
@@ -485,6 +481,7 @@ Inspired by and based on the core overlay/ribbon architecture of [Cursor Motion 
 #include <ctype.h>
 #include <deque>
 #include <vector>
+#include <atomic>
 #include <algorithm>
 
 #define GRAD_STOPS 12
@@ -866,6 +863,8 @@ struct TrailFrame {
     DWORD time;
 };
 std::vector<TrailFrame> g_trailHistory;
+std::atomic<bool> g_settingsDirty{false};  // 设置变更标记，渲染线程中消费
+std::atomic<bool> g_deviceLost{false};      // 设备丢失标记，渲染循环中重建
 DWORD g_lastParticleTime = 0;
 float g_prevVelocity = 0;
 bool g_enableClickStarburst = true;
@@ -1769,8 +1768,136 @@ static void CreateMeshFromQuadStripWithCap(ID2D1DeviceContext *dc, ID2D1Mesh **m
     pSink->Release();
 }
 
+// ===================== 渲染子函数 =====================
+
+// 粒子渲染（主体含发光模拟 + 多形状 + 颜色渐变）
+static void RenderParticles(DWORD dwTime) {
+    if (g_particles.empty()) return;
+    bool particleFastPath = g_particles.size() > (g_superPerformanceMode ? 300 : 100);
+    for (auto &p : g_particles) {
+        float progress = (float)(dwTime - p.startTime) / p.lifetime;
+        if (progress < 0 || progress >= 1) continue;
+        float lifeAlpha = (1.0f - progress);
+        D2D1_COLOR_F pc = D2D1::ColorF(p.color.r + (p.endColor.r - p.color.r) * progress,
+                                       p.color.g + (p.endColor.g - p.color.g) * progress,
+                                       p.color.b + (p.endColor.b - p.color.b) * progress, 1.0f);
+        g_pSolidOuterBrush->SetColor(pc);
+        g_pSolidOuterBrush->SetOpacity(lifeAlpha * 0.65f);
+        float bodySize = p.size * 1.6f;
+        if (!particleFastPath && p.shapeType == 2 && g_pStarGeom) {
+            D2D1_MATRIX_3X2_F oldT;
+            g_pD2DDC->GetTransform(&oldT);
+            g_pD2DDC->SetTransform(D2D1::Matrix3x2F::Scale(bodySize, bodySize) *
+                                   D2D1::Matrix3x2F::Translation(p.x, p.y));
+            g_pD2DDC->FillGeometry(g_pStarGeom, g_pSolidOuterBrush);
+            g_pD2DDC->SetTransform(oldT);
+        } else if (!particleFastPath && p.shapeType == 3 && g_pHexagramGeom) {
+            D2D1_MATRIX_3X2_F oldT;
+            g_pD2DDC->GetTransform(&oldT);
+            g_pD2DDC->SetTransform(D2D1::Matrix3x2F::Scale(bodySize, bodySize) *
+                                   D2D1::Matrix3x2F::Translation(p.x, p.y));
+            g_pD2DDC->FillGeometry(g_pHexagramGeom, g_pSolidOuterBrush);
+            g_pD2DDC->SetTransform(oldT);
+        } else {
+            g_pD2DDC->FillEllipse(D2D1::Ellipse(D2D1::Point2F(p.x, p.y), bodySize, bodySize), g_pSolidOuterBrush);
+        }
+    }
+    g_pSolidOuterBrush->SetOpacity(1.0f);
+}
+
+// 形状拖尾渲染（爱心/五角星/六角形/圆形，带出生动画）
+static void RenderTrailShapes(DWORD dwTime) {
+    if (g_trailShapes.empty()) return;
+    for (auto &s : g_trailShapes) {
+        float progress = (float)(dwTime - s.startTime) / s.lifetime;
+        if (progress < 0 || progress >= 1) continue;
+        float lifeAlpha = (1.0f - progress);
+        float scale = s.size * (progress < 0.2f ? progress * 5.0f : 1.0f);
+        g_pSolidOuterBrush->SetColor(s.color);
+        g_pSolidOuterBrush->SetOpacity(lifeAlpha * 0.85f);
+        ID2D1PathGeometry *geom = nullptr;
+        if (s.shapeType == 0) geom = g_pHeartGeom;
+        else if (s.shapeType == 1) geom = g_pStarGeom;
+        else if (s.shapeType == 2) geom = g_pHexagramGeom;
+        if (geom) {
+            D2D1_MATRIX_3X2_F oldT;
+            g_pD2DDC->GetTransform(&oldT);
+            g_pD2DDC->SetTransform(D2D1::Matrix3x2F::Scale(scale, scale) *
+                                   D2D1::Matrix3x2F::Translation(s.x, s.y));
+            g_pD2DDC->FillGeometry(geom, g_pSolidOuterBrush);
+            g_pD2DDC->SetTransform(oldT);
+        } else {
+            g_pD2DDC->FillEllipse(D2D1::Ellipse(D2D1::Point2F(s.x, s.y), scale, scale), g_pSolidOuterBrush);
+        }
+    }
+    g_pSolidOuterBrush->SetOpacity(1.0f);
+}
+
+// 运动模糊历史帧渲染（仅锥形带，简化外带，透明度递减）
+static void RenderMotionBlur(float widthMul, const GradData &cols, float fadeAlpha) {
+    if (!g_enableMotionBlur || g_trailShape != 0 || g_trailHistory.size() <= 1) return;
+    g_pD2DDC->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
+    for (size_t h = 0; h < g_trailHistory.size() - 1; h++) {
+        auto &histPath = g_trailHistory[h].path;
+        if (histPath.size() < 2) continue;
+        float histAlpha = 0.22f * (1.0f - (float)h / g_trailHistory.size()) * fadeAlpha;
+        std::vector<D2D1_POINT_2F> hlo, hro;
+        for (size_t i = 0; i < histPath.size(); i++) {
+            float ddx, ddy;
+            if (i == 0) { ddx = histPath[0].x - histPath[1].x; ddy = histPath[0].y - histPath[1].y; }
+            else if (i == histPath.size() - 1) { ddx = histPath[i-1].x - histPath[i].x; ddy = histPath[i-1].y - histPath[i].y; }
+            else { ddx = histPath[i-1].x - histPath[i+1].x; ddy = histPath[i-1].y - histPath[i+1].y; }
+            float ln = sqrtf(ddx*ddx + ddy*ddy);
+            if (ln > 0) { ddx /= ln; ddy /= ln; } else { ddx = 1; ddy = 0; }
+            float nx = -ddy, ny = ddx;
+            float ratio = (float)i / (histPath.size() - 1);
+            float ow = 10.0f * powf(1.0f - ratio, 1.3f) * widthMul;
+            if (i == histPath.size() - 1) ow = 0;
+            hlo.push_back(D2D1::Point2F(histPath[i].x + nx*ow, histPath[i].y + ny*ow));
+            hro.push_back(D2D1::Point2F(histPath[i].x - nx*ow, histPath[i].y - ny*ow));
+        }
+        ID2D1Mesh *pHistMesh = nullptr;
+        CreateMeshFromQuadStrip(g_pD2DDC, &pHistMesh, hlo, hro);
+        if (pHistMesh) {
+            g_pSolidOuterBrush->SetColor(cols.solidOuter);
+            g_pSolidOuterBrush->SetOpacity(histAlpha);
+            g_pD2DDC->FillMesh(pHistMesh, g_pSolidOuterBrush);
+            pHistMesh->Release();
+        }
+    }
+    g_pSolidOuterBrush->SetOpacity(1.0f);
+    g_pD2DDC->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+}
+
+// 点击波纹渲染（外圈填充+描边，内圈描边）
+static void RenderClickRipples(DWORD dwTime, const GradData &cols, int vX, int vY) {
+    if (!g_enableClickEffect || g_ripples.empty()) return;
+    for (auto &ripple : g_ripples) {
+        float elapsed = (float)(dwTime - ripple.startTime), progress = elapsed / g_clickDuration;
+        if (progress < 0 || progress >= 1) continue;
+        float radius = progress * g_clickMaxRadius, alpha = (1 - progress) * .7f;
+        D2D1_POINT_2F c = D2D1::Point2F((float)(ripple.pos.x - vX), (float)(ripple.pos.y - vY));
+        g_pSolidOuterBrush->SetColor(cols.solidOuter);
+        g_pSolidOuterBrush->SetOpacity(alpha * 0.12f);
+        g_pD2DDC->FillEllipse(D2D1::Ellipse(c, radius, radius), g_pSolidOuterBrush);
+        g_pSolidOuterBrush->SetOpacity(alpha);
+        g_pD2DDC->DrawEllipse(D2D1::Ellipse(c, radius, radius), g_pSolidOuterBrush, 2.5f);
+        if (radius > 4) {
+            g_pSolidInnerBrush->SetColor(cols.solidInner);
+            g_pSolidInnerBrush->SetOpacity(alpha * .8f);
+            g_pD2DDC->DrawEllipse(D2D1::Ellipse(c, radius * .7f, radius * .7f), g_pSolidInnerBrush, 1.5f);
+        }
+    }
+    g_pSolidOuterBrush->SetOpacity(1);
+    g_pSolidInnerBrush->SetOpacity(1);
+}
+
 // ===================== 主绘制循环 =====================
 static void RenderFrame() {
+    // 设置变更时在渲染线程中重载（避免 UI 线程与渲染线程竞争全局变量）
+    if (g_settingsDirty.exchange(false)) {
+        LoadSettings();
+    }
     DWORD dwTime = GetTickCount();
     POINT pt;
     GetCursorPos(&pt);
@@ -2113,119 +2240,22 @@ static void RenderFrame() {
     g_pD2DDC->BeginDraw();
     g_pD2DDC->Clear(D2D1::ColorF(0, 0, 0, 0));
 
-    // ===== 粒子（主体含发光模拟 + 多形状 + 颜色渐变）=====
+    // ===== 粒子渲染 =====
     if (!g_particles.empty()) {
-        bool particleFastPath = g_particles.size() > (g_superPerformanceMode ? 300 : 100);  // 粒子过多时降级为圆形，提升性能
-        for (auto &p : g_particles) {
-            float progress = (float)(dwTime - p.startTime) / p.lifetime;
-            if (progress < 0 || progress >= 1)
-                continue;
-            float lifeAlpha = (1.0f - progress);
-            // 颜色随生命周期从起始色渐变到结束色
-            D2D1_COLOR_F pc = D2D1::ColorF(p.color.r + (p.endColor.r - p.color.r) * progress,
-                                           p.color.g + (p.endColor.g - p.color.g) * progress,
-                                           p.color.b + (p.endColor.b - p.color.b) * progress, 1.0f);
-            D2D1_POINT_2F pp = D2D1::Point2F(p.x, p.y);
-            // 主体（尺寸增大模拟发光扩散，透明度合并发光+主体）
-            g_pSolidOuterBrush->SetColor(pc);
-            g_pSolidOuterBrush->SetOpacity(lifeAlpha * 0.65f);
-            float bodySize = p.size * 1.6f;
-            if (!particleFastPath && p.shapeType == 2 && g_pStarGeom) {
-                D2D1_MATRIX_3X2_F oldT;
-                g_pD2DDC->GetTransform(&oldT);
-                g_pD2DDC->SetTransform(D2D1::Matrix3x2F::Scale(bodySize, bodySize) *
-                                       D2D1::Matrix3x2F::Translation(p.x, p.y));
-                g_pD2DDC->FillGeometry(g_pStarGeom, g_pSolidOuterBrush);
-                g_pD2DDC->SetTransform(oldT);
-            } else if (!particleFastPath && p.shapeType == 3 && g_pHexagramGeom) {
-                D2D1_MATRIX_3X2_F oldT;
-                g_pD2DDC->GetTransform(&oldT);
-                g_pD2DDC->SetTransform(D2D1::Matrix3x2F::Scale(bodySize, bodySize) *
-                                       D2D1::Matrix3x2F::Translation(p.x, p.y));
-                g_pD2DDC->FillGeometry(g_pHexagramGeom, g_pSolidOuterBrush);
-                g_pD2DDC->SetTransform(oldT);
-            } else {
-                g_pD2DDC->FillEllipse(D2D1::Ellipse(pp, bodySize, bodySize), g_pSolidOuterBrush);
-            }
-        }
-        g_pSolidOuterBrush->SetOpacity(1.0f);
+        RenderParticles(dwTime);
         needsClear = true;
     }
 
-    // ===== 形状拖尾（爱心/五角星/六角形/圆形）=====
+    // ===== 形状拖尾渲染 =====
     if (!g_trailShapes.empty()) {
-        for (auto &s : g_trailShapes) {
-            float progress = (float)(dwTime - s.startTime) / s.lifetime;
-            if (progress < 0 || progress >= 1)
-                continue;
-            float lifeAlpha = (1.0f - progress);
-            // 形状从小到大再缩小（出生动画）
-            float scale = s.size * (progress < 0.2f ? progress * 5.0f : 1.0f);
-            g_pSolidOuterBrush->SetColor(s.color);
-            g_pSolidOuterBrush->SetOpacity(lifeAlpha * 0.85f);
-            D2D1_POINT_2F sp = D2D1::Point2F(s.x, s.y);
-            if (s.shapeType == 0 && g_pHeartGeom) {
-                D2D1_MATRIX_3X2_F oldT;
-                g_pD2DDC->GetTransform(&oldT);
-                g_pD2DDC->SetTransform(D2D1::Matrix3x2F::Scale(scale, scale) *
-                                       D2D1::Matrix3x2F::Translation(s.x, s.y));
-                g_pD2DDC->FillGeometry(g_pHeartGeom, g_pSolidOuterBrush);
-                g_pD2DDC->SetTransform(oldT);
-            } else if (s.shapeType == 1 && g_pStarGeom) {
-                D2D1_MATRIX_3X2_F oldT;
-                g_pD2DDC->GetTransform(&oldT);
-                g_pD2DDC->SetTransform(D2D1::Matrix3x2F::Scale(scale, scale) *
-                                       D2D1::Matrix3x2F::Translation(s.x, s.y));
-                g_pD2DDC->FillGeometry(g_pStarGeom, g_pSolidOuterBrush);
-                g_pD2DDC->SetTransform(oldT);
-            } else if (s.shapeType == 2 && g_pHexagramGeom) {
-                D2D1_MATRIX_3X2_F oldT;
-                g_pD2DDC->GetTransform(&oldT);
-                g_pD2DDC->SetTransform(D2D1::Matrix3x2F::Scale(scale, scale) *
-                                       D2D1::Matrix3x2F::Translation(s.x, s.y));
-                g_pD2DDC->FillGeometry(g_pHexagramGeom, g_pSolidOuterBrush);
-                g_pD2DDC->SetTransform(oldT);
-            } else {
-                g_pD2DDC->FillEllipse(D2D1::Ellipse(sp, scale, scale), g_pSolidOuterBrush);
-            }
-        }
-        g_pSolidOuterBrush->SetOpacity(1.0f);
+        RenderTrailShapes(dwTime);
         needsClear = true;
     }
 
-    // ===== 运动模糊：渲染历史帧拖尾（仅锥形带，简化外带，透明度递减）=====
-    if (g_enableMotionBlur && tailVisible && havePath && g_trailShape == 0 && g_trailHistory.size() > 1) {
-        g_pD2DDC->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
-        for (size_t h = 0; h < g_trailHistory.size() - 1; h++) {
-            auto &histPath = g_trailHistory[h].path;
-            if (histPath.size() < 2) continue;
-            float histAlpha = 0.22f * (1.0f - (float)h / g_trailHistory.size()) * g_fadeAlpha;
-            std::vector<D2D1_POINT_2F> hlo, hro;
-            for (size_t i = 0; i < histPath.size(); i++) {
-                float ddx, ddy;
-                if (i == 0) { ddx = histPath[0].x - histPath[1].x; ddy = histPath[0].y - histPath[1].y; }
-                else if (i == histPath.size() - 1) { ddx = histPath[i-1].x - histPath[i].x; ddy = histPath[i-1].y - histPath[i].y; }
-                else { ddx = histPath[i-1].x - histPath[i+1].x; ddy = histPath[i-1].y - histPath[i+1].y; }
-                float ln = sqrtf(ddx*ddx + ddy*ddy);
-                if (ln > 0) { ddx /= ln; ddy /= ln; } else { ddx = 1; ddy = 0; }
-                float nx = -ddy, ny = ddx;
-                float ratio = (float)i / (histPath.size() - 1);
-                float ow = 10.0f * powf(1.0f - ratio, 1.3f) * widthMul;
-                if (i == histPath.size() - 1) ow = 0;
-                hlo.push_back(D2D1::Point2F(histPath[i].x + nx*ow, histPath[i].y + ny*ow));
-                hro.push_back(D2D1::Point2F(histPath[i].x - nx*ow, histPath[i].y - ny*ow));
-            }
-            ID2D1Mesh *pHistMesh = nullptr;
-            CreateMeshFromQuadStrip(g_pD2DDC, &pHistMesh, hlo, hro);
-            if (pHistMesh) {
-                g_pSolidOuterBrush->SetColor(cols.solidOuter);
-                g_pSolidOuterBrush->SetOpacity(histAlpha);
-                g_pD2DDC->FillMesh(pHistMesh, g_pSolidOuterBrush);
-                pHistMesh->Release();
-            }
-        }
-        g_pSolidOuterBrush->SetOpacity(1.0f);
-        g_pD2DDC->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+    // ===== 运动模糊历史帧渲染 =====
+    if (g_enableMotionBlur && tailVisible && havePath && g_trailHistory.size() > 1) {
+        RenderMotionBlur(widthMul, cols, g_fadeAlpha);
+        needsClear = true;
     }
 
     // ===== 拖尾（复用已计算的 smoothed 路径）=====
@@ -2453,39 +2483,26 @@ static void RenderFrame() {
         }
     }
 
-    // ===== 点击波纹 =====
+    // ===== 点击波纹渲染 =====
     if (g_enableClickEffect && !g_ripples.empty()) {
-        for (auto &ripple : g_ripples) {
-            float elapsed = (float)(dwTime - ripple.startTime), progress = elapsed / g_clickDuration;
-            if (progress < 0 || progress >= 1)
-                continue;
-            float radius = progress * g_clickMaxRadius, alpha = (1 - progress) * .7f;
-            D2D1_POINT_2F c = D2D1::Point2F((float)(ripple.pos.x - vX), (float)(ripple.pos.y - vY));
-            g_pSolidOuterBrush->SetColor(cols.solidOuter);
-            g_pSolidOuterBrush->SetOpacity(alpha * 0.12f);
-            g_pD2DDC->FillEllipse(D2D1::Ellipse(c, radius, radius), g_pSolidOuterBrush);
-            g_pSolidOuterBrush->SetOpacity(alpha);
-            g_pD2DDC->DrawEllipse(D2D1::Ellipse(c, radius, radius), g_pSolidOuterBrush, 2.5f);
-            if (radius > 4) {
-                g_pSolidInnerBrush->SetColor(cols.solidInner);
-                g_pSolidInnerBrush->SetOpacity(alpha * .8f);
-                g_pD2DDC->DrawEllipse(D2D1::Ellipse(c, radius * .7f, radius * .7f), g_pSolidInnerBrush, 1.5f);
-            }
-            needsClear = true;
-        }
-        g_pSolidOuterBrush->SetOpacity(1);
-        g_pSolidInnerBrush->SetOpacity(1);
+        RenderClickRipples(dwTime, cols, vX, vY);
+        needsClear = true;
     }
 
     HRESULT hr = g_pD2DDC->EndDraw();
-    if (hr == D2DERR_RECREATE_TARGET) {
-        if (g_pD2DTargetBitmap) {
-            g_pD2DTargetBitmap->Release();
-            g_pD2DTargetBitmap = nullptr;
+    if (hr == D2DERR_RECREATE_TARGET || hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
+        Wh_Log(L"RenderFrame: device lost (0x%08X), scheduling recovery", hr);
+        g_deviceLost.store(true);
+        return;
+    }
+    if (g_pSwapChain) {
+        HRESULT presHr = g_pSwapChain->Present(0, 0);
+        if (presHr == DXGI_ERROR_DEVICE_REMOVED || presHr == DXGI_ERROR_DEVICE_RESET) {
+            Wh_Log(L"RenderFrame: Present device lost (0x%08X), scheduling recovery", presHr);
+            g_deviceLost.store(true);
+            return;
         }
     }
-    if (g_pSwapChain)
-        g_pSwapChain->Present(0, 0);  // 不等待 VSync，避免阻塞 UI 线程导致鼠标无响应
     if (g_pDCompDevice)
         g_pDCompDevice->Commit();
     if (!isSmearing && g_history.empty() && g_ripples.empty() && g_particles.empty() && g_trailShapes.empty())
@@ -2550,11 +2567,94 @@ static void CreateHeartGeometry(ID2D1Factory *factory, ID2D1PathGeometry **geom)
     sink->Release();
 }
 
+// ===================== 设备丢失恢复 =====================
+static void ReleaseAllRenderResources() {
+    ReleaseGradientBrushes();
+    if (g_pShadowBrush) { g_pShadowBrush->Release(); g_pShadowBrush = nullptr; }
+    if (g_pSolidInnerBrush) { g_pSolidInnerBrush->Release(); g_pSolidInnerBrush = nullptr; }
+    if (g_pSolidOuterBrush) { g_pSolidOuterBrush->Release(); g_pSolidOuterBrush = nullptr; }
+    if (g_pD2DTargetBitmap) { g_pD2DTargetBitmap->Release(); g_pD2DTargetBitmap = nullptr; }
+    if (g_pSwapChain) { g_pSwapChain->Release(); g_pSwapChain = nullptr; }
+    if (g_pDCompVisual) { g_pDCompVisual->Release(); g_pDCompVisual = nullptr; }
+    if (g_pDCompTarget) { g_pDCompTarget->Release(); g_pDCompTarget = nullptr; }
+    if (g_pDCompDevice) { g_pDCompDevice->Release(); g_pDCompDevice = nullptr; }
+    if (g_pShadowMesh) { g_pShadowMesh->Release(); g_pShadowMesh = nullptr; }
+    if (g_pGlow2Mesh) { g_pGlow2Mesh->Release(); g_pGlow2Mesh = nullptr; }
+    if (g_pGlowMesh) { g_pGlowMesh->Release(); g_pGlowMesh = nullptr; }
+    if (g_pOuterMesh) { g_pOuterMesh->Release(); g_pOuterMesh = nullptr; }
+    if (g_pInnerMesh) { g_pInnerMesh->Release(); g_pInnerMesh = nullptr; }
+    if (g_pD2DDC) { g_pD2DDC->Release(); g_pD2DDC = nullptr; }
+    if (g_pD2DDevice) { g_pD2DDevice->Release(); g_pD2DDevice = nullptr; }
+    if (g_pStarGeom) { g_pStarGeom->Release(); g_pStarGeom = nullptr; }
+    if (g_pHexagramGeom) { g_pHexagramGeom->Release(); g_pHexagramGeom = nullptr; }
+    if (g_pHeartGeom) { g_pHeartGeom->Release(); g_pHeartGeom = nullptr; }
+    if (g_pD2DFactory) { g_pD2DFactory->Release(); g_pD2DFactory = nullptr; }
+    if (g_pDXGIDevice) { g_pDXGIDevice->Release(); g_pDXGIDevice = nullptr; }
+    if (g_pD3DContext) { g_pD3DContext->Release(); g_pD3DContext = nullptr; }
+    if (g_pD3DDevice) { g_pD3DDevice->Release(); g_pD3DDevice = nullptr; }
+}
+
+static bool InitAllRenderResources() {
+    // ---- D3D11 设备 ----
+    D3D_FEATURE_LEVEL fl;
+    D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
+                      D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_SINGLETHREADED,
+                      nullptr, 0, D3D11_SDK_VERSION, &g_pD3DDevice, &fl, &g_pD3DContext);
+    if (!g_pD3DDevice) {
+        Wh_Log(L"Recover: D3D11 device creation FAILED");
+        return false;
+    }
+    Wh_Log(L"Recover: D3D11 device created (feature level %d)", fl);
+    g_pD3DDevice->QueryInterface(__uuidof(IDXGIDevice), (void **)&g_pDXGIDevice);
+
+    // ---- D2D1 设备 + 设备上下文 ----
+    D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory1), nullptr, (void **)&g_pD2DFactory);
+    if (g_pD2DFactory && g_pDXGIDevice) {
+        g_pD2DFactory->CreateDevice(g_pDXGIDevice, &g_pD2DDevice);
+        if (g_pD2DDevice) g_pD2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &g_pD2DDC);
+    }
+    if (!g_pD2DDC) {
+        Wh_Log(L"Recover: D2D1 DC creation FAILED");
+        return false;
+    }
+    g_pD2DDC->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+    g_pD2DDC->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+    g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 1), &g_pSolidOuterBrush);
+    g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 1), &g_pSolidInnerBrush);
+    g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 0.18f), &g_pShadowBrush);
+    if (g_pD2DFactory) {
+        CreateStarGeometry(g_pD2DFactory, &g_pStarGeom);
+        CreateHexagramGeometry(g_pD2DFactory, &g_pHexagramGeom);
+        CreateHeartGeometry(g_pD2DFactory, &g_pHeartGeom);
+    }
+
+    // ---- DirectComposition ----
+    if (g_pDXGIDevice) {
+        DCompositionCreateDevice(g_pDXGIDevice, __uuidof(IDCompositionDevice), (void **)&g_pDCompDevice);
+    }
+    if (g_pDCompDevice) {
+        g_pDCompDevice->CreateTargetForHwnd(g_overlayHwnd, TRUE, &g_pDCompTarget);
+        g_pDCompDevice->CreateVisual(&g_pDCompVisual);
+        if (g_pDCompTarget && g_pDCompVisual) g_pDCompTarget->SetRoot(g_pDCompVisual);
+        Wh_Log(L"Recover: DComp device ready");
+    }
+
+    // ---- 交换链 ----
+    int sw = GetSystemMetrics(SM_CXVIRTUALSCREEN), sh = GetSystemMetrics(SM_CYVIRTUALSCREEN) - 1;
+    RecreateSwapChain(sw, sh);
+    Wh_Log(L"Recover: resources reinitialized");
+    return true;
+}
+
 // ===================== 覆盖层线程 =====================
-static UINT g_reloadMsg = 0;
 static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    if (msg == g_reloadMsg) {
-        LoadSettings();
+    if (msg == WM_DISPLAYCHANGE) {
+        // 分辨率/显示器变化时调整窗口大小和位置
+        int vX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        int vY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        int vW = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        int vH = GetSystemMetrics(SM_CYVIRTUALSCREEN) - 1;
+        SetWindowPos(hwnd, HWND_TOPMOST, vX, vY, vW, vH, SWP_NOACTIVATE | SWP_SHOWWINDOW);
         return 0;
     }
     if (msg == WM_NCHITTEST) {
@@ -2705,10 +2805,25 @@ DWORD WINAPI RenderThreadProc(LPVOID) {
     GetCursorPos(&g_lastPos);
 
     Wh_Log(L"RenderThread: entering render loop");
-    // ---- 渲染循环 ----
-    while (WaitForSingleObject(g_renderExitEvent, 0) != WAIT_OBJECT_0) {
+    // ---- 渲染循环（设备丢失恢复 + 空闲退避）----
+    DWORD waitMs = 1;
+    while (WaitForSingleObject(g_renderExitEvent, waitMs) != WAIT_OBJECT_0) {
+        // 设备丢失恢复
+        if (g_deviceLost.exchange(false)) {
+            Wh_Log(L"RenderThread: recovering from device loss");
+            ReleaseAllRenderResources();
+            if (!InitAllRenderResources()) {
+                Wh_Log(L"RenderThread: recovery FAILED, retrying in 1s");
+                g_deviceLost.store(true);
+                Sleep(1000);
+                continue;
+            }
+            Wh_Log(L"RenderThread: recovery complete");
+        }
         RenderFrame();
-        Sleep(1);  // 约 100fps 上限，避免 GPU 占满
+        // 空闲退避：有拖尾/粒子/效果时 1ms，空闲时 16ms（~60fps 响应）
+        bool isActive = !g_history.empty() || !g_particles.empty() || !g_ripples.empty() || !g_trailShapes.empty();
+        waitMs = isActive ? 1 : 16;
     }
 
     // ---- 清理渲染资源 ----
@@ -2773,10 +2888,8 @@ void WhTool_ModUninit() {
     }
 }
 void WhTool_ModSettingsChanged() {
-    if (!g_reloadMsg)
-        g_reloadMsg = RegisterWindowMessageW(L"MouseTrail_Reload");
-    if (g_overlayHwnd)
-        PostMessage(g_overlayHwnd, g_reloadMsg, 0, 0);
+    // 设置变更标记，由渲染线程消费（避免 UI 线程与渲染线程竞争）
+    g_settingsDirty.store(true);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
