@@ -3221,7 +3221,7 @@ static void RenderFrame() {
         }
         if (g_enableClickStarburst) {
             if ((lDown && !g_prevLButton) || (rDown && !g_prevRButton)) {
-                SpawnParticles((float)(pt.x - vX), (float)(pt.y - vY), g_starburstCount, 2.5f, 5.5f, 1.5f, 3.0f, 250, 450,
+                SpawnParticles((float)(pt.x - vX), (float)(pt.y - vY), g_starburstCount, 2.5f, 5.5f, 2.5f, 5.0f, 250, 450,
                                cols.solidOuter, dwTime, true);
             }
         }
@@ -3382,7 +3382,7 @@ static void RenderFrame() {
 
     // ===== 粒子释放（基于 smoothed 路径的指定位置）=====
     if (g_particleMode > 0 && havePath && dwTime - g_lastParticleTime >= (DWORD)g_particleInterval) {
-        bool spawnOK = (g_particleMode == 1) ? !trailActive : true;
+        bool spawnOK = (g_particleMode == 1) ? trailActive : true;
         if (spawnOK) {
             float ratio;
             switch (g_particleOrigin) {
@@ -3410,7 +3410,7 @@ static void RenderFrame() {
                 if (speedMul > 3.5f)
                     speedMul = 3.5f;
             }
-            SpawnParticles(origin.x, origin.y, g_particleDensity, 0.3f * speedMul, 2.0f * speedMul, 0.8f, 2.2f, 300,
+            SpawnParticles(origin.x, origin.y, g_particleDensity, 0.3f * speedMul, 2.0f * speedMul, 2.0f, 4.5f, 300,
                            700, cols.solidOuter, dwTime);
             g_lastParticleTime = dwTime;
         }
