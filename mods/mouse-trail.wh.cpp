@@ -2,44 +2,84 @@
 // @id              mouse-trail
 // @name            Mouse Trail
 // @name:zh-CN      鼠标拖尾
-// @description     High-performance cursor motion blur with particle effects, 12 color modes, custom function trails, cursor color extraction, and click effects. D3D11 + DirectComposition hardware accelerated.
-// @description:zh-CN 高性能鼠标运动模糊拖尾，支持粒子特效、12种颜色模式、自定义函数轨迹、光标取色和点击特效。D3D11 + DirectComposition 硬件加速。
-// @version         2.3
+// @description     Highly customizable cursor trail with native D3D11 rendering, 18 color modes, 10 trail shapes, 2.5D depth effects, particle system, click effects, and cursor color extraction. DirectComposition hardware acceleration, low idle CPU.
+// @description:zh-CN 高度可定制的鼠标拖尾，原生 D3D11 渲染，18种颜色模式，10种拖尾形状，2.5D 立体效果，粒子系统，点击特效，光标取色。DirectComposition 硬件加速，闲置低 CPU。
+// @version         3.3
 // @author          MCheng404
 // @github          https://github.com/MCheng404
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -ld2d1 -ld3d11 -ldxgi -ldcomp -ldwmapi -lole32 -lgdi32 -lshell32
+// @compilerOptions -ld2d1 -ld3d11 -ldxgi -ldcomp -ldwmapi -lole32 -lgdi32 -lshell32 -ld3dcompiler
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
 # Mouse Trail
 
-A highly customizable mouse cursor trail with particle effects, multiple color modes, custom function trails, cursor color extraction, and click effects. D3D11 + DirectComposition hardware accelerated, runs as a dedicated process with low CPU usage when idle.
+A highly customizable mouse cursor trail with native D3D11 rendering, 18 color modes, 10 trail shapes, 2.5D depth effects, particle system, click effects, and cursor color extraction. DirectComposition hardware accelerated, runs as a dedicated process with low CPU usage when idle.
 
 ---
 
-### Features
+### Rendering Architecture
 
-* **Hardware Acceleration:** D3D11 device + ID2D1DeviceContext + DXGI flip swap chain + DirectComposition visual, fully GPU-rendered with zero CPU framebuffer copies. Runs in a dedicated windhawk.exe process for stability.
-* **4 Trail Shapes:** Tapered ribbon / Tapered dot chain / Function curve / Sine wave.
-* **12 Color Modes:** Single / Gradient (3-color) / Rainbow / Warm / Cool / Neon / Velocity / Stripes / Fire / Aurora / Cursor Extract / Cursor Mix.
-* **Particle System:** Mini particles released from the trail, attracted back to cursor with configurable origin (head/middle/tail/custom), attraction strength, and cursor repulsion force. Shapes: circle / star / hexagram / random mix. Colors fade over lifetime.
-* **Click Effects:** Starburst particle burst + expanding ripple on left/right click (both toggleable).
-* **Cursor Color Extraction:** Real-time pixel color sampling under the cursor (2 modes), with auto complementary-color shift for visibility.
-* **Function Trails:** Custom math expressions generate trail curves, 4 built-in presets.
-* **Delay Rendering:** Trail head eases toward the cursor (0-10 adjustable).
-* **Fadeout Modes:** Hard cut / Accelerated shrink / Soft fade (alpha + length synchronized).
-* **Dynamic Width:** Trail widens with speed and acceleration.
-* **Enhanced Glow:** Dual-layer halo (outer glow + inner bloom), toggleable.
-* **Head Highlight:** Bright center dot at the trail head.
-* **Trail Shadow:** Dark underlay adds depth.
-* **Game Detection:** Auto-disable in fullscreen DirectX games.
-* **Idle at 0% CPU:** Window hidden when cursor is stationary and no effects active.
+* **Native D3D11 Rendering:** Custom HLSL vertex/pixel shaders with instanced particle rendering. No D2D1 dependency for core trail/particle/shape rendering.
+* **2.5D Depth Effects:** Per-vertex z-coordinate with perspective projection and simple lighting. Trail ribbons bulge in the middle, particles and shapes have random depth, shape trails rotate on Y-axis.
+* **DXGI Flip Swap Chain:** Premultiplied alpha for tear-free composition with DirectComposition.
+* **Dual-Thread Design:** UI thread handles window/message pump, render thread handles all D3D11/DComp work — mouse input never blocks.
+* **Device Loss Recovery:** Auto-rebuilds entire D3D/DComp stack on GPU TDR, driver update, or GPU switch.
+* **Display Change Handling:** Auto-resizes and repositions overlay on `WM_DISPLAYCHANGE`.
+
+### Trail Shapes (10 modes)
+
+* **Tapered Ribbon:** Classic fading ribbon with glow, shadow, and head highlight
+* **Dot Chain:** Beads along the path with configurable density
+* **Function Curve:** Custom mathematical function deforms the trail (sine, damped, heartbeat, swirl, or custom formula)
+* **Wave Curve:** Animated wave deformation
+* **Shape Trail:** Spawns hearts, stars, hexagrams, or circles along the path with random velocity, configurable interval/size/count/lifetime
+* **Double Line:** Two parallel trail ribbons
+* **Dashed:** Segmented dashed trail
+* **Spiral:** Spiral deformation along the path
+* **Lightning:** Random jagged lightning effect
+* **Feather:** Random spiky depth texture
+
+### Color Modes (18 modes)
+
+Single / 3-Color Gradient / Rainbow Flow / Warm Flow / Cool Flow / Neon Pulse / Velocity Color / Stripes / Fire / Aurora / Cursor Extract / Cursor Mix / Metallic Gold / Cyberpunk / Pastel / Hue Rotate / Dual Pulse / Sparkle
+
+### Cursor Color Shift (6 modes)
+
+Off / Complementary (180°) / Analogous (30°) / Triadic (120°) / Split Complement (150°) / Custom Angle
+
+### Visual Effects
+
+* **Bezier Smoothing:** Catmull-Rom spline interpolation for buttery-smooth curves
+* **Motion Blur:** History frame overlay with decreasing opacity (1-5 strength)
+* **Enhanced Glow:** Dual-layer halo (outer + inner) with independent toggles
+* **Head Highlight + Trail Shadow:** Premium depth cues
+* **Speed-Reactive Width:** Trail widens when moving fast
+
+### Particle System
+
+* Released from trail head/middle/tail/custom/random position
+* Cursor attraction + repulsion force creating orbiting motion
+* Shapes: circle, star, hexagram, or random mix
+* Colors fade over lifetime; configurable density, interval (0 = per-frame), acceleration
+* Click starburst particle burst
+
+### Click Effects
+
+* Starburst particle burst on click
+* Expanding ripple ring on click
+* Both toggleable independently
+
+### Performance
+
+* **Super Performance Mode:** Removes all caps (particle/shape limits, fast-path downgrade)
+* **Adaptive Backoff:** Render thread waits 1ms when active, 16ms when idle
+* **Game Detection:** Auto-hide in fullscreen DirectX games
 
 ### Function Trail Variables
 
-Available variables: `t` (normalized 0=head 1=tail), `d` (distance from head in px), `time` (seconds). Functions: sin cos tan exp sqrt abs log. Operators: + - * / ^. Constants: pi e.
+Available variables: `t` (normalized 0=head 1=tail), `d` (distance from head in px), `time` (seconds). Functions: sin cos exp sqrt abs. Operators: + - * / ^.
 
 Examples: `sin(d * 0.15) * 8`, `sin(d * 0.25) * exp(0 - t * 2.5) * 10`.
 
@@ -56,31 +96,71 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 
 # 鼠标拖尾
 
-高度可定制的鼠标拖尾特效，支持粒子系统、多种颜色模式、自定义函数轨迹、光标取色和点击特效。D3D11 + DirectComposition 硬件加速，独立进程运行，静止时低 CPU 占用。
+高度可定制的鼠标拖尾特效，原生 D3D11 渲染，18种颜色模式，10种拖尾形状，2.5D 立体效果，粒子系统，点击特效，光标取色。DirectComposition 硬件加速，独立进程运行，闲置时低 CPU 占用。
 
 ---
 
-### 功能特性
+### 渲染架构
 
-* **硬件加速：** D3D11 设备 + ID2D1DeviceContext + DXGI 翻转交换链 + DirectComposition 视觉对象，纯 GPU 渲染，零 CPU 帧缓冲拷贝。独立 windhawk.exe 进程运行，稳定性更高。
-* **4 种拖尾形状：** 锥形带 / 类锥形圆链 / 函数曲线 / 正弦波浪。
-* **12 种颜色模式：** 单色 / 多色渐变（三色） / 彩虹流动 / 暖色调 / 冷色调 / 霓虹脉冲 / 速度变色 / 流动条纹 / 火焰 / 极光 / 光标取色 / 光标混色。
-* **粒子系统：** 拖尾释放迷你粒子，全程吸附回光标。释放位置（开头/中间/结尾/自定义）、吸附强度、光标排斥力均可调。支持圆形/五角星/六芒星/随机混合形状，颜色随生命周期渐变。
-* **点击特效：** 点击时迸发星爆粒子 + 扩散波纹（均可独立开关）。
-* **光标取色：** 实时提取光标下方像素颜色（2种模式），支持自动互补色偏移确保醒目。
-* **函数轨迹：** 自定义数学公式生成轨迹曲线，内置4组预设。
-* **延迟渲染：** 拖尾头部缓动跟随光标（0-10可调）。
-* **淡出模式：** 硬截断 / 加速收缩 / 软截断（透明度+长度同步）。
-* **动态宽度：** 移动越快、急转时拖尾越宽。
-* **增强发光：** 双层光晕（外晕+内辉），可开关。
-* **头部高光：** 拖尾头部明亮中心点。
-* **拖尾阴影：** 底层暗色阴影增加立体感。
-* **游戏检测：** 全屏 DirectX 游戏时自动禁用。
-* **低功耗待机：** 鼠标静止且无特效时渲染线程退避到 16ms 轮询，CPU 占用极低。
+* **原生 D3D11 渲染：** 自定义 HLSL 顶点/像素着色器，粒子实例化渲染。核心拖尾/粒子/形状渲染不依赖 D2D1。
+* **2.5D 立体效果：** 逐顶点 z 坐标 + 透视投影 + 简单光照。拖尾带中间凸起，粒子和形状有随机深度，形状拖尾 Y 轴旋转。
+* **DXGI 翻转交换链：** 预乘 alpha，与 DirectComposition 无撕裂合成。
+* **双线程设计：** UI 线程处理窗口/消息泵，渲染线程处理所有 D3D11/DComp 工作——鼠标输入永不阻塞。
+* **设备丢失恢复：** GPU TDR、驱动更新或显卡切换时自动重建整个 D3D/DComp 栈。
+* **显示变化处理：** `WM_DISPLAYCHANGE` 时自动调整覆盖层大小和位置。
+
+### 拖尾形状（10种）
+
+* **锥形飘带：** 经典渐隐飘带，带发光、阴影和头部高光
+* **圆点链：** 沿路径排列的圆点，密度可调
+* **函数曲线：** 自定义数学函数变形轨迹（正弦、阻尼、心跳、漩涡或自定义公式）
+* **波浪曲线：** 动态波浪变形
+* **形状拖尾：** 沿路径生成爱心、五角星、六芒星或圆形，随机速度，间隔/大小/数量/存活时间可调
+* **双线拖尾：** 两条平行拖尾带
+* **虚线拖尾：** 分段虚线效果
+* **螺旋拖尾：** 沿路径螺旋变形
+* **闪电拖尾：** 随机锯齿闪电效果
+* **羽毛拖尾：** 随机毛刺深度纹理
+
+### 颜色模式（18种）
+
+单色 / 三色渐变 / 彩虹流动 / 暖色调流动 / 冷色调流动 / 霓虹脉冲 / 速度变色 / 流动条纹 / 火焰 / 极光 / 光标取色 / 光标混色 / 金属金 / 赛博朋克 / 粉彩 / 色相旋转 / 双色脉冲 / 星光闪烁
+
+### 取色偏移（6种模式）
+
+关闭 / 互补色(180°) / 类似色(30°) / 三角色(120°) / 分裂互补(150°) / 自定义角度
+
+### 视觉特效
+
+* **贝塞尔平滑：** Catmull-Rom 样条插值，曲线如丝般顺滑
+* **运动模糊：** 历史帧叠加，透明度递减（1-5强度）
+* **增强发光：** 双层光晕（外晕+内辉），独立开关
+* **头部高光 + 拖尾阴影：** 高级质感深度提示
+* **速度响应宽度：** 快速移动时拖尾变宽
+
+### 粒子系统
+
+* 从拖尾开头/中间/结尾/自定义/随机位置释放
+* 光标吸引 + 排斥力，形成绕飞运动
+* 形状：圆形、五角星、六芒星或随机混合
+* 颜色随生命周期渐变；密度、间隔（0=每帧）、加速度可调
+* 点击星爆粒子迸发
+
+### 点击特效
+
+* 点击时星爆粒子迸发
+* 点击时扩散波纹环
+* 两者可独立开关
+
+### 性能
+
+* **超级性能模式：** 解除所有上限（粒子/形状限制、快速路径降级）
+* **自适应退避：** 渲染线程活跃时等待1ms，闲置时16ms
+* **游戏检测：** 全屏 DirectX 游戏时自动隐藏
 
 ### 函数轨迹变量
 
-自定义公式中可使用：`t`（归一化位置 0=头 1=尾）、`d`（距头部像素距离）、`time`（秒）。支持函数：sin cos tan exp sqrt abs log，运算符：+ - * / ^，常量：pi e。
+自定义公式中可使用：`t`（归一化位置 0=头 1=尾）、`d`（距头部像素距离）、`time`（秒）。支持函数：sin cos exp sqrt abs，运算符：+ - * / ^。
 
 示例：`sin(d * 0.15) * 8`，`sin(d * 0.25) * exp(0 - t * 2.5) * 10`。
 
@@ -96,45 +176,68 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
+# ===== 基础设置 =====
 - trigger_velocity: 25
   $name: Trigger Velocity
   $name:zh-CN: 触发速度
-  $description: How fast the mouse must move to trigger the blur (pixels per frame).
-  $description:zh-CN: 鼠标移动多快时触发拖影（像素/帧）。
+  $description: Minimum mouse speed to activate the trail (pixels/frame).
+  $description:zh-CN: 激活拖尾所需的最低鼠标移动速度（像素/帧）。
 - stop_velocity: 10
   $name: Stop Velocity
   $name:zh-CN: 停止速度
-  $description: Velocity threshold to stop the blur. Must be lower than Trigger Velocity.
-  $description:zh-CN: 停止拖影的速度阈值（像素/帧）。必须低于触发速度。
+  $description: Speed below which the trail fades out. Must be lower than Trigger Velocity.
+  $description:zh-CN: 低于此速度时拖尾开始淡出。必须低于触发速度。
+- tail_length: 10
+  $name: Trail Length
+  $name:zh-CN: 拖尾长度
+  $description: Number of history points in the trail. Range 2-200.
+  $description:zh-CN: 拖尾保留的历史点数。范围 2-200。
 - tail_offset_x: 6
   $name: Tail Offset X
   $name:zh-CN: 拖尾 X 偏移
-  $description: X-axis offset where the tail connects to the cursor.
-  $description:zh-CN: 拖尾连接到光标的 X 轴偏移量（像素）。
+  $description: Horizontal offset of trail origin from cursor (pixels).
+  $description:zh-CN: 拖尾起点相对光标的水平偏移（像素）。
 - tail_offset_y: 10
   $name: Tail Offset Y
   $name:zh-CN: 拖尾 Y 偏移
-  $description: Y-axis offset where the tail connects to the cursor.
-  $description:zh-CN: 拖尾连接到光标的 Y 轴偏移量（像素）。
-- tail_length: 10
-  $name: Tail Length
-  $name:zh-CN: 拖尾长度
-  $description: How many frames the blur trails behind you. Range 2-200.
-  $description:zh-CN: 拖影跟随的帧数。范围 2-200。
+  $description: Vertical offset of trail origin from cursor (pixels).
+  $description:zh-CN: 拖尾起点相对光标的垂直偏移（像素）。
 - trail_delay: 0
   $name: Trail Delay
   $name:zh-CN: 拖尾延迟
-  $description: How much the trail head lags behind the cursor (0-10, 0=off).
-  $description:zh-CN: 拖尾头部滞后于光标的程度（0-10，0=关闭）。
-- enable_smooth_gradient: true
-  $name: Smooth Gradient
-  $name:zh-CN: 平滑渐变
-  $description: Head-to-tail opacity gradient.
-  $description:zh-CN: 拖尾透明度渐变淡出。
+  $description: How much the trail head lags behind cursor (0-10, 0=off).
+  $description:zh-CN: 拖尾头部滞后光标的程度（0-10，0=关闭）。
+
+# ===== 拖尾外观 =====
+- trail_shape: tapered
+  $name: Trail Shape
+  $name:zh-CN: 拖尾形状
+  $options:
+  - tapered: Tapered Ribbon
+  - dots: Dot Chain
+  - function: Function Curve
+  - wave: Wave Curve
+  - shapes: Shape Trail
+  - double: Double Line
+  - dashed: Dashed
+  - spiral: Spiral
+  - lightning: Lightning
+  - feather: Feather
+  $options:zh-CN:
+  - tapered: 锥形飘带
+  - dots: 圆点链
+  - function: 函数曲线
+  - wave: 波浪曲线
+  - shapes: 形状拖尾
+  - double: 双线拖尾
+  - dashed: 虚线拖尾
+  - spiral: 螺旋拖尾
+  - lightning: 闪电拖尾
+  - feather: 羽毛拖尾
 - fadeout_mode: soft
   $name: Fadeout Mode
   $name:zh-CN: 淡出模式
-  $description: How the trail disappears when the mouse stops.
+  $description: How the trail disappears when mouse stops.
   $description:zh-CN: 鼠标停止后拖尾的消失方式。
   $options:
   - hard: Hard Cut
@@ -143,46 +246,130 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
   $options:zh-CN:
   - hard: 硬截断
   - accelerate: 加速收缩
-  - soft: 软截断
+  - soft: 柔和淡出
+- enable_smooth_gradient: true
+  $name: Smooth Gradient
+  $name:zh-CN: 平滑渐变
+  $description: Enable head-to-tail opacity gradient for smoother fade.
+  $description:zh-CN: 启用从头到尾的透明度渐变，淡出更平滑。
 - enable_speed_response: true
   $name: Dynamic Width
   $name:zh-CN: 动态宽度
-  $description: Trail width responds to speed and acceleration.
-  $description:zh-CN: 移动速度和加速度影响拖尾宽度，急转时更宽。
+  $description: Trail width increases with speed and acceleration.
+  $description:zh-CN: 移动速度和加速度影响拖尾宽度，快速移动时更宽。
+
+# ===== 颜色设置 =====
+- color_mode: single
+  $name: Color Mode
+  $name:zh-CN: 颜色模式
+  $options:
+  - single: Single Color
+  - gradient: 3-Color Gradient
+  - rainbow: Rainbow Flow
+  - warm: Warm Flow
+  - cool: Cool Flow
+  - neon: Neon Pulse
+  - velocity: Velocity Color
+  - stripes: Stripes
+  - fire: Fire
+  - aurora: Aurora
+  - cursor_extract: Cursor Extract
+  - cursor_mix: Cursor Mix
+  - metallic: Metallic Gold
+  - cyberpunk: Cyberpunk
+  - pastel: Pastel
+  - hue_rotate: Hue Rotate
+  - dual_pulse: Dual Pulse
+  - sparkle: Sparkle
+  $options:zh-CN:
+  - single: 单色
+  - gradient: 三色渐变
+  - rainbow: 彩虹流动
+  - warm: 暖色调流动
+  - cool: 冷色调流动
+  - neon: 霓虹脉冲
+  - velocity: 速度变色
+  - stripes: 流动条纹
+  - fire: 火焰
+  - aurora: 极光
+  - cursor_extract: 光标取色
+  - cursor_mix: 光标混色
+  - metallic: 金属金
+  - cyberpunk: 赛博朋克
+  - pastel: 粉彩
+  - hue_rotate: 色相旋转
+  - dual_pulse: 双色脉冲
+  - sparkle: 星光闪烁
+- custom_color: "00BFFF"
+  $name: Custom Color
+  $name:zh-CN: 自定义颜色
+  $description: Primary color for single/neon/hue-rotate modes. Hex RGB.
+  $description:zh-CN: 单色/霓虹/色相旋转模式的主色，十六进制 RGB。
+- gradient_colors: "FF6B35,00BFFF,FFD700"
+  $name: Gradient Colors
+  $name:zh-CN: 渐变颜色
+  $description: 3 colors for gradient/stripes/dual-pulse modes, comma-separated hex RGB.
+  $description:zh-CN: 渐变/条纹/双色脉冲模式的3个颜色，逗号分隔的十六进制RGB。
+- enable_cursor_color_shift: true
+  $name: Auto Color Shift
+  $name:zh-CN: 取色自动偏移
+  $description: Auto hue shift for cursor extraction modes to ensure visibility.
+  $description:zh-CN: 光标取色模式下自动偏移色相，确保拖尾在任何背景上都醒目。
+- color_shift_mode: complementary
+  $name: Color Shift Mode
+  $name:zh-CN: 取色偏移模式
+  $options:
+  - off: Off
+  - complementary: Complementary (180°)
+  - analogous: Analogous (30°)
+  - triadic: Triadic (120°)
+  - split: Split Complement (150°)
+  - custom: Custom Angle
+  $options:zh-CN:
+  - off: 关闭
+  - complementary: 互补色(180°)
+  - analogous: 类似色(30°)
+  - triadic: 三角色(120°)
+  - split: 分裂互补(150°)
+  - custom: 自定义角度
+- color_shift_angle: 180
+  $name: Custom Shift Angle
+  $name:zh-CN: 自定义偏移角度
+  $description: Hue shift angle for custom mode. 0-360 degrees.
+  $description:zh-CN: 自定义模式下的色相偏移角度，0-360度。
+
+# ===== 发光效果 =====
+- enable_glow: true
+  $name: Micro Glow
+  $name:zh-CN: 微发光
+  $description: Soft outer glow around the trail.
+  $description:zh-CN: 拖尾外圈柔和发光效果。
+- glow_intensity: 40
+  $name: Glow Intensity
+  $name:zh-CN: 发光强度
+  $description: Glow radius and brightness (0-100).
+  $description:zh-CN: 发光范围和亮度（0-100）。
 - enhanced_glow: true
   $name: Enhanced Glow
   $name:zh-CN: 增强发光
-  $description: Dual-layer halo for softer glow. Requires Micro Glow to be enabled.
-  $description:zh-CN: 双层光晕（外晕+内辉），发光更柔和自然。需先开启微发光效果。
+  $description: Dual-layer halo (outer + inner) for softer glow.
+  $description:zh-CN: 双层光晕（外晕+内辉），发光更柔和自然。
 - enable_head_highlight: true
   $name: Head Highlight
   $name:zh-CN: 头部高光
-  $description: Bright center dot at trail head. Tapered/function/wave shapes only.
-  $description:zh-CN: 拖尾头部添加明亮中心点，提升质感。仅锥形/函数/波浪形状生效。
+  $description: Bright center dot at trail head for premium look.
+  $description:zh-CN: 拖尾头部添加明亮中心点，提升质感。
 - enable_trail_shadow: true
   $name: Trail Shadow
   $name:zh-CN: 拖尾阴影
-  $description: Dark underlay shadow for depth.
+  $description: Dark underlay shadow for depth perception.
   $description:zh-CN: 拖尾底层绘制暗色阴影，增加立体感。
-- trail_shape: tapered
-  $name: Trail Shape
-  $name:zh-CN: 拖尾形状
-  $options:
-  - tapered: Tapered
-  - dots: Dot Chain
-  - function: Function Curve
-  - wave: Wave Curve
-  - shapes: Shape Trail
-  $options:zh-CN:
-  - tapered: 锥形
-  - dots: 类锥形圆链
-  - function: 函数曲线
-  - wave: 波浪曲线
-  - shapes: 形状拖尾
+
+# ===== 形状拖尾设置 =====
 - shape_type: heart
   $name: Shape Type
   $name:zh-CN: 拖尾形状类型
-  $description: Shape used for shape trail mode.
+  $description: Shape used for Shape Trail mode.
   $description:zh-CN: 形状拖尾模式下使用的形状。
   $options:
   - heart: Heart
@@ -193,44 +380,46 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
   $options:zh-CN:
   - heart: 爱心
   - star: 五角星
-  - hexagram: 六角星
+  - hexagram: 六芒星
   - circle: 圆形
   - random: 随机混合
 - shape_interval: 30
   $name: Shape Interval
   $name:zh-CN: 形状生成间隔
-  $description: Distance between shapes in pixels (10-100). Shape trail only.
-  $description:zh-CN: 形状之间的间隔距离（像素，10-100）。仅形状拖尾生效。
+  $description: Distance between shapes in pixels (10-100).
+  $description:zh-CN: 形状之间的间隔距离（像素，10-100）。
 - shape_random_offset: true
   $name: Random Position Offset
   $name:zh-CN: 随机位置微调
   $description: Add small random offset to each shape position.
-  $description:zh-CN: 为每个形状位置添加小范围随机偏移。
+  $description:zh-CN: 为每个形状位置添加小范围随机偏移，更自然。
 - shape_count: 1
   $name: Shape Count
   $name:zh-CN: 每次生成数量
-  $description: Number of shapes per spawn (1-5). Shape trail only.
-  $description:zh-CN: 每次生成的形状数量（1-5）。仅形状拖尾生效。
+  $description: Number of shapes per spawn (1-5).
+  $description:zh-CN: 每次生成的形状数量（1-5）。
 - shape_size: 12
   $name: Shape Size
   $name:zh-CN: 形状大小
-  $description: Base size of shapes in pixels (5-30). Shape trail only.
-  $description:zh-CN: 形状的基础大小（像素，5-30）。仅形状拖尾生效。
+  $description: Base size of shapes in pixels (5-30).
+  $description:zh-CN: 形状的基础大小（像素，5-30）。
 - shape_lifetime: 800
   $name: Shape Lifetime
   $name:zh-CN: 形状存活时间
-  $description: How long each shape lasts in ms (200-2000). Shape trail only.
-  $description:zh-CN: 每个形状的存活时间（毫秒，200-2000）。仅形状拖尾生效。
+  $description: How long each shape lasts (ms, 200-2000).
+  $description:zh-CN: 每个形状的存活时间（毫秒，200-2000）。
+
+# ===== 特殊形状参数 =====
 - dots_multiplier: 2
   $name: Dot Chain Density
-  $name:zh-CN: 圆链密度倍率
-  $description: Dot count multiplier (1-5), higher = more smaller dots. Dot Chain shape only.
-  $description:zh-CN: 类锥形圆链的小球数量倍率（1-5），越大小球越多且越小。仅圆链形状生效。
+  $name:zh-CN: 圆点链密度
+  $description: Dot count multiplier (1-5), higher = more smaller dots.
+  $description:zh-CN: 圆点链的小球数量倍率（1-5），越大小球越多越密。
 - function_preset: sine
   $name: Function Preset
   $name:zh-CN: 函数预设
-  $description: Preset formula for function curve shape. Choose custom to use your own formula.
-  $description:zh-CN: 函数曲线形状的预设公式，选择 custom 时使用下方自定义公式。
+  $description: Preset formula for Function Curve mode.
+  $description:zh-CN: 函数曲线模式的预设公式。
   $options:
   - sine: Sine Wave
   - damped: Damped
@@ -246,75 +435,23 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 - custom_function: "sin(d * 0.15) * 8"
   $name: Custom Function
   $name:zh-CN: 自定义函数公式
-  $description: "Variables: t(0-1) d(distance) time(sec); Functions: sin cos exp sqrt abs; Operators: + - * / ^."
-  $description:zh-CN: "变量 t(0-1) d(距离) time(秒)；函数 sin cos exp sqrt abs；运算符 + - * / ^。"
+  $description: "Variables: t(0-1) d(distance) time(sec); Functions: sin cos exp sqrt abs."
+  $description:zh-CN: "变量 t(0-1) d(距离) time(秒)；函数 sin cos exp sqrt abs。"
 - wave_amplitude: 8
   $name: Wave Amplitude
   $name:zh-CN: 波浪幅度
-  $description: Wave amplitude in pixels. Wave shape only.
-  $description:zh-CN: 波浪曲线的振幅（像素）。仅波浪形状生效。
+  $description: Wave amplitude in pixels.
+  $description:zh-CN: 波浪曲线的振幅（像素）。
 - wave_frequency: 15
   $name: Wave Frequency
   $name:zh-CN: 波浪频率
-  $description: Wave frequency (3-60, higher = denser waves). Wave shape only.
-  $description:zh-CN: 波浪曲线的频率（3-60，越大波浪越密）。仅波浪形状生效。
-- enable_glow: true
-  $name: Micro Glow
-  $name:zh-CN: 微发光效果
-  $description: Soft outer glow around the trail.
-  $description:zh-CN: 拖尾外圈柔和发光。
-- glow_intensity: 40
-  $name: Glow Intensity
-  $name:zh-CN: 发光强度
-  $description: Glow radius and brightness (0-100).
-  $description:zh-CN: 发光范围和亮度（0-100）。
-- color_mode: single
-  $name: Color Mode
-  $name:zh-CN: 颜色模式
-  $options:
-  - single: Single Color
-  - gradient: Gradient
-  - rainbow: Rainbow
-  - warm: Warm Flow
-  - cool: Cool Flow
-  - neon: Neon Pulse
-  - velocity: Velocity Color
-  - stripes: Stripes
-  - fire: Fire
-  - aurora: Aurora
-  - cursor_extract: Cursor Extract
-  - cursor_mix: Cursor Mix
-  $options:zh-CN:
-  - single: 单色
-  - gradient: 多色渐变
-  - rainbow: 彩虹流动
-  - warm: 暖色调流动
-  - cool: 冷色调流动
-  - neon: 霓虹脉冲
-  - velocity: 速度变色
-  - stripes: 流动条纹
-  - fire: 火焰
-  - aurora: 极光
-  - cursor_extract: 光标取色
-  - cursor_mix: 光标混色
-- enable_cursor_color_shift: true
-  $name: Auto Color Shift
-  $name:zh-CN: 取色自动偏移
-  $description: Auto complementary-color shift (+180° hue) for cursor extraction modes, ensuring visibility on any background.
-  $description:zh-CN: 光标取色模式下自动将提取的颜色转为互补色（色相+180°）并增强饱和度和亮度，确保拖尾在任何背景上都醒目可见。
-- custom_color: "00BFFF"
-  $name: Custom Color
-  $name:zh-CN: 自定义颜色
-  $description: Primary color for single/neon/cursor-mix modes. Hex RGB.
-  $description:zh-CN: 单色/霓虹/光标混色模式的主色，十六进制 RGB。
-- gradient_colors: "FF6B35,00BFFF,FFD700"
-  $name: Gradient Colors 1,2,3
-  $name:zh-CN: 渐变颜色1,2,3
-  $description: 3 colors for gradient/stripes modes, comma-separated hex RGB (e.g. FF6B35,00BFFF,FFD700).
-  $description:zh-CN: 多色渐变/条纹模式的颜色，用英文逗号分隔3个十六进制RGB（如 FF6B35,00BFFF,FFD700）。
+  $description: Wave frequency (3-60, higher = denser waves).
+  $description:zh-CN: 波浪曲线的频率（3-60，越大波浪越密）。
+
+# ===== 粒子系统 =====
 - particle_mode: fadeout
   $name: Particle Mode
-  $name:zh-CN: 粒子消散模式
+  $name:zh-CN: 粒子模式
   $options:
   - off: Off
   - fadeout: On Fadeout
@@ -343,48 +480,26 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 - particle_origin_ratio: 80
   $name: Custom Origin Ratio
   $name:zh-CN: 自定义释放比例
-  $description: Position along trail (0=head/cursor, 100=tail). Custom origin only.
-  $description:zh-CN: 沿拖尾的位置比例（0=开头光标，100=结尾）。仅释放位置为自定义时生效。
-- particle_attraction: 40
-  $name: Particle Attraction
-  $name:zh-CN: 粒子吸附强度
-  $description: How strongly particles are attracted to cursor (0=off, 1-100, non-linear curve).
-  $description:zh-CN: 粒子被吸向光标的强度（0=关闭，1-100，非线性曲线：低数值区分度高）。
-- enable_particle_repel: true
-  $name: Cursor Repulsion
-  $name:zh-CN: 光标排斥力
-  $description: Particles near cursor are repelled with random perturbation, creating orbiting motion.
-  $description:zh-CN: 粒子飞到光标附近时被排斥力弹开，并随机扰乱轨迹，形成振荡绕飞效果。
-- particle_repel_radius: 25
-  $name: Repulsion Radius
-  $name:zh-CN: 排斥范围
-  $description: Repulsion radius around cursor in pixels (5-100).
-  $description:zh-CN: 光标周围的排斥半径（像素，5-100）。粒子进入此范围会受到排斥力。
-- particle_repel_force: 30
-  $name: Repulsion Force
-  $name:zh-CN: 排斥强度
-  $description: Repulsion and random perturbation strength (0-100).
-  $description:zh-CN: 排斥力和随机扰动的强度（0-100）。数值越大粒子被弹开越远、扰乱越剧烈。
+  $description: Position along trail (0=head, 100=tail). Custom origin only.
+  $description:zh-CN: 沿拖尾的位置比例（0=开头，100=结尾）。仅自定义位置生效。
 - particle_density: 3
   $name: Particle Density
   $name:zh-CN: 粒子密度
   $description: Number of particles per release (1-10).
-  $description:zh-CN: 每次释放的粒子数量（1-10）。数值越大消散越明显。
+  $description:zh-CN: 每次释放的粒子数量（1-10）。
 - particle_interval: 50
   $name: Particle Interval
   $name:zh-CN: 粒子释放间隔
-  $description: Minimum interval between particle releases in ms (0-2000). 0 = every frame.
-  $description:zh-CN: 粒子释放的最小时间间隔（毫秒，0-2000），0=每帧生成，越小越密集。
+  $description: Minimum interval between releases (ms, 0-2000). 0 = every frame.
+  $description:zh-CN: 粒子释放的最小时间间隔（毫秒，0-2000），0=每帧生成。
 - particle_acceleration: true
   $name: Acceleration Effect
   $name:zh-CN: 加速度影响
   $description: Particle initial velocity affected by mouse acceleration.
-  $description:zh-CN: 粒子初速度受鼠标相对加速度影响（速度变化越大粒子飞散越快）。
+  $description:zh-CN: 粒子初速度受鼠标加速度影响，速度变化越大飞散越快。
 - particle_shape: random
   $name: Particle Shape
   $name:zh-CN: 粒子形状
-  $description: Particle shape. Random mix includes circle, star, and hexagram.
-  $description:zh-CN: 粒子消散时的形状。随机混合会同时出现圆形、五角星、六芒星。
   $options:
   - random: Random Mix
   - circle: Circle
@@ -395,10 +510,32 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
   - circle: 仅圆形
   - star: 仅五角星
   - hexagram: 仅六芒星
+- particle_attraction: 40
+  $name: Particle Attraction
+  $name:zh-CN: 粒子吸附强度
+  $description: How strongly particles are attracted to cursor (0-100).
+  $description:zh-CN: 粒子被吸向光标的强度（0-100）。
+- enable_particle_repel: true
+  $name: Cursor Repulsion
+  $name:zh-CN: 光标排斥力
+  $description: Particles near cursor are repelled, creating orbiting motion.
+  $description:zh-CN: 粒子靠近光标时被排斥弹开，形成绕飞效果。
+- particle_repel_radius: 25
+  $name: Repulsion Radius
+  $name:zh-CN: 排斥范围
+  $description: Repulsion radius around cursor (pixels, 5-100).
+  $description:zh-CN: 光标周围的排斥半径（像素，5-100）。
+- particle_repel_force: 30
+  $name: Repulsion Force
+  $name:zh-CN: 排斥强度
+  $description: Repulsion and perturbation strength (0-100).
+  $description:zh-CN: 排斥力和随机扰动的强度（0-100）。
+
+# ===== 点击效果 =====
 - enable_click_starburst: true
   $name: Click Starburst
   $name:zh-CN: 点击星爆
-  $description: Particle burst on mouse click.
+  $description: Particle burst from cursor on mouse click.
   $description:zh-CN: 点击时从光标位置迸发粒子。
 - starburst_count: 8
   $name: Starburst Count
@@ -408,38 +545,42 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 - enable_click_effect: true
   $name: Click Ripple
   $name:zh-CN: 点击波纹
-  $description: Expanding ripple on mouse click.
-  $description:zh-CN: 点击时产生扩散波纹。
+  $description: Expanding ripple ring on mouse click.
+  $description:zh-CN: 点击时产生扩散波纹环。
 - click_max_radius: 40
   $name: Ripple Max Radius
   $name:zh-CN: 波纹最大半径
-  $description: Maximum ripple radius in pixels. Range 1-500.
-  $description:zh-CN: 点击波纹扩散的最大半径（像素）。范围 1-500。
+  $description: Maximum ripple radius (pixels, 1-500).
+  $description:zh-CN: 点击波纹扩散的最大半径（像素，1-500）。
 - click_duration: 300
   $name: Ripple Duration
   $name:zh-CN: 波纹持续时间
-  $description: Ripple duration in milliseconds. Range 1-3000.
-  $description:zh-CN: 点击波纹从出现到消失的时长（毫秒）。范围 1-3000。
-- super_performance_mode: false
-  $name: Super Performance Mode
-  $name:zh-CN: 超级性能模式
-  $description: Remove all performance limits (particle cap, shape cap, fast-path downgrade). Use on high-end PCs only.
-  $description:zh-CN: 解除所有性能上限（粒子数量、形状数量、快速降级阈值）。仅在高性能电脑上启用。
+  $description: Ripple duration (ms, 1-3000).
+  $description:zh-CN: 点击波纹从出现到消失的时长（毫秒，1-3000）。
+
+# ===== 高级效果 =====
 - enable_bezier_smooth: true
   $name: Bezier Smoothing
   $name:zh-CN: 贝塞尔曲线平滑
-  $description: Use Catmull-Rom spline interpolation for smoother trail curves.
+  $description: Catmull-Rom spline interpolation for smoother curves.
   $description:zh-CN: 使用 Catmull-Rom 样条插值，拖尾曲线更顺滑。
 - enable_motion_blur: false
   $name: Motion Blur
   $name:zh-CN: 运动模糊
-  $description: Overlay previous trail frames with decreasing opacity for motion blur effect.
-  $description:zh-CN: 以递减透明度叠加历史拖尾帧，制造运动模糊效果。
+  $description: Overlay previous frames with decreasing opacity for motion blur.
+  $description:zh-CN: 以递减透明度叠加历史帧，制造运动模糊效果。
 - motion_blur_strength: 3
   $name: Motion Blur Strength
   $name:zh-CN: 运动模糊强度
-  $description: Number of history frames to overlay (1-5). Motion blur only.
-  $description:zh-CN: 叠加的历史帧数（1-5）。仅运动模糊生效时。
+  $description: Number of history frames to overlay (1-5).
+  $description:zh-CN: 叠加的历史帧数（1-5）。
+
+# ===== 性能设置 =====
+- super_performance_mode: false
+  $name: Super Performance Mode
+  $name:zh-CN: 超级性能模式
+  $description: Remove all performance limits. High-end PCs only.
+  $description:zh-CN: 解除所有性能上限。仅在高性能电脑上启用。
 */
 // ==/WindhawkModSettings==
 #include <windows.h>
@@ -448,6 +589,7 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 #include <dxgi1_2.h>
 #include <dcomp.h>
 #include <dwmapi.h>
+#include <d3dcompiler.h>
 #include <math.h>
 #include <shellapi.h>
 #include <stdlib.h>
@@ -494,6 +636,25 @@ static D2D1_COLOR_F HSVtoRGB(float h, float s, float v) {
     }
     return D2D1::ColorF(r + m, g + m, b + m, 1.0f);
 }
+
+static void RGBtoHSV(D2D1_COLOR_F c, float &h, float &s, float &v) {
+    float mx = fmaxf(fmaxf(c.r, c.g), c.b);
+    float mn = fminf(fminf(c.r, c.g), c.b);
+    v = mx;
+    float d = mx - mn;
+    s = (mx == 0.0f) ? 0.0f : d / mx;
+    if (d == 0.0f)
+        h = 0.0f;
+    else if (mx == c.r)
+        h = fmodf((c.g - c.b) / d, 6.0f);
+    else if (mx == c.g)
+        h = (c.b - c.r) / d + 2.0f;
+    else
+        h = (c.r - c.g) / d + 4.0f;
+    h *= 60.0f;
+    if (h < 0.0f) h += 360.0f;
+}
+
 static D2D1_COLOR_F LerpColor(D2D1_COLOR_F a, D2D1_COLOR_F b, float t) {
     return D2D1::ColorF(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, 1.0f);
 }
@@ -744,6 +905,10 @@ float g_fadeAlpha = 1.0f;
 
 D2D1_COLOR_F g_cursorExtractedColor = {0.5f, 0.5f, 0.5f, 1.0f};
 bool g_cursorColorShift = true;
+int g_colorShiftMode = 1;       // 0=off, 1=complementary(180), 2=analogous(30), 3=triadic(120), 4=split(150), 5=custom
+int g_colorShiftAngle = 180;    // 自定义偏移角度
+float g_colorShiftSatBoost = 0.55f;  // 饱和度保底
+float g_colorShiftValBoost = 0.72f;  // 亮度保底
 static DWORD s_lastColorExtract = 0;
 
 // ===================== 渲染设备（D3D11 + D2D1 Device + DirectComposition）=====================
@@ -980,6 +1145,58 @@ static void ComputeColors(int mode, DWORD time, float velocity, GradData &out) {
             tailInner = LighterColor(mixedTail, 0.55f);
             break;
         }
+        case 12: { // 金属金色
+            float shine = 0.7f + 0.3f * sinf(t * 3.0f);
+            headOuter = D2D1::ColorF(1.0f * shine, 0.84f * shine, 0.0f, 1);
+            tailOuter = D2D1::ColorF(0.6f, 0.4f, 0.05f, 1);
+            headInner = D2D1::ColorF(1.0f, 0.95f, 0.6f, 1);
+            tailInner = D2D1::ColorF(0.8f, 0.6f, 0.2f, 1);
+            break;
+        }
+        case 13: { // 赛博朋克（紫青渐变）
+            float pulse = 0.5f + 0.5f * sinf(t * 5.0f);
+            headOuter = HSVtoRGB(280 + pulse * 40, 0.9f, 1.0f);
+            tailOuter = HSVtoRGB(180 - pulse * 20, 0.9f, 1.0f);
+            headInner = HSVtoRGB(300, 0.5f, 1.0f);
+            tailInner = HSVtoRGB(170, 0.5f, 1.0f);
+            break;
+        }
+        case 14: { // 粉彩
+            float h = fmodf(t * 30, 360);
+            headOuter = HSVtoRGB(h, 0.35f, 1.0f);
+            tailOuter = HSVtoRGB(fmodf(h + 60, 360), 0.35f, 1.0f);
+            headInner = HSVtoRGB(h, 0.2f, 1.0f);
+            tailInner = HSVtoRGB(fmodf(h + 60, 360), 0.2f, 1.0f);
+            break;
+        }
+        case 15: { // 色相旋转（基于自定义颜色）
+            float h, s, v;
+            RGBtoHSV(g_customColor, h, s, v);
+            float h1 = fmodf(h + t * 60, 360);
+            float h2 = fmodf(h1 + 120, 360);
+            headOuter = HSVtoRGB(h1, s, v);
+            tailOuter = HSVtoRGB(h2, s, v);
+            headInner = HSVtoRGB(h1, s * 0.5f, v);
+            tailInner = HSVtoRGB(h2, s * 0.5f, v);
+            break;
+        }
+        case 16: { // 双色脉冲
+            float pulse = 0.5f + 0.5f * sinf(t * 4.0f);
+            headOuter = LerpColor(g_gradColors[0], g_gradColors[2], pulse);
+            tailOuter = LerpColor(g_gradColors[2], g_gradColors[0], pulse);
+            headInner = LighterColor(headOuter, 0.5f);
+            tailInner = LighterColor(tailOuter, 0.5f);
+            break;
+        }
+        case 17: { // 随机闪烁
+            float sparkle = (rand() % 100) / 100.0f;
+            float baseH = fmodf(t * 50, 360);
+            headOuter = HSVtoRGB(baseH, 0.8f, 0.6f + sparkle * 0.4f);
+            tailOuter = HSVtoRGB(fmodf(baseH + 90, 360), 0.8f, 0.5f + sparkle * 0.3f);
+            headInner = HSVtoRGB(baseH, 0.4f, 1.0f);
+            tailInner = HSVtoRGB(fmodf(baseH + 90, 360), 0.4f, 1.0f);
+            break;
+        }
         default:
             headOuter = tailOuter = D2D1::ColorF(0, 0, 0, 1);
             headInner = tailInner = D2D1::ColorF(1, 1, 1, 1);
@@ -1067,6 +1284,857 @@ static void UpdateColorBrushes(const GradData &data, D2D1_POINT_2F headPt, D2D1_
         g_pGradInnerBrush->SetStartPoint(headPt);
         g_pGradInnerBrush->SetEndPoint(tailPt);
     }
+}
+
+// ===================== D3D11 原生渲染（v3）=====================
+
+// ---- HLSL 着色器（v3.1：渐变采样 + 2.5D 透视）----
+static const char* g_vsShader = R"(
+cbuffer ConstantBuffer : register(b0) {
+    float2 screenSize;
+    float perspective;   // 透视强度（0=纯2D，0.5=中等）
+    float2 lightDir;     // 光照方向
+    float4 gradient[16]; // 渐变停止点（rgba）
+    int gradientCount;
+    float pad[3];
+};
+
+struct VS_INPUT {
+    float3 pos : POSITION;   // x, y, z(深度)
+    float4 color : COLOR;
+    float u : TEXCOORD0;     // 沿路径比例 0~1
+};
+
+struct VS_OUTPUT {
+    float4 pos : SV_POSITION;
+    float4 color : COLOR;
+    float u : TEXCOORD0;
+    float depth : TEXCOORD1;
+};
+
+VS_OUTPUT VSMain(VS_INPUT input) {
+    VS_OUTPUT output;
+    // 2.5D 透视：根据深度 z 缩放位置
+    float scale = 1.0 + input.pos.z * perspective;
+    float2 screenPos = float2(input.pos.x * scale, input.pos.y * scale);
+    // 屏幕坐标 → 裁剪空间
+    float2 ndc = float2(
+        (screenPos.x / screenSize.x) * 2.0 - 1.0,
+        1.0 - (screenPos.y / screenSize.y) * 2.0
+    );
+    output.pos = float4(ndc, 0.0, 1.0);
+    output.color = input.color;
+    output.u = input.u;
+    output.depth = input.pos.z;
+    return output;
+}
+)";
+
+static const char* g_psShader = R"(
+cbuffer ConstantBuffer : register(b0) {
+    float2 screenSize;
+    float perspective;
+    float2 lightDir;
+    float4 gradient[16];
+    int gradientCount;
+    float pad[3];
+};
+
+struct PS_INPUT {
+    float4 pos : SV_POSITION;
+    float4 color : COLOR;
+    float u : TEXCOORD0;
+    float depth : TEXCOORD1;
+};
+
+float4 PSMain(PS_INPUT input) : SV_TARGET {
+    // 从渐变中采样颜色（GPU 硬件插值，无断层）
+    float4 gradColor = input.color;
+    if (gradientCount > 1) {
+        float t = input.u * (gradientCount - 1);
+        int idx = (int)t;
+        float frac = t - idx;
+        if (idx >= gradientCount - 1) {
+            gradColor = gradient[gradientCount - 1];
+        } else {
+            gradColor = lerp(gradient[idx], gradient[idx + 1], frac);
+        }
+        gradColor.a *= input.color.a;
+    }
+    // 2.5D 光照：深度越大越亮（模拟高光）
+    float light = 1.0 + input.depth * 0.3;
+    return float4(gradColor.rgb * light, gradColor.a);
+}
+)";
+
+// 粒子实例着色器（带 2.5D 透视）
+static const char* g_particleVS = R"(
+cbuffer ConstantBuffer : register(b0) {
+    float2 screenSize;
+    float perspective;
+    float2 lightDir;
+    float4 gradient[16];
+    int gradientCount;
+    float pad[3];
+};
+
+struct VS_INPUT {
+    float2 quadPos : POSITION;
+    float3 instancePos : TEXCOORD0; // x, y, z
+    float4 instanceColor : TEXCOORD1;
+    float instanceSize : TEXCOORD2;
+};
+
+struct VS_OUTPUT {
+    float4 pos : SV_POSITION;
+    float2 uv : TEXCOORD0;
+    float4 color : COLOR;
+    float depth : TEXCOORD1;
+};
+
+VS_OUTPUT VSMain(VS_INPUT input) {
+    VS_OUTPUT output;
+    // 2.5D 透视
+    float scale = 1.0 + input.instancePos.z * perspective;
+    float2 worldPos = input.instancePos.xy + input.quadPos * input.instanceSize * scale;
+    float2 ndc = float2(
+        (worldPos.x / screenSize.x) * 2.0 - 1.0,
+        1.0 - (worldPos.y / screenSize.y) * 2.0
+    );
+    output.pos = float4(ndc, 0.0, 1.0);
+    output.uv = input.quadPos * 0.5 + 0.5;
+    output.color = input.instanceColor;
+    output.depth = input.instancePos.z;
+    return output;
+}
+)";
+
+static const char* g_particlePS = R"(
+struct PS_INPUT {
+    float4 pos : SV_POSITION;
+    float2 uv : TEXCOORD0;
+    float4 color : COLOR;
+    float depth : TEXCOORD1;
+};
+
+float4 PSMain(PS_INPUT input) : SV_TARGET {
+    float2 center = input.uv - 0.5;
+    float dist = length(center);
+    if (dist > 0.5) discard;
+    float alpha = input.color.a * smoothstep(0.5, 0.42, dist);
+    // 2.5D 光照
+    float light = 1.0 + input.depth * 0.25;
+    return float4(input.color.rgb * light, alpha);
+}
+)";
+
+// ---- 顶点结构（v3.1：添加 z 深度和 u 坐标）----
+struct VertexPosColor {
+    float x, y, z;     // 位置 + 深度（2.5D）
+    float r, g, b, a;  // 颜色
+    float u;           // 沿路径比例 0~1（用于渐变采样）
+};
+
+struct ParticleInstance {
+    float x, y, z;     // 位置 + 深度
+    float r, g, b, a; // 颜色
+    float size;       // 大小（半径）
+};
+
+// ---- 原生渲染资源 ----
+ID3D11VertexShader* g_pNativeVS = nullptr;
+ID3D11PixelShader* g_pNativePS = nullptr;
+ID3D11VertexShader* g_pParticleVS = nullptr;
+ID3D11PixelShader* g_pParticlePS = nullptr;
+ID3D11InputLayout* g_pNativeLayout = nullptr;
+ID3D11InputLayout* g_pParticleLayout = nullptr;
+ID3D11Buffer* g_pConstantBuffer = nullptr;
+ID3D11Buffer* g_pTrailVB = nullptr;       // 拖尾带顶点缓冲（动态）
+ID3D11Buffer* g_pParticleQuadVB = nullptr; // 粒子四边形顶点缓冲
+ID3D11Buffer* g_pParticleInstanceBuf = nullptr; // 粒子实例缓冲（动态）
+ID3D11BlendState* g_pAlphaBlend = nullptr;
+ID3D11RasterizerState* g_pRasterState = nullptr;
+int g_nativeTrailVerts = 0;  // 当前拖尾带顶点数
+int g_nativeParticleCount = 0; // 当前粒子实例数
+
+static bool CompileShader(const char* source, const char* target, ID3DBlob** blob) {
+    ID3DBlob* error = nullptr;
+    HRESULT hr = D3DCompile(source, strlen(source), nullptr, nullptr, nullptr, "main", target,
+                            D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, blob, &error);
+    if (FAILED(hr)) {
+        if (error) {
+            Wh_Log(L"NativeD3D: shader compile failed: %S", (char*)error->GetBufferPointer());
+            error->Release();
+        }
+        return false;
+    }
+    if (error) error->Release();
+    return true;
+}
+
+static bool InitNativeRendering() {
+    if (!g_pD3DDevice) return false;
+
+    // 编译着色器
+    ID3DBlob* vsBlob = nullptr, *psBlob = nullptr;
+    if (!CompileShader(g_vsShader, "vs_4_0", &vsBlob)) return false;
+    if (!CompileShader(g_psShader, "ps_4_0", &psBlob)) return false;
+    g_pD3DDevice->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, &g_pNativeVS);
+    g_pD3DDevice->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &g_pNativePS);
+
+    ID3DBlob* pvsBlob = nullptr, *ppsBlob = nullptr;
+    if (!CompileShader(g_particleVS, "vs_4_0", &pvsBlob)) return false;
+    if (!CompileShader(g_particlePS, "ps_4_0", &ppsBlob)) return false;
+    g_pD3DDevice->CreateVertexShader(pvsBlob->GetBufferPointer(), pvsBlob->GetBufferSize(), nullptr, &g_pParticleVS);
+    g_pD3DDevice->CreatePixelShader(ppsBlob->GetBufferPointer(), ppsBlob->GetBufferSize(), nullptr, &g_pParticlePS);
+
+    // 输入布局：通用顶点（位置+深度+颜色+u坐标）
+    D3D11_INPUT_ELEMENT_DESC layoutDesc[] = {
+        {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
+        {"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
+        {"TEXCOORD", 0, DXGI_FORMAT_R32_FLOAT, 0, 28, D3D11_INPUT_PER_VERTEX_DATA, 0},
+    };
+    g_pD3DDevice->CreateInputLayout(layoutDesc, 3, vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), &g_pNativeLayout);
+
+    // 输入布局：粒子实例（位置+深度+颜色+大小）
+    D3D11_INPUT_ELEMENT_DESC particleLayout[] = {
+        {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
+        {"TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+        {"TEXCOORD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 12, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+        {"TEXCOORD", 2, DXGI_FORMAT_R32_FLOAT, 1, 28, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+    };
+    g_pD3DDevice->CreateInputLayout(particleLayout, 4, pvsBlob->GetBufferPointer(), pvsBlob->GetBufferSize(), &g_pParticleLayout);
+
+    vsBlob->Release(); psBlob->Release(); pvsBlob->Release(); ppsBlob->Release();
+
+    // 常量缓冲（包含屏幕尺寸、透视、渐变停止点）
+    D3D11_BUFFER_DESC cbDesc = {};
+    cbDesc.ByteWidth = 320;  // 对齐到 16 字节
+    cbDesc.Usage = D3D11_USAGE_DYNAMIC;
+    cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    g_pD3DDevice->CreateBuffer(&cbDesc, nullptr, &g_pConstantBuffer);
+
+    // 拖尾带顶点缓冲（动态，最大 4096 顶点）
+    D3D11_BUFFER_DESC vbDesc = {};
+    vbDesc.ByteWidth = sizeof(VertexPosColor) * 4096;
+    vbDesc.Usage = D3D11_USAGE_DYNAMIC;
+    vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    vbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    g_pD3DDevice->CreateBuffer(&vbDesc, nullptr, &g_pTrailVB);
+
+    // 粒子四边形（两个三角形组成的正方形）
+    float quadVerts[] = {
+        -1, -1,  1, -1,  -1, 1,
+         1, -1,  1,  1,  -1, 1,
+    };
+    D3D11_BUFFER_DESC quadDesc = {};
+    quadDesc.ByteWidth = sizeof(quadVerts);
+    quadDesc.Usage = D3D11_USAGE_IMMUTABLE;
+    quadDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    D3D11_SUBRESOURCE_DATA quadData = {quadVerts, 0, 0};
+    g_pD3DDevice->CreateBuffer(&quadDesc, &quadData, &g_pParticleQuadVB);
+
+    // 粒子实例缓冲（动态，最大 2000 实例）
+    D3D11_BUFFER_DESC instDesc = {};
+    instDesc.ByteWidth = sizeof(ParticleInstance) * 2000;
+    instDesc.Usage = D3D11_USAGE_DYNAMIC;
+    instDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    instDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    g_pD3DDevice->CreateBuffer(&instDesc, nullptr, &g_pParticleInstanceBuf);
+
+    // Alpha 混合状态
+    D3D11_BLEND_DESC blendDesc = {};
+    blendDesc.RenderTarget[0].BlendEnable = TRUE;
+    blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+    blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+    blendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+    blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+    blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+    blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+    blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+    g_pD3DDevice->CreateBlendState(&blendDesc, &g_pAlphaBlend);
+
+    // 光栅化状态
+    D3D11_RASTERIZER_DESC rastDesc = {};
+    rastDesc.FillMode = D3D11_FILL_SOLID;
+    rastDesc.CullMode = D3D11_CULL_NONE;
+    rastDesc.DepthClipEnable = FALSE;
+    g_pD3DDevice->CreateRasterizerState(&rastDesc, &g_pRasterState);
+
+    Wh_Log(L"NativeD3D: initialized successfully");
+    return true;
+}
+
+static void ReleaseNativeRendering() {
+    if (g_pNativeVS) { g_pNativeVS->Release(); g_pNativeVS = nullptr; }
+    if (g_pNativePS) { g_pNativePS->Release(); g_pNativePS = nullptr; }
+    if (g_pParticleVS) { g_pParticleVS->Release(); g_pParticleVS = nullptr; }
+    if (g_pParticlePS) { g_pParticlePS->Release(); g_pParticlePS = nullptr; }
+    if (g_pNativeLayout) { g_pNativeLayout->Release(); g_pNativeLayout = nullptr; }
+    if (g_pParticleLayout) { g_pParticleLayout->Release(); g_pParticleLayout = nullptr; }
+    if (g_pConstantBuffer) { g_pConstantBuffer->Release(); g_pConstantBuffer = nullptr; }
+    if (g_pTrailVB) { g_pTrailVB->Release(); g_pTrailVB = nullptr; }
+    if (g_pParticleQuadVB) { g_pParticleQuadVB->Release(); g_pParticleQuadVB = nullptr; }
+    if (g_pParticleInstanceBuf) { g_pParticleInstanceBuf->Release(); g_pParticleInstanceBuf = nullptr; }
+    if (g_pAlphaBlend) { g_pAlphaBlend->Release(); g_pAlphaBlend = nullptr; }
+    if (g_pRasterState) { g_pRasterState->Release(); g_pRasterState = nullptr; }
+}
+
+static void UpdateConstantBuffer(int width, int height, const GradData* cols = nullptr) {
+    if (!g_pConstantBuffer || !g_pD3DContext) return;
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    if (SUCCEEDED(g_pD3DContext->Map(g_pConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
+        float* data = (float*)mapped.pData;
+        // screenSize (offset 0)
+        data[0] = (float)width;
+        data[1] = (float)height;
+        // perspective (offset 2)
+        data[2] = 0.15f;  // 2.5D 透视强度
+        // lightDir (offset 3-4)
+        data[3] = 0.5f;
+        data[4] = -0.5f;
+        // gradient[16] (offset 8-71)
+        int gradCount = 0;
+        if (cols) {
+            for (int i = 0; i < GRAD_STOPS; i++) {
+                data[8 + i * 4 + 0] = cols->outer[i].color.r;
+                data[8 + i * 4 + 1] = cols->outer[i].color.g;
+                data[8 + i * 4 + 2] = cols->outer[i].color.b;
+                data[8 + i * 4 + 3] = cols->outer[i].color.a;
+            }
+            gradCount = GRAD_STOPS;
+        }
+        // gradientCount (offset 72)
+        data[72] = (float)gradCount;
+        g_pD3DContext->Unmap(g_pConstantBuffer, 0);
+    }
+}
+
+// 粒子 Instanced Rendering（v3 原生渲染）
+static void NativeRenderParticles(int screenW, int screenH) {
+    if (!g_pParticleVS || !g_pParticlePS || !g_pParticleInstanceBuf || g_particles.empty()) return;
+
+    // 更新实例缓冲
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    if (FAILED(g_pD3DContext->Map(g_pParticleInstanceBuf, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
+    ParticleInstance* instances = (ParticleInstance*)mapped.pData;
+    int count = 0;
+    DWORD now = GetTickCount();
+    for (auto &p : g_particles) {
+        float progress = (float)(now - p.startTime) / p.lifetime;
+        if (progress < 0 || progress >= 1) continue;
+        float lifeAlpha = (1.0f - progress);
+        D2D1_COLOR_F pc = D2D1::ColorF(p.color.r + (p.endColor.r - p.color.r) * progress,
+                                       p.color.g + (p.endColor.g - p.color.g) * progress,
+                                       p.color.b + (p.endColor.b - p.color.b) * progress, 1.0f);
+        instances[count].x = p.x;
+        instances[count].y = p.y;
+        instances[count].z = (rand()/(float)RAND_MAX - 0.5f) * 0.3f;  // 2.5D 随机深度
+        instances[count].r = pc.r;
+        instances[count].g = pc.g;
+        instances[count].b = pc.b;
+        instances[count].a = lifeAlpha * 0.65f;
+        instances[count].size = p.size * 1.6f;
+        count++;
+        if (count >= 2000) break;
+    }
+    g_pD3DContext->Unmap(g_pParticleInstanceBuf, 0);
+    if (count == 0) return;
+
+    // 设置渲染状态
+    UpdateConstantBuffer(screenW, screenH);
+    g_pD3DContext->IASetInputLayout(g_pParticleLayout);
+    g_pD3DContext->VSSetShader(g_pParticleVS, nullptr, 0);
+    g_pD3DContext->PSSetShader(g_pParticlePS, nullptr, 0);
+    g_pD3DContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    g_pD3DContext->RSSetState(g_pRasterState);
+    g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
+
+    // 绑定顶点缓冲（四边形）和实例缓冲
+    UINT stride = 2 * sizeof(float);
+    UINT offset = 0;
+    g_pD3DContext->IASetVertexBuffers(0, 1, &g_pParticleQuadVB, &stride, &offset);
+    stride = sizeof(ParticleInstance);
+    g_pD3DContext->IASetVertexBuffers(1, 1, &g_pParticleInstanceBuf, &stride, &offset);
+    g_pD3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+    // 绘制（6 顶点/实例，count 个实例）
+    g_pD3DContext->DrawInstanced(6, count, 0, 0);
+}
+
+// 拖尾带顶点缓冲渲染（v3 原生渲染）
+static void NativeRenderTrail(const std::vector<D2D1_POINT_2F>& smoothed, float widthMul,
+                              const GradData& cols, float fadeAlpha, int screenW, int screenH, DWORD dwTime = 0) {
+    if (!g_pNativeVS || !g_pNativePS || !g_pTrailVB || smoothed.size() < 2) return;
+
+    // 构建顶点（外带 + 内带，三角形带）
+    std::vector<VertexPosColor> verts;
+    verts.reserve(smoothed.size() * 4);
+    size_t sl = smoothed.size();
+
+    // 外带
+    for (size_t i = 0; i < sl; ++i) {
+        float ddx, ddy;
+        if (i == 0) { ddx = smoothed[0].x - smoothed[1].x; ddy = smoothed[0].y - smoothed[1].y; }
+        else if (i == sl - 1) { ddx = smoothed[i-1].x - smoothed[i].x; ddy = smoothed[i-1].y - smoothed[i].y; }
+        else { ddx = smoothed[i-1].x - smoothed[i+1].x; ddy = smoothed[i-1].y - smoothed[i+1].y; }
+        float ln = sqrtf(ddx*ddx + ddy*ddy);
+        if (ln > 0) { ddx /= ln; ddy /= ln; } else { ddx = 1; ddy = 0; }
+        float nx = -ddy, ny = ddx;
+        float ratio = (float)i / (sl - 1);
+        float taper = powf(1.0f - ratio, 1.3f);
+        float ow = (i == sl - 1) ? 0 : 10.0f * taper * widthMul;
+        // 2.5D 深度：根据拖尾形状类型使用不同的深度模式
+        float depth = 0.0f;
+        if (g_trailShape == 0 || g_trailShape == 5 || g_trailShape == 6) {
+            // 锥形/双线/虚线：中间高两端低
+            depth = sinf(ratio * 3.14159f) * 0.25f;
+        } else if (g_trailShape == 1) {
+            // 点链：离散深度波动
+            depth = sinf(ratio * 3.14159f * 8.0f) * 0.15f;
+        } else if (g_trailShape == 2 || g_trailShape == 7) {
+            // 函数曲线/螺旋：动态波动深度
+            depth = sinf(ratio * 3.14159f * 4.0f + dwTime * 0.003f) * 0.2f;
+        } else if (g_trailShape == 3 || g_trailShape == 8) {
+            // 波形/闪电：波浪深度
+            depth = sinf(ratio * 3.14159f * 6.0f - dwTime * 0.005f) * 0.2f;
+        } else if (g_trailShape == 9) {
+            // 羽毛：随机毛刺深度
+            depth = (rand() % 100 / 100.0f - 0.5f) * 0.3f;
+        }
+        // 颜色从渐变采样（u 坐标传递到着色器）
+        verts.push_back({smoothed[i].x + nx*ow, smoothed[i].y + ny*ow, depth,
+                         1,1,1, fadeAlpha, ratio});
+        verts.push_back({smoothed[i].x - nx*ow, smoothed[i].y - ny*ow, depth,
+                         1,1,1, fadeAlpha, ratio});
+    }
+
+    // 更新顶点缓冲
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    if (FAILED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
+    memcpy(mapped.pData, verts.data(), verts.size() * sizeof(VertexPosColor));
+    g_pD3DContext->Unmap(g_pTrailVB, 0);
+
+    // 设置渲染状态（传递渐变数据到着色器，实现平滑颜色过渡）
+    UpdateConstantBuffer(screenW, screenH, &cols);
+    g_pD3DContext->IASetInputLayout(g_pNativeLayout);
+    g_pD3DContext->VSSetShader(g_pNativeVS, nullptr, 0);
+    g_pD3DContext->PSSetShader(g_pNativePS, nullptr, 0);
+    g_pD3DContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    g_pD3DContext->RSSetState(g_pRasterState);
+    g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
+
+    UINT stride = sizeof(VertexPosColor);
+    UINT offset = 0;
+    g_pD3DContext->IASetVertexBuffers(0, 1, &g_pTrailVB, &stride, &offset);
+    g_pD3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+
+    // 绘制外带
+    g_pD3DContext->Draw((UINT)verts.size(), 0);
+}
+
+// ---- 形状拖尾原生渲染（v3）----
+struct ShapeInstance {
+    float x, y;       // 位置
+    float r, g, b, a; // 颜色
+    float size;       // 大小
+    float rotation;   // 旋转角度
+    int shapeType;    // 0=圆, 1=星, 2=六芒星, 3=爱心
+};
+
+ID3D11Buffer* g_pShapeVB = nullptr;       // 形状顶点缓冲（每种形状的基础顶点）
+ID3D11Buffer* g_pShapeInstanceBuf = nullptr; // 形状实例缓冲
+
+// 生成形状顶点（三角形列表）
+static std::vector<float> GenerateShapeVerts(int shapeType) {
+    std::vector<float> verts;
+    const int segments = 32;
+    if (shapeType == 0) { // 圆
+        for (int i = 0; i < segments; i++) {
+            float a1 = (i / (float)segments) * 6.28318f;
+            float a2 = ((i + 1) / (float)segments) * 6.28318f;
+            verts.push_back(0); verts.push_back(0);
+            verts.push_back(cosf(a1)); verts.push_back(sinf(a1));
+            verts.push_back(cosf(a2)); verts.push_back(sinf(a2));
+        }
+    } else if (shapeType == 1) { // 五角星
+        for (int i = 0; i < 5; i++) {
+            float a1 = (i / 5.0f) * 6.28318f - 1.5708f;
+            float a2 = ((i + 0.5f) / 5.0f) * 6.28318f - 1.5708f;
+            float a3 = ((i + 1) / 5.0f) * 6.28318f - 1.5708f;
+            verts.push_back(0); verts.push_back(0);
+            verts.push_back(cosf(a1)); verts.push_back(sinf(a1));
+            verts.push_back(0.4f * cosf(a2)); verts.push_back(0.4f * sinf(a2));
+            verts.push_back(0); verts.push_back(0);
+            verts.push_back(0.4f * cosf(a2)); verts.push_back(0.4f * sinf(a2));
+            verts.push_back(cosf(a3)); verts.push_back(sinf(a3));
+        }
+    } else if (shapeType == 2) { // 六芒星（两个三角形）
+        // 上三角
+        verts.push_back(0); verts.push_back(-1);
+        verts.push_back(-0.866f); verts.push_back(0.5f);
+        verts.push_back(0.866f); verts.push_back(0.5f);
+        // 下三角
+        verts.push_back(0); verts.push_back(1);
+        verts.push_back(-0.866f); verts.push_back(-0.5f);
+        verts.push_back(0.866f); verts.push_back(-0.5f);
+    } else if (shapeType == 3) { // 爱心（近似）
+        for (int i = 0; i < segments; i++) {
+            float t = (i / (float)segments) * 6.28318f;
+            float t2 = ((i + 1) / (float)segments) * 6.28318f;
+            float x1 = 16 * powf(sinf(t), 3) / 16.0f;
+            float y1 = -(13 * cosf(t) - 5 * cosf(2*t) - 2 * cosf(3*t) - cosf(4*t)) / 16.0f;
+            float x2 = 16 * powf(sinf(t2), 3) / 16.0f;
+            float y2 = -(13 * cosf(t2) - 5 * cosf(2*t2) - 2 * cosf(3*t2) - cosf(4*t2)) / 16.0f;
+            verts.push_back(0); verts.push_back(0);
+            verts.push_back(x1); verts.push_back(y1);
+            verts.push_back(x2); verts.push_back(y2);
+        }
+    }
+    return verts;
+}
+
+static bool InitShapeRendering() {
+    if (!g_pD3DDevice) return false;
+
+    // 合并所有形状的顶点（每种形状最多 64 个顶点）
+    std::vector<float> allVerts;
+    int offsets[4] = {0, 0, 0, 0};
+    int counts[4] = {0, 0, 0, 0};
+    for (int i = 0; i < 4; i++) {
+        offsets[i] = (int)allVerts.size() / 2;
+        auto v = GenerateShapeVerts(i);
+        counts[i] = (int)v.size() / 2;
+        allVerts.insert(allVerts.end(), v.begin(), v.end());
+    }
+
+    D3D11_BUFFER_DESC vbDesc = {};
+    vbDesc.ByteWidth = (UINT)(allVerts.size() * sizeof(float));
+    vbDesc.Usage = D3D11_USAGE_IMMUTABLE;
+    vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    D3D11_SUBRESOURCE_DATA data = {allVerts.data(), 0, 0};
+    g_pD3DDevice->CreateBuffer(&vbDesc, &data, &g_pShapeVB);
+
+    // 实例缓冲（最大 500 个形状）
+    D3D11_BUFFER_DESC instDesc = {};
+    instDesc.ByteWidth = sizeof(ShapeInstance) * 500;
+    instDesc.Usage = D3D11_USAGE_DYNAMIC;
+    instDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    instDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    g_pD3DDevice->CreateBuffer(&instDesc, nullptr, &g_pShapeInstanceBuf);
+
+    return true;
+}
+
+static void ReleaseShapeRendering() {
+    if (g_pShapeVB) { g_pShapeVB->Release(); g_pShapeVB = nullptr; }
+    if (g_pShapeInstanceBuf) { g_pShapeInstanceBuf->Release(); g_pShapeInstanceBuf = nullptr; }
+}
+
+static void NativeRenderShapes(int screenW, int screenH, DWORD dwTime) {
+    if (!g_pShapeVB || !g_pShapeInstanceBuf || g_trailShapes.empty()) return;
+
+    // 更新实例缓冲
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    if (FAILED(g_pD3DContext->Map(g_pShapeInstanceBuf, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
+    ShapeInstance* instances = (ShapeInstance*)mapped.pData;
+    int count = 0;
+    for (auto &s : g_trailShapes) {
+        float progress = (float)(dwTime - s.startTime) / s.lifetime;
+        if (progress < 0 || progress >= 1) continue;
+        float lifeAlpha = (1.0f - progress);
+        instances[count].x = s.x;
+        instances[count].y = s.y;
+        instances[count].r = s.color.r;
+        instances[count].g = s.color.g;
+        instances[count].b = s.color.b;
+        instances[count].a = lifeAlpha * 0.7f;
+        instances[count].size = s.size * (1.0f + progress * 0.5f);
+        instances[count].rotation = 0;  // TrailShape 没有 rotation，暂时设为 0
+        instances[count].shapeType = s.shapeType;
+        count++;
+        if (count >= 500) break;
+    }
+    g_pD3DContext->Unmap(g_pShapeInstanceBuf, 0);
+    if (count == 0) return;
+
+    // 设置渲染状态（复用粒子着色器，但需要支持旋转和形状类型）
+    // 暂时使用通用着色器，后续优化
+    UpdateConstantBuffer(screenW, screenH);
+    g_pD3DContext->IASetInputLayout(g_pParticleLayout);
+    g_pD3DContext->VSSetShader(g_pParticleVS, nullptr, 0);
+    g_pD3DContext->PSSetShader(g_pParticlePS, nullptr, 0);
+    g_pD3DContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    g_pD3DContext->RSSetState(g_pRasterState);
+    g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
+
+    // 按形状类型分组绘制
+    int counts[4] = {96, 20, 6, 96}; // 圆=32*3, 星=5*6, 六芒星=6, 爱心=32*3
+
+    for (int shapeType = 0; shapeType < 4; shapeType++) {
+        // 统计该类型的实例数量（简化处理，实际应分组）
+        int shapeCount = 0;
+        for (int i = 0; i < count; i++) {
+            if (instances[i].shapeType == shapeType) shapeCount++;
+        }
+        if (shapeCount == 0) continue;
+
+        // 绑定形状顶点缓冲
+        UINT stride = 2 * sizeof(float);
+        UINT offset = 0;
+        // 计算该形状在合并缓冲中的偏移
+        int vertexOffset = 0;
+        for (int i = 0; i < shapeType; i++) vertexOffset += counts[i];
+        g_pD3DContext->IASetVertexBuffers(0, 1, &g_pShapeVB, &stride, &offset);
+        stride = sizeof(ShapeInstance);
+        g_pD3DContext->IASetVertexBuffers(1, 1, &g_pShapeInstanceBuf, &stride, &offset);
+        g_pD3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+        // 绘制（简化：绘制所有实例，实际应只绘制该类型）
+        // TODO: 优化为按类型分组的实例缓冲
+        g_pD3DContext->DrawInstanced(counts[shapeType], count, vertexOffset, 0);
+    }
+}
+
+// 形状拖尾原生渲染（v3）：直接生成世界坐标顶点，一次绘制
+static void NativeRenderTrailShapes(int screenW, int screenH, DWORD dwTime) {
+    if (g_trailShapes.empty() || !g_pTrailVB) return;
+
+    std::vector<VertexPosColor> verts;
+    verts.reserve(g_trailShapes.size() * 32);
+
+    for (auto &s : g_trailShapes) {
+        float progress = (float)(dwTime - s.startTime) / s.lifetime;
+        if (progress < 0 || progress >= 1) continue;
+        float lifeAlpha = (1.0f - progress) * 0.7f;
+        float size = s.size * (1.0f + progress * 0.3f);
+        float cr = s.color.r, cg = s.color.g, cb = s.color.b;
+
+        // 根据形状类型生成顶点（局部坐标 -1~1）
+        std::vector<float> shapeVerts;
+        const int seg = 24;
+        if (s.shapeType == 3) { // 圆
+            for (int i = 0; i < seg; i++) {
+                float a1 = (i / (float)seg) * 6.28318f;
+                float a2 = ((i + 1) / (float)seg) * 6.28318f;
+                shapeVerts.push_back(0); shapeVerts.push_back(0);
+                shapeVerts.push_back(cosf(a1)); shapeVerts.push_back(sinf(a1));
+                shapeVerts.push_back(cosf(a2)); shapeVerts.push_back(sinf(a2));
+            }
+        } else if (s.shapeType == 1) { // 五角星
+            for (int i = 0; i < 5; i++) {
+                float a1 = (i / 5.0f) * 6.28318f - 1.5708f;
+                float a2 = ((i + 0.5f) / 5.0f) * 6.28318f - 1.5708f;
+                float a3 = ((i + 1) / 5.0f) * 6.28318f - 1.5708f;
+                shapeVerts.push_back(0); shapeVerts.push_back(0);
+                shapeVerts.push_back(cosf(a1)); shapeVerts.push_back(sinf(a1));
+                shapeVerts.push_back(0.4f * cosf(a2)); shapeVerts.push_back(0.4f * sinf(a2));
+                shapeVerts.push_back(0); shapeVerts.push_back(0);
+                shapeVerts.push_back(0.4f * cosf(a2)); shapeVerts.push_back(0.4f * sinf(a2));
+                shapeVerts.push_back(cosf(a3)); shapeVerts.push_back(sinf(a3));
+            }
+        } else if (s.shapeType == 2) { // 六芒星
+            shapeVerts.push_back(0); shapeVerts.push_back(-1);
+            shapeVerts.push_back(-0.866f); shapeVerts.push_back(0.5f);
+            shapeVerts.push_back(0.866f); shapeVerts.push_back(0.5f);
+            shapeVerts.push_back(0); shapeVerts.push_back(1);
+            shapeVerts.push_back(-0.866f); shapeVerts.push_back(-0.5f);
+            shapeVerts.push_back(0.866f); shapeVerts.push_back(-0.5f);
+        } else if (s.shapeType == 0) { // 爱心
+            for (int i = 0; i < seg; i++) {
+                float t = (i / (float)seg) * 6.28318f;
+                float t2 = ((i + 1) / (float)seg) * 6.28318f;
+                float x1 = 16 * powf(sinf(t), 3) / 16.0f;
+                float y1 = -(13 * cosf(t) - 5 * cosf(2*t) - 2 * cosf(3*t) - cosf(4*t)) / 16.0f;
+                float x2 = 16 * powf(sinf(t2), 3) / 16.0f;
+                float y2 = -(13 * cosf(t2) - 5 * cosf(2*t2) - 2 * cosf(3*t2) - cosf(4*t2)) / 16.0f;
+                shapeVerts.push_back(0); shapeVerts.push_back(0);
+                shapeVerts.push_back(x1); shapeVerts.push_back(y1);
+                shapeVerts.push_back(x2); shapeVerts.push_back(y2);
+            }
+        }
+
+        // 2.5D 旋转角度：基于时间和形状生命周期，模拟 3D 翻转
+        float rotAngle = (dwTime - s.startTime) * 0.003f + s.x * 0.01f;
+        float cosR = cosf(rotAngle);
+        float sinR = sinf(rotAngle);
+
+        // 变换到世界坐标并添加到顶点列表（应用 2.5D Y 轴旋转）
+        for (size_t i = 0; i < shapeVerts.size(); i += 2) {
+            float lx = shapeVerts[i] * size;
+            float ly = shapeVerts[i + 1] * size;
+            // Y 轴旋转：x 坐标缩放，深度变化
+            float rx = lx * cosR;
+            float depth = lx * sinR * 0.3f;  // 旋转产生的深度
+            verts.push_back({s.x + rx, s.y + ly, depth, cr, cg, cb, lifeAlpha, 0.5f});
+        }
+    }
+
+    if (verts.empty()) return;
+    if (verts.size() > 4096) verts.resize(4096); // 限制最大顶点数
+
+    // 更新顶点缓冲
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    if (FAILED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
+    memcpy(mapped.pData, verts.data(), verts.size() * sizeof(VertexPosColor));
+    g_pD3DContext->Unmap(g_pTrailVB, 0);
+
+    // 设置渲染状态
+    UpdateConstantBuffer(screenW, screenH);
+    g_pD3DContext->IASetInputLayout(g_pNativeLayout);
+    g_pD3DContext->VSSetShader(g_pNativeVS, nullptr, 0);
+    g_pD3DContext->PSSetShader(g_pNativePS, nullptr, 0);
+    g_pD3DContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    g_pD3DContext->RSSetState(g_pRasterState);
+    g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
+
+    UINT stride = sizeof(VertexPosColor);
+    UINT offset = 0;
+    g_pD3DContext->IASetVertexBuffers(0, 1, &g_pTrailVB, &stride, &offset);
+    g_pD3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+    g_pD3DContext->Draw((UINT)verts.size(), 0);
+}
+
+// 原生渲染主函数（v3）：使用 D3D11 直接渲染，替代 D2D1
+static void NativeRenderRipples(int screenW, int screenH, DWORD dwTime, const GradData& cols, int vX, int vY) {
+    if (g_ripples.empty() || !g_pTrailVB) return;
+
+    // 构建波纹环顶点（每个波纹用三角形带渲染圆环）
+    std::vector<VertexPosColor> verts;
+    const int segments = 48;
+    for (auto &r : g_ripples) {
+        float progress = (float)(dwTime - r.startTime) / g_clickDuration;
+        if (progress < 0 || progress >= 1) continue;
+        float radius = g_clickMaxRadius * progress;
+        float alpha = (1.0f - progress) * 0.6f;
+        float ringWidth = 3.0f + progress * 2.0f;
+        D2D1_COLOR_F rc = cols.outer[GRAD_STOPS / 2].color;
+        for (int i = 0; i <= segments; i++) {
+            float a = (i / (float)segments) * 6.28318f;
+            float cosA = cosf(a), sinA = sinf(a);
+            // 外圈
+            verts.push_back({r.pos.x + cosA * (radius + ringWidth), r.pos.y + sinA * (radius + ringWidth), 0,
+                             rc.r, rc.g, rc.b, alpha, 0.5f});
+            // 内圈
+            verts.push_back({r.pos.x + cosA * radius, r.pos.y + sinA * radius, 0,
+                             rc.r, rc.g, rc.b, 0, 0.5f});
+        }
+    }
+    if (verts.empty()) return;
+
+    // 更新顶点缓冲
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    if (FAILED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
+    memcpy(mapped.pData, verts.data(), verts.size() * sizeof(VertexPosColor));
+    g_pD3DContext->Unmap(g_pTrailVB, 0);
+
+    // 设置渲染状态
+    UpdateConstantBuffer(screenW, screenH, &cols);
+    g_pD3DContext->IASetInputLayout(g_pNativeLayout);
+    g_pD3DContext->VSSetShader(g_pNativeVS, nullptr, 0);
+    g_pD3DContext->PSSetShader(g_pNativePS, nullptr, 0);
+    g_pD3DContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    g_pD3DContext->RSSetState(g_pRasterState);
+    g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
+
+    UINT stride = sizeof(VertexPosColor);
+    UINT offset = 0;
+    g_pD3DContext->IASetVertexBuffers(0, 1, &g_pTrailVB, &stride, &offset);
+    g_pD3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+
+    // 绘制每个波纹环（需要按环分段绘制，简化为一次绘制所有顶点）
+    g_pD3DContext->Draw((UINT)verts.size(), 0);
+}
+
+static D2D1_POINT_2F GetPointOnPath(const std::vector<D2D1_POINT_2F> &path, float ratio);
+
+static bool NativeRenderFrame(int screenW, int screenH, const std::vector<D2D1_POINT_2F>& smoothed,
+                              bool tailVisible, const GradData& cols, float widthMul, float fadeAlpha,
+                              DWORD dwTime, int vX, int vY) {
+    if (!g_pNativeVS || !g_pD3DContext || !g_pD2DTargetBitmap) return false;
+
+    // 获取 D3D11 渲染目标视图（从 D2D1 bitmap 获取底层 DXGI surface）
+    IDXGISurface* pSurface = nullptr;
+    if (FAILED(g_pD2DTargetBitmap->GetSurface(&pSurface))) return false;
+    ID3D11Texture2D* pTexture = nullptr;
+    if (FAILED(pSurface->QueryInterface(__uuidof(ID3D11Texture2D), (void**)&pTexture))) {
+        pSurface->Release();
+        return false;
+    }
+    ID3D11RenderTargetView* pRTV = nullptr;
+    if (FAILED(g_pD3DDevice->CreateRenderTargetView(pTexture, nullptr, &pRTV))) {
+        pTexture->Release();
+        pSurface->Release();
+        return false;
+    }
+
+    // 清空渲染目标（透明黑）
+    float clearColor[4] = {0, 0, 0, 0};
+    g_pD3DContext->ClearRenderTargetView(pRTV, clearColor);
+    g_pD3DContext->OMSetRenderTargets(1, &pRTV, nullptr);
+
+    // 设置视口
+    D3D11_VIEWPORT vp = {0, 0, (float)screenW, (float)screenH, 0, 1};
+    g_pD3DContext->RSSetViewports(1, &vp);
+
+    // 1. 粒子渲染（Instanced）
+    if (!g_particles.empty()) {
+        NativeRenderParticles(screenW, screenH);
+    }
+
+    // 2. 拖尾带渲染（顶点缓冲）
+    // 锥形(0)、函数曲线(2)、波形曲线(3) 直接渲染
+    // 点链(1) 用小锥形段近似
+    // 形状拖尾(4) 不渲染带
+    if (tailVisible && !smoothed.empty() && g_trailShape != 4) {
+        if (g_trailShape == 1) {
+            // 点链：沿路径生成离散点，用小锥形段近似
+            std::vector<D2D1_POINT_2F> dots;
+            int dotCount = (int)smoothed.size() * g_dotsMultiplier;
+            if (dotCount > 200) dotCount = 200;
+            for (int i = 0; i < dotCount; i++) {
+                float t = i / (float)(dotCount - 1);
+                D2D1_POINT_2F p = GetPointOnPath(smoothed, t);
+                dots.push_back(p);
+            }
+            // 用很窄的锥形段连接点，模拟点链
+            NativeRenderTrail(dots, widthMul * 0.3f, cols, fadeAlpha, screenW, screenH, dwTime);
+        } else {
+            NativeRenderTrail(smoothed, widthMul, cols, fadeAlpha, screenW, screenH, dwTime);
+        }
+    }
+
+    // 3. 点击波纹环渲染（顶点缓冲）
+    if (g_enableClickEffect && !g_ripples.empty()) {
+        NativeRenderRipples(screenW, screenH, dwTime, cols, vX, vY);
+    }
+
+    // 4. 运动模糊：绘制历史路径（透明度递减）
+    if (g_enableMotionBlur && tailVisible && !g_trailHistory.empty()) {
+        for (size_t h = 0; h < g_trailHistory.size(); h++) {
+            float histAlpha = fadeAlpha * (0.15f + 0.1f * (float)h / g_trailHistory.size());
+            if (histAlpha < 0.02f) continue;
+            const std::vector<D2D1_POINT_2F>& histPath = g_trailHistory[h].path;
+            if (histPath.size() < 2) continue;
+            NativeRenderTrail(histPath, widthMul, cols, histAlpha, screenW, screenH, dwTime);
+        }
+    }
+
+    // 5. 形状拖尾渲染（顶点缓冲）
+    if (!g_trailShapes.empty()) {
+        NativeRenderTrailShapes(screenW, screenH, dwTime);
+    }
+
+    // 释放临时资源
+    pRTV->Release();
+    pTexture->Release();
+    pSurface->Release();
+
+    // 恢复 D2D1 状态（如果后续还有 D2D1 渲染）
+    g_pD2DDC->SetTarget(g_pD2DTargetBitmap);
+    return true;
 }
 
 static inline float Rand01() {
@@ -1249,6 +2317,16 @@ void LoadSettings() {
             g_trailShape = 3;
         else if (wcscmp(str, L"shapes") == 0)
             g_trailShape = 4;
+        else if (wcscmp(str, L"double") == 0)
+            g_trailShape = 5;
+        else if (wcscmp(str, L"dashed") == 0)
+            g_trailShape = 6;
+        else if (wcscmp(str, L"spiral") == 0)
+            g_trailShape = 7;
+        else if (wcscmp(str, L"lightning") == 0)
+            g_trailShape = 8;
+        else if (wcscmp(str, L"feather") == 0)
+            g_trailShape = 9;
         else
             g_trailShape = 0;
         Wh_FreeStringSetting(str);
@@ -1332,6 +2410,18 @@ void LoadSettings() {
             g_colorMode = 10;
         else if (wcscmp(str, L"cursor_mix") == 0)
             g_colorMode = 11;
+        else if (wcscmp(str, L"metallic") == 0)
+            g_colorMode = 12;
+        else if (wcscmp(str, L"cyberpunk") == 0)
+            g_colorMode = 13;
+        else if (wcscmp(str, L"pastel") == 0)
+            g_colorMode = 14;
+        else if (wcscmp(str, L"hue_rotate") == 0)
+            g_colorMode = 15;
+        else if (wcscmp(str, L"dual_pulse") == 0)
+            g_colorMode = 16;
+        else if (wcscmp(str, L"sparkle") == 0)
+            g_colorMode = 17;
         else
             g_colorMode = 0;
         Wh_FreeStringSetting(str);
@@ -1351,6 +2441,20 @@ void LoadSettings() {
         Wh_FreeStringSetting(str);
     }
     g_cursorColorShift = Wh_GetIntSetting(L"enable_cursor_color_shift") != 0;
+    str = Wh_GetStringSetting(L"color_shift_mode");
+    if (str) {
+        if (wcscmp(str, L"off") == 0) g_colorShiftMode = 0;
+        else if (wcscmp(str, L"complementary") == 0) g_colorShiftMode = 1;
+        else if (wcscmp(str, L"analogous") == 0) g_colorShiftMode = 2;
+        else if (wcscmp(str, L"triadic") == 0) g_colorShiftMode = 3;
+        else if (wcscmp(str, L"split") == 0) g_colorShiftMode = 4;
+        else if (wcscmp(str, L"custom") == 0) g_colorShiftMode = 5;
+        else g_colorShiftMode = 1;
+        Wh_FreeStringSetting(str);
+    }
+    g_colorShiftAngle = Wh_GetIntSetting(L"color_shift_angle");
+    if (g_colorShiftAngle < 0) g_colorShiftAngle = 0;
+    if (g_colorShiftAngle > 360) g_colorShiftAngle = 360;
     str = Wh_GetStringSetting(L"custom_color");
     if (str) {
         g_customColor = ParseHexColor(str, D2D1::ColorF(0, .75f, 1));
@@ -1432,43 +2536,56 @@ void LoadSettings() {
 }
 
 // ===================== 游戏检测 =====================
-bool IsGameRunning() {
-    HWND hwnd = GetForegroundWindow();
-    if (!hwnd || hwnd == GetDesktopWindow())
+// 检测前台窗口是否为全屏应用（游戏/视频等）
+// 实现方式：窗口尺寸匹配 + 光标裁剪 + 光标隐藏 + D3D 全屏状态
+bool CheckForegroundFullscreen() {
+    HWND fg = GetForegroundWindow();
+    if (!fg || fg == GetDesktopWindow())
         return false;
-    // 每 500ms 重新查询桌面窗口句柄，避免 Explorer 重启后句柄失效
-    static DWORD lastDesktopCheck = 0;
-    static HWND s_pm = nullptr, s_ww = nullptr;
-    DWORD now = GetTickCount();
-    if (now - lastDesktopCheck > 500 || !s_pm || !s_ww) {
-        s_pm = FindWindowW(L"Progman", NULL);
-        s_ww = FindWindowW(L"WorkerW", NULL);
-        lastDesktopCheck = now;
+
+    // 缓存桌面窗口句柄，每 500ms 刷新（Explorer 重启后失效）
+    static DWORD s_cacheTime = 0;
+    static HWND s_progman = nullptr, s_workerw = nullptr;
+    DWORD tick = GetTickCount();
+    if (tick - s_cacheTime > 500 || !s_progman) {
+        s_progman = FindWindowW(L"Progman", NULL);
+        s_workerw = FindWindowW(L"WorkerW", NULL);
+        s_cacheTime = tick;
     }
-    if (hwnd == s_pm || hwnd == s_ww)
+    if (fg == s_progman || fg == s_workerw)
         return false;
-    QUERY_USER_NOTIFICATION_STATE state;
-    if (SUCCEEDED(SHQueryUserNotificationState(&state)) && state == QUNS_RUNNING_D3D_FULL_SCREEN)
+
+    // 1. 系统 D3D 全屏状态检测
+    QUERY_USER_NOTIFICATION_STATE quns;
+    if (SUCCEEDED(SHQueryUserNotificationState(&quns)) && quns == QUNS_RUNNING_D3D_FULL_SCREEN)
         return true;
-    RECT rcApp;
-    GetWindowRect(hwnd, &rcApp);
-    HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+
+    // 2. 窗口尺寸与显示器匹配
+    RECT rcWnd;
+    GetWindowRect(fg, &rcWnd);
+    HMONITOR hMon = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi = {sizeof(mi)};
-    if (GetMonitorInfo(hMon, &mi)) {
-        bool fs = rcApp.left <= mi.rcMonitor.left && rcApp.top <= mi.rcMonitor.top &&
-                  rcApp.right >= mi.rcMonitor.right && rcApp.bottom >= mi.rcMonitor.bottom;
-        if (fs) {
-            RECT rcClip;
-            if (GetClipCursor(&rcClip)) {
-                int vW = GetSystemMetrics(SM_CXVIRTUALSCREEN), vH = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-                if ((rcClip.right - rcClip.left) < vW || (rcClip.bottom - rcClip.top) < vH)
-                    return true;
-            }
-            CURSORINFO ci = {sizeof(CURSORINFO)};
-            if (GetCursorInfo(&ci) && ci.flags == 0)
-                return true;
-        }
+    if (!GetMonitorInfo(hMon, &mi))
+        return false;
+    bool sizeMatch = rcWnd.left <= mi.rcMonitor.left && rcWnd.top <= mi.rcMonitor.top &&
+                     rcWnd.right >= mi.rcMonitor.right && rcWnd.bottom >= mi.rcMonitor.bottom;
+    if (!sizeMatch)
+        return false;
+
+    // 3. 光标裁剪（游戏通常会限制光标在窗口内）
+    RECT rcClip;
+    if (GetClipCursor(&rcClip)) {
+        int vW = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        int vH = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        if ((rcClip.right - rcClip.left) < vW || (rcClip.bottom - rcClip.top) < vH)
+            return true;
     }
+
+    // 4. 光标隐藏（全屏游戏通常隐藏光标）
+    CURSORINFO ci = {sizeof(CURSORINFO)};
+    if (GetCursorInfo(&ci) && ci.flags == 0)
+        return true;
+
     return false;
 }
 
@@ -1490,9 +2607,20 @@ static D2D1_COLOR_F ShiftToComplementary(D2D1_COLOR_F c) {
     h *= 60.0f;
     if (h < 0.0f)
         h += 360.0f;
-    h = fmodf(h + 180.0f, 360.0f);  // 互补色
-    s = fmaxf(s, 0.55f);            // 饱和度保底
-    v = fmaxf(v, 0.72f);            // 亮度保底
+
+    // 根据偏移模式计算偏移角度
+    float shiftAngle = 0.0f;
+    switch (g_colorShiftMode) {
+        case 1: shiftAngle = 180.0f; break;  // 互补色
+        case 2: shiftAngle = 30.0f; break;   // 类似色
+        case 3: shiftAngle = 120.0f; break;  // 三角色
+        case 4: shiftAngle = 150.0f; break;  // 分裂互补
+        case 5: shiftAngle = (float)g_colorShiftAngle; break;  // 自定义
+        default: shiftAngle = 0.0f; break;   // 关闭
+    }
+    h = fmodf(h + shiftAngle, 360.0f);
+    s = fmaxf(s, g_colorShiftSatBoost);  // 饱和度保底
+    v = fmaxf(v, g_colorShiftValBoost);  // 亮度保底
     return HSVtoRGB(h, s, v);
 }
 
@@ -1515,6 +2643,50 @@ static void ExtractCursorColor(POINT pt, DWORD dwTime) {
 }
 
 // ===================== 轨迹变形 =====================
+// 螺旋变形：沿路径法线方向应用螺旋偏移
+static void ApplySpiralDeformation(std::vector<D2D1_POINT_2F> &pts, DWORD dwTime) {
+    if (pts.size() < 3) return;
+    float phase = dwTime * 0.005f;
+    std::vector<D2D1_POINT_2F> result;
+    result.reserve(pts.size());
+    for (size_t i = 0; i < pts.size(); ++i) {
+        float ratio = (float)i / (pts.size() - 1);
+        float spiral = sinf(ratio * 12.0f + phase) * (1.0f - ratio) * 15.0f;
+        // 计算法线
+        float dx, dy;
+        if (i == 0) { dx = pts[1].x - pts[0].x; dy = pts[1].y - pts[0].y; }
+        else if (i == pts.size() - 1) { dx = pts[i].x - pts[i-1].x; dy = pts[i].y - pts[i-1].y; }
+        else { dx = pts[i+1].x - pts[i-1].x; dy = pts[i+1].y - pts[i-1].y; }
+        float len = sqrtf(dx*dx + dy*dy);
+        if (len > 0) { dx /= len; dy /= len; }
+        float nx = -dy, ny = dx;
+        result.push_back({pts[i].x + nx * spiral, pts[i].y + ny * spiral});
+    }
+    pts = result;
+}
+
+// 闪电变形：沿路径应用随机锯齿
+static void ApplyLightningDeformation(std::vector<D2D1_POINT_2F> &pts, DWORD dwTime) {
+    if (pts.size() < 3) return;
+    std::vector<D2D1_POINT_2F> result;
+    result.reserve(pts.size() * 2);
+    for (size_t i = 0; i < pts.size() - 1; ++i) {
+        result.push_back(pts[i]);
+        // 在每两点之间插入一个随机偏移的中点
+        float mx = (pts[i].x + pts[i+1].x) / 2.0f;
+        float my = (pts[i].y + pts[i+1].y) / 2.0f;
+        float dx = pts[i+1].x - pts[i].x, dy = pts[i+1].y - pts[i].y;
+        float len = sqrtf(dx*dx + dy*dy);
+        if (len > 0) {
+            float nx = -dy / len, ny = dx / len;
+            float offset = (rand() % 100 - 50) / 100.0f * 8.0f;
+            result.push_back({mx + nx * offset, my + ny * offset});
+        }
+    }
+    result.push_back(pts.back());
+    pts = result;
+}
+
 static void ApplyWaveDeformation(std::vector<D2D1_POINT_2F> &pts, DWORD dwTime) {
     if (pts.size() < 3)
         return;
@@ -1926,14 +3098,14 @@ static void RenderFrame() {
     int vX = g_virtX, vY = g_virtY;
 
     static DWORD lastFsCheck = 0;
-    static bool isGameCached = false, isSmearing = false;
-    static int lowVelFrames = 0, fadeoutFrame = 0;
-    static bool needsClear = false;
+    static bool isGameCached = false, trailActive = false;
+    static int idleFrameCount = 0, fadeoutFrame = 0;
+    static bool surfaceDirty = false;
     static bool gameHidden = false;
     static bool isWindowVisible = false;  // 窗口初始隐藏，首次有内容绘制时才显示
     static int hideDelayCounter = 0;
     if (dwTime - lastFsCheck > 500) {
-        isGameCached = IsGameRunning();
+        isGameCached = CheckForegroundFullscreen();
         lastFsCheck = dwTime;
     }
 
@@ -1971,8 +3143,8 @@ static void RenderFrame() {
             gameHidden = true;
             isWindowVisible = false;  // 同步窗口可见状态，避免退出游戏后窗口不显示
         }
-        if (isSmearing || !g_history.empty() || !g_ripples.empty() || !g_particles.empty() || needsClear) {
-            isSmearing = false;
+        if (trailActive || !g_history.empty() || !g_ripples.empty() || !g_particles.empty() || surfaceDirty) {
+            trailActive = false;
             g_history.clear();
             g_ripples.clear();
             g_particles.clear();
@@ -1982,18 +3154,37 @@ static void RenderFrame() {
             return;
     } else {
         gameHidden = false;  // 退出游戏后重置，允许窗口重新显示
-        if (velocity > g_triggerVelocity && !isSmearing) {
-            isSmearing = true;
-            lowVelFrames = 0;
-        } else if (velocity < g_stopVelocity && isSmearing) {
-            lowVelFrames++;
-            if (lowVelFrames > 2) {
-                isSmearing = false;
-                g_hasLastShapePos = false;  // 重置形状拖尾位置，避免重新开始时第一个形状飞偏
+        // 拖尾激活状态机：基于速度阈值 + 低速持续时间
+        // 与 cursor-motion-blur 的实现不同：使用速度积分和加速度辅助判断
+        static float accumulatedDist = 0.0f;
+        static float lastVel = 0.0f;
+        float accel = velocity - lastVel;
+        lastVel = velocity;
+
+        if (!trailActive) {
+            // 未激活：速度超过阈值 或 加速度突增 时激活
+            if (velocity > g_triggerVelocity || (accel > 5.0f && velocity > g_triggerVelocity * 0.5f)) {
+                trailActive = true;
+                idleFrameCount = 0;
+                accumulatedDist = 0.0f;
             }
-        } else if (velocity >= g_stopVelocity && isSmearing)
-            lowVelFrames = 0;
-        if (isSmearing) {
+        } else {
+            // 已激活：速度低于停止阈值时计数
+            if (velocity < g_stopVelocity) {
+                idleFrameCount++;
+                accumulatedDist += velocity;
+                // 低速超过 3 帧 或 累积距离过小 时停止
+                if (idleFrameCount > 3 || (idleFrameCount > 1 && accumulatedDist < 2.0f)) {
+                    trailActive = false;
+                    g_hasLastShapePos = false;  // 重置形状拖尾位置
+                    accumulatedDist = 0.0f;
+                }
+            } else {
+                idleFrameCount = 0;
+                accumulatedDist = 0.0f;
+            }
+        }
+        if (trailActive) {
             POINT np = {renderPos.x - vX, renderPos.y - vY};
             g_history.push_front(np);
             while (g_history.size() > (size_t)g_tailLength)
@@ -2071,6 +3262,10 @@ static void RenderFrame() {
             ApplyFunctionDeformation(smoothed, dwTime);
         else if (g_trailShape == 3)
             ApplyWaveDeformation(smoothed, dwTime);
+        else if (g_trailShape == 7)
+            ApplySpiralDeformation(smoothed, dwTime);
+        else if (g_trailShape == 8)
+            ApplyLightningDeformation(smoothed, dwTime);
     }
 
     // ===== 运动模糊：保存当前路径到历史缓冲区（仅锥形带模式，避免切换形状后残留旧帧）=====
@@ -2087,7 +3282,7 @@ static void RenderFrame() {
 
     // ===== 粒子释放（基于 smoothed 路径的指定位置）=====
     if (g_particleMode > 0 && havePath && dwTime - g_lastParticleTime >= (DWORD)g_particleInterval) {
-        bool spawnOK = (g_particleMode == 1) ? !isSmearing : true;
+        bool spawnOK = (g_particleMode == 1) ? !trailActive : true;
         if (spawnOK) {
             float ratio;
             switch (g_particleOrigin) {
@@ -2212,7 +3407,7 @@ static void RenderFrame() {
                                             [&](const TrailShape &s) { return dwTime - s.startTime > (DWORD)s.lifetime; }),
                              g_trailShapes.end());
 
-    bool tailVisible = (isSmearing || g_history.size() >= 2) && g_fadeAlpha > 0.02f;
+    bool tailVisible = (trailActive || g_history.size() >= 2) && g_fadeAlpha > 0.02f;
     bool isDrawing = tailVisible || !g_ripples.empty() || !g_particles.empty() || !g_trailShapes.empty();
 
     if (isDrawing) {
@@ -2221,7 +3416,7 @@ static void RenderFrame() {
             ShowWindowAsync(g_overlayHwnd, SW_SHOWNA);
             isWindowVisible = true;
         }
-    } else if (!needsClear) {
+    } else if (!surfaceDirty) {
         hideDelayCounter++;
         if (hideDelayCounter >= 3 && isWindowVisible) {
             ShowWindowAsync(g_overlayHwnd, SW_HIDE);
@@ -2230,7 +3425,7 @@ static void RenderFrame() {
     } else {
         hideDelayCounter = 0;
     }
-    if (!isDrawing && !needsClear)
+    if (!isDrawing && !surfaceDirty)
         return;
 
     if (!g_pSwapChain || !g_pD2DTargetBitmap || g_cachedVW != vW || g_cachedVH != vH) {
@@ -2239,6 +3434,28 @@ static void RenderFrame() {
     if (!g_pD2DDC || !g_pD2DTargetBitmap)
         return;
 
+    // v3：原生 D3D11 渲染路径（锥形拖尾 + 粒子）
+    bool useNative = g_pNativeVS != nullptr;  // v3：所有拖尾形状都支持原生渲染
+    if (useNative) {
+        if (NativeRenderFrame(vW, vH, smoothed, tailVisible, cols, widthMul, g_fadeAlpha, dwTime, vX, vY)) {
+            // 原生渲染成功：所有效果（拖尾、粒子、形状、点击、运动模糊）均用 D3D11 原生渲染
+            // 无需 D2D1 后处理
+
+            if (g_pSwapChain) {
+                HRESULT presHr = g_pSwapChain->Present(1, 0);
+                if (presHr == DXGI_ERROR_DEVICE_REMOVED || presHr == DXGI_ERROR_DEVICE_RESET) {
+                    g_deviceLost.store(true);
+                    return;
+                }
+            }
+            if (g_pDCompDevice) g_pDCompDevice->Commit();
+            if (!trailActive && g_history.empty() && g_ripples.empty() && g_particles.empty() && g_trailShapes.empty())
+                surfaceDirty = false;
+            return;
+        }
+        // 原生渲染失败，回退到 D2D1
+    }
+
     g_pD2DDC->SetTarget(g_pD2DTargetBitmap);
     g_pD2DDC->BeginDraw();
     g_pD2DDC->Clear(D2D1::ColorF(0, 0, 0, 0));
@@ -2246,19 +3463,19 @@ static void RenderFrame() {
     // ===== 粒子渲染 =====
     if (!g_particles.empty()) {
         RenderParticles(dwTime);
-        needsClear = true;
+        surfaceDirty = true;
     }
 
     // ===== 形状拖尾渲染 =====
     if (!g_trailShapes.empty()) {
         RenderTrailShapes(dwTime);
-        needsClear = true;
+        surfaceDirty = true;
     }
 
     // ===== 运动模糊历史帧渲染 =====
     if (g_enableMotionBlur && tailVisible && havePath && g_trailHistory.size() > 1) {
         RenderMotionBlur(widthMul, cols, g_fadeAlpha);
-        needsClear = true;
+        surfaceDirty = true;
     }
 
     // ===== 拖尾（复用已计算的 smoothed 路径）=====
@@ -2375,7 +3592,7 @@ static void RenderFrame() {
             }
             g_pSolidOuterBrush->SetOpacity(1);
             g_pSolidInnerBrush->SetOpacity(1);
-            needsClear = true;
+            surfaceDirty = true;
         } else {
             // ===== 多边形带状 =====
             size_t sl = smoothed.size();
@@ -2482,14 +3699,14 @@ static void RenderFrame() {
                 g_pD2DDC->FillEllipse(D2D1::Ellipse(smoothed[0], 2.8f, 2.8f), g_pSolidInnerBrush);
                 g_pSolidInnerBrush->SetOpacity(1.0f);
             }
-            needsClear = true;
+            surfaceDirty = true;
         }
     }
 
     // ===== 点击波纹渲染 =====
     if (g_enableClickEffect && !g_ripples.empty()) {
         RenderClickRipples(dwTime, cols, vX, vY);
-        needsClear = true;
+        surfaceDirty = true;
     }
 
     HRESULT hr = g_pD2DDC->EndDraw();
@@ -2508,8 +3725,8 @@ static void RenderFrame() {
     }
     if (g_pDCompDevice)
         g_pDCompDevice->Commit();
-    if (!isSmearing && g_history.empty() && g_ripples.empty() && g_particles.empty() && g_trailShapes.empty())
-        needsClear = false;
+    if (!trailActive && g_history.empty() && g_ripples.empty() && g_particles.empty() && g_trailShapes.empty())
+        surfaceDirty = false;
 }
 
 // ===================== 粒子形状几何 =====================
@@ -2598,6 +3815,7 @@ static void ReleaseAllRenderResources() {
     g_cachedVW = 0;
     g_cachedVH = 0;
     g_trailHistory.clear();  // 清除运动模糊历史帧，避免恢复后渲染旧坐标
+    ReleaseNativeRendering();  // 释放 D3D11 原生渲染资源
 }
 
 static bool InitAllRenderResources() {
@@ -2654,6 +3872,10 @@ static bool InitAllRenderResources() {
 
     // ---- 交换链 ----
     RecreateSwapChain(g_virtW, g_virtH);
+
+    // ---- D3D11 原生渲染初始化（v3）----
+    InitNativeRendering();
+
     Wh_Log(L"Recover: resources reinitialized");
     return true;
 }
@@ -2663,7 +3885,9 @@ static void UpdateVirtualScreenCache() {
     g_virtX = GetSystemMetrics(SM_XVIRTUALSCREEN);
     g_virtY = GetSystemMetrics(SM_YVIRTUALSCREEN);
     g_virtW = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    g_virtH = GetSystemMetrics(SM_CYVIRTUALSCREEN) - 1;
+    g_virtH = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    // 高度减 1 避免与 DWM 合成边界完全重合导致的渲染问题
+    if (g_virtH > 1) g_virtH -= 1;
 }
 static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_DISPLAYCHANGE) {
@@ -2805,6 +4029,11 @@ DWORD WINAPI RenderThreadProc(LPVOID) {
     }
     // mesh 每帧动态创建（ID2D1Mesh 只写一次），此处不预创建
 
+    // ---- D3D11 原生渲染初始化（v3）----
+    if (!InitNativeRendering()) {
+        Wh_Log(L"RenderThread: Native D3D11 rendering init FAILED, falling back to D2D1");
+    }
+
     // ---- DirectComposition（DComp API 线程安全，可在渲染线程创建）----
     if (g_pDXGIDevice) {
         DCompositionCreateDevice(g_pDXGIDevice, __uuidof(IDCompositionDevice), (void **)&g_pDCompDevice);
@@ -2874,6 +4103,7 @@ DWORD WINAPI RenderThreadProc(LPVOID) {
     if (g_pDXGIDevice) { g_pDXGIDevice->Release(); g_pDXGIDevice = nullptr; }
     if (g_pD3DContext) { g_pD3DContext->Release(); g_pD3DContext = nullptr; }
     if (g_pD3DDevice) { g_pD3DDevice->Release(); g_pD3DDevice = nullptr; }
+    ReleaseNativeRendering();  // 释放 D3D11 原生渲染资源
     CoUninitialize();
     return 0;
 }
