@@ -1712,9 +1712,7 @@ static void NativeRenderTrail(const std::vector<D2D1_POINT_2F>& smoothed, float 
                          1,1,1, fadeAlpha, ratio});
     }
 
-    // 更新顶点缓冲（限制最大顶点数，防止溢出）
-    const int maxVerts = 4096;
-    if ((int)verts.size() > maxVerts) verts.resize(maxVerts);
+    // 更新顶点缓冲
     D3D11_MAPPED_SUBRESOURCE mapped;
     if (FAILED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
     memcpy(mapped.pData, verts.data(), verts.size() * sizeof(VertexPosColor));
@@ -1737,170 +1735,6 @@ static void NativeRenderTrail(const std::vector<D2D1_POINT_2F>& smoothed, float 
 
     // 绘制外带
     g_pD3DContext->Draw((UINT)verts.size(), 0);
-}
-
-// ---- 形状拖尾原生渲染（v3）----
-struct ShapeInstance {
-    float x, y;       // 位置
-    float r, g, b, a; // 颜色
-    float size;       // 大小
-    float rotation;   // 旋转角度
-    int shapeType;    // 0=圆, 1=星, 2=六芒星, 3=爱心
-};
-
-ID3D11Buffer* g_pShapeVB = nullptr;       // 形状顶点缓冲（每种形状的基础顶点）
-ID3D11Buffer* g_pShapeInstanceBuf = nullptr; // 形状实例缓冲
-
-// 生成形状顶点（三角形列表）
-static std::vector<float> GenerateShapeVerts(int shapeType) {
-    std::vector<float> verts;
-    const int segments = 32;
-    if (shapeType == 0) { // 圆
-        for (int i = 0; i < segments; i++) {
-            float a1 = (i / (float)segments) * 6.28318f;
-            float a2 = ((i + 1) / (float)segments) * 6.28318f;
-            verts.push_back(0); verts.push_back(0);
-            verts.push_back(cosf(a1)); verts.push_back(sinf(a1));
-            verts.push_back(cosf(a2)); verts.push_back(sinf(a2));
-        }
-    } else if (shapeType == 1) { // 五角星
-        for (int i = 0; i < 5; i++) {
-            float a1 = (i / 5.0f) * 6.28318f - 1.5708f;
-            float a2 = ((i + 0.5f) / 5.0f) * 6.28318f - 1.5708f;
-            float a3 = ((i + 1) / 5.0f) * 6.28318f - 1.5708f;
-            verts.push_back(0); verts.push_back(0);
-            verts.push_back(cosf(a1)); verts.push_back(sinf(a1));
-            verts.push_back(0.4f * cosf(a2)); verts.push_back(0.4f * sinf(a2));
-            verts.push_back(0); verts.push_back(0);
-            verts.push_back(0.4f * cosf(a2)); verts.push_back(0.4f * sinf(a2));
-            verts.push_back(cosf(a3)); verts.push_back(sinf(a3));
-        }
-    } else if (shapeType == 2) { // 六芒星（两个三角形）
-        // 上三角
-        verts.push_back(0); verts.push_back(-1);
-        verts.push_back(-0.866f); verts.push_back(0.5f);
-        verts.push_back(0.866f); verts.push_back(0.5f);
-        // 下三角
-        verts.push_back(0); verts.push_back(1);
-        verts.push_back(-0.866f); verts.push_back(-0.5f);
-        verts.push_back(0.866f); verts.push_back(-0.5f);
-    } else if (shapeType == 3) { // 爱心（近似）
-        for (int i = 0; i < segments; i++) {
-            float t = (i / (float)segments) * 6.28318f;
-            float t2 = ((i + 1) / (float)segments) * 6.28318f;
-            float x1 = 16 * powf(sinf(t), 3) / 16.0f;
-            float y1 = -(13 * cosf(t) - 5 * cosf(2*t) - 2 * cosf(3*t) - cosf(4*t)) / 16.0f;
-            float x2 = 16 * powf(sinf(t2), 3) / 16.0f;
-            float y2 = -(13 * cosf(t2) - 5 * cosf(2*t2) - 2 * cosf(3*t2) - cosf(4*t2)) / 16.0f;
-            verts.push_back(0); verts.push_back(0);
-            verts.push_back(x1); verts.push_back(y1);
-            verts.push_back(x2); verts.push_back(y2);
-        }
-    }
-    return verts;
-}
-
-static bool InitShapeRendering() {
-    if (!g_pD3DDevice) return false;
-
-    // 合并所有形状的顶点（每种形状最多 64 个顶点）
-    std::vector<float> allVerts;
-    int offsets[4] = {0, 0, 0, 0};
-    int counts[4] = {0, 0, 0, 0};
-    for (int i = 0; i < 4; i++) {
-        offsets[i] = (int)allVerts.size() / 2;
-        auto v = GenerateShapeVerts(i);
-        counts[i] = (int)v.size() / 2;
-        allVerts.insert(allVerts.end(), v.begin(), v.end());
-    }
-
-    D3D11_BUFFER_DESC vbDesc = {};
-    vbDesc.ByteWidth = (UINT)(allVerts.size() * sizeof(float));
-    vbDesc.Usage = D3D11_USAGE_IMMUTABLE;
-    vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-    D3D11_SUBRESOURCE_DATA data = {allVerts.data(), 0, 0};
-    g_pD3DDevice->CreateBuffer(&vbDesc, &data, &g_pShapeVB);
-
-    // 实例缓冲（最大 500 个形状）
-    D3D11_BUFFER_DESC instDesc = {};
-    instDesc.ByteWidth = sizeof(ShapeInstance) * 500;
-    instDesc.Usage = D3D11_USAGE_DYNAMIC;
-    instDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-    instDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-    g_pD3DDevice->CreateBuffer(&instDesc, nullptr, &g_pShapeInstanceBuf);
-
-    return true;
-}
-
-static void ReleaseShapeRendering() {
-    if (g_pShapeVB) { g_pShapeVB->Release(); g_pShapeVB = nullptr; }
-    if (g_pShapeInstanceBuf) { g_pShapeInstanceBuf->Release(); g_pShapeInstanceBuf = nullptr; }
-}
-
-static void NativeRenderShapes(int screenW, int screenH, DWORD dwTime) {
-    if (!g_pShapeVB || !g_pShapeInstanceBuf || g_trailShapes.empty()) return;
-
-    // 更新实例缓冲
-    D3D11_MAPPED_SUBRESOURCE mapped;
-    if (FAILED(g_pD3DContext->Map(g_pShapeInstanceBuf, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
-    ShapeInstance* instances = (ShapeInstance*)mapped.pData;
-    int count = 0;
-    for (auto &s : g_trailShapes) {
-        float progress = (float)(dwTime - s.startTime) / s.lifetime;
-        if (progress < 0 || progress >= 1) continue;
-        float lifeAlpha = (1.0f - progress);
-        instances[count].x = s.x;
-        instances[count].y = s.y;
-        instances[count].r = s.color.r;
-        instances[count].g = s.color.g;
-        instances[count].b = s.color.b;
-        instances[count].a = lifeAlpha * 0.7f;
-        instances[count].size = s.size * (1.0f + progress * 0.5f);
-        instances[count].rotation = 0;  // TrailShape 没有 rotation，暂时设为 0
-        instances[count].shapeType = s.shapeType;
-        count++;
-        if (count >= 500) break;
-    }
-    g_pD3DContext->Unmap(g_pShapeInstanceBuf, 0);
-    if (count == 0) return;
-
-    // 设置渲染状态（复用粒子着色器，但需要支持旋转和形状类型）
-    // 暂时使用通用着色器，后续优化
-    UpdateConstantBuffer(screenW, screenH);
-    g_pD3DContext->IASetInputLayout(g_pParticleLayout);
-    g_pD3DContext->VSSetShader(g_pParticleVS, nullptr, 0);
-    g_pD3DContext->PSSetShader(g_pParticlePS, nullptr, 0);
-    g_pD3DContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
-    g_pD3DContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
-    g_pD3DContext->RSSetState(g_pRasterState);
-    g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
-
-    // 按形状类型分组绘制
-    int counts[4] = {96, 20, 6, 96}; // 圆=32*3, 星=5*6, 六芒星=6, 爱心=32*3
-
-    for (int shapeType = 0; shapeType < 4; shapeType++) {
-        // 统计该类型的实例数量（简化处理，实际应分组）
-        int shapeCount = 0;
-        for (int i = 0; i < count; i++) {
-            if (instances[i].shapeType == shapeType) shapeCount++;
-        }
-        if (shapeCount == 0) continue;
-
-        // 绑定形状顶点缓冲
-        UINT stride = 2 * sizeof(float);
-        UINT offset = 0;
-        // 计算该形状在合并缓冲中的偏移
-        int vertexOffset = 0;
-        for (int i = 0; i < shapeType; i++) vertexOffset += counts[i];
-        g_pD3DContext->IASetVertexBuffers(0, 1, &g_pShapeVB, &stride, &offset);
-        stride = sizeof(ShapeInstance);
-        g_pD3DContext->IASetVertexBuffers(1, 1, &g_pShapeInstanceBuf, &stride, &offset);
-        g_pD3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-        // 绘制（简化：绘制所有实例，实际应只绘制该类型）
-        // TODO: 优化为按类型分组的实例缓冲
-        g_pD3DContext->DrawInstanced(counts[shapeType], count, vertexOffset, 0);
-    }
 }
 
 // 形状拖尾原生渲染（v3）：直接生成世界坐标顶点，一次绘制
@@ -2075,9 +1909,6 @@ static bool NativeRenderFrame(int screenW, int screenH, const std::vector<D2D1_P
                               DWORD dwTime, int vX, int vY) {
     if (!g_pNativeVS || !g_pD3DContext || !g_pD2DTargetBitmap) return false;
 
-    // 确保 D2D 操作完成，再用 D3D 原生渲染到同一 surface
-    if (g_pD2DDC) g_pD2DDC->Flush();
-
     // 获取 D3D11 渲染目标视图（从 D2D1 bitmap 获取底层 DXGI surface）
     IDXGISurface* pSurface = nullptr;
     if (FAILED(g_pD2DTargetBitmap->GetSurface(&pSurface))) return false;
@@ -2108,8 +1939,10 @@ static bool NativeRenderFrame(int screenW, int screenH, const std::vector<D2D1_P
     }
 
     // 2. 拖尾带渲染（顶点缓冲）
-    // 锥形(0)、函数曲线(2)、波形曲线(3) 直接渲染
+    // 锥形(0)、函数曲线(2)、波形曲线(3)、螺旋(7)、闪电(8)、羽毛(9) 直接渲染
     // 点链(1) 用小锥形段近似
+    // 双线(5) 渲染两条偏移的带
+    // 虚线(6) 分段渲染
     // 形状拖尾(4) 不渲染带
     if (tailVisible && !smoothed.empty() && g_trailShape != 4) {
         if (g_trailShape == 1) {
@@ -2122,9 +1955,41 @@ static bool NativeRenderFrame(int screenW, int screenH, const std::vector<D2D1_P
                 D2D1_POINT_2F p = GetPointOnPath(smoothed, t);
                 dots.push_back(p);
             }
-            // 用很窄的锥形段连接点，模拟点链
             NativeRenderTrail(dots, widthMul * 0.3f, cols, fadeAlpha, screenW, screenH, dwTime);
+        } else if (g_trailShape == 5) {
+            // 双线拖尾：渲染两条偏移的带
+            std::vector<D2D1_POINT_2F> line1, line2;
+            float offset = 4.0f;
+            for (size_t i = 0; i < smoothed.size(); i++) {
+                float ddx, ddy;
+                if (i == 0) { ddx = smoothed[1].x - smoothed[0].x; ddy = smoothed[1].y - smoothed[0].y; }
+                else if (i == smoothed.size() - 1) { ddx = smoothed[i].x - smoothed[i-1].x; ddy = smoothed[i].y - smoothed[i-1].y; }
+                else { ddx = smoothed[i+1].x - smoothed[i-1].x; ddy = smoothed[i+1].y - smoothed[i-1].y; }
+                float ln = sqrtf(ddx*ddx + ddy*ddy);
+                if (ln > 0) { ddx /= ln; ddy /= ln; }
+                float nx = -ddy, ny = ddx;
+                line1.push_back({smoothed[i].x + nx * offset, smoothed[i].y + ny * offset});
+                line2.push_back({smoothed[i].x - nx * offset, smoothed[i].y - ny * offset});
+            }
+            NativeRenderTrail(line1, widthMul * 0.5f, cols, fadeAlpha, screenW, screenH, dwTime);
+            NativeRenderTrail(line2, widthMul * 0.5f, cols, fadeAlpha, screenW, screenH, dwTime);
+        } else if (g_trailShape == 6) {
+            // 虚线拖尾：分段渲染（每隔一段跳过一段）
+            std::vector<D2D1_POINT_2F> segment;
+            int segLen = 8;
+            for (size_t i = 0; i < smoothed.size(); i++) {
+                segment.push_back(smoothed[i]);
+                if ((i + 1) % segLen == 0) {
+                    if (segment.size() >= 2)
+                        NativeRenderTrail(segment, widthMul, cols, fadeAlpha, screenW, screenH, dwTime);
+                    segment.clear();
+                    i += segLen / 2;
+                }
+            }
+            if (segment.size() >= 2)
+                NativeRenderTrail(segment, widthMul, cols, fadeAlpha, screenW, screenH, dwTime);
         } else {
+            // 锥形/函数/波形/螺旋/闪电/羽毛
             NativeRenderTrail(smoothed, widthMul, cols, fadeAlpha, screenW, screenH, dwTime);
         }
     }
