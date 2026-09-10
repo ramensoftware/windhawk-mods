@@ -2,7 +2,7 @@
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Desktop-only taskbar hiding using a dedicated Windhawk tool process
-// @version         5.4.0
+// @version         5.5.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -28,9 +28,11 @@ This Windhawk mod hides selected taskbars when their corresponding display is sh
 
 ## How It Works
 
-For each selected display, the mod checks whether a relevant visible application is present. Supported Windows shell surfaces are excluded from the application check, and shell popups are handled separately during hover dismissal.
+For each selected display, the mod checks whether a relevant visible, non-minimized application is present. Supported Windows shell surfaces and desktop infrastructure are excluded from the normal application check.
 
-When the display is showing only the desktop, its selected taskbar can be hidden. Applications and configured hover reveal control normal visibility, while supported shell popups can extend a hover-revealed taskbar's visible period.
+When a display is showing only the desktop, its selected bottom-docked taskbar can be hidden. An application on that display, taskbar keyboard focus, or supported shell interaction can keep the taskbar visible.
+
+Applications spanning multiple displays are considered for every display they intersect, so each affected display can independently remain visible.
 
 The taskbar is hidden using layered-window transparency rather than Windows' native auto-hide mode, so the mod does not intentionally change the desktop work area.
 
@@ -41,17 +43,19 @@ You can configure independently:
 - Which displays should hide their taskbar on the desktop
 - Which displays should support bottom-edge hover reveal
 
-You can select all displays or individual logical display numbers. The mod also keeps a stable monitor/device association when Windows changes its internal `DISPLAYn` numbering during the current session.
+You can select all displays or individual logical display numbers. The settings use the current logical monitor order rather than the internal Windows `DISPLAYn` device identifier.
+
+The mod keeps a stable monitor/device association when Windows changes its internal `DISPLAYn` numbering during the current session. When a display topology change invalidates an old association, stale selection bindings are reconciled instead of silently following an unrelated monitor.
 
 ## Hover Reveal
 
-For bottom-docked taskbars, moving the cursor into the configured bottom-edge area reveals the taskbar.
+For bottom-docked taskbars, moving the cursor into the configured bottom-edge area reveals the taskbar. The hover zone follows the taskbar's actual height and display scaling, with an optional extra margin.
 
-After the cursor leaves the area, the taskbar hides again after the configured delay.
+After the cursor leaves the area, the taskbar hides again after the configured delay. Moving the cursor between displays also updates which taskbar is currently revealed.
 
-The hover area follows the taskbar height and display scaling, with an optional extra margin in pixels.
+Hover tracking uses a dedicated cursor-sampling thread. It samples faster when hover tracking is needed, backs off when it is not needed, and backs off further after repeated cursor-position failures. Hover-eligible taskbars that would currently be hidden are published to the sampler so cursor-leave detection does not depend solely on the periodic safety poll.
 
-Hover reveal does not apply to taskbars docked to the top or sides.
+Hover reveal does not apply to taskbars docked to the top or sides. Desktop-based hiding also applies only to bottom-docked taskbars.
 
 ## Windows Shell Interactions
 
@@ -65,21 +69,51 @@ Supported shell surfaces include:
 - Notification and Quick Settings surfaces
 - Alt+Tab and related task-switching UI
 
-Shell popups are also checked while a hover-revealed taskbar is waiting to hide, so an open supported popup can keep that revealed taskbar visible.
+Supported shell popup classes are checked during hover dismissal. A supported popup can keep the corresponding taskbar visible while it is being dismissed, and the currently hovered taskbar remains visible during that grace period as well.
+
+The taskbar is also treated as occupied when the taskbar itself is the foreground window, preventing keyboard navigation such as `Win+T`, `Win+B`, or `Win+number` from operating on an invisible taskbar.
+
+## Taskbar State and Recovery
+
+The mod uses `WS_EX_LAYERED` with `SetLayeredWindowAttributes` and alpha 0 to hide the taskbar without changing its normal `ShowWindow` visibility state. It runs the state-management logic in a dedicated `windhawk.exe` tool-mod process rather than injecting a taskbar `ShowWindow` hook into Explorer.
+
+Before hiding a taskbar, the mod records the relevant original extended-window style and layered-window attributes on the taskbar itself. An ownership marker identifies taskbars whose transparency was applied by this mod.
+
+If a taskbar is recreated, the new taskbar is rediscovered and evaluated again. If the dedicated tool process is restarted after an unexpected termination, a new instance can reclaim taskbars still carrying the ownership marker. If another component removes `WS_EX_LAYERED` while the mod still has ownership, the stale ownership data is discarded so the current taskbar state can be captured again safely on a later hide.
 
 ## Multi-Monitor Behavior
 
 Each selected display is evaluated independently. For example, an application can remain open on display 1 while the selected taskbar on display 2 hides because display 2 is showing only the desktop.
 
-Applications spanning multiple displays are considered for each display they intersect.
+An application spanning multiple displays keeps the taskbars on every intersected display visible. A taskbar can also be revealed independently by hovering its own configured bottom-edge area.
+
+The mod supports up to 16 display/taskbar entries and retains the existing logical display numbering system used by the settings UI.
+
+## Performance and Refreshing
+
+The full application and display scan runs in the dedicated tool process rather than inside Explorer.
+
+The mod uses:
+
+- A dedicated worker thread for state management
+- A lightweight cursor-sampling thread for hover detection
+- Event-driven refreshes for relevant foreground, minimize/move, display, theme, settings, and taskbar recreation changes
+- A periodic 250 ms safety poll for missed or unusual transitions
+- A one-shot timer for hover dismissal
+
+The 250 ms safety poll is intentionally retained as a fallback and does not replace the normal event-driven refresh path. Native Windows taskbar auto-hide state is cached and refreshed when settings or relevant shell/taskbar changes occur rather than being queried on every safety tick.
+
+When no displays are configured for desktop-based hiding, the mod skips the application and shell-popup scans and restores any taskbars that may still be hidden by an earlier configuration.
 
 ## Limitations
 
-- Hover reveal is supported only for bottom-docked taskbars.
+- Desktop-based hiding and hover reveal are supported only for bottom-docked taskbars.
 - Hiding the taskbar does not increase the desktop work area, so maximized windows may still leave the normal taskbar space reserved.
 - Windows display device names such as `\\.\DISPLAY1` may differ from the logical display numbers used by the settings UI.
 - The display-selection configuration supports up to 16 display entries.
-- The mod keeps Windows' native taskbar auto-hide setting separate from its own hiding behavior.
+- The mod keeps Windows' native taskbar auto-hide setting separate from its own hiding behavior. If native auto-hide is enabled, this mod does not take over that taskbar.
+- Because the taskbar is made fully transparent, flashing taskbar buttons and tray notifications are not visually available while that taskbar is hidden by the mod.
+- If the dedicated tool process is terminated unexpectedly, a taskbar may remain invisible and click-through until the mod is started again or the taskbar is otherwise recreated; the next mod instance can reclaim marked taskbars.
 - Other taskbar transparency/customization mods that modify the same taskbar window can conflict with this mod.
 - Windows shell window classes and processes can change between Windows releases, so shell-interaction detection may need updates for future Windows versions.
 
@@ -558,7 +592,7 @@ ULONGLONG g_hoverDeadline = 0;
 LONG g_refreshPosted = 0;
 void LoadSettings();
 void WhTool_ModUninit();
-void ArmHoverExpireTimer();
+void ArmHoverExpireTimer(DWORD delayMs);
 void CancelHoverExpireTimer();
 void RestoreAllTaskbars();
 bool WaitForThreadWithTimeout(
@@ -1699,6 +1733,10 @@ bool IsNativeAutoHideEnabled() {
     return (SHAppBarMessage(ABM_GETSTATE, &data) & ABS_AUTOHIDE) != 0;
 }
 
+void RefreshNativeAutoHideState() {
+    g_nativeAutoHideEnabled = IsNativeAutoHideEnabled();
+}
+
 bool ShouldHideTaskbar(
     const TaskbarMonitorState& state
 ) {
@@ -1993,23 +2031,6 @@ bool IsPointNearBottomEdge(
         pt.y < mi.rcMonitor.bottom;
 }
 
-bool IsCursorNearBottomEdge(
-    HWND hTaskbar,
-    HMONITOR cursorMonitor
-) {
-    POINT pt = {};
-
-    if (!GetCursorPos(&pt)) {
-        return false;
-    }
-
-    return IsPointNearBottomEdge(
-        hTaskbar,
-        cursorMonitor,
-        pt
-    );
-}
-
 void UpdateCursorHoverSnapshot() {
     CursorHoverSnapshot snapshots[kMaxTaskbars] = {};
     size_t snapshotCount = 0;
@@ -2021,8 +2042,9 @@ void UpdateCursorHoverSnapshot() {
 
         const TaskbarMonitorState& state = g_taskbarStates[i];
 
-        if (!state.hiddenByMod ||
-            !ShouldRevealOnHover(state) ||
+        if (!ShouldRevealOnHover(state) ||
+            !state.desktopOnly ||
+            !ShouldHideTaskbar(state) ||
             !IsBottomDockedTaskbar(state.hwnd, state.monitor)) {
             continue;
         }
@@ -2186,22 +2208,34 @@ void UpdateTaskbarState() {
         monitors
     );
 
-    // ABM_GETSTATE reports the native auto-hide setting globally. Sample it
-    // once per reconciliation and reuse the result for every taskbar.
-    g_nativeAutoHideEnabled =
-        IsNativeAutoHideEnabled();
+    // If no display is configured for desktop-based hiding, there is no reason
+    // to continue with cursor or shell-popup work. Reconcile any taskbars that
+    // may still be hidden from an earlier configuration before returning.
+    if (!g_settings.hideAllMonitors) {
+        bool anyHideMonitorSelected = false;
+        for (size_t i = 1; i <= kMaxMonitorNumbers; ++i) {
+            if (g_settings.hideMonitor[i]) {
+                anyHideMonitorSelected = true;
+                break;
+            }
+        }
+
+        if (!anyHideMonitorSelected) {
+            g_hoverActive = false;
+            g_hoverMonitor = nullptr;
+            g_hoverDeadline = 0;
+            CancelHoverExpireTimer();
+            ApplyBaseTaskbarState();
+            UpdateCursorHoverSnapshot();
+            return;
+        }
+    }
 
     WindowScanResult scan = {};
-    ShellPopupScanResult shellPopups = {};
 
     ScanWindowsOnce(
         monitors,
         scan
-    );
-
-    ScanVisibleShellPopupsOnce(
-        monitors,
-        shellPopups
     );
 
     for (size_t i = 0; i < g_taskbarStateCount; ++i) {
@@ -2227,6 +2261,14 @@ void UpdateTaskbarState() {
             }
         }
 
+    }
+
+    HWND foreground = GetForegroundWindow();
+    for (size_t i = 0; i < g_taskbarStateCount; ++i) {
+        if (g_taskbarStates[i].hwnd == foreground) {
+            g_taskbarStates[i].desktopOnly = false;
+            break;
+        }
     }
 
     POINT cursorPoint = {};
@@ -2265,9 +2307,10 @@ void UpdateTaskbarState() {
         cursorTaskbar &&
         cursorMonitor &&
         cursorHoverConfigured &&
-        IsCursorNearBottomEdge(
+        IsPointNearBottomEdge(
             cursorTaskbar,
-            cursorMonitor
+            cursorMonitor,
+            cursorPoint
         );
 
     if (hovering) {
@@ -2288,8 +2331,8 @@ void UpdateTaskbarState() {
             );
         }
 
-        // Snapshot the state after visibility reconciliation. The cursor sampler
-        // must see the taskbars that are actually hidden by the mod.
+        // Publish hover-eligible taskbars that would be hidden so the cursor
+        // sampler can also detect the cursor leaving a revealed hover zone.
         UpdateCursorHoverSnapshot();
         return;
     }
@@ -2303,7 +2346,7 @@ void UpdateTaskbarState() {
                 now +
                 g_settings.autoHideDelayMs;
 
-            ArmHoverExpireTimer();
+            ArmHoverExpireTimer(g_settings.autoHideDelayMs);
         }
 
         if (now < g_hoverDeadline) {
@@ -2322,6 +2365,12 @@ void UpdateTaskbarState() {
             UpdateCursorHoverSnapshot();
             return;
         }
+
+        ShellPopupScanResult shellPopups = {};
+        ScanVisibleShellPopupsOnce(
+            monitors,
+            shellPopups
+        );
 
         bool shellPopupPresent = false;
         for (size_t i = 0; i < g_taskbarStateCount; ++i) {
@@ -2357,6 +2406,7 @@ void UpdateTaskbarState() {
 
                 SetTaskbarState(
                     state,
+                    state.monitor == g_hoverMonitor ||
                     !state.desktopOnly ||
                     !ShouldHideTaskbar(state) ||
                     shellPopupOnMonitor
@@ -2364,7 +2414,7 @@ void UpdateTaskbarState() {
             }
 
             g_hoverDeadline = now + 100;
-            ArmHoverExpireTimer();
+            ArmHoverExpireTimer(100);
             UpdateCursorHoverSnapshot();
             return;
         }
@@ -2394,15 +2444,12 @@ void UpdateTaskbarState() {
     UpdateCursorHoverSnapshot();
 }
 
-void ArmHoverExpireTimer() {
+void ArmHoverExpireTimer(DWORD delayMs) {
     if (!g_workerMessageWindow) {
         return;
     }
 
-    UINT delay =
-        g_settings.autoHideDelayMs == 0
-            ? 1
-            : g_settings.autoHideDelayMs;
+    UINT delay = delayMs == 0 ? 1 : delayMs;
 
     SetTimer(
         g_workerMessageWindow,
@@ -2584,6 +2631,13 @@ LRESULT CALLBACK WorkerMessageWindowProc(
         message == WM_SETTINGCHANGE ||
         message == WM_THEMECHANGED
     ) {
+        if (
+            message == g_taskbarCreatedMessage ||
+            message == WM_SETTINGCHANGE
+        ) {
+            RefreshNativeAutoHideState();
+        }
+
         PostRefresh();
         return 0;
     }
@@ -2793,21 +2847,13 @@ DWORD WINAPI WorkerThread(
 
                     UpdateTaskbarState();
 
-            // Do not lose a refresh posted while UpdateTaskbarState() ran.
-            if (InterlockedExchange(
-                    &g_refreshPosted,
-                    0
-                ) != 0) {
-                PostRefresh();
-            }
-
             continue;
         }
 
         if (msg.message == WM_APP_SETTINGS) {
             LoadSettings();
-                    UpdateTaskbarState();
-
+            RefreshNativeAutoHideState();
+            UpdateTaskbarState();
 
             continue;
         }
@@ -2986,6 +3032,10 @@ BOOL WhTool_ModInit() {
     // ShouldHideMonitor() returns false even when the UI says "All displays".
     LoadSettings();
 
+    // Cache the native auto-hide setting at startup. It is refreshed only when
+    // settings or shell/taskbar recreation messages indicate it may have changed.
+    RefreshNativeAutoHideState();
+
     // Recover ownership left by an unexpectedly terminated previous tool
     // process before the new worker starts making visibility decisions.
     RestoreAllTaskbars();
@@ -3035,6 +3085,20 @@ BOOL WhTool_ModInit() {
         );
 
         RestoreAllTaskbars();
+
+        if (g_workerThread) {
+            if (!PostThreadMessageW(
+                    g_workerThreadId,
+                    WM_QUIT,
+                    0,
+                    0
+                )) {
+                Wh_Log(
+                    L"PostThreadMessageW(WM_QUIT) during startup cleanup failed: %lu",
+                    GetLastError()
+                );
+            }
+        }
 
         if (!WaitForThreadWithTimeout(
                 g_workerThread,
