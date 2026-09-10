@@ -578,7 +578,8 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    // SnapLayout.dll
+    WindhawkUtils::SYMBOL_HOOK snapLayoutDllHooks[] = {
 
         {
             {
@@ -619,8 +620,8 @@ BOOL Wh_ModInit()
 
     if (!WindhawkUtils::HookSymbols(
             g_snapLayoutModule,
-            hooks,
-            ARRAYSIZE(hooks)))
+            snapLayoutDllHooks,
+            ARRAYSIZE(snapLayoutDllHooks)))
     {
         Wh_Log(
             L"Failed to resolve one or more SnapLayout.dll symbols"
