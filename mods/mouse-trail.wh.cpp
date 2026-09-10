@@ -1833,7 +1833,8 @@ static void NativeRenderParticles(int screenW, int screenH) {
         float sizeScale = sinf(progress * 3.14159f) * 0.7f + 0.3f;
         instances[count].size = p.size * 2.0f * (g_particleSizeMultiplier / 100.0f) * sizeScale;
         instances[count].shapeType = (float)p.shapeType;
-        instances[count].rotation = p.rotation;
+        // 调试：使用基于索引的旋转角度 + 粒子自身的 rotation，确认数据传递正常
+        instances[count].rotation = p.rotation + (float)count * 0.3f;
         count++;
         if (count >= 2000) break;
     }
