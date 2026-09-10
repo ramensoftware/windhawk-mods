@@ -14,7 +14,8 @@
 /*
 # Windows 11 Native Four Column Snap Layout
 
-Add an extra native Windows 11 Snap Layout with four equal vertical columns
+Add an extra native Windows 11 Snap Layout with four equal vertical columns. This is especially useful on ultrawide monitors, where four equal vertical
+zones make better use of the available horizontal screen space.
 
 ![Windows 11 four-column Snap Layout](https://i.imgur.com/a3sGZSk.png)
 
