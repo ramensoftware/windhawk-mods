@@ -1797,19 +1797,11 @@ static void NativeRenderTrailShapes(int screenW, int screenH, DWORD dwTime) {
             }
         }
 
-        // 2.5D 旋转角度：基于时间和形状生命周期，模拟 3D 翻转
-        float rotAngle = (dwTime - s.startTime) * 0.003f + s.x * 0.01f;
-        float cosR = cosf(rotAngle);
-        float sinR = sinf(rotAngle);
-
-        // 变换到世界坐标并添加到顶点列表（应用 2.5D Y 轴旋转）
+        // 变换到世界坐标并添加到顶点列表（2D 平面渲染）
         for (size_t i = 0; i < shapeVerts.size(); i += 2) {
             float lx = shapeVerts[i] * size;
             float ly = shapeVerts[i + 1] * size;
-            // Y 轴旋转：x 坐标缩放，深度变化
-            float rx = lx * cosR;
-            float depth = lx * sinR * 0.3f;  // 旋转产生的深度
-            verts.push_back({s.x + rx, s.y + ly, depth, cr, cg, cb, lifeAlpha, 0.5f});
+            verts.push_back({s.x + lx, s.y + ly, 0.0f, cr, cg, cb, lifeAlpha, 0.5f});
         }
     }
 
