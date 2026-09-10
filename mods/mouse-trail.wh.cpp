@@ -2112,7 +2112,12 @@ static void SpawnParticles(float x, float y, int count, float speedMin, float sp
             if (st == 0)
                 st = (int)(Rand01() * 3.0f) + 1;  // random: 1=circle,2=star,3=hexagram
         }
-        g_particles.push_back({x, y, cosf(angle) * speed, sinf(angle) * speed, sizeMin + Rand01() * (sizeMax - sizeMin),
+        // 生成位置随机偏移：在生成点周围分布，避免所有粒子从同一点发射
+        float spawnAngle = Rand01() * 6.28318f;
+        float spawnRadius = Rand01() * 8.0f;  // 0-8 像素的随机偏移
+        float px = x + cosf(spawnAngle) * spawnRadius;
+        float py = y + sinf(spawnAngle) * spawnRadius;
+        g_particles.push_back({px, py, cosf(angle) * speed, sinf(angle) * speed, sizeMin + Rand01() * (sizeMax - sizeMin),
                                time, lifeMin + (int)(Rand01() * (lifeMax - lifeMin)), color, endCol, st});
     }
 }
