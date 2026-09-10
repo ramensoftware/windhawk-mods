@@ -17,6 +17,12 @@
 
 A highly customizable mouse cursor trail with native D3D11 rendering, 18 color modes, 10 trail shapes, 2.5D depth effects, particle system, click effects, and cursor color extraction. DirectComposition hardware accelerated, runs as a dedicated process with low CPU usage when idle.
 
+🎬 Demo
+
+| Tapered Trail | Shape Trail | Particle Effects |
+|---|---|---|
+| ![Tapered](https://i.imgur.com/IRU13YW.gif) | ![Shapes](https://i.imgur.com/2rdA6uq.gif) | ![Particles](https://i.imgur.com/ZztfvkS.gif) |
+
 ---
 
 ### Rendering Architecture
