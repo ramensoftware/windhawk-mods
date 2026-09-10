@@ -71,14 +71,12 @@ thread_local bool g_inSnapBarLoad = false;
 thread_local bool g_snapBarCustomAdded = false;
 
 // Set after the normal flyout path successfully appends the custom layout.
-// Thread-local for consistency with the Snap Bar state.
 thread_local bool g_flyoutCustomAdded = false;
 
 // Keep track of SnapLayout.dll so a reference acquired by this mod can be
-// released again when the mod unloads.
+// released when the mod unloads.
 HMODULE g_snapLayoutModule = nullptr;
 bool g_loadedSnapLayoutModule = false;
-
 
 // -----------------------------------------------------------------------------
 // Native functions resolved from SnapLayout.dll
@@ -91,7 +89,6 @@ using Layouts_t = RawVector* (__cdecl*)(
 
 Layouts_t Layouts_Original = nullptr;
 
-
 using EmplaceLayout_t = void* (__cdecl*)(
     void* vectorThis,
     const void* sourceLayout
@@ -99,14 +96,12 @@ using EmplaceLayout_t = void* (__cdecl*)(
 
 EmplaceLayout_t EmplaceLayout_Original = nullptr;
 
-
 using PickerHeight_t = int (__cdecl*)(
     void* thisPtr,
     int* value
 );
 
 PickerHeight_t PickerHeight_Original = nullptr;
-
 
 using SnapBarLoadLayouts_t = void (__cdecl*)(
     void* thisPtr,
@@ -116,7 +111,6 @@ using SnapBarLoadLayouts_t = void (__cdecl*)(
 );
 
 SnapBarLoadLayouts_t SnapBarLoadLayouts_Original = nullptr;
-
 
 // This pass-through hook exists so Windhawk resolves the private vector helper
 // and exposes a callable original/trampoline pointer.
@@ -129,7 +123,6 @@ void* __cdecl EmplaceLayout_Hook(
         sourceLayout
     );
 }
-
 
 int __cdecl PickerHeight_Hook(
     void* thisPtr,
@@ -154,7 +147,6 @@ int __cdecl PickerHeight_Hook(
 
     return hr;
 }
-
 
 void __cdecl SnapBarLoadLayouts_Hook(
     void* thisPtr,
@@ -184,7 +176,6 @@ void __cdecl SnapBarLoadLayouts_Hook(
     g_snapBarCustomAdded =
         previousCustomAdded;
 }
-
 
 // -----------------------------------------------------------------------------
 // Raw SnapLayout / SnapZone helpers
@@ -227,7 +218,6 @@ SIZE_T GetVectorCount(
 
     return bytes / elementSize;
 }
-
 
 SIZE_T GetZoneCount(
     const void* layout)
@@ -281,7 +271,6 @@ SIZE_T GetZoneCount(
     return bytes / kSnapZoneSize;
 }
 
-
 void WriteU32(
     void* base,
     SIZE_T offset,
@@ -293,7 +282,6 @@ void WriteU32(
         sizeof(value)
     );
 }
-
 
 bool IsExpectedSourceLayout(
     const void* layout)
@@ -322,7 +310,6 @@ bool IsExpectedSourceLayout(
         rows == 2 &&
         GetZoneCount(layout) == 4;
 }
-
 
 // -----------------------------------------------------------------------------
 // Convert copied native quadrant layout into four equal columns
@@ -362,8 +349,7 @@ bool PatchToFourColumns(
         return false;
     }
 
-    // SnapLayout grid:
-    // 4 columns × 1 row.
+    // SnapLayout grid: four columns, one row.
     WriteU32(layout, 0x20, 4);
     WriteU32(layout, 0x24, 1);
 
@@ -379,41 +365,20 @@ bool PatchToFourColumns(
     //
     // | 0 | 1 | 2 | 3 |
     //
-    // with each zone spanning exactly one column.
+    // Each zone occupies one equal column.
     for (unsigned int i = 0; i < 4; i++) {
-
         BYTE* zone =
             reinterpret_cast<BYTE*>(zoneFirst) +
             i * kSnapZoneSize;
 
-        WriteU32(
-            zone,
-            0x20,
-            i
-        );
-
-        WriteU32(
-            zone,
-            0x24,
-            0
-        );
-
-        WriteU32(
-            zone,
-            0x28,
-            1
-        );
-
-        WriteU32(
-            zone,
-            0x2C,
-            1
-        );
+        WriteU32(zone, 0x20, i);
+        WriteU32(zone, 0x24, 0);
+        WriteU32(zone, 0x28, 1);
+        WriteU32(zone, 0x2C, 1);
     }
 
     return true;
 }
-
 
 // -----------------------------------------------------------------------------
 // Deep-copy and append one native layout
@@ -436,7 +401,7 @@ bool CloneAndAppendFourColumn(
         );
 
     // Safety check:
-    // this build is expected to return six native layouts.
+    // the supported build is expected to return six native layouts.
     if (count != kNativeLayoutCount ||
         sourceIndex >= count)
     {
@@ -453,7 +418,7 @@ bool CloneAndAppendFourColumn(
         return false;
     }
 
-    // Use SnapLayout.dll's own std::vector insertion helper.
+    // Use SnapLayout.dll's own vector insertion helper.
     //
     // SnapLayout contains non-trivial members such as std::wstring and
     // std::vector<SnapZone>, so a raw memcpy clone would duplicate ownership
@@ -480,7 +445,6 @@ bool CloneAndAppendFourColumn(
         newLayout
     );
 }
-
 
 // -----------------------------------------------------------------------------
 // SnapModel::Layouts hook
@@ -539,7 +503,6 @@ RawVector* __cdecl Layouts_Hook(
 
 }  // namespace
 
-
 // -----------------------------------------------------------------------------
 // Windhawk lifecycle
 // -----------------------------------------------------------------------------
@@ -578,8 +541,7 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
-    // SnapLayout.dll
-    WindhawkUtils::SYMBOL_HOOK snapLayoutDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK snapLayoutHooks[] = {
 
         {
             {
@@ -620,8 +582,8 @@ BOOL Wh_ModInit()
 
     if (!WindhawkUtils::HookSymbols(
             g_snapLayoutModule,
-            snapLayoutDllHooks,
-            ARRAYSIZE(snapLayoutDllHooks)))
+            snapLayoutHooks,
+            ARRAYSIZE(snapLayoutHooks)))
     {
         Wh_Log(
             L"Failed to resolve one or more SnapLayout.dll symbols"
@@ -641,7 +603,6 @@ BOOL Wh_ModInit()
 
     return TRUE;
 }
-
 
 void Wh_ModUninit()
 {
