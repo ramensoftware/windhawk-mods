@@ -2,7 +2,7 @@
 // @id              taskbar-centered-start-split-icons
 // @name            Taskbar Start Button Centered Origin
 // @description     Pins the Start button to true screen-center and splits running-app taskbar buttons into two groups flanking it by which side of the screen each window is on (Windows 11 only; incompatible with "Start button always on the left")
-// @version         0.1.0
+// @version         1.0.0
 // @author          rick
 // @github          https://github.com/rycalvo
 // @include         explorer.exe
@@ -3420,6 +3420,17 @@ DWORD WINAPI BackgroundWorkerThreadProc(LPVOID) {
     // ArmButtonHwndResolveTimer keep it armed afterward only as needed.
     g_buttonHwndResolveTimerId =
         SetTimer(nullptr, 0, 100, ButtonHwndResolveTimerProc);
+    if (!g_buttonHwndResolveTimerId) {
+        // Nothing to reorder here the way SetDragFollowPollInterval
+        // needed: this recovers on its own, since the id stays 0 and the
+        // next kArmResolveNowMsg arms a fresh timer. Logged anyway so a
+        // session whose initial resolve pass simply never happened has an
+        // explanation rather than looking like the resolve chain silently
+        // doing nothing.
+        Wh_Log(L"BackgroundWorkerThreadProc: initial resolve SetTimer "
+               L"failed, error=%lu - waiting for the next arm request",
+               GetLastError());
+    }
 
     // Runs for as long as this thread does, switching between the fast
     // and idle cadences on its own - see DragFollowPollTimerProc's tail.
@@ -3437,9 +3448,43 @@ DWORD WINAPI BackgroundWorkerThreadProc(LPVOID) {
             break;
         }
         if (msg.message == kArmResolveNowMsg) {
-            KillTimer(nullptr, g_buttonHwndResolveTimerId);
-            g_buttonHwndResolveTimerId =
-                SetTimer(nullptr, 0, (UINT)msg.lParam, ButtonHwndResolveTimerProc);
+            // Arm the replacement before killing the old one - the same
+            // ordering, and for the same reason, as
+            // SetDragFollowPollInterval: killing first and then failing to
+            // arm would leave no resolve timer at all. Less severe here
+            // than for the drag-follow poll, since the taskbar thread
+            // re-arms this from several places (a real click, an
+            // ArrangeOverride count change, a subclass install) so it
+            // would recover eventually rather than never - but keeping the
+            // old timer means it recovers on its own schedule instead of
+            // waiting on an unrelated caller, and the failure no longer
+            // passes silently. Killing the old one afterward is safe even
+            // when it is the timer whose callback queued this message:
+            // this thread's own message loop is what dispatches both.
+            UINT_PTR newResolveTimerId = SetTimer(
+                nullptr, 0, (UINT)msg.lParam, ButtonHwndResolveTimerProc);
+            if (!newResolveTimerId) {
+                // Both outcomes are genuinely reachable, so the message
+                // says which one happened rather than assuming. On the
+                // ordinary tick -> re-arm path there is nothing to keep:
+                // ButtonHwndResolveTimerProc is a one-shot that kills
+                // itself and zeroes the id, then lets
+                // ResolvePendingButtonHwnds' ScheduleNextResolveTick
+                // request the next arm. On the event-driven arms - the
+                // UpdateVisualStates debounce, an ArrangeOverride count
+                // change, a subclass install - a timer usually is still
+                // pending, and that one does survive this failure.
+                Wh_Log(L"kArmResolveNowMsg: SetTimer failed, error=%lu - %s",
+                       GetLastError(),
+                       g_buttonHwndResolveTimerId
+                           ? L"keeping the existing resolve timer"
+                           : L"no resolve timer is currently armed");
+                continue;
+            }
+            if (g_buttonHwndResolveTimerId) {
+                KillTimer(nullptr, g_buttonHwndResolveTimerId);
+            }
+            g_buttonHwndResolveTimerId = newResolveTimerId;
             continue;
         }
         TranslateMessage(&msg);
