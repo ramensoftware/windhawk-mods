@@ -12822,7 +12822,7 @@
           0
         ],
         "ratingUsers": 1,
-        "updated": 1788628434000,
+        "updated": 1789047045000,
         "users": 13
       },
       "metadata": {
@@ -12838,7 +12838,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Taskbar Start Button Centered Origin",
-        "version": "0.1.0"
+        "version": "1.0.0"
       }
     },
     "taskbar-classic-menu": {

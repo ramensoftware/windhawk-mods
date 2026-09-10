@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-10T13:26:14.000Z</updated>
+    <updated>2026-09-10T13:30:45.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Start Button Centered Origin 1.0.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-centered-start-split-icons#272c8e5c94ca8de5f6cae88ab69698695abb927b</id>
+        <link href="https://windhawk.net/mods/taskbar-centered-start-split-icons"/>
+        <updated>2026-09-10T13:30:45.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the <code>kArmResolveNowMsg</code> handler in <code>BackgroundWorkerThreadProc</code> dropping a <code>SetTimer</code> failure. It killed the HWND-resolve timer and then discarded <code>SetTimer</code>'s return value, so a failure left no resolve timer running, with nothing logged. It now arms the replacement first and only kills the old one once the new id is known good — the same ordering <code>SetDragFollowPollInterval</code> already uses a few lines away, which is where this was noticed. Milder than that sibling case: the resolve timer is re-armed from several independent places on the taskbar thread (a real click, an <code>ArrangeOverride</code> count change, a subclass install), so losing it meant "recovers whenever something unrelated nudges it" rather than "never recovers". It now recovers on its own schedule, and a failure is logged rather than swallowed.</li>
+</ul>]]></content>
+        <author>
+            <name>rick</name>
+            <uri>https://github.com/rycalvo</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Control Panel Revival 1.0.0]]></title>
         <id>https://windhawk.net/mods/control-panel-revival#45a16be6974ea488dcd5464d0a8bd3aebd01bae7</id>
@@ -700,20 +713,6 @@ attribution look busier than expected.</li>
         <author>
             <name>Narayan</name>
             <uri>https://github.com/NarayanChetri</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Widget Board Size and Position 0.1.1]]></title>
-        <id>https://windhawk.net/mods/widget-board-size-position#f157de8be1492b6a69025eda9e8a22f5caad47b7</id>
-        <link href="https://windhawk.net/mods/widget-board-size-position"/>
-        <updated>2026-09-05T15:13:31.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated the author's GitHub profile URL after the username changed from <code>Meteony</code> to <code>Meteoni</code>.</li>
-<li>Updated screenshot and GIF URLs to use the renamed <code>Meteoni/meteoni-assets</code> repository.</li>
-</ul>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteoni</uri>
         </author>
     </entry>
 </feed>
