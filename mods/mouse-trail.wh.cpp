@@ -2358,6 +2358,8 @@ static void SpawnParticles(float x, float y, int count, float speedMin, float sp
         p.endColor = endCol;
         p.shapeType = st;
         p.z = (Rand01() - 0.5f) * 0.8f;  // 生成时随机深度，避免每帧闪烁
+        p.rotation = Rand01() * 6.28318f;  // 随机初始旋转角度
+        p.spinSpeed = (Rand01() - 0.5f) * 0.15f;  // 随机自旋转速度 ±0.15 rad/帧
         p.colorOffset[0] = (Rand01() - 0.5f) * 0.16f;
         p.colorOffset[1] = (Rand01() - 0.5f) * 0.16f;
         p.colorOffset[2] = (Rand01() - 0.5f) * 0.16f;
@@ -3596,6 +3598,32 @@ static void RenderFrame() {
         g_particles.erase(g_particles.begin(), g_particles.begin() + (g_particles.size() - particleCap));
     }
     g_prevVelocity = velocity;
+
+    // ===== 粒子间排斥力计算（O(n²)，粒子过多时跳过以保证性能）=====
+    if (g_enableParticleInteraction && !g_particles.empty()) {
+        int pcount = (int)g_particles.size();
+        int maxCalc = g_superPerformanceMode ? 500 : 250;
+        if (pcount <= maxCalc) {
+            float repelDist = (float)g_interParticleRepelDistance;
+            float repelDistSq = repelDist * repelDist;
+            for (int i = 0; i < pcount; i++) {
+                for (int j = i + 1; j < pcount; j++) {
+                    float dx = g_particles[i].x - g_particles[j].x;
+                    float dy = g_particles[i].y - g_particles[j].y;
+                    float distSq = dx * dx + dy * dy;
+                    if (distSq < repelDistSq && distSq > 0.01f) {
+                        float dist = sqrtf(distSq);
+                        float falloff = 1.0f - dist / repelDist;
+                        float force = falloff * g_interParticleRepelForce / dist;
+                        g_particles[i].vx += dx * force;
+                        g_particles[i].vy += dy * force;
+                        g_particles[j].vx -= dx * force;
+                        g_particles[j].vy -= dy * force;
+                    }
+                }
+            }
+        }
+    }
 
     // ===== 粒子物理：摩擦 + 光标排斥力 + 随机扰动 + 全程吸附光标 =====
     float attractTargetX = (float)(renderPos.x - vX + g_tailOffsetX);
