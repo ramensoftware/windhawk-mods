@@ -1514,6 +1514,7 @@ struct ParticleInstance {
     float x, y, z;     // 位置 + 深度
     float r, g, b, a; // 颜色
     float size;       // 大小（半径）
+    float shapeType;  // 0=circle, 1=star, 2=hexagram
 };
 
 // ---- 原生渲染资源 ----
@@ -1579,7 +1580,7 @@ static bool InitNativeRendering() {
         {"TEXCOORD", 2, DXGI_FORMAT_R32_FLOAT, 1, 28, D3D11_INPUT_PER_INSTANCE_DATA, 1},
         {"TEXCOORD", 3, DXGI_FORMAT_R32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 1},
     };
-    g_pD3DDevice->CreateInputLayout(particleLayout, 4, pvsBlob->GetBufferPointer(), pvsBlob->GetBufferSize(), &g_pParticleLayout);
+    g_pD3DDevice->CreateInputLayout(particleLayout, 5, pvsBlob->GetBufferPointer(), pvsBlob->GetBufferSize(), &g_pParticleLayout);
 
     vsBlob->Release(); psBlob->Release(); pvsBlob->Release(); ppsBlob->Release();
 
