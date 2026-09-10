@@ -7,39 +7,38 @@
 // @github          https://github.com/hlsitechio
 // @include         explorer.exe
 // @architecture    x86-64
-// @license         MIT
+// @license         GPL-3.0
 // ==/WindhawkMod==
+
+// Source code is published under The GNU General Public License v3.0.
+//
+// Based on taskbar-notification-icons-show-all by m417z:
+// https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-notification-icons-show-all.wh.cpp
+//
+// Registry path helper from valinet:
+// https://github.com/valinet/wh-mods/blob/61319815c7e018e392a08077dc364559548ade02/mods/valinet-unserver.wh.cpp#L95
 
 // ==WindhawkModReadme==
 /*
 # Always hide all taskbar tray icons in overflow
 
 Keep your Windows 11 taskbar minimal, clean, and distraction-free by automatically collapsing
-all notification area (system tray) icons into the overflow arrow (the `^` chevron flyout).
+all notification area (system tray) icons inside the overflow arrow (the `^` / `<` chevron flyout).
 
 ![Demonstration](https://raw.githubusercontent.com/hlsitechio/windhawk-tray-icons-in-overflow/main/assets/tray-icons-after.png)
 
 ### Features
 - **All icons inside the arrow**: Ensures every third-party notification tray icon stays inside the overflow flyout rather than cluttering the main taskbar.
-- **Configurable modes**:
-  - `hideAll` (Default): All notification icons are forced into the overflow flyout.
-  - `hideNew`: New notification icons are sent to the overflow flyout by default, leaving existing configurations intact.
-- **Zero background overhead**: Hooks the Windows registry queries (`NotifyIconSettings\IsPromoted`) directly inside Explorer without running persistent polling loops.
+- **Pure memory hook**: Hooks the Windows registry query (`NotifyIconSettings\IsPromoted`) directly in `explorer.exe` on read and write, leaving the underlying registry untouched. Disabling the mod immediately restores your original icon layout.
+
+### Notes
+- Dragging an icon out of the overflow flyout onto the taskbar will silently snap back inside the overflow while the mod is active.
+- The toggles in *Settings > Personalization > Taskbar > Other system tray icons* are handled by `SystemSettings.exe`, but the taskbar itself will enforce the collapsed state.
 
 ### Supported Windows Versions
 - Windows 11 only (including 22H2, 23H2, and 24H2).
 */
 // ==/WindhawkModReadme==
-
-// ==WindhawkModSettings==
-/*
-- mode: hideAll
-  $name: Mode
-  $options:
-  - hideAll: All icons are hidden inside the overflow arrow
-  - hideNew: New icons are hidden inside the overflow arrow, existing icons are unaffected
-*/
-// ==/WindhawkModSettings==
 
 #include <ntstatus.h>
 
@@ -47,15 +46,8 @@ all notification area (system tray) icons into the overflow arrow (the `^` chevr
 #include <string_view>
 #include <vector>
 
-enum class Mode {
-    hideAll,
-    hideNew,
-};
-
-struct {
-    Mode mode;
-} g_settings;
-
+// https://github.com/valinet/wh-mods/blob/61319815c7e018e392a08077dc364559548ade02/mods/valinet-unserver.wh.cpp#L95
+// https://stackoverflow.com/questions/937044/determine-path-to-registry-key-from-hkey-handle-in-c
 std::wstring GetPathFromHKEY(HKEY key) {
     std::wstring keyPath;
     if (key) {
@@ -88,6 +80,7 @@ std::wstring GetPathFromHKEY(HKEY key) {
     return keyPath;
 }
 
+// https://stackoverflow.com/a/46931770
 std::vector<std::wstring> SplitStringView(std::wstring_view s,
                                           WCHAR delimiter) {
     size_t pos_start = 0, pos_end;
@@ -129,41 +122,16 @@ LONG WINAPI RegSetValueExW_Hook(HKEY hKey,
                                 DWORD dwType,
                                 CONST BYTE* lpData,
                                 DWORD cbData) {
-    if (g_settings.mode == Mode::hideAll && lpValueName &&
-        _wcsicmp(lpValueName, L"IsPromoted") == 0) {
+    if (lpValueName && _wcsicmp(lpValueName, L"IsPromoted") == 0) {
         auto entry = GetNotifyIconSettingsNameFromRegKey(hKey);
         if (!entry.empty()) {
-            Wh_Log(L"Suppressing promotion for %s, keeping inside overflow", entry.c_str());
+            Wh_Log(L"Suppressing promotion for %s", entry.c_str());
             return ERROR_SUCCESS;
         }
     }
 
     return RegSetValueExW_Original(hKey, lpValueName, Reserved, dwType, lpData,
                                    cbData);
-}
-
-bool SetIsPromoted(PCWSTR entry, DWORD isPromoted) {
-    Wh_Log(L"Writing IsPromoted=%u for %s", isPromoted, entry);
-
-    std::wstring subKey = L"Control Panel\\NotifyIconSettings\\";
-    subKey += entry;
-
-    HKEY key;
-    LONG result =
-        RegOpenKeyEx(HKEY_CURRENT_USER, subKey.c_str(), 0, KEY_SET_VALUE, &key);
-    if (result != ERROR_SUCCESS) {
-        Wh_Log(L"Failed to open %s: %d", subKey.c_str(), result);
-        return false;
-    }
-
-    result = RegSetValueExW_Original(key, L"IsPromoted", 0, REG_DWORD,
-                                     (const BYTE*)&isPromoted, sizeof(isPromoted));
-    if (result != ERROR_SUCCESS) {
-        Wh_Log(L"Failed to write to %s: %d", subKey.c_str(), result);
-    }
-
-    RegCloseKey(key);
-    return result == ERROR_SUCCESS;
 }
 
 using RegGetValueW_t = decltype(&RegGetValueW);
@@ -180,24 +148,13 @@ LONG WINAPI RegGetValueW_Hook(HKEY hkey,
         _wcsicmp(lpValue, L"IsPromoted") == 0) {
         auto entry = GetNotifyIconSettingsNameFromRegKey(hkey);
         if (!entry.empty()) {
-            Wh_Log(L"Checking IsPromoted for %s", entry.c_str());
-
-            if (g_settings.mode != Mode::hideAll) {
-                LONG result = RegGetValueW_Original(
-                    hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
-                if (result != ERROR_FILE_NOT_FOUND) {
-                    return result;
-                }
-
-                Wh_Log(L"No existing IsPromoted value found for %s, setting default 0", entry.c_str());
-                SetIsPromoted(entry.c_str(), 0);
-            }
+            Wh_Log(L"Forcing IsPromoted=0 for %s", entry.c_str());
 
             if (pdwType) {
                 *pdwType = REG_DWORD;
             }
 
-            // 0 = Not promoted, keeps icon inside the overflow chevron arrow
+            // 0 = Not promoted -> keeps icon inside the overflow chevron arrow
             *(DWORD*)pvData = 0;
             *pcbData = sizeof(DWORD);
             return ERROR_SUCCESS;
@@ -253,19 +210,8 @@ void TouchAllNotifyIconSettings() {
     RegCloseKey(hKey);
 }
 
-void LoadSettings() {
-    PCWSTR mode = Wh_GetStringSetting(L"mode");
-    g_settings.mode = Mode::hideAll;
-    if (mode && wcscmp(mode, L"hideNew") == 0) {
-        g_settings.mode = Mode::hideNew;
-    }
-    Wh_FreeStringSetting(mode);
-}
-
 BOOL Wh_ModInit() {
-    Wh_Log(L"> Init");
-
-    LoadSettings();
+    Wh_Log(L">");
 
     HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelBaseModule) {
@@ -296,17 +242,11 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    Wh_Log(L"> AfterInit");
+    Wh_Log(L">");
     TouchAllNotifyIconSettings();
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"> Uninit");
-    TouchAllNotifyIconSettings();
-}
-
-void Wh_ModSettingsChanged() {
-    Wh_Log(L"> SettingsChanged");
-    LoadSettings();
+    Wh_Log(L">");
     TouchAllNotifyIconSettings();
 }
