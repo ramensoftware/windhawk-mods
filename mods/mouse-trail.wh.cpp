@@ -1970,6 +1970,63 @@ static void NativeRenderRipples(int screenW, int screenH, DWORD dwTime, const Gr
 
 static D2D1_POINT_2F GetPointOnPath(const std::vector<D2D1_POINT_2F> &path, float ratio);
 
+// 圆点链渲染：离散圆点，每个点是一个独立的四边形
+static void NativeRenderDotChain(const std::vector<D2D1_POINT_2F>& path, float dotSize,
+                                 const GradData& cols, float fadeAlpha, int screenW, int screenH) {
+    if (!g_pNativeVS || !g_pNativePS || !g_pTrailVB || path.size() < 2) return;
+
+    std::vector<VertexPosColor> verts;
+    verts.reserve(path.size() * 6);  // 每个圆点 6 个顶点（2 个三角形）
+
+    for (size_t i = 0; i < path.size(); i++) {
+        float ratio = (float)i / (path.size() - 1);
+        float taper = powf(1.0f - ratio, 1.3f);
+        float size = dotSize * taper;
+        if (size < 0.5f) continue;
+
+        float x = path[i].x, y = path[i].y;
+        // 从渐变采样颜色
+        D2D1_GRADIENT_STOP gs = cols.outer[(int)(ratio * (GRAD_STOPS - 1))];
+        float r = gs.color.r, g = gs.color.g, b = gs.color.b;
+
+        // 四边形的四个角（两个三角形）
+        // 三角形 1: 左上, 右上, 左下
+        verts.push_back({x - size, y - size, 0, r, g, b, fadeAlpha, ratio});
+        verts.push_back({x + size, y - size, 0, r, g, b, fadeAlpha, ratio});
+        verts.push_back({x - size, y + size, 0, r, g, b, fadeAlpha, ratio});
+        // 三角形 2: 右上, 右下, 左下
+        verts.push_back({x + size, y - size, 0, r, g, b, fadeAlpha, ratio});
+        verts.push_back({x + size, y + size, 0, r, g, b, fadeAlpha, ratio});
+        verts.push_back({x - size, y + size, 0, r, g, b, fadeAlpha, ratio});
+    }
+
+    if (verts.empty()) return;
+    if (verts.size() > 4096) verts.resize(4096);
+
+    // 更新顶点缓冲
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    if (FAILED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
+    memcpy(mapped.pData, verts.data(), verts.size() * sizeof(VertexPosColor));
+    g_pD3DContext->Unmap(g_pTrailVB, 0);
+
+    // 设置渲染状态
+    UpdateConstantBuffer(screenW, screenH, &cols);
+    g_pD3DContext->IASetInputLayout(g_pNativeLayout);
+    g_pD3DContext->VSSetShader(g_pNativeVS, nullptr, 0);
+    g_pD3DContext->PSSetShader(g_pNativePS, nullptr, 0);
+    g_pD3DContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    g_pD3DContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    g_pD3DContext->RSSetState(g_pRasterState);
+    g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
+
+    UINT stride = sizeof(VertexPosColor);
+    UINT offset = 0;
+    g_pD3DContext->IASetVertexBuffers(0, 1, &g_pTrailVB, &stride, &offset);
+    g_pD3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+    g_pD3DContext->Draw((UINT)verts.size(), 0);
+}
+
 static bool NativeRenderFrame(int screenW, int screenH, const std::vector<D2D1_POINT_2F>& smoothed,
                               bool tailVisible, const GradData& cols, float widthMul, float fadeAlpha,
                               DWORD dwTime, int vX, int vY) {
@@ -2012,7 +2069,7 @@ static bool NativeRenderFrame(int screenW, int screenH, const std::vector<D2D1_P
     // 形状拖尾(4) 不渲染带
     if (tailVisible && !smoothed.empty() && g_trailShape != 4) {
         if (g_trailShape == 1) {
-            // 点链：沿路径生成离散点，用小锥形段近似
+            // 点链：沿路径生成离散圆点
             std::vector<D2D1_POINT_2F> dots;
             int dotCount = (int)smoothed.size() * g_dotsMultiplier;
             if (dotCount > 200) dotCount = 200;
@@ -2021,7 +2078,8 @@ static bool NativeRenderFrame(int screenW, int screenH, const std::vector<D2D1_P
                 D2D1_POINT_2F p = GetPointOnPath(smoothed, t);
                 dots.push_back(p);
             }
-            NativeRenderTrail(dots, widthMul * 0.6f * (g_dotChainSize / 100.0f), cols, fadeAlpha, screenW, screenH, dwTime);
+            float dotSize = 4.0f * widthMul * (g_dotChainSize / 100.0f);
+            NativeRenderDotChain(dots, dotSize, cols, fadeAlpha, screenW, screenH);
         } else if (g_trailShape == 5) {
             // 双线拖尾：渲染两条偏移的带
             std::vector<D2D1_POINT_2F> line1, line2;
