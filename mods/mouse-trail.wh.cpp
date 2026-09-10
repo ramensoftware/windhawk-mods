@@ -551,6 +551,21 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
   $name:zh-CN: 粒子自旋转
   $description: Enable random self-rotation for particles.
   $description:zh-CN: 启用粒子随机自旋转效果。
+- enable_particle_interaction: true
+  $name: Particle Interaction
+  $name:zh-CN: 粒子间相互作用
+  $description: Enable repulsion force between particles.
+  $description:zh-CN: 启用粒子之间的排斥力，使粒子不会重叠。
+- particle_repel_distance: 25
+  $name: Repel Distance
+  $name:zh-CN: 排斥距离
+  $description: Distance (pixels) within which particles repel each other.
+  $description:zh-CN: 粒子之间产生排斥力的距离（像素）。
+- particle_repel_force: 15
+  $name: Repel Force
+  $name:zh-CN: 排斥力强度
+  $description: Strength of inter-particle repulsion force.
+  $description:zh-CN: 粒子之间排斥力的强度。
 - particle_attraction: 40
   $name: Particle Attraction
   $name:zh-CN: 粒子吸附强度
@@ -1024,6 +1039,9 @@ int g_particleInterval = 50;
 bool g_particleAccel = true;
 int g_particleShape = 0;  // 0=random, 1=circle, 2=star, 3=hexagram
 bool g_enableParticleSpin = true;  // 粒子自旋转
+bool g_enableParticleInteraction = true;  // 粒子间相互作用
+int g_particleRepelDistance = 25;  // 排斥距离（像素）
+float g_particleRepelForce = 0.15f;  // 排斥力强度
 ID2D1PathGeometry *g_pStarGeom = nullptr;
 ID2D1PathGeometry *g_pHexagramGeom = nullptr;
 ID2D1PathGeometry *g_pHeartGeom = nullptr;
@@ -2495,6 +2513,14 @@ void LoadSettings() {
         Wh_FreeStringSetting(pshape);
     }
     g_enableParticleSpin = Wh_GetIntSetting(L"enable_particle_spin") != 0;
+    g_enableParticleInteraction = Wh_GetIntSetting(L"enable_particle_interaction") != 0;
+    g_particleRepelDistance = Wh_GetIntSetting(L"particle_repel_distance");
+    if (g_particleRepelDistance < 5) g_particleRepelDistance = 5;
+    if (g_particleRepelDistance > 100) g_particleRepelDistance = 100;
+    int repelVal = Wh_GetIntSetting(L"particle_repel_force");
+    if (repelVal < 1) repelVal = 1;
+    if (repelVal > 50) repelVal = 50;
+    g_particleRepelForce = repelVal / 100.0f;
     g_enableClickStarburst = Wh_GetIntSetting(L"enable_click_starburst") != 0;
     g_starburstCount = Wh_GetIntSetting(L"starburst_count");
     g_enableClickEffect = Wh_GetIntSetting(L"enable_click_effect") != 0;
