@@ -66,6 +66,8 @@ Hex RGB, e.g. `FF0000`=red, `00FF00`=green, `0000FF`=blue, `FFD700`=gold.
 
 Developed by [MCheng404](https://github.com/MCheng404).
 
+Inspired by and based on the core overlay/ribbon architecture of [Cursor Motion Blur](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/cursor-motion-blur.wh.cpp) by TheatriChris (MIT License).
+
 ---
 
 # 鼠标拖尾
@@ -119,6 +121,8 @@ Developed by [MCheng404](https://github.com/MCheng404).
 ### 致谢
 
 开发者 [MCheng404](https://github.com/MCheng404)。
+
+核心覆盖层/锥形带架构灵感来源于 TheatriChris 的 [Cursor Motion Blur](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/cursor-motion-blur.wh.cpp)（MIT 许可证）。
 */
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
