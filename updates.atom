@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-09T22:42:28.000Z</updated>
+    <updated>2026-09-10T00:57:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Live Overlay 1.2]]></title>
+        <id>https://windhawk.net/mods/desktop-live-overlay#4cfbf496f2cde4f5cffb0433050f3e7f1ebeacfc</id>
+        <link href="https://windhawk.net/mods/desktop-live-overlay"/>
+        <updated>2026-09-10T00:57:48.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added new system metrics: CPU and GPU temperature (Celsius and Fahrenheit), RAM usage details including used/total amounts and committed memory, and VRAM usage covering both dedicated and shared video memory.</li>
+<li>Fixed some system metrics not working on non-English computers.</li>
+<li>Various minor fixes and improvements.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7 Window Animations Restorer 1.0.0]]></title>
         <id>https://windhawk.net/mods/win7-window-animations-restorer#fd9f9ebfefba8b7839633521bde2f92390574f16</id>
@@ -671,20 +686,6 @@ attribution look busier than expected.</li>
         <id>https://windhawk.net/mods/taskbar-z-order-override#47bd3790bfa3878f9eaba84661f0cbc623f1c2b7</id>
         <link href="https://windhawk.net/mods/taskbar-z-order-override"/>
         <updated>2026-09-05T15:13:25.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated the author's GitHub profile URL after the username changed from <code>Meteony</code> to <code>Meteoni</code>.</li>
-<li>Updated screenshot and GIF URLs to use the renamed <code>Meteoni/meteoni-assets</code> repository.</li>
-</ul>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteoni</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Icon Separators 1.0.33]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-separators#821a5dc751f6f7a2f74dbf5043556d3b9dbc7c93</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-separators"/>
-        <updated>2026-09-05T15:13:20.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Updated the author's GitHub profile URL after the username changed from <code>Meteony</code> to <code>Meteoni</code>.</li>
 <li>Updated screenshot and GIF URLs to use the renamed <code>Meteoni/meteoni-assets</code> repository.</li>

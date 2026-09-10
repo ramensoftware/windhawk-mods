@@ -1,3 +1,9 @@
+## 1.2 ([Sep 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4cfbf496f2cde4f5cffb0433050f3e7f1ebeacfc/mods/desktop-live-overlay.wh.cpp))
+
+* Added new system metrics: CPU and GPU temperature (Celsius and Fahrenheit), RAM usage details including used/total amounts and committed memory, and VRAM usage covering both dedicated and shared video memory.
+* Fixed some system metrics not working on non-English computers.
+* Various minor fixes and improvements.
+
 ## 1.1 ([Mar 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/594e5a7b6716156f9d49857aafbb3880e1f442df/mods/desktop-live-overlay.wh.cpp))
 
 * Fixed weather being stuck on "Loading...".
