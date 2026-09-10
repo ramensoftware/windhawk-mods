@@ -1407,7 +1407,6 @@ static LRESULT CALLBACK ExplorerWindowSubclassProc(
     UINT message,
     WPARAM wParam,
     LPARAM lParam,
-    UINT_PTR,
     DWORD_PTR)
 {
     if (message == WM_NCDESTROY)
