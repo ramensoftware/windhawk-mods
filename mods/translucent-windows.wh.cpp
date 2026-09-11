@@ -169,6 +169,7 @@ This is caused by default by the AccentBlur API.❕
 
 #include <windhawk_utils.h>
 #include <windowsx.h>
+#include <tlhelp32.h>
 #include <dwmapi.h>
 #include <vssym32.h>
 #include <uxtheme.h>
@@ -5392,12 +5393,67 @@ VOID RestoreWindowCustomizations(HWND hWnd)
     }
 }
 
+struct FindThreadWindowContext
+{
+    HWND hWnd;
+    BOOL found;
+};
+
+static BOOL CALLBACK FindThreadWindowProc(HWND hWnd, LPARAM lParam)
+{
+    auto* ctx = reinterpret_cast<FindThreadWindowContext*>(lParam);
+    if (hWnd != ctx->hWnd)
+        return TRUE;
+    ctx->found = TRUE;
+    return FALSE;
+}
+
+// Whether a thread of this process created the window. Unlike
+// GetWindowThreadProcessId, EnumThreadWindows reflects the creating thread for
+// console windows too. Only reached for console windows that are not reported
+// as ours, so the cost of the thread snapshot doesn't matter.
+static BOOL IsWindowOfCurrentProcessThread(HWND hWnd)
+{
+    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (hSnapshot == INVALID_HANDLE_VALUE)
+        return FALSE;
+
+    FindThreadWindowContext ctx = { hWnd, FALSE };
+    THREADENTRY32 te{};
+    te.dwSize = sizeof(te);
+    if (Thread32First(hSnapshot, &te))
+    {
+        do
+        {
+            if (te.th32OwnerProcessID == GetCurrentProcessId())
+                EnumThreadWindows(te.th32ThreadID, FindThreadWindowProc, reinterpret_cast<LPARAM>(&ctx));
+        } while (!ctx.found && Thread32Next(hSnapshot, &te));
+    }
+    CloseHandle(hSnapshot);
+    return ctx.found;
+}
+
+// A console window reports the console's client process (e.g. cmd.exe) as its
+// owner, not the conhost.exe that created it, so the same-process check in
+// EnumWindowsProc can't recognize this process's own console windows. Accept a
+// console window only if it is the console attached to this process, or if this
+// process created it (conhost.exe is started by csrss.exe, which Windhawk never
+// injects, so it gets the mod after the window already exists). Console windows
+// of other processes are left alone.
+static BOOL IsOwnConsoleWindow(HWND hWnd)
+{
+    if (!IsWindowClass(hWnd, L"ConsoleWindowClass"))
+        return FALSE;
+    if (hWnd == GetConsoleWindow())
+        return TRUE;
+    return IsWindowOfCurrentProcessThread(hWnd);
+}
+
 BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) 
 {
     DWORD dwProcessId = 0;
-    // Pass only the console window attached to this process (Clink runs inside cmd.exe).
-    // Passing every ConsoleWindowClass window styled consoles owned by other processes.
-    if ((!GetWindowThreadProcessId(hWnd, &dwProcessId) || dwProcessId != GetCurrentProcessId()) && hWnd != GetConsoleWindow())
+    // Console windows are matched by IsOwnConsoleWindow, see the comment there.
+    if ((!GetWindowThreadProcessId(hWnd, &dwProcessId) || dwProcessId != GetCurrentProcessId()) && !IsOwnConsoleWindow(hWnd))
         return TRUE;
     else
     {
