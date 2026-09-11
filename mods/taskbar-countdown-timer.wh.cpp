@@ -2,7 +2,7 @@
 // @id              taskbar-countdown-timer
 // @name            Taskbar Countdown Timer
 // @description     A simple countdown timer integrated into the Windows 11 taskbar (Windows 11 only)
-// @version         1.15
+// @version         1.16
 // @author          Richi
 // @github          https://github.com/richilp
 // @include         explorer.exe
@@ -27,6 +27,8 @@ Adds a compact countdown timer directly to the Windows 11 taskbar.
 - Completion sound
 - Reliable completion alert that doesn't depend on the taskbar XAML tree
 - Timer state survives Explorer restarts and mod reloads
+- Persisted timers use the Windows wall clock; changing the system time can shift an active timer
+- Missed reminders older than 6 hours are discarded on restore
 - Native XAML flyout for timer configuration
 - Completion alert follows the Windows light/dark app theme
 - No external application required
@@ -169,11 +171,17 @@ static std::atomic<HWND> g_taskbarWnd{nullptr};
 static std::atomic<DWORD> g_taskbarThreadId{0};
 static std::atomic_bool g_systemTrayModuleHooked{false};
 static std::atomic<HMODULE> g_systemTrayModuleAttempted{nullptr};
+static std::atomic_bool g_taskbarDllHooked{false};
+static std::atomic<HMODULE> g_taskbarDllAttempted{nullptr};
+
+static SRWLOCK g_shellRuntimeLock = SRWLOCK_INIT;
+static bool g_shellRuntimeStarted = false;
 
 static std::atomic_bool g_unloading{false};
 static std::atomic_bool g_xamlTornDown{false};
 
 static void ApplyTimerButtonIfAvailable();
+static bool EnsureShellRuntimeStarted();
 
 // -----------------------------------------------------------------------------
 // XAML helpers
@@ -344,24 +352,16 @@ static void WINAPI TrayUI_StartTaskbar_Hook(
     }
 
     if (!g_unloading.load()) {
+        EnsureShellRuntimeStarted();
         ApplyTimerButtonIfAvailable();
     }
 }
 
 
-static bool HookTaskbarDllSymbols()
+static bool HookTaskbarDllSymbols(
+    HMODULE module)
 {
-    HMODULE module = LoadLibraryExW(
-        L"taskbar.dll",
-        nullptr,
-        LOAD_LIBRARY_SEARCH_SYSTEM32
-    );
-
     if (!module) {
-        Wh_Log(
-            L"ERROR: Could not load taskbar.dll"
-        );
-
         return false;
     }
 
@@ -1164,6 +1164,7 @@ static void BuildTimerFlyout()
     reminderBox.PlaceholderText(
         L"What should I remind you about?"
     );
+    reminderBox.MaxLength(255);
     reminderBox.Margin(
         Thickness{0, 0, 0, 10}
     );
@@ -1758,11 +1759,6 @@ static LRESULT CALLBACK FinishedAlertWndProc(
             dpi = 96;
         }
 
-        ApplyFinishedAlertTheme(
-            hWnd,
-            dpi
-        );
-
         CreateWindowExW(
             0,
             L"STATIC",
@@ -1830,6 +1826,11 @@ static LRESULT CALLBACK FinishedAlertWndProc(
             reinterpret_cast<HMENU>(IDC_ALERT_DISMISS),
             nullptr,
             nullptr
+        );
+
+        ApplyFinishedAlertTheme(
+            hWnd,
+            dpi
         );
 
         LayoutFinishedAlert(
@@ -2287,6 +2288,21 @@ static DWORD WINAPI FinishedAlertThreadProc(LPVOID param)
     }
 
 ExitLoop:
+    MSG pending{};
+
+    while (PeekMessageW(
+               &pending,
+               hWnd,
+               WM_APP_ALERT_REFRESH,
+               WM_APP_ALERT_REFRESH,
+               PM_REMOVE))
+    {
+        delete reinterpret_cast<
+            FinishedAlertData*>(
+                pending.lParam
+            );
+    }
+
     if (IsWindow(hWnd)) {
         DestroyWindow(hWnd);
     }
@@ -2318,6 +2334,15 @@ static void CloseFinishedAlertThreadIfExited()
 static bool ShowFinishedAlertLocked(const wchar_t* reminder)
 {
     if (g_unloading.load()) {
+        return false;
+    }
+
+    if (!g_finishedAlertClassRegistered &&
+        !RegisterFinishedAlertClass())
+    {
+        Wh_Log(
+            L"ERROR: Completion alert class isn't available"
+        );
         return false;
     }
 
@@ -2750,7 +2775,7 @@ static void CleanupTimerObjects()
 }
 
 
-static bool StartTimerWorkerFromInit()
+static bool StartTimerWorker()
 {
     g_timerStopEvent =
         CreateEventW(
@@ -2817,6 +2842,53 @@ static bool StartTimerWorkerFromInit()
 
     g_timerWorkerThread =
         thread;
+
+    return true;
+}
+
+
+static bool EnsureShellRuntimeStarted()
+{
+    AcquireSRWLockExclusive(
+        &g_shellRuntimeLock
+    );
+
+    if (g_unloading.load()) {
+        ReleaseSRWLockExclusive(
+            &g_shellRuntimeLock
+        );
+        return false;
+    }
+
+    if (g_shellRuntimeStarted) {
+        ReleaseSRWLockExclusive(
+            &g_shellRuntimeLock
+        );
+        return true;
+    }
+
+    if (!g_finishedAlertClassRegistered &&
+        !RegisterFinishedAlertClass())
+    {
+        Wh_Log(
+            L"WARNING: Completion alert class could not be registered"
+        );
+    }
+
+    if (!StartTimerWorker()) {
+        ReleaseSRWLockExclusive(
+            &g_shellRuntimeLock
+        );
+        return false;
+    }
+
+    g_shellRuntimeStarted = true;
+
+    RestorePersistedTimer();
+
+    ReleaseSRWLockExclusive(
+        &g_shellRuntimeLock
+    );
 
     return true;
 }
@@ -2977,22 +3049,6 @@ static void AddTimerButtonImpl(
         return;
     }
 
-    // Fast path which is safe across in-process tray rebuilds: only keep the
-    // current button if it still belongs to the *current* taskbar XamlRoot.
-    if (g_timerButton) {
-        auto buttonRoot =
-            g_timerButton.XamlRoot();
-
-        if (buttonRoot &&
-            SameWinrtObject(
-                buttonRoot,
-                xamlRoot))
-        {
-            g_taskbarWnd.store(taskbar);
-            return;
-        }
-    }
-
     auto content =
         xamlRoot.Content()
             .try_as<FrameworkElement>();
@@ -3014,6 +3070,22 @@ static void AddTimerButtonImpl(
 
     if (!tray) {
         return;
+    }
+
+    if (g_timerButton) {
+        auto currentParent =
+            VisualTreeHelper::GetParent(
+                g_timerButton
+            ).try_as<FrameworkElement>();
+
+        if (currentParent &&
+            SameWinrtObject(
+                currentParent,
+                tray))
+        {
+            g_taskbarWnd.store(taskbar);
+            return;
+        }
     }
 
     auto panel =
@@ -3490,11 +3562,6 @@ static HMODULE GetSystemTrayModuleHandle()
         {
             return module;
         }
-
-        Wh_Log(
-            L"Skipping Taskbar.View.dll version %u",
-            moduleMajor
-        );
     }
 
     return GetModuleHandleW(
@@ -3592,6 +3659,47 @@ static bool HookSystemTraySymbols(
 }
 
 
+static void HandleLoadedModuleIfTaskbar(
+    HMODULE module)
+{
+    if (g_unloading.load() ||
+        g_taskbarDllHooked.load())
+    {
+        return;
+    }
+
+    HMODULE current =
+        GetModuleHandleW(
+            L"taskbar.dll"
+        );
+
+    if (!current ||
+        current != module)
+    {
+        return;
+    }
+
+    HMODULE previous =
+        g_taskbarDllAttempted.exchange(
+            module
+        );
+
+    if (previous == module) {
+        return;
+    }
+
+    if (HookTaskbarDllSymbols(module)) {
+        g_taskbarDllHooked.store(true);
+        Wh_ApplyHookOperations();
+    }
+    else {
+        Wh_Log(
+            L"ERROR: Failed to hook taskbar.dll symbols"
+        );
+    }
+}
+
+
 static void HandleLoadedModuleIfSystemTray(
     HMODULE module)
 {
@@ -3639,6 +3747,7 @@ static HMODULE WINAPI LoadLibraryExW_Hook(
         );
 
     if (module) {
+        HandleLoadedModuleIfTaskbar(module);
         HandleLoadedModuleIfSystemTray(module);
     }
 
@@ -3697,38 +3806,32 @@ BOOL Wh_ModInit()
 
     LoadSettings();
 
-    if (!RegisterFinishedAlertClass()) {
-        return FALSE;
-    }
+    bool taskbarHookedAtInit = false;
 
-    if (!StartTimerWorkerFromInit()) {
-        UnregisterFinishedAlertClass();
-        return FALSE;
-    }
-
-    if (!HookTaskbarDllSymbols()) {
-        StopTimerWorker();
-
-        if (g_timerWorkerThread) {
-            PumpWaitForThread(
-                g_timerWorkerThread
-            );
-
-            CloseHandle(
-                g_timerWorkerThread
-            );
-
-            g_timerWorkerThread = nullptr;
-        }
-
-        CleanupTimerObjects();
-
-        UnregisterFinishedAlertClass();
-        Wh_Log(
-            L"ERROR: Failed to resolve taskbar.dll symbols"
+    if (HMODULE taskbar =
+            GetModuleHandleW(
+                L"taskbar.dll"))
+    {
+        g_taskbarDllAttempted.store(
+            taskbar
         );
 
-        return FALSE;
+        taskbarHookedAtInit =
+            HookTaskbarDllSymbols(
+                taskbar
+            );
+
+        if (taskbarHookedAtInit) {
+            g_taskbarDllHooked.store(
+                true
+            );
+        }
+        else {
+            Wh_Log(
+                L"ERROR: Failed to resolve taskbar.dll symbols"
+            );
+            return FALSE;
+        }
     }
 
     bool systemTrayHookedAtInit = false;
@@ -3757,7 +3860,9 @@ BOOL Wh_ModInit()
         }
     }
 
-    if (!systemTrayHookedAtInit) {
+    if (!taskbarHookedAtInit ||
+        !systemTrayHookedAtInit)
+    {
         HMODULE kernelbase =
             GetModuleHandleW(
                 L"kernelbase.dll"
@@ -3781,15 +3886,26 @@ BOOL Wh_ModInit()
                 &LoadLibraryExW_Original
             );
         }
+        else {
+            Wh_Log(
+                L"ERROR: Could not resolve LoadLibraryExW"
+            );
+        }
     }
 
     return TRUE;
 }
 
-
 void Wh_ModAfterInit()
 {
-    RestorePersistedTimer();
+    if (HMODULE taskbar =
+            GetModuleHandleW(
+                L"taskbar.dll"))
+    {
+        HandleLoadedModuleIfTaskbar(
+            taskbar
+        );
+    }
 
     if (HMODULE systemTray =
             GetSystemTrayModuleHandle())
@@ -3799,9 +3915,11 @@ void Wh_ModAfterInit()
         );
     }
 
-    ApplyTimerButtonIfAvailable();
+    if (FindCurrentProcessTaskbarWnd()) {
+        EnsureShellRuntimeStarted();
+        ApplyTimerButtonIfAvailable();
+    }
 }
-
 
 static void StopTimerWorker()
 {
@@ -3815,7 +3933,15 @@ static void StopTimerWorker()
 
 void Wh_ModBeforeUninit()
 {
+    AcquireSRWLockExclusive(
+        &g_shellRuntimeLock
+    );
+
     g_unloading.store(true);
+
+    ReleaseSRWLockExclusive(
+        &g_shellRuntimeLock
+    );
 
     StopTimerWorker();
 
@@ -3940,6 +4066,14 @@ void Wh_ModUninit()
     }
 
     UnregisterFinishedAlertClass();
+
+    AcquireSRWLockExclusive(
+        &g_shellRuntimeLock
+    );
+    g_shellRuntimeStarted = false;
+    ReleaseSRWLockExclusive(
+        &g_shellRuntimeLock
+    );
 
     Wh_Log(
         L"Taskbar Countdown Timer unloaded"
