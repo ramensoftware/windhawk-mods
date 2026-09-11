@@ -2,12 +2,72 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-10T13:26:14.000Z</updated>
+    <updated>2026-09-11T13:13:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Hide Scrollbars 1.0.0]]></title>
+        <id>https://windhawk.net/mods/hide-scrollbars#ee6f6c54fbf9168becf6c4a801a1fd2b634c4954</id>
+        <link href="https://windhawk.net/mods/hide-scrollbars"/>
+        <updated>2026-09-11T13:13:00.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="hidescrollbars">Hide Scrollbars</h1>
+<p>Shrinks the vertical and/or horizontal scrollbars away in the target
+process. By default it targets <code>explorer.exe</code>, so the File Explorer file
+list loses its scrollbar and the freed strip is used by the content
+instead of sitting empty.</p>
+<p>To apply it to other programs, add them to the mod's <strong>Custom process
+inclusion list</strong> under the mod's Advanced settings in Windhawk.</p>
+<p>Mouse-wheel and keyboard scrolling are unaffected.</p>
+<h2 id="screenshots">Screenshots</h2>
+<p>Windows default (slim scrollbar in its own gutter):</p>
+<p><img src="https://raw.githubusercontent.com/AmazingBodilyFluids/windhawk-mods/assets/hide-scrollbars-default.png" alt="Default" /></p>
+<p>With the mod (1px sliver, gutter reclaimed):</p>
+<p><img src="https://raw.githubusercontent.com/AmazingBodilyFluids/windhawk-mods/assets/hide-scrollbars-1px.png" alt="With the mod" /></p>
+<h2 id="howitworks">How it works</h2>
+<p>The mod hooks <code>GetSystemMetrics</code>, <code>GetSystemMetricsForDpi</code> and
+<code>GetThemeSysSize</code>, and reports a size of 1px for <code>SM_CXVSCROLL</code> /
+<code>SM_CYHSCROLL</code> (the vertical/horizontal scrollbar thickness). Code that
+lays itself out from that metric - such as Explorer's DirectUI file list</p>
+<ul>
+<li>then shrinks the scrollbar to a 1px sliver. Plain Win32 windows that
+draw standard non-client scrollbars are mostly unaffected, because
+user32 lays those out from an internal metric table rather than the
+exported function.</li>
+</ul>
+<h2 id="why1pxandnot0">Why 1px and not 0</h2>
+<p>Reporting 0 makes the scrollbar disappear entirely, but a 0-width
+scrollbar reads as "not scrollable" to the Windows precision-touchpad
+pan handler, so two-finger scrolling stops working in the affected
+windows. A 1px sliver is visually negligible and keeps precision-touchpad
+scrolling working, so the mod uses 1px and does not expose a 0 option.
+Mouse wheel and keyboard scrolling (arrows, PageUp/PageDown, Home/End)
+work either way.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The override is process-wide. Other mods running in the same process
+that read <code>SM_CXVSCROLL</code> / <code>SM_CYHSCROLL</code> (for example to hit-test the
+scrollbar strip) will see the reduced value too.</li>
+<li><code>SM_CXVSCROLL</code> also drives the width of combo-box drop-down buttons
+and the status-bar sizing grip. Code that reads the exported metric
+(rather than user32's internal table) shrinks those too.</li>
+<li>The scrollbar <em>arrow button</em> metrics (<code>SM_CXHSCROLL</code> / <code>SM_CYVSCROLL</code>)
+and <code>SPI_GETNONCLIENTMETRICS</code> are left untouched, so a control that
+mixes those with <code>SM_CXVSCROLL</code> may lay out slightly oddly.</li>
+<li>If a targeted process misbehaves, remove it from the inclusion list.</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Hide vertical scrollbars</strong> - toggle the vertical bar.</li>
+<li><strong>Hide horizontal scrollbars</strong> - toggle the horizontal bar.</li>
+</ul>]]></content>
+        <author>
+            <name>AmazingBodilyFluids</name>
+            <uri>https://github.com/AmazingBodilyFluids</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Control Panel Revival 1.0.0]]></title>
         <id>https://windhawk.net/mods/control-panel-revival#45a16be6974ea488dcd5464d0a8bd3aebd01bae7</id>
@@ -1133,36 +1193,6 @@ and Manual management (Alt+R).</p>
         <author>
             <name>meteoni</name>
             <uri>https://github.com/Meteony</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7 Classic AutoPlay Dialog 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win7-classic-autoplay-restorer#a9855f73d19de31e603101483d1fb85e8f027620</id>
-        <link href="https://windhawk.net/mods/win7-classic-autoplay-restorer"/>
-        <updated>2026-08-30T17:49:11.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows7classicautoplaydialog">Windows 7 Classic AutoPlay Dialog</h1>
-<h2 id="about">About</h2>
-<p>This mod restores the classic Windows 7 AutoPlay dialog when inserting a USB drive, a disc, or a phone.</p>
-<p>What is seen is a simple list of real actions (open folder, play with Windows
-Media Player, view pictures with Windows Photo Viewer, ReadyBoost). A program
-from the disc is offered only if clicked and only if the file is on that
-volume.</p>
-<p>The "Always do this" choice is remembered by the mod, not by Windows policy.
-A privacy setting can hide the volume or device name in this mod only.</p>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/autoplay.png" alt="autoplay.png" /></p>
-<h2 id="notes">Notes</h2>
-<p>The mod has been tested on Windows 10 21H2 and Windows 11 24H2.
-This mod is a best-effort reimplementation using native Windows components.
-Native AutoPlay is suppressed by intercepting the shell's enumeration of
-<code>IQueryCancelAutoPlay</code> CLSIDs under
-<code>HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\CancelAutoplay\CLSID</code>
-and synthesizing this mod's handler. Nothing is written to that key. Leftover
-values from earlier versions of the mod are deleted when the owner instance
-starts.</p>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>

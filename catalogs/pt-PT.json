@@ -7108,6 +7108,34 @@
         "version": "0.3"
       }
     },
+    "hide-scrollbars": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1789132380000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1789132380000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "AmazingBodilyFluids",
+        "description": "Hide vertical/horizontal scrollbars in selected processes (default: File Explorer) and reclaim the gutter space",
+        "github": "https://github.com/AmazingBodilyFluids",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Hide Scrollbars",
+        "version": "1.0.0"
+      }
+    },
     "hide-search-bar": {
       "details": {
         "defaultSorting": 4039,
