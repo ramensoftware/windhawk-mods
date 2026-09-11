@@ -8324,29 +8324,36 @@ void ShutdownLegacyOnCurrentThread() {
     }
 }
 LRESULT CALLBACK ShutdownHookProc(int code, WPARAM wParam, LPARAM lParam) {
-    if (code == HC_ACTION && !g_shutdownRan.exchange(true)) {
-        // A hook callback must never let a C++ exception cross back into the
-        // system hook-chain dispatcher; the waiting unload thread is released
-        // even if ShutdownLegacyOnCurrentThread() throws.
+    // A hook callback must never let a C++ exception cross back into the
+    // system hook-chain dispatcher; the waiting unload thread is released
+    // even if ShutdownLegacyOnCurrentThread() throws.
+    //
+    // The chain call runs BEFORE the signal on purpose. What is left of this
+    // proc after SetEvent is a load of an already-computed result plus the
+    // return, so no mod code runs on this thread after the unload thread is
+    // released and no mod return address stays on this thread's stack past
+    // the signal. Relying on the compiler to emit a tail call for the
+    // CallNextHookEx below would be optimizer-dependent - this function has
+    // a try block - and memory safety must not rest on that (finding 1).
+    const bool ran = code == HC_ACTION && !g_shutdownRan.exchange(true);
+    if (ran) {
         try {
             ShutdownLegacyOnCurrentThread();
         } catch (...) {
             LastErrorScope keep;
             Wh_Log(L"Exception during marshaled legacy shutdown; continuing teardown");
         }
-        // The unhook is the unload thread's job (ShutdownMarshalRelease), so
-        // g_shutdownHook is only ever touched from one thread.
-        //
-        // Signal LAST, and signal only an event: what is left of this proc is
-        // its epilogue plus the tail call below, so no mod code runs on this
-        // thread afterwards and no mod return address stays on its stack once
-        // the jump is taken. The unload thread does not resume here - it joins
-        // the sentinel thread instead, which gives this epilogue the whole
-        // wake/schedule/exit latency of another thread to retire before
-        // Wh_ModUninit returns and Windhawk unmaps the image (finding 1).
-        if (g_shutdownWorked) SetEvent(g_shutdownWorked);
     }
-    return CallNextHookEx(nullptr, code, wParam, lParam);
+    // The unhook is the unload thread's job (ShutdownMarshalRelease), so
+    // g_shutdownHook is only ever touched from one thread.
+    //
+    // The unload thread does not resume on this thread's epilogue either - it
+    // joins the sentinel thread instead, which gives this epilogue the whole
+    // wake/schedule/exit latency of another thread to retire before
+    // Wh_ModUninit returns and Windhawk unmaps the image.
+    const LRESULT result = CallNextHookEx(nullptr, code, wParam, lParam);
+    if (ran && g_shutdownWorked) SetEvent(g_shutdownWorked);
+    return result;
 }
 DWORD WINAPI ShutdownSentinel(void* parameter) {
     if (parameter) WaitForSingleObject(static_cast<HANDLE>(parameter), kShutdownMarshalMs);
