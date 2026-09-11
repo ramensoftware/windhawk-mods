@@ -36,15 +36,16 @@ This mod restores the classic Windows 7 "Region and Language" Control Panel page
 
 - 64-bit Windows 10 or Windows 11 (ARM64 and Windows Server are not supported).
 - On first use, the original Windows 7 components (intl.cpl and input.dll, about 620 KB) are downloaded automatically from Microsoft's public symbol server and verified by size and SHA-256 before use. An Internet connection is needed only for this step; afterwards everything works offline from the mod's private cache.
-- The download runs in the background and never blocks the Control Panel thread. If it has not finished within a few seconds of the very first activation, that one activation shows the normal modern Region page; the classic page appears from the next activation on. Nothing is executed before it has been verified.
+- The download runs on a background thread, and opening the Control Panel folder (which merely enumerates the applet) never waits for it. Only actually opening Region waits, and at most a few seconds in total: if the download has not finished by then, that one opening shows the normal modern Region page and the classic page appears from the next one on. Once the payloads are in the private cache, nothing waits at all - including the very first enumeration after a restart. Nothing is executed before it has been verified.
 
 ---
 
 ## Settings
 
 The mod includes a series of settings:
-- **UI language** (default: Automatic): this setting controls the language of the restored page. Automatic follows the Windows display language.
-- **Redirect Settings pages** (default: off): this setting opens the classic page instead of the modern Settings Region pages. The redirect follows the same defensive, pass-through approach as the reference Settings-to-Control-Panel mod and covers ShellExecuteExW, ShellExecuteW, and CreateProcessW launches from Explorer. Only Region/Language URIs are redirected; unrelated Settings pages pass through unchanged.
+- **UI language** (default: Automatic): this setting controls the language of the restored page. Automatic follows the Windows display language. It takes effect the next time the page is opened.
+- **Redirect Settings pages** (default: off): this setting opens the classic page instead of the modern Settings Region pages. The redirect follows the same defensive, pass-through approach as the reference Settings-to-Control-Panel mod and covers ShellExecuteExW, ShellExecuteW, and CreateProcessW launches from Explorer. Only Region/Language URIs are redirected; unrelated Settings pages pass through unchanged. It takes effect immediately.
+- Neither setting reloads the mod, so changing them while a restored dialog is open does not tear anything down.
 
 ---
 
@@ -55,7 +56,8 @@ The mod includes a series of settings:
 - Some Windows 7 features no longer exist on modern Windows. In those cases the closest modern equivalent is opened instead (for example, the "Default location" link opens the Location privacy page).
 - Settings that were already applied are kept after the mod is disabled.
 - Windows system files **are not modified** and the modern intl.cpl is used as a fallback.
-- Disabling the mod, or changing any of its settings, asks the restored dialogs to close normally and waits up to about 12 seconds for them. If a dialog refuses to close, the mod stops waiting, leaves the Windows 7 component resident in the process and switches every hook to a permanent pass-through, so the host is never blocked. Restarting Explorer (or the Control Panel window) clears that state.
+- Changing a setting never reloads the mod: the redirect option is a runtime flag and a language change is applied the next time the page is opened.
+- Disabling the mod asks any restored dialog to close and, after a few seconds, closes the ones it created itself (its property sheets and modal dialogs). It then waits for them to be gone before it unloads, because the restored component still points into the mod while a dialog is open. In practice that means: if you disable the mod while the Region page is open, the page closes; if the classic page is waiting on a UAC prompt, answering or dismissing that prompt is what finishes the unload.
 
 ---
 
@@ -91,7 +93,7 @@ While the mod is active, the restored page can also be opened directly:
 /*
 - language: auto
   $name: UI language
-  $description: This setting controls the language of the restored Region UI. Automatic follows your Windows display language. Changing this reloads the mod.
+  $description: This setting controls the language of the restored Region UI. Automatic follows your Windows display language. It applies from the next time the page is opened; the mod is not reloaded.
   $options:
   - auto: Automatic (follow Windows)
   - en-US: English (genuine Microsoft)
@@ -116,7 +118,7 @@ While the mod is active, the restored page can also be opened directly:
   - ar-SA: العربية (RTL)
 - redirectSettings: false
   $name: Redirect Settings pages
-  $description: This setting redirects the modern Settings Region and Language pages (ms-settings:regionlanguage, ms-settings:regionformatting) to the restored classic Region dialog. It applies to links opened from Explorer; Date & time, Speech and Typing pages are never touched. Changing this reloads the mod.
+  $description: This setting redirects the modern Settings Region and Language pages (ms-settings:regionlanguage, ms-settings:regionformatting) to the restored classic Region dialog. It applies to links opened from Explorer; Date & time, Speech and Typing pages are never touched. It applies immediately; the mod is not reloaded.
 */
 // ==/WindhawkModSettings==
 
@@ -407,58 +409,44 @@ std::atomic<LONG> g_active{0};
 std::atomic<LONG> g_jobs{0};
 SRWLOCK g_gate = SRWLOCK_INIT;
 SRWLOCK g_windowsLock = SRWLOCK_INIT;
-std::vector<HWND> g_owned;
+// Windows this mod created and serves: property sheets (SheetCallback) and
+// modal dialogs (DialogCallback). The `sheet` flag is what lets the unload path
+// escalate correctly - a sheet is closed by pressing its Cancel button, a modal
+// dialog by EndDialog from its own thread (see CloseOwnedWindows).
+struct OwnedWindow { HWND hwnd = nullptr; bool sheet = false; };
+std::vector<OwnedWindow> g_owned;
 constexpr size_t kMaxOwnedWindows = 64;
 SRWLOCK g_threadsLock = SRWLOCK_INIT;
 std::vector<HANDLE> g_threads;
 constexpr size_t kMaxTrackedThreads = 256;
-// ===== Bounded unload =====
-// Every wait on the unload path is bounded by this. WM_CLOSE is only a
-// request: a modal Win7 dialog whose DLGPROC ignores it, or one sitting on a
-// nested modal child loop, never closes, and a worker wedged in such a loop
-// never returns. Wh_ModSettingsChanged asks for a reload on every settings
-// change, so an unbounded wait here hangs Explorer's settings dialog, not just
-// a disable. On expiry the provider image is deliberately left mapped and
-// resident (a leak) and the hooks stay in the permanent pass-through state
-// g_stopping/g_useLegacy put them in: a hang is worse for the user than a
-// leak (finding 2).
-constexpr DWORD kUnloadDeadlineMs = 12000;
-// Shorter budget for the same wait when it runs on a UI thread (CPL_EXIT).
+// ===== Unload rundown =====
+// The waits on the unload path are NOT bounded, and that is deliberate.
+// Windhawk unmaps this mod's image with a single FreeLibrary the moment
+// Wh_ModUninit returns - unconditionally - and at that moment the mapped Win7
+// provider still points into it from four directions:
+//   * its compatibility IAT: BindImports(g_image, true) binds ~40 imports to
+//     mod code (PrivateMalloc/PrivateFree/PrivateLoadStringW/MainPropertySheet/
+//     MainDialogBox/PrivateShellExecuteExW/PrivateCreateThread/...);
+//   * every dialog and sheet this mod serves: DialogCallback and SheetCallback
+//     are installed as the real DLGPROC / PFNPROPSHEETCALLBACK, so the next
+//     message a still-open Region sheet receives goes into unmapped memory;
+//   * ThreadBridge under every private worker that has not returned;
+//   * the return address of any thread still inside a legacy call.
+// So "give up after N seconds and leave the provider mapped" is not a safe
+// degradation: it converts a recoverable hang into a host crash. Instead the
+// unload path removes the reasons the wait can be long - see the escalation in
+// Wh_ModBeforeUninit/CloseOwnedWindows - and Wh_ModSettingsChanged no longer
+// forces a reload, so editing a setting does not run this path at all.
+//
+// How long the UI is asked to take before it is force-closed.
+constexpr DWORD kUnloadEscalateMs = 3000;
+// Shorter budget for the job wait when it runs on a UI thread (CPL_EXIT). Safe
+// to bound there: Cleanup() still joins everything unconditionally before the
+// image can be unmapped, so timing out here only defers the wait.
 constexpr DWORD kUiJobWaitMs = 5000;
-// One deadline for the WHOLE unload path, armed by Wh_ModBeforeUninit (or by
-// Cleanup when BeforeUninit did not run, e.g. a failed Wh_ModInit). Every
-// bounded wait below takes its slice from this single deadline, so the time a
-// disable or a settings change can be held up is ~kUnloadDeadlineMs and not the
-// sum of the individual waits.
-std::atomic<ULONGLONG> g_unloadDeadline{0};
-void BeginUnloadDeadline() {
-    ULONGLONG unset = 0;
-    g_unloadDeadline.compare_exchange_strong(unset, GetTickCount64() + kUnloadDeadlineMs);
-}
-// Milliseconds left on the shared unload budget; `fallback` when it was never
-// armed, 0 when it is exhausted (which makes the next wait fail immediately
-// instead of starting a fresh budget).
-DWORD RemainingUnloadMs(DWORD fallback) {
-    const ULONGLONG deadline = g_unloadDeadline.load(std::memory_order_acquire);
-    if (!deadline) return fallback;
-    const ULONGLONG now = GetTickCount64();
-    if (now >= deadline) return 0;
-    const ULONGLONG left = deadline - now;
-    return left > 0xFFFFFFFEULL ? 0xFFFFFFFE : static_cast<DWORD>(left);
-}
-std::atomic<bool> g_abandoned{false};
-void Abandon(PCWSTR why) {
-    if (g_abandoned.exchange(true)) return;
-    // Permanent pass-through: no new legacy call is started, CplHook hands
-    // everything to the native provider, and the mapped Win7 image with its
-    // dependencies, actctx and dialog blobs stays resident for the life of the
-    // process. Cleanup() consults this and skips every free/unmap below.
-    g_useLegacy.store(false, std::memory_order_release);
-    g_stopping.store(true, std::memory_order_release);
-    Wh_Log(L"WARNING: giving up on a clean unload (%s) after %lu ms. The Windows 7 provider stays mapped and "
-           L"every hook is a permanent pass-through from here on; blocking the host would have been worse.",
-           why, static_cast<unsigned long>(kUnloadDeadlineMs));
-}
+// Set once the unload path starts force-closing the UI this mod created.
+// DialogCallback honours it by calling EndDialog from the dialog's own thread.
+std::atomic<bool> g_forceCloseUi{false};
 void RegisterThread(HANDLE thread) {
     HANDLE dup = nullptr;
     if (!DuplicateHandle(GetCurrentProcess(), thread, GetCurrentProcess(), &dup, 0, FALSE,
@@ -470,30 +458,35 @@ void RegisterThread(HANDLE thread) {
 }
 // Waits for every tracked private worker thread to actually return (not just
 // signal EndJob) before the caller unmaps/frees the image those threads'
-// epilogues and thread-start thunks still live in (finding 4). Bounded: a
-// worker wedged in a nested modal loop must not hang the unload (finding 2).
-// Returns false if any thread was still running when the budget ran out, in
-// which case the caller must leave the image mapped.
+// epilogues and thread-start thunks still live in (finding 4). The unload path
+// passes INFINITE on purpose: ThreadBridge is mod code, so a worker that has
+// not returned means a live frame in the image Windhawk is about to unmap.
+// Returns false only on WAIT_FAILED, or on timeout for a caller that supplied
+// one (the CPL_EXIT UI path, which Cleanup() still joins afterwards).
 bool JoinTrackedThreads(DWORD timeoutMs) {
     std::vector<HANDLE> copy;
     AcquireSRWLockExclusive(&g_threadsLock);
     copy.swap(g_threads);
     ReleaseSRWLockExclusive(&g_threadsLock);
-    const ULONGLONG deadline = GetTickCount64() + timeoutMs;
+    const bool unbounded = timeoutMs == INFINITE;
+    const ULONGLONG deadline = unbounded ? 0 : GetTickCount64() + timeoutMs;
     bool joined = true;
     for (size_t i = 0; i < copy.size(); i += MAXIMUM_WAIT_OBJECTS) {
         DWORD count = static_cast<DWORD>(std::min<size_t>(MAXIMUM_WAIT_OBJECTS, copy.size() - i));
-        const ULONGLONG now = GetTickCount64();
-        // A zero slice is deliberate: WaitForMultipleObjects then simply reports
-        // the current state, so threads that already exited are not mistaken for
-        // stuck ones when the shared unload budget has run out.
-        const DWORD slice = now >= deadline ? 0
-            : static_cast<DWORD>(std::min<ULONGLONG>(deadline - now, 0xFFFFFFFEULL));
+        DWORD slice = INFINITE;
+        if (!unbounded) {
+            const ULONGLONG now = GetTickCount64();
+            // A zero slice is deliberate: WaitForMultipleObjects then simply
+            // reports the current state, so threads that already exited are not
+            // mistaken for stuck ones when the budget has run out.
+            slice = now >= deadline ? 0
+                : static_cast<DWORD>(std::min<ULONGLONG>(deadline - now, 0xFFFFFFFEULL));
+        }
         const DWORD wait = WaitForMultipleObjects(count, &copy[i], TRUE, slice);
         if (wait != WAIT_OBJECT_0) {
-            Wh_Log(L"%lu private worker thread(s) still running after %lu ms (wait=0x%lX)",
-                   static_cast<unsigned long>(count), static_cast<unsigned long>(timeoutMs),
-                   static_cast<unsigned long>(wait));
+            Wh_Log(L"%lu private worker thread(s) not joined (wait=0x%lX, budget=%lu ms)",
+                   static_cast<unsigned long>(count), static_cast<unsigned long>(wait),
+                   static_cast<unsigned long>(timeoutMs));
             joined = false;
             break;
         }
@@ -526,7 +519,7 @@ HANDLE WINAPI PrivateCreateThread(LPSECURITY_ATTRIBUTES, SIZE_T, LPTHREAD_START_
 BOOL WINAPI PrivateSHCreateThread(LPTHREAD_START_ROUTINE, void*, DWORD, LPTHREAD_START_ROUTINE);
 BOOL WINAPI PrivateShellExecuteExW(SHELLEXECUTEINFOW*);
 BOOL WINAPI PrivateDisableThreadLibraryCalls(HMODULE);
-bool WaitForJobs(DWORD timeoutMs = kUnloadDeadlineMs);
+bool WaitForJobs(DWORD timeoutMs = INFINITE);
 
 bool Fail(PCWSTR stage, DWORD error = GetLastError()) {
     Wh_Log(L"ERROR: %s; Win32=%lu (0x%08lX)", stage, error, error);
@@ -5317,7 +5310,15 @@ static const wchar_t* const* const kTitleMasters[20] = {
     kTitleTr_KO, kTitleTr_TR, kTitleTr_CS, kTitleTr_HU, kTitleTr_RO,
     kTitleTr_SV, kTitleTr_UK, kTitleTr_EL, kTitleTr_AR,
 };
-int g_lang = LangEN; // Selected UI language (LangIndex); resolved once in Prepare.
+// Selected UI language (LangIndex). Resolved in Prepare() and switchable at
+// runtime by Wh_ModSettingsChanged, which no longer reloads the mod - hence
+// atomic: the dialog/template builders read it from the legacy call threads.
+std::atomic<int> g_lang{LangEN};
+// Language queued by Wh_ModSettingsChanged, or -1. Applied by
+// ApplyPendingLanguageChange() (defined next to the resource builders) at the
+// next quiet point; see the comment there for why it cannot be applied inline.
+SRWLOCK g_langLock = SRWLOCK_INIT;
+std::atomic<int> g_pendingLang{-1};
 
 // ================= INPUT.DLL LANGUAGE PACKS (v1.1.0) =================
 // en-US (LangEN) keeps the genuine Microsoft text of the pinned input.dll.
@@ -6789,19 +6790,32 @@ HMODULE WINAPI PrivateLoadLibraryW(LPCWSTR name) {
     } catch (...) { SetLastError(ERROR_NOT_ENOUGH_MEMORY); return nullptr; }
 }
 
-void Own(HWND window, bool add) {
+void Own(HWND window, bool add, bool sheet = false) {
     if (!window) return;
     AcquireSRWLockExclusive(&g_windowsLock);
     if (add) {
         bool exists = false;
-        for (HWND w : g_owned) if (w == window) exists = true;
+        for (const auto& entry : g_owned) if (entry.hwnd == window) exists = true;
         if (!exists) {
             bool placed = false;
-            for (auto& w : g_owned) if (!w) { w = window; placed = true; break; }
-            if (!placed && g_owned.size() < kMaxOwnedWindows) g_owned.push_back(window);
+            for (auto& entry : g_owned) {
+                if (!entry.hwnd) { entry.hwnd = window; entry.sheet = sheet; placed = true; break; }
+            }
+            if (!placed && g_owned.size() < kMaxOwnedWindows) g_owned.push_back({window, sheet});
         }
-    } else for (auto& w : g_owned) if (w == window) w = nullptr;
+    } else {
+        for (auto& entry : g_owned) if (entry.hwnd == window) { entry.hwnd = nullptr; entry.sheet = false; }
+    }
     ReleaseSRWLockExclusive(&g_windowsLock);
+}
+// True while any window this mod serves is still alive. Used as the quiet-point
+// test before rebuilding the embedded resource tables at runtime.
+bool AnyOwnedWindowAlive() {
+    AcquireSRWLockShared(&g_windowsLock);
+    bool alive = false;
+    for (const auto& entry : g_owned) if (entry.hwnd) { alive = true; break; }
+    ReleaseSRWLockShared(&g_windowsLock);
+    return alive;
 }
 struct SheetContext { PFNPROPSHEETCALLBACK original; HWND window; SheetContext* previous; bool isInput; };
 thread_local SheetContext* g_sheet = nullptr;
@@ -6813,7 +6827,7 @@ int CALLBACK SheetCallback(HWND window, UINT message, LPARAM parameter) {
 if (context && message == PSCB_INITIALIZED) {
             context->window = window;
             if (context->isInput) TranslateInputWindow(window);
-            Own(window, true); ++g_uiCreated;
+            Own(window, true, true); ++g_uiCreated;
             Wh_Log(L"Original Windows 7 property sheet initialized: HWND=%p", window);
             if (g_stopping.load()) PostMessageW(window, WM_CLOSE, 0, 0);
         }
@@ -7005,6 +7019,19 @@ INT_PTR CALLBACK DialogCallback(HWND window, UINT message, WPARAM wparam, LPARAM
             }
             Own(window, true); ++g_uiCreated; lparam = context->parameter;
             if (g_stopping.load()) PostMessageW(window, WM_CLOSE, 0, 0);
+        }
+        // Unload escalation: the mod asked this dialog to close and its own
+        // DLGPROC did not (or it is a nested modal child that ignores it). End
+        // it from here - the dialog's own thread, which is the only place
+        // EndDialog may be called - so the unload wait can finish instead of
+        // holding the host open. Only ever reached with g_stopping set.
+        if (message == WM_CLOSE && g_forceCloseUi.load(std::memory_order_acquire)) {
+            // EndDialog only: the dialog's own teardown (WM_DESTROY and the
+            // WM_NCDESTROY that untracks it below) must still run through the
+            // original DLGPROC, so the property and the tracking entry are not
+            // dropped early here.
+            EndDialog(window, 0);
+            return TRUE;
         }
         INT_PTR result = context->original(window, message, wparam, lparam);
         if (message == WM_NCDESTROY) { RemovePropW(window, kDialogProperty); Own(window, false); }
@@ -7210,18 +7237,25 @@ BOOL WINAPI PrivateDisableThreadLibraryCalls(HMODULE module) {
         return DisableThreadLibraryCalls(module);
     }
 }
-// Bounded (finding 2): returns false if jobs were still outstanding when the
-// budget ran out, so the caller can leave the provider mapped instead of
-// spinning forever on a worker that will never finish.
+// Returns false only if a caller supplied a budget and it ran out. The unload
+// path passes INFINITE: a job that has not called EndJob means a worker still
+// inside ThreadBridge, i.e. mod code on a live stack.
 bool WaitForJobs(DWORD timeoutMs) {
     if (!g_jobsIdle || g_jobs.load(std::memory_order_acquire) == 0) return true;
-    const ULONGLONG deadline = GetTickCount64() + timeoutMs;
+    const bool unbounded = timeoutMs == INFINITE;
+    const ULONGLONG deadline = unbounded ? 0 : GetTickCount64() + timeoutMs;
+    ULONGLONG lastDiagnostic = GetTickCount64();
     while (g_jobs.load(std::memory_order_acquire) != 0) {
         const ULONGLONG now = GetTickCount64();
-        if (now >= deadline) {
-            Wh_Log(L"Private worker jobs still running after %lu ms; not waiting longer",
+        if (!unbounded && now >= deadline) {
+            Wh_Log(L"Private worker jobs still running after %lu ms; this wait is over, the caller escalates",
                    static_cast<unsigned long>(timeoutMs));
             return false;
+        }
+        if (unbounded && now - lastDiagnostic > 5000) {
+            Wh_Log(L"Still waiting for %ld private worker job(s) to finish (%llu ms elapsed)",
+                   g_jobs.load(std::memory_order_acquire), now - lastDiagnostic);
+            lastDiagnostic = now;
         }
         // Plain WaitForSingleObject does not service cross-thread
         // SendMessage calls, so a worker that sends to this (UI) thread
@@ -7229,7 +7263,8 @@ bool WaitForJobs(DWORD timeoutMs) {
         // Wake for inbound sends and let PeekMessage's internal dispatch
         // answer them, without pumping posted messages (which would
         // re-enter arbitrary window procs).
-        const DWORD slice = static_cast<DWORD>(std::min<ULONGLONG>(100, deadline - now));
+        const DWORD slice = unbounded ? 100
+            : static_cast<DWORD>(std::min<ULONGLONG>(100, deadline - now));
         DWORD wait = MsgWaitForMultipleObjectsEx(1, &g_jobsIdle, slice, QS_SENDMESSAGE, MWMO_INPUTAVAILABLE);
         if (wait == WAIT_OBJECT_0 + 1) {
             MSG msg;
@@ -7238,6 +7273,36 @@ bool WaitForJobs(DWORD timeoutMs) {
     }
     // Pair with EndJob's final signal before teardown closes the event.
     AcquireSRWLockExclusive(&g_gate); ReleaseSRWLockExclusive(&g_gate);
+    return true;
+}
+// Same shape as WaitForJobs, for the in-flight legacy CPL calls instead of the
+// worker jobs: an unfinished legacy call is mod code and provider code on a
+// live stack, so the unload path passes INFINITE here too. The bounded variant
+// exists so Cleanup() can escalate (close the UI this mod created) between two
+// waits rather than sitting in a wait nothing can end.
+bool WaitForLegacyIdle(DWORD timeoutMs) {
+    if (!g_idle || g_active.load(std::memory_order_acquire) == 0) return true;
+    const bool unbounded = timeoutMs == INFINITE;
+    const ULONGLONG deadline = unbounded ? 0 : GetTickCount64() + timeoutMs;
+    ULONGLONG lastDiagnostic = GetTickCount64();
+    while (g_active.load(std::memory_order_acquire) != 0) {
+        const ULONGLONG now = GetTickCount64();
+        if (!unbounded && now >= deadline) return false;
+        if (unbounded && now - lastDiagnostic > 5000) {
+            Wh_Log(L"Still waiting for %ld in-flight private legacy call(s) to finish (%llu ms elapsed)",
+                   g_active.load(std::memory_order_acquire), now - lastDiagnostic);
+            lastDiagnostic = now;
+        }
+        // See WaitForJobs: wake for inbound sends so a legacy thread messaging
+        // this one is answered instead of deadlocking against the wait.
+        const DWORD slice = unbounded ? 100
+            : static_cast<DWORD>(std::min<ULONGLONG>(100, deadline - now));
+        DWORD wait = MsgWaitForMultipleObjectsEx(1, &g_idle, slice, QS_SENDMESSAGE, MWMO_INPUTAVAILABLE);
+        if (wait == WAIT_OBJECT_0 + 1) {
+            MSG msg;
+            PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);
+        }
+    }
     return true;
 }
 BOOL WINAPI PrivateShellExecuteExW(SHELLEXECUTEINFOW* info) {
@@ -7677,11 +7742,12 @@ bool PayloadsCached() {
 // a working page, and the classic one appears on the next activation.
 // Prepare() itself never touches the network, so it cannot reintroduce the
 // freeze.
-// Total time the activation path may spend waiting for the background fetch,
-// summed over every activation in this process. One CPL activation sends
-// several messages (CPL_INIT, CPL_GETCOUNT, CPL_DBLCLK, ...) and each of them
-// comes through EnsurePrepared(), so without a shared budget a slow download
-// would freeze the caller once per message instead of once in total.
+// Total time this process may spend waiting for the background fetch, summed
+// over every activation. Only a real activation waits at all (CplHook routes
+// CPL_INIT/CPL_GETCOUNT/CPL_INQUIRE - the messages the shell sends when it
+// merely enumerates the applet - to StartPrefetch instead), but an activation
+// can come through more than once before the provider is up, so without a
+// shared budget a slow download would freeze the caller once per attempt.
 constexpr DWORD kPrepareGraceMs = 5000;
 std::atomic<ULONGLONG> g_prepareWaitUsed{0};
 std::atomic<bool> g_prefetchRunning{false};
@@ -7713,20 +7779,32 @@ DWORD WINAPI PrefetchThread(void*) {
 // Idempotent: at most one prefetch attempt is in flight, and no file or network
 // I/O happens on the caller's thread - the warm-cache check is the worker's job
 // too, so hooking intl.cpl in Explorer costs a CreateThread and nothing else.
-// The worker is tracked so the unload path joins it (bounded) before the mod
-// image goes away.
+// The worker is tracked so the unload path joins it before the mod image goes
+// away.
 void StartPrefetch() {
-    if (g_stopping.load(std::memory_order_acquire)) return;
     if (g_prefetchSucceeded.load(std::memory_order_acquire)) return;
     if (g_prefetchRunning.exchange(true)) return; // one attempt in flight
-    if (g_prefetchDone) ResetEvent(g_prefetchDone);
-    HANDLE thread = CreateThread(nullptr, 0, PrefetchThread, nullptr, 0, nullptr);
+    // Same fence BeginJob() uses, for the same reason: Wh_ModBeforeUninit sets
+    // g_stopping under g_gate held exclusively and Cleanup() joins the tracked
+    // threads afterwards, so reading g_stopping outside the lock could let this
+    // create a worker after the join already happened - and PrefetchThread's
+    // code lives in the image Windhawk is about to unmap. Creating the thread
+    // and registering it must both happen inside the shared hold.
+    HANDLE thread = nullptr;
+    bool allowed = false;
+    AcquireSRWLockShared(&g_gate);
+    allowed = !g_stopping.load(std::memory_order_acquire);
+    if (allowed) {
+        if (g_prefetchDone) ResetEvent(g_prefetchDone);
+        thread = CreateThread(nullptr, 0, PrefetchThread, nullptr, 0, nullptr);
+        if (thread) RegisterThread(thread); // teardown joins this before unmapping
+    }
+    ReleaseSRWLockShared(&g_gate);
     if (!thread) {
         g_prefetchRunning.store(false, std::memory_order_release);
-        Wh_Log(L"Could not start the payload prefetch worker");
+        if (allowed) Wh_Log(L"Could not start the payload prefetch worker");
         return;
     }
-    RegisterThread(thread); // teardown joins this before unmapping the image
     CloseHandle(thread);
     Wh_Log(L"Fetching the original Microsoft payloads in the background");
 }
@@ -7764,6 +7842,9 @@ bool Prepare() {
     if (!active.active) return Fail(L"ActivateActCtx");
     g_lang = ResolveSelectedLanguage();
     if (g_lang < LangEN || g_lang >= LangCount) g_lang = LangEN;
+    // Prepare() just resolved the live setting, so a change queued while the
+    // provider was not ready yet is already reflected in the tables below.
+    g_pendingLang.store(-1, std::memory_order_release);
     Wh_Log(L"Building embedded resources for language %s (%s)", kLangTags[g_lang], kLangNames[g_lang]);
     if (!BuildEmbeddedResources()) return false;
     if (!BuildEmbeddedInputResources()) return false;
@@ -7881,6 +7962,39 @@ bool EnsurePrepared() {
     return ready;
 }
 
+// ===== Runtime language switch =====
+// Wh_ModSettingsChanged no longer reloads the mod, so a language change is
+// applied here. The embedded resource tables are handed to comctl32 as raw
+// pointers (g_blobs[i].data() becomes a dialog template), so they may only be
+// rebuilt at a quiet point: no live CPL session, no window of ours alive, and no
+// other legacy call in flight. CplHook calls this on every message and it is a
+// single atomic load until all of that holds.
+bool ApplyPendingLanguageChange() {
+    if (g_pendingLang.load(std::memory_order_acquire) < 0) return true;
+    if (g_legacyInitialized.load(std::memory_order_acquire)) return false;
+    if (g_active.load(std::memory_order_acquire) > 1) return false; // another legacy call in flight
+    if (AnyOwnedWindowAlive()) return false;                        // a dialog of ours is up
+    // Provider not mapped yet: Prepare() resolves the live setting itself.
+    if (!g_image.cpl || !g_blobCount) return false;
+    AcquireSRWLockExclusive(&g_langLock);
+    const int pending = g_pendingLang.load(std::memory_order_acquire);
+    if (pending < 0) { ReleaseSRWLockExclusive(&g_langLock); return true; }
+    const int previous = g_lang.load(std::memory_order_acquire);
+    g_lang.store(pending, std::memory_order_release);
+    g_pendingLang.store(-1, std::memory_order_release);
+    bool ok = BuildEmbeddedResources() && BuildEmbeddedInputResources();
+    if (ok) {
+        Wh_Log(L"UI language switched at runtime: %s -> %s", kLangTags[previous], kLangTags[pending]);
+    } else {
+        // Never leave half-built tables behind: restore the previous language.
+        g_lang.store(previous, std::memory_order_release);
+        ok = BuildEmbeddedResources() && BuildEmbeddedInputResources();
+        Wh_Log(L"Runtime language switch to %s failed; restored %s", kLangTags[pending], kLangTags[previous]);
+    }
+    ReleaseSRWLockExclusive(&g_langLock);
+    return ok;
+}
+
 // Threads currently inside a legacy CPL call, paired with the host window
 // CplHook was invoked with. Both halves are used by CloseOwnedWindows(): the
 // thread id narrows the enumeration to threads that are genuinely running
@@ -7917,9 +8031,46 @@ void LeaveLegacy() {
     ReleaseSRWLockExclusive(&g_gate);
 }
 struct LegacyCall { ~LegacyCall() { LeaveLegacy(); } };
+// Brings the private provider up when the shell already sent CPL_INIT before
+// the payloads were verified. Enumerating the applet must not wait on a cold
+// download - that is the shell's own UI thread - so in that case CPL_INIT is
+// answered by the native provider and the legacy side is initialized here
+// instead, on the activation that actually needs it, replaying the prologue a
+// host would have sent. Without this the activation below would find
+// g_legacyInitialized false and hand the whole thing to the modern page.
+bool InitializeLegacyProvider(HWND window) {
+    if (!g_useLegacy.load(std::memory_order_acquire) || !g_image.cpl) return false;
+    LONG result = 0; DWORD exception = 0;
+    if (!CallCpl(g_image.cpl, window, CPL_INIT, 0, 0, result, exception) || !result) {
+        Wh_Log(L"Deferred CPlApplet initialization failed: exception=0x%08lX result=%ld; "
+               L"fallback to native intl.cpl", exception, result);
+        g_useLegacy.store(false);
+        return false;
+    }
+    // CPL_GETCOUNT is what a host sends next and is where the provider sizes
+    // its per-applet state. The shell already enumerated, so the count is not
+    // used here - only logged. A failure is not fatal: the provider is up, and
+    // marking it initialized keeps the CPL_STOP/CPL_EXIT pairing intact.
+    LONG count = 0;
+    const bool counted = CallCpl(g_image.cpl, window, CPL_GETCOUNT, 0, 0, count, exception) && count > 0;
+    Wh_Log(L"CPlApplet initialized on activation: authentic Windows 7 provider (CPL count = %ld%s)",
+           count, counted ? L"" : L", unexpected");
+    g_legacyInitialized.store(true);
+    g_cplInitThreadId.store(GetCurrentThreadId(), std::memory_order_release);
+    return true;
+}
 LONG CALLBACK CplHook(HWND window, UINT message, LPARAM first, LPARAM second) {
     DWORD entryError = GetLastError();
     const bool activation = message == CPL_DBLCLK || message == CPL_STARTWPARMSA || message == CPL_STARTWPARMSW;
+    // The complement of "the applet is being asked to show something": what the
+    // shell sends when it merely lists the applet or tears it down. Deliberately
+    // broader than `activation` above (which the native-fallback paths below
+    // have always used): anything that is not enumeration or lifetime may need
+    // the provider, CPL_SELECT included, and must never be routed to the modern
+    // page just because it is not one of the three messages listed there.
+    const bool enumeration = message == CPL_INIT || message == CPL_GETCOUNT ||
+                             message == CPL_INQUIRE || message == CPL_NEWINQUIRE ||
+                             message == CPL_STOP || message == CPL_EXIT;
     // `window` is the host window the applet was invoked with; the unload path
     // uses it as the root that a provider-raised window's owner chain has to
     // trace back to before it may be asked to close (finding 3).
@@ -7931,7 +8082,26 @@ LONG CALLBACK CplHook(HWND window, UINT message, LPARAM first, LPARAM second) {
         DpiScope dpi;
         LegacyCall call;
         SetLastError(entryError);
-        if (g_useLegacy.load() && !g_legacyInitialized.load()) EnsurePrepared();
+        if (g_useLegacy.load() && !g_legacyInitialized.load()) {
+            // A real activation may always wait out the grace budget for the
+            // payloads. Enumeration (CPL_INIT/CPL_GETCOUNT/CPL_INQUIRE, sent
+            // when the shell merely lists the applet - opening the Control
+            // Panel folder - which is also the moment LoadLibraryExW_hook
+            // installs this hook) must not wait on a *cold* download: that
+            // would freeze the shell's UI thread and burn the whole grace
+            // budget before the user ever double-clicks Region.
+            //
+            // It does still prepare here when the verified payloads are already
+            // on disk, which is the normal case after the first use. That
+            // matters: g_legacyInitialized is set by the CPL_INIT branch below,
+            // and a provider that missed CPL_INIT would leave every later
+            // message - including the activation - dispatched to the native
+            // modern page. When the payloads are not ready yet the provider
+            // comes up on the activation instead (InitializeLegacyProvider).
+            if (!enumeration || g_prefetchSucceeded.load(std::memory_order_acquire)) EnsurePrepared();
+            else StartPrefetch();
+        }
+        ApplyPendingLanguageChange(); // cheap no-op unless the language changed
         ActScope act(g_act);
         g_uiCreated = 0; g_uiFailed = false;
         if (message == CPL_INIT) {
@@ -7939,7 +8109,9 @@ LONG CALLBACK CplHook(HWND window, UINT message, LPARAM first, LPARAM second) {
             // is holding CPL metadata. The native provider shows no UI on CPL_INIT.
             LONG native = g_nativeCpl(window, message, first, second);
             g_nativeInitialized.store(native != 0);
-            if (!native || !g_useLegacy.load() || !act.active) return native;
+            // act.active/g_image.cpl are empty until Prepare() has run, which a
+            // plain enumeration deliberately does not wait for.
+            if (!native || !g_useLegacy.load() || !act.active || !g_image.cpl) return native;
             LONG legacy = 0; DWORD exception = 0;
             if (!CallCpl(g_image.cpl, window, message, first, second, legacy, exception) || !legacy) {
                 Wh_Log(L"CPlApplet initialization failed: exception=0x%08lX result=%ld; fallback to native intl.cpl", exception, legacy);
@@ -7950,9 +8122,18 @@ LONG CALLBACK CplHook(HWND window, UINT message, LPARAM first, LPARAM second) {
             Wh_Log(L"CPlApplet initialized: authentic Windows 7 provider");
             return legacy;
         }
-        if (!g_useLegacy.load() || !g_legacyInitialized.load() || !act.active) {
+        if (!g_useLegacy.load() || !act.active) {
             if (message == CPL_EXIT) g_nativeInitialized.store(false);
             return g_nativeCpl(window, message, first, second);
+        }
+        if (!g_legacyInitialized.load()) {
+            // Only a message that wants UI may bring the provider up late:
+            // CPL_STOP/CPL_EXIT must never map a provider that was not used,
+            // and the enumeration messages have nothing to dispatch to it.
+            if (enumeration || !InitializeLegacyProvider(window)) {
+                if (message == CPL_EXIT) g_nativeInitialized.store(false);
+                return g_nativeCpl(window, message, first, second);
+            }
         }
         // The original DLL starts notification/launch workers. Do not let its
         // globals disappear while those workers still use the private image.
@@ -8028,15 +8209,28 @@ BOOL CALLBACK CloseScanProc(HWND window, LPARAM lparam) {
     }
     return TRUE;
 }
-void CloseOwnedWindows() {
+// `force` escalates from "please close" to "this mod is ending the UI it
+// created itself". It exists because the unload wait is unbounded on purpose
+// (see the block comment at "Unload rundown"): a WM_CLOSE that a Win7 DLGPROC
+// ignores, or a nested modal child that never sees it, would otherwise hold the
+// unload open forever. Everything it force-closes is a window this mod created,
+// served and is still tracking, so it can legitimately end them.
+void CloseOwnedWindows(bool force) {
     // Called in a loop from Wh_ModBeforeUninit's unload wait; an exception
     // here must not abort that loop early and skip requesting the close.
     try {
         CloseScan scan;
         scan.pid = GetCurrentProcessId();
         std::vector<DWORD> threads;
+        std::vector<HWND> sheets, dialogs;
         AcquireSRWLockShared(&g_windowsLock);
-        scan.owned = g_owned;
+        scan.owned.reserve(g_owned.size());
+        for (const auto& entry : g_owned) {
+            if (!entry.hwnd) continue;
+            scan.owned.push_back(entry.hwnd);
+            if (entry.sheet) sheets.push_back(entry.hwnd);
+            else dialogs.push_back(entry.hwnd);
+        }
         scan.hosts.reserve(g_legacyThreads.size());
         threads.reserve(g_legacyThreads.size());
         for (const auto& entry : g_legacyThreads) {
@@ -8047,8 +8241,6 @@ void CloseOwnedWindows() {
             if (!seen) threads.push_back(entry.first);
         }
         ReleaseSRWLockShared(&g_windowsLock);
-        scan.owned.erase(std::remove(scan.owned.begin(), scan.owned.end(), static_cast<HWND>(nullptr)),
-                         scan.owned.end());
 
         // 1. Windows the mod itself created and tracked (property sheets and
         //    dialogs registered through Own()).
@@ -8064,6 +8256,30 @@ void CloseOwnedWindows() {
         //    owner chain traces back to a tracked or host window are asked to
         //    close - never a whole thread (finding 3).
         for (DWORD tid : threads) EnumThreadWindows(tid, CloseScanProc, reinterpret_cast<LPARAM>(&scan));
+
+        if (!force) return;
+        // 3. Escalation, children first: a nested modal dialog is what keeps
+        //    its parent sheet's loop running.
+        g_forceCloseUi.store(true, std::memory_order_release);
+        //    Modal dialogs: DialogCallback sees WM_CLOSE with the flag set and
+        //    calls EndDialog from the dialog's own thread, which is the only
+        //    thread allowed to end it. The unload loop re-posts every 100 ms, so
+        //    a dialog that is pumping will take it.
+        for (HWND window : dialogs) {
+            DWORD process = 0;
+            if (GetWindowThreadProcessId(window, &process) && process == scan.pid)
+                PostMessageW(window, WM_CLOSE, 0, 0);
+        }
+        //    Property sheets: press Cancel. PSM_PRESSBUTTON is the documented
+        //    programmatic close and is safe to send cross-thread; ABORTIFHUNG
+        //    keeps a wedged sheet from blocking the unload thread instead.
+        for (HWND window : sheets) {
+            DWORD process = 0;
+            if (!GetWindowThreadProcessId(window, &process) || process != scan.pid) continue;
+            DWORD_PTR ignored = 0;
+            SendMessageTimeoutW(window, PSM_PRESSBUTTON, PSBTN_CANCEL, 0,
+                                SMTO_ABORTIFHUNG | SMTO_NORMAL, 1000, &ignored);
+        }
     } catch (...) {
         // Best-effort: the outer unload loop keeps retrying regardless.
     }
@@ -8149,9 +8365,14 @@ void ShutdownMarshalRelease() {
 // Marshals the legacy CPL_EXIT/DLL_PROCESS_DETACH teardown to the thread
 // that ran CPL_INIT: that thread's Cicero/TSF and COM objects have thread
 // affinity there, while Wh_ModUninit runs on an arbitrary Windhawk thread
-// with no COM apartment initialized (finding 5). Bounded: if the init
-// thread is gone or wedged, falls back to running inline rather than
-// hanging the unload.
+// with no COM apartment initialized (finding 5).
+//
+// This one keeps its own fixed budget (kShutdownMarshalMs plus slack for the
+// sentinel) rather than joining the drain: by the time Cleanup() gets here the
+// drain has already proved g_active == 0, so no legacy call is in flight on any
+// thread and a timeout can only mean the init thread is gone or not pumping -
+// in which case running the teardown inline is the correct fallback, not a
+// race. The budget is what keeps a dead thread from hanging the unload.
 void ShutdownLegacyOnInitThread() {
     DWORD tid = g_cplInitThreadId.load(std::memory_order_acquire);
     if (!tid || tid == GetCurrentThreadId()) { ShutdownLegacyOnCurrentThread(); return; }
@@ -8215,37 +8436,51 @@ void RestoreInputIat() {
     g_inputPatches.clear();
 }
 void Cleanup() {
-    BeginUnloadDeadline(); // no-op when Wh_ModBeforeUninit already armed it
-    const bool drained = WaitForJobs(RemainingUnloadMs(kUnloadDeadlineMs));
+    // Unbounded, and it has to be - see "Unload rundown" at the top of the file
+    // for the four ways the mapped provider still points into this mod's image.
+    // What is bounded is each step leading up to it: ask the UI to close, and
+    // after kUnloadEscalateMs force-close the dialogs and sheets this mod
+    // created itself. That keeps this path correct even when Cleanup() is
+    // reached without Wh_ModBeforeUninit's loop (initialisation failure), and
+    // makes the unconditional wait below something nobody can be held open by.
+    bool drained = WaitForLegacyIdle(kUnloadEscalateMs) && WaitForJobs(kUnloadEscalateMs);
+    if (!drained) {
+        CloseOwnedWindows(false);
+        drained = WaitForLegacyIdle(kUnloadEscalateMs) && WaitForJobs(kUnloadEscalateMs);
+    }
+    if (!drained) {
+        Wh_Log(L"Private-provider UI still open at teardown; force-closing the dialogs and "
+               L"sheets this mod created");
+        CloseOwnedWindows(true);
+        drained = WaitForLegacyIdle(INFINITE) && WaitForJobs(INFINITE);
+    }
     // EndJob() (the job-count signal) fires before ThreadBridge actually
     // returns, so wait for the real thread handles too before anything below
     // unmaps the mod image their epilogues still execute in (finding 4).
-    // Bounded (finding 2): if they do not return, the image must stay mapped.
-    const bool joined = JoinTrackedThreads(RemainingUnloadMs(kUnloadDeadlineMs));
-    if (!drained) Abandon(L"private worker jobs did not finish");
-    if (!joined) Abandon(L"private worker threads did not return");
-    if (g_abandoned.load(std::memory_order_acquire)) {
-        // Something of ours is still live on another thread, so nothing that
-        // owns memory or code those threads use may be released: no legacy
-        // CPL_EXIT/DLL_PROCESS_DETACH (it would pull the provider's globals out
-        // from under an in-flight call), no RtlDeleteFunctionTable, no
-        // VirtualFree of the mapped image, no FreeLibrary of the private
-        // input.dll or its dependencies, no blob release (the mapped image's
-        // dialog templates point into them) and no ReleaseActCtx. All of it
-        // stays resident for the life of the process - a deliberate leak.
-        //
-        // The one thing that MUST still be undone is the private input.dll IAT:
-        // those slots point at functions inside this mod's image, which
-        // Windhawk unmaps as soon as Wh_ModUninit returns. An in-flight legacy
-        // call that finishes through the original function is survivable; a
-        // dangling pointer into an unmapped image is not.
-        RestoreInputIat();
-        Wh_Log(L"Unload abandoned: the Windows 7 provider image, its dependencies and the mod's private "
-               L"caches stay resident. Native intl.cpl serves every future call.");
-        return;
+    const bool joined = JoinTrackedThreads(INFINITE);
+    if (!drained || !joined) {
+        // Only reachable if an INFINITE wait returned something other than
+        // WAIT_OBJECT_0, which cannot happen with valid handles. Continuing is
+        // the lesser evil versus a Cleanup() that never returns, but it must be
+        // loud: it means the image below is about to be freed with something
+        // still running in it.
+        Wh_Log(L"ERROR: unload rundown reported failure (drained=%d joined=%d); continuing teardown",
+               drained ? 1 : 0, joined ? 1 : 0);
     }
+    // Last check before the image goes away: everything this mod served is
+    // modal, so nothing of ours should still be alive here. A hit means a
+    // DLGPROC/callback in this image is still reachable from a live window.
+    AcquireSRWLockShared(&g_windowsLock);
+    for (const auto& entry : g_owned)
+        if (entry.hwnd) Wh_Log(L"WARNING: window %p served by this mod is still alive at teardown", entry.hwnd);
+    ReleaseSRWLockShared(&g_windowsLock);
     ActScope act(g_act);
     ShutdownLegacyOnInitThread();
+    // Restore only slots we own, after legacy modal calls have left. They point
+    // into this mod's image, so an in-flight legacy call finishing through the
+    // original function is survivable; leaving them pointing at an unmapped
+    // image is not - and on a reload the next instance would record our dead
+    // hook as "the original".
     RestoreInputIat();
     if (g_image.functionTable && g_rtlDeleteTable) { g_rtlDeleteTable(g_image.functions); g_image.functionTable = false; }
     if (g_image.base) VirtualFree(g_image.base, 0, MEM_RELEASE);
@@ -8275,6 +8510,10 @@ void Cleanup() {
 // control.exe intl.cpl, which this mod already serves in full mode.
 Host g_host = Host::Other;
 bool g_envViable = false;
+// Read by the three redirect hooks on entry. Wh_ModSettingsChanged flips it, so
+// turning the redirect on or off takes effect immediately and does not need a
+// mod reload (which would run the whole unload rundown).
+std::atomic<bool> g_redirectWanted{false};
 using ShellExecuteExWFn = BOOL (WINAPI*)(SHELLEXECUTEINFOW*);
 using ShellExecuteWFn = HINSTANCE (WINAPI*)(HWND, LPCWSTR, LPCWSTR, LPCWSTR, LPCWSTR, INT);
 using CreateProcessWFn = BOOL (WINAPI*)(LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES, BOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION);
@@ -8305,6 +8544,7 @@ bool RedirectTarget(const SHELLEXECUTEINFOW* info) {
 BOOL WINAPI RedirectShellExecuteExW(SHELLEXECUTEINFOW* info) {
     auto orig = g_origShellExecuteExW;
     if (!orig) { SetLastError(ERROR_INVALID_FUNCTION); return FALSE; }
+    if (!g_redirectWanted.load(std::memory_order_acquire)) return orig(info);
     // Deliberately no EnterLegacy()/LeaveLegacy() here (finding 3). This hook
     // only rewrites a ms-settings: URL into "control.exe intl.cpl" and hands
     // the call straight to the original ShellExecuteExW: it never touches the
@@ -8348,6 +8588,8 @@ HINSTANCE WINAPI RedirectShellExecuteW(HWND hwnd, LPCWSTR verb, LPCWSTR file,
                                        LPCWSTR parameters, LPCWSTR directory, INT show) {
     auto orig = g_origShellExecuteW;
     if (!orig) return FALSE;
+    if (!g_redirectWanted.load(std::memory_order_acquire))
+        return orig(hwnd, verb, file, parameters, directory, show);
     try {
         if (IsRegionSettingsUrl(file) || ContainsRegionSettingsUrl(parameters)) {
             return orig(hwnd, verb, g_redirectExe.c_str(), L"intl.cpl", directory, show);
@@ -8363,6 +8605,10 @@ BOOL WINAPI RedirectCreateProcessW(LPCWSTR applicationName, LPWSTR commandLine,
     LPPROCESS_INFORMATION processInformation) {
     auto orig = g_origCreateProcessW;
     if (!orig) return FALSE;
+    if (!g_redirectWanted.load(std::memory_order_acquire))
+        return orig(applicationName, commandLine, processAttributes, threadAttributes,
+                    inheritHandles, creationFlags, environment, currentDirectory,
+                    startupInfo, processInformation);
     try {
         if (commandLine && ContainsRegionSettingsUrl(commandLine)) {
             std::wstring replacement = L"\"" + g_redirectExe + L"\" intl.cpl";
@@ -8527,6 +8773,7 @@ BOOL Wh_ModInit() {
     using namespace IntlRestore;
     try {
         const bool redirectWanted = Wh_GetIntSetting(L"redirectSettings") != 0;
+        g_redirectWanted.store(redirectWanted, std::memory_order_release);
         if (!Environment()) {
             return FALSE;
         }
@@ -8597,7 +8844,40 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 }
-BOOL Wh_ModSettingsChanged(BOOL* reload) { *reload = TRUE; return TRUE; }
+// Settings are applied at runtime; nothing here needs the mod torn down and
+// reloaded. That is not just a convenience: a reload runs the whole unload
+// rundown, so editing a setting while a Region dialog is open would make the
+// host wait for that dialog.
+BOOL Wh_ModSettingsChanged(BOOL* reload) {
+    using namespace IntlRestore;
+    *reload = FALSE;
+    try {
+        // redirectSettings: the hooks stay installed once they are up and check
+        // the flag on entry. They are only installed on demand, so an Explorer
+        // that never uses the feature carries no extra hooks; turning the
+        // feature off just clears the flag, because unhooking here would be a
+        // reload in all but name.
+        const bool wanted = Wh_GetIntSetting(L"redirectSettings") != 0;
+        const bool before = g_redirectWanted.exchange(wanted, std::memory_order_acq_rel);
+        if (wanted && g_host == Host::Explorer && !g_origShellExecuteExW) {
+            if (InstallRedirectHook()) Wh_Log(L"Settings redirect installed at runtime");
+            else Wh_Log(L"WARNING: Settings-redirect hook failed at runtime; classic UI still active");
+        } else if (wanted != before) {
+            Wh_Log(L"Settings redirect %s", wanted ? L"enabled" : L"disabled");
+        }
+        // language: queue the switch; ApplyPendingLanguageChange() rebuilds the
+        // embedded tables at the next quiet point inside CplHook.
+        const int lang = ResolveSelectedLanguage();
+        if (lang != g_lang.load(std::memory_order_acquire)) {
+            g_pendingLang.store(lang, std::memory_order_release);
+            Wh_Log(L"UI language change queued: %s -> %s", kLangTags[g_lang.load(std::memory_order_acquire)],
+                   kLangTags[lang]);
+        }
+    } catch (...) {
+        Wh_Log(L"Exception while applying settings at runtime; keeping the current state");
+    }
+    return TRUE;
+}
 void Wh_ModBeforeUninit() {
     using namespace IntlRestore;
     try {
@@ -8612,42 +8892,41 @@ void Wh_ModBeforeUninit() {
 
         Wh_Log(L"Unloading: requesting normal close of private-provider dialogs");
 
-        // Bounded, and this matters more than it looks: Wh_ModSettingsChanged
-        // asks for a reload on every settings change, so this path runs on any
-        // settings edit, not just on disable. WM_CLOSE is only a request - a
-        // modal Win7 dialog whose DLGPROC ignores it, or one sitting on a
-        // nested modal child loop, never closes - so an unbounded loop here
-        // would hang Explorer's settings dialog forever (finding 2).
-        BeginUnloadDeadline();
+        // No deadline here, deliberately: the mod image cannot be unmapped while
+        // anything still points into it, and giving up would crash the host
+        // instead of waiting (see "Unload rundown"). What this loop does instead
+        // is remove the reasons the wait can be long - it asks every window it
+        // may touch to close, and after kUnloadEscalateMs it force-closes the UI
+        // this mod created itself (EndDialog through its own DLGPROC wrapper,
+        // PSM_PRESSBUTTON/Cancel for its property sheets). What is left after
+        // that is only a wait on the user: a legacy launch blocked behind an
+        // out-of-process UAC consent prompt, which nothing in this process can
+        // end and which resolves as soon as it is answered.
         const ULONGLONG start = GetTickCount64();
         ULONGLONG lastDiagnostic = start;
         const ULONGLONG DIAGNOSTIC_INTERVAL_MS = 5000;
+        bool escalated = false;
 
         while (g_active.load(std::memory_order_acquire) != 0 ||
                g_jobs.load(std::memory_order_acquire) != 0) {
             const ULONGLONG now = GetTickCount64();
-            const DWORD remaining = RemainingUnloadMs(kUnloadDeadlineMs);
-            if (!remaining) {
-                Abandon(L"private-provider dialogs/jobs did not close");
-                break;
+            if (!escalated && now - start >= kUnloadEscalateMs) {
+                escalated = true;
+                Wh_Log(L"Private-provider UI still open after %llu ms; force-closing the dialogs and sheets "
+                       L"this mod created", now - start);
             }
 
-            CloseOwnedWindows();
+            CloseOwnedWindows(escalated);
 
-            // There is no safe way to force this: the mod image cannot be
-            // unmapped while its code is still on some thread's stack (see
-            // Wh_ModUninit / Cleanup). Keep requesting a normal close and
-            // waiting; only log periodically so a stuck provider is visible
-            // instead of silently hanging the unload. On expiry Abandon() leaves
-            // it mapped and puts every hook in a permanent pass-through state.
             if (now - lastDiagnostic > DIAGNOSTIC_INTERVAL_MS) {
-                Wh_Log(L"Still waiting for private-provider dialogs/jobs to close (%llu ms elapsed, giving up at %lu ms)",
-                       now - start, static_cast<unsigned long>(kUnloadDeadlineMs));
+                Wh_Log(L"Still waiting for private-provider dialogs/jobs to close (%llu ms elapsed, "
+                       L"active=%ld jobs=%ld)", now - start, g_active.load(std::memory_order_acquire),
+                       g_jobs.load(std::memory_order_acquire));
                 lastDiagnostic = now;
             }
 
             HANDLE event = g_active.load() != 0 ? g_idle : g_jobsIdle;
-            if (event) WaitForSingleObject(event, std::min<DWORD>(100, remaining));
+            if (event) WaitForSingleObject(event, 100);
         }
 
         AcquireSRWLockExclusive(&g_gate);
@@ -8661,15 +8940,13 @@ void Wh_ModUninit() {
     using namespace IntlRestore;
     try {
     Cleanup();
-    // On the abandoned path the provider image, its actctx, its dependencies
-    // and the dialog blobs are deliberately left resident (finding 2), and a
-    // worker may still be running, so nothing it can touch is released here.
-    const bool abandoned = g_abandoned.load(std::memory_order_acquire);
-    if (!abandoned && g_act != INVALID_HANDLE_VALUE) { ReleaseActCtx(g_act); g_act = INVALID_HANDLE_VALUE; }
+    // Cleanup() drained every legacy call and joined every tracked worker, so
+    // nothing can still SetEvent these handles or run inside the mod image.
+    if (g_act != INVALID_HANDLE_VALUE) { ReleaseActCtx(g_act); g_act = INVALID_HANDLE_VALUE; }
     if (g_nativeModule) { FreeLibrary(g_nativeModule); g_nativeModule = nullptr; }
     if (g_idle) { CloseHandle(g_idle); g_idle = nullptr; }
     if (g_jobsIdle) { CloseHandle(g_jobsIdle); g_jobsIdle = nullptr; }
-    if (!abandoned && g_prefetchDone) { CloseHandle(g_prefetchDone); g_prefetchDone = nullptr; }
+    if (g_prefetchDone) { CloseHandle(g_prefetchDone); g_prefetchDone = nullptr; }
     Wh_Log(L"Unloaded. Native Region behavior restored for new calls; system files and registration unchanged.");
     } catch (...) {
         // Unload must never propagate; the host survives with native behavior.
