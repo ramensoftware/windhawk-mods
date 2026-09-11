@@ -2,7 +2,7 @@
 // @id              taskbar-volume-percentage
 // @name            Taskbar Volume Percentage Indicator
 // @description     Displays the exact master volume percentage in the system tray natively inside the Windows 11 volume button with real-time sync.
-// @version         1.3.0
+// @version         1.3.1
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
@@ -20,7 +20,7 @@ Replaces the Windows 11 taskbar volume icon with the current volume level in rea
 
 - **Display styles**: Percentage (`50%`), number only (`50`), custom prefix (`Vol 50%`), emoji (`🔊 50%`), or default icon.
 - **Mute indicator**: Customizable mute display (`MUT`, `Mute`, `0%`, `✕`, `🔇`, or native glyph).
-- **Zero-Jitter Structural Stabilization**: Locks the XAML container minimum width (`IFrameworkElement::put_MinWidth`) to prevent neighboring system tray icons from shifting during volume changes.
+- **Zero-Jitter Structural Stabilization**: Locks the XAML container width and measure override (`TextIconContent::MeasureOverride` & `IFrameworkElement::put_MinWidth`) to eliminate layout jitter during volume changes without needing artificial padding.
 
 ## Credits
 
@@ -39,13 +39,6 @@ Replaces the Windows 11 taskbar volume icon with the current volume level in rea
     - prefix: Prefix and Percentage (e.g. Vol 50%)
     - emoji: Icon and Percentage (e.g. 🔊 50%)
     - vanilla: Windows Default (exact vanilla Windows speaker icon)
-- padStyle: none
-  $name: Number Padding
-  $description: Format padding to minimize icon movement during volume changes.
-  $options:
-    - none: No Padding (e.g. 50%)
-    - space: Space Padded (e.g. " 50%")
-    - zero: Zero Padded (e.g. 050%)
 - fixedContainerWidth: 0
   $name: Fixed Container Width
   $description: Minimum width in pixels for the volume container to eliminate layout jitter. Set to 0 for automatic optimal width based on style (e.g. 42 for percentage), or enter a custom width (e.g. 42). Set to -1 to disable.
@@ -138,12 +131,6 @@ enum class DisplayStyle {
     Vanilla,
 };
 
-enum class PadStyle {
-    None,
-    Space,
-    Zero,
-};
-
 enum class MuteStyle {
     Mut,
     Mute,
@@ -156,7 +143,6 @@ enum class MuteStyle {
 
 struct Settings {
     DisplayStyle displayStyle;
-    PadStyle padStyle;
     int fixedContainerWidth;
     std::wstring customPrefix;
     MuteStyle muteStyle;
@@ -180,6 +166,9 @@ static std::mutex g_dataModelMutex;
 
 static void* g_pVolumeIconView = nullptr;
 static std::mutex g_iconViewMutex;
+
+static void* g_pVolumeTextIcon = nullptr;
+static std::mutex g_textIconMutex;
 
 static std::atomic<bool> g_unloading{false};
 static std::atomic<bool> g_systemTrayModuleHooked{false};
@@ -238,6 +227,11 @@ struct IFrameworkElementCustom {
     IFrameworkElementVtbl* lpVtbl;
 };
 
+struct WinRTSize {
+    float Width;
+    float Height;
+};
+
 static double GetTargetContainerWidth(const Settings& settings) {
     if (settings.fixedContainerWidth < 0) {
         return 0.0; // Disabled
@@ -261,6 +255,33 @@ static double GetTargetContainerWidth(const Settings& settings) {
     }
 }
 
+static void ApplyElementMinWidth(void* pElement, double minWidth) {
+    if (!IsValidUserPointer(pElement)) {
+        return;
+    }
+
+    // 1. QueryInterface directly on pElement
+    IUnknown* pUnk = reinterpret_cast<IUnknown*>(pElement);
+    void* pFEVoid = nullptr;
+    if (SUCCEEDED(pUnk->QueryInterface(IID_IFrameworkElement, &pFEVoid)) && pFEVoid) {
+        IFrameworkElementCustom* pFE = reinterpret_cast<IFrameworkElementCustom*>(pFEVoid);
+        pFE->lpVtbl->put_MinWidth(pFE, minWidth);
+        pFE->lpVtbl->Release(pFE);
+    }
+
+    // 2. Also check inner composable XAML object at offset +8 (for aggregated controls)
+    void* pInner = *reinterpret_cast<void**>(reinterpret_cast<char*>(pElement) + 8);
+    if (IsValidUserPointer(pInner)) {
+        void* pInnerFEVoid = nullptr;
+        IUnknown* pInnerUnk = reinterpret_cast<IUnknown*>(pInner);
+        if (SUCCEEDED(pInnerUnk->QueryInterface(IID_IFrameworkElement, &pInnerFEVoid)) && pInnerFEVoid) {
+            IFrameworkElementCustom* pInnerFE = reinterpret_cast<IFrameworkElementCustom*>(pInnerFEVoid);
+            pInnerFE->lpVtbl->put_MinWidth(pInnerFE, minWidth);
+            pInnerFE->lpVtbl->Release(pInnerFE);
+        }
+    }
+}
+
 static void ApplyVolumeContainerWidth(void* pIconView) {
     if (!IsValidUserPointer(pIconView) || g_unloading.load(std::memory_order_relaxed)) {
         return;
@@ -275,25 +296,13 @@ static void ApplyVolumeContainerWidth(void* pIconView) {
     double targetWidth = GetTargetContainerWidth(settingsCopy);
 
     // Apply put_MinWidth on the IconView FrameworkElement
-    IUnknown* pUnk = reinterpret_cast<IUnknown*>(pIconView);
-    void* pFEVoid = nullptr;
-    if (SUCCEEDED(pUnk->QueryInterface(IID_IFrameworkElement, &pFEVoid)) && pFEVoid) {
-        IFrameworkElementCustom* pFE = reinterpret_cast<IFrameworkElementCustom*>(pFEVoid);
-        pFE->lpVtbl->put_MinWidth(pFE, targetWidth);
-        pFE->lpVtbl->Release(pFE);
-    }
+    ApplyElementMinWidth(pIconView, targetWidth);
 
     // Also apply put_MinWidth on the hosted content element (Grid / TextIconContent) if present
     if (targetWidth > 0.0) {
         void* pHostedContent = *reinterpret_cast<void**>(reinterpret_cast<char*>(pIconView) + 0x1b0);
         if (IsValidUserPointer(pHostedContent)) {
-            void* pHostedFEVoid = nullptr;
-            IUnknown* pHostedUnk = reinterpret_cast<IUnknown*>(pHostedContent);
-            if (SUCCEEDED(pHostedUnk->QueryInterface(IID_IFrameworkElement, &pHostedFEVoid)) && pHostedFEVoid) {
-                IFrameworkElementCustom* pHostedFE = reinterpret_cast<IFrameworkElementCustom*>(pHostedFEVoid);
-                pHostedFE->lpVtbl->put_MinWidth(pHostedFE, targetWidth);
-                pHostedFE->lpVtbl->Release(pHostedFE);
-            }
+            ApplyElementMinWidth(pHostedContent, targetWidth);
         }
     }
 }
@@ -366,30 +375,59 @@ static bool IsVolumeIconViewModel(void* pIconViewModel) {
     return isVolume;
 }
 
+static bool IsVolumeTextIcon(void* pThis) {
+    if (!IsValidUserPointer(pThis)) {
+        return false;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_textIconMutex);
+        if (g_pVolumeTextIcon == pThis) {
+            return true;
+        }
+    }
+
+    // Check ViewModel at offsets 0x80 and 0x68
+    const size_t vmOffsets[] = { 0x80, 0x68 };
+    for (size_t offset : vmOffsets) {
+        void* pVM = *reinterpret_cast<void**>(reinterpret_cast<char*>(pThis) + offset);
+        if (IsValidUserPointer(pVM)) {
+            // 1. Direct GUID check at offset 0x38 in ViewModel
+            const GUID* pGuid = reinterpret_cast<const GUID*>(reinterpret_cast<const char*>(pVM) + 0x38);
+            if (memcmp(pGuid, &GUID_VolumeIcon, sizeof(GUID)) == 0) {
+                return true;
+            }
+
+            // 2. Check via slot 6 (ITextIconContentViewModel::get_Id)
+            void** vtbl = *reinterpret_cast<void***>(pVM);
+            if (IsValidUserPointer(vtbl) && IsValidUserPointer(reinterpret_cast<void*>(vtbl[6]))) {
+                using get_Id_t = HRESULT(STDMETHODCALLTYPE*)(void* This, GUID* pGuidOut);
+                auto get_Id = reinterpret_cast<get_Id_t>(vtbl[6]);
+                GUID id = {};
+                if (SUCCEEDED(get_Id(pVM, &id)) && memcmp(&id, &GUID_VolumeIcon, sizeof(GUID)) == 0) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
 // ---------------------------------------------------------------------------
 // Formatting logic
 // ---------------------------------------------------------------------------
 
-static std::wstring FormatDigits(int percentage, PadStyle padStyle) {
-    std::wstring s = std::to_wstring(percentage);
-    if (padStyle == PadStyle::None) {
-        return s;
-    }
-
-    constexpr size_t kTotalDigits = 3;
-    if (s.length() < kTotalDigits) {
-        wchar_t padChar = (padStyle == PadStyle::Zero) ? L'0' : L' ';
-        s.insert(0, kTotalDigits - s.length(), padChar);
-    }
-    return s;
+static inline std::wstring FormatDigits(int percentage) {
+    return std::to_wstring(percentage);
 }
 
-static std::wstring FormatMuteString(MuteStyle style, const std::wstring& customText, PadStyle padStyle) {
+static std::wstring FormatMuteString(MuteStyle style, const std::wstring& customText) {
     switch (style) {
         case MuteStyle::Mute:
             return L"Mute";
         case MuteStyle::Zero:
-            return FormatDigits(0, padStyle) + L"%";
+            return L"0%";
         case MuteStyle::Cross:
             return L"\u2715";
         case MuteStyle::Emoji:
@@ -412,10 +450,10 @@ static std::wstring FormatVolumeText(int percentage, bool isMuted) {
     }
 
     if (isMuted && settingsCopy.displayStyle != DisplayStyle::Vanilla) {
-        return FormatMuteString(settingsCopy.muteStyle, settingsCopy.customMuteText, settingsCopy.padStyle);
+        return FormatMuteString(settingsCopy.muteStyle, settingsCopy.customMuteText);
     }
 
-    std::wstring s = FormatDigits(percentage, settingsCopy.padStyle);
+    std::wstring s = FormatDigits(percentage);
 
     switch (settingsCopy.displayStyle) {
         case DisplayStyle::Vanilla: {
@@ -657,7 +695,7 @@ static VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
 }
 
 // ---------------------------------------------------------------------------
-// VolumeSystemTrayIconDataModel & IconView hooks
+// VolumeSystemTrayIconDataModel, IconView & TextIconContent hooks
 // ---------------------------------------------------------------------------
 
 using VolumeSystemTrayIconDataModel_UpdateVolume_t = void(__cdecl*)(
@@ -682,6 +720,11 @@ using IconView_UpdateHostedContent_t = void(__cdecl*)(void* pThis);
 static IconView_UpdateHostedContent_t
     IconView_UpdateHostedContent_Original = nullptr;
 
+using TextIconContent_MeasureOverride_t = WinRTSize*(__cdecl*)(
+    void* pThis, WinRTSize* pResult, WinRTSize availableSize);
+static TextIconContent_MeasureOverride_t
+    TextIconContent_MeasureOverride_Original = nullptr;
+
 static void __cdecl VolumeSystemTrayIconDataModel_dtor_Hook(void* pThis) {
     {
         std::lock_guard<std::mutex> lock(g_dataModelMutex);
@@ -692,6 +735,10 @@ static void __cdecl VolumeSystemTrayIconDataModel_dtor_Hook(void* pThis) {
     {
         std::lock_guard<std::mutex> lock(g_iconViewMutex);
         g_pVolumeIconView = nullptr;
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_textIconMutex);
+        g_pVolumeTextIcon = nullptr;
     }
     if (VolumeSystemTrayIconDataModel_dtor_Original) {
         VolumeSystemTrayIconDataModel_dtor_Original(pThis);
@@ -741,6 +788,18 @@ static void __cdecl VolumeSystemTrayIconDataModel_UpdateVolume_Hook(
             ApplyVolumeContainerWidth(g_pVolumeIconView);
         }
     }
+    {
+        std::lock_guard<std::mutex> lock(g_textIconMutex);
+        if (g_pVolumeTextIcon) {
+            Settings settingsCopy;
+            {
+                std::lock_guard<std::mutex> lockSettings(g_settingsMutex);
+                settingsCopy = g_settings;
+            }
+            double targetWidth = GetTargetContainerWidth(settingsCopy);
+            ApplyElementMinWidth(g_pVolumeTextIcon, targetWidth);
+        }
+    }
 
     // Trigger UI redraw via CurrentData property notification with recursion guard
     if (VolumeSystemTrayIconDataModel_OnDataModelChanged_Original) {
@@ -749,6 +808,37 @@ static void __cdecl VolumeSystemTrayIconDataModel_UpdateVolume_Hook(
         VolumeSystemTrayIconDataModel_OnDataModelChanged_Original(pThis, &propName);
         s_inHook = false;
     }
+}
+
+static WinRTSize* __cdecl TextIconContent_MeasureOverride_Hook(
+    void* pThis, WinRTSize* pResult, WinRTSize availableSize) {
+    WinRTSize* res = TextIconContent_MeasureOverride_Original(pThis, pResult, availableSize);
+
+    if (res && !g_unloading.load(std::memory_order_relaxed)) {
+        if (IsVolumeTextIcon(pThis)) {
+            {
+                std::lock_guard<std::mutex> lock(g_textIconMutex);
+                g_pVolumeTextIcon = pThis;
+            }
+
+            Settings settingsCopy;
+            {
+                std::lock_guard<std::mutex> lock(g_settingsMutex);
+                settingsCopy = g_settings;
+            }
+
+            double targetWidth = GetTargetContainerWidth(settingsCopy);
+            if (targetWidth > 0.0) {
+                float targetWidthF = static_cast<float>(targetWidth);
+                if (res->Width < targetWidthF) {
+                    res->Width = targetWidthF;
+                }
+                ApplyElementMinWidth(pThis, targetWidth);
+            }
+        }
+    }
+
+    return res;
 }
 
 static void __cdecl IconView_OnViewModelChanged_Hook(void* pThis, void* pIconViewModel) {
@@ -787,7 +877,6 @@ static void __cdecl IconView_UpdateHostedContent_Hook(void* pThis) {
     }
 
     if (!isVolume) {
-        // If g_pVolumeIconView was not yet captured, check IconView + 0x78 (IconViewModel)
         void* pVM = *reinterpret_cast<void**>(reinterpret_cast<char*>(pThis) + 0x78);
         if (pVM && IsVolumeIconViewModel(pVM)) {
             {
@@ -844,6 +933,16 @@ static bool HookSystemTraySymbols(HMODULE module) {
         },
         {
             {
+                LR"(public: struct winrt::Windows::Foundation::Size __cdecl winrt::SystemTray::implementation::TextIconContent::MeasureOverride(struct winrt::Windows::Foundation::Size))",
+                LR"(public: struct winrt::Windows::Foundation::Size __cdecl winrt::SystemTray::implementation::TextIconContent::MeasureOverride(struct winrt::Windows::Foundation::Size) __ptr64)",
+                LR"(winrt::SystemTray::implementation::TextIconContent::MeasureOverride)",
+            },
+            reinterpret_cast<void**>(&TextIconContent_MeasureOverride_Original),
+            reinterpret_cast<void*>(TextIconContent_MeasureOverride_Hook),
+            true,
+        },
+        {
+            {
                 LR"(private: void __cdecl winrt::SystemTray::implementation::IconView::OnViewModelChanged(struct winrt::SystemTray::IconViewModel const &))",
                 LR"(private: void __cdecl winrt::SystemTray::implementation::IconView::OnViewModelChanged(struct winrt::SystemTray::IconViewModel const & __ptr64) __ptr64)",
                 LR"(?OnViewModelChanged@IconView@implementation@SystemTray@winrt@@AEAAXAEBUIconViewModel@34@@Z)",
@@ -873,6 +972,10 @@ static bool HookSystemTraySymbols(HMODULE module) {
 
     if (!VolumeSystemTrayIconDataModel_dtor_Original) {
         Wh_Log(L"Warning: VolumeSystemTrayIconDataModel destructor symbol could not be hooked; lifetime tracking will rely on validity checks");
+    }
+
+    if (TextIconContent_MeasureOverride_Original) {
+        Wh_Log(L"Successfully hooked TextIconContent::MeasureOverride for dynamic container width stabilization");
     }
 
     if (IconView_OnViewModelChanged_Original) {
@@ -973,20 +1076,6 @@ static void LoadSettings() {
         newSettings.displayStyle = DisplayStyle::Percentage;
     }
 
-    auto padStyleSetting = WindhawkUtils::StringSetting::make(L"padStyle");
-    PCWSTR padStyleStr = padStyleSetting.get();
-    if (padStyleStr) {
-        if (wcscmp(padStyleStr, L"zero") == 0) {
-            newSettings.padStyle = PadStyle::Zero;
-        } else if (wcscmp(padStyleStr, L"space") == 0) {
-            newSettings.padStyle = PadStyle::Space;
-        } else {
-            newSettings.padStyle = PadStyle::None;
-        }
-    } else {
-        newSettings.padStyle = PadStyle::None;
-    }
-
     newSettings.fixedContainerWidth = Wh_GetIntSetting(L"fixedContainerWidth");
 
     auto prefixSetting = WindhawkUtils::StringSetting::make(L"customPrefix");
@@ -1080,26 +1169,23 @@ void Wh_ModAfterInit() {
 }
 
 static void BeforeUninitOnUIThread(void* /*parameter*/) {
-    // Reset XAML container width to natural vanilla width (0.0)
+    // Reset TextIconContent width to natural vanilla width (0.0)
+    {
+        std::lock_guard<std::mutex> lock(g_textIconMutex);
+        if (g_pVolumeTextIcon) {
+            ApplyElementMinWidth(g_pVolumeTextIcon, 0.0);
+            g_pVolumeTextIcon = nullptr;
+        }
+    }
+
+    // Reset IconView container width to natural vanilla width (0.0)
     {
         std::lock_guard<std::mutex> lock(g_iconViewMutex);
         if (g_pVolumeIconView) {
-            IUnknown* pUnk = reinterpret_cast<IUnknown*>(g_pVolumeIconView);
-            void* pFEVoid = nullptr;
-            if (SUCCEEDED(pUnk->QueryInterface(IID_IFrameworkElement, &pFEVoid)) && pFEVoid) {
-                IFrameworkElementCustom* pFE = reinterpret_cast<IFrameworkElementCustom*>(pFEVoid);
-                pFE->lpVtbl->put_MinWidth(pFE, 0.0);
-                pFE->lpVtbl->Release(pFE);
-            }
+            ApplyElementMinWidth(g_pVolumeIconView, 0.0);
             void* pHostedContent = *reinterpret_cast<void**>(reinterpret_cast<char*>(g_pVolumeIconView) + 0x1b0);
             if (IsValidUserPointer(pHostedContent)) {
-                void* pHostedFEVoid = nullptr;
-                IUnknown* pHostedUnk = reinterpret_cast<IUnknown*>(pHostedContent);
-                if (SUCCEEDED(pHostedUnk->QueryInterface(IID_IFrameworkElement, &pHostedFEVoid)) && pHostedFEVoid) {
-                    IFrameworkElementCustom* pHostedFE = reinterpret_cast<IFrameworkElementCustom*>(pHostedFEVoid);
-                    pHostedFE->lpVtbl->put_MinWidth(pHostedFE, 0.0);
-                    pHostedFE->lpVtbl->Release(pHostedFE);
-                }
+                ApplyElementMinWidth(pHostedContent, 0.0);
             }
             g_pVolumeIconView = nullptr;
         }
@@ -1152,6 +1238,23 @@ void Wh_ModUninit() {
 }
 
 static void SettingsChangedOnUIThread(void* /*parameter*/) {
+    Settings settingsCopy;
+    {
+        std::lock_guard<std::mutex> lock(g_settingsMutex);
+        settingsCopy = g_settings;
+    }
+
+    double targetWidth = GetTargetContainerWidth(settingsCopy);
+
+    // Apply width to TextIconContent
+    {
+        std::lock_guard<std::mutex> lock(g_textIconMutex);
+        if (g_pVolumeTextIcon && !g_unloading.load(std::memory_order_relaxed)) {
+            ApplyElementMinWidth(g_pVolumeTextIcon, targetWidth);
+        }
+    }
+
+    // Apply width to IconView if captured
     {
         std::lock_guard<std::mutex> lock(g_iconViewMutex);
         if (g_pVolumeIconView && !g_unloading.load(std::memory_order_relaxed)) {
