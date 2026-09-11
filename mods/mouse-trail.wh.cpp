@@ -381,8 +381,8 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 - enable_adaptive_contrast: false
   $name: Adaptive Contrast
   $name:zh-CN: 自适应对比度
-  $description: Sample background brightness, add dark outline on bright backgrounds and bright outline on dark backgrounds.
-  $description:zh-CN: 采样背景亮度，亮背景叠加黑色描边，暗背景叠加亮色描边，确保拖尾始终可见。
+  $description: Sample background brightness and adapt trail color luminance automatically, with a subtle soft edge for visibility on any background.
+  $description:zh-CN: 采样背景亮度自动微调拖尾颜色明暗，亮背景下压暗、暗背景提亮，并加一圈极细柔和边缘，确保任何背景下都清晰可见。
 
 # ===== 形状拖尾设置 =====
 - shape_type: heart
@@ -1463,7 +1463,13 @@ float4 PSMain(PS_INPUT input) : SV_TARGET {
     }
     // 2.5D 光照：深度越大越亮（模拟高光）
     float light = 1.0 + input.depth * 0.3;
-    return float4(gradColor.rgb * light, gradColor.a);
+    float3 rgb = gradColor.rgb * light;
+    if (adaptiveFlag > 0.5) {
+        float adapt = (bgLuminance - 0.5) * 0.7;
+        if (adapt > 0.0) { rgb *= (1.0 - adapt); }
+        else { rgb = lerp(rgb, float3(1,1,1), -adapt); }
+    }
+    return float4(rgb, gradColor.a);
 }
 )";
 
@@ -1644,25 +1650,16 @@ float4 PSMain(PS_INPUT input) : SV_TARGET {
     }
     if (!inside) discard;
     float alpha = input.color.a * smoothstep(0.5, 0.42, dist);
-    // 自适应对比描边：形状边缘添加对比色环
-    if (adaptiveFlag > 0.5) {
-        float edgeDist = 0.0;
-        // 计算到形状边缘的近似距离
-        if (input.shape < 1.5) {
-            edgeDist = 0.5 - dist;  // 圆形
-        } else {
-            edgeDist = 0.5 - dist;  // 其他形状近似
-        }
-        // 边缘 15% 区域叠加描边色
-        if (edgeDist < 0.08) {
-            float3 outlineRGB = bgLuminance > 0.5 ? float3(0,0,0) : float3(1,1,1);
-            float edgeAlpha = smoothstep(0.08, 0.0, edgeDist) * 0.7;
-            return float4(outlineRGB, edgeAlpha);
-        }
-    }
     // 2.5D 光照
     float light = 1.0 + input.depth * 0.25;
-    return float4(input.color.rgb * light, alpha);
+    float3 rgb = input.color.rgb * light;
+    // 自适应对比度：根据背景亮度微调粒子颜色明度
+    if (adaptiveFlag > 0.5) {
+        float adapt = (bgLuminance - 0.5) * 0.7;
+        if (adapt > 0.0) { rgb *= (1.0 - adapt); }
+        else { rgb = lerp(rgb, float3(1,1,1), -adapt); }
+    }
+    return float4(rgb, alpha);
 }
 )";
 
@@ -1913,9 +1910,6 @@ static void NativeRenderParticles(int screenW, int screenH) {
     g_pD3DContext->DrawInstanced(6, count, 0, 0);
 }
 
-// 前向声明（自适应对比度函数定义在后面）
-static D2D1_COLOR_F GetAdaptiveOutlineColor(float alpha);
-
 // 拖尾带顶点缓冲渲染（v3 原生渲染）
 static void NativeRenderTrail(const std::vector<D2D1_POINT_2F>& smoothed, float widthMul,
                               const GradData& cols, float fadeAlpha, int screenW, int screenH, DWORD dwTime = 0) {
@@ -1980,10 +1974,10 @@ static void NativeRenderTrail(const std::vector<D2D1_POINT_2F>& smoothed, float 
         }
     };
 
-    // 0. 自适应对比描边（最外层，亮背景黑色/暗背景白色）
+    // 0. 自适应柔和边缘（极细、低透明度，自然不突兀）
     if (g_adaptiveContrast) {
-        D2D1_COLOR_F outlineCol = GetAdaptiveOutlineColor(0.55f);
-        drawBand(buildBand(2.6f, outlineCol.r, outlineCol.g, outlineCol.b, outlineCol.a));
+        float edgeV = g_bgLuminance > 0.5f ? 0.08f : 0.95f;
+        drawBand(buildBand(1.18f, edgeV, edgeV, edgeV, 0.18f));
     }
     // 1. 外发光层（受 enable_glow 和 glow_intensity 控制）
     if (g_enableGlow) {
@@ -3016,14 +3010,6 @@ static void SampleBackgroundLuminance(const std::vector<D2D1_POINT_2F>& path, DW
         // 平滑过渡，避免亮度跳变
         g_bgLuminance = g_bgLuminance * 0.7f + avgLum * 0.3f;
     }
-}
-
-// 获取自适应描边颜色：亮背景→黑色，暗背景→白色
-static D2D1_COLOR_F GetAdaptiveOutlineColor(float alpha) {
-    if (g_bgLuminance > 0.5f)
-        return D2D1::ColorF(0.0f, 0.0f, 0.0f, alpha);  // 亮背景：黑色描边
-    else
-        return D2D1::ColorF(1.0f, 1.0f, 1.0f, alpha);  // 暗背景：白色描边
 }
 
 // ===================== 轨迹变形 =====================
