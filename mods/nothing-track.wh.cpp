@@ -8,6 +8,7 @@
 // @author          lenorio
 // @github          https://github.com/lenorio
 // @homepage        https://github.com/lenorio/Nothing-Track
+// @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -luser32 -lwindowsapp
@@ -27,6 +28,8 @@ The mod communicates with earbuds directly over Bluetooth RFCOMM (SPP), so you d
 
 Unlike the generic **BT Battery Monitor** mod, Nothing Track uses the Nothing/CMF vendor protocol to provide ANC, EQ, bass, low-latency, and Find My Earbuds controls in addition to battery levels.
 
+Taskbar placement and XAML injection are based on [Taskbar Fluent Media Player](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-fluent-media-player.wh.cpp) by Salyts.
+
 ### Features
 * **Taskbar widget:** shows battery percentage for left/right buds and the charging case with native battery glyphs.
 * **Placement options:** dock next to the clock, tray icons, or near the Start button.
@@ -35,7 +38,7 @@ Unlike the generic **BT Battery Monitor** mod, Nothing Track uses the Nothing/CM
   * Ultra Bass: toggle and level adjustment (1–5).
   * EQ presets: Balanced, More Bass, More Treble, Voice, Dirac Opteo.
   * Game mode (Low Latency toggle).
-  * Find My Earbuds: ring left or right bud (with in-ear detection to avoid accidental loud sound in your ear).
+  * Find My Earbuds: ring the left or right earbud.
 * **Single-earbud mode:** automatically dims the inactive bud and disables dual-earbud ANC modes when only one bud is worn.
 * **Background reconnect:** recovers connection automatically when earbuds wake up or reconnect to Windows.
 
@@ -58,7 +61,7 @@ Tested with CMF Buds 2 / Buds Pro 2 and Nothing Ear series. Other Nothing/CMF mo
   * Ultra Bass: переключатель и выбор уровня (1–5).
   * Эквалайзер: пресеты Balanced, More Bass, More Treble, Voice, Dirac Opteo.
   * Игровой режим (Low Latency).
-  * Поиск наушников: звуковой сигнал на левый или правый наушник (с защитой от случайного срабатывания в ухе).
+  * Поиск наушников: звуковой сигнал на левый или правый наушник.
 * **Режим одного наушника:** скрывает неактивный наушник и блокирует недоступные режимы ANC, когда надет только один наушник.
 * **Фоновое переподключение:** автоматически восстанавливает связь по Bluetooth при включении или подключении наушников к системе.
 
@@ -206,6 +209,7 @@ Tested with CMF Buds 2 / Buds Pro 2 and Nothing Ear series. Other Nothing/CMF mo
 #include <mutex>
 #include <condition_variable>
 #include <algorithm>
+#include <cmath>
 #include <functional>
 #include <optional>
 #include <type_traits>
@@ -278,6 +282,7 @@ struct ModSettings {
 };
 
 static ModSettings g_settings;
+static std::atomic<int> g_pollIntervalSeconds{30};
 static EarbudsState g_earbudsState;
 static std::mutex g_stateMutex;
 static HWND g_taskbarWnd = nullptr;
@@ -294,6 +299,7 @@ static std::wstring g_trackPosition = L"";
 static winrt::event_token g_layoutUpdateToken{};
 [[clang::no_destroy]] static DispatcherTimer g_dispatcherTimer{nullptr};
 [[clang::no_destroy]] static DispatcherTimer g_retryTimer{nullptr};
+static winrt::event_token g_retryTimerToken{};
 [[clang::no_destroy]] static Flyout s_currentFlyout{nullptr};
 static winrt::event_token g_timerToken{};
 
@@ -309,6 +315,7 @@ static inline uint16_t ComputeCrc16(const uint8_t* data, size_t size) {
 }
 
 static inline std::vector<uint8_t> BuildPacket(uint16_t commandId, const std::vector<uint8_t>& payload, uint8_t opId) {
+    uint16_t payloadSize = static_cast<uint16_t>(payload.size());
     std::vector<uint8_t> packet;
     packet.reserve(3 + 2 + 1 + 2 + payload.size() + 2);
     packet.push_back(0x55);
@@ -316,8 +323,8 @@ static inline std::vector<uint8_t> BuildPacket(uint16_t commandId, const std::ve
     packet.push_back(0x01);
     packet.push_back(static_cast<uint8_t>(commandId & 0xFF));
     packet.push_back(static_cast<uint8_t>((commandId >> 8) & 0xFF));
-    packet.push_back(static_cast<uint8_t>(payload.size()));
-    packet.push_back(0x00);
+    packet.push_back(static_cast<uint8_t>(payloadSize & 0xFF));
+    packet.push_back(static_cast<uint8_t>((payloadSize >> 8) & 0xFF));
     packet.push_back(opId);
     packet.insert(packet.end(), payload.begin(), payload.end());
     uint16_t crc = ComputeCrc16(packet.data(), packet.size());
@@ -329,6 +336,7 @@ static inline std::vector<uint8_t> BuildPacket(uint16_t commandId, const std::ve
 class BluetoothManager {
 public:
     static BluetoothManager& Instance() {
+        std::lock_guard<std::mutex> lock(InstanceMutex());
         auto& instance = InstanceStorage();
         if (!instance) {
             instance.emplace();
@@ -337,20 +345,35 @@ public:
     }
 
     static void DestroyInstance() {
+        std::lock_guard<std::mutex> lock(InstanceMutex());
         InstanceStorage().reset();
     }
 
     void Start() {
-        if (m_running.load()) return;
+        std::lock_guard<std::mutex> lock(m_lifecycleMutex);
+        if (m_running.exchange(true)) return;
         m_stopRequested.store(false);
-        m_running.store(true);
-        m_worker = std::thread([this]() { WorkerLoop(); });
-        m_actionWorker = std::thread([this]() { ActionLoop(); });
+        try {
+            m_worker = std::thread([this]() { WorkerLoop(); });
+            m_actionWorker = std::thread([this]() { ActionLoop(); });
+        } catch (...) {
+            m_stopRequested.store(true);
+            m_actionCv.notify_all();
+            m_workerCv.notify_all();
+            CancelPendingOperations();
+            if (m_actionWorker.joinable()) m_actionWorker.join();
+            if (m_worker.joinable()) m_worker.join();
+            m_running.store(false);
+            Wh_Log(L"BluetoothManager: Failed to start worker threads");
+        }
     }
 
     void Stop() {
+        std::lock_guard<std::mutex> lock(m_lifecycleMutex);
+        if (!m_running.exchange(false)) return;
         m_stopRequested.store(true);
         m_actionCv.notify_all();
+        m_workerCv.notify_all();
         CancelPendingOperations();
         Disconnect();
         if (m_actionWorker.joinable()) {
@@ -359,7 +382,6 @@ public:
         if (m_worker.joinable()) {
             m_worker.join();
         }
-        m_running.store(false);
     }
 
     void PostAction(std::function<void()> action) {
@@ -486,13 +508,31 @@ public:
         // EarWeb protocol for B179: CMD 61442, [0x02 (L) / 0x03 (R), active ? 0x01 : 0x00]
         uint8_t side = left ? 0x02 : 0x03;
         uint8_t stateVal = active ? 0x01 : 0x00;
-        return SendCommand(61442, {side, stateVal});
+        bool ok = SendCommand(61442, {side, stateVal});
+        if (ok) {
+            (left ? m_ringingLeft : m_ringingRight).store(active);
+        }
+        return ok;
+    }
+
+    void StopRinging() {
+        if (m_ringingLeft.exchange(false)) {
+            SendCommand(61442, {0x02, 0x00});
+        }
+        if (m_ringingRight.exchange(false)) {
+            SendCommand(61442, {0x03, 0x00});
+        }
     }
 
 private:
     static std::optional<BluetoothManager>& InstanceStorage() {
         [[clang::no_destroy]] static std::optional<BluetoothManager> s_instance;
         return s_instance;
+    }
+
+    static std::mutex& InstanceMutex() {
+        [[clang::no_destroy]] static std::mutex mutex;
+        return mutex;
     }
 
     template <typename TAsync>
@@ -545,6 +585,9 @@ private:
     std::atomic<bool> m_running{false};
     std::atomic<bool> m_stopRequested{false};
     std::atomic<bool> m_connected{false};
+    std::atomic<bool> m_ringingLeft{false};
+    std::atomic<bool> m_ringingRight{false};
+    std::mutex m_lifecycleMutex;
     std::thread m_worker;
     std::thread m_actionWorker;
     std::mutex m_actionMutex;
@@ -552,28 +595,65 @@ private:
     std::deque<std::function<void()>> m_actionQueue;
     std::mutex m_asyncMutex;
     std::vector<winrt::Windows::Foundation::IAsyncInfo> m_asyncOperations;
+    std::mutex m_workerWaitMutex;
+    std::condition_variable m_workerCv;
+    BluetoothDevice m_cachedDevice{nullptr};
+    std::wstring m_cachedDeviceName;
+
+    bool WaitForStop(std::chrono::seconds duration) {
+        std::unique_lock<std::mutex> lock(m_workerWaitMutex);
+        return m_workerCv.wait_for(lock, duration,
+                                  [this]() { return m_stopRequested.load(); });
+    }
+
+    void ExpireStaleBatteryReadings() {
+        auto now = std::chrono::steady_clock::now();
+        std::lock_guard<std::mutex> lock(g_stateMutex);
+        if (g_earbudsState.left.present &&
+            now - g_earbudsState.left.lastSeen > std::chrono::seconds(35)) {
+            g_earbudsState.left.present = false;
+        }
+        if (g_earbudsState.right.present &&
+            now - g_earbudsState.right.lastSeen > std::chrono::seconds(35)) {
+            g_earbudsState.right.present = false;
+        }
+        if (g_earbudsState.caseBattery.present &&
+            now - g_earbudsState.caseBattery.lastSeen > std::chrono::seconds(15)) {
+            g_earbudsState.caseBattery.present = false;
+        }
+    }
 
     void ActionLoop() {
         try {
             init_apartment(winrt::apartment_type::multi_threaded);
         } catch (...) {}
+        auto nextPoll = std::chrono::steady_clock::now() +
+                        std::chrono::seconds(g_pollIntervalSeconds.load());
         while (!m_stopRequested.load()) {
             std::function<void()> action;
+            bool pollBattery = false;
             {
                 std::unique_lock<std::mutex> lock(m_actionMutex);
-                m_actionCv.wait(lock, [this]() {
+                m_actionCv.wait_until(lock, nextPoll, [this]() {
                     return m_stopRequested.load() || !m_actionQueue.empty();
                 });
                 if (m_stopRequested.load()) break;
                 if (!m_actionQueue.empty()) {
                     action = std::move(m_actionQueue.front());
                     m_actionQueue.pop_front();
+                } else if (std::chrono::steady_clock::now() >= nextPoll) {
+                    pollBattery = true;
+                    nextPoll = std::chrono::steady_clock::now() +
+                               std::chrono::seconds(g_pollIntervalSeconds.load());
                 }
             }
             if (action) {
                 try {
                     action();
                 } catch (...) {}
+            } else if (pollBattery && m_connected.load()) {
+                ExpireStaleBatteryReadings();
+                QueryBattery();
             }
         }
     }
@@ -649,6 +729,7 @@ private:
             }
         } else if (cmd == 16414 || cmd == 57347 || cmd == 28688) { // ANC
             if (!payload.empty()) {
+                std::lock_guard<std::mutex> lock(g_stateMutex);
                 AncMode mode = AncMode::Off;
                 bool restricted = false;
 
@@ -679,7 +760,6 @@ private:
                     }
                 }
 
-                std::lock_guard<std::mutex> lock(g_stateMutex);
                 g_earbudsState.ancMode = mode;
                 g_earbudsState.ancRestrictedSingleBud = restricted;
             }
@@ -751,28 +831,32 @@ private:
 
         while (!m_stopRequested.load()) {
             if (!m_connected.load()) {
-                BluetoothDevice targetBtDev{nullptr};
+                BluetoothDevice targetBtDev = m_cachedDevice;
                 RfcommDeviceService service{nullptr};
-                std::wstring realName;
+                std::wstring realName = m_cachedDeviceName;
 
                 // 1. Find paired Nothing / CMF earbuds
                 try {
-                    auto btSelector = BluetoothDevice::GetDeviceSelectorFromPairingState(true);
-                    auto paired = GetAsync(DeviceInformation::FindAllAsync(btSelector));
-                    for (uint32_t i = 0; i < paired.Size(); ++i) {
-                        auto dev = paired.GetAt(i);
-                        std::wstring devName = dev.Name().c_str();
-                        std::wstring lower = devName;
-                        for (auto& c : lower) c = towlower(c);
-                        if (lower.find(L"nothing") != std::wstring::npos ||
-                            lower.find(L"cmf") != std::wstring::npos ||
-                            lower.find(L"ear (") != std::wstring::npos ||
-                            lower.find(L"ear(") != std::wstring::npos) {
-                            auto btDev = GetAsync(BluetoothDevice::FromIdAsync(dev.Id()));
-                            if (btDev) {
-                                targetBtDev = btDev;
-                                realName = devName;
-                                break;
+                    if (!targetBtDev) {
+                        auto btSelector = BluetoothDevice::GetDeviceSelectorFromPairingState(true);
+                        auto paired = GetAsync(DeviceInformation::FindAllAsync(btSelector));
+                        for (uint32_t i = 0; i < paired.Size(); ++i) {
+                            auto dev = paired.GetAt(i);
+                            std::wstring devName = dev.Name().c_str();
+                            std::wstring lower = devName;
+                            for (auto& c : lower) c = towlower(c);
+                            if (lower.find(L"nothing") != std::wstring::npos ||
+                                lower.find(L"cmf") != std::wstring::npos ||
+                                lower.find(L"ear (") != std::wstring::npos ||
+                                lower.find(L"ear(") != std::wstring::npos) {
+                                auto btDev = GetAsync(BluetoothDevice::FromIdAsync(dev.Id()));
+                                if (btDev) {
+                                    targetBtDev = btDev;
+                                    realName = devName;
+                                    m_cachedDevice = btDev;
+                                    m_cachedDeviceName = devName;
+                                    break;
+                                }
                             }
                         }
                     }
@@ -796,6 +880,8 @@ private:
                                     targetBtDev = s.Device();
                                     service = s;
                                     realName = devName;
+                                    m_cachedDevice = targetBtDev;
+                                    m_cachedDeviceName = devName;
                                     break;
                                 }
                             }
@@ -808,7 +894,10 @@ private:
                 if (targetBtDev) {
                     try {
                         isDevConnected = (targetBtDev.ConnectionStatus() == BluetoothConnectionStatus::Connected);
-                    } catch (...) {}
+                    } catch (...) {
+                        m_cachedDevice = nullptr;
+                        m_cachedDeviceName.clear();
+                    }
                 }
 
                 if (!isDevConnected) {
@@ -822,10 +911,10 @@ private:
                         g_earbudsState.caseBattery.present = false;
                     }
 
-                    // Sleep gently (3 seconds) waiting for Windows to connect before checking status again
-                    for (int i = 0; i < 12 && !m_stopRequested.load(); ++i) {
-                        std::this_thread::sleep_for(std::chrono::milliseconds(250));
-                    }
+                    // Reuse the matched BluetoothDevice and check it cheaply. If no
+                    // matching device exists, back off before enumerating again.
+                    WaitForStop(targetBtDev ? std::chrono::seconds(15)
+                                            : std::chrono::seconds(30));
                     continue;
                 }
 
@@ -892,17 +981,7 @@ private:
                         DataReader reader(socket.InputStream());
                         reader.InputStreamOptions(InputStreamOptions::None);
 
-                        auto lastPoll = std::chrono::steady_clock::now();
-
                         while (!m_stopRequested.load() && m_connected.load()) {
-                            // Check poll interval
-                            auto now = std::chrono::steady_clock::now();
-                            int interval = (std::max)(10, g_settings.pollInterval);
-                            if (std::chrono::duration_cast<std::chrono::seconds>(now - lastPoll).count() >= interval) {
-                                lastPoll = now;
-                                QueryBattery();
-                            }
-
                             // Read header magic
                             if (GetAsync(reader.LoadAsync(1)) < 1) break;
                             if (reader.ReadByte() != 0x55) continue;
@@ -913,8 +992,9 @@ private:
                             uint8_t cmdLo = reader.ReadByte();
                             uint8_t cmdHi = reader.ReadByte();
                             uint16_t cmd = cmdLo | (cmdHi << 8);
-                            uint8_t pLen = reader.ReadByte();
-                            uint8_t b6 = reader.ReadByte(); // 0x00
+                            uint8_t pLenLo = reader.ReadByte();
+                            uint8_t pLenHi = reader.ReadByte();
+                            uint16_t pLen = static_cast<uint16_t>(pLenLo | (pLenHi << 8));
                             uint8_t opId = reader.ReadByte(); // opId
 
                             uint32_t toRead = pLen + 2;
@@ -932,8 +1012,8 @@ private:
                             packetData.push_back(b2);
                             packetData.push_back(cmdLo);
                             packetData.push_back(cmdHi);
-                            packetData.push_back(pLen);
-                            packetData.push_back(b6);
+                            packetData.push_back(pLenLo);
+                            packetData.push_back(pLenHi);
                             packetData.push_back(opId);
                             packetData.insert(packetData.end(), payload.begin(), payload.end());
 
@@ -948,12 +1028,12 @@ private:
                     Disconnect();
                 }
 
-                // Wait before retrying
-                for (int i = 0; i < 20 && !m_stopRequested.load(); ++i) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(250));
-                }
+                // Wait briefly before retrying a cached, connected device.
+                WaitForStop(std::chrono::seconds(5));
             }
         }
+        m_cachedDevice = nullptr;
+        m_cachedDeviceName.clear();
     }
 };
 
@@ -1241,10 +1321,9 @@ inline wchar_t GetBatteryGlyph(int percent, bool charging) {
     int step = (percent + 5) / 10;
     step = std::clamp(step, 0, 10);
     if (charging) {
-        return static_cast<wchar_t>(0xEBB5 + step);
+        return static_cast<wchar_t>(0xEBAB + step);
     } else {
-        if (step == 0) return L'\uE83F';
-        return static_cast<wchar_t>(0xE850 + (step - 1));
+        return static_cast<wchar_t>(0xE850 + step);
     }
 }
 
@@ -2067,14 +2146,6 @@ static UIElement BuildFlyoutContent() {
                 ringLabel.Text(Loc(isLeft ? StringId::RingLeft : StringId::RingRight));
                 ringLabel.Foreground(SolidColorBrush(Color{0xCC, 0xFF, 0xFF, 0xFF}));
             } else {
-                EarbudsState st;
-                {
-                    std::lock_guard<std::mutex> lock(g_stateMutex);
-                    st = g_earbudsState;
-                }
-                bool inEar = isLeft ? st.left.present : st.right.present;
-                MessageBeep(inEar ? MB_ICONWARNING : MB_ICONASTERISK);
-
                 isRinging = true;
                 ringBtn.Background(SolidColorBrush(Color{0xFF, 0xD7, 0x19, 0x20}));
                 ringIcon.Text(L"\uE71A");
@@ -2595,6 +2666,10 @@ static void UpdateWidgetUi() {
                 } else {
                     leftIcon.ClearValue(TextBlock::ForegroundProperty());
                 }
+            } else {
+                leftIcon.Text(std::wstring(1, GetBatteryGlyph(-1, false)));
+                leftIcon.Opacity(0.35);
+                leftIcon.ClearValue(TextBlock::ForegroundProperty());
             }
             if (state.right.present) {
                 rightIcon.Text(std::wstring(1, GetBatteryGlyph(state.right.percent, state.right.charging)));
@@ -2604,33 +2679,47 @@ static void UpdateWidgetUi() {
                 } else {
                     rightIcon.ClearValue(TextBlock::ForegroundProperty());
                 }
+            } else {
+                rightIcon.Text(std::wstring(1, GetBatteryGlyph(-1, false)));
+                rightIcon.Opacity(0.35);
+                rightIcon.ClearValue(TextBlock::ForegroundProperty());
             }
         } else if (g_settings.displayFormat == L"single_active") {
             statusText.Visibility(Visibility::Collapsed);
-            bool showRight = state.right.present || !state.left.present;
-            leftSp.Visibility(showRight ? Visibility::Collapsed : Visibility::Visible);
-            rightSp.Visibility(showRight ? Visibility::Visible : Visibility::Collapsed);
-            leftText.Visibility(Visibility::Visible);
-            rightText.Visibility(Visibility::Visible);
-
-            if (showRight) {
-                rightIcon.Text(std::wstring(1, GetBatteryGlyph(state.right.present ? state.right.percent : -1, state.right.charging)));
-                rightText.Text(state.right.present ? (std::to_wstring(state.right.percent) + L"%") : L"—");
-                if (state.right.present && state.right.percent <= 20) {
-                    rightIcon.Foreground(SolidColorBrush(Color{0xFF, 0xE5, 0x39, 0x35}));
-                } else {
-                    rightIcon.ClearValue(TextBlock::ForegroundProperty());
-                }
-                rightSp.Opacity(state.right.present ? 1.0 : 0.4);
+            if (!state.left.present && !state.right.present) {
+                leftSp.Visibility(Visibility::Collapsed);
+                rightSp.Visibility(Visibility::Collapsed);
+                statusText.Visibility(Visibility::Visible);
+                statusText.Text(state.caseBattery.present
+                    ? Loc(StringId::Case) + L" " + std::to_wstring(state.caseBattery.percent) + L"%"
+                    : Loc(StringId::InCase));
+                statusText.Opacity(0.7);
             } else {
-                leftIcon.Text(std::wstring(1, GetBatteryGlyph(state.left.present ? state.left.percent : -1, state.left.charging)));
-                leftText.Text(state.left.present ? (std::to_wstring(state.left.percent) + L"%") : L"—");
-                if (state.left.present && state.left.percent <= 20) {
-                    leftIcon.Foreground(SolidColorBrush(Color{0xFF, 0xE5, 0x39, 0x35}));
+                bool showRight = state.right.present || !state.left.present;
+                leftSp.Visibility(showRight ? Visibility::Collapsed : Visibility::Visible);
+                rightSp.Visibility(showRight ? Visibility::Visible : Visibility::Collapsed);
+                leftText.Visibility(Visibility::Visible);
+                rightText.Visibility(Visibility::Visible);
+
+                if (showRight) {
+                    rightIcon.Text(std::wstring(1, GetBatteryGlyph(state.right.present ? state.right.percent : -1, state.right.charging)));
+                    rightText.Text(state.right.present ? (std::to_wstring(state.right.percent) + L"%") : L"—");
+                    if (state.right.present && state.right.percent <= 20) {
+                        rightIcon.Foreground(SolidColorBrush(Color{0xFF, 0xE5, 0x39, 0x35}));
+                    } else {
+                        rightIcon.ClearValue(TextBlock::ForegroundProperty());
+                    }
+                    rightSp.Opacity(state.right.present ? 1.0 : 0.4);
                 } else {
-                    leftIcon.ClearValue(TextBlock::ForegroundProperty());
+                    leftIcon.Text(std::wstring(1, GetBatteryGlyph(state.left.present ? state.left.percent : -1, state.left.charging)));
+                    leftText.Text(state.left.present ? (std::to_wstring(state.left.percent) + L"%") : L"—");
+                    if (state.left.present && state.left.percent <= 20) {
+                        leftIcon.Foreground(SolidColorBrush(Color{0xFF, 0xE5, 0x39, 0x35}));
+                    } else {
+                        leftIcon.ClearValue(TextBlock::ForegroundProperty());
+                    }
+                    leftSp.Opacity(state.left.present ? 1.0 : 0.4);
                 }
-                leftSp.Opacity(state.left.present ? 1.0 : 0.4);
             }
         } else {
             // Default "compact" (Dual battery L & R) or "detailed"
@@ -2715,7 +2804,7 @@ static void UpdateWidgetUi() {
 
             if (g_settings.displayFormat == L"detailed") {
                 statusText.Visibility(Visibility::Visible);
-                statusText.Text((state.deviceName.empty() ? L"CMF Buds 2" : state.deviceName) + L" • ");
+                statusText.Text(state.deviceName.empty() ? L"CMF Buds 2" : state.deviceName);
                 statusText.Opacity(0.7);
             } else if (!g_settings.hideDisconnectedBuds || showLeft || showRight) {
                 statusText.Visibility(Visibility::Collapsed);
@@ -2781,8 +2870,12 @@ static void RemoveWidgetGrid() {
     if (g_retryTimer) {
         try {
             g_retryTimer.Stop();
+            if (g_retryTimerToken.value) {
+                g_retryTimer.Tick(g_retryTimerToken);
+            }
         } catch (...) {}
         g_retryTimer = nullptr;
+        g_retryTimerToken = {};
     }
 
     if (s_currentFlyout) {
@@ -2805,10 +2898,12 @@ static void RemoveWidgetGrid() {
         if (c->isRingingL || c->isRingingR) {
             c->isRingingL = false;
             c->isRingingR = false;
-            BluetoothManager::Instance().PostAction([]() {
-                BluetoothManager::Instance().FindBuds(true, false);
-                BluetoothManager::Instance().FindBuds(false, false);
-            });
+            if (!g_unloading.load()) {
+                BluetoothManager::Instance().PostAction([]() {
+                    BluetoothManager::Instance().FindBuds(true, false);
+                    BluetoothManager::Instance().FindBuds(false, false);
+                });
+            }
         }
     }
 
@@ -3070,11 +3165,12 @@ static bool InjectWidget() {
     }
 }
 
-static void ApplySettings() {
+static bool ApplySettings() {
     try { RemoveWidgetGrid(); } catch (...) { Wh_Log(L"ApplySettings: Exception in RemoveWidgetGrid"); }
     if (!g_unloading) {
-        try { InjectWidget(); } catch (...) { Wh_Log(L"ApplySettings: Exception in InjectWidget"); }
+        try { return InjectWidget(); } catch (...) { Wh_Log(L"ApplySettings: Exception in InjectWidget"); }
     }
+    return false;
 }
 
 static void ApplySettingsWithRetry(FrameworkElement xamlRootContent, int retryCount = 0) {
@@ -3088,18 +3184,26 @@ static void ApplySettingsWithRetry(FrameworkElement xamlRootContent, int retryCo
             return;
         }
         if (g_retryTimer) {
-            try { g_retryTimer.Stop(); } catch (...) {}
+            try {
+                g_retryTimer.Stop();
+                if (g_retryTimerToken.value) {
+                    g_retryTimer.Tick(g_retryTimerToken);
+                }
+            } catch (...) {}
             g_retryTimer = nullptr;
+            g_retryTimerToken = {};
         }
         auto timer = DispatcherTimer();
         timer.Interval(winrt::Windows::Foundation::TimeSpan{std::chrono::milliseconds(100)});
-        auto tickToken = std::make_shared<winrt::event_token>();
-        *tickToken = timer.Tick(
-            [timer, tickToken, xamlRootContent, retryCount](
+        g_retryTimerToken = timer.Tick(
+            [timer, xamlRootContent, retryCount](
                 winrt::Windows::Foundation::IInspectable const&,
                 winrt::Windows::Foundation::IInspectable const&) {
                 timer.Stop();
-                timer.Tick(*tickToken);
+                if (g_retryTimerToken.value) {
+                    timer.Tick(g_retryTimerToken);
+                    g_retryTimerToken = {};
+                }
                 if (g_retryTimer == timer) {
                     g_retryTimer = nullptr;
                 }
@@ -3121,7 +3225,9 @@ static void ApplySettingsWithRetry(FrameworkElement xamlRootContent, int retryCo
         retry();
         return;
     }
-    ApplySettings();
+    if (!ApplySettings()) {
+        retry();
+    }
 }
 
 static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
@@ -3193,10 +3299,19 @@ static void LoadSettings() {
     g_settings.pollInterval = Wh_GetIntSetting(L"pollInterval");
     if (g_settings.pollInterval <= 0) g_settings.pollInterval = 30;
     g_settings.pollInterval = std::clamp(g_settings.pollInterval, 10, 120);
+    g_pollIntervalSeconds.store(g_settings.pollInterval);
 
     PCWSTR margins = Wh_GetStringSetting(L"marginSide");
     if (margins) {
-        swscanf_s(margins, L"%lf %lf", &g_settings.marginLeft, &g_settings.marginRight);
+        double marginLeft = 4.0;
+        double marginRight = 4.0;
+        if (swscanf_s(margins, L"%lf %lf", &marginLeft, &marginRight) == 2) {
+            g_settings.marginLeft = marginLeft;
+            g_settings.marginRight = marginRight;
+        } else {
+            g_settings.marginLeft = 4.0;
+            g_settings.marginRight = 4.0;
+        }
         Wh_FreeStringSetting(margins);
     }
 
@@ -3266,19 +3381,22 @@ void Wh_ModUninit() {
         }
     }
 
+    BluetoothManager::Instance().StopRinging();
     BluetoothManager::Instance().Stop();
     BluetoothManager::DestroyInstance();
 }
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Wh_ModSettingsChanged NothingTrack");
-    LoadSettings();
-    Wh_Log(L"NothingTrack: New pos=%s, format=%s, lang=%s", g_settings.position.c_str(), g_settings.displayFormat.c_str(), g_settings.language.c_str());
     HWND hWnd = FindCurrentProcessTaskbarWnd();
     if (!hWnd) hWnd = g_taskbarWnd;
     if (hWnd) {
         g_taskbarWnd = hWnd;
         RunFromWindowThread(hWnd, [](void*) {
+            LoadSettings();
+            Wh_Log(L"NothingTrack: New pos=%s, format=%s, lang=%s",
+                   g_settings.position.c_str(), g_settings.displayFormat.c_str(),
+                   g_settings.language.c_str());
             ApplySettings();
         }, nullptr);
     }
