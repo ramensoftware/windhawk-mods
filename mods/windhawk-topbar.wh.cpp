@@ -384,7 +384,10 @@ namespace resource {
     }
 
     // RAM usage via GlobalMemoryStatusEx
+    std::mutex g_resourceInitMutex;
+
     void Initialize() {
+        std::lock_guard<std::mutex> lock(g_resourceInitMutex);
         // Initialize CPU counter
         if (!g_cpuQuery) {
             if (PdhOpenQuery(nullptr, 0, &g_cpuQuery) == ERROR_SUCCESS) {
@@ -460,15 +463,19 @@ namespace resource {
             PdhCollectQueryData(g_gpuQuery);
             g_gpuSecondPollDone = true;
         }
+        // \GPU Engine(*)\Utilization Percentage reports one value per engine
+        // (3D, Copy, VideoDecode, ...) per adapter, and each is already a
+        // percentage. Report the busiest engine, matching Task Manager.
         double usage = 0;
         for (auto counter : g_gpuCounters) {
             if (PdhGetFormattedCounterValue(counter, PDH_FMT_DOUBLE, nullptr, &value) == ERROR_SUCCESS) {
                 if (value.CStatus == ERROR_SUCCESS) {
-                    usage += value.doubleValue;
+                    if (value.doubleValue > usage) usage = value.doubleValue;
                 }
             }
         }
         if (usage < 0) usage = 0;
+        if (usage > 100) usage = 100;
         return static_cast<int>(usage + 0.5);
     }
 
@@ -501,9 +508,34 @@ namespace resource {
     }
 
     int GetCpuCoreCount() {
-        SYSTEM_INFO si;
-        GetSystemInfo(&si);
-        return si.dwNumberOfProcessors;
+        DWORD length = 0;
+        GetLogicalProcessorInformationEx(RelationProcessorCore, nullptr, &length);
+        if (length == 0) {
+            SYSTEM_INFO si;
+            GetSystemInfo(&si);
+            return si.dwNumberOfProcessors;
+        }
+        std::vector<BYTE> buffer(length);
+        if (!GetLogicalProcessorInformationEx(
+                RelationProcessorCore,
+                reinterpret_cast<SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX*>(buffer.data()),
+                &length)) {
+            SYSTEM_INFO si;
+            GetSystemInfo(&si);
+            return si.dwNumberOfProcessors;
+        }
+        DWORD count = 0;
+        DWORD offset = 0;
+        while (offset < length) {
+            auto* entry = reinterpret_cast<SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX*>(
+                buffer.data() + offset);
+            if (entry->Size == 0) break;
+            if (entry->Relationship == RelationProcessorCore) {
+                count++;
+            }
+            offset += entry->Size;
+        }
+        return count > 0 ? static_cast<int>(count) : 1;
     }
 
     int GetCpuThreadCount() {
@@ -1161,7 +1193,10 @@ HWND g_taskClickPendingHwnd = nullptr;
 [[clang::no_destroy]] wuxc::StackPanel g_statCell1{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_statCell2{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_statCell3{nullptr};
-std::vector<wuxc::Button> g_tabButtons;
+// Holds strong XAML references. The attribute prevents the destructor from
+// running on the shutdown thread; the teardown block releases the elements on
+// the UI thread instead.
+[[clang::no_destroy]] std::vector<wuxc::Button> g_tabButtons;
 
 // Info island globals
 [[clang::no_destroy]] wuxc::TextBlock g_infoCpuName{nullptr};
@@ -1181,6 +1216,7 @@ int g_currentTab = 0; // 0=CPU, 1=RAM, 2=GPU
 [[clang::no_destroy]] FrameworkElement g_rootElement{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_taskListPanel{nullptr};
 [[clang::no_destroy]] std::vector<HWND> g_stableWindowOrder;
+ULONGLONG g_lastDoubleTapTick = 0;
 [[clang::no_destroy]] std::map<HWND, wuxc::Button> g_taskButtonsByHwnd;
 [[clang::no_destroy]] std::map<HWND, std::wstring> g_taskButtonLastTitle;
 // Helper to resize task buttons so they fit within the available width
@@ -2055,39 +2091,87 @@ FrameworkElement BuildSearchIcon(double displaySize) {
 // ============================================================================
 
 FrameworkElement BuildBatteryIcon(double displaySize, int percentage, bool charging) {
-    const double internalWidth = 108.809;
-    const double internalHeight = 55.6796;
-    double viewboxWidth = displaySize * (internalWidth / internalHeight);
-    double viewboxHeight = displaySize;
-
-    // Clamp percentage to 0-100
     percentage = std::clamp(percentage, 0, 100);
-    
-    // Fill color: green when charging, white otherwise
-    std::wstring fillColor = charging ? L"#34C759" : L"#FFFFFF";
-    // Body background: dark interior (opaque black)
-    std::wstring bodyFill = L"#FF1A1A1A";
-    // Outline stroke color: white (always)
-    std::wstring bodyStroke = L"#FFFFFFFF";
-    // Terminal color: white
-    std::wstring terminalColor = L"#FFFFFFFF";
 
-    // Calculate fill width inside the battery body (inset by 4px on each side)
-    double fillMaxWidth = 88.0;  // 100 - 4 left - 4 right - 2*2 border = 88
-    double fillWidth = fillMaxWidth * percentage / 100.0;
-    if (fillWidth < 4.0) fillWidth = 4.0; // minimum visible fill
-    
-    std::wstring xaml;
-    xaml = L"<Viewbox xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
-           L"Stretch=\"Uniform\" Width=\"" + std::to_wstring(viewboxWidth) + L"\" Height=\"" + std::to_wstring(viewboxHeight) + L"\">"
-           L"<Grid Width=\"" + std::to_wstring(internalWidth) + L"\" Height=\"" + std::to_wstring(internalHeight) + L"\">"
-           // Battery body (dark fill with white outline)
-           L"<Border Width=\"100\" Height=\"44\" CornerRadius=\"8\" Background=\"" + bodyFill + L"\" BorderBrush=\"" + bodyStroke + L"\" BorderThickness=\"2\" HorizontalAlignment=\"Left\" VerticalAlignment=\"Center\" Margin=\"0,0,8,0\"/>"
-           // Terminal (white rectangle)
-           L"<Rectangle Width=\"8\" Height=\"20\" Fill=\"" + terminalColor + L"\" HorizontalAlignment=\"Right\" VerticalAlignment=\"Center\" Margin=\"0,0,0,0\"/>"
-           // Fill area (white/green portion) - inset from the body edges
-           L"<Rectangle Width=\"" + std::to_wstring(fillWidth) + L"\" Height=\"40\" RadiusX=\"6\" RadiusY=\"6\" Fill=\"" + fillColor + L"\" HorizontalAlignment=\"Left\" VerticalAlignment=\"Center\" Margin=\"4,2,4,2\"/>"
-           L"</Grid></Viewbox>";
+    // Indicator colour depends only on the charge level; charging is shown by
+    // the bolt to the left, not by a colour change.
+    std::wstring indicatorColor;
+    std::wstring textColor;
+    if (percentage < 20) {
+        indicatorColor = L"#FF3B30";   // red
+        textColor = L"#000000";
+    } else if (percentage < 40) {
+        indicatorColor = L"#FF9500";   // orange
+        textColor = L"#000000";
+    } else if (percentage < 60) {
+        indicatorColor = L"#FFCC00";   // yellow
+        textColor = L"#000000";
+    } else if (percentage < 80) {
+        indicatorColor = L"#121212";   // black
+        textColor = L"#FFFFFF";
+    } else {
+        indicatorColor = L"#34C759";   // green
+        textColor = L"#000000";
+    }
+
+    const double shellWidth = 99.4277;
+    const double shellHeight = 55.6796;
+
+    // Indicator width grows with the charge level; a small minimum keeps it
+    // visible at 1-2%.
+    double indicatorWidth = shellWidth * percentage / 100.0;
+    if (indicatorWidth < 6.0) indicatorWidth = 6.0;
+
+    // Outer grid holds the shell + terminal nub. A nested grid the exact width
+    // of the shell is used as the text container so the digits are centred on
+    // the shell, not on the shell+nub combination (which is where the text
+    // used to drift right).
+    std::wstring batteryXaml;
+    batteryXaml += L"<Grid Width=\"108.809\" Height=\"55.6796\">";
+
+    // Terminal nub, drawn first so the shell overlaps its left edge.
+    batteryXaml += L"<Border Width=\"5.404\" Height=\"11.931\" "
+                   L"CornerRadius=\"0,3,3,0\" Background=\"#D1D1D1\" "
+                   L"HorizontalAlignment=\"Right\" VerticalAlignment=\"Center\"/>";
+
+    // Shell-area grid: everything that should visually sit "inside the shell".
+    batteryXaml += L"<Grid Width=\"99.4277\" Height=\"55.6796\" "
+                   L"HorizontalAlignment=\"Left\" VerticalAlignment=\"Center\">";
+    batteryXaml += L"<Border Width=\"99.4277\" Height=\"55.6796\" "
+                   L"CornerRadius=\"15.9085\" Background=\"#D1D1D1\"/>";
+    batteryXaml += L"<Border Width=\"" + std::to_wstring(indicatorWidth) + L"\" "
+                   L"Height=\"55.6796\" CornerRadius=\"15.9085\" "
+                   L"Background=\"" + indicatorColor + L"\" "
+                   L"HorizontalAlignment=\"Left\"/>";
+    batteryXaml += L"<TextBlock Text=\"" + std::to_wstring(percentage) + L"\" "
+                   L"Foreground=\"" + textColor + L"\" FontWeight=\"Bold\" "
+                   L"FontSize=\"50\" FontFamily=\"Segoe UI Variable Display, Segoe UI\" "
+                   L"HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\" "
+                   L"TextAlignment=\"Center\" Margin=\"0\" Padding=\"0\">"
+                   L"<TextBlock.RenderTransform>"
+                   L"<TranslateTransform Y=\"-2\"/>"
+                   L"</TextBlock.RenderTransform>"
+                   L"</TextBlock>";
+    batteryXaml += L"</Grid>";
+    batteryXaml += L"</Grid>";
+
+    std::wstring contentXaml;
+    if (charging) {
+        contentXaml += L"<StackPanel Orientation=\"Horizontal\" Spacing=\"2\" "
+                       L"HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\">";
+        contentXaml += L"<Path Data=\"M0 18.3378L14.2119 0L11.9196 13.4478H24.1448L4.43166 32.8553L10.6971 18.3378H0Z\" "
+                       L"Fill=\"#FFFFFF\" Width=\"20\" Height=\"26\" Stretch=\"Uniform\" "
+                       L"VerticalAlignment=\"Center\"/>";
+        contentXaml += batteryXaml;
+        contentXaml += L"</StackPanel>";
+    } else {
+        contentXaml = batteryXaml;
+    }
+
+    std::wstring xaml =
+        L"<Viewbox xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
+        L"Stretch=\"Uniform\" Height=\"" + std::to_wstring(displaySize) + L"\">"
+        + contentXaml + L"</Viewbox>";
 
     try {
         auto element = Markup::XamlReader::Load(xaml).as<FrameworkElement>();
@@ -2359,31 +2443,37 @@ wuxm::Imaging::BitmapImage GetWindowIconBitmap(HWND hwnd, UINT physicalSize) {
 // task list
 // ============================================================================
 
-// Helper to determine if a window is the Start menu or Search overlay
+// Helper to determine if a window is a Windows shell surface (Start, Search,
+// Task View, Action Center, Quick Settings). The owning process name is stable
+// across UI languages, unlike the window titles, so match on that.
 bool IsStartOrSearchWindow(HWND hwnd) {
-    wchar_t title[256] = {0};
-    GetWindowText(hwnd, title, ARRAYSIZE(title));
-    std::wstring titleStr = title;
-    std::wstring lowerTitle = ToLowerCopy(titleStr);
-    
-    // Known titles for Start and Search
-    if (lowerTitle == L"start" || lowerTitle == L"search" ||
-        lowerTitle == L"cortana" || lowerTitle == L"task view" ||
-        lowerTitle == L"action center" || lowerTitle == L"quick settings") {
-        return true;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (!pid) {
+        return false;
     }
-
-    // Also check class name for XAML islands used by Start/Search
-    wchar_t className[256] = {0};
-    GetClassName(hwnd, className, ARRAYSIZE(className));
-    std::wstring classStr = className;
-    if (classStr.find(L"Xaml") != std::wstring::npos &&
-        (classStr.find(L"Start") != std::wstring::npos ||
-         classStr.find(L"Search") != std::wstring::npos)) {
-        return true;
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) {
+        return false;
     }
-
-    return false;
+    wchar_t path[MAX_PATH]{};
+    DWORD size = ARRAYSIZE(path);
+    bool ok = QueryFullProcessImageNameW(process, 0, path, &size) != FALSE;
+    CloseHandle(process);
+    if (!ok) {
+        return false;
+    }
+    std::wstring exe = path;
+    size_t slash = exe.find_last_of(L"\\/");
+    if (slash != std::wstring::npos) {
+        exe.erase(0, slash + 1);
+    }
+    std::wstring lowerExe = ToLowerCopy(exe);
+    return lowerExe == L"startmenuexperiencehost.exe" ||
+           lowerExe == L"searchhost.exe" ||
+           lowerExe == L"searchapp.exe" ||
+           lowerExe == L"searchui.exe" ||
+           lowerExe == L"shellexperiencehost.exe";
 }
 
 
@@ -2603,29 +2693,33 @@ wuxc::Button CreateTaskButton(HWND hwnd, const std::wstring& title) {
     button.HorizontalContentAlignment(HorizontalAlignment::Center);
     button.Tag(winrt::box_value(reinterpret_cast<int64_t>(hwnd)));
 
-    button.Tapped([](wf::IInspectable const& sender, Input::TappedRoutedEventArgs const&) {
+    // The first Tapped of a double-tap would minimize the window before
+    // DoubleTapped fires, and the trailing Tapped raised by WinUI after
+    // DoubleTapped would do the same again. Both are handled here: the first
+    // Tapped defers the single-tap action so it can be cancelled, and the
+    // trailing one is discarded via the timestamp set in DoubleTapped.
+    // The event is marked handled so it does not bubble up to the bar root,
+    // whose own DoubleTapped handler toggles the last foreground window.
+    button.Tapped([](wf::IInspectable const& sender, Input::TappedRoutedEventArgs const& args) {
         try {
+            args.Handled(true);
+            if (g_lastDoubleTapTick != 0 &&
+                GetTickCount64() - g_lastDoubleTapTick < 400) {
+                return;
+            }
             auto btn = sender.as<wuxc::Button>();
-            auto tagValue = winrt::unbox_value<int64_t>(btn.Tag());
-            HWND hwnd = reinterpret_cast<HWND>(tagValue);
+            HWND hwnd = reinterpret_cast<HWND>(winrt::unbox_value<int64_t>(btn.Tag()));
             if (!IsWindow(hwnd)) {
                 return;
             }
-            // Activating a background (or minimized) window is unambiguous and
-            // must feel instant; a following double-tap still maximizes on top
-            // of the activation, which is the correct visual.
-            if (hwnd != g_lastForegroundHwnd || IsIconic(hwnd)) {
-                ActivateTaskWindow(hwnd);
-                return;
-            }
-            // The window is already foreground, so a single tap means
-            // "minimize". Defer it briefly so a double-tap can cancel it and
-            // run the maximize instead, avoiding the minimize-then-maximize
-            // animation the user was seeing.
+            // Defer the single-tap action just long enough for a second tap to
+            // arrive and cancel it. GetDoubleClickTime() matches the interval
+            // the framework itself uses to decide between single and double tap.
             g_taskClickPendingHwnd = hwnd;
             if (!g_taskClickTimer) {
                 g_taskClickTimer = DispatcherTimer();
-                g_taskClickTimer.Interval(std::chrono::milliseconds(250));
+                g_taskClickTimer.Interval(
+                    std::chrono::milliseconds(GetDoubleClickTime()));
                 g_taskClickTimer.Tick(
                     [](wf::IInspectable const&, wf::IInspectable const&) {
                         g_taskClickTimer.Stop();
@@ -2643,15 +2737,27 @@ wuxc::Button CreateTaskButton(HWND hwnd, const std::wstring& title) {
     });
 
     button.DoubleTapped(
-        [](wf::IInspectable const& sender, Input::DoubleTappedRoutedEventArgs const&) {
+        [](wf::IInspectable const& sender, Input::DoubleTappedRoutedEventArgs const& args) {
             try {
+                // Mark handled so the event does not bubble to the bar root's
+                // DoubleTapped, which toggles the last foreground window and
+                // would otherwise affect a second window (or the same one
+                // twice, flipping it back).
+                args.Handled(true);
+                // Cancel the deferred single-tap action before it runs the
+                // minimize animation, and stamp the time so any trailing Tapped
+                // raised by the framework for this same gesture is discarded.
+                g_lastDoubleTapTick = GetTickCount64();
                 if (g_taskClickTimer) {
                     g_taskClickTimer.Stop();
                 }
                 g_taskClickPendingHwnd = nullptr;
                 auto btn = sender.as<wuxc::Button>();
-                auto tagValue = winrt::unbox_value<int64_t>(btn.Tag());
-                ToggleMaximizeWindow(reinterpret_cast<HWND>(tagValue));
+                HWND hwnd = reinterpret_cast<HWND>(winrt::unbox_value<int64_t>(btn.Tag()));
+                if (!IsWindow(hwnd)) {
+                    return;
+                }
+                ToggleMaximizeWindow(hwnd);
             } catch (...) {
             }
         });
@@ -6281,23 +6387,16 @@ BatteryInfo GetBatteryInfo() {
 void UpdateBatteryButton() {
     if (!g_batteryButton) return;
     BatteryInfo info = GetBatteryInfo();
-    auto batteryIcon = BuildBatteryIcon(16, info.percentage, info.charging);
-    auto batteryStack = wuxc::StackPanel();
-    batteryStack.Orientation(wuxc::Orientation::Horizontal);
-    batteryStack.Spacing(4);
-    if (batteryIcon) batteryStack.Children().Append(batteryIcon);
-    auto percentText = MakeText(nullptr, std::to_wstring(info.percentage) + L"%", 12);
-    batteryStack.Children().Append(percentText);
-    g_batteryButton.Content(batteryStack);
+    auto batteryIcon = BuildBatteryIcon(20, info.percentage, info.charging);
+    if (batteryIcon) {
+        batteryIcon.VerticalAlignment(VerticalAlignment::Center);
+        g_batteryButton.Content(batteryIcon);
+    }
 }
 
-void UpdateResourceButton() {
+void ApplyResourceUsageToButton(const resource::Usage& usage) {
     if (!g_resourceButton) return;
 
-    // Initialize PDH counters on first call (or if needed)
-    resource::Initialize();
-
-    auto usage = resource::GetUsage();
     std::wstring text;
     bool any = false;
     if (g_settings.showCpuUsage) {
@@ -6334,15 +6433,24 @@ void UpdateResourceButton() {
     g_resourceButton.Content(MakeText(nullptr, text, 12));
 }
 
-// Update the graph and stats based on current tab
-void UpdateResourceFlyoutContent() {
-    if (!g_graphCanvas || !g_graphLine || !g_graphFill || !g_statsGrid) return;
-    try {
+void UpdateResourceButton() {
+    if (!g_resourceButton) return;
+    RunInBackground([] {
+        resource::Initialize();
+        auto usage = resource::GetUsage();
+        RunOnUiThread([usage] {
+            try {
+                ApplyResourceUsageToButton(usage);
+            } catch (...) {
+            }
+        });
+    });
+}
 
-    resource::Initialize();
-    auto usage = resource::GetUsage();
-    auto detailed = resource::GetDetailedInfo(g_selectedGpuIndex);
- 
+// Update the graph and stats based on current tab
+void ApplyResourceFlyoutContentUI(const resource::Usage& usage,
+                                  const resource::DetailedInfo& detailed) {
+    try {
     // Update Info Island - show only the currently selected component and update it
     if (g_infoCpuLabel && g_infoCpuName && g_infoRamLabel && g_infoRamName && g_infoGpuLabel && g_infoGpuCombo) {
         if (g_currentTab == 0) {
@@ -6558,11 +6666,27 @@ void UpdateResourceFlyoutContent() {
     }
 
         } catch (winrt::hresult_error const& ex) {
-        Wh_Log(L"UpdateResourceFlyoutContent failed: %s", ex.message().c_str());
+        Wh_Log(L"ApplyResourceFlyoutContentUI failed: %s", ex.message().c_str());
         } catch (...) {
-        Wh_Log(L"UpdateResourceFlyoutContent failed (unknown error)");
+        Wh_Log(L"ApplyResourceFlyoutContentUI failed (unknown error)");
         }
     }
+
+void UpdateResourceFlyoutContent() {
+    if (!g_graphCanvas || !g_graphLine || !g_graphFill || !g_statsGrid) return;
+    int gpuIndex = g_selectedGpuIndex;
+    RunInBackground([gpuIndex] {
+        resource::Initialize();
+        auto usage = resource::GetUsage();
+        auto detailed = resource::GetDetailedInfo(gpuIndex);
+        RunOnUiThread([usage, detailed] {
+            try {
+                ApplyResourceFlyoutContentUI(usage, detailed);
+            } catch (...) {
+            }
+        });
+    });
+}
 
 // Populate the resource flyout (with tabs, graph, stats)
 void PopulateResourceFlyout() {
@@ -7658,24 +7782,15 @@ RunOnUiThread([status, networks = std::move(networks)]() mutable {
         rightPanel.Children().Append(g_bluetoothButton);
     }
 
-    // Battery button (with percentage text and charging icon)
+    // Battery button. The percentage is drawn inside the icon, so no separate
+    // text label is added next to it.
     {
         BatteryInfo info = GetBatteryInfo();
-        auto batteryIcon = BuildBatteryIcon(16, info.percentage, info.charging);
-        auto batteryStack = wuxc::StackPanel();
-        batteryStack.Orientation(wuxc::Orientation::Horizontal);
-        batteryStack.Spacing(4);
-        batteryStack.VerticalAlignment(VerticalAlignment::Center);
-        batteryStack.HorizontalAlignment(HorizontalAlignment::Center);
+        auto batteryIcon = BuildBatteryIcon(20, info.percentage, info.charging);
         if (batteryIcon) {
             batteryIcon.VerticalAlignment(VerticalAlignment::Center);
-            batteryStack.Children().Append(batteryIcon);
         }
-        auto percentText = MakeText(nullptr, std::to_wstring(info.percentage) + L"%", 12);
-        percentText.VerticalAlignment(VerticalAlignment::Center);
-        batteryStack.Children().Append(percentText);
-
-        g_batteryButton = MakeControlButton(L"BatteryButton", batteryStack, g_batteryFlyout,
+        g_batteryButton = MakeControlButton(L"BatteryButton", batteryIcon, g_batteryFlyout,
                                             [] { PopulateBatteryPanel(); });
         rightPanel.Children().Append(g_batteryButton);
     }
@@ -8113,12 +8228,13 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                     break;
                 case ABN_FULLSCREENAPP:
                     {
-                        // The shell sends TRUE via wParam (not lParam).
-                        // Win+D (Show Desktop) makes the shell incorrectly report
-                        // ABN_FULLSCREENAPP = TRUE even though it's really the
-                        // desktop being shown. Verify the foreground window is
-                        // actually a fullscreen app covering the whole monitor.
-                        bool isFullscreen = (wParam != 0);
+                        // lParam carries TRUE when a full-screen app is opening
+                        // and FALSE when it is closing. Win+D (Show Desktop)
+                        // makes the shell incorrectly report TRUE even though
+                        // it's really the desktop being shown. Verify the
+                        // foreground window is actually a fullscreen app
+                        // covering the whole monitor.
+                        bool isFullscreen = (lParam != 0);
                         if (isFullscreen) {
                             HWND fg = GetForegroundWindow();
                             bool verified = false;
@@ -8242,7 +8358,7 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             break;
 
         case WM_SYSCOMMAND:
-            if (wParam == SC_MINIMIZE) {
+            if ((wParam & 0xFFF0) == SC_MINIMIZE) {
                 return 0;   // block minimization
             }
             break;
@@ -8529,25 +8645,38 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                     }
                 }
 
-                if (fullscreenFg) {
-                    // Place the bar DIRECTLY BEHIND the fullscreen window.
-                    // Works whether the fullscreen app is topmost or not.
-                    g_fullScreenAppActive = true;
-                    SetWindowPos(g_topBarHwnd, fg, 0, 0, 0, 0,
-                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
-                                 SWP_NOOWNERZORDER);
-                } else if (desktopFg) {
-                    // Win+D: re-stack above the desktop (which is itself topmost).
-                    g_fullScreenAppActive = false;
-                    SetWindowPos(g_topBarHwnd, HWND_BOTTOM, 0, 0, 0, 0,
-                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-                    SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-                } else {
-                    // Normal window foreground: keep ourselves above it.
-                    g_fullScreenAppActive = false;
-                    SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                // Only touch z-order when the classification actually changed:
+                // calling SetWindowPos once a second while a full-screen game
+                // is foreground can kick it out of exclusive full-screen.
+                static HWND s_lastRestoreFg = nullptr;
+                static int s_lastRestoreClass = -1; // 0 normal, 1 desktop, 2 fullscreen
+                int currentClass = fullscreenFg ? 2 : (desktopFg ? 1 : 0);
+                bool classChanged =
+                    (fg != s_lastRestoreFg || currentClass != s_lastRestoreClass);
+                s_lastRestoreFg = fg;
+                s_lastRestoreClass = currentClass;
+
+                if (classChanged) {
+                    if (fullscreenFg) {
+                        // Place the bar DIRECTLY BEHIND the fullscreen window.
+                        // Works whether the fullscreen app is topmost or not.
+                        g_fullScreenAppActive = true;
+                        SetWindowPos(g_topBarHwnd, fg, 0, 0, 0, 0,
+                                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                                     SWP_NOOWNERZORDER);
+                    } else if (desktopFg) {
+                        // Win+D: re-stack above the desktop (which is itself topmost).
+                        g_fullScreenAppActive = false;
+                        SetWindowPos(g_topBarHwnd, HWND_BOTTOM, 0, 0, 0, 0,
+                                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                        SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                    } else {
+                        // Normal window foreground: keep ourselves above it.
+                        g_fullScreenAppActive = false;
+                        SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                    }
                 }
 
                 // Reposition if drifted.
@@ -8608,6 +8737,8 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         if (g_bluetoothAutoRefreshTimer) g_bluetoothAutoRefreshTimer.Stop();
         if (g_volumeRevertTimer) g_volumeRevertTimer.Stop();
         if (g_brightnessRevertTimer) g_brightnessRevertTimer.Stop();
+        if (g_resourceTimer) g_resourceTimer.Stop();
+        if (g_resourceFlyoutTimer) g_resourceFlyoutTimer.Stop();
         if (g_restoreTimer) g_restoreTimer.Stop();
         if (g_restoreTimer) g_restoreTimer = nullptr;
         g_allowHide = true;  // allow hiding during final teardown
@@ -8615,11 +8746,15 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         if (g_clockTimer) g_clockTimer = nullptr;
         if (g_taskRefreshTimer) g_taskRefreshTimer = nullptr;
         if (g_taskClickTimer) g_taskClickTimer = nullptr;
+        g_taskClickPendingHwnd = nullptr;
+        g_lastDoubleTapTick = 0;
 
         if (g_wifiAutoRefreshTimer) g_wifiAutoRefreshTimer = nullptr;
         if (g_bluetoothAutoRefreshTimer) g_bluetoothAutoRefreshTimer = nullptr;
         if (g_volumeRevertTimer) g_volumeRevertTimer = nullptr;
         if (g_brightnessRevertTimer) g_brightnessRevertTimer = nullptr;
+        if (g_resourceTimer) g_resourceTimer = nullptr;
+        if (g_resourceFlyoutTimer) g_resourceFlyoutTimer = nullptr;
 
         // Release wallpaper layer and other no_destroy globals
         if (g_wallpaperLayer) g_wallpaperLayer = nullptr;
@@ -8656,6 +8791,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         g_startContextMenu = nullptr;
         g_taskMenuToggleItem = nullptr;
         g_mediaContainer = nullptr;
+        g_tabButtons.clear();
 
         // Release COM pointers
         audio::g_cachedEndpointVolume = nullptr;
