@@ -998,7 +998,7 @@ BOOL ExtTextOutCalcRect(HDC hdc, POINT point, UINT options, RECT& textRect, LPCR
         if (!ExtTextOutAlignRect(hdc, point, textSize, textRect))
             return FALSE;
     }
-    else if (options && GetTextExtentPoint32W(hdc, lpString, c, &textSize))
+    else if (GetTextExtentPoint32W(hdc, lpString, c, &textSize))
     {
         if (lpDx)
             textSize.cx = ExtTextOutDxWidth(options, lpDx, c);
@@ -1007,7 +1007,7 @@ BOOL ExtTextOutCalcRect(HDC hdc, POINT point, UINT options, RECT& textRect, LPCR
     }
     else
         return FALSE;
-     
+    
     if (RECTWIDTH(&textRect) <= 0 || RECTHEIGHT(&textRect) <= 0)
         return FALSE;
 
@@ -1398,7 +1398,7 @@ VOID ColorizeSysColors()
 HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, INT iPartId, INT iStateId, INT iPropId, COLORREF *pColor) 
 {
     HRESULT hr = GetThemeColor_orig(hTheme, iPartId, iStateId, iPropId, pColor);
-    std::wstring ThemeClassName = GetThemeClass(hTheme);  
+    std::wstring ThemeClassName = GetThemeClass(hTheme);
 
     if (ThemeClassName == L"ItemsView" && iPropId == TMT_TEXTCOLOR && ((iPartId == 4 && iStateId == 1) || iPartId == 5))
     {
@@ -5835,7 +5835,7 @@ VOID User32Hooks(BOOL areSysColorsApplied)
             &DrawCommandRectangle_orig,
             Hooked_DrawCommandRectangle,
             FALSE
-        }
+        },
     };
 
     HMODULE hUser32 = LoadLibraryEx(L"user32.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -6362,6 +6362,43 @@ VOID Comdlg32Hooks()
         Wh_Log(L"Failed to hook one or more symbol functions in comdlg32.dll");
         return;
     }
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////
+
+static decltype(&DrawEdge) DrawEdge_orig = nullptr;
+static decltype(&DrawFrameControl) DrawFrameControl_orig = nullptr;
+static decltype(&DrawStateW) DrawStateW_orig = nullptr;
+
+BOOL WINAPI HookedDrawEdge(HDC hdc, LPRECT qrc, UINT edge, UINT grfFlags)
+{
+    Wh_Log(L"DrawEdge edge:0x%08x flags:0x%08x", edge, grfFlags);
+    BOOL ret = DrawEdge_orig(hdc, qrc, edge, grfFlags);
+    return ret;
+}
+
+BOOL WINAPI HookedDrawFrameControl(HDC hdc, LPRECT lprect, UINT uType, UINT uState)
+{
+    Wh_Log(L"DrawFrameControl Type:0x%08x State:0x%08x", uType, uState);
+    BOOL ret = DrawFrameControl_orig(hdc, lprect, uType, uState);
+    return ret;
+}
+
+typedef __int64(WINAPI* pDrawFrame)(HDC, int*, int, int);
+static auto DrawFrame = (pDrawFrame)GetProcAddress(GetModuleHandle(L"user32.dll"), MAKEINTRESOURCEA(1720));
+
+__int64 WINAPI HookedDrawFrame(HDC hdc, int* edge, int a3, int a4)
+{
+    Wh_Log(L"DrawFrame");
+    __int64 ret = DrawFrame(hdc, edge, a3, a4);
+    return ret;
+}
+
+BOOL WINAPI HookedDrawStateW(HDC hdc, HBRUSH hbrFore, DRAWSTATEPROC qfnCallBack, LPARAM lData, WPARAM wData, int x, int y, int cx, int cy, UINT uFlags)
+{
+    Wh_Log(L"DrawStateW x:%d y:%d cx:%d cy:%d flags:0x%08x", x, y, cx, cy, uFlags);
+    BOOL ret = DrawStateW_orig(hdc, hbrFore, qfnCallBack, lData, wData, x, y, cx, cy, uFlags);
+    return ret;
 }
 
 VOID CustomRenderingHooks()
