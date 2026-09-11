@@ -2,7 +2,7 @@
 // @id              vit-mess-menu-taskbar
 // @name            VIT Mess Menu Taskbar Flyout
 // @description     Shows the VIT Vellore hostel mess menu on the Windows 11 taskbar, with a native flyout for the full day's menu.
-// @version         1.0.0
+// @version         1.0.1
 // @author          ashishkupadhyay
 // @github          https://github.com/ashishkupadhyay
 // @include         explorer.exe
@@ -33,7 +33,7 @@ and Dinner. Chevrons at the top let you browse to other days.
 - **Flyout** — all four meals, always expanded, with the current meal
   highlighted green and the upcoming meal highlighted yellow.
 - **Automatic grouping** — items are sorted into Main Items, Bread & Sides,
-  Dairy, Drinks and Dessert, and shown inline to keep the flyout compact.
+  Dairy, Beverages and Dessert, and shown inline to keep the flyout compact.
 - **Offline first** — the menu is cached on disk, so the flyout opens instantly
   and works without a network connection.
 
@@ -58,9 +58,10 @@ version of the mod:
 
 ## Updating
 
-Each JSON file on the site covers one month. If the current month is already
-cached, nothing is downloaded. If it is missing, the mod retries every few
-hours until the site publishes it, and you can force a check with the reload
+Each JSON file on the site covers one month. The current month is re-downloaded
+about once a day, because the site sometimes revises a file after publishing
+it. If the month is missing altogether, the mod retries every few hours until
+the site publishes it. You can force a check at any time with the reload
 button at the bottom of the flyout. The previous month's menu is never shown as
 if it were the current one.
 
@@ -151,6 +152,9 @@ backdrop blur is derived from GPL-3.0 code.
   $description: Pixels. The meal cards follow automatically, staying concentric with the flyout's own corners.
 - showSnacks: true
   $name: Show the Snacks card
+- extraDessertItems: ""
+  $name: Extra dessert items
+  $description: "Comma-separated. The site sometimes lists desserts without a \"Sweet:\" or \"Fruits:\" label; the common ones are recognised already, and anything it starts listing that is not can be added here, e.g. Rasgulla, Mango. An entry matches a whole item or its last word, ignoring case."
 - backgroundMode: auto
   $name: Flyout background
   $description: Match Windows follows the built-in Windows 11 flyout styling and ignores the two settings below. Use Custom to match a Taskbar Styler theme instead.
@@ -165,7 +169,7 @@ backdrop blur is derived from GPL-3.0 code.
   $description: Only used when the background is set to Custom. Blur radius in pixels, on the same scale Taskbar Styler themes use. The default 18 is the Tinted Glass taskbar theme's value. Set to 0 for a flat surface with no blur.
 - autoUpdate: true
   $name: Check for new menus automatically
-  $description: When off, the menu is only downloaded when you press the reload button in the flyout.
+  $description: Re-downloads the current month about once a day, since the site sometimes revises a menu after publishing it, and keeps checking for a missing month every few hours. When off, the menu is only downloaded when you press the reload button in the flyout.
 - timeBreakfast: "07:00-09:00"
   $name: Breakfast (Mon-Fri)
   $description: "Serving window as HH:MM-HH:MM, on a 24-hour clock. This drives the countdown and which card is highlighted, so correct it here if your mess changes a slot. The defaults are the VIT Vellore timings."
@@ -301,6 +305,16 @@ struct ModSettings {
 
 static ModSettings g_settings;
 
+// The user's extra dessert keywords, already normalised (see NormalizeKey).
+// Kept out of ModSettings for the reason given above: this is a list of
+// strings, rewritten by LoadSettings while the taskbar thread may be in the
+// middle of classifying a menu. Readers take a snapshot of the shared_ptr
+// under the lock and never touch the vector itself while unlocked.
+static std::mutex g_userDessertKeywordsMutex;
+static std::shared_ptr<const std::vector<std::wstring>> g_userDessertKeywords;
+
+static std::wstring NormalizeKey(const std::wstring& text);
+
 // Wh_GetStringSetting never returns null -- it yields L"" when unset or on
 // error -- so an empty test is all that is needed. StringSetting is RAII, so
 // Wh_FreeStringSetting cannot be missed.
@@ -420,6 +434,31 @@ static bool ParseTimeRange(const std::wstring& text, MealWindow& out) {
     return true;
 }
 
+// "Rasgulla, Mango, " -> {"rasgulla", "mango"}. Empty entries are dropped so a
+// trailing comma cannot turn every item into a dessert.
+static void LoadUserDessertKeywords() {
+    std::wstring text = GetStringSetting(L"extraDessertItems", L"");
+    auto keywords = std::make_shared<std::vector<std::wstring>>();
+
+    size_t start = 0;
+    while (start <= text.size()) {
+        size_t comma = text.find(L',', start);
+        std::wstring piece = NormalizeKey(text.substr(
+            start, comma == std::wstring::npos ? std::wstring::npos
+                                               : comma - start));
+        if (!piece.empty()) {
+            keywords->push_back(std::move(piece));
+        }
+        if (comma == std::wstring::npos) {
+            break;
+        }
+        start = comma + 1;
+    }
+
+    std::lock_guard<std::mutex> lock(g_userDessertKeywordsMutex);
+    g_userDessertKeywords = std::move(keywords);
+}
+
 static void LoadMealWindow(PCWSTR key, PCWSTR fallback, MealWindow& target) {
     std::wstring text = GetStringSetting(key, fallback);
     if (ParseTimeRange(text, target)) {
@@ -457,6 +496,7 @@ static void LoadSettings() {
     g_settings.popupCornerRadius =
         std::clamp(Wh_GetIntSetting(L"popupCornerRadius"), 0, 32);
     g_settings.showSnacks = Wh_GetIntSetting(L"showSnacks") != 0;
+    LoadUserDessertKeywords();
 
     g_settings.customBackground =
         (GetStringSetting(L"backgroundMode", L"auto") == L"custom");
@@ -505,12 +545,12 @@ static const wchar_t* const kMealEmoji[kMealCount] = {
 
 static const wchar_t* const kTaskbarEmoji = L"\U0001F37D";
 
-enum class Group { Main = 0, BreadSides, Dairy, Drinks, Dessert, Count };
+enum class Group { Main = 0, BreadSides, Dairy, Beverages, Dessert, Count };
 
 static constexpr int kGroupCount = (int)Group::Count;
 
 static const wchar_t* const kGroupNames[kGroupCount] = {
-    L"Main Items", L"Bread & Sides", L"Dairy", L"Drinks", L"Dessert"};
+    L"Main Items", L"Bread & Sides", L"Dairy", L"Beverages", L"Dessert"};
 
 struct DayMenu {
     std::wstring raw[kMealCount];
@@ -748,6 +788,21 @@ static bool InList(const std::wstring& value, const wchar_t* const* list,
     return false;
 }
 
+// The site cannot decide whether a compound is one word or two -- "Water
+// Melon" and "Watermelon", "Butter milk" and "Buttermilk" have all appeared --
+// so whole-item comparisons drop the spaces on both sides: the whole-item lists
+// in ClassifyItem are written spaceless and compared against this.
+static std::wstring WithoutSpaces(const std::wstring& text) {
+    std::wstring result;
+    result.reserve(text.size());
+    for (wchar_t c : text) {
+        if (c != L' ') {
+            result.push_back(c);
+        }
+    }
+    return result;
+}
+
 // True for "Sweet: Badusha", "Sweet : Badusha", "Fruits: Grapes",
 // "Fruit : Banana" -- the site is inconsistent about the space before the colon,
 // so match the label and then skip any spaces before requiring the colon.
@@ -772,12 +827,15 @@ static bool HasDessertLabel(const std::wstring& key) {
 
 // Whole-item and last-word matching, never substring matching: a substring test
 // on "curd" files "Curd Rice" as dairy, and the last-word rule is what makes
-// "Cold Badam Milk", "Iced Lemon Tea" and "Nimbu Sharbat" land in Drinks.
+// "Cold Badam Milk", "Iced Lemon Tea" and "Nimbu Sharbat" land in Beverages.
 static Group ClassifyItem(const std::wstring& item) {
     const std::wstring key = NormalizeKey(item);
     if (key.empty()) {
         return Group::Main;
     }
+    // For the whole-item lists below, which are written spaceless.
+    const std::wstring compactKey = WithoutSpaces(key);
+    const std::wstring lastWord = LastWord(key);
 
     if (HasDessertLabel(key)) {
         return Group::Dessert;
@@ -790,23 +848,78 @@ static Group ClassifyItem(const std::wstring& item) {
         return Group::Dessert;
     }
 
-    static const wchar_t* const kDairy[] = {L"curd", L"loose curd",
-                                            L"thick curd", L"butter milk",
-                                            L"buttermilk"};
-    if (InList(key, kDairy, ARRAYSIZE(kDairy))) {
+    // In September 2026 the site dropped the labels altogether and started
+    // listing desserts bare -- "Gulab Jamun", "Jalebi", "Seasonal Fruit",
+    // "Papaya". The label rule above stays in case they come back; this
+    // catches the bare form with the same discipline as the other groups:
+    // whole item or last word, never substring. So "Raw Banana Fry" and "Raw
+    // Banana Bajji" stay main dishes while "Banana" does not, and "Sweet corn
+    // chaat" is not a dessert.
+    //
+    // No cake here on purpose. Cake only ever shows up as the snack itself
+    // ("Brownie Cake, Tea, Coffee, Milk"), and filing it under Dessert would
+    // leave Main Items empty -- the taskbar button would then read "Tea •
+    // Coffee • Milk" during snacks.
+    static const wchar_t* const kFruits[] = {
+        L"banana",   L"papaya",  L"watermelon",  L"muskmelon", L"grapes",
+        L"apple",    L"orange",  L"pineapple",   L"guava",     L"mango",
+        L"pomegranate", L"sapota", L"chikoo",    L"fruitsalad"};
+    if (InList(compactKey, kFruits, ARRAYSIZE(kFruits))) {
+        return Group::Dessert;
+    }
+
+    // "Seasonal Fruit", "Cut Fruits", "Bread Halwa", "Gulab Jamun", "Boondi
+    // Laddu", "Dal Payasam", "Mysore Pak", "Water Melon".
+    static const wchar_t* const kDessertTails[] = {
+        L"fruit",   L"fruits",  L"halwa",   L"laddu",    L"ladoo",
+        L"laddoo",  L"jamun",   L"jalebi",  L"kheer",    L"payasam",
+        L"kesari",  L"burfi",   L"barfi",   L"rasgulla", L"rasmalai",
+        L"badusha", L"jangri",  L"peda",    L"phirni",   L"kulfi",
+        L"custard", L"pudding", L"pak",     L"rabri",    L"poli",
+        L"melon"};
+    if (InList(lastWord, kDessertTails, ARRAYSIZE(kDessertTails))) {
+        return Group::Dessert;
+    }
+
+    // Whatever the user added in settings, for the next time the site changes
+    // its mind. Snapshot the list under the lock; LoadSettings may be swapping
+    // it on another thread.
+    {
+        std::shared_ptr<const std::vector<std::wstring>> userKeywords;
+        {
+            std::lock_guard<std::mutex> lock(g_userDessertKeywordsMutex);
+            userKeywords = g_userDessertKeywords;
+        }
+        if (userKeywords) {
+            for (const std::wstring& keyword : *userKeywords) {
+                if (compactKey == WithoutSpaces(keyword) ||
+                    lastWord == keyword) {
+                    return Group::Dessert;
+                }
+            }
+        }
+    }
+
+    // Plain "Milk" is dairy; flavoured milks ("Rose Milk", "Cold Badam Milk")
+    // fall through to Beverages on their last word.
+    static const wchar_t* const kDairy[] = {L"curd", L"loosecurd",
+                                            L"thickcurd", L"cupcurd",
+                                            L"buttermilk", L"milk"};
+    if (InList(compactKey, kDairy, ARRAYSIZE(kDairy))) {
         return Group::Dairy;
     }
 
-    // No "buttermilk" here: kDairy above matches it first.
-    static const wchar_t* const kDrinkTails[] = {L"tea",   L"coffee", L"milk",
-                                                 L"sharbat", L"juice",
-                                                 L"lassi", L"shake"};
-    if (InList(LastWord(key), kDrinkTails, ARRAYSIZE(kDrinkTails))) {
-        return Group::Drinks;
+    static const wchar_t* const kBeverageTails[] = {
+        L"tea", L"coffee", L"milk", L"sharbat", L"juice", L"lassi", L"shake"};
+    if (InList(lastWord, kBeverageTails, ARRAYSIZE(kBeverageTails))) {
+        return Group::Beverages;
     }
 
-    static const wchar_t* const kBreadSides[] = {L"bread", L"butter", L"jam"};
-    if (InList(key, kBreadSides, ARRAYSIZE(kBreadSides))) {
+    // "Bread, Butter, Jam" -- the breakfast sides, whether listed separately or
+    // as one "Bread Butter Jam" / "BBJ" item.
+    static const wchar_t* const kBreadSides[] = {L"bread", L"butter", L"jam",
+                                                 L"breadbutterjam", L"bbj"};
+    if (InList(compactKey, kBreadSides, ARRAYSIZE(kBreadSides))) {
         return Group::BreadSides;
     }
 
@@ -1297,6 +1410,39 @@ static bool StoreCoversMonth(int monthKey) {
         }
     }
     return false;
+}
+
+// True when the cached file for this month was written more than `maxAgeMs`
+// ago, or does not exist. The file's own timestamp is used rather than an
+// in-memory "last fetched" tick so an Explorer restart does not trigger a
+// fresh download every time.
+static bool CachedMonthOlderThan(int hostel, int mess, int monthKey,
+                                 ULONGLONG maxAgeMs) {
+    std::wstring directory = GetCacheDirectory();
+    if (directory.empty()) {
+        return true;
+    }
+    std::wstring path =
+        directory + L"\\" + CacheFileName(hostel, mess, monthKey);
+
+    WIN32_FILE_ATTRIBUTE_DATA attributes{};
+    if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard,
+                              &attributes)) {
+        return true;
+    }
+
+    FILETIME nowFileTime{};
+    GetSystemTimeAsFileTime(&nowFileTime);
+    ULARGE_INTEGER now{}, written{};
+    now.LowPart = nowFileTime.dwLowDateTime;
+    now.HighPart = nowFileTime.dwHighDateTime;
+    written.LowPart = attributes.ftLastWriteTime.dwLowDateTime;
+    written.HighPart = attributes.ftLastWriteTime.dwHighDateTime;
+    if (written.QuadPart > now.QuadPart) {
+        return false;  // clock moved backwards; treat as fresh
+    }
+    // FILETIME is in 100 ns units.
+    return (now.QuadPart - written.QuadPart) / 10000ULL > maxAgeMs;
 }
 
 // ---------------------------------------------------------------------------
@@ -3948,6 +4094,11 @@ static std::atomic<bool> g_reloadCacheRequested{false};
 static constexpr DWORD kIdleIntervalMs = 6 * 60 * 60 * 1000;   // 6 hours
 static constexpr DWORD kFirstBackoffMs = 15 * 60 * 1000;       // 15 minutes
 
+// The site revises a month's file after publishing it -- in September 2026 the
+// breakfast sides and drinks were missing for the first week and added later.
+// So a cached month is not final: re-download the current one once a day.
+static constexpr ULONGLONG kRefreshAgeMs = 24ULL * 60 * 60 * 1000;
+
 static void KickFetch() {
     std::lock_guard<std::mutex> lock(g_netMutex);
     if (g_kickEvent) {
@@ -4061,6 +4212,12 @@ static DWORD WINAPI NetThreadProc(void*) {
     DWORD backoffMs = kFirstBackoffMs;
     bool forced = false;
 
+    // Tick of the last successful fetch, 0 until there has been one. The
+    // file's age alone is not enough: near the end of a month the site can
+    // already be serving the next month's file, so a refresh would write
+    // 2026-10.json and leave 2026-09.json looking stale forever.
+    ULONGLONG lastSuccessTick = 0;
+
     for (;;) {
         if (g_unloading) {
             break;
@@ -4073,11 +4230,18 @@ static DWORD WINAPI NetThreadProc(void*) {
 
         const int todayKey = TodayKey();
         const bool covered = StoreCoversDay(todayKey);
+        const bool refreshDue =
+            covered && g_settings.autoUpdate &&
+            (lastSuccessTick == 0 ||
+             GetTickCount64() - lastSuccessTick > kRefreshAgeMs) &&
+            CachedMonthOlderThan(g_settings.hostel, g_settings.mess,
+                                 MonthKeyFromDayKey(todayKey), kRefreshAgeMs);
         DWORD waitMs = kIdleIntervalMs;
 
-        if (forced || (!covered && g_settings.autoUpdate)) {
+        if (forced || refreshDue || (!covered && g_settings.autoUpdate)) {
             bool satisfied = PerformFetch();
             if (satisfied) {
+                lastSuccessTick = GetTickCount64();
                 backoffMs = kFirstBackoffMs;
                 waitMs = kIdleIntervalMs;
             } else {
