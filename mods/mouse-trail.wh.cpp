@@ -1521,6 +1521,17 @@ VS_OUTPUT VSMain(VS_INPUT input) {
 )";
 
 static const char* g_particlePS = R"(
+cbuffer ConstantBuffer : register(b0) {
+    float2 screenSize;
+    float perspective;
+    float2 lightDir;
+    float4 gradient[16];
+    int gradientCount;
+    float bgLuminance;
+    float adaptiveFlag;
+    float pad;
+};
+
 struct PS_INPUT {
     float4 pos : SV_POSITION;
     float2 uv : TEXCOORD0;
