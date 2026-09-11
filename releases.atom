@@ -2,12 +2,51 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-11T13:22:32.000Z</updated>
+    <updated>2026-09-11T13:28:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Hide Empty Optical Drives 1.0.0]]></title>
+        <id>https://windhawk.net/mods/hide-empty-optical-drives-shell#aa233acc7e301068b9f3f7baf35221c635507ca5</id>
+        <link href="https://windhawk.net/mods/hide-empty-optical-drives-shell"/>
+        <updated>2026-09-11T13:28:04.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="hideemptyopticaldrives">Hide Empty Optical Drives</h1>
+<p>Hides empty optical drives from <strong>This PC</strong> while leaving the device and its
+drive letter fully available to Windows.</p>
+<p><img src="https://raw.githubusercontent.com/Solomag/windhawk-assets/main/hide-empty-optical-drives/demo.gif" alt="Demo" /></p>
+<p>Unlike the built-in "Hide empty drives" option, this mod is intended for
+optical CD/DVD/BD drives that still remain visible in This PC when empty.</p>
+<p>The mod only affects the main <strong>This PC</strong> view in File Explorer
+(<code>explorer.exe</code>). The navigation pane, address-bar dropdown, file dialogs and
+third-party file managers are not modified.</p>
+<p>When an empty drive is hidden, Explorer's context-menu <strong>Eject</strong> command is no
+longer available for it. Use the drive's physical eject button instead.</p>
+<h3 id="compatibility">Compatibility</h3>
+<p>Tested on:</p>
+<ul>
+<li>Windows 10 22H2 (build 19045)</li>
+<li>Windows 11 25H2</li>
+</ul>
+<p>Verified behavior includes hiding an empty optical drive, showing it after media
+insertion, hiding it again after eject, and keeping the correct state after
+restarting Explorer.</p>
+<p>Media detection is event-driven. There is no permanent polling. After Windows
+reports media insertion, a background worker retries briefly while an optical
+disc spins up.</p>
+<p>Detection behavior:</p>
+<ul>
+<li>media confirmed present -&gt; show;</li>
+<li>no media, or a drive that remains not ready after the spin-up grace window -&gt; hide;</li>
+<li>other inconclusive probe failures -&gt; show (fail open).</li>
+</ul>]]></content>
+        <author>
+            <name>Solo_mag</name>
+            <uri>https://github.com/Solomag</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Folder Thumbnails 1.0]]></title>
         <id>https://windhawk.net/mods/disable-folder-thumbnails#c9c51fe08b709a2e318614018690386a3ff9c026</id>
@@ -1059,66 +1098,6 @@ the long-standing pre-animation stutter issue. </p>
         <author>
             <name>meteoni</name>
             <uri>https://github.com/Meteony</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Info Bar+ 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-info-bar#e012cc18f46b9136c58fdf570368d7de19b183a7</id>
-        <link href="https://windhawk.net/mods/explorer-info-bar"/>
-        <updated>2026-09-01T19:19:48.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorerinfobar">Explorer Info Bar+</h1>
-<p>A customizable Windhawk mod that enhances the bottom info bar in Windows 11 File Explorer.</p>
-<p>Explorer Info Bar+ adds drive, folder, selection, literal file-extension, and basic media/image metadata information while keeping the native Explorer look and adapting to light, dark, and customized themes.</p>
-<p>Unlike mods that restore the classic status bar or focus only on metadata, Explorer Info Bar+ combines several information groups in one modern, configurable Windows 11 info bar.</p>
-<h2 id="preview">Preview</h2>
-<p><img src="https://raw.githubusercontent.com/digart11/explorer-info-bar/main/images/explorer-info-bar-preview.png" alt="Explorer Info Bar+ preview" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Drive free-space information</li>
-<li>Current folder content summary</li>
-<li>Folder count</li>
-<li>File count</li>
-<li>Immediate file size total</li>
-<li>Selection information</li>
-<li>Selected folders</li>
-<li>Selected files</li>
-<li>Selected file size</li>
-<li>Single-file details when available</li>
-<li>Real file extension</li>
-<li>Image resolution</li>
-<li>Video resolution</li>
-<li>Media duration</li>
-<li>Three display styles</li>
-<li>Simple</li>
-<li>Flat panes</li>
-<li>Soft cards</li>
-<li>Configurable section order</li>
-<li>Individual section visibility controls</li>
-<li>Custom text and panel colors</li>
-<li>Automatic theme-derived colors by default</li>
-<li>Works with File Explorer's native status area rather than replacing Explorer itself</li>
-</ul>
-<h2 id="compatibilitywhythismodisseparate">Compatibility / Why this mod is separate</h2>
-<p>Explorer Info Bar+ uses the native Windows 11 bottom status area; it does not restore or create a classic <code>msctls_statusbar32</code>-style status bar. It combines drive, content, and selection information with configurable ordering, styles, colors, literal extension display, and basic image/media metadata in one native-style bar. This is a different presentation and design from Classic Explorer Status Bar and PreVista Explorer Status Bar.</p>
-<p>Do not enable Classic Explorer Status Bar or PreVista Explorer Status Bar at the same time as Explorer Info Bar+. Both try to control the same bottom Explorer area and can conflict or overlap.</p>
-<p>Explorer Info Bar+ paints over the native status-row text, including output from Explorer Status Bar Metadata. Do not enable Explorer Status Bar Metadata at the same time because its output will be covered. When Explorer Status Bar Metadata is not used, Explorer Info Bar+'s optional Single File Details can provide file extension, dimensions, and duration when available.</p>
-<h2 id="examples">Examples</h2>
-<p>Typical information shown by the mod:</p>
-<pre><code class="text language-text">Drive D: 150.7GB free
-Content: 15 folders / 25 files (77.2MB)
-Selected: 2 folders / 4 files (571KB)
-</code></pre>
-<p>When one file is selected, additional details can appear:</p>
-<pre><code class="text language-text">.jpg (4032×3024)
-.jpeg (6000×4000)
-.mp4 (1920×1080, 01:23:43)
-.mp3 (00:03:47)
-.doc
-.pdf
-</code></pre>]]></content>
-        <author>
-            <name>digART</name>
-            <uri>https://github.com/digart11</uri>
         </author>
     </entry>
 </feed>

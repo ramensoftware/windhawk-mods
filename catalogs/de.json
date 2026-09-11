@@ -7089,6 +7089,38 @@
         "version": "1.0.1"
       }
     },
+    "hide-empty-optical-drives-shell": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1789133284000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1789133284000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Solo_mag",
+        "compilerOptions": "-lshell32 -lshlwapi -lcomctl32 -luuid",
+        "description": "Hide empty CD/DVD/BD drives from This PC while keeping the drives fully available to Windows.",
+        "github": "https://github.com/Solomag",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Hide Empty Optical Drives",
+        "version": "1.0.0"
+      }
+    },
     "hide-home-gallery-explorer": {
       "details": {
         "defaultSorting": 32296,
