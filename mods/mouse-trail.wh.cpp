@@ -1019,6 +1019,9 @@ int g_fadeoutMode = 2;  // 0=hard 1=accelerate 2=soft
 bool g_enableSpeedResponse = true;
 bool g_enhancedGlow = true;
 bool g_enableHeadHighlight = true;
+bool g_adaptiveContrast = false;   // 自适应对比度
+float g_bgLuminance = 0.5f;        // 背景亮度缓存（0=暗，1=亮）
+DWORD g_lastBgSample = 0;          // 上次背景采样时间
 bool g_enableTrailShadow = true;
 int g_trailShape = 0;
 int g_dotsMultiplier = 2;
@@ -1383,7 +1386,9 @@ cbuffer ConstantBuffer : register(b0) {
     float2 lightDir;     // 光照方向
     float4 gradient[16]; // 渐变停止点（rgba）
     int gradientCount;
-    float pad[3];
+    float bgLuminance;   // 背景亮度
+    float adaptiveFlag;  // 自适应对比度开关
+    float pad;
 };
 
 struct VS_INPUT {
@@ -1425,7 +1430,9 @@ cbuffer ConstantBuffer : register(b0) {
     float2 lightDir;
     float4 gradient[16];
     int gradientCount;
-    float pad[3];
+    float bgLuminance;
+    float adaptiveFlag;
+    float pad;
 };
 
 struct PS_INPUT {
@@ -1463,7 +1470,9 @@ cbuffer ConstantBuffer : register(b0) {
     float2 lightDir;
     float4 gradient[16];
     int gradientCount;
-    float pad[3];
+    float bgLuminance;
+    float adaptiveFlag;
+    float pad;
 };
 
 struct VS_INPUT {
@@ -1619,6 +1628,22 @@ float4 PSMain(PS_INPUT input) : SV_TARGET {
     }
     if (!inside) discard;
     float alpha = input.color.a * smoothstep(0.5, 0.42, dist);
+    // 自适应对比描边：形状边缘添加对比色环
+    if (adaptiveFlag > 0.5) {
+        float edgeDist = 0.0;
+        // 计算到形状边缘的近似距离
+        if (input.shape < 1.5) {
+            edgeDist = 0.5 - dist;  // 圆形
+        } else {
+            edgeDist = 0.5 - dist;  // 其他形状近似
+        }
+        // 边缘 15% 区域叠加描边色
+        if (edgeDist < 0.08) {
+            float3 outlineRGB = bgLuminance > 0.5 ? float3(0,0,0) : float3(1,1,1);
+            float edgeAlpha = smoothstep(0.08, 0.0, edgeDist) * 0.7;
+            return float4(outlineRGB, edgeAlpha);
+        }
+    }
     // 2.5D 光照
     float light = 1.0 + input.depth * 0.25;
     return float4(input.color.rgb * light, alpha);
@@ -1807,6 +1832,9 @@ static void UpdateConstantBuffer(int width, int height, const GradData* cols = n
         }
         // gradientCount (offset 72, bytes 288-291) — int 类型，用整数写入
         ((int*)data)[72] = gradCount;
+        // bgLuminance (offset 73) 和 adaptiveFlag (offset 74)
+        data[73] = g_bgLuminance;
+        data[74] = g_adaptiveContrast ? 1.0f : 0.0f;
         g_pD3DContext->Unmap(g_pConstantBuffer, 0);
     }
 }
@@ -1933,6 +1961,11 @@ static void NativeRenderTrail(const std::vector<D2D1_POINT_2F>& smoothed, float 
         }
     };
 
+    // 0. 自适应对比描边（最外层，亮背景黑色/暗背景白色）
+    if (g_adaptiveContrast) {
+        D2D1_COLOR_F outlineCol = GetAdaptiveOutlineColor(0.55f);
+        drawBand(buildBand(2.6f, outlineCol.r, outlineCol.g, outlineCol.b, outlineCol.a));
+    }
     // 1. 外发光层（受 enable_glow 和 glow_intensity 控制）
     if (g_enableGlow) {
         float glowAlpha = 0.08f + (g_glowIntensity / 100.0f) * 0.15f;
@@ -2468,6 +2501,7 @@ void LoadSettings() {
     g_enableSpeedResponse = Wh_GetIntSetting(L"enable_speed_response") != 0;
     g_enhancedGlow = Wh_GetIntSetting(L"enhanced_glow") != 0;
     g_enableHeadHighlight = Wh_GetIntSetting(L"enable_head_highlight") != 0;
+    g_adaptiveContrast = Wh_GetIntSetting(L"enable_adaptive_contrast") != 0;
     g_dotsMultiplier = Wh_GetIntSetting(L"dots_multiplier");
     if (g_dotsMultiplier < 1) g_dotsMultiplier = 1;
     if (g_dotsMultiplier > 10) g_dotsMultiplier = 10;
@@ -2927,6 +2961,49 @@ static void ExtractCursorColor(POINT pt, DWORD dwTime) {
             g_cursorExtractedColor = LerpColor(g_cursorExtractedColor, newColor, 0.22f);
         }
     }
+}
+
+// ===================== 自适应对比度：背景亮度采样 =====================
+// 沿拖尾路径采样屏幕像素，计算平均亮度（0=暗，1=亮）
+// 限制采样频率避免性能开销，采样结果用于选择描边颜色
+static void SampleBackgroundLuminance(const std::vector<D2D1_POINT_2F>& path, DWORD dwTime, int vX, int vY) {
+    if (!g_adaptiveContrast || path.empty()) return;
+    if (dwTime - g_lastBgSample < 100) return;  // 每 100ms 采样一次
+    g_lastBgSample = dwTime;
+
+    HDC hdcScreen = GetDC(NULL);
+    if (!hdcScreen) return;
+
+    float totalLum = 0.0f;
+    int samples = 0;
+    // 沿路径均匀采样最多 5 个点
+    int step = max(1, (int)path.size() / 5);
+    for (size_t i = 0; i < path.size(); i += step) {
+        int sx = (int)path[i].x + vX;
+        int sy = (int)path[i].y + vY;
+        COLORREF col = GetPixel(hdcScreen, sx, sy);
+        if (col != CLR_INVALID) {
+            // 感知亮度公式：0.299R + 0.587G + 0.114B
+            float lum = (0.299f * GetRValue(col) + 0.587f * GetGValue(col) + 0.114f * GetBValue(col)) / 255.0f;
+            totalLum += lum;
+            samples++;
+        }
+    }
+    ReleaseDC(NULL, hdcScreen);
+
+    if (samples > 0) {
+        float avgLum = totalLum / samples;
+        // 平滑过渡，避免亮度跳变
+        g_bgLuminance = g_bgLuminance * 0.7f + avgLum * 0.3f;
+    }
+}
+
+// 获取自适应描边颜色：亮背景→黑色，暗背景→白色
+static D2D1_COLOR_F GetAdaptiveOutlineColor(float alpha) {
+    if (g_bgLuminance > 0.5f)
+        return D2D1::ColorF(0.0f, 0.0f, 0.0f, alpha);  // 亮背景：黑色描边
+    else
+        return D2D1::ColorF(1.0f, 1.0f, 1.0f, alpha);  // 暗背景：白色描边
 }
 
 // ===================== 轨迹变形 =====================
@@ -3554,6 +3631,9 @@ static void RenderFrame() {
         else if (g_trailShape == 8)
             ApplyLightningDeformation(smoothed, dwTime);
     }
+
+    // ===== 自适应对比度：采样背景亮度 =====
+    SampleBackgroundLuminance(smoothed, dwTime, vX, vY);
 
     // ===== 运动模糊：保存当前路径到历史缓冲区（仅锥形带模式，避免切换形状后残留旧帧）=====
     if (g_enableMotionBlur && havePath && g_trailShape == 0) {
