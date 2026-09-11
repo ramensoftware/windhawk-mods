@@ -480,6 +480,7 @@ namespace resource {
     }
 
     Usage GetUsage() {
+        std::lock_guard<std::mutex> lock(g_resourceInitMutex);
         Usage usage;
         usage.cpu = GetCpu();
         usage.ram = GetRam();
@@ -844,8 +845,9 @@ namespace resource {
                 initialized = true;
                 return 0;
             }
-            winrt::com_ptr<IDXGIAdapter1> adapter;
-            for (UINT i = 0; factory->EnumAdapters1(i, adapter.put()) != DXGI_ERROR_NOT_FOUND; ++i) {
+            for (UINT i = 0;; ++i) {
+                winrt::com_ptr<IDXGIAdapter1> adapter;
+                if (factory->EnumAdapters1(i, adapter.put()) == DXGI_ERROR_NOT_FOUND) break;
                 DXGI_ADAPTER_DESC1 desc;
                 if (SUCCEEDED(adapter->GetDesc1(&desc))) {
                     if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) continue;
@@ -874,9 +876,10 @@ namespace resource {
     std::wstring GetGpuLuidForIndex(int gpuIndex) {
         winrt::com_ptr<IDXGIFactory1> factory;
         if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)factory.put()))) return L"";
-        winrt::com_ptr<IDXGIAdapter1> adapter;
         int current = 0;
-        for (UINT i = 0; factory->EnumAdapters1(i, adapter.put()) != DXGI_ERROR_NOT_FOUND; ++i) {
+        for (UINT i = 0;; ++i) {
+            winrt::com_ptr<IDXGIAdapter1> adapter;
+            if (factory->EnumAdapters1(i, adapter.put()) == DXGI_ERROR_NOT_FOUND) break;
             DXGI_ADAPTER_DESC1 desc;
             if (SUCCEEDED(adapter->GetDesc1(&desc))) {
                 if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) continue;
@@ -949,6 +952,7 @@ namespace resource {
     }
 
     DetailedInfo GetDetailedInfo(int gpuIndex = 0) {
+        std::lock_guard<std::mutex> lock(g_resourceInitMutex);
         DetailedInfo info;
         info.cpuClockMHz = GetCurrentCpuFrequencyMHz(); // live frequency
         if (info.cpuClockMHz <= 0) info.cpuClockMHz = GetCpuClockMHz(); // fallback if API fails
@@ -1207,9 +1211,10 @@ HWND g_taskClickPendingHwnd = nullptr;
 [[clang::no_destroy]] wuxc::TextBlock g_infoGpuLabel{nullptr};
 std::vector<std::wstring> g_gpuNames;
 int g_selectedGpuIndex = 0;
+bool g_selectedGpuIndexLoaded = false;
 std::deque<float> g_cpuHistory;
 std::deque<float> g_ramHistory;
-std::deque<float> g_gpuHistory;
+std::map<int, std::deque<float>> g_gpuHistory;
 int g_currentTab = 0; // 0=CPU, 1=RAM, 2=GPU
 
 [[clang::no_destroy]] std::map<std::wstring, FrameworkElement> g_namedElements;
@@ -1302,6 +1307,7 @@ void AdjustTaskButtonWidths() {
 // global EVENT_SYSTEM_FOREGROUND hook records the last real foreground window
 // instead, ignoring anything owned by this process.
 HWINEVENTHOOK g_windowEventHook;
+HWINEVENTHOOK g_windowEventNameHook;
 HWND g_lastForegroundHwnd;
 HWINEVENTHOOK g_foregroundHook = nullptr;
 bool g_fullScreenAppActive = false;   
@@ -2160,7 +2166,7 @@ FrameworkElement BuildBatteryIcon(double displaySize, int percentage, bool charg
         contentXaml += L"<StackPanel Orientation=\"Horizontal\" Spacing=\"2\" "
                        L"HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\">";
         contentXaml += L"<Path Data=\"M0 18.3378L14.2119 0L11.9196 13.4478H24.1448L4.43166 32.8553L10.6971 18.3378H0Z\" "
-                       L"Fill=\"#FFFFFF\" Width=\"20\" Height=\"26\" Stretch=\"Uniform\" "
+                       L"Fill=\"#FFFFFF\" Width=\"36\" Height=\"47\" Stretch=\"Uniform\" "
                        L"VerticalAlignment=\"Center\"/>";
         contentXaml += batteryXaml;
         contentXaml += L"</StackPanel>";
@@ -4258,7 +4264,9 @@ std::vector<Device> Enumerate(bool includeUnpaired) {
         if (device.name.empty()) {
             continue;  // skip devices with no name
         }
-        device.batteryPercent = GetBatteryPercent(device.address);  // optional, but use if you have it
+        if (device.connected) {
+            device.batteryPercent = GetBatteryPercent(device.address);
+        }
         devices.push_back(std::move(device));
 
         info = {};
@@ -4301,7 +4309,9 @@ std::vector<Device> Enumerate(bool includeUnpaired) {
                 device.paired = deviceInfo.Pairing().IsPaired();
                 device.connected = false; // we can't easily determine from here
 
-                device.batteryPercent = GetBatteryPercent(device.address);
+                if (device.connected) {
+                    device.batteryPercent = GetBatteryPercent(device.address);
+                }
                 if (device.name.empty() || device.address.ullLong == 0) continue;
 
                 devices.push_back(std::move(device));
@@ -6387,6 +6397,16 @@ BatteryInfo GetBatteryInfo() {
 void UpdateBatteryButton() {
     if (!g_batteryButton) return;
     BatteryInfo info = GetBatteryInfo();
+    static int s_lastPercentage = -1;
+    static bool s_lastCharging = false;
+    static bool s_initialized = false;
+    if (s_initialized && info.percentage == s_lastPercentage &&
+        info.charging == s_lastCharging) {
+        return;
+    }
+    s_lastPercentage = info.percentage;
+    s_lastCharging = info.charging;
+    s_initialized = true;
     auto batteryIcon = BuildBatteryIcon(20, info.percentage, info.charging);
     if (batteryIcon) {
         batteryIcon.VerticalAlignment(VerticalAlignment::Center);
@@ -6401,11 +6421,7 @@ void ApplyResourceUsageToButton(const resource::Usage& usage) {
     bool any = false;
     if (g_settings.showCpuUsage) {
         text += L"CPU: ";
-        if (usage.cpuAvailable) {
-            text += std::to_wstring(usage.cpu) + L"%";
-        } else {
-            text += L"-";
-        }
+        text += usage.cpuAvailable ? (std::to_wstring(usage.cpu) + L"%") : L"-";
         any = true;
     }
     if (g_settings.showRamUsage) {
@@ -6416,15 +6432,10 @@ void ApplyResourceUsageToButton(const resource::Usage& usage) {
     if (g_settings.showGpuUsage) {
         if (any) text += L" ";
         text += L"GPU: ";
-        if (usage.gpuAvailable) {
-            text += std::to_wstring(usage.gpu) + L"%";
-        } else {
-            text += L"-";
-        }
+        text += usage.gpuAvailable ? (std::to_wstring(usage.gpu) + L"%") : L"-";
     }
 
     if (!any) {
-        text = L"";
         g_resourceButton.Visibility(Visibility::Collapsed);
         return;
     }
@@ -6506,6 +6517,10 @@ void ApplyResourceFlyoutContentUI(const resource::Usage& usage,
             g_infoGpuCombo.Visibility(Visibility::Visible);
 
             if (g_infoGpuCombo.Items().Size() == 0) {
+                if (!g_selectedGpuIndexLoaded) {
+                    g_selectedGpuIndex = Wh_GetIntValue(L"selectedGpuIndex", 0);
+                    g_selectedGpuIndexLoaded = true;
+                }
                 g_gpuNames = resource::GetAllGpuNames();
                 for (const auto& name : g_gpuNames) {
                     wuxc::ComboBoxItem item;
@@ -6513,7 +6528,13 @@ void ApplyResourceFlyoutContentUI(const resource::Usage& usage,
                     g_infoGpuCombo.Items().Append(item);
                 }
                 if (g_gpuNames.size() > 0) {
+                    if (g_selectedGpuIndex < 0 || g_selectedGpuIndex >= (int)g_gpuNames.size()) {
+                        g_selectedGpuIndex = 0;
+                    }
+                    bool prev = g_populatingPanel;
+                    g_populatingPanel = true;
                     g_infoGpuCombo.SelectedIndex(g_selectedGpuIndex);
+                    g_populatingPanel = prev;
                 }
             }
         }
@@ -6529,9 +6550,10 @@ void ApplyResourceFlyoutContentUI(const resource::Usage& usage,
         g_ramHistory.push_back(static_cast<float>(usage.ram));
         if (g_ramHistory.size() > maxSamples) g_ramHistory.pop_front();
     } else if (g_currentTab == 2) {
-        if (usage.gpuAvailable) g_gpuHistory.push_back(static_cast<float>(usage.gpu));
-        else g_gpuHistory.push_back(0);
-        if (g_gpuHistory.size() > maxSamples) g_gpuHistory.pop_front();
+        auto& hist = g_gpuHistory[g_selectedGpuIndex];
+        if (usage.gpuAvailable) hist.push_back(static_cast<float>(usage.gpu));
+        else hist.push_back(0);
+        if (hist.size() > maxSamples) hist.pop_front();
     }
 
     // Set graph colors based on current tab
@@ -6554,7 +6576,10 @@ void ApplyResourceFlyoutContentUI(const resource::Usage& usage,
     g_graphFill.Fill(MakeBrush(fillColor.A, fillColor.R, fillColor.G, fillColor.B));
 
     // Draw graph (line + fill)
-    auto& history = (g_currentTab == 0) ? g_cpuHistory : (g_currentTab == 1) ? g_ramHistory : g_gpuHistory;
+    static std::deque<float> s_emptyGpuHistory;
+    auto& history = (g_currentTab == 0) ? g_cpuHistory
+                   : (g_currentTab == 1) ? g_ramHistory
+                                         : g_gpuHistory[g_selectedGpuIndex];
     
     auto linePoints = g_graphLine.Points();
     auto fillPoints = g_graphFill.Points();
@@ -6781,10 +6806,12 @@ void PopulateResourceFlyout() {
 
     // Drop-down changed handler
     g_infoGpuCombo.SelectionChanged([](auto&& sender, auto&&) {
+        if (g_populatingPanel) return;
         auto combo = sender.template as<wuxc::ComboBox>();
         int index = combo.SelectedIndex();
-        if (index >= 0) {
+        if (index >= 0 && index != g_selectedGpuIndex) {
             g_selectedGpuIndex = index;
+            Wh_SetIntValue(L"selectedGpuIndex", index);
             UpdateResourceFlyoutContent();
         }
     });
@@ -7802,8 +7829,15 @@ RunOnUiThread([status, networks = std::move(networks)]() mutable {
         resourceButton.Margin(Thickness{5, 4, 5, 4});
         resourceButton.Padding(Thickness{7, 0, 7, 0});
         resourceButton.HorizontalContentAlignment(HorizontalAlignment::Center);
+        {
+            int metrics = (g_settings.showCpuUsage ? 1 : 0) +
+                          (g_settings.showRamUsage ? 1 : 0) +
+                          (g_settings.showGpuUsage ? 1 : 0);
+            if (metrics < 1) metrics = 1;
+            resourceButton.Width(metrics * 64.0 + 10.0);
+        }
         // Placeholder text; will be updated periodically
-        resourceButton.Content(MakeText(nullptr, L"CPU: -% RAM: -%", 12));
+        resourceButton.Content(MakeText(nullptr, L"CPU: 0% RAM: 0% GPU: 0%", 12));
 
         // Create the flyout with toggles
         g_resourceFlyout = MakeControlFlyout(L"ResourceFlyoutRoot", g_resourcePanel);
@@ -8414,9 +8448,12 @@ void ForegroundEventProcInstall() {
     }
 
     // Additional hook for window creation/destruction/rename to refresh task list
-    g_windowEventHook = SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_NAMECHANGE,
+    g_windowEventHook = SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_HIDE,
                                         nullptr, WindowEventProc, 0, 0,
                                         WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    g_windowEventNameHook = SetWinEventHook(EVENT_OBJECT_NAMECHANGE, EVENT_OBJECT_NAMECHANGE,
+                                            nullptr, WindowEventProc, 0, 0,
+                                            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
 }
 
 DWORD WINAPI TopBarThreadProc(LPVOID) {
@@ -8726,6 +8763,10 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         if (g_windowEventHook) {
             UnhookWinEvent(g_windowEventHook);
             g_windowEventHook = nullptr;
+        }
+        if (g_windowEventNameHook) {
+            UnhookWinEvent(g_windowEventNameHook);
+            g_windowEventNameHook = nullptr;
         }
 
         // The topbar has been closed. Stop all timers before the DLL unloads.
