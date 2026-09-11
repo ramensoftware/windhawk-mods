@@ -378,6 +378,11 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
   $name:zh-CN: 拖尾阴影
   $description: Dark underlay shadow for depth perception.
   $description:zh-CN: 拖尾底层绘制暗色阴影，增加立体感。
+- enable_adaptive_contrast: false
+  $name: Adaptive Contrast
+  $name:zh-CN: 自适应对比度
+  $description: Sample background brightness, add dark outline on bright backgrounds and bright outline on dark backgrounds.
+  $description:zh-CN: 采样背景亮度，亮背景叠加黑色描边，暗背景叠加亮色描边，确保拖尾始终可见。
 
 # ===== 形状拖尾设置 =====
 - shape_type: heart
