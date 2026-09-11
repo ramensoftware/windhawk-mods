@@ -2,7 +2,7 @@
 // @id              translucent-windows
 // @name            Translucent Windows
 // @description     Enables native translucent effects in Windows 11
-// @version         1.8.1
+// @version         1.8.2
 // @author          Undisputed00x
 // @github          https://github.com/Undisputed00x
 // @include         *
@@ -5395,8 +5395,9 @@ VOID RestoreWindowCustomizations(HWND hWnd)
 BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) 
 {
     DWORD dwProcessId = 0;
-    // Pass console window, it might be called from other processes like Clink:https://github.com/chrisant996/clink
-    if ((!GetWindowThreadProcessId(hWnd, &dwProcessId) || dwProcessId != GetCurrentProcessId()) && !IsWindowClass(hWnd, L"ConsoleWindowClass")) 
+    // Pass only the console window attached to this process (Clink runs inside cmd.exe).
+    // Passing every ConsoleWindowClass window styled consoles owned by other processes.
+    if ((!GetWindowThreadProcessId(hWnd, &dwProcessId) || dwProcessId != GetCurrentProcessId()) && hWnd != GetConsoleWindow())
         return TRUE;
     else
     {
