@@ -702,6 +702,7 @@ This project is licensed under the GNU General Public License Version 3.0.
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdlib>
 #include <memory>
 #include <new>
 #include <string>
@@ -720,6 +721,7 @@ This project is licensed under the GNU General Public License Version 3.0.
 #include <knownfolders.h>
 #include <gdiplus.h>
 #include <windhawk_api.h>
+#include <windhawk_utils.h>
 #include <strsafe.h>
 
 // Constants and input state
@@ -868,6 +870,7 @@ constexpr UINT TIMER_DPI_REINSTALL_ID = 108;
 
 // Active drag polling runs only while a physical left-button gesture is in progress.
 constexpr UINT DRAG_POLL_INTERVAL_ACTIVE_MS = 40;
+constexpr ULONGLONG OLE_STALE_GRACE_MS = 2000;
 
 // Display changes are debounced, then sampled until the tray rectangle is stable.
 constexpr UINT DISPLAY_SETTLE_INTERVAL_MS = 200;
@@ -938,6 +941,7 @@ struct TrayState {
     bool isIconRectValid = false;
     bool dragPollTimerActive = false;
     bool dragRectRefreshed = false;
+    ULONGLONG oleReleaseDeadline = 0;
     bool displaySettleTimerActive = false;
     bool shellCoalesceTimerActive = false;
     RECT displaySettleLastRect = { 0 };
@@ -1579,7 +1583,7 @@ static DWORD WINAPI RecycleWorkerProc(LPVOID) {
 
         std::unique_ptr<RecycleWorkerJob> job(TakePendingRecycleWorkerJob());
         if (job) {
-            const bool completed = PerformRecycleWorkerJob(*job);
+            (void)PerformRecycleWorkerJob(*job);
             g_recycleWorkerBusy.store(false);
 
             HWND hWnd = GetSafeHwnd();
@@ -1588,8 +1592,7 @@ static DWORD WINAPI RecycleWorkerProc(LPVOID) {
                 // completed only part of a multi-item operation.
                 (void)PostMessageW(hWnd, WM_SHELLNOTIFY, 0, 0);
                 (void)PostMessageW(
-                    hWnd, WM_USER_RECYCLE_WORK_COMPLETE,
-                    completed ? TRUE : FALSE, 0);
+                    hWnd, WM_USER_RECYCLE_WORK_COMPLETE, 0, 0);
             }
         }
 
@@ -1683,6 +1686,32 @@ static bool QueueRecycleWorkerJob(HWND owner, std::vector<std::wstring> paths) {
     return true;
 }
 
+// CF_HDROP can expose the physical $R... path for items dragged from the
+// Recycle Bin. Never queue those physical paths for another delete operation.
+static bool IsPathInsideRecycleBinRoot(const std::wstring& path) {
+    const PCWSTR subPath = PathSkipRootW(path.c_str());
+    if (!subPath || !*subPath) {
+        return false;
+    }
+
+    const std::wstring_view subPathView(subPath);
+    const size_t separator = subPathView.find_first_of(L"\\/");
+    const std::wstring_view firstComponent =
+        subPathView.substr(0, separator);
+
+    constexpr wchar_t kRecycleBinComponent[] = L"$Recycle.Bin";
+    constexpr size_t kRecycleBinComponentLength =
+        ARRAYSIZE(kRecycleBinComponent) - 1;
+
+    return firstComponent.size() == kRecycleBinComponentLength &&
+           CompareStringOrdinal(
+               firstComponent.data(),
+               static_cast<int>(firstComponent.size()),
+               kRecycleBinComponent,
+               static_cast<int>(kRecycleBinComponentLength),
+               TRUE) == CSTR_EQUAL;
+}
+
 static bool ExtractDroppedPaths(HDROP hDrop, std::vector<std::wstring>& paths) {
     paths.clear();
 
@@ -1709,6 +1738,12 @@ static bool ExtractDroppedPaths(HDROP hDrop, std::vector<std::wstring>& paths) {
         }
 
         path.resize(cchCopied);
+        if (IsPathInsideRecycleBinRoot(path)) {
+            Wh_Log(L"D&D: rejected item already inside Recycle Bin: '%s'",
+                   path.c_str());
+            return false;
+        }
+
         paths.push_back(std::move(path));
     }
 
@@ -1812,6 +1847,7 @@ public:
         // Once entered, OLE owns the session; the mouse hook must not hide the target before Drop().
         const ULONGLONG generation = g_oleDragGeneration.fetch_add(1) + 1;
         g_dragGestureSawOle = true;
+        g_trayState.oleReleaseDeadline = 0;
         g_oleDragActive.store(m_hasValidFormat);
         if (m_hasValidFormat) {
             g_dropOverlayArmed.store(true);
@@ -2100,22 +2136,19 @@ static std::wstring TrimAndUnquote(std::wstring_view value) {
 }
 
 static void ReadStringSetting(PCWSTR key, WCHAR* target, size_t maxCount, PCWSTR defaultValue) {
-    PCWSTR val = Wh_GetStringSetting(key);
-    StringCchCopyW(target, maxCount, *val ? val : defaultValue);
-    Wh_FreeStringSetting(val);
+    auto value = WindhawkUtils::StringSetting::make(key);
+    StringCchCopyW(target, maxCount, *value.get() ? value.get() : defaultValue);
 }
 
 static void ReadTrimmedStringSetting(PCWSTR key, WCHAR* target, size_t maxCount) {
-    PCWSTR value = Wh_GetStringSetting(key);
-    const std::wstring normalized = TrimAndUnquote(value);
+    auto value = WindhawkUtils::StringSetting::make(key);
+    const std::wstring normalized = TrimAndUnquote(value.get());
     StringCchCopyW(target, maxCount, normalized.c_str());
-    Wh_FreeStringSetting(value);
 }
 
 static void ReadFontNameSetting(PCWSTR key, WCHAR* target, size_t maxCount) {
-    PCWSTR value = Wh_GetStringSetting(key);
-    const std::wstring normalized = TrimAndUnquote(value);
-    Wh_FreeStringSetting(value);
+    auto value = WindhawkUtils::StringSetting::make(key);
+    const std::wstring normalized = TrimAndUnquote(value.get());
 
     target[0] = L'\0';
     if (normalized.empty()) {
@@ -2192,10 +2225,8 @@ static const RecycleBinTooltipLabels& GetRecycleBinTooltipLabels() {
 }
 
 void LoadPathSetting(PCWSTR settingName, std::wstring& outPath) {
-    PCWSTR value = Wh_GetStringSetting(settingName);
-    const std::wstring raw(value);
-    Wh_FreeStringSetting(value);
-    outPath = SanitizePath(raw);
+    auto value = WindhawkUtils::StringSetting::make(settingName);
+    outPath = SanitizePath(value.get());
 }
 
 static TrayAction ReadActionSetting(PCWSTR valueName, PCWSTR defaultValue) {
@@ -3386,12 +3417,15 @@ void OpenPropertiesAction(HWND hWnd) {
 
 LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
+        const MSLLHOOKSTRUCT* pMouse =
+            reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
+        if (!pMouse || (pMouse->flags & LLMHF_LOWER_IL_INJECTED)) {
+            return CallNextHookEx(NULL, nCode, wParam, lParam);
+        }
+
         HWND hWnd = GetSafeHwnd();
         if (hWnd) {
             if (wParam == WM_LBUTTONDOWN) {
-                const MSLLHOOKSTRUCT* pMouse =
-                    reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
-
                 // Marshal the start point to the tray thread instead of sharing
                 // mutable POINT state between the hook and tray threads.
                 (void)PostMessageW(
@@ -3614,6 +3648,7 @@ static bool SetDragDropEnabled(HWND hWnd, bool enable) {
 
         g_dropOverlayArmed.store(false);
         g_trayState.dragRectRefreshed = false;
+        g_trayState.oleReleaseDeadline = 0;
         HideDropOverlay();
 
         if (g_pDropTarget) {
@@ -3905,10 +3940,14 @@ void ShowContextMenu(HWND hWnd) {
     }
 
     (void)SetForegroundWindow(hWnd);
-    const UINT cmd = TrackPopupMenuEx(
-        menu,
-        TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON | TPM_VERTICAL,
-        anchor.x, anchor.y, hWnd, popupParamsPtr);
+    UINT cmd = 0;
+    {
+        ShellModalScope menuScope(hWnd);
+        cmd = TrackPopupMenuEx(
+            menu,
+            TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON | TPM_VERTICAL,
+            anchor.x, anchor.y, hWnd, popupParamsPtr);
+    }
 
     (void)PostMessageW(hWnd, WM_NULL, 0, 0);
     (void)Shell_NotifyIconW(NIM_SETFOCUS, &g_nid);
@@ -3971,20 +4010,51 @@ void CheckDragStatus(HWND hWnd) {
     if (!g_settings.enableDragDrop || !g_iconVisible || !g_hOverlayWnd ||
         g_recycleWorkerBusy.load()) {
         g_dropOverlayArmed.store(false);
+        g_trayState.oleReleaseDeadline = 0;
         HideDropOverlay();
+        if (g_trayState.dragPollTimerActive) {
+            (void)KillLoggedTimer(hWnd, TIMER_DRAG_POLL_ID);
+            g_trayState.dragPollTimerActive = false;
+        }
         return;
     }
 
     const bool isDragging = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
 
-    // WM_LBUTTONUP can precede Drop(); keep the target alive while OLE still owns it.
+    // WM_LBUTTONUP can precede Drop(); keep the target alive briefly while OLE
+    // still owns it, but recover if the source disappears without DragLeave/Drop.
     if (!isDragging) {
         if (!g_oleDragActive.load()) {
             g_dropOverlayArmed.store(false);
+            g_trayState.oleReleaseDeadline = 0;
+            g_trayState.dragRectRefreshed = false;
             HideDropOverlay();
+            if (g_trayState.dragPollTimerActive) {
+                (void)KillLoggedTimer(hWnd, TIMER_DRAG_POLL_ID);
+                g_trayState.dragPollTimerActive = false;
+            }
+            return;
+        }
+
+        const ULONGLONG now = GetTickCount64();
+        if (g_trayState.oleReleaseDeadline == 0) {
+            g_trayState.oleReleaseDeadline = now + OLE_STALE_GRACE_MS;
+        } else if (now >= g_trayState.oleReleaseDeadline) {
+            Wh_Log(L"D&D: OLE session never completed; forcing cleanup");
+            g_oleDragActive.store(false);
+            g_dropOverlayArmed.store(false);
+            g_trayState.oleReleaseDeadline = 0;
+            g_trayState.dragRectRefreshed = false;
+            HideDropOverlay();
+            if (g_trayState.dragPollTimerActive) {
+                (void)KillLoggedTimer(hWnd, TIMER_DRAG_POLL_ID);
+                g_trayState.dragPollTimerActive = false;
+            }
         }
         return;
     }
+
+    g_trayState.oleReleaseDeadline = 0;
 
     POINT pt = {};
     if (!GetCursorPos(&pt)) {
@@ -3996,8 +4066,8 @@ void CheckDragStatus(HWND hWnd) {
     const int dragThresholdX = GetSystemMetrics(SM_CXDRAG);
     const int dragThresholdY = GetSystemMetrics(SM_CYDRAG);
     const bool movedEnoughToBeDrag =
-        (abs(pt.x - g_dragStartPt.x) > dragThresholdX) ||
-        (abs(pt.y - g_dragStartPt.y) > dragThresholdY);
+        (std::abs(pt.x - g_dragStartPt.x) > dragThresholdX) ||
+        (std::abs(pt.y - g_dragStartPt.y) > dragThresholdY);
     if (!movedEnoughToBeDrag) {
         return;
     }
@@ -4330,6 +4400,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             g_dragStartPt.y = static_cast<LONG>(lParam);
             g_dragGestureSawOle = false;
             g_trayState.dragRectRefreshed = false;
+            g_trayState.oleReleaseDeadline = 0;
             if (g_settings.enableDragDrop && !g_trayState.dragPollTimerActive) {
                 (void)SetLoggedTimer(hWnd, TIMER_DRAG_POLL_ID, DRAG_POLL_INTERVAL_ACTIVE_MS);
                 g_trayState.dragPollTimerActive = true;
@@ -4340,15 +4411,28 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (g_dropOverlayArmed.load() && !g_dragGestureSawOle) {
                 Wh_Log(L"D&D: physical drag ended without OLE DragEnter; source did not start/reach an OLE drag");
             }
-            if (g_trayState.dragPollTimerActive) {
-                (void)KillLoggedTimer(hWnd, TIMER_DRAG_POLL_ID);
-                g_trayState.dragPollTimerActive = false;
-            }
             g_trayState.dragRectRefreshed = false;
+
             // Button-up is final only when OLE is no longer inside the target.
-            if (!g_oleDragActive.load()) {
+            // Keep polling briefly if OLE still owns the session so a missing
+            // DragLeave/Drop can't strand the topmost overlay.
+            if (g_oleDragActive.load()) {
+                g_trayState.oleReleaseDeadline =
+                    GetTickCount64() + OLE_STALE_GRACE_MS;
+                if (!g_trayState.dragPollTimerActive) {
+                    g_trayState.dragPollTimerActive =
+                        SetLoggedTimer(
+                            hWnd, TIMER_DRAG_POLL_ID,
+                            DRAG_POLL_INTERVAL_ACTIVE_MS);
+                }
+            } else {
+                g_trayState.oleReleaseDeadline = 0;
                 g_dropOverlayArmed.store(false);
                 HideDropOverlay();
+                if (g_trayState.dragPollTimerActive) {
+                    (void)KillLoggedTimer(hWnd, TIMER_DRAG_POLL_ID);
+                    g_trayState.dragPollTimerActive = false;
+                }
             }
             return 0;
 
@@ -4362,6 +4446,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             g_oleDragActive.store(false);
             g_dropOverlayArmed.store(false);
             g_trayState.dragRectRefreshed = false;
+            g_trayState.oleReleaseDeadline = 0;
             HideDropOverlay();
             if (g_trayState.dragPollTimerActive) {
                 (void)KillLoggedTimer(hWnd, TIMER_DRAG_POLL_ID);
@@ -4651,6 +4736,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             g_suppressLeftActivationAfterDoubleClick = false;
             g_oleDragActive.store(false);
             g_dropOverlayArmed.store(false);
+            g_trayState.oleReleaseDeadline = 0;
 
             UnregisterShellNotifications();
             if (g_iconVisible) {
