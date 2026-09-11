@@ -28,7 +28,7 @@ and Dinner. Chevrons at the top let you browse to other days.
 
 ## What it does
 
-- **Taskbar button** — `Idli - Vada - Khichdi...` while a meal is being served,
+- **Taskbar button** — `Idli • Vada • Khichdi…` while a meal is being served,
   `Lunch starts in 1 hr 20 min` between meals. Or icon only, in compact mode.
 - **Flyout** — all four meals, always expanded, with the current meal
   highlighted green and the upcoming meal highlighted yellow.
@@ -70,7 +70,9 @@ button at the bottom of the flyout. The previous month's menu is never shown as
 if it were the current one.
 
 Cached menus are kept in Windhawk's own per-mod storage folder, which Windhawk
-deletes when the mod is removed — so the mod leaves nothing behind.
+deletes when the mod is removed — so the mod leaves nothing behind. Every
+hostel and mess you have looked at stays cached, so switching between them is
+instant and works offline.
 
 ## Notes
 
@@ -1225,7 +1227,15 @@ static bool ParseIsoDate(const std::wstring& text, int& dayKey) {
         return false;
     }
     dayKey = DaysFromCivil(year, (unsigned)month, (unsigned)day);
-    return true;
+
+    // DaysFromCivil happily normalises "2026-02-31" to 3 March, which would
+    // then silently overwrite that day's menu. Round-trip and require the
+    // same date back, so a malformed entry is skipped instead.
+    int checkYear;
+    unsigned checkMonth, checkDay;
+    CivilFromDays(dayKey, checkYear, checkMonth, checkDay);
+    return checkYear == year && checkMonth == (unsigned)month &&
+           checkDay == (unsigned)day;
 }
 
 static bool ParseMenuJson(const std::wstring& json, ParsedMonth& out) {
@@ -1494,32 +1504,47 @@ static bool HttpGetJson(const std::wstring& url, std::string& out,
 // Section 9: cache load, merge and pruning
 // ---------------------------------------------------------------------------
 
-static void PruneOldCacheFiles(int hostel, int mess, int keepFromMonthKey) {
+// Our own "h<n>m<n>-YYYY-MM.json" names, and nothing else in the directory.
+// Fills in the month the name carries.
+static bool ParseCacheFileName(const std::wstring& name, int& monthKey) {
+    // h1m2-2026-09.json is 17 characters.
+    if (name.size() != 17 || name[0] != L'h' || name[2] != L'm' ||
+        name[4] != L'-' || name[9] != L'-' || !iswdigit(name[1]) ||
+        !iswdigit(name[3])) {
+        return false;
+    }
+    int year = _wtoi(name.substr(5, 4).c_str());
+    int month = _wtoi(name.substr(10, 2).c_str());
+    if (year < 1970 || month < 1 || month > 12) {
+        return false;
+    }
+    monthKey = year * 12 + month - 1;
+    return true;
+}
+
+// Deletes every cached month older than `keepFromMonthKey`, for every
+// hostel/mess -- not just the one selected. The other sources' files are kept
+// on purpose, so switching between messes is instant and works offline, and
+// this is the only place their old months would ever age out.
+static void PruneOldCacheFiles(int keepFromMonthKey) {
     std::wstring directory = GetCacheDirectory();
     if (directory.empty()) {
         return;
     }
 
-    std::wstring pattern = directory + L"\\" + CacheFilePrefix(hostel, mess) +
-                           L"*.json";
+    std::wstring pattern = directory + L"\\h*m*-*.json";
     WIN32_FIND_DATAW findData{};
     HANDLE find = FindFirstFileW(pattern.c_str(), &findData);
     if (find == INVALID_HANDLE_VALUE) {
         return;
     }
 
-    const std::wstring prefix = CacheFilePrefix(hostel, mess);
     do {
         std::wstring name = findData.cFileName;
-        if (name.size() < prefix.size() + 12) {
+        int monthKey = 0;
+        if (!ParseCacheFileName(name, monthKey)) {
             continue;
         }
-        int year = _wtoi(name.substr(prefix.size(), 4).c_str());
-        int month = _wtoi(name.substr(prefix.size() + 5, 2).c_str());
-        if (year < 1970 || month < 1 || month > 12) {
-            continue;
-        }
-        int monthKey = year * 12 + month - 1;
         if (monthKey < keepFromMonthKey) {
             std::wstring full = directory + L"\\" + name;
             DeleteFileW(full.c_str());
@@ -1530,19 +1555,15 @@ static void PruneOldCacheFiles(int hostel, int mess, int keepFromMonthKey) {
     FindClose(find);
 }
 
-// Deletes every cached month except those with `keepPrefix`; an empty prefix
-// deletes them all. Two callers: switching hostel or mess leaves the old
-// source's files behind (PruneOldCacheFiles only ever looks at the current
-// prefix), and changing the menu URL invalidates everything, because the
-// file names carry only the hostel/mess pair and not where it came from. Only
-// our own "h<n>m<n>-YYYY-MM.json" names are touched.
-static void PruneCacheFilesExcept(const std::wstring& keepPrefix) {
+// Deletes every cached month, for every hostel/mess. Only for a change of
+// menu URL: the file names carry the hostel/mess pair and not where the data
+// came from, so nothing on disk can be trusted to match the new source.
+static void PurgeCacheFiles() {
     std::wstring directory = GetCacheDirectory();
     if (directory.empty()) {
         return;
     }
 
-    const std::wstring& keep = keepPrefix;
     std::wstring pattern = directory + L"\\h*m*-*.json";
     WIN32_FIND_DATAW findData{};
     HANDLE find = FindFirstFileW(pattern.c_str(), &findData);
@@ -1552,27 +1573,23 @@ static void PruneCacheFilesExcept(const std::wstring& keepPrefix) {
 
     do {
         std::wstring name = findData.cFileName;
-        // h1m2-2026-09.json is 17 characters; anything else is not ours.
-        if (name.size() != 17 || name[0] != L'h' || name[2] != L'm' ||
-            name[4] != L'-' || !iswdigit(name[1]) || !iswdigit(name[3])) {
-            continue;
-        }
-        if (!keep.empty() && name.compare(0, keep.size(), keep) == 0) {
+        int monthKey = 0;
+        if (!ParseCacheFileName(name, monthKey)) {
             continue;
         }
         std::wstring full = directory + L"\\" + name;
         DeleteFileW(full.c_str());
-        Wh_Log(L"PruneCacheFilesExcept: removed %s", name.c_str());
+        Wh_Log(L"PurgeCacheFiles: removed %s", name.c_str());
     } while (FindNextFileW(find, &findData));
 
     FindClose(find);
 }
 
-// Loads every cached month for the configured hostel/mess into one map.
+// Loads every cached month for the configured hostel/mess into one map. The
+// other sources' files stay on disk untouched, ready for a switch back.
 static void LoadCacheFromDisk() {
     MenuStore store;
     CurrentSource(store.hostel, store.mess);
-    PruneCacheFilesExcept(CacheFilePrefix(store.hostel, store.mess));
 
     std::wstring directory = GetCacheDirectory();
     if (!directory.empty()) {
@@ -2597,7 +2614,19 @@ static std::vector<int> g_cardMeals;
 // only detached when one of them wins; if neither has by unload, detach here.
 [[clang::no_destroy]] static Border g_revealTarget{nullptr};
 static winrt::event_token g_revealSizeToken{};
+// Both Storyboards, for the same reason: while one runs, XAML's timing
+// manager roots it, and it holds the flyout tree -- and the Click delegates
+// in it, whose code lives in this image -- alive. An unload inside the 250 ms
+// would otherwise let the animation's completion release them into unmapped
+// memory. Stop()ped and nulled in TearDownFlyout.
+[[clang::no_destroy]] static Storyboard g_revealStoryboard{nullptr};
 [[clang::no_destroy]] static Storyboard g_closingStoryboard{nullptr};
+
+// The Flyout's own event registrations, revoked in TearDownFlyout before the
+// Flyout itself is released, like every other handler the mod attaches.
+static winrt::event_token g_flyoutOpenedToken{};
+static winrt::event_token g_flyoutClosingToken{};
+static winrt::event_token g_flyoutClosedToken{};
 
 // Each of these checks the optional first: Wh_ModUninit reset()s it, and a
 // stray callback arriving afterwards must not dereference an empty one.
@@ -2980,7 +3009,8 @@ static int ResolveInsertColumn(Grid const& trayGrid) {
         if (inputColumn >= 0) {
             return inputColumn;
         }
-        // Not found -- fall through and append at the end.
+        Wh_Log(L"ResolveInsertColumn: NonActivatableStack not found, "
+               L"appending at the end of the tray");
     }
     if (position == ButtonPosition::NetworkLeft) {
         // ControlCenterButton is the network / volume / battery group.
@@ -2989,7 +3019,8 @@ static int ResolveInsertColumn(Grid const& trayGrid) {
         if (networkColumn >= 0) {
             return networkColumn;
         }
-        // Not found -- fall through and append at the end.
+        Wh_Log(L"ResolveInsertColumn: ControlCenterButton not found, "
+               L"appending at the end of the tray");
     }
     if (position == ButtonPosition::ClockLeft ||
         position == ButtonPosition::ClockRight) {
@@ -2999,9 +3030,11 @@ static int ResolveInsertColumn(Grid const& trayGrid) {
             return position == ButtonPosition::ClockLeft ? clockColumn
                                                          : clockColumn + 1;
         }
-        // Clock not found -- fall through and append at the end.
+        Wh_Log(L"ResolveInsertColumn: NotificationCenterButton not found, "
+               L"appending at the end of the tray");
     }
-    // Fallback: append after everything else.
+    // Fallback: append after everything else. Indistinguishable from "Right
+    // of the clock" on screen, which is why the misses above are logged.
     return columnCount;
 }
 
@@ -3923,6 +3956,14 @@ static void ClearFlyoutRefs() {
 // would silently do nothing in the common case.
 static void TearDownFlyout() {
     try {
+        if (g_revealStoryboard) {
+            g_revealStoryboard.Stop();
+        }
+    } catch (...) {
+    }
+    g_revealStoryboard = nullptr;
+
+    try {
         if (g_closingStoryboard) {
             g_closingStoryboard.Stop();
         }
@@ -3961,6 +4002,25 @@ static void TearDownFlyout() {
     } catch (...) {
         g_flyoutClosingAnimInProgress.store(false);
     }
+
+    // After Hide(), so its Closing and Closed still ran through the handlers.
+    try {
+        if (g_flyout) {
+            if (g_flyoutOpenedToken.value) {
+                g_flyout.Opened(g_flyoutOpenedToken);
+            }
+            if (g_flyoutClosingToken.value) {
+                g_flyout.Closing(g_flyoutClosingToken);
+            }
+            if (g_flyoutClosedToken.value) {
+                g_flyout.Closed(g_flyoutClosedToken);
+            }
+        }
+    } catch (...) {
+    }
+    g_flyoutOpenedToken = {};
+    g_flyoutClosingToken = {};
+    g_flyoutClosedToken = {};
 
     g_flyout = nullptr;
     g_flyoutOpen = false;
@@ -4038,7 +4098,7 @@ static void ShowMessFlyout(FrameworkElement const& target) {
                   winrt::box_value(10000.0));
         flyout.FlyoutPresenterStyle(presenterStyle);
 
-        flyout.Opened([content](auto const&, auto const&) {
+        g_flyoutOpenedToken = flyout.Opened([content](auto const&, auto const&) {
             g_flyoutOpen = true;
             g_flyoutClosingAnimStarted.store(false);
 
@@ -4116,6 +4176,7 @@ static void ShowMessFlyout(FrameworkElement const& target) {
                         L"(UIElement.RenderTransform).(CompositeTransform."
                         L"TranslateY)");
                     storyboard.Children().Append(animation);
+                    g_revealStoryboard = storyboard;
                     storyboard.Begin();
                 } catch (...) {
                 }
@@ -4161,8 +4222,9 @@ static void ShowMessFlyout(FrameworkElement const& target) {
             fallback.Start();
         });
 
-        flyout.Closing([content](Primitives::FlyoutBase const& sender,
-                                 Primitives::FlyoutBaseClosingEventArgs const& args) {
+        g_flyoutClosingToken = flyout.Closing(
+            [content](Primitives::FlyoutBase const& sender,
+                      Primitives::FlyoutBaseClosingEventArgs const& args) {
             if (g_unloading) {
                 return;
             }
@@ -4243,7 +4305,7 @@ static void ShowMessFlyout(FrameworkElement const& target) {
             }
         });
 
-        flyout.Closed([](auto const&, auto const&) {
+        g_flyoutClosedToken = flyout.Closed([](auto const&, auto const&) {
             g_flyoutOpen = false;
             g_flyoutClosingAnimStarted.store(false);
             g_dayOffset = 0;
@@ -4640,8 +4702,9 @@ static bool PerformFetch() {
             g_storeVersion.fetch_add(1);
         }
 
-        // Keep the previous, current and next month; drop anything older.
-        PruneOldCacheFiles(hostel, mess, MonthKeyFromDayKey(TodayKey()) - 1);
+        // Keep the previous, current and next month; drop anything older,
+        // for every source.
+        PruneOldCacheFiles(MonthKeyFromDayKey(TodayKey()) - 1);
 
         int year;
         unsigned month;
@@ -4694,7 +4757,7 @@ static DWORD WINAPI NetThreadProc(void*) {
 
         if (g_reloadCacheRequested.exchange(false)) {
             if (g_purgeCacheRequested.exchange(false)) {
-                PruneCacheFilesExcept(L"");
+                PurgeCacheFiles();
             }
             LoadCacheFromDisk();
             NotifyUiDataChanged();
@@ -4737,6 +4800,17 @@ static DWORD WINAPI NetThreadProc(void*) {
             forced = false;
         } else if (covered) {
             waitMs = kIdleIntervalMs;
+        }
+
+        // With automatic checks off, a timed wake could only find nothing to
+        // do: every fetch above is gated on the setting except a manual
+        // reload, and that arrives on the kick event -- as does the setting
+        // being turned back on (Wh_ModSettingsChanged kicks for it). So sleep
+        // until one of them, rather than waking four times a day for a no-op.
+        // This also keeps a failed manual reload from scheduling the automatic
+        // retries the setting says are off.
+        if (!g_settings.autoUpdate) {
+            waitMs = INFINITE;
         }
 
         if (g_unloading) {
@@ -5027,12 +5101,17 @@ void Wh_ModSettingsChanged() {
     const int oldHostel = g_settings.hostel;
     const int oldMess = g_settings.mess;
     const std::wstring oldUrl = GetMenuUrlTemplate();
+    const bool oldAutoUpdate = g_settings.autoUpdate;
 
     LoadSettings();
 
     const bool urlChanged = (oldUrl != GetMenuUrlTemplate());
     const bool sourceChanged = urlChanged ||
         (oldHostel != g_settings.hostel) || (oldMess != g_settings.mess);
+    // The worker sleeps indefinitely while automatic checks are off, so
+    // turning them on has to wake it -- otherwise "Checking periodically for
+    // updates…" would be shown with nothing actually scheduled.
+    const bool autoUpdateTurnedOn = !oldAutoUpdate && g_settings.autoUpdate;
 
     HWND hWnd = FindCurrentProcessTaskbarWnd();
     if (!hWnd) {
@@ -5068,8 +5147,10 @@ void Wh_ModSettingsChanged() {
     if (sourceChanged) {
         // A different hostel/mess is a different file entirely: drop the loaded
         // menu now so the flyout cannot show the old mess's food, then let the
-        // worker reload the cache and fetch. A different URL invalidates the
-        // cache files as well, since they are named by hostel/mess alone.
+        // worker load that source's cached months (if it has been viewed
+        // before, the flyout is populated again at once) and fetch. A
+        // different URL invalidates the cache files as well, since they are
+        // named by hostel/mess alone.
         {
             std::lock_guard<std::mutex> lock(g_dataMutex);
             g_store.days.clear();
@@ -5082,6 +5163,8 @@ void Wh_ModSettingsChanged() {
             g_purgeCacheRequested.store(true);
         }
         g_reloadCacheRequested.store(true);
+        KickFetch();
+    } else if (autoUpdateTurnedOn) {
         KickFetch();
     }
 }
@@ -5136,6 +5219,7 @@ void Wh_ModUninit() {
     g_flyout = nullptr;
     g_flyoutRoot = nullptr;
     g_revealTarget = nullptr;
+    g_revealStoryboard = nullptr;
     g_closingStoryboard = nullptr;
     g_flyoutAnchorButton = nullptr;
     g_flyoutTaskbarWnd = nullptr;
