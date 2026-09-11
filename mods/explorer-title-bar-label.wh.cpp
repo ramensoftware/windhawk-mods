@@ -1689,33 +1689,68 @@ static void TryInsertTitleText(muxc::Grid const &grid)
 
     auto children = grid.Children();
     mux::FrameworkElement rightAnchor{nullptr};
-    for (uint32_t i = 0; i < children.Size();)
+    mux::FrameworkElement existingLabel{nullptr};
+    uint32_t existingLabelIndex = 0;
+
+    for (uint32_t i = 0; i < children.Size(); ++i)
     {
         auto child = children.GetAt(i).try_as<mux::FrameworkElement>();
         if (!child)
         {
-            ++i;
             continue;
         }
 
         if (child.Name() == L"WindhawkExplorerTitleBarLabel")
         {
-            // Recover from a stale label left by an earlier instance that
-            // couldn't remove its XAML element during teardown. Don't advance
-            // the index because the next child shifts into this slot.
-            children.RemoveAt(i);
-            continue;
+            existingLabel = child;
+            existingLabelIndex = i;
         }
-
-        if (child.Name() == L"RightContentPresenter")
+        else if (child.Name() == L"RightContentPresenter")
         {
             rightAnchor = child;
         }
-
-        ++i;
     }
+
     if (!rightAnchor)
+    {
         return;
+    }
+
+    PruneReleasedLabelEntries();
+
+    if (existingLabel)
+    {
+        for (auto const &entry : g_labelEntries)
+        {
+            if (!entry || entry->cleaned)
+            {
+                continue;
+            }
+
+            auto entryGrid = entry->grid.get();
+            auto entryText = entry->text.get();
+
+            if (entryGrid == grid && entryText == existingLabel)
+            {
+                try
+                {
+                    RefreshLabelEntry(entry, GetSettings());
+                }
+                catch (...)
+                {
+                    Wh_Log(L"Refresh existing label failed hr=0x%08X",
+                           winrt::to_hresult());
+                }
+
+                return;
+            }
+        }
+
+        // The XAML element exists but no live LabelEntry owns it. This can
+        // happen if a previous mod instance couldn't remove its element during
+        // teardown. Remove only that orphaned child, then recreate it below.
+        children.RemoveAt(existingLabelIndex);
+    }
 
     HWND hwnd = GetExplorerWindowForElement(grid);
     if (!hwnd)
@@ -1732,7 +1767,6 @@ static void TryInsertTitleText(muxc::Grid const &grid)
         return;
     }
 
-    PruneReleasedLabelEntries();
     Settings initialSettings = GetSettings();
 
     muxc::TextBlock text;
