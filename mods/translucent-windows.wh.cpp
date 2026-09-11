@@ -80,6 +80,9 @@ This is caused by default by the AccentBlur API.❕
 
 * ✨The mod works best on the default dark theme.✨
 
+* ⚠️Console windows (cmd.exe, Windows PowerShell 5.1, anything not hosted by Windows Terminal) are styled by the conhost.exe that hosts them.
+To keep console windows unstyled, exclude conhost.exe and the console programs in Windhawk's process exclusion list.⚠️
+
 */
 // ==/WindhawkModReadme==
 
@@ -176,6 +179,7 @@ This is caused by default by the AccentBlur API.❕
 #include <cmath>
 #include <string>
 #include <array>
+#include <vector>
 #include <d2d1.h>
 #include <wrl.h>
 #include <ShellScalingApi.h>
@@ -462,7 +466,7 @@ std::wstring GetWindowClass(HWND hWnd)
 {
     if (!hWnd)
         return L"";
-    WCHAR buffer[MAX_PATH];
+    WCHAR buffer[MAX_PATH] = {};
     GetClassNameW(hWnd, buffer, MAX_PATH);
     return buffer;
 }
@@ -5408,29 +5412,55 @@ static BOOL CALLBACK FindThreadWindowProc(HWND hWnd, LPARAM lParam)
     return FALSE;
 }
 
-// Whether a thread of this process created the window. Unlike
-// GetWindowThreadProcessId, EnumThreadWindows reflects the creating thread for
-// console windows too. Only reached for console windows that are not reported
-// as ours, so the cost of the thread snapshot doesn't matter.
-static BOOL IsWindowOfCurrentProcessThread(HWND hWnd)
+// Per-pass state of ApplyForExistingWindows. The thread IDs of this process are
+// collected lazily and at most once per pass: the system-wide thread snapshot
+// is expensive, and it is only needed for console windows that are not
+// reported as ours.
+struct ExistingWindowsContext
+{
+    std::vector<DWORD> threadIds;
+    BOOL threadIdsCollected = FALSE;
+};
+
+static VOID CollectCurrentProcessThreadIds(std::vector<DWORD>& threadIds)
 {
     HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
     if (hSnapshot == INVALID_HANDLE_VALUE)
-        return FALSE;
+        return;
 
-    FindThreadWindowContext ctx = { hWnd, FALSE };
+    const DWORD dwProcessId = GetCurrentProcessId();
     THREADENTRY32 te{};
     te.dwSize = sizeof(te);
     if (Thread32First(hSnapshot, &te))
     {
         do
         {
-            if (te.th32OwnerProcessID == GetCurrentProcessId())
-                EnumThreadWindows(te.th32ThreadID, FindThreadWindowProc, reinterpret_cast<LPARAM>(&ctx));
-        } while (!ctx.found && Thread32Next(hSnapshot, &te));
+            if (te.th32OwnerProcessID == dwProcessId)
+                threadIds.push_back(te.th32ThreadID);
+        } while (Thread32Next(hSnapshot, &te));
     }
     CloseHandle(hSnapshot);
-    return ctx.found;
+}
+
+// Whether a thread of this process created the window. Unlike
+// GetWindowThreadProcessId, EnumThreadWindows reflects the creating thread for
+// console windows too.
+static BOOL IsWindowOfCurrentProcessThread(HWND hWnd, ExistingWindowsContext* ctx)
+{
+    if (!ctx->threadIdsCollected)
+    {
+        ctx->threadIdsCollected = TRUE;
+        CollectCurrentProcessThreadIds(ctx->threadIds);
+    }
+
+    FindThreadWindowContext find = { hWnd, FALSE };
+    for (DWORD dwThreadId : ctx->threadIds)
+    {
+        EnumThreadWindows(dwThreadId, FindThreadWindowProc, reinterpret_cast<LPARAM>(&find));
+        if (find.found)
+            break;
+    }
+    return find.found;
 }
 
 // A console window reports the console's client process (e.g. cmd.exe) as its
@@ -5440,20 +5470,23 @@ static BOOL IsWindowOfCurrentProcessThread(HWND hWnd)
 // process created it (conhost.exe is started by csrss.exe, which Windhawk never
 // injects, so it gets the mod after the window already exists). Console windows
 // of other processes are left alone.
-static BOOL IsOwnConsoleWindow(HWND hWnd)
+static BOOL IsOwnConsoleWindow(HWND hWnd, ExistingWindowsContext* ctx)
 {
     if (!IsWindowClass(hWnd, L"ConsoleWindowClass"))
         return FALSE;
     if (hWnd == GetConsoleWindow())
         return TRUE;
-    return IsWindowOfCurrentProcessThread(hWnd);
+    if (IsWindowOfCurrentProcessThread(hWnd, ctx))
+        return TRUE;
+    Wh_Log(L"Console window %p is neither attached to nor created by this process, skipped", hWnd);
+    return FALSE;
 }
 
 BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) 
 {
     DWORD dwProcessId = 0;
     // Console windows are matched by IsOwnConsoleWindow, see the comment there.
-    if ((!GetWindowThreadProcessId(hWnd, &dwProcessId) || dwProcessId != GetCurrentProcessId()) && !IsOwnConsoleWindow(hWnd))
+    if ((!GetWindowThreadProcessId(hWnd, &dwProcessId) || dwProcessId != GetCurrentProcessId()) && !IsOwnConsoleWindow(hWnd, reinterpret_cast<ExistingWindowsContext*>(lParam)))
         return TRUE;
     else
     {
@@ -5470,7 +5503,8 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam)
 
 VOID ApplyForExistingWindows()
 {
-    EnumWindows(EnumWindowsProc, 0);
+    ExistingWindowsContext ctx;
+    EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&ctx));
 }
 
 BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor) 
