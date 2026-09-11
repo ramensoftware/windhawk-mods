@@ -930,18 +930,14 @@ BOOL ExtTextOutComposition(HDC hdc, HPAINTBUFFER hpb, LPCRECT pTextRect)
     return TRUE;
 }
 
-BOOL ExtTextOutAlignRect(HDC hdc, POINT point, SIZE textSize, RECT& textRect)
+BOOL ExtTextOutAlignRect(HDC hdc, POINT point, SIZE textSize, RECT& textRect, UINT textAlignment)
 {
-    UINT ta = GetTextAlign(hdc);
-    if (ta == GDI_ERROR || (ta & TA_UPDATECP))
-        return FALSE;
-
     // TA_BASELINE's bits are a superset of TA_BOTTOM's, and TA_CENTER's are
     // a superset of TA_RIGHT's - mask the field and compare for equality
     // rather than testing individual bits, or TA_CENTER/TA_BASELINE get
     // misread as TA_RIGHT/TA_BOTTOM.
-    UINT vAlign = ta & (TA_BOTTOM | TA_BASELINE);
-    UINT hAlign = ta & (TA_RIGHT | TA_CENTER);
+    UINT vAlign = textAlignment & (TA_BOTTOM | TA_BASELINE);
+    UINT hAlign = textAlignment & (TA_RIGHT | TA_CENTER);
 
     INT top = point.y;
     if (vAlign == TA_BASELINE)
@@ -987,6 +983,10 @@ static INT ExtTextOutDxWidth(UINT options, const INT* lpDx, UINT c)
 // Calculate text boundaries
 BOOL ExtTextOutCalcRect(HDC hdc, POINT point, UINT options, RECT& textRect, LPCRECT lprect, LPCWSTR lpString, UINT c, const INT* lpDx)
 {
+    UINT ta = GetTextAlign(hdc);
+    if (ta == GDI_ERROR || (ta & TA_UPDATECP))
+        return FALSE;
+
     SIZE textSize = {0};
 
     if (lprect)
@@ -995,14 +995,14 @@ BOOL ExtTextOutCalcRect(HDC hdc, POINT point, UINT options, RECT& textRect, LPCR
     {
         if (lpDx)
             textSize.cx = ExtTextOutDxWidth(options, lpDx, c);
-        if (!ExtTextOutAlignRect(hdc, point, textSize, textRect))
+        if (!ExtTextOutAlignRect(hdc, point, textSize, textRect, ta))
             return FALSE;
     }
-    else if (GetTextExtentPoint32W(hdc, lpString, c, &textSize))
+    else if (options && GetTextExtentPoint32W(hdc, lpString, c, &textSize))
     {
         if (lpDx)
             textSize.cx = ExtTextOutDxWidth(options, lpDx, c);
-        if (!ExtTextOutAlignRect(hdc, point, textSize, textRect))
+        if (!ExtTextOutAlignRect(hdc, point, textSize, textRect, ta))
             return FALSE;
     }
     else
@@ -1047,6 +1047,8 @@ BOOL WINAPI HookedExtTextOutW(
 
     SelectObject(memDC, GetCurrentObject(hdc, OBJ_FONT));
     SetTextAlign(memDC, GetTextAlign(hdc));
+    SetLayout(memDC, GetLayout(hdc));
+    SetMapMode(memDC, GetMapMode(hdc));
     SetBkMode(memDC, TRANSPARENT);
     SetTextColor(memDC, RGB(255, 255, 255)); // White text mask
 
@@ -1424,7 +1426,7 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, INT iPartId, INT iStateId, INT
         *pColor = g_IsSysThemeDarkMode ? RGB(255, 255, 255) : *pColor;
         return S_OK;
     }
-    if (iPropId == TMT_TEXTCOLOR && ThemeClassName == L"ControlPanel" && iPartId == CPANEL_HELPLINK) {
+    else if (iPropId == TMT_TEXTCOLOR && ThemeClassName == L"ControlPanel" && iPartId == CPANEL_HELPLINK) {
         *pColor = (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(96,205,255);
         return S_OK;
     }  
