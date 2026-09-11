@@ -2,7 +2,7 @@
 // @id              taskbar-volume-percentage
 // @name            Taskbar Volume Percentage Indicator
 // @description     Displays the exact master volume percentage in the system tray natively inside the Windows 11 volume button with real-time sync.
-// @version         1.3.2
+// @version         1.3.5
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
@@ -14,14 +14,13 @@
 /*
 # Taskbar Volume Percentage Indicator
 
-Replaces the Windows 11 taskbar volume icon with the current volume level in real time.
+Replaces the default Windows 11 taskbar volume icon with the current volume level in real time directly inside the system tray button.
 
-## Features
+## How It Works
 
-- **Display styles**: Percentage (`50%`), number only (`50`), custom prefix (`Vol 50%`), emoji (`🔊 50%`), or default icon.
-- **Mute indicator**: Customizable mute display (`MUT`, `Mute`, `0%`, `✕`, `🔇`, or native glyph).
-- **Zero-Jitter Structural Stabilization**: Locks the XAML container width and measure override (`TextIconContent::MeasureOverride` & `IFrameworkElement::put_MinWidth`) to eliminate layout jitter during volume changes without needing artificial padding.
-- **Robust Memory Validation**: Guards all WinRT visual tree inspections with multi-tier page commitment and COM vtable verification, preventing memory corruption or dangling pointer access.
+- **Real-Time Volume Display**: Displays the current master audio level as a percentage (`50%`), pure number (`50`), with a custom prefix (`Vol 50%`), with an emoji (`🔊 50%`), or using the default Windows speaker icon.
+- **Mute Indicator**: When muted, automatically switches to a customizable mute display (`MUT`, `Mute`, `0%`, `✕`, `🔇`, native glyph, or custom text).
+- **Layout Stabilization**: Automatically sizes the container to fit the percentage text smoothly without shifting adjacent taskbar icons. A fixed container width can also be set manually in the settings.
 
 ## Credits
 
@@ -142,11 +141,11 @@ enum class MuteStyle {
 };
 
 struct Settings {
-    DisplayStyle displayStyle;
-    int fixedContainerWidth;
-    std::wstring customPrefix;
-    MuteStyle muteStyle;
-    std::wstring customMuteText;
+    DisplayStyle displayStyle{DisplayStyle::Percentage};
+    int fixedContainerWidth{0};
+    std::wstring customPrefix{L"Vol "};
+    MuteStyle muteStyle{MuteStyle::Mut};
+    std::wstring customMuteText{L"Mute"};
 };
 
 static Settings g_settings;
@@ -571,16 +570,36 @@ static size_t GetIconTextOffset(void* pThis) {
         if (h->flags > 1 || h->length > 256 || !h->ptr) {
             return false;
         }
+        if (!IsValidReadableMemory(h->ptr, sizeof(wchar_t))) {
+            return false;
+        }
         return true;
     };
 
-    // Primary offset in standard Windows 11 SystemTray builds is 0xB8
-    constexpr size_t defaultOffset = 0xB8;
-    if (IsValidReadableMemory(reinterpret_cast<const char*>(pThis) + defaultOffset, sizeof(void*))) {
-        shared_hstring_header* defaultCandidate = *reinterpret_cast<shared_hstring_header**>(
-            reinterpret_cast<char*>(pThis) + defaultOffset);
-        if (isValidHeader(defaultCandidate)) {
-            return defaultOffset;
+    auto matchesGlyphOrText = [&](shared_hstring_header* candidate) -> bool {
+        if (!isValidHeader(candidate)) {
+            return false;
+        }
+        // Read character from candidate->ptr, supporting both shared_hstring and HSTRING_REFERENCE
+        wchar_t firstChar = candidate->ptr[0];
+        return (firstChar >= 0xE700 && firstChar <= 0xE9FF) ||
+               (firstChar >= L'0' && firstChar <= L'9') ||
+               (firstChar >= L'a' && firstChar <= L'z') ||
+               (firstChar >= L'A' && firstChar <= L'Z') ||
+               firstChar == L' ' || firstChar == 0x2715 ||
+               firstChar == 0x2007 || firstChar == 0x00A0 ||
+               firstChar == 0xD83D;
+    };
+
+    // Primary offset in standard Windows 11 SystemTray builds is 0x90; fallback to 0xB8 and 0x88
+    const size_t preferredOffsets[] = { 0x90, 0xB8, 0x88 };
+    for (size_t prefOffset : preferredOffsets) {
+        if (IsValidReadableMemory(reinterpret_cast<const char*>(pThis) + prefOffset, sizeof(void*))) {
+            shared_hstring_header* candidate = *reinterpret_cast<shared_hstring_header**>(
+                reinterpret_cast<char*>(pThis) + prefOffset);
+            if (matchesGlyphOrText(candidate)) {
+                return prefOffset;
+            }
         }
     }
 
@@ -590,17 +609,8 @@ static size_t GetIconTextOffset(void* pThis) {
         }
         shared_hstring_header* candidate = *reinterpret_cast<shared_hstring_header**>(
             reinterpret_cast<char*>(pThis) + offset);
-        if (isValidHeader(candidate)) {
-            wchar_t firstChar = candidate->buffer[0];
-            if ((firstChar >= 0xE700 && firstChar <= 0xE9FF) ||
-                (firstChar >= L'0' && firstChar <= L'9') ||
-                (firstChar >= L'a' && firstChar <= L'z') ||
-                (firstChar >= L'A' && firstChar <= L'Z') ||
-                firstChar == L' ' || firstChar == 0x2715 ||
-                firstChar == 0x2007 || firstChar == 0x00A0 ||
-                firstChar == 0xD83D) {
-                return offset;
-            }
+        if (matchesGlyphOrText(candidate)) {
+            return offset;
         }
     }
 
@@ -836,38 +846,62 @@ static void __cdecl TextIconContent_dtor_Hook(void* pThis) {
     }
 }
 
+static void __cdecl VolumeSystemTrayIconDataModel_OnDataModelChanged_Hook(
+    void* pThis, const std::wstring_view* propertyName) {
+    static thread_local bool s_inOnDataModelChanged = false;
+
+    if (!s_inOnDataModelChanged && !g_unloading.load(std::memory_order_relaxed) &&
+        pThis && propertyName && *propertyName == L"CurrentData") {
+        float volumeLevel = 0.0f;
+        bool isMuted = false;
+        {
+            std::lock_guard<std::mutex> lock(g_dataModelMutex);
+            volumeLevel = g_lastVolumeLevel;
+            isMuted = g_lastIsMuted;
+            ApplyCustomVolumeText(pThis, volumeLevel, isMuted);
+        }
+    }
+
+    if (VolumeSystemTrayIconDataModel_OnDataModelChanged_Original) {
+        s_inOnDataModelChanged = true;
+        VolumeSystemTrayIconDataModel_OnDataModelChanged_Original(pThis, propertyName);
+        s_inOnDataModelChanged = false;
+    }
+}
+
 static void __cdecl VolumeSystemTrayIconDataModel_UpdateVolume_Hook(
     void* pThis, float volumeLevel, bool isMuted, void* hstringIcon) {
     static thread_local bool s_inHook = false;
 
-    // Point 1: Always invoke the original Windows system function first without condition
+    if (g_unloading.load(std::memory_order_relaxed)) {
+        if (VolumeSystemTrayIconDataModel_UpdateVolume_Original) {
+            VolumeSystemTrayIconDataModel_UpdateVolume_Original(
+                pThis, volumeLevel, isMuted, hstringIcon);
+        }
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_dataModelMutex);
+        g_pVolumeDataModel = pThis;
+        g_lastVolumeLevel = volumeLevel;
+        g_lastIsMuted = isMuted;
+    }
+
+    // Always invoke the original Windows system function first
     if (VolumeSystemTrayIconDataModel_UpdateVolume_Original) {
         VolumeSystemTrayIconDataModel_UpdateVolume_Original(
             pThis, volumeLevel, isMuted, hstringIcon);
     }
 
-    if (s_inHook || g_unloading.load(std::memory_order_relaxed)) {
+    if (s_inHook) {
         return;
     }
 
-    bool changed = false;
+    // Ensure custom volume text is in place in case UpdateVolume_Original overwrote it
     {
         std::lock_guard<std::mutex> lock(g_dataModelMutex);
-        changed = !(g_pVolumeDataModel == pThis &&
-                    g_lastVolumeLevel == volumeLevel &&
-                    g_lastIsMuted == isMuted);
-        g_pVolumeDataModel = pThis;
-        g_lastVolumeLevel = volumeLevel;
-        g_lastIsMuted = isMuted;
-
-        if (changed) {
-            ApplyCustomVolumeText(pThis, volumeLevel, isMuted);
-        }
-    }
-
-    // Only skip our own redundant visual/layout updates when values have not changed
-    if (!changed) {
-        return;
+        ApplyCustomVolumeText(pThis, volumeLevel, isMuted);
     }
 
     // Ensure volume container width constraint is active on UI
@@ -1001,7 +1035,7 @@ static bool HookSystemTraySymbols(HMODULE module) {
                 LR"(winrt::SystemTray::implementation::VolumeSystemTrayIconDataModel::OnDataModelChanged)",
             },
             reinterpret_cast<void**>(&VolumeSystemTrayIconDataModel_OnDataModelChanged_Original),
-            nullptr, // Resolved for invocation only, not hooked
+            reinterpret_cast<void*>(VolumeSystemTrayIconDataModel_OnDataModelChanged_Hook),
             true,
         },
         {
