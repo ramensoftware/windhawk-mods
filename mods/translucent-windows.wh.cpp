@@ -81,7 +81,7 @@ This is caused by default by the AccentBlur API.❕
 * ✨The mod works best on the default dark theme.✨
 
 * ⚠️Console windows (cmd.exe, Windows PowerShell 5.1, anything not hosted by Windows Terminal) are styled by the conhost.exe that hosts them.
-To keep console windows unstyled, exclude conhost.exe and the console programs in Windhawk's process exclusion list.⚠️
+To leave them unstyled, add a process rule for conhost.exe with Background translucent effects set to Default and Windows theme custom rendering disabled, or exclude conhost.exe in Windhawk's process exclusion list.⚠️
 
 */
 // ==/WindhawkModReadme==
@@ -251,6 +251,7 @@ std::wstring g_LastThemePath = GetCurrentWindowsThemePath();
 BOOL g_InsideTaskMgrProc = FALSE;
 
 BOOL g_InsideExplorerProc = FALSE;
+BOOL g_InsideConhostProc = FALSE;
 
 using PUNICODE_STRING = PVOID;
 constexpr auto MENUPOPUP_CLASS = L"#32768";
@@ -619,6 +620,10 @@ BOOL CheckExplorerProcess() {
 
 BOOL InTaskManagerProcess() {
     return GetCurrProcStr() == L"taskmgr.exe";
+}
+
+BOOL InConhostProcess() {
+    return GetCurrProcStr() == L"conhost.exe";
 }
 
 enum AccentColorShade
@@ -5414,24 +5419,32 @@ static BOOL CALLBACK FindThreadWindowProc(HWND hWnd, LPARAM lParam)
 
 // Per-pass state of ApplyForExistingWindows. The thread IDs of this process are
 // collected lazily and at most once per pass: the system-wide thread snapshot
-// is expensive, and it is only needed for console windows that are not
-// reported as ours.
+// is expensive, and only conhost.exe ever needs it (see IsOwnConsoleWindow).
 struct ExistingWindowsContext
 {
     std::vector<DWORD> threadIds;
     BOOL threadIdsCollected = FALSE;
 };
 
-static VOID CollectCurrentProcessThreadIds(std::vector<DWORD>& threadIds)
+static BOOL CollectCurrentProcessThreadIds(std::vector<DWORD>& threadIds)
 {
-    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    // The snapshot can fail transiently. A failure would make conhost.exe treat
+    // its own console as foreign, and after Wh_ModUninit nothing would restore
+    // the window, so retry a few times.
+    HANDLE hSnapshot = INVALID_HANDLE_VALUE;
+    for (int attempt = 0; attempt < 3 && hSnapshot == INVALID_HANDLE_VALUE; attempt++)
+        hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
     if (hSnapshot == INVALID_HANDLE_VALUE)
-        return;
+    {
+        Wh_Log(L"CreateToolhelp32Snapshot failed, error 0x%08X", GetLastError());
+        return FALSE;
+    }
 
     const DWORD dwProcessId = GetCurrentProcessId();
     THREADENTRY32 te{};
     te.dwSize = sizeof(te);
-    if (Thread32First(hSnapshot, &te))
+    BOOL result = Thread32First(hSnapshot, &te);
+    if (result)
     {
         do
         {
@@ -5440,6 +5453,7 @@ static VOID CollectCurrentProcessThreadIds(std::vector<DWORD>& threadIds)
         } while (Thread32Next(hSnapshot, &te));
     }
     CloseHandle(hSnapshot);
+    return result;
 }
 
 // Whether a thread of this process created the window. Unlike
@@ -5448,10 +5462,7 @@ static VOID CollectCurrentProcessThreadIds(std::vector<DWORD>& threadIds)
 static BOOL IsWindowOfCurrentProcessThread(HWND hWnd, ExistingWindowsContext* ctx)
 {
     if (!ctx->threadIdsCollected)
-    {
-        ctx->threadIdsCollected = TRUE;
-        CollectCurrentProcessThreadIds(ctx->threadIds);
-    }
+        ctx->threadIdsCollected = CollectCurrentProcessThreadIds(ctx->threadIds);
 
     FindThreadWindowContext find = { hWnd, FALSE };
     for (DWORD dwThreadId : ctx->threadIds)
@@ -5464,21 +5475,20 @@ static BOOL IsWindowOfCurrentProcessThread(HWND hWnd, ExistingWindowsContext* ct
 }
 
 // A console window reports the console's client process (e.g. cmd.exe) as its
-// owner, not the conhost.exe that created it, so the same-process check in
-// EnumWindowsProc can't recognize this process's own console windows. Accept a
-// console window only if it is the console attached to this process, or if this
-// process created it (conhost.exe is started by csrss.exe, which Windhawk never
-// injects, so it gets the mod after the window already exists). Console windows
-// of other processes are left alone.
+// owner, not the conhost.exe that created it. The client therefore passes the
+// same-process check in EnumWindowsProc on its own, while conhost.exe never
+// does. conhost.exe is started by csrss.exe, which Windhawk never injects, so
+// it only gets the mod after the window exists and the sweep is its only way
+// to style, and later restore, its console. Accept a console window only in
+// conhost.exe and only if a thread of this process created it; every other
+// console window belongs to another process and is left alone.
 static BOOL IsOwnConsoleWindow(HWND hWnd, ExistingWindowsContext* ctx)
 {
-    if (!IsWindowClass(hWnd, L"ConsoleWindowClass"))
+    if (!g_InsideConhostProc || !IsWindowClass(hWnd, L"ConsoleWindowClass"))
         return FALSE;
-    if (hWnd == GetConsoleWindow())
-        return TRUE;
     if (IsWindowOfCurrentProcessThread(hWnd, ctx))
         return TRUE;
-    Wh_Log(L"Console window %p is neither attached to nor created by this process, skipped", hWnd);
+    Wh_Log(L"Console window %p was not created by this process, skipped", hWnd);
     return FALSE;
 }
 
@@ -6635,6 +6645,7 @@ BOOL Wh_ModInit(VOID)
         g_explorerStylerNoBackgroundEffectAtom = AddAtom(L"WindhawkFileExplorerStylerNoBackgroundEffect");
     if (InTaskManagerProcess())
         g_InsideTaskMgrProc = TRUE;
+    g_InsideConhostProc = InConhostProcess();
 
     LoadSettings();
 
