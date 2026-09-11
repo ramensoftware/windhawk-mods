@@ -87,7 +87,7 @@ When a double-click action is enabled, the mod therefore waits for the Windows d
 
 This small delay is intentional. Removing it while keeping independent single- and double-click actions could cause a physical double-click to execute the configured single-click action as well.
 
-When **Double click action = Do nothing**, the single-click action is executed immediately because no double-click needs to be distinguished.
+Single-click execution is deferred by the Windows double-click interval so that a physical double-click executes only its configured double-click action. If **Double click action = Do nothing**, a physical double-click therefore performs no action.
 
 ## Drag & Drop
 
@@ -1115,7 +1115,7 @@ RecycleBinDropTarget* g_pDropTarget = NULL;
 NOTIFYICONDATAW g_nid = {0};
 ULONG g_shellNotifyLock = 0;
 bool g_iconVisible = false;
-bool g_suppressLeftActivationAfterDoubleClick = false;
+ULONGLONG g_suppressLeftActivationUntil = 0;
 bool g_trayVersion4 = false;
 bool g_loggedInitialState = false;
 std::atomic_bool g_shutdownRequested{false};
@@ -2008,7 +2008,10 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
     }
 
     case WM_LBUTTONUP:
-        if (g_hWnd) PostMessageW(g_hWnd, WM_TRAYICON, 0, WM_LBUTTONUP);
+        if (g_hWnd) {
+            PostMessageW(g_hWnd, WM_TRAYICON, 0,
+                         g_trayVersion4 ? NIN_SELECT : WM_LBUTTONUP);
+        }
         return 0;
 
     case WM_LBUTTONDBLCLK:
@@ -2020,7 +2023,10 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
         return 0;
 
     case WM_RBUTTONUP:
-        if (g_hWnd) PostMessageW(g_hWnd, WM_TRAYICON, 0, WM_RBUTTONUP);
+        if (g_hWnd) {
+            PostMessageW(g_hWnd, WM_TRAYICON, 0,
+                         g_trayVersion4 ? WM_CONTEXTMENU : WM_RBUTTONUP);
+        }
         return 0;
     }
     return DefWindowProcW(hWnd, message, wParam, lParam);
@@ -3004,16 +3010,37 @@ HICON CreateVectorTrashIcon(int iconSize, bool isEmpty, bool isDarkTheme, std::w
 }
 
 // System and custom icon loaders
-static HICON LoadShellStockIcon(SHSTOCKICONID iconId) {
+static HICON LoadShellStockIcon(SHSTOCKICONID iconId, int iconSize) {
+    if (iconSize > 0) {
+        SHSTOCKICONINFO location = { sizeof(location) };
+        if (SUCCEEDED(SHGetStockIconInfo(iconId, SHGSI_ICONLOCATION, &location))) {
+            HICON hIcon = NULL;
+            if (SUCCEEDED(SHDefExtractIconW(
+                    location.szPath,
+                    location.iIcon,
+                    0,
+                    &hIcon,
+                    NULL,
+                    MAKELONG(iconSize, iconSize))) &&
+                hIcon) {
+                return hIcon;
+            }
+        }
+    }
+
+    // Fallback to the Shell-provided small stock icon if explicit extraction
+    // fails for any reason. This preserves the previous behavior.
     SHSTOCKICONINFO info = { sizeof(info) };
-    return SUCCEEDED(SHGetStockIconInfo(iconId, SHGSI_ICON | SHGSI_SMALLICON, &info))
+    return SUCCEEDED(
+               SHGetStockIconInfo(iconId, SHGSI_ICON | SHGSI_SMALLICON, &info))
         ? info.hIcon
         : NULL;
 }
 
 // Request the stock empty/full icon directly to avoid stale PIDL icon-cache state.
-HICON GetSystemRecycleBinIcon(bool isEmpty) {
-    return LoadShellStockIcon(isEmpty ? SIID_RECYCLER : SIID_RECYCLERFULL);
+HICON GetSystemRecycleBinIcon(bool isEmpty, int iconSize) {
+    return LoadShellStockIcon(
+        isEmpty ? SIID_RECYCLER : SIID_RECYCLERFULL, iconSize);
 }
 
 const std::wstring& GetCustomIconPath(bool isEmpty, bool isDarkTheme) {
@@ -3368,7 +3395,7 @@ HICON LoadDesiredIcon(const IconCacheKey& key) {
                 key.iconSize, key.customPath, key.dark, key.customThemeTint);
         case IconStyle::System:
         default:
-            return GetSystemRecycleBinIcon(key.empty);
+            return GetSystemRecycleBinIcon(key.empty, key.iconSize);
     }
 }
 
@@ -3804,7 +3831,7 @@ bool UpdateTrayState() {
 
         // Safety fallback
         if (!rawIcon) {
-            rawIcon = GetSystemRecycleBinIcon(isEmpty);
+            rawIcon = GetSystemRecycleBinIcon(isEmpty, iconSize);
             if (!rawIcon) {
                 Wh_Log(L"CRITICAL: Failed to load any icon");
                 return false;
@@ -4401,7 +4428,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             g_dragGestureSawOle = false;
             g_trayState.dragRectRefreshed = false;
             g_trayState.oleReleaseDeadline = 0;
-            if (g_settings.enableDragDrop && !g_trayState.dragPollTimerActive) {
+            if (g_settings.enableDragDrop && g_iconVisible &&
+                !g_trayState.dragPollTimerActive) {
                 (void)SetLoggedTimer(hWnd, TIMER_DRAG_POLL_ID, DRAG_POLL_INTERVAL_ACTIVE_MS);
                 g_trayState.dragPollTimerActive = true;
             }
@@ -4462,34 +4490,48 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         case WM_TRAYICON: {
             // Decode callbacks according to the negotiated notification-icon version.
-            const UINT trayMessage = g_trayVersion4 ? LOWORD(lParam) : static_cast<UINT>(lParam);
+            const UINT trayMessage =
+                g_trayVersion4 ? LOWORD(lParam) : static_cast<UINT>(lParam);
+
+            const bool isLeftActivation =
+                trayMessage == NIN_SELECT || trayMessage == NIN_KEYSELECT ||
+                (!g_trayVersion4 && trayMessage == WM_LBUTTONUP);
+            const bool isContextActivation =
+                trayMessage == WM_CONTEXTMENU ||
+                (!g_trayVersion4 && trayMessage == WM_RBUTTONUP);
 
             if (trayMessage == WM_LBUTTONDOWN) {
-                // A new physical click ends any suppression left by the previous
-                // double-click sequence before its matching button-up arrives.
-                g_suppressLeftActivationAfterDoubleClick = false;
-            } else if (trayMessage == WM_LBUTTONUP || trayMessage == NIN_SELECT ||
-                       trayMessage == NIN_KEYSELECT) {
-                // Windows can emit more than one activation callback after a
-                // double-click. Suppress all trailing mouse activations until
-                // the next real left-button-down, rather than only one event.
+                // Fast-path reset for a new physical click. Suppression also
+                // expires on its own, so correctness doesn't depend on this
+                // callback being delivered in every notification mode/path.
+                g_suppressLeftActivationUntil = 0;
+            } else if (isLeftActivation) {
+                const ULONGLONG now = GetTickCount64();
                 if (trayMessage != NIN_KEYSELECT &&
-                    g_suppressLeftActivationAfterDoubleClick) {
+                    now < g_suppressLeftActivationUntil) {
                     return 0;
                 }
-                // If no double-click action is configured, run the single-click action immediately.
-                if (g_settings.doubleClickAction == TrayAction::None) {
+                if (now >= g_suppressLeftActivationUntil) {
+                    g_suppressLeftActivationUntil = 0;
+                }
+
+                // Keyboard activation has no mouse double-click ambiguity.
+                // Mouse activation is always deferred so a following
+                // WM_LBUTTONDBLCLK can cancel the pending single-click action,
+                // including when the configured double-click action is None.
+                if (trayMessage == NIN_KEYSELECT) {
                     ExecuteAction(g_settings.leftClickAction, hWnd);
                 } else {
                     (void)SetLoggedTimer(hWnd, TIMER_CLICK_ID, GetDoubleClickTime());
                 }
             } else if (trayMessage == WM_LBUTTONDBLCLK) {
                 (void)KillLoggedTimer(hWnd, TIMER_CLICK_ID);
-                g_suppressLeftActivationAfterDoubleClick = true;
+                g_suppressLeftActivationUntil =
+                    GetTickCount64() + GetDoubleClickTime();
                 ExecuteAction(g_settings.doubleClickAction, hWnd);
             } else if (trayMessage == WM_MBUTTONUP) {
                 ExecuteAction(g_settings.middleClickAction, hWnd);
-            } else if (trayMessage == WM_RBUTTONUP || trayMessage == WM_CONTEXTMENU) {
+            } else if (isContextActivation) {
                 ExecuteAction(g_settings.rightClickAction, hWnd);
             }
             return 0;
@@ -4733,7 +4775,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             (void)KillLoggedTimer(hWnd, TIMER_DPI_REINSTALL_ID);
             g_pendingDpiShellReinstall = false;
             g_trayState.displaySettleTimerActive = false;
-            g_suppressLeftActivationAfterDoubleClick = false;
+            g_suppressLeftActivationUntil = 0;
             g_oleDragActive.store(false);
             g_dropOverlayArmed.store(false);
             g_trayState.oleReleaseDeadline = 0;
@@ -4787,6 +4829,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
         NULL, NULL, hInstance, NULL);
     if (!hWndNew) {
         Wh_Log(L"Tray: Failed to create host window: %lu", GetLastError());
+        (void)UnregisterClassW(TRAY_WINDOW_CLASS, hInstance);
         return 0; // OleInitGuard handles OleUninitialize().
     }
 
