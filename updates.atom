@@ -2,12 +2,31 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-11T14:06:00.000Z</updated>
+    <updated>2026-09-11T15:56:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[TopBar for Windows 1.1.0]]></title>
+        <id>https://windhawk.net/mods/windhawk-topbar#50b1da24769a21b15ee5293e97d03a04e98f4499</id>
+        <link href="https://windhawk.net/mods/windhawk-topbar"/>
+        <updated>2026-09-11T15:56:51.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add Resource Monitor to show CPU, GPU, and RAM Usage on the topbar.</li>
+<li>Fixed Rough Corners for the flyouts, and context menus.(Note: uses DWM to round corners which is Windows 11 exclusive)</li>
+<li>Added option for moving or rearranging the TrayPanel(right panel) items.</li>
+<li>Made Battery Icon look better</li>
+<li>Fixed Win+D(Show Desktop) hides the TopBar.</li>
+<li>Fixed Bluetooth panel not finding new devices.</li>
+<li>Updated themes: NoIslands, and GreenBar.</li>
+</ul>]]></content>
+        <author>
+            <name>WasiXGamer</name>
+            <uri>https://github.com/wasixgamer</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start button colorizer 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-start-button-colorizer#e0a0b51bcad52f7f2dc5edc42be0026f2a093b59</id>
@@ -541,26 +560,6 @@ use the mod <code>Taskbar tray icon spacing and grid</code>.</p>
         <author>
             <name>Nikolay</name>
             <uri>https://github.com/Nikolay1243</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7 Network Flyout Recreation 5.0.0]]></title>
-        <id>https://windhawk.net/mods/win7-network-flyout-recreation#f7c5a612538e9b6187778e7718cd96a403c1c554</id>
-        <link href="https://windhawk.net/mods/win7-network-flyout-recreation"/>
-        <updated>2026-09-07T17:58:07.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for RetroBar</li>
-<li>Added support for the High contrast theme (credits to OrthodoxToolkits for the suggestion)</li>
-<li>Fixed the positioning of the flyout (credits to Tails for reporting the problem)</li>
-<li>Enhanced the interface of the Network Sharing Center</li>
-<li>Reduced a conflict with the Action Center mod</li>
-<li>Added the Turkish translation (credits to Cips)</li>
-<li>Minor UI enhancements</li>
-<li>Updated the README</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>

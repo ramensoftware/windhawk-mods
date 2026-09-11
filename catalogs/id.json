@@ -17233,7 +17233,7 @@
           14
         ],
         "ratingUsers": 15,
-        "updated": 1788817964000,
+        "updated": 1789142211000,
         "users": 29
       },
       "metadata": {
@@ -17241,14 +17241,15 @@
           "x86-64"
         ],
         "author": "WasiXGamer",
-        "compilerOptions": "-lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -ladvapi32 -luser32 -lshcore -lcomctl32",
+        "compilerOptions": "-lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -ladvapi32 -luser32 -lshcore -lcomctl32 -lpdh -lpsapi -ldxgi",
         "description": "A working TopBar with Flyouts for Windows through Windhawk.",
+        "donateUrl": "https://www.patreon.com/WasiXGamer/join",
         "github": "https://github.com/wasixgamer",
         "include": [
           "explorer.exe"
         ],
         "name": "TopBar for Windows",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "window-border-customizer": {
