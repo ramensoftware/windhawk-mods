@@ -2,7 +2,7 @@
 // @id              taskbar-countdown-timer
 // @name            Taskbar Countdown Timer
 // @description     A simple countdown timer integrated into the Windows 11 taskbar (Windows 11 only)
-// @version         1.11
+// @version         1.12
 // @author          Richi
 // @github          https://github.com/richilp
 // @include         explorer.exe
@@ -155,7 +155,6 @@ static HANDLE g_timerStopEvent = nullptr;
 static HANDLE g_timerRearmEvent = nullptr;
 static HANDLE g_timerWaitable = nullptr;
 static HANDLE g_timerWorkerThread = nullptr;
-static std::atomic_bool g_timerWorkerStarted{false};
 
 // Completion alert is independent from the taskbar XAML tree.
 static std::atomic<HWND> g_finishedAlertWnd{nullptr};
@@ -166,14 +165,12 @@ static bool g_finishedAlertClassRegistered = false;
 
 static std::atomic<HWND> g_taskbarWnd{nullptr};
 static std::atomic<DWORD> g_taskbarThreadId{0};
-static std::atomic_bool g_buttonInjected{false};
 static std::atomic_bool g_systemTrayModuleHooked{false};
 static std::atomic<HMODULE> g_systemTrayModuleAttempted{nullptr};
 
 static std::atomic_bool g_unloading{false};
 
 static void ApplyTimerButtonIfAvailable();
-static bool EnsureTimerWorkerStarted();
 
 // -----------------------------------------------------------------------------
 // XAML helpers
@@ -1017,14 +1014,6 @@ static bool ArmTimer(
         minutes > settings.maximumMinutes ||
         g_unloading.load())
     {
-        return false;
-    }
-
-    if (!EnsureTimerWorkerStarted()) {
-        Wh_Log(
-            L"ERROR: Timer worker isn't available"
-        );
-
         return false;
     }
 
@@ -1940,6 +1929,14 @@ static LRESULT CALLBACK FinishedAlertWndProc(
                 return 0;
             }
 
+            SetWindowTextW(
+                GetDlgItem(
+                    hWnd,
+                    IDC_ALERT_SNOOZE_LABEL
+                ),
+                L"Snooze minutes:"
+            );
+
             const wchar_t* reminder =
                 data && data->reminder[0]
                     ? data->reminder
@@ -2198,15 +2195,10 @@ static bool ShowFinishedAlert(const wchar_t* reminder)
     }
 
     if (!g_finishedAlertStopEvent) {
-        g_finishedAlertStopEvent =
-            CreateEventW(nullptr, TRUE, FALSE, nullptr);
-
-        if (!g_finishedAlertStopEvent) {
-            Wh_Log(
-                L"ERROR: Could not create completion alert stop event"
-            );
-            return false;
-        }
+        Wh_Log(
+            L"ERROR: Completion alert stop event isn't available"
+        );
+        return false;
     }
 
     ResetEvent(g_finishedAlertStopEvent);
@@ -2518,16 +2510,8 @@ static void RestorePersistedTimer()
 }
 
 
-static bool EnsureTimerWorkerStarted()
+static bool StartTimerWorkerFromInit()
 {
-    if (g_timerWorkerStarted.load()) {
-        return true;
-    }
-
-    if (g_unloading.load()) {
-        return false;
-    }
-
     g_timerStopEvent =
         CreateEventW(
             nullptr,
@@ -2551,28 +2535,22 @@ static bool EnsureTimerWorkerStarted()
             nullptr
         );
 
-    if (!g_timerStopEvent ||
-        !g_timerRearmEvent ||
-        !g_timerWaitable)
-    {
-        Wh_Log(
-            L"ERROR: Could not create timer worker objects"
+    g_finishedAlertStopEvent =
+        CreateEventW(
+            nullptr,
+            TRUE,
+            FALSE,
+            nullptr
         );
 
-        if (g_timerWaitable) {
-            CloseHandle(g_timerWaitable);
-            g_timerWaitable = nullptr;
-        }
-
-        if (g_timerRearmEvent) {
-            CloseHandle(g_timerRearmEvent);
-            g_timerRearmEvent = nullptr;
-        }
-
-        if (g_timerStopEvent) {
-            CloseHandle(g_timerStopEvent);
-            g_timerStopEvent = nullptr;
-        }
+    if (!g_timerStopEvent ||
+        !g_timerRearmEvent ||
+        !g_timerWaitable ||
+        !g_finishedAlertStopEvent)
+    {
+        Wh_Log(
+            L"ERROR: Could not create timer synchronization objects"
+        );
 
         return false;
     }
@@ -2592,24 +2570,11 @@ static bool EnsureTimerWorkerStarted()
             L"ERROR: Could not create timer worker thread"
         );
 
-        CloseHandle(g_timerWaitable);
-        g_timerWaitable = nullptr;
-
-        CloseHandle(g_timerRearmEvent);
-        g_timerRearmEvent = nullptr;
-
-        CloseHandle(g_timerStopEvent);
-        g_timerStopEvent = nullptr;
-
         return false;
     }
 
     g_timerWorkerThread =
         thread;
-
-    g_timerWorkerStarted.store(true);
-
-    RestorePersistedTimer();
 
     return true;
 }
@@ -2754,7 +2719,6 @@ static void AddTimerButtonImpl(
         VisualTreeHelper::GetParent(
             g_timerButton))
     {
-        g_buttonInjected.store(true);
         return;
     }
 
@@ -2827,7 +2791,6 @@ static void AddTimerButtonImpl(
             g_timerButton))
     {
         g_taskbarWnd.store(taskbar);
-        g_buttonInjected.store(true);
         return;
     }
 
@@ -2998,13 +2961,6 @@ static void AddTimerButtonImpl(
     }
 
     g_taskbarWnd.store(taskbar);
-    g_buttonInjected.store(true);
-
-    if (!EnsureTimerWorkerStarted()) {
-        Wh_Log(
-            L"ERROR: Timer worker could not be started"
-        );
-    }
 
     int remaining =
         RemainingSeconds(
@@ -3146,7 +3102,6 @@ static void RemoveTimerButtonImpl(
     g_timerColumn = nullptr;
     g_timerText = nullptr;
     g_timerButton = nullptr;
-    g_buttonInjected.store(false);
 }
 
 
@@ -3390,8 +3345,7 @@ static void* WINAPI IconView_IconView_Hook(
                 }
 
                 // A new IconView means the tray may have rebuilt its XAML tree.
-                g_buttonInjected.store(false);
-                ApplyTimerButtonIfAvailable();
+                            ApplyTimerButtonIfAvailable();
             }
         );
     }
@@ -3517,6 +3471,9 @@ static DWORD PumpWaitForThread(
 // Windhawk
 // -----------------------------------------------------------------------------
 
+static void StopTimerWorker();
+
+
 BOOL Wh_ModInit()
 {
     Wh_Log(
@@ -3531,7 +3488,55 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
+    if (!StartTimerWorkerFromInit()) {
+        UnregisterFinishedAlertClass();
+        return FALSE;
+    }
+
     if (!HookTaskbarDllSymbols()) {
+        StopTimerWorker();
+
+        if (g_timerWorkerThread) {
+            PumpWaitForThread(
+                g_timerWorkerThread
+            );
+
+            CloseHandle(
+                g_timerWorkerThread
+            );
+
+            g_timerWorkerThread = nullptr;
+        }
+
+        if (g_timerWaitable) {
+            CloseHandle(
+                g_timerWaitable
+            );
+            g_timerWaitable = nullptr;
+        }
+
+        if (g_timerRearmEvent) {
+            CloseHandle(
+                g_timerRearmEvent
+            );
+            g_timerRearmEvent = nullptr;
+        }
+
+        if (g_timerStopEvent) {
+            CloseHandle(
+                g_timerStopEvent
+            );
+            g_timerStopEvent = nullptr;
+        }
+
+        if (g_finishedAlertStopEvent) {
+            CloseHandle(
+                g_finishedAlertStopEvent
+            );
+            g_finishedAlertStopEvent = nullptr;
+        }
+
+        UnregisterFinishedAlertClass();
         UnregisterFinishedAlertClass();
         Wh_Log(
             L"ERROR: Failed to resolve taskbar.dll symbols"
@@ -3541,13 +3546,10 @@ BOOL Wh_ModInit()
     }
 
     bool systemTrayHookedAtInit = false;
-    bool systemTrayModuleLoadedAtInit = false;
 
     if (HMODULE systemTray =
             GetSystemTrayModuleHandle())
     {
-        systemTrayModuleLoadedAtInit = true;
-
         g_systemTrayModuleAttempted.store(
             systemTray
         );
@@ -3563,13 +3565,17 @@ BOOL Wh_ModInit()
             );
         }
         else {
+            g_systemTrayModuleAttempted.store(
+                nullptr
+            );
+
             Wh_Log(
                 L"ERROR: Failed to hook system tray symbols"
             );
         }
     }
 
-    if (!systemTrayModuleLoadedAtInit) {
+    if (!systemTrayHookedAtInit) {
         HMODULE kernelbase =
             GetModuleHandleW(
                 L"kernelbase.dll"
@@ -3601,6 +3607,8 @@ BOOL Wh_ModInit()
 
 void Wh_ModAfterInit()
 {
+    RestorePersistedTimer();
+
     if (HMODULE systemTray =
             GetSystemTrayModuleHandle())
     {
@@ -3629,7 +3637,8 @@ void Wh_ModBeforeUninit()
 
     StopTimerWorker();
 
-    // First teardown attempt while the taskbar thread is still available.
+    // Primary teardown attempt while the taskbar thread is still available.
+    // Wh_ModUninit performs one final best-effort retry after worker threads stop.
     if (!TryRemoveTimerXaml()) {
         Wh_Log(
             L"Timer XAML teardown will be retried in Wh_ModUninit"
@@ -3658,7 +3667,6 @@ void Wh_ModUninit()
         g_timerWorkerThread = nullptr;
     }
 
-    g_timerWorkerStarted.store(false);
 
     // Only after the timer worker is gone can no new alert thread be created.
     if (g_finishedAlertStopEvent) {
@@ -3787,4 +3795,3 @@ void Wh_ModSettingsChanged()
         );
     }
 }
-
