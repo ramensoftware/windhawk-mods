@@ -1135,6 +1135,8 @@ double g_dpiScale = 1.0;
 [[clang::no_destroy]] DispatcherTimer g_clockTimer{nullptr};
 [[clang::no_destroy]] DispatcherTimer g_taskRefreshTimer{nullptr};
 [[clang::no_destroy]] DispatcherTimer g_taskListTimer{nullptr};
+[[clang::no_destroy]] DispatcherTimer g_taskClickTimer{nullptr};
+HWND g_taskClickPendingHwnd = nullptr;
 [[clang::no_destroy]] DispatcherTimer g_wifiAutoRefreshTimer{nullptr};
 [[clang::no_destroy]] DispatcherTimer g_bluetoothAutoRefreshTimer{nullptr};
 [[clang::no_destroy]] DispatcherTimer g_restoreTimer{nullptr};
@@ -2605,7 +2607,37 @@ wuxc::Button CreateTaskButton(HWND hwnd, const std::wstring& title) {
         try {
             auto btn = sender.as<wuxc::Button>();
             auto tagValue = winrt::unbox_value<int64_t>(btn.Tag());
-            ActivateTaskWindow(reinterpret_cast<HWND>(tagValue));
+            HWND hwnd = reinterpret_cast<HWND>(tagValue);
+            if (!IsWindow(hwnd)) {
+                return;
+            }
+            // Activating a background (or minimized) window is unambiguous and
+            // must feel instant; a following double-tap still maximizes on top
+            // of the activation, which is the correct visual.
+            if (hwnd != g_lastForegroundHwnd || IsIconic(hwnd)) {
+                ActivateTaskWindow(hwnd);
+                return;
+            }
+            // The window is already foreground, so a single tap means
+            // "minimize". Defer it briefly so a double-tap can cancel it and
+            // run the maximize instead, avoiding the minimize-then-maximize
+            // animation the user was seeing.
+            g_taskClickPendingHwnd = hwnd;
+            if (!g_taskClickTimer) {
+                g_taskClickTimer = DispatcherTimer();
+                g_taskClickTimer.Interval(std::chrono::milliseconds(250));
+                g_taskClickTimer.Tick(
+                    [](wf::IInspectable const&, wf::IInspectable const&) {
+                        g_taskClickTimer.Stop();
+                        HWND pending = g_taskClickPendingHwnd;
+                        g_taskClickPendingHwnd = nullptr;
+                        if (pending) {
+                            ActivateTaskWindow(pending);
+                        }
+                    });
+            }
+            g_taskClickTimer.Stop();
+            g_taskClickTimer.Start();
         } catch (...) {
         }
     });
@@ -2613,6 +2645,10 @@ wuxc::Button CreateTaskButton(HWND hwnd, const std::wstring& title) {
     button.DoubleTapped(
         [](wf::IInspectable const& sender, Input::DoubleTappedRoutedEventArgs const&) {
             try {
+                if (g_taskClickTimer) {
+                    g_taskClickTimer.Stop();
+                }
+                g_taskClickPendingHwnd = nullptr;
                 auto btn = sender.as<wuxc::Button>();
                 auto tagValue = winrt::unbox_value<int64_t>(btn.Tag());
                 ToggleMaximizeWindow(reinterpret_cast<HWND>(tagValue));
@@ -8566,6 +8602,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         // The topbar has been closed. Stop all timers before the DLL unloads.
         if (g_clockTimer) g_clockTimer.Stop();
         if (g_taskRefreshTimer) g_taskRefreshTimer.Stop();
+        if (g_taskClickTimer) g_taskClickTimer.Stop();
         if (g_taskListTimer) g_taskListTimer.Stop();
         if (g_wifiAutoRefreshTimer) g_wifiAutoRefreshTimer.Stop();
         if (g_bluetoothAutoRefreshTimer) g_bluetoothAutoRefreshTimer.Stop();
@@ -8577,6 +8614,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         // Release XAML and COM objects on this thread (before it exits)
         if (g_clockTimer) g_clockTimer = nullptr;
         if (g_taskRefreshTimer) g_taskRefreshTimer = nullptr;
+        if (g_taskClickTimer) g_taskClickTimer = nullptr;
 
         if (g_wifiAutoRefreshTimer) g_wifiAutoRefreshTimer = nullptr;
         if (g_bluetoothAutoRefreshTimer) g_bluetoothAutoRefreshTimer = nullptr;
