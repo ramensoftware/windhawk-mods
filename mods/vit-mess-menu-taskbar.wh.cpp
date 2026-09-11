@@ -13,7 +13,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Mess Menu Taskbar Flyout
+# VIT Mess Menu Taskbar Flyout
 
 Puts the VIT Vellore hostel mess menu into the Windows 11 taskbar.
 
@@ -43,8 +43,9 @@ Pick your **Hostel** and **Mess** in the settings, and that is it. The mod
 downloads the right file from `messit.vinnovateit.com` by itself and keeps it
 up to date. There is nothing to import and no files to manage.
 
-If your campus publishes a menu in the same JSON shape somewhere else, point
-**Custom menu URL** at it.
+The mod is built around VIT Vellore's messes and timings. If the site ever
+moves, or another mess publishes its menu as JSON in the same shape, the
+**Custom menu URL** setting points the mod there instead.
 
 ## Meal timings
 
@@ -120,7 +121,7 @@ backdrop blur is derived from GPL-3.0 code.
     - nonveg: Non-Veg (Mess 3)
   - url: ""
     $name: Custom menu URL
-    $description: "Leave empty to use messit.vinnovateit.com. Otherwise the full URL of a JSON file in the same format. {hostel} and {mess} in the URL are replaced with the numbers chosen above, e.g. https://example.com/menu/hostel-{hostel}-mess-{mess}.json. Changing this clears the cached menus."
+    $description: "Leave empty to use messit.vinnovateit.com. Otherwise the full URL of a JSON file in the same format. {hostel} and {mess} in the URL are replaced with the numbers chosen above, e.g. https://example.com/menu/hostel-{hostel}-mess-{mess}.json. Prefer https; a plain http URL is accepted for a server on your own network but is fetched unencrypted. Changing this clears the cached menus."
   $name: Menu source
   $description: Which mess's menu to show. This is the only thing that needs setting up.
 - button:
@@ -136,6 +137,8 @@ backdrop blur is derived from GPL-3.0 code.
     $options:
     - taskbar_left: Left edge of the taskbar
     - tray_left: Left of the system tray
+    - input_left: Left of the input indicator (language switcher)
+    - network_left: Left of the network, volume and battery icons
     - clock_left: Left of the clock
     - clock_right: Right of the clock
   - scope: primary
@@ -216,6 +219,7 @@ backdrop blur is derived from GPL-3.0 code.
 #include <winrt/Windows.UI.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.Xaml.h>
+#include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Interop.h>
@@ -235,6 +239,7 @@ backdrop blur is derived from GPL-3.0 code.
 #include <chrono>
 #include <climits>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <cwchar>
 #include <cwctype>
@@ -276,6 +281,8 @@ using namespace winrt::Windows::UI::Xaml::Media::Animation;
 enum class ButtonPosition {
     TaskbarLeft,
     TrayLeft,
+    InputLeft,
+    NetworkLeft,
     ClockLeft,
     ClockRight,
 };
@@ -365,7 +372,7 @@ static std::wstring NormalizeKey(const std::wstring& text);
 static std::wstring GetStringSetting(PCWSTR key, PCWSTR fallback) {
     WindhawkUtils::StringSetting value =
         WindhawkUtils::StringSetting::make(key);
-    return *value ? std::wstring(value.get()) : std::wstring(fallback);
+    return value.get()[0] ? std::wstring(value.get()) : std::wstring(fallback);
 }
 
 // Accepts #AARRGGBB and #RRGGBB, with or without the leading '#', in either
@@ -540,10 +547,12 @@ static void LoadSettings() {
         (GetStringSetting(L"button.mode", L"expanded") == L"compact");
     std::wstring position = GetStringSetting(L"button.position", L"tray_left");
     g_settings.position =
-        (position == L"taskbar_left")  ? ButtonPosition::TaskbarLeft
-        : (position == L"clock_left")  ? ButtonPosition::ClockLeft
-        : (position == L"clock_right") ? ButtonPosition::ClockRight
-                                       : ButtonPosition::TrayLeft;
+        (position == L"taskbar_left")   ? ButtonPosition::TaskbarLeft
+        : (position == L"input_left")   ? ButtonPosition::InputLeft
+        : (position == L"network_left") ? ButtonPosition::NetworkLeft
+        : (position == L"clock_left")   ? ButtonPosition::ClockLeft
+        : (position == L"clock_right")  ? ButtonPosition::ClockRight
+                                        : ButtonPosition::TrayLeft;
     g_settings.taskbarScope =
         (GetStringSetting(L"button.scope", L"primary") == L"all")
             ? TaskbarScope::All
@@ -1742,23 +1751,39 @@ static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param,
         g_runPayloads[id] = payload;
     }
 
-    LRESULT sent = 1;
     if (blockIndefinitely) {
         SendMessageW(hWnd, GetRunFromWindowThreadMessage(), 0, (LPARAM)id);
     } else {
+        // SMTO_NOTIMEOUTIFNOTHUNG: a taskbar thread that is merely busy is
+        // waited for; only one Windows classifies as hung is abandoned.
+        // SMTO_BLOCK: no re-entrancy into this thread while it waits.
         DWORD_PTR result = 0;
-        sent = SendMessageTimeoutW(hWnd, GetRunFromWindowThreadMessage(), 0,
-                                   (LPARAM)id, SMTO_ABORTIFHUNG, 10000,
-                                   &result);
+        SendMessageTimeoutW(hWnd, GetRunFromWindowThreadMessage(), 0,
+                            (LPARAM)id,
+                            SMTO_BLOCK | SMTO_ABORTIFHUNG |
+                                SMTO_NOTIMEOUTIFNOTHUNG,
+                            10000, &result);
     }
 
-    {
+    // The hook proc claims the payload under the lock and runs it with the
+    // lock released, so a send that gives up after the claim leaves proc()
+    // executing on the taskbar thread. Returning now would let the caller --
+    // at unload, the image itself -- go away underneath it. If the id is
+    // already gone from the map, that is exactly what happened: wait for the
+    // run to finish rather than pretend it never started.
+    bool claimed = false;
+    if (!payload->ran.load()) {
         std::lock_guard<std::mutex> lock(g_runPayloadsMutex);
-        g_runPayloads.erase(id);
+        claimed = g_runPayloads.erase(id) == 0;
+    }
+    if (claimed) {
+        while (!payload->ran.load()) {
+            Sleep(1);
+        }
     }
     UnhookWindowsHookEx(hook);
 
-    return sent != 0 && payload->ran.load();
+    return payload->ran.load();
 }
 
 static bool IsReadableMemoryRange(const void* address, size_t size) {
@@ -2494,8 +2519,12 @@ struct TaskbarEntry {
     PathIcon icon{nullptr};
     TextBlock label{nullptr};
     Grid injectionParent{nullptr};
-    // -1 means we appended without adding a column (taskbar-area positions).
-    int injectedColumn = -1;
+    // The tray column we added, or null when we appended without adding one
+    // (taskbar-area positions). Held by identity rather than by index: the
+    // tray's column list shifts as tray icons and other mods' columns come
+    // and go, so an index recorded at injection time can point at somebody
+    // else's column by the time we remove ours.
+    ColumnDefinition injectedColumnDefinition{nullptr};
     // The taskbar's icon strip, when we are holding space open in front of it.
     FrameworkElement reservedElement{nullptr};
     Thickness reservedOriginalMargin{};
@@ -2637,6 +2666,20 @@ static void RenderFlyoutPage();
 static void UpdateTaskbarLabel();
 static void KickFetch();
 static void ApplyTimerInterval();
+static void InjectWithRetry(int generation, int attempt = 0);
+
+// Bumped every time the taskbar is (re)created. A retry chain started for an
+// older taskbar carries its generation and gives up when it no longer matches,
+// so two chains racing after a quick double restart cannot both inject -- which
+// would otherwise leave the visible button unmanaged while the globals point at
+// a dead tree.
+static int g_injectGeneration = 0;
+
+// Set when Wh_ModSettingsChanged could not reach the taskbar thread to
+// re-apply the settings (the send was abandoned because the thread was
+// classified as hung). The UI timer picks it up once the thread is responsive
+// again, so the new settings are not silently ignored until the next change.
+static std::atomic<bool> g_reapplySettingsPending{false};
 
 static std::wstring HostelDisplayName() {
     return g_settings.hostel == 2 ? L"Women's Hostel" : L"Men's Hostel";
@@ -2853,6 +2896,12 @@ static void BuildTaskbarButton(bool light, TaskbarEntry& entry) {
     }
 
     button.Content(panel);
+
+    // The tray's own buttons expose a name to screen readers; without one
+    // this would be announced as an unnamed button.
+    winrt::Windows::UI::Xaml::Automation::AutomationProperties::SetName(
+        button, L"Mess menu");
+
     button.Click([](winrt::Windows::Foundation::IInspectable const& sender,
                     RoutedEventArgs const&) {
         try {
@@ -2921,6 +2970,27 @@ static int ResolveInsertColumn(Grid const& trayGrid) {
     if (position == ButtonPosition::TrayLeft) {
         return 0;
     }
+    if (position == ButtonPosition::InputLeft) {
+        // NonActivatableStack holds the input indicator (the language
+        // switcher) along with the microphone / location in-use badges. It is
+        // a direct child of the tray grid even on a single-language system
+        // where the indicator itself is hidden.
+        int inputColumn =
+            ColumnOfChildContaining(trayGrid, L"NonActivatableStack");
+        if (inputColumn >= 0) {
+            return inputColumn;
+        }
+        // Not found -- fall through and append at the end.
+    }
+    if (position == ButtonPosition::NetworkLeft) {
+        // ControlCenterButton is the network / volume / battery group.
+        int networkColumn =
+            ColumnOfChildContaining(trayGrid, L"ControlCenterButton");
+        if (networkColumn >= 0) {
+            return networkColumn;
+        }
+        // Not found -- fall through and append at the end.
+    }
     if (position == ButtonPosition::ClockLeft ||
         position == ButtonPosition::ClockRight) {
         int clockColumn = ColumnOfChildContaining(trayGrid,
@@ -2981,6 +3051,46 @@ static Grid FindTaskbarRootGrid(FrameworkElement const& root) {
     return rootGrid ? rootGrid.try_as<Grid>() : nullptr;
 }
 
+// Keeps the tray's children where they were after a column is inserted at
+// `column`: anything at or past it moves right by one, and anything that
+// starts before it but spans across it grows by one so it still covers the
+// same columns.
+static void ShiftGridChildrenForInsertedColumn(Grid const& grid, int column) {
+    const uint32_t count = grid.Children().Size();
+    for (uint32_t i = 0; i < count; i++) {
+        auto child = grid.Children().GetAt(i).try_as<FrameworkElement>();
+        if (!child) {
+            continue;
+        }
+        const int childColumn = Grid::GetColumn(child);
+        const int childSpan = Grid::GetColumnSpan(child);
+        if (childColumn >= column) {
+            Grid::SetColumn(child, childColumn + 1);
+        } else if (childColumn + childSpan > column) {
+            Grid::SetColumnSpan(child, childSpan + 1);
+        }
+    }
+}
+
+// The inverse, after the column at `column` has been removed.
+static void ShiftGridChildrenForRemovedColumn(Grid const& grid, int column) {
+    const uint32_t count = grid.Children().Size();
+    for (uint32_t i = 0; i < count; i++) {
+        auto child = grid.Children().GetAt(i).try_as<FrameworkElement>();
+        if (!child) {
+            continue;
+        }
+        const int childColumn = Grid::GetColumn(child);
+        const int childSpan = Grid::GetColumnSpan(child);
+        if (childColumn > column) {
+            Grid::SetColumn(child, childColumn - 1);
+        } else if (childColumn < column && childColumn + childSpan > column &&
+                   childSpan > 1) {
+            Grid::SetColumnSpan(child, childSpan - 1);
+        }
+    }
+}
+
 static void RemoveTaskbarButtonFrom(TaskbarEntry& entry) {
     // Give the taskbar its own layout back before anything else, so an
     // exception later cannot leave the icons permanently shoved aside.
@@ -3016,24 +3126,26 @@ static void RemoveTaskbarButtonFrom(TaskbarEntry& entry) {
             if (entry.injectionParent.Children().IndexOf(entry.button, index)) {
                 entry.injectionParent.Children().RemoveAt(index);
             }
-            if (entry.injectedColumn >= 0 &&
-                entry.injectedColumn <
-                    (int)entry.injectionParent.ColumnDefinitions().Size()) {
-                entry.injectionParent.ColumnDefinitions().RemoveAt(
-                    (uint32_t)entry.injectedColumn);
-                uint32_t count = entry.injectionParent.Children().Size();
+            // Find our column by identity, now, rather than trusting the
+            // index we inserted at. If it is no longer in the list, whoever
+            // removed it also owns the child shifts that went with it, so
+            // there is nothing for us to undo.
+            int ownedColumn = -1;
+            if (entry.injectedColumnDefinition) {
+                auto definitions = entry.injectionParent.ColumnDefinitions();
+                const uint32_t count = definitions.Size();
                 for (uint32_t i = 0; i < count; i++) {
-                    auto child = entry.injectionParent.Children()
-                                     .GetAt(i)
-                                     .try_as<FrameworkElement>();
-                    if (!child) {
-                        continue;
-                    }
-                    int column = Grid::GetColumn(child);
-                    if (column > entry.injectedColumn) {
-                        Grid::SetColumn(child, column - 1);
+                    if (definitions.GetAt(i) == entry.injectedColumnDefinition) {
+                        ownedColumn = (int)i;
+                        break;
                     }
                 }
+            }
+            if (ownedColumn >= 0) {
+                entry.injectionParent.ColumnDefinitions().RemoveAt(
+                    (uint32_t)ownedColumn);
+                ShiftGridChildrenForRemovedColumn(entry.injectionParent,
+                                                  ownedColumn);
             }
         }
     } catch (...) {
@@ -3044,7 +3156,7 @@ static void RemoveTaskbarButtonFrom(TaskbarEntry& entry) {
     entry.icon = nullptr;
     entry.label = nullptr;
     entry.injectionParent = nullptr;
-    entry.injectedColumn = -1;
+    entry.injectedColumnDefinition = nullptr;
 }
 
 static void RemoveTaskbarButton() {
@@ -3117,7 +3229,7 @@ static bool InjectTaskbarButtonInto(HWND hWnd) {
             rootGrid.Children().Append(button);
 
             entry.injectionParent = rootGrid;
-            entry.injectedColumn = -1;
+            entry.injectedColumnDefinition = nullptr;
 
             // Nothing lets us see where another mod has parked itself, so the
             // spacing settings stay the manual escape hatch. What we can do is
@@ -3158,24 +3270,14 @@ static bool InjectTaskbarButtonInto(HWND hWnd) {
             trayGrid.ColumnDefinitions().Append(column);
         } else {
             trayGrid.ColumnDefinitions().InsertAt((uint32_t)insertColumn, column);
-            uint32_t count = trayGrid.Children().Size();
-            for (uint32_t i = 0; i < count; i++) {
-                auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
-                if (!child) {
-                    continue;
-                }
-                int childColumn = Grid::GetColumn(child);
-                if (childColumn >= insertColumn) {
-                    Grid::SetColumn(child, childColumn + 1);
-                }
-            }
+            ShiftGridChildrenForInsertedColumn(trayGrid, insertColumn);
         }
 
         Grid::SetColumn(button, insertColumn);
         trayGrid.Children().Append(button);
 
         entry.injectionParent = trayGrid;
-        entry.injectedColumn = insertColumn;
+        entry.injectedColumnDefinition = column;
 
         InvalidateLabelCache();
         UpdateTaskbarLabel();
@@ -3462,11 +3564,14 @@ static void RenderFlyoutPage() {
 
         if (!haveDay) {
             if (!StoreCoversMonth(MonthKeyFromDayKey(dayKey))) {
+                const wchar_t* subtitle =
+                    g_fetching ? L"Checking now…"
+                    : g_settings.autoUpdate
+                        ? L"Checking periodically for updates…"
+                        : L"Automatic checks are off — use the reload button "
+                          L"below.";
                 AddMessageBlock(L"Menu data not available for this month.",
-                                g_fetching ? L"Checking now…"
-                                           : L"Checking periodically for "
-                                             L"updates…",
-                                light);
+                                subtitle, light);
             } else {
                 AddMessageBlock(L"No menu for this date.", L"", light);
             }
@@ -3860,6 +3965,10 @@ static void TearDownFlyout() {
     g_flyout = nullptr;
     g_flyoutOpen = false;
     g_flyoutClosingAnimStarted.store(false);
+    // If Hide() above was a no-op (the flyout was already mid-close), Closing
+    // never ran to consume the flag, and the next flyout's first close would
+    // skip its animation. Deterministic is better than usually-right.
+    g_flyoutClosingAnimInProgress.store(false);
     g_flyoutTaskbarWnd = nullptr;
     g_flyoutAnchorButton = nullptr;
     ClearFlyoutRefs();
@@ -4336,6 +4445,15 @@ static void OnTimerTick() {
     }
 
     try {
+        // A settings change that could not reach this thread at the time.
+        if (g_reapplySettingsPending.exchange(false)) {
+            Wh_Log(L"OnTimerTick: re-applying settings");
+            TearDownFlyout();
+            RemoveTaskbarButton();
+            InjectWithRetry(++g_injectGeneration);
+            return;
+        }
+
         ApplyTimerInterval();
         ReconcileTaskbars();
         UpdateTaskbarLabel();
@@ -4737,18 +4855,11 @@ static void StopNetThread() {
 // Section 19: injection retry and the taskbar creation hook
 // ---------------------------------------------------------------------------
 
-// Bumped every time the taskbar is (re)created. A retry chain started for an
-// older taskbar carries its generation and gives up when it no longer matches,
-// so two chains racing after a quick double restart cannot both inject -- which
-// would otherwise leave the visible button unmanaged while the globals point at
-// a dead tree.
-static int g_injectGeneration = 0;
-
 // Retries until every targeted taskbar has a button. InjectTaskbarButton skips
 // the ones already done, so a slow secondary taskbar never costs the primary
 // its button -- which a remove-and-retry-everything loop would have made
 // visibly flicker for up to five seconds.
-static void InjectWithRetry(int generation, int attempt = 0) {
+static void InjectWithRetry(int generation, int attempt) {
     static constexpr int kMaxAttempts = 50;
 
     if (g_unloading || generation != g_injectGeneration) {
@@ -4930,7 +5041,7 @@ void Wh_ModSettingsChanged() {
 
     if (hWnd) {
         g_taskbarWnd.store(hWnd);
-        RunFromWindowThread(
+        const bool applied = RunFromWindowThread(
             hWnd,
             [](void*) {
                 TearDownFlyout();
@@ -4946,6 +5057,12 @@ void Wh_ModSettingsChanged() {
                 }
             },
             nullptr);
+        if (!applied) {
+            // The taskbar thread was not reachable; the UI timer will do it
+            // once it is.
+            Wh_Log(L"Wh_ModSettingsChanged: taskbar thread busy, deferring");
+            g_reapplySettingsPending.store(true);
+        }
     }
 
     if (sourceChanged) {
