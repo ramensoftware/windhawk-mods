@@ -2,9 +2,10 @@
 // @id              windows-animations
 // @name            Windows Animations
 // @description     Smooth minimize, restore, close, switch animations for windows.
-// @version         1.3.13
+// @version         1.3.5
 // @author          ReDrag
 // @github          https://github.com/redrag2105
+// @donateUrl       https://ko-fi.com/redrag2105
 // @include         *
 // @exclude         TextInputHost.exe
 // @exclude         ShellExperienceHost.exe
@@ -38,7 +39,7 @@ By utilizing a smart Hybrid Rendering Engine, this mod bridges the gap between s
 
 &nbsp;
 
-## 🆕 What's new in 1.3.13
+## 🆕 What's new in 1.3.5
 
 My original goal (v1.3.0 -- an unreleased full-GPU prototype) was simple: implement D3D11 versions of every animation and move all rendering to the GPU. An unreleased development build did exactly that for minimize, restore, launch, and all close effects. I then tested it instead of assuming that "GPU" always means "faster."
 
@@ -61,7 +62,7 @@ The experiment revealed three practical results:
 
 > I also prototyped DirectComposition for minimize to remove the layered-window cost. However, Windows changes the real window's native taskbar state during minimize, and that internal transition intermittently exposed a flicker even after the composition visual was detached, DWM commits were drained, and the real window had both cloak and opacity protection. Rapid reversal tests confirmed that rendering itself was fast; the unreliable part was the final native minimize handoff. Because visual correctness matters more than a benchmark number, that prototype is not included in this release.
 
-### Why 1.3.13 uses a hybrid renderer
+### Why 1.3.5 uses a hybrid renderer
 
 The shipped design keeps the best measured path for each workload instead of forcing one renderer everywhere:
 
@@ -185,7 +186,7 @@ You can deeply customize the feel and pacing of every animation via the Windhawk
 * **Toggles:** Individually turn on/off Minimize, Restore, Close, Alt+Tab Switch, and Launch animations to suit your workflow.
 * **Taskbar placement:** Bottom, top, left, and right taskbars are supported, including taskbars on secondary monitors and auto-hidden taskbars. Genie bends toward the detected edge and targets the app button on that axis; Windows 10 scales toward the full button position. The other minimize/restore effects animate in place, while **None** continues to use Windows' native transition.
 * **Rounded corners:** Minimize, restore, and launch effects preserve Windows 11's rounded window silhouette. Maximized windows and apps that explicitly request square corners stay square. This does not add a synthetic window shadow.
-* **Hybrid GPU acceleration:** Separate toggles allow the mod to use GPU rendering where it is measurably beneficial. The minimize/restore toggle accelerates restores and launches; normal minimizes intentionally remain on CPU. The close toggle accelerates only sufficiently large 1 px Thanos/Perlin workloads; ordinary close effects remain on CPU. Turn a toggle off to force that whole group to CPU. See **Why 1.3.13 uses a hybrid renderer** above for the complete routing rules and fallbacks.
+* **Hybrid GPU acceleration:** Separate toggles allow the mod to use GPU rendering where it is measurably beneficial. The minimize/restore toggle accelerates restores and launches; normal minimizes intentionally remain on CPU. The close toggle accelerates only sufficiently large 1 px Thanos/Perlin workloads; ordinary close effects remain on CPU. Turn a toggle off to force that whole group to CPU. See **Why 1.3.5 uses a hybrid renderer** above for the complete routing rules and fallbacks.
 * **Performance telemetry:** An optional diagnostic setting writes one compact timing and resource summary after each animation, including the selected D3D adapter, display refresh, average pacing wait, and CPU canvas-clear/effect/presentation breakdown. It also enables supporting animation-start, routing, taskbar-lookup, reversal, settings, and GPU-lifecycle events. It is disabled by default and never logs individual frames.
 * **Optional Show Desktop optimization:** By default, Win+D uses the classic behavior and custom-animates eligible windows in sequence. Enable **Optimize Show Desktop** to custom-animate only the foreground/top window while background windows minimize immediately without Windows' native minimize transition. The matching Win+D restore remains native for those background windows; opening one individually later uses the normal custom restore path again.
 * **Reveal taskbar during Genie (auto-hide):** If the taskbar is already visible or hovered, Genie stays behind it without changing focus. Otherwise, Genie briefly reveals it and defers the real minimize until the animation finishes. Ignored for Windows 10, Ink Splash, Scorch, Splinter, Mirage, Stipple, and Swell.
