@@ -2,66 +2,102 @@
 // @id              mallss-music-overlay
 // @name            Mallss Music Overlay
 // @description     Compact desktop music overlay with album art, clock, marquee title, progress and media controls.
-// @version         1.4.1
+// @version         1.5.1
 // @author          Mallss
 // @github          https://github.com/ItsMeMal
-// @include         explorer.exe
-// @compilerOptions -lgdiplus -lgdi32 -lshlwapi -lole32 -loleaut32 -lruntimeobject
+// @license         MIT
+// @include         windhawk.exe
+// @compilerOptions -lshell32 -lgdiplus -lgdi32 -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
+
 // ==WindhawkModReadme==
 /*
 # Mallss Music Overlay
 
-A compact Windows desktop music overlay powered by Windows System Media
-Transport Controls.
+A compact desktop music overlay for Windows using Windows Global System
+Media Transport Controls.
+
+The overlay is designed specifically for the desktop rather than the
+taskbar. It stays behind normal applications and becomes visible again
+when the desktop is active.
 
 ## Features
 
 - Album artwork
-- Song title and artist
+- Song title
+- Artist
+- Album
 - Scrolling marquee for long titles
-- Playback progress bar
+- Playback progress
 - Elapsed and total duration
-- Previous, play/pause and next controls
-- Click the progress bar to seek
-- Desktop clock and date
-- Automatic display while media is playing
-- Local monotonic playback clock to prevent elapsed-time jitter
+- Previous track
+- Play / pause
+- Next track
+- Click-to-seek progress bar
+- Desktop clock
+- Current date
+- Windows Media Session integration
+- Local monotonic playback clock
+- Safe media command queue
+- Dedicated Windhawk tool process
+- Double-buffered layered rendering
+- DPI-aware rendering
 
-## Supported media
+## Desktop behavior
 
-The mod uses Windows Global System Media Transport Controls, so it can
-work with media applications that expose their playback session through
-Windows.
+The overlay remains alive while media is available.
 
-## Usage
+When another application is in the foreground, the overlay remains
+alive but is moved behind normal application windows.
 
-Enable the mod in Windhawk and start playing supported media.
+When the desktop becomes active, the overlay is moved above normal
+desktop windows again.
 
-The overlay appears near the bottom-right corner of the desktop.
+The overlay is not injected into Explorer. It runs as a dedicated
+Windhawk tool process.
 
-When another application is active, the overlay remains alive but stays
-behind the active application. It becomes visible again when returning
-to the desktop.
+## Playback timing
+
+During playback, elapsed time is driven by a local monotonic clock.
+Windows Media Session timeline data is used for initial positioning,
+track changes and explicit seek operations.
+
+Normal media polling does not continuously overwrite the local playback
+clock, preventing the elapsed time from jumping backwards.
 
 ## Controls
 
-- Previous: skip to the previous track
-- Play/Pause: toggle playback
-- Next: skip to the next track
+- Previous button: previous track
+- Center button: play / pause
+- Next button: next track
 - Progress bar: click to seek
+
+## Compatibility
+
+The mod uses Windows Global System Media Transport Controls.
+
+It can work with media applications that expose their playback session
+through Windows System Media Transport Controls.
+
+## Difference from taskbar media mods
+
+Mallss Music Overlay is a desktop-first floating overlay.
+
+It combines media controls with a compact clock and date display and is
+positioned near the bottom-right of the desktop.
+
+It is not intended to replace taskbar media controls.
 
 ## Notes
 
-The elapsed playback position is driven by a local monotonic timer during
-normal playback. Media Session timeline data is used for initial
-positioning, track changes and explicit seeks.
+A catalog screenshot or GIF should be added once hosted at an allowed
+location such as raw.githubusercontent.com or i.imgur.com.
 */
 // ==/WindhawkModReadme==
 
 #include <windows.h>
 #include <windowsx.h>
-#include <shlwapi.h>
+#include <shellapi.h>
 #include <gdiplus.h>
 
 #include <winrt/base.h>
@@ -69,38 +105,38 @@ positioning, track changes and explicit seeks.
 #include <winrt/Windows.Media.Control.h>
 #include <winrt/Windows.Storage.Streams.h>
 
-#include <atomic>
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdint>
 #include <cwctype>
+#include <deque>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
 
-#pragma comment(lib, "gdiplus.lib")
-#pragma comment(lib, "gdi32.lib")
-#pragma comment(lib, "shlwapi.lib")
-#pragma comment(lib, "ole32.lib")
-#pragma comment(lib, "oleaut32.lib")
-#pragma comment(lib, "runtimeobject.lib")
-
 using namespace Gdiplus;
 using namespace winrt;
 
+using namespace Windows::Foundation;
 using namespace Windows::Media::Control;
 using namespace Windows::Storage::Streams;
+
+using namespace std::chrono_literals;
 
 // ============================================================
 // CONFIG
 // ============================================================
 
-static constexpr int OVERLAY_W = 420;
-static constexpr int OVERLAY_H = 164;
+static constexpr int BASE_WIDTH = 420;
+static constexpr int BASE_HEIGHT = 164;
 
-static constexpr int SCREEN_MARGIN_RIGHT = 18;
-static constexpr int SCREEN_MARGIN_BOTTOM = 18;
+static constexpr int RIGHT_MARGIN = 18;
+static constexpr int BOTTOM_MARGIN = 18;
 
 static constexpr int COVER_X = 12;
 static constexpr int COVER_Y = 11;
@@ -136,11 +172,8 @@ static constexpr double MARQUEE_GAP = 42.0;
 static constexpr double MARQUEE_START_HOLD = 1.15;
 static constexpr double MARQUEE_END_HOLD = 0.80;
 
-static constexpr int MEDIA_POLL_MS = 500;
-
-static constexpr int FRAME_MS = 16;
-
-static constexpr int ZORDER_CHECK_MS = 120;
+static constexpr int MEDIA_POLL_MS = 250;
+static constexpr int COMMAND_TIMEOUT_MS = 800;
 
 // ============================================================
 // FORWARD DECLARATIONS
@@ -149,62 +182,84 @@ static constexpr int ZORDER_CHECK_MS = 120;
 static void UIThreadProc();
 static void MediaThreadProc();
 
+static void RenderFrame();
+static void PresentFrame();
+
 static void PositionOverlay();
 static void UpdateOverlayZOrder(bool force);
 
-static void MediaPrevious();
-static void MediaNext();
-static void MediaTogglePlayPause();
-static void MediaSeek(double position);
+static bool UpdateCover(
+    const GlobalSystemMediaTransportControlsSessionMediaProperties& props,
+    const std::wstring& key
+);
+
+static bool LoadCoverFromThumbnail(
+    const GlobalSystemMediaTransportControlsSessionMediaProperties& props,
+    const std::wstring& key
+);
+
+static void QueuePrevious();
+static void QueuePlayPause();
+static void QueueNext();
+static void QueueSeek(double position);
 
 // ============================================================
 // GLOBAL
 // ============================================================
 
-static bool g_activeMod = false;
-
-static HANDLE g_singletonMutex = nullptr;
-
+static HINSTANCE g_hInstance = nullptr;
 static HWND g_hwnd = nullptr;
-
-// ============================================================
-// THREAD STATE
-// ============================================================
+static HWINEVENTHOOK g_foregroundHook = nullptr;
 
 static std::atomic<bool> g_running{true};
+static std::atomic<bool> g_visible{false};
+static std::atomic<bool> g_playing{false};
+static std::atomic<bool> g_forceRedraw{true};
 
-static std::thread g_mediaThread;
-static std::thread g_uiThread;
+// ============================================================
+// THREADS
+// ============================================================
+
+[[clang::no_destroy]]
+static std::optional<std::thread> g_uiThread;
+
+[[clang::no_destroy]]
+static std::optional<std::thread> g_mediaThread;
+
+// ============================================================
+// COMMAND QUEUE
+// ============================================================
+
+enum class CommandType
+{
+    Previous,
+    PlayPause,
+    Next,
+    Seek
+};
+
+struct MediaCommand
+{
+    CommandType type =
+        CommandType::PlayPause;
+
+    double position = 0.0;
+};
+
+[[clang::no_destroy]]
+static std::mutex g_commandMutex;
+
+[[clang::no_destroy]]
+static std::condition_variable g_commandCv;
+
+[[clang::no_destroy]]
+static std::deque<MediaCommand> g_commandQueue;
+
+// ============================================================
+// MEDIA STATE
+// ============================================================
 
 static std::mutex g_stateMutex;
-
-// ============================================================
-// PLAYBACK STATE
-// ============================================================
-
-static std::atomic<bool> g_playing{false};
-static std::atomic<bool> g_visible{false};
-
-// ============================================================
-// GDI+
-// ============================================================
-
-static ULONG_PTR g_gdiplusToken = 0;
-
-// ============================================================
-// BACK BUFFER
-// ============================================================
-
-static HDC g_backDC = nullptr;
-static HBITMAP g_backBitmap = nullptr;
-static HBITMAP g_backOldBitmap = nullptr;
-static void* g_backBits = nullptr;
-
-static bool g_backBufferReady = false;
-
-// ============================================================
-// MEDIA
-// ============================================================
 
 static bool g_mediaValid = false;
 
@@ -222,20 +277,19 @@ static double g_duration = 0.0;
 // ============================================================
 
 static double g_clockAnchorPosition = 0.0;
-
 static int64_t g_clockAnchorQpc = 0;
-
 static bool g_clockRunning = false;
-
 static double g_frozenPosition = 0.0;
 
 // ============================================================
-// MEDIA SESSION
+// WINRT
 // ============================================================
 
+[[clang::no_destroy]]
 static GlobalSystemMediaTransportControlsSessionManager
     g_sessionManager{nullptr};
 
+[[clang::no_destroy]]
 static GlobalSystemMediaTransportControlsSession
     g_session{nullptr};
 
@@ -243,9 +297,43 @@ static GlobalSystemMediaTransportControlsSession
 // COVER
 // ============================================================
 
+[[clang::no_destroy]]
 static Bitmap* g_coverBitmap = nullptr;
 
 static std::wstring g_coverKey;
+
+// ============================================================
+// GDI+
+// ============================================================
+
+[[clang::no_destroy]]
+static ULONG_PTR g_gdiplusToken = 0;
+
+// ============================================================
+// BACK BUFFER
+// ============================================================
+
+[[clang::no_destroy]]
+static HDC g_backDC = nullptr;
+
+[[clang::no_destroy]]
+static HBITMAP g_backBitmap = nullptr;
+
+[[clang::no_destroy]]
+static HBITMAP g_backOldBitmap = nullptr;
+
+[[clang::no_destroy]]
+static void* g_backBits = nullptr;
+
+static int g_bufferWidth = 0;
+static int g_bufferHeight = 0;
+
+// ============================================================
+// DPI
+// ============================================================
+
+static UINT g_dpi = 96;
+static float g_scale = 1.0f;
 
 // ============================================================
 // MARQUEE
@@ -262,30 +350,19 @@ static MarqueePhase g_marqueePhase =
     MarqueePhase::HoldStart;
 
 static double g_marqueeTimer = 0.0;
-
 static double g_marqueeOffset = 0.0;
 
 static int g_cachedTitleWidth = 0;
-
 static bool g_cachedTitleOverflow = false;
 
 static std::wstring g_cachedTitle;
 
 // ============================================================
-// CLOCK CACHE
-// ============================================================
-
-static int g_cachedMinuteKey = -1;
-
-// ============================================================
-// Z ORDER CACHE
+// Z ORDER STATE
 // ============================================================
 
 static bool g_lastDesktopActive = false;
-
 static bool g_haveZOrderState = false;
-
-static int64_t g_lastZOrderQpc = 0;
 
 // ============================================================
 // QPC
@@ -301,27 +378,48 @@ static int64_t QpcNow()
     return value.QuadPart;
 }
 
-static double SecondsSince(
+static double QpcSecondsSince(
     int64_t start
 )
 {
     if (start == 0)
         return 0.0;
 
-    LARGE_INTEGER frequency{};
+    static const double frequency = []()
+    {
+        LARGE_INTEGER value{};
 
-    if (!QueryPerformanceFrequency(&frequency))
-        return 0.0;
+        if (!QueryPerformanceFrequency(&value))
+            return 1.0;
 
-    const int64_t now =
-        QpcNow();
+        return static_cast<double>(
+            value.QuadPart
+        );
+    }();
 
     return static_cast<double>(
-        now - start
-    ) /
-    static_cast<double>(
-        frequency.QuadPart
+        QpcNow() - start
+    ) / frequency;
+}
+
+// ============================================================
+// MODULE HANDLE
+// ============================================================
+
+static HINSTANCE GetCurrentModuleHandle()
+{
+    HINSTANCE instance = nullptr;
+
+    GetModuleHandleExW(
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        reinterpret_cast<LPCWSTR>(
+            &GetCurrentModuleHandle
+        ),
+        &instance
     );
+
+    return instance;
 }
 
 // ============================================================
@@ -332,28 +430,28 @@ static std::wstring TrimString(
     const std::wstring& value
 )
 {
-    size_t start = 0;
-    size_t end = value.size();
+    size_t first = 0;
+    size_t last = value.size();
 
     while (
-        start < end &&
-        iswspace(value[start])
+        first < last &&
+        iswspace(value[first])
     )
     {
-        ++start;
+        ++first;
     }
 
     while (
-        end > start &&
-        iswspace(value[end - 1])
+        last > first &&
+        iswspace(value[last - 1])
     )
     {
-        --end;
+        --last;
     }
 
     return value.substr(
-        start,
-        end - start
+        first,
+        last - first
     );
 }
 
@@ -470,21 +568,8 @@ static std::wstring CurrentDate()
     return buffer;
 }
 
-static int CurrentMinuteKey()
-{
-    SYSTEMTIME st{};
-
-    GetLocalTime(
-        &st
-    );
-
-    return
-        st.wHour * 60 +
-        st.wMinute;
-}
-
 // ============================================================
-// LOCAL PLAYBACK CLOCK
+// LOCAL CLOCK
 // ============================================================
 
 static double GetLocalPlaybackPositionLocked()
@@ -493,7 +578,7 @@ static double GetLocalPlaybackPositionLocked()
         return g_frozenPosition;
 
     const double elapsed =
-        SecondsSince(
+        QpcSecondsSince(
             g_clockAnchorQpc
         );
 
@@ -591,7 +676,7 @@ static void ResetMarqueeLocked()
 }
 
 // ============================================================
-// COVER CLEANUP
+// COVER
 // ============================================================
 
 static void DestroyCoverLocked()
@@ -603,10 +688,6 @@ static void DestroyCoverLocked()
 
     g_coverKey.clear();
 }
-
-// ============================================================
-// LOAD COVER
-// ============================================================
 
 static bool LoadCoverFromThumbnail(
     const GlobalSystemMediaTransportControlsSessionMediaProperties& props,
@@ -621,10 +702,20 @@ static bool LoadCoverFromThumbnail(
         if (!thumbnail)
             return false;
 
+        auto operation =
+            thumbnail.OpenReadAsync();
+
+        if (
+            operation.wait_for(
+                1500ms
+            ) != AsyncStatus::Completed
+        )
+        {
+            return false;
+        }
+
         auto stream =
-            thumbnail
-                .OpenReadAsync()
-                .get();
+            operation.get();
 
         if (!stream)
             return false;
@@ -646,9 +737,21 @@ static bool LoadCoverFromThumbnail(
             stream
         );
 
-        reader.LoadAsync(
-            size
-        ).get();
+        auto loadOperation =
+            reader.LoadAsync(
+                size
+            );
+
+        if (
+            loadOperation.wait_for(
+                1500ms
+            ) != AsyncStatus::Completed
+        )
+        {
+            return false;
+        }
+
+        loadOperation.get();
 
         std::vector<uint8_t> bytes(
             size
@@ -758,10 +861,6 @@ static bool LoadCoverFromThumbnail(
     }
 }
 
-// ============================================================
-// UPDATE COVER
-// ============================================================
-
 static bool UpdateCover(
     const GlobalSystemMediaTransportControlsSessionMediaProperties& props,
     const std::wstring& key
@@ -791,118 +890,223 @@ static bool UpdateCover(
 }
 
 // ============================================================
-// MEDIA COMMANDS
+// COMMAND QUEUE
 // ============================================================
 
-static void MediaPrevious()
+static void QueueCommand(
+    const MediaCommand& command
+)
 {
-    try
     {
-        if (g_session)
+        std::scoped_lock lock(
+            g_commandMutex
+        );
+
+        if (
+            g_commandQueue.size() >= 8
+        )
         {
-            g_session
-                .TrySkipPreviousAsync()
-                .get();
+            g_commandQueue.pop_front();
         }
+
+        g_commandQueue.push_back(
+            command
+        );
     }
-    catch (...)
-    {
-    }
+
+    g_commandCv.notify_one();
 }
 
-static void MediaNext()
+static void QueuePrevious()
 {
-    try
-    {
-        if (g_session)
-        {
-            g_session
-                .TrySkipNextAsync()
-                .get();
+    QueueCommand(
+        MediaCommand{
+            CommandType::Previous,
+            0.0
         }
-    }
-    catch (...)
-    {
-    }
+    );
 }
 
-static void MediaTogglePlayPause()
+static void QueuePlayPause()
 {
-    try
-    {
-        if (g_session)
-        {
-            g_session
-                .TryTogglePlayPauseAsync()
-                .get();
+    QueueCommand(
+        MediaCommand{
+            CommandType::PlayPause,
+            0.0
         }
-    }
-    catch (...)
-    {
-    }
+    );
 }
 
-// ============================================================
-// SEEK
-// ============================================================
+static void QueueNext()
+{
+    QueueCommand(
+        MediaCommand{
+            CommandType::Next,
+            0.0
+        }
+    );
+}
 
-static void MediaSeek(
+static void QueueSeek(
     double position
+)
+{
+    QueueCommand(
+        MediaCommand{
+            CommandType::Seek,
+            position
+        }
+    );
+}
+
+// ============================================================
+// COMMAND EXECUTION
+// ============================================================
+
+static void ExecuteMediaCommand(
+    const MediaCommand& command
 )
 {
     try
     {
-        if (!g_session)
+        auto session =
+            g_session;
+
+        if (!session)
             return;
 
-        double duration;
-
+        switch (command.type)
         {
-            std::scoped_lock lock(
-                g_stateMutex
-            );
+            case CommandType::Previous:
+            {
+                auto operation =
+                    session
+                        .TrySkipPreviousAsync();
 
-            duration =
-                g_duration;
-        }
-
-        if (position < 0.0)
-            position = 0.0;
-
-        if (
-            duration > 0.0 &&
-            position > duration
-        )
-        {
-            position =
-                duration;
-        }
-
-        g_session
-            .TryChangePlaybackPositionAsync(
-                static_cast<int64_t>(
-                    position *
-                    10000000.0
+                if (
+                    operation.wait_for(
+                        std::chrono::milliseconds(
+                            COMMAND_TIMEOUT_MS
+                        )
+                    ) ==
+                    AsyncStatus::Completed
                 )
-            )
-            .get();
+                {
+                    operation.get();
+                }
 
-        {
-            std::scoped_lock lock(
-                g_stateMutex
-            );
-
-            if (g_playing)
-            {
-                StartLocalClockLocked(
-                    position
-                );
+                break;
             }
-            else
+
+            case CommandType::PlayPause:
             {
-                FreezeLocalClockLocked(
-                    position
-                );
+                auto operation =
+                    session
+                        .TryTogglePlayPauseAsync();
+
+                if (
+                    operation.wait_for(
+                        std::chrono::milliseconds(
+                            COMMAND_TIMEOUT_MS
+                        )
+                    ) ==
+                    AsyncStatus::Completed
+                )
+                {
+                    operation.get();
+                }
+
+                break;
+            }
+
+            case CommandType::Next:
+            {
+                auto operation =
+                    session
+                        .TrySkipNextAsync();
+
+                if (
+                    operation.wait_for(
+                        std::chrono::milliseconds(
+                            COMMAND_TIMEOUT_MS
+                        )
+                    ) ==
+                    AsyncStatus::Completed
+                )
+                {
+                    operation.get();
+                }
+
+                break;
+            }
+
+            case CommandType::Seek:
+            {
+                double duration;
+
+                {
+                    std::scoped_lock lock(
+                        g_stateMutex
+                    );
+
+                    duration =
+                        g_duration;
+                }
+
+                double target =
+                    command.position;
+
+                if (target < 0.0)
+                    target = 0.0;
+
+                if (
+                    duration > 0.0 &&
+                    target > duration
+                )
+                {
+                    target =
+                        duration;
+                }
+
+                auto operation =
+                    session
+                        .TryChangePlaybackPositionAsync(
+                            static_cast<int64_t>(
+                                target *
+                                10000000.0
+                            )
+                        );
+
+                if (
+                    operation.wait_for(
+                        std::chrono::milliseconds(
+                            COMMAND_TIMEOUT_MS
+                        )
+                    ) ==
+                    AsyncStatus::Completed
+                )
+                {
+                    operation.get();
+
+                    std::scoped_lock lock(
+                        g_stateMutex
+                    );
+
+                    if (g_playing)
+                    {
+                        StartLocalClockLocked(
+                            target
+                        );
+                    }
+                    else
+                    {
+                        FreezeLocalClockLocked(
+                            target
+                        );
+                    }
+                }
+
+                break;
             }
         }
     }
@@ -921,14 +1125,16 @@ struct MediaSnapshot
 
     bool playing = false;
 
+    GlobalSystemMediaTransportControlsSessionPlaybackStatus
+        playbackStatus =
+            GlobalSystemMediaTransportControlsSessionPlaybackStatus
+                ::Closed;
+
     std::wstring title;
-
     std::wstring artist;
-
     std::wstring album;
 
     double duration = 0.0;
-
     double position = 0.0;
 
     std::wstring coverKey;
@@ -949,10 +1155,21 @@ static bool QueryMedia(
     {
         if (!g_sessionManager)
         {
-            g_sessionManager =
+            auto operation =
                 GlobalSystemMediaTransportControlsSessionManager
-                    ::RequestAsync()
-                    .get();
+                    ::RequestAsync();
+
+            if (
+                operation.wait_for(
+                    1500ms
+                ) != AsyncStatus::Completed
+            )
+            {
+                return false;
+            }
+
+            g_sessionManager =
+                operation.get();
         }
 
         if (!g_sessionManager)
@@ -976,11 +1193,10 @@ static bool QueryMedia(
         g_session =
             session;
 
-        auto playbackInfo =
-            session
-                .GetPlaybackInfo();
+        auto playback =
+            session.GetPlaybackInfo();
 
-        if (!playbackInfo)
+        if (!playback)
         {
             snapshot.valid =
                 false;
@@ -988,15 +1204,48 @@ static bool QueryMedia(
             return true;
         }
 
+        snapshot.playbackStatus =
+            playback.PlaybackStatus();
+
         snapshot.playing =
-            playbackInfo.PlaybackStatus() ==
+            snapshot.playbackStatus ==
             GlobalSystemMediaTransportControlsSessionPlaybackStatus
                 ::Playing;
 
-        auto props =
+        //
+        // Keep panel for Playing and Paused.
+        //
+
+        if (
+            snapshot.playbackStatus ==
+                GlobalSystemMediaTransportControlsSessionPlaybackStatus
+                    ::Closed ||
+            snapshot.playbackStatus ==
+                GlobalSystemMediaTransportControlsSessionPlaybackStatus
+                    ::Stopped
+        )
+        {
+            snapshot.valid =
+                false;
+
+            return true;
+        }
+
+        auto propertiesOperation =
             session
-                .TryGetMediaPropertiesAsync()
-                .get();
+                .TryGetMediaPropertiesAsync();
+
+        if (
+            propertiesOperation.wait_for(
+                1500ms
+            ) != AsyncStatus::Completed
+        )
+        {
+            return false;
+        }
+
+        auto props =
+            propertiesOperation.get();
 
         if (!props)
         {
@@ -1045,9 +1294,7 @@ static bool QueryMedia(
         if (timeline)
         {
             snapshot.position =
-                timeline
-                    .Position()
-                    .count() /
+                timeline.Position().count() /
                 10000000.0;
 
             const auto start =
@@ -1141,18 +1388,11 @@ static void ApplyMedia(
         g_album =
             snapshot.album;
 
-        if (snapshot.duration > 0.0)
+        if (trackChanged)
         {
             g_duration =
                 snapshot.duration;
-        }
 
-        //
-        // Track changed.
-        //
-
-        if (trackChanged)
-        {
             double position =
                 snapshot.position;
 
@@ -1191,30 +1431,37 @@ static void ApplyMedia(
             coverKey =
                 snapshot.coverKey;
         }
-
-        //
-        // Playing -> Paused.
-        //
-
         else if (
+            snapshot.duration > 0.0
+        )
+        {
+            g_duration =
+                snapshot.duration;
+        }
+
+        //
+        // Playing -> Paused
+        //
+
+        if (
             playbackChanged &&
             oldPlaying &&
             !snapshot.playing
         )
         {
-            const double position =
+            const double current =
                 GetLocalPlaybackPositionLocked();
 
             FreezeLocalClockLocked(
-                position
+                current
             );
         }
 
         //
-        // Paused -> Playing.
+        // Paused -> Playing
         //
 
-        else if (
+        if (
             playbackChanged &&
             !oldPlaying &&
             snapshot.playing
@@ -1226,17 +1473,22 @@ static void ApplyMedia(
         }
 
         //
-        // IMPORTANT:
-        //
-        // Do not synchronize normal position polling.
+        // Never continuously synchronize position
+        // during normal polling.
         //
 
         g_playing =
             snapshot.playing;
     }
 
+    //
+    // IMPORTANT:
+    //
+    // Keep the panel alive while paused.
+    //
+
     g_visible.store(
-        snapshot.playing
+        true
     );
 
     if (needCover)
@@ -1246,14 +1498,27 @@ static void ApplyMedia(
             coverKey
         );
     }
+
+    if (g_hwnd)
+    {
+        PostMessageW(
+            g_hwnd,
+            WM_APP + 20,
+            0,
+            0
+        );
+    }
 }
 
 // ============================================================
-// HANDLE NO MEDIA
+// NO MEDIA
 // ============================================================
 
 static void HandleNoMedia()
 {
+    bool changed =
+        false;
+
     {
         std::scoped_lock lock(
             g_stateMutex
@@ -1264,11 +1529,11 @@ static void HandleNoMedia()
 
         if (g_clockRunning)
         {
-            const double position =
+            const double current =
                 GetLocalPlaybackPositionLocked();
 
             FreezeLocalClockLocked(
-                position
+                current
             );
         }
 
@@ -1291,11 +1556,27 @@ static void HandleNoMedia()
         DestroyCoverLocked();
 
         ResetMarqueeLocked();
+
+        changed =
+            true;
     }
 
-    g_visible.store(
-        false
-    );
+    if (changed)
+    {
+        g_visible.store(
+            false
+        );
+
+        if (g_hwnd)
+        {
+            PostMessageW(
+                g_hwnd,
+                WM_APP + 20,
+                0,
+                0
+            );
+        }
+    }
 }
 
 // ============================================================
@@ -1318,9 +1599,60 @@ static void MediaThreadProc()
         g_running.load()
     )
     {
+        MediaCommand command{};
+
+        bool haveCommand =
+            false;
+
+        {
+            std::unique_lock lock(
+                g_commandMutex
+            );
+
+            g_commandCv.wait_for(
+                lock,
+                std::chrono::milliseconds(
+                    MEDIA_POLL_MS
+                ),
+                []
+                {
+                    return
+                        !g_running.load() ||
+                        !g_commandQueue.empty();
+                }
+            );
+
+            if (
+                !g_commandQueue.empty()
+            )
+            {
+                command =
+                    g_commandQueue.front();
+
+                g_commandQueue.pop_front();
+
+                haveCommand =
+                    true;
+            }
+        }
+
+        if (!g_running.load())
+            break;
+
+        if (haveCommand)
+        {
+            ExecuteMediaCommand(
+                command
+            );
+        }
+
         MediaSnapshot snapshot;
 
-        if (QueryMedia(snapshot))
+        if (
+            QueryMedia(
+                snapshot
+            )
+        )
         {
             if (snapshot.valid)
             {
@@ -1333,21 +1665,21 @@ static void MediaThreadProc()
                 HandleNoMedia();
             }
         }
-
-        int waited =
-            0;
-
-        while (
-            waited <
-                MEDIA_POLL_MS &&
-            g_running.load()
-        )
-        {
-            Sleep(50);
-
-            waited += 50;
-        }
     }
+
+    {
+        std::scoped_lock lock(
+            g_commandMutex
+        );
+
+        g_commandQueue.clear();
+    }
+
+    g_session =
+        nullptr;
+
+    g_sessionManager =
+        nullptr;
 
     try
     {
@@ -1359,8 +1691,234 @@ static void MediaThreadProc()
 }
 
 // ============================================================
+// DPI
+// ============================================================
+
+static void UpdateDpiForWindow()
+{
+    if (!g_hwnd)
+        return;
+
+    UINT dpi =
+        GetDpiForWindow(
+            g_hwnd
+        );
+
+    if (dpi == 0)
+        dpi = 96;
+
+    g_dpi =
+        dpi;
+
+    g_scale =
+        static_cast<float>(
+            dpi
+        ) / 96.0f;
+}
+
+static int ScaledInt(
+    int value
+)
+{
+    return static_cast<int>(
+        std::round(
+            value *
+            g_scale
+        )
+    );
+}
+
+static float S(
+    float value
+)
+{
+    return value *
+        g_scale;
+}
+
+// ============================================================
+// BACK BUFFER
+// ============================================================
+
+static void DestroyBackBuffer()
+{
+    if (g_backDC)
+    {
+        if (g_backOldBitmap)
+        {
+            SelectObject(
+                g_backDC,
+                g_backOldBitmap
+            );
+        }
+
+        if (g_backBitmap)
+        {
+            DeleteObject(
+                g_backBitmap
+            );
+        }
+
+        DeleteDC(
+            g_backDC
+        );
+    }
+
+    g_backDC =
+        nullptr;
+
+    g_backBitmap =
+        nullptr;
+
+    g_backOldBitmap =
+        nullptr;
+
+    g_backBits =
+        nullptr;
+
+    g_bufferWidth =
+        0;
+
+    g_bufferHeight =
+        0;
+}
+
+static bool CreateBackBuffer()
+{
+    const int width =
+        ScaledInt(
+            BASE_WIDTH
+        );
+
+    const int height =
+        ScaledInt(
+            BASE_HEIGHT
+        );
+
+    if (
+        g_backDC &&
+        g_bufferWidth ==
+            width &&
+        g_bufferHeight ==
+            height
+    )
+    {
+        return true;
+    }
+
+    DestroyBackBuffer();
+
+    HDC screen =
+        GetDC(nullptr);
+
+    if (!screen)
+        return false;
+
+    g_backDC =
+        CreateCompatibleDC(
+            screen
+        );
+
+    if (!g_backDC)
+    {
+        ReleaseDC(
+            nullptr,
+            screen
+        );
+
+        return false;
+    }
+
+    BITMAPINFO bi{};
+
+    bi.bmiHeader.biSize =
+        sizeof(
+            BITMAPINFOHEADER
+        );
+
+    bi.bmiHeader.biWidth =
+        width;
+
+    bi.bmiHeader.biHeight =
+        -height;
+
+    bi.bmiHeader.biPlanes =
+        1;
+
+    bi.bmiHeader.biBitCount =
+        32;
+
+    bi.bmiHeader.biCompression =
+        BI_RGB;
+
+    g_backBitmap =
+        CreateDIBSection(
+            screen,
+            &bi,
+            DIB_RGB_COLORS,
+            &g_backBits,
+            nullptr,
+            0
+        );
+
+    ReleaseDC(
+        nullptr,
+        screen
+    );
+
+    if (!g_backBitmap)
+    {
+        DestroyBackBuffer();
+
+        return false;
+    }
+
+    g_backOldBitmap =
+        static_cast<HBITMAP>(
+            SelectObject(
+                g_backDC,
+                g_backBitmap
+            )
+        );
+
+    g_bufferWidth =
+        width;
+
+    g_bufferHeight =
+        height;
+
+    return true;
+}
+
+// ============================================================
 // DESKTOP STATE
 // ============================================================
+
+static bool IsDesktopWindow(
+    HWND hwnd
+)
+{
+    if (!hwnd)
+        return false;
+
+    wchar_t className[128]{};
+
+    GetClassNameW(
+        hwnd,
+        className,
+        ARRAYSIZE(className)
+    );
+
+    return
+        lstrcmpW(
+            className,
+            L"Progman"
+        ) == 0 ||
+        lstrcmpW(
+            className,
+            L"WorkerW"
+        ) == 0;
+}
 
 static bool IsDesktopActive()
 {
@@ -1370,10 +1928,6 @@ static bool IsDesktopActive()
     if (!foreground)
         return false;
 
-    //
-    // Our overlay.
-    //
-
     if (
         foreground ==
         g_hwnd
@@ -1381,10 +1935,6 @@ static bool IsDesktopActive()
     {
         return true;
     }
-
-    //
-    // Shell.
-    //
 
     HWND shell =
         GetShellWindow();
@@ -1397,10 +1947,6 @@ static bool IsDesktopActive()
         return true;
     }
 
-    //
-    // Root window.
-    //
-
     HWND root =
         GetAncestor(
             foreground,
@@ -1411,39 +1957,13 @@ static bool IsDesktopActive()
         root =
             foreground;
 
-    wchar_t className[128]{};
-
-    GetClassNameW(
-        root,
-        className,
-        ARRAYSIZE(className)
+    return IsDesktopWindow(
+        root
     );
-
-    if (
-        lstrcmpW(
-            className,
-            L"Progman"
-        ) == 0
-    )
-    {
-        return true;
-    }
-
-    if (
-        lstrcmpW(
-            className,
-            L"WorkerW"
-        ) == 0
-    )
-    {
-        return true;
-    }
-
-    return false;
 }
 
 // ============================================================
-// POSITION OVERLAY
+// POSITION
 // ============================================================
 
 static void PositionOverlay()
@@ -1478,23 +1998,37 @@ static void PositionOverlay()
         return;
     }
 
+    const int width =
+        ScaledInt(
+            BASE_WIDTH
+        );
+
+    const int height =
+        ScaledInt(
+            BASE_HEIGHT
+        );
+
     const int x =
         mi.rcWork.right -
-        OVERLAY_W -
-        SCREEN_MARGIN_RIGHT;
+        width -
+        ScaledInt(
+            RIGHT_MARGIN
+        );
 
     const int y =
         mi.rcWork.bottom -
-        OVERLAY_H -
-        SCREEN_MARGIN_BOTTOM;
+        height -
+        ScaledInt(
+            BOTTOM_MARGIN
+        );
 
     SetWindowPos(
         g_hwnd,
         nullptr,
         x,
         y,
-        OVERLAY_W,
-        OVERLAY_H,
+        width,
+        height,
         SWP_NOACTIVATE |
         SWP_NOZORDER |
         SWP_NOSENDCHANGING
@@ -1525,14 +2059,11 @@ static void UpdateOverlayZOrder(
         return;
     }
 
-    HWND insertAfter =
-        desktopActive
-            ? HWND_TOP
-            : HWND_BOTTOM;
-
     SetWindowPos(
         g_hwnd,
-        insertAfter,
+        desktopActive
+            ? HWND_TOP
+            : HWND_BOTTOM,
         0,
         0,
         0,
@@ -1549,13 +2080,10 @@ static void UpdateOverlayZOrder(
 
     g_haveZOrderState =
         true;
-
-    g_lastZOrderQpc =
-        QpcNow();
 }
 
 // ============================================================
-// ROUND RECT PATH
+// ROUND RECT
 // ============================================================
 
 static void RoundedRectPath(
@@ -1616,10 +2144,6 @@ static void RoundedRectPath(
     path.CloseFigure();
 }
 
-// ============================================================
-// FILL ROUND RECT
-// ============================================================
-
 static void FillRoundedRect(
     Graphics& graphics,
     const RectF& rect,
@@ -1645,28 +2169,38 @@ static void FillRoundedRect(
 }
 
 // ============================================================
-// BACKGROUND
+// DRAW BACKGROUND
 // ============================================================
 
 static void DrawBackground(
     Graphics& graphics
 )
 {
-    graphics.SetSmoothingMode(
-        SmoothingModeAntiAlias
-    );
+    const float width =
+        S(
+            static_cast<float>(
+                BASE_WIDTH
+            )
+        );
+
+    const float height =
+        S(
+            static_cast<float>(
+                BASE_HEIGHT
+            )
+        );
 
     GraphicsPath path;
 
     RoundedRectPath(
         path,
         RectF(
-            0.5f,
-            0.5f,
-            OVERLAY_W - 1.0f,
-            OVERLAY_H - 1.0f
+            S(0.5f),
+            S(0.5f),
+            width - S(1.0f),
+            height - S(1.0f)
         ),
-        18.0f
+        S(18.0f)
     );
 
     SolidBrush background(
@@ -1690,7 +2224,7 @@ static void DrawBackground(
             255,
             255
         ),
-        1.0f
+        S(1.0f)
     );
 
     graphics.DrawPath(
@@ -1700,25 +2234,33 @@ static void DrawBackground(
 }
 
 // ============================================================
-// COVER
+// DRAW COVER
 // ============================================================
 
 static void DrawCover(
     Graphics& graphics
 )
 {
-    const RectF destination(
-        static_cast<float>(
-            COVER_X
+    RectF destination(
+        S(
+            static_cast<float>(
+                COVER_X
+            )
         ),
-        static_cast<float>(
-            COVER_Y
+        S(
+            static_cast<float>(
+                COVER_Y
+            )
         ),
-        static_cast<float>(
-            COVER_SIZE
+        S(
+            static_cast<float>(
+                COVER_SIZE
+            )
         ),
-        static_cast<float>(
-            COVER_SIZE
+        S(
+            static_cast<float>(
+                COVER_SIZE
+            )
         )
     );
 
@@ -1727,7 +2269,7 @@ static void DrawCover(
     RoundedRectPath(
         clip,
         destination,
-        12.0f
+        S(12.0f)
     );
 
     graphics.SetClip(
@@ -1783,31 +2325,31 @@ static void DrawCover(
                     255,
                     255
                 ),
-                5.0f
+                S(5.0f)
             );
 
             graphics.DrawLine(
                 &notePen,
-                49.0f,
-                35.0f,
-                49.0f,
-                64.0f
+                S(49.0f),
+                S(35.0f),
+                S(49.0f),
+                S(64.0f)
             );
 
             graphics.DrawLine(
                 &notePen,
-                49.0f,
-                35.0f,
-                67.0f,
-                30.0f
+                S(49.0f),
+                S(35.0f),
+                S(67.0f),
+                S(30.0f)
             );
 
             graphics.FillEllipse(
                 &noteBrush,
-                38.0f,
-                59.0f,
-                16.0f,
-                11.0f
+                S(38.0f),
+                S(59.0f),
+                S(16.0f),
+                S(11.0f)
             );
         }
     }
@@ -1816,7 +2358,7 @@ static void DrawCover(
 }
 
 // ============================================================
-// CLOCK
+// DRAW CLOCK
 // ============================================================
 
 static void DrawClock(
@@ -1835,26 +2377,26 @@ static void DrawClock(
     FillRoundedRect(
         graphics,
         RectF(
-            CLOCK_X,
-            CLOCK_Y,
-            CLOCK_W,
-            CLOCK_H
+            S(CLOCK_X),
+            S(CLOCK_Y),
+            S(CLOCK_W),
+            S(CLOCK_H)
         ),
-        10.0f,
+        S(10.0f),
         &panel
     );
 
-    GraphicsPath path;
+    GraphicsPath borderPath;
 
     RoundedRectPath(
-        path,
+        borderPath,
         RectF(
-            CLOCK_X + 0.5f,
-            CLOCK_Y + 0.5f,
-            CLOCK_W - 1.0f,
-            CLOCK_H - 1.0f
+            S(CLOCK_X + 0.5f),
+            S(CLOCK_Y + 0.5f),
+            S(CLOCK_W - 1.0f),
+            S(CLOCK_H - 1.0f)
         ),
-        10.0f
+        S(10.0f)
     );
 
     Pen border(
@@ -1864,20 +2406,20 @@ static void DrawClock(
             255,
             255
         ),
-        1.0f
+        S(1.0f)
     );
 
     graphics.DrawPath(
         &border,
-        &path
+        &borderPath
     );
 
-    const std::wstring clock =
+    const std::wstring time =
         CurrentClock();
 
-    Font clockFont(
+    Font timeFont(
         L"Segoe UI",
-        16.0f,
+        S(16.0f),
         FontStyleBold,
         UnitPixel
     );
@@ -1902,14 +2444,14 @@ static void DrawClock(
     );
 
     graphics.DrawString(
-        clock.c_str(),
+        time.c_str(),
         -1,
-        &clockFont,
+        &timeFont,
         RectF(
-            CLOCK_X,
-            CLOCK_Y + 1.0f,
-            CLOCK_W,
-            21.0f
+            S(CLOCK_X),
+            S(CLOCK_Y + 1.0f),
+            S(CLOCK_W),
+            S(21.0f)
         ),
         &center,
         &white
@@ -1920,7 +2462,7 @@ static void DrawClock(
 
     Font dateFont(
         L"Segoe UI",
-        8.5f,
+        S(8.5f),
         FontStyleRegular,
         UnitPixel
     );
@@ -1939,10 +2481,10 @@ static void DrawClock(
         -1,
         &dateFont,
         RectF(
-            CLOCK_X,
-            CLOCK_Y + 25.0f,
-            CLOCK_W,
-            13.0f
+            S(CLOCK_X),
+            S(CLOCK_Y + 25.0f),
+            S(CLOCK_W),
+            S(13.0f)
         ),
         &center,
         &dateBrush
@@ -1950,7 +2492,7 @@ static void DrawClock(
 }
 
 // ============================================================
-// TITLE
+// DRAW TITLE
 // ============================================================
 
 static void DrawTitle(
@@ -1970,7 +2512,7 @@ static void DrawTitle(
 
     Font font(
         L"Segoe UI",
-        TITLE_FONT_SIZE,
+        S(TITLE_FONT_SIZE),
         FontStyleBold,
         UnitPixel
     );
@@ -1985,14 +2527,18 @@ static void DrawTitle(
     );
 
     RectF area(
-        static_cast<float>(
-            CONTENT_X
+        S(
+            static_cast<float>(
+                CONTENT_X
+            )
         ),
-        9.0f,
-        static_cast<float>(
-            TITLE_WIDTH
+        S(9.0f),
+        S(
+            static_cast<float>(
+                TITLE_WIDTH
+            )
         ),
-        22.0f
+        S(22.0f)
     );
 
     graphics.SetClip(
@@ -2000,7 +2546,7 @@ static void DrawTitle(
         CombineModeReplace
     );
 
-    double offset;
+    double offset = 0.0;
 
     {
         std::scoped_lock lock(
@@ -2026,10 +2572,12 @@ static void DrawTitle(
     }
     else
     {
-        const float x =
+        const float firstX =
             area.X +
-            static_cast<float>(
-                offset
+            S(
+                static_cast<float>(
+                    offset
+                )
             );
 
         graphics.DrawString(
@@ -2037,7 +2585,7 @@ static void DrawTitle(
             -1,
             &font,
             PointF(
-                x,
+                firstX,
                 area.Y
             ),
             &brush
@@ -2048,11 +2596,13 @@ static void DrawTitle(
             -1,
             &font,
             PointF(
-                x +
-                static_cast<float>(
-                    g_cachedTitleWidth +
-                    MARQUEE_GAP
-                ),
+                firstX +
+                    S(
+                        static_cast<float>(
+                            g_cachedTitleWidth +
+                            MARQUEE_GAP
+                        )
+                    ),
                 area.Y
             ),
             &brush
@@ -2063,7 +2613,7 @@ static void DrawTitle(
 }
 
 // ============================================================
-// ARTIST
+// DRAW ARTIST
 // ============================================================
 
 static void DrawArtist(
@@ -2087,7 +2637,7 @@ static void DrawArtist(
 
     Font font(
         L"Segoe UI",
-        ARTIST_FONT_SIZE,
+        S(ARTIST_FONT_SIZE),
         FontStyleRegular,
         UnitPixel
     );
@@ -2102,14 +2652,18 @@ static void DrawArtist(
     );
 
     RectF area(
-        static_cast<float>(
-            CONTENT_X
+        S(
+            static_cast<float>(
+                CONTENT_X
+            )
         ),
-        34.0f,
-        static_cast<float>(
-            ARTIST_WIDTH
+        S(34.0f),
+        S(
+            static_cast<float>(
+                ARTIST_WIDTH
+            )
         ),
-        17.0f
+        S(17.0f)
     );
 
     StringFormat format;
@@ -2129,7 +2683,7 @@ static void DrawArtist(
 }
 
 // ============================================================
-// ALBUM
+// DRAW ALBUM
 // ============================================================
 
 static void DrawAlbum(
@@ -2152,7 +2706,7 @@ static void DrawAlbum(
 
     Font font(
         L"Segoe UI",
-        ALBUM_FONT_SIZE,
+        S(ALBUM_FONT_SIZE),
         FontStyleRegular,
         UnitPixel
     );
@@ -2167,14 +2721,18 @@ static void DrawAlbum(
     );
 
     RectF area(
-        static_cast<float>(
-            CONTENT_X
+        S(
+            static_cast<float>(
+                CONTENT_X
+            )
         ),
-        49.0f,
-        static_cast<float>(
-            ALBUM_WIDTH
+        S(49.0f),
+        S(
+            static_cast<float>(
+                ALBUM_WIDTH
+            )
         ),
-        14.0f
+        S(14.0f)
     );
 
     StringFormat format;
@@ -2194,7 +2752,7 @@ static void DrawAlbum(
 }
 
 // ============================================================
-// PROGRESS
+// DRAW PROGRESS
 // ============================================================
 
 static void DrawProgress(
@@ -2234,12 +2792,12 @@ static void DrawProgress(
     FillRoundedRect(
         graphics,
         RectF(
-            PROGRESS_X,
-            PROGRESS_Y,
-            PROGRESS_W,
-            PROGRESS_H
+            S(PROGRESS_X),
+            S(PROGRESS_Y),
+            S(PROGRESS_W),
+            S(PROGRESS_H)
         ),
-        2.5f,
+        S(2.5f),
         &track
     );
 
@@ -2257,13 +2815,12 @@ static void DrawProgress(
         FillRoundedRect(
             graphics,
             RectF(
-                PROGRESS_X,
-                PROGRESS_Y,
-                PROGRESS_W *
-                    ratio,
-                PROGRESS_H
+                S(PROGRESS_X),
+                S(PROGRESS_Y),
+                S(PROGRESS_W * ratio),
+                S(PROGRESS_H)
             ),
-            2.5f,
+            S(2.5f),
             &fill
         );
     }
@@ -2284,15 +2841,15 @@ static void DrawProgress(
 
     graphics.FillEllipse(
         &knob,
-        knobX - 4.0f,
-        PROGRESS_Y - 1.5f,
-        8.0f,
-        8.0f
+        S(knobX - 4.0f),
+        S(PROGRESS_Y - 1.5f),
+        S(8.0f),
+        S(8.0f)
     );
 }
 
 // ============================================================
-// DURATION
+// DRAW DURATION
 // ============================================================
 
 static void DrawDuration(
@@ -2313,7 +2870,7 @@ static void DrawDuration(
 
     Font font(
         L"Segoe UI",
-        8.5f,
+        S(8.5f),
         FontStyleRegular,
         UnitPixel
     );
@@ -2332,8 +2889,8 @@ static void DrawDuration(
         -1,
         &font,
         PointF(
-            PROGRESS_X,
-            72.0f
+            S(PROGRESS_X),
+            S(72.0f)
         ),
         &brush
     );
@@ -2349,10 +2906,10 @@ static void DrawDuration(
         -1,
         &font,
         RectF(
-            PROGRESS_X,
-            72.0f,
-            PROGRESS_W,
-            15.0f
+            S(PROGRESS_X),
+            S(72.0f),
+            S(PROGRESS_W),
+            S(15.0f)
         ),
         &alignRight,
         &brush
@@ -2360,7 +2917,7 @@ static void DrawDuration(
 }
 
 // ============================================================
-// VECTOR PLAY
+// VECTOR ICONS
 // ============================================================
 
 static void DrawPlayIcon(
@@ -2393,10 +2950,6 @@ static void DrawPlayIcon(
     );
 }
 
-// ============================================================
-// VECTOR PAUSE
-// ============================================================
-
 static void DrawPauseIcon(
     Graphics& graphics,
     float cx,
@@ -2427,10 +2980,6 @@ static void DrawPauseIcon(
         height
     );
 }
-
-// ============================================================
-// VECTOR PREVIOUS
-// ============================================================
 
 static void DrawPreviousIcon(
     Graphics& graphics,
@@ -2475,10 +3024,6 @@ static void DrawPreviousIcon(
         3
     );
 }
-
-// ============================================================
-// VECTOR NEXT
-// ============================================================
 
 static void DrawNextIcon(
     Graphics& graphics,
@@ -2549,10 +3094,10 @@ static void DrawMediaButton(
 
     graphics.FillEllipse(
         &circle,
-        cx - radius,
-        cy - radius,
-        radius * 2.0f,
-        radius * 2.0f
+        S(cx - radius),
+        S(cy - radius),
+        S(radius * 2.0f),
+        S(radius * 2.0f)
     );
 
     SolidBrush icon(
@@ -2572,9 +3117,9 @@ static void DrawMediaButton(
         case 0:
             DrawPreviousIcon(
                 graphics,
-                cx,
-                cy,
-                size,
+                S(cx),
+                S(cy),
+                S(size),
                 &icon
             );
             break;
@@ -2584,9 +3129,9 @@ static void DrawMediaButton(
             {
                 DrawPauseIcon(
                     graphics,
-                    cx,
-                    cy,
-                    size,
+                    S(cx),
+                    S(cy),
+                    S(size),
                     &icon
                 );
             }
@@ -2594,9 +3139,9 @@ static void DrawMediaButton(
             {
                 DrawPlayIcon(
                     graphics,
-                    cx,
-                    cy,
-                    size,
+                    S(cx),
+                    S(cy),
+                    S(size),
                     &icon
                 );
             }
@@ -2605,9 +3150,9 @@ static void DrawMediaButton(
         case 2:
             DrawNextIcon(
                 graphics,
-                cx,
-                cy,
-                size,
+                S(cx),
+                S(cy),
+                S(size),
                 &icon
             );
             break;
@@ -2622,16 +3167,8 @@ static void DrawControls(
     Graphics& graphics
 )
 {
-    bool playing;
-
-    {
-        std::scoped_lock lock(
-            g_stateMutex
-        );
-
-        playing =
-            g_playing;
-    }
+    const bool playing =
+        g_playing.load();
 
     DrawMediaButton(
         graphics,
@@ -2685,7 +3222,7 @@ static void UpdateTitleMetrics(
 
     Font font(
         L"Segoe UI",
-        TITLE_FONT_SIZE,
+        S(TITLE_FONT_SIZE),
         FontStyleBold,
         UnitPixel
     );
@@ -2703,10 +3240,11 @@ static void UpdateTitleMetrics(
         &measured
     );
 
-    const int width =
+    const int logicalWidth =
         static_cast<int>(
             std::ceil(
-                measured.Width
+                measured.Width /
+                g_scale
             )
         );
 
@@ -2728,152 +3266,15 @@ static void UpdateTitleMetrics(
     }
 
     g_cachedTitleWidth =
-        width;
+        logicalWidth;
 
     g_cachedTitleOverflow =
-        width >
+        logicalWidth >
         TITLE_WIDTH;
 }
 
 // ============================================================
-// BACK BUFFER
-// ============================================================
-
-static bool CreateBackBuffer()
-{
-    if (g_backBufferReady)
-        return true;
-
-    HDC screen =
-        GetDC(nullptr);
-
-    if (!screen)
-        return false;
-
-    g_backDC =
-        CreateCompatibleDC(
-            screen
-        );
-
-    if (!g_backDC)
-    {
-        ReleaseDC(
-            nullptr,
-            screen
-        );
-
-        return false;
-    }
-
-    BITMAPINFO bi{};
-
-    bi.bmiHeader.biSize =
-        sizeof(
-            BITMAPINFOHEADER
-        );
-
-    bi.bmiHeader.biWidth =
-        OVERLAY_W;
-
-    bi.bmiHeader.biHeight =
-        -OVERLAY_H;
-
-    bi.bmiHeader.biPlanes =
-        1;
-
-    bi.bmiHeader.biBitCount =
-        32;
-
-    bi.bmiHeader.biCompression =
-        BI_RGB;
-
-    g_backBitmap =
-        CreateDIBSection(
-            screen,
-            &bi,
-            DIB_RGB_COLORS,
-            &g_backBits,
-            nullptr,
-            0
-        );
-
-    ReleaseDC(
-        nullptr,
-        screen
-    );
-
-    if (!g_backBitmap)
-    {
-        DeleteDC(
-            g_backDC
-        );
-
-        g_backDC =
-            nullptr;
-
-        return false;
-    }
-
-    g_backOldBitmap =
-        static_cast<HBITMAP>(
-            SelectObject(
-                g_backDC,
-                g_backBitmap
-            )
-        );
-
-    g_backBufferReady =
-        true;
-
-    return true;
-}
-
-// ============================================================
-// DESTROY BACK BUFFER
-// ============================================================
-
-static void DestroyBackBuffer()
-{
-    if (g_backDC)
-    {
-        if (g_backOldBitmap)
-        {
-            SelectObject(
-                g_backDC,
-                g_backOldBitmap
-            );
-        }
-
-        if (g_backBitmap)
-        {
-            DeleteObject(
-                g_backBitmap
-            );
-        }
-
-        DeleteDC(
-            g_backDC
-        );
-    }
-
-    g_backDC =
-        nullptr;
-
-    g_backBitmap =
-        nullptr;
-
-    g_backOldBitmap =
-        nullptr;
-
-    g_backBits =
-        nullptr;
-
-    g_backBufferReady =
-        false;
-}
-
-// ============================================================
-// RENDER FRAME
+// RENDER
 // ============================================================
 
 static void RenderFrame()
@@ -2897,10 +3298,6 @@ static void RenderFrame()
         InterpolationModeHighQualityBicubic
     );
 
-    //
-    // Clear transparent.
-    //
-
     graphics.Clear(
         Color(
             0,
@@ -2909,10 +3306,6 @@ static void RenderFrame()
             0
         )
     );
-
-    //
-    // Draw complete UI into one buffer.
-    //
 
     DrawBackground(
         graphics
@@ -2983,14 +3376,16 @@ static void PresentFrame()
     if (!g_hwnd)
         return;
 
-    if (!IsWindowVisible(
+    if (
+        !IsWindowVisible(
             g_hwnd
-        ))
+        )
+    )
     {
         return;
     }
 
-    if (!CreateBackBuffer())
+    if (!g_backDC)
         return;
 
     HDC screen =
@@ -2999,16 +3394,16 @@ static void PresentFrame()
     if (!screen)
         return;
 
-    RECT windowRect{};
+    RECT rect{};
 
     GetWindowRect(
         g_hwnd,
-        &windowRect
+        &rect
     );
 
     POINT destination{
-        windowRect.left,
-        windowRect.top
+        rect.left,
+        rect.top
     };
 
     POINT source{
@@ -3017,8 +3412,8 @@ static void PresentFrame()
     };
 
     SIZE size{
-        OVERLAY_W,
-        OVERLAY_H
+        g_bufferWidth,
+        g_bufferHeight
     };
 
     BLENDFUNCTION blend{};
@@ -3067,10 +3462,34 @@ enum class HitArea
 };
 
 static HitArea HitTest(
-    int x,
-    int y
+    int screenX,
+    int screenY
 )
 {
+    RECT rect{};
+
+    GetWindowRect(
+        g_hwnd,
+        &rect
+    );
+
+    const float scale =
+        g_scale <= 0.0f
+            ? 1.0f
+            : g_scale;
+
+    const int x =
+        static_cast<int>(
+            (screenX - rect.left) /
+            scale
+        );
+
+    const int y =
+        static_cast<int>(
+            (screenY - rect.top) /
+            scale
+        );
+
     auto insideCircle =
         [](
             int px,
@@ -3151,8 +3570,8 @@ static HitArea HitTest(
             PROGRESS_X +
             PROGRESS_W
         ) &&
-        y >= 52 &&
-        y <= 80
+        y >= 60 &&
+        y <= 79
     )
     {
         return HitArea::Progress;
@@ -3162,7 +3581,39 @@ static HitArea HitTest(
 }
 
 // ============================================================
-// WINDOW PROC
+// FOREGROUND EVENT
+// ============================================================
+
+static void CALLBACK ForegroundWinEventProc(
+    HWINEVENTHOOK hook,
+    DWORD event,
+    HWND hwnd,
+    LONG idObject,
+    LONG idChild,
+    DWORD eventThread,
+    DWORD eventTime
+)
+{
+    UNREFERENCED_PARAMETER(hook);
+    UNREFERENCED_PARAMETER(event);
+    UNREFERENCED_PARAMETER(idObject);
+    UNREFERENCED_PARAMETER(idChild);
+    UNREFERENCED_PARAMETER(eventThread);
+    UNREFERENCED_PARAMETER(eventTime);
+
+    if (!g_hwnd)
+        return;
+
+    if (hwnd == g_hwnd)
+        return;
+
+    UpdateOverlayZOrder(
+        true
+    );
+}
+
+// ============================================================
+// WINDOW PROCEDURE
 // ============================================================
 
 static LRESULT CALLBACK OverlayWndProc(
@@ -3174,42 +3625,16 @@ static LRESULT CALLBACK OverlayWndProc(
 {
     switch (message)
     {
-        case WM_MOUSEACTIVATE:
-        {
-            return MA_NOACTIVATE;
-        }
-
         case WM_NCHITTEST:
         {
-            const int screenX =
-                GET_X_LPARAM(
-                    lParam
-                );
-
-            const int screenY =
-                GET_Y_LPARAM(
-                    lParam
-                );
-
-            RECT rect{};
-
-            GetWindowRect(
-                hwnd,
-                &rect
-            );
-
-            const int x =
-                screenX -
-                rect.left;
-
-            const int y =
-                screenY -
-                rect.top;
-
             const HitArea area =
                 HitTest(
-                    x,
-                    y
+                    GET_X_LPARAM(
+                        lParam
+                    ),
+                    GET_Y_LPARAM(
+                        lParam
+                    )
                 );
 
             if (
@@ -3223,36 +3648,35 @@ static LRESULT CALLBACK OverlayWndProc(
             return HTTRANSPARENT;
         }
 
+        case WM_MOUSEACTIVATE:
+        {
+            return MA_NOACTIVATE;
+        }
+
         case WM_LBUTTONDOWN:
         {
-            const int x =
-                GET_X_LPARAM(
-                    lParam
-                );
-
-            const int y =
-                GET_Y_LPARAM(
-                    lParam
-                );
-
             const HitArea area =
                 HitTest(
-                    x,
-                    y
+                    GET_X_LPARAM(
+                        lParam
+                    ),
+                    GET_Y_LPARAM(
+                        lParam
+                    )
                 );
 
             switch (area)
             {
                 case HitArea::Previous:
-                    MediaPrevious();
+                    QueuePrevious();
                     break;
 
                 case HitArea::PlayPause:
-                    MediaTogglePlayPause();
+                    QueuePlayPause();
                     break;
 
                 case HitArea::Next:
-                    MediaNext();
+                    QueueNext();
                     break;
 
                 case HitArea::Progress:
@@ -3270,12 +3694,30 @@ static LRESULT CALLBACK OverlayWndProc(
 
                     if (duration > 0.0)
                     {
-                        double ratio =
+                        RECT rect{};
+
+                        GetWindowRect(
+                            hwnd,
+                            &rect
+                        );
+
+                        const float scale =
+                            g_scale <= 0.0f
+                                ? 1.0f
+                                : g_scale;
+
+                        const double logicalX =
                             static_cast<double>(
-                                x -
-                                static_cast<int>(
-                                    PROGRESS_X
+                                GET_X_LPARAM(
+                                    lParam
                                 )
+                            ) /
+                            scale;
+
+                        double ratio =
+                            (
+                                logicalX -
+                                PROGRESS_X
                             ) /
                             PROGRESS_W;
 
@@ -3286,7 +3728,7 @@ static LRESULT CALLBACK OverlayWndProc(
                                 1.0
                             );
 
-                        MediaSeek(
+                        QueueSeek(
                             duration *
                             ratio
                         );
@@ -3302,6 +3744,60 @@ static LRESULT CALLBACK OverlayWndProc(
             return 0;
         }
 
+        case WM_DPICHANGED:
+        {
+            const UINT newDpi =
+                HIWORD(
+                    wParam
+                );
+
+            g_dpi =
+                newDpi == 0
+                    ? 96
+                    : newDpi;
+
+            g_scale =
+                static_cast<float>(
+                    g_dpi
+                ) /
+                96.0f;
+
+            const RECT* suggested =
+                reinterpret_cast<
+                    const RECT*
+                >(
+                    lParam
+                );
+
+            if (suggested)
+            {
+                SetWindowPos(
+                    hwnd,
+                    nullptr,
+                    suggested->left,
+                    suggested->top,
+                    suggested->right -
+                        suggested->left,
+                    suggested->bottom -
+                        suggested->top,
+                    SWP_NOACTIVATE |
+                    SWP_NOZORDER
+                );
+            }
+            else
+            {
+                PositionOverlay();
+            }
+
+            DestroyBackBuffer();
+
+            RenderFrame();
+
+            PresentFrame();
+
+            return 0;
+        }
+
         case WM_DISPLAYCHANGE:
         case WM_SETTINGCHANGE:
         {
@@ -3310,9 +3806,59 @@ static LRESULT CALLBACK OverlayWndProc(
             g_haveZOrderState =
                 false;
 
-            RenderFrame();
+            if (g_visible.load())
+            {
+                RenderFrame();
 
-            PresentFrame();
+                PresentFrame();
+            }
+
+            return 0;
+        }
+
+        case WM_APP + 20:
+        {
+            const bool shouldShow =
+                g_visible.load();
+
+            if (shouldShow)
+            {
+                if (
+                    !IsWindowVisible(
+                        hwnd
+                    )
+                )
+                {
+                    PositionOverlay();
+
+                    ShowWindow(
+                        hwnd,
+                        SW_SHOWNOACTIVATE
+                    );
+                }
+
+                UpdateOverlayZOrder(
+                    true
+                );
+
+                RenderFrame();
+
+                PresentFrame();
+            }
+            else
+            {
+                if (
+                    IsWindowVisible(
+                        hwnd
+                    )
+                )
+                {
+                    ShowWindow(
+                        hwnd,
+                        SW_HIDE
+                    );
+                }
+            }
 
             return 0;
         }
@@ -3326,8 +3872,31 @@ static LRESULT CALLBACK OverlayWndProc(
             return 0;
         }
 
+        case WM_NCDESTROY:
+        {
+            g_hwnd =
+                nullptr;
+
+            return DefWindowProcW(
+                hwnd,
+                message,
+                wParam,
+                lParam
+            );
+        }
+
         case WM_DESTROY:
         {
+            if (g_foregroundHook)
+            {
+                UnhookWinEvent(
+                    g_foregroundHook
+                );
+
+                g_foregroundHook =
+                    nullptr;
+            }
+
             PostQuitMessage(
                 0
             );
@@ -3353,19 +3922,9 @@ static LRESULT CALLBACK OverlayWndProc(
 
 static void UIThreadProc()
 {
-    try
-    {
-        winrt::init_apartment(
-            winrt::apartment_type::multi_threaded
-        );
-    }
-    catch (...)
-    {
-    }
-
-    //
-    // Register class.
-    //
+    SetThreadDpiAwarenessContext(
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+    );
 
     WNDCLASSEXW wc{};
 
@@ -3376,12 +3935,10 @@ static void UIThreadProc()
         OverlayWndProc;
 
     wc.hInstance =
-        GetModuleHandleW(
-            nullptr
-        );
+        g_hInstance;
 
     wc.lpszClassName =
-        L"MallssMusicOverlay141";
+        L"MallssMusicOverlay151";
 
     wc.hCursor =
         LoadCursorW(
@@ -3392,155 +3949,80 @@ static void UIThreadProc()
     wc.hbrBackground =
         nullptr;
 
-    ATOM atom =
-        RegisterClassExW(
-            &wc
-        );
-
     if (
-        atom == 0 &&
-        GetLastError() !=
-            ERROR_CLASS_ALREADY_EXISTS
+        !RegisterClassExW(
+            &wc
+        )
     )
     {
         Wh_Log(
-            L"[UI] RegisterClassEx failed: %lu",
+            L"RegisterClassExW failed: %lu",
             GetLastError()
         );
 
-        try
-        {
-            winrt::uninit_apartment();
-        }
-        catch (...)
-        {
-        }
-
         return;
     }
-
-    //
-    // Normal popup.
-    //
-    // No WS_CHILD.
-    // No HWND_TOPMOST.
-    //
 
     g_hwnd =
         CreateWindowExW(
             WS_EX_TOOLWINDOW |
             WS_EX_LAYERED |
-            WS_EX_NOACTIVATE |
-            WS_EX_NOREDIRECTIONBITMAP,
+            WS_EX_NOACTIVATE,
             wc.lpszClassName,
             L"",
             WS_POPUP,
             0,
             0,
-            OVERLAY_W,
-            OVERLAY_H,
+            BASE_WIDTH,
+            BASE_HEIGHT,
             nullptr,
             nullptr,
-            wc.hInstance,
+            g_hInstance,
             nullptr
         );
 
     if (!g_hwnd)
     {
-        //
-        // Retry without WS_EX_NOREDIRECTIONBITMAP.
-        //
-
-        g_hwnd =
-            CreateWindowExW(
-                WS_EX_TOOLWINDOW |
-                WS_EX_LAYERED |
-                WS_EX_NOACTIVATE,
-                wc.lpszClassName,
-                L"",
-                WS_POPUP,
-                0,
-                0,
-                OVERLAY_W,
-                OVERLAY_H,
-                nullptr,
-                nullptr,
-                wc.hInstance,
-                nullptr
-            );
-    }
-
-    if (!g_hwnd)
-    {
         Wh_Log(
-            L"[UI] CreateWindowEx failed: %lu",
+            L"CreateWindowExW failed: %lu",
             GetLastError()
         );
 
-        try
-        {
-            winrt::uninit_apartment();
-        }
-        catch (...)
-        {
-        }
+        UnregisterClassW(
+            wc.lpszClassName,
+            g_hInstance
+        );
 
         return;
     }
 
-    //
-    // Rounded region.
-    //
-
-    HRGN region =
-        CreateRoundRectRgn(
-            0,
-            0,
-            OVERLAY_W + 1,
-            OVERLAY_H + 1,
-            36,
-            36
-        );
-
-    if (region)
-    {
-        SetWindowRgn(
-            g_hwnd,
-            region,
-            TRUE
-        );
-    }
-
-    //
-    // Create buffer.
-    //
-
-    if (!CreateBackBuffer())
-    {
-        Wh_Log(
-            L"[UI] CreateBackBuffer failed."
-        );
-    }
-
-    //
-    // Initial render.
-    //
-
-    RenderFrame();
-
-    //
-    // Initial position.
-    //
+    UpdateDpiForWindow();
 
     PositionOverlay();
 
-    //
-    // Hidden until music plays.
-    //
+    CreateBackBuffer();
+
+    RenderFrame();
+
+    g_foregroundHook =
+        SetWinEventHook(
+            EVENT_SYSTEM_FOREGROUND,
+            EVENT_SYSTEM_FOREGROUND,
+            nullptr,
+            ForegroundWinEventProc,
+            0,
+            0,
+            WINEVENT_OUTOFCONTEXT |
+                WINEVENT_SKIPOWNPROCESS
+        );
 
     ShowWindow(
         g_hwnd,
         SW_HIDE
+    );
+
+    UpdateOverlayZOrder(
+        true
     );
 
     Wh_Log(
@@ -3550,20 +4032,16 @@ static void UIThreadProc()
 
     MSG msg{};
 
-    int64_t lastFrame =
+    int64_t lastFrameQpc =
         QpcNow();
 
-    int64_t lastZOrder =
-        QpcNow();
+    int lastMinute =
+        -1;
 
     while (
         g_running.load()
     )
     {
-        //
-        // Process pending messages.
-        //
-
         while (
             PeekMessageW(
                 &msg,
@@ -3598,226 +4076,216 @@ static void UIThreadProc()
         if (!g_running.load())
             break;
 
-        //
-        // Music visibility only.
-        //
-
-        const bool shouldShow =
+        const bool visible =
             g_visible.load();
 
-        if (shouldShow)
-        {
-            if (
-                !IsWindowVisible(
-                    g_hwnd
-                )
-            )
-            {
-                PositionOverlay();
+        const bool playing =
+            g_playing.load();
 
-                ShowWindow(
-                    g_hwnd,
-                    SW_SHOWNOACTIVATE
-                );
+        SYSTEMTIME st{};
 
-                g_haveZOrderState =
-                    false;
-            }
-        }
-        else
+        GetLocalTime(
+            &st
+        );
+
+        const int minuteKey =
+            st.wHour * 60 +
+            st.wMinute;
+
+        const bool minuteChanged =
+            minuteKey !=
+            lastMinute;
+
+        if (minuteChanged)
         {
-            if (
-                IsWindowVisible(
-                    g_hwnd
-                )
-            )
-            {
-                ShowWindow(
-                    g_hwnd,
-                    SW_HIDE
-                );
-            }
+            lastMinute =
+                minuteKey;
         }
 
-        //
-        // Z order only when necessary.
-        //
-
-        const int64_t now =
+        const int64_t nowQpc =
             QpcNow();
 
-        if (
-            SecondsSince(
-                lastZOrder
-            ) >=
-            (
-                static_cast<double>(
-                    ZORDER_CHECK_MS
-                ) /
-                1000.0
-            )
-        )
-        {
-            lastZOrder =
-                now;
+        double dt =
+            QpcSecondsSince(
+                lastFrameQpc
+            );
 
-            if (shouldShow)
+        lastFrameQpc =
+            nowQpc;
+
+        if (dt > 0.1)
+            dt = 0.1;
+
+        bool titleOverflow =
+            false;
+
+        {
+            std::scoped_lock lock(
+                g_stateMutex
+            );
+
+            titleOverflow =
+                g_cachedTitleOverflow;
+
+            if (
+                visible &&
+                playing &&
+                titleOverflow
+            )
             {
+                g_marqueeTimer +=
+                    dt;
+
+                switch (
+                    g_marqueePhase
+                )
+                {
+                    case MarqueePhase::HoldStart:
+                    {
+                        g_marqueeOffset =
+                            0.0;
+
+                        if (
+                            g_marqueeTimer >=
+                            MARQUEE_START_HOLD
+                        )
+                        {
+                            g_marqueeTimer =
+                                0.0;
+
+                            g_marqueePhase =
+                                MarqueePhase::Scrolling;
+                        }
+
+                        break;
+                    }
+
+                    case MarqueePhase::Scrolling:
+                    {
+                        g_marqueeOffset -=
+                            MARQUEE_SPEED *
+                            dt;
+
+                        const double cycleWidth =
+                            g_cachedTitleWidth +
+                            MARQUEE_GAP;
+
+                        if (
+                            -g_marqueeOffset >=
+                            cycleWidth
+                        )
+                        {
+                            g_marqueeOffset =
+                                0.0;
+
+                            g_marqueeTimer =
+                                0.0;
+
+                            g_marqueePhase =
+                                MarqueePhase::HoldStart;
+                        }
+
+                        break;
+                    }
+
+                    case MarqueePhase::HoldEnd:
+                    {
+                        if (
+                            g_marqueeTimer >=
+                            MARQUEE_END_HOLD
+                        )
+                        {
+                            g_marqueeTimer =
+                                0.0;
+
+                            g_marqueeOffset =
+                                0.0;
+
+                            g_marqueePhase =
+                                MarqueePhase::HoldStart;
+                        }
+
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (visible)
+        {
+            RenderFrame();
+
+            PresentFrame();
+        }
+
+        //
+        // Z-order is not touched every frame.
+        //
+
+        if (visible)
+        {
+            static int zOrderCounter =
+                0;
+
+            ++zOrderCounter;
+
+            if (
+                zOrderCounter >= 10
+            )
+            {
+                zOrderCounter =
+                    0;
+
                 UpdateOverlayZOrder(
                     false
                 );
             }
         }
 
-        //
-        // Current minute.
-        //
-
-        const int minuteKey =
-            CurrentMinuteKey();
-
-        bool clockChanged =
-            minuteKey !=
-            g_cachedMinuteKey;
-
-        if (clockChanged)
-        {
-            g_cachedMinuteKey =
-                minuteKey;
-        }
-
-        //
-        // Frame delta.
-        //
-
-        double dt =
-            SecondsSince(
-                lastFrame
-            );
-
-        lastFrame =
-            now;
-
-        if (dt > 0.1)
-            dt = 0.1;
-
-        //
-        // Marquee.
-        //
+        int sleepMs;
 
         if (
-            shouldShow &&
-            g_cachedTitleOverflow
+            visible &&
+            playing &&
+            titleOverflow
         )
         {
-            std::scoped_lock lock(
-                g_stateMutex
-            );
-
-            g_marqueeTimer +=
-                dt;
-
-            switch (
-                g_marqueePhase
-            )
-            {
-                case MarqueePhase::HoldStart:
-                {
-                    g_marqueeOffset =
-                        0.0;
-
-                    if (
-                        g_marqueeTimer >=
-                        MARQUEE_START_HOLD
-                    )
-                    {
-                        g_marqueeTimer =
-                            0.0;
-
-                        g_marqueePhase =
-                            MarqueePhase::Scrolling;
-                    }
-
-                    break;
-                }
-
-                case MarqueePhase::Scrolling:
-                {
-                    g_marqueeOffset -=
-                        MARQUEE_SPEED *
-                        dt;
-
-                    const double maxScroll =
-                        static_cast<double>(
-                            g_cachedTitleWidth -
-                            TITLE_WIDTH
-                        );
-
-                    if (
-                        -g_marqueeOffset >=
-                        maxScroll
-                    )
-                    {
-                        g_marqueeOffset =
-                            -maxScroll;
-
-                        g_marqueeTimer =
-                            0.0;
-
-                        g_marqueePhase =
-                            MarqueePhase::HoldEnd;
-                    }
-
-                    break;
-                }
-
-                case MarqueePhase::HoldEnd:
-                {
-                    if (
-                        g_marqueeTimer >=
-                        MARQUEE_END_HOLD
-                    )
-                    {
-                        g_marqueeTimer =
-                            0.0;
-
-                        g_marqueeOffset =
-                            0.0;
-
-                        g_marqueePhase =
-                            MarqueePhase::HoldStart;
-                    }
-
-                    break;
-                }
-            }
+            sleepMs =
+                16;
         }
-
-        //
-        // Re-render.
-        //
-
-        if (
-            shouldShow ||
-            clockChanged
+        else if (
+            visible &&
+            playing
         )
         {
-            if (shouldShow)
-            {
-                RenderFrame();
-
-                PresentFrame();
-            }
+            sleepMs =
+                33;
+        }
+        else if (visible)
+        {
+            sleepMs =
+                200;
+        }
+        else
+        {
+            sleepMs =
+                250;
         }
 
         Sleep(
-            FRAME_MS
+            sleepMs
         );
     }
 
-    //
-    // Cleanup.
-    //
+    if (g_foregroundHook)
+    {
+        UnhookWinEvent(
+            g_foregroundHook
+        );
+
+        g_foregroundHook =
+            nullptr;
+    }
 
     if (g_hwnd)
     {
@@ -3831,193 +4299,26 @@ static void UIThreadProc()
 
     DestroyBackBuffer();
 
-    try
-    {
-        winrt::uninit_apartment();
-    }
-    catch (...)
-    {
-    }
-}
-
-// ============================================================
-// SHELL PROCESS SEARCH
-// ============================================================
-
-struct ShellSearch
-{
-    DWORD pid = 0;
-};
-
-static BOOL CALLBACK FindShellProcessProc(
-    HWND hwnd,
-    LPARAM lParam
-)
-{
-    ShellSearch* search =
-        reinterpret_cast<
-            ShellSearch*
-        >(
-            lParam
-        );
-
-    if (!search)
-        return TRUE;
-
-    //
-    // Look for actual desktop view.
-    //
-
-    HWND desktopView =
-        FindWindowExW(
-            hwnd,
-            nullptr,
-            L"SHELLDLL_DefView",
-            nullptr
-        );
-
-    if (!desktopView)
-        return TRUE;
-
-    DWORD pid =
-        0;
-
-    GetWindowThreadProcessId(
-        hwnd,
-        &pid
+    UnregisterClassW(
+        wc.lpszClassName,
+        g_hInstance
     );
-
-    if (pid == 0)
-        return TRUE;
-
-    search->pid =
-        pid;
-
-    return FALSE;
 }
 
 // ============================================================
-// GET DESKTOP SHELL PID
-// ============================================================
-
-static DWORD GetDesktopShellPid()
-{
-    ShellSearch search{};
-
-    EnumWindows(
-        FindShellProcessProc,
-        reinterpret_cast<LPARAM>(
-            &search
-        )
-    );
-
-    //
-    // Fallback 1.
-    //
-
-    if (search.pid == 0)
-    {
-        HWND shell =
-            GetShellWindow();
-
-        if (shell)
-        {
-            GetWindowThreadProcessId(
-                shell,
-                &search.pid
-            );
-        }
-    }
-
-    //
-    // Fallback 2.
-    //
-
-    if (search.pid == 0)
-    {
-        HWND progman =
-            FindWindowW(
-                L"Progman",
-                nullptr
-            );
-
-        if (progman)
-        {
-            GetWindowThreadProcessId(
-                progman,
-                &search.pid
-            );
-        }
-    }
-
-    return search.pid;
-}
-
-// ============================================================
-// SINGLETON
-// ============================================================
-
-static bool AcquireSingleton()
-{
-    g_singletonMutex =
-        CreateMutexW(
-            nullptr,
-            TRUE,
-            L"Local\\MallssMusicOverlay.Singleton"
-        );
-
-    if (!g_singletonMutex)
-    {
-        Wh_Log(
-            L"[Guard] CreateMutex failed: %lu",
-            GetLastError()
-        );
-
-        return false;
-    }
-
-    if (
-        GetLastError() ==
-        ERROR_ALREADY_EXISTS
-    )
-    {
-        Wh_Log(
-            L"[Guard] Another active Mallss Music Overlay exists."
-        );
-
-        CloseHandle(
-            g_singletonMutex
-        );
-
-        g_singletonMutex =
-            nullptr;
-
-        return false;
-    }
-
-    Wh_Log(
-        L"[Guard] Singleton acquired."
-    );
-
-    return true;
-}
-
-// ============================================================
-// GDI+
+// TOOL INIT
 // ============================================================
 
 static bool InitGdiplus()
 {
     GdiplusStartupInput input{};
 
-    const Status status =
+    return
         GdiplusStartup(
             &g_gdiplusToken,
             &input,
             nullptr
-        );
-
-    return status == Ok;
+        ) == Ok;
 }
 
 static void ShutdownGdiplus()
@@ -4033,125 +4334,41 @@ static void ShutdownGdiplus()
     }
 }
 
-// ============================================================
-// WINDHAWK INIT
-// ============================================================
-
-BOOL Wh_ModInit()
+BOOL WhTool_ModInit()
 {
-    //
-    // Determine actual desktop Shell Explorer.
-    //
+    g_hInstance =
+        GetCurrentModuleHandle();
 
-    const DWORD currentPid =
-        GetCurrentProcessId();
-
-    const DWORD desktopShellPid =
-        GetDesktopShellPid();
-
-    Wh_Log(
-        L"[Guard] Current PID=%lu | Desktop Shell PID=%lu",
-        currentPid,
-        desktopShellPid
-    );
-
-    //
-    // Only the actual desktop Explorer.
-    //
-
-    if (
-        desktopShellPid == 0 ||
-        currentPid != desktopShellPid
-    )
+    if (!g_hInstance)
     {
         Wh_Log(
-            L"[Guard] Not desktop Shell Explorer. Skipping."
+            L"Failed to resolve mod module handle"
         );
 
-        g_activeMod =
-            false;
-
         return FALSE;
     }
-
-    //
-    // One active instance.
-    //
-
-    if (!AcquireSingleton())
-    {
-        g_activeMod =
-            false;
-
-        return FALSE;
-    }
-
-    g_activeMod =
-        true;
-
-    //
-    // Reset.
-    //
 
     g_running.store(
         true
-    );
-
-    g_playing.store(
-        false
     );
 
     g_visible.store(
         false
     );
 
-    g_cachedTitleWidth =
-        0;
+    g_playing.store(
+        false
+    );
 
-    g_cachedTitleOverflow =
+    g_forceRedraw.store(
+        true
+    );
+
+    g_lastDesktopActive =
         false;
-
-    g_cachedTitle.clear();
-
-    g_cachedMinuteKey =
-        -1;
 
     g_haveZOrderState =
         false;
-
-    //
-    // GDI+.
-    //
-
-    if (!InitGdiplus())
-    {
-        Wh_Log(
-            L"[Init] GDI+ initialization failed."
-        );
-
-        if (g_singletonMutex)
-        {
-            ReleaseMutex(
-                g_singletonMutex
-            );
-
-            CloseHandle(
-                g_singletonMutex
-            );
-
-            g_singletonMutex =
-                nullptr;
-        }
-
-        g_activeMod =
-            false;
-
-        return FALSE;
-    }
-
-    //
-    // Reset media state.
-    //
 
     {
         std::scoped_lock lock(
@@ -4188,55 +4405,110 @@ BOOL Wh_ModInit()
         DestroyCoverLocked();
     }
 
-    //
-    // Start UI.
-    //
+    if (!InitGdiplus())
+    {
+        Wh_Log(
+            L"GDI+ initialization failed"
+        );
 
-    g_uiThread =
-        std::thread(
+        return FALSE;
+    }
+
+    try
+    {
+        g_uiThread.emplace(
             UIThreadProc
         );
+    }
+    catch (...)
+    {
+        ShutdownGdiplus();
 
-    //
-    // Start media worker.
-    //
+        return FALSE;
+    }
 
-    g_mediaThread =
-        std::thread(
+    try
+    {
+        g_mediaThread.emplace(
             MediaThreadProc
         );
+    }
+    catch (...)
+    {
+        g_running.store(
+            false
+        );
+
+        g_commandCv.notify_all();
+
+        if (g_hwnd)
+        {
+            PostMessageW(
+                g_hwnd,
+                WM_CLOSE,
+                0,
+                0
+            );
+        }
+
+        if (
+            g_uiThread &&
+            g_uiThread->joinable()
+        )
+        {
+            g_uiThread->join();
+        }
+
+        g_uiThread.reset();
+
+        ShutdownGdiplus();
+
+        return FALSE;
+    }
 
     Wh_Log(
-        L"Mallss Music Overlay 1.4.1 initialized."
+        L"Mallss Music Overlay 1.5.1 started as Windhawk tool"
     );
 
     return TRUE;
 }
 
 // ============================================================
-// WINDHAWK UNINIT
+// TOOL SETTINGS
 // ============================================================
 
-void Wh_ModUninit()
+void WhTool_ModSettingsChanged()
 {
-    if (!g_activeMod)
-        return;
-
-    Wh_Log(
-        L"Mallss Music Overlay 1.4.1 shutting down."
+    g_forceRedraw.store(
+        true
     );
 
-    //
-    // Stop.
-    //
+    if (g_hwnd)
+    {
+        PostMessageW(
+            g_hwnd,
+            WM_APP + 20,
+            0,
+            0
+        );
+    }
+}
+
+// ============================================================
+// TOOL UNINIT
+// ============================================================
+
+void WhTool_ModUninit()
+{
+    Wh_Log(
+        L"Mallss Music Overlay 1.5.1 shutting down"
+    );
 
     g_running.store(
         false
     );
 
-    //
-    // Wake UI.
-    //
+    g_commandCv.notify_all();
 
     if (g_hwnd)
     {
@@ -4248,31 +4520,25 @@ void Wh_ModUninit()
         );
     }
 
-    //
-    // Media thread.
-    //
-
     if (
-        g_mediaThread.joinable()
+        g_mediaThread &&
+        g_mediaThread->joinable()
     )
     {
-        g_mediaThread.join();
+        g_mediaThread->join();
     }
 
-    //
-    // UI thread.
-    //
+    g_mediaThread.reset();
 
     if (
-        g_uiThread.joinable()
+        g_uiThread &&
+        g_uiThread->joinable()
     )
     {
-        g_uiThread.join();
+        g_uiThread->join();
     }
 
-    //
-    // Cover.
-    //
+    g_uiThread.reset();
 
     {
         std::scoped_lock lock(
@@ -4280,52 +4546,435 @@ void Wh_ModUninit()
         );
 
         DestroyCoverLocked();
+
+        g_title =
+            L"No music";
+
+        g_artist.clear();
+
+        g_album.clear();
+
+        g_duration =
+            0.0;
+
+        g_mediaValid =
+            false;
+
+        g_playing =
+            false;
     }
 
-    //
-    // Media.
-    //
+    {
+        std::scoped_lock lock(
+            g_commandMutex
+        );
 
-    g_session =
-        nullptr;
-
-    g_sessionManager =
-        nullptr;
-
-    //
-    // Buffer.
-    //
-
-    DestroyBackBuffer();
-
-    //
-    // GDI+.
-    //
+        g_commandQueue.clear();
+    }
 
     ShutdownGdiplus();
 
-    //
-    // Singleton.
-    //
+    Wh_Log(
+        L"Mallss Music Overlay 1.5.1 stopped"
+    );
+}
 
-    if (g_singletonMutex)
+// ============================================================
+// WINDHAWK TOOL LAUNCHER
+// ============================================================
+
+static bool g_isToolModProcessLauncher = false;
+
+static HANDLE g_toolModProcessMutex = nullptr;
+
+static void WINAPI EntryPoint_Hook()
+{
+    Wh_Log(
+        L">"
+    );
+
+    ExitThread(
+        0
+    );
+}
+
+BOOL Wh_ModInit()
+{
+    bool isService =
+        false;
+
+    bool isToolModProcess =
+        false;
+
+    bool isCurrentToolModProcess =
+        false;
+
+    int argc = 0;
+
+    LPWSTR* argv =
+        CommandLineToArgvW(
+            GetCommandLineW(),
+            &argc
+        );
+
+    if (!argv)
     {
-        ReleaseMutex(
-            g_singletonMutex
+        Wh_Log(
+            L"CommandLineToArgvW failed"
         );
 
+        return FALSE;
+    }
+
+    for (
+        int i = 1;
+        i < argc;
+        ++i
+    )
+    {
+        if (
+            wcscmp(
+                argv[i],
+                L"-service"
+            ) == 0
+        )
+        {
+            isService =
+                true;
+
+            break;
+        }
+    }
+
+    for (
+        int i = 1;
+        i < argc - 1;
+        ++i
+    )
+    {
+        if (
+            wcscmp(
+                argv[i],
+                L"-tool-mod"
+            ) == 0
+        )
+        {
+            isToolModProcess =
+                true;
+
+            if (
+                wcscmp(
+                    argv[i + 1],
+                    WH_MOD_ID
+                ) == 0
+            )
+            {
+                isCurrentToolModProcess =
+                    true;
+            }
+
+            break;
+        }
+    }
+
+    LocalFree(
+        argv
+    );
+
+    if (isService)
+    {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess)
+    {
+        g_toolModProcessMutex =
+            CreateMutexW(
+                nullptr,
+                TRUE,
+                L"windhawk-tool-mod_" WH_MOD_ID
+            );
+
+        if (!g_toolModProcessMutex)
+        {
+            Wh_Log(
+                L"CreateMutex failed"
+            );
+
+            ExitProcess(
+                1
+            );
+        }
+
+        if (
+            GetLastError() ==
+            ERROR_ALREADY_EXISTS
+        )
+        {
+            Wh_Log(
+                L"Tool mod already running (%s)",
+                WH_MOD_ID
+            );
+
+            ExitProcess(
+                1
+            );
+        }
+
+        if (!WhTool_ModInit())
+        {
+            ExitProcess(
+                1
+            );
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            reinterpret_cast<
+                IMAGE_DOS_HEADER*
+            >(
+                GetModuleHandleW(
+                    nullptr
+                )
+            );
+
+        if (!dosHeader)
+        {
+            ExitProcess(
+                1
+            );
+        }
+
+        IMAGE_NT_HEADERS* ntHeaders =
+            reinterpret_cast<
+                IMAGE_NT_HEADERS*
+            >(
+                reinterpret_cast<BYTE*>(
+                    dosHeader
+                ) +
+                dosHeader->e_lfanew
+            );
+
+        const DWORD entryPointRVA =
+            ntHeaders
+                ->OptionalHeader
+                .AddressOfEntryPoint;
+
+        void* entryPoint =
+            reinterpret_cast<BYTE*>(
+                dosHeader
+            ) +
+            entryPointRVA;
+
+        Wh_SetFunctionHook(
+            entryPoint,
+            reinterpret_cast<void*>(
+                EntryPoint_Hook
+            ),
+            nullptr
+        );
+
+        return TRUE;
+    }
+
+    if (isToolModProcess)
+    {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher =
+        true;
+
+    return TRUE;
+}
+
+// ============================================================
+// TOOL LAUNCHER
+// ============================================================
+
+void Wh_ModAfterInit()
+{
+    if (!g_isToolModProcessLauncher)
+        return;
+
+    WCHAR currentProcessPath[MAX_PATH]{};
+
+    const DWORD length =
+        GetModuleFileNameW(
+            nullptr,
+            currentProcessPath,
+            ARRAYSIZE(
+                currentProcessPath
+            )
+        );
+
+    if (
+        length == 0 ||
+        length >= ARRAYSIZE(
+            currentProcessPath
+        )
+    )
+    {
+        Wh_Log(
+            L"GetModuleFileNameW failed"
+        );
+
+        return;
+    }
+
+    WCHAR commandLine[
+        MAX_PATH + 128
+    ]{};
+
+    swprintf_s(
+        commandLine,
+        L"\"%s\" -tool-mod \"%s\"",
+        currentProcessPath,
+        WH_MOD_ID
+    );
+
+    HMODULE kernelModule =
+        GetModuleHandleW(
+            L"kernelbase.dll"
+        );
+
+    if (!kernelModule)
+    {
+        kernelModule =
+            GetModuleHandleW(
+                L"kernel32.dll"
+            );
+    }
+
+    if (!kernelModule)
+    {
+        Wh_Log(
+            L"No kernel module"
+        );
+
+        return;
+    }
+
+    using CreateProcessInternalW_t =
+        BOOL(WINAPI*)(
+            HANDLE,
+            LPCWSTR,
+            LPWSTR,
+            LPSECURITY_ATTRIBUTES,
+            LPSECURITY_ATTRIBUTES,
+            WINBOOL,
+            DWORD,
+            LPVOID,
+            LPCWSTR,
+            LPSTARTUPINFOW,
+            LPPROCESS_INFORMATION,
+            PHANDLE
+        );
+
+    auto pCreateProcessInternalW =
+        reinterpret_cast<
+            CreateProcessInternalW_t
+        >(
+            GetProcAddress(
+                kernelModule,
+                "CreateProcessInternalW"
+            )
+        );
+
+    if (!pCreateProcessInternalW)
+    {
+        Wh_Log(
+            L"CreateProcessInternalW unavailable"
+        );
+
+        return;
+    }
+
+    STARTUPINFOW si{};
+
+    si.cb =
+        sizeof(si);
+
+    si.dwFlags =
+        STARTF_FORCEOFFFEEDBACK;
+
+    PROCESS_INFORMATION pi{};
+
+    if (
+        !pCreateProcessInternalW(
+            nullptr,
+            currentProcessPath,
+            commandLine,
+            nullptr,
+            nullptr,
+            FALSE,
+            NORMAL_PRIORITY_CLASS,
+            nullptr,
+            nullptr,
+            &si,
+            &pi,
+            nullptr
+        )
+    )
+    {
+        Wh_Log(
+            L"CreateProcessInternalW failed: %lu",
+            GetLastError()
+        );
+
+        return;
+    }
+
+    CloseHandle(
+        pi.hProcess
+    );
+
+    CloseHandle(
+        pi.hThread
+    );
+}
+
+// ============================================================
+// WINDHAWK SETTINGS
+// ============================================================
+
+void Wh_ModSettingsChanged()
+{
+    if (
+        g_isToolModProcessLauncher
+    )
+    {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+// ============================================================
+// WINDHAWK UNINIT
+// ============================================================
+
+void Wh_ModUninit()
+{
+    if (
+        g_isToolModProcessLauncher
+    )
+    {
+        return;
+    }
+
+    WhTool_ModUninit();
+
+    if (g_toolModProcessMutex)
+    {
         CloseHandle(
-            g_singletonMutex
+            g_toolModProcessMutex
         );
 
-        g_singletonMutex =
+        g_toolModProcessMutex =
             nullptr;
     }
 
-    g_activeMod =
-        false;
-
-    Wh_Log(
-        L"Mallss Music Overlay 1.4.1 stopped."
+    ExitProcess(
+        0
     );
 }
