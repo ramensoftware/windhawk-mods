@@ -17294,6 +17294,37 @@
         "version": "1.6"
       }
     },
+    "windows-11-native-four-column-snap-layout": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1789132705000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1789132705000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Hoffelhas",
+        "description": "Adds an extra native Windows 11 Snap Layout with four equal vertical columns",
+        "github": "https://github.com/Hoffelhas",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Windows 11 Native Four Column Snap Layout",
+        "version": "1.0"
+      }
+    },
     "windows-11-notification-center-styler": {
       "details": {
         "defaultSorting": 4613247,
