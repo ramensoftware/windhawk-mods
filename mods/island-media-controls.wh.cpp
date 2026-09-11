@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.10.46
+// @version         0.10.47
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -427,14 +427,7 @@ struct PreparedArtwork {
     uint64_t displayHash = 0;
     std::vector<uint8_t> visualBytes;
     std::vector<uint8_t> displayBytes;
-    std::vector<uint8_t> transportWashBytes;
-    std::vector<uint8_t> mainWashBytes;
-    std::vector<uint8_t> popupArtBytes;
-    std::vector<uint8_t> popupBackdropBytes;
-    std::vector<uint8_t> popupBackdropTopBytes;
-    std::vector<uint8_t> popupPanelBytes;
     PreparedBitmap compactArtBitmap;
-    PreparedBitmap popupFallbackArtBitmap;
     PreparedBitmap transportWashBitmap;
     PreparedBitmap mainWashBitmap;
     PreparedBitmap popupArtBitmap;
@@ -553,7 +546,7 @@ bool WaitForAsyncWithTimeout(AsyncOperation const& operation,
     } catch (...) {
     }
 
-    Wh_Log(L"Island: async operation timed out label=%s status=%d timeoutMs=%lld",
+    Wh_Log(L"async operation timed out label=%s status=%d timeoutMs=%lld",
            label ? label : L"(unknown)",
            static_cast<int>(status),
            static_cast<long long>(timeout.count()));
@@ -1122,7 +1115,7 @@ bool TrySeekAppleMusicWithUiAutomation(double ratio) {
     if (!SendMessageTimeoutW(
             appleMusicWindow, WM_NULL, 0, 0,
             SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, nullptr)) {
-        Wh_Log(L"Island: Apple Music UI Automation seek skipped; window is unresponsive");
+        Wh_Log(L"Apple Music UI Automation seek skipped; window is unresponsive");
         return false;
     }
 
@@ -1196,7 +1189,7 @@ bool TrySeekAppleMusicWithUiAutomation(double ratio) {
     if (windowRoot) windowRoot->Release();
     if (automation) automation->Release();
 
-    Wh_Log(L"Island: Apple Music UI Automation seek result=%d hr=0x%08X",
+    Wh_Log(L"Apple Music UI Automation seek result=%d hr=0x%08X",
            succeeded, static_cast<unsigned>(result));
     return succeeded;
 }
@@ -1984,7 +1977,7 @@ bool RunFromWindowThread(HWND hwnd,
         try {
             proc(param);
         } catch (...) {
-            Wh_Log(L"Island: exception in taskbar-thread callback");
+            Wh_Log(L"exception in taskbar-thread callback");
             return false;
         }
         return true;
@@ -1998,7 +1991,7 @@ bool RunFromWindowThread(HWND hwnd,
         !SendMessageTimeoutW(hwnd, WM_NULL, 0, 0,
                              SMTO_ABORTIFHUNG | SMTO_BLOCK,
                              probeTimeoutMs, nullptr)) {
-        Wh_Log(L"Island: taskbar thread is unresponsive");
+        Wh_Log(L"taskbar thread is unresponsive");
         return false;
     }
 
@@ -2016,7 +2009,7 @@ bool RunFromWindowThread(HWND hwnd,
                         payload->proc(payload->param);
                         payload->succeeded = true;
                     } catch (...) {
-                        Wh_Log(L"Island: exception in taskbar-thread hook callback");
+                        Wh_Log(L"exception in taskbar-thread hook callback");
                     }
                 }
             }
@@ -2035,7 +2028,7 @@ bool RunFromWindowThread(HWND hwnd,
     SendMessageW(hwnd, msg, 0, reinterpret_cast<LPARAM>(&payload));
     UnhookWindowsHookEx(hook);
     if (!payload.invoked) {
-        Wh_Log(L"Island: taskbar-thread dispatch failed");
+        Wh_Log(L"taskbar-thread dispatch failed");
     }
     if (callbackInvoked) {
         *callbackInvoked = payload.invoked;
@@ -2096,7 +2089,7 @@ xaml::XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd) {
     }
 #endif
     if (!signatureMatched) {
-        Wh_Log(L"Island: unsupported TaskbarHost::FrameHeight signature; deferring injection");
+        Wh_Log(L"unsupported TaskbarHost::FrameHeight signature; deferring injection");
         releaseTaskbarHost();
         return nullptr;
     }
@@ -2671,13 +2664,13 @@ void SeekToMediaPosition(double ratio) {
                     kMediaCommandAsyncTimeout,
                     L"TryChangePlaybackPositionAsync absolute");
             }
-            Wh_Log(L"Island: seek source=%s result=%d advertised=%d relative=%lld absolute=%lld",
+            Wh_Log(L"seek source=%s result=%d advertised=%d relative=%lld absolute=%lld",
                    source.c_str(), changed,
                    providerReportsSeekSupport,
                    static_cast<long long>(relativePositionTicks),
                    static_cast<long long>(absolutePositionTicks));
         } catch (winrt::hresult_error const& error) {
-            Wh_Log(L"Island: seek source=%s failed=0x%08X",
+            Wh_Log(L"seek source=%s failed=0x%08X",
                    session.SourceAppUserModelId().c_str(),
                    static_cast<unsigned>(error.code().value));
         }
@@ -2706,6 +2699,7 @@ HBITMAP DecodeAlbumBitmap(std::vector<uint8_t> const& bytes, UINT size) {
     IWICImagingFactory* factory = nullptr;
     IWICBitmapDecoder* decoder = nullptr;
     IWICBitmapFrameDecode* frame = nullptr;
+    IWICBitmapClipper* clipper = nullptr;
     IWICBitmapScaler* scaler = nullptr;
     IWICFormatConverter* converter = nullptr;
     HBITMAP bitmap = nullptr;
@@ -2722,11 +2716,31 @@ HBITMAP DecodeAlbumBitmap(std::vector<uint8_t> const& bytes, UINT size) {
     if (SUCCEEDED(hr)) {
         hr = decoder->GetFrame(0, &frame);
     }
+    UINT sourceWidth = 0;
+    UINT sourceHeight = 0;
+    if (SUCCEEDED(hr)) {
+        hr = frame->GetSize(&sourceWidth, &sourceHeight);
+    }
+    WICRect cropRect{};
+    if (SUCCEEDED(hr) && sourceWidth > 0 && sourceHeight > 0 &&
+        sourceWidth <= static_cast<UINT>(INT_MAX) &&
+        sourceHeight <= static_cast<UINT>(INT_MAX)) {
+        UINT square = std::min(sourceWidth, sourceHeight);
+        cropRect = {static_cast<INT>((sourceWidth - square) / 2),
+                    static_cast<INT>((sourceHeight - square) / 2),
+                    static_cast<INT>(square), static_cast<INT>(square)};
+        hr = factory->CreateBitmapClipper(&clipper);
+    } else if (SUCCEEDED(hr)) {
+        hr = E_INVALIDARG;
+    }
+    if (SUCCEEDED(hr)) {
+        hr = clipper->Initialize(frame, &cropRect);
+    }
     if (SUCCEEDED(hr)) {
         hr = factory->CreateBitmapScaler(&scaler);
     }
     if (SUCCEEDED(hr)) {
-        hr = scaler->Initialize(frame, size, size, WICBitmapInterpolationModeFant);
+        hr = scaler->Initialize(clipper, size, size, WICBitmapInterpolationModeFant);
     }
     if (SUCCEEDED(hr)) {
         hr = factory->CreateFormatConverter(&converter);
@@ -2762,6 +2776,7 @@ HBITMAP DecodeAlbumBitmap(std::vector<uint8_t> const& bytes, UINT size) {
 
     if (converter) converter->Release();
     if (scaler) scaler->Release();
+    if (clipper) clipper->Release();
     if (frame) frame->Release();
     if (decoder) decoder->Release();
     if (factory) factory->Release();
@@ -2825,7 +2840,8 @@ std::vector<uint8_t> CreateLowDetailAlbumCoverBytes(std::vector<uint8_t> const& 
                                                      bool fadeFromRight = false,
                                                      int blurPasses = 3,
                                                      bool albumMicaGrade = false,
-                                                     bool fadeFromLeft = false) {
+                                                     bool fadeFromLeft = false,
+                                                     PreparedBitmap* preparedBitmap = nullptr) {
     std::vector<uint8_t> output;
     if (bytes.empty()) {
         return output;
@@ -3011,6 +3027,19 @@ std::vector<uint8_t> CreateLowDetailAlbumCoverBytes(std::vector<uint8_t> const& 
                 pixel[2] = static_cast<BYTE>(std::lround(pixel[2] * alphaScale));
             }
         }
+    }
+
+    if (SUCCEEDED(hr) && preparedBitmap) {
+        preparedBitmap->width = kLowDetailSize;
+        preparedBitmap->height = kLowDetailSize;
+        preparedBitmap->pixels = std::move(pixels);
+        if (converter) converter->Release();
+        if (scaler) scaler->Release();
+        if (frame) frame->Release();
+        if (decoder) decoder->Release();
+        if (factory) factory->Release();
+        if (stream) stream->Release();
+        return {};
     }
 
     if (SUCCEEDED(hr)) {
@@ -3211,6 +3240,7 @@ void ApplyPopupCoverG2Mask(std::vector<BYTE>& pixels,
 std::vector<uint8_t> CreatePopupG2AlbumCoverBytes(
     std::vector<uint8_t> const& bytes,
     int expandedCornerRadius,
+    PreparedBitmap* preparedBitmap = nullptr,
     UINT size = 320) {
     std::vector<uint8_t> output;
     if (bytes.empty() || size == 0) {
@@ -3285,7 +3315,13 @@ std::vector<uint8_t> CreatePopupG2AlbumCoverBytes(
     }
     if (SUCCEEDED(hr)) {
         ApplyPopupCoverG2Mask(pixels, size, expandedCornerRadius);
-        output = EncodePbgraPngBytes(size, size, pixels);
+        if (preparedBitmap) {
+            preparedBitmap->width = size;
+            preparedBitmap->height = size;
+            preparedBitmap->pixels = std::move(pixels);
+        } else {
+            output = EncodePbgraPngBytes(size, size, pixels);
+        }
     }
 
     if (converter) converter->Release();
@@ -3301,7 +3337,8 @@ std::vector<uint8_t> CreatePopupG2AlbumCoverBytes(
 std::vector<uint8_t> CreatePlaceholderAlbumCoverBytes(UINT size,
                                                        bool edgeFadeToMiddle = false,
                                                        bool fadeFromTop = false,
-                                                       bool fadeFromRight = false) {
+                                                       bool fadeFromRight = false,
+                                                       PreparedBitmap* preparedBitmap = nullptr) {
     if (size == 0) {
         return {};
     }
@@ -3344,6 +3381,12 @@ std::vector<uint8_t> CreatePlaceholderAlbumCoverBytes(UINT size,
             pixel[2] = static_cast<BYTE>(std::lround(rr * alpha / 255.0));
             pixel[3] = alpha;
         }
+    }
+    if (preparedBitmap) {
+        preparedBitmap->width = size;
+        preparedBitmap->height = size;
+        preparedBitmap->pixels = std::move(pixels);
+        return {};
     }
     return EncodePbgraPngBytes(size, size, pixels);
 }
@@ -4245,11 +4288,12 @@ std::vector<uint8_t> CreateResilientLowDetailAlbumCoverBytes(
     bool fadeFromRight = false,
     int blurPasses = 3,
     bool albumMicaGrade = false,
-    bool fadeFromLeft = false) {
+    bool fadeFromLeft = false,
+    PreparedBitmap* preparedBitmap = nullptr) {
     auto output = CreateLowDetailAlbumCoverBytes(
         bytes, edgeFadeToMiddle, fadeFromTop, fadeFromRight,
-        blurPasses, albumMicaGrade, fadeFromLeft);
-    if (!output.empty() || bytes.empty()) {
+        blurPasses, albumMicaGrade, fadeFromLeft, preparedBitmap);
+    if (!output.empty() || (preparedBitmap && !preparedBitmap->pixels.empty()) || bytes.empty()) {
         return output;
     }
 
@@ -4312,6 +4356,12 @@ std::vector<uint8_t> CreateResilientLowDetailAlbumCoverBytes(
                 Clamp(baseRed * shade, 0.0, 255.0) * premultiply));
             pixel[3] = alpha;
         }
+    }
+    if (preparedBitmap) {
+        preparedBitmap->width = kSize;
+        preparedBitmap->height = kSize;
+        preparedBitmap->pixels = std::move(pixels);
+        return {};
     }
     return EncodePbgraPngBytes(kSize, kSize, pixels);
 }
@@ -4453,8 +4503,8 @@ void PrepareMediaArtwork(MediaState& state) {
         shouldUseAbstractArtwork,
         artworkSettings.artworkAbstractMode);
     prepared->displayHash = ThumbnailHash(prepared->displayBytes);
-    prepared->compactArtBitmap = DecodePreparedBitmap(prepared->displayBytes, 96);
-    prepared->popupFallbackArtBitmap = DecodePreparedBitmap(prepared->displayBytes, 320);
+    prepared->compactArtBitmap =
+        DecodePreparedBitmap(prepared->displayBytes, 96);
 
     std::vector<uint8_t> const& accentSourceBytes =
         prepared->displayBytes.empty() ? prepared->visualBytes
@@ -4465,41 +4515,37 @@ void PrepareMediaArtwork(MediaState& state) {
     }
 
     if (needsTintAssets && !prepared->displayBytes.empty()) {
-        prepared->transportWashBytes =
-            CreateResilientLowDetailAlbumCoverBytes(
-                prepared->displayBytes,
-                false, false, false, 6, true);
-        prepared->mainWashBytes =
-            CreateResilientLowDetailAlbumCoverBytes(
-                prepared->displayBytes,
-                true, false, false, 5, true, true);
+        CreateResilientLowDetailAlbumCoverBytes(
+            prepared->displayBytes, false, false, false, 6, true, false,
+            &prepared->transportWashBitmap);
+        CreateResilientLowDetailAlbumCoverBytes(
+            prepared->displayBytes, true, false, false, 5, true, true,
+            &prepared->mainWashBitmap);
         prepared->tintAssetsReady = true;
     } else {
         prepared->tintAssetsReady = needsTintAssets;
     }
-    prepared->transportWashBitmap = DecodePreparedBitmap(prepared->transportWashBytes, 20);
-    prepared->mainWashBitmap = DecodePreparedBitmap(prepared->mainWashBytes, 20);
 
     if (popupRequested) {
         if (prepared->visualBytes.empty()) {
-            auto placeholderArtBytes = CreatePlaceholderAlbumCoverBytes(128);
-            auto placeholderG2Bytes =
-                CreatePopupG2AlbumCoverBytes(
-                    placeholderArtBytes, artworkSettings.expandedCornerRadius);
-            prepared->popupArtBytes = placeholderG2Bytes.empty()
-                                              ? std::move(placeholderArtBytes)
-                                              : std::move(placeholderG2Bytes);
-            prepared->popupPanelBytes = CreatePlaceholderAlbumCoverBytes(20);
-            prepared->popupBackdropBytes =
-                CreatePlaceholderAlbumCoverBytes(20, true, false, false);
-            prepared->popupBackdropTopBytes =
-                CreatePlaceholderAlbumCoverBytes(20, true, true, false);
+            CreatePlaceholderAlbumCoverBytes(
+                320, false, false, false, &prepared->popupArtBitmap);
+            ApplyPopupCoverG2Mask(
+                prepared->popupArtBitmap.pixels, 320,
+                artworkSettings.expandedCornerRadius);
+            CreatePlaceholderAlbumCoverBytes(
+                20, false, false, false, &prepared->popupPanelBitmap);
+            CreatePlaceholderAlbumCoverBytes(
+                20, true, false, false, &prepared->popupBackdropBitmap);
+            CreatePlaceholderAlbumCoverBytes(
+                20, true, true, false, &prepared->popupBackdropTopBitmap);
         } else {
-            prepared->popupArtBytes =
-                CreatePopupG2AlbumCoverBytes(
-                    prepared->displayBytes, artworkSettings.expandedCornerRadius);
-            if (prepared->popupArtBytes.empty()) {
-                prepared->popupArtBytes = prepared->displayBytes;
+            CreatePopupG2AlbumCoverBytes(
+                prepared->displayBytes, artworkSettings.expandedCornerRadius,
+                &prepared->popupArtBitmap);
+            if (prepared->popupArtBitmap.pixels.empty()) {
+                prepared->popupArtBitmap =
+                    DecodePreparedBitmap(prepared->displayBytes, 320);
             }
             bool useGeneratedBlurCover =
                 browserArtworkSource && shouldUseAbstractArtwork &&
@@ -4508,19 +4554,16 @@ void PrepareMediaArtwork(MediaState& state) {
             std::vector<uint8_t> const& popupBlurSource =
                 useGeneratedBlurCover ? prepared->displayBytes
                                       : prepared->visualBytes;
-            prepared->popupBackdropBytes =
-                CreateResilientLowDetailAlbumCoverBytes(
-                    popupBlurSource, true, false, false);
-            prepared->popupBackdropTopBytes =
-                CreateResilientLowDetailAlbumCoverBytes(
-                    popupBlurSource, true, true, false);
-            prepared->popupPanelBytes =
-                CreateResilientLowDetailAlbumCoverBytes(popupBlurSource);
+            CreateResilientLowDetailAlbumCoverBytes(
+                popupBlurSource, true, false, false, 3, false, false,
+                &prepared->popupBackdropBitmap);
+            CreateResilientLowDetailAlbumCoverBytes(
+                popupBlurSource, true, true, false, 3, false, false,
+                &prepared->popupBackdropTopBitmap);
+            CreateResilientLowDetailAlbumCoverBytes(
+                popupBlurSource, false, false, false, 3, false, false,
+                &prepared->popupPanelBitmap);
         }
-        prepared->popupArtBitmap = DecodePreparedBitmap(prepared->popupArtBytes, 320);
-        prepared->popupBackdropBitmap = DecodePreparedBitmap(prepared->popupBackdropBytes, 20);
-        prepared->popupBackdropTopBitmap = DecodePreparedBitmap(prepared->popupBackdropTopBytes, 20);
-        prepared->popupPanelBitmap = DecodePreparedBitmap(prepared->popupPanelBytes, 20);
         prepared->popupReady = true;
     }
 
@@ -9876,7 +9919,7 @@ void FinishCloseExpandedPopup(HWND hwnd) {
             g_playerGrid.IsHitTestVisible(true);
         }
     } catch (...) {
-        Wh_Log(L"Island: failed to restore compact island after closing popup");
+        Wh_Log(L"failed to restore compact island after closing popup");
         try {
             if (g_playerGrid) {
                 g_playerGrid.Opacity(1.0);
@@ -10007,7 +10050,7 @@ void OnPopupXamlRendering(winrt::Windows::Foundation::IInspectable const&,
         }
     }
     } catch (...) {
-        Wh_Log(L"Island: exception in popup rendering callback");
+        Wh_Log(L"exception in popup rendering callback");
         FinishCloseExpandedPopup(g_expandedPopup);
     }
 }
@@ -10173,7 +10216,7 @@ LRESULT CALLBACK ExpandedPopupWndProc(HWND hwnd, UINT message, WPARAM wParam, LP
     }
     return DefWindowProcW(hwnd, message, wParam, lParam);
     } catch (...) {
-        Wh_Log(L"Island: exception in expanded popup window callback");
+        Wh_Log(L"exception in expanded popup window callback");
         FinishCloseExpandedPopup(hwnd);
         return 0;
     }
@@ -10203,7 +10246,7 @@ bool CreatePopupOverlayWgcCaptureItemForMonitor(HMONITOR monitor,
     g_popupOverlayWgcCreateItemHr = S_OK;
     if (!monitor) {
         g_popupOverlayWgcCreateItemHr = E_INVALIDARG;
-        Wh_Log(L"Island: overlay WGC CreateForMonitor skipped: null monitor");
+        Wh_Log(L"overlay WGC CreateForMonitor skipped: null monitor");
         return false;
     }
 
@@ -10219,7 +10262,7 @@ bool CreatePopupOverlayWgcCaptureItemForMonitor(HMONITOR monitor,
                              interopFactory.put_void());
         if (FAILED(hr) || !interopFactory) {
             g_popupOverlayWgcCreateItemHr = hr;
-            Wh_Log(L"Island: overlay WGC QI IGraphicsCaptureItemInterop failed hr=0x%08X",
+            Wh_Log(L"overlay WGC QI IGraphicsCaptureItemInterop failed hr=0x%08X",
                    static_cast<unsigned>(hr));
             return false;
         }
@@ -10231,14 +10274,14 @@ bool CreatePopupOverlayWgcCaptureItemForMonitor(HMONITOR monitor,
             &rawItem);
         g_popupOverlayWgcCreateItemHr = hr;
         if (FAILED(hr)) {
-            Wh_Log(L"Island: overlay WGC CreateForMonitor failed hr=0x%08X monitor=%p",
+            Wh_Log(L"overlay WGC CreateForMonitor failed hr=0x%08X monitor=%p",
                    static_cast<unsigned>(hr),
                    monitor);
             return false;
         }
         if (!rawItem) {
             g_popupOverlayWgcCreateItemHr = E_POINTER;
-            Wh_Log(L"Island: overlay WGC CreateForMonitor returned null item hr=0x%08X monitor=%p",
+            Wh_Log(L"overlay WGC CreateForMonitor returned null item hr=0x%08X monitor=%p",
                    static_cast<unsigned>(hr),
                    monitor);
             return false;
@@ -10247,17 +10290,17 @@ bool CreatePopupOverlayWgcCaptureItemForMonitor(HMONITOR monitor,
         item = capture::GraphicsCaptureItem{
             rawItem,
             winrt::take_ownership_from_abi};
-        Wh_Log(L"Island: overlay WGC CreateForMonitor succeeded monitor=%p", monitor);
+        Wh_Log(L"overlay WGC CreateForMonitor succeeded monitor=%p", monitor);
         g_popupOverlayWgcCreateItemFailed = false;
         return true;
     } catch (winrt::hresult_error const& error) {
         g_popupOverlayWgcCreateItemHr = error.code().value;
-        Wh_Log(L"Island: overlay WGC CreateForMonitor exception hr=0x%08X",
+        Wh_Log(L"overlay WGC CreateForMonitor exception hr=0x%08X",
                static_cast<unsigned>(g_popupOverlayWgcCreateItemHr));
         return false;
     } catch (...) {
         g_popupOverlayWgcCreateItemHr = E_FAIL;
-        Wh_Log(L"Island: overlay WGC CreateForMonitor unknown exception");
+        Wh_Log(L"overlay WGC CreateForMonitor unknown exception");
         return false;
     }
 }
@@ -10555,7 +10598,7 @@ bool EnsurePopupOverlayWgcLensDisplacementMap(int width, int height, int radius)
         map.put());
     if (FAILED(hr)) {
         g_popupOverlayWgcLastHr = hr;
-        Wh_Log(L"Island: overlay WGC lens displacement map failed hr=0x%08X",
+        Wh_Log(L"overlay WGC lens displacement map failed hr=0x%08X",
                static_cast<unsigned>(hr));
         ClearPopupOverlayWgcLensDisplacementMap();
         return false;
@@ -10751,7 +10794,7 @@ bool RecreatePopupOverlayWgcReadbackTextures(int widthPx, int heightPx) {
             __uuidof(IDCompositionDevice),
             g_popupOverlayDcompDevice.put_void());
         if (FAILED(hr)) {
-            Wh_Log(L"Island: overlay DComp device failed hr=0x%08X",
+            Wh_Log(L"overlay DComp device failed hr=0x%08X",
                    static_cast<unsigned>(hr));
             g_popupOverlayWgcLastHr = hr;
             return false;
@@ -10762,7 +10805,7 @@ bool RecreatePopupOverlayWgcReadbackTextures(int widthPx, int heightPx) {
         HRESULT hr = g_popupOverlayDcompDevice->CreateTargetForHwnd(
             g_popupBackdropOverlay, TRUE, g_popupOverlayDcompTarget.put());
         if (FAILED(hr)) {
-            Wh_Log(L"Island: overlay DComp target failed hr=0x%08X",
+            Wh_Log(L"overlay DComp target failed hr=0x%08X",
                    static_cast<unsigned>(hr));
             g_popupOverlayWgcLastHr = hr;
             return false;
@@ -10773,7 +10816,7 @@ bool RecreatePopupOverlayWgcReadbackTextures(int widthPx, int heightPx) {
         HRESULT hr = g_popupOverlayDcompDevice->CreateVisual(
             g_popupOverlayDcompVisual.put());
         if (FAILED(hr)) {
-            Wh_Log(L"Island: overlay DComp visual failed hr=0x%08X",
+            Wh_Log(L"overlay DComp visual failed hr=0x%08X",
                    static_cast<unsigned>(hr));
             g_popupOverlayWgcLastHr = hr;
             return false;
@@ -10812,7 +10855,7 @@ bool RecreatePopupOverlayWgcReadbackTextures(int widthPx, int heightPx) {
     hr = factory->CreateSwapChainForComposition(
         g_popupOverlayWgcD3dDevice.get(), &desc, nullptr, swapChain.put());
     if (FAILED(hr)) {
-        Wh_Log(L"Island: overlay DComp swapchain failed hr=0x%08X",
+        Wh_Log(L"overlay DComp swapchain failed hr=0x%08X",
                static_cast<unsigned>(hr));
         g_popupOverlayWgcLastHr = hr;
         return false;
@@ -10834,7 +10877,7 @@ bool RecreatePopupOverlayWgcReadbackTextures(int widthPx, int heightPx) {
     hr = g_popupOverlayWgcD2dContext->CreateBitmapFromDxgiSurface(
         backBufferSurface.get(), &targetProps, targetBitmap.put());
     if (FAILED(hr)) {
-        Wh_Log(L"Island: overlay DComp target bitmap failed hr=0x%08X",
+        Wh_Log(L"overlay DComp target bitmap failed hr=0x%08X",
                static_cast<unsigned>(hr));
         g_popupOverlayWgcLastHr = hr;
         return false;
@@ -10944,7 +10987,7 @@ bool EnsurePopupOverlayWgcDeviceResourcesLocked(HWND hwnd,
             g_popupOverlayWgcD3dContext.put());
     }
     if (FAILED(hr)) {
-        Wh_Log(L"Island: overlay WGC D3D11CreateDevice failed hr=0x%08X",
+        Wh_Log(L"overlay WGC D3D11CreateDevice failed hr=0x%08X",
                static_cast<unsigned>(hr));
         return false;
     }
@@ -10957,14 +11000,14 @@ bool EnsurePopupOverlayWgcDeviceResourcesLocked(HWND hwnd,
                            &factoryOptions,
                            reinterpret_cast<void**>(g_popupOverlayWgcD2dFactory.put()));
     if (FAILED(hr)) {
-        Wh_Log(L"Island: overlay WGC D2D factory failed hr=0x%08X",
+        Wh_Log(L"overlay WGC D2D factory failed hr=0x%08X",
                static_cast<unsigned>(hr));
         return false;
     }
     hr = g_popupOverlayWgcD2dFactory->CreateDevice(g_popupOverlayWgcDxgiDevice.get(),
                                                    g_popupOverlayWgcD2dDevice.put());
     if (FAILED(hr)) {
-        Wh_Log(L"Island: overlay WGC D2D device failed hr=0x%08X",
+        Wh_Log(L"overlay WGC D2D device failed hr=0x%08X",
                static_cast<unsigned>(hr));
         return false;
     }
@@ -10972,7 +11015,7 @@ bool EnsurePopupOverlayWgcDeviceResourcesLocked(HWND hwnd,
         D2D1_DEVICE_CONTEXT_OPTIONS_NONE,
         g_popupOverlayWgcD2dContext.put());
     if (FAILED(hr)) {
-        Wh_Log(L"Island: overlay WGC D2D context failed hr=0x%08X",
+        Wh_Log(L"overlay WGC D2D context failed hr=0x%08X",
                static_cast<unsigned>(hr));
         return false;
     }
@@ -10982,7 +11025,7 @@ bool EnsurePopupOverlayWgcDeviceResourcesLocked(HWND hwnd,
         g_popupOverlayWgcDxgiDevice.get(),
         graphicsDeviceInspectable.put());
     if (FAILED(hr)) {
-        Wh_Log(L"Island: overlay WGC CreateDirect3D11DeviceFromDXGIDevice failed hr=0x%08X",
+        Wh_Log(L"overlay WGC CreateDirect3D11DeviceFromDXGIDevice failed hr=0x%08X",
                static_cast<unsigned>(hr));
         return false;
     }
@@ -11075,7 +11118,7 @@ void RequestPopupOverlayWgcBorderlessAccessAsync() {
                         }
                     }
                 }
-                Wh_Log(L"Island: overlay WGC borderless access %s",
+                Wh_Log(L"overlay WGC borderless access %s",
                        allowed ? L"allowed" : L"denied");
             } catch (winrt::hresult_error const& error) {
                 g_popupOverlayWgcBorderlessAccessState.store(
@@ -11097,7 +11140,7 @@ void RequestPopupOverlayWgcBorderlessAccessAsync() {
         g_popupOverlayWgcBorderlessAccessState.store(
             4, std::memory_order_release);
         g_popupOverlayWgcBorderlessAccessThread.reset();
-        Wh_Log(L"Island: failed to start overlay WGC access thread");
+        Wh_Log(L"failed to start overlay WGC access thread");
     }
 }
 
@@ -11425,7 +11468,7 @@ void RenderPopupOverlayWgcFrameLocked(
         if (FAILED(hr)) {
             g_popupOverlayWgcLastHr = hr;
             ++g_popupOverlayWgcRenderFailCount;
-            Wh_Log(L"Island: overlay WGC state intermediate EndDraw failed hr=0x%08X frames=%llu fails=%llu",
+            Wh_Log(L"overlay WGC state intermediate EndDraw failed hr=0x%08X frames=%llu fails=%llu",
                    static_cast<unsigned>(hr),
                    static_cast<unsigned long long>(g_popupOverlayWgcFrameCount),
                    static_cast<unsigned long long>(g_popupOverlayWgcRenderFailCount));
@@ -11518,7 +11561,7 @@ void RenderPopupOverlayWgcFrameLocked(
         if (FAILED(hr)) {
             g_popupOverlayWgcLastHr = hr;
             ++g_popupOverlayWgcRenderFailCount;
-            Wh_Log(L"Island: overlay WGC state EndDraw failed hr=0x%08X frames=%llu fails=%llu",
+            Wh_Log(L"overlay WGC state EndDraw failed hr=0x%08X frames=%llu fails=%llu",
                    static_cast<unsigned>(hr),
                    static_cast<unsigned long long>(g_popupOverlayWgcFrameCount),
                    static_cast<unsigned long long>(g_popupOverlayWgcRenderFailCount));
@@ -11562,7 +11605,7 @@ void RenderPopupOverlayWgcFrameLocked(
         if (FAILED(hr)) {
             g_popupOverlayWgcLastHr = hr;
             ++g_popupOverlayWgcRenderFailCount;
-            Wh_Log(L"Island: overlay WGC swapchain Present failed hr=0x%08X frames=%llu fails=%llu",
+            Wh_Log(L"overlay WGC swapchain Present failed hr=0x%08X frames=%llu fails=%llu",
                    static_cast<unsigned>(hr),
                    static_cast<unsigned long long>(g_popupOverlayWgcFrameCount),
                    static_cast<unsigned long long>(g_popupOverlayWgcRenderFailCount));
@@ -11581,7 +11624,7 @@ void RenderPopupOverlayWgcFrameLocked(
         g_popupOverlayWgcFallbackPainted = false;
         if (finalFrameReady) {
             if (!g_popupOverlayWgcReadbackHadVisibleFrame) {
-                Wh_Log(L"Island: overlay WGC final frame validated after %llu frames",
+                Wh_Log(L"overlay WGC final frame validated after %llu frames",
                        static_cast<unsigned long long>(
                            g_popupOverlayWgcFrameCount));
             }
@@ -11594,14 +11637,14 @@ void RenderPopupOverlayWgcFrameLocked(
     } catch (winrt::hresult_error const& error) {
         g_popupOverlayWgcLastHr = error.code().value;
         ++g_popupOverlayWgcRenderFailCount;
-        Wh_Log(L"Island: overlay WGC state hresult_error=0x%08X frames=%llu fails=%llu",
+        Wh_Log(L"overlay WGC state hresult_error=0x%08X frames=%llu fails=%llu",
                static_cast<unsigned>(g_popupOverlayWgcLastHr),
                static_cast<unsigned long long>(g_popupOverlayWgcFrameCount),
                static_cast<unsigned long long>(g_popupOverlayWgcRenderFailCount));
     } catch (...) {
         g_popupOverlayWgcLastHr = E_FAIL;
         ++g_popupOverlayWgcRenderFailCount;
-        Wh_Log(L"Island: overlay WGC state unknown failure frames=%llu fails=%llu",
+        Wh_Log(L"overlay WGC state unknown failure frames=%llu fails=%llu",
                static_cast<unsigned long long>(g_popupOverlayWgcFrameCount),
                static_cast<unsigned long long>(g_popupOverlayWgcRenderFailCount));
     }
@@ -11758,7 +11801,7 @@ bool StartPopupOverlayWgcBackdrop(
 
     if (!UseOverlayPopupBackdropMaterial() || !g_popupBackdropOverlay ||
         !g_expandedPopup) {
-        Wh_Log(L"Island: overlay WGC state start skipped material=%d overlay=%p popup=%p unloading=%d size=%dx%d",
+        Wh_Log(L"overlay WGC state start skipped material=%d overlay=%p popup=%p unloading=%d size=%dx%d",
                UseOverlayPopupBackdropMaterial(),
                g_popupBackdropOverlay,
                g_expandedPopup,
@@ -11771,7 +11814,7 @@ bool StartPopupOverlayWgcBackdrop(
     HMONITOR monitor = MonitorFromRect(&captureRect, MONITOR_DEFAULTTONEAREST);
     MONITORINFO monitorInfo{sizeof(monitorInfo)};
     if (!monitor || !GetMonitorInfoW(monitor, &monitorInfo)) {
-        Wh_Log(L"Island: overlay WGC state no monitor");
+        Wh_Log(L"overlay WGC state no monitor");
         return false;
     }
     double frameIntervalMs =
@@ -11829,7 +11872,7 @@ bool StartPopupOverlayWgcBackdrop(
     StopPopupOverlayWgcBackdrop();
 
     if (!capture::GraphicsCaptureSession::IsSupported()) {
-        Wh_Log(L"Island: overlay WGC state not supported");
+        Wh_Log(L"overlay WGC state not supported");
         return false;
     }
 
@@ -11843,7 +11886,7 @@ bool StartPopupOverlayWgcBackdrop(
         if (!EnsurePopupOverlayWgcDeviceResourcesLocked(g_popupBackdropOverlay,
                                                         widthPx,
                                                         heightPx)) {
-            Wh_Log(L"Island: overlay WGC state Ensure resources failed hr=0x%08X",
+            Wh_Log(L"overlay WGC state Ensure resources failed hr=0x%08X",
                    static_cast<unsigned>(g_popupOverlayWgcLastHr));
             return false;
         }
@@ -11852,7 +11895,7 @@ bool StartPopupOverlayWgcBackdrop(
     if (!CreatePopupOverlayWgcCaptureItemForMonitor(monitor,
                                                     g_popupOverlayWgcItem)) {
         g_popupOverlayWgcCreateItemFailed = true;
-        Wh_Log(L"Island: overlay WGC state Create capture item failed hr=0x%08X; throttling retries",
+        Wh_Log(L"overlay WGC state Create capture item failed hr=0x%08X; throttling retries",
                static_cast<unsigned>(g_popupOverlayWgcCreateItemHr));
         return false;
     }
@@ -11977,7 +12020,7 @@ bool StartPopupOverlayWgcBackdrop(
         } catch (...) {
         }
         g_popupOverlayWgcSession.StartCapture();
-        Wh_Log(L"Island: overlay WGC state backdrop started %dx%d monitor=(%ld,%ld,%ld,%ld)",
+        Wh_Log(L"overlay WGC state backdrop started %dx%d monitor=(%ld,%ld,%ld,%ld)",
                widthPx,
                heightPx,
                monitorInfo.rcMonitor.left,
@@ -11987,7 +12030,7 @@ bool StartPopupOverlayWgcBackdrop(
         return true;
     } catch (winrt::hresult_error const& error) {
         g_popupOverlayWgcLastHr = error.code().value;
-        Wh_Log(L"Island: overlay WGC state start failed hr=0x%08X",
+        Wh_Log(L"overlay WGC state start failed hr=0x%08X",
                static_cast<unsigned>(g_popupOverlayWgcLastHr));
         g_popupOverlayWgcRunning = false;
         g_popupOverlayWgcFrameCallbackHooked = false;
@@ -11995,7 +12038,7 @@ bool StartPopupOverlayWgcBackdrop(
         return false;
     } catch (...) {
         g_popupOverlayWgcLastHr = E_FAIL;
-        Wh_Log(L"Island: overlay WGC state start failed unknown");
+        Wh_Log(L"overlay WGC state start failed unknown");
         g_popupOverlayWgcRunning = false;
         g_popupOverlayWgcFrameCallbackHooked = false;
         ResetPopupOverlayWgcDeviceResourcesLocked();
@@ -12558,7 +12601,7 @@ bool RegisterPopupBackdropOverlayClass() {
     windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     windowClass.lpszClassName = kPopupBackdropOverlayClassName;
     if (!RegisterClassExW(&windowClass)) {
-        Wh_Log(L"Island: failed to register popup backdrop overlay window class");
+        Wh_Log(L"failed to register popup backdrop overlay window class");
         return false;
     }
     g_popupBackdropOverlayClassRegistered = true;
@@ -12592,7 +12635,7 @@ bool EnsurePopupBackdropOverlayWindow() {
         WS_POPUP, 0, 0, 1, 1,
         g_taskbarWnd, nullptr, ModInstance(), nullptr);
     if (!g_popupBackdropOverlay) {
-        Wh_Log(L"Island: failed to create popup backdrop overlay window");
+        Wh_Log(L"failed to create popup backdrop overlay window");
         return false;
     }
     return true;
@@ -13001,7 +13044,7 @@ bool RegisterPopupWindowClass() {
 
     HINSTANCE moduleInstance = ModInstance();
     if (!moduleInstance) {
-        Wh_Log(L"Island: failed to resolve the mod module handle");
+        Wh_Log(L"failed to resolve the mod module handle");
         return false;
     }
 
@@ -13012,7 +13055,7 @@ bool RegisterPopupWindowClass() {
     windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     windowClass.lpszClassName = kPopupClassName;
     if (!RegisterClassExW(&windowClass)) {
-        Wh_Log(L"Island: failed to register expanded popup window class");
+        Wh_Log(L"failed to register expanded popup window class");
         return false;
     }
 
@@ -13645,7 +13688,7 @@ bool EnsureDynamicTransportClipFactory() {
         reinterpret_cast<void**>(
             g_dynamicTransportClipD2dFactory.put()));
     if (FAILED(hr)) {
-        Wh_Log(L"Island: seam D2D factory failed hr=0x%08X",
+        Wh_Log(L"seam D2D factory failed hr=0x%08X",
                static_cast<unsigned>(hr));
         return false;
     }
@@ -13751,7 +13794,7 @@ bool ApplyTransparentDynamicTransportOcclusionClip(
         visual.Clip(compositor6.CreateGeometricClip(compositionGeometry));
         return true;
     } catch (winrt::hresult_error const& error) {
-        Wh_Log(L"Island: parent occlusion clip failed hr=0x%08X",
+        Wh_Log(L"parent occlusion clip failed hr=0x%08X",
                static_cast<unsigned>(error.code().value));
     } catch (...) {
     }
@@ -14785,7 +14828,7 @@ void MediaThreadProc() {
         winrt::init_apartment(winrt::apartment_type::multi_threaded);
         apartmentInitialized = true;
     } catch (...) {
-        Wh_Log(L"Island: failed to initialize media thread apartment");
+        Wh_Log(L"failed to initialize media thread apartment");
         g_mediaThreadStartFailed = true;
         g_mediaThreadRunning = false;
         return;
@@ -15031,7 +15074,7 @@ void MediaThreadProc() {
                        g_mediaRefreshRequested.load();
             });
         } catch (...) {
-            Wh_Log(L"Island: exception in media worker iteration");
+            Wh_Log(L"exception in media worker iteration");
             Sleep(10);
         }
     }
@@ -15085,7 +15128,7 @@ void StartMediaThread() {
     } catch (...) {
         g_mediaThreadRunning = false;
         g_mediaThread.reset();
-        Wh_Log(L"Island: failed to start media thread");
+        Wh_Log(L"failed to start media thread");
     }
 }
 
@@ -16979,7 +17022,7 @@ void UpdatePlayerContents() {
             }
 
             if (compactArtHash && preparedArtwork &&
-                !preparedArtwork->transportWashBytes.empty()) {
+                !preparedArtwork->transportWashBitmap.pixels.empty()) {
                 g_dynamicTransportWash.Source(
                     makeBitmap(preparedArtwork->transportWashBitmap));
             } else {
@@ -17005,7 +17048,7 @@ void UpdatePlayerContents() {
          (compactArtHash && g_dynamicMainWash.Source() == nullptr))) {
         try {
             if (compactArtHash && preparedArtwork &&
-                !preparedArtwork->mainWashBytes.empty()) {
+                !preparedArtwork->mainWashBitmap.pixels.empty()) {
                 g_dynamicMainWash.Source(
                     makeBitmap(preparedArtwork->mainWashBitmap));
             } else {
@@ -17149,7 +17192,7 @@ void UpdatePlayerContents() {
                         g_popupXamlArt.Source(
                             displayThumbnailBytes.empty()
                                 ? nullptr
-                                : makeBitmap(preparedArtwork->popupFallbackArtBitmap));
+                                : makeBitmap(preparedArtwork->compactArtBitmap));
                     }
                     if (g_popupXamlArtFade) {
                         g_popupXamlArtFade.Source(nullptr);
@@ -17304,7 +17347,7 @@ void UpdatePlayerContents() {
                                : Visibility::Visible);
     EnsureCompactIslandInteractive();
     } catch (...) {
-        Wh_Log(L"Island: exception while updating player contents");
+        Wh_Log(L"exception while updating player contents");
         if (g_expandedPopup && IsWindowVisible(g_expandedPopup)) {
             try {
                 BeginCloseExpandedPopup();
@@ -17550,7 +17593,7 @@ void RemoveIslandGrid() noexcept {
     try {
         RemoveIslandGridImpl();
     } catch (...) {
-        Wh_Log(L"Island: exception during full UI teardown; using OS-resource fallback");
+        Wh_Log(L"exception during full UI teardown; using OS-resource fallback");
     }
     RemoveIslandOsResourcesNoexcept();
 }
@@ -17558,7 +17601,7 @@ void RemoveIslandGrid() noexcept {
 bool InjectIslandGrid() {
     HWND hwnd = g_taskbarWnd ? g_taskbarWnd.load() : FindCurrentProcessTaskbarWnd();
     if (!hwnd) {
-        Wh_Log(L"Island: taskbar window not found");
+        Wh_Log(L"taskbar window not found");
         return false;
     }
     g_taskbarWnd = hwnd;
@@ -17566,13 +17609,13 @@ bool InjectIslandGrid() {
     try {
         auto xamlRoot = GetTaskbarXamlRoot(hwnd);
         if (!xamlRoot) {
-            Wh_Log(L"Island: failed to get taskbar XAML root");
+            Wh_Log(L"failed to get taskbar XAML root");
             return false;
         }
 
         auto root = xamlRoot.Content().try_as<FrameworkElement>();
         if (!root) {
-            Wh_Log(L"Island: XAML root content isn't a FrameworkElement");
+            Wh_Log(L"XAML root content isn't a FrameworkElement");
             return false;
         }
 
@@ -17580,7 +17623,7 @@ bool InjectIslandGrid() {
 
         auto target = ResolveInjectionTarget(root);
         if (!target.grid) {
-            Wh_Log(L"Island: injection target not found");
+            Wh_Log(L"injection target not found");
             return false;
         }
 
@@ -17631,10 +17674,10 @@ bool InjectIslandGrid() {
         UpdatePlayerContents();
         target.grid.UpdateLayout();
         RefreshCompactTextHostClip(false);
-        Wh_Log(L"Island: injected successfully");
+        Wh_Log(L"injected successfully");
         return true;
     } catch (...) {
-        Wh_Log(L"Island: exception while injecting");
+        Wh_Log(L"exception while injecting");
         return false;
     }
 }
@@ -17710,7 +17753,7 @@ void ApplySettingsOnTaskbarThread() {
             Sleep(25);
         }
     }
-    Wh_Log(L"Island: settings update could not be dispatched");
+    Wh_Log(L"settings update could not be dispatched");
 }
 
 void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
@@ -17756,14 +17799,14 @@ bool HookTaskbarSymbols() {
 } // namespace
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Island: init");
+    Wh_Log(L"init");
     g_unloading = false;
     g_modActive = false;
     g_mediaRefreshRequested = false;
     g_settings = ReadSettings();
 
     if (!HookTaskbarSymbols()) {
-        Wh_Log(L"Island: failed to hook taskbar symbols");
+        Wh_Log(L"failed to hook taskbar symbols");
         return FALSE;
     }
 
@@ -17835,7 +17878,7 @@ void Wh_ModUninit() {
                 break;
             }
             if (callbackInvoked) {
-                Wh_Log(L"Island: full UI teardown callback failed; dispatching OS-resource fallback");
+                Wh_Log(L"full UI teardown callback failed; dispatching OS-resource fallback");
                 bool fallbackInvoked = false;
                 if (RunFromWindowThread(
                         candidate,
@@ -17848,21 +17891,21 @@ void Wh_ModUninit() {
                 }
                 teardownCallbackFailed = fallbackInvoked;
                 if (teardownCallbackFailed) {
-                    Wh_Log(L"Island: OS-resource fallback callback failed");
+                    Wh_Log(L"OS-resource fallback callback failed");
                     break;
                 }
             }
         }
         if (!teardownSucceeded && !teardownCallbackFailed) {
-            Wh_Log(L"Island: UI teardown attempt %d failed; retrying", attempt + 1);
+            Wh_Log(L"UI teardown attempt %d failed; retrying", attempt + 1);
             Sleep(25);
         }
     }
     if (!teardownSucceeded) {
         if (teardownCallbackFailed) {
-            Wh_Log(L"Island: critical: UI-thread teardown callback failed");
+            Wh_Log(L"critical: UI-thread teardown callback failed");
         } else {
-            Wh_Log(L"Island: critical: UI-thread teardown could not be dispatched");
+            Wh_Log(L"critical: UI-thread teardown could not be dispatched");
         }
     }
     // UnregisterClassW safely fails while a window of the class still exists.
