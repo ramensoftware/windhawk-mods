@@ -43,6 +43,9 @@ Pick your **Hostel** and **Mess** in the settings, and that is it. The mod
 downloads the right file from `messit.vinnovateit.com` by itself and keeps it
 up to date. There is nothing to import and no files to manage.
 
+If your campus publishes a menu in the same JSON shape somewhere else, point
+**Custom menu URL** at it.
+
 ## Meal timings
 
 These are the defaults, and they are the VIT Vellore timings. All five windows
@@ -96,92 +99,111 @@ backdrop blur is derived from GPL-3.0 code.
   the taskbar's XAML root through `CTaskBand::GetTaskbarHost` and the
   `TaskbarHost::FrameHeight` prologue, the system-tray column insert/remove, and
   the `RunFromWindowThread` helper.
+- **Fluent UI System Icons** by Microsoft (MIT) — the "Food" glyph on the
+  taskbar button.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- hostel: mens
-  $name: Hostel
-  $options:
-  - mens: Men's Hostel (Hostel 1)
-  - womens: Women's Hostel (Hostel 2)
-- mess: veg
-  $name: Mess
-  $options:
-  - special: Special (Mess 1)
-  - veg: Veg (Mess 2)
-  - nonveg: Non-Veg (Mess 3)
-- buttonMode: expanded
+- source:
+  - hostel: mens
+    $name: Hostel
+    $options:
+    - mens: Men's Hostel (Hostel 1)
+    - womens: Women's Hostel (Hostel 2)
+  - mess: veg
+    $name: Mess
+    $options:
+    - special: Special (Mess 1)
+    - veg: Veg (Mess 2)
+    - nonveg: Non-Veg (Mess 3)
+  - url: ""
+    $name: Custom menu URL
+    $description: "Leave empty to use messit.vinnovateit.com. Otherwise the full URL of a JSON file in the same format. {hostel} and {mess} in the URL are replaced with the numbers chosen above, e.g. https://example.com/menu/hostel-{hostel}-mess-{mess}.json. Changing this clears the cached menus."
+  $name: Menu source
+  $description: Which mess's menu to show. This is the only thing that needs setting up.
+- button:
+  - mode: expanded
+    $name: Content
+    $description: Expanded shows the current meal or the next-meal countdown next to the icon. Compact shows only the icon, with the same text in the tooltip.
+    $options:
+    - expanded: Expanded
+    - compact: Compact
+  - position: tray_left
+    $name: Position
+    $description: The first sits in the taskbar's own area; the rest sit inside the system tray, next to the other tray icons.
+    $options:
+    - taskbar_left: Left edge of the taskbar
+    - tray_left: Left of the system tray
+    - clock_left: Left of the clock
+    - clock_right: Right of the clock
+  - scope: primary
+    $name: Show on
+    $description: Which taskbars get the button on a multi-monitor setup.
+    $options:
+    - primary: The primary taskbar only
+    - all: Every taskbar
+  - maxLabelWidth: 180
+    $name: Maximum label width
+    $description: Longer text is truncated with an ellipsis. Pixels.
+  - paddingLeft: 4
+    $name: Spacing (left)
+    $description: Gap in pixels to the left of the button, which also shifts the button to the right. Increase this to move clear of another mod occupying the same spot.
+  - paddingRight: 4
+    $name: Spacing (right)
+    $description: Gap in pixels to the right of the button.
+  - reserveSpace: true
+    $name: 'Push the taskbar icons aside (only with "Left edge of the taskbar")'
+    $description: Reserves the button's width plus its spacing before the taskbar icons, so they move out of the way instead of sitting underneath. Has no effect in the system-tray positions, where the tray lays the button out for us. Turn this off if another mod already manages that space.
   $name: Taskbar button
-  $description: Expanded shows the current meal or the next-meal countdown. Compact shows only the icon.
-  $options:
-  - expanded: Expanded
-  - compact: Compact
-- position: tray_left
-  $name: Button position
-  $description: The first sits in the taskbar's own area; the rest sit inside the system tray, next to the other tray icons.
-  $options:
-  - taskbar_left: Left edge of the taskbar
-  - tray_left: Left of the system tray
-  - clock_left: Left of the clock
-  - clock_right: Right of the clock
-- buttonPaddingLeft: 4
-  $name: Button spacing (left)
-  $description: Gap in pixels to the left of the button, which also shifts the button to the right. Increase this to move clear of another mod occupying the same spot.
-- buttonPaddingRight: 4
-  $name: Button spacing (right)
-  $description: Gap in pixels to the right of the button.
-- reserveTaskbarSpace: true
-  $name: 'Push the taskbar icons aside (only with "Left edge of the taskbar")'
-  $description: Reserves the button's width plus its spacing before the taskbar icons, so they move out of the way instead of sitting underneath. Has no effect in the system-tray positions, where the tray lays the button out for us. Turn this off if another mod already manages that space.
-- taskbarScope: primary
-  $name: Show on
-  $description: Which taskbars get the button on a multi-monitor setup.
-  $options:
-  - primary: The primary taskbar only
-  - all: Every taskbar
-- maxLabelWidth: 180
-  $name: Maximum label width
-  $description: Longer text is truncated with an ellipsis. Pixels.
-- popupWidth: 380
-  $name: Flyout width
-  $description: Pixels.
-- popupCornerRadius: 8
-  $name: Flyout corner radius
-  $description: Pixels. The meal cards follow automatically, staying concentric with the flyout's own corners.
-- showSnacks: true
-  $name: Show the Snacks card
-- extraDessertItems: ""
-  $name: Extra dessert items
-  $description: "Comma-separated. The site sometimes lists desserts without a \"Sweet:\" or \"Fruits:\" label; the common ones are recognised already, and anything it starts listing that is not can be added here, e.g. Rasgulla, Mango. An entry matches a whole item or its last word, ignoring case."
-- backgroundMode: auto
-  $name: Flyout background
-  $description: Match Windows follows the built-in Windows 11 flyout styling and ignores the two settings below. Use Custom to match a Taskbar Styler theme instead.
-  $options:
-  - auto: Match Windows 11
-  - custom: Custom colour and blur
-- backgroundColor: "#80000000"
-  $name: Custom background colour
-  $description: "Only used when the background is set to Custom. Hex with the alpha first: #AARRGGBB, or #RRGGBB for fully opaque. The default #80000000 is the Tinted Glass taskbar theme's colour."
-- blurAmount: 18
-  $name: Custom blur amount
-  $description: Only used when the background is set to Custom. Blur radius in pixels, on the same scale Taskbar Styler themes use. The default 18 is the Tinted Glass taskbar theme's value. Set to 0 for a flat surface with no blur.
-- autoUpdate: true
-  $name: Check for new menus automatically
-  $description: Re-downloads the current month about once a day, since the site sometimes revises a menu after publishing it, and keeps checking for a missing month every few hours. When off, the menu is only downloaded when you press the reload button in the flyout.
-- timeBreakfast: "07:00-09:00"
-  $name: Breakfast (Mon-Fri)
-  $description: "Serving window as HH:MM-HH:MM, on a 24-hour clock. This drives the countdown and which card is highlighted, so correct it here if your mess changes a slot. The defaults are the VIT Vellore timings."
-- timeBreakfastWeekend: "07:30-09:30"
-  $name: Breakfast (Sat & Sun)
-- timeLunch: "12:30-14:30"
-  $name: Lunch
-- timeSnacks: "16:30-18:00"
-  $name: Snacks
-- timeDinner: "19:00-21:00"
-  $name: Dinner
-
+- flyout:
+  - width: 380
+    $name: Width
+    $description: Pixels.
+  - cornerRadius: 8
+    $name: Corner radius
+    $description: Pixels. The meal cards follow automatically, staying concentric with the flyout's own corners.
+  - showSnacks: true
+    $name: Show the Snacks card
+    $description: Hides only the card. The countdown still knows when snacks are served.
+  - backgroundMode: auto
+    $name: Background
+    $description: Match Windows follows the built-in Windows 11 flyout styling and ignores the two settings below. Use Custom to match a Taskbar Styler theme instead.
+    $options:
+    - auto: Match Windows 11
+    - custom: Custom colour and blur
+  - backgroundColor: "#80000000"
+    $name: Custom background colour
+    $description: "Only used when the background is set to Custom. Hex with the alpha first: #AARRGGBB, or #RRGGBB for fully opaque. The default #80000000 is the Tinted Glass taskbar theme's colour."
+  - blurAmount: 18
+    $name: Custom blur amount
+    $description: Only used when the background is set to Custom. Blur radius in pixels, on the same scale Taskbar Styler themes use. The default 18 is the Tinted Glass taskbar theme's value. Set to 0 for a flat surface with no blur.
+  $name: Flyout
+- timings:
+  - breakfast: "07:00-09:00"
+    $name: Breakfast (Mon-Fri)
+  - breakfastWeekend: "07:30-09:30"
+    $name: Breakfast (Sat & Sun)
+  - lunch: "12:30-14:30"
+    $name: Lunch
+  - snacks: "16:30-18:00"
+    $name: Snacks
+  - dinner: "19:00-21:00"
+    $name: Dinner
+  $name: Meal timings
+  $description: "Serving windows as HH:MM-HH:MM, on a 24-hour clock. These drive the countdown and which card is highlighted, so correct them here if your mess changes a slot. The defaults are the VIT Vellore timings."
+- grouping:
+  - extraDessertItems: ""
+    $name: Extra dessert items
+    $description: "Comma-separated. The site sometimes lists desserts without a \"Sweet:\" or \"Fruits:\" label; the common ones are recognised already, and anything it starts listing that is not can be added here, e.g. Rasgulla, Mango. An entry matches a whole item or its last word, ignoring case."
+  $name: Menu grouping
+  $description: How items are sorted into Main Items, Bread & Sides, Dairy, Beverages and Dessert in the flyout.
+- updates:
+  - automatic: true
+    $name: Check for new menus automatically
+    $description: Re-downloads the current month about once a day, since the site sometimes revises a menu after publishing it, and keeps checking for a missing month every few hours. When off, the menu is only downloaded when you press the reload button in the flyout.
+  $name: Updates
 */
 // ==/WindhawkModSettings==
 
@@ -305,6 +327,18 @@ struct ModSettings {
 
 static ModSettings g_settings;
 
+// hostel * 10 + mess, published as one word. The worker snapshots the pair
+// while LoadSettings may be rewriting g_settings on another thread; read
+// separately, a fetch could pair the new hostel with the old mess and cache
+// that response under a file name it does not belong to.
+static std::atomic<int> g_sourceKey{12};
+
+static void CurrentSource(int& hostel, int& mess) {
+    const int key = g_sourceKey.load();
+    hostel = key / 10;
+    mess = key % 10;
+}
+
 // The user's extra dessert keywords, already normalised (see NormalizeKey).
 // Kept out of ModSettings for the reason given above: this is a list of
 // strings, rewritten by LoadSettings while the taskbar thread may be in the
@@ -312,6 +346,16 @@ static ModSettings g_settings;
 // under the lock and never touch the vector itself while unlocked.
 static std::mutex g_userDessertKeywordsMutex;
 static std::shared_ptr<const std::vector<std::wstring>> g_userDessertKeywords;
+
+// The custom menu URL template, or empty for the built-in host. Same
+// arrangement: written by LoadSettings, snapshotted by the network worker.
+static std::mutex g_menuUrlMutex;
+static std::shared_ptr<const std::wstring> g_menuUrlTemplate;
+
+static std::wstring GetMenuUrlTemplate() {
+    std::lock_guard<std::mutex> lock(g_menuUrlMutex);
+    return g_menuUrlTemplate ? *g_menuUrlTemplate : std::wstring();
+}
 
 static std::wstring NormalizeKey(const std::wstring& text);
 
@@ -437,7 +481,7 @@ static bool ParseTimeRange(const std::wstring& text, MealWindow& out) {
 // "Rasgulla, Mango, " -> {"rasgulla", "mango"}. Empty entries are dropped so a
 // trailing comma cannot turn every item into a dessert.
 static void LoadUserDessertKeywords() {
-    std::wstring text = GetStringSetting(L"extraDessertItems", L"");
+    std::wstring text = GetStringSetting(L"grouping.extraDessertItems", L"");
     auto keywords = std::make_shared<std::vector<std::wstring>>();
 
     size_t start = 0;
@@ -469,38 +513,61 @@ static void LoadMealWindow(PCWSTR key, PCWSTR fallback, MealWindow& target) {
     ParseTimeRange(fallback, target);
 }
 
+// Settings are grouped into sections in the settings block above, and Windhawk
+// addresses a grouped key as "section.key".
 static void LoadSettings() {
-    g_settings.hostel = (GetStringSetting(L"hostel", L"mens") == L"womens") ? 2 : 1;
+    g_settings.hostel =
+        (GetStringSetting(L"source.hostel", L"mens") == L"womens") ? 2 : 1;
 
-    std::wstring mess = GetStringSetting(L"mess", L"veg");
+    std::wstring mess = GetStringSetting(L"source.mess", L"veg");
     g_settings.mess = (mess == L"special") ? 1 : (mess == L"nonveg") ? 3 : 2;
+    g_sourceKey.store(g_settings.hostel * 10 + g_settings.mess);
 
-    g_settings.compact = (GetStringSetting(L"buttonMode", L"expanded") == L"compact");
-    std::wstring position = GetStringSetting(L"position", L"tray_left");
+    {
+        // Trimmed, so a stray space cannot turn a valid URL into a bad one.
+        std::wstring url = GetStringSetting(L"source.url", L"");
+        size_t first = url.find_first_not_of(L" \t\r\n");
+        size_t last = url.find_last_not_of(L" \t\r\n");
+        url = (first == std::wstring::npos)
+                  ? std::wstring()
+                  : url.substr(first, last - first + 1);
+        auto shared = std::make_shared<const std::wstring>(std::move(url));
+        std::lock_guard<std::mutex> lock(g_menuUrlMutex);
+        g_menuUrlTemplate = std::move(shared);
+    }
+
+    g_settings.compact =
+        (GetStringSetting(L"button.mode", L"expanded") == L"compact");
+    std::wstring position = GetStringSetting(L"button.position", L"tray_left");
     g_settings.position =
         (position == L"taskbar_left")  ? ButtonPosition::TaskbarLeft
         : (position == L"clock_left")  ? ButtonPosition::ClockLeft
         : (position == L"clock_right") ? ButtonPosition::ClockRight
                                        : ButtonPosition::TrayLeft;
+    g_settings.taskbarScope =
+        (GetStringSetting(L"button.scope", L"primary") == L"all")
+            ? TaskbarScope::All
+            : TaskbarScope::Primary;
+    g_settings.maxLabelWidth =
+        std::clamp(Wh_GetIntSetting(L"button.maxLabelWidth"), 40, 600);
     // Wide enough to slide the button across any monitor; the bound is only
     // here to stop a typo pushing it off-screen with no way back.
     g_settings.buttonPaddingLeft =
-        std::clamp(Wh_GetIntSetting(L"buttonPaddingLeft"), 0, 4000);
+        std::clamp(Wh_GetIntSetting(L"button.paddingLeft"), 0, 4000);
     g_settings.buttonPaddingRight =
-        std::clamp(Wh_GetIntSetting(L"buttonPaddingRight"), 0, 4000);
+        std::clamp(Wh_GetIntSetting(L"button.paddingRight"), 0, 4000);
     g_settings.reserveTaskbarSpace =
-        Wh_GetIntSetting(L"reserveTaskbarSpace") != 0;
+        Wh_GetIntSetting(L"button.reserveSpace") != 0;
 
-    g_settings.maxLabelWidth = std::clamp(Wh_GetIntSetting(L"maxLabelWidth"), 40, 600);
-    g_settings.popupWidth = std::clamp(Wh_GetIntSetting(L"popupWidth"), 260, 900);
+    g_settings.popupWidth =
+        std::clamp(Wh_GetIntSetting(L"flyout.width"), 260, 900);
     g_settings.popupCornerRadius =
-        std::clamp(Wh_GetIntSetting(L"popupCornerRadius"), 0, 32);
-    g_settings.showSnacks = Wh_GetIntSetting(L"showSnacks") != 0;
-    LoadUserDessertKeywords();
-
+        std::clamp(Wh_GetIntSetting(L"flyout.cornerRadius"), 0, 32);
+    g_settings.showSnacks = Wh_GetIntSetting(L"flyout.showSnacks") != 0;
     g_settings.customBackground =
-        (GetStringSetting(L"backgroundMode", L"auto") == L"custom");
-    std::wstring hexColor = GetStringSetting(L"backgroundColor", L"#80000000");
+        (GetStringSetting(L"flyout.backgroundMode", L"auto") == L"custom");
+    std::wstring hexColor =
+        GetStringSetting(L"flyout.backgroundColor", L"#80000000");
     if (!ParseHexColor(hexColor, g_settings.bgA, g_settings.bgR, g_settings.bgG,
                        g_settings.bgB)) {
         Wh_Log(L"LoadSettings: could not parse backgroundColor \"%s\", "
@@ -511,21 +578,22 @@ static void LoadSettings() {
         g_settings.bgG = 0;
         g_settings.bgB = 0;
     }
+    g_settings.blurAmount =
+        std::clamp(Wh_GetIntSetting(L"flyout.blurAmount"), 0, 100);
 
-    g_settings.blurAmount = std::clamp(Wh_GetIntSetting(L"blurAmount"), 0, 100);
-    g_settings.autoUpdate = Wh_GetIntSetting(L"autoUpdate") != 0;
-
-    g_settings.taskbarScope =
-        (GetStringSetting(L"taskbarScope", L"primary") == L"all")
-            ? TaskbarScope::All
-            : TaskbarScope::Primary;
-
-    LoadMealWindow(L"timeBreakfast", L"07:00-09:00", g_settings.mealWeekday[0]);
-    LoadMealWindow(L"timeBreakfastWeekend", L"07:30-09:30",
+    LoadMealWindow(L"timings.breakfast", L"07:00-09:00",
+                   g_settings.mealWeekday[0]);
+    LoadMealWindow(L"timings.breakfastWeekend", L"07:30-09:30",
                    g_settings.breakfastWeekend);
-    LoadMealWindow(L"timeLunch", L"12:30-14:30", g_settings.mealWeekday[1]);
-    LoadMealWindow(L"timeSnacks", L"16:30-18:00", g_settings.mealWeekday[2]);
-    LoadMealWindow(L"timeDinner", L"19:00-21:00", g_settings.mealWeekday[3]);
+    LoadMealWindow(L"timings.lunch", L"12:30-14:30", g_settings.mealWeekday[1]);
+    LoadMealWindow(L"timings.snacks", L"16:30-18:00",
+                   g_settings.mealWeekday[2]);
+    LoadMealWindow(L"timings.dinner", L"19:00-21:00",
+                   g_settings.mealWeekday[3]);
+
+    LoadUserDessertKeywords();
+
+    g_settings.autoUpdate = Wh_GetIntSetting(L"updates.automatic") != 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -539,11 +607,49 @@ static constexpr int kMealCount = (int)Meal::Count;
 static const wchar_t* const kMealNames[kMealCount] = {L"Breakfast", L"Lunch",
                                                       L"Snacks", L"Dinner"};
 
-// Breakfast, Lunch, Snacks, Dinner.
-static const wchar_t* const kMealEmoji[kMealCount] = {
-    L"\U0001F373", L"\U0001F35B", L"☕", L"\U0001F319"};
-
-static const wchar_t* const kTaskbarEmoji = L"\U0001F37D";
+// The taskbar icon: Fluent UI System Icons "Food" (ic_fluent_food_48_regular,
+// MIT), as XAML path data so it renders through a PathIcon like the tray's
+// own glyphs -- monochrome, theme-aware, no image decoding. "F1" selects the
+// nonzero fill rule the SVG uses; XAML's default is even-odd.
+// https://github.com/microsoft/fluentui-system-icons
+static constexpr int kTaskbarIconCanvas = 48;
+static const wchar_t* const kTaskbarIconData =
+    L"F1 M7.97791 6.72626C8.23786 5.13494 9.61649 4 11.2028 4C12.0065 4 "
+    L"12.7431 4.28759 13.3152 4.76548C13.914 4.28645 14.6735 4 15.5 4C16.3265 "
+    L"4 17.086 4.28645 17.6848 4.76548C18.2569 4.28759 18.9935 4 19.7972 "
+    L"4C21.3835 4 22.7621 5.13495 23.0221 6.72627C23.3899 8.97815 24 13.1284 "
+    L"24 16C24 18.8478 22.5983 21.3683 20.4526 22.9087C19.8122 23.3685 19.5 "
+    L"23.9239 19.5 24.3989C19.5 24.437 19.5011 24.4631 19.5035 24.4932C19.5912 "
+    L"25.5888 20.5 36.9682 20.5 39C20.5 41.7614 18.2614 44 15.5 44C12.7386 44 "
+    L"10.5 41.7614 10.5 39C10.5 36.9682 11.4088 25.5888 11.4965 24.4932C11.4989 "
+    L"24.4631 11.5 24.437 11.5 24.3989C11.5 23.9239 11.1878 23.3685 10.5474 "
+    L"22.9087C8.40173 21.3683 7 18.8478 7 16C7 13.1284 7.61005 8.97815 7.97791 "
+    L"6.72626ZM19 16.75C19 17.4404 18.4404 18 17.75 18C17.0596 18 16.5 17.4404 "
+    L"16.5 16.75V7.5C16.5 6.94772 16.0523 6.5 15.5 6.5C14.9477 6.5 14.5 "
+    L"6.94772 14.5 7.5V16.75C14.5 17.4404 13.9404 18 13.25 18C12.5596 18 12 "
+    L"17.4404 12 16.75V7.29725C12 6.85694 11.6431 6.5 11.2028 6.5C10.8154 6.5 "
+    L"10.5034 6.77283 10.4452 7.12931C10.0747 9.3972 9.5 13.3587 9.5 16C9.5 "
+    L"18.0086 10.4857 19.7869 12.0054 20.8779C13.0246 21.6096 14 22.8308 14 "
+    L"24.3989C14 24.4955 13.9969 24.5886 13.9885 24.6928C13.8934 25.8804 13 "
+    L"37.0998 13 39C13 40.3807 14.1193 41.5 15.5 41.5C16.8807 41.5 18 40.3807 "
+    L"18 39C18 37.0998 17.1066 25.8804 17.0115 24.6928C17.0031 24.5886 17 "
+    L"24.4955 17 24.3989C17 22.8308 17.9754 21.6096 18.9946 20.8779C20.5143 "
+    L"19.7869 21.5 18.0086 21.5 16C21.5 13.3587 20.9253 9.3972 20.5548 "
+    L"7.12931C20.4966 6.77283 20.1846 6.5 19.7972 6.5C19.3569 6.5 19 6.85694 "
+    L"19 7.29725V16.75ZM36.5 6.53169V22.75C36.5 23.3401 36.6885 26.0805 "
+    L"36.8952 29.0854L36.9093 29.2894C37.1889 33.3551 37.5 37.8909 37.5 "
+    L"39C37.5 40.3807 36.3807 41.5 35 41.5C33.6193 41.5 32.5 40.3807 32.5 "
+    L"39C32.5 38.0176 32.7453 34.014 32.9973 30.1803C33.1222 28.2802 33.2471 "
+    L"26.4445 33.3408 25.0837C33.3876 24.4033 33.4267 23.8417 33.454 "
+    L"23.4503L33.4969 22.8379C33.5213 22.492 33.4009 22.1515 33.1644 "
+    L"21.8978C32.928 21.6441 32.5968 21.5 32.25 21.5H29.25C28.8358 21.5 28.5 "
+    L"21.1642 28.5 20.75V15.25C28.5 10.6702 32.0186 6.91212 36.5 "
+    L"6.53169ZM30.9097 24L30.8467 24.912C30.7529 26.2744 30.6278 28.1128 "
+    L"30.5027 30.0164C30.2547 33.7899 30 37.9113 30 39C30 41.7614 32.2386 44 "
+    L"35 44C37.7614 44 40 41.7614 40 39C40 37.7912 39.6846 33.2057 39.4123 "
+    L"29.2478L39.4034 29.1178C39.1852 25.9458 39 23.2397 39 22.75V5.25C39 "
+    L"4.55964 38.4404 4 37.75 4H37.25C31.0368 4 26 9.0368 26 15.25V20.75C26 "
+    L"22.5449 27.4551 24 29.25 24H30.9097Z";
 
 enum class Group { Main = 0, BreadSides, Dairy, Beverages, Dessert, Count };
 
@@ -703,22 +809,33 @@ static MealState ComputeMealState() {
         }
     }
 
+    // The windows are all editable, so nothing guarantees they sit in array
+    // order: take the earliest start still ahead, not the first one found.
     for (int i = 0; i < kMealCount; i++) {
         MealWindow window = GetMealWindow((Meal)i, weekendToday);
-        if (window.startSec > nowSec) {
+        if (window.startSec > nowSec &&
+            (state.nextMeal < 0 ||
+             window.startSec - nowSec < state.remainingSec)) {
             state.nextMeal = i;
             state.remainingSec = window.startSec - nowSec;
-            return state;
         }
     }
+    if (state.nextMeal >= 0) {
+        return state;
+    }
 
-    // Past the last meal of the day: count down to tomorrow's breakfast, using
-    // tomorrow's weekday to pick the right breakfast window.
+    // Past the last meal of the day: count down to tomorrow's first one, using
+    // tomorrow's weekday so the weekend breakfast window is honoured.
     const bool weekendTomorrow = IsWeekend(todayKey + 1);
-    MealWindow breakfast = GetMealWindow(Meal::Breakfast, weekendTomorrow);
-    state.nextMeal = (int)Meal::Breakfast;
+    for (int i = 0; i < kMealCount; i++) {
+        MealWindow window = GetMealWindow((Meal)i, weekendTomorrow);
+        const int untilStart = (24 * 3600 - nowSec) + window.startSec;
+        if (state.nextMeal < 0 || untilStart < state.remainingSec) {
+            state.nextMeal = i;
+            state.remainingSec = untilStart;
+        }
+    }
     state.nextIsTomorrow = true;
-    state.remainingSec = (24 * 3600 - nowSec) + breakfast.startSec;
     return state;
 }
 
@@ -1195,15 +1312,63 @@ static constexpr DWORD kMaxResponseBytes = 2 * 1024 * 1024;
 // read: closing the handle makes the blocking call return immediately.
 static std::atomic<void*> g_activeRequest{nullptr};
 
-static std::wstring BuildMenuPath(int hostel, int mess) {
-    return L"/menu-data/hostel-" + std::to_wstring(hostel) + L"-mess-" +
-           std::to_wstring(mess) + L".json";
+static void ReplaceAll(std::wstring& text, const wchar_t* token,
+                       const std::wstring& value) {
+    const size_t length = wcslen(token);
+    for (size_t pos = text.find(token); pos != std::wstring::npos;
+         pos = text.find(token, pos + value.size())) {
+        text.replace(pos, length, value);
+    }
 }
 
-static bool HttpGetJson(const std::wstring& path, std::string& out,
+// The URL to download for this hostel/mess: the custom template with its
+// placeholders filled in, or the built-in messit.vinnovateit.com path.
+static std::wstring ResolveMenuUrl(int hostel, int mess) {
+    std::wstring url = GetMenuUrlTemplate();
+    if (url.empty()) {
+        url = std::wstring(L"https://") + kMenuHost + L"/menu-data/hostel-" +
+              std::to_wstring(hostel) + L"-mess-" + std::to_wstring(mess) +
+              L".json";
+        return url;
+    }
+    ReplaceAll(url, L"{hostel}", std::to_wstring(hostel));
+    ReplaceAll(url, L"{mess}", std::to_wstring(mess));
+    return url;
+}
+
+static bool HttpGetJson(const std::wstring& url, std::string& out,
                         std::wstring& error) {
     out.clear();
     error.clear();
+
+    // Split the URL up front so a typo in the custom setting fails with a
+    // clear message rather than a connection error. Only http and https are
+    // meaningful here.
+    URL_COMPONENTS parts{};
+    parts.dwStructSize = sizeof(parts);
+    parts.dwSchemeLength = (DWORD)-1;
+    parts.dwHostNameLength = (DWORD)-1;
+    parts.dwUrlPathLength = (DWORD)-1;
+    parts.dwExtraInfoLength = (DWORD)-1;
+    if (!WinHttpCrackUrl(url.c_str(), (DWORD)url.size(), 0, &parts) ||
+        !parts.lpszHostName || parts.dwHostNameLength == 0 ||
+        (parts.nScheme != INTERNET_SCHEME_HTTPS &&
+         parts.nScheme != INTERNET_SCHEME_HTTP)) {
+        error = L"The menu URL is not valid";
+        return false;
+    }
+    const bool secure = parts.nScheme == INTERNET_SCHEME_HTTPS;
+    const std::wstring host(parts.lpszHostName, parts.dwHostNameLength);
+    std::wstring path = parts.lpszUrlPath
+                            ? std::wstring(parts.lpszUrlPath,
+                                           parts.dwUrlPathLength)
+                            : std::wstring();
+    if (parts.lpszExtraInfo && parts.dwExtraInfoLength) {
+        path.append(parts.lpszExtraInfo, parts.dwExtraInfoLength);
+    }
+    if (path.empty()) {
+        path = L"/";
+    }
 
     HINTERNET session = WinHttpOpen(L"MessMenuWindhawkMod/1.0",
                                     WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
@@ -1227,8 +1392,8 @@ static bool HttpGetJson(const std::wstring& path, std::string& out,
     WinHttpSetOption(session, WINHTTP_OPTION_DECOMPRESSION, &decompression,
                      sizeof(decompression));
 
-    HINTERNET connection = WinHttpConnect(session, kMenuHost,
-                                          INTERNET_DEFAULT_HTTPS_PORT, 0);
+    HINTERNET connection =
+        WinHttpConnect(session, host.c_str(), parts.nPort, 0);
     if (!connection) {
         error = L"Could not reach the server";
         WinHttpCloseHandle(session);
@@ -1237,7 +1402,7 @@ static bool HttpGetJson(const std::wstring& path, std::string& out,
 
     HINTERNET request = WinHttpOpenRequest(
         connection, L"GET", path.c_str(), nullptr, WINHTTP_NO_REFERER,
-        WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
+        WINHTTP_DEFAULT_ACCEPT_TYPES, secure ? WINHTTP_FLAG_SECURE : 0);
     if (!request) {
         error = L"Could not create the request";
         WinHttpCloseHandle(connection);
@@ -1261,12 +1426,13 @@ static bool HttpGetJson(const std::wstring& path, std::string& out,
     } else {
         DWORD status = 0;
         DWORD statusSize = sizeof(status);
-        WinHttpQueryHeaders(request,
-                            WINHTTP_QUERY_STATUS_CODE |
-                                WINHTTP_QUERY_FLAG_NUMBER,
-                            WINHTTP_HEADER_NAME_BY_INDEX, &status, &statusSize,
-                            WINHTTP_NO_HEADER_INDEX);
-        if (status != 200) {
+        if (!WinHttpQueryHeaders(request,
+                                 WINHTTP_QUERY_STATUS_CODE |
+                                     WINHTTP_QUERY_FLAG_NUMBER,
+                                 WINHTTP_HEADER_NAME_BY_INDEX, &status,
+                                 &statusSize, WINHTTP_NO_HEADER_INDEX)) {
+            error = L"The server's response could not be read";
+        } else if (status != 200) {
             error = L"The server returned HTTP " + std::to_wstring(status);
         } else {
             success = true;
@@ -1355,11 +1521,49 @@ static void PruneOldCacheFiles(int hostel, int mess, int keepFromMonthKey) {
     FindClose(find);
 }
 
+// Deletes every cached month except those with `keepPrefix`; an empty prefix
+// deletes them all. Two callers: switching hostel or mess leaves the old
+// source's files behind (PruneOldCacheFiles only ever looks at the current
+// prefix), and changing the menu URL invalidates everything, because the
+// file names carry only the hostel/mess pair and not where it came from. Only
+// our own "h<n>m<n>-YYYY-MM.json" names are touched.
+static void PruneCacheFilesExcept(const std::wstring& keepPrefix) {
+    std::wstring directory = GetCacheDirectory();
+    if (directory.empty()) {
+        return;
+    }
+
+    const std::wstring& keep = keepPrefix;
+    std::wstring pattern = directory + L"\\h*m*-*.json";
+    WIN32_FIND_DATAW findData{};
+    HANDLE find = FindFirstFileW(pattern.c_str(), &findData);
+    if (find == INVALID_HANDLE_VALUE) {
+        return;
+    }
+
+    do {
+        std::wstring name = findData.cFileName;
+        // h1m2-2026-09.json is 17 characters; anything else is not ours.
+        if (name.size() != 17 || name[0] != L'h' || name[2] != L'm' ||
+            name[4] != L'-' || !iswdigit(name[1]) || !iswdigit(name[3])) {
+            continue;
+        }
+        if (!keep.empty() && name.compare(0, keep.size(), keep) == 0) {
+            continue;
+        }
+        std::wstring full = directory + L"\\" + name;
+        DeleteFileW(full.c_str());
+        Wh_Log(L"PruneCacheFilesExcept: removed %s", name.c_str());
+    } while (FindNextFileW(find, &findData));
+
+    FindClose(find);
+}
+
 // Loads every cached month for the configured hostel/mess into one map.
 static void LoadCacheFromDisk() {
     MenuStore store;
-    store.hostel = g_settings.hostel;
-    store.mess = g_settings.mess;
+    CurrentSource(store.hostel, store.mess);
+    PruneCacheFilesExcept(CacheFilePrefix(store.hostel, store.mess));
 
     std::wstring directory = GetCacheDirectory();
     if (!directory.empty()) {
@@ -1813,7 +2017,22 @@ static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
 // Section 12: theme and brushes
 // ---------------------------------------------------------------------------
 
+// An element already in the taskbar's tree, for asking what theme is actually
+// in effect there. Defined with the UI state below.
+static FrameworkElement ThemeProbeElement();
+
 static bool IsLightTheme() {
+    // Ask the tree first: another mod can set an explicit RequestedTheme on
+    // the taskbar (Taskbar Styler themes do), which the registry knows nothing
+    // about. The button's ActualThemeChanged handler already works this way.
+    try {
+        if (auto element = ThemeProbeElement()) {
+            return element.ActualTheme() == ElementTheme::Light;
+        }
+    } catch (...) {
+    }
+
+    // Before the button exists, fall back to the OS setting.
     DWORD value = 0;
     DWORD size = sizeof(value);
     if (RegGetValueW(HKEY_CURRENT_USER,
@@ -2272,6 +2491,7 @@ static Style GetTaskbarButtonStyle(bool light) {
 struct TaskbarEntry {
     HWND taskbarWnd = nullptr;
     Button button{nullptr};
+    PathIcon icon{nullptr};
     TextBlock label{nullptr};
     Grid injectionParent{nullptr};
     // -1 means we appended without adding a column (taskbar-area positions).
@@ -2286,6 +2506,18 @@ struct TaskbarEntry {
 
 [[clang::no_destroy]] static std::optional<std::vector<TaskbarEntry>>
     g_taskbars{std::in_place};
+
+static FrameworkElement ThemeProbeElement() {
+    if (!g_taskbars) {
+        return nullptr;
+    }
+    for (auto& entry : *g_taskbars) {
+        if (entry.button) {
+            return entry.button;
+        }
+    }
+    return nullptr;
+}
 
 // The taskbar the open flyout belongs to, so its anchor maths use the right
 // monitor rather than always the primary one.
@@ -2533,8 +2765,56 @@ static void UpdateTaskbarLabel() {
 
 static void ShowMessFlyout(FrameworkElement const& target);
 
-// Fills entry.button and entry.label. The entry must already be in g_taskbars,
-// so the handlers below can find it again.
+// The 48-unit Fluent glyph scaled to tray-icon size. The PathIcon sits at its
+// designed offset inside a 48x48 canvas and the Viewbox scales the canvas, so
+// the glyph keeps the padding the icon set designed in rather than being
+// stretched to its own bounds. Returns the element to place; `icon` receives
+// the PathIcon so its Foreground can follow the theme.
+static FrameworkElement MakeTaskbarIcon(bool light, PathIcon& icon) {
+    icon = nullptr;
+
+    // Geometry has no public parser in C++/WinRT, so the path mini-language
+    // goes through XamlReader.
+    static const wchar_t* kIconXaml =
+        L"<PathIcon xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/"
+        L"presentation\" HorizontalAlignment=\"Left\" "
+        L"VerticalAlignment=\"Top\" Data=\"%DATA%\"/>";
+    std::wstring xaml = kIconXaml;
+    xaml.replace(xaml.find(L"%DATA%"), 6, kTaskbarIconData);
+
+    try {
+        icon = Markup::XamlReader::Load(xaml).try_as<PathIcon>();
+    } catch (...) {
+        Wh_Log(L"MakeTaskbarIcon: XamlReader failed");
+    }
+    if (!icon) {
+        // Should never happen with fixed data, but a text fallback beats an
+        // invisible button.
+        TextBlock fallback;
+        fallback.Text(L"•");
+        fallback.FontSize(14);
+        fallback.Foreground(MakeBrush(TextPrimaryColor(light)));
+        fallback.VerticalAlignment(VerticalAlignment::Center);
+        return fallback;
+    }
+    icon.Foreground(MakeBrush(TextPrimaryColor(light)));
+
+    Grid canvas;
+    canvas.Width(kTaskbarIconCanvas);
+    canvas.Height(kTaskbarIconCanvas);
+    canvas.Children().Append(icon);
+
+    Viewbox viewbox;
+    viewbox.Width(16);
+    viewbox.Height(16);
+    viewbox.Stretch(Stretch::Uniform);
+    viewbox.VerticalAlignment(VerticalAlignment::Center);
+    viewbox.Child(canvas);
+    return viewbox;
+}
+
+// Fills entry.button, entry.icon and entry.label. The entry must already be in
+// g_taskbars, so the handlers below can find it again.
 static void BuildTaskbarButton(bool light, TaskbarEntry& entry) {
     Button button;
     if (auto style = GetTaskbarButtonStyle(light)) {
@@ -2554,12 +2834,7 @@ static void BuildTaskbarButton(bool light, TaskbarEntry& entry) {
     panel.Orientation(Orientation::Horizontal);
     panel.VerticalAlignment(VerticalAlignment::Center);
 
-    TextBlock icon;
-    icon.Text(kTaskbarEmoji);
-    icon.FontFamily(FontFamily(L"Segoe UI Emoji"));
-    icon.FontSize(14);
-    icon.VerticalAlignment(VerticalAlignment::Center);
-    panel.Children().Append(icon);
+    panel.Children().Append(MakeTaskbarIcon(light, entry.icon));
 
     if (!g_settings.compact) {
         TextBlock label;
@@ -2609,6 +2884,10 @@ static void BuildTaskbarButton(bool light, TaskbarEntry& entry) {
                     sender.as<Control>().Style(style);
                 }
                 if (auto* entry = FindEntryForButton(sender)) {
+                    if (entry->icon) {
+                        entry->icon.Foreground(
+                            MakeBrush(TextPrimaryColor(nowLight)));
+                    }
                     if (entry->label) {
                         entry->label.Foreground(
                             MakeBrush(TextPrimaryColor(nowLight)));
@@ -2762,6 +3041,7 @@ static void RemoveTaskbarButtonFrom(TaskbarEntry& entry) {
     }
 
     entry.button = nullptr;
+    entry.icon = nullptr;
     entry.label = nullptr;
     entry.injectionParent = nullptr;
     entry.injectedColumn = -1;
@@ -2920,7 +3200,20 @@ static bool InjectTaskbarButtonInto(HWND hWnd) {
 static std::vector<HWND> TargetTaskbarWnds() {
     std::vector<HWND> all = EnumerateTaskbarWnds();
     if (g_settings.taskbarScope == TaskbarScope::All) {
-        return all;
+        // Without the optional CSecondaryTaskBand symbols a secondary can
+        // never be injected into. Leave them out here rather than let the
+        // periodic reconcile below retry them -- and log the failure -- every
+        // twenty seconds for the life of the session.
+        if (CSecondaryTaskBand_GetTaskbarHost_Original &&
+            CSecondaryTaskBand_ITaskListWndSite_vftable) {
+            return all;
+        }
+        static bool warned = false;
+        if (!warned && all.size() > 1) {
+            warned = true;
+            Wh_Log(L"TargetTaskbarWnds: CSecondaryTaskBand symbols not "
+                   L"resolved, primary taskbar only");
+        }
     }
     std::vector<HWND> primaryOnly;
     if (!all.empty()) {
@@ -3034,7 +3327,7 @@ static Border BuildMealCard(Meal meal, const DayMenu& day, bool light,
 
     StackPanel content;
 
-    // Header row: emoji + name on the left, countdown on the right.
+    // Header row: meal name on the left, countdown on the right.
     Grid header;
     header.ColumnDefinitions().Append([] {
         ColumnDefinition definition;
@@ -3047,25 +3340,11 @@ static Border BuildMealCard(Meal meal, const DayMenu& day, bool light,
         return definition;
     }());
 
-    StackPanel titlePanel;
-    titlePanel.Orientation(Orientation::Horizontal);
-    titlePanel.VerticalAlignment(VerticalAlignment::Center);
-
-    TextBlock emoji;
-    emoji.Text(kMealEmoji[(int)meal]);
-    emoji.FontFamily(FontFamily(L"Segoe UI Emoji"));
-    emoji.FontSize(14);
-    emoji.VerticalAlignment(VerticalAlignment::Center);
-    titlePanel.Children().Append(emoji);
-
     auto title = MakeTextBlock(kMealNames[(int)meal], 14,
                                TextPrimaryColor(light), true);
-    title.Margin({8, 0, 0, 0});
     title.VerticalAlignment(VerticalAlignment::Center);
-    titlePanel.Children().Append(title);
-
-    Grid::SetColumn(titlePanel, 0);
-    header.Children().Append(titlePanel);
+    Grid::SetColumn(title, 0);
+    header.Children().Append(title);
 
     auto countdown = MakeTextBlock(countdownText, 11, TextTertiaryColor(light));
     countdown.HorizontalAlignment(HorizontalAlignment::Right);
@@ -3984,6 +4263,73 @@ static void ApplyTimerInterval() {
     }
 }
 
+// Monitors come and go at runtime -- docking a laptop, switching a display
+// off -- and TrayUI::StartTaskbar does not re-fire for that. Without this, a
+// removed monitor's entry would sit in g_taskbars forever holding references
+// into a dead tree, and a newly attached one would never get a button.
+//
+// Runs from the UI timer, so a new taskbar is picked up within one idle tick.
+// InjectTaskbarButton already skips taskbars that have a button, so it is
+// only called when one is actually missing -- otherwise it would re-resolve
+// the XAML root every tick for nothing.
+static void ReconcileTaskbars() {
+    if (!g_taskbars || g_unloading) {
+        return;
+    }
+
+    // The timer ticks every second while the flyout is open; enumerating
+    // windows that often is pointless, so hold this to the idle cadence.
+    static ULONGLONG lastRunTick = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (lastRunTick != 0 && now - lastRunTick < (ULONGLONG)kIdleTickMs) {
+        return;
+    }
+    lastRunTick = now;
+
+    try {
+        // The flyout is anchored to a taskbar; if that one is gone, the
+        // flyout's tree went with it.
+        if (g_flyoutTaskbarWnd && !IsWindow(g_flyoutTaskbarWnd)) {
+            TearDownFlyout();
+        }
+
+        auto& entries = *g_taskbars;
+        bool removed = false;
+        for (auto& entry : entries) {
+            if (entry.taskbarWnd && !IsWindow(entry.taskbarWnd)) {
+                // Revokes the tokens; the element removals fail harmlessly
+                // against the dead tree, each inside its own try/catch.
+                RemoveTaskbarButtonFrom(entry);
+                removed = true;
+            }
+        }
+        if (removed) {
+            entries.erase(std::remove_if(entries.begin(), entries.end(),
+                                         [](const TaskbarEntry& entry) {
+                                             return !entry.button;
+                                         }),
+                          entries.end());
+            InvalidateLabelCache();
+        }
+
+        for (HWND hWnd : TargetTaskbarWnds()) {
+            bool present = false;
+            for (auto& entry : entries) {
+                if (entry.taskbarWnd == hWnd && entry.button) {
+                    present = true;
+                    break;
+                }
+            }
+            if (!present) {
+                InjectTaskbarButton();
+                break;
+            }
+        }
+    } catch (...) {
+        Wh_Log(L"ReconcileTaskbars: exception");
+    }
+}
+
 static void OnTimerTick() {
     if (g_unloading || !g_cardCountdowns) {
         return;
@@ -3991,6 +4337,7 @@ static void OnTimerTick() {
 
     try {
         ApplyTimerInterval();
+        ReconcileTaskbars();
         UpdateTaskbarLabel();
 
         const int todayKey = TodayKey();
@@ -4091,6 +4438,10 @@ static HANDLE g_kickEvent = nullptr;
 // never on whichever thread Windhawk calls Wh_ModSettingsChanged from.
 static std::atomic<bool> g_reloadCacheRequested{false};
 
+// Set with g_reloadCacheRequested when the menu URL changes: every cached
+// file came from the old source and none of them is trustworthy any more.
+static std::atomic<bool> g_purgeCacheRequested{false};
+
 static constexpr DWORD kIdleIntervalMs = 6 * 60 * 60 * 1000;   // 6 hours
 static constexpr DWORD kFirstBackoffMs = 15 * 60 * 1000;       // 15 minutes
 
@@ -4129,15 +4480,15 @@ static void NotifyUiDataChanged() {
 
 // Returns true when the merged cache now covers today.
 static bool PerformFetch() {
-    const int hostel = g_settings.hostel;
-    const int mess = g_settings.mess;
+    int hostel, mess;
+    CurrentSource(hostel, mess);
 
     g_fetching.store(true);
     NotifyUiDataChanged();
 
     std::string body;
     std::wstring error;
-    bool ok = HttpGetJson(BuildMenuPath(hostel, mess), body, error);
+    bool ok = HttpGetJson(ResolveMenuUrl(hostel, mess), body, error);
 
     ParsedMonth parsed;
     if (ok) {
@@ -4224,18 +4575,23 @@ static DWORD WINAPI NetThreadProc(void*) {
         }
 
         if (g_reloadCacheRequested.exchange(false)) {
+            if (g_purgeCacheRequested.exchange(false)) {
+                PruneCacheFilesExcept(L"");
+            }
             LoadCacheFromDisk();
             NotifyUiDataChanged();
         }
 
         const int todayKey = TodayKey();
         const bool covered = StoreCoversDay(todayKey);
+        int hostel, mess;
+        CurrentSource(hostel, mess);
         const bool refreshDue =
             covered && g_settings.autoUpdate &&
             (lastSuccessTick == 0 ||
              GetTickCount64() - lastSuccessTick > kRefreshAgeMs) &&
-            CachedMonthOlderThan(g_settings.hostel, g_settings.mess,
-                                 MonthKeyFromDayKey(todayKey), kRefreshAgeMs);
+            CachedMonthOlderThan(hostel, mess, MonthKeyFromDayKey(todayKey),
+                                 kRefreshAgeMs);
         DWORD waitMs = kIdleIntervalMs;
 
         if (forced || refreshDue || (!covered && g_settings.autoUpdate)) {
@@ -4280,7 +4636,7 @@ static DWORD WINAPI NetThreadProc(void*) {
             break;
         }
         if (result == WAIT_OBJECT_0 + 1) {
-            ResetEvent(kickEvent);
+            // Auto-reset event: the wait already cleared it.
             forced = true;          // a manual reload ignores the backoff
             backoffMs = kFirstBackoffMs;
         }
@@ -4541,8 +4897,11 @@ void Wh_ModAfterInit() {
             [](void*) {
                 try {
                     RemoveTaskbarButton();
-                    InjectTaskbarButton();
-                    StartUiTimer();
+                    // Same retry chain as the taskbar-creation hook, so a
+                    // transient failure when the mod is enabled mid-session
+                    // does not leave it buttonless until a setting is touched.
+                    // InjectWithRetry starts the UI timer once it is done.
+                    InjectWithRetry(++g_injectGeneration);
                 } catch (...) {
                     Wh_Log(L"Wh_ModAfterInit: exception during injection");
                 }
@@ -4556,10 +4915,12 @@ void Wh_ModSettingsChanged() {
 
     const int oldHostel = g_settings.hostel;
     const int oldMess = g_settings.mess;
+    const std::wstring oldUrl = GetMenuUrlTemplate();
 
     LoadSettings();
 
-    const bool sourceChanged =
+    const bool urlChanged = (oldUrl != GetMenuUrlTemplate());
+    const bool sourceChanged = urlChanged ||
         (oldHostel != g_settings.hostel) || (oldMess != g_settings.mess);
 
     HWND hWnd = FindCurrentProcessTaskbarWnd();
@@ -4576,11 +4937,10 @@ void Wh_ModSettingsChanged() {
 
                 try {
                     RemoveTaskbarButton();
-                    InjectTaskbarButton();
-                    // Idempotent, and needed in case the first injection failed
-                    // and the timer was never created -- otherwise the label
-                    // would sit frozen even once the button is back.
-                    StartUiTimer();
+                    // InjectWithRetry starts the UI timer when it is done --
+                    // idempotently, so this also covers the case where the
+                    // first injection failed and the timer was never created.
+                    InjectWithRetry(++g_injectGeneration);
                 } catch (...) {
                     Wh_Log(L"Wh_ModSettingsChanged: exception during re-inject");
                 }
@@ -4591,7 +4951,8 @@ void Wh_ModSettingsChanged() {
     if (sourceChanged) {
         // A different hostel/mess is a different file entirely: drop the loaded
         // menu now so the flyout cannot show the old mess's food, then let the
-        // worker reload the cache and fetch.
+        // worker reload the cache and fetch. A different URL invalidates the
+        // cache files as well, since they are named by hostel/mess alone.
         {
             std::lock_guard<std::mutex> lock(g_dataMutex);
             g_store.days.clear();
@@ -4599,6 +4960,9 @@ void Wh_ModSettingsChanged() {
             g_store.mess = g_settings.mess;
             g_lastFetchError.clear();
             g_storeVersion.fetch_add(1);
+        }
+        if (urlChanged) {
+            g_purgeCacheRequested.store(true);
         }
         g_reloadCacheRequested.store(true);
         KickFetch();
