@@ -2,12 +2,35 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-11T13:28:04.000Z</updated>
+    <updated>2026-09-11T14:06:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Start button colorizer 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-start-button-colorizer#e0a0b51bcad52f7f2dc5edc42be0026f2a093b59</id>
+        <link href="https://windhawk.net/mods/taskbar-start-button-colorizer"/>
+        <updated>2026-09-11T14:06:00.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="startbuttoncolorizer">Start button colorizer</h1>
+<p>Customize the Windows logo of the Start button on the taskbar:</p>
+<ul>
+<li><strong>Color</strong>: recolor the icon with one of the built-in colors, such as red,
+green or pink.</li>
+<li><strong>Effects</strong>: fine tune the icon with the hue, saturation, brightness and
+opacity effects.</li>
+<li><strong>Size</strong>: set the size of the icon.</li>
+</ul>
+<p>To use a custom image instead of the built-in icon, refer to the <a href="https://windhawk.net/mods/start-button-replacer">Start Button
+Replacer</a> mod.</p>
+<p>Only Windows 11 is supported.</p>
+<p><img src="https://i.imgur.com/GebA6hR.png" alt="Screenshot" /></p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Hide Empty Optical Drives 1.0.0]]></title>
         <id>https://windhawk.net/mods/hide-empty-optical-drives-shell#aa233acc7e301068b9f3f7baf35221c635507ca5</id>
@@ -1076,28 +1099,6 @@ segment simply stays in <code>{title}</code>.</p></li>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Faster Virtual Desktop Switching 1.0]]></title>
-        <id>https://windhawk.net/mods/faster-virtual-desktop-switching#318648f4d4d5bbec3ffc2901e396b6969bd159f0</id>
-        <link href="https://windhawk.net/mods/faster-virtual-desktop-switching"/>
-        <updated>2026-09-01T19:25:06.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fastervirtualdesktopswitching">Faster Virtual Desktop Switching</h1>
-<p>Removes the long-standing pre-animation lag caused by oversized wallpaper thumbnail requests on Windows 11.</p>
-<p><img src="https://raw.githubusercontent.com/Meteony/meteoni-assets/main/faster-virtual-desktop-switching/faster-virtual-desktop-switching.gif" alt="GIF" /></p>
-<p><em>Note: This can make the wallpaper look softer during the switch. The mod is a no-op on Windows 10.</em></p>
-<p>Windows 11 can synchronously request a full-monitor-sized wallpaper thumbnail
-before beginning a virtual desktop transition. On a high-DPI display with specific wallpaper
-configurations, that request can take roughly 136-169 ms when warm and more than one second 
-when cold (exact figure depends).</p>
-<p>This mod caps that request to the maximum size documented for <code>IThumbnailCache</code>, which is 
-1024 pixels. In testing, that netted a latency reduction of ~150ms, effectively eliminating 
-the long-standing pre-animation stutter issue. </p>
-<p>Laptop users who use three- or four-finger swipe gestures can especially benefit from this mod.</p>]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteony</uri>
         </author>
     </entry>
 </feed>

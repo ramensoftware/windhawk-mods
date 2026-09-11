@@ -2,12 +2,35 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-11T13:28:04.000Z</updated>
+    <updated>2026-09-11T14:06:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Start button colorizer 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-start-button-colorizer#e0a0b51bcad52f7f2dc5edc42be0026f2a093b59</id>
+        <link href="https://windhawk.net/mods/taskbar-start-button-colorizer"/>
+        <updated>2026-09-11T14:06:00.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="startbuttoncolorizer">Start button colorizer</h1>
+<p>Customize the Windows logo of the Start button on the taskbar:</p>
+<ul>
+<li><strong>Color</strong>: recolor the icon with one of the built-in colors, such as red,
+green or pink.</li>
+<li><strong>Effects</strong>: fine tune the icon with the hue, saturation, brightness and
+opacity effects.</li>
+<li><strong>Size</strong>: set the size of the icon.</li>
+</ul>
+<p>To use a custom image instead of the built-in icon, refer to the <a href="https://windhawk.net/mods/start-button-replacer">Start Button
+Replacer</a> mod.</p>
+<p>Only Windows 11 is supported.</p>
+<p><img src="https://i.imgur.com/GebA6hR.png" alt="Screenshot" /></p>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Hide Empty Optical Drives 1.0.0]]></title>
         <id>https://windhawk.net/mods/hide-empty-optical-drives-shell#aa233acc7e301068b9f3f7baf35221c635507ca5</id>
@@ -538,17 +561,6 @@ use the mod <code>Taskbar tray icon spacing and grid</code>.</p>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Taskbar 3D buttons Lite 1.4]]></title>
-        <id>https://windhawk.net/mods/classic-taskbar-buttons-lite#ceed0856bcb6fdaa03fcd135bc2a8191bce8e940</id>
-        <link href="https://windhawk.net/mods/classic-taskbar-buttons-lite"/>
-        <updated>2026-09-07T17:53:27.000Z</updated>
-        <content type="html"><![CDATA[<p>fix for vertical second taskbar</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

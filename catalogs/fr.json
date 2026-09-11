@@ -14178,6 +14178,39 @@
         "version": "1.0.2"
       }
     },
+    "taskbar-start-button-colorizer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1789135560000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1789135560000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "m417z",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+        "description": "Recolor the Start button icon on the taskbar with a color preset or with hue, saturation, brightness and opacity effects, and change its size (Windows 11 only)",
+        "github": "https://github.com/m417z",
+        "homepage": "https://m417z.com/",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Start button colorizer",
+        "twitter": "https://twitter.com/m417z",
+        "version": "1.0"
+      }
+    },
     "taskbar-start-button-corner-fix": {
       "details": {
         "defaultSorting": 2170,
