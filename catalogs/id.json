@@ -3845,6 +3845,34 @@
         "version": "1.0.0"
       }
     },
+    "disable-folder-thumbnails": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1789132952000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1789132952000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Anixx",
+        "compilerOptions": "-lole32 -luuid -lshell32",
+        "description": "Disable folder thumbnails while preserving file thumbnails.",
+        "github": "https://github.com/Anixx",
+        "include": [
+          "*"
+        ],
+        "name": "Disable Folder Thumbnails",
+        "version": "1.0"
+      }
+    },
     "disable-immersive-context-menus": {
       "details": {
         "defaultSorting": 8550,

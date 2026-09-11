@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-11T13:18:25.000Z</updated>
+    <updated>2026-09-11T13:22:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable Folder Thumbnails 1.0]]></title>
+        <id>https://windhawk.net/mods/disable-folder-thumbnails#c9c51fe08b709a2e318614018690386a3ff9c026</id>
+        <link href="https://windhawk.net/mods/disable-folder-thumbnails"/>
+        <updated>2026-09-11T13:22:32.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="disablefolderthumbnails">Disable Folder Thumbnails</h1>
+<p>Disables thumbnail extraction and retrieval for ordinary filesystem
+folders both in Explorer and file choosing dialogs. 
+This mod is particularly useful if you are using a custom folder icon.</p>
+<p>File thumbnail requests are passed through unchanged. Not-thumbnail icon overlays are unaffected.</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Native Four Column Snap Layout 1.0]]></title>
         <id>https://windhawk.net/mods/windows-11-native-four-column-snap-layout#37fbf58052262eb7f649145c89850d4b11f00f09</id>
@@ -509,19 +524,6 @@ use the mod <code>Taskbar tray icon spacing and grid</code>.</p>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar height and icon size 1.3.10]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-size#49b891e1e34d158d345b06f3ac86c8124a7ae129</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-size"/>
-        <updated>2026-09-07T01:47:14.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the mod incorrectly affecting the search icon inside the search bar.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
