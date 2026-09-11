@@ -2,7 +2,7 @@
 // @id              taskbar-countdown-timer
 // @name            Taskbar Countdown Timer
 // @description     A simple countdown timer integrated into the Windows 11 taskbar (Windows 11 only)
-// @version         1.12
+// @version         1.14
 // @author          Richi
 // @github          https://github.com/richilp
 // @include         explorer.exe
@@ -334,9 +334,11 @@ static TrayUI_StartTaskbar_t
 static void WINAPI TrayUI_StartTaskbar_Hook(
     void* pThis)
 {
-    TrayUI_StartTaskbar_Original(
-        pThis
-    );
+    if (TrayUI_StartTaskbar_Original) {
+        TrayUI_StartTaskbar_Original(
+            pThis
+        );
+    }
 
     if (!g_unloading.load()) {
         ApplyTimerButtonIfAvailable();
@@ -1382,6 +1384,9 @@ static HFONT g_finishedAlertFont = nullptr;
 static HBRUSH g_finishedAlertBackgroundBrush = nullptr;
 static HBRUSH g_finishedAlertEditBrush = nullptr;
 static bool g_finishedAlertDark = true;
+static COLORREF g_finishedAlertBackgroundColor = RGB(32, 32, 32);
+static COLORREF g_finishedAlertEditBackgroundColor = RGB(45, 45, 45);
+static COLORREF g_finishedAlertTextColor = RGB(245, 245, 245);
 
 static bool AppsUseLightTheme()
 {
@@ -1406,48 +1411,50 @@ static bool AppsUseLightTheme()
     return value != 0;
 }
 
-static void EnsureFinishedAlertResources(
+struct FinishedAlertOldResources
+{
+    HFONT font = nullptr;
+    HBRUSH backgroundBrush = nullptr;
+    HBRUSH editBrush = nullptr;
+};
+
+
+static FinishedAlertOldResources CreateFinishedAlertResources(
     UINT dpi)
 {
+    FinishedAlertOldResources old{
+        g_finishedAlertFont,
+        g_finishedAlertBackgroundBrush,
+        g_finishedAlertEditBrush,
+    };
+
     g_finishedAlertDark =
         !AppsUseLightTheme();
 
-    if (g_finishedAlertBackgroundBrush) {
-        DeleteObject(
-            g_finishedAlertBackgroundBrush
-        );
-        g_finishedAlertBackgroundBrush = nullptr;
-    }
-
-    if (g_finishedAlertEditBrush) {
-        DeleteObject(
-            g_finishedAlertEditBrush
-        );
-        g_finishedAlertEditBrush = nullptr;
-    }
-
-    COLORREF background =
+    g_finishedAlertBackgroundColor =
         g_finishedAlertDark
             ? RGB(32, 32, 32)
             : RGB(249, 249, 249);
 
-    COLORREF editBackground =
+    g_finishedAlertEditBackgroundColor =
         g_finishedAlertDark
             ? RGB(45, 45, 45)
             : RGB(255, 255, 255);
 
+    g_finishedAlertTextColor =
+        g_finishedAlertDark
+            ? RGB(245, 245, 245)
+            : RGB(25, 25, 25);
+
     g_finishedAlertBackgroundBrush =
-        CreateSolidBrush(background);
+        CreateSolidBrush(
+            g_finishedAlertBackgroundColor
+        );
 
     g_finishedAlertEditBrush =
-        CreateSolidBrush(editBackground);
-
-    if (g_finishedAlertFont) {
-        DeleteObject(
-            g_finishedAlertFont
+        CreateSolidBrush(
+            g_finishedAlertEditBackgroundColor
         );
-        g_finishedAlertFont = nullptr;
-    }
 
     g_finishedAlertFont =
         CreateFontW(
@@ -1470,13 +1477,40 @@ static void EnsureFinishedAlertResources(
             DEFAULT_PITCH | FF_DONTCARE,
             L"Segoe UI"
         );
+
+    return old;
 }
+
+
+static void DeleteFinishedAlertResources(
+    FinishedAlertOldResources const& resources)
+{
+    if (resources.font) {
+        DeleteObject(resources.font);
+    }
+
+    if (resources.backgroundBrush) {
+        DeleteObject(resources.backgroundBrush);
+    }
+
+    if (resources.editBrush) {
+        DeleteObject(resources.editBrush);
+    }
+}
+
+
+static void ThemeFinishedAlertChild(
+    HWND child);
+
 
 static void ApplyFinishedAlertTheme(
     HWND hWnd,
     UINT dpi)
 {
-    EnsureFinishedAlertResources(dpi);
+    FinishedAlertOldResources old =
+        CreateFinishedAlertResources(
+            dpi
+        );
 
     constexpr DWORD DWMWA_USE_IMMERSIVE_DARK_MODE_LOCAL = 20;
     constexpr DWORD DWMWA_WINDOW_CORNER_PREFERENCE_LOCAL = 33;
@@ -1503,7 +1537,18 @@ static void ApplyFinishedAlertTheme(
         &corner,
         sizeof(corner)
     );
+
+    InvalidateRect(
+        hWnd,
+        nullptr,
+        TRUE
+    );
+
+    DeleteFinishedAlertResources(
+        old
+    );
 }
+
 
 static void ThemeFinishedAlertChild(
     HWND child)
@@ -1571,6 +1616,30 @@ static int ScaleAlertValue(int value, UINT dpi)
     return MulDiv(value, dpi ? dpi : 96, 96);
 }
 
+static SIZE GetFinishedAlertWindowSize(
+    UINT dpi)
+{
+    RECT rect{
+        0,
+        0,
+        ScaleAlertValue(380, dpi),
+        ScaleAlertValue(220, dpi)
+    };
+
+    AdjustWindowRectExForDpi(
+        &rect,
+        WS_POPUP | WS_CAPTION | WS_SYSMENU,
+        FALSE,
+        WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+        dpi ? dpi : 96
+    );
+
+    return SIZE{
+        rect.right - rect.left,
+        rect.bottom - rect.top
+    };
+}
+
 static void PositionFinishedAlert(HWND hWnd, UINT dpi)
 {
     HWND taskbar = g_taskbarWnd.load();
@@ -1587,8 +1656,11 @@ static void PositionFinishedAlert(HWND hWnd, UINT dpi)
         return;
     }
 
-    int width = ScaleAlertValue(380, dpi);
-    int height = ScaleAlertValue(220, dpi);
+    SIZE windowSize =
+        GetFinishedAlertWindowSize(dpi);
+
+    int width = windowSize.cx;
+    int height = windowSize.cy;
     int margin = ScaleAlertValue(10, dpi);
 
     SetWindowPos(
@@ -1739,21 +1811,6 @@ static LRESULT CALLBACK FinishedAlertWndProc(
             nullptr
         );
 
-        EnumChildWindows(
-            hWnd,
-            [](
-                HWND child,
-                LPARAM) -> BOOL
-            {
-                ThemeFinishedAlertChild(
-                    child
-                );
-
-                return TRUE;
-            },
-            0
-        );
-
         LayoutFinishedAlert(
             hWnd,
             dpi
@@ -1782,21 +1839,6 @@ static LRESULT CALLBACK FinishedAlertWndProc(
             dpi
         );
 
-        EnumChildWindows(
-            hWnd,
-            [](
-                HWND child,
-                LPARAM) -> BOOL
-            {
-                ThemeFinishedAlertChild(
-                    child
-                );
-
-                return TRUE;
-            },
-            0
-        );
-
         LayoutFinishedAlert(
             hWnd,
             dpi
@@ -1810,11 +1852,13 @@ static LRESULT CALLBACK FinishedAlertWndProc(
         RECT rect{};
         GetClientRect(hWnd, &rect);
 
-        FillRect(
-            reinterpret_cast<HDC>(wParam),
-            &rect,
-            g_finishedAlertBackgroundBrush
-        );
+        if (g_finishedAlertBackgroundBrush) {
+            FillRect(
+                reinterpret_cast<HDC>(wParam),
+                &rect,
+                g_finishedAlertBackgroundBrush
+            );
+        }
 
         return 1;
     }
@@ -1824,24 +1868,14 @@ static LRESULT CALLBACK FinishedAlertWndProc(
         HDC hdc =
             reinterpret_cast<HDC>(wParam);
 
-        COLORREF textColor =
-            g_finishedAlertDark
-                ? RGB(245, 245, 245)
-                : RGB(25, 25, 25);
-
-        COLORREF background =
-            g_finishedAlertDark
-                ? RGB(32, 32, 32)
-                : RGB(249, 249, 249);
-
         SetTextColor(
             hdc,
-            textColor
+            g_finishedAlertTextColor
         );
 
         SetBkColor(
             hdc,
-            background
+            g_finishedAlertBackgroundColor
         );
 
         return reinterpret_cast<LRESULT>(
@@ -1854,30 +1888,42 @@ static LRESULT CALLBACK FinishedAlertWndProc(
         HDC hdc =
             reinterpret_cast<HDC>(wParam);
 
-        COLORREF textColor =
-            g_finishedAlertDark
-                ? RGB(245, 245, 245)
-                : RGB(25, 25, 25);
-
-        COLORREF background =
-            g_finishedAlertDark
-                ? RGB(45, 45, 45)
-                : RGB(255, 255, 255);
-
         SetTextColor(
             hdc,
-            textColor
+            g_finishedAlertTextColor
         );
 
         SetBkColor(
             hdc,
-            background
+            g_finishedAlertEditBackgroundColor
         );
 
         return reinterpret_cast<LRESULT>(
             g_finishedAlertEditBrush
         );
     }
+
+    case WM_THEMECHANGED:
+        ApplyFinishedAlertTheme(
+            hWnd,
+            GetDpiForWindow(hWnd)
+        );
+        return 0;
+
+    case WM_SETTINGCHANGE:
+        if (lParam &&
+            _wcsicmp(
+                reinterpret_cast<LPCWSTR>(
+                    lParam
+                ),
+                L"ImmersiveColorSet") == 0)
+        {
+            ApplyFinishedAlertTheme(
+                hWnd,
+                GetDpiForWindow(hWnd)
+            );
+        }
+        return 0;
 
     case WM_COMMAND:
     {
@@ -2072,8 +2118,8 @@ static DWORD WINAPI FinishedAlertThreadProc(LPVOID param)
             WS_POPUP | WS_CAPTION | WS_SYSMENU,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
-            ScaleAlertValue(380, dpi),
-            ScaleAlertValue(220, dpi),
+            GetFinishedAlertWindowSize(dpi).cx,
+            GetFinishedAlertWindowSize(dpi).cy,
             nullptr,
             nullptr,
             g_modInstance,
@@ -2092,13 +2138,13 @@ static DWORD WINAPI FinishedAlertThreadProc(LPVOID param)
     g_finishedAlertWnd.store(hWnd);
 
     PositionFinishedAlert(hWnd, dpi);
-    ShowWindow(hWnd, SW_SHOWNORMAL);
+    ShowWindow(hWnd, SW_SHOWNOACTIVATE);
 
     SetWindowPos(
         hWnd,
         HWND_TOPMOST,
         0, 0, 0, 0,
-        SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW
+        SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE
     );
 
     FlashWindow(hWnd, TRUE);
@@ -2180,7 +2226,6 @@ static bool ShowFinishedAlert(const wchar_t* reminder)
 
     if (HWND existing = g_finishedAlertWnd.load()) {
         if (IsWindow(existing)) {
-            SetForegroundWindow(existing);
             FlashWindow(existing, TRUE);
             return true;
         }
@@ -2296,7 +2341,13 @@ static void HandleTimerExpiredFromWorker()
     }
 
     if (GetUtcFileTimeNow() < expected) {
-        SignalTimerWorker();
+        if (WaitForSingleObject(
+                g_timerStopEvent,
+                250) == WAIT_TIMEOUT)
+        {
+            SignalTimerWorker();
+        }
+
         return;
     }
 
@@ -2510,6 +2561,38 @@ static void RestorePersistedTimer()
 }
 
 
+static void CleanupTimerObjects()
+{
+    if (g_timerWaitable) {
+        CloseHandle(
+            g_timerWaitable
+        );
+        g_timerWaitable = nullptr;
+    }
+
+    if (g_timerRearmEvent) {
+        CloseHandle(
+            g_timerRearmEvent
+        );
+        g_timerRearmEvent = nullptr;
+    }
+
+    if (g_timerStopEvent) {
+        CloseHandle(
+            g_timerStopEvent
+        );
+        g_timerStopEvent = nullptr;
+    }
+
+    if (g_finishedAlertStopEvent) {
+        CloseHandle(
+            g_finishedAlertStopEvent
+        );
+        g_finishedAlertStopEvent = nullptr;
+    }
+}
+
+
 static bool StartTimerWorkerFromInit()
 {
     g_timerStopEvent =
@@ -2552,6 +2635,7 @@ static bool StartTimerWorkerFromInit()
             L"ERROR: Could not create timer synchronization objects"
         );
 
+        CleanupTimerObjects();
         return false;
     }
 
@@ -2570,6 +2654,7 @@ static bool StartTimerWorkerFromInit()
             L"ERROR: Could not create timer worker thread"
         );
 
+        CleanupTimerObjects();
         return false;
     }
 
@@ -2630,95 +2715,10 @@ static void ReleaseOwnedXamlForRebuild()
 }
 
 
-static void RemoveStaleNamedButton(
-    Panel const& panel,
-    FrameworkElement const& stale)
-{
-    if (!panel || !stale) {
-        return;
-    }
-
-    auto children =
-        panel.Children();
-
-    uint32_t staleIndex = 0;
-
-    if (!children.IndexOf(
-            stale,
-            staleIndex))
-    {
-        return;
-    }
-
-    auto grid =
-        panel.try_as<Grid>();
-
-    int staleColumn =
-        grid
-            ? Grid::GetColumn(stale)
-            : -1;
-
-    children.RemoveAt(
-        staleIndex
-    );
-
-    if (!grid ||
-        staleColumn < 0)
-    {
-        return;
-    }
-
-    auto columns =
-        grid.ColumnDefinitions();
-
-    if (static_cast<uint32_t>(staleColumn) >=
-        columns.Size())
-    {
-        return;
-    }
-
-    for (uint32_t i = 0;
-         i < children.Size();
-         i++)
-    {
-        auto child =
-            children.GetAt(i)
-                .try_as<FrameworkElement>();
-
-        if (!child) {
-            continue;
-        }
-
-        int column =
-            Grid::GetColumn(child);
-
-        if (column > staleColumn) {
-            Grid::SetColumn(
-                child,
-                column - 1
-            );
-        }
-    }
-
-    columns.RemoveAt(
-        static_cast<uint32_t>(
-            staleColumn
-        )
-    );
-}
-
-
 static void AddTimerButtonImpl(
     void* param)
 {
     if (g_unloading.load()) {
-        return;
-    }
-
-    if (g_timerButton &&
-        VisualTreeHelper::GetParent(
-            g_timerButton))
-    {
         return;
     }
 
@@ -2730,6 +2730,22 @@ static void AddTimerButtonImpl(
 
     if (!xamlRoot) {
         return;
+    }
+
+    // Fast path which is safe across in-process tray rebuilds: only keep the
+    // current button if it still belongs to the *current* taskbar XamlRoot.
+    if (g_timerButton) {
+        auto buttonRoot =
+            g_timerButton.XamlRoot();
+
+        if (buttonRoot &&
+            SameWinrtObject(
+                buttonRoot,
+                xamlRoot))
+        {
+            g_taskbarWnd.store(taskbar);
+            return;
+        }
     }
 
     auto content =
@@ -2796,13 +2812,10 @@ static void AddTimerButtonImpl(
 
     if (existing) {
         Wh_Log(
-            L"Removing stale timer button from a previous mod instance"
+            L"WARNING: A foreign TaskbarCountdownTimerButton already exists; "
+            L"leaving it untouched for safety"
         );
-
-        RemoveStaleNamedButton(
-            panel,
-            existing
-        );
+        return;
     }
 
     ReleaseOwnedXamlForRebuild();
@@ -3001,9 +3014,21 @@ static void AddTimerButton(
 }
 
 
-static void RemoveTimerButtonImpl(
-    void*)
+struct RemoveTimerButtonRequest
 {
+    bool callbacksRevoked = false;
+};
+
+
+static void RemoveTimerButtonImpl(
+    void* param)
+{
+    auto* request =
+        reinterpret_cast<
+            RemoveTimerButtonRequest*>(
+            param
+        );
+
     // Revoke every callback into this mod first. Nothing below this point is
     // allowed to throw while leaving a live delegate behind.
     if (g_loadedRevokers) {
@@ -3024,6 +3049,10 @@ static void RemoveTimerButtonImpl(
         g_timerButton.Click(
             g_timerButtonClickToken
         );
+    }
+
+    if (request) {
+        request->callbacksRevoked = true;
     }
 
     // Best-effort visual-tree detachment follows after all callbacks are gone.
@@ -3144,11 +3173,17 @@ static bool TryRemoveTimerXaml()
         return false;
     }
 
-    return RunFromWindowThread(
-        target,
-        RemoveTimerButton,
-        nullptr
-    );
+    RemoveTimerButtonRequest request{};
+
+    if (!RunFromWindowThread(
+            target,
+            RemoveTimerButton,
+            &request))
+    {
+        return false;
+    }
+
+    return request.callbacksRevoked;
 }
 
 
@@ -3345,7 +3380,7 @@ static void* WINAPI IconView_IconView_Hook(
                 }
 
                 // A new IconView means the tray may have rebuilt its XAML tree.
-                            ApplyTimerButtonIfAvailable();
+                ApplyTimerButtonIfAvailable();
             }
         );
     }
@@ -3385,7 +3420,9 @@ static bool HookSystemTraySymbols(
 static void HandleLoadedModuleIfSystemTray(
     HMODULE module)
 {
-    if (g_systemTrayModuleHooked.load()) {
+    if (g_unloading.load() ||
+        g_systemTrayModuleHooked.load())
+    {
         return;
     }
 
@@ -3508,35 +3545,8 @@ BOOL Wh_ModInit()
             g_timerWorkerThread = nullptr;
         }
 
-        if (g_timerWaitable) {
-            CloseHandle(
-                g_timerWaitable
-            );
-            g_timerWaitable = nullptr;
-        }
+        CleanupTimerObjects();
 
-        if (g_timerRearmEvent) {
-            CloseHandle(
-                g_timerRearmEvent
-            );
-            g_timerRearmEvent = nullptr;
-        }
-
-        if (g_timerStopEvent) {
-            CloseHandle(
-                g_timerStopEvent
-            );
-            g_timerStopEvent = nullptr;
-        }
-
-        if (g_finishedAlertStopEvent) {
-            CloseHandle(
-                g_finishedAlertStopEvent
-            );
-            g_finishedAlertStopEvent = nullptr;
-        }
-
-        UnregisterFinishedAlertClass();
         UnregisterFinishedAlertClass();
         Wh_Log(
             L"ERROR: Failed to resolve taskbar.dll symbols"
@@ -3565,10 +3575,6 @@ BOOL Wh_ModInit()
             );
         }
         else {
-            g_systemTrayModuleAttempted.store(
-                nullptr
-            );
-
             Wh_Log(
                 L"ERROR: Failed to hook system tray symbols"
             );
@@ -3700,40 +3706,17 @@ void Wh_ModUninit()
         );
     }
 
-    // Final best-effort XAML teardown after all worker activity is stopped.
-    if (!TryRemoveTimerXaml()) {
+    // Final best-effort XAML teardown only if the first attempt left an
+    // owned button behind.
+    if (g_timerButton &&
+        !TryRemoveTimerXaml())
+    {
         Wh_Log(
             L"ERROR: Could not dispatch final timer XAML teardown"
         );
     }
 
-    if (g_timerWaitable) {
-        CloseHandle(
-            g_timerWaitable
-        );
-        g_timerWaitable = nullptr;
-    }
-
-    if (g_timerRearmEvent) {
-        CloseHandle(
-            g_timerRearmEvent
-        );
-        g_timerRearmEvent = nullptr;
-    }
-
-    if (g_timerStopEvent) {
-        CloseHandle(
-            g_timerStopEvent
-        );
-        g_timerStopEvent = nullptr;
-    }
-
-    if (g_finishedAlertStopEvent) {
-        CloseHandle(
-            g_finishedAlertStopEvent
-        );
-        g_finishedAlertStopEvent = nullptr;
-    }
+    CleanupTimerObjects();
 
     if (g_finishedAlertFont) {
         DeleteObject(
@@ -3795,3 +3778,4 @@ void Wh_ModSettingsChanged()
         );
     }
 }
+
