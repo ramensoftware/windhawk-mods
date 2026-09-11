@@ -2,7 +2,7 @@
 // @id              smart-process-priority-ram-optimizer
 // @name            Smart Process Priority & RAM Optimizer
 // @description     Boosts foreground responsiveness, shields audio and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.
-// @version         2.0.0
+// @version         2.1.0
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         windhawk.exe
@@ -79,6 +79,9 @@ Pressing Ctrl+Alt+F11 triggers an immediate memory cleanup pass.
 - enableForegroundCpuSets: false
   $name: Suggest P-Cores to Foreground Window (Experimental)
   $description: Suggests performance cores (P-cores) to the main foreground window on hybrid Intel/AMD architectures. Child renderers remain free to use efficiency cores.
+- enableBackgroundCpuSets: false
+  $name: Restrict Throttled Background Apps to E-Cores (Experimental)
+  $description: Assigns efficiency cores (E-cores) to throttled background processes on hybrid Intel/AMD architectures to preserve full P-core capacity for the active foreground window.
 - enableBackgroundThrottling: true
   $name: Throttle CPU-Heavy Background Processes
   $description: Temporarily lowers the priority of background processes that consume excessive CPU while a foreground app is active.
@@ -282,6 +285,7 @@ struct SystemHardwareProfile {
   bool isLowCoreCount = false; // <= 4 cores (single runaway process paralyzes 25-50% CPU)
   bool isHybridCpu = false;    // Intel P/E-cores or heterogeneous CPU
   std::vector<ULONG> pCoreCpuSetIds; // IDs of performance cores (EfficiencyClass == max)
+  std::vector<ULONG> eCoreCpuSetIds; // IDs of efficiency cores (EfficiencyClass == min)
 };
 
 static SystemHardwareProfile GetHardwareProfile() {
@@ -332,9 +336,12 @@ static SystemHardwareProfile GetHardwareProfile() {
             for (ULONG i = 0; i < count; i++) {
               auto *item = reinterpret_cast<PSYSTEM_CPU_SET_INFORMATION>(
                   buf.data() + i * sizeof(SYSTEM_CPU_SET_INFORMATION));
-              if (item->Type == CpuSetInformation &&
-                  item->CpuSet.EfficiencyClass == maxEff) {
-                p.pCoreCpuSetIds.push_back(item->CpuSet.Id);
+              if (item->Type == CpuSetInformation) {
+                if (item->CpuSet.EfficiencyClass == maxEff) {
+                  p.pCoreCpuSetIds.push_back(item->CpuSet.Id);
+                } else if (item->CpuSet.EfficiencyClass == minEff) {
+                  p.eCoreCpuSetIds.push_back(item->CpuSet.Id);
+                }
               }
             }
           }
@@ -372,6 +379,7 @@ struct ModSettings {
   ForegroundPrioritySetting foregroundPriorityLevel =
       ForegroundPrioritySetting::AboveNormal;
   bool enableForegroundCpuSets = false;
+  bool enableBackgroundCpuSets = false;
   bool enableBackgroundThrottling = true;
   int backgroundCpuThrottleThresholdPercent = 15;
   int systemCpuContentionThresholdPercent = 60;
@@ -459,6 +467,7 @@ struct ThrottledProcessInfo {
   ULONG originalIoPriority = IoPriorityNormal;
   ULONG originalMemoryPriority = 5; // MEMORY_PRIORITY_NORMAL
   bool ecoQosApplied = false;
+  bool cpuSetsApplied = false;
   DWORD staleSampleCount = 0;
 };
 static std::map<DWORD, ThrottledProcessInfo>
@@ -1153,6 +1162,7 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
       origIoPriority = itThrottled->second.originalIoPriority;
       origMemoryPriority = itThrottled->second.originalMemoryPriority;
       bool ecoQosWasApplied = itThrottled->second.ecoQosApplied;
+      bool cpuSetsWasApplied = itThrottled->second.cpuSetsApplied;
       if (itThrottled->second.hProcess) {
         CloseHandle(itThrottled->second.hProcess);
       }
@@ -1163,6 +1173,9 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
       SetProcessMemoryPriorityHint(hProc, origMemoryPriority);
       if (ecoQosWasApplied) {
         ResetProcessEcoQoS(hProc);
+      }
+      if (cpuSetsWasApplied && g_pfnSetProcessDefaultCpuSets) {
+        g_pfnSetProcessDefaultCpuSets(hProc, nullptr, 0);
       }
     } else {
       DWORD prevPriority = GetPriorityClass(hProc);
@@ -1355,6 +1368,7 @@ static bool RestoreAndEraseThrottledProcess(DWORD pid) {
   ULONG originalIoPriority = it->second.originalIoPriority;
   ULONG originalMemoryPriority = it->second.originalMemoryPriority;
   bool ecoQosApplied = it->second.ecoQosApplied;
+  bool cpuSetsApplied = it->second.cpuSetsApplied;
   g_throttledProcesses.erase(it);
 
   if (hSaved) {
@@ -1364,6 +1378,9 @@ static bool RestoreAndEraseThrottledProcess(DWORD pid) {
       SetProcessMemoryPriorityHint(hSaved, originalMemoryPriority);
       if (ecoQosApplied) {
         ResetProcessEcoQoS(hSaved);
+      }
+      if (cpuSetsApplied && g_pfnSetProcessDefaultCpuSets) {
+        g_pfnSetProcessDefaultCpuSets(hSaved, nullptr, 0);
       }
     }
     CloseHandle(hSaved);
@@ -1382,6 +1399,9 @@ static void RestoreAllThrottledProcesses() {
         SetProcessMemoryPriorityHint(info.hProcess, info.originalMemoryPriority);
         if (info.ecoQosApplied) {
           ResetProcessEcoQoS(info.hProcess);
+        }
+        if (info.cpuSetsApplied && g_pfnSetProcessDefaultCpuSets) {
+          g_pfnSetProcessDefaultCpuSets(info.hProcess, nullptr, 0);
         }
       }
       CloseHandle(info.hProcess);
@@ -1883,6 +1903,7 @@ static void ApplyBackgroundThrottling(const ModSettings &settings,
           ULONG prevIo = GetProcessIoPriorityHint(hProc);
           ULONG prevMem = GetProcessMemoryPriorityHint(hProc);
           bool appliedEcoQos = false;
+          bool appliedCpuSets = false;
           {
             std::lock_guard<std::mutex> lock(g_priorityMutex);
             if (pid != g_currentBoostedPid &&
@@ -1899,8 +1920,20 @@ static void ApplyBackgroundThrottling(const ModSettings &settings,
                     appliedEcoQos = true;
                   }
                 }
+
+                // Hybrid Architecture: Confine throttled background process to E-cores
+                const SystemHardwareProfile &hwProfile = GetHardwareProfile();
+                if (settings.enableBackgroundCpuSets && hwProfile.isHybridCpu &&
+                    g_pfnSetProcessDefaultCpuSets && !hwProfile.eCoreCpuSetIds.empty()) {
+                  if (g_pfnSetProcessDefaultCpuSets(
+                          hProc, hwProfile.eCoreCpuSetIds.data(),
+                          static_cast<ULONG>(hwProfile.eCoreCpuSetIds.size()))) {
+                    appliedCpuSets = true;
+                  }
+                }
+
                 g_throttledProcesses[pid] = {hProc, prevPriority, prevIo,
-                                             prevMem, appliedEcoQos, 0};
+                                             prevMem, appliedEcoQos, appliedCpuSets, 0};
                 hProc = nullptr; // Transferred ownership to
                                  // g_throttledProcesses: blocks PID reuse!
               }
@@ -2889,6 +2922,9 @@ static void LoadSettings() {
 
   g_settings.enableForegroundCpuSets =
       Wh_GetIntSetting(L"enableForegroundCpuSets") != 0;
+
+  g_settings.enableBackgroundCpuSets =
+      Wh_GetIntSetting(L"enableBackgroundCpuSets") != 0;
 
   g_settings.enableBackgroundThrottling =
       Wh_GetIntSetting(L"enableBackgroundThrottling") != 0;
