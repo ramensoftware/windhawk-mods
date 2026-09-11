@@ -1897,6 +1897,9 @@ static void NativeRenderParticles(int screenW, int screenH) {
     g_pD3DContext->DrawInstanced(6, count, 0, 0);
 }
 
+// 前向声明（自适应对比度函数定义在后面）
+static D2D1_COLOR_F GetAdaptiveOutlineColor(float alpha);
+
 // 拖尾带顶点缓冲渲染（v3 原生渲染）
 static void NativeRenderTrail(const std::vector<D2D1_POINT_2F>& smoothed, float widthMul,
                               const GradData& cols, float fadeAlpha, int screenW, int screenH, DWORD dwTime = 0) {
@@ -2977,7 +2980,8 @@ static void SampleBackgroundLuminance(const std::vector<D2D1_POINT_2F>& path, DW
     float totalLum = 0.0f;
     int samples = 0;
     // 沿路径均匀采样最多 5 个点
-    int step = max(1, (int)path.size() / 5);
+    int step = ((int)path.size() / 5);
+    if (step < 1) step = 1;
     for (size_t i = 0; i < path.size(); i += step) {
         int sx = (int)path[i].x + vX;
         int sy = (int)path[i].y + vY;
