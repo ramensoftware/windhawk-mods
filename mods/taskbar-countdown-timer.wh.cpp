@@ -2,7 +2,7 @@
 // @id              taskbar-countdown-timer
 // @name            Taskbar Countdown Timer
 // @description     A simple countdown timer integrated into the Windows 11 taskbar (Windows 11 only)
-// @version         1.14
+// @version         1.15
 // @author          Richi
 // @github          https://github.com/richilp
 // @include         explorer.exe
@@ -93,6 +93,7 @@ The mod supports one active timer at a time and currently places its button on t
 #include <functional>
 #include <list>
 #include <memory>
+#include <new>
 #include <optional>
 #include <cwchar>
 #include <string>
@@ -160,6 +161,7 @@ static HANDLE g_timerWorkerThread = nullptr;
 static std::atomic<HWND> g_finishedAlertWnd{nullptr};
 static std::atomic<HANDLE> g_finishedAlertThread{nullptr};
 static HANDLE g_finishedAlertStopEvent = nullptr;
+static SRWLOCK g_finishedAlertLock = SRWLOCK_INIT;
 static HINSTANCE g_modInstance = nullptr;
 static bool g_finishedAlertClassRegistered = false;
 
@@ -169,6 +171,7 @@ static std::atomic_bool g_systemTrayModuleHooked{false};
 static std::atomic<HMODULE> g_systemTrayModuleAttempted{nullptr};
 
 static std::atomic_bool g_unloading{false};
+static std::atomic_bool g_xamlTornDown{false};
 
 static void ApplyTimerButtonIfAvailable();
 
@@ -1373,6 +1376,7 @@ constexpr int IDC_ALERT_SNOOZE_LABEL = 2101;
 constexpr int IDC_ALERT_SNOOZE_MINUTES = 2102;
 constexpr int IDC_ALERT_SNOOZE = 2103;
 constexpr int IDC_ALERT_DISMISS = 2104;
+constexpr UINT WM_APP_ALERT_REFRESH = WM_APP + 20;
 
 static constexpr wchar_t kFinishedAlertClass[] =
     L"TaskbarCountdownTimerFinishedAlert";
@@ -1536,6 +1540,23 @@ static void ApplyFinishedAlertTheme(
         DWMWA_WINDOW_CORNER_PREFERENCE_LOCAL,
         &corner,
         sizeof(corner)
+    );
+
+    // Point every child at the new font/theme before deleting the old GDI
+    // resources they may still reference.
+    EnumChildWindows(
+        hWnd,
+        [](
+            HWND child,
+            LPARAM) -> BOOL
+        {
+            ThemeFinishedAlertChild(
+                child
+            );
+
+            return TRUE;
+        },
+        0
     );
 
     InvalidateRect(
@@ -1878,8 +1899,15 @@ static LRESULT CALLBACK FinishedAlertWndProc(
             g_finishedAlertBackgroundColor
         );
 
-        return reinterpret_cast<LRESULT>(
+        HBRUSH brush =
             g_finishedAlertBackgroundBrush
+                ? g_finishedAlertBackgroundBrush
+                : GetSysColorBrush(
+                      COLOR_WINDOW
+                  );
+
+        return reinterpret_cast<LRESULT>(
+            brush
         );
     }
 
@@ -1898,8 +1926,15 @@ static LRESULT CALLBACK FinishedAlertWndProc(
             g_finishedAlertEditBackgroundColor
         );
 
-        return reinterpret_cast<LRESULT>(
+        HBRUSH brush =
             g_finishedAlertEditBrush
+                ? g_finishedAlertEditBrush
+                : GetSysColorBrush(
+                      COLOR_WINDOW
+                  );
+
+        return reinterpret_cast<LRESULT>(
+            brush
         );
     }
 
@@ -1924,6 +1959,65 @@ static LRESULT CALLBACK FinishedAlertWndProc(
             );
         }
         return 0;
+
+    case WM_APP_ALERT_REFRESH:
+    {
+        auto* incoming =
+            reinterpret_cast<
+                FinishedAlertData*>(
+                lParam
+            );
+
+        if (incoming) {
+            auto* current =
+                reinterpret_cast<
+                    FinishedAlertData*>(
+                    GetWindowLongPtrW(
+                        hWnd,
+                        GWLP_USERDATA
+                    )
+                );
+
+            if (current) {
+                *current =
+                    *incoming;
+
+                SetWindowTextW(
+                    GetDlgItem(
+                        hWnd,
+                        IDC_ALERT_REMINDER
+                    ),
+                    current->reminder[0]
+                        ? current->reminder
+                        : L"Timer finished"
+                );
+
+                wchar_t snoozeText[32]{};
+                swprintf_s(
+                    snoozeText,
+                    L"%d",
+                    current->defaultSnoozeMinutes
+                );
+
+                SetWindowTextW(
+                    GetDlgItem(
+                        hWnd,
+                        IDC_ALERT_SNOOZE_MINUTES
+                    ),
+                    snoozeText
+                );
+            }
+
+            delete incoming;
+        }
+
+        FlashWindow(
+            hWnd,
+            TRUE
+        );
+
+        return 0;
+    }
 
     case WM_COMMAND:
     {
@@ -2110,6 +2204,11 @@ static DWORD WINAPI FinishedAlertThreadProc(LPVOID param)
         dpi = 96;
     }
 
+    SIZE windowSize =
+        GetFinishedAlertWindowSize(
+            dpi
+        );
+
     HWND hWnd =
         CreateWindowExW(
             WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
@@ -2118,8 +2217,8 @@ static DWORD WINAPI FinishedAlertThreadProc(LPVOID param)
             WS_POPUP | WS_CAPTION | WS_SYSMENU,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
-            GetFinishedAlertWindowSize(dpi).cx,
-            GetFinishedAlertWindowSize(dpi).cy,
+            windowSize.cx,
+            windowSize.cy,
             nullptr,
             nullptr,
             g_modInstance,
@@ -2216,7 +2315,7 @@ static void CloseFinishedAlertThreadIfExited()
     }
 }
 
-static bool ShowFinishedAlert(const wchar_t* reminder)
+static bool ShowFinishedAlertLocked(const wchar_t* reminder)
 {
     if (g_unloading.load()) {
         return false;
@@ -2226,6 +2325,40 @@ static bool ShowFinishedAlert(const wchar_t* reminder)
 
     if (HWND existing = g_finishedAlertWnd.load()) {
         if (IsWindow(existing)) {
+            auto* refresh =
+                new (std::nothrow)
+                    FinishedAlertData{};
+
+            if (refresh) {
+                wcsncpy_s(
+                    refresh->reminder,
+                    reminder && reminder[0]
+                        ? reminder
+                        : L"Timer finished",
+                    _TRUNCATE
+                );
+
+                ModSettings settings =
+                    GetSettingsSnapshot();
+
+                refresh->defaultSnoozeMinutes =
+                    settings.defaultSnoozeMinutes;
+
+                refresh->maximumMinutes =
+                    settings.maximumMinutes;
+
+                if (!PostMessageW(
+                        existing,
+                        WM_APP_ALERT_REFRESH,
+                        0,
+                        reinterpret_cast<LPARAM>(
+                            refresh
+                        )))
+                {
+                    delete refresh;
+                }
+            }
+
             FlashWindow(existing, TRUE);
             return true;
         }
@@ -2283,6 +2416,30 @@ static bool ShowFinishedAlert(const wchar_t* reminder)
     g_finishedAlertThread.store(thread);
     return true;
 }
+
+static bool ShowFinishedAlert(
+    const wchar_t* reminder)
+{
+    AcquireSRWLockExclusive(
+        &g_finishedAlertLock
+    );
+
+    bool result = false;
+
+    if (!g_unloading.load()) {
+        result =
+            ShowFinishedAlertLocked(
+                reminder
+            );
+    }
+
+    ReleaseSRWLockExclusive(
+        &g_finishedAlertLock
+    );
+
+    return result;
+}
+
 
 static void TimerExpiredOnTaskbarThread(void*)
 {
@@ -2691,6 +2848,92 @@ static bool SameWinrtObject(
 }
 
 
+static void DetachOwnedTimerVisuals()
+{
+    if (!g_timerButton) {
+        return;
+    }
+
+    auto parentElement =
+        VisualTreeHelper::GetParent(
+            g_timerButton
+        ).try_as<FrameworkElement>();
+
+    auto parent =
+        parentElement.try_as<Panel>();
+
+    if (!parent) {
+        return;
+    }
+
+    auto children =
+        parent.Children();
+
+    uint32_t buttonIndex = 0;
+
+    if (children.IndexOf(
+            g_timerButton,
+            buttonIndex))
+    {
+        children.RemoveAt(
+            buttonIndex
+        );
+    }
+
+    auto parentGrid =
+        parentElement.try_as<Grid>();
+
+    if (!parentGrid ||
+        !g_timerColumn)
+    {
+        return;
+    }
+
+    auto columns =
+        parentGrid.ColumnDefinitions();
+
+    uint32_t columnIndex = 0;
+
+    if (!columns.IndexOf(
+            g_timerColumn,
+            columnIndex))
+    {
+        return;
+    }
+
+    for (uint32_t i = 0;
+         i < children.Size();
+         i++)
+    {
+        auto child =
+            children.GetAt(i)
+                .try_as<FrameworkElement>();
+
+        if (!child) {
+            continue;
+        }
+
+        int currentColumn =
+            Grid::GetColumn(child);
+
+        if (currentColumn >
+            static_cast<int>(
+                columnIndex
+            ))
+        {
+            Grid::SetColumn(
+                child,
+                currentColumn - 1
+            );
+        }
+    }
+
+    columns.RemoveAt(
+        columnIndex
+    );
+}
+
+
 static void ReleaseOwnedXamlForRebuild()
 {
     HideAndReleaseFlyouts();
@@ -2707,9 +2950,11 @@ static void ReleaseOwnedXamlForRebuild()
         g_timerButton.Click(
             g_timerButtonClickToken
         );
-        g_timerButton = nullptr;
     }
 
+    DetachOwnedTimerVisuals();
+
+    g_timerButton = nullptr;
     g_timerText = nullptr;
     g_timerColumn = nullptr;
 }
@@ -3056,77 +3301,7 @@ static void RemoveTimerButtonImpl(
     }
 
     // Best-effort visual-tree detachment follows after all callbacks are gone.
-    if (g_timerButton) {
-        auto parentElement =
-            VisualTreeHelper::GetParent(
-                g_timerButton
-            ).try_as<FrameworkElement>();
-
-        auto parent =
-            parentElement.try_as<Panel>();
-
-        if (parent) {
-            auto children =
-                parent.Children();
-
-            uint32_t index = 0;
-
-            if (children.IndexOf(
-                    g_timerButton,
-                    index))
-            {
-                children.RemoveAt(index);
-            }
-
-            auto parentGrid =
-                parentElement.try_as<Grid>();
-
-            if (parentGrid &&
-                g_timerColumn)
-            {
-                auto columns =
-                    parentGrid.ColumnDefinitions();
-
-                uint32_t columnIndex = 0;
-
-                if (columns.IndexOf(
-                        g_timerColumn,
-                        columnIndex))
-                {
-                    for (uint32_t i = 0;
-                         i < children.Size();
-                         i++)
-                    {
-                        auto child =
-                            children.GetAt(i)
-                                .try_as<FrameworkElement>();
-
-                        if (!child) {
-                            continue;
-                        }
-
-                        int currentColumn =
-                            Grid::GetColumn(child);
-
-                        if (currentColumn >
-                            static_cast<int>(
-                                columnIndex
-                            ))
-                        {
-                            Grid::SetColumn(
-                                child,
-                                currentColumn - 1
-                            );
-                        }
-                    }
-
-                    columns.RemoveAt(
-                        columnIndex
-                    );
-                }
-            }
-        }
-    }
+    DetachOwnedTimerVisuals();
 
     g_timerColumn = nullptr;
     g_timerText = nullptr;
@@ -3518,6 +3693,7 @@ BOOL Wh_ModInit()
     );
 
     g_unloading.store(false);
+    g_xamlTornDown.store(false);
 
     LoadSettings();
 
@@ -3643,11 +3819,17 @@ void Wh_ModBeforeUninit()
 
     StopTimerWorker();
 
-    // Primary teardown attempt while the taskbar thread is still available.
-    // Wh_ModUninit performs one final best-effort retry after worker threads stop.
-    if (!TryRemoveTimerXaml()) {
+    // Primary teardown attempt while the taskbar UI thread is still available.
+    bool tornDown =
+        TryRemoveTimerXaml();
+
+    g_xamlTornDown.store(
+        tornDown
+    );
+
+    if (!tornDown) {
         Wh_Log(
-            L"Timer XAML teardown will be retried in Wh_ModUninit"
+            L"Initial timer XAML teardown failed; will retry in Wh_ModUninit"
         );
     }
 }
@@ -3674,7 +3856,13 @@ void Wh_ModUninit()
     }
 
 
-    // Only after the timer worker is gone can no new alert thread be created.
+    // Only after the timer worker is gone can no new alert be requested by it.
+    // Serialize ownership with ShowFinishedAlert in case another caller is
+    // concurrently leaving the initialization path.
+    AcquireSRWLockExclusive(
+        &g_finishedAlertLock
+    );
+
     if (g_finishedAlertStopEvent) {
         SetEvent(
             g_finishedAlertStopEvent
@@ -3692,11 +3880,16 @@ void Wh_ModUninit()
         );
     }
 
-    if (HANDLE alertThread =
-            g_finishedAlertThread.exchange(
-                nullptr
-            ))
-    {
+    HANDLE alertThread =
+        g_finishedAlertThread.exchange(
+            nullptr
+        );
+
+    ReleaseSRWLockExclusive(
+        &g_finishedAlertLock
+    );
+
+    if (alertThread) {
         PumpWaitForThread(
             alertThread
         );
@@ -3706,14 +3899,21 @@ void Wh_ModUninit()
         );
     }
 
-    // Final best-effort XAML teardown only if the first attempt left an
-    // owned button behind.
-    if (g_timerButton &&
-        !TryRemoveTimerXaml())
-    {
-        Wh_Log(
-            L"ERROR: Could not dispatch final timer XAML teardown"
+    // Retry whenever the first teardown didn't complete. Loaded revokers can
+    // exist even when no timer button was ever created.
+    if (!g_xamlTornDown.load()) {
+        bool tornDown =
+            TryRemoveTimerXaml();
+
+        g_xamlTornDown.store(
+            tornDown
         );
+
+        if (!tornDown) {
+            Wh_Log(
+                L"ERROR: Could not complete final timer XAML teardown"
+            );
+        }
     }
 
     CleanupTimerObjects();
