@@ -141,7 +141,7 @@ volume control, call state, and headset integration.
 - Headset:
   - headsetSyncMode: off
     $name: Headset mute synchronization
-    $description: Uses Windows hardware mute, standard HID mute controls, or a supported vendor adapter. For supported vendor-adapter headsets, full mode automatically releases a Windows mute only when MuteAlert still owns that mute on the same input device; manual Windows mutes are preserved. Call apps unmute only after a physical transition. While a physical mute remains observable, mute-only and full modes re-apply it at most every five seconds if software is manually unmuted. The taskbar tooltip shows the current detection method and confidence. Silence is never interpreted as physical mute.
+    $description: Uses Windows hardware mute, standard HID mute controls, or a supported vendor adapter. For supported vendor adapters, full mode releases a Windows mute only when MuteAlert still owns it on the same input. Manual Windows mutes are preserved, and call apps unmute only after a physical transition. An observable vendor mute is re-applied to Windows on each status poll; active-call mute retries are limited to once every five seconds. Silence is never interpreted as physical mute.
     $options:
     - full: Sync physical mute and unmute changes
     - muteOnly: Sync only physical mute changes
@@ -705,7 +705,9 @@ static std::atomic<int> g_pendingVolumeNotches{0};
 static std::atomic<int> g_pendingVolumeSet{-1};
 static std::atomic<int> g_pendingForcedVolumePersist{-1};
 static std::atomic<unsigned int> g_pendingMuteToggles{0};
-static std::atomic<int> g_pendingMuteSet{-1};
+// Low two bits: 0 = none, 1 = unmute, 2 = mute, 3 = owned-endpoint
+// unmute. Upper bits hold the GetTickCount64 deadline in milliseconds.
+static std::atomic<unsigned long long> g_pendingMuteRequest{0};
 static std::atomic<int> g_pendingSlackCommand{-1};
 static std::atomic<int> g_pendingTeamsCommand{-1};
 static std::atomic<int> g_pendingZoomCommand{-1};
@@ -985,12 +987,20 @@ static void QueueMuteToggle() {
     }
 }
 
-static void QueueHeadsetMuteSet(bool muted,
-                                bool requireOwnedEndpoint = false) {
-    // -1 = none, 0 = unmute, 1 = mute, 2 = unmute only if the persisted
-    // headset-owned endpoint is still the default input.
-    g_pendingMuteSet.store(requireOwnedEndpoint ? 2 : (muted ? 1 : 0));
+static void QueueHeadsetMuteRequest(unsigned command) {
+    constexpr unsigned long long kCommandMask = 3;
+    unsigned long long deadline = GetTickCount64() + 5000;
+    g_pendingMuteRequest.store((deadline << 2) |
+                               (command & kCommandMask));
     if (g_audioWakeEvent) SetEvent(g_audioWakeEvent);
+}
+
+static void QueueHeadsetMuteSet(bool muted) {
+    QueueHeadsetMuteRequest(muted ? 2 : 1);
+}
+
+static void QueueOwnedHeadsetUnmute() {
+    QueueHeadsetMuteRequest(3);
 }
 
 static constexpr int kCallCommandNone = -1;
@@ -2148,10 +2158,13 @@ static DWORD WINAPI AudioThreadProc(void*) {
             }
         }
 
-        int requestedMute = g_pendingMuteSet.exchange(-1);
-        if (requestedMute >= 0) {
-            bool requireOwnedEndpoint = requestedMute == 2;
-            bool targetMuted = requestedMute == 1;
+        unsigned long long muteRequest =
+            g_pendingMuteRequest.exchange(0);
+        unsigned muteCommand = static_cast<unsigned>(muteRequest & 3);
+        unsigned long long muteDeadline = muteRequest >> 2;
+        if (muteCommand != 0 && now <= muteDeadline) {
+            bool requireOwnedEndpoint = muteCommand == 3;
+            bool targetMuted = muteCommand == 2;
             bool endpointMatches =
                 !requireOwnedEndpoint ||
                 (g_windowsMutedByHeadset.load() &&
@@ -3274,8 +3287,11 @@ static DWORD WINAPI HeadsetThreadProc(void*) {
                         releaseHeadsetMute) {
                         bool audioKnown = g_audioAvailable.load();
                         if (!audioKnown || g_audioMuted.load()) {
-                            QueueHeadsetMuteSet(
-                                false, ownershipRelease);
+                            if (ownershipRelease) {
+                                QueueOwnedHeadsetUnmute();
+                            } else {
+                                QueueHeadsetMuteSet(false);
+                            }
                         } else if (audioKnown) {
                             ClearHeadsetMuteOwnership();
                         }
@@ -3357,6 +3373,9 @@ static bool StartAudioThread() {
         g_audioWakeEvent = nullptr;
         return false;
     }
+
+    g_pendingMuteRequest.store(0);
+    g_pendingMuteToggles.store(0);
 
     g_audioThread = CreateThread(nullptr, 0, AudioThreadProc, nullptr, 0,
                                  nullptr);
