@@ -8061,6 +8061,16 @@ bool InitializeLegacyProvider(HWND window) {
 }
 LONG CALLBACK CplHook(HWND window, UINT message, LPARAM first, LPARAM second) {
     DWORD entryError = GetLastError();
+    // Every path below calls g_nativeCpl. It cannot be null once this hook is
+    // live - the detour and the original-function pointer are written by the
+    // same Wh_ApplyHookOperations step, and both registration sites require it
+    // to have succeeded - but the alternative to checking is a null call inside
+    // explorer.exe, so the applet is refused instead.
+    if (!g_nativeCpl) {
+        Wh_Log(L"ERROR: CPlApplet hook is live without an original function; refusing CPL=%u", message);
+        SetLastError(entryError);
+        return 0;
+    }
     const bool activation = message == CPL_DBLCLK || message == CPL_STARTWPARMSA || message == CPL_STARTWPARMSW;
     // The complement of "the applet is being asked to show something": what the
     // shell sends when it merely lists the applet or tears it down. Deliberately
@@ -8656,6 +8666,9 @@ bool InstallRedirectHook() {
 // which is the mod's headline scenario.
 using LoadLibraryExWProc = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
 LoadLibraryExWProc g_origLoadLibraryExW = nullptr;
+// "Settled", not "installed": set once the Explorer in-process route is either
+// hooked or has failed to hook, so the loader hook stops trying. Read only
+// there. The name predates the failure latch.
 std::atomic<bool> g_explorerCplHooked{false};
 // Shared with the eager Control/Rundll32 path in Wh_ModInit.
 bool HookNativeCpl(HMODULE module) {
@@ -8691,16 +8704,46 @@ HMODULE WINAPI LoadLibraryExW_hook(LPCWSTR name, HANDLE file, DWORD flags) {
                 HMODULE pinned = g_origLoadLibraryExW
                     ? g_origLoadLibraryExW(name, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32)
                     : LoadLibraryExW(name, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-                if (pinned && HookNativeCpl(pinned)) {
-                    g_explorerCplHooked.store(true, std::memory_order_release);
+                // Wh_SetFunctionHook only *registers* an operation: Windhawk
+                // applies the registrations automatically exactly once, right
+                // after Wh_ModInit returns, and that is also when the original-
+                // function pointer gets written. This registration happens long
+                // after init, so without Wh_ApplyHookOperations() the CPlApplet
+                // detour never exists - the bookkeeping below would all succeed
+                // while CplHook was never entered and g_nativeCpl stayed null,
+                // leaving Explorer's in-process Control Panel > Region route on
+                // the modern page.
+                const bool registered = pinned && HookNativeCpl(pinned);
+                const bool hooked = registered && Wh_ApplyHookOperations() && g_nativeCpl;
+                if (hooked) {
                     // An activation is about to follow on this thread; start the
                     // payload fetch now so the download runs in the background
                     // instead of on the activation thread (finding 5).
                     StartPrefetch();
                     Wh_Log(L"intl.cpl loaded in Explorer; CPlApplet hook installed");
-                } else if (pinned) {
-                    FreeLibrary(pinned);
+                } else if (!registered) {
+                    // Nothing was queued and nothing was adopted, so the extra
+                    // reference is simply ours to drop.
+                    if (pinned) FreeLibrary(pinned);
+                    Wh_Log(L"WARNING: CPlApplet hook could not be registered in Explorer; "
+                           L"the in-process Control Panel > Region route stays on the modern page");
+                } else {
+                    // Registered but not applied. Deliberately keeps our module
+                    // reference (HookNativeCpl adopted it into g_nativeModule):
+                    // the operation is still queued inside Windhawk, and any
+                    // later Wh_ApplyHookOperations() - a settings edit, for
+                    // instance - would apply it. Releasing the pin here could
+                    // then leave a live detour pointing into a module Explorer
+                    // is free to unmap. Cleanup() drops the reference on unload.
+                    Wh_Log(L"ERROR: CPlApplet hook registered but Wh_ApplyHookOperations "
+                           L"failed in Explorer; the in-process Control Panel > Region route "
+                           L"stays on the modern page");
                 }
+                // Settled either way. Retrying on the next load would register
+                // the same target again and re-apply everything from inside a
+                // loader hook, and an apply that failed once is unlikely to
+                // fail differently next time.
+                g_explorerCplHooked.store(true, std::memory_order_release);
             }
         }
     } catch (...) {
@@ -8860,8 +8903,21 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
         const bool wanted = Wh_GetIntSetting(L"redirectSettings") != 0;
         const bool before = g_redirectWanted.exchange(wanted, std::memory_order_acq_rel);
         if (wanted && g_host == Host::Explorer && !g_origShellExecuteExW) {
-            if (InstallRedirectHook()) Wh_Log(L"Settings redirect installed at runtime");
-            else Wh_Log(L"WARNING: Settings-redirect hook failed at runtime; classic UI still active");
+            // Same rule as the loader hook above: registrations made after
+            // Wh_ModInit are inert until they are applied, and the trampolines
+            // stay null until then. Applying is also what makes the
+            // !g_origShellExecuteExW guard above work - without it every later
+            // settings change would re-register the same three targets.
+            // On failure the trampolines stay null, so this branch is taken
+            // again by the next settings edit - which is right, since a later
+            // edit is also a later chance for the apply to succeed. It is not a
+            // re-registration loop in the harmful sense: InstallRedirectHook()
+            // guards on g_origShellExecuteExW, and the registration itself is
+            // idempotent for the same target and hook.
+            if (InstallRedirectHook() && Wh_ApplyHookOperations() && g_origShellExecuteExW)
+                Wh_Log(L"Settings redirect installed at runtime");
+            else
+                Wh_Log(L"WARNING: Settings-redirect hook failed at runtime; classic UI still active");
         } else if (wanted != before) {
             Wh_Log(L"Settings redirect %s", wanted ? L"enabled" : L"disabled");
         }
