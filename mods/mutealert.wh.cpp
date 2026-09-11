@@ -2104,6 +2104,7 @@ static DWORD WINAPI AudioThreadProc(void*) {
     ULONGLONG lastEndpointCheck = 0;
     ULONGLONG lastVolumeForce = 0;
     std::wstring observedEndpointId;
+    bool observedEndpointOwned = false;
     bool observedHardwareMuteKnown = false;
     bool observedHardwareMuted = false;
     ULONGLONG lastHardwareCallMuteAssert = 0;
@@ -2132,6 +2133,8 @@ static DWORD WINAPI AudioThreadProc(void*) {
             }
             if (observedEndpointId != endpoint.id) {
                 observedEndpointId = endpoint.id;
+                observedEndpointOwned =
+                    GetHeadsetMutedEndpointId() == endpoint.id;
                 observedHardwareMuteKnown = false;
             }
         }
@@ -2183,6 +2186,7 @@ static DWORD WINAPI AudioThreadProc(void*) {
                     Wh_SetStringValue(
                         L"windowsMutedByHeadsetDevice",
                         targetMuted ? endpoint.id.c_str() : L"");
+                    observedEndpointOwned = targetMuted;
                 }
             }
         } else {
@@ -2206,10 +2210,12 @@ static DWORD WINAPI AudioThreadProc(void*) {
             continue;
         }
 
-        if (muted == FALSE && g_windowsMutedByHeadset.load()) {
+        if (muted == FALSE && observedEndpointOwned &&
+            g_windowsMutedByHeadset.load()) {
             // A different control removed the mute, so a later startup must
             // not claim ownership of a subsequent manual privacy mute.
             ClearHeadsetMuteOwnership();
+            observedEndpointOwned = false;
         }
 
         if (g_forceVolume.load()) {
