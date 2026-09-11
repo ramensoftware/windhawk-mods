@@ -10966,7 +10966,7 @@
           93
         ],
         "ratingUsers": 108,
-        "updated": 1780474059000,
+        "updated": 1789131448000,
         "users": 5092
       },
       "metadata": {
@@ -10974,7 +10974,7 @@
           "x86-64"
         ],
         "author": "Armaninyow",
-        "compilerOptions": "-lole32 -loleaut32 -lshlwapi -luuid",
+        "compilerOptions": "-lole32 -lshlwapi -luuid",
         "description": "Removes unwanted items from file context menus with configurable options and context-aware filtering",
         "github": "https://github.com/armaninyow",
         "include": [
@@ -10982,7 +10982,7 @@
         ],
         "license": "MIT",
         "name": "Remove Context Menu Items",
-        "version": "1.11.0"
+        "version": "1.12.0"
       }
     },
     "remove-fullscreen-popup-chrome": {

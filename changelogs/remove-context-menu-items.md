@@ -1,3 +1,19 @@
+## 1.12.0 ([Sep 11, 2026](https://github.com/ramensoftware/windhawk-mods/blob/00d16690c8ac0726d4b9c16db136b0a9c772b8b2/mods/remove-context-menu-items.wh.cpp))
+
+* Added Polish language support (thanks to [FadeMind](https://github.com/FadeMind))
+* Added French language support (thanks to [Catif](https://github.com/Catif))
+* Skipped the expensive file-lookup step for every right-click menu unless extension filtering is actually turned on, so menus open faster
+* Fixed file selection being pulled from the wrong window/tab, and made it more reliable when using tabs or keyboard shortcuts to open menus
+* Fixed a crash that could happen when a menu item with a submenu (like "Open with" or "Send to") got removed
+* Added menu filtering limitation to actual file/folder right-click menus, so it no longer accidentally affects the taskbar, tray icons, or Start menu
+* Removed Ctrl as a bypass key option (since it's also used for selecting multiple files) and kept Alt as the only bypass key, off by default
+* Fixed a crash risk where the mod could message the wrong window while looking up which files were selected, and restored a more reliable way to find that information
+* Fixed the left-hand folder tree (navigation pane) being skipped by filtering, so right-clicking there now behaves the same as right-clicking the main file list
+* Added support for filtering menu items inside submenus like "Send to," "New," and "Open with," which weren't being caught before
+* Fixed right-clicking on empty space not behaving consistently everywhere, including special folders like This PC and Recycle Bin
+* Fixed file extension detection breaking on files with very long folder paths
+* Blocked a custom rule of just "*" from accidentally wiping out the entire right-click menu
+
 ## 1.11.0 ([Jun 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5183328f1bd44e572e823ad342b948a2025c253e/mods/remove-context-menu-items.wh.cpp))
 
 - Added Japanese language support (thanks to [haru612](https://github.com/haru612))
