@@ -8,6 +8,56 @@
 // @include         explorer.exe
 // @compilerOptions -lgdiplus -lgdi32 -lshlwapi -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
+// ==WindhawkModReadme==
+/*
+# Mallss Music Overlay
+
+A compact Windows desktop music overlay powered by Windows System Media
+Transport Controls.
+
+## Features
+
+- Album artwork
+- Song title and artist
+- Scrolling marquee for long titles
+- Playback progress bar
+- Elapsed and total duration
+- Previous, play/pause and next controls
+- Click the progress bar to seek
+- Desktop clock and date
+- Automatic display while media is playing
+- Local monotonic playback clock to prevent elapsed-time jitter
+
+## Supported media
+
+The mod uses Windows Global System Media Transport Controls, so it can
+work with media applications that expose their playback session through
+Windows.
+
+## Usage
+
+Enable the mod in Windhawk and start playing supported media.
+
+The overlay appears near the bottom-right corner of the desktop.
+
+When another application is active, the overlay remains alive but stays
+behind the active application. It becomes visible again when returning
+to the desktop.
+
+## Controls
+
+- Previous: skip to the previous track
+- Play/Pause: toggle playback
+- Next: skip to the next track
+- Progress bar: click to seek
+
+## Notes
+
+The elapsed playback position is driven by a local monotonic timer during
+normal playback. Media Session timeline data is used for initial
+positioning, track changes and explicit seeks.
+*/
+// ==/WindhawkModReadme==
 
 #include <windows.h>
 #include <windowsx.h>
