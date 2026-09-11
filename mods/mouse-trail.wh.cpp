@@ -3751,7 +3751,8 @@ static void RenderFrame() {
     // v3：原生 D3D11 渲染路径（锥形拖尾 + 粒子）
     bool useNative = g_pNativeVS != nullptr;  // v3：所有拖尾形状都支持原生渲染
     if (useNative) {
-        if (NativeRenderFrame(vW, vH, smoothed, tailVisible, cols, widthMul, g_fadeAlpha, dwTime, vX, vY)) {
+        bool nativeOK = NativeRenderFrame(vW, vH, smoothed, tailVisible, cols, widthMul, g_fadeAlpha, dwTime, vX, vY);
+        if (nativeOK) {
             // 原生渲染成功：所有效果（拖尾、粒子、形状、点击、运动模糊）均用 D3D11 原生渲染
             // 无需 D2D1 后处理
 
@@ -3766,8 +3767,12 @@ static void RenderFrame() {
             if (!trailActive && g_history.empty() && g_ripples.empty() && g_particles.empty() && g_trailShapes.empty())
                 surfaceDirty = false;
             return;
+        } else if (tailVisible || !g_history.empty() || !g_particles.empty() || !g_ripples.empty() || !g_trailShapes.empty()) {
+            // 原生渲染失败但有内容要渲染，可能是设备丢失，触发恢复
+            g_deviceLost.store(true);
+            return;
         }
-        // 原生渲染失败，回退到 D2D1
+        // 原生渲染失败且无内容，回退到 D2D1（通常是空闲帧）
     }
 
     g_pD2DDC->SetTarget(g_pD2DTargetBitmap);
@@ -4109,6 +4114,9 @@ static void ReleaseAllRenderResources() {
     if (g_pSolidOuterBrush) { g_pSolidOuterBrush->Release(); g_pSolidOuterBrush = nullptr; }
     if (g_pD2DTargetBitmap) { g_pD2DTargetBitmap->Release(); g_pD2DTargetBitmap = nullptr; }
     if (g_pSwapChain) { g_pSwapChain->Release(); g_pSwapChain = nullptr; }
+    if (g_pDCompTarget && g_pDCompVisual) {
+        g_pDCompTarget->SetRoot(nullptr);  // 清除根视觉对象，避免旧内容残留
+    }
     if (g_pDCompVisual) { g_pDCompVisual->Release(); g_pDCompVisual = nullptr; }
     if (g_pDCompTarget) { g_pDCompTarget->Release(); g_pDCompTarget = nullptr; }
     if (g_pDCompDevice) { g_pDCompDevice->Release(); g_pDCompDevice = nullptr; }
@@ -4129,6 +4137,10 @@ static void ReleaseAllRenderResources() {
     g_cachedVW = 0;
     g_cachedVH = 0;
     g_trailHistory.clear();  // 清除运动模糊历史帧，避免恢复后渲染旧坐标
+    g_history.clear();       // 清除拖尾历史
+    g_particles.clear();     // 清除粒子
+    g_ripples.clear();       // 清除点击波纹
+    g_trailShapes.clear();   // 清除形状拖尾
     ReleaseNativeRendering();  // 释放 D3D11 原生渲染资源
 }
 
