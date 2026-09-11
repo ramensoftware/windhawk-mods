@@ -26,12 +26,8 @@ The mod is designed to remain lightweight and self-contained while integrating w
 
 ## Features
 
+* **Drag & Drop to Recycle Bin** — drag files and folders directly from the Desktop, File Explorer, or other applications that expose dropped files through the standard Windows `CF_HDROP` format. Deletion follows the Windows Recycle Bin policy for each source drive. If the icon is in the `^` notification-area overflow menu, you can drop directly onto `^`, or onto the Recycle Bin icon while the overflow panel is open.
 * **Live Recycle Bin state** — updates when items are added to or removed from the Recycle Bin.
-* **Optional auto-hide** — automatically hides the tray icon while the Recycle Bin is empty.
-* **Automatic recovery** — a configurable fallback timer periodically checks the Recycle Bin state in case a Shell notification is missed.
-* **Taskbar restart recovery** — the tray icon is recreated after Explorer or the Windows taskbar is restarted.
-* **Light / dark theme support** — vector and font rendering adapt to the current Windows system theme; custom icons use Light-theme source files, optional Dark-theme alternatives, and can automatically adapt transparent monochrome image colors to the active theme.
-* **DPI-aware rendering** — the render target follows the tray's DPI, while Shell-reported tray geometry is tracked separately for layout changes. Vector icons are rendered at high internal resolution for smoother results.
 * **Four icon styles**:
   * `system` — use the native Windows Recycle Bin icon.
   * `vector` — render a lightweight custom vector Windows 11-style icon.
@@ -39,10 +35,14 @@ The mod is designed to remain lightweight and self-contained while integrating w
   * `custom` — load an `.ico`, `.png`, `.bmp`, or `.jpg` file.
 * **Three vector variants** — choose between a minimal geometric style with a lifted-lid full state, a Fluent-inspired trapezoidal style, and a compact symbolic style.
 * **Separate icons for states and themes** — custom mode uses Empty/Full Light-theme files with optional Empty/Full Dark-theme alternatives.
+* **Optional auto-hide** — automatically hides the tray icon while the Recycle Bin is empty.
+* **Light / dark theme support** — vector and font rendering adapt to the current Windows system theme; custom icons use Light-theme source files, optional Dark-theme alternatives, and can automatically adapt transparent monochrome image colors to the active theme.
+* **Automatic recovery** — a configurable fallback timer periodically checks the Recycle Bin state in case a Shell notification is missed.
+* **Taskbar restart recovery** — the tray icon is recreated after Explorer or the Windows taskbar is restarted.
+* **DPI-aware rendering** — the render target follows the tray's DPI, while Shell-reported tray geometry is tracked separately for layout changes. Vector icons are rendered at high internal resolution for smoother results.
 * **Configurable mouse actions** — independently configure left click, double-click, middle click, and right click.
 * **Recycle Bin context menu** — open, empty, or open Properties using Windows Shell-provided localized labels when available.
 * **Optional empty confirmation** — keep or disable the confirmation dialog before emptying the Recycle Bin.
-* **Drag & Drop to Recycle Bin** — drag files and folders directly from the Desktop, File Explorer, or other applications that expose dropped files through the standard Windows `CF_HDROP` format. If the icon is in the `^` notification-area overflow menu, you can drop directly onto `^`, or onto the Recycle Bin icon while the overflow panel is open.
 
 ## Installation
 
@@ -101,7 +101,15 @@ Simply drag one or more items from:
 
 and drop them directly onto the Recycle Bin tray icon.
 
-The mod receives the dropped items through the standard Windows OLE drag & drop mechanism and moves them to the Windows Recycle Bin.
+The mod receives the dropped items through the standard Windows OLE drag & drop mechanism and asks the Windows Shell to process them according to the Recycle Bin policy configured for each source drive.
+
+### Deletion policy and safety
+
+Drag & drop follows the per-drive Recycle Bin policy configured in Windows for each dropped item.
+
+If a drive is configured to **remove files immediately instead of moving them to the Recycle Bin**, items dropped from that drive can be permanently deleted. The Windows delete-confirmation preference is respected.
+
+If Windows cannot recycle a selection, for example because it exceeds the configured Recycle Bin capacity, the Shell may display its native warning or confirmation before allowing permanent deletion. Cancelling that prompt leaves the operation uncompleted.
 
 ### Visibility and overflow menu
 
@@ -333,6 +341,8 @@ This allows the icon to recover without requiring the Windhawk mod to be manuall
 
 * The tray icon is hosted by a hidden top-level tool window owned by the mod's dedicated tray thread.
 * Drag & drop uses the standard Windows OLE `IDropTarget` mechanism and accepts dropped file lists exposed through `CF_HDROP`.
+* Dropped items are processed asynchronously on a dedicated STA worker through `IFileOperation`, so Shell UI or slow storage does not block the source application's `DoDragDrop` call.
+* A passive `IFileOperationProgressSink` records recycle, permanent-delete, cancellation, and failure results for diagnostics without changing the Shell operation.
 * The mod does not create a separate executable or Windows service.
 * GDI+ is initialized lazily only when vector rendering or custom raster-image loading requires it; native `.ico` loading can bypass GDI+. It is released opportunistically when no rendered icon needs it and again during final teardown.
 * Tray timers are explicitly cancelled during window destruction before icon and Shell resources are released.
@@ -424,8 +434,8 @@ This project is licensed under the GNU General Public License Version 3.0.
   - enableDragDrop: true
     $name: "Enable drag & drop"
     $name:fr-FR: "Autoriser le glisser-déposer"
-    $description: "Allow dropping files and folders onto the tray icon to move them to the Recycle Bin. Windows may place the icon in the ^ notification-area overflow menu when it first appears. Keeping it visible is recommended for quicker access. The icon does not need to stay permanently visible in the main system tray. If it is in the ^ overflow menu, drop directly onto ^ or onto the Recycle Bin icon while the overflow panel is open. ⚠ Requires \"Hide when empty\" to be turned off."
-    $description:fr-FR: "Permet de glisser des fichiers et dossiers sur l'icône de la Corbeille pour les déplacer dans la Corbeille. Windows peut placer l'icône dans le menu ^ des icônes masquées de la zone de notification lors de sa première apparition. Il est recommandé de la garder visible pour un accès plus rapide. L'icône n'a pas besoin de rester visible en permanence dans la zone de notification principale. Si elle se trouve dans le menu ^, déposez directement sur ^ ou sur l'icône de la Corbeille lorsque le panneau est ouvert. ⚠ Nécessite que \"Masquer si vide\" soit désactivé."
+    $description: "Allow dropping files and folders onto the tray icon. Windows Shell processes them according to the Recycle Bin policy of each source drive. If a drive is configured to remove files immediately instead of using the Recycle Bin, dropped items can be permanently deleted; the Windows delete-confirmation preference is respected. Windows may place the icon in the ^ notification-area overflow menu when it first appears. Keeping it visible is recommended for quicker access. The icon does not need to stay permanently visible in the main system tray. If it is in the ^ overflow menu, drop directly onto ^ or onto the Recycle Bin icon while the overflow panel is open. ⚠ Requires \"Hide when empty\" to be turned off."
+    $description:fr-FR: "Permet de glisser des fichiers et dossiers sur l'icône de la Corbeille. Le Shell Windows les traite selon la stratégie de Corbeille configurée pour le lecteur source de chaque élément. Si un lecteur est configuré pour supprimer immédiatement les fichiers au lieu de les placer dans la Corbeille, les éléments déposés peuvent être supprimés définitivement ; le réglage Windows de confirmation de suppression est respecté. Windows peut placer l'icône dans le menu ^ des icônes masquées de la zone de notification lors de sa première apparition. Il est recommandé de la garder visible pour un accès plus rapide. L'icône n'a pas besoin de rester visible en permanence dans la zone de notification principale. Si elle se trouve dans le menu ^, déposez directement sur ^ ou sur l'icône de la Corbeille lorsque le panneau est ouvert. ⚠ Nécessite que \"Masquer si vide\" soit désactivé."
   - iconStyle: system
     $name: "Icon style"
     $name:fr-FR: "Style d'icône"
@@ -697,6 +707,7 @@ This project is licensed under the GNU General Public License Version 3.0.
 #include <string>
 #include <utility>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 #include <initguid.h>
 #include <windows.h>
@@ -704,6 +715,7 @@ This project is licensed under the GNU General Public License Version 3.0.
 #include <shellapi.h>
 #include <shlobj.h>
 #include <shobjidl.h>
+#include <sherrors.h>
 #include <shlwapi.h>
 #include <knownfolders.h>
 #include <gdiplus.h>
@@ -724,7 +736,6 @@ constexpr wchar_t DROP_OVERLAY_CLASS[] = L"WindhawkBinDropOverlay";
 
 HANDLE g_hMouseHookThread = NULL;
 DWORD g_mouseHookThreadId = 0;
-HANDLE g_hMouseHookReadyEvent = NULL;
 std::atomic_bool g_mouseHookInstalled{false};
 std::atomic_bool g_mouseHookStopRequested{false};
 POINT g_dragStartPt = { 0, 0 };
@@ -865,6 +876,10 @@ constexpr UINT DISPLAY_SETTLE_MAX_ATTEMPTS = 10;
 // Coalesce bursts of per-item Shell notifications into one Recycle Bin query.
 constexpr UINT SHELL_COALESCE_INTERVAL_MS = 300;
 
+// Bound Shell/tray recovery so a permanent failure can't trigger hot polling forever.
+constexpr UINT STARTUP_RETRY_MAX_ATTEMPTS = 8;
+constexpr UINT STARTUP_RETRY_MAX_INTERVAL_MS = 4000;
+
 // Give the Shell a short one-shot settle window after the tray owner changes DPI.
 constexpr UINT DPI_REINSTALL_DELAY_MS = 250;
 
@@ -929,6 +944,8 @@ struct TrayState {
     bool displaySettleHasRect = false;
     bool displaySettleProbedStableRect = false;
     UINT displaySettleAttempts = 0;
+    UINT startupRetryAttempts = 0;
+    UINT startupRetryIntervalMs = 0;
     IconCacheKey lastKey;
 };
 
@@ -1094,7 +1111,7 @@ RecycleBinDropTarget* g_pDropTarget = NULL;
 NOTIFYICONDATAW g_nid = {0};
 ULONG g_shellNotifyLock = 0;
 bool g_iconVisible = false;
-bool g_ignoreNextLeftUp = false;
+bool g_suppressLeftActivationAfterDoubleClick = false;
 bool g_trayVersion4 = false;
 bool g_loggedInitialState = false;
 std::atomic_bool g_shutdownRequested{false};
@@ -1199,6 +1216,192 @@ static void NotifyShellSourceChanged(const std::vector<RecycleDroppedItem>& item
            static_cast<UINT>(notifiedParents.size()));
 }
 
+static bool IsUserCancellation(HRESULT hr) {
+    return hr == COPYENGINE_E_USER_CANCELLED ||
+           hr == HRESULT_FROM_WIN32(ERROR_CANCELLED);
+}
+
+// Passive IFileOperation diagnostics. Callbacks never alter Shell behavior;
+// they only retain compact result counters and log failures/unexpected deletes.
+class RecycleOperationProgressSink final : public IFileOperationProgressSink {
+public:
+    explicit RecycleOperationProgressSink(UINT expectedItems)
+        : m_expectedItems(expectedItems) {}
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(
+        REFIID riid, void** ppvObject) override {
+        if (!ppvObject) {
+            return E_POINTER;
+        }
+
+        *ppvObject = nullptr;
+        if (IsEqualIID(riid, __uuidof(IUnknown)) ||
+            IsEqualIID(riid, __uuidof(IFileOperationProgressSink))) {
+            *ppvObject = static_cast<IFileOperationProgressSink*>(this);
+            AddRef();
+            return S_OK;
+        }
+
+        return E_NOINTERFACE;
+    }
+
+    ULONG STDMETHODCALLTYPE AddRef() override {
+        return static_cast<ULONG>(InterlockedIncrement(&m_refCount));
+    }
+
+    ULONG STDMETHODCALLTYPE Release() override {
+        const LONG refCount = InterlockedDecrement(&m_refCount);
+        if (refCount == 0) {
+            delete this;
+            return 0;
+        }
+
+        return static_cast<ULONG>(refCount);
+    }
+
+    HRESULT STDMETHODCALLTYPE StartOperations() override {
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE FinishOperations(HRESULT hrResult) override {
+        Wh_Log(
+            L"D&D sink: finish hr=0x%08X expected=%u processed=%u "
+            L"recycled=%u permanent=%u cancelled=%u failed=%u",
+            hrResult,
+            m_expectedItems,
+            m_processedItems,
+            m_recycledItems,
+            m_permanentlyDeletedItems,
+            m_cancelledItems,
+            m_failedItems);
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE PreRenameItem(
+        DWORD, IShellItem*, LPCWSTR) override {
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE PostRenameItem(
+        DWORD, IShellItem*, LPCWSTR, HRESULT, IShellItem*) override {
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE PreMoveItem(
+        DWORD, IShellItem*, IShellItem*, LPCWSTR) override {
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE PostMoveItem(
+        DWORD, IShellItem*, IShellItem*, LPCWSTR, HRESULT,
+        IShellItem*) override {
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE PreCopyItem(
+        DWORD, IShellItem*, IShellItem*, LPCWSTR) override {
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE PostCopyItem(
+        DWORD, IShellItem*, IShellItem*, LPCWSTR, HRESULT,
+        IShellItem*) override {
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE PreDeleteItem(
+        DWORD, IShellItem*) override {
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE PostDeleteItem(
+        DWORD,
+        IShellItem* psiItem,
+        HRESULT hrDelete,
+        IShellItem* psiNewlyCreated) override {
+        ++m_processedItems;
+
+        if (IsUserCancellation(hrDelete)) {
+            ++m_cancelledItems;
+            LogDeleteResult(
+                L"D&D sink: delete cancelled by user", psiItem, hrDelete);
+        } else if (FAILED(hrDelete)) {
+            ++m_failedItems;
+            LogDeleteResult(
+                L"D&D sink: delete failed", psiItem, hrDelete);
+        } else if (psiNewlyCreated) {
+            ++m_recycledItems;
+        } else {
+            ++m_permanentlyDeletedItems;
+            LogDeleteResult(
+                L"D&D sink: permanent delete completed", psiItem, hrDelete);
+        }
+
+        // Keep the sink observational: returning an error here would cancel
+        // all subsequent operations queued on this IFileOperation instance.
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE PreNewItem(
+        DWORD, IShellItem*, LPCWSTR) override {
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE PostNewItem(
+        DWORD, IShellItem*, LPCWSTR, LPCWSTR, DWORD, HRESULT,
+        IShellItem*) override {
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE UpdateProgress(UINT, UINT) override {
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE ResetTimer() override {
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE PauseTimer() override {
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE ResumeTimer() override {
+        return S_OK;
+    }
+
+private:
+    ~RecycleOperationProgressSink() = default;
+
+    static void LogDeleteResult(
+        PCWSTR prefix, IShellItem* psiItem, HRESULT hrDelete) {
+        PWSTR path = nullptr;
+        HRESULT hrName = psiItem
+            ? psiItem->GetDisplayName(SIGDN_FILESYSPATH, &path)
+            : E_INVALIDARG;
+
+        if (FAILED(hrName) && psiItem) {
+            hrName = psiItem->GetDisplayName(
+                SIGDN_DESKTOPABSOLUTEPARSING, &path);
+        }
+
+        if (SUCCEEDED(hrName) && path) {
+            Wh_Log(L"%s for '%s': 0x%08X", prefix, path, hrDelete);
+        } else {
+            Wh_Log(L"%s: 0x%08X (item name unavailable)", prefix, hrDelete);
+        }
+
+        CoTaskMemFree(path);
+    }
+
+    LONG m_refCount = 1;
+    const UINT m_expectedItems;
+    UINT m_processedItems = 0;
+    UINT m_recycledItems = 0;
+    UINT m_permanentlyDeletedItems = 0;
+    UINT m_cancelledItems = 0;
+    UINT m_failedItems = 0;
+};
+
 static bool PerformRecycleWorkerJob(RecycleWorkerJob& job) {
     if (job.paths.empty()) {
         return false;
@@ -1246,13 +1449,28 @@ static bool PerformRecycleWorkerJob(RecycleWorkerJob& job) {
     hr = pfo->SetOperationFlags(
         FOFX_RECYCLEONDELETE |
         FOFX_ADDUNDORECORD |
-        FOF_NOCONFIRMATION |
-        FOF_SILENT |
         FOF_WANTNUKEWARNING);
     if (FAILED(hr)) {
         Wh_Log(L"D&D worker: SetOperationFlags failed: 0x%08X", hr);
         pfo->Release();
         return false;
+    }
+
+    RecycleOperationProgressSink* progressSink =
+        new (std::nothrow) RecycleOperationProgressSink(
+            static_cast<UINT>(items.size()));
+    DWORD progressCookie = 0;
+    bool progressAdvised = false;
+
+    if (!progressSink) {
+        Wh_Log(L"D&D sink: allocation failed; continuing without diagnostics");
+    } else {
+        const HRESULT hrAdvise = pfo->Advise(progressSink, &progressCookie);
+        if (FAILED(hrAdvise)) {
+            Wh_Log(L"D&D sink: Advise failed: 0x%08X", hrAdvise);
+        } else {
+            progressAdvised = true;
+        }
     }
 
     bool allQueued = true;
@@ -1283,22 +1501,37 @@ static bool PerformRecycleWorkerJob(RecycleWorkerJob& job) {
         // it no longer runs inside the source application's DoDragDrop call.
         hr = pfo->PerformOperations();
 
-        if (FAILED(hr)) {
-            Wh_Log(L"D&D worker: PerformOperations failed: 0x%08X", hr);
-        } else {
-            BOOL aborted = FALSE;
-            const HRESULT hrAborted = pfo->GetAnyOperationsAborted(&aborted);
-            if (FAILED(hrAborted)) {
-                Wh_Log(L"D&D worker: GetAnyOperationsAborted failed: 0x%08X", hrAborted);
-            } else if (aborted) {
-                Wh_Log(L"D&D worker: one or more file operations were aborted");
-            } else {
-                completed = true;
-                Wh_Log(L"D&D worker: %u item(s) sent to Recycle Bin asynchronously",
-                       static_cast<UINT>(items.size()));
-                NotifyShellSourceChanged(items);
-            }
+        BOOL aborted = FALSE;
+        const HRESULT hrAborted = pfo->GetAnyOperationsAborted(&aborted);
+        if (FAILED(hrAborted)) {
+            Wh_Log(L"D&D worker: GetAnyOperationsAborted failed: 0x%08X", hrAborted);
         }
+
+        if (IsUserCancellation(hr)) {
+            Wh_Log(L"D&D worker: operation cancelled by user: 0x%08X", hr);
+        } else if (FAILED(hr)) {
+            Wh_Log(L"D&D worker: PerformOperations failed: 0x%08X", hr);
+        } else if (FAILED(hrAborted)) {
+            // Keep success conservative when Shell cannot report abort state.
+        } else if (aborted) {
+            Wh_Log(L"D&D worker: one or more file operations were aborted");
+        } else {
+            completed = true;
+            Wh_Log(L"D&D worker: %u item(s) processed asynchronously",
+                   static_cast<UINT>(items.size()));
+            NotifyShellSourceChanged(items);
+        }
+    }
+
+    if (progressAdvised) {
+        const HRESULT hrUnadvise = pfo->Unadvise(progressCookie);
+        if (FAILED(hrUnadvise)) {
+            Wh_Log(L"D&D sink: Unadvise failed: 0x%08X", hrUnadvise);
+        }
+    }
+
+    if (progressSink) {
+        progressSink->Release();
     }
 
     pfo->Release();
@@ -1321,7 +1554,20 @@ static DWORD WINAPI RecycleWorkerProc(LPVOID) {
     Wh_Log(L"D&D worker: started");
 
     for (;;) {
-        const DWORD waitResult = WaitForSingleObject(g_hRecycleWorkerEvent, INFINITE);
+        // This is an STA worker, so keep dispatching its message queue while
+        // waiting for recycle work instead of blocking the apartment outright.
+        const DWORD waitResult = MsgWaitForMultipleObjectsEx(
+            1, &g_hRecycleWorkerEvent, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+
+        if (waitResult == WAIT_OBJECT_0 + 1) {
+            MSG msg;
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+            continue;
+        }
+
         if (waitResult != WAIT_OBJECT_0) {
             if (waitResult == WAIT_FAILED) {
                 Wh_Log(L"D&D worker: wait failed: %lu", GetLastError());
@@ -3167,7 +3413,11 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
 // Own WH_MOUSE_LL on a thread that does nothing except service its message pump.
 // Blocking Shell/render work stays on the tray thread, so LowLevelHooksTimeout
 // can't silently remove the hook while that work is in progress.
-static DWORD WINAPI MouseHookThreadProc(LPVOID) {
+static DWORD WINAPI MouseHookThreadProc(LPVOID parameter) {
+    // The thread owns a private duplicate so the caller can time out and close
+    // its wait handle without racing this readiness signal.
+    HANDLE readyEvent = parameter;
+
     ThreadDpiAwarenessGuard dpiAwareness;
     if (!dpiAwareness) {
         Wh_Log(L"D&D hook: failed to enable Per-Monitor V2 awareness: %lu",
@@ -3188,8 +3438,10 @@ static DWORD WINAPI MouseHookThreadProc(LPVOID) {
     // cannot race the first GetMessageW after a settings change or shutdown.
     MSG msg;
     (void)PeekMessageW(&msg, NULL, WM_USER, WM_USER, PM_NOREMOVE);
-    if (g_hMouseHookReadyEvent) {
-        (void)SetEvent(g_hMouseHookReadyEvent);
+    if (readyEvent) {
+        (void)SetEvent(readyEvent);
+        CloseHandle(readyEvent);
+        readyEvent = NULL;
     }
 
     // Covers the rare case where shutdown beats message-queue readiness and the
@@ -3246,11 +3498,17 @@ static void StopMouseHookThread() {
     const DWORD waitResult =
         WaitForSingleObject(g_hMouseHookThread, TOOL_THREAD_SHUTDOWN_TIMEOUT_MS);
     if (waitResult == WAIT_TIMEOUT) {
+        // The thread is no longer considered usable once shutdown was requested.
+        // Keep its handle for later cleanup, but never let re-enable report success.
+        g_mouseHookInstalled.store(false);
         Wh_Log(L"D&D hook: thread did not exit within %lu ms; process exit will complete teardown",
                TOOL_THREAD_SHUTDOWN_TIMEOUT_MS);
         return;
     }
     if (waitResult == WAIT_FAILED) {
+        // The thread state is unknown, so fail closed instead of advertising a
+        // hook that may already be exiting after the WM_QUIT request.
+        g_mouseHookInstalled.store(false);
         Wh_Log(L"D&D hook: thread wait failed: %lu", GetLastError());
         return;
     }
@@ -3275,26 +3533,36 @@ static bool StartMouseHookThread() {
 
     g_mouseHookStopRequested.store(false);
     g_mouseHookInstalled.store(false);
-    g_hMouseHookReadyEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
-    if (!g_hMouseHookReadyEvent) {
+
+    HANDLE readyEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!readyEvent) {
         Wh_Log(L"D&D hook: CreateEvent failed: %lu", GetLastError());
         return false;
     }
 
+    HANDLE threadReadyEvent = NULL;
+    if (!DuplicateHandle(
+            GetCurrentProcess(), readyEvent,
+            GetCurrentProcess(), &threadReadyEvent,
+            0, FALSE, DUPLICATE_SAME_ACCESS)) {
+        Wh_Log(L"D&D hook: DuplicateHandle failed: %lu", GetLastError());
+        CloseHandle(readyEvent);
+        return false;
+    }
+
     g_hMouseHookThread = CreateThread(
-        NULL, 0, MouseHookThreadProc, NULL, 0, &g_mouseHookThreadId);
+        NULL, 0, MouseHookThreadProc, threadReadyEvent, 0, &g_mouseHookThreadId);
     if (!g_hMouseHookThread) {
         Wh_Log(L"D&D hook: CreateThread failed: %lu", GetLastError());
-        CloseHandle(g_hMouseHookReadyEvent);
-        g_hMouseHookReadyEvent = NULL;
+        CloseHandle(threadReadyEvent);
+        CloseHandle(readyEvent);
         g_mouseHookThreadId = 0;
         return false;
     }
 
     const DWORD waitResult = WaitForSingleObject(
-        g_hMouseHookReadyEvent, TOOL_THREAD_SHUTDOWN_TIMEOUT_MS);
-    CloseHandle(g_hMouseHookReadyEvent);
-    g_hMouseHookReadyEvent = NULL;
+        readyEvent, TOOL_THREAD_SHUTDOWN_TIMEOUT_MS);
+    CloseHandle(readyEvent);
 
     if (waitResult != WAIT_OBJECT_0 || !g_mouseHookInstalled.load()) {
         if (waitResult == WAIT_TIMEOUT) {
@@ -3337,9 +3605,11 @@ static bool SetDragDropEnabled(HWND hWnd, bool enable) {
     if (!enable) {
         StopMouseHookThread();
 
-        HWND trayWnd = GetSafeHwnd();
-        if (trayWnd) {
-            (void)PostMessageW(trayWnd, WM_USER_STOP_DRAG_POLL, 0, 0);
+        // This already runs on the tray thread, so stop its timer immediately
+        // instead of queuing a second message behind the settings change.
+        if (g_trayState.dragPollTimerActive) {
+            (void)KillLoggedTimer(hWnd, TIMER_DRAG_POLL_ID);
+            g_trayState.dragPollTimerActive = false;
         }
 
         g_dropOverlayArmed.store(false);
@@ -3850,7 +4120,9 @@ const WCHAR* TimerName(UINT timerId) {
 bool SetLoggedTimer(HWND hWnd, UINT timerId, UINT intervalMs) {
     const UINT_PTR result = SetTimer(hWnd, timerId, intervalMs, NULL);
     if (result != 0) {
-        Wh_Log(L"Timer START %s: %u ms", TimerName(timerId), intervalMs);
+        if (timerId != TIMER_DRAG_POLL_ID) {
+            Wh_Log(L"Timer START %s: %u ms", TimerName(timerId), intervalMs);
+        }
         return true;
     }
     Wh_Log(L"Timer START %s FAILED: interval=%u ms error=%lu", TimerName(timerId), intervalMs, GetLastError());
@@ -3859,10 +4131,22 @@ bool SetLoggedTimer(HWND hWnd, UINT timerId, UINT intervalMs) {
 
 bool KillLoggedTimer(HWND hWnd, UINT timerId) {
     const BOOL result = KillTimer(hWnd, timerId);
-    if (result) {
+    if (result && timerId != TIMER_DRAG_POLL_ID) {
         Wh_Log(L"Timer STOP %s", TimerName(timerId));
     }
     return result != FALSE;
+}
+
+static void StartStartupRetryTimer(HWND hWnd, UINT initialIntervalMs) {
+    g_trayState.startupRetryAttempts = 0;
+    g_trayState.startupRetryIntervalMs = initialIntervalMs;
+    (void)SetLoggedTimer(hWnd, TIMER_STARTUP_ID, initialIntervalMs);
+}
+
+static void StopStartupRetryTimer(HWND hWnd) {
+    (void)KillLoggedTimer(hWnd, TIMER_STARTUP_ID);
+    g_trayState.startupRetryAttempts = 0;
+    g_trayState.startupRetryIntervalMs = 0;
 }
 
 void UpdateRefreshTimer(HWND hWnd) {
@@ -4034,8 +4318,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         UpdateTrayState();
 
-        // Retry once Explorer has rebuilt the notification area.
-        (void)SetLoggedTimer(hWnd, TIMER_STARTUP_ID, 250);
+        // Retry once Explorer has rebuilt the notification area. A fresh
+        // TaskbarCreated broadcast starts a new bounded recovery sequence.
+        StartStartupRetryTimer(hWnd, 250);
         return 0;
     }
 
@@ -4094,10 +4379,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             // Decode callbacks according to the negotiated notification-icon version.
             const UINT trayMessage = g_trayVersion4 ? LOWORD(lParam) : static_cast<UINT>(lParam);
 
-            if (trayMessage == WM_LBUTTONUP || trayMessage == NIN_SELECT ||
-                trayMessage == NIN_KEYSELECT) {
-                if (g_ignoreNextLeftUp) {
-                    g_ignoreNextLeftUp = false;
+            if (trayMessage == WM_LBUTTONDOWN) {
+                // A new physical click ends any suppression left by the previous
+                // double-click sequence before its matching button-up arrives.
+                g_suppressLeftActivationAfterDoubleClick = false;
+            } else if (trayMessage == WM_LBUTTONUP || trayMessage == NIN_SELECT ||
+                       trayMessage == NIN_KEYSELECT) {
+                // Windows can emit more than one activation callback after a
+                // double-click. Suppress all trailing mouse activations until
+                // the next real left-button-down, rather than only one event.
+                if (trayMessage != NIN_KEYSELECT &&
+                    g_suppressLeftActivationAfterDoubleClick) {
                     return 0;
                 }
                 // If no double-click action is configured, run the single-click action immediately.
@@ -4108,7 +4400,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 }
             } else if (trayMessage == WM_LBUTTONDBLCLK) {
                 (void)KillLoggedTimer(hWnd, TIMER_CLICK_ID);
-                g_ignoreNextLeftUp = true;
+                g_suppressLeftActivationAfterDoubleClick = true;
                 ExecuteAction(g_settings.doubleClickAction, hWnd);
             } else if (trayMessage == WM_MBUTTONUP) {
                 ExecuteAction(g_settings.middleClickAction, hWnd);
@@ -4174,7 +4466,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
                 const bool trayReady = UpdateTrayState();
                 if (shellReady && trayReady) {
-                    (void)KillLoggedTimer(hWnd, TIMER_STARTUP_ID);
+                    StopStartupRetryTimer(hWnd);
+                } else {
+                    ++g_trayState.startupRetryAttempts;
+                    if (g_trayState.startupRetryAttempts >=
+                        STARTUP_RETRY_MAX_ATTEMPTS) {
+                        const UINT attempts = g_trayState.startupRetryAttempts;
+                        (void)KillLoggedTimer(hWnd, TIMER_STARTUP_ID);
+                        g_trayState.startupRetryIntervalMs = 0;
+                        Wh_Log(
+                            L"Tray: giving up startup recovery after %u attempts (shell=%d tray=%d)",
+                            attempts, shellReady, trayReady);
+                    } else {
+                        const UINT currentInterval =
+                            g_trayState.startupRetryIntervalMs;
+                        const UINT nextInterval = std::min(
+                            currentInterval * 2,
+                            STARTUP_RETRY_MAX_INTERVAL_MS);
+                        g_trayState.startupRetryIntervalMs = nextInterval;
+                        (void)SetLoggedTimer(
+                            hWnd, TIMER_STARTUP_ID, nextInterval);
+                    }
                 }
             } else if (wParam == TIMER_DRAG_POLL_ID) {
                 CheckDragStatus(hWnd);
@@ -4328,7 +4640,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
             (void)KillLoggedTimer(hWnd, TIMER_CLICK_ID);
             (void)KillLoggedTimer(hWnd, TIMER_REFRESH_ID);
-            (void)KillLoggedTimer(hWnd, TIMER_STARTUP_ID);
+            StopStartupRetryTimer(hWnd);
             (void)KillLoggedTimer(hWnd, TIMER_DRAG_POLL_ID);
             (void)KillLoggedTimer(hWnd, TIMER_DPI_CHECK_ID);
             StopShellCoalesceTimer(hWnd);
@@ -4336,7 +4648,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             (void)KillLoggedTimer(hWnd, TIMER_DPI_REINSTALL_ID);
             g_pendingDpiShellReinstall = false;
             g_trayState.displaySettleTimerActive = false;
-            g_ignoreNextLeftUp = false;
+            g_suppressLeftActivationAfterDoubleClick = false;
             g_oleDragActive.store(false);
             g_dropOverlayArmed.store(false);
 
@@ -4465,9 +4777,10 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     (void)SetDragDropEnabled(hWndNew, g_settings.enableDragDrop);
     const bool trayReady = UpdateTrayState();
 
-    // A healthy startup needs no retry timer. Keep it only for Shell/tray recovery.
+    // A healthy startup needs no retry timer. Keep bounded recovery only for
+    // Shell/tray startup failures.
     if (!shellReady || !trayReady) {
-        (void)SetLoggedTimer(hWndNew, TIMER_STARTUP_ID, 1000);
+        StartStartupRetryTimer(hWndNew, 1000);
     }
 
     MSG msg;
