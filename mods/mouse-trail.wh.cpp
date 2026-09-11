@@ -264,8 +264,8 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 - enable_smooth_gradient: true
   $name: Smooth Gradient
   $name:zh-CN: 平滑渐变
-  $description: Enable head-to-tail opacity gradient for smoother fade.
-  $description:zh-CN: 启用从头到尾的透明度渐变，淡出更平滑。
+  $description: Smoothly interpolate between gradient colors. Turn off for stepped color bands.
+  $description:zh-CN: 在渐变色之间平滑插值过渡，关闭则为分段阶梯色带。
 - enable_speed_response: true
   $name: Dynamic Width
   $name:zh-CN: 动态宽度
@@ -368,6 +368,11 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
   $name:zh-CN: 增强发光
   $description: Dual-layer halo (outer + inner) for softer glow.
   $description:zh-CN: 双层光晕（外晕+内辉），发光更柔和自然。
+- edge_softness: 50
+  $name: Edge Softness
+  $name:zh-CN: 边缘柔和度
+  $description: Trail edge anti-aliasing width (0=hard edge, 100=very soft).
+  $description:zh-CN: 拖尾边缘抗锯齿宽度（0=硬边，100=极柔和）。
 - enable_head_highlight: true
   $name: Head Highlight
   $name:zh-CN: 头部高光
@@ -516,6 +521,16 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
   $name:zh-CN: 粒子大小
   $description: Size multiplier for particles (50-300).
   $description:zh-CN: 粒子大小倍数（50-300）。
+- enable_particle_glow: true
+  $name: Particle Glow
+  $name:zh-CN: 粒子发光
+  $description: Soft outer halo around each particle.
+  $description:zh-CN: 每个粒子外圈绘制柔和光晕。
+- particle_glow_intensity: 40
+  $name: Particle Glow Intensity
+  $name:zh-CN: 粒子发光强度
+  $description: Particle glow size and brightness (0-100).
+  $description:zh-CN: 粒子发光范围和亮度（0-100）。
 - particle_interval: 50
   $name: Particle Interval
   $name:zh-CN: 粒子释放间隔
@@ -987,6 +1002,19 @@ float g_colorShiftSatBoost = 0.55f;  // 饱和度保底
 float g_colorShiftValBoost = 0.72f;  // 亮度保底
 static DWORD s_lastColorExtract = 0;
 
+// ===================== 后台采样线程（GDI 回读剥离，避免阻塞渲染线程 vsync）=====================
+// GetDC(NULL)/BitBlt 在 DWM 下触发全屏 GPU→CPU 回读，放在独立低优先级线程执行
+static HANDLE g_bgSampleThread = NULL;
+static HANDLE g_bgSampleExitEvent = NULL;
+static CRITICAL_SECTION g_sampleCS;
+static std::vector<D2D1_POINT_2F> g_samplePath;
+static int g_sampleVX = 0, g_sampleVY = 0;
+static POINT g_sampleCursor = {0, 0};
+static DWORD g_sampleTime = 0;
+static bool g_sampleHasPath = false;
+static int g_sampleColorMode = 0;
+static bool g_sampleAdaptive = false;
+
 // ===================== 渲染设备（D3D11 + D2D1 Device + DirectComposition）=====================
 ID3D11Device *g_pD3DDevice = nullptr;
 ID3D11DeviceContext *g_pD3DContext = nullptr;
@@ -996,6 +1024,7 @@ ID2D1Device *g_pD2DDevice = nullptr;
 ID2D1DeviceContext *g_pD2DDC = nullptr;
 IDXGISwapChain1 *g_pSwapChain = nullptr;
 ID2D1Bitmap1 *g_pD2DTargetBitmap = nullptr;
+ID3D11RenderTargetView *g_pCachedRTV = nullptr;  // 缓存的后台缓冲 RTV（随交换链重建，避免每帧创建）
 IDCompositionDevice *g_pDCompDevice = nullptr;
 IDCompositionTarget *g_pDCompTarget = nullptr;
 IDCompositionVisual *g_pDCompVisual = nullptr;
@@ -1032,11 +1061,14 @@ int g_trailShape = 0;
 int g_dotsMultiplier = 2;
 int g_dotChainSize = 100;         // 圆点链大小倍数（百分比）
 int g_particleSizeMultiplier = 100; // 粒子大小倍数（百分比）
+bool g_enableParticleGlow = true;   // 粒子发光开关
+int g_particleGlowIntensity = 40;   // 粒子发光强度（0-100）
 int g_functionPreset = 0;
 char g_customFunction[256] = "sin(d * 0.15) * 8";
 int g_waveAmplitude = 8, g_waveFrequency = 15;
 bool g_enableGlow = true;
 int g_glowIntensity = 40;
+int g_edgeSoftness = 50;  // 拖尾边缘柔和度（0=硬边，100=极柔和）
 int g_colorMode = 0;
 D2D1_COLOR_F g_customColor = {0.0f, 0.75f, 1.0f, 1.0f};
 D2D1_COLOR_F g_gradColors[3] = {{1.0f, 0.42f, 0.21f, 1.0f}, {0.0f, 0.75f, 1.0f, 1.0f}, {1.0f, 0.84f, 0.0f, 1.0f}};
@@ -1393,20 +1425,23 @@ cbuffer ConstantBuffer : register(b0) {
     int gradientCount;
     float bgLuminance;   // 背景亮度
     float adaptiveFlag;  // 自适应对比度开关
-    float pad;
+    float smoothFlag;  // 平滑渐变开关（1=插值平滑，0=阶梯色）
+    float edgeSoftness;  // 边缘柔和度（0=硬边，1=极柔和）
 };
 
 struct VS_INPUT {
     float3 pos : POSITION;   // x, y, z(深度)
     float4 color : COLOR;
     float u : TEXCOORD0;     // 沿路径比例 0~1
+    float v : TEXCOORD1;     // 垂直路径方向 -1~1
 };
 
 struct VS_OUTPUT {
     float4 pos : SV_POSITION;
     float4 color : COLOR;
     float u : TEXCOORD0;
-    float depth : TEXCOORD1;
+    float v : TEXCOORD1;
+    float depth : TEXCOORD2;
 };
 
 VS_OUTPUT VSMain(VS_INPUT input) {
@@ -1423,6 +1458,7 @@ VS_OUTPUT VSMain(VS_INPUT input) {
     output.pos = float4(ndc, 0.0, 1.0);
     output.color = input.color;
     output.u = input.u;
+    output.v = input.v;
     output.depth = input.pos.z;
     return output;
 }
@@ -1437,39 +1473,50 @@ cbuffer ConstantBuffer : register(b0) {
     int gradientCount;
     float bgLuminance;
     float adaptiveFlag;
-    float pad;
+    float smoothFlag;  // 平滑渐变开关（1=插值平滑，0=阶梯色）
+    float edgeSoftness;  // 边缘柔和度（0=硬边，1=极柔和）
 };
 
 struct PS_INPUT {
     float4 pos : SV_POSITION;
     float4 color : COLOR;
     float u : TEXCOORD0;
-    float depth : TEXCOORD1;
+    float v : TEXCOORD1;
+    float depth : TEXCOORD2;
 };
 
 float4 PSMain(PS_INPUT input) : SV_TARGET {
     // 从渐变中采样颜色（GPU 硬件插值，无断层）
     float4 gradColor = input.color;
+    float3 tint = float3(1, 1, 1);  // 单色模式下顶点颜色即最终颜色，不做调制
     if (gradientCount > 1) {
         float t = input.u * (gradientCount - 1);
         int idx = (int)t;
         float frac = t - idx;
         if (idx >= gradientCount - 1) {
             gradColor = gradient[gradientCount - 1];
+        } else if (smoothFlag > 0.5) {
+            gradColor = lerp(gradient[idx], gradient[idx + 1], frac);  // 平滑插值
         } else {
-            gradColor = lerp(gradient[idx], gradient[idx + 1], frac);
+            gradColor = gradient[idx];  // 阶梯色（关闭平滑渐变时分段切换）
         }
         gradColor.a *= input.color.a;
+        tint = input.color.rgb;  // 渐变模式下顶点RGB作为亮度/色调调制：阴影(0,0,0)变黑、高亮(>1)变亮、主体(1,1,1)不变
     }
+    // 软边缘：|v| 接近 1 时 alpha 衰减，消除三角形带硬边锯齿；edgeSoftness 控制衰减宽度
+    float inner = 1.0 - edgeSoftness * 0.5;  // 0=硬边(inner=1.0)，1=极柔和(inner=0.5)
+    float edgeFade = smoothstep(1.0, inner, abs(input.v));
+    // 圆柱光照：中心(v=0)最亮，向边缘逐渐变暗，模拟管状体积感
+    float tube = 0.88 + 0.12 * (1.0 - abs(input.v));
     // 2.5D 光照：深度越大越亮（模拟高光）
     float light = 1.0 + input.depth * 0.3;
-    float3 rgb = gradColor.rgb * light;
+    float3 rgb = gradColor.rgb * tint * tube * light;
     if (adaptiveFlag > 0.5) {
-        float adapt = (bgLuminance - 0.5) * 0.7;
+        float adapt = (bgLuminance - 0.5) * 0.35;  // 压暗/提亮强度减半，避免过度
         if (adapt > 0.0) { rgb *= (1.0 - adapt); }
         else { rgb = lerp(rgb, float3(1,1,1), -adapt); }
     }
-    return float4(rgb, gradColor.a);
+    return float4(rgb, gradColor.a * edgeFade);
 }
 )";
 
@@ -1483,7 +1530,8 @@ cbuffer ConstantBuffer : register(b0) {
     int gradientCount;
     float bgLuminance;
     float adaptiveFlag;
-    float pad;
+    float smoothFlag;  // 平滑渐变开关（1=插值平滑，0=阶梯色）
+    float edgeSoftness;  // 边缘柔和度（0=硬边，1=极柔和）
 };
 
 struct VS_INPUT {
@@ -1540,7 +1588,8 @@ cbuffer ConstantBuffer : register(b0) {
     int gradientCount;
     float bgLuminance;
     float adaptiveFlag;
-    float pad;
+    float smoothFlag;  // 平滑渐变开关（1=插值平滑，0=阶梯色）
+    float edgeSoftness;  // 边缘柔和度（0=硬边，1=极柔和）
 };
 
 struct PS_INPUT {
@@ -1551,123 +1600,78 @@ struct PS_INPUT {
     float shape : TEXCOORD2;
 };
 
-// 星形遮罩：5角星
-bool starMask(float2 uv) {
+// 形状 signed distance：返回值 >0 在形状内部，<0 在外部，绝对值近似到边界的距离（UV 空间）
+float shapeSDF(float2 uv, float shapeType) {
     float2 p = uv - 0.5;
     float r = length(p);
-    if (r > 0.5) return false;
     float a = atan2(p.y, p.x);
-    float starR = 0.5 * (0.4 + 0.6 * abs(cos(a * 2.5)));
-    return r < starR;
-}
-
-// 六芒星遮罩
-bool hexagramMask(float2 uv) {
-    float2 p = uv - 0.5;
-    float r = length(p);
-    if (r > 0.5) return false;
-    float a = atan2(p.y, p.x);
-    float hexR = 0.5 * (0.5 + 0.5 * abs(cos(a * 3.0)));
-    return r < hexR;
-}
-
-// 心形遮罩
-bool heartMask(float2 uv) {
-    float2 p = (uv - 0.5) * 2.0;
-    p.y = -p.y;
-    float x = p.x, y = p.y;
-    // 心形方程
-    float heart = pow(x*x + y*y - 1.0, 3.0) - x*x * y*y*y;
-    return heart < 0.0;
-}
-
-// 菱形遮罩
-bool diamondMask(float2 uv) {
-    float2 p = uv - 0.5;
-    return abs(p.x) + abs(p.y) < 0.5;
-}
-
-// 三角形遮罩
-bool triangleMask(float2 uv) {
-    float2 p = (uv - 0.5) * 2.0;
-    p.y = -p.y;
-    // 等边三角形
-    return p.y > -0.8 && p.y < 1.0 - 1.732 * abs(p.x);
-}
-
-// 花朵遮罩（5瓣）
-bool flowerMask(float2 uv) {
-    float2 p = uv - 0.5;
-    float r = length(p);
-    if (r > 0.5) return false;
-    float a = atan2(p.y, p.x);
-    float flowerR = 0.5 * (0.6 + 0.4 * cos(a * 5.0));
-    return r < flowerR;
-}
-
-// 五边形遮罩
-bool pentagonMask(float2 uv) {
-    float2 p = uv - 0.5;
-    float r = length(p);
-    if (r > 0.5) return false;
-    float a = atan2(p.y, p.x);
-    float pentR = 0.5 * 0.85 / cos(fmod(a + 3.14159, 2.0 * 3.14159 / 5.0) - 3.14159 / 5.0);
-    return r < pentR;
-}
-
-// 六边形遮罩
-bool hexagonMask(float2 uv) {
-    float2 p = uv - 0.5;
-    float r = length(p);
-    if (r > 0.5) return false;
-    float a = atan2(p.y, p.x);
-    float hexR = 0.5 * 0.87 / cos(fmod(a + 3.14159, 3.14159 / 3.0) - 3.14159 / 6.0);
-    return r < hexR;
+    if (shapeType < 1.5) {
+        return 0.5 - r;                                    // circle
+    } else if (shapeType < 2.5) {
+        float starR = 0.5 * (0.4 + 0.6 * abs(cos(a * 2.5)));
+        return starR - r;                                  // star
+    } else if (shapeType < 3.5) {
+        float hexR = 0.5 * (0.5 + 0.5 * abs(cos(a * 3.0)));
+        return hexR - r;                                   // hexagram
+    } else if (shapeType < 4.5) {
+        // heart: (x²+y²-1)³ - x²y³ < 0 在内部
+        float2 hp = (uv - 0.5) * 2.0;
+        hp.y = -hp.y;
+        float heart = pow(hp.x*hp.x + hp.y*hp.y - 1.0, 3.0) - hp.x*hp.x * hp.y*hp.y*hp.y;
+        return -heart * 0.12;                              // heart（缩放使边缘过渡合适）
+    } else if (shapeType < 5.5) {
+        return 0.5 - (abs(p.x) + abs(p.y));                // diamond
+    } else if (shapeType < 6.5) {
+        // triangle（等边，顶点在上）
+        float2 tp = (uv - 0.5) * 2.0;
+        tp.y = -tp.y;
+        float d1 = tp.y + 0.5;
+        float d2 = 1.0 - tp.y - 1.732 * tp.x;
+        float d3 = 1.0 - tp.y + 1.732 * tp.x;
+        return min(d1, min(d2, d3)) * 0.35;                // triangle
+    } else if (shapeType < 7.5) {
+        float flowerR = 0.5 * (0.6 + 0.4 * cos(a * 5.0));
+        return flowerR - r;                                // flower
+    } else if (shapeType < 8.5) {
+        float pentR = 0.5 * 0.85 / cos(fmod(a + 3.14159, 2.0 * 3.14159 / 5.0) - 3.14159 / 5.0);
+        return pentR - r;                                  // pentagon
+    } else {
+        float hexR = 0.5 * 0.87 / cos(fmod(a + 3.14159, 3.14159 / 3.0) - 3.14159 / 6.0);
+        return hexR - r;                                   // hexagon
+    }
 }
 
 float4 PSMain(PS_INPUT input) : SV_TARGET {
     float2 center = input.uv - 0.5;
     float dist = length(center);
-    bool inside = false;
-    if (input.shape < 1.5) {
-        inside = dist < 0.5;           // circle
-    } else if (input.shape < 2.5) {
-        inside = starMask(input.uv);   // star
-    } else if (input.shape < 3.5) {
-        inside = hexagramMask(input.uv); // hexagram
-    } else if (input.shape < 4.5) {
-        inside = heartMask(input.uv);  // heart
-    } else if (input.shape < 5.5) {
-        inside = diamondMask(input.uv); // diamond
-    } else if (input.shape < 6.5) {
-        inside = triangleMask(input.uv); // triangle
-    } else if (input.shape < 7.5) {
-        inside = flowerMask(input.uv);  // flower
-    } else if (input.shape < 8.5) {
-        inside = pentagonMask(input.uv); // pentagon
-    } else {
-        inside = hexagonMask(input.uv); // hexagon
-    }
-    if (!inside) discard;
-    float alpha = input.color.a * smoothstep(0.5, 0.42, dist);
-    // 2.5D 光照
+    // signed distance 软边缘：所有形状统一平滑抗锯齿
+    float sdf = shapeSDF(input.uv, input.shape);
+    float edge = 0.025;  // 软边缘宽度（UV 空间）
+    float mask = smoothstep(-edge, edge, sdf);
+    if (mask <= 0.001) discard;
+    // 径向光照：中心亮、边缘暗，模拟球体/体积感
+    float radial = 1.0 - dist * 0.3;
+    radial = max(radial, 0.6);
+    // 2.5D 深度光照
     float light = 1.0 + input.depth * 0.25;
-    float3 rgb = input.color.rgb * light;
-    // 自适应对比度：根据背景亮度微调粒子颜色明度
+    float3 rgb = input.color.rgb * light * radial;
+    // 自适应对比度：根据背景亮度微调粒子明度
     if (adaptiveFlag > 0.5) {
-        float adapt = (bgLuminance - 0.5) * 0.7;
+        float adapt = (bgLuminance - 0.5) * 0.35;
         if (adapt > 0.0) { rgb *= (1.0 - adapt); }
         else { rgb = lerp(rgb, float3(1,1,1), -adapt); }
     }
+    float alpha = input.color.a * mask;
     return float4(rgb, alpha);
 }
 )";
 
-// ---- 顶点结构（v3.1：添加 z 深度和 u 坐标）----
+// ---- 顶点结构（v3.3：添加 v 垂直坐标用于软边缘和管光）----
 struct VertexPosColor {
     float x, y, z;     // 位置 + 深度（2.5D）
     float r, g, b, a;  // 颜色
     float u;           // 沿路径比例 0~1（用于渐变采样）
+    float v;           // 垂直路径方向 -1~1（左边缘=-1，右边缘=1，用于软边缘和圆柱光照）
 };
 
 struct ParticleInstance {
@@ -1692,6 +1696,7 @@ ID3D11Buffer* g_pParticleInstanceBuf = nullptr; // 粒子实例缓冲（动态�
 ID3D11BlendState* g_pAlphaBlend = nullptr;
 ID3D11RasterizerState* g_pRasterState = nullptr;
 
+static void ReleaseNativeRendering();  // 前向声明，供 InitNativeRendering 失败清理调用
 
 static bool CompileShader(const char* source, const char* entry, const char* target, ID3DBlob** blob) {
     ID3DBlob* error = nullptr;
@@ -1710,96 +1715,116 @@ static bool CompileShader(const char* source, const char* entry, const char* tar
 
 static bool InitNativeRendering() {
     if (!g_pD3DDevice) return false;
+    ReleaseNativeRendering();  // 幂等：清理可能的残留对象
 
     // 编译着色器
-    ID3DBlob* vsBlob = nullptr, *psBlob = nullptr;
-    if (!CompileShader(g_vsShader, "VSMain", "vs_4_0", &vsBlob)) return false;
-    if (!CompileShader(g_psShader, "PSMain", "ps_4_0", &psBlob)) return false;
-    g_pD3DDevice->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, &g_pNativeVS);
-    g_pD3DDevice->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &g_pNativePS);
+    ID3DBlob *vsBlob = nullptr, *psBlob = nullptr;
+    ID3DBlob *pvsBlob = nullptr, *ppsBlob = nullptr;
+    bool ok = false;
+    do {
+        if (!CompileShader(g_vsShader, "VSMain", "vs_4_0", &vsBlob)) break;
+        if (!CompileShader(g_psShader, "PSMain", "ps_4_0", &psBlob)) break;
+        if (!CompileShader(g_particleVS, "VSMain", "vs_4_0", &pvsBlob)) break;
+        if (!CompileShader(g_particlePS, "PSMain", "ps_4_0", &ppsBlob)) break;
 
-    ID3DBlob* pvsBlob = nullptr, *ppsBlob = nullptr;
-    if (!CompileShader(g_particleVS, "VSMain", "vs_4_0", &pvsBlob)) return false;
-    if (!CompileShader(g_particlePS, "PSMain", "ps_4_0", &ppsBlob)) return false;
-    g_pD3DDevice->CreateVertexShader(pvsBlob->GetBufferPointer(), pvsBlob->GetBufferSize(), nullptr, &g_pParticleVS);
-    g_pD3DDevice->CreatePixelShader(ppsBlob->GetBufferPointer(), ppsBlob->GetBufferSize(), nullptr, &g_pParticlePS);
+        if (FAILED(g_pD3DDevice->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, &g_pNativeVS))) break;
+        if (FAILED(g_pD3DDevice->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &g_pNativePS))) break;
+        if (FAILED(g_pD3DDevice->CreateVertexShader(pvsBlob->GetBufferPointer(), pvsBlob->GetBufferSize(), nullptr, &g_pParticleVS))) break;
+        if (FAILED(g_pD3DDevice->CreatePixelShader(ppsBlob->GetBufferPointer(), ppsBlob->GetBufferSize(), nullptr, &g_pParticlePS))) break;
 
-    // 输入布局：通用顶点（位置+深度+颜色+u坐标）
-    D3D11_INPUT_ELEMENT_DESC layoutDesc[] = {
-        {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
-        {"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
-        {"TEXCOORD", 0, DXGI_FORMAT_R32_FLOAT, 0, 28, D3D11_INPUT_PER_VERTEX_DATA, 0},
-    };
-    g_pD3DDevice->CreateInputLayout(layoutDesc, 3, vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), &g_pNativeLayout);
+        // 输入布局：通用顶点（位置+深度+颜色+u坐标+v坐标）
+        D3D11_INPUT_ELEMENT_DESC layoutDesc[] = {
+            {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"TEXCOORD", 0, DXGI_FORMAT_R32_FLOAT, 0, 28, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"TEXCOORD", 1, DXGI_FORMAT_R32_FLOAT, 0, 32, D3D11_INPUT_PER_VERTEX_DATA, 0},
+        };
+        if (FAILED(g_pD3DDevice->CreateInputLayout(layoutDesc, 4, vsBlob->GetBufferPointer(),
+                                                   vsBlob->GetBufferSize(), &g_pNativeLayout)))
+            break;
 
-    // 输入布局：粒子实例（位置+深度+颜色+大小+形状+旋转）
-    D3D11_INPUT_ELEMENT_DESC particleLayout[] = {
-        {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
-        {"TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 1},
-        {"TEXCOORD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
-        {"TEXCOORD", 2, DXGI_FORMAT_R32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
-        {"TEXCOORD", 3, DXGI_FORMAT_R32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
-        {"TEXCOORD", 4, DXGI_FORMAT_R32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
-    };
-    g_pD3DDevice->CreateInputLayout(particleLayout, 6, pvsBlob->GetBufferPointer(), pvsBlob->GetBufferSize(), &g_pParticleLayout);
+        // 输入布局：粒子实例（位置+深度+颜色+大小+形状+旋转）
+        D3D11_INPUT_ELEMENT_DESC particleLayout[] = {
+            {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
+            {"TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 1, 0, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+            {"TEXCOORD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+            {"TEXCOORD", 2, DXGI_FORMAT_R32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+            {"TEXCOORD", 3, DXGI_FORMAT_R32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+            {"TEXCOORD", 4, DXGI_FORMAT_R32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+        };
+        if (FAILED(g_pD3DDevice->CreateInputLayout(particleLayout, 6, pvsBlob->GetBufferPointer(),
+                                                   pvsBlob->GetBufferSize(), &g_pParticleLayout)))
+            break;
 
-    vsBlob->Release(); psBlob->Release(); pvsBlob->Release(); ppsBlob->Release();
+        // 常量缓冲（包含屏幕尺寸、透视、渐变停止点）
+        D3D11_BUFFER_DESC cbDesc = {};
+        cbDesc.ByteWidth = 320;  // 对齐到 16 字节
+        cbDesc.Usage = D3D11_USAGE_DYNAMIC;
+        cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        if (FAILED(g_pD3DDevice->CreateBuffer(&cbDesc, nullptr, &g_pConstantBuffer))) break;
 
-    // 常量缓冲（包含屏幕尺寸、透视、渐变停止点）
-    D3D11_BUFFER_DESC cbDesc = {};
-    cbDesc.ByteWidth = 320;  // 对齐到 16 字节
-    cbDesc.Usage = D3D11_USAGE_DYNAMIC;
-    cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-    cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-    g_pD3DDevice->CreateBuffer(&cbDesc, nullptr, &g_pConstantBuffer);
+        // 拖尾带顶点缓冲（动态，最大 4096 顶点）
+        D3D11_BUFFER_DESC vbDesc = {};
+        vbDesc.ByteWidth = sizeof(VertexPosColor) * 4096;
+        vbDesc.Usage = D3D11_USAGE_DYNAMIC;
+        vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        vbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        if (FAILED(g_pD3DDevice->CreateBuffer(&vbDesc, nullptr, &g_pTrailVB))) break;
 
-    // 拖尾带顶点缓冲（动态，最大 4096 顶点）
-    D3D11_BUFFER_DESC vbDesc = {};
-    vbDesc.ByteWidth = sizeof(VertexPosColor) * 4096;
-    vbDesc.Usage = D3D11_USAGE_DYNAMIC;
-    vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-    vbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-    g_pD3DDevice->CreateBuffer(&vbDesc, nullptr, &g_pTrailVB);
+        // 粒子四边形（两个三角形组成的正方形）
+        float quadVerts[] = {
+            -1, -1,  1, -1,  -1, 1,
+             1, -1,  1,  1,  -1, 1,
+        };
+        D3D11_BUFFER_DESC quadDesc = {};
+        quadDesc.ByteWidth = sizeof(quadVerts);
+        quadDesc.Usage = D3D11_USAGE_IMMUTABLE;
+        quadDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        D3D11_SUBRESOURCE_DATA quadData = {quadVerts, 0, 0};
+        if (FAILED(g_pD3DDevice->CreateBuffer(&quadDesc, &quadData, &g_pParticleQuadVB))) break;
 
-    // 粒子四边形（两个三角形组成的正方形）
-    float quadVerts[] = {
-        -1, -1,  1, -1,  -1, 1,
-         1, -1,  1,  1,  -1, 1,
-    };
-    D3D11_BUFFER_DESC quadDesc = {};
-    quadDesc.ByteWidth = sizeof(quadVerts);
-    quadDesc.Usage = D3D11_USAGE_IMMUTABLE;
-    quadDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-    D3D11_SUBRESOURCE_DATA quadData = {quadVerts, 0, 0};
-    g_pD3DDevice->CreateBuffer(&quadDesc, &quadData, &g_pParticleQuadVB);
+        // 粒子实例缓冲（动态，最大 2000 实例）
+        D3D11_BUFFER_DESC instDesc = {};
+        instDesc.ByteWidth = sizeof(ParticleInstance) * 4000;  // 发光层+正常层各最多2000
+        instDesc.Usage = D3D11_USAGE_DYNAMIC;
+        instDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        instDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        if (FAILED(g_pD3DDevice->CreateBuffer(&instDesc, nullptr, &g_pParticleInstanceBuf))) break;
 
-    // 粒子实例缓冲（动态，最大 2000 实例）
-    D3D11_BUFFER_DESC instDesc = {};
-    instDesc.ByteWidth = sizeof(ParticleInstance) * 2000;
-    instDesc.Usage = D3D11_USAGE_DYNAMIC;
-    instDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-    instDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-    g_pD3DDevice->CreateBuffer(&instDesc, nullptr, &g_pParticleInstanceBuf);
+        // Alpha 混合状态
+        D3D11_BLEND_DESC blendDesc = {};
+        blendDesc.RenderTarget[0].BlendEnable = TRUE;
+        blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+        blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+        blendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+        blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+        blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+        blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+        blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+        if (FAILED(g_pD3DDevice->CreateBlendState(&blendDesc, &g_pAlphaBlend))) break;
 
-    // Alpha 混合状态
-    D3D11_BLEND_DESC blendDesc = {};
-    blendDesc.RenderTarget[0].BlendEnable = TRUE;
-    blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
-    blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
-    blendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
-    blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
-    blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
-    blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
-    blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-    g_pD3DDevice->CreateBlendState(&blendDesc, &g_pAlphaBlend);
+        // 光栅化状态
+        D3D11_RASTERIZER_DESC rastDesc = {};
+        rastDesc.FillMode = D3D11_FILL_SOLID;
+        rastDesc.CullMode = D3D11_CULL_NONE;
+        rastDesc.DepthClipEnable = FALSE;
+        if (FAILED(g_pD3DDevice->CreateRasterizerState(&rastDesc, &g_pRasterState))) break;
 
-    // 光栅化状态
-    D3D11_RASTERIZER_DESC rastDesc = {};
-    rastDesc.FillMode = D3D11_FILL_SOLID;
-    rastDesc.CullMode = D3D11_CULL_NONE;
-    rastDesc.DepthClipEnable = FALSE;
-    g_pD3DDevice->CreateRasterizerState(&rastDesc, &g_pRasterState);
+        ok = true;
+    } while (false);
 
+    // 编译 blob 无论成败都释放
+    if (vsBlob) vsBlob->Release();
+    if (psBlob) psBlob->Release();
+    if (pvsBlob) pvsBlob->Release();
+    if (ppsBlob) ppsBlob->Release();
+
+    if (!ok) {
+        Wh_Log(L"NativeD3D: init failed, releasing partial resources");
+        ReleaseNativeRendering();
+        return false;
+    }
     Wh_Log(L"NativeD3D: initialized successfully");
     return true;
 }
@@ -1848,20 +1873,32 @@ static void UpdateConstantBuffer(int width, int height, const GradData* cols = n
         // bgLuminance (offset 73) 和 adaptiveFlag (offset 74)
         data[73] = g_bgLuminance;
         data[74] = g_adaptiveContrast ? 1.0f : 0.0f;
+        data[75] = g_enableSmoothGradient ? 1.0f : 0.0f;
+        // edgeSoftness (offset 76)：0=硬边，1=极柔和
+        data[76] = g_edgeSoftness / 100.0f;
         g_pD3DContext->Unmap(g_pConstantBuffer, 0);
     }
 }
 
-// 粒子 Instanced Rendering（v3 原生渲染）
+// 粒子 Instanced Rendering（v3 原生渲染，含发光层；一次 Map 写两层）
 static void NativeRenderParticles(int screenW, int screenH) {
     if (!g_pParticleVS || !g_pParticlePS || !g_pParticleInstanceBuf || g_particles.empty()) return;
 
-    // 更新实例缓冲
+    DWORD now = GetTickCount();
+    const int MAX_PER_LAYER = 2000;
+
+    // 一次 Map，依次写入发光层（offset 0）和正常层（offset MAX_PER_LAYER）
     D3D11_MAPPED_SUBRESOURCE mapped;
     if (FAILED(g_pD3DContext->Map(g_pParticleInstanceBuf, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
     ParticleInstance* instances = (ParticleInstance*)mapped.pData;
-    int count = 0;
-    DWORD now = GetTickCount();
+
+    int glowCount = 0, normalCount = 0;
+    float gi = g_particleGlowIntensity / 100.0f;
+    float glowSize = 1.6f + gi * 0.8f;
+    float glowAlpha = 0.2f + gi * 0.2f;
+    float glowColorMul = 1.2f + gi * 0.3f;
+
+    // 单次遍历同时填充两层，消除重复遍历和重复 Map
     for (auto &p : g_particles) {
         float progress = (float)(now - p.startTime) / p.lifetime;
         if (progress < 0 || progress >= 1) continue;
@@ -1870,23 +1907,32 @@ static void NativeRenderParticles(int screenW, int screenH) {
             p.color.r + (p.endColor.r - p.color.r) * progress + p.colorOffset[0],
             p.color.g + (p.endColor.g - p.color.g) * progress + p.colorOffset[1],
             p.color.b + (p.endColor.b - p.color.b) * progress + p.colorOffset[2], 1.0f);
-        instances[count].x = p.x;
-        instances[count].y = p.y;
-        instances[count].z = p.z;  // 使用生成时的随机深度，避免闪烁
-        instances[count].r = pc.r;
-        instances[count].g = pc.g;
-        instances[count].b = pc.b;
-        instances[count].a = lifeAlpha * 0.65f;
-        // 粒子大小随生命周期变化：出生小，中间大，死亡小
         float sizeScale = sinf(progress * 3.14159f) * 0.7f + 0.3f;
-        instances[count].size = p.size * 2.0f * (g_particleSizeMultiplier / 100.0f) * sizeScale;
-        instances[count].shapeType = (float)p.shapeType;
-        instances[count].rotation = p.rotation;
-        count++;
-        if (count >= 2000) break;
+        float baseSize = p.size * 2.0f * (g_particleSizeMultiplier / 100.0f) * sizeScale;
+
+        // 发光层
+        if (g_enableParticleGlow && glowCount < MAX_PER_LAYER) {
+            ParticleInstance& gl = instances[glowCount++];
+            gl.x = p.x; gl.y = p.y; gl.z = p.z;
+            gl.r = pc.r * glowColorMul; gl.g = pc.g * glowColorMul; gl.b = pc.b * glowColorMul;
+            gl.a = lifeAlpha * 0.8f * glowAlpha;
+            gl.size = baseSize * glowSize;
+            gl.shapeType = (float)p.shapeType;
+            gl.rotation = p.rotation;
+        }
+        // 正常层
+        if (normalCount < MAX_PER_LAYER) {
+            ParticleInstance& nm = instances[MAX_PER_LAYER + normalCount++];
+            nm.x = p.x; nm.y = p.y; nm.z = p.z;
+            nm.r = pc.r; nm.g = pc.g; nm.b = pc.b;
+            nm.a = lifeAlpha * 0.8f;
+            nm.size = baseSize;
+            nm.shapeType = (float)p.shapeType;
+            nm.rotation = p.rotation;
+        }
     }
     g_pD3DContext->Unmap(g_pParticleInstanceBuf, 0);
-    if (count == 0) return;
+    if (glowCount == 0 && normalCount == 0) return;
 
     // 设置渲染状态
     UpdateConstantBuffer(screenW, screenH);
@@ -1898,16 +1944,17 @@ static void NativeRenderParticles(int screenW, int screenH) {
     g_pD3DContext->RSSetState(g_pRasterState);
     g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
 
-    // 绑定顶点缓冲（四边形）和实例缓冲
     UINT stride = 2 * sizeof(float);
-    UINT offset = 0;
-    g_pD3DContext->IASetVertexBuffers(0, 1, &g_pParticleQuadVB, &stride, &offset);
+    UINT vbOffset = 0;
+    g_pD3DContext->IASetVertexBuffers(0, 1, &g_pParticleQuadVB, &stride, &vbOffset);
     stride = sizeof(ParticleInstance);
-    g_pD3DContext->IASetVertexBuffers(1, 1, &g_pParticleInstanceBuf, &stride, &offset);
+    g_pD3DContext->IASetVertexBuffers(1, 1, &g_pParticleInstanceBuf, &stride, &vbOffset);
     g_pD3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-    // 绘制（6 顶点/实例，count 个实例）
-    g_pD3DContext->DrawInstanced(6, count, 0, 0);
+    // 发光层（实例起始 0）
+    if (glowCount > 0) g_pD3DContext->DrawInstanced(6, glowCount, 0, 0);
+    // 正常层（实例起始 MAX_PER_LAYER）
+    if (normalCount > 0) g_pD3DContext->DrawInstanced(6, normalCount, 0, MAX_PER_LAYER);
 }
 
 // 拖尾带顶点缓冲渲染（v3 原生渲染）
@@ -1932,21 +1979,6 @@ static void NativeRenderTrail(const std::vector<D2D1_POINT_2F>& smoothed, float 
         widths[i] = (i == sl - 1) ? 0.5f : 10.0f * taper * widthMul;
     }
 
-    // 辅助函数：生成带的顶点
-    auto buildBand = [&](float widthScale, float r, float g, float b, float aMul) {
-        std::vector<VertexPosColor> bandVerts;
-        bandVerts.reserve(sl * 2);
-        for (size_t i = 0; i < sl; ++i) {
-            float ratio = (float)i / (sl - 1);
-            float ow = widths[i] * widthScale;
-            bandVerts.push_back({smoothed[i].x + nx[i]*ow, smoothed[i].y + ny[i]*ow, 0.0f,
-                                 r, g, b, fadeAlpha * aMul, ratio});
-            bandVerts.push_back({smoothed[i].x - nx[i]*ow, smoothed[i].y - ny[i]*ow, 0.0f,
-                                 r, g, b, fadeAlpha * aMul, ratio});
-        }
-        return bandVerts;
-    };
-
     // 设置渲染状态
     UpdateConstantBuffer(screenW, screenH, &cols);
     g_pD3DContext->IASetInputLayout(g_pNativeLayout);
@@ -1958,42 +1990,131 @@ static void NativeRenderTrail(const std::vector<D2D1_POINT_2F>& smoothed, float 
     g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
 
     UINT stride = sizeof(VertexPosColor);
-    UINT offset = 0;
-    g_pD3DContext->IASetVertexBuffers(0, 1, &g_pTrailVB, &stride, &offset);
+    UINT vbOffset = 0;
+    g_pD3DContext->IASetVertexBuffers(0, 1, &g_pTrailVB, &stride, &vbOffset);
     g_pD3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
-    auto drawBand = [&](const std::vector<VertexPosColor>& bandVerts) {
-        if (bandVerts.empty()) return;
-        std::vector<VertexPosColor> v = bandVerts;
-        if ((int)v.size() > 4096) v.resize(4096);
-        D3D11_MAPPED_SUBRESOURCE mapped;
-        if (SUCCEEDED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
-            memcpy(mapped.pData, v.data(), v.size() * sizeof(VertexPosColor));
-            g_pD3DContext->Unmap(g_pTrailVB, 0);
-            g_pD3DContext->Draw((UINT)v.size(), 0);
+    // 一次 Map 批量写入所有层（消除多次 vector 分配 + Map/Unmap）
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    if (FAILED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
+    VertexPosColor* dst = (VertexPosColor*)mapped.pData;
+    int vtxOffset = 0;
+    const int MAX_VTX = 4096;
+
+    struct Layer { int offset, count; };
+    Layer layers[8];
+    int layerCount = 0;
+
+    // 写入一层带，直接写入 mapped 内存，返回顶点数（0=缓冲溢出）
+    auto writeBand = [&](float widthScale, float r, float g, float b, float aMul,
+                         bool headOnly, float offX, float offY) -> int {
+        int count = (int)sl * 2;
+        if (vtxOffset + count > MAX_VTX) return 0;
+        VertexPosColor* p = dst + vtxOffset;
+        for (size_t i = 0; i < sl; ++i) {
+            float ratio = (float)i / (sl - 1);
+            float ow = widths[i] * widthScale;
+            float pointAlpha = fadeAlpha * aMul;
+            if (headOnly) {
+                pointAlpha *= (ratio < 0.25f) ? 0.0f : ((ratio > 0.85f) ? 1.0f : (ratio - 0.25f) / 0.6f);
+            }
+            p[0] = {smoothed[i].x + offX + nx[i]*ow, smoothed[i].y + offY + ny[i]*ow, 0.0f,
+                    r, g, b, pointAlpha, ratio, 1.0f};
+            p[1] = {smoothed[i].x + offX - nx[i]*ow, smoothed[i].y + offY - ny[i]*ow, 0.0f,
+                    r, g, b, pointAlpha, ratio, -1.0f};
+            p += 2;
         }
+        vtxOffset += count;
+        return count;
     };
 
-    // 0. 自适应柔和边缘（极细、低透明度，自然不突兀）
+    auto pushLayer = [&](int c) { if (c && layerCount < 8) layers[layerCount++] = {vtxOffset - c, c}; };
+
+    // 1. 拖尾阴影（右下偏移深色投影）
+    if (g_enableTrailShadow)
+        pushLayer(writeBand(1.0f, 0,0,0, 0.18f, false, 1.5f, 2.0f));
+    // 2. 自适应柔和边缘
     if (g_adaptiveContrast) {
-        float edgeV = g_bgLuminance > 0.5f ? 0.08f : 0.95f;
-        drawBand(buildBand(1.18f, edgeV, edgeV, edgeV, 0.18f));
+        float edgeV = g_bgLuminance > 0.5f ? 0.08f : 1.6f;
+        pushLayer(writeBand(1.18f, edgeV,edgeV,edgeV, 0.18f, false, 0,0));
     }
-    // 1. 外发光层（受 enable_glow 和 glow_intensity 控制）
+    // 3. 外发光三层（宽淡→中→窄亮）
     if (g_enableGlow) {
-        float glowAlpha = 0.08f + (g_glowIntensity / 100.0f) * 0.15f;
-        float glowWidth = 1.8f + (g_glowIntensity / 100.0f) * 1.0f;
-        drawBand(buildBand(glowWidth, 1, 1, 1, glowAlpha));
-        // 增强发光（第二层更宽更淡）
-        if (g_enhancedGlow) {
-            drawBand(buildBand(glowWidth * 1.6f, 1, 1, 1, glowAlpha * 0.5f));
+        float gi = g_glowIntensity / 100.0f;
+        pushLayer(writeBand(2.6f + gi*1.4f, 1,1,1, 0.04f+gi*0.05f, false, 0,0));
+        pushLayer(writeBand(1.7f + gi*0.7f, 1,1,1, 0.09f+gi*0.09f, false, 0,0));
+        if (g_enhancedGlow)
+            pushLayer(writeBand(1.25f + gi*0.35f, 1.15f,1.15f,1.15f, 0.14f+gi*0.10f, false, 0,0));
+    }
+    // 4. 主体带
+    pushLayer(writeBand(1.0f, 1,1,1, 1.0f, false, 0,0));
+    // 5. 头部高亮（只在头部显示）
+    if (g_enableHeadHighlight)
+        pushLayer(writeBand(0.35f, 1.25f,1.25f,1.25f, 0.75f, true, 0,0));
+
+    g_pD3DContext->Unmap(g_pTrailVB, 0);
+
+    // 绘制所有层（每层独立 Draw，三角形带不跨层连接）
+    for (int i = 0; i < layerCount; ++i)
+        g_pD3DContext->Draw(layers[i].count, layers[i].offset);
+}
+
+// 预计算形状局部顶点（消除每帧 cos/sin/pow 重复计算）
+struct ShapeVertsCache { const float* verts; int count; };
+static ShapeVertsCache GetShapeVerts(int shapeType) {
+    static float circleVerts[72 * 2];   // 24段 × 3顶点 × 2坐标
+    static float starVerts[30 * 2];     // 5 × 6顶点 × 2
+    static float hexVerts[6 * 2];       // 6顶点 × 2
+    static float heartVerts[72 * 2];    // 24段 × 3顶点 × 2
+    static bool inited = false;
+    if (!inited) {
+        inited = true;
+        const int seg = 24;
+        for (int i = 0; i < seg; i++) {
+            float a1 = (i / (float)seg) * 6.28318f;
+            float a2 = ((i + 1) / (float)seg) * 6.28318f;
+            int idx = i * 6;
+            circleVerts[idx]=0; circleVerts[idx+1]=0;
+            circleVerts[idx+2]=cosf(a1); circleVerts[idx+3]=sinf(a1);
+            circleVerts[idx+4]=cosf(a2); circleVerts[idx+5]=sinf(a2);
+        }
+        for (int i = 0; i < 5; i++) {
+            float a1 = (i / 5.0f) * 6.28318f - 1.5708f;
+            float a2 = ((i + 0.5f) / 5.0f) * 6.28318f - 1.5708f;
+            float a3 = ((i + 1) / 5.0f) * 6.28318f - 1.5708f;
+            int idx = i * 12;
+            starVerts[idx]=0; starVerts[idx+1]=0;
+            starVerts[idx+2]=cosf(a1); starVerts[idx+3]=sinf(a1);
+            starVerts[idx+4]=0.4f*cosf(a2); starVerts[idx+5]=0.4f*sinf(a2);
+            starVerts[idx+6]=0; starVerts[idx+7]=0;
+            starVerts[idx+8]=0.4f*cosf(a2); starVerts[idx+9]=0.4f*sinf(a2);
+            starVerts[idx+10]=cosf(a3); starVerts[idx+11]=sinf(a3);
+        }
+        hexVerts[0]=0; hexVerts[1]=-1;
+        hexVerts[2]=-0.866f; hexVerts[3]=0.5f;
+        hexVerts[4]=0.866f; hexVerts[5]=0.5f;
+        hexVerts[6]=0; hexVerts[7]=1;
+        hexVerts[8]=-0.866f; hexVerts[9]=-0.5f;
+        hexVerts[10]=0.866f; hexVerts[11]=-0.5f;
+        for (int i = 0; i < seg; i++) {
+            float t = (i / (float)seg) * 6.28318f;
+            float t2 = ((i + 1) / (float)seg) * 6.28318f;
+            float x1 = powf(sinf(t), 3);
+            float y1 = -(13*cosf(t) - 5*cosf(2*t) - 2*cosf(3*t) - cosf(4*t)) / 16.0f;
+            float x2 = powf(sinf(t2), 3);
+            float y2 = -(13*cosf(t2) - 5*cosf(2*t2) - 2*cosf(3*t2) - cosf(4*t2)) / 16.0f;
+            int idx = i * 6;
+            heartVerts[idx]=0; heartVerts[idx+1]=0;
+            heartVerts[idx+2]=x1; heartVerts[idx+3]=y1;
+            heartVerts[idx+4]=x2; heartVerts[idx+5]=y2;
         }
     }
-    // 2. 外带（主色，渐变）
-    drawBand(buildBand(1.0f, 1, 1, 1, 1.0f));
-    // 3. 内带（核心高亮，受 enable_head_highlight 控制）
-    if (g_enableHeadHighlight) {
-        drawBand(buildBand(0.35f, 1.25f, 1.25f, 1.25f, 0.75f));
+    switch (shapeType) {
+        case 0: return {heartVerts, 72};
+        case 1: return {starVerts, 30};
+        case 2: return {hexVerts, 6};
+        case 3: return {circleVerts, 72};
+        default: return {circleVerts, 72};
     }
 }
 
@@ -2011,54 +2132,10 @@ static void NativeRenderTrailShapes(int screenW, int screenH, DWORD dwTime) {
         float size = s.size * (1.0f + progress * 0.3f);
         float cr = s.color.r, cg = s.color.g, cb = s.color.b;
 
-        // 根据形状类型生成顶点（局部坐标 -1~1）
-        std::vector<float> shapeVerts;
-        const int seg = 24;
-        if (s.shapeType == 3) { // 圆
-            for (int i = 0; i < seg; i++) {
-                float a1 = (i / (float)seg) * 6.28318f;
-                float a2 = ((i + 1) / (float)seg) * 6.28318f;
-                shapeVerts.push_back(0); shapeVerts.push_back(0);
-                shapeVerts.push_back(cosf(a1)); shapeVerts.push_back(sinf(a1));
-                shapeVerts.push_back(cosf(a2)); shapeVerts.push_back(sinf(a2));
-            }
-        } else if (s.shapeType == 1) { // 五角星
-            for (int i = 0; i < 5; i++) {
-                float a1 = (i / 5.0f) * 6.28318f - 1.5708f;
-                float a2 = ((i + 0.5f) / 5.0f) * 6.28318f - 1.5708f;
-                float a3 = ((i + 1) / 5.0f) * 6.28318f - 1.5708f;
-                shapeVerts.push_back(0); shapeVerts.push_back(0);
-                shapeVerts.push_back(cosf(a1)); shapeVerts.push_back(sinf(a1));
-                shapeVerts.push_back(0.4f * cosf(a2)); shapeVerts.push_back(0.4f * sinf(a2));
-                shapeVerts.push_back(0); shapeVerts.push_back(0);
-                shapeVerts.push_back(0.4f * cosf(a2)); shapeVerts.push_back(0.4f * sinf(a2));
-                shapeVerts.push_back(cosf(a3)); shapeVerts.push_back(sinf(a3));
-            }
-        } else if (s.shapeType == 2) { // 六芒星
-            shapeVerts.push_back(0); shapeVerts.push_back(-1);
-            shapeVerts.push_back(-0.866f); shapeVerts.push_back(0.5f);
-            shapeVerts.push_back(0.866f); shapeVerts.push_back(0.5f);
-            shapeVerts.push_back(0); shapeVerts.push_back(1);
-            shapeVerts.push_back(-0.866f); shapeVerts.push_back(-0.5f);
-            shapeVerts.push_back(0.866f); shapeVerts.push_back(-0.5f);
-        } else if (s.shapeType == 0) { // 爱心
-            for (int i = 0; i < seg; i++) {
-                float t = (i / (float)seg) * 6.28318f;
-                float t2 = ((i + 1) / (float)seg) * 6.28318f;
-                float x1 = 16 * powf(sinf(t), 3) / 16.0f;
-                float y1 = -(13 * cosf(t) - 5 * cosf(2*t) - 2 * cosf(3*t) - cosf(4*t)) / 16.0f;
-                float x2 = 16 * powf(sinf(t2), 3) / 16.0f;
-                float y2 = -(13 * cosf(t2) - 5 * cosf(2*t2) - 2 * cosf(3*t2) - cosf(4*t2)) / 16.0f;
-                shapeVerts.push_back(0); shapeVerts.push_back(0);
-                shapeVerts.push_back(x1); shapeVerts.push_back(y1);
-                shapeVerts.push_back(x2); shapeVerts.push_back(y2);
-            }
-        }
-
-        // 变换到世界坐标并添加到顶点列表（2D 平面渲染）
-        for (size_t i = 0; i < shapeVerts.size(); i += 2) {
-            float lx = shapeVerts[i] * size;
-            float ly = shapeVerts[i + 1] * size;
+        ShapeVertsCache sv = GetShapeVerts(s.shapeType);
+        for (int i = 0; i < sv.count; i++) {
+            float lx = sv.verts[i * 2] * size;
+            float ly = sv.verts[i * 2 + 1] * size;
             verts.push_back({s.x + lx, s.y + ly, 0.0f, cr, cg, cb, lifeAlpha, 0.5f});
         }
     }
@@ -2202,7 +2279,10 @@ static void NativeRenderDotChain(const std::vector<D2D1_POINT_2F>& path, float d
     if (!g_pNativeVS || !g_pNativePS || !g_pTrailVB || path.size() < 2) return;
 
     std::vector<VertexPosColor> verts;
+    std::vector<VertexPosColor> shadowVerts;
     verts.reserve(path.size() * 6);  // 每个圆点 6 个顶点（2 个三角形）
+    shadowVerts.reserve(path.size() * 6);
+    const float SH_DX = 1.5f, SH_DY = 2.0f;
 
     for (size_t i = 0; i < path.size(); i++) {
         float ratio = (float)i / (path.size() - 1);
@@ -2215,6 +2295,17 @@ static void NativeRenderDotChain(const std::vector<D2D1_POINT_2F>& path, float d
         D2D1_GRADIENT_STOP gs = cols.outer[(int)(ratio * (GRAD_STOPS - 1))];
         float r = gs.color.r, g = gs.color.g, b = gs.color.b;
 
+        // 阴影圆点（向右下偏移的深色投影，受 enable_trail_shadow 控制）
+        if (g_enableTrailShadow) {
+            float sx = x + SH_DX, sy = y + SH_DY, sa = fadeAlpha * 0.18f;
+            shadowVerts.push_back({sx - size, sy - size, 0, 0, 0, 0, sa, ratio});
+            shadowVerts.push_back({sx + size, sy - size, 0, 0, 0, 0, sa, ratio});
+            shadowVerts.push_back({sx - size, sy + size, 0, 0, 0, 0, sa, ratio});
+            shadowVerts.push_back({sx + size, sy - size, 0, 0, 0, 0, sa, ratio});
+            shadowVerts.push_back({sx + size, sy + size, 0, 0, 0, 0, sa, ratio});
+            shadowVerts.push_back({sx - size, sy + size, 0, 0, 0, 0, sa, ratio});
+        }
+
         // 四边形的四个角（两个三角形）
         // 三角形 1: 左上, 右上, 左下
         verts.push_back({x - size, y - size, 0, r, g, b, fadeAlpha, ratio});
@@ -2226,14 +2317,9 @@ static void NativeRenderDotChain(const std::vector<D2D1_POINT_2F>& path, float d
         verts.push_back({x - size, y + size, 0, r, g, b, fadeAlpha, ratio});
     }
 
-    if (verts.empty()) return;
+    if (verts.empty() && shadowVerts.empty()) return;
     if (verts.size() > 4096) verts.resize(4096);
-
-    // 更新顶点缓冲
-    D3D11_MAPPED_SUBRESOURCE mapped;
-    if (FAILED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
-    memcpy(mapped.pData, verts.data(), verts.size() * sizeof(VertexPosColor));
-    g_pD3DContext->Unmap(g_pTrailVB, 0);
+    if (shadowVerts.size() > 4096) shadowVerts.resize(4096);
 
     // 设置渲染状态
     UpdateConstantBuffer(screenW, screenH, &cols);
@@ -2250,33 +2336,29 @@ static void NativeRenderDotChain(const std::vector<D2D1_POINT_2F>& path, float d
     g_pD3DContext->IASetVertexBuffers(0, 1, &g_pTrailVB, &stride, &offset);
     g_pD3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-    g_pD3DContext->Draw((UINT)verts.size(), 0);
+    // 先画阴影，再画主体
+    auto drawList = [&](const std::vector<VertexPosColor>& v) {
+        if (v.empty()) return;
+        D3D11_MAPPED_SUBRESOURCE mapped;
+        if (SUCCEEDED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
+            memcpy(mapped.pData, v.data(), v.size() * sizeof(VertexPosColor));
+            g_pD3DContext->Unmap(g_pTrailVB, 0);
+            g_pD3DContext->Draw((UINT)v.size(), 0);
+        }
+    };
+    drawList(shadowVerts);
+    drawList(verts);
 }
 
 static bool NativeRenderFrame(int screenW, int screenH, const std::vector<D2D1_POINT_2F>& smoothed,
                               bool tailVisible, const GradData& cols, float widthMul, float fadeAlpha,
                               DWORD dwTime, int vX, int vY) {
-    if (!g_pNativeVS || !g_pD3DContext || !g_pD2DTargetBitmap) return false;
+    if (!g_pNativeVS || !g_pD3DContext || !g_pCachedRTV) return false;
 
-    // 获取 D3D11 渲染目标视图（从 D2D1 bitmap 获取底层 DXGI surface）
-    IDXGISurface* pSurface = nullptr;
-    if (FAILED(g_pD2DTargetBitmap->GetSurface(&pSurface))) return false;
-    ID3D11Texture2D* pTexture = nullptr;
-    if (FAILED(pSurface->QueryInterface(__uuidof(ID3D11Texture2D), (void**)&pTexture))) {
-        pSurface->Release();
-        return false;
-    }
-    ID3D11RenderTargetView* pRTV = nullptr;
-    if (FAILED(g_pD3DDevice->CreateRenderTargetView(pTexture, nullptr, &pRTV))) {
-        pTexture->Release();
-        pSurface->Release();
-        return false;
-    }
-
-    // 清空渲染目标（透明黑）
+    // 清空渲染目标（透明黑），RTV 随交换链缓存，避免每帧创建 COM 对象
     float clearColor[4] = {0, 0, 0, 0};
-    g_pD3DContext->ClearRenderTargetView(pRTV, clearColor);
-    g_pD3DContext->OMSetRenderTargets(1, &pRTV, nullptr);
+    g_pD3DContext->ClearRenderTargetView(g_pCachedRTV, clearColor);
+    g_pD3DContext->OMSetRenderTargets(1, &g_pCachedRTV, nullptr);
 
     // 设置视口
     D3D11_VIEWPORT vp = {0, 0, (float)screenW, (float)screenH, 0, 1};
@@ -2364,11 +2446,6 @@ static bool NativeRenderFrame(int screenW, int screenH, const std::vector<D2D1_P
     if (!g_trailShapes.empty()) {
         NativeRenderTrailShapes(screenW, screenH, dwTime);
     }
-
-    // 释放临时资源
-    pRTV->Release();
-    pTexture->Release();
-    pSurface->Release();
 
     // 恢复 D2D1 状态（如果后续还有 D2D1 渲染）
     g_pD2DDC->SetTarget(g_pD2DTargetBitmap);
@@ -2494,11 +2571,7 @@ void LoadSettings() {
     g_tailOffsetX = Wh_GetIntSetting(L"tail_offset_x");
     g_tailOffsetY = Wh_GetIntSetting(L"tail_offset_y");
     g_tailLength = Wh_GetIntSetting(L"tail_length");
-    if (g_tailLength < 2) g_tailLength = 10;
-    if (g_tailLength > 200) g_tailLength = 200;
     g_trailDelay = Wh_GetIntSetting(L"trail_delay");
-    if (g_trailDelay < 0) g_trailDelay = 0;
-    if (g_trailDelay > 10) g_trailDelay = 10;
     {
         PCWSTR fstr = Wh_GetStringSetting(L"fadeout_mode");
         if (fstr) {
@@ -2516,30 +2589,17 @@ void LoadSettings() {
     g_enableHeadHighlight = Wh_GetIntSetting(L"enable_head_highlight") != 0;
     g_adaptiveContrast = Wh_GetIntSetting(L"enable_adaptive_contrast") != 0;
     g_dotsMultiplier = Wh_GetIntSetting(L"dots_multiplier");
-    if (g_dotsMultiplier < 1) g_dotsMultiplier = 1;
-    if (g_dotsMultiplier > 10) g_dotsMultiplier = 10;
     g_waveAmplitude = Wh_GetIntSetting(L"wave_amplitude");
-    if (g_waveAmplitude < 0) g_waveAmplitude = 0;
-    if (g_waveAmplitude > 50) g_waveAmplitude = 50;
     g_waveFrequency = Wh_GetIntSetting(L"wave_frequency");
-    if (g_waveFrequency < 1) g_waveFrequency = 1;
-    if (g_waveFrequency > 50) g_waveFrequency = 50;
     g_enableGlow = Wh_GetIntSetting(L"enable_glow") != 0;
     g_glowIntensity = Wh_GetIntSetting(L"glow_intensity");
-    if (g_glowIntensity < 0) g_glowIntensity = 0;
-    if (g_glowIntensity > 100) g_glowIntensity = 100;
+    g_edgeSoftness = Wh_GetIntSetting(L"edge_softness");
     g_enableSmoothGradient = Wh_GetIntSetting(L"enable_smooth_gradient") != 0;
     g_enableTrailShadow = Wh_GetIntSetting(L"enable_trail_shadow") != 0;
     g_particleDensity = Wh_GetIntSetting(L"particle_density");
-    if (g_particleDensity < 1) g_particleDensity = 1;
-    if (g_particleDensity > 50) g_particleDensity = 50;
     g_particleInterval = Wh_GetIntSetting(L"particle_interval");
-    if (g_particleInterval < 0) g_particleInterval = 0;
-    if (g_particleInterval > 100) g_particleInterval = 100;
     g_particleAccel = Wh_GetIntSetting(L"particle_acceleration") != 0;
     g_particleOriginRatio = Wh_GetIntSetting(L"particle_origin_ratio");
-    if (g_particleOriginRatio < 0) g_particleOriginRatio = 0;
-    if (g_particleOriginRatio > 100) g_particleOriginRatio = 100;
     int attrVal = Wh_GetIntSetting(L"particle_attraction");
     if (attrVal < 0)
         attrVal = 0;
@@ -2607,15 +2667,9 @@ void LoadSettings() {
     g_interParticleRepelForce = interRepelVal / 100.0f;
     g_enableClickStarburst = Wh_GetIntSetting(L"enable_click_starburst") != 0;
     g_starburstCount = Wh_GetIntSetting(L"starburst_count");
-    if (g_starburstCount < 1) g_starburstCount = 1;
-    if (g_starburstCount > 100) g_starburstCount = 100;
     g_enableClickEffect = Wh_GetIntSetting(L"enable_click_effect") != 0;
     g_clickMaxRadius = Wh_GetIntSetting(L"click_max_radius");
-    if (g_clickMaxRadius <= 0) g_clickMaxRadius = 40;
-    if (g_clickMaxRadius > 500) g_clickMaxRadius = 500;
     g_clickDuration = Wh_GetIntSetting(L"click_duration");
-    if (g_clickDuration <= 0) g_clickDuration = 300;
-    if (g_clickDuration > 3000) g_clickDuration = 3000;
 
     PCWSTR str = Wh_GetStringSetting(L"trail_shape");
     if (str) {
@@ -2675,12 +2729,8 @@ void LoadSettings() {
     g_motionBlurStrength = Wh_GetIntSetting(L"motion_blur_strength");
     if (g_motionBlurStrength < 1) g_motionBlurStrength = 1;
     if (g_motionBlurStrength > 5) g_motionBlurStrength = 5;
-    if (g_motionBlurStrength < 1) g_motionBlurStrength = 1;
-    if (g_motionBlurStrength > 5) g_motionBlurStrength = 5;
     g_enable25DEffect = Wh_GetIntSetting(L"enable_25d_effect") != 0;
     g_perspectiveStrength = Wh_GetIntSetting(L"perspective_strength");
-    if (g_perspectiveStrength < 0) g_perspectiveStrength = 0;
-    if (g_perspectiveStrength > 50) g_perspectiveStrength = 50;
     if (g_perspectiveStrength < 0) g_perspectiveStrength = 0;
     if (g_perspectiveStrength > 50) g_perspectiveStrength = 50;
     str = Wh_GetStringSetting(L"function_preset");
@@ -2773,8 +2823,6 @@ void LoadSettings() {
     g_colorShiftAngle = Wh_GetIntSetting(L"color_shift_angle");
     if (g_colorShiftAngle < 0) g_colorShiftAngle = 0;
     if (g_colorShiftAngle > 360) g_colorShiftAngle = 360;
-    if (g_colorShiftAngle < 0) g_colorShiftAngle = 0;
-    if (g_colorShiftAngle > 360) g_colorShiftAngle = 360;
     str = Wh_GetStringSetting(L"custom_color");
     if (str) {
         g_customColor = ParseHexColor(str, D2D1::ColorF(0, .75f, 1));
@@ -2806,8 +2854,12 @@ void LoadSettings() {
     if (g_dotChainSize < 50) g_dotChainSize = 50;
     if (g_dotChainSize > 300) g_dotChainSize = 300;
     g_particleSizeMultiplier = Wh_GetIntSetting(L"particle_size_multiplier");
+    g_enableParticleGlow = Wh_GetIntSetting(L"enable_particle_glow") != 0;
+    g_particleGlowIntensity = Wh_GetIntSetting(L"particle_glow_intensity");
     if (g_particleSizeMultiplier < 50) g_particleSizeMultiplier = 50;
     if (g_particleSizeMultiplier > 300) g_particleSizeMultiplier = 300;
+    if (g_particleGlowIntensity < 0) g_particleGlowIntensity = 0;
+    if (g_particleGlowIntensity > 100) g_particleGlowIntensity = 100;
     if (g_waveAmplitude < 1)
         g_waveAmplitude = 1;
     if (g_waveAmplitude > 40)
@@ -2820,6 +2872,8 @@ void LoadSettings() {
         g_glowIntensity = 0;
     if (g_glowIntensity > 100)
         g_glowIntensity = 100;
+    if (g_edgeSoftness < 0) g_edgeSoftness = 0;
+    if (g_edgeSoftness > 100) g_edgeSoftness = 100;
     if (g_particleDensity < 1)
         g_particleDensity = 1;
     if (g_particleDensity > 10)
@@ -2959,7 +3013,8 @@ static D2D1_COLOR_F ShiftToComplementary(D2D1_COLOR_F c) {
 }
 
 static void ExtractCursorColor(POINT pt, DWORD dwTime) {
-    if (dwTime - s_lastColorExtract < 40)
+    // 100ms 一次：GetDC(NULL) 在 DWM 下触发全屏回读，过于频繁会与渲染线程冲突掉帧
+    if (dwTime - s_lastColorExtract < 100)
         return;
     s_lastColorExtract = dwTime;
     HDC hdcScreen = GetDC(NULL);
@@ -2977,32 +3032,86 @@ static void ExtractCursorColor(POINT pt, DWORD dwTime) {
 }
 
 // ===================== 自适应对比度：背景亮度采样 =====================
-// 沿拖尾路径采样屏幕像素，计算平均亮度（0=暗，1=亮）
-// 限制采样频率避免性能开销，采样结果用于选择描边颜色
+// 沿拖尾路径、在路径法线两侧偏移采样屏幕像素（避开拖尾自身），计算平均亮度（0=暗，1=亮）
+// 限制采样频率避免性能开销，采样结果用于自适应明度
 static void SampleBackgroundLuminance(const std::vector<D2D1_POINT_2F>& path, DWORD dwTime, int vX, int vY) {
-    if (!g_adaptiveContrast || path.empty()) return;
-    if (dwTime - g_lastBgSample < 100) return;  // 每 100ms 采样一次
+    if (!g_adaptiveContrast || path.size() < 2) return;
+    // 500ms 一次：GetDC(NULL) 在 DWM 下会触发全屏 GPU→CPU 回读，过于频繁会与渲染线程的 DwmFlush 互斥阻塞导致掉帧
+    if (dwTime - g_lastBgSample < 500) return;
     g_lastBgSample = dwTime;
+
+    const float OFFSET = 10.0f;  // 沿法线偏移像素，需大于拖尾最大宽度以避开自身
+    // 收集采样点：沿路径均匀 3 处，每处取法线两侧各 1 点（共最多 6 点）
+    struct Pt { int x, y; };
+    Pt pts[6];
+    int nPts = 0;
+    size_t n = path.size();
+    int step = (int)n / 3;
+    if (step < 1) step = 1;
+    for (size_t i = 0; i < n && nPts < 6; i += step) {
+        size_t i0 = (i == 0) ? 0 : i - 1;
+        size_t i1 = (i == n - 1) ? n - 1 : i + 1;
+        float dx = path[i1].x - path[i0].x;
+        float dy = path[i1].y - path[i0].y;
+        float ln = sqrtf(dx * dx + dy * dy);
+        if (ln < 0.001f) continue;
+        float nx = -dy / ln, ny = dx / ln;  // 单位法线
+        float bx = path[i].x + vX, by = path[i].y + vY;
+        pts[nPts++] = {(int)(bx + nx * OFFSET), (int)(by + ny * OFFSET)};
+        pts[nPts++] = {(int)(bx - nx * OFFSET), (int)(by - ny * OFFSET)};
+    }
+    if (nPts == 0) return;
+
+    // 计算采样点包围盒
+    int minX = pts[0].x, maxX = pts[0].x, minY = pts[0].y, maxY = pts[0].y;
+    for (int i = 1; i < nPts; ++i) {
+        if (pts[i].x < minX) minX = pts[i].x;
+        if (pts[i].x > maxX) maxX = pts[i].x;
+        if (pts[i].y < minY) minY = pts[i].y;
+        if (pts[i].y > maxY) maxY = pts[i].y;
+    }
+    int w = maxX - minX + 1, h = maxY - minY + 1;
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+    // 限制 DIB 尺寸，避免极端情况下分配过大
+    if (w > 128) w = 128;
+    if (h > 128) h = 128;
 
     HDC hdcScreen = GetDC(NULL);
     if (!hdcScreen) return;
 
+    // 创建 top-down 32bpp DIB（biHeight 为负表示自上而下，避免坐标翻转）
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = w;
+    bmi.bmiHeader.biHeight = -h;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    void* pBits = nullptr;
+    HBITMAP hBmp = CreateDIBSection(hdcScreen, &bmi, DIB_RGB_COLORS, &pBits, nullptr, 0);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    HGDIOBJ oldBmp = SelectObject(hdcMem, hBmp);
+
+    // 一次 BitBlt 批量回读包围盒区域，替代多次 GetPixel（每次 GetPixel 都会单独触发 DWM 往返）
+    BitBlt(hdcMem, 0, 0, w, h, hdcScreen, minX, minY, SRCCOPY);
+
     float totalLum = 0.0f;
     int samples = 0;
-    // 沿路径均匀采样最多 5 个点
-    int step = ((int)path.size() / 5);
-    if (step < 1) step = 1;
-    for (size_t i = 0; i < path.size(); i += step) {
-        int sx = (int)path[i].x + vX;
-        int sy = (int)path[i].y + vY;
-        COLORREF col = GetPixel(hdcScreen, sx, sy);
-        if (col != CLR_INVALID) {
-            // 感知亮度公式：0.299R + 0.587G + 0.114B
-            float lum = (0.299f * GetRValue(col) + 0.587f * GetGValue(col) + 0.114f * GetBValue(col)) / 255.0f;
-            totalLum += lum;
-            samples++;
-        }
+    const BYTE* pSrc = (const BYTE*)pBits;
+    for (int i = 0; i < nPts; ++i) {
+        int dx = pts[i].x - minX, dy = pts[i].y - minY;
+        if (dx < 0 || dx >= w || dy < 0 || dy >= h) continue;  // 超出 DIB 范围（被尺寸限制裁剪）则跳过
+        const BYTE* px = pSrc + (dy * w + dx) * 4;  // 32bpp BGRA，top-down
+        // 感知亮度：0.299R + 0.587G + 0.114B
+        float lum = (0.299f * px[2] + 0.587f * px[1] + 0.114f * px[0]) / 255.0f;
+        totalLum += lum;
+        samples++;
     }
+
+    SelectObject(hdcMem, oldBmp);
+    DeleteObject(hBmp);
+    DeleteDC(hdcMem);
     ReleaseDC(NULL, hdcScreen);
 
     if (samples > 0) {
@@ -3010,6 +3119,36 @@ static void SampleBackgroundLuminance(const std::vector<D2D1_POINT_2F>& path, DW
         // 平滑过渡，避免亮度跳变
         g_bgLuminance = g_bgLuminance * 0.7f + avgLum * 0.3f;
     }
+}
+
+// 后台采样线程：把 GDI 回读（GetDC/BitBlt）从渲染线程剥离，避免阻塞 vsync
+// 渲染线程只负责写入最新输入，本线程定期读取并执行慢操作，结果写回全局变量供渲染线程读取
+static DWORD WINAPI BgSamplerThreadProc(LPVOID) {
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+    while (WaitForSingleObject(g_bgSampleExitEvent, 50) != WAIT_OBJECT_0) {
+        // 复制输入（锁内，vector 复制很快）
+        std::vector<D2D1_POINT_2F> path;
+        int vX, vY; POINT cursor; DWORD dwTime; bool hasPath; int colorMode; bool adaptive;
+        EnterCriticalSection(&g_sampleCS);
+        path = g_samplePath;
+        vX = g_sampleVX; vY = g_sampleVY;
+        cursor = g_sampleCursor; dwTime = g_sampleTime;
+        hasPath = g_sampleHasPath;
+        colorMode = g_sampleColorMode;
+        adaptive = g_sampleAdaptive;
+        LeaveCriticalSection(&g_sampleCS);
+
+        if (!hasPath) continue;
+
+        // 慢操作全部在锁外执行，不阻塞渲染线程
+        if (adaptive) {
+            SampleBackgroundLuminance(path, dwTime, vX, vY);
+        }
+        if (colorMode == 10 || colorMode == 11) {
+            ExtractCursorColor(cursor, dwTime);
+        }
+    }
+    return 0;
 }
 
 // ===================== 轨迹变形 =====================
@@ -3155,6 +3294,10 @@ struct DotInfo {
 static void RecreateSwapChain(int vW, int vH) {
     if (g_pD2DDC)
         g_pD2DDC->SetTarget(nullptr);
+    if (g_pCachedRTV) {
+        g_pCachedRTV->Release();
+        g_pCachedRTV = nullptr;
+    }
     if (g_pD2DTargetBitmap) {
         g_pD2DTargetBitmap->Release();
         g_pD2DTargetBitmap = nullptr;
@@ -3206,6 +3349,19 @@ static void RecreateSwapChain(int vW, int vH) {
         return;
     }
     Wh_Log(L"RecreateSwapChain: swap chain ready (%dx%d)", vW, vH);
+
+    // 从后台缓冲 bitmap 取底层 texture，创建缓存的渲染目标视图
+    // （RTV 自持底层资源引用，临时 surface/texture 用完即可释放）
+    {
+        IDXGISurface *pRtvSurface = nullptr;
+        ID3D11Texture2D *pRtvTexture = nullptr;
+        if (SUCCEEDED(g_pD2DTargetBitmap->GetSurface(&pRtvSurface)) &&
+            SUCCEEDED(pRtvSurface->QueryInterface(__uuidof(ID3D11Texture2D), (void **)&pRtvTexture))) {
+            g_pD3DDevice->CreateRenderTargetView(pRtvTexture, nullptr, &g_pCachedRTV);
+            pRtvTexture->Release();
+            pRtvSurface->Release();
+        }
+    }
 
     if (g_pDCompVisual) {
         g_pDCompVisual->SetContent(g_pSwapChain);
@@ -3436,8 +3592,8 @@ static void RenderFrame() {
     float velocity = sqrtf((float)(dx * dx + dy * dy));
     g_lastPos = pt;
 
-    if (g_colorMode == 10 || g_colorMode == 11)
-        ExtractCursorColor(pt, dwTime);
+    // 光标取色和背景采样已移至后台线程（BgSamplerThreadProc），避免 GDI 回读阻塞渲染线程
+    // 这里只把最新输入写入共享结构，后台线程定期读取执行
 
     POINT renderPos = pt;
     if (g_trailDelay > 0) {
@@ -3638,8 +3794,15 @@ static void RenderFrame() {
             ApplyLightningDeformation(smoothed, dwTime);
     }
 
-    // ===== 自适应对比度：采样背景亮度 =====
-    SampleBackgroundLuminance(smoothed, dwTime, vX, vY);
+    // ===== 把最新输入交给后台采样线程（GDI 回读在后台线程执行，不阻塞渲染）=====
+    EnterCriticalSection(&g_sampleCS);
+    g_samplePath = smoothed;
+    g_sampleVX = vX; g_sampleVY = vY;
+    g_sampleCursor = pt; g_sampleTime = dwTime;
+    g_sampleHasPath = havePath;
+    g_sampleColorMode = g_colorMode;
+    g_sampleAdaptive = g_adaptiveContrast ? true : false;
+    LeaveCriticalSection(&g_sampleCS);
 
     // ===== 运动模糊：保存当前路径到历史缓冲区（仅锥形带模式，避免切换形状后残留旧帧）=====
     if (g_enableMotionBlur && havePath && g_trailShape == 0) {
@@ -4198,6 +4361,7 @@ static void ReleaseAllRenderResources() {
     if (g_pShadowBrush) { g_pShadowBrush->Release(); g_pShadowBrush = nullptr; }
     if (g_pSolidInnerBrush) { g_pSolidInnerBrush->Release(); g_pSolidInnerBrush = nullptr; }
     if (g_pSolidOuterBrush) { g_pSolidOuterBrush->Release(); g_pSolidOuterBrush = nullptr; }
+    if (g_pCachedRTV) { g_pCachedRTV->Release(); g_pCachedRTV = nullptr; }
     if (g_pD2DTargetBitmap) { g_pD2DTargetBitmap->Release(); g_pD2DTargetBitmap = nullptr; }
     if (g_pSwapChain) { g_pSwapChain->Release(); g_pSwapChain = nullptr; }
     if (g_pDCompTarget && g_pDCompVisual) {
@@ -4369,7 +4533,16 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
     Wh_Log(L"OverlayThread: message loop ended, stopping render thread");
     if (g_renderExitEvent) SetEvent(g_renderExitEvent);
     if (g_renderThread) {
-        WaitForSingleObject(g_renderThread, 5000);
+        DWORD wr = WaitForSingleObject(g_renderThread, 5000);
+        if (wr == WAIT_TIMEOUT) {
+            // 渲染线程 5s 未退出（可能卡在 GPU 调用），再宽限 2s；仍不退出则强制终止，避免卸载永久挂起
+            Wh_Log(L"OverlayThread: render thread did not exit in 5s, waiting 2s more");
+            if (WaitForSingleObject(g_renderThread, 2000) == WAIT_TIMEOUT) {
+                Wh_Log(L"OverlayThread: render thread stuck, terminating as last resort");
+                TerminateThread(g_renderThread, 1);
+                WaitForSingleObject(g_renderThread, 1000);
+            }
+        }
         CloseHandle(g_renderThread);
         g_renderThread = nullptr;
     }
@@ -4462,6 +4635,15 @@ DWORD WINAPI RenderThreadProc(LPVOID) {
     RecreateSwapChain(g_virtW, g_virtH);
     GetCursorPos(&g_lastPos);
 
+    // ---- 后台采样线程（把 GDI 回读从渲染线程剥离，避免阻塞 vsync）----
+    InitializeCriticalSection(&g_sampleCS);
+    g_bgSampleExitEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    g_bgSampleThread = CreateThread(NULL, 0, BgSamplerThreadProc, NULL, 0, NULL);
+    if (g_bgSampleThread)
+        Wh_Log(L"RenderThread: background sampler thread started");
+    else
+        Wh_Log(L"RenderThread: failed to create background sampler thread");
+
     Wh_Log(L"RenderThread: entering render loop");
     // ---- 渲染循环（设备丢失恢复 + 空闲退避）----
     DWORD waitMs = 1;
@@ -4488,33 +4670,22 @@ DWORD WINAPI RenderThreadProc(LPVOID) {
         waitMs = isActive ? 1 : 16;
     }
 
-    // ---- 清理渲染资源 ----
+    // ---- 清理渲染资源（复用统一清理，保证与设备丢失恢复路径一致，含 SetRoot(nullptr)）----
     Wh_Log(L"RenderThread: exiting, cleaning up");
-    ReleaseGradientBrushes();
-    if (g_pShadowBrush) { g_pShadowBrush->Release(); g_pShadowBrush = nullptr; }
-    if (g_pSolidInnerBrush) { g_pSolidInnerBrush->Release(); g_pSolidInnerBrush = nullptr; }
-    if (g_pSolidOuterBrush) { g_pSolidOuterBrush->Release(); g_pSolidOuterBrush = nullptr; }
-    if (g_pD2DTargetBitmap) { g_pD2DTargetBitmap->Release(); g_pD2DTargetBitmap = nullptr; }
-    if (g_pSwapChain) { g_pSwapChain->Release(); g_pSwapChain = nullptr; }
-    if (g_pDCompVisual) { g_pDCompVisual->Release(); g_pDCompVisual = nullptr; }
-    if (g_pDCompTarget) { g_pDCompTarget->Release(); g_pDCompTarget = nullptr; }
-    if (g_pDCompDevice) { g_pDCompDevice->Release(); g_pDCompDevice = nullptr; }
-    // 释放预分配 mesh（必须在 D2D DC 之前释放）
-    if (g_pShadowMesh) { g_pShadowMesh->Release(); g_pShadowMesh = nullptr; }
-    if (g_pGlow2Mesh) { g_pGlow2Mesh->Release(); g_pGlow2Mesh = nullptr; }
-    if (g_pGlowMesh) { g_pGlowMesh->Release(); g_pGlowMesh = nullptr; }
-    if (g_pOuterMesh) { g_pOuterMesh->Release(); g_pOuterMesh = nullptr; }
-    if (g_pInnerMesh) { g_pInnerMesh->Release(); g_pInnerMesh = nullptr; }
-    if (g_pD2DDC) { g_pD2DDC->Release(); g_pD2DDC = nullptr; }
-    if (g_pD2DDevice) { g_pD2DDevice->Release(); g_pD2DDevice = nullptr; }
-    if (g_pStarGeom) { g_pStarGeom->Release(); g_pStarGeom = nullptr; }
-    if (g_pHexagramGeom) { g_pHexagramGeom->Release(); g_pHexagramGeom = nullptr; }
-    if (g_pHeartGeom) { g_pHeartGeom->Release(); g_pHeartGeom = nullptr; }
-    if (g_pD2DFactory) { g_pD2DFactory->Release(); g_pD2DFactory = nullptr; }
-    if (g_pDXGIDevice) { g_pDXGIDevice->Release(); g_pDXGIDevice = nullptr; }
-    if (g_pD3DContext) { g_pD3DContext->Release(); g_pD3DContext = nullptr; }
-    if (g_pD3DDevice) { g_pD3DDevice->Release(); g_pD3DDevice = nullptr; }
-    ReleaseNativeRendering();  // 释放 D3D11 原生渲染资源
+    // 先停止后台采样线程，再释放渲染资源
+    if (g_bgSampleExitEvent) SetEvent(g_bgSampleExitEvent);
+    if (g_bgSampleThread) {
+        if (WaitForSingleObject(g_bgSampleThread, 3000) == WAIT_TIMEOUT) {
+            Wh_Log(L"RenderThread: background sampler thread timed out, terminating");
+            TerminateThread(g_bgSampleThread, 1);
+            WaitForSingleObject(g_bgSampleThread, 1000);
+        }
+        CloseHandle(g_bgSampleThread);
+        g_bgSampleThread = NULL;
+    }
+    if (g_bgSampleExitEvent) { CloseHandle(g_bgSampleExitEvent); g_bgSampleExitEvent = NULL; }
+    DeleteCriticalSection(&g_sampleCS);
+    ReleaseAllRenderResources();
     CoUninitialize();
     return 0;
 }
