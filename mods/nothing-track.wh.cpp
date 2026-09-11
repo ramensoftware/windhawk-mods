@@ -19,9 +19,13 @@
 
 Displays battery levels and quick audio controls for Nothing and CMF earbuds on the Windows 11 taskbar.
 
-![Nothing Track Screenshot](https://raw.githubusercontent.com/lenorio/Nothing-Track/main/assets/screenshot.png)
+![Nothing Track taskbar widget](https://raw.githubusercontent.com/lenorio/Nothing-Track/main/assets/taskbar-widget.png)
+
+![Nothing Track control flyout](https://raw.githubusercontent.com/lenorio/Nothing-Track/main/assets/control-flyout.png)
 
 The mod communicates with earbuds directly over Bluetooth RFCOMM (SPP), so you don't need the phone app or an emulator to check battery or toggle features on PC.
+
+Unlike the generic **BT Battery Monitor** mod, Nothing Track uses the Nothing/CMF vendor protocol to provide ANC, EQ, bass, low-latency, and Find My Earbuds controls in addition to battery levels.
 
 ### Features
 * **Taskbar widget:** shows battery percentage for left/right buds and the charging case with native battery glyphs.
@@ -203,6 +207,8 @@ Tested with CMF Buds 2 / Buds Pro 2 and Nothing Ear series. Other Nothing/CMF mo
 #include <condition_variable>
 #include <algorithm>
 #include <functional>
+#include <optional>
+#include <type_traits>
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 
@@ -323,8 +329,15 @@ static inline std::vector<uint8_t> BuildPacket(uint16_t commandId, const std::ve
 class BluetoothManager {
 public:
     static BluetoothManager& Instance() {
-        [[clang::no_destroy]] static BluetoothManager s_instance;
-        return s_instance;
+        auto& instance = InstanceStorage();
+        if (!instance) {
+            instance.emplace();
+        }
+        return *instance;
+    }
+
+    static void DestroyInstance() {
+        InstanceStorage().reset();
     }
 
     void Start() {
@@ -337,8 +350,9 @@ public:
 
     void Stop() {
         m_stopRequested.store(true);
-        Disconnect();
         m_actionCv.notify_all();
+        CancelPendingOperations();
+        Disconnect();
         if (m_actionWorker.joinable()) {
             m_actionWorker.join();
         }
@@ -363,14 +377,14 @@ public:
 
     bool SendCommand(uint16_t commandId, const std::vector<uint8_t>& payload) {
         std::lock_guard<std::mutex> lock(m_socketMutex);
-        if (!m_socket) return false;
+        if (m_stopRequested.load() || !m_connected.load() || !m_socket) return false;
         try {
             uint8_t opId = static_cast<uint8_t>((m_opCounter++ % 250) + 1);
             auto packet = BuildPacket(commandId, payload, opId);
             DataWriter writer(m_socket.OutputStream());
             writer.WriteBytes(winrt::array_view<const uint8_t>(packet.data(), packet.size()));
-            writer.StoreAsync().get();
-            writer.FlushAsync().get();
+            GetAsync(writer.StoreAsync());
+            GetAsync(writer.FlushAsync());
             writer.DetachStream();
             return true;
         } catch (...) {
@@ -381,18 +395,25 @@ public:
 
     void QueryAll() {
         SendCommand(49158, {}); // Serial (readSerial)
+        if (m_stopRequested.load()) return;
         std::this_thread::sleep_for(std::chrono::milliseconds(40));
         SendCommand(49159, {}); // Battery (readBattery)
+        if (m_stopRequested.load()) return;
         std::this_thread::sleep_for(std::chrono::milliseconds(40));
         SendCommand(49182, {}); // ANC (readANC)
+        if (m_stopRequested.load()) return;
         std::this_thread::sleep_for(std::chrono::milliseconds(40));
         SendCommand(49232, {}); // ListeningMode / EQ for B179 / CMF Buds 2
+        if (m_stopRequested.load()) return;
         std::this_thread::sleep_for(std::chrono::milliseconds(40));
         SendCommand(49183, {}); // EQ fallback (readEQ)
+        if (m_stopRequested.load()) return;
         std::this_thread::sleep_for(std::chrono::milliseconds(40));
         SendCommand(49230, {}); // Bass (readEnhancedBass)
+        if (m_stopRequested.load()) return;
         std::this_thread::sleep_for(std::chrono::milliseconds(40));
         SendCommand(49218, {}); // Firmware (readFirmware)
+        if (m_stopRequested.load()) return;
         std::this_thread::sleep_for(std::chrono::milliseconds(40));
         SendCommand(49217, {}); // Low latency (readLatency)
     }
@@ -469,6 +490,58 @@ public:
     }
 
 private:
+    static std::optional<BluetoothManager>& InstanceStorage() {
+        [[clang::no_destroy]] static std::optional<BluetoothManager> s_instance;
+        return s_instance;
+    }
+
+    template <typename TAsync>
+    auto GetAsync(TAsync const& operation) -> decltype(operation.get()) {
+        auto asyncInfo = operation.template as<winrt::Windows::Foundation::IAsyncInfo>();
+        {
+            std::lock_guard<std::mutex> lock(m_asyncMutex);
+            if (m_stopRequested.load()) {
+                try { asyncInfo.Cancel(); } catch (...) {}
+                throw winrt::hresult_canceled();
+            }
+            m_asyncOperations.push_back(asyncInfo);
+        }
+
+        auto untrack = [&]() {
+            std::lock_guard<std::mutex> lock(m_asyncMutex);
+            auto abi = winrt::get_abi(asyncInfo);
+            m_asyncOperations.erase(
+                std::remove_if(m_asyncOperations.begin(), m_asyncOperations.end(),
+                    [abi](auto const& item) { return winrt::get_abi(item) == abi; }),
+                m_asyncOperations.end());
+        };
+
+        try {
+            if constexpr (std::is_void_v<decltype(operation.get())>) {
+                operation.get();
+                untrack();
+            } else {
+                auto result = operation.get();
+                untrack();
+                return result;
+            }
+        } catch (...) {
+            untrack();
+            throw;
+        }
+    }
+
+    void CancelPendingOperations() {
+        std::vector<winrt::Windows::Foundation::IAsyncInfo> operations;
+        {
+            std::lock_guard<std::mutex> lock(m_asyncMutex);
+            operations = m_asyncOperations;
+        }
+        for (auto const& operation : operations) {
+            try { operation.Cancel(); } catch (...) {}
+        }
+    }
+
     std::atomic<bool> m_running{false};
     std::atomic<bool> m_stopRequested{false};
     std::atomic<bool> m_connected{false};
@@ -477,6 +550,8 @@ private:
     std::mutex m_actionMutex;
     std::condition_variable m_actionCv;
     std::deque<std::function<void()>> m_actionQueue;
+    std::mutex m_asyncMutex;
+    std::vector<winrt::Windows::Foundation::IAsyncInfo> m_asyncOperations;
 
     void ActionLoop() {
         try {
@@ -683,7 +758,7 @@ private:
                 // 1. Find paired Nothing / CMF earbuds
                 try {
                     auto btSelector = BluetoothDevice::GetDeviceSelectorFromPairingState(true);
-                    auto paired = DeviceInformation::FindAllAsync(btSelector).get();
+                    auto paired = GetAsync(DeviceInformation::FindAllAsync(btSelector));
                     for (uint32_t i = 0; i < paired.Size(); ++i) {
                         auto dev = paired.GetAt(i);
                         std::wstring devName = dev.Name().c_str();
@@ -693,7 +768,7 @@ private:
                             lower.find(L"cmf") != std::wstring::npos ||
                             lower.find(L"ear (") != std::wstring::npos ||
                             lower.find(L"ear(") != std::wstring::npos) {
-                            auto btDev = BluetoothDevice::FromIdAsync(dev.Id()).get();
+                            auto btDev = GetAsync(BluetoothDevice::FromIdAsync(dev.Id()));
                             if (btDev) {
                                 targetBtDev = btDev;
                                 realName = devName;
@@ -707,9 +782,9 @@ private:
                 if (!targetBtDev) {
                     try {
                         auto selector = RfcommDeviceService::GetDeviceSelector(RfcommServiceId::FromUuid(SppUuid()));
-                        auto devices = DeviceInformation::FindAllAsync(selector).get();
+                        auto devices = GetAsync(DeviceInformation::FindAllAsync(selector));
                         for (uint32_t i = 0; i < devices.Size(); ++i) {
-                            auto s = RfcommDeviceService::FromIdAsync(devices.GetAt(i).Id()).get();
+                            auto s = GetAsync(RfcommDeviceService::FromIdAsync(devices.GetAt(i).Id()));
                             if (s && s.Device()) {
                                 std::wstring devName = s.Device().Name().c_str();
                                 std::wstring lower = devName;
@@ -763,9 +838,9 @@ private:
 
                 if (!service && targetBtDev) {
                     try {
-                        auto rf = targetBtDev.GetRfcommServicesForIdAsync(
+                        auto rf = GetAsync(targetBtDev.GetRfcommServicesForIdAsync(
                             RfcommServiceId::FromUuid(SppUuid()),
-                            BluetoothCacheMode::Uncached).get();
+                            BluetoothCacheMode::Uncached));
                         if (rf && rf.Services().Size() > 0) {
                             service = rf.Services().GetAt(0);
                         }
@@ -785,15 +860,21 @@ private:
 
                         StreamSocket socket;
                         socket.Control().KeepAlive(true);
-                        socket.ConnectAsync(
-                            service.ConnectionHostName(),
-                            service.ConnectionServiceName(),
-                            SocketProtectionLevel::BluetoothEncryptionAllowNullAuthentication).get();
-
                         {
                             std::lock_guard<std::mutex> sLock(m_socketMutex);
                             m_socket = socket;
                             m_service = service;
+                        }
+                        GetAsync(socket.ConnectAsync(
+                            service.ConnectionHostName(),
+                            service.ConnectionServiceName(),
+                            SocketProtectionLevel::BluetoothEncryptionAllowNullAuthentication));
+
+                        {
+                            std::lock_guard<std::mutex> sLock(m_socketMutex);
+                            if (m_stopRequested.load()) {
+                                throw winrt::hresult_canceled();
+                            }
                             m_connected.store(true);
                         }
 
@@ -809,7 +890,7 @@ private:
 
                         // Enter reader loop
                         DataReader reader(socket.InputStream());
-                        reader.InputStreamOptions(InputStreamOptions::Partial);
+                        reader.InputStreamOptions(InputStreamOptions::None);
 
                         auto lastPoll = std::chrono::steady_clock::now();
 
@@ -823,10 +904,10 @@ private:
                             }
 
                             // Read header magic
-                            if (reader.LoadAsync(1).get() < 1) break;
+                            if (GetAsync(reader.LoadAsync(1)) < 1) break;
                             if (reader.ReadByte() != 0x55) continue;
 
-                            if (reader.LoadAsync(7).get() < 7) break;
+                            if (GetAsync(reader.LoadAsync(7)) < 7) break;
                             uint8_t b1 = reader.ReadByte(); // 0x60
                             uint8_t b2 = reader.ReadByte(); // 0x01
                             uint8_t cmdLo = reader.ReadByte();
@@ -837,7 +918,7 @@ private:
                             uint8_t opId = reader.ReadByte(); // opId
 
                             uint32_t toRead = pLen + 2;
-                            if (reader.LoadAsync(toRead).get() < toRead) break;
+                            if (GetAsync(reader.LoadAsync(toRead)) < toRead) break;
                             std::vector<uint8_t> payload(pLen);
                             if (pLen > 0) reader.ReadBytes(payload);
                             uint8_t crcLo = reader.ReadByte();
@@ -889,7 +970,8 @@ using Std_Ref_Decref_t = void(WINAPI*)(void*);
 static Std_Ref_Decref_t Std_Ref_Decref_Original = nullptr;
 
 using WindowThreadProc = void(*)(void*);
-static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param) {
+static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param,
+                                DWORD timeoutMs = 5000) {
     static const UINT kMsg = RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
     struct Payload { WindowThreadProc proc; void* param; };
     DWORD tid = GetWindowThreadProcessId(hWnd, nullptr);
@@ -912,9 +994,12 @@ static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param) {
         }, nullptr, tid);
     if (!hook) return false;
     Payload pay{proc, param};
-    SendMessageW(hWnd, kMsg, 0, reinterpret_cast<LPARAM>(&pay));
+    DWORD_PTR result = 0;
+    BOOL sent = SendMessageTimeoutW(
+        hWnd, kMsg, 0, reinterpret_cast<LPARAM>(&pay),
+        SMTO_ABORTIFHUNG | SMTO_BLOCK, timeoutMs, &result);
     UnhookWindowsHookEx(hook);
-    return true;
+    return sent != FALSE;
 }
 
 static bool IsReadableMemoryRange(const void* address, size_t size) {
@@ -1516,7 +1601,9 @@ static UIElement BuildFlyoutContent() {
     refreshBtn.Content(refreshIcon);
     ToolTipService::SetToolTip(refreshBtn, winrt::box_value(Loc(StringId::Refresh)));
     refreshBtn.Click([](auto const&, auto const&) {
-        BluetoothManager::Instance().QueryAll();
+        BluetoothManager::Instance().PostAction([]() {
+            BluetoothManager::Instance().QueryAll();
+        });
     });
     Grid::SetColumn(refreshBtn, 1);
     headerGrid.Children().Append(refreshBtn);
@@ -3045,14 +3132,9 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
         Wh_Log(L"TrayUI_StartTaskbar_Hook: Taskbar window not found");
         return;
     }
-    g_injectedGrid    = nullptr;
-    g_injectionParent = nullptr;
-    g_injectedColumn  = -1;
-    g_trackedElement  = nullptr;
-    g_hasTrackedElementOriginalMargin = false;
-    g_trackPosition   = L"";
-    g_layoutUpdateToken = {};
+    RemoveWidgetGrid();
     g_taskbarWnd = hWnd;
+    BluetoothManager::Instance().Start();
 
     auto xamlRoot = GetTaskbarXamlRoot(hWnd);
     if (!xamlRoot) {
@@ -3139,18 +3221,27 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L"Wh_ModAfterInit NothingTrack");
 
-    // Start background Bluetooth SPP manager
-    BluetoothManager::Instance().Start();
-
     g_taskbarWnd = FindCurrentProcessTaskbarWnd();
-    if (g_taskbarWnd) {
-        RunFromWindowThread(g_taskbarWnd, [](void*) {
-            try {
-                ApplySettings();
-            } catch (...) {
-                Wh_Log(L"Wh_ModAfterInit: Exception in ApplySettings");
+    if (!g_taskbarWnd) {
+        // This is a secondary explorer.exe process, or the shell taskbar hasn't
+        // been created yet. TrayUI_StartTaskbar_Hook will start the manager in
+        // the latter case.
+        return;
+    }
+
+    BluetoothManager::Instance().Start();
+    if (!RunFromWindowThread(g_taskbarWnd, [](void*) {
+        try {
+            auto xamlRoot = GetTaskbarXamlRoot(g_taskbarWnd);
+            auto content = xamlRoot ? xamlRoot.Content().try_as<FrameworkElement>() : nullptr;
+            if (content) {
+                ApplySettingsWithRetry(content);
             }
-        }, nullptr);
+        } catch (...) {
+            Wh_Log(L"Wh_ModAfterInit: Exception in ApplySettingsWithRetry");
+        }
+    }, nullptr)) {
+        Wh_Log(L"Wh_ModAfterInit: Failed to dispatch taskbar setup");
     }
 }
 
@@ -3158,15 +3249,25 @@ void Wh_ModUninit() {
     Wh_Log(L"Wh_ModUninit NothingTrack");
     g_unloading = true;
 
-    BluetoothManager::Instance().Stop();
-
     HWND hWnd = FindCurrentProcessTaskbarWnd();
     if (!hWnd) hWnd = g_taskbarWnd;
     if (hWnd) {
-        RunFromWindowThread(hWnd, [](void*) {
-            RemoveWidgetGrid();
-        }, nullptr);
+        bool removed = false;
+        for (int attempt = 0; attempt < 3 && !removed; ++attempt) {
+            removed = RunFromWindowThread(hWnd, [](void*) {
+                RemoveWidgetGrid();
+            }, nullptr);
+            if (!removed) {
+                Sleep(50);
+            }
+        }
+        if (!removed) {
+            Wh_Log(L"Wh_ModUninit: Failed to dispatch taskbar teardown");
+        }
     }
+
+    BluetoothManager::Instance().Stop();
+    BluetoothManager::DestroyInstance();
 }
 
 void Wh_ModSettingsChanged() {
