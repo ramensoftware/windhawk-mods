@@ -1,6 +1,7 @@
 // ==WindhawkMod==
 // @id              windhawk-topbar
 // @name            TopBar for Windows
+// @donateUrl       https://www.patreon.com/WasiXGamer/join
 // @description     A working TopBar with Flyouts for Windows through Windhawk.
 // @version         1.1.0
 // @author          WasiXGamer
