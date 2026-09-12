@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.10.54
+// @version         0.10.55
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -81,6 +81,9 @@ play/pause, and next controls.
 >
 > While the expanded player is open, glass and transparent materials use
 > Windows Graphics Capture to blur the monitor content directly behind it.
+> By default, the expanded player is hidden from screenshots, recordings, and
+> screen sharing to prevent the blur from capturing itself. Enable **Expanded
+> player capturable blurred backdrop** if it needs to appear in captures.
 
 ## Material previews
 
@@ -97,7 +100,7 @@ play/pause, and next controls.
 - Main:
   - Material: "liquid_glass"
     $name: Material
-    $description: Choose the surface style for the island and expanded player.
+    $description: Choose the surface style for the island and expanded player. Mica-like was reworked in 0.10; existing Mica-like users keep the Acrylic glass look until settings are saved. Select Mica-like and save to switch to the reworked style.
     $options:
     - "mica_like": "Mica-like"
     - "solid": "Solid"
@@ -1308,7 +1311,7 @@ bool IsDarkModeApprox() {
                       0,
                       KEY_READ,
                       &key) == ERROR_SUCCESS) {
-        RegQueryValueExW(key, L"AppsUseLightTheme", nullptr, nullptr,
+        RegQueryValueExW(key, L"SystemUsesLightTheme", nullptr, nullptr,
                          reinterpret_cast<LPBYTE>(&value), &size);
         RegCloseKey(key);
     }
@@ -11853,8 +11856,8 @@ bool StartPopupOverlayWgcBackdrop(
         }
     }
 
-    if (!CreatePopupOverlayWgcCaptureItemForMonitor(monitor,
-                                                    g_popupOverlayWgcItem)) {
+    capture::GraphicsCaptureItem captureItem{nullptr};
+    if (!CreatePopupOverlayWgcCaptureItemForMonitor(monitor, captureItem)) {
         g_popupOverlayWgcCreateItemFailed = true;
         Wh_Log(L"overlay WGC state Create capture item failed hr=0x%08X; throttling retries",
                static_cast<unsigned>(g_popupOverlayWgcCreateItemHr));
@@ -11878,6 +11881,7 @@ bool StartPopupOverlayWgcBackdrop(
     }
 
     std::lock_guard lock(g_popupOverlayWgcMutex);
+    g_popupOverlayWgcItem = captureItem;
     g_popupOverlayWgcCaptureRectPx = captureRect;
     g_popupOverlayWgcMonitorRectPx = monitorInfo.rcMonitor;
     g_popupOverlayWgcMonitor = monitor;
@@ -14655,6 +14659,9 @@ void ClearDynamicTransportButtonMotions() {
     ResetDynamicTransportButtonMotion(g_dynamicTransportNextMotion);
     ResetDynamicTransportButtonMotion(g_compactPrevMotion);
     ResetDynamicTransportButtonMotion(g_compactNextMotion);
+    ResetDynamicTransportButtonMotion(g_popupPrevMotion);
+    ResetDynamicTransportButtonMotion(g_popupPlayMotion);
+    ResetDynamicTransportButtonMotion(g_popupNextMotion);
     g_dynamicTransportNavigationFailureDirection.store(0);
     CancelPendingNavigationValidation();
 }
@@ -17535,6 +17542,7 @@ void RemoveIslandOsResourcesNoexcept() noexcept {
     // teardown callback while the module is about to be unloaded.
     try { StopHoverRenderLoop(); } catch (...) {}
     try { StopDynamicCompactRenderLoop(); } catch (...) {}
+    try { StopCompactNavigationRenderLoop(); } catch (...) {}
     try { StopDynamicMainGlowBreathing(); } catch (...) {}
     try { StopCompactTextRenderLoop(); } catch (...) {}
     try { StopCompactTintTransition(); } catch (...) {}
