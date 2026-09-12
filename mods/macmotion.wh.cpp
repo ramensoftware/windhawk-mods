@@ -258,6 +258,20 @@ static void CompactWorkerHandlesLocked() {
     }
 }
 
+static void PumpWorkerThreadMessages() {
+    MSG message;
+    while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+        TranslateMessage(&message);
+        DispatchMessageW(&message);
+    }
+}
+
+static void DwmFlushWithFallback() {
+    if (FAILED(DwmFlush())) {
+        Sleep(1);
+    }
+}
+
 static bool StartWorkerThread(LPTHREAD_START_ROUTINE startRoutine,
                               void* parameter) {
     std::lock_guard<std::mutex> lock(g_workerMutex);
@@ -267,6 +281,12 @@ static bool StartWorkerThread(LPTHREAD_START_ROUTINE startRoutine,
     }
 
     CompactWorkerHandlesLocked();
+
+    try {
+        g_workerThreads.reserve(g_workerThreads.size() + 1);
+    } catch (const std::bad_alloc&) {
+        return false;
+    }
 
     HANDLE thread =
         CreateThread(nullptr, 0, startRoutine, parameter, 0, nullptr);
@@ -380,7 +400,8 @@ static DWORD WINAPI ResizeAnimationThread(void* parameter) {
                         DwmUpdateThumbnailProperties(thumbnail,
                                                      &properties))) {
                     ShowWindow_Original(ghost, SW_SHOWNOACTIVATE);
-                    DwmFlush();
+                    PumpWorkerThreadMessages();
+                    DwmFlushWithFallback();
 
                     LARGE_INTEGER frequency{};
                     LARGE_INTEGER start{};
@@ -415,12 +436,13 @@ static DWORD WINAPI ResizeAnimationThread(void* parameter) {
                             MakeLocalRect(frame, ghostRect);
                         DwmUpdateThumbnailProperties(thumbnail,
                                                      &properties);
+                        PumpWorkerThreadMessages();
 
                         if (lastFrame) {
                             break;
                         }
 
-                        DwmFlush();
+                        DwmFlushWithFallback();
                     }
                 }
             }
@@ -430,13 +452,15 @@ static DWORD WINAPI ResizeAnimationThread(void* parameter) {
     // Reveal the real window before removing the thumbnail/ghost. This avoids a
     // composition frame where neither representation is visible.
     RestoreRealWindow(hWnd);
-    DwmFlush();
+    PumpWorkerThreadMessages();
+    DwmFlushWithFallback();
 
     if (thumbnail) {
         DwmUnregisterThumbnail(thumbnail);
     }
     if (ghost) {
         DestroyWindow(ghost);
+        PumpWorkerThreadMessages();
     }
 
     return 0;
@@ -639,15 +663,20 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    WindhawkUtils::SetFunctionHook(
+    bool hooksInstalled = true;
+    hooksInstalled &= WindhawkUtils::SetFunctionHook(
         ShowWindow, ShowWindow_Hook, &ShowWindow_Original);
-    WindhawkUtils::SetFunctionHook(
+    hooksInstalled &= WindhawkUtils::SetFunctionHook(
         DefWindowProcW, DefWindowProcW_Hook, &DefWindowProcW_Original);
-    WindhawkUtils::SetFunctionHook(
+    hooksInstalled &= WindhawkUtils::SetFunctionHook(
         DefWindowProcA, DefWindowProcA_Hook, &DefWindowProcA_Original);
-    WindhawkUtils::SetFunctionHook(
+    hooksInstalled &= WindhawkUtils::SetFunctionHook(
         SetWindowPlacement, SetWindowPlacement_Hook,
         &SetWindowPlacement_Original);
+    if (!hooksInstalled) {
+        Wh_Log(L"Failed to install one or more hooks");
+        return FALSE;
+    }
 
     Wh_Log(L"Initialized duration=%d",
            g_maximizeDurationMs.load(std::memory_order_relaxed));
