@@ -30,6 +30,8 @@ and Dinner. Chevrons at the top let you browse to other days.
 
 - **Taskbar button** — `Idli • Vada • Khichdi…` while a meal is being served,
   `Lunch starts in 1 hr 20 min` between meals. Or icon only, in compact mode.
+  The icon itself fills in while a meal is being served, so the state is
+  visible at a glance either way.
 - **Flyout** — all four meals, always expanded, with the current meal
   highlighted green and the upcoming meal highlighted yellow.
 - **Automatic grouping** — items are sorted into Main Items, Bread & Sides,
@@ -103,7 +105,7 @@ backdrop blur is derived from GPL-3.0 code.
   `TaskbarHost::FrameHeight` prologue, the system-tray column insert/remove, and
   the `RunFromWindowThread` helper.
 - **Fluent UI System Icons** by Microsoft (MIT) — the "Food" glyph on the
-  taskbar button.
+  taskbar button, in its regular and filled variants.
 */
 // ==/WindhawkModReadme==
 
@@ -133,6 +135,9 @@ backdrop blur is derived from GPL-3.0 code.
     $options:
     - expanded: Expanded
     - compact: Compact
+  - filledIconWhenServing: true
+    $name: Filled icon while a meal is being served
+    $description: Switches the outline glyph to its filled variant for the duration of each serving window, so the state is visible from the icon alone. Useful in Compact mode.
   - position: tray_left
     $name: Position
     $description: The first sits in the taskbar's own area; the rest sit inside the system tray, next to the other tray icons.
@@ -308,6 +313,7 @@ struct ModSettings {
     int  hostel          = 1;       // 1 = men's, 2 = women's
     int  mess            = 2;       // 1 = special, 2 = veg, 3 = non-veg
     bool compact         = false;
+    bool filledIconWhenServing = true;
     ButtonPosition position = ButtonPosition::TrayLeft;
     TaskbarScope taskbarScope = TaskbarScope::Primary;
 
@@ -348,13 +354,18 @@ static void CurrentSource(int& hostel, int& mess) {
     mess = key % 10;
 }
 
-// The user's extra dessert keywords, already normalised (see NormalizeKey).
-// Kept out of ModSettings for the reason given above: this is a list of
-// strings, rewritten by LoadSettings while the taskbar thread may be in the
-// middle of classifying a menu. Readers take a snapshot of the shared_ptr
-// under the lock and never touch the vector itself while unlocked.
+// The user's extra dessert keywords, already normalised (see NormalizeKey),
+// each with its spaceless form precomputed so ClassifyItem does not redo it
+// per item. Kept out of ModSettings for the reason given above: this is a
+// list of strings, rewritten by LoadSettings while the taskbar thread may be
+// in the middle of classifying a menu. Readers take a snapshot of the
+// shared_ptr under the lock and never touch the vector itself while unlocked.
+struct DessertKeyword {
+    std::wstring normalized;  // "water melon"
+    std::wstring compact;     // "watermelon"
+};
 static std::mutex g_userDessertKeywordsMutex;
-static std::shared_ptr<const std::vector<std::wstring>> g_userDessertKeywords;
+static std::shared_ptr<const std::vector<DessertKeyword>> g_userDessertKeywords;
 
 // The custom menu URL template, or empty for the built-in host. Same
 // arrangement: written by LoadSettings, snapshotted by the network worker.
@@ -367,6 +378,7 @@ static std::wstring GetMenuUrlTemplate() {
 }
 
 static std::wstring NormalizeKey(const std::wstring& text);
+static std::wstring WithoutSpaces(const std::wstring& text);
 
 // Wh_GetStringSetting never returns null -- it yields L"" when unset or on
 // error -- so an empty test is all that is needed. StringSetting is RAII, so
@@ -491,7 +503,7 @@ static bool ParseTimeRange(const std::wstring& text, MealWindow& out) {
 // trailing comma cannot turn every item into a dessert.
 static void LoadUserDessertKeywords() {
     std::wstring text = GetStringSetting(L"grouping.extraDessertItems", L"");
-    auto keywords = std::make_shared<std::vector<std::wstring>>();
+    auto keywords = std::make_shared<std::vector<DessertKeyword>>();
 
     size_t start = 0;
     while (start <= text.size()) {
@@ -500,7 +512,8 @@ static void LoadUserDessertKeywords() {
             start, comma == std::wstring::npos ? std::wstring::npos
                                                : comma - start));
         if (!piece.empty()) {
-            keywords->push_back(std::move(piece));
+            std::wstring compact = WithoutSpaces(piece);
+            keywords->push_back({std::move(piece), std::move(compact)});
         }
         if (comma == std::wstring::npos) {
             break;
@@ -547,6 +560,8 @@ static void LoadSettings() {
 
     g_settings.compact =
         (GetStringSetting(L"button.mode", L"expanded") == L"compact");
+    g_settings.filledIconWhenServing =
+        Wh_GetIntSetting(L"button.filledIconWhenServing") != 0;
     std::wstring position = GetStringSetting(L"button.position", L"tray_left");
     g_settings.position =
         (position == L"taskbar_left")   ? ButtonPosition::TaskbarLeft
@@ -662,6 +677,31 @@ static const wchar_t* const kTaskbarIconData =
     L"4.55964 38.4404 4 37.75 4H37.25C31.0368 4 26 9.0368 26 15.25V20.75C26 "
     L"22.5449 27.4551 24 29.25 24H30.9097Z";
 
+// The filled variant (ic_fluent_food_48_filled), shown while a meal is being
+// served so the state is readable from the icon alone -- which is all there
+// is to read in compact mode.
+static const wchar_t* const kTaskbarIconFilledData =
+    L"F1 M10.6139 4C9.96568 4 9.35301 4.46302 9.24717 5.17623C9.10659 6.1236 "
+    L"8 13.6664 8 17C8 19.1964 8.94573 21.1737 10.4483 22.5436C11.1431 23.177 "
+    L"11.5 23.8171 11.5 24.3858C11.5 24.4314 11.4986 24.4678 11.4954 "
+    L"24.5078C11.4014 25.6815 10.5 36.9763 10.5 39C10.5 41.7614 12.7386 44 "
+    L"15.5 44C18.2614 44 20.5 41.7614 20.5 39C20.5 36.9763 19.5986 25.6815 "
+    L"19.5046 24.5078C19.5014 24.4678 19.5 24.4314 19.5 24.3858C19.5 23.8171 "
+    L"19.8569 23.177 20.5517 22.5436C22.0543 21.1737 23 19.1964 23 17C23 "
+    L"13.6657 21.8929 6.12023 21.7527 5.17555C21.6471 4.46372 21.0356 4 "
+    L"20.3869 4H20.3688C19.5732 4 19.0017 4.65496 19.0017 5.37V15.88C19.0017 "
+    L"16.4986 18.5003 17 17.8817 17C17.2632 17 16.7617 16.4986 16.7617 "
+    L"15.88V5.37C16.7617 5.35279 16.7621 5.33575 16.7628 5.31888C16.7943 "
+    L"4.60485 16.2251 4 15.5009 4C14.7766 4 14.2074 4.60485 14.2389 "
+    L"5.31888C14.2396 5.33575 14.24 5.35279 14.24 5.37V15.88C14.24 16.4986 "
+    L"13.7386 17 13.12 17C12.5014 17 12 16.4986 12 15.88V5.37C12 4.65496 "
+    L"11.4285 4 10.6329 4H10.6139ZM30.9097 24L30.8467 24.912C30.7529 26.2744 "
+    L"30.6278 28.1128 30.5027 30.0164C30.2547 33.7899 30 37.9113 30 39C30 "
+    L"41.7614 32.2386 44 35 44C37.7614 44 40 41.7614 40 39C40 37.7912 39.6846 "
+    L"33.2057 39.4123 29.2478L39.4034 29.1178C39.1852 25.9458 39 23.2397 39 "
+    L"22.75V5.25C39 4.55964 38.4404 4 37.75 4H37.25C31.0368 4 26 9.0368 26 "
+    L"15.25V20.75C26 22.5449 27.4551 24 29.25 24H30.9097Z";
+
 enum class Group { Main = 0, BreadSides, Dairy, Beverages, Dessert, Count };
 
 static constexpr int kGroupCount = (int)Group::Count;
@@ -776,7 +816,8 @@ static std::wstring FormatLongDate(int dayKey) {
 // ---------------------------------------------------------------------------
 // Section 4: meal windows and the "what is happening now" state machine
 //
-// VIT Vellore timings, deliberately hard-coded: this mod targets one campus.
+// The windows come from settings (VIT Vellore's by default), so nothing here
+// may assume a fixed order or fixed times.
 // ---------------------------------------------------------------------------
 
 static_assert(kMealCount == 4,
@@ -1013,15 +1054,15 @@ static Group ClassifyItem(const std::wstring& item) {
     // its mind. Snapshot the list under the lock; LoadSettings may be swapping
     // it on another thread.
     {
-        std::shared_ptr<const std::vector<std::wstring>> userKeywords;
+        std::shared_ptr<const std::vector<DessertKeyword>> userKeywords;
         {
             std::lock_guard<std::mutex> lock(g_userDessertKeywordsMutex);
             userKeywords = g_userDessertKeywords;
         }
         if (userKeywords) {
-            for (const std::wstring& keyword : *userKeywords) {
-                if (compactKey == WithoutSpaces(keyword) ||
-                    lastWord == keyword) {
+            for (const DessertKeyword& keyword : *userKeywords) {
+                if (compactKey == keyword.compact ||
+                    lastWord == keyword.normalized) {
                     return Group::Dessert;
                 }
             }
@@ -1246,10 +1287,8 @@ static bool ParseMenuJson(const std::wstring& json, ParsedMonth& out) {
         if (!JsonObject::TryParse(json, root) || !root) {
             return false;
         }
-        if (!root.HasKey(L"menu")) {
-            return false;
-        }
 
+        // Null when "menu" is missing or not an array.
         JsonArray dayArray = root.GetNamedArray(L"menu", nullptr);
         if (!dayArray) {
             return false;
@@ -2468,15 +2507,9 @@ static Style MakeSubtleButtonStyle(bool light, int verticalInset) {
         std::to_wstring(verticalInset);
 
     std::wstring xaml = kTemplate;
-    auto replace = [&xaml](const wchar_t* token, const std::wstring& value) {
-        size_t pos = xaml.find(token);
-        if (pos != std::wstring::npos) {
-            xaml.replace(pos, wcslen(token), value);
-        }
-    };
-    replace(L"%HOVER%", light ? L"#18000000" : L"#20FFFFFF");
-    replace(L"%PRESSED%", light ? L"#0C000000" : L"#12FFFFFF");
-    replace(L"%INSET%", inset);
+    ReplaceAll(xaml, L"%HOVER%", light ? L"#18000000" : L"#20FFFFFF");
+    ReplaceAll(xaml, L"%PRESSED%", light ? L"#0C000000" : L"#12FFFFFF");
+    ReplaceAll(xaml, L"%INSET%", inset);
 
     try {
         return Markup::XamlReader::Load(xaml).try_as<Style>();
@@ -2533,7 +2566,10 @@ static Style GetTaskbarButtonStyle(bool light) {
 struct TaskbarEntry {
     HWND taskbarWnd = nullptr;
     Button button{nullptr};
+    // Both glyphs live in the button at once and swap by Visibility: the
+    // outline between meals, the filled one while a meal is being served.
     PathIcon icon{nullptr};
+    PathIcon iconFilled{nullptr};
     TextBlock label{nullptr};
     Grid injectionParent{nullptr};
     // The tray column we added, or null when we appended without adding one
@@ -2744,8 +2780,8 @@ static std::wstring ComputeButtonLabel(const MealState& state) {
         if (it != g_store.days.end()) {
             GroupedMenu grouped =
                 GroupMenuItems(it->second.raw[state.currentMeal]);
-            // Prefer the main dishes: "Idli - Vada" is a more useful glance
-            // than "Tea - Coffee - Milk".
+            // Prefer the main dishes: "Idli • Vada" is a more useful glance
+            // than "Tea • Coffee • Milk".
             for (int group = 0; group < kGroupCount; group++) {
                 if (!grouped.groups[group].empty()) {
                     return JoinItems(grouped.groups[group], 4);
@@ -2782,12 +2818,42 @@ static TaskbarEntry* FindEntryForButton(FrameworkElement const& element) {
     return nullptr;
 }
 
+// Shows the filled glyph while a meal is being served, the outline otherwise.
+// Setting-off means the outline always. Cheap enough to call on every label
+// refresh; Visibility is only written when it actually changes.
+static void ApplyIconState(TaskbarEntry& entry, bool serving) {
+    if (!entry.icon || !entry.iconFilled) {
+        return;
+    }
+    const bool filled = serving && g_settings.filledIconWhenServing;
+    try {
+        const Visibility outlineWanted =
+            filled ? Visibility::Collapsed : Visibility::Visible;
+        const Visibility filledWanted =
+            filled ? Visibility::Visible : Visibility::Collapsed;
+        if (entry.icon.Visibility() != outlineWanted) {
+            entry.icon.Visibility(outlineWanted);
+        }
+        if (entry.iconFilled.Visibility() != filledWanted) {
+            entry.iconFilled.Visibility(filledWanted);
+        }
+    } catch (...) {
+    }
+}
+
 static void UpdateTaskbarLabel() {
     if (!g_taskbars || g_taskbars->empty()) {
         return;
     }
     try {
         MealState state = ComputeMealState();
+
+        // Before the label cache's early-outs: the icon depends only on
+        // whether a meal is in progress, and a freshly injected button starts
+        // on the outline regardless of what the cache remembers.
+        for (auto& entry : *g_taskbars) {
+            ApplyIconState(entry, state.currentMeal >= 0);
+        }
 
         // Everything the label depends on, as one cheap integer, so the split /
         // classify / join work only runs when the text can actually have
@@ -2837,31 +2903,38 @@ static void UpdateTaskbarLabel() {
 
 static void ShowMessFlyout(FrameworkElement const& target);
 
-// The 48-unit Fluent glyph scaled to tray-icon size. The PathIcon sits at its
-// designed offset inside a 48x48 canvas and the Viewbox scales the canvas, so
-// the glyph keeps the padding the icon set designed in rather than being
-// stretched to its own bounds. Returns the element to place; `icon` receives
-// the PathIcon so its Foreground can follow the theme.
-static FrameworkElement MakeTaskbarIcon(bool light, PathIcon& icon) {
-    icon = nullptr;
-
-    // Geometry has no public parser in C++/WinRT, so the path mini-language
-    // goes through XamlReader.
+// Geometry has no public parser in C++/WinRT, so the path mini-language goes
+// through XamlReader. Null if that fails, which it should not with fixed data.
+static PathIcon LoadPathIcon(const wchar_t* data) {
     static const wchar_t* kIconXaml =
         L"<PathIcon xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/"
         L"presentation\" HorizontalAlignment=\"Left\" "
         L"VerticalAlignment=\"Top\" Data=\"%DATA%\"/>";
     std::wstring xaml = kIconXaml;
-    xaml.replace(xaml.find(L"%DATA%"), 6, kTaskbarIconData);
-
+    ReplaceAll(xaml, L"%DATA%", data);
     try {
-        icon = Markup::XamlReader::Load(xaml).try_as<PathIcon>();
+        return Markup::XamlReader::Load(xaml).try_as<PathIcon>();
     } catch (...) {
-        Wh_Log(L"MakeTaskbarIcon: XamlReader failed");
+        Wh_Log(L"LoadPathIcon: XamlReader failed");
+        return nullptr;
     }
+}
+
+// The 48-unit Fluent glyphs scaled to tray-icon size. Each PathIcon sits at
+// its designed offset inside a 48x48 canvas and the Viewbox scales the canvas,
+// so the glyph keeps the padding the icon set designed in rather than being
+// stretched to its own bounds. Both variants are loaded once and overlaid;
+// ApplyIconState picks which is visible, so a state change is one property
+// set rather than another XamlReader pass. Returns the element to place;
+// `icon` and `iconFilled` receive the PathIcons so their Foreground can
+// follow the theme.
+static FrameworkElement MakeTaskbarIcon(bool light, PathIcon& icon,
+                                        PathIcon& iconFilled) {
+    icon = LoadPathIcon(kTaskbarIconData);
+    iconFilled = LoadPathIcon(kTaskbarIconFilledData);
     if (!icon) {
-        // Should never happen with fixed data, but a text fallback beats an
-        // invisible button.
+        // A text fallback beats an invisible button.
+        iconFilled = nullptr;
         TextBlock fallback;
         fallback.Text(L"•");
         fallback.FontSize(14);
@@ -2875,6 +2948,11 @@ static FrameworkElement MakeTaskbarIcon(bool light, PathIcon& icon) {
     canvas.Width(kTaskbarIconCanvas);
     canvas.Height(kTaskbarIconCanvas);
     canvas.Children().Append(icon);
+    if (iconFilled) {
+        iconFilled.Foreground(MakeBrush(TextPrimaryColor(light)));
+        iconFilled.Visibility(Visibility::Collapsed);
+        canvas.Children().Append(iconFilled);
+    }
 
     Viewbox viewbox;
     viewbox.Width(16);
@@ -2885,7 +2963,7 @@ static FrameworkElement MakeTaskbarIcon(bool light, PathIcon& icon) {
     return viewbox;
 }
 
-// Fills entry.button, entry.icon and entry.label. The entry must already be in
+// Fills entry.button, entry.icon, entry.iconFilled and entry.label. The entry must already be in
 // g_taskbars, so the handlers below can find it again.
 static void BuildTaskbarButton(bool light, TaskbarEntry& entry) {
     Button button;
@@ -2906,7 +2984,8 @@ static void BuildTaskbarButton(bool light, TaskbarEntry& entry) {
     panel.Orientation(Orientation::Horizontal);
     panel.VerticalAlignment(VerticalAlignment::Center);
 
-    panel.Children().Append(MakeTaskbarIcon(light, entry.icon));
+    panel.Children().Append(
+        MakeTaskbarIcon(light, entry.icon, entry.iconFilled));
 
     if (!g_settings.compact) {
         TextBlock label;
@@ -2964,6 +3043,10 @@ static void BuildTaskbarButton(bool light, TaskbarEntry& entry) {
                 if (auto* entry = FindEntryForButton(sender)) {
                     if (entry->icon) {
                         entry->icon.Foreground(
+                            MakeBrush(TextPrimaryColor(nowLight)));
+                    }
+                    if (entry->iconFilled) {
+                        entry->iconFilled.Foreground(
                             MakeBrush(TextPrimaryColor(nowLight)));
                     }
                     if (entry->label) {
@@ -3187,6 +3270,7 @@ static void RemoveTaskbarButtonFrom(TaskbarEntry& entry) {
 
     entry.button = nullptr;
     entry.icon = nullptr;
+    entry.iconFilled = nullptr;
     entry.label = nullptr;
     entry.injectionParent = nullptr;
     entry.injectedColumnDefinition = nullptr;
@@ -5069,30 +5153,33 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    g_taskbarWnd.store(FindCurrentProcessTaskbarWnd());
-
-    if (g_taskbarWnd.load()) {
-        // Only the Explorer instance that owns the taskbar needs the menu.
-        StartNetThread();
+    // No taskbar in this process (a folder window's Explorer) means nothing
+    // to do at all -- neither the worker nor the button. The taskbar-creation
+    // hook covers the case where the taskbar appears later.
+    HWND hWnd = FindCurrentProcessTaskbarWnd();
+    g_taskbarWnd.store(hWnd);
+    if (!hWnd) {
+        return;
     }
 
-    if (g_taskbarWnd.load()) {
-        RunFromWindowThread(
-            g_taskbarWnd.load(),
-            [](void*) {
-                try {
-                    RemoveTaskbarButton();
-                    // Same retry chain as the taskbar-creation hook, so a
-                    // transient failure when the mod is enabled mid-session
-                    // does not leave it buttonless until a setting is touched.
-                    // InjectWithRetry starts the UI timer once it is done.
-                    InjectWithRetry(++g_injectGeneration);
-                } catch (...) {
-                    Wh_Log(L"Wh_ModAfterInit: exception during injection");
-                }
-            },
-            nullptr);
-    }
+    // Only the Explorer instance that owns the taskbar needs the menu.
+    StartNetThread();
+
+    RunFromWindowThread(
+        hWnd,
+        [](void*) {
+            try {
+                RemoveTaskbarButton();
+                // Same retry chain as the taskbar-creation hook, so a
+                // transient failure when the mod is enabled mid-session
+                // does not leave it buttonless until a setting is touched.
+                // InjectWithRetry starts the UI timer once it is done.
+                InjectWithRetry(++g_injectGeneration);
+            } catch (...) {
+                Wh_Log(L"Wh_ModAfterInit: exception during injection");
+            }
+        },
+        nullptr);
 }
 
 void Wh_ModSettingsChanged() {
