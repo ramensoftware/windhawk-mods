@@ -2,7 +2,7 @@
 // @id              desktop-draggable-widgets
 // @name            JonaOS Draggable Desktop Widgets
 // @description     Draggable widgets with transparent, light, and dark themes. You can add a custom folder path in the mod settings to open your desired music folder.
-// @version         7
+// @version         7.1
 // @author          Jona like it, code it
 // @github          https://github.com/Stunning-dev
 // @include         windhawk.exe
@@ -14,6 +14,8 @@
 /*
 # JonaOS Draggable Desktop Widgets
 View Calendar, Time, Battery, Open your Music easily and fast without need of navigating through folders to reach Music folder, and Control Volume really fast by dragging the slider. Dragging moves them to any position on the Desktop and positions are remembered, the Quick Settings shortcuts need Windows 11 (Windows 10 falls back to full Settings pages), and the panel is primary-monitor only.
+![image](https://i.imgur.com/QsdEEBq.png)
+*Volume and Baterry Widgets can be made Horizontal, Vertical and Round via mod settings*
 ![image](https://i.imgur.com/OT1h1u1.png)
 *LiquidGlass*
 ![image](https://i.imgur.com/DjpCK5N.png)
@@ -90,16 +92,18 @@ View Calendar, Time, Battery, Open your Music easily and fast without need of na
 
 - volumeWidgetOrientation: horizontal
   $name: Volume widget orientation
-  $description: Choose whether the Volume widget is horizontal or vertical.
+  $description: Choose whether the Volume widget is horizontal, vertical, or round.
   $options:
   - horizontal: Horizontal
   - vertical: Vertical
+  - round: Round
 - batteryWidgetOrientation: horizontal
   $name: Battery widget orientation
-  $description: Choose whether the Battery widget is horizontal or vertical.
+  $description: Choose whether the Battery widget is horizontal, vertical, or round.
   $options:
   - horizontal: Horizontal
   - vertical: Vertical
+  - round: Round
 - searchWidgetOrientation: horizontal
   $name: Windows Search widget orientation
   $description: Choose whether the Windows Search widget is horizontal or vertical.
@@ -434,12 +438,23 @@ constexpr float kSmallButtonFontSize = 15.0f;
 constexpr float kRoundShortcutWidth = 80.0f;
 constexpr float kRoundShortcutHeight = 70.0f;
 constexpr float kRoundShortcutFontSize = 12.0f;
+constexpr float kRoundMeterDiameterPx = 125.0f;
+constexpr float kSliderShellThicknessPx = 30.0f;
+constexpr float kSliderIndicatorThicknessPx = 10.0f;
+constexpr float kRoundMeterThicknessPx = kSliderShellThicknessPx;
 
 // Vertical widget dimensions.
 // 173.333 logical px * 0.75 = 130 screen px.
 // 73.333 logical px * 0.75 = 55 screen px.
 constexpr float kVerticalWidgetHeight = 173.333333f;
 constexpr float kSearchVerticalWidth = 73.333333f;
+
+enum class SliderOrientation {
+    Horizontal,
+    Vertical,
+    Round,
+};
+
 int g_dragWidget = -1;
 PointF g_dragDelta;
 PointF g_dragStart;
@@ -449,8 +464,8 @@ float g_volumeLevel = 1.0f;
 float g_batteryLevel = 1.0f;
 bool g_onBatteryCapable = false;
 AppearanceTheme _appearanceTheme = AppearanceTheme::LiquidGlass;
-bool g_volumeWidgetVertical = false;
-bool g_batteryWidgetVertical = false;
+SliderOrientation g_volumeWidgetOrientation = SliderOrientation::Horizontal;
+SliderOrientation g_batteryWidgetOrientation = SliderOrientation::Horizontal;
 bool g_searchWidgetVertical = false;
 bool g_personalizationWidgetVertical = false;
 BYTE g_materialAccentR = 0xFE;
@@ -649,14 +664,54 @@ bool ReadVerticalOrientationSetting(const wchar_t* name) {
     return vertical;
 }
 
+SliderOrientation ReadSliderOrientationSetting(const wchar_t* name) {
+    SliderOrientation orientation = SliderOrientation::Horizontal;
+    PCWSTR value = Wh_GetStringSetting(name);
+    if (value) {
+        if (wcscmp(value, L"vertical") == 0) {
+            orientation = SliderOrientation::Vertical;
+        } else if (wcscmp(value, L"round") == 0) {
+            orientation = SliderOrientation::Round;
+        }
+        Wh_FreeStringSetting(value);
+    }
+    return orientation;
+}
+
+bool IsWidgetRoundMeter(int widgetId) {
+    switch (widgetId) {
+        case WidgetVolume:
+            return g_volumeWidgetOrientation == SliderOrientation::Round;
+        case WidgetBattery:
+            return g_batteryWidgetOrientation == SliderOrientation::Round;
+    }
+    return false;
+}
+
 bool IsWidgetVertical(int widgetId) {
     switch (widgetId) {
-        case WidgetVolume:           return g_volumeWidgetVertical;
-        case WidgetBattery:          return g_batteryWidgetVertical;
+        case WidgetVolume:           return g_volumeWidgetOrientation == SliderOrientation::Vertical;
+        case WidgetBattery:          return g_batteryWidgetOrientation == SliderOrientation::Vertical;
         case WidgetSearch:           return g_searchWidgetVertical;
         case WidgetPersonalization:  return g_personalizationWidgetVertical;
     }
     return false;
+}
+
+float RoundMeterDiameterLogical() {
+    return kRoundMeterDiameterPx / RenderScale();
+}
+
+float RoundMeterThicknessLogical() {
+    return kRoundMeterThicknessPx / RenderScale();
+}
+
+float SliderShellThicknessLogical() {
+    return kSliderShellThicknessPx / RenderScale();
+}
+
+float SliderIndicatorThicknessLogical() {
+    return kSliderIndicatorThicknessPx / RenderScale();
 }
 
 // ── FIX A: Dynamic calendar height ───────────────────────────────────────────
@@ -712,23 +767,45 @@ void ApplyDefaultWidgetLayout() {
 
     float y = clockY + 170.0f + 10.0f;
 
-    if (!g_volumeWidgetVertical && !g_batteryWidgetVertical) {
+    const bool volumeVertical = g_volumeWidgetOrientation == SliderOrientation::Vertical;
+    const bool batteryVertical = g_batteryWidgetOrientation == SliderOrientation::Vertical;
+    const bool volumeRound = g_volumeWidgetOrientation == SliderOrientation::Round;
+    const bool batteryRound = g_batteryWidgetOrientation == SliderOrientation::Round;
+    const float roundD = RoundMeterDiameterLogical();
+
+    if (!volumeVertical && !batteryVertical && !volumeRound && !batteryRound) {
         g_widgets[WidgetVolume].rc  = RectF(0, y, 350, 30);
         y += 50.0f;
         g_widgets[WidgetBattery].rc = RectF(0, y, 350, 30);
         y += 50.0f;
-    } else if (g_volumeWidgetVertical && g_batteryWidgetVertical) {
+    } else if (volumeVertical && batteryVertical) {
         g_widgets[WidgetVolume].rc  = RectF(0,  y, 70, kVerticalWidgetHeight);
         g_widgets[WidgetBattery].rc = RectF(90, y, 70, kVerticalWidgetHeight);
         y += kVerticalWidgetHeight + 20.0f;
-    } else if (g_volumeWidgetVertical) {
+    } else if (volumeRound && batteryRound) {
+        g_widgets[WidgetVolume].rc  = RectF(0, y, roundD, roundD);
+        g_widgets[WidgetBattery].rc = RectF(roundD + 20.0f, y, roundD, roundD);
+        y += roundD + 20.0f;
+    } else if (volumeVertical) {
         g_widgets[WidgetVolume].rc  = RectF(0,  y, 70,  kVerticalWidgetHeight);
-        g_widgets[WidgetBattery].rc = RectF(90, y, 260, 30);
+        g_widgets[WidgetBattery].rc = batteryRound
+            ? RectF(90, y, roundD, roundD)
+            : RectF(90, y, 260, 30);
         y += kVerticalWidgetHeight + 20.0f;
-    } else {
-        g_widgets[WidgetVolume].rc  = RectF(0,   y, 260, 30);
+    } else if (batteryVertical) {
+        g_widgets[WidgetVolume].rc = volumeRound
+            ? RectF(0, y, roundD, roundD)
+            : RectF(0, y, 260, 30);
         g_widgets[WidgetBattery].rc = RectF(280, y, 70,  kVerticalWidgetHeight);
         y += kVerticalWidgetHeight + 20.0f;
+    } else if (volumeRound) {
+        g_widgets[WidgetVolume].rc  = RectF(0, y, roundD, roundD);
+        g_widgets[WidgetBattery].rc = RectF(roundD + 20.0f, y, 350.0f - roundD - 20.0f, 30);
+        y += roundD + 20.0f;
+    } else {
+        g_widgets[WidgetVolume].rc  = RectF(0, y, 350.0f - roundD - 20.0f, 30);
+        g_widgets[WidgetBattery].rc = RectF(350.0f - roundD, y, roundD, roundD);
+        y += roundD + 20.0f;
     }
 
     if (!g_searchWidgetVertical && !g_personalizationWidgetVertical) {
@@ -769,6 +846,18 @@ RectF RectForOrientation(const RectF& current, bool vertical,
         : RectF(current.X, current.Y, horizontalWidth, horizontalHeight);
 }
 
+RectF RectForSliderOrientation(const RectF& current, SliderOrientation orientation,
+                               float horizontalWidth = 350.0f) {
+    if (orientation == SliderOrientation::Vertical) {
+        return RectF(current.X, current.Y, 70.0f, kVerticalWidgetHeight);
+    }
+    if (orientation == SliderOrientation::Round) {
+        const float diameter = RoundMeterDiameterLogical();
+        return RectF(current.X, current.Y, diameter, diameter);
+    }
+    return RectF(current.X, current.Y, horizontalWidth, 30.0f);
+}
+
 void ClampWidgetToDesktop(Widget& widget) {
     RectF desktop = LogicalDesktopBounds();
     const float maxX = std::max(0.0f, desktop.Width  - widget.rc.Width);
@@ -777,18 +866,20 @@ void ClampWidgetToDesktop(Widget& widget) {
     widget.rc.Y = Clamp(widget.rc.Y, 0.0f, maxY);
 }
 
-void ApplyOrientationResizeIfNeeded(bool oldVolumeVertical,
-                                    bool oldBatteryVertical,
+void ApplyOrientationResizeIfNeeded(SliderOrientation oldVolumeOrientation,
+                                    SliderOrientation oldBatteryOrientation,
                                     bool oldSearchVertical,
                                     bool oldPersonalizationVertical) {
-    if (oldVolumeVertical != g_volumeWidgetVertical) {
-        g_widgets[WidgetVolume].rc = RectForOrientation(
-            g_widgets[WidgetVolume].rc, g_volumeWidgetVertical, 350.0f, 70.0f);
+    if (oldVolumeOrientation != g_volumeWidgetOrientation) {
+        g_widgets[WidgetVolume].rc = RectForSliderOrientation(
+            g_widgets[WidgetVolume].rc, g_volumeWidgetOrientation);
+        g_widgets[WidgetVolume].round = g_volumeWidgetOrientation == SliderOrientation::Round;
         ClampWidgetToDesktop(g_widgets[WidgetVolume]);
     }
-    if (oldBatteryVertical != g_batteryWidgetVertical) {
-        g_widgets[WidgetBattery].rc = RectForOrientation(
-            g_widgets[WidgetBattery].rc, g_batteryWidgetVertical, 350.0f, 70.0f);
+    if (oldBatteryOrientation != g_batteryWidgetOrientation) {
+        g_widgets[WidgetBattery].rc = RectForSliderOrientation(
+            g_widgets[WidgetBattery].rc, g_batteryWidgetOrientation);
+        g_widgets[WidgetBattery].round = g_batteryWidgetOrientation == SliderOrientation::Round;
         ClampWidgetToDesktop(g_widgets[WidgetBattery]);
     }
     if (oldSearchVertical != g_searchWidgetVertical) {
@@ -813,8 +904,8 @@ void ApplyOrientationResizeIfNeeded(bool oldVolumeVertical,
 
 void LoadSettings() {
     g_appearanceTheme = AppearanceTheme::LiquidGlass;
-    g_volumeWidgetVertical = false;
-    g_batteryWidgetVertical = false;
+    g_volumeWidgetOrientation = SliderOrientation::Horizontal;
+    g_batteryWidgetOrientation = SliderOrientation::Horizontal;
     g_searchWidgetVertical = false;
     g_personalizationWidgetVertical = false;
     ResetMaterialAccentColor();
@@ -843,10 +934,12 @@ void LoadSettings() {
         Wh_FreeStringSetting(theme);
     }
 
-    g_volumeWidgetVertical        = ReadVerticalOrientationSetting(L"volumeWidgetOrientation");
-    g_batteryWidgetVertical       = ReadVerticalOrientationSetting(L"batteryWidgetOrientation");
+    g_volumeWidgetOrientation     = ReadSliderOrientationSetting(L"volumeWidgetOrientation");
+    g_batteryWidgetOrientation    = ReadSliderOrientationSetting(L"batteryWidgetOrientation");
     g_searchWidgetVertical        = ReadVerticalOrientationSetting(L"searchWidgetOrientation");
     g_personalizationWidgetVertical = ReadVerticalOrientationSetting(L"personalizationWidgetOrientation");
+    g_widgets[WidgetVolume].round = g_volumeWidgetOrientation == SliderOrientation::Round;
+    g_widgets[WidgetBattery].round = g_batteryWidgetOrientation == SliderOrientation::Round;
 
     PCWSTR materialCustomColor = Wh_GetStringSetting(L"materialCustomColor");
     if (materialCustomColor) {
@@ -894,6 +987,15 @@ void LoadWidgetPositions() {
 
 bool PtInWidget(const Widget& widget, PointF pt) {
     if (!PtInRectF(widget.rc, pt)) return false;
+    if (IsWidgetRoundMeter(widget.id)) {
+        const float cx = widget.rc.X + widget.rc.Width  / 2.0f;
+        const float cy = widget.rc.Y + widget.rc.Height / 2.0f;
+        const float dx = pt.X - cx;
+        const float dy = pt.Y - cy;
+        const float distance = std::sqrt(dx * dx + dy * dy);
+        const float outerRadius = std::min(widget.rc.Width, widget.rc.Height) / 2.0f;
+        return distance <= outerRadius;
+    }
     if (!widget.round) return true;
     const float cx = widget.rc.X + widget.rc.Width  / 2.0f;
     const float cy = widget.rc.Y + widget.rc.Height / 2.0f;
@@ -912,11 +1014,71 @@ int HitTestWidget(PointF pt) {
 }
 
 RectF VolumeSliderRect() {
-    RectF rc = g_widgets[WidgetVolume].rc;
-    if (g_volumeWidgetVertical) {
-        return RectF(rc.X + rc.Width / 2.0f - 7.5f, rc.Y + 32.0f, 15, rc.Height - 48.0f);
+    const Widget& widget = g_widgets[WidgetVolume];
+    RectF rc = widget.rc;
+    const SliderOrientation orientation = g_volumeWidgetOrientation;
+    if (orientation == SliderOrientation::Round) {
+        return rc;
     }
-    return RectF(rc.X + 90, rc.Y + 7.5f, std::max(40.0f, rc.Width - 110.0f), 15);
+    const float shellPadding = 2.0f / RenderScale();
+    float thickness = SliderShellThicknessLogical();
+    if (orientation == SliderOrientation::Vertical) {
+        thickness = std::min(thickness, std::max(1.0f, rc.Width - shellPadding * 2.0f));
+        return RectF(rc.X + rc.Width / 2.0f - thickness / 2.0f, rc.Y + 32.0f,
+                     thickness, rc.Height - 48.0f);
+    }
+    thickness = std::min(thickness, std::max(1.0f, rc.Height - shellPadding * 2.0f));
+    return RectF(rc.X + 90, rc.Y + (rc.Height - thickness) / 2.0f,
+                 std::max(40.0f, rc.Width - 110.0f), thickness);
+}
+
+RectF VolumeSliderIndicatorRect() {
+    RectF shell = VolumeSliderRect();
+    if (g_volumeWidgetOrientation == SliderOrientation::Round) {
+        return shell;
+    }
+    const float thickness = SliderIndicatorThicknessLogical();
+    if (g_volumeWidgetOrientation == SliderOrientation::Vertical) {
+        return RectF(shell.X + (shell.Width - thickness) / 2.0f, shell.Y,
+                     thickness, shell.Height);
+    }
+    return RectF(shell.X, shell.Y + (shell.Height - thickness) / 2.0f,
+                 shell.Width, thickness);
+}
+
+bool PtInVolumeSlider(PointF pt) {
+    if (g_volumeWidgetOrientation == SliderOrientation::Round) {
+        RectF rc = g_widgets[WidgetVolume].rc;
+        if (!PtInRectF(rc, pt)) return false;
+        const float cx = rc.X + rc.Width  / 2.0f;
+        const float cy = rc.Y + rc.Height / 2.0f;
+        const float dx = pt.X - cx;
+        const float dy = pt.Y - cy;
+        const float distance = std::sqrt(dx * dx + dy * dy);
+        const float outerRadius = std::min(rc.Width, rc.Height) / 2.0f;
+        const float indicatorHalf = SliderIndicatorThicknessLogical() / 2.0f;
+        const float shellCenterRadius = outerRadius - RoundMeterThicknessLogical() / 2.0f;
+        const float innerRadius = std::max(0.0f, shellCenterRadius - indicatorHalf);
+        const float outerIndicatorRadius = shellCenterRadius + indicatorHalf;
+        return distance >= innerRadius && distance <= outerIndicatorRadius;
+    }
+    return PtInRectF(VolumeSliderIndicatorRect(), pt);
+}
+
+float VolumeLevelFromPoint(PointF pt) {
+    if (g_volumeWidgetOrientation == SliderOrientation::Round) {
+        RectF rc = g_widgets[WidgetVolume].rc;
+        const float cx = rc.X + rc.Width / 2.0f;
+        const float cy = rc.Y + rc.Height / 2.0f;
+        float degrees = std::atan2(pt.Y - cy, pt.X - cx) * 180.0f / 3.14159265358979323846f;
+        degrees += 90.0f;
+        if (degrees < 0.0f) degrees += 360.0f;
+        return degrees / 360.0f;
+    }
+    RectF slider = VolumeSliderIndicatorRect();
+    return g_volumeWidgetOrientation == SliderOrientation::Vertical
+        ? 1.0f - (pt.Y - slider.Y) / slider.Height
+        : (pt.X - slider.X) / slider.Width;
 }
 
 // ── Audio / battery COM helpers (unchanged from original) ─────────────────────
@@ -1167,6 +1329,7 @@ void DrawLiquidGlass(Graphics& g, const Widget& widget) {
 
 void DrawGlass(Graphics& g, const Widget& widget) {
     if (IsLiquidGlassTheme()) { DrawLiquidGlass(g, widget); return; }
+    if (IsWidgetRoundMeter(widget.id)) return;
 
     // ── JonaOS themes: every widget has its own frame colour ─────────────
     {
@@ -1237,6 +1400,7 @@ void DrawGlass(Graphics& g, const Widget& widget) {
 
 void DrawAcrylicGrain(Graphics& g, const Widget& widget) {
     if (g_appearanceTheme != AppearanceTheme::AcrylicTranslucent) return;
+    if (IsWidgetRoundMeter(widget.id)) return;
     GraphicsPath clipPath;
     if (widget.round) {
         clipPath.AddEllipse(widget.rc);
@@ -1455,6 +1619,9 @@ void DrawMusic(Graphics& g, const Widget& widget) {
     g.FillPolygon(&playGlyph, points, 3);
 }
 
+void DrawVolumeIcon(Graphics& g, float cx, float cy, Color color);
+void DrawBatteryIcon(Graphics& g, float cx, float cy, Color color);
+
 void DrawSlider(Graphics& g, const Widget& widget, const wchar_t* label,
                 float value, Color fillColor, FontFamily& family) {
     RectF rc = widget.rc;
@@ -1463,12 +1630,45 @@ void DrawSlider(Graphics& g, const Widget& widget, const wchar_t* label,
     const JonaOSPalette* jp = CurrentJonaOSPalette();
     Color jonaTextColor = Color(255,0x1C,0x1C,0x1E);
     Color jonaFillColor = fillColor;
+    Color jonaShellColor = Color(255,0xE5,0xE5,0xEA);
     if (jp) {
-        if (widget.id == WidgetVolume)  { jonaTextColor = jp->volumeText;  jonaFillColor = jp->volumeSlider;  }
-        if (widget.id == WidgetBattery) { jonaTextColor = jp->batteryText; jonaFillColor = jp->batterySlider; }
+        if (widget.id == WidgetVolume)  { jonaTextColor = jp->volumeText;  jonaFillColor = jp->volumeSlider;  jonaShellColor = jp->volumeFrame;  }
+        if (widget.id == WidgetBattery) { jonaTextColor = jp->batteryText; jonaFillColor = jp->batterySlider; jonaShellColor = jp->batteryFrame; }
     }
     Font font(&family, 13, FontStyleRegular, UnitPixel);
     SolidBrush text(jp ? jonaTextColor : theme ? theme->textOnAccent : liquidGlass ? LiquidGlassTextColor() : Color(245, 255, 255, 255));
+    Color shellColor = jp ? jonaShellColor : theme ? theme->accent : liquidGlass ? LiquidGlassTextColor(90) : Color(105, 255, 255, 255);
+    Color activeColor = jp ? jonaFillColor : theme ? MaterialThemeHeaderColor(theme) : liquidGlass ? MaterialAccentColor() : fillColor;
+    if (IsWidgetRoundMeter(widget.id)) {
+        const float shellThickness = RoundMeterThicknessLogical();
+        const float indicatorThickness = SliderIndicatorThicknessLogical();
+        RectF shellArcRc = Deflate(rc, shellThickness / 2.0f, shellThickness / 2.0f);
+        Pen trackPen(shellColor, shellThickness);
+        Pen fillPen(activeColor, indicatorThickness);
+        trackPen.SetStartCap(LineCapRound);
+        trackPen.SetEndCap(LineCapRound);
+        fillPen.SetStartCap(LineCapRound);
+        fillPen.SetEndCap(LineCapRound);
+        if (!liquidGlass) {
+            g.DrawEllipse(&trackPen, shellArcRc);
+        }
+        const float clampedValue = Clamp(value, 0.0f, 1.0f);
+        if (clampedValue >= 0.999f) {
+            g.DrawEllipse(&fillPen, shellArcRc);
+        } else if (clampedValue > 0.001f) {
+            DrawArcF(g, &fillPen, shellArcRc.X, shellArcRc.Y, shellArcRc.Width, shellArcRc.Height,
+                     -90.0f, clampedValue * 360.0f);
+        }
+        const float cx = rc.X + rc.Width / 2.0f;
+        const float cy = rc.Y + rc.Height / 2.0f;
+        if (widget.id == WidgetVolume) {
+            DrawVolumeIcon(g, cx, cy, activeColor);
+        } else if (widget.id == WidgetBattery) {
+            DrawBatteryIcon(g, cx, cy, activeColor);
+        }
+
+        return;
+    }
     const bool vertical = IsWidgetVertical(widget.id);
     if (vertical) {
         DrawTextFit(g, label, font, RectF(rc.X + 4, rc.Y + 8, rc.Width - 8, 20), text);
@@ -1476,11 +1676,26 @@ void DrawSlider(Graphics& g, const Widget& widget, const wchar_t* label,
         DrawTextFit(g, label, font, RectF(rc.X + 14, rc.Y, 70, rc.Height), text,
                     StringAlignmentNear, StringAlignmentCenter);
     }
+    const float shellThickness = SliderShellThicknessLogical();
+    const float indicatorThickness = SliderIndicatorThicknessLogical();
+    const float shellPadding = 2.0f / RenderScale();
+    const float effectiveShellThickness = vertical
+        ? std::min(shellThickness, std::max(1.0f, rc.Width - shellPadding * 2.0f))
+        : std::min(shellThickness, std::max(1.0f, rc.Height - shellPadding * 2.0f));
+    RectF shell = vertical
+        ? RectF(rc.X + rc.Width / 2.0f - effectiveShellThickness / 2.0f,
+                rc.Y + 32.0f, effectiveShellThickness, rc.Height - 48.0f)
+        : RectF(rc.X + 90, rc.Y + (rc.Height - effectiveShellThickness) / 2.0f,
+                std::max(40.0f, rc.Width - 110.0f), effectiveShellThickness);
     RectF slider = vertical
-        ? RectF(rc.X + rc.Width / 2.0f - 7.5f, rc.Y + 32.0f, 15, rc.Height - 48.0f)
-        : RectF(rc.X + 90, rc.Y + 7.5f, std::max(40.0f, rc.Width - 110.0f), 15);
-    SolidBrush track(jp ? Color(180,0x88,0x88,0x88) : theme ? theme->body : liquidGlass ? LiquidGlassTextColor(90) : Color(105, 255, 255, 255));
-    DrawRoundedRectangle(g, slider, 7.5f, track);
+        ? RectF(shell.X + (shell.Width - indicatorThickness) / 2.0f,
+                shell.Y, indicatorThickness, shell.Height)
+        : RectF(shell.X, shell.Y + (shell.Height - indicatorThickness) / 2.0f,
+                shell.Width, indicatorThickness);
+    if (!liquidGlass) {
+        SolidBrush shellBrush(shellColor);
+        DrawRoundedRectangle(g, shell, effectiveShellThickness / 2.0f, shellBrush);
+    }
     RectF filled = slider;
     if (vertical) {
         filled.Y      += slider.Height * (1.0f - Clamp(value, 0.0f, 1.0f));
@@ -1488,15 +1703,17 @@ void DrawSlider(Graphics& g, const Widget& widget, const wchar_t* label,
     } else {
         filled.Width  *= Clamp(value, 0.0f, 1.0f);
     }
-    SolidBrush fill(jp ? jonaFillColor : theme ? MaterialThemeHeaderColor(theme) : liquidGlass ? MaterialAccentColor() : fillColor);
-    DrawRoundedRectangle(g, filled, 7.5f, fill);
+    SolidBrush fill(activeColor);
+    DrawRoundedRectangle(g, filled, indicatorThickness / 2.0f, fill);
     SolidBrush thumb(jp ? jonaTextColor : theme ? theme->textOnAccent : liquidGlass ? LiquidGlassTextColor() : Color(245, 255, 255, 255));
+    const float thumbDiameter = indicatorThickness;
     if (vertical) {
-        FillEllipseF(g, &thumb, slider.X + 0.5f,
-                     slider.Y + slider.Height * (1.0f - Clamp(value, 0.0f, 1.0f)) - 7.0f, 14.0f, 14.0f);
+        FillEllipseF(g, &thumb, slider.X,
+                     slider.Y + slider.Height * (1.0f - Clamp(value, 0.0f, 1.0f)) - thumbDiameter / 2.0f,
+                     thumbDiameter, thumbDiameter);
     } else {
-        FillEllipseF(g, &thumb, slider.X + slider.Width * Clamp(value, 0.0f, 1.0f) - 7.0f,
-                     slider.Y + 0.5f, 14.0f, 14.0f);
+        FillEllipseF(g, &thumb, slider.X + slider.Width * Clamp(value, 0.0f, 1.0f) - thumbDiameter / 2.0f,
+                     slider.Y, thumbDiameter, thumbDiameter);
     }
 }
 
@@ -1513,6 +1730,33 @@ void DrawBrushIcon(Graphics& g, const RectF& rc, Color color) {
     g.DrawLine(&pen, rc.X + 14, rc.Y +  2, rc.X +  5, rc.Y + 12);
     g.DrawLine(&pen, rc.X +  5, rc.Y + 12, rc.X + 12, rc.Y + 19);
     g.DrawLine(&pen, rc.X + 12, rc.Y + 19, rc.X + 22, rc.Y + 10);
+}
+
+void DrawVolumeIcon(Graphics& g, float cx, float cy, Color color) {
+    Pen pen(color, 3.0f);
+    pen.SetStartCap(LineCapRound); pen.SetEndCap(LineCapRound);
+    SolidBrush brush(color);
+    PointF speaker[] = {
+        PointF(cx - 18.0f, cy - 7.0f),
+        PointF(cx - 10.0f, cy - 7.0f),
+        PointF(cx +  1.0f, cy - 16.0f),
+        PointF(cx +  1.0f, cy + 16.0f),
+        PointF(cx - 10.0f, cy +  7.0f),
+        PointF(cx - 18.0f, cy +  7.0f),
+    };
+    g.FillPolygon(&brush, speaker, ARRAYSIZE(speaker));
+    DrawArcF(g, &pen, cx + 2.0f, cy - 14.0f, 20.0f, 28.0f, -38.0f, 76.0f);
+    DrawArcF(g, &pen, cx + 7.0f, cy - 20.0f, 27.0f, 40.0f, -38.0f, 76.0f);
+}
+
+void DrawBatteryIcon(Graphics& g, float cx, float cy, Color color) {
+    Pen pen(color, 3.0f);
+    pen.SetStartCap(LineCapRound); pen.SetEndCap(LineCapRound);
+    SolidBrush brush(color);
+    RectF body(cx - 18.0f, cy - 10.0f, 32.0f, 20.0f);
+    DrawRoundedRectangle(g, body, 4.0f, SolidBrush(Color(0, 0, 0, 0)), &pen);
+    DrawRoundedRectangle(g, RectF(cx + 16.0f, cy - 4.0f, 5.0f, 8.0f), 2.0f, brush);
+    DrawRoundedRectangle(g, RectF(cx - 13.0f, cy - 5.0f, 20.0f, 10.0f), 3.0f, brush);
 }
 
 void DrawWifiIcon(Graphics& g, float cx, float cy, Color color) {
@@ -1802,12 +2046,12 @@ LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             return 0;
 
         case kSettingsChangedMessage: {
-            const bool oldVolumeVertical          = g_volumeWidgetVertical;
-            const bool oldBatteryVertical         = g_batteryWidgetVertical;
+            const SliderOrientation oldVolumeOrientation = g_volumeWidgetOrientation;
+            const SliderOrientation oldBatteryOrientation = g_batteryWidgetOrientation;
             const bool oldSearchVertical          = g_searchWidgetVertical;
             const bool oldPersonalizationVertical = g_personalizationWidgetVertical;
             LoadSettings();
-            ApplyOrientationResizeIfNeeded(oldVolumeVertical, oldBatteryVertical,
+            ApplyOrientationResizeIfNeeded(oldVolumeOrientation, oldBatteryOrientation,
                                            oldSearchVertical, oldPersonalizationVertical);
             for (Widget& widget : g_widgets) ClampWidgetToDesktop(widget);
             Render();
@@ -1827,13 +2071,10 @@ LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
         case WM_LBUTTONDOWN: {
             PointF pt = LogicalPointFromLParam(lParam);
             int hit = HitTestWidget(pt);
-            if (hit == WidgetVolume && PtInRectF(VolumeSliderRect(), pt)) {
-                RectF slider = VolumeSliderRect();
+            if (hit == WidgetVolume && PtInVolumeSlider(pt)) {
                 g_draggingSlider = true;
                 SetCapture(hwnd);
-                SetSystemVolume(g_volumeWidgetVertical
-                    ? 1.0f - (pt.Y - slider.Y) / slider.Height
-                    : (pt.X - slider.X) / slider.Width);
+                SetSystemVolume(VolumeLevelFromPoint(pt));
                 Render();
                 return 0;
             }
@@ -1855,10 +2096,7 @@ LRESULT CALLBACK WidgetWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
                     ReleaseCapture();
                     return 0;
                 }
-                RectF slider = VolumeSliderRect();
-                SetSystemVolume(g_volumeWidgetVertical
-                    ? 1.0f - (pt.Y - slider.Y) / slider.Height
-                    : (pt.X - slider.X) / slider.Width);
+                SetSystemVolume(VolumeLevelFromPoint(pt));
                 Render();
                 return 0;
             }
