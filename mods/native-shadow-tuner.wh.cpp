@@ -165,7 +165,7 @@ BOOL Wh_ModInit() {
     Wh_Log(L"CONFIG opacity=%.2f size=%.2f cacheKey=%u",
            static_cast<double>(opacityScale), static_cast<double>(sizeScale), cacheKey);
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK udwmDllHooks[] = {
         {
             {
                 LR"(private: static void __cdecl CWindowBorder::GetShadowParameters(enum CWindowBorder::ShadowStyle,int,float *,float *,float *,float *))",
@@ -183,7 +183,8 @@ BOOL Wh_ModInit() {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(module, udwmDllHooks,
+                                    ARRAYSIZE(udwmDllHooks))) {
         Wh_Log(L"Required uDWM shadow symbols were not found.");
         return FALSE;
     }
