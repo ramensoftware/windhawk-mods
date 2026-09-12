@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              recycle-bin-tray
-// @name            Recycle Bin Tray Icon
+// @name            Recycle Bin Tray
 // @description     Adds an interactive Recycle Bin icon to the Windows 11 system tray with live state updates, drag-and-drop support, theme-aware rendering, multiple icon styles, and configurable mouse actions.
 // @description:fr-FR Ajoute une icône interactive de la Corbeille à la zone de notification de Windows 11, avec mise à jour en temps réel, glisser-déposer, adaptation au thème, plusieurs styles d'icône et actions de souris configurables.
 // @version         1.0.0
@@ -9,12 +9,12 @@
 // @donateUrl       https://ko-fi.com/wildstyle23
 // @license         GPL-3.0
 // @include         windhawk.exe
-// @compilerOptions -lshell32 -ladvapi32 -luser32 -lole32 -lgdi32 -lgdiplus -lshlwapi
+// @compilerOptions -lshell32 -ladvapi32 -luser32 -lole32 -loleaut32 -lgdi32 -lgdiplus -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Recycle Bin Tray Icon
+# Recycle Bin Tray
 
 ![Drag and drop support](https://raw.githubusercontent.com/wildstyle23/Recycle-Bin-Tray-Icon/refs/heads/main/Images/Recycle%20Bin%20Tray%20Icon.png)
 
@@ -26,7 +26,7 @@ The mod is designed to remain lightweight and self-contained while integrating w
 
 ## Features
 
-* **Drag & Drop to Recycle Bin** — drag files and folders directly from the Desktop, File Explorer, or other applications that expose dropped files through the standard Windows `CF_HDROP` format. Deletion follows the Windows Recycle Bin policy for each source drive. If the icon is in the `^` notification-area overflow menu, you can drop directly onto `^`, or onto the Recycle Bin icon while the overflow panel is open.
+* **Drag & Drop to Recycle Bin** — drag files and folders directly from the Desktop, File Explorer, or other applications that expose dropped files through the standard Windows `CF_HDROP` format. Deletion follows the Windows Recycle Bin policy for each source drive. If the icon is in the `^` notification-area overflow menu, open the menu and drop directly onto the Recycle Bin icon.
 * **Live Recycle Bin state** — updates when items are added to or removed from the Recycle Bin.
 * **Four icon styles**:
   * `system` — use the native Windows Recycle Bin icon.
@@ -49,7 +49,7 @@ The mod is designed to remain lightweight and self-contained while integrating w
 ### From Windhawk
 
 1. Open **Windhawk**.
-2. Go to the **Explore** tab and search for **Recycle Bin Tray Icon**.
+2. Go to the **Explore** tab and search for **Recycle Bin Tray**.
 3. Click **Details**, then click **Install**.
 4. Open the mod's settings to customize the icon and mouse actions.
 
@@ -122,7 +122,7 @@ Keeping it visible is recommended for quicker access.
 The icon does not need to stay permanently visible in the main system tray.
 
 * If it is visible directly in the tray, drop files and folders onto it normally.
-* If it is in the `^` overflow menu, you can drop directly onto `^`. If the overflow panel is open, you can also drop directly onto the Recycle Bin icon itself.
+* If it is in the `^` overflow menu, open the menu and drop files and folders directly onto the Recycle Bin icon.
 
 If you want to keep the icon permanently visible, move it out of the overflow menu:
 
@@ -168,13 +168,13 @@ English fallback strings are used when a corresponding Shell resource cannot be 
 
 ## Emptying the Recycle Bin
 
-The **Confirm before emptying** option controls whether the standard Windows confirmation dialog is displayed.
+The **Confirm before emptying** option controls confirmation for actions that empty the Recycle Bin through the mod, independently of the Windows **Display delete confirmation dialog** option in Recycle Bin Properties.
 
-When enabled, the normal Windows confirmation dialog is shown before the Recycle Bin is emptied.
+When enabled, the standard Windows confirmation dialog is shown before the Recycle Bin is emptied.
 
 When disabled, the mod requests the silent empty operation directly.
 
-This setting applies to actions that empty the Recycle Bin through the mod.
+For emptying actions triggered through the mod, this setting takes precedence over the Windows Recycle Bin confirmation preference.
 
 ## Icon Styles
 
@@ -385,7 +385,7 @@ Windows may place the icon in the overflow menu when it first appears. This is n
 ### Drag & Drop does not work
 
 1. Check the mod's settings to ensure that Drag & Drop is enabled and **Hide when empty** is turned off.
-2. If the icon is in the `^` overflow menu, drop directly onto `^`, or open the overflow panel and drop onto the Recycle Bin icon itself.
+2. If the icon is in the `^` overflow menu, open the overflow panel and drop onto the Recycle Bin icon itself.
 3. Make sure the source application provides dropped files through the standard Windows `CF_HDROP` format.
 
 If dragging from the Desktop does not work, check whether another application currently has the input focus.
@@ -417,6 +417,16 @@ For raster images, choose a source size appropriate for the current display scal
 
 If a custom icon cannot be loaded, the mod automatically falls back to the Windows system Recycle Bin icon.
 
+### A font glyph does not display
+
+Check that:
+
+* the configured **Font name** exactly matches the Windows GDI font/typeface name;
+* the **Glyph** value is a valid Unicode hexadecimal code point (for example `0xF014`);
+* the selected font actually contains a glyph at that hexadecimal code point.
+
+If either the font name or glyph code is incorrect or unavailable, Font mode falls back according to the rules described in the **Font** section above.
+
 ## License
 
 This project is licensed under the GNU General Public License Version 3.0.
@@ -429,13 +439,19 @@ This project is licensed under the GNU General Public License Version 3.0.
   - hideWhenEmpty: false
     $name: "Hide when empty"
     $name:fr-FR: "Masquer si vide"
-    $description: "Automatically hide the tray icon when the Recycle Bin contains no items. If the bin is empty when enabled, the icon disappears immediately."
-    $description:fr-FR: "Masquer automatiquement l'icône lorsque la corbeille est vide. Si elle est déjà vide au moment de l'activation, l'icône disparaît immédiatement."
+    $description: "Automatically hide the tray icon when the Recycle Bin contains no items. If the bin is empty when enabled, the icon disappears immediately. Drag & Drop is disabled while this option is enabled."
+    $description:fr-FR: "Masquer automatiquement l'icône lorsque la corbeille est vide. Si elle est déjà vide au moment de l'activation, l'icône disparaît immédiatement. Le glisser-déposer est désactivé lorsque cette option est activée."
   - enableDragDrop: true
     $name: "Enable drag & drop"
     $name:fr-FR: "Autoriser le glisser-déposer"
-    $description: "Allow dropping files and folders onto the tray icon. Windows Shell processes them according to the Recycle Bin policy of each source drive. If a drive is configured to remove files immediately instead of using the Recycle Bin, dropped items can be permanently deleted; the Windows delete-confirmation preference is respected. Windows may place the icon in the ^ notification-area overflow menu when it first appears. Keeping it visible is recommended for quicker access. The icon does not need to stay permanently visible in the main system tray. If it is in the ^ overflow menu, drop directly onto ^ or onto the Recycle Bin icon while the overflow panel is open. ⚠ Requires \"Hide when empty\" to be turned off."
-    $description:fr-FR: "Permet de glisser des fichiers et dossiers sur l'icône de la Corbeille. Le Shell Windows les traite selon la stratégie de Corbeille configurée pour le lecteur source de chaque élément. Si un lecteur est configuré pour supprimer immédiatement les fichiers au lieu de les placer dans la Corbeille, les éléments déposés peuvent être supprimés définitivement ; le réglage Windows de confirmation de suppression est respecté. Windows peut placer l'icône dans le menu ^ des icônes masquées de la zone de notification lors de sa première apparition. Il est recommandé de la garder visible pour un accès plus rapide. L'icône n'a pas besoin de rester visible en permanence dans la zone de notification principale. Si elle se trouve dans le menu ^, déposez directement sur ^ ou sur l'icône de la Corbeille lorsque le panneau est ouvert. ⚠ Nécessite que \"Masquer si vide\" soit désactivé."
+    $description: |-
+      Allow dropping files and folders onto the tray icon. Windows uses the Recycle Bin policy of each source drive, so items may be permanently deleted if a drive is configured to bypass the Recycle Bin. If the icon is in the ^ overflow menu, open it and drop onto the Recycle Bin icon. The icon does not need to stay permanently visible in the main system tray to work, but keeping it visible is recommended for quicker access.
+
+      ⚠ Drag & Drop is disabled while "Hide when empty" is enabled.
+    $description:fr-FR: |-
+      Permet de déposer des fichiers et dossiers sur l'icône de la Corbeille. Windows applique la stratégie de Corbeille de chaque lecteur source ; les éléments peuvent donc être supprimés définitivement si un lecteur est configuré pour contourner la Corbeille. Si l'icône se trouve dans le menu ^, ouvrez-le puis déposez les éléments sur l'icône de la Corbeille. L'icône n'a pas besoin de rester visible en permanence dans la zone de notification principale pour fonctionner, mais la garder visible permet un accès plus rapide.
+
+      ⚠ Le glisser-déposer est désactivé lorsque "Masquer si vide" est activé.
   - iconStyle: system
     $name: "Icon style"
     $name:fr-FR: "Style d'icône"
@@ -708,9 +724,10 @@ This project is licensed under the GNU General Public License Version 3.0.
 #include <initguid.h>
 #include <windows.h>
 #include <ole2.h>
+#include <oleauto.h>
+#include <uiautomation.h>
 #include <shellapi.h>
 #include <shlobj.h>
-#include <shobjidl.h>
 #include <sherrors.h>
 #include <shlwapi.h>
 #include <knownfolders.h>
@@ -850,6 +867,11 @@ constexpr UINT TRAY_ICON_ID = 1001;
 // Stable GUID gives this tray icon its own Shell identity across tool mods.
 static const GUID TRAY_ICON_GUID =
     {0x4173737d, 0xce0b, 0x4c73, {0x96, 0x57, 0xa8, 0x69, 0x63, 0x05, 0x5a, 0x98}};
+// NIF_GUID is preferred, but Windows also binds that GUID to the registering
+// executable path. Fall back to hWnd+uID only if the GUID add is rejected
+// while the plain add succeeds.
+bool g_trayUseGuid = true;
+bool g_trayGuidValidated = false;
 constexpr UINT WM_TRAYICON = WM_USER + 1;
 constexpr UINT WM_SHELLNOTIFY = WM_USER + 2;
 constexpr UINT WM_APPLY_SETTINGS = WM_USER + 3;
@@ -862,7 +884,7 @@ constexpr UINT TIMER_DISPLAY_SETTLE_ID = 106;
 constexpr UINT TIMER_SHELL_COALESCE_ID = 107;
 constexpr UINT TIMER_DPI_REINSTALL_ID = 108;
 constexpr UINT TIMER_DPI_WATCH_ID = 109;
-constexpr UINT DPI_WATCH_INTERVAL_MS = 1000;
+constexpr UINT DPI_WATCH_INTERVAL_MS = 3000;
 
 // Active drag polling runs only while a physical left-button gesture is in progress.
 constexpr UINT DRAG_POLL_INTERVAL_ACTIVE_MS = 40;
@@ -937,6 +959,14 @@ struct TrayState {
     bool isIconRectValid = false;
     bool dragPollTimerActive = false;
     bool dragRectRefreshed = false;
+    // Once a hidden-icons chevron is seen during a physical drag, keep Shell
+    // geometry live for the rest of that gesture so an opened/closed overflow
+    // flyout can be followed without ever turning the chevron into a drop target.
+    bool dragChevronTracking = false;
+    bool dragChevronBlocked = false;
+    bool dragChevronProbeUnknown = false;
+    RECT dragChevronRect = { 0 };
+    ULONGLONG dragChevronNextProbeTick = 0;
     ULONGLONG oleReleaseDeadline = 0;
     bool displaySettleTimerActive = false;
     bool shellCoalesceTimerActive = false;
@@ -959,8 +989,12 @@ inline bool g_dragGestureSawOle = false;
 // Keep an armed OLE target visible until the physical gesture ends; recreating it breaks reliable re-entry.
 inline std::atomic_bool g_dropOverlayArmed{false};
 
-// Suppresses the nested DPI notification while a display-settle probe handles it synchronously.
-inline bool g_displayDpiProbeActive = false;
+// UI Automation is owned by the tray STA and reused across drag gestures.
+// It is only queried at state transitions; Shell_NotifyIconGetRect remains the
+// lightweight geometry source during active chevron tracking.
+inline IUIAutomation* g_trayUiAutomation = nullptr;
+inline IUIAutomationTreeWalker* g_trayUiAutomationRawWalker = nullptr;
+inline bool g_trayUiAutomationCreateFailureLogged = false;
 
 struct TrayGeometryCache {
     int renderSize = 0;
@@ -1022,6 +1056,13 @@ struct ModSettings {
     bool confirmEmpty;
     UINT fallbackTimerInterval;
 } g_settings;
+
+// Drag & Drop requires a persistent tray target. Keep the user's preference
+// separate from the effective runtime state so disabling Hide when empty
+// automatically restores Drag & Drop when the setting itself remains enabled.
+static bool IsDragDropEffectivelyEnabled() {
+    return g_settings.enableDragDrop && !g_settings.hideWhenEmpty;
+}
 
 // Settings callbacks can run outside the tray thread. Keep only the newest
 // snapshot here; the tray thread remains the sole writer of g_settings.
@@ -1131,6 +1172,8 @@ UINT g_shellModalDepth = 0; // Tray-thread only; protects the hidden Shell UI ow
 bool g_hostDpiProbeActive = false;
 bool g_pendingDpiShellReinstall = false;
 bool QueryTrayIconRect(HWND hWnd, RECT& rect, bool forceRefresh);
+static void ResetChevronDragTracking();
+static void ShutdownTrayUiAutomation();
 bool RefreshTrayGeometry(HWND hWnd, bool forceRegeneration);
 static HWND GetSafeHwnd();
 const WCHAR* TimerName(UINT timerId);
@@ -1989,8 +2032,8 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
         return HTCLIENT;
 
     case WM_DPICHANGED: {
-        // Apply Windows' suggested bounds so the hidden reference window
-        // completes its per-monitor DPI transition before the tray is refreshed.
+        // Apply Windows' suggested bounds so the drag overlay completes its
+        // per-monitor DPI transition when it moves between displays.
         const RECT* suggestedRect = reinterpret_cast<const RECT*>(lParam);
         const UINT dpiX = LOWORD(wParam);
         const UINT dpiY = HIWORD(wParam);
@@ -2006,11 +2049,9 @@ LRESULT CALLBACK OverlayWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
         Wh_Log(L"DPI: overlay WM_DPICHANGED dpi=%u x %u", dpiX, dpiY);
 
-        if (!g_displayDpiProbeActive) {
-            HWND hMainWnd = GetSafeHwnd();
-            if (hMainWnd) {
-                (void)PostMessageW(hMainWnd, WM_USER_TRAY_DPI_CHANGED, 0, 0);
-            }
+        HWND hMainWnd = GetSafeHwnd();
+        if (hMainWnd) {
+            (void)PostMessageW(hMainWnd, WM_USER_TRAY_DPI_CHANGED, 0, 0);
         }
         return 0;
     }
@@ -2063,31 +2104,6 @@ static bool PositionDropOverlay(const RECT& rect, bool show) {
         rect.right - rect.left, rect.bottom - rect.top, flags) != FALSE;
 }
 
-// Refresh the hidden PMv2 DPI reference at the tray position.
-// The fallback watch covers primary-display changes missed by display events.
-static bool ProbeDpiReferenceAtTray(const RECT& rect) {
-    if (!g_hOverlayWnd) return false;
-
-    // Never disturb an active physical/OLE drag; the normal D&D path will move
-    // the overlay itself and therefore complete the DPI transition.
-    if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 ||
-        g_oleDragActive.load() || g_dropOverlayArmed.load()) {
-        return false;
-    }
-
-    const bool wasVisible = IsWindowVisible(g_hOverlayWnd) != FALSE;
-
-    g_displayDpiProbeActive = true;
-    const bool positioned = PositionDropOverlay(rect, true);
-    g_displayDpiProbeActive = false;
-
-    if (!wasVisible) {
-        HideDropOverlay();
-    }
-
-    return positioned;
-}
-
 // Keep the notification-icon owner on the same physical DPI as the tray.
 static bool ProbeTrayHostDpiAtRect(HWND hWnd, const RECT& rect) {
     if (!hWnd) return false;
@@ -2109,7 +2125,7 @@ static bool ProbeTrayHostDpiAtRect(HWND hWnd, const RECT& rect) {
 
 // Overlay visibility is derived from the current tray and D&D state.
 void UpdateOverlayState() {
-    if (!g_settings.enableDragDrop || !g_iconVisible || !g_hOverlayWnd) {
+    if (!IsDragDropEffectivelyEnabled() || !g_iconVisible || !g_hOverlayWnd) {
         g_dropOverlayArmed.store(false);
         HideDropOverlay();
         return;
@@ -2343,6 +2359,40 @@ static UINT GetDpiForReferenceWindow(HWND hWnd) {
     }
 
     return GetSystemFallbackDpi();
+}
+
+// Read the effective DPI from the real window currently occupying the tray
+// rectangle. Unlike the old fallback probe, this doesn't move or show our
+// topmost drag overlay.
+static UINT GetDpiForTrayRect(const RECT& rect) {
+    if (rect.right <= rect.left || rect.bottom <= rect.top) {
+        return GetDpiForReferenceWindow(g_hOverlayWnd);
+    }
+
+    const POINT center = {
+        rect.left + (rect.right - rect.left) / 2,
+        rect.top + (rect.bottom - rect.top) / 2,
+    };
+
+    HWND pointWnd = WindowFromPoint(center);
+    if (pointWnd) {
+        UINT dpi = GetDpiForWindow(pointWnd);
+        if (dpi) {
+            return dpi;
+        }
+
+        HWND rootWnd = GetAncestor(pointWnd, GA_ROOT);
+        if (rootWnd && rootWnd != pointWnd) {
+            dpi = GetDpiForWindow(rootWnd);
+            if (dpi) {
+                return dpi;
+            }
+        }
+    }
+
+    // Keep the previous reference as a last-resort fallback. On Windows 11 the
+    // tray rectangle is expected to be backed by a real Shell window.
+    return GetDpiForReferenceWindow(g_hOverlayWnd);
 }
 
 static int GetSmallIconMetricForDpi(UINT dpi) {
@@ -3665,6 +3715,7 @@ static bool SetDragDropEnabled(HWND hWnd, bool enable) {
 
         g_dropOverlayArmed.store(false);
         g_trayState.dragRectRefreshed = false;
+        ResetChevronDragTracking();
         g_trayState.oleReleaseDeadline = 0;
         HideDropOverlay();
 
@@ -3679,6 +3730,10 @@ static bool SetDragDropEnabled(HWND hWnd, bool enable) {
             g_pDropTarget = nullptr;
         }
 
+        // UI Automation is created lazily only for R50 chevron safety. Release
+        // it together with the rest of the D&D runtime state when D&D becomes
+        // ineffective (for example while Hide when empty is enabled).
+        ShutdownTrayUiAutomation();
         g_oleDragActive.store(false);
         return true;
     }
@@ -3722,9 +3777,38 @@ static bool SetDragDropEnabled(HWND hWnd, bool enable) {
     return true;
 }
 
+static void SetTrayIdentity(bool useGuid) {
+    g_trayUseGuid = useGuid;
+    if (useGuid) {
+        g_nid.uFlags |= NIF_GUID;
+        g_nid.guidItem = TRAY_ICON_GUID;
+    } else {
+        g_nid.uFlags &= ~NIF_GUID;
+        g_nid.guidItem = GUID{};
+    }
+}
+
 static bool AddTrayIconAndNegotiateVersion(HWND hWnd, bool reInstantiation) {
     if (!Shell_NotifyIconW(NIM_ADD, &g_nid)) {
-        return false;
+        if (!g_trayUseGuid || g_trayGuidValidated) {
+            return false;
+        }
+
+        // A GUID tray identity is tied to the executable path. Before the GUID
+        // has ever succeeded in this process, retry once with hWnd+uID. Latch
+        // the fallback only if that add succeeds; if both fail, keep the GUID
+        // for the next bounded startup retry.
+        NOTIFYICONDATAW plainNid = g_nid;
+        plainNid.uFlags &= ~NIF_GUID;
+        plainNid.guidItem = GUID{};
+        if (!Shell_NotifyIconW(NIM_ADD, &plainNid)) {
+            return false;
+        }
+
+        SetTrayIdentity(false);
+        Wh_Log(L"Tray: GUID identity refused; using hWnd+uID fallback for this session");
+    } else if (g_trayUseGuid) {
+        g_trayGuidValidated = true;
     }
 
     if (reInstantiation) {
@@ -3776,10 +3860,11 @@ bool UpdateTrayState() {
             default: break;
         }
         Wh_Log(
-            L"Startup: Recycle Bin empty=%d items=%lld size=%lld bytes; hideWhenEmpty=%d dragDrop=%d iconStyle=%s fallbackTimer=%u s",
+            L"Startup: Recycle Bin empty=%d items=%lld size=%lld bytes; hideWhenEmpty=%d dragDropSetting=%d dragDropEffective=%d iconStyle=%s fallbackTimer=%u s",
             isEmpty ? 1 : 0, rbInfo.i64NumItems, rbInfo.i64Size,
             g_settings.hideWhenEmpty ? 1 : 0, g_settings.enableDragDrop ? 1 : 0,
-            styleName, g_settings.fallbackTimerInterval);
+            IsDragDropEffectivelyEnabled() ? 1 : 0, styleName,
+            g_settings.fallbackTimerInterval);
     }
 
     // Hide the notification icon when requested and the bin is empty.
@@ -3995,6 +4080,135 @@ void ExecuteAction(TrayAction action, HWND hWnd) {
     }
 }
 
+enum class TrayChevronProbeResult {
+    Chevron,
+    NotChevron,
+    Unavailable,
+};
+
+constexpr ULONGLONG CHEVRON_PROBE_RETRY_MS = 150;
+
+static void ResetChevronDragTracking() {
+    g_trayState.dragChevronTracking = false;
+    g_trayState.dragChevronBlocked = false;
+    g_trayState.dragChevronProbeUnknown = false;
+    g_trayState.dragChevronRect = {};
+    g_trayState.dragChevronNextProbeTick = 0;
+}
+
+static bool EnsureTrayUiAutomation() {
+    if (g_trayUiAutomation) {
+        return true;
+    }
+
+    IUIAutomation* automation = nullptr;
+    const HRESULT hr = CoCreateInstance(
+        CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER,
+        IID_PPV_ARGS(&automation));
+    if (FAILED(hr) || !automation) {
+        if (!g_trayUiAutomationCreateFailureLogged) {
+            Wh_Log(L"D&D: UI Automation unavailable for tray chevron safety: 0x%08X",
+                   static_cast<unsigned>(hr));
+            g_trayUiAutomationCreateFailureLogged = true;
+        }
+        return false;
+    }
+
+    g_trayUiAutomation = automation;
+    (void)g_trayUiAutomation->get_RawViewWalker(
+        &g_trayUiAutomationRawWalker);
+    return true;
+}
+
+static void ShutdownTrayUiAutomation() {
+    if (g_trayUiAutomationRawWalker) {
+        g_trayUiAutomationRawWalker->Release();
+        g_trayUiAutomationRawWalker = nullptr;
+    }
+    if (g_trayUiAutomation) {
+        g_trayUiAutomation->Release();
+        g_trayUiAutomation = nullptr;
+    }
+}
+
+// Windows 11 exposes the hidden-icons chevron as a UI Automation element with
+// this language-independent identity. Notification icons may share the class,
+// but use another AutomationId. Return Unavailable separately so a destructive
+// drop can fail closed instead of treating an inspection failure as an icon.
+static TrayChevronProbeResult ProbeTrayChevronAtRect(
+    const RECT& rect, RECT& matchedChevronRect) {
+    matchedChevronRect = {};
+    if (rect.right <= rect.left || rect.bottom <= rect.top ||
+        !EnsureTrayUiAutomation()) {
+        return TrayChevronProbeResult::Unavailable;
+    }
+
+    const POINT center = {
+        rect.left + (rect.right - rect.left) / 2,
+        rect.top + (rect.bottom - rect.top) / 2,
+    };
+
+    IUIAutomationElement* current = nullptr;
+    const HRESULT elementHr =
+        g_trayUiAutomation->ElementFromPoint(center, &current);
+    if (FAILED(elementHr) || !current) {
+        return TrayChevronProbeResult::Unavailable;
+    }
+
+    bool readAnyIdentity = false;
+    for (int level = 0; current && level < 8; ++level) {
+        BSTR className = nullptr;
+        BSTR automationId = nullptr;
+        const HRESULT classHr = current->get_CurrentClassName(&className);
+        const HRESULT idHr = current->get_CurrentAutomationId(&automationId);
+
+        if (SUCCEEDED(classHr) && SUCCEEDED(idHr)) {
+            readAnyIdentity = true;
+            const wchar_t* cls = className ? className : L"";
+            const wchar_t* id = automationId ? automationId : L"";
+            if (wcscmp(cls, L"SystemTray.NormalButton") == 0 &&
+                wcscmp(id, L"SystemTrayIcon") == 0) {
+                RECT candidate = {};
+                if (FAILED(current->get_CurrentBoundingRectangle(&candidate)) ||
+                    candidate.right <= candidate.left ||
+                    candidate.bottom <= candidate.top) {
+                    // The identity is authoritative; keep a conservative
+                    // geometry gate even if UIA couldn't return its bounds.
+                    candidate = rect;
+                }
+                matchedChevronRect = candidate;
+                if (automationId) SysFreeString(automationId);
+                if (className) SysFreeString(className);
+                current->Release();
+                return TrayChevronProbeResult::Chevron;
+            }
+        }
+
+        if (automationId) SysFreeString(automationId);
+        if (className) SysFreeString(className);
+
+        if (!g_trayUiAutomationRawWalker) {
+            break;
+        }
+
+        IUIAutomationElement* parent = nullptr;
+        const HRESULT parentHr =
+            g_trayUiAutomationRawWalker->GetParentElement(current, &parent);
+        current->Release();
+        current = nullptr;
+        if (FAILED(parentHr) || !parent) {
+            break;
+        }
+        current = parent;
+    }
+
+    if (current) {
+        current->Release();
+    }
+    return readAnyIdentity ? TrayChevronProbeResult::NotChevron
+                           : TrayChevronProbeResult::Unavailable;
+}
+
 bool QueryTrayIconRect(HWND hWnd, RECT& rect, bool forceRefresh) {
     if (!forceRefresh && g_trayState.isIconRectValid) {
         rect = g_trayState.cachedIconRect;
@@ -4003,8 +4217,11 @@ bool QueryTrayIconRect(HWND hWnd, RECT& rect, bool forceRefresh) {
 
     NOTIFYICONIDENTIFIER nid = { sizeof(nid) };
     nid.hWnd = hWnd;
-    nid.uID = TRAY_ICON_ID;
-    nid.guidItem = TRAY_ICON_GUID;
+    if (g_trayUseGuid) {
+        nid.guidItem = TRAY_ICON_GUID;
+    } else {
+        nid.uID = TRAY_ICON_ID;
+    }
 
     RECT fresh = {};
     const HRESULT hr = Shell_NotifyIconGetRect(&nid, &fresh);
@@ -4019,10 +4236,12 @@ bool QueryTrayIconRect(HWND hWnd, RECT& rect, bool forceRefresh) {
 }
 
 void CheckDragStatus(HWND hWnd) {
-    if (!g_settings.enableDragDrop || !g_iconVisible || !g_hOverlayWnd ||
+    if (!IsDragDropEffectivelyEnabled() || !g_iconVisible || !g_hOverlayWnd ||
         g_recycleWorkerBusy.load()) {
         g_dropOverlayArmed.store(false);
         g_trayState.oleReleaseDeadline = 0;
+        g_trayState.dragRectRefreshed = false;
+        ResetChevronDragTracking();
         HideDropOverlay();
         if (g_trayState.dragPollTimerActive) {
             (void)KillLoggedTimer(hWnd, TIMER_DRAG_POLL_ID);
@@ -4040,6 +4259,7 @@ void CheckDragStatus(HWND hWnd) {
             g_dropOverlayArmed.store(false);
             g_trayState.oleReleaseDeadline = 0;
             g_trayState.dragRectRefreshed = false;
+            ResetChevronDragTracking();
             HideDropOverlay();
             if (g_trayState.dragPollTimerActive) {
                 (void)KillLoggedTimer(hWnd, TIMER_DRAG_POLL_ID);
@@ -4057,6 +4277,7 @@ void CheckDragStatus(HWND hWnd) {
             g_dropOverlayArmed.store(false);
             g_trayState.oleReleaseDeadline = 0;
             g_trayState.dragRectRefreshed = false;
+            ResetChevronDragTracking();
             HideDropOverlay();
             if (g_trayState.dragPollTimerActive) {
                 (void)KillLoggedTimer(hWnd, TIMER_DRAG_POLL_ID);
@@ -4074,9 +4295,13 @@ void CheckDragStatus(HWND hWnd) {
     }
 
     // A simple click must never activate the overlay. Arm it only after the
-    // pointer moved beyond the system drag threshold.
-    const int dragThresholdX = GetSystemMetrics(SM_CXDRAG);
-    const int dragThresholdY = GetSystemMetrics(SM_CYDRAG);
+    // pointer moved beyond the system drag threshold. Use the cached tray
+    // rectangle for DPI so ordinary clicks still don't query Explorer.
+    const UINT dragDpi = g_trayState.isIconRectValid
+        ? GetDpiForTrayRect(g_trayState.cachedIconRect)
+        : GetSystemFallbackDpi();
+    const int dragThresholdX = GetSystemMetricsForDpi(SM_CXDRAG, dragDpi);
+    const int dragThresholdY = GetSystemMetricsForDpi(SM_CYDRAG, dragDpi);
     const bool movedEnoughToBeDrag =
         (std::abs(pt.x - g_dragStartPt.x) > dragThresholdX) ||
         (std::abs(pt.y - g_dragStartPt.y) > dragThresholdY);
@@ -4084,14 +4309,93 @@ void CheckDragStatus(HWND hWnd) {
         return;
     }
 
-    RECT iconRect = { 0 };
-    // A real drag gets one fresh Shell rectangle so manual tray rearrangement
-    // is observed without making ordinary clicks query Explorer.
-    const bool forceRectRefresh = !g_trayState.dragRectRefreshed;
+    const bool firstRectForDrag = !g_trayState.dragRectRefreshed;
+    const bool forceRectRefresh =
+        firstRectForDrag || g_trayState.dragChevronTracking ||
+        g_trayState.dragChevronProbeUnknown;
+
+    RECT iconRect = {};
     if (!QueryTrayIconRect(hWnd, iconRect, forceRectRefresh)) {
         return;
     }
     g_trayState.dragRectRefreshed = true;
+
+    const POINT iconCenter = {
+        iconRect.left + (iconRect.right - iconRect.left) / 2,
+        iconRect.top + (iconRect.bottom - iconRect.top) / 2,
+    };
+    const bool centerInKnownChevron =
+        g_trayState.dragChevronTracking &&
+        PtInRect(&g_trayState.dragChevronRect, iconCenter) != FALSE;
+
+    const ULONGLONG now = GetTickCount64();
+    bool shouldProbeChevron = firstRectForDrag;
+    if (!shouldProbeChevron && g_trayState.dragChevronProbeUnknown) {
+        shouldProbeChevron = now >= g_trayState.dragChevronNextProbeTick;
+    } else if (!shouldProbeChevron && g_trayState.dragChevronTracking) {
+        // While blocked, only UIA-confirm leaving the known chevron area.
+        // While unblocked, only UIA-confirm re-entering it. Shell geometry can
+        // therefore be polled every 40 ms without polling UI Automation.
+        shouldProbeChevron =
+            (g_trayState.dragChevronBlocked && !centerInKnownChevron) ||
+            (!g_trayState.dragChevronBlocked && centerInKnownChevron &&
+             now >= g_trayState.dragChevronNextProbeTick);
+    }
+
+    if (shouldProbeChevron) {
+        RECT matchedChevronRect = {};
+        const TrayChevronProbeResult probe =
+            ProbeTrayChevronAtRect(iconRect, matchedChevronRect);
+
+        if (probe == TrayChevronProbeResult::Chevron) {
+            const bool wasBlocked = g_trayState.dragChevronBlocked;
+            g_trayState.dragChevronTracking = true;
+            g_trayState.dragChevronBlocked = true;
+            g_trayState.dragChevronProbeUnknown = false;
+            g_trayState.dragChevronRect = matchedChevronRect;
+            g_trayState.dragChevronNextProbeTick = 0;
+            if (!wasBlocked) {
+                Wh_Log(L"D&D: hidden-icons chevron detected; drop target suppressed");
+            }
+        } else if (probe == TrayChevronProbeResult::NotChevron) {
+            const bool wasBlocked = g_trayState.dragChevronBlocked;
+            g_trayState.dragChevronBlocked = false;
+            g_trayState.dragChevronProbeUnknown = false;
+            if (!g_trayState.dragChevronTracking) {
+                // Normal visible tray icon (or the real icon in an already-open
+                // overflow flyout): return to the original one-refresh path.
+                g_trayState.dragChevronNextProbeTick = 0;
+            } else if (centerInKnownChevron) {
+                // During a flyout animation the real icon can briefly overlap
+                // the remembered chevron area. Recheck at a bounded rate until
+                // it either leaves the area or becomes the chevron again.
+                g_trayState.dragChevronNextProbeTick =
+                    now + CHEVRON_PROBE_RETRY_MS;
+            } else {
+                g_trayState.dragChevronNextProbeTick = 0;
+            }
+            if (wasBlocked && g_trayState.dragChevronTracking) {
+                Wh_Log(L"D&D: real overflow icon resolved; drop target available");
+            }
+        } else {
+            // Destructive action: if chevron classification is unavailable,
+            // fail closed for this gesture and retry UIA at a bounded rate.
+            g_trayState.dragChevronBlocked = true;
+            g_trayState.dragChevronProbeUnknown = true;
+            g_trayState.dragChevronNextProbeTick =
+                now + CHEVRON_PROBE_RETRY_MS;
+        }
+    }
+
+    if (g_trayState.dragChevronBlocked) {
+        // On the initial chevron path the overlay is still hidden. If a target
+        // was already armed earlier in this gesture, leave its HWND at the last
+        // real-icon location instead of moving it onto the destructive chevron.
+        if (!g_dropOverlayArmed.load() && !g_oleDragActive.load()) {
+            HideDropOverlay();
+        }
+        return;
+    }
 
     const bool isOverIcon = PtInRect(&iconRect, pt) != FALSE;
 
@@ -4121,10 +4425,7 @@ static bool RefreshTrayGeometryFromRect(
         return false;
     }
 
-    // Position the overlay on the real tray rectangle so GetDpiForWindow() uses that monitor.
-    (void)PositionDropOverlay(iconRect, false);
-
-    const UINT dpi = GetDpiForReferenceWindow(g_hOverlayWnd);
+    const UINT dpi = GetDpiForTrayRect(iconRect);
 
     const UINT oldHostDpi = GetDpiForReferenceWindow(hWnd);
     if (oldHostDpi != dpi && ProbeTrayHostDpiAtRect(hWnd, iconRect)) {
@@ -4354,7 +4655,7 @@ static void ApplyPendingSettings(HWND hWnd) {
     InvalidateFontConfigCache();
     g_forceIconRegen = true;
     UpdateRefreshTimer(hWnd);
-    (void)SetDragDropEnabled(hWnd, g_settings.enableDragDrop);
+    (void)SetDragDropEnabled(hWnd, IsDragDropEffectivelyEnabled());
     UpdateTrayState();
 }
 
@@ -4378,6 +4679,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         // Hide stale drag feedback after an Explorer/taskbar restart.
         HideDropOverlay();
+        g_trayState.dragRectRefreshed = false;
+        ResetChevronDragTracking();
 
         UpdateTrayState();
 
@@ -4393,8 +4696,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             g_dragStartPt.y = static_cast<LONG>(lParam);
             g_dragGestureSawOle = false;
             g_trayState.dragRectRefreshed = false;
+            ResetChevronDragTracking();
             g_trayState.oleReleaseDeadline = 0;
-            if (g_settings.enableDragDrop && g_iconVisible &&
+            if (IsDragDropEffectivelyEnabled() && g_iconVisible &&
                 !g_trayState.dragPollTimerActive) {
                 (void)SetLoggedTimer(hWnd, TIMER_DRAG_POLL_ID, DRAG_POLL_INTERVAL_ACTIVE_MS);
                 g_trayState.dragPollTimerActive = true;
@@ -4406,6 +4710,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 Wh_Log(L"D&D: physical drag ended without OLE DragEnter; source did not start/reach an OLE drag");
             }
             g_trayState.dragRectRefreshed = false;
+            ResetChevronDragTracking();
 
             // Button-up is final only when OLE is no longer inside the target.
             // Keep polling briefly if OLE still owns the session so a missing
@@ -4440,6 +4745,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             g_oleDragActive.store(false);
             g_dropOverlayArmed.store(false);
             g_trayState.dragRectRefreshed = false;
+            ResetChevronDragTracking();
             g_trayState.oleReleaseDeadline = 0;
             HideDropOverlay();
             if (g_trayState.dragPollTimerActive) {
@@ -4585,19 +4891,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 CheckDragStatus(hWnd);
             } else if (wParam == TIMER_DPI_WATCH_ID) {
                 // A primary-display switch can move the notification area to
-                // another monitor without producing a WM_DISPLAYCHANGE that
-                // wakes our hidden per-monitor-DPI reference window. Probe the
-                // real tray icon periodically so a stale reference cannot leave
-                // the tray icon rendered for the previous monitor's DPI.
-                if (!g_iconVisible || !g_hOverlayWnd ||
+                // another monitor without producing a useful display event here.
+                // Read the DPI passively from the real Shell window under the tray
+                // rectangle so a missed transition can't leave a stale icon size.
+                if (!g_iconVisible ||
                     (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 ||
                     g_oleDragActive.load() || g_dropOverlayArmed.load()) {
                     return 0;
                 }
 
                 RECT iconRect = {};
-                if (!QueryTrayIconRect(hWnd, iconRect, true) ||
-                    !ProbeDpiReferenceAtTray(iconRect)) {
+                if (!QueryTrayIconRect(hWnd, iconRect, true)) {
                     return 0;
                 }
 
@@ -4661,29 +4965,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                         g_trayState.displaySettleHasRect = true;
                         g_trayState.displaySettleProbedStableRect = false;
                     } else if (!g_trayState.displaySettleProbedStableRect) {
-                        // Probe each stable tray position only once. If the Shell moves it
-                        // later, the changed rectangle re-arms the probe automatically.
-                        if (ProbeDpiReferenceAtTray(iconRect)) {
-                            g_trayState.displaySettleProbedStableRect = true;
+                        // Evaluate each stable tray position only once. If the Shell
+                        // moves it later, the changed rectangle re-arms the check.
+                        g_trayState.displaySettleProbedStableRect = true;
 
-                            if (RefreshTrayGeometryFromRect(hWnd, iconRect, false)) {
-                                Wh_Log(L"DPI: display settle detected a tray geometry/render-size change; regenerating icon");
-                                g_forceIconRegen = true;
-                                UpdateTrayState();
-                                StopDisplaySettleTimer(hWnd);
-                            }
+                        if (RefreshTrayGeometryFromRect(hWnd, iconRect, false)) {
+                            Wh_Log(L"DPI: display settle detected a tray geometry/render-size change; regenerating icon");
+                            g_forceIconRegen = true;
+                            UpdateTrayState();
+                            StopDisplaySettleTimer(hWnd);
                         }
                     }
                 }
 
                 if (g_trayState.displaySettleTimerActive &&
                     g_trayState.displaySettleAttempts >= DISPLAY_SETTLE_MAX_ATTEMPTS) {
-                    // One final probe catches a late DPI transition even when the
+                    // One final check catches a late DPI transition even when the
                     // tray rectangle itself did not visibly move.
-                    bool changed = false;
-                    if (haveRect && ProbeDpiReferenceAtTray(iconRect)) {
-                        changed = RefreshTrayGeometryFromRect(hWnd, iconRect, false);
-                    }
+                    const bool changed =
+                        haveRect && RefreshTrayGeometryFromRect(hWnd, iconRect, false);
 
                     if (changed) {
                         Wh_Log(L"DPI: display settle final probe detected a tray geometry/render-size change; regenerating icon");
@@ -4760,6 +5060,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             g_suppressLeftActivationUntil = 0;
             g_oleDragActive.store(false);
             g_dropOverlayArmed.store(false);
+            g_trayState.dragRectRefreshed = false;
+            ResetChevronDragTracking();
             g_trayState.oleReleaseDeadline = 0;
 
             UnregisterShellNotifications();
@@ -4876,8 +5178,8 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     g_nid.cbSize = sizeof(NOTIFYICONDATAW);
     g_nid.hWnd = hWndNew;
     g_nid.uID = TRAY_ICON_ID;
-    g_nid.guidItem = TRAY_ICON_GUID;
-    g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_GUID | NIF_SHOWTIP;
+    g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_SHOWTIP;
+    SetTrayIdentity(true);
     g_nid.uCallbackMessage = WM_TRAYICON;
     g_nid.uVersion = NOTIFYICON_VERSION_4;
 
@@ -4885,7 +5187,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
 
     UpdateRefreshTimer(hWndNew);
     (void)SetLoggedTimer(hWndNew, TIMER_DPI_WATCH_ID, DPI_WATCH_INTERVAL_MS);
-    (void)SetDragDropEnabled(hWndNew, g_settings.enableDragDrop);
+    (void)SetDragDropEnabled(hWndNew, IsDragDropEffectivelyEnabled());
     const bool trayReady = UpdateTrayState();
 
     // A healthy startup needs no retry timer. Keep bounded recovery only for
@@ -4917,6 +5219,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
 
     // Fallback cleanup if WM_DESTROY wasn't reached.
     (void)SetDragDropEnabled(hWndNew, false);
+    ShutdownTrayUiAutomation();
     g_hCurrentIcon.reset();
 
     if (g_hOverlayWnd) {
