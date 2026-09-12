@@ -2,11 +2,11 @@
 // @id              taskbar-volume-percentage
 // @name            Taskbar Volume Percentage Indicator
 // @description     Displays the exact master volume percentage in the system tray natively inside the Windows 11 volume button with real-time sync.
-// @version         1.3.5
+// @version         1.3.6
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
-// @compilerOptions -lversion
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -16,11 +16,20 @@
 
 Replaces the default Windows 11 taskbar volume icon with the current volume level in real time directly inside the system tray button.
 
+![Taskbar Volume Percentage Preview 1](https://i.imgur.com/vjwali8.png)
+![Taskbar Volume Percentage Preview 2](https://i.imgur.com/XEf8m50.png)
+![Taskbar Volume Percentage Preview 3](https://i.imgur.com/27iyViO.png)
+![Taskbar Volume Percentage Preview 4](https://i.imgur.com/1alQd1j.png)
+
 ## How It Works
 
 - **Real-Time Volume Display**: Displays the current master audio level as a percentage (`50%`), pure number (`50`), with a custom prefix (`Vol 50%`), with an emoji (`🔊 50%`), or using the default Windows speaker icon.
 - **Mute Indicator**: When muted, automatically switches to a customizable mute display (`MUT`, `Mute`, `0%`, `✕`, `🔇`, native glyph, or custom text).
 - **Layout Stabilization**: Automatically sizes the container to fit the percentage text smoothly without shifting adjacent taskbar icons. A fixed container width can also be set manually in the settings.
+
+## Compatibility
+
+Only Windows 11 is supported.
 
 ## Credits
 
@@ -63,12 +72,13 @@ Replaces the default Windows 11 taskbar volume icon with the current volume leve
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <winstring.h>
 #include <winver.h>
 
 #include <atomic>
 #include <cmath>
-#include <cstdint>
 #include <cstring>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -76,51 +86,15 @@ Replaces the default Windows 11 taskbar volume icon with the current volume leve
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 
-// Reference: C++/WinRT base_string.h shared_hstring_header binary layout
-struct hstring_header {
-    uint32_t flags;
-    uint32_t length;
-    uint32_t padding1;
-    uint32_t padding2;
-    wchar_t const* ptr;
-};
+#undef GetCurrentTime
 
-struct shared_hstring_header : hstring_header {
-    int32_t count;
-    wchar_t buffer[1];
-};
+#include <winrt/base.h>
+#include <winrt/Windows.UI.Core.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
 
-constexpr uint32_t MOD_HSTRING_MAGIC = 0x57484F4B; // "WHOK" tag to verify ownership before HeapFree
-
-static shared_hstring_header* CreateSharedHString(const std::wstring& str) {
-    uint32_t len = static_cast<uint32_t>(str.length());
-    size_t bytes = sizeof(shared_hstring_header) + sizeof(wchar_t) * len;
-    shared_hstring_header* header = static_cast<shared_hstring_header*>(
-        HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, bytes));
-    if (!header) {
-        return nullptr;
-    }
-    header->flags = 0;
-    header->length = len;
-    header->padding1 = MOD_HSTRING_MAGIC;
-    header->padding2 = 0;
-    header->ptr = header->buffer;
-    header->count = 1;
-    memcpy(header->buffer, str.c_str(), sizeof(wchar_t) * (len + 1));
-    return header;
-}
-
-static void ReleaseSharedHString(shared_hstring_header* header) {
-    if (!header) {
-        return;
-    }
-    if (header->flags != 0 || header->padding1 != MOD_HSTRING_MAGIC) {
-        return;
-    }
-    if (InterlockedDecrement(reinterpret_cast<volatile LONG*>(&header->count)) == 0) {
-        HeapFree(GetProcessHeap(), 0, header);
-    }
-}
+using namespace winrt::Windows::UI::Xaml;
 
 enum class DisplayStyle {
     Percentage,
@@ -152,7 +126,7 @@ static Settings g_settings;
 static std::mutex g_settingsMutex;
 
 // Segoe Fluent Icons volume glyphs
-constexpr wchar_t GLYPH_MUTE  = 0xE74F; // Crossed-out speaker
+constexpr wchar_t GLYPH_MUTE = 0xE74F;  // Crossed-out speaker
 constexpr wchar_t GLYPH_VOL_0 = 0xE992; // 0 bars
 constexpr wchar_t GLYPH_VOL_1 = 0xE993; // 1 bar
 constexpr wchar_t GLYPH_VOL_2 = 0xE994; // 2 bars
@@ -160,124 +134,14 @@ constexpr wchar_t GLYPH_VOL_3 = 0xE995; // 3 bars
 
 static void* g_pVolumeDataModel = nullptr;
 static float g_lastVolumeLevel = 0.5f;
-static bool  g_lastIsMuted = false;
+static bool g_lastIsMuted = false;
 static std::mutex g_dataModelMutex;
 
-static void* g_pVolumeIconView = nullptr;
-static std::mutex g_iconViewMutex;
-
-static void* g_pVolumeTextIcon = nullptr;
-static std::mutex g_textIconMutex;
-
-static std::atomic<double> g_lastAppliedTextIconWidth{-1.0};
+static winrt::weak_ref<FrameworkElement> g_volumeIconViewWeak;
 static std::atomic<double> g_lastAppliedIconViewWidth{-1.0};
 
 static std::atomic<bool> g_unloading{false};
 static std::atomic<bool> g_systemTrayModuleHooked{false};
-
-// ---------------------------------------------------------------------------
-// Memory verification & WinRT ABI definitions
-// ---------------------------------------------------------------------------
-
-static bool IsValidReadableMemory(const void* ptr, size_t size) {
-    if (!ptr || size == 0) return false;
-    uintptr_t u = reinterpret_cast<uintptr_t>(ptr);
-#if defined(_WIN64) || defined(__x86_64__) || defined(_M_AMD64) || defined(__aarch64__)
-    if (u < 0x10000 || u >= 0x00007FFFFFF00000ULL) return false;
-#else
-    if (u < 0x10000 || u >= 0x7FFF0000UL) return false;
-#endif
-
-    MEMORY_BASIC_INFORMATION mbi = {};
-    if (VirtualQuery(ptr, &mbi, sizeof(mbi)) != sizeof(mbi)) {
-        return false;
-    }
-
-    if (mbi.State != MEM_COMMIT) {
-        return false;
-    }
-
-    if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) {
-        return false;
-    }
-
-    constexpr DWORD kReadable = PAGE_READONLY | PAGE_READWRITE |
-                                PAGE_WRITECOPY | PAGE_EXECUTE_READ |
-                                PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
-    if (!(mbi.Protect & kReadable)) {
-        return false;
-    }
-
-    uintptr_t regionEnd = reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
-    if (u + size > regionEnd) {
-        return false;
-    }
-
-    return true;
-}
-
-static inline bool IsValidUserPointer(const void* ptr) {
-    if (!ptr || (reinterpret_cast<uintptr_t>(ptr) % sizeof(void*)) != 0) {
-        return false;
-    }
-    return IsValidReadableMemory(ptr, sizeof(void*));
-}
-
-static inline bool IsValidComObject(const void* ptr) {
-    if (!IsValidUserPointer(ptr)) {
-        return false;
-    }
-    const void* const* vtbl = *reinterpret_cast<const void* const* const*>(ptr);
-    if (!IsValidUserPointer(vtbl)) {
-        return false;
-    }
-    // QueryInterface (slot 0) must point to valid readable/executable code
-    return IsValidReadableMemory(vtbl[0], sizeof(void*));
-}
-
-// IFrameworkElement GUID: a391d09b-4a99-4b7c-9d8d-6fa5d01f6fbf
-// Matches official Windows SDK winrt::impl::guid_v<winrt::Windows::UI::Xaml::IFrameworkElement>
-static constexpr GUID IID_IFrameworkElement = {
-    0xa391d09b, 0x4a99, 0x4b7c, { 0x9d, 0x8d, 0x6f, 0xa5, 0xd0, 0x1f, 0x6f, 0xbf }
-};
-
-// VolumeSystemTrayIconDataModel unique identifier GUID in SystemTray.dll
-static constexpr GUID GUID_VolumeIcon = {
-    0x7820ae73, 0x23e3, 0x4229, { 0x82, 0xc1, 0xe4, 0x1c, 0xb6, 0x7d, 0x5b, 0x9c }
-};
-
-struct IFrameworkElementVtbl {
-    HRESULT (STDMETHODCALLTYPE* QueryInterface)(void* This, REFIID riid, void** ppvObject); // 0
-    ULONG   (STDMETHODCALLTYPE* AddRef)(void* This); // 1
-    ULONG   (STDMETHODCALLTYPE* Release)(void* This); // 2
-    HRESULT (STDMETHODCALLTYPE* GetIids)(void* This, ULONG* iidCount, IID** iids); // 3
-    HRESULT (STDMETHODCALLTYPE* GetRuntimeClassName)(void* This, void** className); // 4
-    HRESULT (STDMETHODCALLTYPE* GetTrustLevel)(void* This, int* trustLevel); // 5
-    HRESULT (STDMETHODCALLTYPE* get_Triggers)(void* This, void** value); // 6
-    HRESULT (STDMETHODCALLTYPE* get_Resources)(void* This, void** value); // 7
-    HRESULT (STDMETHODCALLTYPE* put_Resources)(void* This, void* value); // 8
-    HRESULT (STDMETHODCALLTYPE* get_Tag)(void* This, void** value); // 9
-    HRESULT (STDMETHODCALLTYPE* put_Tag)(void* This, void* value); // 10
-    HRESULT (STDMETHODCALLTYPE* get_Language)(void* This, void** value); // 11
-    HRESULT (STDMETHODCALLTYPE* put_Language)(void* This, void* value); // 12
-    HRESULT (STDMETHODCALLTYPE* get_ActualWidth)(void* This, double* value); // 13
-    HRESULT (STDMETHODCALLTYPE* get_ActualHeight)(void* This, double* value); // 14
-    HRESULT (STDMETHODCALLTYPE* get_Width)(void* This, double* value); // 15
-    HRESULT (STDMETHODCALLTYPE* put_Width)(void* This, double value); // 16
-    HRESULT (STDMETHODCALLTYPE* get_Height)(void* This, double* value); // 17
-    HRESULT (STDMETHODCALLTYPE* put_Height)(void* This, double value); // 18
-    HRESULT (STDMETHODCALLTYPE* get_MinWidth)(void* This, double* value); // 19
-    HRESULT (STDMETHODCALLTYPE* put_MinWidth)(void* This, double value); // 20
-};
-
-struct IFrameworkElementCustom {
-    IFrameworkElementVtbl* lpVtbl;
-};
-
-struct WinRTSize {
-    float Width;
-    float Height;
-};
 
 static double GetTargetContainerWidth(const Settings& settings) {
     if (settings.fixedContainerWidth < 0) {
@@ -288,55 +152,142 @@ static double GetTargetContainerWidth(const Settings& settings) {
     }
     // Optimal automatic width in DIPs based on display style
     switch (settings.displayStyle) {
-        case DisplayStyle::Vanilla:
-            return 0.0; // Native auto-size
-        case DisplayStyle::Number:
-            return 30.0;
-        case DisplayStyle::Prefix:
-            return 72.0;
-        case DisplayStyle::Emoji:
-            return 66.0;
-        case DisplayStyle::Percentage:
-        default:
-            return 42.0;
+    case DisplayStyle::Vanilla:
+        return 0.0; // Native auto-size
+    case DisplayStyle::Number:
+        return 30.0;
+    case DisplayStyle::Prefix:
+        return 72.0;
+    case DisplayStyle::Emoji:
+        return 66.0;
+    case DisplayStyle::Percentage:
+    default:
+        return 42.0;
     }
 }
 
-static void ApplyElementMinWidth(void* pElement, double minWidth) {
-    if (!IsValidComObject(pElement)) {
-        return;
-    }
+// ---------------------------------------------------------------------------
+// WinUI Visual Tree inspection helpers
+// ---------------------------------------------------------------------------
 
-    // 1. QueryInterface directly on pElement
-    IUnknown* pUnk = reinterpret_cast<IUnknown*>(pElement);
-    void* pFEVoid = nullptr;
-    if (SUCCEEDED(pUnk->QueryInterface(IID_IFrameworkElement, &pFEVoid)) && pFEVoid) {
-        if (IsValidComObject(pFEVoid)) {
-            IFrameworkElementCustom* pFE = reinterpret_cast<IFrameworkElementCustom*>(pFEVoid);
-            pFE->lpVtbl->put_MinWidth(pFE, minWidth);
-            pFE->lpVtbl->Release(pFE);
+static FrameworkElement GetParentElementByName(const FrameworkElement& element, PCWSTR name) {
+    auto parent = Media::VisualTreeHelper::GetParent(element).try_as<FrameworkElement>();
+    while (parent) {
+        if (parent.Name() == name) {
+            return parent;
         }
+        parent = Media::VisualTreeHelper::GetParent(parent).try_as<FrameworkElement>();
     }
-
-    // 2. Also check inner composable XAML object at offset +8 (for aggregated controls)
-    if (IsValidReadableMemory(reinterpret_cast<const char*>(pElement) + 8, sizeof(void*))) {
-        void* pInner = *reinterpret_cast<void**>(reinterpret_cast<char*>(pElement) + 8);
-        if (IsValidComObject(pInner)) {
-            void* pInnerFEVoid = nullptr;
-            IUnknown* pInnerUnk = reinterpret_cast<IUnknown*>(pInner);
-            if (SUCCEEDED(pInnerUnk->QueryInterface(IID_IFrameworkElement, &pInnerFEVoid)) && pInnerFEVoid) {
-                if (IsValidComObject(pInnerFEVoid)) {
-                    IFrameworkElementCustom* pInnerFE = reinterpret_cast<IFrameworkElementCustom*>(pInnerFEVoid);
-                    pInnerFE->lpVtbl->put_MinWidth(pInnerFE, minWidth);
-                    pInnerFE->lpVtbl->Release(pInnerFE);
-                }
-            }
-        }
-    }
+    return nullptr;
 }
 
-static void ApplyVolumeContainerWidth(void* pIconView) {
-    if (!IsValidComObject(pIconView) || g_unloading.load(std::memory_order_relaxed)) {
+static bool IsChildOfElementByName(const FrameworkElement& element, PCWSTR name) {
+    return !!GetParentElementByName(element, name);
+}
+
+static FrameworkElement EnumChildElements(
+    const FrameworkElement& element,
+    const std::function<bool(const FrameworkElement&)>& enumCallback) {
+    int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
+
+    for (int i = 0; i < childrenCount; i++) {
+        auto child = Media::VisualTreeHelper::GetChild(element, i).try_as<FrameworkElement>();
+        if (!child) {
+            continue;
+        }
+
+        if (enumCallback(child)) {
+            return child;
+        }
+    }
+
+    return nullptr;
+}
+
+static FrameworkElement FindChildByName(const FrameworkElement& element, PCWSTR name) {
+    return EnumChildElements(element, [name](const FrameworkElement& child) {
+        return child.Name() == name;
+    });
+}
+
+static FrameworkElement FindChildByClassName(const FrameworkElement& element, PCWSTR className) {
+    return EnumChildElements(element, [className](const FrameworkElement& child) {
+        return winrt::get_class_name(child) == className;
+    });
+}
+
+static bool IsVolumeIconElement(const FrameworkElement& iconView) {
+    auto containerGrid = FindChildByName(iconView, L"ContainerGrid");
+    if (!containerGrid) {
+        return false;
+    }
+    auto contentGrid = FindChildByName(containerGrid, L"ContentGrid");
+    if (!contentGrid) {
+        return false;
+    }
+
+    // Battery icon uses BatteryIconContent, not TextIconContent
+    if (FindChildByClassName(contentGrid, L"SystemTray.BatteryIconContent")) {
+        return false;
+    }
+
+    auto textIconContent = FindChildByClassName(contentGrid, L"SystemTray.TextIconContent");
+    if (!textIconContent) {
+        return false;
+    }
+
+    auto textContainer = FindChildByName(textIconContent, L"ContainerGrid");
+    if (!textContainer) {
+        return false;
+    }
+    auto baseGrid = FindChildByName(textContainer, L"Base");
+    if (!baseGrid) {
+        return false;
+    }
+    auto textBlockEl = FindChildByName(baseGrid, L"InnerTextBlock");
+    if (!textBlockEl) {
+        return false;
+    }
+
+    auto textBlock = textBlockEl.try_as<Controls::TextBlock>();
+    if (!textBlock) {
+        return false;
+    }
+
+    auto text = textBlock.Text();
+    if (text.empty()) {
+        return false;
+    }
+
+    std::wstring_view textView = text;
+
+    wchar_t firstChar = textView[0];
+    switch (firstChar) {
+    case GLYPH_MUTE:
+    case GLYPH_VOL_0:
+    case GLYPH_VOL_1:
+    case GLYPH_VOL_2:
+    case GLYPH_VOL_3:
+    case 0xEA85: // VolumeDisabled
+    case 0xEBC5: // VolumeBars
+        return true;
+    default:
+        break;
+    }
+
+    // Already customized by mod
+    if (textView.find(L'%') != std::wstring_view::npos ||
+        textView.find(L"MUT") != std::wstring_view::npos ||
+        textView.find(L"Mute") != std::wstring_view::npos ||
+        textView.find(L"Vol") != std::wstring_view::npos) {
+        return true;
+    }
+
+    return false;
+}
+
+static void ApplyVolumeContainerWidth(const FrameworkElement& iconView) {
+    if (!iconView || g_unloading.load(std::memory_order_relaxed)) {
         return;
     }
 
@@ -350,159 +301,48 @@ static void ApplyVolumeContainerWidth(void* pIconView) {
     double prevWidth = g_lastAppliedIconViewWidth.load(std::memory_order_relaxed);
     if (prevWidth != targetWidth) {
         g_lastAppliedIconViewWidth.store(targetWidth, std::memory_order_relaxed);
-        ApplyElementMinWidth(pIconView, targetWidth);
-
-        // Also apply put_MinWidth on the hosted content element if present
-        if (targetWidth > 0.0 && IsValidReadableMemory(reinterpret_cast<const char*>(pIconView) + 0x1b0, sizeof(void*))) {
-            void* pHostedContent = *reinterpret_cast<void**>(reinterpret_cast<char*>(pIconView) + 0x1b0);
-            if (IsValidComObject(pHostedContent)) {
-                ApplyElementMinWidth(pHostedContent, targetWidth);
-            }
-        }
+        iconView.MinWidth(targetWidth);
     }
-}
-
-static bool IsVolumeIconViewModel(void* pIconViewModel) {
-    if (!IsValidComObject(pIconViewModel)) {
-        return false;
-    }
-
-    void* pInterface = pIconViewModel;
-    void** vtbl = *reinterpret_cast<void***>(pInterface);
-    if (!IsValidUserPointer(vtbl) || !IsValidReadableMemory(reinterpret_cast<char*>(vtbl) + 6 * sizeof(void*), sizeof(void*))) {
-        return false;
-    }
-
-    // Slot 6: get_Configuration(void** ppConfig)
-    void* pSlot6 = vtbl[6];
-    if (!IsValidReadableMemory(pSlot6, sizeof(void*))) {
-        return false;
-    }
-    using get_Configuration_t = HRESULT(STDMETHODCALLTYPE*)(void* This, void** ppConfig);
-    auto get_Configuration = reinterpret_cast<get_Configuration_t>(pSlot6);
-
-    void* pConfig = nullptr;
-    if (FAILED(get_Configuration(pInterface, &pConfig)) || !IsValidComObject(pConfig)) {
-        return false;
-    }
-
-    void** configVtbl = *reinterpret_cast<void***>(pConfig);
-    bool isVolume = false;
-    if (IsValidUserPointer(configVtbl)) {
-        // Slot 9: get_Id(GUID* pGuid)
-        if (IsValidReadableMemory(reinterpret_cast<char*>(configVtbl) + 9 * sizeof(void*), sizeof(void*))) {
-            void* pSlot9 = configVtbl[9];
-            if (IsValidReadableMemory(pSlot9, sizeof(void*))) {
-                using get_Id_t = HRESULT(STDMETHODCALLTYPE*)(void* This, GUID* pGuid);
-                auto get_Id = reinterpret_cast<get_Id_t>(pSlot9);
-                GUID guid = {};
-                if (SUCCEEDED(get_Id(pConfig, &guid)) && memcmp(&guid, &GUID_VolumeIcon, sizeof(GUID)) == 0) {
-                    isVolume = true;
-                }
-            }
-        }
-
-        // Also check Slot 6: get_DataModel(void** ppDataModel)
-        if (!isVolume && IsValidReadableMemory(reinterpret_cast<char*>(configVtbl) + 6 * sizeof(void*), sizeof(void*))) {
-            void* pConfigSlot6 = configVtbl[6];
-            if (IsValidReadableMemory(pConfigSlot6, sizeof(void*))) {
-                using get_DataModel_t = HRESULT(STDMETHODCALLTYPE*)(void* This, void** ppDataModel);
-                auto get_DataModel = reinterpret_cast<get_DataModel_t>(pConfigSlot6);
-                void* pDataModel = nullptr;
-                if (SUCCEEDED(get_DataModel(pConfig, &pDataModel)) && pDataModel) {
-                    {
-                        std::lock_guard<std::mutex> lock(g_dataModelMutex);
-                        if (pDataModel == g_pVolumeDataModel) {
-                            isVolume = true;
-                        }
-                    }
-                    reinterpret_cast<IUnknown*>(pDataModel)->Release();
-                }
-            }
-        }
-
-        reinterpret_cast<IUnknown*>(pConfig)->Release();
-    }
-
-    return isVolume;
-}
-
-static bool IsVolumeTextIcon(void* pThis) {
-    if (!IsValidUserPointer(pThis)) {
-        return false;
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(g_textIconMutex);
-        if (g_pVolumeTextIcon == pThis) {
-            return true;
-        }
-    }
-
-    // Check ViewModel at offsets 0x80 and 0x68
-    const size_t vmOffsets[] = { 0x80, 0x68 };
-    for (size_t offset : vmOffsets) {
-        if (!IsValidReadableMemory(reinterpret_cast<const char*>(pThis) + offset, sizeof(void*))) {
-            continue;
-        }
-        void* pVM = *reinterpret_cast<void**>(reinterpret_cast<char*>(pThis) + offset);
-        if (!IsValidUserPointer(pVM)) {
-            continue;
-        }
-
-        // 1. Direct GUID check at offset 0x38 in ViewModel
-        if (IsValidReadableMemory(reinterpret_cast<const char*>(pVM) + 0x38, sizeof(GUID))) {
-            const GUID* pGuid = reinterpret_cast<const GUID*>(reinterpret_cast<const char*>(pVM) + 0x38);
-            if (memcmp(pGuid, &GUID_VolumeIcon, sizeof(GUID)) == 0) {
-                return true;
-            }
-        }
-
-        // 2. Check via slot 6 (ITextIconContentViewModel::get_Id)
-        if (IsValidComObject(pVM)) {
-            void** vtbl = *reinterpret_cast<void***>(pVM);
-            if (IsValidReadableMemory(reinterpret_cast<char*>(vtbl) + 6 * sizeof(void*), sizeof(void*))) {
-                void* pSlot6 = vtbl[6];
-                if (IsValidReadableMemory(pSlot6, sizeof(void*))) {
-                    using get_Id_t = HRESULT(STDMETHODCALLTYPE*)(void* This, GUID* pGuidOut);
-                    auto get_Id = reinterpret_cast<get_Id_t>(pSlot6);
-                    GUID id = {};
-                    if (SUCCEEDED(get_Id(pVM, &id)) && memcmp(&id, &GUID_VolumeIcon, sizeof(GUID)) == 0) {
-                        return true;
-                    }
-                }
-            }
-        }
-    }
-
-    return false;
 }
 
 // ---------------------------------------------------------------------------
-// Formatting logic
+// Text Formatting
 // ---------------------------------------------------------------------------
 
-static inline std::wstring FormatDigits(int percentage) {
-    return std::to_wstring(percentage);
+static std::wstring FormatDigits(int value) {
+    if (value <= 0)
+        return L"0";
+    std::wstring result;
+    int temp = value;
+    while (temp > 0) {
+        result.push_back(static_cast<wchar_t>(L'0' + (temp % 10)));
+        temp /= 10;
+    }
+    for (size_t i = 0, j = result.length() - 1; i < j; ++i, --j) {
+        wchar_t c = result[i];
+        result[i] = result[j];
+        result[j] = c;
+    }
+    return result;
 }
 
 static std::wstring FormatMuteString(MuteStyle style, const std::wstring& customText) {
     switch (style) {
-        case MuteStyle::Mute:
-            return L"Mute";
-        case MuteStyle::Zero:
-            return L"0%";
-        case MuteStyle::Cross:
-            return L"\u2715";
-        case MuteStyle::Emoji:
-            return L"\xD83D\xDD07";
-        case MuteStyle::Glyph:
-            return std::wstring(1, GLYPH_MUTE);
-        case MuteStyle::Custom:
-            return customText.empty() ? L"Mute" : customText;
-        case MuteStyle::Mut:
-        default:
-            return L"MUT";
+    case MuteStyle::Mute:
+        return L"Mute";
+    case MuteStyle::Zero:
+        return L"0%";
+    case MuteStyle::Cross:
+        return L"\x2715"; // Unicode heavy multiplication x
+    case MuteStyle::Emoji:
+        return L"\xD83D\xDD07"; // Speaker with cancellation stroke
+    case MuteStyle::Glyph:
+        return std::wstring(1, GLYPH_MUTE);
+    case MuteStyle::Custom:
+        return customText.empty() ? L"Mute" : customText;
+    case MuteStyle::Mut:
+    default:
+        return L"MUT";
     }
 }
 
@@ -520,143 +360,46 @@ static std::wstring FormatVolumeText(int percentage, bool isMuted) {
     std::wstring s = FormatDigits(percentage);
 
     switch (settingsCopy.displayStyle) {
-        case DisplayStyle::Vanilla: {
-            wchar_t glyph = GLYPH_MUTE;
-            if (!isMuted) {
-                if (percentage == 0)      glyph = GLYPH_VOL_0;
-                else if (percentage < 33) glyph = GLYPH_VOL_1;
-                else if (percentage < 66) glyph = GLYPH_VOL_2;
-                else                      glyph = GLYPH_VOL_3;
-            }
-            return std::wstring(1, glyph);
+    case DisplayStyle::Vanilla: {
+        wchar_t glyph = GLYPH_MUTE;
+        if (!isMuted) {
+            if (percentage == 0)
+                glyph = GLYPH_VOL_0;
+            else if (percentage < 33)
+                glyph = GLYPH_VOL_1;
+            else if (percentage < 66)
+                glyph = GLYPH_VOL_2;
+            else
+                glyph = GLYPH_VOL_3;
         }
-
-        case DisplayStyle::Number:
-            return s;
-
-        case DisplayStyle::Prefix:
-            return settingsCopy.customPrefix + s + L"%";
-
-        case DisplayStyle::Emoji: {
-            std::wstring prefix;
-            if (percentage == 0) {
-                prefix = L"\xD83D\xDD08 ";
-            } else if (percentage <= 50) {
-                prefix = L"\xD83D\xDD09 ";
-            } else {
-                prefix = L"\xD83D\xDD0A ";
-            }
-            return prefix + s + L"%";
-        }
-
-        case DisplayStyle::Percentage:
-        default:
-            return s + L"%";
+        return std::wstring(1, glyph);
+    }
+    case DisplayStyle::Number:
+        return s;
+    case DisplayStyle::Prefix: {
+        std::wstring result = settingsCopy.customPrefix;
+        result += s;
+        result += L"%";
+        return result;
+    }
+    case DisplayStyle::Emoji: {
+        std::wstring result = L"\xD83D\xDD0A ";
+        result += s;
+        result += L"%";
+        return result;
+    }
+    case DisplayStyle::Percentage:
+    default: {
+        std::wstring result = s;
+        result += L"%";
+        return result;
+    }
     }
 }
 
-static size_t GetIconTextOffset(void* pThis) {
-    if (!IsValidUserPointer(pThis)) {
-        return 0;
-    }
-
-    auto isValidHeader = [](shared_hstring_header* h) -> bool {
-        if (!h || (reinterpret_cast<uintptr_t>(h) % sizeof(void*)) != 0) {
-            return false;
-        }
-        if (!IsValidReadableMemory(h, sizeof(shared_hstring_header))) {
-            return false;
-        }
-        if (h->flags > 1 || h->length > 256 || !h->ptr) {
-            return false;
-        }
-        if (!IsValidReadableMemory(h->ptr, sizeof(wchar_t))) {
-            return false;
-        }
-        return true;
-    };
-
-    auto matchesGlyphOrText = [&](shared_hstring_header* candidate) -> bool {
-        if (!isValidHeader(candidate)) {
-            return false;
-        }
-        // Read character from candidate->ptr, supporting both shared_hstring and HSTRING_REFERENCE
-        wchar_t firstChar = candidate->ptr[0];
-        return (firstChar >= 0xE700 && firstChar <= 0xE9FF) ||
-               (firstChar >= L'0' && firstChar <= L'9') ||
-               (firstChar >= L'a' && firstChar <= L'z') ||
-               (firstChar >= L'A' && firstChar <= L'Z') ||
-               firstChar == L' ' || firstChar == 0x2715 ||
-               firstChar == 0x2007 || firstChar == 0x00A0 ||
-               firstChar == 0xD83D;
-    };
-
-    // Primary offset in standard Windows 11 SystemTray builds is 0x90; fallback to 0xB8 and 0x88
-    const size_t preferredOffsets[] = { 0x90, 0xB8, 0x88 };
-    for (size_t prefOffset : preferredOffsets) {
-        if (IsValidReadableMemory(reinterpret_cast<const char*>(pThis) + prefOffset, sizeof(void*))) {
-            shared_hstring_header* candidate = *reinterpret_cast<shared_hstring_header**>(
-                reinterpret_cast<char*>(pThis) + prefOffset);
-            if (matchesGlyphOrText(candidate)) {
-                return prefOffset;
-            }
-        }
-    }
-
-    for (size_t offset = 0x40; offset <= 0x120; offset += sizeof(void*)) {
-        if (!IsValidReadableMemory(reinterpret_cast<const char*>(pThis) + offset, sizeof(void*))) {
-            continue;
-        }
-        shared_hstring_header* candidate = *reinterpret_cast<shared_hstring_header**>(
-            reinterpret_cast<char*>(pThis) + offset);
-        if (matchesGlyphOrText(candidate)) {
-            return offset;
-        }
-    }
-
-    return 0;
-}
-
-static void ApplyCustomVolumeText(void* pThis, float volumeLevel, bool isMuted) {
-    if (!IsValidUserPointer(pThis) || g_unloading.load(std::memory_order_relaxed)) {
-        return;
-    }
-
-    size_t offset = GetIconTextOffset(pThis);
-    if (offset == 0) {
-        Wh_Log(L"Could not safely locate icon text member in VolumeSystemTrayIconDataModel");
-        return;
-    }
-
-    int percentage = static_cast<int>(std::round(volumeLevel * 100.0f));
-    if (percentage < 0) percentage = 0;
-    if (percentage > 100) percentage = 100;
-
-    std::wstring customText = FormatVolumeText(percentage, isMuted);
-
-    shared_hstring_header** ppHeader = reinterpret_cast<shared_hstring_header**>(
-        reinterpret_cast<char*>(pThis) + offset);
-
-    shared_hstring_header* oldHeader = *ppHeader;
-
-    // If the current header was already created by us and matches the desired text, reuse it
-    if (oldHeader && oldHeader->flags == 0 && oldHeader->padding1 == MOD_HSTRING_MAGIC &&
-        oldHeader->length == customText.length() && oldHeader->ptr &&
-        wcsncmp(oldHeader->ptr, customText.c_str(), customText.length()) == 0) {
-        return;
-    }
-
-    shared_hstring_header* newHeader = CreateSharedHString(customText);
-    if (!newHeader) {
-        return;
-    }
-
-    *ppHeader = newHeader;
-
-    if (oldHeader && oldHeader != newHeader) {
-        ReleaseSharedHString(oldHeader);
-    }
-}
+// ---------------------------------------------------------------------------
+// Thread dispatching
+// ---------------------------------------------------------------------------
 
 static HWND FindCurrentProcessTaskbarWnd() {
     DWORD currentProcessId = GetCurrentProcessId();
@@ -673,32 +416,33 @@ static HWND FindCurrentProcessTaskbarWnd() {
     return nullptr;
 }
 
-using RunFromWindowThreadProc_t = void (*)(void* param);
+using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
+
+static UINT g_runFromWindowThreadRegisteredMsg = 0;
 
 struct RUN_FROM_WINDOW_THREAD_PARAM {
     RunFromWindowThreadProc_t proc;
     void* procParam;
 };
 
-static UINT g_runFromWindowThreadMsg = 0;
-
 static LRESULT CALLBACK RunFromWindowThreadHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode == HC_ACTION && g_runFromWindowThreadMsg != 0) {
-        const CWPSTRUCT* cwp = reinterpret_cast<const CWPSTRUCT*>(lParam);
-        if (cwp->message == g_runFromWindowThreadMsg) {
+    if (nCode == HC_ACTION && g_runFromWindowThreadRegisteredMsg != 0) {
+        const auto* cwp = reinterpret_cast<const CWPSTRUCT*>(lParam);
+        if (cwp->message == g_runFromWindowThreadRegisteredMsg) {
             auto* param = reinterpret_cast<RUN_FROM_WINDOW_THREAD_PARAM*>(cwp->lParam);
             if (param && param->proc) {
                 param->proc(param->procParam);
             }
         }
     }
+
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
 static bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* procParam) {
-    if (g_runFromWindowThreadMsg == 0) {
-        g_runFromWindowThreadMsg = RegisterWindowMessage(
-            L"Windhawk_RunFromWindowThread_taskbar-volume-percentage");
+    if (g_runFromWindowThreadRegisteredMsg == 0) {
+        g_runFromWindowThreadRegisteredMsg =
+            RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
     }
 
     DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
@@ -714,8 +458,7 @@ static bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void*
     HHOOK hook = SetWindowsHookEx(
         WH_CALLWNDPROC,
         RunFromWindowThreadHookProc,
-        nullptr,
-        dwThreadId);
+        nullptr, dwThreadId);
     if (!hook) {
         return false;
     }
@@ -723,23 +466,9 @@ static bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void*
     RUN_FROM_WINDOW_THREAD_PARAM param;
     param.proc = proc;
     param.procParam = procParam;
-
-    DWORD_PTR dwResult = 0;
-    LRESULT lr = SendMessageTimeout(
-        hWnd,
-        g_runFromWindowThreadMsg,
-        0,
-        reinterpret_cast<LPARAM>(&param),
-        SMTO_NORMAL | SMTO_ABORTIFHUNG,
-        2000,
-        &dwResult);
+    SendMessage(hWnd, g_runFromWindowThreadRegisteredMsg, 0, reinterpret_cast<LPARAM>(&param));
 
     UnhookWindowsHookEx(hook);
-
-    if (lr == 0) {
-        Wh_Log(L"SendMessageTimeout failed or timed out in RunFromWindowThread (error: %lu)", GetLastError());
-        return false;
-    }
 
     return true;
 }
@@ -748,15 +477,13 @@ static VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
     void* pFixedFileInfo = nullptr;
     UINT uPtrLen = 0;
 
-    HRSRC hResource =
-        FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
+    HRSRC hResource = FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
     if (hResource) {
         HGLOBAL hGlobal = LoadResource(hModule, hResource);
         if (hGlobal) {
             void* pData = LockResource(hGlobal);
             if (pData) {
-                if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) ||
-                    uPtrLen == 0) {
+                if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) || uPtrLen == 0) {
                     pFixedFileInfo = nullptr;
                     uPtrLen = 0;
                 }
@@ -772,7 +499,7 @@ static VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
 }
 
 // ---------------------------------------------------------------------------
-// VolumeSystemTrayIconDataModel, IconView & TextIconContent hooks
+// VolumeSystemTrayIconDataModel & IconView hooks
 // ---------------------------------------------------------------------------
 
 using VolumeSystemTrayIconDataModel_UpdateVolume_t = void(__cdecl*)(
@@ -789,10 +516,6 @@ using VolumeSystemTrayIconDataModel_dtor_t = void(__cdecl*)(void* pThis);
 static VolumeSystemTrayIconDataModel_dtor_t
     VolumeSystemTrayIconDataModel_dtor_Original = nullptr;
 
-using IconView_OnViewModelChanged_t = void(__cdecl*)(void* pThis, void* pIconViewModel);
-static IconView_OnViewModelChanged_t
-    IconView_OnViewModelChanged_Original = nullptr;
-
 using IconView_UpdateHostedContent_t = void(__cdecl*)(void* pThis);
 static IconView_UpdateHostedContent_t
     IconView_UpdateHostedContent_Original = nullptr;
@@ -800,13 +523,90 @@ static IconView_UpdateHostedContent_t
 using IconView_dtor_t = void(__cdecl*)(void* pThis);
 static IconView_dtor_t IconView_dtor_Original = nullptr;
 
-using TextIconContent_MeasureOverride_t = WinRTSize*(__cdecl*)(
-    void* pThis, WinRTSize* pResult, WinRTSize availableSize);
-static TextIconContent_MeasureOverride_t
-    TextIconContent_MeasureOverride_Original = nullptr;
+static std::atomic<size_t> g_iconTextOffset{0x90};
 
-using TextIconContent_dtor_t = void(__cdecl*)(void* pThis);
-static TextIconContent_dtor_t TextIconContent_dtor_Original = nullptr;
+static size_t GetIconTextOffset(void* pThis) {
+    if (!pThis) {
+        return 0;
+    }
+
+    auto matchesGlyphOrText = [](HSTRING hStr) -> bool {
+        if (!hStr) {
+            return false;
+        }
+        UINT32 len = 0;
+        PCWSTR raw = WindowsGetStringRawBuffer(hStr, &len);
+        if (!raw || len == 0) {
+            return false;
+        }
+        wchar_t firstChar = raw[0];
+        return (firstChar >= 0xE700 && firstChar <= 0xE9FF) ||
+               (firstChar >= L'0' && firstChar <= L'9') ||
+               (firstChar >= L'a' && firstChar <= L'z') ||
+               (firstChar >= L'A' && firstChar <= L'Z') ||
+               firstChar == L' ' || firstChar == 0x2715 ||
+               firstChar == 0x2007 || firstChar == 0x00A0 ||
+               firstChar == 0xD83D || firstChar == 0xEA85 ||
+               firstChar == 0xEBC5;
+    };
+
+    size_t cached = g_iconTextOffset.load(std::memory_order_relaxed);
+    if (cached != 0) {
+        HSTRING candidate = *reinterpret_cast<HSTRING*>(reinterpret_cast<char*>(pThis) + cached);
+        if (matchesGlyphOrText(candidate)) {
+            return cached;
+        }
+    }
+
+    const size_t preferredOffsets[] = {0x90, 0xB8, 0x88};
+    for (size_t prefOffset : preferredOffsets) {
+        HSTRING candidate = *reinterpret_cast<HSTRING*>(reinterpret_cast<char*>(pThis) + prefOffset);
+        if (matchesGlyphOrText(candidate)) {
+            g_iconTextOffset.store(prefOffset, std::memory_order_relaxed);
+            return prefOffset;
+        }
+    }
+
+    return 0x90;
+}
+
+static void ApplyCustomVolumeText(void* pThis, float volumeLevel, bool isMuted) {
+    if (!pThis || g_unloading.load(std::memory_order_relaxed)) {
+        return;
+    }
+
+    size_t offset = GetIconTextOffset(pThis);
+    if (offset == 0) {
+        return;
+    }
+
+    int percentage = static_cast<int>(std::round(volumeLevel * 100.0f));
+    if (percentage < 0)
+        percentage = 0;
+    if (percentage > 100)
+        percentage = 100;
+
+    std::wstring customText = FormatVolumeText(percentage, isMuted);
+
+    HSTRING* ppHString = reinterpret_cast<HSTRING*>(reinterpret_cast<char*>(pThis) + offset);
+    HSTRING oldHString = *ppHString;
+
+    if (oldHString) {
+        UINT32 len = 0;
+        PCWSTR raw = WindowsGetStringRawBuffer(oldHString, &len);
+        if (raw && len == customText.length() && wcsncmp(raw, customText.c_str(), len) == 0) {
+            return;
+        }
+    }
+
+    HSTRING newHString = nullptr;
+    if (SUCCEEDED(WindowsCreateString(customText.c_str(), static_cast<UINT32>(customText.length()), &newHString))) {
+        *ppHString = newHString;
+        if (oldHString) {
+            WindowsDeleteString(oldHString);
+        }
+    }
+}
 
 static void __cdecl VolumeSystemTrayIconDataModel_dtor_Hook(void* pThis) {
     {
@@ -821,28 +621,19 @@ static void __cdecl VolumeSystemTrayIconDataModel_dtor_Hook(void* pThis) {
 }
 
 static void __cdecl IconView_dtor_Hook(void* pThis) {
-    {
-        std::lock_guard<std::mutex> lock(g_iconViewMutex);
-        if (g_pVolumeIconView == pThis) {
-            g_pVolumeIconView = nullptr;
-            g_lastAppliedIconViewWidth.store(-1.0, std::memory_order_relaxed);
+    if (auto currentView = g_volumeIconViewWeak.get()) {
+        IUnknown* inner = pThis ? reinterpret_cast<IUnknown**>(pThis)[1] : nullptr;
+        if (inner) {
+            FrameworkElement thisElement = nullptr;
+            inner->QueryInterface(winrt::guid_of<FrameworkElement>(), winrt::put_abi(thisElement));
+            if (thisElement && thisElement == currentView) {
+                g_volumeIconViewWeak = nullptr;
+                g_lastAppliedIconViewWidth.store(-1.0, std::memory_order_relaxed);
+            }
         }
     }
     if (IconView_dtor_Original) {
         IconView_dtor_Original(pThis);
-    }
-}
-
-static void __cdecl TextIconContent_dtor_Hook(void* pThis) {
-    {
-        std::lock_guard<std::mutex> lock(g_textIconMutex);
-        if (g_pVolumeTextIcon == pThis) {
-            g_pVolumeTextIcon = nullptr;
-            g_lastAppliedTextIconWidth.store(-1.0, std::memory_order_relaxed);
-        }
-    }
-    if (TextIconContent_dtor_Original) {
-        TextIconContent_dtor_Original(pThis);
     }
 }
 
@@ -898,18 +689,20 @@ static void __cdecl VolumeSystemTrayIconDataModel_UpdateVolume_Hook(
         return;
     }
 
-    // Ensure custom volume text is in place in case UpdateVolume_Original overwrote it
+    Settings settingsCopy;
     {
+        std::lock_guard<std::mutex> lock(g_settingsMutex);
+        settingsCopy = g_settings;
+    }
+
+    if (settingsCopy.displayStyle != DisplayStyle::Vanilla) {
         std::lock_guard<std::mutex> lock(g_dataModelMutex);
         ApplyCustomVolumeText(pThis, volumeLevel, isMuted);
     }
 
-    // Ensure volume container width constraint is active on UI
-    {
-        std::lock_guard<std::mutex> lock(g_iconViewMutex);
-        if (g_pVolumeIconView) {
-            ApplyVolumeContainerWidth(g_pVolumeIconView);
-        }
+    // Apply container width to volume icon if captured
+    if (auto iconView = g_volumeIconViewWeak.get()) {
+        ApplyVolumeContainerWidth(iconView);
     }
 
     // Trigger UI redraw via CurrentData property notification with recursion guard
@@ -918,65 +711,6 @@ static void __cdecl VolumeSystemTrayIconDataModel_UpdateVolume_Hook(
         std::wstring_view propName = L"CurrentData";
         VolumeSystemTrayIconDataModel_OnDataModelChanged_Original(pThis, &propName);
         s_inHook = false;
-    }
-}
-
-static WinRTSize* __cdecl TextIconContent_MeasureOverride_Hook(
-    void* pThis, WinRTSize* pResult, WinRTSize availableSize) {
-    static thread_local bool s_inMeasureHook = false;
-
-    WinRTSize* res = TextIconContent_MeasureOverride_Original(pThis, pResult, availableSize);
-
-    if (res && !s_inMeasureHook && !g_unloading.load(std::memory_order_relaxed)) {
-        if (IsVolumeTextIcon(pThis)) {
-            {
-                std::lock_guard<std::mutex> lock(g_textIconMutex);
-                g_pVolumeTextIcon = pThis;
-            }
-
-            Settings settingsCopy;
-            {
-                std::lock_guard<std::mutex> lock(g_settingsMutex);
-                settingsCopy = g_settings;
-            }
-
-            double targetWidth = GetTargetContainerWidth(settingsCopy);
-            if (targetWidth > 0.0) {
-                float targetWidthF = static_cast<float>(targetWidth);
-                if (res->Width < targetWidthF) {
-                    res->Width = targetWidthF;
-                }
-
-                // Point 4 & 5: Apply MinWidth only when target value changes, with re-entrancy guard
-                double prevWidth = g_lastAppliedTextIconWidth.load(std::memory_order_relaxed);
-                if (prevWidth != targetWidth) {
-                    g_lastAppliedTextIconWidth.store(targetWidth, std::memory_order_relaxed);
-                    s_inMeasureHook = true;
-                    ApplyElementMinWidth(pThis, targetWidth);
-                    s_inMeasureHook = false;
-                }
-            }
-        }
-    }
-
-    return res;
-}
-
-static void __cdecl IconView_OnViewModelChanged_Hook(void* pThis, void* pIconViewModel) {
-    if (IconView_OnViewModelChanged_Original) {
-        IconView_OnViewModelChanged_Original(pThis, pIconViewModel);
-    }
-
-    if (g_unloading.load(std::memory_order_relaxed) || !pThis) {
-        return;
-    }
-
-    if (IsVolumeIconViewModel(pIconViewModel)) {
-        {
-            std::lock_guard<std::mutex> lock(g_iconViewMutex);
-            g_pVolumeIconView = pThis;
-        }
-        ApplyVolumeContainerWidth(pThis);
     }
 }
 
@@ -989,33 +723,29 @@ static void __cdecl IconView_UpdateHostedContent_Hook(void* pThis) {
         return;
     }
 
-    bool isVolume = false;
-    {
-        std::lock_guard<std::mutex> lock(g_iconViewMutex);
-        if (g_pVolumeIconView == pThis) {
-            isVolume = true;
-        }
+    IUnknown* inner = reinterpret_cast<IUnknown**>(pThis)[1];
+    if (!inner) {
+        return;
     }
 
-    if (!isVolume && IsValidReadableMemory(reinterpret_cast<const char*>(pThis) + 0x78, sizeof(void*))) {
-        void* pVM = *reinterpret_cast<void**>(reinterpret_cast<char*>(pThis) + 0x78);
-        if (pVM && IsVolumeIconViewModel(pVM)) {
-            {
-                std::lock_guard<std::mutex> lock(g_iconViewMutex);
-                g_pVolumeIconView = pThis;
-            }
-            isVolume = true;
-        }
+    FrameworkElement iconView = nullptr;
+    inner->QueryInterface(winrt::guid_of<FrameworkElement>(), winrt::put_abi(iconView));
+    if (!iconView || winrt::get_class_name(iconView) != L"SystemTray.IconView") {
+        return;
     }
 
-    if (isVolume) {
-        ApplyVolumeContainerWidth(pThis);
+    if (!IsChildOfElementByName(iconView, L"ControlCenterButton")) {
+        return;
+    }
+
+    if (IsVolumeIconElement(iconView)) {
+        g_volumeIconViewWeak = iconView;
+        ApplyVolumeContainerWidth(iconView);
     }
 }
 
 static bool HookSystemTraySymbols(HMODULE module) {
-    // SystemTray.dll, Taskbar.View.dll
-    WindhawkUtils::SYMBOL_HOOK systemTrayHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK systemTrayDllHooks[] = {
         {
             {
                 LR"(public: void __cdecl winrt::SystemTray::implementation::VolumeSystemTrayIconDataModel::UpdateVolume(float,bool,struct winrt::hstring))",
@@ -1040,53 +770,6 @@ static bool HookSystemTraySymbols(HMODULE module) {
         },
         {
             {
-                LR"(public: virtual __cdecl winrt::SystemTray::implementation::VolumeSystemTrayIconDataModel::~VolumeSystemTrayIconDataModel(void))",
-                LR"(public: virtual __cdecl winrt::SystemTray::implementation::VolumeSystemTrayIconDataModel::~VolumeSystemTrayIconDataModel(void) __ptr64)",
-                LR"(??1VolumeSystemTrayIconDataModel@implementation@SystemTray@winrt@@UEAA@XZ)",
-                LR"(??_GVolumeSystemTrayIconDataModel@implementation@SystemTray@winrt@@UEAAPEAXI@Z)",
-                LR"(??1VolumeSystemTrayIconDataModel@implementation@SystemTray@winrt@@UAE@XZ)",
-                LR"(??_GVolumeSystemTrayIconDataModel@implementation@SystemTray@winrt@@UAEPAXI@Z)",
-                LR"(winrt::SystemTray::implementation::VolumeSystemTrayIconDataModel::~VolumeSystemTrayIconDataModel)",
-            },
-            reinterpret_cast<void**>(&VolumeSystemTrayIconDataModel_dtor_Original),
-            reinterpret_cast<void*>(VolumeSystemTrayIconDataModel_dtor_Hook),
-            true,
-        },
-        {
-            {
-                LR"(public: struct winrt::Windows::Foundation::Size __cdecl winrt::SystemTray::implementation::TextIconContent::MeasureOverride(struct winrt::Windows::Foundation::Size))",
-                LR"(public: struct winrt::Windows::Foundation::Size __cdecl winrt::SystemTray::implementation::TextIconContent::MeasureOverride(struct winrt::Windows::Foundation::Size) __ptr64)",
-                LR"(winrt::SystemTray::implementation::TextIconContent::MeasureOverride)",
-            },
-            reinterpret_cast<void**>(&TextIconContent_MeasureOverride_Original),
-            reinterpret_cast<void*>(TextIconContent_MeasureOverride_Hook),
-            true,
-        },
-        {
-            {
-                LR"(public: virtual __cdecl winrt::SystemTray::implementation::TextIconContent::~TextIconContent(void))",
-                LR"(public: virtual __cdecl winrt::SystemTray::implementation::TextIconContent::~TextIconContent(void) __ptr64)",
-                LR"(??1TextIconContent@implementation@SystemTray@winrt@@UEAA@XZ)",
-                LR"(??_GTextIconContent@implementation@SystemTray@winrt@@UEAAPEAXI@Z)",
-                LR"(winrt::SystemTray::implementation::TextIconContent::~TextIconContent)",
-            },
-            reinterpret_cast<void**>(&TextIconContent_dtor_Original),
-            reinterpret_cast<void*>(TextIconContent_dtor_Hook),
-            true,
-        },
-        {
-            {
-                LR"(private: void __cdecl winrt::SystemTray::implementation::IconView::OnViewModelChanged(struct winrt::SystemTray::IconViewModel const &))",
-                LR"(private: void __cdecl winrt::SystemTray::implementation::IconView::OnViewModelChanged(struct winrt::SystemTray::IconViewModel const & __ptr64) __ptr64)",
-                LR"(?OnViewModelChanged@IconView@implementation@SystemTray@winrt@@AEAAXAEBUIconViewModel@34@@Z)",
-                LR"(winrt::SystemTray::implementation::IconView::OnViewModelChanged)",
-            },
-            reinterpret_cast<void**>(&IconView_OnViewModelChanged_Original),
-            reinterpret_cast<void*>(IconView_OnViewModelChanged_Hook),
-            true,
-        },
-        {
-            {
                 LR"(private: void __cdecl winrt::SystemTray::implementation::IconView::UpdateHostedContent(void))",
                 LR"(private: void __cdecl winrt::SystemTray::implementation::IconView::UpdateHostedContent(void) __ptr64)",
                 LR"(?UpdateHostedContent@IconView@implementation@SystemTray@winrt@@AEAAXXZ)",
@@ -1098,11 +781,15 @@ static bool HookSystemTraySymbols(HMODULE module) {
         },
         {
             {
-                LR"(public: virtual __cdecl winrt::SystemTray::implementation::IconView::~IconView(void))",
-                LR"(public: virtual __cdecl winrt::SystemTray::implementation::IconView::~IconView(void) __ptr64)",
+                LR"(??1VolumeSystemTrayIconDataModel@implementation@SystemTray@winrt@@UEAA@XZ)",
+            },
+            reinterpret_cast<void**>(&VolumeSystemTrayIconDataModel_dtor_Original),
+            reinterpret_cast<void*>(VolumeSystemTrayIconDataModel_dtor_Hook),
+            true,
+        },
+        {
+            {
                 LR"(??1IconView@implementation@SystemTray@winrt@@UEAA@XZ)",
-                LR"(??_GIconView@implementation@SystemTray@winrt@@UEAAPEAXI@Z)",
-                LR"(winrt::SystemTray::implementation::IconView::~IconView)",
             },
             reinterpret_cast<void**>(&IconView_dtor_Original),
             reinterpret_cast<void*>(IconView_dtor_Hook),
@@ -1110,25 +797,7 @@ static bool HookSystemTraySymbols(HMODULE module) {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(module, systemTrayHooks, ARRAYSIZE(systemTrayHooks))) {
-        Wh_Log(L"Failed to hook SystemTray volume symbols");
-        return false;
-    }
-
-    if (!VolumeSystemTrayIconDataModel_dtor_Original) {
-        Wh_Log(L"Warning: VolumeSystemTrayIconDataModel destructor symbol could not be hooked; lifetime tracking will rely on validity checks");
-    }
-
-    if (TextIconContent_MeasureOverride_Original) {
-        Wh_Log(L"Successfully hooked TextIconContent::MeasureOverride for dynamic container width stabilization");
-    }
-
-    if (IconView_OnViewModelChanged_Original) {
-        Wh_Log(L"Successfully hooked IconView::OnViewModelChanged for XAML container stabilization");
-    }
-
-    Wh_Log(L"Successfully hooked SystemTray volume symbols");
-    return true;
+    return WindhawkUtils::HookSymbols(module, systemTrayDllHooks, ARRAYSIZE(systemTrayDllHooks));
 }
 
 static HMODULE GetSystemTrayModuleHandle() {
@@ -1151,8 +820,8 @@ using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 static LoadLibraryExW_t LoadLibraryExW_Original = nullptr;
 
 static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
-                                         HANDLE hFile,
-                                         DWORD dwFlags) {
+                                          HANDLE hFile,
+                                          DWORD dwFlags) {
     HMODULE hModule = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (!hModule || ((ULONG_PTR)hModule & 3)) {
         return hModule;
@@ -1191,59 +860,49 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 }
 
 // ---------------------------------------------------------------------------
-// Settings & lifecycle
+// Settings & Lifecycle
 // ---------------------------------------------------------------------------
 
 static void LoadSettings() {
     Settings newSettings;
 
     auto displayStyleSetting = WindhawkUtils::StringSetting::make(L"displayStyle");
-    PCWSTR displayStyleStr = displayStyleSetting.get();
-    if (displayStyleStr) {
-        if (wcscmp(displayStyleStr, L"vanilla") == 0 ||
-            wcscmp(displayStyleStr, L"default") == 0 ||
-            wcscmp(displayStyleStr, L"vanillaOnly") == 0) {
-            newSettings.displayStyle = DisplayStyle::Vanilla;
-        } else if (wcscmp(displayStyleStr, L"number") == 0 ||
-                   wcscmp(displayStyleStr, L"numberOnly") == 0) {
+    if (displayStyleSetting.get()) {
+        if (wcscmp(displayStyleSetting.get(), L"number") == 0) {
             newSettings.displayStyle = DisplayStyle::Number;
-        } else if (wcscmp(displayStyleStr, L"prefix") == 0 ||
-                   wcscmp(displayStyleStr, L"volPrefix") == 0) {
+        } else if (wcscmp(displayStyleSetting.get(), L"prefix") == 0) {
             newSettings.displayStyle = DisplayStyle::Prefix;
-        } else if (wcscmp(displayStyleStr, L"emoji") == 0 ||
-                   wcscmp(displayStyleStr, L"emojiAndPercent") == 0 ||
-                   wcscmp(displayStyleStr, L"iconAndPercent") == 0) {
+        } else if (wcscmp(displayStyleSetting.get(), L"emoji") == 0) {
             newSettings.displayStyle = DisplayStyle::Emoji;
+        } else if (wcscmp(displayStyleSetting.get(), L"vanilla") == 0) {
+            newSettings.displayStyle = DisplayStyle::Vanilla;
         } else {
             newSettings.displayStyle = DisplayStyle::Percentage;
         }
-    } else {
-        newSettings.displayStyle = DisplayStyle::Percentage;
     }
 
     newSettings.fixedContainerWidth = Wh_GetIntSetting(L"fixedContainerWidth");
 
-    auto prefixSetting = WindhawkUtils::StringSetting::make(L"customPrefix");
-    if (prefixSetting.get()) {
-        newSettings.customPrefix = prefixSetting.get();
+    auto customPrefixSetting = WindhawkUtils::StringSetting::make(L"customPrefix");
+    if (customPrefixSetting.get()) {
+        newSettings.customPrefix = customPrefixSetting.get();
     } else {
         newSettings.customPrefix = L"Vol ";
     }
 
     auto muteStyleSetting = WindhawkUtils::StringSetting::make(L"muteStyle");
-    PCWSTR muteStyleStr = muteStyleSetting.get();
-    if (muteStyleStr) {
-        if (wcscmp(muteStyleStr, L"mute") == 0) {
+    if (muteStyleSetting.get()) {
+        if (wcscmp(muteStyleSetting.get(), L"mute") == 0) {
             newSettings.muteStyle = MuteStyle::Mute;
-        } else if (wcscmp(muteStyleStr, L"zero") == 0) {
+        } else if (wcscmp(muteStyleSetting.get(), L"zero") == 0) {
             newSettings.muteStyle = MuteStyle::Zero;
-        } else if (wcscmp(muteStyleStr, L"cross") == 0) {
+        } else if (wcscmp(muteStyleSetting.get(), L"cross") == 0) {
             newSettings.muteStyle = MuteStyle::Cross;
-        } else if (wcscmp(muteStyleStr, L"emoji") == 0) {
+        } else if (wcscmp(muteStyleSetting.get(), L"emoji") == 0) {
             newSettings.muteStyle = MuteStyle::Emoji;
-        } else if (wcscmp(muteStyleStr, L"glyph") == 0) {
+        } else if (wcscmp(muteStyleSetting.get(), L"glyph") == 0) {
             newSettings.muteStyle = MuteStyle::Glyph;
-        } else if (wcscmp(muteStyleStr, L"custom") == 0) {
+        } else if (wcscmp(muteStyleSetting.get(), L"custom") == 0) {
             newSettings.muteStyle = MuteStyle::Custom;
         } else {
             newSettings.muteStyle = MuteStyle::Mut;
@@ -1262,6 +921,145 @@ static void LoadSettings() {
     {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
         g_settings = std::move(newSettings);
+    }
+}
+
+static void WINAPI BeforeUninitOnUIThread(void* /*parameter*/) {
+    if (auto iconView = g_volumeIconViewWeak.get()) {
+        iconView.MinWidth(0.0);
+    }
+    g_volumeIconViewWeak = nullptr;
+    g_lastAppliedIconViewWidth.store(-1.0, std::memory_order_relaxed);
+
+    void* dataModel = nullptr;
+    float vol = 0.0f;
+    bool muted = false;
+    {
+        std::lock_guard<std::mutex> lock(g_dataModelMutex);
+        dataModel = g_pVolumeDataModel;
+        vol = g_lastVolumeLevel;
+        muted = g_lastIsMuted;
+        g_pVolumeDataModel = nullptr;
+    }
+
+    if (dataModel) {
+        wchar_t defaultGlyph = muted ? GLYPH_MUTE : GLYPH_VOL_3;
+        if (!muted) {
+            int percentage = static_cast<int>(std::round(vol * 100.0f));
+            if (percentage <= 0)
+                defaultGlyph = GLYPH_VOL_0;
+            else if (percentage < 33)
+                defaultGlyph = GLYPH_VOL_1;
+            else if (percentage < 66)
+                defaultGlyph = GLYPH_VOL_2;
+            else
+                defaultGlyph = GLYPH_VOL_3;
+        }
+        std::wstring restoreStr(1, defaultGlyph);
+        size_t offset = g_iconTextOffset.load(std::memory_order_relaxed);
+        HSTRING* ppHString = reinterpret_cast<HSTRING*>(reinterpret_cast<char*>(dataModel) + offset);
+        HSTRING oldHString = *ppHString;
+        HSTRING newHString = nullptr;
+        if (SUCCEEDED(WindowsCreateString(restoreStr.c_str(), 1, &newHString))) {
+            *ppHString = newHString;
+            if (oldHString) {
+                WindowsDeleteString(oldHString);
+            }
+        }
+
+        if (VolumeSystemTrayIconDataModel_OnDataModelChanged_Original) {
+            std::wstring_view propName = L"CurrentData";
+            VolumeSystemTrayIconDataModel_OnDataModelChanged_Original(dataModel, &propName);
+        }
+    }
+}
+
+void Wh_ModBeforeUninit() {
+    Wh_Log(L"Preparing mod unload, restoring native icon and container size");
+
+    g_unloading = true;
+
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (hTaskbarWnd) {
+        RunFromWindowThread(hTaskbarWnd, BeforeUninitOnUIThread, nullptr);
+    } else {
+        std::lock_guard<std::mutex> lock(g_dataModelMutex);
+        g_pVolumeDataModel = nullptr;
+    }
+}
+
+void Wh_ModUninit() {
+    Wh_Log(L"Uninitializing Taskbar Volume Percentage Indicator mod");
+}
+
+static void WINAPI SettingsChangedOnUIThread(void* /*parameter*/) {
+    if (auto iconView = g_volumeIconViewWeak.get()) {
+        ApplyVolumeContainerWidth(iconView);
+    }
+
+    void* dataModel = nullptr;
+    float vol = 0.0f;
+    bool muted = false;
+    {
+        std::lock_guard<std::mutex> lock(g_dataModelMutex);
+        dataModel = g_pVolumeDataModel;
+        vol = g_lastVolumeLevel;
+        muted = g_lastIsMuted;
+    }
+
+    if (dataModel && !g_unloading.load(std::memory_order_relaxed)) {
+        Settings settingsCopy;
+        {
+            std::lock_guard<std::mutex> lock(g_settingsMutex);
+            settingsCopy = g_settings;
+        }
+
+        if (settingsCopy.displayStyle == DisplayStyle::Vanilla) {
+            wchar_t defaultGlyph = muted ? GLYPH_MUTE : GLYPH_VOL_3;
+            if (!muted) {
+                int percentage = static_cast<int>(std::round(vol * 100.0f));
+                if (percentage <= 0)
+                    defaultGlyph = GLYPH_VOL_0;
+                else if (percentage < 33)
+                    defaultGlyph = GLYPH_VOL_1;
+                else if (percentage < 66)
+                    defaultGlyph = GLYPH_VOL_2;
+                else
+                    defaultGlyph = GLYPH_VOL_3;
+            }
+            std::wstring restoreStr(1, defaultGlyph);
+            size_t offset = g_iconTextOffset.load(std::memory_order_relaxed);
+            HSTRING* ppHString = reinterpret_cast<HSTRING*>(reinterpret_cast<char*>(dataModel) + offset);
+            HSTRING oldHString = *ppHString;
+            HSTRING newHString = nullptr;
+            if (SUCCEEDED(WindowsCreateString(restoreStr.c_str(), 1, &newHString))) {
+                *ppHString = newHString;
+                if (oldHString) {
+                    WindowsDeleteString(oldHString);
+                }
+            }
+        } else {
+            ApplyCustomVolumeText(dataModel, vol, muted);
+        }
+
+        if (VolumeSystemTrayIconDataModel_OnDataModelChanged_Original) {
+            std::wstring_view propName = L"CurrentData";
+            VolumeSystemTrayIconDataModel_OnDataModelChanged_Original(dataModel, &propName);
+        }
+    }
+}
+
+void Wh_ModSettingsChanged() {
+    Wh_Log(L"Settings changed, reloading...");
+    LoadSettings();
+
+    if (g_unloading.load(std::memory_order_relaxed)) {
+        return;
+    }
+
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (hTaskbarWnd) {
+        RunFromWindowThread(hTaskbarWnd, SettingsChangedOnUIThread, nullptr);
     }
 }
 
@@ -1310,129 +1108,5 @@ void Wh_ModAfterInit() {
                 }
             }
         }
-    }
-}
-
-static void BeforeUninitOnUIThread(void* /*parameter*/) {
-    // Reset TextIconContent width to natural vanilla width (0.0)
-    {
-        std::lock_guard<std::mutex> lock(g_textIconMutex);
-        if (g_pVolumeTextIcon) {
-            ApplyElementMinWidth(g_pVolumeTextIcon, 0.0);
-            g_pVolumeTextIcon = nullptr;
-        }
-        g_lastAppliedTextIconWidth.store(-1.0, std::memory_order_relaxed);
-    }
-
-    // Reset IconView container width to natural vanilla width (0.0)
-    {
-        std::lock_guard<std::mutex> lock(g_iconViewMutex);
-        if (g_pVolumeIconView) {
-            ApplyElementMinWidth(g_pVolumeIconView, 0.0);
-            if (IsValidReadableMemory(reinterpret_cast<const char*>(g_pVolumeIconView) + 0x1b0, sizeof(void*))) {
-                void* pHostedContent = *reinterpret_cast<void**>(reinterpret_cast<char*>(g_pVolumeIconView) + 0x1b0);
-                if (IsValidComObject(pHostedContent)) {
-                    ApplyElementMinWidth(pHostedContent, 0.0);
-                }
-            }
-            g_pVolumeIconView = nullptr;
-        }
-        g_lastAppliedIconViewWidth.store(-1.0, std::memory_order_relaxed);
-    }
-
-    std::lock_guard<std::mutex> lock(g_dataModelMutex);
-    if (g_pVolumeDataModel && IsValidUserPointer(g_pVolumeDataModel)) {
-        size_t offset = GetIconTextOffset(g_pVolumeDataModel);
-        if (offset != 0) {
-            wchar_t defaultGlyph = g_lastIsMuted ? GLYPH_MUTE : GLYPH_VOL_3;
-            std::wstring restoreStr(1, defaultGlyph);
-
-            shared_hstring_header** ppHeader = reinterpret_cast<shared_hstring_header**>(
-                reinterpret_cast<char*>(g_pVolumeDataModel) + offset);
-
-            shared_hstring_header* oldHeader = *ppHeader;
-            shared_hstring_header* newHeader = CreateSharedHString(restoreStr);
-            if (newHeader) {
-                *ppHeader = newHeader;
-                if (oldHeader && oldHeader != newHeader) {
-                    ReleaseSharedHString(oldHeader);
-                }
-            }
-
-            if (VolumeSystemTrayIconDataModel_OnDataModelChanged_Original) {
-                std::wstring_view propName = L"CurrentData";
-                VolumeSystemTrayIconDataModel_OnDataModelChanged_Original(g_pVolumeDataModel, &propName);
-            }
-        }
-    }
-    g_pVolumeDataModel = nullptr;
-}
-
-void Wh_ModBeforeUninit() {
-    Wh_Log(L"Preparing mod unload, restoring native icon and container size");
-
-    g_unloading = true;
-
-    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
-    if (hTaskbarWnd) {
-        RunFromWindowThread(hTaskbarWnd, BeforeUninitOnUIThread, nullptr);
-    } else {
-        std::lock_guard<std::mutex> lock(g_dataModelMutex);
-        g_pVolumeDataModel = nullptr;
-    }
-}
-
-void Wh_ModUninit() {
-    Wh_Log(L"Uninitializing Taskbar Volume Percentage Indicator mod");
-}
-
-static void SettingsChangedOnUIThread(void* /*parameter*/) {
-    Settings settingsCopy;
-    {
-        std::lock_guard<std::mutex> lock(g_settingsMutex);
-        settingsCopy = g_settings;
-    }
-
-    double targetWidth = GetTargetContainerWidth(settingsCopy);
-
-    // Apply width to TextIconContent
-    {
-        std::lock_guard<std::mutex> lock(g_textIconMutex);
-        if (g_pVolumeTextIcon && !g_unloading.load(std::memory_order_relaxed)) {
-            g_lastAppliedTextIconWidth.store(targetWidth, std::memory_order_relaxed);
-            ApplyElementMinWidth(g_pVolumeTextIcon, targetWidth);
-        }
-    }
-
-    // Apply width to IconView if captured
-    {
-        std::lock_guard<std::mutex> lock(g_iconViewMutex);
-        if (g_pVolumeIconView && !g_unloading.load(std::memory_order_relaxed)) {
-            g_lastAppliedIconViewWidth.store(targetWidth, std::memory_order_relaxed);
-            ApplyVolumeContainerWidth(g_pVolumeIconView);
-        }
-    }
-
-    std::lock_guard<std::mutex> lock(g_dataModelMutex);
-    if (g_pVolumeDataModel && !g_unloading.load(std::memory_order_relaxed)) {
-        ApplyCustomVolumeText(g_pVolumeDataModel, g_lastVolumeLevel, g_lastIsMuted);
-        if (VolumeSystemTrayIconDataModel_OnDataModelChanged_Original) {
-            std::wstring_view propName = L"CurrentData";
-            VolumeSystemTrayIconDataModel_OnDataModelChanged_Original(g_pVolumeDataModel, &propName);
-        }
-    }
-}
-
-void Wh_ModSettingsChanged() {
-    Wh_Log(L"Settings changed, reloading...");
-    LoadSettings();
-
-    if (g_unloading.load(std::memory_order_relaxed)) {
-        return;
-    }
-
-    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
-    if (hTaskbarWnd) {
-        RunFromWindowThread(hTaskbarWnd, SettingsChangedOnUIThread, nullptr);
     }
 }
