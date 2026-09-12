@@ -2,27 +2,30 @@
 // @id                quake-mode-window-switch
 // @name              Quake mode window switch
 // @description       Slide a chosen app down from off-screen with a hotkey, Quake-console style
-// @version           1.0
+// @version           2.0
 // @author            Tal Koren
 // @github            https://github.com/dewbjorn
-// @include           explorer.exe
+// @include           windhawk.exe
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Quake mode window switch
 
-Press a configurable hotkey (default **`~`**, the tilde/backtick key) to slide a chosen app's
+Press a configurable hotkey (default **Win+`**) to slide a chosen app's
 window down from off-screen into a docked strip at the top of the
 screen, Quake-console style. Press again (or click another window) to
 slide it back up out of view.
 
 ## Notes
 
-- Runs in `explorer.exe`, so one global hotkey handles everything.
+- Runs as a standalone background process (a "tool mod"), not injected
+  into `explorer.exe` - the hotkey works no matter how many `explorer.exe`
+  processes are running, and a bug here can't take the shell down with it.
 - Only acts on the configured process; if it isn't running, nothing happens.
-- The window is not resized permanently, it's repositioned/resized
-  only while parked in its docked or hidden slot.
+- The window is not resized permanently, it's repositioned/resized only
+  while parked in its docked or hidden slot; disabling the mod restores
+  its original position, size and styles.
 */
 // ==/WindhawkModReadme==
 
@@ -41,11 +44,13 @@ slide it back up out of view.
   $options:
   - primary: Primary monitor
   - cursor: Monitor under cursor
-- hotkey: "`"
+- hotkey: "Win+`"
   $name: Hotkey
   $description: >-
-    Key combo to toggle the window, e.g. "`" or "Ctrl+Shift+F12".
-    Supported modifiers: Ctrl, Alt, Shift, Win.
+    Key combo to toggle the window, e.g. "Win+`" or "Ctrl+Shift+F12".
+    Supported modifiers: Ctrl, Alt, Shift, Win. At least one modifier is
+    required - a modifier-less key (e.g. a bare "`") would be captured
+    globally and block typing that key in every other app.
 - hideFromTaskbar: false
   $name: Hide from taskbar
   $description: >-
@@ -64,10 +69,10 @@ slide it back up out of view.
 
 #include <windows.h>
 #include <string>
-#include <thread>
 #include <atomic>
 #include <algorithm>
 #include <cwctype>
+#include <cstdlib>
 #include <cmath>
 
 static std::wstring g_processName;
@@ -78,23 +83,28 @@ static UINT g_hotkeyVk = VK_OEM_3;
 static bool g_hideFromTaskbar = false;
 static bool g_hideTitleBar = false;
 static bool g_autoHideOnFocusLoss = true;
+
+static HWND g_styledHwnd = nullptr;
 static LONG_PTR g_originalExStyle = 0;
 static LONG_PTR g_originalStyle = 0;
-static bool g_styleModified = false;
+static WINDOWPLACEMENT g_originalPlacement = {sizeof(WINDOWPLACEMENT)};
 
-static std::thread g_hotkeyThread;
-static std::atomic<bool> g_running = false;
-static DWORD g_hotkeyThreadId = 0;
-static HANDLE g_hotkeyThreadReady = nullptr;
+static HANDLE g_hThread = nullptr;
+static HWND g_hMsgWnd = nullptr;
+static std::atomic<bool> g_running{false};
 static HWINEVENTHOOK g_foregroundHook = nullptr;
 
 static HWND g_targetHwnd = nullptr;
-static std::atomic<bool> g_visible = false;
+static bool g_visible = false;
 static HWND g_previousForegroundHwnd = nullptr;
 
 static constexpr int kHotkeyId = 1;
 static constexpr int kAnimationDurationMs = 120;
 static constexpr int kAnimationFrameMs = 10;
+
+#define WM_APP_SETTINGS_CHANGED (WM_APP + 1)
+
+static const wchar_t kMsgWndClassName[] = L"QuakeModeWindowSwitch_MsgWnd";
 
 static double EaseInOut(double t)
 {
@@ -114,6 +124,8 @@ static void AnimateWindowToRect(HWND hwnd, const RECT& from, const RECT& to, int
         int right = static_cast<int>(std::lround(from.right + (to.right - from.right) * e));
         int bottom = static_cast<int>(std::lround(from.bottom + (to.bottom - from.bottom) * e));
 
+        // ASYNCWINDOWPOS keeps a hung target app from stalling this loop -
+        // and with it, WhTool_ModUninit's join - indefinitely.
         SetWindowPos(
             hwnd,
             nullptr,
@@ -121,10 +133,10 @@ static void AnimateWindowToRect(HWND hwnd, const RECT& from, const RECT& to, int
             top,
             right - left,
             bottom - top,
-            SWP_NOZORDER | SWP_NOACTIVATE
+            SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS
         );
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(kAnimationFrameMs));
+        Sleep(kAnimationFrameMs);
     }
 }
 
@@ -194,12 +206,18 @@ static void ParseHotkeySetting(const std::wstring& spec, UINT& modifiersOut, UIN
         }
         start = plus + 1;
     }
+
+    // A modifier-less hotkey registers the plain key globally, swallowing
+    // it in every app (e.g. a bare "`" blocks typing a backtick anywhere).
+    if (modifiersOut == 0) {
+        vkOut = 0;
+    }
 }
 
 static void LoadSettings()
 {
     PCWSTR processName = Wh_GetStringSetting(L"processName");
-    g_processName = ToLower(processName ? processName : L"");
+    g_processName = ToLower(processName);
     Wh_FreeStringSetting(processName);
 
     g_heightPercent = Wh_GetIntSetting(L"heightPercent");
@@ -208,18 +226,18 @@ static void LoadSettings()
     }
 
     PCWSTR monitorMode = Wh_GetStringSetting(L"monitorMode");
-    g_useCursorMonitor = monitorMode && ToLower(monitorMode) == L"cursor";
+    g_useCursorMonitor = ToLower(monitorMode) == L"cursor";
     Wh_FreeStringSetting(monitorMode);
 
     PCWSTR hotkey = Wh_GetStringSetting(L"hotkey");
     UINT modifiers = 0;
     UINT vk = 0;
-    ParseHotkeySetting(hotkey ? hotkey : L"`", modifiers, vk);
+    ParseHotkeySetting(hotkey, modifiers, vk);
     Wh_FreeStringSetting(hotkey);
 
     if (vk == 0) {
-        Wh_Log(L"Invalid hotkey setting, falling back to `");
-        modifiers = 0;
+        Wh_Log(L"Invalid or modifier-less hotkey setting, falling back to Win+`");
+        modifiers = MOD_WIN;
         vk = VK_OEM_3;
     }
 
@@ -280,14 +298,54 @@ static bool IsCandidateWindow(HWND hwnd)
 
 // ---- Window styling ----
 
+// Restores styles and the original WINDOWPLACEMENT (position, size, and
+// minimized/maximized state) onto whichever window ApplyWindowStyles last
+// captured. Also undoes the SW_HIDE used to park the window off-screen.
+static void RestoreOriginalState()
+{
+    if (!g_styledHwnd) {
+        return;
+    }
+
+    HWND hwnd = g_styledHwnd;
+    g_styledHwnd = nullptr;
+
+    if (!IsWindow(hwnd)) {
+        return;
+    }
+
+    SetWindowLongPtrW(hwnd, GWL_EXSTYLE, g_originalExStyle);
+    SetWindowLongPtrW(hwnd, GWL_STYLE, g_originalStyle);
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+
+    if (g_hideFromTaskbar && IsWindowVisible(hwnd)) {
+        ShowWindow(hwnd, SW_HIDE);
+        ShowWindow(hwnd, SW_SHOWNA);
+    }
+
+    SetWindowPlacement(hwnd, &g_originalPlacement);
+}
+
+// Captures the window's original styles/placement the first time it's
+// touched and applies the configured taskbar/title-bar tweaks. Tracked
+// by g_styledHwnd, independent of g_targetHwnd, so a stale capture never
+// gets applied to (or restored onto) the wrong window.
 static void ApplyWindowStyles(HWND hwnd)
 {
-    if (g_styleModified && g_targetHwnd == hwnd) {
+    if (g_styledHwnd == hwnd) {
         return;
+    }
+
+    if (g_styledHwnd) {
+        RestoreOriginalState();
     }
 
     g_originalExStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
     g_originalStyle = GetWindowLongPtrW(hwnd, GWL_STYLE);
+    g_originalPlacement = WINDOWPLACEMENT{sizeof(WINDOWPLACEMENT)};
+    GetWindowPlacement(hwnd, &g_originalPlacement);
+    g_styledHwnd = hwnd;
 
     LONG_PTR exStyle = g_originalExStyle;
     if (g_hideFromTaskbar) {
@@ -299,8 +357,6 @@ static void ApplyWindowStyles(HWND hwnd)
     if (g_hideTitleBar) {
         style &= ~WS_CAPTION;
     }
-
-    g_styleModified = true;
 
     if (exStyle == g_originalExStyle && style == g_originalStyle) {
         return;
@@ -317,26 +373,6 @@ static void ApplyWindowStyles(HWND hwnd)
         ShowWindow(hwnd, SW_HIDE);
         ShowWindow(hwnd, SW_SHOWNA);
     }
-}
-
-static void RestoreWindowStyles()
-{
-    if (!g_styleModified || !g_targetHwnd || !IsWindow(g_targetHwnd)) {
-        g_styleModified = false;
-        return;
-    }
-
-    SetWindowLongPtrW(g_targetHwnd, GWL_EXSTYLE, g_originalExStyle);
-    SetWindowLongPtrW(g_targetHwnd, GWL_STYLE, g_originalStyle);
-    SetWindowPos(g_targetHwnd, nullptr, 0, 0, 0, 0,
-        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-
-    if (g_hideFromTaskbar && IsWindowVisible(g_targetHwnd)) {
-        ShowWindow(g_targetHwnd, SW_HIDE);
-        ShowWindow(g_targetHwnd, SW_SHOWNA);
-    }
-
-    g_styleModified = false;
 }
 
 static BOOL CALLBACK FindTargetWindowProc(HWND hwnd, LPARAM lParam)
@@ -366,6 +402,13 @@ static HWND FindTargetWindow()
 
     HWND found = nullptr;
     EnumWindows(FindTargetWindowProc, reinterpret_cast<LPARAM>(&found));
+
+    if (found != g_targetHwnd) {
+        // The previous target is gone or no longer matches; don't carry
+        // over its shown/hidden state onto an unrelated window.
+        g_visible = false;
+    }
+
     g_targetHwnd = found;
     if (found) {
         ApplyWindowStyles(found);
@@ -386,7 +429,7 @@ static HMONITOR PickMonitor()
     return MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
 }
 
-static void GetDockedAndHiddenRects(HWND hwnd, RECT& docked, RECT& hidden)
+static void GetDockedAndHiddenRects(RECT& docked, RECT& hidden)
 {
     HMONITOR monitor = PickMonitor();
 
@@ -440,17 +483,23 @@ static void ForceSetForegroundWindow(HWND hwnd)
 
 static void HideTargetWindow(bool restoreFocus)
 {
-    if (!g_visible.load() || !g_targetHwnd || !IsWindow(g_targetHwnd)) {
+    if (!g_visible || !g_targetHwnd || !IsWindow(g_targetHwnd)) {
         return;
     }
 
     RECT docked, hidden;
-    GetDockedAndHiddenRects(g_targetHwnd, docked, hidden);
+    GetDockedAndHiddenRects(docked, hidden);
 
     RECT current = {};
     GetWindowRect(g_targetHwnd, &current);
 
     AnimateWindowToRect(g_targetHwnd, current, hidden, kAnimationDurationMs);
+
+    // The hidden slot is only offscreen on a single-monitor, horizontally
+    // arranged setup - on a vertically stacked layout it's another
+    // monitor's screen. Actually hiding it also drops it from Alt+Tab
+    // and stops it from rendering while parked.
+    ShowWindow(g_targetHwnd, SW_HIDE);
     g_visible = false;
 
     // Only restore focus on an explicit hotkey collapse. On an
@@ -469,7 +518,7 @@ static void ShowTargetWindow(HWND hwnd)
     g_previousForegroundHwnd = (currentForeground && currentForeground != hwnd) ? currentForeground : nullptr;
 
     RECT docked, hidden;
-    GetDockedAndHiddenRects(hwnd, docked, hidden);
+    GetDockedAndHiddenRects(docked, hidden);
 
     SetWindowPos(
         hwnd,
@@ -496,7 +545,7 @@ static void ToggleTargetWindow()
         return;
     }
 
-    if (g_visible.load()) {
+    if (g_visible) {
         HideTargetWindow(/* restoreFocus */ true);
     } else {
         ShowTargetWindow(hwnd);
@@ -510,7 +559,7 @@ static void CALLBACK OnForegroundChanged(
         return;
     }
 
-    if (!g_autoHideOnFocusLoss || !g_visible.load() || !g_targetHwnd) {
+    if (!g_autoHideOnFocusLoss || !g_visible || !g_targetHwnd) {
         return;
     }
 
@@ -522,37 +571,80 @@ static void CALLBACK OnForegroundChanged(
     HideTargetWindow(/* restoreFocus */ false);
 }
 
-static void HotkeyThreadProc()
-{
-    g_hotkeyThreadId = GetCurrentThreadId();
+// ---- Hotkey thread ----
 
-    bool registered = RegisterHotKey(nullptr, kHotkeyId, g_hotkeyModifiers, g_hotkeyVk);
-    if (!registered) {
+static LRESULT CALLBACK HotkeyWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    if (msg == WM_HOTKEY && wParam == kHotkeyId) {
+        ToggleTargetWindow();
+        return 0;
+    }
+
+    if (msg == WM_APP_SETTINGS_CHANGED) {
+        // (Un)RegisterHotKey must run on the thread that owns the window.
+        UnregisterHotKey(hwnd, kHotkeyId);
+
+        // Settings like taskbar/title-bar styling or the height percent
+        // only affect a window when it's (re-)captured, so drop whatever
+        // we're currently tracking and undo styling done under the old
+        // settings; the next toggle re-applies everything fresh.
+        RestoreOriginalState();
+        g_targetHwnd = nullptr;
+        g_visible = false;
+
+        LoadSettings();
+
+        if (!RegisterHotKey(hwnd, kHotkeyId, g_hotkeyModifiers | MOD_NOREPEAT, g_hotkeyVk)) {
+            Wh_Log(L"RegisterHotKey failed: %u", GetLastError());
+        } else {
+            Wh_Log(L"Quake mode hotkey re-registered");
+        }
+        return 0;
+    }
+
+    return DefWindowProc(hwnd, msg, wParam, lParam);
+}
+
+static DWORD WINAPI HotkeyThreadProc(LPVOID)
+{
+    WNDCLASSEXW wc = {sizeof(wc)};
+    wc.lpfnWndProc = HotkeyWndProc;
+    wc.hInstance = GetModuleHandle(nullptr);
+    wc.lpszClassName = kMsgWndClassName;
+    RegisterClassExW(&wc);
+
+    HWND hwnd = CreateWindowExW(0, kMsgWndClassName, nullptr, 0, 0, 0, 0, 0,
+        HWND_MESSAGE, nullptr, GetModuleHandle(nullptr), nullptr);
+    if (!hwnd) {
+        Wh_Log(L"Failed to create message window");
+        return 0;
+    }
+
+    g_hMsgWnd = hwnd;
+
+    if (!RegisterHotKey(hwnd, kHotkeyId, g_hotkeyModifiers | MOD_NOREPEAT, g_hotkeyVk)) {
         Wh_Log(L"RegisterHotKey failed: %u", GetLastError());
     } else {
         Wh_Log(L"Quake mode hotkey registered");
-        g_foregroundHook = SetWinEventHook(
-            EVENT_SYSTEM_FOREGROUND,
-            EVENT_SYSTEM_FOREGROUND,
-            nullptr,
-            OnForegroundChanged,
-            0,
-            0,
-            WINEVENT_OUTOFCONTEXT
-        );
     }
 
-    SetEvent(g_hotkeyThreadReady);
-
-    if (!registered) {
-        return;
-    }
+    // Keep the message loop running even if registration failed, so a
+    // later settings change (fixing the hotkey) can still register it,
+    // and so the thread ID/window stay valid for a clean WM_QUIT shutdown.
+    g_foregroundHook = SetWinEventHook(
+        EVENT_SYSTEM_FOREGROUND,
+        EVENT_SYSTEM_FOREGROUND,
+        nullptr,
+        OnForegroundChanged,
+        0,
+        0,
+        WINEVENT_OUTOFCONTEXT
+    );
 
     MSG msg;
     while (g_running.load() && GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        if (msg.message == WM_HOTKEY && msg.wParam == kHotkeyId) {
-            ToggleTargetWindow();
-        }
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
     }
 
     if (g_foregroundHook) {
@@ -560,52 +652,232 @@ static void HotkeyThreadProc()
         g_foregroundHook = nullptr;
     }
 
-    UnregisterHotKey(nullptr, kHotkeyId);
+    UnregisterHotKey(hwnd, kHotkeyId);
+    g_hMsgWnd = nullptr;
+    DestroyWindow(hwnd);
+    UnregisterClassW(kMsgWndClassName, GetModuleHandle(nullptr));
+
     Wh_Log(L"Quake mode hotkey unregistered");
+    return 0;
 }
 
-BOOL Wh_ModInit()
+// ---- Tool mod callbacks ----
+
+BOOL WhTool_ModInit()
 {
     Wh_Log(L"Init");
 
     LoadSettings();
 
-    g_hotkeyThreadReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-
     g_running = true;
-    g_hotkeyThread = std::thread(HotkeyThreadProc);
-
-    WaitForSingleObject(g_hotkeyThreadReady, INFINITE);
-    CloseHandle(g_hotkeyThreadReady);
-    g_hotkeyThreadReady = nullptr;
-
-    return TRUE;
+    g_hThread = CreateThread(nullptr, 0, HotkeyThreadProc, nullptr, 0, nullptr);
+    return g_hThread != nullptr;
 }
 
-void Wh_ModUninit()
-{
-    Wh_Log(L"Uninit");
-
-    RestoreWindowStyles();
-
-    g_running = false;
-
-    if (g_hotkeyThreadId != 0) {
-        PostThreadMessageW(g_hotkeyThreadId, WM_QUIT, 0, 0);
-    }
-
-    if (g_hotkeyThread.joinable()) {
-        g_hotkeyThread.join();
-    }
-}
-
-BOOL Wh_ModSettingsChanged(BOOL* bReload)
+void WhTool_ModSettingsChanged()
 {
     Wh_Log(L"Settings changed");
 
-    // Several settings (hotkey, taskbar/title-bar styling) only take
-    // effect from Wh_ModInit, so always request a full reload rather
-    // than trying to hot-apply a subset.
-    *bReload = TRUE;
+    if (g_hMsgWnd) {
+        PostMessageW(g_hMsgWnd, WM_APP_SETTINGS_CHANGED, 0, 0);
+    }
+}
+
+void WhTool_ModUninit()
+{
+    Wh_Log(L"Uninit");
+
+    // Stop the hotkey thread *before* restoring styles/placement: it can
+    // be mid-toggle or holding a queued WM_HOTKEY, and re-applying its
+    // own state after our restore would strand the window again.
+    g_running = false;
+    if (g_hMsgWnd) {
+        PostMessageW(g_hMsgWnd, WM_QUIT, 0, 0);
+    }
+    if (g_hThread) {
+        WaitForSingleObject(g_hThread, INFINITE);
+        CloseHandle(g_hThread);
+        g_hThread = nullptr;
+    }
+
+    RestoreOriginalState();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
     return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
