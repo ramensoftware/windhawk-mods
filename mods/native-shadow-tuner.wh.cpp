@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              native-shadow-tuner
-// @name            Windows Shadows TUNER
+// @name            Windows Shadows Tuner
 // @description     Adjust the size, blur and intensity of native Windows shadows.
 // @version         0.5.0
 // @author          HaVeN80
