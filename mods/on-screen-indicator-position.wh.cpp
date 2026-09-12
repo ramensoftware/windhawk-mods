@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
-// @description     Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, instead of the three positions Windows offers
-// @version         1.2.7
+// @description     Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, and optionally skip the slide out animation
+// @version         1.4.0
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
@@ -49,16 +49,25 @@ nudge one of the built-in positions.
 
 ## A different spot per indicator
 
-Volume, brightness, keyboard brightness, airplane mode, camera, microphone and the
-plain text indicator can each be given their own position. Anything left on **Same
-as the main position** follows the setting above, so you only have to touch the ones
-you want somewhere else. Handy if you want the volume indicator out of the way at the
-bottom but still want the camera one where you will notice it.
+Volume, brightness, keyboard brightness, airplane mode, camera, microphone, the
+virtual desktop name popup and the plain text indicator can each be given their own
+position. Anything left on **Same as the main position** follows the setting above,
+so you only have to touch the ones you want somewhere else. Handy if you want the
+volume indicator out of the way at the bottom but still want the camera one where
+you will notice it.
 
 Volume kept at the top left while brightness sits in the middle. Only one of them is
 ever on screen at a time, so this is the same desktop photographed twice:
 
 ![Volume top left, brightness center](https://raw.githubusercontent.com/mario0318/windhawk-mods/628f80317652209d3feed54eadf9c329e77b04a7/on-screen-indicator-position/per-indicator.jpg)
+
+## Skip the slide out animation
+
+The indicator normally slides off screen when it's done. With **Skip the slide out
+animation** on, it just disappears. Windows already has a no-animation hide path
+and the mod asks for that one instead, so the slide in and everything outside the
+indicator are left alone. If the setting ever appears to do nothing, the mod's log
+says so on a build where the entry points have moved.
 
 ## Choosing a monitor
 
@@ -79,7 +88,12 @@ a monitor by number or by interface name. The two work together.
 * With two indicators set to different spots you can catch the previous one
   flashing at the new spot for a frame before the new one draws. That's the
   confirmator reusing its frame, the placement hook can't do anything about it.
+  Skipping the slide out makes it easier to catch rather than harder, since what
+  lands at the new spot is the tail end of the previous indicator instead of an
+  empty frame.
 * Tested on Windows 11 build 26200 (25H2) x64, on a 100% and a 150% display.
+  ARM64 hasn't been tested; the position lookup follows a different calling
+  convention there, so if you run it on ARM64 please let me know how it goes.
 
 ## Credits
 
@@ -112,19 +126,18 @@ both target the same function and work out the origin handling.
 - offsetX: 0
   $name: Horizontal offset
   $description: >-
-    Pixels to nudge the indicator by, at 100% scaling. Positive moves right,
-    negative moves left. The value is scaled to match the monitor, so the same
-    setting moves the same distance on a scaled display. The indicator is kept
-    inside the area Windows lays it out in, so an offset that would push it past
-    an edge stops at the edge instead.
+    Nudge the indicator sideways. A positive number moves it right, a negative one
+    moves it left. It stops at the edge of the screen rather than going off it, and
+    the same number moves it the same distance on any display.
 - offsetY: 0
   $name: Vertical offset
   $description: >-
-    Pixels to nudge the indicator by, at 100% scaling. Positive moves down,
-    negative moves up. The value is scaled to match the monitor, so the same
-    setting moves the same distance on a scaled display. The indicator is kept
-    inside the area Windows lays it out in, so an offset that would push it past
-    an edge stops at the edge instead.
+    Nudge the indicator up or down. A positive number moves it down, a negative one
+    moves it up. It stops at the edge of the screen rather than going off it, and
+    the same number moves it the same distance on any display.
+- skipHideAnimation: false
+  $name: Skip the slide out animation
+  $description: The indicator disappears instead of sliding away.
 - perIndicator:
   - volume: same
     $name: Volume
@@ -217,10 +230,25 @@ both target the same function and work out the origin handling.
     - bottomLeft: Bottom left
     - bottomCenter: Bottom center
     - bottomRight: Bottom right
+  - virtualDesktop: same
+    $name: Virtual desktop name
+    $options:
+    - same: Same as the main position
+    - topLeft: Top left
+    - topCenter: Top center
+    - topRight: Top right
+    - middleLeft: Middle left
+    - center: Center
+    - middleRight: Middle right
+    - bottomLeft: Bottom left
+    - bottomCenter: Bottom center
+    - bottomRight: Bottom right
   $name: Position per indicator
   $description: >-
-    Give an individual indicator its own spot. Anything left on Same as the main
-    position follows the Position setting above. The offsets apply to all of them.
+    Give one kind of indicator a spot of its own. The virtual desktop name popup
+    is separated from other text indicators so it can be placed independently.
+    Anything left on "Same as the main position" follows the Position setting
+    above. The offsets apply to all of them either way.
 */
 // ==/WindhawkModSettings==
 
@@ -254,6 +282,7 @@ enum class Indicator {
     camera,
     microphone,
     text,
+    virtualDesktop,
     count,
     // Nothing has been shown yet, so there is no kind to look up and the main
     // position is used.
@@ -275,14 +304,12 @@ std::atomic<bool> g_kindUnreliable{false};
 constexpr Position kDefaultPosition = Position::topRight;
 
 // Written from Wh_ModSettingsChanged on an arbitrary thread and read on the
-// confirmator's UI thread, so the members are atomic. Each field is still read
-// separately, so a settings change landing mid-placement can put one indicator
-// on screen with a mix of old and new values. That was true before the atomics
-// too, and one misplaced indicator is the whole cost.
+// confirmator's UI thread, so the members are atomic.
 struct {
     std::atomic<Position> position;
     std::atomic<int> offsetX;
     std::atomic<int> offsetY;
+    std::atomic<bool> skipHideAnimation;
     // Position::windowsDefault means "no override", so the main position is used.
     // It is never offered as a per-indicator choice, which leaves it free to be
     // the sentinel. The main position keeps its own meaning of leaving Windows'
@@ -299,6 +326,33 @@ bool AnyPerIndicator() {
 
     return false;
 }
+
+// Only for the log, so a line someone is asked to read back says which kind it was
+// rather than a number to count enum members against.
+PCWSTR IndicatorName(Indicator indicator) {
+    static constexpr PCWSTR kNames[] = {
+        L"volume",     L"brightness",      L"keyboardBrightness",
+        L"airplaneMode", L"camera",        L"microphone",
+        L"text",       L"virtualDesktop",
+    };
+    static_assert(ARRAYSIZE(kNames) == (size_t)Indicator::count);
+
+    size_t i = (size_t)indicator;
+    return i < ARRAYSIZE(kNames) ? kNames[i] : L"unknown";
+}
+
+// Said from two places. The text is shared rather than the call, so the line still
+// reports whichever function actually logged it.
+constexpr PCWSTR kKindUnreliableMessage =
+    L"An indicator entry point didn't resolve, so the position per indicator "
+    L"settings are ignored and everything uses the main position";
+
+// Set once in Wh_ModInit when either half of the hide pair didn't resolve.
+bool g_hideAnimationUnavailable = false;
+
+constexpr PCWSTR kHideAnimationUnavailableMessage =
+    L"The hide entry points didn't resolve, so the slide out animation is left "
+    L"alone";
 
 // The position to place the indicator that is being shown right now.
 Position CurrentPosition() {
@@ -400,14 +454,114 @@ void PlaceInArea(const WinrtRect& area,
     }
 }
 
+// The same eight kinds arrive here first. These are the com vtable entries the
+// interface is called through, so they run before the host's own entry points
+// and before the position is worked out, and they are still there on builds
+// where the host's private coroutines have been refactored away. Whichever of
+// the two fires first records the kind, and recording it twice for one showing
+// is harmless since both agree. They return an HRESULT rather than the
+// implementation's own return.
+
+using ShowVolumeThunk_t = int(WINAPI*)(void* pThis, int value);
+ShowVolumeThunk_t ShowVolumeThunk_Original;
+int WINAPI ShowVolumeThunk_Hook(void* pThis, int value) {
+    g_currentIndicator.store(Indicator::volume);
+    return ShowVolumeThunk_Original(pThis, value);
+}
+
+using ShowBrightnessThunk_t = int(WINAPI*)(void* pThis, int value);
+ShowBrightnessThunk_t ShowBrightnessThunk_Original;
+int WINAPI ShowBrightnessThunk_Hook(void* pThis, int value) {
+    g_currentIndicator.store(Indicator::brightness);
+    return ShowBrightnessThunk_Original(pThis, value);
+}
+
+using ShowKeyboardBrightnessThunk_t = int(WINAPI*)(void* pThis, int value);
+ShowKeyboardBrightnessThunk_t ShowKeyboardBrightnessThunk_Original;
+int WINAPI ShowKeyboardBrightnessThunk_Hook(void* pThis, int value) {
+    g_currentIndicator.store(Indicator::keyboardBrightness);
+    return ShowKeyboardBrightnessThunk_Original(pThis, value);
+}
+
+using ShowAirplaneModeOnThunk_t = int(WINAPI*)(void* pThis, bool value);
+ShowAirplaneModeOnThunk_t ShowAirplaneModeOnThunk_Original;
+int WINAPI ShowAirplaneModeOnThunk_Hook(void* pThis, bool value) {
+    g_currentIndicator.store(Indicator::airplaneMode);
+    return ShowAirplaneModeOnThunk_Original(pThis, value);
+}
+
+using ShowCameraOnThunk_t = int(WINAPI*)(void* pThis, bool value);
+ShowCameraOnThunk_t ShowCameraOnThunk_Original;
+int WINAPI ShowCameraOnThunk_Hook(void* pThis, bool value) {
+    g_currentIndicator.store(Indicator::camera);
+    return ShowCameraOnThunk_Original(pThis, value);
+}
+
+using ShowCameraAccessEnabledThunk_t = int(WINAPI*)(void* pThis, bool value);
+ShowCameraAccessEnabledThunk_t ShowCameraAccessEnabledThunk_Original;
+int WINAPI ShowCameraAccessEnabledThunk_Hook(void* pThis, bool value) {
+    g_currentIndicator.store(Indicator::camera);
+    return ShowCameraAccessEnabledThunk_Original(pThis, value);
+}
+
+using ShowMicrophoneMutedThunk_t = int(WINAPI*)(void* pThis,
+                                                int state,
+                                                void* text);
+ShowMicrophoneMutedThunk_t ShowMicrophoneMutedThunk_Original;
+int WINAPI ShowMicrophoneMutedThunk_Hook(void* pThis, int state, void* text) {
+    g_currentIndicator.store(Indicator::microphone);
+    return ShowMicrophoneMutedThunk_Original(pThis, state, text);
+}
+
+// The virtual desktop name popup goes through the same ShowText entry point as
+// every other text indicator. The only thing that tells them apart at hook time
+// is who called it: twinui.dll for the virtual desktop switch, the aeh module
+// for everything else. Hooking twinui.dll directly crashes the shell, so the
+// caller module is looked up from the return address instead. Cheap, no other
+// module touched, no chance of conflicting with another mod that hooks the same
+// twinui function. GetModuleHandleEx is used at call time rather than caching a
+// range at init, since Wh_ModInit runs before the target process begins and
+// twinui isn't loaded yet on a fresh explorer start.
+bool ReturnAddressIsTwinui(void* returnAddress) {
+    HMODULE fromModule = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            reinterpret_cast<PCWSTR>(returnAddress),
+                            &fromModule)) {
+        return false;
+    }
+    return fromModule == GetModuleHandleW(L"twinui.dll");
+}
+
+// A ShowText call from twinui goes through the thunk first, and the thunk then
+// calls into the async ramp internally. The ramp is a private coroutine only
+// reachable from inside the confirmator DLL, so its own return address can
+// never be in twinui. The thunk records the decision in this thread_local and
+// the ramp reads it back. Cleared when the thunk returns so it doesn't leak
+// into a later plain text show on the same thread.
+thread_local bool g_textCallFromTwinui = false;
+
+using ShowTextThunk_t = int(WINAPI*)(void* pThis, void* text, bool value);
+ShowTextThunk_t ShowTextThunk_Original;
+int WINAPI ShowTextThunk_Hook(void* pThis, void* text, bool value) {
+    bool fromTwinui = ReturnAddressIsTwinui(__builtin_return_address(0));
+    g_textCallFromTwinui = fromTwinui;
+    g_currentIndicator.store(fromTwinui ? Indicator::virtualDesktop
+                                        : Indicator::text);
+    int result = ShowTextThunk_Original(pThis, text, value);
+    g_textCallFromTwinui = false;
+    return result;
+}
+
 // Each kind of indicator has its own entry point on the host, so the kind is
 // recorded as one is asked for and read back when the position is worked out.
 // They are private coroutines returning winrt::fire_and_forget, an empty struct,
 // so the return is passed through as the single byte it occupies. Every one is
 // hooked as optional, so a name that stops resolving on some build costs the per
 // indicator feature rather than the whole mod. Wh_ModInit checks afterwards that
-// all eight resolved, and if any didn't it ignores the overrides for the session
-// instead of placing one kind using another kind's spot.
+// each kind can still be recognised by one layer or the other, and if any kind
+// has neither it ignores the overrides for the session instead of placing one
+// kind using another kind's spot.
 
 using ShowVolumeAsync_t = char(WINAPI*)(void* pThis, int value);
 ShowVolumeAsync_t ShowVolumeAsync_Original;
@@ -469,10 +623,127 @@ char WINAPI ShowMicrophoneMutedAsync_Hook(void* pThis, int value, void* text) {
 using ShowTextAsync_t = char(WINAPI*)(void* pThis, void* text, bool value);
 ShowTextAsync_t ShowTextAsync_Original;
 char WINAPI ShowTextAsync_Hook(void* pThis, void* text, bool value) {
-    g_currentIndicator.store(Indicator::text);
+    g_currentIndicator.store(g_textCallFromTwinui ? Indicator::virtualDesktop
+                                                  : Indicator::text);
     return ShowTextAsync_Original(pThis, text, value);
 }
 
+// The control hides itself two ways and Windows picks the animated one. Handing the
+// call to the other is the whole feature, so nothing has to be torn out of the
+// animation and nothing outside this control is touched.
+using ConfirmatorHostControl_Hide_t = void(WINAPI*)(void* pThis);
+ConfirmatorHostControl_Hide_t ConfirmatorHostControl_Hide_Original;
+
+// Same shape as the one above today, declared separately so a drift in one doesn't
+// quietly redefine the other.
+using ConfirmatorHostControl_HideWithoutAnimation_t = void(WINAPI*)(void* pThis);
+ConfirmatorHostControl_HideWithoutAnimation_t
+    ConfirmatorHostControl_HideWithoutAnimation_Original;
+void WINAPI ConfirmatorHostControl_Hide_Hook(void* pThis) {
+    // Nothing on the builds this was written against calls back the other way,
+    // but a build where HideWithoutAnimation went through Hide would otherwise
+    // turn the redirect into unbounded recursion rather than a dead setting.
+    thread_local bool redirecting = false;
+
+    bool skip = !redirecting && g_settings.skipHideAnimation.load() &&
+                ConfirmatorHostControl_HideWithoutAnimation_Original;
+    Wh_Log(L"> skip=%d", (int)skip);
+
+    if (skip) {
+        // Restored however this returns. Hide is an implementation method rather
+        // than an abi thunk, so an hresult_error coming out of it would otherwise
+        // leave the flag latched and the setting dead for the rest of the session.
+        struct Restore {
+            bool& flag;
+            ~Restore() { flag = false; }
+        } restore{redirecting};
+
+        redirecting = true;
+        return ConfirmatorHostControl_HideWithoutAnimation_Original(pThis);
+    }
+
+    return ConfirmatorHostControl_Hide_Original(pThis);
+}
+
+// Declared with the platform's own return convention so the compiler produces
+// the hidden-pointer form on x64 and the HFA-in-registers form on ARM64.
+// Hand-rolling the hidden pointer worked on x64 but shifted every argument on
+// ARM64, where four floats are a homogeneous aggregate returned in s0-s3.
+// WinrtRect is four floats = 16 bytes. Both x64 and ARM64 return it via
+// hidden pointer, but the pointer slot differs by architecture and, on x64,
+// by compiler:
+//
+//   - MSVC treats this as a non-static member function: RCX carries `this`,
+//     the hidden retval pointer goes in RDX, and the rect argument follows.
+//   - Clang targeting x86_64-w64-mingw32 sees the WINAPI-declared type as a
+//     free function and puts the hidden retval pointer in RCX with `this` in
+//     RDX. The MSVC-compiled explorer.exe caller expects the MSVC layout, so
+//     the compiler-managed return-by-value form writes the result to what the
+//     caller was using as `this`. The shell crashes on the first call.
+//   - ARM64 uses AAPCS64: four floats are a Homogeneous Floating-point
+//     Aggregate returned in s0-s3 with no hidden pointer at all, so the
+//     compiler-managed form emits exactly what the target expects.
+//
+// So the signature is declared per architecture: hand-rolled hidden pointer on
+// x64 to match MSVC's placement, compiler-managed return by value on ARM64 so
+// the compiler emits the HFA form.
+#if defined(_M_ARM64) || defined(__aarch64__)
+using HardwareConfirmatorHost_GetPositionRect_t =
+    WinrtRect(WINAPI*)(void* pThis, const WinrtRect& rect);
+HardwareConfirmatorHost_GetPositionRect_t
+    HardwareConfirmatorHost_GetPositionRect_Original;
+WinrtRect WINAPI
+HardwareConfirmatorHost_GetPositionRect_Hook(void* pThis,
+                                             const WinrtRect& rect) {
+    Wh_Log(L"> indicator=%s", IndicatorName(g_currentIndicator.load()));
+
+    int offsetSettingX = g_settings.offsetX.load();
+    int offsetSettingY = g_settings.offsetY.load();
+
+    // Scale the offsets to the target monitor's DPI so the same number moves
+    // the same distance everywhere.
+    if (offsetSettingX || offsetSettingY) {
+        RECT areaRect{
+            .left = (LONG)rect.X,
+            .top = (LONG)rect.Y,
+            .right = (LONG)(rect.X + rect.Width),
+            .bottom = (LONG)(rect.Y + rect.Height),
+        };
+        HMONITOR monitor = MonitorFromRect(&areaRect, MONITOR_DEFAULTTONEAREST);
+        UINT dpiX = 96;
+        UINT dpiY = 96;
+        if (SUCCEEDED(GetDpiForMonitor(monitor, MDT_DEFAULT, &dpiX, &dpiY)) &&
+            dpiX && dpiY) {
+            offsetSettingX = MulDiv(offsetSettingX, dpiX, 96);
+            offsetSettingY = MulDiv(offsetSettingY, dpiY, 96);
+        }
+    }
+
+    // Shift the input rect to 0,0 since the original function assumes that.
+    WinrtRect shiftedRect = rect;
+    float offsetX = shiftedRect.X;
+    float offsetY = shiftedRect.Y;
+    shiftedRect.X = 0;
+    shiftedRect.Y = 0;
+
+    WinrtRect result = HardwareConfirmatorHost_GetPositionRect_Original(
+        pThis, shiftedRect);
+
+    Position position = CurrentPosition();
+    bool anyPlacement = position != Position::windowsDefault || offsetSettingX ||
+                        offsetSettingY;
+
+    if (anyPlacement) {
+        PlaceInArea(shiftedRect, position, offsetSettingX, offsetSettingY,
+                    &result);
+    }
+
+    result.X += offsetX;
+    result.Y += offsetY;
+
+    return result;
+}
+#else
 using HardwareConfirmatorHost_GetPositionRect_t =
     WinrtRect*(WINAPI*)(void* pThis, WinrtRect* retval, const WinrtRect* rect);
 HardwareConfirmatorHost_GetPositionRect_t
@@ -481,18 +752,13 @@ WinrtRect* WINAPI
 HardwareConfirmatorHost_GetPositionRect_Hook(void* pThis,
                                              WinrtRect* retval,
                                              const WinrtRect* rect) {
-    Wh_Log(L"> indicator=%d", (int)g_currentIndicator.load());
+    Wh_Log(L"> indicator=%s", IndicatorName(g_currentIndicator.load()));
 
-    // Read the offsets once so the placement below uses one consistent pair.
     int offsetSettingX = g_settings.offsetX.load();
     int offsetSettingY = g_settings.offsetY.load();
 
-    // The rect is in the target monitor's physical pixels, so a raw offset would
-    // cover less ground the more that monitor is scaled up. Scaling by its DPI
-    // keeps the setting meaning the same distance everywhere. Both offsets are
-    // zero by default, and then there is nothing to scale and no reason to look
-    // the monitor up on every showing. Resolve it before the origin is shifted
-    // away.
+    // Scale the offsets to the target monitor's DPI so the same number moves
+    // the same distance everywhere.
     if (offsetSettingX || offsetSettingY) {
         RECT areaRect{
             .left = (LONG)rect->X,
@@ -521,16 +787,22 @@ HardwareConfirmatorHost_GetPositionRect_Hook(void* pThis,
         pThis, retval, &shiftedRect);
 
     if (result) {
-        PlaceInArea(shiftedRect, CurrentPosition(), offsetSettingX,
-                    offsetSettingY, result);
+        Position position = CurrentPosition();
+        bool anyPlacement = position != Position::windowsDefault ||
+                            offsetSettingX || offsetSettingY;
 
-        // Shift the result back.
+        if (anyPlacement) {
+            PlaceInArea(shiftedRect, position, offsetSettingX,
+                        offsetSettingY, result);
+        }
+
         result->X += offsetX;
         result->Y += offsetY;
     }
 
     return result;
 }
+#endif
 
 Position PositionFromString(PCWSTR value) {
     if (wcscmp(value, L"topLeft") == 0) {
@@ -578,6 +850,8 @@ void LoadSettings() {
     g_settings.offsetX = Wh_GetIntSetting(L"offsetX");
     g_settings.offsetY = Wh_GetIntSetting(L"offsetY");
 
+    g_settings.skipHideAnimation = Wh_GetIntSetting(L"skipHideAnimation");
+
     static const PCWSTR kIndicatorSettings[] = {
         L"perIndicator.volume",
         L"perIndicator.brightness",
@@ -586,6 +860,7 @@ void LoadSettings() {
         L"perIndicator.camera",
         L"perIndicator.microphone",
         L"perIndicator.text",
+        L"perIndicator.virtualDesktop",
     };
     static_assert(ARRAYSIZE(kIndicatorSettings) == (size_t)Indicator::count);
 
@@ -610,7 +885,8 @@ BOOL Wh_ModInit() {
     bool anyPerIndicator = AnyPerIndicator();
 
     if (g_settings.position == Position::windowsDefault && !anyPerIndicator &&
-        !g_settings.offsetX && !g_settings.offsetY) {
+        !g_settings.offsetX && !g_settings.offsetY &&
+        !g_settings.skipHideAnimation) {
         Wh_Log(L"Nothing to do");
         return FALSE;
     }
@@ -681,13 +957,71 @@ BOOL Wh_ModInit() {
             ShowMicrophoneMutedAsync_Hook,
             true,  // optional
         },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowVolume(int))"},
+            &ShowVolumeThunk_Original,
+            ShowVolumeThunk_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowBrightness(int))"},
+            &ShowBrightnessThunk_Original,
+            ShowBrightnessThunk_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowKeyboardBrightness(int))"},
+            &ShowKeyboardBrightnessThunk_Original,
+            ShowKeyboardBrightnessThunk_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowAirplaneModeOn(bool))"},
+            &ShowAirplaneModeOnThunk_Original,
+            ShowAirplaneModeOnThunk_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowCameraOn(bool))"},
+            &ShowCameraOnThunk_Original,
+            ShowCameraOnThunk_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowCameraAccessEnabled(bool))"},
+            &ShowCameraAccessEnabledThunk_Original,
+            ShowCameraAccessEnabledThunk_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowMicrophoneMuted(int,void *))",
+             LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowMicrophoneMuted(int))"},
+            &ShowMicrophoneMutedThunk_Original,
+            ShowMicrophoneMutedThunk_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Windows::Internal::HardwareConfirmator::implementation::HardwareConfirmatorHost,struct winrt::Windows::Internal::HardwareConfirmator::IHardwareConfirmatorHost>::ShowText(void *,bool))"},
+            &ShowTextThunk_Original,
+            ShowTextThunk_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(public: void __cdecl winrt::HWConfirmatorUI::implementation::ConfirmatorHostControl::Hide(void))"},
+            &ConfirmatorHostControl_Hide_Original,
+            ConfirmatorHostControl_Hide_Hook,
+            true,  // optional
+        },
+        {
+            {LR"(public: void __cdecl winrt::HWConfirmatorUI::implementation::ConfirmatorHostControl::HideWithoutAnimation(void))"},
+            &ConfirmatorHostControl_HideWithoutAnimation_Original,
+            nullptr,  // wanted for its address, not hooked
+            true,     // optional
+        },
     };
 
-    // All nine go in every time. The eight that record which kind is being shown
-    // are coroutine ramps that store a value and tail-call the original, so
-    // patching them when no kind has a spot of its own costs nothing worth
-    // measuring, and installing the same set every time keeps the symbol cache
-    // from being resolved again the first time someone turns an override on.
+    // The whole set goes in every time so the symbol cache doesn't need to be
+    // resolved again when someone turns a setting on later.
     if (!HookSymbols(g_hardwareConfirmatorModule, symbolHooks,
                      ARRAYSIZE(symbolHooks))) {
         Wh_Log(L"HookSymbols failed");
@@ -698,34 +1032,74 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    // An optional symbol that isn't found leaves its original pointer alone, so
-    // a null here means that kind would never be recorded and every kind after
-    // it would be placed using a stale one. Rather than misplace an indicator,
-    // drop to the main position for everything and say so in the log.
-    const void* kindRecorders[] = {
-        (void*)ShowVolumeAsync_Original,
-        (void*)ShowBrightnessAsync_Original,
-        (void*)ShowKeyboardBrightnessAsync_Original,
-        (void*)ShowAirplaneModeOnAsync_Original,
-        (void*)ShowCameraOnAsync_Original,
-        (void*)ShowCameraAccessEnabledAsync_Original,
-        (void*)ShowMicrophoneMutedAsync_Original,
-        (void*)ShowTextAsync_Original,
+    // Each kind is recognised as long as one of its two entry points resolved.
+    // Named after the symbols, not the kinds, since camera has two.
+    const struct {
+        PCWSTR name;
+        const void* ramp;
+        const void* thunk;
+    } kindRecorders[] = {
+        {L"ShowVolume",
+         (void*)ShowVolumeAsync_Original,
+         (void*)ShowVolumeThunk_Original},
+        {L"ShowBrightness",
+         (void*)ShowBrightnessAsync_Original,
+         (void*)ShowBrightnessThunk_Original},
+        {L"ShowKeyboardBrightness",
+         (void*)ShowKeyboardBrightnessAsync_Original,
+         (void*)ShowKeyboardBrightnessThunk_Original},
+        {L"ShowAirplaneModeOn",
+         (void*)ShowAirplaneModeOnAsync_Original,
+         (void*)ShowAirplaneModeOnThunk_Original},
+        {L"ShowCameraOn",
+         (void*)ShowCameraOnAsync_Original,
+         (void*)ShowCameraOnThunk_Original},
+        {L"ShowCameraAccessEnabled",
+         (void*)ShowCameraAccessEnabledAsync_Original,
+         (void*)ShowCameraAccessEnabledThunk_Original},
+        {L"ShowMicrophoneMuted",
+         (void*)ShowMicrophoneMutedAsync_Original,
+         (void*)ShowMicrophoneMutedThunk_Original},
+        {L"ShowText",
+         (void*)ShowTextAsync_Original,
+         (void*)ShowTextThunk_Original},
     };
 
-    for (const void* recorder : kindRecorders) {
-        if (!recorder) {
-            g_kindUnreliable = true;
-            // Only worth saying to someone who has an override set. With the
-            // shipped defaults there is nothing being ignored to complain about.
-            if (anyPerIndicator) {
-                Wh_Log(
-                    L"An indicator entry point didn't resolve, so the position "
-                    L"per indicator settings are ignored and everything uses "
-                    L"the main position");
-            }
-            break;
+    if (!ConfirmatorHostControl_Hide_Original ||
+        !ConfirmatorHostControl_HideWithoutAnimation_Original) {
+        g_hideAnimationUnavailable = true;
+        if (g_settings.skipHideAnimation) {
+            Wh_Log(L"%s", kHideAnimationUnavailableMessage);
         }
+    }
+
+    // Report all of them before deciding, so a build that moved several shows all.
+    for (const auto& recorder : kindRecorders) {
+        Wh_Log(L"Entry point %s resolved through ramp=%d thunk=%d", recorder.name,
+               !!recorder.ramp, !!recorder.thunk);
+
+        if (!recorder.ramp && !recorder.thunk) {
+            g_kindUnreliable = true;
+        }
+    }
+
+    // Only worth saying to someone who has an override set. With the shipped
+    // defaults there is nothing being ignored to complain about.
+    if (g_kindUnreliable && anyPerIndicator) {
+        Wh_Log(L"%s", kKindUnreliableMessage);
+    }
+
+    // The thread_local flag that tells virtual desktop popups apart from other
+    // text indicators is set from ShowText's thunk, so if the thunk didn't
+    // resolve, virtual desktop popups silently follow the plain text position.
+    // The ramp resolving on its own is enough to keep text detection working,
+    // so it wouldn't trip the recorder check above. Only worth saying if the
+    // user has actually set a per-kind position for the virtual desktop popup.
+    if (!ShowTextThunk_Original && ShowTextAsync_Original &&
+        g_settings.perIndicator[(size_t)Indicator::virtualDesktop].load() !=
+            Position::windowsDefault) {
+        Wh_Log(L"ShowText thunk did not resolve, virtual desktop popup will "
+               L"use the plain text position");
     }
 
     return TRUE;
@@ -734,9 +1108,6 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    // The hooks are already gone by this point, so handing back the reference
-    // taken in Wh_ModInit is safe. Without this every enable and disable cycle
-    // leaves one behind.
     if (g_hardwareConfirmatorModule) {
         FreeLibrary(g_hardwareConfirmatorModule);
         g_hardwareConfirmatorModule = nullptr;
@@ -746,16 +1117,12 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
-    // Every hook is installed either way now, so nothing here needs a reload and
-    // a change takes effect on the next indicator.
     LoadSettings();
-
-    // Turning on the first override no longer re-runs Wh_ModInit, so this is the
-    // only place the person it concerns can still be told.
     if (g_kindUnreliable && AnyPerIndicator()) {
-        Wh_Log(
-            L"An indicator entry point didn't resolve, so the position "
-            L"per indicator settings are ignored and everything uses "
-            L"the main position");
+        Wh_Log(L"%s", kKindUnreliableMessage);
+    }
+
+    if (g_hideAnimationUnavailable && g_settings.skipHideAnimation) {
+        Wh_Log(L"%s", kHideAnimationUnavailableMessage);
     }
 }
