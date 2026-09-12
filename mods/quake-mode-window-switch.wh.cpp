@@ -12,7 +12,7 @@
 /*
 # Quake mode window switch
 
-Press a configurable hotkey (default **Win+`**) to slide a chosen app's
+Press a configurable hotkey (default **Ctrl+Alt+`**) to slide a chosen app's
 window down from off-screen into a docked strip at the top of the
 screen, Quake-console style. Press again (or click another window) to
 slide it back up out of view.
@@ -81,6 +81,7 @@ slide it back up out of view.
 #include <algorithm>
 #include <cwctype>
 #include <cstdlib>
+#include <cstdio>
 #include <cmath>
 
 static std::wstring g_processName;
@@ -287,13 +288,9 @@ static bool GetWindowProcessName(HWND hwnd, std::wstring& nameOut)
     return true;
 }
 
-static bool IsCandidateWindow(HWND hwnd, bool requireVisible)
+static bool IsCandidateWindow(HWND hwnd)
 {
-    if (!IsWindow(hwnd)) {
-        return false;
-    }
-
-    if (requireVisible && !IsWindowVisible(hwnd)) {
+    if (!IsWindow(hwnd) || !IsWindowVisible(hwnd)) {
         return false;
     }
 
@@ -305,20 +302,68 @@ static bool IsCandidateWindow(HWND hwnd, bool requireVisible)
         return false;
     }
 
-    if (!requireVisible) {
-        // Only relevant for the orphaned-hidden fallback: skip a
-        // zero-size window (e.g. an app's hidden helper window) rather
-        // than mistaking it for the parked target.
-        RECT rect;
-        if (!GetWindowRect(hwnd, &rect) || rect.right <= rect.left || rect.bottom <= rect.top) {
-            return false;
-        }
-    }
-
     return true;
 }
 
 // ---- Window styling ----
+
+// Persisted (survives this process exiting, e.g. a crash or a killed tool
+// process) record of the pre-dock state of whichever window is currently
+// captured, so a later process instance can recover a window stranded
+// parked off-screen without mistaking its damaged, already-parked state
+// for the original one to restore.
+static const wchar_t kParkedHwndValueName[] = L"parkedHwnd";
+static const wchar_t kParkedStateValueName[] = L"parkedState";
+
+static void PersistParkedState(HWND hwnd, LONG_PTR exStyle, LONG_PTR style, const WINDOWPLACEMENT& placement)
+{
+    Wh_SetIntValue(kParkedHwndValueName, static_cast<int>(reinterpret_cast<INT_PTR>(hwnd)));
+
+    wchar_t buf[256];
+    swprintf_s(buf, L"%ld,%ld,%u,%ld,%ld,%ld,%ld",
+        static_cast<long>(exStyle),
+        static_cast<long>(style),
+        placement.showCmd,
+        placement.rcNormalPosition.left,
+        placement.rcNormalPosition.top,
+        placement.rcNormalPosition.right,
+        placement.rcNormalPosition.bottom);
+    Wh_SetStringValue(kParkedStateValueName, buf);
+}
+
+static void ClearPersistedParkedState()
+{
+    Wh_SetIntValue(kParkedHwndValueName, 0);
+    Wh_SetStringValue(kParkedStateValueName, L"");
+}
+
+static bool LoadPersistedParkedState(HWND& hwndOut, LONG_PTR& exStyleOut, LONG_PTR& styleOut, WINDOWPLACEMENT& placementOut)
+{
+    int hwndValue = Wh_GetIntValue(kParkedHwndValueName, 0);
+    if (hwndValue == 0) {
+        return false;
+    }
+
+    wchar_t buf[256] = {};
+    if (Wh_GetStringValue(kParkedStateValueName, buf, ARRAYSIZE(buf)) == 0) {
+        return false;
+    }
+
+    long exStyle, style, left, top, right, bottom;
+    unsigned showCmd;
+    if (swscanf_s(buf, L"%ld,%ld,%u,%ld,%ld,%ld,%ld",
+            &exStyle, &style, &showCmd, &left, &top, &right, &bottom) != 7) {
+        return false;
+    }
+
+    hwndOut = reinterpret_cast<HWND>(static_cast<INT_PTR>(hwndValue));
+    exStyleOut = exStyle;
+    styleOut = style;
+    placementOut = WINDOWPLACEMENT{sizeof(WINDOWPLACEMENT)};
+    placementOut.showCmd = showCmd;
+    placementOut.rcNormalPosition = {left, top, right, bottom};
+    return true;
+}
 
 // Restores styles and the original WINDOWPLACEMENT (position, size, and
 // minimized/maximized state) onto whichever window ApplyWindowStyles last
@@ -331,6 +376,8 @@ static void RestoreOriginalState()
 
     HWND hwnd = g_styledHwnd;
     g_styledHwnd = nullptr;
+
+    ClearPersistedParkedState();
 
     if (!IsWindow(hwnd)) {
         return;
@@ -353,7 +400,14 @@ static void RestoreOriginalState()
 // touched and applies the configured taskbar/title-bar tweaks. Tracked
 // by g_styledHwnd, independent of g_targetHwnd, so a stale capture never
 // gets applied to (or restored onto) the wrong window.
-static void ApplyWindowStyles(HWND hwnd)
+//
+// useRecoveredState is set by FindTargetWindow's orphan-recovery path: the
+// window's *current* styles/placement are the damaged, already-parked ones
+// (SW_HIDE, off-screen, taskbar/title-bar tweaks already applied), so the
+// caller seeds g_originalExStyle/g_originalStyle/g_originalPlacement from
+// the persisted pre-dock values instead of letting this function capture
+// the live (wrong) ones.
+static void ApplyWindowStyles(HWND hwnd, bool useRecoveredState = false)
 {
     if (g_styledHwnd == hwnd) {
         return;
@@ -363,11 +417,15 @@ static void ApplyWindowStyles(HWND hwnd)
         RestoreOriginalState();
     }
 
-    g_originalExStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-    g_originalStyle = GetWindowLongPtrW(hwnd, GWL_STYLE);
-    g_originalPlacement = WINDOWPLACEMENT{sizeof(WINDOWPLACEMENT)};
-    GetWindowPlacement(hwnd, &g_originalPlacement);
+    if (!useRecoveredState) {
+        g_originalExStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        g_originalStyle = GetWindowLongPtrW(hwnd, GWL_STYLE);
+        g_originalPlacement = WINDOWPLACEMENT{sizeof(WINDOWPLACEMENT)};
+        GetWindowPlacement(hwnd, &g_originalPlacement);
+    }
     g_styledHwnd = hwnd;
+
+    PersistParkedState(hwnd, g_originalExStyle, g_originalStyle, g_originalPlacement);
 
     LONG_PTR exStyle = g_originalExStyle;
     if (g_hideFromTaskbar) {
@@ -397,16 +455,9 @@ static void ApplyWindowStyles(HWND hwnd)
     }
 }
 
-struct FindWindowContext {
-    HWND found;
-    bool requireVisible;
-};
-
 static BOOL CALLBACK FindTargetWindowProc(HWND hwnd, LPARAM lParam)
 {
-    FindWindowContext& ctx = *reinterpret_cast<FindWindowContext*>(lParam);
-
-    if (!IsCandidateWindow(hwnd, ctx.requireVisible)) {
+    if (!IsCandidateWindow(hwnd)) {
         return TRUE;
     }
 
@@ -415,7 +466,7 @@ static BOOL CALLBACK FindTargetWindowProc(HWND hwnd, LPARAM lParam)
         return TRUE;
     }
 
-    ctx.found = hwnd;
+    *reinterpret_cast<HWND*>(lParam) = hwnd;
     return FALSE;
 }
 
@@ -429,19 +480,37 @@ static HWND FindTargetWindow()
         }
     }
 
-    FindWindowContext ctx{nullptr, /* requireVisible */ true};
-    EnumWindows(FindTargetWindowProc, reinterpret_cast<LPARAM>(&ctx));
+    HWND found = nullptr;
+    EnumWindows(FindTargetWindowProc, reinterpret_cast<LPARAM>(&found));
 
-    if (!ctx.found) {
+    bool useRecoveredState = false;
+
+    if (!found) {
         // Nothing visible matched - the tool process may have ended
-        // abnormally (crash, killed) while the window was parked SW_HIDE'd,
-        // leaving it invisible with no taskbar button and no Alt+Tab entry.
-        // Fall back to a non-visible match so it isn't stranded forever.
-        ctx.requireVisible = false;
-        EnumWindows(FindTargetWindowProc, reinterpret_cast<LPARAM>(&ctx));
+        // abnormally (crash, killed, or a hung target that outlasted the
+        // uninit join) while the window was parked SW_HIDE'd, leaving it
+        // invisible with no taskbar button and no Alt+Tab entry. Recover
+        // it via the pre-dock state persisted in PersistParkedState,
+        // rather than scanning for any hidden window of the process -
+        // that could grab an unrelated tray app's helper window, or adopt
+        // the parked window's *current*, already-damaged state as the
+        // "original" to restore later.
+        HWND parkedHwnd = nullptr;
+        LONG_PTR parkedExStyle = 0;
+        LONG_PTR parkedStyle = 0;
+        WINDOWPLACEMENT parkedPlacement = {};
+        if (LoadPersistedParkedState(parkedHwnd, parkedExStyle, parkedStyle, parkedPlacement) &&
+            IsWindow(parkedHwnd)) {
+            std::wstring processName;
+            if (GetWindowProcessName(parkedHwnd, processName) && processName == g_processName) {
+                found = parkedHwnd;
+                g_originalExStyle = parkedExStyle;
+                g_originalStyle = parkedStyle;
+                g_originalPlacement = parkedPlacement;
+                useRecoveredState = true;
+            }
+        }
     }
-
-    HWND found = ctx.found;
 
     if (found != g_targetHwnd) {
         // The previous target is gone or no longer matches; don't carry
@@ -451,7 +520,7 @@ static HWND FindTargetWindow()
 
     g_targetHwnd = found;
     if (found) {
-        ApplyWindowStyles(found);
+        ApplyWindowStyles(found, useRecoveredState);
     }
     return found;
 }
