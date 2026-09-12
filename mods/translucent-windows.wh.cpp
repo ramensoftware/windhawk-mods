@@ -1048,7 +1048,6 @@ BOOL WINAPI HookedExtTextOutW(
     SelectObject(memDC, GetCurrentObject(hdc, OBJ_FONT));
     SetTextAlign(memDC, GetTextAlign(hdc));
     SetLayout(memDC, GetLayout(hdc));
-    SetMapMode(memDC, GetMapMode(hdc));
     SetBkMode(memDC, TRANSPARENT);
     SetTextColor(memDC, RGB(255, 255, 255)); // White text mask
 
