@@ -2,12 +2,50 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-11T14:06:00.000Z</updated>
+    <updated>2026-09-12T12:37:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Title Bar Label 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-title-bar-label#12ff4e1fed9336f02f00ae94d92f5962a1112e93</id>
+        <link href="https://windhawk.net/mods/explorer-title-bar-label"/>
+        <updated>2026-09-12T12:37:10.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorertitlebarlabel">Explorer Title Bar Label</h1>
+<p>Add custom text, date and time to the right side of the Windows 11 File Explorer title bar.</p>
+<p><img src="https://raw.githubusercontent.com/digart11/explorer-title-bar-label/main/images/screenshot.png" alt="Explorer Title Bar Label" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Custom text, date and time</li>
+<li>Flexible date display</li>
+<li>12-hour or 24-hour time with optional seconds</li>
+<li>Font, size, weight and color</li>
+<li>Opacity and spacing</li>
+<li>Live updates</li>
+</ul>
+<h2 id="dateandtime">Date and time</h2>
+<p>Choose the date parts and order you prefer:</p>
+<ul>
+<li><strong>Weekday:</strong> None, Mon, Monday</li>
+<li><strong>Day number:</strong> 1, 01</li>
+<li><strong>Month:</strong> 8, 08, Aug, August</li>
+<li><strong>Year:</strong> None, 26, 2026</li>
+<li><strong>Date order:</strong> Month-Day-Year, Day-Month-Year, Year-Month-Day</li>
+<li><strong>Numeric separator:</strong> <code>/</code>, <code>-</code>, <code>.</code></li>
+</ul>
+<p>Time can use <strong>12-hour or 24-hour format</strong>, with optional seconds.</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>This mod does not use XAML Diagnostics, so it can be used together with <strong>Windows 11 File Explorer Styler</strong> and other tools/mods that consume File Explorer XAML diagnostics.</p>
+<p>If the mod is enabled while File Explorer windows are already open, the label may only appear in newly opened windows or after Explorer rebuilds the relevant tab UI (for example, after tab activity). This is a limitation of avoiding XAML Diagnostics.</p>
+<h2 id="credits">Credits</h2>
+<p>Parts of the File Explorer hook and XAML discovery plumbing are adapted from <strong>Explorer Command Bar</strong> by <strong>DanRotaru</strong>, licensed under the MIT License.</p>]]></content>
+        <author>
+            <name>digART</name>
+            <uri>https://github.com/digart11</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start button colorizer 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-start-button-colorizer#e0a0b51bcad52f7f2dc5edc42be0026f2a093b59</id>
@@ -1069,36 +1107,6 @@ segment simply stays in <code>{title}</code>.</p></li>
         <author>
             <name>NeiZ</name>
             <uri>https://github.com/NeiZqwe</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7/8.1 Language Switcher Restorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win7-language-switcher-restorer#bdc548be9cea54ede4520004188e7c0db2c4017d</id>
-        <link href="https://windhawk.net/mods/win7-language-switcher-restorer"/>
-        <updated>2026-09-01T20:53:11.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows781languageswitcherrestorer">Windows 7/8.1 Language Switcher Restorer</h1>
-<h2 id="about">About</h2>
-<p>This mod restores the classic <strong>Windows 7 and 8.1 language switcher</strong> on Windows 10 and Windows 11, enabling rapid switching between keyboard layouts and input languages.</p>
-<p><strong>Important</strong>: This is a <strong>best-effort visual and functional recreation</strong>. The mod intercepts clicks on the taskbar language indicator, as well as the <strong>Win+Space</strong> and <strong>Alt+Shift / Ctrl+Shift</strong> keyboard shortcuts, replacing the modern Windows 10/11 flyout with a fast, lightweight, classic switcher.</p>
-<p>The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 23H2, and Windows 11 24H2.</p>
-<h2 id="screenshots">Screenshots</h2>
-<h2 id="windows7theme">Windows 7 Theme</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7language.PNG" alt="win7language.PNG" /></p>
-<h2 id="windows81theme">Windows 8.1 Theme</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win8language.PNG" alt="win8language.PNG" /></p>
-<h2 id="mainfeatures">Main Features</h2>
-<ul>
-<li><strong>Two classic styles</strong>: selection between the Windows 7 classic menu and the Windows 8.1 modern flyout.</li>
-<li><strong>Light and dark theme support</strong>: automatic adaptation to system colors and theme.</li>
-<li><strong>Quick dismissal</strong>: closes upon clicking outside or pressing Escape.</li>
-<li><strong>Translated into 27 languages</strong>: fully localized interface.</li>
-<li><strong>Win+Space cycling</strong>: holding Win and pressing Space cycles through layouts without popping up the Start Menu.</li>
-<li><strong>Alt+Shift and Ctrl+Shift support</strong>: fast switching with auto-repeat suppression and clean modifier sequence tracking.</li>
-<li><strong>Robust Multi-Threaded Architecture</strong>: modeled on win7-network-flyout-recreation for rock-solid stability and clean reloading.</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>

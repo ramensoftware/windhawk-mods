@@ -5725,6 +5725,38 @@
         "version": "1.0"
       }
     },
+    "explorer-title-bar-label": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1789216630000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1789216630000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "digART",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -ldwmapi -lcomctl32",
+        "description": "Add custom text, date and time to the Windows 11 File Explorer title bar.",
+        "github": "https://github.com/digart11",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Explorer Title Bar Label",
+        "version": "1.0.0"
+      }
+    },
     "explorer-toolbar-links-item": {
       "details": {
         "defaultSorting": 2295,

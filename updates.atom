@@ -2,12 +2,50 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-12T12:21:02.000Z</updated>
+    <updated>2026-09-12T12:37:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Title Bar Label 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-title-bar-label#12ff4e1fed9336f02f00ae94d92f5962a1112e93</id>
+        <link href="https://windhawk.net/mods/explorer-title-bar-label"/>
+        <updated>2026-09-12T12:37:10.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorertitlebarlabel">Explorer Title Bar Label</h1>
+<p>Add custom text, date and time to the right side of the Windows 11 File Explorer title bar.</p>
+<p><img src="https://raw.githubusercontent.com/digart11/explorer-title-bar-label/main/images/screenshot.png" alt="Explorer Title Bar Label" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Custom text, date and time</li>
+<li>Flexible date display</li>
+<li>12-hour or 24-hour time with optional seconds</li>
+<li>Font, size, weight and color</li>
+<li>Opacity and spacing</li>
+<li>Live updates</li>
+</ul>
+<h2 id="dateandtime">Date and time</h2>
+<p>Choose the date parts and order you prefer:</p>
+<ul>
+<li><strong>Weekday:</strong> None, Mon, Monday</li>
+<li><strong>Day number:</strong> 1, 01</li>
+<li><strong>Month:</strong> 8, 08, Aug, August</li>
+<li><strong>Year:</strong> None, 26, 2026</li>
+<li><strong>Date order:</strong> Month-Day-Year, Day-Month-Year, Year-Month-Day</li>
+<li><strong>Numeric separator:</strong> <code>/</code>, <code>-</code>, <code>.</code></li>
+</ul>
+<p>Time can use <strong>12-hour or 24-hour format</strong>, with optional seconds.</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>This mod does not use XAML Diagnostics, so it can be used together with <strong>Windows 11 File Explorer Styler</strong> and other tools/mods that consume File Explorer XAML diagnostics.</p>
+<p>If the mod is enabled while File Explorer windows are already open, the label may only appear in newly opened windows or after Explorer rebuilds the relevant tab UI (for example, after tab activity). This is a limitation of avoiding XAML Diagnostics.</p>
+<h2 id="credits">Credits</h2>
+<p>Parts of the File Explorer hook and XAML discovery plumbing are adapted from <strong>Explorer Command Bar</strong> by <strong>DanRotaru</strong>, licensed under the MIT License.</p>]]></content>
+        <author>
+            <name>digART</name>
+            <uri>https://github.com/digart11</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.4.5]]></title>
         <id>https://windhawk.net/mods/taskbar-labels#cc00cec7e715c06c8242113ce8ce2fe117e120e1</id>
@@ -541,23 +579,6 @@ and to all context menus.</p>
         <author>
             <name>Valer100</name>
             <uri>https://github.com/Valer100</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Adjustable tray icons padding for Win10 taskbar 1.0]]></title>
-        <id>https://windhawk.net/mods/dense-tray-icons-padding-old-taskbar#70b2e94eb5a6d619418a6a4b47ad9a164b21b3ab</id>
-        <link href="https://windhawk.net/mods/dense-tray-icons-padding-old-taskbar"/>
-        <updated>2026-09-07T19:03:44.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="adjustabletrayiconspaddingforwin10taskbar">Adjustable tray icons padding for Win10 taskbar</h1>
-<p>This is a port of functionality of 7+ Taskbar Tweaker that allows to adjust the padding of the tray icons
-in legacy (Win10) taskbar (running either under Windows 10 or Windows 11). To adjust the tray icons padding on the new Win11 taskbar,
-use the mod <code>Taskbar tray icon spacing and grid</code>.</p>
-<p><img src="https://i.imgur.com/NjGhXuc.png" alt="screenshot" /></p>
-<p>The default padding value is set to 2, the same as under Windows 95-Windows XP, more dense than under Windows 7, but can be changed in mod's options.</p>
-<p>Explorer should be restarted after enabling this mod.</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
