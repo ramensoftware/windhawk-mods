@@ -480,7 +480,7 @@ bool InstallNativeAltTabHook() {
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK twinuiPcshellHooks[] = {
         {
             {LR"(public: virtual long __cdecl XamlAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
             &g_XamlAltTabViewHost_Show_Original,
@@ -488,7 +488,7 @@ bool InstallNativeAltTabHook() {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(twinuiPcshell, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(twinuiPcshell, twinuiPcshellHooks, ARRAYSIZE(twinuiPcshellHooks))) {
         Wh_Log(L"Native Windows 11 Alt+Tab symbol was not resolved; fallbacks remain active");
         return false;
     }
