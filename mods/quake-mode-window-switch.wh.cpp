@@ -287,9 +287,13 @@ static bool GetWindowProcessName(HWND hwnd, std::wstring& nameOut)
     return true;
 }
 
-static bool IsCandidateWindow(HWND hwnd)
+static bool IsCandidateWindow(HWND hwnd, bool requireVisible)
 {
-    if (!IsWindow(hwnd) || !IsWindowVisible(hwnd)) {
+    if (!IsWindow(hwnd)) {
+        return false;
+    }
+
+    if (requireVisible && !IsWindowVisible(hwnd)) {
         return false;
     }
 
@@ -299,6 +303,16 @@ static bool IsCandidateWindow(HWND hwnd)
 
     if (GetWindow(hwnd, GW_OWNER) != nullptr) {
         return false;
+    }
+
+    if (!requireVisible) {
+        // Only relevant for the orphaned-hidden fallback: skip a
+        // zero-size window (e.g. an app's hidden helper window) rather
+        // than mistaking it for the parked target.
+        RECT rect;
+        if (!GetWindowRect(hwnd, &rect) || rect.right <= rect.left || rect.bottom <= rect.top) {
+            return false;
+        }
     }
 
     return true;
@@ -383,9 +397,16 @@ static void ApplyWindowStyles(HWND hwnd)
     }
 }
 
+struct FindWindowContext {
+    HWND found;
+    bool requireVisible;
+};
+
 static BOOL CALLBACK FindTargetWindowProc(HWND hwnd, LPARAM lParam)
 {
-    if (!IsCandidateWindow(hwnd)) {
+    FindWindowContext& ctx = *reinterpret_cast<FindWindowContext*>(lParam);
+
+    if (!IsCandidateWindow(hwnd, ctx.requireVisible)) {
         return TRUE;
     }
 
@@ -394,7 +415,7 @@ static BOOL CALLBACK FindTargetWindowProc(HWND hwnd, LPARAM lParam)
         return TRUE;
     }
 
-    *reinterpret_cast<HWND*>(lParam) = hwnd;
+    ctx.found = hwnd;
     return FALSE;
 }
 
@@ -408,8 +429,19 @@ static HWND FindTargetWindow()
         }
     }
 
-    HWND found = nullptr;
-    EnumWindows(FindTargetWindowProc, reinterpret_cast<LPARAM>(&found));
+    FindWindowContext ctx{nullptr, /* requireVisible */ true};
+    EnumWindows(FindTargetWindowProc, reinterpret_cast<LPARAM>(&ctx));
+
+    if (!ctx.found) {
+        // Nothing visible matched - the tool process may have ended
+        // abnormally (crash, killed) while the window was parked SW_HIDE'd,
+        // leaving it invisible with no taskbar button and no Alt+Tab entry.
+        // Fall back to a non-visible match so it isn't stranded forever.
+        ctx.requireVisible = false;
+        EnumWindows(FindTargetWindowProc, reinterpret_cast<LPARAM>(&ctx));
+    }
+
+    HWND found = ctx.found;
 
     if (found != g_targetHwnd) {
         // The previous target is gone or no longer matches; don't carry
@@ -527,6 +559,14 @@ static void ShowTargetWindow(HWND hwnd)
 
     RECT docked, hidden;
     GetDockedAndHiddenRects(docked, hidden);
+
+    // IsWindowVisible is TRUE for a minimized window, and SW_SHOWNA below
+    // shows it in its current (still iconic) state - so a minimized target
+    // would otherwise never reappear and every hotkey press would silently
+    // flip g_visible without anything visible happening.
+    if (IsIconic(hwnd)) {
+        ShowWindow(hwnd, SW_RESTORE);
+    }
 
     SetWindowPos(
         hwnd,
@@ -675,6 +715,14 @@ static DWORD WINAPI HotkeyThreadProc(LPVOID)
     DestroyWindow(hwnd);
     UnregisterClassW(kMsgWndClassName, GetModuleHandle(nullptr));
 
+    // Must run here, not in WhTool_ModUninit: window-coordinate APIs are
+    // virtualized per the calling thread's DPI awareness, and this thread
+    // is the one set to PER_MONITOR_AWARE_V2 (matching the capture in
+    // ApplyWindowStyles). Restoring from a thread on the process default
+    // awareness would re-scale the captured coordinates on a non-100%
+    // display.
+    RestoreOriginalState();
+
     Wh_Log(L"Quake mode hotkey unregistered");
     return 0;
 }
@@ -705,20 +753,22 @@ void WhTool_ModUninit()
 {
     Wh_Log(L"Uninit");
 
-    // Stop the hotkey thread *before* restoring styles/placement: it can
-    // be mid-toggle or holding a queued WM_HOTKEY, and re-applying its
-    // own state after our restore would strand the window again.
+    // The hotkey thread restores styles/placement itself once its message
+    // loop exits, under its own DPI awareness context - see the end of
+    // HotkeyThreadProc.
     g_running = false;
     if (g_hMsgWnd) {
         PostMessageW(g_hMsgWnd, WM_QUIT, 0, 0);
     }
     if (g_hThread) {
-        WaitForSingleObject(g_hThread, INFINITE);
+        // Bounded: the toggle/restore path does synchronous cross-process
+        // work (SetWindowPos, SetForegroundWindow, AttachThreadInput) that
+        // a hung target app can stall indefinitely, and Wh_ModUninit calls
+        // ExitProcess(0) right after this returns regardless.
+        WaitForSingleObject(g_hThread, 3000);
         CloseHandle(g_hThread);
         g_hThread = nullptr;
     }
-
-    RestoreOriginalState();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
