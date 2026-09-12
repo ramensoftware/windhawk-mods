@@ -547,7 +547,15 @@ struct {
 
 HWND g_hwnd = nullptr;
 HFONT g_font = nullptr;
-UINT_PTR g_timerId = 1;
+constexpr UINT_PTR g_timerId = 1;
+
+int g_appliedX = INT_MIN;
+int g_appliedY = INT_MIN;
+int g_appliedWidth = -1;
+int g_appliedHeight = -1;
+bool g_appliedAlwaysOnTop = false;
+bool g_appliedBackgroundEnabled = false;
+int g_appliedBackgroundCornerRadius = -1;
 HANDLE g_uiThread = nullptr;
 DWORD g_uiThreadId = 0;
 constexpr int HOTKEY_TOGGLE_OVERLAY = 1;
@@ -777,9 +785,11 @@ void RecreateFont() {
         g_font = nullptr;
     }
 
-    HDC hdc = GetDC(nullptr);
-    int height = -MulDiv(settings.fontSize, GetDeviceCaps(hdc, LOGPIXELSY), 72);
-    ReleaseDC(nullptr, hdc);
+    // Keep the font on a fixed 96-DPI basis because all overlay layout
+    // settings are explicit pixel values. Partial DPI scaling of only the
+    // font would make the text grow while columns/padding remain unchanged.
+    constexpr int baseDpi = 96;
+    int height = -MulDiv(settings.fontSize, baseDpi, 72);
 
 DWORD fontQuality = settings.backgroundEnabled
     ? CLEARTYPE_QUALITY
@@ -1692,6 +1702,27 @@ void ApplyOverlayWindowSize(HWND hwnd) {
 
     UpdateAutoHeight(hwnd);
 
+    bool geometryUnchanged =
+        settings.x == g_appliedX &&
+        settings.y == g_appliedY &&
+        settings.width == g_appliedWidth &&
+        settings.height == g_appliedHeight &&
+        settings.alwaysOnTop == g_appliedAlwaysOnTop &&
+        settings.backgroundEnabled == g_appliedBackgroundEnabled &&
+        settings.backgroundCornerRadius == g_appliedBackgroundCornerRadius;
+
+    if (geometryUnchanged) {
+        return;
+    }
+
+    g_appliedX = settings.x;
+    g_appliedY = settings.y;
+    g_appliedWidth = settings.width;
+    g_appliedHeight = settings.height;
+    g_appliedAlwaysOnTop = settings.alwaysOnTop;
+    g_appliedBackgroundEnabled = settings.backgroundEnabled;
+    g_appliedBackgroundCornerRadius = settings.backgroundCornerRadius;
+
     SetWindowPos(
         hwnd,
         GetOverlayInsertAfter(),
@@ -1752,14 +1783,19 @@ void DrawWaterAgeSeparator(HDC hdc, int y) {
 LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_TIMER:
-        RefreshCachedRegistryValues();
+            if (wParam != g_timerId) {
+                break;
+            }
 
-        if (settings.autoHeight) {
+            if (!settings.overlayVisible) {
+                return 0;
+            }
+
+            RefreshCachedRegistryValues();
             ApplyOverlayWindowSize(hwnd);
-        }
 
-        InvalidateRect(hwnd, nullptr, TRUE);
-        return 0;
+            InvalidateRect(hwnd, nullptr, FALSE);
+            return 0;
 
         case WM_PAINT: {
             PAINTSTRUCT ps;
