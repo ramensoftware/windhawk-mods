@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.10.47
+// @version         0.10.53
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -598,9 +598,12 @@ winrt::event_token g_compactTintRenderingToken{};
 bool g_compactTintRenderingHooked = false;
 std::chrono::steady_clock::time_point g_lastCompactTintFrameTime{};
 [[clang::no_destroy]] Border g_dynamicMainOcclusion = nullptr;
+[[clang::no_destroy]] ScaleTransform g_dynamicMainOcclusionGlowScale = nullptr;
 [[clang::no_destroy]] Border g_dynamicMainWashHost = nullptr;
 [[clang::no_destroy]] Image g_dynamicMainWash = nullptr;
+[[clang::no_destroy]] ScaleTransform g_dynamicMainWashRevealScale = nullptr;
 [[clang::no_destroy]] Border g_dynamicMainEdgeGlow = nullptr;
+[[clang::no_destroy]] ScaleTransform g_dynamicMainEdgeGlowRevealScale = nullptr;
 [[clang::no_destroy]] FrameworkElement g_dynamicTransportIsland = nullptr;
 [[clang::no_destroy]] Grid g_dynamicTransportOcclusionHost = nullptr;
 [[clang::no_destroy]] Border g_compactBackgroundBorder = nullptr;
@@ -685,9 +688,15 @@ std::atomic<int> g_dynamicTransportNavigationFailureDirection{0};
 [[clang::no_destroy]] TranslateTransform g_dynamicTransportTranslate = nullptr;
 winrt::event_token g_dynamicCompactRenderingToken{};
 bool g_dynamicCompactRenderingHooked = false;
+winrt::event_token g_dynamicMainGlowRenderingToken{};
+bool g_dynamicMainGlowRenderingHooked = false;
+std::chrono::steady_clock::time_point g_lastDynamicMainGlowFrameTime{};
+
 double g_dynamicTransportReveal = 0.0;
 double g_dynamicTransportTargetReveal = 0.0;
 double g_dynamicTransportRevealVelocity = 0.0;
+double g_dynamicMainGlowRevealProgress = 0.0;
+double g_dynamicMainGlowBreathPhase = 0.0;
 bool g_dynamicTransportLaunchPhase = false;
 std::chrono::steady_clock::time_point g_lastDynamicCompactFrameTime{};
 uint64_t g_dynamicTransportAccentThumbnailHash = UINT64_MAX;
@@ -1636,11 +1645,13 @@ mediax::Brush DynamicMainEdgeGlowBrush() {
         stop.Color(Color(alpha, accent.R, accent.G, accent.B));
         stops.Append(stop);
     };
+    // Carry the side-island color farther across the main surface. The long
+    // tail avoids the previous hard-looking falloff around the first third.
     addStop(0.00, dark ? 0xB8 : 0x98);
-    addStop(0.12, dark ? 0x82 : 0x68);
-    addStop(0.34, dark ? 0x38 : 0x2C);
-    addStop(0.62, 0x08);
-    addStop(0.78, 0x00);
+    addStop(0.18, dark ? 0x96 : 0x78);
+    addStop(0.44, dark ? 0x58 : 0x46);
+    addStop(0.70, dark ? 0x24 : 0x1C);
+    addStop(0.90, 0x08);
     addStop(1.00, 0x00);
     brush.GradientStops(stops);
     return brush;
@@ -1674,8 +1685,8 @@ void RefreshDynamicAccentGradientColors() {
         updateStops(
             g_dynamicMainEdgeGlow.BorderBrush(),
             dark
-                ? std::initializer_list<BYTE>{0xB8, 0x82, 0x38, 0x08, 0x00, 0x00}
-                : std::initializer_list<BYTE>{0x98, 0x68, 0x2C, 0x08, 0x00, 0x00});
+                ? std::initializer_list<BYTE>{0xB8, 0x96, 0x58, 0x24, 0x08, 0x00}
+                : std::initializer_list<BYTE>{0x98, 0x78, 0x46, 0x1C, 0x08, 0x00});
     }
     if (g_dynamicTransportStrokeBorder) {
         updateStops(
@@ -3001,23 +3012,20 @@ std::vector<uint8_t> CreateLowDetailAlbumCoverBytes(std::vector<uint8_t> const& 
         // Expanded-surface color wash: keep only a low-frequency album glow
         // near the selected edge and ease it to transparent at the middle.
         const double kEdgeAlpha = IsDarkModeApprox() ? 0.72 : 0.88;
-        const double middle = (static_cast<double>(kLowDetailSize) - 1.0) * 0.50;
         const double edge = static_cast<double>(kLowDetailSize) - 1.0;
+        const double fadeSpan = std::max(1.0, edge * 0.90);
         for (UINT y = 0; y < kLowDetailSize; ++y) {
             for (UINT x = 0; x < kLowDetailSize; ++x) {
-                double edgePosition =
+                double distanceFromGlowEdge =
                     fadeFromLeft
-                        ? edge - static_cast<double>(x)
+                        ? static_cast<double>(x)
                         : (fadeFromRight
-                               ? static_cast<double>(x)
-                               : (fadeFromTop ? edge - static_cast<double>(y)
-                                              : static_cast<double>(y)));
-                double amount = 0.0;
-                if (edgePosition > middle && edge > middle) {
-                    amount = (edgePosition - middle) / (edge - middle);
-                    amount = Clamp(amount, 0.0, 1.0);
-                    amount = amount * amount * (3.0 - 2.0 * amount);
-                }
+                               ? edge - static_cast<double>(x)
+                               : (fadeFromTop ? static_cast<double>(y)
+                                              : edge - static_cast<double>(y)));
+                double amount = 1.0 - Clamp(
+                    distanceFromGlowEdge / fadeSpan, 0.0, 1.0);
+                amount = amount * amount * (3.0 - 2.0 * amount);
                 double alphaScale = kEdgeAlpha * amount;
                 BYTE* pixel = pixels.data() +
                     (static_cast<size_t>(y) * kLowDetailSize + x) * 4;
@@ -4328,21 +4336,19 @@ std::vector<uint8_t> CreateResilientLowDetailAlbumCoverBytes(
             double shade = 1.04 - radial * 0.10;
             double alphaScale = 1.0;
             if (edgeFadeToMiddle) {
-                double edgePosition =
+                double distanceFromGlowEdge =
                     fadeFromLeft
-                        ? edge - static_cast<double>(x)
+                        ? static_cast<double>(x)
                         : (fadeFromRight
-                               ? static_cast<double>(x)
-                               : (fadeFromTop ? edge - static_cast<double>(y)
-                                              : static_cast<double>(y)));
-                alphaScale = 0.0;
-                if (edgePosition > middle && edge > middle) {
-                    alphaScale = Clamp(
-                        (edgePosition - middle) / (edge - middle), 0.0, 1.0);
-                    alphaScale = alphaScale * alphaScale *
-                                 (3.0 - 2.0 * alphaScale);
-                    alphaScale *= dark ? 0.72 : 0.88;
-                }
+                               ? edge - static_cast<double>(x)
+                               : (fadeFromTop ? static_cast<double>(y)
+                                              : edge - static_cast<double>(y)));
+                double fadeSpan = std::max(1.0, edge * 0.90);
+                alphaScale = 1.0 - Clamp(
+                    distanceFromGlowEdge / fadeSpan, 0.0, 1.0);
+                alphaScale = alphaScale * alphaScale *
+                             (3.0 - 2.0 * alphaScale);
+                alphaScale *= dark ? 0.72 : 0.88;
             }
             BYTE alpha = static_cast<BYTE>(std::lround(255.0 * alphaScale));
             double premultiply = alpha / 255.0;
@@ -9300,11 +9306,24 @@ bool UpdateCompactProgressFromSnapshot() {
 void SetCompactTextEdgeFadeOpacity(double opacity) {
     opacity = Clamp(opacity, 0.0, 1.0);
     try {
+        double seamFadeOpacity = opacity;
+        if (g_settings.sideExpand) {
+            // The solid text-edge cover used during track changes used to sit
+            // above and visibly erase the album glow. Fade only the cover on
+            // the side that meets the transport island as the glow appears.
+            double glowReveal = SmootherStep(
+                Clamp(g_dynamicMainGlowRevealProgress / 0.72, 0.0, 1.0));
+            seamFadeOpacity *= 1.0 - glowReveal;
+        }
+        bool seamOnRight = g_settings.sideExpand &&
+                           g_settings.position == L"taskbar_left_edge";
         if (g_compactTextLeftFade) {
-            g_compactTextLeftFade.Opacity(opacity);
+            g_compactTextLeftFade.Opacity(
+                seamOnRight ? opacity : seamFadeOpacity);
         }
         if (g_compactTextRightFade) {
-            g_compactTextRightFade.Opacity(opacity);
+            g_compactTextRightFade.Opacity(
+                seamOnRight ? seamFadeOpacity : opacity);
         }
     } catch (...) {
     }
@@ -13949,13 +13968,28 @@ void ApplyDynamicCompactVisuals() {
     if (g_dynamicMainOcclusion) {
         // Once transparent materials use a precise seam clip, this layer is a
         // reveal-linked brightness lift rather than a fast opaque mask.
+        double glowProgress = SmootherStep(
+            Clamp(g_dynamicMainGlowRevealProgress, 0.0, 1.0));
+        double glowSettled = SmootherStep(Clamp(
+            (g_dynamicMainGlowRevealProgress - 0.70) / 0.30, 0.0, 1.0));
+        double breathUnit =
+            0.5 + std::sin(g_dynamicMainGlowBreathPhase) * 0.5;
+        double opacityBreath =
+            1.0 - glowSettled * (1.0 - breathUnit) * 0.18;
+        double rangeBreath =
+            1.0 - glowSettled * (1.0 - breathUnit) * 0.22;
         double occlusionOpacity = IsTransparentMaterial()
-            ? SmootherStep(Clamp(easedReveal, 0.0, 1.0)) *
-                  g_compactMainTintOpacity
+            ? glowProgress * g_compactMainTintOpacity * opacityBreath
             : (g_dynamicTransportTargetReveal > 0.5
                    ? Clamp(easedReveal * 4.0, 0.0, 1.0)
                    : SmoothStep(Clamp(easedReveal / 0.08, 0.0, 1.0)));
         g_dynamicMainOcclusion.Opacity(occlusionOpacity);
+        if (g_dynamicMainOcclusionGlowScale) {
+            double baseRange = 0.76 + glowProgress * 0.24;
+            g_dynamicMainOcclusionGlowScale.ScaleX(
+                IsTransparentMaterial() ? baseRange * rangeBreath : 1.0);
+            g_dynamicMainOcclusionGlowScale.ScaleY(1.0);
+        }
     }
 
     if (g_compactBackgroundBorder) {
@@ -13968,14 +14002,39 @@ void ApplyDynamicCompactVisuals() {
                 : Thickness{seamStroke, 1.0, 1.0, 1.0});
     }
 
+    // Let the color bloom travel inward from the side-island seam instead of
+    // merely fading the finished layer in place. Once open, a very small,
+    // slow pulse keeps the glow alive without making the border visibly flash.
+    // The glow owns a separate, slower timeline. It begins with the island but
+    // reaches full range only after the side surface has settled.
+    double glowReveal = SmootherStep(
+        Clamp(g_dynamicMainGlowRevealProgress, 0.0, 1.0));
+    double settledGlow = SmootherStep(Clamp(
+        (g_dynamicMainGlowRevealProgress - 0.70) / 0.30, 0.0, 1.0));
+    double breathAmount =
+        (0.5 + std::sin(g_dynamicMainGlowBreathPhase) * 0.5) * settledGlow;
+    // The established appearance is the upper bound: breathing only recedes
+    // from it and returns, never making the glow larger or brighter.
+    double glowBreath = 1.0 - (settledGlow - breathAmount) * 0.18;
+    double rangeBreath = 1.0 - (settledGlow - breathAmount) * 0.22;
+    double spread = glowReveal;
+    if (g_dynamicMainWashRevealScale) {
+        g_dynamicMainWashRevealScale.ScaleX(
+            (0.72 + spread * 0.28) * rangeBreath);
+        g_dynamicMainWashRevealScale.ScaleY(0.97 + spread * 0.03);
+    }
+    if (g_dynamicMainEdgeGlowRevealScale) {
+        g_dynamicMainEdgeGlowRevealScale.ScaleX(
+            (0.86 + spread * 0.14) * rangeBreath);
+        g_dynamicMainEdgeGlowRevealScale.ScaleY(1.0);
+    }
     if (g_dynamicMainWashHost) {
         g_dynamicMainWashHost.Opacity(
-            SmoothStep(Clamp((easedReveal - 0.03) / 0.82, 0.0, 1.0)));
+            Clamp(glowReveal * glowBreath, 0.0, 1.0));
     }
     if (g_dynamicMainEdgeGlow) {
-        // The left edge wakes first and the brush itself fades toward the right.
         g_dynamicMainEdgeGlow.Opacity(
-            SmoothStep(Clamp((easedReveal - 0.04) / 0.78, 0.0, 1.0)));
+            Clamp(glowReveal * glowBreath, 0.0, 1.0));
     }
     if (g_dynamicTransportIsland) {
         g_dynamicTransportIsland.HorizontalAlignment(
@@ -14313,6 +14372,87 @@ void TriggerCompactNavigationFailure(
     EnsureCompactNavigationRenderLoop();
 }
 
+void StopDynamicMainGlowBreathing() {
+    if (!g_dynamicMainGlowRenderingHooked) {
+        return;
+    }
+    try {
+        mediax::CompositionTarget::Rendering(g_dynamicMainGlowRenderingToken);
+    } catch (...) {
+    }
+    g_dynamicMainGlowRenderingHooked = false;
+    g_lastDynamicMainGlowFrameTime = {};
+}
+
+void OnDynamicMainGlowRendering(
+    winrt::Windows::Foundation::IInspectable const&,
+    winrt::Windows::Foundation::IInspectable const&) {
+    try {
+        if (!IsDynamicCompactMode() || g_unloading ||
+            g_dynamicTransportTargetReveal <= 0.5 ||
+            (!g_dynamicMainOcclusion && !g_dynamicMainWashHost &&
+             !g_dynamicMainEdgeGlow)) {
+            StopDynamicMainGlowBreathing();
+            return;
+        }
+
+        constexpr double kGlowBreathPeriodSeconds = 4.8;
+        auto now = std::chrono::steady_clock::now();
+        double dtSec = 0.0;
+        if (g_lastDynamicMainGlowFrameTime.time_since_epoch().count() != 0) {
+            dtSec = std::chrono::duration<double>(
+                now - g_lastDynamicMainGlowFrameTime).count();
+        }
+        g_lastDynamicMainGlowFrameTime = now;
+        g_dynamicMainGlowBreathPhase = std::fmod(
+            g_dynamicMainGlowBreathPhase +
+                Clamp(dtSec, 0.0, 0.05) * 6.283185307179586 /
+                    kGlowBreathPeriodSeconds,
+            6.283185307179586);
+
+        double breathAmount =
+            0.5 + std::sin(g_dynamicMainGlowBreathPhase) * 0.5;
+        double opacity = 0.82 + breathAmount * 0.18;
+        double rangeScale = 0.78 + breathAmount * 0.22;
+
+        if (g_dynamicMainOcclusion && IsTransparentMaterial()) {
+            g_dynamicMainOcclusion.Opacity(
+                g_compactMainTintOpacity * opacity);
+        }
+        if (g_dynamicMainOcclusionGlowScale) {
+            g_dynamicMainOcclusionGlowScale.ScaleX(rangeScale);
+            g_dynamicMainOcclusionGlowScale.ScaleY(1.0);
+        }
+        if (g_dynamicMainWashHost) {
+            g_dynamicMainWashHost.Opacity(opacity);
+        }
+        if (g_dynamicMainWashRevealScale) {
+            g_dynamicMainWashRevealScale.ScaleX(rangeScale);
+            g_dynamicMainWashRevealScale.ScaleY(1.0);
+        }
+        if (g_dynamicMainEdgeGlow) {
+            g_dynamicMainEdgeGlow.Opacity(opacity);
+        }
+        if (g_dynamicMainEdgeGlowRevealScale) {
+            g_dynamicMainEdgeGlowRevealScale.ScaleX(rangeScale);
+            g_dynamicMainEdgeGlowRevealScale.ScaleY(1.0);
+        }
+
+    } catch (...) {
+        StopDynamicMainGlowBreathing();
+    }
+}
+void StartDynamicMainGlowBreathing() {
+    if (g_dynamicMainGlowRenderingHooked ||
+        g_dynamicTransportTargetReveal <= 0.5) {
+        return;
+    }
+    g_lastDynamicMainGlowFrameTime = std::chrono::steady_clock::now();
+    g_dynamicMainGlowRenderingToken =
+        mediax::CompositionTarget::Rendering(OnDynamicMainGlowRendering);
+    g_dynamicMainGlowRenderingHooked = true;
+}
+
 void OnDynamicCompactRendering(
     winrt::Windows::Foundation::IInspectable const&,
     winrt::Windows::Foundation::IInspectable const&) {
@@ -14334,7 +14474,26 @@ void OnDynamicCompactRendering(
         g_lastDynamicCompactFrameTime = now;
         dtSec = Clamp(dtSec, 0.001, 0.033);
 
+
         double speed = Clamp(g_settings.animationSpeed, 0.25, 2.5);
+        double glowTarget =
+            g_dynamicTransportTargetReveal > 0.5 ? 1.0 : 0.0;
+        // Side expansion and track changes share this reveal path so their
+        // bloom speed stays identical. Opening takes about 500 ms by default.
+        double glowRate = (glowTarget > g_dynamicMainGlowRevealProgress
+                               ? 2.00
+                               : 2.35) * speed;
+        double glowDelta = glowTarget - g_dynamicMainGlowRevealProgress;
+        double glowStep = glowRate * dtSec;
+        if (std::abs(glowDelta) <= glowStep) {
+            g_dynamicMainGlowRevealProgress = glowTarget;
+        } else {
+            g_dynamicMainGlowRevealProgress +=
+                std::copysign(glowStep, glowDelta);
+        }
+        bool glowRevealSettled =
+            std::abs(glowTarget - g_dynamicMainGlowRevealProgress) < 0.0001;
+
         double stiffness = 205.0 * speed * speed;
         double damping = 20.5 * speed;
         double acceleration =
@@ -14378,7 +14537,7 @@ void OnDynamicCompactRendering(
         bool buttonsSettled = previousButtonSettled && playButtonSettled &&
                               nextButtonSettled;
         ApplyDynamicCompactVisuals();
-        if (revealSettled && buttonsSettled) {
+        if (revealSettled && buttonsSettled && glowRevealSettled) {
             if (g_dynamicTransportScale) {
                 g_dynamicTransportScale.ScaleX(1.0);
                 g_dynamicTransportScale.ScaleY(1.0);
@@ -14386,6 +14545,13 @@ void OnDynamicCompactRendering(
             if (g_dynamicTransportSurfaceScale) {
                 g_dynamicTransportSurfaceScale.ScaleX(1.0);
                 g_dynamicTransportSurfaceScale.ScaleY(1.0);
+            }
+            if (g_dynamicTransportTargetReveal > 0.5) {
+                StartDynamicMainGlowBreathing();
+            } else {
+                StopDynamicMainGlowBreathing();
+                g_dynamicMainGlowRevealProgress = 0.0;
+                g_dynamicMainGlowBreathPhase = 0.0;
             }
             StopDynamicCompactRenderLoop();
         }
@@ -14419,8 +14585,10 @@ void StartDynamicCompactRenderLoop(double targetReveal) {
         // reversing a half-open close resumes with the normal spring instead.
         g_dynamicTransportLaunchPhase =
             g_dynamicTransportReveal < 0.55;
+        g_dynamicMainGlowBreathPhase = 1.5707963267948966;
     } else if (clampedTarget <= 0.5) {
         g_dynamicTransportLaunchPhase = false;
+        StopDynamicMainGlowBreathing();
     }
     g_dynamicTransportTargetReveal = clampedTarget;
     EnsureDynamicCompactRenderLoop();
@@ -15560,9 +15728,16 @@ void ApplyCompactTintTransitionVisuals() {
     }
     if (g_dynamicMainOcclusion && IsTransparentMaterial()) {
         g_dynamicMainOcclusion.Background(DynamicMainOcclusionBrush());
+        double glowReveal = SmootherStep(
+            Clamp(g_dynamicMainGlowRevealProgress, 0.0, 1.0));
+        double glowSettled = SmootherStep(Clamp(
+            (g_dynamicMainGlowRevealProgress - 0.70) / 0.30, 0.0, 1.0));
+        double breathUnit =
+            0.5 + std::sin(g_dynamicMainGlowBreathPhase) * 0.5;
+        double opacityBreath =
+            1.0 - glowSettled * (1.0 - breathUnit) * 0.18;
         g_dynamicMainOcclusion.Opacity(
-            SmootherStep(Clamp(g_dynamicTransportReveal, 0.0, 1.0)) *
-            g_compactMainTintOpacity);
+            glowReveal * g_compactMainTintOpacity * opacityBreath);
     }
 }
 
@@ -16056,7 +16231,15 @@ Grid BuildIslandGrid() {
     mainOcclusion.Opacity(0.0);
     mainOcclusion.IsHitTestVisible(false);
     controls::Canvas::SetZIndex(mainOcclusion, -1);
+    mainOcclusion.RenderTransformOrigin(
+        {DynamicTransportExpandsRight() ? 1.0f : 0.0f, 0.5f});
+    ScaleTransform mainOcclusionGlowScale;
+    mainOcclusionGlowScale.ScaleX(0.76);
+    mainOcclusionGlowScale.ScaleY(1.0);
+    mainOcclusion.RenderTransform(mainOcclusionGlowScale);
     g_dynamicMainOcclusion = IsDynamicCompactMode() ? mainOcclusion : nullptr;
+    g_dynamicMainOcclusionGlowScale =
+        IsDynamicCompactMode() ? mainOcclusionGlowScale : nullptr;
 
     Border background;
     background.Name(L"Island_Background");
@@ -16097,6 +16280,12 @@ Grid BuildIslandGrid() {
     mainWashHost.Opacity(0.0);
     mainWashHost.IsHitTestVisible(false);
     controls::Canvas::SetZIndex(mainWashHost, 0);
+    mainWashHost.RenderTransformOrigin(
+        {DynamicTransportExpandsRight() ? 1.0f : 0.0f, 0.5f});
+    ScaleTransform mainWashRevealScale;
+    mainWashRevealScale.ScaleX(0.72);
+    mainWashRevealScale.ScaleY(0.97);
+    mainWashHost.RenderTransform(mainWashRevealScale);
     Grid mainWashLayers;
     mainWashLayers.IsHitTestVisible(false);
     Image mainWash;
@@ -16108,6 +16297,8 @@ Grid BuildIslandGrid() {
     mainWashHost.Child(mainWashLayers);
     g_dynamicMainWashHost = IsDynamicCompactMode() ? mainWashHost : nullptr;
     g_dynamicMainWash = IsDynamicCompactMode() ? mainWash : nullptr;
+    g_dynamicMainWashRevealScale =
+        IsDynamicCompactMode() ? mainWashRevealScale : nullptr;
     Border mainEdgeGlow;
     mainEdgeGlow.Name(L"Island_MainEdgeGlow");
     mainEdgeGlow.CornerRadius({g_layout.cornerRadius, g_layout.cornerRadius,
@@ -16118,7 +16309,15 @@ Grid BuildIslandGrid() {
     mainEdgeGlow.Opacity(0.0);
     mainEdgeGlow.IsHitTestVisible(false);
     controls::Canvas::SetZIndex(mainEdgeGlow, 1);
+    mainEdgeGlow.RenderTransformOrigin(
+        {DynamicTransportExpandsRight() ? 1.0f : 0.0f, 0.5f});
+    ScaleTransform mainEdgeGlowRevealScale;
+    mainEdgeGlowRevealScale.ScaleX(0.86);
+    mainEdgeGlowRevealScale.ScaleY(1.0);
+    mainEdgeGlow.RenderTransform(mainEdgeGlowRevealScale);
     g_dynamicMainEdgeGlow = IsDynamicCompactMode() ? mainEdgeGlow : nullptr;
+    g_dynamicMainEdgeGlowRevealScale =
+        IsDynamicCompactMode() ? mainEdgeGlowRevealScale : nullptr;
 
     Grid content;
     content.Name(L"Island_Content");
@@ -16628,6 +16827,8 @@ Grid BuildIslandGrid() {
         g_dynamicTransportReveal = 0.0;
         g_dynamicTransportTargetReveal = 0.0;
         g_dynamicTransportRevealVelocity = 0.0;
+        g_dynamicMainGlowRevealProgress = 0.0;
+        g_dynamicMainGlowBreathPhase = 0.0;
         g_dynamicTransportLaunchPhase = false;
         ApplyCompactTintTransitionVisuals();
     } else {
@@ -17060,7 +17261,19 @@ void UpdatePlayerContents() {
             g_dynamicMainWash.Opacity(DynamicMainWashOpacity());
         }
     }
-    if (compactWasInitialized && !g_expanded && (compactTextChanged || compactArtChanged)) {
+    if (compactWasInitialized && !g_expanded &&
+        (compactTextChanged || compactArtChanged)) {
+        // Artwork is the actual light source. Restart the slower main-island
+        // bloom only when the new artwork/tint has arrived, rather than when
+        // metadata arrives first, so one track switch produces one reveal.
+        if (compactArtChanged && IsDynamicCompactMode() &&
+            g_dynamicTransportTargetReveal > 0.5) {
+            StopDynamicMainGlowBreathing();
+            g_dynamicMainGlowRevealProgress = 0.0;
+            g_dynamicMainGlowBreathPhase = 1.5707963267948966;
+            ApplyDynamicCompactVisuals();
+            EnsureDynamicCompactRenderLoop();
+        }
         StartCompactTrackTransition(compactOldTitle, compactOldArtist,
                                     compactTextChanged, compactArtChanged);
     }
@@ -17367,6 +17580,7 @@ void RemoveIslandOsResourcesNoexcept() noexcept {
     // teardown callback while the module is about to be unloaded.
     try { StopHoverRenderLoop(); } catch (...) {}
     try { StopDynamicCompactRenderLoop(); } catch (...) {}
+    try { StopDynamicMainGlowBreathing(); } catch (...) {}
     try { StopCompactTextRenderLoop(); } catch (...) {}
     try { StopCompactTintTransition(); } catch (...) {}
     try { StopPopupXamlRenderLoop(); } catch (...) {}
@@ -17415,6 +17629,7 @@ void RemoveIslandGridImpl() {
     bestEffort([] { StopTaskbarLayoutMonitor(); });
     bestEffort([] { StopHoverRenderLoop(); });
     bestEffort([] { StopDynamicCompactRenderLoop(); });
+    bestEffort([] { StopDynamicMainGlowBreathing(); });
     bestEffort([] { ClearDynamicTransportButtonMotions(); });
     bestEffort([] { StopCompactTextRenderLoop(); });
     bestEffort([] { StopCompactTintTransition(); });
@@ -17446,9 +17661,12 @@ void RemoveIslandGridImpl() {
         g_dynamicTransportTintBrush = nullptr;
         g_compactTintColorValid = false;
         g_dynamicMainOcclusion = nullptr;
+        g_dynamicMainOcclusionGlowScale = nullptr;
         g_dynamicMainWashHost = nullptr;
         g_dynamicMainWash = nullptr;
+        g_dynamicMainWashRevealScale = nullptr;
         g_dynamicMainEdgeGlow = nullptr;
+        g_dynamicMainEdgeGlowRevealScale = nullptr;
         g_dynamicTransportIsland = nullptr;
         g_dynamicTransportOcclusionHost = nullptr;
         g_dynamicTransportSurface = nullptr;
@@ -17459,6 +17677,8 @@ void RemoveIslandGridImpl() {
         g_dynamicTransportReveal = 0.0;
         g_dynamicTransportTargetReveal = 0.0;
         g_dynamicTransportRevealVelocity = 0.0;
+        g_dynamicMainGlowRevealProgress = 0.0;
+        g_dynamicMainGlowBreathPhase = 0.0;
         g_dynamicTransportLaunchPhase = false;
         g_compactTitleText = nullptr;
         g_compactArtistText = nullptr;
@@ -17540,9 +17760,12 @@ void RemoveIslandGridImpl() {
     g_dynamicTransportTintBrush = nullptr;
     g_compactTintColorValid = false;
     g_dynamicMainOcclusion = nullptr;
+    g_dynamicMainOcclusionGlowScale = nullptr;
     g_dynamicMainWashHost = nullptr;
     g_dynamicMainWash = nullptr;
+    g_dynamicMainWashRevealScale = nullptr;
     g_dynamicMainEdgeGlow = nullptr;
+    g_dynamicMainEdgeGlowRevealScale = nullptr;
     g_dynamicTransportIsland = nullptr;
     g_dynamicTransportOcclusionHost = nullptr;
     g_dynamicTransportSurface = nullptr;
@@ -17553,6 +17776,8 @@ void RemoveIslandGridImpl() {
     g_dynamicTransportReveal = 0.0;
     g_dynamicTransportTargetReveal = 0.0;
     g_dynamicTransportRevealVelocity = 0.0;
+    g_dynamicMainGlowRevealProgress = 0.0;
+    g_dynamicMainGlowBreathPhase = 0.0;
     g_dynamicTransportLaunchPhase = false;
     g_compactTitleText = nullptr;
     g_compactArtistText = nullptr;
