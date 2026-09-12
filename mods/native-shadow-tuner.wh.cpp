@@ -23,6 +23,8 @@ and adjust their size and blur.
 by default. Open Windhawk Settings, go to **Advanced settings**, then
 **More advanced settings**, and add `dwm.exe` to the process inclusion list.
 
+![Windhawk advanced settings](https://i.imgur.com/epfTlMZ.png)
+
 ## Controls
 
 - **Intensity**: 100 keeps the original opacity, 50 halves it and 150 makes
@@ -141,6 +143,14 @@ void __cdecl ParametersHook(int style, int dpi, float* radius1,
                static_cast<double>(*radius1), static_cast<double>(*radius2));
 }
 
+void RequestDwmRefresh() {
+    if (HWND hDwm = FindWindowW(L"dwm", nullptr)) {
+        PostMessageW(hDwm, WM_DWMCOLORIZATIONCOLORCHANGED, 0, 0);
+    } else {
+        Wh_Log(L"DWM refresh window wasn't found.");
+    }
+}
+
 }
 
 BOOL Wh_ModInit() {
@@ -190,12 +200,12 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    PostMessageW(HWND_BROADCAST, WM_DWMCOLORIZATIONCOLORCHANGED, 0, 0);
+    RequestDwmRefresh();
 }
 
 void Wh_ModBeforeUninit() {
     stopping.store(true);
-    PostMessageW(HWND_BROADCAST, WM_DWMCOLORIZATIONCOLORCHANGED, 0, 0);
+    RequestDwmRefresh();
 }
 void Wh_ModUninit() {}
 
