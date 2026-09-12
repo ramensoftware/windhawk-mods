@@ -2,7 +2,7 @@
 // @id              disable-inactive-menubar-greying
 // @name            Disable Inactive Menubar Greying
 // @description     Prevents menubar text from being greyed out in inactive folder windows in Classic theme
-// @version         1.3
+// @version         1.4
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -17,6 +17,8 @@ This mod prevents the classic menubar text (File, Edit, View, etc.) in folder wi
 under the Classic theme from appearing greyed out when the window loses focus, 
 the way it was in Windows 95, before Windows 98.
 
+The current version of the mod intended for Windows 10 version 1607 or higher.
+
 ![screenshot](https://i.imgur.com/FCEXTyt.png)
 
 ![screenshot](https://i.imgur.com/XBVNN0v.png)
@@ -27,8 +29,11 @@ the way it was in Windows 95, before Windows 98.
 typedef COLORREF (WINAPI *SetTextColor_t)(HDC hdc, COLORREF color);
 SetTextColor_t SetTextColor_Original;
 
-thread_local bool checked=false;
-thread_local bool found=false;
+typedef HRESULT (WINAPI *GetThreadDescription_t)(HANDLE hThread, PWSTR* ppszThreadDescription);
+GetThreadDescription_t pGetThreadDescription;
+
+thread_local bool checked = false;
+thread_local bool found = false;
 
 bool IsGreyColor(COLORREF color, COLORREF menuTextColor)
 {
@@ -57,28 +62,26 @@ bool IsCurrentThreadWindowFocused()
     return fgThreadId == GetCurrentThreadId();
 }
 
-BOOL CALLBACK EnumThreadWndProc_CheckTaskbar(HWND hwnd, LPARAM lParam)
-{
-    wchar_t className[256];
-    if (GetClassNameW(hwnd, className, 256) > 0)
-    {
-        if (wcscmp(className, L"Shell_TrayWnd") == 0 ||
-            wcscmp(className, L"Shell_SecondaryTrayWnd") == 0)
-        {
-            *(bool*)lParam = true;
-            return FALSE; // нашли, прекращаем перебор
-        }
-    }
-    return TRUE; // продолжаем перебор
-}
-
-// Возвращает true, если текущий поток владеет хотя бы одним окном панели задач
+// Возвращает true, если текущий поток - это поток панели задач (имя потока "Taskbar")
 bool IsCurrentThreadTaskbar()
 {
-    if (!checked) {
-        EnumThreadWindows(GetCurrentThreadId(), EnumThreadWndProc_CheckTaskbar, (LPARAM)&found);
-        checked=true;
+    if (checked)
+        return found;
+
+    checked = true;
+    found = false;
+
+    if (pGetThreadDescription)
+    {
+        PWSTR desc = nullptr;
+        HRESULT hr = pGetThreadDescription(GetCurrentThread(), &desc);
+        if (SUCCEEDED(hr) && desc)
+        {
+            found = (wcscmp(desc, L"Taskbar") == 0);
+            LocalFree(desc);
+        }
     }
+
     return found;
 }
 
@@ -97,6 +100,9 @@ COLORREF WINAPI SetTextColor_Hook(HDC hdc, COLORREF color)
 
 BOOL Wh_ModInit()
 {
+    pGetThreadDescription = (GetThreadDescription_t)GetProcAddress(
+        GetModuleHandle(L"kernel32.dll"), "GetThreadDescription");
+
     Wh_SetFunctionHook(
         (void*)GetProcAddress(GetModuleHandle(L"gdi32.dll"), "SetTextColor"),
         (void*)SetTextColor_Hook,
