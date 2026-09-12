@@ -1,3 +1,11 @@
+## 1.7 ([Sep 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/41266af195ef78e4379a9a7a54e28e8a63ef802f/mods/windows-11-notification-center-styler.wh.cpp))
+
+* Added the OS26 Tahoe Glass theme.
+* Updated the FrostyGlass theme.
+* Several target controls can now be specified for the same styles by separating them with commas, for example: `ParentClass > Class#Name1, ParentClass > Class#Name2`.
+* Style variables now get the value from whichever capturing control is closest. Previously, the value was undefined if there was more than one control publishing the same variable.
+* Improved handling for remote images and added local caching. Internet connection is no longer needed once remote images are downloaded.
+
 ## 1.6 ([Jul 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fe719ff30cfa77714e643de3a28f103a9aa7950a/mods/windows-11-notification-center-styler.wh.cpp))
 
 * Added themes: Densy, FrostyGlass.
