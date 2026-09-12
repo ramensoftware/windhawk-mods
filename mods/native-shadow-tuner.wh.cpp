@@ -14,18 +14,18 @@
 # Windows Shadows TUNER
 ### HaVeN80
 
-Customize the native Windows window shadows: make them lighter or more pronounced, adjust their size and blur, and choose a custom color.
+Customize the native Windows window shadows: make them lighteror more pronounced, adjust their size and blur, and choose a custom color.
 
 ## Controls
 
-- **Enable shadow modification**: activates or deactivates the customization.
-- **Intensity**: 100 maintains the original opacity, 50 cuts it in half, 150 increases it. At 0, the shadow becomes invisible, even if colored.
+- **Enable shadow modification: activates or deactivates the customization.
+- **Intensity**: 100 maintains the original opacity, 50 cuts it in half,150 increases it. At 0, the shadow becomes invisible, even if colored.
 - **Size and Blur**: adjusts the drop and blur from 50% to 150%
-- **Update shadows on new requests**: prevents the reuse of previous surfaces. Leave this active to apply your customizations.
-- **Custom color**: enables the chosen color; 
-- **Shadow color**: #RRGGBB code, for example #2878FF (blue), #00A860 (green), #000000 (black). An invalid code will default back to black.
+- **Update shadows on new requests: prevents the reuse of previous surfaces.Leave this active to apply your customizations.
+- **Custom color: enables the chosen color; 
+- **Shadow color: #RRGGBB code, for example #2878FF (blue),#00A860 (green), #000000 (black). An invalid code will default back to black.
 
-To test the color, use intensity 150, size 100, custom color active and #2878FF. Open a new window and switch focus. The result also depends on your background and the set opacity.
+To test the color, use intensity 150, size 100, custom color activeand #2878FF. Open a new window and switch focus.The result also depends on your background and the set opacity.
 
 ## Aggiornamento
 
@@ -33,37 +33,19 @@ Sostituisci il sorgente della mod esistente e ricompila. L'identificativo
 interno e le chiavi delle impostazioni precedenti restano gli stessi.
 Il colore personalizzato e' inizialmente disattivato.
 
-## How it works
-It intercepts the creation of native shadows inside DWM, without adding overlapping windows. The tint is applied to the two components of the shadow separately from the border. The DLLs on the disk are not modified. Windows may retain already created surfaces. Opening new ones or changing focus allows you to verify the new settings; in some cases you may need to log out and log back in, even after deactivation.
+## How it worksIt intercepts the creation of native shadows inside DWM, without addingoverlapping windows. The tint is applied to the two components of the shadowseparately from the border. The DLLs on the disk are not modified.Windows may retain already created surfaces. Opening new ones orchanging focus allows you to verify the new settings; in some cases you may need to log out and log back in, even after deactivation.
+
 
 ## Compatibilita
 
 Intended for the analyzed uDWM.dll version uDWM.dll 10.0.26100.9278.
 windows 11 25h2.
+
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
-/*
-- enabled: false
-  $name: Abilita modifica ombre
-  $description: Attiva la personalizzazione delle ombre native.
-- opacityPercent: 100
-  $name: Intensita ombra (% del valore nativo)
-  $description: Da 0 a 300. 100 originale, 50 piu chiara, 150 piu scura. Con 0 anche il colore e invisibile.
-- sizePercent: 100
-  $name: Dimensione e sfumatura (% del valore nativo)
-  $description: Da 50 a 150. 100 mantiene la dimensione originale.
-- bypassCache: true
-  $name: Aggiorna ombre alle nuove richieste
-  $description: Ricrea le superfici per applicare le impostazioni. Puo aumentare il carico grafico.
-- customColor: false
-  $name: Colore personalizzato
-  $description: Colora le due componenti dell'ombra. Disattivato mantiene il nero nativo.
-- shadowColor: '#2878FF'
-  $name: Colore ombra
-  $description: "Codice esadecimale #RRGGBB. Esempi - #2878FF blu, #00A860 verde, #000000 nero."
-*/
+
 // ==/WindhawkModSettings==
 
 #include <windows.h>
@@ -82,42 +64,25 @@ __attribute__((used)) float wstRed = 0, wstGreen = 0, wstBlue = 0;
 __attribute__((used)) void* wstColorResume1 = nullptr;
 __attribute__((used)) void* wstColorResume2 = nullptr;
 
-#ifdef _M_AMD64
+#if defined(_M_X64) || defined(__x86_64__)
 __attribute__((naked, used)) void WstColorHook1() {
-    __asm__("pushq %rax
-"
-            "movl wstRed(%rip), %eax
-movl %eax, 0x48(%rbp)
-"
-            "movl wstGreen(%rip), %eax
-movl %eax, 0x4c(%rbp)
-"
-            "movl wstBlue(%rip), %eax
-movl %eax, 0x50(%rbp)
-"
-            "popq %rax
-jmp *wstColorResume1(%rip)
-");
+    __asm__("pushq %rax\n"
+            "movl wstRed(%rip), %eax\nmovl %eax, 0x48(%rbp)\n"
+            "movl wstGreen(%rip), %eax\nmovl %eax, 0x4c(%rbp)\n"
+            "movl wstBlue(%rip), %eax\nmovl %eax, 0x50(%rbp)\n"
+            "popq %rax\njmp *wstColorResume1(%rip)\n");
 }
+
 __attribute__((naked, used)) void WstColorHook2() {
-    __asm__("pushq %rax
-"
-            "movl wstRed(%rip), %eax
-movl %eax, 0x48(%rbp)
-"
-            "movl wstGreen(%rip), %eax
-movl %eax, 0x4c(%rbp)
-"
-            "movl wstBlue(%rip), %eax
-movl %eax, 0x50(%rbp)
-"
-            "popq %rax
-jmp *wstColorResume2(%rip)
-");
+    __asm__("pushq %rax\n"
+            "movl wstRed(%rip), %eax\nmovl %eax, 0x48(%rbp)\n"
+            "movl wstGreen(%rip), %eax\nmovl %eax, 0x4c(%rbp)\n"
+            "movl wstBlue(%rip), %eax\nmovl %eax, 0x50(%rbp)\n"
+            "popq %rax\njmp *wstColorResume2(%rip)\n");
 }
 #else
-__attribute__((used)) void WstColorHook1() {}
-__attribute__((used)) void WstColorHook2() {}
+void WstColorHook1() {}
+void WstColorHook2() {}
 #endif
 }
 
@@ -126,9 +91,11 @@ using Parameters = void(__cdecl*)(int, int, float*, float*, float*, float*);
 Parameters original = nullptr;
 float opacityScale = 1.0f;
 float sizeScale = 1.0f;
+
 std::atomic<bool> stopping{false};
 std::atomic<bool> reported{false};
 std::atomic<unsigned> marginReports{0}, surfaceReports{0}, otherReports{0}, brushReports{0};
+
 BYTE* moduleBase = nullptr;
 bool bypassCache = true;
 bool customColor = false;
@@ -268,6 +235,10 @@ bool VerifyTarget(HMODULE module) {
 }
 
 BOOL Wh_ModInit() {
+#if !defined(_M_X64) && !defined(__x86_64__)
+    Wh_Log(L"REFUSED: Questo mod supporta esclusivamente l'architettura x86-64.");
+    return FALSE;
+#else
     stopping.store(false);
     reported.store(false);
     marginReports.store(0); surfaceReports.store(0);
@@ -319,7 +290,6 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
     if (customColor) {
-#ifdef _M_AMD64
         if (!Wh_SetFunctionHook(moduleBase+0x37918,
                 reinterpret_cast<void*>(WstColorHook1), &wstColorResume1) ||
             !Wh_SetFunctionHook(moduleBase+0x37a40,
@@ -332,16 +302,15 @@ BOOL Wh_ModInit() {
                static_cast<double>(wstRed), static_cast<double>(wstGreen),
                static_cast<double>(wstBlue));
         if (!bypassCache) Wh_Log(L"COLOR: enable bypassCache if existing brushes keep the old color.");
-#else
-        Wh_Log(L"COLOR hook skipped: non-x64 architecture detected.");
-#endif
     }
     Wh_Log(L"Native shadow hooks registered. Open a NEW window and change focus for testing.");
     return TRUE;
+#endif
 }
 
 void Wh_ModBeforeUninit() { stopping.store(true); }
 void Wh_ModUninit() {}
+
 BOOL Wh_ModSettingsChanged(BOOL* reload) {
     *reload = TRUE;
     return TRUE;
