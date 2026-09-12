@@ -7,7 +7,7 @@
 // @github          https://github.com/haven80
 // @include         dwm.exe
 // @architecture    x86-64
-// @compilerOptions -lbcrypt -masm=att
+// @compilerOptions -lbcrypt
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -28,16 +28,11 @@ Customize the native Windows window shadows: make them lighteror more pronounced
 
 To test the color, use intensity 150, size 100, custom color activeand #2878FF. Open a new window and switch focus.The result also depends on your background and the set opacity.
 
-## Aggiornamento
-
-Sostituisci il sorgente della mod esistente e ricompila. L'identificativo
-interno e le chiavi delle impostazioni precedenti restano gli stessi.
-Il colore personalizzato e' inizialmente disattivato.
 
 ## How it worksIt intercepts the creation of native shadows inside DWM, without addingoverlapping windows. The tint is applied to the two components of the shadowseparately from the border. The DLLs on the disk are not modified.Windows may retain already created surfaces. Opening new ones orchanging focus allows you to verify the new settings; in some cases you may need to log out and log back in, even after deactivation.
 
 
-## Compatibilita
+## Compatibility
 
 Intended for the analyzed uDWM.dll version uDWM.dll 10.0.26100.9278.
 windows 11 25h2.
