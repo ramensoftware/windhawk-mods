@@ -2,12 +2,12 @@
 // @id              simple-window-switcher
 // @name            Simple Window Switcher
 // @description     Replaces the default Alt+Tab with a lightweight window switcher inspired by ExplorerPatcher's Simple Window Switcher
-// @version         2.2
+// @version         3.0
 // @author          Lone
 // @github          https://github.com/Louis047
 // @include         windhawk.exe
 // @include         explorer.exe
-// @compilerOptions -ldwmapi -luxtheme -lgdi32 -lshlwapi -loleaut32 -lole32 -lcomctl32 -lgdiplus -lversion -lwinmm
+// @compilerOptions -O2 -ldwmapi -luxtheme -lgdi32 -lshlwapi -loleaut32 -lole32 -lcomctl32 -lgdiplus -lversion -lwinmm
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -430,14 +430,14 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
         - dockPreviewHeight: 280
           $name: Central Preview Max Height (px)
           $description: Maximum height for the central preview window. Aspect ratio of the selected window is preserved.
-        - dockIconSize: 48
+        - dockIconSize: '48'
           $name: Dock Icon Size (px)
           $description: Size of application icons in the strip.
           $options:
-          - 32: 32px (Medium)
-          - 40: 40px (Large)
-          - 48: 48px (Extra Large - Default)
-          - 64: 64px (Jumbo)
+          - '32': 32px (Medium)
+          - '40': 40px (Large)
+          - '48': 48px (Extra Large - Default)
+          - '64': 64px (Jumbo)
         - dockIconSpacing: 8
           $name: Icon Spacing (px)
           $description: Horizontal spacing between icon tiles in the strip.
@@ -448,15 +448,15 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
           - fillOnly: Background Fill (Default for Dock)
           - border: Border Outline
           - fillAndBorder: Fill and Border
-        - dockMaxVisibleIcons: 7
+        - dockMaxVisibleIcons: '7'
           $name: Max Visible Icons in Strip
           $description: Maximum number of window icons displayed simultaneously in the dock strip. Excess windows overflow and can be navigated with scrolling and chevrons. Set to 0 to fit screen width.
           $options:
-          - 5: 5 Icons
-          - 7: 7 Icons (Default)
-          - 9: 9 Icons
-          - 11: 11 Icons
-          - 0: Fit Screen Width
+          - '5': 5 Icons
+          - '7': 7 Icons (Default)
+          - '9': 9 Icons
+          - '11': 11 Icons
+          - '0': Fit Screen Width
       $name: Dock Layout Settings
       $description: Configuration options applied when Switcher Layout is set to Dock / Strip Layout.
     - Font:
@@ -932,7 +932,6 @@ static void UpdateDockThumbnailDwm();
 static void UpdateDockPreviewForSelection();
 static void FinishAnimations();
 static void StartExitAnimation(bool activateSelectedWindow);
-static bool IsWindowTruncated(int idx);
 static void UpdateHoverFromCursor(bool allowAnimation = true);
 static void UpdateHoverAtPoint(HWND hWnd, int x, int y, bool allowAnimation = true);
 static void GetOverflowState(bool& hasPrev, bool& hasNext);
@@ -942,50 +941,101 @@ static int HitTestChevron(HWND hWnd, int x, int y);
 
 static inline int DpiScale(int val, int dpi) { return MulDiv(val, dpi, 96); }
 
+// Helper: check if a window is truncated (not placed in current layout)
+static bool IsWindowTruncated(int idx) {
+    if (idx < 0 || idx >= (int)g_windows.size()) return true;
+    const auto& w = g_windows[idx];
+    return w.rcCell.left == 0 && w.rcCell.right == 0 &&
+           w.rcCell.top == 0 && w.rcCell.bottom == 0;
+}
+
+// Helper: find index of a window entry by its HWND
+static int FindWindowIndexByHwnd(HWND hWnd) {
+    if (!hWnd) return -1;
+    for (int i = 0; i < (int)g_windows.size(); i++) {
+        if (g_windows[i].hWnd == hWnd) return i;
+    }
+    return -1;
+}
+
 // Helpers
 
-static bool ThemeIs(const WCHAR* v) { return wcscmp(g_settings.theme, v) == 0; }
+struct CachedSettings {
+    bool themeIsNone;
+    bool themeIsMica;
+    bool themeIsBackdrop;
+    bool thumbnailHoverIsZoom;
+    bool dockLayoutActive;
+    bool badgeLayoutActive;
+    bool highlightHasFill;
+    bool highlightHasBorder;
+    bool thumbnailIsBottom;
+    bool thumbnailIsTop;
+    bool thumbnailIsLeft;
+    bool thumbnailIsRight;
+    bool thumbnailIsSide;
+};
+static CachedSettings s_cachedSettings = {};
+
+static void UpdateCachedSettings() {
+    s_cachedSettings.themeIsNone = (wcscmp(g_settings.theme, L"none") == 0);
+    s_cachedSettings.themeIsMica = (wcscmp(g_settings.theme, L"mica") == 0);
+    s_cachedSettings.themeIsBackdrop = (wcscmp(g_settings.theme, L"backdrop") == 0);
+    s_cachedSettings.thumbnailHoverIsZoom = (wcscmp(g_settings.thumbnailHoverEffect, L"zoom") == 0);
+    s_cachedSettings.dockLayoutActive = (wcscmp(g_settings.switcherLayout, L"dock") == 0);
+    s_cachedSettings.badgeLayoutActive = (wcscmp(g_settings.switcherLayout, L"badge") == 0 && g_settings.showThumbnails);
+
+    if (s_cachedSettings.dockLayoutActive) {
+        s_cachedSettings.highlightHasFill = (wcscmp(g_settings.dockHighlightStyle, L"border") != 0);
+        s_cachedSettings.highlightHasBorder = (wcscmp(g_settings.dockHighlightStyle, L"border") == 0 ||
+                                               wcscmp(g_settings.dockHighlightStyle, L"fillAndBorder") == 0);
+    } else {
+        bool fillAndBorder = (wcscmp(g_settings.highlightStyle, L"fillAndBorder") == 0);
+        s_cachedSettings.highlightHasFill = fillAndBorder || (wcscmp(g_settings.highlightStyle, L"fillOnly") == 0);
+        s_cachedSettings.highlightHasBorder = fillAndBorder || (wcscmp(g_settings.highlightStyle, L"border") == 0);
+    }
+
+    s_cachedSettings.thumbnailIsBottom = (wcscmp(g_settings.thumbnailPosition, L"bottom") == 0);
+    s_cachedSettings.thumbnailIsTop = (wcscmp(g_settings.thumbnailPosition, L"top") == 0);
+    s_cachedSettings.thumbnailIsLeft = (wcscmp(g_settings.thumbnailPosition, L"left") == 0);
+    s_cachedSettings.thumbnailIsRight = (wcscmp(g_settings.thumbnailPosition, L"right") == 0);
+    s_cachedSettings.thumbnailIsSide = (s_cachedSettings.thumbnailIsLeft || s_cachedSettings.thumbnailIsRight);
+}
+
+static bool ThemeIs(const WCHAR* v) {
+    if (wcscmp(v, L"none") == 0) return s_cachedSettings.themeIsNone;
+    if (wcscmp(v, L"mica") == 0) return s_cachedSettings.themeIsMica;
+    if (wcscmp(v, L"backdrop") == 0) return s_cachedSettings.themeIsBackdrop;
+    return wcscmp(g_settings.theme, v) == 0;
+}
 static bool ScrollIs(const WCHAR* v) { return wcscmp(g_settings.scrollWheelBehavior, v) == 0; }
 static bool LayoutIsVertical() { return wcscmp(g_settings.taskListOrientation, L"vertical") == 0; }
 static bool HeaderOrientationIs(const WCHAR* v) { return wcscmp(g_settings.headerContentOrientation, v) == 0; }
 static bool IconSizeIs(const WCHAR* v) { return wcscmp(g_settings.iconSize, v) == 0; }
 static bool BackwardShortcutIs(const WCHAR* v) { return wcscmp(g_settings.backwardShortcut, v) == 0; }
-static bool ThumbnailPositionIs(const WCHAR* v) { return wcscmp(g_settings.thumbnailPosition, v) == 0; }
-static bool HighlightStyleIs(const WCHAR* v) {
-    return wcscmp(g_settings.highlightStyle, v) == 0;
-}
 static bool UseAltShiftTabBackward() { return BackwardShortcutIs(L"altShiftTab"); }
 static bool UseAltShiftBackward() { return BackwardShortcutIs(L"altShift"); }
 static bool UseAltBacktickBackward() { return BackwardShortcutIs(L"altBacktick"); }
-static bool ThumbnailIsBottom() { return ThumbnailPositionIs(L"bottom"); }
-static bool ThumbnailIsTop() { return ThumbnailPositionIs(L"top"); }
-static bool ThumbnailIsLeft() { return ThumbnailPositionIs(L"left"); }
-static bool ThumbnailIsRight() { return ThumbnailPositionIs(L"right"); }
-static bool ThumbnailIsSide() { return ThumbnailIsLeft() || ThumbnailIsRight(); }
+static bool ThumbnailIsBottom() { return s_cachedSettings.thumbnailIsBottom; }
+static bool ThumbnailIsTop() { return s_cachedSettings.thumbnailIsTop; }
+static bool ThumbnailIsLeft() { return s_cachedSettings.thumbnailIsLeft; }
+static bool ThumbnailIsRight() { return s_cachedSettings.thumbnailIsRight; }
+static bool ThumbnailIsSide() { return s_cachedSettings.thumbnailIsSide; }
 static bool ThumbnailAlignmentIs(const WCHAR* v) { return wcscmp(g_settings.thumbnailAlignment, v) == 0; }
 static bool ThumbnailAlignCentered() { return ThumbnailAlignmentIs(L"centered"); }
 static bool ThumbnailAlignRight() { return ThumbnailAlignmentIs(L"right"); }
-static bool ThumbnailHoverIsZoom() { return wcscmp(g_settings.thumbnailHoverEffect, L"zoom") == 0; }
+static bool ThumbnailHoverIsZoom() { return s_cachedSettings.thumbnailHoverIsZoom; }
 static bool DockLayoutActive() {
-    return wcscmp(g_settings.switcherLayout, L"dock") == 0;
+    return s_cachedSettings.dockLayoutActive;
 }
 static bool BadgeLayoutActive() {
-    return wcscmp(g_settings.switcherLayout, L"badge") == 0 && g_settings.showThumbnails;
+    return s_cachedSettings.badgeLayoutActive;
 }
 static bool HighlightHasFill() {
-    if (DockLayoutActive()) {
-        if (wcscmp(g_settings.dockHighlightStyle, L"border") == 0) return false;
-        return true;
-    }
-    return HighlightStyleIs(L"fillAndBorder") || HighlightStyleIs(L"fillOnly");
+    return s_cachedSettings.highlightHasFill;
 }
 static bool HighlightHasBorder() {
-    if (DockLayoutActive()) {
-        if (wcscmp(g_settings.dockHighlightStyle, L"border") == 0 ||
-            wcscmp(g_settings.dockHighlightStyle, L"fillAndBorder") == 0) return true;
-        return false;
-    }
-    return HighlightStyleIs(L"border") || HighlightStyleIs(L"fillAndBorder");
+    return s_cachedSettings.highlightHasBorder;
 }
 static bool StretchThumbsToTaskWidth() {
     return g_settings.stretchThumbnailsToTaskWidth;
@@ -1213,7 +1263,8 @@ enum ScrollNavType {
 };
 
 struct OutgoingItemSnapshot {
-    int windowIndex;
+    HWND hWnd = NULL;
+    int windowIndex = -1;
     RECT rcCell;
     RECT rcThumbActual;
     RECT rcThumbSlot;
@@ -1351,7 +1402,32 @@ static void InvalidateStaticCache() {
     g_staticContentDirty = true;
 }
 
+static HRGN s_cachedRoundRectRgn = NULL;
+static int s_cachedRgnW = 0, s_cachedRgnH = 0, s_cachedRgnRadius = 0;
+
+static HRGN GetCachedRoundRectRgn(int w, int h, int radius) {
+    if (radius <= 0 || w <= 0 || h <= 0) return NULL;
+    if (!s_cachedRoundRectRgn || s_cachedRgnW != w || s_cachedRgnH != h || s_cachedRgnRadius != radius) {
+        if (s_cachedRoundRectRgn) {
+            DeleteObject(s_cachedRoundRectRgn);
+            s_cachedRoundRectRgn = NULL;
+        }
+        s_cachedRoundRectRgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, radius * 2, radius * 2);
+        s_cachedRgnW = w;
+        s_cachedRgnH = h;
+        s_cachedRgnRadius = radius;
+    }
+    return s_cachedRoundRectRgn;
+}
+
 static void FreeCachedBuffers() {
+    if (s_cachedRoundRectRgn) {
+        DeleteObject(s_cachedRoundRectRgn);
+        s_cachedRoundRectRgn = NULL;
+        s_cachedRgnW = 0;
+        s_cachedRgnH = 0;
+        s_cachedRgnRadius = 0;
+    }
     if (s_cachedMemDC) {
         if (s_cachedOldBitmap) SelectObject(s_cachedMemDC, s_cachedOldBitmap);
         if (s_cachedBitmap) DeleteObject(s_cachedBitmap);
@@ -1410,13 +1486,20 @@ static void FreeCachedBuffers() {
     g_staticContentDirty = true;
 }
 
-static bool AreAnimationsGloballyEnabled() {
-    if (!g_settings.enableAnimations) return false;
+static bool s_clientAreaAnimCached = true;
+
+static void RefreshClientAreaAnimCache() {
     BOOL clientAnim = TRUE;
     if (SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &clientAnim, 0)) {
-        if (!clientAnim) return false;
+        s_clientAreaAnimCached = (clientAnim != FALSE);
+    } else {
+        s_clientAreaAnimCached = true;
     }
-    return true;
+}
+
+static bool AreAnimationsGloballyEnabled() {
+    if (!g_settings.enableAnimations) return false;
+    return s_clientAreaAnimCached;
 }
 
 static void StartAnimationTicker() {
@@ -1465,12 +1548,13 @@ static void FinishAnimations() {
     g_scrollTransition.offsetCurrentX = 0.0f;
     g_scrollTransition.offsetCurrentY = 0.0f;
     for (auto& item : g_scrollTransition.outgoingItems) {
-        if (IsWindowTruncated(item.windowIndex)) {
+        int curIdx = FindWindowIndexByHwnd(item.hWnd);
+        if (curIdx == -1 || IsWindowTruncated(curIdx)) {
             for (const auto& kv : item.hThumbs) {
                 if (kv.second) DwmUnregisterThumbnail(kv.second);
             }
-            if (item.windowIndex >= 0 && item.windowIndex < (int)g_windows.size()) {
-                g_windows[item.windowIndex].hThumbs.clear();
+            if (curIdx != -1) {
+                g_windows[curIdx].hThumbs.clear();
             }
         }
     }
@@ -1506,25 +1590,21 @@ static void CaptureOutgoingSnapshot() {
         if (w > 0 && h > 0 && s_cachedStaticDC && s_cachedStaticW == w && s_cachedStaticH == h) {
             int radius = GetWindowCornerRadiusPx();
             if (s_cachedStaticBits) memset(s_cachedStaticBits, 0, (size_t)w * h * sizeof(DWORD));
-            if (radius > 0) {
-                HRGN hClip = CreateRoundRectRgn(0, 0, w + 1, h + 1, radius * 2, radius * 2);
-                SelectClipRgn(s_cachedStaticDC, hClip);
-                DeleteObject(hClip);
-            } else {
-                SelectClipRgn(s_cachedStaticDC, NULL);
-            }
+            HRGN hClip = GetCachedRoundRectRgn(w, h, radius);
+            SelectClipRgn(s_cachedStaticDC, hClip);
             DrawSwitcherStaticContent(s_cachedStaticDC, ThemeIs(L"none"), g_hSwitcher);
             g_staticContentDirty = false;
         }
     }
     if (g_scrollTransition.active && !g_scrollTransition.outgoingItems.empty()) {
         for (auto& item : g_scrollTransition.outgoingItems) {
-            if (IsWindowTruncated(item.windowIndex)) {
+            int curIdx = FindWindowIndexByHwnd(item.hWnd);
+            if (curIdx == -1 || IsWindowTruncated(curIdx)) {
                 for (const auto& kv : item.hThumbs) {
                     if (kv.second) DwmUnregisterThumbnail(kv.second);
                 }
-                if (item.windowIndex >= 0 && item.windowIndex < (int)g_windows.size()) {
-                    g_windows[item.windowIndex].hThumbs.clear();
+                if (curIdx != -1) {
+                    g_windows[curIdx].hThumbs.clear();
                 }
             }
         }
@@ -1536,6 +1616,7 @@ static void CaptureOutgoingSnapshot() {
             w.rcCell.top == 0 && w.rcCell.bottom == 0) continue;
 
         OutgoingItemSnapshot snap;
+        snap.hWnd = w.hWnd;
         snap.windowIndex = i;
         snap.rcCell = w.rcCell;
         snap.rcThumbActual = w.rcThumbActual;
@@ -1597,25 +1678,15 @@ static void PreRenderScrollCanvases() {
         BitBlt(s_cachedScrollFromDC, 0, 0, w, h, s_cachedStaticDC, 0, 0, SRCCOPY);
     } else {
         if (s_cachedScrollFromBits) memset(s_cachedScrollFromBits, 0, (size_t)w * h * sizeof(DWORD));
-        if (radius > 0) {
-            HRGN hClip = CreateRoundRectRgn(0, 0, w + 1, h + 1, radius * 2, radius * 2);
-            SelectClipRgn(s_cachedScrollFromDC, hClip);
-            DeleteObject(hClip);
-        } else {
-            SelectClipRgn(s_cachedScrollFromDC, NULL);
-        }
+        HRGN hClip = GetCachedRoundRectRgn(w, h, radius);
+        SelectClipRgn(s_cachedScrollFromDC, hClip);
         DrawSwitcherStaticContent(s_cachedScrollFromDC, true, g_hSwitcher);
     }
 
     // 2. Pre-render Incoming Canvas: render incoming layout at rest (offset 0,0)
     if (s_cachedScrollToBits) memset(s_cachedScrollToBits, 0, (size_t)w * h * sizeof(DWORD));
-    if (radius > 0) {
-        HRGN hClip = CreateRoundRectRgn(0, 0, w + 1, h + 1, radius * 2, radius * 2);
-        SelectClipRgn(s_cachedScrollToDC, hClip);
-        DeleteObject(hClip);
-    } else {
-        SelectClipRgn(s_cachedScrollToDC, NULL);
-    }
+    HRGN hClip = GetCachedRoundRectRgn(w, h, radius);
+    SelectClipRgn(s_cachedScrollToDC, hClip);
     DrawSwitcherStaticContent(s_cachedScrollToDC, true, g_hSwitcher);
 }
 
@@ -1625,12 +1696,13 @@ static void TriggerScrollAnimationEx(int dir, ScrollNavType type) {
         g_scrollTransition.offsetCurrentX = 0.0f;
         g_scrollTransition.offsetCurrentY = 0.0f;
         for (auto& item : g_scrollTransition.outgoingItems) {
-            if (IsWindowTruncated(item.windowIndex)) {
+            int curIdx = FindWindowIndexByHwnd(item.hWnd);
+            if (curIdx == -1 || IsWindowTruncated(curIdx)) {
                 for (const auto& kv : item.hThumbs) {
                     if (kv.second) DwmUnregisterThumbnail(kv.second);
                 }
-                if (item.windowIndex >= 0 && item.windowIndex < (int)g_windows.size()) {
-                    g_windows[item.windowIndex].hThumbs.clear();
+                if (curIdx != -1) {
+                    g_windows[curIdx].hThumbs.clear();
                 }
             }
         }
@@ -1657,8 +1729,8 @@ static void TriggerScrollAnimationEx(int dir, ScrollNavType type) {
 
     if (horizontalScroll) {
         for (const auto& snap : g_scrollTransition.outgoingItems) {
-            int idx = snap.windowIndex;
-            if (idx >= 0 && idx < (int)g_windows.size() && !IsWindowTruncated(idx)) {
+            int idx = FindWindowIndexByHwnd(snap.hWnd);
+            if (idx != -1 && !IsWindowTruncated(idx)) {
                 const auto& cur = g_windows[idx];
                 int diffX = snap.rcCell.left - cur.rcCell.left;
                 if (diffX != 0) {
@@ -1682,8 +1754,8 @@ static void TriggerScrollAnimationEx(int dir, ScrollNavType type) {
         // If an item was at snap.rcCell and is now at cur.rcCell, it must start at
         // cur.rcCell + delta = snap.rcCell => delta = snap.rcCell - cur.rcCell.
         for (const auto& snap : g_scrollTransition.outgoingItems) {
-            int idx = snap.windowIndex;
-            if (idx >= 0 && idx < (int)g_windows.size() && !IsWindowTruncated(idx)) {
+            int idx = FindWindowIndexByHwnd(snap.hWnd);
+            if (idx != -1 && !IsWindowTruncated(idx)) {
                 const auto& cur = g_windows[idx];
                 int diffX = snap.rcCell.left - cur.rcCell.left;
                 int diffY = snap.rcCell.top - cur.rcCell.top;
@@ -1959,7 +2031,8 @@ static void UpdateThumbnailAnimations() {
         int outOffY = offY - g_scrollTransition.travelDistanceY;
 
         for (const auto& snap : g_scrollTransition.outgoingItems) {
-            if (!IsWindowTruncated(snap.windowIndex)) continue; // Already updated above in incoming items
+            int curIdx = FindWindowIndexByHwnd(snap.hWnd);
+            if (curIdx != -1 && !IsWindowTruncated(curIdx)) continue; // Already updated above in incoming items
 
             RECT dst = snap.rcThumbActual;
             OffsetRect(&dst, outOffX, outOffY);
@@ -2067,12 +2140,13 @@ static void OnAnimationTick() {
                 g_staticContentDirty = false;
             }
             for (auto& item : g_scrollTransition.outgoingItems) {
-                if (IsWindowTruncated(item.windowIndex)) {
+                int curIdx = FindWindowIndexByHwnd(item.hWnd);
+                if (curIdx == -1 || IsWindowTruncated(curIdx)) {
                     for (const auto& kv : item.hThumbs) {
                         if (kv.second) DwmUnregisterThumbnail(kv.second);
                     }
-                    if (item.windowIndex >= 0 && item.windowIndex < (int)g_windows.size()) {
-                        g_windows[item.windowIndex].hThumbs.clear();
+                    if (curIdx != -1) {
+                        g_windows[curIdx].hThumbs.clear();
                     }
                 }
             }
@@ -2828,6 +2902,7 @@ static bool CanCloseWindow(HWND hWnd) {
 }
 
 static std::vector<HWND> s_pendingCloseWindows;
+static int s_pendingCloseRetries = 0;
 
 // Activation MRU (Most Recently Used) tracking
 static std::vector<HWND> g_mruWindows;
@@ -4154,7 +4229,7 @@ static void ComputeLayout(HMONITOR hMon) {
                 bool keep = false;
                 if (g_scrollTransition.preservingThumbnails) {
                     for (const auto& snap : g_scrollTransition.outgoingItems) {
-                        if (snap.windowIndex == ji) { keep = true; break; }
+                        if (snap.hWnd == g_windows[ji].hWnd) { keep = true; break; }
                     }
                 }
                 if (!keep) {
@@ -4962,25 +5037,25 @@ static void DrawSelectionFillF(HDC hdc, const RectF& rc) {
     graphics.FillRectangle(&brush, snapLeft, snapTop, snapW, snapH);
 }
 
-static RECT GetHeaderContentRectForEntry(const WindowEntry& e) {
+static RECT GetHeaderContentRectForEntry(const RECT& rcCell, const RECT& rcThumbActual, const RECT& rcThumbSlot) {
     int padLeft = DpiScale(g_settings.entryPadding, g_dpiX);
     int padTop = DpiScale(g_settings.entryPadding, g_dpiY);
     int padBottom = DpiScale(g_settings.entryPadding, g_dpiY);
     RECT rc = {
-        e.rcCell.left + padLeft,
-        e.rcCell.top + padTop,
-        e.rcCell.right - padLeft,
-        e.rcCell.bottom - padBottom,
+        rcCell.left + padLeft,
+        rcCell.top + padTop,
+        rcCell.right - padLeft,
+        rcCell.bottom - padBottom,
     };
 
     if (!g_settings.showThumbnails) {
         return rc;
     }
 
-    const RECT& rcHeaderSplit = ((e.rcThumbSlot.left != 0 || e.rcThumbSlot.top != 0 ||
-                                  e.rcThumbSlot.right != 0 || e.rcThumbSlot.bottom != 0))
-                                    ? e.rcThumbSlot
-                                    : e.rcThumbActual;
+    const RECT& rcHeaderSplit = ((rcThumbSlot.left != 0 || rcThumbSlot.top != 0 ||
+                                  rcThumbSlot.right != 0 || rcThumbSlot.bottom != 0))
+                                    ? rcThumbSlot
+                                    : rcThumbActual;
 
     // In badge mode the title position is controlled by badgeTitlePosition, not thumbnailPosition.
     // "title on top" → thumb on bottom → header rect is above the thumb (ThumbnailIsBottom semantics)
@@ -5007,8 +5082,12 @@ static RECT GetHeaderContentRectForEntry(const WindowEntry& e) {
     return rc;
 }
 
-static int GetHeaderTopForEntry(const WindowEntry& e) {
-    RECT rcHeader = GetHeaderContentRectForEntry(e);
+static inline RECT GetHeaderContentRectForEntry(const WindowEntry& e) {
+    return GetHeaderContentRectForEntry(e.rcCell, e.rcThumbActual, e.rcThumbSlot);
+}
+
+static int GetHeaderTopForEntry(const RECT& rcCell, const RECT& rcThumbActual, const RECT& rcThumbSlot) {
+    RECT rcHeader = GetHeaderContentRectForEntry(rcCell, rcThumbActual, rcThumbSlot);
     int rowTitleH = GetHeaderRowHeightPx();
     if (BadgeLayoutActive()) {
         rowTitleH = g_settings.showTitle ? GetHeaderTitleHeightPx() : 0;
@@ -5025,12 +5104,16 @@ static int GetHeaderTopForEntry(const WindowEntry& e) {
     return rcHeader.top + (available - rowTitleH) / 2;
 }
 
-static RECT GetCloseButtonRect(const WindowEntry& e) {
+static inline int GetHeaderTopForEntry(const WindowEntry& e) {
+    return GetHeaderTopForEntry(e.rcCell, e.rcThumbActual, e.rcThumbSlot);
+}
+
+static RECT GetCloseButtonRect(const RECT& rcCell, const RECT& rcThumbActual, const RECT& rcThumbSlot) {
     if (DockLayoutActive()) {
         int btnSz = DpiScale(16, g_dpiX);
         int btnPadding = DpiScale(2, g_dpiX);
-        int bx = e.rcCell.right - btnSz - btnPadding;
-        int by = e.rcCell.top + btnPadding;
+        int bx = rcCell.right - btnSz - btnPadding;
+        int by = rcCell.top + btnPadding;
         return { bx, by, bx + btnSz, by + btnSz };
     }
 
@@ -5039,19 +5122,19 @@ static RECT GetCloseButtonRect(const WindowEntry& e) {
     int bx = 0, by = 0;
     if (rowTitleH == 0 || (g_settings.showThumbnails && ThumbnailIsSide()) || BadgeLayoutActive()) {
         int btnPadding = DpiScale(4, g_dpiX);
-        bx = e.rcThumbActual.right - btnSz - btnPadding;
-        by = e.rcThumbActual.top + btnPadding;
+        bx = rcThumbActual.right - btnSz - btnPadding;
+        by = rcThumbActual.top + btnPadding;
     } else if (!g_settings.showThumbnails && !g_settings.showTitle && g_settings.showIcon) {
         int padLeft = DpiScale(g_settings.entryPadding, g_dpiX);
         int padTop = DpiScale(g_settings.entryPadding, g_dpiY);
-        int contentLeft = e.rcCell.left + padLeft;
-        int contentRight = e.rcCell.right - padLeft;
+        int contentLeft = rcCell.left + padLeft;
+        int contentRight = rcCell.right - padLeft;
         int iconSz = GetHeaderIconSizePx();
         int availableW = contentRight - contentLeft;
         if (availableW < 0) availableW = 0;
 
         int iconX = contentLeft;
-        int iconY = e.rcCell.top + padTop + (rowTitleH - iconSz) / 2;
+        int iconY = rcCell.top + padTop + (rowTitleH - iconSz) / 2;
 
         if (g_settings.centerTaskContent && iconSz < availableW) {
             iconX = contentLeft + (availableW - iconSz) / 2;
@@ -5069,12 +5152,16 @@ static RECT GetCloseButtonRect(const WindowEntry& e) {
             by = iconY;
         }
     } else {
-        RECT rcHeaderContent = GetHeaderContentRectForEntry(e);
-        int headerTop = GetHeaderTopForEntry(e);
+        RECT rcHeaderContent = GetHeaderContentRectForEntry(rcCell, rcThumbActual, rcThumbSlot);
+        int headerTop = GetHeaderTopForEntry(rcCell, rcThumbActual, rcThumbSlot);
         bx = rcHeaderContent.right - btnSz;
         by = HeaderIsVertical() ? headerTop : (headerTop + (rowTitleH - btnSz) / 2);
     }
     return { bx, by, bx + btnSz, by + btnSz };
+}
+
+static inline RECT GetCloseButtonRect(const WindowEntry& e) {
+    return GetCloseButtonRect(e.rcCell, e.rcThumbActual, e.rcThumbSlot);
 }
 
 static bool HitTestCloseButton(const WindowEntry& e, POINT ptClient) {
@@ -5279,8 +5366,6 @@ static void DrawThumbnailShadow(HDC hdc, const RECT& rc, int cornerRadius, float
         }
     }
 }
-
-static bool IsWindowTruncated(int idx);
 
 // Shared drawing routine for both layered and buffered paint paths
 static void DrawTaskEntry(HDC hdc, WindowEntry& e, HWND hWnd, int padLeft, int rowTitleH, int iconSz, int cornerRadius, int closeBtnReserve, bool isHovered, float alpha = 1.0f) {
@@ -5709,7 +5794,7 @@ static void DrawSwitcherContentInner(HDC hdc, bool fillBg, HWND hWnd, bool inclu
 
     // 2. Draw current items
     for (int i = 0; i < (int)g_windows.size(); i++) {
-        WindowEntry e = g_windows[i];
+        auto& e = g_windows[i];
 
         // Skip truncated (not placed) windows
         if (e.rcCell.left == 0 && e.rcCell.right == 0 &&
@@ -5742,11 +5827,11 @@ static void DrawSwitcherStaticContent(HDC hdc, bool fillBg, HWND hWnd) {
 
 // Rendering
 
-static void DrawBadgeIconOverlay(HDC hdc, WindowEntry& e) {
-    if (!BadgeLayoutActive() || !g_settings.showIcon || !e.hIcon) return;
+static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon, int* pOutIconX = NULL, int* pOutIconY = NULL, int* pOutIconSz = NULL) {
+    if (!BadgeLayoutActive() || !g_settings.showIcon || !hIcon) return;
     int iconSz = GetHeaderIconSizePx();
-    int thumbW = e.rcThumbActual.right - e.rcThumbActual.left;
-    int thumbHt = e.rcThumbActual.bottom - e.rcThumbActual.top;
+    int thumbW = rcThumbActual.right - rcThumbActual.left;
+    int thumbHt = rcThumbActual.bottom - rcThumbActual.top;
     if (thumbW <= 0 || thumbHt <= 0) return;
 
     int badgePad = DpiScale(g_settings.badgeIconPadding, g_dpiX);
@@ -5754,27 +5839,27 @@ static void DrawBadgeIconOverlay(HDC hdc, WindowEntry& e) {
 
     // Horizontal positioning
     if (BadgeIconPositionIs(L"topLeft") || BadgeIconPositionIs(L"centerLeft") || BadgeIconPositionIs(L"bottomLeft")) {
-        bIconX = e.rcThumbActual.left + badgePad;
+        bIconX = rcThumbActual.left + badgePad;
     } else if (BadgeIconPositionIs(L"topRight") || BadgeIconPositionIs(L"centerRight") || BadgeIconPositionIs(L"bottomRight")) {
-        bIconX = e.rcThumbActual.right - iconSz - badgePad;
+        bIconX = rcThumbActual.right - iconSz - badgePad;
     } else {
-        bIconX = e.rcThumbActual.left + (thumbW - iconSz) / 2;
+        bIconX = rcThumbActual.left + (thumbW - iconSz) / 2;
     }
     // Vertical positioning
     if (BadgeIconPositionIs(L"topLeft") || BadgeIconPositionIs(L"topCenter") || BadgeIconPositionIs(L"topRight")) {
-        bIconY = e.rcThumbActual.top + badgePad;
+        bIconY = rcThumbActual.top + badgePad;
     } else if (BadgeIconPositionIs(L"bottomLeft") || BadgeIconPositionIs(L"bottomCenter") || BadgeIconPositionIs(L"bottomRight")) {
-        bIconY = e.rcThumbActual.bottom - iconSz - badgePad;
+        bIconY = rcThumbActual.bottom - iconSz - badgePad;
     } else {
-        bIconY = e.rcThumbActual.top + (thumbHt - iconSz) / 2;
+        bIconY = rcThumbActual.top + (thumbHt - iconSz) / 2;
     }
 
     bIconX += DpiScale(g_settings.badgeIconOffsetX, g_dpiX);
     bIconY += DpiScale(g_settings.badgeIconOffsetY, g_dpiY);
 
-    e.drawnIconX = bIconX;
-    e.drawnIconY = bIconY;
-    e.drawnIconSz = iconSz;
+    if (pOutIconX) *pOutIconX = bIconX;
+    if (pOutIconY) *pOutIconY = bIconY;
+    if (pOutIconSz) *pOutIconSz = iconSz;
 
     Gdiplus::Graphics gfx(hdc);
     gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
@@ -5832,9 +5917,9 @@ static void DrawBadgeIconOverlay(HDC hdc, WindowEntry& e) {
         } else {
             gfx.FillRectangle(&bgBrush, bgX, bgY, bgSize, bgSize);
         }
-        DrawIconEx(hdc, bIconX, bIconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
+        DrawIconEx(hdc, bIconX, bIconY, hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
     } else {
-        Gdiplus::Bitmap* pBmp = CreateIconShadowBitmap(e.hIcon, iconSz, iconSz, 0.08f);
+        Gdiplus::Bitmap* pBmp = CreateIconShadowBitmap(hIcon, iconSz, iconSz, 0.08f);
         if (pBmp) {
             int dx[] = { 0, 1, 0, -1, 1 };
             int dy[] = { 1, 0, -1, 0, 1 };
@@ -5843,7 +5928,7 @@ static void DrawBadgeIconOverlay(HDC hdc, WindowEntry& e) {
             }
             delete pBmp;
         }
-        DrawIconEx(hdc, bIconX, bIconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
+        DrawIconEx(hdc, bIconX, bIconY, hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
     }
 }
 
@@ -5919,29 +6004,23 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
         int outOffX = offX - g_scrollTransition.travelDistanceX;
         int outOffY = offY - g_scrollTransition.travelDistanceY;
         for (const auto& snap : g_scrollTransition.outgoingItems) {
-            if (!IsWindowTruncated(snap.windowIndex)) continue; // Items still visible are handled in incoming loop below
+            int curIdx = FindWindowIndexByHwnd(snap.hWnd);
+            if (curIdx != -1 && !IsWindowTruncated(curIdx)) continue; // Items still visible are handled in incoming loop below
 
-            WindowEntry e = {};
-            e.rcCell = snap.rcCell;
-            e.rcThumbActual = snap.rcThumbActual;
-            e.rcThumbSlot = snap.rcThumbSlot;
-            wcsncpy_s(e.title, snap.title, _TRUNCATE);
-            e.hIcon = snap.hIcon;
-            e.groupWindows = snap.groupWindows;
-
-            OffsetRect(&e.rcCell, outOffX, outOffY);
-            OffsetRect(&e.rcThumbActual, outOffX, outOffY);
-            OffsetRect(&e.rcThumbSlot, outOffX, outOffY);
+            RECT snapCell = snap.rcCell;
+            RECT snapThumb = snap.rcThumbActual;
+            OffsetRect(&snapCell, outOffX, outOffY);
+            OffsetRect(&snapThumb, outOffX, outOffY);
 
             RECT rcIntersect;
-            if (!IntersectRect(&rcIntersect, &rcClip, &e.rcCell)) continue;
+            if (!IntersectRect(&rcIntersect, &rcClip, &snapCell)) continue;
 
             bool collidesWithIncoming = false;
             for (int k = 0; k < (int)g_windows.size(); k++) {
                 if (IsWindowTruncated(k)) continue;
                 RECT inCell = g_windows[k].rcCell;
                 if (offX != 0 || offY != 0) OffsetRect(&inCell, offX, offY);
-                if (EqualRect(&e.rcCell, &inCell)) {
+                if (EqualRect(&snapCell, &inCell)) {
                     collidesWithIncoming = true;
                     break;
                 }
@@ -5950,10 +6029,10 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
 
             if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
                 COLORREF maskColor = GetBgColor();
-                MaskRectCorners(hdc, e.rcThumbActual, cornerRadius, true, maskColor);
+                MaskRectCorners(hdc, snapThumb, cornerRadius, true, maskColor);
             }
 
-            DrawBadgeIconOverlay(hdc, e);
+            DrawBadgeIconOverlay(hdc, snapThumb, snap.hIcon);
         }
     }
 
@@ -5961,36 +6040,32 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
     if (g_layoutTransition.active && !g_layoutTransition.departingItems.empty()) {
         for (const auto& dep : g_layoutTransition.departingItems) {
             if (dep.alpha <= 0.01f) continue;
-            WindowEntry e = {};
-            e.rcCell = dep.rcCellCurrent;
-            e.rcThumbActual = dep.rcThumbCurrent;
-            e.rcThumbSlot = dep.rcThumbCurrent;
-            e.hIcon = dep.hIcon;
-            wcsncpy_s(e.title, dep.title, _TRUNCATE);
-            e.groupWindows = dep.groupWindows;
+            RECT depThumb = dep.rcThumbCurrent;
 
             if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
                 COLORREF maskColor = GetBgColor();
-                MaskRectCorners(hdc, e.rcThumbActual, cornerRadius, true, maskColor);
+                MaskRectCorners(hdc, depThumb, cornerRadius, true, maskColor);
             }
-            DrawBadgeIconOverlay(hdc, e);
+            DrawBadgeIconOverlay(hdc, depThumb, dep.hIcon);
         }
     }
 
-    // 2. Incoming / current items
+    // 3. Incoming / current items
     for (int idx = 0; idx < (int)g_windows.size(); idx++) {
         int i = (g_layoutStartIndex + idx) % g_windows.size();
-        WindowEntry e = g_windows[i];
+        const auto& e = g_windows[i];
         if (IsWindowTruncated(i)) continue;
 
-        if (ThumbnailHoverIsZoom() && e.hoverScale > 1.0001f) {
-            e.rcThumbActual = GetScaledThumbRect(e);
-        }
+        RECT rcThumbActual = (ThumbnailHoverIsZoom() && e.hoverScale > 1.0001f)
+                             ? GetScaledThumbRect(e)
+                             : e.rcThumbActual;
+        RECT rcCell = e.rcCell;
+        RECT rcThumbSlot = e.rcThumbSlot;
 
         if (offX != 0 || offY != 0) {
-            OffsetRect(&e.rcCell, offX, offY);
-            OffsetRect(&e.rcThumbActual, offX, offY);
-            OffsetRect(&e.rcThumbSlot, offX, offY);
+            OffsetRect(&rcCell, offX, offY);
+            OffsetRect(&rcThumbActual, offX, offY);
+            OffsetRect(&rcThumbSlot, offX, offY);
         }
 
         if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
@@ -5998,17 +6073,20 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             if (i == g_selectedIndex && HighlightHasFill() && !DockLayoutActive()) {
                 maskColor = GetHighlightFillColor();
             }
-            MaskRectCorners(hdc, e.rcThumbActual, cornerRadius, true, maskColor);
+            MaskRectCorners(hdc, rcThumbActual, cornerRadius, true, maskColor);
         }
 
         // Badge layout: draw icon overlay on thumbnail
+        int drawnIconX = e.drawnIconX + offX;
+        int drawnIconY = e.drawnIconY + offY;
+        int drawnIconSz = e.drawnIconSz;
         if (!DockLayoutActive()) {
-            DrawBadgeIconOverlay(hdc, e);
+            DrawBadgeIconOverlay(hdc, rcThumbActual, e.hIcon, &drawnIconX, &drawnIconY, &drawnIconSz);
         }
 
         // Close button (rendered for any entry with closeBtnAlpha > 0.01f, enabling smooth cross-fades between entries)
         if (g_settings.showCloseButton && e.closeBtnAlpha > 0.01f) {
-            RECT btnRc = GetCloseButtonRect(e);
+            RECT btnRc = GetCloseButtonRect(rcCell, rcThumbActual, rcThumbSlot);
             float hoverPlateAlpha = (i == g_hoverIndex && g_hoverWnd == hWnd && g_isCloseHovered) ? g_animCloseBtnHoverAlpha : 0.0f;
             bool isBtnPressed = (i == g_hoverIndex && g_hoverWnd == hWnd && g_isClosePressed);
             DrawCloseButton(hdc, btnRc, e.closeBtnAlpha, hoverPlateAlpha, isBtnPressed);
@@ -6058,13 +6136,13 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
 
             // Position: top-right area of the icon
             int badgeX, badgeY;
-            if (e.drawnIconSz > 0) {
-                badgeX = e.drawnIconX + e.drawnIconSz - (badgeW / 2);
-                badgeY = e.drawnIconY - (badgeH / 2);
+            if (drawnIconSz > 0) {
+                badgeX = drawnIconX + drawnIconSz - (badgeW / 2);
+                badgeY = drawnIconY - (badgeH / 2);
             } else {
                 int cellPad = DpiScale(4, g_dpiX);
-                badgeX = e.rcCell.right - badgeW - cellPad;
-                badgeY = e.rcCell.top + cellPad;
+                badgeX = rcCell.right - badgeW - cellPad;
+                badgeY = rcCell.top + cellPad;
             }
 
             // Background pill
@@ -6310,13 +6388,8 @@ static void PaintSwitcherOverlay() {
     }
 
     int radius = GetWindowCornerRadiusPx();
-    if (radius > 0) {
-        HRGN hClip = CreateRoundRectRgn(0, 0, w + 1, h + 1, radius * 2, radius * 2);
-        SelectClipRgn(s_cachedOverlayDC, hClip);
-        DeleteObject(hClip);
-    } else {
-        SelectClipRgn(s_cachedOverlayDC, NULL);
-    }
+    HRGN hClip = GetCachedRoundRectRgn(w, h, radius);
+    SelectClipRgn(s_cachedOverlayDC, hClip);
 
     DrawSwitcherOverlay(s_cachedOverlayDC, targetWnd);
 
@@ -6400,13 +6473,8 @@ static void PaintSwitcher() {
                 if (s_cachedStaticBits) {
                     memset(s_cachedStaticBits, 0, (size_t)w * h * sizeof(DWORD));
                 }
-                if (radius > 0) {
-                    HRGN hClip = CreateRoundRectRgn(0, 0, w + 1, h + 1, radius * 2, radius * 2);
-                    SelectClipRgn(s_cachedStaticDC, hClip);
-                    DeleteObject(hClip);
-                } else {
-                    SelectClipRgn(s_cachedStaticDC, NULL);
-                }
+                HRGN hClip = GetCachedRoundRectRgn(w, h, radius);
+                SelectClipRgn(s_cachedStaticDC, hClip);
                 DrawSwitcherStaticContent(s_cachedStaticDC, true, g_hSwitcher);
                 g_staticContentDirty = false;
             }
@@ -6429,13 +6497,8 @@ static void PaintSwitcher() {
             }
 
             // Draw moving selection highlight fill on top of background
-            if (radius > 0) {
-                HRGN hClip = CreateRoundRectRgn(0, 0, w + 1, h + 1, radius * 2, radius * 2);
-                SelectClipRgn(s_cachedMemDC, hClip);
-                DeleteObject(hClip);
-            } else {
-                SelectClipRgn(s_cachedMemDC, NULL);
-            }
+            HRGN hClip = GetCachedRoundRectRgn(w, h, radius);
+            SelectClipRgn(s_cachedMemDC, hClip);
             if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size() && HighlightHasFill()) {
                 RectF fillRc = (g_animSelectionActive && AreAnimationsGloballyEnabled() && g_settings.enableSelectionAnimation)
                                ? g_animSelectionCurrent
@@ -6456,13 +6519,8 @@ static void PaintSwitcher() {
             if (DockLayoutActive()) {
                 // 1. In Dock Layout, the switcher background, central preview shadow, divider line,
                 // and window title are stationary and must remain 100% visible throughout the transition.
-                if (radius > 0) {
-                    HRGN hWndClip = CreateRoundRectRgn(0, 0, w + 1, h + 1, radius * 2, radius * 2);
-                    SelectClipRgn(s_cachedMemDC, hWndClip);
-                    DeleteObject(hWndClip);
-                } else {
-                    SelectClipRgn(s_cachedMemDC, NULL);
-                }
+                HRGN hWndClip = GetCachedRoundRectRgn(w, h, radius);
+                SelectClipRgn(s_cachedMemDC, hWndClip);
                 if (s_cachedScrollToDC) {
                     BitBlt(s_cachedMemDC, 0, 0, w, h, s_cachedScrollToDC, 0, 0, SRCCOPY);
                 }
@@ -6516,9 +6574,8 @@ static void PaintSwitcher() {
                 int masterPadY = DpiScale(g_settings.switcherPadding, g_dpiY);
                 HRGN hContentClip = CreateRectRgn(masterPadX, masterPadY, w - masterPadX, h - masterPadY);
                 if (radius > 0) {
-                    HRGN hWndClip = CreateRoundRectRgn(0, 0, w + 1, h + 1, radius * 2, radius * 2);
+                    HRGN hWndClip = GetCachedRoundRectRgn(w, h, radius);
                     CombineRgn(hContentClip, hContentClip, hWndClip, RGN_AND);
-                    DeleteObject(hWndClip);
                 }
                 SelectClipRgn(s_cachedMemDC, hContentClip);
 
@@ -6929,6 +6986,7 @@ static void ApplySwitcherRegion() {
 }
 
 static void ShowSwitcher(bool sticky) {
+    RefreshClientAreaAnimCache();
     DestroyMirrorSwitchers();
 
     POINT pt; GetCursorPos(&pt);
@@ -7173,6 +7231,7 @@ static void HideSwitcher() {
         KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
     }
     s_pendingCloseWindows.clear();
+    s_pendingCloseRetries = 0;
 }
 
 // Restores a window from iconic (minimized) state.
@@ -7246,13 +7305,6 @@ static void StartExitAnimation(bool activateSelectedWindow) {
 
 static void SwitchToSelected() {
     StartExitAnimation(true);
-}
-
-// Helper: check if a window is truncated (not placed in current layout)
-static bool IsWindowTruncated(int idx) {
-    auto& w = g_windows[idx];
-    return w.rcCell.left == 0 && w.rcCell.right == 0 &&
-           w.rcCell.top == 0 && w.rcCell.bottom == 0;
 }
 
 // Helper: recompute layout and reposition switcher window
@@ -8823,6 +8875,7 @@ static void CloseSwitcherEntry(int idx) {
     }
 
     if (!s_pendingCloseWindows.empty() && g_hSwitcher) {
+        s_pendingCloseRetries = 0;
         SetTimer(g_hSwitcher, SWS_CLOSE_VERIFY_TIMER_ID, 200, NULL);
     }
 }
@@ -8870,12 +8923,24 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 HWND h = *it;
                 if (!IsWindow(h) || !IsWindowVisible(h)) {
                     toRemove.push_back(h);
+                    it = s_pendingCloseWindows.erase(it);
+                } else {
+                    ++it;
                 }
-                it = s_pendingCloseWindows.erase(it);
             }
             for (HWND h : toRemove) {
                 RemoveMruWindow(h);
                 RemoveWindowEntryByHwnd(h);
+            }
+            if (!s_pendingCloseWindows.empty()) {
+                if (++s_pendingCloseRetries < 15) { // Try up to ~3 seconds
+                    SetTimer(hWnd, SWS_CLOSE_VERIFY_TIMER_ID, 200, NULL);
+                } else {
+                    s_pendingCloseWindows.clear();
+                    s_pendingCloseRetries = 0;
+                }
+            } else {
+                s_pendingCloseRetries = 0;
             }
             return 0;
         }
@@ -8999,13 +9064,8 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                         memset(s_cachedStaticBits, 0, (size_t)w * h * sizeof(DWORD));
                     }
                     int radius = GetWindowCornerRadiusPx();
-                    if (radius > 0) {
-                        HRGN hClip = CreateRoundRectRgn(0, 0, w + 1, h + 1, radius * 2, radius * 2);
-                        SelectClipRgn(s_cachedStaticDC, hClip);
-                        DeleteObject(hClip);
-                    } else {
-                        SelectClipRgn(s_cachedStaticDC, NULL);
-                    }
+                    HRGN hClip = GetCachedRoundRectRgn(w, h, radius);
+                    SelectClipRgn(s_cachedStaticDC, hClip);
                     DrawSwitcherStaticContent(s_cachedStaticDC, false, hWnd);
                     g_staticContentDirty = false;
                 }
@@ -9041,13 +9101,8 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 if (DockLayoutActive()) {
                 // 1. In Dock Layout, the switcher background, central preview shadow, divider line,
                 // and window title are stationary and must remain 100% visible throughout the transition.
-                if (radius > 0) {
-                    HRGN hWndClip = CreateRoundRectRgn(0, 0, w + 1, h + 1, radius * 2, radius * 2);
-                    SelectClipRgn(hdcBuf, hWndClip);
-                    DeleteObject(hWndClip);
-                } else {
-                    SelectClipRgn(hdcBuf, NULL);
-                }
+                HRGN hWndClip = GetCachedRoundRectRgn(w, h, radius);
+                SelectClipRgn(hdcBuf, hWndClip);
                 if (s_cachedScrollToDC) {
                     BitBlt(hdcBuf, 0, 0, w, h, s_cachedScrollToDC, 0, 0, SRCCOPY);
                 }
@@ -9101,9 +9156,8 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 int masterPadY = DpiScale(g_settings.switcherPadding, g_dpiY);
                 HRGN hContentClip = CreateRectRgn(masterPadX, masterPadY, w - masterPadX, h - masterPadY);
                 if (radius > 0) {
-                    HRGN hWndClip = CreateRoundRectRgn(0, 0, w + 1, h + 1, radius * 2, radius * 2);
+                    HRGN hWndClip = GetCachedRoundRectRgn(w, h, radius);
                     CombineRgn(hContentClip, hContentClip, hWndClip, RGN_AND);
-                    DeleteObject(hWndClip);
                 }
                 SelectClipRgn(hdcBuf, hContentClip);
 
@@ -9302,6 +9356,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         return 0;
     }
     case WM_SETTINGCHANGE:
+        RefreshClientAreaAnimCache();
         if (!AreAnimationsGloballyEnabled()) {
             FinishAnimations();
             StopAnimationTicker();
@@ -9765,7 +9820,13 @@ static void LoadSettings() {
     g_settings.dockShowPreview = Wh_GetIntSetting(L"Appearance.DockLayout.dockShowPreview");
     g_settings.dockPreviewHeight = Wh_GetIntSetting(L"Appearance.DockLayout.dockPreviewHeight");
     if (g_settings.dockPreviewHeight <= 0) g_settings.dockPreviewHeight = 280;
-    g_settings.dockIconSize = Wh_GetIntSetting(L"Appearance.DockLayout.dockIconSize");
+    PCWSTR dockIconSizeStr = Wh_GetStringSetting(L"Appearance.DockLayout.dockIconSize");
+    if (dockIconSizeStr) {
+        g_settings.dockIconSize = _wtoi(dockIconSizeStr);
+        Wh_FreeStringSetting(dockIconSizeStr);
+    } else {
+        g_settings.dockIconSize = Wh_GetIntSetting(L"Appearance.DockLayout.dockIconSize");
+    }
     if (g_settings.dockIconSize <= 0) g_settings.dockIconSize = 48;
     g_settings.dockIconSpacing = Wh_GetIntSetting(L"Appearance.DockLayout.dockIconSpacing");
     if (g_settings.dockIconSpacing < 0) g_settings.dockIconSpacing = 8;
@@ -9775,7 +9836,13 @@ static void LoadSettings() {
         wcscmp(g_settings.dockHighlightStyle, L"fillAndBorder") != 0) {
         wcsncpy_s(g_settings.dockHighlightStyle, L"fillOnly", _TRUNCATE);
     }
-    g_settings.dockMaxVisibleIcons = Wh_GetIntSetting(L"Appearance.DockLayout.dockMaxVisibleIcons");
+    PCWSTR dockMaxIconsStr = Wh_GetStringSetting(L"Appearance.DockLayout.dockMaxVisibleIcons");
+    if (dockMaxIconsStr) {
+        g_settings.dockMaxVisibleIcons = _wtoi(dockMaxIconsStr);
+        Wh_FreeStringSetting(dockMaxIconsStr);
+    } else {
+        g_settings.dockMaxVisibleIcons = Wh_GetIntSetting(L"Appearance.DockLayout.dockMaxVisibleIcons");
+    }
     if (g_settings.dockMaxVisibleIcons < 0) g_settings.dockMaxVisibleIcons = 7;
 
     // Grouped indicator
@@ -9940,6 +10007,7 @@ static void LoadSettings() {
         if (name) Wh_FreeStringSetting(name);
         if (endOfArray) break;
     }
+    UpdateCachedSettings();
     InvalidateStaticCache();
 }
 
