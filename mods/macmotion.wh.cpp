@@ -2,7 +2,7 @@
 // @id              macmotion
 // @name            MacMotion Smooth Maximize
 // @description     Smooth macOS-inspired maximize and unmaximize transitions without blocking the app UI thread.
-// @version         2.0.0
+// @version         2.0.1
 // @author          Aayush
 // @github          https://github.com/Aayushjoshi12
 // @include         *
@@ -19,33 +19,44 @@
 /*
 # MacMotion Smooth Maximize
 
-MacMotion adds a smooth macOS-inspired transition when a normal desktop window
+MacMotion adds a focused macOS-inspired transition when a normal desktop window
 is maximized or restored from maximized state.
 
-This catalog version intentionally focuses on maximize/unmaximize only. It does
-not duplicate minimize, restore-from-taskbar, close, launch, or destruction
-effects from the existing **Windows Animations** mod. If you want those effects,
-use Windows Animations alongside MacMotion.
+This catalog version intentionally implements only maximize/unmaximize. It does
+not include minimize, restore-from-taskbar, close, launch, destruction, or
+window-switch effects.
 
-The animation is rendered on a worker thread with a DWM thumbnail. The real
-window is temporarily cloaked while the visual transition runs, so the
-application's UI thread remains free to process messages.
+The implementation uses a DWM thumbnail and temporary window cloaking. The
+animation loop runs on a worker thread, leaving the application's UI thread free
+to process messages during the transition. The animation worker uses a
+per-monitor-DPI-aware coordinate context, so physical screen coordinates stay
+correct on scaled and mixed-DPI displays.
 
-Earlier MacMotion prototypes experimented with MIT-licensed ideas and code from
-ReDrag's Windows Animations mod and Abdullah Masood's macos-minimize-animation.
-Those minimize/close/launch implementations and their preview assets are not
-part of this catalog-focused version.
+## Relationship to Windows Animations
+
+MacMotion's earlier prototypes were derived in part from ReDrag's MIT-licensed
+**Windows Animations** mod and Abdullah Masood's MIT-licensed
+**macos-minimize-animation**. The current catalog build keeps the general
+DWM-thumbnail/cloak technique for a maximize transition, but does not include
+their minimize/close/window-switch renderers or preview assets. Credit is kept
+here because those projects influenced the development of MacMotion.
+
+Do not enable MacMotion and Windows Animations at the same time. Both mods hook
+some of the same USER32 window-transition APIs, so running them together can
+produce competing animation state.
 
 ## Features
 
 - Smooth maximize animation.
 - Smooth unmaximize/restore animation.
+- Worker-thread rendering; the app UI thread is not held for the animation.
 - Click-through animation surface, so the transition doesn't block input.
-- Animation surface is limited to the affected window's start/end bounds rather
-  than covering the whole virtual desktop.
+- Animation surface is limited to the affected window's start/end bounds.
+- Mixed-DPI-safe physical coordinate handling.
 - Adjustable duration.
-- Safe unload: animation workers avoid synchronous cross-thread window messages
-  and are joined before the mod is unloaded.
+- Safe unload: active workers exit and are joined before the mod unloads.
+- Does not force-enable or force-disable the target window's native DWM
+  transition preference, avoiding side effects on apps and other mods.
 
 Disable the mod to immediately return to normal Windows maximize behavior.
 */
@@ -79,8 +90,8 @@ Disable the mod to immediately return to normal Windows maximize behavior.
 #include <unordered_set>
 #include <vector>
 
-#ifndef DWMWA_EXTENDED_FRAME_BOUNDS
-#define DWMWA_EXTENDED_FRAME_BOUNDS 9
+#ifndef DWMWA_CLOAK
+#define DWMWA_CLOAK 13
 #endif
 
 #ifndef WS_EX_NOREDIRECTIONBITMAP
@@ -89,10 +100,12 @@ Disable the mod to immediately return to normal Windows maximize behavior.
 
 using ShowWindow_t = BOOL(WINAPI*)(HWND, int);
 using DefWindowProcW_t = LRESULT(WINAPI*)(HWND, UINT, WPARAM, LPARAM);
+using DefWindowProcA_t = LRESULT(WINAPI*)(HWND, UINT, WPARAM, LPARAM);
 using SetWindowPlacement_t = BOOL(WINAPI*)(HWND, const WINDOWPLACEMENT*);
 
 ShowWindow_t ShowWindow_Original = nullptr;
 DefWindowProcW_t DefWindowProcW_Original = nullptr;
+DefWindowProcA_t DefWindowProcA_Original = nullptr;
 SetWindowPlacement_t SetWindowPlacement_Original = nullptr;
 
 std::atomic<bool> g_maximizeAnimation{true};
@@ -129,6 +142,27 @@ static constexpr std::wstring_view kExcludedClasses[] = {
     L"ToolTip",
 };
 
+class ScopedPerMonitorDpiContext {
+public:
+    ScopedPerMonitorDpiContext() {
+        previous_ = SetThreadDpiAwarenessContext(
+            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    }
+
+    ~ScopedPerMonitorDpiContext() {
+        if (previous_) {
+            SetThreadDpiAwarenessContext(previous_);
+        }
+    }
+
+    ScopedPerMonitorDpiContext(const ScopedPerMonitorDpiContext&) = delete;
+    ScopedPerMonitorDpiContext& operator=(const ScopedPerMonitorDpiContext&) =
+        delete;
+
+private:
+    DPI_AWARENESS_CONTEXT previous_{};
+};
+
 static bool IsExactExcludedClass(HWND hWnd) {
     wchar_t className[128]{};
     if (!GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
@@ -151,24 +185,24 @@ static bool IsCurrentThreadWindow(HWND hWnd) {
            threadId == GetCurrentThreadId();
 }
 
-static bool GetAnimationRect(HWND hWnd, RECT* rect) {
+// GetWindowRect is virtualized for DPI-unaware callers. Pinning the calling
+// thread to PMv2 makes the returned coordinates physical, matching the
+// coordinate space used by the DWM thumbnail and the worker's ghost window.
+static bool GetPhysicalWindowRect(HWND hWnd, RECT* rect) {
     if (!rect) {
         return false;
     }
 
-    if (SUCCEEDED(DwmGetWindowAttribute(
-            hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, rect, sizeof(*rect))) &&
-        rect->right > rect->left && rect->bottom > rect->top) {
-        return true;
-    }
-
+    ScopedPerMonitorDpiContext dpiContext;
     return GetWindowRect(hWnd, rect) &&
            rect->right > rect->left && rect->bottom > rect->top;
 }
 
 static bool IsEligibleWindow(HWND hWnd) {
     if (!IsWindow(hWnd) || !IsWindowVisible(hWnd) || IsIconic(hWnd) ||
-        GetAncestor(hWnd, GA_ROOT) != hWnd || IsExactExcludedClass(hWnd)) {
+        GetAncestor(hWnd, GA_ROOT) != hWnd ||
+        GetWindow(hWnd, GW_OWNER) != nullptr ||
+        IsExactExcludedClass(hWnd)) {
         return false;
     }
 
@@ -181,18 +215,12 @@ static bool IsEligibleWindow(HWND hWnd) {
     }
 
     RECT rect{};
-    if (!GetWindowRect(hWnd, &rect)) {
+    if (!GetPhysicalWindowRect(hWnd, &rect)) {
         return false;
     }
 
     return (rect.right - rect.left) >= 160 &&
            (rect.bottom - rect.top) >= 100;
-}
-
-static void SetDwmTransitionsEnabled(HWND hWnd, bool enabled) {
-    const BOOL forcedDisabled = enabled ? FALSE : TRUE;
-    DwmSetWindowAttribute(hWnd, DWMWA_TRANSITIONS_FORCEDISABLED,
-                          &forcedDisabled, sizeof(forcedDisabled));
 }
 
 static bool SetWindowCloak(HWND hWnd, bool cloaked) {
@@ -214,7 +242,6 @@ static bool ReserveAnimatingWindow(HWND hWnd) {
 static void RestoreRealWindow(HWND hWnd) {
     if (IsWindow(hWnd)) {
         SetWindowCloak(hWnd, false);
-        SetDwmTransitionsEnabled(hWnd, true);
     }
     RemoveAnimatingWindow(hWnd);
 }
@@ -316,7 +343,7 @@ static DWORD WINAPI ResizeAnimationThread(void* parameter) {
     const int durationMs = data->durationMs;
     delete data;
 
-    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+    ScopedPerMonitorDpiContext dpiContext;
 
     HWND ghost = nullptr;
     HTHUMBNAIL thumbnail = nullptr;
@@ -337,15 +364,15 @@ static DWORD WINAPI ResizeAnimationThread(void* parameter) {
             nullptr, nullptr, nullptr, nullptr);
 
         if (ghost) {
-            HRESULT hr = DwmRegisterThumbnail(ghost, hWnd, &thumbnail);
-            if (SUCCEEDED(hr)) {
+            const HRESULT registerResult =
+                DwmRegisterThumbnail(ghost, hWnd, &thumbnail);
+            if (SUCCEEDED(registerResult)) {
                 DWM_THUMBNAIL_PROPERTIES properties{};
                 properties.dwFlags =
                     DWM_TNP_VISIBLE | DWM_TNP_RECTDESTINATION |
-                    DWM_TNP_OPACITY | DWM_TNP_SOURCECLIENTAREAONLY;
+                    DWM_TNP_OPACITY;
                 properties.fVisible = TRUE;
                 properties.opacity = 255;
-                properties.fSourceClientAreaOnly = FALSE;
                 properties.rcDestination =
                     MakeLocalRect(fromRect, ghostRect);
 
@@ -362,13 +389,6 @@ static DWORD WINAPI ResizeAnimationThread(void* parameter) {
                     QueryPerformanceCounter(&start);
 
                     for (;;) {
-                        MSG message{};
-                        while (PeekMessageW(&message, nullptr, 0, 0,
-                                            PM_REMOVE)) {
-                            TranslateMessage(&message);
-                            DispatchMessageW(&message);
-                        }
-
                         QueryPerformanceCounter(&now);
                         const double elapsedMs =
                             (now.QuadPart - start.QuadPart) * 1000.0 /
@@ -381,8 +401,7 @@ static DWORD WINAPI ResizeAnimationThread(void* parameter) {
                         const float progress =
                             lastFrame
                                 ? 1.0f
-                                : static_cast<float>(
-                                      elapsedMs / durationMs);
+                                : static_cast<float>(elapsedMs / durationMs);
                         const float eased = EaseInOutCubic(progress);
                         const RECT frame =
                             InterpolateRect(fromRect, toRect, eased);
@@ -396,16 +415,22 @@ static DWORD WINAPI ResizeAnimationThread(void* parameter) {
                             MakeLocalRect(frame, ghostRect);
                         DwmUpdateThumbnailProperties(thumbnail,
                                                      &properties);
-                        DwmFlush();
 
                         if (lastFrame) {
                             break;
                         }
+
+                        DwmFlush();
                     }
                 }
             }
         }
     }
+
+    // Reveal the real window before removing the thumbnail/ghost. This avoids a
+    // composition frame where neither representation is visible.
+    RestoreRealWindow(hWnd);
+    DwmFlush();
 
     if (thumbnail) {
         DwmUnregisterThumbnail(thumbnail);
@@ -414,7 +439,6 @@ static DWORD WINAPI ResizeAnimationThread(void* parameter) {
         DestroyWindow(ghost);
     }
 
-    RestoreRealWindow(hWnd);
     return 0;
 }
 
@@ -429,15 +453,12 @@ static bool PrepareResizeAnimation(HWND hWnd,
     }
 
     RECT fromRect{};
-    if (!GetAnimationRect(hWnd, &fromRect) ||
+    if (!GetPhysicalWindowRect(hWnd, &fromRect) ||
         !ReserveAnimatingWindow(hWnd)) {
         return false;
     }
 
-    SetDwmTransitionsEnabled(hWnd, false);
-
     if (!SetWindowCloak(hWnd, true)) {
-        SetDwmTransitionsEnabled(hWnd, true);
         RemoveAnimatingWindow(hWnd);
         return false;
     }
@@ -468,7 +489,7 @@ static void CommitResizeAnimation(PendingResizeAnimation* pending,
     RECT toRect{};
     if (g_unloading.load(std::memory_order_acquire) ||
         !IsWindow(pending->hWnd) ||
-        !GetAnimationRect(pending->hWnd, &toRect) ||
+        !GetPhysicalWindowRect(pending->hWnd, &toRect) ||
         EqualRect(&pending->fromRect, &toRect)) {
         CancelResizeAnimation(pending);
         return;
@@ -515,10 +536,12 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int command) {
     return result;
 }
 
-LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd,
-                                   UINT message,
-                                   WPARAM wParam,
-                                   LPARAM lParam) {
+static LRESULT HandleDefWindowProcSysCommand(
+    HWND hWnd,
+    UINT message,
+    WPARAM wParam,
+    LPARAM lParam,
+    LRESULT(WINAPI* original)(HWND, UINT, WPARAM, LPARAM)) {
     if (message == WM_SYSCOMMAND) {
         const UINT command = static_cast<UINT>(wParam) & 0xFFF0;
         const bool maximize =
@@ -532,8 +555,7 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd,
             PendingResizeAnimation pending{};
             PrepareResizeAnimation(hWnd, &pending);
 
-            const LRESULT result =
-                DefWindowProcW_Original(hWnd, message, wParam, lParam);
+            const LRESULT result = original(hWnd, message, wParam, lParam);
 
             if (pending.active) {
                 CommitResizeAnimation(
@@ -544,7 +566,23 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd,
         }
     }
 
-    return DefWindowProcW_Original(hWnd, message, wParam, lParam);
+    return original(hWnd, message, wParam, lParam);
+}
+
+LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd,
+                                   UINT message,
+                                   WPARAM wParam,
+                                   LPARAM lParam) {
+    return HandleDefWindowProcSysCommand(
+        hWnd, message, wParam, lParam, DefWindowProcW_Original);
+}
+
+LRESULT WINAPI DefWindowProcA_Hook(HWND hWnd,
+                                   UINT message,
+                                   WPARAM wParam,
+                                   LPARAM lParam) {
+    return HandleDefWindowProcSysCommand(
+        hWnd, message, wParam, lParam, DefWindowProcA_Original);
 }
 
 BOOL WINAPI SetWindowPlacement_Hook(
@@ -570,8 +608,12 @@ BOOL WINAPI SetWindowPlacement_Hook(
         SetWindowPlacement_Original(hWnd, placement);
 
     if (pending.active) {
-        CommitResizeAnimation(
-            &pending, maximize ? L"maximize" : L"unmaximize");
+        if (result) {
+            CommitResizeAnimation(
+                &pending, maximize ? L"maximize" : L"unmaximize");
+        } else {
+            CancelResizeAnimation(&pending);
+        }
     }
 
     return result;
@@ -592,23 +634,29 @@ static void LoadSettings() {
 BOOL Wh_ModInit() {
     LoadSettings();
 
+    if (!g_maximizeAnimation.load(std::memory_order_relaxed)) {
+        Wh_Log(L"Disabled by setting");
+        return FALSE;
+    }
+
     WindhawkUtils::SetFunctionHook(
         ShowWindow, ShowWindow_Hook, &ShowWindow_Original);
     WindhawkUtils::SetFunctionHook(
         DefWindowProcW, DefWindowProcW_Hook, &DefWindowProcW_Original);
     WindhawkUtils::SetFunctionHook(
+        DefWindowProcA, DefWindowProcA_Hook, &DefWindowProcA_Original);
+    WindhawkUtils::SetFunctionHook(
         SetWindowPlacement, SetWindowPlacement_Hook,
         &SetWindowPlacement_Original);
 
-    Wh_Log(L"MacMotion initialized enabled=%d duration=%d",
-           g_maximizeAnimation.load(std::memory_order_relaxed),
+    Wh_Log(L"Initialized duration=%d",
            g_maximizeDurationMs.load(std::memory_order_relaxed));
     return TRUE;
 }
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
-    Wh_Log(L"MacMotion settings changed enabled=%d duration=%d",
+    Wh_Log(L"Settings changed enabled=%d duration=%d",
            g_maximizeAnimation.load(std::memory_order_relaxed),
            g_maximizeDurationMs.load(std::memory_order_relaxed));
 }
@@ -630,9 +678,8 @@ void Wh_ModUninit() {
     for (HWND hWnd : stuckWindows) {
         if (IsWindow(hWnd)) {
             SetWindowCloak(hWnd, false);
-            SetDwmTransitionsEnabled(hWnd, true);
         }
     }
 
-    Wh_Log(L"MacMotion unloaded");
+    Wh_Log(L"Unloaded");
 }
