@@ -2,7 +2,7 @@
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Hides selected taskbars while their displays show only the desktop
-// @version         5.8.0
+// @version         5.9.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -30,7 +30,7 @@ This Windhawk mod hides selected taskbars when their corresponding display is sh
 
 For each selected display, the mod checks whether a relevant visible, non-minimized application is present. Supported Windows shell surfaces and desktop infrastructure are excluded from the normal application check.
 
-When a display is showing only the desktop, its selected bottom-docked taskbar can be hidden. An application on that display, keyboard-driven taskbar focus such as Win+T or Win+B, or supported shell interaction can keep the taskbar visible. Mouse interaction with the taskbar does not prevent it from hiding after hover dismissal.
+When a display is showing only the desktop, its selected bottom-docked taskbar can be hidden. An application on that display, keyboard-driven taskbar focus such as Win+T or Win+B, or supported shell interaction can keep the taskbar visible. Mouse interaction with the taskbar does not prevent it from hiding after hover dismissal. Borderless fullscreen content is tracked per display after it enters fullscreen and keeps that display's taskbar hidden even if another display later becomes foreground; leaving fullscreen clears the tracked state.
 
 Applications spanning multiple displays are considered for every display they intersect, so each affected display can independently remain visible.
 
@@ -49,7 +49,7 @@ Display selections are evaluated using the current logical monitor numbering eac
 
 ## Hover Reveal
 
-For bottom-docked taskbars, moving the cursor into the configured bottom-edge area reveals the taskbar. The hover zone follows the taskbar's actual height and display scaling, with an optional extra margin.
+For bottom-docked taskbars, moving the cursor into the configured bottom-edge area reveals the taskbar. The hover zone follows the taskbar's actual height and display scaling, with an optional extra margin. A taskbar on a display currently tracked as fullscreen does not reveal from bottom-edge hover.
 
 After the cursor leaves the area, the taskbar hides again after the configured delay. Moving the cursor between displays also updates which taskbar is currently revealed.
 
@@ -91,19 +91,36 @@ The mod supports up to 16 display/taskbar entries and uses the current logical d
 
 ## Performance and Refreshing
 
-The full application and display scan runs in the dedicated tool process rather than inside Explorer.
+The full application and display scan runs in the dedicated tool process rather than inside Explorer. Fullscreen state is cached by the actual HMONITOR only after an actual fullscreen window has entered the foreground, avoiding false positives from unrelated borderless background windows and preventing monitor-enumeration changes from moving fullscreen ownership to another display.
+
+Fullscreen state is retained while the cached fullscreen window remains the last fullscreen owner of its monitor, even when focus moves to another display or a transient minimize event is reported. A normal application becoming foreground on that same monitor clears the cached fullscreen owner. Desktop and taskbar foreground transitions on another monitor do not clear it.
 
 The mod uses:
 
 - A dedicated worker thread for state management
 - A lightweight cursor-sampling thread for hover detection
-- Event-driven refreshes for relevant foreground, minimize/move, window show/hide/destroy, display, theme, settings, and taskbar recreation changes
-- A periodic 250 ms safety poll for missed or unusual transitions
+- Event-driven refreshes for relevant foreground, minimize/move, window show/hide/destroy/cloak/uncloak, display, theme, settings, and taskbar recreation changes
+- A periodic 2 second safety poll for missed or unusual transitions
 - A one-shot timer for hover dismissal
 
-The 250 ms safety poll is intentionally retained as a fallback and does not replace the normal event-driven refresh path. Native Windows taskbar auto-hide state is cached and refreshed when settings or relevant shell/taskbar changes occur rather than being queried on every safety tick.
+The 2 second safety poll is intentionally retained as a fallback and does not replace the normal event-driven refresh path. Native Windows taskbar auto-hide state is cached and refreshed when settings or relevant shell/taskbar changes occur rather than being queried on every safety tick.
 
 When no displays are configured for desktop-based hiding, the mod skips the application and shell-popup scans and restores any taskbars that may still be hidden by an earlier configuration.
+
+## Known Fullscreen Multi-Monitor Issue
+
+There is currently an unresolved edge case involving a fullscreen window on the primary display and interaction with a secondary display. The intended behavior is that the primary taskbar remains hidden for as long as the primary display is still owned by a tracked fullscreen window, even when focus or mouse interaction moves to another display.
+
+The reproducible failure pattern is:
+
+1. Start a borderless/monitor-sized fullscreen application on the primary display.
+2. Move the cursor to the secondary display.
+3. Click the secondary display's desktop before interacting with its taskbar.
+4. The primary taskbar can incorrectly become visible, even though the fullscreen application is still active on the primary display.
+
+A closely related sequence is that interacting with the secondary taskbar first can leave the primary taskbar correctly hidden, while clicking the secondary desktop first can expose the bug. The problem is predominantly observed with the primary display; equivalent fullscreen behavior on the secondary display generally behaves correctly.
+
+The current implementation already keeps fullscreen ownership associated with the actual `HMONITOR`, caches fullscreen only after the fullscreen window becomes foreground, avoids clearing the cache for ordinary transient shell-focus/minimize-start transitions, and avoids changing the existing shell-interaction classification. Despite those protections, the edge case remains unresolved and needs a more fundamental state-transition analysis rather than another superficial fullscreen check.
 
 ## Limitations
 
@@ -239,12 +256,14 @@ struct TaskbarMonitorState {
 
 struct WindowScanResult {
     bool applicationOnMonitor[kMaxMonitorNumbers];
+    bool fullscreenOnMonitor[kMaxMonitorNumbers];
 };
 
 HWINEVENTHOOK g_foregroundHook = nullptr;
 HWINEVENTHOOK g_minimizeHook = nullptr;
 HWINEVENTHOOK g_moveHook = nullptr;
 HWINEVENTHOOK g_objectHook = nullptr;
+HWINEVENTHOOK g_cloakHook = nullptr;
 
 HANDLE g_workerThread = nullptr;
 DWORD g_workerThreadId = 0;
@@ -588,10 +607,23 @@ bool g_appBarRegistered = false;
 bool g_hoverActive = false;
 HMONITOR g_hoverMonitor = nullptr;
 ULONGLONG g_hoverDeadline = 0;
-HWND g_keyboardFocusedTaskbar = nullptr;
-bool g_suppressHoverUntilCursorLeaves = false;
-
 LONG g_refreshPosted = 0;
+// Tracks whether the current foreground taskbar activation came from mouse
+// interaction rather than keyboard-driven taskbar navigation. Mouse activation
+// must not make a desktop-only taskbar stay visible after hover dismissal.
+LONG g_taskbarForegroundMouseActivated = 0;
+ULONGLONG g_lastMinimizeEventTick = 0;
+bool g_ignoreTaskbarForegroundAfterMinimize = false;
+// A fullscreen window is cached only after that window has actually entered
+// the foreground. The cache is keyed by the HMONITOR itself rather than by
+// monitor-enumeration index, so a shell/foreground transition cannot move the
+// fullscreen owner to a different display.
+struct FullscreenMonitorOwner {
+    HMONITOR monitor;
+    HWND hwnd;
+};
+
+FullscreenMonitorOwner g_fullscreenOwners[kMaxMonitorNumbers] = {};
 void LoadSettings();
 void WhTool_ModUninit();
 void ArmHoverExpireTimer(DWORD delayMs);
@@ -648,7 +680,11 @@ bool IsDesktopInfrastructureWindow(
 
     HWND shellWindow = GetShellWindow();
 
-    return shellWindow && shellWindow == hwnd;
+    if (shellWindow && shellWindow == hwnd) {
+        return true;
+    }
+
+    return GetPropW(hwnd, L"DesktopWindow") != nullptr;
 }
 
 BOOL CALLBACK CollectMonitorProc(
@@ -997,6 +1033,13 @@ bool IsApplicationWindowCandidate(
         return false;
     }
 
+    if (IsDesktopInfrastructureWindow(
+            hwnd,
+            className
+        )) {
+        return false;
+    }
+
     if (IsShellSurfaceWindow(
             hwnd,
             className
@@ -1038,6 +1081,257 @@ struct ScanContext {
     WindowScanResult* result;
 };
 
+bool IsFullscreenWindowForMonitor(
+    HWND hwnd,
+    const MonitorEntry& monitorEntry
+) {
+    if (
+        !hwnd ||
+        !IsWindow(hwnd)
+    ) {
+        return false;
+    }
+
+    LONG_PTR style =
+        GetWindowLongPtrW(
+            hwnd,
+            GWL_STYLE
+        );
+
+    if (
+        (style & WS_POPUP) == 0 ||
+        (style & WS_CAPTION) != 0 ||
+        (style & WS_THICKFRAME) != 0
+    ) {
+        return false;
+    }
+
+    RECT rect = {};
+
+    if (
+        !GetWindowRect(
+            hwnd,
+            &rect
+        ) ||
+        rect.right <= rect.left ||
+        rect.bottom <= rect.top
+    ) {
+        return false;
+    }
+
+    constexpr LONG kFullscreenTolerance = 2;
+
+    return
+        abs(rect.left - monitorEntry.rect.left) <= kFullscreenTolerance &&
+        abs(rect.top - monitorEntry.rect.top) <= kFullscreenTolerance &&
+        abs(rect.right - monitorEntry.rect.right) <= kFullscreenTolerance &&
+        abs(rect.bottom - monitorEntry.rect.bottom) <= kFullscreenTolerance;
+}
+
+int FindFullscreenOwnerIndex(HMONITOR monitor) {
+    if (!monitor) {
+        return -1;
+    }
+
+    for (size_t i = 0; i < kMaxMonitorNumbers; ++i) {
+        if (g_fullscreenOwners[i].monitor == monitor) {
+            return static_cast<int>(i);
+        }
+    }
+
+    return -1;
+}
+
+bool IsMonitorFullscreenCached(HMONITOR monitor) {
+    const int index = FindFullscreenOwnerIndex(monitor);
+
+    return
+        index >= 0 &&
+        g_fullscreenOwners[index].hwnd != nullptr &&
+        IsWindow(g_fullscreenOwners[index].hwnd);
+}
+
+void SetFullscreenOwner(HMONITOR monitor, HWND hwnd) {
+    if (!monitor || !hwnd) {
+        return;
+    }
+
+    int index = FindFullscreenOwnerIndex(monitor);
+
+    if (index < 0) {
+        for (size_t i = 0; i < kMaxMonitorNumbers; ++i) {
+            if (!g_fullscreenOwners[i].monitor) {
+                index = static_cast<int>(i);
+                break;
+            }
+        }
+    }
+
+    if (index >= 0) {
+        g_fullscreenOwners[index].monitor = monitor;
+        g_fullscreenOwners[index].hwnd = hwnd;
+    }
+}
+
+void ClearFullscreenOwnersForWindow(HWND hwnd) {
+    if (!hwnd) {
+        return;
+    }
+
+    for (size_t i = 0; i < kMaxMonitorNumbers; ++i) {
+        if (g_fullscreenOwners[i].hwnd == hwnd) {
+            g_fullscreenOwners[i] = {};
+        }
+    }
+}
+
+void ClearInvalidFullscreenWindowCache(
+    const MonitorList& monitors
+) {
+    // Keep fullscreen ownership tied to the actual HMONITOR. An accessibility
+    // or foreground transition on another display must not reassign this state.
+    for (size_t i = 0; i < kMaxMonitorNumbers; ++i) {
+        if (!g_fullscreenOwners[i].monitor) {
+            continue;
+        }
+
+        bool monitorStillPresent = false;
+
+        for (size_t monitorIndex = 0;
+             monitorIndex < monitors.count;
+             ++monitorIndex) {
+            if (monitors.entries[monitorIndex].monitor ==
+                g_fullscreenOwners[i].monitor) {
+                monitorStillPresent = true;
+                break;
+            }
+        }
+
+        if (!monitorStillPresent ||
+            !g_fullscreenOwners[i].hwnd ||
+            !IsWindow(g_fullscreenOwners[i].hwnd)) {
+            g_fullscreenOwners[i] = {};
+        }
+    }
+}
+
+bool IsTaskbarWindow(
+    HWND hwnd
+) {
+    if (!hwnd) {
+        return false;
+    }
+
+    for (size_t i = 0; i < g_taskbarStateCount; ++i) {
+        if (g_taskbarStates[i].hwnd == hwnd) {
+            return true;
+        }
+    }
+
+    WCHAR className[256] = {};
+    if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0) {
+        return false;
+    }
+
+    return
+        wcscmp(className, L"Shell_TrayWnd") == 0 ||
+        wcscmp(className, L"Shell_SecondaryTrayWnd") == 0;
+}
+
+bool IsForegroundNormalApplication(
+    HWND hwnd
+) {
+    if (
+        !hwnd ||
+        !IsWindowVisible(hwnd) ||
+        IsIconic(hwnd)
+    ) {
+        return false;
+    }
+
+    WCHAR className[256] = {};
+    if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0) {
+        return false;
+    }
+
+    if (
+        IsDesktopInfrastructureWindow(hwnd, className) ||
+        IsShellChromeClass(className) ||
+        IsShellSurfaceWindow(hwnd, className) ||
+        IsTaskbarWindow(hwnd)
+    ) {
+        return false;
+    }
+
+    return IsApplicationWindowCandidate(hwnd, className);
+}
+
+void ClearFullscreenOwnerForForegroundApplication(
+    HWND hwnd
+) {
+    // A real application becoming foreground means only that application's
+    // monitor has a new foreground owner. Desktop, shell and taskbar
+    // transitions deliberately do not clear fullscreen ownership.
+    if (!IsForegroundNormalApplication(hwnd)) {
+        return;
+    }
+
+    HMONITOR monitor =
+        MonitorFromWindow(
+            hwnd,
+            MONITOR_DEFAULTTONEAREST
+        );
+
+    const int ownerIndex =
+        FindFullscreenOwnerIndex(monitor);
+
+    if (ownerIndex >= 0 &&
+        g_fullscreenOwners[ownerIndex].hwnd != hwnd) {
+        g_fullscreenOwners[ownerIndex] = {};
+    }
+}
+
+void NoteForegroundFullscreenWindow(
+    const MonitorList& monitors,
+    HWND hwnd
+) {
+    if (!hwnd || !IsWindow(hwnd)) {
+        return;
+    }
+
+    for (size_t i = 0; i < monitors.count; ++i) {
+        if (IsFullscreenWindowForMonitor(
+                hwnd,
+                monitors.entries[i]
+            )) {
+            SetFullscreenOwner(
+                monitors.entries[i].monitor,
+                hwnd
+            );
+        }
+    }
+}
+
+void RefreshFullscreenWindowCache(
+    const MonitorList& monitors
+) {
+    ClearInvalidFullscreenWindowCache(monitors);
+
+    HWND foreground = GetForegroundWindow();
+
+    // Only an actual foreground application on the same HMONITOR can replace
+    // fullscreen ownership. Clicking the desktop or taskbar on another display
+    // does not clear the primary display's fullscreen owner.
+    ClearFullscreenOwnerForForegroundApplication(
+        foreground
+    );
+
+    NoteForegroundFullscreenWindow(
+        monitors,
+        foreground
+    );
+}
+
 BOOL CALLBACK ScanWindowsWithMonitorsProc(
     HWND hwnd,
     LPARAM lParam
@@ -1053,15 +1347,21 @@ BOOL CALLBACK ScanWindowsWithMonitorsProc(
         return TRUE;
     }
 
-    bool allMonitorsOccupied = true;
+    bool allMonitorsClassified = true;
     for (size_t i = 0; i < context->monitors->count; ++i) {
-        if (!context->result->applicationOnMonitor[i]) {
-            allMonitorsOccupied = false;
+        if (
+            !context->result->applicationOnMonitor[i] &&
+            !context->result->fullscreenOnMonitor[i]
+        ) {
+            allMonitorsClassified = false;
             break;
         }
     }
 
-    if (allMonitorsOccupied && context->monitors->count != 0) {
+    if (
+        allMonitorsClassified &&
+        context->monitors->count != 0
+    ) {
         return FALSE;
     }
 
@@ -1157,6 +1457,15 @@ void ScanWindowsOnce(
 ) {
     result = {};
 
+    RefreshFullscreenWindowCache(monitors);
+
+    for (size_t i = 0; i < monitors.count; ++i) {
+        result.fullscreenOnMonitor[i] =
+            IsMonitorFullscreenCached(
+                monitors.entries[i].monitor
+            );
+    }
+
     ScanContext context = {
         &monitors,
         &result
@@ -1223,7 +1532,9 @@ void ScanWindowsOnce(
                         monitors.entries[i].monitor ==
                         foregroundMonitor
                     ) {
-                        result.applicationOnMonitor[i] = true;
+                        if (!result.fullscreenOnMonitor[i]) {
+                            result.applicationOnMonitor[i] = true;
+                        }
                         break;
                     }
                 }
@@ -1795,7 +2106,6 @@ void UpdateTaskbarState() {
             g_hoverActive = false;
             g_hoverMonitor = nullptr;
             g_hoverDeadline = 0;
-            g_suppressHoverUntilCursorLeaves = false;
             CancelHoverExpireTimer();
             ApplyBaseTaskbarState();
             UpdateCursorHoverSnapshot();
@@ -1826,6 +2136,7 @@ void UpdateTaskbarState() {
                 state.monitor
             ) {
                 state.desktopOnly =
+                    IsMonitorFullscreenCached(state.monitor) ||
                     !scan.applicationOnMonitor[
                         monitorIndex
                     ];
@@ -1835,20 +2146,30 @@ void UpdateTaskbarState() {
 
     }
 
-    if (g_keyboardFocusedTaskbar) {
-        bool found = false;
-        for (size_t i = 0; i < g_taskbarStateCount; ++i) {
-            if (g_taskbarStates[i].hwnd == g_keyboardFocusedTaskbar) {
-                g_taskbarStates[i].desktopOnly = false;
-                found = true;
-                break;
-            }
-        }
+    // Treat the currently foreground taskbar as occupied only when it has
+    // keyboard-driven focus. A taskbar foreground activation caused by a mouse
+    // click, including clicking a taskbar icon to minimize/maximize, must not
+    // prevent a desktop-only taskbar from hiding after hover dismissal.
+    HWND foreground = GetForegroundWindow();
+    // After minimizing an application, Windows may briefly leave the primary
+    // taskbar as the global foreground window. Treat that foreground state as
+    // stale for the duration of this post-minimize window instead of allowing
+    // it to make the primary desktop-only taskbar appear occupied.
+    const bool postMinimizeTaskbarForeground =
+        g_ignoreTaskbarForegroundAfterMinimize;
 
-        if (!found) {
-            g_keyboardFocusedTaskbar = nullptr;
-        }
-    }
+    const bool taskbarForegroundMouseActivated =
+        InterlockedCompareExchange(
+            &g_taskbarForegroundMouseActivated,
+            0,
+            0
+        ) != 0;
+
+    // The foreground taskbar override is applied only after the current cursor
+    // monitor is known. Windows may report the primary Shell_TrayWnd as the
+    // foreground window after a click on another display's desktop. That must
+    // not make the primary taskbar visible while the cursor is on the secondary
+    // display.
 
     POINT cursorPoint = {};
     HMONITOR cursorMonitor = nullptr;
@@ -1860,6 +2181,28 @@ void UpdateTaskbarState() {
                 MONITOR_DEFAULTTONEAREST
             );
 
+    }
+
+    if (!postMinimizeTaskbarForeground &&
+        !taskbarForegroundMouseActivated &&
+        cursorMonitor) {
+        for (size_t i = 0; i < g_taskbarStateCount; ++i) {
+            if (g_taskbarStates[i].hwnd != foreground ||
+                g_taskbarStates[i].monitor != cursorMonitor) {
+                continue;
+            }
+
+            const bool fullscreenOnTaskbarMonitor =
+                IsMonitorFullscreenCached(
+                    g_taskbarStates[i].monitor
+                );
+
+            if (!fullscreenOnTaskbarMonitor) {
+                g_taskbarStates[i].desktopOnly = false;
+            }
+
+            break;
+        }
     }
 
     HWND cursorTaskbar = nullptr;
@@ -1882,23 +2225,49 @@ void UpdateTaskbarState() {
         break;
     }
 
-    const bool cursorInHoverZone =
+    bool cursorMonitorFullscreen = false;
+
+    for (size_t i = 0; i < monitors.count; ++i) {
+        if (monitors.entries[i].monitor == cursorMonitor) {
+            cursorMonitorFullscreen =
+                scan.fullscreenOnMonitor[i];
+            break;
+        }
+    }
+
+    bool hoverMonitorFullscreen = false;
+
+    if (g_hoverMonitor) {
+        for (size_t i = 0; i < monitors.count; ++i) {
+            if (monitors.entries[i].monitor == g_hoverMonitor) {
+                hoverMonitorFullscreen =
+                    scan.fullscreenOnMonitor[i];
+                break;
+            }
+        }
+    }
+
+    // A fullscreen transition invalidates an existing hover reveal on that
+    // same display. The cursor may already be on another monitor, so use
+    // g_hoverMonitor rather than cursorMonitor for this check.
+    if (g_hoverActive && hoverMonitorFullscreen) {
+        g_hoverActive = false;
+        g_hoverMonitor = nullptr;
+        g_hoverDeadline = 0;
+        hoverMonitorFullscreen = false;
+        CancelHoverExpireTimer();
+    }
+
+    const bool hovering =
         cursorTaskbar &&
         cursorMonitor &&
         cursorHoverConfigured &&
+        !cursorMonitorFullscreen &&
         IsPointNearBottomEdge(
             cursorTaskbar,
             cursorMonitor,
             cursorPoint
         );
-
-    if (!cursorInHoverZone) {
-        g_suppressHoverUntilCursorLeaves = false;
-    }
-
-    const bool hovering =
-        cursorInHoverZone &&
-        !g_suppressHoverUntilCursorLeaves;
 
     if (hovering) {
         g_hoverActive = true;
@@ -1912,7 +2281,8 @@ void UpdateTaskbarState() {
 
             SetTaskbarState(
                 state,
-                state.monitor == g_hoverMonitor ||
+                (state.monitor == g_hoverMonitor &&
+                 !cursorMonitorFullscreen) ||
                 !state.desktopOnly ||
                 !ShouldHideTaskbar(state)
             );
@@ -1943,7 +2313,8 @@ void UpdateTaskbarState() {
 
                 SetTaskbarState(
                     state,
-                    state.monitor == g_hoverMonitor ||
+                    (state.monitor == g_hoverMonitor &&
+                     !hoverMonitorFullscreen) ||
                     !state.desktopOnly ||
                     !ShouldHideTaskbar(state)
                 );
@@ -1954,10 +2325,16 @@ void UpdateTaskbarState() {
         }
 
         ShellPopupScanResult shellPopups = {};
-        ScanVisibleShellPopupsOnce(
-            monitors,
-            shellPopups
-        );
+        const bool ignorePostMinimizeShellPopup =
+            g_lastMinimizeEventTick != 0 &&
+            GetTickCount64() - g_lastMinimizeEventTick < 1000;
+
+        if (!ignorePostMinimizeShellPopup) {
+            ScanVisibleShellPopupsOnce(
+                monitors,
+                shellPopups
+            );
+        }
 
         bool shellPopupPresent = false;
         for (size_t i = 0; i < g_taskbarStateCount; ++i) {
@@ -1978,25 +2355,40 @@ void UpdateTaskbarState() {
             // Keep the revealed taskbar visible while a shell popup/context
             // menu is still open, even when the cursor has moved outside the
             // popup. The popup itself is what keeps the interaction alive.
+            // A popup observed immediately after minimize is ignored above so
+            // stale taskbar UI cannot pin the first post-minimize hover cycle.
             for (size_t i = 0; i < g_taskbarStateCount; ++i) {
                 TaskbarMonitorState& state =
                     g_taskbarStates[i];
 
                 bool shellPopupOnMonitor = false;
-                for (size_t monitorIndex = 0; monitorIndex < monitors.count; ++monitorIndex) {
-                    if (monitors.entries[monitorIndex].monitor == state.monitor) {
+                bool stateFullscreenOnMonitor = false;
+
+                for (
+                    size_t monitorIndex = 0;
+                    monitorIndex < monitors.count;
+                    ++monitorIndex
+                ) {
+                    if (
+                        monitors.entries[monitorIndex].monitor ==
+                        state.monitor
+                    ) {
                         shellPopupOnMonitor =
                             shellPopups.visibleOnMonitor[monitorIndex];
+                        stateFullscreenOnMonitor =
+                            scan.fullscreenOnMonitor[monitorIndex];
                         break;
                     }
                 }
 
                 SetTaskbarState(
                     state,
-                    state.monitor == g_hoverMonitor ||
+                    (state.monitor == g_hoverMonitor &&
+                     !hoverMonitorFullscreen) ||
                     !state.desktopOnly ||
                     !ShouldHideTaskbar(state) ||
-                    shellPopupOnMonitor
+                    (shellPopupOnMonitor &&
+                     !stateFullscreenOnMonitor)
                 );
             }
 
@@ -2195,103 +2587,176 @@ void CALLBACK WinEventProc(
     DWORD
 ) {
     if (event == EVENT_SYSTEM_FOREGROUND) {
-        g_keyboardFocusedTaskbar = nullptr;
+        MonitorList monitors = GetCurrentMonitors();
+        RefreshFullscreenWindowCache(monitors);
+        NoteForegroundFullscreenWindow(
+            monitors,
+            hwnd
+        );
+
+        const bool postMinimizeTaskbarForeground =
+            g_ignoreTaskbarForegroundAfterMinimize;
+
+        bool isTaskbarForeground = false;
 
         if (hwnd) {
-            WCHAR className[64] = {};
-            if (GetClassNameW(
-                    hwnd,
-                    className,
-                    ARRAYSIZE(className)
-                ) != 0 &&
-                (wcscmp(className, L"Shell_TrayWnd") == 0 ||
-                 wcscmp(className, L"Shell_SecondaryTrayWnd") == 0)) {
-                POINT cursorPoint = {};
-                RECT taskbarRect = {};
-                bool cursorOverTaskbar = false;
-
-                if (GetCursorPos(&cursorPoint) &&
-                    GetWindowRect(hwnd, &taskbarRect)) {
-                    cursorOverTaskbar =
-                        PtInRect(&taskbarRect, cursorPoint) != FALSE;
-                }
-
-                // A taskbar focused while the cursor is elsewhere is treated
-                // as keyboard-driven focus (for example Win+T/Win+B/Win+number).
-                // Do not infer keyboard focus during a just-completed minimize
-                // while hover suppression is active; that foreground transition
-                // can simply be the taskbar taking focus after the app closes.
-                // A taskbar focused with the cursor over it is treated as mouse
-                // interaction and may hide normally after hover dismissal.
-                if (!cursorOverTaskbar && !g_suppressHoverUntilCursorLeaves) {
-                    g_keyboardFocusedTaskbar = hwnd;
+            for (size_t i = 0; i < g_taskbarStateCount; ++i) {
+                if (g_taskbarStates[i].hwnd == hwnd) {
+                    isTaskbarForeground = true;
+                    break;
                 }
             }
         }
+
+        if (!isTaskbarForeground) {
+            // A real foreground transition away from the taskbar means the
+            // stale taskbar foreground produced by the minimize is gone.
+            g_ignoreTaskbarForegroundAfterMinimize = false;
+            InterlockedExchange(
+                &g_taskbarForegroundMouseActivated,
+                0
+            );
+            PostRefresh();
+            return;
+        }
+
+        if (postMinimizeTaskbarForeground) {
+            InterlockedExchange(
+                &g_taskbarForegroundMouseActivated,
+                1
+            );
+            PostRefresh();
+            return;
+        }
+
+        POINT cursorPoint = {};
+            bool cursorOverTaskbar = false;
+
+            if (GetCursorPos(&cursorPoint)) {
+                cursorOverTaskbar =
+                    WindowFromPoint(cursorPoint) == hwnd;
+
+                if (!cursorOverTaskbar) {
+                    RECT taskbarRect = {};
+                    if (GetWindowRect(hwnd, &taskbarRect)) {
+                        cursorOverTaskbar =
+                            PtInRect(&taskbarRect, cursorPoint) != FALSE;
+                    }
+                }
+            }
+
+            const bool mouseButtonDown =
+                (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 ||
+                (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0 ||
+                (GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0;
+
+        InterlockedExchange(
+            &g_taskbarForegroundMouseActivated,
+            (cursorOverTaskbar || mouseButtonDown) ? 1 : 0
+        );
 
         PostRefresh();
         return;
     }
 
     if (event == EVENT_SYSTEM_MINIMIZESTART) {
-        POINT cursorPoint = {};
-        bool cursorOverTaskbar = false;
-
-        if (GetCursorPos(&cursorPoint)) {
-            for (size_t i = 0; i < g_taskbarStateCount; ++i) {
-                RECT taskbarRect = {};
-                if (GetWindowRect(g_taskbarStates[i].hwnd, &taskbarRect) &&
-                    PtInRect(&taskbarRect, cursorPoint) != FALSE) {
-                    cursorOverTaskbar = true;
-                    break;
-                }
-            }
-        }
-
-        g_keyboardFocusedTaskbar = nullptr;
-        g_suppressHoverUntilCursorLeaves = !cursorOverTaskbar;
-        g_hoverActive = false;
-        g_hoverMonitor = nullptr;
-        g_hoverDeadline = 0;
-        CancelHoverExpireTimer();
+        // Do not immediately discard fullscreen ownership here. Windows can
+        // emit a transient minimize-start while shell focus moves between
+        // displays, and clearing the owner at this point can make the primary
+        // taskbar reappear even though fullscreen content is still active.
+        // A genuine minimize is finalized in MINIMIZEEND below.
+        g_lastMinimizeEventTick = GetTickCount64();
+        g_ignoreTaskbarForegroundAfterMinimize = true;
+        InterlockedExchange(
+            &g_taskbarForegroundMouseActivated,
+            1
+        );
         PostRefresh();
         return;
     }
 
     if (event == EVENT_SYSTEM_MINIMIZEEND) {
-        // The start event already decided whether this was a mouse/taskbar
-        // interaction or an external minimize. Reconcile the final state now.
-        g_keyboardFocusedTaskbar = nullptr;
+        g_lastMinimizeEventTick = GetTickCount64();
+        g_ignoreTaskbarForegroundAfterMinimize = true;
+
+        // A completed minimize starts a fresh hover cycle. Any hover state
+        // carried from the taskbar/application interaction that initiated the
+        // minimize must not survive into the first post-minimize cursor move.
+        g_hoverActive = false;
+        g_hoverMonitor = nullptr;
+        g_hoverDeadline = 0;
+        CancelHoverExpireTimer();
+
+        // Windows can leave the taskbar as the foreground window after an
+        // application has finished minimizing. Treat that activation as stale
+        // mouse-style taskbar interaction rather than keyboard taskbar focus.
+        // This also covers minimizing by clicking a taskbar button itself.
+        HWND foreground = GetForegroundWindow();
+        bool foregroundIsTaskbar = false;
+
+        if (foreground) {
+            for (size_t i = 0; i < g_taskbarStateCount; ++i) {
+                if (g_taskbarStates[i].hwnd == foreground) {
+                    foregroundIsTaskbar = true;
+                    break;
+                }
+            }
+        }
+
+        if (foregroundIsTaskbar) {
+            InterlockedExchange(
+                &g_taskbarForegroundMouseActivated,
+                1
+            );
+        }
+
+        // Clear fullscreen ownership only after a minimize has actually
+        // completed and only when the cached window is still minimized.
+        // If the minimize was transient or cancelled, keep fullscreen
+        // ownership so focus changes on another display cannot expose the
+        // primary taskbar.
+        if (hwnd && IsIconic(hwnd)) {
+            ClearFullscreenOwnersForWindow(hwnd);
+        }
+
         PostRefresh();
+        UpdateCursorHoverSnapshot();
         return;
     }
 
     if (event == EVENT_SYSTEM_MOVESIZEEND) {
+        MonitorList monitors = GetCurrentMonitors();
+        ClearInvalidFullscreenWindowCache(monitors);
         PostRefresh();
         return;
-    }
-
-    if (
-        event == EVENT_OBJECT_DESTROY &&
-        hwnd &&
-        hwnd == g_keyboardFocusedTaskbar
-    ) {
-        g_keyboardFocusedTaskbar = nullptr;
     }
 
     if (
         (event == EVENT_OBJECT_DESTROY ||
          event == EVENT_OBJECT_SHOW ||
-         event == EVENT_OBJECT_HIDE) &&
+         event == EVENT_OBJECT_HIDE ||
+         event == EVENT_OBJECT_CLOAKED ||
+         event == EVENT_OBJECT_UNCLOAKED) &&
         hwnd &&
         idObject == OBJID_WINDOW &&
         idChild == CHILDID_SELF
     ) {
+        if (event == EVENT_OBJECT_DESTROY) {
+            for (size_t i = 0; i < kMaxMonitorNumbers; ++i) {
+                if (g_fullscreenOwners[i].hwnd == hwnd) {
+                    g_fullscreenOwners[i] = {};
+                }
+            }
+        }
+
+        // Hide/cloak notifications can be transient while a fullscreen browser
+        // changes activation state. Revalidate against the current window state
+        // instead of eagerly discarding the cache from the accessibility event.
+        MonitorList monitors = GetCurrentMonitors();
+        ClearInvalidFullscreenWindowCache(monitors);
         PostRefresh();
     }
 }
-
-
 
 LRESULT CALLBACK WorkerMessageWindowProc(
     HWND hwnd,
@@ -2470,7 +2935,7 @@ DWORD WINAPI WorkerThread(
 
     if (!CreateWorkerMessageWindow()) {
         Wh_Log(
-            L"CreateWorkerMessageWindow failed; continuing with WinEvent/safety-poll handling"
+            L"CreateWorkerMessageWindow failed; continuing with WinEvent/2-second safety-poll handling"
         );
     }
 
@@ -2519,12 +2984,23 @@ DWORD WINAPI WorkerThread(
             WINEVENT_OUTOFCONTEXT
         );
 
+    g_cloakHook =
+        SetWinEventHook(
+            EVENT_OBJECT_CLOAKED,
+            EVENT_OBJECT_UNCLOAKED,
+            nullptr,
+            WinEventProc,
+            0,
+            0,
+            WINEVENT_OUTOFCONTEXT
+        );
+
     UpdateTaskbarState();
 
     // Keep a true periodic safety poll. It is only a fallback for shell/window
     // transitions that do not produce a usable accessibility event. Refresh
     // events never re-arm this timer, so frequent events cannot postpone it.
-    constexpr UINT kSafetyPollIntervalMs = 250;
+    constexpr UINT kSafetyPollIntervalMs = 2000;
     UINT_PTR timerId =
         SetTimer(
             nullptr,
@@ -2598,6 +3074,7 @@ DWORD WINAPI WorkerThread(
     SafeUnhookWinEvent(g_minimizeHook);
     SafeUnhookWinEvent(g_moveHook);
     SafeUnhookWinEvent(g_objectHook);
+    SafeUnhookWinEvent(g_cloakHook);
 
     DestroyWorkerMessageWindow();
 
