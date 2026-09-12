@@ -16,12 +16,12 @@
 // ==WindhawkModReadme==
 /*
 # `Tourne'Table` **[Audio Visualizer]**
-
+![Full Documentation Here](https://github.com/USER-TOURNE/Windhawk-Mods/blob/main/CHANGED%20READ%20ME%20%26%20UPDATE%20PUSH/README.md)
 ![Tourne'Table Audio Visualizer](https://raw.githubusercontent.com/USER-TOURNE/Windhawk-Mods/main/GIF/11.gif)
 
 *Oscilloscope shape running live audio - bottom-left placement, blurred panel, single-pixel border.*
 
-> **A real-time audio visualizer that lives on your Windows desktop.**
+> **A real-time audio visualizer that lives on your Windows desktop.** 
 > Built on the foundation of Salyts' Desktop Audio Visualizer, rebuilt around performance.
 
 Play music. Bars dance on your wallpaper. That's the whole idea.
@@ -89,7 +89,7 @@ Full methodology, raw numbers and honest caveats are further down.
 | **Windows Accent** | Matches your Windows accent color, updating instantly. |
 | **Album Art** | Pulls the dominant color from the playing track's cover. |
 | **Dynamic Album** | Gradient between the cover art's two strongest colors. |
-| **Acrylic** | Grows more opaque the louder it gets - invisible in silence. |
+| **Acrylic** | Grows more opaque the louder it gets - near-transparent in silence. |
 | **Rainbow Cycle** | Continuously cycling hue, adjustable speed. |
 | **Tourne** | Built-in teal → red gradient from my personal palette. |
 
@@ -113,7 +113,7 @@ Fades in on track change, fades out after a configurable delay. Custom color, fo
 
 ![Oscilloscope closeup](https://raw.githubusercontent.com/USER-TOURNE/Windhawk-Mods/main/GIF/7.gif)
 
-*Closeup of the same setup - the waveform trace drawn as a continuous line.*
+*Zoomed view of the waveform trace.*
 
 ## ◐ THE PALETTE
 
@@ -239,7 +239,7 @@ The built-in **Tourne** color mode is drawn from these.
 
 ![Oscilloscope closeup](https://raw.githubusercontent.com/USER-TOURNE/Windhawk-Mods/main/GIF/4.gif)
 
-*Closeup of the same setup - the waveform trace drawn as a continuous line.*
+*Zoomed view at a different scale.*
 
 # ▲ WHAT ACTUALLY GOT FIXED
 
@@ -653,6 +653,7 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
 #include <windhawk_utils.h>
 
 #include <d2d1_1.h>
+#include <d2d1effects.h>
 #include <d2d1helper.h>
 #include <d3d11.h>
 #include <dcomp.h>
@@ -671,6 +672,7 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
 #include <atomic>
 #include <cmath>
 #include <mutex>
+#include <optional>
 #include <thread>
 #include <vector>
 
@@ -822,9 +824,6 @@ ComPtr<ID2D1SolidColorBrush> g_nowPlayingBrush;
 int g_dwriteTextFormatFontSize = -1;
 std::wstring g_dwriteTextFormatFontName;
 
-static const IID kCLSID_D2D1GaussianBlur = {
-    0x1feb6d69, 0x2fe6, 0x4ac9, {0x8c, 0x58, 0x1d, 0x7f, 0x93, 0xe7, 0xa6, 0xa5}};
-
 float g_dpiScale = 1.0f;
 FILETIME g_lastWallpaperTime = {};
 HMONITOR g_cachedMonitor = nullptr;
@@ -894,8 +893,29 @@ static std::atomic<bool>  g_albumArtFetchPending{false};
 static std::atomic<DWORD> g_accentColorCache{0xFF0078D4};
 
 static HANDLE g_gsmtcStopEvent = nullptr;
-[[clang::no_destroy]] static std::thread g_gsmtcThread;
+// std::thread is not a nullable/handle-like type: there is no assignment that
+// empties it, and move-assigning over a joinable() thread calls std::terminate().
+// The optional gives the bare [[clang::no_destroy]] attribute something it can
+// legitimately be applied to.
+[[clang::no_destroy]] static std::optional<std::thread> g_gsmtcThread;
+
+// Guards g_albumArtThread. The GSMTC event handlers run on WinRT thread-pool
+// threads and can race Wh_ModUninit for ownership of this pointer.
+static std::mutex g_albumArtThreadMutex;
 static std::thread* g_albumArtThread = nullptr;
+
+// Thread timer armed from the CreateWindowExW hook. Must be a global rather than
+// a function-local static: the TIMERPROC points into the mod image, so if the mod
+// unloads inside the 1s window the next WM_TIMER dispatch jumps into unmapped
+// memory and takes explorer.exe with it. A thread timer can only be killed from
+// the thread that set it, so uninit kills it via RunFromWindowThread.
+UINT_PTR g_createOverlayTimer = 0;
+
+// Animation time base. GetTickCount64() alone overflows a float's 24-bit
+// mantissa after ~4.7 hours of uptime, at which point Wave/Breathe/Rainbow
+// visibly quantize; measuring from a baseline captured at init keeps the
+// delta small enough to stay exact.
+ULONGLONG g_startTick = 0;
 
 using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
 
@@ -1123,7 +1143,10 @@ bool IsWindowFullscreen(HWND hwnd, HMONITOR targetMonitor = nullptr) {
 }
 
 bool IsFullscreenOrGameActive() {
-    HMONITOR targetMonitor = GetMonitorById(g_settings.monitor - 1);
+    // g_cachedMonitor is maintained by CreateSwapChainResources/HandleDisplayChange.
+    // This runs on the UI thread once a second with pauseOnFullscreen on by
+    // default, so re-running EnumDisplayMonitors here would undo the caching.
+    HMONITOR targetMonitor = g_cachedMonitor;
     if (!targetMonitor) targetMonitor = MonitorFromPoint({0, 0}, MONITOR_DEFAULTTONEAREST);
 
     HWND hwndForeground = GetForegroundWindow();
@@ -1240,7 +1263,7 @@ bool IsVisualizerOccluded() {
                 // the log rather than guessed at.
                 WCHAR title[128] = {};
                 GetWindowText(hWnd, title, ARRAYSIZE(title));
-                Wh_Log(L"[Viz] Occluded by class='%s' title='%s' rect=(%ld,%ld,%ld,%ld)",
+                Wh_Log(L"Occluded by class='%s' title='%s' rect=(%ld,%ld,%ld,%ld)",
                        cls, title, wr.left, wr.top, wr.right, wr.bottom);
                 return FALSE;
             }
@@ -1290,9 +1313,24 @@ DWORD GetWindowsAccentColor() {
 }
 
 void FetchAlbumArtColorAsync() {
+    // Called from GSMTC handlers running on WinRT thread-pool threads. Revoking
+    // those handlers during teardown does not drain one already in flight, so
+    // without this check a callback could spawn a fresh thread after uninit has
+    // already joined and deleted the previous one - a double delete on the raw
+    // pointer, plus a new thread running straight into the unload.
+    if (g_unloading.load()) return;
+
     bool expected = false;
     if (!g_albumArtFetchPending.compare_exchange_strong(expected, true))
         return;
+
+    std::lock_guard<std::mutex> ownerLock(g_albumArtThreadMutex);
+
+    // Re-check: uninit may have set g_unloading while we waited on the mutex.
+    if (g_unloading.load()) {
+        g_albumArtFetchPending.store(false);
+        return;
+    }
 
     if (g_albumArtThread) {
         if (g_albumArtThread->joinable())
@@ -1304,13 +1342,21 @@ void FetchAlbumArtColorAsync() {
     g_albumArtThread = new std::thread([]() {
         try {
             winrt::init_apartment(winrt::apartment_type::multi_threaded);
+
+            // Cancellation the worker can actually observe. Each await below can
+            // block for seconds if a media app is unresponsive, so unloading is
+            // re-checked between them to keep teardown bounded.
+            auto cancelled = [] { return g_unloading.load(); };
+            auto bail = [] { winrt::uninit_apartment(); g_albumArtFetchPending.store(false); };
+
+            if (cancelled()) { bail(); return; }
             auto mgr = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
-            if (!mgr) { winrt::uninit_apartment(); g_albumArtFetchPending.store(false); return; }
+            if (!mgr || cancelled()) { bail(); return; }
             auto session = mgr.GetCurrentSession();
-            if (!session) { winrt::uninit_apartment(); g_albumArtFetchPending.store(false); return; }
+            if (!session || cancelled()) { bail(); return; }
 
             auto props = session.TryGetMediaPropertiesAsync().get();
-            if (!props) { winrt::uninit_apartment(); g_albumArtFetchPending.store(false); return; }
+            if (!props || cancelled()) { bail(); return; }
 
             {
                 std::wstring title(props.Title());
@@ -1328,16 +1374,17 @@ void FetchAlbumArtColorAsync() {
             }
 
             auto thumbRef = props.Thumbnail();
-            if (!thumbRef) { winrt::uninit_apartment(); g_albumArtFetchPending.store(false); return; }
+            if (!thumbRef || cancelled()) { bail(); return; }
 
             auto stream = thumbRef.OpenReadAsync().get();
-            if (!stream) { winrt::uninit_apartment(); g_albumArtFetchPending.store(false); return; }
+            if (!stream || cancelled()) { bail(); return; }
 
             UINT64 sz = stream.Size();
-            if (sz == 0 || sz > 4 * 1024 * 1024) { winrt::uninit_apartment(); g_albumArtFetchPending.store(false); return; }
+            if (sz == 0 || sz > 4 * 1024 * 1024) { bail(); return; }
 
             DataReader reader(stream);
             reader.LoadAsync((UINT32)sz).get();
+            if (cancelled()) { bail(); return; }
             std::vector<BYTE> thumbBytes((size_t)sz);
             reader.ReadBytes(winrt::array_view<BYTE>(thumbBytes));
             reader.DetachStream();
@@ -1466,7 +1513,7 @@ void InitGsmtcListener() {
     g_gsmtcStopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     if (!g_gsmtcStopEvent) return;
 
-    g_gsmtcThread = std::thread([]() {
+    g_gsmtcThread.emplace([]() {
         try {
             winrt::init_apartment(winrt::apartment_type::multi_threaded);
             g_gsmtcMgr = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
@@ -1674,7 +1721,6 @@ bool VizInitAudioClient(IMMDeviceEnumerator* pEnum, ComPtr<IAudioClient>& pClien
 
 void VizCaptureThreadProc() {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    BuildVizSeeds();
 
     ComPtr<IMMDeviceEnumerator> pEnum;
     if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
@@ -1979,7 +2025,7 @@ void UpdateVisualizerTargets() {
         }
     };
 
-    float t = (float)GetTickCount64() * 0.001f;
+    float t = (float)(GetTickCount64() - g_startTick) * 0.001f;
     float center = (vizBars - 1) * 0.5f;
 
     for (int i = 0; i < vizBars; i++) {
@@ -1988,25 +2034,28 @@ void UpdateVisualizerTargets() {
 
         switch (g_settings.shape) {
             case VizShape::Stereo:
-                target = sampleBands(warpT(freqT)) * eqForT(warpT(freqT));
+                { float wt = warpT(freqT); target = sampleBands(wt) * eqForT(wt); }
                 break;
             case VizShape::Mountain: {
                 float dist = fabsf((float)i - center) / std::max(1.f, center);
-                float energy = sampleBands(warpT(dist)) * eqForT(warpT(dist));
+                float wd = warpT(dist);
+                float energy = sampleBands(wd) * eqForT(wd);
                 float taper = 1.6f - dist * 0.9f;
                 target = std::max(0.f, std::min(1.f, (energy + masterPeak * (0.2f - dist * 0.12f)) * taper));
                 break;
             }
             case VizShape::Mirror: {
                 float mirT = 1.f - fabsf((float)i - center) / std::max(1.f, center);
-                float energy = sampleBands(warpT(mirT)) * eqForT(warpT(mirT));
+                float wm = warpT(mirT);
+                float energy = sampleBands(wm) * eqForT(wm);
                 target = std::max(0.f, std::min(1.f, (energy + masterPeak * (0.1f + mirT * 0.12f)) * 1.3f));
                 break;
             }
             case VizShape::Wave: {
                 float phase = (float)i * (2.f * VIZ_PI / (float)vizBars);
                 float wave = 0.55f + 0.45f * sinf(t * 3.5f - phase);
-                float energy = sampleBands(warpT(freqT)) * eqForT(warpT(freqT));
+                float wf = warpT(freqT);
+                float energy = sampleBands(wf) * eqForT(wf);
                 target = std::max(0.f, std::min(1.f, energy * wave + masterPeak * 0.15f));
                 break;
             }
@@ -2021,10 +2070,10 @@ void UpdateVisualizerTargets() {
                 break;
             }
             case VizShape::Dots:
-                target = sampleBands(warpT(freqT)) * eqForT(warpT(freqT));
+                { float wt = warpT(freqT); target = sampleBands(wt) * eqForT(wt); }
                 break;
             case VizShape::Radial:
-                target = sampleBands(warpT(freqT)) * eqForT(warpT(freqT));
+                { float wt = warpT(freqT); target = sampleBands(wt) * eqForT(wt); }
                 break;
             case VizShape::Oscilloscope:
                 target = 0.f;  // drawn directly from the raw waveform buffer, not per-bar targets
@@ -2489,11 +2538,13 @@ bool RecreateVisualResources() {
         if (g_settings.bgBlur > 0) {
             CaptureWallpaperBitmap();
             if (g_wallpaperBitmap) {
-                hr = g_dc->CreateEffect(kCLSID_D2D1GaussianBlur, &g_blurEffect);
+                hr = g_dc->CreateEffect(CLSID_D2D1GaussianBlur, &g_blurEffect);
                 if (SUCCEEDED(hr)) {
                     g_blurEffect->SetInput(0, g_wallpaperBitmap.Get());
-                    g_blurEffect->SetValue(0, (FLOAT)g_settings.bgBlur);
-                    g_blurEffect->SetValue(2, (UINT32)1);
+                    g_blurEffect->SetValue(D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION,
+                                           (FLOAT)g_settings.bgBlur);
+                    g_blurEffect->SetValue(D2D1_GAUSSIANBLUR_PROP_BORDER_MODE,
+                                           D2D1_BORDER_MODE_HARD);
 
                     // Evaluate the blur exactly once, into a bitmap covering only
                     // the widget's bounding box rather than the whole desktop.
@@ -2554,6 +2605,11 @@ bool RecreateVisualResources() {
                         g_settings.nowPlayingB / 255.0f, g_settings.nowPlayingA / 255.0f);
         g_dc->CreateSolidColorBrush(npColor, &g_nowPlayingBrush);
 
+        // The user's locale rather than a hardcoded en-us: this drives font
+        // fallback and shaping for non-Latin track titles.
+        WCHAR localeName[LOCALE_NAME_MAX_LENGTH] = L"en-us";
+        GetUserDefaultLocaleName(localeName, ARRAYSIZE(localeName));
+
         int fontSize = std::max(6, g_settings.nowPlayingFontSize);
         if (g_dwriteFactory && (!g_dwriteTextFormat || g_dwriteTextFormatFontSize != fontSize ||
                                  g_dwriteTextFormatFontName != g_settings.nowPlayingFont)) {
@@ -2561,7 +2617,7 @@ bool RecreateVisualResources() {
             HRESULT hrText = g_dwriteFactory->CreateTextFormat(
                 g_settings.nowPlayingFont.c_str(), nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
                 DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                (FLOAT)fontSize * g_dpiScale, L"en-us", &g_dwriteTextFormat);
+                (FLOAT)fontSize * g_dpiScale, localeName, &g_dwriteTextFormat);
             if (SUCCEEDED(hrText)) {
                 g_dwriteTextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
                 g_dwriteTextFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
@@ -2700,7 +2756,7 @@ void RenderVisualizer() {
         g_dc->BeginDraw();
         g_dc->Clear(D2D1::ColorF(0, 0, 0, 0));
         g_dc->EndDraw();
-        g_swapChain->Present(1, 0);
+        g_swapChain->Present(0, 0);
         g_autoHideBlanked = true;
         return;
     }
@@ -2745,7 +2801,7 @@ void RenderVisualizer() {
         totalHeight = horizontal ? groupExtent    : groupThickness;
     }
 
-    float animTime = (float)GetTickCount64() * 0.001f;
+    float animTime = (float)(GetTickCount64() - g_startTick) * 0.001f;
     {
         float pulse = g_beatPulse.load(std::memory_order_relaxed);
         if (pulse > 0.f) g_beatPulse.store(std::max(0.f, pulse - 0.08f), std::memory_order_relaxed);
@@ -3172,6 +3228,19 @@ void RenderVisualizer() {
                 }
                 float capThickness = std::max(1.5f, 2.0f * g_dpiScale);
 
+                // Recolour the cap brush to match this bar. Without this the caps
+                // are stuck on whatever Gradient Color 2 happens to be, which
+                // ignores Solid/Rainbow/Album/Accent/Acrylic completely. A
+                // brightened version of the bar colour keeps them readable
+                // against the bar they sit on.
+                if (g_settings.peakHoldEnabled && g_barBrush2) {
+                    auto lift = [](BYTE c) -> float {
+                        return std::min(1.0f, (c / 255.0f) * 1.35f + 0.12f);
+                    };
+                    g_barBrush2->SetColor(D2D1::ColorF(lift(col.r), lift(col.g), lift(col.b),
+                                                       col.a / 255.0f));
+                }
+
                 D2D1_RECT_F barRect;
                 if (horizontal) {
                     float x = blockX + i * (barW + barGap);
@@ -3331,7 +3400,10 @@ void RenderVisualizer() {
     }
 
     g_dc->EndDraw();
-    g_swapChain->Present(1, 0);
+    // Sync interval 0: frame pacing is already handled by the waitable timer
+    // in RenderThreadProc. Waiting on vblank here as well would park the
+    // shell's UI thread inside Present for a slice of every frame.
+    g_swapChain->Present(0, 0);
 }
 
 void RenderThreadProc() {
@@ -3398,7 +3470,7 @@ void RenderThreadProc() {
             PostMessage(overlayWnd, WM_APP_RENDER_TICK, 0, 0);
             lastSuccessfulPostTick = now;
         } else if (now - lastSuccessfulPostTick > 1000) {
-            Wh_Log(L"[Viz] Render tick flag was stuck, forced a reset");
+            Wh_Log(L"Render tick flag was stuck, forced a reset");
             g_renderTickPending.store(false, std::memory_order_relaxed);
             lastSuccessfulPostTick = now;
         }
@@ -3718,9 +3790,10 @@ HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
                                          nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
     if (!hWnd || !IsFolderViewWnd(hWnd)) return hWnd;
 
-    static UINT_PTR s_timer = 0;
-    s_timer = SetTimer(nullptr, s_timer, 1000, [](HWND, UINT, UINT_PTR idEvent, DWORD) {
+    g_createOverlayTimer = SetTimer(nullptr, g_createOverlayTimer, 1000,
+                                    [](HWND, UINT, UINT_PTR idEvent, DWORD) {
         KillTimer(nullptr, idEvent);
+        g_createOverlayTimer = 0;
         CreateOverlayWindow();
         CreateMessageWindow();
     });
@@ -3754,8 +3827,16 @@ void LoadSettings() {
     PCWSTR barCornerRadiusStr = Wh_GetStringSetting(L"appearance.barCornerRadius");
     {
         float v[4] = {3.0f, 3.0f, 3.0f, 3.0f};
-        int n = swscanf_s(barCornerRadiusStr, L"%f %f %f %f", &v[0], &v[1], &v[2], &v[3]);
-        if (n == 1) { v[1] = v[2] = v[3] = v[0]; }
+        float parsed[4] = {};
+        int n = swscanf_s(barCornerRadiusStr, L"%f %f %f %f", &parsed[0], &parsed[1], &parsed[2], &parsed[3]);
+        // Documented contract is one value or four. Anything else (e.g. "5 5")
+        // previously mixed parsed values with hardcoded defaults; treat it as
+        // invalid and keep all four defaults instead.
+        if (n == 1) {
+            v[0] = v[1] = v[2] = v[3] = parsed[0];
+        } else if (n == 4) {
+            for (int k = 0; k < 4; k++) v[k] = parsed[k];
+        }
         for (int k = 0; k < 4; k++) v[k] = std::max(0.0f, v[k]);
         g_settings.barRadiusTL = v[0];
         g_settings.barRadiusTR = v[1];
@@ -3831,8 +3912,16 @@ void LoadSettings() {
     PCWSTR bgCornerRadiusStr = Wh_GetStringSetting(L"background.cornerRadius");
     {
         float v[4] = {14.0f, 14.0f, 14.0f, 14.0f};
-        int n = swscanf_s(bgCornerRadiusStr, L"%f %f %f %f", &v[0], &v[1], &v[2], &v[3]);
-        if (n == 1) { v[1] = v[2] = v[3] = v[0]; }
+        float parsed[4] = {};
+        int n = swscanf_s(bgCornerRadiusStr, L"%f %f %f %f", &parsed[0], &parsed[1], &parsed[2], &parsed[3]);
+        // Documented contract is one value or four. Anything else (e.g. "5 5")
+        // previously mixed parsed values with hardcoded defaults; treat it as
+        // invalid and keep all four defaults instead.
+        if (n == 1) {
+            v[0] = v[1] = v[2] = v[3] = parsed[0];
+        } else if (n == 4) {
+            for (int k = 0; k < 4; k++) v[k] = parsed[k];
+        }
         for (int k = 0; k < 4; k++) v[k] = std::max(0.0f, v[k]);
         g_settings.bgRadiusTL = v[0];
         g_settings.bgRadiusTR = v[1];
@@ -3868,7 +3957,7 @@ void LoadSettings() {
     }
     Wh_FreeStringSetting(nowPlayingColor);
     PCWSTR nowPlayingFont = Wh_GetStringSetting(L"appearance.nowPlayingFont");
-    g_settings.nowPlayingFont = (nowPlayingFont && *nowPlayingFont) ? nowPlayingFont : L"Segoe UI";
+    g_settings.nowPlayingFont = *nowPlayingFont ? nowPlayingFont : L"Segoe UI";
     Wh_FreeStringSetting(nowPlayingFont);
     g_settings.nowPlayingFontSize = std::max(6, Wh_GetIntSetting(L"appearance.nowPlayingFontSize"));
     g_settings.nowPlayingDisplaySeconds =
@@ -3914,6 +4003,14 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
+    // Built here rather than on the capture thread: UpdateVisualizerTargets()
+    // reads VIZ_SEEDS from the render thread, and if capture never starts (e.g.
+    // pauseOnFullscreen with a fullscreen app already foreground at init) the
+    // array would stay zeroed and every bar would breathe in lockstep.
+    BuildVizSeeds();
+
+    g_startTick = GetTickCount64();
+
     RefreshAccentColorCache();
 
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
@@ -3942,6 +4039,17 @@ void Wh_ModUninit() {
 
     g_unloading = true;
 
+    // Kill the pending overlay-creation timer before anything else. It must be
+    // killed from the thread that set it, which is the desktop/shell thread.
+    if (HWND hProgman = FindWindow(L"Progman", nullptr)) {
+        RunFromWindowThread(hProgman, [](void*) {
+            if (g_createOverlayTimer) {
+                KillTimer(nullptr, g_createOverlayTimer);
+                g_createOverlayTimer = 0;
+            }
+        }, nullptr);
+    }
+
     StopRenderThread();
 
     if (g_overlayWnd) SendMessage(g_overlayWnd, WM_APP_CLEANUP, 0, 0);
@@ -3956,25 +4064,28 @@ void Wh_ModUninit() {
     if (g_gsmtcStopEvent) {
         SetEvent(g_gsmtcStopEvent);
     }
-    if (g_gsmtcThread.joinable()) {
-        g_gsmtcThread.join();
+    if (g_gsmtcThread && g_gsmtcThread->joinable()) {
+        g_gsmtcThread->join();
     }
+    g_gsmtcThread.reset();
     if (g_gsmtcStopEvent) {
         CloseHandle(g_gsmtcStopEvent);
         g_gsmtcStopEvent = nullptr;
     }
 
-    if (g_albumArtThread) {
-        if (g_albumArtThread->joinable()) {
-            HANDLE hThread = g_albumArtThread->native_handle();
-            if (WaitForSingleObject(hThread, 3000) == WAIT_OBJECT_0) {
+    // Joined unconditionally. Windhawk FreeLibrarys the mod the moment this
+    // returns, so a detached thread whose code and return address live in the
+    // mod image would crash the host. g_unloading (checked between the worker's
+    // awaits) is what keeps this bounded instead of a timeout-and-walk-away.
+    {
+        std::lock_guard<std::mutex> ownerLock(g_albumArtThreadMutex);
+        if (g_albumArtThread) {
+            if (g_albumArtThread->joinable()) {
                 g_albumArtThread->join();
-            } else {
-                g_albumArtThread->detach();
             }
+            delete g_albumArtThread;
+            g_albumArtThread = nullptr;
         }
-        delete g_albumArtThread;
-        g_albumArtThread = nullptr;
     }
     g_gsmtcStarted = false;
 }
