@@ -236,7 +236,11 @@ static void RemoveAnimatingWindow(HWND hWnd) {
 
 static bool ReserveAnimatingWindow(HWND hWnd) {
     std::lock_guard<std::mutex> lock(g_stateMutex);
-    return g_animatingWindows.insert(hWnd).second;
+    try {
+        return g_animatingWindows.insert(hWnd).second;
+    } catch (const std::bad_alloc&) {
+        return false;
+    }
 }
 
 static void RestoreRealWindow(HWND hWnd) {
@@ -434,11 +438,13 @@ static DWORD WINAPI ResizeAnimationThread(void* parameter) {
                         properties.opacity = 255;
                         properties.rcDestination =
                             MakeLocalRect(frame, ghostRect);
-                        DwmUpdateThumbnailProperties(thumbnail,
-                                                     &properties);
+                        const HRESULT updateResult =
+                            DwmUpdateThumbnailProperties(thumbnail,
+                                                         &properties);
                         PumpWorkerThreadMessages();
 
-                        if (lastFrame) {
+                        if (FAILED(updateResult) || lastFrame ||
+                            !IsWindow(ghost)) {
                             break;
                         }
 
@@ -486,6 +492,7 @@ static bool PrepareResizeAnimation(HWND hWnd,
         RemoveAnimatingWindow(hWnd);
         return false;
     }
+    DwmFlushWithFallback();
 
     pending->hWnd = hWnd;
     pending->fromRect = fromRect;
@@ -696,15 +703,19 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
-    std::vector<HWND> stuckWindows;
-    {
-        std::lock_guard<std::mutex> lock(g_stateMutex);
-        stuckWindows.assign(
-            g_animatingWindows.begin(), g_animatingWindows.end());
-        g_animatingWindows.clear();
-    }
+    for (;;) {
+        HWND hWnd = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(g_stateMutex);
+            if (g_animatingWindows.empty()) {
+                break;
+            }
 
-    for (HWND hWnd : stuckWindows) {
+            const auto it = g_animatingWindows.begin();
+            hWnd = *it;
+            g_animatingWindows.erase(it);
+        }
+
         if (IsWindow(hWnd)) {
             SetWindowCloak(hWnd, false);
         }
