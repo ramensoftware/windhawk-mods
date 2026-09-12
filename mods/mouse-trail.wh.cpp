@@ -1336,7 +1336,8 @@ struct Particle {
     D2D1_COLOR_F color;
     D2D1_COLOR_F endColor;
     int shapeType;
-    float colorOffset[3]; // 随机偏色（RGB，约 ±20/255）
+    float colorOffset[3]; // 随机偏色（RGB，约 ±20/255），生成后不变
+    float vortexBrightness[3]; // 漩涡亮度调制（向心力/3D效果），与色差分离
 };
 std::vector<Particle> g_particles;
 struct Ripple {
@@ -2227,9 +2228,9 @@ static void NativeRenderParticles(int screenW, int screenH) {
         if (progress < 0 || progress >= 1) continue;
         float lifeAlpha = (1.0f - progress);
         D2D1_COLOR_F pc = D2D1::ColorF(
-            p.color.r + (p.endColor.r - p.color.r) * progress + p.colorOffset[0],
-            p.color.g + (p.endColor.g - p.color.g) * progress + p.colorOffset[1],
-            p.color.b + (p.endColor.b - p.color.b) * progress + p.colorOffset[2], 1.0f);
+            p.color.r + (p.endColor.r - p.color.r) * progress + p.colorOffset[0] + p.vortexBrightness[0],
+            p.color.g + (p.endColor.g - p.color.g) * progress + p.colorOffset[1] + p.vortexBrightness[1],
+            p.color.b + (p.endColor.b - p.color.b) * progress + p.colorOffset[2] + p.vortexBrightness[2], 1.0f);
         float sizeScale = sinf(progress * 3.14159f) * 0.7f + 0.3f;
         float baseSize = p.size * 2.0f * (g_particleSizeMultiplier / 100.0f) * sizeScale;
 
@@ -2825,6 +2826,9 @@ static void SpawnParticles(float x, float y, int count, float speedMin, float sp
         p.colorOffset[0] = (Rand01() - 0.5f) * 0.16f;
         p.colorOffset[1] = (Rand01() - 0.5f) * 0.16f;
         p.colorOffset[2] = (Rand01() - 0.5f) * 0.16f;
+        p.vortexBrightness[0] = 0;
+        p.vortexBrightness[1] = 0;
+        p.vortexBrightness[2] = 0;
         g_particles.push_back(p);
     }
 }
@@ -4423,11 +4427,11 @@ static void RenderFrame() {
             if (cd.vortexStrength < 0.02f) {
                 cd.vortexStrength = 0;
                 cd.historyCount = 0;
-                // 清除粒子的z深度调制，恢复正常
+                // 清除粒子的漩涡亮度调制，恢复正常（色差保留）
                 for (auto &p : g_particles) {
-                    p.colorOffset[0] = 0;
-                    p.colorOffset[1] = 0;
-                    p.colorOffset[2] = 0;
+                    p.vortexBrightness[0] = 0;
+                    p.vortexBrightness[1] = 0;
+                    p.vortexBrightness[2] = 0;
                 }
             }
         }
@@ -4498,15 +4502,15 @@ static void RenderFrame() {
                         float speed = sqrtf(p.vx * p.vx + p.vy * p.vy);
                         float energyBoost = fminf(speed / 15.0f, 1.0f);
                         float depthBrightness = (1.0f - p.z) * 0.2f;
-                        p.colorOffset[0] = energyBoost * 0.12f + depthBrightness;
-                        p.colorOffset[1] = energyBoost * 0.12f + depthBrightness;
-                        p.colorOffset[2] = energyBoost * 0.12f + depthBrightness;
+                        p.vortexBrightness[0] = energyBoost * 0.12f + depthBrightness;
+                        p.vortexBrightness[1] = energyBoost * 0.12f + depthBrightness;
+                        p.vortexBrightness[2] = energyBoost * 0.12f + depthBrightness;
                     } else {
                         // 衰减阶段：z深度和亮度恢复正常
                         p.z += (0.5f - p.z) * 0.1f;
-                        p.colorOffset[0] *= 0.9f;
-                        p.colorOffset[1] *= 0.9f;
-                        p.colorOffset[2] *= 0.9f;
+                        p.vortexBrightness[0] *= 0.9f;
+                        p.vortexBrightness[1] *= 0.9f;
+                        p.vortexBrightness[2] *= 0.9f;
                     }
                 }
             }
