@@ -1081,21 +1081,23 @@ def validate_specific_keywords(path: Path, mod_source: str):
     # form feed and similar, hiding them from the control character check.
     mod_source_lines = mod_source.split('\n')
 
-    # Words to check (pattern, description)
+    # fmt: off
     keyword_patterns = [
-        (r'InternalWh', 'InternalWh'),
-        (r'WH_EDITING', 'WH_EDITING'),
-        (r'\bWH_MOD\b', 'WH_MOD'),
-        (r'(^|,)\s*GWL_WNDPROC', 'GWL_WNDPROC'),
-        (r'(^|,)\s*GWLP_WNDPROC', 'GWLP_WNDPROC'),
-        (r'Wh_FindFirstSymbol', 'Wh_FindFirstSymbol'),
-        (r'Wh_FindNextSymbol', 'Wh_FindNextSymbol'),
-        (r'Wh_FindCloseSymbol', 'Wh_FindCloseSymbol'),
-        (r'noUndecoratedSymbols', 'noUndecoratedSymbols'),
+        (r'\bInternalWh', 'InternalWh', 'Avoid using internal API unless absolutely necessary'),
+        (r'\bWH_EDITING\b', 'WH_EDITING', 'Avoid using WH_EDITING unless absolutely necessary'),
+        (r'\bWH_MOD\b', 'WH_MOD', 'Avoid using WH_MOD unless absolutely necessary'),
+        (r'(^|,)\s*GWL_WNDPROC\b', 'GWL_WNDPROC', '`WindhawkUtils::SetWindowSubclassFromAnyThread` is usually preferred for subclassing'),
+        (r'(^|,)\s*GWLP_WNDPROC\b', 'GWLP_WNDPROC', '`WindhawkUtils::SetWindowSubclassFromAnyThread` is usually preferred for subclassing'),
+        (r'\bWh_FindFirstSymbol\b', 'Wh_FindFirstSymbol', '`WindhawkUtils::HookSymbols` is usually preferred for symbol hooking'),
+        (r'\bWh_FindNextSymbol\b', 'Wh_FindNextSymbol', '`WindhawkUtils::HookSymbols` is usually preferred for symbol hooking'),
+        (r'\bWh_FindCloseSymbol\b', 'Wh_FindCloseSymbol', '`WindhawkUtils::HookSymbols` is usually preferred for symbol hooking'),
+        (r'\bnoUndecoratedSymbols\b', 'noUndecoratedSymbols', 'Decorated symbols don\'t support online caching, undecorated symbols are usually preferred'),
+        (r'\bWh_SetFunctionHookT\b', 'Wh_SetFunctionHookT', 'Deprecated, use `WindhawkUtils::SetFunctionHook` instead'),
     ]
+    # fmt: on
 
     for line_num, line in enumerate(mod_source_lines, start=1):
-        for pattern, word in keyword_patterns:
+        for pattern, word, description in keyword_patterns:
             if re.search(pattern, line):
                 # Skip GWL(P)_WNDPROC when used with GetWindowLong(Ptr)
                 if word in ('GWL_WNDPROC', 'GWLP_WNDPROC') and re.search(
@@ -1104,7 +1106,7 @@ def validate_specific_keywords(path: Path, mod_source: str):
                     continue
 
                 warnings += add_warning(
-                    path, line_num, f'Line requires manual inspection for "{word}"'
+                    path, line_num, f'Line requires manual inspection for "{word}": {description}'
                 )
 
         hidden_ws = [

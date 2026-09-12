@@ -14231,7 +14231,7 @@
           2
         ],
         "ratingUsers": 2,
-        "updated": 1789135560000,
+        "updated": 1789225045000,
         "users": 22
       },
       "metadata": {
@@ -14248,7 +14248,7 @@
         ],
         "name": "Start button colorizer",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "taskbar-start-button-corner-fix": {

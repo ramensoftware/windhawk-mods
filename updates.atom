@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-12T13:18:51.000Z</updated>
+    <updated>2026-09-12T14:57:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Start button colorizer 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-start-button-colorizer#008f818567e8e0627aa0f86e93dfe62595e03eff</id>
+        <link href="https://windhawk.net/mods/taskbar-start-button-colorizer"/>
+        <updated>2026-09-12T14:57:25.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option to use the system accent color.</li>
+<li>Fixed the color not applying on startup until the Start button is hovered.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Always show all taskbar tray icons 1.1]]></title>
         <id>https://windhawk.net/mods/taskbar-notification-icons-show-all#c314fe0b7407dba42d04212b30f3d7fff2e80553</id>
@@ -562,22 +576,6 @@ and to all context menus.</p>
         <author>
             <name>WasiXGamer</name>
             <uri>https://github.com/wasixgamer</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Vista/7 Blocked Shutdown UX & Logoff Sequence 1.1]]></title>
-        <id>https://windhawk.net/mods/win7-bsdr#d7f29f93f17b01ab03c53367f421bdc0fc339ffe</id>
-        <link href="https://windhawk.net/mods/win7-bsdr"/>
-        <updated>2026-09-07T21:52:22.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add support for loading <code>winsrv.dll</code> from Windows Vista<ul>
-<li>Resources for Vista BSDR are not included in the mod source. You must provide the resource DLL if you want to use the Vista style. See the mod readme for the instructions.</li></ul></li>
-<li>Improve the accuracy of app tile layout, image rendering, and scrolling behavior</li>
-<li>Refactor the safety checks to be less janky</li>
-</ul>]]></content>
-        <author>
-            <name>Ingan121</name>
-            <uri>https://github.com/Ingan121</uri>
         </author>
     </entry>
 </feed>
