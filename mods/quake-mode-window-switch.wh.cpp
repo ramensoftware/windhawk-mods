@@ -26,6 +26,11 @@ slide it back up out of view.
 - The window is not resized permanently, it's repositioned/resized only
   while parked in its docked or hidden slot; disabling the mod restores
   its original position, size and styles.
+- If the configured hotkey is already registered by another app, this mod
+  silently does nothing when pressed - there's no visible error, only a
+  `RegisterHotKey failed` line in the log (logging is off by default).
+  Windows Terminal in particular binds its own quake mode to Win+` by
+  default, so pick a hotkey that isn't already spoken for.
 */
 // ==/WindhawkModReadme==
 
@@ -44,13 +49,16 @@ slide it back up out of view.
   $options:
   - primary: Primary monitor
   - cursor: Monitor under cursor
-- hotkey: "Win+`"
+- hotkey: "Ctrl+Alt+`"
   $name: Hotkey
   $description: >-
-    Key combo to toggle the window, e.g. "Win+`" or "Ctrl+Shift+F12".
+    Key combo to toggle the window, e.g. "Ctrl+Alt+`" or "Ctrl+Shift+F12".
     Supported modifiers: Ctrl, Alt, Shift, Win. At least one modifier is
     required - a modifier-less key (e.g. a bare "`") would be captured
-    globally and block typing that key in every other app.
+    globally and block typing that key in every other app. If another
+    app already owns the combo, RegisterHotKey silently does nothing -
+    enable logging and check for a "RegisterHotKey failed" line if the
+    hotkey seems unresponsive.
 - hideFromTaskbar: false
   $name: Hide from taskbar
   $description: >-
@@ -236,8 +244,8 @@ static void LoadSettings()
     Wh_FreeStringSetting(hotkey);
 
     if (vk == 0) {
-        Wh_Log(L"Invalid or modifier-less hotkey setting, falling back to Win+`");
-        modifiers = MOD_WIN;
+        Wh_Log(L"Invalid or modifier-less hotkey setting, falling back to Ctrl+Alt+`");
+        modifiers = MOD_CONTROL | MOD_ALT;
         vk = VK_OEM_3;
     }
 
@@ -563,7 +571,10 @@ static void CALLBACK OnForegroundChanged(
         return;
     }
 
-    HWND root = GetAncestor(hwnd, GA_ROOT);
+    // GA_ROOTOWNER (not GA_ROOT) walks the owner chain, so an owned
+    // dialog/popup from the target app (settings, file picker, find bar)
+    // still resolves back to the target and doesn't trigger auto-hide.
+    HWND root = GetAncestor(hwnd, GA_ROOTOWNER);
     if (root == g_targetHwnd) {
         return;
     }
@@ -607,6 +618,13 @@ static LRESULT CALLBACK HotkeyWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
 
 static DWORD WINAPI HotkeyThreadProc(LPVOID)
 {
+    // Without this, GetMonitorInfoW/GetCursorPos coordinates come back
+    // DPI-virtualized on any monitor whose scaling differs from the
+    // system DPI, so the docked strip lands at the wrong position/size
+    // on a mixed-DPI multi-monitor setup (exactly what monitorMode:
+    // cursor is for).
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
     WNDCLASSEXW wc = {sizeof(wc)};
     wc.lpfnWndProc = HotkeyWndProc;
     wc.hInstance = GetModuleHandle(nullptr);
