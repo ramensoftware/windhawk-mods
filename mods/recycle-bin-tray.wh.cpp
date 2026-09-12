@@ -305,7 +305,7 @@ Shell notifications allow the icon to react quickly when items are added to or r
 
 Because Shell notifications can occasionally be missed, a configurable fallback timer periodically checks the actual Recycle Bin state.
 
-The default fallback interval is **300 seconds** and can be changed in the Windhawk settings. Tray position / DPI polling is disabled by default and remains available as an optional fallback.
+The default fallback interval is **300 seconds** and can be changed in the Windhawk settings. DPI and tray-geometry changes are handled through Windows display/DPI events and the Shell-reported tray rectangle.
 
 Initialization checks the Shell and tray immediately. A one-second startup retry is armed only if Shell notification registration or tray creation is not ready yet.
 
@@ -344,7 +344,7 @@ This allows the icon to recover without requiring the Windhawk mod to be manuall
 * Dropped items are processed asynchronously on a dedicated STA worker through `IFileOperation`, so Shell UI or slow storage does not block the source application's `DoDragDrop` call.
 * A passive `IFileOperationProgressSink` records recycle, permanent-delete, cancellation, and failure results for diagnostics without changing the Shell operation.
 * The mod does not create a separate executable or Windows service.
-* GDI+ is initialized lazily only when vector rendering or custom raster-image loading requires it; native `.ico` loading can bypass GDI+. It is released opportunistically when no rendered icon needs it and again during final teardown.
+* GDI+ is initialized lazily only when vector rendering or custom raster-image loading requires it; native `.ico` loading can bypass GDI+. Once initialized, it stays available for the lifetime of the tool and is released during final teardown.
 * Tray timers are explicitly cancelled during window destruction before icon and Shell resources are released.
 * Explorer/taskbar restarts are detected through the standard `TaskbarCreated` broadcast received by the hidden tray host.
 * The current icon handle is explicitly destroyed whenever the icon is replaced or the mod unloads.
@@ -362,7 +362,7 @@ The Windhawk settings are grouped by function:
 * **Font** — font family and glyph values for empty/full states.
 * **Custom Icon** — color handling, Light-theme Empty/Full source files, and optional Dark-theme files.
 * **Actions** — mouse-button behavior and empty confirmation.
-* **System** — fallback refresh interval and tray DPI check interval.
+* **System** — fallback Recycle Bin state refresh interval.
 
 Renderer-specific settings only apply to the corresponding selected icon style.
 
@@ -637,7 +637,7 @@ This project is licensed under the GNU General Public License Version 3.0.
       - empty: Vider la corbeille
       - properties: Propriétés
       - none: Ne rien faire
-  - middleClick: empty
+  - middleClick: none
     $name: "Middle click"
     $name:fr-FR: "Clic milieu"
     $options:
@@ -681,17 +681,12 @@ This project is licensed under the GNU General Public License Version 3.0.
   - fallbackTimerInterval: 300
     $name: "Fallback timer interval (seconds)"
     $name:fr-FR: "Intervalle de vérification de secours (secondes)"
-    $description: "Safety polling interval in seconds to refresh state if Shell events are missed. Set to 0 to disable."
-    $description:fr-FR: "Intervalle utilisé pour vérifier l'état de la Corbeille si une notification Windows est manquée. Régler sur 0 pour désactiver."
-  - dpiCheckInterval: 0
-    $name: "Tray position / DPI check interval (seconds)"
-    $name:fr-FR: "Intervalle de vérification de la position / du DPI de l'icône (secondes)"
-    $description: "How often the mod checks the real tray icon position and DPI. Set to 0 to disable."
-    $description:fr-FR: "Fréquence de vérification de la position réelle et du DPI de l'icône. Régler sur 0 pour désactiver."
+    $description: "Safety polling interval in seconds to refresh state if Shell events are missed. Set to 0 to disable; enabled values use a minimum interval of 10 seconds."
+    $description:fr-FR: "Intervalle utilisé pour vérifier l'état de la Corbeille si une notification Windows est manquée. Régler sur 0 pour désactiver ; toute valeur active utilise un minimum de 10 secondes."
   $name: "System"
   $name:fr-FR: "Système"
-  $description: "Fallback polling and tray DPI monitoring."
-  $description:fr-FR: "Vérification de secours et suivi du DPI de l'icône."
+  $description: "Fallback Recycle Bin state polling."
+  $description:fr-FR: "Vérification de secours de l'état de la Corbeille."
 */
 // ==/WindhawkModSettings==
 #ifndef _WIN32_WINNT
@@ -818,7 +813,7 @@ private:
     DPI_AWARENESS_CONTEXT m_previous = NULL;
 };
 
-// Owns a screen DC and releases it with the matching HWND.
+// Owns a screen DC acquired with GetDC(NULL).
 class ScreenDC {
    public:
     ScreenDC() : m_hdc(GetDC(NULL)) {}
@@ -863,10 +858,11 @@ constexpr UINT TIMER_CLICK_ID = 101;
 constexpr UINT TIMER_REFRESH_ID = 102;
 constexpr UINT TIMER_STARTUP_ID = 103;
 constexpr UINT TIMER_DRAG_POLL_ID = 104;
-constexpr UINT TIMER_DPI_CHECK_ID = 105;
 constexpr UINT TIMER_DISPLAY_SETTLE_ID = 106;
 constexpr UINT TIMER_SHELL_COALESCE_ID = 107;
 constexpr UINT TIMER_DPI_REINSTALL_ID = 108;
+constexpr UINT TIMER_DPI_WATCH_ID = 109;
+constexpr UINT DPI_WATCH_INTERVAL_MS = 1000;
 
 // Active drag polling runs only while a physical left-button gesture is in progress.
 constexpr UINT DRAG_POLL_INTERVAL_ACTIVE_MS = 40;
@@ -1025,7 +1021,6 @@ struct ModSettings {
     TrayAction rightClickAction;
     bool confirmEmpty;
     UINT fallbackTimerInterval;
-    UINT dpiCheckInterval;
 } g_settings;
 
 // Settings callbacks can run outside the tray thread. Keep only the newest
@@ -1055,6 +1050,7 @@ static bool ConsumePendingSettings() {
 static bool ReadSystemDarkTheme() {
     HKEY hKey;
     DWORD data = 1;
+    DWORD dataType = 0;
     DWORD dataSize = sizeof(data);
     LONG result = RegOpenKeyExW(
         HKEY_CURRENT_USER,
@@ -1065,8 +1061,20 @@ static bool ReadSystemDarkTheme() {
     );
 
     if (result == ERROR_SUCCESS) {
-        RegQueryValueExW(hKey, L"SystemUsesLightTheme", NULL, NULL, (LPBYTE)&data, &dataSize);
+        result = RegQueryValueExW(
+            hKey,
+            L"SystemUsesLightTheme",
+            NULL,
+            &dataType,
+            reinterpret_cast<LPBYTE>(&data),
+            &dataSize);
         RegCloseKey(hKey);
+
+        if (result != ERROR_SUCCESS ||
+            dataType != REG_DWORD ||
+            dataSize != sizeof(data)) {
+            data = 1;
+        }
     }
 
     return data == 0;
@@ -2055,8 +2063,8 @@ static bool PositionDropOverlay(const RECT& rect, bool show) {
         rect.right - rect.left, rect.bottom - rect.top, flags) != FALSE;
 }
 
-// A hidden Per-Monitor V2 window may keep its previous DPI after a display change.
-// Briefly showing the nearly transparent overlay makes Windows complete the transition.
+// Refresh the hidden PMv2 DPI reference at the tray position.
+// The fallback watch covers primary-display changes missed by display events.
 static bool ProbeDpiReferenceAtTray(const RECT& rect) {
     if (!g_hOverlayWnd) return false;
 
@@ -2206,6 +2214,8 @@ static bool GetShellStringIndirect(PCWSTR dllName, UINT resourceId, WCHAR* buffe
            buffer[0] != L'\0';
 }
 
+// Historical Shell resource IDs provide localized Windows labels; key Recycle Bin IDs
+// were verified back to Windows XP. English fallbacks cover missing future resources.
 static void GetShell32String(UINT resourceId, WCHAR* buffer,
                              size_t maxCount, PCWSTR fallback) {
     if (!GetShellStringIndirect(L"shell32.dll", resourceId, buffer, maxCount)) {
@@ -2288,24 +2298,21 @@ void LoadSettingsInto(ModSettings& s) {
     // Parse all mouse actions through one helper.
     s.leftClickAction   = ReadActionSetting(L"actions.leftClick",   L"none");
     s.doubleClickAction = ReadActionSetting(L"actions.doubleClick", L"open");
-    s.middleClickAction = ReadActionSetting(L"actions.middleClick", L"empty");
+    s.middleClickAction = ReadActionSetting(L"actions.middleClick", L"none");
     s.rightClickAction  = ReadActionSetting(L"actions.rightClick",  L"contextMenu");
 
     s.confirmEmpty = Wh_GetIntSetting(L"actions.confirmEmpty") != 0;
 
-    // Clamp fallback polling to 0..24 hours.
+    // Keep 0 as disabled. Active fallback polling is clamped to 10 s..24 h
+    // so SHQueryRecycleBinW(NULL, ...) can't be configured as a hot loop.
     int interval = Wh_GetIntSetting(L"system.fallbackTimerInterval");
     if (interval < 0) {
         s.fallbackTimerInterval = 300;
+    } else if (interval == 0) {
+        s.fallbackTimerInterval = 0;
     } else {
-        s.fallbackTimerInterval = static_cast<UINT>(std::min(interval, 86400));
-    }
-
-    int dpiInterval = Wh_GetIntSetting(L"system.dpiCheckInterval");
-    if (dpiInterval < 0) {
-        s.dpiCheckInterval = 0;
-    } else {
-        s.dpiCheckInterval = static_cast<UINT>(std::min(dpiInterval, 86400));
+        s.fallbackTimerInterval = static_cast<UINT>(
+            std::clamp(interval, 10, 86400));
     }
 }
 
@@ -3230,7 +3237,9 @@ static bool BuildAreaResampledAlphaMask(
 }
 
 // Thin monochrome raster strokes can become too faint at the 16 px tray
-// target. Dark theme tint gets a small coverage remap after resampling.
+// target. This dark-theme-only coverage remap was tuned empirically from
+// side-by-side 16 px tray tests at 100% scaling: without it, thin transparent
+// monochrome strokes lost too much visual weight after area resampling.
 static BYTE RemapSmallDarkTintAlpha(BYTE alpha) {
     const UINT a = alpha;
 
@@ -3641,25 +3650,6 @@ static bool StartMouseHookThread() {
     return true;
 }
 
-// Open the overlay UIPI exceptions only while OLE drag & drop is enabled.
-static void SetDragDropMessageFilters(bool allow) {
-    if (!g_hOverlayWnd) {
-        return;
-    }
-
-    constexpr UINT kWmCopyGlobalData = 0x0049;
-    const UINT dragDropMessages[] = { WM_DROPFILES, WM_COPYDATA, kWmCopyGlobalData };
-    const DWORD action = allow ? MSGFLT_ALLOW : MSGFLT_DISALLOW;
-
-    for (UINT message : dragDropMessages) {
-        if (!ChangeWindowMessageFilterEx(
-                g_hOverlayWnd, message, action, nullptr)) {
-            Wh_Log(L"D&D: message filter %s failed for 0x%04X: %lu",
-                   allow ? L"allow" : L"disallow", message, GetLastError());
-        }
-    }
-}
-
 // The overlay window stays alive as the physical per-monitor DPI reference.
 // Only the OLE drop target and dedicated mouse-hook thread are enabled on demand.
 static bool SetDragDropEnabled(HWND hWnd, bool enable) {
@@ -3689,7 +3679,6 @@ static bool SetDragDropEnabled(HWND hWnd, bool enable) {
             g_pDropTarget = nullptr;
         }
 
-        SetDragDropMessageFilters(false);
         g_oleDragActive.store(false);
         return true;
     }
@@ -3720,8 +3709,6 @@ static bool SetDragDropEnabled(HWND hWnd, bool enable) {
         Wh_Log(L"D&D: RegisterDragDrop succeeded.");
     }
 
-    SetDragDropMessageFilters(true);
-
     if (!StartMouseHookThread()) {
         const HRESULT hr = RevokeDragDrop(g_hOverlayWnd);
         if (FAILED(hr) && hr != DRAGDROP_E_NOTREGISTERED) {
@@ -3729,7 +3716,6 @@ static bool SetDragDropEnabled(HWND hWnd, bool enable) {
         }
         g_pDropTarget->Release();
         g_pDropTarget = nullptr;
-        SetDragDropMessageFilters(false);
         return false;
     }
 
@@ -3790,10 +3776,10 @@ bool UpdateTrayState() {
             default: break;
         }
         Wh_Log(
-            L"Startup: Recycle Bin empty=%d items=%lld size=%lld bytes; hideWhenEmpty=%d dragDrop=%d iconStyle=%s fallbackTimer=%u s dpiCheck=%u s",
+            L"Startup: Recycle Bin empty=%d items=%lld size=%lld bytes; hideWhenEmpty=%d dragDrop=%d iconStyle=%s fallbackTimer=%u s",
             isEmpty ? 1 : 0, rbInfo.i64NumItems, rbInfo.i64Size,
             g_settings.hideWhenEmpty ? 1 : 0, g_settings.enableDragDrop ? 1 : 0,
-            styleName, g_settings.fallbackTimerInterval, g_settings.dpiCheckInterval);
+            styleName, g_settings.fallbackTimerInterval);
     }
 
     // Hide the notification icon when requested and the bin is empty.
@@ -3805,7 +3791,6 @@ bool UpdateTrayState() {
         }
         g_hCurrentIcon.reset();
         g_trayState.lastKey = {};
-        ShutdownGdiplusIfInitialized();
 
         UpdateOverlayState();
         return true;
@@ -4206,10 +4191,10 @@ const WCHAR* TimerName(UINT timerId) {
         case TIMER_REFRESH_ID: return L"REFRESH";
         case TIMER_STARTUP_ID: return L"STARTUP";
         case TIMER_DRAG_POLL_ID: return L"DRAG_POLL";
-        case TIMER_DPI_CHECK_ID: return L"DPI_CHECK";
         case TIMER_DISPLAY_SETTLE_ID: return L"DISPLAY_SETTLE";
         case TIMER_SHELL_COALESCE_ID: return L"SHELL_COALESCE";
         case TIMER_DPI_REINSTALL_ID: return L"DPI_REINSTALL";
+        case TIMER_DPI_WATCH_ID: return L"DPI_WATCH";
         default: return L"UNKNOWN";
     }
 }
@@ -4255,17 +4240,6 @@ void UpdateRefreshTimer(HWND hWnd) {
     }
 
     (void)SetLoggedTimer(hWnd, TIMER_REFRESH_ID, g_settings.fallbackTimerInterval * 1000);
-}
-
-void UpdateDpiCheckTimer(HWND hWnd) {
-    (void)KillLoggedTimer(hWnd, TIMER_DPI_CHECK_ID);
-
-    if (g_settings.dpiCheckInterval == 0) {
-        Wh_Log(L"Timer DPI_CHECK disabled by settings");
-        return;
-    }
-
-    (void)SetLoggedTimer(hWnd, TIMER_DPI_CHECK_ID, g_settings.dpiCheckInterval * 1000);
 }
 
 static void StopShellCoalesceTimer(HWND hWnd) {
@@ -4380,16 +4354,8 @@ static void ApplyPendingSettings(HWND hWnd) {
     InvalidateFontConfigCache();
     g_forceIconRegen = true;
     UpdateRefreshTimer(hWnd);
-    UpdateDpiCheckTimer(hWnd);
     (void)SetDragDropEnabled(hWnd, g_settings.enableDragDrop);
     UpdateTrayState();
-
-    // System and Font rendering do not need GDI+. Release its process-wide
-    // state after the new icon has been fully rendered and installed.
-    if (g_settings.iconStyle == IconStyle::System ||
-        g_settings.iconStyle == IconStyle::Font) {
-        ShutdownGdiplusIfInitialized();
-    }
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -4617,6 +4583,29 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 }
             } else if (wParam == TIMER_DRAG_POLL_ID) {
                 CheckDragStatus(hWnd);
+            } else if (wParam == TIMER_DPI_WATCH_ID) {
+                // A primary-display switch can move the notification area to
+                // another monitor without producing a WM_DISPLAYCHANGE that
+                // wakes our hidden per-monitor-DPI reference window. Probe the
+                // real tray icon periodically so a stale reference cannot leave
+                // the tray icon rendered for the previous monitor's DPI.
+                if (!g_iconVisible || !g_hOverlayWnd ||
+                    (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 ||
+                    g_oleDragActive.load() || g_dropOverlayArmed.load()) {
+                    return 0;
+                }
+
+                RECT iconRect = {};
+                if (!QueryTrayIconRect(hWnd, iconRect, true) ||
+                    !ProbeDpiReferenceAtTray(iconRect)) {
+                    return 0;
+                }
+
+                if (RefreshTrayGeometryFromRect(hWnd, iconRect, false)) {
+                    Wh_Log(L"DPI: fallback watch detected a tray geometry/DPI change; regenerating icon");
+                    g_forceIconRegen = true;
+                    UpdateTrayState();
+                }
             } else if (wParam == TIMER_SHELL_COALESCE_ID) {
                 StopShellCoalesceTimer(hWnd);
                 UpdateTrayState();
@@ -4655,13 +4644,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                         Wh_Log(L"DPI: delayed NIM_DELETE failed: %lu",
                                GetLastError());
                     }
-                }
-            } else if (wParam == TIMER_DPI_CHECK_ID) {
-                const bool changed = RefreshTrayGeometry(hWnd, false);
-                if (changed) {
-                    Wh_Log(L"DPI_CHECK: tray geometry/render size changed; regenerating icon");
-                    g_forceIconRegen = true;
-                    UpdateTrayState();
                 }
             } else if (wParam == TIMER_DISPLAY_SETTLE_ID) {
                 ++g_trayState.displaySettleAttempts;
@@ -4769,10 +4751,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             (void)KillLoggedTimer(hWnd, TIMER_REFRESH_ID);
             StopStartupRetryTimer(hWnd);
             (void)KillLoggedTimer(hWnd, TIMER_DRAG_POLL_ID);
-            (void)KillLoggedTimer(hWnd, TIMER_DPI_CHECK_ID);
             StopShellCoalesceTimer(hWnd);
             (void)KillLoggedTimer(hWnd, TIMER_DISPLAY_SETTLE_ID);
             (void)KillLoggedTimer(hWnd, TIMER_DPI_REINSTALL_ID);
+            (void)KillLoggedTimer(hWnd, TIMER_DPI_WATCH_ID);
             g_pendingDpiShellReinstall = false;
             g_trayState.displaySettleTimerActive = false;
             g_suppressLeftActivationUntil = 0;
@@ -4902,7 +4884,7 @@ DWORD WINAPI TrayThreadProc(LPVOID) {
     const bool shellReady = RegisterShellNotifications(hWndNew);
 
     UpdateRefreshTimer(hWndNew);
-    UpdateDpiCheckTimer(hWndNew);
+    (void)SetLoggedTimer(hWndNew, TIMER_DPI_WATCH_ID, DPI_WATCH_INTERVAL_MS);
     (void)SetDragDropEnabled(hWndNew, g_settings.enableDragDrop);
     const bool trayReady = UpdateTrayState();
 
