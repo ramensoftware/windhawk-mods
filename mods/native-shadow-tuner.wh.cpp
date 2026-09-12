@@ -1,9 +1,10 @@
 // ==WindhawkMod==
 // @id              native-shadow-tuner
 // @name            Windows Shadows TUNER
-// @description     Personalizza intensita, dimensione e colore delle ombre native delle finestre.
+// @description     Edit dimension, intensity and color of Windows's Drop Shadows.
 // @version         0.3.0
 // @author          HaVeN80
+// @github          https://github.com/haven80
 // @include         dwm.exe
 // @architecture    x86-64
 // @compilerOptions -lbcrypt -masm=att
@@ -45,7 +46,26 @@ windows 11 25h2.
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
-
+/*
+- enabled: false
+  $name: Enable Shadows MOD
+  $description: Activate MOD.
+- opacityPercent: 100
+  $name: Shadow Intensity (% of the original value)
+  $description: From 0 to 300. 100 original, 50 less visible, 150 more visible. 0 to make invisible.
+- sizePercent: 100
+  $name: Dimenbsion and Blur (% of the original value)
+  $description: from 50 to 150. 100 for the original value.
+- bypassCache: true
+  $name: Update shadows
+  $description: Check this if the shadows does not change.
+- customColor: false
+  $name: Color personalization
+  $description: Shadow color. Disable to make it original.
+- shadowColor: '#2878FF'
+  $name: Shadow Color
+  $description: "in exadecimal #RRGGBB. Examples - #2878FF blu, #00A860 green, #000000 black."
+*/
 // ==/WindhawkModSettings==
 
 #include <windows.h>
