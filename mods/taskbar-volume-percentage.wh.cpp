@@ -2,7 +2,7 @@
 // @id              taskbar-volume-percentage
 // @name            Taskbar Volume Percentage Indicator
 // @description     Displays the exact master volume percentage in the system tray natively inside the Windows 11 volume button with real-time sync.
-// @version         1.3.7
+// @version         1.3.8
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
@@ -144,6 +144,12 @@ static winrt::weak_ref<FrameworkElement> g_volumeIconViewWeak;
 
 static std::atomic<bool> g_unloading{false};
 static std::atomic<bool> g_systemTrayModuleHooked{false};
+
+struct BoolScopeGuard {
+    bool& ref;
+    BoolScopeGuard(bool& var) : ref(var) { ref = true; }
+    ~BoolScopeGuard() { ref = false; }
+};
 
 static void InitMasterVolumeFromCoreAudio() {
     IMMDeviceEnumerator* pEnumerator = nullptr;
@@ -319,16 +325,20 @@ static bool IsVolumeIconElement(const FrameworkElement& iconView) {
             break;
         }
 
-        // Numeric percentage or raw number style (e.g. "50%", "50")
-        if (firstChar >= L'0' && firstChar <= L'9') {
+        // Already customized by mod with known formatted strings
+        if (textView.find(L'%') != std::wstring_view::npos ||
+            textView == L"MUT" ||
+            textView == L"Mute") {
             return true;
         }
 
-        // Already customized by mod with known prefixes / strings
-        if (textView.find(L'%') != std::wstring_view::npos ||
-            textView.find(L"MUT") != std::wstring_view::npos ||
-            textView.find(L"Mute") != std::wstring_view::npos ||
-            textView.find(L"Vol") != std::wstring_view::npos) {
+        Settings settingsCopy;
+        {
+            std::lock_guard<std::mutex> lock(g_settingsMutex);
+            settingsCopy = g_settings;
+        }
+        if (!settingsCopy.customPrefix.empty() &&
+            textView.rfind(settingsCopy.customPrefix, 0) == 0) {
             return true;
         }
     } catch (...) {
@@ -351,7 +361,9 @@ static void ApplyVolumeContainerWidth(const FrameworkElement& iconView) {
 
     double targetWidth = GetTargetContainerWidth(settingsCopy);
     try {
-        if (iconView.MinWidth() != targetWidth) {
+        if (targetWidth <= 0.0) {
+            iconView.as<DependencyObject>().ClearValue(FrameworkElement::MinWidthProperty());
+        } else if (iconView.MinWidth() != targetWidth) {
             iconView.MinWidth(targetWidth);
         }
     } catch (...) {
@@ -627,7 +639,7 @@ static size_t GetIconTextOffset(void* pThis) {
         }
     }
 
-    return 0x90; // Fallback to standard Windows 11 member offset
+    return 0; // Return 0 to bail out safely if no candidate matches
 }
 
 static void ApplyCustomVolumeText(void* pThis, float volumeLevel, bool isMuted) {
@@ -686,32 +698,29 @@ static void __cdecl VolumeSystemTrayIconDataModel_OnDataModelChanged_Hook(
 
     if (!s_inOnDataModelChanged && !g_unloading.load(std::memory_order_relaxed) &&
         pThis && propertyName && *propertyName == L"CurrentData") {
-        Settings settingsCopy;
-        {
-            std::lock_guard<std::mutex> lock(g_settingsMutex);
-            settingsCopy = g_settings;
-        }
-
-        if (settingsCopy.displayStyle != DisplayStyle::Vanilla) {
-            float volumeLevel = 0.0f;
-            bool isMuted = false;
+        if (g_hasReceivedVolumeUpdate.load(std::memory_order_relaxed)) {
+            Settings settingsCopy;
             {
-                std::lock_guard<std::mutex> lock(g_dataModelMutex);
-                volumeLevel = g_lastVolumeLevel;
-                isMuted = g_lastIsMuted;
+                std::lock_guard<std::mutex> lock(g_settingsMutex);
+                settingsCopy = g_settings;
             }
-            ApplyCustomVolumeText(pThis, volumeLevel, isMuted);
+
+            if (settingsCopy.displayStyle != DisplayStyle::Vanilla) {
+                float volumeLevel = 0.0f;
+                bool isMuted = false;
+                {
+                    std::lock_guard<std::mutex> lock(g_dataModelMutex);
+                    volumeLevel = g_lastVolumeLevel;
+                    isMuted = g_lastIsMuted;
+                }
+                ApplyCustomVolumeText(pThis, volumeLevel, isMuted);
+            }
         }
     }
 
     if (VolumeSystemTrayIconDataModel_OnDataModelChanged_Original) {
-        s_inOnDataModelChanged = true;
-        try {
-            VolumeSystemTrayIconDataModel_OnDataModelChanged_Original(pThis, propertyName);
-        } catch (...) {
-            Wh_Log(L"Exception in OnDataModelChanged_Original");
-        }
-        s_inOnDataModelChanged = false;
+        BoolScopeGuard guard(s_inOnDataModelChanged);
+        VolumeSystemTrayIconDataModel_OnDataModelChanged_Original(pThis, propertyName);
     }
 }
 
@@ -732,16 +741,13 @@ static void __cdecl VolumeSystemTrayIconDataModel_UpdateVolume_Hook(
         g_pVolumeDataModel = pThis;
         g_lastVolumeLevel = volumeLevel;
         g_lastIsMuted = isMuted;
+        g_hasReceivedVolumeUpdate.store(true, std::memory_order_relaxed);
     }
 
     // Always invoke the original Windows system function first
     if (VolumeSystemTrayIconDataModel_UpdateVolume_Original) {
-        try {
-            VolumeSystemTrayIconDataModel_UpdateVolume_Original(
-                pThis, volumeLevel, isMuted, hstringIcon);
-        } catch (...) {
-            Wh_Log(L"Exception in UpdateVolume_Original");
-        }
+        VolumeSystemTrayIconDataModel_UpdateVolume_Original(
+            pThis, volumeLevel, isMuted, hstringIcon);
     }
 
     if (s_inHook) {
@@ -770,24 +776,15 @@ static void __cdecl VolumeSystemTrayIconDataModel_UpdateVolume_Hook(
 
     // Trigger UI redraw via CurrentData property notification with recursion guard
     if (VolumeSystemTrayIconDataModel_OnDataModelChanged_Original) {
-        s_inHook = true;
-        try {
-            std::wstring_view propName = L"CurrentData";
-            VolumeSystemTrayIconDataModel_OnDataModelChanged_Original(pThis, &propName);
-        } catch (...) {
-            Wh_Log(L"Exception re-triggering OnDataModelChanged");
-        }
-        s_inHook = false;
+        BoolScopeGuard guard(s_inHook);
+        std::wstring_view propName = L"CurrentData";
+        VolumeSystemTrayIconDataModel_OnDataModelChanged_Original(pThis, &propName);
     }
 }
 
 static void __cdecl IconView_UpdateHostedContent_Hook(void* pThis) {
     if (IconView_UpdateHostedContent_Original) {
-        try {
-            IconView_UpdateHostedContent_Original(pThis);
-        } catch (...) {
-            Wh_Log(L"Exception in IconView_UpdateHostedContent_Original");
-        }
+        IconView_UpdateHostedContent_Original(pThis);
     }
 
     if (g_unloading.load(std::memory_order_relaxed) || !pThis) {
@@ -995,7 +992,7 @@ static void LoadSettings() {
 static void WINAPI BeforeUninitOnUIThread(void* /*parameter*/) {
     try {
         if (auto iconView = g_volumeIconViewWeak.get()) {
-            iconView.MinWidth(0.0);
+            iconView.as<DependencyObject>().ClearValue(FrameworkElement::MinWidthProperty());
         }
     } catch (...) {
         Wh_Log(L"Exception in BeforeUninitOnUIThread resetting width");
@@ -1150,11 +1147,21 @@ void Wh_ModSettingsChanged() {
     }
 }
 
+static void WINAPI InitMasterVolumeOnTaskbarThread(void* /*parameter*/) {
+    InitMasterVolumeFromCoreAudio();
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing Taskbar Volume Percentage Indicator mod in explorer.exe");
 
     LoadSettings();
-    InitMasterVolumeFromCoreAudio();
+
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (hTaskbarWnd) {
+        RunFromWindowThread(hTaskbarWnd, InitMasterVolumeOnTaskbarThread, nullptr);
+    } else {
+        InitMasterVolumeFromCoreAudio();
+    }
 
     bool hooked = false;
     if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
@@ -1185,6 +1192,13 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
+    if (!g_hasReceivedVolumeUpdate.load(std::memory_order_relaxed)) {
+        HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+        if (hTaskbarWnd) {
+            RunFromWindowThread(hTaskbarWnd, InitMasterVolumeOnTaskbarThread, nullptr);
+        }
+    }
+
     if (!g_systemTrayModuleHooked) {
         if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
             if (!g_systemTrayModuleHooked.exchange(true)) {
