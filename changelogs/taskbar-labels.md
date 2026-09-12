@@ -1,3 +1,9 @@
+## 1.4.5 ([Sep 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/cc00cec7e715c06c8242113ce8ce2fe117e120e1/mods/taskbar-labels.wh.cpp))
+
+* Improved compatibility with the new small taskbar.
+* Fixed icons being cut off for some settings, such as for large values of "Left and right padding size".
+* Fixed an uncommon crash with some running indicator styles.
+
 ## 1.4.4 ([Sep 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b0553682078854d14adffff2ed5cda1dc4774748/mods/taskbar-labels.wh.cpp))
 
 * Fixed compatibility with the latest Windows 11 update. You might need to restart explorer after updating the to the newer version of the mod.

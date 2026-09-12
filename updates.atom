@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-11T15:56:51.000Z</updated>
+    <updated>2026-09-12T12:21:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.4.5]]></title>
+        <id>https://windhawk.net/mods/taskbar-labels#cc00cec7e715c06c8242113ce8ce2fe117e120e1</id>
+        <link href="https://windhawk.net/mods/taskbar-labels"/>
+        <updated>2026-09-12T12:21:02.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved compatibility with the new small taskbar.</li>
+<li>Fixed icons being cut off for some settings, such as for large values of "Left and right padding size".</li>
+<li>Fixed an uncommon crash with some running indicator styles.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[TopBar for Windows 1.1.0]]></title>
         <id>https://windhawk.net/mods/windhawk-topbar#50b1da24769a21b15ee5293e97d03a04e98f4499</id>
@@ -543,23 +558,6 @@ use the mod <code>Taskbar tray icon spacing and grid</code>.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MuteAlert - Microphone Activity Taskbar Widget 0.9.8]]></title>
-        <id>https://windhawk.net/mods/mutealert#96af7a4c23f66842ccc6aa627b8cb0d611d81df4</id>
-        <link href="https://windhawk.net/mods/mutealert"/>
-        <updated>2026-09-07T18:02:10.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add Google Meet call and mute-state detection through Windows UI Automation.</li>
-<li>Add speaking-while-muted warnings, optional audio cue, taskbar mute/unmute, call-window focus, and headset mute synchronization.</li>
-<li>Add a distinct Google Meet call-state logo and configurable localized control labels.</li>
-<li>Recognize Meet windows in Chrome, Edge, Firefox, Brave, Vivaldi, Opera, and Arc.</li>
-<li>Document that the meeting must be the active, visible browser tab because inactive tabs don't expose their controls to UI Automation.</li>
-</ul>]]></content>
-        <author>
-            <name>Nikolay</name>
-            <uri>https://github.com/Nikolay1243</uri>
         </author>
     </entry>
 </feed>
