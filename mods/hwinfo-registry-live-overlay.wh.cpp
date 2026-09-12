@@ -6,8 +6,8 @@
 // @author          SilverAmd
 // @github          https://github.com/SilverAmd
 // @license         MIT
-// @include         explorer.exe
-// @compilerOptions -lgdi32 -lmsimg32 -lshell32
+// @include         windhawk.exe
+// @compilerOptions -lgdi32 -lmsimg32 -lshell32 -lole32 -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -128,6 +128,8 @@ The Water Age text can change color based on warning and alarm percentage thresh
 This mod does not read all HWiNFO sensors directly. It only reads values that HWiNFO exposes through its Gadget/VSB Registry reporting feature.
 
 This mod does not use HWiNFO Shared Memory.
+
+This is a separate mod because it reads HWiNFO Gadget/VSB Registry values instead of HWiNFO Shared Memory and includes an HTML registry export helper for mapping ValueN entries to Windhawk rows.
 
 HWiNFO must be installed and running, and the desired sensor values must be enabled for Gadget reporting in HWiNFO.
 
@@ -433,9 +435,11 @@ MIT
 
 #include <windows.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <string>
 #include <vector>
 #include <sstream>
+#include <climits>
 
 struct RowConfig {
     std::wstring label;
@@ -552,6 +556,8 @@ constexpr int HOTKEY_EXPORT_REGISTRY = 3;
 constexpr int SAVED_POSITION_NOT_SET = -2147483647;
 constexpr COLORREF TRANSPARENT_COLOR_KEY = 0x00FF00FF; // RGB(255, 0, 255)
 constexpr UINT WM_APP_SETTINGS_CHANGED = WM_APP + 1;
+constexpr const wchar_t* OVERLAY_WINDOW_CLASS_NAME =
+    L"HWiNFORegistryLiveOverlayWindow";
 std::wstring Trim(const std::wstring& s) {
     size_t start = s.find_first_not_of(L" \t\r\n");
     if (start == std::wstring::npos)
@@ -648,28 +654,27 @@ std::wstring ReadRegistryStringFromOpenKey(HKEY key, const std::wstring& valueNa
     if (!key)
         return L"N/A";
 
-    wchar_t buffer[512] = {};
     DWORD type = 0;
-    DWORD size = sizeof(buffer);
+    DWORD size = 0;
 
     LONG result = RegQueryValueExW(
         key,
         valueName.c_str(),
         nullptr,
         &type,
-        reinterpret_cast<LPBYTE>(buffer),
+        nullptr,
         &size
     );
 
     if (result != ERROR_SUCCESS)
         return L"N/A";
 
-    if (type == REG_SZ || type == REG_EXPAND_SZ)
-        return buffer;
+    if (type == REG_DWORD) {
+        if (size != sizeof(DWORD))
+            return L"N/A";
 
-    if (type == REG_DWORD && size == sizeof(DWORD)) {
         DWORD value = 0;
-        size = sizeof(value);
+        DWORD valueSize = sizeof(value);
 
         result = RegQueryValueExW(
             key,
@@ -677,17 +682,47 @@ std::wstring ReadRegistryStringFromOpenKey(HKEY key, const std::wstring& valueNa
             nullptr,
             &type,
             reinterpret_cast<LPBYTE>(&value),
-            &size
+            &valueSize
         );
 
-        if (result == ERROR_SUCCESS) {
-            wchar_t numberBuffer[64] = {};
-            swprintf_s(numberBuffer, L"%lu", value);
-            return numberBuffer;
-        }
+        if (result != ERROR_SUCCESS || valueSize != sizeof(value))
+            return L"N/A";
+
+        wchar_t numberBuffer[64] = {};
+        swprintf_s(numberBuffer, L"%lu", value);
+        return numberBuffer;
     }
 
-    return L"N/A";
+    if (type != REG_SZ && type != REG_EXPAND_SZ)
+        return L"N/A";
+
+    if (size == 0)
+        return L"";
+
+    if (size % sizeof(wchar_t) != 0)
+        return L"N/A";
+
+    std::vector<wchar_t> buffer((size / sizeof(wchar_t)) + 1, L'\0');
+
+    result = RegQueryValueExW(
+        key,
+        valueName.c_str(),
+        nullptr,
+        &type,
+        reinterpret_cast<LPBYTE>(buffer.data()),
+        &size
+    );
+
+    if (result != ERROR_SUCCESS)
+        return L"N/A";
+
+    size_t charCount = size / sizeof(wchar_t);
+
+    if (charCount > 0 && buffer[charCount - 1] == L'\0') {
+        --charCount;
+    }
+
+    return std::wstring(buffer.data(), charCount);
 }
 
 void RefreshCachedRegistryValues() {
@@ -873,8 +908,6 @@ void LoadSettings() {
     settings.exportHotkeyShift = Wh_GetIntSetting(L"exportHotkeyShift");
 
     settings.openExportHtmlAfterCreate = Wh_GetIntSetting(L"openExportHtmlAfterCreate");
-
-    settings.overlayVisible = true;
 
     if (settings.paddingLeft < 0)
         settings.paddingLeft = 24;
@@ -1083,6 +1116,23 @@ void LoadSettings() {
     Wh_FreeStringSetting(waterAgeSeparatorColor);
 }
 
+bool IsLeapYear(int year) {
+    return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+}
+
+int DaysInMonth(int year, int month) {
+    static const int days[] = {
+        31, 28, 31, 30, 31, 30,
+        31, 31, 30, 31, 30, 31
+    };
+
+    if (month == 2) {
+        return IsLeapYear(year) ? 29 : 28;
+    }
+
+    return days[month - 1];
+}
+
 bool ParseWaterFillDate(int* year, int* month, int* day) {
     if (!year || !month || !day)
         return false;
@@ -1090,15 +1140,31 @@ bool ParseWaterFillDate(int* year, int* month, int* day) {
     int y = 0;
     int m = 0;
     int d = 0;
+    int charsRead = 0;
 
-    if (swscanf_s(settings.waterFillDate.c_str(), L"%d-%d-%d", &y, &m, &d) != 3)
+    if (swscanf_s(
+            settings.waterFillDate.c_str(),
+            L"%d-%d-%d%n",
+            &y,
+            &m,
+            &d,
+            &charsRead
+        ) != 3) {
         return false;
+    }
+
+    if (charsRead <= 0 ||
+        (size_t)charsRead != settings.waterFillDate.length()) {
+        return false;
+    }
 
     if (y < 1900 || y > 2100)
         return false;
+
     if (m < 1 || m > 12)
         return false;
-    if (d < 1 || d > 31)
+
+    if (d < 1 || d > DaysInMonth(y, m))
         return false;
 
     *year = y;
@@ -1132,6 +1198,7 @@ int CalculateWaterAgeDays() {
 
     if (!SystemTimeToFileTime(&fillSt, &fillFt))
         return -1;
+
     if (!SystemTimeToFileTime(&nowSt, &nowFt))
         return -1;
 
@@ -1147,7 +1214,12 @@ int CalculateWaterAgeDays() {
         return 0;
 
     const ULONGLONG ticksPerDay = 10000000ULL * 60ULL * 60ULL * 24ULL;
-    return (int)((now.QuadPart - fill.QuadPart) / ticksPerDay);
+    ULONGLONG days = (now.QuadPart - fill.QuadPart) / ticksPerDay;
+
+    if (days > INT_MAX)
+        return INT_MAX;
+
+    return (int)days;
 }
 
 std::wstring BuildWaterAgeValue(int ageDays) {
@@ -1169,7 +1241,7 @@ COLORREF GetWaterAgeTextColor(int ageDays) {
     if (ageDays < 0 || settings.waterMaxAgeDays <= 0)
         return settings.textColor;
 
-    int percent = (ageDays * 100) / settings.waterMaxAgeDays;
+    int percent = (int)(((long long)ageDays * 100) / settings.waterMaxAgeDays);
 
     if (percent >= settings.waterAgeAlarmPercent)
         return settings.waterAgeAlarmColor;
@@ -1178,6 +1250,19 @@ COLORREF GetWaterAgeTextColor(int ageDays) {
         return settings.waterAgeWarnColor;
 
     return settings.textColor;
+}
+
+HINSTANCE GetCurrentModuleHandle() {
+    HINSTANCE hInst = nullptr;
+
+    GetModuleHandleExW(
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        reinterpret_cast<LPCWSTR>(&GetCurrentModuleHandle),
+        &hInst
+    );
+
+    return hInst;
 }
 
 HWND GetOverlayInsertAfter() {
@@ -1835,7 +1920,7 @@ DrawColumnSeparator(hdc, contentTopY, separatorBottomY);
 
                 SetWindowPos(
                     hwnd,
-                    settings.dragModeEnabled ? HWND_TOPMOST : GetOverlayInsertAfter(),
+                    GetOverlayInsertAfter(),
                     settings.x,
                     settings.y,
                     settings.width,
@@ -1860,6 +1945,8 @@ DrawColumnSeparator(hdc, contentTopY, separatorBottomY);
             break;
 
         case WM_APP_SETTINGS_CHANGED:
+            LoadSettings();
+
             ApplyOverlayWindowSize(hwnd);
             UpdateLayeredAttributes(hwnd);
             RegisterToggleHotkey(hwnd);
@@ -1879,6 +1966,11 @@ DrawColumnSeparator(hdc, contentTopY, separatorBottomY);
             UnregisterHotKey(hwnd, HOTKEY_DRAG_MODE);
             UnregisterHotKey(hwnd, HOTKEY_EXPORT_REGISTRY);
             KillTimer(hwnd, g_timerId);
+
+            if (g_hwnd == hwnd) {
+                g_hwnd = nullptr;
+            }
+
             PostQuitMessage(0);
             return 0;
     }
@@ -1919,6 +2011,10 @@ UINT GetToggleHotkeyVk() {
     return 'H';
 }
 
+bool HasHotkeyModifier(UINT modifiers) {
+    return (modifiers & (MOD_CONTROL | MOD_ALT | MOD_SHIFT)) != 0;
+}
+
 void RegisterToggleHotkey(HWND hwnd) {
     UnregisterHotKey(hwnd, HOTKEY_TOGGLE_OVERLAY);
 
@@ -1927,6 +2023,11 @@ void RegisterToggleHotkey(HWND hwnd) {
 
     UINT modifiers = GetToggleHotkeyModifiers();
     UINT vk = GetToggleHotkeyVk();
+
+    if (!HasHotkeyModifier(modifiers)) {
+        Wh_Log(L"Toggle hotkey needs at least one modifier; not registering");
+        return;
+    }
 
     if (!RegisterHotKey(hwnd, HOTKEY_TOGGLE_OVERLAY, modifiers, vk)) {
         Wh_Log(L"Failed to register toggle hotkey");
@@ -1984,6 +2085,11 @@ void RegisterDragHotkey(HWND hwnd) {
     UINT modifiers = GetDragHotkeyModifiers();
     UINT vk = GetDragHotkeyVk();
 
+    if (!HasHotkeyModifier(modifiers)) {
+        Wh_Log(L"Drag hotkey needs at least one modifier; not registering");
+        return;
+    }
+
     if (!RegisterHotKey(hwnd, HOTKEY_DRAG_MODE, modifiers, vk)) {
         Wh_Log(L"Failed to register drag hotkey");
     }
@@ -2031,6 +2137,11 @@ void RegisterExportHotkey(HWND hwnd) {
     UINT modifiers = GetExportHotkeyModifiers();
     UINT vk = GetExportHotkeyVk();
 
+    if (!HasHotkeyModifier(modifiers)) {
+        Wh_Log(L"Registry export hotkey needs at least one modifier; not registering");
+        return;
+    }
+
     if (!RegisterHotKey(hwnd, HOTKEY_EXPORT_REGISTRY, modifiers, vk)) {
         Wh_Log(L"Failed to register registry export hotkey");
     }
@@ -2052,7 +2163,7 @@ void UpdateClickThroughState(HWND hwnd) {
 
     SetWindowPos(
         hwnd,
-        settings.dragModeEnabled ? HWND_TOPMOST : GetOverlayInsertAfter(),
+        GetOverlayInsertAfter(),
         0,
         0,
         0,
@@ -2134,19 +2245,37 @@ std::wstring MakeIndexedRegistryName(const wchar_t* prefix, int index) {
 }
 
 std::wstring GetDesktopExportPath() {
-    wchar_t userProfile[MAX_PATH] = {};
-    DWORD len = GetEnvironmentVariableW(
-        L"USERPROFILE",
-        userProfile,
-        ARRAYSIZE(userProfile)
-    );
+    constexpr const wchar_t* fileName = L"HWiNFO_Registry_Output_Windhawk.html";
 
-    if (len > 0 && len < ARRAYSIZE(userProfile)) {
-        return std::wstring(userProfile) +
-            L"\\Desktop\\HWiNFO_Registry_Output_Windhawk.html";
+    PWSTR desktopPath = nullptr;
+
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Desktop, 0, nullptr, &desktopPath))) {
+        std::wstring path = desktopPath;
+        CoTaskMemFree(desktopPath);
+
+        if (!path.empty() && path.back() != L'\\') {
+            path += L'\\';
+        }
+
+        path += fileName;
+        return path;
     }
 
-    return L"C:\\HWiNFO_Registry_Output_Windhawk.html";
+    wchar_t tempPath[MAX_PATH] = {};
+    DWORD tempPathLength = GetTempPathW(ARRAYSIZE(tempPath), tempPath);
+
+    if (tempPathLength > 0 && tempPathLength < ARRAYSIZE(tempPath)) {
+        std::wstring path = tempPath;
+
+        if (!path.empty() && path.back() != L'\\') {
+            path += L'\\';
+        }
+
+        path += fileName;
+        return path;
+    }
+
+    return fileName;
 }
 
 bool WriteUtf8File(const std::wstring& path, const std::wstring& text) {
@@ -2154,29 +2283,37 @@ bool WriteUtf8File(const std::wstring& path, const std::wstring& text) {
         CP_UTF8,
         0,
         text.c_str(),
-        -1,
+        (int)text.size(),
         nullptr,
         0,
         nullptr,
         nullptr
     );
 
-    if (byteCount <= 1)
+    if (byteCount == 0 && !text.empty()) {
         return false;
+    }
 
     std::string utf8;
-    utf8.resize(byteCount - 1);
 
-    WideCharToMultiByte(
-        CP_UTF8,
-        0,
-        text.c_str(),
-        -1,
-        &utf8[0],
-        byteCount,
-        nullptr,
-        nullptr
-    );
+    if (byteCount > 0) {
+        utf8.resize(byteCount);
+
+        int converted = WideCharToMultiByte(
+            CP_UTF8,
+            0,
+            text.c_str(),
+            (int)text.size(),
+            utf8.data(),
+            byteCount,
+            nullptr,
+            nullptr
+        );
+
+        if (converted != byteCount) {
+            return false;
+        }
+    }
 
     HANDLE file = CreateFileW(
         path.c_str(),
@@ -2188,25 +2325,37 @@ bool WriteUtf8File(const std::wstring& path, const std::wstring& text) {
         nullptr
     );
 
-    if (file == INVALID_HANDLE_VALUE)
+    if (file == INVALID_HANDLE_VALUE) {
         return false;
+    }
 
     DWORD written = 0;
+    const BYTE bom[] = {0xEF, 0xBB, 0xBF};
 
-    const BYTE bom[] = { 0xEF, 0xBB, 0xBF };
-    WriteFile(file, bom, sizeof(bom), &written, nullptr);
+    if (!WriteFile(file, bom, sizeof(bom), &written, nullptr) ||
+        written != sizeof(bom)) {
+        CloseHandle(file);
+        return false;
+    }
 
-    BOOL ok = WriteFile(
-        file,
-        utf8.data(),
-        (DWORD)utf8.size(),
-        &written,
-        nullptr
-    );
+    if (!utf8.empty()) {
+        written = 0;
+
+        if (!WriteFile(
+                file,
+                utf8.data(),
+                (DWORD)utf8.size(),
+                &written,
+                nullptr
+            ) ||
+            written != utf8.size()) {
+            CloseHandle(file);
+            return false;
+        }
+    }
 
     CloseHandle(file);
-
-    return ok;
+    return true;
 }
 
 std::vector<ExportSensorRow> ReadRegistryRowsForExport() {
@@ -2465,6 +2614,14 @@ function applySuggestedNames() {
     rebuildRows();
 }
 
+function applyCustomShortNames() {
+    rebuildRows();
+
+    document.getElementById('status').textContent =
+        'Applied ' + document.getElementById('rowCount').textContent +
+        ' custom short names to Windhawk rows.';
+}
+
 async function copyRows() {
     rebuildRows();
 
@@ -2505,6 +2662,7 @@ window.addEventListener('DOMContentLoaded', rebuildRows);
     <button onclick="setAllRows(true)">Select all</button>
     <button onclick="setAllRows(false)">Select none</button>
     <button onclick="applySuggestedNames()">Apply suggested short names</button>
+    <button onclick="applyCustomShortNames()">Apply custom short names</button>
     <div id="status"></div>
     <div class="small">Selected rows: <span id="rowCount">0</span></div>
 </div>
@@ -2669,6 +2827,19 @@ void ExportRegistryHtml() {
 
     if (!WriteUtf8File(path, html)) {
         Wh_Log(L"Registry export failed: could not write HTML file");
+
+        std::wstring message =
+            L"Failed to write the HWiNFO Registry export HTML file:\n\n" +
+            path +
+            L"\n\nPlease check folder permissions or try again.";
+
+        MessageBoxW(
+            nullptr,
+            message.c_str(),
+            L"HWiNFO Registry Export",
+            MB_OK | MB_ICONERROR
+        );
+
         return;
     }
 
@@ -2691,16 +2862,19 @@ void ExportRegistryHtml() {
 }
 
 bool CreateOverlayWindow() {
-    const wchar_t* className = L"HWiNFORegistryLiveOverlayWindow";
+    HINSTANCE hInstance = GetCurrentModuleHandle();
 
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = OverlayWndProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
-    wc.lpszClassName = className;
+    wc.hInstance = hInstance;
+    wc.lpszClassName = OVERLAY_WINDOW_CLASS_NAME;
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
 
-    RegisterClassExW(&wc);
+    if (!RegisterClassExW(&wc)) {
+        Wh_Log(L"RegisterClassExW failed: %u", GetLastError());
+        return false;
+    }
 
     DWORD exStyle = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW;
 
@@ -2708,12 +2882,12 @@ bool CreateOverlayWindow() {
         exStyle |= WS_EX_TOPMOST;
     }
 
-        RefreshCachedRegistryValues();
-        UpdateAutoHeight(nullptr);
+    RefreshCachedRegistryValues();
+    UpdateAutoHeight(nullptr);
 
     g_hwnd = CreateWindowExW(
         exStyle,
-        className,
+        OVERLAY_WINDOW_CLASS_NAME,
         L"HWiNFO Registry Live Overlay",
         WS_POPUP,
         settings.x,
@@ -2722,15 +2896,17 @@ bool CreateOverlayWindow() {
         settings.height,
         nullptr,
         nullptr,
-        GetModuleHandleW(nullptr),
+        hInstance,
         nullptr
     );
 
-    if (!g_hwnd)
+    if (!g_hwnd) {
+        Wh_Log(L"CreateWindowExW failed: %u", GetLastError());
+        UnregisterClassW(OVERLAY_WINDOW_CLASS_NAME, hInstance);
         return false;
+    }
 
     UpdateWindowRegion(g_hwnd);
-
     UpdateLayeredAttributes(g_hwnd);
 
     settings.overlayVisible = true;
@@ -2760,22 +2936,36 @@ bool CreateOverlayWindow() {
 }
 
 DWORD WINAPI OverlayThreadProc(LPVOID) {
+    MSG msg;
+
+    // Ensure a message queue exists before WhTool_ModUninit's
+    // PostThreadMessageW can be relied on to reach it.
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
     if (!CreateOverlayWindow()) {
         Wh_Log(L"Failed to create overlay window in UI thread");
+        UnregisterClassW(OVERLAY_WINDOW_CLASS_NAME, GetCurrentModuleHandle());
         return 1;
     }
 
-    MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
 
-    g_hwnd = nullptr;
+    if (g_hwnd) {
+        DestroyWindow(g_hwnd);
+        g_hwnd = nullptr;
+    }
+
+    UnregisterClassW(OVERLAY_WINDOW_CLASS_NAME, GetCurrentModuleHandle());
+
     return 0;
 }
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     Wh_Log(L"Init");
 
     LoadSettings();
@@ -2797,18 +2987,33 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModUninit() {
-    Wh_Log(L"Uninit");
+void WhTool_ModSettingsChanged() {
+    Wh_Log(L"SettingsChanged");
 
     if (g_hwnd) {
-        PostMessageW(g_hwnd, WM_CLOSE, 0, 0);
+        PostMessageW(g_hwnd, WM_APP_SETTINGS_CHANGED, 0, 0);
+    } else {
+        LoadSettings();
+    }
+}
+
+void WhTool_ModUninit() {
+    Wh_Log(L"Uninit");
+
+    if (g_uiThreadId) {
+        while (!PostThreadMessageW(g_uiThreadId, WM_QUIT, 0, 0) &&
+               g_uiThread &&
+               WaitForSingleObject(g_uiThread, 10) == WAIT_TIMEOUT) {
+        }
     }
 
     if (g_uiThread) {
-        WaitForSingleObject(g_uiThread, 3000);
+        WaitForSingleObject(g_uiThread, INFINITE);
         CloseHandle(g_uiThread);
         g_uiThread = nullptr;
     }
+
+    g_uiThreadId = 0;
 
     if (g_font) {
         DeleteObject(g_font);
@@ -2816,12 +3021,181 @@ void Wh_ModUninit() {
     }
 }
 
-void Wh_ModSettingsChanged() {
-    Wh_Log(L"SettingsChanged");
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
-    LoadSettings();
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
 
-    if (g_hwnd) {
-        PostMessageW(g_hwnd, WM_APP_SETTINGS_CHANGED, 0, 0);
-    }
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
 }
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
+}
+// clang-format on
+
+
