@@ -13889,7 +13889,7 @@
           112
         ],
         "ratingUsers": 118,
-        "updated": 1724956331000,
+        "updated": 1789219131000,
         "users": 8172
       },
       "metadata": {
@@ -13897,7 +13897,7 @@
           "x86-64"
         ],
         "author": "m417z",
-        "description": "Restore the missing Windows option to always show all notification (tray) icons (Windows 11 only)",
+        "description": "Restore the missing Windows option to always show all tray icons, show new icons by default, or hide all of them (Windows 11 only)",
         "github": "https://github.com/m417z",
         "homepage": "https://m417z.com/",
         "include": [
@@ -13905,7 +13905,7 @@
         ],
         "name": "Always show all taskbar tray icons",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "taskbar-numberer": {

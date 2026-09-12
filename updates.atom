@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-12T12:37:10.000Z</updated>
+    <updated>2026-09-12T13:18:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Always show all taskbar tray icons 1.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-notification-icons-show-all#c314fe0b7407dba42d04212b30f3d7fff2e80553</id>
+        <link href="https://windhawk.net/mods/taskbar-notification-icons-show-all"/>
+        <updated>2026-09-12T13:18:51.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a mode to hide all tray icons.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Title Bar Label 1.0.0]]></title>
         <id>https://windhawk.net/mods/explorer-title-bar-label#12ff4e1fed9336f02f00ae94d92f5962a1112e93</id>
@@ -565,20 +578,6 @@ and to all context menus.</p>
         <author>
             <name>Ingan121</name>
             <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disk Usage Bar Customizer 1.2.0]]></title>
-        <id>https://windhawk.net/mods/disk-usage-bar-customizer#d2d0c6132a9cdb7deeece76d86a69ca28fb2ea0f</id>
-        <link href="https://windhawk.net/mods/disk-usage-bar-customizer"/>
-        <updated>2026-09-07T21:51:54.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add WinUI-like rendering option</li>
-<li>The "Render using visual styles" option has been replaced with a "Rendering mode" option that allows you to change the rendering mode to one of the following options: Custom, Visual styles and WinUI-like (breaking change)</li>
-</ul>]]></content>
-        <author>
-            <name>Valer100</name>
-            <uri>https://github.com/Valer100</uri>
         </author>
     </entry>
 </feed>
