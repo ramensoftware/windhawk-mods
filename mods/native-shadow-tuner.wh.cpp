@@ -144,10 +144,6 @@ void __cdecl ParametersHook(int style, int dpi, float* radius1,
 }
 
 BOOL Wh_ModInit() {
-#if !defined(_M_X64) && !defined(__x86_64__)
-    Wh_Log(L"REFUSED: Questo mod supporta esclusivamente l'architettura x86-64.");
-    return FALSE;
-#else
     stopping.store(false);
     surfaceReports.store(0);
     brushReports.store(0);
@@ -191,7 +187,6 @@ BOOL Wh_ModInit() {
 
     Wh_Log(L"Native shadow symbols resolved and hooks registered.");
     return TRUE;
-#endif
 }
 
 void Wh_ModAfterInit() {
