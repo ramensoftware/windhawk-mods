@@ -36,7 +36,7 @@ Taskbar placement and XAML injection are based on [Taskbar Fluent Media Player](
 * **Control flyout (click widget to open):**
   * Noise control: ANC (High, Mid, Low, Adaptive), Transparency, Off.
   * Ultra Bass: toggle and level adjustment (1–5).
-  * EQ presets: Balanced, More Bass, More Treble, Voice, Dirac Opteo.
+  * EQ presets: Balanced, More Bass, More Treble, Voice, Pop, Dirac Opteo.
   * Game mode (Low Latency toggle).
   * Find My Earbuds: ring the left or right earbud.
 * **Single-earbud mode:** automatically dims an inactive or unavailable earbud.
@@ -59,7 +59,7 @@ Tested with CMF Buds 2 / Buds Pro 2 and Nothing Ear series. Other Nothing/CMF mo
 * **Окно управления (по клику на виджет):**
   * Шумоподавление: ANC (высокое, среднее, низкое, адаптивное), Прозрачность, Выкл.
   * Ultra Bass: переключатель и выбор уровня (1–5).
-  * Эквалайзер: пресеты Balanced, More Bass, More Treble, Voice, Dirac Opteo.
+  * Эквалайзер: пресеты Balanced, More Bass, More Treble, Voice, Pop, Dirac Opteo.
   * Игровой режим (Low Latency).
   * Поиск наушников: звуковой сигнал на левый или правый наушник.
 * **Режим одного наушника:** автоматически приглушает отображение неактивного или недоступного наушника.
@@ -295,7 +295,7 @@ static winrt::event_token g_retryTimerToken{};
 static winrt::event_token g_flyoutOpenedToken{};
 static winrt::event_token g_flyoutClosedToken{};
 static winrt::event_token g_timerToken{};
-[[clang::no_destroy]] static std::optional<std::wstring> g_lastTooltip;
+static std::optional<std::wstring> g_lastTooltip;
 
 static inline uint16_t ComputeCrc16(const uint8_t* data, size_t size) {
     uint16_t crc = 0xFFFF;
@@ -345,15 +345,19 @@ public:
 
     void Start() {
         std::lock_guard<std::mutex> lock(m_lifecycleMutex);
+        if (g_unloading.load()) return;
         if (m_running.exchange(true)) return;
-        m_stopRequested.store(false);
+        {
+            std::scoped_lock stateLock(
+                m_actionMutex, m_workerWakeState->mutex);
+            m_stopRequested.store(false);
+            m_pollIntervalChanged = false;
+        }
         try {
             m_worker = std::thread([this]() { WorkerLoop(); });
             m_actionWorker = std::thread([this]() { ActionLoop(); });
         } catch (...) {
-            m_stopRequested.store(true);
-            m_actionCv.notify_all();
-            m_workerWakeState->cv.notify_all();
+            PublishStopRequested();
             CancelPendingOperations();
             if (m_actionWorker.joinable()) m_actionWorker.join();
             if (m_worker.joinable()) m_worker.join();
@@ -365,9 +369,7 @@ public:
     void Stop() {
         std::lock_guard<std::mutex> lock(m_lifecycleMutex);
         if (!m_running.exchange(false)) return;
-        m_stopRequested.store(true);
-        m_actionCv.notify_all();
-        m_workerWakeState->cv.notify_all();
+        PublishStopRequested();
         CancelPendingOperations();
         Disconnect();
         if (m_actionWorker.joinable()) {
@@ -379,20 +381,27 @@ public:
     }
 
     void PostAction(std::function<void()> action) {
-        if (m_stopRequested.load()) return;
         {
             std::lock_guard<std::mutex> lock(m_actionMutex);
+            if (m_stopRequested.load()) return;
             m_actionQueue.push_back(std::move(action));
         }
         m_actionCv.notify_one();
     }
 
     void NotifyPollIntervalChanged() {
-        m_pollIntervalChanged.store(true);
+        {
+            std::lock_guard<std::mutex> lock(m_actionMutex);
+            if (m_stopRequested.load()) return;
+            m_pollIntervalChanged = true;
+        }
         m_actionCv.notify_all();
     }
 
-    bool SendCommand(uint16_t commandId, const std::vector<uint8_t>& payload) {
+    bool SendCommand(
+        uint16_t commandId,
+        const std::vector<uint8_t>& payload,
+        std::chrono::milliseconds timeout = std::chrono::seconds(3)) {
         std::lock_guard<std::mutex> lock(m_socketMutex);
         if (m_stopRequested.load() || !m_connected.load() || !m_socket ||
             payload.size() > UINT16_MAX) {
@@ -404,9 +413,8 @@ public:
             DataWriter writer(m_socket.OutputStream());
             writer.WriteBytes(winrt::array_view<const uint8_t>(
                 packet.data(), static_cast<uint32_t>(packet.size())));
-            auto deadline = std::chrono::steady_clock::now() +
-                            std::chrono::seconds(3);
-            GetAsync(writer.StoreAsync(), std::chrono::seconds(3));
+            auto deadline = std::chrono::steady_clock::now() + timeout;
+            GetAsync(writer.StoreAsync(), timeout);
             auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
                 deadline - std::chrono::steady_clock::now());
             if (remaining <= std::chrono::milliseconds::zero()) {
@@ -526,11 +534,12 @@ public:
     }
 
     void StopRinging() {
+        constexpr auto kStopRingingTimeout = std::chrono::milliseconds(750);
         if (m_ringingLeft.exchange(false)) {
-            SendCommand(61442, {0x02, 0x00});
+            SendCommand(61442, {0x02, 0x00}, kStopRingingTimeout);
         }
         if (m_ringingRight.exchange(false)) {
-            SendCommand(61442, {0x03, 0x00});
+            SendCommand(61442, {0x03, 0x00}, kStopRingingTimeout);
         }
     }
 
@@ -591,6 +600,15 @@ private:
         }
     }
 
+    void PublishStopRequested() {
+        {
+            std::scoped_lock lock(m_actionMutex, m_workerWakeState->mutex);
+            m_stopRequested.store(true);
+        }
+        m_actionCv.notify_all();
+        m_workerWakeState->cv.notify_all();
+    }
+
     void CancelPendingOperations() {
         std::vector<winrt::Windows::Foundation::IAsyncInfo> operations;
         {
@@ -607,7 +625,7 @@ private:
     std::atomic<bool> m_connected{false};
     std::atomic<bool> m_ringingLeft{false};
     std::atomic<bool> m_ringingRight{false};
-    std::atomic<bool> m_pollIntervalChanged{false};
+    bool m_pollIntervalChanged = false;
     std::mutex m_lifecycleMutex;
     std::thread m_worker;
     std::thread m_actionWorker;
@@ -617,24 +635,24 @@ private:
     std::mutex m_asyncMutex;
     std::vector<winrt::Windows::Foundation::IAsyncInfo> m_asyncOperations;
     struct WorkerWakeState {
+        std::mutex mutex;
         std::condition_variable cv;
-        std::atomic<uint64_t> connectionStatusVersion{0};
+        uint64_t connectionStatusVersion = 0;
     };
     std::shared_ptr<WorkerWakeState> m_workerWakeState =
         std::make_shared<WorkerWakeState>();
-    std::mutex m_workerWaitMutex;
     BluetoothDevice m_cachedDevice{nullptr};
     std::wstring m_cachedDeviceName;
     winrt::event_token m_connectionStatusToken{};
 
     bool WaitForWake(std::chrono::seconds duration) {
         auto wakeState = m_workerWakeState;
-        uint64_t version = wakeState->connectionStatusVersion.load();
-        std::unique_lock<std::mutex> lock(m_workerWaitMutex);
+        std::unique_lock<std::mutex> lock(wakeState->mutex);
+        uint64_t version = wakeState->connectionStatusVersion;
         return wakeState->cv.wait_for(lock, duration,
                                      [this, wakeState, version]() {
                                          return m_stopRequested.load() ||
-                                                wakeState->connectionStatusVersion.load() != version;
+                                                wakeState->connectionStatusVersion != version;
                                      });
     }
 
@@ -658,7 +676,10 @@ private:
                 auto wakeState = m_workerWakeState;
                 m_connectionStatusToken = m_cachedDevice.ConnectionStatusChanged(
                     [wakeState](auto const&, auto const&) {
-                        wakeState->connectionStatusVersion.fetch_add(1);
+                        {
+                            std::lock_guard<std::mutex> lock(wakeState->mutex);
+                            wakeState->connectionStatusVersion++;
+                        }
                         wakeState->cv.notify_all();
                     });
             } catch (...) {}
@@ -690,36 +711,49 @@ private:
         } catch (...) {}
         auto nextPoll = std::chrono::steady_clock::now() +
                         std::chrono::seconds(g_pollIntervalSeconds.load());
+        auto nextExpiryCheck = std::chrono::steady_clock::now() +
+                               std::chrono::seconds(1);
         while (!m_stopRequested.load()) {
             std::function<void()> action;
             bool pollBattery = false;
+            bool expireBattery = false;
             {
                 std::unique_lock<std::mutex> lock(m_actionMutex);
-                m_actionCv.wait_until(lock, nextPoll, [this]() {
+                auto wakeDeadline = std::min(nextPoll, nextExpiryCheck);
+                m_actionCv.wait_until(lock, wakeDeadline, [this]() {
                     return m_stopRequested.load() ||
-                           m_pollIntervalChanged.load() ||
+                           m_pollIntervalChanged ||
                            !m_actionQueue.empty();
                 });
                 if (m_stopRequested.load()) break;
-                if (m_pollIntervalChanged.exchange(false)) {
+                if (m_pollIntervalChanged) {
+                    m_pollIntervalChanged = false;
                     nextPoll = std::chrono::steady_clock::now() +
                                std::chrono::seconds(g_pollIntervalSeconds.load());
                 }
                 if (!m_actionQueue.empty()) {
                     action = std::move(m_actionQueue.front());
                     m_actionQueue.pop_front();
-                } else if (std::chrono::steady_clock::now() >= nextPoll) {
+                }
+                auto now = std::chrono::steady_clock::now();
+                if (now >= nextExpiryCheck) {
+                    expireBattery = true;
+                    nextExpiryCheck = now + std::chrono::seconds(1);
+                }
+                if (!action && now >= nextPoll) {
                     pollBattery = true;
-                    nextPoll = std::chrono::steady_clock::now() +
+                    nextPoll = now +
                                std::chrono::seconds(g_pollIntervalSeconds.load());
                 }
+            }
+            if (expireBattery) {
+                ExpireStaleBatteryReadings();
             }
             if (action) {
                 try {
                     action();
                 } catch (...) {}
             } else if (pollBattery && m_connected.load()) {
-                ExpireStaleBatteryReadings();
                 QueryBattery();
             }
         }
@@ -784,17 +818,6 @@ private:
                             }
                         }
                     }
-                }
-
-                // Check timeouts for buds not seen in 35 seconds
-                if (g_earbudsState.left.present && (now - g_earbudsState.left.lastSeen > std::chrono::seconds(35))) {
-                    g_earbudsState.left.present = false;
-                }
-                if (g_earbudsState.right.present && (now - g_earbudsState.right.lastSeen > std::chrono::seconds(35))) {
-                    g_earbudsState.right.present = false;
-                }
-                if (g_earbudsState.caseBattery.present && (now - g_earbudsState.caseBattery.lastSeen > std::chrono::seconds(15))) {
-                    g_earbudsState.caseBattery.present = false;
                 }
             }
         } else if (cmd == 16414 || cmd == 57347 || cmd == 28688) { // ANC
@@ -2854,6 +2877,7 @@ static void UpdateWidgetUi() {
             if (g_settings.hideDisconnectedBuds) {
                 if (!showLeft && !showRight) {
                     if (state.caseBattery.present && state.caseBattery.percent >= 0) {
+                        statusText.Visibility(Visibility::Collapsed);
                         leftSp.Visibility(Visibility::Visible);
                         rightSp.Visibility(Visibility::Collapsed);
                         leftText.Visibility(Visibility::Visible);
@@ -3507,29 +3531,53 @@ void Wh_ModUninit() {
     Wh_Log(L"Wh_ModUninit NothingTrack");
     g_unloading = true;
 
-    HWND hWnd = FindCurrentProcessTaskbarWnd();
-    if (!hWnd) hWnd = g_taskbarWnd.load();
     bool removed = false;
-    if (hWnd) {
-        removed = RunFromWindowThread(hWnd, [](void*) {
-            RemoveWidgetGrid();
-        }, nullptr);
+    constexpr int kWindowTeardownAttempts = 5;
+    for (int attempt = 0; attempt < kWindowTeardownAttempts && !removed;
+         attempt++) {
+        HWND hWnd = FindCurrentProcessTaskbarWnd();
+        if (!hWnd) {
+            HWND storedHWnd = g_taskbarWnd.load();
+            if (IsWindow(storedHWnd)) {
+                hWnd = storedHWnd;
+            }
+        }
+        if (hWnd) {
+            removed = RunFromWindowThread(hWnd, [](void*) {
+                RemoveWidgetGrid();
+            }, nullptr);
+        }
+        if (!removed && attempt + 1 < kWindowTeardownAttempts) {
+            Sleep(50);
+        }
     }
 
     // A taskbar window can disappear before uninitialization during Explorer
     // shutdown. Keep a dispatcher captured from the injected XAML tree so that
-    // teardown still runs synchronously on its owning thread.
+    // teardown still gets a short, bounded chance to run on its owning thread.
     if (!removed && g_uiDispatcher) {
         try {
             auto dispatcher = g_uiDispatcher;
             if (dispatcher.HasThreadAccess()) {
                 RemoveWidgetGrid();
+                removed = true;
             } else {
-                dispatcher.RunAsync(
+                auto operation = dispatcher.RunAsync(
                     winrt::Windows::UI::Core::CoreDispatcherPriority::Normal,
-                    []() { RemoveWidgetGrid(); }).get();
+                    []() { RemoveWidgetGrid(); });
+                auto status = operation.wait_for(std::chrono::seconds(5));
+                if (status == winrt::Windows::Foundation::AsyncStatus::Completed) {
+                    operation.GetResults();
+                    removed = true;
+                } else {
+                    // Prevent a queued callback from entering this module after
+                    // Windhawk unloads it. Cancellation is safe when the owning
+                    // dispatcher has stopped pumping messages.
+                    operation.Cancel();
+                    operation.Close();
+                    Wh_Log(L"Wh_ModUninit: Dispatcher teardown timed out");
+                }
             }
-            removed = true;
         } catch (...) {
             Wh_Log(L"Wh_ModUninit: Dispatcher teardown failed");
         }
