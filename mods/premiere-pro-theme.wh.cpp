@@ -2663,8 +2663,13 @@ static bool PaintMenuBarItem(HWND hwnd, LPARAM lParam) {
         return true;
     }
 
-    bool disabled = (state & (ODS_GRAYED | ODS_DISABLED)) != 0 ||
-                    GetForegroundWindow() != hwnd;
+    /*
+        Only a genuinely disabled item is dimmed. An unfocused window used to
+        count as disabled here, which meant alt-tabbing away greyed the whole
+        File/Edit/Clip bar — Windows does not do that, and on a second monitor
+        the bar would sit there looking permanently disabled.
+    */
+    bool disabled = (state & (ODS_GRAYED | ODS_DISABLED)) != 0;
 
     DrawThemeTextEx_t drawText = ResolveDrawThemeTextEx();
     HTHEME theme = MenuBarTheme(hwnd);
