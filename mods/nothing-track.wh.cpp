@@ -39,7 +39,7 @@ Taskbar placement and XAML injection are based on [Taskbar Fluent Media Player](
   * EQ presets: Balanced, More Bass, More Treble, Voice, Dirac Opteo.
   * Game mode (Low Latency toggle).
   * Find My Earbuds: ring the left or right earbud.
-* **Single-earbud mode:** automatically dims the inactive bud and disables dual-earbud ANC modes when only one bud is worn.
+* **Single-earbud mode:** automatically dims an inactive or unavailable earbud.
 * **Background reconnect:** recovers connection automatically when earbuds wake up or reconnect to Windows.
 
 ### Supported Devices
@@ -62,7 +62,7 @@ Tested with CMF Buds 2 / Buds Pro 2 and Nothing Ear series. Other Nothing/CMF mo
   * Эквалайзер: пресеты Balanced, More Bass, More Treble, Voice, Dirac Opteo.
   * Игровой режим (Low Latency).
   * Поиск наушников: звуковой сигнал на левый или правый наушник.
-* **Режим одного наушника:** скрывает неактивный наушник и блокирует недоступные режимы ANC, когда надет только один наушник.
+* **Режим одного наушника:** автоматически приглушает отображение неактивного или недоступного наушника.
 * **Фоновое переподключение:** автоматически восстанавливает связь по Bluetooth при включении или подключении наушников к системе.
 
 ### Поддерживаемые устройства
@@ -301,6 +301,9 @@ static winrt::event_token g_layoutUpdateToken{};
 [[clang::no_destroy]] static DispatcherTimer g_retryTimer{nullptr};
 static winrt::event_token g_retryTimerToken{};
 [[clang::no_destroy]] static Flyout s_currentFlyout{nullptr};
+[[clang::no_destroy]] static winrt::Windows::UI::Core::CoreDispatcher g_uiDispatcher{nullptr};
+static winrt::event_token g_flyoutOpenedToken{};
+static winrt::event_token g_flyoutClosedToken{};
 static winrt::event_token g_timerToken{};
 
 static inline uint16_t ComputeCrc16(const uint8_t* data, size_t size) {
@@ -405,8 +408,8 @@ public:
             auto packet = BuildPacket(commandId, payload, opId);
             DataWriter writer(m_socket.OutputStream());
             writer.WriteBytes(winrt::array_view<const uint8_t>(packet.data(), packet.size()));
-            GetAsync(writer.StoreAsync());
-            GetAsync(writer.FlushAsync());
+            GetAsync(writer.StoreAsync(), std::chrono::seconds(3));
+            GetAsync(writer.FlushAsync(), std::chrono::seconds(3));
             writer.DetachStream();
             return true;
         } catch (...) {
@@ -531,12 +534,15 @@ private:
     }
 
     static std::mutex& InstanceMutex() {
-        [[clang::no_destroy]] static std::mutex mutex;
+        static std::mutex mutex;
         return mutex;
     }
 
     template <typename TAsync>
-    auto GetAsync(TAsync const& operation) -> decltype(operation.get()) {
+    auto GetAsync(
+        TAsync const& operation,
+        std::chrono::milliseconds timeout = std::chrono::milliseconds::max())
+        -> decltype(operation.get()) {
         auto asyncInfo = operation.template as<winrt::Windows::Foundation::IAsyncInfo>();
         {
             std::lock_guard<std::mutex> lock(m_asyncMutex);
@@ -557,6 +563,13 @@ private:
         };
 
         try {
+            if (timeout != std::chrono::milliseconds::max() &&
+                operation.wait_for(timeout) !=
+                    winrt::Windows::Foundation::AsyncStatus::Completed) {
+                try { asyncInfo.Cancel(); } catch (...) {}
+                untrack();
+                throw winrt::hresult_canceled();
+            }
             if constexpr (std::is_void_v<decltype(operation.get())>) {
                 operation.get();
                 untrack();
@@ -624,8 +637,10 @@ private:
     }
 
     void ActionLoop() {
+        bool apartmentInitialized = false;
         try {
             init_apartment(winrt::apartment_type::multi_threaded);
+            apartmentInitialized = true;
         } catch (...) {}
         auto nextPoll = std::chrono::steady_clock::now() +
                         std::chrono::seconds(g_pollIntervalSeconds.load());
@@ -655,6 +670,9 @@ private:
                 ExpireStaleBatteryReadings();
                 QueryBattery();
             }
+        }
+        if (apartmentInitialized) {
+            winrt::uninit_apartment();
         }
     }
 
@@ -825,8 +843,10 @@ private:
     }
 
     void WorkerLoop() {
+        bool apartmentInitialized = false;
         try {
             init_apartment(winrt::apartment_type::multi_threaded);
+            apartmentInitialized = true;
         } catch (...) {}
 
         while (!m_stopRequested.load()) {
@@ -995,6 +1015,11 @@ private:
                             uint8_t pLenLo = reader.ReadByte();
                             uint8_t pLenHi = reader.ReadByte();
                             uint16_t pLen = static_cast<uint16_t>(pLenLo | (pLenHi << 8));
+                            constexpr uint16_t kMaxPacketPayload = 4096;
+                            if (pLen > kMaxPacketPayload) {
+                                Wh_Log(L"BluetoothManager: Rejecting oversized packet (%u bytes)", pLen);
+                                continue;
+                            }
                             uint8_t opId = reader.ReadByte(); // opId
 
                             uint32_t toRead = pLen + 2;
@@ -1034,6 +1059,9 @@ private:
         }
         m_cachedDevice = nullptr;
         m_cachedDeviceName.clear();
+        if (apartmentInitialized) {
+            winrt::uninit_apartment();
+        }
     }
 };
 
@@ -1074,10 +1102,16 @@ static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param,
         }, nullptr, tid);
     if (!hook) return false;
     Payload pay{proc, param};
-    DWORD_PTR result = 0;
-    BOOL sent = SendMessageTimeoutW(
-        hWnd, kMsg, 0, reinterpret_cast<LPARAM>(&pay),
-        SMTO_ABORTIFHUNG | SMTO_BLOCK, timeoutMs, &result);
+    BOOL sent = FALSE;
+    if (timeoutMs == INFINITE) {
+        SendMessageW(hWnd, kMsg, 0, reinterpret_cast<LPARAM>(&pay));
+        sent = TRUE;
+    } else {
+        DWORD_PTR result = 0;
+        sent = SendMessageTimeoutW(
+            hWnd, kMsg, 0, reinterpret_cast<LPARAM>(&pay),
+            SMTO_ABORTIFHUNG | SMTO_BLOCK, timeoutMs, &result);
+    }
     UnhookWindowsHookEx(hook);
     return sent != FALSE;
 }
@@ -2260,7 +2294,6 @@ static Grid BuildWidgetGrid() {
     Button btn;
     btn.Name(L"NothingTrackButton");
     btn.Padding({5, 2, 5, 2});
-    btn.Margin({g_settings.marginLeft, 0, g_settings.marginRight, 0});
     btn.CornerRadius({6, 6, 6, 6});
     btn.VerticalAlignment(VerticalAlignment::Center);
     btn.BorderThickness({0, 0, 0, 0});
@@ -2346,11 +2379,11 @@ static Grid BuildWidgetGrid() {
         flyout.ShouldConstrainToRootBounds(false);
     } catch (...) {}
 
-    flyout.Opened([](auto const&, auto const&) {
+    g_flyoutOpenedToken = flyout.Opened([](auto const&, auto const&) {
         s_flyoutOpen = true;
     });
 
-    flyout.Closed([](auto const&, auto const&) {
+    g_flyoutClosedToken = flyout.Closed([](auto const&, auto const&) {
         s_flyoutOpen = false;
         s_refreshFlyoutUi = nullptr;
         auto c = s_currentFlyoutCtx.lock();
@@ -2878,13 +2911,6 @@ static void RemoveWidgetGrid() {
         g_retryTimerToken = {};
     }
 
-    if (s_currentFlyout) {
-        try {
-            s_currentFlyout.Hide();
-        } catch (...) {}
-        s_currentFlyout = nullptr;
-    }
-
     auto c = s_currentFlyoutCtx.lock();
     if (c) {
         if (c->ringTimerL) {
@@ -2906,8 +2932,29 @@ static void RemoveWidgetGrid() {
             }
         }
     }
+    s_currentFlyoutCtx.reset();
+    s_refreshFlyoutUi = nullptr;
+    s_flyoutOpen = false;
 
-    if (!g_injectionParent) return;
+    if (s_currentFlyout) {
+        if (g_flyoutOpenedToken.value) {
+            try { s_currentFlyout.Opened(g_flyoutOpenedToken); } catch (...) {}
+        }
+        if (g_flyoutClosedToken.value) {
+            try { s_currentFlyout.Closed(g_flyoutClosedToken); } catch (...) {}
+        }
+        try { s_currentFlyout.Hide(); } catch (...) {}
+        try { s_currentFlyout.Content(nullptr); } catch (...) {}
+        s_currentFlyout = nullptr;
+    }
+    g_flyoutOpenedToken = {};
+    g_flyoutClosedToken = {};
+
+    if (!g_injectionParent) {
+        g_injectedGrid = nullptr;
+        g_uiDispatcher = nullptr;
+        return;
+    }
     try {
         if (g_layoutUpdateToken.value) {
             auto targetGrid = g_injectionParent.try_as<Grid>();
@@ -2950,10 +2997,12 @@ static void RemoveWidgetGrid() {
         g_injectedGrid    = nullptr;
         g_injectionParent = nullptr;
         g_injectedColumn  = -1;
+        g_uiDispatcher    = nullptr;
     } catch (...) {
         g_injectedGrid    = nullptr;
         g_injectionParent = nullptr;
         g_injectedColumn  = -1;
+        g_uiDispatcher    = nullptr;
     }
 }
 
@@ -2975,9 +3024,13 @@ static bool InjectWidget() {
             Wh_Log(L"InjectWidget: Failed to get root FrameworkElement");
             return false;
         }
+        g_uiDispatcher = root.Dispatcher();
 
         auto [targetGrid, insertCol] = ResolveInjectionTarget(root, g_settings.position);
         if (!targetGrid) return false;
+        // Store the owner before registering any callbacks so a partial
+        // injection can still be fully unwound during retry or unload.
+        g_injectionParent = targetGrid;
 
         Grid widgetGrid = BuildWidgetGrid();
         if (!widgetGrid) return false;
@@ -3147,7 +3200,6 @@ static bool InjectWidget() {
         }
 
         g_injectedGrid = widgetGrid;
-        g_injectionParent = targetGrid;
         Canvas::SetZIndex(g_injectedGrid, 1000);
 
         // Setup 1-second UI updater timer
@@ -3366,19 +3418,35 @@ void Wh_ModUninit() {
 
     HWND hWnd = FindCurrentProcessTaskbarWnd();
     if (!hWnd) hWnd = g_taskbarWnd;
+    bool removed = false;
     if (hWnd) {
-        bool removed = false;
-        for (int attempt = 0; attempt < 3 && !removed; ++attempt) {
-            removed = RunFromWindowThread(hWnd, [](void*) {
+        removed = RunFromWindowThread(hWnd, [](void*) {
+            RemoveWidgetGrid();
+        }, nullptr, INFINITE);
+    }
+
+    // A taskbar window can disappear before uninitialization during Explorer
+    // shutdown. Keep a dispatcher captured from the injected XAML tree so that
+    // teardown still runs synchronously on its owning thread.
+    if (!removed && g_uiDispatcher) {
+        try {
+            auto dispatcher = g_uiDispatcher;
+            if (dispatcher.HasThreadAccess()) {
                 RemoveWidgetGrid();
-            }, nullptr);
-            if (!removed) {
-                Sleep(50);
+            } else {
+                dispatcher.RunAsync(
+                    winrt::Windows::UI::Core::CoreDispatcherPriority::Normal,
+                    []() { RemoveWidgetGrid(); }).get();
             }
+            removed = true;
+        } catch (...) {
+            Wh_Log(L"Wh_ModUninit: Dispatcher teardown failed");
         }
-        if (!removed) {
-            Wh_Log(L"Wh_ModUninit: Failed to dispatch taskbar teardown");
-        }
+    }
+
+    if (!removed && (g_injectedGrid || g_injectionParent || s_currentFlyout ||
+                     g_dispatcherTimer || g_retryTimer)) {
+        Wh_Log(L"Wh_ModUninit: UI objects remain after teardown");
     }
 
     BluetoothManager::Instance().StopRinging();
