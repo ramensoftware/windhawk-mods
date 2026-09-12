@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
-// @description     Desktop-only taskbar hiding using a dedicated Windhawk tool process
-// @version         5.7.0
+// @description     Hides selected taskbars while their displays show only the desktop
+// @version         5.8.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -30,7 +30,7 @@ This Windhawk mod hides selected taskbars when their corresponding display is sh
 
 For each selected display, the mod checks whether a relevant visible, non-minimized application is present. Supported Windows shell surfaces and desktop infrastructure are excluded from the normal application check.
 
-When a display is showing only the desktop, its selected bottom-docked taskbar can be hidden. An application on that display, taskbar keyboard focus, or supported shell interaction can keep the taskbar visible.
+When a display is showing only the desktop, its selected bottom-docked taskbar can be hidden. An application on that display, keyboard-driven taskbar focus such as Win+T or Win+B, or supported shell interaction can keep the taskbar visible. Mouse interaction with the taskbar does not prevent it from hiding after hover dismissal.
 
 Applications spanning multiple displays are considered for every display they intersect, so each affected display can independently remain visible.
 
@@ -71,7 +71,7 @@ Supported shell surfaces include:
 
 Supported shell popup classes are checked during hover dismissal. A supported popup can keep the corresponding taskbar visible while it is being dismissed, and the currently hovered taskbar remains visible during that grace period as well.
 
-The taskbar is also treated as occupied when the taskbar itself is the foreground window, preventing keyboard navigation such as `Win+T`, `Win+B`, or `Win+number` from operating on an invisible taskbar.
+The taskbar is treated as occupied when it receives keyboard-driven foreground focus, preventing keyboard navigation such as `Win+T`, `Win+B`, or `Win+number` from operating on an invisible taskbar. A taskbar focused by mouse interaction can still hide normally after the hover grace period ends.
 
 ## Taskbar State and Recovery
 
@@ -97,7 +97,7 @@ The mod uses:
 
 - A dedicated worker thread for state management
 - A lightweight cursor-sampling thread for hover detection
-- Event-driven refreshes for relevant foreground, minimize/move, display, theme, settings, and taskbar recreation changes
+- Event-driven refreshes for relevant foreground, minimize/move, window show/hide/destroy, display, theme, settings, and taskbar recreation changes
 - A periodic 250 ms safety poll for missed or unusual transitions
 - A one-shot timer for hover dismissal
 
@@ -244,6 +244,7 @@ struct WindowScanResult {
 HWINEVENTHOOK g_foregroundHook = nullptr;
 HWINEVENTHOOK g_minimizeHook = nullptr;
 HWINEVENTHOOK g_moveHook = nullptr;
+HWINEVENTHOOK g_objectHook = nullptr;
 
 HANDLE g_workerThread = nullptr;
 DWORD g_workerThreadId = 0;
@@ -587,6 +588,8 @@ bool g_appBarRegistered = false;
 bool g_hoverActive = false;
 HMONITOR g_hoverMonitor = nullptr;
 ULONGLONG g_hoverDeadline = 0;
+HWND g_keyboardFocusedTaskbar = nullptr;
+bool g_suppressHoverUntilCursorLeaves = false;
 
 LONG g_refreshPosted = 0;
 void LoadSettings();
@@ -1005,8 +1008,14 @@ bool IsApplicationWindowCandidate(
         return false;
     }
 
-    BOOL transparent = FALSE;
+    // Background title-less helper surfaces are ignored. A title-less
+    // application becomes covered by the foreground-window path.
+    if (!((exStyle & WS_EX_APPWINDOW) != 0 ||
+          GetWindowTextLengthW(hwnd) > 0)) {
+        return false;
+    }
 
+    BOOL transparent = FALSE;
     if (
         SUCCEEDED(
             DwmGetWindowAttribute(
@@ -1021,21 +1030,7 @@ bool IsApplicationWindowCandidate(
         return false;
     }
 
-    if (
-        IsDesktopInfrastructureWindow(
-            hwnd,
-            className
-        ) ||
-        IsShellChromeClass(className)
-    ) {
-        return false;
-    }
-
-    // Background title-less helper surfaces are ignored. A title-less
-    // application becomes covered by the foreground-window path.
-    return
-        (exStyle & WS_EX_APPWINDOW) != 0 ||
-        GetWindowTextLengthW(hwnd) > 0;
+    return true;
 }
 
 struct ScanContext {
@@ -1056,6 +1051,18 @@ BOOL CALLBACK ScanWindowsWithMonitorsProc(
         !context->result
     ) {
         return TRUE;
+    }
+
+    bool allMonitorsOccupied = true;
+    for (size_t i = 0; i < context->monitors->count; ++i) {
+        if (!context->result->applicationOnMonitor[i]) {
+            allMonitorsOccupied = false;
+            break;
+        }
+    }
+
+    if (allMonitorsOccupied && context->monitors->count != 0) {
+        return FALSE;
     }
 
     WCHAR className[256] = {};
@@ -1788,6 +1795,7 @@ void UpdateTaskbarState() {
             g_hoverActive = false;
             g_hoverMonitor = nullptr;
             g_hoverDeadline = 0;
+            g_suppressHoverUntilCursorLeaves = false;
             CancelHoverExpireTimer();
             ApplyBaseTaskbarState();
             UpdateCursorHoverSnapshot();
@@ -1827,11 +1835,18 @@ void UpdateTaskbarState() {
 
     }
 
-    HWND foreground = GetForegroundWindow();
-    for (size_t i = 0; i < g_taskbarStateCount; ++i) {
-        if (g_taskbarStates[i].hwnd == foreground) {
-            g_taskbarStates[i].desktopOnly = false;
-            break;
+    if (g_keyboardFocusedTaskbar) {
+        bool found = false;
+        for (size_t i = 0; i < g_taskbarStateCount; ++i) {
+            if (g_taskbarStates[i].hwnd == g_keyboardFocusedTaskbar) {
+                g_taskbarStates[i].desktopOnly = false;
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            g_keyboardFocusedTaskbar = nullptr;
         }
     }
 
@@ -1867,7 +1882,7 @@ void UpdateTaskbarState() {
         break;
     }
 
-    const bool hovering =
+    const bool cursorInHoverZone =
         cursorTaskbar &&
         cursorMonitor &&
         cursorHoverConfigured &&
@@ -1876,6 +1891,14 @@ void UpdateTaskbarState() {
             cursorMonitor,
             cursorPoint
         );
+
+    if (!cursorInHoverZone) {
+        g_suppressHoverUntilCursorLeaves = false;
+    }
+
+    const bool hovering =
+        cursorInHoverZone &&
+        !g_suppressHoverUntilCursorLeaves;
 
     if (hovering) {
         g_hoverActive = true;
@@ -1989,7 +2012,16 @@ void UpdateTaskbarState() {
 
         CancelHoverExpireTimer();
 
-        ApplyBaseTaskbarState();
+        for (size_t i = 0; i < g_taskbarStateCount; ++i) {
+            TaskbarMonitorState& state =
+                g_taskbarStates[i];
+
+            SetTaskbarState(
+                state,
+                !state.desktopOnly ||
+                !ShouldHideTaskbar(state)
+            );
+        }
         UpdateCursorHoverSnapshot();
         return;
     }
@@ -2156,21 +2188,109 @@ DWORD WINAPI CursorSamplingThread(LPVOID) {
 void CALLBACK WinEventProc(
     HWINEVENTHOOK,
     DWORD event,
-    HWND,
-    LONG,
-    LONG,
+    HWND hwnd,
+    LONG idObject,
+    LONG idChild,
     DWORD,
     DWORD
 ) {
+    if (event == EVENT_SYSTEM_FOREGROUND) {
+        g_keyboardFocusedTaskbar = nullptr;
+
+        if (hwnd) {
+            WCHAR className[64] = {};
+            if (GetClassNameW(
+                    hwnd,
+                    className,
+                    ARRAYSIZE(className)
+                ) != 0 &&
+                (wcscmp(className, L"Shell_TrayWnd") == 0 ||
+                 wcscmp(className, L"Shell_SecondaryTrayWnd") == 0)) {
+                POINT cursorPoint = {};
+                RECT taskbarRect = {};
+                bool cursorOverTaskbar = false;
+
+                if (GetCursorPos(&cursorPoint) &&
+                    GetWindowRect(hwnd, &taskbarRect)) {
+                    cursorOverTaskbar =
+                        PtInRect(&taskbarRect, cursorPoint) != FALSE;
+                }
+
+                // A taskbar focused while the cursor is elsewhere is treated
+                // as keyboard-driven focus (for example Win+T/Win+B/Win+number).
+                // Do not infer keyboard focus during a just-completed minimize
+                // while hover suppression is active; that foreground transition
+                // can simply be the taskbar taking focus after the app closes.
+                // A taskbar focused with the cursor over it is treated as mouse
+                // interaction and may hide normally after hover dismissal.
+                if (!cursorOverTaskbar && !g_suppressHoverUntilCursorLeaves) {
+                    g_keyboardFocusedTaskbar = hwnd;
+                }
+            }
+        }
+
+        PostRefresh();
+        return;
+    }
+
+    if (event == EVENT_SYSTEM_MINIMIZESTART) {
+        POINT cursorPoint = {};
+        bool cursorOverTaskbar = false;
+
+        if (GetCursorPos(&cursorPoint)) {
+            for (size_t i = 0; i < g_taskbarStateCount; ++i) {
+                RECT taskbarRect = {};
+                if (GetWindowRect(g_taskbarStates[i].hwnd, &taskbarRect) &&
+                    PtInRect(&taskbarRect, cursorPoint) != FALSE) {
+                    cursorOverTaskbar = true;
+                    break;
+                }
+            }
+        }
+
+        g_keyboardFocusedTaskbar = nullptr;
+        g_suppressHoverUntilCursorLeaves = !cursorOverTaskbar;
+        g_hoverActive = false;
+        g_hoverMonitor = nullptr;
+        g_hoverDeadline = 0;
+        CancelHoverExpireTimer();
+        PostRefresh();
+        return;
+    }
+
+    if (event == EVENT_SYSTEM_MINIMIZEEND) {
+        // The start event already decided whether this was a mouse/taskbar
+        // interaction or an external minimize. Reconcile the final state now.
+        g_keyboardFocusedTaskbar = nullptr;
+        PostRefresh();
+        return;
+    }
+
+    if (event == EVENT_SYSTEM_MOVESIZEEND) {
+        PostRefresh();
+        return;
+    }
+
     if (
-        event == EVENT_SYSTEM_FOREGROUND ||
-        event == EVENT_SYSTEM_MINIMIZESTART ||
-        event == EVENT_SYSTEM_MINIMIZEEND ||
-        event == EVENT_SYSTEM_MOVESIZEEND
+        event == EVENT_OBJECT_DESTROY &&
+        hwnd &&
+        hwnd == g_keyboardFocusedTaskbar
+    ) {
+        g_keyboardFocusedTaskbar = nullptr;
+    }
+
+    if (
+        (event == EVENT_OBJECT_DESTROY ||
+         event == EVENT_OBJECT_SHOW ||
+         event == EVENT_OBJECT_HIDE) &&
+        hwnd &&
+        idObject == OBJID_WINDOW &&
+        idChild == CHILDID_SELF
     ) {
         PostRefresh();
     }
 }
+
 
 
 LRESULT CALLBACK WorkerMessageWindowProc(
@@ -2388,6 +2508,17 @@ DWORD WINAPI WorkerThread(
             WINEVENT_OUTOFCONTEXT
         );
 
+    g_objectHook =
+        SetWinEventHook(
+            EVENT_OBJECT_DESTROY,
+            EVENT_OBJECT_HIDE,
+            nullptr,
+            WinEventProc,
+            0,
+            0,
+            WINEVENT_OUTOFCONTEXT
+        );
+
     UpdateTaskbarState();
 
     // Keep a true periodic safety poll. It is only a fallback for shell/window
@@ -2466,6 +2597,7 @@ DWORD WINAPI WorkerThread(
     SafeUnhookWinEvent(g_foregroundHook);
     SafeUnhookWinEvent(g_minimizeHook);
     SafeUnhookWinEvent(g_moveHook);
+    SafeUnhookWinEvent(g_objectHook);
 
     DestroyWorkerMessageWindow();
 
@@ -3049,9 +3181,6 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModUninit() {
     if (g_isToolModProcessLauncher) {
-        // Recover taskbars left transparent if the dedicated tool process
-        // terminated before its normal cleanup path could run.
-        RestoreAllTaskbars();
         return;
     }
 
