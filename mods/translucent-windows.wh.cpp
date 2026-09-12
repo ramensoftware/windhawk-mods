@@ -2,7 +2,7 @@
 // @id              translucent-windows
 // @name            Translucent Windows
 // @description     Enables native translucent effects in Windows 11
-// @version         1.8.1
+// @version         1.8.2
 // @author          Undisputed00x
 // @github          https://github.com/Undisputed00x
 // @include         *
@@ -916,7 +916,7 @@ BOOL ExtTextOutComposition(HDC hdc, HPAINTBUFFER hpb, LPCRECT pTextRect)
                 continue;
             
             // Greyscale alpha
-            BYTE luma = (BYTE)((px.rgbBlue + (px.rgbGreen << 1) + px.rgbRed) >> 2);          
+            BYTE luma = (px.rgbBlue + (px.rgbGreen << 1) + px.rgbRed) >> 2;          
             // Gamma alpha correction
             BYTE txtA = g_textAlphaGammaLUT[luma];
             
@@ -930,29 +930,80 @@ BOOL ExtTextOutComposition(HDC hdc, HPAINTBUFFER hpb, LPCRECT pTextRect)
     return TRUE;
 }
 
-// Calculate text boundaries
-BOOL ExtTextOutCalcRect(HDC hdc, POINT point, UINT options, RECT& textRect, LPCRECT lprect, LPCWSTR lpString, UINT c)
+BOOL ExtTextOutAlignRect(HDC hdc, POINT point, SIZE textSize, RECT& textRect, UINT textAlignment)
 {
+    // TA_BASELINE's bits are a superset of TA_BOTTOM's, and TA_CENTER's are
+    // a superset of TA_RIGHT's - mask the field and compare for equality
+    // rather than testing individual bits, or TA_CENTER/TA_BASELINE get
+    // misread as TA_RIGHT/TA_BOTTOM.
+    UINT vAlign = textAlignment & (TA_BOTTOM | TA_BASELINE);
+    UINT hAlign = textAlignment & (TA_RIGHT | TA_CENTER);
+
+    INT top = point.y;
+    if (vAlign == TA_BASELINE)
+    {
+        TEXTMETRIC tm;
+        if (!GetTextMetrics(hdc, &tm))
+            return FALSE;
+        top = point.y - tm.tmAscent;
+    }
+    else if (vAlign == TA_BOTTOM)
+        top = point.y - textSize.cy;
+
+    INT left = point.x;
+    if (hAlign == TA_CENTER)
+        left = point.x - textSize.cx / 2;
+    else if (hAlign == TA_RIGHT)
+        left = point.x - textSize.cx;
+
+    textRect.left   = left;
+    textRect.top    = top;
+    textRect.right  = left + textSize.cx;
+    textRect.bottom = top + textSize.cy;
+
+    return TRUE;
+}
+
+// When the caller supplies explicit per-character advances, GDI positions
+// glyphs using those instead of the font's own design metrics -
+// GetTextExtentPoint32W/GetTextExtentPointI have no lpDx parameter and
+// always measure using natural advances, so their result can be far
+// narrower than what's actually drawn (e.g. a single glyph stretched into
+// a long underline via lpDx with c == 1). Recover the real width by
+// summing lpDx instead.
+static INT ExtTextOutDxWidth(UINT options, const INT* lpDx, UINT c)
+{
+    INT width = 0;
+    UINT stride = (options & ETO_PDY) ? 2 : 1; // ETO_PDY: lpDx holds (dx,dy) pairs
+    for (UINT i = 0; i < c; i++)
+        width += lpDx[i * stride];
+    return width;
+}
+
+// Calculate text boundaries
+BOOL ExtTextOutCalcRect(HDC hdc, POINT point, UINT options, RECT& textRect, LPCRECT lprect, LPCWSTR lpString, UINT c, const INT* lpDx)
+{
+    UINT ta = GetTextAlign(hdc);
+    if (ta == GDI_ERROR || (ta & TA_UPDATECP))
+        return FALSE;
+
     SIZE textSize = {0};
 
     if (lprect)
         textRect = *lprect;
     else if (options & ETO_GLYPH_INDEX && GetTextExtentPointI(hdc, (WORD*)lpString, c, &textSize))
     {
-        textRect.left   = point.x;
-        textRect.top    = point.y;
-        textRect.right  = point.x + textSize.cx;
-        textRect.bottom = point.y + textSize.cy;
-    }
-    else if (options == ETO_IGNORELANGUAGE) {
-        if(!GetClipBox(hdc, &textRect))
+        if (lpDx)
+            textSize.cx = ExtTextOutDxWidth(options, lpDx, c);
+        if (!ExtTextOutAlignRect(hdc, point, textSize, textRect, ta))
             return FALSE;
     }
-    else if (options && GetTextExtentPoint32W(hdc, lpString, c, &textSize)) {
-        textRect.left   = point.x;
-        textRect.top    = point.y;
-        textRect.right  = point.x + textSize.cx;
-        textRect.bottom = point.y + textSize.cy; 
+    else if (options && GetTextExtentPoint32W(hdc, lpString, c, &textSize))
+    {
+        if (lpDx)
+            textSize.cx = ExtTextOutDxWidth(options, lpDx, c);
+        if (!ExtTextOutAlignRect(hdc, point, textSize, textRect, ta))
+            return FALSE;
     }
     else
         return FALSE;
@@ -977,7 +1028,10 @@ BOOL WINAPI HookedExtTextOutW(
         return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
 
     RECT textRect {0};
-    if (!ExtTextOutCalcRect(hdc, {x, y}, options, textRect, lprect, lpString, c))
+    if (!ExtTextOutCalcRect(hdc, {x, y}, options, textRect, lprect, lpString, c, lpDx))
+        return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
+
+    if (!ExtTextOutBkPaint(hdc, lprect, options))
         return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
         
     // https://devblogs.microsoft.com/oldnewthing/20110520-00/?p=10613
@@ -993,13 +1047,9 @@ BOOL WINAPI HookedExtTextOutW(
 
     SelectObject(memDC, GetCurrentObject(hdc, OBJ_FONT));
     SetTextAlign(memDC, GetTextAlign(hdc));
+    SetLayout(memDC, GetLayout(hdc));
     SetBkMode(memDC, TRANSPARENT);
     SetTextColor(memDC, RGB(255, 255, 255)); // White text mask
-
-    if (!ExtTextOutBkPaint(hdc, lprect, options)) {
-        EndBufferedPaint(hpb, FALSE);
-        return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
-    }
 
     // Remove default background painting operation, as it done by us
     WINBOOL res = ExtTextOutW_orig(memDC, x, y, options & ~ETO_OPAQUE, lprect, lpString, c, lpDx);
@@ -1373,6 +1423,10 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, INT iPartId, INT iStateId, INT
     }
     else if (ThemeClassName == L"PreviewPane" && iPropId == TMT_TEXTCOLOR) {
         *pColor = g_IsSysThemeDarkMode ? RGB(255, 255, 255) : *pColor;
+        return S_OK;
+    }
+    else if (iPropId == TMT_TEXTCOLOR && ThemeClassName == L"ControlPanel" && iPartId == CPANEL_HELPLINK) {
+        *pColor = (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(96,205,255);
         return S_OK;
     }  
     else if (ThemeClassName == L"ControlPanelStyle" && iPropId == TMT_TEXTCOLOR)
