@@ -170,12 +170,6 @@ Tested with CMF Buds 2 / Buds Pro 2 and Nothing Ear series. Other Nothing/CMF mo
 // ==/WindhawkModSettings==
 
 #undef GetCurrentTime
-#ifndef WH_MOD_ID
-#define WH_MOD_ID L"nothing-track"
-#endif
-#ifndef WH_MOD_VERSION
-#define WH_MOD_VERSION L"1.0.0"
-#endif
 #include <winrt/base.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
@@ -251,8 +245,6 @@ struct BatteryReading {
 
 struct EarbudsState {
     std::wstring deviceName = L"CMF Buds 2";
-    std::wstring firmwareVersion = L"";
-    std::wstring serialNumber = L"";
     bool connected = false;
     bool connecting = false;
 
@@ -261,14 +253,12 @@ struct EarbudsState {
     BatteryReading caseBattery;
 
     AncMode ancMode = AncMode::Off;
-    bool ancRestrictedSingleBud = false;
 
     uint8_t eqPreset = 0;
     bool bassEnabled = true;
     uint8_t bassLevel = 3;
     bool lowLatencyEnabled = false;
 
-    std::chrono::steady_clock::time_point lastQueryTime{};
 };
 
 struct ModSettings {
@@ -285,7 +275,7 @@ static ModSettings g_settings;
 static std::atomic<int> g_pollIntervalSeconds{30};
 static EarbudsState g_earbudsState;
 static std::mutex g_stateMutex;
-static HWND g_taskbarWnd = nullptr;
+static std::atomic<HWND> g_taskbarWnd{nullptr};
 static std::atomic<bool> g_unloading{false};
 
 // XAML Elements references
@@ -305,6 +295,7 @@ static winrt::event_token g_retryTimerToken{};
 static winrt::event_token g_flyoutOpenedToken{};
 static winrt::event_token g_flyoutClosedToken{};
 static winrt::event_token g_timerToken{};
+[[clang::no_destroy]] static std::optional<std::wstring> g_lastTooltip;
 
 static inline uint16_t ComputeCrc16(const uint8_t* data, size_t size) {
     uint16_t crc = 0xFFFF;
@@ -362,7 +353,7 @@ public:
         } catch (...) {
             m_stopRequested.store(true);
             m_actionCv.notify_all();
-            m_workerCv.notify_all();
+            m_workerWakeState->cv.notify_all();
             CancelPendingOperations();
             if (m_actionWorker.joinable()) m_actionWorker.join();
             if (m_worker.joinable()) m_worker.join();
@@ -376,7 +367,7 @@ public:
         if (!m_running.exchange(false)) return;
         m_stopRequested.store(true);
         m_actionCv.notify_all();
-        m_workerCv.notify_all();
+        m_workerWakeState->cv.notify_all();
         CancelPendingOperations();
         Disconnect();
         if (m_actionWorker.joinable()) {
@@ -396,32 +387,51 @@ public:
         m_actionCv.notify_one();
     }
 
-    bool IsConnected() const {
-        return m_connected.load();
+    void NotifyPollIntervalChanged() {
+        m_pollIntervalChanged.store(true);
+        m_actionCv.notify_all();
     }
 
     bool SendCommand(uint16_t commandId, const std::vector<uint8_t>& payload) {
         std::lock_guard<std::mutex> lock(m_socketMutex);
-        if (m_stopRequested.load() || !m_connected.load() || !m_socket) return false;
+        if (m_stopRequested.load() || !m_connected.load() || !m_socket ||
+            payload.size() > UINT16_MAX) {
+            return false;
+        }
         try {
             uint8_t opId = static_cast<uint8_t>((m_opCounter++ % 250) + 1);
             auto packet = BuildPacket(commandId, payload, opId);
             DataWriter writer(m_socket.OutputStream());
-            writer.WriteBytes(winrt::array_view<const uint8_t>(packet.data(), packet.size()));
+            writer.WriteBytes(winrt::array_view<const uint8_t>(
+                packet.data(), static_cast<uint32_t>(packet.size())));
+            auto deadline = std::chrono::steady_clock::now() +
+                            std::chrono::seconds(3);
             GetAsync(writer.StoreAsync(), std::chrono::seconds(3));
-            GetAsync(writer.FlushAsync(), std::chrono::seconds(3));
+            auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+                deadline - std::chrono::steady_clock::now());
+            if (remaining <= std::chrono::milliseconds::zero()) {
+                throw winrt::hresult_canceled();
+            }
+            GetAsync(writer.FlushAsync(), remaining);
             writer.DetachStream();
             return true;
         } catch (...) {
             m_connected.store(false);
+            try {
+                if (m_socket) {
+                    m_socket.Close();
+                    m_socket = nullptr;
+                }
+                m_service = nullptr;
+            } catch (...) {}
+            std::lock_guard<std::mutex> stateLock(g_stateMutex);
+            g_earbudsState.connected = false;
+            g_earbudsState.connecting = false;
             return false;
         }
     }
 
     void QueryAll() {
-        SendCommand(49158, {}); // Serial (readSerial)
-        if (m_stopRequested.load()) return;
-        std::this_thread::sleep_for(std::chrono::milliseconds(40));
         SendCommand(49159, {}); // Battery (readBattery)
         if (m_stopRequested.load()) return;
         std::this_thread::sleep_for(std::chrono::milliseconds(40));
@@ -435,9 +445,6 @@ public:
         if (m_stopRequested.load()) return;
         std::this_thread::sleep_for(std::chrono::milliseconds(40));
         SendCommand(49230, {}); // Bass (readEnhancedBass)
-        if (m_stopRequested.load()) return;
-        std::this_thread::sleep_for(std::chrono::milliseconds(40));
-        SendCommand(49218, {}); // Firmware (readFirmware)
         if (m_stopRequested.load()) return;
         std::this_thread::sleep_for(std::chrono::milliseconds(40));
         SendCommand(49217, {}); // Low latency (readLatency)
@@ -600,6 +607,7 @@ private:
     std::atomic<bool> m_connected{false};
     std::atomic<bool> m_ringingLeft{false};
     std::atomic<bool> m_ringingRight{false};
+    std::atomic<bool> m_pollIntervalChanged{false};
     std::mutex m_lifecycleMutex;
     std::thread m_worker;
     std::thread m_actionWorker;
@@ -608,15 +616,53 @@ private:
     std::deque<std::function<void()>> m_actionQueue;
     std::mutex m_asyncMutex;
     std::vector<winrt::Windows::Foundation::IAsyncInfo> m_asyncOperations;
+    struct WorkerWakeState {
+        std::condition_variable cv;
+        std::atomic<uint64_t> connectionStatusVersion{0};
+    };
+    std::shared_ptr<WorkerWakeState> m_workerWakeState =
+        std::make_shared<WorkerWakeState>();
     std::mutex m_workerWaitMutex;
-    std::condition_variable m_workerCv;
     BluetoothDevice m_cachedDevice{nullptr};
     std::wstring m_cachedDeviceName;
+    winrt::event_token m_connectionStatusToken{};
 
-    bool WaitForStop(std::chrono::seconds duration) {
+    bool WaitForWake(std::chrono::seconds duration) {
+        auto wakeState = m_workerWakeState;
+        uint64_t version = wakeState->connectionStatusVersion.load();
         std::unique_lock<std::mutex> lock(m_workerWaitMutex);
-        return m_workerCv.wait_for(lock, duration,
-                                  [this]() { return m_stopRequested.load(); });
+        return wakeState->cv.wait_for(lock, duration,
+                                     [this, wakeState, version]() {
+                                         return m_stopRequested.load() ||
+                                                wakeState->connectionStatusVersion.load() != version;
+                                     });
+    }
+
+    void ClearCachedDevice() {
+        if (m_cachedDevice && m_connectionStatusToken.value) {
+            try {
+                m_cachedDevice.ConnectionStatusChanged(m_connectionStatusToken);
+            } catch (...) {}
+        }
+        m_connectionStatusToken = {};
+        m_cachedDevice = nullptr;
+        m_cachedDeviceName.clear();
+    }
+
+    void CacheDevice(BluetoothDevice const& device, std::wstring const& name) {
+        ClearCachedDevice();
+        m_cachedDevice = device;
+        m_cachedDeviceName = name;
+        if (m_cachedDevice) {
+            try {
+                auto wakeState = m_workerWakeState;
+                m_connectionStatusToken = m_cachedDevice.ConnectionStatusChanged(
+                    [wakeState](auto const&, auto const&) {
+                        wakeState->connectionStatusVersion.fetch_add(1);
+                        wakeState->cv.notify_all();
+                    });
+            } catch (...) {}
+        }
     }
 
     void ExpireStaleBatteryReadings() {
@@ -650,9 +696,15 @@ private:
             {
                 std::unique_lock<std::mutex> lock(m_actionMutex);
                 m_actionCv.wait_until(lock, nextPoll, [this]() {
-                    return m_stopRequested.load() || !m_actionQueue.empty();
+                    return m_stopRequested.load() ||
+                           m_pollIntervalChanged.load() ||
+                           !m_actionQueue.empty();
                 });
                 if (m_stopRequested.load()) break;
+                if (m_pollIntervalChanged.exchange(false)) {
+                    nextPoll = std::chrono::steady_clock::now() +
+                               std::chrono::seconds(g_pollIntervalSeconds.load());
+                }
                 if (!m_actionQueue.empty()) {
                     action = std::move(m_actionQueue.front());
                     m_actionQueue.pop_front();
@@ -749,7 +801,6 @@ private:
             if (!payload.empty()) {
                 std::lock_guard<std::mutex> lock(g_stateMutex);
                 AncMode mode = AncMode::Off;
-                bool restricted = false;
 
                 // EarWeb protocol: ancStatus is at payload[1] (full packet byte 9)
                 uint8_t ancByte = (payload.size() >= 2) ? payload[1] : payload[0];
@@ -771,15 +822,7 @@ private:
                     else if (payload[0] == 0x01) mode = AncMode::High;
                 }
 
-                // If only one earbud is connected, High ANC cannot be activated by hardware
-                if (g_earbudsState.left.present ^ g_earbudsState.right.present) {
-                    if (mode != AncMode::Transparency && mode != AncMode::Off) {
-                        restricted = true;
-                    }
-                }
-
                 g_earbudsState.ancMode = mode;
-                g_earbudsState.ancRestrictedSingleBud = restricted;
             }
         } else if (cmd == 16415 || cmd == 16464 || cmd == 16469) { // EQ / ListeningMode
             if (!payload.empty()) {
@@ -790,54 +833,15 @@ private:
             if (payload.size() >= 2) {
                 std::lock_guard<std::mutex> lock(g_stateMutex);
                 g_earbudsState.bassEnabled = (payload[0] != 0);
-                g_earbudsState.bassLevel = payload[1] / 2;
-            }
-        } else if (cmd == 16450) { // Firmware
-            std::wstring fw;
-            for (uint8_t b : payload) {
-                if (b >= 32 && b <= 126) fw.push_back(static_cast<wchar_t>(b));
-            }
-            if (!fw.empty()) {
-                std::lock_guard<std::mutex> lock(g_stateMutex);
-                g_earbudsState.firmwareVersion = fw;
+                if (payload[1] > 0) {
+                    g_earbudsState.bassLevel = std::clamp<uint8_t>(
+                        static_cast<uint8_t>(payload[1] / 2), 1, 5);
+                }
             }
         } else if (cmd == 16449) { // Low latency
             if (!payload.empty()) {
                 std::lock_guard<std::mutex> lock(g_stateMutex);
                 g_earbudsState.lowLatencyEnabled = (payload[0] == 0x01);
-            }
-        } else if (cmd == 16390) { // Serial Number CSV
-            // Strip any non-printable leading control bytes (e.g. 0x04)
-            size_t start = 0;
-            while (start < payload.size() && payload[start] < 0x20) {
-                start++;
-            }
-            std::string csv(payload.begin() + start, payload.end());
-            std::vector<std::string> lines;
-            size_t p = 0;
-            while (p < csv.size()) {
-                size_t nl = csv.find('\n', p);
-                if (nl == std::string::npos) nl = csv.size();
-                std::string line = csv.substr(p, nl - p);
-                while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
-                if (!line.empty()) lines.push_back(line);
-                p = nl + 1;
-            }
-
-            for (const auto& line : lines) {
-                // Check if contains serial (type 4)
-                if (line.find(",4,") != std::string::npos) {
-                    size_t sPos = line.find(",4,") + 3;
-                    std::string serial = line.substr(sPos);
-                    if (!serial.empty()) {
-                        std::wstring wserial(serial.begin(), serial.end());
-                        std::lock_guard<std::mutex> lock(g_stateMutex);
-                        g_earbudsState.serialNumber = wserial;
-                        if (serial.rfind("1351", 0) == 0 && g_earbudsState.deviceName.empty()) {
-                            g_earbudsState.deviceName = L"CMF Buds 2";
-                        }
-                    }
-                }
             }
         }
     }
@@ -848,6 +852,7 @@ private:
             init_apartment(winrt::apartment_type::multi_threaded);
             apartmentInitialized = true;
         } catch (...) {}
+        unsigned int consecutiveConnectionFailures = 0;
 
         while (!m_stopRequested.load()) {
             if (!m_connected.load()) {
@@ -859,7 +864,8 @@ private:
                 try {
                     if (!targetBtDev) {
                         auto btSelector = BluetoothDevice::GetDeviceSelectorFromPairingState(true);
-                        auto paired = GetAsync(DeviceInformation::FindAllAsync(btSelector));
+                        auto paired = GetAsync(DeviceInformation::FindAllAsync(btSelector),
+                                               std::chrono::seconds(10));
                         for (uint32_t i = 0; i < paired.Size(); ++i) {
                             auto dev = paired.GetAt(i);
                             std::wstring devName = dev.Name().c_str();
@@ -869,12 +875,12 @@ private:
                                 lower.find(L"cmf") != std::wstring::npos ||
                                 lower.find(L"ear (") != std::wstring::npos ||
                                 lower.find(L"ear(") != std::wstring::npos) {
-                                auto btDev = GetAsync(BluetoothDevice::FromIdAsync(dev.Id()));
+                                auto btDev = GetAsync(BluetoothDevice::FromIdAsync(dev.Id()),
+                                                      std::chrono::seconds(5));
                                 if (btDev) {
                                     targetBtDev = btDev;
                                     realName = devName;
-                                    m_cachedDevice = btDev;
-                                    m_cachedDeviceName = devName;
+                                    CacheDevice(btDev, devName);
                                     break;
                                 }
                             }
@@ -886,9 +892,12 @@ private:
                 if (!targetBtDev) {
                     try {
                         auto selector = RfcommDeviceService::GetDeviceSelector(RfcommServiceId::FromUuid(SppUuid()));
-                        auto devices = GetAsync(DeviceInformation::FindAllAsync(selector));
+                        auto devices = GetAsync(DeviceInformation::FindAllAsync(selector),
+                                                std::chrono::seconds(10));
                         for (uint32_t i = 0; i < devices.Size(); ++i) {
-                            auto s = GetAsync(RfcommDeviceService::FromIdAsync(devices.GetAt(i).Id()));
+                            auto s = GetAsync(
+                                RfcommDeviceService::FromIdAsync(devices.GetAt(i).Id()),
+                                std::chrono::seconds(5));
                             if (s && s.Device()) {
                                 std::wstring devName = s.Device().Name().c_str();
                                 std::wstring lower = devName;
@@ -900,8 +909,7 @@ private:
                                     targetBtDev = s.Device();
                                     service = s;
                                     realName = devName;
-                                    m_cachedDevice = targetBtDev;
-                                    m_cachedDeviceName = devName;
+                                    CacheDevice(targetBtDev, devName);
                                     break;
                                 }
                             }
@@ -915,12 +923,12 @@ private:
                     try {
                         isDevConnected = (targetBtDev.ConnectionStatus() == BluetoothConnectionStatus::Connected);
                     } catch (...) {
-                        m_cachedDevice = nullptr;
-                        m_cachedDeviceName.clear();
+                        ClearCachedDevice();
                     }
                 }
 
                 if (!isDevConnected) {
+                    consecutiveConnectionFailures = 0;
                     // Headphones are disconnected! DO NOT attempt to connect socket or poll RFCOMM.
                     {
                         std::lock_guard<std::mutex> lock(g_stateMutex);
@@ -933,7 +941,7 @@ private:
 
                     // Reuse the matched BluetoothDevice and check it cheaply. If no
                     // matching device exists, back off before enumerating again.
-                    WaitForStop(targetBtDev ? std::chrono::seconds(15)
+                    WaitForWake(targetBtDev ? std::chrono::seconds(15)
                                             : std::chrono::seconds(30));
                     continue;
                 }
@@ -948,18 +956,20 @@ private:
                 if (!service && targetBtDev) {
                     try {
                         auto rf = GetAsync(targetBtDev.GetRfcommServicesForIdAsync(
-                            RfcommServiceId::FromUuid(SppUuid()),
-                            BluetoothCacheMode::Uncached));
+                                              RfcommServiceId::FromUuid(SppUuid()),
+                                              BluetoothCacheMode::Uncached),
+                                           std::chrono::seconds(10));
                         if (rf && rf.Services().Size() > 0) {
                             service = rf.Services().GetAt(0);
                         }
                     } catch (...) {}
                 }
 
+                bool connectionEstablished = false;
                 if (service) {
                     try {
                         // Extract true friendly device name
-                        std::wstring realName = L"CMF Buds 2";
+                        if (realName.empty()) realName = L"CMF Buds 2";
                         try {
                             auto bt = service.Device();
                             if (bt && !bt.Name().empty()) {
@@ -975,9 +985,10 @@ private:
                             m_service = service;
                         }
                         GetAsync(socket.ConnectAsync(
-                            service.ConnectionHostName(),
-                            service.ConnectionServiceName(),
-                            SocketProtectionLevel::BluetoothEncryptionAllowNullAuthentication));
+                                     service.ConnectionHostName(),
+                                     service.ConnectionServiceName(),
+                                     SocketProtectionLevel::BluetoothEncryptionAllowNullAuthentication),
+                                 std::chrono::seconds(10));
 
                         {
                             std::lock_guard<std::mutex> sLock(m_socketMutex);
@@ -986,6 +997,8 @@ private:
                             }
                             m_connected.store(true);
                         }
+                        connectionEstablished = true;
+                        consecutiveConnectionFailures = 0;
 
                         {
                             std::lock_guard<std::mutex> lock(g_stateMutex);
@@ -1003,27 +1016,30 @@ private:
 
                         while (!m_stopRequested.load() && m_connected.load()) {
                             // Read header magic
-                            if (GetAsync(reader.LoadAsync(1)) < 1) break;
+                            auto readTimeout = std::chrono::seconds(
+                                std::max(15, g_pollIntervalSeconds.load() + 10));
+                            if (GetAsync(reader.LoadAsync(1), readTimeout) < 1) break;
                             if (reader.ReadByte() != 0x55) continue;
 
-                            if (GetAsync(reader.LoadAsync(7)) < 7) break;
+                            if (GetAsync(reader.LoadAsync(7), std::chrono::seconds(10)) < 7) break;
                             uint8_t b1 = reader.ReadByte(); // 0x60
                             uint8_t b2 = reader.ReadByte(); // 0x01
+                            if (b1 != 0x60 || b2 != 0x01) continue;
                             uint8_t cmdLo = reader.ReadByte();
                             uint8_t cmdHi = reader.ReadByte();
-                            uint16_t cmd = cmdLo | (cmdHi << 8);
+                            uint16_t cmd = static_cast<uint16_t>(cmdLo | (cmdHi << 8));
                             uint8_t pLenLo = reader.ReadByte();
                             uint8_t pLenHi = reader.ReadByte();
                             uint16_t pLen = static_cast<uint16_t>(pLenLo | (pLenHi << 8));
+                            uint8_t opId = reader.ReadByte(); // opId
                             constexpr uint16_t kMaxPacketPayload = 4096;
                             if (pLen > kMaxPacketPayload) {
                                 Wh_Log(L"BluetoothManager: Rejecting oversized packet (%u bytes)", pLen);
                                 continue;
                             }
-                            uint8_t opId = reader.ReadByte(); // opId
 
                             uint32_t toRead = pLen + 2;
-                            if (GetAsync(reader.LoadAsync(toRead)) < toRead) break;
+                            if (GetAsync(reader.LoadAsync(toRead), std::chrono::seconds(10)) < toRead) break;
                             std::vector<uint8_t> payload(pLen);
                             if (pLen > 0) reader.ReadBytes(payload);
                             uint8_t crcLo = reader.ReadByte();
@@ -1049,16 +1065,24 @@ private:
                             ProcessPacket(cmd, payload);
                         }
                     } catch (...) {}
-
-                    Disconnect();
                 }
 
-                // Wait briefly before retrying a cached, connected device.
-                WaitForStop(std::chrono::seconds(5));
+                if (!connectionEstablished) {
+                    consecutiveConnectionFailures++;
+                }
+                Disconnect();
+
+                // Avoid repeated over-the-air service discovery when RFCOMM is
+                // unavailable, while still reconnecting quickly after a normal
+                // established connection drops.
+                unsigned int backoffStep = std::min(consecutiveConnectionFailures, 4u);
+                int retrySeconds = connectionEstablished
+                    ? 5
+                    : std::min(60, 5 * (1 << backoffStep));
+                WaitForWake(std::chrono::seconds(retrySeconds));
             }
         }
-        m_cachedDevice = nullptr;
-        m_cachedDeviceName.clear();
+        ClearCachedDevice();
         if (apartmentInitialized) {
             winrt::uninit_apartment();
         }
@@ -1068,25 +1092,32 @@ private:
 using TrayUI_StartTaskbar_t = void(WINAPI*)(void*);
 static TrayUI_StartTaskbar_t TrayUI_StartTaskbar_Original = nullptr;
 static void* CTaskBand_ITaskListWndSite_vftable = nullptr;
-static void* CSecondaryTaskBand_ITaskListWndSite_vftable = nullptr;
 using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void*, void**);
 static CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original = nullptr;
-static CTaskBand_GetTaskbarHost_t CSecondaryTaskBand_GetTaskbarHost_Original = nullptr;
 using TaskbarHost_FrameHeight_t = int(WINAPI*)(void*);
 static TaskbarHost_FrameHeight_t TaskbarHost_FrameHeight_Original = nullptr;
 using Std_Ref_Decref_t = void(WINAPI*)(void*);
 static Std_Ref_Decref_t Std_Ref_Decref_Original = nullptr;
 
 using WindowThreadProc = void(*)(void*);
-static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param,
-                                DWORD timeoutMs = 5000) {
+static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param) {
     static const UINT kMsg = RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-    struct Payload { WindowThreadProc proc; void* param; };
+    if (!kMsg) return false;
+    struct Payload {
+        WindowThreadProc proc;
+        void* param;
+        std::atomic<bool> succeeded{false};
+    };
     DWORD tid = GetWindowThreadProcessId(hWnd, nullptr);
     if (!tid) return false;
     if (tid == GetCurrentThreadId()) {
-        proc(param);
-        return true;
+        try {
+            proc(param);
+            return true;
+        } catch (...) {
+            Wh_Log(L"RunFromWindowThread: callback failed");
+            return false;
+        }
     }
     HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC,
         [](int code, WPARAM w, LPARAM l) CALLBACK -> LRESULT {
@@ -1095,25 +1126,21 @@ static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param,
                 static const UINT kM = RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
                 if (cwp->message == kM) {
                     auto* p = reinterpret_cast<Payload*>(cwp->lParam);
-                    p->proc(p->param);
+                    try {
+                        p->proc(p->param);
+                        p->succeeded.store(true);
+                    } catch (...) {
+                        Wh_Log(L"RunFromWindowThread: callback failed");
+                    }
                 }
             }
             return CallNextHookEx(nullptr, code, w, l);
         }, nullptr, tid);
     if (!hook) return false;
     Payload pay{proc, param};
-    BOOL sent = FALSE;
-    if (timeoutMs == INFINITE) {
-        SendMessageW(hWnd, kMsg, 0, reinterpret_cast<LPARAM>(&pay));
-        sent = TRUE;
-    } else {
-        DWORD_PTR result = 0;
-        sent = SendMessageTimeoutW(
-            hWnd, kMsg, 0, reinterpret_cast<LPARAM>(&pay),
-            SMTO_ABORTIFHUNG | SMTO_BLOCK, timeoutMs, &result);
-    }
+    SendMessageW(hWnd, kMsg, 0, reinterpret_cast<LPARAM>(&pay));
     UnhookWindowsHookEx(hook);
-    return sent != FALSE;
+    return pay.succeeded.load();
 }
 
 static bool IsReadableMemoryRange(const void* address, size_t size) {
@@ -1147,23 +1174,14 @@ static HWND FindCurrentProcessTaskbarWnd() {
 }
 
 static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
-    wchar_t clsBuf[64] = {};
-    GetClassNameW(hTaskbarWnd, clsBuf, ARRAYSIZE(clsBuf));
-    bool isSecondary = _wcsicmp(clsBuf, L"Shell_SecondaryTrayWnd") == 0;
-    HWND hTaskSwWnd = isSecondary
-        ? FindWindowExW(hTaskbarWnd, nullptr, L"WorkerW", nullptr)
-        : (HWND)GetPropW(hTaskbarWnd, L"TaskbandHWND");
+    HWND hTaskSwWnd = (HWND)GetPropW(hTaskbarWnd, L"TaskbandHWND");
     if (!hTaskSwWnd) return nullptr;
 
     void* taskBand = (void*)GetWindowLongPtrW(hTaskSwWnd, 0);
     if (!taskBand) return nullptr;
 
-    void* expectedVftable = isSecondary
-        ? CSecondaryTaskBand_ITaskListWndSite_vftable
-        : CTaskBand_ITaskListWndSite_vftable;
-    auto getTaskbarHost = isSecondary
-        ? CSecondaryTaskBand_GetTaskbarHost_Original
-        : CTaskBand_GetTaskbarHost_Original;
+    void* expectedVftable = CTaskBand_ITaskListWndSite_vftable;
+    auto getTaskbarHost = CTaskBand_GetTaskbarHost_Original;
 
     if (!expectedVftable || !getTaskbarHost) return nullptr;
 
@@ -1282,17 +1300,12 @@ enum class StringId {
     MoreBass,
     Pop,
     Voice,
-    LowLatency,
     LowLatencyOn,
     LowLatencyOff,
-    FindBuds,
     RingLeft,
     RingRight,
-    Stop,
     StopLeft,
     StopRight,
-    InEarWarning,
-    ConnectToAdjust,
     Refresh,
 };
 
@@ -1333,17 +1346,12 @@ static std::wstring Loc(StringId id) {
     case StringId::MoreBass:            return ru ? L"Больше НЧ" : L"More Bass";
     case StringId::Pop:                 return ru ? L"Поп" : L"Pop";
     case StringId::Voice:               return ru ? L"Голос" : L"Voice";
-    case StringId::LowLatency:          return ru ? L"Игровой режим" : L"Game Mode";
     case StringId::LowLatencyOn:        return ru ? L"Игровой режим: Вкл" : L"Game Mode: On";
     case StringId::LowLatencyOff:       return ru ? L"Игровой режим: Выкл" : L"Game Mode: Off";
-    case StringId::FindBuds:            return ru ? L"Поиск" : L"Find";
     case StringId::RingLeft:            return ru ? L"Звонок L" : L"Ring L";
     case StringId::RingRight:           return ru ? L"Звонок R" : L"Ring R";
-    case StringId::Stop:                return ru ? L"Стоп" : L"Stop";
     case StringId::StopLeft:            return ru ? L"Стоп L" : L"Stop L";
     case StringId::StopRight:           return ru ? L"Стоп R" : L"Stop R";
-    case StringId::InEarWarning:        return ru ? L"Наушник в ухе! Громкий звук." : L"Earbud in ear! Loud sound.";
-    case StringId::ConnectToAdjust:     return ru ? L"Подключите наушники для настройки" : L"Connect earbuds to adjust";
     case StringId::Refresh:             return ru ? L"Обновить" : L"Refresh";
     default:                            return L"";
     }
@@ -1468,12 +1476,6 @@ struct AncBtnInfo {
     AncMode mode;
 };
 
-struct SubBtnInfo {
-    Button btn{nullptr};
-    TextBlock txt{nullptr};
-    AncMode mode;
-};
-
 struct BassLvlInfo {
     Button btn{nullptr};
     TextBlock txt{nullptr};
@@ -1496,7 +1498,7 @@ struct FlyoutContext {
     Border ancCard{nullptr};
     std::vector<AncBtnInfo> mainAncBtns;
     StackPanel subSp{nullptr};
-    std::vector<SubBtnInfo> subAncBtns;
+    std::vector<AncBtnInfo> subAncBtns;
     Border bassCard{nullptr};
     ToggleSwitch bassToggle{nullptr};
     std::vector<BassLvlInfo> bassBtns;
@@ -1516,18 +1518,44 @@ struct FlyoutContext {
     bool isRingingR = false;
     DispatcherTimer ringTimerL{nullptr};
     DispatcherTimer ringTimerR{nullptr};
+    winrt::event_token ringTimerLToken{};
+    winrt::event_token ringTimerRToken{};
     bool isConnectedState = true;
+    bool suppressBassToggle = false;
 
-    void UpdateConnectionState(bool connected) {
+    void StopRingTimers() {
+        if (ringTimerL) {
+            try { ringTimerL.Stop(); } catch (...) {}
+            if (ringTimerLToken.value) {
+                try { ringTimerL.Tick(ringTimerLToken); } catch (...) {}
+            }
+            ringTimerL = nullptr;
+        }
+        ringTimerLToken = {};
+        if (ringTimerR) {
+            try { ringTimerR.Stop(); } catch (...) {}
+            if (ringTimerRToken.value) {
+                try { ringTimerR.Tick(ringTimerRToken); } catch (...) {}
+            }
+            ringTimerR = nullptr;
+        }
+        ringTimerRToken = {};
+    }
+
+    void UpdateConnectionState(bool connected, bool leftPresent, bool rightPresent) {
         isConnectedState = connected;
         double targetOpacity = connected ? 1.0 : 0.38;
+        bool singleBud = leftPresent ^ rightPresent;
 
         if (ancCard) ancCard.Opacity(targetOpacity);
         for (auto& item : mainAncBtns) {
-            if (item.btn) item.btn.IsEnabled(connected);
+            if (item.btn) {
+                item.btn.IsEnabled(connected &&
+                                   !(singleBud && item.mode == AncMode::High));
+            }
         }
         for (auto& subItem : subAncBtns) {
-            if (subItem.btn) subItem.btn.IsEnabled(connected);
+            if (subItem.btn) subItem.btn.IsEnabled(connected && !singleBud);
         }
 
         if (bassCard) bassCard.Opacity(targetOpacity);
@@ -1543,8 +1571,8 @@ struct FlyoutContext {
 
         if (toolsGrid) toolsGrid.Opacity(targetOpacity);
         if (lowLatencyBtn) lowLatencyBtn.IsEnabled(connected);
-        if (ringLBtn) ringLBtn.IsEnabled(connected);
-        if (ringRBtn) ringRBtn.IsEnabled(connected);
+        if (ringLBtn) ringLBtn.IsEnabled(connected && leftPresent);
+        if (ringRBtn) ringRBtn.IsEnabled(connected && rightPresent);
     }
 
     void ApplyAncVisuals(AncMode currentMode) {
@@ -1642,7 +1670,7 @@ struct FlyoutContext {
     }
 };
 
-static std::weak_ptr<FlyoutContext> s_currentFlyoutCtx;
+[[clang::no_destroy]] static std::shared_ptr<FlyoutContext> s_currentFlyoutCtx;
 
 static UIElement BuildFlyoutContent() {
     ScrollViewer sv;
@@ -1795,7 +1823,7 @@ static UIElement BuildFlyoutContent() {
 
     ctx->warnBadge.Child(warnSp);
     bool isSingleBud = (state.left.present ^ state.right.present);
-    ctx->warnBadge.Visibility((isSingleBud || state.ancRestrictedSingleBud) ? Visibility::Visible : Visibility::Collapsed);
+    ctx->warnBadge.Visibility(isSingleBud ? Visibility::Visible : Visibility::Collapsed);
     ancSp.Children().Append(ctx->warnBadge);
 
     Border segTrack;
@@ -1849,7 +1877,10 @@ static UIElement BuildFlyoutContent() {
         item.btn.Content(item.txt);
 
         AncMode m = item.mode;
-        item.btn.Click([ctx, m](auto const&, auto const&) {
+        std::weak_ptr<FlyoutContext> weakCtx = ctx;
+        item.btn.Click([weakCtx, m](auto const&, auto const&) {
+            auto ctx = weakCtx.lock();
+            if (!ctx) return;
             ctx->ApplyAncVisuals(m);
             {
                 std::lock_guard<std::mutex> lock(g_stateMutex);
@@ -1869,7 +1900,7 @@ static UIElement BuildFlyoutContent() {
     ancSp.Children().Append(segTrack);
 
     for (size_t i = 0; i < subModes.size(); ++i) {
-        SubBtnInfo subItem;
+        AncBtnInfo subItem;
         subItem.mode = subModes[i].second;
         subItem.btn = Button();
         subItem.btn.HorizontalAlignment(HorizontalAlignment::Stretch);
@@ -1883,7 +1914,10 @@ static UIElement BuildFlyoutContent() {
         subItem.btn.Content(subItem.txt);
 
         AncMode sm = subItem.mode;
-        subItem.btn.Click([ctx, sm](auto const&, auto const&) {
+        std::weak_ptr<FlyoutContext> weakCtx = ctx;
+        subItem.btn.Click([weakCtx, sm](auto const&, auto const&) {
+            auto ctx = weakCtx.lock();
+            if (!ctx) return;
             ctx->ApplyAncVisuals(sm);
             {
                 std::lock_guard<std::mutex> lock(g_stateMutex);
@@ -1966,8 +2000,15 @@ static UIElement BuildFlyoutContent() {
         item.btn.Content(item.txt);
 
         uint8_t lvl = item.lvl;
-        item.btn.Click([ctx, lvl](auto const&, auto const&) {
-            if (ctx->bassToggle) ctx->bassToggle.IsOn(true);
+        std::weak_ptr<FlyoutContext> weakCtx = ctx;
+        item.btn.Click([weakCtx, lvl](auto const&, auto const&) {
+            auto ctx = weakCtx.lock();
+            if (!ctx) return;
+            if (ctx->bassToggle && !ctx->bassToggle.IsOn()) {
+                ctx->suppressBassToggle = true;
+                ctx->bassToggle.IsOn(true);
+                ctx->suppressBassToggle = false;
+            }
             ctx->ApplyBassVisuals(true, lvl);
             {
                 std::lock_guard<std::mutex> lock(g_stateMutex);
@@ -1987,7 +2028,10 @@ static UIElement BuildFlyoutContent() {
     bassTrack.Child(bassLevelsGrid);
     bassSp.Children().Append(bassTrack);
 
-    ctx->bassToggle.Toggled([ctx](auto const&, auto const&) {
+    std::weak_ptr<FlyoutContext> weakBassCtx = ctx;
+    ctx->bassToggle.Toggled([weakBassCtx](auto const&, auto const&) {
+        auto ctx = weakBassCtx.lock();
+        if (!ctx || ctx->suppressBassToggle) return;
         bool isOn = ctx->bassToggle.IsOn();
         uint8_t currentLvl = 1;
         {
@@ -2057,7 +2101,10 @@ static UIElement BuildFlyoutContent() {
         item.btn.Content(item.txt);
 
         uint8_t presetId = item.preset;
-        item.btn.Click([ctx, presetId](auto const&, auto const&) {
+        std::weak_ptr<FlyoutContext> weakCtx = ctx;
+        item.btn.Click([weakCtx, presetId](auto const&, auto const&) {
+            auto ctx = weakCtx.lock();
+            if (!ctx) return;
             ctx->ApplyEqVisuals(presetId);
             {
                 std::lock_guard<std::mutex> lock(g_stateMutex);
@@ -2117,7 +2164,10 @@ static UIElement BuildFlyoutContent() {
     ctx->lowLatencyBtn.Content(llSp);
     ctx->ApplyLowLatencyVisuals(state.lowLatencyEnabled);
 
-    ctx->lowLatencyBtn.Click([ctx](auto const&, auto const&) {
+    std::weak_ptr<FlyoutContext> weakLatencyCtx = ctx;
+    ctx->lowLatencyBtn.Click([weakLatencyCtx](auto const&, auto const&) {
+        auto ctx = weakLatencyCtx.lock();
+        if (!ctx) return;
         bool next = false;
         {
             std::lock_guard<std::mutex> lock(g_stateMutex);
@@ -2132,7 +2182,9 @@ static UIElement BuildFlyoutContent() {
     Grid::SetColumn(ctx->lowLatencyBtn, 0);
     ctx->toolsGrid.Children().Append(ctx->lowLatencyBtn);
 
-    auto setupRingButton = [ctx](Button ringBtn, TextBlock ringIcon, TextBlock ringLabel, bool isLeft) {
+    auto setupRingButton = [weakCtx = std::weak_ptr<FlyoutContext>(ctx)](
+                               Button ringBtn, TextBlock ringIcon,
+                               TextBlock ringLabel, bool isLeft) {
         ringBtn.Margin({4, 0, 0, 0});
         ringBtn.Padding({8, 5, 8, 5});
         ringBtn.CornerRadius({4, 4, 4, 4});
@@ -2160,16 +2212,27 @@ static UIElement BuildFlyoutContent() {
 
         ringBtn.Content(contentSp);
 
-        ringBtn.Click([ctx, ringBtn, ringIcon, ringLabel, isLeft](auto const&, auto const&) {
+        ringBtn.Click([weakCtx, isLeft](auto const& sender, auto const&) {
+            auto ctx = weakCtx.lock();
+            auto ringBtn = sender.template try_as<Button>();
+            if (!ctx || !ringBtn) return;
+            auto ringIcon = isLeft ? ctx->ringLIcon : ctx->ringRIcon;
+            auto ringLabel = isLeft ? ctx->ringLTxt : ctx->ringRTxt;
+            if (!ringIcon || !ringLabel) return;
             bool& isRinging = isLeft ? ctx->isRingingL : ctx->isRingingR;
             auto& timer = isLeft ? ctx->ringTimerL : ctx->ringTimerR;
+            auto& timerToken = isLeft ? ctx->ringTimerLToken : ctx->ringTimerRToken;
 
             if (isRinging) {
                 isRinging = false;
                 if (timer) {
-                    timer.Stop();
+                    try { timer.Stop(); } catch (...) {}
+                    if (timerToken.value) {
+                        try { timer.Tick(timerToken); } catch (...) {}
+                    }
                     timer = nullptr;
                 }
+                timerToken = {};
                 BluetoothManager::Instance().PostAction([isLeft]() {
                     BluetoothManager::Instance().FindBuds(isLeft, false);
                 });
@@ -2193,12 +2256,17 @@ static UIElement BuildFlyoutContent() {
 
                 timer = DispatcherTimer();
                 timer.Interval(std::chrono::milliseconds(5000));
-                std::weak_ptr<FlyoutContext> weakCtx = ctx;
-                timer.Tick([weakCtx, ringBtn, ringIcon, ringLabel, isLeft](auto const&, auto const&) {
-                    auto c = weakCtx.lock();
+                std::weak_ptr<FlyoutContext> timerWeakCtx = ctx;
+                timerToken = timer.Tick([timerWeakCtx, isLeft](auto const&, auto const&) {
+                    auto c = timerWeakCtx.lock();
                     if (!c) return;
+                    auto ringBtn = isLeft ? c->ringLBtn : c->ringRBtn;
+                    auto ringIcon = isLeft ? c->ringLIcon : c->ringRIcon;
+                    auto ringLabel = isLeft ? c->ringLTxt : c->ringRTxt;
+                    if (!ringBtn || !ringIcon || !ringLabel) return;
                     bool& ringing = isLeft ? c->isRingingL : c->isRingingR;
                     auto& tmr = isLeft ? c->ringTimerL : c->ringTimerR;
+                    auto& token = isLeft ? c->ringTimerLToken : c->ringTimerRToken;
                     ringing = false;
                     ringBtn.Background(SolidColorBrush(Color{0x0D, 0xFF, 0xFF, 0xFF}));
                     ringIcon.Text(L"\uEA8F");
@@ -2206,9 +2274,13 @@ static UIElement BuildFlyoutContent() {
                     ringLabel.Text(Loc(isLeft ? StringId::RingLeft : StringId::RingRight));
                     ringLabel.Foreground(SolidColorBrush(Color{0xCC, 0xFF, 0xFF, 0xFF}));
                     if (tmr) {
-                        tmr.Stop();
+                        try { tmr.Stop(); } catch (...) {}
+                        if (token.value) {
+                            try { tmr.Tick(token); } catch (...) {}
+                        }
                         tmr = nullptr;
                     }
+                    token = {};
                     BluetoothManager::Instance().PostAction([isLeft]() {
                         BluetoothManager::Instance().FindBuds(isLeft, false);
                     });
@@ -2236,7 +2308,8 @@ static UIElement BuildFlyoutContent() {
     rootBorder.Child(mainSp);
     sv.Content(rootBorder);
 
-    ctx->UpdateConnectionState(state.connected);
+    ctx->UpdateConnectionState(
+        state.connected, state.left.present, state.right.present);
 
     std::weak_ptr<FlyoutContext> weakCtx = ctx;
     s_refreshFlyoutUi = [weakCtx]() {
@@ -2267,9 +2340,12 @@ static UIElement BuildFlyoutContent() {
         UpdateBatteryCard(c->rightCard, curState.right, true);
 
         bool sBud = (curState.left.present ^ curState.right.present);
-        if (c->warnBadge) c->warnBadge.Visibility((sBud || curState.ancRestrictedSingleBud) ? Visibility::Visible : Visibility::Collapsed);
+        if (c->warnBadge) {
+            c->warnBadge.Visibility(sBud ? Visibility::Visible : Visibility::Collapsed);
+        }
 
-        c->UpdateConnectionState(curState.connected);
+        c->UpdateConnectionState(
+            curState.connected, curState.left.present, curState.right.present);
 
         if (curState.connected) {
             c->ApplyAncVisuals(curState.ancMode);
@@ -2386,16 +2462,9 @@ static Grid BuildWidgetGrid() {
     g_flyoutClosedToken = flyout.Closed([](auto const&, auto const&) {
         s_flyoutOpen = false;
         s_refreshFlyoutUi = nullptr;
-        auto c = s_currentFlyoutCtx.lock();
+        auto c = s_currentFlyoutCtx;
         if (c) {
-            if (c->ringTimerL) {
-                try { c->ringTimerL.Stop(); } catch (...) {}
-                c->ringTimerL = nullptr;
-            }
-            if (c->ringTimerR) {
-                try { c->ringTimerR.Stop(); } catch (...) {}
-                c->ringTimerR = nullptr;
-            }
+            c->StopRingTimers();
             if (c->isRingingL || c->isRingingR) {
                 c->isRingingL = false;
                 c->isRingingR = false;
@@ -2405,15 +2474,28 @@ static Grid BuildWidgetGrid() {
                 });
             }
         }
+        if (s_currentFlyout) {
+            try { s_currentFlyout.Content(nullptr); } catch (...) {}
+        }
+        s_currentFlyoutCtx.reset();
     });
 
-    btn.Click([btn, flyout](auto const&, auto const&) {
+    btn.Click([](auto const& sender, auto const&) {
+        auto btn = sender.template try_as<Button>();
+        auto flyout = s_currentFlyout;
+        if (!btn || !flyout) return;
         if (s_flyoutOpen) {
             flyout.Hide();
             return;
         }
 
-        flyout.Content(BuildFlyoutContent());
+        try {
+            flyout.Content(BuildFlyoutContent());
+        } catch (...) {
+            s_currentFlyoutCtx.reset();
+            s_refreshFlyoutUi = nullptr;
+            return;
+        }
 
         try {
             flyout.ShouldConstrainToRootBounds(false);
@@ -2424,7 +2506,7 @@ static Grid BuildWidgetGrid() {
             auto xamlRoot = btn.XamlRoot();
             if (xamlRoot) {
                 flyout.XamlRoot(xamlRoot);
-                auto rootContent = xamlRoot.Content().try_as<FrameworkElement>();
+                auto rootContent = xamlRoot.Content().template try_as<FrameworkElement>();
                 if (rootContent) {
                     auto xform = btn.TransformToVisual(rootContent);
                     auto pt = xform.TransformPoint({0.f, 0.f});
@@ -2446,8 +2528,15 @@ static Grid BuildWidgetGrid() {
             winrt::Windows::UI::Xaml::Controls::Primitives::FlyoutShowOptions options;
             options.Placement(winrt::Windows::UI::Xaml::Controls::Primitives::FlyoutPlacementMode::Top);
             flyout.ShowAt(btn, options);
-        } catch (...) {
+            return;
+        } catch (...) {}
+
+        try {
             flyout.ShowAt(btn);
+        } catch (...) {
+            try { flyout.Content(nullptr); } catch (...) {}
+            s_currentFlyoutCtx.reset();
+            s_refreshFlyoutUi = nullptr;
         }
     });
 
@@ -2665,7 +2754,10 @@ static void UpdateWidgetUi() {
     auto rightIcon = FindChildByName(g_injectedGrid, L"NothingTrackRightIcon").try_as<TextBlock>();
     auto rightText = FindChildByName(g_injectedGrid, L"NothingTrackRightText").try_as<TextBlock>();
     auto statusText = FindChildByName(g_injectedGrid, L"NothingTrackStatusText").try_as<TextBlock>();
-    if (!btn || !leftText || !rightText) return;
+    if (!btn || !iconText || !leftSp || !leftIcon || !leftText ||
+        !rightSp || !rightIcon || !rightText || !statusText) {
+        return;
+    }
 
     EarbudsState state;
     {
@@ -2868,7 +2960,10 @@ static void UpdateWidgetUi() {
         tooltip = (state.deviceName.empty() ? L"CMF Buds 2" : state.deviceName) + L" (" + Loc(StringId::Disconnected) + L")";
     }
 
-    ToolTipService::SetToolTip(btn, winrt::box_value(tooltip));
+    if (!g_lastTooltip || *g_lastTooltip != tooltip) {
+        ToolTipService::SetToolTip(btn, winrt::box_value(tooltip));
+        g_lastTooltip = tooltip;
+    }
 
     // Live update open flyout if active
     if (s_refreshFlyoutUi && s_flyoutOpen) {
@@ -2878,49 +2973,39 @@ static void UpdateWidgetUi() {
     }
 }
 
-static int RemoveWidgetGridChildren(Grid const& targetGrid) {
-    if (!targetGrid) return -1;
-    int firstCol = -1;
-    for (int i = (int)targetGrid.Children().Size() - 1; i >= 0; --i) {
+static void RemoveWidgetGridChildren(Grid const& targetGrid) {
+    if (!targetGrid) return;
+    for (uint32_t i = targetGrid.Children().Size(); i-- > 0;) {
         auto fe = targetGrid.Children().GetAt(i).try_as<FrameworkElement>();
         if (fe && fe.Name() == kWidgetGridName) {
-            if (firstCol < 0) firstCol = Grid::GetColumn(fe);
             try { targetGrid.Children().RemoveAt(i); } catch (...) {}
         }
     }
-    return firstCol;
 }
 
 static void RemoveWidgetGrid() {
+    g_lastTooltip.reset();
     if (g_dispatcherTimer) {
-        try {
-            g_dispatcherTimer.Stop();
-            g_dispatcherTimer.Tick(g_timerToken);
-        } catch (...) {}
+        try { g_dispatcherTimer.Stop(); } catch (...) {}
+        if (g_timerToken.value) {
+            try { g_dispatcherTimer.Tick(g_timerToken); } catch (...) {}
+        }
         g_dispatcherTimer = nullptr;
     }
+    g_timerToken = {};
 
     if (g_retryTimer) {
-        try {
-            g_retryTimer.Stop();
-            if (g_retryTimerToken.value) {
-                g_retryTimer.Tick(g_retryTimerToken);
-            }
-        } catch (...) {}
+        try { g_retryTimer.Stop(); } catch (...) {}
+        if (g_retryTimerToken.value) {
+            try { g_retryTimer.Tick(g_retryTimerToken); } catch (...) {}
+        }
         g_retryTimer = nullptr;
         g_retryTimerToken = {};
     }
 
-    auto c = s_currentFlyoutCtx.lock();
+    auto c = s_currentFlyoutCtx;
     if (c) {
-        if (c->ringTimerL) {
-            try { c->ringTimerL.Stop(); } catch (...) {}
-            c->ringTimerL = nullptr;
-        }
-        if (c->ringTimerR) {
-            try { c->ringTimerR.Stop(); } catch (...) {}
-            c->ringTimerR = nullptr;
-        }
+        c->StopRingTimers();
         if (c->isRingingL || c->isRingingR) {
             c->isRingingL = false;
             c->isRingingR = false;
@@ -2970,7 +3055,7 @@ static void RemoveWidgetGrid() {
                     g_trackedElement.Margin(g_trackedElementOriginalMargin);
                 } else {
                     auto m = g_trackedElement.Margin();
-                    if (g_trackPosition == L"left" || g_trackPosition == L"far_left") m.Left = 0;
+                    if (g_trackPosition == L"left") m.Left = 0;
                     if (g_trackPosition == L"right") m.Right = 0;
                     g_trackedElement.Margin(m);
                 }
@@ -2992,7 +3077,7 @@ static void RemoveWidgetGrid() {
                         Grid::SetColumn(child, childCol - 1);
                 }
             }
-            targetGrid.ColumnDefinitions().RemoveAt(widgetCol);
+            targetGrid.ColumnDefinitions().RemoveAt(static_cast<uint32_t>(widgetCol));
         }
         g_injectedGrid    = nullptr;
         g_injectionParent = nullptr;
@@ -3007,12 +3092,13 @@ static void RemoveWidgetGrid() {
 }
 
 static bool InjectWidget() {
-    HWND hWnd = g_taskbarWnd ? g_taskbarWnd : FindCurrentProcessTaskbarWnd();
+    HWND hWnd = g_taskbarWnd.load();
+    if (!hWnd) hWnd = FindCurrentProcessTaskbarWnd();
     if (!hWnd) {
         Wh_Log(L"InjectWidget: No taskbar window found");
         return false;
     }
-    g_taskbarWnd = hWnd;
+    g_taskbarWnd.store(hWnd);
     try {
         auto xamlRoot = GetTaskbarXamlRoot(hWnd);
         if (!xamlRoot) {
@@ -3043,8 +3129,11 @@ static bool InjectWidget() {
             newCol.Width({1.0, GridUnitType::Auto});
             if (insertCol >= (int)targetGrid.ColumnDefinitions().Size()) {
                 targetGrid.ColumnDefinitions().Append(newCol);
+                g_injectedColumn = insertCol;
             } else {
-                targetGrid.ColumnDefinitions().InsertAt(insertCol, newCol);
+                targetGrid.ColumnDefinitions().InsertAt(
+                    static_cast<uint32_t>(insertCol), newCol);
+                g_injectedColumn = insertCol;
                 for (uint32_t i = 0; i < targetGrid.Children().Size(); ++i) {
                     auto child = targetGrid.Children().GetAt(i).try_as<FrameworkElement>();
                     if (child) {
@@ -3058,7 +3147,6 @@ static bool InjectWidget() {
                             (double)g_settings.marginRight, 0});
             Grid::SetColumn(widgetGrid, insertCol);
             targetGrid.Children().Append(widgetGrid);
-            g_injectedColumn = insertCol;
         }
         else {
             auto repeater  = FindChildByName(targetGrid, L"TaskbarFrameRepeater");
@@ -3129,8 +3217,11 @@ static bool InjectWidget() {
                         g_hasTrackedElementOriginalMargin = true;
                         g_trackPosition = trackSide;
                         g_layoutUpdateToken = targetGrid.LayoutUpdated(
-                            [targetGrid](winrt::Windows::Foundation::IInspectable const&, winrt::Windows::Foundation::IInspectable const&) {
+                            [](winrt::Windows::Foundation::IInspectable const& sender,
+                               winrt::Windows::Foundation::IInspectable const&) {
                                 try {
+                                    auto layoutGrid = sender.try_as<Grid>();
+                                    if (!layoutGrid) return;
                                     if (!g_injectedGrid || !g_trackedElement || g_unloading) return;
                                     bool isVisible = (g_injectedGrid.Visibility() == Visibility::Visible);
                                     double w = isVisible ? g_injectedGrid.ActualWidth() : 0.0;
@@ -3146,7 +3237,7 @@ static bool InjectWidget() {
                                     if (changedMargin) g_trackedElement.Margin(m);
                                     if (isVisible) {
                                         try {
-                                            auto transform = g_trackedElement.TransformToVisual(targetGrid);
+                                            auto transform = g_trackedElement.TransformToVisual(layoutGrid);
                                             auto point = transform.TransformPoint({0, 0});
                                             double leftPos = point.X;
                                             if (g_trackPosition == L"left") {
@@ -3180,8 +3271,11 @@ static bool InjectWidget() {
                 newCol.Width({1.0, GridUnitType::Auto});
                 if (insertCol >= (int)targetGrid.ColumnDefinitions().Size()) {
                     targetGrid.ColumnDefinitions().Append(newCol);
+                    g_injectedColumn = insertCol;
                 } else {
-                    targetGrid.ColumnDefinitions().InsertAt(insertCol, newCol);
+                    targetGrid.ColumnDefinitions().InsertAt(
+                        static_cast<uint32_t>(insertCol), newCol);
+                    g_injectedColumn = insertCol;
                     for (uint32_t i = 0; i < targetGrid.Children().Size(); ++i) {
                         auto child = targetGrid.Children().GetAt(i).try_as<FrameworkElement>();
                         if (child) {
@@ -3195,7 +3289,6 @@ static bool InjectWidget() {
                                 (double)g_settings.marginRight, 0});
                 Grid::SetColumn(widgetGrid, insertCol);
                 targetGrid.Children().Append(widgetGrid);
-                g_injectedColumn = insertCol;
             }
         }
 
@@ -3236,31 +3329,35 @@ static void ApplySettingsWithRetry(FrameworkElement xamlRootContent, int retryCo
             return;
         }
         if (g_retryTimer) {
-            try {
-                g_retryTimer.Stop();
-                if (g_retryTimerToken.value) {
-                    g_retryTimer.Tick(g_retryTimerToken);
-                }
-            } catch (...) {}
+            try { g_retryTimer.Stop(); } catch (...) {}
+            if (g_retryTimerToken.value) {
+                try { g_retryTimer.Tick(g_retryTimerToken); } catch (...) {}
+            }
             g_retryTimer = nullptr;
             g_retryTimerToken = {};
         }
         auto timer = DispatcherTimer();
         timer.Interval(winrt::Windows::Foundation::TimeSpan{std::chrono::milliseconds(100)});
         g_retryTimerToken = timer.Tick(
-            [timer, xamlRootContent, retryCount](
-                winrt::Windows::Foundation::IInspectable const&,
+            [xamlRootContent, retryCount](
+                winrt::Windows::Foundation::IInspectable const& sender,
                 winrt::Windows::Foundation::IInspectable const&) {
-                timer.Stop();
+                auto timer = sender.try_as<DispatcherTimer>();
+                if (!timer) return;
+                try { timer.Stop(); } catch (...) {}
                 if (g_retryTimerToken.value) {
-                    timer.Tick(g_retryTimerToken);
+                    try { timer.Tick(g_retryTimerToken); } catch (...) {}
                     g_retryTimerToken = {};
                 }
                 if (g_retryTimer == timer) {
                     g_retryTimer = nullptr;
                 }
                 if (!g_unloading.load()) {
-                    ApplySettingsWithRetry(xamlRootContent, retryCount + 1);
+                    try {
+                        ApplySettingsWithRetry(xamlRootContent, retryCount + 1);
+                    } catch (...) {
+                        Wh_Log(L"ApplySettingsWithRetry: retry callback failed");
+                    }
                 }
             });
         g_retryTimer = timer;
@@ -3284,27 +3381,31 @@ static void ApplySettingsWithRetry(FrameworkElement xamlRootContent, int retryCo
 
 static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     TrayUI_StartTaskbar_Original(pThis);
-    if (g_unloading) return;
-    HWND hWnd = FindCurrentProcessTaskbarWnd();
-    if (!hWnd) {
-        Wh_Log(L"TrayUI_StartTaskbar_Hook: Taskbar window not found");
-        return;
-    }
-    RemoveWidgetGrid();
-    g_taskbarWnd = hWnd;
-    BluetoothManager::Instance().Start();
+    try {
+        if (g_unloading) return;
+        HWND hWnd = FindCurrentProcessTaskbarWnd();
+        if (!hWnd) {
+            Wh_Log(L"TrayUI_StartTaskbar_Hook: Taskbar window not found");
+            return;
+        }
+        RemoveWidgetGrid();
+        g_taskbarWnd.store(hWnd);
+        BluetoothManager::Instance().Start();
 
-    auto xamlRoot = GetTaskbarXamlRoot(hWnd);
-    if (!xamlRoot) {
-        Wh_Log(L"TrayUI_StartTaskbar_Hook: Failed to get XAML root");
-        return;
+        auto xamlRoot = GetTaskbarXamlRoot(hWnd);
+        if (!xamlRoot) {
+            Wh_Log(L"TrayUI_StartTaskbar_Hook: Failed to get XAML root");
+            return;
+        }
+        auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
+        if (!xamlRootContent) {
+            Wh_Log(L"TrayUI_StartTaskbar_Hook: Failed to get XAML root content");
+            return;
+        }
+        ApplySettingsWithRetry(xamlRootContent);
+    } catch (...) {
+        Wh_Log(L"TrayUI_StartTaskbar_Hook: setup failed");
     }
-    auto xamlRootContent = xamlRoot.Content().try_as<FrameworkElement>();
-    if (!xamlRootContent) {
-        Wh_Log(L"TrayUI_StartTaskbar_Hook: Failed to get XAML root content");
-        return;
-    }
-    ApplySettingsWithRetry(xamlRootContent);
 }
 
 static bool HookTaskbarDllSymbols() {
@@ -3314,12 +3415,8 @@ static bool HookTaskbarDllSymbols() {
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
          &CTaskBand_ITaskListWndSite_vftable},
-        {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
-         &CSecondaryTaskBand_ITaskListWndSite_vftable},
         {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
          &CTaskBand_GetTaskbarHost_Original},
-        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
-         &CSecondaryTaskBand_GetTaskbarHost_Original},
         {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
          &TaskbarHost_FrameHeight_Original},
         {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
@@ -3333,38 +3430,27 @@ static bool HookTaskbarDllSymbols() {
 }
 
 static void LoadSettings() {
-    PCWSTR pos = Wh_GetStringSetting(L"position");
-    if (pos) {
-        g_settings.position = pos;
-        Wh_FreeStringSetting(pos);
-    }
-    PCWSTR disp = Wh_GetStringSetting(L"displayFormat");
-    if (disp) {
-        g_settings.displayFormat = disp;
-        Wh_FreeStringSetting(disp);
-    }
-    PCWSTR lang = Wh_GetStringSetting(L"language");
-    if (lang) {
-        g_settings.language = lang;
-        Wh_FreeStringSetting(lang);
-    }
+    g_settings.position =
+        WindhawkUtils::StringSetting::make(L"position").get();
+    g_settings.displayFormat =
+        WindhawkUtils::StringSetting::make(L"displayFormat").get();
+    g_settings.language =
+        WindhawkUtils::StringSetting::make(L"language").get();
     g_settings.pollInterval = Wh_GetIntSetting(L"pollInterval");
     if (g_settings.pollInterval <= 0) g_settings.pollInterval = 30;
     g_settings.pollInterval = std::clamp(g_settings.pollInterval, 10, 120);
     g_pollIntervalSeconds.store(g_settings.pollInterval);
 
-    PCWSTR margins = Wh_GetStringSetting(L"marginSide");
-    if (margins) {
-        double marginLeft = 4.0;
-        double marginRight = 4.0;
-        if (swscanf_s(margins, L"%lf %lf", &marginLeft, &marginRight) == 2) {
-            g_settings.marginLeft = marginLeft;
-            g_settings.marginRight = marginRight;
-        } else {
-            g_settings.marginLeft = 4.0;
-            g_settings.marginRight = 4.0;
-        }
-        Wh_FreeStringSetting(margins);
+    auto margins = WindhawkUtils::StringSetting::make(L"marginSide");
+    double marginLeft = 4.0;
+    double marginRight = 4.0;
+    if (swscanf_s(margins.get(), L"%lf %lf", &marginLeft, &marginRight) == 2 &&
+        std::isfinite(marginLeft) && std::isfinite(marginRight)) {
+        g_settings.marginLeft = std::clamp(marginLeft, 0.0, 100.0);
+        g_settings.marginRight = std::clamp(marginRight, 0.0, 100.0);
+    } else {
+        g_settings.marginLeft = 4.0;
+        g_settings.marginRight = 4.0;
     }
 
     g_settings.hideDisconnectedBuds = Wh_GetIntSetting(L"hideDisconnectedBuds") != 0;
@@ -3374,12 +3460,16 @@ static void LoadSettings() {
 BOOL Wh_ModInit() {
     Wh_Log(L"Wh_ModInit NothingTrack");
     g_unloading = false;
-    g_taskbarWnd = nullptr;
+    g_taskbarWnd.store(nullptr);
 
-    LoadSettings();
-
-    if (!HookTaskbarDllSymbols()) {
-        Wh_Log(L"HookTaskbarDllSymbols failed");
+    try {
+        LoadSettings();
+        if (!HookTaskbarDllSymbols()) {
+            Wh_Log(L"HookTaskbarDllSymbols failed");
+            return FALSE;
+        }
+    } catch (...) {
+        Wh_Log(L"Wh_ModInit: initialization failed");
         return FALSE;
     }
     return TRUE;
@@ -3388,8 +3478,9 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L"Wh_ModAfterInit NothingTrack");
 
-    g_taskbarWnd = FindCurrentProcessTaskbarWnd();
-    if (!g_taskbarWnd) {
+    HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
+    g_taskbarWnd.store(taskbarWnd);
+    if (!taskbarWnd) {
         // This is a secondary explorer.exe process, or the shell taskbar hasn't
         // been created yet. TrayUI_StartTaskbar_Hook will start the manager in
         // the latter case.
@@ -3397,9 +3488,9 @@ void Wh_ModAfterInit() {
     }
 
     BluetoothManager::Instance().Start();
-    if (!RunFromWindowThread(g_taskbarWnd, [](void*) {
+    if (!RunFromWindowThread(taskbarWnd, [](void*) {
         try {
-            auto xamlRoot = GetTaskbarXamlRoot(g_taskbarWnd);
+            auto xamlRoot = GetTaskbarXamlRoot(g_taskbarWnd.load());
             auto content = xamlRoot ? xamlRoot.Content().try_as<FrameworkElement>() : nullptr;
             if (content) {
                 ApplySettingsWithRetry(content);
@@ -3417,12 +3508,12 @@ void Wh_ModUninit() {
     g_unloading = true;
 
     HWND hWnd = FindCurrentProcessTaskbarWnd();
-    if (!hWnd) hWnd = g_taskbarWnd;
+    if (!hWnd) hWnd = g_taskbarWnd.load();
     bool removed = false;
     if (hWnd) {
         removed = RunFromWindowThread(hWnd, [](void*) {
             RemoveWidgetGrid();
-        }, nullptr, INFINITE);
+        }, nullptr);
     }
 
     // A taskbar window can disappear before uninitialization during Explorer
@@ -3456,17 +3547,27 @@ void Wh_ModUninit() {
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Wh_ModSettingsChanged NothingTrack");
+    if (g_unloading.load()) return;
     HWND hWnd = FindCurrentProcessTaskbarWnd();
-    if (!hWnd) hWnd = g_taskbarWnd;
+    if (!hWnd) hWnd = g_taskbarWnd.load();
     if (hWnd) {
-        g_taskbarWnd = hWnd;
-        RunFromWindowThread(hWnd, [](void*) {
+        g_taskbarWnd.store(hWnd);
+        if (!RunFromWindowThread(hWnd, [](void*) {
             LoadSettings();
+            BluetoothManager::Instance().NotifyPollIntervalChanged();
             Wh_Log(L"NothingTrack: New pos=%s, format=%s, lang=%s",
                    g_settings.position.c_str(), g_settings.displayFormat.c_str(),
                    g_settings.language.c_str());
             ApplySettings();
-        }, nullptr);
+        }, nullptr)) {
+            Wh_Log(L"Wh_ModSettingsChanged: Failed to dispatch settings update");
+        }
+    } else {
+        try {
+            LoadSettings();
+        } catch (...) {
+            Wh_Log(L"Wh_ModSettingsChanged: Failed to load settings");
+        }
     }
 }
 
