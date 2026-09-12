@@ -401,7 +401,6 @@ enum HotkeyIds {
 constexpr UINT WM_APP_MOVE_SIZE_END = WM_APP + 1;
 constexpr UINT WM_APP_WINDOW_EVENT = WM_APP + 2;
 constexpr UINT WM_APP_VIRTUAL_DESKTOP_CHANGED = WM_APP + 3;
-constexpr UINT WM_APP_TRAY_REFRESH = WM_APP + 4;
 constexpr UINT WM_APP_LAYOUT_CYCLE = WM_APP + 5;
 constexpr UINT WM_APP_RECONCILE_NOW = WM_APP + 6;
 constexpr UINT WM_APP_LAYOUT_SET = WM_APP + 7;
@@ -2031,10 +2030,17 @@ void LayoutGridWeighted(
   outRects.resize(windowCount);
   if (windowCount == 0) return;
 
+  const std::vector<double>* effectiveWeights = &weights;
+  std::vector<double> defaultWeights;
+  if (weights.size() != windowCount) {
+    defaultWeights = DefaultWeights(windowCount);
+    effectiveWeights = &defaultWeights;
+  }
+
   LONG totalSize = horizontal ? (area.bottom - area.top) : (area.right - area.left);
   LONG effectiveGap = 0;
   std::vector<LONG> sizes =
-      ComputeWeightedSizes(totalSize, gap, weights, &effectiveGap);
+      ComputeWeightedSizes(totalSize, gap, *effectiveWeights, &effectiveGap);
   LONG position = horizontal ? area.top : area.left;
 
   for (size_t i = 0; i < windowCount; ++i) {
@@ -5621,6 +5627,9 @@ static void ProcessWindowLifecycleEvent(DWORD event, HWND hwnd) {
       // Cross-monitor movement remains ownership migration, not conformance drift.
       // Otherwise a tiled HWND that leaves its authoritative rectangle opens or
       // reuses one bounded lease; expected SetWindowPos echoes are consumed there.
+      // A native drag remains authoritative until MOVESIZEEND reconciles monitor
+      // ownership for this HWND. Never probe or migrate underneath the user.
+      if (IsMoveSizeGestureInProgress(hwnd)) break;
       if (!Platform::WindowEvents::HasTrackedMonitorOwnershipMismatch(hwnd) &&
           HandleTiledWindowLocationChange(hwnd)) {
         break;
@@ -6503,9 +6512,9 @@ static bool SelectVirtualDesktopAbiProfile(
     return false;
   }
 
-  // Mirrors Windhawk's Taskbar Desktop Indicator notification ABI table. Its
-  // manually assembled sink relies on the unified x64 calling convention; x86
-  // keeps the core desktop API but uses settled cloak/uncloak reconciliation.
+  // Mirrors Windhawk's Taskbar Desktop Indicator notification ABI table. The
+  // architecture metadata guarantees a 64-bit caller-cleanup ABI; retain the
+  // compile guard as a belt-and-braces constraint around the manual sink.
 #if defined(_WIN64)
   if (build >= 22000) {
     if (build < 22483 ||
@@ -6739,8 +6748,8 @@ bool RegisterVirtualDesktopNotifications() {
 
   NotificationInterfaceConfig config = GetNotificationInterfaceConfig();
   if (config.methodCount == 0) {
-    // Win10 has no selected native notification ABI. x86 also deliberately uses
-    // settled cloak/uncloak reconciliation instead of the x64-only manual sink.
+    // Win10 has no selected native notification ABI and deliberately uses settled
+    // cloak/uncloak reconciliation instead.
     return true;
   }
 
@@ -6953,6 +6962,20 @@ bool ReinitializeVirtualDesktopAPI() {
   return ready;
 }
 
+// Per-window IVirtualDesktopManager calls can legitimately reject or lose an
+// individual HWND. Rebuild the shared COM stack only when the proxy/server itself
+// is no longer usable.
+static bool IsDeadVirtualDesktopProxy(HRESULT hr) {
+  return hr == RPC_E_DISCONNECTED ||
+         hr == RPC_E_CONNECTION_TERMINATED ||
+         hr == RPC_E_SERVER_DIED ||
+         hr == RPC_E_SERVER_DIED_DNE ||
+         hr == RPC_E_INVALID_IPID ||
+         hr == RPC_E_INVALID_OBJECT ||
+         hr == CO_E_OBJNOTCONNECTED ||
+         hr == HRESULT_FROM_WIN32(RPC_S_SERVER_UNAVAILABLE);
+}
+
 // Invokes a private manager slot using the Windows-version-specific signature.
 // A failed call forces one core-API reinitialization and retry before returning.
 template <typename TResult>
@@ -7027,10 +7050,13 @@ bool GetWindowDesktopIdSafe(HWND hwnd, GUID* outGuid) {
   }
 
   HRESULT hr = g_vd.desktopManager->GetWindowDesktopId(hwnd, outGuid);
-  if (FAILED(hr) && ReinitializeVirtualDesktopAPI() && g_vd.desktopManager) {
+  if (FAILED(hr) && IsDeadVirtualDesktopProxy(hr) &&
+      ReinitializeVirtualDesktopAPI() && g_vd.desktopManager) {
     hr = g_vd.desktopManager->GetWindowDesktopId(hwnd, outGuid);
   }
-  if (FAILED(hr)) RuntimeLifecycle::RequestMaintenance(false);
+  if (FAILED(hr) && IsDeadVirtualDesktopProxy(hr)) {
+    RuntimeLifecycle::RequestMaintenance(false);
+  }
   return SUCCEEDED(hr);
 }
 
@@ -7042,10 +7068,13 @@ bool IsWindowOnCurrentDesktopSafe(HWND hwnd, BOOL* onCurrent) {
   }
 
   HRESULT hr = g_vd.desktopManager->IsWindowOnCurrentVirtualDesktop(hwnd, onCurrent);
-  if (FAILED(hr) && ReinitializeVirtualDesktopAPI() && g_vd.desktopManager) {
+  if (FAILED(hr) && IsDeadVirtualDesktopProxy(hr) &&
+      ReinitializeVirtualDesktopAPI() && g_vd.desktopManager) {
     hr = g_vd.desktopManager->IsWindowOnCurrentVirtualDesktop(hwnd, onCurrent);
   }
-  if (FAILED(hr)) RuntimeLifecycle::RequestMaintenance(false);
+  if (FAILED(hr) && IsDeadVirtualDesktopProxy(hr)) {
+    RuntimeLifecycle::RequestMaintenance(false);
+  }
   return SUCCEEDED(hr);
 }
 
@@ -7394,6 +7423,7 @@ static HICON CreateTextIcon(TileLayout layout) {
             DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   if (oldFont) SelectObject(dc, oldFont);
   if (font) DeleteObject(font);
+  GdiFlush();
 
   auto* pixels = static_cast<uint32_t*>(bits);
   COLORREF fg = ForegroundColor();
@@ -8117,8 +8147,10 @@ static void Shutdown() {
   DestroyIconSet(g_icons);
 
   HINSTANCE instance = GetModuleHandleW(nullptr);
-  if (g_flyoutWindowClass) UnregisterClassW(kFlyoutWindowClassName, instance);
-  if (g_trayWindowClass) UnregisterClassW(kTrayWindowClassName, instance);
+  // Unregister by name even after recovering from ERROR_CLASS_ALREADY_EXISTS,
+  // where RegisterClassW didn't return an ATOM for us to remember.
+  UnregisterClassW(kFlyoutWindowClassName, instance);
+  UnregisterClassW(kTrayWindowClassName, instance);
   g_flyoutWindowClass = g_trayWindowClass = 0;
   g_taskbarCreatedMessage = 0;
   g_displayedLayout = TileLayout::COUNT;
@@ -10098,11 +10130,6 @@ static WmMessageDisposition HandleWmThreadMessage(const MSG& msg) {
       Reconcile::HandleVirtualDesktopChanged();
       return WmMessageDisposition::Handled;
 
-    case WM_APP_TRAY_REFRESH:
-      ++Diagnostics::g_runtime.counters.trayRefreshMessages;
-      TrayUi::RefreshForCurrentWorkspace();
-      return WmMessageDisposition::Handled;
-
     case WM_APP_FOREGROUND_CHANGED:
       RememberManagedForeground(reinterpret_cast<HWND>(msg.wParam));
       ++Diagnostics::g_runtime.counters.trayRefreshMessages;
@@ -10415,11 +10442,11 @@ void WhTool_ModSettingsChanged() {
 }
 
 //=============================================================================
-// Windhawk tool mod implementation for mods which don't need to inject to other
+// Windhawk tool mod implementation for mods which don't need to inject into other
 // processes or hook other functions. Context:
-// https://github.com/ramensoftware/windhawk-mods/pull/1916
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 //
-// The mod will load and run in a dedicated windhawk.exe process.
+// This mod launches a dedicated copy of its configured host executable.
 //=============================================================================
 
 bool g_isToolModProcessLauncher;
@@ -10432,7 +10459,7 @@ void WINAPI EntryPoint_Hook() {
   ExitThread(0);
 }
 
-// Routes each windhawk.exe instance into its tool-mod role. Normal instances act
+// Routes each host executable instance into its tool-mod role. Normal instances act
 // as launchers; only the worker tagged with this mod ID enforces singleton
 // ownership and initializes the tiling service.
 BOOL Wh_ModInit() {
@@ -10513,7 +10540,7 @@ BOOL Wh_ModInit() {
   return TRUE;
 }
 
-// Launcher-side phase: starts a copy of windhawk.exe tagged as this mod's
+// Launcher-side phase: starts a copy of the current host executable tagged as this mod's
 // dedicated tool process, then releases the returned process and thread handles.
 void Wh_ModAfterInit() {
   if (!g_isToolModProcessLauncher) {
