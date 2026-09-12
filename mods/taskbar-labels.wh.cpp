@@ -2,7 +2,7 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Customize text labels and combining for running programs on the taskbar (Windows 11 only)
-// @version         1.4.4
+// @version         1.4.5
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -181,7 +181,6 @@ Labels can also be shown or hidden per-program in the settings.
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.Numerics.h>
-#include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Interop.h>
 #include <winrt/Windows.UI.Xaml.Markup.h>
@@ -936,11 +935,13 @@ void UpdateTaskListButtonWithLabelStyle(FrameworkElement taskListButtonElement,
 
     auto columnDefinitions = iconPanelElement.ColumnDefinitions();
 
+    // The layout below is relative to the icon column width. Fall back to the
+    // stock width of 40 if the column isn't pixel-sized.
     auto firstColumnWidth = columnDefinitions.GetAt(0).Width();
     auto firstColumnWidthPixels =
         firstColumnWidth.GridUnitType == GridUnitType::Pixel
             ? firstColumnWidth.Value
-            : 0.0;
+            : 40.0;
 
     auto iconPanelPadding = iconPanelElement.Padding();
 
@@ -979,8 +980,9 @@ void UpdateTaskListButtonWithLabelStyle(FrameworkElement taskListButtonElement,
         auto labelControlMargin = labelControlElement.Margin();
         labelControlMargin.Left =
             g_unloading ? 0
-                        : (iconWidth - 24 + g_settings.leftAndRightPaddingSize -
-                           8 + g_settings.spaceBetweenIconAndLabel - 8);
+                        : (g_settings.leftAndRightPaddingSize + iconWidth +
+                           g_settings.spaceBetweenIconAndLabel -
+                           firstColumnWidthPixels);
         labelControlMargin.Right =
             g_unloading ? 0 : (g_settings.leftAndRightPaddingSize - 10);
         labelControlElement.Margin(labelControlMargin);
@@ -1047,7 +1049,11 @@ void UpdateTaskListButtonWithLabelStyle(FrameworkElement taskListButtonElement,
     iconMargin.Left = (g_unloading || !labelControlElement)
                           ? 0.0
                           : g_settings.leftAndRightPaddingSize;
-    iconMargin.Right = 0;
+    // A left margin which leaves less than the icon width in the icon column
+    // gets the icon clipped to the column unless its arrange slot is widened
+    // with a negative right margin.
+    iconMargin.Right =
+        -std::fmax(0.0, iconMargin.Left + iconWidth - firstColumnWidthPixels);
     iconElement.Margin(iconMargin);
 
     for (PCWSTR badgeElementName : {
@@ -1061,8 +1067,9 @@ void UpdateTaskListButtonWithLabelStyle(FrameworkElement taskListButtonElement,
             badgeElement.Margin(Thickness{
                 .Right = (g_unloading || !labelControlElement)
                              ? 0.0
-                             : 16 - g_settings.leftAndRightPaddingSize +
-                                   (24 - iconWidth),
+                             : firstColumnWidthPixels -
+                                   g_settings.leftAndRightPaddingSize -
+                                   iconWidth,
             });
         }
     }
@@ -1087,13 +1094,13 @@ void UpdateTaskListButtonWithLabelStyle(FrameworkElement taskListButtonElement,
                 : (isProgressIndicator ? g_settings.progressIndicatorStyle
                                        : g_settings.runningIndicatorStyle);
 
-        if (indicatorStyle == IndicatorStyle::left) {
-            indicatorElement.SetValue(Controls::Grid::ColumnSpanProperty(),
-                                      winrt::box_value(1));
-        } else {
-            indicatorElement.SetValue(Controls::Grid::ColumnSpanProperty(),
-                                      winrt::box_value(2));
-        }
+        // Keep the indicator in the icon column, which has a fixed pixel
+        // width. The sizes below derive from the button's actual width, and
+        // spanning into the auto-sized label column would feed them back into
+        // the desired width, which becomes a layout cycle once the taskbar is
+        // full and the layout scales buttons down.
+        indicatorElement.SetValue(Controls::Grid::ColumnSpanProperty(),
+                                  winrt::box_value(1));
 
         double maxWidth = std::fmax(taskListButtonWidth - 6, 0.0);
         indicatorElement.MaxWidth(maxWidth);
@@ -1122,25 +1129,7 @@ void UpdateTaskListButtonWithLabelStyle(FrameworkElement taskListButtonElement,
             }
         }
 
-        // High values of maximumTaskbarItemWidth together with a fullWidth
-        // indicator can crash the process due to a refresh loop. Use this as a
-        // workaround.
-        if (g_settings.taskbarItemWidth == 0 &&
-            indicatorStyle == IndicatorStyle::fullWidth) {
-            double currentMinWidth = indicatorElement.MinWidth();
-            if (minWidth != currentMinWidth) {
-                indicatorElement.MinWidth(0);
-                if (minWidth > 0) {
-                    indicatorElement.Dispatcher().TryRunAsync(
-                        winrt::Windows::UI::Core::CoreDispatcherPriority::High,
-                        [indicatorElement, minWidth]() {
-                            indicatorElement.MinWidth(minWidth);
-                        });
-                }
-            }
-        } else {
-            indicatorElement.MinWidth(minWidth);
-        }
+        indicatorElement.MinWidth(minWidth);
 
         auto indicatorMargin = indicatorElement.Margin();
         indicatorMargin.Left = 0;
@@ -1148,14 +1137,36 @@ void UpdateTaskListButtonWithLabelStyle(FrameworkElement taskListButtonElement,
         auto indicatorHorizontalAlignment = HorizontalAlignment::Stretch;
         if (!g_unloading && labelControlElement) {
             if (indicatorStyle == IndicatorStyle::left) {
-                indicatorMargin.Left =
-                    (40 - firstColumnWidthPixels) + (iconWidth - 24) +
-                    (g_settings.leftAndRightPaddingSize - 8) * 2;
+                // Stretch centers the indicator between the left margin and the
+                // column edge, so this puts that midpoint on the icon's center.
+                indicatorMargin.Left = iconWidth +
+                                       g_settings.leftAndRightPaddingSize * 2 -
+                                       firstColumnWidthPixels;
             } else {
                 indicatorMargin.Left = (taskListButtonWidth - minWidth) / 2 - 2;
                 indicatorHorizontalAlignment = HorizontalAlignment::Left;
             }
         }
+
+        // An indicator wider than the icon column gets clipped to it unless its
+        // arrange slot is widened with negative margins. A stretched indicator
+        // is centered in the slot, so widen it on both sides to keep the center
+        // in place.
+        double indicatorWidth =
+            indicatorElementWidth > 0
+                ? std::clamp(indicatorElementWidth, minWidth, maxWidth)
+                : minWidth;
+        double columnOverflow =
+            indicatorMargin.Left + indicatorWidth - firstColumnWidthPixels;
+        if (columnOverflow > 0) {
+            if (indicatorHorizontalAlignment == HorizontalAlignment::Stretch) {
+                indicatorMargin.Left -= columnOverflow / 2;
+                indicatorMargin.Right = -columnOverflow / 2;
+            } else {
+                indicatorMargin.Right = -columnOverflow;
+            }
+        }
+
         indicatorElement.Margin(indicatorMargin);
         indicatorElement.HorizontalAlignment(indicatorHorizontalAlignment);
 
