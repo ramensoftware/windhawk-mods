@@ -22,6 +22,7 @@ The mod is adapted from [Icon16bitFix utility](https://github.com/otya128/Icon16
 #include <windhawk_utils.h>
 #include <windows.h>
 #include <vector>
+#include <new>
 
 
 typedef WORD HANDLE16;
@@ -45,54 +46,22 @@ struct NE_TYPEINFO
     FARPROC16   resloader;
 };
 
-#define NE_RSCTYPE_CURSOR             0x8001
-#define NE_RSCTYPE_BITMAP             0x8002
+// Only the two resource types this mod actually walks are kept; the rest of
+// the NE_RSCTYPE_* set inherited from the Wine port was unused.
 #define NE_RSCTYPE_ICON               0x8003
-#define NE_RSCTYPE_MENU               0x8004
-#define NE_RSCTYPE_DIALOG             0x8005
-#define NE_RSCTYPE_STRING             0x8006
-#define NE_RSCTYPE_FONTDIR            0x8007
-#define NE_RSCTYPE_FONT               0x8008
-#define NE_RSCTYPE_ACCELERATOR        0x8009
-#define NE_RSCTYPE_RCDATA             0x800a
-#define NE_RSCTYPE_GROUP_CURSOR       0x800c
 #define NE_RSCTYPE_GROUP_ICON         0x800e
-#define NE_RSCTYPE_SCALABLE_FONTPATH  0x80cc
 
 static BYTE* USER32_LoadResource(BYTE* peimage, NE_NAMEINFO* pNInfo, WORD sizeShift, ULONG* uSize)
 {
-    // TRACE("%p %p 0x%08x\n", peimage, pNInfo, sizeShift); // Commented out
-
     *uSize = static_cast<DWORD>(pNInfo->length) << sizeShift;
     return peimage + (static_cast<DWORD>(pNInfo->offset) << sizeShift);
 }
 
-struct icoICONDIRENTRY
+static bool IsValidGroupIconDir(const BYTE* p, ULONG size)
 {
-    BYTE        bWidth;
-    BYTE        bHeight;
-    BYTE        bColorCount;
-    BYTE        bReserved;
-    WORD        wPlanes;
-    WORD        wBitCount;
-    DWORD       dwBytesInRes;
-    DWORD       dwImageOffset;
-};
-
-struct icoICONDIR
-{
-    WORD            idReserved;
-    WORD            idType;
-    WORD            idCount;
-    icoICONDIRENTRY idEntries[1];
-};
-
-static BYTE* ICO_LoadIcon(BYTE* peimage, icoICONDIRENTRY* lpiIDE, ULONG* uSize)
-{
-    // TRACE("%p %p\n", peimage, lpiIDE); // Commented out
-
-    *uSize = lpiIDE->dwBytesInRes;
-    return peimage + lpiIDE->dwImageOffset;
+    if (!p || size < 6) return false;
+    WORD count = *reinterpret_cast<const WORD*>(p + 4);
+    return size >= 6u + static_cast<ULONG>(count) * 14u; // sizeof(GRPICONDIRENTRY) == 14
 }
 
 UINT NE_ExtractIcon(LPCWSTR lpszExeFileName,
@@ -104,6 +73,14 @@ UINT NE_ExtractIcon(LPCWSTR lpszExeFileName,
     UINT* pIconId,
     UINT flags)
 {
+    // PrivateExtractIconsW callers shouldn't pass NULL, but this now runs in
+    // every process, so guard against it cheaply instead of trusting the
+    // caller.
+    if (!lpszExeFileName)
+    {
+        return 0;
+    }
+
     UINT ret = 0;
     UINT cx1, cx2, cy1, cy2;
     BYTE* pData;
@@ -113,11 +90,13 @@ UINT NE_ExtractIcon(LPCWSTR lpszExeFileName,
     HANDLE fmapping;
     DWORD fsizeh, fsizel;
 
-    // Try the path as given first (the normal case is a full path). Only
-    // fall back to SearchPathW's default search (which includes the host
-    // process's current directory) for bare file names that don't resolve
-    // directly - avoids resolving to an unexpected file when this mod now
-    // runs in every process.
+    // Try the path as given first. For an absolute path this resolves
+    // directly to that file. For a bare/relative name CreateFileW itself
+    // still consults the process's current directory (same as SearchPathW
+    // would), so no special avoidance happens in that case - the fallback
+    // below only helps SearchPathW's *additional* search locations (the
+    // application/system directories, PATH, etc.) find a match that
+    // CreateFileW's plain relative-path resolution wouldn't.
     hFile = CreateFileW(lpszExeFileName, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
     if (hFile == INVALID_HANDLE_VALUE)
     {
@@ -170,13 +149,33 @@ UINT NE_ExtractIcon(LPCWSTR lpszExeFileName,
     cy1 = LOWORD(cyDesired);
     cy2 = HIWORD(cyDesired);
 
+    // iconDirCount (the real per-file limit) is a UINT16, so nIcons can
+    // never usefully exceed that. Clamp it up front, before doing any
+    // allocation based on it, so a caller-controlled UINT can't drive an
+    // absurd allocation size.
+    if (nIcons > 0xFFFF)
+    {
+        nIcons = 0xFFFF;
+    }
+
     // If pIconId is nullptr, use a local scratch buffer instead of reusing
     // the caller's HICON array - on 64-bit HICON is 8 bytes while UINT is 4,
     // so writing UINTs into that array would corrupt not-yet-read entries.
     std::vector<UINT> localIconIds;
     if (!pIconId)
     {
-        localIconIds.resize(nIcons ? nIcons : 1);
+        try
+        {
+            localIconIds.resize(nIcons ? nIcons : 1);
+        }
+        catch (const std::bad_alloc&)
+        {
+            // Belt-and-braces: even after the clamp above this shouldn't
+            // throw, but if it ever does, don't leak the mapped view or let
+            // a C++ exception cross back into the caller through user32.
+            UnmapViewOfFile(image);
+            return 0;
+        }
         pIconId = localIconIds.data();
     }
 
@@ -202,6 +201,12 @@ UINT NE_ExtractIcon(LPCWSTR lpszExeFileName,
     {
         if (!inRange(pData, sizeof(WORD))) goto end;
         WORD sizeShift = *reinterpret_cast<WORD*>(pData);
+        if (sizeShift >= 16)
+        {
+            // A shift count this large is not a valid NE alignment shift
+            // and would be undefined behavior when used below.
+            goto end;
+        }
 
         BYTE* pCIDir = nullptr;
         auto pTInfo = reinterpret_cast<NE_TYPEINFO*>(pData + 2);
@@ -236,7 +241,7 @@ UINT NE_ExtractIcon(LPCWSTR lpszExeFileName,
 
         if (pIconStorage && pIconDir)
         {
-            if (nIcons == 0)
+            if (nIcons == 0 || !RetPtr)
             {
                 ret = iconDirCount;
             }
@@ -275,13 +280,13 @@ UINT NE_ExtractIcon(LPCWSTR lpszExeFileName,
                     for (i = 0; i < nIcons; i++)
                     {
                         pCIDir = USER32_LoadResource(image, pIconDir + i + baseIndex, sizeShift, &uSize);
-                        pIconId[i] = inRange(pCIDir, uSize)
+                        pIconId[i] = (inRange(pCIDir, uSize) && IsValidGroupIconDir(pCIDir, uSize))
                             ? LookupIconIdFromDirectoryEx(pCIDir, TRUE, cx1, cy1, flags)
                             : 0;
 
                         if (cx2 && cy2 && i + 1 < nIcons)
                         {
-                            pIconId[++i] = inRange(pCIDir, uSize)
+                            pIconId[++i] = (inRange(pCIDir, uSize) && IsValidGroupIconDir(pCIDir, uSize))
                                 ? LookupIconIdFromDirectoryEx(pCIDir, TRUE, cx2, cy2, flags)
                                 : 0;
                         }
@@ -294,10 +299,13 @@ UINT NE_ExtractIcon(LPCWSTR lpszExeFileName,
                         {
                             if (pIconStorage[i].id == (static_cast<int>(pIconId[icon]) | 0x8000))
                             {
-                                BYTE* candidate = USER32_LoadResource(image, pIconStorage + i, sizeShift, &uSize);
-                                if (inRange(candidate, uSize))
+                                ULONG candidateSize = 0;
+                                BYTE* candidate = USER32_LoadResource(image, pIconStorage + i, sizeShift, &candidateSize);
+                                if (inRange(candidate, candidateSize))
                                 {
                                     pCIDir = candidate;
+                                    uSize = candidateSize;
+                                    break;
                                 }
                             }
                         }
@@ -315,14 +323,10 @@ UINT NE_ExtractIcon(LPCWSTR lpszExeFileName,
                             RetPtr[icon] = nullptr;
                         }
                     }
+                    // icon is bounded by nIcons via the loop condition and
+                    // the icon + 1 < nIcons guard above, so it can never
+                    // exceed nIcons here - no extra clamp needed.
                     ret = icon;
-                    if (ret > nIcons)
-                    {
-                        // Should not happen given the clamps above, but
-                        // never report more icons than the caller's arrays
-                        // can hold.
-                        ret = nIcons;
-                    }
                 }
             }
         }
