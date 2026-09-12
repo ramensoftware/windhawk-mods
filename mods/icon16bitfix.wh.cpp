@@ -46,10 +46,10 @@ struct NE_TYPEINFO
     FARPROC16   resloader;
 };
 
-// Only the two resource types this mod actually walks are kept; the rest of
-// the NE_RSCTYPE_* set inherited from the Wine port was unused.
 #define NE_RSCTYPE_ICON               0x8003
 #define NE_RSCTYPE_GROUP_ICON         0x800e
+
+static constexpr LONGLONG kMaxNeFileSize = 64LL * 1024 * 1024;
 
 static BYTE* USER32_LoadResource(BYTE* peimage, NE_NAMEINFO* pNInfo, WORD sizeShift, ULONG* uSize)
 {
@@ -73,9 +73,6 @@ UINT NE_ExtractIcon(LPCWSTR lpszExeFileName,
     UINT* pIconId,
     UINT flags)
 {
-    // PrivateExtractIconsW callers shouldn't pass NULL, but this now runs in
-    // every process, so guard against it cheaply instead of trusting the
-    // caller.
     if (!lpszExeFileName)
     {
         return 0;
@@ -86,17 +83,6 @@ UINT NE_ExtractIcon(LPCWSTR lpszExeFileName,
     BYTE* pData;
     HANDLE hFile;
     UINT16 iconDirCount = 0, iconCount = 0;
-    BYTE* image;
-    HANDLE fmapping;
-    DWORD fsizeh, fsizel;
-
-    // Try the path as given first. For an absolute path this resolves
-    // directly to that file. For a bare/relative name CreateFileW itself
-    // still consults the process's current directory (same as SearchPathW
-    // would), so no special avoidance happens in that case - the fallback
-    // below only helps SearchPathW's *additional* search locations (the
-    // application/system directories, PATH, etc.) find a match that
-    // CreateFileW's plain relative-path resolution wouldn't.
     hFile = CreateFileW(lpszExeFileName, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
     if (hFile == INVALID_HANDLE_VALUE)
     {
@@ -105,40 +91,46 @@ UINT NE_ExtractIcon(LPCWSTR lpszExeFileName,
             sizeof(szExePath) / sizeof(szExePath[0]), szExePath, nullptr);
         if ((dwSearchReturn == 0) || (dwSearchReturn > sizeof(szExePath) / sizeof(szExePath[0])))
         {
-            // The original PrivateExtractIconsW already returned 0 before
-            // this fallback runs, so never report a "worse" result than that.
             return 0;
         }
 
         hFile = CreateFileW(szExePath, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
         if (hFile == INVALID_HANDLE_VALUE) return 0;
     }
-
-    fsizel = GetFileSize(hFile, &fsizeh);
-    if (fsizel == INVALID_FILE_SIZE || fsizeh != 0)
+    LARGE_INTEGER fsize;
+    if (!GetFileSizeEx(hFile, &fsize) || fsize.QuadPart <= 0 || fsize.QuadPart > kMaxNeFileSize)
     {
-        // GetFileSize failed, or the file is 4 GB or larger - a valid NE
-        // image can't be that big, and INVALID_FILE_SIZE (0xFFFFFFFF) would
-        // make every bounds check below pass trivially.
         CloseHandle(hFile);
         return 0;
     }
 
-    fmapping = CreateFileMappingW(hFile, nullptr, PAGE_READONLY | SEC_COMMIT, 0, 0, nullptr);
+    DWORD fileSize = static_cast<DWORD>(fsize.QuadPart);
+    std::vector<BYTE> fileBuf;
+    try
+    {
+        fileBuf.resize(fileSize);
+    }
+    catch (const std::bad_alloc&)
+    {
+        CloseHandle(hFile);
+        return 0;
+    }
+
+    for (DWORD totalRead = 0; totalRead < fileSize; )
+    {
+        DWORD chunkRead = 0;
+        if (!ReadFile(hFile, fileBuf.data() + totalRead, fileSize - totalRead, &chunkRead, nullptr) ||
+            chunkRead == 0)
+        {
+            CloseHandle(hFile);
+            return 0;
+        }
+        totalRead += chunkRead;
+    }
     CloseHandle(hFile);
-    if (!fmapping)
-    {
-        return 0;
-    }
 
-    image = static_cast<BYTE*>(MapViewOfFile(fmapping, FILE_MAP_READ, 0, 0, 0));
-    CloseHandle(fmapping);
-    if (!image)
-    {
-        return 0;
-    }
-
-    BYTE* imageEnd = image + fsizel;
+    BYTE* image = fileBuf.data();
+    BYTE* imageEnd = image + fileSize;
     auto inRange = [&](const void* p, size_t size) {
         return (BYTE*)p >= image && (BYTE*)p <= imageEnd &&
                size <= static_cast<size_t>(imageEnd - (BYTE*)p);
@@ -149,18 +141,11 @@ UINT NE_ExtractIcon(LPCWSTR lpszExeFileName,
     cy1 = LOWORD(cyDesired);
     cy2 = HIWORD(cyDesired);
 
-    // iconDirCount (the real per-file limit) is a UINT16, so nIcons can
-    // never usefully exceed that. Clamp it up front, before doing any
-    // allocation based on it, so a caller-controlled UINT can't drive an
-    // absurd allocation size.
     if (nIcons > 0xFFFF)
     {
         nIcons = 0xFFFF;
     }
 
-    // If pIconId is nullptr, use a local scratch buffer instead of reusing
-    // the caller's HICON array - on 64-bit HICON is 8 bytes while UINT is 4,
-    // so writing UINTs into that array would corrupt not-yet-read entries.
     std::vector<UINT> localIconIds;
     if (!pIconId)
     {
@@ -170,10 +155,6 @@ UINT NE_ExtractIcon(LPCWSTR lpszExeFileName,
         }
         catch (const std::bad_alloc&)
         {
-            // Belt-and-braces: even after the clamp above this shouldn't
-            // throw, but if it ever does, don't leak the mapped view or let
-            // a C++ exception cross back into the caller through user32.
-            UnmapViewOfFile(image);
             return 0;
         }
         pIconId = localIconIds.data();
@@ -187,25 +168,23 @@ UINT NE_ExtractIcon(LPCWSTR lpszExeFileName,
     auto mz_header = reinterpret_cast<const IMAGE_DOS_HEADER*>(image);
     const IMAGE_OS2_HEADER* ne_header;
 
-    if (!inRange(mz_header, sizeof(*mz_header))) goto end;
-    if (mz_header->e_magic != IMAGE_DOS_SIGNATURE) goto end;
-    if (mz_header->e_lfanew < 0) goto end;
-    if (!inRange(image + mz_header->e_lfanew, sizeof(*ne_header))) goto end;
+    if (!inRange(mz_header, sizeof(*mz_header))) return ret;
+    if (mz_header->e_magic != IMAGE_DOS_SIGNATURE) return ret;
+    if (mz_header->e_lfanew < 0) return ret;
+    if (!inRange(image + mz_header->e_lfanew, sizeof(*ne_header))) return ret;
     ne_header = reinterpret_cast<const IMAGE_OS2_HEADER*>(image + mz_header->e_lfanew);
-    if (ne_header->ne_magic == IMAGE_NT_SIGNATURE) goto end;
-    if (ne_header->ne_magic != IMAGE_OS2_SIGNATURE) goto end;
+    if (ne_header->ne_magic == IMAGE_NT_SIGNATURE) return ret;
+    if (ne_header->ne_magic != IMAGE_OS2_SIGNATURE) return ret;
 
     pData = image + mz_header->e_lfanew + ne_header->ne_rsrctab;
 
     if (ne_header->ne_rsrctab < ne_header->ne_restab)
     {
-        if (!inRange(pData, sizeof(WORD))) goto end;
+        if (!inRange(pData, sizeof(WORD))) return ret;
         WORD sizeShift = *reinterpret_cast<WORD*>(pData);
         if (sizeShift >= 16)
         {
-            // A shift count this large is not a valid NE alignment shift
-            // and would be undefined behavior when used below.
-            goto end;
+            return ret;
         }
 
         BYTE* pCIDir = nullptr;
@@ -221,8 +200,6 @@ UINT NE_ExtractIcon(LPCWSTR lpszExeFileName,
 
             if (!inRange(infos, infosSize))
             {
-                // Truncated/corrupt resource table - stop walking instead of
-                // running off the end of the mapping.
                 break;
             }
 
@@ -251,10 +228,6 @@ UINT NE_ExtractIcon(LPCWSTR lpszExeFileName,
 
                 if (nIconIndex < 0)
                 {
-                    // Negative index is the documented "icon resource ID"
-                    // convention (e.g. "file.exe,-3"). Resolve it against
-                    // the RT_GROUP_ICON entry ids instead of indexing
-                    // backwards from the table.
                     resolvedIndex = -1;
                     WORD wantId = static_cast<WORD>((-nIconIndex) | 0x8000);
                     for (UINT16 j = 0; j < iconDirCount; j++)
@@ -270,34 +243,38 @@ UINT NE_ExtractIcon(LPCWSTR lpszExeFileName,
                 if (resolvedIndex >= 0 && static_cast<UINT16>(resolvedIndex) < iconDirCount)
                 {
                     UINT16 baseIndex = static_cast<UINT16>(resolvedIndex);
-                    UINT16 i, icon;
-
-                    if (nIcons > static_cast<UINT>(iconDirCount - baseIndex))
+                    UINT step = (cx2 && cy2) ? 2u : 1u;
+                    UINT groupsAvail = static_cast<UINT>(iconDirCount - baseIndex);
+                    UINT groupsWanted = nIcons / step;
+                    if (groupsWanted > groupsAvail)
                     {
-                        nIcons = iconDirCount - baseIndex;
+                        groupsWanted = groupsAvail;
                     }
+                    UINT total = groupsWanted * step; // <= nIcons, always in-bounds
 
-                    for (i = 0; i < nIcons; i++)
+                    for (UINT g = 0; g < groupsWanted; g++)
                     {
-                        pCIDir = USER32_LoadResource(image, pIconDir + i + baseIndex, sizeShift, &uSize);
-                        pIconId[i] = (inRange(pCIDir, uSize) && IsValidGroupIconDir(pCIDir, uSize))
+                        pCIDir = USER32_LoadResource(image, pIconDir + baseIndex + g, sizeShift, &uSize);
+                        bool valid = inRange(pCIDir, uSize) && IsValidGroupIconDir(pCIDir, uSize);
+
+                        pIconId[g * step] = valid
                             ? LookupIconIdFromDirectoryEx(pCIDir, TRUE, cx1, cy1, flags)
                             : 0;
 
-                        if (cx2 && cy2 && i + 1 < nIcons)
+                        if (step == 2)
                         {
-                            pIconId[++i] = (inRange(pCIDir, uSize) && IsValidGroupIconDir(pCIDir, uSize))
+                            pIconId[g * step + 1] = valid
                                 ? LookupIconIdFromDirectoryEx(pCIDir, TRUE, cx2, cy2, flags)
                                 : 0;
                         }
                     }
 
-                    for (icon = 0; icon < nIcons; icon++)
+                    for (UINT n = 0; n < total; n++)
                     {
                         pCIDir = nullptr;
-                        for (i = 0; i < iconCount; i++)
+                        for (UINT16 i = 0; i < iconCount; i++)
                         {
-                            if (pIconStorage[i].id == (static_cast<int>(pIconId[icon]) | 0x8000))
+                            if (pIconStorage[i].id == (static_cast<int>(pIconId[n]) | 0x8000))
                             {
                                 ULONG candidateSize = 0;
                                 BYTE* candidate = USER32_LoadResource(image, pIconStorage + i, sizeShift, &candidateSize);
@@ -310,30 +287,20 @@ UINT NE_ExtractIcon(LPCWSTR lpszExeFileName,
                             }
                         }
 
-                        if (pCIDir)
-                        {
-                            RetPtr[icon] = CreateIconFromResourceEx(pCIDir, uSize, TRUE, 0x00030000, cx1, cy1, flags);
-                            if (cx2 && cy2 && icon + 1 < nIcons)
-                            {
-                                RetPtr[++icon] = CreateIconFromResourceEx(pCIDir, uSize, TRUE, 0x00030000, cx2, cy2, flags);
-                            }
-                        }
-                        else
-                        {
-                            RetPtr[icon] = nullptr;
-                        }
+                        RetPtr[n] = pCIDir
+                            ? CreateIconFromResourceEx(pCIDir, uSize, TRUE, 0x00030000,
+                                                       (n % step) ? cx2 : cx1,
+                                                       (n % step) ? cy2 : cy1, flags)
+                            : nullptr;
                     }
-                    // icon is bounded by nIcons via the loop condition and
-                    // the icon + 1 < nIcons guard above, so it can never
-                    // exceed nIcons here - no extra clamp needed.
-                    ret = icon;
+                    UINT created = 0;
+                    while (created < total && RetPtr[created]) created++;
+                    ret = created;
                 }
             }
         }
     }
 
-end:
-    UnmapViewOfFile(image);
     return ret;
 }
 
