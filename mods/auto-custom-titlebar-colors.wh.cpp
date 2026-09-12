@@ -1,811 +1,337 @@
 // ==WindhawkMod==
-// @id              auto-custom-titlebar-colors
-// @name            Auto Custom Titlebar Colors
-// @description     Auto-switches titlebar dark/light mode with the Windows theme, with separate custom colours for active/inactive windows in both modes
-// @version         1.2.0
-// @author          Lone
-// @github          https://github.com/Louis047
-// @include         *
-// @exclude         devenv.exe
-// @exclude         systemsettings.exe
-// @exclude         applicationframehost.exe
-// @exclude         startmenuexperiencehost.exe
-// @exclude         searchhost.exe
-// @exclude         shellexperiencehost.exe
-// @compilerOptions -ldwmapi -luser32
+// @id              native-shadow-tuner
+// @name            Windows Shadows TUNER
+// @description     Edit dimension, intensity and color of Windows's Drop Shadows.
+// @version         0.3.0
+// @author          HaVeN80
+// @github          https://github.com/haven80
+// @include         dwm.exe
+// @architecture    x86-64
+// @compilerOptions -lbcrypt -masm=att
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-Combines automatic dark/light titlebar switching with per-mode, per-state custom colours. Inspired from the following mods:
-- `Auto Dark Titlebar` by Asteski
-- `Windows 11 Custom Titlebar Colors` by Th3Fanbus
+# Windows Shadows TUNER
+### HaVeN80
 
-## Features
-- Auto-detects Windows dark/light theme via registry and applies `DWMWA_USE_IMMERSIVE_DARK_MODE`
-- Custom titlebar colours for four independent states:
-  - **Light Mode** - Active window
-  - **Light Mode** - Inactive window
-  - **Dark Mode**  - Active window
-  - **Dark Mode**  - Inactive window
-- Per-mode "Use Custom Colours" toggle -- leave off to keep system defaults for that mode
-- Per-mode colour input format toggle -- choose between Hex (`RRGGBB`) or separate R/G/B fields
-- Real-time theme change detection (responds to `WM_SETTINGCHANGE` / `WM_DWMCOLORIZATIONCOLORCHANGED`)
-- New windows receive the correct style immediately via `CreateWindowEx` hooks
-- Dialog windows handled via `DefDlgProc` hooks
-- MDI frame windows (e.g. `mmc.exe`, Event Viewer, Device Manager) handled via `DefFrameProc` hooks
-- Live settings reload: colour changes apply instantly without restarting the process
-- **Exclude Mozilla Browsers** toggle (default: on) -- skips Firefox, Zen Browser, Floorp, etc.; disable to re-enable titlebar colouring for those browsers
+Customize the native Windows window shadows: make them lighteror more pronounced, adjust their size and blur, and choose a custom color.
 
-## Colour Format
-- **Hex mode**: enter a 6-character hex string, e.g. `FF0000` for red (no `#` prefix)
-- **RGB mode**: enter R, G, B as integers 0-255 in separate fields
+## Controls
 
-Custom colours are only applied when the corresponding "Use Custom Colours" toggle is enabled.
+- **Enable shadow modification: activates or deactivates the customization.
+- **Intensity**: 100 maintains the original opacity, 50 cuts it in half,150 increases it. At 0, the shadow becomes invisible, even if colored.
+- **Size and Blur**: adjusts the drop and blur from 50% to 150%
+- **Update shadows on new requests: prevents the reuse of previous surfaces.Leave this active to apply your customizations.
+- **Custom color: enables the chosen color; 
+- **Shadow color: #RRGGBB code, for example #2878FF (blue),#00A860 (green), #000000 (black). An invalid code will default back to black.
 
-## Notes
-- Custom colours are enabled by default in v1.2.0 (`#FFFFFF`/`#E6E6E6` for light mode, `#000000`/`#202020` for dark mode)
-- UWP/WinUI windows (`ApplicationFrameWindow`, WinUI 3, XAML islands) and core shell hosts are automatically skipped to avoid conflicts
-- Windows whose caption colour is set by the application itself while the mod is loaded have that colour left untouched; only the dark/light mode is kept in sync
-- Visual attributes apply seamlessly on window activation and theme changes
+To test the color, use intensity 150, size 100, custom color activeand #2878FF. Open a new window and switch focus.The result also depends on your background and the set opacity.
+
+## Aggiornamento
+
+Sostituisci il sorgente della mod esistente e ricompila. L'identificativo
+interno e le chiavi delle impostazioni precedenti restano gli stessi.
+Il colore personalizzato e' inizialmente disattivato.
+
+## How it worksIt intercepts the creation of native shadows inside DWM, without addingoverlapping windows. The tint is applied to the two components of the shadowseparately from the border. The DLLs on the disk are not modified.Windows may retain already created surfaces. Opening new ones orchanging focus allows you to verify the new settings; in some cases you may need to log out and log back in, even after deactivation.
+
+
+## Compatibilita
+
+Intended for the analyzed uDWM.dll version uDWM.dll 10.0.26100.9278.
+windows 11 25h2.
+
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- customColours:
-  - light: true
-    $name: "Light Mode"
-  - dark: true
-    $name: "Dark Mode"
-  $name: "Custom Colours"
-
-- lightMode:
-  - useHex: false
-    $name: "Use Hex Input"
-    $description: "When on, use RRGGBB hex strings. When off, use separate R/G/B fields."
-  - activeColour:
-    - hex: "FFFFFF"
-      $name: "Hex (RRGGBB)"
-    - r: 255
-      $name: "R (0-255)"
-    - g: 255
-      $name: "G (0-255)"
-    - b: 255
-      $name: "B (0-255)"
-    $name: "Active Window"
-  - inactiveColour:
-    - hex: "E6E6E6"
-      $name: "Hex (RRGGBB)"
-    - r: 230
-      $name: "R (0-255)"
-    - g: 230
-      $name: "G (0-255)"
-    - b: 230
-      $name: "B (0-255)"
-    $name: "Inactive Window"
-  $name: "Light Mode Colours"
-
-- darkMode:
-  - useHex: false
-    $name: "Use Hex Input"
-    $description: "When on, use RRGGBB hex strings. When off, use separate R/G/B fields."
-  - activeColour:
-    - hex: "000000"
-      $name: "Hex (RRGGBB)"
-    - r: 0
-      $name: "R (0-255)"
-    - g: 0
-      $name: "G (0-255)"
-    - b: 0
-      $name: "B (0-255)"
-    $name: "Active Window"
-  - inactiveColour:
-    - hex: "202020"
-      $name: "Hex (RRGGBB)"
-    - r: 32
-      $name: "R (0-255)"
-    - g: 32
-      $name: "G (0-255)"
-    - b: 32
-      $name: "B (0-255)"
-    $name: "Inactive Window"
-  $name: "Dark Mode Colours"
-
-- excludeMozilla: true
-  $name: "Exclude Mozilla Browsers"
-  $description: "Skip Firefox, Zen Browser, etc."
+- enabled: false
+  $name: Enable Shadows MOD
+  $description: Activate MOD.
+- opacityPercent: 100
+  $name: Shadow Intensity (% of the original value)
+  $description: From 0 to 300. 100 original, 50 less visible, 150 more visible. 0 to make invisible.
+- sizePercent: 100
+  $name: Dimenbsion and Blur (% of the original value)
+  $description: from 50 to 150. 100 for the original value.
+- bypassCache: true
+  $name: Update shadows
+  $description: Check this if the shadows does not change.
+- customColor: false
+  $name: Color personalization
+  $description: Shadow color. Disable to make it original.
+- shadowColor: '#2878FF'
+  $name: Shadow Color
+  $description: "in exadecimal #RRGGBB. Examples - #2878FF blu, #00A860 green, #000000 black."
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
-#include <dwmapi.h>
-#include <windhawk_utils.h>
+#include <bcrypt.h>
 #include <algorithm>
-#include <cstring>
-#include <cwchar>
-#include <unordered_set>
-#include <unordered_map>
-#include <mutex>
 #include <atomic>
+#include <cstring>
 
-#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
-#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+// Color interception at two verified instruction boundaries, immediately
+// AFTER native RGBA assembly and BEFORE ID2D1Properties::SetValue.
+// RBP is the native CreateBorderSurface frame, RGB at +48/+4C/+50,
+// alpha at +54. Preserve ALL registers, flags and stack position. No calls.
+// Trampolines replay the displaced native instructions unchanged.
+extern "C" {
+__attribute__((used)) float wstRed = 0, wstGreen = 0, wstBlue = 0;
+__attribute__((used)) void* wstColorResume1 = nullptr;
+__attribute__((used)) void* wstColorResume2 = nullptr;
+
+#if defined(_M_X64) || defined(__x86_64__)
+__attribute__((naked, used)) void WstColorHook1() {
+    __asm__("pushq %rax\n"
+            "movl wstRed(%rip), %eax\nmovl %eax, 0x48(%rbp)\n"
+            "movl wstGreen(%rip), %eax\nmovl %eax, 0x4c(%rbp)\n"
+            "movl wstBlue(%rip), %eax\nmovl %eax, 0x50(%rbp)\n"
+            "popq %rax\njmp *wstColorResume1(%rip)\n");
+}
+
+__attribute__((naked, used)) void WstColorHook2() {
+    __asm__("pushq %rax\n"
+            "movl wstRed(%rip), %eax\nmovl %eax, 0x48(%rbp)\n"
+            "movl wstGreen(%rip), %eax\nmovl %eax, 0x4c(%rbp)\n"
+            "movl wstBlue(%rip), %eax\nmovl %eax, 0x50(%rbp)\n"
+            "popq %rax\njmp *wstColorResume2(%rip)\n");
+}
+#else
+void WstColorHook1() {}
+void WstColorHook2() {}
 #endif
+}
 
-// -----------------------------------------------------------------------------
-// Settings helpers
-// -----------------------------------------------------------------------------
+namespace {
+using Parameters = void(__cdecl*)(int, int, float*, float*, float*, float*);
+Parameters original = nullptr;
+float opacityScale = 1.0f;
+float sizeScale = 1.0f;
 
-struct ModSettings {
-    BOOL useCustomLight;
-    BOOL useCustomDark;
-    COLORREF activeLight;
-    COLORREF inactiveLight;
-    COLORREF activeDark;
-    COLORREF inactiveDark;
-    std::atomic<BOOL> excludeMozilla;
-};
-static ModSettings g_settings;
+std::atomic<bool> stopping{false};
+std::atomic<bool> reported{false};
+std::atomic<unsigned> marginReports{0}, surfaceReports{0}, otherReports{0}, brushReports{0};
 
-// -----------------------------------------------------------------------------
-// Globals
-// -----------------------------------------------------------------------------
+BYTE* moduleBase = nullptr;
+bool bypassCache = true;
+bool customColor = false;
 
-typedef bool (WINAPI* pShouldAppsUseDarkMode)();
-static std::atomic<BOOL> g_isDarkMode = FALSE;
-
-// App-controlled window state tracking
-static std::unordered_set<HWND> g_appControlledWindows;
-static std::mutex g_appControlledMutex;
-static thread_local bool g_inMod = false;
-
-struct InModGuard {
-    bool prev = g_inMod;
-    InModGuard() { g_inMod = true; }
-    ~InModGuard() { g_inMod = prev; }
-};
-
-static std::mutex g_settingsMutex;
-
-static std::unordered_map<HWND, BOOL> g_eligibilityCache;
-static std::mutex g_eligibilityMutex;
-
-static std::unordered_map<HWND, BOOL> g_appDarkModeWindows;
-static std::mutex g_appDarkModeMutex;
-
-static std::unordered_set<HWND> g_appliedWindows;
-static std::mutex g_appliedMutex;
-
-static std::unordered_set<HWND> g_appliedCustomColorWindows;
-static std::mutex g_appliedCustomColorMutex;
-
-// -----------------------------------------------------------------------------
-// Dark mode detection
-// -----------------------------------------------------------------------------
-
-static BOOL IsSystemDarkMode()
-{
-    HKEY hKey;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER,
-        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-        0, KEY_READ, &hKey) == ERROR_SUCCESS)
-    {
-        DWORD value = 0, size = sizeof(DWORD);
-        if (RegQueryValueExW(hKey, L"AppsUseLightTheme", nullptr, nullptr,
-            (LPBYTE)&value, &size) == ERROR_SUCCESS)
-        {
-            RegCloseKey(hKey);
-            return value == 0;
-        }
-        RegCloseKey(hKey);
+bool ParseColor(PCWSTR text, float* red, float* green, float* blue) {
+    if (!text) return false;
+    if (*text == L'#') ++text;
+    unsigned rgb = 0;
+    for (int i=0; i<6; ++i) {
+        wchar_t c = text[i];
+        unsigned digit;
+        if (c >= L'0' && c <= L'9') digit = c-L'0';
+        else if (c >= L'a' && c <= L'f') digit = c-L'a'+10;
+        else if (c >= L'A' && c <= L'F') digit = c-L'A'+10;
+        else return false;
+        rgb = (rgb << 4) | digit;
     }
-
-    static pShouldAppsUseDarkMode fn = []() -> pShouldAppsUseDarkMode {
-        HMODULE hUxtheme = GetModuleHandleW(L"uxtheme.dll");
-        return hUxtheme ? (pShouldAppsUseDarkMode)GetProcAddress(hUxtheme, MAKEINTRESOURCEA(132)) : nullptr;
-    }();
-    if (fn)
-        return fn() != 0;
-
-    return FALSE;
-}
-
-// -----------------------------------------------------------------------------
-// Window eligibility
-// -----------------------------------------------------------------------------
-
-static BOOL CALLBACK CheckXamlChildProc(HWND hwnd, LPARAM lParam) {
-    WCHAR className[256];
-    if (GetClassNameW(hwnd, className, 256)) {
-        if (wcscmp(className, L"DesktopWindowXamlSource") == 0 ||
-            wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0 ||
-            wcscmp(className, L"Microsoft.UI.Content.DesktopChildSiteBridge") == 0) {
-            *(BOOL*)lParam = TRUE;
-            return FALSE; // Stop enumerating, we found it!
-        }
-    }
-    return TRUE; // Continue enumerating
-}
-
-static BOOL IsWindowEligible(HWND hWnd, BOOL allowCacheUpdate = TRUE)
-{
-    if (!hWnd || !IsWindow(hWnd)) return FALSE;
-
-    LONG style   = GetWindowLongW(hWnd, GWL_STYLE);
-    LONG styleEx = GetWindowLongW(hWnd, GWL_EXSTYLE);
-
-    if ((style & WS_CAPTION) != WS_CAPTION) return FALSE;
-    if (styleEx & WS_EX_TOOLWINDOW)  return FALSE;
-    if (style & WS_CHILD)            return FALSE;
-
-    WCHAR className[256];
-    if (GetClassNameW(hWnd, className, 256)) {
-        if (wcscmp(className, L"ApplicationFrameWindow") == 0 ||
-            wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0 ||
-            wcscmp(className, L"DesktopWindowXamlSource") == 0 ||
-            wcscmp(className, L"Microsoft.UI.Content.DesktopChildSiteBridge") == 0 ||
-            wcsncmp(className, L"WinUIDesktopWin32WindowClass", 28) == 0) {
-            return FALSE;
-        }
-        if (g_settings.excludeMozilla && wcsncmp(className, L"Mozilla", 7) == 0) {
-            return FALSE;
-        }
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(g_eligibilityMutex);
-        auto it = g_eligibilityCache.find(hWnd);
-        if (it != g_eligibilityCache.end()) return it->second;
-    }
-
-    // Detect WinUI 3 / UWP modern apps and complex composite windows
-    // These apps host their modern UI inside specific child bridge windows.
-    BOOL hasXaml = FALSE;
-    EnumChildWindows(hWnd, CheckXamlChildProc, (LPARAM)&hasXaml);
-    
-    BOOL isEligible = !hasXaml;
-    
-    if (allowCacheUpdate) {
-        if (!isEligible || IsWindowVisible(hWnd)) {
-            std::lock_guard<std::mutex> lock(g_eligibilityMutex);
-            g_eligibilityCache[hWnd] = isEligible;
-        }
-    }
-
-    return isEligible;
-}
-
-// -----------------------------------------------------------------------------
-// Hex string (RRGGBB, no '#') -> COLORREF
-// Returns FALSE on invalid input and leaves *out unchanged.
-// -----------------------------------------------------------------------------
-
-static BOOL HexToColorref(PCWSTR hex, COLORREF* out)
-{
-    if (!hex || !out) return FALSE;
-
-    int len = 0;
-    while (hex[len]) len++;
-    if (len != 6) return FALSE;
-
-    COLORREF result = 0;
-    for (int i = 0; i < 6; i++) {
-        WCHAR c = hex[i];
-        BYTE nibble;
-        if      (c >= L'0' && c <= L'9') nibble = (BYTE)(c - L'0');
-        else if (c >= L'A' && c <= L'F') nibble = (BYTE)(c - L'A' + 10);
-        else if (c >= L'a' && c <= L'f') nibble = (BYTE)(c - L'a' + 10);
-        else return FALSE;
-        result = (result << 4) | nibble;
-    }
-
-    // RRGGBB -> COLORREF (0x00BBGGRR)
-    BYTE r = (BYTE)((result >> 16) & 0xFF);
-    BYTE g = (BYTE)((result >>  8) & 0xFF);
-    BYTE b = (BYTE)((result >>  0) & 0xFF);
-    *out = RGB(r, g, b);
-    return TRUE;
-}
-
-static void LoadSettings()
-{
-    std::lock_guard<std::mutex> lock(g_settingsMutex);
-
-    g_settings.useCustomLight = (BOOL)Wh_GetIntSetting(L"customColours.light");
-    g_settings.useCustomDark = (BOOL)Wh_GetIntSetting(L"customColours.dark");
-    g_settings.excludeMozilla = (BOOL)Wh_GetIntSetting(L"excludeMozilla");
-
-    BOOL useHexLight = (BOOL)Wh_GetIntSetting(L"lightMode.useHex");
-    if (useHexLight) {
-        WindhawkUtils::StringSetting hexActive = WindhawkUtils::StringSetting::make(L"lightMode.activeColour.hex");
-        if (!HexToColorref(hexActive.get(), &g_settings.activeLight)) g_settings.activeLight = RGB(255, 255, 255);
-
-        WindhawkUtils::StringSetting hexInactive = WindhawkUtils::StringSetting::make(L"lightMode.inactiveColour.hex");
-        if (!HexToColorref(hexInactive.get(), &g_settings.inactiveLight)) g_settings.inactiveLight = RGB(230, 230, 230);
-    } else {
-        g_settings.activeLight = RGB(
-            (BYTE)std::clamp((int)Wh_GetIntSetting(L"lightMode.activeColour.r"), 0, 255),
-            (BYTE)std::clamp((int)Wh_GetIntSetting(L"lightMode.activeColour.g"), 0, 255),
-            (BYTE)std::clamp((int)Wh_GetIntSetting(L"lightMode.activeColour.b"), 0, 255)
-        );
-        g_settings.inactiveLight = RGB(
-            (BYTE)std::clamp((int)Wh_GetIntSetting(L"lightMode.inactiveColour.r"), 0, 255),
-            (BYTE)std::clamp((int)Wh_GetIntSetting(L"lightMode.inactiveColour.g"), 0, 255),
-            (BYTE)std::clamp((int)Wh_GetIntSetting(L"lightMode.inactiveColour.b"), 0, 255)
-        );
-    }
-
-    BOOL useHexDark = (BOOL)Wh_GetIntSetting(L"darkMode.useHex");
-    if (useHexDark) {
-        WindhawkUtils::StringSetting hexActive = WindhawkUtils::StringSetting::make(L"darkMode.activeColour.hex");
-        if (!HexToColorref(hexActive.get(), &g_settings.activeDark)) g_settings.activeDark = RGB(0, 0, 0);
-
-        WindhawkUtils::StringSetting hexInactive = WindhawkUtils::StringSetting::make(L"darkMode.inactiveColour.hex");
-        if (!HexToColorref(hexInactive.get(), &g_settings.inactiveDark)) g_settings.inactiveDark = RGB(32, 32, 32);
-    } else {
-        g_settings.activeDark = RGB(
-            (BYTE)std::clamp((int)Wh_GetIntSetting(L"darkMode.activeColour.r"), 0, 255),
-            (BYTE)std::clamp((int)Wh_GetIntSetting(L"darkMode.activeColour.g"), 0, 255),
-            (BYTE)std::clamp((int)Wh_GetIntSetting(L"darkMode.activeColour.b"), 0, 255)
-        );
-        g_settings.inactiveDark = RGB(
-            (BYTE)std::clamp((int)Wh_GetIntSetting(L"darkMode.inactiveColour.r"), 0, 255),
-            (BYTE)std::clamp((int)Wh_GetIntSetting(L"darkMode.inactiveColour.g"), 0, 255),
-            (BYTE)std::clamp((int)Wh_GetIntSetting(L"darkMode.inactiveColour.b"), 0, 255)
-        );
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Core: apply dark-mode attribute + caption colour to one window
-// -----------------------------------------------------------------------------
-
-using DwmSetWindowAttribute_t = decltype(&DwmSetWindowAttribute);
-static DwmSetWindowAttribute_t DwmSetWindowAttribute_orig;
-
-static HRESULT WINAPI DwmSetWindowAttribute_hook(HWND hwnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute)
-{
-    HRESULT hr = DwmSetWindowAttribute_orig(hwnd, dwAttribute, pvAttribute, cbAttribute);
-    if (!g_inMod && SUCCEEDED(hr)) {
-        if (dwAttribute == DWMWA_CAPTION_COLOR && pvAttribute && cbAttribute == sizeof(COLORREF)) {
-            COLORREF colour = *(COLORREF*)pvAttribute;
-            std::lock_guard<std::mutex> lock(g_appControlledMutex);
-            if (colour == DWMWA_COLOR_DEFAULT) {
-                g_appControlledWindows.erase(hwnd); // app released control
-            } else {
-                g_appControlledWindows.insert(hwnd);
-                Wh_Log(L"App controls DWMWA_CAPTION_COLOR for hWnd=%p", hwnd);
-            }
-        } else if (dwAttribute == DWMWA_USE_IMMERSIVE_DARK_MODE && pvAttribute && cbAttribute == sizeof(BOOL)) {
-            std::lock_guard<std::mutex> lock(g_appDarkModeMutex);
-            g_appDarkModeWindows[hwnd] = *(BOOL*)pvAttribute;
-        }
-    }
-    return hr;
-}
-
-static VOID ApplyTitleBar(HWND hWnd, BOOL isActive, BOOL allowCacheUpdate = TRUE)
-{
-    if (!IsWindowEligible(hWnd, allowCacheUpdate)) {
-        bool wasApplied;
-        {
-            std::lock_guard<std::mutex> lock(g_appliedMutex);
-            wasApplied = g_appliedWindows.erase(hWnd) != 0;
-        }
-        if (!wasApplied) return;
-
-        bool hadCustomColor;
-        {
-            std::lock_guard<std::mutex> lock(g_appliedCustomColorMutex);
-            hadCustomColor = g_appliedCustomColorWindows.erase(hWnd) != 0;
-        }
-
-        BOOL dark = FALSE;
-        {
-            std::lock_guard<std::mutex> lockDark(g_appDarkModeMutex);
-            auto it = g_appDarkModeWindows.find(hWnd);
-            if (it != g_appDarkModeWindows.end()) dark = it->second;
-        }
-
-        bool appOwnsColour;
-        {
-            std::lock_guard<std::mutex> lock(g_appControlledMutex);
-            appOwnsColour = g_appControlledWindows.count(hWnd) != 0;
-        }
-
-        InModGuard guard;
-        DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
-        if (!appOwnsColour && hadCustomColor) {
-            const COLORREF def = DWMWA_COLOR_DEFAULT;
-            DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR, &def, sizeof(def));
-        }
-        return;
-    }
-
-    bool appOwnsColour;
-    {
-        std::lock_guard<std::mutex> lock(g_appControlledMutex);
-        appOwnsColour = g_appControlledWindows.count(hWnd) != 0;
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(g_appliedMutex);
-        g_appliedWindows.insert(hWnd);
-    }
-
-    InModGuard guard;
-    BOOL darkMode = g_isDarkMode;
-    
-    DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
-        &darkMode, sizeof(darkMode));
-
-    if (appOwnsColour) {
-        return;
-    }
-
-    BOOL useCustom;
-    COLORREF colour;
-    {
-        std::lock_guard<std::mutex> lock(g_settingsMutex);
-        useCustom = darkMode ? g_settings.useCustomDark : g_settings.useCustomLight;
-        colour = darkMode 
-            ? (isActive ? g_settings.activeDark : g_settings.inactiveDark)
-            : (isActive ? g_settings.activeLight : g_settings.inactiveLight);
-    }
-
-    if (useCustom) {
-        {
-            std::lock_guard<std::mutex> lock(g_appliedCustomColorMutex);
-            g_appliedCustomColorWindows.insert(hWnd);
-        }
-        DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR,
-            &colour, sizeof(colour));
-        Wh_Log(L"ApplyTitleBar: hWnd=%p dark=%d active=%d colour=#%02X%02X%02X",
-            hWnd, darkMode, isActive,
-            GetRValue(colour), GetGValue(colour), GetBValue(colour));
-    } else {
-        bool hadCustomColor;
-        {
-            std::lock_guard<std::mutex> lock(g_appliedCustomColorMutex);
-            hadCustomColor = g_appliedCustomColorWindows.erase(hWnd) != 0;
-        }
-        if (hadCustomColor) {
-            const COLORREF def = DWMWA_COLOR_DEFAULT;
-            DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR, &def, sizeof(def));
-            Wh_Log(L"ApplyTitleBar: hWnd=%p dark=%d active=%d colour=DEFAULT",
-                hWnd, darkMode, isActive);
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Enumerate all eligible windows in the current process
-
-static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM)
-{
-    DWORD pid = 0;
-    if (!GetWindowThreadProcessId(hWnd, &pid) || pid != GetCurrentProcessId())
-        return TRUE;
-
-    BOOL isActive = (GetForegroundWindow() == hWnd);
-    ApplyTitleBar(hWnd, isActive);
-    return TRUE;
-}
-
-static VOID ApplyToAllWindows()
-{
-    EnumWindows(EnumWindowsProc, 0);
-}
-
-// -----------------------------------------------------------------------------
-// Shared message handler
-// -----------------------------------------------------------------------------
-
-static VOID HandleWindowMessage(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, BOOL isAnsi = FALSE)
-{
-    switch (Msg)
-    {
-        case WM_NCDESTROY:
-        {
-            {
-                std::lock_guard<std::mutex> lock(g_appControlledMutex);
-                g_appControlledWindows.erase(hWnd);
-            }
-            {
-                std::lock_guard<std::mutex> lock(g_eligibilityMutex);
-                g_eligibilityCache.erase(hWnd);
-            }
-            {
-                std::lock_guard<std::mutex> lock(g_appDarkModeMutex);
-                g_appDarkModeWindows.erase(hWnd);
-            }
-            {
-                std::lock_guard<std::mutex> lock(g_appliedMutex);
-                g_appliedWindows.erase(hWnd);
-            }
-            {
-                std::lock_guard<std::mutex> lock(g_appliedCustomColorMutex);
-                g_appliedCustomColorWindows.erase(hWnd);
-            }
-            break;
-        }
-        case WM_ACTIVATE:
-        {
-            BOOL isActive = (LOWORD(wParam) != WA_INACTIVE);
-            ApplyTitleBar(hWnd, isActive);
-            break;
-        }
-        case WM_NCACTIVATE:
-        {
-            BOOL isActive = (BOOL)wParam;
-            ApplyTitleBar(hWnd, isActive);
-            break;
-        }
-        case WM_DWMCOLORIZATIONCOLORCHANGED:
-        {
-            BOOL isActive = (GetForegroundWindow() == hWnd);
-            ApplyTitleBar(hWnd, isActive);
-            break;
-        }
-        case WM_SETTINGCHANGE:
-        {
-            // Only respond to the theme change notification — other WM_SETTINGCHANGE
-            // broadcasts (work area, metrics, etc.) do not require a re-check.
-            BOOL isThemeChange = lParam && (
-                isAnsi
-                    ? strcmp((LPCSTR)lParam, "ImmersiveColorSet") == 0
-                    : wcscmp((LPCWSTR)lParam, L"ImmersiveColorSet") == 0
-            );
-            if (!isThemeChange) break;
-
-            BOOL newDarkMode = IsSystemDarkMode();
-            if (g_isDarkMode.exchange(newDarkMode) != newDarkMode) {
-                Wh_Log(L"[PID %d] Theme changed to %s",
-                    GetCurrentProcessId(), newDarkMode ? L"DARK" : L"LIGHT");
-                ApplyToAllWindows();
-            }
-            break;
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Hook: DefWindowProcW / DefWindowProcA
-// -----------------------------------------------------------------------------
-
-using DefWindowProcW_t = decltype(&DefWindowProcW);
-static DefWindowProcW_t DefWindowProcW_orig;
-
-static LRESULT WINAPI DefWindowProcW_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
-{
-    LRESULT result = DefWindowProcW_orig(hWnd, Msg, wParam, lParam);
-    HandleWindowMessage(hWnd, Msg, wParam, lParam, FALSE);
-    return result;
-}
-
-using DefWindowProcA_t = decltype(&DefWindowProcA);
-static DefWindowProcA_t DefWindowProcA_orig;
-
-static LRESULT WINAPI DefWindowProcA_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
-{
-    LRESULT result = DefWindowProcA_orig(hWnd, Msg, wParam, lParam);
-    HandleWindowMessage(hWnd, Msg, wParam, lParam, TRUE);
-    return result;
-}
-
-// -----------------------------------------------------------------------------
-// Hook: DefDlgProcW / DefDlgProcA
-// -----------------------------------------------------------------------------
-
-using DefDlgProcW_t = decltype(&DefDlgProcW);
-static DefDlgProcW_t DefDlgProcW_orig;
-
-static LRESULT WINAPI DefDlgProcW_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
-{
-    LRESULT result = DefDlgProcW_orig(hWnd, Msg, wParam, lParam);
-    HandleWindowMessage(hWnd, Msg, wParam, lParam, FALSE);
-    return result;
-}
-
-using DefDlgProcA_t = decltype(&DefDlgProcA);
-static DefDlgProcA_t DefDlgProcA_orig;
-
-static LRESULT WINAPI DefDlgProcA_hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
-{
-    LRESULT result = DefDlgProcA_orig(hWnd, Msg, wParam, lParam);
-    HandleWindowMessage(hWnd, Msg, wParam, lParam, TRUE);
-    return result;
-}
-
-// -----------------------------------------------------------------------------
-// Hook: DefFrameProcW / DefFrameProcA (MDI Frame windows, e.g. MMC)
-// -----------------------------------------------------------------------------
-
-using DefFrameProcW_t = decltype(&DefFrameProcW);
-static DefFrameProcW_t DefFrameProcW_orig;
-
-static LRESULT WINAPI DefFrameProcW_hook(HWND hWnd, HWND hWndMDIClient, UINT Msg, WPARAM wParam, LPARAM lParam)
-{
-    LRESULT result = DefFrameProcW_orig(hWnd, hWndMDIClient, Msg, wParam, lParam);
-    HandleWindowMessage(hWnd, Msg, wParam, lParam, FALSE);
-    return result;
-}
-
-using DefFrameProcA_t = decltype(&DefFrameProcA);
-static DefFrameProcA_t DefFrameProcA_orig;
-
-static LRESULT WINAPI DefFrameProcA_hook(HWND hWnd, HWND hWndMDIClient, UINT Msg, WPARAM wParam, LPARAM lParam)
-{
-    LRESULT result = DefFrameProcA_orig(hWnd, hWndMDIClient, Msg, wParam, lParam);
-    HandleWindowMessage(hWnd, Msg, wParam, lParam, TRUE);
-    return result;
-}
-
-// -----------------------------------------------------------------------------
-// Hook: CreateWindowExW / CreateWindowExA
-// -----------------------------------------------------------------------------
-
-static void HandleCreatedWindow(HWND hWnd)
-{
-    if (!hWnd) return;
-
-    WCHAR className[256];
-    if (GetClassNameW(hWnd, className, 256) &&
-        (wcscmp(className, L"DesktopWindowXamlSource") == 0 ||
-         wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0 ||
-         wcscmp(className, L"Microsoft.UI.Content.DesktopChildSiteBridge") == 0)) {
-        HWND hRoot = GetAncestor(hWnd, GA_ROOT);
-        if (hRoot) {
-            // Mark root ineligible in the cache, then let ApplyTitleBar's revert
-            // path do the full cleanup of both DWM attributes consistently.
-            {
-                std::lock_guard<std::mutex> lock(g_eligibilityMutex);
-                g_eligibilityCache[hRoot] = FALSE;
-            }
-            ApplyTitleBar(hRoot, FALSE);
-        }
-    }
-    BOOL isActive = (GetForegroundWindow() == hWnd);
-    ApplyTitleBar(hWnd, isActive, FALSE);
-}
-
-using CreateWindowExW_t = decltype(&CreateWindowExW);
-static CreateWindowExW_t CreateWindowExW_orig;
-
-static HWND WINAPI CreateWindowExW_hook(
-    DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
-    DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
-    HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam)
-{
-    HWND hWnd = CreateWindowExW_orig(
-        dwExStyle, lpClassName, lpWindowName, dwStyle,
-        X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
-
-    HandleCreatedWindow(hWnd);
-    return hWnd;
-}
-
-using CreateWindowExA_t = decltype(&CreateWindowExA);
-static CreateWindowExA_t CreateWindowExA_orig;
-
-static HWND WINAPI CreateWindowExA_hook(
-    DWORD dwExStyle, LPCSTR lpClassName, LPCSTR lpWindowName,
-    DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
-    HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam)
-{
-    HWND hWnd = CreateWindowExA_orig(
-        dwExStyle, lpClassName, lpWindowName, dwStyle,
-        X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
-
-    HandleCreatedWindow(hWnd);
-    return hWnd;
-}
-
-// -----------------------------------------------------------------------------
-// Windhawk lifecycle
-// -----------------------------------------------------------------------------
-
-template <typename TargetType, typename ReplacementType, typename OrigType>
-static bool Hook(TargetType target, ReplacementType replacement, OrigType orig, const wchar_t* name) {
-    if (!WindhawkUtils::SetFunctionHook(target, replacement, orig)) {
-        Wh_Log(L"WARNING: Failed to hook %s", name);
-        return false;
-    }
-    Wh_Log(L"Hooked %s", name);
+    if (text[6]) return false;
+    *red = ((rgb >> 16) & 255)/255.0f;
+    *green = ((rgb >> 8) & 255)/255.0f;
+    *blue = (rgb & 255)/255.0f;
     return true;
 }
 
-BOOL Wh_ModInit()
-{
-    Wh_Log(L"=== Auto Custom Titlebar Colors - Init [PID %d] ===",
-        GetCurrentProcessId());
+// Both static methods have the same x64 ABI. Color is a const reference
+// (pointer). Output is an opaque pointer to a native std::shared_ptr;
+// its ownership, allocation and destruction remain entirely inside uDWM.
+using Brush = HRESULT(__cdecl*)(float, int, const void*, int, int, void*);
+Brush getBrushOriginal = nullptr;
+Brush createBrush = nullptr;
 
-    LoadSettings();
-    g_isDarkMode = IsSystemDarkMode();
-    Wh_Log(L"Initial theme: %s", (BOOL)g_isDarkMode ? L"DARK" : L"LIGHT");
+HRESULT __cdecl GetBrushHook(float radius, int dpi, const void* color,
+                            int borderStyle, int shadowStyle, void* output) {
+    if (stopping.load(std::memory_order_relaxed) || !bypassCache ||
+        shadowStyle == 0 || (!customColor && opacityScale == 1.0f && sizeScale == 1.0f))
+        return getBrushOriginal(radius, dpi, color, borderStyle, shadowStyle, output);
+    // This is exactly the native cache-miss factory and argument list.
+    // Returned resources stay owned by the caller; no foreign C++ ABI use.
+    HRESULT hr = createBrush(radius, dpi, color, borderStyle, shadowStyle, output);
+    if (brushReports.fetch_add(1, std::memory_order_relaxed) < 12)
+        Wh_Log(L"BRUSH_REBUILD style=%d dpi=%d HRESULT=0x%08X", shadowStyle, dpi,
+               static_cast<unsigned>(hr));
+    return hr;
+}
 
-    bool success = true;
-    success &= Hook(DefWindowProcW,  DefWindowProcW_hook,  &DefWindowProcW_orig,  L"DefWindowProcW");
-    success &= Hook(DefWindowProcA,  DefWindowProcA_hook,  &DefWindowProcA_orig,  L"DefWindowProcA");
-    success &= Hook(DefDlgProcW,     DefDlgProcW_hook,     &DefDlgProcW_orig,     L"DefDlgProcW");
-    success &= Hook(DefDlgProcA,     DefDlgProcA_hook,     &DefDlgProcA_orig,     L"DefDlgProcA");
-    success &= Hook(DefFrameProcW,   DefFrameProcW_hook,   &DefFrameProcW_orig,   L"DefFrameProcW");
-    success &= Hook(DefFrameProcA,   DefFrameProcA_hook,   &DefFrameProcA_orig,   L"DefFrameProcA");
-    success &= Hook(CreateWindowExW, CreateWindowExW_hook, &CreateWindowExW_orig, L"CreateWindowExW");
-    success &= Hook(CreateWindowExA, CreateWindowExA_hook, &CreateWindowExA_orig, L"CreateWindowExA");
-    success &= Hook(DwmSetWindowAttribute, DwmSetWindowAttribute_hook, &DwmSetWindowAttribute_orig, L"DwmSetWindowAttribute");
+void __cdecl ParametersHook(int style, int dpi, float* radius1,
+                           float* radius2, float* alpha1, float* alpha2) {
+    auto caller = reinterpret_cast<ULONG_PTR>(__builtin_return_address(0));
+    auto rva = caller - reinterpret_cast<ULONG_PTR>(moduleBase);
+    original(style, dpi, radius1, radius2, alpha1, alpha2);
+    if (stopping.load(std::memory_order_relaxed)) return;
+    // Settings are immutable for the lifetime of this hook. Windhawk reloads
+    // the mod on changes; no allocation, I/O or object traversal here.
+    float before1 = *alpha1, before2 = *alpha2;
+    *radius1 *= sizeScale;
+    *radius2 *= sizeScale;
+    *alpha1 = std::clamp(*alpha1 * opacityScale, 0.0f, 1.0f);
+    *alpha2 = std::clamp(*alpha2 * opacityScale, 0.0f, 1.0f);
+    const wchar_t* path = rva == 0x37373 ? L"SURFACE" :
+                          rva == 0x37154 ? L"MARGINS" : L"OTHER";
+    auto& count = rva == 0x37373 ? surfaceReports :
+                  rva == 0x37154 ? marginReports : otherReports;
+    if (count.fetch_add(1, std::memory_order_relaxed) < 12)
+        Wh_Log(L"%s callerRVA=0x%llX style=%d dpi=%d alpha=(%.3f,%.3f)->(%.3f,%.3f) radii=(%.2f,%.2f)",
+               path, static_cast<unsigned long long>(rva), style, dpi,
+               static_cast<double>(before1), static_cast<double>(before2),
+               static_cast<double>(*alpha1), static_cast<double>(*alpha2),
+               static_cast<double>(*radius1), static_cast<double>(*radius2));
+}
 
-    if (!success) {
-        Wh_Log(L"=== Init failed: one or more hooks could not be set ===");
+bool VerifyBody(BYTE* data, ULONG length, const char* expected) {
+    BCRYPT_ALG_HANDLE algorithm = nullptr;
+    if (BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM,
+                                    nullptr, 0) < 0) return false;
+    BYTE digest[32]{};
+    NTSTATUS status = BCryptHash(algorithm, nullptr, 0, data, length, digest, 32);
+    BCryptCloseAlgorithmProvider(algorithm, 0);
+    if (status < 0) return false;
+    constexpr char hex[] = "0123456789abcdef";
+    for (unsigned i=0; i<32; ++i)
+        if (expected[2*i] != hex[digest[i] >> 4] ||
+            expected[2*i+1] != hex[digest[i] & 15]) return false;
+    return true;
+}
+
+bool VerifyTarget(HMODULE module) {
+    auto base = reinterpret_cast<BYTE*>(module);
+    auto dos = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0 ||
+        dos->e_lfanew > 0x800) return false;
+    auto nt = reinterpret_cast<IMAGE_NT_HEADERS64*>(base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE ||
+        nt->FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64 ||
+        nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC ||
+        nt->FileHeader.TimeDateStamp != 0x240e386a ||
+        nt->OptionalHeader.SizeOfImage != 0x142000) return false;
+    auto directory = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG];
+    if (directory.VirtualAddress != 0x10b860 || directory.Size != 0x70)
+        return false;
+    auto debug = reinterpret_cast<IMAGE_DEBUG_DIRECTORY*>(base + directory.VirtualAddress);
+    const BYTE expectedIdentity[] = {
+        0x52,0x53,0x44,0x53,0x7c,0x56,0x7a,0x7b,
+        0xa0,0xba,0x17,0x41,0x55,0xde,0x63,0x8d,
+        0x3f,0xd1,0x64,0xf6,0x01,0x00,0x00,0x00
+    };
+    bool identity = false;
+    for (unsigned i=0; i<directory.Size/sizeof(*debug); ++i) {
+        if (debug[i].Type == IMAGE_DEBUG_TYPE_CODEVIEW &&
+            debug[i].SizeOfData >= sizeof(expectedIdentity) &&
+            debug[i].AddressOfRawData <= 0x142000-sizeof(expectedIdentity) &&
+            !std::memcmp(base+debug[i].AddressOfRawData, expectedIdentity,
+                         sizeof(expectedIdentity))) identity = true;
+    }
+    if (!identity) return false;
+    // Check full bodies of both new targets before using their addresses.
+    if (!VerifyBody(base+0x3ab80, 0x22e,
+        "c1e6b139c652ba5064389137e53646ed4b40943444a5a6cf88ed829dd78b1cfb") ||
+        !VerifyBody(base+0x38318, 0xa04,
+        "bd3fc277e7e3f633d9c200c907517dfc3cd826057770db1b13f781f46bcaae08")) return false;
+    // Entire leaf function has no base relocations. Hash loaded instructions
+    // before hooking, also rejecting an existing detour by another mod.
+    const BYTE expectedHash[32] = {
+        0x67,0x80,0xf6,0x24,0x7e,0xa7,0xec,0x9d,
+        0xf6,0xc3,0x7f,0xcd,0xe6,0xc4,0x31,0x58,
+        0x80,0xb6,0x36,0xd4,0x57,0xf0,0x63,0xf1,
+        0x5d,0xde,0xc6,0x7f,0x37,0xd1,0x82,0x1d
+    };
+    BCRYPT_ALG_HANDLE algorithm = nullptr;
+    if (BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM,
+                                    nullptr, 0) < 0) return false;
+    BYTE digest[32]{};
+    NTSTATUS status = BCryptHash(algorithm, nullptr, 0, base+0x371a8,
+                                 0xe4, digest, sizeof(digest));
+    BCryptCloseAlgorithmProvider(algorithm, 0);
+    return status >= 0 && !std::memcmp(digest, expectedHash, sizeof(digest));
+}
+}
+
+BOOL Wh_ModInit() {
+#if !defined(_M_X64) && !defined(__x86_64__)
+    Wh_Log(L"REFUSED: Questo mod supporta esclusivamente l'architettura x86-64.");
+    return FALSE;
+#else
+    stopping.store(false);
+    reported.store(false);
+    marginReports.store(0); surfaceReports.store(0);
+    otherReports.store(0); brushReports.store(0);
+    HMODULE module = GetModuleHandleW(L"uDWM.dll");
+    if (!module || !VerifyTarget(module)) {
+        Wh_Log(L"REFUSED: uDWM not loaded, unsupported DLL, or code already modified.");
         return FALSE;
     }
-
-    Wh_Log(L"=== Init complete ===");
+    Wh_Log(L"Exact uDWM identity and function bytes verified.");
+    moduleBase = reinterpret_cast<BYTE*>(module);
+    if (!Wh_GetIntSetting(L"enabled")) {
+        Wh_Log(L"Diagnostic only: shadow changes disabled in settings.");
+        return TRUE;
+    }
+    opacityScale = std::clamp(Wh_GetIntSetting(L"opacityPercent"), 0, 300)/100.0f;
+    sizeScale = std::clamp(Wh_GetIntSetting(L"sizePercent"), 50, 150)/100.0f;
+    bypassCache = Wh_GetIntSetting(L"bypassCache") != 0;
+    customColor = Wh_GetIntSetting(L"customColor") != 0;
+    if (customColor) {
+        PCWSTR color = Wh_GetStringSetting(L"shadowColor");
+        bool valid = ParseColor(color, &wstRed, &wstGreen, &wstBlue);
+        if (color) Wh_FreeStringSetting(color);
+        if (!valid) {
+            customColor = false;
+            Wh_Log(L"COLOR disabled: use a six-digit #RRGGBB value.");
+        }
+        // Only color-on checks/installs the new targets. Color-off retains
+        // the 0.2 hook set and execution paths, including cache behavior.
+        if (customColor && !VerifyBody(moduleBase+0x37294, 0xfed,
+            "e66c5c849c8c1321446e42379e8b68fcdb856be61a6d1f3bfc4311e8d1522ece")) {
+            customColor = false;
+            Wh_Log(L"COLOR disabled: surface code differs. Base controls retained.");
+        }
+    }
+    Wh_Log(L"CONFIG opacity=%.2f size=%.2f bypassCache=%d",
+           static_cast<double>(opacityScale), static_cast<double>(sizeScale), bypassCache);
+    createBrush = reinterpret_cast<Brush>(moduleBase+0x38318);
+    auto target = reinterpret_cast<BYTE*>(module)+0x371a8;
+    if (!Wh_SetFunctionHook(target, reinterpret_cast<void*>(ParametersHook),
+                           reinterpret_cast<void**>(&original))) {
+        Wh_Log(L"Hook registration failed.");
+        return FALSE;
+    }
+    if (bypassCache && !Wh_SetFunctionHook(moduleBase+0x3ab80,
+            reinterpret_cast<void*>(GetBrushHook),
+            reinterpret_cast<void**>(&getBrushOriginal))) {
+        Wh_Log(L"Cache hook registration failed; initialization aborted.");
+        return FALSE;
+    }
+    if (customColor) {
+        if (!Wh_SetFunctionHook(moduleBase+0x37918,
+                reinterpret_cast<void*>(WstColorHook1), &wstColorResume1) ||
+            !Wh_SetFunctionHook(moduleBase+0x37a40,
+                reinterpret_cast<void*>(WstColorHook2), &wstColorResume2)) {
+            // Abort the transaction; never run with only one layer colored.
+            Wh_Log(L"COLOR hook registration failed. Turn customColor off to use the base.");
+            return FALSE;
+        }
+        Wh_Log(L"COLOR enabled RGB=(%.3f,%.3f,%.3f). Both native shadow layers hooked.",
+               static_cast<double>(wstRed), static_cast<double>(wstGreen),
+               static_cast<double>(wstBlue));
+        if (!bypassCache) Wh_Log(L"COLOR: enable bypassCache if existing brushes keep the old color.");
+    }
+    Wh_Log(L"Native shadow hooks registered. Open a NEW window and change focus for testing.");
     return TRUE;
+#endif
 }
 
-VOID Wh_ModAfterInit()
-{
-    Wh_Log(L"[PID %d] Applying to existing windows...", GetCurrentProcessId());
-    ApplyToAllWindows();
-    Wh_Log(L"[PID %d] Done", GetCurrentProcessId());
-}
+void Wh_ModBeforeUninit() { stopping.store(true); }
+void Wh_ModUninit() {}
 
-// Called by Windhawk when the user saves new settings in the UI.
-// Re-reads the current theme and repaints windows with foreground priority.
-VOID Wh_ModSettingsChanged()
-{
-    Wh_Log(L"[PID %d] Settings changed - reapplying...", GetCurrentProcessId());
-    LoadSettings();
-    g_isDarkMode = IsSystemDarkMode();
-    ApplyToAllWindows();
-    Wh_Log(L"[PID %d] Reapply done", GetCurrentProcessId());
-}
-
-VOID Wh_ModUninit()
-{
-    Wh_Log(L"[PID %d] Uninit - restoring system defaults", GetCurrentProcessId());
-
-    // Swap out the applied sets atomically, then iterate over the captured snapshot.
-    // This avoids holding mutexes across DWM calls (cross-process, potentially slow).
-    std::unordered_set<HWND> applied;
-    {
-        std::lock_guard<std::mutex> lock(g_appliedMutex);
-        applied.swap(g_appliedWindows);
-    }
-
-    std::unordered_set<HWND> appliedCustomColors;
-    {
-        std::lock_guard<std::mutex> lock(g_appliedCustomColorMutex);
-        appliedCustomColors.swap(g_appliedCustomColorWindows);
-    }
-
-    for (HWND hWnd : applied) {
-        if (!IsWindow(hWnd)) continue;
-
-        BOOL dark = FALSE;
-        {
-            std::lock_guard<std::mutex> lock(g_appDarkModeMutex);
-            auto it = g_appDarkModeWindows.find(hWnd);
-            if (it != g_appDarkModeWindows.end()) dark = it->second;
-        }
-
-        bool appOwnsColour;
-        {
-            std::lock_guard<std::mutex> lock(g_appControlledMutex);
-            appOwnsColour = g_appControlledWindows.count(hWnd) != 0;
-        }
-
-        bool hadCustomColor = appliedCustomColors.count(hWnd) != 0;
-
-        InModGuard guard;
-        DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
-        if (!appOwnsColour && hadCustomColor) {
-            const COLORREF def = DWMWA_COLOR_DEFAULT;
-            DwmSetWindowAttribute(hWnd, DWMWA_CAPTION_COLOR, &def, sizeof(def));
-        }
-    }
-
-    Wh_Log(L"[PID %d] Cleanup complete", GetCurrentProcessId());
+BOOL Wh_ModSettingsChanged(BOOL* reload) {
+    *reload = TRUE;
+    return TRUE;
 }
