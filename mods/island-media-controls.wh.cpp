@@ -2,7 +2,7 @@
 // @id              island-media-controls
 // @name            Island Media Controls
 // @description     Dynamic island-like media controls for the Windows 11 taskbar.
-// @version         0.10.53
+// @version         0.10.54
 // @author          usho
 // @github          https://github.com/usho-lear
 // @license         MIT
@@ -187,6 +187,7 @@ play/pause, and next controls.
     $description: "Accepted range: 0-128 px."
   - PopupShadowOpacity: 70
     $name: Expanded player shadow opacity (%)
+    $description: "Accepted range: 0-100%."
   - HoverScale: 106
     $name: Hover scale (%)
     $description: "Accepted range: 100-125%."
@@ -195,7 +196,7 @@ play/pause, and next controls.
     $description: "Accepted range: 1-80."
   - AnimationSpeed: 100
     $name: Animation speed (%)
-    $description: 100 is normal speed. Use lower values such as 25 for slow-motion animation preview.
+    $description: "Accepted range: 10-400%. 100% is normal speed; lower values such as 25% are useful for slow-motion animation previews."
 */
 // ==/WindhawkModSettings==
 
@@ -697,6 +698,7 @@ double g_dynamicTransportTargetReveal = 0.0;
 double g_dynamicTransportRevealVelocity = 0.0;
 double g_dynamicMainGlowRevealProgress = 0.0;
 double g_dynamicMainGlowBreathPhase = 0.0;
+double g_lastAppliedGlowBreathOpacity = -1.0;
 bool g_dynamicTransportLaunchPhase = false;
 std::chrono::steady_clock::time_point g_lastDynamicCompactFrameTime{};
 uint64_t g_dynamicTransportAccentThumbnailHash = UINT64_MAX;
@@ -2845,17 +2847,16 @@ bool ReadCommittedHGlobalStreamBytes(
     return true;
 }
 
-std::vector<uint8_t> CreateLowDetailAlbumCoverBytes(std::vector<uint8_t> const& bytes,
-                                                     bool edgeFadeToMiddle = false,
-                                                     bool fadeFromTop = false,
-                                                     bool fadeFromRight = false,
-                                                     int blurPasses = 3,
-                                                     bool albumMicaGrade = false,
-                                                     bool fadeFromLeft = false,
-                                                     PreparedBitmap* preparedBitmap = nullptr) {
-    std::vector<uint8_t> output;
+bool CreateLowDetailAlbumCover(std::vector<uint8_t> const& bytes,
+                               bool edgeFadeToMiddle,
+                               bool fadeFromTop,
+                               bool fadeFromRight,
+                               int blurPasses,
+                               bool albumMicaGrade,
+                               bool fadeFromLeft,
+                               PreparedBitmap& preparedBitmap) {
     if (bytes.empty()) {
-        return output;
+        return false;
     }
 
     // Keep this layer as a soft color wash. Slightly stronger than the
@@ -2873,10 +2874,6 @@ std::vector<uint8_t> CreateLowDetailAlbumCoverBytes(std::vector<uint8_t> const& 
     IWICBitmapFrameDecode* frame = nullptr;
     IWICBitmapScaler* scaler = nullptr;
     IWICFormatConverter* converter = nullptr;
-    IStream* outStream = nullptr;
-    IWICBitmapEncoder* encoder = nullptr;
-    IWICBitmapFrameEncode* outFrame = nullptr;
-    IPropertyBag2* propertyBag = nullptr;
 
     HRESULT hr = stream ? S_OK : E_FAIL;
     if (SUCCEEDED(hr)) {
@@ -3037,67 +3034,20 @@ std::vector<uint8_t> CreateLowDetailAlbumCoverBytes(std::vector<uint8_t> const& 
         }
     }
 
-    if (SUCCEEDED(hr) && preparedBitmap) {
-        preparedBitmap->width = kLowDetailSize;
-        preparedBitmap->height = kLowDetailSize;
-        preparedBitmap->pixels = std::move(pixels);
-        if (converter) converter->Release();
-        if (scaler) scaler->Release();
-        if (frame) frame->Release();
-        if (decoder) decoder->Release();
-        if (factory) factory->Release();
-        if (stream) stream->Release();
-        return {};
+    if (SUCCEEDED(hr)) {
+        preparedBitmap.width = kLowDetailSize;
+        preparedBitmap.height = kLowDetailSize;
+        preparedBitmap.pixels = std::move(pixels);
     }
 
-    if (SUCCEEDED(hr)) {
-        hr = CreateStreamOnHGlobal(nullptr, TRUE, &outStream);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = factory->CreateEncoder(GUID_ContainerFormatPng, nullptr, &encoder);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = encoder->Initialize(outStream, WICBitmapEncoderNoCache);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = encoder->CreateNewFrame(&outFrame, &propertyBag);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = outFrame->Initialize(propertyBag);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = outFrame->SetSize(kLowDetailSize, kLowDetailSize);
-    }
-    WICPixelFormatGUID pixelFormat = GUID_WICPixelFormat32bppPBGRA;
-    if (SUCCEEDED(hr)) {
-        hr = outFrame->SetPixelFormat(&pixelFormat);
-    }
-    if (SUCCEEDED(hr)) {
-        hr = outFrame->WritePixels(kLowDetailSize, stride, bufferSize, pixels.data());
-    }
-    if (SUCCEEDED(hr)) {
-        hr = outFrame->Commit();
-    }
-    if (SUCCEEDED(hr)) {
-        hr = encoder->Commit();
-    }
-    if (SUCCEEDED(hr) && !ReadCommittedHGlobalStreamBytes(outStream, output)) {
-        output.clear();
-    }
-
-    if (propertyBag) propertyBag->Release();
-    if (outFrame) outFrame->Release();
-    if (encoder) encoder->Release();
-    if (outStream) outStream->Release();
     if (converter) converter->Release();
     if (scaler) scaler->Release();
     if (frame) frame->Release();
     if (decoder) decoder->Release();
     if (factory) factory->Release();
     if (stream) stream->Release();
-    return output;
+    return SUCCEEDED(hr);
 }
-
 winrt::Windows::UI::Color DefaultPopupAccentColor() {
     return Color(0xFF, 0x4F, 0x7D, 0xE8);
 }
@@ -3245,14 +3195,13 @@ void ApplyPopupCoverG2Mask(std::vector<BYTE>& pixels,
     }
 }
 
-std::vector<uint8_t> CreatePopupG2AlbumCoverBytes(
+bool CreatePopupG2AlbumCover(
     std::vector<uint8_t> const& bytes,
     int expandedCornerRadius,
-    PreparedBitmap* preparedBitmap = nullptr,
+    PreparedBitmap& preparedBitmap,
     UINT size = 320) {
-    std::vector<uint8_t> output;
     if (bytes.empty() || size == 0) {
-        return output;
+        return false;
     }
 
     IStream* stream = SHCreateMemStream(bytes.data(), static_cast<UINT>(bytes.size()));
@@ -3323,13 +3272,9 @@ std::vector<uint8_t> CreatePopupG2AlbumCoverBytes(
     }
     if (SUCCEEDED(hr)) {
         ApplyPopupCoverG2Mask(pixels, size, expandedCornerRadius);
-        if (preparedBitmap) {
-            preparedBitmap->width = size;
-            preparedBitmap->height = size;
-            preparedBitmap->pixels = std::move(pixels);
-        } else {
-            output = EncodePbgraPngBytes(size, size, pixels);
-        }
+        preparedBitmap.width = size;
+        preparedBitmap.height = size;
+        preparedBitmap.pixels = std::move(pixels);
     }
 
     if (converter) converter->Release();
@@ -3339,16 +3284,16 @@ std::vector<uint8_t> CreatePopupG2AlbumCoverBytes(
     if (decoder) decoder->Release();
     if (factory) factory->Release();
     if (stream) stream->Release();
-    return output;
+    return SUCCEEDED(hr);
 }
 
-std::vector<uint8_t> CreatePlaceholderAlbumCoverBytes(UINT size,
-                                                       bool edgeFadeToMiddle = false,
-                                                       bool fadeFromTop = false,
-                                                       bool fadeFromRight = false,
-                                                       PreparedBitmap* preparedBitmap = nullptr) {
+bool CreatePlaceholderAlbumCover(UINT size,
+                                 bool edgeFadeToMiddle,
+                                 bool fadeFromTop,
+                                 bool fadeFromRight,
+                                 PreparedBitmap& preparedBitmap) {
     if (size == 0) {
-        return {};
+        return false;
     }
 
     auto accent = DefaultPopupAccentColor();
@@ -3390,13 +3335,10 @@ std::vector<uint8_t> CreatePlaceholderAlbumCoverBytes(UINT size,
             pixel[3] = alpha;
         }
     }
-    if (preparedBitmap) {
-        preparedBitmap->width = size;
-        preparedBitmap->height = size;
-        preparedBitmap->pixels = std::move(pixels);
-        return {};
-    }
-    return EncodePbgraPngBytes(size, size, pixels);
+    preparedBitmap.width = size;
+    preparedBitmap.height = size;
+    preparedBitmap.pixels = std::move(pixels);
+    return true;
 }
 
 bool GetArtworkDimensions(std::vector<uint8_t> const& bytes, UINT& width, UINT& height) {
@@ -4289,20 +4231,22 @@ winrt::Windows::UI::Color ExtractAlbumAccentColor(std::vector<uint8_t> const& by
                  static_cast<BYTE>(Clamp(static_cast<int>(std::lround(b)), 0, 255)));
 }
 
-std::vector<uint8_t> CreateResilientLowDetailAlbumCoverBytes(
+bool CreateResilientLowDetailAlbumCover(
     std::vector<uint8_t> const& bytes,
-    bool edgeFadeToMiddle = false,
-    bool fadeFromTop = false,
-    bool fadeFromRight = false,
-    int blurPasses = 3,
-    bool albumMicaGrade = false,
-    bool fadeFromLeft = false,
-    PreparedBitmap* preparedBitmap = nullptr) {
-    auto output = CreateLowDetailAlbumCoverBytes(
-        bytes, edgeFadeToMiddle, fadeFromTop, fadeFromRight,
-        blurPasses, albumMicaGrade, fadeFromLeft, preparedBitmap);
-    if (!output.empty() || (preparedBitmap && !preparedBitmap->pixels.empty()) || bytes.empty()) {
-        return output;
+    bool edgeFadeToMiddle,
+    bool fadeFromTop,
+    bool fadeFromRight,
+    int blurPasses,
+    bool albumMicaGrade,
+    bool fadeFromLeft,
+    PreparedBitmap& preparedBitmap) {
+    if (CreateLowDetailAlbumCover(
+            bytes, edgeFadeToMiddle, fadeFromTop, fadeFromRight,
+            blurPasses, albumMicaGrade, fadeFromLeft, preparedBitmap)) {
+        return true;
+    }
+    if (bytes.empty()) {
+        return false;
     }
 
     // Some providers expose formats which BitmapImage can display but the WIC
@@ -4363,13 +4307,10 @@ std::vector<uint8_t> CreateResilientLowDetailAlbumCoverBytes(
             pixel[3] = alpha;
         }
     }
-    if (preparedBitmap) {
-        preparedBitmap->width = kSize;
-        preparedBitmap->height = kSize;
-        preparedBitmap->pixels = std::move(pixels);
-        return {};
-    }
-    return EncodePbgraPngBytes(kSize, kSize, pixels);
+    preparedBitmap.width = kSize;
+    preparedBitmap.height = kSize;
+    preparedBitmap.pixels = std::move(pixels);
+    return true;
 }
 
 void PrepareMediaArtwork(MediaState& state) {
@@ -4521,12 +4462,12 @@ void PrepareMediaArtwork(MediaState& state) {
     }
 
     if (needsTintAssets && !prepared->displayBytes.empty()) {
-        CreateResilientLowDetailAlbumCoverBytes(
+        CreateResilientLowDetailAlbumCover(
             prepared->displayBytes, false, false, false, 6, true, false,
-            &prepared->transportWashBitmap);
-        CreateResilientLowDetailAlbumCoverBytes(
+            prepared->transportWashBitmap);
+        CreateResilientLowDetailAlbumCover(
             prepared->displayBytes, true, false, false, 5, true, true,
-            &prepared->mainWashBitmap);
+            prepared->mainWashBitmap);
         prepared->tintAssetsReady = true;
     } else {
         prepared->tintAssetsReady = needsTintAssets;
@@ -4534,21 +4475,21 @@ void PrepareMediaArtwork(MediaState& state) {
 
     if (popupRequested) {
         if (prepared->visualBytes.empty()) {
-            CreatePlaceholderAlbumCoverBytes(
-                320, false, false, false, &prepared->popupArtBitmap);
+            CreatePlaceholderAlbumCover(
+                320, false, false, false, prepared->popupArtBitmap);
             ApplyPopupCoverG2Mask(
                 prepared->popupArtBitmap.pixels, 320,
                 artworkSettings.expandedCornerRadius);
-            CreatePlaceholderAlbumCoverBytes(
-                20, false, false, false, &prepared->popupPanelBitmap);
-            CreatePlaceholderAlbumCoverBytes(
-                20, true, false, false, &prepared->popupBackdropBitmap);
-            CreatePlaceholderAlbumCoverBytes(
-                20, true, true, false, &prepared->popupBackdropTopBitmap);
+            CreatePlaceholderAlbumCover(
+                20, false, false, false, prepared->popupPanelBitmap);
+            CreatePlaceholderAlbumCover(
+                20, true, false, false, prepared->popupBackdropBitmap);
+            CreatePlaceholderAlbumCover(
+                20, true, true, false, prepared->popupBackdropTopBitmap);
         } else {
-            CreatePopupG2AlbumCoverBytes(
+            CreatePopupG2AlbumCover(
                 prepared->displayBytes, artworkSettings.expandedCornerRadius,
-                &prepared->popupArtBitmap);
+                prepared->popupArtBitmap);
             if (prepared->popupArtBitmap.pixels.empty()) {
                 prepared->popupArtBitmap =
                     DecodePreparedBitmap(prepared->displayBytes, 320);
@@ -4560,15 +4501,15 @@ void PrepareMediaArtwork(MediaState& state) {
             std::vector<uint8_t> const& popupBlurSource =
                 useGeneratedBlurCover ? prepared->displayBytes
                                       : prepared->visualBytes;
-            CreateResilientLowDetailAlbumCoverBytes(
+            CreateResilientLowDetailAlbumCover(
                 popupBlurSource, true, false, false, 3, false, false,
-                &prepared->popupBackdropBitmap);
-            CreateResilientLowDetailAlbumCoverBytes(
+                prepared->popupBackdropBitmap);
+            CreateResilientLowDetailAlbumCover(
                 popupBlurSource, true, true, false, 3, false, false,
-                &prepared->popupBackdropTopBitmap);
-            CreateResilientLowDetailAlbumCoverBytes(
+                prepared->popupBackdropTopBitmap);
+            CreateResilientLowDetailAlbumCover(
                 popupBlurSource, false, false, false, 3, false, false,
-                &prepared->popupPanelBitmap);
+                prepared->popupPanelBitmap);
         }
         prepared->popupReady = true;
     }
@@ -9303,6 +9244,9 @@ bool UpdateCompactProgressFromSnapshot() {
     return state.hasSession && state.isPlaying && state.durationTicks > 0;
 }
 
+bool IsDynamicCompactMode();
+bool DynamicTransportExpandsRight();
+
 void SetCompactTextEdgeFadeOpacity(double opacity) {
     opacity = Clamp(opacity, 0.0, 1.0);
     try {
@@ -9315,8 +9259,8 @@ void SetCompactTextEdgeFadeOpacity(double opacity) {
                 Clamp(g_dynamicMainGlowRevealProgress / 0.72, 0.0, 1.0));
             seamFadeOpacity *= 1.0 - glowReveal;
         }
-        bool seamOnRight = g_settings.sideExpand &&
-                           g_settings.position == L"taskbar_left_edge";
+        bool seamOnRight =
+            IsDynamicCompactMode() && DynamicTransportExpandsRight();
         if (g_compactTextLeftFade) {
             g_compactTextLeftFade.Opacity(
                 seamOnRight ? opacity : seamFadeOpacity);
@@ -9374,8 +9318,6 @@ void ResetCompactTextAnimationVisuals() {
     } catch (...) {
     }
 }
-
-bool IsDynamicCompactMode();
 
 double CompactTextClipWidthFallback() {
     double width = g_layout.compactWidth -
@@ -11143,13 +11085,13 @@ void RequestPopupOverlayWgcBorderlessAccessAsync() {
                 g_popupOverlayWgcBorderlessAccessState.store(
                     4, std::memory_order_release);
                 Wh_Log(
-                    L"Island: overlay WGC borderless access failed hr=0x%08X",
+                    L"overlay WGC borderless access failed hr=0x%08X",
                     static_cast<unsigned>(error.code().value));
             } catch (...) {
                 g_popupOverlayWgcBorderlessAccessState.store(
                     4, std::memory_order_release);
                 Wh_Log(
-                    L"Island: overlay WGC borderless access failed unknown");
+                    L"overlay WGC borderless access failed unknown");
             }
             std::lock_guard operationLock(
                 g_popupOverlayWgcBorderlessAccessThreadMutex);
@@ -11990,7 +11932,7 @@ bool StartPopupOverlayWgcBackdrop(
                         }
                     } catch (...) {
                         Wh_Log(
-                            L"Island: overlay WGC callback render escaped exception");
+                            L"overlay WGC callback render escaped exception");
                     }
 
                     if (frame) {
@@ -14414,13 +14356,18 @@ void OnDynamicMainGlowRendering(
             0.5 + std::sin(g_dynamicMainGlowBreathPhase) * 0.5;
         double opacity = 0.82 + breathAmount * 0.18;
         double rangeScale = 0.78 + breathAmount * 0.22;
+        if (std::abs(opacity - g_lastAppliedGlowBreathOpacity) < 0.004) {
+            return;
+        }
+        g_lastAppliedGlowBreathOpacity = opacity;
 
         if (g_dynamicMainOcclusion && IsTransparentMaterial()) {
             g_dynamicMainOcclusion.Opacity(
                 g_compactMainTintOpacity * opacity);
         }
         if (g_dynamicMainOcclusionGlowScale) {
-            g_dynamicMainOcclusionGlowScale.ScaleX(rangeScale);
+            g_dynamicMainOcclusionGlowScale.ScaleX(
+                IsTransparentMaterial() ? rangeScale : 1.0);
             g_dynamicMainOcclusionGlowScale.ScaleY(1.0);
         }
         if (g_dynamicMainWashHost) {
@@ -14448,6 +14395,7 @@ void StartDynamicMainGlowBreathing() {
         return;
     }
     g_lastDynamicMainGlowFrameTime = std::chrono::steady_clock::now();
+    g_lastAppliedGlowBreathOpacity = -1.0;
     g_dynamicMainGlowRenderingToken =
         mediax::CompositionTarget::Rendering(OnDynamicMainGlowRendering);
     g_dynamicMainGlowRenderingHooked = true;
@@ -17019,7 +16967,9 @@ void CALLBACK OnTaskbarLayoutTimer(HWND, UINT, UINT_PTR timerId, DWORD) {
             TriggerNavigationFailureFeedback(timedOutNavigationDirection);
         }
     } catch (...) {
-        StopTaskbarLayoutMonitor();
+        // Keep the timer alive so progress, theme polling, and later layout
+        // updates can recover after one transient XAML failure.
+        Wh_Log(L"taskbar layout monitor tick failed");
     }
 }
 
@@ -17094,7 +17044,12 @@ void UpdatePlayerContents() {
     UpdateThemeVisuals();
 
     auto makeBitmap = [](PreparedBitmap const& prepared) -> mediax::ImageSource {
-        if (prepared.pixels.empty()) return nullptr;
+        size_t expectedSize =
+            static_cast<size_t>(prepared.width) * prepared.height * 4;
+        if (prepared.width == 0 || prepared.height == 0 ||
+            prepared.pixels.size() != expectedSize) {
+            return nullptr;
+        }
         imaging::WriteableBitmap bitmap(static_cast<int32_t>(prepared.width),
                                         static_cast<int32_t>(prepared.height));
         auto buffer = bitmap.PixelBuffer();
