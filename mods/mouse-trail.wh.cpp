@@ -4,7 +4,7 @@
 // @name:zh-CN      鼠标拖尾
 // @description     Highly customizable cursor trail with native D3D11 rendering, 18 color modes, 10 trail shapes, 2.5D particle effects, particle system, click effects, and cursor color extraction. DirectComposition hardware acceleration, low idle CPU.
 // @description:zh-CN 高度可定制的鼠标拖尾，原生 D3D11 渲染，18种颜色模式，10种拖尾形状，2.5D 立体效果，粒子系统，点击特效，光标取色。DirectComposition 硬件加速，闲置低 CPU。
-// @version         3.3
+// @version         3.3.1
 // @author          MCheng404
 // @github          https://github.com/MCheng404
 // @license         MIT
@@ -136,9 +136,9 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 * **闪电拖尾：** 随机锯齿闪电效果
 * **羽毛拖尾：** 随机毛刺深度纹理
 
-### 颜色模式（18种）
+### 颜色模式（23种）
 
-单色 / 三色渐变 / 彩虹流动 / 暖色调流动 / 冷色调流动 / 霓虹脉冲 / 速度变色 / 流动条纹 / 火焰 / 极光 / 光标取色 / 光标混色 / 金属金 / 赛博朋克 / 粉彩 / 色相旋转 / 双色脉冲 / 星光闪烁
+单色 / 流动渐变 / 彩虹流动 / 暖色调流动 / 冷色调流动 / 霓虹脉冲 / 速度变色 / 流动条纹 / 火焰 / 极光 / 光标取色 / 光标混色 / 金属金 / 赛博朋克 / 粉彩 / 色相旋转 / 双色脉冲 / 星光闪烁 / 热力图 / 波纹干涉 / 色谱分裂 / 颗粒抖动 / 渐变扭曲
 
 ### 取色偏移（6种模式）
 
@@ -151,6 +151,9 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 * **增强发光：** 双层光晕（外晕+内辉），独立开关
 * **头部高光 + 拖尾阴影：** 高级质感深度提示
 * **速度响应宽度：** 快速移动时拖尾变宽
+* **加法混合发光：** 拖尾/粒子/波纹发光层使用SrcAlpha+One加法混合，光晕更通透
+* **粒子快速移动插值：** 间隔<=10ms时沿路径插值补粒子，消除快速移动缝隙
+* **OKLab感知渐变：** 任意数量渐变颜色，OKLab空间插值无灰暗中点，预计算256色LUT，渐变沿拖尾流动
 
 ### 粒子系统
 
@@ -159,6 +162,9 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 * 形状：圆形、五角星、六芒星或随机混合
 * 颜色随生命周期渐变；密度、间隔（0=每帧）、加速度可调
 * 点击星爆粒子迸发
+* **向心力漩涡：** 鼠标做曲线运动时，粒子被捕获到轨道上旋转，形成漩涡效果（任何曲线运动都能触发）
+* **粒子质量系统：** 每个粒子有随机质量，质量影响惯性、大小、生命周期和引力（符合物理公式）
+* **粒子万有引力：** 牛顿万有引力定律 F=G*m1*m2/r² + 牛顿第二定律 a=F/m，支持双星/N体系统
 
 ### 点击特效
 
@@ -278,7 +284,7 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
   $name:zh-CN: 颜色模式
   $options:
   - single: Single Color
-  - gradient: 3-Color Gradient
+  - gradient: Flowing Gradient
   - rainbow: Rainbow Flow
   - warm: Warm Flow
   - cool: Cool Flow
@@ -295,9 +301,14 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
   - hue_rotate: Hue Rotate
   - dual_pulse: Dual Pulse
   - sparkle: Sparkle
+  - thermal: Thermal Heatmap
+  - interference: Wave Interference
+  - spectrum: Spectrum Split
+  - dither: Grain Dither
+  - warp: Gradient Warp
   $options:zh-CN:
   - single: 单色
-  - gradient: 三色渐变
+  - gradient: 流动渐变
   - rainbow: 彩虹流动
   - warm: 暖色调流动
   - cool: 冷色调流动
@@ -314,6 +325,11 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
   - hue_rotate: 色相旋转
   - dual_pulse: 双色脉冲
   - sparkle: 星光闪烁
+  - thermal: 热力图
+  - interference: 波纹干涉
+  - spectrum: 色谱分裂
+  - dither: 颗粒抖动
+  - warp: 渐变扭曲
 - custom_color: "00BFFF"
   $name: Custom Color
   $name:zh-CN: 自定义颜色
@@ -322,8 +338,8 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 - gradient_colors: "FF6B35,00BFFF,FFD700"
   $name: Gradient Colors
   $name:zh-CN: 渐变颜色
-  $description: 3 colors for gradient/stripes/dual-pulse modes, comma-separated hex RGB.
-  $description:zh-CN: 渐变/条纹/双色脉冲模式的3个颜色，逗号分隔的十六进制RGB。
+  $description: Any number of colors for gradient mode, comma-separated hex RGB. Gradient flows along the trail.
+  $description:zh-CN: 渐变模式的颜色，任意数量，逗号分隔十六进制 RGB。渐变沿拖尾流动。
 - enable_cursor_color_shift: true
   $name: Auto Color Shift
   $name:zh-CN: 取色自动偏移
@@ -612,6 +628,71 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
   $description: Repulsion and perturbation strength (0-100).
   $description:zh-CN: 排斥力和随机扰动的强度（0-100）。
 
+# ===== 向心力漩涡（娱乐功能）=====
+- enable_centripetal: false
+  $name: Centripetal Vortex
+  $name:zh-CN: 向心力漩涡
+  $description: When mouse moves in curved paths, particles get captured into orbiting vortex. Any curved motion triggers it.
+  $description:zh-CN: 鼠标做曲线运动时，粒子被捕获形成旋转漩涡。任何曲线运动都能触发。
+- centripetal_force: 50
+  $name: Vortex Force
+  $name:zh-CN: 漩涡强度
+  $description: Centripetal force strength and orbit speed (0-100).
+  $description:zh-CN: 向心力强度和轨道旋转速度（0-100）。
+- centripetal_sensitivity: 50
+  $name: Detection Sensitivity
+  $name:zh-CN: 检测灵敏度
+  $description: How easily circular motion is detected (0-100, lower = more sensitive).
+  $description:zh-CN: 圆周运动检测的灵敏度（0-100，越低越灵敏）。
+- centripetal_duration: 1500
+  $name: Vortex Duration
+  $name:zh-CN: 漩涡持续时间
+  $description: How long vortex persists after circular motion stops (ms, 500-5000).
+  $description:zh-CN: 停止圆周运动后漩涡持续的时间（毫秒，500-5000）。
+
+# ===== 粒子物理质量系统 =====
+- enable_particle_mass: true
+  $name: Particle Mass
+  $name:zh-CN: 粒子质量
+  $description: Enable random particle mass. Mass affects inertia, size, lifetime and gravity.
+  $description:zh-CN: 启用粒子随机质量。质量影响惯性、大小、生命周期和引力。
+- particle_mass_min: 5
+  $name: Min Mass
+  $name:zh-CN: 最小质量
+  $description: Minimum particle mass (1-50, divided by 10).
+  $description:zh-CN: 粒子最小质量（1-50，除以10）。
+- particle_mass_max: 20
+  $name: Max Mass
+  $name:zh-CN: 最大质量
+  $description: Maximum particle mass (1-100, divided by 10).
+  $description:zh-CN: 粒子最大质量（1-100，除以10）。
+- enable_particle_gravity: false
+  $name: Particle Gravity
+  $name:zh-CN: 粒子万有引力
+  $description: Newtonian gravity between particles. F=G*m1*m2/r², a=F/m.
+  $description:zh-CN: 粒子之间的牛顿万有引力。F=G*m1*m2/r²，a=F/m。
+- gravity_strength: 50
+  $name: Gravity Strength
+  $name:zh-CN: 引力强度
+  $description: Gravitational constant G (0-100).
+  $description:zh-CN: 引力常数G（0-100）。
+- gravity_system: binary
+  $name: Gravity System
+  $name:zh-CN: 引力系统
+  $options:
+  - binary: Binary Star
+  - nbody: N-Body
+  $options:zh-CN:
+  - binary: 双星系统
+  - nbody: N体系统
+  $description: Binary = two massive attractors; N-Body = all particles attract each other.
+  $description:zh-CN: 双星=两个大质量引力源；N体=所有粒子互相吸引。
+- gravity_body_count: 3
+  $name: N-Body Count
+  $name:zh-CN: N体数量
+  $description: Number of massive bodies in N-Body mode (2-10).
+  $description:zh-CN: N体模式中的大质量天体数量（2-10）。
+
 # ===== 点击效果 =====
 - enable_click_starburst: true
   $name: Click Starburst
@@ -752,6 +833,80 @@ static D2D1_COLOR_F LerpColor(D2D1_COLOR_F a, D2D1_COLOR_F b, float t) {
 static D2D1_COLOR_F LighterColor(D2D1_COLOR_F c, float amount = 0.55f) {
     return D2D1::ColorF(c.r + (1.0f - c.r) * amount, c.g + (1.0f - c.g) * amount, c.b + (1.0f - c.b) * amount, 1.0f);
 }
+
+// 渐变颜色系统全局变量 / Gradient color system globals (must be declared before OKLab functions)
+D2D1_COLOR_F g_gradColors[16] = {{1.0f, 0.42f, 0.21f, 1.0f}, {0.0f, 0.75f, 1.0f, 1.0f}, {1.0f, 0.84f, 0.0f, 1.0f}};
+int g_gradColorCount = 3;
+D2D1_COLOR_F g_gradientLUT[256];  // 预计算256色查找表 / Precomputed 256-entry lookup table
+bool g_gradientLUTDirty = true;   // LUT需要重建标记 / LUT rebuild flag
+float g_gradientFlowSpeed = 0.15f;  // 流动速度（相位/秒）/ Flow speed (phase per second)
+
+// ===== OKLab 感知均匀颜色空间转换 / OKLab perceptually-uniform color space conversion =====
+// OKLab是W3C推荐的CSS默认渐变插值空间，感知均匀、无灰暗中点 / W3C recommended default CSS gradient interpolation space
+struct OKLab { float L, a, b; };
+static OKLab RGBtoOKLab(float r, float g, float b) {
+    // sRGB → linear
+    auto srgb2lin = [](float c) { return c <= 0.04045f ? c / 12.92f : powf((c + 0.055f) / 1.055f, 2.4f); };
+    float lr = srgb2lin(r), lg = srgb2lin(g), lb = srgb2lin(b);
+    // linear RGB → LMS
+    float l = 0.4122214708f * lr + 0.5363325363f * lg + 0.0514459929f * lb;
+    float m = 0.2119034982f * lr + 0.6806995451f * lg + 0.1073969566f * lb;
+    float s = 0.0883024619f * lr + 0.2817188376f * lg + 0.6299787005f * lb;
+    // LMS → OKLab（立方根）
+    l = cbrtf(l); m = cbrtf(m); s = cbrtf(s);
+    return { 0.2104542553f * l + 0.7936177850f * m - 0.0040720468f * s,
+             1.9779984951f * l - 2.4285922050f * m + 0.4505937099f * s,
+             0.0259040371f * l + 0.7827717662f * m - 0.8086757660f * s };
+}
+static D2D1_COLOR_F OKLabtoRGB(float L, float a, float b) {
+    // OKLab → LMS
+    float l = L + 0.3963377774f * a + 0.2158037573f * b;
+    float m = L - 0.1055613458f * a - 0.0638541728f * b;
+    float s = L - 0.0894841775f * a - 1.2914855480f * b;
+    l = l * l * l; m = m * m * m; s = s * s * s;
+    // LMS → linear RGB
+    float lr =  4.0767416621f * l - 3.3077115913f * m + 0.2309699292f * s;
+    float lg = -1.2684380046f * l + 2.6097574011f * m - 0.3413193965f * s;
+    float lb = -0.0041960863f * l - 0.7034186147f * m + 1.7076147010f * s;
+    // linear → sRGB
+    auto lin2srgb = [](float c) { return c <= 0.0031308f ? 12.92f * c : 1.055f * powf(c, 1.0f / 2.4f) - 0.055f; };
+    lr = fminf(fmaxf(lin2srgb(lr), 0), 1);
+    lg = fminf(fmaxf(lin2srgb(lg), 0), 1);
+    lb = fminf(fmaxf(lin2srgb(lb), 0), 1);
+    return D2D1::ColorF(lr, lg, lb, 1.0f);
+}
+// OKLab 空间插值（感知均匀，无灰暗中点）/ OKLab-space interpolation (perceptually uniform, no muddy midpoint)
+static D2D1_COLOR_F LerpColorOKLab(D2D1_COLOR_F a, D2D1_COLOR_F b, float t) {
+    OKLab ca = RGBtoOKLab(a.r, a.g, a.b), cb = RGBtoOKLab(b.r, b.g, b.b);
+    return OKLabtoRGB(ca.L + (cb.L - ca.L) * t, ca.a + (cb.a - ca.a) * t, ca.b + (cb.b - ca.b) * t);
+}
+// 预计算256色渐变LUT（OKLab空间，多色点均匀分布）/ Precompute 256-entry gradient LUT (OKLab, evenly distributed color stops)
+static void RebuildGradientLUT() {
+    if (g_gradColorCount < 1) { g_gradientLUT[0] = D2D1::ColorF(1,1,1,1); return; }
+    if (g_gradColorCount == 1) { for (int i = 0; i < 256; i++) g_gradientLUT[i] = g_gradColors[0]; return; }
+    for (int i = 0; i < 256; i++) {
+        float pos = (float)i / 255.0f * (g_gradColorCount - 1);
+        int idx = (int)pos;
+        float frac = pos - idx;
+        if (idx >= g_gradColorCount - 1) { g_gradientLUT[i] = g_gradColors[g_gradColorCount - 1]; continue; }
+        g_gradientLUT[i] = LerpColorOKLab(g_gradColors[idx], g_gradColors[idx + 1], frac);
+    }
+    g_gradientLUTDirty = false;
+}
+// 从LUT采样渐变颜色（支持流动相位）/ Sample gradient from LUT (supports flowing phase)
+static D2D1_COLOR_F SampleGradientLUT(float ratio, float flowPhase) {
+    if (g_gradientLUTDirty) RebuildGradientLUT();
+    float pos = fmodf(ratio + flowPhase, 1.0f);
+    if (pos < 0) pos += 1.0f;
+    int idx = (int)(pos * 255.0f + 0.5f);
+    if (idx < 0) idx = 0; if (idx > 255) idx = 255;
+    return g_gradientLUT[idx];
+}
+// 安全获取渐变颜色（循环索引）/ Safe gradient color access (wrapping index)
+static D2D1_COLOR_F GetGradColor(int idx) {
+    if (g_gradColorCount <= 0) return D2D1::ColorF(1,1,1,1);
+    return g_gradColors[idx % g_gradColorCount];
+}
 static D2D1_COLOR_F ParseHexColor(PCWSTR hex, D2D1_COLOR_F fallback) {
     if (!hex || !*hex)
         return fallback;
@@ -768,22 +923,24 @@ static D2D1_COLOR_F ParseHexColor(PCWSTR hex, D2D1_COLOR_F fallback) {
     DWORD val = wcstoul(hex, nullptr, 16);
     return D2D1::ColorF(((val >> 16) & 0xFF) / 255.0f, ((val >> 8) & 0xFF) / 255.0f, (val & 0xFF) / 255.0f, 1.0f);
 }
-static void ParseGradientColors(PCWSTR input, D2D1_COLOR_F out[3]) {
+static void ParseGradientColors(PCWSTR input) {
     if (!input || !*input)
         return;
-    WCHAR buf[256];
-    wcsncpy_s(buf, input, 255);
-    buf[255] = 0;
+    WCHAR buf[512];
+    wcsncpy_s(buf, input, 511);
+    buf[511] = 0;
     int idx = 0;
     WCHAR *ctx = nullptr;
     WCHAR *tok = wcstok_s(buf, L",", &ctx);
-    while (tok && idx < 3) {
+    while (tok && idx < 16) {
         while (*tok == L' ' || *tok == L'\t')
             tok++;
-        D2D1_COLOR_F c = ParseHexColor(tok, out[idx]);
-        out[idx++] = c;
+        D2D1_COLOR_F c = ParseHexColor(tok, g_gradColors[idx]);
+        g_gradColors[idx++] = c;
         tok = wcstok_s(nullptr, L",", &ctx);
     }
+    if (idx > 0) g_gradColorCount = idx;
+    g_gradientLUTDirty = true;
 }
 
 // ===================== 数学表达式解析器 =====================
@@ -1070,8 +1227,8 @@ bool g_enableGlow = true;
 int g_glowIntensity = 40;
 int g_edgeSoftness = 50;  // 拖尾边缘柔和度（0=硬边，100=极柔和）
 int g_colorMode = 0;
+float g_gradientWarp = 0.5f;  // 渐变扭曲模式的中间色位置（0~1）
 D2D1_COLOR_F g_customColor = {0.0f, 0.75f, 1.0f, 1.0f};
-D2D1_COLOR_F g_gradColors[3] = {{1.0f, 0.42f, 0.21f, 1.0f}, {0.0f, 0.75f, 1.0f, 1.0f}, {1.0f, 0.84f, 0.0f, 1.0f}};
 int g_particleMode = 1;
 int g_particleOrigin = 2;  // 0=head 1=middle 2=tail 3=custom
 int g_particleOriginRatio = 80;
@@ -1088,6 +1245,39 @@ int g_particleSpinSpeed = 30;  // 粒子自旋速度（0-100）
 bool g_enableParticleInteraction = true;  // 粒子间相互作用
 int g_interParticleRepelDistance = 25;  // 粒子间排斥距离（像素）
 float g_interParticleRepelForce = 0.15f;  // 粒子间排斥力强度
+// 粒子质量系统
+bool g_enableParticleMass = true;
+float g_particleMassMin = 0.5f;
+float g_particleMassMax = 2.0f;
+// 粒子万有引力系统
+bool g_enableParticleGravity = false;
+float g_gravityStrength = 0.5f;  // 引力常数G（0-1）
+int g_gravitySystem = 0;  // 0=双星, 1=N体
+int g_gravityBodyCount = 3;  // N体数量
+// 引力天体（双星/N体的大质量粒子索引）
+std::vector<int> g_gravityBodies;
+// 向心力漩涡系统 / Centripetal vortex system
+bool g_enableCentripetal = false;
+float g_centripetalForce = 0.5f;  // 向心力强度（0-1）
+float g_centripetalSensitivity = 0.5f;  // 检测灵敏度（0-1，越低越灵敏）
+int g_centripetalDuration = 1500;  // 漩涡持续时间（ms）
+// 圆周运动检测状态
+struct CircleDetect {
+    float historyX[20];  // 位置历史
+    float historyY[20];
+    int historyCount;
+    float angularVel;  // 角速度（弧度/帧）
+    float circleCenterX, circleCenterY;  // 估算圆心
+    float circleRadius;  // 估算半径
+    bool isCircling;  // 是否在做圆周运动
+    float vortexStrength;  // 当前漩涡强度（0-1，平滑过渡）
+    DWORD lastCircleTime;  // 上次检测到圆周运动的时间
+    float vortexCenterX, vortexCenterY;  // 漩涡中心
+    float vortexAngularVel;  // 漩涡旋转速度
+    float orbitTilt;  // 轨道倾角（弧度，0=正对屏幕，π/2=侧视）
+    float orbitTiltVel;  // 倾角变化速度（轨道自身旋转）
+    float orbitPhase;  // 轨道相位（用于计算粒子在轨道上的位置）
+} g_circleDetect = {};
 ID2D1PathGeometry *g_pStarGeom = nullptr;
 ID2D1PathGeometry *g_pHexagramGeom = nullptr;
 ID2D1PathGeometry *g_pHeartGeom = nullptr;
@@ -1126,6 +1316,8 @@ std::vector<TrailFrame> g_trailHistory;
 std::atomic<bool> g_settingsDirty{false};  // 设置变更标记，渲染线程中消费
 std::atomic<bool> g_deviceLost{false};      // 设备丢失标记，渲染循环中重建
 DWORD g_lastParticleTime = 0;
+float g_lastParticleX = 0, g_lastParticleY = 0;
+bool g_hasLastParticlePos = false;
 float g_prevVelocity = 0;
 bool g_enableClickStarburst = true;
 int g_starburstCount = 8;
@@ -1136,6 +1328,7 @@ int g_clickMaxRadius = 40, g_clickDuration = 300;
 struct Particle {
     float x, y, vx, vy, size;
     float z;            // 3D 深度（生成时随机，避免每帧闪烁）
+    float mass;         // 质量（影响惯性、大小、生命周期、引力）
     float rotation;     // 当前旋转角度（弧度）
     float spinSpeed;    // 自旋转速度（弧度/帧）
     DWORD startTime;
@@ -1183,75 +1376,93 @@ static void ComputeColors(int mode, DWORD time, float velocity, GradData &out) {
             headOuter = tailOuter = g_customColor;
             headInner = tailInner = LighterColor(g_customColor);
             break;
-        case 1:
-            headOuter = g_gradColors[0];
-            tailOuter = g_gradColors[2];
-            headInner = LighterColor(g_gradColors[0]);
-            tailInner = LighterColor(g_gradColors[2]);
-            break;
-        case 2: {
-            float h = fmodf(t * 50, 360);
-            headOuter = HSVtoRGB(h, .85f, 1);
-            tailOuter = HSVtoRGB(fmodf(h + 180, 360), .85f, 1);
-            headInner = HSVtoRGB(h, .4f, 1);
-            tailInner = HSVtoRGB(fmodf(h + 180, 360), .4f, 1);
+        case 1: { // 流动渐变：任意数量颜色，OKLab插值，颜色沿拖尾流动 / Flowing gradient: any color count, OKLab interpolation, colors flow along trail
+            float phase = fmodf(t * g_gradientFlowSpeed, 1.0f);
+            headOuter = SampleGradientLUT(0.0f, phase);
+            tailOuter = SampleGradientLUT(1.0f, phase);
+            headInner = LighterColor(headOuter, 0.5f);
+            tailInner = LighterColor(tailOuter, 0.5f);
             break;
         }
-        case 3: {
-            float h = fmodf(t * 30, 50) - 10;  // -10~40: 红-橙-黄
-            headOuter = HSVtoRGB(h, .9f, 1);
-            tailOuter = HSVtoRGB(fmodf(h + 30, 360), .85f, .95f);
-            headInner = HSVtoRGB(h, .45f, 1);
-            tailInner = HSVtoRGB(fmodf(h + 30, 360), .4f, .95f);
+        case 2: { // 彩虹流动：多频率色相旋转 + 速度驱动饱和度 / Rainbow flow: multi-frequency hue rotation + velocity-driven saturation
+            float speedBoost = fminf(velocity / 50.0f, 1.0f);
+            float h = fmodf(t * (40 + speedBoost * 60), 360);
+            float h2 = fmodf(h + 200 + speedBoost * 40, 360);
+            float sat = 0.75f + speedBoost * 0.2f;
+            headOuter = HSVtoRGB(h, sat, 1.0f);
+            tailOuter = HSVtoRGB(h2, sat * 0.9f, 0.95f);
+            headInner = HSVtoRGB(h, sat * 0.35f, 1.0f);
+            tailInner = HSVtoRGB(h2, sat * 0.3f, 0.95f);
             break;
         }
-        case 4: {
-            float h = 170 + fmodf(t * 25, 110);  // 170~280: 青-蓝-紫
-            headOuter = HSVtoRGB(h, .8f, 1);
-            tailOuter = HSVtoRGB(fmodf(h + 60, 360), .75f, .95f);
-            headInner = HSVtoRGB(h, .4f, 1);
-            tailInner = HSVtoRGB(fmodf(h + 60, 360), .35f, .95f);
+        case 3: { // 暖色调流动：红橙黄范围 + 火焰式亮度脉动 / Warm flow: red-orange-yellow + flame-like brightness pulse
+            float h = fmodf(t * 25, 60) - 15;  // -15~45: 红-橙-黄更广范围
+            float flicker = 0.85f + 0.15f * sinf(t * 8.0f) + 0.08f * sinf(t * 17.0f);
+            headOuter = HSVtoRGB(h, 0.95f, flicker);
+            tailOuter = HSVtoRGB(fmodf(h + 25, 360), 0.85f, flicker * 0.85f);
+            headInner = HSVtoRGB(h + 10, 0.5f, 1.0f);
+            tailInner = HSVtoRGB(fmodf(h + 35, 360), 0.4f, 0.95f);
             break;
         }
-        case 5: {
-            float p = .5f + .5f * sinf(t * 3.5f);
+        case 4: { // 冷色调流动：青蓝紫 + 冰晶式亮度闪烁 / Cool flow: cyan-blue-purple + icy shimmer
+            float h = 160 + fmodf(t * 20, 130);  // 160~290: 青-蓝-紫更广
+            float shimmer = 0.9f + 0.1f * sinf(t * 6.0f) + 0.05f * sinf(t * 13.0f);
+            headOuter = HSVtoRGB(h, 0.75f, shimmer);
+            tailOuter = HSVtoRGB(fmodf(h + 50, 360), 0.7f, shimmer * 0.9f);
+            headInner = HSVtoRGB(h, 0.3f, 1.0f);
+            tailInner = HSVtoRGB(fmodf(h + 50, 360), 0.25f, 0.98f);
+            break;
+        }
+        case 5: { // 霓虹脉冲：强对比亮度脉冲 + 色相微偏移 + 速度增强 / Neon pulse: high-contrast brightness pulse + hue shift + velocity boost
+            float speedBoost = fminf(velocity / 60.0f, 1.0f);
+            float p = 0.5f + 0.5f * sinf(t * (3.5f + speedBoost * 2.5f));
+            float sharpPulse = p * p * (3 - 2 * p);  // smoothstep 更锐利
             D2D1_COLOR_F c = g_customColor;
-            headOuter = D2D1::ColorF(c.r * (0.4f + p * 0.6f), c.g * (0.4f + p * 0.6f), c.b * (0.4f + p * 0.6f), 1);
-            tailOuter = D2D1::ColorF(c.r * p * 0.3f, c.g * p * 0.3f, c.b * p * 0.3f, 1);
-            headInner = LighterColor(headOuter, .5f);
-            tailInner = LighterColor(tailOuter, .5f);
+            float hueShift = sharpPulse * 20.0f;
+            float h, s, v; RGBtoHSV(c, h, s, v);
+            headOuter = HSVtoRGB(fmodf(h + hueShift, 360), s, 0.3f + sharpPulse * 0.7f);
+            tailOuter = HSVtoRGB(fmodf(h - hueShift, 360), s * 0.8f, sharpPulse * 0.4f);
+            headInner = LighterColor(headOuter, 0.5f);
+            tailInner = LighterColor(tailOuter, 0.5f);
             break;
         }
-        case 6: {
-            float sn = fminf(powf(velocity / 80.0f, 0.7f), 1.0f);
-            float h = 220 - sn * 220;  // 蓝→绿→黄→红
-            headOuter = HSVtoRGB(h, .85f, 1);
-            tailOuter = HSVtoRGB(fmodf(h + 50, 360), .7f, .85f);
-            headInner = HSVtoRGB(h, .4f, 1);
-            tailInner = HSVtoRGB(fmodf(h + 50, 360), .3f, .9f);
+        case 6: { // 速度变色：非线性映射蓝→青→绿→黄→橙→红，速度越快越鲜艳 / Velocity color: non-linear mapping blue→cyan→green→yellow→orange→red
+            float sn = fminf(powf(velocity / 70.0f, 0.55f), 1.0f);
+            float h = 240 - sn * 240;  // 蓝240→红0
+            float sat = 0.7f + sn * 0.25f;  // 速度越快越饱和
+            float val = 0.85f + sn * 0.15f;
+            headOuter = HSVtoRGB(h, sat, val);
+            tailOuter = HSVtoRGB(fmodf(h + 40, 360), sat * 0.8f, val * 0.85f);
+            headInner = HSVtoRGB(h, sat * 0.35f, 1.0f);
+            tailInner = HSVtoRGB(fmodf(h + 40, 360), sat * 0.25f, 0.95f);
             break;
         }
         case 7:
-            headOuter = g_gradColors[0];
-            tailOuter = g_gradColors[1];
-            headInner = LighterColor(g_gradColors[0]);
-            tailInner = LighterColor(g_gradColors[1]);
+            headOuter = GetGradColor(0);
+            tailOuter = GetGradColor(1);
+            headInner = LighterColor(GetGradColor(0));
+            tailInner = LighterColor(GetGradColor(1));
             break;
-        case 8: {
-            float f = .8f + .2f * sinf(t * 12) * sinf(t * 6.7f) + .1f * sinf(t * 23);
-            headOuter = D2D1::ColorF(1.0f * f, 0.75f * f, 0.15f, 1);
-            tailOuter = D2D1::ColorF(0.8f, 0.15f, 0.0f, 1);
-            headInner = D2D1::ColorF(1.0f, 0.95f, 0.6f, 1);
-            tailInner = D2D1::ColorF(0.95f, 0.4f, 0.05f, 1);
+        case 8: { // 火焰：多频率湍流 + 速度增强火焰高度 / Fire: multi-frequency turbulence + velocity-driven flame height
+            float speedBoost = fminf(velocity / 50.0f, 1.0f);
+            float turbulence = 0.75f + 0.25f * sinf(t * (10 + speedBoost * 8)) * sinf(t * 5.5f) + 0.12f * sinf(t * (20 + speedBoost * 10));
+            float core = 0.9f + 0.1f * sinf(t * 15);
+            headOuter = D2D1::ColorF(1.0f * turbulence, (0.65f + speedBoost * 0.15f) * turbulence, 0.1f * core, 1);
+            tailOuter = D2D1::ColorF(0.85f, 0.12f, 0.0f, 1);
+            headInner = D2D1::ColorF(1.0f, 0.92f + speedBoost * 0.08f, 0.55f + speedBoost * 0.2f, 1);
+            tailInner = D2D1::ColorF(0.95f, 0.35f, 0.05f, 1);
             break;
         }
-        case 9: {
-            float h1 = 130 + 40 * sinf(t * 0.6f) + 20 * sinf(t * 1.3f);
-            float h2 = 260 + 50 * sinf(t * 0.5f + 1.5f) + 15 * sinf(t * 1.1f);
-            headOuter = HSVtoRGB(h1, .7f, .95f);
-            tailOuter = HSVtoRGB(h2, .7f, .9f);
-            headInner = HSVtoRGB(180, .35f, 1);
-            tailInner = HSVtoRGB(fmodf(h2 + 40, 360), .3f, .95f);
+        case 9: { // 极光：三层色相波动 + 柔和饱和度过渡 + 速度增强 / Aurora: triple-layer hue wave + soft saturation transition + velocity boost
+            float speedBoost = fminf(velocity / 60.0f, 1.0f);
+            float h1 = 125 + 45 * sinf(t * 0.5f) + 25 * sinf(t * 1.1f + 0.7f) + 10 * sinf(t * 2.3f);
+            float h2 = 255 + 55 * sinf(t * 0.4f + 1.2f) + 20 * sinf(t * 0.9f + 2.0f) + 8 * sinf(t * 1.8f);
+            float sat1 = 0.55f + 0.2f * sinf(t * 0.7f) + speedBoost * 0.15f;
+            float sat2 = 0.5f + 0.2f * sinf(t * 0.6f + 1.0f) + speedBoost * 0.15f;
+            headOuter = HSVtoRGB(h1, sat1, 0.95f);
+            tailOuter = HSVtoRGB(h2, sat2, 0.9f);
+            headInner = HSVtoRGB(180, 0.25f, 1.0f);
+            tailInner = HSVtoRGB(fmodf(h2 + 30, 360), 0.2f, 0.98f);
             break;
         }
         case 10: {
@@ -1262,66 +1473,154 @@ static void ComputeColors(int mode, DWORD time, float velocity, GradData &out) {
         }
         case 11: {
             D2D1_COLOR_F mixed = LerpColor(g_cursorExtractedColor, g_customColor, 0.5f);
-            D2D1_COLOR_F mixedTail = LerpColor(g_cursorExtractedColor, g_gradColors[2], 0.5f);
+            D2D1_COLOR_F mixedTail = LerpColor(g_cursorExtractedColor, GetGradColor(2), 0.5f);
             headOuter = mixed;
             tailOuter = mixedTail;
             headInner = LighterColor(mixed, 0.55f);
             tailInner = LighterColor(mixedTail, 0.55f);
             break;
         }
-        case 12: { // 金属金色
-            float shine = 0.65f + 0.35f * sinf(t * 2.5f) + 0.1f * sinf(t * 7.0f);
-            headOuter = D2D1::ColorF(1.0f * shine, 0.82f * shine, 0.1f * shine, 1);
-            tailOuter = D2D1::ColorF(0.55f, 0.38f, 0.05f, 1);
-            headInner = D2D1::ColorF(1.0f, 0.92f, 0.55f, 1);
-            tailInner = D2D1::ColorF(0.85f, 0.65f, 0.25f, 1);
+        case 12: { // 金属金：高光扫过效果 + 速度增强光泽 / Metallic gold: highlight sweep effect + velocity-enhanced shine
+            float speedBoost = fminf(velocity / 50.0f, 1.0f);
+            float shine = 0.6f + 0.4f * sinf(t * (2.0f + speedBoost * 1.5f)) + 0.12f * sinf(t * (6.0f + speedBoost * 3.0f));
+            float sweep = 0.5f + 0.5f * sinf(t * 1.2f);  // 高光扫过 / highlight sweep
+            headOuter = D2D1::ColorF(1.0f * shine, 0.8f * shine, 0.08f * shine, 1);
+            tailOuter = D2D1::ColorF(0.5f, 0.35f, 0.04f, 1);
+            headInner = D2D1::ColorF(1.0f, 0.9f + sweep * 0.1f, 0.5f + sweep * 0.3f, 1);
+            tailInner = D2D1::ColorF(0.8f, 0.6f, 0.2f, 1);
             break;
         }
-        case 13: { // 赛博朋克（紫青渐变）
-            float pulse = 0.5f + 0.5f * sinf(t * 4.0f);
-            float pulse2 = 0.5f + 0.5f * sinf(t * 4.0f + 1.5f);
-            headOuter = HSVtoRGB(290 + pulse * 30, 0.85f, 1.0f);
-            tailOuter = HSVtoRGB(175 - pulse2 * 15, 0.85f, 1.0f);
-            headInner = HSVtoRGB(310, 0.45f, 1.0f);
-            tailInner = HSVtoRGB(165, 0.45f, 1.0f);
+        case 13: { // 赛博朋克：紫青强对比 + glitch式快速脉冲 + 速度增强 / Cyberpunk: purple-cyan high contrast + glitch-style fast pulse + velocity boost
+            float speedBoost = fminf(velocity / 50.0f, 1.0f);
+            float pulse = 0.5f + 0.5f * sinf(t * (4.0f + speedBoost * 3.0f));
+            float pulse2 = 0.5f + 0.5f * sinf(t * (4.0f + speedBoost * 3.0f) + 1.5f);
+            float glitch = 0.9f + 0.1f * sinf(t * 30.0f) * (speedBoost > 0.5f ? 1.0f : 0.0f);  // 高速时glitch闪烁
+            headOuter = HSVtoRGB(285 + pulse * 35, 0.9f, glitch);
+            tailOuter = HSVtoRGB(170 - pulse2 * 20, 0.9f, glitch * 0.95f);
+            headInner = HSVtoRGB(310, 0.5f, 1.0f);
+            tailInner = HSVtoRGB(160, 0.5f, 1.0f);
             break;
         }
-        case 14: { // 粉彩
-            float h = fmodf(t * 20, 360);
-            headOuter = HSVtoRGB(h, 0.3f, 1.0f);
-            tailOuter = HSVtoRGB(fmodf(h + 80, 360), 0.3f, 1.0f);
-            headInner = HSVtoRGB(h, 0.15f, 1.0f);
-            tailInner = HSVtoRGB(fmodf(h + 80, 360), 0.15f, 1.0f);
+        case 14: { // 粉彩：低饱和高亮度 + 柔和色相流动 + 速度微增饱和 / Pastel: low-sat high-brightness + soft hue flow + velocity micro-sat boost
+            float speedBoost = fminf(velocity / 80.0f, 1.0f);
+            float h = fmodf(t * 15, 360);
+            float sat = 0.25f + speedBoost * 0.15f;  // 速度越快越鲜艳
+            headOuter = HSVtoRGB(h, sat, 1.0f);
+            tailOuter = HSVtoRGB(fmodf(h + 70, 360), sat, 0.98f);
+            headInner = HSVtoRGB(h, sat * 0.5f, 1.0f);
+            tailInner = HSVtoRGB(fmodf(h + 70, 360), sat * 0.5f, 1.0f);
             break;
         }
-        case 15: { // 色相旋转（基于自定义颜色）
+        case 15: { // 色相旋转：基于自定义颜色 + 速度驱动旋转速度 + 头尾大色差 / Hue rotate: custom color base + velocity-driven rotation speed + large head-tail gap
+            float speedBoost = fminf(velocity / 50.0f, 1.0f);
             float h, s, v;
             RGBtoHSV(g_customColor, h, s, v);
-            float h1 = fmodf(h + t * 45, 360);
-            float h2 = fmodf(h1 + 140, 360);
+            float rotSpeed = 30 + speedBoost * 60;  // 速度越快旋转越快
+            float h1 = fmodf(h + t * rotSpeed, 360);
+            float h2 = fmodf(h1 + 160 + speedBoost * 40, 360);  // 高速时色差更大
             headOuter = HSVtoRGB(h1, s, v);
-            tailOuter = HSVtoRGB(h2, s, v);
-            headInner = HSVtoRGB(h1, s * 0.45f, v);
-            tailInner = HSVtoRGB(h2, s * 0.45f, v);
+            tailOuter = HSVtoRGB(h2, s * 0.9f, v * 0.95f);
+            headInner = HSVtoRGB(h1, s * 0.4f, v);
+            tailInner = HSVtoRGB(h2, s * 0.35f, v * 0.95f);
             break;
         }
-        case 16: { // 双色脉冲
-            float pulse = 0.5f + 0.5f * sinf(t * 3.0f);
-            float smoothPulse = pulse * pulse * (3 - 2 * pulse);  // smoothstep
-            headOuter = LerpColor(g_gradColors[0], g_gradColors[2], smoothPulse);
-            tailOuter = LerpColor(g_gradColors[2], g_gradColors[0], smoothPulse);
+        case 16: { // 双色脉冲：smoothstep脉冲 + 速度增强频率 + 中间色过渡 / Dual pulse: smoothstep pulse + velocity-enhanced freq + mid-color transition
+            float speedBoost = fminf(velocity / 60.0f, 1.0f);
+            float pulse = 0.5f + 0.5f * sinf(t * (2.5f + speedBoost * 2.0f));
+            float smoothPulse = pulse * pulse * (3 - 2 * pulse);
+            headOuter = LerpColor(GetGradColor(0), GetGradColor(2), smoothPulse);
+            tailOuter = LerpColor(GetGradColor(2), GetGradColor(0), smoothPulse);
             headInner = LighterColor(headOuter, 0.45f);
             tailInner = LighterColor(tailOuter, 0.45f);
             break;
         }
-        case 17: { // 随机闪烁
+        case 17: { // 星光闪烁：随机亮度闪烁 + 色相微变 + 速度增强闪烁频率 / Sparkle: random brightness flicker + hue micro-shift + velocity-enhanced flicker
+            float speedBoost = fminf(velocity / 60.0f, 1.0f);
             float sparkle = (rand() % 100) / 100.0f;
             float sparkle2 = (rand() % 100) / 100.0f;
-            float baseH = fmodf(t * 40, 360);
-            headOuter = HSVtoRGB(baseH, 0.75f, 0.5f + sparkle * 0.5f);
-            tailOuter = HSVtoRGB(fmodf(baseH + 100, 360), 0.75f, 0.4f + sparkle2 * 0.4f);
-            headInner = HSVtoRGB(baseH, 0.35f, 1.0f);
-            tailInner = HSVtoRGB(fmodf(baseH + 100, 360), 0.35f, 1.0f);
+            float baseH = fmodf(t * (30 + speedBoost * 30), 360);
+            float bright1 = 0.4f + sparkle * 0.6f;
+            float bright2 = 0.3f + sparkle2 * 0.5f;
+            headOuter = HSVtoRGB(baseH, 0.8f, bright1);
+            tailOuter = HSVtoRGB(fmodf(baseH + 100, 360), 0.8f, bright2);
+            headInner = HSVtoRGB(baseH, 0.3f, 1.0f);
+            tailInner = HSVtoRGB(fmodf(baseH + 100, 360), 0.3f, 1.0f);
+            break;
+        }
+        case 18: { // 热力图：速度映射黑体辐射色温 + 余温延迟 + 强对比 / Thermal heatmap: velocity maps to blackbody temp + thermal lag + strong contrast
+            static float heatLag = 0.0f;  // 余温延迟 / thermal lag
+            float targetHeat = fminf(powf(velocity / 80.0f, 0.5f), 1.0f);
+            heatLag += (targetHeat - heatLag) * 0.15f;  // 缓慢冷却 / slow cooling
+            float heat = fmaxf(targetHeat, heatLag * 0.8f);
+            float heatTail = heat * 0.35f;
+            auto thermal = [](float h) -> D2D1_COLOR_F {
+                if (h < 0.2f) { float k = h / 0.2f; return D2D1::ColorF(0.02f, 0.05f, 0.35f + k * 0.35f, 1); }
+                else if (h < 0.45f) { float k = (h - 0.2f) / 0.25f; return D2D1::ColorF(0.05f + k * 0.55f, 0.1f, 0.7f - k * 0.45f, 1); }
+                else if (h < 0.7f) { float k = (h - 0.45f) / 0.25f; return D2D1::ColorF(0.6f + k * 0.35f, 0.1f + k * 0.5f, 0.25f - k * 0.15f, 1); }
+                else { float k = (h - 0.7f) / 0.3f; return D2D1::ColorF(0.95f, 0.6f + k * 0.35f, 0.1f + k * 0.85f, 1); }
+            };
+            headOuter = thermal(heat);
+            tailOuter = thermal(heatTail);
+            headInner = LighterColor(headOuter, 0.5f);
+            tailInner = LighterColor(tailOuter, 0.5f);
+            break;
+        }
+        case 19: { // 相位干涉：三波叠加干涉 + 速度增强频率 + 饱和度脉动 / Phase interference: triple-wave interference + velocity freq boost + saturation pulse
+            float speedBoost = fminf(velocity / 50.0f, 1.0f);
+            float wave1 = sinf(t * (2.0f + speedBoost * 2.0f)) * 0.5f + 0.5f;
+            float wave2 = sinf(t * (3.3f + speedBoost * 2.5f) + 1.2f) * 0.5f + 0.5f;
+            float wave3 = sinf(t * (5.0f + speedBoost * 3.0f) + 2.5f) * 0.5f + 0.5f;
+            float interfere = wave1 * wave2 + (1 - wave1) * (1 - wave2);
+            interfere = interfere * 0.7f + wave3 * 0.3f;  // 三波混合 / triple mix
+            float h1 = fmodf(interfere * 360 + t * (15 + speedBoost * 25), 360);
+            float h2 = fmodf(h1 + 130 + sinf(t * 1.5f) * 50, 360);
+            float sat = 0.55f + interfere * 0.4f;
+            headOuter = HSVtoRGB(h1, sat, 1.0f);
+            tailOuter = HSVtoRGB(h2, sat, 0.9f);
+            headInner = HSVtoRGB(h1, sat * 0.35f, 1.0f);
+            tailInner = HSVtoRGB(h2, sat * 0.3f, 0.95f);
+            break;
+        }
+        case 20: { // 色谱分裂：速度驱动头尾色相分裂 + 分裂时饱和度增强 + 摆动 / Spectrum split: velocity-driven head-tail hue split + saturation boost on split + wobble
+            float speedBoost = fminf(velocity / 40.0f, 1.0f);
+            float h, s, v;
+            RGBtoHSV(g_customColor, h, s, v);
+            float split = speedBoost * 200.0f;  // 0~200度分裂，更明显
+            float wobble = sinf(t * (1.5f + speedBoost)) * (20.0f + speedBoost * 20.0f);
+            float satBoost = 1.0f + speedBoost * 0.3f;  // 分裂时更饱和
+            headOuter = HSVtoRGB(fmodf(h + split * 0.5f + wobble + 360, 360), fminf(s * satBoost, 1.0f), v);
+            tailOuter = HSVtoRGB(fmodf(h - split * 0.5f - wobble + 360, 360), fminf(s * satBoost * 0.9f, 1.0f), v * 0.9f);
+            headInner = HSVtoRGB(fmodf(h + split * 0.5f + wobble + 360, 360), s * 0.35f, v);
+            tailInner = HSVtoRGB(fmodf(h - split * 0.5f - wobble + 360, 360), s * 0.3f, v * 0.9f);
+            break;
+        }
+        case 21: { // 颗粒抖动：时间流动噪点 + 速度增强幅度 + 有序抖动图案 / Grain dither: temporal flowing noise + velocity amplitude boost + ordered dither pattern
+            float speedBoost = fminf(velocity / 40.0f, 1.0f);
+            float jitterAmp = (0.2f + speedBoost * 0.4f);  // 幅度更大
+            float baseH, baseS, baseV;
+            RGBtoHSV(g_customColor, baseH, baseS, baseV);
+            // 时间流动噪点：不同帧有不同噪点，形成流动感
+            float timeSeed = fmodf(t * 10.0f, 100.0f);
+            float n1 = (sinf(timeSeed * 12.9898f + 78.233f) * 43758.5453f); n1 = n1 - floorf(n1);
+            float n2 = (sinf(timeSeed * 39.3468f + 11.135f) * 24634.6345f); n2 = n2 - floorf(n2);
+            float n3 = (sinf(timeSeed * 27.1453f + 45.854f) * 34634.6345f); n3 = n3 - floorf(n3);
+            n1 = (n1 - 0.5f) * 2 * jitterAmp;
+            n2 = (n2 - 0.5f) * 2 * jitterAmp;
+            n3 = (n3 - 0.5f) * 2 * jitterAmp * 0.6f;
+            headOuter = HSVtoRGB(fmodf(baseH + n1 * 80 + 360, 360), fminf(fmaxf(baseS + n2, 0), 1), fminf(fmaxf(baseV + n3, 0.15f), 1));
+            tailOuter = HSVtoRGB(fmodf(baseH + 80 + n2 * 80 + 360, 360), fminf(fmaxf(baseS + n1, 0), 1), fminf(fmaxf(baseV * 0.8f + n3, 0.15f), 1));
+            headInner = LighterColor(headOuter, 0.45f);
+            tailInner = LighterColor(tailOuter, 0.45f);
+            break;
+        }
+        case 22: { // 渐变扭曲：双正弦相位扭曲 + 速度增强扭曲幅度 + LUT流动 / Gradient warp: dual-sine phase distortion + velocity amplitude boost + LUT flow
+            float speedBoost = fminf(velocity / 50.0f, 1.0f);
+            float warp = 0.5f + (0.3f + speedBoost * 0.2f) * sinf(t * 1.5f) + (0.15f + speedBoost * 0.1f) * sinf(t * 3.7f + 0.8f);
+            headOuter = GetGradColor(0);
+            tailOuter = GetGradColor(g_gradColorCount - 1);
+            headInner = LighterColor(GetGradColor(0));
+            tailInner = LighterColor(GetGradColor(g_gradColorCount - 1));
+            g_gradientWarp = warp;
             break;
         }
         default:
@@ -1346,16 +1645,18 @@ static void ComputeColors(int mode, DWORD time, float velocity, GradData &out) {
             out.outer[i] = {ratio, D2D1::ColorF(co.r, co.g, co.b, alpha)};
             out.inner[i] = {ratio, D2D1::ColorF(ci.r, ci.g, ci.b, alpha)};
         } else if (mode == 1) {
-            // 三色渐变：color1 → color2 → color3
-            float t2 = ratio * 2.0f;
-            D2D1_COLOR_F co, ci;
-            if (t2 < 1.0f) {
-                co = LerpColor(g_gradColors[0], g_gradColors[1], t2);
-                ci = LerpColor(LighterColor(g_gradColors[0]), LighterColor(g_gradColors[1]), t2);
-            } else {
-                co = LerpColor(g_gradColors[1], g_gradColors[2], t2 - 1.0f);
-                ci = LerpColor(LighterColor(g_gradColors[1]), LighterColor(g_gradColors[2]), t2 - 1.0f);
-            }
+            // 流动渐变：OKLab LUT采样，颜色沿拖尾流动，速度更快 / Flowing gradient: OKLab LUT, colors flow along trail, faster speed
+            float phase = fmodf(t * g_gradientFlowSpeed * 1.5f, 1.0f);
+            D2D1_COLOR_F co = SampleGradientLUT(ratio, phase);
+            D2D1_COLOR_F ci = LighterColor(co, 0.45f);
+            out.outer[i] = {ratio, D2D1::ColorF(co.r, co.g, co.b, alpha)};
+            out.inner[i] = {ratio, D2D1::ColorF(ci.r, ci.g, ci.b, alpha)};
+        } else if (mode == 22) {
+            // 渐变扭曲：LUT采样 + 双正弦相位扭曲，扭曲幅度更大 / Gradient warp: LUT + dual-sine phase distortion, larger amplitude
+            float warp = 0.5f + 0.4f * sinf(t * 1.5f + ratio * 4.0f) + 0.2f * sinf(t * 3.7f + ratio * 7.0f + 0.8f);
+            float phase = fmodf(t * g_gradientFlowSpeed + warp * 0.5f, 1.0f);
+            D2D1_COLOR_F co = SampleGradientLUT(ratio, phase);
+            D2D1_COLOR_F ci = LighterColor(co, 0.45f);
             out.outer[i] = {ratio, D2D1::ColorF(co.r, co.g, co.b, alpha)};
             out.inner[i] = {ratio, D2D1::ColorF(ci.r, ci.g, ci.b, alpha)};
         } else {
@@ -1694,6 +1995,7 @@ ID3D11Buffer* g_pTrailVB = nullptr;       // 拖尾带顶点缓冲（动态）
 ID3D11Buffer* g_pParticleQuadVB = nullptr; // 粒子四边形顶点缓冲
 ID3D11Buffer* g_pParticleInstanceBuf = nullptr; // 粒子实例缓冲（动态）
 ID3D11BlendState* g_pAlphaBlend = nullptr;
+ID3D11BlendState* g_pAdditiveBlend = nullptr;  // 加法混合状态（发光用）/ Additive blend state (for glow effects)
 ID3D11RasterizerState* g_pRasterState = nullptr;
 
 static void ReleaseNativeRendering();  // 前向声明，供 InitNativeRendering 失败清理调用
@@ -1804,6 +2106,18 @@ static bool InitNativeRendering() {
         blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
         if (FAILED(g_pD3DDevice->CreateBlendState(&blendDesc, &g_pAlphaBlend))) break;
 
+        // 加法混合状态（发光用）/ Additive blend state (for glow effects)
+        D3D11_BLEND_DESC addBlendDesc = {};
+        addBlendDesc.RenderTarget[0].BlendEnable = TRUE;
+        addBlendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+        addBlendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_ONE;  // 加法混合 / Additive blending
+        addBlendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+        addBlendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+        addBlendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
+        addBlendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+        addBlendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+        if (FAILED(g_pD3DDevice->CreateBlendState(&addBlendDesc, &g_pAdditiveBlend))) break;
+
         // 光栅化状态
         D3D11_RASTERIZER_DESC rastDesc = {};
         rastDesc.FillMode = D3D11_FILL_SOLID;
@@ -1841,6 +2155,7 @@ static void ReleaseNativeRendering() {
     if (g_pParticleQuadVB) { g_pParticleQuadVB->Release(); g_pParticleQuadVB = nullptr; }
     if (g_pParticleInstanceBuf) { g_pParticleInstanceBuf->Release(); g_pParticleInstanceBuf = nullptr; }
     if (g_pAlphaBlend) { g_pAlphaBlend->Release(); g_pAlphaBlend = nullptr; }
+    if (g_pAdditiveBlend) { g_pAdditiveBlend->Release(); g_pAdditiveBlend = nullptr; }
     if (g_pRasterState) { g_pRasterState->Release(); g_pRasterState = nullptr; }
 }
 
@@ -1884,6 +2199,14 @@ static void UpdateConstantBuffer(int width, int height, const GradData* cols = n
 static void NativeRenderParticles(int screenW, int screenH) {
     if (!g_pParticleVS || !g_pParticlePS || !g_pParticleInstanceBuf || g_particles.empty()) return;
 
+    // 3D深度排序：z大的（后面）先渲染，z小的（前面）后渲染覆盖，实现前后遮挡
+    // 仅在漩涡活跃时排序，避免普通模式下的性能开销
+    if (g_circleDetect.vortexStrength > 0.1f && g_particles.size() < 800) {
+        std::sort(g_particles.begin(), g_particles.end(), [](const Particle &a, const Particle &b) {
+            return a.z > b.z;  // z大的在前（先渲染），z小的在后（后渲染覆盖）
+        });
+    }
+
     DWORD now = GetTickCount();
     const int MAX_PER_LAYER = 2000;
 
@@ -1910,7 +2233,7 @@ static void NativeRenderParticles(int screenW, int screenH) {
         float sizeScale = sinf(progress * 3.14159f) * 0.7f + 0.3f;
         float baseSize = p.size * 2.0f * (g_particleSizeMultiplier / 100.0f) * sizeScale;
 
-        // 发光层
+        // 发光层 / Glow layer
         if (g_enableParticleGlow && glowCount < MAX_PER_LAYER) {
             ParticleInstance& gl = instances[glowCount++];
             gl.x = p.x; gl.y = p.y; gl.z = p.z;
@@ -1920,7 +2243,7 @@ static void NativeRenderParticles(int screenW, int screenH) {
             gl.shapeType = (float)p.shapeType;
             gl.rotation = p.rotation;
         }
-        // 正常层
+        // 正常层 / Normal layer
         if (normalCount < MAX_PER_LAYER) {
             ParticleInstance& nm = instances[MAX_PER_LAYER + normalCount++];
             nm.x = p.x; nm.y = p.y; nm.z = p.z;
@@ -1934,7 +2257,7 @@ static void NativeRenderParticles(int screenW, int screenH) {
     g_pD3DContext->Unmap(g_pParticleInstanceBuf, 0);
     if (glowCount == 0 && normalCount == 0) return;
 
-    // 设置渲染状态
+    // 设置渲染状态 / Set render state
     UpdateConstantBuffer(screenW, screenH);
     g_pD3DContext->IASetInputLayout(g_pParticleLayout);
     g_pD3DContext->VSSetShader(g_pParticleVS, nullptr, 0);
@@ -1951,10 +2274,16 @@ static void NativeRenderParticles(int screenW, int screenH) {
     g_pD3DContext->IASetVertexBuffers(1, 1, &g_pParticleInstanceBuf, &stride, &vbOffset);
     g_pD3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-    // 发光层（实例起始 0）
-    if (glowCount > 0) g_pD3DContext->DrawInstanced(6, glowCount, 0, 0);
-    // 正常层（实例起始 MAX_PER_LAYER）
-    if (normalCount > 0) g_pD3DContext->DrawInstanced(6, normalCount, 0, MAX_PER_LAYER);
+    // 发光层（实例起始 0），加法混合 / Glow layer (instances from 0), additive blending
+    if (glowCount > 0) {
+        g_pD3DContext->OMSetBlendState(g_pAdditiveBlend, nullptr, 0xFFFFFFFF);
+        g_pD3DContext->DrawInstanced(6, glowCount, 0, 0);
+    }
+    // 正常层（实例起始 MAX_PER_LAYER），Alpha混合
+    if (normalCount > 0) {
+        g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
+        g_pD3DContext->DrawInstanced(6, normalCount, 0, MAX_PER_LAYER);
+    }
 }
 
 // 拖尾带顶点缓冲渲染（v3 原生渲染）
@@ -2001,13 +2330,13 @@ static void NativeRenderTrail(const std::vector<D2D1_POINT_2F>& smoothed, float 
     int vtxOffset = 0;
     const int MAX_VTX = 4096;
 
-    struct Layer { int offset, count; };
+    struct Layer { int offset, count; bool additive; };
     Layer layers[8];
     int layerCount = 0;
 
     // 写入一层带，直接写入 mapped 内存，返回顶点数（0=缓冲溢出）
     auto writeBand = [&](float widthScale, float r, float g, float b, float aMul,
-                         bool headOnly, float offX, float offY) -> int {
+                         bool headOnly, float offX, float offY, bool additive) -> int {
         int count = (int)sl * 2;
         if (vtxOffset + count > MAX_VTX) return 0;
         VertexPosColor* p = dst + vtxOffset;
@@ -2028,35 +2357,41 @@ static void NativeRenderTrail(const std::vector<D2D1_POINT_2F>& smoothed, float 
         return count;
     };
 
-    auto pushLayer = [&](int c) { if (c && layerCount < 8) layers[layerCount++] = {vtxOffset - c, c}; };
+    auto pushLayer = [&](int c, bool add) { if (c && layerCount < 8) layers[layerCount++] = {vtxOffset - c, c, add}; };
 
     // 1. 拖尾阴影（右下偏移深色投影）
     if (g_enableTrailShadow)
-        pushLayer(writeBand(1.0f, 0,0,0, 0.18f, false, 1.5f, 2.0f));
+        pushLayer(writeBand(1.0f, 0,0,0, 0.18f, false, 1.5f, 2.0f, false), false);
     // 2. 自适应柔和边缘
     if (g_adaptiveContrast) {
         float edgeV = g_bgLuminance > 0.5f ? 0.08f : 1.6f;
-        pushLayer(writeBand(1.18f, edgeV,edgeV,edgeV, 0.18f, false, 0,0));
+        pushLayer(writeBand(1.18f, edgeV,edgeV,edgeV, 0.18f, false, 0,0, false), false);
     }
-    // 3. 外发光三层（宽淡→中→窄亮）
+    // 3. 外发光三层（宽淡→中→窄亮），加法混合 / Outer glow 3 layers (wide-fade → medium → narrow-bright), additive blending
     if (g_enableGlow) {
         float gi = g_glowIntensity / 100.0f;
-        pushLayer(writeBand(2.6f + gi*1.4f, 1,1,1, 0.04f+gi*0.05f, false, 0,0));
-        pushLayer(writeBand(1.7f + gi*0.7f, 1,1,1, 0.09f+gi*0.09f, false, 0,0));
+        pushLayer(writeBand(2.6f + gi*1.4f, 1,1,1, 0.04f+gi*0.05f, false, 0,0, true), true);
+        pushLayer(writeBand(1.7f + gi*0.7f, 1,1,1, 0.09f+gi*0.09f, false, 0,0, true), true);
         if (g_enhancedGlow)
-            pushLayer(writeBand(1.25f + gi*0.35f, 1.15f,1.15f,1.15f, 0.14f+gi*0.10f, false, 0,0));
+            pushLayer(writeBand(1.25f + gi*0.35f, 1.15f,1.15f,1.15f, 0.14f+gi*0.10f, false, 0,0, true), true);
     }
-    // 4. 主体带
-    pushLayer(writeBand(1.0f, 1,1,1, 1.0f, false, 0,0));
-    // 5. 头部高亮（只在头部显示）
+    // 4. 主体带 / Main body band
+    pushLayer(writeBand(1.0f, 1,1,1, 1.0f, false, 0,0, false), false);
+    // 5. 头部高亮（只在头部显示）/ Head highlight (only at head)
     if (g_enableHeadHighlight)
-        pushLayer(writeBand(0.35f, 1.25f,1.25f,1.25f, 0.75f, true, 0,0));
+        pushLayer(writeBand(0.35f, 1.25f,1.25f,1.25f, 0.75f, true, 0,0, false), false);
 
     g_pD3DContext->Unmap(g_pTrailVB, 0);
 
-    // 绘制所有层（每层独立 Draw，三角形带不跨层连接）
-    for (int i = 0; i < layerCount; ++i)
+    // 绘制所有层，发光层用加法混合，其他用Alpha混合 / Draw all layers: glow uses additive, rest uses alpha blending
+    for (int i = 0; i < layerCount; ++i) {
+        if (layers[i].additive)
+            g_pD3DContext->OMSetBlendState(g_pAdditiveBlend, nullptr, 0xFFFFFFFF);
+        else
+            g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
         g_pD3DContext->Draw(layers[i].count, layers[i].offset);
+    }
+    g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
 }
 
 // 预计算形状局部顶点（消除每帧 cos/sin/pow 重复计算）
@@ -2171,8 +2506,8 @@ static void NativeRenderTrailShapes(int screenW, int screenH, DWORD dwTime) {
 static void NativeRenderRipples(int screenW, int screenH, DWORD dwTime, const GradData& cols, int vX, int vY) {
     if (g_ripples.empty() || !g_pTrailVB) return;
 
-    // 设置渲染状态
-    UpdateConstantBuffer(screenW, screenH, &cols);
+    // 波纹用纯色渲染（不上传渐变，gradientCount=0，PS 直接用顶点色）
+    UpdateConstantBuffer(screenW, screenH);
     g_pD3DContext->IASetInputLayout(g_pNativeLayout);
     g_pD3DContext->VSSetShader(g_pNativeVS, nullptr, 0);
     g_pD3DContext->PSSetShader(g_pNativePS, nullptr, 0);
@@ -2182,93 +2517,80 @@ static void NativeRenderRipples(int screenW, int screenH, DWORD dwTime, const Gr
     g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
 
     UINT stride = sizeof(VertexPosColor);
-    UINT offset = 0;
-    g_pD3DContext->IASetVertexBuffers(0, 1, &g_pTrailVB, &stride, &offset);
+    UINT vbOffset = 0;
+    g_pD3DContext->IASetVertexBuffers(0, 1, &g_pTrailVB, &stride, &vbOffset);
     g_pD3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
     const int segments = 48;
-    const int maxVerts = 4096;
-    int totalVerts = 0;
+    const int ringVerts = (segments + 1) * 2;
+
+    // 一次 Map 写所有波纹的所有层（消除多次 Map/Unmap）
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    if (FAILED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) return;
+    VertexPosColor* dst = (VertexPosColor*)mapped.pData;
+    int vtxOffset = 0;
+    const int MAX_VTX = 4096;
+
+    struct RingLayer { int offset, count; bool additive; };
+    RingLayer layers[48];
+    int layerCount = 0;
+
+    // 写一个环形带：外圈 v=1，内圈 v=-1，PS 软边缘衰减
+    auto writeRing = [&](float px, float py, float radius, float width,
+                         float r, float g, float b, float alpha, bool additive) -> int {
+        int count = ringVerts;
+        if (vtxOffset + count > MAX_VTX) return 0;
+        VertexPosColor* p = dst + vtxOffset;
+        for (int i = 0; i <= segments; i++) {
+            float a = (i / (float)segments) * 6.28318f;
+            float cosA = cosf(a), sinA = sinf(a);
+            p[0] = {px + cosA * (radius + width), py + sinA * (radius + width), 0,
+                    r, g, b, alpha, 0.5f, 1.0f};
+            p[1] = {px + cosA * radius, py + sinA * radius, 0,
+                    r, g, b, alpha, 0.5f, -1.0f};
+            p += 2;
+        }
+        vtxOffset += count;
+        return count;
+    };
+
+    auto pushLayer = [&](int c, bool add) { if (c && layerCount < 48) layers[layerCount++] = {vtxOffset - c, c, add}; };
 
     for (auto &r : g_ripples) {
         float progress = (float)(dwTime - r.startTime) / g_clickDuration;
         if (progress < 0 || progress >= 1) continue;
-        float radius = g_clickMaxRadius * progress;
-        float alpha = (1.0f - progress) * 0.6f;
-        float ringWidth = 3.0f + progress * 2.0f;
-        D2D1_COLOR_F rc = cols.outer[GRAD_STOPS / 2].color;
+        // ease-out 半径：开始扩张快，结束慢，更自然
+        float eased = 1.0f - powf(1.0f - progress, 2.0f);
+        float radius = g_clickMaxRadius * eased;
+        float alpha = (1.0f - progress) * 0.9f;
+        float ringWidth = 5.0f + progress * 4.0f;
+        // 用渐变头部色（最亮的色）作为波纹纯色
+        D2D1_COLOR_F rc = cols.outer[0].color;
 
-        // 检查顶点缓冲是否足够
-        int ringVerts = (segments + 1) * 2;
-        if (totalVerts + ringVerts > maxVerts) break;
-
-        // 减去虚拟屏幕原点偏移
         float px = r.pos.x - vX;
         float py = r.pos.y - vY;
 
-        // 1. 外发光层（宽、半透明）
-        {
-            VertexPosColor glowVerts[100];
-            int idx = 0;
-            float glowWidth = ringWidth * 2.5f;
-            for (int i = 0; i <= segments; i++) {
-                float a = (i / (float)segments) * 6.28318f;
-                float cosA = cosf(a), sinA = sinf(a);
-                glowVerts[idx++] = {px + cosA * (radius + glowWidth), py + sinA * (radius + glowWidth), 0,
-                                    rc.r, rc.g, rc.b, alpha * 0.2f, 0.5f};
-                glowVerts[idx++] = {px + cosA * radius, py + sinA * radius, 0,
-                                    rc.r, rc.g, rc.b, 0, 0.5f};
-            }
-            D3D11_MAPPED_SUBRESOURCE mapped;
-            if (SUCCEEDED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
-                memcpy(mapped.pData, glowVerts, ringVerts * sizeof(VertexPosColor));
-                g_pD3DContext->Unmap(g_pTrailVB, 0);
-                g_pD3DContext->Draw(ringVerts, 0);
-            }
-        }
-
-        // 2. 主环（外圈亮，内圈半透明填充）
-        {
-            VertexPosColor ringVertsArr[100];
-            int idx = 0;
-            for (int i = 0; i <= segments; i++) {
-                float a = (i / (float)segments) * 6.28318f;
-                float cosA = cosf(a), sinA = sinf(a);
-                ringVertsArr[idx++] = {px + cosA * (radius + ringWidth), py + sinA * (radius + ringWidth), 0,
-                                       rc.r, rc.g, rc.b, alpha, 0.5f};
-                ringVertsArr[idx++] = {px + cosA * radius, py + sinA * radius, 0,
-                                       rc.r, rc.g, rc.b, alpha * 0.3f, 0.5f};
-            }
-            D3D11_MAPPED_SUBRESOURCE mapped;
-            if (SUCCEEDED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
-                memcpy(mapped.pData, ringVertsArr, ringVerts * sizeof(VertexPosColor));
-                g_pD3DContext->Unmap(g_pTrailVB, 0);
-                g_pD3DContext->Draw(ringVerts, 0);
-            }
-        }
-
-        // 3. 内圈高亮（更亮更窄）
-        {
-            VertexPosColor innerVerts[100];
-            int idx = 0;
-            float innerWidth = ringWidth * 0.4f;
-            for (int i = 0; i <= segments; i++) {
-                float a = (i / (float)segments) * 6.28318f;
-                float cosA = cosf(a), sinA = sinf(a);
-                innerVerts[idx++] = {px + cosA * (radius + innerWidth), py + sinA * (radius + innerWidth), 0,
-                                     1.0f, 1.0f, 1.0f, alpha * 0.5f, 0.5f};
-                innerVerts[idx++] = {px + cosA * (radius - innerWidth * 0.5f), py + sinA * (radius - innerWidth * 0.5f), 0,
-                                     1.0f, 1.0f, 1.0f, 0, 0.5f};
-            }
-            D3D11_MAPPED_SUBRESOURCE mapped;
-            if (SUCCEEDED(g_pD3DContext->Map(g_pTrailVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
-                memcpy(mapped.pData, innerVerts, ringVerts * sizeof(VertexPosColor));
-                g_pD3DContext->Unmap(g_pTrailVB, 0);
-                g_pD3DContext->Draw(ringVerts, 0);
-            }
-        }
-        totalVerts += ringVerts * 3;
+        // 1. 外发光层（宽、低透明度，柔和光晕），加法混合 / Outer glow layer (wide, low alpha, soft halo), additive
+        pushLayer(writeRing(px, py, radius, ringWidth * 2.5f,
+                            rc.r, rc.g, rc.b, alpha * 0.35f, true), true);
+        // 2. 主环（不透明主体）/ Main ring (opaque body)
+        pushLayer(writeRing(px, py, radius, ringWidth,
+                            rc.r, rc.g, rc.b, alpha, false), false);
+        // 3. 内圈高亮（颜色提亮 >1.0，PS 中增亮）/ Inner highlight (brightened >1.0, PS boosts)
+        pushLayer(writeRing(px, py, radius - ringWidth * 0.3f, ringWidth * 0.5f,
+                            rc.r * 1.4f, rc.g * 1.4f, rc.b * 1.4f, alpha * 0.6f, false), false);
     }
+
+    g_pD3DContext->Unmap(g_pTrailVB, 0);
+
+    for (int i = 0; i < layerCount; i++) {
+        if (layers[i].additive)
+            g_pD3DContext->OMSetBlendState(g_pAdditiveBlend, nullptr, 0xFFFFFFFF);
+        else
+            g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
+        g_pD3DContext->Draw(layers[i].count, layers[i].offset);
+    }
+    g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
 }
 
 static D2D1_POINT_2F GetPointOnPath(const std::vector<D2D1_POINT_2F> &path, float ratio);
@@ -2481,9 +2803,15 @@ static void SpawnParticles(float x, float y, int count, float speedMin, float sp
         Particle p;
         p.x = px; p.y = py;
         p.vx = cosf(angle) * speed; p.vy = sinf(angle) * speed;
-        p.size = sizeMin + Rand01() * (sizeMax - sizeMin);
+        // 随机质量：质量影响大小（体积∝质量^(1/3)）和生命周期
+        float mass = g_enableParticleMass ? (g_particleMassMin + Rand01() * (g_particleMassMax - g_particleMassMin)) : 1.0f;
+        p.mass = mass;
+        float massSizeFactor = powf(mass, 0.333f);  // 体积∝质量，半径∝质量^(1/3)
+        p.size = (sizeMin + Rand01() * (sizeMax - sizeMin)) * massSizeFactor;
         p.startTime = time;
-        p.lifetime = lifeMin + (int)(Rand01() * (lifeMax - lifeMin));
+        // 质量大的粒子生命周期更长（惯性大，消散慢）
+        int baseLife = lifeMin + (int)(Rand01() * (lifeMax - lifeMin));
+        p.lifetime = g_enableParticleMass ? (int)(baseLife * (0.7f + mass * 0.3f)) : baseLife;
         p.color = color;
         p.endColor = endCol;
         p.shapeType = st;
@@ -2619,6 +2947,38 @@ void LoadSettings() {
     if (repelVal > 100)
         repelVal = 100;
     g_particleRepelForce = (repelVal / 100.0f) * 3.0f;  // 0-100 → 0-3.0 像素/帧
+    // 向心力漩涡设置
+    g_enableCentripetal = Wh_GetIntSetting(L"enable_centripetal") != 0;
+    int cfVal = Wh_GetIntSetting(L"centripetal_force");
+    if (cfVal < 0) cfVal = 0; if (cfVal > 100) cfVal = 100;
+    g_centripetalForce = cfVal / 100.0f;
+    int csVal = Wh_GetIntSetting(L"centripetal_sensitivity");
+    if (csVal < 0) csVal = 0; if (csVal > 100) csVal = 100;
+    g_centripetalSensitivity = csVal / 100.0f;
+    int cdVal = Wh_GetIntSetting(L"centripetal_duration");
+    if (cdVal < 500) cdVal = 500; if (cdVal > 5000) cdVal = 5000;
+    g_centripetalDuration = cdVal;
+    // 粒子质量系统设置
+    g_enableParticleMass = Wh_GetIntSetting(L"enable_particle_mass") != 0;
+    g_particleMassMin = (float)Wh_GetIntSetting(L"particle_mass_min") / 10.0f;
+    if (g_particleMassMin < 0.1f) g_particleMassMin = 0.1f;
+    g_particleMassMax = (float)Wh_GetIntSetting(L"particle_mass_max") / 10.0f;
+    if (g_particleMassMax < 0.1f) g_particleMassMax = 0.1f;
+    if (g_particleMassMax < g_particleMassMin) g_particleMassMax = g_particleMassMin;
+    // 粒子万有引力设置
+    g_enableParticleGravity = Wh_GetIntSetting(L"enable_particle_gravity") != 0;
+    int gsVal = Wh_GetIntSetting(L"gravity_strength");
+    if (gsVal < 0) gsVal = 0; if (gsVal > 100) gsVal = 100;
+    g_gravityStrength = gsVal / 100.0f;
+    PCWSTR gstr = Wh_GetStringSetting(L"gravity_system");
+    if (gstr) {
+        if (wcscmp(gstr, L"nbody") == 0) g_gravitySystem = 1;
+        else g_gravitySystem = 0;
+        Wh_FreeStringSetting(gstr);
+    }
+    g_gravityBodyCount = Wh_GetIntSetting(L"gravity_body_count");
+    if (g_gravityBodyCount < 2) g_gravityBodyCount = 2;
+    if (g_gravityBodyCount > 10) g_gravityBodyCount = 10;
     PCWSTR pstr = Wh_GetStringSetting(L"particle_mode");
     if (pstr) {
         if (wcscmp(pstr, L"off") == 0)
@@ -2790,6 +3150,16 @@ void LoadSettings() {
             g_colorMode = 16;
         else if (wcscmp(str, L"sparkle") == 0)
             g_colorMode = 17;
+        else if (wcscmp(str, L"thermal") == 0)
+            g_colorMode = 18;
+        else if (wcscmp(str, L"interference") == 0)
+            g_colorMode = 19;
+        else if (wcscmp(str, L"spectrum") == 0)
+            g_colorMode = 20;
+        else if (wcscmp(str, L"dither") == 0)
+            g_colorMode = 21;
+        else if (wcscmp(str, L"warp") == 0)
+            g_colorMode = 22;
         else
             g_colorMode = 0;
         Wh_FreeStringSetting(str);
@@ -2830,7 +3200,7 @@ void LoadSettings() {
     }
     str = Wh_GetStringSetting(L"gradient_colors");
     if (str) {
-        ParseGradientColors(str, g_gradColors);
+        ParseGradientColors(str);
         Wh_FreeStringSetting(str);
     }
 
@@ -3640,10 +4010,14 @@ static void RenderFrame() {
     bool rDown = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
     if (!isGameCached) {
         if (g_enableClickEffect) {
-            if (lDown && !g_prevLButton)
+            if (lDown && !g_prevLButton) {
                 g_ripples.push_back({pt, dwTime});
-            if (rDown && !g_prevRButton)
+                g_ripples.push_back({pt, dwTime + 120});  // 延迟副波纹，双环效果
+            }
+            if (rDown && !g_prevRButton) {
                 g_ripples.push_back({pt, dwTime});
+                g_ripples.push_back({pt, dwTime + 120});
+            }
         }
         if (g_enableClickStarburst) {
             if ((lDown && !g_prevLButton) || (rDown && !g_prevRButton)) {
@@ -3680,34 +4054,52 @@ static void RenderFrame() {
             return;
     } else {
         gameHidden = false;  // 退出游戏后重置，允许窗口重新显示
-        // 拖尾激活状态机：基于速度阈值 + 低速持续时间
-        // 与 cursor-motion-blur 的实现不同：使用速度积分和加速度辅助判断
+        // 拖尾激活状态机：基于速度阈值 + 低速持续时间 + 实际移动距离
         static float accumulatedDist = 0.0f;
         static float lastVel = 0.0f;
+        static int triggerConfirm = 0;  // 触发确认帧数 / Trigger confirmation frame count
+        static float lastTriggerPosX = 0, lastTriggerPosY = 0;
         float accel = velocity - lastVel;
         lastVel = velocity;
 
         if (!trailActive) {
-            // 未激活：速度超过阈值 或 加速度突增 时激活
-            if (velocity > g_triggerVelocity || (accel > 5.0f && velocity > g_triggerVelocity * 0.5f)) {
-                trailActive = true;
-                idleFrameCount = 0;
-                accumulatedDist = 0.0f;
+            // 未激活：速度超过阈值 或 加速度突增 时触发 / Inactive: trigger when velocity exceeds threshold or acceleration spikes
+            bool speedOK = (velocity > g_triggerVelocity);
+            bool accelOK = (accel > 8.0f && velocity > g_triggerVelocity * 0.6f);  // 加速度触发更严格 / Stricter accel trigger
+            if (speedOK || accelOK) {
+                triggerConfirm++;
+                if (triggerConfirm >= 2) {  // 连续2帧确认，避免单帧抖动误触 / Require 2 consecutive frames to avoid jitter false-trigger
+                    trailActive = true;
+                    idleFrameCount = 0;
+                    accumulatedDist = 0.0f;
+                    triggerConfirm = 0;
+                    lastTriggerPosX = renderPos.x;
+                    lastTriggerPosY = renderPos.y;
+                }
+            } else {
+                triggerConfirm = 0;
             }
         } else {
-            // 已激活：速度低于停止阈值时计数
+            // 已激活：速度低于停止阈值时计数 / Active: count frames when velocity below stop threshold
             if (velocity < g_stopVelocity) {
                 idleFrameCount++;
-                accumulatedDist += velocity;
-                // 低速超过 3 帧 或 累积距离过小 时停止
-                if (idleFrameCount > 3 || (idleFrameCount > 1 && accumulatedDist < 2.0f)) {
+                // 计算实际移动距离（而非速度累积）/ Track actual movement distance (not velocity accumulation)
+                float movedDist = sqrtf((renderPos.x - lastTriggerPosX) * (renderPos.x - lastTriggerPosX) +
+                                        (renderPos.y - lastTriggerPosY) * (renderPos.y - lastTriggerPosY));
+                lastTriggerPosX = renderPos.x;
+                lastTriggerPosY = renderPos.y;
+                accumulatedDist += movedDist;
+                // 低速超过4帧 或 低速2帧且几乎没移动 时停止 / Stop after 4 low-speed frames, or 2 frames with negligible movement
+                if (idleFrameCount > 4 || (idleFrameCount > 1 && accumulatedDist < 1.5f)) {
                     trailActive = false;
-                    g_hasLastShapePos = false;  // 重置形状拖尾位置
+                    g_hasLastShapePos = false;
                     accumulatedDist = 0.0f;
                 }
             } else {
                 idleFrameCount = 0;
                 accumulatedDist = 0.0f;
+                lastTriggerPosX = renderPos.x;
+                lastTriggerPosY = renderPos.y;
             }
         }
         if (trailActive) {
@@ -3716,15 +4108,19 @@ static void RenderFrame() {
             while (g_history.size() > (size_t)g_tailLength)
                 g_history.pop_back();
             fadeoutFrame = 0;
-            // 移动时 alpha 快速恢复到 1.0
+            // 移动时 alpha 快速恢复到 1.0 / Alpha quickly recovers to 1.0 during movement
             g_fadeAlpha += (1.0f - g_fadeAlpha) * 0.4f;
             if (g_fadeAlpha > 1.0f)
                 g_fadeAlpha = 1.0f;
         } else {
-            // ===== 淡出模式：硬截断 / 加速收缩 / 软截断 =====
+            // ===== 淡出模式：硬截断 / 加速收缩 / 软截断 / Fadeout modes: hard cut / accelerated shrink / soft cut =====
             switch (g_fadeoutMode) {
-                case 0:  // 硬截断：立即清除
+                case 0:  // 硬截断：立即清除所有状态，避免下次绘制残留 / Hard cut: clear all state immediately to prevent residual rendering
                     g_history.clear();
+                    g_particles.clear();
+                    g_trailShapes.clear();
+                    g_trailHistory.clear();
+                    g_hasLastParticlePos = false;
                     g_fadeAlpha = 1.0f;
                     fadeoutFrame = 0;
                     break;
@@ -3846,8 +4242,49 @@ static void RenderFrame() {
                 if (speedMul > 3.5f)
                     speedMul = 3.5f;
             }
+            // 快速移动时插值补粒子，消除缝隙 / Interpolate particles during fast movement to eliminate gaps
+            float avgParticleSize = 3.25f * (g_particleSizeMultiplier / 100.0f);
+            float spawnStep = avgParticleSize * 2.0f;  // 每间隔2倍粒子大小插值一批 / Interpolate every 2x particle size
+            int interpCount = g_particleDensity;  // 插值点粒子数和正常一致 / Same count as normal spawn
+            if (interpCount < 1) interpCount = 1;
+            int particleCap = g_superPerformanceMode ? 1200 : 500;
+            // 仅间隔<=10ms时插值，避免曲线路径直线插值出现粒子连光标 / Only interpolate when interval<=10ms to avoid straight-line artifacts on curved paths
+            bool canInterp = (g_particleInterval <= 10) && (g_particles.size() < (size_t)(particleCap * 0.8f));
+            if (canInterp && g_hasLastParticlePos) {
+                float dx = origin.x - g_lastParticleX;
+                float dy = origin.y - g_lastParticleY;
+                float dist = sqrtf(dx * dx + dy * dy);
+                DWORD timeSinceLast = dwTime - g_lastParticleTime;
+                // 时间间隔短（<800ms）说明在正常移动，即使距离大也插值；时间长说明停止过，重置 / Short interval (<800ms) means continuous movement; long interval means stopped, reset
+                if (timeSinceLast > 800) {
+                    g_hasLastParticlePos = false;
+                } else if (dist > spawnStep) {
+                    int steps = (int)(dist / spawnStep);
+                    if (steps > 25) steps = 25;
+                    for (int i = 1; i <= steps; i++) {
+                        float t = (float)i / (steps + 1);  // 0=上一位置(远), 1=当前位置(近) / 0=prev pos(far), 1=current pos(near)
+                        // 位置加随机偏移，避免粒子排成直线 / Add random jitter to avoid straight particle lines
+                        float jitter = avgParticleSize * 0.8f;
+                        float ix = g_lastParticleX + dx * t + (Rand01() - 0.5f) * jitter;
+                        float iy = g_lastParticleY + dy * t + (Rand01() - 0.5f) * jitter;
+                        // 渐变：远小近大、远少近多、远短近长 / Gradient: far=smaller/fewer/shorter, near=larger/more/longer
+                        float sizeFactor = 0.5f + t * 0.5f;  // 远处0.5倍，近处1.0倍 / far=0.5x, near=1.0x
+                        int countFactor = (int)(interpCount * (0.4f + t * 0.6f));  // 远处40%，近处100% / far=40%, near=100%
+                        if (countFactor < 1) countFactor = 1;
+                        int lifeFactor = (int)(200 + t * 300);  // 远处200ms，近处500ms / far=200ms, near=500ms
+                        // 插值点粒子速度稍大，沿移动方向有拖尾感 / Interpolated particles slightly faster for trailing feel
+                        float spdMul = 1.0f + (1.0f - t) * 0.5f;  // 远处速度更大 / far particles faster
+                        SpawnParticles(ix, iy, countFactor, 0.4f * speedMul * spdMul, 2.5f * speedMul * spdMul,
+                                       2.0f * sizeFactor, 4.5f * sizeFactor, lifeFactor,
+                                       lifeFactor + 200, cols.solidOuter, dwTime);
+                    }
+                }
+            }
             SpawnParticles(origin.x, origin.y, g_particleDensity, 0.3f * speedMul, 2.0f * speedMul, 2.0f, 4.5f, 300,
                            700, cols.solidOuter, dwTime);
+            g_lastParticleX = origin.x;
+            g_lastParticleY = origin.y;
+            g_hasLastParticlePos = true;
             g_lastParticleTime = dwTime;
         }
     }
@@ -3888,16 +4325,198 @@ static void RenderFrame() {
         g_trailShapes.erase(g_trailShapes.begin(), g_trailShapes.begin() + (g_trailShapes.size() - shapeCap));
     }
     // 粒子总数上限，防止参数拉满时性能崩溃（超级性能模式下提高上限）
-    int particleCap = g_superPerformanceMode ? 500 : 200;
+    int particleCap = g_superPerformanceMode ? 1200 : 500;
     if (g_particles.size() > (size_t)particleCap) {
         g_particles.erase(g_particles.begin(), g_particles.begin() + (g_particles.size() - particleCap));
     }
     g_prevVelocity = velocity;
 
+    // ===== 向心力漩涡：圆周运动检测 + 粒子轨道捕获 =====
+    if (g_enableCentripetal) {
+        CircleDetect &cd = g_circleDetect;
+        // 计算加速度（当前速度 - 上帧速度）/ Compute acceleration
+        float accel = velocity - g_prevVelocity;
+        float accelAbs = fabsf(accel);
+        // 记录位置历史（环形缓冲）
+        if (cd.historyCount < 20) {
+            cd.historyX[cd.historyCount] = (float)renderPos.x;
+            cd.historyY[cd.historyCount] = (float)renderPos.y;
+            cd.historyCount++;
+        } else {
+            for (int i = 0; i < 19; i++) {
+                cd.historyX[i] = cd.historyX[i + 1];
+                cd.historyY[i] = cd.historyY[i + 1];
+            }
+            cd.historyX[19] = (float)renderPos.x;
+            cd.historyY[19] = (float)renderPos.y;
+        }
+        // 曲线运动检测：任何曲线运动都是圆周运动的一段，曲率中心即漩涡中心
+        // Curvature-based detection: any curved motion is part of a circle, curvature center = vortex center
+        float accelBoost = fminf(accelAbs / 10.0f, 1.0f);
+        float minVel = 3.0f - accelBoost * 2.0f;
+        if (cd.historyCount >= 5 && velocity > minVel) {
+            // 用最近5个点的连续三点组合计算曲率，取平均
+            int start = cd.historyCount - 5;
+            float sumCX = 0, sumCY = 0, sumRadius = 0, sumAngVel = 0;
+            int validCount = 0;
+            for (int tri = 0; tri < 3; tri++) {
+                float x1 = cd.historyX[start + tri], y1 = cd.historyY[start + tri];
+                float x2 = cd.historyX[start + tri + 1], y2 = cd.historyY[start + tri + 1];
+                float x3 = cd.historyX[start + tri + 2], y3 = cd.historyY[start + tri + 2];
+                // 三点外接圆圆心公式
+                float ax = x2 - x1, ay = y2 - y1;
+                float bx = x3 - x1, by = y3 - y1;
+                float cross = ax * by - ay * bx;  // 叉积，符号=旋转方向
+                if (fabsf(cross) < 0.5f) continue;  // 接近直线，跳过
+                float d = 2.0f * cross;
+                float aLenSq = ax * ax + ay * ay;
+                float bLenSq = bx * bx + by * by;
+                float cx = x1 + (by * aLenSq - ay * bLenSq) / d;
+                float cy = y1 + (ax * bLenSq - bx * aLenSq) / d;
+                float radius = sqrtf((x1 - cx) * (x1 - cx) + (y1 - cy) * (y1 - cy));
+                if (radius < 20 || radius > 400) continue;  // 合理半径范围
+                // 角速度 = 速度 / 半径，方向由叉积决定
+                float angVel = (velocity / radius) * (cross > 0 ? 1.0f : -1.0f);
+                sumCX += cx; sumCY += cy; sumRadius += radius; sumAngVel += angVel;
+                validCount++;
+            }
+            if (validCount >= 2) {
+                float avgCX = sumCX / validCount;
+                float avgCY = sumCY / validCount;
+                float avgRadius = sumRadius / validCount;
+                float avgAngVel = sumAngVel / validCount;
+                // 曲率阈值：半径越小曲率越大，越容易触发
+                float curvatureThreshold = (1.0f - g_centripetalSensitivity) * 200.0f + 50.0f;
+                if (avgRadius < curvatureThreshold) {
+                    cd.isCircling = true;
+                    cd.circleCenterX = avgCX;
+                    cd.circleCenterY = avgCY;
+                    cd.circleRadius = avgRadius;
+                    cd.angularVel = avgAngVel;
+                    cd.lastCircleTime = dwTime;
+                    // 平滑增强漩涡强度，曲率越大（半径越小）+加速度越大，增强越快
+                    float curvatureBoost = fminf((curvatureThreshold - avgRadius) / curvatureThreshold, 1.0f);
+                    float boostRate = 0.06f + curvatureBoost * 0.1f + accelBoost * 0.08f;
+                    cd.vortexStrength += (1.0f - cd.vortexStrength) * boostRate;
+                    cd.vortexCenterX = avgCX;
+                    cd.vortexCenterY = avgCY;
+                    // 漩涡旋转速度 = 角速度，受强度和加速度影响
+                    cd.vortexAngularVel = avgAngVel * (0.7f + g_centripetalForce * 0.5f) * (1.0f + accelBoost * 0.4f);
+                    // 初始化轨道倾角（首次触发时随机，之后缓慢变化）
+                    if (cd.vortexStrength < 0.1f) {
+                        cd.orbitTilt = 0.4f + Rand01() * 0.5f;  // 0.4~0.9弧度（23~52度）
+                        cd.orbitTiltVel = (Rand01() - 0.5f) * 0.005f;  // 缓慢变化
+                    }
+                    cd.orbitPhase += cd.vortexAngularVel;  // 更新轨道相位
+                }
+            }
+        }
+        // 停止运动后立即开始衰减：速度低于阈值时不再维持漩涡
+        // Stop maintaining vortex when velocity drops below threshold
+        if (cd.isCircling && velocity < 2.0f) {
+            cd.isCircling = false;
+            cd.lastCircleTime = dwTime;
+        }
+        // 漩涡衰减：停止运动后快速衰减，粒子被甩出而非继续被吸
+        if (!cd.isCircling && cd.vortexStrength > 0) {
+            cd.vortexStrength *= 0.92f;  // 快速衰减
+            if (cd.vortexStrength < 0.02f) {
+                cd.vortexStrength = 0;
+                cd.historyCount = 0;
+                // 清除粒子的z深度调制，恢复正常
+                for (auto &p : g_particles) {
+                    p.colorOffset[0] = 0;
+                    p.colorOffset[1] = 0;
+                    p.colorOffset[2] = 0;
+                }
+            }
+        }
+        // 轨道倾角缓慢变化，增加3D动态感
+        if (cd.vortexStrength > 0.1f) {
+            cd.orbitTilt += cd.orbitTiltVel;
+            if (cd.orbitTilt < 0.2f || cd.orbitTilt > 1.2f) cd.orbitTiltVel = -cd.orbitTiltVel;
+            cd.orbitTilt = fmaxf(0.2f, fminf(1.2f, cd.orbitTilt));
+        }
+        // 向心力作用于粒子：物理化轨道模型（角动量守恒 + 开普勒速度梯度 + 螺旋收敛）
+        // Physical orbital model: angular momentum conservation + Kepler velocity gradient + spiral convergence
+        if (cd.vortexStrength > 0.05f && !g_particles.empty()) {
+            float force = g_centripetalForce * cd.vortexStrength;
+            float orbitRadius = cd.circleRadius * (0.6f + 0.4f * cd.vortexStrength);
+            float influenceRadius = orbitRadius * 3.5f;
+            // 漩涡中心的"引力质量"，决定轨道速度 GM = v² * r
+            float GM = cd.vortexAngularVel * cd.vortexAngularVel * orbitRadius * orbitRadius * orbitRadius;
+            // 衰减阶段：向心力大幅减弱，离心力增强，粒子被甩出而非继续被吸
+            float decaying = cd.isCircling ? 0.0f : 1.0f;  // 衰减阶段=1，全力甩出
+            for (auto &p : g_particles) {
+                float dx = cd.vortexCenterX - p.x;
+                float dy = cd.vortexCenterY - p.y;
+                float dist = sqrtf(dx * dx + dy * dy);
+                if (dist > 2.0f && dist < influenceRadius) {
+                    float nx = dx / dist, ny = dy / dist;  // 径向单位向量（指向中心）
+                    float tx = -ny, ty = nx;  // 切向单位向量（逆时针）
+                    // 分解粒子速度为径向和切向分量
+                    float radialVel = p.vx * nx + p.vy * ny;  // 正=远离中心
+                    float tangentVel = p.vx * tx + p.vy * ty;  // 正=逆时针
+                    // 1. 物理向心力：衰减阶段大幅减弱
+                    float distRatio = dist / influenceRadius;
+                    float gravityFalloff = 1.0f / (0.3f + distRatio * distRatio);
+                    float centripetalAccel = force * gravityFalloff * 3.0f;
+                    float effectiveCentripetal = centripetalAccel * (1.0f - decaying * 0.9f);  // 衰减时只剩10%
+                    p.vx += nx * effectiveCentripetal;
+                    p.vy += ny * effectiveCentripetal;
+                    // 2. 衰减时的离心甩出：粒子沿径向向外加速（比向心力强）
+                    if (decaying > 0.5f) {
+                        float centrifugal = force * 4.0f * (1.0f - distRatio * 0.5f);
+                        p.vx -= nx * centrifugal;
+                        p.vy -= ny * centrifugal;
+                        // 切向速度保留（惯性），但不再驱动
+                    }
+                    // 3. 活跃阶段：角动量守恒驱动 + 轨道阻尼 + 弹簧约束（衰减阶段全部关闭）
+                    if (cd.isCircling) {
+                        float targetTangentVel = sqrtf(fmaxf(GM / fmaxf(dist, 5.0f), 0.5f)) * (cd.vortexAngularVel > 0 ? 1.0f : -1.0f);
+                        float tangentError = targetTangentVel - tangentVel;
+                        float tangentForce = tangentError * 0.08f * force;
+                        p.vx += tx * tangentForce;
+                        p.vy += ty * tangentForce;
+                        float radialDamping = -radialVel * 0.04f * force;
+                        p.vx += nx * radialDamping;
+                        p.vy += ny * radialDamping;
+                        float radiusError = dist - orbitRadius;
+                        if (fabsf(radiusError) > 3.0f) {
+                            float springForce = -radiusError * 0.005f * force;
+                            p.vx += nx * springForce;
+                            p.vy += ny * springForce;
+                        }
+                    }
+                    // 5. 3D轨道倾角（仅活跃阶段）：根据粒子在轨道上的位置计算z深度
+                    if (cd.isCircling) {
+                        float orbitAngle = atan2f(p.y - cd.vortexCenterY, p.x - cd.vortexCenterX);
+                        float depthFactor = sinf(orbitAngle) * sinf(cd.orbitTilt);
+                        float targetZ = 0.5f + depthFactor * 0.5f;
+                        p.z += (targetZ - p.z) * 0.15f;
+                        // 6. 粒子亮度随轨道速度+z深度变化（动能可视化+3D透视）
+                        float speed = sqrtf(p.vx * p.vx + p.vy * p.vy);
+                        float energyBoost = fminf(speed / 15.0f, 1.0f);
+                        float depthBrightness = (1.0f - p.z) * 0.2f;
+                        p.colorOffset[0] = energyBoost * 0.12f + depthBrightness;
+                        p.colorOffset[1] = energyBoost * 0.12f + depthBrightness;
+                        p.colorOffset[2] = energyBoost * 0.12f + depthBrightness;
+                    } else {
+                        // 衰减阶段：z深度和亮度恢复正常
+                        p.z += (0.5f - p.z) * 0.1f;
+                        p.colorOffset[0] *= 0.9f;
+                        p.colorOffset[1] *= 0.9f;
+                        p.colorOffset[2] *= 0.9f;
+                    }
+                }
+            }
+        }
+    }
+
     // ===== 粒子间排斥力计算（O(n²)，粒子过多时跳过以保证性能）=====
     if (g_enableParticleInteraction && !g_particles.empty()) {
         int pcount = (int)g_particles.size();
-        int maxCalc = g_superPerformanceMode ? 500 : 250;
+        int maxCalc = g_superPerformanceMode ? 1200 : 500;
         if (pcount <= maxCalc) {
             float repelDist = (float)g_interParticleRepelDistance;
             float repelDistSq = repelDist * repelDist;
@@ -3920,26 +4539,70 @@ static void RenderFrame() {
         }
     }
 
+    // ===== 粒子万有引力系统（牛顿万有引力定律 + 牛顿第二定律）=====
+    // Newtonian gravity: F = G*m1*m2/r², a = F/m = G*m_other/r²
+    if (g_enableParticleGravity && g_particles.size() > 2) {
+        int pcount = (int)g_particles.size();
+        // 选择引力天体：质量最大的N个粒子
+        int bodyCount = g_gravitySystem == 0 ? 2 : fminf(g_gravityBodyCount, pcount);
+        g_gravityBodies.clear();
+        // 简单选择：按质量排序取前N个（性能考虑，不做完整排序，用部分选择）
+        std::vector<std::pair<float, int>> massIdx;
+        for (int i = 0; i < pcount; i++) {
+            massIdx.push_back({g_particles[i].mass, i});
+        }
+        std::partial_sort(massIdx.begin(), massIdx.begin() + bodyCount, massIdx.end(),
+                          [](const std::pair<float,int> &a, const std::pair<float,int> &b) { return a.first > b.first; });
+        for (int i = 0; i < bodyCount; i++) {
+            g_gravityBodies.push_back(massIdx[i].second);
+        }
+        // 计算每个粒子受到引力源的引力
+        float G = g_gravityStrength * 50.0f;  // 引力常数缩放
+        float minDistSq = 25.0f;  // 最小距离平方，避免引力无穷大
+        for (int i = 0; i < pcount; i++) {
+            float ax = 0, ay = 0;
+            for (int bi = 0; bi < (int)g_gravityBodies.size(); bi++) {
+                int j = g_gravityBodies[bi];
+                if (i == j) continue;
+                float dx = g_particles[j].x - g_particles[i].x;
+                float dy = g_particles[j].y - g_particles[i].y;
+                float distSq = dx * dx + dy * dy;
+                if (distSq < minDistSq) distSq = minDistSq;
+                float dist = sqrtf(distSq);
+                // a = G * m_j / r²（牛顿第二定律，加速度与自身质量无关）
+                float accel = G * g_particles[j].mass / distSq;
+                ax += (dx / dist) * accel;
+                ay += (dy / dist) * accel;
+            }
+            g_particles[i].vx += ax;
+            g_particles[i].vy += ay;
+        }
+    }
+
     // ===== 粒子物理：摩擦 + 光标排斥力 + 随机扰动 + 全程吸附光标 =====
     float attractTargetX = (float)(renderPos.x - vX + g_tailOffsetX);
     float attractTargetY = (float)(renderPos.y - vY + g_tailOffsetY);
     for (auto &p : g_particles) {
-        p.vx *= 0.93f;
-        p.vy *= 0.93f;
-        // 光标周围排斥力：粒子进入范围后被径向弹开 + 随机方向扰乱
+        // 质量影响摩擦（惯性）：质量大的摩擦小，速度保持更久
+        // Friction affected by mass: heavier particles have less friction (more inertia)
+        float invMass = g_enableParticleMass ? (1.0f / p.mass) : 1.0f;
+        float friction = g_enableParticleMass ? (0.90f + 0.03f / fmaxf(p.mass, 0.1f)) : 0.93f;
+        friction = fminf(fmaxf(friction, 0.85f), 0.98f);
+        p.vx *= friction;
+        p.vy *= friction;
+        // 光标周围排斥力：加速度=F/m，质量大的加速度小
         if (g_enableParticleRepel && g_particleRepelForce > 0) {
             float rdx = p.x - attractTargetX;
             float rdy = p.y - attractTargetY;
             float rdist = sqrtf(rdx * rdx + rdy * rdy);
             if (rdist < (float)g_particleRepelRadius && rdist > 0.5f) {
                 float nx = rdx / rdist, ny = rdy / rdist;
-                float falloff = 1.0f - rdist / (float)g_particleRepelRadius;  // 越靠近光标排斥越强
+                float falloff = 1.0f - rdist / (float)g_particleRepelRadius;
                 float force = falloff * g_particleRepelForce;
-                // 径向排斥
-                p.vx += nx * force;
-                p.vy += ny * force;
-                // 随机方向扰动（扰乱吸附轨迹，制造绕飞感）
-                float perturb = force * 0.65f;
+                float accel = force * invMass;  // 牛顿第二定律 a=F/m
+                p.vx += nx * accel;
+                p.vy += ny * accel;
+                float perturb = force * 0.65f * invMass;
                 float angle = Rand01() * 6.28318f;
                 p.vx += cosf(angle) * perturb;
                 p.vy += sinf(angle) * perturb;
@@ -3947,10 +4610,12 @@ static void RenderFrame() {
         }
         p.x += p.vx;
         p.y += p.vy;
-        if (g_enableParticleSpin) p.rotation += p.spinSpeed;  // 自旋转
+        if (g_enableParticleSpin) p.rotation += p.spinSpeed;
+        // 光标吸附：质量大的吸附加速度小
         if (g_particleAttraction > 0) {
-            p.x += (attractTargetX - p.x) * g_particleAttraction;
-            p.y += (attractTargetY - p.y) * g_particleAttraction;
+            float attractAccel = g_particleAttraction * invMass;
+            p.x += (attractTargetX - p.x) * attractAccel;
+            p.y += (attractTargetY - p.y) * attractAccel;
         }
     }
     if (!g_particles.empty())
