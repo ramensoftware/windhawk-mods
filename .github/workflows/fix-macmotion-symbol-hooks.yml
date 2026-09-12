@@ -1,0 +1,40 @@
+name: Fix MacMotion symbol hooks name
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-macmotion-symbol-hooks.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rename symbol hooks variable
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('mods/macmotion.wh.cpp')
+          s = p.read_text(encoding='utf-8')
+          old1 = 'WindhawkUtils::SYMBOL_HOOK hooks[] = {'
+          new1 = 'WindhawkUtils::SYMBOL_HOOK twinuiPcshellHooks[] = {'
+          old2 = 'WindhawkUtils::HookSymbols(twinuiPcshell, hooks, ARRAYSIZE(hooks))'
+          new2 = 'WindhawkUtils::HookSymbols(twinuiPcshell, twinuiPcshellHooks, ARRAYSIZE(twinuiPcshellHooks))'
+          if s.count(old1) != 1:
+              raise SystemExit(f'Expected exactly one symbol hooks declaration, found {s.count(old1)}')
+          if s.count(old2) != 1:
+              raise SystemExit(f'Expected exactly one HookSymbols call, found {s.count(old2)}')
+          s = s.replace(old1, new1).replace(old2, new2)
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Remove temporary workflow and commit
+        run: |
+          rm .github/workflows/fix-macmotion-symbol-hooks.yml
+          git config user.name "Aayushjoshi12"
+          git config user.email "100678671+Aayushjoshi12@users.noreply.github.com"
+          git add mods/macmotion.wh.cpp .github/workflows/fix-macmotion-symbol-hooks.yml
+          git commit -m "Fix MacMotion symbol hooks variable name"
+          git push
