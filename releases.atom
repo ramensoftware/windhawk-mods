@@ -2,12 +2,50 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-13T19:54:42.000Z</updated>
+    <updated>2026-09-13T20:09:16.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Countdown Timer 1.16]]></title>
+        <id>https://windhawk.net/mods/taskbar-countdown-timer#864978cdce85019b2a86892e73681538a5328f1d</id>
+        <link href="https://windhawk.net/mods/taskbar-countdown-timer"/>
+        <updated>2026-09-13T20:09:16.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarcountdowntimer">Taskbar Countdown Timer</h1>
+<p>Adds a compact countdown timer directly to the Windows 11 taskbar.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Create a countdown in minutes from the taskbar</li>
+<li>Add a custom reminder message</li>
+<li>Live countdown display in the taskbar</li>
+<li>Cancel an active timer</li>
+<li>Snooze a completed timer</li>
+<li>Completion sound</li>
+<li>Reliable completion alert that doesn't depend on the taskbar XAML tree</li>
+<li>Timer state survives Explorer restarts and mod reloads</li>
+<li>Persisted timers use the Windows wall clock; changing the system time can shift an active timer</li>
+<li>Missed reminders older than 6 hours are discarded on restore</li>
+<li>Native XAML flyout for timer configuration</li>
+<li>Completion alert follows the Windows light/dark app theme</li>
+<li>No external application required</li>
+</ul>
+<h2 id="howtouse">How to use</h2>
+<ol>
+<li>Click <strong>⏱ Timer</strong> on the taskbar.</li>
+<li>Enter a reminder and duration.</li>
+<li>Click <strong>Start</strong>.</li>
+<li>The taskbar button shows the remaining time.</li>
+<li>When the countdown finishes, a completion alert appears with <strong>Snooze</strong> and <strong>Dismiss</strong>.</li>
+</ol>
+<p>The mod supports one active timer at a time and currently places its button on the primary taskbar.</p>
+<p><img src="https://raw.githubusercontent.com/richilp/taskbar-countdown-timer/main/16c5364b-0834-4a83-8796-1f6b1df4f702.png" alt="Taskbar Countdown Timer" /></p>]]></content>
+        <author>
+            <name>Richi</name>
+            <uri>https://github.com/richilp</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 7 Region and Language Restorer 1.0.0]]></title>
         <id>https://windhawk.net/mods/win7-intl-control-panel-restorer#cfecef6a1220f93bef844c6868880c6ae6bdccfd</id>
@@ -1047,62 +1085,6 @@ segment simply stays in <code>{title}</code>.</p></li>
         <author>
             <name>mazany</name>
             <uri>https://github.com/mazany</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[JonaOS Draggable Desktop Widgets 7]]></title>
-        <id>https://windhawk.net/mods/desktop-draggable-widgets#f1a98ea9fc2204646d7660f0c9474d174a800510</id>
-        <link href="https://windhawk.net/mods/desktop-draggable-widgets"/>
-        <updated>2026-09-02T17:32:10.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="jonaosdraggabledesktopwidgets">JonaOS Draggable Desktop Widgets</h1>
-<p>View Calendar, Time, Battery, Open your Music easily and fast without need of navigating through folders to reach Music folder, and Control Volume really fast by dragging the slider. Dragging moves them to any position on the Desktop and positions are remembered, the Quick Settings shortcuts need Windows 11 (Windows 10 falls back to full Settings pages), and the panel is primary-monitor only.
-<img src="https://i.imgur.com/OT1h1u1.png" alt="image" />
-<em>LiquidGlass</em>
-<img src="https://i.imgur.com/DjpCK5N.png" alt="image" />
-<em>WhiteTransparent</em>
-<img src="https://i.imgur.com/9gl361Y.png" alt="image" />
-<em>AcrylicTranslucent</em>
-<img src="https://i.imgur.com/KY8iKNf.png" alt="image" />
-<em>JonaOSLight</em>
-<img src="https://i.imgur.com/MOJocT6.png" alt="image" />
-<em>JonaOSDark</em>
-<img src="https://i.imgur.com/gXqefEW.png" alt="image" />
-<em>Banana</em>
-<img src="https://i.imgur.com/sKjSb9O.png" alt="image" />
-<em>Winblue</em>
-<img src="https://i.imgur.com/qFwDZWj.png" alt="image" />
-<em>Monochrome</em>
-<img src="https://i.imgur.com/LVPGKke.png" alt="image" />
-<em>Altmonochrome</em>
-<img src="https://i.imgur.com/KjSVQMg.png" alt="image" />
-<em>HoneyDawn</em>
-<img src="https://i.imgur.com/pW2OSDr.png" alt="image" />
-<em>Pink</em>
-<img src="https://i.imgur.com/bqdmOPo.png" alt="image" />
-<em>CharcoalCream</em>
-<img src="https://i.imgur.com/YKWtU5i.png" alt="image" />
-<em>CrimsomBlush</em>
-<img src="https://i.imgur.com/evaldRJ.png" alt="image" />
-<em>DeepTeal</em>
-<img src="https://i.imgur.com/1yBbaNX.png" alt="image" />
-<em>OceanSand</em>
-<img src="https://i.imgur.com/GnqSLmN.png" alt="image" />
-<em>IndigoMist</em>
-<img src="https://i.imgur.com/77dsN6g.png" alt="image" />
-<em>SpruceMist</em>
-<img src="https://i.imgur.com/3ZjPKWy.png" alt="image" />
-<em>PlumCream</em>
-<img src="https://i.imgur.com/vH5eTqi.png" alt="image" />
-<em>ForestSage</em>
-<img src="https://i.imgur.com/0vqcJfm.png" alt="image" />
-<em>PineFrost</em>
-<img src="https://i.imgur.com/nodjpJE.png" alt="image" />
-<em>You can paste your custom folder path eg(E:Music) to open your Music</em>
-<img src="https://i.imgur.com/Eyx3ht4.png" alt="image" />
-<em>You can apply a your custom color code eg(#177DDC)</em></p>]]></content>
-        <author>
-            <name>Jona like it, code it</name>
-            <uri>https://github.com/Stunning-dev</uri>
         </author>
     </entry>
 </feed>
