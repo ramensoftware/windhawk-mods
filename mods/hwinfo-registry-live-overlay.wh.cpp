@@ -1581,6 +1581,7 @@ void ExportRegistryHtml();
 int CalculateOverlayAutoHeight(HWND hwnd);
 void UpdateAutoHeight(HWND hwnd);
 void ApplyOverlayWindowSize(HWND hwnd);
+void ClampOverlayPositionToMonitor();
 
 int GetAlignedLabelX(HDC hdc, const std::wstring& label);
 
@@ -1836,6 +1837,47 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             InvalidateRect(hwnd, nullptr, FALSE);
             return 0;
 
+        case WM_DPICHANGED: {
+            UINT newDpi = HIWORD(wParam);
+            if (newDpi == 0) {
+                newDpi = GetDpiForWindow(hwnd);
+            }
+
+            if (newDpi != 0 && newDpi != g_dpi) {
+                g_dpi = newDpi;
+                RecreateFont();
+            }
+
+            const RECT* suggested = reinterpret_cast<const RECT*>(lParam);
+            if (suggested) {
+                settings.x = suggested->left;
+                settings.y = suggested->top;
+            }
+
+            ClampOverlayPositionToMonitor();
+
+            g_appliedX = INT_MIN;
+            g_appliedY = INT_MIN;
+            g_appliedWidth = -1;
+            g_appliedHeight = -1;
+
+            ApplyOverlayWindowSize(hwnd);
+            InvalidateRect(hwnd, nullptr, TRUE);
+            return 0;
+        }
+
+        case WM_DISPLAYCHANGE:
+            ClampOverlayPositionToMonitor();
+
+            g_appliedX = INT_MIN;
+            g_appliedY = INT_MIN;
+            g_appliedWidth = -1;
+            g_appliedHeight = -1;
+
+            ApplyOverlayWindowSize(hwnd);
+            InvalidateRect(hwnd, nullptr, TRUE);
+            return 0;
+
         case WM_PAINT: {
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hwnd, &ps);
@@ -1998,9 +2040,9 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                     GetOverlayInsertAfter(),
                     settings.x,
                     settings.y,
-                    settings.width,
-                    settings.height,
-                    SWP_NOACTIVATE
+                    0,
+                    0,
+                    SWP_NOSIZE | SWP_NOACTIVATE
                 );
 
                 return 0;
@@ -2025,6 +2067,13 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             }
 
             LoadSettings();
+
+            ClampOverlayPositionToMonitor();
+
+            g_appliedX = INT_MIN;
+            g_appliedY = INT_MIN;
+            g_appliedWidth = -1;
+            g_appliedHeight = -1;
 
             ApplyOverlayWindowSize(hwnd);
             UpdateLayeredAttributes(hwnd);
@@ -3091,14 +3140,17 @@ bool CreateOverlayWindow() {
         g_dpi = actualDpi;
         RecreateFont();
 
+        UpdateAutoHeight(g_hwnd);
+        ClampOverlayPositionToMonitor();
+
         SetWindowPos(
             g_hwnd,
             nullptr,
-            0,
-            0,
+            settings.x,
+            settings.y,
             Scaled(settings.width),
             Scaled(settings.height),
-            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE
+            SWP_NOZORDER | SWP_NOACTIVATE
         );
     }
 
