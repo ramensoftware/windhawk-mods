@@ -2,7 +2,7 @@
 // @id              wobbly-windows
 // @name            Wobbly Windows
 // @description     The classic Compiz/KDE Plasma style Wobbly Windows effect for Windows 11!
-// @version         0.76
+// @version         0.80
 // @author          lalimatyus
 // @github          https://github.com/lalimatyus
 // @include         dwm.exe
@@ -71,7 +71,7 @@ The physics presets and edge-locking behavior are based on KDE Plasma/KWin's Wob
 
 - AdvancedMode:
   - enable: false
-    $name: Advanced Mode
+    $name: Enable
     $description: Use the three physics values instead of the selected preset.
 
   - Stiffness: 6
@@ -120,10 +120,11 @@ BOOL Wh_ModInit()
 #define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
 #endif
 
+namespace
+{
+
 struct WobblySettings
 {
-    int wobbliness;
-    bool advancedMode;
     bool resizeWobbleEnabled;
     bool windowStateWobbleEnabled;
     double stiffness;
@@ -167,12 +168,6 @@ struct WobbleMesh
     bool canWobbleBottom;
     int dragPointIndex;
     Vec2 dragOffset;
-    Vec2 lastDragPosition;
-};
-
-struct MeshStepResult
-{
-    bool wobblying;
 };
 
 using IsGhostWindow_t = bool(__cdecl*)(void* pThis, HWND** ghostWindow);
@@ -185,11 +180,7 @@ static bool IsReadableMemory(const void* address, size_t size);
 
 static HWND GetHwndFromWindowData(void* windowData)
 {
-    if (!windowData)
-    {
-        return nullptr;
-    }
-    if (g_windowDataHwndOffset == SIZE_MAX)
+    if (!windowData || g_windowDataHwndOffset == SIZE_MAX)
     {
         return nullptr;
     }
@@ -217,13 +208,19 @@ static HWND GetHwndFromTrustedWindowData(void* windowData)
                                     g_windowDataHwndOffset);
 }
 
-HWINEVENTHOOK g_moveSizeHook = nullptr;
-HWINEVENTHOOK g_locationHook = nullptr;
-HWINEVENTHOOK g_foregroundHook = nullptr;
-HWINEVENTHOOK g_minimizeHook = nullptr;
-HWINEVENTHOOK g_destroyHook = nullptr;
-HWINEVENTHOOK g_desktopSwitchHook = nullptr;
-HWINEVENTHOOK g_cloakHook = nullptr;
+enum WindowEventHookIndex
+{
+    MOVE_SIZE_HOOK,
+    LOCATION_HOOK,
+    FOREGROUND_HOOK,
+    MINIMIZE_HOOK,
+    DESTROY_HOOK,
+    DESKTOP_SWITCH_HOOK,
+    CLOAK_HOOK,
+    WINDOW_EVENT_HOOK_COUNT
+};
+
+HWINEVENTHOOK g_windowEventHooks[WINDOW_EVENT_HOOK_COUNT] = {};
 static constexpr int MAX_OBSERVED_WINDOWS = 256;
 
 struct ObservedWindowState
@@ -260,8 +257,8 @@ static constexpr LPARAM NATIVE_TRANSITION_DIRECTION_LEFT = 0x10;
 static constexpr LPARAM NATIVE_TRANSITION_DIRECTION_RIGHT = 0x20;
 static constexpr LPARAM NATIVE_TRANSITION_DIRECTION_UP = 0x40;
 static constexpr LPARAM NATIVE_TRANSITION_DIRECTION_DOWN = 0x80;
-std::atomic<HWND> g_pendingInteractiveSnapWindow = nullptr;
-std::atomic<LPARAM> g_pendingInteractiveSnapFlags = 0;
+std::atomic<HWND> g_pendingInteractiveTransitionWindow = nullptr;
+std::atomic<LPARAM> g_pendingInteractiveTransitionFlags = 0;
 std::atomic<ULONGLONG> g_windowStateThrobSuppressedUntil = 0;
 RECT g_realDraggedWindowRect = {};
 RECT g_lastDraggedWindowRect = {};
@@ -294,8 +291,6 @@ using WindowTransitionChange_t = long(__cdecl*)(void* pThis, void* dwmWindow, in
 WindowTransitionChange_t g_windowTransitionChangeOriginal = nullptr;
 POINT g_lastMousePosition = {};
 bool g_hasLastMousePosition = false;
-POINT g_dragStartMousePosition = {};
-Vec2 g_dragStartLocalMouse = {0.0, 0.0};
 HMONITOR g_dragCursorMonitor = nullptr;
 ULONGLONG g_monitorTransitionRebaseUntil = 0;
 using CTopLevelWindowGetVisualProxy_t = void*(__cdecl*)(void* pThis);
@@ -577,20 +572,11 @@ static void* GetTopLevelVisualProxy(void* topLevelWindow,
 
 static void* GetTransitionVisualProxy(void* topLevelWindow3D)
 {
-    if (!HasExactDwmVtableTrusted(topLevelWindow3D, g_topLevelWindow3DVtable) ||
-        g_visualProxyOffset == SIZE_MAX)
+    if (!HasExactDwmVtableTrusted(topLevelWindow3D, g_topLevelWindow3DVtable))
     {
         return nullptr;
     }
-    // The exact vftable identifies the primary CRenderDataVisual/CVisual base;
-    // reuse the proxy field offset derived from a PDB-resolved CVisual getter.
-    const BYTE* proxyField =
-        static_cast<const BYTE*>(topLevelWindow3D) + g_visualProxyOffset;
-    if (!IsReadableMemory(proxyField, sizeof(void*)))
-    {
-        return nullptr;
-    }
-    void* proxy = *reinterpret_cast<void* const*>(proxyField);
+    void* proxy = ReadPointerMember(topLevelWindow3D, g_visualProxyOffset);
     return IsDwmObjectPointerValid(proxy, g_visualProxyVtable) ||
                    IsTrustedDwmPolymorphicObject(proxy)
                ? proxy
@@ -716,7 +702,9 @@ static void QueueMaximizedStateCheck(HWND hwnd)
     }
 }
 
-static bool IsApproximatelyMonitorWorkArea(const RECT& rect)
+static constexpr LONGLONG WINDOW_STATE_EDGE_TOLERANCE = 32;
+
+static bool GetMonitorWorkArea(const RECT& rect, RECT& workArea)
 {
     if (rect.right <= rect.left || rect.bottom <= rect.top)
     {
@@ -733,55 +721,47 @@ static bool IsApproximatelyMonitorWorkArea(const RECT& rect)
     {
         return false;
     }
-    // Include the invisible resize border around maximized windows.
-    constexpr LONGLONG edgeTolerance = 32;
-    auto edgeIsClose = [](LONG first, LONG second)
-    {
-        LONGLONG difference = static_cast<LONGLONG>(first) - static_cast<LONGLONG>(second);
-        return difference >= -edgeTolerance && difference <= edgeTolerance;
-    };
-    return edgeIsClose(rect.left, monitorInfo.rcWork.left) &&
-           edgeIsClose(rect.top, monitorInfo.rcWork.top) &&
-           edgeIsClose(rect.right, monitorInfo.rcWork.right) &&
-           edgeIsClose(rect.bottom, monitorInfo.rcWork.bottom);
+    workArea = monitorInfo.rcWork;
+    return true;
+}
+
+static bool WindowStateEdgesClose(LONG first, LONG second)
+{
+    LONGLONG difference = static_cast<LONGLONG>(first) - second;
+    return difference >= -WINDOW_STATE_EDGE_TOLERANCE &&
+           difference <= WINDOW_STATE_EDGE_TOLERANCE;
+}
+
+static bool IsApproximatelyMonitorWorkArea(const RECT& rect)
+{
+    RECT workArea = {};
+    return GetMonitorWorkArea(rect, workArea) &&
+           WindowStateEdgesClose(rect.left, workArea.left) &&
+           WindowStateEdgesClose(rect.top, workArea.top) &&
+           WindowStateEdgesClose(rect.right, workArea.right) &&
+           WindowStateEdgesClose(rect.bottom, workArea.bottom);
 }
 
 static bool IsApproximatelySnapLayoutTarget(const RECT& rect)
 {
-    if (rect.right <= rect.left || rect.bottom <= rect.top)
-    {
-        return false;
-    }
-    HMONITOR monitor = MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST);
-    if (!monitor)
-    {
-        return false;
-    }
-    MONITORINFO monitorInfo = {};
-    monitorInfo.cbSize = sizeof(monitorInfo);
-    if (!GetMonitorInfoW(monitor, &monitorInfo))
+    RECT workArea = {};
+    if (!GetMonitorWorkArea(rect, workArea))
     {
         return false;
     }
     // Snap zones align with at least two work-area edges.
-    constexpr LONGLONG edgeTolerance = 32;
-    auto edgeIsClose = [](LONG first, LONG second)
-    {
-        LONGLONG difference = static_cast<LONGLONG>(first) - static_cast<LONGLONG>(second);
-        return difference >= -edgeTolerance && difference <= edgeTolerance;
-    };
-    const RECT& workArea = monitorInfo.rcWork;
-    if (rect.left < workArea.left - edgeTolerance || rect.top < workArea.top - edgeTolerance ||
-        rect.right > workArea.right + edgeTolerance ||
-        rect.bottom > workArea.bottom + edgeTolerance)
+    if (rect.left < workArea.left - WINDOW_STATE_EDGE_TOLERANCE ||
+        rect.top < workArea.top - WINDOW_STATE_EDGE_TOLERANCE ||
+        rect.right > workArea.right + WINDOW_STATE_EDGE_TOLERANCE ||
+        rect.bottom > workArea.bottom + WINDOW_STATE_EDGE_TOLERANCE)
     {
         return false;
     }
     int alignedEdges = 0;
-    alignedEdges += edgeIsClose(rect.left, workArea.left) ? 1 : 0;
-    alignedEdges += edgeIsClose(rect.top, workArea.top) ? 1 : 0;
-    alignedEdges += edgeIsClose(rect.right, workArea.right) ? 1 : 0;
-    alignedEdges += edgeIsClose(rect.bottom, workArea.bottom) ? 1 : 0;
+    alignedEdges += WindowStateEdgesClose(rect.left, workArea.left);
+    alignedEdges += WindowStateEdgesClose(rect.top, workArea.top);
+    alignedEdges += WindowStateEdgesClose(rect.right, workArea.right);
+    alignedEdges += WindowStateEdgesClose(rect.bottom, workArea.bottom);
     // Four aligned edges are the maximized work area, not a Snap Layout zone.
     return alignedEdges >= 2 && alignedEdges < 4;
 }
@@ -959,13 +939,18 @@ static void QueueNativeWindowTransition(HWND hwnd, LPARAM transitionFlags)
     }
     if (g_realDragging.load(std::memory_order_relaxed))
     {
-        // Queue early Snap-in; Snap-out keeps the normal drag wobble.
-        if ((transitionFlags & NATIVE_TRANSITION_TARGET_IS_SNAP_LAYOUT) != 0 &&
+        // Preserve the native target even if a fast drag skips the narrow
+        // cursor-edge detection zone. Snap-out keeps the normal drag wobble.
+        constexpr LPARAM interactiveTargetFlags =
+            NATIVE_TRANSITION_TARGET_IS_WORK_AREA |
+            NATIVE_TRANSITION_TARGET_IS_SNAP_LAYOUT;
+        if ((transitionFlags & interactiveTargetFlags) != 0 &&
             g_realDraggedWindow.load(std::memory_order_relaxed) == hwnd)
         {
             // Publish direction before the release-store of its HWND.
-            g_pendingInteractiveSnapFlags.store(transitionFlags, std::memory_order_relaxed);
-            g_pendingInteractiveSnapWindow.store(hwnd, std::memory_order_release);
+            g_pendingInteractiveTransitionFlags.store(transitionFlags,
+                                                       std::memory_order_relaxed);
+            g_pendingInteractiveTransitionWindow.store(hwnd, std::memory_order_release);
         }
         return;
     }
@@ -1092,8 +1077,6 @@ static void __cdecl CheckForMaximizedChangeHook(void* pThis, void* pWindowData)
     HWND hwnd = GetHwndFromTrustedWindowData(pWindowData);
     QueueMaximizedStateCheck(hwnd);
 }
-
-unsigned int g_moveEventCounter = 0;
 
 static bool IsAddressRangeWithin(const void* address, size_t size, const BYTE* begin,
                                  const BYTE* end)
@@ -1308,7 +1291,7 @@ static size_t FindOffsetFromFunction(void* function, size_t defaultValue)
         return defaultValue;
     }
     BYTE* instruction = static_cast<BYTE*>(function);
-    static const std::regex pattern(
+    const std::regex pattern(
         R"(mov \w+, (?:qword ptr )?\[rcx\+0x([0-9a-f]{1,8})\])",
         std::regex_constants::icase);
     size_t bytesRead = 0;
@@ -1366,12 +1349,12 @@ static size_t FindDesktopManagerThreadIdOffset(void* function)
             thisAliases[aliasCount++] = name;
         }
     };
-    static const std::regex movePattern(R"(^mov (r[a-z0-9]+), (r[a-z0-9]+)$)",
+    const std::regex movePattern(R"(^mov (r[a-z0-9]+), (r[a-z0-9]+)$)",
                                         std::regex_constants::icase);
-    static const std::regex loadPattern(
+    const std::regex loadPattern(
         R"(^mov (?:e[a-z0-9]+|r[0-9]+d), (?:dword ptr )?\[(r[a-z0-9]+)\s*\+\s*0x([0-9a-f]{1,8})\]$)",
         std::regex_constants::icase);
-    static const std::regex wakeMessagePattern(R"(^mov edx, 0x0*400$)",
+    const std::regex wakeMessagePattern(R"(^mov edx, 0x0*400$)",
                                                std::regex_constants::icase);
     BYTE* instruction = static_cast<BYTE*>(function);
     size_t candidate = SIZE_MAX;
@@ -1443,9 +1426,9 @@ static size_t FindStoredWindowDataOffset(void* function)
             aliases[count++] = name;
         }
     };
-    static const std::regex movePattern(R"(^mov (r[a-z0-9]+), (r[a-z0-9]+)$)",
+    const std::regex movePattern(R"(^mov (r[a-z0-9]+), (r[a-z0-9]+)$)",
                                         std::regex_constants::icase);
-    static const std::regex storePattern(
+    const std::regex storePattern(
         R"(^mov (?:qword ptr )?\[(r[a-z0-9]+)\s*\+\s*0x([0-9a-f]{1,8})\], (r[a-z0-9]+)$)",
         std::regex_constants::icase);
     BYTE* instruction = static_cast<BYTE*>(function);
@@ -1502,7 +1485,7 @@ static bool FindVisualProxyAccessPath(void* function, size_t* ownerOffset,
     {
         return false;
     }
-    static const std::regex loadPattern(
+    const std::regex loadPattern(
         R"(^mov (r[a-z0-9]+), (?:qword ptr )?\[(r[a-z0-9]+)\+0x([0-9a-f]{1,8})\]$)",
         std::regex_constants::icase);
     BYTE* instruction = static_cast<BYTE*>(function);
@@ -1602,12 +1585,12 @@ static size_t FindDesktopManagerCompositorOffset(void* initializeFunction,
             }
         }
     };
-    static const std::regex movePattern(R"(^mov (r[a-z0-9]+), (r[a-z0-9]+)$)",
+    const std::regex movePattern(R"(^mov (r[a-z0-9]+), (r[a-z0-9]+)$)",
                                         std::regex_constants::icase);
-    static const std::regex leaPattern(
+    const std::regex leaPattern(
         R"(^lea (r[a-z0-9]+), \[(r[a-z0-9]+)\+0x([0-9a-f]{1,8})\]$)",
         std::regex_constants::icase);
-    static const std::regex callPattern(R"(^call 0x([0-9a-f]+)$)",
+    const std::regex callPattern(R"(^call 0x([0-9a-f]+)$)",
                                         std::regex_constants::icase);
     BYTE* instruction = static_cast<BYTE*>(initializeFunction);
     size_t bytesRead = 0;
@@ -1721,9 +1704,9 @@ static bool FindConstructorWindowDataOffsets(void* function, size_t* windowDataT
             remove(aliases, count, reg);
         }
     };
-    static const std::regex movePattern(R"(^mov (r[a-z0-9]+), (r[a-z0-9]+)$)",
+    const std::regex movePattern(R"(^mov (r[a-z0-9]+), (r[a-z0-9]+)$)",
                                         std::regex_constants::icase);
-    static const std::regex storePattern(
+    const std::regex storePattern(
         R"(^mov (?:qword ptr )?\[(r[a-z0-9]+)\+0x([0-9a-f]{1,8})\], (r[a-z0-9]+)$)",
         std::regex_constants::icase);
     size_t forwardCandidate = SIZE_MAX;
@@ -1832,14 +1815,14 @@ static bool FindWindowDataTopLevelOffsets(void* function, size_t* topLevelWindow
     unsigned int candidateCount = 0;
     std::string aliases[8] = {"rdx"};
     unsigned int aliasCount = 1;
-    static const std::regex movePattern(R"(mov (r[a-z0-9]+), (r[a-z0-9]+))",
+    const std::regex movePattern(R"(mov (r[a-z0-9]+), (r[a-z0-9]+))",
                                         std::regex_constants::icase);
     // Accept common compiler encodings when deriving these fields.
-    static const std::regex memoryPattern(
+    const std::regex memoryPattern(
         R"(\[(r[a-z0-9]+)\+0x([0-9a-f]{1,8})\])", std::regex_constants::icase);
-    static const std::regex zeroTestPattern(
+    const std::regex zeroTestPattern(
         R"(^cmp (?:qword ptr )?\[[^\]]+\], (?:0x)?0$)", std::regex_constants::icase);
-    static const std::regex writePattern(
+    const std::regex writePattern(
         R"(^mov (?:qword ptr )?\[[^\]]+\], )", std::regex_constants::icase);
     BYTE* instruction = static_cast<BYTE*>(function);
     size_t bytesRead = 0;
@@ -3493,16 +3476,6 @@ static void CalculateBernsteinBasis(double value, double basis[4])
     basis[3] = value * value * value;
 }
 
-static Vec2 Subtract(const Vec2& a, const Vec2& b)
-{
-    return {a.x - b.x, a.y - b.y};
-}
-
-static double Length(const Vec2& value)
-{
-    return std::sqrt(value.x * value.x + value.y * value.y);
-}
-
 static int GetPointIndex(int x, int y)
 {
     return y * GRID_WIDTH + x;
@@ -3521,7 +3494,6 @@ static void InitializeMesh(WobbleMesh& mesh, double width, double height)
     mesh.canWobbleBottom = true;
     mesh.dragPointIndex = -1;
     mesh.dragOffset = {0.0, 0.0};
-    mesh.lastDragPosition = {0.0, 0.0};
     for (int y = 0; y < GRID_HEIGHT; y++)
     {
         for (int x = 0; x < GRID_WIDTH; x++)
@@ -3551,6 +3523,32 @@ static void UpdateMeshBaseGrid(WobbleMesh& mesh, double width, double height)
             mesh.points[GetPointIndex(x, y)].basePosition = {normalizedX * width,
                                                              normalizedY * height};
         }
+    }
+}
+
+static void ResizeMeshPreservingDeformation(WobbleMesh& mesh, double width, double height)
+{
+    Vec2 displacement[GRID_POINT_COUNT] = {};
+    for (int i = 0; i < GRID_POINT_COUNT; i++)
+    {
+        displacement[i] = {mesh.points[i].position.x - mesh.points[i].basePosition.x,
+                           mesh.points[i].position.y - mesh.points[i].basePosition.y};
+    }
+    UpdateMeshBaseGrid(mesh, width, height);
+    for (int i = 0; i < GRID_POINT_COUNT; i++)
+    {
+        mesh.points[i].position.x += displacement[i].x;
+        mesh.points[i].position.y += displacement[i].y;
+    }
+}
+
+static void UpdateMeshDragOffset(WobbleMesh& mesh, const Vec2& mousePosition)
+{
+    if (mesh.dragPointIndex >= 0 && mesh.dragPointIndex < GRID_POINT_COUNT)
+    {
+        const Vec2& basePosition = mesh.points[mesh.dragPointIndex].basePosition;
+        mesh.dragOffset = {mousePosition.x - basePosition.x,
+                           mousePosition.y - basePosition.y};
     }
 }
 
@@ -3801,8 +3799,7 @@ static void CalculateMeshForces(WobbleMesh& mesh, const WobblySettings& settings
     SmoothMeshField(mesh, false);
 }
 
-static MeshStepResult SimulateMeshStep(WobbleMesh& mesh, const WobblySettings& settings,
-                                       double deltaTime)
+static bool SimulateMeshStep(WobbleMesh& mesh, const WobblySettings& settings, double deltaTime)
 {
     CalculateMeshForces(mesh, settings);
     double deltaTimeMilliseconds = std::clamp(deltaTime * 1000.0, 0.0, 10.0);
@@ -3837,9 +3834,8 @@ static MeshStepResult SimulateMeshStep(WobbleMesh& mesh, const WobblySettings& s
         }
     }
     ApplyResizeConstraints(mesh);
-    MeshStepResult result = {!(accelerationSum < 0.5 && velocitySum < 0.5)};
-    mesh.active = result.wobblying;
-    return result;
+    mesh.active = !(accelerationSum < 0.5 && velocitySum < 0.5);
+    return mesh.active;
 }
 
 static void BeginDrag(WobbleMesh& mesh, const Vec2& mousePosition)
@@ -3849,7 +3845,6 @@ static void BeginDrag(WobbleMesh& mesh, const Vec2& mousePosition)
     // Preserve the exact grab offset for a stable affine pivot.
     mesh.dragOffset = {mousePosition.x - dragPoint.basePosition.x,
                        mousePosition.y - dragPoint.basePosition.y};
-    mesh.lastDragPosition = mousePosition;
     // KDE's grabbed point follows a soft spring constraint.
     dragPoint.fixed = true;
     mesh.dragging = true;
@@ -3889,22 +3884,6 @@ static bool ReplaceAnimationWithStateThrob(WindowAnimationSlot& slot, int width,
     slot.meshIdentityPending = false;
     slot.order = ++g_animationOrderCounter;
     return true;
-}
-
-static void LogMeshSummary(const WobbleMesh& mesh, const wchar_t* prefix)
-{
-    double maximumDisplacement = 0.0;
-    double maximumSpeed = 0.0;
-    for (int i = 0; i < GRID_POINT_COUNT; i++)
-    {
-        const WobblePoint& point = mesh.points[i];
-        Vec2 displacement = Subtract(point.position, point.basePosition);
-        double displacementLength = Length(displacement);
-        double speed = Length(point.velocity);
-        maximumDisplacement = std::max(maximumDisplacement, displacementLength);
-        maximumSpeed = std::max(maximumSpeed, speed);
-    }
-    Wh_Log(L"%s MaxDisplacement=%.2f MaxSpeed=%.2f", prefix, maximumDisplacement, maximumSpeed);
 }
 
 static WobblySettings GetSettingsSnapshot();
@@ -4073,8 +4052,8 @@ static void ResetDragInputState()
 {
     g_realDragging = false;
     g_realDraggedWindow = nullptr;
-    g_pendingInteractiveSnapWindow.store(nullptr, std::memory_order_release);
-    g_pendingInteractiveSnapFlags.store(0, std::memory_order_relaxed);
+    g_pendingInteractiveTransitionWindow.store(nullptr, std::memory_order_release);
+    g_pendingInteractiveTransitionFlags.store(0, std::memory_order_relaxed);
     g_realResizing = false;
     g_moveTypeKnown = false;
     g_dragResizeWobbleEnabled = true;
@@ -4082,12 +4061,9 @@ static void ResetDragInputState()
     g_interactiveWindowStateThrob = false;
     g_interactiveWindowStateMaximizing = false;
     g_resizeCoordinateScale = 1.0;
-    g_moveEventCounter = 0;
     g_dragAnimationSlot = -1;
     g_hasLastMousePosition = false;
     g_lastMousePosition = {};
-    g_dragStartMousePosition = {};
-    g_dragStartLocalMouse = {};
     g_dragCursorMonitor = nullptr;
     g_monitorTransitionRebaseUntil = 0;
     g_realDraggedWindowRect = {};
@@ -4119,7 +4095,8 @@ struct MonitorEdgeState
     Vec2 direction;
 };
 
-static MonitorEdgeState GetPointMonitorEdgeState(const POINT& point)
+static MonitorEdgeState GetPointMonitorEdgeState(const POINT& point,
+                                                  LONG edgeTolerance = 3)
 {
     MonitorEdgeState result = {};
     HMONITOR monitor = MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST);
@@ -4133,19 +4110,20 @@ static MonitorEdgeState GetPointMonitorEdgeState(const POINT& point)
     {
         return result;
     }
-    // Aero Snap uses physical monitor edges, with a small DPI tolerance.
+    // Aero Snap uses physical monitor edges. Normal tracking keeps this narrow;
+    // MOVESIZEEND can request a wider intent band for coalesced fast input.
     result.top = point.x >= monitorInfo.rcMonitor.left && point.x < monitorInfo.rcMonitor.right &&
-                 point.y <= monitorInfo.rcMonitor.top + 3;
+                 point.y <= monitorInfo.rcMonitor.top + edgeTolerance;
     if (result.top)
     {
         result.direction.y = -1.0;
     }
     bool atLeftEdge = point.y >= monitorInfo.rcMonitor.top &&
                       point.y < monitorInfo.rcMonitor.bottom &&
-                      point.x <= monitorInfo.rcMonitor.left + 3;
+                      point.x <= monitorInfo.rcMonitor.left + edgeTolerance;
     bool atRightEdge = point.y >= monitorInfo.rcMonitor.top &&
                        point.y < monitorInfo.rcMonitor.bottom &&
-                       point.x >= monitorInfo.rcMonitor.right - 4;
+                       point.x >= monitorInfo.rcMonitor.right - edgeTolerance - 1;
     result.side = atLeftEdge || atRightEdge;
     if (atLeftEdge)
     {
@@ -4938,26 +4916,15 @@ static int AcquireAnimationSlot(HWND hwnd, const WobblySettings& settings, doubl
 
 static void HandleMoveSizeStart(HWND hwnd)
 {
-    if (!hwnd)
-    {
-        return;
-    }
-    if (!IsWindow(hwnd))
-    {
-        return;
-    }
-    if (!IsWindowVisible(hwnd))
-    {
-        return;
-    }
-    if (!IsInteractiveMoveSizeLoop(hwnd))
+    if (!hwnd || !IsWindow(hwnd) || !IsWindowVisible(hwnd) ||
+        !IsInteractiveMoveSizeLoop(hwnd))
     {
         return;
     }
     // Reset Snap state so the same side can trigger again.
     ResetObservedSnapStateForInteractiveMove(hwnd);
-    g_pendingInteractiveSnapWindow.store(nullptr, std::memory_order_release);
-    g_pendingInteractiveSnapFlags.store(0, std::memory_order_relaxed);
+    g_pendingInteractiveTransitionWindow.store(nullptr, std::memory_order_release);
+    g_pendingInteractiveTransitionFlags.store(0, std::memory_order_relaxed);
     RECT rect = {};
     if (!GetWindowRect(hwnd, &rect))
     {
@@ -5019,17 +4986,14 @@ static void HandleMoveSizeStart(HWND hwnd)
     g_dragStartedWindowZoomed = g_lastDraggedWindowZoomed;
     g_interactiveWindowStateThrob = false;
     g_interactiveWindowStateMaximizing = false;
-    g_dragStartMousePosition = mousePosition;
     g_lastMousePosition = mousePosition;
     g_dragCursorMonitor = MonitorFromPoint(mousePosition, MONITOR_DEFAULTTONEAREST);
     g_monitorTransitionRebaseUntil = 0;
     g_hasLastMousePosition = true;
-    g_dragStartLocalMouse = localMousePosition;
     g_realDragging = true;
     g_realResizing = operationTypeKnown && operationResizing;
     g_moveTypeKnown = operationTypeKnown;
     g_dragResizeWobbleEnabled = activeSettings.resizeWobbleEnabled;
-    g_moveEventCounter = 0;
     if (!EnsureAnimationClockRunning(hwnd))
     {
         Wh_Log(L"Failed to start drag animation timer");
@@ -5037,22 +5001,6 @@ static void HandleMoveSizeStart(HWND hwnd)
         return;
     }
     RequestDwmScenePass(hwnd);
-    int dragPointIndex = -1;
-    AcquireSRWLockShared(&g_animationSlotsLock);
-    if (g_animationSlots[slotIndex].active)
-    {
-        dragPointIndex = g_animationSlots[slotIndex].mesh.dragPointIndex;
-    }
-    ReleaseSRWLockShared(&g_animationSlotsLock);
-    Wh_Log(L"MOVE/SIZE START HWND=%p "
-           L"Type=%s "
-           L"Size=%dx%d "
-           L"ResizeCoordinateScale=%.4f "
-           L"MouseLocal=(%.2f,%.2f) "
-           L"MeshPoint=%d",
-           hwnd, g_moveTypeKnown ? (g_realResizing ? L"RESIZE" : L"MOVE") : L"PENDING", width,
-           height, g_resizeCoordinateScale, g_dragStartLocalMouse.x, g_dragStartLocalMouse.y,
-           dragPointIndex);
 }
 
 static void ApplyAnimationSlotTransform(int slotIndex, double interpolationAlpha)
@@ -5457,13 +5405,13 @@ static void UpdateAnimationFrame()
         {
             double stepMilliseconds = std::min(remainingMilliseconds, 10.0);
             previousMesh = simulatedMesh;
-            MeshStepResult result =
+            bool wobbling =
                 SimulateMeshStep(simulatedMesh, snapshot.settings, stepMilliseconds / 1000.0);
             simulated = true;
             freeStepPending = false;
             remainingMilliseconds -= stepMilliseconds;
             // Match KWin's free-effect stop threshold.
-            if (!snapshot.dragging && !result.wobblying)
+            if (!snapshot.dragging && !wobbling)
             {
                 break;
             }
@@ -5664,7 +5612,6 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
     }
     bool rectChanged = !EqualRect(&rect, &g_lastDraggedWindowRect);
     bool resizeDetectedThisEvent = false;
-    bool operationDetectedThisEvent = false;
     if (!g_moveTypeKnown && rectChanged)
     {
         g_realResizing = currentWidth != originalWidth || currentHeight != originalHeight;
@@ -5674,7 +5621,6 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
             resizeDetectedThisEvent = true;
         }
         g_moveTypeKnown = true;
-        operationDetectedThisEvent = true;
     }
     POINT mousePosition = {};
     if (!GetCursorPos(&mousePosition))
@@ -5691,7 +5637,6 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
         g_realResizing = true;
         g_resizeCoordinateScale = GetResizeVisualCoordinateScale(hwnd, rect);
         resizeDetectedThisEvent = true;
-        operationDetectedThisEvent = true;
     }
     if (g_realResizing && !g_dragResizeWobbleEnabled)
     {
@@ -5704,12 +5649,11 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
     }
     MonitorEdgeState mouseEdgeState = GetPointMonitorEdgeState(mousePosition);
     bool mouseAtMonitorTopEdge = mouseEdgeState.top && !mouseEdgeState.side;
-    double movementX = static_cast<double>(mousePosition.x - g_dragStartMousePosition.x);
-    double movementY = static_cast<double>(mousePosition.y - g_dragStartMousePosition.y);
-    double windowDeltaX = static_cast<double>(rect.left - g_lastDraggedWindowRect.left) *
-                          (g_realResizing ? g_resizeCoordinateScale : 1.0);
-    double windowDeltaY = static_cast<double>(rect.top - g_lastDraggedWindowRect.top) *
-                          (g_realResizing ? g_resizeCoordinateScale : 1.0);
+    double coordinateScale = g_realResizing ? g_resizeCoordinateScale : 1.0;
+    double windowDeltaX =
+        static_cast<double>(rect.left - g_lastDraggedWindowRect.left) * coordinateScale;
+    double windowDeltaY =
+        static_cast<double>(rect.top - g_lastDraggedWindowRect.top) * coordinateScale;
     int previousWidth = g_lastDraggedWindowRect.right - g_lastDraggedWindowRect.left;
     int previousHeight = g_lastDraggedWindowRect.bottom - g_lastDraggedWindowRect.top;
     bool sizeChanged = currentWidth != previousWidth || currentHeight != previousHeight;
@@ -5723,7 +5667,8 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
         g_dragCursorMonitor = cursorMonitor;
         g_monitorTransitionRebaseUntil = now + 750;
     }
-    bool dpiReflow = !g_realResizing && sizeChanged && !zoomStateChanged;
+    bool dpiReflow = !g_realResizing && sizeChanged && !zoomStateChanged &&
+                     !g_interactiveWindowStateThrob;
     if (dpiReflow)
     {
         g_monitorTransitionRebaseUntil = now + 750;
@@ -5732,18 +5677,10 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
     bool rebaseMonitorTransition =
         !g_realResizing && now <= g_monitorTransitionRebaseUntil &&
         (monitorChanged || dpiReflow || largeNativeCatchUp);
-    Vec2 localMousePosition = {static_cast<double>(mousePosition.x - rect.left) *
-                                   (g_realResizing ? g_resizeCoordinateScale : 1.0),
-                               static_cast<double>(mousePosition.y - rect.top) *
-                                   (g_realResizing ? g_resizeCoordinateScale : 1.0)};
-    double currentMeshWidth =
-        static_cast<double>(currentWidth) * (g_realResizing ? g_resizeCoordinateScale : 1.0);
-    double currentMeshHeight =
-        static_cast<double>(currentHeight) * (g_realResizing ? g_resizeCoordinateScale : 1.0);
-    static ULONGLONG lastDebugLogTimestamp = 0;
-    ULONGLONG debugLogTimestamp = GetTickCount64();
-    bool logMesh = debugLogTimestamp - lastDebugLogTimestamp >= 250;
-    WobbleMesh debugMesh = {};
+    Vec2 localMousePosition = {static_cast<double>(mousePosition.x - rect.left) * coordinateScale,
+                               static_cast<double>(mousePosition.y - rect.top) * coordinateScale};
+    double currentMeshWidth = static_cast<double>(currentWidth) * coordinateScale;
+    double currentMeshHeight = static_cast<double>(currentHeight) * coordinateScale;
     AcquireSRWLockExclusive(&g_animationSlotsLock);
     WindowAnimationSlot& slot = g_animationSlots[slotIndex];
     if (!slot.active || slot.hwnd != hwnd)
@@ -5768,15 +5705,12 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
         slot.meshIdentityPending = false;
         slot.meshRevision++;
         ReleaseSRWLockExclusive(&g_animationSlotsLock);
-        g_dragStartMousePosition = mousePosition;
-        g_dragStartLocalMouse = localMousePosition;
         g_lastDraggedWindowRect = rect;
         g_lastDraggedWindowZoomed = IsZoomed(hwnd) != FALSE;
         g_lastMousePosition = mousePosition;
         RequestDwmScenePass(hwnd);
         return;
     }
-    bool startedInteractiveStateThrob = false;
     auto startInteractiveStateThrob = [&](bool maximizing, Vec2 direction)
     {
         InitializeMesh(slot.mesh, static_cast<double>(currentWidth),
@@ -5788,7 +5722,6 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
         slot.windowStateThrob = true;
         g_interactiveWindowStateThrob = true;
         g_interactiveWindowStateMaximizing = maximizing;
-        startedInteractiveStateThrob = true;
     };
     bool canStartInteractiveStateThrob = slot.settings.windowStateWobbleEnabled &&
                                          g_moveTypeKnown && !g_realResizing &&
@@ -5835,11 +5768,21 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
         slot.previousMesh.canWobbleLeft = slot.mesh.canWobbleLeft;
         slot.previousMesh.canWobbleRight = slot.mesh.canWobbleRight;
         slot.previousMesh.canWobbleBottom = slot.mesh.canWobbleBottom;
-        // Preserve the original grab offset across mixed-DPI resize.
-        slot.mesh.lastDragPosition = localMousePosition;
-        slot.previousMesh.lastDragPosition = localMousePosition;
         ApplyResizeConstraints(slot.mesh);
         ApplyResizeConstraints(slot.previousMesh);
+    }
+    else if (g_interactiveWindowStateThrob && slot.windowStateThrob)
+    {
+        // Native Snap can resize the HWND before IsZoomed changes. Keep the
+        // already-seeded state pulse instead of replacing it with drag wobble.
+        if (sizeChanged)
+        {
+            ResizeMeshPreservingDeformation(slot.mesh, currentMeshWidth, currentMeshHeight);
+            ResizeMeshPreservingDeformation(slot.previousMesh, currentMeshWidth,
+                                             currentMeshHeight);
+        }
+        UpdateMeshDragOffset(slot.mesh, localMousePosition);
+        UpdateMeshDragOffset(slot.previousMesh, localMousePosition);
     }
     else if (rebaseMonitorTransition)
     {
@@ -5850,8 +5793,6 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
         BeginDrag(slot.mesh, localMousePosition);
         slot.previousMesh = slot.mesh;
         slot.windowStateThrob = false;
-        g_dragStartMousePosition = mousePosition;
-        g_dragStartLocalMouse = localMousePosition;
     }
     else if (sizeChanged)
     {
@@ -5866,44 +5807,23 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
             slot.windowStateThrob = true;
             g_interactiveWindowStateThrob = true;
             g_interactiveWindowStateMaximizing = windowZoomed;
-            startedInteractiveStateThrob = true;
         }
         BeginDrag(slot.mesh, localMousePosition);
         slot.previousMesh = slot.mesh;
-        g_dragStartMousePosition = mousePosition;
-        g_dragStartLocalMouse = localMousePosition;
     }
-    else if (!startedInteractiveStateThrob)
+    else
     {
         OffsetMeshPositions(slot.mesh, -windowDeltaX, -windowDeltaY);
         OffsetMeshPositions(slot.previousMesh, -windowDeltaX, -windowDeltaY);
-        slot.mesh.lastDragPosition = localMousePosition;
-        slot.previousMesh.lastDragPosition = localMousePosition;
     }
     slot.mesh.active = true;
     slot.identityApplied = false;
     slot.meshIdentityPending = false;
     slot.meshRevision++;
-    if (logMesh)
-    {
-        debugMesh = slot.mesh;
-    }
     ReleaseSRWLockExclusive(&g_animationSlotsLock);
     g_lastDraggedWindowRect = rect;
     g_lastDraggedWindowZoomed = windowZoomed;
     g_lastMousePosition = mousePosition;
-    g_moveEventCounter++;
-    if (operationDetectedThisEvent)
-    {
-        Wh_Log(L"Operation detected: %s", g_realResizing ? L"RESIZE" : L"MOVE");
-    }
-    if (logMesh)
-    {
-        lastDebugLogTimestamp = debugLogTimestamp;
-        Wh_Log(L"%s #%u Delta=(%.2f,%.2f)", g_realResizing ? L"RESIZE" : L"MOVE",
-               g_moveEventCounter, movementX, movementY);
-        LogMeshSummary(debugMesh, L"PHYSICS");
-    }
 }
 
 static void HandleMoveSizeEnd(HWND hwnd)
@@ -5938,6 +5858,19 @@ static void HandleMoveSizeEnd(HWND hwnd)
     bool releasedAtMonitorTopEdge =
         !g_realResizing && releaseEdgeState.top && !releaseEdgeState.side;
     bool releasedAtMonitorSideEdge = !g_realResizing && releaseEdgeState.side;
+    constexpr LONG fastDragSnapBand = 24;
+    MonitorEdgeState releaseSnapBand =
+        hasReleaseMousePosition
+            ? GetPointMonitorEdgeState(releaseMousePosition, fastDragSnapBand)
+            : MonitorEdgeState{};
+    MonitorEdgeState lastDragSnapBand =
+        g_hasLastMousePosition
+            ? GetPointMonitorEdgeState(g_lastMousePosition, fastDragSnapBand)
+            : MonitorEdgeState{};
+    bool fastTopSnapIntent =
+        !g_realResizing &&
+        ((releaseSnapBand.top && !releaseSnapBand.side) ||
+         (lastDragSnapBand.top && !lastDragSnapBand.side));
     // Publish final geometry before releasing the grabbed point.
     g_finalizingMoveSize = true;
     HandleObservedWindowLocationChange(hwnd, OBJID_WINDOW, CHILDID_SELF);
@@ -5945,10 +5878,17 @@ static void HandleMoveSizeEnd(HWND hwnd)
     HandleLocationChange(hwnd, OBJID_WINDOW, CHILDID_SELF);
     // Late Snap notifications can now use the normal queue.
     g_realDragging.store(false, std::memory_order_release);
-    HWND pendingInteractiveSnapWindow =
-        g_pendingInteractiveSnapWindow.exchange(nullptr, std::memory_order_acq_rel);
-    LPARAM pendingInteractiveSnapFlags =
-        g_pendingInteractiveSnapFlags.exchange(0, std::memory_order_relaxed);
+    HWND pendingInteractiveTransitionWindow =
+        g_pendingInteractiveTransitionWindow.exchange(nullptr, std::memory_order_acq_rel);
+    LPARAM pendingInteractiveTransitionFlags =
+        g_pendingInteractiveTransitionFlags.exchange(0, std::memory_order_relaxed);
+    bool hasPendingInteractiveTarget = pendingInteractiveTransitionWindow == hwnd;
+    bool pendingInteractiveMaximize =
+        hasPendingInteractiveTarget &&
+        (pendingInteractiveTransitionFlags & NATIVE_TRANSITION_TARGET_IS_WORK_AREA) != 0;
+    bool pendingInteractiveSnap =
+        hasPendingInteractiveTarget &&
+        (pendingInteractiveTransitionFlags & NATIVE_TRANSITION_TARGET_IS_SNAP_LAYOUT) != 0;
     bool animate = false;
     bool stateTransitionWobble = false;
     bool snapTransitionWobble = false;
@@ -5961,10 +5901,14 @@ static void HandleMoveSizeEnd(HWND hwnd)
                                   IsEligibleWindowForStateThrob(hwnd) &&
                                   IsApproximatelySnapLayoutTarget(releaseRect);
     bool releasedIntoSnapTarget =
-        !g_realResizing && (releasedAtMonitorSideEdge || pendingInteractiveSnapWindow == hwnd ||
+        !g_realResizing && (releasedAtMonitorSideEdge || pendingInteractiveSnap ||
                             releasedAtSnapGeometry);
-    Vec2 snapDirection = pendingInteractiveSnapWindow == hwnd
-                             ? DecodeWindowTransitionDirection(pendingInteractiveSnapFlags)
+    bool releasedIntoMaximizeTarget =
+        !g_realResizing && (releasedAtMonitorTopEdge || fastTopSnapIntent ||
+                            pendingInteractiveMaximize);
+    Vec2 snapDirection = pendingInteractiveSnap
+                             ? DecodeWindowTransitionDirection(
+                                   pendingInteractiveTransitionFlags)
                              : Vec2{};
     if (snapDirection.x == 0.0 && snapDirection.y == 0.0)
     {
@@ -5984,7 +5928,7 @@ static void HandleMoveSizeEnd(HWND hwnd)
         return;
     }
     bool wasDragging = slot.mesh.dragging;
-    if (slot.settings.windowStateWobbleEnabled && releasedAtMonitorTopEdge)
+    if (slot.settings.windowStateWobbleEnabled && releasedIntoMaximizeTarget)
     {
         int releaseWidth = releaseRect.right - releaseRect.left;
         int releaseHeight = releaseRect.bottom - releaseRect.top;
@@ -6044,13 +5988,15 @@ static void HandleMoveSizeEnd(HWND hwnd)
         MarkObservedSnapTransition(hwnd, false);
         RequestDwmScenePass(hwnd);
     }
-    Wh_Log(L"%s END HWND=%p Events=%u", g_realResizing ? L"RESIZE" : L"MOVE", hwnd,
-           g_moveEventCounter);
     if (stateTransitionWobble && transitionExpectedZoomed)
     {
-        Wh_Log(L"WINDOW STATE THROB HWND=%p State=MAXIMIZED "
-               L"Source=INTERACTIVE_TOP_EDGE",
-               hwnd);
+        const wchar_t* source = pendingInteractiveMaximize
+                                    ? L"NATIVE_TARGET"
+                                : releasedAtMonitorTopEdge
+                                    ? L"CURSOR_EDGE"
+                                    : L"FAST_DRAG_BAND";
+        Wh_Log(L"WINDOW STATE THROB HWND=%p State=MAXIMIZED Source=%s", hwnd,
+               source);
     }
     else if (snapTransitionWobble)
     {
@@ -6524,10 +6470,11 @@ static void HandleObservedWindowLocationChange(HWND hwnd, LONG idObject, LONG id
         if (observed.snapped && finalGeometryChanged && !g_realResizing &&
             g_realDraggedWindow.load(std::memory_order_relaxed) == hwnd)
         {
-            g_pendingInteractiveSnapFlags.store(
-                EncodeWindowTransitionDirection(g_realDraggedWindowRect, rect),
+            g_pendingInteractiveTransitionFlags.store(
+                NATIVE_TRANSITION_TARGET_IS_SNAP_LAYOUT |
+                    EncodeWindowTransitionDirection(g_realDraggedWindowRect, rect),
                 std::memory_order_relaxed);
-            g_pendingInteractiveSnapWindow.store(hwnd, std::memory_order_release);
+            g_pendingInteractiveTransitionWindow.store(hwnd, std::memory_order_release);
         }
         observed.zoomed = zoomed;
         observed.nativeTransitionPending = false;
@@ -6639,12 +6586,9 @@ static void ScheduleVirtualDesktopRefresh()
     }
 }
 
-static void CALLBACK WinEventCallback(HWINEVENTHOOK hook, DWORD event, HWND hwnd, LONG idObject,
-                                      LONG idChild, DWORD eventThread, DWORD eventTime)
+static void CALLBACK WinEventCallback(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
+                                      LONG idChild, DWORD, DWORD)
 {
-    UNREFERENCED_PARAMETER(hook);
-    UNREFERENCED_PARAMETER(eventThread);
-    UNREFERENCED_PARAMETER(eventTime);
     if (g_unloading.load(std::memory_order_acquire))
     {
         return;
@@ -6717,106 +6661,46 @@ static void CALLBACK WinEventCallback(HWINEVENTHOOK hook, DWORD event, HWND hwnd
         ScheduleVirtualDesktopRefresh();
         break;
     }
+    default:
+        break;
     }
 }
 
 static bool InitializeWindowEventHooks()
 {
-    g_moveSizeHook =
-        SetWinEventHook(EVENT_SYSTEM_MOVESIZESTART, EVENT_SYSTEM_MOVESIZEEND, nullptr,
-                        WinEventCallback, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
-    if (!g_moveSizeHook)
+    struct HookSpec
     {
-        Wh_Log(L"Failed to create move/size WinEvent hook");
-        return false;
-    }
-    g_locationHook = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE,
-                                     nullptr, WinEventCallback, 0, 0,
-                                     WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
-    if (!g_locationHook)
+        DWORD first;
+        DWORD last;
+        DWORD flags;
+        const wchar_t* name;
+    };
+    constexpr DWORD standardFlags = WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS;
+    const HookSpec specs[WINDOW_EVENT_HOOK_COUNT] = {
+        {EVENT_SYSTEM_MOVESIZESTART, EVENT_SYSTEM_MOVESIZEEND, standardFlags, L"move/size"},
+        {EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, standardFlags, L"location"},
+        {EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, standardFlags, L"foreground"},
+        {EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND, standardFlags, L"minimize"},
+        {EVENT_OBJECT_DESTROY, EVENT_OBJECT_DESTROY, standardFlags, L"destroy"},
+        {EVENT_SYSTEM_DESKTOPSWITCH, EVENT_SYSTEM_DESKTOPSWITCH, WINEVENT_OUTOFCONTEXT,
+         L"virtual desktop"},
+        {EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED, WINEVENT_OUTOFCONTEXT, L"window cloak"},
+    };
+    for (int i = 0; i < WINDOW_EVENT_HOOK_COUNT; i++)
     {
-        Wh_Log(L"Failed to create location WinEvent hook");
-        UnhookWinEvent(g_moveSizeHook);
-        g_moveSizeHook = nullptr;
-        return false;
-    }
-    g_foregroundHook =
-        SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, WinEventCallback,
-                        0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
-    if (!g_foregroundHook)
-    {
-        Wh_Log(L"Failed to create foreground WinEvent hook");
-        UnhookWinEvent(g_locationHook);
-        UnhookWinEvent(g_moveSizeHook);
-        g_locationHook = nullptr;
-        g_moveSizeHook = nullptr;
-        return false;
-    }
-    g_minimizeHook =
-        SetWinEventHook(EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND, nullptr,
-                        WinEventCallback, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
-    if (!g_minimizeHook)
-    {
-        Wh_Log(L"Failed to create minimize WinEvent hook");
-        UnhookWinEvent(g_foregroundHook);
-        UnhookWinEvent(g_locationHook);
-        UnhookWinEvent(g_moveSizeHook);
-        g_foregroundHook = nullptr;
-        g_locationHook = nullptr;
-        g_moveSizeHook = nullptr;
-        return false;
-    }
-    g_destroyHook =
-        SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_DESTROY, nullptr, WinEventCallback, 0, 0,
-                        WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
-    if (!g_destroyHook)
-    {
-        Wh_Log(L"Failed to create destroy WinEvent hook");
-        UnhookWinEvent(g_minimizeHook);
-        UnhookWinEvent(g_foregroundHook);
-        UnhookWinEvent(g_locationHook);
-        UnhookWinEvent(g_moveSizeHook);
-        g_minimizeHook = nullptr;
-        g_foregroundHook = nullptr;
-        g_locationHook = nullptr;
-        g_moveSizeHook = nullptr;
-        return false;
-    }
-    g_desktopSwitchHook =
-        SetWinEventHook(EVENT_SYSTEM_DESKTOPSWITCH, EVENT_SYSTEM_DESKTOPSWITCH, nullptr,
-                        WinEventCallback, 0, 0, WINEVENT_OUTOFCONTEXT);
-    if (!g_desktopSwitchHook)
-    {
-        Wh_Log(L"Failed to create virtual desktop WinEvent hook");
-        UnhookWinEvent(g_destroyHook);
-        UnhookWinEvent(g_minimizeHook);
-        UnhookWinEvent(g_foregroundHook);
-        UnhookWinEvent(g_locationHook);
-        UnhookWinEvent(g_moveSizeHook);
-        g_destroyHook = nullptr;
-        g_minimizeHook = nullptr;
-        g_foregroundHook = nullptr;
-        g_locationHook = nullptr;
-        g_moveSizeHook = nullptr;
-        return false;
-    }
-    g_cloakHook = SetWinEventHook(EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED, nullptr,
-                                  WinEventCallback, 0, 0, WINEVENT_OUTOFCONTEXT);
-    if (!g_cloakHook)
-    {
-        Wh_Log(L"Failed to create window cloak WinEvent hook");
-        UnhookWinEvent(g_desktopSwitchHook);
-        UnhookWinEvent(g_destroyHook);
-        UnhookWinEvent(g_minimizeHook);
-        UnhookWinEvent(g_foregroundHook);
-        UnhookWinEvent(g_locationHook);
-        UnhookWinEvent(g_moveSizeHook);
-        g_desktopSwitchHook = nullptr;
-        g_destroyHook = nullptr;
-        g_minimizeHook = nullptr;
-        g_foregroundHook = nullptr;
-        g_locationHook = nullptr;
-        g_moveSizeHook = nullptr;
+        const HookSpec& spec = specs[i];
+        g_windowEventHooks[i] =
+            SetWinEventHook(spec.first, spec.last, nullptr, WinEventCallback, 0, 0, spec.flags);
+        if (g_windowEventHooks[i])
+        {
+            continue;
+        }
+        Wh_Log(L"Failed to create %s WinEvent hook", spec.name);
+        while (--i >= 0)
+        {
+            UnhookWinEvent(g_windowEventHooks[i]);
+            g_windowEventHooks[i] = nullptr;
+        }
         return false;
     }
     g_lastForegroundWindow = GetForegroundWindow();
@@ -6837,40 +6721,13 @@ static void UninitializeWindowEventHooks()
     g_existingWindowBackfillIndex.store(0, std::memory_order_release);
     g_existingWindowBackfillMapped.store(0, std::memory_order_release);
     StopAllAnimations();
-    if (g_cloakHook)
+    for (HWINEVENTHOOK& hook : g_windowEventHooks)
     {
-        UnhookWinEvent(g_cloakHook);
-        g_cloakHook = nullptr;
-    }
-    if (g_desktopSwitchHook)
-    {
-        UnhookWinEvent(g_desktopSwitchHook);
-        g_desktopSwitchHook = nullptr;
-    }
-    if (g_destroyHook)
-    {
-        UnhookWinEvent(g_destroyHook);
-        g_destroyHook = nullptr;
-    }
-    if (g_foregroundHook)
-    {
-        UnhookWinEvent(g_foregroundHook);
-        g_foregroundHook = nullptr;
-    }
-    if (g_minimizeHook)
-    {
-        UnhookWinEvent(g_minimizeHook);
-        g_minimizeHook = nullptr;
-    }
-    if (g_locationHook)
-    {
-        UnhookWinEvent(g_locationHook);
-        g_locationHook = nullptr;
-    }
-    if (g_moveSizeHook)
-    {
-        UnhookWinEvent(g_moveSizeHook);
-        g_moveSizeHook = nullptr;
+        if (hook)
+        {
+            UnhookWinEvent(hook);
+            hook = nullptr;
+        }
     }
     for (int i = 0; i < MAX_OBSERVED_WINDOWS; i++)
     {
@@ -6880,9 +6737,8 @@ static void UninitializeWindowEventHooks()
     Wh_Log(L"Window event hooks removed");
 }
 
-static DWORD WINAPI WindowEventThreadProc(LPVOID parameter)
+static DWORD WINAPI WindowEventThreadProc(LPVOID)
 {
-    UNREFERENCED_PARAMETER(parameter);
     Wh_Log(L"Window event thread starting");
     // Force creation of this thread's message queue.
     MSG message = {};
@@ -7062,7 +6918,7 @@ static bool StartWindowEventThread()
         StopWindowEventThread();
         return false;
     }
-    return g_moveSizeHook != nullptr && g_locationHook != nullptr;
+    return g_windowEventHooks[MOVE_SIZE_HOOK] && g_windowEventHooks[LOCATION_HOOK];
 }
 
 static void StopWindowEventThread()
@@ -7132,17 +6988,17 @@ static void LoadSettings()
     WobblySettings settings = {};
     auto wobblinessPresetSetting = WindhawkUtils::StringSetting::make(L"WobblinessPreset");
     PCWSTR wobblinessPreset = wobblinessPresetSetting.get();
-    settings.wobbliness = 2;
+    int wobbliness = 2;
     if (wobblinessPreset[0] >= L'0' && wobblinessPreset[0] <= L'4' &&
         wobblinessPreset[1] == L'\0')
     {
-        settings.wobbliness = wobblinessPreset[0] - L'0';
+        wobbliness = wobblinessPreset[0] - L'0';
     }
-    settings.advancedMode = Wh_GetIntSetting(L"AdvancedMode") != 0;
+    bool advancedMode = Wh_GetIntSetting(L"AdvancedMode") != 0;
     settings.resizeWobbleEnabled = Wh_GetIntSetting(L"EnableResizeWobble") != 0;
     settings.windowStateWobbleEnabled =
         Wh_GetIntSetting(L"EnableWindowStateWobble") != 0;
-    if (settings.advancedMode)
+    if (advancedMode)
     {
         settings.stiffness = static_cast<double>(Wh_GetIntSetting(L"Stiffness"));
         settings.drag = static_cast<double>(Wh_GetIntSetting(L"Drag"));
@@ -7150,7 +7006,7 @@ static void LoadSettings()
     }
     else
     {
-        CalculateAutomaticParameters(settings.wobbliness, settings.stiffness, settings.drag,
+        CalculateAutomaticParameters(wobbliness, settings.stiffness, settings.drag,
                                      settings.moveFactor);
     }
     // Clamp imported and current settings at the boundary.
@@ -7168,10 +7024,12 @@ static void LoadSettings()
            L"Stiffness=%.2f, "
            L"Drag=%.2f, "
            L"MoveFactor=%.2f",
-           settings.wobbliness, settings.advancedMode, settings.resizeWobbleEnabled,
+           wobbliness, advancedMode, settings.resizeWobbleEnabled,
            settings.windowStateWobbleEnabled, settings.stiffness, settings.drag,
            settings.moveFactor);
 }
+
+}  // namespace
 
 BOOL Wh_ModInit()
 {
@@ -7188,8 +7046,10 @@ BOOL Wh_ModInit()
     g_sceneWakeOutstanding.store(0, std::memory_order_release);
     LARGE_INTEGER wakeTokenCounter = {};
     QueryPerformanceCounter(&wakeTokenCounter);
-    INT_PTR wakeToken = static_cast<INT_PTR>(wakeTokenCounter.QuadPart ^ GetTickCount64() ^
-                                             reinterpret_cast<UINT_PTR>(&g_dwmSceneWakeToken));
+    UINT_PTR wakeTokenSeed = static_cast<UINT_PTR>(wakeTokenCounter.QuadPart) ^
+                             static_cast<UINT_PTR>(GetTickCount64()) ^
+                             reinterpret_cast<UINT_PTR>(&g_dwmSceneWakeToken);
+    INT_PTR wakeToken = static_cast<INT_PTR>(wakeTokenSeed);
     g_dwmSceneWakeToken.store(wakeToken ? wakeToken : 1, std::memory_order_release);
     g_sceneRequestedSerial.store(0, std::memory_order_release);
     g_sceneSubmittedSerial.store(0, std::memory_order_release);
@@ -7209,7 +7069,7 @@ BOOL Wh_ModInit()
     g_existingWindowBackfillMapped.store(0, std::memory_order_release);
     g_lastObservedScenePassCounter = 0;
     g_lastSceneProgressTimestamp = 0;
-    Wh_Log(L"Wobbly Windows 0.76: initializing");
+    Wh_Log(L"Wobbly Windows 0.80: initializing");
     InitializeDpiSupport();
     LoadSettings();
     if (!InitializeDwmHooks())
