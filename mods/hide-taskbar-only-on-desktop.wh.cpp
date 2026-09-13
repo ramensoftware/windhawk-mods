@@ -2,7 +2,7 @@
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Hides selected taskbars while their displays show only the desktop
-// @version         6.0.0
+// @version         6.1.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -25,6 +25,12 @@ This Windhawk mod hides selected taskbars when their corresponding display is sh
 ### Single Display
 
 ![Single Display](https://raw.githubusercontent.com/Sahil-Dashoni/Hide-Taskbar-Only-on-Desktop-Windhawk-Mod/refs/heads/main/Assets/single-display.gif)
+
+## Why This Is a Separate Mod
+
+This mod intentionally remains standalone rather than being a mode added to `taskbar-fade` or `taskbar-auto-hide-when-maximized`.
+
+Its purpose is a specific combination of behaviors: independently decide whether each selected display is desktop-only, keep fullscreen ownership scoped to that display, hide the taskbar through layered transparency without changing the normal desktop work area, and maintain taskbar ownership/recovery across the dedicated `windhawk.exe` tool process. These choices are intentionally separate from fade behavior and from Windows' native auto-hide mechanism.
 
 ## How It Works
 
@@ -53,7 +59,7 @@ For bottom-docked taskbars, moving the cursor into the configured bottom-edge ar
 
 After the cursor leaves the area, the taskbar hides again after the configured delay. Moving the cursor between displays also updates which taskbar is currently revealed.
 
-Hover tracking uses a dedicated cursor-sampling thread. It samples faster when hover tracking is needed, backs off when it is not needed, and backs off further after repeated cursor-position failures. Hover-eligible taskbars that would currently be hidden are published to the sampler so cursor-leave detection does not depend solely on the periodic safety poll.
+Hover tracking uses a dedicated cursor-sampling thread. It samples at 50 ms while hover tracking is active, backs off when it is not needed, and backs off further after repeated cursor-position failures. Hover-eligible taskbars that would currently be hidden are published to the sampler so cursor-leave detection does not depend solely on the periodic safety poll.
 
 Hover reveal does not apply to taskbars docked to the top or sides. Desktop-based hiding also applies only to bottom-docked taskbars.
 
@@ -77,7 +83,7 @@ The taskbar is treated as occupied when it receives keyboard-driven foreground f
 
 The mod uses `WS_EX_LAYERED` with `SetLayeredWindowAttributes` and alpha 0 to hide the taskbar without changing its normal `ShowWindow` visibility state. It runs the state-management logic in a dedicated `windhawk.exe` tool-mod process rather than injecting a taskbar `ShowWindow` hook into Explorer.
 
-Before hiding a taskbar, the mod records the relevant original extended-window style and layered-window attributes on the taskbar itself. An ownership marker identifies taskbars whose transparency was applied by this mod.
+Before hiding a taskbar, the mod records the relevant original extended-window style and layered-window attributes on the taskbar itself. Hiding makes the taskbar transparent before enabling click-through input, and showing restores input behavior before restoring visible alpha. An ownership marker identifies taskbars whose transparency was applied by this mod.
 
 If a taskbar is recreated, the new taskbar is rediscovered and evaluated again. If the dedicated tool process is restarted after an unexpected termination, a new instance can reclaim taskbars still carrying the ownership marker. If another component removes `WS_EX_LAYERED` while the mod still has ownership, the stale ownership data is discarded safely and the mod-owned `WS_EX_LAYERED`/`WS_EX_TRANSPARENT` bits are reconciled before a later hide recaptures the current taskbar state. Restoring a taskbar changes only the extended-style bits owned by this mod; unrelated extended-style changes are preserved.
 
@@ -101,9 +107,9 @@ The full application and display scan runs in the dedicated tool process rather 
 
 - A dedicated worker thread for state management
 - A lightweight cursor-sampling thread for hover detection
-- Event-driven refreshes for relevant foreground, minimize/move, window show/hide/destroy/cloak/uncloak, display, theme, settings, and taskbar recreation changes
+- Event-driven refreshes for relevant foreground, minimize/move, display, theme, settings, and taskbar recreation changes
 - A periodic 2 second safety poll for missed or unusual transitions
-- A one-shot timer for hover dismissal
+- A one-shot timer for hover dismissal; an open shell popup is rechecked at a bounded 250 ms cadence while the grace period is active
 
 The 2 second safety poll is intentionally retained as a fallback and does not replace the normal event-driven refresh path. Native Windows taskbar auto-hide state is cached and refreshed when settings or relevant shell/taskbar changes occur rather than being queried on every safety tick.
 
@@ -113,7 +119,7 @@ When no displays are configured for desktop-based hiding, the mod skips the appl
 
 - Desktop-based hiding and hover reveal are supported only for bottom-docked taskbars.
 - Hiding the taskbar does not increase the desktop work area, so maximized windows may still leave the normal taskbar space reserved.
-- Windows display device names such as `\\.\DISPLAY1` may differ from the logical display numbers used by the settings UI.
+- Windows display device names such as `\\.\DISPLAY1` may differ from the logical display numbers used by the settings UI. The settings intentionally follow the current logical monitor numbering rather than device identities.
 - The display-selection configuration supports up to 16 display entries.
 - The mod keeps Windows' native taskbar auto-hide setting separate from its own hiding behavior. If native auto-hide is enabled, this mod does not take over that taskbar.
 - Because the taskbar is made fully transparent, flashing taskbar buttons and tray notifications are not visually available while that taskbar is hidden by the mod.
@@ -204,6 +210,7 @@ When no displays are configured for desktop-based hiding, the mod skips the appl
 #include <shellapi.h>
 #include <windhawk_utils.h>
 #include <wchar.h>
+#include <cstdlib>
 
 
 constexpr size_t kMaxMonitorNumbers = 16;
@@ -250,8 +257,6 @@ struct WindowScanResult {
 HWINEVENTHOOK g_foregroundHook = nullptr;
 HWINEVENTHOOK g_minimizeHook = nullptr;
 HWINEVENTHOOK g_moveHook = nullptr;
-HWINEVENTHOOK g_objectHook = nullptr;
-HWINEVENTHOOK g_cloakHook = nullptr;
 
 HANDLE g_workerThread = nullptr;
 DWORD g_workerThreadId = 0;
@@ -474,16 +479,19 @@ bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
             return false;
         }
 
+        // Make the taskbar layered first, but keep it input-enabled while it
+        // is still visible. Apply alpha=0 before adding WS_EX_TRANSPARENT so
+        // there is no interval where an opaque taskbar is click-through.
         SetLastError(ERROR_SUCCESS);
         LONG_PTR previousExStyle = SetWindowLongPtrW(
             hwnd,
             GWL_EXSTYLE,
-            exStyle | WS_EX_LAYERED | WS_EX_TRANSPARENT
+            exStyle | WS_EX_LAYERED
         );
         if (previousExStyle == 0 && GetLastError() != ERROR_SUCCESS) {
             RemoveTaskbarOwnershipProperties(hwnd);
             Wh_Log(
-                L"SetWindowLongPtrW(GWL_EXSTYLE, hide flags) failed for 0x%p: %lu",
+                L"SetWindowLongPtrW(GWL_EXSTYLE, layered hide flag) failed for 0x%p: %lu",
                 hwnd,
                 GetLastError()
             );
@@ -507,6 +515,37 @@ bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
             RemoveTaskbarOwnershipProperties(hwnd);
             Wh_Log(
                 L"SetLayeredWindowAttributes(alpha=0) failed for 0x%p: %lu",
+                hwnd,
+                GetLastError()
+            );
+            return false;
+        }
+
+        SetLastError(ERROR_SUCCESS);
+        previousExStyle = SetWindowLongPtrW(
+            hwnd,
+            GWL_EXSTYLE,
+            exStyle | WS_EX_LAYERED | WS_EX_TRANSPARENT
+        );
+        if (previousExStyle == 0 && GetLastError() != ERROR_SUCCESS) {
+            // Alpha is already zero, so leaving the taskbar visible would not
+            // be useful. Restore the original style and attributes on failure.
+            SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, exStyle);
+            SetWindowPos(
+                hwnd,
+                nullptr,
+                0, 0, 0, 0,
+                SWP_NOMOVE |
+                SWP_NOSIZE |
+                SWP_NOZORDER |
+                SWP_NOACTIVATE |
+                SWP_FRAMECHANGED |
+                SWP_ASYNCWINDOWPOS
+            );
+            RemoveTaskbarOwnershipProperties(hwnd);
+            Wh_Log(
+                L"SetWindowLongPtrW(GWL_EXSTYLE, transparent hide flag) failed for 0x%p: %lu",
                 hwnd,
                 GetLastError()
             );
@@ -586,6 +625,34 @@ bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
         haveOriginalAlpha &&
         haveOriginalFlags;
 
+    SetLastError(ERROR_SUCCESS);
+    LONG_PTR currentExStyle = GetWindowLongPtrW(
+        hwnd,
+        GWL_EXSTYLE
+    );
+    if (currentExStyle == 0 && GetLastError() != ERROR_SUCCESS) {
+        return false;
+    }
+
+    // Restore input behavior before making the taskbar visible, but keep
+    // WS_EX_LAYERED until its alpha/attributes have been restored.
+    SetLastError(ERROR_SUCCESS);
+    const LONG_PTR inputEnabledExStyle =
+        currentExStyle & ~WS_EX_TRANSPARENT;
+    LONG_PTR previousExStyle = SetWindowLongPtrW(
+        hwnd,
+        GWL_EXSTYLE,
+        inputEnabledExStyle
+    );
+    if (previousExStyle == 0 && GetLastError() != ERROR_SUCCESS) {
+        Wh_Log(
+            L"SetWindowLongPtrW(enable taskbar input) failed for 0x%p: %lu",
+            hwnd,
+            GetLastError()
+        );
+        return false;
+    }
+
     bool restoredAttributes = true;
     if (originalLayered) {
         if (originalAttributesValid) {
@@ -626,27 +693,24 @@ bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
     }
 
     SetLastError(ERROR_SUCCESS);
-    LONG_PTR currentExStyle = GetWindowLongPtrW(
-        hwnd,
-        GWL_EXSTYLE
-    );
-    if (currentExStyle == 0 && GetLastError() != ERROR_SUCCESS) {
-        return false;
-    }
+    const LONG_PTR restoredExStyle =
+        (inputEnabledExStyle & ~WS_EX_LAYERED) |
+        (originalExStyle & WS_EX_LAYERED);
 
-    LONG_PTR previousExStyle = SetWindowLongPtrW(
-        hwnd,
-        GWL_EXSTYLE,
-        (currentExStyle & ~kModTaskbarExStyleBits) |
-        (originalExStyle & kModTaskbarExStyleBits)
-    );
-    if (previousExStyle == 0 && GetLastError() != ERROR_SUCCESS) {
-        Wh_Log(
-            L"SetWindowLongPtrW(restore original style) failed for 0x%p: %lu",
+    if (restoredExStyle != inputEnabledExStyle) {
+        previousExStyle = SetWindowLongPtrW(
             hwnd,
-            GetLastError()
+            GWL_EXSTYLE,
+            restoredExStyle
         );
-        return false;
+        if (previousExStyle == 0 && GetLastError() != ERROR_SUCCESS) {
+            Wh_Log(
+                L"SetWindowLongPtrW(remove mod layering) failed for 0x%p: %lu",
+                hwnd,
+                GetLastError()
+            );
+            return false;
+        }
     }
 
     SetWindowPos(
@@ -682,7 +746,6 @@ LONG g_refreshPosted = 0;
 // must not make a desktop-only taskbar stay visible after hover dismissal.
 LONG g_taskbarForegroundMouseActivated = 0;
 ULONGLONG g_lastMinimizeEventTick = 0;
-bool g_ignoreTaskbarForegroundAfterMinimize = false;
 // A fullscreen window is cached only after that window has actually entered
 // the foreground. The cache is keyed by the HMONITOR itself rather than by
 // monitor-enumeration index. Once claimed, ownership is sticky until an explicit
@@ -712,8 +775,6 @@ bool IsShellChromeClass(
     }
 
     static const WCHAR* kClasses[] = {
-        L"Progman",
-        L"WorkerW",
         L"Shell_TrayWnd",
         L"Shell_SecondaryTrayWnd",
         L"TaskListThumbnailWnd",
@@ -1782,9 +1843,7 @@ void RefreshTaskbarMonitorStates(
             if (oldStates[i].hwnd == hwnd) {
                 state.desktopOnly =
                     oldStates[i].desktopOnly;
-                state.hiddenByMod =
-                    oldStates[i].hiddenByMod ||
-                    state.hiddenByMod;
+                state.hiddenByMod = oldStates[i].hiddenByMod;
                 break;
             }
         }
@@ -2356,7 +2415,8 @@ void UpdateTaskbarState() {
     // stale for the duration of this post-minimize window instead of allowing
     // it to make the primary desktop-only taskbar appear occupied.
     const bool postMinimizeTaskbarForeground =
-        g_ignoreTaskbarForegroundAfterMinimize;
+        g_lastMinimizeEventTick != 0 &&
+        GetTickCount64() - g_lastMinimizeEventTick < 1000;
 
     const bool taskbarForegroundMouseActivated =
         InterlockedCompareExchange(
@@ -2592,8 +2652,8 @@ void UpdateTaskbarState() {
                 );
             }
 
-            g_hoverDeadline = now + 100;
-            ArmHoverExpireTimer(100);
+            g_hoverDeadline = now + 250;
+            ArmHoverExpireTimer(250);
             UpdateCursorHoverSnapshot();
             return;
         }
@@ -2655,7 +2715,6 @@ void CancelHoverExpireTimer() {
         );
     }
 }
-
 
 void SafeUnhookWinEvent(HWINEVENTHOOK& hook) {
     if (hook) {
@@ -2724,8 +2783,8 @@ DWORD WINAPI CursorSamplingThread(LPVOID) {
 
         DWORD waitMs =
             hoverTrackingActive
-                ? 25
-                : 100;
+                ? 50
+                : 250;
 
         if (cursorPositionFailures >= 3) {
             waitMs = 1000;
@@ -2791,7 +2850,8 @@ void CALLBACK WinEventProc(
         RefreshFullscreenWindowCache(monitors);
 
         const bool postMinimizeTaskbarForeground =
-            g_ignoreTaskbarForegroundAfterMinimize;
+            g_lastMinimizeEventTick != 0 &&
+            GetTickCount64() - g_lastMinimizeEventTick < 1000;
 
         bool isTaskbarForeground = false;
 
@@ -2807,8 +2867,7 @@ void CALLBACK WinEventProc(
         if (!isTaskbarForeground) {
             // A real foreground transition away from the taskbar means the
             // stale taskbar foreground produced by the minimize is gone.
-            g_ignoreTaskbarForegroundAfterMinimize = false;
-            InterlockedExchange(
+                InterlockedExchange(
                 &g_taskbarForegroundMouseActivated,
                 0
             );
@@ -2862,7 +2921,6 @@ void CALLBACK WinEventProc(
         // taskbar reappear even though fullscreen content is still active.
         // A genuine minimize is finalized in MINIMIZEEND below.
         g_lastMinimizeEventTick = GetTickCount64();
-        g_ignoreTaskbarForegroundAfterMinimize = true;
         InterlockedExchange(
             &g_taskbarForegroundMouseActivated,
             1
@@ -2873,7 +2931,6 @@ void CALLBACK WinEventProc(
 
     if (event == EVENT_SYSTEM_MINIMIZEEND) {
         g_lastMinimizeEventTick = GetTickCount64();
-        g_ignoreTaskbarForegroundAfterMinimize = true;
 
         // A completed minimize starts a fresh hover cycle. Any hover state
         // carried from the taskbar/application interaction that initiated the
@@ -2950,30 +3007,6 @@ void CALLBACK WinEventProc(
         return;
     }
 
-    if (
-        (event == EVENT_OBJECT_DESTROY ||
-         event == EVENT_OBJECT_SHOW ||
-         event == EVENT_OBJECT_HIDE ||
-         event == EVENT_OBJECT_CLOAKED ||
-         event == EVENT_OBJECT_UNCLOAKED) &&
-        hwnd &&
-        idObject == OBJID_WINDOW &&
-        idChild == CHILDID_SELF
-    ) {
-        if (event == EVENT_OBJECT_DESTROY) {
-            for (size_t i = 0; i < kMaxMonitorNumbers; ++i) {
-                if (g_fullscreenOwners[i].hwnd == hwnd) {
-                    g_fullscreenOwners[i] = {};
-                }
-            }
-        }
-
-        // Hide/cloak notifications can be transient while a fullscreen browser
-        // changes activation state. They do not end fullscreen ownership. Only
-        // destruction above, explicit minimize completion, move completion, or
-        // an owner-foreground fullscreen-exit validation can retire the session.
-        PostRefresh();
-    }
 }
 
 LRESULT CALLBACK WorkerMessageWindowProc(
@@ -3179,33 +3212,10 @@ DWORD WINAPI WorkerThread(
             WINEVENT_OUTOFCONTEXT
         );
 
-
     g_moveHook =
         SetWinEventHook(
             EVENT_SYSTEM_MOVESIZEEND,
             EVENT_SYSTEM_MOVESIZEEND,
-            nullptr,
-            WinEventProc,
-            0,
-            0,
-            WINEVENT_OUTOFCONTEXT
-        );
-
-    g_objectHook =
-        SetWinEventHook(
-            EVENT_OBJECT_DESTROY,
-            EVENT_OBJECT_HIDE,
-            nullptr,
-            WinEventProc,
-            0,
-            0,
-            WINEVENT_OUTOFCONTEXT
-        );
-
-    g_cloakHook =
-        SetWinEventHook(
-            EVENT_OBJECT_CLOAKED,
-            EVENT_OBJECT_UNCLOAKED,
             nullptr,
             WinEventProc,
             0,
@@ -3291,8 +3301,6 @@ DWORD WINAPI WorkerThread(
     SafeUnhookWinEvent(g_foregroundHook);
     SafeUnhookWinEvent(g_minimizeHook);
     SafeUnhookWinEvent(g_moveHook);
-    SafeUnhookWinEvent(g_objectHook);
-    SafeUnhookWinEvent(g_cloakHook);
 
     DestroyWorkerMessageWindow();
 
@@ -3615,10 +3623,6 @@ bool WaitForThreadWithTimeout(
     DWORD timeoutMs,
     const wchar_t* threadName
 ) {
-    if (!thread) {
-        return true;
-    }
-
     DWORD result =
         WaitForSingleObject(
             thread,
