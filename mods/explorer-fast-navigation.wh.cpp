@@ -24,6 +24,29 @@ Disclosure: This mod was mainly created by GPT6-Astra, however the discovery was
 */
 // ==/WindhawkModReadme==
 
+// ==WindhawkModSettings==
+/*
+- coverDeadlineMs: 200
+  $name: Folder cover deadline (ms)
+  $description: Maximum time to keep the previous folder visible while the new folder loads. Range 0–5000. Set to 0 to disable the cover and navigation paint suppression.
+- deferralDeadlineMs: 200
+  $name: UI deferral deadline (ms)
+  $description: Maximum delay for enabled ribbon, command bar and navigation bar updates. Updates can run sooner when the folder is ready. Range 0–5000. Set to 0 to disable these deferrals.
+- classicRibbon: true
+  $name: Defer classic ribbon updates
+  $description: Delay classic ribbon refreshes during navigation.
+- xamlCommandBar: true
+  $name: Defer XAML command bar updates
+  $description: Delay modern command bar refreshes during navigation. Navigation bar updates have a separate switch.
+- navigationBar: true
+  $name: Defer navigation bar updates
+  $description: Delay navigation state updates in both the classic and modern navigation bars.
+- duserBatching: true
+  $name: Accelerate DUser batching
+  $description: Shorten folder item batching intervals and time slices to at most 5 ms. Turn off to use the native timing.
+*/
+// ==/WindhawkModSettings==
+
 #include <windows.h>
 
 #include <oaidl.h>
@@ -45,6 +68,15 @@ Disclosure: This mod was mainly created by GPT6-Astra, however the discovery was
 #endif
 
 // Shared types.
+
+struct Settings {
+    UINT coverDeadlineMs = 200;
+    UINT deferralDeadlineMs = 200;
+    bool classicRibbon = true;
+    bool xamlCommandBar = true;
+    bool navigationBar = true;
+    bool duserBatching = true;
+};
 
 // Admit window work and stop it under the same lock. Never hold this lock
 // across window/COM calls: they can reenter the mod on an owning UI thread.
@@ -176,6 +208,10 @@ struct PaintScope {
 
 // File-wide state and original function pointers.
 
+// Loaded before hooks are installed; settings changes reload the mod so active
+// covers and queued references finish teardown before the new policy is used.
+static Settings settings;
+
 static Callback batchCallback;
 static RedrawFrame redrawFrameOriginal;
 static RenderSizer renderSizerOriginal;
@@ -197,6 +233,15 @@ static REGHANDLE diagnosticProvider;
 
 // Shared helpers.
 
+static void LoadSettings(decltype(&Wh_GetIntSetting) readSetting = Wh_GetIntSetting) {
+    settings.coverDeadlineMs = std::clamp(readSetting(L"coverDeadlineMs"), 0, 5000);
+    settings.deferralDeadlineMs = std::clamp(readSetting(L"deferralDeadlineMs"), 0, 5000);
+    settings.classicRibbon = readSetting(L"classicRibbon") != 0;
+    settings.xamlCommandBar = readSetting(L"xamlCommandBar") != 0;
+    settings.navigationBar = readSetting(L"navigationBar") != 0;
+    settings.duserBatching = readSetting(L"duserBatching") != 0;
+}
+
 template <class T>
 static bool Hook(T& original, T replacement) {
     return original && Wh_SetFunctionHook(reinterpret_cast<void*>(original),
@@ -210,6 +255,30 @@ static bool CanDeferInvoke(REFIID iid, WORD flags, const DISPPARAMS* args) {
            args->cNamedArgs == 0;
 }
 
+static HWND FindThreadBrowserWindow() {
+    HWND browser = nullptr;
+    EnumThreadWindows(
+        GetCurrentThreadId(),
+        [](HWND hwnd, LPARAM param) -> BOOL {
+            // A browser thread also owns helper windows and dialogs.
+            wchar_t name[64];
+            if (!GetClassNameW(hwnd, name, ARRAYSIZE(name)) ||
+                wcscmp(name, L"CabinetWClass") != 0) {
+                return TRUE;
+            }
+            auto& found = *reinterpret_cast<HWND*>(param);
+            if (found) {
+                // Do not choose an arbitrary browser if a thread owns several.
+                found = nullptr;
+                return FALSE;
+            }
+            found = hwnd;
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&browser));
+    return browser;
+}
+
 #ifdef EFN_DIAGNOSTICS
 static void Trace(const wchar_t* message) {
     EventWriteString(diagnosticProvider, 4, 1, message);
@@ -219,7 +288,6 @@ static void Trace(const wchar_t*) {}
 #endif
 
 namespace NavigationPolicy {
-static constexpr ULONGLONG LoadingDelayMs = 200;
 
 static bool IsRemotePath(const wchar_t* path, decltype(&GetDriveTypeW) driveType = GetDriveTypeW) {
     if (!path) {
@@ -242,7 +310,9 @@ static bool IsRemotePath(const wchar_t* path, decltype(&GetDriveTypeW) driveType
 
 static UINT RemainingCoverMs(bool remote, ULONGLONG started, ULONGLONG now) {
     ULONGLONG elapsed = now - started;
-    return remote || elapsed >= LoadingDelayMs ? 0 : static_cast<UINT>(LoadingDelayMs - elapsed);
+    return remote || elapsed >= settings.coverDeadlineMs
+               ? 0
+               : static_cast<UINT>(settings.coverDeadlineMs - elapsed);
 }
 
 } // namespace NavigationPolicy
@@ -280,7 +350,6 @@ struct Navigation {
 using ResetRoot = HRESULT(__fastcall*)(void*, void*, void*);
 using Navigate = HRESULT(__fastcall*)(void*, PCIDLIST_ABSOLUTE, ULONG, ULONG);
 using BlockRedraw = void(__fastcall*)(void*, float);
-using UnblockRedraw = void(__fastcall*)(void*);
 using EnsureBatching = HRESULT(__fastcall*)(void*);
 using BatchTimer = void(__fastcall*)(void*, void*);
 using DeleteBatchTimer = bool(__fastcall*)(void*);
@@ -307,7 +376,6 @@ static thread_local unsigned navigationDepth;
 static ResetRoot resetOriginal;
 static Navigate navigateOriginal;
 static BlockRedraw blockOriginal;
-static UnblockRedraw unblockRedraw;
 static EnsureBatching ensureOriginal;
 static BatchTimer batchOriginal;
 static DeleteBatchTimer deleteOriginal;
@@ -316,7 +384,7 @@ static Invoke invokeOriginal;
 // File-view presentation.
 
 static bool NativeLoadingAllowed() {
-    return navigation.remote ||
+    return !settings.coverDeadlineMs || navigation.remote ||
            (navigation.started &&
             !NavigationPolicy::RemainingCoverMs(false, navigation.started, GetTickCount64()));
 }
@@ -478,11 +546,8 @@ static void Begin(void* itemsView) {
         }
         return;
     }
-    HWND root = GetAncestor(GetForegroundWindow(), GA_ROOT);
-    wchar_t cls[64];
-    if (!root || GetWindowThreadProcessId(root, nullptr) != GetCurrentThreadId() ||
-        IsIconic(root) || !GetClassNameW(root, cls, ARRAYSIZE(cls)) ||
-        wcscmp(cls, L"CabinetWClass") != 0) {
+    HWND root = FindThreadBrowserWindow();
+    if (!root || IsIconic(root)) {
         return;
     }
     HWND view = FindFileView(root);
@@ -581,18 +646,17 @@ static HRESULT __fastcall NavigateHook(void* self, PCIDLIST_ABSOLUTE pidl, ULONG
     RibbonWork::NavigationStarted();
     Navigation previous = navigation;
     navigation = {GetTickCount64(), false, true};
-    wchar_t path[32768];
-    if (pidl && SHGetPathFromIDListEx(pidl, path, ARRAYSIZE(path), GPFIDL_DEFAULT)) {
-        navigation.remote = NavigationPolicy::IsRemotePath(path);
+    std::vector<wchar_t> path(32768);
+    if (pidl && SHGetPathFromIDListEx(pidl, path.data(), path.size(), GPFIDL_DEFAULT)) {
+        navigation.remote = NavigationPolicy::IsRemotePath(path.data());
     }
     if (active) {
         // Cancel the previous destination's readiness messages before entering native code.
         ++active->generation;
         active->pending = active->enumerated = false;
         active->started = navigation.started;
-        if (navigation.remote ||
-            !SetTimer(active->overlay, 1, static_cast<UINT>(NavigationPolicy::LoadingDelayMs),
-                      nullptr)) {
+        if (navigation.remote || !settings.coverDeadlineMs ||
+            !SetTimer(active->overlay, 1, settings.coverDeadlineMs, nullptr)) {
             DestroyWindow(active->overlay);
         }
     }
@@ -789,7 +853,8 @@ static LRESULT CALLBACK Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     if (msg == WM_TIMER && wp == 1) {
         // WM_TIMER has lower priority than paint. A bounded fallback also handles
         // empty, slow, remote and failed navigations with no batching callback.
-        if ((ready && !FileTransition::active) || GetTickCount64() - started >= 200) {
+        if ((ready && !FileTransition::active) ||
+            GetTickCount64() - started >= settings.deferralDeadlineMs) {
             Flush();
         }
         return 0;
@@ -824,15 +889,19 @@ static LRESULT CALLBACK Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 static bool Enqueue(IUnknown* object, std::function<void()> run) {
+    // Verified in the saved ExplorerFrame and Windows.UI.FileExplorer vtables:
+    // Invoke uses IDispatch; OnBrowserNavigated/OnCommandStateInvalidated use
+    // IExplorerRibbon; SetNavigationState uses IShellNavigationBand; and
+    // InvalidateCommands uses IExplorerCommandHost. Each has QueryInterface,
+    // AddRef and Release in slots 0..2, with thunks adjusting the interface's
+    // `this` to the complete object. Keep the incoming interface pointer intact.
     WindowLifetime::Operation operation(lifetime);
     if (!operation || (queue && queue->draining)) {
         return false;
     }
     if (!queue) {
-        HWND root = GetAncestor(GetForegroundWindow(), GA_ROOT);
-        wchar_t cls[64];
-        if (!root || GetWindowThreadProcessId(root, nullptr) != GetCurrentThreadId() ||
-            !GetClassNameW(root, cls, ARRAYSIZE(cls)) || wcscmp(cls, L"CabinetWClass") != 0) {
+        HWND root = FindThreadBrowserWindow();
+        if (!root) {
             return false;
         }
         auto q = new (std::nothrow) Queue;
@@ -883,14 +952,14 @@ static void ViewReady() {
 }
 
 static bool Pending() {
-    return started && !ready && GetTickCount64() - started < 200;
+    return started && !ready && GetTickCount64() - started < settings.deferralDeadlineMs;
 }
 
 static bool DeferInvoke(void* self, DISPID id, REFIID iid, LCID locale, WORD flags,
                         DISPPARAMS* args) {
     // The inspected branches return S_OK without consuming arguments. Check the
     // actual call too; argument-bearing events must retain their native inputs.
-    if (!CanDeferInvoke(iid, flags, args) || !Pending() ||
+    if (!settings.classicRibbon || !CanDeferInvoke(iid, flags, args) || !Pending() ||
         (id != 200 && id != 201 && id != 205 && id != 207 && id != 212 && id != 215 && id != 220)) {
         return false;
     }
@@ -902,7 +971,8 @@ static bool DeferInvoke(void* self, DISPID id, REFIID iid, LCID locale, WORD fla
 }
 
 static HRESULT __fastcall NavigatedHook(void* self) {
-    if (self == connected && Pending() && Enqueue(reinterpret_cast<IUnknown*>(self), [self] {
+    if (settings.classicRibbon && self == connected && Pending() &&
+        Enqueue(reinterpret_cast<IUnknown*>(self), [self] {
             Trace(L"EFN ribbon_run");
             navigatedOriginal(self);
         })) {
@@ -935,7 +1005,8 @@ static HRESULT __fastcall DestroyHook(void* self, BOOL final) {
 }
 
 static HRESULT __fastcall NavStateHook(void* self, ULONG flags) {
-    if (Pending() && Enqueue(reinterpret_cast<IUnknown*>(self), [self, flags] {
+    if (settings.navigationBar && Pending() &&
+        Enqueue(reinterpret_cast<IUnknown*>(self), [self, flags] {
             Trace(L"EFN navbar_run");
             navStateOriginal(self, flags);
         })) {
@@ -1016,7 +1087,7 @@ static HRESULT __fastcall ChangedHook(void* self) {
 }
 
 static HRESULT __fastcall NavigatedHook(void* self) {
-    if (Pending() && self == connected &&
+    if (settings.xamlCommandBar && Pending() && self == connected &&
         RibbonWork::Enqueue(reinterpret_cast<IUnknown*>(self), [self] {
             Run(navigatedOriginal, self, L"EFN xaml_navigated_run");
         })) {
@@ -1027,7 +1098,8 @@ static HRESULT __fastcall NavigatedHook(void* self) {
 }
 
 static HRESULT __fastcall InvalidatedHook(void* self) {
-    if (Pending() && RibbonWork::Enqueue(reinterpret_cast<IUnknown*>(self), [self] {
+    if (settings.xamlCommandBar && Pending() &&
+        RibbonWork::Enqueue(reinterpret_cast<IUnknown*>(self), [self] {
             Run(invalidatedOriginal, self, L"EFN xaml_invalidated_run");
         })) {
         Trace(L"EFN xaml_invalidated_queued");
@@ -1039,7 +1111,7 @@ static HRESULT __fastcall InvalidatedHook(void* self) {
 static HRESULT __fastcall StateHook(void* self, ULONG flags) {
     // This adapter uses bit 4 to refresh location and commands; other bits are
     // native no-ops. Preserve each notification's flags and FIFO ordering.
-    if ((flags & 4) && Pending() &&
+    if (settings.navigationBar && (flags & 4) && Pending() &&
         RibbonWork::Enqueue(reinterpret_cast<IUnknown*>(self), [self, flags] {
             Trace(L"EFN xaml_location_run");
             HRESULT hr = stateOriginal(self, flags);
@@ -1054,7 +1126,8 @@ static HRESULT __fastcall StateHook(void* self, ULONG flags) {
 }
 
 static HRESULT __fastcall InvalidateHook(void* self, ULONG commands) {
-    if (Pending() && RibbonWork::Enqueue(reinterpret_cast<IUnknown*>(self), [self, commands] {
+    if (settings.xamlCommandBar && Pending() &&
+        RibbonWork::Enqueue(reinterpret_cast<IUnknown*>(self), [self, commands] {
             Trace(L"EFN xaml_commands_run");
             invalidateOriginal(self, commands);
         })) {
@@ -1072,7 +1145,7 @@ static HRESULT __fastcall InvokeHook(void* self, DISPID id, REFIID iid, LCID loc
     bool invalidation = id == 200 || id == 201 || id == 205 || id == 207 || id == 211 ||
                         id == 212 || id == 215 || id == 220;
     HRESULT hr;
-    if (invalidation && CanDeferInvoke(iid, flags, args) && Pending() &&
+    if (settings.xamlCommandBar && invalidation && CanDeferInvoke(iid, flags, args) && Pending() &&
         RibbonWork::Enqueue(reinterpret_cast<IUnknown*>(self), [self, id, iid, locale, flags] {
             Trace(L"EFN xaml_event_run");
             DISPPARAMS empty{};
@@ -1214,8 +1287,9 @@ static BOOL WINAPI RedrawWindowHook(HWND hwnd, const RECT* rect, HRGN region, UI
 }
 
 static void* CreateActionHook(const Action* action) {
-    if (action && action->size == sizeof(Action) && action->callback == batchCallback &&
-        std::isfinite(action->duration) && action->duration >= 0) {
+    if (settings.duserBatching && action && action->size == sizeof(Action) &&
+        action->callback == batchCallback && std::isfinite(action->duration) &&
+        action->duration >= 0) {
         Action faster = *action;
         if (faster.duration > 0.005f) {
             faster.duration = 0.005f;
@@ -1245,13 +1319,16 @@ static void ReleaseModules() {
 }
 
 static BOOL InitializeMod() {
+    LoadSettings();
 #ifdef EFN_DIAGNOSTICS
     GUID provider{0xd1675027, 0xf8d0, 0x4c43, {0x9b, 0x6f, 0x4b, 0x39, 0x0c, 0xe6, 0x46, 0xed}};
     EventRegister(&provider, nullptr, nullptr, &diagnosticProvider);
 #endif
     frame = LoadLibraryExW(L"ExplorerFrame.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     shell = LoadLibraryExW(L"shell32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    duser = LoadLibraryExW(L"DUser.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (settings.duserBatching) {
+        duser = LoadLibraryExW(L"DUser.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
     // ExplorerFrame.dll
     const WindhawkUtils::SYMBOL_HOOK frameSymbols[] = {
         {{L"private: static void __cdecl UIItemsView::s_BatchTimerCallback(struct GMA_ACTIONINFO *)"},
@@ -1264,8 +1341,6 @@ static BOOL InitializeMod() {
         {{L"public: void __cdecl UIItemsView::BlockRedrawWithTimeout(float)"},
          &FileTransition::blockOriginal,
          FileTransition::BlockHook},
-        {{L"public: void __cdecl UIItemsView::UnblockRedraw(void)"},
-         &FileTransition::unblockRedraw},
         {{L"private: long __cdecl UIItemsView::_ResetRoot(struct IItem *,struct IItemCollection *)"},
          &FileTransition::resetOriginal,
          FileTransition::ResetHook},
@@ -1305,7 +1380,6 @@ static BOOL InitializeMod() {
     };
     WH_HOOK_SYMBOLS_OPTIONS options{};
     options.optionsSize = sizeof(options);
-    options.onlineCacheUrl = L"";
     bool frameSymbolsReady =
         frame && WindhawkUtils::HookSymbols(frame, frameSymbols, ARRAYSIZE(frameSymbols), &options);
     if (!frameSymbolsReady) {
@@ -1362,6 +1436,11 @@ BOOL Wh_ModInit() {
     EventUnregister(diagnosticProvider);
 #endif
     return FALSE;
+}
+
+BOOL Wh_ModSettingsChanged(BOOL* reload) {
+    *reload = TRUE;
+    return TRUE;
 }
 
 void Wh_ModBeforeUninit() {
