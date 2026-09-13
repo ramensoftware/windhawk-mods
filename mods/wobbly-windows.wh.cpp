@@ -2,7 +2,7 @@
 // @id              wobbly-windows
 // @name            Wobbly Windows
 // @description     The classic Compiz/KDE Plasma style Wobbly Windows effect for Windows 11!
-// @version         0.83
+// @version         0.84
 // @author          lalimatyus
 // @github          https://github.com/lalimatyus
 // @include         dwm.exe
@@ -25,8 +25,9 @@ Since this mod runs in `dwm.exe`, add `dwm.exe` to Windhawk's
 
 ![Tutorial](https://raw.githubusercontent.com/lalimatyus/Wobbly-Windows/refs/heads/main/dwm.gif)
 
-This mod is currently in **beta**, so things can occasionally break and it might not work on every Windows 11 build.
-It was mostly tested and made on `Windows 11 23H2`, where it works great, and it was also tested on `25H2` and on `Insider Preview 26H2`.
+This beta runs inside `dwm.exe` and has been tested on Windows 11 `23H2`, `25H2`
+and `Insider Preview 26H2`. If the required private uDWM symbols or validated object
+layouts aren't available, the mod refuses to initialize instead of using unverified addresses.
 
 ## Features
 
@@ -313,6 +314,7 @@ enum class InteractiveStateThrobKind : unsigned char
 };
 InteractiveStateThrobKind g_interactiveStateThrob = InteractiveStateThrobKind::None;
 LPARAM g_interactiveStateThrobDirection = 0;
+bool g_interactiveStateThrobFromPointerEdge = false;
 double g_resizeCoordinateScale = 1.0;
 using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR monitor, int dpiType, UINT* dpiX, UINT* dpiY);
 HMODULE g_shcoreModule = nullptr;
@@ -431,7 +433,7 @@ std::atomic<unsigned int> g_existingWindowBackfillCount = 0;
 std::atomic<unsigned int> g_existingWindowBackfillIndex = 0;
 std::atomic<unsigned int> g_existingWindowBackfillMapped = 0;
 std::atomic<DWORD> g_dwmSceneThreadId = 0;
-static constexpr UINT WM_DWM_SCENE_WAKE = WM_USER + 1;
+UINT g_dwmSceneWakeMessage = 0;
 static constexpr UINT_PTR DWM_SCENE_WAKE_WPARAM = 0x574F42424C59574BULL;
 std::atomic<INT_PTR> g_dwmSceneWakeToken = 0;
 std::atomic<unsigned int> g_sceneWakeOutstanding = 0;
@@ -941,34 +943,42 @@ static Vec2 DecodeWindowTransitionDirection(LPARAM transitionFlags)
 
 static void QueueNativeWindowTransition(HWND hwnd, LPARAM transitionFlags)
 {
-    if (!hwnd || transitionFlags == 0 || g_unloading.load(std::memory_order_acquire))
+    if (!hwnd || g_unloading.load(std::memory_order_acquire))
     {
         return;
     }
     DWORD eventThreadId = g_eventThreadMessageTarget.load(std::memory_order_acquire);
     if (g_realDragging.load(std::memory_order_relaxed))
     {
-        // Preserve the native target even if a fast drag skips the narrow
-        // cursor-edge detection zone. Snap-out keeps the normal drag wobble.
+        if (g_realDraggedWindow.load(std::memory_order_relaxed) != hwnd)
+        {
+            return;
+        }
         constexpr LPARAM interactiveTargetFlags =
             NATIVE_TRANSITION_TARGET_IS_WORK_AREA |
             NATIVE_TRANSITION_TARGET_IS_SNAP_LAYOUT;
-        if ((transitionFlags & interactiveTargetFlags) != 0 &&
-            g_realDraggedWindow.load(std::memory_order_relaxed) == hwnd)
+        if ((transitionFlags & interactiveTargetFlags) != 0)
         {
             // Publish direction before the release-store of its HWND.
             g_pendingInteractiveTransitionFlags.store(transitionFlags,
                                                        std::memory_order_relaxed);
             g_pendingInteractiveTransitionWindow.store(hwnd, std::memory_order_release);
-            if (eventThreadId != 0)
-            {
-                PostThreadMessageW(eventThreadId, WM_WOBBLY_NATIVE_WINDOW_TRANSITION,
-                                   reinterpret_cast<WPARAM>(hwnd), transitionFlags);
-            }
+        }
+        else
+        {
+            HWND expectedWindow = hwnd;
+            g_pendingInteractiveTransitionWindow.compare_exchange_strong(
+                expectedWindow, nullptr, std::memory_order_acq_rel,
+                std::memory_order_acquire);
+        }
+        if (eventThreadId != 0)
+        {
+            PostThreadMessageW(eventThreadId, WM_WOBBLY_NATIVE_WINDOW_TRANSITION,
+                               reinterpret_cast<WPARAM>(hwnd), transitionFlags);
         }
         return;
     }
-    if (eventThreadId != 0)
+    if (transitionFlags != 0 && eventThreadId != 0)
     {
         PostThreadMessageW(eventThreadId, WM_WOBBLY_NATIVE_WINDOW_TRANSITION,
                            reinterpret_cast<WPARAM>(hwnd), transitionFlags);
@@ -3386,7 +3396,7 @@ static void __cdecl DesktopManagerHandleThreadMessageHook(UINT message,
                                                           UINT_PTR wParam,
                                                           INT_PTR lParam)
 {
-    if (message != WM_DWM_SCENE_WAKE || wParam != DWM_SCENE_WAKE_WPARAM)
+    if (message != g_dwmSceneWakeMessage || wParam != DWM_SCENE_WAKE_WPARAM)
     {
         g_desktopManagerHandleThreadMessageOriginal(message, wParam, lParam);
         return;
@@ -4074,6 +4084,7 @@ static void ResetDragInputState()
     g_waitingForInitialRestore = false;
     g_interactiveStateThrob = InteractiveStateThrobKind::None;
     g_interactiveStateThrobDirection = 0;
+    g_interactiveStateThrobFromPointerEdge = false;
     g_resizeCoordinateScale = 1.0;
     g_dragAnimationSlot = -1;
     g_hasLastMousePosition = false;
@@ -4222,7 +4233,7 @@ static bool PostPendingDwmSceneWake(HWND hwnd, bool forceRepost)
     if (sceneThreadId)
     {
         g_sceneWakeOutstanding.fetch_add(1, std::memory_order_acq_rel);
-        if (PostThreadMessageW(sceneThreadId, WM_DWM_SCENE_WAKE,
+        if (PostThreadMessageW(sceneThreadId, g_dwmSceneWakeMessage,
                                DWM_SCENE_WAKE_WPARAM,
                                g_dwmSceneWakeToken.load(std::memory_order_acquire)))
         {
@@ -5003,6 +5014,7 @@ static void HandleMoveSizeStart(HWND hwnd)
     g_waitingForInitialRestore = startedWindowZoomed;
     g_interactiveStateThrob = InteractiveStateThrobKind::None;
     g_interactiveStateThrobDirection = 0;
+    g_interactiveStateThrobFromPointerEdge = false;
     g_lastMousePosition = mousePosition;
     g_dragCursorMonitor = MonitorFromPoint(mousePosition, MONITOR_DEFAULTTONEAREST);
     g_monitorTransitionRebaseUntil = 0;
@@ -5654,6 +5666,24 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
     constexpr LPARAM nativeTargetMask = NATIVE_TRANSITION_TARGET_IS_WORK_AREA |
                                         NATIVE_TRANSITION_TARGET_IS_SNAP_LAYOUT;
     bool nativeTargetPending = (nativeTargetFlags & nativeTargetMask) != 0;
+    MonitorEdgeState mouseEdgeState = GetPointMonitorEdgeState(mousePosition);
+    bool windowZoomed = IsZoomed(hwnd) != FALSE;
+    bool pointerSnapPreviewAbandoned =
+        g_interactiveStateThrobFromPointerEdge &&
+        (g_interactiveStateThrob == InteractiveStateThrobKind::Maximize ||
+         g_interactiveStateThrob == InteractiveStateThrobKind::Snap) &&
+        !mouseEdgeState.top && !mouseEdgeState.side && !windowZoomed &&
+        !IsApproximatelyMonitorWorkArea(rect) &&
+        !IsApproximatelySnapLayoutTarget(rect);
+    if (pointerSnapPreviewAbandoned)
+    {
+        HWND expectedWindow = hwnd;
+        g_pendingInteractiveTransitionWindow.compare_exchange_strong(
+            expectedWindow, nullptr, std::memory_order_acq_rel,
+            std::memory_order_acquire);
+        nativeTargetFlags = 0;
+        nativeTargetPending = false;
+    }
     bool sizeChangedFromStart = currentWidth != originalWidth || currentHeight != originalHeight;
     if (!g_dragStartedWindowZoomed && g_moveTypeKnown && !g_realResizing &&
         sizeChangedFromStart &&
@@ -5669,11 +5699,11 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
         RetireAnimationSlot(slotIndex);
         return;
     }
-    if (!rectChanged && !mouseMoved && !nativeTargetPending)
+    if (!rectChanged && !mouseMoved && !nativeTargetPending &&
+        !pointerSnapPreviewAbandoned)
     {
         return;
     }
-    MonitorEdgeState mouseEdgeState = GetPointMonitorEdgeState(mousePosition);
     bool nativeMaximizeIntent =
         (nativeTargetFlags & NATIVE_TRANSITION_TARGET_IS_WORK_AREA) != 0;
     bool nativeSnapIntent =
@@ -5696,7 +5726,6 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
     int previousWidth = g_lastDraggedWindowRect.right - g_lastDraggedWindowRect.left;
     int previousHeight = g_lastDraggedWindowRect.bottom - g_lastDraggedWindowRect.top;
     bool sizeChanged = currentWidth != previousWidth || currentHeight != previousHeight;
-    bool windowZoomed = IsZoomed(hwnd) != FALSE;
     bool zoomStateChanged = windowZoomed != g_lastDraggedWindowZoomed;
     if (g_waitingForInitialRestore && !windowZoomed &&
         !IsApproximatelyMonitorWorkArea(rect))
@@ -5767,15 +5796,19 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
         slot.windowStateThrob = true;
         g_interactiveStateThrob = kind;
         g_interactiveStateThrobDirection = EncodeWindowTransitionDirection(direction);
+        g_interactiveStateThrobFromPointerEdge =
+            mouseEdgeState.top || mouseEdgeState.side;
     };
-    if (g_interactiveStateThrob == InteractiveStateThrobKind::Restore &&
-        slot.windowStateThrob && !sizeChanged)
+    bool resumeNormalDrag =
+        (g_interactiveStateThrob == InteractiveStateThrobKind::Restore &&
+         slot.windowStateThrob && !sizeChanged) ||
+        pointerSnapPreviewAbandoned;
+    if (resumeNormalDrag)
     {
-        // Once native restore geometry settles, resume normal drag physics
-        // without requiring a new move/size loop.
         slot.windowStateThrob = false;
         g_interactiveStateThrob = InteractiveStateThrobKind::None;
         g_interactiveStateThrobDirection = 0;
+        g_interactiveStateThrobFromPointerEdge = false;
     }
     bool canStartInteractiveStateThrob = slot.settings.windowStateWobbleEnabled &&
                                          g_moveTypeKnown && !g_realResizing &&
@@ -5866,6 +5899,7 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
                                                     : InteractiveStateThrobKind::Restore;
             g_interactiveStateThrobDirection = EncodeWindowTransitionDirection(
                 windowZoomed ? Vec2{0.0, -1.0} : Vec2{0.0, 1.0});
+            g_interactiveStateThrobFromPointerEdge = false;
         }
         BeginDrag(slot.mesh, localMousePosition);
         slot.previousMesh = slot.mesh;
@@ -7061,15 +7095,17 @@ static void LoadSettings()
     {
         wobbliness = wobblinessPreset[0] - L'0';
     }
-    bool advancedMode = Wh_GetIntSetting(L"AdvancedMode") != 0;
+    bool advancedMode = Wh_GetIntSetting(L"AdvancedMode.enable") != 0;
     settings.resizeWobbleEnabled = Wh_GetIntSetting(L"EnableResizeWobble") != 0;
     settings.windowStateWobbleEnabled =
         Wh_GetIntSetting(L"EnableWindowStateWobble") != 0;
     if (advancedMode)
     {
-        settings.stiffness = static_cast<double>(Wh_GetIntSetting(L"Stiffness"));
-        settings.drag = static_cast<double>(Wh_GetIntSetting(L"Drag"));
-        settings.moveFactor = static_cast<double>(Wh_GetIntSetting(L"MoveFactor"));
+        settings.stiffness =
+            static_cast<double>(Wh_GetIntSetting(L"AdvancedMode.Stiffness"));
+        settings.drag = static_cast<double>(Wh_GetIntSetting(L"AdvancedMode.Drag"));
+        settings.moveFactor =
+            static_cast<double>(Wh_GetIntSetting(L"AdvancedMode.MoveFactor"));
     }
     else
     {
@@ -7101,6 +7137,13 @@ static void LoadSettings()
 BOOL Wh_ModInit()
 {
     g_unloading.store(false, std::memory_order_release);
+    g_dwmSceneWakeMessage =
+        RegisterWindowMessageW(L"Windhawk.WobblyWindows.DwmSceneWake");
+    if (g_dwmSceneWakeMessage == 0)
+    {
+        Wh_Log(L"Wobbly Windows: failed to register DWM scene wake message");
+        return FALSE;
+    }
     g_desktopManagerThreadIdOffset = SIZE_MAX;
     g_topLevelWindow3DWindowDataOffset = SIZE_MAX;
     g_dwmSceneThreadId.store(0, std::memory_order_release);
@@ -7136,7 +7179,7 @@ BOOL Wh_ModInit()
     g_existingWindowBackfillMapped.store(0, std::memory_order_release);
     g_lastObservedScenePassCounter = 0;
     g_lastSceneProgressTimestamp = 0;
-    Wh_Log(L"Wobbly Windows 0.83: initializing");
+    Wh_Log(L"Wobbly Windows 0.84: initializing");
     InitializeDpiSupport();
     LoadSettings();
     if (!InitializeDwmHooks())
