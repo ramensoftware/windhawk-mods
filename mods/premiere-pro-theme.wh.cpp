@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              premiere-pro-theme
 // @name            Premiere Pro Theme
-// @description     Recolors the entire Adobe Premiere Pro interface — panels, timeline, video monitor, window frame and menu bar — with a choice of very dark palettes.
+// @description     Recolors the Adobe Premiere Pro interface — panels, timeline, monitors, window frame and menu bar — with a choice of very dark palettes.
 // @version         1.0.0
 // @author          Threshold Editor
 // @license         MIT
@@ -17,8 +17,8 @@
 # Premiere Pro Theme
 
 Recolors Premiere Pro far beyond what the Appearance brightness slider reaches,
-and does it consistently across parts of the app that are painted by four
-different mechanisms.
+and does it consistently across the parts of the app that are painted in
+different ways.
 
 ## Screenshots
 
@@ -47,76 +47,6 @@ gray `#1D1D1D`, under the light title bar and menu bar that Windows gives it.
 
 ![Glitch palette](https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/glitch.png)
 
-## How it finds the colors
-
-Premiere's interface is painted with the **Adobe Spectrum** gray ramp —
-`#1D1D1D`, `#262626`, `#303030`, `#4B4B4B` — served by `dvaui.dll`, Adobe's UI
-toolkit. The mod intercepts the functions that hand out those colors and returns
-a darkened version instead.
-
-Three families, all in `dvaui.dll`:
-
-- **Theme**: `Theme::GetColor`, `ThemeClient::GetColor`, `ui::GetColor`
-- **Spectrum**: `ui::GetGrayColor`, `Theme::GetGrayColor`,
-  `GetSpectrumGrayColor`, `GetSpectrumColor` — this family paints most panels
-- **DNA / skins**: application, content and list backgrounds, dividers,
-  scrollbars
-
-Not every Premiere version exports all of them. The mod installs what it finds
-and logs the rest.
-
-## Parts that never ask the theme
-
-Some surfaces are painted directly, without consulting the theme at all — most
-of the monitor and timeline chrome. There is no color function to intercept for
-them. What there is, is the places most solid fills pass through no matter who
-picked the color:
-
-```
-dvaui::drawbot::d2d::OSSupplier::NewBrush(const ColorRGBA&)
-UIF::DC::FillRect / UIF::DC::FrameRect      [UIFramework.dll]
-```
-
-The Direct2D brush factory, and Premiere's own drawing layer. Hooking them
-catches most of what the theme functions never hand out — not all of it: the
-band around the video in the monitors reaches neither, see *Known limitations*.
-The SVG brush is deliberately left alone — it paints icons, and a darkened icon
-disappears.
-
-## The menu bar
-
-The `File / Edit / Clip` bar and the menus that drop from it look like one
-thing, but Windows paints them through two different paths.
-
-**Dropdown menus** get their theme from `OpenNcThemeData`, uxtheme ordinal 49,
-used for non-client area and absent from every header. Asking it for the `Menu`
-class only returns the dark theme *after* `SetPreferredAppMode` and
-`FlushMenuThemes` have run — an ordering dependency that fails when the app
-already opened and cached the light one. Asking for `DarkMode::Menu` depends on
-no ordering at all:
-
-```
-Windows app mode = light, no SetPreferredAppMode call:
-  OpenNcThemeData(nullptr, L"Menu")           -> text #000000  (light theme)
-  OpenNcThemeData(nullptr, L"DarkMode::Menu") -> text #FFFFFF  (dark theme)
-```
-
-**The bar itself** is not themed content and no theme will recolor it. It is
-non-client area, drawn by `DefWindowProc` / `DefFrameProc` in response to two
-undocumented messages — `WM_UAHDRAWMENU` (0x91) and `WM_UAHDRAWMENUITEM` (0x92).
-The mod intercepts those four functions and paints the strip and each item into
-the same DCs and rectangles Windows would have used, plus the 1px line below it
-that arrives through no message at all.
-
-Technique from [win32-darkmode](https://github.com/adzm/win32-darkmode), branch
-`darkmenubar`.
-
-> **If your menu bar ignores the palette**, another mod is painting it first.
-> Any mod that darkens Win32 menus globally hooks the same `DefWindowProc` and
-> answers before this one, with its own fixed color. Add
-> `Adobe Premiere Pro.exe` to that mod's process **exclusion** list and this one
-> takes over.
-
 ## Palettes
 
 Neutral:
@@ -141,147 +71,97 @@ Tinted:
 | Text    | `#D2D2F7` | `#EDE0D0` | `#FAF5EF` | `#E9F7C0` |
 | Accent  | `#3A3A99` | `#5A4028` | `#5C1F47` | `#B8157A` |
 
-**Premiere** was sampled from the app's own executable icon: of 728 opaque
-pixels, 72% are `#00005B` and 16% are `#9999FF`, all on hue 240.
+**Premiere** takes its violet from the app's own icon. **Neon** and **Glitch**
+come from reference artwork; in Glitch the acid green would be far too bright as
+background, so it tints the black and the magenta becomes the accent. **Comfy**
+is warm brown, lower in contrast and the lightest of the set, for long sessions.
 
-**Neon** and **Glitch** were sampled from reference artwork — the first
-near-black with magenta, the second acid green with magenta. In Glitch the green
-never becomes background: 70% of the screen in `#C3E600` would be far too bright
-to judge an image on, which is the job. It becomes the bias of the black and the
-top of the ramp instead, and the magenta becomes the accent.
+The accent is kept out of the ramp: the ramp is interpolated, and a strong color
+in it would tint half the interface. It only shows on hovered menu items and
+system highlights.
 
-**Comfy** is the only one designed rather than sampled. Warm brown, lower
-contrast, and deliberately the lightest of the set — the point is to sit in it
-for hours.
+## What it changes, and what it leaves alone
 
-## The program monitor surround
+Each layer has its own switch in the settings:
 
-Around the picture in the Program and Source monitors, visible when the monitor
-is zoomed out, there is a band that stays neutral gray whichever palette is
-active. On the near-black palettes it matches the panels exactly; with a
-tinted palette it shows as a neutral band. It is a documented limitation rather
-than a bug, and what was measured is under *Known limitations* below.
+- **Premiere interface** — the theme colors served by `dvaui.dll`, Adobe's UI
+  toolkit: panels, timeline, monitors.
+- **Direct fills** — surfaces Premiere paints without asking the theme, most of
+  the monitor and timeline chrome.
+- **Window and system dialogs** — dark title bar, border and native dialogs.
+- **Menu bar and menus** — the File / Edit / Clip bar and its dropdowns.
+- **GDI surfaces** — brushes, pens and text backgrounds created by Premiere's
+  own modules.
 
-The black *inside* the sequence frame is a different thing: that is the rendered
-picture, black wherever the sequence has no media, and it stays black in every
-palette. It is the image you are judging, not chrome.
-
-## The accent
-
-The accent is not part of the ramp. The ramp is interpolated to paint
-background, so a strong color placed in it bleeds into neighbouring tones and
-tints half the interface. The accent appears only on hovered menu items and
-system highlights — which is what makes a purple theme look purple without
-painting the timeline purple.
-
-## What is never touched
-
-Saturated colors — selection blue, timeline clips, labels, warnings — pass
-through untouched. So does anything above the **brightness ceiling**: text,
-icons, and the `#4B4B4B` Spectrum uses for disabled text. The default ceiling
-(28) sits just below that gray on purpose.
-
-Colors that are content rather than interface are left alone whatever they
-are: the swatches in the color picker, marker colors and Essential Graphics,
-and the parameter colors that Effect Controls, Lumetri and the monitors draw. A
-dark gray you pick shows as that gray, not as the palette.
-
-## Known limitations
-
-Two surfaces are not themed. Both are written down here rather than worked
-around, because the workaround available for each is worse than the limitation.
-
-### The Home screen
-
-The startup screen is rendered by **UXP**, Adobe's newer runtime
-(`dvauxphost.dll` / `dvauxpui.dll`), which styles itself with its own CSS rather
-than through the `dvaui` color functions everything else goes through.
-`dvauxphost` exports exactly two theme entry points —
-`SetUIThemeInfoAPIObject(const UIThemeInfo&)` and `UpdateTheme(int)` — and
-neither hands out a color. Reaching it would mean guessing the layout of an
-undocumented struct, in a process holding unsaved work.
-
-Premiere's own preferences can open the most recent project directly instead of
-the Home screen, which takes it out of the way.
-
-### The band around the video, with a tinted palette
-
-Zoomed out, the monitors paint the area around the picture a gray made from a
-single channel of the panel color — the red one. Without the mod it matches the
-panels, `#1D1D1D` on both. On the near-black palettes it still matches, because
-the red channel of a gray is the gray: Onyx measures `#0C0C0C` for panels and
-surround alike. With a hue the step shows. Glitch panels `#101907` give a
-surround of `#101010`, and Neon panels `#150D14` = (21, 13, 20) give `#151515`.
-The average of Neon's channels would be 18, so this is the red channel and not
-a desaturation.
-
-The monitor also keeps that gray from when it last fetched it. Switching palettes
-with Premiere open repaints the panels but leaves the band on the previous
-palette's value until Premiere restarts.
-
-Where it is painted has not been found. A diagnostic build recorded every
-distinct color arriving at nine separate entry points — the theme functions, the
-Direct2D brush and pen factories, `UIF::DC::FillRect` and `FrameRect` in both
-their color overloads, the background-erase path, and the GPU fill in
-`GPUFoundation.dll` — 181 distinct (entry point, color) pairs, and the gray
-appeared at **none** of them. `UIF::DC` has a third `FillRect` that takes a
-named decal and no color at all, which would explain the absence; confirming
-that means reading an undocumented skin table, and guessing at one inside an
-editor holding unsaved work is not a trade worth making for a band.
-
-So it stays as Premiere paints it, and this readme says so instead of the mod
-patching blind. If you use a tinted palette and the band bothers you, the
-near-black palettes do not have it.
-
-## Compatibility
-
-The mod does not assume a Premiere version. It looks up each color function by
-name at startup, installs the ones the running build exports, and logs the rest
-— so a version that moved or dropped a function loses that surface, not the mod.
-
-Measured against the export tables of the installed builds:
-
-| Premiere | Color functions found | Drawing primitives |
-|----------|-----------------------|--------------------|
-| 2026     | 31 of 31              | 4 of 4             |
-| 2023     | 27 of 31              | 4 of 4             |
-
-Between those two Adobe swapped the smart pointer that half of the color
-functions take — `boost::intrusive_ptr` for its own `IntrusivePtr` — which
-changes the mangled name and nothing else. Both spellings are in the table, so
-each version finds its own and skips the other.
-
-The four missing on 2023 (`dna::GetSpectrumColor`, `GrayBackgroundColor`,
-`GrayBorderColor`, `utils::DrawFillRect`) do not exist there under any
-signature. Their surfaces fall back to the Spectrum family, which is present in
-both.
-
-The window frame, the menu bar and the native dialogs do not depend on Premiere
-at all — they are Windows, and they work on any version. Native dark mode needs
-Windows 10 build 17763 or newer; below that the mod still themes the interface
-and paints the menus itself.
-
-## Credits
-
-The menu bar technique — the two undocumented `WM_UAHDRAWMENU` messages and the
-`DarkMode::Menu` theme class — comes from
-[win32-darkmode](https://github.com/adzm/win32-darkmode) by adzm, MIT licensed.
-This mod is MIT as well.
+Saturated colors — selection blue, clips, labels, warnings — pass through
+untouched, and so does anything above the **brightness ceiling**: text, icons,
+and the `#4B4B4B` Spectrum uses for disabled text. Colors that are content
+rather than interface are left alone whatever they are: the color picker's
+swatches, marker colors, Essential Graphics, and the parameter colors Effect
+Controls, Lumetri and the monitors draw. A dark gray you pick shows as that
+gray.
 
 ## If something becomes unreadable
 
 Lower the ceiling. Raising it darkens more, starting with disabled text — which
 is exactly what disappears first.
 
-Settings apply while Premiere is running: the colours it already holds are
-rewritten in place and the window repaints. Some surfaces keep the previous
-palette until Premiere restarts, because Premiere copies those colours into
+Settings apply while Premiere is running. Some surfaces keep the previous
+palette until Premiere restarts, because Premiere copies those colors into
 caches of its own.
 
 If a Premiere update ever makes a panel misbehave with the mod on, switch off
 **Premiere interface**, **Direct fills** and **GDI surfaces** together and
 restart Premiere. With all three off when the mod loads, it does not hook
 Premiere's own modules at all.
+
+## Other mods that darken menus
+
+If your menu bar ignores the palette, another mod is painting it first: any mod
+that darkens Win32 menus globally answers the same `DefWindowProc` messages
+before this one, with its own fixed color. Add `Adobe Premiere Pro.exe` to that
+mod's process **exclusion** list and this one takes over.
+
+## Known limitations
+
+**The Home screen** is rendered by UXP, Adobe's newer runtime, which styles
+itself with its own CSS and hands out no color to intercept. Premiere's
+preferences can open the most recent project directly instead.
+
+**The band around the video, with a tinted palette.** Zoomed out, the monitors
+paint the area around the picture a gray taken from the red channel of the
+panel color, and keep it until Premiere restarts. On the neutral palettes it
+matches the panels; with a hue it shows as a neutral band — Glitch panels
+`#101907` give `#101010`. Where it is painted has not been found, so the mod
+leaves it as it is rather than patch blind.
+
+The black *inside* the sequence frame is the rendered picture, not chrome, and
+stays black in every palette.
+
+## Compatibility
+
+The mod looks up each color function by name at startup, installs the ones the
+running build exports, and logs the rest, so a version that moved or dropped a
+function loses that surface, not the mod. Measured against the installed
+builds:
+
+| Premiere | Color functions found | Drawing primitives |
+|----------|-----------------------|--------------------|
+| 2026     | 31 of 31              | 4 of 4             |
+| 2023     | 27 of 31              | 4 of 4             |
+
+The four missing on 2023 do not exist there under any name, and their surfaces
+fall back to the Spectrum family, which both have. The window frame, the menu
+bar and the native dialogs do not depend on the Premiere version. Native dark
+mode needs Windows 10 build 17763 or newer; below that the mod still themes the
+interface and paints the menus itself.
+
+## Credits
+
+The menu bar technique — the undocumented `WM_UAHDRAWMENU` messages and the
+`DarkMode::Menu` theme class — comes from
+[win32-darkmode](https://github.com/adzm/win32-darkmode) by adzm, MIT licensed.
+This mod is MIT as well.
 */
 // ==/WindhawkModReadme==
 
@@ -343,7 +223,7 @@ Premiere's own modules at all.
   $description: Paints the File/Edit/Clip bar and the dropdown menus in the palette, instead of white or the Windows default gray.
 - gdiHook: true
   $name: GDI surfaces
-  $description: Darkens brushes and pens created by Premiere and by dvaui.dll.
+  $description: Darkens GDI brushes, pens and text backgrounds created by Premiere's own modules.
 */
 // ==/WindhawkModSettings==
 
@@ -370,26 +250,18 @@ Premiere's own modules at all.
 
 struct Palette {
     /*
-        The five tones, deepest to lightest, in ramp order.
-
-        ramp[0] is the darkest stop of the INTERPOLATION, not the window frame color.
-        The title bar and the menu bar use ramp[1], the same tone as the panels — in
-        any tinted palette the darkest tone reads as black, and a black frame around a
-        purple interface does not look like a theme, it looks like a frame that missed
-        the theme.
+        The five tones, deepest to lightest. The title bar and the menu bar use
+        ramp[1], the panel tone: in a tinted palette ramp[0] reads as black, and
+        a black frame around a purple interface looks like it missed the theme.
     */
     COLORREF ramp[5];
     COLORREF text;
     COLORREF dimText;
 
     /*
-        The accent sits OUTSIDE the ramp on purpose.
-
-        The ramp is interpolated to paint background, so any color placed in it bleeds
-        into the neighbouring tones and would tint half the interface. Here it appears
-        only where it is genuinely a highlight: hovered menu items and system
-        highlights. That is what makes a purple theme look purple without painting the
-        timeline purple.
+        Outside the ramp on purpose: the ramp is interpolated, so a strong color
+        in it would bleed into its neighbors and tint half the interface. The
+        accent only shows on hovered menu items and system highlights.
     */
     COLORREF accent;
 };
@@ -436,35 +308,25 @@ static size_t FibonacciIndex(uint64_t value) {
                                (64 - std::countr_zero(Slots)));
 }
 
+// True for the first caller only, whichever thread it is on.
+static bool Claim(volatile LONG* flag) {
+    return InterlockedCompareExchange(flag, TRUE, FALSE) == FALSE;
+}
+
 // ============================================================================
 // WHERE THE CALL CAME FROM
 // ============================================================================
 
 /*
-    The return address is passed in as a parameter, never read inside this
-    function.
-
-    Reading __builtin_return_address(0) in here would only give the real caller if
-    the compiler had inlined the function — otherwise it gives an address inside
-    the mod itself, and the filter lets everything through. Depending on an
-    optimization decision for correctness is a bug that shows up when the clang
-    version changes.
-*/
-/*
     Which modules count as Adobe UI, kept as address ranges rather than asked
     per call.
 
     The GDI hooks ask this on every CreateSolidBrush, CreatePen and SetBkColor.
-    Asking it with GetModuleHandleExW took the loader lock each time, which is
-    more expensive than the colour work it guards and, worse, a lock-order
-    hazard: ThemeSysBrush holds g_brushLock while calling CreateSolidBrush, so
-    that path takes g_brushLock and then the loader lock, while a thread already
-    inside the loader calling GetSysColorBrush takes the two the other way
-    round.
-
-    The set only changes when a module is mapped. It is snapshot once at init,
-    then appended to from a loader notification, and the question becomes a
-    pointer comparison against a short list of ranges.
+    GetModuleHandleExW would take the loader lock each time, and ThemeSysBrush
+    calls CreateSolidBrush while holding g_brushLock, which a thread inside the
+    loader could be waiting for the other way round. The set only changes when
+    a module is mapped: it is snapshot once at init, then appended to from a
+    loader notification.
 */
 struct ModuleRange {
     uintptr_t begin;
@@ -479,6 +341,7 @@ constexpr size_t kMaxModuleRanges = 256;
 
 ModuleRange g_moduleRanges[kMaxModuleRanges];
 volatile LONG g_moduleRangeCount = 0;
+volatile LONG g_moduleRangesFullLogged = FALSE;
 SRWLOCK g_moduleRangeLock = SRWLOCK_INIT;
 
 /*
@@ -496,7 +359,7 @@ static bool IsAdobeUIName(const wchar_t* name, size_t length) {
 }
 
 /*
-    Writers are serialised by g_moduleRangeLock; readers take no lock at all.
+    Writers are serialized by g_moduleRangeLock; readers take no lock at all.
     An entry is written in full before the count that exposes it is
     published, so IsAdobeUICaller never sees a half-written range.
 
@@ -517,27 +380,27 @@ static void AddModuleRange(uintptr_t begin, uintptr_t end) {
         }
     }
 
-    if (!known && count < static_cast<LONG>(kMaxModuleRanges)) {
+    bool full = !known && count >= static_cast<LONG>(kMaxModuleRanges);
+
+    if (!known && !full) {
         g_moduleRanges[count] = {begin, end};
         InterlockedExchange(&g_moduleRangeCount, count + 1);
     }
 
     ReleaseSRWLockExclusive(&g_moduleRangeLock);
+
+    if (full && Claim(&g_moduleRangesFullLogged)) {
+        Wh_Log(L"module range table full; GDI calls from Adobe modules loaded "
+               L"from now on will not be recognized");
+    }
 }
 
 /*
-    Every module mapped after init, including the ones LoadLibraryExW never
-    returns.
-
-    LoadLibraryExW hands back only the module that was asked for. A DLL brings
-    its dependencies in with it, and in Premiere most dva* modules arrive that
-    way, as imports of something else, so noting what LoadLibraryExW returned
-    missed them. The loader notification sees every mapping and carries the
-    name, base and size with it, so nothing here asks the loader anything.
-
-    It runs with the loader lock held, which is also what serialises it
-    against itself. It is unregistered in Wh_ModUninit, before the image that
-    contains it goes away.
+    Every module mapped after init, including the dependencies LoadLibraryExW
+    never returns, which is how most dva* modules arrive in Premiere. The
+    notification carries the name, base and size, so nothing here asks the
+    loader anything. It runs with the loader lock held, and it is unregistered
+    in Wh_ModUninit, before the image that contains it goes away.
 */
 struct LdrUnicodeString {
     USHORT length;  // in bytes, and not terminated
@@ -593,7 +456,7 @@ static void WatchModuleLoads() {
                              &g_dllNotificationCookie) != 0) {
         g_dllNotificationCookie = nullptr;
         Wh_Log(L"could not register for DLL notifications; GDI calls from "
-               L"dva modules loaded later will not be recognised");
+               L"dva modules loaded later will not be recognized");
     }
 }
 
@@ -621,11 +484,10 @@ static void StopWatchingModuleLoads() {
     the ones after. It is registered first, so a module mapped in between is
     seen twice and deduplicated rather than missed.
 
-    The list grows to whatever the process reports. Premiere 2026 runs with
-    more than 560 modules, past the 512 a fixed array used to hold, and the
-    modules beyond that point were never noted. Sizes come from
-    K32GetModuleInformation rather than from reading the module's headers, so
-    a module unloaded in between costs a failed call, not an access violation.
+    The list is sized from what the process reports (Premiere 2026 runs with
+    more than 560 modules). Sizes come from K32GetModuleInformation rather
+    than from the module's headers, so a module unloaded in between costs a
+    failed call, not an access violation.
 */
 struct ModuleInformation {  // MODULEINFO
     LPVOID base;
@@ -694,7 +556,7 @@ static void SnapshotAdobeModules() {
     if (!enumModules || !moduleInformation) {
         Wh_Log(L"cannot enumerate modules; besides the executable, dvaui, "
                L"dvacore and UIFramework, only dva modules loaded from now on "
-               L"will be recognised as Adobe UI");
+               L"will be recognized as Adobe UI");
         return;
     }
 
@@ -712,7 +574,7 @@ static void SnapshotAdobeModules() {
         if (!enumModules(process, modules.data(), bytes, &needed)) {
             Wh_Log(L"module enumeration failed (%u); besides the executable, "
                    L"dvaui, dvacore and UIFramework, only dva modules loaded "
-                   L"from now on will be recognised as Adobe UI",
+                   L"from now on will be recognized as Adobe UI",
                    GetLastError());
             return;
         }
@@ -772,17 +634,10 @@ static bool IsAdobeUICaller(void* caller) {
 // ============================================================================
 
 /*
-    The ramp is interpolated, not stepped.
-
-    Premiere's interface is painted with the Adobe Spectrum gray scale (#1D1D1D,
-    #262626, #303030, #4B4B4B ...), and every step of that scale carries
-    information: it is how you tell a panel from the panel behind it, a header
-    strip from the body. Mapping brightness bands onto fixed tones would collapse
-    neighbouring steps into the same value and erase that depth — the interface
-    would end up dark and flat.
-
-    Interpolating preserves the order: whatever was one step lighter stays one step
-    lighter, just inside a much darker range.
+    Interpolated, not stepped: each step of Spectrum's gray scale is how a
+    panel is told from the panel behind it, and fixed bands would collapse
+    neighboring steps into one tone. Whatever was one step lighter stays one
+    step lighter, inside a much darker range.
 */
 static COLORREF PickTarget(float brightness) {
     const COLORREF* ramp = g_settings.palette.ramp;
@@ -839,10 +694,10 @@ static bool IsSaneChannel(float v) {
 }
 
 /*
-    This validation exists because the layout of dvaui::drawbot::ColorRGBA is an
-    assumption — four floats in RGBA order. If a future Premiere changes the
-    struct, the values read here stop looking like a color, and the mod would
-    rather return the original than paint garbage on screen.
+    dvaui::drawbot::ColorRGBA is four floats in RGBA order, which is how Adobe's
+    own ASLColorToDVAColorRGBA writes it. If a future Premiere changes the
+    struct, the values read here stop looking like a color, and the original is
+    returned rather than garbage painted.
 */
 static bool ShouldConvert(const DvaColorRGBA& in) {
     if (!IsSaneChannel(in.r) || !IsSaneChannel(in.g) || !IsSaneChannel(in.b) ||
@@ -879,43 +734,28 @@ static bool ConvertDvaColor(const DvaColorRGBA& in, DvaColorRGBA* out) {
 // ============================================================================
 
 /*
-    All of these functions return `const ColorRGBA&` — a reference to a color that
-    belongs to the theme and lives as long as the theme does, and Adobe's code may
-    hold on to it. So the conversion has to return a stable reference too, not one
-    into a reused buffer: with a single buffer, `Draw(GetColor(A), GetColor(B))`
-    would make both references point at the same place and both colors would come
-    out identical.
+    The theme functions return `const ColorRGBA&`, a reference to a color the
+    theme owns and Adobe's code may keep, so the conversion returns a stable
+    reference too. A single reused buffer would make
+    `Draw(GetColor(A), GetColor(B))` paint both in the same color.
 
-    The slot key is the ADDRESS of the original color, not an id.
-
-    That is what allows dozens of functions with different signatures to be covered
-    — `GetGrayColor(enum)`, `GetColor(ImmutableString)`, `GrayBackgroundColor()` —
-    without understanding any parameter type. The address identifies the color
-    better than any key could, because it is the color.
-
-    And if an address is ever reused for a different color, comparing against `src`
-    notices and recomputes. The table corrects itself.
+    The key is the address of the theme's color. That covers functions with
+    different signatures — `GetGrayColor(enum)`, `GetColor(ImmutableString)`,
+    `GrayBackgroundColor()` — without understanding their parameters, and the
+    theme's own storage is what keeps an address meaning one color. If the
+    theme changes the color behind an address, comparing against `src` notices.
 */
 
 /*
-    A Premiere 2026 session measured 12 slots in use, logged at unload. The key
-    is an address the theme hands out, and the theme holds few color objects.
-    1024 leaves room for many more panels and versions, and if the table ever
-    fills, StoreColor returns nothing and the caller keeps the original color.
+    A Premiere 2026 session with a project open used 12 slots, logged at
+    unload: the key is an address the theme hands out, and the theme holds
+    few color objects. 128 is a tenfold margin. If the table ever fills,
+    StoreColor logs it once and the caller keeps the original color.
 */
-constexpr size_t kSlotCount = 1024;  // power of two, so the mask is a single &
-
-/*
-    Which hook handed a slot's address out, so that a settings change knows
-    which setting the slot answers to. The same address can arrive through
-    both, which is why this is a mask rather than a single value.
-*/
-constexpr LONG kFromThemeFunction = 1;  // ConvertColorRef — "Premiere interface"
-constexpr LONG kFromEraseColor = 2;     // StableConvert — "Direct fills"
+constexpr size_t kSlotCount = 128;  // power of two, so the mask is a single &
 
 struct ColorSlot {
     volatile LONG state;       // 0 free, 1 being filled, 2 ready
-    volatile LONG sources;     // kFromThemeFunction | kFromEraseColor
     volatile LONG generation;  // the settings generation dst was computed under
     uintptr_t key;
     DvaColorRGBA src;
@@ -925,18 +765,12 @@ struct ColorSlot {
 /*
     Deliberately heap-allocated and deliberately leaked.
 
-    The pointer this table returns is handed to Premiere and kept by it — the
-    comments on ConvertColorRef and StableConvert spell out that contract. A
-    static array would live in the mod image, and Windhawk unmaps that image on
-    unload. The references Premiere still holds would then point at unmapped
-    memory.
-
-    One table of about 56 KB leaks each time the mod is unloaded — disabled,
-    or updated. A settings change does not unload it (see
-    Wh_ModSettingsChanged), so trying out palettes costs nothing here. That is
-    the price of handing out a pointer whose lifetime the mod does not
-    control, and it is the same trade already made for the GetSysColorBrush
-    brushes.
+    Premiere keeps the pointers this table hands out. A static array would
+    live in the mod image, which Windhawk unmaps on unload, and those
+    references would then point at unmapped memory. So one table of about
+    6 KB is left behind each time the mod is disabled or updated; a settings
+    change does not unload it. The GetSysColorBrush brushes make the same
+    trade.
 */
 ColorSlot* g_slots = nullptr;
 constexpr size_t kSlotBytes = kSlotCount * sizeof(ColorSlot);
@@ -972,10 +806,10 @@ static bool IsOurSlot(const void* address) {
 }
 
 /*
-    Whether an address is a colour this table actually converted.
+    Whether an address is a color this table actually converted.
 
-    A slot whose setting is off holds its original colour again (see
-    RefreshSlot), and that colour is raw: the brush layer has to treat it like
+    A slot whose setting is off holds its original color again (see
+    RefreshSlot), and that color is raw: the brush layer has to treat it like
     any other. Skipping every slot address instead would leave whatever
     Premiere still holds from the table stock gray once "Premiere interface" is
     switched off, even with "Direct fills" on.
@@ -1000,12 +834,12 @@ static bool IsConvertedSlot(const void* address) {
 /*
     Bumped on every settings change, after the new settings are in place.
 
-    A colour another thread was converting at the moment of the change was
+    A color another thread was converting at the moment of the change was
     computed under the old settings, and Premiere may keep the slot it lands
     in without ever asking again. So a write computed under an older
     generation never replaces a slot the change already recomputed, and a
     slot that was still being filled when the change ran is recomputed by the
-    thread filling it (see StoreColor). Neither can leave a colour Premiere
+    thread filling it (see StoreColor). Neither can leave a color Premiere
     holds on the previous palette.
 */
 volatile LONG g_generation = 0;
@@ -1014,20 +848,15 @@ static void RememberProduced(const DvaColorRGBA& c);
 
 /*
     Recomputes one slot's dst from its src under the settings in force now.
-    With restoreOriginals, or with neither setting the slot answers to on,
-    dst goes back to src.
+    With restoreOriginals, or with "Premiere interface" off, dst goes back to
+    src.
 */
 static void RefreshSlot(ColorSlot& slot, LONG generation, bool restoreOriginals) {
-    LONG sources = slot.sources;
-
-    bool active = !restoreOriginals &&
-                  (((sources & kFromThemeFunction) && g_settings.dvauiHook) ||
-                   ((sources & kFromEraseColor) && g_settings.brushHook));
-
     // ConvertDvaColor leaves dst untouched when it declines.
     DvaColorRGBA dst = slot.src;
 
-    if (active && ConvertDvaColor(slot.src, &dst)) {
+    if (!restoreOriginals && g_settings.dvauiHook &&
+        ConvertDvaColor(slot.src, &dst)) {
         RememberProduced(dst);
     }
 
@@ -1035,9 +864,10 @@ static void RefreshSlot(ColorSlot& slot, LONG generation, bool restoreOriginals)
     slot.generation = generation;
 }
 
+volatile LONG g_slotsFullLogged = FALSE;
+
 static const DvaColorRGBA* StoreColor(uintptr_t key, const DvaColorRGBA& src,
-                                      const DvaColorRGBA& dst, LONG generation,
-                                      LONG source) {
+                                      const DvaColorRGBA& dst, LONG generation) {
     if (!g_slots) {
         return nullptr;
     }
@@ -1054,7 +884,6 @@ static const DvaColorRGBA* StoreColor(uintptr_t key, const DvaColorRGBA& src,
                 slot.key = key;
                 slot.src = src;
                 slot.dst = dst;
-                slot.sources = source;
                 slot.generation = generation;
 
                 InterlockedExchange(&slot.state, 2);
@@ -1087,10 +916,6 @@ static const DvaColorRGBA* StoreColor(uintptr_t key, const DvaColorRGBA& src,
             continue;
         }
 
-        if (!(slot.sources & source)) {
-            InterlockedOr(&slot.sources, source);
-        }
-
         LONG current = slot.generation;
 
         // Computed under older settings than the slot already holds.
@@ -1099,10 +924,10 @@ static const DvaColorRGBA* StoreColor(uintptr_t key, const DvaColorRGBA& src,
         }
 
         /*
-            The address was reused, the theme changed the colour behind it, or
+            The address was reused, the theme changed the color behind it, or
             the settings changed since dst was computed. These are plain
             writes, and a drawing thread may be reading dst at the same moment;
-            the worst case is one frame painted in a colour that is half the
+            the worst case is one frame painted in a color that is half the
             old one and half the new.
         */
         if (current != generation || !SameColor(slot.src, src)) {
@@ -1114,23 +939,24 @@ static const DvaColorRGBA* StoreColor(uintptr_t key, const DvaColorRGBA& src,
         return &slot.dst;
     }
 
-    return nullptr;  // table saturated: the original color beats a wrong one
+    // Saturated: the original color beats a wrong one.
+    if (Claim(&g_slotsFullLogged)) {
+        Wh_Log(L"color table full; further interface colors keep Premiere's "
+               L"own value");
+    }
+
+    return nullptr;
 }
 
 /*
-    Second line of defense against double conversion, BY VALUE.
+    Second line of defense against converting a color twice, by value.
 
-    A color that came out of a theme function has already been converted — and
-    arrives again when it is time to build a brush. Converting twice pushes
-    everything toward the darkest stop of the ramp and flattens the interface.
-
-    On the reference path this is settled by address (IsOurSlot), but the caller may
-    have copied the color into a temporary before asking for the brush, and then the
-    address says nothing. So every color we produce also goes into this set, and a
-    color found in it passes through untouched.
-
-    The key is the RGB quantized to 8 bits rather than the raw floats: the
-    comparison has to survive a round trip through a format conversion.
+    A converted color arrives again when a brush is built from it, and
+    converting twice pushes everything toward the darkest stop. The address
+    settles that when the brush gets the table's own pointer (IsConvertedSlot),
+    but not once the caller has copied the color. So every color produced goes
+    into this set, and one found in it passes through. The key is 8-bit RGB, so
+    it survives a round trip through another format.
 */
 constexpr size_t kProducedSlots = 8192;
 
@@ -1150,10 +976,8 @@ static size_t ProducedIndex(LONG key) {
 }
 
 /*
-    Called for every colour a theme function hands out, and almost every one of
-    them is already in the set — so each slot is read plainly first, and the
-    lock cmpxchg only happens to claim an empty one. The reasoning is the same
-    as in IsProducedColor below.
+    Almost every color is already in the set, so slots are read plainly and only
+    an empty one is claimed with an interlocked exchange.
 */
 static void RememberProduced(const DvaColorRGBA& c) {
     LONG key = PackColorKey(c);
@@ -1177,15 +1001,7 @@ static void RememberProduced(const DvaColorRGBA& c) {
     }
 }
 
-/*
-    Plain read, no interlocked operation.
-
-    Using InterlockedCompareExchange just to READ costs a `lock cmpxchg`: tens of
-    cycles, plus the cache line marked dirty for every other core. In a function
-    called once per screen fill that shows up. An aligned LONG is already read
-    atomically on x86-64; the interlocked operation is only needed to WRITE, which
-    happens once per new color.
-*/
+// Plain reads: an aligned LONG is read atomically on x86-64.
 static bool IsProducedColor(const DvaColorRGBA& c) {
     LONG key = PackColorKey(c);
     size_t start = ProducedIndex(key);
@@ -1220,36 +1036,25 @@ static const DvaColorRGBA* ConvertColorRef(const DvaColorRGBA* original) {
 
     RememberProduced(converted);
 
-    const DvaColorRGBA* stored =
-        StoreColor(reinterpret_cast<uintptr_t>(original), *original, converted,
-                   generation, kFromThemeFunction);
+    const DvaColorRGBA* stored = StoreColor(reinterpret_cast<uintptr_t>(original),
+                                            *original, converted, generation);
 
     return stored ? stored : original;
 }
 
 /*
-    Brings every colour already handed out in line with the current settings.
+    Brings every color already handed out in line with the current settings,
+    in place, so the references Premiere holds follow a settings change. With
+    restoreOriginals — on unload — every slot goes back to the color it
+    replaced, since the table outlives the mod.
 
-    Premiere keeps the references this table returns, so a settings change
-    that only reached new requests would leave everything Premiere already
-    holds on the old palette. Rewriting dst in place reaches those too: the
-    address Premiere holds stays the same, the colour behind it changes.
-
-    With restoreOriginals — on unload — every slot goes back to the colour it
-    replaced. The table outlives the mod, and without this the surfaces still
-    pointing into it would keep the last palette frozen after the mod is gone.
-
-    A slot another thread is filling at this moment (state 1) is skipped; that
-    thread brings it up to date itself when it publishes it — see StoreColor.
-    Returns how many slots are in use.
+    A slot another thread is filling (state 1) is skipped; that thread brings
+    it up to date when it publishes it — see StoreColor. Returns how many
+    slots are in use.
 */
 static size_t RecomputeColorTable(bool restoreOriginals) {
-    /*
-        The produced set describes what the current settings produce. Left as
-        it was, it would make a colour from the previous palette look already
-        converted and let it through untouched, so it is emptied here and
-        refilled from the table below.
-    */
+    // Emptied and refilled below, or a color from the previous palette would
+    // look already converted.
     for (size_t i = 0; i < kProducedSlots; i++) {
         g_produced[i] = 0;
     }
@@ -1309,13 +1114,18 @@ struct ColorHook {
 struct ColorSymbol {
     const char* mangled;
     const wchar_t* label;
-    bool alternate = false;  // an older spelling of a name listed above it
+    const char* before2026 = nullptr;  // the same function's earlier name
 };
 
 /*
     Not every Premiere version exports everything: 2023 has no `dna` family, which
     only appears in the versions with the newer Spectrum. Whatever is missing is
     logged and the rest carries on.
+
+    Fourteen of them were renamed in Premiere 2026, when Adobe swapped
+    boost::intrusive_ptr for dvacore's own IntrusivePtr in their signatures.
+    That changes the mangled name and nothing else, so those entries carry the
+    earlier name too, and each version exports one of the two.
 */
 static const ColorSymbol kColorSymbols[] = {
     // --- classic theme ---
@@ -1346,27 +1156,45 @@ static const ColorSymbol kColorSymbols[] = {
     {"?GetApplicationBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@"
      "drawbot@3@PEBVThemeProvider@ui@3@V?$IntrusivePtr@VSkinSet@core@skins@dvaui@"
      "@@RefCountedInterface@utility@dvacore@@@Z",
-     L"GetApplicationBackgroundColor"},
+     L"GetApplicationBackgroundColor",
+     "?GetApplicationBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@"
+     "drawbot@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@"
+     "dvaui@@@boost@@@Z"},
     {"?GetContentBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@"
      "3@PEBVThemeProvider@ui@3@V?$IntrusivePtr@VSkinSet@core@skins@dvaui@@"
      "@RefCountedInterface@utility@dvacore@@@Z",
-     L"GetContentBackgroundColor"},
+     L"GetContentBackgroundColor",
+     "?GetContentBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@draw"
+     "bot@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvau"
+     "i@@@boost@@@Z"},
     {"?GetListBoxBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@"
      "3@PEBVThemeProvider@ui@3@V?$IntrusivePtr@VSkinSet@core@skins@dvaui@@"
      "@RefCountedInterface@utility@dvacore@@@Z",
-     L"GetListBoxBackgroundColor"},
+     L"GetListBoxBackgroundColor",
+     "?GetListBoxBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@draw"
+     "bot@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvau"
+     "i@@@boost@@@Z"},
     {"?GetHoverBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@3@"
      "PEBVThemeProvider@ui@3@V?$IntrusivePtr@VSkinSet@core@skins@dvaui@@"
      "@RefCountedInterface@utility@dvacore@@@Z",
-     L"GetHoverBackgroundColor"},
+     L"GetHoverBackgroundColor",
+     "?GetHoverBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbo"
+     "t@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@"
+     "@@boost@@@Z"},
     {"?GetTabBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@3@"
      "PEBVThemeProvider@ui@3@V?$IntrusivePtr@VSkinSet@core@skins@dvaui@@"
      "@RefCountedInterface@utility@dvacore@@@Z",
-     L"GetTabBackgroundColor"},
+     L"GetTabBackgroundColor",
+     "?GetTabBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@"
+     "3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@@@"
+     "boost@@@Z"},
     {"?GetThumbnailBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@"
      "drawbot@3@PEBVThemeProvider@ui@3@V?$IntrusivePtr@VSkinSet@core@skins@dvaui@"
      "@@RefCountedInterface@utility@dvacore@@@Z",
-     L"GetThumbnailBackgroundColor"},
+     L"GetThumbnailBackgroundColor",
+     "?GetThumbnailBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@dr"
+     "awbot@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dv"
+     "aui@@@boost@@@Z"},
 
     // --- DNA ---
     {"?GrayBackgroundColor@GrayBackgroundColorDNA@dna@dvaui@@QEBAAEBVColorRGBA@"
@@ -1383,116 +1211,66 @@ static const ColorSymbol kColorSymbols[] = {
     {"?GetDefaultControlColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@3@"
      "PEBVThemeProvider@ui@3@V?$IntrusivePtr@VSkinSet@core@skins@dvaui@@"
      "@RefCountedInterface@utility@dvacore@@_N@Z",
-     L"GetDefaultControlColor"},
+     L"GetDefaultControlColor",
+     "?GetDefaultControlColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot"
+     "@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@@"
+     "@boost@@_N@Z"},
     {"?GetInteractiveControlColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@"
      "3@PEBVThemeProvider@ui@3@V?$IntrusivePtr@VSkinSet@core@skins@dvaui@@"
      "@RefCountedInterface@utility@dvacore@@@Z",
-     L"GetInteractiveControlColor"},
+     L"GetInteractiveControlColor",
+     "?GetInteractiveControlColor@utilities@skins@dvaui@@YAAEBVColorRGBA@dra"
+     "wbot@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dva"
+     "ui@@@boost@@@Z"},
     {"?GetDividerColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@3@"
      "PEBVThemeProvider@ui@3@V?$IntrusivePtr@VSkinSet@core@skins@dvaui@@"
      "@RefCountedInterface@utility@dvacore@@@Z",
-     L"GetDividerColor"},
+     L"GetDividerColor",
+     "?GetDividerColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@3@PEBV"
+     "ThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@@@boost@"
+     "@@Z"},
     {"?GetListBoxBorderColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@3@"
      "PEBVThemeProvider@ui@3@V?$IntrusivePtr@VSkinSet@core@skins@dvaui@@"
      "@RefCountedInterface@utility@dvacore@@@Z",
-     L"GetListBoxBorderColor"},
+     L"GetListBoxBorderColor",
+     "?GetListBoxBorderColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@"
+     "3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@@@"
+     "boost@@@Z"},
     {"?GetFieldBorderColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@3@"
      "PEBVThemeProvider@ui@3@V?$IntrusivePtr@VSkinSet@core@skins@dvaui@@"
      "@RefCountedInterface@utility@dvacore@@@Z",
-     L"GetFieldBorderColor"},
+     L"GetFieldBorderColor",
+     "?GetFieldBorderColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@3@"
+     "PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@@@bo"
+     "ost@@@Z"},
     {"?GetScrollBarThumbColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@3@"
      "PEBVThemeProvider@ui@3@V?$IntrusivePtr@VSkinSet@core@skins@dvaui@@"
      "@RefCountedInterface@utility@dvacore@@_N@Z",
-     L"GetScrollBarThumbColor"},
+     L"GetScrollBarThumbColor",
+     "?GetScrollBarThumbColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot"
+     "@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@@"
+     "@boost@@_N@Z"},
     {"?GetScrollBarTrackColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@3@"
      "PEBVThemeProvider@ui@3@V?$IntrusivePtr@VSkinSet@core@skins@dvaui@@"
      "@RefCountedInterface@utility@dvacore@@_N@Z",
-     L"GetScrollBarTrackColor"},
+     L"GetScrollBarTrackColor",
+     "?GetScrollBarTrackColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot"
+     "@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@@"
+     "@boost@@_N@Z"},
     {"?GetWidgetColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@3@"
      "PEBVThemeProvider@ui@3@V?$IntrusivePtr@VSkinSet@core@skins@dvaui@@"
      "@RefCountedInterface@utility@dvacore@@_N@Z",
-     L"GetWidgetColor"},
-
-    /*
-        The same functions as above, under the name they carry before
-        Premiere 2026.
-
-        Adobe swapped the smart pointer these take — boost::intrusive_ptr for
-        dvacore's own IntrusivePtr — which changes the mangled name and nothing
-        else: same arguments, same count, same convention. Carrying only the
-        newer spelling meant sixteen of them silently missed on Premiere 2023.
-
-        Whichever spelling the running version does not have is simply absent,
-        logged, and skipped, so both can sit in the table at once.
-    */
-    {"?GetApplicationBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@"
-     "drawbot@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@"
-     "dvaui@@@boost@@@Z",
-     L"GetApplicationBackgroundColor (pre-2026)", true},
-    {"?GetContentBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@draw"
-     "bot@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvau"
-     "i@@@boost@@@Z",
-     L"GetContentBackgroundColor (pre-2026)", true},
-    {"?GetListBoxBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@draw"
-     "bot@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvau"
-     "i@@@boost@@@Z",
-     L"GetListBoxBackgroundColor (pre-2026)", true},
-    {"?GetHoverBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbo"
-     "t@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@"
-     "@@boost@@@Z",
-     L"GetHoverBackgroundColor (pre-2026)", true},
-    {"?GetTabBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@"
-     "3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@@@"
-     "boost@@@Z",
-     L"GetTabBackgroundColor (pre-2026)", true},
-    {"?GetThumbnailBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@dr"
-     "awbot@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dv"
-     "aui@@@boost@@@Z",
-     L"GetThumbnailBackgroundColor (pre-2026)", true},
-    {"?GetDefaultControlColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot"
-     "@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@@"
-     "@boost@@_N@Z",
-     L"GetDefaultControlColor (pre-2026)", true},
-    {"?GetInteractiveControlColor@utilities@skins@dvaui@@YAAEBVColorRGBA@dra"
-     "wbot@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dva"
-     "ui@@@boost@@@Z",
-     L"GetInteractiveControlColor (pre-2026)", true},
-    {"?GetDividerColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@3@PEBV"
-     "ThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@@@boost@"
-     "@@Z",
-     L"GetDividerColor (pre-2026)", true},
-    {"?GetListBoxBorderColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@"
-     "3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@@@"
-     "boost@@@Z",
-     L"GetListBoxBorderColor (pre-2026)", true},
-    {"?GetFieldBorderColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@3@"
-     "PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@@@bo"
-     "ost@@@Z",
-     L"GetFieldBorderColor (pre-2026)", true},
-    {"?GetScrollBarThumbColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot"
-     "@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@@"
-     "@boost@@_N@Z",
-     L"GetScrollBarThumbColor (pre-2026)", true},
-    {"?GetScrollBarTrackColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot"
-     "@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@@"
-     "@boost@@_N@Z",
-     L"GetScrollBarTrackColor (pre-2026)", true},
-    {"?GetWidgetColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@3@PEBVT"
+     L"GetWidgetColor",
+     "?GetWidgetColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@3@PEBVT"
      "hemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@@@boost@@"
-     "_N@Z",
-     L"GetWidgetColor (pre-2026)", true},
-
+     "_N@Z"},
 };
 
 constexpr size_t kColorSymbolCount = ARRAYSIZE(kColorSymbols);
 
-static int g_colorHooksInstalled = 0;
-static int g_colorHooksMissing = 0;
-
 /*
     Every hook into Premiere's modules goes in through here: looked up by its
     mangled name, registered, and logged when the running version lacks it.
-    The counted ones are the color entry points the startup log reports on.
 */
 struct HookSpec {
     const char* mangled;
@@ -1501,7 +1279,13 @@ struct HookSpec {
     const wchar_t* label;
 };
 
-static bool InstallHook(HMODULE module, const HookSpec& spec, bool counted) {
+// What the startup log reports for one module. Each module fills its own.
+struct HookCount {
+    int installed = 0;
+    int missing = 0;
+};
+
+static void InstallHook(HMODULE module, const HookSpec& spec, HookCount* count) {
     FARPROC proc = GetProcAddress(module, spec.mangled);
     bool installed = false;
 
@@ -1514,47 +1298,39 @@ static bool InstallHook(HMODULE module, const HookSpec& spec, bool counted) {
         installed = true;
     }
 
-    if (counted) {
-        if (installed) {
-            g_colorHooksInstalled++;
-        } else {
-            g_colorHooksMissing++;
-        }
+    if (count) {
+        (installed ? count->installed : count->missing)++;
     }
-
-    return installed;
 }
 
 template <size_t N>
-static void InstallHooks(HMODULE module, const HookSpec (&specs)[N], bool counted) {
+static void InstallHooks(HMODULE module, const HookSpec (&specs)[N],
+                         HookCount* count) {
     for (const HookSpec& spec : specs) {
-        InstallHook(module, spec, counted);
+        InstallHook(module, spec, count);
     }
 }
 
 static void InstallOneColorHook(HMODULE dvaui, size_t index, void* hook,
-                                void** original) {
+                                void** original, HookCount& count) {
     const ColorSymbol& sym = kColorSymbols[index];
 
-    /*
-        An older spelling only exists where the newer name listed above it is
-        missing, and that name was already counted absent. So a missing
-        alternate is not counted again, and one that resolves takes the
-        absence back: the log reports functions, not spellings.
-    */
-    bool installed = InstallHook(dvaui, {sym.mangled, hook, original, sym.label},
-                                 !sym.alternate);
+    // A version exports one of the two names, so a function is only counted
+    // and logged as absent when it has neither.
+    const char* mangled = sym.mangled;
 
-    if (sym.alternate && installed) {
-        g_colorHooksInstalled++;
-        g_colorHooksMissing--;
+    if (sym.before2026 && !GetProcAddress(dvaui, mangled)) {
+        mangled = sym.before2026;
     }
+
+    InstallHook(dvaui, {mangled, hook, original, sym.label}, &count);
 }
 
 template <size_t... I>
-static void InstallColorHooksImpl(HMODULE dvaui, std::index_sequence<I...>) {
+static void InstallColorHooksImpl(HMODULE dvaui, HookCount& count,
+                                  std::index_sequence<I...>) {
     (InstallOneColorHook(dvaui, I, reinterpret_cast<void*>(&ColorHook<I>::Hook),
-                         reinterpret_cast<void**>(&ColorHook<I>::original)),
+                         reinterpret_cast<void**>(&ColorHook<I>::original), count),
      ...);
 }
 
@@ -1563,24 +1339,15 @@ static void InstallColorHooksImpl(HMODULE dvaui, std::index_sequence<I...>) {
 // ============================================================================
 
 /*
-    Not every interface color comes from a theme function.
-
-    Much of the monitor and timeline chrome is painted directly, without
-    consulting any theme, and there is no color function to intercept for it in
-    MediaCoreUI.dll or dvaplayer.dll. What does exist is the place most solid
-    fills pass through, no matter who picked the color:
+    Much of the monitor and timeline chrome is painted without asking the
+    theme, so the Direct2D brush factory that most solid fills pass through is
+    hooked as well:
 
         dvaui::drawbot::d2d::OSSupplier::NewBrush(const ColorRGBA&)
 
-    Most, not all: the band around the video in the monitors never arrives
-    here — see Known limitations in the readme.
-
-    The Direct2D brush factory. The color is read while building the brush, so a
-    stack temporary is safe here — unlike the theme function path, which returns a
-    reference.
-
-    The SVG sibling (SVGSupplier::NewBrush) is deliberately left out: it paints
-    icons, and a darkened icon disappears.
+    The color is read while the brush is built, so a stack temporary is safe.
+    The SVG sibling is left out: it paints icons, and a darkened icon
+    disappears.
 */
 
 using NewBrush_t = void*(*)(void*, const DvaColorRGBA*);
@@ -1592,34 +1359,18 @@ NewPen_t NewPen_Original = nullptr;
 DrawFillRect_t DrawFillRect_Original = nullptr;
 
 /*
-    Not every dark gray on screen is interface.
+    Not every dark gray on screen is interface: #373737 in the color picker is a
+    value being edited. The brush hooks decide by color alone, so the origin
+    decides instead. While a swatch or a parameter color is drawn, the thread
+    doing it paints what it is given. Interface colors drawn inside still arrive
+    themed, because the theme functions converted them first.
 
-    A color swatch shows a color the user chose: #373737 in the color picker is
-    a value being edited, not a panel. The brush hooks decide by color alone, so
-    they painted it in the palette — the value itself was never changed, but the
-    swatch showed a color that was not there, which is the one thing a color
-    picker must not do.
-
-    Color cannot tell the two apart, so the origin does. While a swatch or a
-    parameter color is being drawn, the thread doing it paints what it is given.
-    Interface colors drawn inside still arrive themed, because the theme
-    functions converted them before they got here; only raw colors are left
-    alone.
-*/
-/*
-    The depth alone cannot be trusted to come back down. An exception thrown by
-    Adobe's code under a content hook and caught above it unwinds through the
-    hook's frame, and the unwinder this mod is built with is not guaranteed to
-    run destructors for an exception that is not its own. A skipped
-    ~ContentScope would leave the thread passing every colour through for the
-    rest of the session.
-
-    So the outermost scope also records the frame it was opened in. Anything
-    running inside it is deeper on the same stack; a check made from higher up
-    can only mean the scope is gone, and clears it. The hook passes its own
-    frame in, rather than the scope using its address or reading the frame
-    itself: two scopes in one frame then compare equal, and the answer does not
-    depend on whether the constructor was inlined.
+    The outermost scope also records the frame it was opened in. An exception
+    from Adobe's code can unwind past the hook without running ~ContentScope,
+    since this mod's unwinder is not guaranteed to run destructors for a foreign
+    exception; a check made from higher up the stack can only mean the scope is
+    gone, and clears it. The hook passes its own frame in, so two scopes in one
+    frame compare equal whether or not the constructor was inlined.
 */
 thread_local int g_contentDepth = 0;
 thread_local uintptr_t g_contentFrame = 0;  // frame of the outermost live scope
@@ -1667,12 +1418,8 @@ static bool ContentScopesMatter() {
 }
 
 /*
-    The order of these checks is the difference between a light mod and a heavy one.
-
-    The overwhelming majority of colors arriving here will not be converted: they
-    are saturated, or too light. Rejecting those first, with float comparisons,
-    keeps the hash lookup off the common path — it only runs for the few colors that
-    actually become background.
+    Cheapest test first: most colors arriving here are saturated or too light,
+    and float comparisons turn them away before the hash lookup.
 */
 static bool ConvertForPaint(const DvaColorRGBA* in, DvaColorRGBA* out) {
     if (!g_settings.brushHook || !in || InContentScope()) {
@@ -1736,59 +1483,17 @@ void DrawFillRect_Hook(void* drawbot, const void* rect,
 }
 
 /*
-    Some entry points are handed a color reference to KEEP, not to read and drop.
-
-    A brush reads the color while it is being built, so a stack temporary is
-    safe there. A node manager that is told "erase your background with this
-    color" may hold the reference for as long as the panel lives. Handing it a
-    temporary would leave it pointing at reclaimed stack.
-
-    So these go through the slot table, the same one the theme functions use:
-    the returned pointer is stable for the life of the process.
-*/
-static const DvaColorRGBA* StableConvert(const DvaColorRGBA* in) {
-    // Read before the settings are, as in ConvertColorRef.
-    LONG generation = g_generation;
-
-    if (!g_settings.brushHook || !in || IsConvertedSlot(in) || InContentScope()) {
-        return in;
-    }
-
-    if (!ShouldConvert(*in)) {
-        return in;
-    }
-
-    if (IsProducedColor(*in)) {
-        return in;
-    }
-
-    DvaColorRGBA converted{};
-
-    if (!ConvertDvaColor(*in, &converted)) {
-        return in;
-    }
-
-    RememberProduced(converted);
-
-    const DvaColorRGBA* stored =
-        StoreColor(reinterpret_cast<uintptr_t>(in), *in, converted, generation,
-                   kFromEraseColor);
-
-    return stored ? stored : in;
-}
-
-/*
     Some panels erase their own background before their children draw, with a
     color handed over by reference:
 
         OS_NodeManager::ScEnableEraseBackgroundDrawing(OS_NodeManager*, const ColorRGBA&)
         UI_Node::UI_DispatchDrawFromRoot(const ColorRGBA&, Drawbot*, bool)
 
-    The first is a scope guard that switches background erasing on with a color;
-    the second draws a node subtree over one. The color they are handed has not
-    necessarily been through a theme color function, and neither builds a brush,
-    so both are hooked here — and both get a stable pointer, because either may
-    keep the reference.
+    That color has not necessarily been through a theme function. Neither
+    keeps the reference, so a stack temporary is safe here as it is for the
+    brushes. In dvaui 2023, 2025 and 2026 the constructor turns the color into
+    a GDI brush that the node manager keeps, and the dispatch only passes it
+    down to UI_DrawAndCache, which draws with it and returns.
 */
 using EraseBackgroundCtor_t = void* (*)(void*, void*, const DvaColorRGBA*);
 using DispatchDrawFromRoot_t = void (*)(void*, const DvaColorRGBA*, void*, bool);
@@ -1798,28 +1503,33 @@ DispatchDrawFromRoot_t DispatchDrawFromRoot_Original = nullptr;
 
 void* EraseBackgroundCtor_Hook(void* self, void* nodeManager,
                                const DvaColorRGBA* color) {
-    return EraseBackgroundCtor_Original(self, nodeManager, StableConvert(color));
+    DvaColorRGBA converted{};
+
+    if (ConvertForPaint(color, &converted)) {
+        return EraseBackgroundCtor_Original(self, nodeManager, &converted);
+    }
+
+    return EraseBackgroundCtor_Original(self, nodeManager, color);
 }
 
 void DispatchDrawFromRoot_Hook(void* self, const DvaColorRGBA* color,
                                void* drawbot, bool flag) {
-    DispatchDrawFromRoot_Original(self, StableConvert(color), drawbot, flag);
+    DvaColorRGBA converted{};
+
+    if (ConvertForPaint(color, &converted)) {
+        DispatchDrawFromRoot_Original(self, &converted, drawbot, flag);
+        return;
+    }
+
+    DispatchDrawFromRoot_Original(self, color, drawbot, flag);
 }
 
 /*
-    Premiere does not paint everything through dvaui.
-
-    UIFramework.dll is Adobe's own UI layer on top of the toolkit, and it has its
-    own drawing context with primitives that take a color directly:
+    UIFramework.dll, Premiere's UI layer on top of the toolkit, has drawing
+    primitives of its own that take a color directly and never ask the theme:
 
         UIF::DC::FillRect(const RectT<int>&, const ColorRGBA&)
         UIF::DC::FrameRect(const RectT<int>&, const ColorRGBA&)
-
-    Fills that go through here never ask the theme for their color, which is why
-    the theme hooks alone left them stock. The band around the video in the
-    monitors is not one of them: a diagnostic build logged every color arriving
-    at these entry points, and that gray was never among them — see Known
-    limitations in the readme.
 
     Both read the color while drawing, so a stack temporary is safe here.
 */
@@ -1851,33 +1561,14 @@ void UifFrameRect_Hook(void* self, const void* rect, const DvaColorRGBA* color) 
 }
 
 /*
-    The other FillRect, and the fills the mod deliberately leaves alone.
+    The ParamColor overloads, which the mod deliberately leaves alone.
 
-    UIF::DC has two of each drawing primitive: one taking dvaui's ColorRGBA, and
-    one taking ASL::ParamColor<unsigned char> — a parameter color, the 8-bit
-    color an effect or a clip carries. Every module that calls the ParamColor
-    overload is a panel showing user content: Effect Controls, the Timeline,
-    both monitors, Lumetri, Essential Graphics, the Project panel, the timecode
-    display. A diagnostic build that logged every color arriving here in four
-    palettes saw only content colors and colors already derived from the
-    palette, never an interface gray.
-
-    Converting here could therefore only ever repaint content: a dark gray
-    parameter shown in the palette instead of as itself. So these fills pass
-    their color through untouched, and run inside a ContentScope, so whatever
-    they call further in does not convert it either.
-
-    The byte layout was decoded from Adobe's own converter,
-    UIF::DVAConversionUtilities::ASLColorToDVAColorRGBA:
-
-        movzx eax, byte [rdx]        ->  out.r = b0 / 255
-        movzx eax, byte [rdx+1]      ->  out.g = b1 / 255
-        movzx eax, byte [rdx+2]      ->  out.b = b2 / 255
-        mov dword [rcx+0Ch], 1.0f    ->  alpha is a constant, never read
-
-    Bytes 0, 1, 2 are R, G, B. The same disassembly settles something that had
-    been an assumption all along: ColorRGBA really is four floats in r, g, b, a
-    order.
+    ASL::ParamColor<unsigned char> is a parameter color, the 8-bit color an
+    effect or a clip carries. Every module that calls these is a panel showing
+    user content — Effect Controls, the Timeline, the monitors, Lumetri,
+    Essential Graphics — and a diagnostic build saw only content colors arrive
+    here, never an interface gray. So they pass their color through, inside a
+    ContentScope, so that nothing they call further in converts it either.
 */
 using UifFillRectParam_t = void (*)(void*, const void*, const void*,
                                     unsigned char);
@@ -1897,7 +1588,7 @@ void UifFrameRectParam_Hook(void* self, const void* rect, const void* color) {
     UifFrameRectParam_Original(self, rect, color);
 }
 
-static void InstallUifHooks(HMODULE uif) {
+static void InstallUifHooks(HMODULE uif, HookCount& count) {
     const HookSpec specs[] = {
         {"?FillRect@DC@UIF@@QEAAXAEBV?$RectT@H@geom@dvacore@@"
          "AEBVColorRGBA@drawbot@dvaui@@@Z",
@@ -1922,10 +1613,10 @@ static void InstallUifHooks(HMODULE uif) {
          L"UIF::DC::FrameRect (ParamColor)"},
     };
 
-    InstallHooks(uif, specs, true);
+    InstallHooks(uif, specs, &count);
 }
 
-static void InstallBrushHooks(HMODULE dvaui) {
+static void InstallBrushHooks(HMODULE dvaui, HookCount& count) {
     const HookSpec specs[] = {
         {"?NewBrush@OSSupplier@d2d@drawbot@dvaui@@UEBAPEAUBrushInterface@34@"
          "AEBVColorRGBA@34@@Z",
@@ -1955,23 +1646,18 @@ static void InstallBrushHooks(HMODULE dvaui) {
          L"UI_Node::UI_DispatchDrawFromRoot"},
     };
 
-    InstallHooks(dvaui, specs, true);
+    InstallHooks(dvaui, specs, &count);
 }
 
 /*
-    The swatch controls, drawn inside a ContentScope — see the comment above it.
+    The swatch controls, drawn inside a ContentScope. UI_Swatch::UI_Draw is what
+    the color picker, marker colors and Essential Graphics draw their swatches
+    through; the skin-level draws cover a swatch painted through its skin by
+    something else, and popup menus draw label colors through their own
+    function.
 
-    UI_Swatch::UI_Draw is the one every swatch goes through, whichever skin
-    version paints it: the color picker's web-safe swatch, marker colors and
-    Essential Graphics all build theirs from UI_Swatch. The picker's larger chip
-    is a class of its own, handled below. The skin-level draws are hooked as
-    well, so a swatch painted through its skin by something other than a
-    UI_Swatch — the swatch pair control is one candidate — is covered too, and
-    popup menus draw label colors through their own swatch function.
-
-    All of them take pointers only, five at most with the fifth on the stack, so
-    one thunk forwarding five integer arguments carries each of them through
-    unchanged; a function that takes fewer ignores the extra ones.
+    All take pointers only, five at most with the fifth on the stack, so one
+    thunk forwarding five integer arguments carries each through unchanged.
 */
 using ContentDraw_t = void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t,
                                uintptr_t);
@@ -2010,7 +1696,7 @@ static void InstallOneContentHook(HMODULE dvaui, size_t index, void* hook,
                                   void** original) {
     const ColorSymbol& sym = kContentDraws[index];
 
-    InstallHook(dvaui, {sym.mangled, hook, original, sym.label}, false);
+    InstallHook(dvaui, {sym.mangled, hook, original, sym.label}, nullptr);
 }
 
 template <size_t... I>
@@ -2022,21 +1708,13 @@ static void InstallContentHooksImpl(HMODULE dvaui, std::index_sequence<I...>) {
 }
 
 /*
-    Content views that export no draw function of their own.
-
-    The color picker's chip — the new color over the original one — is a
-    ColorPickerChipView, and neither its draw function nor its vtable is
-    exported. What is exported is the function every node is drawn through,
-    UI_Node::UI_DrawSelf, and UI_DrawAndCache for nodes drawn into a cache. Those
-    are hooked, and the node being drawn is recognised by its class.
-
-    The class comes from MSVC's RTTI, which Adobe's modules carry. The slot before
-    a vtable points at the complete object locator, and the locator at the type
-    descriptor that holds the decorated name of the most-derived class. Every step
-    is checked against the image it must lie in — the locator's own RVA has to
-    lead back to the module it sits in — so anything that does not look like that
-    is simply not content. The answer is cached per vtable, so each class is
-    looked up once; every other node pays a hash and a compare.
+    Content views that export no draw function of their own, such as the color
+    picker's chip. Every node is drawn through UI_Node::UI_DrawSelf or
+    UI_DrawAndCache, so those are hooked and the node is recognized by its
+    most-derived class, from MSVC's RTTI: the slot before a vtable points at the
+    complete object locator, which points at the type descriptor holding the
+    decorated name. Every step is checked to lie in the right image, and the
+    answer is cached per vtable.
 */
 static const char* const kContentClasses[] = {
     ".?AVColorPickerChipView@ColorPicker@DLG@@",  // Premiere's color picker
@@ -2181,7 +1859,7 @@ static void InstallNodeDrawHooks(HMODULE dvaui) {
          L"UI_Node::UI_DrawAndCache"},
     };
 
-    InstallHooks(dvaui, specs, false);
+    InstallHooks(dvaui, specs, nullptr);
 }
 
 /*
@@ -2193,30 +1871,18 @@ static void InstallNodeDrawHooks(HMODULE dvaui) {
 volatile LONG g_dvauiHooked = FALSE;
 volatile LONG g_uifHooked = FALSE;
 
-static bool Claim(volatile LONG* flag) {
-    return InterlockedCompareExchange(flag, TRUE, FALSE) == FALSE;
-}
-
 /*
     Registers the hooks for whichever of the two modules is loaded now and not
-    done yet.
+    done yet, and returns whether it registered any. It does not apply them:
+    Windhawk does that when Wh_ModInit returns, and the loader hook and the
+    settings callback apply what this registers.
 
-    Returns whether anything was registered, so the caller knows whether an
-    apply is needed. Nothing here applies the operations itself: at init
-    Windhawk applies them when Wh_ModInit returns, and from the loader hook the
-    caller applies them once for the module that just arrived.
-
-    Once in, a hook stays in and checks its own setting every time it runs
-    (ConvertColorRef tests dvauiHook, ConvertForPaint and StableConvert test
-    brushHook), so one whose setting is off only forwards the call it received.
-    That is what lets a setting be switched off and on again without the mod
-    being reloaded — see Wh_ModSettingsChanged.
-
-    They only go in while a setting that works through these modules is on.
-    With "Premiere interface", "Direct fills" and "GDI surfaces" all off when
-    the mod loads, dvaui and UIFramework are not touched at all: the way back
-    to a working Premiere if an update ever breaks one of these hooks.
-    Switching one of them on later hooks the modules then.
+    Once in, a hook stays in and checks its own setting each time it runs,
+    which is what lets settings change without a reload. They only go in while
+    a setting that works through these modules is on: with "Premiere
+    interface", "Direct fills" and "GDI surfaces" all off when the mod loads,
+    dvaui and UIFramework are not touched at all — the way back to a working
+    Premiere if an update ever breaks one of these hooks.
 */
 static bool WantsPremiereHooks() {
     return g_settings.dvauiHook || g_settings.brushHook || g_settings.gdiHook;
@@ -2232,19 +1898,19 @@ static bool HookLoadedModules() {
     HMODULE dvaui = GetModuleHandleW(L"dvaui.dll");
 
     if (dvaui && Claim(&g_dvauiHooked)) {
-        g_colorHooksInstalled = 0;
-        g_colorHooksMissing = 0;
+        HookCount count;
 
-        InstallColorHooksImpl(dvaui, std::make_index_sequence<kColorSymbolCount>{});
-        InstallBrushHooks(dvaui);
+        InstallColorHooksImpl(dvaui, count,
+                              std::make_index_sequence<kColorSymbolCount>{});
+        InstallBrushHooks(dvaui, count);
         InstallContentHooksImpl(dvaui, std::make_index_sequence<kContentDrawCount>{});
         InstallNodeDrawHooks(dvaui);
 
         registered = true;
 
-        if (g_colorHooksInstalled) {
+        if (count.installed) {
             Wh_Log(L"dvaui: %d hooks active, %d absent in this version",
-                   g_colorHooksInstalled, g_colorHooksMissing);
+                   count.installed, count.missing);
         } else {
             Wh_Log(L"no dvaui color entry point matched — this Premiere version "
                    L"is not supported by the interface layer. The window frame "
@@ -2255,26 +1921,23 @@ static bool HookLoadedModules() {
     HMODULE uif = GetModuleHandleW(L"UIFramework.dll");
 
     if (uif && Claim(&g_uifHooked)) {
-        InstallUifHooks(uif);
+        HookCount count;
+
+        InstallUifHooks(uif, count);
         registered = true;
+
+        Wh_Log(L"UIFramework: %d hooks active, %d absent in this version",
+               count.installed, count.missing);
     }
 
     return registered;
 }
 
 /*
-    Why the loader instead of a thread.
-
-    dvaui and UIFramework are not necessarily loaded when the mod initialises —
-    enable the mod before Premiere starts and neither is. The previous answer
-    was a thread that polled GetModuleHandleW every 100 ms and gave up after two
-    minutes, which had two problems beyond the polling itself: a mod that starts
-    late enough missed its window silently, and the thread could still be inside
-    Wh_SetFunctionHook when Windhawk tore the mod down.
-
-    Hooking the loader removes all of it. The hook goes in kernelbase, not
-    kernel32, because kernel32's export is only a forwarder and Premiere's own
-    calls go straight to kernelbase.
+    dvaui and UIFramework are not necessarily loaded when the mod initializes —
+    enable the mod before Premiere starts and neither is — so the loader is
+    hooked, and each module is hooked when it arrives. The hook goes in
+    kernelbase, not kernel32, whose export is only a forwarder.
 */
 using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
 
@@ -2293,12 +1956,9 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD flags) {
     }
 
     /*
-        The question is not whether the module just returned is dvaui, but
-        whether dvaui is loaded now. A DLL brings its dependencies in with it,
-        and those never come back from LoadLibraryExW on their own: when dvaui
-        arrives as an import of whatever Premiere asked for, comparing the
-        returned handle would miss it for good. Once both are hooked, or while
-        no setting needs them, this is a couple of plain reads.
+        Whether dvaui is loaded now, not whether it is the module just
+        returned: it usually arrives as a dependency of something else. Once
+        both are hooked, this is a couple of plain reads.
     */
     if ((!g_dvauiHooked || !g_uifHooked) && HookLoadedModules() &&
         !Wh_ApplyHookOperations()) {
@@ -2331,6 +1991,22 @@ SetWindowTheme_t g_SetWindowTheme = nullptr;
 HMODULE g_uxtheme = nullptr;
 DWORD g_buildNumber = 0;
 
+using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
+GetDpiForWindow_t g_GetDpiForWindow = nullptr;  // Windows 10 1607 and later
+
+template <typename Function>
+static Function UxThemeProc(const char* name) {
+    return g_uxtheme ? reinterpret_cast<Function>(GetProcAddress(g_uxtheme, name))
+                     : nullptr;
+}
+
+template <typename Function>
+static Function UxThemeOrdinal(WORD ordinal) {
+    return g_uxtheme ? reinterpret_cast<Function>(
+                           GetProcAddress(g_uxtheme, MAKEINTRESOURCEA(ordinal)))
+                     : nullptr;
+}
+
 static DWORD GetWindowsBuild() {
     using RtlGetNtVersionNumbers_t = void(WINAPI*)(DWORD*, DWORD*, DWORD*);
 
@@ -2357,16 +2033,10 @@ static DWORD GetWindowsBuild() {
 }
 
 /*
-    Turns the process-wide app mode on or off.
-
-    Split out from the lookups below so that a settings change can flip it
-    without the mod being torn down and rebuilt. This is the one part of the
-    native dark mode that is not re-checked at call time — it is a state Windows
-    holds, not a branch in a hook.
-
-    Only a mode this mod set is ever undone. With "Window and system dialogs"
-    off from the start, nothing is called at all — not even to set Default,
-    which would still overwrite a mode something else in the process chose.
+    Turns the process-wide app mode on or off; a settings change calls it too.
+    Only a mode this mod set is ever undone: with "Window and system dialogs"
+    off from the start nothing is called, not even to set Default, which would
+    overwrite a mode something else in the process chose.
 */
 bool g_appModeForced = false;
 
@@ -2403,6 +2073,12 @@ static void ApplyAppMode(bool dark) {
 */
 static void InitNativeDarkMode() {
     g_buildNumber = GetWindowsBuild();
+
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+
+    g_GetDpiForWindow = user32 ? reinterpret_cast<GetDpiForWindow_t>(
+                                     GetProcAddress(user32, "GetDpiForWindow"))
+                               : nullptr;
 
     g_uxtheme =
         LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -2462,22 +2138,13 @@ constexpr DWORD kTextColor = 36;
 constexpr COLORREF kDwmColorDefault = 0xFFFFFFFF;  // DWMWA_COLOR_DEFAULT
 
 /*
-    The windows this mod actually changed, and what it changed on each.
-
-    The revert has to undo what the apply did and nothing more. Walking every
-    window in the process instead would clear the theme class of windows the
-    mod never touched — a common dialog, a CEF panel, a control Premiere
-    themed itself — and force immersive dark mode off on frames that may have
-    turned it on for themselves. So the apply records each window here, and
-    the revert walks this and nothing else.
-
-    Entries are not removed when a window is destroyed: nothing on that path
-    is hooked, and hooking it for this would cost every window in the process.
-    Instead the map drops dead handles whenever it doubles, and the revert
-    re-checks each handle before touching it.
+    The windows this mod changed, and what it changed on each, so the revert
+    undoes exactly that and never touches a window the mod left alone.
+    Destroyed windows are not removed as they go: the map drops dead handles
+    whenever it doubles, and the revert re-checks each handle.
 */
 constexpr BYTE kThemedClass = 1;  // SetWindowTheme(DarkMode_Explorer)
-constexpr BYTE kThemedFrame = 2;  // immersive dark mode, and caption colours on 22000+
+constexpr BYTE kThemedFrame = 2;  // immersive dark mode, and caption colors on 22000+
 
 SRWLOCK g_themedLock = SRWLOCK_INIT;
 std::unordered_map<HWND, BYTE> g_themedWindows;
@@ -2560,14 +2227,9 @@ static void ApplyDarkModeToWindow(HWND hwnd) {
     }
 
     /*
-        Title bar and border only exist on a top-level window, and GetParent is
-        the wrong way to ask: for a WS_POPUP it returns the OWNER, so Premiere's
-        owned dialogs and floating panels — which do have captions — were being
-        treated as children and kept the default colours. The style bit answers
-        the question that was actually being asked.
-
-        Immersive dark mode is a frame attribute as well, so it waits for the
-        same test: a child window has no frame for DWM to apply it to.
+        Frame attributes only apply to a top-level window. The style bit, not
+        GetParent: for an owned popup such as a dialog, GetParent returns the
+        owner.
     */
     if (!(GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_CHILD)) {
         BOOL dark = TRUE;
@@ -2586,26 +2248,17 @@ static void ApplyDarkModeToWindow(HWND hwnd) {
 }
 
 /*
-    Undoes exactly what ApplyDarkModeToWindow recorded for one window.
+    Undoes what ApplyDarkModeToWindow recorded for one window.
 
-    Immersive dark mode goes back to FALSE, and for these windows that is the
-    value they had rather than an override: it is only recorded on windows the
-    mod set it on, and nothing in Premiere sets it on its own. In Premiere 2026
-    the executable, dvaui.dll, dvacore.dll, UIFramework.dll and PlugPlug.dll do
-    not reference DwmSetWindowAttribute at all, and none of the process's
-    top-level windows is a Chromium frame — so the frames the mod turned dark
-    were light before it did. The caption colours go back to
-    DWMWA_COLOR_DEFAULT, which hands them to the system.
+    Immersive dark mode goes back to FALSE, which is the value these windows
+    had: Premiere's executable, dvaui, dvacore, UIFramework and PlugPlug do not
+    call DwmSetWindowAttribute, and none of its top-level windows is a Chromium
+    frame. The caption colors go back to DWMWA_COLOR_DEFAULT.
 
-    SetWindowTheme(nullptr, nullptr) clears the theme class rather than
-    restoring an earlier one, because there is no earlier one to restore: the
-    apply replaced it, and uxtheme has no call that reads it back. That is why
-    only windows the apply changed, and nobody has re-themed since (see
-    ForgetThemedClass), are cleared.
-
-    AllowDarkModeForWindow is left as it is. It is a permission, not a colour —
-    it only has an effect while the app mode allows dark — and the app mode is
-    handed back alongside this.
+    SetWindowTheme(nullptr, nullptr) clears the theme class, since uxtheme
+    cannot read the earlier one back; that is why only windows the apply
+    changed, and nobody re-themed since, are cleared. AllowDarkModeForWindow
+    stays: it is a permission that only acts while the app mode allows dark.
 */
 static void RevertWindow(HWND hwnd, BYTE applied) {
     if ((applied & kThemedClass) && g_SetWindowTheme) {
@@ -2633,16 +2286,9 @@ static bool IsOwnWindow(HWND hwnd) {
 /*
     Runs on unload, and when "Window and system dialogs" is switched off.
 
-    With the setting on, the apply reaches every window Premiere creates, so
-    this is still a couple of hundred windows — about 230 in a running
-    Premiere 2026 with a project open — and SetWindowTheme sends each one
-    WM_THEMECHANGED on its own thread. That cost is paid once per disable; a
-    settings change that leaves the frame on never comes here.
-
-    The map is emptied before any window is touched. SetWindowTheme waits for
-    the window's thread to answer, and if that thread were at that moment
-    creating a window and waiting for g_themedLock in RememberThemedWindow,
-    holding the lock across the send would deadlock the two.
+    The map is swapped out before any window is touched: SetWindowTheme waits
+    for the window's thread, which may at that moment be creating a window and
+    waiting for g_themedLock in RememberThemedWindow.
 */
 static void RevertThemedWindows() {
     std::unordered_map<HWND, BYTE> windows;
@@ -2661,7 +2307,7 @@ static void RevertThemedWindows() {
 }
 
 /*
-    A palette change with the frame on. Only the caption colours depend on the
+    A palette change with the frame on. Only the caption colors depend on the
     palette; the theme class and immersive dark mode stay as they are, so no
     window gets a WM_THEMECHANGED for this.
 */
@@ -2684,16 +2330,10 @@ static void RecolorThemedFrames() {
 }
 
 /*
-    Asks every window of the process to repaint, frame included.
-
-    Needed after a settings change and on unload: the colour table has just
-    been rewritten under Premiere, and the menu bar and the 1px line under it
-    are non-client area that nothing else would repaint. RedrawWindow only
-    invalidates here — each window paints on its own thread when it next gets
-    to it — so this waits on no UI thread.
-
-    RDW_ERASE too: native dialogs paint their background in WM_ERASEBKGND, and
-    without it their controls would repaint over the previous palette.
+    Asks every window of the process to repaint, frame included, after a
+    settings change and on unload. RedrawWindow only invalidates, so this waits
+    on no UI thread. RDW_ERASE because native dialogs paint their background in
+    WM_ERASEBKGND.
 */
 static BOOL CALLBACK RedrawTopLevel(HWND hwnd, LPARAM) {
     if (IsOwnWindow(hwnd)) {
@@ -2804,16 +2444,10 @@ HRESULT WINAPI SetWindowTheme_Hook(HWND hwnd, LPCWSTR subAppName,
 // ============================================================================
 
 /*
-    GetSysColorBrush promises that the brush it returns stays valid for the
-    life of the process, and Premiere keeps running after the mod goes away —
-    so a brush this mod hands out is never deleted, on unload or on a palette
-    change.
-
-    Keyed by colour rather than by index: a palette change then adds only the
-    handful of colours the new palette uses, switching back to a palette
-    already seen adds nothing, and the cap keeps endless editing of a custom
-    palette from running the process out of GDI handles. Past the cap the
-    system brush is returned instead.
+    GetSysColorBrush promises a brush valid for the life of the process, so a
+    brush this mod hands out is never deleted. Keyed by color, so switching
+    back to a palette already seen adds nothing; past the cap, the system brush
+    is returned instead.
 */
 struct SysBrush {
     COLORREF color;
@@ -2824,6 +2458,7 @@ constexpr size_t kMaxSysBrushes = 256;
 
 SysBrush g_sysBrushes[kMaxSysBrushes]{};
 size_t g_sysBrushCount = 0;
+volatile LONG g_sysBrushesFullLogged = FALSE;
 SRWLOCK g_brushLock = SRWLOCK_INIT;
 
 static bool MapSysColor(int index, COLORREF* out) {
@@ -2904,9 +2539,9 @@ static HBRUSH FindSysBrush(COLORREF color) {
 }
 
 /*
-    The shared lock covers the common case — a colour already cached — so
-    concurrent FillRect calls with a system colour do not queue behind one
-    another. Only a colour seen for the first time takes the exclusive lock.
+    The shared lock covers the common case — a color already cached — so
+    concurrent FillRect calls with a system color do not queue behind one
+    another. Only a color seen for the first time takes the exclusive lock.
 */
 static HBRUSH ThemeSysBrush(int index) {
     COLORREF mapped;
@@ -2926,8 +2561,9 @@ static HBRUSH ThemeSysBrush(int index) {
     AcquireSRWLockExclusive(&g_brushLock);
 
     brush = FindSysBrush(mapped);
+    bool full = !brush && g_sysBrushCount >= kMaxSysBrushes;
 
-    if (!brush && g_sysBrushCount < kMaxSysBrushes) {
+    if (!brush && !full) {
         brush = CreateSolidBrush(mapped);
 
         if (brush) {
@@ -2937,6 +2573,11 @@ static HBRUSH ThemeSysBrush(int index) {
     }
 
     ReleaseSRWLockExclusive(&g_brushLock);
+
+    if (full && Claim(&g_sysBrushesFullLogged)) {
+        Wh_Log(L"system brush cache full; new palette colors use the Windows "
+               L"brushes");
+    }
 
     return brush;
 }
@@ -2979,16 +2620,10 @@ int WINAPI FillRect_Hook(HDC hdc, const RECT* rect, HBRUSH brush) {
 // ============================================================================
 
 /*
-    Premiere's File / Edit / Clip bar is a native Win32 menu, and its theme does NOT
-    come from the public OpenThemeData: Windows opens non-client themes — menu,
-    scrollbar, border — through OpenNcThemeData, which exists only as uxtheme
-    ordinal 49 and appears in no header.
-
-    Intercepting only OpenThemeData leaves the dropdown menus dark and the top bar
-    white, which was exactly the symptom. Both have to be recorded.
-
-    DrawThemeBackground receives an opaque HTHEME and there is no API that returns
-    its class, so the class is noted at open time.
+    Menus take their theme from OpenThemeData and, for non-client parts, from
+    OpenNcThemeData, which exists only as uxtheme ordinal 49; both are hooked.
+    DrawThemeBackground receives an opaque HTHEME with no API to read its class
+    back, so menu themes are noted when they are opened.
 */
 
 constexpr int kMenuBarBackground = 7;
@@ -3004,39 +2639,37 @@ constexpr size_t kThemeSlots = 256;
 HTHEME g_menuThemes[kThemeSlots]{};
 SRWLOCK g_themeLock = SRWLOCK_INIT;
 
-/*
-    High-water mark: how many slots have ever been used.
-
-    Without it, every DrawThemeBackground call scans all 256 slots even in a process
-    that registered three themes. With it, it scans three.
-*/
+// How many slots have ever been used, which bounds every scan.
 size_t g_menuThemeHighWater = 0;
+
+volatile LONG g_menuThemesFullLogged = FALSE;
 
 static void RememberMenuTheme(HTHEME theme) {
     AcquireSRWLockExclusive(&g_themeLock);
 
-    bool known = false;
+    bool stored = false;
 
-    for (size_t i = 0; i < kThemeSlots; i++) {
+    for (size_t i = 0; i < g_menuThemeHighWater; i++) {
         if (g_menuThemes[i] == theme) {
-            known = true;
+            stored = true;
             break;
         }
     }
 
-    if (!known) {
-        for (size_t i = 0; i < kThemeSlots; i++) {
-            if (!g_menuThemes[i]) {
-                g_menuThemes[i] = theme;
-                if (i + 1 > g_menuThemeHighWater) {
-                    g_menuThemeHighWater = i + 1;
-                }
-                break;
-            }
+    for (size_t i = 0; i < kThemeSlots && !stored; i++) {
+        if (!g_menuThemes[i]) {
+            g_menuThemes[i] = theme;
+            g_menuThemeHighWater = std::max(g_menuThemeHighWater, i + 1);
+            stored = true;
         }
     }
 
     ReleaseSRWLockExclusive(&g_themeLock);
+
+    if (!stored && Claim(&g_menuThemesFullLogged)) {
+        Wh_Log(L"menu theme list full; menus opened from now on are not "
+               L"repainted in the palette");
+    }
 }
 
 static bool IsMenuTheme(HTHEME theme) {
@@ -3106,26 +2739,17 @@ DrawThemeText_t DrawThemeText_Original = nullptr;
 DrawThemeTextEx_t DrawThemeTextEx_Original = nullptr;
 
 /*
-    Observing the theme being opened and repainting over it is not enough: the class
-    being asked for has to be swapped.
-
-    Measured on this Windows, with the system app mode set to light:
+    The class asked for is swapped, not just painted over. With the system in
+    light mode:
 
         OpenNcThemeData(nullptr, L"Menu")            -> text #000000  (light)
         OpenNcThemeData(nullptr, L"DarkMode::Menu")  -> text #FFFFFF  (dark)
 
-    The "Menu" class does return the dark theme too, but only after
-    SetPreferredAppMode(ForceDark) and FlushMenuThemes have run. That is an ORDERING
-    dependency, and it is what leaves the bar white: user32 opens and caches the
-    menu bar theme on the window's first paint, which can happen before the mod
-    acts — and then the light theme is cached and no amount of repainting fixes the
-    half the theme decides (text, metrics, check glyphs, submenu arrows).
-
-    Asking for "DarkMode::Menu" explicitly depends on no state at all: the dark
-    variant comes back dark even with the whole of Windows in light mode.
-
-    The classes "DarkMode_Menu" and "DarkMode::Explorer::Menu" do not exist — they
-    return NULL. That is why the result is always checked before being used.
+    "Menu" only turns dark after SetPreferredAppMode(ForceDark) and
+    FlushMenuThemes, and user32 caches the menu theme on a window's first paint,
+    which can come before the mod acts; the text, metrics and glyphs would then
+    stay light. "DarkMode::Menu" is dark regardless. The result is checked,
+    because the class can be missing.
 */
 static HTHEME OpenDarkMenuTheme(HWND hwnd, LPCWSTR classList,
                                 OpenNcThemeData_t opener) {
@@ -3152,7 +2776,7 @@ static HTHEME TrackMenuTheme(HTHEME theme, LPCWSTR classList) {
         Exactly "Menu", the same test OpenDarkMenuTheme uses to decide what to
         swap. A substring match would also register any class whose name merely
         contains "menu", and PaintMenuPart would then repaint parts 7-15 of it
-        with menu colours — part numbers mean different things in different
+        with menu colors — part numbers mean different things in different
         classes, so that shows up as a corrupted control.
     */
     if (theme && classList && _wcsicmp(classList, L"Menu") == 0) {
@@ -3186,11 +2810,7 @@ HTHEME WINAPI OpenThemeDataForDpi_Hook(HWND hwnd, LPCWSTR classList, UINT dpi) {
                           classList);
 }
 
-/*
-    The File / Edit / Clip bar comes through here, not through the public
-    OpenThemeData: Windows opens non-client themes through OpenNcThemeData, which
-    exists only as uxtheme ordinal 49 and appears in no header.
-*/
+// Non-client menu themes, the menu bar's among them, come through here.
 HTHEME WINAPI OpenNcThemeData_Hook(HWND hwnd, LPCWSTR classList) {
     HTHEME dark = OpenDarkMenuTheme(hwnd, classList, OpenNcThemeData_Original);
 
@@ -3295,15 +2915,10 @@ HRESULT WINAPI DrawThemeBackgroundEx_Hook(HTHEME theme, HDC hdc, int part,
 }
 
 /*
-    Repainting only the background is not enough.
-
-    If Windows opened the light variant of the menu theme, the text comes back
-    black — and black on the background we just painted black is an invisible menu,
-    which is worse than a white one. So the text color is forced alongside it.
-
-    The DTTOPTS layout is written out here instead of coming from uxtheme.h because
-    that header varies between toolchains, and one field more or less misaligns the
-    whole struct with no compile error.
+    The text color is forced alongside the background: light-variant text on a
+    dark background would leave an invisible menu. DTTOPTS is written out here
+    because uxtheme.h varies between toolchains, and one field more or less
+    would misalign it silently.
 */
 struct ThemeDttOpts {
     DWORD dwSize;
@@ -3400,23 +3015,15 @@ HRESULT WINAPI DrawThemeTextEx_Hook(HTHEME theme, HDC hdc, int part, int state,
 // ============================================================================
 
 /*
-    The File / Edit / Clip bar is not themed content that can be repainted through
-    DrawThemeBackground. It is non-client area, and user32 draws it by sending the
-    window two undocumented messages:
+    The menu bar is non-client area, which user32 draws by sending the window
+    two undocumented messages:
 
         WM_UAHDRAWMENU      (0x91)  the background of the whole strip
         WM_UAHDRAWMENUITEM  (0x92)  each item, one at a time
 
-    They arrive at DefWindowProc / DefFrameProc, which is where the default — light
-    — drawing happens. Intercepting there and painting into the same HDCs and
-    rectangles Windows was going to use makes the strip ours.
-
-    Swapping the theme class to DarkMode::Menu does not fix this strip on its own:
-    that governs the dropdown menus. Two different mechanisms for two parts that
-    look like the same thing.
-
-    Technique from https://github.com/adzm/win32-darkmode (darkmenubar branch),
-    MIT licensed. The implementation below is this mod's own.
+    They reach DefWindowProc / DefFrameProc, where the default drawing happens,
+    so the mod paints into the same DCs and rectangles there. Technique from
+    https://github.com/adzm/win32-darkmode (darkmenubar branch), MIT licensed.
 */
 
 #define WM_UAHDRAWMENU 0x0091
@@ -3456,33 +3063,70 @@ struct UahDrawMenuItem {
     UahMenuItem umi;
 };
 
-thread_local HTHEME g_menuBarTheme = nullptr;
+/*
+    The theme for one menu bar item, opened when the item is drawn and closed
+    right after.
 
-static HTHEME MenuBarTheme(HWND hwnd) {
-    if (g_menuBarTheme) {
-        return g_menuBarTheme;
-    }
+    A handle kept per thread would be left open on every UI thread when the
+    mod unloads, since only that thread's own messages could close it, and it
+    would keep the DPI it was opened at after its window moves to another
+    monitor. Menu bar items only repaint on hover and non-client paints, so
+    opening one per item costs nothing visible.
 
-    OpenThemeData_t open = OpenThemeData_Original;
-
-    if (!open && g_uxtheme) {
-        open = reinterpret_cast<OpenThemeData_t>(
-            GetProcAddress(g_uxtheme, "OpenThemeData"));
-    }
-
-    if (!open) {
-        return nullptr;
-    }
-
+    The originals are called, so the hooks above do not swap the class again.
+*/
+static HTHEME OpenMenuBarTheme(HWND hwnd) {
     // The dark variant comes back dark even with Windows in light mode.
-    g_menuBarTheme = open(hwnd, L"DarkMode::Menu");
+    static constexpr LPCWSTR kClasses[] = {L"DarkMode::Menu", L"Menu"};
 
-    if (!g_menuBarTheme) {
-        g_menuBarTheme = open(hwnd, L"Menu");
+    auto openForDpi = OpenThemeDataForDpi_Original
+                          ? OpenThemeDataForDpi_Original
+                          : UxThemeProc<OpenThemeDataForDpi_t>("OpenThemeDataForDpi");
+    auto open = OpenThemeData_Original
+                    ? OpenThemeData_Original
+                    : UxThemeProc<OpenThemeData_t>("OpenThemeData");
+
+    UINT dpi = g_GetDpiForWindow ? g_GetDpiForWindow(hwnd) : 0;
+
+    for (LPCWSTR themeClass : kClasses) {
+        HTHEME theme = nullptr;
+
+        if (openForDpi && dpi) {
+            theme = openForDpi(hwnd, themeClass, dpi);
+        } else if (open) {
+            theme = open(hwnd, themeClass);
+        }
+
+        if (theme) {
+            return theme;
+        }
     }
 
-    return g_menuBarTheme;
+    return nullptr;
 }
+
+class MenuBarTheme {
+   public:
+    explicit MenuBarTheme(HWND hwnd) : m_theme(OpenMenuBarTheme(hwnd)) {}
+
+    ~MenuBarTheme() {
+        auto close = CloseThemeData_Original
+                         ? CloseThemeData_Original
+                         : UxThemeProc<CloseThemeData_t>("CloseThemeData");
+
+        if (m_theme && close) {
+            close(m_theme);
+        }
+    }
+
+    MenuBarTheme(const MenuBarTheme&) = delete;
+    MenuBarTheme& operator=(const MenuBarTheme&) = delete;
+
+    HTHEME get() const { return m_theme; }
+
+   private:
+    HTHEME m_theme;
+};
 
 static DrawThemeTextEx_t ResolveDrawThemeTextEx() {
     if (DrawThemeTextEx_Original) {
@@ -3590,13 +3234,13 @@ static bool PaintMenuBarItem(HWND hwnd, LPARAM lParam) {
         DefWindowProc, which then paints it again on top of the fill.
     */
     DrawThemeTextEx_t drawText = nullptr;
-    HTHEME theme = nullptr;
+    std::optional<MenuBarTheme> theme;
 
     if (hasText) {
         drawText = ResolveDrawThemeTextEx();
-        theme = MenuBarTheme(hwnd);
+        theme.emplace(hwnd);
 
-        if (!drawText || !theme) {
+        if (!drawText || !theme->get()) {
             return false;
         }
     }
@@ -3626,12 +3270,7 @@ static bool PaintMenuBarItem(HWND hwnd, LPARAM lParam) {
         return true;
     }
 
-    /*
-        Only a genuinely disabled item is dimmed. An unfocused window used to
-        count as disabled here, which meant alt-tabbing away greyed the whole
-        File/Edit/Clip bar — Windows does not do that, and on a second monitor
-        the bar would sit there looking permanently disabled.
-    */
+    // Only a disabled item is dimmed; Windows does not dim an inactive bar.
     bool disabled = (state & (ODS_GRAYED | ODS_DISABLED)) != 0;
 
     DWORD flags = DT_CENTER | DT_SINGLELINE | DT_VCENTER;
@@ -3645,7 +3284,7 @@ static bool PaintMenuBarItem(HWND hwnd, LPARAM lParam) {
     opts.dwFlags = kDttTextColor;
     opts.crText = disabled ? p.dimText : p.text;
 
-    HRESULT hr = drawText(theme, draw->um.hdc, kMenuBarItem, 1, label,
+    HRESULT hr = drawText(theme->get(), draw->um.hdc, kMenuBarItem, 1, label,
                           static_cast<int>(itemInfo.cch), flags,
                           &draw->dis.rcItem, &opts);
 
@@ -3673,44 +3312,19 @@ static bool HandleMenuBarMessage(HWND hwnd, UINT msg, LPARAM lParam,
             }
             return false;
 
-        case WM_THEMECHANGED:
-        case WM_DESTROY:
-            if (g_menuBarTheme) {
-                CloseThemeData_t close = CloseThemeData_Original;
-
-                if (!close && g_uxtheme) {
-                    close = reinterpret_cast<CloseThemeData_t>(
-                        GetProcAddress(g_uxtheme, "CloseThemeData"));
-                }
-
-                if (close) {
-                    close(g_menuBarTheme);
-                }
-
-                g_menuBarTheme = nullptr;
-            }
-            return false;
-
         default:
             return false;
     }
 }
 
 /*
-    DefWindowProc runs for practically every message of every window in the process.
-    The cheap test has to come first.
-
-    Comparing the message id is a chain of integer comparisons the compiler turns
-    into a jump table; GetMenu reaches into the window structure. With the right
-    order, the mod's cost on the common path — which is almost every path — stays
-    close to zero.
+    DefWindowProc runs for almost every message in the process, so the message
+    id, a jump table, is tested before anything reaches into the window.
 */
 static bool IsMenuBarMessage(UINT msg) {
     switch (msg) {
         case WM_UAHDRAWMENU:
         case WM_UAHDRAWMENUITEM:
-        case WM_THEMECHANGED:
-        case WM_DESTROY:
         case WM_NCPAINT:
         case WM_ACTIVATE:
             return true;
@@ -3722,8 +3336,7 @@ static bool IsMenuBarMessage(UINT msg) {
 /*
     WS_CHILD is tested before GetMenu, whose answer is undefined for a child
     window: in practice it is the control ID, so a child with a nonzero ID
-    would pass, and its WM_DESTROY would close the thread's cached menu bar
-    theme.
+    would pass.
 */
 static bool NeedsMenuBarWork(HWND hwnd, UINT msg) {
     return g_settings.menuHook && IsMenuBarMessage(msg) && hwnd &&
@@ -3864,51 +3477,44 @@ static DvaColorRGBA GdiToDva(COLORREF color) {
             GetBValue(color) / 255.0f, 1.0f};
 }
 
+static COLORREF DvaToGdi(const DvaColorRGBA& color) {
+    auto channel = [](float v) {
+        return ClampInt(static_cast<int>(v * 255.0f + 0.5f), 0, 255);
+    };
+
+    return RGB(channel(color.r), channel(color.g), channel(color.b));
+}
+
 /*
-    Adobe code often turns a colour that already came out of a theme function
-    into a COLORREF before it builds a brush or pen from it. So the produced
-    set is consulted here as on every other path: converting that colour again
-    would push it toward the darkest stop, and Onyx's border would land on the
-    surface tone. PackColorKey quantises to 8 bits, so a COLORREF compares
-    equal to the float colour it was made from.
+    The same conversion and the same guard as for dvaui's colors. Adobe code
+    often turns a color that already came out of a theme function into a
+    COLORREF before it builds a brush or pen from it, and converting it again
+    would push it toward the darkest stop. The produced set is keyed on 8-bit
+    channels, so a COLORREF compares equal to the float color it was made
+    from.
 */
 static COLORREF ConvertGdiColor(COLORREF color) {
-    float r = GetRValue(color) / 255.0f;
-    float g = GetGValue(color) / 255.0f;
-    float b = GetBValue(color) / 255.0f;
+    DvaColorRGBA in = GdiToDva(color);
+    DvaColorRGBA out{};
 
-    if (!IsNeutral(r, g, b, 0.035f)) {
+    if (IsProducedColor(in) || !ConvertDvaColor(in, &out)) {
         return color;
     }
 
-    float brightness = (r + g + b) / 3.0f;
+    RememberProduced(out);
 
-    if (brightness > g_settings.ceiling) {
-        return color;
-    }
+    return DvaToGdi(out);
+}
 
-    // Asked only after the float tests, as in ConvertForPaint.
-    if (IsProducedColor(GdiToDva(color))) {
-        return color;  // already a palette colour
-    }
-
-    COLORREF target = PickTarget(brightness);
-
-    int nr = ClampInt(
-        static_cast<int>(Blend(r, GetRValue(target) / 255.0f) * 255.0f + 0.5f), 0,
-        255);
-    int ng = ClampInt(
-        static_cast<int>(Blend(g, GetGValue(target) / 255.0f) * 255.0f + 0.5f), 0,
-        255);
-    int nb = ClampInt(
-        static_cast<int>(Blend(b, GetBValue(target) / 255.0f) * 255.0f + 0.5f), 0,
-        255);
-
-    COLORREF result = RGB(nr, ng, nb);
-
-    RememberProduced(GdiToDva(result));
-
-    return result;
+/*
+    Cheapest test first: the color test turns most calls away on its own, so
+    the module ranges are only walked for the dark grays that may be
+    converted. The caller's address is read in the hook and passed in; read in
+    here, it would be the hook's own address unless this was inlined.
+*/
+static bool ShouldConvertGdi(COLORREF color, void* caller) {
+    return g_settings.gdiHook && ShouldConvert(GdiToDva(color)) &&
+           !InContentScope() && IsAdobeUICaller(caller);
 }
 
 using CreateSolidBrush_t = HBRUSH(WINAPI*)(COLORREF);
@@ -3920,8 +3526,7 @@ CreatePen_t CreatePen_Original = nullptr;
 SetBkColor_t SetBkColor_Original = nullptr;
 
 HBRUSH WINAPI CreateSolidBrush_Hook(COLORREF color) {
-    if (g_settings.gdiHook && !InContentScope() &&
-        IsAdobeUICaller(__builtin_return_address(0))) {
+    if (ShouldConvertGdi(color, __builtin_return_address(0))) {
         color = ConvertGdiColor(color);
     }
 
@@ -3929,8 +3534,7 @@ HBRUSH WINAPI CreateSolidBrush_Hook(COLORREF color) {
 }
 
 HPEN WINAPI CreatePen_Hook(int style, int width, COLORREF color) {
-    if (g_settings.gdiHook && !InContentScope() &&
-        IsAdobeUICaller(__builtin_return_address(0))) {
+    if (ShouldConvertGdi(color, __builtin_return_address(0))) {
         color = ConvertGdiColor(color);
     }
 
@@ -3938,8 +3542,7 @@ HPEN WINAPI CreatePen_Hook(int style, int width, COLORREF color) {
 }
 
 COLORREF WINAPI SetBkColor_Hook(HDC hdc, COLORREF color) {
-    if (g_settings.gdiHook && !InContentScope() &&
-        IsAdobeUICaller(__builtin_return_address(0))) {
+    if (ShouldConvertGdi(color, __builtin_return_address(0))) {
         color = ConvertGdiColor(color);
     }
 
@@ -3951,10 +3554,6 @@ COLORREF WINAPI SetBkColor_Hook(HDC hdc, COLORREF color) {
 // ============================================================================
 
 static bool ParseHexColor(PCWSTR text, COLORREF* out) {
-    if (!text) {
-        return false;
-    }
-
     while (*text == L'#' || *text == L' ') {
         text++;
     }
@@ -3993,15 +3592,13 @@ static bool ParseHexColor(PCWSTR text, COLORREF* out) {
 }
 
 static COLORREF ReadColorSetting(PCWSTR name, COLORREF fallback) {
-    PCWSTR text = Wh_GetStringSetting(name);
+    auto text = WindhawkUtils::StringSetting::make(name);
     COLORREF parsed = fallback;
 
     if (!ParseHexColor(text, &parsed)) {
         Wh_Log(L"invalid value in %s, using the default", name);
         parsed = fallback;
     }
-
-    Wh_FreeStringSetting(text);
 
     return parsed;
 }
@@ -4012,26 +3609,11 @@ struct NamedPalette {
 };
 
 /*
-    Two of these palettes were not invented, they were measured.
-
-    PREMIERE: sampled from the icon of Adobe Premiere Pro.exe itself. Of the 728
-    opaque pixels, 72% are #00005B and 16% are #9999FF, with #3A3A99 and #7373D6 in
-    the mid-tones. The whole logo lives on hue 240 — which is why the ramp below
-    climbs from near-black to an indigo, with the text pulled toward the periwinkle
-    of the "Pr".
-
-    NEON and GLITCH: sampled from reference artwork. The first is near-black with
-    magenta; the original magenta accent enters lowered, because at full strength,
-    behind a menu item, it drowns the text instead of highlighting it.
-
-    In GLITCH the acid green cannot be background: 70% of the screen in it would be
-    far too bright to judge an image on, which is the job. So the green becomes the
-    BIAS of the black and the top of the ramp, and the magenta becomes the accent.
-    Strong color where it is a highlight, not where it is area.
-
-    COMFY: this one is designed rather than measured. Warm brown and lower contrast
-    than the others — the point is to sit in it for hours, so it deliberately does
-    NOT go near black.
+    Premiere is sampled from the app's icon, which lives on hue 240; Neon and
+    Glitch from reference artwork, with Neon's magenta accent lowered so it
+    highlights a menu item instead of drowning its text. Glitch's acid green
+    would be too bright as background, so it tints the black and tops the ramp.
+    Comfy is designed for long sessions and stays away from black.
 */
 static const NamedPalette kPalettes[] = {
     {L"onyx",
@@ -4085,7 +3667,7 @@ static const NamedPalette kPalettes[] = {
 };
 
 static void LoadSettings() {
-    PCWSTR name = Wh_GetStringSetting(L"palette");
+    auto name = WindhawkUtils::StringSetting::make(L"palette");
 
     // Onyx is the default: first in the table and also the fallback.
     Palette p = kPalettes[0].colors;
@@ -4116,8 +3698,6 @@ static void LoadSettings() {
             }
         }
     }
-
-    Wh_FreeStringSetting(name);
 
     /*
         Built in a local and published with a single assignment. Hooks on other
@@ -4165,25 +3745,12 @@ static void HookOrLog(Prototype* target, Prototype* hook, Prototype** original,
     }
 }
 
-template <typename Function>
-static Function UxThemeProc(const char* name) {
-    return g_uxtheme ? reinterpret_cast<Function>(GetProcAddress(g_uxtheme, name))
-                     : nullptr;
-}
-
-template <typename Function>
-static Function UxThemeOrdinal(WORD ordinal) {
-    return g_uxtheme ? reinterpret_cast<Function>(
-                           GetProcAddress(g_uxtheme, MAKEINTRESOURCEA(ordinal)))
-                     : nullptr;
-}
-
 BOOL Wh_ModInit() {
     LoadSettings();
 
     if (!AllocateSlots()) {
-        Wh_Log(L"could not allocate the colour table; the interface layer will "
-               L"pass colours through unchanged");
+        Wh_Log(L"could not allocate the color table; the interface layer will "
+               L"pass colors through unchanged");
     }
 
     WatchModuleLoads();
@@ -4255,10 +3822,7 @@ BOOL Wh_ModInit() {
     HookOrLog(CreatePen, CreatePen_Hook, &CreatePen_Original, L"CreatePen");
     HookOrLog(SetBkColor, SetBkColor_Hook, &SetBkColor_Original, L"SetBkColor");
 
-    /*
-        kernelbase, not kernel32: kernel32's LoadLibraryExW is only a forwarder,
-        and callers inside the process go straight to the real one.
-    */
+    // kernelbase, not kernel32; see LoadLibraryExW_Hook.
     HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
 
     auto loadLibraryExW =
@@ -4296,21 +3860,17 @@ void Wh_ModAfterInit() {
 void Wh_ModUninit() {
     /*
         Hooks are already removed by the time this runs, so the calls below go
-        straight to the system and the windows come back with their own colours.
+        straight to the system and the windows come back with their own colors.
     */
 
     // The notification callback lives in this image, which is about to go.
     StopWatchingModuleLoads();
 
-    /*
-        The colour table outlives the mod, so every reference Premiere still
-        holds into it gets its original colour back rather than the last
-        palette. The count is logged so the table size can be judged against
-        what a real session actually uses.
-    */
+    // Premiere's references into the table get their original colors back.
+    // The count is logged to judge the table size against real sessions.
     size_t used = RecomputeColorTable(true);
 
-    Wh_Log(L"colour table: %u of %u slots in use", static_cast<unsigned>(used),
+    Wh_Log(L"color table: %u of %u slots in use", static_cast<unsigned>(used),
            static_cast<unsigned>(kSlotCount));
 
     RevertThemedWindows();
@@ -4327,14 +3887,7 @@ void Wh_ModUninit() {
 
     RedrawProcessWindows();
 
-    /*
-        The g_sysBrushes brushes are deliberately leaked.
-
-        They were handed to Premiere by GetSysColorBrush, which promises a valid brush
-        for the rest of the process lifetime. Deleting them here would trade a few bytes
-        of leak for an invalid handle still in use — Premiere keeps running after the
-        mod goes away.
-    */
+    // The g_sysBrushes brushes are never deleted; see the comment above them.
 
     if (g_uxtheme) {
         FreeLibrary(g_uxtheme);
@@ -4345,17 +3898,15 @@ void Wh_ModUninit() {
 /*
     Settings are applied in place; the mod is not reloaded.
 
-    A reload would unload the image and leave behind what Premiere still holds
-    from it — the colour table, the system brushes, a menu theme per UI thread —
-    once per change, and trying out palettes is exactly the pattern that
-    changes settings many times in a row. It would also do less: the colours
-    Premiere took before the change would stay on the palette they were
-    converted under.
+    A reload would leave the color table and the system brushes behind once
+    per change, and trying out palettes changes settings many times in a row.
+    It would also do less: the colors Premiere took before the change would
+    stay on the palette they were converted under.
 
     Every hook already checks its own setting each time it runs. What is left
-    is the state that lives outside the hooks: the colour table, the process
+    is the state that lives outside the hooks: the color table, the process
     app mode, the window frames, the menu themes user32 caches, and a repaint
-    so the new colours show.
+    so the new colors show.
 */
 void Wh_ModSettingsChanged() {
     Settings previous = g_settings;
