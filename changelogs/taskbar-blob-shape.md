@@ -1,3 +1,7 @@
+## 1.1.1 ([Sep 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7e252f99133edd5fd4700e822286ca653da0b2cc/mods/taskbar-blob-shape.wh.cpp))
+
+* Compatibility with newer Windows 11 builds: the tray host is matched as a Panel (`SystemTrayFrameGrid` became a StackPanel), the search icon button is matched by class (its name gained a generated suffix), and visual-state detection tolerates the new wrapper Grid inside the button panels. No behavior changes on older builds.
+
 ## 1.1.0 ([Aug 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/53c9298760a1b89b1fbf686d7240d29dc65bc566/mods/taskbar-blob-shape.wh.cpp))
 
 * Extends the blob beyond task list buttons, each group behind its own toggle (all default off): Start/Search/Task view, Widgets, date and time, and the other checkable system tray buttons (control center, language, overflow chevron), shown while their flyout is open — on every monitor's instance, matching the native active highlight.
