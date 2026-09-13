@@ -220,7 +220,6 @@ menu presenter receives its name after creation.
 #include <cstdarg>
 #include <winrt/Windows.System.h>
 
-#include <winsock2.h>
 #include <windows.h>
 #include <inspectable.h>
 #include <shellapi.h>
