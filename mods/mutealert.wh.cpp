@@ -2141,7 +2141,6 @@ static DWORD WINAPI AudioThreadProc(void*) {
     bool observedEndpointOwned = false;
     bool observedHardwareMuteKnown = false;
     bool observedHardwareMuted = false;
-    ULONGLONG lastHardwareCallMuteAssert = 0;
     HANDLE waits[] = {g_audioStopEvent, g_audioWakeEvent};
 
     for (;;) {
@@ -2310,13 +2309,11 @@ static DWORD WINAPI AudioThreadProc(void*) {
             bool initialMuted =
                 !observedHardwareMuteKnown && muted != FALSE;
             bool assertMute = muted != FALSE && syncMute &&
-                (changed || initialMuted || lastHardwareCallMuteAssert == 0 ||
-                 now - lastHardwareCallMuteAssert >= 5000);
+                              (changed || initialMuted);
             bool assertUnmute = muted == FALSE && changed && syncUnmute;
             bool shouldSync = assertMute || assertUnmute;
-            if (g_settings.headsetSyncCalls && shouldSync &&
-                QueueActiveCallMuteState(muted != FALSE) && muted != FALSE) {
-                lastHardwareCallMuteAssert = now;
+            if (g_settings.headsetSyncCalls && shouldSync) {
+                QueueActiveCallMuteState(muted != FALSE);
             }
             if (g_settings.headsetSyncCalls &&
                 (changed || initialMuted) && shouldSync) {
