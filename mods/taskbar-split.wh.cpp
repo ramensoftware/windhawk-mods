@@ -2,7 +2,7 @@
 // @id              taskbar-split
 // @name            Taskbar Split: Running Left, Pinned Right
 // @description     Places running apps on the left and closed pinned apps on the right, with flexible empty space between them (Windows 11).
-// @version         0.2.1
+// @version         0.2.2
 // @author          Arkadiusz
 // @github          https://github.com/Artllex
 // @homepage        https://github.com/Artllex/taskbar-split
@@ -65,13 +65,20 @@ Closing it returns it to the right zone, where pinned icons can be made smaller
 and packed more densely. The persistent Windows pin list is not changed.
 
 Targets the horizontal primary taskbar on Windows 11 x64 and ARM64.
-ARM64 support requires runtime testing on an ARM64 device.
 Disable the mod to immediately return to the standard Windows layout.
 
-Do not combine with "Start button always on the left" or other mods that
+Unlike "Taskbar Start Button Centered Origin", this mod splits by running
+versus closed pinned apps, not by window position on the screen.
+Do not combine with "Start button always on the left",
+"Taskbar Start Button Centered Origin" (taskbar-centered-start-split-icons), or other mods that
 reposition or scale taskbar buttons. They can override the same layout.
 On crowded taskbars, reduced spacing can overlap buttons; reduce the pinned
 icon size or the middle gap, or unpin applications to free space.
+
+Positioning and pinned scaling currently use XAML render properties. Native
+overflow decisions retain the original layout, and the overflow button is not
+repositioned. Click targets, previews, jump lists and drag insertion positions
+still require verification on Windows before this version is considered ready.
 */
 // ==/WindhawkModReadme==
 
@@ -104,6 +111,7 @@ icon size or the middle gap, or unpin applications to free space.
 #include <atomic>
 #include <functional>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <commctrl.h>
@@ -302,8 +310,13 @@ FrameworkElement FindTaskbarRepeater(FrameworkElement const& root) {
 }
 
 winrt::weak_ref<FrameworkElement> g_repeaterCache;
+std::atomic<bool> g_repeaterCacheInvalidated{false};
 
 FrameworkElement GetTaskbarRepeater() {
+    // Only the taskbar UI thread touches the weak cache itself.
+    if (g_repeaterCacheInvalidated.exchange(false)) {
+        g_repeaterCache = nullptr;
+    }
     if (auto cached = g_repeaterCache.get()) {
         if (cached.XamlRoot()) {
             return cached;
@@ -376,6 +389,7 @@ struct AppliedVisualState {
     numerics::float3 originalTranslation{};
     numerics::float3 originalScale{};
     numerics::float3 originalCenterPoint{};
+    bool scaleApplied = false;
 };
 
 // Only weak UI references and numeric values: no strong thread-affine Visual
@@ -403,8 +417,6 @@ AppliedVisualState& EnsureVisualState(FrameworkElement const& element) {
     AppliedVisualState applied;
     applied.element = element;
     applied.originalTranslation = element.Translation();
-    applied.originalScale = element.Scale();
-    applied.originalCenterPoint = element.CenterPoint();
     return g_visualStates.emplace(winrt::get_abi(element), std::move(applied))
         .first->second;
 }
@@ -419,6 +431,20 @@ void PlaceElement(FrameworkElement const& element,
     translation.x += static_cast<float>(targetVisualX - nativeX);
     element.Translation(translation);
 
+    if (scaleValue == 1.0) {
+        if (applied.scaleApplied) {
+            element.Scale(applied.originalScale);
+            element.CenterPoint(applied.originalCenterPoint);
+            applied.scaleApplied = false;
+        }
+        return;
+    }
+    if (!applied.scaleApplied) {
+        applied.originalScale = element.Scale();
+        applied.originalCenterPoint = element.CenterPoint();
+        // Mark before writes so a partial failure can still be restored.
+        applied.scaleApplied = true;
+    }
     auto centerPoint = applied.originalCenterPoint;
     // Placement math assumes scaling from the left edge.
     centerPoint.x = 0;
@@ -431,14 +457,41 @@ void PlaceElement(FrameworkElement const& element,
     element.Scale(scale);
 }
 
+void RestoreElementState(AppliedVisualState& applied) {
+    if (auto element = applied.element.get()) {
+        element.Translation(applied.originalTranslation);
+        if (applied.scaleApplied) {
+            element.Scale(applied.originalScale);
+            element.CenterPoint(applied.originalCenterPoint);
+            applied.scaleApplied = false;
+        }
+    }
+}
+
+void PruneVisualStates(std::vector<FrameworkElement> const& children) {
+    std::unordered_set<void*> live;
+    for (auto const& child : children) {
+        live.insert(winrt::get_abi(child));
+    }
+    for (auto it = g_visualStates.begin(); it != g_visualStates.end();) {
+        if (!live.count(it->first) || !it->second.element.get()) {
+            // A detached but still alive element must be restored before
+            // forgetting it, in case Windows later reuses the same object.
+            try {
+                RestoreElementState(it->second);
+            } catch (winrt::hresult_error const&) {
+            }
+            it = g_visualStates.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 void RestoreVisualStates() {
     for (auto& [key, applied] : g_visualStates) {
         try {
-            if (auto element = applied.element.get()) {
-                element.Translation(applied.originalTranslation);
-                element.Scale(applied.originalScale);
-                element.CenterPoint(applied.originalCenterPoint);
-            }
+            RestoreElementState(applied);
         } catch (winrt::hresult_error const&) {
             // A disconnected element must not prevent restoring the others.
         }
@@ -487,6 +540,7 @@ void ApplySplitLayout() {
         double repeaterX = ElementX(repeater, content);
 
         auto children = RepeaterElements(repeater);
+        PruneVisualStates(children);
         std::vector<ButtonInfo> buttons;
         std::vector<FrameworkElement> systemButtons;
         buttons.reserve(children.size());
@@ -606,7 +660,7 @@ HRESULT WINAPI ArrangeOverride_Hook(
         ~ArrangeGuard() { g_insideArrange = false; }
     } guard;
     HWND window = EnsureTaskbarWindow();
-    if (!window || GetWindowThreadProcessId(window, nullptr) !=
+    if (!window || !g_taskbarSubclassed || GetWindowThreadProcessId(window, nullptr) !=
                        GetCurrentThreadId()) {
         return result;
     }
@@ -654,7 +708,7 @@ HWND EnsureTaskbarWindow() {
         g_taskbarWindow = nullptr;
         g_taskbarSubclassed = false;
         g_refreshQueued = false;
-        g_repeaterCache = nullptr;
+        g_repeaterCacheInvalidated = true;
         window = nullptr;
     }
     if (!window && !g_unloading) {
