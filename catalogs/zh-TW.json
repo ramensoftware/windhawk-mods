@@ -3598,7 +3598,7 @@
           7
         ],
         "ratingUsers": 13,
-        "updated": 1788370330000,
+        "updated": 1789322343000,
         "users": 110
       },
       "metadata": {
@@ -3611,7 +3611,7 @@
         ],
         "license": "MIT",
         "name": "JonaOS Draggable Desktop Widgets",
-        "version": "7"
+        "version": "7.2"
       }
     },
     "desktop-icon-selection-style": {

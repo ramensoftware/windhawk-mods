@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-13T16:46:29.000Z</updated>
+    <updated>2026-09-13T17:59:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[JonaOS Draggable Desktop Widgets 7.2]]></title>
+        <id>https://windhawk.net/mods/desktop-draggable-widgets#1a2bdd2ce8b8deda4f25e2c9cc1eed0594e0d221</id>
+        <link href="https://windhawk.net/mods/desktop-draggable-widgets"/>
+        <updated>2026-09-13T17:59:03.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Volume and Battery widgets can now be made Round.</li>
+</ul>]]></content>
+        <author>
+            <name>Jona like it, code it</name>
+            <uri>https://github.com/Stunning-dev</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Power Options Button 1.0.14]]></title>
         <id>https://windhawk.net/mods/power-options-button#4ab1b3861c4072e44fcc9fc9b3d89a0a3e98d4b8</id>
@@ -484,42 +497,6 @@ reimplementation of that idea; no code from that mod is included here.</p></li>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[File Operation Styler 1.0.0]]></title>
-        <id>https://windhawk.net/mods/file-operation-styler#a1c505d677b0f1af43e75a8bf8d8d39e9bb8d388</id>
-        <link href="https://windhawk.net/mods/file-operation-styler"/>
-        <updated>2026-09-09T22:22:18.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fileoperationstyler">File Operation Styler</h1>
-<p>A modern replacement for the standard Windows 11 file operation window.</p>
-<p>File Operation Styler gives copy, move, delete, and recycle operations a cleaner modern layout while keeping the normal Windows file operation behavior.</p>
-<p><img src="https://raw.githubusercontent.com/digart11/File-Operation-Styler/master/images/file-operation-styler.png" alt="File Operation Styler" /></p>
-<h3 id="defaultvsfileoperationstyler">Default vs File Operation Styler</h3>
-<p><img src="https://raw.githubusercontent.com/digart11/File-Operation-Styler/master/images/file-operation-styler-compare.png" alt="Default vs File Operation Styler" /></p>
-<h3 id="themes">Themes</h3>
-<p><img src="https://raw.githubusercontent.com/digart11/File-Operation-Styler/master/images/file-operation-styler-themes.png" alt="File Operation Styler Themes" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Modern copy and move progress window</li>
-<li>Circular percentage indicator</li>
-<li>Transferred size, remaining items, speed, and estimated time</li>
-<li>Progress graph in More Details view</li>
-<li>Multiple file operations in the same window</li>
-<li>Pause, resume, and cancel controls</li>
-<li>Works with normal Windows conflict and error dialogs</li>
-<li>Several built-in themes</li>
-<li>Custom colors, fonts, text sizes, and progress thickness</li>
-</ul>
-<h2 id="customization">Customization</h2>
-<p>Choose one of the included themes or adjust a few basic options to create your own look.</p>
-<h2 id="notes">Notes</h2>
-<p>File Operation Styler changes the appearance of the normal file operation window only.<br />
-Windows continues to handle the actual copy, move, delete, conflicts, and errors.</p>
-<p>Settings changes apply to new file-operation windows; operations already in progress may use the native Windows presentation until they complete.</p>]]></content>
-        <author>
-            <name>digART</name>
-            <uri>https://github.com/digart11</uri>
         </author>
     </entry>
 </feed>
