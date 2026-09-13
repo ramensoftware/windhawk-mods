@@ -6,9 +6,8 @@
 // @author          0Allu
 // @github          https://github.com/0Allu
 // @homepage        https://github.com/0Allu/minimize-to-tray
-// @include         explorer.exe
-// @architecture    x86-64
-// @compilerOptions -lshell32 -ldwmapi
+// @include         windhawk.exe
+// @compilerOptions -lshell32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -32,33 +31,30 @@ The mod supports standard Windows title bars and many applications with
 custom title bars, including Chromium/Electron applications and Steam.
 
 Some applications with unusual custom title bars might not be detected.
-
-Applications running with administrator privileges are not supported when
-Windows Explorer is running at normal user privileges. This is due to Windows
-User Interface Privilege Isolation (UIPI).
+Applications running with administrator privileges are not supported when the
+mod is running at normal user privileges. This is due to Windows User Interface
+Privilege Isolation (UIPI).
 
 ## Safety
 
-If the mod is disabled or unloaded normally, all windows hidden by the mod
-are automatically restored.
+A tray icon is created before a window is hidden. If the tray icon cannot be
+created, the window is left visible. If the mod is disabled or unloaded
+normally, all windows hidden by the mod are automatically restored. Hidden
+windows are also recovered if the dedicated mod process restarts.
 */
 // ==/WindhawkModReadme==
 
 #define NOMINMAX
 
-#include <dwmapi.h>
 #include <shellapi.h>
 #include <windows.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <string>
 #include <vector>
 
 namespace {
-
-// -----------------------------------------------------------------------------
-// Constants
-// -----------------------------------------------------------------------------
 
 constexpr UINT WM_TRAY_ICON = WM_APP + 100;
 constexpr UINT WM_HIDE_WINDOW = WM_APP + 101;
@@ -68,30 +64,21 @@ constexpr UINT_PTR TIMER_CLEANUP = 1;
 constexpr UINT MENU_RESTORE = 1;
 constexpr UINT MENU_CLOSE = 2;
 
+constexpr DWORD HIT_TEST_TIMEOUT_MS = 15;
+
 constexpr wchar_t HIDDEN_WINDOW_PROPERTY[] =
     L"Windhawk.MinimizeToTray.HiddenWindow.v1";
-
 constexpr wchar_t CONTROLLER_CLASS[] = L"WindhawkMinimizeToTrayController";
-
-// -----------------------------------------------------------------------------
-// Tray item
-// -----------------------------------------------------------------------------
 
 struct TrayItem {
     HWND hwnd = nullptr;
     DWORD processId = 0;
-
     UINT id = 0;
-
     HICON icon = nullptr;
     bool ownsIcon = false;
-
+    bool iconAdded = false;
     std::wstring title;
 };
-
-// -----------------------------------------------------------------------------
-// Globals
-// -----------------------------------------------------------------------------
 
 HWND g_controllerWindow = nullptr;
 HHOOK g_mouseHook = nullptr;
@@ -100,35 +87,32 @@ HANDLE g_workerThread = nullptr;
 HANDLE g_workerStartedEvent = nullptr;
 
 bool g_workerStartedSuccessfully = false;
-bool g_activeExplorerInstance = false;
 
 UINT g_taskbarCreatedMessage = 0;
 UINT g_nextTrayId = 1;
 
 HWND g_rightClickWindow = nullptr;
+DWORD g_rightClickProcessId = 0;
+POINT g_rightClickPoint = {};
 
 std::vector<TrayItem> g_trayItems;
 
-// -----------------------------------------------------------------------------
-// Basic window helpers
-// -----------------------------------------------------------------------------
-
 DWORD GetWindowProcessId(HWND hwnd) {
     DWORD processId = 0;
-
     if (hwnd) {
         GetWindowThreadProcessId(hwnd, &processId);
     }
-
     return processId;
 }
 
-bool IsTrayItemWindowValid(const TrayItem& item) {
-    if (!IsWindow(item.hwnd)) {
-        return false;
-    }
+UINT GetWindowDpiSafe(HWND hwnd) {
+    UINT dpi = GetDpiForWindow(hwnd);
+    return dpi ? dpi : 96;
+}
 
-    return GetWindowProcessId(item.hwnd) == item.processId;
+bool IsTrayItemWindowValid(const TrayItem& item) {
+    return IsWindow(item.hwnd) &&
+           GetWindowProcessId(item.hwnd) == item.processId;
 }
 
 TrayItem* FindTrayItemByWindow(HWND hwnd) {
@@ -155,7 +139,6 @@ TrayItem* FindTrayItemById(UINT id) {
 
 std::wstring GetWindowTitleSafe(HWND hwnd) {
     wchar_t title[256] = {};
-
     GetWindowTextW(hwnd, title, ARRAYSIZE(title));
 
     if (!title[0]) {
@@ -164,10 +147,6 @@ std::wstring GetWindowTitleSafe(HWND hwnd) {
 
     return title;
 }
-
-// -----------------------------------------------------------------------------
-// Window icon
-// -----------------------------------------------------------------------------
 
 HICON CopyWindowIcon(HWND hwnd, bool* ownsIcon) {
     if (ownsIcon) {
@@ -180,15 +159,13 @@ HICON CopyWindowIcon(HWND hwnd, bool* ownsIcon) {
         DWORD_PTR result = 0;
 
         if (SendMessageTimeoutW(hwnd, WM_GETICON, iconType, 0,
-                                SMTO_ABORTIFHUNG | SMTO_BLOCK, 50, &result) &&
+                                SMTO_ABORTIFHUNG, 50, &result) &&
             result) {
             HICON copiedIcon = CopyIcon(reinterpret_cast<HICON>(result));
-
             if (copiedIcon) {
                 if (ownsIcon) {
                     *ownsIcon = true;
                 }
-
                 return copiedIcon;
             }
         }
@@ -196,33 +173,28 @@ HICON CopyWindowIcon(HWND hwnd, bool* ownsIcon) {
 
     HICON classIcon =
         reinterpret_cast<HICON>(GetClassLongPtrW(hwnd, GCLP_HICONSM));
-
     if (!classIcon) {
-        classIcon = reinterpret_cast<HICON>(GetClassLongPtrW(hwnd, GCLP_HICON));
+        classIcon =
+            reinterpret_cast<HICON>(GetClassLongPtrW(hwnd, GCLP_HICON));
     }
 
     if (classIcon) {
         HICON copiedIcon = CopyIcon(classIcon);
-
         if (copiedIcon) {
             if (ownsIcon) {
                 *ownsIcon = true;
             }
-
             return copiedIcon;
         }
     }
 
     HICON fallback = LoadIconW(nullptr, IDI_APPLICATION);
-
     if (fallback) {
         HICON copiedIcon = CopyIcon(fallback);
-
         if (copiedIcon) {
             if (ownsIcon) {
                 *ownsIcon = true;
             }
-
             return copiedIcon;
         }
     }
@@ -230,280 +202,377 @@ HICON CopyWindowIcon(HWND hwnd, bool* ownsIcon) {
     return fallback;
 }
 
-// -----------------------------------------------------------------------------
-// Window filtering
-// -----------------------------------------------------------------------------
-
 bool IsExcludedWindow(HWND hwnd) {
-    if (!hwnd) {
-        return true;
-    }
-
-    if (hwnd == g_controllerWindow || hwnd == GetDesktopWindow()) {
+    if (!hwnd || hwnd == g_controllerWindow || hwnd == GetDesktopWindow()) {
         return true;
     }
 
     wchar_t className[128] = {};
-
     GetClassNameW(hwnd, className, ARRAYSIZE(className));
 
     return wcscmp(className, L"Shell_TrayWnd") == 0 ||
-
            wcscmp(className, L"Shell_SecondaryTrayWnd") == 0 ||
-
            wcscmp(className, L"Progman") == 0 ||
-
            wcscmp(className, L"WorkerW") == 0;
 }
 
-// -----------------------------------------------------------------------------
-// Custom title-bar detection
-// -----------------------------------------------------------------------------
+bool HasMinimizeFrame(HWND hwnd) {
+    LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+    LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
 
-bool IsPointInApproximateMinimizeButton(HWND hwnd, POINT screenPoint) {
+    if ((style & WS_CHILD) || (exStyle & WS_EX_NOACTIVATE)) {
+        return false;
+    }
+
+    return (style & WS_MINIMIZEBOX) != 0 &&
+           (style & WS_CAPTION) == WS_CAPTION;
+}
+
+bool GetProcessImageName(HWND hwnd, wchar_t* fileName, size_t fileNameSize) {
+    DWORD processId = GetWindowProcessId(hwnd);
+    if (!processId || !fileName || fileNameSize == 0) {
+        return false;
+    }
+
+    HANDLE process =
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    if (!process) {
+        return false;
+    }
+
+    wchar_t imagePath[1024] = {};
+    DWORD imagePathLength = ARRAYSIZE(imagePath);
+    bool success = false;
+
+    if (QueryFullProcessImageNameW(process, 0, imagePath, &imagePathLength)) {
+        const wchar_t* imageFileName = wcsrchr(imagePath, L'\\');
+        imageFileName = imageFileName ? imageFileName + 1 : imagePath;
+        success = wcsncpy_s(fileName, fileNameSize, imageFileName, _TRUNCATE) == 0;
+    }
+
+    CloseHandle(process);
+    return success;
+}
+
+bool IsSteamClientWindow(HWND hwnd) {
+    wchar_t className[128] = {};
+    GetClassNameW(hwnd, className, ARRAYSIZE(className));
+
+    if (wcscmp(className, L"SDL_app") != 0) {
+        return false;
+    }
+
+    // Depending on the Steam client version, the SDL top-level window can be
+    // owned by either steam.exe or steamwebhelper.exe. Restricting the rule by
+    // both class and process avoids affecting unrelated SDL applications.
+    wchar_t processName[MAX_PATH] = {};
+    if (!GetProcessImageName(hwnd, processName, ARRAYSIZE(processName))) {
+        return false;
+    }
+
+    return _wcsicmp(processName, L"steam.exe") == 0 ||
+           _wcsicmp(processName, L"steamwebhelper.exe") == 0;
+}
+
+bool IsPointInSteamMinimizeButton(HWND hwnd, POINT screenPoint) {
     RECT windowRect = {};
-
     if (!GetWindowRect(hwnd, &windowRect)) {
         return false;
     }
 
-    LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+    UINT dpi = GetWindowDpiSafe(hwnd);
+    int relativeY = screenPoint.y - windowRect.top;
+    int distanceFromRight = windowRect.right - screenPoint.x;
 
-    LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    return relativeY >= 0 && relativeY < MulDiv(48, dpi, 96) &&
+           distanceFromRight >= MulDiv(68, dpi, 96) &&
+           distanceFromRight <= MulDiv(115, dpi, 96);
+}
 
-    if (style & WS_CHILD) {
+// Cheap pre-filter for the low-level mouse hook. It intentionally uses a
+// generous caption-button area so normal right-clicks can be rejected without
+// sending a cross-process message.
+bool IsPotentialMinimizeClick(HWND hwnd,
+                              POINT screenPoint,
+                              bool isSteamClientWindow) {
+    RECT windowRect = {};
+    if (!GetWindowRect(hwnd, &windowRect)) {
         return false;
     }
 
-    if (exStyle & WS_EX_NOACTIVATE) {
-        return false;
-    }
-
-    UINT dpi = GetDpiForWindow(hwnd);
-
-    if (!dpi) {
-        dpi = 96;
-    }
-
-    wchar_t className[128] = {};
-
-    GetClassNameW(hwnd, className, ARRAYSIZE(className));
-
-    // -------------------------------------------------------------------------
-    // Steam / SDL
-    // -------------------------------------------------------------------------
-    //
-    // Steam uses an SDL top-level window and custom-drawn caption buttons.
-    // Its buttons are narrower than standard Windows caption buttons.
-    //
-
-    if (wcscmp(className, L"SDL_app") == 0) {
+    // Steam's custom SDL frame doesn't reliably advertise the standard Win32
+    // caption/minimize styles, so use a narrowly scoped Steam-only pre-filter.
+    if (isSteamClientWindow) {
+        UINT dpi = GetWindowDpiSafe(hwnd);
         int relativeY = screenPoint.y - windowRect.top;
-
         int distanceFromRight = windowRect.right - screenPoint.x;
 
-        int maxTitleBarHeight = MulDiv(48, dpi, 96);
-
-        int minimumDistance = MulDiv(68, dpi, 96);
-
-        int maximumDistance = MulDiv(115, dpi, 96);
-
-        return relativeY >= 0 && relativeY < maxTitleBarHeight &&
-               distanceFromRight >= minimumDistance &&
-               distanceFromRight <= maximumDistance;
+        return relativeY >= 0 && relativeY < MulDiv(56, dpi, 96) &&
+               distanceFromRight >= MulDiv(55, dpi, 96) &&
+               distanceFromRight <= MulDiv(130, dpi, 96);
     }
 
-    // -------------------------------------------------------------------------
-    // Generic custom frame
-    // -------------------------------------------------------------------------
+    if (!HasMinimizeFrame(hwnd)) {
+        return false;
+    }
 
-    int buttonWidth = GetSystemMetricsForDpi(SM_CXSIZE, dpi);
+    UINT dpi = GetWindowDpiSafe(hwnd);
+    LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
 
-    int buttonHeight = GetSystemMetricsForDpi(SM_CYSIZE, dpi);
-
-    int frameWidth = GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi);
-
+    int buttonWidth = std::max(GetSystemMetricsForDpi(SM_CXSIZE, dpi),
+                               MulDiv(50, dpi, 96));
     int frameHeight = GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi);
-
     int paddedBorder = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
-
-    int titleBarHeight = std::max(buttonHeight + frameHeight + paddedBorder,
-                                  MulDiv(48, dpi, 96));
+    int candidateHeight =
+        std::max(GetSystemMetricsForDpi(SM_CYSIZE, dpi) + frameHeight +
+                     paddedBorder,
+                 MulDiv(64, dpi, 96));
 
     if (screenPoint.y < windowRect.top ||
+        screenPoint.y >= windowRect.top + candidateHeight) {
+        return false;
+    }
 
+    int candidateWidth = buttonWidth * 4;
+    bool rightToLeft = (exStyle & WS_EX_LAYOUTRTL) != 0;
+
+    if (!rightToLeft) {
+        return screenPoint.x >= windowRect.right - candidateWidth &&
+               screenPoint.x < windowRect.right;
+    }
+
+    return screenPoint.x >= windowRect.left &&
+           screenPoint.x < windowRect.left + candidateWidth;
+}
+
+bool IsPointInApproximateMinimizeButton(HWND hwnd, POINT screenPoint) {
+    if (!HasMinimizeFrame(hwnd)) {
+        return false;
+    }
+
+    RECT windowRect = {};
+    if (!GetWindowRect(hwnd, &windowRect)) {
+        return false;
+    }
+
+    UINT dpi = GetWindowDpiSafe(hwnd);
+    LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+
+    int buttonWidth = GetSystemMetricsForDpi(SM_CXSIZE, dpi);
+    int buttonHeight = GetSystemMetricsForDpi(SM_CYSIZE, dpi);
+    int frameWidth = GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi);
+    int frameHeight = GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi);
+    int paddedBorder = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+
+    // These dimensions are intentionally conservative. They preserve tested
+    // compatibility with Chromium/Electron custom title bars while the
+    // HTCLIENT requirement below limits when this fallback can run.
+    int titleBarHeight = std::max(buttonHeight + frameHeight + paddedBorder,
+                                  MulDiv(48, dpi, 96));
+    if (screenPoint.y < windowRect.top ||
         screenPoint.y >= windowRect.top + titleBarHeight) {
         return false;
     }
 
     int customButtonWidth = std::max(buttonWidth, MulDiv(46, dpi, 96));
-
     bool rightToLeft = (exStyle & WS_EX_LAYOUTRTL) != 0;
 
     if (!rightToLeft) {
         int rightEdge = windowRect.right - frameWidth;
-
         int minimizeLeft = rightEdge - customButtonWidth * 3;
-
         int minimizeRight = rightEdge - customButtonWidth * 2;
 
-        return screenPoint.x >= minimizeLeft && screenPoint.x < minimizeRight;
+        return screenPoint.x >= minimizeLeft &&
+               screenPoint.x < minimizeRight;
     }
 
     int leftEdge = windowRect.left + frameWidth;
-
     int minimizeLeft = leftEdge + customButtonWidth * 2;
-
     int minimizeRight = leftEdge + customButtonWidth * 3;
 
     return screenPoint.x >= minimizeLeft && screenPoint.x < minimizeRight;
 }
 
-// -----------------------------------------------------------------------------
-// Main minimize-button hit testing
-// -----------------------------------------------------------------------------
-
 HWND FindMinimizeButtonWindow(POINT screenPoint) {
     HWND hwnd = WindowFromPoint(screenPoint);
-
     if (!hwnd) {
         return nullptr;
     }
 
     hwnd = GetAncestor(hwnd, GA_ROOT);
-
     if (!hwnd || !IsWindow(hwnd) || !IsWindowVisible(hwnd) ||
         IsExcludedWindow(hwnd)) {
         return nullptr;
     }
 
+    bool isSteamClientWindow = IsSteamClientWindow(hwnd);
+
+    // Avoid cross-process messages for ordinary right-clicks that are nowhere
+    // near a caption button.
+    if (!IsPotentialMinimizeClick(hwnd, screenPoint, isSteamClientWindow)) {
+        return nullptr;
+    }
+
+    // Steam's SDL title bar doesn't reliably participate in normal Win32
+    // caption hit testing. The exception is restricted to SDL_app windows
+    // owned by steam.exe or steamwebhelper.exe.
+    if (isSteamClientWindow) {
+        return IsPointInSteamMinimizeButton(hwnd, screenPoint) ? hwnd : nullptr;
+    }
+
     LPARAM pointParam = MAKELPARAM(static_cast<SHORT>(screenPoint.x),
                                    static_cast<SHORT>(screenPoint.y));
-
-    // -------------------------------------------------------------------------
-    // Method 1: WM_NCHITTEST
-    // -------------------------------------------------------------------------
-
     DWORD_PTR hitTestResult = HTNOWHERE;
 
-    if (SendMessageTimeoutW(hwnd, WM_NCHITTEST, 0, pointParam,
-                            SMTO_ABORTIFHUNG | SMTO_BLOCK, 50,
-                            &hitTestResult)) {
-        if (static_cast<LRESULT>(hitTestResult) == HTMINBUTTON) {
-            return hwnd;
-        }
+    if (!SendMessageTimeoutW(hwnd, WM_NCHITTEST, 0, pointParam,
+                             SMTO_ABORTIFHUNG, HIT_TEST_TIMEOUT_MS,
+                             &hitTestResult)) {
+        return nullptr;
     }
 
-    // -------------------------------------------------------------------------
-    // Method 2: DWM caption-button hit testing
-    // -------------------------------------------------------------------------
-
-    LRESULT dwmHitTest = HTNOWHERE;
-
-    if (DwmDefWindowProc(hwnd, WM_NCHITTEST, 0, pointParam, &dwmHitTest)) {
-        if (dwmHitTest == HTMINBUTTON) {
-            return hwnd;
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // Method 3: Custom-title-bar geometry
-    // -------------------------------------------------------------------------
-
-    if (IsPointInApproximateMinimizeButton(hwnd, screenPoint)) {
+    LRESULT hitTest = static_cast<LRESULT>(hitTestResult);
+    if (hitTest == HTMINBUTTON) {
         return hwnd;
     }
 
-    return nullptr;
+    // Only use geometry when the application reports client content at the
+    // point. This avoids overriding explicit HTCAPTION, HTSYSMENU, and other
+    // non-client results.
+    if (hitTest != HTCLIENT) {
+        return nullptr;
+    }
+
+    return IsPointInApproximateMinimizeButton(hwnd, screenPoint) ? hwnd
+                                                                 : nullptr;
 }
 
-// -----------------------------------------------------------------------------
-// Notification area icons
-// -----------------------------------------------------------------------------
+bool IsRightClickReleaseValid(HWND hwnd,
+                              DWORD processId,
+                              POINT downPoint,
+                              POINT upPoint) {
+    if (!IsWindow(hwnd) || GetWindowProcessId(hwnd) != processId) {
+        return false;
+    }
 
-bool AddNotificationIcon(const TrayItem& item) {
+    HWND windowAtPoint = WindowFromPoint(upPoint);
+    if (!windowAtPoint || GetAncestor(windowAtPoint, GA_ROOT) != hwnd) {
+        return false;
+    }
+
+    RECT windowRect = {};
+    if (!GetWindowRect(hwnd, &windowRect)) {
+        return false;
+    }
+
+    if (upPoint.x < windowRect.left || upPoint.x >= windowRect.right ||
+        upPoint.y < windowRect.top || upPoint.y >= windowRect.bottom) {
+        return false;
+    }
+
+    int tolerance = MulDiv(16, GetWindowDpiSafe(hwnd), 96);
+    LONG deltaX = upPoint.x - downPoint.x;
+    LONG deltaY = upPoint.y - downPoint.y;
+
+    if (deltaX < -tolerance || deltaX > tolerance ||
+        deltaY < -tolerance || deltaY > tolerance) {
+        return false;
+    }
+
+    return true;
+}
+
+bool AddNotificationIcon(TrayItem& item) {
     NOTIFYICONDATAW nid = {};
-
     nid.cbSize = sizeof(nid);
-
     nid.hWnd = g_controllerWindow;
-
     nid.uID = item.id;
-
     nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
-
     nid.uCallbackMessage = WM_TRAY_ICON;
-
     nid.hIcon = item.icon;
 
-    wcsncpy_s(nid.szTip, ARRAYSIZE(nid.szTip), item.title.c_str(), _TRUNCATE);
+    // Without NIM_SETVERSION, older notification-area behavior only uses the
+    // first 63 characters of the tooltip. Truncate deliberately.
+    wcsncpy_s(nid.szTip, 64, item.title.c_str(), _TRUNCATE);
 
-    return Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
+    item.iconAdded = Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
+    return item.iconAdded;
 }
 
-void DeleteNotificationIcon(const TrayItem& item) {
+void DeleteNotificationIcon(TrayItem& item) {
+    if (!item.iconAdded) {
+        return;
+    }
+
     NOTIFYICONDATAW nid = {};
-
     nid.cbSize = sizeof(nid);
-
     nid.hWnd = g_controllerWindow;
-
     nid.uID = item.id;
 
     Shell_NotifyIconW(NIM_DELETE, &nid);
+    item.iconAdded = false;
 }
 
 void RecreateNotificationIcons() {
-    for (const auto& item : g_trayItems) {
+    for (auto& item : g_trayItems) {
+        // Explorer lost all notification icons when it restarted.
+        item.iconAdded = false;
         AddNotificationIcon(item);
     }
 }
-
-// -----------------------------------------------------------------------------
-// Tray item management
-// -----------------------------------------------------------------------------
 
 void AddTrayItem(HWND hwnd, bool hideWindow) {
     if (!IsWindow(hwnd)) {
         return;
     }
 
-    if (FindTrayItemByWindow(hwnd)) {
-        if (hideWindow) {
-            ShowWindowAsync(hwnd, SW_HIDE);
+    if (TrayItem* existing = FindTrayItemByWindow(hwnd)) {
+        if (!existing->iconAdded) {
+            AddNotificationIcon(*existing);
         }
 
+        if (hideWindow && existing->iconAdded) {
+            ShowWindowAsync(hwnd, SW_HIDE);
+        }
         return;
     }
 
     TrayItem item;
-
     item.hwnd = hwnd;
-
     item.processId = GetWindowProcessId(hwnd);
-
     item.id = g_nextTrayId++;
-
     item.title = GetWindowTitleSafe(hwnd);
-
     item.icon = CopyWindowIcon(hwnd, &item.ownsIcon);
 
-    SetPropW(hwnd, HIDDEN_WINDOW_PROPERTY,
-             reinterpret_cast<HANDLE>(static_cast<INT_PTR>(1)));
+    if (hideWindow) {
+        // Never hide a new window unless we can mark it for recovery first.
+        if (!SetPropW(hwnd, HIDDEN_WINDOW_PROPERTY,
+                      reinterpret_cast<HANDLE>(static_cast<INT_PTR>(1)))) {
+            if (item.icon && item.ownsIcon) {
+                DestroyIcon(item.icon);
+            }
+            return;
+        }
+    }
 
     g_trayItems.push_back(item);
+    TrayItem& addedItem = g_trayItems.back();
 
-    if (!AddNotificationIcon(g_trayItems.back())) {
-        RemovePropW(hwnd, HIDDEN_WINDOW_PROPERTY);
+    if (!AddNotificationIcon(addedItem)) {
+        if (hideWindow) {
+            // This is a new hide request. Leave the window visible if there is
+            // no tray icon through which the user can restore it.
+            RemovePropW(hwnd, HIDDEN_WINDOW_PROPERTY);
 
-        if (item.icon && item.ownsIcon) {
-            DestroyIcon(item.icon);
+            if (addedItem.icon && addedItem.ownsIcon) {
+                DestroyIcon(addedItem.icon);
+            }
+
+            g_trayItems.pop_back();
+            Wh_Log(L"Failed to create tray icon for window %p", hwnd);
         }
 
-        g_trayItems.pop_back();
-
-        Wh_Log(L"Failed to create tray icon for window %p", hwnd);
-
+        // On recovery, keep the item and its existing recovery property. The
+        // cleanup timer and TaskbarCreated handler will retry NIM_ADD.
         return;
     }
 
@@ -512,26 +581,19 @@ void AddTrayItem(HWND hwnd, bool hideWindow) {
     }
 }
 
-void RemoveTrayItemByIndex(size_t index,
-                           bool restoreWindow,
-                           bool activateWindow) {
+void RemoveTrayItemByIndex(size_t index, bool restoreWindow) {
     if (index >= g_trayItems.size()) {
         return;
     }
 
     TrayItem item = g_trayItems[index];
-
-    DeleteNotificationIcon(item);
+    DeleteNotificationIcon(g_trayItems[index]);
 
     if (IsTrayItemWindowValid(item)) {
         RemovePropW(item.hwnd, HIDDEN_WINDOW_PROPERTY);
 
         if (restoreWindow) {
-            ShowWindowAsync(item.hwnd, SW_SHOW);
-
-            if (activateWindow) {
-                SetForegroundWindow(item.hwnd);
-            }
+            ShowWindow(item.hwnd, SW_SHOW);
         }
     }
 
@@ -549,20 +611,19 @@ void RestoreTrayItem(UINT id) {
         }
 
         HWND hwnd = g_trayItems[i].hwnd;
+        DWORD processId = g_trayItems[i].processId;
 
-        RemoveTrayItemByIndex(i, true, false);
+        RemoveTrayItemByIndex(i, true);
 
-        if (IsWindow(hwnd)) {
+        if (IsWindow(hwnd) && GetWindowProcessId(hwnd) == processId) {
             SetForegroundWindow(hwnd);
         }
-
         return;
     }
 }
 
 void CloseTrayItem(UINT id) {
     TrayItem* item = FindTrayItemById(id);
-
     if (!item || !IsTrayItemWindowValid(*item)) {
         return;
     }
@@ -572,55 +633,48 @@ void CloseTrayItem(UINT id) {
 
 void RestoreAllWindows() {
     while (!g_trayItems.empty()) {
-        RemoveTrayItemByIndex(g_trayItems.size() - 1, true, false);
+        RemoveTrayItemByIndex(g_trayItems.size() - 1, true);
     }
 }
 
 void CleanupTrayItems() {
     for (size_t i = g_trayItems.size(); i > 0; i--) {
         size_t index = i - 1;
-
         TrayItem& item = g_trayItems[index];
 
-        // Application was closed.
         if (!IsTrayItemWindowValid(item)) {
-            RemoveTrayItemByIndex(index, false, false);
-
+            RemoveTrayItemByIndex(index, false);
             continue;
         }
 
-        // The application restored its window itself, for example through
-        // its own notification-area icon.
+        // Applications such as Steam and Discord can restore themselves using
+        // their own tray icon. Remove our now-redundant icon and marker.
         if (IsWindowVisible(item.hwnd)) {
-            RemoveTrayItemByIndex(index, false, false);
+            RemoveTrayItemByIndex(index, false);
+            continue;
+        }
+
+        // Recovery can occur while Explorer's notification area is not ready.
+        // Keep retrying without dropping the recovery marker.
+        if (!item.iconAdded) {
+            AddNotificationIcon(item);
         }
     }
 }
-
-// -----------------------------------------------------------------------------
-// Recovery after Explorer restart
-// -----------------------------------------------------------------------------
 
 BOOL CALLBACK RecoverWindowProc(HWND hwnd, LPARAM) {
     if (!GetPropW(hwnd, HIDDEN_WINDOW_PROPERTY)) {
         return TRUE;
     }
 
-    // The recovery property is stale if the window is already visible.
     if (IsWindowVisible(hwnd)) {
         RemovePropW(hwnd, HIDDEN_WINDOW_PROPERTY);
-
         return TRUE;
     }
 
     AddTrayItem(hwnd, false);
-
     return TRUE;
 }
-
-// -----------------------------------------------------------------------------
-// Tray menu
-// -----------------------------------------------------------------------------
 
 void ShowTrayMenu(UINT id) {
     if (!FindTrayItemById(id)) {
@@ -628,19 +682,15 @@ void ShowTrayMenu(UINT id) {
     }
 
     HMENU menu = CreatePopupMenu();
-
     if (!menu) {
         return;
     }
 
     AppendMenuW(menu, MF_STRING, MENU_RESTORE, L"Restore");
-
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-
     AppendMenuW(menu, MF_STRING, MENU_CLOSE, L"Close");
 
     POINT cursor = {};
-
     GetCursorPos(&cursor);
 
     SetForegroundWindow(g_controllerWindow);
@@ -650,7 +700,6 @@ void ShowTrayMenu(UINT id) {
                        cursor.x, cursor.y, 0, g_controllerWindow, nullptr);
 
     DestroyMenu(menu);
-
     PostMessageW(g_controllerWindow, WM_NULL, 0, 0);
 
     switch (command) {
@@ -664,10 +713,6 @@ void ShowTrayMenu(UINT id) {
     }
 }
 
-// -----------------------------------------------------------------------------
-// Mouse hook
-// -----------------------------------------------------------------------------
-
 LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode != HC_ACTION) {
         return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
@@ -675,50 +720,43 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
     const auto* mouseInfo = reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
 
-    // -------------------------------------------------------------------------
-    // Right-button down
-    // -------------------------------------------------------------------------
+    // Don't turn synthetic input from automation tools into global actions.
+    if (mouseInfo->flags & LLMHF_INJECTED) {
+        return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
+    }
 
     if (wParam == WM_RBUTTONDOWN) {
         HWND hwnd = FindMinimizeButtonWindow(mouseInfo->pt);
 
         if (hwnd) {
             g_rightClickWindow = hwnd;
-
-            // Suppress the original right-click.
+            g_rightClickProcessId = GetWindowProcessId(hwnd);
+            g_rightClickPoint = mouseInfo->pt;
             return 1;
         }
 
         g_rightClickWindow = nullptr;
-    }
-
-    // -------------------------------------------------------------------------
-    // Right-button up
-    // -------------------------------------------------------------------------
-
-    else if (wParam == WM_RBUTTONUP && g_rightClickWindow) {
+        g_rightClickProcessId = 0;
+    } else if (wParam == WM_RBUTTONUP && g_rightClickWindow) {
         HWND originalWindow = g_rightClickWindow;
+        DWORD originalProcessId = g_rightClickProcessId;
+        POINT downPoint = g_rightClickPoint;
 
         g_rightClickWindow = nullptr;
+        g_rightClickProcessId = 0;
 
-        HWND currentWindow = FindMinimizeButtonWindow(mouseInfo->pt);
-
-        if (currentWindow == originalWindow) {
+        if (IsRightClickReleaseValid(originalWindow, originalProcessId,
+                                     downPoint, mouseInfo->pt)) {
             PostMessageW(g_controllerWindow, WM_HIDE_WINDOW,
                          reinterpret_cast<WPARAM>(originalWindow), 0);
         }
 
-        // The button-down event was swallowed, so swallow its matching
-        // button-up event too.
+        // The matching button-down was swallowed, so swallow button-up too.
         return 1;
     }
 
     return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
 }
-
-// -----------------------------------------------------------------------------
-// Controller window
-// -----------------------------------------------------------------------------
 
 LRESULT CALLBACK ControllerWindowProc(HWND hwnd,
                                       UINT message,
@@ -732,13 +770,12 @@ LRESULT CALLBACK ControllerWindowProc(HWND hwnd,
     switch (message) {
         case WM_HIDE_WINDOW:
             AddTrayItem(reinterpret_cast<HWND>(wParam), true);
-
             return 0;
 
         case WM_TRAY_ICON: {
             UINT id = static_cast<UINT>(wParam);
 
-            switch (static_cast<UINT>(lParam)) {
+            switch (LOWORD(lParam)) {
                 case WM_LBUTTONUP:
                     RestoreTrayItem(id);
                     break;
@@ -755,61 +792,41 @@ LRESULT CALLBACK ControllerWindowProc(HWND hwnd,
             if (wParam == TIMER_CLEANUP) {
                 CleanupTrayItems();
             }
-
             return 0;
 
         case WM_CLOSE:
+            RestoreAllWindows();
             DestroyWindow(hwnd);
             return 0;
 
         case WM_DESTROY:
             KillTimer(hwnd, TIMER_CLEANUP);
-
-            if (g_mouseHook) {
-                UnhookWindowsHookEx(g_mouseHook);
-
-                g_mouseHook = nullptr;
-            }
-
-            // Never leave applications inaccessible when the mod is
-            // disabled or unloaded.
-            RestoreAllWindows();
-
             g_controllerWindow = nullptr;
-
             PostQuitMessage(0);
-
             return 0;
     }
 
     return DefWindowProcW(hwnd, message, wParam, lParam);
 }
 
-// -----------------------------------------------------------------------------
-// Worker thread
-// -----------------------------------------------------------------------------
-
 DWORD WINAPI WorkerThreadProc(LPVOID) {
+    HINSTANCE instance = GetModuleHandleW(nullptr);
+    bool classRegistered = false;
+    bool startedEventSignaled = false;
+    DWORD exitCode = 1;
+
     g_taskbarCreatedMessage = RegisterWindowMessageW(L"TaskbarCreated");
 
-    HINSTANCE instance = GetModuleHandleW(nullptr);
-
     WNDCLASSW windowClass = {};
-
     windowClass.lpfnWndProc = ControllerWindowProc;
-
     windowClass.hInstance = instance;
-
     windowClass.lpszClassName = CONTROLLER_CLASS;
 
-    if (!RegisterClassW(&windowClass) &&
-        GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+    if (!RegisterClassW(&windowClass)) {
         Wh_Log(L"RegisterClassW failed: %u", GetLastError());
-
-        SetEvent(g_workerStartedEvent);
-
-        return 1;
+        goto Cleanup;
     }
+    classRegistered = true;
 
     g_controllerWindow = CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, CONTROLLER_CLASS, L"", WS_POPUP, 0,
@@ -817,133 +834,292 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
 
     if (!g_controllerWindow) {
         Wh_Log(L"CreateWindowExW failed: %u", GetLastError());
-
-        SetEvent(g_workerStartedEvent);
-
-        return 1;
+        goto Cleanup;
     }
 
-    // This is the same low-level hook architecture as the working version.
-    // WH_MOUSE_LL callbacks are delivered back to this thread, which owns
-    // the message loop below.
     g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, nullptr, 0);
-
     if (!g_mouseHook) {
         Wh_Log(L"SetWindowsHookExW failed: %u", GetLastError());
-
-        DestroyWindow(g_controllerWindow);
-
-        SetEvent(g_workerStartedEvent);
-
-        return 1;
+        goto Cleanup;
     }
 
     SetTimer(g_controllerWindow, TIMER_CLEANUP, 2000, nullptr);
 
-    // Recreate tray icons for windows which survived an Explorer restart.
+    // Recover windows left hidden if the tool process was restarted. If the
+    // notification area isn't available yet, their icons remain pending and
+    // are retried later without losing the recovery marker.
     EnumWindows(RecoverWindowProc, 0);
 
     g_workerStartedSuccessfully = true;
-
     SetEvent(g_workerStartedEvent);
+    startedEventSignaled = true;
 
     Wh_Log(L"Minimize to tray started");
 
-    MSG message;
+    {
+        MSG message;
+        BOOL result;
 
-    while (GetMessageW(&message, nullptr, 0, 0) > 0) {
-        TranslateMessage(&message);
+        while ((result = GetMessageW(&message, nullptr, 0, 0)) != 0) {
+            if (result == -1) {
+                Wh_Log(L"GetMessageW failed: %u", GetLastError());
+                break;
+            }
 
-        DispatchMessageW(&message);
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
+        }
     }
 
-    UnregisterClassW(CONTROLLER_CLASS, instance);
+    exitCode = 0;
 
-    return 0;
+Cleanup:
+    if (!startedEventSignaled && g_workerStartedEvent) {
+        SetEvent(g_workerStartedEvent);
+    }
+
+    if (g_mouseHook) {
+        UnhookWindowsHookEx(g_mouseHook);
+        g_mouseHook = nullptr;
+    }
+
+    if (g_controllerWindow) {
+        RestoreAllWindows();
+        DestroyWindow(g_controllerWindow);
+        g_controllerWindow = nullptr;
+    } else if (!g_trayItems.empty()) {
+        // Normally WM_CLOSE already restored the windows before destroying the
+        // controller. Keep this as a last-resort cleanup path.
+        RestoreAllWindows();
+    }
+
+    if (classRegistered) {
+        UnregisterClassW(CONTROLLER_CLASS, instance);
+    }
+
+    return exitCode;
 }
 
 }  // namespace
 
-// -----------------------------------------------------------------------------
-// Windhawk callbacks
-// -----------------------------------------------------------------------------
-
-BOOL Wh_ModInit() {
-    // Explorer can optionally run folder windows in separate explorer.exe
-    // processes. Only run the controller inside the Explorer process which
-    // owns the Windows shell.
-    HWND shellWindow = GetShellWindow();
-
-    if (shellWindow) {
-        DWORD shellProcessId = 0;
-
-        GetWindowThreadProcessId(shellWindow, &shellProcessId);
-
-        if (shellProcessId != 0 && shellProcessId != GetCurrentProcessId()) {
-            return TRUE;
-        }
-    }
-
-    g_activeExplorerInstance = true;
-
+BOOL WhTool_ModInit() {
     g_workerStartedSuccessfully = false;
 
     g_workerStartedEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-
     if (!g_workerStartedEvent) {
         Wh_Log(L"CreateEventW failed: %u", GetLastError());
-
         return FALSE;
     }
 
     g_workerThread =
         CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, nullptr);
-
     if (!g_workerThread) {
         Wh_Log(L"CreateThread failed: %u", GetLastError());
-
         CloseHandle(g_workerStartedEvent);
-
         g_workerStartedEvent = nullptr;
-
         return FALSE;
     }
 
     WaitForSingleObject(g_workerStartedEvent, INFINITE);
-
     CloseHandle(g_workerStartedEvent);
-
     g_workerStartedEvent = nullptr;
 
     if (!g_workerStartedSuccessfully) {
         WaitForSingleObject(g_workerThread, INFINITE);
-
         CloseHandle(g_workerThread);
-
         g_workerThread = nullptr;
-
         return FALSE;
     }
 
     return TRUE;
 }
 
-void Wh_ModUninit() {
-    if (!g_activeExplorerInstance) {
-        return;
-    }
+void WhTool_ModSettingsChanged() {
+}
 
+void WhTool_ModUninit() {
     if (g_controllerWindow) {
-        SendMessageW(g_controllerWindow, WM_CLOSE, 0, 0);
+        PostMessageW(g_controllerWindow, WM_CLOSE, 0, 0);
     }
 
     if (g_workerThread) {
         WaitForSingleObject(g_workerThread, INFINITE);
-
         CloseHandle(g_workerThread);
-
         g_workerThread = nullptr;
     }
+}
 
-    g_activeExplorerInstance = false;
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
