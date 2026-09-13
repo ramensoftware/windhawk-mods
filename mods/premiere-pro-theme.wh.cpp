@@ -2772,6 +2772,10 @@ static HTHEME OpenDarkMenuTheme(HWND hwnd, LPCWSTR classList,
 }
 
 static HTHEME TrackMenuTheme(HTHEME theme, LPCWSTR classList) {
+    if (!theme) {
+        return theme;
+    }
+
     /*
         Exactly "Menu", the same test OpenDarkMenuTheme uses to decide what to
         swap. A substring match would also register any class whose name merely
@@ -2779,8 +2783,19 @@ static HTHEME TrackMenuTheme(HTHEME theme, LPCWSTR classList) {
         with menu colors — part numbers mean different things in different
         classes, so that shows up as a corrupted control.
     */
-    if (theme && classList && _wcsicmp(classList, L"Menu") == 0) {
+    if (classList && _wcsicmp(classList, L"Menu") == 0) {
         RememberMenuTheme(theme);
+    } else {
+        /*
+            A menu theme's handle is not freed only through the CloseThemeData
+            hooked below. uxtheme releases non-client themes itself when the
+            owning window is destroyed or the theme or DPI changes, none of
+            which comes through that export, and then hands the same value back
+            for another class. Dropping it the moment it reappears as a
+            non-menu class keeps a stale handle from making PaintMenuPart
+            repaint that control in menu colors.
+        */
+        ForgetMenuTheme(theme);
     }
 
     return theme;
@@ -3436,38 +3451,6 @@ LRESULT WINAPI DefFrameProcA_Hook(HWND hwnd, HWND mdiClient, UINT msg,
     return result;
 }
 
-/*
-    An app can install its own background brush on a menu. If that brush is light,
-    the menu goes light again underneath everything we did. Replacing the brush here
-    is cheaper than working out later why one single menu came back white.
-*/
-using SetMenuInfo_t = BOOL(WINAPI*)(HMENU, LPCMENUINFO);
-
-SetMenuInfo_t SetMenuInfo_Original = nullptr;
-
-BOOL WINAPI SetMenuInfo_Hook(HMENU menu, LPCMENUINFO info) {
-    /*
-        Only a MENUINFO of exactly the documented size is copied. Trusting a
-        larger cbSize would read past what the caller actually passed; anything
-        else is forwarded untouched for SetMenuInfo to judge.
-    */
-    if (!g_settings.menuHook || !info || info->cbSize != sizeof(MENUINFO) ||
-        !(info->fMask & MIM_BACKGROUND)) {
-        return SetMenuInfo_Original(menu, info);
-    }
-
-    HBRUSH brush = ThemeSysBrush(COLOR_MENU);
-
-    if (!brush) {
-        return SetMenuInfo_Original(menu, info);
-    }
-
-    MENUINFO copy = *info;
-    copy.hbrBack = brush;
-
-    return SetMenuInfo_Original(menu, &copy);
-}
-
 // ============================================================================
 // GDI SURFACES
 // ============================================================================
@@ -3815,7 +3798,6 @@ BOOL Wh_ModInit() {
               L"DefFrameProcW");
     HookOrLog(DefFrameProcA, DefFrameProcA_Hook, &DefFrameProcA_Original,
               L"DefFrameProcA");
-    HookOrLog(SetMenuInfo, SetMenuInfo_Hook, &SetMenuInfo_Original, L"SetMenuInfo");
 
     HookOrLog(CreateSolidBrush, CreateSolidBrush_Hook, &CreateSolidBrush_Original,
               L"CreateSolidBrush");
