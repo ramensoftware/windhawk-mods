@@ -27,12 +27,25 @@ Right-click a window's minimize button to hide the window in the system tray.
 
 The application continues running while its window is hidden.
 
+## Custom title bars
+
+Standard Windows minimize buttons work automatically.
+
+Applications which draw their own title bar can be enabled with the **Custom
+title bar rules** setting. Ready-made rules for Discord and Steam are included,
+but custom title bar support is disabled by default to avoid intercepting
+right-clicks in application toolbars or other client-area controls.
+
+A custom rule uses this format:
+
+`executable|window class|height|min right|max right`
+
+The three numeric values are in DPI-independent pixels. `height` is the maximum
+distance below the top of the window, and `min right` / `max right` define the
+button's distance from the right edge.
+
 ## Compatibility
 
-The mod supports standard Windows title bars and many applications with
-custom title bars, including Chromium/Electron applications and Steam.
-
-Some applications with unusual custom title bars might not be detected.
 Applications running with administrator privileges are not supported when the
 mod is running at normal user privileges. This is due to Windows User Interface
 Privilege Isolation (UIPI).
@@ -41,32 +54,59 @@ Privilege Isolation (UIPI).
 
 A tray icon is created before a window is hidden. If the tray icon cannot be
 created, the window is left visible. If the mod is disabled or unloaded
-normally, all windows hidden by the mod are automatically restored. Hidden
+normally, restore requests are posted for all windows hidden by the mod. Hidden
 windows are also recovered if the dedicated mod process restarts.
+
+If the dedicated tool process is forcibly terminated and the mod is then
+disabled before it can restart, recovery code cannot run. In that unusual case,
+the affected application may need to be restarted manually.
 */
 // ==/WindhawkModReadme==
 
-#define NOMINMAX
+// ==WindhawkModSettings==
+/*
+- enableCustomTitleBarRules: false
+  $name: Enable custom title bar rules
+  $description: >-
+    Enables geometry-based minimize detection only for applications listed in
+    Custom title bar rules. Leave disabled for the safest behavior.
+
+- customTitleBarRules:
+  - Discord.exe|*|48|90|150
+  - steam.exe|SDL_app|48|68|115
+  - steamwebhelper.exe|SDL_app|48|68|115
+  $name: Custom title bar rules
+  $description: >-
+    One rule per application in the format executable|window class|height|min
+    right|max right. Numeric values are DPI-independent pixels measured from
+    the top and right edges of the window. Use * as the window class to match
+    any class for the executable.
+*/
+// ==/WindhawkModSettings==
 
 #include <shellapi.h>
 #include <windows.h>
 
 #include <algorithm>
 #include <cstdio>
+#include <cwchar>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
 
 constexpr UINT WM_TRAY_ICON = WM_APP + 100;
 constexpr UINT WM_HIDE_WINDOW = WM_APP + 101;
+constexpr UINT WM_RELOAD_SETTINGS = WM_APP + 102;
 
 constexpr UINT_PTR TIMER_CLEANUP = 1;
 
 constexpr UINT MENU_RESTORE = 1;
 constexpr UINT MENU_CLOSE = 2;
 
-constexpr DWORD HIT_TEST_TIMEOUT_MS = 15;
+constexpr DWORD HIT_TEST_TIMEOUT_MS = 10;
+constexpr DWORD WORKER_SHUTDOWN_TIMEOUT_MS = 5000;
 
 constexpr wchar_t HIDDEN_WINDOW_PROPERTY[] =
     L"Windhawk.MinimizeToTray.HiddenWindow.v1";
@@ -80,6 +120,21 @@ struct TrayItem {
     bool ownsIcon = false;
     bool iconAdded = false;
     std::wstring title;
+};
+
+struct CustomTitleBarRule {
+    std::wstring executable;
+    std::wstring windowClass;
+    int heightDip = 0;
+    int minRightDip = 0;
+    int maxRightDip = 0;
+};
+
+struct CachedWindowIdentity {
+    HWND hwnd = nullptr;
+    DWORD processId = 0;
+    std::wstring executable;
+    std::wstring windowClass;
 };
 
 HWND g_controllerWindow = nullptr;
@@ -97,6 +152,11 @@ HWND g_rightClickWindow = nullptr;
 DWORD g_rightClickProcessId = 0;
 POINT g_rightClickPoint = {};
 
+bool g_enableCustomTitleBarRules = false;
+int g_maxCustomRuleHeightDip = 0;
+int g_maxCustomRuleRightDip = 0;
+std::vector<CustomTitleBarRule> g_customTitleBarRules;
+std::vector<CachedWindowIdentity> g_windowIdentityCache;
 std::vector<TrayItem> g_trayItems;
 
 DWORD GetWindowProcessId(HWND hwnd) {
@@ -230,9 +290,9 @@ bool HasMinimizeFrame(HWND hwnd) {
            (style & WS_CAPTION) == WS_CAPTION;
 }
 
-bool GetProcessImageName(HWND hwnd, wchar_t* fileName, size_t fileNameSize) {
+bool GetProcessImageName(HWND hwnd, std::wstring* fileName) {
     DWORD processId = GetWindowProcessId(hwnd);
-    if (!processId || !fileName || fileNameSize == 0) {
+    if (!processId || !fileName) {
         return false;
     }
 
@@ -249,34 +309,187 @@ bool GetProcessImageName(HWND hwnd, wchar_t* fileName, size_t fileNameSize) {
     if (QueryFullProcessImageNameW(process, 0, imagePath, &imagePathLength)) {
         const wchar_t* imageFileName = wcsrchr(imagePath, L'\\');
         imageFileName = imageFileName ? imageFileName + 1 : imagePath;
-        success = wcsncpy_s(fileName, fileNameSize, imageFileName, _TRUNCATE) == 0;
+        *fileName = imageFileName;
+        success = true;
     }
 
     CloseHandle(process);
     return success;
 }
 
-bool IsSteamClientWindow(HWND hwnd) {
-    wchar_t className[128] = {};
-    GetClassNameW(hwnd, className, ARRAYSIZE(className));
-
-    if (wcscmp(className, L"SDL_app") != 0) {
-        return false;
+CachedWindowIdentity* FindCachedWindowIdentity(HWND hwnd) {
+    DWORD processId = GetWindowProcessId(hwnd);
+    if (!processId) {
+        return nullptr;
     }
 
-    // Depending on the Steam client version, the SDL top-level window can be
-    // owned by either steam.exe or steamwebhelper.exe. Restricting the rule by
-    // both class and process avoids affecting unrelated SDL applications.
-    wchar_t processName[MAX_PATH] = {};
-    if (!GetProcessImageName(hwnd, processName, ARRAYSIZE(processName))) {
-        return false;
+    for (auto& entry : g_windowIdentityCache) {
+        if (entry.hwnd == hwnd && entry.processId == processId) {
+            return &entry;
+        }
     }
 
-    return _wcsicmp(processName, L"steam.exe") == 0 ||
-           _wcsicmp(processName, L"steamwebhelper.exe") == 0;
+    return nullptr;
 }
 
-bool IsPointInSteamMinimizeButton(HWND hwnd, POINT screenPoint) {
+BOOL CALLBACK CacheWindowIdentityProc(HWND hwnd, LPARAM) {
+    if (!IsWindowVisible(hwnd)) {
+        return TRUE;
+    }
+
+    DWORD processId = GetWindowProcessId(hwnd);
+    if (!processId) {
+        return TRUE;
+    }
+
+    wchar_t className[128] = {};
+    if (!GetClassNameW(hwnd, className, ARRAYSIZE(className))) {
+        return TRUE;
+    }
+
+    std::wstring executable;
+
+    // Reuse a process image name already obtained for another top-level
+    // window owned by the same process.
+    for (const auto& entry : g_windowIdentityCache) {
+        if (entry.processId == processId && !entry.executable.empty()) {
+            executable = entry.executable;
+            break;
+        }
+    }
+
+    if (executable.empty() && !GetProcessImageName(hwnd, &executable)) {
+        return TRUE;
+    }
+
+    CachedWindowIdentity entry;
+    entry.hwnd = hwnd;
+    entry.processId = processId;
+    entry.executable = std::move(executable);
+    entry.windowClass = className;
+    g_windowIdentityCache.push_back(std::move(entry));
+    return TRUE;
+}
+
+void RefreshWindowIdentityCache() {
+    g_windowIdentityCache.clear();
+
+    if (g_enableCustomTitleBarRules) {
+        EnumWindows(CacheWindowIdentityProc, 0);
+    }
+}
+
+bool ParseCustomRule(const std::wstring& text, CustomTitleBarRule* rule) {
+    std::vector<std::wstring> parts;
+    size_t start = 0;
+
+    while (true) {
+        size_t separator = text.find(L'|', start);
+        parts.push_back(text.substr(start, separator - start));
+        if (separator == std::wstring::npos) {
+            break;
+        }
+        start = separator + 1;
+    }
+
+    if (parts.size() != 5 || parts[0].empty() || parts[1].empty()) {
+        return false;
+    }
+
+    wchar_t* end = nullptr;
+    long height = wcstol(parts[2].c_str(), &end, 10);
+    if (!end || *end) {
+        return false;
+    }
+
+    end = nullptr;
+    long minRight = wcstol(parts[3].c_str(), &end, 10);
+    if (!end || *end) {
+        return false;
+    }
+
+    end = nullptr;
+    long maxRight = wcstol(parts[4].c_str(), &end, 10);
+    if (!end || *end) {
+        return false;
+    }
+
+    if (height <= 0 || minRight < 0 || maxRight <= minRight ||
+        height > 256 || maxRight > 1024) {
+        return false;
+    }
+
+    rule->executable = parts[0];
+    rule->windowClass = parts[1];
+    rule->heightDip = static_cast<int>(height);
+    rule->minRightDip = static_cast<int>(minRight);
+    rule->maxRightDip = static_cast<int>(maxRight);
+    return true;
+}
+
+void LoadSettings() {
+    g_enableCustomTitleBarRules =
+        Wh_GetIntSetting(L"enableCustomTitleBarRules") != 0;
+
+    g_customTitleBarRules.clear();
+    g_maxCustomRuleHeightDip = 0;
+    g_maxCustomRuleRightDip = 0;
+
+    for (int i = 0;; i++) {
+        PCWSTR setting =
+            Wh_GetStringSetting(L"customTitleBarRules[%d]", i);
+
+        if (!setting || !*setting) {
+            Wh_FreeStringSetting(setting);
+            break;
+        }
+
+        CustomTitleBarRule rule;
+        if (ParseCustomRule(setting, &rule)) {
+            g_maxCustomRuleHeightDip =
+                std::max(g_maxCustomRuleHeightDip, rule.heightDip);
+            g_maxCustomRuleRightDip =
+                std::max(g_maxCustomRuleRightDip, rule.maxRightDip);
+            g_customTitleBarRules.push_back(std::move(rule));
+        } else {
+            Wh_Log(L"Ignoring invalid custom title bar rule: %s", setting);
+        }
+
+        Wh_FreeStringSetting(setting);
+    }
+
+    RefreshWindowIdentityCache();
+}
+
+const CustomTitleBarRule* FindCustomRule(HWND hwnd) {
+    if (!g_enableCustomTitleBarRules) {
+        return nullptr;
+    }
+
+    CachedWindowIdentity* identity = FindCachedWindowIdentity(hwnd);
+    if (!identity) {
+        return nullptr;
+    }
+
+    for (const auto& rule : g_customTitleBarRules) {
+        if (_wcsicmp(identity->executable.c_str(), rule.executable.c_str()) != 0) {
+            continue;
+        }
+
+        if (rule.windowClass != L"*" &&
+            _wcsicmp(identity->windowClass.c_str(), rule.windowClass.c_str()) != 0) {
+            continue;
+        }
+
+        return &rule;
+    }
+
+    return nullptr;
+}
+
+bool IsPointInCustomRule(HWND hwnd,
+                         POINT screenPoint,
+                         const CustomTitleBarRule& rule) {
     RECT windowRect = {};
     if (!GetWindowRect(hwnd, &windowRect)) {
         return false;
@@ -286,113 +499,54 @@ bool IsPointInSteamMinimizeButton(HWND hwnd, POINT screenPoint) {
     int relativeY = screenPoint.y - windowRect.top;
     int distanceFromRight = windowRect.right - screenPoint.x;
 
-    return relativeY >= 0 && relativeY < MulDiv(48, dpi, 96) &&
-           distanceFromRight >= MulDiv(68, dpi, 96) &&
-           distanceFromRight <= MulDiv(115, dpi, 96);
+    return relativeY >= 0 && relativeY < MulDiv(rule.heightDip, dpi, 96) &&
+           distanceFromRight >= MulDiv(rule.minRightDip, dpi, 96) &&
+           distanceFromRight <= MulDiv(rule.maxRightDip, dpi, 96);
 }
 
-// Cheap pre-filter for the low-level mouse hook. It intentionally uses a
-// generous caption-button area so normal right-clicks can be rejected without
-// sending a cross-process message.
-bool IsPotentialMinimizeClick(HWND hwnd,
-                              POINT screenPoint,
-                              bool isSteamClientWindow) {
+// Cheap pre-filter. It only decides whether a click is near enough to a
+// caption-button area to justify further inspection. It never triggers hiding.
+bool IsPotentialCaptionClick(HWND hwnd, POINT screenPoint) {
     RECT windowRect = {};
     if (!GetWindowRect(hwnd, &windowRect)) {
-        return false;
-    }
-
-    // Steam's custom SDL frame doesn't reliably advertise the standard Win32
-    // caption/minimize styles, so use a narrowly scoped Steam-only pre-filter.
-    if (isSteamClientWindow) {
-        UINT dpi = GetWindowDpiSafe(hwnd);
-        int relativeY = screenPoint.y - windowRect.top;
-        int distanceFromRight = windowRect.right - screenPoint.x;
-
-        return relativeY >= 0 && relativeY < MulDiv(56, dpi, 96) &&
-               distanceFromRight >= MulDiv(55, dpi, 96) &&
-               distanceFromRight <= MulDiv(130, dpi, 96);
-    }
-
-    if (!HasMinimizeFrame(hwnd)) {
         return false;
     }
 
     UINT dpi = GetWindowDpiSafe(hwnd);
     LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
 
-    int buttonWidth = std::max(GetSystemMetricsForDpi(SM_CXSIZE, dpi),
-                               MulDiv(50, dpi, 96));
+    int frameWidth = GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi);
     int frameHeight = GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi);
     int paddedBorder = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
-    int candidateHeight =
-        std::max(GetSystemMetricsForDpi(SM_CYSIZE, dpi) + frameHeight +
-                     paddedBorder,
-                 MulDiv(64, dpi, 96));
+    int buttonWidth = GetSystemMetricsForDpi(SM_CXSIZE, dpi);
+    int captionHeight = GetSystemMetricsForDpi(SM_CYSIZE, dpi) + frameHeight +
+                        paddedBorder;
+
+    int candidateHeight = captionHeight;
+    int candidateWidth = buttonWidth * 4 + frameWidth;
+
+    if (g_enableCustomTitleBarRules) {
+        candidateHeight =
+            std::max(candidateHeight,
+                     MulDiv(g_maxCustomRuleHeightDip, dpi, 96));
+        candidateWidth =
+            std::max(candidateWidth,
+                     MulDiv(g_maxCustomRuleRightDip, dpi, 96) + frameWidth);
+    }
 
     if (screenPoint.y < windowRect.top ||
         screenPoint.y >= windowRect.top + candidateHeight) {
         return false;
     }
 
-    int candidateWidth = buttonWidth * 4;
     bool rightToLeft = (exStyle & WS_EX_LAYOUTRTL) != 0;
-
-    if (!rightToLeft) {
-        return screenPoint.x >= windowRect.right - candidateWidth &&
-               screenPoint.x < windowRect.right;
+    if (rightToLeft && !g_enableCustomTitleBarRules) {
+        return screenPoint.x >= windowRect.left &&
+               screenPoint.x < windowRect.left + candidateWidth;
     }
 
-    return screenPoint.x >= windowRect.left &&
-           screenPoint.x < windowRect.left + candidateWidth;
-}
-
-bool IsPointInApproximateMinimizeButton(HWND hwnd, POINT screenPoint) {
-    if (!HasMinimizeFrame(hwnd)) {
-        return false;
-    }
-
-    RECT windowRect = {};
-    if (!GetWindowRect(hwnd, &windowRect)) {
-        return false;
-    }
-
-    UINT dpi = GetWindowDpiSafe(hwnd);
-    LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-
-    int buttonWidth = GetSystemMetricsForDpi(SM_CXSIZE, dpi);
-    int buttonHeight = GetSystemMetricsForDpi(SM_CYSIZE, dpi);
-    int frameWidth = GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi);
-    int frameHeight = GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi);
-    int paddedBorder = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
-
-    // These dimensions are intentionally conservative. They preserve tested
-    // compatibility with Chromium/Electron custom title bars while the
-    // HTCLIENT requirement below limits when this fallback can run.
-    int titleBarHeight = std::max(buttonHeight + frameHeight + paddedBorder,
-                                  MulDiv(48, dpi, 96));
-    if (screenPoint.y < windowRect.top ||
-        screenPoint.y >= windowRect.top + titleBarHeight) {
-        return false;
-    }
-
-    int customButtonWidth = std::max(buttonWidth, MulDiv(46, dpi, 96));
-    bool rightToLeft = (exStyle & WS_EX_LAYOUTRTL) != 0;
-
-    if (!rightToLeft) {
-        int rightEdge = windowRect.right - frameWidth;
-        int minimizeLeft = rightEdge - customButtonWidth * 3;
-        int minimizeRight = rightEdge - customButtonWidth * 2;
-
-        return screenPoint.x >= minimizeLeft &&
-               screenPoint.x < minimizeRight;
-    }
-
-    int leftEdge = windowRect.left + frameWidth;
-    int minimizeLeft = leftEdge + customButtonWidth * 2;
-    int minimizeRight = leftEdge + customButtonWidth * 3;
-
-    return screenPoint.x >= minimizeLeft && screenPoint.x < minimizeRight;
+    return screenPoint.x >= windowRect.right - candidateWidth &&
+           screenPoint.x < windowRect.right;
 }
 
 HWND FindMinimizeButtonWindow(POINT screenPoint) {
@@ -407,44 +561,38 @@ HWND FindMinimizeButtonWindow(POINT screenPoint) {
         return nullptr;
     }
 
-    bool isSteamClientWindow = IsSteamClientWindow(hwnd);
-
-    // Avoid cross-process messages for ordinary right-clicks that are nowhere
-    // near a caption button.
-    if (!IsPotentialMinimizeClick(hwnd, screenPoint, isSteamClientWindow)) {
+    if (!IsPotentialCaptionClick(hwnd, screenPoint)) {
         return nullptr;
     }
 
-    // Steam's SDL title bar doesn't reliably participate in normal Win32
-    // caption hit testing. The exception is restricted to SDL_app windows
-    // owned by steam.exe or steamwebhelper.exe.
-    if (isSteamClientWindow) {
-        return IsPointInSteamMinimizeButton(hwnd, screenPoint) ? hwnd : nullptr;
-    }
+    // Native caption buttons are the only unconditional trigger.
+    if (HasMinimizeFrame(hwnd)) {
+        LPARAM pointParam = MAKELPARAM(static_cast<SHORT>(screenPoint.x),
+                                       static_cast<SHORT>(screenPoint.y));
+        DWORD_PTR hitTestResult = HTNOWHERE;
 
-    LPARAM pointParam = MAKELPARAM(static_cast<SHORT>(screenPoint.x),
-                                   static_cast<SHORT>(screenPoint.y));
-    DWORD_PTR hitTestResult = HTNOWHERE;
+        if (SendMessageTimeoutW(hwnd, WM_NCHITTEST, 0, pointParam,
+                                SMTO_ABORTIFHUNG, HIT_TEST_TIMEOUT_MS,
+                                &hitTestResult)) {
+            LRESULT hitTest = static_cast<LRESULT>(hitTestResult);
+            if (hitTest == HTMINBUTTON) {
+                return hwnd;
+            }
 
-    if (!SendMessageTimeoutW(hwnd, WM_NCHITTEST, 0, pointParam,
-                             SMTO_ABORTIFHUNG, HIT_TEST_TIMEOUT_MS,
-                             &hitTestResult)) {
+            // A custom rule is only allowed to override client-area hit
+            // testing, never another explicit non-client result.
+            if (hitTest != HTCLIENT) {
+                return nullptr;
+            }
+        } else if (!g_enableCustomTitleBarRules) {
+            return nullptr;
+        }
+    } else if (!g_enableCustomTitleBarRules) {
         return nullptr;
     }
 
-    LRESULT hitTest = static_cast<LRESULT>(hitTestResult);
-    if (hitTest == HTMINBUTTON) {
-        return hwnd;
-    }
-
-    // Only use geometry when the application reports client content at the
-    // point. This avoids overriding explicit HTCAPTION, HTSYSMENU, and other
-    // non-client results.
-    if (hitTest != HTCLIENT) {
-        return nullptr;
-    }
-
-    return IsPointInApproximateMinimizeButton(hwnd, screenPoint) ? hwnd
+    const CustomTitleBarRule* rule = FindCustomRule(hwnd);
+    return rule && IsPointInCustomRule(hwnd, screenPoint, *rule) ? hwnd
                                                                  : nullptr;
 }
 
@@ -475,29 +623,43 @@ bool IsRightClickReleaseValid(HWND hwnd,
     LONG deltaX = upPoint.x - downPoint.x;
     LONG deltaY = upPoint.y - downPoint.y;
 
-    if (deltaX < -tolerance || deltaX > tolerance ||
-        deltaY < -tolerance || deltaY > tolerance) {
-        return false;
-    }
+    return deltaX >= -tolerance && deltaX <= tolerance &&
+           deltaY >= -tolerance && deltaY <= tolerance;
+}
 
-    return true;
+void FillNotificationIconData(const TrayItem& item, NOTIFYICONDATAW* nid) {
+    *nid = {};
+    nid->cbSize = sizeof(*nid);
+    nid->hWnd = g_controllerWindow;
+    nid->uID = item.id;
+    nid->uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+    nid->uCallbackMessage = WM_TRAY_ICON;
+    nid->hIcon = item.icon;
+    wcsncpy_s(nid->szTip, ARRAYSIZE(nid->szTip), item.title.c_str(), _TRUNCATE);
 }
 
 bool AddNotificationIcon(TrayItem& item) {
     NOTIFYICONDATAW nid = {};
-    nid.cbSize = sizeof(nid);
-    nid.hWnd = g_controllerWindow;
-    nid.uID = item.id;
-    nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
-    nid.uCallbackMessage = WM_TRAY_ICON;
-    nid.hIcon = item.icon;
-
-    // Without NIM_SETVERSION, older notification-area behavior only uses the
-    // first 63 characters of the tooltip. Truncate deliberately.
-    wcsncpy_s(nid.szTip, 64, item.title.c_str(), _TRUNCATE);
+    FillNotificationIconData(item, &nid);
 
     item.iconAdded = Shell_NotifyIconW(NIM_ADD, &nid) != FALSE;
     return item.iconAdded;
+}
+
+bool VerifyNotificationIcon(TrayItem& item) {
+    if (!item.iconAdded) {
+        return false;
+    }
+
+    NOTIFYICONDATAW nid = {};
+    FillNotificationIconData(item, &nid);
+
+    if (Shell_NotifyIconW(NIM_MODIFY, &nid)) {
+        return true;
+    }
+
+    item.iconAdded = false;
+    return false;
 }
 
 void DeleteNotificationIcon(TrayItem& item) {
@@ -516,7 +678,6 @@ void DeleteNotificationIcon(TrayItem& item) {
 
 void RecreateNotificationIcons() {
     for (auto& item : g_trayItems) {
-        // Explorer lost all notification icons when it restarted.
         item.iconAdded = false;
         AddNotificationIcon(item);
     }
@@ -528,7 +689,7 @@ void AddTrayItem(HWND hwnd, bool hideWindow) {
     }
 
     if (TrayItem* existing = FindTrayItemByWindow(hwnd)) {
-        if (!existing->iconAdded) {
+        if (!VerifyNotificationIcon(*existing)) {
             AddNotificationIcon(*existing);
         }
 
@@ -546,7 +707,7 @@ void AddTrayItem(HWND hwnd, bool hideWindow) {
     item.icon = CopyWindowIcon(hwnd, &item.ownsIcon);
 
     if (hideWindow) {
-        // Never hide a new window unless we can mark it for recovery first.
+        // Never hide a new window unless recovery is marked first.
         if (!SetPropW(hwnd, HIDDEN_WINDOW_PROPERTY,
                       reinterpret_cast<HANDLE>(static_cast<INT_PTR>(1)))) {
             if (item.icon && item.ownsIcon) {
@@ -561,8 +722,7 @@ void AddTrayItem(HWND hwnd, bool hideWindow) {
 
     if (!AddNotificationIcon(addedItem)) {
         if (hideWindow) {
-            // This is a new hide request. Leave the window visible if there is
-            // no tray icon through which the user can restore it.
+            // A new hide request is cancelled if there is no restore path.
             RemovePropW(hwnd, HIDDEN_WINDOW_PROPERTY);
 
             if (addedItem.icon && addedItem.ownsIcon) {
@@ -573,8 +733,8 @@ void AddTrayItem(HWND hwnd, bool hideWindow) {
             Wh_Log(L"Failed to create tray icon for window %p", hwnd);
         }
 
-        // On recovery, keep the item and its existing recovery property. The
-        // cleanup timer and TaskbarCreated handler will retry NIM_ADD.
+        // Recovery keeps the marker and item. The timer and TaskbarCreated
+        // handler will continue trying to recreate the icon.
         return;
     }
 
@@ -589,15 +749,17 @@ void RemoveTrayItemByIndex(size_t index, bool restoreWindow) {
     }
 
     TrayItem item = g_trayItems[index];
-    DeleteNotificationIcon(g_trayItems[index]);
 
     if (IsTrayItemWindowValid(item)) {
         RemovePropW(item.hwnd, HIDDEN_WINDOW_PROPERTY);
 
         if (restoreWindow) {
-            ShowWindow(item.hwnd, SW_SHOW);
+            // Cross-process restore must not block the tool's shutdown.
+            ShowWindowAsync(item.hwnd, SW_SHOW);
         }
     }
+
+    DeleteNotificationIcon(g_trayItems[index]);
 
     if (item.icon && item.ownsIcon) {
         DestroyIcon(item.icon);
@@ -634,12 +796,30 @@ void CloseTrayItem(UINT id) {
 }
 
 void RestoreAllWindows() {
+    // Post every restore first. Even if Explorer is busy while tray icons are
+    // removed, no hidden window is left waiting behind that shell operation.
+    for (auto& item : g_trayItems) {
+        if (IsTrayItemWindowValid(item)) {
+            RemovePropW(item.hwnd, HIDDEN_WINDOW_PROPERTY);
+            ShowWindowAsync(item.hwnd, SW_SHOW);
+        }
+    }
+
     while (!g_trayItems.empty()) {
-        RemoveTrayItemByIndex(g_trayItems.size() - 1, true);
+        TrayItem item = g_trayItems.back();
+        DeleteNotificationIcon(g_trayItems.back());
+
+        if (item.icon && item.ownsIcon) {
+            DestroyIcon(item.icon);
+        }
+
+        g_trayItems.pop_back();
     }
 }
 
 void CleanupTrayItems() {
+    RefreshWindowIdentityCache();
+
     for (size_t i = g_trayItems.size(); i > 0; i--) {
         size_t index = i - 1;
         TrayItem& item = g_trayItems[index];
@@ -650,15 +830,15 @@ void CleanupTrayItems() {
         }
 
         // Applications such as Steam and Discord can restore themselves using
-        // their own tray icon. Remove our now-redundant icon and marker.
+        // their own tray icon. Remove our redundant icon and marker.
         if (IsWindowVisible(item.hwnd)) {
             RemoveTrayItemByIndex(index, false);
             continue;
         }
 
-        // Recovery can occur while Explorer's notification area is not ready.
-        // Keep retrying without dropping the recovery marker.
-        if (!item.iconAdded) {
+        // Verify the shell still knows about every icon. This recovers even if
+        // TaskbarCreated was missed or filtered.
+        if (!VerifyNotificationIcon(item)) {
             AddNotificationIcon(item);
         }
     }
@@ -722,7 +902,6 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
     const auto* mouseInfo = reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
 
-    // Don't turn synthetic input from automation tools into global actions.
     if (mouseInfo->flags & LLMHF_INJECTED) {
         return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
     }
@@ -753,7 +932,6 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                          reinterpret_cast<WPARAM>(originalWindow), 0);
         }
 
-        // The matching button-down was swallowed, so swallow button-up too.
         return 1;
     }
 
@@ -772,6 +950,10 @@ LRESULT CALLBACK ControllerWindowProc(HWND hwnd,
     switch (message) {
         case WM_HIDE_WINDOW:
             AddTrayItem(reinterpret_cast<HWND>(wParam), true);
+            return 0;
+
+        case WM_RELOAD_SETTINGS:
+            LoadSettings();
             return 0;
 
         case WM_TRAY_ICON: {
@@ -812,11 +994,16 @@ LRESULT CALLBACK ControllerWindowProc(HWND hwnd,
 }
 
 DWORD WINAPI WorkerThreadProc(LPVOID) {
+    // Low-level mouse-hook points are physical pixels. Make every window and
+    // cursor coordinate queried on this thread use the same coordinate space.
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
     HINSTANCE instance = GetModuleHandleW(nullptr);
     bool classRegistered = false;
     bool startedEventSignaled = false;
     DWORD exitCode = 1;
 
+    LoadSettings();
     g_taskbarCreatedMessage = RegisterWindowMessageW(L"TaskbarCreated");
 
     WNDCLASSW windowClass = {};
@@ -830,13 +1017,21 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     }
     classRegistered = true;
 
+    // This is a hidden 0x0 tool window. It can become foreground briefly when
+    // showing tray menus, which makes the standard popup-menu dismissal
+    // behavior reliable.
     g_controllerWindow = CreateWindowExW(
-        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, CONTROLLER_CLASS, L"", WS_POPUP, 0,
-        0, 0, 0, nullptr, nullptr, instance, nullptr);
+        WS_EX_TOOLWINDOW, CONTROLLER_CLASS, L"", WS_POPUP, 0, 0, 0, 0, nullptr,
+        nullptr, instance, nullptr);
 
     if (!g_controllerWindow) {
         Wh_Log(L"CreateWindowExW failed: %u", GetLastError());
         goto Cleanup;
+    }
+
+    if (g_taskbarCreatedMessage) {
+        ChangeWindowMessageFilterEx(g_controllerWindow, g_taskbarCreatedMessage,
+                                    MSGFLT_ALLOW, nullptr);
     }
 
     g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, nullptr, 0);
@@ -848,8 +1043,8 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     SetTimer(g_controllerWindow, TIMER_CLEANUP, 2000, nullptr);
 
     // Recover windows left hidden if the tool process was restarted. If the
-    // notification area isn't available yet, their icons remain pending and
-    // are retried later without losing the recovery marker.
+    // notification area isn't ready, their icons remain pending and the timer
+    // keeps retrying without dropping the recovery marker.
     EnumWindows(RecoverWindowProc, 0);
 
     g_workerStartedSuccessfully = true;
@@ -890,8 +1085,6 @@ Cleanup:
         DestroyWindow(g_controllerWindow);
         g_controllerWindow = nullptr;
     } else if (!g_trayItems.empty()) {
-        // Normally WM_CLOSE already restored the windows before destroying the
-        // controller. Keep this as a last-resort cleanup path.
         RestoreAllWindows();
     }
 
@@ -937,6 +1130,9 @@ BOOL WhTool_ModInit() {
 }
 
 void WhTool_ModSettingsChanged() {
+    if (g_controllerWindow) {
+        PostMessageW(g_controllerWindow, WM_RELOAD_SETTINGS, 0, 0);
+    }
 }
 
 void WhTool_ModUninit() {
@@ -945,12 +1141,19 @@ void WhTool_ModUninit() {
     }
 
     if (g_workerThread) {
-        WaitForSingleObject(g_workerThread, INFINITE);
+        DWORD waitResult =
+            WaitForSingleObject(g_workerThread, WORKER_SHUTDOWN_TIMEOUT_MS);
+        if (waitResult == WAIT_TIMEOUT) {
+            Wh_Log(L"Worker thread did not stop within %u ms",
+                   WORKER_SHUTDOWN_TIMEOUT_MS);
+        }
+
         CloseHandle(g_workerThread);
         g_workerThread = nullptr;
     }
 }
 
+// clang-format off
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
@@ -979,9 +1182,11 @@ BOOL Wh_ModInit() {
         sessionId == 0) {
         return FALSE;
     }
+
     bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
+
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
@@ -1009,6 +1214,7 @@ BOOL Wh_ModInit() {
     }
 
     LocalFree(argv);
+
     if (isExcluded) {
         return FALSE;
     }
@@ -1069,6 +1275,7 @@ void Wh_ModAfterInit() {
                 (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
+
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
         kernelModule = GetModuleHandle(L"kernel32.dll");
@@ -1122,6 +1329,8 @@ void Wh_ModUninit() {
     if (g_isToolModProcessLauncher) {
         return;
     }
+
     WhTool_ModUninit();
     ExitProcess(0);
 }
+// clang-format on
