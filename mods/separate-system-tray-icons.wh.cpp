@@ -6393,7 +6393,7 @@ static bool HookTaskbarDllSymbols() {
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK taskbarHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
          &CTaskBand_ITaskListWndSite_vftable},
         {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
@@ -6407,8 +6407,8 @@ static bool HookTaskbarDllSymbols() {
          TrayUI_StartTaskbar_Hook},
     };
 
-    if (!WindhawkUtils::HookSymbols(taskbarModule, taskbarHooks,
-                                    ARRAYSIZE(taskbarHooks))) {
+    if (!WindhawkUtils::HookSymbols(taskbarModule, taskbarDllHooks,
+                                    ARRAYSIZE(taskbarDllHooks))) {
         Wh_Log(L"HookTaskbarDllSymbols: failed to resolve taskbar symbols.");
         return false;
     }
