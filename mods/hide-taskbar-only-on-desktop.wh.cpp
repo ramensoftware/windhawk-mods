@@ -2,7 +2,7 @@
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Hides selected taskbars while their displays show only the desktop
-// @version         6.2.0
+// @version         6.3.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -59,7 +59,7 @@ For bottom-docked taskbars, moving the cursor into the configured bottom-edge ar
 
 After the cursor leaves the area, the taskbar hides again after the configured delay. Moving the cursor between displays also updates which taskbar is currently revealed.
 
-Hover tracking uses a dedicated cursor-sampling thread. It samples at 50 ms while hover tracking is active, backs off when it is not needed, and backs off further after repeated cursor-position failures. Hover-eligible taskbars that would currently be hidden are published to the sampler so cursor-leave detection does not depend solely on the periodic safety poll.
+Hover tracking uses a dedicated cursor-sampling thread. It samples at 50 ms while any taskbar is hidden, backs off when no hidden taskbar needs hover tracking, and backs off further after repeated cursor-position failures. Hover-eligible taskbars that would currently be hidden are published to the sampler so cursor-leave detection does not depend solely on the periodic safety poll.
 
 Hover reveal does not apply to taskbars docked to the top or sides. Desktop-based hiding also applies only to bottom-docked taskbars.
 
@@ -85,7 +85,7 @@ The mod uses `WS_EX_LAYERED` with `SetLayeredWindowAttributes` and alpha 0 to hi
 
 Before hiding a taskbar, the mod records the relevant original extended-window style and layered-window attributes on the taskbar itself. Hiding makes the taskbar transparent before enabling click-through input, and showing restores input behavior before restoring visible alpha. An ownership marker identifies taskbars whose transparency was applied by this mod.
 
-If a taskbar is recreated, the new taskbar is rediscovered and evaluated again. If the dedicated tool process is restarted after an unexpected termination, a new instance can reclaim taskbars still carrying the ownership marker. If another component removes `WS_EX_LAYERED` while the mod still has ownership, the stale ownership data is discarded safely and the mod-owned `WS_EX_LAYERED`/`WS_EX_TRANSPARENT` bits are reconciled before a later hide recaptures the current taskbar state. Restoring a taskbar changes only the extended-style bits owned by this mod; unrelated extended-style changes are preserved.
+If a taskbar is recreated, the new taskbar is rediscovered and evaluated again. If the dedicated tool process is restarted after an unexpected termination, a new instance can reclaim taskbars still carrying the ownership marker. The launcher also attempts this recovery when the mod is disabled after the tool process has already terminated unexpectedly. If another component removes `WS_EX_LAYERED` while the mod still has ownership, the stale ownership data is discarded safely and only the mod-owned `WS_EX_LAYERED`/`WS_EX_TRANSPARENT` bits are cleared before a later hide recaptures the current taskbar state. Restoring a taskbar changes only the extended-style bits owned by this mod; unrelated extended-style changes are preserved.
 
 ## Multi-Monitor Behavior
 
@@ -123,7 +123,7 @@ When no displays are configured for desktop-based hiding, the mod skips the appl
 - The display-selection configuration supports up to 16 display entries.
 - The mod keeps Windows' native taskbar auto-hide setting separate from its own hiding behavior. If native auto-hide is enabled, this mod does not take over that taskbar.
 - Because the taskbar is made fully transparent, flashing taskbar buttons and tray notifications are not visually available while that taskbar is hidden by the mod.
-- If the dedicated tool process is terminated unexpectedly, a taskbar may remain invisible and click-through until the mod is started again or the taskbar is otherwise recreated; the next mod instance can reclaim marked taskbars.
+- If the dedicated tool process is terminated unexpectedly, the launcher attempts to reclaim taskbars still carrying the ownership marker. A later tool-process startup also reclaims any marked taskbars.
 - Other taskbar transparency/customization mods that modify the same taskbar window can conflict with this mod.
 - Borderless fullscreen detection intentionally treats a visible, monitor-sized, captionless and non-resizable application as fullscreen; unusual applications with that exact window presentation may therefore keep their taskbar hidden.
 - Windows shell window classes and processes can change between Windows releases, so shell-interaction detection may need updates for future Windows versions.
@@ -347,19 +347,11 @@ bool DropStaleTaskbarOwnership(
         return false;
     }
 
-    LONG_PTR restoredExStyle =
+    // Another component already changed the taskbar out from under this mod.
+    // Reconcile only the bits controlled by this mod and do not re-add a stale
+    // WS_EX_LAYERED bit without also restoring its layered attributes.
+    const LONG_PTR restoredExStyle =
         currentExStyle & ~kModTaskbarExStyleBits;
-
-    ULONG_PTR savedExStyleValue = 0;
-    if (GetWindowUlongPtrProp(
-            hwnd,
-            kTaskbarOriginalExStyleProp,
-            &savedExStyleValue)) {
-        const LONG_PTR savedExStyle =
-            static_cast<LONG_PTR>(savedExStyleValue);
-        restoredExStyle |=
-            savedExStyle & kModTaskbarExStyleBits;
-    }
 
     if (restoredExStyle != currentExStyle) {
         SetLastError(ERROR_SUCCESS);
@@ -1315,48 +1307,22 @@ bool IsFullscreenOwnerVisible(HMONITOR monitor) {
     }
 
     HWND owner = g_fullscreenOwners[index].hwnd;
-
     if (!IsFullscreenOwnerOnSameMonitor(owner, monitor) ||
-        !IsWindowVisible(owner) ||
-        IsIconic(owner)) {
+        !IsWindowVisible(owner) || IsIconic(owner)) {
         return false;
     }
 
     BOOL cloaked = FALSE;
-    if (SUCCEEDED(
+    return !(
+        SUCCEEDED(
             DwmGetWindowAttribute(
                 owner,
                 DWMWA_CLOAKED,
                 &cloaked,
                 sizeof(cloaked)
             )
-        ) && cloaked) {
-        return false;
-    }
-
-    return true;
-}
-
-bool IsMonitorFullscreenCached(HMONITOR monitor) {
-    const int index = FindFullscreenOwnerIndex(monitor);
-
-    if (index < 0 || !g_fullscreenOwners[index].hwnd) {
-        return false;
-    }
-
-    // This is deliberately a pure ownership query. Do not validate fullscreen
-    // geometry here: this function is called during the ordinary taskbar scan,
-    // including shell transitions on another monitor. Windows can transiently
-    // change a fullscreen window's visibility/geometry during those transitions.
-    // The owner is retired only by explicit fullscreen lifecycle events below.
-    HWND owner = g_fullscreenOwners[index].hwnd;
-
-    if (!IsFullscreenOwnerOnSameMonitor(owner, monitor)) {
-        g_fullscreenOwners[index] = {};
-        return false;
-    }
-
-    return true;
+        ) && cloaked
+    );
 }
 
 void SetFullscreenOwner(HMONITOR monitor, HWND hwnd) {
@@ -1488,32 +1454,12 @@ bool IsTaskbarWindow(
         wcscmp(className, L"Shell_SecondaryTrayWnd") == 0;
 }
 
-bool IsForegroundNormalApplication(
-    HWND hwnd
-) {
-    if (
-        !hwnd ||
-        !IsWindowVisible(hwnd) ||
-        IsIconic(hwnd)
-    ) {
-        return false;
-    }
-
+bool IsForegroundNormalApplication(HWND hwnd) {
     WCHAR className[256] = {};
-    if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0) {
-        return false;
-    }
-
-    if (
-        IsDesktopInfrastructureWindow(hwnd, className) ||
-        IsShellChromeClass(className) ||
-        IsShellSurfaceWindow(hwnd, className) ||
-        IsTaskbarWindow(hwnd)
-    ) {
-        return false;
-    }
-
-    return IsApplicationWindowCandidate(hwnd, className);
+    return
+        hwnd &&
+        GetClassNameW(hwnd, className, ARRAYSIZE(className)) != 0 &&
+        IsApplicationWindowCandidate(hwnd, className);
 }
 
 void ClearFullscreenOwnerForForegroundApplication(
@@ -1558,15 +1504,6 @@ void NoteForegroundFullscreenWindow(
     HWND hwnd
 ) {
     if (!hwnd || !IsWindow(hwnd)) {
-        return;
-    }
-
-    WCHAR className[256] = {};
-    if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0 ||
-        IsDesktopInfrastructureWindow(hwnd, className) ||
-        IsShellChromeClass(className) ||
-        IsShellSurfaceWindow(hwnd, className) ||
-        IsTaskbarWindow(hwnd)) {
         return;
     }
 
@@ -1746,7 +1683,7 @@ void ScanWindowsOnce(
 
     for (size_t i = 0; i < monitors.count; ++i) {
         result.fullscreenOnMonitor[i] =
-            IsMonitorFullscreenCached(
+            IsFullscreenOwnerVisible(
                 monitors.entries[i].monitor
             );
     }
@@ -1785,7 +1722,9 @@ void ScanWindowsOnce(
                 foreground,
                 className
             ) &&
-            !IsShellChromeClass(className)
+            !IsShellChromeClass(className) &&
+            !IsShellSurfaceWindow(foreground, className) &&
+            !IsTaskbarWindow(foreground)
         ) {
             BOOL transparent = FALSE;
 
@@ -2424,8 +2363,10 @@ void UpdateTaskbarState() {
                 monitors.entries[monitorIndex].monitor ==
                 state.monitor
             ) {
+                const bool fullscreenActive =
+                    IsFullscreenOwnerVisible(state.monitor);
                 state.desktopOnly =
-                    IsMonitorFullscreenCached(state.monitor) ||
+                    fullscreenActive ||
                     !scan.applicationOnMonitor[
                         monitorIndex
                     ];
@@ -2483,9 +2424,6 @@ void UpdateTaskbarState() {
             }
 
             const bool fullscreenOnTaskbarMonitor =
-                IsMonitorFullscreenCached(
-                    g_taskbarStates[i].monitor
-                ) &&
                 IsFullscreenOwnerVisible(
                     g_taskbarStates[i].monitor
                 );
@@ -2881,6 +2819,10 @@ void CALLBACK WinEventProc(
     DWORD,
     DWORD
 ) {
+    if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF) {
+        return;
+    }
+
     if (event == EVENT_SYSTEM_FOREGROUND) {
         MonitorList monitors = GetCurrentMonitors();
         RefreshFullscreenWindowCache(monitors);
@@ -2903,7 +2845,7 @@ void CALLBACK WinEventProc(
         if (!isTaskbarForeground) {
             // A real foreground transition away from the taskbar means the
             // stale taskbar foreground produced by the minimize is gone.
-                InterlockedExchange(
+            InterlockedExchange(
                 &g_taskbarForegroundMouseActivated,
                 0
             );
@@ -2921,25 +2863,25 @@ void CALLBACK WinEventProc(
         }
 
         POINT cursorPoint = {};
-            bool cursorOverTaskbar = false;
+        bool cursorOverTaskbar = false;
 
-            if (GetCursorPos(&cursorPoint)) {
-                cursorOverTaskbar =
-                    WindowFromPoint(cursorPoint) == hwnd;
+        if (GetCursorPos(&cursorPoint)) {
+            cursorOverTaskbar =
+                WindowFromPoint(cursorPoint) == hwnd;
 
-                if (!cursorOverTaskbar) {
-                    RECT taskbarRect = {};
-                    if (GetWindowRect(hwnd, &taskbarRect)) {
-                        cursorOverTaskbar =
-                            PtInRect(&taskbarRect, cursorPoint) != FALSE;
-                    }
+            if (!cursorOverTaskbar) {
+                RECT taskbarRect = {};
+                if (GetWindowRect(hwnd, &taskbarRect)) {
+                    cursorOverTaskbar =
+                        PtInRect(&taskbarRect, cursorPoint) != FALSE;
                 }
             }
+        }
 
-            const bool mouseButtonDown =
-                (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 ||
-                (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0 ||
-                (GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0;
+        const bool mouseButtonDown =
+            (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 ||
+            (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0 ||
+            (GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0;
 
         InterlockedExchange(
             &g_taskbarForegroundMouseActivated,
@@ -3916,6 +3858,25 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModUninit() {
     if (g_isToolModProcessLauncher) {
+        HANDLE toolModMutex =
+            OpenMutexW(
+                SYNCHRONIZE,
+                FALSE,
+                L"windhawk-tool-mod_" WH_MOD_ID
+            );
+
+        if (toolModMutex) {
+            CloseHandle(toolModMutex);
+        } else {
+            // The dedicated tool may have terminated unexpectedly. Reclaim any
+            // taskbar still marked as owned so disabling the mod cannot strand
+            // an invisible, click-through taskbar.
+            EnumWindows(
+                RestoreMarkedTaskbarProc,
+                0
+            );
+        }
+
         return;
     }
 
