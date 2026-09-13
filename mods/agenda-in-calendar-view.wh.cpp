@@ -1,14 +1,14 @@
 // ==WindhawkMod==
-// @id              agenda-in-calendar-pane
-// @name            Agenda in Calendar Pane
-// @description     Show .ics events in the calendar view in the Notification Centre, like Windows 10. Supports both local and remote .ics sources.
+// @id              agenda-in-calendar-view
+// @name            Agenda in Calendar View
+// @description     Show .ics events in the calendar view in the Notification Centre like in Windows 10
 // @version         1.0
 // @author          lonfro
 // @github          https://github.com/lonfro
 // @include         ShellExperienceHost.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject
-// @license         GPLv3
+// @license         GPL-3.0-only
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -66,28 +66,25 @@ generated using AI.
 ## FAQ
 |Problem|Solution|
 |---|---|
-|My local `.ics` file does not work!|Unblock it from its *Properties* pane in
-File Explorer.| |The bottom corners of the *Notifications* pane (immediately
-above the agenda) are not rounded!|Set a maximum height for the Agenda in the
-mod settings to stop it from clipping the *Notifications* pane.|
+|My local `.ics` file does not work!|Unblock it from its *Properties* pane in File Explorer.| 
+|The bottom corners of the *Notifications* pane (immediately above the agenda) are not rounded!|Set a maximum height for the Agenda in the mod settings to stop it from clipping the *Notifications* pane.|
+
 */
 // ==/WindhawkModReadme==
+
+
 
 // ==WindhawkModSettings==
 /*
 - icsPath: ""
   $name: Path to .ics
-  $description: Local file path or remote URL to the .ics calendar file. If your
-local .ics calendar file is not working, make sure it is unblocked (in
-Properties).
+  $description: Local file path or remote URL to the .ics calendar file. If your local .ics calendar file is not working, make sure it is unblocked (in Properties).
 - maxHeight: 400
   $name: Max height (in pixels)
-  $description: Maximum visible height of the events list in pixels before the
-list starts to scroll.
+  $description: Maximum visible height of the events list in pixels before the list starts to scroll.
 - hideFocusSession: true
   $name: Hide Focus Session
-  $description: Hide the Focus Session control in the calendar/notification
-center flyout.
+  $description: Hide the Focus Session control in the calendar/notification center flyout.
 */
 // ==/WindhawkModSettings==
 
