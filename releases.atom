@@ -2,12 +2,82 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-12T12:37:10.000Z</updated>
+    <updated>2026-09-13T19:54:42.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Region and Language Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-intl-control-panel-restorer#cfecef6a1220f93bef844c6868880c6ae6bdccfd</id>
+        <link href="https://windhawk.net/mods/win7-intl-control-panel-restorer"/>
+        <updated>2026-09-13T19:54:42.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows7regionandlanguagerestorer">Windows 7 Region and Language Restorer</h1>
+<p>This mod restores the classic Windows 7 "Region and Language" Control Panel page on Windows 10 and Windows 11.</p>
+<hr />
+<h2 id="screenshot">Screenshot</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/region.PNG" alt="region.PNG" /></p>
+<h2 id="functionality">Functionality</h2>
+<ul>
+<li>The mod restores the classic Region page with its four tabs: Formats, Location, Keyboards and Languages, and Administrative.</li>
+<li>All changes are applied through the standard Windows controls and nothing is simulated.</li>
+<li>The restored dialogs use per-monitor DPI awareness on their UI thread, so scaling follows the active monitor without changing Explorer system-wide.</li>
+<li>The interface is available in 20 languages and tries to follow the system language automatically. This covers the Region pages and the Text Services and Input Languages dialogs (input.dll): its pages and dialogs are rebuilt from verified embedded templates and its runtime strings are served through a LoadStringW hook, so the whole restored UI follows the selected language.</li>
+</ul>
+<hr />
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>64-bit Windows 10 or Windows 11 (ARM64 and Windows Server are not supported).</li>
+<li>On first use, the original Windows 7 components (intl.cpl and input.dll, about 620 KB) are downloaded automatically from Microsoft's public symbol server and verified by size and SHA-256 before use. An Internet connection is needed only for this step; afterwards everything works offline from the mod's private cache.</li>
+<li>The download runs on a background thread, and opening the Control Panel folder (which merely enumerates the applet) never waits for it. Only actually opening Region waits, and at most a few seconds in total: if the download has not finished by then, that one opening shows the normal modern Region page and the classic page appears from the next one on. Once the payloads are in the private cache, nothing waits at all - including the very first enumeration after a restart. Nothing is executed before it has been verified.</li>
+</ul>
+<hr />
+<h2 id="settings">Settings</h2>
+<p>The mod includes a series of settings:</p>
+<ul>
+<li><strong>UI language</strong> (default: Automatic): this setting controls the language of the restored page. Automatic follows the Windows display language. It takes effect the next time the page is opened.</li>
+<li><strong>Redirect Settings pages</strong> (default: off): this setting opens the classic page instead of the modern Settings Region pages. The redirect follows the same defensive, pass-through approach as the reference Settings-to-Control-Panel mod and covers ShellExecuteExW, ShellExecuteW, and CreateProcessW launches from Explorer. Only Region/Language URIs are redirected; unrelated Settings pages pass through unchanged. It takes effect immediately.</li>
+<li>Neither setting reloads the mod, so changing them while a restored dialog is open does not tear anything down.</li>
+</ul>
+<hr />
+<h2 id="notes">Notes</h2>
+<ul>
+<li>This modification has been tested on Windows 10 21H2 , Windows 11 24H2 and Windows 11 25H2.</li>
+<li>This modification is a best-effort reimplementation of the Windows 7 intl.cpl (Region and Language Control Panel) on Windows 10/11. While it aims to restore the classic experience, 100% feature parity with the original Windows 7 component is not guaranteed. Some Windows 7 features no longer exist on modern Windows and are redirected to their closest modern equivalents.</li>
+<li>Some Windows 7 features no longer exist on modern Windows. In those cases the closest modern equivalent is opened instead (for example, the "Default location" link opens the Location privacy page).</li>
+<li>Settings that were already applied are kept after the mod is disabled.</li>
+<li>Windows system files <strong>are not modified</strong> and the modern intl.cpl is used as a fallback.</li>
+<li>Changing a setting never reloads the mod: the redirect option is a runtime flag and a language change is applied the next time the page is opened.</li>
+<li>Disabling the mod asks any restored dialog to close and, after a few seconds, closes the ones it created itself (its property sheets and modal dialogs). It then waits for them to be gone before it unloads, because the restored component still points into the mod while a dialog is open. In practice that means: if you disable the mod while the Region page is open, the page closes; if the classic page is waiting on a UAC prompt, answering or dismissing that prompt is what finishes the unload.</li>
+</ul>
+<hr />
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>This modification is a best-effort reimplementation of a NT 6.1 binary file. Some translations might not be completely accurate to the original files as the mod provides them by itself.</li>
+<li>Display-language installation is not available. It depends on components that exist only on Windows 7.</li>
+<li>Inside input.dll, the Chinese IME hotkey-action descriptions and the English fallback keyboard-layout names are not translated; they are rare and mostly language-neutral. Key-cap labels on the Keyboard Layout Preview (Tab, Caps, Shift, Enter, BackSp) intentionally stay English to fit the original geometry.</li>
+<li><strong>Stability risk of running a Windows 7 binary on Windows 10/11.</strong> The original <code>intl.cpl</code> is executed in-process, inside <code>explorer.exe</code>/<code>control.exe</code>, through a compatibility layer (a private import table, a Windows 7 version answer, and a private copy of the CRT heap calls it needs). This mod deliberately has <strong>no crash guard</strong>: it does not install any exception handler and does not swallow faults. A genuine C++ exception from the legacy component is caught and answered by falling back to the modern page, but a hardware fault (an access violation, for example) inside that 2010-era binary is <strong>not</strong> contained and can take the host process down - in Explorer's case, restarting the shell. The component is the unmodified, hash-verified Microsoft binary and is exercised through the same code paths Windows 7 used, but it is being run on an OS it was never built for, and that risk cannot be engineered away from user mode. If you are not comfortable with it, do not use this mod.</li>
+</ul>
+<hr />
+<h2 id="openingthepage">Opening the page</h2>
+<p>While the mod is active, the restored page can also be opened directly:</p>
+<ul>
+<li><code>control.exe intl.cpl</code> - the classic Region page.</li>
+<li><code>control.exe intl.cpl,,3</code> - the page opened on Administrative.</li>
+</ul>
+<hr />
+<h2 id="credits">Credits</h2>
+<ul>
+<li>AdministratoX – Testing on Windows 11 25H2</li>
+<li>m417z - Code review</li>
+</ul>
+<hr />]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Title Bar Label 1.0.0]]></title>
         <id>https://windhawk.net/mods/explorer-title-bar-label#12ff4e1fed9336f02f00ae94d92f5962a1112e93</id>
@@ -1033,80 +1103,6 @@ segment simply stays in <code>{title}</code>.</p></li>
         <author>
             <name>Jona like it, code it</name>
             <uri>https://github.com/Stunning-dev</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Audio Visualizer Plus 1.0.1]]></title>
-        <id>https://windhawk.net/mods/neiz-supersmile-audio-visualizer#e01d0d0dbd6204804235831fd7f68821e4614028</id>
-        <link href="https://windhawk.net/mods/neiz-supersmile-audio-visualizer"/>
-        <updated>2026-09-01T20:53:36.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="desktopaudiovisualizerplus">Desktop Audio Visualizer Plus</h1>
-<p>Desktop Audio Visualizer Plus is a Windhawk desktop overlay that renders a highly customizable real-time audio visualizer directly on the Windows desktop.</p>
-<h2 id="features">Features</h2>
-<h3 id="audio">Audio</h3>
-<ul>
-<li>WASAPI loopback capture for system audio</li>
-<li>Optional per-application audio source</li>
-<li>1024-point FFT</li>
-<li>32 logarithmic frequency bands</li>
-<li>10-band custom EQ curve applied across the FFT bands ( Win 11 )</li>
-<li>Up to 256 rendered visual bars</li>
-<li>Auto-Gain normalization</li>
-<li>Attack / decay controls</li>
-<li>Optional CAVA-style smoothing</li>
-</ul>
-<h3 id="visualization">Visualization</h3>
-<ul>
-<li>Stereo, Mountain, Mirror, Wave, Circular, Dots and Area visualization types</li>
-<li>Square, Rounded, Segmented, Pointed, Continuous Curve and Battery bar styles</li>
-<li>Linear, Step, Cosine and Catmull-Rom interpolation</li>
-<li>Vertical and horizontal orientations</li>
-<li>Mirrored visualization pass</li>
-<li>Configurable bar count, width, spacing, height and corner radius</li>
-<li>Circular radius and start-angle controls</li>
-</ul>
-<h3 id="appearance">Appearance</h3>
-<ul>
-<li>Solid colors and gradients</li>
-<li>Album-derived colors and album gradients</li>
-<li>Dynamic Acrylic, Liquid Glass and Aero-style peak-cap rendering</li>
-<li>Configurable opacity and dynamic opacity curves</li>
-<li>Dynamic color curves</li>
-<li>Bar borders with visualizer, album and custom hex colors</li>
-<li>Optional visualizer backgrounds: solid, gradient, album color and album gradient</li>
-</ul>
-<h3 id="lyrics">Lyrics</h3>
-<p>Lyrics are optional and disabled by default. When enabled, the mod can retrieve synchronized lyrics for the currently playing track from LRCLIB and display them in a configurable desktop widget.</p>
-<p>The widget supports artist/title metadata, synchronized highlighting, previous/upcoming lines, multiple fonts, alignment, long-line wrapping, fallback/collapse/hide behavior, album-derived backgrounds, gradients, rounded corners and configurable borders.</p>
-<h2 id="lyricsdatasource">Lyrics data source</h2>
-<p>When the Lyrics feature is enabled, the mod contacts LRCLIB only to retrieve lyrics for the currently playing track. The lyrics feature is optional and disabled by default; the network access is not used for telemetry, analytics, remote configuration, or any part of the audio visualization engine.</p>
-<h2 id="customeqwin11">Custom EQ ( Win 11 )</h2>
-<p>The Equalizer button is injected as a native Windows 11 XAML element directly into the system tray. Click it to open the graphical 10-band EQ flyout. Each band ranges from 0.0x to 2.0x gain, with 1.0x as the neutral/default value. EQ values are stored in the mod's local Windhawk storage so they survive reloads without changing the existing visualizer settings pipeline.</p>
-<h2 id="performance">Performance</h2>
-<p>The visualizer uses a lightweight WASAPI/FFT pipeline and dynamically reduces rendering frequency when the visualization has reached its resting state.</p>
-<p>The visualizer frame rate can be configured independently. A value of <code>0</code> removes the software FPS cap and follows the current display refresh rate; any positive value requests that FPS, but it is still capped by the display refresh rate. Higher refresh rates can make the animation smoother, especially with fast visualizer styles, but may increase CPU/GPU usage and power consumption.</p>
-<p>Actual CPU usage depends on display resolution, enabled effects, visualization style, lyrics, frame rate and other settings.</p>
-<hr />
-<h2 id="preview">Preview</h2>
-<p><img src="https://i.imgur.com/IOwofqV.png" alt="eq" /></p>
-<p><img src="https://i.imgur.com/TU0iXkc.gif" alt="1" /></p>
-<p><img src="https://i.imgur.com/8NllN1h.gif" alt="2" /></p>
-<p><img src="https://i.imgur.com/VNz6GOi.gif" alt="3" /></p>
-<p><img src="https://i.imgur.com/aqXU5Fa.gif" alt="4" /></p>
-<hr />
-<h1 id="credits">Credits</h1>
-<ul>
-<li><strong>NeiZ</strong> — Author and maintainer.</li>
-<li><strong>SuperSmile123</strong> — Contributor.</li>
-<li><strong>Salyts</strong> — Reference / upstream desktop audio visualizer implementation.</li>
-<li><strong>GR0UD</strong> — Upstream audio capture / FFT implementation reference.</li>
-</ul>
-<hr />
-<h2 id="reportabug">Report a Bug</h2>
-<p>Please report bugs and feature requests through the repository issue tracker: <a href="https://github.com/NeiZqwe/windhawk-mods/issues">Report an Issue on GitHub</a></p>]]></content>
-        <author>
-            <name>NeiZ</name>
-            <uri>https://github.com/NeiZqwe</uri>
         </author>
     </entry>
 </feed>
