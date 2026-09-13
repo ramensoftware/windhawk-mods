@@ -797,7 +797,7 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
   $name:zh-CN: 音乐响应
   $description: Enable WASAPI loopback audio capture, FFT frequency analysis, beat detection and BPM estimation. Powers music-physics linking.
   $description:zh-CN: 启用WASAPI回环音频捕获、FFT频率分析、节拍检测和BPM估计。为音乐物理联动提供数据。
-- music_fft_size: 512
+- music_fft_size: fft512
   $name: FFT Size
   $name:zh-CN: FFT大小
   $options:
