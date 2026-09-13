@@ -16,6 +16,10 @@
 
 Adds a blob shape behind active taskbar buttons.
 
+Example:
+
+[Blob taskbar theme](https://github.com/ramensoftware/windows-11-taskbar-styling-guide/tree/main/Themes/Blob)
+
 ![Taskbar Blob Shape](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/main/taskbar-blob-shape/demo2.gif)
 
 Based on **Taskbar Elastic WinUI Pill** and the unreleased **Taskbar Elastic
@@ -922,11 +926,29 @@ void RefreshBlob(winrt::Windows::UI::Xaml::FrameworkElement const& button, const
     // full pipeline is skipped; an entry still showing a blob (the dock
     // just switched) falls through once so Ensure hides it and restores
     // the natives.
+    //
+    // Island registration must survive this return — the same hazard as
+    // the disabled-kind branch above: SweepExistingButtons (host tracking,
+    // SizeChanged + DockingStates subscriptions, tray discovery) is only
+    // otherwise reached from EnsureBlobOnButton, so returning bare here
+    // would leave a taskbar first seen while vertically docked untracked,
+    // with no recovery on the switch back to horizontal. Terminates for
+    // the same reason: the re-entrant RefreshBlob hits firstTime == false.
     {
         int dock = g_dockEdge.load();
         if (dock == DockLeft || dock == DockRight) {
             isActive = false;
-            if (!entry->bound && !entry->bgHidden && !entry->indicatorHidden) return;
+            if (!entry->bound && !entry->bgHidden && !entry->indicatorHidden) {
+                if (!IsTrayKind(entry->kind)) {
+                    auto grid = entry->grid.get();
+                    if (!grid) {
+                        grid = GetHostRootGrid(button);
+                        if (grid) entry->grid = winrt::make_weak(grid);
+                    }
+                    if (grid) SweepExistingButtons(grid, localSettings);
+                }
+                return;
+            }
         }
     }
     EnsureBlobOnButton(button, entry, iconPanel, isActive, localSettings);
