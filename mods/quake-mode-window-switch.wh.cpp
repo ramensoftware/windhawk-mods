@@ -109,6 +109,14 @@ static HWND g_targetHwnd = nullptr;
 static bool g_visible = false;
 static HWND g_previousForegroundHwnd = nullptr;
 
+// The docked/hidden rects picked when the window was last shown, reused on
+// hide so the window slides back to where it came from even if
+// monitorMode: cursor would now resolve to a different monitor (e.g. the
+// user's cursor moved before an auto-hide, or before pressing the hotkey
+// again).
+static RECT g_shownDockedRect = {};
+static RECT g_shownHiddenRect = {};
+
 static constexpr int kHotkeyId = 1;
 static constexpr int kAnimationDurationMs = 120;
 static constexpr int kAnimationFrameMs = 10;
@@ -598,13 +606,10 @@ static void HideTargetWindow(bool restoreFocus)
         return;
     }
 
-    RECT docked, hidden;
-    GetDockedAndHiddenRects(docked, hidden);
-
     RECT current = {};
     GetWindowRect(g_targetHwnd, &current);
 
-    AnimateWindowToRect(g_targetHwnd, current, hidden, kAnimationDurationMs);
+    AnimateWindowToRect(g_targetHwnd, current, g_shownHiddenRect, kAnimationDurationMs);
 
     // The hidden slot is only offscreen on a single-monitor, horizontally
     // arranged setup - on a vertically stacked layout it's another
@@ -628,31 +633,32 @@ static void ShowTargetWindow(HWND hwnd)
     HWND currentForeground = GetForegroundWindow();
     g_previousForegroundHwnd = (currentForeground && currentForeground != hwnd) ? currentForeground : nullptr;
 
-    RECT docked, hidden;
-    GetDockedAndHiddenRects(docked, hidden);
+    GetDockedAndHiddenRects(g_shownDockedRect, g_shownHiddenRect);
 
-    // IsWindowVisible is TRUE for a minimized window, and SW_SHOWNA below
-    // shows it in its current (still iconic) state - so a minimized target
-    // would otherwise never reappear and every hotkey press would silently
-    // flip g_visible without anything visible happening.
-    if (IsIconic(hwnd)) {
+    // IsWindowVisible is TRUE for a minimized/maximized window, and
+    // SW_SHOWNA below shows it in its current state - so a minimized
+    // target would otherwise never reappear, and a maximized one would
+    // keep WS_MAXIMIZE while docked (wrong restore-button state, wrong
+    // maximized chrome, and the shell may snap it back to a full work
+    // area when SetWindowPos below moves it to another monitor).
+    if (IsIconic(hwnd) || IsZoomed(hwnd)) {
         ShowWindow(hwnd, SW_RESTORE);
     }
 
     SetWindowPos(
         hwnd,
         HWND_TOP,
-        hidden.left,
-        hidden.top,
-        hidden.right - hidden.left,
-        hidden.bottom - hidden.top,
+        g_shownHiddenRect.left,
+        g_shownHiddenRect.top,
+        g_shownHiddenRect.right - g_shownHiddenRect.left,
+        g_shownHiddenRect.bottom - g_shownHiddenRect.top,
         SWP_NOACTIVATE
     );
 
     ShowWindow(hwnd, SW_SHOWNA);
     ForceSetForegroundWindow(hwnd);
 
-    AnimateWindowToRect(hwnd, hidden, docked, kAnimationDurationMs);
+    AnimateWindowToRect(hwnd, g_shownHiddenRect, g_shownDockedRect, kAnimationDurationMs);
 
     g_visible = true;
 }
@@ -721,6 +727,24 @@ static LRESULT CALLBACK HotkeyWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
         } else {
             Wh_Log(L"Quake mode hotkey re-registered");
         }
+
+        // UnhookWinEvent/SetWinEventHook must run on the thread that
+        // installed the hook, which is why this lives here rather than
+        // in LoadSettings.
+        if (g_autoHideOnFocusLoss && !g_foregroundHook) {
+            g_foregroundHook = SetWinEventHook(
+                EVENT_SYSTEM_FOREGROUND,
+                EVENT_SYSTEM_FOREGROUND,
+                nullptr,
+                OnForegroundChanged,
+                0,
+                0,
+                WINEVENT_OUTOFCONTEXT
+            );
+        } else if (!g_autoHideOnFocusLoss && g_foregroundHook) {
+            UnhookWinEvent(g_foregroundHook);
+            g_foregroundHook = nullptr;
+        }
         return 0;
     }
 
@@ -760,15 +784,17 @@ static DWORD WINAPI HotkeyThreadProc(LPVOID)
     // Keep the message loop running even if registration failed, so a
     // later settings change (fixing the hotkey) can still register it,
     // and so the thread ID/window stay valid for a clean WM_QUIT shutdown.
-    g_foregroundHook = SetWinEventHook(
-        EVENT_SYSTEM_FOREGROUND,
-        EVENT_SYSTEM_FOREGROUND,
-        nullptr,
-        OnForegroundChanged,
-        0,
-        0,
-        WINEVENT_OUTOFCONTEXT
-    );
+    if (g_autoHideOnFocusLoss) {
+        g_foregroundHook = SetWinEventHook(
+            EVENT_SYSTEM_FOREGROUND,
+            EVENT_SYSTEM_FOREGROUND,
+            nullptr,
+            OnForegroundChanged,
+            0,
+            0,
+            WINEVENT_OUTOFCONTEXT
+        );
+    }
 
     MSG msg;
     while (g_running.load() && GetMessageW(&msg, nullptr, 0, 0) > 0) {
