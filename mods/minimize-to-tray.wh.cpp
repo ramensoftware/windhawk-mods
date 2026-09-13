@@ -17,6 +17,8 @@
 
 Right-click a window's minimize button to hide the window in the system tray.
 
+![Minimize to tray demo](https://raw.githubusercontent.com/0Allu/minimize-to-tray/main/assets/minimize-to-tray-demo.gif)
+
 ## Usage
 
 - Right-click a window's minimize button to send it to the tray.
