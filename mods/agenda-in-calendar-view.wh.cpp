@@ -1,0 +1,2090 @@
+// ==WindhawkMod==
+// @id              agenda-in-calendar-pane
+// @name            Agenda in Calendar Pane
+// @description     Show .ics events in the calendar view in the Notification Centre, like Windows 10. Supports both local and remote .ics sources.
+// @version         1.0
+// @author          lonfro
+// @github          https://github.com/lonfro
+// @include         ShellExperienceHost.exe
+// @architecture    x86-64
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject
+// @license         GPLv3
+// ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# Agenda in Calendar
+![VImage](https://i.imgur.com/lQhwoAL.png)
+## Bring back the Windows 10 Agenda to Windows 11
+
+This mod brings the Windows 10-style agenda to Windows 11, allowing you to
+quickly and conveniently view your events from the Notification Centre.
+
+It supports `.ics` files  from both local and remote locations.
+
+
+## Details
+![event](https://i.imgur.com/EkWnp1c.png)
+
+The details shown include:
+- Event name
+- Event description
+- Location
+- Starting and ending time
+
+## Additional features
+**Additional features include:**
+
+Hiding the focus panel:
+
+![comparison](https://i.imgur.com/xurxfJ9.png)
+
+Setting a maximum height (before it starts scrolling):
+
+![scrollViewer](https://i.imgur.com/c9i40PA.png)
+
+Checking events on other dates:
+
+![calendar](https://i.imgur.com/DM8tcj0.png)
+
+
+## Notes
+- Events are refreshed every time the notification pane is opened.
+    - If events can't be fetched (e.g. no internet connection),
+previously-fetched events are shown.
+- The mod resiliently accepts errors; if you have a problem, enable logging.
+- Injection logic has been ported from m417z's *Start Menu Styler*.
+- The creation of this mod was assisted by AI:
+    - Sadly, I do not have experience with C++/Windhawk;
+    - However, I do have experience with WinUI (as I have created several WinUI
+apps in C#);
+    - As a result, the controls used *(inc. CalendarDatePicker, Border, Grid,
+TextBlock)* were manually structured, but the underlying implementation was
+generated using AI.
+
+
+## FAQ
+|Problem|Solution|
+|---|---|
+|My local `.ics` file does not work!|Unblock it from its *Properties* pane in
+File Explorer.| |The bottom corners of the *Notifications* pane (immediately
+above the agenda) are not rounded!|Set a maximum height for the Agenda in the
+mod settings to stop it from clipping the *Notifications* pane.|
+*/
+// ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- icsPath: ""
+  $name: Path to .ics
+  $description: Local file path or remote URL to the .ics calendar file. If your
+local .ics calendar file is not working, make sure it is unblocked (in
+Properties).
+- maxHeight: 400
+  $name: Max height (in pixels)
+  $description: Maximum visible height of the events list in pixels before the
+list starts to scroll.
+- hideFocusSession: true
+  $name: Hide Focus Session
+  $description: Hide the Focus Session control in the calendar/notification
+center flyout.
+*/
+// ==/WindhawkModSettings==
+
+// Parts of the mod were ported from the "Start Menu Styler" mod by m417z
+// This includes:
+// - The injection hook into the Notification Centre
+// For this reason, the original author's license has been attached:
+
+// Copyright (C) 2026 m417z
+// Copyright (C) 2026 lonfro
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+// Modified by lonfro in 2026.
+// Original work by m417z.
+
+#include <windows.h>
+#include <algorithm>
+#include <atomic>
+#include <limits>
+#include <mutex>
+#include <sstream>
+#include <string>
+#include <vector>
+
+#undef GetCurrentTime
+
+#include <xamlom.h>
+
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.UI.Core.h>
+#include <winrt/Windows.UI.Text.h>
+#include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.h>
+#include <winrt/base.h>
+
+namespace wf = winrt::Windows::Foundation;
+namespace wux = winrt::Windows::UI::Xaml;
+namespace wuxc = winrt::Windows::UI::Xaml::Controls;
+namespace wuxm = winrt::Windows::UI::Xaml::Media;
+namespace wuc = winrt::Windows::UI::Core;
+
+std::atomic<bool> g_initialized = false;
+std::atomic<ULONGLONG> g_lastOpenTick = 0;
+std::atomic<ULONGLONG> g_lastFetchTick = 0;
+
+struct CalendarEvent {
+    SYSTEMTIME startLocal{};
+    SYSTEMTIME endLocal{};
+    bool hasEnd = false;
+    bool isAllDay = false;
+    ULONGLONG sortKey = 0;
+    std::wstring name;
+    std::wstring location;
+    std::wstring notes;
+};
+
+std::vector<CalendarEvent> g_allParsedEvents;
+std::vector<CalendarEvent> g_cachedEvents;
+bool g_hasCachedEvents = false;
+std::mutex g_eventsMutex;
+SYSTEMTIME g_selectedDate{};
+bool g_hasSelectedDate = false;
+
+std::vector<CalendarEvent> FilterEventsForDate(
+    std::vector<CalendarEvent> const& allEvents,
+    SYSTEMTIME const& targetDate) {
+    std::vector<CalendarEvent> result;
+    for (const auto& ev : allEvents) {
+        bool matches = false;
+        if (ev.isAllDay && ev.hasEnd) {
+            FILETIME ftStart{}, ftEnd{}, ftTarget{};
+            SYSTEMTIME sOnly = ev.startLocal;
+            sOnly.wHour = sOnly.wMinute = sOnly.wSecond = sOnly.wMilliseconds =
+                0;
+            SYSTEMTIME eOnly = ev.endLocal;
+            eOnly.wHour = eOnly.wMinute = eOnly.wSecond = eOnly.wMilliseconds =
+                0;
+            SYSTEMTIME tOnly = targetDate;
+            tOnly.wHour = tOnly.wMinute = tOnly.wSecond = tOnly.wMilliseconds =
+                0;
+            SystemTimeToFileTime(&sOnly, &ftStart);
+            SystemTimeToFileTime(&eOnly, &ftEnd);
+            SystemTimeToFileTime(&tOnly, &ftTarget);
+            ULARGE_INTEGER uStart{};
+            uStart.LowPart = ftStart.dwLowDateTime;
+            uStart.HighPart = ftStart.dwHighDateTime;
+            ULARGE_INTEGER uEnd{};
+            uEnd.LowPart = ftEnd.dwLowDateTime;
+            uEnd.HighPart = ftEnd.dwHighDateTime;
+            ULARGE_INTEGER uTarget{};
+            uTarget.LowPart = ftTarget.dwLowDateTime;
+            uTarget.HighPart = ftTarget.dwHighDateTime;
+
+            if (uTarget.QuadPart >= uStart.QuadPart &&
+                uTarget.QuadPart < uEnd.QuadPart) {
+                matches = true;
+            } else if (uStart.QuadPart == uEnd.QuadPart &&
+                       uTarget.QuadPart == uStart.QuadPart) {
+                matches = true;
+            }
+        } else {
+            if (ev.startLocal.wYear == targetDate.wYear &&
+                ev.startLocal.wMonth == targetDate.wMonth &&
+                ev.startLocal.wDay == targetDate.wDay) {
+                matches = true;
+            }
+        }
+
+        if (matches) {
+            result.push_back(ev);
+        }
+    }
+
+    std::sort(result.begin(), result.end(),
+              [](const CalendarEvent& a, const CalendarEvent& b) {
+                  if (a.isAllDay != b.isAllDay) {
+                      return a.isAllDay > b.isAllDay;
+                  }
+                  return a.sortKey < b.sortKey;
+              });
+    return result;
+}
+
+void OnCalendarOpened();
+void TriggerBackgroundFetch(bool force = false);
+
+std::wstring GetIcsPathSetting() {
+    PCWSTR str = Wh_GetStringSetting(L"icsPath");
+    std::wstring result = str ? str : L"";
+    if (str) {
+        Wh_FreeStringSetting(str);
+    }
+    while (!result.empty() &&
+           (result.front() == L' ' || result.front() == L'\t' ||
+            result.front() == L'"')) {
+        result.erase(result.begin());
+    }
+    while (!result.empty() &&
+           (result.back() == L' ' || result.back() == L'\t' ||
+            result.back() == L'"')) {
+        result.pop_back();
+    }
+    return result;
+}
+
+int GetMaxHeightSetting() {
+    int val = Wh_GetIntSetting(L"maxHeight");
+    return (val > 0) ? val : 400;
+}
+
+bool ShouldHideFocusSession() {
+    return Wh_GetIntSetting(L"hideFocusSession") != 0;
+}
+
+HMODULE GetCurrentModuleHandle() {
+    HMODULE module = nullptr;
+
+    if (!GetModuleHandleEx(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(
+                reinterpret_cast<const void*>(&GetCurrentModuleHandle)),
+            &module)) {
+        return nullptr;
+    }
+
+    return module;
+}
+
+std::wstring FormatTimeAmPm(SYSTEMTIME const& st) {
+    int hour = st.wHour;
+    const wchar_t* ampm = L"AM";
+    if (hour >= 12) {
+        ampm = L"PM";
+        if (hour > 12) {
+            hour -= 12;
+        }
+    } else if (hour == 0) {
+        hour = 12;
+    }
+
+    WCHAR buf[32];
+    swprintf_s(buf, L"%d:%02d %s", hour, st.wMinute, ampm);
+    return buf;
+}
+
+std::wstring Utf8ToWide(const std::string& str) {
+    if (str.empty())
+        return {};
+    int size = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.length(),
+                                   nullptr, 0);
+    std::wstring wstr(size, 0);
+    MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.length(), &wstr[0],
+                        size);
+    return wstr;
+}
+
+std::string UnescapeIcsText(const std::string& str) {
+    std::string result;
+    result.reserve(str.size());
+    for (size_t i = 0; i < str.size(); ++i) {
+        if (str[i] == '\\' && i + 1 < str.size()) {
+            char next = str[i + 1];
+            if (next == 'n' || next == 'N') {
+                result.push_back('\n');
+                ++i;
+            } else if (next == ',' || next == ';' || next == '\\') {
+                result.push_back(next);
+                ++i;
+            } else {
+                result.push_back(str[i]);
+            }
+        } else {
+            result.push_back(str[i]);
+        }
+    }
+    return result;
+}
+
+inline int SafeParseInt(const std::string& s, size_t pos, size_t len) {
+    if (pos + len > s.size())
+        return 0;
+    int val = 0;
+    for (size_t i = 0; i < len; ++i) {
+        char c = s[pos + i];
+        if (c < '0' || c > '9')
+            return 0;
+        val = val * 10 + (c - '0');
+    }
+    return val;
+}
+
+bool ParseIcsDateTime(const std::string& val, SYSTEMTIME& stUtc, bool& isUtc) {
+    ZeroMemory(&stUtc, sizeof(stUtc));
+    isUtc = false;
+    bool hasTime = false;
+    if (val.length() >= 8) {
+        stUtc.wYear = (WORD)SafeParseInt(val, 0, 4);
+        stUtc.wMonth = (WORD)SafeParseInt(val, 4, 2);
+        stUtc.wDay = (WORD)SafeParseInt(val, 6, 2);
+    }
+    if (val.length() >= 15 && (val[8] == 'T' || val[8] == 't')) {
+        hasTime = true;
+        stUtc.wHour = (WORD)SafeParseInt(val, 9, 2);
+        stUtc.wMinute = (WORD)SafeParseInt(val, 11, 2);
+        stUtc.wSecond = (WORD)SafeParseInt(val, 13, 2);
+    }
+    if (!val.empty() && (val.back() == 'Z' || val.back() == 'z')) {
+        isUtc = true;
+    }
+    return hasTime;
+}
+
+SYSTEMTIME ToLocal(const SYSTEMTIME& stUtc, bool isUtc) {
+    if (!isUtc)
+        return stUtc;
+    SYSTEMTIME stLocal{};
+    if (SystemTimeToTzSpecificLocalTime(nullptr, &stUtc, &stLocal)) {
+        return stLocal;
+    }
+    return stUtc;
+}
+
+std::vector<CalendarEvent> ParseIcs(const std::string& icsContent) {
+    std::string unfolded;
+    unfolded.reserve(icsContent.size());
+    for (size_t i = 0; i < icsContent.size(); ++i) {
+        if ((icsContent[i] == '\r' && i + 1 < icsContent.size() &&
+             icsContent[i + 1] == '\n') ||
+            icsContent[i] == '\n') {
+            size_t nextPos = (icsContent[i] == '\r') ? i + 2 : i + 1;
+            if (nextPos < icsContent.size() &&
+                (icsContent[nextPos] == ' ' || icsContent[nextPos] == '\t')) {
+                i = nextPos;
+                continue;
+            }
+        }
+        unfolded.push_back(icsContent[i]);
+    }
+
+    std::vector<CalendarEvent> events;
+    std::istringstream stream(unfolded);
+    std::string line;
+    bool inEvent = false;
+    CalendarEvent currentEvent;
+
+    while (std::getline(stream, line)) {
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
+        if (line.empty())
+            continue;
+
+        if (line == "BEGIN:VEVENT") {
+            inEvent = true;
+            currentEvent = CalendarEvent{};
+            continue;
+        }
+        if (line == "END:VEVENT") {
+            if (inEvent) {
+                if (!currentEvent.isAllDay &&
+                    currentEvent.startLocal.wHour == 0 &&
+                    currentEvent.startLocal.wMinute == 0) {
+                    if (currentEvent.hasEnd) {
+                        if ((currentEvent.endLocal.wHour == 12 &&
+                             currentEvent.endLocal.wMinute == 0) ||
+                            (currentEvent.endLocal.wHour == 23 &&
+                             currentEvent.endLocal.wMinute == 59) ||
+                            (currentEvent.endLocal.wHour == 0 &&
+                             currentEvent.endLocal.wMinute == 0 &&
+                             (currentEvent.endLocal.wDay !=
+                                  currentEvent.startLocal.wDay ||
+                              currentEvent.endLocal.wMonth !=
+                                  currentEvent.startLocal.wMonth))) {
+                            currentEvent.isAllDay = true;
+                        }
+                    }
+                }
+                events.push_back(currentEvent);
+                inEvent = false;
+            }
+            continue;
+        }
+        if (!inEvent)
+            continue;
+
+        size_t colon = line.find(':');
+        if (colon == std::string::npos)
+            continue;
+
+        std::string keyPart = line.substr(0, colon);
+        std::string valPart = line.substr(colon + 1);
+
+        size_t semi = keyPart.find(';');
+        std::string key =
+            (semi != std::string::npos) ? keyPart.substr(0, semi) : keyPart;
+
+        if (key == "SUMMARY") {
+            currentEvent.name = Utf8ToWide(UnescapeIcsText(valPart));
+        } else if (key == "LOCATION") {
+            currentEvent.location = Utf8ToWide(UnescapeIcsText(valPart));
+        } else if (key == "DESCRIPTION") {
+            currentEvent.notes = Utf8ToWide(UnescapeIcsText(valPart));
+            for (auto& ch : currentEvent.notes) {
+                if (ch == L'\r' || ch == L'\n')
+                    ch = L' ';
+            }
+        } else if (key == "X-MICROSOFT-CDO-ALLDAYEVENT" ||
+                   key == "X-MICROSOFT-MSNCALENDAR-ALL-DAY-EVENT") {
+            if (_stricmp(valPart.c_str(), "TRUE") == 0 || valPart == "1") {
+                currentEvent.isAllDay = true;
+            }
+        } else if (key == "DTSTART") {
+            SYSTEMTIME stUtc{};
+            bool isUtc = false;
+            bool hasTime = ParseIcsDateTime(valPart, stUtc, isUtc);
+            if (!hasTime || keyPart.find("VALUE=DATE") != std::string::npos) {
+                currentEvent.isAllDay = true;
+                currentEvent.startLocal = stUtc;
+            } else {
+                currentEvent.startLocal = ToLocal(stUtc, isUtc);
+            }
+
+            FILETIME ft{};
+            SystemTimeToFileTime(&currentEvent.startLocal, &ft);
+            currentEvent.sortKey =
+                ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+        } else if (key == "DTEND") {
+            SYSTEMTIME stUtc{};
+            bool isUtc = false;
+            bool hasTime = ParseIcsDateTime(valPart, stUtc, isUtc);
+            if (!hasTime || keyPart.find("VALUE=DATE") != std::string::npos) {
+                currentEvent.isAllDay = true;
+                currentEvent.endLocal = stUtc;
+            } else {
+                currentEvent.endLocal = ToLocal(stUtc, isUtc);
+            }
+            currentEvent.hasEnd = true;
+        }
+    }
+
+    return events;
+}
+
+std::string FetchIcsContent(std::wstring const& pathOrUrl) {
+    std::wstring trimmed = pathOrUrl;
+    while (!trimmed.empty() &&
+           (trimmed.front() == L' ' || trimmed.front() == L'\t' ||
+            trimmed.front() == L'"')) {
+        trimmed.erase(trimmed.begin());
+    }
+    while (!trimmed.empty() &&
+           (trimmed.back() == L' ' || trimmed.back() == L'\t' ||
+            trimmed.back() == L'"')) {
+        trimmed.pop_back();
+    }
+
+    if (_wcsnicmp(trimmed.c_str(), L"http://", 7) == 0 ||
+        _wcsnicmp(trimmed.c_str(), L"https://", 8) == 0) {
+        Wh_Log(L"Fetching remote URL: %s", trimmed.c_str());
+        const WH_URL_CONTENT* content =
+            Wh_GetUrlContent(trimmed.c_str(), nullptr);
+        if (content && content->statusCode == 200 && content->data) {
+            std::string result(content->data, content->length);
+            Wh_FreeUrlContent(content);
+            Wh_Log(L"Successfully fetched %zu bytes from remote URL",
+                   result.size());
+            return result;
+        }
+        if (content) {
+            Wh_Log(L"Wh_GetUrlContent returned HTTP status %d",
+                   content->statusCode);
+            Wh_FreeUrlContent(content);
+        } else {
+            Wh_Log(L"Wh_GetUrlContent returned null");
+        }
+        return {};
+    } else {
+        std::wstring localPath = trimmed;
+        if (_wcsnicmp(localPath.c_str(), L"file:///", 8) == 0) {
+            localPath = localPath.substr(8);
+        } else if (_wcsnicmp(localPath.c_str(), L"file://", 7) == 0) {
+            localPath = localPath.substr(7);
+        }
+
+        for (auto& ch : localPath) {
+            if (ch == L'/')
+                ch = L'\\';
+        }
+
+        Wh_Log(L"Reading local file: %s", localPath.c_str());
+
+        HANDLE hFile =
+            CreateFileW(localPath.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                        nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+
+        if (hFile == INVALID_HANDLE_VALUE) {
+            Wh_Log(L"CreateFileW failed (%u) for local path: %s",
+                   GetLastError(), localPath.c_str());
+            return {};
+        }
+
+        DWORD fileSize = GetFileSize(hFile, nullptr);
+        if (fileSize == INVALID_FILE_SIZE || fileSize == 0) {
+            CloseHandle(hFile);
+            Wh_Log(L"Local file is empty or size invalid: %s",
+                   localPath.c_str());
+            return {};
+        }
+
+        std::string result(fileSize, '\0');
+        DWORD bytesRead = 0;
+        if (!ReadFile(hFile, &result[0], fileSize, &bytesRead, nullptr)) {
+            CloseHandle(hFile);
+            Wh_Log(L"ReadFile failed (%u) for local path: %s", GetLastError(),
+                   localPath.c_str());
+            return {};
+        }
+
+        CloseHandle(hFile);
+        result.resize(bytesRead);
+        Wh_Log(L"Successfully read %u bytes from local file", bytesRead);
+        return result;
+    }
+}
+
+SYSTEMTIME AdjustDays(SYSTEMTIME const& stLocal, int days) {
+    SYSTEMTIME stUtc{};
+    TzSpecificLocalTimeToSystemTime(nullptr, &stLocal, &stUtc);
+
+    FILETIME ft{};
+    SystemTimeToFileTime(&stUtc, &ft);
+
+    ULARGE_INTEGER uli;
+    uli.LowPart = ft.dwLowDateTime;
+    uli.HighPart = ft.dwHighDateTime;
+
+    ULONGLONG dayTicks = 864000000000ULL;
+    if (days >= 0) {
+        uli.QuadPart += (ULONGLONG)days * dayTicks;
+    } else {
+        uli.QuadPart -= (ULONGLONG)(-days) * dayTicks;
+    }
+
+    ft.dwLowDateTime = uli.LowPart;
+    ft.dwHighDateTime = uli.HighPart;
+
+    FileTimeToSystemTime(&ft, &stUtc);
+
+    SYSTEMTIME newLocal{};
+    SystemTimeToTzSpecificLocalTime(nullptr, &stUtc, &newLocal);
+    return newLocal;
+}
+
+wf::DateTime SystemTimeToWinRtDateTime(SYSTEMTIME const& stLocal) {
+    SYSTEMTIME stUtc{};
+    TzSpecificLocalTimeToSystemTime(nullptr, &stLocal, &stUtc);
+    FILETIME ft{};
+    SystemTimeToFileTime(&stUtc, &ft);
+    ULARGE_INTEGER uli;
+    uli.LowPart = ft.dwLowDateTime;
+    uli.HighPart = ft.dwHighDateTime;
+    return wf::DateTime{wf::TimeSpan{static_cast<int64_t>(uli.QuadPart)}};
+}
+
+wux::CornerRadius GetStandardCornerRadius() {
+    try {
+        auto res = wux::Application::Current().Resources();
+        if (res.HasKey(winrt::box_value(L"ControlCornerRadius"))) {
+            return winrt::unbox_value<wux::CornerRadius>(
+                res.Lookup(winrt::box_value(L"ControlCornerRadius")));
+        }
+    } catch (...) {
+    }
+    return wux::CornerRadius{4, 4, 4, 4};
+}
+
+wuxm::Brush GetCardBackgroundBrush() {
+    try {
+        auto res = wux::Application::Current().Resources();
+        if (res.HasKey(
+                winrt::box_value(L"CardBackgroundFillColorDefaultBrush"))) {
+            auto brush = res.Lookup(winrt::box_value(
+                                        L"CardBackgroundFillColorDefaultBrush"))
+                             .try_as<wuxm::Brush>();
+            if (brush)
+                return brush;
+        }
+        if (res.HasKey(
+                winrt::box_value(L"SystemControlBackgroundBaseLowBrush"))) {
+            auto brush = res.Lookup(winrt::box_value(
+                                        L"SystemControlBackgroundBaseLowBrush"))
+                             .try_as<wuxm::Brush>();
+            if (brush)
+                return brush;
+        }
+        if (res.HasKey(winrt::box_value(
+                L"SystemControlBackgroundAltMediumLowBrush"))) {
+            auto brush =
+                res.Lookup(winrt::box_value(
+                               L"SystemControlBackgroundAltMediumLowBrush"))
+                    .try_as<wuxm::Brush>();
+            if (brush)
+                return brush;
+        }
+    } catch (...) {
+    }
+
+    return wuxm::SolidColorBrush(winrt::Windows::UI::Color{20, 128, 128, 128});
+}
+
+wuxm::Brush GetCardBorderBrush() {
+    try {
+        auto res = wux::Application::Current().Resources();
+        if (res.HasKey(winrt::box_value(L"CardStrokeColorDefaultBrush"))) {
+            auto brush =
+                res.Lookup(winrt::box_value(L"CardStrokeColorDefaultBrush"))
+                    .try_as<wuxm::Brush>();
+            if (brush)
+                return brush;
+        }
+        if (res.HasKey(winrt::box_value(
+                L"SystemControlBackgroundBaseMediumLowBrush"))) {
+            auto brush =
+                res.Lookup(winrt::box_value(
+                               L"SystemControlBackgroundBaseMediumLowBrush"))
+                    .try_as<wuxm::Brush>();
+            if (brush)
+                return brush;
+        }
+    } catch (...) {
+    }
+
+    return wuxm::SolidColorBrush(winrt::Windows::UI::Color{15, 128, 128, 128});
+}
+
+class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
+                                                   IVisualTreeServiceCallback2,
+                                                   winrt::non_agile> {
+   public:
+    explicit VisualTreeWatcher(winrt::com_ptr<IUnknown> const& site)
+        : m_xamlDiagnostics(site.as<IXamlDiagnostics>()) {
+        Wh_Log(L"Creating VisualTreeWatcher");
+
+        // The Start Menu Styler does not call AdviseVisualTreeChange directly
+        // from this thread because it can sometimes hang.
+        HANDLE thread = CreateThread(
+            nullptr, 0,
+            [](LPVOID parameter) -> DWORD {
+                auto* watcher = reinterpret_cast<VisualTreeWatcher*>(parameter);
+
+                HRESULT hr =
+                    watcher->m_xamlDiagnostics.as<IVisualTreeService3>()
+                        ->AdviseVisualTreeChange(watcher);
+
+                watcher->Release();
+
+                if (FAILED(hr)) {
+                    Wh_Log(L"AdviseVisualTreeChange failed: %08X", hr);
+                }
+
+                return 0;
+            },
+            this, 0, nullptr);
+
+        if (thread) {
+            AddRef();
+            CloseHandle(thread);
+        } else {
+            Wh_Log(L"Failed to create watcher thread");
+        }
+    }
+
+    VisualTreeWatcher(const VisualTreeWatcher&) = delete;
+    VisualTreeWatcher& operator=(const VisualTreeWatcher&) = delete;
+
+    ~VisualTreeWatcher() {
+        Wh_Log(L"Destroying VisualTreeWatcher");
+        if (m_prevDayButton && m_prevBtnToken.value != 0) {
+            m_prevDayButton.Click(m_prevBtnToken);
+            m_prevBtnToken = {};
+        }
+        if (m_nextDayButton && m_nextBtnToken.value != 0) {
+            m_nextDayButton.Click(m_nextBtnToken);
+            m_nextBtnToken = {};
+        }
+        if (m_refreshButton && m_refreshBtnToken.value != 0) {
+            m_refreshButton.Click(m_refreshBtnToken);
+            m_refreshBtnToken = {};
+        }
+        if (m_datePicker && m_dateChangedToken.value != 0) {
+            m_datePicker.DateChanged(m_dateChangedToken);
+            m_dateChangedToken = {};
+        }
+        if (m_focusSessionControl && m_focusSessionVisibilityToken != 0) {
+            try {
+                m_focusSessionControl.UnregisterPropertyChangedCallback(
+                    wux::UIElement::VisibilityProperty(),
+                    m_focusSessionVisibilityToken);
+            } catch (...) {
+            }
+            m_focusSessionVisibilityToken = 0;
+        }
+        m_focusSessionControl = nullptr;
+        m_prevDayButton = nullptr;
+        m_nextDayButton = nullptr;
+        m_refreshButton = nullptr;
+        m_datePicker = nullptr;
+        m_headerGrid = nullptr;
+        m_rootGrid = nullptr;
+        m_eventsScrollViewer = nullptr;
+        m_itemsControl = nullptr;
+    }
+
+    void UnadviseVisualTreeChange() {
+        if (!m_xamlDiagnostics) {
+            return;
+        }
+
+        HRESULT hr = m_xamlDiagnostics.as<IVisualTreeService3>()
+                         ->UnadviseVisualTreeChange(this);
+
+        if (FAILED(hr)) {
+            Wh_Log(L"UnadviseVisualTreeChange failed: %08X", hr);
+        }
+
+        if (m_prevDayButton && m_prevBtnToken.value != 0) {
+            m_prevDayButton.Click(m_prevBtnToken);
+            m_prevBtnToken = {};
+        }
+        if (m_nextDayButton && m_nextBtnToken.value != 0) {
+            m_nextDayButton.Click(m_nextBtnToken);
+            m_nextBtnToken = {};
+        }
+        if (m_refreshButton && m_refreshBtnToken.value != 0) {
+            m_refreshButton.Click(m_refreshBtnToken);
+            m_refreshBtnToken = {};
+        }
+        if (m_datePicker && m_dateChangedToken.value != 0) {
+            m_datePicker.DateChanged(m_dateChangedToken);
+            m_dateChangedToken = {};
+        }
+
+        m_xamlDiagnostics = nullptr;
+        if (m_focusSessionControl && m_focusSessionVisibilityToken != 0) {
+            try {
+                m_focusSessionControl.UnregisterPropertyChangedCallback(
+                    wux::UIElement::VisibilityProperty(),
+                    m_focusSessionVisibilityToken);
+            } catch (...) {
+            }
+            m_focusSessionVisibilityToken = 0;
+        }
+        m_focusSessionControl = nullptr;
+        m_prevDayButton = nullptr;
+        m_nextDayButton = nullptr;
+        m_refreshButton = nullptr;
+        m_datePicker = nullptr;
+        m_headerGrid = nullptr;
+        m_rootGrid = nullptr;
+        m_eventsScrollViewer = nullptr;
+        m_itemsControl = nullptr;
+    }
+
+    void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
+        if (!m_itemsControl)
+            return;
+
+        m_itemsControl.Items().Clear();
+
+        if (events.empty()) {
+            auto border = wuxc::Border();
+            border.Margin(wux::Thickness{0, 2, 0, 4});
+            border.Padding(wux::Thickness{12, 16, 12, 16});
+            border.CornerRadius(GetStandardCornerRadius());
+            border.Background(GetCardBackgroundBrush());
+            border.BorderBrush(GetCardBorderBrush());
+            border.BorderThickness(wux::Thickness{1, 1, 1, 1});
+            auto tb = wuxc::TextBlock();
+            std::wstring icsPath = GetIcsPathSetting();
+            if (icsPath.empty()) {
+                tb.Text(
+                    L"Please set a calendar path or URL in the mod settings.");
+            } else {
+                SYSTEMTIME today;
+                GetLocalTime(&today);
+                bool isToday = (m_currentFilterDate.wYear == today.wYear &&
+                                m_currentFilterDate.wMonth == today.wMonth &&
+                                m_currentFilterDate.wDay == today.wDay);
+                tb.Text(isToday ? L"No events scheduled for today"
+                                : L"No events scheduled for this date");
+            }
+            tb.Opacity(0.7);
+            tb.TextWrapping(wux::TextWrapping::Wrap);
+            tb.HorizontalAlignment(wux::HorizontalAlignment::Center);
+            border.Child(tb);
+            m_itemsControl.Items().Append(border);
+            return;
+        }
+
+        for (const auto& ev : events) {
+            auto border = wuxc::Border();
+            border.Margin(wux::Thickness{0, 2, 0, 4});
+            border.Padding(wux::Thickness{8, 6, 8, 6});
+            border.CornerRadius(GetStandardCornerRadius());
+            border.Background(GetCardBackgroundBrush());
+            border.BorderBrush(GetCardBorderBrush());
+            border.BorderThickness(wux::Thickness{1, 1, 1, 1});
+
+            auto eventGrid = wuxc::Grid();
+
+            // Column 0: fixed width, enough to accompany XX:XX XM + some
+            // padding
+            wuxc::ColumnDefinition col0{};
+            col0.Width(wux::GridLength{65, wux::GridUnitType::Pixel});
+            eventGrid.ColumnDefinitions().Append(col0);
+
+            // Column 1: * width
+            wuxc::ColumnDefinition col1{};
+            col1.Width(wux::GridLength{1, wux::GridUnitType::Star});
+            eventGrid.ColumnDefinitions().Append(col1);
+
+            // Row 0: Starting time + Name of event
+            wuxc::RowDefinition row0{};
+            row0.Height(wux::GridLength{0, wux::GridUnitType::Auto});
+            eventGrid.RowDefinitions().Append(row0);
+
+            // Row 1: Ending time + Location | Notes
+            wuxc::RowDefinition row1{};
+            row1.Height(wux::GridLength{0, wux::GridUnitType::Auto});
+            eventGrid.RowDefinitions().Append(row1);
+
+            // Starting time: Column 0, Row 0
+            auto startTimeTb = wuxc::TextBlock();
+            startTimeTb.Margin(wux::Thickness{0, 0, 8, 0});
+            startTimeTb.VerticalAlignment(wux::VerticalAlignment::Center);
+            wuxc::Grid::SetRow(startTimeTb, 0);
+            wuxc::Grid::SetColumn(startTimeTb, 0);
+            eventGrid.Children().Append(startTimeTb);
+
+            // Name of event: Column 1, Row 0
+            auto nameTb = wuxc::TextBlock();
+            nameTb.Text(winrt::hstring(ev.name));
+            nameTb.FontWeight(
+                winrt::Windows::UI::Text::FontWeights::SemiBold());
+            nameTb.TextWrapping(wux::TextWrapping::Wrap);
+            nameTb.VerticalAlignment(wux::VerticalAlignment::Center);
+            wuxc::Grid::SetRow(nameTb, 0);
+            wuxc::Grid::SetColumn(nameTb, 1);
+            eventGrid.Children().Append(nameTb);
+
+            // Ending time: Column 0, Row 1
+            auto endTimeTb = wuxc::TextBlock();
+            endTimeTb.Margin(wux::Thickness{0, 0, 8, 0});
+            endTimeTb.VerticalAlignment(wux::VerticalAlignment::Center);
+            wuxc::Grid::SetRow(endTimeTb, 1);
+            wuxc::Grid::SetColumn(endTimeTb, 0);
+            eventGrid.Children().Append(endTimeTb);
+
+            if (ev.isAllDay) {
+                startTimeTb.Text(L"All");
+                endTimeTb.Text(L"Day");
+                endTimeTb.Opacity(0.8);
+            } else {
+                startTimeTb.Text(winrt::hstring(FormatTimeAmPm(ev.startLocal)));
+                if (ev.hasEnd) {
+                    endTimeTb.Text(winrt::hstring(FormatTimeAmPm(ev.endLocal)));
+                }
+                endTimeTb.Opacity(0.7);
+            }
+
+            // Location then separator '-' then event notes: Column 1, Row 1
+            std::wstring detailsText;
+            if (!ev.location.empty() && !ev.notes.empty()) {
+                detailsText = ev.location + L" - " + ev.notes;
+            } else if (!ev.location.empty()) {
+                detailsText = ev.location;
+            } else if (!ev.notes.empty()) {
+                detailsText = ev.notes;
+            }
+
+            auto detailsTb = wuxc::TextBlock();
+            detailsTb.Text(winrt::hstring(detailsText));
+            detailsTb.Opacity(0.7);
+            detailsTb.TextWrapping(wux::TextWrapping::Wrap);
+            detailsTb.VerticalAlignment(wux::VerticalAlignment::Center);
+            if (detailsText.empty() && !ev.hasEnd && !ev.isAllDay) {
+                detailsTb.Visibility(wux::Visibility::Collapsed);
+                endTimeTb.Visibility(wux::Visibility::Collapsed);
+            }
+            wuxc::Grid::SetRow(detailsTb, 1);
+            wuxc::Grid::SetColumn(detailsTb, 1);
+            eventGrid.Children().Append(detailsTb);
+
+            border.Child(eventGrid);
+            m_itemsControl.Items().Append(border);
+        }
+    }
+
+    void ChangeSelectedDay(int deltaDays) {
+        SYSTEMTIME newDate = AdjustDays(m_currentFilterDate, deltaDays);
+        m_currentFilterDate = newDate;
+
+        Wh_Log(L"ChangeSelectedDay(%d) -> %04d-%02d-%02d", deltaDays,
+               newDate.wYear, newDate.wMonth, newDate.wDay);
+
+        if (m_datePicker) {
+            m_datePicker.Date(SystemTimeToWinRtDateTime(newDate));
+        }
+
+        std::vector<CalendarEvent> filtered;
+        {
+            std::lock_guard<std::mutex> lock(g_eventsMutex);
+            g_selectedDate = newDate;
+            g_hasSelectedDate = true;
+            filtered = FilterEventsForDate(g_allParsedEvents, newDate);
+            g_cachedEvents = filtered;
+        }
+
+        PopulateItemsControl(filtered);
+    }
+
+    void OnDatePickerDateChanged(wf::IReference<wf::DateTime> const& newDate) {
+        SYSTEMTIME selected{};
+        if (newDate) {
+            auto dt = newDate.Value();
+            auto ticks = dt.time_since_epoch().count();
+            ULARGE_INTEGER uli;
+            uli.QuadPart = static_cast<ULONGLONG>(ticks);
+            FILETIME ft;
+            ft.dwLowDateTime = uli.LowPart;
+            ft.dwHighDateTime = uli.HighPart;
+
+            SYSTEMTIME stUtc{}, stLocal{};
+            FileTimeToSystemTime(&ft, &stUtc);
+            SystemTimeToTzSpecificLocalTime(nullptr, &stUtc, &stLocal);
+            selected = stLocal;
+        } else {
+            GetLocalTime(&selected);
+            if (m_datePicker) {
+                m_datePicker.Date(winrt::clock::now());
+            }
+        }
+
+        if (selected.wYear == m_currentFilterDate.wYear &&
+            selected.wMonth == m_currentFilterDate.wMonth &&
+            selected.wDay == m_currentFilterDate.wDay) {
+            return;
+        }
+
+        m_currentFilterDate = selected;
+        Wh_Log(L"User selected date: %04d-%02d-%02d", selected.wYear,
+               selected.wMonth, selected.wDay);
+
+        std::vector<CalendarEvent> filtered;
+        {
+            std::lock_guard<std::mutex> lock(g_eventsMutex);
+            g_selectedDate = selected;
+            g_hasSelectedDate = true;
+            filtered = FilterEventsForDate(g_allParsedEvents, selected);
+            g_cachedEvents = filtered;
+        }
+
+        PopulateItemsControl(filtered);
+    }
+
+    void ResetDatePickerToToday() {
+        if (!m_datePicker)
+            return;
+
+        auto dispatcher = m_datePicker.Dispatcher();
+        if (!dispatcher)
+            return;
+
+        dispatcher.TryRunAsync(
+            wuc::CoreDispatcherPriority::Normal,
+            [weakThis = winrt::make_weak(get_strong())]() {
+                if (auto strongThis = weakThis.get()) {
+                    SYSTEMTIME today;
+                    GetLocalTime(&today);
+                    strongThis->m_currentFilterDate = today;
+                    if (strongThis->m_datePicker) {
+                        strongThis->m_datePicker.Date(winrt::clock::now());
+                    }
+                    std::vector<CalendarEvent> events;
+                    {
+                        std::lock_guard<std::mutex> lock(g_eventsMutex);
+                        g_selectedDate = today;
+                        g_hasSelectedDate = true;
+                        events = FilterEventsForDate(g_allParsedEvents, today);
+                        g_cachedEvents = events;
+                    }
+                    strongThis->PopulateItemsControl(events);
+                }
+            });
+    }
+
+    void DispatchUpdateEvents(std::vector<CalendarEvent> events) {
+        if (!m_itemsControl) {
+            return;
+        }
+
+        auto dispatcher = m_itemsControl.Dispatcher();
+        if (!dispatcher) {
+            return;
+        }
+
+        dispatcher.TryRunAsync(
+            wuc::CoreDispatcherPriority::Normal,
+            [weakThis = winrt::make_weak(get_strong()),
+             events = std::move(events)]() {
+                if (auto strongThis = weakThis.get()) {
+                    try {
+                        strongThis->PopulateItemsControl(events);
+                        Wh_Log(L"Updated UI with %zu events", events.size());
+                    } catch (...) {
+                        Wh_Log(L"PopulateItemsControl failed: %08X",
+                               winrt::to_hresult());
+                    }
+                }
+            });
+    }
+
+    void UpdateMaxHeight(int maxHeight) {
+        if (!m_eventsScrollViewer) {
+            return;
+        }
+
+        auto dispatcher = m_eventsScrollViewer.Dispatcher();
+        if (!dispatcher) {
+            return;
+        }
+
+        dispatcher.TryRunAsync(
+            wuc::CoreDispatcherPriority::Normal,
+            [weakSv = winrt::make_weak(m_eventsScrollViewer), maxHeight]() {
+                if (auto sv = weakSv.get()) {
+                    sv.MaxHeight((double)maxHeight);
+                    sv.Height(std::numeric_limits<double>::quiet_NaN());
+                }
+            });
+    }
+
+    void ReplaceCalendarContent(wuxc::ScrollViewer const& hostScrollViewer) {
+        auto dispatcher = hostScrollViewer.Dispatcher();
+        if (!dispatcher) {
+            Wh_Log(L"Host ScrollViewer has no Dispatcher");
+            return;
+        }
+
+        auto action = dispatcher.TryRunAsync(
+            wuc::CoreDispatcherPriority::Normal,
+            [strongThis = get_strong(),
+             weakHost = winrt::make_weak(hostScrollViewer)]() {
+                auto host = weakHost.get();
+                if (!host) {
+                    return;
+                }
+
+                try {
+                    if (!strongThis->m_itemsControl) {
+                        strongThis->m_itemsControl = wuxc::ItemsControl();
+                    }
+
+                    if (!strongThis->m_eventsScrollViewer) {
+                        strongThis->m_eventsScrollViewer = wuxc::ScrollViewer();
+                        strongThis->m_eventsScrollViewer.Name(
+                            L"CustomCalendarScrollViewer");
+                        strongThis->m_eventsScrollViewer
+                            .VerticalScrollBarVisibility(
+                                wuxc::ScrollBarVisibility::Auto);
+                        strongThis->m_eventsScrollViewer
+                            .HorizontalScrollBarVisibility(
+                                wuxc::ScrollBarVisibility::Disabled);
+                        strongThis->m_eventsScrollViewer.Content(
+                            strongThis->m_itemsControl);
+                    }
+
+                    int maxHeight = GetMaxHeightSetting();
+                    strongThis->m_eventsScrollViewer.MaxHeight(
+                        (double)maxHeight);
+                    strongThis->m_eventsScrollViewer.Height(
+                        std::numeric_limits<double>::quiet_NaN());
+
+                    if (!strongThis->m_datePicker) {
+                        strongThis->m_datePicker = wuxc::CalendarDatePicker();
+                        strongThis->m_datePicker.Name(
+                            L"CustomCalendarDatePicker");
+                        strongThis->m_datePicker.HorizontalAlignment(
+                            wux::HorizontalAlignment::Stretch);
+                        strongThis->m_datePicker.VerticalAlignment(
+                            wux::VerticalAlignment::Center);
+                        strongThis->m_datePicker.Margin(
+                            wux::Thickness{0, 0, 0, 6});
+                        strongThis->m_datePicker.IsTodayHighlighted(true);
+                        strongThis->m_datePicker.DateFormat(
+                            L"{dayofweek.full}, "
+                            L"{day.integer(2)}/{month.integer(2)}/{year.full}");
+                        strongThis->m_datePicker.Date(winrt::clock::now());
+
+                        strongThis->m_dateChangedToken =
+                            strongThis->m_datePicker.DateChanged(
+                                [weakThis = winrt::make_weak(strongThis)](
+                                    wuxc::CalendarDatePicker const&,
+                                    wuxc::
+                                        CalendarDatePickerDateChangedEventArgs const&
+                                            args) {
+                                    if (auto watcher = weakThis.get()) {
+                                        watcher->OnDatePickerDateChanged(
+                                            args.NewDate());
+                                    }
+                                });
+                    }
+
+                    if (!strongThis->m_prevDayButton) {
+                        strongThis->m_prevDayButton = wuxc::Button();
+                        strongThis->m_prevDayButton.Name(
+                            L"CustomCalendarPrevDayButton");
+                        strongThis->m_prevDayButton.Width(32);
+                        strongThis->m_prevDayButton.Height(32);
+                        strongThis->m_prevDayButton.Padding(
+                            wux::Thickness{0, 0, 0, 0});
+                        strongThis->m_prevDayButton.Margin(
+                            wux::Thickness{0, 0, 6, 6});
+                        strongThis->m_prevDayButton.VerticalAlignment(
+                            wux::VerticalAlignment::Center);
+
+                        auto prevIcon = wuxc::FontIcon();
+                        prevIcon.Glyph(L"\uE76B");  // ChevronLeft
+                        prevIcon.FontSize(12);
+                        strongThis->m_prevDayButton.Content(prevIcon);
+
+                        strongThis->m_prevBtnToken =
+                            strongThis->m_prevDayButton.Click(
+                                [weakThis = winrt::make_weak(strongThis)](
+                                    wf::IInspectable const&,
+                                    wux::RoutedEventArgs const&) {
+                                    if (auto watcher = weakThis.get()) {
+                                        watcher->ChangeSelectedDay(-1);
+                                    }
+                                });
+                    }
+
+                    if (!strongThis->m_nextDayButton) {
+                        strongThis->m_nextDayButton = wuxc::Button();
+                        strongThis->m_nextDayButton.Name(
+                            L"CustomCalendarNextDayButton");
+                        strongThis->m_nextDayButton.Width(32);
+                        strongThis->m_nextDayButton.Height(32);
+                        strongThis->m_nextDayButton.Padding(
+                            wux::Thickness{0, 0, 0, 0});
+                        strongThis->m_nextDayButton.Margin(
+                            wux::Thickness{6, 0, 6, 6});
+                        strongThis->m_nextDayButton.VerticalAlignment(
+                            wux::VerticalAlignment::Center);
+
+                        auto nextIcon = wuxc::FontIcon();
+                        nextIcon.Glyph(L"\uE76C");  // ChevronRight
+                        nextIcon.FontSize(12);
+                        strongThis->m_nextDayButton.Content(nextIcon);
+
+                        strongThis->m_nextBtnToken =
+                            strongThis->m_nextDayButton.Click(
+                                [weakThis = winrt::make_weak(strongThis)](
+                                    wf::IInspectable const&,
+                                    wux::RoutedEventArgs const&) {
+                                    if (auto watcher = weakThis.get()) {
+                                        watcher->ChangeSelectedDay(1);
+                                    }
+                                });
+                    }
+
+                    if (!strongThis->m_refreshButton) {
+                        strongThis->m_refreshButton = wuxc::Button();
+                        strongThis->m_refreshButton.Name(
+                            L"CustomCalendarRefreshButton");
+                        strongThis->m_refreshButton.Width(32);
+                        strongThis->m_refreshButton.Height(32);
+                        strongThis->m_refreshButton.Padding(
+                            wux::Thickness{0, 0, 0, 0});
+                        strongThis->m_refreshButton.Margin(
+                            wux::Thickness{0, 0, 0, 6});
+                        strongThis->m_refreshButton.VerticalAlignment(
+                            wux::VerticalAlignment::Center);
+
+                        auto refreshIcon = wuxc::FontIcon();
+                        refreshIcon.Glyph(L"\uE72C");  // Refresh
+                        refreshIcon.FontSize(12);
+                        strongThis->m_refreshButton.Content(refreshIcon);
+
+                        strongThis->m_refreshBtnToken =
+                            strongThis->m_refreshButton.Click(
+                                [](wf::IInspectable const&,
+                                   wux::RoutedEventArgs const&) {
+                                    TriggerBackgroundFetch(true);
+                                });
+                    }
+
+                    if (!strongThis->m_headerGrid) {
+                        strongThis->m_headerGrid = wuxc::Grid();
+                        strongThis->m_headerGrid.Name(
+                            L"CustomCalendarHeaderGrid");
+                        strongThis->m_headerGrid.Margin(
+                            wux::Thickness{0, 6, 0, 0});
+
+                        // Auto - * - Auto - Auto
+                        wuxc::ColumnDefinition col0{};
+                        col0.Width(wux::GridLength{0, wux::GridUnitType::Auto});
+                        strongThis->m_headerGrid.ColumnDefinitions().Append(
+                            col0);
+
+                        wuxc::ColumnDefinition col1{};
+                        col1.Width(wux::GridLength{1, wux::GridUnitType::Star});
+                        strongThis->m_headerGrid.ColumnDefinitions().Append(
+                            col1);
+
+                        wuxc::ColumnDefinition col2{};
+                        col2.Width(wux::GridLength{0, wux::GridUnitType::Auto});
+                        strongThis->m_headerGrid.ColumnDefinitions().Append(
+                            col2);
+
+                        wuxc::ColumnDefinition col3{};
+                        col3.Width(wux::GridLength{0, wux::GridUnitType::Auto});
+                        strongThis->m_headerGrid.ColumnDefinitions().Append(
+                            col3);
+
+                        wuxc::Grid::SetColumn(strongThis->m_prevDayButton, 0);
+                        strongThis->m_headerGrid.Children().Append(
+                            strongThis->m_prevDayButton);
+
+                        wuxc::Grid::SetColumn(strongThis->m_datePicker, 1);
+                        strongThis->m_headerGrid.Children().Append(
+                            strongThis->m_datePicker);
+
+                        wuxc::Grid::SetColumn(strongThis->m_nextDayButton, 2);
+                        strongThis->m_headerGrid.Children().Append(
+                            strongThis->m_nextDayButton);
+
+                        wuxc::Grid::SetColumn(strongThis->m_refreshButton, 3);
+                        strongThis->m_headerGrid.Children().Append(
+                            strongThis->m_refreshButton);
+                    }
+
+                    if (!strongThis->m_rootGrid) {
+                        strongThis->m_rootGrid = wuxc::Grid();
+                        strongThis->m_rootGrid.Name(L"CustomCalendarRootGrid");
+                        strongThis->m_rootGrid.Margin(
+                            wux::Thickness{12, 4, 12, 4});
+
+                        wuxc::RowDefinition row0{};
+                        row0.Height(
+                            wux::GridLength{0, wux::GridUnitType::Auto});
+                        strongThis->m_rootGrid.RowDefinitions().Append(row0);
+
+                        wuxc::RowDefinition row1{};
+                        row1.Height(
+                            wux::GridLength{0, wux::GridUnitType::Auto});
+                        strongThis->m_rootGrid.RowDefinitions().Append(row1);
+
+                        wuxc::Grid::SetRow(strongThis->m_headerGrid, 0);
+                        strongThis->m_rootGrid.Children().Append(
+                            strongThis->m_headerGrid);
+
+                        wuxc::Grid::SetRow(strongThis->m_eventsScrollViewer, 1);
+                        strongThis->m_rootGrid.Children().Append(
+                            strongThis->m_eventsScrollViewer);
+                    }
+
+                    SYSTEMTIME today;
+                    GetLocalTime(&today);
+                    strongThis->m_currentFilterDate = today;
+
+                    std::vector<CalendarEvent> currentEvents;
+                    {
+                        std::lock_guard<std::mutex> lock(g_eventsMutex);
+                        currentEvents =
+                            FilterEventsForDate(g_allParsedEvents, today);
+                        g_cachedEvents = currentEvents;
+                    }
+                    strongThis->PopulateItemsControl(currentEvents);
+
+                    host.VerticalScrollBarVisibility(
+                        wuxc::ScrollBarVisibility::Disabled);
+                    host.HorizontalScrollBarVisibility(
+                        wuxc::ScrollBarVisibility::Disabled);
+                    host.Content(strongThis->m_rootGrid);
+
+                    TriggerBackgroundFetch();
+
+                    Wh_Log(
+                        L"Successfully replaced CalendarControlScrollViewer "
+                        L"content on UI thread!");
+                } catch (...) {
+                    Wh_Log(L"ReplaceCalendarContent on UI thread failed: %08X",
+                           winrt::to_hresult());
+                }
+            });
+
+        if (!action) {
+            Wh_Log(L"TryRunAsync returned null");
+        }
+    }
+
+    void UpdateFocusSessionVisibility() {
+        if (!m_focusSessionControl)
+            return;
+
+        auto dispatcher = m_focusSessionControl.Dispatcher();
+        if (!dispatcher)
+            return;
+
+        dispatcher.TryRunAsync(
+            wuc::CoreDispatcherPriority::Normal,
+            [weakThis = winrt::make_weak(get_strong())]() {
+                if (auto watcher = weakThis.get()) {
+                    if (watcher->m_focusSessionControl) {
+                        try {
+                            bool hide = ShouldHideFocusSession();
+                            watcher->m_focusSessionControl.Visibility(
+                                hide ? wux::Visibility::Collapsed
+                                     : wux::Visibility::Visible);
+                            Wh_Log(L"Set FocusSessionControl visibility to %s",
+                                   hide ? L"Collapsed" : L"Visible");
+                        } catch (...) {
+                            Wh_Log(
+                                L"Failed to set FocusSessionControl "
+                                L"visibility: %08X",
+                                winrt::to_hresult());
+                        }
+                    }
+                }
+            });
+    }
+
+    void HandleFocusSessionControl(wux::FrameworkElement const& element) {
+        m_focusSessionControl = element;
+
+        auto dispatcher = element.Dispatcher();
+        if (!dispatcher)
+            return;
+
+        dispatcher.TryRunAsync(
+            wuc::CoreDispatcherPriority::Normal,
+            [weakThis = winrt::make_weak(get_strong()),
+             weakEl = winrt::make_weak(element)]() {
+                auto watcher = weakThis.get();
+                auto el = weakEl.get();
+                if (!watcher || !el)
+                    return;
+
+                try {
+                    bool hide = ShouldHideFocusSession();
+                    if (hide) {
+                        el.Visibility(wux::Visibility::Collapsed);
+                        Wh_Log(L"Collapsed FocusSessionControl");
+                    }
+
+                    if (watcher->m_focusSessionVisibilityToken == 0) {
+                        watcher->m_focusSessionVisibilityToken =
+                            el.RegisterPropertyChangedCallback(
+                                wux::UIElement::VisibilityProperty(),
+                                [weakWatcher = winrt::make_weak(watcher)](
+                                    wux::DependencyObject const& sender,
+                                    wux::DependencyProperty const&) {
+                                    if (auto w = weakWatcher.get()) {
+                                        if (auto fe =
+                                                sender.try_as<
+                                                    wux::FrameworkElement>()) {
+                                            if (ShouldHideFocusSession() &&
+                                                fe.Visibility() !=
+                                                    wux::Visibility::
+                                                        Collapsed) {
+                                                fe.Visibility(
+                                                    wux::Visibility::Collapsed);
+                                                Wh_Log(
+                                                    L"Re-collapsed "
+                                                    L"FocusSessionControl on "
+                                                    L"external visibility "
+                                                    L"change");
+                                            }
+                                        }
+                                    }
+                                });
+                    }
+                } catch (...) {
+                    Wh_Log(L"Failed to configure FocusSessionControl: %08X",
+                           winrt::to_hresult());
+                }
+            });
+    }
+
+    HRESULT STDMETHODCALLTYPE
+    OnVisualTreeChange(ParentChildRelation relation,
+                       VisualElement element,
+                       VisualMutationType mutationType) override {
+        UNREFERENCED_PARAMETER(relation);
+
+        try {
+            if (mutationType != Add) {
+                return S_OK;
+            }
+
+            auto inspectable = FromHandle(element.Handle);
+            auto frameworkElement = inspectable.try_as<wux::FrameworkElement>();
+            if (!frameworkElement) {
+                return S_OK;
+            }
+
+            auto name = frameworkElement.Name();
+
+            if (name == L"CalendarControlScrollViewer") {
+                Wh_Log(L"FOUND CalendarControlScrollViewer");
+
+                auto scrollViewer =
+                    frameworkElement.try_as<wuxc::ScrollViewer>();
+
+                if (!scrollViewer) {
+                    Wh_Log(
+                        L"CalendarControlScrollViewer is not a ScrollViewer");
+                    return S_OK;
+                }
+
+                ReplaceCalendarContent(scrollViewer);
+            } else if (name == L"FocusSessionControl" ||
+                       (element.Type &&
+                        wcscmp(element.Type,
+                               L"ActionCenter.FocusSessionControl") == 0)) {
+                Wh_Log(L"FOUND FocusSessionControl");
+                HandleFocusSessionControl(frameworkElement);
+            } else if (name == L"SeeMoreLessViewInstance" ||
+                       name == L"SeeMoreLessButton" ||
+                       (element.Type &&
+                        wcsstr(element.Type, L"ActionCenter"))) {
+                OnCalendarOpened();
+            }
+        } catch (...) {
+            HRESULT hr = winrt::to_hresult();
+            Wh_Log(L"OnVisualTreeChange failed: %08X", hr);
+        }
+
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE
+    OnElementStateChanged(InstanceHandle element,
+                          VisualElementState elementState,
+                          LPCWSTR context) noexcept override {
+        UNREFERENCED_PARAMETER(element);
+        UNREFERENCED_PARAMETER(elementState);
+        UNREFERENCED_PARAMETER(context);
+
+        return S_OK;
+    }
+
+   private:
+    wf::IInspectable FromHandle(InstanceHandle handle) {
+        wf::IInspectable object;
+
+        winrt::check_hresult(m_xamlDiagnostics->GetIInspectableFromHandle(
+            handle,
+            reinterpret_cast<::IInspectable**>(winrt::put_abi(object))));
+
+        return object;
+    }
+
+    winrt::com_ptr<IXamlDiagnostics> m_xamlDiagnostics;
+    wuxc::Grid m_rootGrid{nullptr};
+    wuxc::Grid m_headerGrid{nullptr};
+    wuxc::Button m_prevDayButton{nullptr};
+    wuxc::Button m_nextDayButton{nullptr};
+    wuxc::Button m_refreshButton{nullptr};
+    wuxc::CalendarDatePicker m_datePicker{nullptr};
+    wuxc::ScrollViewer m_eventsScrollViewer{nullptr};
+    wuxc::ItemsControl m_itemsControl{nullptr};
+    SYSTEMTIME m_currentFilterDate{};
+    winrt::event_token m_dateChangedToken{};
+    winrt::event_token m_prevBtnToken{};
+    winrt::event_token m_nextBtnToken{};
+    winrt::event_token m_refreshBtnToken{};
+    wux::FrameworkElement m_focusSessionControl{nullptr};
+    int64_t m_focusSessionVisibilityToken{0};
+};
+
+// -----------------------------------------------------------------------------
+// XAML Diagnostics TAP
+// -----------------------------------------------------------------------------
+
+static constexpr CLSID CLSID_WindhawkTAP = {
+    0xc85d8cc7,
+    0x5463,
+    0x40e8,
+    {0xa4, 0x32, 0xf5, 0x91, 0x6b, 0x64, 0x27, 0xe5}};
+
+winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
+
+void TriggerBackgroundFetch(bool force) {
+    ULONGLONG currentTick = GetTickCount64();
+    if (!force && currentTick - g_lastFetchTick < 1000) {
+        return;
+    }
+    g_lastFetchTick = currentTick;
+
+    HANDLE thread = CreateThread(
+        nullptr, 0,
+        [](LPVOID) -> DWORD {
+            std::wstring icsPath = GetIcsPathSetting();
+            if (icsPath.empty()) {
+                Wh_Log(L"No ICS path configured in settings");
+                if (g_visualTreeWatcher) {
+                    g_visualTreeWatcher->DispatchUpdateEvents({});
+                }
+                return 0;
+            }
+
+            Wh_Log(L"Fetching ICS from: %s", icsPath.c_str());
+
+            std::string content = FetchIcsContent(icsPath);
+            if (content.empty()) {
+                Wh_Log(
+                    L"Failed to fetch ICS content (or empty), keeping existing "
+                    L"content");
+                return 0;
+            }
+
+            auto allEvents = ParseIcs(content);
+            Wh_Log(L"Parsed %zu total events from ICS", allEvents.size());
+
+            SYSTEMTIME targetDate;
+            {
+                std::lock_guard<std::mutex> lock(g_eventsMutex);
+                g_allParsedEvents = allEvents;
+                g_hasCachedEvents = true;
+                if (g_hasSelectedDate) {
+                    targetDate = g_selectedDate;
+                } else {
+                    GetLocalTime(&targetDate);
+                    g_selectedDate = targetDate;
+                    g_hasSelectedDate = true;
+                }
+            }
+
+            auto filteredEvents = FilterEventsForDate(allEvents, targetDate);
+            Wh_Log(L"Found %zu events for date %04d-%02d-%02d",
+                   filteredEvents.size(), targetDate.wYear, targetDate.wMonth,
+                   targetDate.wDay);
+
+            {
+                std::lock_guard<std::mutex> lock(g_eventsMutex);
+                g_cachedEvents = filteredEvents;
+            }
+
+            if (g_visualTreeWatcher) {
+                g_visualTreeWatcher->DispatchUpdateEvents(filteredEvents);
+            }
+
+            return 0;
+        },
+        nullptr, 0, nullptr);
+
+    if (thread) {
+        CloseHandle(thread);
+    }
+}
+
+void OnCalendarOpened() {
+    ULONGLONG currentTick = GetTickCount64();
+    if (currentTick - g_lastOpenTick < 500) {
+        return;
+    }
+    g_lastOpenTick = currentTick;
+
+    Wh_Log(
+        L"Calendar opened, resetting date picker to today and triggering "
+        L"background fetch");
+
+    if (g_visualTreeWatcher) {
+        g_visualTreeWatcher->ResetDatePickerToToday();
+    }
+
+    TriggerBackgroundFetch();
+}
+
+class WindhawkTAP
+    : public winrt::implements<WindhawkTAP, IObjectWithSite, winrt::non_agile> {
+   public:
+    HRESULT STDMETHODCALLTYPE SetSite(IUnknown* pUnkSite) override {
+        if (g_visualTreeWatcher) {
+            g_visualTreeWatcher->UnadviseVisualTreeChange();
+            g_visualTreeWatcher = nullptr;
+        }
+
+        m_site = nullptr;
+
+        if (!pUnkSite) {
+            return S_OK;
+        }
+
+        m_site.copy_from(pUnkSite);
+
+        // InitializeXamlDiagnosticsEx increments our DLL refcount.
+        // The Start Menu Styler balances that here.
+        HMODULE module = GetCurrentModuleHandle();
+
+        if (module) {
+            FreeLibrary(module);
+        }
+
+        g_visualTreeWatcher = winrt::make_self<VisualTreeWatcher>(m_site);
+
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE GetSite(REFIID riid,
+                                      void** ppvSite) noexcept override {
+        return m_site.as(riid, ppvSite);
+    }
+
+   private:
+    winrt::com_ptr<IUnknown> m_site;
+};
+
+// -----------------------------------------------------------------------------
+// Simple COM class factory
+// -----------------------------------------------------------------------------
+
+template <class T>
+struct SimpleFactory
+    : winrt::implements<SimpleFactory<T>, IClassFactory, winrt::non_agile> {
+    HRESULT STDMETHODCALLTYPE CreateInstance(IUnknown* pUnkOuter,
+                                             REFIID riid,
+                                             void** ppvObject) override {
+        if (pUnkOuter) {
+            return CLASS_E_NOAGGREGATION;
+        }
+
+        try {
+            *ppvObject = nullptr;
+            return winrt::make<T>().as(riid, ppvObject);
+        } catch (...) {
+            return winrt::to_hresult();
+        }
+    }
+
+    HRESULT STDMETHODCALLTYPE LockServer(BOOL) noexcept override {
+        return S_OK;
+    }
+};
+
+// -----------------------------------------------------------------------------
+// DLL exports required by XAML Diagnostics
+// -----------------------------------------------------------------------------
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdll-attribute-on-redeclaration"
+
+__declspec(dllexport) _Use_decl_annotations_ STDAPI
+DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv) {
+    try {
+        if (rclsid != CLSID_WindhawkTAP) {
+            return CLASS_E_CLASSNOTAVAILABLE;
+        }
+
+        *ppv = nullptr;
+
+        return winrt::make<SimpleFactory<WindhawkTAP>>().as(riid, ppv);
+    } catch (...) {
+        return winrt::to_hresult();
+    }
+}
+
+__declspec(dllexport) _Use_decl_annotations_ STDAPI DllCanUnloadNow() {
+    return winrt::get_module_lock() ? S_FALSE : S_OK;
+}
+
+#pragma clang diagnostic pop
+
+// -----------------------------------------------------------------------------
+// XAML Diagnostics initialization
+// -----------------------------------------------------------------------------
+
+using PFN_INITIALIZE_XAML_DIAGNOSTICS_EX =
+    decltype(&InitializeXamlDiagnosticsEx);
+
+HRESULT InjectWindhawkTAP() {
+    HMODULE module = GetCurrentModuleHandle();
+
+    if (!module) {
+        Wh_Log(L"GetCurrentModuleHandle failed");
+        return HRESULT_FROM_WIN32(GetLastError());
+    }
+
+    WCHAR modulePath[MAX_PATH];
+
+    DWORD modulePathLength =
+        GetModuleFileNameW(module, modulePath, ARRAYSIZE(modulePath));
+
+    if (modulePathLength == 0 || modulePathLength >= ARRAYSIZE(modulePath)) {
+        Wh_Log(L"GetModuleFileNameW failed");
+
+        return HRESULT_FROM_WIN32(GetLastError());
+    }
+
+    Wh_Log(L"Module path: %s", modulePath);
+
+    HMODULE xamlModule = LoadLibraryExW(L"Windows.UI.Xaml.dll", nullptr,
+                                        LOAD_LIBRARY_SEARCH_SYSTEM32);
+
+    if (!xamlModule) {
+        Wh_Log(L"Failed to load Windows.UI.Xaml.dll");
+
+        return HRESULT_FROM_WIN32(GetLastError());
+    }
+
+    auto initializeXamlDiagnostics =
+        reinterpret_cast<PFN_INITIALIZE_XAML_DIAGNOSTICS_EX>(
+            GetProcAddress(xamlModule, "InitializeXamlDiagnosticsEx"));
+
+    if (!initializeXamlDiagnostics) {
+        Wh_Log(L"InitializeXamlDiagnosticsEx not found");
+
+        return HRESULT_FROM_WIN32(GetLastError());
+    }
+
+    HRESULT hr = E_FAIL;
+
+    // This is the same strategy used by the Start Menu Styler:
+    // try VisualDiagConnection1, VisualDiagConnection2, ...
+    for (int i = 0; i < 10000; i++) {
+        WCHAR connectionName[256];
+
+        swprintf_s(connectionName, L"VisualDiagConnection%d", i + 1);
+
+        hr = initializeXamlDiagnostics(connectionName, GetCurrentProcessId(),
+                                       L"", modulePath, CLSID_WindhawkTAP,
+                                       nullptr);
+
+        if (hr != HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) {
+            break;
+        }
+    }
+
+    Wh_Log(L"InitializeXamlDiagnosticsEx returned: %08X", hr);
+
+    return hr;
+}
+
+// -----------------------------------------------------------------------------
+// Start Menu Styler initialization pattern for CoreWindow
+// -----------------------------------------------------------------------------
+
+void RegisterCoreWindowEvents() {
+    try {
+        auto coreWindow = wuc::CoreWindow::GetForCurrentThread();
+        if (coreWindow) {
+            Wh_Log(
+                L"Registering CoreWindow Activated & VisibilityChanged for "
+                L"thread %u",
+                GetCurrentThreadId());
+
+            coreWindow.Activated(
+                [](auto&&, wuc::WindowActivatedEventArgs const& args) {
+                    if (args.WindowActivationState() !=
+                        wuc::CoreWindowActivationState::Deactivated) {
+                        Wh_Log(L"CoreWindow Activated");
+                        OnCalendarOpened();
+                    }
+                });
+
+            coreWindow.VisibilityChanged(
+                [](auto&&, wuc::VisibilityChangedEventArgs const& args) {
+                    if (args.Visible()) {
+                        Wh_Log(L"CoreWindow VisibilityChanged: Visible");
+                        OnCalendarOpened();
+                    }
+                });
+        }
+    } catch (...) {
+        Wh_Log(L"Failed to register CoreWindow events: %08X",
+               winrt::to_hresult());
+    }
+}
+
+void InitializeSettingsAndTap() {
+    RegisterCoreWindowEvents();
+
+    if (g_initialized.exchange(true)) {
+        return;
+    }
+
+    Wh_Log(L"InitializeSettingsAndTap: Injecting TAP for process %u",
+           GetCurrentProcessId());
+
+    HRESULT hr = InjectWindhawkTAP();
+    if (FAILED(hr)) {
+        Wh_Log(L"InjectWindhawkTAP failed: %08X", hr);
+        g_initialized = false;
+    }
+}
+
+void UninitializeSettingsAndTap() {
+    if (g_visualTreeWatcher) {
+        g_visualTreeWatcher->UnadviseVisualTreeChange();
+        g_visualTreeWatcher = nullptr;
+    }
+
+    g_initialized = false;
+}
+
+using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
+
+bool RunFromWindowThread(HWND hWnd,
+                         RunFromWindowThreadProc_t proc,
+                         PVOID procParam) {
+    static const UINT runFromWindowThreadRegisteredMsg =
+        RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
+    struct RUN_FROM_WINDOW_THREAD_PARAM {
+        RunFromWindowThreadProc_t proc;
+        PVOID procParam;
+    };
+
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (dwThreadId == 0) {
+        return false;
+    }
+
+    if (dwThreadId == GetCurrentThreadId()) {
+        proc(procParam);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookEx(
+        WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION) {
+                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
+                if (cwp->message == runFromWindowThreadRegisteredMsg) {
+                    RUN_FROM_WINDOW_THREAD_PARAM* param =
+                        (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
+                    param->proc(param->procParam);
+                }
+            }
+
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, dwThreadId);
+    if (!hook) {
+        return false;
+    }
+
+    RUN_FROM_WINDOW_THREAD_PARAM param;
+    param.proc = proc;
+    param.procParam = procParam;
+    SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
+
+    UnhookWindowsHookEx(hook);
+
+    return true;
+}
+
+void OnWindowCreated(HWND hWnd, LPCWSTR lpClassName, PCSTR funcName) {
+    BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
+    if (bTextualClassName &&
+        _wcsicmp(lpClassName, L"Windows.UI.Core.CoreWindow") == 0) {
+        Wh_Log(L"Initializing - Created core window: %08X via %S",
+               (DWORD)(ULONG_PTR)hWnd, funcName);
+
+        InitializeSettingsAndTap();
+    }
+}
+
+using CreateWindowInBand_t = HWND(WINAPI*)(DWORD dwExStyle,
+                                           LPCWSTR lpClassName,
+                                           LPCWSTR lpWindowName,
+                                           DWORD dwStyle,
+                                           int X,
+                                           int Y,
+                                           int nWidth,
+                                           int nHeight,
+                                           HWND hWndParent,
+                                           HMENU hMenu,
+                                           HINSTANCE hInstance,
+                                           PVOID lpParam,
+                                           DWORD dwBand);
+CreateWindowInBand_t CreateWindowInBand_Original;
+
+HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
+                                    LPCWSTR lpClassName,
+                                    LPCWSTR lpWindowName,
+                                    DWORD dwStyle,
+                                    int X,
+                                    int Y,
+                                    int nWidth,
+                                    int nHeight,
+                                    HWND hWndParent,
+                                    HMENU hMenu,
+                                    HINSTANCE hInstance,
+                                    PVOID lpParam,
+                                    DWORD dwBand) {
+    HWND hWnd = CreateWindowInBand_Original(
+        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
+        hWndParent, hMenu, hInstance, lpParam, dwBand);
+    if (!hWnd) {
+        return hWnd;
+    }
+
+    OnWindowCreated(hWnd, lpClassName, __FUNCTION__);
+    return hWnd;
+}
+
+using CreateWindowInBandEx_t = HWND(WINAPI*)(DWORD dwExStyle,
+                                             LPCWSTR lpClassName,
+                                             LPCWSTR lpWindowName,
+                                             DWORD dwStyle,
+                                             int X,
+                                             int Y,
+                                             int nWidth,
+                                             int nHeight,
+                                             HWND hWndParent,
+                                             HMENU hMenu,
+                                             HINSTANCE hInstance,
+                                             PVOID lpParam,
+                                             DWORD dwBand,
+                                             DWORD dwTypeFlags);
+CreateWindowInBandEx_t CreateWindowInBandEx_Original;
+
+HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
+                                      LPCWSTR lpClassName,
+                                      LPCWSTR lpWindowName,
+                                      DWORD dwStyle,
+                                      int X,
+                                      int Y,
+                                      int nWidth,
+                                      int nHeight,
+                                      HWND hWndParent,
+                                      HMENU hMenu,
+                                      HINSTANCE hInstance,
+                                      PVOID lpParam,
+                                      DWORD dwBand,
+                                      DWORD dwTypeFlags) {
+    HWND hWnd = CreateWindowInBandEx_Original(
+        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
+        hWndParent, hMenu, hInstance, lpParam, dwBand, dwTypeFlags);
+    if (!hWnd) {
+        return hWnd;
+    }
+
+    OnWindowCreated(hWnd, lpClassName, __FUNCTION__);
+    return hWnd;
+}
+
+std::vector<HWND> GetCoreWnds() {
+    struct ENUM_WINDOWS_PARAM {
+        std::vector<HWND>* hWnds;
+    };
+
+    std::vector<HWND> hWnds;
+    ENUM_WINDOWS_PARAM param = {&hWnds};
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            ENUM_WINDOWS_PARAM& param = *(ENUM_WINDOWS_PARAM*)lParam;
+
+            DWORD dwProcessId = 0;
+            if (!GetWindowThreadProcessId(hWnd, &dwProcessId) ||
+                dwProcessId != GetCurrentProcessId()) {
+                return TRUE;
+            }
+
+            WCHAR szClassName[32];
+            if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
+                return TRUE;
+            }
+
+            if (_wcsicmp(szClassName, L"Windows.UI.Core.CoreWindow") == 0) {
+                param.hWnds->push_back(hWnd);
+            }
+
+            return TRUE;
+        },
+        (LPARAM)&param);
+
+    return hWnds;
+}
+
+// -----------------------------------------------------------------------------
+// Windhawk lifecycle
+// -----------------------------------------------------------------------------
+
+BOOL Wh_ModInit() {
+    Wh_Log(L"Calendar XAML mod initializing");
+
+    HMODULE user32Module =
+        LoadLibraryExW(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (user32Module) {
+        void* pCreateWindowInBand =
+            (void*)GetProcAddress(user32Module, "CreateWindowInBand");
+        if (pCreateWindowInBand) {
+            Wh_SetFunctionHook(pCreateWindowInBand,
+                               (void*)CreateWindowInBand_Hook,
+                               (void**)&CreateWindowInBand_Original);
+        }
+
+        void* pCreateWindowInBandEx =
+            (void*)GetProcAddress(user32Module, "CreateWindowInBandEx");
+        if (pCreateWindowInBandEx) {
+            Wh_SetFunctionHook(pCreateWindowInBandEx,
+                               (void*)CreateWindowInBandEx_Hook,
+                               (void**)&CreateWindowInBandEx_Original);
+        }
+    }
+
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    Wh_Log(L">");
+
+    bool initialize = false;
+    for (HWND hCoreWnd : GetCoreWnds()) {
+        Wh_Log(L"Initializing for existing CoreWindow: %08X",
+               (DWORD)(ULONG_PTR)hCoreWnd);
+        RunFromWindowThread(
+            hCoreWnd, [](PVOID) { RegisterCoreWindowEvents(); }, nullptr);
+        initialize = true;
+    }
+
+    if (initialize) {
+        InitializeSettingsAndTap();
+    }
+}
+
+void Wh_ModSettingsChanged() {
+    Wh_Log(L"Settings changed");
+    if (g_visualTreeWatcher) {
+        int maxHeight = GetMaxHeightSetting();
+        g_visualTreeWatcher->UpdateMaxHeight(maxHeight);
+        g_visualTreeWatcher->UpdateFocusSessionVisibility();
+    }
+    TriggerBackgroundFetch(true);
+}
+
+void Wh_ModUninit() {
+    Wh_Log(L">");
+
+    UninitializeSettingsAndTap();
+}
