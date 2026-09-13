@@ -247,7 +247,11 @@ XamlRoot TaskbarXamlRoot(HWND taskbarWindow) {
         return nullptr;
     }
 #else
-#error Taskbar Split currently supports x86-64 only.
+    // The marketplace compatibility job also parses/builds mods for ARM64.
+    // This mod is declared x86-64-only, so leave the unsupported runtime path
+    // without attempting to inspect an architecture-specific prologue.
+    Wh_Log(L"Taskbar Split supports x86-64 only");
+    return nullptr;
 #endif
 
     auto unknown = *reinterpret_cast<IUnknown**>(
@@ -670,7 +674,7 @@ bool HookTaskbarHostSymbols() {
     if (!module) {
         return false;
     }
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
          &CTaskBand_ITaskListWndSite_vftable},
         {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
@@ -680,11 +684,13 @@ bool HookTaskbarHostSymbols() {
         {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
          &RefCount_Decref_Original},
     };
-    return WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
+    return WindhawkUtils::HookSymbols(module, taskbarDllHooks,
+                                      ARRAYSIZE(taskbarDllHooks));
 }
 
 bool HookTaskbarViewSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarCollapsibleLayout,struct winrt::Microsoft::UI::Xaml::Controls::IVirtualizingLayoutOverrides>::ArrangeOverride(void *,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
          &ArrangeOverride_Original, ArrangeOverride_Hook},
         {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskListButton>::get_IsRunning(bool *))"},
@@ -693,7 +699,8 @@ bool HookTaskbarViewSymbols(HMODULE module) {
          &TaskListButton_UpdateVisualStates_Original,
          TaskListButton_UpdateVisualStates_Hook, true},
     };
-    bool result = WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
+    bool result = WindhawkUtils::HookSymbols(
+        module, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks));
     if (!TaskListButton_GetIsRunning_Original) {
         Wh_Log(L"Taskbar Split: IsRunning unavailable; keeping task buttons left");
     }
