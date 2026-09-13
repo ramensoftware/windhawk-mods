@@ -2,7 +2,7 @@
 // @id              icon16bitfix
 // @name            Icons of Win16 apps in Explorer and file dialogs
 // @description     Adds support for icons of 16-bit (Win16) applications in File Explorer and file dialogs
-// @version         1.0.10
+// @version         1.1
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         *
@@ -103,21 +103,25 @@ UINT NE_ExtractIcon(LPCWSTR lpszExeFileName,
     }
 
     LARGE_INTEGER fsize;
-    IMAGE_DOS_HEADER mz{};
-    IMAGE_OS2_HEADER ne{};
+    IMAGE_DOS_HEADER mzSniff{};
+    IMAGE_OS2_HEADER neSniff{};
     LARGE_INTEGER off{};
 
-    // Sniff the DOS/NE headers before allocating/reading the whole file -
-    // this path runs for every icon-less PE file too.
-    bool isNe = GetFileSizeEx(hFile, &fsize) && fsize.QuadPart > 0 &&
-        ReadExact(hFile, &mz, sizeof(mz)) &&
-        mz.e_magic == IMAGE_DOS_SIGNATURE && mz.e_lfanew >= 0 &&
-        static_cast<ULONGLONG>(mz.e_lfanew) + sizeof(ne) <= static_cast<ULONGLONG>(fsize.QuadPart) &&
-        (off.QuadPart = mz.e_lfanew, SetFilePointerEx(hFile, off, nullptr, FILE_BEGIN)) &&
-        ReadExact(hFile, &ne, sizeof(ne)) &&
-        ne.ne_magic == IMAGE_OS2_SIGNATURE;
+    // Cheap early-out so icon-less PE files (the common case for this hook,
+    // since it only runs after the real PrivateExtractIconsW returns 0)
+    // don't pay for a full read. This is only a hint: the file was opened
+    // with FILE_SHARE_WRITE | FILE_SHARE_DELETE, so it can be rewritten
+    // between this sniff and the buffer parse below - everything here is
+    // re-validated against the actual buffer contents before being trusted.
+    bool looksNe = GetFileSizeEx(hFile, &fsize) && fsize.QuadPart > 0 &&
+        ReadExact(hFile, &mzSniff, sizeof(mzSniff)) &&
+        mzSniff.e_magic == IMAGE_DOS_SIGNATURE && mzSniff.e_lfanew >= 0 &&
+        static_cast<ULONGLONG>(mzSniff.e_lfanew) + sizeof(neSniff) <= static_cast<ULONGLONG>(fsize.QuadPart) &&
+        (off.QuadPart = mzSniff.e_lfanew, SetFilePointerEx(hFile, off, nullptr, FILE_BEGIN)) &&
+        ReadExact(hFile, &neSniff, sizeof(neSniff)) &&
+        neSniff.ne_magic == IMAGE_OS2_SIGNATURE;
 
-    if (!isNe || fsize.QuadPart > kMaxNeFileSize)
+    if (!looksNe || fsize.QuadPart > kMaxNeFileSize)
     {
         CloseHandle(hFile);
         return 0;
@@ -145,9 +149,17 @@ UINT NE_ExtractIcon(LPCWSTR lpszExeFileName,
         return (BYTE*)p >= image && (BYTE*)p <= imageEnd && size <= static_cast<size_t>(imageEnd - (BYTE*)p);
     };
 
+    // Re-validate against the buffer we actually parse. The sniff above only
+    // proves what the file looked like at read time; parsing must not trust
+    // it and must instead bounds-check every field against `image`.
     auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(image);
+    if (!inRange(dos, sizeof(*dos)) || dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew < 0)
+    {
+        return 0;
+    }
     auto* neh = reinterpret_cast<const IMAGE_OS2_HEADER*>(image + dos->e_lfanew);
-    if (neh->ne_rsrctab >= neh->ne_restab)
+    if (!inRange(neh, sizeof(*neh)) || neh->ne_magic != IMAGE_OS2_SIGNATURE ||
+        neh->ne_rsrctab >= neh->ne_restab)
     {
         return 0;
     }
@@ -197,20 +209,6 @@ UINT NE_ExtractIcon(LPCWSTR lpszExeFileName,
         return iconDirCount;
     }
 
-    if (nIcons > 0xFFFF)
-    {
-        nIcons = 0xFFFF; // iconDirCount is a UINT16; also bounds the allocation below
-    }
-
-    std::vector<UINT> localIconIds;
-    if (!pIconId)
-    {
-        try { localIconIds.resize(nIcons); }
-        catch (const std::bad_alloc&) { return 0; }
-        pIconId = localIconIds.data();
-    }
-    pIconId[0] = kNoIconId; // only touch the caller's buffer once we know we'll populate it
-
     int resolvedIndex = nIconIndex;
     if (nIconIndex < 0)
     {
@@ -226,65 +224,87 @@ UINT NE_ExtractIcon(LPCWSTR lpszExeFileName,
     }
     if (resolvedIndex < 0 || static_cast<UINT>(resolvedIndex) >= iconDirCount)
     {
-        return 0;
+        return 0; // caller's piconid buffer is left untouched on this no-op path
     }
-
     UINT16 baseIndex = static_cast<UINT16>(resolvedIndex);
-    if (nIcons > static_cast<UINT>(iconDirCount - baseIndex))
+
+    // One icon index consumes two RetPtr/piconid slots when the caller packs
+    // two sizes into cx/cyDesired (the standard shell dual-size call, e.g.
+    // SHDefExtractIcon). nIcons is the caller's array *capacity*, not the
+    // number of icon groups to read - keep those separate instead of
+    // clamping nIcons directly against iconDirCount.
+    const UINT step = (HIWORD(cxDesired) && HIWORD(cyDesired)) ? 2u : 1u;
+    UINT groupsAvail = static_cast<UINT>(iconDirCount - baseIndex);
+    UINT groupsWanted = nIcons / step;
+    if (groupsWanted > groupsAvail)
     {
-        nIcons = iconDirCount - baseIndex;
+        groupsWanted = groupsAvail;
+    }
+    const UINT total = groupsWanted * step; // slots we will fill; always <= nIcons
+
+    // Sized from `total`, which is already tightly bounded (<= iconDirCount * 2,
+    // both small UINT16-derived values) regardless of how large the
+    // caller-supplied nIcons is.
+    std::vector<UINT> localIconIds;
+    if (!pIconId)
+    {
+        try { localIconIds.resize(total); }
+        catch (const std::bad_alloc&) { return 0; }
+        pIconId = localIconIds.data();
     }
 
-    BYTE* pCIDir = nullptr;
-    ULONG uSize = 0;
-    UINT16 i, icon;
-    for (i = 0; i < nIcons; i++)
+    for (UINT g = 0; g < groupsWanted; g++)
     {
-        pCIDir = LoadNeResource(image, pIconDir + i + baseIndex, sizeShift, &uSize);
-        bool valid = inRange(pCIDir, uSize) && IsValidGroupIconDir(pCIDir, uSize);
-        pIconId[i] = valid ? LookupIconIdFromDirectoryEx(pCIDir, TRUE, LOWORD(cxDesired), LOWORD(cyDesired), flags) : kNoIconId;
+        ULONG grpSize = 0;
+        BYTE* pGrp = LoadNeResource(image, pIconDir + baseIndex + g, sizeShift, &grpSize);
+        bool valid = inRange(pGrp, grpSize) && IsValidGroupIconDir(pGrp, grpSize);
 
-        if (HIWORD(cxDesired) && HIWORD(cyDesired) && i + 1 < nIcons)
+        // LookupIconIdFromDirectoryEx returns 0 on failure - map that to
+        // kNoIconId too, otherwise the lookup below would search for
+        // resource id (0 | 0x8000), which could match an unrelated RT_ICON.
+        UINT id1 = valid ? LookupIconIdFromDirectoryEx(pGrp, TRUE, LOWORD(cxDesired), LOWORD(cyDesired), flags) : 0;
+        pIconId[g * step] = id1 ? id1 : kNoIconId;
+
+        if (step == 2)
         {
-            valid = inRange(pCIDir, uSize) && IsValidGroupIconDir(pCIDir, uSize);
-            pIconId[++i] = valid ? LookupIconIdFromDirectoryEx(pCIDir, TRUE, HIWORD(cxDesired), HIWORD(cyDesired), flags) : kNoIconId;
+            UINT id2 = valid ? LookupIconIdFromDirectoryEx(pGrp, TRUE, HIWORD(cxDesired), HIWORD(cyDesired), flags) : 0;
+            pIconId[g * step + 1] = id2 ? id2 : kNoIconId;
         }
     }
 
     // Create icons one slot at a time, stopping at the first failure, so we
     // never create (and thus leak) an icon past the count we report back.
     UINT created = 0;
-    for (icon = 0; icon < nIcons; icon++)
+    for (; created < total; created++)
     {
-        pCIDir = nullptr;
-        if (pIconId[icon] != kNoIconId)
+        BYTE* pRes = nullptr;
+        ULONG resSize = 0;
+        if (pIconId[created] != kNoIconId)
         {
-            for (i = 0; i < iconCount; i++)
+            for (UINT16 i = 0; i < iconCount; i++)
             {
-                if (pIconStorage[i].id == (static_cast<int>(pIconId[icon]) | 0x8000))
+                if (pIconStorage[i].id == (static_cast<int>(pIconId[created]) | 0x8000))
                 {
                     ULONG sz = 0;
                     BYTE* cand = LoadNeResource(image, pIconStorage + i, sizeShift, &sz);
-                    if (inRange(cand, sz)) { pCIDir = cand; uSize = sz; break; }
+                    if (inRange(cand, sz)) { pRes = cand; resSize = sz; break; }
                 }
             }
         }
 
-        HICON hIcon = pCIDir ? CreateIconFromResourceEx(pCIDir, uSize, TRUE, 0x00030000,
-            LOWORD(cxDesired), LOWORD(cyDesired), flags) : nullptr;
-        if (!hIcon) break;
-        RetPtr[created++] = hIcon;
-
-        if (HIWORD(cxDesired) && HIWORD(cyDesired) && icon + 1 < nIcons)
+        HICON hIcon = pRes
+            ? CreateIconFromResourceEx(pRes, resSize, TRUE, 0x00030000,
+                                       (created % step) ? HIWORD(cxDesired) : LOWORD(cxDesired),
+                                       (created % step) ? HIWORD(cyDesired) : LOWORD(cyDesired), flags)
+            : nullptr;
+        if (!hIcon)
         {
-            hIcon = CreateIconFromResourceEx(pCIDir, uSize, TRUE, 0x00030000,
-                HIWORD(cxDesired), HIWORD(cyDesired), flags);
-            if (!hIcon) break;
-            RetPtr[created++] = hIcon;
-            icon++;
+            break;
         }
+        RetPtr[created] = hIcon;
     }
-    for (UINT n = created; n < nIcons; n++)
+
+    for (UINT n = created; n < nIcons; n++) // nIcons, not total - clear the caller's whole array
     {
         RetPtr[n] = nullptr;
     }
