@@ -668,7 +668,7 @@ bool HookSnapLayoutDll(
         return true;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK snapLayoutDllHooks[] = {
         {
             {
                 LR"(public: class std::vector<struct SnapLayout,class std::allocator<struct SnapLayout> > __cdecl SnapModel::Layouts(void)const )",
@@ -707,9 +707,9 @@ bool HookSnapLayoutDll(
     };
 
     if (!WindhawkUtils::HookSymbols(
-            module,
-            hooks,
-            ARRAYSIZE(hooks))) {
+        module,
+        snapLayoutDllHooks,
+        ARRAYSIZE(snapLayoutDllHooks))) {
         Wh_Log(
             L"Failed to resolve one or more SnapLayout.dll symbols");
 
