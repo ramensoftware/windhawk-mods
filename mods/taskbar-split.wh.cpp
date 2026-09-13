@@ -2,17 +2,36 @@
 // @id              taskbar-split
 // @name            Taskbar Split: Running Left, Pinned Right
 // @description     Places running apps on the left and closed pinned apps on the right, with flexible empty space between them (Windows 11).
-// @version         0.2.0
+// @version         0.2.1
 // @author          Arkadiusz
 // @github          https://github.com/Artllex
 // @homepage        https://github.com/Artllex/taskbar-split
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject
-// @license         MIT
+// @license         GPL-3.0
 // ==/WindhawkMod==
 
 // Copyright (c) 2026 Arkadiusz
+//
+// This program is free software: you can redistribute it and/or modify it
+// under the terms of the GNU General Public License version 3 as published
+// by the Free Software Foundation.
+// This program is distributed WITHOUT ANY WARRANTY; without even the implied
+// warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+// See https://www.gnu.org/licenses/gpl-3.0.html for the full license.
+//
+// GPL-3.0 taskbar discovery, system-button identification and running-state
+// techniques adapted from Michael Maltsev (m417z): taskbar-labels and
+// taskbar-start-button-position; and Taskbar Start Button Centered Origin
+// by rick/rycalvo. Sources:
+// https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-labels.wh.cpp
+// https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-start-button-position.wh.cpp
+// https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-centered-start-split-icons.wh.cpp
+//
+// Taskbar-host discovery also uses MIT-licensed code from Taskbar multi-tray
+// by EDM115 and Island Media Controls by usho. The following MIT notice is
+// retained for those portions, not as the license of this combined mod.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -32,8 +51,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-// Taskbar-host discovery is based on the MIT-licensed Windhawk mods
-// Taskbar multi-tray by EDM115 and Island Media Controls by usho.
 
 // ==WindhawkModReadme==
 /*
@@ -47,8 +64,14 @@ Launching a pinned app moves it to the left zone and restores its normal size.
 Closing it returns it to the right zone, where pinned icons can be made smaller
 and packed more densely. The persistent Windows pin list is not changed.
 
-Version 0.2.0 targets the horizontal primary taskbar on Windows 11 x64.
+Targets the horizontal primary taskbar on Windows 11 x64 and ARM64.
+ARM64 support requires runtime testing on an ARM64 device.
 Disable the mod to immediately return to the standard Windows layout.
+
+Do not combine with "Start button always on the left" or other mods that
+reposition or scale taskbar buttons. They can override the same layout.
+On crowded taskbars, reduced spacing can overlap buttons; reduce the pinned
+icon size or the middle gap, or unpin applications to free space.
 */
 // ==/WindhawkModReadme==
 
@@ -56,7 +79,7 @@ Disable the mod to immediately return to the standard Windows layout.
 /*
 - leftPadding: 8
   $name: Left edge padding
-  $description: Empty space before the first system button, in pixels.
+  $description: Empty space before the first system button, in device-independent pixels (DIPs).
 - runningGap: 8
   $name: Gap after system buttons
   $description: Space between Start/Search/Widgets/Task View and running apps.
@@ -89,9 +112,7 @@ Disable the mod to immediately return to the standard Windows layout.
 
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Numerics.h>
-#include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
-#include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/base.h>
@@ -101,8 +122,6 @@ Disable the mod to immediately return to the standard Windows layout.
 
 using namespace winrt::Windows::UI::Xaml;
 namespace media = winrt::Windows::UI::Xaml::Media;
-namespace composition = winrt::Windows::UI::Composition;
-namespace hosting = winrt::Windows::UI::Xaml::Hosting;
 namespace numerics = winrt::Windows::Foundation::Numerics;
 
 struct Settings {
@@ -246,11 +265,20 @@ XamlRoot TaskbarXamlRoot(HWND taskbarWindow) {
         Wh_Log(L"Unsupported TaskbarHost::FrameHeight implementation");
         return nullptr;
     }
+#elif defined(_M_ARM64) || defined(__aarch64__)
+    // ARM64 host discovery from the MIT-licensed Taskbar multi-tray.
+    const DWORD* instructions =
+        static_cast<const DWORD*>(TaskbarHost_FrameHeight_Original);
+    if (instructions[0] == 0xD503237F &&
+        (instructions[1] & 0xFFC07FFF) == 0xA9807BFD &&
+        instructions[2] == 0x910003FD &&
+        (instructions[3] & 0xFFF00FE0) == 0xF8400C00) {
+        elementOffset = (instructions[3] >> 12) & 0xFF;
+    } else {
+        Wh_Log(L"Unsupported ARM64 TaskbarHost::FrameHeight implementation");
+        return nullptr;
+    }
 #else
-    // The marketplace compatibility job also parses/builds mods for ARM64.
-    // This mod is declared x86-64-only, so leave the unsupported runtime path
-    // without attempting to inspect an architecture-specific prologue.
-    Wh_Log(L"Taskbar Split supports x86-64 only");
     return nullptr;
 #endif
 
@@ -316,7 +344,8 @@ SystemButtonKind GetSystemButtonKind(FrameworkElement const& element) {
         if (id == L"TaskViewButton") {
             return SystemButtonKind::TaskView;
         }
-    } else if (className == L"Taskbar.AugmentedEntryPointButton") {
+    } else if (className == L"Taskbar.AugmentedEntryPointButton" &&
+               element.Name() == L"AugmentedEntryPointButton") {
         return SystemButtonKind::Widgets;
     } else if (className == L"Taskbar.TaskbarExtensionElement") {
         return SystemButtonKind::Search;
@@ -345,11 +374,12 @@ bool ButtonIsRunning(FrameworkElement const& element) {
 struct AppliedVisualState {
     winrt::weak_ref<FrameworkElement> element;
     numerics::float3 originalTranslation{};
-    composition::Visual visual{nullptr};
     numerics::float3 originalScale{};
     numerics::float3 originalCenterPoint{};
 };
 
+// Only weak UI references and numeric values: no strong thread-affine Visual
+// references are released by a global destructor during process shutdown.
 std::unordered_map<void*, AppliedVisualState> g_visualStates;
 
 AppliedVisualState* CurrentVisualState(FrameworkElement const& element) {
@@ -373,10 +403,8 @@ AppliedVisualState& EnsureVisualState(FrameworkElement const& element) {
     AppliedVisualState applied;
     applied.element = element;
     applied.originalTranslation = element.Translation();
-    applied.visual = hosting::ElementCompositionPreview::GetElementVisual(
-        element);
-    applied.originalScale = applied.visual.Scale();
-    applied.originalCenterPoint = applied.visual.CenterPoint();
+    applied.originalScale = element.Scale();
+    applied.originalCenterPoint = element.CenterPoint();
     return g_visualStates.emplace(winrt::get_abi(element), std::move(applied))
         .first->second;
 }
@@ -392,24 +420,27 @@ void PlaceElement(FrameworkElement const& element,
     element.Translation(translation);
 
     auto centerPoint = applied.originalCenterPoint;
-    centerPoint.x = static_cast<float>(element.ActualWidth() / 2.0);
+    // Placement math assumes scaling from the left edge.
+    centerPoint.x = 0;
     centerPoint.y = static_cast<float>(element.ActualHeight() / 2.0);
-    applied.visual.CenterPoint(centerPoint);
+    element.CenterPoint(centerPoint);
 
     auto scale = applied.originalScale;
     scale.x *= static_cast<float>(scaleValue);
     scale.y *= static_cast<float>(scaleValue);
-    applied.visual.Scale(scale);
+    element.Scale(scale);
 }
 
 void RestoreVisualStates() {
     for (auto& [key, applied] : g_visualStates) {
-        if (auto element = applied.element.get()) {
-            element.Translation(applied.originalTranslation);
-            if (applied.visual) {
-                applied.visual.Scale(applied.originalScale);
-                applied.visual.CenterPoint(applied.originalCenterPoint);
+        try {
+            if (auto element = applied.element.get()) {
+                element.Translation(applied.originalTranslation);
+                element.Scale(applied.originalScale);
+                element.CenterPoint(applied.originalCenterPoint);
             }
+        } catch (winrt::hresult_error const&) {
+            // A disconnected element must not prevent restoring the others.
         }
     }
     g_visualStates.clear();
@@ -561,6 +592,7 @@ using ArrangeOverride_t = HRESULT(WINAPI*)(
     void*, void*, winrt::Windows::Foundation::Size,
     winrt::Windows::Foundation::Size*);
 ArrangeOverride_t ArrangeOverride_Original = nullptr;
+HWND EnsureTaskbarWindow();
 
 HRESULT WINAPI ArrangeOverride_Hook(
     void* self, void* context, winrt::Windows::Foundation::Size size,
@@ -573,6 +605,11 @@ HRESULT WINAPI ArrangeOverride_Hook(
         ArrangeGuard() { g_insideArrange = true; }
         ~ArrangeGuard() { g_insideArrange = false; }
     } guard;
+    HWND window = EnsureTaskbarWindow();
+    if (!window || GetWindowThreadProcessId(window, nullptr) !=
+                       GetCurrentThreadId()) {
+        return result;
+    }
     ApplySplitLayout();
     return result;
 }
@@ -593,8 +630,14 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND window, UINT message, WPARAM wParam,
                                      LPARAM lParam, DWORD_PTR) {
     if (message == RefreshMessage()) {
         g_refreshQueued = false;
-        if (auto repeater = GetTaskbarRepeater()) {
-            repeater.InvalidateArrange();
+        if (!g_unloading) {
+            try {
+                if (auto repeater = GetTaskbarRepeater()) {
+                    repeater.InvalidateArrange();
+                }
+            } catch (winrt::hresult_error const&) {
+                Wh_Log(L"Refresh failed: taskbar element disconnected");
+            }
         }
         return 0;
     }
@@ -610,6 +653,7 @@ HWND EnsureTaskbarWindow() {
     if (window && !IsWindow(window)) {
         g_taskbarWindow = nullptr;
         g_taskbarSubclassed = false;
+        g_refreshQueued = false;
         g_repeaterCache = nullptr;
         window = nullptr;
     }
@@ -627,6 +671,7 @@ HWND EnsureTaskbarWindow() {
         }
     }
     if (window && !g_taskbarSubclassed && !g_unloading &&
+        GetWindowThreadProcessId(window, nullptr) == GetCurrentThreadId() &&
         WindhawkUtils::SetWindowSubclassFromAnyThread(
             window, TaskbarSubclassProc, 0)) {
         g_taskbarSubclassed = true;
@@ -635,7 +680,10 @@ HWND EnsureTaskbarWindow() {
 }
 
 void RequestRefresh() {
-    HWND window = EnsureTaskbarWindow();
+    if (g_unloading) {
+        return;
+    }
+    HWND window = g_taskbarWindow;
     if (!window || !g_taskbarSubclassed || g_refreshQueued.exchange(true)) {
         return;
     }
@@ -647,24 +695,44 @@ void RequestRefresh() {
 using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void*);
 TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original =
     nullptr;
-std::unordered_map<void*, bool> g_lastRunningState;
+struct RunningState {
+    winrt::weak_ref<FrameworkElement> element;
+    bool running;
+};
+std::unordered_map<void*, RunningState> g_lastRunningState;
 
 void WINAPI TaskListButton_UpdateVisualStates_Hook(void* self) {
     TaskListButton_UpdateVisualStates_Original(self);
 
     // UpdateVisualStates also runs for hover, focus and press animations.
     // Invalidate layout only when the running state itself really changed.
-    if (!TaskListButton_GetIsRunning_Original) {
+    if (g_unloading || !TaskListButton_GetIsRunning_Original) {
         return;
     }
-    bool running = false;
-    if (FAILED(TaskListButton_GetIsRunning_Original(self, &running))) {
-        return;
-    }
-    auto [entry, inserted] = g_lastRunningState.emplace(self, running);
-    if (!inserted && entry->second != running) {
-        entry->second = running;
-        RequestRefresh();
+    try {
+        // UpdateVisualStates receives the implementation address. The ABI
+        // interface subobject starts three pointer-sized slots later.
+        winrt::Windows::Foundation::IUnknown abiObject{nullptr};
+        winrt::copy_from_abi(abiObject, static_cast<void**>(self) + 3);
+        auto element = abiObject.as<FrameworkElement>();
+        bool running = ButtonIsRunning(element);
+        for (auto it = g_lastRunningState.begin();
+             it != g_lastRunningState.end();) {
+            if (!it->second.element.get()) {
+                it = g_lastRunningState.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        auto [entry, inserted] = g_lastRunningState.emplace(
+            self, RunningState{element, running});
+        if (inserted || entry->second.element.get() != element ||
+            entry->second.running != running) {
+            entry->second = RunningState{element, running};
+            RequestRefresh();
+        }
+    } catch (winrt::hresult_error const&) {
+        // Do not let a disconnected XAML object unwind through Explorer.
     }
 }
 
@@ -722,7 +790,6 @@ void TryHookLoadedTaskbarView(HMODULE loadedModule) {
             Wh_Log(L"Taskbar Split: failed to hook taskbar view symbols");
         }
         Wh_ApplyHookOperations();
-        RequestRefresh();
     }
 }
 
@@ -764,7 +831,14 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    EnsureTaskbarWindow();
+    // This entry point is outside the LoadLibrary hook. It can marshal the
+    // initial subclass installation to an already existing taskbar thread.
+    HWND window = EnsureTaskbarWindow();
+    if (window && !g_taskbarSubclassed &&
+        WindhawkUtils::SetWindowSubclassFromAnyThread(
+            window, TaskbarSubclassProc, 0)) {
+        g_taskbarSubclassed = true;
+    }
     if (!g_viewHooksInstalled) {
         if (HMODULE module = CurrentTaskbarViewModule()) {
             TryHookLoadedTaskbarView(module);
@@ -774,11 +848,11 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModBeforeUninit() {
+    g_unloading = true;
     HWND window = g_taskbarWindow;
     if (window && g_taskbarSubclassed) {
         SendMessageW(window, RestoreMessage(), 0, 0);
     }
-    g_unloading = true;
     if (window && g_taskbarSubclassed.exchange(false)) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(
             window, TaskbarSubclassProc);
