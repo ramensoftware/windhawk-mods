@@ -7,7 +7,7 @@
 // @github          https://github.com/enginelesscc
 // @twitter         https://x.com/VivyVCCS
 // @include         explorer.exe
-// @architecture    amd64
+// @architecture    x86-64
 // @compilerOptions -lgdi32 -lcomctl32 -lshell32
 // ==/WindhawkMod==
 
@@ -373,7 +373,8 @@ HRESULT __fastcall InvokeHook(void* self, DISPID id, REFIID iid, LCID locale, WO
     return hr;
 }
 bool Initialize(HMODULE frame, const WH_HOOK_SYMBOLS_OPTIONS* options) {
-    const WindhawkUtils::SYMBOL_HOOK symbols[] = {
+    // ExplorerFrame.dll
+    const WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {{L"?_NavigateToPidl@CShellBrowser@@AEAAJPEBU_ITEMIDLIST_ABSOLUTE@@KK@Z"}, &navigateOriginal, NavigateHook},
         {{L"?BlockRedrawWithTimeout@UIItemsView@@QEAAXM@Z"}, &blockOriginal, BlockHook},
         {{L"?UnblockRedraw@UIItemsView@@QEAAXXZ"}, &unblockRedraw},
@@ -383,7 +384,7 @@ bool Initialize(HMODULE frame, const WH_HOOK_SYMBOLS_OPTIONS* options) {
         {{L"?DeleteBatchTimer@UIItemsView@@AEAA_NXZ"}, &deleteOriginal, DeleteHook},
         {{L"?Invoke@CExplorerRibbon@@UEAAJJAEBU_GUID@@KGPEAUtagDISPPARAMS@@PEAUtagVARIANT@@PEAUtagEXCEPINFO@@PEAI@Z"}, &invokeOriginal, InvokeHook},
     };
-    if (!WindhawkUtils::HookSymbols(frame, symbols, ARRAYSIZE(symbols), options)) return false;
+    if (!WindhawkUtils::HookSymbols(frame, hooks, ARRAYSIZE(hooks), options)) return false;
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
         reinterpret_cast<LPCWSTR>(WindowProc), &instance);
     WNDCLASSW cls{};
@@ -554,13 +555,14 @@ HRESULT __fastcall NavStateHook(void* self, ULONG flags) {
     return navStateOriginal(self, flags);
 }
 bool Initialize(HMODULE frame, const WH_HOOK_SYMBOLS_OPTIONS* options) {
-    const WindhawkUtils::SYMBOL_HOOK symbols[] = {
+    // ExplorerFrame.dll
+    const WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {{L"?OnBrowserNavigated@CExplorerRibbon@@UEAAJXZ"}, &navigatedOriginal, NavigatedHook},
         {{L"?OnShellViewChanged@CExplorerRibbon@@UEAAJXZ"}, &changedOriginal, ChangedHook},
         {{L"?DestroyRibbonUI@CExplorerRibbon@@UEAAJH@Z"}, &destroyOriginal, DestroyHook},
         {{L"?SetNavigationState@CNavBar@@UEAAJK@Z"}, &navStateOriginal, NavStateHook},
     };
-    if (!WindhawkUtils::HookSymbols(frame, symbols, ARRAYSIZE(symbols), options)) return false;
+    if (!WindhawkUtils::HookSymbols(frame, hooks, ARRAYSIZE(hooks), options)) return false;
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
         reinterpret_cast<LPCWSTR>(Proc), &instance);
     WNDCLASSW cls{};
@@ -669,7 +671,8 @@ HRESULT __fastcall CleanupHook(void* self) {
 void Initialize(const WH_HOOK_SYMBOLS_OPTIONS* options) {
     module = LoadLibraryExW(L"Windows.UI.FileExplorer.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) { Wh_Log(L"Modern XAML adapter unavailable; classic hooks remain active"); return; }
-    const WindhawkUtils::SYMBOL_HOOK symbols[] = {
+    // Windows.UI.FileExplorer.dll
+    const WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {{L"?OnBrowserNavigated@CommandBarViewAdapter@@UEAAJXZ"}, &navigatedOriginal, NavigatedHook, true},
         {{L"?OnShellViewChanged@CommandBarViewAdapter@@UEAAJXZ"}, &changedOriginal, ChangedHook, true},
         {{L"?OnCommandStateInvalidated@CommandBarViewAdapter@@UEAAJXZ"}, &invalidatedOriginal, InvalidatedHook, true},
@@ -678,7 +681,7 @@ void Initialize(const WH_HOOK_SYMBOLS_OPTIONS* options) {
         {{L"?Invoke@CommandBarViewAdapter@@UEAAJJAEBU_GUID@@KGPEAUtagDISPPARAMS@@PEAUtagVARIANT@@PEAUtagEXCEPINFO@@PEAI@Z"}, &invokeOriginal, InvokeHook, true},
         {{L"?Cleanup@CommandBarViewAdapter@@QEAAJXZ"}, &cleanupOriginal, CleanupHook, true},
     };
-    bool resolved = WindhawkUtils::HookSymbols(module, symbols, ARRAYSIZE(symbols), options);
+    bool resolved = WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks), options);
     enabled = resolved && navigatedOriginal && changedOriginal && invalidatedOriginal &&
         stateOriginal && invalidateOriginal && invokeOriginal && cleanupOriginal;
     Wh_Log(L"Modern XAML command/location deferral=%d", enabled);
@@ -776,9 +779,11 @@ BOOL Wh_ModInit() {
     auto frame = LoadLibraryExW(L"ExplorerFrame.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     auto shell = GetModuleHandleW(L"shell32.dll");
     auto duser = GetModuleHandleW(L"DUser.dll");
+    // ExplorerFrame.dll
     const WindhawkUtils::SYMBOL_HOOK frameSymbols[] = {
         {{L"?s_BatchTimerCallback@UIItemsView@@CAXPEAUGMA_ACTIONINFO@@@Z"}, &batchCallback, nullptr, true},
     };
+    // shell32.dll
     const WindhawkUtils::SYMBOL_HOOK shellSymbols[] = {
         {{L"?_RedrawFrame@CDUIViewFrame@@AEAAXXZ"}, &redrawFrame, nullptr, true},
         {{L"?_Render@CDUISizerElement@@AEAAJXZ"}, &renderSizer, nullptr, true},
