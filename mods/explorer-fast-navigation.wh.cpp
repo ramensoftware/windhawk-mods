@@ -2,8 +2,8 @@
 // @id              explorer-fast-navigation
 // @name            Explorer Fast Navigation
 // @description     Improves explorer navigation latency
-// @version         0.8.0
-// @author          GPT6-Astra w/ Vivy
+// @version         0.9.0
+// @author          Vivy
 // @github          https://github.com/enginelesscc
 // @twitter         https://x.com/VivyVCCS
 // @include         explorer.exe
@@ -53,13 +53,90 @@ UINT RemainingCoverMs(bool remote, ULONGLONG started, ULONGLONG now) {
 #include <shdispid.h>
 
 // Preserve the last rendered file pane until the new view has finished batching.
-#include <atomic>
 #include <algorithm>
 #include <mutex>
+#include <condition_variable>
 #include <new>
 #include <vector>
 #include <functional>
 #include <deque>
+
+// Admit window work and stop it under the same lock. Never hold this lock
+// across window/COM calls: they can reenter the mod on an owning UI thread.
+class WindowLifetime {
+    std::mutex mutex;
+    std::condition_variable changed;
+    bool stopping = false;
+    size_t operations = 0;
+    size_t callbacks = 0;
+    std::vector<HWND> windows;
+public:
+    class Operation {
+        WindowLifetime& owner;
+        bool admitted;
+    public:
+        explicit Operation(WindowLifetime& owner) : owner(owner) {
+            std::lock_guard lock(owner.mutex);
+            admitted = !owner.stopping;
+            if (admitted) ++owner.operations;
+        }
+        Operation(const Operation&) = delete;
+        ~Operation() {
+            if (admitted) {
+                std::lock_guard lock(owner.mutex);
+                --owner.operations;
+                owner.changed.notify_all();
+            }
+        }
+        explicit operator bool() const { return admitted; }
+    };
+    class Callback {
+        WindowLifetime& owner;
+    public:
+        explicit Callback(WindowLifetime& owner) : owner(owner) {
+            std::lock_guard lock(owner.mutex);
+            ++owner.callbacks;
+        }
+        Callback(const Callback&) = delete;
+        ~Callback() {
+            std::lock_guard lock(owner.mutex);
+            --owner.callbacks;
+            owner.changed.notify_all();
+        }
+    };
+    void Add(HWND hwnd) {
+        std::lock_guard lock(mutex);
+        windows.push_back(hwnd);
+    }
+    void Remove(HWND hwnd) {
+        std::lock_guard lock(mutex);
+        std::erase(windows, hwnd);
+        changed.notify_all();
+    }
+    void Stop() {
+        std::lock_guard lock(mutex);
+        stopping = true;
+    }
+    void CloseAndWait() {
+        std::vector<HWND> copy;
+        {
+            std::unique_lock lock(mutex);
+            changed.wait(lock, [this] { return operations == 0; });
+            copy = windows;
+        }
+        for (HWND hwnd : copy) SendMessageW(hwnd, WM_CLOSE, 0, 0);
+        // A nested WM_CLOSE during Flush only requests closure. The outer
+        // drain destroys the window after releasing its outstanding COM refs.
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [this] { return windows.empty() && callbacks == 0; });
+    }
+};
+
+bool CanDeferInvoke(REFIID iid, WORD flags, const DISPPARAMS* args) {
+    const GUID nullIid{};
+    return IsEqualGUID(iid, nullIid) && flags == DISPATCH_METHOD && args &&
+        args->cArgs == 0 && args->cNamedArgs == 0;
+}
 
 #ifdef EFN_DIAGNOSTICS
 #include <evntprov.h>
@@ -70,11 +147,11 @@ void Trace(const wchar_t*) {}
 #endif
 
 namespace RibbonWork {
-bool Initialize(HMODULE, const WH_HOOK_SYMBOLS_OPTIONS*);
+bool Initialize();
 void BeforeUninit();
 void Uninit();
 void Flush();
-bool DeferInvoke(void*, DISPID);
+bool DeferInvoke(void*, DISPID, REFIID, LCID, WORD, DISPPARAMS*);
 void NavigationStarted();
 void ViewReady();
 }
@@ -90,7 +167,7 @@ struct State {
     void* itemsView{};
     ULONG generation = 1;
     ULONGLONG started = 0;
-    bool pending = false, enumerated = false, ready = false, finishing = false;
+    bool pending = false, enumerated = false, finishing = false;
 };
 thread_local State* active;
 thread_local void* processingBatch;
@@ -104,10 +181,9 @@ bool NativeLoadingAllowed() {
     return navigation.remote || (navigation.started &&
         !NavigationPolicy::RemainingCoverMs(false, navigation.started, GetTickCount64()));
 }
-std::atomic<bool> stopping;
-std::mutex windowsMutex;
-std::vector<HWND> windows;
+WindowLifetime lifetime;
 HINSTANCE instance;
+bool registered;
 
 HWND FindFileView(HWND root) {
     HWND result = nullptr;
@@ -122,11 +198,17 @@ HWND FindFileView(HWND root) {
     }, reinterpret_cast<LPARAM>(&result));
     return result;
 }
+bool CanPresent(const State* state) {
+    // An empty batch queue can be only a gap between enumeration batches.
+    return state && state->enumerated && !state->pending && !navigationDepth &&
+        processingBatch != state->itemsView;
+}
 void QueuePresent(State* state) {
-    if (state && (state->ready || (state->enumerated && !state->pending)))
+    if (CanPresent(state))
         PostMessageW(state->overlay, PresentMessage, state->generation, 0);
 }
-void Finish(State* state) {
+void Finish(State* state, bool force = false) {
+    if (!force && !CanPresent(state)) return;
     if (state->finishing) return;
     state->finishing = true;
     HWND overlay = state->overlay;
@@ -139,30 +221,35 @@ void Finish(State* state) {
     // present here leaves the old screenshot on screen for an extra frame.
     GdiFlush();
     if (active == state) {
-        if (state->generation == generation) { DestroyWindow(overlay); Trace(L"EFN present_done"); }
+        if (state->generation == generation && (force || CanPresent(state))) {
+            if (!force) RibbonWork::ViewReady();
+            DestroyWindow(overlay);
+            Trace(L"EFN present_done");
+        }
         else state->finishing = false;
     }
 }
 LRESULT CALLBACK RootSubclass(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR data) {
+    WindowLifetime::Callback callback(lifetime);
     auto state = reinterpret_cast<State*>(data);
     if (msg == WM_SIZE || msg == WM_DPICHANGED || msg == WM_NCDESTROY)
         DestroyWindow(state->overlay);
     return DefSubclassProc(hwnd, msg, wp, lp);
 }
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    WindowLifetime::Callback callback(lifetime);
     auto state = reinterpret_cast<State*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
     if (!state) return DefWindowProcW(hwnd, msg, wp, lp);
     switch (msg) {
     case PresentMessage:
-        if (wp == state->generation &&
-                (state->ready || (state->enumerated && !state->pending))) Finish(state);
+        if (wp == state->generation) Finish(state);
         return 0;
     case WM_TIMER:
         if (wp == 1) {
             // Ignore stale timer messages left queued by an earlier navigation.
             UINT remaining = NavigationPolicy::RemainingCoverMs(false, state->started, GetTickCount64());
-            if (!remaining) Finish(state);
-            else if (!SetTimer(hwnd, 1, remaining, nullptr)) Finish(state);
+            if (!remaining) Finish(state, true);
+            else if (!SetTimer(hwnd, 1, remaining, nullptr)) Finish(state, true);
         }
         return 0;
     case WM_MOUSEACTIVATE: return MA_NOACTIVATEANDEAT;
@@ -175,20 +262,18 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(state->root, RootSubclass);
         if (active == state) active = nullptr;
-        {
-            std::lock_guard lock(windowsMutex);
-            std::erase(windows, hwnd);
-        }
         SelectObject(state->dc, state->oldBitmap);
         DeleteObject(state->bitmap);
         DeleteDC(state->dc);
         delete state;
+        lifetime.Remove(hwnd);
         break;
     }
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 void Begin(void* itemsView) {
-    if (stopping) return;
+    WindowLifetime::Operation operation(lifetime);
+    if (!operation) return;
     ULONGLONG started = navigation.awaitingReset ? navigation.started :
         active ? active->started : GetTickCount64();
     navigation.started = started;
@@ -202,7 +287,7 @@ void Begin(void* itemsView) {
         active->itemsView = itemsView;
         active->started = started;
         ++active->generation;
-        active->pending = active->enumerated = active->ready = false;
+        active->pending = active->enumerated = false;
         if (!SetTimer(active->overlay, 1, remaining, nullptr)) DestroyWindow(active->overlay);
         return;
     }
@@ -250,10 +335,7 @@ void Begin(void* itemsView) {
     state->started = started;
     SetWindowLongPtrW(overlay, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state));
     active = state;
-    {
-        std::lock_guard lock(windowsMutex);
-        windows.push_back(overlay);
-    }
+    lifetime.Add(overlay);
     POINT source{};
     SIZE size{width, height};
     remaining = NavigationPolicy::RemainingCoverMs(false, started, GetTickCount64());
@@ -286,10 +368,16 @@ DeleteBatchTimer deleteOriginal;
 Invoke invokeOriginal;
 
 void __fastcall BlockHook(void* self, float delay) {
+    // Only shorten a hold protected by our cover. A stale navigation timestamp
+    // must not disable native redraw protection during later folder updates.
+    if (!active || active->itemsView != self) {
+        blockOriginal(self, delay);
+        return;
+    }
     UINT remaining = NavigationPolicy::RemainingCoverMs(navigation.remote,
-        navigation.started ? navigation.started : GetTickCount64(), GetTickCount64());
+        active->started, GetTickCount64());
     if (!remaining) {
-        unblockRedraw(self);
+        blockOriginal(self, delay);
         return;
     }
     // Match the native redraw hold to the cover deadline, not its usual 250 ms.
@@ -314,7 +402,7 @@ HRESULT __fastcall NavigateHook(void* self, PCIDLIST_ABSOLUTE pidl, ULONG flags,
     if (active) {
         // Cancel the previous destination's readiness messages before entering native code.
         ++active->generation;
-        active->pending = active->enumerated = active->ready = false;
+        active->pending = active->enumerated = false;
         active->started = navigation.started;
         if (navigation.remote || !SetTimer(active->overlay, 1,
                 static_cast<UINT>(NavigationPolicy::LoadingDelayMs), nullptr))
@@ -325,31 +413,29 @@ HRESULT __fastcall NavigateHook(void* self, PCIDLIST_ABSOLUTE pidl, ULONG flags,
     --navigationDepth;
     if (FAILED(result)) {
         navigation = previous;
-        if (active) Finish(active);
+        if (active) Finish(active, true);
     }
+    else QueuePresent(active);
     return result;
 }
 
 HRESULT __fastcall ResetHook(void* self, void* item, void* collection) {
     Begin(self);
     HRESULT result = resetOriginal(self, item, collection);
-    if (FAILED(result) && active && active->itemsView == self) Finish(active);
+    if (FAILED(result) && active && active->itemsView == self) Finish(active, true);
     return result;
 }
 HRESULT __fastcall EnsureHook(void* self) {
     HRESULT result = ensureOriginal(self);
     if (SUCCEEDED(result) && active && active->itemsView == self) {
         active->pending = true;
-        active->ready = false;
     }
     return result;
 }
 bool __fastcall DeleteHook(void* self) {
     bool result = deleteOriginal(self);
-    if (result && processingBatch == self) RibbonWork::ViewReady();
     if (result && processingBatch == self && active && active->itemsView == self) {
         active->pending = false;
-        active->ready = true;
     }
     return result;
 }
@@ -363,7 +449,7 @@ void __fastcall BatchHook(void* self, void* info) {
 HRESULT __fastcall InvokeHook(void* self, DISPID id, REFIID iid, LCID locale, WORD flags,
         DISPPARAMS* args, VARIANT* result, EXCEPINFO* exception, UINT* argError) {
     HRESULT hr;
-    if (RibbonWork::DeferInvoke(self, id)) {
+    if (RibbonWork::DeferInvoke(self, id, iid, locale, flags, args)) {
         if (result) *result = {};
         hr = S_OK;
     } else {
@@ -372,32 +458,21 @@ HRESULT __fastcall InvokeHook(void* self, DISPID id, REFIID iid, LCID locale, WO
     if (id == DISPID_FILELISTENUMDONE) EnumerationDone();
     return hr;
 }
-bool Initialize(HMODULE frame, const WH_HOOK_SYMBOLS_OPTIONS* options) {
-    // ExplorerFrame.dll
-    const WindhawkUtils::SYMBOL_HOOK hooks[] = {
-        {{L"?_NavigateToPidl@CShellBrowser@@AEAAJPEBU_ITEMIDLIST_ABSOLUTE@@KK@Z"}, &navigateOriginal, NavigateHook},
-        {{L"?BlockRedrawWithTimeout@UIItemsView@@QEAAXM@Z"}, &blockOriginal, BlockHook},
-        {{L"?UnblockRedraw@UIItemsView@@QEAAXXZ"}, &unblockRedraw},
-        {{L"?_ResetRoot@UIItemsView@@AEAAJPEAUIItem@@PEAUIItemCollection@@@Z"}, &resetOriginal, ResetHook},
-        {{L"?_EnsureBatching@UIItemsView@@AEAAJXZ"}, &ensureOriginal, EnsureHook},
-        {{L"?_OnBatchTimer@UIItemsView@@AEAAXPEAUGMA_ACTIONINFO@@@Z"}, &batchOriginal, BatchHook},
-        {{L"?DeleteBatchTimer@UIItemsView@@AEAA_NXZ"}, &deleteOriginal, DeleteHook},
-        {{L"?Invoke@CExplorerRibbon@@UEAAJJAEBU_GUID@@KGPEAUtagDISPPARAMS@@PEAUtagVARIANT@@PEAUtagEXCEPINFO@@PEAI@Z"}, &invokeOriginal, InvokeHook},
-    };
-    if (!WindhawkUtils::HookSymbols(frame, hooks, ARRAYSIZE(hooks), options)) return false;
+bool Initialize() {
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
         reinterpret_cast<LPCWSTR>(WindowProc), &instance);
     WNDCLASSW cls{};
     cls.lpfnWndProc = WindowProc; cls.hInstance = instance; cls.lpszClassName = WindowClass;
-    return RegisterClassW(&cls) != 0;
+    registered = RegisterClassW(&cls) != 0;
+    return registered;
 }
 void BeforeUninit() {
-    stopping = true;
-    std::vector<HWND> copy;
-    { std::lock_guard lock(windowsMutex); copy = windows; }
-    for (HWND hwnd : copy) SendMessageW(hwnd, WM_CLOSE, 0, 0);
+    lifetime.Stop();
+    lifetime.CloseAndWait();
 }
-void Uninit() { UnregisterClassW(WindowClass, instance); }
+void Uninit() {
+    if (registered && UnregisterClassW(WindowClass, instance)) registered = false;
+}
 } // namespace FileTransition
 
 // Run ribbon state refreshes on the owning UI thread after native view painting.
@@ -416,10 +491,9 @@ thread_local Queue* queue;
 thread_local void* connected;
 thread_local ULONGLONG started;
 thread_local bool ready;
-std::atomic<bool> stopping;
-std::mutex mutex;
-std::vector<HWND> windows;
+WindowLifetime lifetime;
 HINSTANCE instance;
+bool registered;
 using Notification = HRESULT(__fastcall*)(void*);
 using Destroy = HRESULT(__fastcall*)(void*, BOOL);
 using NavState = HRESULT(__fastcall*)(void*, ULONG);
@@ -428,6 +502,7 @@ Destroy destroyOriginal;
 NavState navStateOriginal;
 
 void Flush() {
+    WindowLifetime::Callback callback(lifetime);
     Queue* q = queue;
     if (!q || q->draining) return;
     q->draining = true;
@@ -442,6 +517,7 @@ void Flush() {
     if (q->closing) DestroyWindow(q->hwnd);
 }
 LRESULT CALLBACK InputHook(int code, WPARAM wp, LPARAM lp) {
+    WindowLifetime::Callback callback(lifetime);
     if (code >= 0 && wp == PM_REMOVE && queue && !queue->tasks.empty()) {
         const auto msg = reinterpret_cast<const MSG*>(lp);
         // Refresh before accepting input so deferred ribbon/address commands
@@ -454,6 +530,7 @@ LRESULT CALLBACK InputHook(int code, WPARAM wp, LPARAM lp) {
     return CallNextHookEx(nullptr, code, wp, lp);
 }
 LRESULT CALLBACK OwnerSubclass(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR data) {
+    WindowLifetime::Callback callback(lifetime);
     if (msg == WM_DESTROY) {
         auto q = reinterpret_cast<Queue*>(data);
         q->closing = true;
@@ -462,6 +539,7 @@ LRESULT CALLBACK OwnerSubclass(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_
     return DefSubclassProc(hwnd, msg, wp, lp);
 }
 LRESULT CALLBACK Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    WindowLifetime::Callback callback(lifetime);
     if (msg == WM_TIMER && wp == 1) {
         // WM_TIMER has lower priority than paint. A bounded fallback also handles
         // empty, slow, remote and failed navigations with no batching callback.
@@ -470,21 +548,27 @@ LRESULT CALLBACK Proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
     if (msg == WM_CLOSE) {
-        if (queue && queue->draining) { queue->closing = true; return 0; }
-        Flush(); DestroyWindow(hwnd); return 0;
+        auto q = reinterpret_cast<Queue*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+        if (!q) { DestroyWindow(hwnd); return 0; }
+        q->closing = true;
+        // Flush owns q while draining. CloseAndWait waits for its destruction.
+        Flush();
+        return 0;
     }
     if (msg == WM_NCDESTROY) {
         Queue* q = reinterpret_cast<Queue*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
         if (q && q->inputHook) UnhookWindowsHookEx(q->inputHook);
         if (q && q->root) WindhawkUtils::RemoveWindowSubclassFromAnyThread(q->root, OwnerSubclass);
         if (queue == q) queue = nullptr;
-        { std::lock_guard lock(mutex); std::erase(windows, hwnd); }
         delete q;
+        lifetime.Remove(hwnd);
     }
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 bool Enqueue(IUnknown* object, std::function<void()> run) {
-    if (stopping || (queue && queue->draining)) return false;
+    WindowLifetime::Operation operation(lifetime);
+    if (!operation || (queue && queue->draining)) return false;
     if (!queue) {
         HWND root = GetAncestor(GetForegroundWindow(), GA_ROOT);
         wchar_t cls[64];
@@ -499,7 +583,7 @@ bool Enqueue(IUnknown* object, std::function<void()> run) {
         SetWindowLongPtrW(q->hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(q));
         q->root = root;
         queue = q;
-        { std::lock_guard lock(mutex); windows.push_back(q->hwnd); }
+        lifetime.Add(q->hwnd);
         q->inputHook = SetWindowsHookExW(WH_GETMESSAGE, InputHook, instance, GetCurrentThreadId());
         if (!q->inputHook || !WindhawkUtils::SetWindowSubclassFromAnyThread(root, OwnerSubclass,
                 reinterpret_cast<DWORD_PTR>(q))) { DestroyWindow(q->hwnd); return false; }
@@ -513,16 +597,16 @@ bool Enqueue(IUnknown* object, std::function<void()> run) {
 void NavigationStarted() { Flush(); started = GetTickCount64(); ready = false; Trace(L"EFN navigation_enter"); }
 void ViewReady() { ready = true; }
 bool Pending() { return started && !ready && GetTickCount64() - started < 200; }
-bool DeferInvoke(void* self, DISPID id) {
-    // These native branches use no DISPPARAMS and always return S_OK. All
-    // argument-bearing events (especially mouse-wheel handling) stay synchronous.
-    if (!Pending() || (id != 200 && id != 201 && id != 205 && id != 207 &&
+bool DeferInvoke(void* self, DISPID id, REFIID iid, LCID locale, WORD flags, DISPPARAMS* args) {
+    // The inspected branches return S_OK without consuming arguments. Check the
+    // actual call too; argument-bearing events must retain their native inputs.
+    if (!CanDeferInvoke(iid, flags, args) || !Pending() ||
+            (id != 200 && id != 201 && id != 205 && id != 207 &&
             id != 212 && id != 215 && id != 220)) return false;
-    return Enqueue(reinterpret_cast<IUnknown*>(self), [self, id] {
-        DISPPARAMS args{};
-        const GUID iid{};
-        FileTransition::invokeOriginal(self, id, iid, 0, DISPATCH_METHOD,
-            &args, nullptr, nullptr, nullptr);
+    return Enqueue(reinterpret_cast<IUnknown*>(self), [self, id, iid, locale, flags] {
+        DISPPARAMS empty{};
+        FileTransition::invokeOriginal(self, id, iid, locale, flags,
+            &empty, nullptr, nullptr, nullptr);
     });
 }
 HRESULT __fastcall NavigatedHook(void* self) {
@@ -554,28 +638,21 @@ HRESULT __fastcall NavStateHook(void* self, ULONG flags) {
         })) { Trace(L"EFN navbar_queued"); return S_OK; }
     return navStateOriginal(self, flags);
 }
-bool Initialize(HMODULE frame, const WH_HOOK_SYMBOLS_OPTIONS* options) {
-    // ExplorerFrame.dll
-    const WindhawkUtils::SYMBOL_HOOK hooks[] = {
-        {{L"?OnBrowserNavigated@CExplorerRibbon@@UEAAJXZ"}, &navigatedOriginal, NavigatedHook},
-        {{L"?OnShellViewChanged@CExplorerRibbon@@UEAAJXZ"}, &changedOriginal, ChangedHook},
-        {{L"?DestroyRibbonUI@CExplorerRibbon@@UEAAJH@Z"}, &destroyOriginal, DestroyHook},
-        {{L"?SetNavigationState@CNavBar@@UEAAJK@Z"}, &navStateOriginal, NavStateHook},
-    };
-    if (!WindhawkUtils::HookSymbols(frame, hooks, ARRAYSIZE(hooks), options)) return false;
+bool Initialize() {
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
         reinterpret_cast<LPCWSTR>(Proc), &instance);
     WNDCLASSW cls{};
     cls.lpfnWndProc = Proc; cls.hInstance = instance; cls.lpszClassName = ClassName;
-    return RegisterClassW(&cls) != 0;
+    registered = RegisterClassW(&cls) != 0;
+    return registered;
 }
 void BeforeUninit() {
-    stopping = true;
-    std::vector<HWND> copy;
-    { std::lock_guard lock(mutex); copy = windows; }
-    for (HWND hwnd : copy) SendMessageW(hwnd, WM_CLOSE, 0, 0);
+    lifetime.Stop();
+    lifetime.CloseAndWait();
 }
-void Uninit() { UnregisterClassW(ClassName, instance); }
+void Uninit() {
+    if (registered && UnregisterClassW(ClassName, instance)) registered = false;
+}
 } // namespace RibbonWork
 
 // The modern command surface has its own event sink and navigation-band
@@ -643,12 +720,11 @@ HRESULT __fastcall InvokeHook(void* self, DISPID id, REFIID iid, LCID locale, WO
     bool invalidation = id == 200 || id == 201 || id == 205 || id == 207 ||
         id == 211 || id == 212 || id == 215 || id == 220;
     HRESULT hr;
-    if (invalidation && Pending() && RibbonWork::Enqueue(
-            reinterpret_cast<IUnknown*>(self), [self, id] {
+    if (invalidation && CanDeferInvoke(iid, flags, args) && Pending() && RibbonWork::Enqueue(
+            reinterpret_cast<IUnknown*>(self), [self, id, iid, locale, flags] {
                 Trace(L"EFN xaml_event_run");
                 DISPPARAMS empty{};
-                const GUID iid{};
-                invokeOriginal(self, id, iid, 0, DISPATCH_METHOD, &empty, nullptr, nullptr, nullptr);
+                invokeOriginal(self, id, iid, locale, flags, &empty, nullptr, nullptr, nullptr);
             })) {
         Trace(L"EFN xaml_event_queued");
         if (result) *result = {};
@@ -673,13 +749,13 @@ void Initialize(const WH_HOOK_SYMBOLS_OPTIONS* options) {
     if (!module) { Wh_Log(L"Modern XAML adapter unavailable; classic hooks remain active"); return; }
     // Windows.UI.FileExplorer.dll
     const WindhawkUtils::SYMBOL_HOOK hooks[] = {
-        {{L"?OnBrowserNavigated@CommandBarViewAdapter@@UEAAJXZ"}, &navigatedOriginal, NavigatedHook, true},
-        {{L"?OnShellViewChanged@CommandBarViewAdapter@@UEAAJXZ"}, &changedOriginal, ChangedHook, true},
-        {{L"?OnCommandStateInvalidated@CommandBarViewAdapter@@UEAAJXZ"}, &invalidatedOriginal, InvalidatedHook, true},
-        {{L"?SetNavigationState@CommandBarViewAdapter@@UEAAJK@Z"}, &stateOriginal, StateHook, true},
-        {{L"?InvalidateCommands@CommandBarViewAdapter@@UEAAJW4COMMAND_SET@@@Z"}, &invalidateOriginal, InvalidateHook, true},
-        {{L"?Invoke@CommandBarViewAdapter@@UEAAJJAEBU_GUID@@KGPEAUtagDISPPARAMS@@PEAUtagVARIANT@@PEAUtagEXCEPINFO@@PEAI@Z"}, &invokeOriginal, InvokeHook, true},
-        {{L"?Cleanup@CommandBarViewAdapter@@QEAAJXZ"}, &cleanupOriginal, CleanupHook, true},
+        {{L"public: virtual long __cdecl CommandBarViewAdapter::OnBrowserNavigated(void)"}, &navigatedOriginal, NavigatedHook, true},
+        {{L"public: virtual long __cdecl CommandBarViewAdapter::OnShellViewChanged(void)"}, &changedOriginal, ChangedHook, true},
+        {{L"public: virtual long __cdecl CommandBarViewAdapter::OnCommandStateInvalidated(void)"}, &invalidatedOriginal, InvalidatedHook, true},
+        {{L"public: virtual long __cdecl CommandBarViewAdapter::SetNavigationState(unsigned long)"}, &stateOriginal, StateHook, true},
+        {{L"public: virtual long __cdecl CommandBarViewAdapter::InvalidateCommands(enum COMMAND_SET)"}, &invalidateOriginal, InvalidateHook, true},
+        {{L"public: virtual long __cdecl CommandBarViewAdapter::Invoke(long,struct _GUID const &,unsigned long,unsigned short,struct tagDISPPARAMS *,struct tagVARIANT *,struct tagEXCEPINFO *,unsigned int *)"}, &invokeOriginal, InvokeHook, true},
+        {{L"public: long __cdecl CommandBarViewAdapter::Cleanup(void)"}, &cleanupOriginal, CleanupHook, true},
     };
     bool resolved = WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks), options);
     enabled = resolved && navigatedOriginal && changedOriginal && invalidatedOriginal &&
@@ -701,24 +777,25 @@ static_assert(sizeof(Action) == 40 && offsetof(Action, callback) == 24);
 using CreateAction = void*(*)(const Action*);
 
 Callback batchCallback;
-void *redrawFrame, *renderSizer;
-struct FunctionRange {
-    ULONG_PTR begin = 0, end = 0;
-    bool ContainsReturnAddress(ULONG_PTR caller) const {
-        return caller > begin && caller <= end;
-    }
-    bool Resolve(void* function) {
-        DWORD64 imageBase = 0;
-        auto address = reinterpret_cast<DWORD64>(function);
-        auto entry = address ? RtlLookupFunctionEntry(address, &imageBase, nullptr) : nullptr;
-        if (!entry || imageBase + entry->BeginAddress != address ||
-            entry->EndAddress <= entry->BeginAddress) return false;
-        begin = address;
-        end = imageBase + entry->EndAddress;
-        return true;
-    }
+using RedrawFrame = void(__fastcall*)(void*);
+using RenderSizer = HRESULT(__fastcall*)(void*);
+RedrawFrame redrawFrameOriginal;
+RenderSizer renderSizerOriginal;
+thread_local unsigned redrawFrameDepth, renderSizerDepth;
+struct PaintScope {
+    unsigned& depth;
+    explicit PaintScope(unsigned& depth) : depth(depth) { ++depth; }
+    PaintScope(const PaintScope&) = delete;
+    ~PaintScope() { --depth; }
 };
-FunctionRange activationRange, sizerRange;
+void __fastcall RedrawFrameHook(void* self) {
+    PaintScope scope(redrawFrameDepth);
+    redrawFrameOriginal(self);
+}
+HRESULT __fastcall RenderSizerHook(void* self) {
+    PaintScope scope(renderSizerDepth);
+    return renderSizerOriginal(self);
+}
 CreateAction createActionOriginal;
 decltype(&UpdateWindow) updateWindowOriginal;
 decltype(&RedrawWindow) redrawWindowOriginal;
@@ -742,14 +819,13 @@ BOOL WINAPI SetWindowPosHook(HWND hwnd, HWND after, int x, int y, int cx, int cy
     return result;
 }
 BOOL WINAPI UpdateWindowHook(HWND hwnd) {
-    auto caller = reinterpret_cast<ULONG_PTR>(__builtin_return_address(0));
-    // The return address may equal the exclusive end of the calling function.
-    return activationRange.ContainsReturnAddress(caller) && !FileTransition::NativeLoadingAllowed()
+    // Scope survives intervening API hooks installed by other mods. Suppress
+    // only while this thread is navigating inside the relevant shell32 host.
+    return FileTransition::navigationDepth && redrawFrameDepth && !FileTransition::NativeLoadingAllowed()
         ? TRUE : updateWindowOriginal(hwnd);
 }
 BOOL WINAPI RedrawWindowHook(HWND hwnd, const RECT* rect, HRGN region, UINT flags) {
-    auto caller = reinterpret_cast<ULONG_PTR>(__builtin_return_address(0));
-    if (sizerRange.ContainsReturnAddress(caller) && !FileTransition::NativeLoadingAllowed()) {
+    if (FileTransition::navigationDepth && renderSizerDepth && !FileTransition::NativeLoadingAllowed()) {
         // _Render flushes every child during navigation layout initialization.
         // Leave invalidation and geometry alone; remove only the immediate flush.
         flags &= ~(RDW_UPDATENOW | RDW_ERASENOW);
@@ -771,32 +847,55 @@ template<class T> bool Hook(T& original, T replacement) {
         reinterpret_cast<void*>(replacement), reinterpret_cast<void**>(&original));
 }
 
-BOOL Wh_ModInit() {
+HMODULE frame, shell, duser;
+void ReleaseModules() {
+    XamlWork::Uninit();
+    if (duser) FreeLibrary(duser);
+    if (shell) FreeLibrary(shell);
+    if (frame) FreeLibrary(frame);
+    duser = shell = frame = nullptr;
+}
+
+BOOL InitializeMod() {
 #ifdef EFN_DIAGNOSTICS
     GUID provider{0xd1675027, 0xf8d0, 0x4c43, {0x9b, 0x6f, 0x4b, 0x39, 0x0c, 0xe6, 0x46, 0xed}};
     EventRegister(&provider, nullptr, nullptr, &diagnosticProvider);
 #endif
-    auto frame = LoadLibraryExW(L"ExplorerFrame.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    auto shell = GetModuleHandleW(L"shell32.dll");
-    auto duser = GetModuleHandleW(L"DUser.dll");
+    frame = LoadLibraryExW(L"ExplorerFrame.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    shell = LoadLibraryExW(L"shell32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    duser = LoadLibraryExW(L"DUser.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     // ExplorerFrame.dll
     const WindhawkUtils::SYMBOL_HOOK frameSymbols[] = {
-        {{L"?s_BatchTimerCallback@UIItemsView@@CAXPEAUGMA_ACTIONINFO@@@Z"}, &batchCallback, nullptr, true},
+        {{L"private: static void __cdecl UIItemsView::s_BatchTimerCallback(struct GMA_ACTIONINFO *)"}, &batchCallback, nullptr, true},
+        {{L"private: long __cdecl CShellBrowser::_NavigateToPidl(struct _ITEMIDLIST_ABSOLUTE const *,unsigned long,unsigned long)"}, &FileTransition::navigateOriginal, FileTransition::NavigateHook},
+        {{L"public: void __cdecl UIItemsView::BlockRedrawWithTimeout(float)"}, &FileTransition::blockOriginal, FileTransition::BlockHook},
+        {{L"public: void __cdecl UIItemsView::UnblockRedraw(void)"}, &FileTransition::unblockRedraw},
+        {{L"private: long __cdecl UIItemsView::_ResetRoot(struct IItem *,struct IItemCollection *)"}, &FileTransition::resetOriginal, FileTransition::ResetHook},
+        {{L"private: long __cdecl UIItemsView::_EnsureBatching(void)"}, &FileTransition::ensureOriginal, FileTransition::EnsureHook},
+        {{L"private: void __cdecl UIItemsView::_OnBatchTimer(struct GMA_ACTIONINFO *)"}, &FileTransition::batchOriginal, FileTransition::BatchHook},
+        {{L"private: bool __cdecl UIItemsView::DeleteBatchTimer(void)"}, &FileTransition::deleteOriginal, FileTransition::DeleteHook},
+        {{L"public: virtual long __cdecl CExplorerRibbon::Invoke(long,struct _GUID const &,unsigned long,unsigned short,struct tagDISPPARAMS *,struct tagVARIANT *,struct tagEXCEPINFO *,unsigned int *)"}, &FileTransition::invokeOriginal, FileTransition::InvokeHook},
+        {{L"public: virtual long __cdecl CExplorerRibbon::OnBrowserNavigated(void)"}, &RibbonWork::navigatedOriginal, RibbonWork::NavigatedHook},
+        {{L"public: virtual long __cdecl CExplorerRibbon::OnShellViewChanged(void)"}, &RibbonWork::changedOriginal, RibbonWork::ChangedHook},
+        {{L"public: virtual long __cdecl CExplorerRibbon::DestroyRibbonUI(int)"}, &RibbonWork::destroyOriginal, RibbonWork::DestroyHook},
+        {{L"public: virtual long __cdecl CNavBar::SetNavigationState(unsigned long)"}, &RibbonWork::navStateOriginal, RibbonWork::NavStateHook},
     };
     // shell32.dll
     const WindhawkUtils::SYMBOL_HOOK shellSymbols[] = {
-        {{L"?_RedrawFrame@CDUIViewFrame@@AEAAXXZ"}, &redrawFrame, nullptr, true},
-        {{L"?_Render@CDUISizerElement@@AEAAJXZ"}, &renderSizer, nullptr, true},
+        {{L"private: void __cdecl CDUIViewFrame::_RedrawFrame(void)"}, &redrawFrameOriginal, RedrawFrameHook},
+        {{L"private: long __cdecl CDUISizerElement::_Render(void)"}, &renderSizerOriginal, RenderSizerHook},
     };
     WH_HOOK_SYMBOLS_OPTIONS options{};
     options.optionsSize = sizeof(options);
-    options.noUndecoratedSymbols = TRUE;
     options.onlineCacheUrl = L"";
     bool frameSymbolsReady = frame && WindhawkUtils::HookSymbols(frame, frameSymbols, ARRAYSIZE(frameSymbols), &options);
+    if (!frameSymbolsReady) {
+        Wh_Log(L"Required ExplorerFrame symbols unavailable");
+        return FALSE;
+    }
     bool shellSymbolsReady = shell && WindhawkUtils::HookSymbols(shell, shellSymbols, ARRAYSIZE(shellSymbols), &options);
-    if (!shellSymbolsReady || !activationRange.Resolve(redrawFrame) ||
-        !sizerRange.Resolve(renderSizer)) {
-        Wh_Log(L"Required activation/layout paint symbols or function metadata missing");
+    if (!shellSymbolsReady) {
+        Wh_Log(L"Required activation/layout paint hooks unavailable");
         return FALSE;
     }
     updateWindowOriginal = UpdateWindow;
@@ -809,12 +908,11 @@ BOOL Wh_ModInit() {
         Wh_Log(L"Required paint hook failed: activation=%d, layout=%d", paint, layoutPaint);
         return FALSE; // Windhawk rolls back hooks when initialization fails.
     }
-    if (!FileTransition::Initialize(frame, &options)) {
+    if (!FileTransition::Initialize()) {
         Wh_Log(L"Required file-view transition hooks unavailable");
         return FALSE;
     }
-    if (!RibbonWork::Initialize(frame, &options)) {
-        FileTransition::Uninit();
+    if (!RibbonWork::Initialize()) {
         Wh_Log(L"Required deferred UI hooks unavailable");
         return FALSE;
     }
@@ -828,10 +926,24 @@ BOOL Wh_ModInit() {
            batches, paint, layoutPaint);
     return TRUE;
 }
-void Wh_ModBeforeUninit() { FileTransition::BeforeUninit(); RibbonWork::BeforeUninit(); }
+BOOL Wh_ModInit() {
+    if (InitializeMod()) return TRUE;
+    // Windhawk rolls back hooks on failure, but doesn't call Wh_ModUninit.
+    FileTransition::Uninit(); RibbonWork::Uninit();
+    ReleaseModules();
+#ifdef EFN_DIAGNOSTICS
+    EventUnregister(diagnosticProvider);
+#endif
+    return FALSE;
+}
+void Wh_ModBeforeUninit() {
+    FileTransition::lifetime.Stop();
+    RibbonWork::lifetime.Stop();
+    FileTransition::BeforeUninit(); RibbonWork::BeforeUninit();
+}
 void Wh_ModUninit() {
     FileTransition::Uninit(); RibbonWork::Uninit();
-    XamlWork::Uninit();
+    ReleaseModules();
 #ifdef EFN_DIAGNOSTICS
     EventUnregister(diagnosticProvider);
 #endif
