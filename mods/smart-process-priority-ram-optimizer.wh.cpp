@@ -2,7 +2,7 @@
 // @id              smart-process-priority-ram-optimizer
 // @name            Smart Process Priority & RAM Optimizer
 // @description     Boosts foreground responsiveness, shields audio and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.
-// @version         2.1.0
+// @version         2.2.0
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         windhawk.exe
@@ -217,6 +217,9 @@ typedef struct _PROCESS_POWER_THROTTLING_STATE {
 #endif
 #ifndef PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION
 #define PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION 0x4
+#endif
+#ifndef DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+#define DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 ((DPI_AWARENESS_CONTEXT)-4)
 #endif
 static constexpr INT ProcessPowerThrottlingInfoClass = 4;
 
@@ -2019,9 +2022,14 @@ static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
   if (!hwnd || !IsWindowVisible(hwnd) || pid == 0)
     return false;
 
-  RECT wndRect;
-  if (!GetWindowRect(hwnd, &wndRect))
-    return false;
+  RECT wndRect{};
+  // Query DWM extended frame bounds first for exact composited physical coordinates,
+  // falling back to GetWindowRect if DWM call is unavailable.
+  if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &wndRect,
+                                   sizeof(wndRect)))) {
+    if (!GetWindowRect(hwnd, &wndRect))
+      return false;
+  }
 
   HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
   MONITORINFO mi{};
@@ -2029,13 +2037,13 @@ static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
   if (!GetMonitorInfoW(hMon, &mi))
     return false;
 
-  // Allow a +/- 2 pixel tolerance margin to accommodate DWM sizing borders
-  // and multi-monitor mixed DPI scaling offsets on Windows 10/11.
+  // Allow a +/- 4 pixel tolerance margin to accommodate DWM sizing borders,
+  // drop shadow margins, and multi-monitor mixed DPI scaling boundaries on Windows 10/11.
   bool coversMonitor =
-      (wndRect.left <= mi.rcMonitor.left + 2 &&
-       wndRect.top <= mi.rcMonitor.top + 2 &&
-       wndRect.right >= mi.rcMonitor.right - 2 &&
-       wndRect.bottom >= mi.rcMonitor.bottom - 2);
+      (wndRect.left <= mi.rcMonitor.left + 4 &&
+       wndRect.top <= mi.rcMonitor.top + 4 &&
+       wndRect.right >= mi.rcMonitor.right - 4 &&
+       wndRect.bottom >= mi.rcMonitor.bottom - 4);
   if (!coversMonitor)
     return false;
 
@@ -3036,6 +3044,28 @@ BOOL WhTool_ModInit() {
   Wh_Log(
       L"[SmartOptimizer] Initializing Smart Process Priority & RAM Optimizer "
       L"(Dedicated Tool Process)...");
+
+  // Initialize Per-Monitor V2 DPI awareness dynamically so window coordinates across
+  // multi-monitor configurations with mixed DPI scaling factors (e.g. 4K 150% + 1440p 100%)
+  // are evaluated in exact physical pixels without Windows DPI virtualization distortion.
+  // Dynamically resolved to remain 100% compatible across all Windows versions and CPUs.
+  HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+  if (hUser32) {
+    using pfnSetProcessDpiAwarenessContext_t =
+        BOOL(WINAPI *)(DPI_AWARENESS_CONTEXT);
+    auto pfnSetDpiContext = (pfnSetProcessDpiAwarenessContext_t)GetProcAddress(
+        hUser32, "SetProcessDpiAwarenessContext");
+    if (pfnSetDpiContext) {
+      pfnSetDpiContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    } else {
+      using pfnSetProcessDPIAware_t = BOOL(WINAPI *)();
+      auto pfnSetDpiAware =
+          (pfnSetProcessDPIAware_t)GetProcAddress(hUser32, "SetProcessDPIAware");
+      if (pfnSetDpiAware) {
+        pfnSetDpiAware();
+      }
+    }
+  }
 
   SystemHardwareProfile hw = GetHardwareProfile();
   Wh_Log(L"[SmartOptimizer] Hardware Profile: %.1f GB RAM (%s), %u CPU cores (%s)%s.",
