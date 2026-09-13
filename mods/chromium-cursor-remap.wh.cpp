@@ -8,20 +8,6 @@
 // @twitter         https://x.com/tomazany
 // @donateUrl       https://ko-fi.com/mazany
 // @include         *
-// @exclude         explorer.exe
-// @exclude         SearchHost.exe
-// @exclude         StartMenuExperienceHost.exe
-// @exclude         ShellExperienceHost.exe
-// @exclude         RuntimeBroker.exe
-// @exclude         taskhostw.exe
-// @exclude         sihost.exe
-// @exclude         ctfmon.exe
-// @exclude         conhost.exe
-// @exclude         cmd.exe
-// @exclude         powershell.exe
-// @exclude         pwsh.exe
-// @exclude         WindowsTerminal.exe
-// @exclude         mstsc.exe
 // @architecture    x86-64
 // @compilerOptions -lgdi32 -luser32
 // @license         MIT
@@ -74,8 +60,6 @@ cursor the mod recognises, whatever the per-type settings say, so you can see at
 a glance which ones it catches. If the test cursor cannot be loaded, the
 per-type settings stay in force.
 
-**Guess cursors that are not Chromium's own** is off by default; see below.
-
 Settings take effect without restarting the app.
 
 ## Tested with
@@ -83,7 +67,9 @@ Settings take effect without restarting the app.
 - Microsoft Edge 152 and 153, and Google Chrome 152: all ten cursor types replaced.
 - MarkText 0.19.1, an Electron app.
 - The cursor images bundled with VS Code, Obsidian, Vivaldi and Steam's built-in
-  browser (CEF) were checked to be recognised.
+  browser (CEF) were checked to be recognised. Windhawk does not load mods into
+  Steam installed under `Program Files` unless it is removed from Windhawk's
+  process exclusion list, which lists it by default as a game folder.
 
 Other Chromium-based browsers and Electron or CEF apps should work the same way.
 
@@ -93,9 +79,7 @@ The mod is set to load into every program, because Electron and CEF apps can
 have any file name and a list of names misses most of them. It stays only in
 the main process of a Chromium-based app, which it recognises from the program
 file itself before installing any hook; anywhere else, including Chromium's own
-helper processes, it unloads again at once. A few shell and console programs
-(Explorer, Windows Terminal, PowerShell and similar) are excluded outright, so
-the check does not even run there.
+helper processes, it unloads again at once.
 
 In the processes where it stays, it watches `SetCursor`. The first time a cursor
 appears, the mod asks Windows which module and resource it was loaded from,
@@ -103,13 +87,6 @@ loads that resource again at 32x32 and compares it with Chromium's ten bundled
 images. The answer does not depend on the size the app loaded the cursor at
 (checked from 32 to 72 px, which covers display scaling from 100% to 225%). A
 web page's own cursor image has no resource behind it and is left alone.
-
-**Guess cursors that are not Chromium's own** also judges cursors with no
-resource behind them, by their shape. It is a fallback for an app that creates
-Chromium's cursors from images at run time instead of loading them from its
-resources; none of the apps above needs it. It can misread a web page's own
-cursor that merely looks like a hand, a magnifier or a resize bar, and replace
-it, so leave it off unless you need it.
 
 ## Known limitations
 
@@ -216,9 +193,6 @@ CSS cursor type in the Windhawk mods repository on GitHub
       $name: Custom cursor source
       $description: IDC_* constant or .cur/.ani path. Leave empty for default (IDC_SIZENS).
   $name: row-resize (vertical double arrow)
-- GuessUnknownCursors: false
-  $name: Guess cursors that are not Chromium's own
-  $description: "Off: only cursors loaded from a program's resources that match Chromium's bundled cursor images are replaced, and web pages' own cursor images are left alone. On: cursors with no resource behind them are judged by their shape too, which can replace a page's cursor that only looks like a hand or a magnifier."
 - TestMode:
     - enabled: false
       $name: Enable test mode
@@ -232,11 +206,12 @@ CSS cursor type in the Windhawk mods repository on GitHub
 
 #include <windows.h>
 #include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <map>
 #include <set>
 #include <string>
-#include <cmath>
-#include <cstring>
 
 // The CSS cursors Chromium draws from its own resources on Windows.
 enum class CssCursorType : int {
@@ -251,7 +226,6 @@ enum class CssCursorType : int {
     Copy,
     ColResize,
     RowResize,
-    Blank,     // Fully transparent; only the heuristic says so. Never replaced.
     Count
 };
 
@@ -267,7 +241,6 @@ static const wchar_t* CssCursorName(CssCursorType t) {
         case CssCursorType::Copy:         return L"copy";
         case CssCursorType::ColResize:    return L"col-resize";
         case CssCursorType::RowResize:    return L"row-resize";
-        case CssCursorType::Blank:        return L"blank";
         default:                          return L"unknown";
     }
 }
@@ -277,7 +250,6 @@ static const wchar_t* CssCursorName(CssCursorType t) {
 struct ModSettings {
     // NULL keeps Chromium's own cursor.
     HCURSOR replacement[static_cast<int>(CssCursorType::Count)] = {};
-    bool guessUnknown = false;
 };
 
 // Guards the globals below up to g_settings. Nothing that can call into Win32
@@ -401,22 +373,14 @@ static HCURSOR LoadCursorFromSource(const std::wstring& source) {
     return NULL;
 }
 
-// The shape metrics are relative to the bounding box of the non-transparent
-// pixels, so they do not depend on the canvas size.
 struct CursorFingerprint {
     int canvasW = 0, canvasH = 0;
     int hotspotX = 0, hotspotY = 0;
-    bool isBlank = true;
     uint32_t pixelHash = 0;            // FNV-1a over the BGRA pixels
-    int opaqueCount = 0;
-    int bbW = 0, bbH = 0;
-    float hsRelX = 0.0f, hsRelY = 0.0f;
-    int cqTL = 0, cqTR = 0, cqBL = 0, cqBR = 0;  // pixels per quadrant
 };
 
-// Renders the cursor into a 32-bpp DIB; withShape adds the heuristic's metrics.
-static bool ComputeFingerprint(HCURSOR hCursor, CursorFingerprint& fp,
-                               bool withShape = true) {
+// Renders the cursor into a 32-bpp DIB and hashes the pixels.
+static bool ComputeFingerprint(HCURSOR hCursor, CursorFingerprint& fp) {
     ICONINFO ii = {};
     if (!GetIconInfo(hCursor, &ii)) {
         return false;
@@ -455,6 +419,7 @@ static bool ComputeFingerprint(HCURSOR hCursor, CursorFingerprint& fp,
     HBITMAP hDib = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS,
                                     &pBits, NULL, 0);
     if (!hDib || !pBits) {
+        if (hDib) DeleteObject(hDib);
         DeleteDC(hdcMem); ReleaseDC(NULL, hdcScreen); return false;
     }
 
@@ -472,46 +437,11 @@ static bool ComputeFingerprint(HCURSOR hCursor, CursorFingerprint& fp,
 
     BYTE* px = static_cast<BYTE*>(pBits);
     uint32_t hash = 0x811c9dc5u;
-    int bbL = fp.canvasW, bbT = fp.canvasH, bbR = -1, bbB = -1;
-
-    for (int y = 0; y < fp.canvasH; y++) {
-        for (int x = 0; x < fp.canvasW; x++) {
-            int i = (y * fp.canvasW + x) * 4;
-            for (int k = 0; k < 4; k++) {
-                hash ^= px[i + k];
-                hash *= 0x01000193u;
-            }
-            if ((px[i] | px[i+1] | px[i+2] | px[i+3]) != 0) {
-                fp.isBlank = false;
-                fp.opaqueCount++;
-                if (x < bbL) bbL = x;
-                if (x > bbR) bbR = x;
-                if (y < bbT) bbT = y;
-                if (y > bbB) bbB = y;
-            }
-        }
+    for (int i = 0; i < dataSize; i++) {
+        hash ^= px[i];
+        hash *= 0x01000193u;
     }
     fp.pixelHash = hash;
-
-    if (withShape && !fp.isBlank && bbR >= bbL && bbB >= bbT) {
-        fp.bbW = bbR - bbL + 1;
-        fp.bbH = bbB - bbT + 1;
-
-        if (fp.bbW > 0) fp.hsRelX = (float)(fp.hotspotX - bbL) / fp.bbW;
-        if (fp.bbH > 0) fp.hsRelY = (float)(fp.hotspotY - bbT) / fp.bbH;
-
-        float cx = bbL + fp.bbW / 2.0f;
-        float cy = bbT + fp.bbH / 2.0f;
-        for (int y = 0; y < fp.canvasH; y++) {
-            for (int x = 0; x < fp.canvasW; x++) {
-                int i = (y * fp.canvasW + x) * 4;
-                if ((px[i] | px[i+1] | px[i+2] | px[i+3]) != 0) {
-                    if (x < cx) { (y < cy) ? fp.cqTL++ : fp.cqBL++; }
-                    else         { (y < cy) ? fp.cqTR++ : fp.cqBR++; }
-                }
-            }
-        }
-    }
 
     SelectObject(hdcMem, hOld);
     DeleteObject(hDib);
@@ -544,47 +474,6 @@ static const KnownCursor kChromiumCursors[] = {
     {0x25B107C5, 9, 10, CssCursorType::RowResize},      // IDC_ROWRESIZE
 };
 
-// Shape heuristic for cursors with no resource behind them, used only when
-// GuessUnknownCursors is on. The thresholds come from Chromium's own cursors.
-static CssCursorType ClassifyByHeuristic(const CursorFingerprint& fp) {
-    if (fp.isBlank || fp.opaqueCount == 0) return CssCursorType::Blank;
-    if (fp.bbW < 4 || fp.bbH < 4) return CssCursorType::Unknown;
-
-    int total = fp.opaqueCount;
-    float cDens = (float)total / (float)(fp.bbW * fp.bbH);
-    float asp = (float)fp.bbW / fp.bbH;
-    float hx = fp.hsRelX, hy = fp.hsRelY;
-
-    int cL = fp.cqTL + fp.cqBL, cR = fp.cqTR + fp.cqBR;
-    int cT = fp.cqTL + fp.cqTR, cB = fp.cqBL + fp.cqBR;
-    float symLR = (total > 0) ? 1.0f - std::abs(cL - cR) / (float)total : 0;
-    float symTB = (total > 0) ? 1.0f - std::abs(cT - cB) / (float)total : 0;
-
-    // Rule 1: Hotspot at/before left edge of content → arrow-based
-    if (hx < 0.10f && hy < 0.25f) {
-        return (symLR < 0.57f) ? CssCursorType::Copy : CssCursorType::Alias;
-    }
-    // Rule 2: Extreme width → vertical-text (asp≈2.70)
-    if (asp > 1.8f) return CssCursorType::VerticalText;
-    // Rule 3: Low density → resize cursors (cDens≈0.222)
-    if (cDens < 0.28f) {
-        return (asp > 1.05f) ? CssCursorType::ColResize
-                             : CssCursorType::RowResize;
-    }
-    // Rule 4: Very high symmetry → zoom/cell/grabbing
-    if (symLR > 0.93f && symTB > 0.93f) {
-        if (cDens > 0.73f) return CssCursorType::Grabbing;
-        if (symLR > 0.995f && symTB > 0.995f && cDens < 0.60f)
-            return CssCursorType::Cell;
-        return (cDens < 0.65f) ? CssCursorType::ZoomIn
-                               : CssCursorType::ZoomOut;
-    }
-    // Rule 5: Moderate symmetry + high density → grab
-    if (cDens > 0.45f) return CssCursorType::Grab;
-
-    return CssCursorType::Unknown;
-}
-
 // Loads the resource again at 32x32 and looks it up. The copy is never cached,
 // so destroying it is safe.
 static CssCursorType ClassifyResourceCursor(HMODULE module, LPCWSTR name,
@@ -595,7 +484,7 @@ static CssCursorType ClassifyResourceCursor(HMODULE module, LPCWSTR name,
         return CssCursorType::Unknown;
     }
     CursorFingerprint fp = {};
-    bool fingerprinted = ComputeFingerprint(canonical, fp, false);
+    bool fingerprinted = ComputeFingerprint(canonical, fp);
     // The original is unset when this runs before the hooks exist.
     (DestroyCursor_Original ? DestroyCursor_Original : DestroyCursor)(canonical);
     if (!fingerprinted) {
@@ -616,8 +505,8 @@ static CssCursorType ClassifyResourceCursor(HMODULE module, LPCWSTR name,
 }
 
 // Classifies a cursor by the resource it was loaded from; a cursor with no
-// resource behind it is left alone unless guessUnknown is set.
-static CssCursorType ClassifyCursor(HCURSOR hCursor, bool guessUnknown) {
+// resource behind it, such as a web page's own cursor image, is left alone.
+static CssCursorType ClassifyCursor(HCURSOR hCursor) {
     ICONINFOEXW info = {sizeof(info)};
     if (!GetIconInfoExW(hCursor, &info)) {
         Wh_Log(L"cursor %p: GetIconInfoExW failed (err=%lu)", hCursor, GetLastError());
@@ -641,19 +530,8 @@ static CssCursorType ClassifyCursor(HCURSOR hCursor, bool guessUnknown) {
         return type;
     }
 
-    if (!guessUnknown) {
-        Wh_Log(L"cursor %p: no resource, left alone", hCursor);
-        return CssCursorType::Unknown;
-    }
-
-    CursorFingerprint fp = {};
-    if (!ComputeFingerprint(hCursor, fp)) {
-        return CssCursorType::Unknown;
-    }
-    CssCursorType type = ClassifyByHeuristic(fp);
-    Wh_Log(L"cursor %p: no resource, %dx%d, guessed -> %s", hCursor, fp.canvasW,
-           fp.canvasH, CssCursorName(type));
-    return type;
+    Wh_Log(L"cursor %p: no resource, left alone", hCursor);
+    return CssCursorType::Unknown;
 }
 
 // Exported by the executable of every Chromium browser, WebView2 host,
@@ -684,28 +562,69 @@ static bool HasChromiumExeMarkers(HMODULE exe) {
                        (LONG_PTR)&hasCursors);
     if (hasCursors) return true;
 
-    // Fails closed on anything that is not a well-formed PE32+ image.
+    // The import walk fails closed on anything that is not a well-formed PE32+
+    // image, and reads only the headers and sections the image maps readable:
+    // a mod loaded into every process must not fault on a packed executable.
     BYTE* base = (BYTE*)exe;
     auto dos = (IMAGE_DOS_HEADER*)base;
-    if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0) return false;
+    // The DOS and NT headers are read before they are checked against
+    // SizeOfHeaders: this is the process's own executable, whose headers the
+    // loader has already mapped and validated; the e_lfanew bound only rules
+    // out a nonsensical offset.
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0 ||
+        dos->e_lfanew >= 0x10000000) {
+        return false;
+    }
     auto nt = (IMAGE_NT_HEADERS64*)(base + dos->e_lfanew);
     if (nt->Signature != IMAGE_NT_SIGNATURE ||
         nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC ||
-        nt->OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_IMPORT) {
+        nt->OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_IMPORT ||
+        nt->FileHeader.SizeOfOptionalHeader <
+            offsetof(IMAGE_OPTIONAL_HEADER64, DataDirectory) +
+                (IMAGE_DIRECTORY_ENTRY_IMPORT + 1) * sizeof(IMAGE_DATA_DIRECTORY)) {
         return false;
     }
     const DWORD imageSize = nt->OptionalHeader.SizeOfImage;
+    const DWORD headersSize = nt->OptionalHeader.SizeOfHeaders;
+    auto sections = IMAGE_FIRST_SECTION(nt);
+    const WORD sectionCount = nt->FileHeader.NumberOfSections;
+    if (headersSize > imageSize ||
+        (DWORD)dos->e_lfanew + sizeof(IMAGE_NT_HEADERS64) > headersSize ||
+        (size_t)((BYTE*)(sections + sectionCount) - base) > headersSize) {
+        return false;
+    }
+
+    // Bytes readable from rva to the end of its section; 0 if none are.
+    auto readableAt = [&](DWORD rva) -> DWORD {
+        for (WORD i = 0; i < sectionCount; i++) {
+            const auto& s = sections[i];
+            DWORD size = s.Misc.VirtualSize ? s.Misc.VirtualSize : s.SizeOfRawData;
+            if ((s.Characteristics & IMAGE_SCN_MEM_READ) && rva >= s.VirtualAddress &&
+                rva - s.VirtualAddress < size && size <= imageSize &&
+                s.VirtualAddress <= imageSize - size) {
+                return size - (rva - s.VirtualAddress);
+            }
+        }
+        return 0;
+    };
+
+    // Bounded by the directory's declared size, and ended where the loader
+    // ends it: at the first descriptor with no name or no address table.
     const auto& dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
-    if (!dir.VirtualAddress || dir.VirtualAddress >= imageSize) return false;
-    for (DWORD at = dir.VirtualAddress;
-         at + sizeof(IMAGE_IMPORT_DESCRIPTOR) <= imageSize;
-         at += sizeof(IMAGE_IMPORT_DESCRIPTOR)) {
-        auto d = (IMAGE_IMPORT_DESCRIPTOR*)(base + at);
-        if (!d->Name) break;
-        if (d->Name >= imageSize) return false;
-        const char* dll = (const char*)(base + d->Name);
-        size_t len = strnlen(dll, imageSize - d->Name);
-        if (len == imageSize - d->Name) return false;
+    const DWORD count = dir.Size / sizeof(IMAGE_IMPORT_DESCRIPTOR);
+    if (!dir.VirtualAddress || !count ||
+        readableAt(dir.VirtualAddress) < count * sizeof(IMAGE_IMPORT_DESCRIPTOR)) {
+        return false;
+    }
+    auto descriptors = (IMAGE_IMPORT_DESCRIPTOR*)(base + dir.VirtualAddress);
+    for (DWORD i = 0; i < count; i++) {
+        const auto& d = descriptors[i];
+        if (!d.Name || !d.FirstThunk) break;
+        DWORD available = readableAt(d.Name);
+        if (!available) return false;
+        const char* dll = (const char*)(base + d.Name);
+        size_t len = strnlen(dll, available);
+        if (len == available) return false;
         if (len > 8 && _strnicmp(dll + len - 8, "_elf.dll", 8) == 0) return true;
     }
     return false;
@@ -721,9 +640,10 @@ static bool IsChromiumProcess() {
 
 // A non-empty --type= switch marks a Chromium child process, which never owns
 // the windows. Not a substring search: a URL or path on the browser's command
-// line can contain "--type=". Follows base::CommandLine::ParseFromString: split
-// as CommandLineToArgvW does, trim, stop at "--" or --single-argument, switch
-// prefixes "--", "-" and "/", names lowercased, last value wins.
+// line can contain "--type=". Follows base::CommandLine::ParseFromString: trim,
+// split with CommandLineToArgvW, trim each argument, stop at "--" or
+// --single-argument, switch prefixes "--", "-" and "/", names lowercased, last
+// value wins.
 static bool IsChromiumWhitespace(wchar_t c) {
     return (c >= 0x09 && c <= 0x0D) || c == 0x20 || c == 0x85 ||
            c == 0xA0 || c == 0x1680 || (c >= 0x2000 && c <= 0x200A) ||
@@ -731,58 +651,37 @@ static bool IsChromiumWhitespace(wchar_t c) {
            c == 0x3000;
 }
 
-static bool HasChromiumTypeSwitch(const wchar_t* commandLine) {
-    const wchar_t* p = commandLine;
-    while (IsChromiumWhitespace(*p)) p++;
+static std::wstring TrimChromiumWhitespace(const wchar_t* s) {
+    const wchar_t* end = s + wcslen(s);
+    while (s < end && IsChromiumWhitespace(*s)) s++;
+    while (end > s && IsChromiumWhitespace(end[-1])) end--;
+    return std::wstring(s, end);
+}
 
-    // argv[0]: quotes delimit the program name and backslashes are literal.
-    // Unquoted, it ends at (and consumes) any character up to U+0020, while
-    // later arguments split on space and tab only.
-    if (*p == L'"') {
-        p++;
-        while (*p && *p != L'"') p++;
-        if (*p) p++;
-    } else {
-        while (*p > L' ') p++;
-        if (*p) p++;
+// Returns true when the line cannot be split, so that the mod leaves a process
+// it cannot tell apart from a child.
+static bool HasChromiumTypeSwitch(const wchar_t* commandLine) {
+    std::wstring line = TrimChromiumWhitespace(commandLine);
+    if (line.empty()) return false;
+
+    // Loaded here rather than linked, so that shell32.dll is not pulled into
+    // every process the mod is loaded into; this runs only in Chromium.
+    HMODULE shell32 = LoadLibraryW(L"shell32.dll");
+    using CommandLineToArgvW_t = LPWSTR* (WINAPI*)(LPCWSTR, int*);
+    auto commandLineToArgv = shell32 ? (CommandLineToArgvW_t)GetProcAddress(
+                                           shell32, "CommandLineToArgvW")
+                                     : nullptr;
+    int argc = 0;
+    LPWSTR* argv = commandLineToArgv ? commandLineToArgv(line.c_str(), &argc) : nullptr;
+    if (!argv) {
+        Wh_Log(L"Cannot split the command line (err=%lu), unloading", GetLastError());
+        if (shell32) FreeLibrary(shell32);
+        return true;
     }
 
     bool isChild = false;
-    std::wstring arg;
-    for (;;) {
-        while (*p == L' ' || *p == L'\t') p++;
-        if (!*p) break;
-
-        arg.clear();
-        bool quoted = false;
-        while (*p && (quoted || (*p != L' ' && *p != L'\t'))) {
-            size_t backslashes = 0;
-            while (*p == L'\\') { backslashes++; p++; }
-            if (*p == L'"') {
-                arg.append(backslashes / 2, L'\\');
-                if (backslashes % 2) {
-                    arg += L'"';
-                } else if (quoted && p[1] == L'"') {
-                    // CommandLineToArgvW: "" inside quotes is a literal quote
-                    // and also ends the quoted run.
-                    arg += L'"';
-                    quoted = false;
-                    p++;
-                } else {
-                    quoted = !quoted;
-                }
-                p++;
-            } else {
-                arg.append(backslashes, L'\\');
-                if (*p && (quoted || (*p != L' ' && *p != L'\t'))) arg += *p++;
-            }
-        }
-
-        size_t begin = 0, end = arg.size();
-        while (begin < end && IsChromiumWhitespace(arg[begin])) begin++;
-        while (end > begin && IsChromiumWhitespace(arg[end - 1])) end--;
-        arg = arg.substr(begin, end - begin);
-
+    for (int i = 1; i < argc; i++) {
+        std::wstring arg = TrimChromiumWhitespace(argv[i]);
         if (arg == L"--") break;
 
         size_t prefix = (arg.compare(0, 2, L"--") == 0) ? 2
@@ -803,6 +702,8 @@ static bool HasChromiumTypeSwitch(const wchar_t* commandLine) {
             isChild = eq != std::wstring::npos && eq + 1 < arg.size();
         }
     }
+    LocalFree(argv);
+    FreeLibrary(shell32);
     return isChild;
 }
 
@@ -836,8 +737,6 @@ static std::wstring ReadStringSetting(const wchar_t* name) {
 static ModSettings LoadSettings() {
     ExclusiveLock loadLock(g_loadLock);
     ModSettings next;
-
-    next.guessUnknown = (Wh_GetIntSetting(L"GuessUnknownCursors") != 0);
 
     // Test mode overrides every per-type setting.
     HCURSOR testCursor = NULL;
@@ -898,7 +797,7 @@ static HCURSOR WINAPI SetCursor_Hook(HCURSOR hCursor) {
     SetCursorHookScope scope;
 
     // System cursors and our own replacements pass through. The replacement
-    // slots of Unknown, Blank and kept types are NULL.
+    // slots of Unknown and kept types are NULL.
     bool classify = false;
     HCURSOR hRepl = NULL;
     {
@@ -919,15 +818,13 @@ static HCURSOR WINAPI SetCursor_Hook(HCURSOR hCursor) {
 
     if (classify) {
         // Classifying loads and draws cursors, so it runs outside the lock.
-        bool guessUnknown;
         unsigned generation;
         {
             ExclusiveLock lock(g_lock);
             ++g_classifying[hCursor];
             generation = g_generation;
-            guessUnknown = g_settings.guessUnknown;
         }
-        CssCursorType type = ClassifyCursor(hCursor, guessUnknown);
+        CssCursorType type = ClassifyCursor(hCursor);
         {
             ExclusiveLock lock(g_lock);
             auto it = g_classifying.find(hCursor);  // registered above
@@ -989,9 +886,6 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    g_settings = LoadSettings();
-    CacheSystemCursors();
-
     // Every hook is required: without the destroy hooks a verdict could outlive
     // its cursor. No hook is live before Wh_ModInit returns, so giving up here
     // leaves nothing behind.
@@ -1026,7 +920,12 @@ BOOL Wh_ModInit() {
         }
     }
 
-    Wh_Log(L"Chromium browser process, hooks registered (guess=%d)", g_settings.guessUnknown);
+    // Last, after everything that can give up: settings may load cursor files,
+    // which are never destroyed. The hooks are not live until this returns.
+    g_settings = LoadSettings();
+    CacheSystemCursors();
+
+    Wh_Log(L"Chromium browser process, hooks registered");
     return TRUE;
 }
 
@@ -1048,8 +947,8 @@ void Wh_ModUninit() {
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Settings changed");
-    // Verdicts are dropped, including any being worked out, because
-    // GuessUnknownCursors decides some of them. Freed after the lock is released.
+    // Verdicts are dropped, including any being worked out, so that every
+    // settings change starts from an empty cache. Freed after the lock is released.
     ModSettings next = LoadSettings();
     std::map<HCURSOR, CssCursorType> dropped;
     AcquireSRWLockExclusive(&g_lock);
