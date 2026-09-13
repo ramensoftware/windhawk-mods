@@ -6,7 +6,7 @@
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @include         windhawk.exe
-// @compilerOptions -ld2d1 -ladvapi32 -lole32 -luser32 -lgdi32 -lshell32
+// @compilerOptions -ld2d1 -ldwrite -ladvapi32 -luser32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -44,6 +44,11 @@ Click, right click and wheel need the overlay focused -- click it once. **Hold
 Space** slides the colour from anywhere while the overlay is running, and the
 key is passed straight through so typing is never disturbed. **Esc always
 closes it**, from any window, so you can never get stuck.
+
+The overlay is otherwise completely clean -- no labels, no chrome. When you
+change something, a single line appears along the bottom showing the style, its
+parameter value and the amount notch, then fades away after about two seconds.
+That line is the only text the mod ever draws.
 
 The overlay sits above your wallpaper but *below* your windows: anything you
 open covers it normally, and it never steals focus by itself or appears in
@@ -83,21 +88,43 @@ The mod listens on a named event, so a shortcut can toggle it. Save this as
 `toggle-screen-holder.vbs` anywhere:
 
 ```vbs
-CreateObject("WScript.Shell").Run "powershell -nop -w hidden -c ""foreach($n in @('Global\WindhawkVectorScreenHolderToggle','Local\WindhawkVectorScreenHolderToggle')){try{[Threading.EventWaitHandle]::OpenExisting($n).Set();break}catch{}}""", 0, False
+CreateObject("WScript.Shell").Run "powershell -nop -w hidden -c ""[Threading.EventWaitHandle]::OpenExisting('Local\WindhawkVectorScreenHolderToggle').Set()""", 0, False
 ```
 
 Then make an ordinary Windows shortcut to that `.vbs` and give it whatever icon
 you like. Running it toggles the overlay. `wscript.exe` opens no console, so
 nothing flashes on screen.
 
+The event lives in the `Local\` (per-session) namespace and grants only
+`EVENT_MODIFY_STATE`, so it can be signalled but not otherwise touched, and a
+second logged-in user cannot toggle your overlay.
+
+## Performance
+
+The overlay is real work on the GPU and CPU, and the whole point is to run it
+*while* something else is busy. The heaviest combination by far is **contours
+at maximal amount**, which marches 46 iso levels over the sampling grid and
+rebuilds 46 path geometries every frame.
+
+If you are holding the screen for a long build or render and want the mod to
+stay further out of its way:
+
+- drop **Frames per second** to 30 -- motion is paced against wall-clock time,
+  so it stays smooth rather than becoming choppy;
+- or step the **amount** down a notch or two with right click;
+- or pick flow field or harmonograph, which draw themselves and then idle,
+  rather than contours, which redraw continuously.
+
 ## Notes
 
 - Runs as a Windhawk *tool mod* in its own dedicated `windhawk.exe` process, so
   it is never injected into your applications.
-- The display numbers this mod uses are the same ones Windows Settings shows.
-  The list of connected displays (with each display's Windows number and
-  device name) is written to the mod log when it loads. Open the log to
-  confirm which number is which.
+- The display numbers come from the `\\.\DISPLAYn` device names. These
+  normally line up with the numbers Windows Settings shows, but the two are
+  produced by different parts of Windows and can disagree after displays are
+  re-arranged. The list of connected displays -- number, resolution, position
+  and device name -- is written to the mod log when it loads; use that, and
+  the resolution in particular, to confirm which display is which.
 - Parameter, amount and the current style are remembered across restarts.
 
 ## Credits
@@ -216,10 +243,15 @@ pair-programmers Claude and Big-Pickle (opencode).
 
 #include <windows.h>
 #include <d2d1.h>
+#include <dwrite.h>
 #include <sddl.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <cwctype>
 #include <memory>
 #include <string>
 #include <vector>
@@ -234,11 +266,17 @@ static const GUID kIID_ID2D1Factory = {
     0x06152247, 0x6f50, 0x465a,
     {0x92, 0x45, 0x11, 0x8b, 0xfd, 0x3b, 0x60, 0x07}};
 
+static const GUID kIID_IDWriteFactory = {
+    0xb859ee5a, 0xd838, 0x4b5b,
+    {0xa2, 0xe8, 0x1a, 0xdc, 0x7d, 0x93, 0xdb, 0x48}};
+
+static IDWriteFactory* g_dwrite = nullptr;
+
 static const WCHAR kWindowClass[] = L"WindhawkVectorScreenHolderWnd";
-static const WCHAR kEventGlobal[] = L"Global\\WindhawkVectorScreenHolderToggle";
 static const WCHAR kEventLocal[] = L"Local\\WindhawkVectorScreenHolderToggle";
 
-static const int kHotkeyId = 0xC0DE;
+// Thread hot keys must use 0x0000-0xBFFF; 0xC000+ is reserved for atoms.
+static const int kHotkeyId = 0x4A21;
 static const float kPi = 3.14159265358979f;
 
 enum StyleId {
@@ -250,6 +288,13 @@ enum StyleId {
 };
 
 static const int kAmountCount = 5;
+
+static const wchar_t* kStyleNames[kStyleCount] = {
+    L"flow field", L"contours", L"differential growth", L"harmonograph"};
+static const wchar_t* kStyleParams[kStyleCount] = {L"turbulence", L"relief",
+                                                   L"vigor", L"tempo"};
+static const wchar_t* kAmountNames[kAmountCount] = {
+    L"minimal", L"sparse", L"balanced", L"dense", L"maximal"};
 
 template <typename T>
 static T ClampT(T v, T lo, T hi) {
@@ -521,7 +566,6 @@ struct SceneCtx {
     ID2D1Factory* factory = nullptr;
     ID2D1RenderTarget* target = nullptr;      // accumulation buffer
     ID2D1SolidColorBrush* brush = nullptr;
-    const Palette* pal = nullptr;
     float hue = 0;
     float param = 0.5f;                       // 0..1, the wheel
     int amount = 2;                           // 0..4, right click
@@ -1483,8 +1527,6 @@ struct MonitorEntry {
     int winNum = 0;             // the number in \\.\DISPLAY<n>, as Windows shows it
 };
 
-static std::vector<MonitorEntry>* g_enumTarget = nullptr;
-
 static int DisplayNumberFromDevice(const std::wstring& dev) {
     // "\\.\DISPLAY2" -> 2; the number Windows Settings shows.
     size_t p = dev.rfind(L"DISPLAY");
@@ -1494,7 +1536,8 @@ static int DisplayNumberFromDevice(const std::wstring& dev) {
     return _wtoi(dev.c_str() + p + 7);
 }
 
-static BOOL CALLBACK EnumMonProc(HMONITOR hMon, HDC, LPRECT, LPARAM) {
+static BOOL CALLBACK EnumMonProc(HMONITOR hMon, HDC, LPRECT, LPARAM lParam) {
+    std::vector<MonitorEntry>* out = (std::vector<MonitorEntry>*)lParam;
     MONITORINFOEXW mi;
     ZeroMemory(&mi, sizeof(mi));
     mi.cbSize = sizeof(mi);
@@ -1511,16 +1554,14 @@ static BOOL CALLBACK EnumMonProc(HMONITOR hMon, HDC, LPRECT, LPARAM) {
         if (EnumDisplayDevicesW(mi.szDevice, 0, &dd, 0)) {
             e.deviceName = dd.DeviceString;
         }
-        g_enumTarget->push_back(e);
+        out->push_back(e);
     }
     return TRUE;
 }
 
 static std::vector<MonitorEntry> EnumerateMonitors() {
     std::vector<MonitorEntry> list;
-    g_enumTarget = &list;
-    EnumDisplayMonitors(nullptr, nullptr, EnumMonProc, 0);
-    g_enumTarget = nullptr;
+    EnumDisplayMonitors(nullptr, nullptr, EnumMonProc, (LPARAM)&list);
     std::sort(list.begin(), list.end(),
               [](const MonitorEntry& a, const MonitorEntry& b) {
                   if (a.rect.left != b.rect.left) {
@@ -1536,6 +1577,10 @@ static std::vector<MonitorEntry> EnumerateMonitors() {
 // ---------------------------------------------------------------------------
 enum Phase { kPhaseIn, kPhaseBuild, kPhaseHold, kPhaseOut };
 
+// How long the readout stays up, and how much of that is the fade.
+static const float kHudSecs = 2.2f;
+static const float kHudFade = 0.6f;
+
 class Overlay {
    public:
     Overlay(ID2D1Factory* factory, const RECT& rc, unsigned seed)
@@ -1547,6 +1592,9 @@ class Overlay {
     void Destroy();
     void Render(float dtSec);
     void NewScene();
+    // Briefly show what just changed. The overlay is otherwise completely
+    // clean -- this is the only text it ever draws.
+    void FlashHud();
     HWND Hwnd() const { return hwnd_; }
 
     int style = kStyleFlow;
@@ -1569,6 +1617,10 @@ class Overlay {
     ID2D1SolidColorBrush* brush_ = nullptr;
 
     std::unique_ptr<Scene> scene_;
+    IDWriteTextFormat* hudFormat_ = nullptr;
+    std::wstring hudText_;
+    float hudT_ = 0;
+
     Phase phase_ = kPhaseIn;
     float phaseT_ = 0;
     float artAlpha_ = 0;
@@ -1579,9 +1631,9 @@ class Overlay {
 static void Controller_CycleStyle(Overlay* ov);
 static void Controller_StepAmount(Overlay* ov);
 static void Controller_Wheel(Overlay* ov, int delta);
-static void Controller_Close();
+static void Controller_RequestRebuild();
+static void Controller_RequestClose();
 static void Controller_SetSpace(bool down);
-static void Controller_Hud();
 
 bool Overlay::Create() {
     // Bottom of the z-order: it sits above the wallpaper but under every
@@ -1602,7 +1654,7 @@ bool Overlay::Create() {
         SetWindowLongPtrW(hwnd_, GWL_EXSTYLE,
                           GetWindowLongPtrW(hwnd_, GWL_EXSTYLE) |
                               WS_EX_LAYERED);
-        BYTE a = (BYTE)(255 * ClampT(g_settings.opacity, 10, 100) / 100);
+        BYTE a = (BYTE)(255 * g_settings.opacity / 100);
         SetLayeredWindowAttributes(hwnd_, 0, a, LWA_ALPHA);
     }
 
@@ -1627,9 +1679,10 @@ void Overlay::Destroy() {
 }
 
 bool Overlay::CreateDeviceResources() {
-    if (rt_) {
+    if (rt_ && buf_ && brush_) {
         return true;
     }
+    DiscardDeviceResources();   // never leave a half-built set behind
     D2D1_RENDER_TARGET_PROPERTIES props;
     ZeroMemory(&props, sizeof(props));
     props.type = D2D1_RENDER_TARGET_TYPE_DEFAULT;
@@ -1651,6 +1704,7 @@ bool Overlay::CreateDeviceResources() {
 
     if (FAILED(factory_->CreateHwndRenderTarget(&props, &hprops, &rt_))) {
         Wh_Log(L"CreateHwndRenderTarget failed");
+        DiscardDeviceResources();
         return false;
     }
     rt_->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
@@ -1664,18 +1718,32 @@ bool Overlay::CreateDeviceResources() {
             nullptr, nullptr, &fmt,
             D2D1_COMPATIBLE_RENDER_TARGET_OPTIONS_NONE, &buf_))) {
         Wh_Log(L"CreateCompatibleRenderTarget failed");
+        DiscardDeviceResources();
         return false;
     }
     buf_->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
 
+    if (g_dwrite && !hudFormat_) {
+        float px = std::max(15.0f, (float)(rect_.bottom - rect_.top) * 0.018f);
+        if (FAILED(g_dwrite->CreateTextFormat(
+                L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
+                DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, px, L"",
+                &hudFormat_))) {
+            hudFormat_ = nullptr;   // readout is optional, never fatal
+        }
+    }
+
     D2D1_COLOR_F white = {1, 1, 1, 1};
     if (FAILED(rt_->CreateSolidColorBrush(&white, nullptr, &brush_))) {
+        Wh_Log(L"CreateSolidColorBrush failed");
+        DiscardDeviceResources();
         return false;
     }
     return true;
 }
 
 void Overlay::DiscardDeviceResources() {
+    SafeRelease(&hudFormat_);
     SafeRelease(&brush_);
     SafeRelease(&buf_);
     SafeRelease(&rt_);
@@ -1714,6 +1782,16 @@ void Overlay::NewScene() {
     }
 }
 
+void Overlay::FlashHud() {
+    int st = ClampT(style, 0, kStyleCount - 1);
+    int am = ClampT(amount, 0, kAmountCount - 1);
+    WCHAR buf[160];
+    swprintf_s(buf, ARRAYSIZE(buf), L"%s     %s %.2f     amount %s",
+               kStyleNames[st], kStyleParams[st], param, kAmountNames[am]);
+    hudText_ = buf;
+    hudT_ = kHudSecs;
+}
+
 extern float g_hue;
 
 static float EaseInOut(float t) {
@@ -1721,14 +1799,15 @@ static float EaseInOut(float t) {
 }
 
 void Overlay::Render(float dtSec) {
-    if (!rt_ && !CreateDeviceResources()) {
+    if ((!rt_ || !buf_ || !brush_) && !CreateDeviceResources()) {
         return;
     }
 
     const float kFadeIn = 0.75f, kFadeOut = 2.2f;
-    float holdSecs = g_settings.rotate
-                         ? (float)ClampT(g_settings.rotateSeconds, 10, 7200)
-                         : 8.0f;
+    // A fixed hold. This used to borrow rotateSeconds when rotation was on,
+    // giving two independent timers the same period so they raced each other
+    // around the rotation boundary.
+    const float holdSecs = 8.0f;
 
     SceneCtx ctx;
     ctx.w = (float)(rect_.right - rect_.left);
@@ -1736,7 +1815,6 @@ void Overlay::Render(float dtSec) {
     ctx.factory = factory_;
     ctx.target = buf_;
     ctx.brush = brush_;
-    ctx.pal = &g_palette;
     ctx.hue = g_hue;
     ctx.param = param;
     ctx.amount = amount;
@@ -1744,8 +1822,12 @@ void Overlay::Render(float dtSec) {
 
     buf_->BeginDraw();
     bool done = false;
-    if (phase_ == kPhaseIn || phase_ == kPhaseBuild || phase_ == kPhaseHold) {
-        done = scene_ ? scene_->Step(ctx) : true;
+    // Step in every phase, fade-out included, so contours and growth keep
+    // moving all the way through the transition instead of freezing.
+    if (scene_) {
+        done = scene_->Step(ctx);
+    } else {
+        done = true;
     }
     buf_->EndDraw(nullptr, nullptr);
 
@@ -1808,6 +1890,41 @@ void Overlay::Render(float dtSec) {
         scene_->PaintCrisp(ctx, rt_);
     }
 
+    // The readout, drawn last so it sits over the art.
+    if (hudT_ > 0.0f) {
+        hudT_ -= dtSec;
+        if (hudFormat_ && !hudText_.empty()) {
+            float a = ClampT(hudT_ / kHudFade, 0.0f, 1.0f);
+            float margin = std::max(24.0f, ctx.h * 0.035f);
+            D2D1_RECT_F box;
+            box.left = margin;
+            box.top = ctx.h - margin * 2.0f;
+            box.right = ctx.w - margin;
+            box.bottom = ctx.h - margin * 0.5f;
+
+            const Rgb& fg = g_palette.ink[g_palette.ink.size() - 1];
+            Rgb shifted = ShiftHue(fg, g_hue);
+
+            // a soft dark pass underneath keeps it legible over pale art
+            D2D1_COLOR_F shadow = {0, 0, 0, 0.55f * a};
+            brush_->SetColor(&shadow);
+            D2D1_RECT_F sbox = box;
+            sbox.left += 1.5f;
+            sbox.top += 1.5f;
+            rt_->DrawTextW(hudText_.c_str(), (UINT32)hudText_.size(),
+                           hudFormat_, &sbox, brush_,
+                           D2D1_DRAW_TEXT_OPTIONS_NONE,
+                           DWRITE_MEASURING_MODE_NATURAL);
+
+            D2D1_COLOR_F col = ToColorF(shifted, 0.92f * a);
+            brush_->SetColor(&col);
+            rt_->DrawTextW(hudText_.c_str(), (UINT32)hudText_.size(),
+                           hudFormat_, &box, brush_,
+                           D2D1_DRAW_TEXT_OPTIONS_NONE,
+                           DWRITE_MEASURING_MODE_NATURAL);
+        }
+    }
+
     HRESULT hr = rt_->EndDraw(nullptr, nullptr);
     if (hr == D2DERR_RECREATE_TARGET) {
         DiscardDeviceResources();
@@ -1819,11 +1936,19 @@ LRESULT CALLBACK Overlay::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
     switch (msg) {
         case WM_WINDOWPOSCHANGING: {
-            // Keep it pinned to the bottom of the z-order even when clicked.
+            // Re-sink on every position change. ORing SWP_NOZORDER here would
+            // also neutralise our own HWND_BOTTOM call and leave the overlay
+            // above the user's windows.
             WINDOWPOS* wpos = (WINDOWPOS*)lp;
-            wpos->flags |= SWP_NOZORDER;
+            wpos->hwndInsertAfter = HWND_BOTTOM;
+            wpos->flags &= ~SWP_NOZORDER;
             return 0;
         }
+        case WM_DISPLAYCHANGE:
+        case WM_DPICHANGED:
+            // Monitor geometry moved under us; rebuild every overlay.
+            Controller_RequestRebuild();
+            return 0;
         case WM_MOUSEACTIVATE:
             // Focusable on click, but never raised.
             return MA_ACTIVATE;
@@ -1846,7 +1971,9 @@ LRESULT CALLBACK Overlay::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         case WM_KEYDOWN:
             if (wp == VK_ESCAPE) {
-                Controller_Close();
+                // Post rather than calling HideOverlays directly: that deletes
+                // this very Overlay while its WndProc is on the stack.
+                Controller_RequestClose();
                 return 0;
             }
             if (wp == VK_SPACE) {
@@ -1880,16 +2007,17 @@ LRESULT CALLBACK Overlay::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 float g_hue = 0;
 
 static std::vector<Overlay*> g_overlays;
-static bool g_active = false;
-static bool g_spaceDown = false;
+static std::atomic<bool> g_active{false};
+static std::atomic<bool> g_spaceDown{false};
 static HANDLE g_toggleEvent = nullptr;
-static DWORD g_workerThreadId = 0;
+static std::atomic<DWORD> g_workerThreadId{0};
 static HHOOK g_kbdHook = nullptr;
 static bool g_hotkeyRegistered = false;
 static float g_rotateTimer = 0;
 
 static const UINT WM_VSH_SETTINGS = WM_APP + 1;
 static const UINT WM_VSH_QUIT = WM_APP + 2;
+static const UINT WM_VSH_REBUILD = WM_APP + 4;
 static const UINT WM_VSH_CLOSE = WM_APP + 3;
 
 static int NextEnabledStyle(int from) {
@@ -1911,17 +2039,36 @@ static int FirstEnabledStyle() {
     return kStyleFlow;
 }
 
+// A wheel notch used to write three values straight through, so a fast
+// scroll hammered the store dozens of times a second. Mark dirty instead and
+// flush on hide, rotation and teardown.
+static std::atomic<bool> g_stateDirty{false};
+static int g_pendingStyle = 0, g_pendingAmount = 2, g_pendingParam = 500;
+
 static void SaveState(const Overlay* ov) {
-    Wh_SetIntValue(L"state.style", ov->style);
-    Wh_SetIntValue(L"state.amount", ov->amount);
-    Wh_SetIntValue(L"state.param", (int)(ov->param * 1000.0f));
+    g_pendingStyle = ov->style;
+    g_pendingAmount = ov->amount;
+    g_pendingParam = (int)(ov->param * 1000.0f);
+    g_stateDirty = true;
+}
+
+static void FlushState() {
+    if (!g_stateDirty.exchange(false)) {
+        return;
+    }
+    Wh_SetIntValue(L"state.style", g_pendingStyle);
+    Wh_SetIntValue(L"state.amount", g_pendingAmount);
+    Wh_SetIntValue(L"state.param", g_pendingParam);
+    // Stamp which setting values this state was derived from.
+    Wh_SetIntValue(L"state.amountFrom", g_settings.amount);
+    Wh_SetIntValue(L"state.paramFrom", g_settings.parameter);
 }
 
 static void Controller_CycleStyle(Overlay* ov) {
     ov->style = NextEnabledStyle(ov->style);
     ov->NewScene();
     SaveState(ov);
-    Controller_Hud();
+    ov->FlashHud();
 }
 
 static void Controller_StepAmount(Overlay* ov) {
@@ -1931,30 +2078,39 @@ static void Controller_StepAmount(Overlay* ov) {
         ov->NewScene();
     }
     SaveState(ov);
-    Controller_Hud();
+    ov->FlashHud();
 }
 
 static void Controller_Wheel(Overlay* ov, int delta) {
     float d = (delta > 0) ? 0.04f : -0.04f;
     ov->param = ClampT(ov->param + d, 0.0f, 1.0f);
     SaveState(ov);
-    Controller_Hud();
+    ov->FlashHud();
 }
 
 static void Controller_SetSpace(bool down) {
     g_spaceDown = down;
 }
 
-static void Controller_Hud() {
-    // Reserved for the on-screen readout; the overlay is deliberately clean
-    // and the values are persisted, so nothing is drawn here yet.
-}
+
 
 static void ShowOverlays();
 static void HideOverlays();
 
-static void Controller_Close() {
-    HideOverlays();
+static void Controller_RequestClose() {
+    DWORD tid = g_workerThreadId.load();
+    if (tid) {
+        PostThreadMessageW(tid, WM_VSH_CLOSE, 0, 0);
+    }
+}
+
+// Monitor geometry changed; ask the worker to tear the overlays down and
+// re-run the display selection from scratch.
+static void Controller_RequestRebuild() {
+    DWORD tid = g_workerThreadId.load();
+    if (tid) {
+        PostThreadMessageW(tid, WM_VSH_REBUILD, 0, 0);
+    }
 }
 
 // A global low-level keyboard hook so Space and Esc work even when no overlay
@@ -1967,7 +2123,7 @@ static LRESULT CALLBACK LowLevelKbdProc(int nCode, WPARAM wParam, LPARAM lParam)
         bool up = wParam == WM_KEYUP || wParam == WM_SYSKEYUP;
         if (k->vkCode == VK_ESCAPE) {
             if (down) {
-                PostThreadMessageW(g_workerThreadId, WM_VSH_CLOSE, 0, 0);
+                PostThreadMessageW(g_workerThreadId.load(), WM_VSH_CLOSE, 0, 0);
             }
         } else if (k->vkCode == VK_SPACE) {
             if (down || up) {
@@ -1978,22 +2134,62 @@ static LRESULT CALLBACK LowLevelKbdProc(int nCode, WPARAM wParam, LPARAM lParam)
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
-static void InstallKbdHook() {
-    if (g_kbdHook) {
-        return;
-    }
+static HANDLE g_hookThread = nullptr;
+static std::atomic<DWORD> g_hookThreadId{0};
+
+static DWORD WINAPI KbdHookThread(LPVOID) {
+    g_hookThreadId = GetCurrentThreadId();
+
     HMODULE mod = nullptr;
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                        (LPCWSTR)&LowLevelKbdProc, &mod);
     g_kbdHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKbdProc, mod, 0);
-}
+    if (!g_kbdHook) {
+        Wh_Log(L"SetWindowsHookEx failed (%u)", GetLastError());
+    }
 
-static void UninstallKbdHook() {
+    // Nothing but the pump lives on this thread, so the hook is always
+    // serviced immediately no matter how long a frame takes.
+    MSG msg;
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if (msg.message == WM_VSH_QUIT) {
+            break;
+        }
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
     if (g_kbdHook) {
         UnhookWindowsHookEx(g_kbdHook);
         g_kbdHook = nullptr;
     }
+    g_hookThreadId = 0;
+    return 0;
+}
+
+static void InstallKbdHook() {
+    if (g_hookThread) {
+        return;
+    }
+    g_hookThread = CreateThread(nullptr, 0, KbdHookThread, nullptr, 0, nullptr);
+    if (!g_hookThread) {
+        Wh_Log(L"Could not start the keyboard hook thread (%u)",
+               GetLastError());
+    }
+}
+
+static void UninstallKbdHook() {
+    if (!g_hookThread) {
+        return;
+    }
+    DWORD tid = g_hookThreadId.load();
+    if (tid) {
+        PostThreadMessageW(tid, WM_VSH_QUIT, 0, 0);
+    }
+    WaitForSingleObject(g_hookThread, 5000);
+    CloseHandle(g_hookThread);
+    g_hookThread = nullptr;
 }
 
 static void ApplyExecutionState() {
@@ -2019,6 +2215,15 @@ static void ShowOverlays() {
                                      (void**)&g_factory))) {
             Wh_Log(L"D2D1CreateFactory failed");
             return;
+        }
+    }
+    if (!g_dwrite) {
+        // Optional: without it the art still runs, just with no readout.
+        if (FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,
+                                       kIID_IDWriteFactory,
+                                       (IUnknown**)&g_dwrite))) {
+            Wh_Log(L"DWriteCreateFactory failed; readout disabled");
+            g_dwrite = nullptr;
         }
     }
 
@@ -2073,12 +2278,20 @@ static void ShowOverlays() {
     if (!g_settings.enable[style]) {
         style = FirstEnabledStyle();
     }
-    int amount = ClampT(Wh_GetIntValue(L"state.amount", g_settings.amount), 0,
-                        kAmountCount - 1);
-    float param =
-        ClampT(Wh_GetIntValue(L"state.param", g_settings.parameter * 10),
-               0, 1000) /
-        1000.0f;
+    // If the setting changed since the state was saved, the setting wins --
+    // otherwise "Starting amount notch" and "Starting parameter" would be
+    // silently ignored forever after the first scroll or right click.
+    int amount = g_settings.amount;
+    if (Wh_GetIntValue(L"state.amountFrom", -1) == g_settings.amount) {
+        amount = Wh_GetIntValue(L"state.amount", g_settings.amount);
+    }
+    amount = ClampT(amount, 0, kAmountCount - 1);
+
+    int paramMilli = g_settings.parameter * 10;
+    if (Wh_GetIntValue(L"state.paramFrom", -1) == g_settings.parameter) {
+        paramMilli = Wh_GetIntValue(L"state.param", paramMilli);
+    }
+    float param = ClampT(paramMilli, 0, 1000) / 1000.0f;
 
     unsigned seed = (unsigned)GetTickCount();
     for (size_t i = 0; i < targets.size(); i++) {
@@ -2097,6 +2310,7 @@ static void ShowOverlays() {
         return;
     }
     g_active = true;
+    g_spaceDown = false;   // a hide while Space was held must not stick
     g_rotateTimer = 0;
     InstallKbdHook();
     ApplyExecutionState();
@@ -2108,11 +2322,13 @@ static void HideOverlays() {
         return;
     }
     UninstallKbdHook();
+    FlushState();
     for (size_t i = 0; i < g_overlays.size(); i++) {
         delete g_overlays[i];
     }
     g_overlays.clear();
     g_active = false;
+    g_spaceDown = false;
     ApplyExecutionState();
     Wh_Log(L"Screen Holder hidden");
 }
@@ -2196,19 +2412,19 @@ static HANDLE CreateToggleEvent() {
     sa.nLength = sizeof(sa);
     PSECURITY_DESCRIPTOR psd = nullptr;
 
-    // Grant everyone access and label the object low integrity, so a normal
-    // (medium integrity) shortcut can signal it even when Windhawk is
-    // running elevated.
+    // EVENT_MODIFY_STATE (0x0002) only -- SetEvent is all the shortcut needs;
+    // GENERIC_ALL would also hand out DELETE/WRITE_DAC/WRITE_OWNER. The low
+    // integrity label lets a normal medium-integrity shortcut signal it even
+    // when Windhawk runs elevated.
     if (ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            L"D:(A;;GA;;;WD)S:(ML;;NW;;;LW)", SDDL_REVISION_1, &psd,
+            L"D:(A;;0x0002;;;WD)S:(ML;;NW;;;LW)", SDDL_REVISION_1, &psd,
             nullptr)) {
         sa.lpSecurityDescriptor = psd;
     }
 
-    HANDLE h = CreateEventW(psd ? &sa : nullptr, FALSE, FALSE, kEventGlobal);
-    if (!h) {
-        h = CreateEventW(psd ? &sa : nullptr, FALSE, FALSE, kEventLocal);
-    }
+    // Local\ (per session) so a second logged-in user's shortcut cannot
+    // toggle this session's overlay.
+    HANDLE h = CreateEventW(psd ? &sa : nullptr, FALSE, FALSE, kEventLocal);
     if (psd) {
         LocalFree(psd);
     }
@@ -2294,7 +2510,7 @@ static void RegisterHotkeyFromSettings() {
 // ---------------------------------------------------------------------------
 // Worker thread -- owns the windows, the render loop and the execution state
 // ---------------------------------------------------------------------------
-static volatile bool g_running = true;
+static std::atomic<bool> g_running{true};
 
 static DWORD WINAPI WorkerThread(LPVOID) {
     g_workerThreadId = GetCurrentThreadId();
@@ -2352,7 +2568,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
 
     while (g_running) {
         DWORD waitMs =
-            g_active ? (DWORD)(1000 / ClampT(g_settings.fps, 10, 240))
+            g_active ? (DWORD)(1000 / g_settings.fps)
                      : INFINITE;
         DWORD count = g_toggleEvent ? 1 : 0;
         HANDLE handles[1] = {g_toggleEvent};
@@ -2385,6 +2601,16 @@ static DWORD WINAPI WorkerThread(LPVOID) {
                 }
                 if (msg.message == WM_VSH_CLOSE) {
                     HideOverlays();
+                    continue;
+                }
+                if (msg.message == WM_VSH_REBUILD) {
+                    // Displays added, removed or resized. Rebuild so the
+                    // overlay follows the new geometry rather than sitting at
+                    // the old size on a display that may no longer exist.
+                    if (g_active) {
+                        HideOverlays();
+                        ShowOverlays();
+                    }
                     continue;
                 }
                 TranslateMessage(&msg);
@@ -2426,6 +2652,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
                     g_overlays[i]->style =
                         NextEnabledStyle(g_overlays[i]->style);
                     g_overlays[i]->NewScene();
+                    g_overlays[i]->FlashHud();
                 }
                 if (!g_overlays.empty()) {
                     SaveState(g_overlays[0]);
@@ -2447,33 +2674,46 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         CloseHandle(g_toggleEvent);
         g_toggleEvent = nullptr;
     }
+    SafeRelease(&g_dwrite);
     SafeRelease(&g_factory);
     SetThreadExecutionState(ES_CONTINUOUS);
     return 0;
 }
 
+static HANDLE g_workerThread = nullptr;
+
 BOOL WhTool_ModInit() {
     Wh_Log(L"Vector Screen Holder starting");
     g_running = true;
-    HANDLE h = CreateThread(nullptr, 0, WorkerThread, nullptr, 0, nullptr);
-    if (!h) {
+    g_workerThread = CreateThread(nullptr, 0, WorkerThread, nullptr, 0, nullptr);
+    if (!g_workerThread) {
         Wh_Log(L"CreateThread failed");
         return FALSE;
     }
-    CloseHandle(h);
     return TRUE;
 }
 
 void WhTool_ModSettingsChanged() {
-    if (g_workerThreadId) {
-        PostThreadMessageW(g_workerThreadId, WM_VSH_SETTINGS, 0, 0);
+    DWORD tid = g_workerThreadId.load();
+    if (tid) {
+        PostThreadMessageW(tid, WM_VSH_SETTINGS, 0, 0);
     }
 }
 
 void WhTool_ModUninit() {
     g_running = false;
-    if (g_workerThreadId) {
-        PostThreadMessageW(g_workerThreadId, WM_VSH_QUIT, 0, 0);
+    DWORD tid = g_workerThreadId.load();
+    if (tid) {
+        PostThreadMessageW(tid, WM_VSH_QUIT, 0, 0);
+    }
+    // Wh_ModUninit calls ExitProcess right after this. Without the join that
+    // would terminate the worker inside Direct2D, which can wedge DLL
+    // teardown and leave the tool-mod mutex held -- making the next enable
+    // fail with "Tool mod already running".
+    if (g_workerThread) {
+        WaitForSingleObject(g_workerThread, INFINITE);
+        CloseHandle(g_workerThread);
+        g_workerThread = nullptr;
     }
 }
 
@@ -2493,7 +2733,13 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    bool isService = false;
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
@@ -2504,8 +2750,10 @@ BOOL Wh_ModInit() {
     }
 
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0) {
-            isService = true;
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
             break;
         }
     }
@@ -2522,7 +2770,7 @@ BOOL Wh_ModInit() {
 
     LocalFree(argv);
 
-    if (isService) {
+    if (isExcluded) {
         return FALSE;
     }
 
