@@ -10662,7 +10662,7 @@
           1
         ],
         "ratingUsers": 2,
-        "updated": 1783690999000,
+        "updated": 1789317989000,
         "users": 95
       },
       "metadata": {
@@ -10675,7 +10675,7 @@
         ],
         "license": "MIT",
         "name": "Power Options Button",
-        "version": "1.0.13"
+        "version": "1.0.14"
       }
     },
     "prevent-focus-stealing": {

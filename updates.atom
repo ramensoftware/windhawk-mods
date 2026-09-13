@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-13T00:19:27.000Z</updated>
+    <updated>2026-09-13T16:46:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Power Options Button 1.0.14]]></title>
+        <id>https://windhawk.net/mods/power-options-button#4ab1b3861c4072e44fcc9fc9b3d89a0a3e98d4b8</id>
+        <link href="https://windhawk.net/mods/power-options-button"/>
+        <updated>2026-09-13T16:46:29.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Detect duplicated Ultimate Performance plans language-independently by comparing the raw FriendlyName MUI reference with the built-in Ultimate Performance template.</li>
+<li>Use an exact localized FriendlyName comparison as a secondary fallback.</li>
+<li>Remove language-specific "Ultimate"/"Ultimativ" keyword matching.</li>
+<li>Add diagnostic logging for unavailable FriendlyName references.</li>
+<li>Clean up unreachable code.</li>
+</ul>]]></content>
+        <author>
+            <name>SilverAmd</name>
+            <uri>https://github.com/SilverAmd</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.10]]></title>
         <id>https://windhawk.net/mods/windows-11-taskbar-styler#162bca0d6b4fe4da2c63c21f17921a165d5870fa</id>
@@ -503,19 +520,6 @@ Windows continues to handle the actual copy, move, delete, conflicts, and errors
         <author>
             <name>digART</name>
             <uri>https://github.com/digart11</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Accent Window Border 1.0.5]]></title>
-        <id>https://windhawk.net/mods/win11-accent-border#426175013e2b141e3b7ff9f4ac0ed012901d8053</id>
-        <link href="https://windhawk.net/mods/win11-accent-border"/>
-        <updated>2026-09-08T23:16:30.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added <em>Hook additional activation events</em> setting that allows the mod to work properly with some applications that handle activation events (e.g. UnigetUI).</li>
-</ul>]]></content>
-        <author>
-            <name>Guerra24</name>
-            <uri>https://github.com/Guerra24</uri>
         </author>
     </entry>
 </feed>
