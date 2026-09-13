@@ -864,6 +864,9 @@ BOOL ExtTextOutBkPaint(HDC hdc, LPCRECT lprect, UINT options)
 {
     if ((options & ETO_OPAQUE) && lprect) 
     {
+        if (RECTWIDTH(lprect) <= 0 || RECTHEIGHT(lprect) <= 0)
+            return FALSE;
+
         // Make opaque highlighted text background rectangle
         if (GetBkColor(hdc) == GetSysColor(COLOR_HIGHLIGHT)) 
         {
@@ -1027,16 +1030,19 @@ BOOL WINAPI HookedExtTextOutW(
     if (!hdc || !lpString || !c)
         return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
 
+    if (!ExtTextOutBkPaint(hdc, lprect, options))
+        return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
+    
     RECT textRect {0};
     if (!ExtTextOutCalcRect(hdc, {x, y}, options, textRect, lprect, lpString, c, lpDx))
-        return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
-
-    if (!ExtTextOutBkPaint(hdc, lprect, options))
         return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
         
     // https://devblogs.microsoft.com/oldnewthing/20110520-00/?p=10613
     BP_PAINTPARAMS params = { sizeof(BP_PAINTPARAMS) };
     params.dwFlags = (options & ETO_CLIPPED) ? BPPF_ERASE : BPPF_NOCLIP | BPPF_ERASE;
+    BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    params.pBlendFunction = &blend;
+    
     HDC memDC = nullptr;
     // Acquire OS cached bitmap
     HPAINTBUFFER hpb = BeginBufferedPaint(hdc, &textRect, BPBF_TOPDOWNDIB, &params, &memDC);
@@ -1048,21 +1054,24 @@ BOOL WINAPI HookedExtTextOutW(
     SelectObject(memDC, GetCurrentObject(hdc, OBJ_FONT));
     SetTextAlign(memDC, GetTextAlign(hdc));
     SetLayout(memDC, GetLayout(hdc));
+    SetGraphicsMode(memDC, GetGraphicsMode(hdc));
     SetBkMode(memDC, TRANSPARENT);
     SetTextColor(memDC, RGB(255, 255, 255)); // White text mask
 
-    // Remove default background painting operation, as it done by us
-    WINBOOL res = ExtTextOutW_orig(memDC, x, y, options & ~ETO_OPAQUE, lprect, lpString, c, lpDx);
+    // Remove default background painting operation, as it done by our ExtTextOutBkPaint helper
+    // Remove clipping as it is done by the BeginBufferedPaint API
+    options &= (options & ETO_CLIPPED) ? ~(ETO_CLIPPED | ETO_OPAQUE) : ~ETO_OPAQUE;
+    WINBOOL res = ExtTextOutW_orig(memDC, x, y, options, lprect, lpString, c, lpDx);
 
     // Text greyscale alpha composition
     if (!ExtTextOutComposition(hdc, hpb, &textRect))
         return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
 
-    BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-    AlphaBlend(hdc, textRect.left, textRect.top, RECTWIDTH(&textRect), RECTHEIGHT(&textRect),
-            memDC, textRect.left, textRect.top, RECTWIDTH(&textRect), RECTHEIGHT(&textRect), blend);
-
-    EndBufferedPaint(hpb, FALSE);
+    // EndBufferedPaint executes AlphaBlend only on DIBs otherwise applies BitBlt.
+    if (FAILED(EndBufferedPaint(hpb, TRUE))) {
+        Wh_Log(L"EndBufferedPaint failed error:0x%08x", GetLastError());
+        return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
+    }
     return res;
 }
 
@@ -5312,7 +5321,7 @@ void __fastcall Hooked_BorderRect(HDC hdc, COLORREF color, LPRECT pRect, INT cxT
     auto BorderComposition = [&](RECT rcBorder)
     {
         BP_PAINTPARAMS params = { sizeof(BP_PAINTPARAMS) };
-        params.dwFlags = BPPF_ERASE | BPPF_NONCLIENT;
+        params.dwFlags = BPPF_NOCLIP;
         HDC memDC = NULL;
 
         HPAINTBUFFER hpb = BeginBufferedPaint(hdc, &rcBorder, BPBF_TOPDOWNDIB, &params, &memDC);
@@ -5323,8 +5332,7 @@ void __fastcall Hooked_BorderRect(HDC hdc, COLORREF color, LPRECT pRect, INT cxT
 
         SetBkColor(memDC, color);
         ExtTextOutW(memDC, pRect->left, pRect->top, ETO_OPAQUE, pRect, NULL, NULL, NULL);
-
-        BufferedPaintSetAlpha(hpb, pRect, 255);
+        BufferedPaintMakeOpaque(hpb, pRect);
         EndBufferedPaint(hpb, TRUE);
     };
 
