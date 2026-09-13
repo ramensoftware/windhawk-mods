@@ -312,7 +312,7 @@ Premiere's own modules at all.
   $name: Custom — border
 - customText: "E6E6E6"
   $name: Custom — text
-  $description: Menu and title bar text.
+  $description: Menu and title bar text. Disabled items use the tone halfway between it and the panel.
 - customAccent: "2E2E2E"
   $name: Custom — accent
   $description: Hovered menu items and system highlights. The one place a strong color fits without tinting everything else.
@@ -638,10 +638,9 @@ using GetModuleInformation_t = BOOL(WINAPI*)(HANDLE, HMODULE, ModuleInformation*
                                              DWORD);
 
 /*
-    The fallback when the process cannot be enumerated: the executable and the
-    modules the mod hooks by name, sized from their own PE headers. Those stay
-    mapped for the life of the process, so reading their headers is safe here,
-    unlike for an arbitrary module out of an enumeration.
+    The executable and the modules the mod hooks by name, sized from their own
+    PE headers. Those stay mapped for the life of the process, so reading their
+    headers is safe here, unlike for an arbitrary module out of an enumeration.
 */
 static void NoteModuleFromHeaders(HMODULE module) {
     if (!module) {
@@ -664,7 +663,22 @@ static void NoteModuleFromHeaders(HMODULE module) {
     AddModuleRange(base, base + nt->OptionalHeader.SizeOfImage);
 }
 
+static void NoteKnownModules() {
+    NoteModuleFromHeaders(GetModuleHandleW(nullptr));
+    NoteModuleFromHeaders(GetModuleHandleW(L"dvaui.dll"));
+    NoteModuleFromHeaders(GetModuleHandleW(L"dvacore.dll"));
+    NoteModuleFromHeaders(GetModuleHandleW(L"UIFramework.dll"));
+}
+
 static void SnapshotAdobeModules() {
+    /*
+        These are recorded first, whatever the enumeration below manages. It
+        can fail or come up short while Premiere is still mapping modules from
+        several threads, and the executable was mapped before the loader
+        notification could see it. A module recorded twice is deduplicated.
+    */
+    NoteKnownModules();
+
     HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
 
     auto enumModules =
@@ -678,11 +692,6 @@ static void SnapshotAdobeModules() {
                  : nullptr;
 
     if (!enumModules || !moduleInformation) {
-        NoteModuleFromHeaders(GetModuleHandleW(nullptr));
-        NoteModuleFromHeaders(GetModuleHandleW(L"dvaui.dll"));
-        NoteModuleFromHeaders(GetModuleHandleW(L"dvacore.dll"));
-        NoteModuleFromHeaders(GetModuleHandleW(L"UIFramework.dll"));
-
         Wh_Log(L"cannot enumerate modules; besides the executable, dvaui, "
                L"dvacore and UIFramework, only dva modules loaded from now on "
                L"will be recognised as Adobe UI");
@@ -701,6 +710,10 @@ static void SnapshotAdobeModules() {
         bytes = static_cast<DWORD>(modules.size() * sizeof(HMODULE));
 
         if (!enumModules(process, modules.data(), bytes, &needed)) {
+            Wh_Log(L"module enumeration failed (%u); besides the executable, "
+                   L"dvaui, dvacore and UIFramework, only dva modules loaded "
+                   L"from now on will be recognised as Adobe UI",
+                   GetLastError());
             return;
         }
 
@@ -1296,6 +1309,7 @@ struct ColorHook {
 struct ColorSymbol {
     const char* mangled;
     const wchar_t* label;
+    bool alternate = false;  // an older spelling of a name listed above it
 };
 
 /*
@@ -1414,59 +1428,59 @@ static const ColorSymbol kColorSymbols[] = {
     {"?GetApplicationBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@"
      "drawbot@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@"
      "dvaui@@@boost@@@Z",
-     L"GetApplicationBackgroundColor (pre-2026)"},
+     L"GetApplicationBackgroundColor (pre-2026)", true},
     {"?GetContentBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@draw"
      "bot@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvau"
      "i@@@boost@@@Z",
-     L"GetContentBackgroundColor (pre-2026)"},
+     L"GetContentBackgroundColor (pre-2026)", true},
     {"?GetListBoxBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@draw"
      "bot@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvau"
      "i@@@boost@@@Z",
-     L"GetListBoxBackgroundColor (pre-2026)"},
+     L"GetListBoxBackgroundColor (pre-2026)", true},
     {"?GetHoverBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbo"
      "t@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@"
      "@@boost@@@Z",
-     L"GetHoverBackgroundColor (pre-2026)"},
+     L"GetHoverBackgroundColor (pre-2026)", true},
     {"?GetTabBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@"
      "3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@@@"
      "boost@@@Z",
-     L"GetTabBackgroundColor (pre-2026)"},
+     L"GetTabBackgroundColor (pre-2026)", true},
     {"?GetThumbnailBackgroundColor@utilities@skins@dvaui@@YAAEBVColorRGBA@dr"
      "awbot@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dv"
      "aui@@@boost@@@Z",
-     L"GetThumbnailBackgroundColor (pre-2026)"},
+     L"GetThumbnailBackgroundColor (pre-2026)", true},
     {"?GetDefaultControlColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot"
      "@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@@"
      "@boost@@_N@Z",
-     L"GetDefaultControlColor (pre-2026)"},
+     L"GetDefaultControlColor (pre-2026)", true},
     {"?GetInteractiveControlColor@utilities@skins@dvaui@@YAAEBVColorRGBA@dra"
      "wbot@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dva"
      "ui@@@boost@@@Z",
-     L"GetInteractiveControlColor (pre-2026)"},
+     L"GetInteractiveControlColor (pre-2026)", true},
     {"?GetDividerColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@3@PEBV"
      "ThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@@@boost@"
      "@@Z",
-     L"GetDividerColor (pre-2026)"},
+     L"GetDividerColor (pre-2026)", true},
     {"?GetListBoxBorderColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@"
      "3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@@@"
      "boost@@@Z",
-     L"GetListBoxBorderColor (pre-2026)"},
+     L"GetListBoxBorderColor (pre-2026)", true},
     {"?GetFieldBorderColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@3@"
      "PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@@@bo"
      "ost@@@Z",
-     L"GetFieldBorderColor (pre-2026)"},
+     L"GetFieldBorderColor (pre-2026)", true},
     {"?GetScrollBarThumbColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot"
      "@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@@"
      "@boost@@_N@Z",
-     L"GetScrollBarThumbColor (pre-2026)"},
+     L"GetScrollBarThumbColor (pre-2026)", true},
     {"?GetScrollBarTrackColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot"
      "@3@PEBVThemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@@"
      "@boost@@_N@Z",
-     L"GetScrollBarTrackColor (pre-2026)"},
+     L"GetScrollBarTrackColor (pre-2026)", true},
     {"?GetWidgetColor@utilities@skins@dvaui@@YAAEBVColorRGBA@drawbot@3@PEBVT"
      "hemeProvider@ui@3@V?$intrusive_ptr@VSkinSet@core@skins@dvaui@@@boost@@"
      "_N@Z",
-     L"GetWidgetColor (pre-2026)"},
+     L"GetWidgetColor (pre-2026)", true},
 
 };
 
@@ -1487,7 +1501,7 @@ struct HookSpec {
     const wchar_t* label;
 };
 
-static void InstallHook(HMODULE module, const HookSpec& spec, bool counted) {
+static bool InstallHook(HMODULE module, const HookSpec& spec, bool counted) {
     FARPROC proc = GetProcAddress(module, spec.mangled);
     bool installed = false;
 
@@ -1500,15 +1514,15 @@ static void InstallHook(HMODULE module, const HookSpec& spec, bool counted) {
         installed = true;
     }
 
-    if (!counted) {
-        return;
+    if (counted) {
+        if (installed) {
+            g_colorHooksInstalled++;
+        } else {
+            g_colorHooksMissing++;
+        }
     }
 
-    if (installed) {
-        g_colorHooksInstalled++;
-    } else {
-        g_colorHooksMissing++;
-    }
+    return installed;
 }
 
 template <size_t N>
@@ -1522,7 +1536,19 @@ static void InstallOneColorHook(HMODULE dvaui, size_t index, void* hook,
                                 void** original) {
     const ColorSymbol& sym = kColorSymbols[index];
 
-    InstallHook(dvaui, {sym.mangled, hook, original, sym.label}, true);
+    /*
+        An older spelling only exists where the newer name listed above it is
+        missing, and that name was already counted absent. So a missing
+        alternate is not counted again, and one that resolves takes the
+        absence back: the log reports functions, not spellings.
+    */
+    bool installed = InstallHook(dvaui, {sym.mangled, hook, original, sym.label},
+                                 !sym.alternate);
+
+    if (sym.alternate && installed) {
+        g_colorHooksInstalled++;
+        g_colorHooksMissing--;
+    }
 }
 
 template <size_t... I>
@@ -3342,12 +3368,19 @@ HRESULT WINAPI DrawThemeTextEx_Hook(HTHEME theme, HDC hdc, int part, int state,
         ThemeDttOpts opts{};
 
         if (options) {
-            // Keep what the caller asked for and only swap the color.
             DWORD callerSize = *reinterpret_cast<const DWORD*>(options);
 
-            if (callerSize <= sizeof(opts)) {
-                memcpy(&opts, options, callerSize);
+            /*
+                A DTTOPTS larger than this one is forwarded as it came:
+                copying only part of it would drop flags the caller set.
+            */
+            if (callerSize > sizeof(opts)) {
+                return DrawThemeTextEx_Original(theme, hdc, part, state, text,
+                                                length, flags, rect, options);
             }
+
+            // Keep what the caller asked for and only swap the color.
+            memcpy(&opts, options, callerSize);
         }
 
         opts.dwSize = sizeof(opts);
@@ -3686,8 +3719,15 @@ static bool IsMenuBarMessage(UINT msg) {
     }
 }
 
+/*
+    WS_CHILD is tested before GetMenu, whose answer is undefined for a child
+    window: in practice it is the control ID, so a child with a nonzero ID
+    would pass, and its WM_DESTROY would close the thread's cached menu bar
+    theme.
+*/
 static bool NeedsMenuBarWork(HWND hwnd, UINT msg) {
     return g_settings.menuHook && IsMenuBarMessage(msg) && hwnd &&
+           !(GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_CHILD) &&
            GetMenu(hwnd) != nullptr;
 }
 
@@ -3819,6 +3859,19 @@ BOOL WINAPI SetMenuInfo_Hook(HMENU menu, LPCMENUINFO info) {
 // GDI SURFACES
 // ============================================================================
 
+static DvaColorRGBA GdiToDva(COLORREF color) {
+    return {GetRValue(color) / 255.0f, GetGValue(color) / 255.0f,
+            GetBValue(color) / 255.0f, 1.0f};
+}
+
+/*
+    Adobe code often turns a colour that already came out of a theme function
+    into a COLORREF before it builds a brush or pen from it. So the produced
+    set is consulted here as on every other path: converting that colour again
+    would push it toward the darkest stop, and Onyx's border would land on the
+    surface tone. PackColorKey quantises to 8 bits, so a COLORREF compares
+    equal to the float colour it was made from.
+*/
 static COLORREF ConvertGdiColor(COLORREF color) {
     float r = GetRValue(color) / 255.0f;
     float g = GetGValue(color) / 255.0f;
@@ -3834,6 +3887,11 @@ static COLORREF ConvertGdiColor(COLORREF color) {
         return color;
     }
 
+    // Asked only after the float tests, as in ConvertForPaint.
+    if (IsProducedColor(GdiToDva(color))) {
+        return color;  // already a palette colour
+    }
+
     COLORREF target = PickTarget(brightness);
 
     int nr = ClampInt(
@@ -3846,7 +3904,11 @@ static COLORREF ConvertGdiColor(COLORREF color) {
         static_cast<int>(Blend(b, GetBValue(target) / 255.0f) * 255.0f + 0.5f), 0,
         255);
 
-    return RGB(nr, ng, nb);
+    COLORREF result = RGB(nr, ng, nb);
+
+    RememberProduced(GdiToDva(result));
+
+    return result;
 }
 
 using CreateSolidBrush_t = HBRUSH(WINAPI*)(COLORREF);
@@ -4036,6 +4098,16 @@ static void LoadSettings() {
         p.ramp[4] = ReadColorSetting(L"customBorder", p.ramp[4]);
         p.text = ReadColorSetting(L"customText", p.text);
         p.accent = ReadColorSetting(L"customAccent", p.accent);
+
+        /*
+            Disabled text has no setting of its own. Halfway from the text to
+            the panel is close to where the built-in palettes put it, and it
+            always lies between the two, which Onyx's #777777 would not once
+            the custom text is darker than that.
+        */
+        p.dimText = RGB((GetRValue(p.text) + GetRValue(p.ramp[1])) / 2,
+                        (GetGValue(p.text) + GetGValue(p.ramp[1])) / 2,
+                        (GetBValue(p.text) + GetBValue(p.ramp[1])) / 2);
     } else {
         for (const NamedPalette& candidate : kPalettes) {
             if (wcscmp(name, candidate.id) == 0) {
@@ -4285,7 +4357,7 @@ void Wh_ModUninit() {
     app mode, the window frames, the menu themes user32 caches, and a repaint
     so the new colours show.
 */
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+void Wh_ModSettingsChanged() {
     Settings previous = g_settings;
 
     LoadSettings();
@@ -4316,7 +4388,4 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     }
 
     RedrawProcessWindows();
-
-    *bReload = FALSE;
-    return TRUE;
 }
