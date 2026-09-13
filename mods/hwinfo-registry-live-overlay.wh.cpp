@@ -36,18 +36,18 @@ The mod can be used to monitor values such as CPU power, GPU power, GPU temperat
 
 *Shows where to enable HWiNFO Gadget reporting: enable reporting to Gadget, select a sensor, enable “Report value in Gadget”, note the index number, and click OK.*
 
-*Alternatively, use the built-in registry export helper, copy the generated Windhawk Rows text, and paste it into the Rows setting.*
+*Alternatively, use the built-in registry export helper to look up the Label and Registry value name for each sensor, then add a row for it in the Rows setting.*
 
 ![HWiNFO Registry Live Overlay Rows input field](https://i.imgur.com/D9D4hVT.png)
 
-*Shows the Rows input field. Separate rows with semicolon. Format: Display Name | Registry Value. Use Ctrl+Alt+R to export available HWiNFO Gadget/VSB values as HTML.*
+*Shows the Rows setting. Each row has a Label and a Registry value name, managed with Add/Remove/Reorder. Use Ctrl+Alt+R to export available HWiNFO Gadget/VSB values as HTML.*
 
 
 
 ## Features
 
 - Displays selected HWiNFO Gadget/VSB Registry values on the desktop
-- Configurable sensor rows using `Label | ValueN`
+- Configurable sensor rows using a native array setting (Label + Registry value name)
 - Custom font family, size, weight, and style
 - Separate label and value colors
 - Left/right alignment for label and value columns
@@ -92,11 +92,14 @@ Sensor1 / Label1 / Value1 / ValueRaw1 / Color1
 ...
 ```
 
-Rows are configured like this:
+Rows are configured using the native Rows array setting. Each row has two fields:
 
 ```txt
-CPU W | Value0; GPU W | Value1; GPU TEMP | Value2
+Label:                Example Sensor
+Registry value name:  Value0
 ```
+
+Use Add/Remove/Reorder in the Rows setting to manage rows. Use the export hotkey to find out which registry value name (`ValueN`) belongs to which HWiNFO sensor.
 
 ## Hotkeys
 
@@ -263,9 +266,9 @@ MIT
 - rowSpacing: 2
   $name: Row spacing
 
-- alwaysOnTop: false
+- alwaysOnTop: true
   $name: Always on top
-  $description: When enabled, the overlay stays above normal windows. When disabled, it behaves like a normal overlay window.
+  $description: "Keeps the overlay above normal windows. Recommended: the overlay is click-through, so if it is not always on top it gets covered by the next focused window and there is no way to bring it back short of a settings reload. Disable only if you specifically want the overlay to sit in the normal z-order, for example on a monitor/virtual desktop that always shows the desktop."
 
 - enableToggleHotkey: true
   $name: Enable toggle hotkey
@@ -349,11 +352,11 @@ MIT
   $name: Water age alarm percent
   $description: "Water age turns alarm color at this percentage."
 
-- waterAgeWarnColor: "#FFFFAA00"
-  $name: "Water age warning color #FFFFAA00"
+- waterAgeWarnColor: "#FFAA00"
+  $name: "Water age warning color #FFAA00"
 
-- waterAgeAlarmColor: "#FFFF3333"
-  $name: "Water age alarm color #FFFF3333"
+- waterAgeAlarmColor: "#FF3333"
+  $name: "Water age alarm color #FF3333"
 
 - waterAgeTopGap: 8
   $name: Water age top gap
@@ -424,9 +427,14 @@ MIT
   $name: Hide unavailable rows
   $description: "Hides rows whose cached value is N/A."
 
-- rows: RAM Used | Value0; CPU Usage | Value1; CPU Package | Value2; GPU Temp | Value3; GPU Power | Value4; GPU Clock | Value5; VRAM Clock | Value6; GPU Usage | Value7; VRAM Used | Value8; GPU Hotspot | Value9
+- rows:
+  - - label: Example Sensor
+      $name: Label
+    - valueName: Value0
+      $name: Registry value name
+      $description: "The HWiNFO Gadget/VSB value name, e.g. Value0. Which sensor this actually is depends entirely on your own HWiNFO Gadget configuration and the order sensors were enabled in -- it is NOT the same sensor on every system."
   $name: Rows
-  $description: Separate rows with semicolon. Format is Display Name | Registry Value. Use Ctrl+Alt+R to export available HWiNFO Gadget/VSB values as HTML.
+  $description: "Sensor rows to display, in order. The single default row above is a placeholder only: ValueN indices are assigned by HWiNFO in the order Gadget reporting was enabled and differ from system to system, so a hardcoded default row list would show the wrong sensor for most users. Use Ctrl+Alt+R to export your actual HWiNFO Gadget/VSB values as HTML, read off the Label / Registry value name for each sensor you want, then use Add/Remove/Reorder to build your row list."
 */
 // ==/WindhawkModSettings==
 
@@ -440,9 +448,9 @@ MIT
 #include <shellapi.h>
 #include <shlobj.h>
 #include <objbase.h>
+#include <algorithm>
 #include <string>
 #include <vector>
-#include <sstream>
 #include <climits>
 
 struct RowConfig {
@@ -477,7 +485,6 @@ struct {
     bool showColumnSeparator;
     int columnSeparatorX;
     COLORREF columnSeparatorColor;
-    BYTE columnSeparatorAlpha;
     int rowSpacing;
     bool alwaysOnTop;
     bool enableToggleHotkey;
@@ -510,21 +517,15 @@ struct {
     int waterAgeWarnPercent;
     int waterAgeAlarmPercent;
     COLORREF waterAgeWarnColor;
-    BYTE waterAgeWarnAlpha;
     COLORREF waterAgeAlarmColor;
-    BYTE waterAgeAlarmAlpha;
     int waterAgeTopGap;
     bool showWaterAgeSeparator;
     COLORREF waterAgeSeparatorColor;
-    BYTE waterAgeSeparatorAlpha;
 
     COLORREF textColor;
-    BYTE textAlpha;
 
     COLORREF labelColor;
-    BYTE labelAlpha;
     COLORREF valueColor;
-    BYTE valueAlpha;
 
     bool backgroundEnabled;
     COLORREF backgroundColor;
@@ -533,7 +534,6 @@ struct {
 
     bool backgroundGradientEnabled;
     COLORREF backgroundGradientColor2;
-    BYTE backgroundGradientAlpha2;
     std::wstring backgroundGradientDirection;
     bool backgroundGradientHorizontal;
     bool backgroundGradientDiagonalDown;
@@ -542,10 +542,8 @@ struct {
     int backgroundCornerRadius;
     int backgroundBorderSize;
     COLORREF backgroundBorderColor;
-    BYTE backgroundBorderAlpha;
 
     bool hideUnavailableRows;
-    std::wstring rowsText;
     std::vector<RowConfig> rows;
 } settings;
 
@@ -570,6 +568,20 @@ constexpr COLORREF TRANSPARENT_COLOR_KEY = 0x00FF00FF; // RGB(255, 0, 255)
 constexpr UINT WM_APP_SETTINGS_CHANGED = WM_APP + 1;
 constexpr const wchar_t* OVERLAY_WINDOW_CLASS_NAME =
     L"HWiNFORegistryLiveOverlayWindow";
+
+// DPI of the monitor the overlay window currently lives on. Updated once
+// after window creation and again on every WM_DPICHANGED. All pixel-based
+// layout settings (padding, column widths, row spacing, corner radius,
+// border size, width/height) are authored against 96 DPI and scaled with
+// Scaled() before use, so the whole layout grows or shrinks together
+// instead of only the font. x/y are absolute desktop coordinates and are
+// intentionally never scaled.
+UINT g_dpi = 96;
+
+int Scaled(int value) {
+    return MulDiv(value, (int)g_dpi, 96);
+}
+
 std::wstring Trim(const std::wstring& s) {
     size_t start = s.find_first_not_of(L" \t\r\n");
     if (start == std::wstring::npos)
@@ -579,6 +591,8 @@ std::wstring Trim(const std::wstring& s) {
     return s.substr(start, end - start + 1);
 }
 
+// GDI pens/brushes ignore alpha, so callers that don't need it pass
+// nullptr for the alpha out-parameter instead of storing a dead byte.
 bool ParseHexColor(const std::wstring& text, BYTE* alpha, COLORREF* color) {
     std::wstring s = text;
 
@@ -610,45 +624,48 @@ bool ParseHexColor(const std::wstring& text, BYTE* alpha, COLORREF* color) {
         b = value & 0xFF;
     }
 
-    *alpha = a;
+    if (alpha) {
+        *alpha = a;
+    }
     *color = RGB(r, g, b);
     return true;
 }
 
-std::vector<RowConfig> ParseRows(const std::wstring& rowsText) {
+// Reads the "rows" native Windhawk array setting: an ordered list of
+// {label, valueName} groups. Stops at the first entry where both fields
+// are empty, which is how Windhawk signals the end of the array.
+std::vector<RowConfig> LoadRowsFromSettings() {
     std::vector<RowConfig> rows;
 
-    std::wstring normalized = rowsText;
+    for (int i = 0;; i++) {
+        wchar_t labelKey[32];
+        wchar_t valueNameKey[32];
+        swprintf_s(labelKey, L"rows[%d].label", i);
+        swprintf_s(valueNameKey, L"rows[%d].valueName", i);
 
-    // Windhawk settings may flatten multiline text into one line.
-    // Support semicolon as row separator:
-    // RAM Used | Value0; CPU Usage | Value1; GPU Temp | Value3
-    for (wchar_t& ch : normalized) {
-        if (ch == L';')
-            ch = L'\n';
-    }
+        const wchar_t* labelRaw = Wh_GetStringSetting(labelKey);
+        const wchar_t* valueNameRaw = Wh_GetStringSetting(valueNameKey);
 
-    std::wstringstream ss(normalized);
-    std::wstring line;
+        std::wstring label = labelRaw ? labelRaw : L"";
+        std::wstring valueName = valueNameRaw ? valueNameRaw : L"";
 
-    while (std::getline(ss, line)) {
-        line = Trim(line);
+        Wh_FreeStringSetting(labelRaw);
+        Wh_FreeStringSetting(valueNameRaw);
 
-        if (line.empty())
-            continue;
+        label = Trim(label);
+        valueName = Trim(valueName);
 
-        size_t sep = line.find(L'|');
-        if (sep == std::wstring::npos)
-            continue;
+        if (label.empty() && valueName.empty())
+            break;
 
-        RowConfig row;
-        row.label = Trim(line.substr(0, sep));
-        row.valueName = Trim(line.substr(sep + 1));
-        row.cachedValue = L"N/A";
-
-        if (!row.label.empty() && !row.valueName.empty())
+        if (!label.empty() && !valueName.empty()) {
+            RowConfig row;
+            row.label = label;
+            row.valueName = valueName;
+            row.cachedValue = L"N/A";
             rows.push_back(row);
         }
+    }
 
     return rows;
 }
@@ -789,15 +806,14 @@ void RecreateFont() {
         g_font = nullptr;
     }
 
-    // Keep the font on a fixed 96-DPI basis because all overlay layout
-    // settings are explicit pixel values. Partial DPI scaling of only the
-    // font would make the text grow while columns/padding remain unchanged.
-    constexpr int baseDpi = 96;
-    int height = -MulDiv(settings.fontSize, baseDpi, 72);
+    // The font is scaled together with the rest of the layout via g_dpi
+    // (see Scaled()), so text and columns grow or shrink consistently on
+    // a scaled display.
+    int height = -MulDiv(settings.fontSize, (int)g_dpi, 72);
 
-DWORD fontQuality = settings.backgroundEnabled
-    ? CLEARTYPE_QUALITY
-    : NONANTIALIASED_QUALITY;
+    DWORD fontQuality = settings.backgroundEnabled
+        ? CLEARTYPE_QUALITY
+        : NONANTIALIASED_QUALITY;
 
     g_font = CreateFontW(
         height,
@@ -828,7 +844,7 @@ void LoadSettings() {
 
     settings.refreshIntervalMs = Wh_GetIntSetting(L"refreshIntervalMs");
     if (settings.refreshIntervalMs < 250)
-        settings.refreshIntervalMs = 1000;
+        settings.refreshIntervalMs = 250;
 
     settings.x = Wh_GetIntSetting(L"x");
     settings.y = Wh_GetIntSetting(L"y");
@@ -842,34 +858,33 @@ void LoadSettings() {
     settings.labelColumnWidth = Wh_GetIntSetting(L"labelColumnWidth");
 
     const wchar_t* labelAlignment = Wh_GetStringSetting(L"labelAlignment");
-    settings.labelAlignment = labelAlignment ? labelAlignment : L"Left";
+    settings.labelAlignment = (labelAlignment && *labelAlignment) ? labelAlignment : L"Right";
     Wh_FreeStringSetting(labelAlignment);
     settings.labelAlignRight =
-    _wcsicmp(settings.labelAlignment.c_str(), L"Right") == 0;
+        _wcsicmp(settings.labelAlignment.c_str(), L"Right") == 0;
 
     settings.paddingTop = Wh_GetIntSetting(L"paddingTop");
     settings.valueColumnX = Wh_GetIntSetting(L"valueColumnX");
     settings.valueColumnWidth = Wh_GetIntSetting(L"valueColumnWidth");
 
     const wchar_t* valueAlignment = Wh_GetStringSetting(L"valueAlignment");
-    settings.valueAlignment = valueAlignment ? valueAlignment : L"Left";
+    settings.valueAlignment = (valueAlignment && *valueAlignment) ? valueAlignment : L"Right";
     Wh_FreeStringSetting(valueAlignment);
     settings.valueAlignRight =
-    _wcsicmp(settings.valueAlignment.c_str(), L"Right") == 0;
+        _wcsicmp(settings.valueAlignment.c_str(), L"Right") == 0;
 
     settings.showColumnSeparator = Wh_GetIntSetting(L"showColumnSeparator");
 
     settings.columnSeparatorX = Wh_GetIntSetting(L"columnSeparatorX");
     if (settings.columnSeparatorX < 0)
-        settings.columnSeparatorX = 285;
+        settings.columnSeparatorX = 0;
     if (settings.columnSeparatorX > 2000)
         settings.columnSeparatorX = 2000;
 
     const wchar_t* columnSeparatorColor = Wh_GetStringSetting(L"columnSeparatorColor");
-    if (!ParseHexColor(columnSeparatorColor ? columnSeparatorColor : L"#40FFFFFF",
-                       &settings.columnSeparatorAlpha,
+    if (!ParseHexColor(columnSeparatorColor ? columnSeparatorColor : L"#FFFFFF",
+                       nullptr,
                        &settings.columnSeparatorColor)) {
-        settings.columnSeparatorAlpha = 0x40;
         settings.columnSeparatorColor = RGB(255, 255, 255);
     }
     Wh_FreeStringSetting(columnSeparatorColor);
@@ -941,11 +956,11 @@ void LoadSettings() {
         settings.rowSpacing = 0;
 
     if (settings.width < 100)
-        settings.width = 420;
+        settings.width = 100;
     if (settings.height < 50)
-        settings.height = 300;
+        settings.height = 50;
     if (settings.fontSize < 8)
-        settings.fontSize = 22;
+        settings.fontSize = 8;
 
     if (settings.paddingBottom < 0)
         settings.paddingBottom = 24;
@@ -958,7 +973,7 @@ void LoadSettings() {
     Wh_FreeStringSetting(fontFamily);
 
     const wchar_t* fontWeight = Wh_GetStringSetting(L"fontWeight");
-    settings.fontWeight = fontWeight ? fontWeight : L"Normal";
+    settings.fontWeight = (fontWeight && *fontWeight) ? fontWeight : L"SemiBold";
     Wh_FreeStringSetting(fontWeight);
 
     const wchar_t* fontStyle = Wh_GetStringSetting(L"fontStyle");
@@ -966,28 +981,25 @@ void LoadSettings() {
     Wh_FreeStringSetting(fontStyle);
 
     const wchar_t* textColor = Wh_GetStringSetting(L"textColor");
-    if (!ParseHexColor(textColor ? textColor : L"#CCFFFFFF",
-                       &settings.textAlpha,
+    if (!ParseHexColor(textColor ? textColor : L"#FFFFFF",
+                       nullptr,
                        &settings.textColor)) {
-        settings.textAlpha = 0xCC;
         settings.textColor = RGB(255, 255, 255);
     }
     Wh_FreeStringSetting(textColor);
 
     const wchar_t* labelColor = Wh_GetStringSetting(L"labelColor");
-    if (!ParseHexColor(labelColor ? labelColor : L"#CCFFFFFF",
-                       &settings.labelAlpha,
+    if (!ParseHexColor(labelColor ? labelColor : L"#FF0000",
+                       nullptr,
                        &settings.labelColor)) {
-        settings.labelAlpha = settings.textAlpha;
         settings.labelColor = settings.textColor;
     }
     Wh_FreeStringSetting(labelColor);
 
     const wchar_t* valueColor = Wh_GetStringSetting(L"valueColor");
-    if (!ParseHexColor(valueColor ? valueColor : L"#CCFFFFFF",
-                    &settings.valueAlpha,
+    if (!ParseHexColor(valueColor ? valueColor : L"#00FF00",
+                    nullptr,
                     &settings.valueColor)) {
-        settings.valueAlpha = settings.textAlpha;
         settings.valueColor = settings.textColor;
     }
     Wh_FreeStringSetting(valueColor);
@@ -995,11 +1007,10 @@ void LoadSettings() {
     settings.backgroundEnabled = Wh_GetIntSetting(L"backgroundEnabled");
 
     const wchar_t* backgroundColor = Wh_GetStringSetting(L"backgroundColor");
-    if (!ParseHexColor(backgroundColor ? backgroundColor : L"#80000000",
-                       &settings.backgroundAlpha,
+    if (!ParseHexColor(backgroundColor ? backgroundColor : L"#304050",
+                       nullptr,
                        &settings.backgroundColor)) {
-        settings.backgroundAlpha = 0x80;
-        settings.backgroundColor = RGB(0, 0, 0);
+        settings.backgroundColor = RGB(48, 64, 80);
     }
     Wh_FreeStringSetting(backgroundColor);
 
@@ -1016,10 +1027,9 @@ void LoadSettings() {
     settings.backgroundGradientEnabled = Wh_GetIntSetting(L"backgroundGradientEnabled");
 
     const wchar_t* backgroundGradientColor2 = Wh_GetStringSetting(L"backgroundGradientColor2");
-    if (!ParseHexColor(backgroundGradientColor2 ? backgroundGradientColor2 : L"#80507080",
-                       &settings.backgroundGradientAlpha2,
+    if (!ParseHexColor(backgroundGradientColor2 ? backgroundGradientColor2 : L"#507080",
+                       nullptr,
                        &settings.backgroundGradientColor2)) {
-        settings.backgroundGradientAlpha2 = settings.backgroundAlpha;
         settings.backgroundGradientColor2 = RGB(80, 112, 128);
     }
     Wh_FreeStringSetting(backgroundGradientColor2);
@@ -1049,21 +1059,16 @@ void LoadSettings() {
         settings.backgroundBorderSize = 20;
 
     const wchar_t* backgroundBorderColor = Wh_GetStringSetting(L"backgroundBorderColor");
-    if (!ParseHexColor(backgroundBorderColor ? backgroundBorderColor : L"#50FFFFFF",
-                       &settings.backgroundBorderAlpha,
+    if (!ParseHexColor(backgroundBorderColor ? backgroundBorderColor : L"#FFFFFF",
+                       nullptr,
                        &settings.backgroundBorderColor)) {
-        settings.backgroundBorderAlpha = 0x50;
         settings.backgroundBorderColor = RGB(255, 255, 255);
     }
     Wh_FreeStringSetting(backgroundBorderColor);
 
     settings.hideUnavailableRows = Wh_GetIntSetting(L"hideUnavailableRows");
 
-    const wchar_t* rows = Wh_GetStringSetting(L"rows");
-    settings.rowsText = rows ? rows : L"RAM Used | Value0";
-    Wh_FreeStringSetting(rows);
-
-    settings.rows = ParseRows(settings.rowsText);
+    settings.rows = LoadRowsFromSettings();
 
     RecreateFont();
 
@@ -1097,19 +1102,19 @@ void LoadSettings() {
         settings.waterAgeAlarmPercent = settings.waterAgeWarnPercent;
 
     const wchar_t* waterAgeWarnColor = Wh_GetStringSetting(L"waterAgeWarnColor");
-    if (!ParseHexColor(waterAgeWarnColor ? waterAgeWarnColor : L"#FFFFAA00",
-                   &settings.waterAgeWarnAlpha,
-                   &settings.waterAgeWarnColor)) {
-        settings.waterAgeWarnAlpha = 0xFF;
+    if (!ParseHexColor(
+            waterAgeWarnColor ? waterAgeWarnColor : L"#FFAA00",
+            nullptr,
+            &settings.waterAgeWarnColor)) {
         settings.waterAgeWarnColor = RGB(255, 170, 0);
-    }   
+    }
     Wh_FreeStringSetting(waterAgeWarnColor);
 
     const wchar_t* waterAgeAlarmColor = Wh_GetStringSetting(L"waterAgeAlarmColor");
-    if (!ParseHexColor(waterAgeAlarmColor ? waterAgeAlarmColor : L"#FFFF3333",
-                   &settings.waterAgeAlarmAlpha,
-                   &settings.waterAgeAlarmColor)) {
-        settings.waterAgeAlarmAlpha = 0xFF;
+    if (!ParseHexColor(
+            waterAgeAlarmColor ? waterAgeAlarmColor : L"#FF3333",
+            nullptr,
+            &settings.waterAgeAlarmColor)) {
         settings.waterAgeAlarmColor = RGB(255, 51, 51);
     }
     Wh_FreeStringSetting(waterAgeAlarmColor);
@@ -1121,10 +1126,10 @@ void LoadSettings() {
     settings.showWaterAgeSeparator = Wh_GetIntSetting(L"showWaterAgeSeparator");
 
     const wchar_t* waterAgeSeparatorColor = Wh_GetStringSetting(L"waterAgeSeparatorColor");
-    if (!ParseHexColor(waterAgeSeparatorColor ? waterAgeSeparatorColor : L"#30FFFFFF",
-                       &settings.waterAgeSeparatorAlpha,
-                       &settings.waterAgeSeparatorColor)) {
-        settings.waterAgeSeparatorAlpha = 0x30;
+    if (!ParseHexColor(
+            waterAgeSeparatorColor ? waterAgeSeparatorColor : L"#FFFFFF",
+            nullptr,
+            &settings.waterAgeSeparatorColor)) {
         settings.waterAgeSeparatorColor = RGB(255, 255, 255);
     }
     Wh_FreeStringSetting(waterAgeSeparatorColor);
@@ -1269,12 +1274,22 @@ COLORREF GetWaterAgeTextColor(int ageDays) {
 HINSTANCE GetCurrentModuleHandle() {
     HINSTANCE hInst = nullptr;
 
-    GetModuleHandleExW(
+    BOOL ok = GetModuleHandleExW(
         GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
             GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
         reinterpret_cast<LPCWSTR>(&GetCurrentModuleHandle),
         &hInst
     );
+
+    if (!ok) {
+        Wh_Log(L"GetModuleHandleExW failed: %u", GetLastError());
+        return nullptr;
+    }
+
+    if (!hInst) {
+        Wh_Log(L"GetModuleHandleExW succeeded but returned a null handle");
+        return nullptr;
+    }
 
     return hInst;
 }
@@ -1297,13 +1312,13 @@ void UpdateWindowRegion(HWND hwnd) {
         return;
     }
 
-    int radius = settings.backgroundCornerRadius * 2;
+    int radius = Scaled(settings.backgroundCornerRadius) * 2;
 
     HRGN region = CreateRoundRectRgn(
         0,
         0,
-        settings.width + 1,
-        settings.height + 1,
+        Scaled(settings.width) + 1,
+        Scaled(settings.height) + 1,
         radius,
         radius
     );
@@ -1439,7 +1454,7 @@ void DrawOverlayBorder(HDC hdc, const RECT& rc) {
 
     HPEN borderPen = CreatePen(
         PS_SOLID,
-        settings.backgroundBorderSize,
+        Scaled(settings.backgroundBorderSize),
         settings.backgroundBorderColor
     );
 
@@ -1447,7 +1462,7 @@ void DrawOverlayBorder(HDC hdc, const RECT& rc) {
     HGDIOBJ oldBrush = SelectObject(hdc, GetStockObject(NULL_BRUSH));
 
     if (settings.backgroundCornerRadius > 0) {
-        int radius = settings.backgroundCornerRadius * 2;
+        int radius = Scaled(settings.backgroundCornerRadius) * 2;
         RoundRect(
             hdc,
             rc.left,
@@ -1484,7 +1499,7 @@ void DrawOverlayBackground(HDC hdc, const RECT& rc) {
         HRGN clipRegion = nullptr;
 
         if (settings.backgroundCornerRadius > 0) {
-            int radius = settings.backgroundCornerRadius * 2;
+            int radius = Scaled(settings.backgroundCornerRadius) * 2;
             clipRegion = CreateRoundRectRgn(
                 rc.left,
                 rc.top,
@@ -1516,7 +1531,7 @@ void DrawOverlayBackground(HDC hdc, const RECT& rc) {
     if (settings.backgroundBorderSize > 0) {
         borderPen = CreatePen(
             PS_SOLID,
-            settings.backgroundBorderSize,
+            Scaled(settings.backgroundBorderSize),
             settings.backgroundBorderColor
         );
     } else {
@@ -1527,7 +1542,7 @@ void DrawOverlayBackground(HDC hdc, const RECT& rc) {
     HGDIOBJ oldPen = SelectObject(hdc, borderPen);
 
     if (settings.backgroundCornerRadius > 0) {
-        int radius = settings.backgroundCornerRadius * 2;
+        int radius = Scaled(settings.backgroundCornerRadius) * 2;
         RoundRect(
             hdc,
             rc.left,
@@ -1570,7 +1585,8 @@ void ApplyOverlayWindowSize(HWND hwnd);
 int GetAlignedLabelX(HDC hdc, const std::wstring& label);
 
 int GetAlignedValueX(HDC hdc, const std::wstring& value) {
-    int x = settings.valueColumnX;
+    int minX = Scaled(settings.valueColumnX);
+    int x = minX;
 
     if (settings.valueAlignRight) {
         SIZE textSize = {};
@@ -1579,7 +1595,12 @@ int GetAlignedValueX(HDC hdc, const std::wstring& value) {
                 value.c_str(),
                 (int)value.length(),
                 &textSize)) {
-            x = settings.valueColumnX + settings.valueColumnWidth - textSize.cx;
+            x = Scaled(settings.valueColumnX) + Scaled(settings.valueColumnWidth) - textSize.cx;
+            // A value wider than the configured column would otherwise
+            // start to the left of valueColumnX and can run into (or past)
+            // the label column. Clamp so it never starts before the
+            // column's left edge.
+            x = std::max(x, minX);
         }
     }
 
@@ -1587,7 +1608,8 @@ int GetAlignedValueX(HDC hdc, const std::wstring& value) {
 }
 
 int GetAlignedLabelX(HDC hdc, const std::wstring& label) {
-    int x = settings.paddingLeft;
+    int minX = Scaled(settings.paddingLeft);
+    int x = minX;
 
     if (settings.labelAlignRight) {
         SIZE textSize = {};
@@ -1596,7 +1618,12 @@ int GetAlignedLabelX(HDC hdc, const std::wstring& label) {
                 label.c_str(),
                 (int)label.length(),
                 &textSize)) {
-            x = settings.paddingLeft + settings.labelColumnWidth - textSize.cx;
+            x = Scaled(settings.paddingLeft) + Scaled(settings.labelColumnWidth) - textSize.cx;
+            // A label wider than the configured label column would
+            // otherwise start to the left of paddingLeft and run off the
+            // edge of the overlay entirely. Clamp so it never starts
+            // before the left padding.
+            x = std::max(x, minX);
         }
     }
 
@@ -1659,26 +1686,32 @@ int CalculateOverlayAutoHeight(HWND hwnd) {
 
     ReleaseDC(hwnd ? hwnd : nullptr, hdc);
 
-    int rowHeight = tm.tmHeight + settings.rowSpacing;
+    // Mirror the exact physical-pixel scaling WM_PAINT uses, then convert
+    // the result back to the logical (96-DPI) unit that settings.height is
+    // stored in, since that value is scaled again with Scaled() wherever
+    // it is consumed (SetWindowPos, UpdateWindowRegion).
+    int rowHeight = tm.tmHeight + Scaled(settings.rowSpacing);
 
     if (rowHeight < 1) {
-        rowHeight = settings.fontSize + settings.rowSpacing + 4;
+        rowHeight = Scaled(settings.fontSize) + Scaled(settings.rowSpacing) + Scaled(4);
     }
 
-    int newHeight =
-        settings.paddingTop +
+    int newHeightPhysical =
+        Scaled(settings.paddingTop) +
         (GetVisibleRowCount() * rowHeight) +
-        settings.paddingBottom;
+        Scaled(settings.paddingBottom);
 
     if (settings.showWaterAge) {
-        newHeight += settings.waterAgeTopGap;
+        newHeightPhysical += Scaled(settings.waterAgeTopGap);
 
         if (settings.showWaterAgeSeparator) {
-            newHeight += settings.waterAgeTopGap;
+            newHeightPhysical += Scaled(settings.waterAgeTopGap);
         }
 
-        newHeight += rowHeight;
+        newHeightPhysical += rowHeight;
     }
+
+    int newHeight = MulDiv(newHeightPhysical, 96, (int)g_dpi);
 
     if (newHeight < 50) {
         newHeight = 50;
@@ -1732,8 +1765,8 @@ void ApplyOverlayWindowSize(HWND hwnd) {
         GetOverlayInsertAfter(),
         settings.x,
         settings.y,
-        settings.width,
-        settings.height,
+        Scaled(settings.width),
+        Scaled(settings.height),
         SWP_NOACTIVATE
     );
 
@@ -1744,6 +1777,8 @@ void DrawColumnSeparator(HDC hdc, int topY, int bottomY) {
     if (!settings.showColumnSeparator)
         return;
 
+    int sepX = Scaled(settings.columnSeparatorX);
+
     HPEN pen = CreatePen(
         PS_SOLID,
         1,
@@ -1752,19 +1787,19 @@ void DrawColumnSeparator(HDC hdc, int topY, int bottomY) {
 
     HGDIOBJ oldPen = SelectObject(hdc, pen);
 
-    MoveToEx(hdc, settings.columnSeparatorX, topY, nullptr);
-    LineTo(hdc, settings.columnSeparatorX, bottomY);
+    MoveToEx(hdc, sepX, topY, nullptr);
+    LineTo(hdc, sepX, bottomY);
 
     SelectObject(hdc, oldPen);
     DeleteObject(pen);
 }
 
-void DrawWaterAgeSeparator(HDC hdc, int y) {
+void DrawWaterAgeSeparator(HDC hdc, int y, const RECT& rc) {
     if (!settings.showWaterAgeSeparator)
         return;
 
-    int leftX = settings.paddingLeft;
-    int rightX = settings.width - settings.paddingLeft;
+    int leftX = Scaled(settings.paddingLeft);
+    int rightX = rc.right - Scaled(settings.paddingLeft);
 
     if (rightX <= leftX)
         return;
@@ -1818,14 +1853,14 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 oldFont = (HFONT)SelectObject(hdc, g_font);
             }
 
-            int y = settings.paddingTop;
+            int y = Scaled(settings.paddingTop);
 
             int contentTopY = y;
 
             TEXTMETRICW tm = {};
             GetTextMetricsW(hdc, &tm);
 
-            int rowHeight = tm.tmHeight + settings.rowSpacing;
+            int rowHeight = tm.tmHeight + Scaled(settings.rowSpacing);
 
             for (const RowConfig& row : settings.rows) {
                 const std::wstring& value = row.cachedValue;
@@ -1863,12 +1898,12 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
             int separatorBottomY = y;
 
-                if (settings.showWaterAge) {
-                    y += settings.waterAgeTopGap;
+            if (settings.showWaterAge) {
+                y += Scaled(settings.waterAgeTopGap);
 
                 if (settings.showWaterAgeSeparator) {
-                    DrawWaterAgeSeparator(hdc, y);
-                    y += settings.waterAgeTopGap;
+                    DrawWaterAgeSeparator(hdc, y, rc);
+                    y += Scaled(settings.waterAgeTopGap);
                 }
 
                 int ageDays = CalculateWaterAgeDays();
@@ -1886,7 +1921,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                     (int)settings.waterAgeLabel.length()
                 );
 
-            int alignedWaterAgeValueX = GetAlignedValueX(hdc, value);
+                int alignedWaterAgeValueX = GetAlignedValueX(hdc, value);
 
                 TextOutW(
                     hdc,
@@ -1898,10 +1933,10 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
                 SetTextColor(hdc, oldTextColor);
 
-            y += rowHeight;
-}
+                y += rowHeight;
+            }
 
-DrawColumnSeparator(hdc, contentTopY, separatorBottomY);
+            DrawColumnSeparator(hdc, contentTopY, separatorBottomY);
 
             if (oldFont) {
                 SelectObject(hdc, oldFont);
@@ -1985,6 +2020,10 @@ DrawColumnSeparator(hdc, contentTopY, separatorBottomY);
             break;
 
         case WM_APP_SETTINGS_CHANGED:
+            if (GetCapture() == hwnd) {
+                ReleaseCapture();
+            }
+
             LoadSettings();
 
             ApplyOverlayWindowSize(hwnd);
@@ -2583,9 +2622,25 @@ td {
 </style>
 
 <script>
+// Minimal, safe YAML scalar quoting for the Rows textual-mode export.
+// Plain unquoted scalars are only used for simple, unambiguous labels;
+// everything else (colons, quotes, leading/trailing space, YAML indicator
+// characters) gets double-quoted with backslash escaping.
+function yamlScalar(text) {
+    var isSimple = /^[A-Za-z0-9][A-Za-z0-9 _\-.\/()°%]*$/.test(text) &&
+        !/:(\s|$)/.test(text) &&
+        text === text.trim();
+
+    if (isSimple) {
+        return text;
+    }
+
+    return '"' + text.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+}
+
 function rebuildRows() {
     const tableRows = document.querySelectorAll('tr.sensorRow');
-    const rows = [];
+    const entries = [];
 
     tableRows.forEach(function(tr) {
         const box = tr.querySelector('.rowCheck');
@@ -2599,17 +2654,33 @@ function rebuildRows() {
             name = input.dataset.fallback || ('Sensor ' + index);
         }
 
-        const rowText = name + ' | Value' + index;
+        const valueName = 'Value' + index;
 
-        cell.textContent = rowText;
+        cell.textContent = name + ' | ' + valueName;
 
         if (box.checked) {
-            rows.push(rowText);
+            entries.push({ label: name, valueName: valueName });
         }
     });
 
-    document.getElementById('rowsText').value = rows.join('; ');
-    document.getElementById('rowCount').textContent = rows.length;
+    // Genuine Windhawk textual-mode YAML for the "rows" array setting:
+    // rows:
+    //   - label: Total CPU Usage
+    //     valueName: Value0
+    // This is the raw-settings-value format a user pastes into the mod's
+    // settings text editor, not the mod-source $name/$description schema.
+    let yaml = '';
+
+    if (entries.length > 0) {
+        yaml = 'rows:\n';
+        entries.forEach(function(entry) {
+            yaml += '  - label: ' + yamlScalar(entry.label) + '\n';
+            yaml += '    valueName: ' + entry.valueName + '\n';
+        });
+    }
+
+    document.getElementById('rowsText').value = yaml;
+    document.getElementById('rowCount').textContent = entries.length;
 }
 
 function setAllRows(checked) {
@@ -2694,7 +2765,7 @@ async function copyRows() {
     }
 
     document.getElementById('status').textContent =
-        'Copied ' + document.getElementById('rowCount').textContent + ' Windhawk rows to clipboard.';
+        'Copied Rows YAML for ' + document.getElementById('rowCount').textContent + ' sensors to clipboard. Paste it into this mod\'s Rows setting via Windhawk\'s textual settings editor.';
 }
 
 window.addEventListener('DOMContentLoaded', rebuildRows);
@@ -2705,17 +2776,18 @@ window.addEventListener('DOMContentLoaded', rebuildRows);
 <h1>HWiNFO Registry Reader - Windhawk Export</h1>
 
 <div class="info">
-    Select the sensors you want and copy the generated Windhawk Rows text.
+    Select the sensors you want, then copy the YAML below and paste it into this mod's
+    settings using Windhawk's textual settings editor (the "Rows" array setting).
     <br>
-    <span class="small">Format: Display Name | Registry Value</span>
+    <span class="small">This is the raw settings-value YAML for the Rows array, not the mod's settings schema.</span>
 </div>
 
 <div class="controls">
-    <b>Windhawk Rows</b>
+    <b>Rows textual-mode YAML</b>
     <br>
     <textarea id="rowsText" readonly></textarea>
     <br>
-    <button onclick="copyRows()">Copy Windhawk Rows</button>
+    <button onclick="copyRows()">Copy YAML</button>
     <button onclick="setAllRows(true)">Select all</button>
     <button onclick="setAllRows(false)">Select none</button>
     <button onclick="applySuggestedNames()">Apply suggested short names</button>
@@ -2734,7 +2806,7 @@ window.addEventListener('DOMContentLoaded', rebuildRows);
 <th style="width: 14%;">Custom Name</th>
 <th style="width: 10%;">Value</th>
 <th style="width: 9%;">ValueRaw</th>
-<th style="width: 11%;">Windhawk Row</th>
+<th style="width: 11%;">Label / Registry value name</th>
 </tr>
 <tbody id="sensorRows">
 )WHHTML";
@@ -2918,8 +2990,54 @@ void ExportRegistryHtml() {
     }
 }
 
+// Clamps the overlay's stored position into the work area of the nearest
+// monitor. The overlay is click-through outside drag mode, so if a monitor
+// gets unplugged or rearranged and x/y end up fully off-screen, there would
+// otherwise be no way to bring the overlay back other than editing settings
+// by hand.
+void ClampOverlayPositionToMonitor() {
+    RECT testRect = {
+        settings.x,
+        settings.y,
+        settings.x + Scaled(settings.width),
+        settings.y + Scaled(settings.height)
+    };
+
+    HMONITOR monitor = MonitorFromRect(&testRect, MONITOR_DEFAULTTONEAREST);
+
+    MONITORINFO monitorInfo = {};
+    monitorInfo.cbSize = sizeof(monitorInfo);
+
+    if (!GetMonitorInfoW(monitor, &monitorInfo)) {
+        return;
+    }
+
+    const RECT& work = monitorInfo.rcWork;
+
+    int width = Scaled(settings.width);
+    int height = Scaled(settings.height);
+
+    if (settings.x < work.left) {
+        settings.x = work.left;
+    }
+    if (settings.y < work.top) {
+        settings.y = work.top;
+    }
+    if (settings.x + width > work.right) {
+        settings.x = std::max(work.left, work.right - width);
+    }
+    if (settings.y + height > work.bottom) {
+        settings.y = std::max(work.top, work.bottom - height);
+    }
+}
+
 bool CreateOverlayWindow() {
     HINSTANCE hInstance = GetCurrentModuleHandle();
+
+    if (!hInstance) {
+        Wh_Log(L"GetCurrentModuleHandle failed");
+        return false;
+    }
 
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(wc);
@@ -2933,7 +3051,8 @@ bool CreateOverlayWindow() {
         return false;
     }
 
-    DWORD exStyle = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW;
+    DWORD exStyle = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW |
+                    WS_EX_NOACTIVATE;
 
     if (settings.alwaysOnTop) {
         exStyle |= WS_EX_TOPMOST;
@@ -2941,6 +3060,7 @@ bool CreateOverlayWindow() {
 
     RefreshCachedRegistryValues();
     UpdateAutoHeight(nullptr);
+    ClampOverlayPositionToMonitor();
 
     g_hwnd = CreateWindowExW(
         exStyle,
@@ -2949,8 +3069,8 @@ bool CreateOverlayWindow() {
         WS_POPUP,
         settings.x,
         settings.y,
-        settings.width,
-        settings.height,
+        Scaled(settings.width),
+        Scaled(settings.height),
         nullptr,
         nullptr,
         hInstance,
@@ -2961,6 +3081,25 @@ bool CreateOverlayWindow() {
         Wh_Log(L"CreateWindowExW failed: %u", GetLastError());
         UnregisterClassW(OVERLAY_WINDOW_CLASS_NAME, hInstance);
         return false;
+    }
+
+    // The window was created assuming 96 DPI. Now that it exists on its
+    // final monitor, pick up the real DPI, rebuild the font to match, and
+    // resize to the correctly scaled dimensions.
+    UINT actualDpi = GetDpiForWindow(g_hwnd);
+    if (actualDpi != 0 && actualDpi != g_dpi) {
+        g_dpi = actualDpi;
+        RecreateFont();
+
+        SetWindowPos(
+            g_hwnd,
+            nullptr,
+            0,
+            0,
+            Scaled(settings.width),
+            Scaled(settings.height),
+            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE
+        );
     }
 
     UpdateWindowRegion(g_hwnd);
@@ -2977,13 +3116,21 @@ bool CreateOverlayWindow() {
     UpdateClickThroughState(g_hwnd);
     UpdateWindow(g_hwnd);
 
+    g_appliedX = settings.x;
+    g_appliedY = settings.y;
+    g_appliedWidth = settings.width;
+    g_appliedHeight = settings.height;
+    g_appliedAlwaysOnTop = settings.alwaysOnTop;
+    g_appliedBackgroundEnabled = settings.backgroundEnabled;
+    g_appliedBackgroundCornerRadius = settings.backgroundCornerRadius;
+
     SetWindowPos(
         g_hwnd,
         GetOverlayInsertAfter(),
         settings.x,
         settings.y,
-        settings.width,
-        settings.height,
+        Scaled(settings.width),
+        Scaled(settings.height),
         SWP_NOACTIVATE
     );
 
@@ -3097,6 +3244,11 @@ void WhTool_ModUninit() {
     }
 }
 
+// clang-format off
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 //
 // The mod will load and run in a dedicated windhawk.exe process.
