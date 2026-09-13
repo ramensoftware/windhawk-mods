@@ -1,8 +1,8 @@
-﻿// ==WindhawkMod==
+// ==WindhawkMod==
 // @id              mouse-trail
 // @name            Mouse Trail
 // @name:zh-CN      鼠标拖尾
-// @description     Highly customizable cursor trail with native D3D11 rendering, 23 color modes, 10 trail shapes, 2.5D particle effects, particle system, click effects, centripetal vortex, particle physics, and music reactive framework. DirectComposition hardware acceleration, low idle CPU.
+// @description     Highly customizable cursor trail with D3D11 rendering, 23 color modes, 10 trail shapes, 2.5D particles, click effects, centripetal vortex, particle physics, music reactive. DirectComposition acceleration, low idle CPU.
 // @description:zh-CN 高度可定制的鼠标拖尾，原生 D3D11 渲染，23种颜色模式，10种拖尾形状，2.5D 立体效果，粒子系统，点击特效，向心力漩涡，粒子物理，音乐响应框架。DirectComposition 硬件加速，闲置低 CPU。
 // @version         3.4.1
 // @author          MCheng404
