@@ -37,8 +37,9 @@ outward with concave (outside) corner radii, ending in a flat top edge:
 
 - **Width / Height**: the main area of the blob shape ('auto' matches the
   button's background element). Horizontally the shape is centered on the
-  button; vertically its flat top edge is anchored to the top of the
-  taskbar, with the body hanging downward.
+  button; vertically its flat edge is anchored to the taskbar's outer edge
+  (the top of a bottom-docked taskbar, the bottom of a top-docked one),
+  with the body hanging into the bar.
 - **Top corner radius**: the radius of the concave top flares. The flares
   are circular quarter arcs, so this also sets how far the blob shape
   extends upward and outward. Total size is
@@ -68,7 +69,7 @@ since both replace the native active indicator.
 - BlobShape:
   - Dimensions: 'auto, 36'
     $name: Custom blob shape dimensions (Width, Height)
-    $description: Size of the blob shape's main area. Set to 'auto' to match the button's background element, or specify pixel values (e.g., '32, 32'). The body hangs down from the top of the taskbar.
+    $description: Size of the blob shape's main area. Set to 'auto' to match the button's background element, or specify pixel values (e.g., '32, 32'). The body hangs into the bar from its anchored edge (the top edge when bottom-docked, the bottom edge when top-docked).
   - Margins: '0, 0, 0, 0'
     $name: Custom blob shape margin (Left, Top, Right, Bottom)
     $description: Offsets the blob shape like insets - Left pushes right, Right pushes left. Vertical values are relative to the taskbar's anchored edge, so Top pushes the blob deeper into the bar and Bottom pulls it back out (e.g. '0, 4, 0, 0' nudges it 4px inward on both bottom and top taskbars). Accepts 1, 2 (horizontal, vertical), or 4 values. Leave empty to disable.
@@ -914,11 +915,19 @@ void RefreshBlob(winrt::Windows::UI::Xaml::FrameworkElement const& button, const
         if (enabled) isActive = IsSystemButtonChecked(button);
     }
     // Vertical taskbars get no blob: the tab silhouette has no sideways
-    // variant — force inactive so the normal show=false path hides the
-    // blob and leaves the native indicator in charge.
+    // variant. Fast path only — the authoritative gate is at show time in
+    // EnsureBlobOnButton, because the dock value here can be stale before
+    // this island's first sweep runs (inside Ensure). When nothing is
+    // bound or suppressed there is also nothing to create or undo, so the
+    // full pipeline is skipped; an entry still showing a blob (the dock
+    // just switched) falls through once so Ensure hides it and restores
+    // the natives.
     {
         int dock = g_dockEdge.load();
-        if (dock == DockLeft || dock == DockRight) isActive = false;
+        if (dock == DockLeft || dock == DockRight) {
+            isActive = false;
+            if (!entry->bound && !entry->bgHidden && !entry->indicatorHidden) return;
+        }
     }
     EnsureBlobOnButton(button, entry, iconPanel, isActive, localSettings);
 }
@@ -962,14 +971,75 @@ void ScheduleBgRestore(std::shared_ptr<BlobEntry> const& entry) {
 }
 
 void SweepTray(Panel const& trayGrid, const Settings& localSettings);
+void TaskbarSweepBody(Panel const& grid, const Settings& localSettings);
 
 // The re-runnable sweep body: enumerates the taskbar repeater's realized
 // children and reaches this island's system tray. Idempotent — RefreshBlob
 // finds or creates entries.
+// Attaches the DockingStates subscription for a tracked taskbar host if it
+// doesn't have one yet. Called from every sweep rather than only at first
+// contact: the group can be absent when the host is first seen (template
+// applied, groups not yet attached), and a Bottom<->Top switch doesn't
+// necessarily resize the RootGrid, so SizeChanged is not a reliable
+// backstop. On builds without the feature this is one null lookup per
+// sweep.
+void EnsureDockSubscription(Panel const& grid) {
+    {
+        std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
+        if (g_unloading) return;
+        bool tracked = false;
+        for (auto& host : g_taskbarHosts) {
+            if (host.grid.get() == grid) {
+                if (host.dockGroup.get()) return; // already subscribed
+                tracked = true;
+                break;
+            }
+        }
+        if (!tracked) return; // only tracked hosts get subscriptions
+    }
+    try {
+        auto dockGroup = GetVisualStateGroup(grid, L"DockingStates");
+        if (!dockGroup) return; // absent (older build, or not yet attached)
+
+        // Weak refs built BEFORE subscribing: if anything after the
+        // subscription threw, the revoke below would be skipped and the
+        // delegate would outlive the mod image.
+        auto weakDockGroup = winrt::make_weak(dockGroup);
+        auto weakGrid = winrt::make_weak(grid);
+        auto dockToken = dockGroup.CurrentStateChanged([weakGrid](auto const&, auto const&) {
+            if (g_unloading) return;
+            auto g = weakGrid.get();
+            if (!g) return;
+            Settings localSettings;
+            { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
+            try { TaskbarSweepBody(g, localSettings); } catch (...) {}
+        });
+        bool dockStored = false;
+        {
+            std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
+            if (!g_unloading) {
+                for (auto& host : g_taskbarHosts) {
+                    if (host.grid.get() == grid) {
+                        host.dockGroup = weakDockGroup;
+                        host.dockToken = dockToken;
+                        dockStored = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if (!dockStored) {
+            // Untracked subscription: revoke immediately.
+            try { dockGroup.CurrentStateChanged(dockToken); } catch (...) {}
+        }
+    } catch (...) {}
+}
+
 void TaskbarSweepBody(Panel const& grid, const Settings& localSettings) {
     // The dock edge is global; every taskbar sweep re-reads it so the
     // refreshes below apply the current anchoring.
     g_dockEdge = ReadDockEdge(grid);
+    EnsureDockSubscription(grid);
 
     try {
         FrameworkElement repeater = nullptr;
@@ -1086,40 +1156,6 @@ void SweepExistingButtons(Panel const& grid, const Settings& localSettings) {
             // Untracked subscription: revoke immediately.
             try { grid.SizeChanged(token); } catch (...) {}
         }
-
-        // Track taskbar position changes: DockingStates lives on the
-        // RootGrid, and a dock switch re-sweeps this island so every blob
-        // re-anchors (or hides, for vertical docks).
-        try {
-            if (auto dockGroup = GetVisualStateGroup(grid, L"DockingStates")) {
-                auto dockToken = dockGroup.CurrentStateChanged([weakGrid](auto const&, auto const&) {
-                    if (g_unloading) return;
-                    auto g = weakGrid.get();
-                    if (!g) return;
-                    Settings localSettings;
-                    { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
-                    try { TaskbarSweepBody(g, localSettings); } catch (...) {}
-                });
-                bool dockStored = false;
-                {
-                    std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
-                    if (!g_unloading) {
-                        for (auto& host : g_taskbarHosts) {
-                            if (host.grid.get() == grid) {
-                                host.dockGroup = winrt::make_weak(dockGroup);
-                                host.dockToken = dockToken;
-                                dockStored = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-                if (!dockStored) {
-                    // Untracked subscription: revoke immediately.
-                    try { dockGroup.CurrentStateChanged(dockToken); } catch (...) {}
-                }
-            }
-        } catch (...) {}
 
         TaskbarSweepBody(grid, localSettings);
     }
@@ -1860,15 +1896,23 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
     // One condition drives both the blob and the native indicator: the
     // native background only disappears when the blob is actually shown in
     // its place, and the blob never renders at a stale or unbound position.
-    bool show = isActive && entry->bound;
+    // The dock is re-read HERE, after any first-contact sweep inside this
+    // call has updated it: the fast-path check in RefreshBlob runs BEFORE
+    // that sweep and can hold a stale bottom-dock value for the very first
+    // button of a vertically-docked taskbar — this gate is the
+    // authoritative one.
+    int dockNow = g_dockEdge.load();
+    bool show = isActive && entry->bound &&
+                dockNow != DockLeft && dockNow != DockRight;
     blobShape.Opacity(show ? 1.0 : 0.0);
     setNativeHidden(show);
 
     // Idle blobs don't evaluate: one live expression per button would keep
     // ~20 per-frame evaluations running on the render thread for shapes at
-    // Opacity(0). Stop on deactivation; the bound flag already drives the
-    // cheap rebind on the next activation.
-    if (!isActive && entry->bound) {
+    // Opacity(0). Stop whenever not shown (deactivation or a vertical
+    // dock); the bound flag already drives the cheap rebind on the next
+    // activation.
+    if (!show && entry->bound) {
         try {
             ElementCompositionPreview::GetElementVisual(blobShape).Properties().StopAnimation(L"Translation");
         } catch (...) {}
