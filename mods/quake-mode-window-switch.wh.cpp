@@ -17,6 +17,8 @@ window down from off-screen into a docked strip at the top of the
 screen, Quake-console style. Press again (or click another window) to
 slide it back up out of view.
 
+![Quake mode window switch demo](https://raw.githubusercontent.com/dewbjorn/windhawk-mods/main/quake-mode.gif)
+
 ## Notes
 
 - Runs as a standalone background process (a "tool mod"), not injected
