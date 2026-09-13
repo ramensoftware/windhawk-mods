@@ -1,3 +1,9 @@
+## 1.4.2 ([Sep 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6a06dbbff13cacd1cfd4bb530d53ca643b42a019/mods/on-screen-indicator-position.wh.cpp))
+
+* Give the "Desktop N" popup that appears on virtual desktop change its own position, separate from other text indicators.
+* New setting to make the indicator disappear straight away instead of sliding off screen.
+* Keeps working on future Windows builds where the parts it hooks into get moved around.
+
 ## 1.2.7 ([Sep 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c27674120c8e769a26898d151ce4b3a48d0497c0/mods/on-screen-indicator-position.wh.cpp))
 
 * Fixed the per indicator positions, which had not worked at all since 1.2.6. Whatever you set for volume or brightness on its own was ignored and everything used the main position instead.

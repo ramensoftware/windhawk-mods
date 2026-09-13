@@ -10108,7 +10108,7 @@
           8
         ],
         "ratingUsers": 10,
-        "updated": 1788550365000,
+        "updated": 1789323499000,
         "users": 150
       },
       "metadata": {
@@ -10117,13 +10117,13 @@
         ],
         "author": "mario0318",
         "compilerOptions": "-lshcore",
-        "description": "Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, instead of the three positions Windows offers",
+        "description": "Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, and optionally skip the slide out animation",
         "github": "https://github.com/mario0318",
         "include": [
           "explorer.exe"
         ],
         "name": "On-Screen Indicator Position",
-        "version": "1.2.7"
+        "version": "1.4.2"
       }
     },
     "one-hair": {
