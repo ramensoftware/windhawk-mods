@@ -7,7 +7,7 @@
 // @github          https://github.com/0Allu
 // @homepage        https://github.com/0Allu/minimize-to-tray
 // @include         windhawk.exe
-// @compilerOptions -lshell32
+// @compilerOptions -lshell32 -lshcore
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -46,9 +46,15 @@ button's distance from the right edge.
 
 ## Compatibility
 
+Windows 10 version 1607 or later is required.
+
 Applications running with administrator privileges are not supported when the
 mod is running at normal user privileges. This is due to Windows User Interface
 Privilege Isolation (UIPI).
+
+Custom title bar rules apply only to unowned top-level application windows.
+Tool windows, non-activating windows, child windows, dialogs and owned popups
+are ignored.
 
 ## Safety
 
@@ -84,8 +90,9 @@ the affected application may need to be restarted manually.
 */
 // ==/WindhawkModSettings==
 
-#include <shellapi.h>
 #include <windows.h>
+#include <shellapi.h>
+#include <shellscalingapi.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -105,7 +112,7 @@ constexpr UINT_PTR TIMER_CLEANUP = 1;
 constexpr UINT MENU_RESTORE = 1;
 constexpr UINT MENU_CLOSE = 2;
 
-constexpr DWORD HIT_TEST_TIMEOUT_MS = 10;
+constexpr DWORD HIT_TEST_TIMEOUT_MS = 20;
 constexpr DWORD WORKER_SHUTDOWN_TIMEOUT_MS = 5000;
 
 constexpr wchar_t HIDDEN_WINDOW_PROPERTY[] =
@@ -142,8 +149,12 @@ HHOOK g_mouseHook = nullptr;
 
 HANDLE g_workerThread = nullptr;
 HANDLE g_workerStartedEvent = nullptr;
-
 bool g_workerStartedSuccessfully = false;
+
+HANDLE g_hookThread = nullptr;
+HANDLE g_hookStartedEvent = nullptr;
+DWORD g_hookThreadId = 0;
+bool g_hookStartedSuccessfully = false;
 
 UINT g_taskbarCreatedMessage = 0;
 UINT g_nextTrayId = 1;
@@ -152,11 +163,13 @@ HWND g_rightClickWindow = nullptr;
 DWORD g_rightClickProcessId = 0;
 POINT g_rightClickPoint = {};
 
+SRWLOCK g_detectionLock = SRWLOCK_INIT;
 bool g_enableCustomTitleBarRules = false;
 int g_maxCustomRuleHeightDip = 0;
 int g_maxCustomRuleRightDip = 0;
 std::vector<CustomTitleBarRule> g_customTitleBarRules;
 std::vector<CachedWindowIdentity> g_windowIdentityCache;
+
 std::vector<TrayItem> g_trayItems;
 
 DWORD GetWindowProcessId(HWND hwnd) {
@@ -167,9 +180,20 @@ DWORD GetWindowProcessId(HWND hwnd) {
     return processId;
 }
 
-UINT GetWindowDpiSafe(HWND hwnd) {
-    UINT dpi = GetDpiForWindow(hwnd);
-    return dpi ? dpi : 96;
+UINT GetMonitorDpiSafe(HWND hwnd) {
+    HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    if (!monitor) {
+        return 96;
+    }
+
+    UINT dpiX = 96;
+    UINT dpiY = 96;
+    if (SUCCEEDED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)) &&
+        dpiX) {
+        return dpiX;
+    }
+
+    return 96;
 }
 
 bool IsTrayItemWindowValid(const TrayItem& item) {
@@ -290,6 +314,20 @@ bool HasMinimizeFrame(HWND hwnd) {
            (style & WS_CAPTION) == WS_CAPTION;
 }
 
+bool IsCustomRuleWindowEligible(HWND hwnd) {
+    LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+    LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+
+    if ((style & WS_CHILD) ||
+        (exStyle & (WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW))) {
+        return false;
+    }
+
+    // Custom rules are intended for primary top-level application windows,
+    // not owned dialogs, popouts or notification surfaces.
+    return GetWindow(hwnd, GW_OWNER) == nullptr;
+}
+
 bool GetProcessImageName(HWND hwnd, std::wstring* fileName) {
     DWORD processId = GetWindowProcessId(hwnd);
     if (!processId || !fileName) {
@@ -317,25 +355,18 @@ bool GetProcessImageName(HWND hwnd, std::wstring* fileName) {
     return success;
 }
 
-CachedWindowIdentity* FindCachedWindowIdentity(HWND hwnd) {
-    DWORD processId = GetWindowProcessId(hwnd);
-    if (!processId) {
-        return nullptr;
-    }
+struct IdentityCacheBuildContext {
+    std::vector<CachedWindowIdentity> entries;
+    std::vector<std::pair<DWORD, std::wstring>> processNames;
+};
 
-    for (auto& entry : g_windowIdentityCache) {
-        if (entry.hwnd == hwnd && entry.processId == processId) {
-            return &entry;
-        }
-    }
-
-    return nullptr;
-}
-
-BOOL CALLBACK CacheWindowIdentityProc(HWND hwnd, LPARAM) {
-    if (!IsWindowVisible(hwnd)) {
+BOOL CALLBACK CacheWindowIdentityProc(HWND hwnd, LPARAM lParam) {
+    if (!IsWindowVisible(hwnd) || !IsCustomRuleWindowEligible(hwnd)) {
         return TRUE;
     }
+
+    auto* context =
+        reinterpret_cast<IdentityCacheBuildContext*>(lParam);
 
     DWORD processId = GetWindowProcessId(hwnd);
     if (!processId) {
@@ -348,18 +379,19 @@ BOOL CALLBACK CacheWindowIdentityProc(HWND hwnd, LPARAM) {
     }
 
     std::wstring executable;
-
-    // Reuse a process image name already obtained for another top-level
-    // window owned by the same process.
-    for (const auto& entry : g_windowIdentityCache) {
-        if (entry.processId == processId && !entry.executable.empty()) {
-            executable = entry.executable;
+    for (const auto& processEntry : context->processNames) {
+        if (processEntry.first == processId) {
+            executable = processEntry.second;
             break;
         }
     }
 
-    if (executable.empty() && !GetProcessImageName(hwnd, &executable)) {
-        return TRUE;
+    if (executable.empty()) {
+        if (!GetProcessImageName(hwnd, &executable)) {
+            return TRUE;
+        }
+
+        context->processNames.emplace_back(processId, executable);
     }
 
     CachedWindowIdentity entry;
@@ -367,16 +399,33 @@ BOOL CALLBACK CacheWindowIdentityProc(HWND hwnd, LPARAM) {
     entry.processId = processId;
     entry.executable = std::move(executable);
     entry.windowClass = className;
-    g_windowIdentityCache.push_back(std::move(entry));
+    context->entries.push_back(std::move(entry));
+
     return TRUE;
 }
 
-void RefreshWindowIdentityCache() {
-    g_windowIdentityCache.clear();
+bool AreCustomRulesEnabled() {
+    AcquireSRWLockShared(&g_detectionLock);
+    bool enabled = g_enableCustomTitleBarRules;
+    ReleaseSRWLockShared(&g_detectionLock);
+    return enabled;
+}
 
-    if (g_enableCustomTitleBarRules) {
-        EnumWindows(CacheWindowIdentityProc, 0);
+void RefreshWindowIdentityCache() {
+    if (!AreCustomRulesEnabled()) {
+        AcquireSRWLockExclusive(&g_detectionLock);
+        g_windowIdentityCache.clear();
+        ReleaseSRWLockExclusive(&g_detectionLock);
+        return;
     }
+
+    IdentityCacheBuildContext context;
+    EnumWindows(CacheWindowIdentityProc,
+                reinterpret_cast<LPARAM>(&context));
+
+    AcquireSRWLockExclusive(&g_detectionLock);
+    g_windowIdentityCache = std::move(context.entries);
+    ReleaseSRWLockExclusive(&g_detectionLock);
 }
 
 bool ParseCustomRule(const std::wstring& text, CustomTitleBarRule* rule) {
@@ -428,29 +477,28 @@ bool ParseCustomRule(const std::wstring& text, CustomTitleBarRule* rule) {
 }
 
 void LoadSettings() {
-    g_enableCustomTitleBarRules =
+    bool enableCustomTitleBarRules =
         Wh_GetIntSetting(L"enableCustomTitleBarRules") != 0;
 
-    g_customTitleBarRules.clear();
-    g_maxCustomRuleHeightDip = 0;
-    g_maxCustomRuleRightDip = 0;
+    std::vector<CustomTitleBarRule> customTitleBarRules;
+    int maxCustomRuleHeightDip = 0;
+    int maxCustomRuleRightDip = 0;
 
     for (int i = 0;; i++) {
-        PCWSTR setting =
-            Wh_GetStringSetting(L"customTitleBarRules[%d]", i);
+        PCWSTR setting = Wh_GetStringSetting(L"customTitleBarRules[%d]", i);
 
-        if (!setting || !*setting) {
+        if (!*setting) {
             Wh_FreeStringSetting(setting);
             break;
         }
 
         CustomTitleBarRule rule;
         if (ParseCustomRule(setting, &rule)) {
-            g_maxCustomRuleHeightDip =
-                std::max(g_maxCustomRuleHeightDip, rule.heightDip);
-            g_maxCustomRuleRightDip =
-                std::max(g_maxCustomRuleRightDip, rule.maxRightDip);
-            g_customTitleBarRules.push_back(std::move(rule));
+            maxCustomRuleHeightDip =
+                std::max(maxCustomRuleHeightDip, rule.heightDip);
+            maxCustomRuleRightDip =
+                std::max(maxCustomRuleRightDip, rule.maxRightDip);
+            customTitleBarRules.push_back(std::move(rule));
         } else {
             Wh_Log(L"Ignoring invalid custom title bar rule: %s", setting);
         }
@@ -458,17 +506,44 @@ void LoadSettings() {
         Wh_FreeStringSetting(setting);
     }
 
+    AcquireSRWLockExclusive(&g_detectionLock);
+    g_enableCustomTitleBarRules = enableCustomTitleBarRules;
+    g_maxCustomRuleHeightDip = maxCustomRuleHeightDip;
+    g_maxCustomRuleRightDip = maxCustomRuleRightDip;
+    g_customTitleBarRules = std::move(customTitleBarRules);
+    ReleaseSRWLockExclusive(&g_detectionLock);
+
     RefreshWindowIdentityCache();
 }
 
-const CustomTitleBarRule* FindCustomRule(HWND hwnd) {
-    if (!g_enableCustomTitleBarRules) {
-        return nullptr;
+bool FindCustomRule(HWND hwnd, CustomTitleBarRule* matchedRule) {
+    if (!matchedRule || !IsCustomRuleWindowEligible(hwnd)) {
+        return false;
     }
 
-    CachedWindowIdentity* identity = FindCachedWindowIdentity(hwnd);
+    DWORD processId = GetWindowProcessId(hwnd);
+    if (!processId) {
+        return false;
+    }
+
+    AcquireSRWLockShared(&g_detectionLock);
+
+    if (!g_enableCustomTitleBarRules) {
+        ReleaseSRWLockShared(&g_detectionLock);
+        return false;
+    }
+
+    const CachedWindowIdentity* identity = nullptr;
+    for (const auto& entry : g_windowIdentityCache) {
+        if (entry.hwnd == hwnd && entry.processId == processId) {
+            identity = &entry;
+            break;
+        }
+    }
+
     if (!identity) {
-        return nullptr;
+        ReleaseSRWLockShared(&g_detectionLock);
+        return false;
     }
 
     for (const auto& rule : g_customTitleBarRules) {
@@ -477,14 +552,18 @@ const CustomTitleBarRule* FindCustomRule(HWND hwnd) {
         }
 
         if (rule.windowClass != L"*" &&
-            _wcsicmp(identity->windowClass.c_str(), rule.windowClass.c_str()) != 0) {
+            _wcsicmp(identity->windowClass.c_str(),
+                     rule.windowClass.c_str()) != 0) {
             continue;
         }
 
-        return &rule;
+        *matchedRule = rule;
+        ReleaseSRWLockShared(&g_detectionLock);
+        return true;
     }
 
-    return nullptr;
+    ReleaseSRWLockShared(&g_detectionLock);
+    return false;
 }
 
 bool IsPointInCustomRule(HWND hwnd,
@@ -495,7 +574,7 @@ bool IsPointInCustomRule(HWND hwnd,
         return false;
     }
 
-    UINT dpi = GetWindowDpiSafe(hwnd);
+    UINT dpi = GetMonitorDpiSafe(hwnd);
     int relativeY = screenPoint.y - windowRect.top;
     int distanceFromRight = windowRect.right - screenPoint.x;
 
@@ -512,41 +591,62 @@ bool IsPotentialCaptionClick(HWND hwnd, POINT screenPoint) {
         return false;
     }
 
-    UINT dpi = GetWindowDpiSafe(hwnd);
+    UINT dpi = GetMonitorDpiSafe(hwnd);
     LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
 
     int frameWidth = GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi);
     int frameHeight = GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi);
     int paddedBorder = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
     int buttonWidth = GetSystemMetricsForDpi(SM_CXSIZE, dpi);
-    int captionHeight = GetSystemMetricsForDpi(SM_CYSIZE, dpi) + frameHeight +
-                        paddedBorder;
 
-    int candidateHeight = captionHeight;
-    int candidateWidth = buttonWidth * 4 + frameWidth;
+    // Be deliberately generous here. WM_NCHITTEST is the authority for native
+    // caption buttons, so this band should avoid false negatives on maximized
+    // and DWM-drawn windows rather than try to model the button exactly.
+    int nativeHeight =
+        GetSystemMetricsForDpi(SM_CYCAPTION, dpi) +
+        2 * (frameHeight + paddedBorder);
+    int nativeWidth = buttonWidth * 5 + 2 * frameWidth;
 
-    if (g_enableCustomTitleBarRules) {
-        candidateHeight =
-            std::max(candidateHeight,
-                     MulDiv(g_maxCustomRuleHeightDip, dpi, 96));
-        candidateWidth =
-            std::max(candidateWidth,
-                     MulDiv(g_maxCustomRuleRightDip, dpi, 96) + frameWidth);
+    bool customEnabled = false;
+    int customHeight = 0;
+    int customWidth = 0;
+
+    AcquireSRWLockShared(&g_detectionLock);
+    customEnabled = g_enableCustomTitleBarRules;
+    if (customEnabled) {
+        customHeight = MulDiv(g_maxCustomRuleHeightDip, dpi, 96);
+        customWidth =
+            MulDiv(g_maxCustomRuleRightDip, dpi, 96) + frameWidth;
     }
-
-    if (screenPoint.y < windowRect.top ||
-        screenPoint.y >= windowRect.top + candidateHeight) {
-        return false;
-    }
+    ReleaseSRWLockShared(&g_detectionLock);
 
     bool rightToLeft = (exStyle & WS_EX_LAYOUTRTL) != 0;
-    if (rightToLeft && !g_enableCustomTitleBarRules) {
-        return screenPoint.x >= windowRect.left &&
-               screenPoint.x < windowRect.left + candidateWidth;
+
+    bool inNativeVerticalBand =
+        screenPoint.y >= windowRect.top &&
+        screenPoint.y < windowRect.top + nativeHeight;
+
+    bool inNativeHorizontalBand = rightToLeft
+        ? (screenPoint.x >= windowRect.left &&
+           screenPoint.x < windowRect.left + nativeWidth)
+        : (screenPoint.x >= windowRect.right - nativeWidth &&
+           screenPoint.x < windowRect.right);
+
+    if (inNativeVerticalBand && inNativeHorizontalBand) {
+        return true;
     }
 
-    return screenPoint.x >= windowRect.right - candidateWidth &&
-           screenPoint.x < windowRect.right;
+    // Custom rules are always expressed as offsets from the top-right corner,
+    // independent of the window's RTL layout.
+    if (customEnabled &&
+        screenPoint.y >= windowRect.top &&
+        screenPoint.y < windowRect.top + customHeight &&
+        screenPoint.x >= windowRect.right - customWidth &&
+        screenPoint.x < windowRect.right) {
+        return true;
+    }
+
+    return false;
 }
 
 HWND FindMinimizeButtonWindow(POINT screenPoint) {
@@ -565,6 +665,8 @@ HWND FindMinimizeButtonWindow(POINT screenPoint) {
         return nullptr;
     }
 
+    bool customRulesEnabled = AreCustomRulesEnabled();
+
     // Native caption buttons are the only unconditional trigger.
     if (HasMinimizeFrame(hwnd)) {
         LPARAM pointParam = MAKELPARAM(static_cast<SHORT>(screenPoint.x),
@@ -579,21 +681,23 @@ HWND FindMinimizeButtonWindow(POINT screenPoint) {
                 return hwnd;
             }
 
-            // A custom rule is only allowed to override client-area hit
-            // testing, never another explicit non-client result.
+            // Custom rules may only override an explicit client-area result.
             if (hitTest != HTCLIENT) {
                 return nullptr;
             }
-        } else if (!g_enableCustomTitleBarRules) {
+        } else if (!customRulesEnabled) {
             return nullptr;
         }
-    } else if (!g_enableCustomTitleBarRules) {
+    } else if (!customRulesEnabled) {
         return nullptr;
     }
 
-    const CustomTitleBarRule* rule = FindCustomRule(hwnd);
-    return rule && IsPointInCustomRule(hwnd, screenPoint, *rule) ? hwnd
-                                                                 : nullptr;
+    CustomTitleBarRule rule;
+    if (!FindCustomRule(hwnd, &rule)) {
+        return nullptr;
+    }
+
+    return IsPointInCustomRule(hwnd, screenPoint, rule) ? hwnd : nullptr;
 }
 
 bool IsRightClickReleaseValid(HWND hwnd,
@@ -619,7 +723,7 @@ bool IsRightClickReleaseValid(HWND hwnd,
         return false;
     }
 
-    int tolerance = MulDiv(16, GetWindowDpiSafe(hwnd), 96);
+    int tolerance = MulDiv(16, GetMonitorDpiSafe(hwnd), 96);
     LONG deltaX = upPoint.x - downPoint.x;
     LONG deltaY = upPoint.y - downPoint.y;
 
@@ -938,6 +1042,49 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
 }
 
+
+DWORD WINAPI HookThreadProc(LPVOID) {
+    // MSLLHOOKSTRUCT::pt uses per-monitor-aware screen coordinates. Keep every
+    // geometry query on this thread in the same physical-pixel coordinate space.
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
+    // Force creation of this thread's message queue before installing the hook.
+    MSG message = {};
+    PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+
+    g_hookThreadId = GetCurrentThreadId();
+    g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, nullptr, 0);
+
+    g_hookStartedSuccessfully = g_mouseHook != nullptr;
+    if (!g_hookStartedSuccessfully) {
+        Wh_Log(L"SetWindowsHookExW failed: %u", GetLastError());
+    }
+
+    SetEvent(g_hookStartedEvent);
+
+    if (!g_hookStartedSuccessfully) {
+        g_hookThreadId = 0;
+        return 1;
+    }
+
+    BOOL result;
+    while ((result = GetMessageW(&message, nullptr, 0, 0)) != 0) {
+        if (result == -1) {
+            Wh_Log(L"Hook GetMessageW failed: %u", GetLastError());
+            break;
+        }
+
+        TranslateMessage(&message);
+        DispatchMessageW(&message);
+    }
+
+    UnhookWindowsHookEx(g_mouseHook);
+    g_mouseHook = nullptr;
+    g_hookThreadId = 0;
+
+    return 0;
+}
+
 LRESULT CALLBACK ControllerWindowProc(HWND hwnd,
                                       UINT message,
                                       WPARAM wParam,
@@ -979,14 +1126,12 @@ LRESULT CALLBACK ControllerWindowProc(HWND hwnd,
             return 0;
 
         case WM_CLOSE:
-            RestoreAllWindows();
-            DestroyWindow(hwnd);
+            PostQuitMessage(0);
             return 0;
 
         case WM_DESTROY:
             KillTimer(hwnd, TIMER_CLEANUP);
             g_controllerWindow = nullptr;
-            PostQuitMessage(0);
             return 0;
     }
 
@@ -994,10 +1139,6 @@ LRESULT CALLBACK ControllerWindowProc(HWND hwnd,
 }
 
 DWORD WINAPI WorkerThreadProc(LPVOID) {
-    // Low-level mouse-hook points are physical pixels. Make every window and
-    // cursor coordinate queried on this thread use the same coordinate space.
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-
     HINSTANCE instance = GetModuleHandleW(nullptr);
     bool classRegistered = false;
     bool startedEventSignaled = false;
@@ -1017,9 +1158,6 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     }
     classRegistered = true;
 
-    // This is a hidden 0x0 tool window. It can become foreground briefly when
-    // showing tray menus, which makes the standard popup-menu dismissal
-    // behavior reliable.
     g_controllerWindow = CreateWindowExW(
         WS_EX_TOOLWINDOW, CONTROLLER_CLASS, L"", WS_POPUP, 0, 0, 0, 0, nullptr,
         nullptr, instance, nullptr);
@@ -1034,18 +1172,37 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
                                     MSGFLT_ALLOW, nullptr);
     }
 
-    g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, nullptr, 0);
-    if (!g_mouseHook) {
-        Wh_Log(L"SetWindowsHookExW failed: %u", GetLastError());
+    SetTimer(g_controllerWindow, TIMER_CLEANUP, 2000, nullptr);
+
+    // Do all startup recovery work before the low-level hook exists. Shell and
+    // cross-process operations on this controller thread can therefore never
+    // starve the hook's message pump.
+    EnumWindows(RecoverWindowProc, 0);
+
+    g_hookStartedSuccessfully = false;
+    g_hookStartedEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_hookStartedEvent) {
+        Wh_Log(L"CreateEventW for hook thread failed: %u", GetLastError());
         goto Cleanup;
     }
 
-    SetTimer(g_controllerWindow, TIMER_CLEANUP, 2000, nullptr);
+    g_hookThread =
+        CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, nullptr);
+    if (!g_hookThread) {
+        Wh_Log(L"CreateThread for hook thread failed: %u", GetLastError());
+        goto Cleanup;
+    }
 
-    // Recover windows left hidden if the tool process was restarted. If the
-    // notification area isn't ready, their icons remain pending and the timer
-    // keeps retrying without dropping the recovery marker.
-    EnumWindows(RecoverWindowProc, 0);
+    WaitForSingleObject(g_hookStartedEvent, INFINITE);
+    CloseHandle(g_hookStartedEvent);
+    g_hookStartedEvent = nullptr;
+
+    if (!g_hookStartedSuccessfully) {
+        WaitForSingleObject(g_hookThread, INFINITE);
+        CloseHandle(g_hookThread);
+        g_hookThread = nullptr;
+        goto Cleanup;
+    }
 
     g_workerStartedSuccessfully = true;
     SetEvent(g_workerStartedEvent);
@@ -1059,7 +1216,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
 
         while ((result = GetMessageW(&message, nullptr, 0, 0)) != 0) {
             if (result == -1) {
-                Wh_Log(L"GetMessageW failed: %u", GetLastError());
+                Wh_Log(L"Controller GetMessageW failed: %u", GetLastError());
                 break;
             }
 
@@ -1075,9 +1232,21 @@ Cleanup:
         SetEvent(g_workerStartedEvent);
     }
 
-    if (g_mouseHook) {
-        UnhookWindowsHookEx(g_mouseHook);
-        g_mouseHook = nullptr;
+    // Stop the input-only thread before destroying the controller window it
+    // posts commands to. The hook thread performs no shell or tray work.
+    if (g_hookThread) {
+        if (g_hookThreadId) {
+            PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
+        }
+
+        WaitForSingleObject(g_hookThread, INFINITE);
+        CloseHandle(g_hookThread);
+        g_hookThread = nullptr;
+    }
+
+    if (g_hookStartedEvent) {
+        CloseHandle(g_hookStartedEvent);
+        g_hookStartedEvent = nullptr;
     }
 
     if (g_controllerWindow) {
@@ -1186,7 +1355,6 @@ BOOL Wh_ModInit() {
     bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
-
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
