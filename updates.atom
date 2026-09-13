@@ -2,12 +2,32 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-12T15:54:28.000Z</updated>
+    <updated>2026-09-13T00:19:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Taskbar Styler 1.10]]></title>
+        <id>https://windhawk.net/mods/windows-11-taskbar-styler#162bca0d6b4fe4da2c63c21f17921a165d5870fa</id>
+        <link href="https://windhawk.net/mods/windows-11-taskbar-styler"/>
+        <updated>2026-09-13T00:19:27.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed running indication in several themes - a regression that was introduced in the previous update.</li>
+<li>Updated themes to avoid changing the taskbar width when it vertical mode. Previously, some themes could cause the taskbar to fill the whole screen, making it difficult to recover from that state.</li>
+<li>Fixed the long-standing <a href="https://github.com/ramensoftware/windhawk-mods/issues/1028">white box issue</a>.</li>
+<li>Added <code>skip()</code> which leaves the style unapplied, so the property keeps (or returns to) its original value, e.g. <code>{{width &gt; 0 ? width : skip()}}</code> applies only once <code>width</code> is positive.</li>
+<li>Improved handling for <code>NaN</code> and <code>Infinity</code> values in expressions.</li>
+<li>Fixed click-through compatibility with tablet mode.</li>
+<li>Fixed crashes.</li>
+<li>Minor misc theme fixes.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Notification Center Styler 1.7]]></title>
         <id>https://windhawk.net/mods/windows-11-notification-center-styler#41266af195ef78e4379a9a7a54e28e8a63ef802f</id>
@@ -496,31 +516,6 @@ Windows continues to handle the actual copy, move, delete, conflicts, and errors
         <author>
             <name>Guerra24</name>
             <uri>https://github.com/Guerra24</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Clock to Left 2.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-clock-to-left#66142e7d3d98559b85934b8d74a9915b63c8cead</id>
-        <link href="https://windhawk.net/mods/taskbar-clock-to-left"/>
-        <updated>2026-09-08T23:16:12.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarclocktoleft">Taskbar Clock to Left</h1>
-<p>Moves the native Windows 11 notification-center clock button to the left side
-of the taskbar. The clock is hosted in its own left-side layer. Instead of
-adding columns or invisible spacers, the mod preserves the native system-tray
-extent supplied to the taskbar layout engine. Centered Start/app buttons remain
-at their original position and the remaining tray stays flush with the right
-edge. Clock customization mods can load before or after this mod: customized
-text width only changes the left host and never becomes a taskbar-layout input.
-On a centered taskbar, the left host is placed after the Widgets/weather button
-when it is visible. If Windows is configured to left-align Start and app icons,
-the clock stays in its native position to avoid covering those buttons.</p>
-<p><img src="https://i.imgur.com/Wew0LZh.png" alt="Taskbar Clock to Left" /></p>
-<p>Windows 11's modern taskbar is required.</p>
-<h2 id="acknowledgements">Acknowledgements</h2>
-<p>This mod was inspired by <a href="https://windhawk.net/mods/taskbar-clock-customization">Taskbar Clock Customization</a> by <a href="https://github.com/m417z">m417z</a>.</p>]]></content>
-        <author>
-            <name>pleromyst</name>
-            <uri>https://github.com/pleromyst</uri>
         </author>
     </entry>
 </feed>

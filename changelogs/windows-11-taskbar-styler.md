@@ -1,3 +1,14 @@
+## 1.10 ([Sep 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/162bca0d6b4fe4da2c63c21f17921a165d5870fa/mods/windows-11-taskbar-styler.wh.cpp))
+
+* Fixed running indication in several themes - a regression that was introduced in the previous update.
+* Updated themes to avoid changing the taskbar width when it vertical mode. Previously, some themes could cause the taskbar to fill the whole screen, making it difficult to recover from that state.
+* Fixed the long-standing [white box issue](https://github.com/ramensoftware/windhawk-mods/issues/1028).
+* Added `skip()` which leaves the style unapplied, so the property keeps (or returns to) its original value, e.g. `{{width > 0 ? width : skip()}}` applies only once `width` is positive.
+* Improved handling for `NaN` and `Infinity` values in expressions.
+* Fixed click-through compatibility with tablet mode.
+* Fixed crashes.
+* Minor misc theme fixes.
+
 ## 1.9 ([Aug 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/36710e43ba152f119a7adcfda85a8377507d65c8/mods/windows-11-taskbar-styler.wh.cpp))
 
 * Added the following themes: OS26 Liquid Glass (Clear MacDock Compact), OS26 Liquid Glass (Dark MacDock Compact), Blob, Minecraft Hotbar, One UI 8.5 (Dock), One UI 8.5 (Taskbar).
