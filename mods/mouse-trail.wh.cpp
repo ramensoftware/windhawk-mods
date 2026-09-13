@@ -1,35 +1,29 @@
-// ==WindhawkMod==
+﻿// ==WindhawkMod==
 // @id              mouse-trail
 // @name            Mouse Trail
 // @name:zh-CN      鼠标拖尾
-// @description     Highly customizable cursor trail with native D3D11 rendering, 18 color modes, 10 trail shapes, 2.5D particle effects, particle system, click effects, and cursor color extraction. DirectComposition hardware acceleration, low idle CPU.
-// @description:zh-CN 高度可定制的鼠标拖尾，原生 D3D11 渲染，18种颜色模式，10种拖尾形状，2.5D 立体效果，粒子系统，点击特效，光标取色。DirectComposition 硬件加速，闲置低 CPU。
-// @version         3.3.1
+// @description     Highly customizable cursor trail with native D3D11 rendering, 23 color modes, 10 trail shapes, 2.5D particle effects, particle system, click effects, centripetal vortex, particle physics, and music reactive framework. DirectComposition hardware acceleration, low idle CPU.
+// @description:zh-CN 高度可定制的鼠标拖尾，原生 D3D11 渲染，23种颜色模式，10种拖尾形状，2.5D 立体效果，粒子系统，点击特效，向心力漩涡，粒子物理，音乐响应框架。DirectComposition 硬件加速，闲置低 CPU。
+// @version         3.4.1
 // @author          MCheng404
 // @github          https://github.com/MCheng404
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -ld2d1 -ld3d11 -ldxgi -ldcomp -ldwmapi -lole32 -lgdi32 -lshell32 -ld3dcompiler
+// @compilerOptions -ld2d1 -ld3d11 -ldxgi -ldcomp -ldwmapi -lole32 -lgdi32 -lshell32 -ld3dcompiler -lavrt -lksuser
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
 /*
 # Mouse Trail
 
-A highly customizable mouse cursor trail with native D3D11 rendering, 18 color modes, 10 trail shapes, 2.5D particle effects, particle system, click effects, and cursor color extraction. DirectComposition hardware accelerated, runs as a dedicated process with low CPU usage when idle.
+A highly customizable mouse cursor trail with native D3D11 rendering, 23 color modes, 10 trail shapes, 2.5D particle effects, advanced particle physics system, centripetal vortex, music reactive framework, click effects, and cursor color extraction. DirectComposition hardware accelerated, runs as a dedicated process with low CPU usage when idle.
 
-🎬 Demo
+## Demos
 
-**Tapered Trail**
-![Tapered Trail](https://i.imgur.com/6pJjvT7.gif)
+![Trail & Particles](https://raw.githubusercontent.com/MCheng404/windhawk-mods/mouse-trail-assets/mods/mouse-trail-assets/demo1.gif)
 
-**Shape Trail**
-![Shape Trail](https://i.imgur.com/vtTCnuw.gif)
+![Centripetal Vortex](https://raw.githubusercontent.com/MCheng404/windhawk-mods/mouse-trail-assets/mods/mouse-trail-assets/demo2.gif)
 
-**Particle Effects**
-![Particle Effects](https://i.imgur.com/vieAvyG.gif)
-
-**Click Effects**
-![Click Effects](https://i.imgur.com/bK1UC7g.gif)
+![Particle Physics](https://raw.githubusercontent.com/MCheng404/windhawk-mods/mouse-trail-assets/mods/mouse-trail-assets/demo3.gif)
 
 ---
 
@@ -37,10 +31,12 @@ A highly customizable mouse cursor trail with native D3D11 rendering, 18 color m
 
 * **Native D3D11 Rendering:** Custom HLSL vertex/pixel shaders with instanced particle rendering. No D2D1 dependency for core trail/particle/shape rendering.
 * **2.5D Particle Effects:** Particles have per-instance z-depth with perspective projection and simple lighting. Particles scale with depth (near = larger, far = smaller) for a 3D feel.
-* **DXGI Flip Swap Chain:** Premultiplied alpha for tear-free composition with DirectComposition.
+* **DXGI Flip Swap Chain:** Premultiplied alpha for tear-free composition with DirectComposition. HDR auto-detection with R16G16B16A16_FLOAT fallback.
 * **Dual-Thread Design:** UI thread handles window/message pump, render thread handles all D3D11/DComp work — mouse input never blocks.
 * **Device Loss Recovery:** Auto-rebuilds entire D3D/DComp stack on GPU TDR, driver update, or GPU switch.
 * **Display Change Handling:** Auto-resizes and repositions overlay on `WM_DISPLAYCHANGE`.
+* **Additive Blend Glow:** Trail/particle/ripple glow layers use SrcAlpha+One additive blending for more translucent halos.
+* **Fast-Move Interpolation:** When interval ≤10ms, particles are interpolated along the path to eliminate gaps during fast movement.
 
 ### Trail Shapes (10 modes)
 
@@ -48,16 +44,23 @@ A highly customizable mouse cursor trail with native D3D11 rendering, 18 color m
 * **Dot Chain:** Beads along the path with configurable density
 * **Function Curve:** Custom mathematical function deforms the trail (sine, damped, heartbeat, swirl, or custom formula)
 * **Wave Curve:** Animated wave deformation
-* **Shape Trail:** Spawns hearts, stars, hexagrams, or circles along the path with random velocity, configurable interval/size/count/lifetime
+* **Shape Trail:** Spawns hearts, stars, hexagrams, or circles along the path with random velocity, rotation, gravity, configurable interval/size/count/lifetime
 * **Double Line:** Two parallel trail ribbons
 * **Dashed:** Segmented dashed trail
 * **Spiral:** Spiral deformation along the path
 * **Lightning:** Random jagged lightning effect
 * **Feather:** Random spiky depth texture
 
-### Color Modes (18 modes)
+### Color Modes (23 modes)
 
-Single / 3-Color Gradient / Rainbow Flow / Warm Flow / Cool Flow / Neon Pulse / Velocity Color / Stripes / Fire / Aurora / Cursor Extract / Cursor Mix / Metallic Gold / Cyberpunk / Pastel / Hue Rotate / Dual Pulse / Sparkle
+Single / Flowing Gradient / Rainbow Flow / Warm Flow / Cool Flow / Neon Pulse / Velocity Color / Stripes / Fire / Aurora / Cursor Extract / Cursor Mix / Metallic Gold / Cyberpunk / Pastel / Hue Rotate / Dual Pulse / Sparkle / Heatmap / Phase Interference / Spectrum Split / Grain Jitter / Gradient Warp
+
+### Gradient System
+
+* **Unlimited Colors:** Add any number of gradient colors (up to 16), used as-is
+* **OKLab Perceptual Interpolation:** No gray midpoints, perceptually uniform color transitions
+* **256-Color LUT:** Precomputed lookup table for performance
+* **Flowing Gradient:** Gradient animates along the trail over time
 
 ### Cursor Color Shift (6 modes)
 
@@ -78,6 +81,19 @@ Off / Complementary (180°) / Analogous (30°) / Triadic (120°) / Split Complem
 * Shapes: circle, star, hexagram, or random mix
 * Colors fade over lifetime; configurable density, interval (0 = per-frame), acceleration
 * Click starburst particle burst
+* **Particle Mass System:** Each particle has random mass (normal distribution via Box-Muller), affecting inertia, size (∝mass^(1/3)), lifetime, and acceleration (a=F/m)
+* **Particle Gravity:** Newton's law of universal gravitation F=G·m₁·m₂/r² with Plummer softening + Newton's second law a=F/m, supports binary/N-body systems (2-10 bodies)
+* **Centripetal Vortex:** Curved mouse motion captures particles into orbiting tracks with angular momentum conservation, Kepler velocity gradient, orbital precession, and 3D orbital inclination. Particles fly outward when motion stops.
+* **Advanced Physics (optional):** Elastic particle collisions (momentum + energy conservation), Lorentz force (charged particles in magnetic field), Brownian motion (thermal noise), multi-band audio linking
+
+### Music Reactive Framework (v3.4)
+
+* **WASAPI Loopback Capture:** Real-time system audio capture (48kHz stereo)
+* **FFT Frequency Analysis:** Cooley-Tukey FFT (256/512/1024/2048 points) with Hann window
+* **Beat Detection:** Three methods — energy threshold, spectral flux, multi-band detection. Low-frequency weighted.
+* **Frequency Band Analysis:** Bass / Mid / Treble energy levels
+* **BPM Estimation:** Real-time tempo estimation
+* **Music-Physics Linking:** Beat → velocity burst, bass → particle size, volume → gravity strength, beat → vortex energy, multi-band → gravity/magnetic/noise
 
 ### Click Effects
 
@@ -90,6 +106,7 @@ Off / Complementary (180°) / Analogous (30°) / Triadic (120°) / Split Complem
 * **Super Performance Mode:** Removes all caps (particle/shape limits, fast-path downgrade)
 * **Adaptive Backoff:** Render thread waits 1ms when active, 16ms when idle
 * **Game Detection:** Auto-hide in fullscreen DirectX games
+* **Zero CPU Idle:** Window hidden when cursor stationary and no effects active
 
 ### Function Trail Variables
 
@@ -110,7 +127,7 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 
 # 鼠标拖尾
 
-高度可定制的鼠标拖尾特效，原生 D3D11 渲染，18种颜色模式，10种拖尾形状，2.5D 立体效果，粒子系统，点击特效，光标取色。DirectComposition 硬件加速，独立进程运行，闲置时低 CPU 占用。
+高度可定制的鼠标拖尾特效，原生 D3D11 渲染，23种颜色模式，10种拖尾形状，2.5D 立体效果，高级粒子物理系统，向心力漩涡，音乐响应框架，点击特效，光标取色。DirectComposition 硬件加速，独立进程运行，闲置时低 CPU 占用。
 
 ---
 
@@ -118,10 +135,12 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 
 * **原生 D3D11 渲染：** 自定义 HLSL 顶点/像素着色器，粒子实例化渲染。核心拖尾/粒子/形状渲染不依赖 D2D1。
 * **2.5D 粒子效果：** 粒子具有实例级 z 深度 + 透视投影 + 简单光照。粒子随深度缩放（近大远小），营造 3D 空间感。
-* **DXGI 翻转交换链：** 预乘 alpha，与 DirectComposition 无撕裂合成。
+* **DXGI 翻转交换链：** 预乘 alpha，与 DirectComposition 无撕裂合成。HDR 自动检测，R16G16B16A16_FLOAT 格式自动回退。
 * **双线程设计：** UI 线程处理窗口/消息泵，渲染线程处理所有 D3D11/DComp 工作——鼠标输入永不阻塞。
 * **设备丢失恢复：** GPU TDR、驱动更新或显卡切换时自动重建整个 D3D/DComp 栈。
 * **显示变化处理：** `WM_DISPLAYCHANGE` 时自动调整覆盖层大小和位置。
+* **加法混合发光：** 拖尾/粒子/波纹发光层使用 SrcAlpha+One 加法混合，光晕更通透。
+* **快速移动插值：** 间隔≤10ms 时沿路径插值补粒子，消除快速移动缝隙。
 
 ### 拖尾形状（10种）
 
@@ -129,7 +148,7 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 * **圆点链：** 沿路径排列的圆点，密度可调
 * **函数曲线：** 自定义数学函数变形轨迹（正弦、阻尼、心跳、漩涡或自定义公式）
 * **波浪曲线：** 动态波浪变形
-* **形状拖尾：** 沿路径生成爱心、五角星、六芒星或圆形，随机速度，间隔/大小/数量/存活时间可调
+* **形状拖尾：** 沿路径生成爱心、五角星、六芒星或圆形，带随机速度、旋转、重力，间隔/大小/数量/存活时间可调
 * **双线拖尾：** 两条平行拖尾带
 * **虚线拖尾：** 分段虚线效果
 * **螺旋拖尾：** 沿路径螺旋变形
@@ -139,6 +158,13 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 ### 颜色模式（23种）
 
 单色 / 流动渐变 / 彩虹流动 / 暖色调流动 / 冷色调流动 / 霓虹脉冲 / 速度变色 / 流动条纹 / 火焰 / 极光 / 光标取色 / 光标混色 / 金属金 / 赛博朋克 / 粉彩 / 色相旋转 / 双色脉冲 / 星光闪烁 / 热力图 / 波纹干涉 / 色谱分裂 / 颗粒抖动 / 渐变扭曲
+
+### 渐变系统
+
+* **任意数量颜色：** 添加任意数量渐变颜色（最多16种），写入多少用多少
+* **OKLab 感知均匀插值：** 无灰暗中点，感知均匀的色彩过渡
+* **256色 LUT：** 预计算查找表，保证性能
+* **流动渐变：** 渐变沿拖尾随时间流动
 
 ### 取色偏移（6种模式）
 
@@ -151,9 +177,6 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 * **增强发光：** 双层光晕（外晕+内辉），独立开关
 * **头部高光 + 拖尾阴影：** 高级质感深度提示
 * **速度响应宽度：** 快速移动时拖尾变宽
-* **加法混合发光：** 拖尾/粒子/波纹发光层使用SrcAlpha+One加法混合，光晕更通透
-* **粒子快速移动插值：** 间隔<=10ms时沿路径插值补粒子，消除快速移动缝隙
-* **OKLab感知渐变：** 任意数量渐变颜色，OKLab空间插值无灰暗中点，预计算256色LUT，渐变沿拖尾流动
 
 ### 粒子系统
 
@@ -162,9 +185,19 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 * 形状：圆形、五角星、六芒星或随机混合
 * 颜色随生命周期渐变；密度、间隔（0=每帧）、加速度可调
 * 点击星爆粒子迸发
-* **向心力漩涡：** 鼠标做曲线运动时，粒子被捕获到轨道上旋转，形成漩涡效果（任何曲线运动都能触发）
-* **粒子质量系统：** 每个粒子有随机质量，质量影响惯性、大小、生命周期和引力（符合物理公式）
-* **粒子万有引力：** 牛顿万有引力定律 F=G*m1*m2/r² + 牛顿第二定律 a=F/m，支持双星/N体系统
+* **粒子质量系统：** 每个粒子有随机质量（Box-Muller 正态分布），影响惯性、大小（∝质量^(1/3)）、生命周期和加速度（a=F/m）
+* **粒子万有引力：** 牛顿万有引力定律 F=G·m₁·m₂/r² + Plummer 软化 + 牛顿第二定律 a=F/m，支持双星/N体系统（2-10体）
+* **向心力漩涡：** 鼠标做曲线运动时，粒子被捕获到轨道上旋转，角动量守恒 + 开普勒速度梯度 + 轨道进动 + 3D轨道倾角。停止运动后粒子离心甩出。
+* **高级物理（可选）：** 粒子弹性碰撞（动量+动能守恒）、洛伦兹力（带电粒子在磁场中运动）、布朗运动（热噪声）、多频段音频联动
+
+### 音乐响应框架（v3.4）
+
+* **WASAPI 回环捕获：** 实时系统音频捕获（48kHz 立体声）
+* **FFT 频率分析：** Cooley-Tukey FFT（256/512/1024/2048点）+ Hann 窗
+* **节拍检测：** 三种方式——能量阈值、频谱通量、多频段检测。低频权重最高。
+* **频段分析：** 低频/中频/高频能量级别
+* **BPM 估计：** 实时节拍速度估计
+* **音乐物理联动：** 节拍→速度爆发、低频→粒子大小、音量→引力强度、节拍→漩涡能量、多频段→引力/磁场/噪声
 
 ### 点击特效
 
@@ -177,6 +210,7 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 * **超级性能模式：** 解除所有上限（粒子/形状限制、快速路径降级）
 * **自适应退避：** 渲染线程活跃时等待1ms，闲置时16ms
 * **游戏检测：** 全屏 DirectX 游戏时自动隐藏
+* **零 CPU 闲置：** 鼠标静止且无特效时窗口隐藏，CPU 占用为 0
 
 ### 函数轨迹变量
 
@@ -338,8 +372,8 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 - gradient_colors: "FF6B35,00BFFF,FFD700"
   $name: Gradient Colors
   $name:zh-CN: 渐变颜色
-  $description: Any number of colors for gradient mode, comma-separated hex RGB. Gradient flows along the trail.
-  $description:zh-CN: 渐变模式的颜色，任意数量，逗号分隔十六进制 RGB。渐变沿拖尾流动。
+  $description: Any number of colors (max 16) for gradient mode, comma-separated hex RGB. Uses OKLab perceptual interpolation with 256-color LUT. Gradient flows along the trail over time.
+  $description:zh-CN: 渐变模式的颜色，任意数量（最多16种），逗号分隔十六进制RGB。使用OKLab感知均匀插值+256色LUT。渐变沿拖尾随时间流动。
 - enable_cursor_color_shift: true
   $name: Auto Color Shift
   $name:zh-CN: 取色自动偏移
@@ -550,8 +584,8 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 - particle_interval: 50
   $name: Particle Interval
   $name:zh-CN: 粒子释放间隔
-  $description: Minimum interval between releases (ms, 0-2000). 0 = every frame.
-  $description:zh-CN: 粒子释放的最小时间间隔（毫秒，0-2000），0=每帧生成。
+  $description: Minimum interval between releases (ms, 0-2000). 0 = every frame. When ≤10ms, fast-move interpolation fills gaps along the path.
+  $description:zh-CN: 粒子释放的最小时间间隔（毫秒，0-2000），0=每帧生成。间隔≤10ms时启用快速移动插值，沿路径补粒子消除缝隙。
 - particle_acceleration: true
   $name: Acceleration Effect
   $name:zh-CN: 加速度影响
@@ -595,8 +629,8 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 - enable_particle_interaction: true
   $name: Particle Interaction
   $name:zh-CN: 粒子间相互作用
-  $description: Enable repulsion force between particles.
-  $description:zh-CN: 启用粒子之间的排斥力，使粒子不会重叠。
+  $description: Enable repulsion force between particles. Force scales with mass product (√m₁·m₂), acceleration scales with 1/m (Newton's 2nd law). O(n²), auto-skipped when >500 particles (1200 in Super Mode).
+  $description:zh-CN: 启用粒子之间的排斥力。力与质量乘积（√m₁·m₂）成正比，加速度与质量成反比（牛顿第二定律）。O(n²)复杂度，粒子>500时自动跳过（超级模式1200）。
 - particle_repel_distance: 25
   $name: Repel Distance
   $name:zh-CN: 排斥距离
@@ -605,8 +639,8 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 - particle_inter_repel_force: 15
   $name: Inter Repel Force
   $name:zh-CN: 粒子间排斥强度
-  $description: Strength of inter-particle repulsion force.
-  $description:zh-CN: 粒子之间排斥力的强度。
+  $description: Strength of inter-particle repulsion force. Multiplied by mass factor when Particle Mass is enabled.
+  $description:zh-CN: 粒子之间排斥力的强度。启用粒子质量时乘以质量系数。
 - particle_attraction: 40
   $name: Particle Attraction
   $name:zh-CN: 粒子吸附强度
@@ -632,50 +666,87 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 - enable_centripetal: false
   $name: Centripetal Vortex
   $name:zh-CN: 向心力漩涡
-  $description: When mouse moves in curved paths, particles get captured into orbiting vortex. Any curved motion triggers it.
-  $description:zh-CN: 鼠标做曲线运动时，粒子被捕获形成旋转漩涡。任何曲线运动都能触发。
+  $description: Curved mouse motion captures particles into orbiting vortex. Physics model includes angular momentum conservation, Kepler velocity gradient, orbital precession, 3D inclination. Particles fly outward when motion stops.
+  $description:zh-CN: 鼠标做曲线运动时粒子被捕获形成旋转漩涡。物理模型：角动量守恒、开普勒速度梯度、轨道进动、3D轨道倾角。停止运动后粒子离心甩出。
 - centripetal_force: 50
   $name: Vortex Force
   $name:zh-CN: 漩涡强度
-  $description: Centripetal force strength and orbit speed (0-100).
-  $description:zh-CN: 向心力强度和轨道旋转速度（0-100）。
+  $description: Centripetal force strength, orbit speed and spring constraint (0-100).
+  $description:zh-CN: 向心力强度、轨道速度和弹簧约束（0-100）。
 - centripetal_sensitivity: 50
   $name: Detection Sensitivity
   $name:zh-CN: 检测灵敏度
-  $description: How easily circular motion is detected (0-100, lower = more sensitive).
-  $description:zh-CN: 圆周运动检测的灵敏度（0-100，越低越灵敏）。
+  $description: How easily curved motion is detected (0-100, lower = more sensitive). Any curve triggers, not just perfect circles.
+  $description:zh-CN: 曲线运动检测灵敏度（0-100，越低越灵敏）。任何曲线运动都能触发，不限于正圆。
 - centripetal_duration: 1500
   $name: Vortex Duration
   $name:zh-CN: 漩涡持续时间
-  $description: How long vortex persists after circular motion stops (ms, 500-5000).
-  $description:zh-CN: 停止圆周运动后漩涡持续的时间（毫秒，500-5000）。
+  $description: How long vortex persists after curved motion stops (ms, 500-5000). Particles gradually fly outward during decay.
+  $description:zh-CN: 停止曲线运动后漩涡持续时间（毫秒，500-5000）。衰减阶段粒子逐渐离心甩出。
+- vortex_max_count: 2
+  $name: Max Vortex Count
+  $name:zh-CN: 最大漩涡数量
+  $description: Maximum simultaneous vortices (1-8). New vortex only spawns when an existing one fully decays.
+  $description:zh-CN: 同时存在的最大漩涡数量（1-8）。只有现有漩涡完全衰减后才能生成新漩涡。
+- vortex_min_distance: 200
+  $name: Vortex Min Distance
+  $name:zh-CN: 漩涡最小间距
+  $description: Minimum distance between vortex centers (px, 50-500). New vortex closer than this is blocked. Vortices repel each other softly.
+  $description:zh-CN: 漩涡中心之间的最小距离（像素，50-500）。小于此距离禁止生成新漩涡，漩涡之间有轻微排斥力。
+- vortex_drift: 30
+  $name: Vortex Center Drift
+  $name:zh-CN: 漩涡中心漂移
+  $description: How much vortex center follows mouse motion and forces (0-100). Higher = center drifts more with cursor velocity.
+  $description:zh-CN: 漩涡中心受鼠标运动和力影响的漂移程度（0-100）。越高中心越容易随光标速度移动。
+- vortex_duration_speed: 20
+  $name: Duration Speed Boost
+  $name:zh-CN: 持续时间速度增益
+  $description: Extend vortex duration based on mouse speed (0-100). Faster motion = longer lasting vortex.
+  $description:zh-CN: 鼠标速度对漩涡持续时间的延长比例（0-100）。速度越快漩涡持续越久。
+- vortex_phys_model: rankine
+  $name: Vortex Physics Model
+  $name:zh-CN: 漩涡物理模型
+  $description: Vortex velocity field model - rankine=core rigid+outer free, free=pure angular momentum, solid=uniform rotation, lamb=viscous Gaussian core, kepler=planetary orbit.
+  $description:zh-CN: 漩涡速度场模型：rankine=Rankine涡（涡核刚体+外部自由涡），free=自由涡（纯角动量守恒），solid=刚体旋转（整体匀速旋转），lamb=Lamb-Oseen涡（粘性高斯涡核），kepler=开普勒轨道（行星模型）。
+  $options:
+  - rankine: Rankine Vortex
+  - free: Free Vortex
+  - solid: Solid Body
+  - lamb: Lamb-Oseen
+  - kepler: Kepler Orbit
+  $options:zh-CN:
+  - rankine: Rankine涡
+  - free: 自由涡
+  - solid: 刚体旋转
+  - lamb: Lamb-Oseen涡
+  - kepler: 开普勒轨道
 
 # ===== 粒子物理质量系统 =====
 - enable_particle_mass: true
   $name: Particle Mass
   $name:zh-CN: 粒子质量
-  $description: Enable random particle mass. Mass affects inertia, size, lifetime and gravity.
-  $description:zh-CN: 启用粒子随机质量。质量影响惯性、大小、生命周期和引力。
+  $description: Enable random particle mass (normal distribution via Box-Muller). Mass affects inertia (a=F/m), size (∝mass^(1/3)), lifetime, gravity and repulsion.
+  $description:zh-CN: 启用粒子随机质量（Box-Muller正态分布）。质量影响惯性（a=F/m）、大小（∝质量^(1/3)）、生命周期、引力和排斥力。
 - particle_mass_min: 5
   $name: Min Mass
   $name:zh-CN: 最小质量
-  $description: Minimum particle mass (1-50, divided by 10).
-  $description:zh-CN: 粒子最小质量（1-50，除以10）。
+  $description: Minimum particle mass (1-50, value/10 = actual mass).
+  $description:zh-CN: 粒子最小质量（1-50，实际质量=数值/10）。
 - particle_mass_max: 20
   $name: Max Mass
   $name:zh-CN: 最大质量
-  $description: Maximum particle mass (1-100, divided by 10).
-  $description:zh-CN: 粒子最大质量（1-100，除以10）。
+  $description: Maximum particle mass (1-100, value/10 = actual mass).
+  $description:zh-CN: 粒子最大质量（1-100，实际质量=数值/10）。
 - enable_particle_gravity: false
   $name: Particle Gravity
   $name:zh-CN: 粒子万有引力
-  $description: Newtonian gravity between particles. F=G*m1*m2/r², a=F/m.
-  $description:zh-CN: 粒子之间的牛顿万有引力。F=G*m1*m2/r²，a=F/m。
+  $description: Newtonian gravity between particles. F=G·m₁·m₂/(r²+ε²) with Plummer softening, a=F/m. All bodies attract each other.
+  $description:zh-CN: 粒子之间的牛顿万有引力。F=G·m₁·m₂/(r²+ε²) 带Plummer软化，a=F/m。所有天体互相吸引。
 - gravity_strength: 50
   $name: Gravity Strength
   $name:zh-CN: 引力强度
-  $description: Gravitational constant G (0-100).
-  $description:zh-CN: 引力常数G（0-100）。
+  $description: Gravitational constant G multiplier (0-100).
+  $description:zh-CN: 引力常数G倍率（0-100）。
 - gravity_system: binary
   $name: Gravity System
   $name:zh-CN: 引力系统
@@ -685,13 +756,131 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
   $options:zh-CN:
   - binary: 双星系统
   - nbody: N体系统
-  $description: Binary = two massive attractors; N-Body = all particles attract each other.
-  $description:zh-CN: 双星=两个大质量引力源；N体=所有粒子互相吸引。
+  $description: Binary = two heaviest particles as attractors; N-Body = all particles attract each other (O(n²)).
+  $description:zh-CN: 双星=质量最大的两个粒子作为引力源；N体=所有粒子互相吸引（O(n²)复杂度）。
 - gravity_body_count: 3
   $name: N-Body Count
   $name:zh-CN: N体数量
-  $description: Number of massive bodies in N-Body mode (2-10).
-  $description:zh-CN: N体模式中的大质量天体数量（2-10）。
+  $description: Number of massive attractor bodies in N-Body mode (2-10).
+  $description:zh-CN: N体模式中的大质量引力源数量（2-10）。
+
+# ===== 物理可视化调试 =====
+- enable_debug_velocity: false
+  $name: Debug Velocity Vectors
+  $name:zh-CN: 调试-速度向量
+  $description: Draw green velocity arrows on each particle for tuning.
+  $description:zh-CN: 在每个粒子上绘制绿色速度箭头，方便调节速度相关参数。
+- enable_debug_force: false
+  $name: Debug Force Vectors
+  $name:zh-CN: 调试-受力向量
+  $description: Draw red force vectors (F=m*dv) on each particle for tuning physics.
+  $description:zh-CN: 在每个粒子上绘制红色受力向量（F=m·Δv），方便调节物理参数。
+- enable_debug_vortex: false
+  $name: Debug Vortex Center
+  $name:zh-CN: 调试-漩涡中心
+  $description: Draw blue vortex center, orbit rings and strength indicator.
+  $description:zh-CN: 绘制蓝色漩涡中心、轨道环和强度指示。
+- enable_debug_gravity: false
+  $name: Debug Gravity Sources
+  $name:zh-CN: 调试-引力源
+  $description: Draw yellow gravity source markers and influence radius.
+  $description:zh-CN: 绘制黄色引力源标记和影响范围。
+- enable_debug_collision: false
+  $name: Debug Collision Radius
+  $name:zh-CN: 调试-碰撞半径
+  $description: Draw collision radius on each particle. Filled semi-transparent circle + bright outline.
+  $description:zh-CN: 绘制每个粒子的碰撞半径。半透明填充圆+高亮轮廓线。
+
+# ===== 音乐响应框架（v3.4）=====
+- enable_music_reactive: false
+  $name: Music Reactive
+  $name:zh-CN: 音乐响应
+  $description: Enable WASAPI loopback audio capture, FFT frequency analysis, beat detection and BPM estimation. Powers music-physics linking.
+  $description:zh-CN: 启用WASAPI回环音频捕获、FFT频率分析、节拍检测和BPM估计。为音乐物理联动提供数据。
+- music_fft_size: 512
+  $name: FFT Size
+  $name:zh-CN: FFT大小
+  $options:
+  - fft256: "256"
+  - fft512: "512"
+  - fft1024: "1024"
+  - fft2048: "2048"
+  $options:zh-CN:
+  - fft256: "256点"
+  - fft512: "512点"
+  - fft1024: "1024点"
+  - fft2048: "2048点"
+  $description: FFT window size. Larger = better frequency resolution, higher latency.
+  $description:zh-CN: FFT窗口大小。越大频率分辨率越好，延迟越高。
+- music_sensitivity: 50
+  $name: Beat Sensitivity
+  $name:zh-CN: 节拍灵敏度
+  $description: Beat detection sensitivity (0-100). Lower = more sensitive.
+  $description:zh-CN: 节拍检测灵敏度（0-100）。越低越灵敏。
+- music_smoothing: 50
+  $name: Frequency Smoothing
+  $name:zh-CN: 频率平滑
+  $description: Frequency band smoothing factor (0-100). Reduces jitter.
+  $description:zh-CN: 频段平滑系数（0-100）。减少抖动。
+
+# ===== 音乐物理联动 =====
+- enable_music_physics: false
+  $name: Music Physics Link
+  $name:zh-CN: 音乐物理联动
+  $description: Link music analysis to particle physics. Beat detection uses 3 methods (energy threshold + spectral flux + multi-band) with low-frequency weighting. Pulses accumulate and decay slowly (~0.5s).
+  $description:zh-CN: 将音乐分析联动到粒子物理。节拍检测使用3种方式（能量阈值+频谱通量+多频段），低频权重最高。脉冲叠加累积，缓慢衰减（约0.5秒）。
+- music_gravity_link: 50
+  $name: Volume→Gravity
+  $name:zh-CN: 音量→引力
+  $description: Overall audio volume boosts particle gravity strength (0-100). Louder = stronger attraction.
+  $description:zh-CN: 总音量增强粒子引力强度（0-100）。音量越大引力越强。
+- music_beat_pulse: 50
+  $name: Beat→Velocity
+  $name:zh-CN: 节拍→速度
+  $description: Beat triggers particle velocity burst. Pulses accumulate and decay with attack-fast/release-slow envelope (0-100).
+  $description:zh-CN: 节拍触发粒子速度爆发。脉冲叠加累积，攻击快释放慢（0-100）。
+- music_bass_size: 50
+  $name: Bass→Size
+  $name:zh-CN: 低频→大小
+  $description: Bass (low frequency) energy increases particle size with smooth envelope (0-100). Kick drums make particles bigger.
+  $description:zh-CN: 低频能量平滑增大粒子大小（0-100）。底鼓使粒子变大。
+- music_vortex_link: 50
+  $name: Beat→Vortex
+  $name:zh-CN: 节拍→漩涡
+  $description: Beat energy injects into centripetal vortex strength (0-100). Requires Centripetal Vortex enabled.
+  $description:zh-CN: 节拍能量注入向心力漩涡强度（0-100）。需先开启向心力漩涡。
+
+# ===== 高级物理系统 =====
+- enable_particle_collision: false
+  $name: Particle Collision
+  $name:zh-CN: 粒子碰撞
+  $description: Elastic collisions between particles. Conserves momentum and kinetic energy, with position correction to prevent overlap. Mass affects collision response.
+  $description:zh-CN: 粒子之间的弹性碰撞。动量守恒+动能守恒，带位置修正防重叠。质量影响碰撞响应。
+- enable_lorentz_force: false
+  $name: Lorentz Force
+  $name:zh-CN: 洛伦兹力
+  $description: Particles carry random charge (±1). Magnetic field causes circular motion per F=q(v×B). Positive charge rotates CCW, negative CW.
+  $description:zh-CN: 粒子带随机电荷（±1）。磁场使粒子做圆周运动：F=q(v×B)。正电荷逆时针，负电荷顺时针。
+- lorentz_strength: 30
+  $name: Magnetic Field
+  $name:zh-CN: 磁场强度
+  $description: Magnetic field B strength for Lorentz force (0-100). Mid-band audio can boost this when Multi-Band Link is on.
+  $description:zh-CN: 洛伦兹力的磁场B强度（0-100）。开启多频段联动时，中频音频可增强磁场。
+- enable_brownian_motion: false
+  $name: Brownian Motion
+  $name:zh-CN: 布朗运动
+  $description: Random thermal noise force on particles. Simulates molecular heat motion. High-band audio can boost this when Multi-Band Link is on.
+  $description:zh-CN: 粒子受随机热噪声力。模拟分子热运动。开启多频段联动时，高频音频可增强热噪声。
+- brownian_strength: 20
+  $name: Thermal Noise
+  $name:zh-CN: 热噪声强度
+  $description: Brownian motion force magnitude (0-100).
+  $description:zh-CN: 布朗运动力的大小（0-100）。
+- enable_multi_band_link: false
+  $name: Multi-Band Link
+  $name:zh-CN: 多频段联动
+  $description: Independently link audio frequency bands to physics. Bass→Gravity, Mid→Magnetic Field (Lorentz), Treble→Thermal Noise (Brownian).
+  $description:zh-CN: 将音频频段独立联动到物理：低频→引力，中频→磁场（洛伦兹力），高频→热噪声（布朗运动）。
 
 # ===== 点击效果 =====
 - enable_click_starburst: true
@@ -771,6 +960,11 @@ Original overlay/smear architecture inspired by [TheatriChris](https://github.co
 #include <vector>
 #include <atomic>
 #include <algorithm>
+// WASAPI 音频捕获 / WASAPI audio capture
+#include <mmdeviceapi.h>
+#include <audioclient.h>
+#include <avrt.h>
+#include <functiondiscoverykeys_devpkey.h>
 
 #define GRAD_STOPS 12
 
@@ -1180,6 +1374,8 @@ ID2D1Factory1 *g_pD2DFactory = nullptr;
 ID2D1Device *g_pD2DDevice = nullptr;
 ID2D1DeviceContext *g_pD2DDC = nullptr;
 IDXGISwapChain1 *g_pSwapChain = nullptr;
+bool g_isHDRMode = false;  // 当前是否HDR模式
+DXGI_FORMAT g_swapChainFormat = DXGI_FORMAT_B8G8R8A8_UNORM;  // 当前交换链格式
 ID2D1Bitmap1 *g_pD2DTargetBitmap = nullptr;
 ID3D11RenderTargetView *g_pCachedRTV = nullptr;  // 缓存的后台缓冲 RTV（随交换链重建，避免每帧创建）
 IDCompositionDevice *g_pDCompDevice = nullptr;
@@ -1256,12 +1452,124 @@ int g_gravitySystem = 0;  // 0=双星, 1=N体
 int g_gravityBodyCount = 3;  // N体数量
 // 引力天体（双星/N体的大质量粒子索引）
 std::vector<int> g_gravityBodies;
+
+// ===================== 音乐响应系统（v3.4 基础设施）=====================
+// Music reactive system (v3.4 infrastructure, visual effects TBD)
+struct MusicState {
+    bool initialized = false;
+    bool capturing = false;
+    // WASAPI 接口
+    IMMDeviceEnumerator *pEnumerator = nullptr;
+    IMMDevice *pDevice = nullptr;
+    IAudioClient *pAudioClient = nullptr;
+    IAudioCaptureClient *pCaptureClient = nullptr;
+    HANDLE hCaptureThread = nullptr;
+    HANDLE hStopEvent = nullptr;
+    std::atomic<bool> captureRunning{false};
+    // 音频格式
+    WAVEFORMATEX *pWaveFormat = nullptr;
+    UINT32 bufferFrames = 0;
+    // FFT 数据
+    int fftSize = 512;
+    std::vector<float> fftInput;       // 时域输入（环形缓冲）
+    std::vector<float> fftOutput;      // 频域输出（幅度）
+    std::vector<float> fftSmoothed;    // 平滑后的频域
+    std::vector<float> windowFunction; // Hann 窗函数
+    int fftWritePos = 0;               // 环形缓冲写入位置
+    // 节拍检测
+    float beatEnergy = 0;              // 当前帧能量
+    float beatAvgEnergy = 0;           // 平均能量（历史）
+    float beatThreshold = 0;           // 节拍阈值
+    bool beatDetected = false;         // 当前帧是否检测到节拍
+    float beatIntensity = 0;           // 节拍强度（0-1）
+    DWORD lastBeatTime = 0;            // 上次节拍时间
+    float bpmEstimate = 0;             // BPM估计
+    std::deque<DWORD> beatHistory;     // 节拍时间历史
+    // 频谱通量检测 / Spectral flux detection
+    std::vector<float> prevSpectrum;   // 上一帧频谱
+    float spectralFlux = 0;            // 当前频谱通量
+    float avgSpectralFlux = 0;         // 平均频谱通量
+    // 多频段节拍 / Multi-band beat detection
+    float bassBeatEnergy = 0;          // 低频节拍能量
+    float bassBeatAvg = 0;             // 低频平均能量
+    bool bassBeat = false;             // 低频节拍
+    float midBeatEnergy = 0;           // 中频节拍能量
+    float midBeatAvg = 0;              // 中频平均能量
+    bool midBeat = false;              // 中频节拍
+    float trebleBeatEnergy = 0;        // 高频节拍能量
+    float trebleBeatAvg = 0;           // 高频平均能量
+    bool trebleBeat = false;           // 高频节拍
+    // 频段数据（低/中/高）
+    float bassLevel = 0;    // 低频 (20-250Hz)
+    float midLevel = 0;     // 中频 (250-2000Hz)
+    float trebleLevel = 0;  // 高频 (2000-20000Hz)
+    float overallLevel = 0; // 总音量
+};
+MusicState g_music;
+bool g_enableMusicReactive = false;
+int g_musicFftSize = 512;
+float g_musicSensitivity = 0.5f;
+float g_musicSmoothing = 0.5f;
+// 音乐物理联动 / Music-physics link
+bool g_enableMusicPhysics = false;
+float g_musicGravityLink = 0.5f;   // 音量→引力
+float g_musicBeatPulse = 0.5f;     // 节拍→速度
+float g_musicBassSize = 0.5f;      // 低频→大小
+float g_musicVortexLink = 0.5f;    // 节拍→漩涡
+float g_musicBeatPulseAmount = 0;  // 当前节拍脉冲量（衰减）
+float g_musicBassSizeBoost = 0;    // 当前低频大小增益（平滑）
+// 高级物理系统 / Advanced physics
+bool g_enableParticleCollision = false;
+bool g_enableLorentzForce = false;
+float g_lorentzStrength = 0.3f;    // 磁场强度
+bool g_enableBrownianMotion = false;
+float g_brownianStrength = 0.2f;   // 热噪声强度
+bool g_enableMultiBandLink = false;
+// 物理可视化调试（独立开关）/ Physics debug visualization (individual toggles)
+bool g_debugVelocity = false;   // 速度向量
+bool g_debugForce = false;      // 受力向量
+bool g_debugVortex = false;     // 漩涡中心/轨道
+bool g_debugGravity = false;    // 引力源
+bool g_debugCollision = false;  // 碰撞半径
+// 多频段联动状态 / Multi-band link state
+float g_bassGravityBoost = 0;      // 低频→引力
+float g_midRepelBoost = 0;         // 中频→排斥力
+float g_trebleNoiseBoost = 0;      // 高频→噪声
+
 // 向心力漩涡系统 / Centripetal vortex system
 bool g_enableCentripetal = false;
 float g_centripetalForce = 0.5f;  // 向心力强度（0-1）
 float g_centripetalSensitivity = 0.5f;  // 检测灵敏度（0-1，越低越灵敏）
 int g_centripetalDuration = 1500;  // 漩涡持续时间（ms）
-// 圆周运动检测状态
+int g_vortexMaxCount = 2;      // 最大同时存在的漩涡数量（1-8）
+float g_vortexMinDistance = 200.0f;  // 漩涡之间最小间距（像素）
+float g_vortexDrift = 0.3f;     // 漩涡中心漂移程度（0-1）
+float g_vortexDurationSpeed = 0.2f;  // 持续时间速度增益（0-1）
+int g_vortexPhysModel = 0;      // 漩涡物理模型：0=Rankine, 1=自由涡, 2=刚体旋转, 3=Lamb-Oseen, 4=开普勒
+
+#define MAX_VORTICES 8
+// 单个漩涡实例 / Single vortex instance
+struct Vortex {
+    bool active;           // 是否活跃（包括衰减阶段）
+    float centerX, centerY; // 漩涡中心
+    float driftX, driftY;   // 中心漂移速度
+    float radius;          // 轨道半径（涡核外边界）
+    float coreRadius;      // 涡核半径（Rankine涡内边界，内部刚体旋转）
+    float angularVel;      // 角速度（涡核内刚体旋转角速度）
+    float circulation;     // 环量Γ（自由涡强度，v_θ = Γ/(2πr)）
+    float strength;        // 强度（0-1，平滑过渡）
+    float pressureGradient; // 径向压力梯度强度（中心低压吸力）
+    bool isCircling;       // 是否在维持（鼠标还在圆周运动）
+    DWORD startTime;       // 创建时间
+    int actualDuration;    // 实际持续时间（受速度影响）
+    float orbitTilt;       // 轨道倾角
+    float orbitTiltVel;    // 倾角变化速度
+    float orbitPhase;      // 轨道相位
+    float stretchRate;     // 涡管拉伸率（鼠标加速度导致，增强涡量）
+};
+Vortex g_vortices[MAX_VORTICES] = {};
+
+// 圆周运动检测状态（位置历史共享，检测后分配到漩涡槽位）
 struct CircleDetect {
     float historyX[20];  // 位置历史
     float historyY[20];
@@ -1270,13 +1578,7 @@ struct CircleDetect {
     float circleCenterX, circleCenterY;  // 估算圆心
     float circleRadius;  // 估算半径
     bool isCircling;  // 是否在做圆周运动
-    float vortexStrength;  // 当前漩涡强度（0-1，平滑过渡）
     DWORD lastCircleTime;  // 上次检测到圆周运动的时间
-    float vortexCenterX, vortexCenterY;  // 漩涡中心
-    float vortexAngularVel;  // 漩涡旋转速度
-    float orbitTilt;  // 轨道倾角（弧度，0=正对屏幕，π/2=侧视）
-    float orbitTiltVel;  // 倾角变化速度（轨道自身旋转）
-    float orbitPhase;  // 轨道相位（用于计算粒子在轨道上的位置）
 } g_circleDetect = {};
 ID2D1PathGeometry *g_pStarGeom = nullptr;
 ID2D1PathGeometry *g_pHexagramGeom = nullptr;
@@ -1287,7 +1589,9 @@ struct TrailShape {
     float x, y;
     float vx, vy;
     float size;
-    int shapeType;  // 0=heart 1=star 2=hexagram 3=circle
+    float rotation;      // 当前旋转角度
+    float rotSpeed;      // 旋转速度
+    int shapeType;       // 0=heart 1=star 2=hexagram 3=circle
     DWORD startTime;
     float lifetime;
     D2D1_COLOR_F color;
@@ -1329,6 +1633,7 @@ struct Particle {
     float x, y, vx, vy, size;
     float z;            // 3D 深度（生成时随机，避免每帧闪烁）
     float mass;         // 质量（影响惯性、大小、生命周期、引力）
+    float charge;       // 电荷（洛伦兹力用，正/负）
     float rotation;     // 当前旋转角度（弧度）
     float spinSpeed;    // 自旋转速度（弧度/帧）
     DWORD startTime;
@@ -1338,6 +1643,7 @@ struct Particle {
     int shapeType;
     float colorOffset[3]; // 随机偏色（RGB，约 ±20/255），生成后不变
     float vortexBrightness[3]; // 漩涡亮度调制（向心力/3D效果），与色差分离
+    float debugForceX, debugForceY; // 调试用：本帧总受力（物理可视化）
 };
 std::vector<Particle> g_particles;
 struct Ripple {
@@ -1814,9 +2120,16 @@ float4 PSMain(PS_INPUT input) : SV_TARGET {
     float light = 1.0 + input.depth * 0.3;
     float3 rgb = gradColor.rgb * tint * tube * light;
     if (adaptiveFlag > 0.5) {
-        float adapt = (bgLuminance - 0.5) * 0.35;  // 压暗/提亮强度减半，避免过度
-        if (adapt > 0.0) { rgb *= (1.0 - adapt); }
-        else { rgb = lerp(rgb, float3(1,1,1), -adapt); }
+        float bgDelta = bgLuminance - 0.5;
+        if (bgDelta > 0.0) {
+            // 亮背景：非线性压暗，越亮压暗越明显（二次曲线+线性叠加）
+            float darken = bgDelta * bgDelta * 2.5 + bgDelta * 0.3;
+            rgb *= (1.0 - min(darken, 0.7));
+        } else {
+            // 暗背景：向白色提亮
+            float brighten = -bgDelta * 0.5;
+            rgb = lerp(rgb, float3(1,1,1), brighten);
+        }
     }
     return float4(rgb, gradColor.a * edgeFade);
 }
@@ -1959,9 +2272,16 @@ float4 PSMain(PS_INPUT input) : SV_TARGET {
     float3 rgb = input.color.rgb * light * radial;
     // 自适应对比度：根据背景亮度微调粒子明度
     if (adaptiveFlag > 0.5) {
-        float adapt = (bgLuminance - 0.5) * 0.35;
-        if (adapt > 0.0) { rgb *= (1.0 - adapt); }
-        else { rgb = lerp(rgb, float3(1,1,1), -adapt); }
+        float bgDelta = bgLuminance - 0.5;
+        if (bgDelta > 0.0) {
+            // 亮背景：非线性压暗，越亮压暗越明显
+            float darken = bgDelta * bgDelta * 2.5 + bgDelta * 0.3;
+            rgb *= (1.0 - min(darken, 0.7));
+        } else {
+            // 暗背景：向白色提亮
+            float brighten = -bgDelta * 0.5;
+            rgb = lerp(rgb, float3(1,1,1), brighten);
+        }
     }
     float alpha = input.color.a * mask;
     return float4(rgb, alpha);
@@ -2202,9 +2522,13 @@ static void NativeRenderParticles(int screenW, int screenH) {
 
     // 3D深度排序：z大的（后面）先渲染，z小的（前面）后渲染覆盖，实现前后遮挡
     // 仅在漩涡活跃时排序，避免普通模式下的性能开销
-    if (g_circleDetect.vortexStrength > 0.1f && g_particles.size() < 800) {
+    bool anyVortexActive = false;
+    for (int i = 0; i < g_vortexMaxCount; i++) {
+        if (g_vortices[i].active && g_vortices[i].strength > 0.1f) { anyVortexActive = true; break; }
+    }
+    if (anyVortexActive && g_particles.size() < 800) {
         std::sort(g_particles.begin(), g_particles.end(), [](const Particle &a, const Particle &b) {
-            return a.z > b.z;  // z大的在前（先渲染），z小的在后（后渲染覆盖）
+            return a.z > b.z;
         });
     }
 
@@ -2223,16 +2547,23 @@ static void NativeRenderParticles(int screenW, int screenH) {
     float glowColorMul = 1.2f + gi * 0.3f;
 
     // 单次遍历同时填充两层，消除重复遍历和重复 Map
+    float sizeMul = g_particleSizeMultiplier / 100.0f;  // 预计算
     for (auto &p : g_particles) {
         float progress = (float)(now - p.startTime) / p.lifetime;
         if (progress < 0 || progress >= 1) continue;
         float lifeAlpha = (1.0f - progress);
+        // 预计算颜色偏移（colorOffset + vortexBrightness合并）
+        float rOff = p.colorOffset[0] + p.vortexBrightness[0];
+        float gOff = p.colorOffset[1] + p.vortexBrightness[1];
+        float bOff = p.colorOffset[2] + p.vortexBrightness[2];
         D2D1_COLOR_F pc = D2D1::ColorF(
-            p.color.r + (p.endColor.r - p.color.r) * progress + p.colorOffset[0] + p.vortexBrightness[0],
-            p.color.g + (p.endColor.g - p.color.g) * progress + p.colorOffset[1] + p.vortexBrightness[1],
-            p.color.b + (p.endColor.b - p.color.b) * progress + p.colorOffset[2] + p.vortexBrightness[2], 1.0f);
+            p.color.r + (p.endColor.r - p.color.r) * progress + rOff,
+            p.color.g + (p.endColor.g - p.color.g) * progress + gOff,
+            p.color.b + (p.endColor.b - p.color.b) * progress + bOff, 1.0f);
         float sizeScale = sinf(progress * 3.14159f) * 0.7f + 0.3f;
-        float baseSize = p.size * 2.0f * (g_particleSizeMultiplier / 100.0f) * sizeScale;
+        // 音乐联动：低频增强粒子大小
+        float musicSizeBoost = g_enableMusicPhysics ? (1.0f + g_musicBassSizeBoost * 0.5f) : 1.0f;
+        float baseSize = p.size * 2.0f * sizeMul * sizeScale * musicSizeBoost;
 
         // 发光层 / Glow layer
         if (g_enableParticleGlow && glowCount < MAX_PER_LAYER) {
@@ -2294,8 +2625,9 @@ static void NativeRenderTrail(const std::vector<D2D1_POINT_2F>& smoothed, float 
 
     size_t sl = smoothed.size();
 
-    // 预计算每个点的法线和宽度
-    std::vector<float> nx(sl), ny(sl), widths(sl);
+    // 预计算每个点的法线、宽度和ratio
+    std::vector<float> nx(sl), ny(sl), widths(sl), ratios(sl);
+    float invSlMinus1 = 1.0f / (float)(sl - 1);
     for (size_t i = 0; i < sl; ++i) {
         float ddx, ddy;
         if (i == 0) { ddx = smoothed[1].x - smoothed[0].x; ddy = smoothed[1].y - smoothed[0].y; }
@@ -2304,7 +2636,8 @@ static void NativeRenderTrail(const std::vector<D2D1_POINT_2F>& smoothed, float 
         float ln = sqrtf(ddx*ddx + ddy*ddy);
         if (ln > 0) { ddx /= ln; ddy /= ln; } else { ddx = 1; ddy = 0; }
         nx[i] = -ddy; ny[i] = ddx;
-        float ratio = (float)i / (sl - 1);
+        float ratio = (float)i * invSlMinus1;
+        ratios[i] = ratio;
         float taper = powf(1.0f - ratio, 1.3f);
         widths[i] = (i == sl - 1) ? 0.5f : 10.0f * taper * widthMul;
     }
@@ -2342,7 +2675,7 @@ static void NativeRenderTrail(const std::vector<D2D1_POINT_2F>& smoothed, float 
         if (vtxOffset + count > MAX_VTX) return 0;
         VertexPosColor* p = dst + vtxOffset;
         for (size_t i = 0; i < sl; ++i) {
-            float ratio = (float)i / (sl - 1);
+            float ratio = ratios[i];  // 使用预计算的ratio
             float ow = widths[i] * widthScale;
             float pointAlpha = fadeAlpha * aMul;
             if (headOnly) {
@@ -2365,8 +2698,9 @@ static void NativeRenderTrail(const std::vector<D2D1_POINT_2F>& smoothed, float 
         pushLayer(writeBand(1.0f, 0,0,0, 0.18f, false, 1.5f, 2.0f, false), false);
     // 2. 自适应柔和边缘
     if (g_adaptiveContrast) {
-        float edgeV = g_bgLuminance > 0.5f ? 0.08f : 1.6f;
-        pushLayer(writeBand(1.18f, edgeV,edgeV,edgeV, 0.18f, false, 0,0, false), false);
+        // 亮背景用深色边缘增强对比，暗背景用浅色边缘
+        float edgeV = g_bgLuminance > 0.5f ? (0.02f + (1.0f - g_bgLuminance) * 0.06f) : (1.2f + g_bgLuminance * 0.8f);
+        pushLayer(writeBand(1.18f, edgeV,edgeV,edgeV, 0.22f, false, 0,0, false), false);
     }
     // 3. 外发光三层（宽淡→中→窄亮），加法混合 / Outer glow 3 layers (wide-fade → medium → narrow-bright), additive blending
     if (g_enableGlow) {
@@ -2455,6 +2789,22 @@ static ShapeVertsCache GetShapeVerts(int shapeType) {
 }
 
 // 形状拖尾原生渲染（v3）：直接生成世界坐标顶点，一次绘制
+// 公共D3D11渲染状态设置 / Common D3D11 render state setup
+static void SetNativeRenderState(int screenW, int screenH, D3D11_PRIMITIVE_TOPOLOGY topology) {
+    UpdateConstantBuffer(screenW, screenH);
+    g_pD3DContext->IASetInputLayout(g_pNativeLayout);
+    g_pD3DContext->VSSetShader(g_pNativeVS, nullptr, 0);
+    g_pD3DContext->PSSetShader(g_pNativePS, nullptr, 0);
+    g_pD3DContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    g_pD3DContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+    g_pD3DContext->RSSetState(g_pRasterState);
+    g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
+    UINT stride = sizeof(VertexPosColor);
+    UINT offset = 0;
+    g_pD3DContext->IASetVertexBuffers(0, 1, &g_pTrailVB, &stride, &offset);
+    g_pD3DContext->IASetPrimitiveTopology(topology);
+}
+
 static void NativeRenderTrailShapes(int screenW, int screenH, DWORD dwTime) {
     if (g_trailShapes.empty() || !g_pTrailVB) return;
 
@@ -2464,15 +2814,39 @@ static void NativeRenderTrailShapes(int screenW, int screenH, DWORD dwTime) {
     for (auto &s : g_trailShapes) {
         float progress = (float)(dwTime - s.startTime) / s.lifetime;
         if (progress < 0 || progress >= 1) continue;
-        float lifeAlpha = (1.0f - progress) * 0.7f;
-        float size = s.size * (1.0f + progress * 0.3f);
+        // 生命周期动画：与D2D1渲染对齐
+        float scale;
+        if (progress < 0.2f) {
+            scale = progress * 5.0f;
+        } else if (progress > 0.7f) {
+            scale = 1.0f - (progress - 0.7f) * 2.33f;
+            scale = fmaxf(scale, 0.1f);
+        } else {
+            scale = 1.0f;
+        }
+        scale *= s.size;
+        // 透明度：与D2D1对齐
+        float lifeAlpha;
+        if (progress < 0.1f) {
+            lifeAlpha = progress * 10.0f;
+        } else if (progress > 0.7f) {
+            lifeAlpha = (1.0f - progress) / 0.3f;
+        } else {
+            lifeAlpha = 1.0f;
+        }
+        lifeAlpha *= 0.7f;
         float cr = s.color.r, cg = s.color.g, cb = s.color.b;
+        // 旋转矩阵
+        float cosR = cosf(s.rotation), sinR = sinf(s.rotation);
 
         ShapeVertsCache sv = GetShapeVerts(s.shapeType);
         for (int i = 0; i < sv.count; i++) {
-            float lx = sv.verts[i * 2] * size;
-            float ly = sv.verts[i * 2 + 1] * size;
-            verts.push_back({s.x + lx, s.y + ly, 0.0f, cr, cg, cb, lifeAlpha, 0.5f});
+            float lx = sv.verts[i * 2] * scale;
+            float ly = sv.verts[i * 2 + 1] * scale;
+            // 应用旋转
+            float rx = lx * cosR - ly * sinR;
+            float ry = lx * sinR + ly * cosR;
+            verts.push_back({s.x + rx, s.y + ry, 0.0f, cr, cg, cb, lifeAlpha, 0.5f});
         }
     }
 
@@ -2485,21 +2859,8 @@ static void NativeRenderTrailShapes(int screenW, int screenH, DWORD dwTime) {
     memcpy(mapped.pData, verts.data(), verts.size() * sizeof(VertexPosColor));
     g_pD3DContext->Unmap(g_pTrailVB, 0);
 
-    // 设置渲染状态
-    UpdateConstantBuffer(screenW, screenH);
-    g_pD3DContext->IASetInputLayout(g_pNativeLayout);
-    g_pD3DContext->VSSetShader(g_pNativeVS, nullptr, 0);
-    g_pD3DContext->PSSetShader(g_pNativePS, nullptr, 0);
-    g_pD3DContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
-    g_pD3DContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
-    g_pD3DContext->RSSetState(g_pRasterState);
-    g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
-
-    UINT stride = sizeof(VertexPosColor);
-    UINT offset = 0;
-    g_pD3DContext->IASetVertexBuffers(0, 1, &g_pTrailVB, &stride, &offset);
-    g_pD3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
+    // 设置渲染状态（使用公共函数）
+    SetNativeRenderState(screenW, screenH, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     g_pD3DContext->Draw((UINT)verts.size(), 0);
 }
 
@@ -2508,22 +2869,21 @@ static void NativeRenderRipples(int screenW, int screenH, DWORD dwTime, const Gr
     if (g_ripples.empty() || !g_pTrailVB) return;
 
     // 波纹用纯色渲染（不上传渐变，gradientCount=0，PS 直接用顶点色）
-    UpdateConstantBuffer(screenW, screenH);
-    g_pD3DContext->IASetInputLayout(g_pNativeLayout);
-    g_pD3DContext->VSSetShader(g_pNativeVS, nullptr, 0);
-    g_pD3DContext->PSSetShader(g_pNativePS, nullptr, 0);
-    g_pD3DContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
-    g_pD3DContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
-    g_pD3DContext->RSSetState(g_pRasterState);
-    g_pD3DContext->OMSetBlendState(g_pAlphaBlend, nullptr, 0xFFFFFFFF);
-
-    UINT stride = sizeof(VertexPosColor);
-    UINT vbOffset = 0;
-    g_pD3DContext->IASetVertexBuffers(0, 1, &g_pTrailVB, &stride, &vbOffset);
-    g_pD3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+    SetNativeRenderState(screenW, screenH, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
     const int segments = 48;
     const int ringVerts = (segments + 1) * 2;
+    // 预计算cos/sin表（所有波纹共用，避免重复计算）
+    static float cosTable[49], sinTable[49];
+    static bool tableInit = false;
+    if (!tableInit) {
+        for (int i = 0; i <= segments; i++) {
+            float a = (i / (float)segments) * 6.28318f;
+            cosTable[i] = cosf(a);
+            sinTable[i] = sinf(a);
+        }
+        tableInit = true;
+    }
 
     // 一次 Map 写所有波纹的所有层（消除多次 Map/Unmap）
     D3D11_MAPPED_SUBRESOURCE mapped;
@@ -2543,8 +2903,7 @@ static void NativeRenderRipples(int screenW, int screenH, DWORD dwTime, const Gr
         if (vtxOffset + count > MAX_VTX) return 0;
         VertexPosColor* p = dst + vtxOffset;
         for (int i = 0; i <= segments; i++) {
-            float a = (i / (float)segments) * 6.28318f;
-            float cosA = cosf(a), sinA = sinf(a);
+            float cosA = cosTable[i], sinA = sinTable[i];
             p[0] = {px + cosA * (radius + width), py + sinA * (radius + width), 0,
                     r, g, b, alpha, 0.5f, 1.0f};
             p[1] = {px + cosA * radius, py + sinA * radius, 0,
@@ -2673,6 +3032,153 @@ static void NativeRenderDotChain(const std::vector<D2D1_POINT_2F>& path, float d
     drawList(verts);
 }
 
+// 整数钳制辅助函数 / Integer clamp helper
+static inline int ClampInt(int v, int lo, int hi) {
+    return v < lo ? lo : (v > hi ? hi : v);
+}
+
+// ===== 物理可视化调试（D2D1叠加绘制）=====
+// Physics debug visualization: each element has independent toggle
+static void RenderPhysicsDebugD2D(DWORD dwTime) {
+    if (!g_pD2DDC) return;
+    // 所有调试都关闭则直接返回
+    if (!g_debugVelocity && !g_debugForce && !g_debugVortex && !g_debugGravity && !g_debugCollision) return;
+
+    // 创建画刷（调试功能，每帧创建可接受）
+    ID2D1SolidColorBrush *brushGreen = nullptr, *brushRed = nullptr,
+                        *brushBlue = nullptr, *brushYellow = nullptr,
+                        *brushCyan = nullptr, *brushCyanFill = nullptr;
+    if (g_debugVelocity)
+        g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(0.0f, 1.0f, 0.0f, 0.95f), &brushGreen);
+    if (g_debugForce)
+        g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.2f, 0.2f, 0.95f), &brushRed);
+    if (g_debugVortex)
+        g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.6f, 1.0f, 0.9f), &brushBlue);
+    if (g_debugGravity)
+        g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 0.0f, 0.95f), &brushYellow);
+    if (g_debugCollision) {
+        g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(0.0f, 1.0f, 1.0f, 0.9f), &brushCyan);
+        g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(0.0f, 1.0f, 1.0f, 0.18f), &brushCyanFill);
+    }
+
+    const float VEC_SCALE = 4.0f;   // 速度向量缩放
+    const float FORCE_SCALE = 10.0f; // 受力向量缩放（增大更明显）
+
+    // 1. 粒子级调试：速度向量、受力向量、碰撞半径
+    if (g_debugVelocity || g_debugForce || g_debugCollision) {
+        for (auto &p : g_particles) {
+            float progress = (float)(dwTime - p.startTime) / p.lifetime;
+            if (progress < 0 || progress >= 1) continue;
+
+            D2D1_POINT_2F pos = D2D1::Point2F(p.x, p.y);
+
+            // 碰撞半径：半透明填充 + 高亮轮廓（青色，不依赖碰撞开关，方便预览）
+            if (g_debugCollision) {
+                float colRadius = p.size * 1.5f;  // 略大于实际碰撞范围，更易观察
+                g_pD2DDC->FillEllipse(D2D1::Ellipse(pos, colRadius, colRadius), brushCyanFill);
+                g_pD2DDC->DrawEllipse(D2D1::Ellipse(pos, colRadius, colRadius), brushCyan, 2.0f);
+            }
+
+            // 速度向量：绿色线段 + 箭头
+            if (g_debugVelocity) {
+                float vLen = sqrtf(p.vx * p.vx + p.vy * p.vy);
+                if (vLen > 0.1f) {
+                    D2D1_POINT_2F vEnd = D2D1::Point2F(p.x + p.vx * VEC_SCALE, p.y + p.vy * VEC_SCALE);
+                    g_pD2DDC->DrawLine(pos, vEnd, brushGreen, 2.0f);
+                    // 箭头头部
+                    float angle = atan2f(p.vy, p.vx);
+                    float arrowLen = 5.0f;
+                    D2D1_POINT_2F a1 = D2D1::Point2F(vEnd.x - cosf(angle - 0.4f) * arrowLen,
+                                                      vEnd.y - sinf(angle - 0.4f) * arrowLen);
+                    D2D1_POINT_2F a2 = D2D1::Point2F(vEnd.x - cosf(angle + 0.4f) * arrowLen,
+                                                      vEnd.y - sinf(angle + 0.4f) * arrowLen);
+                    g_pD2DDC->DrawLine(vEnd, a1, brushGreen, 2.0f);
+                    g_pD2DDC->DrawLine(vEnd, a2, brushGreen, 2.0f);
+                }
+            }
+
+            // 受力向量：红色线段 + 箭头
+            if (g_debugForce) {
+                float fLen = sqrtf(p.debugForceX * p.debugForceX + p.debugForceY * p.debugForceY);
+                if (fLen > 0.02f) {
+                    D2D1_POINT_2F fEnd = D2D1::Point2F(p.x + p.debugForceX * FORCE_SCALE,
+                                                        p.y + p.debugForceY * FORCE_SCALE);
+                    g_pD2DDC->DrawLine(pos, fEnd, brushRed, 1.8f);
+                    // 箭头头部
+                    float angle = atan2f(p.debugForceY, p.debugForceX);
+                    float arrowLen = 4.0f;
+                    D2D1_POINT_2F a1 = D2D1::Point2F(fEnd.x - cosf(angle - 0.4f) * arrowLen,
+                                                      fEnd.y - sinf(angle - 0.4f) * arrowLen);
+                    D2D1_POINT_2F a2 = D2D1::Point2F(fEnd.x - cosf(angle + 0.4f) * arrowLen,
+                                                      fEnd.y - sinf(angle + 0.4f) * arrowLen);
+                    g_pD2DDC->DrawLine(fEnd, a1, brushRed, 1.8f);
+                    g_pD2DDC->DrawLine(fEnd, a2, brushRed, 1.8f);
+                }
+            }
+        }
+    }
+
+    // 2. 漩涡中心和轨道（蓝色）：遍历所有活跃漩涡
+    if (g_debugVortex && g_enableCentripetal) {
+        for (int vi = 0; vi < g_vortexMaxCount; vi++) {
+            Vortex &v = g_vortices[vi];
+            if (!v.active || v.strength <= 0.02f) continue;
+
+            D2D1_POINT_2F center = D2D1::Point2F(v.centerX, v.centerY);
+
+            // 中心十字
+            g_pD2DDC->DrawLine(D2D1::Point2F(center.x - 10, center.y),
+                               D2D1::Point2F(center.x + 10, center.y), brushBlue, 2.5f);
+            g_pD2DDC->DrawLine(D2D1::Point2F(center.x, center.y - 10),
+                               D2D1::Point2F(center.x, center.y + 10), brushBlue, 2.5f);
+
+            // 轨道圆（多个半径，表示粒子轨道）
+            for (int r = 30; r <= 180; r += 30) {
+                float radius = r * (0.85f + v.strength * 0.3f);
+                g_pD2DDC->DrawEllipse(D2D1::Ellipse(center, radius, radius), brushBlue, 1.2f);
+            }
+
+            // 涡核圆（Rankine涡内边界，虚线表示）
+            g_pD2DDC->DrawEllipse(D2D1::Ellipse(center, v.coreRadius, v.coreRadius), brushBlue, 1.5f);
+
+            // 漩涡强度：实心圆大小表示
+            float strengthRadius = 8 + v.strength * 25;
+            g_pD2DDC->FillEllipse(D2D1::Ellipse(center, strengthRadius, strengthRadius), brushBlue);
+        }
+    }
+
+    // 3. 引力源（黄色双圆）
+    if (g_debugGravity && g_enableParticleGravity) {
+        int n = (int)g_particles.size();
+        int bodyCount = (g_gravitySystem == 0) ? 2 : ClampInt(g_gravityBodyCount, 2, 10);
+        int drawCount = bodyCount < n ? bodyCount : n;
+        // 找出质量最大的bodyCount个粒子作为引力源
+        std::vector<int> indices(n);
+        for (int i = 0; i < n; i++) indices[i] = i;
+        std::partial_sort(indices.begin(), indices.begin() + drawCount, indices.end(),
+                          [&](int a, int b) { return g_particles[a].mass > g_particles[b].mass; });
+        for (int i = 0; i < drawCount; i++) {
+            Particle &p = g_particles[indices[i]];
+            D2D1_POINT_2F pos = D2D1::Point2F(p.x, p.y);
+            float r = 6 + p.mass * 0.5f;
+            // 内圈：实心
+            g_pD2DDC->FillEllipse(D2D1::Ellipse(pos, r * 0.6f, r * 0.6f), brushYellow);
+            // 外圈：轮廓
+            g_pD2DDC->DrawEllipse(D2D1::Ellipse(pos, r, r), brushYellow, 2.0f);
+            // 引力范围
+            g_pD2DDC->DrawEllipse(D2D1::Ellipse(pos, r * 5, r * 5), brushYellow, 0.8f);
+        }
+    }
+
+    // 释放画刷
+    if (brushGreen) brushGreen->Release();
+    if (brushRed) brushRed->Release();
+    if (brushBlue) brushBlue->Release();
+    if (brushYellow) brushYellow->Release();
+    if (brushCyan) brushCyan->Release();
+    if (brushCyanFill) brushCyanFill->Release();
+}
+
 static bool NativeRenderFrame(int screenW, int screenH, const std::vector<D2D1_POINT_2F>& smoothed,
                               bool tailVisible, const GradData& cols, float widthMul, float fadeAlpha,
                               DWORD dwTime, int vX, int vY) {
@@ -2778,6 +3284,10 @@ static bool NativeRenderFrame(int screenW, int screenH, const std::vector<D2D1_P
 static inline float Rand01() {
     return rand() / (float)RAND_MAX;
 }
+// 获取粒子数量上限 / Get particle count cap
+static inline int GetParticleCap() {
+    return g_superPerformanceMode ? 1200 : 500;
+}
 static inline float Hash01(int n) {
     uint32_t u = (uint32_t)n;
     u = (u << 13) ^ u;
@@ -2787,8 +3297,13 @@ static void SpawnParticles(float x, float y, int count, float speedMin, float sp
                            int lifeMin, int lifeMax, D2D1_COLOR_F color, DWORD time, bool radial = false,
                            int shapeType = -1) {
     D2D1_COLOR_F endCol = D2D1::ColorF(color.r * 0.25f, color.g * 0.25f, color.b * 0.25f, 1.0f);
+    // 预计算公共因子，避免循环内重复计算
+    float massMean = (g_particleMassMin + g_particleMassMax) * 0.5f;
+    float massStddev = (g_particleMassMax - g_particleMassMin) * 0.25f;
+    float baseSpin = (float)g_particleSpinSpeed / 100.0f * 0.3f;
+    float twoPi = 6.2831853f;
     for (int i = 0; i < count; i++) {
-        float angle = radial ? (i / (float)count * 6.28318f) : (Rand01() * 6.28318f);
+        float angle = radial ? (i / (float)count * twoPi) : (Rand01() * twoPi);
         float speed = speedMin + Rand01() * (speedMax - speedMin);
         int st = shapeType;
         if (st < 0) {
@@ -2797,17 +3312,31 @@ static void SpawnParticles(float x, float y, int count, float speedMin, float sp
                 st = (int)(Rand01() * 9.0f) + 1;  // random: 1-9 shapes
         }
         // 生成位置随机偏移：在生成点周围分布，避免所有粒子从同一点发射
-        float spawnAngle = Rand01() * 6.28318f;
+        float spawnAngle = Rand01() * twoPi;
         float spawnRadius = Rand01() * 8.0f;  // 0-8 像素的随机偏移
         float px = x + cosf(spawnAngle) * spawnRadius;
         float py = y + sinf(spawnAngle) * spawnRadius;
         Particle p;
         p.x = px; p.y = py;
         p.vx = cosf(angle) * speed; p.vy = sinf(angle) * speed;
-        // 随机质量：质量影响大小（体积∝质量^(1/3)）和生命周期
-        float mass = g_enableParticleMass ? (g_particleMassMin + Rand01() * (g_particleMassMax - g_particleMassMin)) : 1.0f;
+        // 随机质量：正态分布（Box-Muller变换）
+        float mass = 1.0f;
+        if (g_enableParticleMass) {
+            float u1 = fmaxf(Rand01(), 0.001f);
+            float u2 = Rand01();
+            float z = sqrtf(-2.0f * logf(u1)) * cosf(twoPi * u2);
+            mass = massMean + z * massStddev;
+            mass = fmaxf(g_particleMassMin, fminf(g_particleMassMax, mass));
+        }
         p.mass = mass;
-        float massSizeFactor = powf(mass, 0.333f);  // 体积∝质量，半径∝质量^(1/3)
+        // 随机电荷：50%正，50%负（洛伦兹力用）
+        p.charge = (Rand01() > 0.5f) ? 1.0f : -1.0f;
+        // 体积∝质量，半径∝质量^(1/3)，用快速近似替代powf
+        float massSizeFactor = 1.0f;
+        if (g_enableParticleMass) {
+            float m = mass * 0.1f;  // 归一化到0.5-2.0范围
+            massSizeFactor = 0.7f + m * 0.3f;  // 线性近似cube root，足够接近且更快
+        }
         p.size = (sizeMin + Rand01() * (sizeMax - sizeMin)) * massSizeFactor;
         p.startTime = time;
         // 质量大的粒子生命周期更长（惯性大，消散慢）
@@ -2816,20 +3345,348 @@ static void SpawnParticles(float x, float y, int count, float speedMin, float sp
         p.color = color;
         p.endColor = endCol;
         p.shapeType = st;
-        p.z = (Rand01() - 0.5f) * 0.8f;  // 生成时随机深度，避免每帧闪烁
-        p.rotation = Rand01() * 6.28318f;  // 随机初始旋转角度
-        // 基础速度由设置控制，每个粒子有 ±50% 的随机差异，确保旋转速度存在差异
-        // 注意：速度过快会导致非对称形状（三角形/星形等）因运动模糊看起来像圆形
-        float baseSpin = (float)g_particleSpinSpeed / 100.0f * 0.3f;  // 最大 ±0.15 rad/帧
-        float variation = (Rand01() - 0.5f) * baseSpin;  // ±50% 随机差异
-        p.spinSpeed = baseSpin + variation;  // 随机自旋转速度，每个粒子不同
-        p.colorOffset[0] = (Rand01() - 0.5f) * 0.16f;
-        p.colorOffset[1] = (Rand01() - 0.5f) * 0.16f;
-        p.colorOffset[2] = (Rand01() - 0.5f) * 0.16f;
+        p.z = (Rand01() - 0.5f) * 0.8f;
+        p.rotation = Rand01() * twoPi;
+        // 随机自旋转速度，每个粒子有 ±50% 差异
+        float variation = (Rand01() - 0.5f) * baseSpin;
+        p.spinSpeed = baseSpin + variation;
+        // 用一次随机数生成三个颜色偏移（减少Rand01调用）
+        float r1 = Rand01() - 0.5f;
+        float r2 = Rand01() - 0.5f;
+        float r3 = Rand01() - 0.5f;
+        p.colorOffset[0] = r1 * 0.16f;
+        p.colorOffset[1] = r2 * 0.16f;
+        p.colorOffset[2] = r3 * 0.16f;
         p.vortexBrightness[0] = 0;
         p.vortexBrightness[1] = 0;
         p.vortexBrightness[2] = 0;
+        p.debugForceX = 0;
+        p.debugForceY = 0;
         g_particles.push_back(p);
+    }
+}
+
+// ===================== 音乐响应系统（v3.4 基础设施）=====================
+// Music reactive system (v3.4 infrastructure, visual effects TBD)
+
+// Cooley-Tukey radix-2 FFT（原地，输入输出交替存储）
+// Cooley-Tukey radix-2 FFT (in-place)
+static void FFT(std::vector<float> &real, std::vector<float> &imag, bool inverse = false) {
+    int n = (int)real.size();
+    if (n <= 1) return;
+    // 位反转排序 / Bit-reversal permutation
+    for (int i = 1, j = 0; i < n; i++) {
+        int bit = n >> 1;
+        for (; j & bit; bit >>= 1) j ^= bit;
+        j ^= bit;
+        if (i < j) {
+            std::swap(real[i], real[j]);
+            std::swap(imag[i], imag[j]);
+        }
+    }
+    // 蝶形运算 / Butterfly operations
+    for (int len = 2; len <= n; len <<= 1) {
+        float ang = (inverse ? 2.0f : -2.0f) * 3.14159265358979f / len;
+        float wlenR = cosf(ang), wlenI = sinf(ang);
+        for (int i = 0; i < n; i += len) {
+            float wR = 1, wI = 0;
+            for (int j = 0; j < len / 2; j++) {
+                float uR = real[i + j], uI = imag[i + j];
+                float vR = real[i + j + len / 2] * wR - imag[i + j + len / 2] * wI;
+                float vI = real[i + j + len / 2] * wI + imag[i + j + len / 2] * wR;
+                real[i + j] = uR + vR;
+                imag[i + j] = uI + vI;
+                real[i + j + len / 2] = uR - vR;
+                imag[i + j + len / 2] = uI - vI;
+                float nextWR = wR * wlenR - wI * wlenI;
+                wI = wR * wlenI + wI * wlenR;
+                wR = nextWR;
+            }
+        }
+    }
+    if (inverse) {
+        for (int i = 0; i < n; i++) { real[i] /= n; imag[i] /= n; }
+    }
+}
+
+// 初始化Hann窗函数 / Initialize Hann window
+static void InitWindowFunction(std::vector<float> &window, int size) {
+    window.resize(size);
+    for (int i = 0; i < size; i++) {
+        window[i] = 0.5f * (1.0f - cosf(2.0f * 3.14159265358979f * i / (size - 1)));
+    }
+}
+
+// WASAPI 音频捕获线程 / WASAPI audio capture thread
+static DWORD WINAPI MusicCaptureThread(LPVOID param) {
+    MusicState *m = &g_music;
+    // 设置MMCSS优先级 / Set MMCSS priority
+    DWORD taskIndex = 0;
+    HANDLE hAvrt = AvSetMmThreadCharacteristicsW(L"Audio", &taskIndex);
+    while (m->captureRunning.load()) {
+        // 等待捕获缓冲区就绪 / Wait for capture buffer
+        UINT32 packetLength = 0;
+        HRESULT hr = m->pCaptureClient->GetNextPacketSize(&packetLength);
+        if (FAILED(hr) || packetLength == 0) {
+            WaitForSingleObject(m->hStopEvent, 5);
+            continue;
+        }
+        // 读取捕获数据 / Read captured data
+        BYTE *pData = nullptr;
+        UINT32 numFrames = 0;
+        DWORD flags = 0;
+        hr = m->pCaptureClient->GetBuffer(&pData, &numFrames, &flags, nullptr, nullptr);
+        if (SUCCEEDED(hr) && pData && numFrames > 0) {
+            int channels = m->pWaveFormat->nChannels;
+            int bytesPerSample = m->pWaveFormat->wBitsPerSample / 8;
+            // 转换为单声道浮点样本并写入环形缓冲 / Convert to mono float and write to ring buffer
+            for (UINT32 i = 0; i < numFrames; i++) {
+                float sample = 0;
+                if (bytesPerSample == 4) {
+                    // 32-bit float
+                    float *pFloat = (float*)(pData + i * channels * bytesPerSample);
+                    for (int c = 0; c < channels; c++) sample += pFloat[c];
+                    sample /= channels;
+                } else if (bytesPerSample == 2) {
+                    // 16-bit integer
+                    short *pShort = (short*)(pData + i * channels * bytesPerSample);
+                    for (int c = 0; c < channels; c++) sample += pShort[c];
+                    sample /= (channels * 32768.0f);
+                }
+                m->fftInput[m->fftWritePos] = sample;
+                m->fftWritePos = (m->fftWritePos + 1) % m->fftSize;
+            }
+            m->pCaptureClient->ReleaseBuffer(numFrames);
+        }
+    }
+    if (hAvrt) AvRevertMmThreadCharacteristics(hAvrt);
+    return 0;
+}
+
+// 启动音乐捕获 / Start music capture
+static bool MusicStartCapture() {
+    MusicState *m = &g_music;
+    if (m->capturing) return true;
+    // 确保COM已初始化 / Ensure COM is initialized
+    CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    // 创建设备枚举器 / Create device enumerator
+    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                                  __uuidof(IMMDeviceEnumerator), (void**)&m->pEnumerator);
+    if (FAILED(hr)) { Wh_Log(L"Music: CoCreateInstance failed 0x%08X", hr); return false; }
+    // 获取默认渲染设备（用于loopback）/ Get default render device for loopback
+    hr = m->pEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &m->pDevice);
+    if (FAILED(hr)) { Wh_Log(L"Music: GetDefaultAudioEndpoint failed 0x%08X", hr); return false; }
+    // 激活音频客户端 / Activate audio client
+    hr = m->pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&m->pAudioClient);
+    if (FAILED(hr)) { Wh_Log(L"Music: Activate failed 0x%08X", hr); return false; }
+    // 获取混合格式 / Get mix format
+    hr = m->pAudioClient->GetMixFormat(&m->pWaveFormat);
+    if (FAILED(hr)) { Wh_Log(L"Music: GetMixFormat failed 0x%08X", hr); return false; }
+    // 初始化loopback捕获 / Initialize loopback capture
+    REFERENCE_TIME hnsRequestedDuration = 10000000; // 1秒缓冲
+    hr = m->pAudioClient->Initialize(AUDCLNT_SHAREMODE_SHARED,
+                                     AUDCLNT_STREAMFLAGS_LOOPBACK,
+                                     hnsRequestedDuration, 0, m->pWaveFormat, nullptr);
+    if (FAILED(hr)) { Wh_Log(L"Music: Initialize loopback failed 0x%08X", hr); return false; }
+    // 获取缓冲区大小 / Get buffer size
+    hr = m->pAudioClient->GetBufferSize(&m->bufferFrames);
+    if (FAILED(hr)) { Wh_Log(L"Music: GetBufferSize failed 0x%08X", hr); return false; }
+    // 获取捕获客户端 / Get capture client
+    hr = m->pAudioClient->GetService(__uuidof(IAudioCaptureClient), (void**)&m->pCaptureClient);
+    if (FAILED(hr)) { Wh_Log(L"Music: GetService capture failed 0x%08X", hr); return false; }
+    // 初始化FFT缓冲 / Initialize FFT buffers
+    m->fftSize = g_musicFftSize;
+    m->fftInput.assign(m->fftSize, 0.0f);
+    m->fftOutput.assign(m->fftSize / 2, 0.0f);
+    m->fftSmoothed.assign(m->fftSize / 2, 0.0f);
+    InitWindowFunction(m->windowFunction, m->fftSize);
+    m->fftWritePos = 0;
+    // 启动捕获 / Start capture
+    hr = m->pAudioClient->Start();
+    if (FAILED(hr)) { Wh_Log(L"Music: Start failed 0x%08X", hr); return false; }
+    // 创建捕获线程 / Create capture thread
+    m->hStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    m->captureRunning.store(true);
+    m->hCaptureThread = CreateThread(nullptr, 0, MusicCaptureThread, nullptr, 0, nullptr);
+    m->capturing = true;
+    m->initialized = true;
+    Wh_Log(L"Music: capture started, %d Hz, %d channels, FFT %d",
+           m->pWaveFormat->nSamplesPerSec, m->pWaveFormat->nChannels, m->fftSize);
+    return true;
+}
+
+// 停止音乐捕获 / Stop music capture
+static void MusicStopCapture() {
+    MusicState *m = &g_music;
+    if (!m->capturing) return;
+    m->captureRunning.store(false);
+    if (m->hStopEvent) { SetEvent(m->hStopEvent); }
+    if (m->hCaptureThread) {
+        WaitForSingleObject(m->hCaptureThread, 2000);
+        CloseHandle(m->hCaptureThread);
+        m->hCaptureThread = nullptr;
+    }
+    if (m->hStopEvent) { CloseHandle(m->hStopEvent); m->hStopEvent = nullptr; }
+    if (m->pAudioClient) { m->pAudioClient->Stop(); m->pAudioClient->Release(); m->pAudioClient = nullptr; }
+    if (m->pCaptureClient) { m->pCaptureClient->Release(); m->pCaptureClient = nullptr; }
+    if (m->pDevice) { m->pDevice->Release(); m->pDevice = nullptr; }
+    if (m->pEnumerator) { m->pEnumerator->Release(); m->pEnumerator = nullptr; }
+    if (m->pWaveFormat) { CoTaskMemFree(m->pWaveFormat); m->pWaveFormat = nullptr; }
+    m->capturing = false;
+    m->initialized = false;
+    Wh_Log(L"Music: capture stopped");
+}
+
+// 每帧更新音乐分析（FFT + 节拍检测 + 频段分析）
+// Per-frame music analysis (FFT + beat detection + frequency bands)
+static void MusicUpdate(DWORD dwTime) {
+    MusicState *m = &g_music;
+    if (!m->capturing || !m->initialized) return;
+    int n = m->fftSize;
+    // 从环形缓冲复制数据并加窗，同时计算maxSample（合并两次遍历）
+    std::vector<float> fftReal(n), fftImag(n, 0.0f);
+    float maxSample = 0;
+    for (int i = 0; i < n; i++) {
+        int idx = (m->fftWritePos + i) % n;
+        float sample = m->fftInput[idx];
+        fftReal[i] = sample * m->windowFunction[i];
+        float absSample = fabsf(sample);
+        if (absSample > maxSample) maxSample = absSample;
+    }
+    // 执行FFT / Execute FFT
+    FFT(fftReal, fftImag, false);
+    // 计算幅度谱 / Compute magnitude spectrum
+    float smoothFactor = g_musicSmoothing * 0.01f; // 0~1
+    float totalEnergy = 0;
+    for (int i = 0; i < n / 2; i++) {
+        float mag = sqrtf(fftReal[i] * fftReal[i] + fftImag[i] * fftImag[i]) / n;
+        m->fftOutput[i] = mag;
+        // 平滑 / Smoothing
+        m->fftSmoothed[i] = m->fftSmoothed[i] * smoothFactor + mag * (1.0f - smoothFactor);
+        totalEnergy += mag * mag;
+    }
+    // 频段分析 / Frequency band analysis（预计算频段边界索引，避免每帧算freq）
+    if (m->pWaveFormat) {
+        float sampleRate = (float)m->pWaveFormat->nSamplesPerSec;
+        float freqPerBin = sampleRate / n;
+        // 预计算频段边界：bass<250Hz, mid<2000Hz, treble<20000Hz
+        int bassEnd = (int)(250.0f / freqPerBin) + 1;
+        int midEnd = (int)(2000.0f / freqPerBin) + 1;
+        int trebleEnd = (int)(20000.0f / freqPerBin) + 1;
+        if (bassEnd > n / 2) bassEnd = n / 2;
+        if (midEnd > n / 2) midEnd = n / 2;
+        if (trebleEnd > n / 2) trebleEnd = n / 2;
+        m->bassLevel = 0; m->midLevel = 0; m->trebleLevel = 0;
+        for (int i = 1; i < bassEnd; i++) m->bassLevel += m->fftSmoothed[i];
+        for (int i = bassEnd; i < midEnd; i++) m->midLevel += m->fftSmoothed[i];
+        for (int i = midEnd; i < trebleEnd; i++) m->trebleLevel += m->fftSmoothed[i];
+        int bassCount = bassEnd - 1;
+        int midCount = midEnd - bassEnd;
+        int trebleCount = trebleEnd - midEnd;
+        if (bassCount > 0) m->bassLevel /= bassCount;
+        if (midCount > 0) m->midLevel /= midCount;
+        if (trebleCount > 0) m->trebleLevel /= trebleCount;
+    }
+    m->overallLevel = sqrtf(totalEnergy / ((float)n * 0.5f));
+
+    // ===== 多方式节拍检测 / Multi-method beat detection =====
+    float sensitivity = 1.1f + (1.0f - g_musicSensitivity) * 0.8f;
+
+    // 方式1：总能量阈值法 / Method 1: Total energy threshold
+    m->beatEnergy = totalEnergy;
+    m->beatAvgEnergy = m->beatAvgEnergy * 0.92f + totalEnergy * 0.08f;
+    m->beatThreshold = m->beatAvgEnergy * sensitivity;
+    bool energyBeat = (totalEnergy > m->beatThreshold) && (totalEnergy > m->beatAvgEnergy * 1.1f);
+
+    // 方式2：频谱通量法（相邻帧频谱变化量）/ Method 2: Spectral flux
+    if (m->prevSpectrum.size() != (size_t)(n / 2)) {
+        m->prevSpectrum.assign(n / 2, 0.0f);
+    }
+    float flux = 0;
+    for (int i = 0; i < n / 2; i++) {
+        float diff = m->fftSmoothed[i] - m->prevSpectrum[i];
+        if (diff > 0) flux += diff;  // 只计正变化（能量增加）
+        m->prevSpectrum[i] = m->fftSmoothed[i];
+    }
+    m->spectralFlux = flux;
+    m->avgSpectralFlux = m->avgSpectralFlux * 0.9f + flux * 0.1f;
+    bool fluxBeat = (flux > m->avgSpectralFlux * sensitivity) && (flux > m->avgSpectralFlux * 1.2f);
+
+    // 方式3：多频段节拍检测 / Method 3: Multi-band beat detection
+    m->bassBeatEnergy = m->bassLevel;
+    m->bassBeatAvg = m->bassBeatAvg * 0.9f + m->bassLevel * 0.1f;
+    m->bassBeat = (m->bassLevel > m->bassBeatAvg * sensitivity) && (m->bassLevel > m->bassBeatAvg * 1.15f);
+
+    m->midBeatEnergy = m->midLevel;
+    m->midBeatAvg = m->midBeatAvg * 0.9f + m->midLevel * 0.1f;
+    m->midBeat = (m->midLevel > m->midBeatAvg * sensitivity * 1.1f);
+
+    m->trebleBeatEnergy = m->trebleLevel;
+    m->trebleBeatAvg = m->trebleBeatAvg * 0.9f + m->trebleLevel * 0.1f;
+    m->trebleBeat = (m->trebleLevel > m->trebleBeatAvg * sensitivity * 1.2f);
+
+    // 综合判断：任一方式触发即算节拍，低频节拍权重最高 / Combined: any method triggers, bass has highest weight
+    bool newBeat = energyBeat || fluxBeat || m->bassBeat;
+    // 节拍强度：综合多种触发方式 / Beat intensity: combined from multiple methods
+    float intensity = 0;
+    if (energyBeat) intensity += 0.4f * fminf(totalEnergy / fmaxf(m->beatAvgEnergy, 0.001f), 2.0f);
+    if (fluxBeat) intensity += 0.3f * fminf(flux / fmaxf(m->avgSpectralFlux, 0.001f), 2.0f);
+    if (m->bassBeat) intensity += 0.5f * fminf(m->bassLevel / fmaxf(m->bassBeatAvg, 0.001f), 2.5f);
+    if (m->midBeat) intensity += 0.2f;
+    if (m->trebleBeat) intensity += 0.15f;
+    m->beatIntensity = fminf(intensity, 1.0f);
+
+    // 节拍去抖（最小间隔120ms = 500BPM上限）/ Beat debounce
+    if (newBeat && (dwTime - m->lastBeatTime) > 120) {
+        m->beatDetected = true;
+        m->lastBeatTime = dwTime;
+        m->beatHistory.push_back(dwTime);
+        if (m->beatHistory.size() > 16) m->beatHistory.pop_front();
+        // BPM估计 / BPM estimation
+        if (m->beatHistory.size() >= 4) {
+            float avgInterval = 0;
+            for (size_t i = 1; i < m->beatHistory.size(); i++) {
+                avgInterval += (m->beatHistory[i] - m->beatHistory[i-1]);
+            }
+            avgInterval /= (m->beatHistory.size() - 1);
+            if (avgInterval > 0) m->bpmEstimate = 60000.0f / avgInterval;
+        }
+    } else {
+        m->beatDetected = false;
+    }
+
+    // ===== 音乐物理联动状态更新（优化持续能力）=====
+    if (g_enableMusicPhysics) {
+        // 节拍脉冲：触发时叠加（而非替换），缓慢衰减，延长作用时间
+        if (m->beatDetected) {
+            float pulseAdd = m->beatIntensity * g_musicBeatPulse * 1.5f;
+            g_musicBeatPulseAmount = fminf(g_musicBeatPulseAmount + pulseAdd, 1.5f);  // 叠加，上限1.5
+        } else {
+            g_musicBeatPulseAmount *= 0.94f;  // 缓慢衰减（约0.5秒作用时间）
+        }
+        // 低频大小增益：平滑跟随bassLevel，攻击快释放慢
+        float bassTarget = fminf(m->bassLevel * 15.0f, 1.0f) * g_musicBassSize;
+        float bassLerp = (bassTarget > g_musicBassSizeBoost) ? 0.3f : 0.08f;
+        g_musicBassSizeBoost += (bassTarget - g_musicBassSizeBoost) * bassLerp;
+        // 多频段联动：低频→引力，中频→排斥力，高频→噪声
+        if (g_enableMultiBandLink) {
+            float bgTarget = fminf(m->bassLevel * 12.0f, 1.0f);
+            g_bassGravityBoost += (bgTarget - g_bassGravityBoost) * 0.15f;
+            float mrTarget = fminf(m->midLevel * 20.0f, 1.0f);
+            g_midRepelBoost += (mrTarget - g_midRepelBoost) * 0.15f;
+            float tnTarget = fminf(m->trebleLevel * 50.0f, 1.0f);
+            g_trebleNoiseBoost += (tnTarget - g_trebleNoiseBoost) * 0.2f;
+        } else {
+            g_bassGravityBoost *= 0.9f;
+            g_midRepelBoost *= 0.9f;
+            g_trebleNoiseBoost *= 0.9f;
+        }
+    } else {
+        g_musicBeatPulseAmount *= 0.85f;
+        g_musicBassSizeBoost *= 0.9f;
+        g_bassGravityBoost *= 0.9f;
+        g_midRepelBoost *= 0.9f;
+        g_trebleNoiseBoost *= 0.9f;
     }
 }
 
@@ -2954,14 +3811,38 @@ void LoadSettings() {
     // 向心力漩涡设置
     g_enableCentripetal = Wh_GetIntSetting(L"enable_centripetal") != 0;
     int cfVal = Wh_GetIntSetting(L"centripetal_force");
-    if (cfVal < 0) cfVal = 0; if (cfVal > 100) cfVal = 100;
+    cfVal = ClampInt(cfVal, 0, 100);
     g_centripetalForce = cfVal / 100.0f;
     int csVal = Wh_GetIntSetting(L"centripetal_sensitivity");
-    if (csVal < 0) csVal = 0; if (csVal > 100) csVal = 100;
+    csVal = ClampInt(csVal, 0, 100);
     g_centripetalSensitivity = csVal / 100.0f;
     int cdVal = Wh_GetIntSetting(L"centripetal_duration");
     if (cdVal < 500) cdVal = 500; if (cdVal > 5000) cdVal = 5000;
     g_centripetalDuration = cdVal;
+    int vmcVal = Wh_GetIntSetting(L"vortex_max_count");
+    vmcVal = ClampInt(vmcVal, 1, MAX_VORTICES);
+    g_vortexMaxCount = vmcVal;
+    int vmdVal = Wh_GetIntSetting(L"vortex_min_distance");
+    vmdVal = ClampInt(vmdVal, 50, 500);
+    g_vortexMinDistance = (float)vmdVal;
+    int vdVal = Wh_GetIntSetting(L"vortex_drift");
+    vdVal = ClampInt(vdVal, 0, 100);
+    g_vortexDrift = vdVal / 100.0f;
+    int vdsVal = Wh_GetIntSetting(L"vortex_duration_speed");
+    vdsVal = ClampInt(vdsVal, 0, 100);
+    g_vortexDurationSpeed = vdsVal / 100.0f;
+    g_vortexPhysModel = 0;
+    {
+        PCWSTR modelStr = Wh_GetStringSetting(L"vortex_phys_model");
+        if (modelStr) {
+            if (wcscmp(modelStr, L"rankine") == 0) g_vortexPhysModel = 0;
+            else if (wcscmp(modelStr, L"free") == 0) g_vortexPhysModel = 1;
+            else if (wcscmp(modelStr, L"solid") == 0) g_vortexPhysModel = 2;
+            else if (wcscmp(modelStr, L"lamb") == 0) g_vortexPhysModel = 3;
+            else if (wcscmp(modelStr, L"kepler") == 0) g_vortexPhysModel = 4;
+            Wh_FreeStringSetting(modelStr);
+        }
+    }
     // 粒子质量系统设置
     g_enableParticleMass = Wh_GetIntSetting(L"enable_particle_mass") != 0;
     g_particleMassMin = (float)Wh_GetIntSetting(L"particle_mass_min") / 10.0f;
@@ -2972,7 +3853,7 @@ void LoadSettings() {
     // 粒子万有引力设置
     g_enableParticleGravity = Wh_GetIntSetting(L"enable_particle_gravity") != 0;
     int gsVal = Wh_GetIntSetting(L"gravity_strength");
-    if (gsVal < 0) gsVal = 0; if (gsVal > 100) gsVal = 100;
+    gsVal = ClampInt(gsVal, 0, 100);
     g_gravityStrength = gsVal / 100.0f;
     PCWSTR gstr = Wh_GetStringSetting(L"gravity_system");
     if (gstr) {
@@ -2983,6 +3864,63 @@ void LoadSettings() {
     g_gravityBodyCount = Wh_GetIntSetting(L"gravity_body_count");
     if (g_gravityBodyCount < 2) g_gravityBodyCount = 2;
     if (g_gravityBodyCount > 10) g_gravityBodyCount = 10;
+    // 音乐响应设置
+    bool oldMusicEnable = g_enableMusicReactive;
+    g_enableMusicReactive = Wh_GetIntSetting(L"enable_music_reactive") != 0;
+    PCWSTR fftStr = Wh_GetStringSetting(L"music_fft_size");
+    if (fftStr) {
+        if (wcscmp(fftStr, L"fft256") == 0) g_musicFftSize = 256;
+        else if (wcscmp(fftStr, L"fft512") == 0) g_musicFftSize = 512;
+        else if (wcscmp(fftStr, L"fft1024") == 0) g_musicFftSize = 1024;
+        else if (wcscmp(fftStr, L"fft2048") == 0) g_musicFftSize = 2048;
+        else g_musicFftSize = 512;
+        Wh_FreeStringSetting(fftStr);
+    } else {
+        g_musicFftSize = 512;
+    }
+    int msVal = Wh_GetIntSetting(L"music_sensitivity");
+    msVal = ClampInt(msVal, 0, 100);
+    g_musicSensitivity = msVal / 100.0f;
+    int msmVal = Wh_GetIntSetting(L"music_smoothing");
+    msmVal = ClampInt(msmVal, 0, 100);
+    g_musicSmoothing = msmVal / 100.0f;
+    // 音乐物理联动设置
+    g_enableMusicPhysics = Wh_GetIntSetting(L"enable_music_physics") != 0;
+    int mglVal = Wh_GetIntSetting(L"music_gravity_link");
+    mglVal = ClampInt(mglVal, 0, 100);
+    g_musicGravityLink = mglVal / 100.0f;
+    int mbpVal = Wh_GetIntSetting(L"music_beat_pulse");
+    mbpVal = ClampInt(mbpVal, 0, 100);
+    g_musicBeatPulse = mbpVal / 100.0f;
+    int mbsVal = Wh_GetIntSetting(L"music_bass_size");
+    mbsVal = ClampInt(mbsVal, 0, 100);
+    g_musicBassSize = mbsVal / 100.0f;
+    int mvlVal = Wh_GetIntSetting(L"music_vortex_link");
+    mvlVal = ClampInt(mvlVal, 0, 100);
+    g_musicVortexLink = mvlVal / 100.0f;
+    // 高级物理系统设置
+    g_enableParticleCollision = Wh_GetIntSetting(L"enable_particle_collision") != 0;
+    g_enableLorentzForce = Wh_GetIntSetting(L"enable_lorentz_force") != 0;
+    int lsVal = Wh_GetIntSetting(L"lorentz_strength");
+    lsVal = ClampInt(lsVal, 0, 100);
+    g_lorentzStrength = lsVal / 100.0f;
+    g_enableBrownianMotion = Wh_GetIntSetting(L"enable_brownian_motion") != 0;
+    int bsVal = Wh_GetIntSetting(L"brownian_strength");
+    bsVal = ClampInt(bsVal, 0, 100);
+    g_brownianStrength = bsVal / 100.0f;
+    g_enableMultiBandLink = Wh_GetIntSetting(L"enable_multi_band_link") != 0;
+    // 物理可视化调试（独立开关）
+    g_debugVelocity = Wh_GetIntSetting(L"enable_debug_velocity") != 0;
+    g_debugForce = Wh_GetIntSetting(L"enable_debug_force") != 0;
+    g_debugVortex = Wh_GetIntSetting(L"enable_debug_vortex") != 0;
+    g_debugGravity = Wh_GetIntSetting(L"enable_debug_gravity") != 0;
+    g_debugCollision = Wh_GetIntSetting(L"enable_debug_collision") != 0;
+    // 音乐捕获开关变化时启动/停止
+    if (g_enableMusicReactive && !oldMusicEnable) {
+        MusicStartCapture();
+    } else if (!g_enableMusicReactive && oldMusicEnable) {
+        MusicStopCapture();
+    }
     PCWSTR pstr = Wh_GetStringSetting(L"particle_mode");
     if (pstr) {
         if (wcscmp(pstr, L"off") == 0)
@@ -3527,28 +4465,32 @@ static DWORD WINAPI BgSamplerThreadProc(LPVOID) {
 
 // ===================== 轨迹变形 =====================
 // 螺旋变形：沿路径法线方向应用螺旋偏移
+// 计算路径上某点的法线单位向量 / Compute normal unit vector at path point
+static inline void GetPathNormal(const std::vector<D2D1_POINT_2F> &pts, size_t i, float &nx, float &ny) {
+    float dx, dy;
+    if (i == 0) { dx = pts[1].x - pts[0].x; dy = pts[1].y - pts[0].y; }
+    else if (i == pts.size() - 1) { dx = pts[i].x - pts[i-1].x; dy = pts[i].y - pts[i-1].y; }
+    else { dx = pts[i+1].x - pts[i-1].x; dy = pts[i+1].y - pts[i-1].y; }
+    float len = sqrtf(dx*dx + dy*dy);
+    if (len > 0.001f) { nx = -dy / len; ny = dx / len; }
+    else { nx = 0; ny = 1; }
+}
+
+// 螺旋变形：沿路径法线方向应用正弦螺旋偏移，尾部衰减
 static void ApplySpiralDeformation(std::vector<D2D1_POINT_2F> &pts, DWORD dwTime) {
     if (pts.size() < 3) return;
     float phase = dwTime * 0.005f;
-    std::vector<D2D1_POINT_2F> result;
-    result.reserve(pts.size());
     for (size_t i = 0; i < pts.size(); ++i) {
         float ratio = (float)i / (pts.size() - 1);
         float spiral = sinf(ratio * 12.0f + phase) * (1.0f - ratio) * 15.0f;
-        // 计算法线
-        float dx, dy;
-        if (i == 0) { dx = pts[1].x - pts[0].x; dy = pts[1].y - pts[0].y; }
-        else if (i == pts.size() - 1) { dx = pts[i].x - pts[i-1].x; dy = pts[i].y - pts[i-1].y; }
-        else { dx = pts[i+1].x - pts[i-1].x; dy = pts[i+1].y - pts[i-1].y; }
-        float len = sqrtf(dx*dx + dy*dy);
-        if (len > 0) { dx /= len; dy /= len; }
-        float nx = -dy, ny = dx;
-        result.push_back({pts[i].x + nx * spiral, pts[i].y + ny * spiral});
+        float nx, ny;
+        GetPathNormal(pts, i, nx, ny);
+        pts[i].x += nx * spiral;
+        pts[i].y += ny * spiral;
     }
-    pts = result;
 }
 
-// 闪电变形：沿路径应用随机锯齿
+// 闪电变形：沿路径应用随机锯齿，使用统一随机数生成器
 static void ApplyLightningDeformation(std::vector<D2D1_POINT_2F> &pts, DWORD dwTime) {
     if (pts.size() < 3) return;
     std::vector<D2D1_POINT_2F> result;
@@ -3556,13 +4498,13 @@ static void ApplyLightningDeformation(std::vector<D2D1_POINT_2F> &pts, DWORD dwT
     for (size_t i = 0; i < pts.size() - 1; ++i) {
         result.push_back(pts[i]);
         // 在每两点之间插入一个随机偏移的中点
-        float mx = (pts[i].x + pts[i+1].x) / 2.0f;
-        float my = (pts[i].y + pts[i+1].y) / 2.0f;
+        float mx = (pts[i].x + pts[i+1].x) * 0.5f;
+        float my = (pts[i].y + pts[i+1].y) * 0.5f;
         float dx = pts[i+1].x - pts[i].x, dy = pts[i+1].y - pts[i].y;
         float len = sqrtf(dx*dx + dy*dy);
-        if (len > 0) {
+        if (len > 0.001f) {
             float nx = -dy / len, ny = dx / len;
-            float offset = (rand() % 100 - 50) / 100.0f * 8.0f;
+            float offset = (Rand01() - 0.5f) * 16.0f;  // 统一随机数，范围-8~8
             result.push_back({mx + nx * offset, my + ny * offset});
         }
     }
@@ -3575,38 +4517,18 @@ static void ApplyWaveDeformation(std::vector<D2D1_POINT_2F> &pts, DWORD dwTime) 
         return;
     float freq = g_waveFrequency / 100.0f, amp = (float)g_waveAmplitude;
     float phase = dwTime * 0.004f, dist = 0;
-    std::vector<D2D1_POINT_2F> result;
-    result.reserve(pts.size());
     for (size_t i = 0; i < pts.size(); ++i) {
         if (i > 0) {
             float ddx = pts[i].x - pts[i - 1].x, ddy = pts[i].y - pts[i - 1].y;
             dist += sqrtf(ddx * ddx + ddy * ddy);
         }
-        float tdx, tdy;
-        if (i == 0) {
-            tdx = pts[1].x - pts[0].x;
-            tdy = pts[1].y - pts[0].y;
-        } else if (i == pts.size() - 1) {
-            tdx = pts[i].x - pts[i - 1].x;
-            tdy = pts[i].y - pts[i - 1].y;
-        } else {
-            tdx = pts[i + 1].x - pts[i - 1].x;
-            tdy = pts[i + 1].y - pts[i - 1].y;
-        }
-        float tl = sqrtf(tdx * tdx + tdy * tdy);
-        if (tl > 0.001f) {
-            tdx /= tl;
-            tdy /= tl;
-        } else {
-            tdx = 1;
-            tdy = 0;
-        }
-        float nx = -tdy, ny = tdx;
+        float nx, ny;
+        GetPathNormal(pts, i, nx, ny);
         float taper = 1.0f - (float)i / (pts.size() - 1) * 0.65f;
         float wave = sinf(dist * freq + phase) * amp * taper;
-        result.push_back(D2D1::Point2F(pts[i].x + nx * wave, pts[i].y + ny * wave));
+        pts[i].x += nx * wave;
+        pts[i].y += ny * wave;
     }
-    pts = result;
 }
 
 static void ApplyFunctionDeformation(std::vector<D2D1_POINT_2F> &pts, DWORD dwTime) {
@@ -3618,42 +4540,20 @@ static void ApplyFunctionDeformation(std::vector<D2D1_POINT_2F> &pts, DWORD dwTi
         float ddx = pts[i].x - pts[i - 1].x, ddy = pts[i].y - pts[i - 1].y;
         totalDist += sqrtf(ddx * ddx + ddy * ddy);
     }
-    std::vector<D2D1_POINT_2F> result;
-    result.reserve(pts.size());
     for (size_t i = 0; i < pts.size(); ++i) {
         if (i > 0) {
             float ddx = pts[i].x - pts[i - 1].x, ddy = pts[i].y - pts[i - 1].y;
             dist += sqrtf(ddx * ddx + ddy * ddy);
         }
-        float tdx, tdy;
-        if (i == 0) {
-            tdx = pts[1].x - pts[0].x;
-            tdy = pts[1].y - pts[0].y;
-        } else if (i == pts.size() - 1) {
-            tdx = pts[i].x - pts[i - 1].x;
-            tdy = pts[i].y - pts[i - 1].y;
-        } else {
-            tdx = pts[i + 1].x - pts[i - 1].x;
-            tdy = pts[i + 1].y - pts[i - 1].y;
-        }
-        float tl = sqrtf(tdx * tdx + tdy * tdy);
-        if (tl > 0.001f) {
-            tdx /= tl;
-            tdy /= tl;
-        } else {
-            tdx = 1;
-            tdy = 0;
-        }
-        float nx = -tdy, ny = tdx;
+        float nx, ny;
+        GetPathNormal(pts, i, nx, ny);
         float t = totalDist > 0 ? dist / totalDist : 0;
         float offset = EvalExpression(t, dist, time);
-        if (offset > 60)
-            offset = 60;
-        if (offset < -60)
-            offset = -60;
-        result.push_back(D2D1::Point2F(pts[i].x + nx * offset, pts[i].y + ny * offset));
+        // 钳制偏移范围，避免表达式异常导致飞点
+        offset = fmaxf(-60.0f, fminf(60.0f, offset));
+        pts[i].x += nx * offset;
+        pts[i].y += ny * offset;
     }
-    pts = result;
 }
 
 struct DotInfo {
@@ -3665,6 +4565,47 @@ struct DotInfo {
 };
 
 // ===================== 交换链/目标位图重建 =====================
+// 检测当前是否HDR模式（通过尝试创建HDR格式交换链来自动探测）
+// Detect HDR mode by attempting to create HDR format swap chain
+static bool DetectHDRMode() {
+    // 旧版dxgi.h不支持IDXGIOutput6，改用注册表检测HDR状态
+    HKEY hKey = nullptr;
+    bool hdr = false;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+        L"SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers",
+        0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        DWORD value = 0, size = sizeof(DWORD);
+        if (RegQueryValueExW(hKey, L"ATIDXGISupport", nullptr, nullptr, (LPBYTE)&value, &size) == ERROR_SUCCESS) {
+            // ATI显卡HDR支持标志
+        }
+        // 检查Windows HDR高级颜色设置
+        HKEY hSubKey = nullptr;
+        if (RegOpenKeyExW(hKey, L"Configuration", 0, KEY_READ, &hSubKey) == ERROR_SUCCESS) {
+            // 遍历所有显示配置，检查HDR启用状态
+            DWORD index = 0;
+            wchar_t subName[256];
+            DWORD subNameLen = 256;
+            while (RegEnumKeyExW(hSubKey, index++, subName, &subNameLen, nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS) {
+                HKEY hMonitor = nullptr;
+                if (RegOpenKeyExW(hSubKey, subName, 0, KEY_READ, &hMonitor) == ERROR_SUCCESS) {
+                    DWORD advancedColor = 0;
+                    DWORD advSize = sizeof(DWORD);
+                    // 0=SDR, 1=HDR
+                    if (RegQueryValueExW(hMonitor, L"AdvancedColorEnabled", nullptr, nullptr,
+                                         (LPBYTE)&advancedColor, &advSize) == ERROR_SUCCESS) {
+                        if (advancedColor == 1) hdr = true;
+                    }
+                    RegCloseKey(hMonitor);
+                }
+                subNameLen = 256;
+            }
+            RegCloseKey(hSubKey);
+        }
+        RegCloseKey(hKey);
+    }
+    return hdr;
+}
+
 static void RecreateSwapChain(int vW, int vH) {
     if (g_pD2DDC)
         g_pD2DDC->SetTarget(nullptr);
@@ -3683,6 +4624,15 @@ static void RecreateSwapChain(int vW, int vH) {
     if (!g_pDXGIDevice || !g_pD3DDevice || !g_pD2DDC)
         return;
 
+    // 检测HDR模式，选择合适的交换链格式
+    g_isHDRMode = DetectHDRMode();
+    if (g_isHDRMode) {
+        // HDR模式使用R16G16B16A16_FLOAT（scRGB色彩空间）
+        g_swapChainFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
+    } else {
+        g_swapChainFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
+    }
+
     IDXGIFactory2 *pFactory = nullptr;
     if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory2), (void **)&pFactory)))
         return;
@@ -3690,7 +4640,7 @@ static void RecreateSwapChain(int vW, int vH) {
     DXGI_SWAP_CHAIN_DESC1 desc = {};
     desc.Width = vW;
     desc.Height = vH;
-    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    desc.Format = g_swapChainFormat;
     desc.SampleDesc.Count = 1;
     desc.SampleDesc.Quality = 0;
     desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
@@ -3702,16 +4652,33 @@ static void RecreateSwapChain(int vW, int vH) {
     HRESULT hr = pFactory->CreateSwapChainForComposition(g_pD3DDevice, &desc, nullptr, &g_pSwapChain);
     pFactory->Release();
     if (FAILED(hr) || !g_pSwapChain) {
-        Wh_Log(L"RecreateSwapChain: CreateSwapChainForComposition failed: 0x%08X (%dx%d)", hr, vW, vH);
-        return;
+        // HDR格式创建失败，回退到SDR格式
+        if (g_isHDRMode) {
+            Wh_Log(L"RecreateSwapChain: HDR format failed, falling back to SDR");
+            g_isHDRMode = false;
+            g_swapChainFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
+            desc.Format = g_swapChainFormat;
+            IDXGIFactory2 *pFactory2 = nullptr;
+            if (SUCCEEDED(CreateDXGIFactory1(__uuidof(IDXGIFactory2), (void **)&pFactory2))) {
+                hr = pFactory2->CreateSwapChainForComposition(g_pD3DDevice, &desc, nullptr, &g_pSwapChain);
+                pFactory2->Release();
+            }
+        }
+        if (FAILED(hr) || !g_pSwapChain) {
+            Wh_Log(L"RecreateSwapChain: CreateSwapChainForComposition failed: 0x%08X (%dx%d)", hr, vW, vH);
+            return;
+        }
     }
+
+    // HDR模式下使用浮点格式，色彩空间由DWM自动处理
+    // (旧版dxgi.h不支持SetColorSpace1，依赖DWM自动识别格式)
 
     IDXGISurface *pSurface = nullptr;
     if (FAILED(g_pSwapChain->GetBuffer(0, __uuidof(IDXGISurface), (void **)&pSurface)))
         return;
 
     D2D1_BITMAP_PROPERTIES1 bmpProps = {};
-    bmpProps.pixelFormat = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
+    bmpProps.pixelFormat = D2D1::PixelFormat(g_swapChainFormat, D2D1_ALPHA_MODE_PREMULTIPLIED);
     bmpProps.dpiX = 96.0f;
     bmpProps.dpiY = 96.0f;
     bmpProps.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
@@ -3722,7 +4689,7 @@ static void RecreateSwapChain(int vW, int vH) {
         Wh_Log(L"RecreateSwapChain: CreateBitmapFromDxgiSurface failed: 0x%08X", hr);
         return;
     }
-    Wh_Log(L"RecreateSwapChain: swap chain ready (%dx%d)", vW, vH);
+    Wh_Log(L"RecreateSwapChain: swap chain ready (%dx%d), HDR=%d, format=%d", vW, vH, g_isHDRMode, (int)g_swapChainFormat);
 
     // 从后台缓冲 bitmap 取底层 texture，创建缓存的渲染目标视图
     // （RTV 自持底层资源引用，临时 surface/texture 用完即可释放）
@@ -3872,23 +4839,51 @@ static void RenderTrailShapes(DWORD dwTime) {
     for (auto &s : g_trailShapes) {
         float progress = (float)(dwTime - s.startTime) / s.lifetime;
         if (progress < 0 || progress >= 1) continue;
-        float lifeAlpha = (1.0f - progress);
-        float scale = s.size * (progress < 0.2f ? progress * 5.0f : 1.0f);
+        // 生命周期动画：前20%放大（0→1），后30%缩小（1→0.3），中间保持
+        float scale;
+        if (progress < 0.2f) {
+            scale = progress * 5.0f;  // 出生放大
+        } else if (progress > 0.7f) {
+            scale = 1.0f - (progress - 0.7f) * 2.33f;  // 死亡缩小
+            scale = fmaxf(scale, 0.1f);
+        } else {
+            scale = 1.0f;
+        }
+        scale *= s.size;
+        // 透明度：前10%淡入，后30%淡出
+        float lifeAlpha;
+        if (progress < 0.1f) {
+            lifeAlpha = progress * 10.0f;
+        } else if (progress > 0.7f) {
+            lifeAlpha = (1.0f - progress) / 0.3f;
+        } else {
+            lifeAlpha = 1.0f;
+        }
+        lifeAlpha *= 0.85f;
         g_pSolidOuterBrush->SetColor(s.color);
-        g_pSolidOuterBrush->SetOpacity(lifeAlpha * 0.85f);
+        g_pSolidOuterBrush->SetOpacity(lifeAlpha);
         ID2D1PathGeometry *geom = nullptr;
         if (s.shapeType == 0) geom = g_pHeartGeom;
         else if (s.shapeType == 1) geom = g_pStarGeom;
         else if (s.shapeType == 2) geom = g_pHexagramGeom;
+        // 变换：旋转 + 缩放 + 平移（形状中心在原点）
+        D2D1_MATRIX_3X2_F transform =
+            D2D1::Matrix3x2F::Rotation(s.rotation * 57.2958f) *  // 弧度转角度
+            D2D1::Matrix3x2F::Scale(scale, scale) *
+            D2D1::Matrix3x2F::Translation(s.x, s.y);
         if (geom) {
             D2D1_MATRIX_3X2_F oldT;
             g_pD2DDC->GetTransform(&oldT);
-            g_pD2DDC->SetTransform(D2D1::Matrix3x2F::Scale(scale, scale) *
-                                   D2D1::Matrix3x2F::Translation(s.x, s.y));
+            g_pD2DDC->SetTransform(transform);
             g_pD2DDC->FillGeometry(geom, g_pSolidOuterBrush);
             g_pD2DDC->SetTransform(oldT);
         } else {
-            g_pD2DDC->FillEllipse(D2D1::Ellipse(D2D1::Point2F(s.x, s.y), scale, scale), g_pSolidOuterBrush);
+            // 圆形用Ellipse，也应用旋转（圆形旋转无视觉变化，但保持一致）
+            D2D1_MATRIX_3X2_F oldT;
+            g_pD2DDC->GetTransform(&oldT);
+            g_pD2DDC->SetTransform(transform);
+            g_pD2DDC->FillEllipse(D2D1::Ellipse(D2D1::Point2F(0, 0), 1.0f, 1.0f), g_pSolidOuterBrush);
+            g_pD2DDC->SetTransform(oldT);
         }
     }
     g_pSolidOuterBrush->SetOpacity(1.0f);
@@ -4159,6 +5154,7 @@ static void RenderFrame() {
 
     // ===== 提前计算 smoothed 路径（粒子释放和渲染共用）=====
     std::vector<D2D1_POINT_2F> smoothed;
+    smoothed.reserve(g_tailLength * 4);  // 预分配，避免多次扩容
     bool havePath = (g_history.size() >= 2);
     if (havePath) {
         for (auto &p : g_history)
@@ -4166,14 +5162,17 @@ static void RenderFrame() {
         if (g_enableBezierSmooth) {
             // Catmull-Rom 样条平滑（更顺滑的曲线）
             std::vector<D2D1_POINT_2F> bezierOut;
+            bezierOut.reserve(smoothed.size() * 4);
             CatmullRomSmooth(smoothed, bezierOut, 4);
-            smoothed = bezierOut;
+            smoothed.swap(bezierOut);  // swap替代拷贝，O(1)
         } else {
             // 原线性插值平滑
+            std::vector<D2D1_POINT_2F> ns;
+            ns.reserve(smoothed.size() * 3);
             for (int iter = 0; iter < 2; ++iter) {
                 if (smoothed.size() < 3)
                     break;
-                std::vector<D2D1_POINT_2F> ns;
+                ns.clear();
                 ns.push_back(smoothed.front());
                 for (size_t i = 0; i < smoothed.size() - 1; ++i) {
                     D2D1_POINT_2F p0 = smoothed[i], p1 = smoothed[i + 1];
@@ -4181,7 +5180,7 @@ static void RenderFrame() {
                     ns.push_back(D2D1::Point2F(.25f * p0.x + .75f * p1.x, .25f * p0.y + .75f * p1.y));
                 }
                 ns.push_back(smoothed.back());
-                smoothed = ns;
+                smoothed.swap(ns);  // swap替代拷贝
             }
         }
         if (g_trailShape == 2)
@@ -4251,9 +5250,8 @@ static void RenderFrame() {
             float spawnStep = avgParticleSize * 2.0f;  // 每间隔2倍粒子大小插值一批 / Interpolate every 2x particle size
             int interpCount = g_particleDensity;  // 插值点粒子数和正常一致 / Same count as normal spawn
             if (interpCount < 1) interpCount = 1;
-            int particleCap = g_superPerformanceMode ? 1200 : 500;
             // 仅间隔<=10ms时插值，避免曲线路径直线插值出现粒子连光标 / Only interpolate when interval<=10ms to avoid straight-line artifacts on curved paths
-            bool canInterp = (g_particleInterval <= 10) && (g_particles.size() < (size_t)(particleCap * 0.8f));
+            bool canInterp = (g_particleInterval <= 10) && (g_particles.size() < (size_t)(GetParticleCap() * 0.8f));
             if (canInterp && g_hasLastParticlePos) {
                 float dx = origin.x - g_lastParticleX;
                 float dy = origin.y - g_lastParticleY;
@@ -4311,11 +5309,13 @@ static void RenderFrame() {
                 }
                 int st = g_shapeType;
                 if (st == 4) st = (int)(Rand01() * 4);  // random
-                // 随机方向初速度（0.5-2.0 像素/帧）
+                // 随机方向初速度（0.5-2.0 像素/帧）+ 随机旋转速度
                 float angle = Rand01() * 6.2831853f;
                 float speed = 0.5f + Rand01() * 1.5f;
+                float rotSpeed = (Rand01() - 0.5f) * 0.1f;  // 随机旋转速度
                 g_trailShapes.push_back({sx, sy, cosf(angle) * speed, sinf(angle) * speed,
-                                         g_shapeSize, st, dwTime, (float)g_shapeLifetime, cols.solidOuter});
+                                         g_shapeSize, 0.0f, rotSpeed, st, dwTime,
+                                         (float)g_shapeLifetime, cols.solidOuter});
             }
             g_lastShapeX = curX;
             g_lastShapeY = curY;
@@ -4329,13 +5329,18 @@ static void RenderFrame() {
         g_trailShapes.erase(g_trailShapes.begin(), g_trailShapes.begin() + (g_trailShapes.size() - shapeCap));
     }
     // 粒子总数上限，防止参数拉满时性能崩溃（超级性能模式下提高上限）
-    int particleCap = g_superPerformanceMode ? 1200 : 500;
+    int particleCap = GetParticleCap();
     if (g_particles.size() > (size_t)particleCap) {
         g_particles.erase(g_particles.begin(), g_particles.begin() + (g_particles.size() - particleCap));
     }
     g_prevVelocity = velocity;
 
-    // ===== 向心力漩涡：圆周运动检测 + 粒子轨道捕获 =====
+    // ===== 音乐响应：FFT分析 + 节拍检测（基础设施，暂未接入视觉）=====
+    if (g_enableMusicReactive) {
+        MusicUpdate(dwTime);
+    }
+
+    // ===== 向心力漩涡：多漩涡系统 + 圆周运动检测 + 粒子轨道捕获 =====
     if (g_enableCentripetal) {
         CircleDetect &cd = g_circleDetect;
         // 计算加速度（当前速度 - 上帧速度）/ Compute acceleration
@@ -4354,12 +5359,19 @@ static void RenderFrame() {
             cd.historyX[19] = (float)renderPos.x;
             cd.historyY[19] = (float)renderPos.y;
         }
+
+        // 统计当前活跃漩涡数量
+        int activeVortexCount = 0;
+        for (int i = 0; i < g_vortexMaxCount; i++) {
+            if (g_vortices[i].active) activeVortexCount++;
+        }
+
         // 曲线运动检测：任何曲线运动都是圆周运动的一段，曲率中心即漩涡中心
-        // Curvature-based detection: any curved motion is part of a circle, curvature center = vortex center
         float accelBoost = fminf(accelAbs / 10.0f, 1.0f);
         float minVel = 3.0f - accelBoost * 2.0f;
+        bool detected = false;
+        float detCX = 0, detCY = 0, detRadius = 0, detAngVel = 0;
         if (cd.historyCount >= 5 && velocity > minVel) {
-            // 用最近5个点的连续三点组合计算曲率，取平均
             int start = cd.historyCount - 5;
             float sumCX = 0, sumCY = 0, sumRadius = 0, sumAngVel = 0;
             int validCount = 0;
@@ -4367,19 +5379,17 @@ static void RenderFrame() {
                 float x1 = cd.historyX[start + tri], y1 = cd.historyY[start + tri];
                 float x2 = cd.historyX[start + tri + 1], y2 = cd.historyY[start + tri + 1];
                 float x3 = cd.historyX[start + tri + 2], y3 = cd.historyY[start + tri + 2];
-                // 三点外接圆圆心公式
                 float ax = x2 - x1, ay = y2 - y1;
                 float bx = x3 - x1, by = y3 - y1;
-                float cross = ax * by - ay * bx;  // 叉积，符号=旋转方向
-                if (fabsf(cross) < 0.5f) continue;  // 接近直线，跳过
+                float cross = ax * by - ay * bx;
+                if (fabsf(cross) < 0.5f) continue;
                 float d = 2.0f * cross;
                 float aLenSq = ax * ax + ay * ay;
                 float bLenSq = bx * bx + by * by;
                 float cx = x1 + (by * aLenSq - ay * bLenSq) / d;
                 float cy = y1 + (ax * bLenSq - bx * aLenSq) / d;
                 float radius = sqrtf((x1 - cx) * (x1 - cx) + (y1 - cy) * (y1 - cy));
-                if (radius < 20 || radius > 400) continue;  // 合理半径范围
-                // 角速度 = 速度 / 半径，方向由叉积决定
+                if (radius < 20 || radius > 400) continue;
                 float angVel = (velocity / radius) * (cross > 0 ? 1.0f : -1.0f);
                 sumCX += cx; sumCY += cy; sumRadius += radius; sumAngVel += angVel;
                 validCount++;
@@ -4389,138 +5399,539 @@ static void RenderFrame() {
                 float avgCY = sumCY / validCount;
                 float avgRadius = sumRadius / validCount;
                 float avgAngVel = sumAngVel / validCount;
-                // 曲率阈值：半径越小曲率越大，越容易触发
                 float curvatureThreshold = (1.0f - g_centripetalSensitivity) * 200.0f + 50.0f;
                 if (avgRadius < curvatureThreshold) {
+                    detected = true;
+                    detCX = avgCX; detCY = avgCY;
+                    detRadius = avgRadius; detAngVel = avgAngVel;
                     cd.isCircling = true;
                     cd.circleCenterX = avgCX;
                     cd.circleCenterY = avgCY;
                     cd.circleRadius = avgRadius;
                     cd.angularVel = avgAngVel;
                     cd.lastCircleTime = dwTime;
-                    // 平滑增强漩涡强度，曲率越大（半径越小）+加速度越大，增强越快
-                    float curvatureBoost = fminf((curvatureThreshold - avgRadius) / curvatureThreshold, 1.0f);
-                    float boostRate = 0.06f + curvatureBoost * 0.1f + accelBoost * 0.08f;
-                    cd.vortexStrength += (1.0f - cd.vortexStrength) * boostRate;
-                    cd.vortexCenterX = avgCX;
-                    cd.vortexCenterY = avgCY;
-                    // 漩涡旋转速度 = 角速度，受强度和加速度影响
-                    cd.vortexAngularVel = avgAngVel * (0.7f + g_centripetalForce * 0.5f) * (1.0f + accelBoost * 0.4f);
-                    // 初始化轨道倾角（首次触发时随机，之后缓慢变化）
-                    if (cd.vortexStrength < 0.1f) {
-                        cd.orbitTilt = 0.4f + Rand01() * 0.5f;  // 0.4~0.9弧度（23~52度）
-                        cd.orbitTiltVel = (Rand01() - 0.5f) * 0.005f;  // 缓慢变化
-                    }
-                    cd.orbitPhase += cd.vortexAngularVel;  // 更新轨道相位
                 }
             }
         }
-        // 停止运动后立即开始衰减：速度低于阈值时不再维持漩涡
-        // Stop maintaining vortex when velocity drops below threshold
+
+        // 检测到曲线运动：尝试更新现有漩涡或创建新漩涡
+        if (detected) {
+            float curvatureThreshold = (1.0f - g_centripetalSensitivity) * 200.0f + 50.0f;
+            float curvatureBoost = fminf((curvatureThreshold - detRadius) / curvatureThreshold, 1.0f);
+            float boostRate = 0.06f + curvatureBoost * 0.1f + accelBoost * 0.08f;
+
+            // 先检查是否有现有活跃漩涡接近检测位置（在minDistance范围内），有则更新它
+            bool updatedExisting = false;
+            for (int i = 0; i < g_vortexMaxCount; i++) {
+                Vortex &v = g_vortices[i];
+                if (!v.active) continue;
+                float dx = v.centerX - detCX, dy = v.centerY - detCY;
+                float distSq = dx * dx + dy * dy;
+                if (distSq < g_vortexMinDistance * g_vortexMinDistance) {
+                    // 更新现有漩涡：平滑移动中心，增强强度
+                    v.centerX += (detCX - v.centerX) * 0.1f;
+                    v.centerY += (detCY - v.centerY) * 0.1f;
+                    // 给漂移速度一个推动力（沿曲率中心到光标的方向）
+                    if (g_vortexDrift > 0.01f && velocity > 1.0f) {
+                        float pullDx = detCX - v.centerX;
+                        float pullDy = detCY - v.centerY;
+                        float pullDist = sqrtf(pullDx * pullDx + pullDy * pullDy);
+                        if (pullDist > 0.1f) {
+                            v.driftX += (pullDx / pullDist) * velocity * g_vortexDrift * 0.03f;
+                            v.driftY += (pullDy / pullDist) * velocity * g_vortexDrift * 0.03f;
+                        }
+                    }
+                    v.radius = detRadius;
+                    v.coreRadius = detRadius * 0.3f;
+                    v.isCircling = true;
+                    v.strength += (1.0f - v.strength) * boostRate;
+                    v.angularVel = detAngVel * (0.7f + g_centripetalForce * 0.5f) * (1.0f + accelBoost * 0.4f);
+                    v.circulation = v.angularVel * v.coreRadius * v.coreRadius * 6.28318f;
+                    v.pressureGradient = 0.3f + v.strength * 0.5f;
+                    // 涡管拉伸：鼠标加速度拉伸涡管，增强涡量（流体力学涡度方程）
+                    v.stretchRate = accelAbs * 0.01f;
+                    v.orbitPhase += v.angularVel;
+                    // 持续运动延长实际持续时间（补充能量）
+                    float speedFactor = fminf(velocity / 15.0f, 1.0f);
+                    v.actualDuration += (int)(speedFactor * g_vortexDurationSpeed * 10);
+                    if (v.actualDuration > g_centripetalDuration * 3) v.actualDuration = g_centripetalDuration * 3;
+                    updatedExisting = true;
+                    break;
+                }
+            }
+
+            // 没有可更新的现有漩涡：尝试创建新漩涡
+            if (!updatedExisting && activeVortexCount < g_vortexMaxCount) {
+                // 检查与所有活跃漩涡的距离
+                bool tooClose = false;
+                for (int i = 0; i < g_vortexMaxCount; i++) {
+                    Vortex &v = g_vortices[i];
+                    if (!v.active) continue;
+                    float dx = v.centerX - detCX, dy = v.centerY - detCY;
+                    float distSq = dx * dx + dy * dy;
+                    if (distSq < g_vortexMinDistance * g_vortexMinDistance) {
+                        tooClose = true;
+                        break;
+                    }
+                }
+                if (!tooClose) {
+                    // 找到第一个空槽位
+                    for (int i = 0; i < g_vortexMaxCount; i++) {
+                        if (!g_vortices[i].active) {
+                            Vortex &v = g_vortices[i];
+                            v.active = true;
+                            v.centerX = detCX;
+                            v.centerY = detCY;
+                            v.driftX = 0; v.driftY = 0;
+                            v.radius = detRadius;
+                            v.coreRadius = detRadius * 0.3f;  // 涡核半径=轨道半径的30%
+                            v.angularVel = detAngVel * (0.7f + g_centripetalForce * 0.5f) * (1.0f + accelBoost * 0.4f);
+                            v.circulation = v.angularVel * v.coreRadius * v.coreRadius * 6.28318f;  // Γ=2πωR²
+                            v.strength = 0.1f;
+                            v.strength += (1.0f - v.strength) * boostRate;
+                            v.pressureGradient = 0.5f;
+                            v.isCircling = true;
+                            v.startTime = dwTime;
+                            v.stretchRate = 0;
+                            // 实际持续时间受速度影响：速度越快持续越久
+                            float speedFactor = fminf(velocity / 15.0f, 1.0f);
+                            v.actualDuration = (int)(g_centripetalDuration * (1.0f + speedFactor * g_vortexDurationSpeed));
+                            v.orbitTilt = 0.4f + Rand01() * 0.5f;
+                            v.orbitTiltVel = (Rand01() - 0.5f) * 0.005f;
+                            v.orbitPhase = 0;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 音乐联动：节拍给漩涡注入能量（给最近的活跃漩涡，或创建新漩涡）
+        if (g_enableMusicPhysics && g_musicBeatPulseAmount > 0.1f) {
+            float beatVortexBoost = g_musicBeatPulseAmount * g_musicVortexLink * 0.3f;
+            // 找到最近的活跃漩涡并增强
+            int nearestIdx = -1;
+            float nearestDist = 1e9f;
+            float cursorX = (float)(renderPos.x - vX + g_tailOffsetX);
+            float cursorY = (float)(renderPos.y - vY + g_tailOffsetY);
+            for (int i = 0; i < g_vortexMaxCount; i++) {
+                if (!g_vortices[i].active) continue;
+                float dx = g_vortices[i].centerX - cursorX;
+                float dy = g_vortices[i].centerY - cursorY;
+                float d = dx * dx + dy * dy;
+                if (d < nearestDist) { nearestDist = d; nearestIdx = i; }
+            }
+            if (nearestIdx >= 0) {
+                Vortex &v = g_vortices[nearestIdx];
+                v.strength += (1.0f - v.strength) * beatVortexBoost;
+            } else if (activeVortexCount < g_vortexMaxCount) {
+                // 没有活跃漩涡，在光标位置创建一个
+                for (int i = 0; i < g_vortexMaxCount; i++) {
+                    if (!g_vortices[i].active) {
+                        Vortex &v = g_vortices[i];
+                        v.active = true;
+                        v.centerX = cursorX;
+                        v.centerY = cursorY;
+                        v.driftX = 0; v.driftY = 0;
+                        v.radius = 60.0f + g_music.bassLevel * 200.0f;
+                        v.coreRadius = v.radius * 0.3f;
+                        v.angularVel = (g_music.bpmEstimate > 0) ? (g_music.bpmEstimate / 60.0f * 6.28f / 60.0f) : 0.05f;
+                        v.circulation = v.angularVel * v.coreRadius * v.coreRadius * 6.28318f;
+                        v.strength = 0.2f;
+                        v.strength += (1.0f - v.strength) * beatVortexBoost;
+                        v.pressureGradient = 0.5f;
+                        v.isCircling = true;
+                        v.startTime = dwTime;
+                        v.stretchRate = 0;
+                        // 音乐触发的漩涡持续时间受低频能量影响
+                        float bassFactor = fminf(g_music.bassLevel * 2.0f, 1.0f);
+                        v.actualDuration = (int)(g_centripetalDuration * (1.0f + bassFactor * g_vortexDurationSpeed));
+                        v.orbitTilt = 0.4f + Rand01() * 0.5f;
+                        v.orbitTiltVel = (Rand01() - 0.5f) * 0.005f;
+                        v.orbitPhase = 0;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 停止运动后：所有漩涡的isCircling设为false，开始衰减
         if (cd.isCircling && velocity < 2.0f) {
             cd.isCircling = false;
             cd.lastCircleTime = dwTime;
+            for (int i = 0; i < g_vortexMaxCount; i++) {
+                if (g_vortices[i].active) g_vortices[i].isCircling = false;
+            }
         }
-        // 漩涡衰减：停止运动后快速衰减，粒子被甩出而非继续被吸
-        if (!cd.isCircling && cd.vortexStrength > 0) {
-            cd.vortexStrength *= 0.92f;  // 快速衰减
-            if (cd.vortexStrength < 0.02f) {
-                cd.vortexStrength = 0;
-                cd.historyCount = 0;
-                // 清除粒子的漩涡亮度调制，恢复正常（色差保留）
-                for (auto &p : g_particles) {
-                    p.vortexBrightness[0] = 0;
-                    p.vortexBrightness[1] = 0;
-                    p.vortexBrightness[2] = 0;
+
+        // 更新所有漩涡：中心漂移 + 涡旋诱导速度 + 合并/湮灭 + 衰减 + 持续时间 + 轨道倾角
+        float cursorX = (float)(renderPos.x - vX + g_tailOffsetX);
+        float cursorY = (float)(renderPos.y - vY + g_tailOffsetY);
+
+        // 第一步：计算所有漩涡的诱导速度（二维涡旋动力学）
+        // 同号涡：互相诱导绕共同中心旋转；异号涡：成对平移
+        float inducedX[8] = {0}, inducedY[8] = {0};
+        for (int i = 0; i < g_vortexMaxCount; i++) {
+            if (!g_vortices[i].active) continue;
+            for (int j = 0; j < g_vortexMaxCount; j++) {
+                if (i == j || !g_vortices[j].active) continue;
+                Vortex &vi = g_vortices[i];
+                Vortex &vj = g_vortices[j];
+                float dx = vi.centerX - vj.centerX;
+                float dy = vi.centerY - vj.centerY;
+                float dist = sqrtf(dx * dx + dy * dy);
+                if (dist < 1.0f) continue;
+                // 点涡诱导速度：v = Γ/(2πd)，方向垂直于连线
+                // Γ的符号由angularVel决定
+                float inducedSpeed = fabsf(vj.circulation) / (6.28318f * dist) * vj.strength * 0.3f;
+                // 垂直于连线方向（逆时针为正）
+                float perpX = -dy / dist, perpY = dx / dist;
+                // 同号涡：诱导速度使它们绕转；异号涡：诱导速度使它们平移
+                // angularVel同号=同方向旋转，诱导速度方向相同（绕转）
+                // angularVel异号=反方向旋转，诱导速度方向相反（平移）
+                int sameDir = (vi.angularVel >= 0) == (vj.angularVel >= 0) ? 1 : -1;
+                inducedX[i] += perpX * inducedSpeed * sameDir;
+                inducedY[i] += perpY * inducedSpeed * sameDir;
+            }
+        }
+
+        // 第二步：检测同号涡合并和异号涡湮灭
+        bool merged[8] = {false};
+        for (int i = 0; i < g_vortexMaxCount; i++) {
+            if (!g_vortices[i].active || merged[i]) continue;
+            for (int j = i + 1; j < g_vortexMaxCount; j++) {
+                if (!g_vortices[j].active || merged[j]) continue;
+                Vortex &vi = g_vortices[i];
+                Vortex &vj = g_vortices[j];
+                float dx = vi.centerX - vj.centerX;
+                float dy = vi.centerY - vj.centerY;
+                float dist = sqrtf(dx * dx + dy * dy);
+                bool sameDir = (vi.angularVel >= 0) == (vj.angularVel >= 0);
+
+                if (sameDir && dist < (vi.coreRadius + vj.coreRadius) * 1.5f) {
+                    // 同号涡合并：总环量守恒，涡核变大，强度加权平均
+                    float totalStrength = vi.strength + vj.strength;
+                    float newCirculation = vi.circulation + vj.circulation;  // 同号相加
+                    float newCore = sqrtf(vi.coreRadius * vi.coreRadius + vj.coreRadius * vj.coreRadius) * 1.2f;
+                    float newRadius = (vi.radius * vi.strength + vj.radius * vj.strength) / totalStrength;
+                    // 合并到较强的漩涡（或第一个）
+                    vi.centerX = (vi.centerX * vi.strength + vj.centerX * vj.strength) / totalStrength;
+                    vi.centerY = (vi.centerY * vi.strength + vj.centerY * vj.strength) / totalStrength;
+                    vi.circulation = newCirculation;
+                    vi.coreRadius = newCore;
+                    vi.radius = newRadius;
+                    vi.angularVel = newCirculation / (newCore * newCore * 6.28318f);
+                    vi.strength = fminf(totalStrength * 0.7f, 1.0f);
+                    vi.pressureGradient = (vi.pressureGradient + vj.pressureGradient) * 0.5f;
+                    vi.driftX = (vi.driftX * vi.strength + vj.driftX * vj.strength) / totalStrength;
+                    vi.driftY = (vi.driftY * vi.strength + vj.driftY * vj.strength) / totalStrength;
+                    vi.isCircling = vi.isCircling || vj.isCircling;
+                    vi.actualDuration = (vi.actualDuration + vj.actualDuration) / 2;
+                    merged[j] = true;  // 标记j为已合并（删除）
+                } else if (!sameDir && dist < (vi.coreRadius + vj.coreRadius) * 1.2f) {
+                    // 异号涡湮灭：强度抵消，较弱的消失
+                    if (vi.strength > vj.strength) {
+                        vi.strength -= vj.strength * 0.8f;
+                        vi.circulation -= vj.circulation * 0.8f;
+                        if (vi.strength < 0.05f) vi.strength = 0.05f;
+                        merged[j] = true;
+                    } else {
+                        vj.strength -= vi.strength * 0.8f;
+                        vj.circulation -= vi.circulation * 0.8f;
+                        if (vj.strength < 0.05f) vj.strength = 0.05f;
+                        merged[i] = true;
+                        break;
+                    }
                 }
             }
         }
-        // 轨道倾角缓慢变化，增加3D动态感
-        if (cd.vortexStrength > 0.1f) {
-            cd.orbitTilt += cd.orbitTiltVel;
-            if (cd.orbitTilt < 0.2f || cd.orbitTilt > 1.2f) cd.orbitTiltVel = -cd.orbitTiltVel;
-            cd.orbitTilt = fmaxf(0.2f, fminf(1.2f, cd.orbitTilt));
+        // 应用合并/湮灭删除
+        for (int i = 0; i < g_vortexMaxCount; i++) {
+            if (merged[i]) {
+                g_vortices[i].active = false;
+                g_vortices[i].strength = 0;
+            }
         }
-        // 向心力作用于粒子：物理化轨道模型（角动量守恒 + 开普勒速度梯度 + 螺旋收敛）
-        // Physical orbital model: angular momentum conservation + Kepler velocity gradient + spiral convergence
-        if (cd.vortexStrength > 0.05f && !g_particles.empty()) {
-            float force = g_centripetalForce * cd.vortexStrength;
-            float orbitRadius = cd.circleRadius * (0.6f + 0.4f * cd.vortexStrength);
-            float influenceRadius = orbitRadius * 3.5f;
-            // 漩涡中心的"引力质量"，决定轨道速度 GM = v² * r
-            float GM = cd.vortexAngularVel * cd.vortexAngularVel * orbitRadius * orbitRadius * orbitRadius;
-            // 衰减阶段：向心力大幅减弱，离心力增强，粒子被甩出而非继续被吸
-            float decaying = cd.isCircling ? 0.0f : 1.0f;  // 衰减阶段=1，全力甩出
-            for (auto &p : g_particles) {
-                float dx = cd.vortexCenterX - p.x;
-                float dy = cd.vortexCenterY - p.y;
+
+        // 第三步：应用漂移、诱导速度和其他更新
+        for (int i = 0; i < g_vortexMaxCount; i++) {
+            Vortex &v = g_vortices[i];
+            if (!v.active) continue;
+
+            // 1. 漩涡中心漂移：受鼠标速度和位置影响
+            if (g_vortexDrift > 0.01f) {
+                float dx = cursorX - v.centerX;
+                float dy = cursorY - v.centerY;
                 float dist = sqrtf(dx * dx + dy * dy);
-                if (dist > 2.0f && dist < influenceRadius) {
-                    float nx = dx / dist, ny = dy / dist;  // 径向单位向量（指向中心）
-                    float tx = -ny, ty = nx;  // 切向单位向量（逆时针）
-                    // 分解粒子速度为径向和切向分量
-                    float radialVel = p.vx * nx + p.vy * ny;  // 正=远离中心
-                    float tangentVel = p.vx * tx + p.vy * ty;  // 正=逆时针
-                    // 1. 物理向心力：衰减阶段大幅减弱
-                    float distRatio = dist / influenceRadius;
-                    float gravityFalloff = 1.0f / (0.3f + distRatio * distRatio);
-                    float centripetalAccel = force * gravityFalloff * 3.0f;
-                    float effectiveCentripetal = centripetalAccel * (1.0f - decaying * 0.9f);  // 衰减时只剩10%
-                    p.vx += nx * effectiveCentripetal;
-                    p.vy += ny * effectiveCentripetal;
-                    // 2. 衰减时的离心甩出：粒子沿径向向外加速（比向心力强）
-                    if (decaying > 0.5f) {
-                        float centrifugal = force * 4.0f * (1.0f - distRatio * 0.5f);
-                        p.vx -= nx * centrifugal;
-                        p.vy -= ny * centrifugal;
-                        // 切向速度保留（惯性），但不再驱动
-                    }
-                    // 3. 活跃阶段：角动量守恒驱动 + 轨道阻尼 + 弹簧约束（衰减阶段全部关闭）
-                    if (cd.isCircling) {
-                        float targetTangentVel = sqrtf(fmaxf(GM / fmaxf(dist, 5.0f), 0.5f)) * (cd.vortexAngularVel > 0 ? 1.0f : -1.0f);
-                        float tangentError = targetTangentVel - tangentVel;
-                        float tangentForce = tangentError * 0.08f * force;
-                        p.vx += tx * tangentForce;
-                        p.vy += ty * tangentForce;
-                        float radialDamping = -radialVel * 0.04f * force;
-                        p.vx += nx * radialDamping;
-                        p.vy += ny * radialDamping;
-                        float radiusError = dist - orbitRadius;
-                        if (fabsf(radiusError) > 3.0f) {
-                            float springForce = -radiusError * 0.005f * force;
-                            p.vx += nx * springForce;
-                            p.vy += ny * springForce;
+                if (dist > 1.0f && dist < 500.0f) {
+                    float pullStrength = g_vortexDrift * 0.02f * (1.0f - dist / 500.0f);
+                    v.driftX += (dx / dist) * pullStrength * velocity * 0.1f;
+                    v.driftY += (dy / dist) * pullStrength * velocity * 0.1f;
+                }
+                v.driftX *= 0.95f;
+                v.driftY *= 0.95f;
+                v.centerX += v.driftX;
+                v.centerY += v.driftY;
+            }
+
+            // 2. 应用涡旋诱导速度（同号绕转，异号平移）
+            v.centerX += inducedX[i];
+            v.centerY += inducedY[i];
+
+            // 3. 持续时间结束：强制开始衰减
+            if (dwTime - v.startTime > (DWORD)v.actualDuration) {
+                v.isCircling = false;
+            }
+
+            // 3.5 涡管拉伸增强
+            if (v.isCircling && v.stretchRate > 0.001f) {
+                v.strength += v.stretchRate * 0.5f;
+                if (v.strength > 1.0f) v.strength = 1.0f;
+                v.coreRadius *= (1.0f - v.stretchRate * 0.1f);
+                if (v.coreRadius < v.radius * 0.1f) v.coreRadius = v.radius * 0.1f;
+                v.angularVel = v.circulation / (v.coreRadius * v.coreRadius * 6.28318f);
+                v.stretchRate *= 0.9f;
+            }
+
+            // 4. 衰减
+            if (!v.isCircling && v.strength > 0) {
+                v.strength *= 0.92f;
+                v.coreRadius += (v.radius * 0.3f - v.coreRadius) * 0.05f;
+                if (v.strength < 0.02f) {
+                    v.active = false;
+                    v.strength = 0;
+                }
+            }
+
+            // 5. 轨道倾角
+            if (v.strength > 0.1f) {
+                v.orbitTilt += v.orbitTiltVel;
+                if (v.orbitTilt < 0.2f || v.orbitTilt > 1.2f) v.orbitTiltVel = -v.orbitTiltVel;
+                v.orbitTilt = fmaxf(0.2f, fminf(1.2f, v.orbitTilt));
+            }
+        }
+
+        // 清除完全没有活跃漩涡时的粒子漩涡亮度
+        bool anyActive = false;
+        for (int i = 0; i < g_vortexMaxCount; i++) {
+            if (g_vortices[i].active && g_vortices[i].strength > 0.05f) { anyActive = true; break; }
+        }
+        if (!anyActive) {
+            // 不重置historyCount，让位置历史自然积累，否则检测永远触发不了
+            for (auto &p : g_particles) {
+                p.vortexBrightness[0] = 0;
+                p.vortexBrightness[1] = 0;
+                p.vortexBrightness[2] = 0;
+            }
+        }
+
+        // 向心力作用于粒子：Rankine涡模型 + 角动量守恒 + 径向压力梯度
+        // Rankine vortex: core (r≤R) rigid rotation vθ=ωr, outer (r>R) free vortex vθ=Γ/(2πr)
+        // 牛顿第三定律：粒子对漩涡中心的反作用力累积
+        if (!g_particles.empty()) {
+            for (int vi = 0; vi < g_vortexMaxCount; vi++) {
+                Vortex &v = g_vortices[vi];
+                if (!v.active || v.strength <= 0.05f) continue;
+
+                float force = g_centripetalForce * v.strength;
+                float influenceRadius = v.radius * 4.0f;
+                float decaying = v.isCircling ? 0.0f : 1.0f;
+                float invCore = 1.0f / fmaxf(v.coreRadius, 1.0f);
+                float circOver2Pi = v.circulation / 6.28318f;  // Γ/(2π)
+                int rotDir = v.angularVel >= 0 ? 1 : -1;
+
+                // 粒子反作用力累积（牛顿第三定律）
+                float reactionX = 0, reactionY = 0;
+                int affectedCount = 0;
+
+                for (auto &p : g_particles) {
+                    float dx = v.centerX - p.x;
+                    float dy = v.centerY - p.y;
+                    float dist = sqrtf(dx * dx + dy * dy);
+                    if (dist > 2.0f && dist < influenceRadius) {
+                        float nx = dx / dist, ny = dy / dist;  // 径向（指向中心）
+                        float tx = -ny * rotDir, ty = nx * rotDir;  // 切向（旋转方向）
+                        float radialVel = p.vx * nx + p.vy * ny;
+                        float tangentVel = p.vx * tx + p.vy * ty;
+
+                        // 记录施加给粒子的总力，用于反作用力计算
+                        float forceOnParticleX = 0, forceOnParticleY = 0;
+
+                        // 1. 根据物理模型计算目标切向速度
+                        float targetTangentVel;
+                        switch (g_vortexPhysModel) {
+                            case 1: {  // 自由涡：纯角动量守恒，vθ=Γ/(2πr)
+                                targetTangentVel = circOver2Pi / dist;
+                                break;
+                            }
+                            case 2: {  // 刚体旋转：整体匀速旋转，vθ=ω·r
+                                targetTangentVel = v.angularVel * dist;
+                                break;
+                            }
+                            case 3: {  // Lamb-Oseen涡：粘性高斯涡核
+                                float gauss = 1.0f - expf(-(dist * dist) / (2.0f * v.coreRadius * v.coreRadius));
+                                targetTangentVel = (circOver2Pi / dist) * gauss;
+                                break;
+                            }
+                            case 4: {  // 开普勒轨道：行星模型 v=sqrt(GM/r)
+                                float GM = v.angularVel * v.angularVel * v.radius * v.radius * v.radius;
+                                targetTangentVel = sqrtf(fmaxf(GM / fmaxf(dist, 5.0f), 0.5f));
+                                break;
+                            }
+                            case 0:  // Rankine涡（默认）
+                            default: {
+                                if (dist <= v.coreRadius) {
+                                    targetTangentVel = v.angularVel * dist;
+                                } else {
+                                    targetTangentVel = circOver2Pi / dist;
+                                }
+                                break;
+                            }
                         }
+
+                        // 2. 径向压力梯度力（中心低压吸力，根据物理模型变化）
+                        float pressureForce;
+                        switch (g_vortexPhysModel) {
+                            case 1:  // 自由涡：伯努利方程，压力∝1/r²
+                                pressureForce = force * v.pressureGradient * (v.coreRadius * v.coreRadius) / (dist * dist);
+                                break;
+                            case 2:  // 刚体旋转：离心力平衡，压力∝r
+                                pressureForce = force * v.pressureGradient * (dist / v.radius);
+                                break;
+                            case 4:  // 开普勒：引力∝1/r²
+                                pressureForce = force * v.pressureGradient * (v.radius * v.radius) / (dist * dist);
+                                break;
+                            case 3:  // Lamb-Oseen：高斯过渡
+                            case 0:  // Rankine（默认）
+                            default:
+                                if (dist <= v.coreRadius) {
+                                    pressureForce = force * v.pressureGradient * (dist * invCore);
+                                } else {
+                                    pressureForce = force * v.pressureGradient * (v.coreRadius / dist);
+                                }
+                                break;
+                        }
+                        float effectivePressure = pressureForce * (1.0f - decaying * 0.85f);
+                        forceOnParticleX += nx * effectivePressure;
+                        forceOnParticleY += ny * effectivePressure;
+                        p.vx += nx * effectivePressure;
+                        p.vy += ny * effectivePressure;
+
+                        // 3. 衰减时离心甩出
+                        if (decaying > 0.5f) {
+                            float centrifugal = force * 3.5f * (1.0f - dist / influenceRadius * 0.5f);
+                            forceOnParticleX -= nx * centrifugal;
+                            forceOnParticleY -= ny * centrifugal;
+                            p.vx -= nx * centrifugal;
+                            p.vy -= ny * centrifugal;
+                        }
+
+                        // 4. 活跃阶段：角动量守恒驱动 + 粘性阻尼
+                        if (v.isCircling) {
+                            float tangentError = targetTangentVel - tangentVel;
+                            float viscosity;
+                            switch (g_vortexPhysModel) {
+                                case 1: viscosity = 0.02f; break;
+                                case 2: viscosity = 0.2f; break;
+                                case 3: viscosity = 0.04f + 0.1f * expf(-(dist * dist) / (2.0f * v.coreRadius * v.coreRadius)); break;
+                                case 4: viscosity = 0.08f; break;
+                                case 0: default: viscosity = dist <= v.coreRadius ? 0.15f : 0.04f; break;
+                            }
+                            float tangentForce = tangentError * viscosity * force;
+                            forceOnParticleX += tx * tangentForce;
+                            forceOnParticleY += ty * tangentForce;
+                            p.vx += tx * tangentForce;
+                            p.vy += ty * tangentForce;
+
+                            float radialDamping = -radialVel * 0.04f * force;
+                            forceOnParticleX += nx * radialDamping;
+                            forceOnParticleY += ny * radialDamping;
+                            p.vx += nx * radialDamping;
+                            p.vy += ny * radialDamping;
+
+                            // 软弹簧约束
+                            float massOrbitFactor = g_enableParticleMass ? powf(p.mass, 0.333f) : 1.0f;
+                            float targetRadius;
+                            switch (g_vortexPhysModel) {
+                                case 1: targetRadius = v.radius * 0.8f * massOrbitFactor; break;
+                                case 2: targetRadius = v.radius * 0.7f * massOrbitFactor; break;
+                                case 3: targetRadius = v.coreRadius * 1.5f * massOrbitFactor; break;
+                                case 4: targetRadius = v.radius * 0.6f * massOrbitFactor; break;
+                                case 0: default: targetRadius = v.coreRadius * 2.0f * massOrbitFactor; break;
+                            }
+                            float radiusError = dist - targetRadius;
+                            if (fabsf(radiusError) > 2.0f) {
+                                float springForce = -radiusError * 0.006f * force;
+                                springForce -= radialVel * 0.015f * force;
+                                forceOnParticleX += nx * springForce;
+                                forceOnParticleY += ny * springForce;
+                                p.vx += nx * springForce;
+                                p.vy += ny * springForce;
+                            }
+
+                            float orbitAngle = atan2f(p.y - v.centerY, p.x - v.centerX);
+                            float precession = 0.0015f * force * sinf(orbitAngle * 2.0f);
+                            forceOnParticleX += tx * precession;
+                            forceOnParticleY += ty * precession;
+                            p.vx += tx * precession;
+                            p.vy += ty * precession;
+                        }
+
+                        // 5. 3D轨道倾角 + 亮度
+                        if (v.isCircling) {
+                            float orbitAngle = atan2f(p.y - v.centerY, p.x - v.centerX);
+                            float depthFactor = sinf(orbitAngle) * sinf(v.orbitTilt);
+                            float targetZ = 0.5f + depthFactor * 0.5f;
+                            p.z += (targetZ - p.z) * 0.15f;
+                            float speed = sqrtf(p.vx * p.vx + p.vy * p.vy);
+                            float energyBoost = fminf(speed / 12.0f, 1.0f);
+                            float coreBoost = dist <= v.coreRadius ? 0.15f : 0.0f;
+                            float depthBrightness = (1.0f - p.z) * 0.2f;
+                            p.vortexBrightness[0] = fmaxf(p.vortexBrightness[0], energyBoost * 0.1f + depthBrightness + coreBoost);
+                            p.vortexBrightness[1] = fmaxf(p.vortexBrightness[1], energyBoost * 0.1f + depthBrightness + coreBoost);
+                            p.vortexBrightness[2] = fmaxf(p.vortexBrightness[2], energyBoost * 0.1f + depthBrightness + coreBoost);
+                        } else {
+                            p.z += (0.5f - p.z) * 0.1f;
+                            p.vortexBrightness[0] *= 0.9f;
+                            p.vortexBrightness[1] *= 0.9f;
+                            p.vortexBrightness[2] *= 0.9f;
+                        }
+
+                        // 累积反作用力（牛顿第三定律：粒子对漩涡的力 = -漩涡对粒子的力）
+                        // 粒子质量越大，反作用力越强
+                        float particleMass = g_enableParticleMass ? p.mass : 1.0f;
+                        reactionX -= forceOnParticleX * particleMass * 0.02f;
+                        reactionY -= forceOnParticleY * particleMass * 0.02f;
+                        // 额外：粒子动量对漩涡中心的推动（粒子分布不对称时产生净推力）
+                        reactionX += p.vx * particleMass * 0.0005f;
+                        reactionY += p.vy * particleMass * 0.0005f;
+                        affectedCount++;
                     }
-                    // 5. 3D轨道倾角（仅活跃阶段）：根据粒子在轨道上的位置计算z深度
-                    if (cd.isCircling) {
-                        float orbitAngle = atan2f(p.y - cd.vortexCenterY, p.x - cd.vortexCenterX);
-                        float depthFactor = sinf(orbitAngle) * sinf(cd.orbitTilt);
-                        float targetZ = 0.5f + depthFactor * 0.5f;
-                        p.z += (targetZ - p.z) * 0.15f;
-                        // 6. 粒子亮度随轨道速度+z深度变化（动能可视化+3D透视）
-                        float speed = sqrtf(p.vx * p.vx + p.vy * p.vy);
-                        float energyBoost = fminf(speed / 15.0f, 1.0f);
-                        float depthBrightness = (1.0f - p.z) * 0.2f;
-                        p.vortexBrightness[0] = energyBoost * 0.12f + depthBrightness;
-                        p.vortexBrightness[1] = energyBoost * 0.12f + depthBrightness;
-                        p.vortexBrightness[2] = energyBoost * 0.12f + depthBrightness;
-                    } else {
-                        // 衰减阶段：z深度和亮度恢复正常
-                        p.z += (0.5f - p.z) * 0.1f;
-                        p.vortexBrightness[0] *= 0.9f;
-                        p.vortexBrightness[1] *= 0.9f;
-                        p.vortexBrightness[2] *= 0.9f;
+                }
+
+                // 应用粒子反作用力到漩涡中心漂移
+                if (affectedCount > 0 && g_vortexDrift > 0.01f) {
+                    // 反作用力系数：粒子越多影响越大（sqrt归一化，避免过度）
+                    float countFactor = sqrtf((float)affectedCount) * 0.3f;
+                    float reactionScale = g_vortexDrift * countFactor;
+                    v.driftX += reactionX * reactionScale;
+                    v.driftY += reactionY * reactionScale;
+                    // 限制漂移速度，避免飞出去
+                    float driftSpeed = sqrtf(v.driftX * v.driftX + v.driftY * v.driftY);
+                    float maxDrift = 5.0f * g_vortexDrift;
+                    if (driftSpeed > maxDrift) {
+                        v.driftX = v.driftX / driftSpeed * maxDrift;
+                        v.driftY = v.driftY / driftSpeed * maxDrift;
                     }
                 }
             }
         }
     }
 
-    // ===== 粒子间排斥力计算（O(n²)，粒子过多时跳过以保证性能）=====
-    if (g_enableParticleInteraction && !g_particles.empty()) {
+    // ===== 粒子间排斥力 + 弹性碰撞（与质量相关）=====
+    if ((g_enableParticleInteraction || g_enableParticleCollision) && !g_particles.empty()) {
         int pcount = (int)g_particles.size();
-        int maxCalc = g_superPerformanceMode ? 1200 : 500;
+        int maxCalc = GetParticleCap();
         if (pcount <= maxCalc) {
             float repelDist = (float)g_interParticleRepelDistance;
             float repelDistSq = repelDist * repelDist;
@@ -4531,26 +5942,59 @@ static void RenderFrame() {
                     float distSq = dx * dx + dy * dy;
                     if (distSq < repelDistSq && distSq > 0.01f) {
                         float dist = sqrtf(distSq);
-                        float falloff = 1.0f - dist / repelDist;
-                        float force = falloff * g_interParticleRepelForce / dist;
-                        g_particles[i].vx += dx * force;
-                        g_particles[i].vy += dy * force;
-                        g_particles[j].vx -= dx * force;
-                        g_particles[j].vy -= dy * force;
+                        float nx = dx / dist, ny = dy / dist;
+                        // 排斥力
+                        if (g_enableParticleInteraction) {
+                            float falloff = 1.0f - dist / repelDist;
+                            float massFactor = g_enableParticleMass ? sqrtf(g_particles[i].mass * g_particles[j].mass) : 1.0f;
+                            float force = falloff * g_interParticleRepelForce / dist * massFactor;
+                            float invMassI = g_enableParticleMass ? (1.0f / g_particles[i].mass) : 1.0f;
+                            float invMassJ = g_enableParticleMass ? (1.0f / g_particles[j].mass) : 1.0f;
+                            g_particles[i].vx += nx * force * invMassI;
+                            g_particles[i].vy += ny * force * invMassI;
+                            g_particles[j].vx -= nx * force * invMassJ;
+                            g_particles[j].vy -= ny * force * invMassJ;
+                        }
+                        // 弹性碰撞：距离小于两粒子半径之和时
+                        if (g_enableParticleCollision) {
+                            float radiusI = g_particles[i].size * 0.5f;
+                            float radiusJ = g_particles[j].size * 0.5f;
+                            float minDist = radiusI + radiusJ;
+                            if (dist < minDist) {
+                                // 位置修正：防止重叠
+                                float overlap = (minDist - dist) * 0.5f;
+                                g_particles[i].x += nx * overlap;
+                                g_particles[i].y += ny * overlap;
+                                g_particles[j].x -= nx * overlap;
+                                g_particles[j].y -= ny * overlap;
+                                // 弹性碰撞（动量守恒+动能守恒）
+                                float mi = g_enableParticleMass ? g_particles[i].mass : 1.0f;
+                                float mj = g_enableParticleMass ? g_particles[j].mass : 1.0f;
+                                float totalMass = mi + mj;
+                                // 相对速度在法向上的分量
+                                float dvx = g_particles[i].vx - g_particles[j].vx;
+                                float dvy = g_particles[i].vy - g_particles[j].vy;
+                                float vn = dvx * nx + dvy * ny;
+                                if (vn > 0) {  // 正在接近才碰撞
+                                    float impulse = (2.0f * vn) / totalMass;
+                                    g_particles[i].vx -= impulse * mj * nx;
+                                    g_particles[i].vy -= impulse * mj * ny;
+                                    g_particles[j].vx += impulse * mi * nx;
+                                    g_particles[j].vy += impulse * mi * ny;
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
     }
 
-    // ===== 粒子万有引力系统（牛顿万有引力定律 + 牛顿第二定律）=====
-    // Newtonian gravity: F = G*m1*m2/r², a = F/m = G*m_other/r²
+    // ===== 粒子万有引力系统（牛顿万有引力定律 + 牛顿第二定律 + Plummer软化）=====
     if (g_enableParticleGravity && g_particles.size() > 2) {
         int pcount = (int)g_particles.size();
-        // 选择引力天体：质量最大的N个粒子
         int bodyCount = g_gravitySystem == 0 ? 2 : fminf(g_gravityBodyCount, pcount);
         g_gravityBodies.clear();
-        // 简单选择：按质量排序取前N个（性能考虑，不做完整排序，用部分选择）
         std::vector<std::pair<float, int>> massIdx;
         for (int i = 0; i < pcount; i++) {
             massIdx.push_back({g_particles[i].mass, i});
@@ -4560,20 +6004,55 @@ static void RenderFrame() {
         for (int i = 0; i < bodyCount; i++) {
             g_gravityBodies.push_back(massIdx[i].second);
         }
-        // 计算每个粒子受到引力源的引力
-        float G = g_gravityStrength * 50.0f;  // 引力常数缩放
-        float minDistSq = 25.0f;  // 最小距离平方，避免引力无穷大
+        float G = g_gravityStrength * 50.0f;
+        if (g_enableMusicPhysics && g_musicGravityLink > 0) {
+            float volumeBoost = 1.0f + fminf(g_music.overallLevel * 20.0f, 2.0f) * g_musicGravityLink;
+            G *= volumeBoost;
+        }
+        // 多频段联动：低频增强引力
+        if (g_enableMultiBandLink) {
+            G *= (1.0f + g_bassGravityBoost * 1.5f);
+        }
+        // Plummer软化半径：避免近距离引力奇点 / Plummer softening
+        float softening = 8.0f;
+        float softeningSq = softening * softening;
+        float maxDist = 400.0f;  // 引力截断距离
+        float maxDistSq = maxDist * maxDist;
+        // 先计算所有引力源之间的相互作用（引力源也运动）
+        for (int bi = 0; bi < (int)g_gravityBodies.size(); bi++) {
+            int i = g_gravityBodies[bi];
+            float ax = 0, ay = 0;
+            for (int bj = 0; bj < (int)g_gravityBodies.size(); bj++) {
+                if (bi == bj) continue;
+                int j = g_gravityBodies[bj];
+                float dx = g_particles[j].x - g_particles[i].x;
+                float dy = g_particles[j].y - g_particles[i].y;
+                float distSq = dx * dx + dy * dy + softeningSq;
+                if (distSq > maxDistSq) continue;
+                float dist = sqrtf(distSq);
+                float accel = G * g_particles[j].mass / distSq;
+                ax += (dx / dist) * accel;
+                ay += (dy / dist) * accel;
+            }
+            g_particles[i].vx += ax * 0.5f;  // 引力源运动减半（避免太剧烈）
+            g_particles[i].vy += ay * 0.5f;
+        }
+        // 用bool数组标记引力源，O(1)查找替代线性查找
+        std::vector<bool> isBodyFlag(pcount, false);
+        for (int bi = 0; bi < (int)g_gravityBodies.size(); bi++) {
+            isBodyFlag[g_gravityBodies[bi]] = true;
+        }
+        // 计算所有粒子受到引力源的引力
         for (int i = 0; i < pcount; i++) {
+            if (isBodyFlag[i]) continue;  // 引力源已计算
             float ax = 0, ay = 0;
             for (int bi = 0; bi < (int)g_gravityBodies.size(); bi++) {
                 int j = g_gravityBodies[bi];
-                if (i == j) continue;
                 float dx = g_particles[j].x - g_particles[i].x;
                 float dy = g_particles[j].y - g_particles[i].y;
-                float distSq = dx * dx + dy * dy;
-                if (distSq < minDistSq) distSq = minDistSq;
+                float distSq = dx * dx + dy * dy + softeningSq;
+                if (distSq > maxDistSq) continue;
                 float dist = sqrtf(distSq);
-                // a = G * m_j / r²（牛顿第二定律，加速度与自身质量无关）
                 float accel = G * g_particles[j].mass / distSq;
                 ax += (dx / dist) * accel;
                 ay += (dy / dist) * accel;
@@ -4583,37 +6062,84 @@ static void RenderFrame() {
         }
     }
 
-    // ===== 粒子物理：摩擦 + 光标排斥力 + 随机扰动 + 全程吸附光标 =====
+    // ===== 粒子物理：空气阻力 + 速度上限 + 光标排斥/吸附 + 音乐脉冲 =====
     float attractTargetX = (float)(renderPos.x - vX + g_tailOffsetX);
     float attractTargetY = (float)(renderPos.y - vY + g_tailOffsetY);
+    const float MAX_SPEED = 25.0f;  // 速度上限（像素/帧）
+    const float MAX_SPEED_SQ = MAX_SPEED * MAX_SPEED;
     for (auto &p : g_particles) {
-        // 质量影响摩擦（惯性）：质量大的摩擦小，速度保持更久
-        // Friction affected by mass: heavier particles have less friction (more inertia)
+        // 记录初始速度，用于调试受力计算（F = m * Δv）
+        float oldVx = p.vx, oldVy = p.vy;
+        // 质量影响惯性：质量大的空气阻力小，速度保持更久
         float invMass = g_enableParticleMass ? (1.0f / p.mass) : 1.0f;
-        float friction = g_enableParticleMass ? (0.90f + 0.03f / fmaxf(p.mass, 0.1f)) : 0.93f;
-        friction = fminf(fmaxf(friction, 0.85f), 0.98f);
-        p.vx *= friction;
-        p.vy *= friction;
+        // 预计算到光标的距离（音乐脉冲和光标排斥共用）
+        float toCursorDx = p.x - attractTargetX;
+        float toCursorDy = p.y - attractTargetY;
+        float toCursorDistSq = toCursorDx * toCursorDx + toCursorDy * toCursorDy;
+        // 空气阻力模型：F_drag = -k * v（低速线性阻力）+ 高速二次阻力
+        float speedSq = p.vx * p.vx + p.vy * p.vy;
+        float speed = sqrtf(speedSq);
+        float dragCoeff = g_enableParticleMass ? (0.04f / fmaxf(p.mass, 0.2f)) : 0.05f;
+        float linearDrag = 1.0f - dragCoeff;
+        float quadraticDrag = speed > 10.0f ? (1.0f - dragCoeff * 0.5f * (speed - 10.0f) / 15.0f) : 1.0f;
+        float totalDrag = fmaxf(fminf(linearDrag * quadraticDrag, 0.98f), 0.80f);
+        p.vx *= totalDrag;
+        p.vy *= totalDrag;
+        // 音乐节拍脉冲：每拍给粒子一个径向速度爆发（从光标向外）
+        if (g_enableMusicPhysics && g_musicBeatPulseAmount > 0.01f && toCursorDistSq > 1.0f) {
+            float pdist = sqrtf(toCursorDistSq);
+            float pulseForce = g_musicBeatPulseAmount * 8.0f * invMass;
+            p.vx += (toCursorDx / pdist) * pulseForce;
+            p.vy += (toCursorDy / pdist) * pulseForce;
+        }
         // 光标周围排斥力：加速度=F/m，质量大的加速度小
-        if (g_enableParticleRepel && g_particleRepelForce > 0) {
-            float rdx = p.x - attractTargetX;
-            float rdy = p.y - attractTargetY;
-            float rdist = sqrtf(rdx * rdx + rdy * rdy);
-            if (rdist < (float)g_particleRepelRadius && rdist > 0.5f) {
-                float nx = rdx / rdist, ny = rdy / rdist;
-                float falloff = 1.0f - rdist / (float)g_particleRepelRadius;
-                float force = falloff * g_particleRepelForce;
-                float accel = force * invMass;  // 牛顿第二定律 a=F/m
-                p.vx += nx * accel;
-                p.vy += ny * accel;
-                float perturb = force * 0.65f * invMass;
-                float angle = Rand01() * 6.28318f;
-                p.vx += cosf(angle) * perturb;
-                p.vy += sinf(angle) * perturb;
-            }
+        if (g_enableParticleRepel && g_particleRepelForce > 0 && toCursorDistSq < (float)g_particleRepelRadius * g_particleRepelRadius && toCursorDistSq > 0.25f) {
+            float rdist = sqrtf(toCursorDistSq);
+            float nx = toCursorDx / rdist, ny = toCursorDy / rdist;
+            float falloff = 1.0f - rdist / (float)g_particleRepelRadius;
+            float force = falloff * g_particleRepelForce;
+            float accel = force * invMass;
+            p.vx += nx * accel;
+            p.vy += ny * accel;
+            float perturb = force * 0.65f * invMass;
+            float angle = Rand01() * 6.28318f;
+            p.vx += cosf(angle) * perturb;
+            p.vy += sinf(angle) * perturb;
+        }
+        // 洛伦兹力：带电粒子在磁场中做圆周运动 F = q(v × B)
+        // 2D中：F = q * B * (-vy, vx)，正电荷逆时针，负电荷顺时针
+        if (g_enableLorentzForce) {
+            float B = g_lorentzStrength * 0.5f;
+            // 多频段联动：中频增强磁场
+            if (g_enableMultiBandLink) B *= (1.0f + g_midRepelBoost * 0.5f);
+            float lx = -p.vy * B * p.charge;
+            float ly = p.vx * B * p.charge;
+            p.vx += lx * invMass;
+            p.vy += ly * invMass;
+        }
+        // 布朗运动：随机热运动，受高频音频影响
+        if (g_enableBrownianMotion) {
+            float noise = g_brownianStrength * 0.5f;
+            // 多频段联动：高频增强热噪声
+            if (g_enableMultiBandLink) noise *= (1.0f + g_trebleNoiseBoost * 2.0f);
+            float angle = Rand01() * 6.28318f;
+            float magnitude = noise * (0.5f + Rand01());
+            p.vx += cosf(angle) * magnitude * invMass;
+            p.vy += sinf(angle) * magnitude * invMass;
+        }
+        // 速度上限：避免粒子飞太快（复用上面计算的speedSq）
+        if (speedSq > MAX_SPEED_SQ) {
+            float scale = MAX_SPEED / speed;  // speed已计算，直接用
+            p.vx *= scale;
+            p.vy *= scale;
         }
         p.x += p.vx;
         p.y += p.vy;
+        // 调试：记录本帧总受力 F = m * Δv（用于物理可视化）
+        if (g_debugForce) {
+            p.debugForceX = p.mass * (p.vx - oldVx);
+            p.debugForceY = p.mass * (p.vy - oldVy);
+        }
         if (g_enableParticleSpin) p.rotation += p.spinSpeed;
         // 光标吸附：质量大的吸附加速度小
         if (g_particleAttraction > 0) {
@@ -4621,17 +6147,27 @@ static void RenderFrame() {
             p.x += (attractTargetX - p.x) * attractAccel;
             p.y += (attractTargetY - p.y) * attractAccel;
         }
+        // 质量影响亮度：大质量粒子更亮（通过vortexBrightness叠加）
+        if (g_enableParticleMass && p.mass > 1.2f) {
+            float massBrightness = (p.mass - 1.0f) * 0.08f;
+            p.vortexBrightness[0] = fmaxf(p.vortexBrightness[0], massBrightness);
+            p.vortexBrightness[1] = fmaxf(p.vortexBrightness[1], massBrightness);
+            p.vortexBrightness[2] = fmaxf(p.vortexBrightness[2], massBrightness);
+        }
     }
     if (!g_particles.empty())
         g_particles.erase(std::remove_if(g_particles.begin(), g_particles.end(),
                                          [&](const Particle &p) { return dwTime - p.startTime > (DWORD)p.lifetime; }),
                           g_particles.end());
-    // 形状拖尾物理更新（随机方向速度 + 摩擦衰减）
+    // 形状拖尾物理更新（速度衰减 + 旋转 + 微重力）
     for (auto &s : g_trailShapes) {
         s.x += s.vx;
         s.y += s.vy;
         s.vx *= 0.96f;
         s.vy *= 0.96f;
+        s.vy += 0.02f;  // 微重力，形状缓慢下落
+        s.rotation += s.rotSpeed;  // 旋转
+        s.rotSpeed *= 0.98f;  // 旋转阻尼
     }
     // 形状拖尾过期清理
     if (!g_trailShapes.empty())
@@ -4672,7 +6208,13 @@ static void RenderFrame() {
         bool nativeOK = NativeRenderFrame(vW, vH, smoothed, tailVisible, cols, widthMul, g_fadeAlpha, dwTime, vX, vY);
         if (nativeOK) {
             // 原生渲染成功：所有效果（拖尾、粒子、形状、点击、运动模糊）均用 D3D11 原生渲染
-            // 无需 D2D1 后处理
+            // 物理可视化调试：用 D2D1 叠加绘制速度/受力向量、漩涡、引力源等
+            if (g_debugVelocity || g_debugForce || g_debugVortex || g_debugGravity || g_debugCollision) {
+                g_pD2DDC->SetTarget(g_pD2DTargetBitmap);
+                g_pD2DDC->BeginDraw();
+                RenderPhysicsDebugD2D(dwTime);
+                g_pD2DDC->EndDraw();
+            }
 
             if (g_pSwapChain) {
                 HRESULT presHr = g_pSwapChain->Present(1, 0);
@@ -5373,6 +6915,8 @@ BOOL WhTool_ModInit() {
     return TRUE;
 }
 void WhTool_ModUninit() {
+    // 停止音乐捕获 / Stop music capture
+    MusicStopCapture();
     if (g_threadHandle) {
         if (g_readyEvent)
             WaitForSingleObject(g_readyEvent, INFINITE);
