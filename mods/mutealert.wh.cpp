@@ -21,10 +21,10 @@
 Adds a microphone button to the Windows 11 system tray area.
 
 > **Updating from 0.9.8 or earlier:** Version 0.9.10 organized the settings
-> into collapsible sections. Windhawk can't migrate the old flat setting paths,
-> so review and save your settings once after updating. In particular, re-enable
-> headset synchronization and call integrations, restore localized button text,
-> and check the position and locked-volume target.
+> into collapsible sections. MuteAlert continues using saved settings from the
+> old flat layout until the grouped settings are next saved. Review the grouped
+> values before saving, particularly headset synchronization, call integrations,
+> localized button text, position, and the locked-volume target.
 
 ![MuteAlert microphone activity widget](https://raw.githubusercontent.com/MuteAlert/windhawk/main/assets/taskbar-widget.png)
 
@@ -487,6 +487,7 @@ static std::atomic<int> g_peakSensitivity{150};
 static std::atomic<bool> g_forceVolume{false};
 static std::atomic<int> g_forcedVolume{100};
 static std::atomic<bool> g_windowsMutedByHeadset{false};
+static bool g_usingLegacySettings = false;
 
 static unsigned long long CurrentBootStamp() {
     FILETIME fileTime{};
@@ -517,7 +518,26 @@ static std::wstring GetStringSetting(PCWSTR name) {
     return WindhawkUtils::StringSetting::make(name).get();
 }
 
+static int GetMigratedIntSetting(PCWSTR groupedName, PCWSTR legacyName) {
+    return Wh_GetIntSetting(
+        g_usingLegacySettings ? legacyName : groupedName);
+}
+
+static std::wstring GetMigratedStringSetting(PCWSTR groupedName,
+                                             PCWSTR legacyName) {
+    return GetStringSetting(
+        g_usingLegacySettings ? legacyName : groupedName);
+}
+
 static void LoadSettings() {
+    g_usingLegacySettings =
+        Wh_GetIntValue(L"settingsSchema", 1) < 2 &&
+        !GetStringSetting(L"position").empty();
+    if (g_usingLegacySettings) {
+        Wh_Log(L"[Settings] Using saved pre-0.9.10 settings until the "
+               L"grouped settings are next saved");
+    }
+
     bool ownsWindowsMute =
         Wh_GetIntValue(L"windowsMutedByHeadset", 0) != 0;
     if (ownsWindowsMute && !HeadsetMuteOwnershipIsFromCurrentBoot()) {
@@ -527,12 +547,14 @@ static void LoadSettings() {
         Wh_SetStringValue(L"windowsMutedByHeadsetBoot", L"");
     }
     g_windowsMutedByHeadset.store(ownsWindowsMute);
-    g_settings.position = GetStringSetting(L"General.position");
+    g_settings.position = GetMigratedStringSetting(
+        L"General.position", L"position");
     if (g_settings.position.empty()) {
         g_settings.position = L"beforeClock";
     }
 
-    std::wstring role = GetStringSetting(L"General.deviceRole");
+    std::wstring role = GetMigratedStringSetting(
+        L"General.deviceRole", L"deviceRole");
     if (role == L"communications") {
         g_settings.deviceRole = eCommunications;
     } else if (role == L"multimedia") {
@@ -542,10 +564,15 @@ static void LoadSettings() {
     }
 
     g_settings.volumeStep =
-        std::clamp(Wh_GetIntSetting(L"General.volumeStep"), 1, 20);
-    g_settings.forceVolume = Wh_GetIntSetting(L"General.forceVolume") != 0;
+        std::clamp(GetMigratedIntSetting(
+                       L"General.volumeStep", L"volumeStep"),
+                   1, 20);
+    g_settings.forceVolume = GetMigratedIntSetting(
+        L"General.forceVolume", L"forceVolume") != 0;
     int configuredForcedVolume =
-        std::clamp(Wh_GetIntSetting(L"General.forcedVolume"), 0, 100);
+        std::clamp(GetMigratedIntSetting(
+                       L"General.forcedVolume", L"forcedVolume"),
+                   0, 100);
     int previousConfiguredVolume =
         Wh_GetIntValue(L"forcedVolumeSettingBaseline", -1);
     if (previousConfiguredVolume != configuredForcedVolume) {
@@ -555,21 +582,32 @@ static void LoadSettings() {
     g_settings.forcedVolume = std::clamp(
         Wh_GetIntValue(L"forcedVolumeTarget", configuredForcedVolume), 0, 100);
     g_settings.updateInterval =
-        std::clamp(Wh_GetIntSetting(L"General.updateInterval"), 25, 500);
+        std::clamp(GetMigratedIntSetting(
+                       L"General.updateInterval", L"updateInterval"),
+                   25, 500);
     g_settings.peakSensitivity =
-        std::clamp(Wh_GetIntSetting(L"General.peakSensitivity"), 25, 500);
+        std::clamp(GetMigratedIntSetting(
+                       L"General.peakSensitivity", L"peakSensitivity"),
+                   25, 500);
     g_settings.iconSize =
-        std::clamp(Wh_GetIntSetting(L"General.iconSize"), 12, 32);
+        std::clamp(GetMigratedIntSetting(
+                       L"General.iconSize", L"iconSize"),
+                   12, 32);
     g_settings.buttonWidth =
-        std::clamp(Wh_GetIntSetting(L"General.buttonWidth"), 20, 64);
+        std::clamp(GetMigratedIntSetting(
+                       L"General.buttonWidth", L"buttonWidth"),
+                   20, 64);
     g_settings.showCallStateIcon =
-        Wh_GetIntSetting(L"General.showCallStateIcon") != 0;
-    g_settings.headsetSyncMode = GetStringSetting(L"Headset.headsetSyncMode");
+        GetMigratedIntSetting(L"General.showCallStateIcon",
+                              L"showCallStateIcon") != 0;
+    g_settings.headsetSyncMode = GetMigratedStringSetting(
+        L"Headset.headsetSyncMode", L"headsetSyncMode");
     if (g_settings.headsetSyncMode.empty()) {
         g_settings.headsetSyncMode = L"off";
     }
     g_settings.headsetSyncWindows =
-        Wh_GetIntSetting(L"Headset.headsetSyncWindows") != 0;
+        GetMigratedIntSetting(L"Headset.headsetSyncWindows",
+                              L"headsetSyncWindows") != 0;
     if (!g_settings.headsetSyncWindows &&
         g_windowsMutedByHeadset.exchange(false)) {
         Wh_SetIntValue(L"windowsMutedByHeadset", 0);
@@ -577,21 +615,32 @@ static void LoadSettings() {
         Wh_SetStringValue(L"windowsMutedByHeadsetBoot", L"");
     }
     g_settings.headsetSyncCalls =
-        Wh_GetIntSetting(L"Headset.headsetSyncCalls") != 0;
+        GetMigratedIntSetting(L"Headset.headsetSyncCalls",
+                              L"headsetSyncCalls") != 0;
     g_settings.headsetPollInterval =
-        std::clamp(Wh_GetIntSetting(L"Headset.headsetPollInterval"), 200, 2000);
+        std::clamp(GetMigratedIntSetting(
+                       L"Headset.headsetPollInterval",
+                       L"headsetPollInterval"),
+                   200, 2000);
     g_settings.headsetDiagnosticsPath =
-        GetStringSetting(L"Headset.headsetDiagnosticsPath");
-    g_settings.slackWarning = Wh_GetIntSetting(L"Slack.slackWarning") != 0;
-    g_settings.slackAudioCue = Wh_GetIntSetting(L"Slack.slackAudioCue") != 0;
+        GetMigratedStringSetting(L"Headset.headsetDiagnosticsPath",
+                                 L"headsetDiagnosticsPath");
+    g_settings.slackWarning = GetMigratedIntSetting(
+        L"Slack.slackWarning", L"slackWarning") != 0;
+    g_settings.slackAudioCue = GetMigratedIntSetting(
+        L"Slack.slackAudioCue", L"slackAudioCue") != 0;
     g_settings.slackRightClickToggle =
-        Wh_GetIntSetting(L"Slack.slackRightClickUnmute") != 0;
+        GetMigratedIntSetting(L"Slack.slackRightClickUnmute",
+                              L"slackRightClickUnmute") != 0;
     g_settings.slackMutedButtonText =
-        GetStringSetting(L"Slack.slackMutedButtonText");
+        GetMigratedStringSetting(L"Slack.slackMutedButtonText",
+                                 L"slackMutedButtonText");
     g_settings.slackUnmutedButtonText =
-        GetStringSetting(L"Slack.slackUnmutedButtonText");
+        GetMigratedStringSetting(L"Slack.slackUnmutedButtonText",
+                                 L"slackUnmutedButtonText");
     g_settings.slackCallButtonText =
-        GetStringSetting(L"Slack.slackCallButtonText");
+        GetMigratedStringSetting(L"Slack.slackCallButtonText",
+                                 L"slackCallButtonText");
     if (g_settings.slackMutedButtonText.empty()) {
         g_settings.slackMutedButtonText = L"unmute";
     }
@@ -602,19 +651,30 @@ static void LoadSettings() {
         g_settings.slackCallButtonText = L"leave";
     }
     g_settings.slackSpeechThreshold =
-        std::clamp(Wh_GetIntSetting(L"Slack.slackSpeechThreshold"), 1, 100);
+        std::clamp(GetMigratedIntSetting(
+                       L"Slack.slackSpeechThreshold",
+                       L"slackSpeechThreshold"),
+                   1, 100);
     g_settings.slackSpeechDelay =
-        std::clamp(Wh_GetIntSetting(L"Slack.slackSpeechDelay"), 100, 3000);
-    g_settings.teamsWarning = Wh_GetIntSetting(L"Teams.teamsWarning") != 0;
-    g_settings.teamsAudioCue = Wh_GetIntSetting(L"Teams.teamsAudioCue") != 0;
+        std::clamp(GetMigratedIntSetting(
+                       L"Slack.slackSpeechDelay", L"slackSpeechDelay"),
+                   100, 3000);
+    g_settings.teamsWarning = GetMigratedIntSetting(
+        L"Teams.teamsWarning", L"teamsWarning") != 0;
+    g_settings.teamsAudioCue = GetMigratedIntSetting(
+        L"Teams.teamsAudioCue", L"teamsAudioCue") != 0;
     g_settings.teamsRightClickToggle =
-        Wh_GetIntSetting(L"Teams.teamsRightClickUnmute") != 0;
+        GetMigratedIntSetting(L"Teams.teamsRightClickUnmute",
+                              L"teamsRightClickUnmute") != 0;
     g_settings.teamsMutedButtonText =
-        GetStringSetting(L"Teams.teamsMutedButtonText");
+        GetMigratedStringSetting(L"Teams.teamsMutedButtonText",
+                                 L"teamsMutedButtonText");
     g_settings.teamsUnmutedButtonText =
-        GetStringSetting(L"Teams.teamsUnmutedButtonText");
+        GetMigratedStringSetting(L"Teams.teamsUnmutedButtonText",
+                                 L"teamsUnmutedButtonText");
     g_settings.teamsCallButtonText =
-        GetStringSetting(L"Teams.teamsCallButtonText");
+        GetMigratedStringSetting(L"Teams.teamsCallButtonText",
+                                 L"teamsCallButtonText");
     if (g_settings.teamsMutedButtonText.empty()) {
         g_settings.teamsMutedButtonText = L"unmute";
     }
@@ -625,21 +685,33 @@ static void LoadSettings() {
         g_settings.teamsCallButtonText = L"hang up|leave";
     }
     g_settings.teamsSpeechThreshold =
-        std::clamp(Wh_GetIntSetting(L"Teams.teamsSpeechThreshold"), 1, 100);
+        std::clamp(GetMigratedIntSetting(
+                       L"Teams.teamsSpeechThreshold",
+                       L"teamsSpeechThreshold"),
+                   1, 100);
     g_settings.teamsSpeechDelay =
-        std::clamp(Wh_GetIntSetting(L"Teams.teamsSpeechDelay"), 100, 3000);
-    g_settings.zoomWarning = Wh_GetIntSetting(L"Zoom.zoomWarning") != 0;
-    g_settings.zoomAudioCue = Wh_GetIntSetting(L"Zoom.zoomAudioCue") != 0;
+        std::clamp(GetMigratedIntSetting(
+                       L"Teams.teamsSpeechDelay", L"teamsSpeechDelay"),
+                   100, 3000);
+    g_settings.zoomWarning = GetMigratedIntSetting(
+        L"Zoom.zoomWarning", L"zoomWarning") != 0;
+    g_settings.zoomAudioCue = GetMigratedIntSetting(
+        L"Zoom.zoomAudioCue", L"zoomAudioCue") != 0;
     g_settings.zoomRightClickToggle =
-        Wh_GetIntSetting(L"Zoom.zoomRightClickUnmute") != 0;
+        GetMigratedIntSetting(L"Zoom.zoomRightClickUnmute",
+                              L"zoomRightClickUnmute") != 0;
     g_settings.zoomShortcutFallback =
-        Wh_GetIntSetting(L"Zoom.zoomShortcutFallback") != 0;
+        GetMigratedIntSetting(L"Zoom.zoomShortcutFallback",
+                              L"zoomShortcutFallback") != 0;
     g_settings.zoomMutedButtonText =
-        GetStringSetting(L"Zoom.zoomMutedButtonText");
+        GetMigratedStringSetting(L"Zoom.zoomMutedButtonText",
+                                 L"zoomMutedButtonText");
     g_settings.zoomUnmutedButtonText =
-        GetStringSetting(L"Zoom.zoomUnmutedButtonText");
+        GetMigratedStringSetting(L"Zoom.zoomUnmutedButtonText",
+                                 L"zoomUnmutedButtonText");
     g_settings.zoomCallButtonText =
-        GetStringSetting(L"Zoom.zoomCallButtonText");
+        GetMigratedStringSetting(L"Zoom.zoomCallButtonText",
+                                 L"zoomCallButtonText");
     if (g_settings.zoomMutedButtonText.empty()) {
         g_settings.zoomMutedButtonText = L"unmute";
     }
@@ -650,12 +722,20 @@ static void LoadSettings() {
         g_settings.zoomCallButtonText = L"leave|end";
     }
     g_settings.zoomSpeechThreshold =
-        std::clamp(Wh_GetIntSetting(L"Zoom.zoomSpeechThreshold"), 1, 100);
+        std::clamp(GetMigratedIntSetting(
+                       L"Zoom.zoomSpeechThreshold",
+                       L"zoomSpeechThreshold"),
+                   1, 100);
     g_settings.zoomSpeechDelay =
-        std::clamp(Wh_GetIntSetting(L"Zoom.zoomSpeechDelay"), 100, 3000);
-    g_settings.meetEnabled = Wh_GetIntSetting(L"GoogleMeet.meetEnabled") != 0;
-    g_settings.meetWindowTitle = GetStringSetting(L"GoogleMeet.meetWindowTitle");
-    g_settings.meetBrowserExecutables = GetStringSetting(L"GoogleMeet.meetBrowserExecutables");
+        std::clamp(GetMigratedIntSetting(
+                       L"Zoom.zoomSpeechDelay", L"zoomSpeechDelay"),
+                   100, 3000);
+    g_settings.meetEnabled = GetMigratedIntSetting(
+        L"GoogleMeet.meetEnabled", L"meetEnabled") != 0;
+    g_settings.meetWindowTitle = GetMigratedStringSetting(
+        L"GoogleMeet.meetWindowTitle", L"meetWindowTitle");
+    g_settings.meetBrowserExecutables = GetMigratedStringSetting(
+        L"GoogleMeet.meetBrowserExecutables", L"meetBrowserExecutables");
     if (g_settings.meetWindowTitle.find_first_not_of(L" |\t\r\n") ==
         std::wstring::npos) {
         g_settings.meetWindowTitle = ModSettings{}.meetWindowTitle;
@@ -678,16 +758,22 @@ static void LoadSettings() {
                        });
         g_settings.meetBrowserNames.push_back(std::move(browserToken));
     }
-    g_settings.meetWarning = Wh_GetIntSetting(L"GoogleMeet.meetWarning") != 0;
-    g_settings.meetAudioCue = Wh_GetIntSetting(L"GoogleMeet.meetAudioCue") != 0;
+    g_settings.meetWarning = GetMigratedIntSetting(
+        L"GoogleMeet.meetWarning", L"meetWarning") != 0;
+    g_settings.meetAudioCue = GetMigratedIntSetting(
+        L"GoogleMeet.meetAudioCue", L"meetAudioCue") != 0;
     g_settings.meetRightClickToggle =
-        Wh_GetIntSetting(L"GoogleMeet.meetRightClickUnmute") != 0;
+        GetMigratedIntSetting(L"GoogleMeet.meetRightClickUnmute",
+                              L"meetRightClickUnmute") != 0;
     g_settings.meetMutedButtonText =
-        GetStringSetting(L"GoogleMeet.meetMutedButtonText");
+        GetMigratedStringSetting(L"GoogleMeet.meetMutedButtonText",
+                                 L"meetMutedButtonText");
     g_settings.meetUnmutedButtonText =
-        GetStringSetting(L"GoogleMeet.meetUnmutedButtonText");
+        GetMigratedStringSetting(L"GoogleMeet.meetUnmutedButtonText",
+                                 L"meetUnmutedButtonText");
     g_settings.meetCallButtonText =
-        GetStringSetting(L"GoogleMeet.meetCallButtonText");
+        GetMigratedStringSetting(L"GoogleMeet.meetCallButtonText",
+                                 L"meetCallButtonText");
     if (g_settings.meetMutedButtonText.empty()) {
         g_settings.meetMutedButtonText = L"turn on microphone";
     }
@@ -698,9 +784,14 @@ static void LoadSettings() {
         g_settings.meetCallButtonText = L"leave call";
     }
     g_settings.meetSpeechThreshold =
-        std::clamp(Wh_GetIntSetting(L"GoogleMeet.meetSpeechThreshold"), 1, 100);
+        std::clamp(GetMigratedIntSetting(
+                       L"GoogleMeet.meetSpeechThreshold",
+                       L"meetSpeechThreshold"),
+                   1, 100);
     g_settings.meetSpeechDelay =
-        std::clamp(Wh_GetIntSetting(L"GoogleMeet.meetSpeechDelay"), 100, 3000);
+        std::clamp(GetMigratedIntSetting(
+                       L"GoogleMeet.meetSpeechDelay", L"meetSpeechDelay"),
+                   100, 3000);
 
     if (!g_settings.meetEnabled &&
         (g_settings.meetWarning || g_settings.meetRightClickToggle ||
@@ -5042,6 +5133,11 @@ void Wh_ModSettingsChanged() {
     g_diagnosticEvents.clear();
     g_diagnosticStartTime = GetTickCount64();
     ReleaseSRWLockExclusive(&g_diagnosticLock);
+    if (g_usingLegacySettings) {
+        Wh_SetIntValue(L"settingsSchema", 2);
+        g_usingLegacySettings = false;
+        Wh_Log(L"[Settings] Grouped settings saved; legacy fallback disabled");
+    }
     LoadSettings();
     if (FindMainTaskbarWindow()) {
         StartAudioThread();
