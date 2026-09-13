@@ -2,7 +2,7 @@
 // @id              explorer-fast-navigation
 // @name            Explorer Fast Navigation
 // @description     Improves explorer navigation latency
-// @version         0.9.1
+// @version         0.9.2
 // @author          Vivy
 // @github          https://github.com/enginelesscc
 // @twitter         https://x.com/VivyVCCS
@@ -18,7 +18,7 @@ Mostly done by delaying heavy work and redraws until after navigation finish.
 Navigation now feels like it used to in Windows 7 and earlier.
 This mod does not remove ribbon to avoid breaking the command bar.
 
-Only tested on Windows 11 x64, but in theory should also work on earlier versions.
+Only tested on Windows 11 x64, but in theory - with some edits - should also work on earlier versions (as they are affected by the same problems).
 
 Disclosure: This mod was mainly created by GPT6-Astra, however the discovery was made much earlier: https://x.com/VivyVCCS/status/1698420723344187879
 */
@@ -62,10 +62,6 @@ Disclosure: This mod was mainly created by GPT6-Astra, however the discovery was
 #include <mutex>
 #include <new>
 #include <vector>
-
-#ifdef EFN_DIAGNOSTICS
-#include <evntprov.h>
-#endif
 
 // Shared types.
 
@@ -161,7 +157,7 @@ public:
             copy = windows;
         }
         for (HWND hwnd : copy) {
-            SendMessageW(hwnd, WM_CLOSE, 0, 0);
+            PostMessageW(hwnd, WM_CLOSE, 0, 0);
         }
         // A nested WM_CLOSE during Flush only requests closure. The outer
         // drain destroys the window after releasing its outstanding COM refs.
@@ -227,10 +223,6 @@ static HMODULE frame;
 static HMODULE shell;
 static HMODULE duser;
 
-#ifdef EFN_DIAGNOSTICS
-static REGHANDLE diagnosticProvider;
-#endif
-
 // Shared helpers.
 
 static void LoadSettings(decltype(&Wh_GetIntSetting) readSetting = Wh_GetIntSetting) {
@@ -278,14 +270,6 @@ static HWND FindThreadBrowserWindow() {
         reinterpret_cast<LPARAM>(&browser));
     return browser;
 }
-
-#ifdef EFN_DIAGNOSTICS
-static void Trace(const wchar_t* message) {
-    EventWriteString(diagnosticProvider, 4, 1, message);
-}
-#else
-static void Trace(const wchar_t*) {}
-#endif
 
 namespace NavigationPolicy {
 
@@ -450,12 +434,12 @@ static void Finish(State* state, bool force = false) {
                 RibbonWork::ViewReady();
             }
             DestroyWindow(overlay);
-            Trace(L"EFN present_done");
         } else {
             state->finishing = false;
         }
     }
 }
+
 // Overlay window callbacks.
 
 static LRESULT CALLBACK RootSubclass(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR data) {
@@ -944,7 +928,6 @@ static void NavigationStarted() {
     Flush();
     started = GetTickCount64();
     ready = false;
-    Trace(L"EFN navigation_enter");
 }
 
 static void ViewReady() {
@@ -973,10 +956,8 @@ static bool DeferInvoke(void* self, DISPID id, REFIID iid, LCID locale, WORD fla
 static HRESULT __fastcall NavigatedHook(void* self) {
     if (settings.classicRibbon && self == connected && Pending() &&
         Enqueue(reinterpret_cast<IUnknown*>(self), [self] {
-            Trace(L"EFN ribbon_run");
             navigatedOriginal(self);
         })) {
-        Trace(L"EFN ribbon_queued");
         return S_OK;
     }
     return navigatedOriginal(self);
@@ -1007,10 +988,8 @@ static HRESULT __fastcall DestroyHook(void* self, BOOL final) {
 static HRESULT __fastcall NavStateHook(void* self, ULONG flags) {
     if (settings.navigationBar && Pending() &&
         Enqueue(reinterpret_cast<IUnknown*>(self), [self, flags] {
-            Trace(L"EFN navbar_run");
             navStateOriginal(self, flags);
         })) {
-        Trace(L"EFN navbar_queued");
         return S_OK;
     }
     return navStateOriginal(self, flags);
@@ -1069,7 +1048,6 @@ static bool Pending() {
 }
 
 static HRESULT Run(Notification original, void* self, const wchar_t* label) {
-    Trace(label);
     HRESULT hr = original(self);
     if (FAILED(hr)) {
         Wh_Log(L"Deferred XAML refresh failed: %s, 0x%08X", label, hr);
@@ -1080,7 +1058,6 @@ static HRESULT Run(Notification original, void* self, const wchar_t* label) {
 
 static HRESULT __fastcall ChangedHook(void* self) {
     // ConnectToView must unsubscribe the old view and subscribe the new view now.
-    Trace(L"EFN xaml_connect");
     HRESULT hr = changedOriginal(self);
     connected = SUCCEEDED(hr) ? self : nullptr;
     return hr;
@@ -1091,7 +1068,6 @@ static HRESULT __fastcall NavigatedHook(void* self) {
         RibbonWork::Enqueue(reinterpret_cast<IUnknown*>(self), [self] {
             Run(navigatedOriginal, self, L"EFN xaml_navigated_run");
         })) {
-        Trace(L"EFN xaml_navigated_queued");
         return S_OK;
     }
     return navigatedOriginal(self);
@@ -1102,7 +1078,6 @@ static HRESULT __fastcall InvalidatedHook(void* self) {
         RibbonWork::Enqueue(reinterpret_cast<IUnknown*>(self), [self] {
             Run(invalidatedOriginal, self, L"EFN xaml_invalidated_run");
         })) {
-        Trace(L"EFN xaml_invalidated_queued");
         return S_OK;
     }
     return invalidatedOriginal(self);
@@ -1113,13 +1088,11 @@ static HRESULT __fastcall StateHook(void* self, ULONG flags) {
     // native no-ops. Preserve each notification's flags and FIFO ordering.
     if (settings.navigationBar && (flags & 4) && Pending() &&
         RibbonWork::Enqueue(reinterpret_cast<IUnknown*>(self), [self, flags] {
-            Trace(L"EFN xaml_location_run");
             HRESULT hr = stateOriginal(self, flags);
             if (FAILED(hr)) {
                 Wh_Log(L"Deferred XAML location failed: 0x%08X", hr);
             }
         })) {
-        Trace(L"EFN xaml_location_queued");
         return S_OK;
     }
     return stateOriginal(self, flags);
@@ -1128,10 +1101,8 @@ static HRESULT __fastcall StateHook(void* self, ULONG flags) {
 static HRESULT __fastcall InvalidateHook(void* self, ULONG commands) {
     if (settings.xamlCommandBar && Pending() &&
         RibbonWork::Enqueue(reinterpret_cast<IUnknown*>(self), [self, commands] {
-            Trace(L"EFN xaml_commands_run");
             invalidateOriginal(self, commands);
         })) {
-        Trace(L"EFN xaml_commands_queued");
         return S_OK;
     }
     return invalidateOriginal(self, commands);
@@ -1147,11 +1118,9 @@ static HRESULT __fastcall InvokeHook(void* self, DISPID id, REFIID iid, LCID loc
     HRESULT hr;
     if (settings.xamlCommandBar && invalidation && CanDeferInvoke(iid, flags, args) && Pending() &&
         RibbonWork::Enqueue(reinterpret_cast<IUnknown*>(self), [self, id, iid, locale, flags] {
-            Trace(L"EFN xaml_event_run");
             DISPPARAMS empty{};
             invokeOriginal(self, id, iid, locale, flags, &empty, nullptr, nullptr, nullptr);
         })) {
-        Trace(L"EFN xaml_event_queued");
         if (result) {
             *result = {};
         }
@@ -1320,10 +1289,6 @@ static void ReleaseModules() {
 
 static BOOL InitializeMod() {
     LoadSettings();
-#ifdef EFN_DIAGNOSTICS
-    GUID provider{0xd1675027, 0xf8d0, 0x4c43, {0x9b, 0x6f, 0x4b, 0x39, 0x0c, 0xe6, 0x46, 0xed}};
-    EventRegister(&provider, nullptr, nullptr, &diagnosticProvider);
-#endif
     frame = LoadLibraryExW(L"ExplorerFrame.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     shell = LoadLibraryExW(L"shell32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (settings.duserBatching) {
@@ -1432,9 +1397,6 @@ BOOL Wh_ModInit() {
     FileTransition::Uninit();
     RibbonWork::Uninit();
     ReleaseModules();
-#ifdef EFN_DIAGNOSTICS
-    EventUnregister(diagnosticProvider);
-#endif
     return FALSE;
 }
 
@@ -1454,7 +1416,4 @@ void Wh_ModUninit() {
     FileTransition::Uninit();
     RibbonWork::Uninit();
     ReleaseModules();
-#ifdef EFN_DIAGNOSTICS
-    EventUnregister(diagnosticProvider);
-#endif
 }
