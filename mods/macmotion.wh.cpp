@@ -2,7 +2,7 @@
 // @id              macmotion
 // @name            MacMotion Smooth Maximize
 // @description     Smooth macOS-inspired maximize and unmaximize transitions without blocking the app UI thread.
-// @version         2.0.1
+// @version         2.0.2
 // @author          Aayush
 // @github          https://github.com/Aayushjoshi12
 // @include         *
@@ -21,6 +21,8 @@
 
 MacMotion adds a focused macOS-inspired transition when a normal desktop window
 is maximized or restored from maximized state.
+
+![MacMotion maximize and unmaximize preview](https://raw.githubusercontent.com/Aayushjoshi12/windhawk-mods/macmotion-full-app-effects/assets/macmotion-preview.gif)
 
 This catalog version intentionally implements only maximize/unmaximize. It does
 not include minimize, restore-from-taskbar, close, launch, destruction, or
