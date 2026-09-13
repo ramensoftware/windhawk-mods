@@ -2,7 +2,7 @@
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Hides selected taskbars while their displays show only the desktop
-// @version         6.1.0
+// @version         6.2.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -36,7 +36,7 @@ Its purpose is a specific combination of behaviors: independently decide whether
 
 For each selected display, the mod checks whether a relevant visible, non-minimized application is present. Supported Windows shell surfaces and desktop infrastructure are excluded from the normal application check.
 
-When a display is showing only the desktop, its selected bottom-docked taskbar can be hidden. An application on that display, keyboard-driven taskbar focus such as Win+T or Win+B, or supported shell interaction can keep the taskbar visible. Mouse interaction with the taskbar does not prevent it from hiding after hover dismissal. Borderless fullscreen content is tracked per display after it enters fullscreen and keeps that display's taskbar hidden even if another display later becomes foreground; leaving fullscreen clears the tracked state.
+When a display is showing only the desktop, its selected bottom-docked taskbar can be hidden. An application on that display, keyboard-driven taskbar focus such as Win+T or Win+B, or supported shell interaction can keep the taskbar visible. Mouse interaction with the taskbar does not prevent it from hiding after hover dismissal. Borderless fullscreen content is tracked per display after it enters fullscreen and keeps that display's taskbar hidden even if another display later becomes foreground. A visible fullscreen owner suppresses hover and keyboard taskbar reveal; a cached owner that is hidden, minimized, or DWM-cloaked does not block those reveal paths. Explicit fullscreen lifecycle transitions clear the tracked state.
 
 Applications spanning multiple displays are considered for every display they intersect, so each affected display can independently remain visible.
 
@@ -55,7 +55,7 @@ Display selections are evaluated using the current logical monitor numbering eac
 
 ## Hover Reveal
 
-For bottom-docked taskbars, moving the cursor into the configured bottom-edge area reveals the taskbar. The hover zone follows the taskbar's actual height and display scaling, with an optional extra margin. A taskbar on a display currently tracked as fullscreen does not reveal from bottom-edge hover.
+For bottom-docked taskbars, moving the cursor into the configured bottom-edge area reveals the taskbar. The hover zone follows the taskbar's actual height and display scaling, with an optional extra margin. A taskbar on a display with a visible fullscreen owner does not reveal from bottom-edge hover; a cached owner that is hidden, minimized, or DWM-cloaked does not block hover reveal.
 
 After the cursor leaves the area, the taskbar hides again after the configured delay. Moving the cursor between displays also updates which taskbar is currently revealed.
 
@@ -749,7 +749,8 @@ ULONGLONG g_lastMinimizeEventTick = 0;
 // A fullscreen window is cached only after that window has actually entered
 // the foreground. The cache is keyed by the HMONITOR itself rather than by
 // monitor-enumeration index. Once claimed, ownership is sticky until an explicit
-// fullscreen lifecycle event ends it.
+// fullscreen lifecycle event ends it. Interaction suppression additionally
+// requires the cached owner to remain visible and uncloaked.
 struct FullscreenMonitorOwner {
     HMONITOR monitor;
     HWND hwnd;
@@ -757,7 +758,6 @@ struct FullscreenMonitorOwner {
 
 FullscreenMonitorOwner g_fullscreenOwners[kMaxMonitorNumbers] = {};
 void LoadSettings();
-void WhTool_ModUninit();
 void ArmHoverExpireTimer(DWORD delayMs);
 void CancelHoverExpireTimer();
 void RestoreAllTaskbars();
@@ -1305,6 +1305,36 @@ bool IsFullscreenOwnerOnSameMonitor(HWND hwnd, HMONITOR monitor) {
         hwnd,
         MONITOR_DEFAULTTONEAREST
     ) == monitor;
+}
+
+bool IsFullscreenOwnerVisible(HMONITOR monitor) {
+    const int index = FindFullscreenOwnerIndex(monitor);
+
+    if (index < 0 || !g_fullscreenOwners[index].hwnd) {
+        return false;
+    }
+
+    HWND owner = g_fullscreenOwners[index].hwnd;
+
+    if (!IsFullscreenOwnerOnSameMonitor(owner, monitor) ||
+        !IsWindowVisible(owner) ||
+        IsIconic(owner)) {
+        return false;
+    }
+
+    BOOL cloaked = FALSE;
+    if (SUCCEEDED(
+            DwmGetWindowAttribute(
+                owner,
+                DWMWA_CLOAKED,
+                &cloaked,
+                sizeof(cloaked)
+            )
+        ) && cloaked) {
+        return false;
+    }
+
+    return true;
 }
 
 bool IsMonitorFullscreenCached(HMONITOR monitor) {
@@ -2455,6 +2485,9 @@ void UpdateTaskbarState() {
             const bool fullscreenOnTaskbarMonitor =
                 IsMonitorFullscreenCached(
                     g_taskbarStates[i].monitor
+                ) &&
+                IsFullscreenOwnerVisible(
+                    g_taskbarStates[i].monitor
                 );
 
             if (!fullscreenOnTaskbarMonitor) {
@@ -2490,7 +2523,8 @@ void UpdateTaskbarState() {
     for (size_t i = 0; i < monitors.count; ++i) {
         if (monitors.entries[i].monitor == cursorMonitor) {
             cursorMonitorFullscreen =
-                scan.fullscreenOnMonitor[i];
+                scan.fullscreenOnMonitor[i] &&
+                IsFullscreenOwnerVisible(cursorMonitor);
             break;
         }
     }
@@ -2501,7 +2535,8 @@ void UpdateTaskbarState() {
         for (size_t i = 0; i < monitors.count; ++i) {
             if (monitors.entries[i].monitor == g_hoverMonitor) {
                 hoverMonitorFullscreen =
-                    scan.fullscreenOnMonitor[i];
+                    scan.fullscreenOnMonitor[i] &&
+                    IsFullscreenOwnerVisible(g_hoverMonitor);
                 break;
             }
         }
@@ -2636,7 +2671,8 @@ void UpdateTaskbarState() {
                         shellPopupOnMonitor =
                             shellPopups.visibleOnMonitor[monitorIndex];
                         stateFullscreenOnMonitor =
-                            scan.fullscreenOnMonitor[monitorIndex];
+                            scan.fullscreenOnMonitor[monitorIndex] &&
+                            IsFullscreenOwnerVisible(state.monitor);
                         break;
                     }
                 }
