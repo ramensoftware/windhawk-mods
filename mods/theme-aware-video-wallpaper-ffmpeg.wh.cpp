@@ -28,15 +28,15 @@ Automatically switches between two videos based on the current Windows light/dar
 - **Dark mode video / folder path**: Leave empty to reuse the light-mode path.
 
 ### Behavior
-- The video frame is stretched to 1920×1080 by ffmpeg before rendering.
+- ffmpeg scales the video to the virtual desktop resolution before rendering. Multi-monitor setups
+  are supported — the wallpaper covers the combined desktop area.
 - When a **maximized or fullscreen window** is active, rendering stops but ffmpeg keeps decoding
   (the pipeline is not paused, only new frames are dropped to minimize visual flicker on resume).
 - Audio playback is **not supported** — ffmpeg is invoked with audio disabled.
 
 ### Known limitations
-- Scaling mode (fit / fill / center) is not configurable; the frame is always stretched to fill the screen.
-- Multi-monitor setups are not handled specially — the wallpaper covers the primary monitor area
-  only, stretched to 1920×1080.
+- Scaling mode (fit / fill / center) is not configurable; the frame is always stretched to fill the
+  virtual desktop.
 - Hoping someone else will carry on development — PRs welcome.
 */
 // ==/WindhawkModReadme==
