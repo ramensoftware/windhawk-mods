@@ -1,13 +1,45 @@
 // ==WindhawkMod==
 // @id              theme-aware-video-wallpaper-ffmpeg
 // @name            Theme Aware Video Wallpaper
-// @description     Stretch to 1920x1080. Stop rendering but keep decoding when a maximized/fullscreen window is active. Audio playback is temporarily not supported. Hoping someone else will carry on development.
+// @description     Auto switch video wallpaper via ffmpeg pipe + UpdateLayeredWindow. Currently only supports the latest Windows 11. Audio playback is temporarily not supported. Hoping someone else will carry on development.
 // @version         1.0
 // @author          wakhh@qq.com
 // @github          https://github.com/wakhh
 // @include         explorer.exe
 // @architecture    x86-64
 // ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# Theme Aware Video Wallpaper
+
+Plays a video as desktop wallpaper using ffmpeg and `UpdateLayeredWindow`.
+Automatically switches between two videos based on the current Windows light/dark theme.
+
+### Requirements
+- **ffmpeg.exe** — must be provided via the mod settings. Only the main `ffmpeg.exe` binary is needed;
+  no additional DLLs or codecs are required.
+- **Windows 11** — tested and developed for the latest Windows 11 only.
+
+### Settings
+- **ffmpeg.exe path**: Full path to a standalone `ffmpeg.exe`.
+- **Light mode video / folder path**: Path to a single video **file**, or a **folder** containing videos.
+  When a folder is selected, files are sorted by modification time (newest first) and played in that order.
+- **Dark mode video / folder path**: Leave empty to reuse the light-mode path.
+
+### Behavior
+- The video frame is stretched to 1920×1080 by ffmpeg before rendering.
+- When a **maximized or fullscreen window** is active, rendering stops but ffmpeg keeps decoding
+  (the pipeline is not paused, only new frames are dropped to minimize visual flicker on resume).
+- Audio playback is **not supported** — ffmpeg is invoked with audio disabled.
+
+### Known limitations
+- Scaling mode (fit / fill / center) is not configurable; the frame is always stretched to fill the screen.
+- Multi-monitor setups are not handled specially — the wallpaper covers the primary monitor area
+  only, stretched to 1920×1080.
+- Hoping someone else will carry on development — PRs welcome.
+*/
+// ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
