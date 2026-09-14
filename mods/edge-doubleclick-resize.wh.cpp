@@ -218,9 +218,14 @@ bool HandleEdgeDoubleClick(HWND hWnd, WPARAM wParam) {
         RemovePropW(hWnd, kPrevWProp);
         RemovePropW(hWnd, kPrevYProp);
         RemovePropW(hWnd, kPrevHProp);
-    } else if (!alreadyAtTarget && !hasSaved) {
+    } else if (!alreadyAtTarget) {
         // About to maximize the width: remember the current bounds so
-        // the next double-click on this edge can restore them.
+        // the next double-click on this edge can restore them. If a
+        // save already exists it's stale (the window was moved or
+        // resized by other means since), so overwrite it rather than
+        // keep the old one - restoring to a save from an unrelated
+        // earlier interaction (possibly on a monitor that's since
+        // been disconnected) would be worse than not restoring at all.
         SetPropW(hWnd, kPrevXProp, (HANDLE)(INT_PTR)wr.left);
         SetPropW(hWnd, kPrevWProp, (HANDLE)(INT_PTR)curW);
         newX = targetX;
@@ -232,20 +237,12 @@ bool HandleEdgeDoubleClick(HWND hWnd, WPARAM wParam) {
             SetPropW(hWnd, kPrevHProp, (HANDLE)(INT_PTR)(wr.bottom - wr.top));
             newY = mi.rcWork.top - topInset;
             newH = (mi.rcWork.bottom + bottomInset) - newY;
-        }
-    } else if (hasSaved) {
-        // Not at target, but a save already exists: the window likely
-        // couldn't reach the target on an earlier attempt (e.g. the
-        // app clamped it via WM_GETMINMAXINFO). Resize again without
-        // touching the existing save - re-saving here would overwrite
-        // the real original bounds with these already-widened ones,
-        // and the restore would be lost for good.
-        newX = targetX;
-        newW = targetW;
-
-        if (isCorner) {
-            newY = mi.rcWork.top - topInset;
-            newH = (mi.rcWork.bottom + bottomInset) - newY;
+        } else {
+            // Don't leave a stale Y/H pair from an earlier corner
+            // maximize sitting around for a later corner click to
+            // misread as "the original height".
+            RemovePropW(hWnd, kPrevYProp);
+            RemovePropW(hWnd, kPrevHProp);
         }
     } else {
         return false; // Already at target, nothing saved: no-op.
