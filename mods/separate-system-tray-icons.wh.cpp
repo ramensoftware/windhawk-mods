@@ -241,12 +241,14 @@ menu presenter receives its name after creation.
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cwchar>
 #include <cwctype>
 #include <cstring>
 #include <new>
 #include <unordered_map>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #undef GetCurrentTime
@@ -334,6 +336,12 @@ struct SoundState {
     EndpointFormFactor outputFormFactor = UnknownFormFactor;
 };
 
+struct AudioOutputEndpoint {
+    std::wstring id;
+    std::wstring name;
+    bool isDefault = false;
+};
+
 static void UpdateDynamicXamlIcons();
 static void RequestTrayRefresh(bool radiosChanged = false);
 static void EnsureTrayRefreshWindow();
@@ -352,6 +360,7 @@ struct StatusSnapshot {
     bool bluetoothAvailable = false;
     NetworkState network;
     SoundState sound;
+    std::vector<AudioOutputEndpoint> audioOutputs;
     bool ready = false;
 };
 static SRWLOCK g_statusSnapshotLock = SRWLOCK_INIT;
@@ -421,6 +430,7 @@ static double g_trayButtonWidth = 28;
 static double g_trayButtonHeight = 32;
 static int g_notifyMetricDiagnosticCount = 0;
 [[clang::no_destroy]] static wux::DispatcherTimer g_updateTimer{nullptr};
+static bool g_updateTimerFast = false;
 [[clang::no_destroy]] static wux::DispatcherTimer g_retryTimer{nullptr};
 [[clang::no_destroy]] static wux::DispatcherTimer g_metricRefreshTimer{nullptr};
 static int g_retryCount = 0;
@@ -441,6 +451,14 @@ static HANDLE StartOwnedWorker(std::function<void()> task) {
         return 0;
     }, work, 0, nullptr);
     if (thread) {
+        // Retain only workers that are still executing. The tracked duplicate
+        // is needed for unload, but completed workers must not accumulate
+        // kernel handles for the whole Explorer session.
+        std::erase_if(g_workerThreads, [](HANDLE handle) {
+            if (WaitForSingleObject(handle, 0) != WAIT_OBJECT_0) return false;
+            CloseHandle(handle);
+            return true;
+        });
         HANDLE tracked = nullptr;
         if (!DuplicateHandle(GetCurrentProcess(), thread, GetCurrentProcess(),
             &tracked, 0, FALSE, DUPLICATE_SAME_ACCESS)) {
@@ -1604,7 +1622,7 @@ static SoundState GetSoundState() {
     return state;
 }
 
-static void StepDefaultEndpointVolume(int steps) {
+static void StepDefaultEndpointVolumeWorker(int steps, int configuredStep) {
     if (!steps) return;
     const bool up = steps > 0;
     IAudioEndpointVolume* volume = nullptr;
@@ -1622,9 +1640,9 @@ static void StepDefaultEndpointVolume(int steps) {
 
     if (SUCCEEDED(hr)) {
         float current = 0;
-        if (g_settings.volumeWheelStep > 0 &&
+        if (configuredStep > 0 &&
             SUCCEEDED(volume->GetMasterVolumeLevelScalar(&current))) {
-            const float step = g_settings.volumeWheelStep * steps / 100.0f;
+            const float step = configuredStep * steps / 100.0f;
             const float target = (std::clamp)(current + step, 0.0f, 1.0f);
             hr = volume->SetMasterVolumeLevelScalar(target, nullptr);
         } else {
@@ -1642,7 +1660,7 @@ static void StepDefaultEndpointVolume(int steps) {
     }
 }
 
-static void ToggleDefaultEndpointMute() {
+static void ToggleDefaultEndpointMuteWorker() {
     IAudioEndpointVolume* volume = nullptr;
     bool coInitialized = false;
     if (!GetDefaultEndpointVolume(&volume, &coInitialized)) {
@@ -1662,12 +1680,6 @@ static void ToggleDefaultEndpointMute() {
         CoUninitialize();
     }
 }
-
-struct AudioOutputEndpoint {
-    std::wstring id;
-    std::wstring name;
-    bool isDefault = false;
-};
 
 static std::vector<AudioOutputEndpoint> GetActiveAudioOutputEndpoints() {
     std::vector<AudioOutputEndpoint> result;
@@ -1798,7 +1810,7 @@ static HRESULT SetDefaultAudioOutputWithPolicy(TPolicy* policy,
     return hrCommunications;
 }
 
-static void SetDefaultAudioOutput(std::wstring const& id) {
+static void SetDefaultAudioOutputWorker(std::wstring const& id) {
     if (id.empty()) {
         return;
     }
@@ -1853,7 +1865,31 @@ static void SetDefaultAudioOutput(std::wstring const& id) {
     Wh_Log(L"Set default audio output final [%s]: 0x%08X", id.c_str(),
            finalHr);
     if (coInitialized) CoUninitialize();
-    RequestTrayRefresh();
+}
+
+static void QueueAudioWork(std::function<void()> work) {
+    HANDLE thread = StartOwnedWorker([work = std::move(work)] {
+        work();
+        RequestTrayRefresh();
+    });
+    if (thread) CloseHandle(thread);
+}
+
+static void StepDefaultEndpointVolume(int steps) {
+    if (!steps) return;
+    const int configuredStep = g_settings.volumeWheelStep;
+    QueueAudioWork([steps, configuredStep] {
+        StepDefaultEndpointVolumeWorker(steps, configuredStep);
+    });
+}
+
+static void ToggleDefaultEndpointMute() {
+    QueueAudioWork([] { ToggleDefaultEndpointMuteWorker(); });
+}
+
+static void SetDefaultAudioOutput(std::wstring id) {
+    if (id.empty()) return;
+    QueueAudioWork([id = std::move(id)] { SetDefaultAudioOutputWorker(id); });
 }
 
 static bool ContainsAsciiInsensitive(char const* text,
@@ -2106,6 +2142,7 @@ static void RefreshStatusSnapshot() {
         snapshot.bluetoothAvailable = IsBluetoothAvailable();
         snapshot.network = GetNetworkState();
         snapshot.sound = GetSoundState();
+        snapshot.audioOutputs = GetActiveAudioOutputEndpoints();
         snapshot.ready = true;
     } catch (...) {
         Wh_Log(L"Status snapshot refresh failed: 0x%08X", winrt::to_hresult());
@@ -2185,15 +2222,28 @@ static wux::XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd) {
         return nullptr;
     }
 
-    size_t taskbarElementIUnknownOffset = 0x10;
-    const BYTE* b = reinterpret_cast<const BYTE*>(
-        TaskbarHost_FrameHeight_Original);
+    size_t taskbarElementIUnknownOffset = 0;
+    bool offsetResolved = false;
+#if defined(_M_X64) || defined(__x86_64__)
+    const BYTE* b = reinterpret_cast<const BYTE*>(TaskbarHost_FrameHeight_Original);
     if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
         b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
         taskbarElementIUnknownOffset = b[7];
-    } else {
-        Wh_Log(L"GetTaskbarXamlRoot: unsupported FrameHeight pattern; using "
-               L"fallback offset 0x10.");
+        offsetResolved = true;
+    }
+#elif defined(_M_ARM64) || defined(__aarch64__)
+    const DWORD* p = reinterpret_cast<const DWORD*>(TaskbarHost_FrameHeight_Original);
+    if (p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
+        p[2] == 0x910003FD && (p[3] & 0xFFF00FE0) == 0xF8400C00) {
+        taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
+        offsetResolved = true;
+    }
+#endif
+    if (!offsetResolved) {
+        Wh_Log(L"GetTaskbarXamlRoot: unsupported FrameHeight pattern.");
+        if (taskbarHostSharedPtr[1] && Std_Ref_Decref_Original)
+            Std_Ref_Decref_Original(taskbarHostSharedPtr[1]);
+        return nullptr;
     }
 
     auto* taskbarElementIUnknown =
@@ -2515,8 +2565,8 @@ static bool IsInjectedElement(wux::FrameworkElement const& element) {
         return false;
     }
 
-    PCWSTR name = element.Name().c_str();
-    return wcsncmp(name, L"SeparateQuickSettingsXaml", 25) == 0;
+    const auto name = element.Name();
+    return std::wstring_view(name).starts_with(L"SeparateQuickSettingsXaml");
 }
 
 static void HideFixedTrayTooltip() {
@@ -2977,7 +3027,7 @@ static bool IsUsableTrayButtonDimension(double value) {
     // The normal 48-pixel taskbar reports 32x48 XAML units on this build;
     // the compact taskbar reports smaller values.  Both are valid tray
     // hit-target sizes, so do not reject the default height as a fallback.
-    return value == value && value >= 18 && value <= 64;
+    return !std::isnan(value) && value >= 18 && value <= 64;
 }
 
 static bool TryCaptureTrayButtonMetricsFromElement(
@@ -3321,14 +3371,14 @@ static void EnsureUpdateTimer() {
     }
 
     g_updateTimer = wux::DispatcherTimer();
-    g_updateTimer.Interval(std::chrono::milliseconds(500));
+    g_updateTimer.Interval(std::chrono::seconds(60));
     {
         auto eventSource = g_updateTimer;
         auto eventToken = eventSource.Tick([lastFallback = ULONGLONG{0}](wf::IInspectable const&,
                           wf::IInspectable const&) mutable {
         if (g_unloading) return;
         const auto now = GetTickCount64();
-        if (!lastFallback || now - lastFallback >= 5000) {
+        if (!lastFallback || now - lastFallback >= 60000) {
             lastFallback = now;
             UpdateDynamicXamlIcons();
             // SizeChanged and StartTaskbar handle normal rebuilds. Keep this
@@ -3340,6 +3390,9 @@ static void EnsureUpdateTimer() {
                 HideOriginalGroupedButton(g_originalGroupedButton);
         } else if (g_networkIcon.primary &&
                    g_displayNetworkState.kind == NetworkKind::WifiConnecting) {
+            // Advancing belongs solely to this 500 ms timer. Rendering a
+            // status snapshot must not consume an animation frame.
+            ++g_wifiConnectingFrame;
             g_networkIcon.primary.Glyph(GetNetworkGlyph(g_displayNetworkState));
         }
     });
@@ -3347,6 +3400,18 @@ static void EnsureUpdateTimer() {
             if (auto source = weakSource.get()) source.Tick(eventToken);
         });
     }
+    g_updateTimer.Start();
+}
+
+static void UpdateTimerCadence() {
+    if (!g_updateTimer) return;
+    const bool needFastTimer =
+        g_displayNetworkState.kind == NetworkKind::WifiConnecting;
+    if (needFastTimer == g_updateTimerFast) return;
+    g_updateTimerFast = needFastTimer;
+    g_updateTimer.Stop();
+    g_updateTimer.Interval(needFastTimer ? std::chrono::milliseconds(500)
+                                         : std::chrono::seconds(60));
     g_updateTimer.Start();
 }
 
@@ -3367,10 +3432,7 @@ static winrt::hstring GetNetworkGlyph(NetworkState const& state) {
             return L"\xE701";
         case NetworkKind::WifiConnecting: {
             static PCWSTR frames[] = {L"\xE873", L"\xEAA5", L"\xEAA8"};
-            winrt::hstring glyph = frames[g_wifiConnectingFrame %
-                                          ARRAYSIZE(frames)];
-            ++g_wifiConnectingFrame;
-            return glyph;
+            return frames[g_wifiConnectingFrame % ARRAYSIZE(frames)];
         }
         case NetworkKind::WifiDisconnected:
             return L"\xF384";
@@ -3963,6 +4025,10 @@ static void UpdateDynamicXamlIcons() {
 
         if (g_networkIcon.primary) {
             NetworkState const& state = snapshot.network;
+            if (state.kind != NetworkKind::WifiConnecting ||
+                g_displayNetworkState.kind != NetworkKind::WifiConnecting) {
+                g_wifiConnectingFrame = 0;
+            }
             g_displayNetworkState = state;
             SetTrayGlyph(g_networkIcon.primary, GetNetworkGlyph(state));
             SetTrayForeground(g_networkIcon.primary, primaryBrush);
@@ -4006,6 +4072,7 @@ static void UpdateDynamicXamlIcons() {
                 SetTrayVisibility(g_soundIcon.overlay, wux::Visibility::Collapsed);
             }
         }
+        UpdateTimerCadence();
     } catch (...) {
         Wh_Log(L"UpdateDynamicXamlIcons error: 0x%08X", winrt::to_hresult());
     }
@@ -4662,7 +4729,9 @@ static void AppendWinUiSoundContextMenu(wuc::MenuFlyout const& flyout) {
         icon.FontSize(16);
         outputSubmenu.Icon(icon);
     }
-    auto outputs = GetActiveAudioOutputEndpoints();
+    // Endpoint enumeration is collected by the status worker. Building a
+    // context menu must not synchronously RPC into the audio service.
+    auto outputs = GetStatusSnapshot().audioOutputs;
     if (outputs.empty()) {
         wuc::MenuFlyoutItem noOutput;
         noOutput.Text(L"No output devices");
@@ -5273,18 +5342,20 @@ static bool IsShellHostedWindow(HWND hwnd) {
 
 static bool IsRecordedTrayFlyout(HWND hwnd) {
     wchar_t className[128]{};
-    if (!IsShellHostedWindow(hwnd) ||
+    if (!hwnd || !IsWindowVisible(hwnd) || !IsShellHostedWindow(hwnd) ||
         !GetClassNameW(hwnd, className, ARRAYSIZE(className))) return false;
     // A flyout can have different shell window classes between builds, but it
     // is never the taskbar or desktop itself.
     return _wcsicmp(className, L"Shell_TrayWnd") != 0 &&
+           _wcsicmp(className, L"Shell_SecondaryTrayWnd") != 0 &&
+           _wcsicmp(className, L"CabinetWClass") != 0 &&
            _wcsicmp(className, L"Progman") != 0 &&
            _wcsicmp(className, L"WorkerW") != 0;
 }
 
 static bool DismissForegroundShellFlyout() {
     HWND foreground = GetForegroundWindow();
-    if (!IsShellHostedWindow(foreground)) return false;
+    if (!IsRecordedTrayFlyout(foreground)) return false;
     // Target Escape to the foreground shell window only. Unlike SendInput,
     // this cannot affect the user's active application.
     PostMessageW(foreground, WM_KEYDOWN, VK_ESCAPE, 1);
@@ -5735,7 +5806,6 @@ static void AttachTrayButtonHandlers(wux::FrameworkElement const& element,
             SuppressMiddleClickTap(kind);
             if (kind == ButtonKind::Sound) {
                 ToggleDefaultEndpointMute();
-                RequestTrayRefresh();
             }
             args.Handled(true);
         });
@@ -5759,7 +5829,6 @@ static void AttachTrayButtonHandlers(wux::FrameworkElement const& element,
                     const int steps = input->ConsumeWheelDelta(delta, GetTickCount64());
                     if (steps) {
                         StepDefaultEndpointVolume(steps);
-                        RequestTrayRefresh();
                     }
                     args.Handled(true);
                 }
@@ -6266,6 +6335,7 @@ static void RemoveXamlButtons() {
             g_updateTimer.Stop();
             g_updateTimer = nullptr;
         }
+        g_updateTimerFast = false;
         if (g_retryTimer) {
             g_retryTimer.Stop();
             g_retryTimer = nullptr;
@@ -6504,4 +6574,8 @@ void Wh_ModUninit() {
         else StopStatusEvents();
     }
     WaitForOwnedWorkers();
+    // The refresh window can disappear with the taskbar before the fallback
+    // message is delivered. Joining is idempotent and prevents its worker
+    // from executing code after Windhawk unloads this module.
+    StopStatusEvents();
 }
