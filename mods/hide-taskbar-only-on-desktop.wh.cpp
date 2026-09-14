@@ -2,7 +2,7 @@
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Hides selected taskbars while their displays show only the desktop
-// @version         6.3.0
+// @version         6.4.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -36,7 +36,7 @@ Its purpose is a specific combination of behaviors: independently decide whether
 
 For each selected display, the mod checks whether a relevant visible, non-minimized application is present. Supported Windows shell surfaces and desktop infrastructure are excluded from the normal application check.
 
-When a display is showing only the desktop, its selected bottom-docked taskbar can be hidden. An application on that display, keyboard-driven taskbar focus such as Win+T or Win+B, or supported shell interaction can keep the taskbar visible. Mouse interaction with the taskbar does not prevent it from hiding after hover dismissal. Borderless fullscreen content is tracked per display after it enters fullscreen and keeps that display's taskbar hidden even if another display later becomes foreground. A visible fullscreen owner suppresses hover and keyboard taskbar reveal; a cached owner that is hidden, minimized, or DWM-cloaked does not block those reveal paths. Explicit fullscreen lifecycle transitions clear the tracked state.
+When a display is showing only the desktop, its selected bottom-docked taskbar can be hidden. An application on that display, keyboard-driven taskbar focus such as Win+T or Win+B, or a supported shell surface can keep the corresponding taskbar visible. Mouse interaction with the taskbar does not prevent it from hiding after hover dismissal. Borderless fullscreen content is tracked per display after it enters fullscreen and keeps that display's taskbar hidden even if another display later becomes foreground. A visible fullscreen owner suppresses hover and keyboard taskbar reveal; a cached owner that is hidden, minimized, or DWM-cloaked does not block those reveal paths. Explicit fullscreen lifecycle transitions clear the tracked state.
 
 Applications spanning multiple displays are considered for every display they intersect, so each affected display can independently remain visible.
 
@@ -74,8 +74,9 @@ Supported shell surfaces include:
 - Tray and notification overflow
 - Notification and Quick Settings surfaces
 - Alt+Tab and related task-switching UI
+- Windows Search surfaces
 
-Supported shell popup classes are checked during hover dismissal. A supported popup can keep the corresponding taskbar visible while it is being dismissed, and the currently hovered taskbar remains visible during that grace period as well.
+Supported shell surfaces are tracked per display, including their foreground transitions, so Start, Search, notification and related shell UI do not cause the taskbar to disappear underneath them. Supported taskbar popup classes are also checked during hover dismissal; only a popup on the currently hovered display can extend that hover reveal.
 
 The taskbar is treated as occupied when it receives keyboard-driven foreground focus, preventing keyboard navigation such as `Win+T`, `Win+B`, or `Win+number` from operating on an invisible taskbar. A taskbar focused by mouse interaction can still hide normally after the hover grace period ends.
 
@@ -103,7 +104,7 @@ Once a fullscreen window enters the foreground, its HMONITOR remains associated 
 
 ## Performance and Refreshing
 
-The full application and display scan runs in the dedicated tool process rather than inside Explorer. The mod uses:
+The full application, shell-surface, and display scan runs in the dedicated tool process rather than inside Explorer. The mod uses:
 
 - A dedicated worker thread for state management
 - A lightweight cursor-sampling thread for hover detection
@@ -139,7 +140,7 @@ When no displays are configured for desktop-based hiding, the mod skips the appl
     The reveal zone at the bottom of the screen automatically matches your
     taskbar's actual height (including your display scaling), so hovering
     anywhere over where the taskbar would be reveals it. This setting adds
-    a bit of extra margin above that, in pixels, so you don't need to be pixel-perfect. Default 8px.
+    a bit of extra margin above that. The value is scaled for the display DPI, so the default 8 corresponds to 8 physical pixels at 100% scaling. Default 8px.
 - autoHideDelayMs: 700
   $name: Auto-hide delay after hover (ms)
   $description: >-
@@ -212,7 +213,6 @@ When no displays are configured for desktop-based hiding, the mod skips the appl
 #include <wchar.h>
 #include <cstdlib>
 
-
 constexpr size_t kMaxMonitorNumbers = 16;
 constexpr size_t kMaxTaskbars = 16;
 
@@ -252,6 +252,7 @@ struct TaskbarMonitorState {
 struct WindowScanResult {
     bool applicationOnMonitor[kMaxMonitorNumbers];
     bool fullscreenOnMonitor[kMaxMonitorNumbers];
+    bool shellSurfaceOnMonitor[kMaxMonitorNumbers];
 };
 
 HWINEVENTHOOK g_foregroundHook = nullptr;
@@ -432,6 +433,12 @@ bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
                 &alpha,
                 &layeredFlags
             ) != FALSE;
+
+        // Do not take ownership of a taskbar that is already fully transparent.
+        // Another transparency mod may currently own that visual state.
+        if (originalLayeredAttributesValid && alpha == 0) {
+            return false;
+        }
 
         if (!SetWindowUlongPtrProp(
                 hwnd,
@@ -979,6 +986,14 @@ bool IsKnownShellProcess(DWORD pid) {
         _wcsicmp(
             baseName,
             L"ShellHost.exe"
+        ) == 0 ||
+        _wcsicmp(
+            baseName,
+            L"SearchHost.exe"
+        ) == 0 ||
+        _wcsicmp(
+            baseName,
+            L"SearchApp.exe"
         ) == 0;
 }
 
@@ -1078,11 +1093,11 @@ bool IsShellSurfaceWindow(
     );
 
     if (
-    IsTaskbarPopupClass(className) &&
-    (IsExplorerProcess(pid) || IsKnownShellProcess(pid))
-) {
-    return true;
-}
+        IsTaskbarPopupClass(className) &&
+        (IsExplorerProcess(pid) || IsKnownShellProcess(pid))
+    ) {
+        return true;
+    }
 
     if (
         IsAltTabClass(className) &&
@@ -1124,6 +1139,38 @@ bool IsShellSurfaceWindow(
     }
 
     return false;
+}
+
+bool MarkShellSurfaceOnMonitors(
+    HWND hwnd,
+    const WCHAR* className,
+    const MonitorList& monitors,
+    bool* shellSurfaceOnMonitor
+) {
+    if (
+        !shellSurfaceOnMonitor ||
+        !IsShellSurfaceWindow(hwnd, className)
+    ) {
+        return false;
+    }
+
+    RECT rect = {};
+    if (!GetWindowRect(hwnd, &rect)) {
+        return true;
+    }
+
+    for (size_t i = 0; i < monitors.count; ++i) {
+        RECT intersection = {};
+        if (IntersectRect(
+                &intersection,
+                &rect,
+                &monitors.entries[i].rect
+            )) {
+            shellSurfaceOnMonitor[i] = true;
+        }
+    }
+
+    return true;
 }
 
 bool IsApplicationWindowCandidate(
@@ -1454,14 +1501,6 @@ bool IsTaskbarWindow(
         wcscmp(className, L"Shell_SecondaryTrayWnd") == 0;
 }
 
-bool IsForegroundNormalApplication(HWND hwnd) {
-    WCHAR className[256] = {};
-    return
-        hwnd &&
-        GetClassNameW(hwnd, className, ARRAYSIZE(className)) != 0 &&
-        IsApplicationWindowCandidate(hwnd, className);
-}
-
 void ClearFullscreenOwnerForForegroundApplication(
     const MonitorList& monitors,
     HWND hwnd
@@ -1469,7 +1508,12 @@ void ClearFullscreenOwnerForForegroundApplication(
     // A real application becoming foreground on the same display is an explicit
     // ownership transition. Shell/desktop/taskbar foreground transitions are
     // intentionally ignored.
-    if (!IsForegroundNormalApplication(hwnd)) {
+    WCHAR className[256] = {};
+    if (
+        !hwnd ||
+        GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0 ||
+        !IsApplicationWindowCandidate(hwnd, className)
+    ) {
         return;
     }
 
@@ -1599,6 +1643,15 @@ BOOL CALLBACK ScanWindowsWithMonitorsProc(
         return TRUE;
     }
 
+    if (MarkShellSurfaceOnMonitors(
+            hwnd,
+            className,
+            *context->monitors,
+            context->result->shellSurfaceOnMonitor
+        )) {
+        return TRUE;
+    }
+
     if (!IsApplicationWindowCandidate(
             hwnd,
             className
@@ -1699,68 +1752,81 @@ void ScanWindowsOnce(
     );
 
     /*
-     * A title-less foreground application is allowed even when it did not
-     * meet the conservative background candidate rule.
+     * Track a foreground shell surface directly as well. This keeps Start,
+     * Search and taskbar popup windows visible even when EnumWindows stops
+     * early after all application/fullscreen states are classified.
      */
     HWND foreground =
         GetForegroundWindow();
 
+    WCHAR foregroundClassName[256] = {};
+    if (
+        foreground &&
+        GetClassNameW(
+            foreground,
+            foregroundClassName,
+            ARRAYSIZE(foregroundClassName)
+        ) != 0
+    ) {
+        MarkShellSurfaceOnMonitors(
+            foreground,
+            foregroundClassName,
+            monitors,
+            result.shellSurfaceOnMonitor
+        );
+    }
+
+    /*
+     * A title-less foreground application is allowed even when it did not
+     * meet the conservative background candidate rule.
+     */
     if (
         foreground &&
         IsWindowVisible(foreground) &&
-        !IsIconic(foreground)
+        !IsIconic(foreground) &&
+        foregroundClassName[0] != L'\0' &&
+        !IsDesktopInfrastructureWindow(
+            foreground,
+            foregroundClassName
+        ) &&
+        !IsShellChromeClass(foregroundClassName) &&
+        !IsShellSurfaceWindow(foreground, foregroundClassName) &&
+        !IsTaskbarWindow(foreground)
     ) {
-        WCHAR className[256] = {};
+        BOOL transparent = FALSE;
 
         if (
-            GetClassNameW(
-                foreground,
-                className,
-                ARRAYSIZE(className)
-            ) != 0 &&
-            !IsDesktopInfrastructureWindow(
-                foreground,
-                className
-            ) &&
-            !IsShellChromeClass(className) &&
-            !IsShellSurfaceWindow(foreground, className) &&
-            !IsTaskbarWindow(foreground)
-        ) {
-            BOOL transparent = FALSE;
-
-            if (
-                !(
-                    SUCCEEDED(
-                        DwmGetWindowAttribute(
-                            foreground,
-                            DWMWA_CLOAKED,
-                            &transparent,
-                            sizeof(transparent)
-                        )
-                    ) &&
-                    transparent
-                )
-            ) {
-                HMONITOR foregroundMonitor =
-                    MonitorFromWindow(
+            !(
+                SUCCEEDED(
+                    DwmGetWindowAttribute(
                         foreground,
-                        MONITOR_DEFAULTTONEAREST
-                    );
+                        DWMWA_CLOAKED,
+                        &transparent,
+                        sizeof(transparent)
+                    )
+                ) &&
+                transparent
+            )
+        ) {
+            HMONITOR foregroundMonitor =
+                MonitorFromWindow(
+                    foreground,
+                    MONITOR_DEFAULTTONEAREST
+                );
 
-                for (
-                    size_t i = 0;
-                    i < monitors.count;
-                    ++i
+            for (
+                size_t i = 0;
+                i < monitors.count;
+                ++i
+            ) {
+                if (
+                    monitors.entries[i].monitor ==
+                    foregroundMonitor
                 ) {
-                    if (
-                        monitors.entries[i].monitor ==
-                        foregroundMonitor
-                    ) {
-                        if (!result.fullscreenOnMonitor[i]) {
-                            result.applicationOnMonitor[i] = true;
-                        }
-                        break;
+                    if (!result.fullscreenOnMonitor[i]) {
+                        result.applicationOnMonitor[i] = true;
                     }
+                    break;
                 }
             }
         }
@@ -1803,7 +1869,6 @@ void RefreshTaskbarMonitorStates(
                 monitors,
                 monitor
             );
-
 
         state.desktopOnly = true;
         state.hiddenByMod = false;
@@ -1890,7 +1955,6 @@ bool ShouldHideTaskbar(
         ) &&
         !g_nativeAutoHideEnabled;
 }
-
 
 void SetTaskbarState(
     TaskbarMonitorState& state,
@@ -2055,17 +2119,14 @@ void ScanVisibleShellPopupsOnce(
     );
 }
 
-void ApplyBaseTaskbarState() {
-    for (size_t i = 0; i < g_taskbarStateCount; ++i) {
-        TaskbarMonitorState& state =
-            g_taskbarStates[i];
-
-        SetTaskbarState(
-            state,
-            !state.desktopOnly ||
-            !ShouldHideTaskbar(state)
-        );
+int FindMonitorIndex(const MonitorList& monitors, HMONITOR monitor) {
+    for (size_t i = 0; i < monitors.count; ++i) {
+        if (monitors.entries[i].monitor == monitor) {
+            return static_cast<int>(i);
+        }
     }
+
+    return -1;
 }
 
 int GetHoverZonePx(
@@ -2335,7 +2396,15 @@ void UpdateTaskbarState() {
             g_hoverMonitor = nullptr;
             g_hoverDeadline = 0;
             CancelHoverExpireTimer();
-            ApplyBaseTaskbarState();
+            for (size_t i = 0; i < g_taskbarStateCount; ++i) {
+                TaskbarMonitorState& state =
+                    g_taskbarStates[i];
+                SetTaskbarState(
+                    state,
+                    !state.desktopOnly ||
+                    !ShouldHideTaskbar(state)
+                );
+            }
             UpdateCursorHoverSnapshot();
             return;
         }
@@ -2363,17 +2432,12 @@ void UpdateTaskbarState() {
                 monitors.entries[monitorIndex].monitor ==
                 state.monitor
             ) {
-                const bool fullscreenActive =
-                    IsFullscreenOwnerVisible(state.monitor);
                 state.desktopOnly =
-                    fullscreenActive ||
-                    !scan.applicationOnMonitor[
-                        monitorIndex
-                    ];
+                    scan.fullscreenOnMonitor[monitorIndex] ||
+                    !scan.applicationOnMonitor[monitorIndex];
                 break;
             }
         }
-
     }
 
     // Treat the currently foreground taskbar as occupied only when it has
@@ -2423,10 +2487,14 @@ void UpdateTaskbarState() {
                 continue;
             }
 
-            const bool fullscreenOnTaskbarMonitor =
-                IsFullscreenOwnerVisible(
+            const int monitorIndex =
+                FindMonitorIndex(
+                    monitors,
                     g_taskbarStates[i].monitor
                 );
+            const bool fullscreenOnTaskbarMonitor =
+                monitorIndex >= 0 &&
+                scan.fullscreenOnMonitor[monitorIndex];
 
             if (!fullscreenOnTaskbarMonitor) {
                 g_taskbarStates[i].desktopOnly = false;
@@ -2435,6 +2503,14 @@ void UpdateTaskbarState() {
             break;
         }
     }
+
+    auto IsShellSurfaceVisibleOnMonitor =
+        [&](HMONITOR monitor) {
+            const int index = FindMonitorIndex(monitors, monitor);
+            return index >= 0 &&
+                   scan.shellSurfaceOnMonitor[index] &&
+                   !scan.fullscreenOnMonitor[index];
+        };
 
     HWND cursorTaskbar = nullptr;
     bool cursorHoverConfigured = false;
@@ -2461,8 +2537,7 @@ void UpdateTaskbarState() {
     for (size_t i = 0; i < monitors.count; ++i) {
         if (monitors.entries[i].monitor == cursorMonitor) {
             cursorMonitorFullscreen =
-                scan.fullscreenOnMonitor[i] &&
-                IsFullscreenOwnerVisible(cursorMonitor);
+                scan.fullscreenOnMonitor[i];
             break;
         }
     }
@@ -2473,8 +2548,7 @@ void UpdateTaskbarState() {
         for (size_t i = 0; i < monitors.count; ++i) {
             if (monitors.entries[i].monitor == g_hoverMonitor) {
                 hoverMonitorFullscreen =
-                    scan.fullscreenOnMonitor[i] &&
-                    IsFullscreenOwnerVisible(g_hoverMonitor);
+                    scan.fullscreenOnMonitor[i];
                 break;
             }
         }
@@ -2517,6 +2591,7 @@ void UpdateTaskbarState() {
                 (state.monitor == g_hoverMonitor &&
                  !cursorMonitorFullscreen) ||
                 !state.desktopOnly ||
+                IsShellSurfaceVisibleOnMonitor(state.monitor) ||
                 !ShouldHideTaskbar(state)
             );
         }
@@ -2549,6 +2624,7 @@ void UpdateTaskbarState() {
                     (state.monitor == g_hoverMonitor &&
                      !hoverMonitorFullscreen) ||
                     !state.desktopOnly ||
+                    IsShellSurfaceVisibleOnMonitor(state.monitor) ||
                     !ShouldHideTaskbar(state)
                 );
             }
@@ -2569,20 +2645,11 @@ void UpdateTaskbarState() {
             );
         }
 
-        bool shellPopupPresent = false;
-        for (size_t i = 0; i < g_taskbarStateCount; ++i) {
-            TaskbarMonitorState& state = g_taskbarStates[i];
-            for (size_t monitorIndex = 0; monitorIndex < monitors.count; ++monitorIndex) {
-                if (monitors.entries[monitorIndex].monitor == state.monitor &&
-                    shellPopups.visibleOnMonitor[monitorIndex]) {
-                    shellPopupPresent = true;
-                    break;
-                }
-            }
-            if (shellPopupPresent) {
-                break;
-            }
-        }
+        const int hoverMonitorIndex =
+            FindMonitorIndex(monitors, g_hoverMonitor);
+        const bool shellPopupPresent =
+            hoverMonitorIndex >= 0 &&
+            shellPopups.visibleOnMonitor[hoverMonitorIndex];
 
         if (shellPopupPresent) {
             // Keep the revealed taskbar visible while a shell popup/context
@@ -2594,32 +2661,21 @@ void UpdateTaskbarState() {
                 TaskbarMonitorState& state =
                     g_taskbarStates[i];
 
-                bool shellPopupOnMonitor = false;
-                bool stateFullscreenOnMonitor = false;
-
-                for (
-                    size_t monitorIndex = 0;
-                    monitorIndex < monitors.count;
-                    ++monitorIndex
-                ) {
-                    if (
-                        monitors.entries[monitorIndex].monitor ==
-                        state.monitor
-                    ) {
-                        shellPopupOnMonitor =
-                            shellPopups.visibleOnMonitor[monitorIndex];
-                        stateFullscreenOnMonitor =
-                            scan.fullscreenOnMonitor[monitorIndex] &&
-                            IsFullscreenOwnerVisible(state.monitor);
-                        break;
-                    }
-                }
+                const int monitorIndex =
+                    FindMonitorIndex(monitors, state.monitor);
+                const bool shellPopupOnMonitor =
+                    monitorIndex >= 0 &&
+                    shellPopups.visibleOnMonitor[monitorIndex];
+                const bool stateFullscreenOnMonitor =
+                    monitorIndex >= 0 &&
+                    scan.fullscreenOnMonitor[monitorIndex];
 
                 SetTaskbarState(
                     state,
                     (state.monitor == g_hoverMonitor &&
                      !hoverMonitorFullscreen) ||
                     !state.desktopOnly ||
+                    IsShellSurfaceVisibleOnMonitor(state.monitor) ||
                     !ShouldHideTaskbar(state) ||
                     (shellPopupOnMonitor &&
                      !stateFullscreenOnMonitor)
@@ -2645,6 +2701,7 @@ void UpdateTaskbarState() {
             SetTaskbarState(
                 state,
                 !state.desktopOnly ||
+                IsShellSurfaceVisibleOnMonitor(state.monitor) ||
                 !ShouldHideTaskbar(state)
             );
         }
@@ -2659,6 +2716,7 @@ void UpdateTaskbarState() {
         SetTaskbarState(
             state,
             !state.desktopOnly ||
+            IsShellSurfaceVisibleOnMonitor(state.monitor) ||
             !ShouldHideTaskbar(state)
         );
     }
@@ -3215,7 +3273,6 @@ DWORD WINAPI WorkerThread(
             nullptr
         );
 
-
     for (;;) {
         BOOL result =
             GetMessageW(
@@ -3235,7 +3292,7 @@ DWORD WINAPI WorkerThread(
                 continue;
             }
 
-                    UpdateTaskbarState();
+                UpdateTaskbarState();
 
             continue;
         }
@@ -3249,7 +3306,7 @@ DWORD WINAPI WorkerThread(
                 0
             );
 
-                    UpdateTaskbarState();
+                UpdateTaskbarState();
 
             continue;
         }
@@ -3257,7 +3314,7 @@ DWORD WINAPI WorkerThread(
         if (msg.message == WM_APP_SETTINGS) {
             LoadSettings();
             RefreshNativeAutoHideState();
-            UpdateTaskbarState();
+        UpdateTaskbarState();
 
             continue;
         }
@@ -3286,7 +3343,6 @@ DWORD WINAPI WorkerThread(
 }
 
 void LoadSettings() {
-
     int hoverMargin =
         Wh_GetIntSetting(
             L"extraHoverMarginPx"
