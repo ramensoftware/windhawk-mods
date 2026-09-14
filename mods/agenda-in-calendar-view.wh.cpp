@@ -49,10 +49,15 @@ Checking events on other dates:
 
 
 ## Notes
+- Supports recurring events (daily, weekly, monthly, yearly, including `BYDAY`
+ordinals such as "third Thursday" / `3TH` or "second Tuesday" / `2TU`,
+`BYMONTHDAY`, `WKST`, `EXDATE`, `RECURRENCE-ID`, and multi-day recurring
+events).
 - Events are refreshed every time the notification pane is opened.
     - If events can't be fetched (e.g. no internet connection),
 previously-fetched events are shown.
-    - Smart caching avoids redundant fetches if the file has not been modified.
+    - Smart caching avoids redundant fetches within the configured minimum fetch
+interval.
     - You can click the Refresh button in the calendar header at any time to
 force an immediate refresh.
 - The mod resiliently accepts errors; if you have a problem, enable logging.
@@ -85,17 +90,30 @@ settings to stop it from clipping the *Notifications* pane.
 /*
 - icsPath: ""
   $name: Path to .ics
-  $description: Local file path or remote URL to the .ics calendar file. If your
-local .ics calendar file is not working, make sure it is unblocked (in
-Properties).
+  $description: |
+    Local file path or remote URL to the .ics calendar file.
+    If your local .ics calendar file is not working, make sure it is unblocked
+(in Properties).
 - maxHeight: 400
   $name: Max height (in pixels)
-  $description: Maximum visible height of the events list in pixels before the
-list starts to scroll. Set to 0 to disable.
+  $description: |
+    Maximum visible height of the events list in pixels before the list starts
+to scroll. Set to 0 to disable.
+- timeColumnWidth: 65
+  $name: Time column width (in pixels)
+  $description: |
+    Width of the time column in pixels to keep event titles aligned across
+cards. Set to 0 for automatic width.
 - hideFocusSession: true
   $name: Hide Focus Session
   $description: Hide the Focus Session control in the calendar/notification
 center flyout.
+- minFetchInterval: 5
+  $name: Minimum time between fetches
+  $description: |
+    Minimum time (in minutes) between fetches when opening the notification
+pane. Setting to 0 means .ics is always fetched when the notification pane is
+opened.
 */
 // ==/WindhawkModSettings==
 
@@ -222,6 +240,18 @@ inline int CompareDateOnly(const SYSTEMTIME& a, const SYSTEMTIME& b) {
     return 0;
 }
 
+inline int GetDaysInMonth(int year, int month) {
+    static const int days[13] = {0,  31, 28, 31, 30, 31, 30,
+                                 31, 31, 30, 31, 30, 31};
+    if (month == 2) {
+        bool isLeap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+        return isLeap ? 29 : 28;
+    }
+    if (month >= 1 && month <= 12)
+        return days[month];
+    return 30;
+}
+
 inline std::wstring FormatDateYmd(const SYSTEMTIME& st) {
     WCHAR buf[16];
     swprintf_s(buf, L"%04d%02d%02d", st.wYear, st.wMonth, st.wDay);
@@ -269,6 +299,13 @@ inline SYSTEMTIME ToLocal(const SYSTEMTIME& stUtc, bool isUtc) {
 
 enum class RecurrenceFreq { None, Daily, Weekly, Monthly, Yearly };
 
+struct ByDayItem {
+    int ord =
+        0;  // 0 = every; +1 = 1st, +2 = 2nd, -1 = last, -2 = 2nd-to-last, etc.
+    int dayOfWeek =
+        0;  // 0 = Sun, 1 = Mon, ..., 6 = Sat (matching SYSTEMTIME wDayOfWeek)
+};
+
 struct RecurrenceRule {
     RecurrenceFreq freq = RecurrenceFreq::None;
     int interval = 1;
@@ -276,6 +313,10 @@ struct RecurrenceRule {
     SYSTEMTIME untilUtc{};
     bool hasUntil = false;
     uint8_t byDayMask = 0;  // bit 0 = Sun, 1 = Mon, ..., 6 = Sat
+    std::vector<ByDayItem> byDays;
+    std::vector<int> byMonthDays;
+    int wkst =
+        1;  // 0 = Sun, 1 = Mon, ..., 6 = Sat (RFC 5545 default: 1 = Monday)
 };
 
 struct CalendarEvent {
@@ -408,6 +449,56 @@ inline int ParseUtcOffsetMinutes(const std::wstring& s) {
     return 0;
 }
 
+inline std::wstring TrimW(const std::wstring& s) {
+    size_t start = 0;
+    while (start < s.size() && (s[start] == L' ' || s[start] == L'\t' ||
+                                s[start] == L'\r' || s[start] == L'\n')) {
+        start++;
+    }
+    size_t end = s.size();
+    while (end > start && (s[end - 1] == L' ' || s[end - 1] == L'\t' ||
+                           s[end - 1] == L'\r' || s[end - 1] == L'\n')) {
+        end--;
+    }
+    return s.substr(start, end - start);
+}
+
+inline bool ParseByDayToken(const std::wstring& rawToken, ByDayItem& item) {
+    std::wstring token = TrimW(rawToken);
+    if (token.size() < 2)
+        return false;
+    std::wstring dayCode = token.substr(token.size() - 2);
+    int dow = -1;
+    if (dayCode == L"SU")
+        dow = 0;
+    else if (dayCode == L"MO")
+        dow = 1;
+    else if (dayCode == L"TU")
+        dow = 2;
+    else if (dayCode == L"WE")
+        dow = 3;
+    else if (dayCode == L"TH")
+        dow = 4;
+    else if (dayCode == L"FR")
+        dow = 5;
+    else if (dayCode == L"SA")
+        dow = 6;
+    else
+        return false;
+
+    item.dayOfWeek = dow;
+    item.ord = 0;
+    if (token.size() > 2) {
+        std::wstring prefix = token.substr(0, token.size() - 2);
+        try {
+            item.ord = std::stoi(prefix);
+        } catch (...) {
+            item.ord = 0;
+        }
+    }
+    return true;
+}
+
 inline RecurrenceRule ParseRRule(const std::wstring& rruleStr) {
     RecurrenceRule rule;
     std::wstringstream ss(rruleStr);
@@ -450,24 +541,280 @@ inline RecurrenceRule ParseRRule(const std::wstring& rruleStr) {
             std::wstringstream dayss(val);
             std::wstring dayToken;
             while (std::getline(dayss, dayToken, L',')) {
-                if (dayToken.find(L"SU") != std::wstring::npos)
-                    rule.byDayMask |= (1 << 0);
-                else if (dayToken.find(L"MO") != std::wstring::npos)
-                    rule.byDayMask |= (1 << 1);
-                else if (dayToken.find(L"TU") != std::wstring::npos)
-                    rule.byDayMask |= (1 << 2);
-                else if (dayToken.find(L"WE") != std::wstring::npos)
-                    rule.byDayMask |= (1 << 3);
-                else if (dayToken.find(L"TH") != std::wstring::npos)
-                    rule.byDayMask |= (1 << 4);
-                else if (dayToken.find(L"FR") != std::wstring::npos)
-                    rule.byDayMask |= (1 << 5);
-                else if (dayToken.find(L"SA") != std::wstring::npos)
-                    rule.byDayMask |= (1 << 6);
+                ByDayItem item;
+                if (ParseByDayToken(dayToken, item)) {
+                    rule.byDays.push_back(item);
+                    rule.byDayMask |= (1 << item.dayOfWeek);
+                }
             }
+        } else if (key == L"BYMONTHDAY") {
+            std::wstringstream mds(val);
+            std::wstring mdToken;
+            while (std::getline(mds, mdToken, L',')) {
+                std::wstring token = TrimW(mdToken);
+                try {
+                    int dayVal = std::stoi(token);
+                    if (dayVal >= -31 && dayVal <= 31 && dayVal != 0) {
+                        rule.byMonthDays.push_back(dayVal);
+                    }
+                } catch (...) {
+                }
+            }
+        } else if (key == L"WKST") {
+            std::wstring w = TrimW(val);
+            if (w == L"SU")
+                rule.wkst = 0;
+            else if (w == L"MO")
+                rule.wkst = 1;
+            else if (w == L"TU")
+                rule.wkst = 2;
+            else if (w == L"WE")
+                rule.wkst = 3;
+            else if (w == L"TH")
+                rule.wkst = 4;
+            else if (w == L"FR")
+                rule.wkst = 5;
+            else if (w == L"SA")
+                rule.wkst = 6;
         }
     }
     return rule;
+}
+
+inline bool EventOccursOnDate(const CalendarEvent& ev,
+                              const SYSTEMTIME& tDate) {
+    if (ev.isAllDay && ev.hasEnd) {
+        FILETIME ftStart{}, ftEnd{}, ftTarget{};
+        SYSTEMTIME sOnly = ev.startLocal;
+        sOnly.wHour = sOnly.wMinute = sOnly.wSecond = sOnly.wMilliseconds = 0;
+        SYSTEMTIME eOnly = ev.endLocal;
+        eOnly.wHour = eOnly.wMinute = eOnly.wSecond = eOnly.wMilliseconds = 0;
+        SYSTEMTIME tOnly = tDate;
+        tOnly.wHour = tOnly.wMinute = tOnly.wSecond = tOnly.wMilliseconds = 0;
+        SystemTimeToFileTime(&sOnly, &ftStart);
+        SystemTimeToFileTime(&eOnly, &ftEnd);
+        SystemTimeToFileTime(&tOnly, &ftTarget);
+        ULARGE_INTEGER uStart{}, uEnd{}, uTarget{};
+        uStart.LowPart = ftStart.dwLowDateTime;
+        uStart.HighPart = ftStart.dwHighDateTime;
+        uEnd.LowPart = ftEnd.dwLowDateTime;
+        uEnd.HighPart = ftEnd.dwHighDateTime;
+        uTarget.LowPart = ftTarget.dwLowDateTime;
+        uTarget.HighPart = ftTarget.dwHighDateTime;
+
+        if (uTarget.QuadPart >= uStart.QuadPart &&
+            uTarget.QuadPart < uEnd.QuadPart) {
+            return true;
+        } else if (uStart.QuadPart == uEnd.QuadPart &&
+                   uTarget.QuadPart == uStart.QuadPart) {
+            return true;
+        }
+    } else {
+        if (ev.startLocal.wYear == tDate.wYear &&
+            ev.startLocal.wMonth == tDate.wMonth &&
+            ev.startLocal.wDay == tDate.wDay) {
+            return true;
+        } else if (ev.hasEnd) {
+            if (CompareDateOnly(ev.startLocal, tDate) < 0 &&
+                CompareDateOnly(tDate, ev.endLocal) <= 0) {
+                if (CompareDateOnly(tDate, ev.endLocal) < 0 ||
+                    (ev.endLocal.wHour > 0 || ev.endLocal.wMinute > 0 ||
+                     ev.endLocal.wSecond > 0)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+inline bool MatchesByDayItem(const ByDayItem& item,
+                             const SYSTEMTIME& candDate) {
+    if (candDate.wDayOfWeek != item.dayOfWeek) {
+        return false;
+    }
+    if (item.ord == 0) {
+        return true;
+    }
+    if (item.ord > 0) {
+        int nth = (candDate.wDay - 1) / 7 + 1;
+        return nth == item.ord;
+    } else {
+        int daysInMonth = GetDaysInMonth(candDate.wYear, candDate.wMonth);
+        int daysFromEnd = daysInMonth - candDate.wDay;
+        int negNth = -(daysFromEnd / 7 + 1);
+        return negNth == item.ord;
+    }
+}
+
+inline bool MatchesByMonthDay(int d, const SYSTEMTIME& candDate) {
+    if (d > 0) {
+        return candDate.wDay == d;
+    } else if (d < 0) {
+        int daysInMonth = GetDaysInMonth(candDate.wYear, candDate.wMonth);
+        return candDate.wDay == (daysInMonth + 1 + d);
+    }
+    return false;
+}
+
+inline bool RecurrenceMatchesDate(const CalendarEvent& ev,
+                                  const SYSTEMTIME& candDate) {
+    if (CompareDateOnly(candDate, ev.startLocal) < 0) {
+        return false;
+    }
+
+    if (ev.rrule.hasUntil) {
+        SYSTEMTIME untilLocal = TzToSystemLocal(ev.rrule.untilUtc, 0);
+        if (CompareDateOnly(candDate, untilLocal) > 0) {
+            return false;
+        }
+    }
+
+    int interval = (ev.rrule.interval > 0) ? ev.rrule.interval : 1;
+
+    if (ev.rrule.freq == RecurrenceFreq::Daily) {
+        if (ev.rrule.byDayMask != 0) {
+            if ((ev.rrule.byDayMask & (1 << candDate.wDayOfWeek)) == 0) {
+                return false;
+            }
+        }
+        int days = DaysBetween(ev.startLocal, candDate);
+        if (days < 0 || (days % interval != 0)) {
+            return false;
+        }
+        int occIndex = days / interval;
+        if (ev.rrule.count > 0 && occIndex >= ev.rrule.count) {
+            return false;
+        }
+        return true;
+    } else if (ev.rrule.freq == RecurrenceFreq::Weekly) {
+        uint8_t mask = ev.rrule.byDayMask;
+        if (mask == 0) {
+            mask = (1 << ev.startLocal.wDayOfWeek);
+        }
+        if ((mask & (1 << candDate.wDayOfWeek)) == 0) {
+            return false;
+        }
+
+        int wkst =
+            (ev.rrule.wkst >= 0 && ev.rrule.wkst <= 6) ? ev.rrule.wkst : 1;
+        int startDayInWeek = (ev.startLocal.wDayOfWeek - wkst + 7) % 7;
+        int candDayInWeek = (candDate.wDayOfWeek - wkst + 7) % 7;
+        int64_t startWeekStartDays =
+            ToFileTimeDays(ev.startLocal) - startDayInWeek;
+        int64_t candWeekStartDays = ToFileTimeDays(candDate) - candDayInWeek;
+        int64_t diffDays = candWeekStartDays - startWeekStartDays;
+        if (diffDays < 0) {
+            return false;
+        }
+        int weekDiff = static_cast<int>(diffDays / 7);
+        if (weekDiff % interval != 0) {
+            return false;
+        }
+
+        if (ev.rrule.count > 0) {
+            int countSoFar = 0;
+            for (int w = 0; w <= weekDiff; w += interval) {
+                for (int i = 0; i < 7; ++i) {
+                    int d = (wkst + i) % 7;
+                    if ((mask & (1 << d)) != 0) {
+                        if (w == 0 && ((d - wkst + 7) % 7) < startDayInWeek)
+                            continue;
+                        if (w == weekDiff &&
+                            ((d - wkst + 7) % 7) > candDayInWeek)
+                            break;
+                        countSoFar++;
+                    }
+                }
+            }
+            if (countSoFar > ev.rrule.count) {
+                return false;
+            }
+        }
+        return true;
+    } else if (ev.rrule.freq == RecurrenceFreq::Monthly) {
+        int monthDiff = (candDate.wYear - ev.startLocal.wYear) * 12 +
+                        (candDate.wMonth - ev.startLocal.wMonth);
+        if (monthDiff < 0 || (monthDiff % interval != 0)) {
+            return false;
+        }
+
+        bool dayMatches = false;
+        if (!ev.rrule.byDays.empty()) {
+            for (const auto& item : ev.rrule.byDays) {
+                if (MatchesByDayItem(item, candDate)) {
+                    dayMatches = true;
+                    break;
+                }
+            }
+        } else if (!ev.rrule.byMonthDays.empty()) {
+            for (int d : ev.rrule.byMonthDays) {
+                if (MatchesByMonthDay(d, candDate)) {
+                    dayMatches = true;
+                    break;
+                }
+            }
+        } else {
+            if (candDate.wDay == ev.startLocal.wDay) {
+                dayMatches = true;
+            }
+        }
+
+        if (!dayMatches) {
+            return false;
+        }
+
+        if (ev.rrule.count > 0) {
+            int occIndex = monthDiff / interval;
+            if (occIndex >= ev.rrule.count) {
+                return false;
+            }
+        }
+        return true;
+    } else if (ev.rrule.freq == RecurrenceFreq::Yearly) {
+        int yearDiff = candDate.wYear - ev.startLocal.wYear;
+        if (yearDiff < 0 || (yearDiff % interval != 0)) {
+            return false;
+        }
+        if (candDate.wMonth != ev.startLocal.wMonth) {
+            return false;
+        }
+
+        bool dayMatches = false;
+        if (!ev.rrule.byDays.empty()) {
+            for (const auto& item : ev.rrule.byDays) {
+                if (MatchesByDayItem(item, candDate)) {
+                    dayMatches = true;
+                    break;
+                }
+            }
+        } else if (!ev.rrule.byMonthDays.empty()) {
+            for (int d : ev.rrule.byMonthDays) {
+                if (MatchesByMonthDay(d, candDate)) {
+                    dayMatches = true;
+                    break;
+                }
+            }
+        } else {
+            if (candDate.wDay == ev.startLocal.wDay) {
+                dayMatches = true;
+            }
+        }
+
+        if (!dayMatches) {
+            return false;
+        }
+
+        if (ev.rrule.count > 0) {
+            int occIndex = yearDiff / interval;
+            if (occIndex >= ev.rrule.count) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    return false;
 }
 
 std::vector<CalendarEvent> FilterEventsForDate(
@@ -478,7 +825,8 @@ std::vector<CalendarEvent> FilterEventsForDate(
     std::wstring targetYmd = FormatDateYmd(tDate);
 
     std::unordered_set<std::wstring> cancelledMasterUids;
-    std::unordered_set<std::wstring> overriddenUidsForTarget;
+    // Map/set of overridden occurrence start dates: key = uid + L"#" + YYYYMMDD
+    std::unordered_set<std::wstring> overriddenOccurrences;
 
     // Pass 1: find cancellations and overridden instances
     for (const auto& ev : allEvents) {
@@ -489,14 +837,30 @@ std::vector<CalendarEvent> FilterEventsForDate(
             if (ev.recurrenceId.empty()) {
                 cancelledMasterUids.insert(ev.uid);
             } else {
-                if (MatchesRecurrenceId(ev.recurrenceId, tDate, targetYmd)) {
-                    overriddenUidsForTarget.insert(ev.uid);
+                SYSTEMTIME stRec{};
+                bool isUtc = false;
+                if (ParseIcsDateTimeW(ev.recurrenceId, stRec, isUtc)) {
+                    SYSTEMTIME localRec = isUtc ? ToLocal(stRec, true) : stRec;
+                    overriddenOccurrences.insert(ev.uid + L"#" +
+                                                 FormatDateYmd(localRec));
+                }
+                if (ev.recurrenceId.size() >= 8) {
+                    overriddenOccurrences.insert(ev.uid + L"#" +
+                                                 ev.recurrenceId.substr(0, 8));
                 }
             }
         } else {
             if (!ev.recurrenceId.empty()) {
-                if (MatchesRecurrenceId(ev.recurrenceId, tDate, targetYmd)) {
-                    overriddenUidsForTarget.insert(ev.uid);
+                SYSTEMTIME stRec{};
+                bool isUtc = false;
+                if (ParseIcsDateTimeW(ev.recurrenceId, stRec, isUtc)) {
+                    SYSTEMTIME localRec = isUtc ? ToLocal(stRec, true) : stRec;
+                    overriddenOccurrences.insert(ev.uid + L"#" +
+                                                 FormatDateYmd(localRec));
+                }
+                if (ev.recurrenceId.size() >= 8) {
+                    overriddenOccurrences.insert(ev.uid + L"#" +
+                                                 ev.recurrenceId.substr(0, 8));
                 }
             }
         }
@@ -514,169 +878,62 @@ std::vector<CalendarEvent> FilterEventsForDate(
         }
 
         if (!ev.hasRRule) {
-            bool matches = false;
-            if (ev.isAllDay && ev.hasEnd) {
-                FILETIME ftStart{}, ftEnd{}, ftTarget{};
-                SYSTEMTIME sOnly = ev.startLocal;
-                sOnly.wHour = sOnly.wMinute = sOnly.wSecond =
-                    sOnly.wMilliseconds = 0;
-                SYSTEMTIME eOnly = ev.endLocal;
-                eOnly.wHour = eOnly.wMinute = eOnly.wSecond =
-                    eOnly.wMilliseconds = 0;
-                SYSTEMTIME tOnly = tDate;
-                tOnly.wHour = tOnly.wMinute = tOnly.wSecond =
-                    tOnly.wMilliseconds = 0;
-                SystemTimeToFileTime(&sOnly, &ftStart);
-                SystemTimeToFileTime(&eOnly, &ftEnd);
-                SystemTimeToFileTime(&tOnly, &ftTarget);
-                ULARGE_INTEGER uStart{}, uEnd{}, uTarget{};
-                uStart.LowPart = ftStart.dwLowDateTime;
-                uStart.HighPart = ftStart.dwHighDateTime;
-                uEnd.LowPart = ftEnd.dwLowDateTime;
-                uEnd.HighPart = ftEnd.dwHighDateTime;
-                uTarget.LowPart = ftTarget.dwLowDateTime;
-                uTarget.HighPart = ftTarget.dwHighDateTime;
-
-                if (uTarget.QuadPart >= uStart.QuadPart &&
-                    uTarget.QuadPart < uEnd.QuadPart) {
-                    matches = true;
-                } else if (uStart.QuadPart == uEnd.QuadPart &&
-                           uTarget.QuadPart == uStart.QuadPart) {
-                    matches = true;
-                }
-            } else {
-                if (ev.startLocal.wYear == tDate.wYear &&
-                    ev.startLocal.wMonth == tDate.wMonth &&
-                    ev.startLocal.wDay == tDate.wDay) {
-                    matches = true;
-                } else if (ev.hasEnd) {
-                    if (CompareDateOnly(ev.startLocal, tDate) < 0 &&
-                        CompareDateOnly(tDate, ev.endLocal) <= 0) {
-                        if (CompareDateOnly(tDate, ev.endLocal) < 0 ||
-                            (ev.endLocal.wHour > 0 || ev.endLocal.wMinute > 0 ||
-                             ev.endLocal.wSecond > 0)) {
-                            matches = true;
-                        }
-                    }
-                }
-            }
-
-            if (matches) {
+            if (EventOccursOnDate(ev, tDate)) {
                 result.push_back(ev);
             }
             continue;
         }
 
-        // Recurring master event
-        if (!ev.uid.empty() && overriddenUidsForTarget.count(ev.uid)) {
-            continue;
+        // Recurring master event:
+        // Duration of an occurrence in days:
+        int spanDays = 0;
+        if (ev.hasEnd) {
+            spanDays = DaysBetween(ev.startLocal, ev.endLocal);
+            if (spanDays < 0)
+                spanDays = 0;
+            if (spanDays > 366)
+                spanDays = 366;
         }
 
-        bool isExcluded = false;
-        for (const auto& ex : ev.exDates) {
-            if (MatchesExDate(ex, tDate, targetYmd)) {
-                isExcluded = true;
-                break;
+        for (int offset = 0; offset <= spanDays; ++offset) {
+            SYSTEMTIME candDate = ShiftLocalDate(tDate, -offset);
+
+            if (CompareDateOnly(candDate, ev.startLocal) < 0) {
+                break;  // Earlier offsets will also be before startLocal
             }
-        }
-        if (isExcluded)
-            continue;
 
-        if (CompareDateOnly(tDate, ev.startLocal) < 0) {
-            continue;
-        }
-
-        if (ev.rrule.hasUntil) {
-            SYSTEMTIME untilLocal = TzToSystemLocal(ev.rrule.untilUtc, 0);
-            if (CompareDateOnly(tDate, untilLocal) > 0) {
+            std::wstring candYmd = FormatDateYmd(candDate);
+            if (!ev.uid.empty() &&
+                overriddenOccurrences.count(ev.uid + L"#" + candYmd)) {
                 continue;
             }
-        }
 
-        int interval = (ev.rrule.interval > 0) ? ev.rrule.interval : 1;
-        bool ruleMatches = false;
+            bool isExcluded = false;
+            for (const auto& ex : ev.exDates) {
+                if (MatchesExDate(ex, candDate, candYmd)) {
+                    isExcluded = true;
+                    break;
+                }
+            }
+            if (isExcluded) {
+                continue;
+            }
 
-        if (ev.rrule.freq == RecurrenceFreq::Daily) {
-            int days = DaysBetween(ev.startLocal, tDate);
-            if (days >= 0 && (days % interval == 0)) {
-                int occIndex = days / interval;
-                if (ev.rrule.count == 0 || occIndex < ev.rrule.count) {
-                    ruleMatches = true;
+            if (RecurrenceMatchesDate(ev, candDate)) {
+                int days = DaysBetween(ev.startLocal, candDate);
+                CalendarEvent occ = ev;
+                occ.startLocal = ShiftLocalDate(ev.startLocal, days);
+                if (ev.hasEnd) {
+                    occ.endLocal = ShiftLocalDate(ev.endLocal, days);
+                }
+                if (EventOccursOnDate(occ, tDate)) {
+                    FILETIME ft{};
+                    SystemTimeToFileTime(&occ.startLocal, &ft);
+                    occ.sortKey =
+                        ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+                    result.push_back(occ);
                 }
             }
-        } else if (ev.rrule.freq == RecurrenceFreq::Weekly) {
-            uint8_t mask = ev.rrule.byDayMask;
-            if (mask == 0) {
-                mask = (1 << ev.startLocal.wDayOfWeek);
-            }
-            if ((mask & (1 << tDate.wDayOfWeek)) != 0) {
-                int startWeekStartDays =
-                    static_cast<int>(ToFileTimeDays(ev.startLocal)) -
-                    ev.startLocal.wDayOfWeek;
-                int targetWeekStartDays =
-                    static_cast<int>(ToFileTimeDays(tDate)) - tDate.wDayOfWeek;
-                int diffDays = targetWeekStartDays - startWeekStartDays;
-                if (diffDays >= 0) {
-                    int weekDiff = diffDays / 7;
-                    if (weekDiff % interval == 0) {
-                        if (ev.rrule.count == 0) {
-                            ruleMatches = true;
-                        } else {
-                            int countSoFar = 0;
-                            for (int w = 0; w <= weekDiff; w += interval) {
-                                for (int d = 0; d < 7; ++d) {
-                                    if ((mask & (1 << d)) != 0) {
-                                        if (w == 0 &&
-                                            d < ev.startLocal.wDayOfWeek)
-                                            continue;
-                                        if (w == weekDiff &&
-                                            d > tDate.wDayOfWeek)
-                                            break;
-                                        countSoFar++;
-                                    }
-                                }
-                            }
-                            if (countSoFar <= ev.rrule.count) {
-                                ruleMatches = true;
-                            }
-                        }
-                    }
-                }
-            }
-        } else if (ev.rrule.freq == RecurrenceFreq::Monthly) {
-            int monthDiff = (tDate.wYear - ev.startLocal.wYear) * 12 +
-                            (tDate.wMonth - ev.startLocal.wMonth);
-            if (monthDiff >= 0 && (monthDiff % interval == 0) &&
-                (ev.startLocal.wDay == tDate.wDay)) {
-                int occIndex = monthDiff / interval;
-                if (ev.rrule.count == 0 || occIndex < ev.rrule.count) {
-                    ruleMatches = true;
-                }
-            }
-        } else if (ev.rrule.freq == RecurrenceFreq::Yearly) {
-            int yearDiff = tDate.wYear - ev.startLocal.wYear;
-            if (yearDiff >= 0 && (yearDiff % interval == 0) &&
-                (ev.startLocal.wMonth == tDate.wMonth &&
-                 ev.startLocal.wDay == tDate.wDay)) {
-                int occIndex = yearDiff / interval;
-                if (ev.rrule.count == 0 || occIndex < ev.rrule.count) {
-                    ruleMatches = true;
-                }
-            }
-        }
-
-        if (ruleMatches) {
-            int days = DaysBetween(ev.startLocal, tDate);
-            CalendarEvent occ = ev;
-            occ.startLocal = ShiftLocalDate(ev.startLocal, days);
-            if (ev.hasEnd) {
-                occ.endLocal = ShiftLocalDate(ev.endLocal, days);
-            }
-            FILETIME ft{};
-            SystemTimeToFileTime(&occ.startLocal, &ft);
-            occ.sortKey =
-                ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
-            result.push_back(occ);
         }
     }
 
@@ -718,8 +975,17 @@ int GetMaxHeightSetting() {
     return Wh_GetIntSetting(L"maxHeight");
 }
 
+int GetTimeColumnWidthSetting() {
+    return Wh_GetIntSetting(L"timeColumnWidth");
+}
+
 bool ShouldHideFocusSession() {
     return Wh_GetIntSetting(L"hideFocusSession") != 0;
+}
+
+int GetMinFetchIntervalSetting() {
+    int val = Wh_GetIntSetting(L"minFetchInterval");
+    return (val < 0) ? 0 : val;
 }
 
 HMODULE GetCurrentModuleHandle() {
@@ -1038,18 +1304,20 @@ std::wstring FetchIcsContent(std::wstring const& pathOrUrl,
     bool isRemote = (_wcsnicmp(pathOrUrl.c_str(), L"http://", 7) == 0 ||
                      _wcsnicmp(pathOrUrl.c_str(), L"https://", 8) == 0);
 
+    int minFetchInterval = GetMinFetchIntervalSetting();
+    ULONGLONG ttlMs =
+        static_cast<ULONGLONG>(minFetchInterval) * 60ULL * 1000ULL;
+    ULONGLONG now = GetTickCount64();
+
     {
         std::lock_guard<std::mutex> lock(g_cacheMutex);
-        if (!force && pathOrUrl == g_lastFetchedPath &&
-            !g_cachedIcsContent.empty()) {
+        if (!force && minFetchInterval > 0 && pathOrUrl == g_lastFetchedPath &&
+            !g_cachedIcsContent.empty() &&
+            (now - g_lastSuccessfulFetchTick < ttlMs)) {
             if (isRemote) {
-                ULONGLONG now = GetTickCount64();
-                // 5 minutes TTL = 300,000 ms
-                if (now - g_lastSuccessfulFetchTick < 300000ULL) {
-                    Wh_Log(L"Using cached remote ICS content (TTL remaining)");
-                    outFromCache = true;
-                    return g_cachedIcsContent;
-                }
+                Wh_Log(L"Using cached remote ICS content (TTL remaining)");
+                outFromCache = true;
+                return g_cachedIcsContent;
             } else {
                 std::wstring localPath = pathOrUrl;
                 if (_wcsnicmp(localPath.c_str(), L"file:///", 8) == 0)
@@ -1069,8 +1337,8 @@ std::wstring FetchIcsContent(std::wstring const& pathOrUrl,
                         attr.ftLastWriteTime.dwHighDateTime ==
                             g_lastLocalFileWriteTime.dwHighDateTime) {
                         Wh_Log(
-                            L"Using cached local ICS content (file write time "
-                            L"unchanged)");
+                            L"Using cached local ICS content (TTL remaining & "
+                            L"file write time unchanged)");
                         outFromCache = true;
                         return g_cachedIcsContent;
                     }
@@ -1445,6 +1713,8 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
             return;
         }
 
+        int timeColumnWidth = GetTimeColumnWidthSetting();
+
         for (const auto& ev : events) {
             auto border = wuxc::Border();
             border.Margin(wux::Thickness{0, 2, 0, 4});
@@ -1456,10 +1726,15 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
 
             auto eventGrid = wuxc::Grid();
 
-            // Column 0: Auto width to accompany localized times without
-            // clipping
+            // Column 0: Width for time display (fixed to align event titles, or
+            // auto)
             wuxc::ColumnDefinition col0{};
-            col0.Width(wux::GridLength{0, wux::GridUnitType::Auto});
+            if (timeColumnWidth > 0) {
+                col0.Width(wux::GridLength{(double)timeColumnWidth,
+                                           wux::GridUnitType::Pixel});
+            } else {
+                col0.Width(wux::GridLength{0, wux::GridUnitType::Auto});
+            }
             eventGrid.ColumnDefinitions().Append(col0);
 
             // Column 1: * width
@@ -1698,296 +1973,276 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
             });
     }
 
-    void ReplaceCalendarContent(wuxc::ScrollViewer const& hostScrollViewer) {
-        auto dispatcher = hostScrollViewer.Dispatcher();
-        if (!dispatcher) {
-            Wh_Log(L"Host ScrollViewer has no Dispatcher");
+    void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
+        if (!host) {
             return;
         }
 
-        auto action = dispatcher.TryRunAsync(
-            wuc::CoreDispatcherPriority::Normal,
-            [strongThis = get_strong(),
-             weakHost = winrt::make_weak(hostScrollViewer)]() {
-                auto host = weakHost.get();
-                if (!host) {
-                    return;
-                }
+        auto strongThis = get_strong();
 
+        try {
+            if (m_hostScrollViewer && m_hostScrollViewer != host) {
+                // A new CalendarControlScrollViewer replaced the old one - put
+                // the old one back before taking over the new one.
                 try {
-                    if (!strongThis->m_itemsControl) {
-                        strongThis->m_itemsControl = wuxc::ItemsControl();
+                    if (m_originalCalendarContent) {
+                        m_hostScrollViewer.Content(m_originalCalendarContent);
                     }
+                    m_hostScrollViewer.VerticalScrollBarVisibility(
+                        m_originalVerticalScrollBarVisibility);
+                    m_hostScrollViewer.HorizontalScrollBarVisibility(
+                        m_originalHorizontalScrollBarVisibility);
+                } catch (...) {
+                }
+                m_originalCalendarContent = nullptr;
+                m_hostScrollViewer = nullptr;
+            }
+            if (!strongThis->m_itemsControl) {
+                strongThis->m_itemsControl = wuxc::ItemsControl();
+            }
 
-                    if (!strongThis->m_eventsScrollViewer) {
-                        strongThis->m_eventsScrollViewer = wuxc::ScrollViewer();
-                        strongThis->m_eventsScrollViewer.Name(
-                            L"CustomCalendarScrollViewer");
-                        strongThis->m_eventsScrollViewer
-                            .VerticalScrollBarVisibility(
-                                wuxc::ScrollBarVisibility::Auto);
-                        strongThis->m_eventsScrollViewer
-                            .HorizontalScrollBarVisibility(
-                                wuxc::ScrollBarVisibility::Disabled);
-                        strongThis->m_eventsScrollViewer.Content(
-                            strongThis->m_itemsControl);
-                    }
+            if (!strongThis->m_eventsScrollViewer) {
+                strongThis->m_eventsScrollViewer = wuxc::ScrollViewer();
+                strongThis->m_eventsScrollViewer.Name(
+                    L"CustomCalendarScrollViewer");
+                strongThis->m_eventsScrollViewer.VerticalScrollBarVisibility(
+                    wuxc::ScrollBarVisibility::Auto);
+                strongThis->m_eventsScrollViewer.HorizontalScrollBarVisibility(
+                    wuxc::ScrollBarVisibility::Disabled);
+                strongThis->m_eventsScrollViewer.Content(
+                    strongThis->m_itemsControl);
+            }
 
-                    int maxHeight = GetMaxHeightSetting();
+            int maxHeight = GetMaxHeightSetting();
 
-                    if (maxHeight > 0) {
-                        strongThis->m_eventsScrollViewer.MaxHeight(
-                            (double)maxHeight);
-                    } else {
-                        strongThis->m_eventsScrollViewer.MaxHeight(
-                            std::numeric_limits<double>::infinity());
-                    }
+            if (maxHeight > 0) {
+                strongThis->m_eventsScrollViewer.MaxHeight((double)maxHeight);
+            } else {
+                strongThis->m_eventsScrollViewer.MaxHeight(
+                    std::numeric_limits<double>::infinity());
+            }
 
-                    strongThis->m_eventsScrollViewer.Height(
-                        std::numeric_limits<double>::quiet_NaN());
+            strongThis->m_eventsScrollViewer.Height(
+                std::numeric_limits<double>::quiet_NaN());
 
-                    if (!strongThis->m_datePicker) {
-                        strongThis->m_datePicker = wuxc::CalendarDatePicker();
-                        strongThis->m_datePicker.Name(
-                            L"CustomCalendarDatePicker");
-                        strongThis->m_datePicker.HorizontalAlignment(
-                            wux::HorizontalAlignment::Stretch);
-                        strongThis->m_datePicker.VerticalAlignment(
-                            wux::VerticalAlignment::Center);
-                        strongThis->m_datePicker.Margin(
-                            wux::Thickness{0, 0, 0, 6});
-                        strongThis->m_datePicker.IsTodayHighlighted(true);
-                        strongThis->m_datePicker.Date(winrt::clock::now());
+            if (!strongThis->m_datePicker) {
+                strongThis->m_datePicker = wuxc::CalendarDatePicker();
+                strongThis->m_datePicker.Name(L"CustomCalendarDatePicker");
+                strongThis->m_datePicker.HorizontalAlignment(
+                    wux::HorizontalAlignment::Stretch);
+                strongThis->m_datePicker.VerticalAlignment(
+                    wux::VerticalAlignment::Center);
+                strongThis->m_datePicker.Margin(wux::Thickness{0, 0, 0, 6});
+                strongThis->m_datePicker.IsTodayHighlighted(true);
+                strongThis->m_datePicker.DateFormat(
+                    L"{dayofweek.full}, {month.abbreviated} {day.integer}");
+                strongThis->m_datePicker.Date(winrt::clock::now());
 
-                        strongThis->m_dateChangedToken =
-                            strongThis->m_datePicker.DateChanged(
-                                [weakThis = winrt::make_weak(strongThis)](
-                                    wuxc::CalendarDatePicker const&,
-                                    wuxc::
-                                        CalendarDatePickerDateChangedEventArgs const&
-                                            args) {
-                                    if (auto watcher = weakThis.get()) {
-                                        watcher->OnDatePickerDateChanged(
-                                            args.NewDate());
-                                    }
-                                });
-                    }
-
-                    if (!strongThis->m_prevDayButton) {
-                        strongThis->m_prevDayButton = wuxc::Button();
-                        strongThis->m_prevDayButton.Name(
-                            L"CustomCalendarPrevDayButton");
-                        strongThis->m_prevDayButton.Width(32);
-                        strongThis->m_prevDayButton.Height(32);
-                        strongThis->m_prevDayButton.Padding(
-                            wux::Thickness{0, 0, 0, 0});
-                        strongThis->m_prevDayButton.Margin(
-                            wux::Thickness{0, 0, 6, 6});
-                        strongThis->m_prevDayButton.VerticalAlignment(
-                            wux::VerticalAlignment::Center);
-
-                        auto prevIcon = wuxc::FontIcon();
-                        prevIcon.Glyph(L"\uE76B");  // ChevronLeft
-                        prevIcon.FontSize(12);
-                        strongThis->m_prevDayButton.Content(prevIcon);
-
-                        strongThis->m_prevBtnToken =
-                            strongThis->m_prevDayButton.Click(
-                                [weakThis = winrt::make_weak(strongThis)](
-                                    wf::IInspectable const&,
-                                    wux::RoutedEventArgs const&) {
-                                    if (auto watcher = weakThis.get()) {
-                                        watcher->ChangeSelectedDay(-1);
-                                    }
-                                });
-                    }
-
-                    if (!strongThis->m_nextDayButton) {
-                        strongThis->m_nextDayButton = wuxc::Button();
-                        strongThis->m_nextDayButton.Name(
-                            L"CustomCalendarNextDayButton");
-                        strongThis->m_nextDayButton.Width(32);
-                        strongThis->m_nextDayButton.Height(32);
-                        strongThis->m_nextDayButton.Padding(
-                            wux::Thickness{0, 0, 0, 0});
-                        strongThis->m_nextDayButton.Margin(
-                            wux::Thickness{6, 0, 6, 6});
-                        strongThis->m_nextDayButton.VerticalAlignment(
-                            wux::VerticalAlignment::Center);
-
-                        auto nextIcon = wuxc::FontIcon();
-                        nextIcon.Glyph(L"\uE76C");  // ChevronRight
-                        nextIcon.FontSize(12);
-                        strongThis->m_nextDayButton.Content(nextIcon);
-
-                        strongThis->m_nextBtnToken =
-                            strongThis->m_nextDayButton.Click(
-                                [weakThis = winrt::make_weak(strongThis)](
-                                    wf::IInspectable const&,
-                                    wux::RoutedEventArgs const&) {
-                                    if (auto watcher = weakThis.get()) {
-                                        watcher->ChangeSelectedDay(1);
-                                    }
-                                });
-                    }
-
-                    if (!strongThis->m_refreshButton) {
-                        strongThis->m_refreshButton = wuxc::Button();
-                        strongThis->m_refreshButton.Name(
-                            L"CustomCalendarRefreshButton");
-                        strongThis->m_refreshButton.Width(32);
-                        strongThis->m_refreshButton.Height(32);
-                        strongThis->m_refreshButton.Padding(
-                            wux::Thickness{0, 0, 0, 0});
-                        strongThis->m_refreshButton.Margin(
-                            wux::Thickness{0, 0, 0, 6});
-                        strongThis->m_refreshButton.VerticalAlignment(
-                            wux::VerticalAlignment::Center);
-
-                        auto refreshIcon = wuxc::FontIcon();
-                        refreshIcon.Glyph(L"\uE72C");  // Refresh
-                        refreshIcon.FontSize(12);
-                        strongThis->m_refreshButton.Content(refreshIcon);
-
-                        strongThis->m_refreshBtnToken =
-                            strongThis->m_refreshButton.Click(
-                                [](wf::IInspectable const&,
-                                   wux::RoutedEventArgs const&) {
-                                    TriggerBackgroundFetch(true);
-                                });
-                    }
-
-                    if (!strongThis->m_headerGrid) {
-                        strongThis->m_headerGrid = wuxc::Grid();
-                        strongThis->m_headerGrid.Name(
-                            L"CustomCalendarHeaderGrid");
-                        strongThis->m_headerGrid.Margin(
-                            wux::Thickness{0, 6, 0, 0});
-
-                        // Auto - * - Auto - Auto
-                        wuxc::ColumnDefinition col0{};
-                        col0.Width(wux::GridLength{0, wux::GridUnitType::Auto});
-                        strongThis->m_headerGrid.ColumnDefinitions().Append(
-                            col0);
-
-                        wuxc::ColumnDefinition col1{};
-                        col1.Width(wux::GridLength{1, wux::GridUnitType::Star});
-                        strongThis->m_headerGrid.ColumnDefinitions().Append(
-                            col1);
-
-                        wuxc::ColumnDefinition col2{};
-                        col2.Width(wux::GridLength{0, wux::GridUnitType::Auto});
-                        strongThis->m_headerGrid.ColumnDefinitions().Append(
-                            col2);
-
-                        wuxc::ColumnDefinition col3{};
-                        col3.Width(wux::GridLength{0, wux::GridUnitType::Auto});
-                        strongThis->m_headerGrid.ColumnDefinitions().Append(
-                            col3);
-
-                        wuxc::Grid::SetColumn(strongThis->m_prevDayButton, 0);
-                        strongThis->m_headerGrid.Children().Append(
-                            strongThis->m_prevDayButton);
-
-                        wuxc::Grid::SetColumn(strongThis->m_datePicker, 1);
-                        strongThis->m_headerGrid.Children().Append(
-                            strongThis->m_datePicker);
-
-                        wuxc::Grid::SetColumn(strongThis->m_nextDayButton, 2);
-                        strongThis->m_headerGrid.Children().Append(
-                            strongThis->m_nextDayButton);
-
-                        wuxc::Grid::SetColumn(strongThis->m_refreshButton, 3);
-                        strongThis->m_headerGrid.Children().Append(
-                            strongThis->m_refreshButton);
-                    }
-
-                    if (!strongThis->m_rootGrid) {
-                        strongThis->m_rootGrid = wuxc::Grid();
-                        strongThis->m_rootGrid.Name(L"CustomCalendarRootGrid");
-                        strongThis->m_rootGrid.Margin(
-                            wux::Thickness{12, 4, 12, 4});
-
-                        wuxc::RowDefinition row0{};
-                        row0.Height(
-                            wux::GridLength{0, wux::GridUnitType::Auto});
-                        strongThis->m_rootGrid.RowDefinitions().Append(row0);
-
-                        wuxc::RowDefinition row1{};
-                        row1.Height(
-                            wux::GridLength{0, wux::GridUnitType::Auto});
-                        strongThis->m_rootGrid.RowDefinitions().Append(row1);
-
-                        wuxc::Grid::SetRow(strongThis->m_headerGrid, 0);
-                        strongThis->m_rootGrid.Children().Append(
-                            strongThis->m_headerGrid);
-
-                        wuxc::Grid::SetRow(strongThis->m_eventsScrollViewer, 1);
-                        strongThis->m_rootGrid.Children().Append(
-                            strongThis->m_eventsScrollViewer);
-                    }
-
-                    SYSTEMTIME today;
-                    GetLocalTime(&today);
-                    strongThis->m_currentFilterDate = today;
-
-                    std::vector<CalendarEvent> currentEvents;
-                    {
-                        std::lock_guard<std::mutex> lock(g_eventsMutex);
-                        currentEvents =
-                            FilterEventsForDate(g_allParsedEvents, today);
-                    }
-                    strongThis->PopulateItemsControl(currentEvents);
-
-                    if (strongThis->m_rootGrid) {
-                        if (auto parent = strongThis->m_rootGrid.Parent()) {
-                            if (auto parentContentControl =
-                                    parent.try_as<wuxc::ContentControl>()) {
-                                if (parentContentControl.Content() ==
-                                    strongThis->m_rootGrid) {
-                                    parentContentControl.Content(nullptr);
-                                }
-                            } else if (auto parentPanel =
-                                           parent.try_as<wuxc::Panel>()) {
-                                uint32_t index = 0;
-                                if (parentPanel.Children().IndexOf(
-                                        strongThis->m_rootGrid, index)) {
-                                    parentPanel.Children().RemoveAt(index);
-                                }
+                strongThis->m_dateChangedToken =
+                    strongThis->m_datePicker.DateChanged(
+                        [weakThis = winrt::make_weak(strongThis)](
+                            wuxc::CalendarDatePicker const&,
+                            wuxc::CalendarDatePickerDateChangedEventArgs const&
+                                args) {
+                            if (auto watcher = weakThis.get()) {
+                                watcher->OnDatePickerDateChanged(
+                                    args.NewDate());
                             }
+                        });
+            }
+
+            if (!strongThis->m_prevDayButton) {
+                strongThis->m_prevDayButton = wuxc::Button();
+                strongThis->m_prevDayButton.Name(
+                    L"CustomCalendarPrevDayButton");
+                strongThis->m_prevDayButton.Width(32);
+                strongThis->m_prevDayButton.Height(32);
+                strongThis->m_prevDayButton.Padding(wux::Thickness{0, 0, 0, 0});
+                strongThis->m_prevDayButton.Margin(wux::Thickness{0, 0, 6, 6});
+                strongThis->m_prevDayButton.VerticalAlignment(
+                    wux::VerticalAlignment::Center);
+
+                auto prevIcon = wuxc::FontIcon();
+                prevIcon.Glyph(L"\uE76B");  // ChevronLeft
+                prevIcon.FontSize(12);
+                strongThis->m_prevDayButton.Content(prevIcon);
+
+                strongThis->m_prevBtnToken = strongThis->m_prevDayButton.Click(
+                    [weakThis = winrt::make_weak(strongThis)](
+                        wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                        if (auto watcher = weakThis.get()) {
+                            watcher->ChangeSelectedDay(-1);
+                        }
+                    });
+            }
+
+            if (!strongThis->m_nextDayButton) {
+                strongThis->m_nextDayButton = wuxc::Button();
+                strongThis->m_nextDayButton.Name(
+                    L"CustomCalendarNextDayButton");
+                strongThis->m_nextDayButton.Width(32);
+                strongThis->m_nextDayButton.Height(32);
+                strongThis->m_nextDayButton.Padding(wux::Thickness{0, 0, 0, 0});
+                strongThis->m_nextDayButton.Margin(wux::Thickness{6, 0, 6, 6});
+                strongThis->m_nextDayButton.VerticalAlignment(
+                    wux::VerticalAlignment::Center);
+
+                auto nextIcon = wuxc::FontIcon();
+                nextIcon.Glyph(L"\uE76C");  // ChevronRight
+                nextIcon.FontSize(12);
+                strongThis->m_nextDayButton.Content(nextIcon);
+
+                strongThis->m_nextBtnToken = strongThis->m_nextDayButton.Click(
+                    [weakThis = winrt::make_weak(strongThis)](
+                        wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                        if (auto watcher = weakThis.get()) {
+                            watcher->ChangeSelectedDay(1);
+                        }
+                    });
+            }
+
+            if (!strongThis->m_refreshButton) {
+                strongThis->m_refreshButton = wuxc::Button();
+                strongThis->m_refreshButton.Name(
+                    L"CustomCalendarRefreshButton");
+                strongThis->m_refreshButton.Width(32);
+                strongThis->m_refreshButton.Height(32);
+                strongThis->m_refreshButton.Padding(wux::Thickness{0, 0, 0, 0});
+                strongThis->m_refreshButton.Margin(wux::Thickness{0, 0, 0, 6});
+                strongThis->m_refreshButton.VerticalAlignment(
+                    wux::VerticalAlignment::Center);
+
+                auto refreshIcon = wuxc::FontIcon();
+                refreshIcon.Glyph(L"\uE72C");  // Refresh
+                refreshIcon.FontSize(12);
+                strongThis->m_refreshButton.Content(refreshIcon);
+
+                strongThis->m_refreshBtnToken =
+                    strongThis->m_refreshButton.Click(
+                        [](wf::IInspectable const&,
+                           wux::RoutedEventArgs const&) {
+                            TriggerBackgroundFetch(true);
+                        });
+            }
+
+            if (!strongThis->m_headerGrid) {
+                strongThis->m_headerGrid = wuxc::Grid();
+                strongThis->m_headerGrid.Name(L"CustomCalendarHeaderGrid");
+                strongThis->m_headerGrid.Margin(wux::Thickness{0, 6, 0, 0});
+
+                // Auto - * - Auto - Auto
+                wuxc::ColumnDefinition col0{};
+                col0.Width(wux::GridLength{0, wux::GridUnitType::Auto});
+                strongThis->m_headerGrid.ColumnDefinitions().Append(col0);
+
+                wuxc::ColumnDefinition col1{};
+                col1.Width(wux::GridLength{1, wux::GridUnitType::Star});
+                strongThis->m_headerGrid.ColumnDefinitions().Append(col1);
+
+                wuxc::ColumnDefinition col2{};
+                col2.Width(wux::GridLength{0, wux::GridUnitType::Auto});
+                strongThis->m_headerGrid.ColumnDefinitions().Append(col2);
+
+                wuxc::ColumnDefinition col3{};
+                col3.Width(wux::GridLength{0, wux::GridUnitType::Auto});
+                strongThis->m_headerGrid.ColumnDefinitions().Append(col3);
+
+                wuxc::Grid::SetColumn(strongThis->m_prevDayButton, 0);
+                strongThis->m_headerGrid.Children().Append(
+                    strongThis->m_prevDayButton);
+
+                wuxc::Grid::SetColumn(strongThis->m_datePicker, 1);
+                strongThis->m_headerGrid.Children().Append(
+                    strongThis->m_datePicker);
+
+                wuxc::Grid::SetColumn(strongThis->m_nextDayButton, 2);
+                strongThis->m_headerGrid.Children().Append(
+                    strongThis->m_nextDayButton);
+
+                wuxc::Grid::SetColumn(strongThis->m_refreshButton, 3);
+                strongThis->m_headerGrid.Children().Append(
+                    strongThis->m_refreshButton);
+            }
+
+            if (!strongThis->m_rootGrid) {
+                strongThis->m_rootGrid = wuxc::Grid();
+                strongThis->m_rootGrid.Name(L"CustomCalendarRootGrid");
+                strongThis->m_rootGrid.Margin(wux::Thickness{12, 4, 12, 4});
+
+                wuxc::RowDefinition row0{};
+                row0.Height(wux::GridLength{0, wux::GridUnitType::Auto});
+                strongThis->m_rootGrid.RowDefinitions().Append(row0);
+
+                wuxc::RowDefinition row1{};
+                row1.Height(wux::GridLength{0, wux::GridUnitType::Auto});
+                strongThis->m_rootGrid.RowDefinitions().Append(row1);
+
+                wuxc::Grid::SetRow(strongThis->m_headerGrid, 0);
+                strongThis->m_rootGrid.Children().Append(
+                    strongThis->m_headerGrid);
+
+                wuxc::Grid::SetRow(strongThis->m_eventsScrollViewer, 1);
+                strongThis->m_rootGrid.Children().Append(
+                    strongThis->m_eventsScrollViewer);
+            }
+
+            SYSTEMTIME today;
+            GetLocalTime(&today);
+            strongThis->m_currentFilterDate = today;
+
+            std::vector<CalendarEvent> currentEvents;
+            {
+                std::lock_guard<std::mutex> lock(g_eventsMutex);
+                currentEvents = FilterEventsForDate(g_allParsedEvents, today);
+            }
+            strongThis->PopulateItemsControl(currentEvents);
+
+            if (strongThis->m_rootGrid) {
+                if (auto parent = strongThis->m_rootGrid.Parent()) {
+                    if (auto parentContentControl =
+                            parent.try_as<wuxc::ContentControl>()) {
+                        if (parentContentControl.Content() ==
+                            strongThis->m_rootGrid) {
+                            parentContentControl.Content(nullptr);
+                        }
+                    } else if (auto parentPanel =
+                                   parent.try_as<wuxc::Panel>()) {
+                        uint32_t index = 0;
+                        if (parentPanel.Children().IndexOf(
+                                strongThis->m_rootGrid, index)) {
+                            parentPanel.Children().RemoveAt(index);
                         }
                     }
-
-                    if (!strongThis->m_originalCalendarContent &&
-                        host.Content() != strongThis->m_rootGrid) {
-                        strongThis->m_originalCalendarContent = host.Content();
-                        Wh_Log(
-                            L"Captured original CalendarControlScrollViewer "
-                            L"content: %p",
-                            winrt::get_abi(
-                                strongThis->m_originalCalendarContent));
-                    }
-                    strongThis->m_hostScrollViewer = host;
-
-                    host.VerticalScrollBarVisibility(
-                        wuxc::ScrollBarVisibility::Disabled);
-                    host.HorizontalScrollBarVisibility(
-                        wuxc::ScrollBarVisibility::Disabled);
-                    host.Content(strongThis->m_rootGrid);
-
-                    TriggerBackgroundFetch();
-
-                    Wh_Log(
-                        L"Successfully replaced CalendarControlScrollViewer "
-                        L"content on UI thread!");
-                } catch (...) {
-                    Wh_Log(L"ReplaceCalendarContent on UI thread failed: %08X",
-                           winrt::to_hresult());
                 }
-            });
+            }
 
-        if (!action) {
-            Wh_Log(L"TryRunAsync returned null");
+            if (!m_originalCalendarContent && host.Content() != m_rootGrid) {
+                m_originalCalendarContent = host.Content();
+                m_originalVerticalScrollBarVisibility =
+                    host.VerticalScrollBarVisibility();
+                m_originalHorizontalScrollBarVisibility =
+                    host.HorizontalScrollBarVisibility();
+                Wh_Log(
+                    L"Captured original CalendarControlScrollViewer content: "
+                    L"%p",
+                    winrt::get_abi(m_originalCalendarContent));
+            }
+            m_hostScrollViewer = host;
+
+            host.VerticalScrollBarVisibility(
+                wuxc::ScrollBarVisibility::Disabled);
+            host.HorizontalScrollBarVisibility(
+                wuxc::ScrollBarVisibility::Disabled);
+            host.Content(m_rootGrid);
+
+            TriggerBackgroundFetch();
+
+            Wh_Log(
+                L"Successfully replaced CalendarControlScrollViewer "
+                L"content on UI thread!");
+        } catch (...) {
+            Wh_Log(L"ReplaceCalendarContent on UI thread failed: %08X",
+                   winrt::to_hresult());
         }
     }
 
@@ -2008,7 +2263,8 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
                             bool hide = ShouldHideFocusSession();
                             watcher->m_focusSessionControl.Visibility(
                                 hide ? wux::Visibility::Collapsed
-                                     : wux::Visibility::Visible);
+                                     : watcher
+                                           ->m_originalFocusSessionVisibility);
                             Wh_Log(L"Set FocusSessionControl visibility to %s",
                                    hide ? L"Collapsed" : L"Visible");
                         } catch (...) {
@@ -2023,68 +2279,51 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
     }
 
     void HandleFocusSessionControl(wux::FrameworkElement const& element) {
-        if (m_focusSessionControl == element) {
+        if (!element || m_focusSessionControl == element) {
             return;
         }
 
         UnregisterFocusSessionControl();
         m_focusSessionControl = element;
+        m_originalFocusSessionVisibility = element.Visibility();
 
-        auto dispatcher = element.Dispatcher();
-        if (!dispatcher)
-            return;
+        try {
+            bool hide = ShouldHideFocusSession();
+            if (hide) {
+                element.Visibility(wux::Visibility::Collapsed);
+                Wh_Log(L"Collapsed FocusSessionControl");
+            }
 
-        dispatcher.TryRunAsync(
-            wuc::CoreDispatcherPriority::Normal,
-            [weakThis = winrt::make_weak(get_strong()),
-             weakEl = winrt::make_weak(element)]() {
-                auto watcher = weakThis.get();
-                auto el = weakEl.get();
-                if (!watcher || !el)
-                    return;
-
-                if (watcher->m_focusSessionControl != el)
-                    return;
-
-                try {
-                    bool hide = ShouldHideFocusSession();
-                    if (hide) {
-                        el.Visibility(wux::Visibility::Collapsed);
-                        Wh_Log(L"Collapsed FocusSessionControl");
-                    }
-
-                    if (watcher->m_focusSessionVisibilityToken == 0) {
-                        watcher->m_focusSessionVisibilityToken =
-                            el.RegisterPropertyChangedCallback(
-                                wux::UIElement::VisibilityProperty(),
-                                [weakWatcher = winrt::make_weak(watcher)](
-                                    wux::DependencyObject const& sender,
-                                    wux::DependencyProperty const&) {
-                                    if (auto w = weakWatcher.get()) {
-                                        if (auto fe =
-                                                sender.try_as<
-                                                    wux::FrameworkElement>()) {
-                                            if (ShouldHideFocusSession() &&
-                                                fe.Visibility() !=
-                                                    wux::Visibility::
-                                                        Collapsed) {
-                                                fe.Visibility(
-                                                    wux::Visibility::Collapsed);
-                                                Wh_Log(
-                                                    L"Re-collapsed "
-                                                    L"FocusSessionControl on "
-                                                    L"external visibility "
-                                                    L"change");
-                                            }
-                                        }
+            if (m_focusSessionVisibilityToken == 0) {
+                m_focusSessionVisibilityToken =
+                    element.RegisterPropertyChangedCallback(
+                        wux::UIElement::VisibilityProperty(),
+                        [weakWatcher = winrt::make_weak(get_strong())](
+                            wux::DependencyObject const& sender,
+                            wux::DependencyProperty const&) {
+                            if (auto w = weakWatcher.get()) {
+                                if (auto fe =
+                                        sender
+                                            .try_as<wux::FrameworkElement>()) {
+                                    if (ShouldHideFocusSession() &&
+                                        fe.Visibility() !=
+                                            wux::Visibility::Collapsed) {
+                                        fe.Visibility(
+                                            wux::Visibility::Collapsed);
+                                        Wh_Log(
+                                            L"Re-collapsed "
+                                            L"FocusSessionControl on "
+                                            L"external visibility "
+                                            L"change");
                                     }
-                                });
-                    }
-                } catch (...) {
-                    Wh_Log(L"Failed to configure FocusSessionControl: %08X",
-                           winrt::to_hresult());
-                }
-            });
+                                }
+                            }
+                        });
+            }
+        } catch (...) {
+            Wh_Log(L"Failed to configure FocusSessionControl: %08X",
+                   winrt::to_hresult());
+        }
     }
 
     HRESULT STDMETHODCALLTYPE
@@ -2174,6 +2413,11 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
     int64_t m_focusSessionVisibilityToken{0};
     wuxc::ScrollViewer m_hostScrollViewer{nullptr};
     winrt::Windows::Foundation::IInspectable m_originalCalendarContent{nullptr};
+    wuxc::ScrollBarVisibility m_originalVerticalScrollBarVisibility{
+        wuxc::ScrollBarVisibility::Auto};
+    wuxc::ScrollBarVisibility m_originalHorizontalScrollBarVisibility{
+        wuxc::ScrollBarVisibility::Disabled};
+    wux::Visibility m_originalFocusSessionVisibility{wux::Visibility::Visible};
 };
 
 // -----------------------------------------------------------------------------
@@ -2191,14 +2435,23 @@ static constexpr CLSID CLSID_WindhawkTAP = {
 [[clang::no_destroy]] winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
 std::mutex g_watcherMutex;
 
-HANDLE g_hWorkerThread = nullptr;
-HANDLE g_hWorkEvent = nullptr;
-HANDLE g_hStopEvent = nullptr;
+std::mutex g_uiDispatchersMutex;
+std::vector<winrt::weak_ref<wuc::CoreDispatcher>> g_uiDispatchers;
+
+std::atomic<HANDLE> g_hWorkerThread{nullptr};
+std::atomic<HANDLE> g_hWorkEvent{nullptr};
+std::atomic<HANDLE> g_hStopEvent{nullptr};
 std::atomic<bool> g_workerForceFetch{false};
 
 DWORD WINAPI WorkerThreadProc(LPVOID) {
-    HANDLE events[2] = {g_hStopEvent, g_hWorkEvent};
     while (true) {
+        HANDLE stopEvent = g_hStopEvent.load();
+        HANDLE workEvent = g_hWorkEvent.load();
+        if (!stopEvent || !workEvent) {
+            break;
+        }
+
+        HANDLE events[2] = {stopEvent, workEvent};
         DWORD waitRes = WaitForMultipleObjects(2, events, FALSE, INFINITE);
         if (waitRes == WAIT_OBJECT_0) {
             // Stop event signaled - exit worker thread immediately
@@ -2230,7 +2483,8 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
         bool fromCache = false;
         std::wstring content = FetchIcsContent(icsPath, forceFetch, fromCache);
 
-        if (WaitForSingleObject(g_hStopEvent, 0) == WAIT_OBJECT_0) {
+        if (HANDLE s = g_hStopEvent.load();
+            s && WaitForSingleObject(s, 0) == WAIT_OBJECT_0) {
             break;
         }
 
@@ -2256,7 +2510,8 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
             Wh_Log(L"Reusing %zu parsed events from cache", allEvents.size());
         }
 
-        if (WaitForSingleObject(g_hStopEvent, 0) == WAIT_OBJECT_0) {
+        if (HANDLE s = g_hStopEvent.load();
+            s && WaitForSingleObject(s, 0) == WAIT_OBJECT_0) {
             break;
         }
 
@@ -2291,31 +2546,32 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
 }
 
 void StartWorkerThread() {
-    if (g_hWorkerThread) {
+    if (g_hWorkerThread.load()) {
         return;
     }
-    g_hWorkEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    g_hStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_hWorkerThread =
-        CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, nullptr);
+    g_hWorkEvent.store(CreateEventW(nullptr, FALSE, FALSE, nullptr));
+    g_hStopEvent.store(CreateEventW(nullptr, TRUE, FALSE, nullptr));
+    g_hWorkerThread.store(
+        CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, nullptr));
 }
 
 void StopWorkerThread() {
-    if (g_hWorkerThread) {
-        if (g_hStopEvent) {
-            SetEvent(g_hStopEvent);
-        }
-        WaitForSingleObject(g_hWorkerThread, INFINITE);
-        CloseHandle(g_hWorkerThread);
-        g_hWorkerThread = nullptr;
+    HANDLE workerThread = g_hWorkerThread.exchange(nullptr);
+    HANDLE stopEvent = g_hStopEvent.exchange(nullptr);
+    HANDLE workEvent = g_hWorkEvent.exchange(nullptr);
+
+    if (stopEvent) {
+        SetEvent(stopEvent);
     }
-    if (g_hWorkEvent) {
-        CloseHandle(g_hWorkEvent);
-        g_hWorkEvent = nullptr;
+    if (workerThread) {
+        WaitForSingleObject(workerThread, INFINITE);
+        CloseHandle(workerThread);
     }
-    if (g_hStopEvent) {
-        CloseHandle(g_hStopEvent);
-        g_hStopEvent = nullptr;
+    if (workEvent) {
+        CloseHandle(workEvent);
+    }
+    if (stopEvent) {
+        CloseHandle(stopEvent);
     }
 }
 
@@ -2329,8 +2585,8 @@ void TriggerBackgroundFetch(bool force) {
     if (force) {
         g_workerForceFetch = true;
     }
-    if (g_hWorkEvent) {
-        SetEvent(g_hWorkEvent);
+    if (HANDLE workEvent = g_hWorkEvent.load()) {
+        SetEvent(workEvent);
     }
 }
 
@@ -2360,41 +2616,46 @@ void OnCalendarOpened() {
 class WindhawkTAP
     : public winrt::implements<WindhawkTAP, IObjectWithSite, winrt::non_agile> {
    public:
-    HRESULT STDMETHODCALLTYPE SetSite(IUnknown* pUnkSite) override {
-        winrt::com_ptr<VisualTreeWatcher> oldWatcher;
-        {
-            std::lock_guard<std::mutex> lock(g_watcherMutex);
-            oldWatcher = g_visualTreeWatcher;
-            g_visualTreeWatcher = nullptr;
-        }
+    HRESULT STDMETHODCALLTYPE SetSite(IUnknown* pUnkSite) noexcept override {
+        try {
+            winrt::com_ptr<VisualTreeWatcher> oldWatcher;
+            {
+                std::lock_guard<std::mutex> lock(g_watcherMutex);
+                oldWatcher = g_visualTreeWatcher;
+                g_visualTreeWatcher = nullptr;
+            }
 
-        if (oldWatcher) {
-            oldWatcher->RestoreCalendarContent();
-            oldWatcher->UnadviseVisualTreeChange();
-        }
+            if (oldWatcher) {
+                oldWatcher->RestoreCalendarContent();
+                oldWatcher->UnadviseVisualTreeChange();
+            }
 
-        m_site = nullptr;
+            m_site = nullptr;
 
-        if (!pUnkSite) {
+            if (!pUnkSite) {
+                return S_OK;
+            }
+
+            m_site.copy_from(pUnkSite);
+
+            // InitializeXamlDiagnosticsEx increments our DLL refcount.
+            // The Start Menu Styler balances that here.
+            HMODULE module = GetCurrentModuleHandle();
+
+            if (module) {
+                FreeLibrary(module);
+            }
+
+            {
+                std::lock_guard<std::mutex> lock(g_watcherMutex);
+                g_visualTreeWatcher =
+                    winrt::make_self<VisualTreeWatcher>(m_site);
+            }
+
             return S_OK;
+        } catch (...) {
+            return winrt::to_hresult();
         }
-
-        m_site.copy_from(pUnkSite);
-
-        // InitializeXamlDiagnosticsEx increments our DLL refcount.
-        // The Start Menu Styler balances that here.
-        HMODULE module = GetCurrentModuleHandle();
-
-        if (module) {
-            FreeLibrary(module);
-        }
-
-        {
-            std::lock_guard<std::mutex> lock(g_watcherMutex);
-            g_visualTreeWatcher = winrt::make_self<VisualTreeWatcher>(m_site);
-        }
-
-        return S_OK;
     }
 
     HRESULT STDMETHODCALLTYPE GetSite(REFIID riid,
@@ -2550,6 +2811,12 @@ void RegisterCoreWindowEvents() {
         auto coreWindow = wuc::CoreWindow::GetForCurrentThread();
         if (!coreWindow) {
             return;
+        }
+
+        if (coreWindow.Dispatcher()) {
+            std::lock_guard<std::mutex> lock(g_uiDispatchersMutex);
+            g_uiDispatchers.push_back(
+                winrt::make_weak(coreWindow.Dispatcher()));
         }
 
         Wh_Log(
@@ -2887,15 +3154,6 @@ void Wh_ModUninit() {
         RunFromWindowThread(
             hCoreWnd,
             [](PVOID) {
-                try {
-                    auto coreWindow = wuc::CoreWindow::GetForCurrentThread();
-                    if (coreWindow && coreWindow.Dispatcher()) {
-                        coreWindow.Dispatcher().ProcessEvents(
-                            wuc::CoreProcessEventsOption::ProcessAllIfPresent);
-                    }
-                } catch (...) {
-                }
-
                 UnregisterCoreWindowEvents();
                 UninitializeSettingsAndTap();
             },
@@ -2903,4 +3161,27 @@ void Wh_ModUninit() {
     }
 
     UninitializeSettingsAndTap();
+
+    // Wh_ModUninit runs on a Windhawk worker thread, not a UI thread.
+    // Block on a low-priority no-op on each CoreDispatcher to ensure all
+    // pending Normal-priority work items (e.g. from worker thread or settings
+    // changes) finish executing before FreeLibrary unmaps the mod code.
+    std::vector<winrt::weak_ref<wuc::CoreDispatcher>> dispatchersToFlush;
+    {
+        std::lock_guard<std::mutex> lock(g_uiDispatchersMutex);
+        dispatchersToFlush = std::move(g_uiDispatchers);
+    }
+
+    for (const auto& weakDispatcher : dispatchersToFlush) {
+        if (auto d = weakDispatcher.get()) {
+            try {
+                if (auto action = d.TryRunAsync(
+                        wuc::CoreDispatcherPriority::Low, []() {})) {
+                    action.get();
+                }
+            } catch (...) {
+                Wh_Log(L"Dispatcher flush threw an exception");
+            }
+        }
+    }
 }
