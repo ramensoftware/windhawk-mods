@@ -2,7 +2,7 @@
 // @id              wobbly-windows
 // @name            Wobbly Windows
 // @description     The classic Compiz/KDE Plasma style Wobbly Windows effect for Windows 11!
-// @version         0.84
+// @version         0.85
 // @author          lalimatyus
 // @github          https://github.com/lalimatyus
 // @include         dwm.exe
@@ -25,9 +25,10 @@ Since this mod runs in `dwm.exe`, add `dwm.exe` to Windhawk's
 
 ![Tutorial](https://raw.githubusercontent.com/lalimatyus/Wobbly-Windows/refs/heads/main/dwm.gif)
 
-This beta runs inside `dwm.exe` and has been tested on Windows 11 `23H2`, `25H2`
-and `Insider Preview 26H2`. If the required private uDWM symbols or validated object
-layouts aren't available, the mod refuses to initialize instead of using unverified addresses.
+This mod runs inside `dwm.exe` and has been tested on Windows 11 `23H2`, `25H2`
+and `Insider Preview 26H2`; `24H2` is currently unverified. If the required private
+uDWM symbols or validated object layouts aren't available, the mod refuses to
+initialize instead of using unverified addresses.
 
 ## Features
 
@@ -39,6 +40,8 @@ layouts aren't available, the mod refuses to initialize instead of using unverif
 ## Known Issues
 
 * ARM64 isn't supported yet; the mod safely refuses to initialize on ARM64 systems.
+* If DWM stops servicing its scene thread while the mod is being disabled or updated,
+  a transformed window can remain deformed until DWM recreates its visual.
 
 ## Feedback
 
@@ -242,7 +245,6 @@ struct ObservedWindowState
 
 ObservedWindowState g_observedWindows[MAX_OBSERVED_WINDOWS] = {};
 HANDLE g_eventThread = nullptr;
-DWORD g_eventThreadId = 0;
 HANDLE g_eventThreadReady = nullptr;
 HANDLE g_eventThreadStop = nullptr;
 std::atomic<DWORD> g_eventThreadMessageTarget = 0;
@@ -627,7 +629,6 @@ struct WindowAnimationSlot
     bool identityApplied;
     ULONGLONG lastMatrixErrorLog;
     ULONGLONG lastBindFailureLog;
-    unsigned int privateCallFailureCount;
 };
 
 thread_local bool g_insideWobblyScenePass = false;
@@ -642,11 +643,9 @@ std::atomic<ULONGLONG> g_sceneRequestedSerial = 0;
 std::atomic<ULONGLONG> g_sceneSubmittedSerial = 0;
 std::atomic<ULONGLONG> g_sceneWakePostTimestamp = 0;
 std::atomic<ULONGLONG> g_sceneWakeStallStartedAt = 0;
-std::atomic<unsigned int> g_sceneWakeRetryCount = 0;
 std::atomic_bool g_sceneWakeStalled = false;
 std::atomic_bool g_sceneRecoveryCleanupPending = false;
 std::atomic<ULONGLONG> g_scenePassCounter = 0;
-std::atomic<ULONGLONG> g_lastFallbackInvalidationTimestamp = 0;
 std::atomic<unsigned int> g_abandonedProxyCount = 0;
 std::atomic<void*> g_windowListForSceneWake = nullptr;
 std::atomic_bool g_sceneOwnershipResetPending = false;
@@ -659,10 +658,6 @@ LARGE_INTEGER g_lastAnimationCounter = {};
 LARGE_INTEGER g_nextAnimationCounter = {};
 double g_animationTargetHz = 0.0;
 bool g_animationClockArmed = false;
-bool g_animationPriorityElevated = false;
-using SetThreadInformation_t = BOOL(WINAPI*)(HANDLE thread,
-                                             THREAD_INFORMATION_CLASS informationClass,
-                                             void* information, DWORD informationSize);
 
 static bool ResolveDwmWindowObjects(void* windowData, void** topLevelWindow,
                                     void** topLevelWindow3D);
@@ -682,12 +677,12 @@ static void EnsurePendingMatrixTransformProxies();
 static bool HasAnyAnimationSlots();
 static int GetPointIndex(int x, int y);
 static bool ResetMatrixTransformProxy(void* matrixTransformProxy);
-static void RequestDwmScenePass(HWND hwnd);
+static void RequestDwmScenePass();
 static void MarkAnimationSlotForDwmObjectRefresh(void* windowData);
 static void MarkObservedSnapTransition(HWND hwnd, bool transitionStarted);
 static void HandleObservedWindowLocationChange(HWND hwnd, LONG idObject, LONG idChild);
 static void ResetObservedSnapStateForInteractiveMove(HWND hwnd);
-static bool PostPendingDwmSceneWake(HWND hwnd, bool forceRepost);
+static bool PostPendingDwmSceneWake(bool forceRepost);
 
 static void QueueMaximizedStateCheck(HWND hwnd)
 {
@@ -828,12 +823,11 @@ static void QueueExistingWindowBackfill()
     g_existingWindowBackfillMapped.store(0, std::memory_order_release);
     std::copy_n(collection.windows, collection.count, g_existingWindowBackfill);
     g_existingWindowBackfillCount.store(collection.count, std::memory_order_release);
-    HWND firstWindow = collection.count ? collection.windows[0] : nullptr;
     ReleaseSRWLockExclusive(&g_existingWindowBackfillLock);
     if (collection.count != 0)
     {
         Wh_Log(L"DWM existing-window backfill queued: %u windows", collection.count);
-        RequestDwmScenePass(firstWindow);
+        RequestDwmScenePass();
     }
 }
 
@@ -1062,7 +1056,7 @@ static long __cdecl TopLevelWindow3DStartAnimationHook(void* pThis, int animatio
         // infer animation types here; only expose the newly created transition
         // visual to an already active wobble.
         MarkAnimationSlotForDwmObjectRefresh(windowData);
-        RequestDwmScenePass(hwnd);
+        RequestDwmScenePass();
     }
     return result;
 }
@@ -1315,7 +1309,7 @@ static size_t FindOffsetFromFunction(void* function, size_t defaultValue)
     }
     BYTE* instruction = static_cast<BYTE*>(function);
     const std::regex pattern(
-        R"(mov \w+, (?:qword ptr )?\[rcx\+0x([0-9a-f]{1,8})\])",
+        R"(mov \w+, (?:qword ptr )?\[rcx\s*\+\s*0x([0-9a-f]{1,8})\])",
         std::regex_constants::icase);
     size_t bytesRead = 0;
     for (int i = 0; i < 32 && bytesRead < 256; i++)
@@ -1509,7 +1503,7 @@ static bool FindVisualProxyAccessPath(void* function, size_t* ownerOffset,
         return false;
     }
     const std::regex loadPattern(
-        R"(^mov (r[a-z0-9]+), (?:qword ptr )?\[(r[a-z0-9]+)\+0x([0-9a-f]{1,8})\]$)",
+        R"(^mov (r[a-z0-9]+), (?:qword ptr )?\[(r[a-z0-9]+)\s*\+\s*0x([0-9a-f]{1,8})\]$)",
         std::regex_constants::icase);
     BYTE* instruction = static_cast<BYTE*>(function);
     std::string visualRegister;
@@ -2124,7 +2118,7 @@ static void MarkAnimationSlotForDwmObjectRefresh(void* windowData)
     ReleaseSRWLockExclusive(&g_animationSlotsLock);
     if (refreshNeeded)
     {
-        RequestDwmScenePass(hwnd);
+        RequestDwmScenePass();
     }
 }
 
@@ -2506,32 +2500,32 @@ static bool InitializeDwmHooks()
     WindhawkUtils::SYMBOL_HOOK udwmDllHooks[] = {
         {{L"public: bool __cdecl CWindowData::IsGhostWindow(struct HWND__ * *)const ",
           L"?IsGhostWindow@CWindowData@@QEBA_NPEAPEAUHWND__@@@Z"},
-         reinterpret_cast<void**>(&g_isGhostWindowOriginal),
+         &g_isGhostWindowOriginal,
          nullptr,
          true},
         {{L"public: void __cdecl CWindowList::OnPositionChange(class CWindowData *,bool)",
           L"?OnPositionChange@CWindowList@@QEAAXPEAVCWindowData@@_N@Z"},
-         reinterpret_cast<void**>(&g_onPositionChangeOriginal),
-         reinterpret_cast<void*>(OnPositionChangeHook),
+         &g_onPositionChangeOriginal,
+         OnPositionChangeHook,
          true},
         {{L"public: class CWindowData * __cdecl "
            L"CWindowList::FindWindowDataByHwnd(struct HWND__ *)",
           L"?FindWindowDataByHwnd@CWindowList@@QEAAPEAVCWindowData@@PEAUHWND__@@@Z"},
-         reinterpret_cast<void**>(&g_findWindowDataByHwnd),
+         &g_findWindowDataByHwnd,
          nullptr,
          true},
         {{L"public: long __cdecl CWindowList::GetSyncedWindowData("
            L"struct IDwmWindow *,bool,class CWindowData * *)",
           L"?GetSyncedWindowData@CWindowList@@"
            L"QEAAJPEAUIDwmWindow@@_NPEAPEAVCWindowData@@@Z"},
-         reinterpret_cast<void**>(&g_getSyncedWindowDataLong),
+         &g_getSyncedWindowDataLong,
          nullptr,
          true},
         {{L"public: void __cdecl CWindowList::GetSyncedWindowData("
            L"struct IDwmWindow *,bool,class CWindowData * *)",
           L"?GetSyncedWindowData@CWindowList@@"
            L"QEAAXPEAUIDwmWindow@@_NPEAPEAVCWindowData@@@Z"},
-         reinterpret_cast<void**>(&g_getSyncedWindowDataVoid),
+         &g_getSyncedWindowDataVoid,
          nullptr,
          true},
         {{L"public: virtual long __cdecl CWindowList::WindowTransitionChange("
@@ -2541,13 +2535,13 @@ static bool InitializeDwmHooks()
           L"?WindowTransitionChange@CWindowList@@"
            L"UEAAJPEAUIDwmWindow@@W4DWMTRANSITION_TARGET@@"
            L"AEBUtagRECT@@2222@Z"},
-         reinterpret_cast<void**>(&g_windowTransitionChangeOriginal),
-         reinterpret_cast<void*>(WindowTransitionChangeHook),
+         &g_windowTransitionChangeOriginal,
+         WindowTransitionChangeHook,
          true},
         {{L"private: void __cdecl CWindowList::CheckForMaximizedChange(class CWindowData *)",
           L"?CheckForMaximizedChange@CWindowList@@AEAAXPEAVCWindowData@@@Z"},
-         reinterpret_cast<void**>(&g_checkForMaximizedChangeOriginal),
-         reinterpret_cast<void*>(CheckForMaximizedChangeHook),
+         &g_checkForMaximizedChangeOriginal,
+         CheckForMaximizedChangeHook,
          true},
         {{L"public: long __cdecl CTopLevelWindow3D::"
            L"StartAnimationForMaximizeSnapTransition("
@@ -2555,28 +2549,28 @@ static bool InitializeDwmHooks()
           L"?StartAnimationForMaximizeSnapTransition@"
            L"CTopLevelWindow3D@@QEAAJW4WindowAnimationType@1@"
            L"AEBUtagRECT@@@Z"},
-        reinterpret_cast<void**>(&g_startAnimationForMaximizeSnapTransitionOriginal),
-         reinterpret_cast<void*>(StartAnimationForMaximizeSnapTransitionHook),
+         &g_startAnimationForMaximizeSnapTransitionOriginal,
+         StartAnimationForMaximizeSnapTransitionHook,
          true},
         {{L"public: long __cdecl CTopLevelWindow3D::StartAnimation("
            L"enum CTopLevelWindow3D::WindowAnimationType)",
           L"?StartAnimation@CTopLevelWindow3D@@"
            L"QEAAJW4WindowAnimationType@1@@Z"},
-         reinterpret_cast<void**>(&g_topLevelWindow3DStartAnimationOriginal),
-         reinterpret_cast<void*>(TopLevelWindow3DStartAnimationHook),
+         &g_topLevelWindow3DStartAnimationOriginal,
+         TopLevelWindow3DStartAnimationHook,
          true},
         {{L"public: class CVisualProxy * __cdecl "
            L"CTopLevelWindow::GetCanvasRootVisualProxy(void)",
           L"?GetCanvasRootVisualProxy@CTopLevelWindow@@"
            L"QEAAPEAVCVisualProxy@@XZ"},
-        reinterpret_cast<void**>(&g_getCanvasRootVisualProxy),
+         &g_getCanvasRootVisualProxy,
          nullptr,
          true},
         {{L"public: class CVisual * __cdecl "
            L"CTopLevelWindow::GetRootVisualNoAddRef(enum TLWRootVisualType)",
           L"?GetRootVisualNoAddRef@CTopLevelWindow@@"
            L"QEAAPEAVCVisual@@W4TLWRootVisualType@@@Z"},
-         reinterpret_cast<void**>(&g_topLevelWindowGetRootVisual),
+         &g_topLevelWindowGetRootVisual,
          nullptr,
          true},
         {{L"public: class CWindowData * __cdecl "
@@ -2584,39 +2578,39 @@ static bool InitializeDwmHooks()
           L"public: class CWindowData * __cdecl "
            L"CTopLevelWindow::GetWindowData(void)const ",
           L"?GetWindowData@CTopLevelWindow@@QEBAPEAVCWindowData@@XZ"},
-         reinterpret_cast<void**>(&g_topLevelWindowGetWindowData),
+         &g_topLevelWindowGetWindowData,
          nullptr,
          true},
         {{L"public: long __cdecl CMatrixTransformProxy::Update("
            L"struct _MilMatrix3x2D const &)",
           L"?Update@CMatrixTransformProxy@@"
            L"QEAAJAEBU_MilMatrix3x2D@@@Z"},
-         reinterpret_cast<void**>(&g_cMatrixTransformProxyUpdate),
+         &g_cMatrixTransformProxyUpdate,
          nullptr,
          true},
         {{L"public: long __cdecl CMatrixTransformProxy::Update("
            L"struct D2D_MATRIX_3X2_F const &)",
           L"?Update@CMatrixTransformProxy@@"
            L"QEAAJAEBUD2D_MATRIX_3X2_F@@@Z"},
-         reinterpret_cast<void**>(&g_cMatrixTransformProxyUpdateFloat),
+         &g_cMatrixTransformProxyUpdateFloat,
          nullptr,
          true},
         {{L"public: long __cdecl CVisualProxy::SetTransform("
            L"class CBaseTransformProxy *)",
           L"?SetTransform@CVisualProxy@@QEAAJPEAVCBaseTransformProxy@@@Z"},
-         reinterpret_cast<void**>(&g_cVisualProxySetTransform),
+         &g_cVisualProxySetTransform,
          nullptr,
          true},
         {{L"protected: long __cdecl CCompositor::CreateProxy<"
            L"class CMatrixTransformProxy>(class CMatrixTransformProxy * *)",
           L"??$CreateProxy@VCMatrixTransformProxy@@@CCompositor@@"
            L"IEAAJPEAPEAVCMatrixTransformProxy@@@Z"},
-         reinterpret_cast<void**>(&g_createMatrixTransformProxy),
+         &g_createMatrixTransformProxy,
          nullptr,
          true},
         {{L"public: unsigned long __cdecl CBaseObject::Release(void)",
           L"?Release@CBaseObject@@QEAAKXZ"},
-         reinterpret_cast<void**>(&g_cBaseObjectRelease),
+         &g_cBaseObjectRelease,
          nullptr,
          true},
         {{L"private: static class CDesktopManager * "
@@ -2638,63 +2632,63 @@ static bool InitializeDwmHooks()
         {{L"private: static void __cdecl "
            L"CDesktopManager::HandleThreadMessage(unsigned int,unsigned __int64,__int64)",
           L"?HandleThreadMessage@CDesktopManager@@CAXI_K_J@Z"},
-         reinterpret_cast<void**>(&g_desktopManagerHandleThreadMessageOriginal),
-         reinterpret_cast<void*>(DesktopManagerHandleThreadMessageHook),
+         &g_desktopManagerHandleThreadMessageOriginal,
+         DesktopManagerHandleThreadMessageHook,
          true},
         {{L"public: long __cdecl CDesktopManager::PostStartAnimations(void)",
            L"?PostStartAnimations@CDesktopManager@@QEAAJXZ"},
-         reinterpret_cast<void**>(&g_desktopManagerPostStartAnimations),
+         &g_desktopManagerPostStartAnimations,
          nullptr,
          true},
         {{L"private: __cdecl CTopLevelWindow::CTopLevelWindow(class CWindowData *,bool)",
            L"??0CTopLevelWindow@@AEAA@PEAVCWindowData@@_N@Z"},
-         reinterpret_cast<void**>(&g_topLevelWindowConstructorFunction),
+         &g_topLevelWindowConstructorFunction,
          nullptr,
          true},
         {{L"protected: virtual __cdecl CTopLevelWindow::~CTopLevelWindow(void)",
           L"public: virtual __cdecl CTopLevelWindow::~CTopLevelWindow(void)",
           L"private: virtual __cdecl CTopLevelWindow::~CTopLevelWindow(void)",
           L"??1CTopLevelWindow@@EEAA@XZ"},
-         reinterpret_cast<void**>(&g_topLevelWindowDestructorOriginal),
-         reinterpret_cast<void*>(TopLevelWindowDestructorHook),
+         &g_topLevelWindowDestructorOriginal,
+         TopLevelWindowDestructorHook,
          true},
         {{L"public: void __cdecl CTopLevelWindow3D::SetWindowData(class CWindowData *)",
           L"?SetWindowData@CTopLevelWindow3D@@"
            L"QEAAXPEAVCWindowData@@@Z"},
-         reinterpret_cast<void**>(&g_topLevelWindow3DSetWindowDataOriginal),
-         reinterpret_cast<void*>(TopLevelWindow3DSetWindowDataHook),
+         &g_topLevelWindow3DSetWindowDataOriginal,
+         TopLevelWindow3DSetWindowDataHook,
          true},
         {{L"public: __cdecl CWindowData::~CWindowData(void)",
           L"??1CWindowData@@QEAA@XZ"},
-         reinterpret_cast<void**>(&g_windowDataDestructorOriginal),
-         reinterpret_cast<void*>(WindowDataDestructorHook),
+         &g_windowDataDestructorOriginal,
+         WindowDataDestructorHook,
          true},
         {{L"private: long __cdecl CWindowList::EnsureTopLevelWindow(class CWindowData *)",
           L"?EnsureTopLevelWindow@CWindowList@@"
            L"AEAAJPEAVCWindowData@@@Z"},
-         reinterpret_cast<void**>(&g_ensureTopLevelWindowFunction),
-         reinterpret_cast<void*>(EnsureTopLevelWindowHook),
+         &g_ensureTopLevelWindowFunction,
+         EnsureTopLevelWindowHook,
          true},
         {{L"protected: virtual __cdecl CTopLevelWindow3D::~CTopLevelWindow3D(void)",
           L"public: virtual __cdecl CTopLevelWindow3D::~CTopLevelWindow3D(void)",
           L"??1CTopLevelWindow3D@@MEAA@XZ"},
-         reinterpret_cast<void**>(&g_topLevelWindow3DDestructorOriginal),
-         reinterpret_cast<void*>(TopLevelWindow3DDestructorHook),
+         &g_topLevelWindow3DDestructorOriginal,
+         TopLevelWindow3DDestructorHook,
          true},
         {{L"public: long __cdecl CWindowList::ForceUpdateScene(void)",
           L"?ForceUpdateScene@CWindowList@@QEAAJXZ"},
-         reinterpret_cast<void**>(&g_windowListForceUpdateSceneOriginal),
-         reinterpret_cast<void*>(ForceUpdateSceneHook),
+         &g_windowListForceUpdateSceneOriginal,
+         ForceUpdateSceneHook,
          true},
         {{L"public: virtual long __cdecl CWindowList::UpdateScene(void)",
           L"?UpdateScene@CWindowList@@UEAAJXZ"},
-         reinterpret_cast<void**>(&g_windowListUpdateSceneOriginal),
-         reinterpret_cast<void*>(UpdateSceneHook),
+         &g_windowListUpdateSceneOriginal,
+         UpdateSceneHook,
          true},
         {{L"private: void __cdecl CDesktopManager::AdvanceTimelines(double)",
           L"?AdvanceTimelines@CDesktopManager@@AEAAXN@Z"},
-         reinterpret_cast<void**>(&g_desktopManagerAdvanceTimelinesOriginal),
-         reinterpret_cast<void*>(AdvanceTimelinesHook),
+         &g_desktopManagerAdvanceTimelinesOriginal,
+         AdvanceTimelinesHook,
          true},
         {{L"const CTopLevelWindow::`vftable'", L"??_7CTopLevelWindow@@6B@"},
          &g_topLevelWindowVtableSymbol,
@@ -3238,12 +3232,11 @@ static void BackfillExistingDwmWindowMappings()
         }
     }
     g_existingWindowBackfillIndex.store(index, std::memory_order_release);
-    HWND nextWindow = index < count ? g_existingWindowBackfill[index] : nullptr;
     unsigned int mapped = g_existingWindowBackfillMapped.load(std::memory_order_relaxed);
     ReleaseSRWLockShared(&g_existingWindowBackfillLock);
     if (index < count)
     {
-        RequestDwmScenePass(nextWindow);
+        RequestDwmScenePass();
     }
     else
     {
@@ -3272,7 +3265,6 @@ static void SubmitPendingWobblySceneWork()
     }
     FinalizeRetiringSlots();
     g_sceneSubmittedSerial.store(submittedThrough, std::memory_order_release);
-    g_sceneWakeRetryCount.store(0, std::memory_order_release);
     ULONGLONG stallStartedAt = g_sceneWakeStallStartedAt.exchange(0, std::memory_order_acq_rel);
     if (g_sceneWakeStalled.exchange(false, std::memory_order_acq_rel))
     {
@@ -3282,7 +3274,7 @@ static void SubmitPendingWobblySceneWork()
     // Wake again if the worker published a newer matrix.
     if (g_sceneRequestedSerial.load(std::memory_order_acquire) > submittedThrough)
     {
-        PostPendingDwmSceneWake(nullptr, false);
+        PostPendingDwmSceneWake(false);
     }
 }
 
@@ -3997,32 +3989,8 @@ static void DisableAnimationThreadPowerThrottling()
     powerThrottling.Version = THREAD_POWER_THROTTLING_CURRENT_VERSION;
     powerThrottling.ControlMask = THREAD_POWER_THROTTLING_EXECUTION_SPEED;
     powerThrottling.StateMask = 0;
-    HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
-    auto setThreadInformation = kernel32 ? reinterpret_cast<SetThreadInformation_t>(
-                                               GetProcAddress(kernel32, "SetThreadInformation"))
-                                         : nullptr;
-    if (setThreadInformation)
-    {
-        setThreadInformation(GetCurrentThread(), ThreadPowerThrottling, &powerThrottling,
-                             sizeof(powerThrottling));
-    }
-}
-
-static void SetAnimationThreadActive(bool active)
-{
-    if (g_animationPriorityElevated == active)
-    {
-        return;
-    }
-    int priority = active ? THREAD_PRIORITY_ABOVE_NORMAL : THREAD_PRIORITY_NORMAL;
-    if (SetThreadPriority(GetCurrentThread(), priority))
-    {
-        g_animationPriorityElevated = active;
-    }
-    else
-    {
-        Wh_Log(L"Failed to set animation thread priority: %u", GetLastError());
-    }
+    SetThreadInformation(GetCurrentThread(), ThreadPowerThrottling, &powerThrottling,
+                         sizeof(powerThrottling));
 }
 
 static bool EnsureAnimationClockRunning(HWND hwnd)
@@ -4049,7 +4017,6 @@ static bool EnsureAnimationClockRunning(HWND hwnd)
         }
         return true;
     }
-    SetAnimationThreadActive(true);
     g_animationTargetHz = preferredRate;
     g_nextAnimationCounter = {};
     if (!QueryPerformanceCounter(&g_lastAnimationCounter))
@@ -4064,7 +4031,6 @@ static bool EnsureAnimationClockRunning(HWND hwnd)
         g_animationTargetHz = 0.0;
         g_lastAnimationCounter = {};
         g_nextAnimationCounter = {};
-        SetAnimationThreadActive(false);
         Wh_Log(L"Failed to arm animation timer: %u", timerError);
         return false;
     }
@@ -4173,33 +4139,7 @@ static bool ResetMatrixTransformProxy(void* matrixTransformProxy)
     return UpdateMatrixTransformProxy(matrixTransformProxy, identityMatrix) >= 0;
 }
 
-static bool RequestFallbackWindowInvalidation(HWND hwnd)
-{
-    if (!hwnd)
-    {
-        return false;
-    }
-    constexpr ULONGLONG minimumIntervalMs = 100;
-    ULONGLONG now = GetTickCount64();
-    ULONGLONG previous =
-        g_lastFallbackInvalidationTimestamp.load(std::memory_order_acquire);
-    for (;;)
-    {
-        if (previous != 0 && now - previous < minimumIntervalMs)
-        {
-            return true;
-        }
-        if (g_lastFallbackInvalidationTimestamp.compare_exchange_weak(
-                previous, now, std::memory_order_acq_rel,
-                std::memory_order_acquire))
-        {
-            break;
-        }
-    }
-    return RedrawWindow(hwnd, nullptr, nullptr, RDW_INVALIDATE) != FALSE;
-}
-
-static bool PostPendingDwmSceneWake(HWND hwnd, bool forceRepost)
+static bool PostPendingDwmSceneWake(bool forceRepost)
 {
     if (g_unloading.load(std::memory_order_acquire) && !forceRepost)
     {
@@ -4242,24 +4182,21 @@ static bool PostPendingDwmSceneWake(HWND hwnd, bool forceRepost)
         }
         g_sceneWakeOutstanding.fetch_sub(1, std::memory_order_acq_rel);
     }
-    if (RequestFallbackWindowInvalidation(hwnd))
-    {
-        g_sceneWakePostTimestamp.store(GetTickCount64(), std::memory_order_release);
-        return true;
-    }
+    // AdvanceTimelines consumes the pending serial when the scene thread is
+    // first discovered or a thread-message wake can't be posted.
     g_sceneWakeScheduled.store(false, std::memory_order_release);
     g_sceneWakePostTimestamp.store(0, std::memory_order_release);
     return false;
 }
 
-static void RequestDwmScenePass(HWND hwnd)
+static void RequestDwmScenePass()
 {
     if (g_unloading.load(std::memory_order_acquire))
     {
         return;
     }
     g_sceneRequestedSerial.fetch_add(1, std::memory_order_acq_rel);
-    PostPendingDwmSceneWake(hwnd, false);
+    PostPendingDwmSceneWake(false);
 }
 
 static void FinalizeRetiringSlots()
@@ -4326,11 +4263,9 @@ static void AbandonAnimationSlotsAfterSceneStall(const wchar_t* reason)
     g_animationTargetHz = 0.0;
     g_lastAnimationCounter = {};
     g_nextAnimationCounter = {};
-    SetAnimationThreadActive(false);
     g_sceneWakeScheduled.store(false, std::memory_order_release);
     g_sceneWakePostTimestamp.store(0, std::memory_order_release);
     g_sceneWakeStallStartedAt.store(0, std::memory_order_release);
-    g_sceneWakeRetryCount.store(0, std::memory_order_release);
     g_sceneWakeStalled.store(false, std::memory_order_release);
     g_sceneRecoveryCleanupPending.store(false, std::memory_order_release);
     g_sceneSubmittedSerial.store(g_sceneRequestedSerial.load(std::memory_order_acquire),
@@ -4389,7 +4324,6 @@ static void StopAnimationClockIfIdle()
     g_animationTargetHz = 0.0;
     g_lastAnimationCounter = {};
     g_nextAnimationCounter = {};
-    SetAnimationThreadActive(false);
     g_lastObservedScenePassCounter = g_scenePassCounter.load(std::memory_order_acquire);
     g_lastSceneProgressTimestamp = 0;
     g_sceneRecoveryCleanupPending.store(false, std::memory_order_release);
@@ -4433,7 +4367,7 @@ static void RetireAnimationSlot(int slotIndex)
     ReleaseSRWLockExclusive(&g_animationSlotsLock);
     if (sceneWakeWindow)
     {
-        RequestDwmScenePass(sceneWakeWindow);
+        RequestDwmScenePass();
     }
     if (wasDragSlot)
     {
@@ -4616,7 +4550,6 @@ static void EnsurePendingMatrixTransformProxies()
                 currentSlot.transitionTransformAttached = false;
                 currentSlot.transformRebindRevision++;
                 currentSlot.identityApplied = true;
-                currentSlot.privateCallFailureCount = 0;
                 stored = true;
             }
             else
@@ -4934,7 +4867,6 @@ static int AcquireAnimationSlot(HWND hwnd, const WobblySettings& settings, doubl
     slot.identityApplied = false;
     slot.lastMatrixErrorLog = 0;
     slot.lastBindFailureLog = 0;
-    slot.privateCallFailureCount = 0;
     ReleaseSRWLockExclusive(&g_animationSlotsLock);
     return slotIndex;
 }
@@ -5029,7 +4961,7 @@ static void HandleMoveSizeStart(HWND hwnd)
         RetireAnimationSlot(slotIndex);
         return;
     }
-    RequestDwmScenePass(hwnd);
+    RequestDwmScenePass();
 }
 
 static void ApplyAnimationSlotTransform(int slotIndex, double interpolationAlpha)
@@ -5085,7 +5017,6 @@ static void ApplyAnimationSlotTransform(int slotIndex, double interpolationAlpha
         {
             if (updateResult >= 0)
             {
-                currentSlot.privateCallFailureCount = 0;
                 currentSlot.submittedMeshRevision = snapshot.meshRevision;
                 currentSlot.identityApplied = appliedIdentity;
                 if (appliedIdentity && currentSlot.meshRevision == snapshot.meshRevision)
@@ -5095,7 +5026,6 @@ static void ApplyAnimationSlotTransform(int slotIndex, double interpolationAlpha
             }
             else
             {
-                currentSlot.privateCallFailureCount++;
                 if (now - currentSlot.lastMatrixErrorLog >= 1000)
                 {
                     currentSlot.lastMatrixErrorLog = now;
@@ -5277,7 +5207,7 @@ static void StopAllAnimations()
     // Repost the existing cleanup serial instead of creating a moving target.
     if (initialSceneWakeWindow)
     {
-        PostPendingDwmSceneWake(initialSceneWakeWindow, true);
+        PostPendingDwmSceneWake(true);
     }
     ULONGLONG hookWaitDeadline = GetTickCount64() + DWM_UNLOAD_CLEANUP_TIMEOUT_MS;
     bool cleanupTimedOut = false;
@@ -5314,7 +5244,7 @@ static void StopAllAnimations()
         }
         if (sceneWakeWindow && !wakePending)
         {
-            PostPendingDwmSceneWake(sceneWakeWindow, true);
+            PostPendingDwmSceneWake(true);
         }
         Sleep(16);
     }
@@ -5333,7 +5263,6 @@ static void StopAllAnimations()
     g_animationTargetHz = 0.0;
     g_lastAnimationCounter = {};
     g_nextAnimationCounter = {};
-    SetAnimationThreadActive(false);
     ResetDragInputState();
 }
 
@@ -5585,7 +5514,7 @@ static void UpdateAnimationFrame()
         {
             BeginSceneStallCleanup(L"no scene progress");
         }
-        RequestDwmScenePass(sceneWakeWindow);
+        RequestDwmScenePass();
         ULONGLONG lastWakePost = g_sceneWakePostTimestamp.load(std::memory_order_acquire);
         ULONGLONG lastSceneActivity = std::max(g_lastSceneProgressTimestamp, lastWakePost);
         if (sceneWakeWindow && now - lastSceneActivity >= 50)
@@ -5598,8 +5527,7 @@ static void UpdateAnimationFrame()
                        g_sceneRequestedSerial.load(std::memory_order_acquire),
                        g_sceneSubmittedSerial.load(std::memory_order_acquire));
             }
-            g_sceneWakeRetryCount.fetch_add(1, std::memory_order_acq_rel);
-            PostPendingDwmSceneWake(sceneWakeWindow, true);
+            PostPendingDwmSceneWake(true);
         }
     }
     for (int i = 0; i < retireCount; i++)
@@ -5781,7 +5709,7 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
         g_lastDraggedWindowRect = rect;
         g_lastDraggedWindowZoomed = IsZoomed(hwnd) != FALSE;
         g_lastMousePosition = mousePosition;
-        RequestDwmScenePass(hwnd);
+        RequestDwmScenePass();
         return;
     }
     auto startInteractiveStateThrob = [&](InteractiveStateThrobKind kind, bool maximizing,
@@ -6074,12 +6002,12 @@ static void HandleMoveSizeEnd(HWND hwnd)
     if (stateTransitionWobble && animate)
     {
         MarkObservedWindowTransitionPending(hwnd, transitionExpectedZoomed);
-        RequestDwmScenePass(hwnd);
+        RequestDwmScenePass();
     }
     if (snapTransitionWobble && animate)
     {
         MarkObservedSnapTransition(hwnd, false);
-        RequestDwmScenePass(hwnd);
+        RequestDwmScenePass();
     }
     if (stateTransitionWobble && transitionExpectedZoomed)
     {
@@ -6376,7 +6304,7 @@ static void StartWindowStateThrob(HWND hwnd, bool maximizing, bool snapTransitio
         RetireAnimationSlot(slotIndex);
         return;
     }
-    RequestDwmScenePass(hwnd);
+    RequestDwmScenePass();
     Wh_Log(L"WINDOW STATE THROB HWND=%p State=%s Size=%dx%d", hwnd,
            snapTransition ? L"SNAPPED" : (maximizing ? L"MAXIMIZED" : L"RESTORED"), width,
            height);
@@ -7002,7 +6930,7 @@ static bool StartWindowEventThread()
         g_eventThreadStop = nullptr;
         return false;
     }
-    g_eventThread = CreateThread(nullptr, 0, WindowEventThreadProc, nullptr, 0, &g_eventThreadId);
+    g_eventThread = CreateThread(nullptr, 0, WindowEventThreadProc, nullptr, 0, nullptr);
     if (!g_eventThread)
     {
         Wh_Log(L"Failed to create window event thread");
@@ -7052,7 +6980,6 @@ static void StopWindowEventThread()
         CloseHandle(g_eventThreadStop);
         g_eventThreadStop = nullptr;
     }
-    g_eventThreadId = 0;
 }
 
 static void CalculateAutomaticParameters(int wobbliness, double& stiffness, double& drag,
@@ -7165,11 +7092,9 @@ BOOL Wh_ModInit()
     g_sceneSubmittedSerial.store(0, std::memory_order_release);
     g_sceneWakePostTimestamp.store(0, std::memory_order_release);
     g_sceneWakeStallStartedAt.store(0, std::memory_order_release);
-    g_sceneWakeRetryCount.store(0, std::memory_order_release);
     g_sceneWakeStalled.store(false, std::memory_order_release);
     g_sceneRecoveryCleanupPending.store(false, std::memory_order_release);
     g_scenePassCounter.store(0, std::memory_order_release);
-    g_lastFallbackInvalidationTimestamp.store(0, std::memory_order_release);
     g_abandonedProxyCount.store(0, std::memory_order_release);
     g_sceneOwnershipResetPending.store(false, std::memory_order_release);
     g_lastBindPrerequisiteLog.store(0, std::memory_order_release);
@@ -7179,7 +7104,7 @@ BOOL Wh_ModInit()
     g_existingWindowBackfillMapped.store(0, std::memory_order_release);
     g_lastObservedScenePassCounter = 0;
     g_lastSceneProgressTimestamp = 0;
-    Wh_Log(L"Wobbly Windows 0.84: initializing");
+    Wh_Log(L"Wobbly Windows 0.85: initializing");
     InitializeDpiSupport();
     LoadSettings();
     if (!InitializeDwmHooks())
