@@ -2,7 +2,7 @@
 // @id              explorer-fast-navigation
 // @name            Explorer Fast Navigation
 // @description     Improves explorer navigation latency
-// @version         0.9.4
+// @version         0.9.5
 // @author          Vivy
 // @github          https://github.com/enginelesscc
 // @twitter         https://x.com/VivyVCCS
@@ -226,6 +226,7 @@ static decltype(&SetWindowPos) setWindowPosOriginal;
 static HMODULE frame;
 static HMODULE shell;
 static HMODULE duser;
+static HMODULE storage;
 
 // Shared helpers.
 
@@ -936,6 +937,46 @@ static void Uninit() {
 
 } // namespace XamlWork
 
+// Grouped folders use a separate category timer before ItemsView batching.
+namespace GroupingWork {
+using GroupItem = void(__fastcall*)(void*, const void*, int);
+static GroupItem groupItemOriginal;
+static decltype(&SetTimer) setTimerOriginal;
+static thread_local unsigned depth;
+
+static void __fastcall GroupItemHook(void* self, const void* key, int flags) {
+    PaintScope scope(depth);
+    groupItemOriginal(self, key, flags);
+}
+
+static UINT_PTR WINAPI SetTimerHook(HWND hwnd, UINT_PTR id, UINT elapsed, TIMERPROC callback) {
+    // Only shorten _GroupItem's category timer.
+    if (settings.duserBatching && depth && hwnd && id == 7 && elapsed == 50 && !callback) {
+        elapsed = 10;
+    }
+    return setTimerOriginal(hwnd, id, elapsed, callback);
+}
+
+static void Initialize(const WH_HOOK_SYMBOLS_OPTIONS* options) {
+    if (!settings.duserBatching) {
+        return;
+    }
+    storage = LoadLibraryExW(L"windows.storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    // windows.storage.dll
+    const SymbolHook hooks[] = {
+        {L"private: void __cdecl CDefCollection::_GroupItem(struct tagITEMKEY const *,int)",
+         &groupItemOriginal, GroupItemHook},
+    };
+    HookAvailableSymbols(storage, L"windows.storage.dll", hooks, ARRAYSIZE(hooks), options);
+    bool enabled = false;
+    if (groupItemOriginal) {
+        setTimerOriginal = SetTimer;
+        enabled = Hook(setTimerOriginal, SetTimerHook);
+    }
+    Wh_Log(L"Category batching acceleration=%d", enabled);
+}
+} // namespace GroupingWork
+
 // Native paint and batching hooks.
 
 static void __fastcall RedrawFrameHook(void* self) {
@@ -1030,6 +1071,9 @@ static BOOL WINAPI DeleteActionHook(void* handle) {
 
 static void ReleaseModules() {
     XamlWork::Uninit();
+    if (storage) {
+        FreeLibrary(storage);
+    }
     if (duser) {
         FreeLibrary(duser);
     }
@@ -1039,7 +1083,7 @@ static void ReleaseModules() {
     if (frame) {
         FreeLibrary(frame);
     }
-    duser = shell = frame = nullptr;
+    storage = duser = shell = frame = nullptr;
 }
 
 static BOOL InitializeMod() {
@@ -1143,6 +1187,7 @@ static BOOL InitializeMod() {
     }
 
     XamlWork::Initialize(&options);
+    GroupingWork::Initialize(&options);
     bool batches = false;
     if (batchCallback && duser) {
         createActionOriginal = reinterpret_cast<CreateAction>(GetProcAddress(duser, "CreateAction"));
