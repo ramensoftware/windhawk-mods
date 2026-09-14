@@ -2,7 +2,7 @@
 // @id              move-app-window-to-monitor
 // @name            Move Window to Monitor
 // @description     Easily move windows between monitors using hotkeys or taskbar thumbnail/titlebar menu, with one-click rescue for windows lost on disconnected displays.
-// @version         1.0.0
+// @version         1.0.1
 // @author          heartacker
 // @github          https://github.com/heartacker
 // @include         *
@@ -13,40 +13,47 @@
 /*
 # Move Window to Monitor (窗口换屏助手)
 
-专为多显示器、外接屏幕断开/虚显（幽灵屏）、向日葵等远程控制场景打造的窗口调度与救援工具。
+Easily move windows across multiple monitors, or rescue offscreen/lost windows when displays are disconnected.
 
-### 核心功能：
-1. **任务栏预览右键 & 窗口标题栏右键菜单集成**：
-   - 鼠标悬停在任务栏图标的缩略图预览上点击右键，或者直接右键窗口标题栏：
-     - `🖥️ 移至显示器 1 (主屏幕)`
-     - `🖥️ 移至显示器 2`
-     - `➡️ 移至下一个显示器`
-     - `🔄 召回所有窗口到主屏幕`
-   - 支持所有应用程序（Chrome、Edge、资源管理器、VSCode 等）。
-2. **全局快捷键**：
-   - `Win + Alt + 1`：将当前窗口移动到显示器 1（主屏）
-   - `Win + Alt + 2`：将当前窗口移动到显示器 2
-   - `Win + Alt + 3`：将当前窗口移动到显示器 3
-   - `Win + Alt + ← / →`：将当前窗口移动到上一个 / 下一个显示器
-   - `Win + Alt + R`：**一键召回所有窗口**（Rescue All）
-3. **设置项支持**：
-   - 可在 Windhawk 设置中更改快捷键组合（Win+Alt / Win+Ctrl / Win+Shift）
-   - 可开启“显示器配置变更时自动拯救窗口”
+针对多显示器切换、外接显示器断开/虚显（幽灵屏）、远程控制（向日葵等）场景打造的窗口跨屏调度与一键救援工具。
+
+---
+
+### Features / 核心功能
+
+1. **Taskbar Preview & Window Titlebar Right-Click Menu Integration (任务栏预览与标题栏右键菜单集成)**:
+   - Right-click on a taskbar thumbnail preview or right-click any window's titlebar:
+     - `🖥️ Move to Monitor 1 (Primary)` / `🖥️ 移至显示器 1 (主屏幕)`
+     - `🖥️ Move to Monitor 2` / `🖥️ 移至显示器 2`
+     - `➡️ Move to Next Monitor` / `➡️ 移至下一个显示器`
+     - `🔄 Rescue All Windows to Primary Monitor` / `🔄 召回所有窗口到主屏幕`
+   - Works across all applications (Chrome, Edge, File Explorer, VS Code, and standard Win32 / Chromium apps).
+
+2. **Global Hotkeys (全局快捷键)**:
+   - `Win + Alt + 1`: Move active window to Monitor 1 (Primary) / 移至显示器 1
+   - `Win + Alt + 2`: Move active window to Monitor 2 / 移至显示器 2
+   - `Win + Alt + 3`: Move active window to Monitor 3 / 移至显示器 3
+   - `Win + Alt + ← / →`: Cycle window to Previous / Next monitor / 移至上一/下一个显示器
+   - `Win + Alt + R`: **Rescue All Windows** back to primary monitor / 一键召回所有窗口
+
+3. **Settings (设置项)**:
+   - Configurable hotkey modifiers: `Win + Alt`, `Win + Ctrl`, or `Win + Shift`.
+   - Auto-rescue offscreen windows when display configuration changes.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - hotkeyModifier: win_alt
-  $name: 快捷键修饰键 (Hotkey Modifiers)
-  $description: 选择移动窗口和救援快捷键的组合键
+  $name: Hotkey Modifiers / 快捷键修饰键
+  $description: Modifier combination used for moving windows and rescuing (e.g. Win+Alt+1, Win+Alt+R)
   $options:
-    - win_alt: Win + Alt (例如 Win+Alt+1, Win+Alt+R)
-    - win_ctrl: Win + Ctrl (例如 Win+Ctrl+1, Win+Ctrl+R)
-    - win_shift: Win + Shift (例如 Win+Shift+1, Win+Shift+R)
+    - win_alt: Win + Alt (e.g. Win+Alt+1, Win+Alt+R)
+    - win_ctrl: Win + Ctrl (e.g. Win+Ctrl+1, Win+Ctrl+R)
+    - win_shift: Win + Shift (e.g. Win+Shift+1, Win+Shift+R)
 - autoRescueOnDisplayChange: false
-  $name: 显示器变化时自动拉回 (Auto rescue on display change)
-  $description: 当拔掉显示器或系统显示模式改变时，自动将越界或不可见的窗口拉回主屏幕
+  $name: Auto rescue on display change / 显示器变化时自动拯救窗口
+  $description: Automatically pull offscreen windows back to the primary display when a monitor is disconnected or resolution changes.
 */
 // ==/WindhawkModSettings==
 
@@ -56,6 +63,12 @@
 #include <vector>
 #include <algorithm>
 #include <mutex>
+
+// Localization helper
+static inline bool IsChineseLanguage() {
+    LANGID langId = GetUserDefaultUILanguage();
+    return PRIMARYLANGID(langId) == LANG_CHINESE;
+}
 
 // Settings
 struct {
@@ -461,17 +474,26 @@ static BOOL ProcessTrackPopupMenu(
         auto monitors = GetAllMonitors();
         int curMon = hTargetWnd ? GetWindowMonitorIndex(hTargetWnd, monitors) : 0;
 
+        bool isZh = IsChineseLanguage();
         for (const auto& mon : monitors) {
             WCHAR text[64];
-            if (mon.isPrimary) {
-                swprintf_s(text, L"🖥️ 移至显示器 %d (主屏)%s", mon.index, (mon.index == curMon ? L" [当前]" : L""));
+            if (isZh) {
+                if (mon.isPrimary) {
+                    swprintf_s(text, L"🖥️ 移至显示器 %d (主屏)%s", mon.index, (mon.index == curMon ? L" [当前]" : L""));
+                } else {
+                    swprintf_s(text, L"🖥️ 移至显示器 %d%s", mon.index, (mon.index == curMon ? L" [当前]" : L""));
+                }
             } else {
-                swprintf_s(text, L"🖥️ 移至显示器 %d%s", mon.index, (mon.index == curMon ? L" [当前]" : L""));
+                if (mon.isPrimary) {
+                    swprintf_s(text, L"🖥️ Move to Monitor %d (Primary)%s", mon.index, (mon.index == curMon ? L" [Current]" : L""));
+                } else {
+                    swprintf_s(text, L"🖥️ Move to Monitor %d%s", mon.index, (mon.index == curMon ? L" [Current]" : L""));
+                }
             }
             AppendMenuW(hMenu, MF_STRING, IDM_CUSTOM_MOVE_BASE + mon.index, text);
         }
-        AppendMenuW(hMenu, MF_STRING, IDM_CUSTOM_MOVE_NEXT, L"➡️ 移至下一个显示器");
-        AppendMenuW(hMenu, MF_STRING, IDM_CUSTOM_RESCUE, L"🔄 召回所有窗口到主屏幕");
+        AppendMenuW(hMenu, MF_STRING, IDM_CUSTOM_MOVE_NEXT, isZh ? L"➡️ 移至下一个显示器" : L"➡️ Move to Next Monitor");
+        AppendMenuW(hMenu, MF_STRING, IDM_CUSTOM_RESCUE, isZh ? L"🔄 召回所有窗口到主屏幕" : L"🔄 Rescue All Windows to Primary Monitor");
     }
 
     // Force TPM_RETURNCMD so we can catch our own custom command IDs
