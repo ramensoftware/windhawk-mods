@@ -438,11 +438,11 @@ MIT
 */
 // ==/WindhawkModSettings==
 
-// The source code of the mod starts here. This sample was inspired by the great
-// article of Kyle Halladay, X64 Function Hooking by Example:
-// https://kylehalladay.com/blog/2020/11/13/Hooking-By-Example.html
-// If you're new to terms such as code injection and function hooking, the
-// article is great to get started.
+// This mod installs no hooks and injects into no other process's address
+// space: it runs entirely as a Windhawk tool mod in a dedicated windhawk.exe
+// process (see the launcher boilerplate near the end of the file), reading
+// HWiNFO's Gadget/VSB registry values on a timer and drawing them onto its
+// own layered overlay window.
 
 #include <windows.h>
 #include <shellapi.h>
@@ -452,11 +452,22 @@ MIT
 #include <string>
 #include <vector>
 #include <climits>
+#include <cstdio>
+#include <cwchar>
+#include <cstdlib>
+#include <cstring>
 
 struct RowConfig {
     std::wstring label;
     std::wstring valueName;
     std::wstring cachedValue;
+};
+
+enum class GradientDirection {
+    Vertical,
+    Horizontal,
+    DiagonalDown,
+    DiagonalUp
 };
 
 struct {
@@ -534,10 +545,7 @@ struct {
 
     bool backgroundGradientEnabled;
     COLORREF backgroundGradientColor2;
-    std::wstring backgroundGradientDirection;
-    bool backgroundGradientHorizontal;
-    bool backgroundGradientDiagonalDown;
-    bool backgroundGradientDiagonalUp;
+    GradientDirection backgroundGradientDirection;
 
     int backgroundCornerRadius;
     int backgroundBorderSize;
@@ -560,6 +568,7 @@ bool g_appliedBackgroundEnabled = false;
 int g_appliedBackgroundCornerRadius = -1;
 HANDLE g_uiThread = nullptr;
 DWORD g_uiThreadId = 0;
+LONG g_pendingSettingsReload = 0;
 constexpr int HOTKEY_TOGGLE_OVERLAY = 1;
 constexpr int HOTKEY_DRAG_MODE = 2;
 constexpr int HOTKEY_EXPORT_REGISTRY = 3;
@@ -591,9 +600,9 @@ std::wstring Trim(const std::wstring& s) {
     return s.substr(start, end - start + 1);
 }
 
-// GDI pens/brushes ignore alpha, so callers that don't need it pass
-// nullptr for the alpha out-parameter instead of storing a dead byte.
-bool ParseHexColor(const std::wstring& text, BYTE* alpha, COLORREF* color) {
+// GDI pens/brushes/text output used throughout this mod ignore alpha.
+// #AARRGGBB input is accepted for convenience, but only RGB is used.
+bool ParseHexColor(const std::wstring& text, COLORREF* color) {
     std::wstring s = text;
 
     if (!s.empty() && s[0] == L'#')
@@ -608,25 +617,10 @@ bool ParseHexColor(const std::wstring& text, BYTE* alpha, COLORREF* color) {
     if (!end || *end != 0)
         return false;
 
-    BYTE a = 0xFF;
-    BYTE r = 0;
-    BYTE g = 0;
-    BYTE b = 0;
+    BYTE r = (value >> 16) & 0xFF;
+    BYTE g = (value >> 8) & 0xFF;
+    BYTE b = value & 0xFF;
 
-    if (s.length() == 8) {
-        a = (value >> 24) & 0xFF;
-        r = (value >> 16) & 0xFF;
-        g = (value >> 8) & 0xFF;
-        b = value & 0xFF;
-    } else {
-        r = (value >> 16) & 0xFF;
-        g = (value >> 8) & 0xFF;
-        b = value & 0xFF;
-    }
-
-    if (alpha) {
-        *alpha = a;
-    }
     *color = RGB(r, g, b);
     return true;
 }
@@ -839,7 +833,7 @@ void LoadSettings() {
     Wh_FreeStringSetting(registryRoot);
 
     const wchar_t* registryPath = Wh_GetStringSetting(L"registryPath");
-    settings.registryPath = registryPath ? registryPath : L"SOFTWARE\\HWiNFO64\\VSB";
+    settings.registryPath = (registryPath && *registryPath) ? registryPath : L"SOFTWARE\\HWiNFO64\\VSB";
     Wh_FreeStringSetting(registryPath);
 
     settings.refreshIntervalMs = Wh_GetIntSetting(L"refreshIntervalMs");
@@ -883,7 +877,6 @@ void LoadSettings() {
 
     const wchar_t* columnSeparatorColor = Wh_GetStringSetting(L"columnSeparatorColor");
     if (!ParseHexColor(columnSeparatorColor ? columnSeparatorColor : L"#FFFFFF",
-                       nullptr,
                        &settings.columnSeparatorColor)) {
         settings.columnSeparatorColor = RGB(255, 255, 255);
     }
@@ -895,7 +888,7 @@ void LoadSettings() {
     settings.enableToggleHotkey = Wh_GetIntSetting(L"enableToggleHotkey");
 
     const wchar_t* toggleHotkeyKey = Wh_GetStringSetting(L"toggleHotkeyKey");
-    settings.toggleHotkeyKey = toggleHotkeyKey ? toggleHotkeyKey : L"H";
+    settings.toggleHotkeyKey = (toggleHotkeyKey && *toggleHotkeyKey) ? toggleHotkeyKey : L"H";
     Wh_FreeStringSetting(toggleHotkeyKey);
 
     settings.toggleHotkeyCtrl = Wh_GetIntSetting(L"toggleHotkeyCtrl");
@@ -905,7 +898,7 @@ void LoadSettings() {
     settings.enableDragHotkey = Wh_GetIntSetting(L"enableDragHotkey");
 
     const wchar_t* dragHotkeyKey = Wh_GetStringSetting(L"dragHotkeyKey");
-    settings.dragHotkeyKey = dragHotkeyKey ? dragHotkeyKey : L"D";
+    settings.dragHotkeyKey = (dragHotkeyKey && *dragHotkeyKey) ? dragHotkeyKey : L"D";
     Wh_FreeStringSetting(dragHotkeyKey);
 
     settings.dragHotkeyCtrl = Wh_GetIntSetting(L"dragHotkeyCtrl");
@@ -929,7 +922,7 @@ void LoadSettings() {
     settings.enableExportHotkey = Wh_GetIntSetting(L"enableExportHotkey");
 
     const wchar_t* exportHotkeyKey = Wh_GetStringSetting(L"exportHotkeyKey");
-    settings.exportHotkeyKey = exportHotkeyKey ? exportHotkeyKey : L"R";
+    settings.exportHotkeyKey = (exportHotkeyKey && *exportHotkeyKey) ? exportHotkeyKey : L"R";
     Wh_FreeStringSetting(exportHotkeyKey);
 
     settings.exportHotkeyCtrl = Wh_GetIntSetting(L"exportHotkeyCtrl");
@@ -969,7 +962,7 @@ void LoadSettings() {
         settings.paddingBottom = 500;
 
     const wchar_t* fontFamily = Wh_GetStringSetting(L"fontFamily");
-    settings.fontFamily = fontFamily ? fontFamily : L"Cascadia Mono";
+    settings.fontFamily = (fontFamily && *fontFamily) ? fontFamily : L"Cascadia Mono";
     Wh_FreeStringSetting(fontFamily);
 
     const wchar_t* fontWeight = Wh_GetStringSetting(L"fontWeight");
@@ -977,12 +970,11 @@ void LoadSettings() {
     Wh_FreeStringSetting(fontWeight);
 
     const wchar_t* fontStyle = Wh_GetStringSetting(L"fontStyle");
-    settings.fontStyle = fontStyle ? fontStyle : L"Normal";
+    settings.fontStyle = (fontStyle && *fontStyle) ? fontStyle : L"Normal";
     Wh_FreeStringSetting(fontStyle);
 
     const wchar_t* textColor = Wh_GetStringSetting(L"textColor");
     if (!ParseHexColor(textColor ? textColor : L"#FFFFFF",
-                       nullptr,
                        &settings.textColor)) {
         settings.textColor = RGB(255, 255, 255);
     }
@@ -990,7 +982,6 @@ void LoadSettings() {
 
     const wchar_t* labelColor = Wh_GetStringSetting(L"labelColor");
     if (!ParseHexColor(labelColor ? labelColor : L"#FF0000",
-                       nullptr,
                        &settings.labelColor)) {
         settings.labelColor = settings.textColor;
     }
@@ -998,7 +989,6 @@ void LoadSettings() {
 
     const wchar_t* valueColor = Wh_GetStringSetting(L"valueColor");
     if (!ParseHexColor(valueColor ? valueColor : L"#00FF00",
-                    nullptr,
                     &settings.valueColor)) {
         settings.valueColor = settings.textColor;
     }
@@ -1008,7 +998,6 @@ void LoadSettings() {
 
     const wchar_t* backgroundColor = Wh_GetStringSetting(L"backgroundColor");
     if (!ParseHexColor(backgroundColor ? backgroundColor : L"#304050",
-                       nullptr,
                        &settings.backgroundColor)) {
         settings.backgroundColor = RGB(48, 64, 80);
     }
@@ -1028,23 +1017,27 @@ void LoadSettings() {
 
     const wchar_t* backgroundGradientColor2 = Wh_GetStringSetting(L"backgroundGradientColor2");
     if (!ParseHexColor(backgroundGradientColor2 ? backgroundGradientColor2 : L"#507080",
-                       nullptr,
                        &settings.backgroundGradientColor2)) {
         settings.backgroundGradientColor2 = RGB(80, 112, 128);
     }
     Wh_FreeStringSetting(backgroundGradientColor2);
 
-    const wchar_t* backgroundGradientDirection = Wh_GetStringSetting(L"backgroundGradientDirection");
-    settings.backgroundGradientDirection = backgroundGradientDirection ? backgroundGradientDirection : L"Vertical";
-    Wh_FreeStringSetting(backgroundGradientDirection);
-    settings.backgroundGradientHorizontal =
-    _wcsicmp(settings.backgroundGradientDirection.c_str(), L"Horizontal") == 0;
+    const wchar_t* backgroundGradientDirectionStr = Wh_GetStringSetting(L"backgroundGradientDirection");
+    std::wstring backgroundGradientDirectionValue =
+        (backgroundGradientDirectionStr && *backgroundGradientDirectionStr)
+            ? backgroundGradientDirectionStr
+            : L"Vertical";
+    Wh_FreeStringSetting(backgroundGradientDirectionStr);
 
-    settings.backgroundGradientDiagonalDown =
-    _wcsicmp(settings.backgroundGradientDirection.c_str(), L"DiagonalDown") == 0;
-
-    settings.backgroundGradientDiagonalUp =
-    _wcsicmp(settings.backgroundGradientDirection.c_str(), L"DiagonalUp") == 0;
+    if (_wcsicmp(backgroundGradientDirectionValue.c_str(), L"Horizontal") == 0) {
+        settings.backgroundGradientDirection = GradientDirection::Horizontal;
+    } else if (_wcsicmp(backgroundGradientDirectionValue.c_str(), L"DiagonalDown") == 0) {
+        settings.backgroundGradientDirection = GradientDirection::DiagonalDown;
+    } else if (_wcsicmp(backgroundGradientDirectionValue.c_str(), L"DiagonalUp") == 0) {
+        settings.backgroundGradientDirection = GradientDirection::DiagonalUp;
+    } else {
+        settings.backgroundGradientDirection = GradientDirection::Vertical;
+    }
 
     settings.backgroundCornerRadius = Wh_GetIntSetting(L"backgroundCornerRadius");
     if (settings.backgroundCornerRadius < 0)
@@ -1060,7 +1053,6 @@ void LoadSettings() {
 
     const wchar_t* backgroundBorderColor = Wh_GetStringSetting(L"backgroundBorderColor");
     if (!ParseHexColor(backgroundBorderColor ? backgroundBorderColor : L"#FFFFFF",
-                       nullptr,
                        &settings.backgroundBorderColor)) {
         settings.backgroundBorderColor = RGB(255, 255, 255);
     }
@@ -1075,11 +1067,11 @@ void LoadSettings() {
     settings.showWaterAge = Wh_GetIntSetting(L"showWaterAge");
 
     const wchar_t* waterAgeLabel = Wh_GetStringSetting(L"waterAgeLabel");
-    settings.waterAgeLabel = waterAgeLabel ? waterAgeLabel : L"WATER AGE";
+    settings.waterAgeLabel = (waterAgeLabel && *waterAgeLabel) ? waterAgeLabel : L"WATER AGE";
     Wh_FreeStringSetting(waterAgeLabel);
 
     const wchar_t* waterFillDate = Wh_GetStringSetting(L"waterFillDate");
-    settings.waterFillDate = waterFillDate ? waterFillDate : L"2024-11-18";
+    settings.waterFillDate = (waterFillDate && *waterFillDate) ? waterFillDate : L"2024-11-18";
     Wh_FreeStringSetting(waterFillDate);
 
     settings.waterMaxAgeDays = Wh_GetIntSetting(L"waterMaxAgeDays");
@@ -1104,7 +1096,6 @@ void LoadSettings() {
     const wchar_t* waterAgeWarnColor = Wh_GetStringSetting(L"waterAgeWarnColor");
     if (!ParseHexColor(
             waterAgeWarnColor ? waterAgeWarnColor : L"#FFAA00",
-            nullptr,
             &settings.waterAgeWarnColor)) {
         settings.waterAgeWarnColor = RGB(255, 170, 0);
     }
@@ -1113,7 +1104,6 @@ void LoadSettings() {
     const wchar_t* waterAgeAlarmColor = Wh_GetStringSetting(L"waterAgeAlarmColor");
     if (!ParseHexColor(
             waterAgeAlarmColor ? waterAgeAlarmColor : L"#FF3333",
-            nullptr,
             &settings.waterAgeAlarmColor)) {
         settings.waterAgeAlarmColor = RGB(255, 51, 51);
     }
@@ -1128,7 +1118,6 @@ void LoadSettings() {
     const wchar_t* waterAgeSeparatorColor = Wh_GetStringSetting(L"waterAgeSeparatorColor");
     if (!ParseHexColor(
             waterAgeSeparatorColor ? waterAgeSeparatorColor : L"#FFFFFF",
-            nullptr,
             &settings.waterAgeSeparatorColor)) {
         settings.waterAgeSeparatorColor = RGB(255, 255, 255);
     }
@@ -1360,92 +1349,62 @@ TRIVERTEX MakeGradientVertex(LONG x, LONG y, COLORREF color) {
 }
 
 void FillGradientBackground(HDC hdc, const RECT& rc) {
-    bool horizontal =
-        settings.backgroundGradientHorizontal;
+    switch (settings.backgroundGradientDirection) {
+        case GradientDirection::Horizontal: {
+            TRIVERTEX vertices[2] = {
+                MakeGradientVertex(rc.left, rc.top, settings.backgroundColor),
+                MakeGradientVertex(rc.right, rc.bottom, settings.backgroundGradientColor2)
+            };
+            GRADIENT_RECT gradientRect = { 0, 1 };
+            GradientFill(hdc, vertices, 2, &gradientRect, 1, GRADIENT_FILL_RECT_H);
+            return;
+        }
 
-    bool diagonalDown =
-        settings.backgroundGradientDiagonalDown;
+        case GradientDirection::Vertical: {
+            TRIVERTEX vertices[2] = {
+                MakeGradientVertex(rc.left, rc.top, settings.backgroundColor),
+                MakeGradientVertex(rc.right, rc.bottom, settings.backgroundGradientColor2)
+            };
+            GRADIENT_RECT gradientRect = { 0, 1 };
+            GradientFill(hdc, vertices, 2, &gradientRect, 1, GRADIENT_FILL_RECT_V);
+            return;
+        }
 
-    bool diagonalUp =
-        settings.backgroundGradientDiagonalUp;
+        case GradientDirection::DiagonalDown:
+        case GradientDirection::DiagonalUp: {
+            bool diagonalDown =
+                settings.backgroundGradientDirection == GradientDirection::DiagonalDown;
 
-    if (horizontal || (!diagonalDown && !diagonalUp &&
-        _wcsicmp(settings.backgroundGradientDirection.c_str(), L"Vertical") != 0)) {
-        TRIVERTEX vertices[2] = {
-            MakeGradientVertex(rc.left, rc.top, settings.backgroundColor),
-            MakeGradientVertex(rc.right, rc.bottom, settings.backgroundGradientColor2)
-        };
+            COLORREF middleColor = InterpolateColor(
+                settings.backgroundColor,
+                settings.backgroundGradientColor2,
+                1,
+                2
+            );
 
-        GRADIENT_RECT gradientRect = { 0, 1 };
+            TRIVERTEX vertices[4] = {};
 
-        GradientFill(
-            hdc,
-            vertices,
-            2,
-            &gradientRect,
-            1,
-            GRADIENT_FILL_RECT_H
-        );
+            if (diagonalDown) {
+                vertices[0] = MakeGradientVertex(rc.left,  rc.top,    settings.backgroundColor);
+                vertices[1] = MakeGradientVertex(rc.right, rc.top,    middleColor);
+                vertices[2] = MakeGradientVertex(rc.left,  rc.bottom, middleColor);
+                vertices[3] = MakeGradientVertex(rc.right, rc.bottom, settings.backgroundGradientColor2);
+            } else {
+                vertices[0] = MakeGradientVertex(rc.left,  rc.top,    middleColor);
+                vertices[1] = MakeGradientVertex(rc.right, rc.top,    settings.backgroundGradientColor2);
+                vertices[2] = MakeGradientVertex(rc.left,  rc.bottom, settings.backgroundColor);
+                vertices[3] = MakeGradientVertex(rc.right, rc.bottom, middleColor);
+            }
 
-        return;
+            GRADIENT_TRIANGLE triangles[2] = {
+                { 0, 1, 2 },
+                { 1, 3, 2 }
+            };
+
+            GradientFill(hdc, vertices, 4, triangles, 2, GRADIENT_FILL_TRIANGLE);
+            return;
+        }
     }
-
-    if (!diagonalDown && !diagonalUp) {
-        TRIVERTEX vertices[2] = {
-            MakeGradientVertex(rc.left, rc.top, settings.backgroundColor),
-            MakeGradientVertex(rc.right, rc.bottom, settings.backgroundGradientColor2)
-        };
-
-        GRADIENT_RECT gradientRect = { 0, 1 };
-
-        GradientFill(
-            hdc,
-            vertices,
-            2,
-            &gradientRect,
-            1,
-            GRADIENT_FILL_RECT_V
-        );
-
-        return;
-    }
-
-    COLORREF middleColor = InterpolateColor(
-        settings.backgroundColor,
-        settings.backgroundGradientColor2,
-        1,
-        2
-    );
-
-    TRIVERTEX vertices[4] = {};
-
-    if (diagonalDown) {
-        // Top-left -> bottom-right
-        vertices[0] = MakeGradientVertex(rc.left,  rc.top,    settings.backgroundColor);
-        vertices[1] = MakeGradientVertex(rc.right, rc.top,    middleColor);
-        vertices[2] = MakeGradientVertex(rc.left,  rc.bottom, middleColor);
-        vertices[3] = MakeGradientVertex(rc.right, rc.bottom, settings.backgroundGradientColor2);
-    } else {
-        // Bottom-left -> top-right
-        vertices[0] = MakeGradientVertex(rc.left,  rc.top,    middleColor);
-        vertices[1] = MakeGradientVertex(rc.right, rc.top,    settings.backgroundGradientColor2);
-        vertices[2] = MakeGradientVertex(rc.left,  rc.bottom, settings.backgroundColor);
-        vertices[3] = MakeGradientVertex(rc.right, rc.bottom, middleColor);
-    }
-
-    GRADIENT_TRIANGLE triangles[2] = {
-        { 0, 1, 2 },
-        { 1, 3, 2 }
-    };
-
-    GradientFill(
-        hdc,
-        vertices,
-        4,
-        triangles,
-        2,
-        GRADIENT_FILL_TRIANGLE
-    );
 }
 
 void DrawOverlayBorder(HDC hdc, const RECT& rc) {
@@ -1693,10 +1652,6 @@ int CalculateOverlayAutoHeight(HWND hwnd) {
     // it is consumed (SetWindowPos, UpdateWindowRegion).
     int rowHeight = tm.tmHeight + Scaled(settings.rowSpacing);
 
-    if (rowHeight < 1) {
-        rowHeight = Scaled(settings.fontSize) + Scaled(settings.rowSpacing) + Scaled(4);
-    }
-
     int newHeightPhysical =
         Scaled(settings.paddingTop) +
         (GetVisibleRowCount() * rowHeight) +
@@ -1753,6 +1708,8 @@ void ApplyOverlayWindowSize(HWND hwnd) {
         return;
     }
 
+    bool alwaysOnTopChanged = settings.alwaysOnTop != g_appliedAlwaysOnTop;
+
     g_appliedX = settings.x;
     g_appliedY = settings.y;
     g_appliedWidth = settings.width;
@@ -1761,6 +1718,11 @@ void ApplyOverlayWindowSize(HWND hwnd) {
     g_appliedBackgroundEnabled = settings.backgroundEnabled;
     g_appliedBackgroundCornerRadius = settings.backgroundCornerRadius;
 
+    UINT geometryFlags = SWP_NOACTIVATE;
+    if (!alwaysOnTopChanged) {
+        geometryFlags |= SWP_NOZORDER;
+    }
+
     SetWindowPos(
         hwnd,
         GetOverlayInsertAfter(),
@@ -1768,7 +1730,7 @@ void ApplyOverlayWindowSize(HWND hwnd) {
         settings.y,
         Scaled(settings.width),
         Scaled(settings.height),
-        SWP_NOACTIVATE
+        geometryFlags
     );
 
     UpdateWindowRegion(hwnd);
@@ -1866,7 +1828,13 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             return 0;
         }
 
-        case WM_DISPLAYCHANGE:
+        case WM_DISPLAYCHANGE: {
+            UINT actualDpi = GetDpiForWindow(hwnd);
+            if (actualDpi != 0 && actualDpi != g_dpi) {
+                g_dpi = actualDpi;
+                RecreateFont();
+            }
+
             ClampOverlayPositionToMonitor();
 
             g_appliedX = INT_MIN;
@@ -1877,6 +1845,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             ApplyOverlayWindowSize(hwnd);
             InvalidateRect(hwnd, nullptr, TRUE);
             return 0;
+        }
 
         case WM_PAINT: {
             PAINTSTRUCT ps;
@@ -2068,6 +2037,8 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
             LoadSettings();
 
+            RefreshCachedRegistryValues();
+            UpdateAutoHeight(hwnd);
             ClampOverlayPositionToMonitor();
 
             g_appliedX = INT_MIN;
@@ -2083,8 +2054,6 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             UpdateClickThroughState(hwnd);
             KillTimer(hwnd, g_timerId);
             SetTimer(hwnd, g_timerId, settings.refreshIntervalMs, nullptr);
-
-            RefreshCachedRegistryValues();
 
             InvalidateRect(hwnd, nullptr, TRUE);
             return 0;
@@ -2110,60 +2079,66 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-UINT GetToggleHotkeyModifiers() {
+UINT ComputeHotkeyModifiers(bool ctrl, bool alt, bool shift) {
     UINT modifiers = MOD_NOREPEAT;
-
-    if (settings.toggleHotkeyCtrl)
-        modifiers |= MOD_CONTROL;
-
-    if (settings.toggleHotkeyAlt)
-        modifiers |= MOD_ALT;
-
-    if (settings.toggleHotkeyShift)
-        modifiers |= MOD_SHIFT;
-
+    if (ctrl) modifiers |= MOD_CONTROL;
+    if (alt) modifiers |= MOD_ALT;
+    if (shift) modifiers |= MOD_SHIFT;
     return modifiers;
 }
 
-UINT GetToggleHotkeyVk() {
-    if (settings.toggleHotkeyKey.empty())
-        return 'H';
+UINT ComputeHotkeyVk(const std::wstring& key, wchar_t fallback) {
+    if (key.empty())
+        return (UINT)fallback;
 
-    wchar_t ch = settings.toggleHotkeyKey[0];
-
+    wchar_t ch = key[0];
     if (ch >= L'a' && ch <= L'z')
         ch = ch - L'a' + L'A';
-
     if (ch >= L'A' && ch <= L'Z')
         return (UINT)ch;
-
     if (ch >= L'0' && ch <= L'9')
         return (UINT)ch;
 
-    return 'H';
+    return (UINT)fallback;
 }
 
 bool HasHotkeyModifier(UINT modifiers) {
     return (modifiers & (MOD_CONTROL | MOD_ALT | MOD_SHIFT)) != 0;
 }
 
-void RegisterToggleHotkey(HWND hwnd) {
-    UnregisterHotKey(hwnd, HOTKEY_TOGGLE_OVERLAY);
+bool RegisterAppHotkey(
+    HWND hwnd,
+    int hotkeyId,
+    bool enabled,
+    UINT modifiers,
+    UINT vk,
+    const wchar_t* label
+) {
+    UnregisterHotKey(hwnd, hotkeyId);
 
-    if (!settings.enableToggleHotkey)
-        return;
-
-    UINT modifiers = GetToggleHotkeyModifiers();
-    UINT vk = GetToggleHotkeyVk();
+    if (!enabled)
+        return true;
 
     if (!HasHotkeyModifier(modifiers)) {
-        Wh_Log(L"Toggle hotkey needs at least one modifier; not registering");
-        return;
+        Wh_Log(L"%s hotkey needs at least one modifier; not registering", label);
+        return false;
     }
 
-    if (!RegisterHotKey(hwnd, HOTKEY_TOGGLE_OVERLAY, modifiers, vk)) {
-        Wh_Log(L"Failed to register toggle hotkey");
+    if (!RegisterHotKey(hwnd, hotkeyId, modifiers, vk)) {
+        Wh_Log(L"Failed to register %s hotkey: %u", label, GetLastError());
+        return false;
     }
+
+    return true;
+}
+
+void RegisterToggleHotkey(HWND hwnd) {
+    RegisterAppHotkey(
+        hwnd, HOTKEY_TOGGLE_OVERLAY, settings.enableToggleHotkey,
+        ComputeHotkeyModifiers(settings.toggleHotkeyCtrl, settings.toggleHotkeyAlt, settings.toggleHotkeyShift),
+        ComputeHotkeyVk(settings.toggleHotkeyKey, L'H'),
+        L"Toggle"
+    );
 }
 
 void ToggleOverlayVisibility(HWND hwnd) {
@@ -2181,108 +2156,22 @@ void ToggleOverlayVisibility(HWND hwnd) {
     }
 }
 
-UINT GetDragHotkeyModifiers() {
-    UINT modifiers = MOD_NOREPEAT;
-
-    if (settings.dragHotkeyCtrl)
-        modifiers |= MOD_CONTROL;
-
-    if (settings.dragHotkeyAlt)
-        modifiers |= MOD_ALT;
-
-    if (settings.dragHotkeyShift)
-        modifiers |= MOD_SHIFT;
-
-    return modifiers;
-}
-
-UINT GetDragHotkeyVk() {
-    if (settings.dragHotkeyKey.empty())
-        return 'D';
-
-    wchar_t ch = settings.dragHotkeyKey[0];
-
-    if (ch >= L'a' && ch <= L'z')
-        ch = ch - L'a' + L'A';
-
-    if (ch >= L'A' && ch <= L'Z')
-        return (UINT)ch;
-
-    if (ch >= L'0' && ch <= L'9')
-        return (UINT)ch;
-
-    return 'D';
-}
-
 void RegisterDragHotkey(HWND hwnd) {
-    UnregisterHotKey(hwnd, HOTKEY_DRAG_MODE);
-
-    if (!settings.enableDragHotkey)
-        return;
-
-    UINT modifiers = GetDragHotkeyModifiers();
-    UINT vk = GetDragHotkeyVk();
-
-    if (!HasHotkeyModifier(modifiers)) {
-        Wh_Log(L"Drag hotkey needs at least one modifier; not registering");
-        return;
-    }
-
-    if (!RegisterHotKey(hwnd, HOTKEY_DRAG_MODE, modifiers, vk)) {
-        Wh_Log(L"Failed to register drag hotkey");
-    }
-}
-
-UINT GetExportHotkeyModifiers() {
-    UINT modifiers = MOD_NOREPEAT;
-
-    if (settings.exportHotkeyCtrl)
-        modifiers |= MOD_CONTROL;
-
-    if (settings.exportHotkeyAlt)
-        modifiers |= MOD_ALT;
-
-    if (settings.exportHotkeyShift)
-        modifiers |= MOD_SHIFT;
-
-    return modifiers;
-}
-
-UINT GetExportHotkeyVk() {
-    if (settings.exportHotkeyKey.empty())
-        return 'R';
-
-    wchar_t ch = settings.exportHotkeyKey[0];
-
-    if (ch >= L'a' && ch <= L'z')
-        ch = ch - L'a' + L'A';
-
-    if (ch >= L'A' && ch <= L'Z')
-        return (UINT)ch;
-
-    if (ch >= L'0' && ch <= L'9')
-        return (UINT)ch;
-
-    return 'R';
+    RegisterAppHotkey(
+        hwnd, HOTKEY_DRAG_MODE, settings.enableDragHotkey,
+        ComputeHotkeyModifiers(settings.dragHotkeyCtrl, settings.dragHotkeyAlt, settings.dragHotkeyShift),
+        ComputeHotkeyVk(settings.dragHotkeyKey, L'D'),
+        L"Drag"
+    );
 }
 
 void RegisterExportHotkey(HWND hwnd) {
-    UnregisterHotKey(hwnd, HOTKEY_EXPORT_REGISTRY);
-
-    if (!settings.enableExportHotkey)
-        return;
-
-    UINT modifiers = GetExportHotkeyModifiers();
-    UINT vk = GetExportHotkeyVk();
-
-    if (!HasHotkeyModifier(modifiers)) {
-        Wh_Log(L"Registry export hotkey needs at least one modifier; not registering");
-        return;
-    }
-
-    if (!RegisterHotKey(hwnd, HOTKEY_EXPORT_REGISTRY, modifiers, vk)) {
-        Wh_Log(L"Failed to register registry export hotkey");
-    }
+    RegisterAppHotkey(
+        hwnd, HOTKEY_EXPORT_REGISTRY, settings.enableExportHotkey,
+        ComputeHotkeyModifiers(settings.exportHotkeyCtrl, settings.exportHotkeyAlt, settings.exportHotkeyShift),
+        ComputeHotkeyVk(settings.exportHotkeyKey, L'R'),
+        L"Registry export"
+    );
 }
 
 void UpdateClickThroughState(HWND hwnd) {
@@ -2306,7 +2195,7 @@ void UpdateClickThroughState(HWND hwnd) {
         0,
         0,
         0,
-        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED
     );
 }
 
@@ -2813,8 +2702,8 @@ async function copyRows() {
         document.execCommand('copy');
     }
 
-    document.getElementById('status').textContent =
-        'Copied Rows YAML for ' + document.getElementById('rowCount').textContent + ' sensors to clipboard. Paste it into this mod\'s Rows setting via Windhawk\'s textual settings editor.';
+document.getElementById('status').textContent =
+    'Copied Rows YAML for ' + document.getElementById('rowCount').textContent + ' sensors to clipboard. Replace only the existing rows: section in Windhawk\\'s textual settings editor. Do not replace the whole settings document.';
 }
 
 window.addEventListener('DOMContentLoaded', rebuildRows);
@@ -2825,8 +2714,9 @@ window.addEventListener('DOMContentLoaded', rebuildRows);
 <h1>HWiNFO Registry Reader - Windhawk Export</h1>
 
 <div class="info">
-    Select the sensors you want, then copy the YAML below and paste it into this mod's
-    settings using Windhawk's textual settings editor (the "Rows" array setting).
+    Select the sensors you want, then copy the YAML below.
+    Replace only the existing <code>rows:</code> section in this mod's textual settings editor.
+    Do not replace the whole settings document.
     <br>
     <span class="small">This is the raw settings-value YAML for the Rows array, not the mod's settings schema.</span>
 </div>
@@ -2995,7 +2885,7 @@ void ExportRegistryHtml() {
             L"Please enable at least one sensor in:\n"
             L"HWiNFO Sensors -> Configure Sensors -> HWiNFO Gadget -> Report value in Gadget",
             L"HWiNFO Registry Export",
-            MB_OK | MB_ICONINFORMATION
+            MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND | MB_TOPMOST
         );
 
         html = BuildNoRegistryRowsHtml();
@@ -3015,7 +2905,7 @@ void ExportRegistryHtml() {
             nullptr,
             message.c_str(),
             L"HWiNFO Registry Export",
-            MB_OK | MB_ICONERROR
+            MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST
         );
 
         return;
@@ -3052,6 +2942,10 @@ void ClampOverlayPositionToMonitor() {
         settings.y + Scaled(settings.height)
     };
 
+    if (MonitorFromRect(&testRect, MONITOR_DEFAULTTONULL)) {
+        return;
+    }
+
     HMONITOR monitor = MonitorFromRect(&testRect, MONITOR_DEFAULTTONEAREST);
 
     MONITORINFO monitorInfo = {};
@@ -3061,22 +2955,22 @@ void ClampOverlayPositionToMonitor() {
         return;
     }
 
-    const RECT& work = monitorInfo.rcWork;
+    const RECT& mon = monitorInfo.rcMonitor;
 
     int width = Scaled(settings.width);
     int height = Scaled(settings.height);
 
-    if (settings.x < work.left) {
-        settings.x = work.left;
+    if (settings.x < mon.left) {
+        settings.x = mon.left;
     }
-    if (settings.y < work.top) {
-        settings.y = work.top;
+    if (settings.y < mon.top) {
+        settings.y = mon.top;
     }
-    if (settings.x + width > work.right) {
-        settings.x = std::max(work.left, work.right - width);
+    if (settings.x + width > mon.right) {
+        settings.x = std::max(mon.left, mon.right - width);
     }
-    if (settings.y + height > work.bottom) {
-        settings.y = std::max(work.top, work.bottom - height);
+    if (settings.y + height > mon.bottom) {
+        settings.y = std::max(mon.top, mon.bottom - height);
     }
 }
 
@@ -3188,6 +3082,10 @@ bool CreateOverlayWindow() {
 
     SetTimer(g_hwnd, g_timerId, settings.refreshIntervalMs, nullptr);
 
+    if (InterlockedExchange(&g_pendingSettingsReload, 0) != 0) {
+        PostMessageW(g_hwnd, WM_APP_SETTINGS_CHANGED, 0, 0);
+    }
+
     return true;
 }
 
@@ -3265,10 +3163,11 @@ BOOL WhTool_ModInit() {
 void WhTool_ModSettingsChanged() {
     Wh_Log(L"SettingsChanged");
 
-    if (g_hwnd) {
-        PostMessageW(g_hwnd, WM_APP_SETTINGS_CHANGED, 0, 0);
+    HWND hwnd = g_hwnd;
+    if (hwnd) {
+        PostMessageW(hwnd, WM_APP_SETTINGS_CHANGED, 0, 0);
     } else {
-        LoadSettings();
+        InterlockedExchange(&g_pendingSettingsReload, 1);
     }
 }
 
