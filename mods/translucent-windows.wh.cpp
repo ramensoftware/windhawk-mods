@@ -862,32 +862,32 @@ VOID GenerateTextAlphaGammaLUT()
 
 BOOL ExtTextOutBkPaint(HDC hdc, LPCRECT lprect, UINT options)
 {
-    if ((options & ETO_OPAQUE) && lprect) 
+    if (!(options & ETO_OPAQUE)) 
+        return TRUE;
+        
+    // Make opaque highlighted text background rectangle
+    if (GetBkColor(hdc) == GetSysColor(COLOR_HIGHLIGHT)) 
     {
-        if (RECTWIDTH(lprect) <= 0 || RECTHEIGHT(lprect) <= 0)
+        BP_PAINTPARAMS params = { sizeof(BP_PAINTPARAMS) };
+        HDC memDC = nullptr;
+        HPAINTBUFFER hpb = BeginBufferedPaint(hdc, lprect, BPBF_TOPDOWNDIB, &params, &memDC); 
+        if (!hpb) {
+            Wh_Log(L"Failed BeginBufferedPaint error:0x%08x", GetLastError());
             return FALSE;
-
-        // Make opaque highlighted text background rectangle
-        if (GetBkColor(hdc) == GetSysColor(COLOR_HIGHLIGHT)) 
-        {
-            BP_PAINTPARAMS params = { sizeof(BP_PAINTPARAMS) };
-            HDC memDC = nullptr;
-            HPAINTBUFFER hpb = BeginBufferedPaint(hdc, lprect, BPBF_TOPDOWNDIB, &params, &memDC); 
-            if (!hpb) {
-                Wh_Log(L"Failed BeginBufferedPaint error:0x%08x", GetLastError());
-                return FALSE;
-            }
-
-            FillRect(memDC, lprect, GetSysColorBrush(COLOR_HIGHLIGHT));
-            BufferedPaintMakeOpaque(hpb, lprect);
-
-            EndBufferedPaint(hpb, TRUE);
         }
-        else {
-            HBRUSH brush = CreateSolidBrush(GetBkColor(hdc));
-            FillRect(hdc, lprect, brush);
-            DeleteObject(brush);
+
+        FillRect(memDC, lprect, GetSysColorBrush(COLOR_HIGHLIGHT));
+        BufferedPaintMakeOpaque(hpb, lprect);
+
+        if (FAILED(EndBufferedPaint(hpb, TRUE))) {
+            Wh_Log(L"EndBufferedPaint failed error:0x%08x", GetLastError());
+            return FALSE;
         }
+    }
+    else {
+        HBRUSH brush = CreateSolidBrush(GetBkColor(hdc));
+        FillRect(hdc, lprect, brush);
+        DeleteObject(brush);
     }
     return TRUE;
 }
@@ -985,14 +985,11 @@ static INT ExtTextOutDxWidth(UINT options, const INT* lpDx, UINT c)
 
 // Calculate text boundaries
 BOOL ExtTextOutCalcRect(HDC hdc, POINT point, UINT options, RECT& textRect, LPCRECT lprect, LPCWSTR lpString, UINT c, const INT* lpDx)
-{
-    UINT ta = GetTextAlign(hdc);
-    if (ta == GDI_ERROR || (ta & TA_UPDATECP))
-        return FALSE;
-
+{   
     SIZE textSize = {0};
+    UINT ta = GetTextAlign(hdc);
 
-    if (lprect)
+    if (lprect && !IsRectEmpty(lprect))
         textRect = *lprect;
     else if (options & ETO_GLYPH_INDEX && GetTextExtentPointI(hdc, (WORD*)lpString, c, &textSize))
     {
@@ -1001,7 +998,7 @@ BOOL ExtTextOutCalcRect(HDC hdc, POINT point, UINT options, RECT& textRect, LPCR
         if (!ExtTextOutAlignRect(hdc, point, textSize, textRect, ta))
             return FALSE;
     }
-    else if (options && GetTextExtentPoint32W(hdc, lpString, c, &textSize))
+    else if (GetTextExtentPoint32W(hdc, lpString, c, &textSize))
     {
         if (lpDx)
             textSize.cx = ExtTextOutDxWidth(options, lpDx, c);
@@ -1010,11 +1007,25 @@ BOOL ExtTextOutCalcRect(HDC hdc, POINT point, UINT options, RECT& textRect, LPCR
     }
     else
         return FALSE;
-    
-    if (RECTWIDTH(&textRect) <= 0 || RECTHEIGHT(&textRect) <= 0)
+
+    if (IsRectEmpty(&textRect))
         return FALSE;
 
     return TRUE;
+}
+
+BOOL ExtTextOutShouldSkip(HDC hdc, UINT options, LPCRECT lprect, LPCWSTR lpString, INT c)
+{
+    BOOL filtered = FALSE;
+
+    if (!hdc || !lpString || !c || !options || GetTextAlign(hdc) & TA_UPDATECP)
+        filtered = TRUE;
+    
+    if (options & (ETO_OPAQUE | ETO_CLIPPED))
+        if (!lprect || IsRectEmpty(lprect))
+            filtered = TRUE;
+    
+    return filtered;
 }
 
 BOOL WINAPI HookedExtTextOutW(
@@ -1026,23 +1037,23 @@ BOOL WINAPI HookedExtTextOutW(
     LPCWSTR lpString,
     UINT c,
     const INT* lpDx)
-{
-    if (!hdc || !lpString || !c)
+{   
+    if (ExtTextOutShouldSkip(hdc, options, lprect, lpString, c))
+        return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
+
+    RECT textRect {0};
+    if (!ExtTextOutCalcRect(hdc, {x, y}, options, textRect, lprect, lpString, c, lpDx))
         return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
 
     if (!ExtTextOutBkPaint(hdc, lprect, options))
         return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
-    
-    RECT textRect {0};
-    if (!ExtTextOutCalcRect(hdc, {x, y}, options, textRect, lprect, lpString, c, lpDx))
-        return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
-        
+            
     // https://devblogs.microsoft.com/oldnewthing/20110520-00/?p=10613
     BP_PAINTPARAMS params = { sizeof(BP_PAINTPARAMS) };
-    params.dwFlags = (options & ETO_CLIPPED) ? BPPF_ERASE : BPPF_NOCLIP | BPPF_ERASE;
+    params.dwFlags = BPPF_NOCLIP | BPPF_ERASE;
     BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
     params.pBlendFunction = &blend;
-    
+
     HDC memDC = nullptr;
     // Acquire OS cached bitmap
     HPAINTBUFFER hpb = BeginBufferedPaint(hdc, &textRect, BPBF_TOPDOWNDIB, &params, &memDC);
@@ -1059,9 +1070,7 @@ BOOL WINAPI HookedExtTextOutW(
     SetTextColor(memDC, RGB(255, 255, 255)); // White text mask
 
     // Remove default background painting operation, as it done by our ExtTextOutBkPaint helper
-    // Remove clipping as it is done by the BeginBufferedPaint API
-    options &= (options & ETO_CLIPPED) ? ~(ETO_CLIPPED | ETO_OPAQUE) : ~ETO_OPAQUE;
-    WINBOOL res = ExtTextOutW_orig(memDC, x, y, options, lprect, lpString, c, lpDx);
+    WINBOOL res = ExtTextOutW_orig(memDC, x, y, options & ~ETO_OPAQUE, lprect, lpString, c, lpDx);
 
     // Text greyscale alpha composition
     if (!ExtTextOutComposition(hdc, hpb, &textRect))
