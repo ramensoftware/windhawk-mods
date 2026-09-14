@@ -2294,15 +2294,11 @@ static std::wstring GetElementSelector(wux::DependencyObject const& object) {
     return selector;
 }
 
-static bool IsModLoggingEnabled() {
-    return InternalWh_IsLogEnabled(InternalWhModPtr);
-}
-
 static void DumpInjectedButtonVisualPaths(wux::DependencyObject const& root,
                                           std::wstring const& path,
                                           int depth = 0,
                                           int maxDepth = 5) {
-    if (!IsModLoggingEnabled() || !root || depth > maxDepth) {
+    if (!root || depth > maxDepth) {
         return;
     }
 
@@ -2326,7 +2322,7 @@ static void DumpInjectedButtonVisualPaths(wux::DependencyObject const& root,
 }
 
 static void DumpInjectedButtonDiagnostics(wux::FrameworkElement const& button) {
-    if (!IsModLoggingEnabled() || !button) {
+    if (!button) {
         return;
     }
 
@@ -2336,7 +2332,7 @@ static void DumpInjectedButtonDiagnostics(wux::FrameworkElement const& button) {
 }
 
 static void LogVisualStateGroups(wux::FrameworkElement const& root) {
-    if (!IsModLoggingEnabled() || !root) {
+    if (!root) {
         return;
     }
 
@@ -5828,8 +5824,6 @@ static wux::FrameworkElement CreateTrayButton(ButtonKind kind,
                 ApplyTrayButtonMetrics(button);
                 CenterNativeOmniButtonItemHost(button);
                 ApplyHoverBackgroundMetrics(button);
-                DumpInjectedButtonDiagnostics(button);
-                LogVisualStateGroups(button);
             }
         });
         g_uiEventRevokers.push_back([weakSource = winrt::make_weak(eventSource), eventToken] {
