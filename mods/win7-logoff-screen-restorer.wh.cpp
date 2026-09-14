@@ -7,9 +7,6 @@
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
 // @include        StartMenuExperienceHost.exe
-// @include        ShellExperienceHost.exe
-// @include        ShellHost.exe
-// @include        SearchHost.exe
 // @include        Taskmgr.exe
 // @architecture   x86-64
 // @compilerOptions -luser32 -lgdi32 -lmsimg32 -lpsapi -lshell32 -ldwmapi -ladvapi32
@@ -47,7 +44,7 @@ The mod has been tested on Windows 10 21H2, Windows 11 24H2, and Windows 11 25H2
 
 ## Try it without logging off
 
-To try the mod without logging off, it is recommended to press `Ctrl+Alt+Shift+L` any time (while the mod is enabled) to preview the screen. You can change or disable this shortcut in settings. `Win+L` can't be used — Windows reserves it for locking the PC.
+To try the mod without logging off, it is recommended to press `Ctrl+Alt+Shift+L` any time to preview the screen. You can change or disable this shortcut in settings. `Win+L` can't be used — Windows reserves it for locking the PC.
 
 ---
 
@@ -61,14 +58,14 @@ To try the mod without logging off, it is recommended to press `Ctrl+Alt+Shift+L
 
 - If the screen is ever left open too long, the mod closes it automatically after 60 seconds and lets the logoff/shutdown continue and it never forces programs to close on its own and never destroys unsaved work.
 - The mod only shows a visual screen and it doesn't touch any system files or settings, and doesn't write anything to the registry.
-- Turning the mod off (from Windhawk or from its own settings) removes it completely.
+- Turning the mod off from Windhawk removes it completely.
 
 ---
 
 ## Good to know
 
 - This only catches shutdowns started the normal way (Start menu, Alt+F4, Task Manager, etc.). It won't appear for shutdowns triggered directly by Windows internals or by another program/service.
-- If clicking Shut Down from the Start menu doesn't show the screen, make sure `StartMenuExperienceHost.exe` isn't excluded in Windhawk's process list.
+- If clicking Shut Down or Sign out from the Start menu doesn't show the screen, make sure `StartMenuExperienceHost.exe` isn't excluded in Windhawk's process list.
 - This screen is a visual step before shutdown, not a security screen — it doesn't replace the Windows lock/login screen.
 - "Force log off" only force-closes programs that have actually stopped responding. A program that's still running but has unsaved work is left alone, exactly like in the original Windows 7 behavior, so unsaved work should never be lost.
 
@@ -85,12 +82,6 @@ For any suggestions or problems it is recommended to contact the author of this 
 
 // ==WindhawkModSettings==
 /*
-- enabled: true
-  $name: Enable the custom screen
-  $description: >-
-    This setting turns the custom screen created by the mod on or off. This setting takes effect
-    immediately, dismissing a screen already showing. This setting, when off,
-    leaves log off, shut down and restart unchanged from stock Windows.
 - skin: win7
   $name: Skin
   $description: >-
@@ -358,13 +349,6 @@ static const Skin kSkinVista = {
 
 static const Skin* g_skin = &kSkinWin7;
 
-// Master switch. When false the mod keeps its hooks installed but never shows
-// the screen, so every shutdown path behaves exactly as it would without the
-// mod. Kept as a plain bool read from the settings rather than by unhooking,
-// because unhooking and re-hooking on every Save would be far riskier than
-// one branch on a path that runs at most once per shutdown.
-static bool g_enabled = true;
-
 // Read on the UI thread, when the screen is about to be shown (and again on
 // every settings Save), so switching the setting in Windhawk takes effect on
 // the next screen without a reload. Empty means "follow the Windows user
@@ -390,8 +374,6 @@ static void LoadSkinSetting() {
         if (_wcsicmp(value, L"vista") == 0) g_skin = &kSkinVista;
         Wh_FreeStringSetting(value);
     }
-
-    g_enabled = Wh_GetIntSetting(L"enabled") != 0;
 
     g_forcedLocale[0] = L'\0';
     PCWSTR lang = Wh_GetStringSetting(L"language");
@@ -1831,11 +1813,6 @@ static void ShowScreenOnUiThread(ShutdownRequest* req, ActionKind action) {
     HANDLE replyEvent = req ? req->reply : nullptr;
     // Re-read every setting on the thread that consumes it.
     LoadSkinSetting();
-    if (!g_enabled) {
-        if (req) { req->force = false; req->proceed = true; }
-        if (replyEvent) SetEvent(replyEvent);
-        return;
-    }
 
     if (req) { req->force = false; req->proceed = false; }
     g_action = action;
@@ -2357,7 +2334,7 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
     case WM_HOTKEY:
-        if (wp == kHotkeyId && !g_dialog && g_enabled) {
+        if (wp == kHotkeyId && !g_dialog) {
             // Preview only: pass nullptr for the request, so WM_DESTROY finds
             // nothing to signal (nothing is waiting on it). With no program
             // open the screen skips itself like a real logoff.
@@ -2377,16 +2354,8 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         LoadSkinSetting();
         ApplyHotkey();   // re-registration picks up the changed shortcut
         if (g_dialog) {
-            if (!g_enabled) {
-                // Turned off while the screen was up: dismiss it and let the
-                // pending action continue unforced, as if never intercepted.
-                if (auto* req = reinterpret_cast<ShutdownRequest*>(GetWindowLongPtrW(g_dialog, GWLP_USERDATA)))
-                    { req->force = false; req->proceed = true; }
-                DestroyWindow(g_dialog);
-            } else {
-                RebuildBackdrop();   // re-bake the veil if the skin changed
-                InvalidateRect(g_dialog, nullptr, TRUE);
-            }
+            RebuildBackdrop();   // re-bake the veil if the skin changed
+            InvalidateRect(g_dialog, nullptr, TRUE);
         }
         return 0;
     // WM_APP_QUITUI used to be handled here as a window message posted to
@@ -2626,6 +2595,12 @@ static bool ShowWin7LogoffDialog(UINT flags, DWORD reason, bool* outForce) {
 
 static BOOL WINAPI ExitWindowsEx_Hook(UINT flags, DWORD reason) {
     InFlightHook guard;
+    // TEMP DIAGNOSTIC: remove after finding which process handles OpenShell sign-out.
+    {
+        wchar_t exePath[MAX_PATH]{};
+        GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath));
+        Wh_Log(L"ExitWindowsEx_Hook called in %s, flags=0x%X", exePath, flags);
+    }
     try {
         if (!ExitWindowsEx_Original) return FALSE;
         if (g_insideHook) return ExitWindowsEx_Original(flags, reason);
@@ -2649,6 +2624,12 @@ static DWORD WINAPI InitiateShutdownW_Hook(LPWSTR machineName, LPWSTR message,
                                            DWORD gracePeriod, DWORD shutdownFlags,
                                            DWORD reason) {
     InFlightHook guard;
+    // TEMP DIAGNOSTIC: remove after finding which process handles OpenShell sign-out.
+    {
+        wchar_t exePath[MAX_PATH]{};
+        GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath));
+        Wh_Log(L"InitiateShutdownW_Hook called in %s, shutdownFlags=0x%X", exePath, shutdownFlags);
+    }
     try {
         if (!InitiateShutdownW_Original) return ERROR_PROC_NOT_FOUND;
         // Only local, interactive requests get the screen. A remote shutdown or a
@@ -2801,6 +2782,9 @@ BOOL Wh_ModInit() {
     if (g_isExplorer && !StartUiThread()) {
         Wh_Log(L"UI thread unavailable; the mod will stay out of the way");
     }
+
+    // TEMP DIAGNOSTIC: remove together with the other TEMP DIAGNOSTIC blocks.
+    Wh_Log(L"Mod loaded successfully in %s", exePath);
 
     return TRUE;
 }
