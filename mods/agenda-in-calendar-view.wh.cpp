@@ -49,42 +49,33 @@ Checking events on other dates:
 
 
 ## Notes
-- Supports recurring events (daily, weekly, monthly, yearly, including `BYDAY`
-ordinals such as "third Thursday" / `3TH` or "second Tuesday" / `2TU`,
-`BYMONTHDAY`, `WKST`, `EXDATE`, `RECURRENCE-ID`, and multi-day recurring
-events).
+- Supports recurring events (daily, weekly, monthly, yearly, including `BYDAY` ordinals such as "third Thursday" / `3TH` or "second Tuesday" / `2TU`, `BYMONTHDAY`, `WKST`, `EXDATE`, `RECURRENCE-ID`, and multi-day recurring events).
 - Events are refreshed every time the notification pane is opened.
-    - If events can't be fetched (e.g. no internet connection),
-previously-fetched events are shown.
-    - Smart caching avoids redundant fetches within the configured minimum fetch
-interval.
-    - You can click the Refresh button in the calendar header at any time to
-force an immediate refresh.
+    - If events can't be fetched (e.g. no internet connection), previously-fetched events are shown.
+    - Smart caching avoids redundant fetches within the configured minimum fetch interval.
+    - You can click the Refresh button in the calendar header at any time to force an immediate refresh.
 - The mod resiliently accepts errors; if you have a problem, enable logging.
 - Injection logic has been ported from m417z's *Start Menu Styler*.
 - The creation of this mod was assisted by AI:
     - Sadly, I do not have experience with C++/Windhawk;
-    - However, I do have experience with WinUI (as I have created several WinUI
-apps in C#);
-    - As a result, the controls used *(inc. CalendarDatePicker, Border, Grid,
-TextBlock)* were manually structured, but the underlying implementation was
-generated using AI.
+    - However, I do have experience with WinUI (as I have created several WinUI apps in C#);
+    - As a result, the controls used *(inc. CalendarDatePicker, Border, Grid, TextBlock)* were manually structured, but the underlying implementation was generated using AI.
 
 
 ## FAQ
-* **My local `.ics` file gives an access error (`CreateFileW failed 5`)!**
-  Windows `ShellExperienceHost` runs inside an AppContainer sandbox. Grant read
-permissions to AppContainer packages by running: `icacls
-"C:\path\to\calendar.ics" /grant "*S-1-15-2-1:(R)"` in PowerShell, or place the
-file in an accessible directory like `C:\ProgramData\`.
-* **My local `.ics` file does not work!**
+* **My local `.ics` file gives an access error (`CreateFileW failed 5`)!**  
+  Windows `ShellExperienceHost` runs inside an AppContainer sandbox. Grant read permissions to AppContainer packages by running:  
+  `icacls "C:\path\to\calendar.ics" /grant "*S-1-15-2-1:(R)"`  
+  in PowerShell, or place the file in an accessible directory like `C:\ProgramData\`.
+* **My local `.ics` file does not work!**  
   Unblock it from its *Properties* pane in File Explorer.
-* **The bottom corners of the *Notifications* pane (immediately above the
-agenda) are not rounded!** Set a maximum height for the Agenda in the mod
-settings to stop it from clipping the *Notifications* pane.
+* **The bottom corners of the *Notifications* pane (immediately above the agenda) are not rounded!**  
+  Set a maximum height for the Agenda in the mod settings to stop it from clipping the *Notifications* pane.
 
 */
 // ==/WindhawkModReadme==
+
+
 
 // ==WindhawkModSettings==
 /*
@@ -92,28 +83,25 @@ settings to stop it from clipping the *Notifications* pane.
   $name: Path to .ics
   $description: |
     Local file path or remote URL to the .ics calendar file.
-    If your local .ics calendar file is not working, make sure it is unblocked
-(in Properties).
+    Make sure it is unblocked in File Explorer Properties.
 - maxHeight: 400
   $name: Max height (in pixels)
   $description: |
-    Maximum visible height of the events list in pixels before the list starts
-to scroll. Set to 0 to disable.
+    Maximum visible height of the events list in pixels before the list starts to scroll.
+    Set to 0 to disable.
 - timeColumnWidth: 65
   $name: Time column width (in pixels)
   $description: |
-    Width of the time column in pixels to keep event titles aligned across
-cards. Set to 0 for automatic width.
+    Width of the time column in pixels to keep event titles aligned across cards.
+    Set to 0 for automatic width.
 - hideFocusSession: true
   $name: Hide Focus Session
-  $description: Hide the Focus Session control in the calendar/notification
-center flyout.
+  $description: Hide the Focus Session control in the calendar/notification center flyout.
 - minFetchInterval: 5
   $name: Minimum time between fetches
   $description: |
-    Minimum time (in minutes) between fetches when opening the notification
-pane. Setting to 0 means .ics is always fetched when the notification pane is
-opened.
+    Minimum time (in minutes) between fetches when opening the notification pane.
+    Setting to 0 means .ics is always fetched when the notification pane is opened.
 */
 // ==/WindhawkModSettings==
 
@@ -241,14 +229,12 @@ inline int CompareDateOnly(const SYSTEMTIME& a, const SYSTEMTIME& b) {
 }
 
 inline int GetDaysInMonth(int year, int month) {
-    static const int days[13] = {0,  31, 28, 31, 30, 31, 30,
-                                 31, 31, 30, 31, 30, 31};
+    static const int days[13] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
     if (month == 2) {
         bool isLeap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
         return isLeap ? 29 : 28;
     }
-    if (month >= 1 && month <= 12)
-        return days[month];
+    if (month >= 1 && month <= 12) return days[month];
     return 30;
 }
 
@@ -297,13 +283,17 @@ inline SYSTEMTIME ToLocal(const SYSTEMTIME& stUtc, bool isUtc) {
     return stUtc;
 }
 
-enum class RecurrenceFreq { None, Daily, Weekly, Monthly, Yearly };
+enum class RecurrenceFreq {
+    None,
+    Daily,
+    Weekly,
+    Monthly,
+    Yearly
+};
 
 struct ByDayItem {
-    int ord =
-        0;  // 0 = every; +1 = 1st, +2 = 2nd, -1 = last, -2 = 2nd-to-last, etc.
-    int dayOfWeek =
-        0;  // 0 = Sun, 1 = Mon, ..., 6 = Sat (matching SYSTEMTIME wDayOfWeek)
+    int ord = 0;        // 0 = every; +1 = 1st, +2 = 2nd, -1 = last, -2 = 2nd-to-last, etc.
+    int dayOfWeek = 0;  // 0 = Sun, 1 = Mon, ..., 6 = Sat (matching SYSTEMTIME wDayOfWeek)
 };
 
 struct RecurrenceRule {
@@ -315,8 +305,7 @@ struct RecurrenceRule {
     uint8_t byDayMask = 0;  // bit 0 = Sun, 1 = Mon, ..., 6 = Sat
     std::vector<ByDayItem> byDays;
     std::vector<int> byMonthDays;
-    int wkst =
-        1;  // 0 = Sun, 1 = Mon, ..., 6 = Sat (RFC 5545 default: 1 = Monday)
+    int wkst = 1; // 0 = Sun, 1 = Mon, ..., 6 = Sat (RFC 5545 default: 1 = Monday)
 };
 
 struct CalendarEvent {
@@ -360,9 +349,7 @@ inline int SafeParseIntW(const std::wstring& s, size_t pos, size_t len) {
     return val;
 }
 
-inline bool ParseIcsDateTimeW(const std::wstring& val,
-                              SYSTEMTIME& st,
-                              bool& isUtc) {
+inline bool ParseIcsDateTimeW(const std::wstring& val, SYSTEMTIME& st, bool& isUtc) {
     ZeroMemory(&st, sizeof(st));
     isUtc = false;
     bool hasTime = false;
@@ -384,9 +371,7 @@ inline bool ParseIcsDateTimeW(const std::wstring& val,
     return hasTime;
 }
 
-inline bool MatchesRecurrenceId(const std::wstring& recId,
-                                const SYSTEMTIME& tDate,
-                                const std::wstring& targetYmd) {
+inline bool MatchesRecurrenceId(const std::wstring& recId, const SYSTEMTIME& tDate, const std::wstring& targetYmd) {
     if (recId.find(targetYmd) != std::wstring::npos) {
         return true;
     }
@@ -394,17 +379,14 @@ inline bool MatchesRecurrenceId(const std::wstring& recId,
     bool isUtc = false;
     if (ParseIcsDateTimeW(recId, stRec, isUtc)) {
         SYSTEMTIME localRec = isUtc ? ToLocal(stRec, true) : stRec;
-        if (localRec.wYear == tDate.wYear && localRec.wMonth == tDate.wMonth &&
-            localRec.wDay == tDate.wDay) {
+        if (localRec.wYear == tDate.wYear && localRec.wMonth == tDate.wMonth && localRec.wDay == tDate.wDay) {
             return true;
         }
     }
     return false;
 }
 
-inline bool MatchesExDate(const std::wstring& exDateStr,
-                          const SYSTEMTIME& tDate,
-                          const std::wstring& targetYmd) {
+inline bool MatchesExDate(const std::wstring& exDateStr, const SYSTEMTIME& tDate, const std::wstring& targetYmd) {
     if (exDateStr.find(targetYmd) != std::wstring::npos) {
         return true;
     }
@@ -412,8 +394,7 @@ inline bool MatchesExDate(const std::wstring& exDateStr,
     bool isUtc = false;
     if (ParseIcsDateTimeW(exDateStr, stEx, isUtc)) {
         SYSTEMTIME localEx = isUtc ? ToLocal(stEx, true) : stEx;
-        if (localEx.wYear == tDate.wYear && localEx.wMonth == tDate.wMonth &&
-            localEx.wDay == tDate.wDay) {
+        if (localEx.wYear == tDate.wYear && localEx.wMonth == tDate.wMonth && localEx.wDay == tDate.wDay) {
             return true;
         }
     }
@@ -439,10 +420,8 @@ inline int ParseUtcOffsetMinutes(const std::wstring& s) {
     if (start + 4 <= offsetStr.size()) {
         if (iswdigit(offsetStr[start]) && iswdigit(offsetStr[start + 1]) &&
             iswdigit(offsetStr[start + 2]) && iswdigit(offsetStr[start + 3])) {
-            int hours =
-                (offsetStr[start] - L'0') * 10 + (offsetStr[start + 1] - L'0');
-            int mins = (offsetStr[start + 2] - L'0') * 10 +
-                       (offsetStr[start + 3] - L'0');
+            int hours = (offsetStr[start] - L'0') * 10 + (offsetStr[start + 1] - L'0');
+            int mins = (offsetStr[start + 2] - L'0') * 10 + (offsetStr[start + 3] - L'0');
             return sign * (hours * 60 + mins);
         }
     }
@@ -456,8 +435,9 @@ inline std::wstring TrimW(const std::wstring& s) {
         start++;
     }
     size_t end = s.size();
-    while (end > start && (s[end - 1] == L' ' || s[end - 1] == L'\t' ||
-                           s[end - 1] == L'\r' || s[end - 1] == L'\n')) {
+    while (end > start &&
+           (s[end - 1] == L' ' || s[end - 1] == L'\t' ||
+            s[end - 1] == L'\r' || s[end - 1] == L'\n')) {
         end--;
     }
     return s.substr(start, end - start);
@@ -469,22 +449,14 @@ inline bool ParseByDayToken(const std::wstring& rawToken, ByDayItem& item) {
         return false;
     std::wstring dayCode = token.substr(token.size() - 2);
     int dow = -1;
-    if (dayCode == L"SU")
-        dow = 0;
-    else if (dayCode == L"MO")
-        dow = 1;
-    else if (dayCode == L"TU")
-        dow = 2;
-    else if (dayCode == L"WE")
-        dow = 3;
-    else if (dayCode == L"TH")
-        dow = 4;
-    else if (dayCode == L"FR")
-        dow = 5;
-    else if (dayCode == L"SA")
-        dow = 6;
-    else
-        return false;
+    if (dayCode == L"SU") dow = 0;
+    else if (dayCode == L"MO") dow = 1;
+    else if (dayCode == L"TU") dow = 2;
+    else if (dayCode == L"WE") dow = 3;
+    else if (dayCode == L"TH") dow = 4;
+    else if (dayCode == L"FR") dow = 5;
+    else if (dayCode == L"SA") dow = 6;
+    else return false;
 
     item.dayOfWeek = dow;
     item.ord = 0;
@@ -511,28 +483,15 @@ inline RecurrenceRule ParseRRule(const std::wstring& rruleStr) {
         std::wstring val = part.substr(eq + 1);
 
         if (key == L"FREQ") {
-            if (val == L"DAILY")
-                rule.freq = RecurrenceFreq::Daily;
-            else if (val == L"WEEKLY")
-                rule.freq = RecurrenceFreq::Weekly;
-            else if (val == L"MONTHLY")
-                rule.freq = RecurrenceFreq::Monthly;
-            else if (val == L"YEARLY")
-                rule.freq = RecurrenceFreq::Yearly;
+            if (val == L"DAILY") rule.freq = RecurrenceFreq::Daily;
+            else if (val == L"WEEKLY") rule.freq = RecurrenceFreq::Weekly;
+            else if (val == L"MONTHLY") rule.freq = RecurrenceFreq::Monthly;
+            else if (val == L"YEARLY") rule.freq = RecurrenceFreq::Yearly;
         } else if (key == L"INTERVAL") {
-            try {
-                rule.interval = std::stoi(val);
-            } catch (...) {
-                rule.interval = 1;
-            }
-            if (rule.interval <= 0)
-                rule.interval = 1;
+            try { rule.interval = std::stoi(val); } catch (...) { rule.interval = 1; }
+            if (rule.interval <= 0) rule.interval = 1;
         } else if (key == L"COUNT") {
-            try {
-                rule.count = std::stoi(val);
-            } catch (...) {
-                rule.count = 0;
-            }
+            try { rule.count = std::stoi(val); } catch (...) { rule.count = 0; }
         } else if (key == L"UNTIL") {
             bool isUtc = false;
             ParseIcsDateTimeW(val, rule.untilUtc, isUtc);
@@ -562,27 +521,19 @@ inline RecurrenceRule ParseRRule(const std::wstring& rruleStr) {
             }
         } else if (key == L"WKST") {
             std::wstring w = TrimW(val);
-            if (w == L"SU")
-                rule.wkst = 0;
-            else if (w == L"MO")
-                rule.wkst = 1;
-            else if (w == L"TU")
-                rule.wkst = 2;
-            else if (w == L"WE")
-                rule.wkst = 3;
-            else if (w == L"TH")
-                rule.wkst = 4;
-            else if (w == L"FR")
-                rule.wkst = 5;
-            else if (w == L"SA")
-                rule.wkst = 6;
+            if (w == L"SU") rule.wkst = 0;
+            else if (w == L"MO") rule.wkst = 1;
+            else if (w == L"TU") rule.wkst = 2;
+            else if (w == L"WE") rule.wkst = 3;
+            else if (w == L"TH") rule.wkst = 4;
+            else if (w == L"FR") rule.wkst = 5;
+            else if (w == L"SA") rule.wkst = 6;
         }
     }
     return rule;
 }
 
-inline bool EventOccursOnDate(const CalendarEvent& ev,
-                              const SYSTEMTIME& tDate) {
+inline bool EventOccursOnDate(const CalendarEvent& ev, const SYSTEMTIME& tDate) {
     if (ev.isAllDay && ev.hasEnd) {
         FILETIME ftStart{}, ftEnd{}, ftTarget{};
         SYSTEMTIME sOnly = ev.startLocal;
@@ -628,8 +579,7 @@ inline bool EventOccursOnDate(const CalendarEvent& ev,
     return false;
 }
 
-inline bool MatchesByDayItem(const ByDayItem& item,
-                             const SYSTEMTIME& candDate) {
+inline bool MatchesByDayItem(const ByDayItem& item, const SYSTEMTIME& candDate) {
     if (candDate.wDayOfWeek != item.dayOfWeek) {
         return false;
     }
@@ -657,8 +607,7 @@ inline bool MatchesByMonthDay(int d, const SYSTEMTIME& candDate) {
     return false;
 }
 
-inline bool RecurrenceMatchesDate(const CalendarEvent& ev,
-                                  const SYSTEMTIME& candDate) {
+inline bool RecurrenceMatchesDate(const CalendarEvent& ev, const SYSTEMTIME& candDate) {
     if (CompareDateOnly(candDate, ev.startLocal) < 0) {
         return false;
     }
@@ -696,12 +645,10 @@ inline bool RecurrenceMatchesDate(const CalendarEvent& ev,
             return false;
         }
 
-        int wkst =
-            (ev.rrule.wkst >= 0 && ev.rrule.wkst <= 6) ? ev.rrule.wkst : 1;
+        int wkst = (ev.rrule.wkst >= 0 && ev.rrule.wkst <= 6) ? ev.rrule.wkst : 1;
         int startDayInWeek = (ev.startLocal.wDayOfWeek - wkst + 7) % 7;
         int candDayInWeek = (candDate.wDayOfWeek - wkst + 7) % 7;
-        int64_t startWeekStartDays =
-            ToFileTimeDays(ev.startLocal) - startDayInWeek;
+        int64_t startWeekStartDays = ToFileTimeDays(ev.startLocal) - startDayInWeek;
         int64_t candWeekStartDays = ToFileTimeDays(candDate) - candDayInWeek;
         int64_t diffDays = candWeekStartDays - startWeekStartDays;
         if (diffDays < 0) {
@@ -720,8 +667,7 @@ inline bool RecurrenceMatchesDate(const CalendarEvent& ev,
                     if ((mask & (1 << d)) != 0) {
                         if (w == 0 && ((d - wkst + 7) % 7) < startDayInWeek)
                             continue;
-                        if (w == weekDiff &&
-                            ((d - wkst + 7) % 7) > candDayInWeek)
+                        if (w == weekDiff && ((d - wkst + 7) % 7) > candDayInWeek)
                             break;
                         countSoFar++;
                     }
@@ -845,8 +791,8 @@ std::vector<CalendarEvent> FilterEventsForDate(
                                                  FormatDateYmd(localRec));
                 }
                 if (ev.recurrenceId.size() >= 8) {
-                    overriddenOccurrences.insert(ev.uid + L"#" +
-                                                 ev.recurrenceId.substr(0, 8));
+                    overriddenOccurrences.insert(
+                        ev.uid + L"#" + ev.recurrenceId.substr(0, 8));
                 }
             }
         } else {
@@ -859,8 +805,8 @@ std::vector<CalendarEvent> FilterEventsForDate(
                                                  FormatDateYmd(localRec));
                 }
                 if (ev.recurrenceId.size() >= 8) {
-                    overriddenOccurrences.insert(ev.uid + L"#" +
-                                                 ev.recurrenceId.substr(0, 8));
+                    overriddenOccurrences.insert(
+                        ev.uid + L"#" + ev.recurrenceId.substr(0, 8));
                 }
             }
         }
@@ -889,17 +835,15 @@ std::vector<CalendarEvent> FilterEventsForDate(
         int spanDays = 0;
         if (ev.hasEnd) {
             spanDays = DaysBetween(ev.startLocal, ev.endLocal);
-            if (spanDays < 0)
-                spanDays = 0;
-            if (spanDays > 366)
-                spanDays = 366;
+            if (spanDays < 0) spanDays = 0;
+            if (spanDays > 366) spanDays = 366;
         }
 
         for (int offset = 0; offset <= spanDays; ++offset) {
             SYSTEMTIME candDate = ShiftLocalDate(tDate, -offset);
 
             if (CompareDateOnly(candDate, ev.startLocal) < 0) {
-                break;  // Earlier offsets will also be before startLocal
+                break; // Earlier offsets will also be before startLocal
             }
 
             std::wstring candYmd = FormatDateYmd(candDate);
@@ -953,8 +897,8 @@ void StartWorkerThread();
 void StopWorkerThread();
 
 std::wstring GetIcsPathSetting() {
-    WindhawkUtils::StringSetting string =
-        WindhawkUtils::StringSetting::make(L"icsPath");  // RAII
+
+    WindhawkUtils::StringSetting string = WindhawkUtils::StringSetting::make(L"icsPath"); // RAII
 
     std::wstring result = string.get();
 
@@ -1003,6 +947,7 @@ HMODULE GetCurrentModuleHandle() {
     return module;
 }
 
+
 std::wstring DecodeIcsBytes(const char* data, size_t size) {
     if (!data || size == 0)
         return {};
@@ -1030,7 +975,8 @@ std::wstring DecodeIcsBytes(const char* data, size_t size) {
 
     // Check UTF-8 BOM: EF BB BF
     size_t offset = 0;
-    if (size >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF) {
+    if (size >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB &&
+        bytes[2] == 0xBF) {
         offset = 3;
     }
 
@@ -1048,8 +994,8 @@ std::wstring DecodeIcsBytes(const char* data, size_t size) {
     }
 
     // Fallback: CP_ACP (ANSI)
-    wlen = MultiByteToWideChar(CP_ACP, 0, utf8Data, static_cast<int>(utf8Size),
-                               nullptr, 0);
+    wlen = MultiByteToWideChar(CP_ACP, 0, utf8Data,
+                               static_cast<int>(utf8Size), nullptr, 0);
     if (wlen > 0) {
         std::wstring result(wlen, L'\0');
         MultiByteToWideChar(CP_ACP, 0, utf8Data, static_cast<int>(utf8Size),
@@ -1136,14 +1082,12 @@ std::vector<CalendarEvent> ParseIcs(const std::wstring& icsContent) {
                 std::wstring keyPart = line.substr(0, colon);
                 std::wstring valPart = line.substr(colon + 1);
                 size_t semi = keyPart.find(L';');
-                std::wstring key = (semi != std::wstring::npos)
-                                       ? keyPart.substr(0, semi)
-                                       : keyPart;
+                std::wstring key =
+                    (semi != std::wstring::npos) ? keyPart.substr(0, semi) : keyPart;
 
                 if (key == L"TZID") {
                     currentTzid = valPart;
-                    if (currentTzid.size() >= 2 &&
-                        currentTzid.front() == L'"' &&
+                    if (currentTzid.size() >= 2 && currentTzid.front() == L'"' &&
                         currentTzid.back() == L'"') {
                         currentTzid =
                             currentTzid.substr(1, currentTzid.size() - 2);
@@ -1283,7 +1227,8 @@ std::vector<CalendarEvent> ParseIcs(const std::wstring& icsContent) {
             } else if (!tzid.empty()) {
                 auto it = tzOffsets.find(tzid);
                 if (it != tzOffsets.end()) {
-                    currentEvent.endLocal = TzToSystemLocal(stUtc, it->second);
+                    currentEvent.endLocal =
+                        TzToSystemLocal(stUtc, it->second);
                 } else {
                     currentEvent.endLocal = stUtc;
                 }
@@ -1305,8 +1250,7 @@ std::wstring FetchIcsContent(std::wstring const& pathOrUrl,
                      _wcsnicmp(pathOrUrl.c_str(), L"https://", 8) == 0);
 
     int minFetchInterval = GetMinFetchIntervalSetting();
-    ULONGLONG ttlMs =
-        static_cast<ULONGLONG>(minFetchInterval) * 60ULL * 1000ULL;
+    ULONGLONG ttlMs = static_cast<ULONGLONG>(minFetchInterval) * 60ULL * 1000ULL;
     ULONGLONG now = GetTickCount64();
 
     {
@@ -1390,10 +1334,10 @@ std::wstring FetchIcsContent(std::wstring const& pathOrUrl,
             newWriteTime = attr.ftLastWriteTime;
         }
 
-        HANDLE hFile =
-            CreateFileW(localPath.c_str(), GENERIC_READ,
-                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                        nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        HANDLE hFile = CreateFileW(
+            localPath.c_str(), GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
 
         if (hFile == INVALID_HANDLE_VALUE) {
             Wh_Log(L"CreateFileW failed (%u) for local path: %s",
@@ -1583,9 +1527,8 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
                 m_focusSessionControl.Visibility(wux::Visibility::Visible);
                 Wh_Log(L"Restored FocusSessionControl visibility to Visible");
             } catch (...) {
-                Wh_Log(
-                    L"Failed to restore FocusSessionControl visibility: %08X",
-                    winrt::to_hresult());
+                Wh_Log(L"Failed to restore FocusSessionControl visibility: %08X",
+                       winrt::to_hresult());
             }
             m_focusSessionControl = nullptr;
         }
@@ -1595,52 +1538,42 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
                 m_prevDayButton.Click(m_prevBtnToken);
                 m_prevBtnToken = {};
             }
-        } catch (...) {
-        }
+        } catch (...) {}
         try {
             if (m_nextDayButton && m_nextBtnToken.value != 0) {
                 m_nextDayButton.Click(m_nextBtnToken);
                 m_nextBtnToken = {};
             }
-        } catch (...) {
-        }
+        } catch (...) {}
         try {
             if (m_refreshButton && m_refreshBtnToken.value != 0) {
                 m_refreshButton.Click(m_refreshBtnToken);
                 m_refreshBtnToken = {};
             }
-        } catch (...) {
-        }
+        } catch (...) {}
         try {
             if (m_datePicker && m_dateChangedToken.value != 0) {
                 m_datePicker.DateChanged(m_dateChangedToken);
                 m_dateChangedToken = {};
             }
-        } catch (...) {
-        }
+        } catch (...) {}
 
         if (m_hostScrollViewer) {
             try {
                 if (m_originalCalendarContent) {
                     m_hostScrollViewer.Content(m_originalCalendarContent);
-                    Wh_Log(
-                        L"Restored original CalendarControlScrollViewer "
-                        L"content");
+                    Wh_Log(L"Restored original CalendarControlScrollViewer content");
                 } else if (m_hostScrollViewer.Content() == m_rootGrid) {
                     m_hostScrollViewer.Content(nullptr);
-                    Wh_Log(
-                        L"Detached custom root grid from "
-                        L"CalendarControlScrollViewer");
+                    Wh_Log(L"Detached custom root grid from CalendarControlScrollViewer");
                 }
                 m_hostScrollViewer.VerticalScrollBarVisibility(
                     wuxc::ScrollBarVisibility::Auto);
                 m_hostScrollViewer.HorizontalScrollBarVisibility(
                     wuxc::ScrollBarVisibility::Disabled);
             } catch (...) {
-                Wh_Log(
-                    L"Failed to restore original CalendarControlScrollViewer "
-                    L"content: %08X",
-                    winrt::to_hresult());
+                Wh_Log(L"Failed to restore original CalendarControlScrollViewer content: %08X",
+                       winrt::to_hresult());
             }
             m_originalCalendarContent = nullptr;
             m_hostScrollViewer = nullptr;
@@ -1649,15 +1582,13 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
         if (m_rootGrid) {
             try {
                 m_rootGrid.Children().Clear();
-            } catch (...) {
-            }
+            } catch (...) {}
             m_rootGrid = nullptr;
         }
         if (m_itemsControl) {
             try {
                 m_itemsControl.Items().Clear();
-            } catch (...) {
-            }
+            } catch (...) {}
             m_itemsControl = nullptr;
         }
     }
@@ -1726,8 +1657,7 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
 
             auto eventGrid = wuxc::Grid();
 
-            // Column 0: Width for time display (fixed to align event titles, or
-            // auto)
+            // Column 0: Width for time display (fixed to align event titles, or auto)
             wuxc::ColumnDefinition col0{};
             if (timeColumnWidth > 0) {
                 col0.Width(wux::GridLength{(double)timeColumnWidth,
@@ -1786,20 +1716,18 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
             } else {
                 WCHAR buf[64];
 
-                if (GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS,
-                                    &ev.startLocal, nullptr, buf,
-                                    ARRAYSIZE(buf)) != 0) {
+                if (GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, &ev.startLocal, nullptr, buf, ARRAYSIZE(buf)) != 0)
+                {
                     startTimeTb.Text(winrt::hstring(buf));
                 }
 
-                if (ev.hasEnd &&
-                    GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS,
-                                    &ev.endLocal, nullptr, buf,
-                                    ARRAYSIZE(buf)) != 0) {
+                if (ev.hasEnd && GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS, &ev.endLocal, nullptr, buf, ARRAYSIZE(buf)) != 0) 
+                {
                     endTimeTb.Text(winrt::hstring(buf));
                 }
 
-                endTimeTb.Opacity(0.7);  // slightly greyer than start time
+
+                endTimeTb.Opacity(0.7); // slightly greyer than start time
             }
 
             // Location then separator '-' then event notes: Column 1, Row 1
@@ -1966,8 +1894,8 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
             [weakSv = winrt::make_weak(m_eventsScrollViewer), maxHeight]() {
                 if (auto sv = weakSv.get()) {
                     sv.MaxHeight(maxHeight > 0
-                                     ? (double)maxHeight
-                                     : std::numeric_limits<double>::infinity());
+                                    ? (double)maxHeight
+                                    : std::numeric_limits<double>::infinity());
                     sv.Height(std::numeric_limits<double>::quiet_NaN());
                 }
             });
@@ -1982,8 +1910,8 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
 
         try {
             if (m_hostScrollViewer && m_hostScrollViewer != host) {
-                // A new CalendarControlScrollViewer replaced the old one - put
-                // the old one back before taking over the new one.
+                // A new CalendarControlScrollViewer replaced the old one - put the old
+                // one back before taking over the new one.
                 try {
                     if (m_originalCalendarContent) {
                         m_hostScrollViewer.Content(m_originalCalendarContent);
@@ -1997,235 +1925,258 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
                 m_originalCalendarContent = nullptr;
                 m_hostScrollViewer = nullptr;
             }
-            if (!strongThis->m_itemsControl) {
-                strongThis->m_itemsControl = wuxc::ItemsControl();
-            }
+                    if (!strongThis->m_itemsControl) {
+                        strongThis->m_itemsControl = wuxc::ItemsControl();
+                    }
 
-            if (!strongThis->m_eventsScrollViewer) {
-                strongThis->m_eventsScrollViewer = wuxc::ScrollViewer();
-                strongThis->m_eventsScrollViewer.Name(
-                    L"CustomCalendarScrollViewer");
-                strongThis->m_eventsScrollViewer.VerticalScrollBarVisibility(
-                    wuxc::ScrollBarVisibility::Auto);
-                strongThis->m_eventsScrollViewer.HorizontalScrollBarVisibility(
-                    wuxc::ScrollBarVisibility::Disabled);
-                strongThis->m_eventsScrollViewer.Content(
-                    strongThis->m_itemsControl);
-            }
+                    if (!strongThis->m_eventsScrollViewer) {
+                        strongThis->m_eventsScrollViewer = wuxc::ScrollViewer();
+                        strongThis->m_eventsScrollViewer.Name(
+                            L"CustomCalendarScrollViewer");
+                        strongThis->m_eventsScrollViewer
+                            .VerticalScrollBarVisibility(
+                                wuxc::ScrollBarVisibility::Auto);
+                        strongThis->m_eventsScrollViewer
+                            .HorizontalScrollBarVisibility(
+                                wuxc::ScrollBarVisibility::Disabled);
+                        strongThis->m_eventsScrollViewer.Content(
+                            strongThis->m_itemsControl);
+                    }
 
-            int maxHeight = GetMaxHeightSetting();
+                    int maxHeight = GetMaxHeightSetting();
 
-            if (maxHeight > 0) {
-                strongThis->m_eventsScrollViewer.MaxHeight((double)maxHeight);
-            } else {
-                strongThis->m_eventsScrollViewer.MaxHeight(
-                    std::numeric_limits<double>::infinity());
-            }
+                    if (maxHeight > 0) {
+                        strongThis->m_eventsScrollViewer.MaxHeight(
+                            (double)maxHeight);
+                    } else {
+                        strongThis->m_eventsScrollViewer.MaxHeight(
+                            std::numeric_limits<double>::infinity());
+                    }
+                    
+                    strongThis->m_eventsScrollViewer.Height(
+                        std::numeric_limits<double>::quiet_NaN());
 
-            strongThis->m_eventsScrollViewer.Height(
-                std::numeric_limits<double>::quiet_NaN());
+                    if (!strongThis->m_datePicker) {
+                        strongThis->m_datePicker = wuxc::CalendarDatePicker();
+                        strongThis->m_datePicker.Name(
+                            L"CustomCalendarDatePicker");
+                        strongThis->m_datePicker.HorizontalAlignment(
+                            wux::HorizontalAlignment::Stretch);
+                        strongThis->m_datePicker.VerticalAlignment(
+                            wux::VerticalAlignment::Center);
+                        strongThis->m_datePicker.Margin(
+                            wux::Thickness{0, 0, 0, 6});
+                        strongThis->m_datePicker.IsTodayHighlighted(true);
+                        strongThis->m_datePicker.DateFormat(
+                            L"{dayofweek.full}, {month.abbreviated} {day.integer}");
+                        strongThis->m_datePicker.Date(winrt::clock::now());
 
-            if (!strongThis->m_datePicker) {
-                strongThis->m_datePicker = wuxc::CalendarDatePicker();
-                strongThis->m_datePicker.Name(L"CustomCalendarDatePicker");
-                strongThis->m_datePicker.HorizontalAlignment(
-                    wux::HorizontalAlignment::Stretch);
-                strongThis->m_datePicker.VerticalAlignment(
-                    wux::VerticalAlignment::Center);
-                strongThis->m_datePicker.Margin(wux::Thickness{0, 0, 0, 6});
-                strongThis->m_datePicker.IsTodayHighlighted(true);
-                strongThis->m_datePicker.DateFormat(
-                    L"{dayofweek.full}, {month.abbreviated} {day.integer}");
-                strongThis->m_datePicker.Date(winrt::clock::now());
+                        strongThis->m_dateChangedToken =
+                            strongThis->m_datePicker.DateChanged(
+                                [weakThis = winrt::make_weak(strongThis)](
+                                    wuxc::CalendarDatePicker const&,
+                                    wuxc::
+                                        CalendarDatePickerDateChangedEventArgs const&
+                                            args) {
+                                    if (auto watcher = weakThis.get()) {
+                                        watcher->OnDatePickerDateChanged(
+                                            args.NewDate());
+                                    }
+                                });
+                    }
 
-                strongThis->m_dateChangedToken =
-                    strongThis->m_datePicker.DateChanged(
-                        [weakThis = winrt::make_weak(strongThis)](
-                            wuxc::CalendarDatePicker const&,
-                            wuxc::CalendarDatePickerDateChangedEventArgs const&
-                                args) {
-                            if (auto watcher = weakThis.get()) {
-                                watcher->OnDatePickerDateChanged(
-                                    args.NewDate());
+                    if (!strongThis->m_prevDayButton) {
+                        strongThis->m_prevDayButton = wuxc::Button();
+                        strongThis->m_prevDayButton.Name(
+                            L"CustomCalendarPrevDayButton");
+                        strongThis->m_prevDayButton.Width(32);
+                        strongThis->m_prevDayButton.Height(32);
+                        strongThis->m_prevDayButton.Padding(
+                            wux::Thickness{0, 0, 0, 0});
+                        strongThis->m_prevDayButton.Margin(
+                            wux::Thickness{0, 0, 6, 6});
+                        strongThis->m_prevDayButton.VerticalAlignment(
+                            wux::VerticalAlignment::Center);
+
+                        auto prevIcon = wuxc::FontIcon();
+                        prevIcon.Glyph(L"\uE76B");  // ChevronLeft
+                        prevIcon.FontSize(12);
+                        strongThis->m_prevDayButton.Content(prevIcon);
+
+                        strongThis->m_prevBtnToken =
+                            strongThis->m_prevDayButton.Click(
+                                [weakThis = winrt::make_weak(strongThis)](
+                                    wf::IInspectable const&,
+                                    wux::RoutedEventArgs const&) {
+                                    if (auto watcher = weakThis.get()) {
+                                        watcher->ChangeSelectedDay(-1);
+                                    }
+                                });
+                    }
+
+                    if (!strongThis->m_nextDayButton) {
+                        strongThis->m_nextDayButton = wuxc::Button();
+                        strongThis->m_nextDayButton.Name(
+                            L"CustomCalendarNextDayButton");
+                        strongThis->m_nextDayButton.Width(32);
+                        strongThis->m_nextDayButton.Height(32);
+                        strongThis->m_nextDayButton.Padding(
+                            wux::Thickness{0, 0, 0, 0});
+                        strongThis->m_nextDayButton.Margin(
+                            wux::Thickness{6, 0, 6, 6});
+                        strongThis->m_nextDayButton.VerticalAlignment(
+                            wux::VerticalAlignment::Center);
+
+                        auto nextIcon = wuxc::FontIcon();
+                        nextIcon.Glyph(L"\uE76C");  // ChevronRight
+                        nextIcon.FontSize(12);
+                        strongThis->m_nextDayButton.Content(nextIcon);
+
+                        strongThis->m_nextBtnToken =
+                            strongThis->m_nextDayButton.Click(
+                                [weakThis = winrt::make_weak(strongThis)](
+                                    wf::IInspectable const&,
+                                    wux::RoutedEventArgs const&) {
+                                    if (auto watcher = weakThis.get()) {
+                                        watcher->ChangeSelectedDay(1);
+                                    }
+                                });
+                    }
+
+                    if (!strongThis->m_refreshButton) {
+                        strongThis->m_refreshButton = wuxc::Button();
+                        strongThis->m_refreshButton.Name(
+                            L"CustomCalendarRefreshButton");
+                        strongThis->m_refreshButton.Width(32);
+                        strongThis->m_refreshButton.Height(32);
+                        strongThis->m_refreshButton.Padding(
+                            wux::Thickness{0, 0, 0, 0});
+                        strongThis->m_refreshButton.Margin(
+                            wux::Thickness{0, 0, 0, 6});
+                        strongThis->m_refreshButton.VerticalAlignment(
+                            wux::VerticalAlignment::Center);
+
+                        auto refreshIcon = wuxc::FontIcon();
+                        refreshIcon.Glyph(L"\uE72C");  // Refresh
+                        refreshIcon.FontSize(12);
+                        strongThis->m_refreshButton.Content(refreshIcon);
+
+                        strongThis->m_refreshBtnToken =
+                            strongThis->m_refreshButton.Click(
+                                [](wf::IInspectable const&,
+                                   wux::RoutedEventArgs const&) {
+                                    TriggerBackgroundFetch(true);
+                                });
+                    }
+
+                    if (!strongThis->m_headerGrid) {
+                        strongThis->m_headerGrid = wuxc::Grid();
+                        strongThis->m_headerGrid.Name(
+                            L"CustomCalendarHeaderGrid");
+                        strongThis->m_headerGrid.Margin(
+                            wux::Thickness{0, 6, 0, 0});
+
+                        // Auto - * - Auto - Auto
+                        wuxc::ColumnDefinition col0{};
+                        col0.Width(wux::GridLength{0, wux::GridUnitType::Auto});
+                        strongThis->m_headerGrid.ColumnDefinitions().Append(
+                            col0);
+
+                        wuxc::ColumnDefinition col1{};
+                        col1.Width(wux::GridLength{1, wux::GridUnitType::Star});
+                        strongThis->m_headerGrid.ColumnDefinitions().Append(
+                            col1);
+
+                        wuxc::ColumnDefinition col2{};
+                        col2.Width(wux::GridLength{0, wux::GridUnitType::Auto});
+                        strongThis->m_headerGrid.ColumnDefinitions().Append(
+                            col2);
+
+                        wuxc::ColumnDefinition col3{};
+                        col3.Width(wux::GridLength{0, wux::GridUnitType::Auto});
+                        strongThis->m_headerGrid.ColumnDefinitions().Append(
+                            col3);
+
+                        wuxc::Grid::SetColumn(strongThis->m_prevDayButton, 0);
+                        strongThis->m_headerGrid.Children().Append(
+                            strongThis->m_prevDayButton);
+
+                        wuxc::Grid::SetColumn(strongThis->m_datePicker, 1);
+                        strongThis->m_headerGrid.Children().Append(
+                            strongThis->m_datePicker);
+
+                        wuxc::Grid::SetColumn(strongThis->m_nextDayButton, 2);
+                        strongThis->m_headerGrid.Children().Append(
+                            strongThis->m_nextDayButton);
+
+                        wuxc::Grid::SetColumn(strongThis->m_refreshButton, 3);
+                        strongThis->m_headerGrid.Children().Append(
+                            strongThis->m_refreshButton);
+                    }
+
+                    if (!strongThis->m_rootGrid) {
+                        strongThis->m_rootGrid = wuxc::Grid();
+                        strongThis->m_rootGrid.Name(L"CustomCalendarRootGrid");
+                        strongThis->m_rootGrid.Margin(
+                            wux::Thickness{12, 4, 12, 4});
+
+                        wuxc::RowDefinition row0{};
+                        row0.Height(
+                            wux::GridLength{0, wux::GridUnitType::Auto});
+                        strongThis->m_rootGrid.RowDefinitions().Append(row0);
+
+                        wuxc::RowDefinition row1{};
+                        row1.Height(
+                            wux::GridLength{0, wux::GridUnitType::Auto});
+                        strongThis->m_rootGrid.RowDefinitions().Append(row1);
+
+                        wuxc::Grid::SetRow(strongThis->m_headerGrid, 0);
+                        strongThis->m_rootGrid.Children().Append(
+                            strongThis->m_headerGrid);
+
+                        wuxc::Grid::SetRow(strongThis->m_eventsScrollViewer, 1);
+                        strongThis->m_rootGrid.Children().Append(
+                            strongThis->m_eventsScrollViewer);
+                    }
+
+                    SYSTEMTIME today;
+                    GetLocalTime(&today);
+                    strongThis->m_currentFilterDate = today;
+
+                    std::vector<CalendarEvent> currentEvents;
+                    {
+                        std::lock_guard<std::mutex> lock(g_eventsMutex);
+                        currentEvents =
+                            FilterEventsForDate(g_allParsedEvents, today);
+                    }
+                    strongThis->PopulateItemsControl(currentEvents);
+
+                    if (strongThis->m_rootGrid) {
+                        if (auto parent = strongThis->m_rootGrid.Parent()) {
+                            if (auto parentContentControl =
+                                    parent.try_as<wuxc::ContentControl>()) {
+                                if (parentContentControl.Content() ==
+                                    strongThis->m_rootGrid) {
+                                    parentContentControl.Content(nullptr);
+                                }
+                            } else if (auto parentPanel =
+                                           parent.try_as<wuxc::Panel>()) {
+                                uint32_t index = 0;
+                                if (parentPanel.Children().IndexOf(
+                                        strongThis->m_rootGrid, index)) {
+                                    parentPanel.Children().RemoveAt(index);
+                                }
                             }
-                        });
-            }
-
-            if (!strongThis->m_prevDayButton) {
-                strongThis->m_prevDayButton = wuxc::Button();
-                strongThis->m_prevDayButton.Name(
-                    L"CustomCalendarPrevDayButton");
-                strongThis->m_prevDayButton.Width(32);
-                strongThis->m_prevDayButton.Height(32);
-                strongThis->m_prevDayButton.Padding(wux::Thickness{0, 0, 0, 0});
-                strongThis->m_prevDayButton.Margin(wux::Thickness{0, 0, 6, 6});
-                strongThis->m_prevDayButton.VerticalAlignment(
-                    wux::VerticalAlignment::Center);
-
-                auto prevIcon = wuxc::FontIcon();
-                prevIcon.Glyph(L"\uE76B");  // ChevronLeft
-                prevIcon.FontSize(12);
-                strongThis->m_prevDayButton.Content(prevIcon);
-
-                strongThis->m_prevBtnToken = strongThis->m_prevDayButton.Click(
-                    [weakThis = winrt::make_weak(strongThis)](
-                        wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                        if (auto watcher = weakThis.get()) {
-                            watcher->ChangeSelectedDay(-1);
-                        }
-                    });
-            }
-
-            if (!strongThis->m_nextDayButton) {
-                strongThis->m_nextDayButton = wuxc::Button();
-                strongThis->m_nextDayButton.Name(
-                    L"CustomCalendarNextDayButton");
-                strongThis->m_nextDayButton.Width(32);
-                strongThis->m_nextDayButton.Height(32);
-                strongThis->m_nextDayButton.Padding(wux::Thickness{0, 0, 0, 0});
-                strongThis->m_nextDayButton.Margin(wux::Thickness{6, 0, 6, 6});
-                strongThis->m_nextDayButton.VerticalAlignment(
-                    wux::VerticalAlignment::Center);
-
-                auto nextIcon = wuxc::FontIcon();
-                nextIcon.Glyph(L"\uE76C");  // ChevronRight
-                nextIcon.FontSize(12);
-                strongThis->m_nextDayButton.Content(nextIcon);
-
-                strongThis->m_nextBtnToken = strongThis->m_nextDayButton.Click(
-                    [weakThis = winrt::make_weak(strongThis)](
-                        wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                        if (auto watcher = weakThis.get()) {
-                            watcher->ChangeSelectedDay(1);
-                        }
-                    });
-            }
-
-            if (!strongThis->m_refreshButton) {
-                strongThis->m_refreshButton = wuxc::Button();
-                strongThis->m_refreshButton.Name(
-                    L"CustomCalendarRefreshButton");
-                strongThis->m_refreshButton.Width(32);
-                strongThis->m_refreshButton.Height(32);
-                strongThis->m_refreshButton.Padding(wux::Thickness{0, 0, 0, 0});
-                strongThis->m_refreshButton.Margin(wux::Thickness{0, 0, 0, 6});
-                strongThis->m_refreshButton.VerticalAlignment(
-                    wux::VerticalAlignment::Center);
-
-                auto refreshIcon = wuxc::FontIcon();
-                refreshIcon.Glyph(L"\uE72C");  // Refresh
-                refreshIcon.FontSize(12);
-                strongThis->m_refreshButton.Content(refreshIcon);
-
-                strongThis->m_refreshBtnToken =
-                    strongThis->m_refreshButton.Click(
-                        [](wf::IInspectable const&,
-                           wux::RoutedEventArgs const&) {
-                            TriggerBackgroundFetch(true);
-                        });
-            }
-
-            if (!strongThis->m_headerGrid) {
-                strongThis->m_headerGrid = wuxc::Grid();
-                strongThis->m_headerGrid.Name(L"CustomCalendarHeaderGrid");
-                strongThis->m_headerGrid.Margin(wux::Thickness{0, 6, 0, 0});
-
-                // Auto - * - Auto - Auto
-                wuxc::ColumnDefinition col0{};
-                col0.Width(wux::GridLength{0, wux::GridUnitType::Auto});
-                strongThis->m_headerGrid.ColumnDefinitions().Append(col0);
-
-                wuxc::ColumnDefinition col1{};
-                col1.Width(wux::GridLength{1, wux::GridUnitType::Star});
-                strongThis->m_headerGrid.ColumnDefinitions().Append(col1);
-
-                wuxc::ColumnDefinition col2{};
-                col2.Width(wux::GridLength{0, wux::GridUnitType::Auto});
-                strongThis->m_headerGrid.ColumnDefinitions().Append(col2);
-
-                wuxc::ColumnDefinition col3{};
-                col3.Width(wux::GridLength{0, wux::GridUnitType::Auto});
-                strongThis->m_headerGrid.ColumnDefinitions().Append(col3);
-
-                wuxc::Grid::SetColumn(strongThis->m_prevDayButton, 0);
-                strongThis->m_headerGrid.Children().Append(
-                    strongThis->m_prevDayButton);
-
-                wuxc::Grid::SetColumn(strongThis->m_datePicker, 1);
-                strongThis->m_headerGrid.Children().Append(
-                    strongThis->m_datePicker);
-
-                wuxc::Grid::SetColumn(strongThis->m_nextDayButton, 2);
-                strongThis->m_headerGrid.Children().Append(
-                    strongThis->m_nextDayButton);
-
-                wuxc::Grid::SetColumn(strongThis->m_refreshButton, 3);
-                strongThis->m_headerGrid.Children().Append(
-                    strongThis->m_refreshButton);
-            }
-
-            if (!strongThis->m_rootGrid) {
-                strongThis->m_rootGrid = wuxc::Grid();
-                strongThis->m_rootGrid.Name(L"CustomCalendarRootGrid");
-                strongThis->m_rootGrid.Margin(wux::Thickness{12, 4, 12, 4});
-
-                wuxc::RowDefinition row0{};
-                row0.Height(wux::GridLength{0, wux::GridUnitType::Auto});
-                strongThis->m_rootGrid.RowDefinitions().Append(row0);
-
-                wuxc::RowDefinition row1{};
-                row1.Height(wux::GridLength{0, wux::GridUnitType::Auto});
-                strongThis->m_rootGrid.RowDefinitions().Append(row1);
-
-                wuxc::Grid::SetRow(strongThis->m_headerGrid, 0);
-                strongThis->m_rootGrid.Children().Append(
-                    strongThis->m_headerGrid);
-
-                wuxc::Grid::SetRow(strongThis->m_eventsScrollViewer, 1);
-                strongThis->m_rootGrid.Children().Append(
-                    strongThis->m_eventsScrollViewer);
-            }
-
-            SYSTEMTIME today;
-            GetLocalTime(&today);
-            strongThis->m_currentFilterDate = today;
-
-            std::vector<CalendarEvent> currentEvents;
-            {
-                std::lock_guard<std::mutex> lock(g_eventsMutex);
-                currentEvents = FilterEventsForDate(g_allParsedEvents, today);
-            }
-            strongThis->PopulateItemsControl(currentEvents);
-
-            if (strongThis->m_rootGrid) {
-                if (auto parent = strongThis->m_rootGrid.Parent()) {
-                    if (auto parentContentControl =
-                            parent.try_as<wuxc::ContentControl>()) {
-                        if (parentContentControl.Content() ==
-                            strongThis->m_rootGrid) {
-                            parentContentControl.Content(nullptr);
-                        }
-                    } else if (auto parentPanel =
-                                   parent.try_as<wuxc::Panel>()) {
-                        uint32_t index = 0;
-                        if (parentPanel.Children().IndexOf(
-                                strongThis->m_rootGrid, index)) {
-                            parentPanel.Children().RemoveAt(index);
                         }
                     }
-                }
-            }
 
-            if (!m_originalCalendarContent && host.Content() != m_rootGrid) {
+            if (!m_originalCalendarContent &&
+                host.Content() != m_rootGrid) {
                 m_originalCalendarContent = host.Content();
-                m_originalVerticalScrollBarVisibility =
-                    host.VerticalScrollBarVisibility();
-                m_originalHorizontalScrollBarVisibility =
-                    host.HorizontalScrollBarVisibility();
-                Wh_Log(
-                    L"Captured original CalendarControlScrollViewer content: "
-                    L"%p",
-                    winrt::get_abi(m_originalCalendarContent));
+                m_originalVerticalScrollBarVisibility = host.VerticalScrollBarVisibility();
+                m_originalHorizontalScrollBarVisibility = host.HorizontalScrollBarVisibility();
+                Wh_Log(L"Captured original CalendarControlScrollViewer content: %p",
+                       winrt::get_abi(m_originalCalendarContent));
             }
             m_hostScrollViewer = host;
 
@@ -2263,8 +2214,7 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
                             bool hide = ShouldHideFocusSession();
                             watcher->m_focusSessionControl.Visibility(
                                 hide ? wux::Visibility::Collapsed
-                                     : watcher
-                                           ->m_originalFocusSessionVisibility);
+                                     : watcher->m_originalFocusSessionVisibility);
                             Wh_Log(L"Set FocusSessionControl visibility to %s",
                                    hide ? L"Collapsed" : L"Visible");
                         } catch (...) {
@@ -2303,11 +2253,12 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
                             wux::DependencyProperty const&) {
                             if (auto w = weakWatcher.get()) {
                                 if (auto fe =
-                                        sender
-                                            .try_as<wux::FrameworkElement>()) {
+                                        sender.try_as<
+                                            wux::FrameworkElement>()) {
                                     if (ShouldHideFocusSession() &&
                                         fe.Visibility() !=
-                                            wux::Visibility::Collapsed) {
+                                            wux::Visibility::
+                                                Collapsed) {
                                         fe.Visibility(
                                             wux::Visibility::Collapsed);
                                         Wh_Log(
@@ -2413,10 +2364,8 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
     int64_t m_focusSessionVisibilityToken{0};
     wuxc::ScrollViewer m_hostScrollViewer{nullptr};
     winrt::Windows::Foundation::IInspectable m_originalCalendarContent{nullptr};
-    wuxc::ScrollBarVisibility m_originalVerticalScrollBarVisibility{
-        wuxc::ScrollBarVisibility::Auto};
-    wuxc::ScrollBarVisibility m_originalHorizontalScrollBarVisibility{
-        wuxc::ScrollBarVisibility::Disabled};
+    wuxc::ScrollBarVisibility m_originalVerticalScrollBarVisibility{wuxc::ScrollBarVisibility::Auto};
+    wuxc::ScrollBarVisibility m_originalHorizontalScrollBarVisibility{wuxc::ScrollBarVisibility::Disabled};
     wux::Visibility m_originalFocusSessionVisibility{wux::Visibility::Visible};
 };
 
@@ -2430,8 +2379,7 @@ static constexpr CLSID CLSID_WindhawkTAP = {
     0x40e8,
     {0xa4, 0x32, 0xf5, 0x91, 0x6b, 0x64, 0x27, 0xe5}};
 
-// Released with `g_visualTreeWatcher = nullptr;` on the UI thread in
-// Wh_ModUninit.
+// Released with `g_visualTreeWatcher = nullptr;` on the UI thread in Wh_ModUninit.
 [[clang::no_destroy]] winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
 std::mutex g_watcherMutex;
 
@@ -2483,8 +2431,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
         bool fromCache = false;
         std::wstring content = FetchIcsContent(icsPath, forceFetch, fromCache);
 
-        if (HANDLE s = g_hStopEvent.load();
-            s && WaitForSingleObject(s, 0) == WAIT_OBJECT_0) {
+        if (HANDLE s = g_hStopEvent.load(); s && WaitForSingleObject(s, 0) == WAIT_OBJECT_0) {
             break;
         }
 
@@ -2510,8 +2457,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
             Wh_Log(L"Reusing %zu parsed events from cache", allEvents.size());
         }
 
-        if (HANDLE s = g_hStopEvent.load();
-            s && WaitForSingleObject(s, 0) == WAIT_OBJECT_0) {
+        if (HANDLE s = g_hStopEvent.load(); s && WaitForSingleObject(s, 0) == WAIT_OBJECT_0) {
             break;
         }
 
@@ -2551,8 +2497,7 @@ void StartWorkerThread() {
     }
     g_hWorkEvent.store(CreateEventW(nullptr, FALSE, FALSE, nullptr));
     g_hStopEvent.store(CreateEventW(nullptr, TRUE, FALSE, nullptr));
-    g_hWorkerThread.store(
-        CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, nullptr));
+    g_hWorkerThread.store(CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, nullptr));
 }
 
 void StopWorkerThread() {
@@ -2648,8 +2593,7 @@ class WindhawkTAP
 
             {
                 std::lock_guard<std::mutex> lock(g_watcherMutex);
-                g_visualTreeWatcher =
-                    winrt::make_self<VisualTreeWatcher>(m_site);
+                g_visualTreeWatcher = winrt::make_self<VisualTreeWatcher>(m_site);
             }
 
             return S_OK;
@@ -2815,13 +2759,11 @@ void RegisterCoreWindowEvents() {
 
         if (coreWindow.Dispatcher()) {
             std::lock_guard<std::mutex> lock(g_uiDispatchersMutex);
-            g_uiDispatchers.push_back(
-                winrt::make_weak(coreWindow.Dispatcher()));
+            g_uiDispatchers.push_back(winrt::make_weak(coreWindow.Dispatcher()));
         }
 
         Wh_Log(
-            L"Registering CoreWindow Activated & VisibilityChanged for thread "
-            L"%u",
+            L"Registering CoreWindow Activated & VisibilityChanged for thread %u",
             GetCurrentThreadId());
 
         t_coreWindowData.coreWindow = coreWindow;
@@ -3163,9 +3105,9 @@ void Wh_ModUninit() {
     UninitializeSettingsAndTap();
 
     // Wh_ModUninit runs on a Windhawk worker thread, not a UI thread.
-    // Block on a low-priority no-op on each CoreDispatcher to ensure all
-    // pending Normal-priority work items (e.g. from worker thread or settings
-    // changes) finish executing before FreeLibrary unmaps the mod code.
+    // Block on a low-priority no-op on each CoreDispatcher to ensure all pending
+    // Normal-priority work items (e.g. from worker thread or settings changes)
+    // finish executing before FreeLibrary unmaps the mod code.
     std::vector<winrt::weak_ref<wuc::CoreDispatcher>> dispatchersToFlush;
     {
         std::lock_guard<std::mutex> lock(g_uiDispatchersMutex);
@@ -3175,8 +3117,7 @@ void Wh_ModUninit() {
     for (const auto& weakDispatcher : dispatchersToFlush) {
         if (auto d = weakDispatcher.get()) {
             try {
-                if (auto action = d.TryRunAsync(
-                        wuc::CoreDispatcherPriority::Low, []() {})) {
+                if (auto action = d.TryRunAsync(wuc::CoreDispatcherPriority::Low, []() {})) {
                     action.get();
                 }
             } catch (...) {
