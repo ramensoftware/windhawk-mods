@@ -2,7 +2,7 @@
 // @id              taskbar-blob-shape
 // @name            Taskbar Blob Shape
 // @description     Injects a customizable blob shape behind active taskbar items.
-// @version         1.1.1
+// @version         1.2.0
 // @author          Deen-0x
 // @github          https://github.com/Deen-0x
 // @include         explorer.exe
@@ -15,6 +15,10 @@
 # Taskbar Blob Shape
 
 Adds a blob shape behind active taskbar buttons.
+
+Example:
+
+[Blob taskbar theme](https://github.com/ramensoftware/windows-11-taskbar-styling-guide/tree/main/Themes/Blob)
 
 ![Taskbar Blob Shape](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/main/taskbar-blob-shape/demo2.gif)
 
@@ -37,13 +41,20 @@ outward with concave (outside) corner radii, ending in a flat top edge:
 
 - **Width / Height**: the main area of the blob shape ('auto' matches the
   button's background element). Horizontally the shape is centered on the
-  button; vertically its flat top edge is anchored to the top of the
-  taskbar, with the body hanging downward.
+  button; vertically its flat edge is anchored to the taskbar's outer edge
+  (the top of a bottom-docked taskbar, the bottom of a top-docked one),
+  with the body hanging into the bar.
 - **Top corner radius**: the radius of the concave top flares. The flares
   are circular quarter arcs, so this also sets how far the blob shape
   extends upward and outward. Total size is
   (Width + 2*TopRadius) x (Height + TopRadius).
 - **Bottom corner radius**: the convex bottom corners of the blob shape.
+
+Taskbar position is supported for horizontal taskbars: bottom-docked is
+the default look, and on a top-docked taskbar the blob is flipped so its
+flat edge anchors to the taskbar's bottom edge (the side facing the
+desktop). On vertical (left/right) taskbars the blobs are hidden and the
+native indicator stays in charge.
 
 **Known behavior**: when the mod is enabled mid-session, blobs appear on the
 first taskbar activity (a hover or any window state change) rather than
@@ -62,10 +73,10 @@ since both replace the native active indicator.
 - BlobShape:
   - Dimensions: 'auto, 36'
     $name: Custom blob shape dimensions (Width, Height)
-    $description: Size of the blob shape's main area. Set to 'auto' to match the button's background element, or specify pixel values (e.g., '32, 32'). The body hangs down from the top of the taskbar.
+    $description: Size of the blob shape's main area. Set to 'auto' to match the button's background element, or specify pixel values (e.g., '32, 32'). The body hangs into the bar from its anchored edge (the top edge when bottom-docked, the bottom edge when top-docked).
   - Margins: '0, 0, 0, 0'
     $name: Custom blob shape margin (Left, Top, Right, Bottom)
-    $description: Offsets the blob shape like insets - Left/Top push it right/down, Right/Bottom push it left/up (e.g. '0, 4, 0, 0' pushes it down 4px). Vertical offsets are measured from the top of the taskbar. Accepts 1, 2 (horizontal, vertical), or 4 values. Leave empty to disable.
+    $description: Offsets the blob shape like insets - Left pushes right, Right pushes left. Vertical values are relative to the taskbar's anchored edge, so Top pushes the blob deeper into the bar and Bottom pulls it back out (e.g. '0, 4, 0, 0' nudges it 4px inward on both bottom and top taskbars). Accepts 1, 2 (horizontal, vertical), or 4 values. Leave empty to disable.
   - TopRadius: '8'
     $name: Top corner radius
     $description: The radius of the concave top flare corners. The blob shape extends upward and sideways by this amount. Set to 0 to disable the flare.
@@ -205,6 +216,11 @@ struct BlobEntry {
     bool bound = false;
     float boundAdjX = -1e9f, boundYBase = -1e9f;
 
+    // The dock edge the blob's render transform was last applied for
+    // (top-docked taskbars mirror the silhouette). -1 forces application
+    // on creation.
+    int8_t appliedDock = -1;
+
     // Last applied geometry and fill colors, so state changes (hover,
     // press) don't rebuild anything.
     double geoW = -1.0, geoH = -1.0, geoRt = -1.0, geoRb = -1.0;
@@ -234,9 +250,21 @@ struct SweptHost {
     // Cached tray grid for this taskbar's island, resolved lazily: spares
     // the depth-10 class search over the whole XAML root on every re-sweep.
     winrt::weak_ref<winrt::Windows::UI::Xaml::Controls::Panel> trayGrid;
+    // DockingStates subscription (taskbar hosts only): a dock switch
+    // re-sweeps the island so every blob re-anchors or hides.
+    winrt::weak_ref<winrt::Windows::UI::Xaml::VisualStateGroup> dockGroup;
+    winrt::event_token dockToken{};
 };
 std::vector<SweptHost> g_taskbarHosts;
 std::vector<SweptHost> g_trayHosts;
+
+// Where the taskbar is docked (the taskbar-position feature on newer Win11
+// builds). Global: the position applies to every monitor's taskbar at
+// once. Read from the RootGrid's DockingStates visual state group on every
+// taskbar sweep and updated by its CurrentStateChanged; older builds
+// without the group read as bottom.
+enum DockEdge : int { DockBottom = 0, DockTop = 1, DockLeft = 2, DockRight = 3 };
+std::atomic<int> g_dockEdge{DockBottom};
 
 // Every RunAsync post whose lambda lives in this DLL — hook refreshes, the
 // settings-change re-sweep and per-entry refreshes, cross-thread orphan
@@ -646,6 +674,20 @@ VisualStateGroup GetVisualStateGroup(FrameworkElement const& root, std::wstring_
     return nullptr;
 }
 
+int ReadDockEdge(winrt::Windows::UI::Xaml::FrameworkElement const& taskbarGrid) {
+    try {
+        auto grp = GetVisualStateGroup(taskbarGrid, L"DockingStates");
+        auto st = grp ? grp.CurrentState() : nullptr;
+        if (st) {
+            auto name = st.Name();
+            if (name == L"DockedTop") return DockTop;
+            if (name == L"DockedLeft") return DockLeft;
+            if (name == L"DockedRight") return DockRight;
+        }
+    } catch (...) {}
+    return DockBottom;
+}
+
 // The visual state groups live on the template root — the button's first
 // child on older Win11 builds. Newer builds wrap the button panel contents
 // in an extra Grid, pushing the group host a level down; walk first
@@ -876,6 +918,39 @@ void RefreshBlob(winrt::Windows::UI::Xaml::FrameworkElement const& button, const
         // taskbars, and each instance simply follows its own checked state.
         if (enabled) isActive = IsSystemButtonChecked(button);
     }
+    // Vertical taskbars get no blob: the tab silhouette has no sideways
+    // variant. Fast path only — the authoritative gate is at show time in
+    // EnsureBlobOnButton, because the dock value here can be stale before
+    // this island's first sweep runs (inside Ensure). When nothing is
+    // bound or suppressed there is also nothing to create or undo, so the
+    // full pipeline is skipped; an entry still showing a blob (the dock
+    // just switched) falls through once so Ensure hides it and restores
+    // the natives.
+    //
+    // Island registration must survive this return — the same hazard as
+    // the disabled-kind branch above: SweepExistingButtons (host tracking,
+    // SizeChanged + DockingStates subscriptions, tray discovery) is only
+    // otherwise reached from EnsureBlobOnButton, so returning bare here
+    // would leave a taskbar first seen while vertically docked untracked,
+    // with no recovery on the switch back to horizontal. Terminates for
+    // the same reason: the re-entrant RefreshBlob hits firstTime == false.
+    {
+        int dock = g_dockEdge.load();
+        if (dock == DockLeft || dock == DockRight) {
+            isActive = false;
+            if (!entry->bound && !entry->bgHidden && !entry->indicatorHidden) {
+                if (!IsTrayKind(entry->kind)) {
+                    auto grid = entry->grid.get();
+                    if (!grid) {
+                        grid = GetHostRootGrid(button);
+                        if (grid) entry->grid = winrt::make_weak(grid);
+                    }
+                    if (grid) SweepExistingButtons(grid, localSettings);
+                }
+                return;
+            }
+        }
+    }
     EnsureBlobOnButton(button, entry, iconPanel, isActive, localSettings);
 }
 
@@ -918,11 +993,76 @@ void ScheduleBgRestore(std::shared_ptr<BlobEntry> const& entry) {
 }
 
 void SweepTray(Panel const& trayGrid, const Settings& localSettings);
+void TaskbarSweepBody(Panel const& grid, const Settings& localSettings);
 
 // The re-runnable sweep body: enumerates the taskbar repeater's realized
 // children and reaches this island's system tray. Idempotent — RefreshBlob
 // finds or creates entries.
+// Attaches the DockingStates subscription for a tracked taskbar host if it
+// doesn't have one yet. Called from every sweep rather than only at first
+// contact: the group can be absent when the host is first seen (template
+// applied, groups not yet attached), and a Bottom<->Top switch doesn't
+// necessarily resize the RootGrid, so SizeChanged is not a reliable
+// backstop. On builds without the feature this is one null lookup per
+// sweep.
+void EnsureDockSubscription(Panel const& grid) {
+    {
+        std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
+        if (g_unloading) return;
+        bool tracked = false;
+        for (auto& host : g_taskbarHosts) {
+            if (host.grid.get() == grid) {
+                if (host.dockGroup.get()) return; // already subscribed
+                tracked = true;
+                break;
+            }
+        }
+        if (!tracked) return; // only tracked hosts get subscriptions
+    }
+    try {
+        auto dockGroup = GetVisualStateGroup(grid, L"DockingStates");
+        if (!dockGroup) return; // absent (older build, or not yet attached)
+
+        // Weak refs built BEFORE subscribing: if anything after the
+        // subscription threw, the revoke below would be skipped and the
+        // delegate would outlive the mod image.
+        auto weakDockGroup = winrt::make_weak(dockGroup);
+        auto weakGrid = winrt::make_weak(grid);
+        auto dockToken = dockGroup.CurrentStateChanged([weakGrid](auto const&, auto const&) {
+            if (g_unloading) return;
+            auto g = weakGrid.get();
+            if (!g) return;
+            Settings localSettings;
+            { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
+            try { TaskbarSweepBody(g, localSettings); } catch (...) {}
+        });
+        bool dockStored = false;
+        {
+            std::lock_guard<std::mutex> lock(g_blobEntriesMutex);
+            if (!g_unloading) {
+                for (auto& host : g_taskbarHosts) {
+                    if (host.grid.get() == grid) {
+                        host.dockGroup = weakDockGroup;
+                        host.dockToken = dockToken;
+                        dockStored = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if (!dockStored) {
+            // Untracked subscription: revoke immediately.
+            try { dockGroup.CurrentStateChanged(dockToken); } catch (...) {}
+        }
+    } catch (...) {}
+}
+
 void TaskbarSweepBody(Panel const& grid, const Settings& localSettings) {
+    // The dock edge is global; every taskbar sweep re-reads it so the
+    // refreshes below apply the current anchoring.
+    g_dockEdge = ReadDockEdge(grid);
+    EnsureDockSubscription(grid);
+
     try {
         FrameworkElement repeater = nullptr;
         auto children = grid.Children();
@@ -1038,6 +1178,7 @@ void SweepExistingButtons(Panel const& grid, const Settings& localSettings) {
             // Untracked subscription: revoke immediately.
             try { grid.SizeChanged(token); } catch (...) {}
         }
+
         TaskbarSweepBody(grid, localSettings);
     }
 }
@@ -1589,6 +1730,7 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
         entry->boundAdjX = -1e9f;
         entry->boundYBase = -1e9f;
         entry->geoW = -1.0;
+        entry->appliedDock = -1;
 
         // Repaint on theme switches: without this, untouched buttons would
         // keep the previous theme's fill until their next state change.
@@ -1669,6 +1811,7 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
     double bW = anchor.ActualWidth();
     double bH = anchor.ActualHeight();
     if (bW > 0.001) {
+        int dock = g_dockEdge.load();
         double W = localSettings.CustomWidth >= 0.0 ? localSettings.CustomWidth : bW;
         double H = localSettings.CustomHeight >= 0.0 ? localSettings.CustomHeight : bH;
         double W2 = std::max(1.0, W);
@@ -1676,6 +1819,7 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
         double Rt = std::max(0.0, localSettings.TopRadius);
         double Rb = localSettings.BottomRadius;
 
+        bool geoRebuilt = false;
         if (std::abs(entry->geoW - W2) > 0.01 || std::abs(entry->geoH - H2) > 0.01 ||
             std::abs(entry->geoRt - Rt) > 0.01 || std::abs(entry->geoRb - Rb) > 0.01 ||
             !blobShape.Data()) {
@@ -1684,6 +1828,34 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
             blobShape.Height(H2 + Rt);
             entry->geoW = W2; entry->geoH = H2;
             entry->geoRt = Rt; entry->geoRb = Rb;
+            geoRebuilt = true;
+        }
+
+        // Top-docked taskbars mirror the silhouette vertically. The mirror
+        // is baked into the GEOMETRY (Geometry.Transform, absolute center
+        // Ht/2) rather than applied as an element RenderTransform: the path
+        // then reaches the rasterizer as final coordinates and fills
+        // through the identical pipeline as the upright bottom-dock shape.
+        // An element-level negative-scale transform rasterizes through the
+        // compositor's transform stage instead, whose pixel snapping was
+        // observed to shift the flat edge by one row even with exact
+        // integer coordinates. Re-applied on geometry rebuild too — a
+        // fresh PathGeometry carries no transform.
+        bool dockChanged = entry->appliedDock != dock;
+        if (geoRebuilt || dockChanged) {
+            try {
+                if (auto geo = blobShape.Data()) {
+                    if (dock == DockTop) {
+                        ScaleTransform flipTransform;
+                        flipTransform.ScaleY(-1.0);
+                        flipTransform.CenterY((H2 + Rt) / 2.0);
+                        geo.Transform(flipTransform);
+                    } else {
+                        geo.Transform(nullptr);
+                    }
+                }
+            } catch (...) {}
+            entry->appliedDock = (int8_t)dock;
         }
 
         // X adjustment relative to the button's left edge: the anchor's
@@ -1699,17 +1871,38 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
             } catch (...) {}
         }
 
-        // The Y coordinate is a structural constant: the flat top edge is
-        // anchored to the top of the taskbar (the RootGrid origin), not to
-        // the button — no element position is ever sampled for Y, so no
-        // transition can displace or freeze the shape vertically. Margins
-        // shift it from that anchor; the body hangs downward by Height.
-        float yBase = 0.0f;
+        // The Y coordinate is a structural constant per dock edge — no
+        // element position is ever sampled for Y, so no transition can
+        // displace or freeze the shape vertically. Bottom-docked (default):
+        // the flat top edge anchors to the top of the host (the grid
+        // origin) and the body hangs downward. Top-docked: the flat edge
+        // sits on the host's bottom edge (the side facing the desktop),
+        // with the body's excess hanging above the screen edge — the
+        // mirror of how it hangs below on bottom dock — and the flip above
+        // mirrors the silhouette to match.
+        //
+        // Vertical margins are anchored-edge-relative, not screen-relative:
+        // Top pushes the blob deeper into the bar (away from its flat
+        // edge), Bottom pulls it back out — the same config nudges the
+        // blob inward on both docks.
+        double vertInset = 0.0;
         if (localSettings.HasCustomMargin) {
             adjX += (float)(localSettings.CustomMargin.Left - localSettings.CustomMargin.Right);
-            yBase += (float)(localSettings.CustomMargin.Top - localSettings.CustomMargin.Bottom);
+            vertInset = localSettings.CustomMargin.Top - localSettings.CustomMargin.Bottom;
         }
-        yBase = std::round(yBase);
+        float yBase;
+        if (dock == DockTop) {
+            // Rounded on the FLAT EDGE, then the box placed Ht above it.
+            // The box height (auto height + radius) can be fractional under
+            // display scaling; rounding the box top instead shifts the flat
+            // edge by that fraction, which pixel-snaps into a visible ~1px
+            // offset that bottom dock — where the flat edge IS the box
+            // top — never shows. The fraction is absorbed by the rounded
+            // end at the screen edge, where it is invisible.
+            yBase = (float)(std::round(grid.ActualHeight() - vertInset) - (H2 + Rt));
+        } else {
+            yBase = (float)std::round(vertInset);
+        }
 
         if (!entry->bound ||
             std::abs(entry->boundAdjX - adjX) > 0.5f ||
@@ -1725,15 +1918,23 @@ void EnsureBlobOnButton(winrt::Windows::UI::Xaml::FrameworkElement const& button
     // One condition drives both the blob and the native indicator: the
     // native background only disappears when the blob is actually shown in
     // its place, and the blob never renders at a stale or unbound position.
-    bool show = isActive && entry->bound;
+    // The dock is re-read HERE, after any first-contact sweep inside this
+    // call has updated it: the fast-path check in RefreshBlob runs BEFORE
+    // that sweep and can hold a stale bottom-dock value for the very first
+    // button of a vertically-docked taskbar — this gate is the
+    // authoritative one.
+    int dockNow = g_dockEdge.load();
+    bool show = isActive && entry->bound &&
+                dockNow != DockLeft && dockNow != DockRight;
     blobShape.Opacity(show ? 1.0 : 0.0);
     setNativeHidden(show);
 
     // Idle blobs don't evaluate: one live expression per button would keep
     // ~20 per-frame evaluations running on the render thread for shapes at
-    // Opacity(0). Stop on deactivation; the bound flag already drives the
-    // cheap rebind on the next activation.
-    if (!isActive && entry->bound) {
+    // Opacity(0). Stop whenever not shown (deactivation or a vertical
+    // dock); the bound flag already drives the cheap rebind on the next
+    // activation.
+    if (!show && entry->bound) {
         try {
             ElementCompositionPreview::GetElementVisual(blobShape).Properties().StopAnimation(L"Translation");
         } catch (...) {}
@@ -1920,18 +2121,26 @@ void Wh_ModBeforeUninit() {
         auto hostGrid = host.grid.get();
         auto dispatcher = hostGrid ? hostGrid.Dispatcher() : nullptr;
         auto token = host.sizeToken;
+        auto dockGroup = host.dockGroup;
+        auto dockToken = host.dockToken;
         if (!dispatcher) {
             if (pending->fetch_sub(1) == 1 && eventLifetime.get()) SetEvent(eventLifetime.get());
             continue;
         }
         if (dispatcher.HasThreadAccess()) {
             try { hostGrid.SizeChanged(token); } catch (...) {}
+            if (auto grp = dockGroup.get()) {
+                try { grp.CurrentStateChanged(dockToken); } catch (...) {}
+            }
             if (pending->fetch_sub(1) == 1 && eventLifetime.get()) SetEvent(eventLifetime.get());
         } else {
             bool posted = false;
             try {
-                dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [hostGrid, token, pending, eventLifetime]() {
+                dispatcher.RunAsync(winrt::Windows::UI::Core::CoreDispatcherPriority::High, [hostGrid, token, dockGroup, dockToken, pending, eventLifetime]() {
                     try { hostGrid.SizeChanged(token); } catch (...) {}
+                    if (auto grp = dockGroup.get()) {
+                        try { grp.CurrentStateChanged(dockToken); } catch (...) {}
+                    }
                     if (pending->fetch_sub(1) == 1 && eventLifetime.get()) SetEvent(eventLifetime.get());
                 });
                 posted = true;
