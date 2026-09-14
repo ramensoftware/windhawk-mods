@@ -4,7 +4,7 @@
 // @description     Replaces the grouped Windows 11 system tray button with separate sound, Bluetooth, network, Control Center, and battery buttons.
 // @version         1.0.0
 // @author          Asteski
-// @github          https://www.github.com/Asteski
+// @github          https://github.com/Asteski
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -DWIN32_LEAN_AND_MEAN -lshell32 -lole32 -loleaut32 -lruntimeobject -luuid -liphlpapi -lwlanapi -lbthprops
