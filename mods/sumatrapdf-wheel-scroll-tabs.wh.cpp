@@ -53,6 +53,11 @@ bound to now.
 SumatraPDF versions before 3.5 aren't supported: they have no tab switching
 commands and use Ctrl+PageDown / Ctrl+PageUp for page navigation. The mod stays
 inactive there.
+
+## Credits
+
+Based on the [Chrome/Edge scroll tabs with mouse wheel](https://windhawk.net/mods/chrome-wheel-scroll-tabs)
+mod by m417z (GPL-3.0).
 */
 // ==/WindhawkModReadme==
 
@@ -105,7 +110,7 @@ constexpr PCWSTR kTabBarClassNames[] = {
     L"SumatraTabsCtrlClass",
 };
 
-DWORD g_uiThreadId;
+std::atomic<DWORD> g_uiThreadId;
 DWORD g_lastScrollTime;
 HWND g_lastScrollWnd;
 bool g_lastScrollHorizontal;
@@ -115,17 +120,22 @@ DWORD g_lastActionTime;
 // Command ids of "Next Tab" / "Previous Tab". They differ between SumatraPDF
 // versions, so they're detected from the accelerator tables. SumatraPDF
 // rebuilds its tables on every settings reload, and ids of commands defined in
-// the "Shortcuts" advanced setting are assigned anew each time, so the ids are
-// re-resolved on every table creation. The hooks feeding the detection are
-// process-wide, hence the mutex. g_tabCommandsResolved is set once the first
-// detection succeeded and serves as the lock-free fast path.
+// the "Shortcuts" advanced setting are assigned anew each time. Therefore the
+// ids are resolved from every table that is created, and they're invalidated
+// when the table they came from is destroyed, so a rebuild that no longer
+// binds the shortcuts leaves the mod inactive instead of posting a stale id.
+// The hooks feeding the detection are process-wide, hence the mutex.
+// g_tabCommandsResolved doubles as the lock-free fast path.
 std::atomic<bool> g_tabCommandsResolved;
 std::mutex g_tabCommandsMutex;
 WORD g_cmdNextTab;
 WORD g_cmdPrevTab;
-// Tables already scanned via their handle (only used while the ids aren't
-// known yet, e.g. when the mod was loaded into a running SumatraPDF).
+HACCEL g_resolvedFromTable;
+// Tables already scanned via their handle. Only used while the ids aren't
+// known yet and no table creation has been observed, i.e. when the mod was
+// loaded into a running SumatraPDF.
 std::vector<HACCEL> g_scannedAccelTables;
+std::atomic<bool> g_tableCreationObserved;
 
 // Reads the file version (major.minor) of the executable of the current
 // process, i.e. the SumatraPDF version.
@@ -160,9 +170,11 @@ bool GetProcessFileVersion(WORD* major, WORD* minor) {
 }
 
 // Looks for the Ctrl+PageDown / Ctrl+PageUp entries, which SumatraPDF 3.5+
-// binds to the "Next Tab" / "Previous Tab" commands. Must be called with
-// g_tabCommandsMutex held.
-bool ResolveTabCommandsFromAccels(const ACCEL* accels, int count) {
+// binds to the "Next Tab" / "Previous Tab" commands. hAccel is the table the
+// entries belong to. Must be called with g_tabCommandsMutex held.
+bool ResolveTabCommandsFromAccels(const ACCEL* accels,
+                                  int count,
+                                  HACCEL hAccel) {
     WORD next = 0;
     WORD prev = 0;
     for (int i = 0; i < count; i++) {
@@ -195,6 +207,7 @@ bool ResolveTabCommandsFromAccels(const ACCEL* accels, int count) {
 
     g_cmdNextTab = next;
     g_cmdPrevTab = prev;
+    g_resolvedFromTable = hAccel;
     g_tabCommandsResolved.store(true, std::memory_order_release);
     Wh_Log(L"Tab commands resolved: next=%u, prev=%u", next, prev);
     return true;
@@ -211,9 +224,9 @@ void ResolveTabCommandsFromTable(HACCEL hAccel) {
 
     // Don't scan the same table over and over again. SumatraPDF uses several
     // tables (e.g. a reduced one while an edit control has the focus), not all
-    // of them contain the tab shortcuts. The list is cleared whenever a new
-    // table is created (see CreateAcceleratorTableWHook), since the old ones
-    // are destroyed and their handle values may be reused.
+    // of them contain the tab shortcuts. A table is removed from the list when
+    // it's destroyed (see DestroyAcceleratorTableHook), since its handle value
+    // may be reused.
     for (HACCEL hScanned : g_scannedAccelTables) {
         if (hScanned == hAccel) {
             return;
@@ -233,10 +246,17 @@ void ResolveTabCommandsFromTable(HACCEL hAccel) {
         return;
     }
 
-    ResolveTabCommandsFromAccels(accels.data(), count);
+    ResolveTabCommandsFromAccels(accels.data(), count, hAccel);
 }
 
-bool IsTabBarWindow(HWND hWnd) {
+struct TabBarInfo {
+    HWND hWnd;
+    // True for the standard tab control (SysTabControl32), which answers tab
+    // control messages. The pre-release class doesn't.
+    bool isStandardTabControl;
+};
+
+bool IsTabBarWindow(HWND hWnd, bool* isStandardTabControl) {
     WCHAR windowClassName[64];
     if (!GetClassName(hWnd, windowClassName, ARRAYSIZE(windowClassName))) {
         return false;
@@ -244,6 +264,8 @@ bool IsTabBarWindow(HWND hWnd) {
 
     for (PCWSTR className : kTabBarClassNames) {
         if (_wcsicmp(windowClassName, className) == 0) {
+            *isStandardTabControl =
+                _wcsicmp(windowClassName, WC_TABCONTROLW) == 0;
             return true;
         }
     }
@@ -252,8 +274,11 @@ bool IsTabBarWindow(HWND hWnd) {
 }
 
 BOOL CALLBACK FindTabBarEnumFunc(HWND hWnd, LPARAM lParam) {
-    if (IsTabBarWindow(hWnd) && IsWindowVisible(hWnd)) {
-        *(HWND*)lParam = hWnd;
+    bool isStandardTabControl = false;
+    if (IsTabBarWindow(hWnd, &isStandardTabControl) && IsWindowVisible(hWnd)) {
+        TabBarInfo* info = (TabBarInfo*)lParam;
+        info->hWnd = hWnd;
+        info->isStandardTabControl = isStandardTabControl;
         return FALSE;
     }
 
@@ -263,10 +288,10 @@ BOOL CALLBACK FindTabBarEnumFunc(HWND hWnd, LPARAM lParam) {
 // The tab bar is a child of the main window, or of the custom caption window
 // when the tabs are shown in the title bar. It's hidden when tabs are disabled
 // or (depending on the version) when only a single document is open.
-HWND FindVisibleTabBar(HWND hFrameWnd) {
-    HWND hTabBar = nullptr;
-    EnumChildWindows(hFrameWnd, FindTabBarEnumFunc, (LPARAM)&hTabBar);
-    return hTabBar;
+TabBarInfo FindVisibleTabBar(HWND hFrameWnd) {
+    TabBarInfo info{};
+    EnumChildWindows(hFrameWnd, FindTabBarEnumFunc, (LPARAM)&info);
+    return info;
 }
 
 bool IsCanvasWindow(HWND hWnd) {
@@ -313,17 +338,28 @@ bool OnMouseWheel(HWND hWnd,
         return false;
     }
 
+    if (GetKeyState(VK_MENU) < 0 || GetKeyState(VK_LWIN) < 0 ||
+        GetKeyState(VK_RWIN) < 0) {
+        return false;
+    }
+
+    if (!g_tabCommandsResolved.load(std::memory_order_acquire)) {
+        Wh_Log(L"Tab command ids aren't known (yet), leaving the event alone");
+        return false;
+    }
+
     // The window under the cursor isn't necessarily the tab bar itself: with
     // tabs in the title bar, the area next to the tabs hit-tests as
     // transparent so that the window can be dragged there. Like in the
-    // browser mod, the whole tab bar rectangle counts.
-    HWND hTabBar = FindVisibleTabBar(hWnd);
-    if (!hTabBar) {
+    // browser mod, the whole tab bar rectangle counts. (The caption window,
+    // and with it the tab bar, ends where the caption buttons begin.)
+    TabBarInfo tabBar = FindVisibleTabBar(hWnd);
+    if (!tabBar.hWnd) {
         return false;
     }
 
     RECT rect{};
-    if (!GetWindowRect(hTabBar, &rect)) {
+    if (!GetWindowRect(tabBar.hWnd, &rect)) {
         return false;
     }
 
@@ -333,18 +369,10 @@ bool OnMouseWheel(HWND hWnd,
 
     // With a single tab there's nothing to switch to, leave the event to
     // SumatraPDF (which scrolls the document). Only the standard tab control
-    // answers TCM_GETITEMCOUNT, the pre-release class returns 0.
-    if (SendMessage(hTabBar, TCM_GETITEMCOUNT, 0, 0) == 1) {
-        return false;
-    }
-
-    if (GetKeyState(VK_MENU) < 0 || GetKeyState(VK_LWIN) < 0 ||
-        GetKeyState(VK_RWIN) < 0) {
-        return false;
-    }
-
-    if (!g_tabCommandsResolved.load(std::memory_order_acquire)) {
-        Wh_Log(L"Tab command ids aren't known (yet), leaving the event alone");
+    // is asked - TCM_GETITEMCOUNT is a WM_USER range message that another
+    // class may interpret differently.
+    if (tabBar.isStandardTabControl &&
+        SendMessage(tabBar.hWnd, TCM_GETITEMCOUNT, 0, 0) <= 1) {
         return false;
     }
 
@@ -470,15 +498,16 @@ BOOL CALLBACK InitialEnumFrameWindowsFunc(HWND hWnd, LPARAM lParam) {
         return TRUE;
     }
 
-    if (g_uiThreadId && g_uiThreadId != dwThreadId) {
+    DWORD uiThreadId = g_uiThreadId.load();
+    if (uiThreadId && uiThreadId != dwThreadId) {
         return TRUE;
     }
 
     if (IsSumatraFrameWindow(hWnd)) {
         Wh_Log(L"SumatraPDF window found: %08X", (DWORD)(ULONG_PTR)hWnd);
 
-        if (!g_uiThreadId) {
-            g_uiThreadId = dwThreadId;
+        if (!uiThreadId) {
+            g_uiThreadId.store(dwThreadId);
         }
 
         WindhawkUtils::SetWindowSubclassFromAnyThread(
@@ -522,15 +551,16 @@ HWND WINAPI CreateWindowExWHook(DWORD dwExStyle,
         return hWnd;
     }
 
-    if (g_uiThreadId && g_uiThreadId != GetCurrentThreadId()) {
+    DWORD uiThreadId = g_uiThreadId.load();
+    if (uiThreadId && uiThreadId != GetCurrentThreadId()) {
         return hWnd;
     }
 
     if (IsSumatraFrameWindow(hWnd)) {
         Wh_Log(L"SumatraPDF window created: %08X", (DWORD)(ULONG_PTR)hWnd);
 
-        if (!g_uiThreadId) {
-            g_uiThreadId = GetCurrentThreadId();
+        if (!uiThreadId) {
+            g_uiThreadId.store(GetCurrentThreadId());
         }
 
         WindhawkUtils::SetWindowSubclassFromAnyThread(
@@ -556,14 +586,35 @@ HACCEL WINAPI CreateAcceleratorTableWHook(LPACCEL paccel, int cAccel) {
 
         // Only a table that contains both shortcuts updates the ids, the
         // reduced tables leave them alone.
-        ResolveTabCommandsFromAccels(paccel, cAccel);
+        ResolveTabCommandsFromAccels(paccel, cAccel, hAccel);
 
-        // The previous tables were destroyed before this one was created,
-        // so their handles are stale and may be reused.
-        g_scannedAccelTables.clear();
+        // From now on every live table has been seen here, the handle based
+        // lookup in TranslateAcceleratorWHook is no longer needed.
+        g_tableCreationObserved.store(true, std::memory_order_relaxed);
     }
 
     return hAccel;
+}
+
+// SumatraPDF destroys its tables before rebuilding them. Forget the ids that
+// came from a destroyed table: if the new table binds the shortcuts again,
+// they're resolved afresh, otherwise the mod stays inactive.
+using DestroyAcceleratorTable_t = decltype(&DestroyAcceleratorTable);
+DestroyAcceleratorTable_t pOriginalDestroyAcceleratorTable;
+BOOL WINAPI DestroyAcceleratorTableHook(HACCEL hAccel) {
+    if (hAccel) {
+        std::lock_guard<std::mutex> lock(g_tabCommandsMutex);
+
+        if (hAccel == g_resolvedFromTable) {
+            Wh_Log(L"Table the tab commands came from is being destroyed");
+            g_resolvedFromTable = nullptr;
+            g_tabCommandsResolved.store(false, std::memory_order_release);
+        }
+
+        std::erase(g_scannedAccelTables, hAccel);
+    }
+
+    return pOriginalDestroyAcceleratorTable(hAccel);
 }
 
 // Covers the case that the mod is loaded into an already running SumatraPDF:
@@ -572,7 +623,8 @@ HACCEL WINAPI CreateAcceleratorTableWHook(LPACCEL paccel, int cAccel) {
 using TranslateAcceleratorW_t = decltype(&TranslateAcceleratorW);
 TranslateAcceleratorW_t pOriginalTranslateAcceleratorW;
 int WINAPI TranslateAcceleratorWHook(HWND hWnd, HACCEL hAccTable, LPMSG lpMsg) {
-    if (hAccTable && !g_tabCommandsResolved.load(std::memory_order_acquire)) {
+    if (hAccTable && !g_tabCommandsResolved.load(std::memory_order_acquire) &&
+        !g_tableCreationObserved.load(std::memory_order_relaxed)) {
         ResolveTabCommandsFromTable(hAccTable);
     }
 
@@ -611,6 +663,9 @@ BOOL Wh_ModInit() {
     WindhawkUtils::SetFunctionHook(CreateAcceleratorTableW,
                                    CreateAcceleratorTableWHook,
                                    &pOriginalCreateAcceleratorTableW);
+    WindhawkUtils::SetFunctionHook(DestroyAcceleratorTable,
+                                   DestroyAcceleratorTableHook,
+                                   &pOriginalDestroyAcceleratorTable);
     WindhawkUtils::SetFunctionHook(TranslateAcceleratorW,
                                    TranslateAcceleratorWHook,
                                    &pOriginalTranslateAcceleratorW);
@@ -623,8 +678,9 @@ BOOL Wh_ModInit() {
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    if (g_uiThreadId != 0) {
-        EnumThreadWindows(g_uiThreadId, EnumFrameWindowsUnsubclassFunc, 0);
+    DWORD uiThreadId = g_uiThreadId.load();
+    if (uiThreadId != 0) {
+        EnumThreadWindows(uiThreadId, EnumFrameWindowsUnsubclassFunc, 0);
     }
 }
 
