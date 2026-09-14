@@ -387,23 +387,27 @@ static void RestoreOriginalState()
     HWND hwnd = g_styledHwnd;
     g_styledHwnd = nullptr;
 
+    // Cleared only once the window is actually restored below, not before:
+    // the calls below are synchronous cross-process work that a hung target
+    // app can stall indefinitely, and if the bounded 3 s join in
+    // WhTool_ModUninit times out mid-restore, ExitProcess(0) follows right
+    // after - clearing the record up front would strand the window
+    // SW_HIDE'd with no way for a later instance to recover it.
+    if (IsWindow(hwnd)) {
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, g_originalExStyle);
+        SetWindowLongPtrW(hwnd, GWL_STYLE, g_originalStyle);
+        SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+
+        if (g_hideFromTaskbar && IsWindowVisible(hwnd)) {
+            ShowWindow(hwnd, SW_HIDE);
+            ShowWindow(hwnd, SW_SHOWNA);
+        }
+
+        SetWindowPlacement(hwnd, &g_originalPlacement);
+    }
+
     ClearPersistedParkedState();
-
-    if (!IsWindow(hwnd)) {
-        return;
-    }
-
-    SetWindowLongPtrW(hwnd, GWL_EXSTYLE, g_originalExStyle);
-    SetWindowLongPtrW(hwnd, GWL_STYLE, g_originalStyle);
-    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
-        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-
-    if (g_hideFromTaskbar && IsWindowVisible(hwnd)) {
-        ShowWindow(hwnd, SW_HIDE);
-        ShowWindow(hwnd, SW_SHOWNA);
-    }
-
-    SetWindowPlacement(hwnd, &g_originalPlacement);
 }
 
 // Captures the window's original styles/placement the first time it's
@@ -757,8 +761,15 @@ static DWORD WINAPI HotkeyThreadProc(LPVOID)
     // DPI-virtualized on any monitor whose scaling differs from the
     // system DPI, so the docked strip lands at the wrong position/size
     // on a mixed-DPI multi-monitor setup (exactly what monitorMode:
-    // cursor is for).
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    // cursor is for). Loaded dynamically - the export only exists on
+    // Windows 10 1607+, and linking it statically would make the whole
+    // DLL fail to load on older systems.
+    using SetThreadDpiAwarenessContext_t = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
+    auto pSetThreadDpiAwarenessContext = (SetThreadDpiAwarenessContext_t)GetProcAddress(
+        GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext");
+    if (pSetThreadDpiAwarenessContext) {
+        pSetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    }
 
     WNDCLASSEXW wc = {sizeof(wc)};
     wc.lpfnWndProc = HotkeyWndProc;
