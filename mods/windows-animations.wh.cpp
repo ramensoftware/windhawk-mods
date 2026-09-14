@@ -22,6 +22,11 @@
 // @compilerOptions -ladvapi32 -ld3d11 -ldcomp -ldwmapi -ldxgi -lgdi32 -lole32 -loleaut32 -lshell32 -luuid -luser32
 // ==/WindhawkMod==
 
+// The explicit process exclusions above are pre-injection fast paths for
+// known interactive-session helpers that never host an animatable top-level
+// window. The runtime session/command-line checks below cover generic helper
+// roles, but they run only after injection has already occurred.
+
 // ==WindhawkModReadme==
 /*
 # Windows Animations
@@ -86,7 +91,7 @@ When the corresponding **Hybrid GPU acceleration** option is enabled, the mod us
 | Area | Improvement |
 |---|---|
 | **CPU effects** | Perlin uses a compact dissolve field with cached noise generation. Shatter and Thanos use compact particle data and stop traversing particles after they can no longer contribute to the frame. Specialized 1 px paths reduce the cost of very fine particles. |
-| **GPU preparation** | Predictive background warm-up compiles only the next configured or shuffled eligible effect and reuses shared pipelines. |
+| **GPU preparation** | GPU resources are created on demand after a process actually animates or requests a GPU-eligible path. Predictive background warm-up then compiles only the next configured or shuffled eligible effect and reuses shared pipelines. |
 | **Resource safety** | Right-sized surfaces reduce memory use, and process-wide GPU resources are released before the final app window closes. |
 | **Animation pacing** | Frame scheduling follows the active monitor's refresh timing instead of assuming a fixed refresh rate. |
 | **Window transitions** | Improved taskbar minimizes, support for taskbars on every screen edge, rounded-corner preservation, rapid reversals, Alt+Tab, backdrop windows, console capture, and Windows Terminal taskbar targeting. |
@@ -102,7 +107,7 @@ When the corresponding **Hybrid GPU acceleration** option is enabled, the mod us
 
 ## ✨ Key Features
 
-* **🚀 Smart Hybrid Engine:** Selects the optimized CPU renderer for minimizes and ordinary closes, D3D11 with DirectComposition for restores/launches, and D3D11 with layered presentation for qualifying dense Thanos/Perlin closes. Alt+Tab uses native DWM thumbnails. After an eligible app window settles, the mod predicts the next configured or shuffled GPU-eligible effect and warms only its required pipelines. GPU startup, device loss, Remote Desktop, or unsupported hardware automatically falls back to CPU.
+* **🚀 Smart Hybrid Engine:** Selects the optimized CPU renderer for minimizes and ordinary closes, D3D11 with DirectComposition for restores/launches, and D3D11 with layered presentation for qualifying dense Thanos/Perlin closes. Alt+Tab uses native DWM thumbnails. GPU resources are created only after the process actually needs or predicts GPU animation work; after an animation completes, the mod warms only the next configured or shuffled eligible pipeline. GPU startup, device loss, Remote Desktop, or unsupported hardware automatically falls back to CPU.
 
 * **🎬 Cinematic Close Effects:** Transform how you close applications with six physics-based animations:
   * **Square Shatter:** The window violently explodes outward into digital blocks before drifting into the void.
@@ -367,6 +372,7 @@ You can deeply customize the feel and pacing of every animation via the Windhawk
 #include <string_view>
 #include <exception>
 #include <new>
+#include <memory>
 #include <utility>
 #include <windhawk_utils.h>
 
@@ -582,7 +588,10 @@ namespace AnimConstants {
     constexpr int UiaMinAcceptScore = 400;
     constexpr int TaskbarExpandWaitMs = 250;
     constexpr int GpuFrameLatencyWaitMs = 250;
-    constexpr int ClassicShowDesktopWaitMs = 8000;
+    // Minimize/restore durations are clamped to 1400 ms. Leave enough slack
+    // for endpoint cleanup, but fall back to Windows instead of holding a
+    // shell UI thread for the former eight-second ceiling.
+    constexpr int ClassicShowDesktopWaitMs = 2500;
     constexpr int ClassicShowDesktopCollectionFirstMs = 1000;
     constexpr int ClassicShowDesktopCollectionQuietMs = 75;
     constexpr int ClassicShowDesktopCollectionMaxMs = 1500;
@@ -6216,48 +6225,6 @@ static void RequestPredictedGpuWarmup(HWND hStableWnd) {
     // pipeline is still cold, the normal CPU fallback keeps the action safe
     // without reserving or precompiling every effect for idle windows.
     RequestGpuWarmup(requiredPipelines, settingsGeneration);
-}
-
-static std::atomic<bool> g_stableGpuWarmupRunning{false};
-
-static DWORD WINAPI StableGpuWarmupThread(LPVOID) {
-    const DWORD deadline = GetTickCount() + 2000;
-    Sleep(200);
-    while (!g_unloading.load(std::memory_order_relaxed) &&
-           static_cast<LONG>(GetTickCount() - deadline) < 0) {
-        bool animationActive = false;
-        {
-            std::lock_guard<std::mutex> lock(g_StateMutex);
-            animationActive = !g_AnimActive.empty();
-        }
-        if (!animationActive) {
-            if (HWND hStableWnd = FindStableGpuWindow()) {
-                RequestPredictedGpuWarmup(hStableWnd);
-                break;
-            }
-        }
-        Sleep(25);
-    }
-    g_stableGpuWarmupRunning.store(false, std::memory_order_release);
-    return 0;
-}
-
-static void ScheduleStableGpuWarmup() {
-    if (RequiresCpuAnimationRendererProcess() ||
-        g_unloading.load(std::memory_order_relaxed) ||
-        GetSystemMetrics(SM_REMOTESESSION) ||
-        (!g_gpuAcceleration.load(std::memory_order_relaxed) &&
-         !g_closeGpuAcceleration.load(std::memory_order_relaxed))) {
-        return;
-    }
-    bool expected = false;
-    if (!g_stableGpuWarmupRunning.compare_exchange_strong(
-            expected, true, std::memory_order_acq_rel)) {
-        return;
-    }
-    if (!StartWorkerThread(StableGpuWarmupThread, nullptr)) {
-        g_stableGpuWarmupRunning.store(false, std::memory_order_release);
-    }
 }
 
 static void ReportGpuPresenterFailureLocked(HRESULT hr, PCWSTR stage) {
@@ -12724,7 +12691,14 @@ static bool WaitForClassicShowDesktopRestoreEndpoint(
                 return observedAnimation;
             }
         }
-        Sleep(10);
+        // This runs on Explorer's CTray UI thread. Service nonqueued sent
+        // messages while preserving posted input behind the current Win+D
+        // operation, matching the other classic Show Desktop waits.
+        MsgWaitForMultipleObjectsEx(0, nullptr, 10, QS_SENDMESSAGE,
+                                    MWMO_INPUTAVAILABLE);
+        MSG message{};
+        PeekMessageW(&message, nullptr, 0, 0,
+                     PM_NOREMOVE | PM_QS_SENDMESSAGE);
     }
     return observedAnimation;
 }
@@ -12761,7 +12735,14 @@ static void RestoreClassicShowDesktopBatchBeforeShell() {
     while (IsClassicShowDesktopRestoreBatchCurrent(generation) &&
            FindAnyAnimationSessionWindow() &&
            static_cast<LONG>(GetTickCount() - existingAnimationDeadline) < 0) {
-        Sleep(10);
+        // Avoid blocking cross-thread SendMessage callers while the preceding
+        // animation publishes its endpoint. Posted input remains ordered
+        // behind this Show Desktop operation.
+        MsgWaitForMultipleObjectsEx(0, nullptr, 10, QS_SENDMESSAGE,
+                                    MWMO_INPUTAVAILABLE);
+        MSG message{};
+        PeekMessageW(&message, nullptr, 0, 0,
+                     PM_NOREMOVE | PM_QS_SENDMESSAGE);
     }
 
     size_t alreadyRestored = 0;
@@ -13249,8 +13230,6 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
         return IsWindowVisible(hWnd);
     }
     if (!IsOurWindow(hWnd)) return ShowWindow_Original(hWnd, cmd);
-    const bool mayCreateStableWindow =
-        !IsWindowVisible(hWnd) && IsLaunchCommand(cmd);
     if (IsShowCmdForWinEvent(cmd)) {
         EnsureWinEventThreadStarted();
         PublishShowDesktopCloakEndpointForWindow(hWnd);
@@ -13276,12 +13255,9 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
         KeepLaunchWindowTransparent(hWnd);
         CommitLaunchAnim(hWnd, originalStyle, launchSnapshotToken,
                          launchHiddenByCloak);
-        if (mayCreateStableWindow) ScheduleStableGpuWarmup();
         return result;
     }
-    const BOOL result = ShowWindow_Original(hWnd, cmd);
-    if (mayCreateStableWindow) ScheduleStableGpuWarmup();
-    return result;
+    return ShowWindow_Original(hWnd, cmd);
 }
 BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int cmd) {
     const bool restoreCommand = cmd == SW_RESTORE || cmd == SW_SHOWNORMAL;
@@ -13404,8 +13380,6 @@ BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int cmd) {
         return result;
     }
     if (!IsOurWindow(hWnd)) return ShowWindowAsync_Original(hWnd, cmd);
-    const bool mayCreateStableWindow =
-        !IsWindowVisible(hWnd) && IsLaunchCommand(cmd);
     if (IsShowCmdForWinEvent(cmd)) {
         EnsureWinEventThreadStarted();
         PublishShowDesktopCloakEndpointForWindow(hWnd);
@@ -13424,20 +13398,15 @@ BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int cmd) {
         KeepLaunchWindowTransparent(hWnd);
         CommitLaunchAnim(hWnd, originalStyle, launchSnapshotToken,
                          launchHiddenByCloak);
-        if (mayCreateStableWindow) ScheduleStableGpuWarmup();
         return result;
     }
-    const BOOL result = ShowWindowAsync_Original(hWnd, cmd);
-    if (mayCreateStableWindow) ScheduleStableGpuWarmup();
-    return result;
+    return ShowWindowAsync_Original(hWnd, cmd);
 }
 BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND insertAfter, int x, int y, int cx, int cy, UINT flags) {
     if (!(flags & (SWP_HIDEWINDOW | SWP_SHOWWINDOW))) {
         return SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, flags);
     }
     if (!IsOurWindow(hWnd)) return SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, flags);
-    const bool mayCreateStableWindow =
-        (flags & SWP_SHOWWINDOW) && !IsWindowVisible(hWnd);
     if (flags & SWP_SHOWWINDOW) {
         EnsureWinEventThreadStarted();
         PublishShowDesktopCloakEndpointForWindow(hWnd);
@@ -13462,14 +13431,10 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND insertAfter, int x, int y, int cx,
             KeepLaunchWindowTransparent(hWnd);
             CommitLaunchAnim(hWnd, originalStyle, launchSnapshotToken,
                              launchHiddenByCloak);
-            if (mayCreateStableWindow) ScheduleStableGpuWarmup();
             return result;
         }
     }
-    const BOOL result =
-        SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, flags);
-    if (mayCreateStableWindow) ScheduleStableGpuWarmup();
-    return result;
+    return SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, flags);
 }
 BOOL WINAPI DestroyWindow_Hook(HWND hWnd) {
     bool animated = false;
@@ -14024,9 +13989,6 @@ BOOL Wh_ModInit() {
     if (!explorerProcess && IsExplorerProcess()) {
         StartWorkerThread(ShellOwnershipProbeThread, nullptr);
     }
-    if (FindStableGpuWindow()) {
-        ScheduleStableGpuWarmup();
-    }
     return TRUE;
 }
 void Wh_ModSettingsChanged() { 
@@ -14060,8 +14022,6 @@ void Wh_ModSettingsChanged() {
             Wh_Log(
                 L"GPU renderer released: both acceleration settings are off");
         }
-    } else if (FindStableGpuWindow()) {
-        ScheduleStableGpuWarmup();
     }
 
     if (wasShowDesktopTopWindowOnly != isShowDesktopTopWindowOnly &&
@@ -14110,7 +14070,6 @@ void Wh_ModBeforeUninit() {
     JoinWorkerThreads();
     ShutdownGpuRenderService();
     g_gpuWarmupRunning.store(false, std::memory_order_release);
-    g_stableGpuWarmupRunning.store(false, std::memory_order_release);
     StopSwitchThreads();
 }
 
