@@ -88,6 +88,17 @@ constexpr wchar_t kPrevWProp[] = L"EdgeDoubleClickResizeWH_PrevW";
 constexpr wchar_t kPrevYProp[] = L"EdgeDoubleClickResizeWH_PrevY";
 constexpr wchar_t kPrevHProp[] = L"EdgeDoubleClickResizeWH_PrevH";
 
+// The bounds actually reached after a maximize, which can differ from
+// the requested target if the app clamps or quantizes its size (e.g.
+// a dialog with a WM_GETMINMAXINFO cap, or a console window snapping
+// to character cells). "Already maximized" is judged against these
+// when present, so the toggle still works for such windows instead of
+// only ever re-applying (and re-failing) the same request.
+constexpr wchar_t kAppliedXProp[] = L"EdgeDoubleClickResizeWH_AppliedX";
+constexpr wchar_t kAppliedWProp[] = L"EdgeDoubleClickResizeWH_AppliedW";
+constexpr wchar_t kAppliedYProp[] = L"EdgeDoubleClickResizeWH_AppliedY";
+constexpr wchar_t kAppliedHProp[] = L"EdgeDoubleClickResizeWH_AppliedH";
+
 // Shared logic: inspects the hit-test code and resizes width and/or
 // height depending on which edge was double-clicked. Returns true if
 // the message was handled (caller should suppress default processing).
@@ -189,8 +200,19 @@ bool HandleEdgeDoubleClick(HWND hWnd, WPARAM wParam) {
 
     int curW = wr.right - wr.left;
     const int tolerance = 2; // allow for rounding
-    bool alreadyAtTarget = std::abs(wr.left - targetX) <= tolerance &&
-                            std::abs(curW - targetW) <= tolerance;
+
+    // Compare against the bounds actually reached last time (if any),
+    // falling back to the theoretical target for a window that's never
+    // been touched by this mod.
+    int appliedW = (int)(INT_PTR)GetPropW(hWnd, kAppliedWProp);
+    int appliedX = targetX;
+    if (appliedW > 0) {
+        appliedX = (int)(INT_PTR)GetPropW(hWnd, kAppliedXProp);
+    } else {
+        appliedW = targetW;
+    }
+    bool alreadyAtTarget = std::abs(wr.left - appliedX) <= tolerance &&
+                            std::abs(curW - appliedW) <= tolerance;
 
     int prevW = (int)(INT_PTR)GetPropW(hWnd, kPrevWProp);
     int prevH = (int)(INT_PTR)GetPropW(hWnd, kPrevHProp);
@@ -208,16 +230,18 @@ bool HandleEdgeDoubleClick(HWND hWnd, WPARAM wParam) {
             newH = prevH;
         }
 
-        // Clear all four together, even if only the width half was
-        // used above. Leaving a stale Y/H pair around (e.g. after a
-        // corner-maximize is later restored via a plain side edge)
-        // would otherwise get silently overwritten with the
-        // already-maximized height on the next corner click,
+        // Clear everything together, even if only the width half was
+        // used above. Leaving a stale Y/H (or applied) pair around
+        // would otherwise get silently reused or overwritten later,
         // permanently losing the real original size.
         RemovePropW(hWnd, kPrevXProp);
         RemovePropW(hWnd, kPrevWProp);
         RemovePropW(hWnd, kPrevYProp);
         RemovePropW(hWnd, kPrevHProp);
+        RemovePropW(hWnd, kAppliedXProp);
+        RemovePropW(hWnd, kAppliedWProp);
+        RemovePropW(hWnd, kAppliedYProp);
+        RemovePropW(hWnd, kAppliedHProp);
     } else if (!alreadyAtTarget) {
         // About to maximize the width: remember the current bounds so
         // the next double-click on this edge can restore them. If a
@@ -243,6 +267,8 @@ bool HandleEdgeDoubleClick(HWND hWnd, WPARAM wParam) {
             // misread as "the original height".
             RemovePropW(hWnd, kPrevYProp);
             RemovePropW(hWnd, kPrevHProp);
+            RemovePropW(hWnd, kAppliedYProp);
+            RemovePropW(hWnd, kAppliedHProp);
         }
     } else {
         return false; // Already at target, nothing saved: no-op.
@@ -252,21 +278,20 @@ bool HandleEdgeDoubleClick(HWND hWnd, WPARAM wParam) {
                  SWP_NOZORDER | SWP_NOACTIVATE);
 
     if (justSaved) {
-        // Confirm the resize actually landed on the target (some apps
-        // clamp via WM_GETMINMAXINFO/WM_WINDOWPOSCHANGING). If it
-        // didn't, drop the save we just made instead of leaving behind
-        // bounds that can never be restored, since alreadyAtTarget
-        // will never become true for this window.
+        // Record where the window actually ended up (which may differ
+        // from targetX/targetW if the app clamped or quantized the
+        // size) so the next double-click can still recognize it as
+        // "maximized" and offer the restore, instead of re-requesting
+        // and re-failing the same exact target forever.
         RECT after;
         if (GetWindowRect(hWnd, &after)) {
-            bool reached =
-                std::abs(after.left - targetX) <= tolerance &&
-                std::abs((after.right - after.left) - targetW) <= tolerance;
-            if (!reached) {
-                RemovePropW(hWnd, kPrevXProp);
-                RemovePropW(hWnd, kPrevWProp);
-                RemovePropW(hWnd, kPrevYProp);
-                RemovePropW(hWnd, kPrevHProp);
+            SetPropW(hWnd, kAppliedXProp, (HANDLE)(INT_PTR)after.left);
+            SetPropW(hWnd, kAppliedWProp,
+                     (HANDLE)(INT_PTR)(after.right - after.left));
+            if (isCorner) {
+                SetPropW(hWnd, kAppliedYProp, (HANDLE)(INT_PTR)after.top);
+                SetPropW(hWnd, kAppliedHProp,
+                         (HANDLE)(INT_PTR)(after.bottom - after.top));
             }
         }
     }
