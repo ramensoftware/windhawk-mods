@@ -7511,19 +7511,19 @@
           6
         ],
         "ratingUsers": 6,
-        "updated": 1765047009000,
+        "updated": 1789410314000,
         "users": 534
       },
       "metadata": {
         "author": "Anixx",
-        "description": "Adds support for icons of 16-bit (Win16) applications in File Explorer",
+        "description": "Adds support for icons of 16-bit (Win16) applications in File Explorer and file dialogs",
         "github": "https://github.com/Anixx",
         "include": [
-          "explorer.exe"
+          "*"
         ],
         "license": "LGPL-2.1-or-later",
-        "name": "Icons of Win16 apps in Explorer",
-        "version": "1.0.3"
+        "name": "Icons of Win16 apps in Explorer and file dialogs",
+        "version": "1.1"
       }
     },
     "ida-aliased-fonts": {

@@ -2,12 +2,23 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-14T18:18:55.000Z</updated>
+    <updated>2026-09-14T18:25:14.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Icons of Win16 apps in Explorer and file dialogs 1.1]]></title>
+        <id>https://windhawk.net/mods/icon16bitfix#b8cc74d19cc4a21cdc81fe483a1477c6ed60c136</id>
+        <link href="https://windhawk.net/mods/icon16bitfix"/>
+        <updated>2026-09-14T18:25:14.000Z</updated>
+        <content type="html"><![CDATA[<p>Inject all processes by default so to support file dialogs</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Island Media Controls 0.10.55]]></title>
         <id>https://windhawk.net/mods/island-media-controls#34c05c49402b8bc15fd2bc7241fd1231f0f6435c</id>
@@ -628,66 +639,6 @@ Windhawk may be unable to load the mod until it is updated.</p>]]></content>
         <author>
             <name>Hoffelhas</name>
             <uri>https://github.com/Hoffelhas</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide Scrollbars 1.0.0]]></title>
-        <id>https://windhawk.net/mods/hide-scrollbars#ee6f6c54fbf9168becf6c4a801a1fd2b634c4954</id>
-        <link href="https://windhawk.net/mods/hide-scrollbars"/>
-        <updated>2026-09-11T13:13:00.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="hidescrollbars">Hide Scrollbars</h1>
-<p>Shrinks the vertical and/or horizontal scrollbars away in the target
-process. By default it targets <code>explorer.exe</code>, so the File Explorer file
-list loses its scrollbar and the freed strip is used by the content
-instead of sitting empty.</p>
-<p>To apply it to other programs, add them to the mod's <strong>Custom process
-inclusion list</strong> under the mod's Advanced settings in Windhawk.</p>
-<p>Mouse-wheel and keyboard scrolling are unaffected.</p>
-<h2 id="screenshots">Screenshots</h2>
-<p>Windows default (slim scrollbar in its own gutter):</p>
-<p><img src="https://raw.githubusercontent.com/AmazingBodilyFluids/windhawk-mods/assets/hide-scrollbars-default.png" alt="Default" /></p>
-<p>With the mod (1px sliver, gutter reclaimed):</p>
-<p><img src="https://raw.githubusercontent.com/AmazingBodilyFluids/windhawk-mods/assets/hide-scrollbars-1px.png" alt="With the mod" /></p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod hooks <code>GetSystemMetrics</code>, <code>GetSystemMetricsForDpi</code> and
-<code>GetThemeSysSize</code>, and reports a size of 1px for <code>SM_CXVSCROLL</code> /
-<code>SM_CYHSCROLL</code> (the vertical/horizontal scrollbar thickness). Code that
-lays itself out from that metric - such as Explorer's DirectUI file list</p>
-<ul>
-<li>then shrinks the scrollbar to a 1px sliver. Plain Win32 windows that
-draw standard non-client scrollbars are mostly unaffected, because
-user32 lays those out from an internal metric table rather than the
-exported function.</li>
-</ul>
-<h2 id="why1pxandnot0">Why 1px and not 0</h2>
-<p>Reporting 0 makes the scrollbar disappear entirely, but a 0-width
-scrollbar reads as "not scrollable" to the Windows precision-touchpad
-pan handler, so two-finger scrolling stops working in the affected
-windows. A 1px sliver is visually negligible and keeps precision-touchpad
-scrolling working, so the mod uses 1px and does not expose a 0 option.
-Mouse wheel and keyboard scrolling (arrows, PageUp/PageDown, Home/End)
-work either way.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The override is process-wide. Other mods running in the same process
-that read <code>SM_CXVSCROLL</code> / <code>SM_CYHSCROLL</code> (for example to hit-test the
-scrollbar strip) will see the reduced value too.</li>
-<li><code>SM_CXVSCROLL</code> also drives the width of combo-box drop-down buttons
-and the status-bar sizing grip. Code that reads the exported metric
-(rather than user32's internal table) shrinks those too.</li>
-<li>The scrollbar <em>arrow button</em> metrics (<code>SM_CXHSCROLL</code> / <code>SM_CYVSCROLL</code>)
-and <code>SPI_GETNONCLIENTMETRICS</code> are left untouched, so a control that
-mixes those with <code>SM_CXVSCROLL</code> may lay out slightly oddly.</li>
-<li>If a targeted process misbehaves, remove it from the inclusion list.</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Hide vertical scrollbars</strong> - toggle the vertical bar.</li>
-<li><strong>Hide horizontal scrollbars</strong> - toggle the horizontal bar.</li>
-</ul>]]></content>
-        <author>
-            <name>AmazingBodilyFluids</name>
-            <uri>https://github.com/AmazingBodilyFluids</uri>
         </author>
     </entry>
 </feed>
