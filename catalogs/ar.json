@@ -308,6 +308,36 @@
         "version": "1.0.2"
       }
     },
+    "alt-drag": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1789428545000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1789428545000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "m417z",
+        "compilerOptions": "-lcomctl32",
+        "description": "Move any window by holding Alt and dragging it from anywhere, without having to grab the title bar",
+        "github": "https://github.com/m417z",
+        "homepage": "https://m417z.com/",
+        "include": [
+          "*"
+        ],
+        "name": "AltDrag",
+        "twitter": "https://twitter.com/m417z",
+        "version": "1.0"
+      }
+    },
     "alt-tab-delayer": {
       "details": {
         "defaultSorting": 181320,
