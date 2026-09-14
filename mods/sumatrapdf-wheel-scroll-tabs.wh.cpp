@@ -92,9 +92,10 @@ struct {
     int throttleMs;
 } g_settings;
 
-// Window class of SumatraPDF's main window (FRAME_CLASS_NAME in
-// src/SumatraPDF.h).
+// Window classes of SumatraPDF's main window and of the document canvas
+// (FRAME_CLASS_NAME / CANVAS_CLASS_NAME in src/SumatraPDF.h).
 constexpr PCWSTR kFrameClassName = L"SUMATRA_PDF_FRAME";
+constexpr PCWSTR kCanvasClassName = L"SUMATRA_PDF_CANVAS";
 
 // Window classes of the tab bar. SumatraPDF 3.x uses a custom drawn standard
 // tab control (src/wingui/TabsCtrl.cpp), the current pre-release source has its
@@ -112,15 +113,19 @@ short g_lastScrollDeltaRemainder;
 DWORD g_lastActionTime;
 
 // Command ids of "Next Tab" / "Previous Tab". They differ between SumatraPDF
-// versions, so they're detected from the accelerator tables. The hooks feeding
-// the detection are process-wide, hence the mutex. Once g_tabCommandsResolved
-// is set, the ids are final and are read without it.
+// versions, so they're detected from the accelerator tables. SumatraPDF
+// rebuilds its tables on every settings reload, and ids of commands defined in
+// the "Shortcuts" advanced setting are assigned anew each time, so the ids are
+// re-resolved on every table creation. The hooks feeding the detection are
+// process-wide, hence the mutex. g_tabCommandsResolved is set once the first
+// detection succeeded and serves as the lock-free fast path.
 std::atomic<bool> g_tabCommandsResolved;
 std::mutex g_tabCommandsMutex;
 WORD g_cmdNextTab;
 WORD g_cmdPrevTab;
-HACCEL g_scannedAccelTables[8];
-int g_scannedAccelTablesCount;
+// Tables already scanned via their handle (only used while the ids aren't
+// known yet, e.g. when the mod was loaded into a running SumatraPDF).
+std::vector<HACCEL> g_scannedAccelTables;
 
 // Reads the file version (major.minor) of the executable of the current
 // process, i.e. the SumatraPDF version.
@@ -175,12 +180,12 @@ bool ResolveTabCommandsFromAccels(const ACCEL* accels, int count) {
     }
 
     if (!next || !prev) {
-        // Make a failed detection diagnosable: log the Ctrl accelerators that
-        // this table does contain.
-        Wh_Log(L"Tab commands not found in table with %d entries, Ctrl entries:",
-               count);
+        // Expected for SumatraPDF's reduced tables (edit control, tree view).
+        // For the main table, what's bound to PageUp/PageDown is the useful
+        // diagnostic, so log just those entries.
+        Wh_Log(L"Tab commands not found in table with %d entries", count);
         for (int i = 0; i < count; i++) {
-            if (accels[i].fVirt & FCONTROL) {
+            if (accels[i].key == VK_NEXT || accels[i].key == VK_PRIOR) {
                 Wh_Log(L"  fVirt=%02X key=%04X cmd=%u", accels[i].fVirt,
                        accels[i].key, accels[i].cmd);
             }
@@ -206,21 +211,16 @@ void ResolveTabCommandsFromTable(HACCEL hAccel) {
 
     // Don't scan the same table over and over again. SumatraPDF uses several
     // tables (e.g. a reduced one while an edit control has the focus), not all
-    // of them contain the tab shortcuts.
-    for (int i = 0; i < g_scannedAccelTablesCount; i++) {
-        if (g_scannedAccelTables[i] == hAccel) {
+    // of them contain the tab shortcuts. The list is cleared whenever a new
+    // table is created (see CreateAcceleratorTableWHook), since the old ones
+    // are destroyed and their handle values may be reused.
+    for (HACCEL hScanned : g_scannedAccelTables) {
+        if (hScanned == hAccel) {
             return;
         }
     }
 
-    if (g_scannedAccelTablesCount >= (int)ARRAYSIZE(g_scannedAccelTables)) {
-        // None of the tables seen so far had the shortcuts. Give up rather
-        // than re-scanning on every message. Tables created from now on are
-        // still scanned by the CreateAcceleratorTableW hook.
-        return;
-    }
-
-    g_scannedAccelTables[g_scannedAccelTablesCount++] = hAccel;
+    g_scannedAccelTables.push_back(hAccel);
 
     int count = CopyAcceleratorTable(hAccel, nullptr, 0);
     if (count <= 0) {
@@ -269,9 +269,16 @@ HWND FindVisibleTabBar(HWND hFrameWnd) {
     return hTabBar;
 }
 
-bool SwitchTab(HWND hFrameWnd, bool reverse) {
-    WORD cmdId = reverse ? g_cmdPrevTab : g_cmdNextTab;
+bool IsCanvasWindow(HWND hWnd) {
+    WCHAR windowClassName[64];
+    if (!GetClassName(hWnd, windowClassName, ARRAYSIZE(windowClassName))) {
+        return false;
+    }
 
+    return _wcsicmp(windowClassName, kCanvasClassName) == 0;
+}
+
+bool PostTabCommand(HWND hFrameWnd, WORD cmdId) {
     Wh_Log(L"Posting command %u to window %08X", cmdId,
            (DWORD)(ULONG_PTR)hFrameWnd);
 
@@ -293,6 +300,23 @@ bool OnMouseWheel(HWND hWnd,
         return false;
     }
 
+    // The main window gets every wheel event, most of them are plain document
+    // scrolling. Two cheap checks before walking the child windows: the
+    // window under the cursor must belong to this main window at all (with
+    // the legacy "scroll the focused window" setting, the event arrives here
+    // even if another window overlaps the tab bar), and if it's the canvas,
+    // the cursor isn't over the tab bar.
+    POINT pt{xPos, yPos};
+    HWND hUnderCursor = WindowFromPoint(pt);
+    if (!hUnderCursor || GetAncestor(hUnderCursor, GA_ROOT) != hWnd ||
+        IsCanvasWindow(hUnderCursor)) {
+        return false;
+    }
+
+    // The window under the cursor isn't necessarily the tab bar itself: with
+    // tabs in the title bar, the area next to the tabs hit-tests as
+    // transparent so that the window can be dragged there. Like in the
+    // browser mod, the whole tab bar rectangle counts.
     HWND hTabBar = FindVisibleTabBar(hWnd);
     if (!hTabBar) {
         return false;
@@ -303,8 +327,14 @@ bool OnMouseWheel(HWND hWnd,
         return false;
     }
 
-    POINT pt{xPos, yPos};
     if (!PtInRect(&rect, pt)) {
+        return false;
+    }
+
+    // With a single tab there's nothing to switch to, leave the event to
+    // SumatraPDF (which scrolls the document). Only the standard tab control
+    // answers TCM_GETITEMCOUNT, the pre-release class returns 0.
+    if (SendMessage(hTabBar, TCM_GETITEMCOUNT, 0, 0) == 1) {
         return false;
     }
 
@@ -316,6 +346,14 @@ bool OnMouseWheel(HWND hWnd,
     if (!g_tabCommandsResolved.load(std::memory_order_acquire)) {
         Wh_Log(L"Tab command ids aren't known (yet), leaving the event alone");
         return false;
+    }
+
+    WORD cmdNextTab;
+    WORD cmdPrevTab;
+    {
+        std::lock_guard<std::mutex> lock(g_tabCommandsMutex);
+        cmdNextTab = g_cmdNextTab;
+        cmdPrevTab = g_cmdPrevTab;
     }
 
     if (hWnd == g_lastScrollWnd && horizontal == g_lastScrollHorizontal &&
@@ -342,15 +380,15 @@ bool OnMouseWheel(HWND hWnd,
         }
     }
 
-    bool reverse = false;
+    WORD cmdId = cmdNextTab;
     if (clicks < 0) {
         clicks = -clicks;
-        reverse = true;
+        cmdId = cmdPrevTab;
     }
 
     if (clicks > 0) {
         for (int i = 0; i < clicks; i++) {
-            if (!SwitchTab(hWnd, reverse)) {
+            if (!PostTabCommand(hWnd, cmdId)) {
                 break;
             }
         }
@@ -504,18 +542,25 @@ HWND WINAPI CreateWindowExWHook(DWORD dwExStyle,
 
 // SumatraPDF creates its accelerator tables on startup and again whenever the
 // advanced settings change. Scanning the entries right here makes the command
-// ids known before the first wheel event.
+// ids known before the first wheel event, and keeps them current across
+// rebuilds: ids of commands defined in the "Shortcuts" advanced setting are
+// assigned anew on every reload, and a custom shortcut on Ctrl+PageDown /
+// Ctrl+PageUp takes precedence over the built-in one.
 using CreateAcceleratorTableW_t = decltype(&CreateAcceleratorTableW);
 CreateAcceleratorTableW_t pOriginalCreateAcceleratorTableW;
 HACCEL WINAPI CreateAcceleratorTableWHook(LPACCEL paccel, int cAccel) {
     HACCEL hAccel = pOriginalCreateAcceleratorTableW(paccel, cAccel);
 
-    if (hAccel && paccel && cAccel > 0 &&
-        !g_tabCommandsResolved.load(std::memory_order_acquire)) {
+    if (hAccel && paccel && cAccel > 0) {
         std::lock_guard<std::mutex> lock(g_tabCommandsMutex);
-        if (!g_tabCommandsResolved.load(std::memory_order_relaxed)) {
-            ResolveTabCommandsFromAccels(paccel, cAccel);
-        }
+
+        // Only a table that contains both shortcuts updates the ids, the
+        // reduced tables leave them alone.
+        ResolveTabCommandsFromAccels(paccel, cAccel);
+
+        // The previous tables were destroyed before this one was created,
+        // so their handles are stale and may be reused.
+        g_scannedAccelTables.clear();
     }
 
     return hAccel;
