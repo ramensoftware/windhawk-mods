@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-14T18:25:14.000Z</updated>
+    <updated>2026-09-14T20:18:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Blob Shape 1.2.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-blob-shape#385cf86c8212f3e82eac5b34c432a3fe22fb5689</id>
+        <link href="https://windhawk.net/mods/taskbar-blob-shape"/>
+        <updated>2026-09-14T20:18:04.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Supports the taskbar position feature: on top-docked taskbars the blob is flipped, with its flat edge anchored to the taskbar's bottom edge; on vertical (left/right) taskbars blobs are hidden and the native indicator stays in charge. Position changes apply live. Older builds without the feature are unaffected.</li>
+<li>Vertical margins are now relative to the taskbar's anchored edge (Top pushes the blob deeper into the bar on both bottom and top docks).</li>
+</ul>]]></content>
+        <author>
+            <name>Deen-0x</name>
+            <uri>https://github.com/Deen-0x</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Icons of Win16 apps in Explorer and file dialogs 1.1]]></title>
         <id>https://windhawk.net/mods/icon16bitfix#b8cc74d19cc4a21cdc81fe483a1477c6ed60c136</id>
@@ -604,41 +618,6 @@ This mod is particularly useful if you are using a custom folder icon.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Native Four Column Snap Layout 1.0]]></title>
-        <id>https://windhawk.net/mods/windows-11-native-four-column-snap-layout#37fbf58052262eb7f649145c89850d4b11f00f09</id>
-        <link href="https://windhawk.net/mods/windows-11-native-four-column-snap-layout"/>
-        <updated>2026-09-11T13:18:25.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windows11nativefourcolumnsnaplayout">Windows 11 Native Four Column Snap Layout</h1>
-<p>Add an extra native Windows 11 Snap Layout with four equal vertical columns. This is especially useful on ultrawide monitors, where four equal vertical zones make better use of the available horizontal screen space.</p>
-<p><img src="https://i.imgur.com/a3sGZSk.png" alt="Windows 11 four-column Snap Layout" /></p>
-<h2 id="whatitdoes">What it does</h2>
-<ul>
-<li>Adds the four-column layout as an additional option without replacing the
-existing Windows layouts.</li>
-<li>Appears in <strong>Win+Z</strong>, <strong>maximize-button hover</strong>, and the <strong>Snap Bar</strong> shown
-when dragging a window to the top of the screen.</li>
-<li>Integrates with Windows' native Snap Layout model, so Snap Assist and Snap
-Groups continue to work normally.</li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<p>This mod relies on undocumented Windows internals and private symbols from
-<code>SnapLayout.dll</code>. Windows updates can change these implementation details.</p>
-<p>The mod searches the layouts provided by Windows for a compatible native
-four-zone quadrant layout before creating the additional layout. If a compatible
-source layout isn't found, that layout set is left unchanged.</p>
-<p>Developed and tested on Windows 11 build <strong>26200.9445</strong> on x86-64.</p>
-<p>The mod is currently tested only on x86-64 Windows. Because Windhawk's
-<code>x86-64</code> architecture setting also allows loading into predefined native shell
-processes on ARM64 Windows, ARM64 may attempt to load the mod, but compatibility
-there has not been verified.</p>
-<p>If a Windows update changes the relevant private symbols or internal structure,
-Windhawk may be unable to load the mod until it is updated.</p>]]></content>
-        <author>
-            <name>Hoffelhas</name>
-            <uri>https://github.com/Hoffelhas</uri>
         </author>
     </entry>
 </feed>

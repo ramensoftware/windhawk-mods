@@ -12873,7 +12873,7 @@
           11
         ],
         "ratingUsers": 13,
-        "updated": 1789322545000,
+        "updated": 1789417084000,
         "users": 154
       },
       "metadata": {
@@ -12888,7 +12888,7 @@
           "explorer.exe"
         ],
         "name": "Taskbar Blob Shape",
-        "version": "1.1.1"
+        "version": "1.2.0"
       }
     },
     "taskbar-button-click": {

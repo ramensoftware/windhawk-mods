@@ -1,3 +1,8 @@
+## 1.2.0 ([Sep 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/385cf86c8212f3e82eac5b34c432a3fe22fb5689/mods/taskbar-blob-shape.wh.cpp))
+
+* Supports the taskbar position feature: on top-docked taskbars the blob is flipped, with its flat edge anchored to the taskbar's bottom edge; on vertical (left/right) taskbars blobs are hidden and the native indicator stays in charge. Position changes apply live. Older builds without the feature are unaffected.
+* Vertical margins are now relative to the taskbar's anchored edge (Top pushes the blob deeper into the bar on both bottom and top docks).
+
 ## 1.1.1 ([Sep 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7e252f99133edd5fd4700e822286ca653da0b2cc/mods/taskbar-blob-shape.wh.cpp))
 
 * Compatibility with newer Windows 11 builds: the tray host is matched as a Panel (`SystemTrayFrameGrid` became a StackPanel), the search icon button is matched by class (its name gained a generated suffix), and visual-state detection tolerates the new wrapper Grid inside the button panels. No behavior changes on older builds.
