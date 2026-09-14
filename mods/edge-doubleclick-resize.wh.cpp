@@ -194,35 +194,56 @@ bool HandleEdgeDoubleClick(HWND hWnd, WPARAM wParam) {
 
     int prevW = (int)(INT_PTR)GetPropW(hWnd, kPrevWProp);
     int prevH = (int)(INT_PTR)GetPropW(hWnd, kPrevHProp);
+    bool hasSaved = prevW > 0;
+    bool justSaved = false;
 
-    if (alreadyAtTarget && prevW > 0) {
+    if (alreadyAtTarget && hasSaved) {
         // Already width-maximized and we have prior bounds: toggle
         // back to them, like the native vertical maximize does.
         newX = (int)(INT_PTR)GetPropW(hWnd, kPrevXProp);
         newW = prevW;
-        RemovePropW(hWnd, kPrevXProp);
-        RemovePropW(hWnd, kPrevWProp);
 
         if (isCorner && prevH > 0) {
             newY = (int)(INT_PTR)GetPropW(hWnd, kPrevYProp);
             newH = prevH;
-            RemovePropW(hWnd, kPrevYProp);
-            RemovePropW(hWnd, kPrevHProp);
         }
-    } else if (!alreadyAtTarget) {
+
+        // Clear all four together, even if only the width half was
+        // used above. Leaving a stale Y/H pair around (e.g. after a
+        // corner-maximize is later restored via a plain side edge)
+        // would otherwise get silently overwritten with the
+        // already-maximized height on the next corner click,
+        // permanently losing the real original size.
+        RemovePropW(hWnd, kPrevXProp);
+        RemovePropW(hWnd, kPrevWProp);
+        RemovePropW(hWnd, kPrevYProp);
+        RemovePropW(hWnd, kPrevHProp);
+    } else if (!alreadyAtTarget && !hasSaved) {
         // About to maximize the width: remember the current bounds so
-        // the next double-click on this edge can restore them. If the
-        // window already happens to sit at the target size with
-        // nothing saved, leave it alone rather than "maximizing" to
-        // the same rect and saving bounds nobody asked to restore.
+        // the next double-click on this edge can restore them.
         SetPropW(hWnd, kPrevXProp, (HANDLE)(INT_PTR)wr.left);
         SetPropW(hWnd, kPrevWProp, (HANDLE)(INT_PTR)curW);
         newX = targetX;
         newW = targetW;
+        justSaved = true;
 
         if (isCorner) {
             SetPropW(hWnd, kPrevYProp, (HANDLE)(INT_PTR)wr.top);
             SetPropW(hWnd, kPrevHProp, (HANDLE)(INT_PTR)(wr.bottom - wr.top));
+            newY = mi.rcWork.top - topInset;
+            newH = (mi.rcWork.bottom + bottomInset) - newY;
+        }
+    } else if (hasSaved) {
+        // Not at target, but a save already exists: the window likely
+        // couldn't reach the target on an earlier attempt (e.g. the
+        // app clamped it via WM_GETMINMAXINFO). Resize again without
+        // touching the existing save - re-saving here would overwrite
+        // the real original bounds with these already-widened ones,
+        // and the restore would be lost for good.
+        newX = targetX;
+        newW = targetW;
+
+        if (isCorner) {
             newY = mi.rcWork.top - topInset;
             newH = (mi.rcWork.bottom + bottomInset) - newY;
         }
@@ -232,6 +253,26 @@ bool HandleEdgeDoubleClick(HWND hWnd, WPARAM wParam) {
 
     SetWindowPos(hWnd, nullptr, newX, newY, newW, newH,
                  SWP_NOZORDER | SWP_NOACTIVATE);
+
+    if (justSaved) {
+        // Confirm the resize actually landed on the target (some apps
+        // clamp via WM_GETMINMAXINFO/WM_WINDOWPOSCHANGING). If it
+        // didn't, drop the save we just made instead of leaving behind
+        // bounds that can never be restored, since alreadyAtTarget
+        // will never become true for this window.
+        RECT after;
+        if (GetWindowRect(hWnd, &after)) {
+            bool reached =
+                std::abs(after.left - targetX) <= tolerance &&
+                std::abs((after.right - after.left) - targetW) <= tolerance;
+            if (!reached) {
+                RemovePropW(hWnd, kPrevXProp);
+                RemovePropW(hWnd, kPrevWProp);
+                RemovePropW(hWnd, kPrevYProp);
+                RemovePropW(hWnd, kPrevHProp);
+            }
+        }
+    }
 
     return true; // Handled; caller should not call the original proc.
 }
