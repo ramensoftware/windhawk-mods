@@ -165,267 +165,228 @@ MIT
 
 // ==WindhawkModSettings==
 /*
-- registryRoot: HKCU
-  $name: Registry root
-  $description: "Select the registry root to read the HWiNFO Gadget/VSB values from."
-  $options:
-  - HKCU: HKEY_CURRENT_USER
-  - HKLM: HKEY_LOCAL_MACHINE
-
-- registryPath: SOFTWARE\HWiNFO64\VSB
-  $name: Registry path
-
-- refreshIntervalMs: 1000
-  $name: Refresh interval in milliseconds
-
-- x: 30
-  $name: X position
-
-- y: 30
-  $name: Y position
-
-- width: 850
-  $name: Overlay width
-
-- height: 640
-  $name: Overlay height
-
-- autoHeight: true
-  $name: Auto height
-  $description: "Automatically adjusts the overlay height based on visible rows and water age. Disable this to use Overlay height manually."
-
-- paddingBottom: 24
-  $name: Padding bottom
-
-- fontSize: 16
-  $name: Font size
-
-- fontFamily: Cascadia Mono
-  $name: Font family
-
-- fontWeight: SemiBold
-  $name: Font weight
-  $description: "Default is SemiBold"
-  $options:
-  - Normal: Normal
-  - Medium: Medium
-  - SemiBold: SemiBold
-  - Bold: Bold
-  - ExtraBold: ExtraBold
-
-- fontStyle: Normal
-  $name: Font style
-  $description: "Default is Normal"
-  $options:
-  - Normal: Normal
-  - Italic: Italic
-
-- paddingLeft: 24
-  $name: Padding left
-
-- labelColumnWidth: 200
-  $name: Label column width
-  $description: "Width of the label column in pixels. Used when label alignment is Right."
-
-- labelAlignment: Right
-  $name: Label alignment
-  $description: "Align sensor labels inside the label column."
-  $options:
-  - Left: Left
-  - Right: Right
-
-- paddingTop: 20
-  $name: Padding top
-
-- valueColumnX: 330
-  $name: Value column X
-
-- valueColumnWidth: 260
-  $name: Value column width
-  $description: "Width of the value column in pixels. Used when value alignment is Right."
-
-- valueAlignment: Right
-  $name: Value alignment
-  $description: "Align sensor values inside the value column."
-  $options:
-  - Left: Left
-  - Right: Right
-
-- showColumnSeparator: true
-  $name: Show column separator
-  $description: "Draws a vertical separator line between label and value columns."
-
-- columnSeparatorX: 285
-  $name: Column separator X
-  $description: "X position of the vertical separator line."
-
-- columnSeparatorColor: "#FFFFFF"
-  $name: "Column separator color #RRGGBB"
-  $description: "Vertical separator color. Alpha is ignored for GDI pens."
-
-- rowSpacing: 2
-  $name: Row spacing
-
-- alwaysOnTop: true
-  $name: Always on top
-  $description: "Keeps the overlay above normal windows. Recommended: the overlay is click-through, so if it is not always on top it gets covered by the next focused window and there is no way to bring it back short of a settings reload. Disable only if you specifically want the overlay to sit in the normal z-order, for example on a monitor/virtual desktop that always shows the desktop."
-
-- enableToggleHotkey: true
-  $name: Enable toggle hotkey
-  $description: "Enables a global hotkey to show or hide the overlay."
-
-- toggleHotkeyKey: H
-  $name: Toggle hotkey key
-  $description: "Single letter key for the toggle hotkey. Default is H."
-
-- toggleHotkeyCtrl: true
-  $name: Toggle hotkey Ctrl
-
-- toggleHotkeyAlt: true
-  $name: Toggle hotkey Alt
-
-- toggleHotkeyShift: false
-  $name: Toggle hotkey Shift
-
-- enableDragHotkey: true
-  $name: Enable drag hotkey
-  $description: "Enables a global hotkey to toggle live drag mode."
-
-- dragHotkeyKey: D
-  $name: Drag hotkey key
-  $description: "Single letter key for the drag hotkey. Default is D."
-
-- dragHotkeyCtrl: true
-  $name: Drag hotkey Ctrl
-
-- dragHotkeyAlt: true
-  $name: Drag hotkey Alt
-
-- dragHotkeyShift: false
-  $name: Drag hotkey Shift
-
-- rememberDraggedPosition: false
-  $name: Remember dragged position
-  $description: "When enabled, the last dragged position overrides the X/Y position settings. Disable this to position the overlay manually with the X/Y fields."
-
-- enableExportHotkey: true
-  $name: Enable registry export hotkey
-  $description: "Enables a global hotkey to export the HWiNFO registry sensor list as HTML."
-
-- exportHotkeyKey: R
-  $name: Registry export hotkey key
-  $description: "Single letter key for the registry export hotkey. Default is R."
-
-- exportHotkeyCtrl: true
-  $name: Registry export hotkey Ctrl
-
-- exportHotkeyAlt: true
-  $name: Registry export hotkey Alt
-
-- exportHotkeyShift: false
-  $name: Registry export hotkey Shift
-
-- openExportHtmlAfterCreate: true
-  $name: Open export HTML after create
-  $description: "Opens the generated HWiNFO registry export HTML file after creating it."
-
-- showWaterAge: false
-  $name: Show water age
-  $description: Shows coolant age calculated from the configured fill date.
-
-- waterAgeLabel: WATER AGE
-  $name: Water age label
-
-- waterFillDate: "2024-11-18"
-  $name: Water fill date
-  $description: "Format: YYYY-MM-DD"
-
-- waterMaxAgeDays: 730
-  $name: Water max age in days
-  $description: "Recommended: 730 days = 2 years." 
-
-- waterAgeWarnPercent: 70
-  $name: Water age warning percent
-  $description: "Water age turns warning color at this percentage."
-
-- waterAgeAlarmPercent: 90
-  $name: Water age alarm percent
-  $description: "Water age turns alarm color at this percentage."
-
-- waterAgeWarnColor: "#FFAA00"
-  $name: "Water age warning color #FFAA00"
-
-- waterAgeAlarmColor: "#FF3333"
-  $name: "Water age alarm color #FF3333"
-
-- waterAgeTopGap: 8
-  $name: Water age top gap
-  $description: Extra vertical spacing before the water age row.
-
-- showWaterAgeSeparator: true
-  $name: Show water age separator
-  $description: "Draws a horizontal separator line above the water age row."
-
-- waterAgeSeparatorColor: "#FFFFFF"
-  $name: "Water age separator color #RRGGBB"
-  $description: "Horizontal separator color. Alpha is ignored for GDI pens."
-
-- textColor: "#FFFFFF"
-  $name: "Fallback text color #RRGGBB"
-  $description: "Fallback text color. #AARRGGBB is accepted, but alpha is ignored for GDI text."
-
-- labelColor: "#FF0000"
-  $name: "Label color #RRGGBB"
-  $description: "Color for sensor labels, for example CPU W, GPU W, FLOW. Alpha is ignored for GDI text."
-
-- valueColor: "#00FF00"
-  $name: "Value color #RRGGBB"
-  $description: "Color for sensor values, for example 53.2 W or 330.6 l/h. Alpha is ignored for GDI text."
-
-- backgroundEnabled: true
-  $name: Enable background
-  $description: "When disabled, only the text is shown without background."
-
-- backgroundColor: "#304050"
-  $name: "Background color #RRGGBB"
-  $description: "Background base color. Alpha from #AARRGGBB is ignored because backgroundOpacityPercent controls overlay opacity."
-
-- backgroundOpacityPercent: 90
-  $name: Background opacity percent
-  $description: "Overall overlay opacity when background is enabled. Overrides the alpha value from backgroundColor. 100 = fully opaque, 50 = half transparent."
-
-- backgroundGradientEnabled: true
-  $name: Enable background gradient
-  $description: "When enabled, the background is drawn as a gradient between background color and gradient color 2."
-
-- backgroundGradientColor2: "#507080"
-  $name: "Background gradient color 2 #RRGGBB"
-  $description: "Second background gradient color. Alpha is ignored; use backgroundOpacityPercent."
-
-- backgroundGradientDirection: DiagonalUp
-  $name: Background gradient direction
-  $description: "Direction of the background gradient."
-  $options:
-  - Vertical: Vertical
-  - Horizontal: Horizontal
-  - DiagonalDown: Diagonal down
-  - DiagonalUp: Diagonal up
-
-- backgroundCornerRadius: 18
-  $name: Background corner radius
-  $description: "Rounded background corners. 0 disables rounded corners."
-
-- backgroundBorderSize: 2
-  $name: Background border size
-  $description: "Border size in pixels. 0 disables the border."
-
-- backgroundBorderColor: "#FFFFFF"
-  $name: "Background border color #RRGGBB"
-  $description: "Border color. Alpha is ignored for GDI pens."
-
-- hideUnavailableRows: false
-  $name: Hide unavailable rows
-  $description: "Hides rows whose cached value is N/A."
+- registry:
+  - root: HKCU
+    $name: Registry root
+    $description: "Select the registry root to read the HWiNFO Gadget/VSB values from."
+    $options:
+    - HKCU: HKEY_CURRENT_USER
+    - HKLM: HKEY_LOCAL_MACHINE
+  - path: SOFTWARE\HWiNFO64\VSB
+    $name: Registry path
+  - refreshIntervalMs: 1000
+    $name: Refresh interval in milliseconds
+  $name: Registry
+
+- layout:
+  - x: 30
+    $name: X position
+  - y: 30
+    $name: Y position
+  - width: 850
+    $name: Overlay width
+  - height: 640
+    $name: Overlay height
+  - autoHeight: true
+    $name: Auto height
+    $description: "Automatically adjusts the overlay height based on visible rows and water age. Disable this to use Overlay height manually."
+  - alwaysOnTop: true
+    $name: Always on top
+    $description: "Keeps the overlay above normal windows. Recommended: the overlay is click-through, so if it is not always on top it gets covered by the next focused window and there is no way to bring it back short of a settings reload. Disable only if you specifically want the overlay to sit in the normal z-order, for example on a monitor/virtual desktop that always shows the desktop."
+  - paddingTop: 20
+    $name: Padding top
+  - paddingLeft: 24
+    $name: Padding left
+  - paddingBottom: 24
+    $name: Padding bottom
+  - labelColumnWidth: 200
+    $name: Label column width
+    $description: "Width of the label column in pixels. Used when label alignment is Right."
+  - labelAlignment: Right
+    $name: Label alignment
+    $description: "Align sensor labels inside the label column."
+    $options:
+    - Left: Left
+    - Right: Right
+  - valueColumnX: 330
+    $name: Value column X
+  - valueColumnWidth: 260
+    $name: Value column width
+    $description: "Width of the value column in pixels. Used when value alignment is Right."
+  - valueAlignment: Right
+    $name: Value alignment
+    $description: "Align sensor values inside the value column."
+    $options:
+    - Left: Left
+    - Right: Right
+  - showColumnSeparator: true
+    $name: Show column separator
+    $description: "Draws a vertical separator line between label and value columns."
+  - columnSeparatorX: 285
+    $name: Column separator X
+    $description: "X position of the vertical separator line."
+  - columnSeparatorColor: "#FFFFFF"
+    $name: "Column separator color #RRGGBB"
+    $description: "Vertical separator color. Alpha is ignored for GDI pens."
+  - rowSpacing: 2
+    $name: Row spacing
+  - hideUnavailableRows: false
+    $name: Hide unavailable rows
+    $description: "Hides rows whose cached value is N/A."
+  $name: Layout
+
+- font:
+  - size: 16
+    $name: Font size
+  - family: Cascadia Mono
+    $name: Font family
+  - weight: SemiBold
+    $name: Font weight
+    $description: "Default is SemiBold"
+    $options:
+    - Normal: Normal
+    - Medium: Medium
+    - SemiBold: SemiBold
+    - Bold: Bold
+    - ExtraBold: ExtraBold
+  - style: Normal
+    $name: Font style
+    $description: "Default is Normal"
+    $options:
+    - Normal: Normal
+    - Italic: Italic
+  $name: Font
+
+- colors:
+  - text: "#FFFFFF"
+    $name: "Fallback text color #RRGGBB"
+    $description: "Fallback text color. #AARRGGBB is accepted, but alpha is ignored for GDI text."
+  - label: "#FF0000"
+    $name: "Label color #RRGGBB"
+    $description: "Color for sensor labels, for example CPU W, GPU W, FLOW. Alpha is ignored for GDI text."
+  - value: "#00FF00"
+    $name: "Value color #RRGGBB"
+    $description: "Color for sensor values, for example 53.2 W or 330.6 l/h. Alpha is ignored for GDI text."
+  $name: Colors
+
+- background:
+  - enabled: true
+    $name: Enable background
+    $description: "When disabled, only the text is shown without background."
+  - color: "#304050"
+    $name: "Background color #RRGGBB"
+    $description: "Background base color. Alpha from #AARRGGBB is ignored because backgroundOpacityPercent controls overlay opacity."
+  - opacityPercent: 90
+    $name: Background opacity percent
+    $description: "Overall overlay opacity when background is enabled. Overrides the alpha value from backgroundColor. 100 = fully opaque, 50 = half transparent."
+  - gradientEnabled: true
+    $name: Enable background gradient
+    $description: "When enabled, the background is drawn as a gradient between background color and gradient color 2."
+  - gradientColor2: "#507080"
+    $name: "Background gradient color 2 #RRGGBB"
+    $description: "Second background gradient color. Alpha is ignored; use backgroundOpacityPercent."
+  - gradientDirection: DiagonalUp
+    $name: Background gradient direction
+    $description: "Direction of the background gradient."
+    $options:
+    - Vertical: Vertical
+    - Horizontal: Horizontal
+    - DiagonalDown: Diagonal down
+    - DiagonalUp: Diagonal up
+  - cornerRadius: 18
+    $name: Background corner radius
+    $description: "Rounded background corners. 0 disables rounded corners."
+  - borderSize: 2
+    $name: Background border size
+    $description: "Border size in pixels. 0 disables the border."
+  - borderColor: "#FFFFFF"
+    $name: "Background border color #RRGGBB"
+    $description: "Border color. Alpha is ignored for GDI pens."
+  $name: Background
+
+- hotkeys:
+  - toggle:
+    - enable: true
+      $name: Enable toggle hotkey
+      $description: "Enables a global hotkey to show or hide the overlay."
+    - key: H
+      $name: Toggle hotkey key
+      $description: "Single letter key for the toggle hotkey. Default is H."
+    - ctrl: true
+      $name: Toggle hotkey Ctrl
+    - alt: true
+      $name: Toggle hotkey Alt
+    - shift: false
+      $name: Toggle hotkey Shift
+    $name: Toggle overlay hotkey
+  - drag:
+    - enable: true
+      $name: Enable drag hotkey
+      $description: "Enables a global hotkey to toggle live drag mode."
+    - key: D
+      $name: Drag hotkey key
+      $description: "Single letter key for the drag hotkey. Default is D."
+    - ctrl: true
+      $name: Drag hotkey Ctrl
+    - alt: true
+      $name: Drag hotkey Alt
+    - shift: false
+      $name: Drag hotkey Shift
+    - rememberPosition: true
+      $name: Remember dragged position
+      $description: "Saves the final dragged X/Y position and restores it on the next load. Disable this to always use the X/Y position settings."
+    $name: Drag hotkey
+  - export:
+    - enable: true
+      $name: Enable registry export hotkey
+      $description: "Enables a global hotkey to export the HWiNFO registry sensor list as HTML."
+    - key: R
+      $name: Registry export hotkey key
+      $description: "Single letter key for the registry export hotkey. Default is R."
+    - ctrl: true
+      $name: Registry export hotkey Ctrl
+    - alt: true
+      $name: Registry export hotkey Alt
+    - shift: false
+      $name: Registry export hotkey Shift
+    - openAfterCreate: true
+      $name: Open export HTML after create
+      $description: "Opens the generated HWiNFO registry export HTML file after creating it."
+    $name: Registry export hotkey
+  $name: Hotkeys
+
+- waterAge:
+  - show: false
+    $name: Show water age
+    $description: Shows coolant age calculated from the configured fill date.
+  - label: WATER AGE
+    $name: Water age label
+  - fillDate: "2024-11-18"
+    $name: Water fill date
+    $description: "Format: YYYY-MM-DD"
+  - maxAgeDays: 730
+    $name: Water max age in days
+    $description: "Recommended: 730 days = 2 years." 
+  - warnPercent: 70
+    $name: Water age warning percent
+    $description: "Water age turns warning color at this percentage."
+  - alarmPercent: 90
+    $name: Water age alarm percent
+    $description: "Water age turns alarm color at this percentage."
+  - warnColor: "#FFAA00"
+    $name: "Water age warning color #FFAA00"
+  - alarmColor: "#FF3333"
+    $name: "Water age alarm color #FF3333"
+  - topGap: 8
+    $name: Water age top gap
+    $description: Extra vertical spacing before the water age row.
+  - showSeparator: true
+    $name: Show water age separator
+    $description: "Draws a horizontal separator line above the water age row."
+  - separatorColor: "#FFFFFF"
+    $name: "Water age separator color #RRGGBB"
+    $description: "Horizontal separator color. Alpha is ignored for GDI pens."
+  $name: Water age
 
 - rows:
   - - label: Example Sensor
@@ -437,6 +398,7 @@ MIT
   $description: "Sensor rows to display, in order. The single default row above is a placeholder only: ValueN indices are assigned by HWiNFO in the order Gadget reporting was enabled and differ from system to system, so a hardcoded default row list would show the wrong sensor for most users. Use Ctrl+Alt+R to export your actual HWiNFO Gadget/VSB values as HTML, read off the Label / Registry value name for each sensor you want, then use Add/Remove/Reorder to build your row list."
 */
 // ==/WindhawkModSettings==
+
 
 // This mod installs no hooks and injects into no other process's address
 // space: it runs entirely as a Windhawk tool mod in a dedicated windhawk.exe
@@ -828,83 +790,83 @@ void RecreateFont() {
 }
 
 void LoadSettings() {
-    const wchar_t* registryRoot = Wh_GetStringSetting(L"registryRoot");
+    const wchar_t* registryRoot = Wh_GetStringSetting(L"registry.root");
     settings.registryRoot = registryRoot ? registryRoot : L"HKCU";
     Wh_FreeStringSetting(registryRoot);
 
-    const wchar_t* registryPath = Wh_GetStringSetting(L"registryPath");
+    const wchar_t* registryPath = Wh_GetStringSetting(L"registry.path");
     settings.registryPath = (registryPath && *registryPath) ? registryPath : L"SOFTWARE\\HWiNFO64\\VSB";
     Wh_FreeStringSetting(registryPath);
 
-    settings.refreshIntervalMs = Wh_GetIntSetting(L"refreshIntervalMs");
+    settings.refreshIntervalMs = Wh_GetIntSetting(L"registry.refreshIntervalMs");
     if (settings.refreshIntervalMs < 250)
         settings.refreshIntervalMs = 250;
 
-    settings.x = Wh_GetIntSetting(L"x");
-    settings.y = Wh_GetIntSetting(L"y");
-    settings.width = Wh_GetIntSetting(L"width");
-    settings.height = Wh_GetIntSetting(L"height");
-    settings.autoHeight = Wh_GetIntSetting(L"autoHeight");
-    settings.paddingBottom = Wh_GetIntSetting(L"paddingBottom");
-    settings.fontSize = Wh_GetIntSetting(L"fontSize");
-    settings.paddingLeft = Wh_GetIntSetting(L"paddingLeft");
+    settings.x = Wh_GetIntSetting(L"layout.x");
+    settings.y = Wh_GetIntSetting(L"layout.y");
+    settings.width = Wh_GetIntSetting(L"layout.width");
+    settings.height = Wh_GetIntSetting(L"layout.height");
+    settings.autoHeight = Wh_GetIntSetting(L"layout.autoHeight");
+    settings.paddingBottom = Wh_GetIntSetting(L"layout.paddingBottom");
+    settings.fontSize = Wh_GetIntSetting(L"font.size");
+    settings.paddingLeft = Wh_GetIntSetting(L"layout.paddingLeft");
 
-    settings.labelColumnWidth = Wh_GetIntSetting(L"labelColumnWidth");
+    settings.labelColumnWidth = Wh_GetIntSetting(L"layout.labelColumnWidth");
 
-    const wchar_t* labelAlignment = Wh_GetStringSetting(L"labelAlignment");
+    const wchar_t* labelAlignment = Wh_GetStringSetting(L"layout.labelAlignment");
     settings.labelAlignment = (labelAlignment && *labelAlignment) ? labelAlignment : L"Right";
     Wh_FreeStringSetting(labelAlignment);
     settings.labelAlignRight =
         _wcsicmp(settings.labelAlignment.c_str(), L"Right") == 0;
 
-    settings.paddingTop = Wh_GetIntSetting(L"paddingTop");
-    settings.valueColumnX = Wh_GetIntSetting(L"valueColumnX");
-    settings.valueColumnWidth = Wh_GetIntSetting(L"valueColumnWidth");
+    settings.paddingTop = Wh_GetIntSetting(L"layout.paddingTop");
+    settings.valueColumnX = Wh_GetIntSetting(L"layout.valueColumnX");
+    settings.valueColumnWidth = Wh_GetIntSetting(L"layout.valueColumnWidth");
 
-    const wchar_t* valueAlignment = Wh_GetStringSetting(L"valueAlignment");
+    const wchar_t* valueAlignment = Wh_GetStringSetting(L"layout.valueAlignment");
     settings.valueAlignment = (valueAlignment && *valueAlignment) ? valueAlignment : L"Right";
     Wh_FreeStringSetting(valueAlignment);
     settings.valueAlignRight =
         _wcsicmp(settings.valueAlignment.c_str(), L"Right") == 0;
 
-    settings.showColumnSeparator = Wh_GetIntSetting(L"showColumnSeparator");
+    settings.showColumnSeparator = Wh_GetIntSetting(L"layout.showColumnSeparator");
 
-    settings.columnSeparatorX = Wh_GetIntSetting(L"columnSeparatorX");
+    settings.columnSeparatorX = Wh_GetIntSetting(L"layout.columnSeparatorX");
     if (settings.columnSeparatorX < 0)
         settings.columnSeparatorX = 0;
     if (settings.columnSeparatorX > 2000)
         settings.columnSeparatorX = 2000;
 
-    const wchar_t* columnSeparatorColor = Wh_GetStringSetting(L"columnSeparatorColor");
+    const wchar_t* columnSeparatorColor = Wh_GetStringSetting(L"layout.columnSeparatorColor");
     if (!ParseHexColor(columnSeparatorColor ? columnSeparatorColor : L"#FFFFFF",
                        &settings.columnSeparatorColor)) {
         settings.columnSeparatorColor = RGB(255, 255, 255);
     }
     Wh_FreeStringSetting(columnSeparatorColor);
 
-    settings.rowSpacing = Wh_GetIntSetting(L"rowSpacing");
-    settings.alwaysOnTop = Wh_GetIntSetting(L"alwaysOnTop");
+    settings.rowSpacing = Wh_GetIntSetting(L"layout.rowSpacing");
+    settings.alwaysOnTop = Wh_GetIntSetting(L"layout.alwaysOnTop");
 
-    settings.enableToggleHotkey = Wh_GetIntSetting(L"enableToggleHotkey");
+    settings.enableToggleHotkey = Wh_GetIntSetting(L"hotkeys.toggle.enable");
 
-    const wchar_t* toggleHotkeyKey = Wh_GetStringSetting(L"toggleHotkeyKey");
+    const wchar_t* toggleHotkeyKey = Wh_GetStringSetting(L"hotkeys.toggle.key");
     settings.toggleHotkeyKey = (toggleHotkeyKey && *toggleHotkeyKey) ? toggleHotkeyKey : L"H";
     Wh_FreeStringSetting(toggleHotkeyKey);
 
-    settings.toggleHotkeyCtrl = Wh_GetIntSetting(L"toggleHotkeyCtrl");
-    settings.toggleHotkeyAlt = Wh_GetIntSetting(L"toggleHotkeyAlt");
-    settings.toggleHotkeyShift = Wh_GetIntSetting(L"toggleHotkeyShift");
+    settings.toggleHotkeyCtrl = Wh_GetIntSetting(L"hotkeys.toggle.ctrl");
+    settings.toggleHotkeyAlt = Wh_GetIntSetting(L"hotkeys.toggle.alt");
+    settings.toggleHotkeyShift = Wh_GetIntSetting(L"hotkeys.toggle.shift");
 
-    settings.enableDragHotkey = Wh_GetIntSetting(L"enableDragHotkey");
+    settings.enableDragHotkey = Wh_GetIntSetting(L"hotkeys.drag.enable");
 
-    const wchar_t* dragHotkeyKey = Wh_GetStringSetting(L"dragHotkeyKey");
+    const wchar_t* dragHotkeyKey = Wh_GetStringSetting(L"hotkeys.drag.key");
     settings.dragHotkeyKey = (dragHotkeyKey && *dragHotkeyKey) ? dragHotkeyKey : L"D";
     Wh_FreeStringSetting(dragHotkeyKey);
 
-    settings.dragHotkeyCtrl = Wh_GetIntSetting(L"dragHotkeyCtrl");
-    settings.dragHotkeyAlt = Wh_GetIntSetting(L"dragHotkeyAlt");
-    settings.dragHotkeyShift = Wh_GetIntSetting(L"dragHotkeyShift");
-    settings.rememberDraggedPosition = Wh_GetIntSetting(L"rememberDraggedPosition");
+    settings.dragHotkeyCtrl = Wh_GetIntSetting(L"hotkeys.drag.ctrl");
+    settings.dragHotkeyAlt = Wh_GetIntSetting(L"hotkeys.drag.alt");
+    settings.dragHotkeyShift = Wh_GetIntSetting(L"hotkeys.drag.shift");
+    settings.rememberDraggedPosition = Wh_GetIntSetting(L"hotkeys.drag.rememberPosition");
 
     if (settings.rememberDraggedPosition) {
         int savedX = Wh_GetIntValue(L"draggedX", SAVED_POSITION_NOT_SET);
@@ -919,17 +881,17 @@ void LoadSettings() {
     settings.dragModeEnabled = false;
     settings.dragging = false;
 
-    settings.enableExportHotkey = Wh_GetIntSetting(L"enableExportHotkey");
+    settings.enableExportHotkey = Wh_GetIntSetting(L"hotkeys.export.enable");
 
-    const wchar_t* exportHotkeyKey = Wh_GetStringSetting(L"exportHotkeyKey");
+    const wchar_t* exportHotkeyKey = Wh_GetStringSetting(L"hotkeys.export.key");
     settings.exportHotkeyKey = (exportHotkeyKey && *exportHotkeyKey) ? exportHotkeyKey : L"R";
     Wh_FreeStringSetting(exportHotkeyKey);
 
-    settings.exportHotkeyCtrl = Wh_GetIntSetting(L"exportHotkeyCtrl");
-    settings.exportHotkeyAlt = Wh_GetIntSetting(L"exportHotkeyAlt");
-    settings.exportHotkeyShift = Wh_GetIntSetting(L"exportHotkeyShift");
+    settings.exportHotkeyCtrl = Wh_GetIntSetting(L"hotkeys.export.ctrl");
+    settings.exportHotkeyAlt = Wh_GetIntSetting(L"hotkeys.export.alt");
+    settings.exportHotkeyShift = Wh_GetIntSetting(L"hotkeys.export.shift");
 
-    settings.openExportHtmlAfterCreate = Wh_GetIntSetting(L"openExportHtmlAfterCreate");
+    settings.openExportHtmlAfterCreate = Wh_GetIntSetting(L"hotkeys.export.openAfterCreate");
 
     if (settings.paddingLeft < 0)
         settings.paddingLeft = 24;
@@ -961,49 +923,49 @@ void LoadSettings() {
     if (settings.paddingBottom > 500)
         settings.paddingBottom = 500;
 
-    const wchar_t* fontFamily = Wh_GetStringSetting(L"fontFamily");
+    const wchar_t* fontFamily = Wh_GetStringSetting(L"font.family");
     settings.fontFamily = (fontFamily && *fontFamily) ? fontFamily : L"Cascadia Mono";
     Wh_FreeStringSetting(fontFamily);
 
-    const wchar_t* fontWeight = Wh_GetStringSetting(L"fontWeight");
+    const wchar_t* fontWeight = Wh_GetStringSetting(L"font.weight");
     settings.fontWeight = (fontWeight && *fontWeight) ? fontWeight : L"SemiBold";
     Wh_FreeStringSetting(fontWeight);
 
-    const wchar_t* fontStyle = Wh_GetStringSetting(L"fontStyle");
+    const wchar_t* fontStyle = Wh_GetStringSetting(L"font.style");
     settings.fontStyle = (fontStyle && *fontStyle) ? fontStyle : L"Normal";
     Wh_FreeStringSetting(fontStyle);
 
-    const wchar_t* textColor = Wh_GetStringSetting(L"textColor");
+    const wchar_t* textColor = Wh_GetStringSetting(L"colors.text");
     if (!ParseHexColor(textColor ? textColor : L"#FFFFFF",
                        &settings.textColor)) {
         settings.textColor = RGB(255, 255, 255);
     }
     Wh_FreeStringSetting(textColor);
 
-    const wchar_t* labelColor = Wh_GetStringSetting(L"labelColor");
+    const wchar_t* labelColor = Wh_GetStringSetting(L"colors.label");
     if (!ParseHexColor(labelColor ? labelColor : L"#FF0000",
                        &settings.labelColor)) {
         settings.labelColor = settings.textColor;
     }
     Wh_FreeStringSetting(labelColor);
 
-    const wchar_t* valueColor = Wh_GetStringSetting(L"valueColor");
+    const wchar_t* valueColor = Wh_GetStringSetting(L"colors.value");
     if (!ParseHexColor(valueColor ? valueColor : L"#00FF00",
                     &settings.valueColor)) {
         settings.valueColor = settings.textColor;
     }
     Wh_FreeStringSetting(valueColor);
 
-    settings.backgroundEnabled = Wh_GetIntSetting(L"backgroundEnabled");
+    settings.backgroundEnabled = Wh_GetIntSetting(L"background.enabled");
 
-    const wchar_t* backgroundColor = Wh_GetStringSetting(L"backgroundColor");
+    const wchar_t* backgroundColor = Wh_GetStringSetting(L"background.color");
     if (!ParseHexColor(backgroundColor ? backgroundColor : L"#304050",
                        &settings.backgroundColor)) {
         settings.backgroundColor = RGB(48, 64, 80);
     }
     Wh_FreeStringSetting(backgroundColor);
 
-    settings.backgroundOpacityPercent = Wh_GetIntSetting(L"backgroundOpacityPercent");
+    settings.backgroundOpacityPercent = Wh_GetIntSetting(L"background.opacityPercent");
 
     if (settings.backgroundOpacityPercent < 10)
         settings.backgroundOpacityPercent = 10;
@@ -1013,16 +975,16 @@ void LoadSettings() {
 
     settings.backgroundAlpha = (BYTE)((settings.backgroundOpacityPercent * 255) / 100);
 
-    settings.backgroundGradientEnabled = Wh_GetIntSetting(L"backgroundGradientEnabled");
+    settings.backgroundGradientEnabled = Wh_GetIntSetting(L"background.gradientEnabled");
 
-    const wchar_t* backgroundGradientColor2 = Wh_GetStringSetting(L"backgroundGradientColor2");
+    const wchar_t* backgroundGradientColor2 = Wh_GetStringSetting(L"background.gradientColor2");
     if (!ParseHexColor(backgroundGradientColor2 ? backgroundGradientColor2 : L"#507080",
                        &settings.backgroundGradientColor2)) {
         settings.backgroundGradientColor2 = RGB(80, 112, 128);
     }
     Wh_FreeStringSetting(backgroundGradientColor2);
 
-    const wchar_t* backgroundGradientDirectionStr = Wh_GetStringSetting(L"backgroundGradientDirection");
+    const wchar_t* backgroundGradientDirectionStr = Wh_GetStringSetting(L"background.gradientDirection");
     std::wstring backgroundGradientDirectionValue =
         (backgroundGradientDirectionStr && *backgroundGradientDirectionStr)
             ? backgroundGradientDirectionStr
@@ -1039,52 +1001,52 @@ void LoadSettings() {
         settings.backgroundGradientDirection = GradientDirection::Vertical;
     }
 
-    settings.backgroundCornerRadius = Wh_GetIntSetting(L"backgroundCornerRadius");
+    settings.backgroundCornerRadius = Wh_GetIntSetting(L"background.cornerRadius");
     if (settings.backgroundCornerRadius < 0)
         settings.backgroundCornerRadius = 0;
     if (settings.backgroundCornerRadius > 100)
         settings.backgroundCornerRadius = 100;
 
-    settings.backgroundBorderSize = Wh_GetIntSetting(L"backgroundBorderSize");
+    settings.backgroundBorderSize = Wh_GetIntSetting(L"background.borderSize");
     if (settings.backgroundBorderSize < 0)
         settings.backgroundBorderSize = 0;
     if (settings.backgroundBorderSize > 20)
         settings.backgroundBorderSize = 20;
 
-    const wchar_t* backgroundBorderColor = Wh_GetStringSetting(L"backgroundBorderColor");
+    const wchar_t* backgroundBorderColor = Wh_GetStringSetting(L"background.borderColor");
     if (!ParseHexColor(backgroundBorderColor ? backgroundBorderColor : L"#FFFFFF",
                        &settings.backgroundBorderColor)) {
         settings.backgroundBorderColor = RGB(255, 255, 255);
     }
     Wh_FreeStringSetting(backgroundBorderColor);
 
-    settings.hideUnavailableRows = Wh_GetIntSetting(L"hideUnavailableRows");
+    settings.hideUnavailableRows = Wh_GetIntSetting(L"layout.hideUnavailableRows");
 
     settings.rows = LoadRowsFromSettings();
 
     RecreateFont();
 
-    settings.showWaterAge = Wh_GetIntSetting(L"showWaterAge");
+    settings.showWaterAge = Wh_GetIntSetting(L"waterAge.show");
 
-    const wchar_t* waterAgeLabel = Wh_GetStringSetting(L"waterAgeLabel");
+    const wchar_t* waterAgeLabel = Wh_GetStringSetting(L"waterAge.label");
     settings.waterAgeLabel = (waterAgeLabel && *waterAgeLabel) ? waterAgeLabel : L"WATER AGE";
     Wh_FreeStringSetting(waterAgeLabel);
 
-    const wchar_t* waterFillDate = Wh_GetStringSetting(L"waterFillDate");
+    const wchar_t* waterFillDate = Wh_GetStringSetting(L"waterAge.fillDate");
     settings.waterFillDate = (waterFillDate && *waterFillDate) ? waterFillDate : L"2024-11-18";
     Wh_FreeStringSetting(waterFillDate);
 
-    settings.waterMaxAgeDays = Wh_GetIntSetting(L"waterMaxAgeDays");
+    settings.waterMaxAgeDays = Wh_GetIntSetting(L"waterAge.maxAgeDays");
     if (settings.waterMaxAgeDays < 1)
         settings.waterMaxAgeDays = 730;
 
-    settings.waterAgeWarnPercent = Wh_GetIntSetting(L"waterAgeWarnPercent");
+    settings.waterAgeWarnPercent = Wh_GetIntSetting(L"waterAge.warnPercent");
     if (settings.waterAgeWarnPercent < 0)
         settings.waterAgeWarnPercent = 70;
     if (settings.waterAgeWarnPercent > 100)
         settings.waterAgeWarnPercent = 100;
 
-    settings.waterAgeAlarmPercent = Wh_GetIntSetting(L"waterAgeAlarmPercent");
+    settings.waterAgeAlarmPercent = Wh_GetIntSetting(L"waterAge.alarmPercent");
     if (settings.waterAgeAlarmPercent < 0)
         settings.waterAgeAlarmPercent = 90;
     if (settings.waterAgeAlarmPercent > 100)
@@ -1093,7 +1055,7 @@ void LoadSettings() {
     if (settings.waterAgeAlarmPercent < settings.waterAgeWarnPercent)
         settings.waterAgeAlarmPercent = settings.waterAgeWarnPercent;
 
-    const wchar_t* waterAgeWarnColor = Wh_GetStringSetting(L"waterAgeWarnColor");
+    const wchar_t* waterAgeWarnColor = Wh_GetStringSetting(L"waterAge.warnColor");
     if (!ParseHexColor(
             waterAgeWarnColor ? waterAgeWarnColor : L"#FFAA00",
             &settings.waterAgeWarnColor)) {
@@ -1101,7 +1063,7 @@ void LoadSettings() {
     }
     Wh_FreeStringSetting(waterAgeWarnColor);
 
-    const wchar_t* waterAgeAlarmColor = Wh_GetStringSetting(L"waterAgeAlarmColor");
+    const wchar_t* waterAgeAlarmColor = Wh_GetStringSetting(L"waterAge.alarmColor");
     if (!ParseHexColor(
             waterAgeAlarmColor ? waterAgeAlarmColor : L"#FF3333",
             &settings.waterAgeAlarmColor)) {
@@ -1109,13 +1071,13 @@ void LoadSettings() {
     }
     Wh_FreeStringSetting(waterAgeAlarmColor);
 
-    settings.waterAgeTopGap = Wh_GetIntSetting(L"waterAgeTopGap");
+    settings.waterAgeTopGap = Wh_GetIntSetting(L"waterAge.topGap");
     if (settings.waterAgeTopGap < 0)
         settings.waterAgeTopGap = 0;
 
-    settings.showWaterAgeSeparator = Wh_GetIntSetting(L"showWaterAgeSeparator");
+    settings.showWaterAgeSeparator = Wh_GetIntSetting(L"waterAge.showSeparator");
 
-    const wchar_t* waterAgeSeparatorColor = Wh_GetStringSetting(L"waterAgeSeparatorColor");
+    const wchar_t* waterAgeSeparatorColor = Wh_GetStringSetting(L"waterAge.separatorColor");
     if (!ParseHexColor(
             waterAgeSeparatorColor ? waterAgeSeparatorColor : L"#FFFFFF",
             &settings.waterAgeSeparatorColor)) {
@@ -2116,6 +2078,33 @@ bool HasHotkeyModifier(UINT modifiers) {
     return (modifiers & (MOD_CONTROL | MOD_ALT | MOD_SHIFT)) != 0;
 }
 
+void ShowHotkeyRegistrationWarningOnce(
+    HWND hwnd,
+    int hotkeyId,
+    const wchar_t* label,
+    const wchar_t* reason
+) {
+    static bool shown[4] = {};
+
+    if (hotkeyId < 1 || hotkeyId > 3 || shown[hotkeyId])
+        return;
+
+    shown[hotkeyId] = true;
+
+    std::wstring message =
+        std::wstring(L"The ") + label +
+        L" hotkey could not be registered.\n\n" +
+        reason +
+        L"\n\nPlease choose a different hotkey in the mod settings.";
+
+    MessageBoxW(
+        hwnd,
+        message.c_str(),
+        L"HWiNFO Registry Live Overlay",
+        MB_OK | MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST
+    );
+}
+
 bool RegisterAppHotkey(
     HWND hwnd,
     int hotkeyId,
@@ -2131,11 +2120,30 @@ bool RegisterAppHotkey(
 
     if (!HasHotkeyModifier(modifiers)) {
         Wh_Log(L"%s hotkey needs at least one modifier; not registering", label);
+
+        ShowHotkeyRegistrationWarningOnce(
+            hwnd,
+            hotkeyId,
+            label,
+            L"At least one modifier key (Ctrl, Alt or Shift) is required."
+        );
+
         return false;
     }
 
     if (!RegisterHotKey(hwnd, hotkeyId, modifiers, vk)) {
-        Wh_Log(L"Failed to register %s hotkey: %u", label, GetLastError());
+        DWORD error = GetLastError();
+        Wh_Log(L"Failed to register %s hotkey: %u", label, error);
+
+        ShowHotkeyRegistrationWarningOnce(
+            hwnd,
+            hotkeyId,
+            label,
+            error == ERROR_HOTKEY_ALREADY_REGISTERED
+                ? L"The selected key combination is already in use by another program."
+                : L"Windows rejected the selected key combination."
+        );
+
         return false;
     }
 
