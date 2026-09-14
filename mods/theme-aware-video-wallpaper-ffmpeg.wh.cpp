@@ -35,6 +35,9 @@ Automatically switches between two videos based on the current Windows light/dar
 - Audio playback is **not supported** — ffmpeg is invoked with audio disabled.
 
 ### Known limitations
+- Desktop icons are covered by the video wallpaper — icons remain functional (you can click them)
+  but they are not visible. This is a known Z-order issue; the video window is placed below all
+  desktop layers rather than between `Progman` and `WorkerW` where icons live.
 - Scaling mode (fit / fill / center) is not configurable; the frame is always stretched to fill the
   virtual desktop.
 - Hoping someone else will carry on development — PRs welcome.
