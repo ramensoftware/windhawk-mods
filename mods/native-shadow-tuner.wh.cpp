@@ -2,7 +2,7 @@
 // @id              native-shadow-tuner
 // @name            Windows Shadows Tuner
 // @description     Adjust the size, blur and intensity of native Windows shadows.
-// @version         0.5.0
+// @version         0.5.1
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @include         dwm.exe
@@ -12,10 +12,15 @@
 // ==WindhawkModReadme==
 /*
 # Windows Shadows TUNER
-### HaVeN80
 
 Customize native Windows window shadows: make them lighter or more pronounced,
 and adjust their size and blur.
+
+## Examples
+
+**Shadow intensity and size comparison**
+
+![Windows Shadows TUNER comparison](https://i.imgur.com/mnIyjTj.png)
 
 ## Setup
 
@@ -23,7 +28,7 @@ and adjust their size and blur.
 by default. Open Windhawk Settings, go to **Advanced settings**, then
 **More advanced settings**, and add `dwm.exe` to the process inclusion list.
 
-![Windhawk advanced settings](https://i.imgur.com/epfTlMZ.png)
+![Windhawk advanced settings](https://i.imgur.com/LRhREtJ.png)
 
 ## Controls
 
@@ -89,10 +94,23 @@ struct DwmColorValue {
     float a;
 };
 
-void SetCacheKeyPart(float* value, uint32_t part) {
+void SetStableCacheKeyPart(float* value, uint32_t part,
+                           unsigned payloadBits) {
+    constexpr uint32_t kExponentMask = 0x7F800000u;
+    constexpr uint32_t kNormalCarrier = 0x35800000u;  // 2^-20.
+    uint32_t payloadMask = (1u << payloadBits) - 1u;
     uint32_t bits;
     std::memcpy(&bits, value, sizeof(bits));
-    bits = (bits & ~0xFFFu) | (part & 0xFFFu);
+
+    // Zero/subnormal values are unsafe cache-key carriers: graphics threads
+    // commonly enable flush-to-zero. Replace only such values with a tiny,
+    // positive *normal* float, then store the payload in its mantissa. For a
+    // normal input, preserve sign/exponent and all higher mantissa bits.
+    uint32_t exponent = bits & kExponentMask;
+    if (exponent == 0 || exponent == kExponentMask) {
+        bits = kNormalCarrier;
+    }
+    bits = (bits & ~payloadMask) | (part & payloadMask);
     std::memcpy(value, &bits, sizeof(bits));
 }
 
@@ -102,24 +120,31 @@ HRESULT __cdecl GetBrushHook(float radius, int dpi, const void* color,
         (opacityScale == 1.0f && sizeScale == 1.0f))
         return getBrushOriginal(radius, dpi, color, borderStyle, shadowStyle, output);
 
-    // Keep DWM's native cache active. Two visually insignificant mantissa
-    // fragments make the cache key unique for the current size/opacity pair.
-    // The local copy is valid for the complete synchronous native call.
+    // Keep DWM's native cache active. The complete 15-bit settings key is
+    // split between two visually insignificant, normal-float carriers. The
+    // local copy is valid for the complete synchronous native call.
     DwmColorValue keyedColor;
     std::memcpy(&keyedColor, color, sizeof(keyedColor));
-    SetCacheKeyPart(&keyedColor.r, cacheKey);
-    SetCacheKeyPart(&keyedColor.g, cacheKey >> 12);
+    SetStableCacheKeyPart(&keyedColor.r, cacheKey, 12);
+    SetStableCacheKeyPart(&keyedColor.g, cacheKey >> 12, 3);
     if (std::memcmp(&keyedColor, color, sizeof(keyedColor)) == 0) {
-        uint32_t bits;
-        std::memcpy(&bits, &keyedColor.b, sizeof(bits));
-        bits ^= 1;
-        std::memcpy(&keyedColor.b, &bits, sizeof(bits));
+        SetStableCacheKeyPart(&keyedColor.b, cacheKey ^ 1u, 1);
     }
     HRESULT hr = getBrushOriginal(radius, dpi, &keyedColor, borderStyle,
                                   shadowStyle, output);
     if (brushReports.fetch_add(1, std::memory_order_relaxed) < 12)
-        Wh_Log(L"SHADOW_CACHE key=%u style=%d dpi=%d HRESULT=0x%08X", cacheKey,
-               shadowStyle, dpi,
+        Wh_Log(L"SHADOW_CACHE key=%u style=%d dpi=%d "
+               L"color=(%.9g,%.9g,%.9g,%.9g) "
+               L"keyed=(%.9g,%.9g,%.9g,%.9g) HRESULT=0x%08X",
+               cacheKey, shadowStyle, dpi,
+               static_cast<double>(static_cast<const DwmColorValue*>(color)->r),
+               static_cast<double>(static_cast<const DwmColorValue*>(color)->g),
+               static_cast<double>(static_cast<const DwmColorValue*>(color)->b),
+               static_cast<double>(static_cast<const DwmColorValue*>(color)->a),
+               static_cast<double>(keyedColor.r),
+               static_cast<double>(keyedColor.g),
+               static_cast<double>(keyedColor.b),
+               static_cast<double>(keyedColor.a),
                static_cast<unsigned>(hr));
     return hr;
 }
@@ -186,6 +211,7 @@ BOOL Wh_ModInit() {
             },
             reinterpret_cast<void**>(&getBrushOriginal),
             reinterpret_cast<void*>(GetBrushHook),
+            true,
         },
     };
 
@@ -195,7 +221,8 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    Wh_Log(L"Native shadow symbols resolved and hooks registered.");
+    Wh_Log(L"Native shadow symbols resolved; cache hook=%s.",
+           getBrushOriginal ? L"available" : L"unavailable");
     return TRUE;
 }
 
