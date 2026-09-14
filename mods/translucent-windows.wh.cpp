@@ -3653,7 +3653,7 @@ BOOL CThemeCache::CacheTreeViewButton(INT iPartId, INT iStateId, INT stateIndex)
 
         if (iStateId == TREIS_SELECTED || iStateId == TREIS_SELECTEDNOTFOCUS || iStateId == TREIS_HOTSELECTED)
         {
-            FLOAT pillOffsetY = 7, pillWidth = 2.f + round(scale), pillRadius = 1.f + round(scale);
+            FLOAT pillOffsetY = 7, pillWidth = round(3.4f + scale), pillRadius = round(1.4f + scale);
             brush->SetColor(IsAccentColorPossibleD2D(102, 206, 255, SystemAccentColorLight2));
             pRenderTarget->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x, y + pillOffsetY, x + pillWidth, height - pillOffsetY), pillRadius, pillRadius),brush.Get());
         }
@@ -4971,7 +4971,14 @@ HRESULT WINAPI HookedDrawThemeBackgroundEx(
 {    
     std::wstring ThemeClassName = GetThemeClass(hTheme);
 
-    if (ThemeClassName == L"ListView")
+    if (ThemeClassName == L"ScrollBar")
+    {
+        if (PaintScroll(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+        else if (PaintScrollBarArrows(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+    else if (ThemeClassName == L"ListView")
     {
         if (PaintListView(hdc, iPartId, iStateId, pRect))
             return S_OK;
