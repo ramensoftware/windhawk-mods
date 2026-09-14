@@ -1,28 +1,29 @@
 // ==WindhawkMod==
 // @id              windhawk-topbar
 // @name            TopBar for Windows
+// @donateUrl       https://www.patreon.com/WasiXGamer/join
 // @description     A working TopBar with Flyouts for Windows through Windhawk.
-// @version         1.0.0
+// @version         1.1.0
 // @author          WasiXGamer
 // @github          https://github.com/wasixgamer
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -ladvapi32 -luser32 -lshcore -lcomctl32
+// @compilerOptions -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -ladvapi32 -luser32 -lshcore -lcomctl32 -lpdh -lpsapi -ldxgi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # TopBar For Windhawk
 
-![TopBar screenshot](https://i.imgur.com/bryjzKr.png)
-
+![TopBar screenshot](https://i.imgur.com/nMvk2r9.png)
+![Flyouts screenshot](https://i.imgur.com/1WYUMqX.png)
 Adds a **TopBar** at top of your screen with multiple customizations, hosted by a
 dedicated explorer.exe tool process.
 
+# Support my Work:
 [![Patreon](https://i.imgur.com/JJ0TluA.png)](https://www.patreon.com/WasiXGamer/join)
 
 ## Themes
-
 Themes are collections of styles that can be selected from the **Theme** dropdown in the mod settings. The following themes are available:
 
 | Theme | Preview |
@@ -36,9 +37,9 @@ More themes, stylings, etc can be found and contributed from:
 ## Features
 
 - **Task list** — window icons, titles, click-to-activate, double-click maximize
-- **Control centre** — Display (brightness, Dark Mode), Sound (volume, per-app mixer, device picker, media controls), Wi-Fi (scan/connect), Bluetooth (connect/disconnect), and Tray (notification area)
+- **Control centre** — Display (brightness, Dark Mode), Sound (volume, per-app mixer, device picker, media controls), Wi-Fi (scan/connect), Bluetooth (connect/disconnect)
 - **Full styling** via Control styles
-- **Background translucency** with acrylic/blur
+- **Background translucency** tinting for TopBar, BlurBehind for Flyouts.
 
 ## Process model
 
@@ -60,7 +61,7 @@ class name (`Button`), `ClassName#Name`, or a parent chain (`StackPanel > TextBl
 | `TaskListPanel` / `TaskButton` | Task strip, and every task button |
 | `TaskButtonIcon` / `TaskButtonText` | Icon and label inside a task button |
 | `TrayPanel` | Right-hand strip holding the status buttons and clock |
-| `DisplayButton` `SoundButton` `WifiButton` `BluetoothButton` `TrayButton` | Status buttons |
+| `DisplayButton` `SoundButton` `WifiButton` `BluetoothButton` `ResourceButton` | Status buttons |
 | `ClockButton` / `ClockText` | Date/time |
 | `BatteryButton` | Battery button |
 
@@ -72,11 +73,12 @@ After setting UWPSpy at Sticky mode, the following Shortcuts can be used to trig
 
 | Hotkey | Action |
 |--------|--------|
+| Ctrl+Alt+0 | Toggle Resource Monitor flyout |
 | Ctrl+Alt+1 | Toggle Display flyout |
 | Ctrl+Alt+2 | Toggle Sound flyout |
 | Ctrl+Alt+3 | Toggle Wi-Fi flyout |
 | Ctrl+Alt+4 | Toggle Bluetooth flyout |
-| Ctrl+Alt+5 | Toggle Tray flyout |
+| Ctrl+Alt+5 | Toggle Battery flyout |
 | Ctrl+Alt+6 | Show Start button context menu |
 | Ctrl+Alt+7 | Show Task list context menu |
 
@@ -86,12 +88,11 @@ Style syntax: `Property=Value`, `Property:=<Xaml/>`, `$name` constants.
 ## Global transparency and tint
 
 The transparency and tint configured in **Top bar background color** and **Top bar background opacity**
-are applied to the top bar, and all flyouts (Display, Sound, Wi‑Fi, Bluetooth, Tray)
+are applied to the top bar.
 and to all context menus.
 
 ## Known limitations
 
-- Tray icons dont show up - Will attempted to be fixed in next update.
 - Live Wallpapers are NOT supported and topbar background will use default windows wallpaper instead of live wallpaper.
 
 */
@@ -112,7 +113,7 @@ and to all context menus.
   $description: Height of the top bar in pixels.
 - monitorIndex: 0
   $name: Monitor
-  $description: 0 = primary monitor. Otherwise the secondary monitor number.
+  $description: 1 = primary monitor. Otherwise the secondary monitor number.
 - cornerRadius: 6
   $name: Corner radius
   $description: Rounded corner radius used for buttons.
@@ -133,8 +134,7 @@ and to all context menus.
 - taskButtonWidth: 150
   $name: Task button width (DIP)
   $description: >-
-    Maximum width applied to every task button, so the list does not reflow or resize as
-    window titles change.
+    Maximum width applied to every task button. This automatically decreases if the tasklist grid touches the traypanel grid.
 - taskIconSize: 20
   $name: Task icon size (DIP)
   $description: >-
@@ -154,14 +154,21 @@ and to all context menus.
   $name: Show Wi-Fi button
 - showBluetoothButton: true
   $name: Show Bluetooth button
-- showTrayButton: false
-  $name: Show tray button
 - showBatteryButton: true
   $name: Show battery button
 
+- showCpuUsage: true
+  $name: Show CPU usage
+  $description: Include CPU usage in the resource button.
+- showRamUsage: true
+  $name: Show RAM usage
+  $description: Include RAM usage in the resource button.
+- showGpuUsage: true
+  $name: Show GPU usage
+  $description: Include GPU usage in the resource button.
 - enableHotkeys: false
-  $name: Enable keyboard shortcuts (Ctrl+Alt+1…7)
-  $description: Turn on global hotkeys. (Useful for Inspecting elements in flyout)
+  $name: Enable keyboard shortcuts (Ctrl+Alt+0-7)
+  $description: Turn on global hotkeys for each flyout and context menu. (Useful for Inspecting elements in flyout)
 - showClock: true
   $name: Show time
 - timeFormat: "🕑hh:mm tt"
@@ -217,6 +224,12 @@ and to all context menus.
 #include <bluetoothapis.h>
 #include <physicalmonitorenumerationapi.h>
 #include <highlevelmonitorconfigurationapi.h>
+#include <pdh.h>
+#include <psapi.h>
+#include <dxgi.h>
+#include <dxgi1_3.h>
+#include <tlhelp32.h>
+#include <powerbase.h>
 
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
@@ -237,6 +250,7 @@ and to all context menus.
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Storage.Streams.h>
+#include <winrt/Windows.ApplicationModel.DataTransfer.h>
 #include <windows.ui.xaml.hosting.desktopwindowxamlsource.h>
 
 #if __has_include(<winrt/Windows.Media.Control.h>)
@@ -257,6 +271,8 @@ and to all context menus.
 #define TOPBAR_HAS_BLUETOOTH_LE 1
 #include <winrt/Windows.Devices.Bluetooth.h>
 #include <winrt/Windows.Devices.Bluetooth.GenericAttributeProfile.h>
+#include <winrt/Windows.Devices.Enumeration.h>
+#include <winrt/Windows.Foundation.Collections.h>
 #else
 #define TOPBAR_HAS_BLUETOOTH_LE 0
 #endif
@@ -269,13 +285,17 @@ and to all context menus.
 #include <string>
 #include <string_view>
 #include <thread>
+#include <future>
 #include <atomic>
 #include <mutex>
 #include <process.h>
 
 #include <vector>
+#include <deque>
+#include <limits>
 
 using namespace winrt::Windows::UI::Xaml;
+
 
 
 namespace wuxh = winrt::Windows::UI::Xaml::Hosting;
@@ -284,6 +304,690 @@ namespace wuxm = winrt::Windows::UI::Xaml::Media;
 namespace wf = winrt::Windows::Foundation;
 namespace wui = winrt::Windows::UI;
 
+// ============================================================================
+// Resource usage (CPU, RAM, GPU)
+// ============================================================================
+namespace resource {
+    struct Usage {
+        int cpu = 0;
+        int ram = 0;
+        int gpu = 0;
+        bool cpuAvailable = false;
+        bool gpuAvailable = false;
+    };
+
+    struct DetailedInfo {
+        // CPU
+        int cpuClockMHz = 0;
+        int cpuCores = 0;
+        int cpuThreads = 0;
+        int processCount = 0;
+        // RAM
+        int ramSpeedMHz = 0;
+        uint64_t virtualMemoryTotal = 0;
+        uint64_t virtualMemoryUsed = 0;
+        std::wstring ramType;
+        std::wstring ramManufacturer;
+        std::wstring ramPartNumber;
+        uint64_t ramCapacity = 0;
+        // GPU
+        std::wstring gpuName;
+        uint64_t vramTotal = 0;
+        uint64_t vramUsed = 0;
+    };
+
+    // CPU usage via PDH (Performance Data Helper)
+    // We use a single counter for total processor time.
+    PDH_HQUERY g_cpuQuery = nullptr;
+    PDH_HCOUNTER g_cpuCounter = nullptr;
+
+    // GPU usage via PDH "GPU Engine" counters
+    // We'll aggregate all instances by expanding wildcards into individual counters.
+    PDH_HQUERY g_gpuQuery = nullptr;
+    std::vector<PDH_HCOUNTER> g_gpuCounters;
+    bool g_gpuQueryInitialized = false;
+    bool g_gpuSecondPollDone = false;
+
+    // (GPU Adapter Memory counters are handled by GetVramUsed() with its own query)
+
+    // Expands a wildcard PDH path into specific localized counters (from m417z's approach)
+    std::vector<std::wstring> ExpandGpuWildcard(PCWSTR wildcard_path) {
+        std::vector<std::wstring> paths;
+        PDH_HQUERY temp_query;
+        PDH_HCOUNTER temp_counter;
+        if (PdhOpenQuery(nullptr, 0, &temp_query) != ERROR_SUCCESS) return paths;
+        if (PdhAddEnglishCounter(temp_query, wildcard_path, 0, &temp_counter) != ERROR_SUCCESS) {
+            PdhCloseQuery(temp_query);
+            return paths;
+        }
+
+        DWORD buffer_size = 0;
+        PdhGetCounterInfo(temp_counter, FALSE, &buffer_size, nullptr);
+        std::vector<BYTE> buffer(buffer_size);
+        PDH_COUNTER_INFO* counter_info = reinterpret_cast<PDH_COUNTER_INFO*>(buffer.data());
+        if (PdhGetCounterInfo(temp_counter, FALSE, &buffer_size, counter_info) != ERROR_SUCCESS) {
+            PdhCloseQuery(temp_query);
+            return paths;
+        }
+
+        buffer_size = 0;
+        PdhExpandWildCardPath(nullptr, counter_info->szFullPath, nullptr, &buffer_size, 0);
+        std::vector<WCHAR> path_buffer(buffer_size);
+        if (PdhExpandWildCardPath(nullptr, counter_info->szFullPath, path_buffer.data(), &buffer_size, 0) == ERROR_SUCCESS) {
+            WCHAR* p = path_buffer.data();
+            while (*p) {
+                paths.emplace_back(p);
+                p += wcslen(p) + 1;
+            }
+        }
+        PdhCloseQuery(temp_query);
+        return paths;
+    }
+
+    // RAM usage via GlobalMemoryStatusEx
+    std::mutex g_resourceInitMutex;
+
+    void Initialize() {
+        std::lock_guard<std::mutex> lock(g_resourceInitMutex);
+        // Initialize CPU counter
+        if (!g_cpuQuery) {
+            if (PdhOpenQuery(nullptr, 0, &g_cpuQuery) == ERROR_SUCCESS) {
+                if (PdhAddEnglishCounter(g_cpuQuery, L"\\Processor(_Total)\\% Processor Time", 0, &g_cpuCounter) != ERROR_SUCCESS) {
+                    PdhCloseQuery(g_cpuQuery);
+                    g_cpuQuery = nullptr;
+                }
+            }
+        }
+
+        // Initialize GPU Engine counters (Summing all instances)
+        if (!g_gpuQueryInitialized) {
+            if (PdhOpenQuery(nullptr, 0, &g_gpuQuery) == ERROR_SUCCESS) {
+                auto paths = ExpandGpuWildcard(L"\\GPU Engine(*)\\Utilization Percentage");
+                for (const auto& path : paths) {
+                    PDH_HCOUNTER counter;
+                    if (PdhAddCounter(g_gpuQuery, path.c_str(), 0, &counter) == ERROR_SUCCESS) {
+                        g_gpuCounters.push_back(counter);
+                    }
+                }
+                g_gpuQueryInitialized = true;
+            } else {
+                g_gpuQueryInitialized = true;
+            }
+        }
+
+        // (GPU Adapter Memory counters are handled by GetVramUsed() with its own query)
+    }
+
+    int GetCpu() {
+        if (!g_cpuQuery || !g_cpuCounter) return -1;
+        PDH_FMT_COUNTERVALUE value;
+        if (PdhCollectQueryData(g_cpuQuery) != ERROR_SUCCESS) return -1;
+        if (PdhGetFormattedCounterValue(g_cpuCounter, PDH_FMT_DOUBLE, nullptr, &value) != ERROR_SUCCESS) return -1;
+        return static_cast<int>(value.doubleValue + 0.5);
+    }
+
+    int GetRam() {
+        MEMORYSTATUSEX memInfo;
+        memInfo.dwLength = sizeof(memInfo);
+        if (GlobalMemoryStatusEx(&memInfo)) {
+            return static_cast<int>(memInfo.dwMemoryLoad);
+        }
+        return -1;
+    }
+
+    // Helper to sum a formatted PDH array. You MUST call this for wildcard (*) counters.
+    double SumPdhCounter(PDH_HCOUNTER counter) {
+        DWORD bufferSize = 0;
+        DWORD itemCount = 0;
+        // First call to get the required buffer size and item count.
+        if (PdhGetFormattedCounterArray(counter, PDH_FMT_DOUBLE, &bufferSize, &itemCount, nullptr) != ERROR_SUCCESS) return 0;
+
+        std::vector<BYTE> buffer(bufferSize);
+        PDH_FMT_COUNTERVALUE_ITEM* items = reinterpret_cast<PDH_FMT_COUNTERVALUE_ITEM*>(buffer.data());
+        if (PdhGetFormattedCounterArray(counter, PDH_FMT_DOUBLE, &bufferSize, &itemCount, items) != ERROR_SUCCESS) return 0;
+
+        double total = 0;
+        for (DWORD i = 0; i < itemCount; i++) {
+            if (items[i].FmtValue.CStatus == ERROR_SUCCESS) {
+                total += items[i].FmtValue.doubleValue;
+            }
+        }
+        return total;
+    }
+
+    int GetGpu() {
+        if (!g_gpuQuery || g_gpuCounters.empty()) return -1;
+        PDH_FMT_COUNTERVALUE value;
+        if (PdhCollectQueryData(g_gpuQuery) != ERROR_SUCCESS) return -1;
+        if (!g_gpuSecondPollDone) {
+            Sleep(100); // Wait a tiny bit to allow the counter to compute a baseline
+            PdhCollectQueryData(g_gpuQuery);
+            g_gpuSecondPollDone = true;
+        }
+        // \GPU Engine(*)\Utilization Percentage reports one value per engine
+        // (3D, Copy, VideoDecode, ...) per adapter, and each is already a
+        // percentage. Report the busiest engine, matching Task Manager.
+        double usage = 0;
+        for (auto counter : g_gpuCounters) {
+            if (PdhGetFormattedCounterValue(counter, PDH_FMT_DOUBLE, nullptr, &value) == ERROR_SUCCESS) {
+                if (value.CStatus == ERROR_SUCCESS) {
+                    if (value.doubleValue > usage) usage = value.doubleValue;
+                }
+            }
+        }
+        if (usage < 0) usage = 0;
+        if (usage > 100) usage = 100;
+        return static_cast<int>(usage + 0.5);
+    }
+
+    Usage GetUsage() {
+        std::lock_guard<std::mutex> lock(g_resourceInitMutex);
+        Usage usage;
+        usage.cpu = GetCpu();
+        usage.ram = GetRam();
+        usage.gpu = GetGpu();
+        usage.cpuAvailable = (usage.cpu >= 0);
+        usage.gpuAvailable = (usage.gpu >= 0);
+        return usage;
+    }
+
+    // CPU clock speed via PDH
+    int GetCpuClockMHz() {
+        static PDH_HQUERY query = nullptr;
+        static PDH_HCOUNTER counter = nullptr;
+        if (!query) {
+            if (PdhOpenQuery(nullptr, 0, &query) != ERROR_SUCCESS) return 0;
+            if (PdhAddEnglishCounter(query, L"\\Processor Information(_Total)\\Processor Frequency", 0, &counter) != ERROR_SUCCESS) {
+                PdhCloseQuery(query);
+                query = nullptr;
+                return 0;
+            }
+        }
+        PDH_FMT_COUNTERVALUE value;
+        if (PdhCollectQueryData(query) != ERROR_SUCCESS) return 0;
+        if (PdhGetFormattedCounterValue(counter, PDH_FMT_LONG, nullptr, &value) != ERROR_SUCCESS) return 0;
+        return static_cast<int>(value.longValue);
+    }
+
+    int GetCpuCoreCount() {
+        DWORD length = 0;
+        GetLogicalProcessorInformationEx(RelationProcessorCore, nullptr, &length);
+        if (length == 0) {
+            SYSTEM_INFO si;
+            GetSystemInfo(&si);
+            return si.dwNumberOfProcessors;
+        }
+        std::vector<BYTE> buffer(length);
+        if (!GetLogicalProcessorInformationEx(
+                RelationProcessorCore,
+                reinterpret_cast<SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX*>(buffer.data()),
+                &length)) {
+            SYSTEM_INFO si;
+            GetSystemInfo(&si);
+            return si.dwNumberOfProcessors;
+        }
+        DWORD count = 0;
+        DWORD offset = 0;
+        while (offset < length) {
+            auto* entry = reinterpret_cast<SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX*>(
+                buffer.data() + offset);
+            if (entry->Size == 0) break;
+            if (entry->Relationship == RelationProcessorCore) {
+                count++;
+            }
+            offset += entry->Size;
+        }
+        return count > 0 ? static_cast<int>(count) : 1;
+    }
+
+    int GetCpuThreadCount() {
+        SYSTEM_INFO si;
+        GetSystemInfo(&si);
+        return si.dwNumberOfProcessors;
+    }
+
+    int GetProcessCount() {
+        HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if (snapshot == INVALID_HANDLE_VALUE) return 0;
+        PROCESSENTRY32 pe;
+        pe.dwSize = sizeof(pe);
+        int count = 0;
+        if (Process32First(snapshot, &pe)) {
+            do { count++; } while (Process32Next(snapshot, &pe));
+        }
+        CloseHandle(snapshot);
+        return count;
+    }
+
+    int GetRamSpeedMHz() {
+        static int cached = -1;
+        if (cached >= 0) return cached;
+        // Use WMI (root\cimv2 Win32_PhysicalMemory)
+        static const CLSID kCLSID_WbemLocator = {0x4590f811, 0x1d3a, 0x11d0, {0x89, 0x1f, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
+        static const IID kIID_IWbemLocator = {0xdc12a687, 0x737f, 0x11cf, {0x88, 0x4d, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
+        winrt::com_ptr<IWbemLocator> locator;
+        if (FAILED(CoCreateInstance(kCLSID_WbemLocator, nullptr, CLSCTX_INPROC_SERVER,
+                                    kIID_IWbemLocator, locator.put_void()))) return 0;
+        BSTR ns = SysAllocString(L"root\\cimv2");
+        winrt::com_ptr<IWbemServices> services;
+        if (FAILED(locator->ConnectServer(ns, nullptr, nullptr, nullptr, 0, nullptr, nullptr,
+                                             services.put()))) {
+            SysFreeString(ns);
+            return 0;
+        }
+        SysFreeString(ns);
+        CoSetProxyBlanket(services.get(), RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr,
+                          RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE);
+        BSTR query = SysAllocString(L"SELECT Speed FROM Win32_PhysicalMemory");
+        BSTR lang = SysAllocString(L"WQL");
+        winrt::com_ptr<IEnumWbemClassObject> enumerator;
+        if (SUCCEEDED(services->ExecQuery(lang, query, WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+                                          nullptr, enumerator.put()))) {
+            IWbemClassObject* obj = nullptr;
+            ULONG returned = 0;
+            int speed = 0;
+            while (SUCCEEDED(enumerator->Next(2000, 1, &obj, &returned)) && returned) {
+                VARIANT v;
+                VariantInit(&v);
+                if (SUCCEEDED(obj->Get(L"Speed", 0, &v, nullptr, nullptr))) {
+                    if (v.vt == VT_I4) speed = v.lVal;
+                }
+                VariantClear(&v);
+                obj->Release();
+                if (speed > 0) break;
+            }
+            cached = speed;
+        }
+        SysFreeString(query);
+        SysFreeString(lang);
+        return cached > 0 ? cached : 0;
+    }
+
+    uint64_t GetVirtualMemoryTotal() {
+        MEMORYSTATUSEX memInfo;
+        memInfo.dwLength = sizeof(memInfo);
+        if (GlobalMemoryStatusEx(&memInfo)) {
+            return memInfo.ullTotalPageFile;
+        }
+        return 0;
+    }
+
+    // Gets all GPU names for the dropdown
+    std::vector<std::wstring> GetAllGpuNames() {
+        std::vector<std::wstring> names;
+        static const CLSID kCLSID_WbemLocator = {0x4590f811, 0x1d3a, 0x11d0, {0x89, 0x1f, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
+        static const IID kIID_IWbemLocator = {0xdc12a687, 0x737f, 0x11cf, {0x88, 0x4d, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
+        winrt::com_ptr<IWbemLocator> locator;
+        if (FAILED(CoCreateInstance(kCLSID_WbemLocator, nullptr, CLSCTX_INPROC_SERVER,
+                                    kIID_IWbemLocator, locator.put_void()))) return names;
+        BSTR ns = SysAllocString(L"root\\cimv2");
+        winrt::com_ptr<IWbemServices> services;
+        if (FAILED(locator->ConnectServer(ns, nullptr, nullptr, nullptr, 0, nullptr, nullptr,
+                                             services.put()))) {
+            SysFreeString(ns);
+            return names;
+        }
+        SysFreeString(ns);
+        CoSetProxyBlanket(services.get(), RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr,
+                          RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE);
+        BSTR query = SysAllocString(L"SELECT Name FROM Win32_VideoController");
+        BSTR lang = SysAllocString(L"WQL");
+        winrt::com_ptr<IEnumWbemClassObject> enumerator;
+        if (SUCCEEDED(services->ExecQuery(lang, query, WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+                                          nullptr, enumerator.put()))) {
+            IWbemClassObject* obj = nullptr;
+            ULONG returned = 0;
+            while (SUCCEEDED(enumerator->Next(2000, 1, &obj, &returned)) && returned) {
+                VARIANT v;
+                VariantInit(&v);
+                if (SUCCEEDED(obj->Get(L"Name", 0, &v, nullptr, nullptr))) {
+                    if (v.vt == VT_BSTR) names.push_back(v.bstrVal);
+                }
+                VariantClear(&v);
+                obj->Release();
+            }
+        }
+        SysFreeString(query);
+        SysFreeString(lang);
+        return names;
+    }
+
+    // Gets CPU full name (e.g., "Intel(R) Core(TM) i7-12700K")
+    std::wstring GetCpuFullName() {
+        static std::wstring name;
+        if (!name.empty()) return name;
+        static const CLSID kCLSID_WbemLocator = {0x4590f811, 0x1d3a, 0x11d0, {0x89, 0x1f, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
+        static const IID kIID_IWbemLocator = {0xdc12a687, 0x737f, 0x11cf, {0x88, 0x4d, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
+        winrt::com_ptr<IWbemLocator> locator;
+        if (FAILED(CoCreateInstance(kCLSID_WbemLocator, nullptr, CLSCTX_INPROC_SERVER,
+                                    kIID_IWbemLocator, locator.put_void()))) return L"";
+        BSTR ns = SysAllocString(L"root\\cimv2");
+        winrt::com_ptr<IWbemServices> services;
+        if (FAILED(locator->ConnectServer(ns, nullptr, nullptr, nullptr, 0, nullptr, nullptr,
+                                             services.put()))) {
+            SysFreeString(ns);
+            return L"";
+        }
+        SysFreeString(ns);
+        CoSetProxyBlanket(services.get(), RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr,
+                          RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE);
+        BSTR query = SysAllocString(L"SELECT Name FROM Win32_Processor");
+        BSTR lang = SysAllocString(L"WQL");
+        winrt::com_ptr<IEnumWbemClassObject> enumerator;
+        if (SUCCEEDED(services->ExecQuery(lang, query, WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+                                          nullptr, enumerator.put()))) {
+            IWbemClassObject* obj = nullptr;
+            ULONG returned = 0;
+            if (SUCCEEDED(enumerator->Next(2000, 1, &obj, &returned)) && returned) {
+                VARIANT v;
+                VariantInit(&v);
+                if (SUCCEEDED(obj->Get(L"Name", 0, &v, nullptr, nullptr))) {
+                    if (v.vt == VT_BSTR) name = v.bstrVal;
+                }
+                VariantClear(&v);
+                obj->Release();
+            }
+        }
+        SysFreeString(query);
+        SysFreeString(lang);
+        return name;
+    }
+
+    // Gets RAM type (e.g., DDR4, DDR5), total capacity, and module name
+    struct RamInfo {
+        std::wstring type;
+        std::wstring manufacturer;
+        std::wstring partNumber;
+        uint64_t totalCapacity = 0;
+    };
+
+    RamInfo GetRamInfo() {
+        static RamInfo cached;
+        static bool cachedInitialized = false;
+        if (cachedInitialized) {
+            return cached;
+        }
+        RamInfo info;
+        static const CLSID kCLSID_WbemLocator = {0x4590f811, 0x1d3a, 0x11d0, {0x89, 0x1f, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
+        static const IID kIID_IWbemLocator = {0xdc12a687, 0x737f, 0x11cf, {0x88, 0x4d, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
+        winrt::com_ptr<IWbemLocator> locator;
+        if (FAILED(CoCreateInstance(kCLSID_WbemLocator, nullptr, CLSCTX_INPROC_SERVER,
+                                    kIID_IWbemLocator, locator.put_void()))) return info;
+        BSTR ns = SysAllocString(L"root\\cimv2");
+        winrt::com_ptr<IWbemServices> services;
+        if (FAILED(locator->ConnectServer(ns, nullptr, nullptr, nullptr, 0, nullptr, nullptr,
+                                             services.put()))) {
+            SysFreeString(ns);
+            return info;
+        }
+        SysFreeString(ns);
+        CoSetProxyBlanket(services.get(), RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr,
+                          RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE);
+        BSTR query = SysAllocString(L"SELECT SMBIOSMemoryType, Capacity, Manufacturer, PartNumber FROM Win32_PhysicalMemory");
+        BSTR lang = SysAllocString(L"WQL");
+        winrt::com_ptr<IEnumWbemClassObject> enumerator;
+        if (SUCCEEDED(services->ExecQuery(lang, query, WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+                                          nullptr, enumerator.put()))) {
+            IWbemClassObject* obj = nullptr;
+            ULONG returned = 0;
+            while (SUCCEEDED(enumerator->Next(2000, 1, &obj, &returned)) && returned) {
+                VARIANT vType, vCap, vManufacturer, vPartNumber;
+                VariantInit(&vType);
+                VariantInit(&vCap);
+                VariantInit(&vManufacturer);
+                VariantInit(&vPartNumber);
+                if (SUCCEEDED(obj->Get(L"SMBIOSMemoryType", 0, &vType, nullptr, nullptr)) && vType.vt == VT_I2) {
+                    switch (vType.iVal) {
+                        case 20: info.type = L"DDR"; break;
+                        case 21: info.type = L"DDR2"; break;
+                        case 24: info.type = L"DDR3"; break;
+                        case 26: info.type = L"DDR4"; break;
+                        case 34: info.type = L"DDR5"; break;
+                        default: info.type = L"RAM"; break;
+                    }
+                }
+                if (SUCCEEDED(obj->Get(L"Capacity", 0, &vCap, nullptr, nullptr)) && vCap.vt == VT_UI8) {
+                    info.totalCapacity += vCap.ullVal;
+                }
+                if (SUCCEEDED(obj->Get(L"Manufacturer", 0, &vManufacturer, nullptr, nullptr)) && vManufacturer.vt == VT_BSTR) {
+                    info.manufacturer = vManufacturer.bstrVal;
+                }
+                if (SUCCEEDED(obj->Get(L"PartNumber", 0, &vPartNumber, nullptr, nullptr)) && vPartNumber.vt == VT_BSTR) {
+                    info.partNumber = vPartNumber.bstrVal;
+                }
+                VariantClear(&vType);
+                VariantClear(&vCap);
+                VariantClear(&vManufacturer);
+                VariantClear(&vPartNumber);
+                obj->Release();
+            }
+        }
+        SysFreeString(query);
+        SysFreeString(lang);
+        
+        // Fallback: if WMI capacity query failed, get total physical memory
+        if (info.totalCapacity == 0) {
+            MEMORYSTATUSEX memInfo;
+            memInfo.dwLength = sizeof(memInfo);
+            if (GlobalMemoryStatusEx(&memInfo)) {
+                info.totalCapacity = memInfo.ullTotalPhys;
+            }
+        }
+        cached = info;
+        cachedInitialized = true;
+        return info;
+    }
+
+    // Live CPU frequency using NtPowerInformation
+    // PROCESSOR_POWER_INFORMATION is not reliably declared in the toolchain's headers,
+    // so it's defined manually. This matches the Windows API definition exactly.
+    struct PROCESSOR_POWER_INFORMATION {
+        ULONG Number;
+        ULONG MaxMhz;
+        ULONG CurrentMhz;
+        ULONG MhzLimit;
+        ULONG MaxIdleState;
+        ULONG CurrentIdleState;
+    };
+    int GetCurrentCpuFrequencyMHz() {
+        using CallNtPowerInformation_t = LONG(WINAPI*)(POWER_INFORMATION_LEVEL, PVOID, ULONG, PVOID, ULONG);
+        HMODULE hPowrProf = GetModuleHandle(L"powrprof.dll");
+        if (!hPowrProf) hPowrProf = LoadLibraryEx(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (!hPowrProf) return 0;
+        auto pCall = (CallNtPowerInformation_t)GetProcAddress(hPowrProf, "CallNtPowerInformation");
+        if (!pCall) return 0;
+
+        SYSTEM_INFO si;
+        GetSystemInfo(&si);
+        DWORD numProcessors = si.dwNumberOfProcessors;
+        if (numProcessors == 0) return 0;
+
+        std::vector<PROCESSOR_POWER_INFORMATION> info(numProcessors);
+        ULONG result = pCall(ProcessorInformation, nullptr, 0, info.data(), (ULONG)(sizeof(PROCESSOR_POWER_INFORMATION) * numProcessors));
+        if (result != 0) return 0;
+
+        ULONGLONG total = 0;
+        for (DWORD i = 0; i < numProcessors; i++) {
+            total += info[i].CurrentMhz;
+        }
+        return (int)(total / numProcessors);
+    }
+
+    // Virtual memory used (Total - Available)
+    uint64_t GetVirtualMemoryUsed() {
+        MEMORYSTATUSEX memInfo;
+        memInfo.dwLength = sizeof(memInfo);
+        if (GlobalMemoryStatusEx(&memInfo)) {
+            return memInfo.ullTotalPageFile - memInfo.ullAvailPageFile;
+        }
+        return 0;
+    }
+
+    std::wstring GetGpuName(int gpuIndex = 0) {
+        static std::vector<std::wstring> cachedNames;
+        static bool initialized = false;
+        if (!initialized) {
+            cachedNames = GetAllGpuNames();
+            initialized = true;
+        }
+        if (gpuIndex >= 0 && gpuIndex < (int)cachedNames.size()) {
+            return cachedNames[gpuIndex];
+        }
+        return L"";
+    }
+
+    // GPU VRAM total via DXGI (with GPU index)
+    uint64_t GetVramTotal(int gpuIndex = 0) {
+        static std::vector<uint64_t> cachedVram;
+        static bool initialized = false;
+        if (!initialized) {
+            winrt::com_ptr<IDXGIFactory1> factory;
+            if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)factory.put()))) {
+                initialized = true;
+                return 0;
+            }
+            for (UINT i = 0;; ++i) {
+                winrt::com_ptr<IDXGIAdapter1> adapter;
+                if (factory->EnumAdapters1(i, adapter.put()) == DXGI_ERROR_NOT_FOUND) break;
+                DXGI_ADAPTER_DESC1 desc;
+                if (SUCCEEDED(adapter->GetDesc1(&desc))) {
+                    if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) continue;
+                    cachedVram.push_back(desc.DedicatedVideoMemory);
+                }
+            }
+            initialized = true;
+        }
+        if (gpuIndex >= 0 && gpuIndex < (int)cachedVram.size()) {
+            return cachedVram[gpuIndex];
+        }
+        return 0;
+    }
+
+    // --- Helper to extract LUID from a PDH instance name ---
+    std::wstring ExtractGpuLuidFromInstance(std::wstring_view instance) {
+        auto luid_pos = instance.find(L"luid_");
+        if (luid_pos == std::wstring_view::npos) return L"";
+        auto luid_start = luid_pos + 5;
+        auto phys_pos = instance.find(L"_phys_", luid_start);
+        if (phys_pos == std::wstring_view::npos) return L"";
+        return std::wstring(instance.substr(luid_start, phys_pos - luid_start));
+    }
+
+    // Helper to get the exact LUID of the selected GPU (by index)
+    std::wstring GetGpuLuidForIndex(int gpuIndex) {
+        winrt::com_ptr<IDXGIFactory1> factory;
+        if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)factory.put()))) return L"";
+        int current = 0;
+        for (UINT i = 0;; ++i) {
+            winrt::com_ptr<IDXGIAdapter1> adapter;
+            if (factory->EnumAdapters1(i, adapter.put()) == DXGI_ERROR_NOT_FOUND) break;
+            DXGI_ADAPTER_DESC1 desc;
+            if (SUCCEEDED(adapter->GetDesc1(&desc))) {
+                if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) continue;
+                if (current == gpuIndex) {
+                    WCHAR luid_str[32];
+                    swprintf_s(luid_str, L"0x%08X_0x%08X", desc.AdapterLuid.HighPart, desc.AdapterLuid.LowPart);
+                    return luid_str;
+                }
+                current++;
+            }
+        }
+        return L"";
+    }
+
+    // GPU VRAM used via PDH (Performance Data Helper)
+    // Sums only the expanded instances matching the selected GPU (by LUID)
+    uint64_t GetVramUsed(int gpuIndex = 0) {
+        static int lastGpuIndex = -1;
+        static PDH_HQUERY vramQuery = nullptr;
+        static std::vector<PDH_HCOUNTER> vramCounters;
+
+        // If we switched GPU tabs, re-create the query to filter to the new GPU
+        if (lastGpuIndex != gpuIndex) {
+            if (vramQuery) {
+                PdhCloseQuery(vramQuery);
+                vramQuery = nullptr;
+                vramCounters.clear();
+            }
+
+            if (PdhOpenQuery(nullptr, 0, &vramQuery) == ERROR_SUCCESS) {
+                auto paths = ExpandGpuWildcard(L"\\GPU Adapter Memory(*)\\Dedicated Usage");
+                std::wstring targetLuid = GetGpuLuidForIndex(gpuIndex);
+
+                for (const auto& path : paths) {
+                    // Extract the instance name from the path (e.g., "luid_0x..._0x..._phys_0")
+                    auto start = path.find(L'(');
+                    auto end = path.rfind(L')');
+                    std::wstring instance;
+                    if (start != std::wstring::npos && end != std::wstring::npos) {
+                        instance = path.substr(start + 1, end - start - 1);
+                    }
+
+                    // Extract LUID and match it to the selected GPU
+                    std::wstring luid = ExtractGpuLuidFromInstance(instance);
+                    if (!targetLuid.empty() && luid == targetLuid) {
+                        PDH_HCOUNTER c;
+                        if (PdhAddCounter(vramQuery, path.c_str(), 0, &c) == ERROR_SUCCESS) {
+                            vramCounters.push_back(c);
+                        }
+                    }
+                }
+                PdhCollectQueryData(vramQuery); // Initial baseline poll
+            }
+            lastGpuIndex = gpuIndex;
+        }
+
+        if (!vramQuery || vramCounters.empty()) return 0;
+        if (PdhCollectQueryData(vramQuery) != ERROR_SUCCESS) return 0;
+
+        uint64_t total = 0;
+        PDH_FMT_COUNTERVALUE value;
+        for (auto c : vramCounters) {
+            if (PdhGetFormattedCounterValue(c, PDH_FMT_LARGE, nullptr, &value) == ERROR_SUCCESS) {
+                if (value.CStatus == ERROR_SUCCESS) {
+                    total += static_cast<uint64_t>(value.largeValue);
+                }
+            }
+        }
+        return total;
+    }
+
+    DetailedInfo GetDetailedInfo(int gpuIndex = 0) {
+        std::lock_guard<std::mutex> lock(g_resourceInitMutex);
+        DetailedInfo info;
+        info.cpuClockMHz = GetCurrentCpuFrequencyMHz(); // live frequency
+        if (info.cpuClockMHz <= 0) info.cpuClockMHz = GetCpuClockMHz(); // fallback if API fails
+        info.cpuCores = GetCpuCoreCount();
+        info.cpuThreads = GetCpuThreadCount();
+        // processCount is not displayed; omitted to avoid per-second toolhelp snapshot
+        info.ramSpeedMHz = GetRamSpeedMHz();
+        info.virtualMemoryTotal = GetVirtualMemoryTotal();
+        info.virtualMemoryUsed = GetVirtualMemoryUsed(); // live used
+        RamInfo ramInfo = GetRamInfo();
+        info.ramType = ramInfo.type;
+        info.ramManufacturer = ramInfo.manufacturer;
+        info.ramPartNumber = ramInfo.partNumber;
+        info.ramCapacity = ramInfo.totalCapacity;
+        info.gpuName = GetGpuName(gpuIndex);
+        info.vramTotal = GetVramTotal(gpuIndex);
+        info.vramUsed = GetVramUsed(gpuIndex);
+        return info;
+    }
+
+    void Cleanup() {
+        if (g_cpuQuery) {
+            PdhCloseQuery(g_cpuQuery);
+            g_cpuQuery = nullptr;
+            g_cpuCounter = nullptr;
+        }
+        if (g_gpuQuery) {
+            PdhCloseQuery(g_gpuQuery);
+            g_gpuQuery = nullptr;
+            g_gpuCounters.clear();
+        }
+        // (g_vramQuery is no longer used; see GetVramUsed())
+    }
+}
 // IXamlSourceTransparency – not projected in standard headers, so declare manually.
 MIDL_INTERFACE("06636c29-5a17-458d-8ea2-2422d997a922")
 IXamlSourceTransparency : public IUnknown
@@ -309,7 +1013,9 @@ wui::Color GetSystemAccentColor() {
 // Forward declarations
 // ============================================================================
 
-void RefreshTaskList(bool forceIconRegeneration = false);
+void RefreshTaskList(bool forceIconRegeneration);
+
+
 void ApplyAllControlStyles();
 void ApplyVisibilitySettings();
 FrameworkElement BuildTopBarContent();
@@ -321,9 +1027,13 @@ void PopulateDisplayPanel();
 void PopulateSoundPanel();
 void PopulateWifiPanel();
 void PopulateBluetoothPanel();
+void RefreshBluetoothRadioState();
 void PopulateTrayPanel();
 void PopulateBatteryPanel();
 void ApplyBlurToAllOpenPopups();
+void StripInheritedIslandBackgrounds();
+void ApplyWindowBackdrop(HWND hwnd);
+std::wstring ReadTrayOrder();
 
 // ============================================================================
 // Settings
@@ -352,13 +1062,33 @@ struct {
     bool showBluetoothButton = true;
     bool showTrayButton = true;
     bool showBatteryButton = true;
+    
+    bool showCpuUsage = true;
+    bool showRamUsage = true;
+    bool showGpuUsage = true;
     bool enableHotkeys = false;
     bool showClock = true;
     std::wstring timeFormat = L"🕑hh:mm tt";
     bool showDate = true;
     std::wstring dateFormat = L"📅ddd, MMM dd";
     std::wstring iconColor = L"#FFFFFF";
+    std::wstring trayOrder;
 } g_settings;
+
+std::vector<std::wstring> g_trayOrder;
+const std::vector<std::wstring> kDefaultTrayOrder = {
+    L"DisplayButton", L"SoundButton", L"WifiButton", L"BluetoothButton",
+    L"BatteryButton", L"ResourceButton", L"ClockButton"};
+
+[[clang::no_destroy]] wuxc::StackPanel g_trayPanel{nullptr};
+
+struct TrayDragState {
+    std::wstring itemName;
+    bool tracking = false;
+    double startPanelX = 0.0;
+    FrameworkElement draggedElement{nullptr};
+};
+TrayDragState g_trayDragState;
 
 std::vector<std::pair<std::wstring, std::wstring>> g_styleConstants;
 std::vector<ControlStyleRule> g_controlStyleRules;
@@ -370,14 +1100,14 @@ const std::vector<ControlStyleRule>& BuiltInStyles() {
         {L"SearchButton", {L"Background:=#15ffffff", L"Width=35", L"Margin=4,2,4,2"}},
         {L"SearchIcon", {L"Width=20", L"Height=20"}},
         {L"TaskButton",
-         {L"Background:=#15ffffff", L"Margin=3,2,3,2", L"Foreground=white"}},
+         {L"Background:=#15ffffff", L"Margin=3,4,3,4", L"Foreground=white"}},
         {L"ClockText", {L"Foreground=white", L"FontSize=14"}},
-        {L"ClockButton", {L"Background:=#15ffffff", L"Margin=3,2,6,2"}},
+        {L"ClockButton", {L"Background:=#15ffffff", L"Margin=3,4,6,4"}},
         {L"DisplayButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
         {L"SoundButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
         {L"WifiButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
         {L"BluetoothButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
-        {L"TrayButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
+        {L"ResourceButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
         {L"BatteryButton", {L"Background:=#15ffffff", L"Margin=5,4"}},
         {L"WifiHeaderToggle", {L"Width=50"}},
         {L"BluetoothHeaderToggle", {L"Width=50"}},
@@ -395,7 +1125,7 @@ const std::vector<ControlStyleRule> g_themeGreenBarStyles = {
     {L"SoundButton", {L"Background:=#27403C"}},
     {L"WifiButton", {L"Background:=#27403C"}},
     {L"BluetoothButton", {L"Background:=#27403C"}},
-    {L"TrayButton", {L"Background:=#27403C"}},
+    {L"ResourceButton", {L"Background:=#27403C"}},
     {L"BatteryButton", {L"Background:=#27403C"}},
     {L"TaskButton", {L"Background:=#27403C"}},
 };
@@ -410,7 +1140,7 @@ const std::vector<ControlStyleRule> g_themeNoIslandsStyles = {
     {L"WifiButton", {L"Background:=transparent"}},
     {L"BluetoothButton", {L"Background:=transparent"}},
     {L"BatteryButton", {L"Background:=transparent"}},
-    {L"TrayButton", {L"Background:=transparent"}},
+    {L"ResourceButton", {L"Background:=transparent"}},
     {L"TaskButton", {L"Background:=transparent"}},
 };
 
@@ -440,21 +1170,136 @@ double g_dpiScale = 1.0;
 [[clang::no_destroy]] winrt::Windows::System::DispatcherQueue g_uiDispatcherQueue{nullptr};
 
 [[clang::no_destroy]] DispatcherTimer g_clockTimer{nullptr};
+[[clang::no_destroy]] DispatcherTimer g_taskRefreshTimer{nullptr};
 [[clang::no_destroy]] DispatcherTimer g_taskListTimer{nullptr};
+[[clang::no_destroy]] DispatcherTimer g_taskClickTimer{nullptr};
+HWND g_taskClickPendingHwnd = nullptr;
 [[clang::no_destroy]] DispatcherTimer g_wifiAutoRefreshTimer{nullptr};
 [[clang::no_destroy]] DispatcherTimer g_bluetoothAutoRefreshTimer{nullptr};
+[[clang::no_destroy]] DispatcherTimer g_restoreTimer{nullptr};
+[[clang::no_destroy]] DispatcherTimer g_resourceTimer{nullptr};
+[[clang::no_destroy]] wuxc::Button g_resourceButton{nullptr};
+[[clang::no_destroy]] wuxc::Flyout g_resourceFlyout{nullptr};
+[[clang::no_destroy]] wuxc::StackPanel g_resourcePanel{nullptr};
+[[clang::no_destroy]] DispatcherTimer g_resourceFlyoutTimer{nullptr};
+[[clang::no_destroy]] wuxc::Canvas g_graphCanvas{nullptr};
+[[clang::no_destroy]] winrt::Windows::UI::Xaml::Shapes::Polyline g_graphLine{nullptr};
+[[clang::no_destroy]] winrt::Windows::UI::Xaml::Shapes::Polygon g_graphFill{nullptr};
+[[clang::no_destroy]] wuxc::Grid g_statsGrid{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_statLabel0{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_statValue0{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_statLabel1{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_statValue1{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_statLabel2{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_statValue2{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_statLabel3{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_statValue3{nullptr};
+[[clang::no_destroy]] wuxc::StackPanel g_statCell0{nullptr};
+[[clang::no_destroy]] wuxc::StackPanel g_statCell1{nullptr};
+[[clang::no_destroy]] wuxc::StackPanel g_statCell2{nullptr};
+[[clang::no_destroy]] wuxc::StackPanel g_statCell3{nullptr};
+// Holds strong XAML references. The attribute prevents the destructor from
+// running on the shutdown thread; the teardown block releases the elements on
+// the UI thread instead.
+[[clang::no_destroy]] std::vector<wuxc::Button> g_tabButtons;
+
+// Info island globals
+[[clang::no_destroy]] wuxc::TextBlock g_infoCpuName{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_infoRamName{nullptr};
+[[clang::no_destroy]] wuxc::ComboBox g_infoGpuCombo{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_infoCpuLabel{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_infoRamLabel{nullptr};
+[[clang::no_destroy]] wuxc::TextBlock g_infoGpuLabel{nullptr};
+std::vector<std::wstring> g_gpuNames;
+int g_selectedGpuIndex = 0;
+bool g_selectedGpuIndexLoaded = false;
+std::deque<float> g_cpuHistory;
+std::deque<float> g_ramHistory;
+std::map<int, std::deque<float>> g_gpuHistory;
+int g_currentTab = 0; // 0=CPU, 1=RAM, 2=GPU
 
 [[clang::no_destroy]] std::map<std::wstring, FrameworkElement> g_namedElements;
 [[clang::no_destroy]] FrameworkElement g_rootElement{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_taskListPanel{nullptr};
 [[clang::no_destroy]] std::vector<HWND> g_stableWindowOrder;
+ULONGLONG g_lastDoubleTapTick = 0;
 [[clang::no_destroy]] std::map<HWND, wuxc::Button> g_taskButtonsByHwnd;
 [[clang::no_destroy]] std::map<HWND, std::wstring> g_taskButtonLastTitle;
+// Helper to resize task buttons so they fit within the available width
+void AdjustTaskButtonWidths() {
+    static bool s_adjusting = false;
+    if (s_adjusting) return;
+    if (!g_taskListPanel) return;
+    if (g_taskListPanel.Children().Size() == 0) return;
+    s_adjusting = true;
+    struct Guard {
+        ~Guard() { s_adjusting = false; }
+    } guard;
+
+    // Determine available width for the task list column.
+    double availableWidth = 0.0;
+    if (g_rootElement) {
+        double rootWidth = g_rootElement.ActualWidth();
+        double leftWidth = 0.0, rightWidth = 0.0;
+        auto leftIt = g_namedElements.find(L"LeftPanel");
+        if (leftIt != g_namedElements.end()) leftWidth = leftIt->second.ActualWidth();
+        auto rightIt = g_namedElements.find(L"TrayPanel");
+        if (rightIt != g_namedElements.end()) rightWidth = rightIt->second.ActualWidth();
+        availableWidth = rootWidth - leftWidth - rightWidth;
+    } else {
+        availableWidth = g_taskListPanel.ActualWidth(); // fallback
+    }
+    if (availableWidth <= 0) return;
+
+    // Measure natural width of each button (its desired size without explicit width).
+    double sumNaturalWidths = 0.0;
+    double sumMargins = 0.0;
+    std::vector<double> naturalWidths;
+    for (auto&& child : g_taskListPanel.Children()) {
+        if (auto button = child.try_as<wuxc::Button>()) {
+            button.ClearValue(FrameworkElement::WidthProperty());
+            button.Measure(winrt::Windows::Foundation::Size{
+                std::numeric_limits<float>::max(),
+                std::numeric_limits<float>::max()
+            });
+            double natural = button.DesiredSize().Width;
+            naturalWidths.push_back(natural);
+            sumNaturalWidths += natural;
+            sumMargins += (button.Margin().Left + button.Margin().Right);
+        }
+    }
+    if (sumNaturalWidths <= 0) return;
+
+    double spaceForWidths = availableWidth - sumMargins;
+    if (spaceForWidths <= 0) return;
+
+    if (sumNaturalWidths <= spaceForWidths) {
+        // All buttons fit – clear any explicit width, keep auto sizing.
+        for (auto&& child : g_taskListPanel.Children()) {
+            if (auto button = child.try_as<wuxc::Button>()) {
+                button.ClearValue(FrameworkElement::WidthProperty());
+            }
+        }
+        return;
+    }
+
+    // Need to shrink – scale all button widths proportionally.
+    double scale = spaceForWidths / sumNaturalWidths;
+    size_t idx = 0;
+    for (auto&& child : g_taskListPanel.Children()) {
+        if (auto button = child.try_as<wuxc::Button>()) {
+            double newWidth = naturalWidths[idx] * scale;
+            newWidth = std::max(20.0, newWidth); // minimum width for usability
+            button.Width(newWidth);
+            button.MaxWidth(g_settings.taskButtonWidth); // keep max from settings
+            idx++;
+        }
+    }
+}
 
 [[clang::no_destroy]] wuxc::MenuFlyout g_taskContextMenu{nullptr};
 [[clang::no_destroy]] wuxc::MenuFlyoutItem g_taskMenuToggleItem{nullptr};
 [[clang::no_destroy]] HWND g_contextMenuTargetHwnd;
-
 [[clang::no_destroy]] wuxc::MenuFlyout g_startContextMenu{nullptr};
 
 // Foreground tracking. Clicking a task button activates the bar itself, so
@@ -463,8 +1308,11 @@ double g_dpiScale = 1.0;
 // global EVENT_SYSTEM_FOREGROUND hook records the last real foreground window
 // instead, ignoring anything owned by this process.
 HWINEVENTHOOK g_windowEventHook;
+HWINEVENTHOOK g_windowEventNameHook;
 HWND g_lastForegroundHwnd;
 HWINEVENTHOOK g_foregroundHook = nullptr;
+bool g_fullScreenAppActive = false;   
+bool g_allowHide = false;             
 
 wui::Color g_iconTintColor{0, 255, 255, 255};
 double g_iconTintOpacity = 0.0;
@@ -478,7 +1326,9 @@ constexpr int HOTKEY_ID_DISPLAY = 1;
 constexpr int HOTKEY_ID_SOUND = 2;
 constexpr int HOTKEY_ID_WIFI = 3;
 constexpr int HOTKEY_ID_BLUETOOTH = 4;
-constexpr int HOTKEY_ID_TRAY = 5;
+constexpr int HOTKEY_ID_RESOURCE = 0;
+constexpr int HOTKEY_ID_BATTERY = 5;
+
 constexpr int HOTKEY_ID_START_MENU = 6;
 constexpr int HOTKEY_ID_TASK_MENU = 7;
 UINT g_taskbarCreatedMsg = 0;
@@ -1029,8 +1879,9 @@ void ApplyVisibilitySettings() {
     setVis(L"SoundButton", g_settings.showSoundButton);
     setVis(L"WifiButton", g_settings.showWifiButton);
     setVis(L"BluetoothButton", g_settings.showBluetoothButton);
-    setVis(L"TrayButton", g_settings.showTrayButton);
+    
     setVis(L"BatteryButton", g_settings.showBatteryButton);
+    setVis(L"ResourceButton", (g_settings.showCpuUsage || g_settings.showRamUsage || g_settings.showGpuUsage));
     setVis(L"ClockButton", g_settings.showClock || g_settings.showDate);
 }
 
@@ -1246,36 +2097,88 @@ FrameworkElement BuildSearchIcon(double displaySize) {
 // Battery icon builder
 // ============================================================================
 
-FrameworkElement BuildBatteryIcon(double displaySize, bool charging) {
-    const double internalWidth = 108.809;
-    const double internalHeight = 55.6796;
-    double viewboxWidth = displaySize * (internalWidth / internalHeight);
-    double viewboxHeight = displaySize;
+FrameworkElement BuildBatteryIcon(double displaySize, int percentage, bool charging) {
+    percentage = std::clamp(percentage, 0, 100);
 
-    std::wstring xaml;
-    if (charging) {
-        xaml = L"<Viewbox xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
-               L"Stretch=\"Uniform\" Width=\"" + std::to_wstring(viewboxWidth) + L"\" Height=\"" + std::to_wstring(viewboxHeight) + L"\">"
-               L"<Grid Width=\"" + std::to_wstring(internalWidth) + L"\" Height=\"" + std::to_wstring(internalHeight) + L"\">"
-               // Battery body (grey outline with rounded left corners)
-               L"<Rectangle Width=\"100\" Height=\"44\" RadiusX=\"8\" RadiusY=\"8\" Fill=\"#D1D1D1\" HorizontalAlignment=\"Left\" VerticalAlignment=\"Center\" Margin=\"0,0,8,0\"/>"
-               // Terminal (right notch)
-               L"<Rectangle Width=\"8\" Height=\"20\" Fill=\"#D1D1D1\" HorizontalAlignment=\"Right\" VerticalAlignment=\"Center\" Margin=\"0,0,-4,0\"/>"
-               // White fill area
-               L"<Rectangle Width=\"80\" Height=\"40\" RadiusX=\"6\" RadiusY=\"6\" Fill=\"White\" HorizontalAlignment=\"Left\" VerticalAlignment=\"Center\" Margin=\"4,2,20,2\"/>"
-               // Lightning bolt
-               L"<Path Data=\"M30.8087 30.1776L45.0206 11.8398L42.7283 25.2876H54.9535L35.2404 44.6951L41.5058 30.1776H30.8087Z\" Fill=\"Black\" Stretch=\"Uniform\" HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\" Width=\"30\" Height=\"40\"/>"
-               L"</Grid></Viewbox>";
+    // Indicator colour depends only on the charge level; charging is shown by
+    // the bolt to the left, not by a colour change.
+    std::wstring indicatorColor;
+    std::wstring textColor;
+    if (percentage < 20) {
+        indicatorColor = L"#FF3B30";   // red
+        textColor = L"#000000";
+    } else if (percentage < 40) {
+        indicatorColor = L"#FF9500";   // orange
+        textColor = L"#000000";
+    } else if (percentage < 60) {
+        indicatorColor = L"#FFCC00";   // yellow
+        textColor = L"#000000";
+    } else if (percentage < 80) {
+        indicatorColor = L"#121212";   // black
+        textColor = L"#FFFFFF";
     } else {
-        xaml = L"<Viewbox xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
-               L"Stretch=\"Uniform\" Width=\"" + std::to_wstring(viewboxWidth) + L"\" Height=\"" + std::to_wstring(viewboxHeight) + L"\">"
-               L"<Grid Width=\"" + std::to_wstring(internalWidth) + L"\" Height=\"" + std::to_wstring(internalHeight) + L"\">"
-               // Battery body (green, rounded left corners)
-               L"<Rectangle Width=\"100\" Height=\"44\" RadiusX=\"8\" RadiusY=\"8\" Fill=\"#34C759\" HorizontalAlignment=\"Left\" VerticalAlignment=\"Center\" Margin=\"0,0,8,0\"/>"
-               // Terminal (right notch)
-               L"<Rectangle Width=\"8\" Height=\"20\" Fill=\"#34C759\" HorizontalAlignment=\"Right\" VerticalAlignment=\"Center\" Margin=\"0,0,-4,0\"/>"
-               L"</Grid></Viewbox>";
+        indicatorColor = L"#34C759";   // green
+        textColor = L"#000000";
     }
+
+    const double shellWidth = 99.4277;
+    const double shellHeight = 55.6796;
+
+    // Indicator width grows with the charge level; a small minimum keeps it
+    // visible at 1-2%.
+    double indicatorWidth = shellWidth * percentage / 100.0;
+    if (indicatorWidth < 6.0) indicatorWidth = 6.0;
+
+    // Outer grid holds the shell + terminal nub. A nested grid the exact width
+    // of the shell is used as the text container so the digits are centred on
+    // the shell, not on the shell+nub combination (which is where the text
+    // used to drift right).
+    std::wstring batteryXaml;
+    batteryXaml += L"<Grid Width=\"108.809\" Height=\"55.6796\">";
+
+    // Terminal nub, drawn first so the shell overlaps its left edge.
+    batteryXaml += L"<Border Width=\"5.404\" Height=\"11.931\" "
+                   L"CornerRadius=\"0,3,3,0\" Background=\"#D1D1D1\" "
+                   L"HorizontalAlignment=\"Right\" VerticalAlignment=\"Center\"/>";
+
+    // Shell-area grid: everything that should visually sit "inside the shell".
+    batteryXaml += L"<Grid Width=\"99.4277\" Height=\"55.6796\" "
+                   L"HorizontalAlignment=\"Left\" VerticalAlignment=\"Center\">";
+    batteryXaml += L"<Border Width=\"99.4277\" Height=\"55.6796\" "
+                   L"CornerRadius=\"15.9085\" Background=\"#D1D1D1\"/>";
+    batteryXaml += L"<Border Width=\"" + std::to_wstring(indicatorWidth) + L"\" "
+                   L"Height=\"55.6796\" CornerRadius=\"15.9085\" "
+                   L"Background=\"" + indicatorColor + L"\" "
+                   L"HorizontalAlignment=\"Left\"/>";
+    batteryXaml += L"<TextBlock Text=\"" + std::to_wstring(percentage) + L"\" "
+                   L"Foreground=\"" + textColor + L"\" FontWeight=\"Bold\" "
+                   L"FontSize=\"50\" FontFamily=\"Segoe UI Variable Display, Segoe UI\" "
+                   L"HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\" "
+                   L"TextAlignment=\"Center\" Margin=\"0\" Padding=\"0\">"
+                   L"<TextBlock.RenderTransform>"
+                   L"<TranslateTransform Y=\"-2\"/>"
+                   L"</TextBlock.RenderTransform>"
+                   L"</TextBlock>";
+    batteryXaml += L"</Grid>";
+    batteryXaml += L"</Grid>";
+
+    std::wstring contentXaml;
+    if (charging) {
+        contentXaml += L"<StackPanel Orientation=\"Horizontal\" Spacing=\"2\" "
+                       L"HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\">";
+        contentXaml += L"<Path Data=\"M0 18.3378L14.2119 0L11.9196 13.4478H24.1448L4.43166 32.8553L10.6971 18.3378H0Z\" "
+                       L"Fill=\"#FFFFFF\" Width=\"36\" Height=\"47\" Stretch=\"Uniform\" "
+                       L"VerticalAlignment=\"Center\"/>";
+        contentXaml += batteryXaml;
+        contentXaml += L"</StackPanel>";
+    } else {
+        contentXaml = batteryXaml;
+    }
+
+    std::wstring xaml =
+        L"<Viewbox xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
+        L"Stretch=\"Uniform\" Height=\"" + std::to_wstring(displaySize) + L"\">"
+        + contentXaml + L"</Viewbox>";
 
     try {
         auto element = Markup::XamlReader::Load(xaml).as<FrameworkElement>();
@@ -1547,6 +2450,40 @@ wuxm::Imaging::BitmapImage GetWindowIconBitmap(HWND hwnd, UINT physicalSize) {
 // task list
 // ============================================================================
 
+// Helper to determine if a window is a Windows shell surface (Start, Search,
+// Task View, Action Center, Quick Settings). The owning process name is stable
+// across UI languages, unlike the window titles, so match on that.
+bool IsStartOrSearchWindow(HWND hwnd) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (!pid) {
+        return false;
+    }
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) {
+        return false;
+    }
+    wchar_t path[MAX_PATH]{};
+    DWORD size = ARRAYSIZE(path);
+    bool ok = QueryFullProcessImageNameW(process, 0, path, &size) != FALSE;
+    CloseHandle(process);
+    if (!ok) {
+        return false;
+    }
+    std::wstring exe = path;
+    size_t slash = exe.find_last_of(L"\\/");
+    if (slash != std::wstring::npos) {
+        exe.erase(0, slash + 1);
+    }
+    std::wstring lowerExe = ToLowerCopy(exe);
+    return lowerExe == L"startmenuexperiencehost.exe" ||
+           lowerExe == L"searchhost.exe" ||
+           lowerExe == L"searchapp.exe" ||
+           lowerExe == L"searchui.exe" ||
+           lowerExe == L"shellexperiencehost.exe";
+}
+
+
 bool IsTaskbarEligibleWindow(HWND hwnd) {
     if (!IsWindow(hwnd) || !IsWindowVisible(hwnd)) {
         return false;
@@ -1565,6 +2502,11 @@ bool IsTaskbarEligibleWindow(HWND hwnd) {
         return false;
     }
 
+    // Skip Start menu / Search overlay windows
+    if (IsStartOrSearchWindow(hwnd)) {
+        return false;
+    }
+
     BOOL cloaked = FALSE;
     if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) &&
         cloaked) {
@@ -1573,7 +2515,6 @@ bool IsTaskbarEligibleWindow(HWND hwnd) {
 
     return true;
 }
-
 
 void ForceForegroundWindow(HWND hwnd) {
     if (!IsWindow(hwnd)) {
@@ -1620,6 +2561,34 @@ void CALLBACK ForegroundEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG id
         return;
     }
     g_lastForegroundHwnd = hwnd;
+
+    // Check if the foreground window is the desktop
+    wchar_t className[256] = {0};
+    if (GetClassName(hwnd, className, ARRAYSIZE(className))) {
+        if ((wcscmp(className, L"Progman") == 0 || wcscmp(className, L"WorkerW") == 0)) {
+            // When desktop is shown, always clear fullscreen flag
+            g_fullScreenAppActive = false;
+
+            // Restore the top bar immediately (minimized, hidden, or cloaked)
+            if (g_topBarHwnd) {
+                if (IsIconic(g_topBarHwnd)) {
+                    ShowWindow(g_topBarHwnd, SW_RESTORE);
+                }
+                if (!IsWindowVisible(g_topBarHwnd)) {
+                    ShowWindow(g_topBarHwnd, SW_SHOWNOACTIVATE);
+                }
+                BOOL cloaked = FALSE;
+                if (SUCCEEDED(DwmGetWindowAttribute(g_topBarHwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked) {
+                    DwmSetWindowAttribute(g_topBarHwnd, DWMWA_CLOAK, FALSE, sizeof(BOOL));
+                }
+                // Force topmost so the desktop can't cover the bar
+                SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                // Reposition
+                PositionAppBar(g_topBarHwnd, g_barHeightPx);
+            }
+        }
+    }
 }
 
 void ActivateOrMinimizeWindow(HWND hwnd) {
@@ -1696,9 +2665,8 @@ FrameworkElement BuildTaskButtonContent(HWND hwnd, const std::wstring& title) {
     if (wantText) {
         auto text = MakeText(L"TaskButtonText", title, 12.5);
         wuxc::Grid::SetColumn(text, 1);
-        double textMaxWidth =
-            g_settings.taskButtonWidth - 16.0 - (wantIcon ? (iconDip + 8.0) : 0.0);
-        text.MaxWidth(std::max(20.0, textMaxWidth));
+        // No MaxWidth on text; the button's own width will clip it.
+        text.ClearValue(FrameworkElement::MaxWidthProperty());
         content.Children().Append(text);
     } else {
         textColumn.Width(GridLength{0, GridUnitType::Pixel});
@@ -1707,43 +2675,20 @@ FrameworkElement BuildTaskButtonContent(HWND hwnd, const std::wstring& title) {
     return content;
 }
 
-// A single pending click is enough: Tapped arms a short timer that performs the
-// single-click action; DoubleTapped cancels it and performs the double-click
-// action instead, so a double-click never also fires the single-click behaviour.
-[[clang::no_destroy]] DispatcherTimer g_taskClickTimer{nullptr};
-HWND g_pendingClickHwnd;
-
-void SchedulePendingSingleClick(HWND hwnd) {
-    g_pendingClickHwnd = hwnd;
-    if (!g_taskClickTimer) {
-        g_taskClickTimer = DispatcherTimer();
-        g_taskClickTimer.Interval(std::chrono::milliseconds(GetDoubleClickTime()));
-        g_taskClickTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
-            g_taskClickTimer.Stop();
-            try {
-                if (g_pendingClickHwnd) {
-                    ActivateOrMinimizeWindow(g_pendingClickHwnd);
-                }
-            } catch (...) {
-            }
-            g_pendingClickHwnd = nullptr;
-        });
+// Single click activates immediately, double-click maximizes.
+// No delay: Tapped fires instantly, DoubleTapped also fires (after the second tap)
+// but we accept that the window will be activated once on the first tap.
+void ActivateTaskWindow(HWND hwnd) {
+    if (IsWindow(hwnd)) {
+        ActivateOrMinimizeWindow(hwnd);
     }
-    g_taskClickTimer.Stop();
-    g_taskClickTimer.Start();
-}
-
-void CancelPendingSingleClick() {
-    if (g_taskClickTimer) {
-        g_taskClickTimer.Stop();
-    }
-    g_pendingClickHwnd = nullptr;
 }
 
 wuxc::Button CreateTaskButton(HWND hwnd, const std::wstring& title) {
     auto button = MakeGhostButton(L"TaskButton", g_settings.cornerRadius);
     button.Content(BuildTaskButtonContent(hwnd, title));
-    button.MaxWidth(g_settings.taskButtonWidth);
+    button.MaxWidth(g_settings.taskButtonWidth);  // max width from settings
+    button.ClearValue(FrameworkElement::WidthProperty()); // auto width by default
     // Stretch, not Center: the Start and Search buttons fill the bar height and
     // let their Margin do the insetting, so a centred task button ended up
     // shorter than them with dead space above and below. Stretching makes the
@@ -1755,22 +2700,71 @@ wuxc::Button CreateTaskButton(HWND hwnd, const std::wstring& title) {
     button.HorizontalContentAlignment(HorizontalAlignment::Center);
     button.Tag(winrt::box_value(reinterpret_cast<int64_t>(hwnd)));
 
-    button.Tapped([](wf::IInspectable const& sender, Input::TappedRoutedEventArgs const&) {
+    // The first Tapped of a double-tap would minimize the window before
+    // DoubleTapped fires, and the trailing Tapped raised by WinUI after
+    // DoubleTapped would do the same again. Both are handled here: the first
+    // Tapped defers the single-tap action so it can be cancelled, and the
+    // trailing one is discarded via the timestamp set in DoubleTapped.
+    // The event is marked handled so it does not bubble up to the bar root,
+    // whose own DoubleTapped handler toggles the last foreground window.
+    button.Tapped([](wf::IInspectable const& sender, Input::TappedRoutedEventArgs const& args) {
         try {
+            args.Handled(true);
+            if (g_lastDoubleTapTick != 0 &&
+                GetTickCount64() - g_lastDoubleTapTick < 400) {
+                return;
+            }
             auto btn = sender.as<wuxc::Button>();
-            auto tagValue = winrt::unbox_value<int64_t>(btn.Tag());
-            SchedulePendingSingleClick(reinterpret_cast<HWND>(tagValue));
+            HWND hwnd = reinterpret_cast<HWND>(winrt::unbox_value<int64_t>(btn.Tag()));
+            if (!IsWindow(hwnd)) {
+                return;
+            }
+            // Defer the single-tap action just long enough for a second tap to
+            // arrive and cancel it. GetDoubleClickTime() matches the interval
+            // the framework itself uses to decide between single and double tap.
+            g_taskClickPendingHwnd = hwnd;
+            if (!g_taskClickTimer) {
+                g_taskClickTimer = DispatcherTimer();
+                g_taskClickTimer.Interval(
+                    std::chrono::milliseconds(GetDoubleClickTime()));
+                g_taskClickTimer.Tick(
+                    [](wf::IInspectable const&, wf::IInspectable const&) {
+                        g_taskClickTimer.Stop();
+                        HWND pending = g_taskClickPendingHwnd;
+                        g_taskClickPendingHwnd = nullptr;
+                        if (pending) {
+                            ActivateTaskWindow(pending);
+                        }
+                    });
+            }
+            g_taskClickTimer.Stop();
+            g_taskClickTimer.Start();
         } catch (...) {
         }
     });
 
     button.DoubleTapped(
-        [](wf::IInspectable const& sender, Input::DoubleTappedRoutedEventArgs const&) {
+        [](wf::IInspectable const& sender, Input::DoubleTappedRoutedEventArgs const& args) {
             try {
-                CancelPendingSingleClick();
+                // Mark handled so the event does not bubble to the bar root's
+                // DoubleTapped, which toggles the last foreground window and
+                // would otherwise affect a second window (or the same one
+                // twice, flipping it back).
+                args.Handled(true);
+                // Cancel the deferred single-tap action before it runs the
+                // minimize animation, and stamp the time so any trailing Tapped
+                // raised by the framework for this same gesture is discarded.
+                g_lastDoubleTapTick = GetTickCount64();
+                if (g_taskClickTimer) {
+                    g_taskClickTimer.Stop();
+                }
+                g_taskClickPendingHwnd = nullptr;
                 auto btn = sender.as<wuxc::Button>();
-                auto tagValue = winrt::unbox_value<int64_t>(btn.Tag());
-                ToggleMaximizeWindow(reinterpret_cast<HWND>(tagValue));
+                HWND hwnd = reinterpret_cast<HWND>(winrt::unbox_value<int64_t>(btn.Tag()));
+                if (!IsWindow(hwnd)) {
+                    return;
+                }
+                ToggleMaximizeWindow(hwnd);
             } catch (...) {
             }
         });
@@ -1799,12 +2793,6 @@ wuxc::Button CreateTaskButton(HWND hwnd, const std::wstring& title) {
 void UpdateTaskButtonState(wuxc::Button button, HWND hwnd, const std::wstring& title) {
     button.Content(BuildTaskButtonContent(hwnd, title));
 }
-
-// Diffing refresh: keeps the same Button object at the same panel position for
-// every window that's still open, only appending new windows at the end and
-// removing closed ones. EnumWindows returns Z-order, which changes every time
-// the user clicks between windows -- rebuilding from scratch each tick made the
-// whole list visibly reorder itself on every refresh.
 void RefreshTaskList(bool forceIconRegeneration) {
     if (!g_taskListPanel) {
         return;
@@ -1823,9 +2811,6 @@ void RefreshTaskList(bool forceIconRegeneration) {
 
     std::set<HWND> currentSet(currentWindows.begin(), currentWindows.end());
 
-    // Re-running the style engine means a XamlReader parse per style per
-    // element, so on a timer tick where nothing actually changed it is skipped
-    // entirely.
     bool treeChanged = forceIconRegeneration;
 
     for (auto it = g_stableWindowOrder.begin(); it != g_stableWindowOrder.end();) {
@@ -1868,15 +2853,21 @@ void RefreshTaskList(bool forceIconRegeneration) {
         if (forceIconRegeneration || titleChanged) {
             UpdateTaskButtonState(btnIt->second, hwnd, title);
             g_taskButtonLastTitle.insert_or_assign(hwnd, title);
-            // Don't set treeChanged on title change – only on structural changes.
-            // This avoids unnecessary style re-application.
         }
     }
+
+    // NEW: Adjust button widths to fit the available space
+    AdjustTaskButtonWidths();
 
     if (treeChanged) {
         ApplyAllControlStyles();
     }
 }
+// Diffing refresh: keeps the same Button object at the same panel position for
+// every window that's still open, only appending new windows at the end and
+// removing closed ones. EnumWindows returns Z-order, which changes every time
+// the user clicks between windows -- rebuilding from scratch each tick made the
+// whole list visibly reorder itself on every refresh.
 
 // ============================================================================
 // Audio subsystem
@@ -1988,30 +2979,34 @@ std::wstring DeviceId(IMMDevice* device) {
 // feel sticky. Dropped whenever a call fails, which covers the default endpoint
 // changing underneath us.
 [[clang::no_destroy]] winrt::com_ptr<IAudioEndpointVolume> g_cachedEndpointVolume;
+std::wstring g_cachedEndpointDeviceId;
+std::mutex g_endpointMutex;
 
 void InvalidateEndpointCache() {
+    std::lock_guard<std::mutex> lock(g_endpointMutex);
     g_cachedEndpointVolume = nullptr;
+    g_cachedEndpointDeviceId.clear();
 }
 
 winrt::com_ptr<IAudioEndpointVolume> EndpointVolume() {
-    if (g_cachedEndpointVolume) {
-        float probe = 0.0f;
-        if (SUCCEEDED(g_cachedEndpointVolume->GetMasterVolumeLevelScalar(&probe))) {
-            return g_cachedEndpointVolume;
-        }
-        g_cachedEndpointVolume = nullptr;
-    }
-
     auto device = DefaultRenderDevice();
     if (!device) {
         return nullptr;
     }
+    std::wstring deviceId = DeviceId(device.get());
+
+    std::lock_guard<std::mutex> lock(g_endpointMutex);
+    if (g_cachedEndpointVolume && g_cachedEndpointDeviceId == deviceId) {
+        return g_cachedEndpointVolume;
+    }
+
     winrt::com_ptr<IAudioEndpointVolume> volume;
     if (FAILED(device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr,
                                 volume.put_void()))) {
         return nullptr;
     }
     g_cachedEndpointVolume = volume;
+    g_cachedEndpointDeviceId = deviceId;
     return volume;
 }
 
@@ -3194,19 +4189,20 @@ bool SetRadio(bool on) {
     return false;
 }
 
-// Enumerating paired devices is fast. Inquiry for nearby unpaired ones is not:
-// cTimeoutMultiplier is in 1.28-second units, so this blocks for seconds and
-// must only be called from a worker thread.
-// Battery percentage reader – must be declared before Enumerate uses it.
+// Helper: Query battery percentage for a Bluetooth LE device.
+// Returns -1 if unknown or not available.
 int GetBatteryPercent(const BLUETOOTH_ADDRESS& address) {
 #if TOPBAR_HAS_BLUETOOTH_LE
     try {
         using namespace winrt::Windows::Devices::Bluetooth;
         using namespace winrt::Windows::Devices::Bluetooth::GenericAttributeProfile;
+
         auto device = BluetoothLEDevice::FromBluetoothAddressAsync(address.ullLong).get();
         if (!device) return -1;
+
         auto servicesResult = device.GetGattServicesAsync().get();
         if (servicesResult.Status() != GattCommunicationStatus::Success) return -1;
+
         auto services = servicesResult.Services();
         for (auto&& service : services) {
             if (service.Uuid() == GattServiceUuids::Battery()) {
@@ -3231,12 +4227,13 @@ int GetBatteryPercent(const BLUETOOTH_ADDRESS& address) {
 #endif
     return -1;
 }
-
 std::vector<Device> Enumerate(bool includeUnpaired) {
+    Wh_Log(L"Enumerate called (includeUnpaired=%d)", includeUnpaired ? 1 : 0);
     std::vector<Device> devices;
     const Api& api = GetApi();
     RadioHandle radio;
     if (!radio.ok()) {
+        Wh_Log(L"Radio handle invalid");
         return devices;
     }
 
@@ -3247,7 +4244,7 @@ std::vector<Device> Enumerate(bool includeUnpaired) {
     params.fReturnConnected = TRUE;
     params.fReturnUnknown = includeUnpaired ? TRUE : FALSE;
     params.fIssueInquiry = includeUnpaired ? TRUE : FALSE;
-    params.cTimeoutMultiplier = includeUnpaired ? 4 : 0;  // ~5 s when inquiring
+    params.cTimeoutMultiplier = includeUnpaired ? 3 : 0;  // ~4 s when inquiring
     params.hRadio = radio.radio;
 
     BLUETOOTH_DEVICE_INFO info{};
@@ -3263,13 +4260,14 @@ std::vector<Device> Enumerate(bool includeUnpaired) {
         device.address = info.Address;
         device.name = info.szName;
         device.connected = info.fConnected != FALSE;
-        device.paired = info.fAuthenticated != FALSE || info.fRemembered != FALSE;
+        device.paired = info.fAuthenticated != FALSE;  // Only authenticated devices are truly paired
         device.classOfDevice = info.ulClassofDevice;
         if (device.name.empty()) {
-            continue;  // an address with no name is not worth a row
+            continue;  // skip devices with no name
         }
-        // Try to read battery percentage (may be -1 if unsupported or failed)
-        device.batteryPercent = GetBatteryPercent(device.address);
+        if (device.connected) {
+            device.batteryPercent = GetBatteryPercent(device.address);
+        }
         devices.push_back(std::move(device));
 
         info = {};
@@ -3278,18 +4276,129 @@ std::vector<Device> Enumerate(bool includeUnpaired) {
 
     api.findDeviceClose(find);
 
+    // If the classic Bluetooth API returned nothing, try WinRT (works for some
+    // Bluetooth LE‑only adapters).
+    if (devices.empty() && includeUnpaired) {
+        Wh_Log(L"Classic enumeration returned 0 devices; trying WinRT fallback...");
+#if TOPBAR_HAS_BLUETOOTH_LE
+        try {
+            using namespace winrt::Windows::Devices::Enumeration;
+            using namespace winrt::Windows::Devices::Bluetooth;
+
+            // Query for Bluetooth devices (paired + discovered)
+            auto deviceInfoCollection = DeviceInformation::FindAllAsync(
+                BluetoothDevice::GetDeviceSelector()).get();
+
+            for (auto const& deviceInfo : deviceInfoCollection) {
+                Device device;
+                device.name = deviceInfo.Name().c_str();
+                if (device.name.empty()) continue;
+
+                // Extract Bluetooth address from the device ID (format:
+                // "Bluetooth#BluetoothLE&Dev_XX:XX:XX:XX:XX:XX...")
+                std::wstring id = deviceInfo.Id().c_str();
+                auto pos = id.find(L"Dev_");
+                if (pos != std::wstring::npos) {
+                    auto addr = id.substr(pos + 4);
+                    // Convert colon-separated hex to ULONGLONG
+                    std::wstring hexAddr;
+                    for (auto c : addr) if (c != L':') hexAddr.push_back(c);
+                    device.address.ullLong = std::stoull(hexAddr, nullptr, 16);
+                }
+
+                // Check if it's paired or connected
+                device.paired = deviceInfo.Pairing().IsPaired();
+                device.connected = false; // we can't easily determine from here
+
+                if (device.connected) {
+                    device.batteryPercent = GetBatteryPercent(device.address);
+                }
+                if (device.name.empty() || device.address.ullLong == 0) continue;
+
+                devices.push_back(std::move(device));
+            }
+        } catch (const winrt::hresult_error& e) {
+            Wh_Log(L"WinRT Bluetooth enumeration failed: %s", e.message().c_str());
+        } catch (...) {
+            Wh_Log(L"WinRT Bluetooth enumeration unknown error");
+        }
+#endif
+    }
+
     // Connected first, then paired, then discovered -- matching how the flyout
     // groups them.
     std::sort(devices.begin(), devices.end(), [](const Device& a, const Device& b) {
-        if (a.connected != b.connected) {
-            return a.connected;
-        }
-        if (a.paired != b.paired) {
-            return a.paired;
-        }
+        if (a.connected != b.connected) return a.connected;
+        if (a.paired != b.paired) return a.paired;
         return ToLowerCopy(a.name) < ToLowerCopy(b.name);
     });
     return devices;
+}
+
+// Attempts to pair with a discovered Bluetooth device using WinRT.
+
+bool PairDevice(const BLUETOOTH_ADDRESS& address) {
+    Wh_Log(L"PairDevice called for address 0x%llX", address.ullLong);
+#if TOPBAR_HAS_BLUETOOTH_LE
+    try {
+        using namespace winrt::Windows::Devices::Bluetooth;
+        using namespace winrt::Windows::Devices::Enumeration;
+        using namespace winrt::Windows::Foundation;
+
+        auto device = BluetoothDevice::FromBluetoothAddressAsync(address.ullLong).get();
+        if (!device) {
+            Wh_Log(L"BluetoothDevice not found");
+            return false;
+        }
+        auto deviceInfo = DeviceInformation::CreateFromIdAsync(device.DeviceId()).get();
+        if (!deviceInfo) {
+            Wh_Log(L"DeviceInformation not found");
+            return false;
+        }
+
+        // Get custom pairing interface
+        auto customPairing = deviceInfo.Pairing().Custom();
+        if (!customPairing) {
+            Wh_Log(L"Custom pairing not supported");
+            return false;
+        }
+
+        // Run pairing in a separate task with a 30‑second timeout
+        auto future = std::async(std::launch::async, [customPairing]() {
+            // Attach event handler to accept the pairing request
+            auto pairingRequestedToken = customPairing.PairingRequested(
+                [](DeviceInformationCustomPairing const&, DevicePairingRequestedEventArgs const& args) {
+                    // Accept the pairing request (for devices that require a PIN,
+                    // you would use args.Accept(pin) after getting the PIN)
+                    args.Accept();
+                });
+
+            try {
+                auto result = customPairing.PairAsync(DevicePairingKinds::ConfirmOnly).get();
+                customPairing.PairingRequested(pairingRequestedToken); // unregister
+                return result.Status() == DevicePairingResultStatus::Paired ||
+                       result.Status() == DevicePairingResultStatus::AlreadyPaired;
+            } catch (...) {
+                customPairing.PairingRequested(pairingRequestedToken);
+                return false;
+            }
+        });
+
+        if (future.wait_for(std::chrono::seconds(30)) == std::future_status::ready) {
+            bool result = future.get();
+            Wh_Log(L"Pairing result: %d", result ? 1 : 0);
+            return result;
+        } else {
+            Wh_Log(L"Pairing timed out");
+            return false;
+        }
+    } catch (const winrt::hresult_error& ex) {
+        Wh_Log(L"PairDevice exception: %s", ex.message().c_str());
+    } catch (...) {
+        Wh_Log(L"PairDevice unknown exception");
+    }
+#endif
+    return false;
 }
 
 bool FindDeviceInfo(const BLUETOOTH_ADDRESS& address, HANDLE radioHandle,
@@ -3370,215 +4479,6 @@ bool SetConnected(const BLUETOOTH_ADDRESS& address, bool connect) {
 }  // namespace bluetooth
 
 // ============================================================================
-// System tray
-//
-// There is no API to read another shell's notification icons, so the real
-// taskbar's own tray is driven through UI Automation: find the icon elements
-// inside Shell_TrayWnd (and the overflow window), mirror them as buttons, and
-// forward clicks back to the original element. Right-click has no automation
-// pattern at all, so it is synthesized over the real icon and the cursor is put
-// back afterwards.
-// ============================================================================
-
-namespace tray {
-
-struct Item {
-    std::wstring name;
-    winrt::com_ptr<IUIAutomationElement> element;
-    RECT bounds{};
-};
-
-[[clang::no_destroy]] winrt::com_ptr<IUIAutomation> g_automation;
-
-// Declared by hand: whether CLSID_CUIAutomation is exported as a symbol depends
-// on which UUID import library is linked, and this mod links none of them.
-static const CLSID kCLSID_CUIAutomation = {
-    0xff48dba4, 0x60ef, 0x4201, {0xaa, 0x87, 0x54, 0x10, 0x3e, 0xef, 0x59, 0x4e}};
-
-IUIAutomation* Automation() {
-    if (!g_automation) {
-        winrt::com_ptr<IUIAutomation> automation;
-        if (FAILED(CoCreateInstance(kCLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER,
-                                    IID_PPV_ARGS(automation.put())))) {
-            return nullptr;
-        }
-        g_automation = automation;
-    }
-    return g_automation.get();
-}
-
-// Windows 11 splits the tray across several top-level windows: the always-shown
-// icons live in Shell_TrayWnd, and the "hidden icons" chevron opens a separate
-// XAML popup window. Both are scanned, which is why an item can legitimately be
-// missing until the user has opened the overflow once.
-std::vector<HWND> TrayHostWindows() {
-    std::vector<HWND> windows;
-    // Use the actual notification area container instead of the whole taskbar.
-    HWND tray = FindWindow(L"Shell_TrayWnd", nullptr);
-    if (tray) {
-        HWND notifyArea = FindWindowEx(tray, nullptr, L"TrayNotifyWnd", nullptr);
-        if (notifyArea) {
-            windows.push_back(notifyArea);
-        } else {
-            windows.push_back(tray); // fallback
-        }
-    }
-    // Overflow (hidden icons) window
-    if (HWND overflow = FindWindow(L"TopLevelWindowForOverflowXamlIsland", nullptr)) {
-        windows.push_back(overflow);
-    }
-    if (HWND notify = FindWindow(L"NotifyIconOverflowWindow", nullptr)) {
-        windows.push_back(notify);
-    }
-    return windows;
-}
-
-std::wstring ElementName(IUIAutomationElement* element) {
-    BSTR name = nullptr;
-    if (FAILED(element->get_CurrentName(&name)) || !name) {
-        return L"";
-    }
-    std::wstring result = name;
-    SysFreeString(name);
-    return result;
-}
-
-std::wstring ElementClassName(IUIAutomationElement* element) {
-    BSTR className = nullptr;
-    if (FAILED(element->get_CurrentClassName(&className)) || !className) {
-        return L"";
-    }
-    std::wstring result = className;
-    SysFreeString(className);
-    return result;
-}
-
-// Enumerating by control type rather than by class name: the class names differ
-// between the classic tray, the XAML tray and the overflow popup, but every
-// icon surfaces as a Button with a name. Anything unnamed, zero-sized or
-// off-screen is dropped, which filters out the chevron's own container and the
-// layout scaffolding.
-std::vector<Item> Enumerate() {
-    std::vector<Item> items;
-    IUIAutomation* automation = Automation();
-    if (!automation) return items;
-
-    winrt::com_ptr<IUIAutomationCondition> buttonCondition;
-    {
-        VARIANT value;
-        VariantInit(&value);
-        value.vt = VT_I4;
-        value.lVal = UIA_ButtonControlTypeId;
-        automation->CreatePropertyCondition(UIA_ControlTypePropertyId, value, buttonCondition.put());
-        VariantClear(&value);
-    }
-    if (!buttonCondition) return items;
-
-    std::set<std::wstring> seen;
-
-    // Log how many hosts we are looking at
-    auto hosts = TrayHostWindows();
-    Wh_Log(L"Tray: checking %d host windows", (int)hosts.size());
-
-    for (HWND host : hosts) {
-        winrt::com_ptr<IUIAutomationElement> root;
-        if (FAILED(automation->ElementFromHandle(host, root.put())) || !root) continue;
-
-        winrt::com_ptr<IUIAutomationElementArray> found;
-        if (FAILED(root->FindAll(TreeScope_Descendants, buttonCondition.get(), found.put())) || !found) continue;
-
-        int count = 0;
-        found->get_Length(&count);
-        Wh_Log(L"Tray: host %p found %d buttons", host, count); // Log how many buttons were found
-
-        for (int i = 0; i < count; i++) {
-            winrt::com_ptr<IUIAutomationElement> element;
-            if (FAILED(found->GetElement(i, element.put())) || !element) continue;
-
-            std::wstring name = ElementName(element.get());
-            if (name.empty()) continue;
-
-            // The TrayNotifyWnd container holds only real tray icons – no need for name filtering.
-            // (If we ever fall back to the whole taskbar, we still skip obvious non-icons.)
-            if (GetParent(host) != nullptr && host != FindWindow(L"Shell_TrayWnd", nullptr)) {
-                // For overflow windows, also check we don't pick up chevron buttons.
-                // The size check below already excludes large containers.
-            }
-
-            RECT bounds{};
-            if (FAILED(element->get_CurrentBoundingRectangle(&bounds))) continue;
-
-            // CRITICAL: Only allow small icon sizes (16x16 up to 40x40). Drop containers.
-            int width = bounds.right - bounds.left;
-            int height = bounds.bottom - bounds.top;
-            if (width <= 0 || height <= 0 || width > 40 || height > 40) continue;
-
-            // Remove duplicates
-            std::wstring key = name + L"|" + std::to_wstring(width) + L"x" + std::to_wstring(height);
-            if (!seen.insert(key).second) continue;
-
-            Item item;
-            item.name = std::move(name);
-            item.element = element;
-            item.bounds = bounds;
-            items.push_back(std::move(item));
-        }
-    }
-    Wh_Log(L"Tray: returning %d items", (int)items.size()); // Log the final count
-    
-    std::sort(items.begin(), items.end(), [](const Item& a, const Item& b) {
-        return ToLowerCopy(a.name) < ToLowerCopy(b.name);
-    });
-    return items;
-}
-
-// Synthesizes a click over the real icon. The cursor is moved, clicked and put
-// straight back; there is no way to deliver a tray click without this, because
-// the shell reads the cursor position when it decides where to place the menu.
-void SyntheticClick(const RECT& bounds, bool rightButton) {
-    POINT original{};
-    GetCursorPos(&original);
-
-    POINT target{(bounds.left + bounds.right) / 2, (bounds.top + bounds.bottom) / 2};
-    SetCursorPos(target.x, target.y);
-
-    INPUT input[2]{};
-    input[0].type = INPUT_MOUSE;
-    input[0].mi.dwFlags = rightButton ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_LEFTDOWN;
-    input[1].type = INPUT_MOUSE;
-    input[1].mi.dwFlags = rightButton ? MOUSEEVENTF_RIGHTUP : MOUSEEVENTF_LEFTUP;
-    SendInput(ARRAYSIZE(input), input, sizeof(INPUT));
-
-    // Give the shell a moment to read the cursor position before restoring it,
-    // otherwise the context menu lands where the pointer went back to.
-    Sleep(60);
-    SetCursorPos(original.x, original.y);
-}
-
-void InvokeItem(const Item& item) {
-    // InvokePattern is cleaner than a synthetic click when the icon supports
-    // it, and it doesn't disturb the cursor.
-    winrt::com_ptr<IUIAutomationInvokePattern> invoke;
-    if (item.element &&
-        SUCCEEDED(item.element->GetCurrentPatternAs(UIA_InvokePatternId,
-                                                    IID_PPV_ARGS(invoke.put()))) &&
-        invoke) {
-        if (SUCCEEDED(invoke->Invoke())) {
-            return;
-        }
-    }
-    SyntheticClick(item.bounds, false);
-}
-
-void ShowItemContextMenu(const Item& item) {
-    // No automation pattern raises an app's own tray context menu, so this is
-    // the only route: right-click the real icon where it actually sits.
-    SyntheticClick(item.bounds, true);
-}
-
-}  // namespace tray
-
-// ============================================================================
 // Flyout infrastructure
 // ============================================================================
 
@@ -3591,7 +4491,7 @@ constexpr double kPanelWidth = 340.0;
 [[clang::no_destroy]] wuxc::Button g_soundButton{nullptr};
 [[clang::no_destroy]] wuxc::Button g_wifiButton{nullptr};
 [[clang::no_destroy]] wuxc::Button g_bluetoothButton{nullptr};
-[[clang::no_destroy]] wuxc::Button g_trayButton{nullptr};
+
 
 // Helper to toggle a flyout open/closed.
 void ToggleFlyout(wuxc::Flyout const& flyout, wuxc::Button const& button) {
@@ -3607,7 +4507,7 @@ void ToggleFlyout(wuxc::Flyout const& flyout, wuxc::Button const& button) {
 [[clang::no_destroy]] wuxc::Flyout g_soundFlyout{nullptr};
 [[clang::no_destroy]] wuxc::Flyout g_wifiFlyout{nullptr};
 [[clang::no_destroy]] wuxc::Flyout g_bluetoothFlyout{nullptr};
-[[clang::no_destroy]] wuxc::Flyout g_trayFlyout{nullptr};
+
 [[clang::no_destroy]] DispatcherTimer g_volumeRevertTimer{nullptr};
 [[clang::no_destroy]] DispatcherTimer g_brightnessRevertTimer{nullptr};
 
@@ -3615,7 +4515,7 @@ void ToggleFlyout(wuxc::Flyout const& flyout, wuxc::Button const& button) {
 [[clang::no_destroy]] wuxc::StackPanel g_soundPanel{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_wifiPanel{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_bluetoothPanel{nullptr};
-[[clang::no_destroy]] wuxc::StackPanel g_trayPanel{nullptr};
+
 [[clang::no_destroy]] wuxc::Button g_batteryButton{nullptr};
 [[clang::no_destroy]] wuxc::Flyout g_batteryFlyout{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_batteryPanel{nullptr};
@@ -3646,13 +4546,18 @@ wifi::Network g_wifiPromptNetwork;
 std::wstring g_wifiPromptError;
 
 std::vector<bluetooth::Device> g_bluetoothDevices;
-bool g_bluetoothScanning = false;
-unsigned long long g_bluetoothConnectingAddress = 0;
+
+
+
 
 std::vector<wifi::Network> g_wifiNetworks;
-bool g_wifiScanning = false;
+std::atomic<bool> g_wifiScanning{false};
+std::atomic<bool> g_bluetoothScanning{false};
+std::atomic<int> g_bluetoothConnectingState{0};
+std::atomic<unsigned long long> g_bluetoothConnectingAddress{0};
+std::atomic<unsigned long long> g_pairingDeviceAddress{0};
 std::wstring g_wifiConnectingSSID;
-int g_bluetoothConnectingState = 0; // 0=None, 1=Connecting, 2=Disconnecting
+
 
 // bool g_bluetoothRadioOn = false;   // moved inside bluetooth namespace
 // std::mutex g_bluetoothRadioMutex;  // moved inside bluetooth namespace
@@ -3698,6 +4603,18 @@ void RunInBackground(std::function<void()> work) {
     if (InterlockedCompareExchange(&g_shuttingDown, 0, 0) != 0) {
         return;
     }
+    // Reap finished threads to avoid accumulating handles
+    {
+        std::lock_guard<std::mutex> lock(g_workerThreadsMutex);
+        for (auto it = g_workerThreads.begin(); it != g_workerThreads.end();) {
+            if (WaitForSingleObject(*it, 0) == WAIT_OBJECT_0) {
+                CloseHandle(*it);
+                it = g_workerThreads.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
     g_backgroundJobs.fetch_add(1);
     auto* workPtr = new std::function<void()>(std::move(work));
     HANDLE threadHandle = (HANDLE)_beginthreadex(nullptr, 0, [](void* param) -> unsigned int {
@@ -3718,6 +4635,66 @@ void RunInBackground(std::function<void()> work) {
         std::lock_guard<std::mutex> lock(g_workerThreadsMutex);
         g_workerThreads.push_back(threadHandle);
     }
+}
+
+std::mutex g_volumeCoalesceMutex;
+int g_pendingVolumeValue = -1;
+bool g_volumeWorkerRunning = false;
+
+void SetMasterVolumeCoalesced(int value) {
+    {
+        std::lock_guard<std::mutex> lock(g_volumeCoalesceMutex);
+        g_pendingVolumeValue = value;
+        if (g_volumeWorkerRunning) {
+            return;
+        }
+        g_volumeWorkerRunning = true;
+    }
+    RunInBackground([] {
+        for (;;) {
+            int v;
+            {
+                std::lock_guard<std::mutex> lock(g_volumeCoalesceMutex);
+                if (g_pendingVolumeValue < 0) {
+                    g_volumeWorkerRunning = false;
+                    return;
+                }
+                v = g_pendingVolumeValue;
+                g_pendingVolumeValue = -1;
+            }
+            audio::SetMasterVolume(v);
+        }
+    });
+}
+
+std::mutex g_brightnessCoalesceMutex;
+int g_pendingBrightnessValue = -1;
+bool g_brightnessWorkerRunning = false;
+
+void SetBrightnessCoalesced(int value) {
+    {
+        std::lock_guard<std::mutex> lock(g_brightnessCoalesceMutex);
+        g_pendingBrightnessValue = value;
+        if (g_brightnessWorkerRunning) {
+            return;
+        }
+        g_brightnessWorkerRunning = true;
+    }
+    RunInBackground([] {
+        for (;;) {
+            int v;
+            {
+                std::lock_guard<std::mutex> lock(g_brightnessCoalesceMutex);
+                if (g_pendingBrightnessValue < 0) {
+                    g_brightnessWorkerRunning = false;
+                    return;
+                }
+                v = g_pendingBrightnessValue;
+                g_pendingBrightnessValue = -1;
+            }
+            brightness::Set(v);
+        }
+    });
 }
 
 // Panels tear themselves down from inside their own click handlers, which would
@@ -4097,12 +5074,11 @@ wuxc::Button MakeSettingsLink(std::wstring_view label, PCWSTR uri) {
 }
 
 void HideAllFlyouts() {
-    for (auto& flyout : {g_displayFlyout, g_soundFlyout, g_wifiFlyout, g_bluetoothFlyout,
-                         g_trayFlyout}) {
-        if (flyout) {
-            flyout.Hide();
-        }
-    }
+    if (g_displayFlyout) g_displayFlyout.Hide();
+    if (g_soundFlyout) g_soundFlyout.Hide();
+    if (g_wifiFlyout) g_wifiFlyout.Hide();
+    if (g_bluetoothFlyout) g_bluetoothFlyout.Hide();
+    if (g_batteryFlyout) g_batteryFlyout.Hide();
 }
 
 // ============================================================================
@@ -4127,7 +5103,7 @@ void PopulateDisplayPanel() {
     if (brightness::Available()) {
         auto icon = BuildVectorIcon(nullptr, L"", icons::kBrightnessStroke, 24, 18, 1.6);
         children.Append(MakeSliderRow(icon, brightness::Get(),
-                                      [](int value) { RunInBackground([value] { brightness::Set(value); }); }));
+                                      [](int value) { SetBrightnessCoalesced(value); }));
     } else {
         children.Append(MakeStatusText(L"Brightness control isn't available on this display."));
     }
@@ -4386,7 +5362,7 @@ void PopulateSoundPanel() {
     });
 
     children.Append(MakeSliderRow(muteButton, masterVolume, [](int value) {
-        RunInBackground([value] { audio::SetMasterVolume(value); });
+        SetMasterVolumeCoalesced(value);
         RunOnUiThread([] { RefreshSoundButtonIcon(); });
     }));
 
@@ -4575,7 +5551,7 @@ void ConnectToWifi(const wifi::Network& network, const std::wstring& password) {
             }
         }
 
-        if (!connected) {
+        if (!connected && !network.hasProfile) {
             wifi::ForgetProfile(network.ssid);
         }
 
@@ -4689,19 +5665,17 @@ void PopulateWifiPanel() {
 
     auto status = wifi::GetStatus();
 
-    // 2-Column Header: Left (Title + Spinner) | Right (Toggle)
+    // 2-Column Header: Left (Title + Spinner) | Right (Refresh + Toggle)
     wuxc::Grid headerGrid;
     headerGrid.Margin(Thickness{4, 2, 0, 6});
- // Forces the right column to be 12px from the edge
     headerGrid.HorizontalAlignment(HorizontalAlignment::Stretch);
 
     // Column 0: Title + Spinner
     wuxc::ColumnDefinition leftColumn;
     leftColumn.Width(GridLength{1, GridUnitType::Star});
     headerGrid.ColumnDefinitions().Append(leftColumn);
-    
 
-    // Column 1: Toggle (auto width, pushed far right)
+    // Column 1: Right controls (auto width, pushed far right)
     wuxc::ColumnDefinition rightColumn;
     rightColumn.Width(GridLength{0, GridUnitType::Auto});
     headerGrid.ColumnDefinitions().Append(rightColumn);
@@ -4728,7 +5702,22 @@ void PopulateWifiPanel() {
     wuxc::Grid::SetColumn(leftStack, 0);
     headerGrid.Children().Append(leftStack);
 
-    // Toggle (hard forced right)
+    // Right stack: refresh button + toggle
+    wuxc::StackPanel rightStack;
+    rightStack.Orientation(wuxc::Orientation::Horizontal);
+    rightStack.Spacing(4);
+    rightStack.VerticalAlignment(VerticalAlignment::Center);
+
+    // Refresh button (manual scan trigger)
+    auto refreshButton = MakeGhostButton(L"WifiRefreshButton", kRowCorner);
+    refreshButton.Padding(Thickness{6, 6, 6, 6});
+    refreshButton.Content(BuildVectorIcon(nullptr, L"M12 20c-2.21665 0 -4.10415 -0.77915 -5.6625 -2.3375C4.779165 16.10415 4 14.21665 4 12c0 -2.21665 0.779165 -4.10415 2.3375 -5.6625C7.89585 4.779165 9.78335 4 12 4c1.41665 0 2.65835 0.2875 3.725 0.8625 1.06665 0.575 1.99165 1.3625 2.775 2.3625V4h1.5v6.35H13.65v-1.5h4.2c-0.63335 -1 -1.44165 -1.80835 -2.425 -2.425C14.44165 5.80835 13.3 5.5 12 5.5c-1.81665 0 -3.35415 0.62915 -4.6125 1.8875C6.12915 8.64585 5.5 10.18335 5.5 12c0 1.81665 0.62915 3.35415 1.8875 4.6125C8.64585 17.87085 10.18335 18.5 12 18.5c1.38335 0 2.65 -0.39585 3.8 -1.1875s1.95 -1.8375 2.4 -3.1375h1.55c-0.48335 1.75 -1.44165 3.15835 -2.875 4.225C15.44165 19.46665 13.81665 20 12 20Z", L"", 24, 20, 1.7));
+    refreshButton.Click([](auto&&, auto&&) {
+        StartWifiScan();
+    });
+    rightStack.Children().Append(refreshButton);
+
+    // Toggle switch
     wuxc::ToggleSwitch toggle;
     toggle.Name(L"WifiHeaderToggle");
     g_namedElements.insert_or_assign(L"WifiHeaderToggle", toggle);
@@ -4739,6 +5728,7 @@ void PopulateWifiPanel() {
     toggle.HorizontalAlignment(HorizontalAlignment::Right);
     toggle.HorizontalContentAlignment(HorizontalAlignment::Right);
     toggle.VerticalAlignment(VerticalAlignment::Center);
+    toggle.Margin(Thickness{0, 0, 4, 0});
     toggle.IsOn(status.radioOn);
     toggle.Toggled([](auto&& sender, auto&&) {
         if (g_populatingPanel) return;
@@ -4754,15 +5744,10 @@ void PopulateWifiPanel() {
             });
         });
     });
+    rightStack.Children().Append(toggle);
 
-    // WRAPPER: The Margin MUST go on a container, not the ToggleSwitch itself!
-    wuxc::Border toggleContainer;
-    toggleContainer.HorizontalAlignment(HorizontalAlignment::Center);
-    toggleContainer.Margin(Thickness{12, 0, 24, 0}); // Push this 12px away from the right edge
-    toggleContainer.Child(toggle);
-    
-    wuxc::Grid::SetColumn(toggleContainer, 1);
-    headerGrid.Children().Append(toggleContainer);
+    wuxc::Grid::SetColumn(rightStack, 1);
+    headerGrid.Children().Append(rightStack);
 
     children.Append(headerGrid);
 
@@ -4781,10 +5766,6 @@ void PopulateWifiPanel() {
         error.TextWrapping(TextWrapping::Wrap);
         error.Margin(Thickness{10, 0, 10, 4});
         children.Append(error);
-    }
-
-    if (g_wifiNetworks.empty()) {
-        g_wifiNetworks = wifi::EnumerateNetworks();
     }
 
     if (g_wifiNetworks.empty()) {
@@ -4872,12 +5853,26 @@ void RefreshBluetoothButtonIcon() {
 // nothing ever asked for them.
 void StartBluetoothScan(bool includeUnpaired) {
     if (g_bluetoothScanning) {
+        Wh_Log(L"Bluetooth scan already in progress");
         return;
     }
+    // Make sure the radio is actually on before scanning
+    RefreshBluetoothRadioState();
+    if (!bluetooth::IsRadioOn()) {
+        Wh_Log(L"Bluetooth radio is off, cannot scan");
+        return;
+    }
+
     g_bluetoothScanning = true;
+    Wh_Log(L"Starting Bluetooth scan (includeUnpaired=%d)", includeUnpaired ? 1 : 0);
     RunInBackground([includeUnpaired] {
-        if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) return;
+        if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) {
+            Wh_Log(L"Bluetooth scan cancelled (stop event)");
+            g_bluetoothScanning = false;
+            return;
+        }
         auto devices = bluetooth::Enumerate(includeUnpaired);
+        Wh_Log(L"Bluetooth scan found %d devices", (int)devices.size());
         RunOnUiThread([devices = std::move(devices)]() mutable {
             g_bluetoothDevices = std::move(devices);
             g_bluetoothScanning = false;
@@ -4970,7 +5965,22 @@ void PopulateBluetoothPanel() {
     wuxc::Grid::SetColumn(leftStack, 0);
     headerGrid.Children().Append(leftStack);
 
-    // Toggle (hard forced right)
+    // Right side: refresh button + toggle (stacked horizontally)
+    wuxc::StackPanel rightStack;
+    rightStack.Orientation(wuxc::Orientation::Horizontal);
+    rightStack.Spacing(4);
+    rightStack.VerticalAlignment(VerticalAlignment::Center);
+
+    // Refresh button (manual scan trigger)
+    auto refreshButton = MakeGhostButton(L"BluetoothRefreshButton", kRowCorner);
+    refreshButton.Padding(Thickness{6, 6, 6, 6});
+    refreshButton.Content(BuildVectorIcon(nullptr, L"M12 20c-2.21665 0 -4.10415 -0.77915 -5.6625 -2.3375C4.779165 16.10415 4 14.21665 4 12c0 -2.21665 0.779165 -4.10415 2.3375 -5.6625C7.89585 4.779165 9.78335 4 12 4c1.41665 0 2.65835 0.2875 3.725 0.8625 1.06665 0.575 1.99165 1.3625 2.775 2.3625V4h1.5v6.35H13.65v-1.5h4.2c-0.63335 -1 -1.44165 -1.80835 -2.425 -2.425C14.44165 5.80835 13.3 5.5 12 5.5c-1.81665 0 -3.35415 0.62915 -4.6125 1.8875C6.12915 8.64585 5.5 10.18335 5.5 12c0 1.81665 0.62915 3.35415 1.8875 4.6125C8.64585 17.87085 10.18335 18.5 12 18.5c1.38335 0 2.65 -0.39585 3.8 -1.1875s1.95 -1.8375 2.4 -3.1375h1.55c-0.48335 1.75 -1.44165 3.15835 -2.875 4.225C15.44165 19.46665 13.81665 20 12 20Z", L"", 24, 20, 1.7));
+    refreshButton.Click([](auto&&, auto&&) {
+        StartBluetoothScan(true);
+    });
+    rightStack.Children().Append(refreshButton);
+
+    // Toggle switch
     wuxc::ToggleSwitch toggle;
     toggle.Name(L"BluetoothHeaderToggle");
     g_namedElements.insert_or_assign(L"BluetoothHeaderToggle", toggle);
@@ -4997,12 +6007,14 @@ void PopulateBluetoothPanel() {
                 g_bluetoothDevices = std::move(devices);
                 RefreshBluetoothButtonIcon();
                 PopulateBluetoothPanel();
-                RefreshBluetoothRadioState(); // update cached state after change
+                RefreshBluetoothRadioState();
             });
         });
     });
-    wuxc::Grid::SetColumn(toggle, 1);
-    headerGrid.Children().Append(toggle);
+    rightStack.Children().Append(toggle);
+
+    wuxc::Grid::SetColumn(rightStack, 1);
+    headerGrid.Children().Append(rightStack);
 
     children.Append(headerGrid);
 
@@ -5015,9 +6027,9 @@ void PopulateBluetoothPanel() {
         return;
     }
 
-    if (g_bluetoothDevices.empty()) {
-        g_bluetoothDevices = bluetooth::Enumerate(false);
-    }
+
+
+
 
     if (g_bluetoothDevices.empty()) {
         children.Append(MakeStatusText(L"No paired devices."));
@@ -5030,8 +6042,10 @@ void PopulateBluetoothPanel() {
         }
 
         std::wstring subtitle;
-        // Check connecting status (State 1=Connecting, 2=Disconnecting)
-        if (device.address.ullLong == g_bluetoothConnectingAddress && g_bluetoothConnectingState == 1) {
+        // Check if this device is currently pairing
+        if (device.address.ullLong == g_pairingDeviceAddress) {
+            subtitle = L"Pairing...";
+        } else if (device.address.ullLong == g_bluetoothConnectingAddress && g_bluetoothConnectingState == 1) {
             subtitle = L"Connecting...";
         } else if (device.address.ullLong == g_bluetoothConnectingAddress && g_bluetoothConnectingState == 2) {
             subtitle = L"Disconnecting...";
@@ -5056,12 +6070,34 @@ void PopulateBluetoothPanel() {
 
         bluetooth::Device captured = device;
         children.Append(MakeListRow(icon, device.name, subtitle, trailing, [captured] {
+
+
             if (!captured.paired) {
-                ShellExecute(nullptr, L"open", L"ms-settings:bluetooth", nullptr, nullptr,
-                             SW_SHOWNORMAL);
-                HideAllFlyouts();
+                RunInBackground([captured] {
+                    g_pairingDeviceAddress = captured.address.ullLong;
+                    RunOnUiThread([] { PopulateBluetoothPanel(); }); // show "Pairing..." immediately
+
+                    Wh_Log(L"Clicking unpaired device: %s", captured.name.c_str());
+                    bool paired = bluetooth::PairDevice(captured.address);
+                    Wh_Log(L"PairDevice returned: %d", paired ? 1 : 0);
+
+                    RunOnUiThread([paired, captured]() mutable {
+                        g_pairingDeviceAddress = 0;
+
+                        if (paired) {
+                            for (auto& device : g_bluetoothDevices) {
+                                if (device.address.ullLong == captured.address.ullLong) {
+                                    device.paired = true;
+                                    break;
+                                }
+                            }
+                        }
+                        PopulateBluetoothPanel();
+                    });
+                });
                 return;
             }
+
             bool connect = !captured.connected;
             
             // Set state: 1 for Connect, 2 for Disconnect
@@ -5083,6 +6119,8 @@ void PopulateBluetoothPanel() {
             });
         }));
     }
+
+    // (Scan button removed – scanning is now automatic or via header button)
 
     children.Append(MakeDivider());
     children.Append(MakeSettingsLink(L"Bluetooth settings", L"ms-settings:bluetooth"));
@@ -5237,75 +6275,110 @@ wuxm::Imaging::BitmapImage CaptureScreenRect(const RECT& bounds) {
     return Bgra32ToBitmapImage(pixels, width, height);
 }
 
-void PopulateTrayPanel() {
-    if (!g_trayPanel) return;
-
-    g_populatingPanel = true;
-    struct Guard {
-        ~Guard() { g_populatingPanel = false; }
-    } guard;
-
-    auto children = g_trayPanel.Children();
-    children.Clear();
-
-    children.Append(MakePanelTitle(L"System tray"));
-
-    // Show a placeholder while we fetch
-    auto loading = MakeStatusText(L"Loading tray icons…");
-    children.Append(loading);
-
-    // Fetch icons in background
-    RunInBackground([] {
-        auto items = tray::Enumerate();
-        RunOnUiThread([items = std::move(items)]() mutable {
-            if (!g_trayPanel) return;
-            auto children = g_trayPanel.Children();
-            children.Clear();
-            children.Append(MakePanelTitle(L"System tray"));
-
-            if (items.empty()) {
-                children.Append(MakeStatusText(
-                    L"No tray icons were found. The Windows taskbar has to be running "
-                    L"and visible for its notification icons to be readable."));
-                return;
-            }
-
-            for (const auto& item : items) {
-                auto button = MakeListRow(
-                    nullptr, item.name, L"", nullptr,
-                    [item] { tray::InvokeItem(item); });
-                children.Append(button);
-            }
-        });
-    });
-}
 
 struct BatteryInfo {
     int percentage = 0;
     int health = 100;   // percentage of design capacity
     bool charging = false;
     bool powerSaving = false;
+    bool present = true; // true if a battery exists
 };
+
+
+
+// Helper: Query battery health via WMI (Win32_Battery)
+int QueryBatteryHealth() {
+    static int cachedHealth = -1;
+    if (cachedHealth >= 0) return cachedHealth;
+
+    int health = 100;  // default
+    try {
+        winrt::com_ptr<IWbemLocator> locator;
+        if (FAILED(CoCreateInstance(brightness::kCLSID_WbemLocator, nullptr, CLSCTX_INPROC_SERVER,
+                                    brightness::kIID_IWbemLocator, locator.put_void()))) {
+            return health;
+        }
+        BSTR ns = SysAllocString(L"root\\cimv2");
+        winrt::com_ptr<IWbemServices> services;
+        if (SUCCEEDED(locator->ConnectServer(ns, nullptr, nullptr, nullptr, 0, nullptr, nullptr,
+                                             services.put()))) {
+            SysFreeString(ns);
+            CoSetProxyBlanket(services.get(), RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr,
+                              RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE);
+            BSTR query = SysAllocString(L"SELECT FullChargeCapacity, DesignCapacity FROM Win32_Battery");
+            BSTR lang = SysAllocString(L"WQL");
+            winrt::com_ptr<IEnumWbemClassObject> enumerator;
+            if (SUCCEEDED(services->ExecQuery(lang, query, WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+                                              nullptr, enumerator.put()))) {
+                IWbemClassObject* obj = nullptr;
+                ULONG returned = 0;
+                if (SUCCEEDED(enumerator->Next(2000, 1, &obj, &returned)) && returned) {
+                    VARIANT full, design;
+                    VariantInit(&full);
+                    VariantInit(&design);
+                    bool gotFull = false, gotDesign = false;
+                    if (SUCCEEDED(obj->Get(L"FullChargeCapacity", 0, &full, nullptr, nullptr)) &&
+                        SUCCEEDED(obj->Get(L"DesignCapacity", 0, &design, nullptr, nullptr))) {
+                        // Accept different integer types (some systems report unsigned values)
+                        ULONGLONG fullCap = 0, designCap = 0;
+                        switch (full.vt) {
+                            case VT_UI1: fullCap = full.bVal; break;
+                            case VT_UI2: fullCap = full.uiVal; break;
+                            case VT_UI4: fullCap = full.ulVal; break;
+                            case VT_UI8: fullCap = full.ullVal; break;
+                            case VT_I2:  fullCap = (ULONGLONG)full.iVal; break;
+                            case VT_I4:  fullCap = (ULONGLONG)full.lVal; break;
+                            case VT_I8:  fullCap = (ULONGLONG)full.llVal; break;
+                            default: break;
+                        }
+                        switch (design.vt) {
+                            case VT_UI1: designCap = design.bVal; break;
+                            case VT_UI2: designCap = design.uiVal; break;
+                            case VT_UI4: designCap = design.ulVal; break;
+                            case VT_UI8: designCap = design.ullVal; break;
+                            case VT_I2:  designCap = (ULONGLONG)design.iVal; break;
+                            case VT_I4:  designCap = (ULONGLONG)design.lVal; break;
+                            case VT_I8:  designCap = (ULONGLONG)design.llVal; break;
+                            default: break;
+                        }
+                        if (fullCap > 0 && designCap > 0) {
+                            health = (int)((fullCap * 100ULL) / designCap);
+                            if (health > 100) health = 100;
+                            if (health < 0) health = 0;
+                        }
+                    }
+                    VariantClear(&full);
+                    VariantClear(&design);
+                    obj->Release();
+                }
+            }
+            SysFreeString(query);
+            SysFreeString(lang);
+        } else {
+            SysFreeString(ns);
+        }
+    } catch (...) {
+    }
+    cachedHealth = health;
+    return health;
+}
 
 BatteryInfo GetBatteryInfo() {
     BatteryInfo info;
     SYSTEM_POWER_STATUS powerStatus;
     if (GetSystemPowerStatus(&powerStatus)) {
-        // On desktops (no battery) BatteryLifePercent returns 255.
-        // If no battery or unknown, show 100%.
         if (powerStatus.BatteryLifePercent == 255 || (powerStatus.BatteryFlag & 128)) {
+            info.present = false;
             info.percentage = 100;
+            info.charging = false;
         } else {
             info.percentage = powerStatus.BatteryLifePercent;
-        }
-                // On desktops (no battery), show charging icon (always plugged in).
-        if (powerStatus.BatteryFlag & 128) {
-            info.charging = true;
-        } else {
             info.charging = (powerStatus.ACLineStatus == 1);
         }
+    } else {
+        info.present = false;
     }
-    // Power saving mode (via registry or system setting)
+
     info.powerSaving = false;
     HKEY key = nullptr;
     if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Power\\SystemSettings",
@@ -5315,33 +6388,531 @@ BatteryInfo GetBatteryInfo() {
             info.powerSaving = value != 0;
         RegCloseKey(key);
     }
-    // Battery health via WMI
-    try {
-        // Use `Win32_Battery` – get FullChargeCapacity and DesignCapacity
-        // (if they exist). We'll just use a default if query fails.
-        // (Simplified – real WMI query might be added later.)
-        info.health = 100;
-    } catch (...) {
-        info.health = 100;
+
+    if (info.present) {
+        info.health = QueryBatteryHealth();
     }
     return info;
 }
 
-
-
-
-
 void UpdateBatteryButton() {
     if (!g_batteryButton) return;
     BatteryInfo info = GetBatteryInfo();
-    auto batteryIcon = BuildBatteryIcon(16, info.charging);
-    auto batteryStack = wuxc::StackPanel();
-    batteryStack.Orientation(wuxc::Orientation::Horizontal);
-    batteryStack.Spacing(4);
-    if (batteryIcon) batteryStack.Children().Append(batteryIcon);
-    auto percentText = MakeText(nullptr, std::to_wstring(info.percentage) + L"%", 12);
-    batteryStack.Children().Append(percentText);
-    g_batteryButton.Content(batteryStack);
+    static int s_lastPercentage = -1;
+    static bool s_lastCharging = false;
+    static bool s_initialized = false;
+    if (s_initialized && info.percentage == s_lastPercentage &&
+        info.charging == s_lastCharging) {
+        return;
+    }
+    s_lastPercentage = info.percentage;
+    s_lastCharging = info.charging;
+    s_initialized = true;
+    auto batteryIcon = BuildBatteryIcon(20, info.percentage, info.charging);
+    if (batteryIcon) {
+        batteryIcon.VerticalAlignment(VerticalAlignment::Center);
+        g_batteryButton.Content(batteryIcon);
+    }
+}
+
+void ApplyResourceUsageToButton(const resource::Usage& usage) {
+    if (!g_resourceButton) return;
+
+    std::wstring text;
+    bool any = false;
+    if (g_settings.showCpuUsage) {
+        text += L"CPU: ";
+        text += usage.cpuAvailable ? (std::to_wstring(usage.cpu) + L"%") : L"-";
+        any = true;
+    }
+    if (g_settings.showRamUsage) {
+        if (any) text += L" ";
+        text += L"RAM: " + std::to_wstring(usage.ram) + L"%";
+        any = true;
+    }
+    if (g_settings.showGpuUsage) {
+        if (any) text += L" ";
+        text += L"GPU: ";
+        text += usage.gpuAvailable ? (std::to_wstring(usage.gpu) + L"%") : L"-";
+    }
+
+    if (!any) {
+        g_resourceButton.Visibility(Visibility::Collapsed);
+        return;
+    }
+
+    g_resourceButton.Visibility(Visibility::Visible);
+    g_resourceButton.Content(MakeText(nullptr, text, 12));
+}
+
+void UpdateResourceButton() {
+    if (!g_resourceButton) return;
+    RunInBackground([] {
+        resource::Initialize();
+        auto usage = resource::GetUsage();
+        RunOnUiThread([usage] {
+            try {
+                ApplyResourceUsageToButton(usage);
+            } catch (...) {
+            }
+        });
+    });
+}
+
+// Update the graph and stats based on current tab
+void ApplyResourceFlyoutContentUI(const resource::Usage& usage,
+                                  const resource::DetailedInfo& detailed) {
+    try {
+    // Update Info Island - show only the currently selected component and update it
+    if (g_infoCpuLabel && g_infoCpuName && g_infoRamLabel && g_infoRamName && g_infoGpuLabel && g_infoGpuCombo) {
+        if (g_currentTab == 0) {
+            g_infoCpuLabel.Visibility(Visibility::Visible);
+            g_infoCpuName.Visibility(Visibility::Visible);
+            g_infoRamLabel.Visibility(Visibility::Collapsed);
+            g_infoRamName.Visibility(Visibility::Collapsed);
+            g_infoGpuLabel.Visibility(Visibility::Collapsed);
+            g_infoGpuCombo.Visibility(Visibility::Collapsed);
+
+            std::wstring cpuName = resource::GetCpuFullName();
+            // Strip the hardcoded base frequency from the name string
+            size_t atPos = cpuName.find_last_of(L'@');
+            if (atPos != std::wstring::npos) {
+                cpuName = cpuName.substr(0, atPos);
+            }
+            while (!cpuName.empty() && cpuName.back() == L' ') cpuName.pop_back();
+            // Append the current fluctuating speed
+            cpuName += L" @ " + std::to_wstring(detailed.cpuClockMHz) + L" MHz";
+            g_infoCpuName.Text(winrt::hstring(cpuName));
+        } else if (g_currentTab == 1) {
+            g_infoCpuLabel.Visibility(Visibility::Collapsed);
+            g_infoCpuName.Visibility(Visibility::Collapsed);
+            g_infoRamLabel.Visibility(Visibility::Visible);
+            g_infoRamName.Visibility(Visibility::Visible);
+            g_infoGpuLabel.Visibility(Visibility::Collapsed);
+            g_infoGpuCombo.Visibility(Visibility::Collapsed);
+
+            std::wstring current = g_infoRamName.Text().c_str();
+            if (current.empty() || current == L"Loading...") {
+                std::wstring ramText;
+                if (!detailed.ramManufacturer.empty()) {
+                    ramText = detailed.ramManufacturer;
+                }
+                if (!detailed.ramPartNumber.empty()) {
+                    if (!ramText.empty()) ramText += L" ";
+                    ramText += detailed.ramPartNumber;
+                }
+                if (ramText.empty()) {
+                    double ramGB = static_cast<double>(detailed.ramCapacity) / (1024.0 * 1024.0 * 1024.0);
+                    wchar_t ramBuffer[32];
+                    swprintf_s(ramBuffer, L"%.1f GB", ramGB);
+                    ramText = ramBuffer;
+                }
+                if (!ramText.empty()) g_infoRamName.Text(winrt::hstring(ramText));
+            }
+        } else if (g_currentTab == 2) {
+            g_infoCpuLabel.Visibility(Visibility::Collapsed);
+            g_infoCpuName.Visibility(Visibility::Collapsed);
+            g_infoRamLabel.Visibility(Visibility::Collapsed);
+            g_infoRamName.Visibility(Visibility::Collapsed);
+            g_infoGpuLabel.Visibility(Visibility::Visible);
+            g_infoGpuCombo.Visibility(Visibility::Visible);
+
+            if (g_infoGpuCombo.Items().Size() == 0) {
+                if (!g_selectedGpuIndexLoaded) {
+                    g_selectedGpuIndex = Wh_GetIntValue(L"selectedGpuIndex", 0);
+                    g_selectedGpuIndexLoaded = true;
+                }
+                g_gpuNames = resource::GetAllGpuNames();
+                for (const auto& name : g_gpuNames) {
+                    wuxc::ComboBoxItem item;
+                    item.Content(winrt::box_value(winrt::hstring(name)));
+                    g_infoGpuCombo.Items().Append(item);
+                }
+                if (g_gpuNames.size() > 0) {
+                    if (g_selectedGpuIndex < 0 || g_selectedGpuIndex >= (int)g_gpuNames.size()) {
+                        g_selectedGpuIndex = 0;
+                    }
+                    bool prev = g_populatingPanel;
+                    g_populatingPanel = true;
+                    g_infoGpuCombo.SelectedIndex(g_selectedGpuIndex);
+                    g_populatingPanel = prev;
+                }
+            }
+        }
+    }
+
+    // Add to history (max 60 points)
+    const size_t maxSamples = 60;
+    if (g_currentTab == 0) {
+        if (usage.cpuAvailable) g_cpuHistory.push_back(static_cast<float>(usage.cpu));
+        else g_cpuHistory.push_back(0);
+        if (g_cpuHistory.size() > maxSamples) g_cpuHistory.pop_front();
+    } else if (g_currentTab == 1) {
+        g_ramHistory.push_back(static_cast<float>(usage.ram));
+        if (g_ramHistory.size() > maxSamples) g_ramHistory.pop_front();
+    } else if (g_currentTab == 2) {
+        auto& hist = g_gpuHistory[g_selectedGpuIndex];
+        if (usage.gpuAvailable) hist.push_back(static_cast<float>(usage.gpu));
+        else hist.push_back(0);
+        if (hist.size() > maxSamples) hist.pop_front();
+    }
+
+    // Set graph colors based on current tab
+    wui::Color lineColor;
+    wui::Color fillColor;
+    if (g_currentTab == 0) {
+        // CPU: #34C759 line, #288A5D fill
+        lineColor = wui::ColorHelper::FromArgb(255, 0x34, 0xC7, 0x59);
+        fillColor = wui::ColorHelper::FromArgb(80, 0x28, 0x8A, 0x5D);
+    } else if (g_currentTab == 1) {
+        // RAM: #5C9EFA line, darker fill
+        lineColor = wui::ColorHelper::FromArgb(255, 0x5C, 0x9E, 0xFA);
+        fillColor = wui::ColorHelper::FromArgb(80, 0x3E, 0x6F, 0x9E);
+    } else if (g_currentTab == 2) {
+        // GPU: Fluent red #E81123 line, darker red fill
+        lineColor = wui::ColorHelper::FromArgb(255, 0xE8, 0x11, 0x23);
+        fillColor = wui::ColorHelper::FromArgb(80, 0x80, 0x00, 0x00);
+    }
+    g_graphLine.Stroke(MakeBrush(lineColor.A, lineColor.R, lineColor.G, lineColor.B));
+    g_graphFill.Fill(MakeBrush(fillColor.A, fillColor.R, fillColor.G, fillColor.B));
+
+    // Draw graph (line + fill)
+    static std::deque<float> s_emptyGpuHistory;
+    auto& history = (g_currentTab == 0) ? g_cpuHistory
+                   : (g_currentTab == 1) ? g_ramHistory
+                                         : g_gpuHistory[g_selectedGpuIndex];
+    
+    auto linePoints = g_graphLine.Points();
+    auto fillPoints = g_graphFill.Points();
+    linePoints.Clear();
+    fillPoints.Clear();
+
+    if (history.size() >= 2) {
+        double width = g_graphCanvas.ActualWidth();
+        double height = g_graphCanvas.ActualHeight();
+        if (width <= 0 || height <= 0) width = 300, height = 150;
+        double minVal = 0, maxVal = 100;
+        for (float v : history) {
+            if (v < minVal) minVal = v;
+            if (v > maxVal) maxVal = v;
+        }
+        if (maxVal - minVal < 1) maxVal = minVal + 1;
+
+        // Add fill bottom-left point
+        fillPoints.Append(winrt::Windows::Foundation::Point{0, static_cast<float>(height)});
+        
+        size_t count = history.size();
+        for (size_t i = 0; i < count; ++i) {
+            double x = width * i / (count - 1);
+            double y = height - (height * (history[i] - minVal) / (maxVal - minVal));
+            auto point = winrt::Windows::Foundation::Point{static_cast<float>(x), static_cast<float>(y)};
+            linePoints.Append(point);
+            fillPoints.Append(point);
+        }
+        
+        // Add fill bottom-right point
+        fillPoints.Append(winrt::Windows::Foundation::Point{static_cast<float>(width), static_cast<float>(height)});
+    }
+
+    // Update stats grid (2x2)
+    std::wstring label1, value1, label2, value2, label3, value3, label4, value4;
+    if (g_currentTab == 0) {
+        label1 = L"CPU Usage"; value1 = std::to_wstring(usage.cpu) + L"%";
+        label2 = L"Clock Speed"; value2 = std::to_wstring(detailed.cpuClockMHz) + L" MHz";
+        label3 = L"Cores"; value3 = std::to_wstring(detailed.cpuCores);
+        label4 = L"Threads"; value4 = std::to_wstring(detailed.cpuThreads);
+    } else if (g_currentTab == 1) {
+        label1 = L"RAM Usage"; value1 = std::to_wstring(usage.ram) + L"%";
+        label2 = L"RAM Capacity"; 
+        double ramGB = static_cast<double>(detailed.ramCapacity) / (1024.0 * 1024.0 * 1024.0);
+        wchar_t ramBuffer[32];
+        swprintf_s(ramBuffer, L"%.1f GB", ramGB);
+        value2 = ramBuffer;
+        label3 = L"Speed"; value3 = std::to_wstring(detailed.ramSpeedMHz) + L" MHz";
+        label4 = L"Virtual Mem"; value4 = std::to_wstring(detailed.virtualMemoryUsed / (1024*1024)) + L" MB";
+    } else if (g_currentTab == 2) {
+        label1 = L"GPU Usage"; value1 = std::to_wstring(usage.gpu) + L"%";
+        label2 = L"VRAM"; 
+        double vramUsedGB = static_cast<double>(detailed.vramUsed) / (1024.0 * 1024.0 * 1024.0);
+        double vramTotalGB = static_cast<double>(detailed.vramTotal) / (1024.0 * 1024.0 * 1024.0);
+        wchar_t vramBuffer[64];
+        swprintf_s(vramBuffer, L"%.1f / %.1f GB", vramUsedGB, vramTotalGB);
+        value2 = vramBuffer;
+        label3 = L""; value3 = L"";
+        label4 = L""; value4 = L"";
+    }
+
+    // Collapse the bottom row for the GPU tab to remove the empty space
+    if (g_currentTab == 2) {
+        g_statCell2.Visibility(Visibility::Collapsed);
+        g_statCell3.Visibility(Visibility::Collapsed);
+    } else {
+        g_statCell2.Visibility(Visibility::Visible);
+        g_statCell3.Visibility(Visibility::Visible);
+    }
+
+    // Update text blocks
+    if (g_statLabel0) g_statLabel0.Text(winrt::hstring(label1));
+    if (g_statValue0) g_statValue0.Text(winrt::hstring(value1));
+    if (g_statLabel1) g_statLabel1.Text(winrt::hstring(label2));
+    if (g_statValue1) g_statValue1.Text(winrt::hstring(value2));
+    if (g_statLabel2) g_statLabel2.Text(winrt::hstring(label3));
+    if (g_statValue2) g_statValue2.Text(winrt::hstring(value3));
+    if (g_statLabel3) g_statLabel3.Text(winrt::hstring(label4));
+    if (g_statValue3) g_statValue3.Text(winrt::hstring(value4));
+
+    // Highlight active tab - WinUI pill style with graph color tint
+    wui::Color tabBorderColor;
+    wui::Color tabBackgroundColor;
+    if (g_currentTab == 0) {
+        // CPU graph colors: line #34C759, fill #288A5D
+        tabBorderColor = wui::ColorHelper::FromArgb(255, 0x34, 0xC7, 0x59);
+        tabBackgroundColor = wui::ColorHelper::FromArgb(80, 0x28, 0x8A, 0x5D);
+    } else if (g_currentTab == 1) {
+        // RAM graph colors: line #5C9EFA, fill #3E6F9E
+        tabBorderColor = wui::ColorHelper::FromArgb(255, 0x5C, 0x9E, 0xFA);
+        tabBackgroundColor = wui::ColorHelper::FromArgb(80, 0x3E, 0x6F, 0x9E);
+    } else {
+        // GPU graph colors: line #E81123, fill #800000
+        tabBorderColor = wui::ColorHelper::FromArgb(255, 0xE8, 0x11, 0x23);
+        tabBackgroundColor = wui::ColorHelper::FromArgb(80, 0x80, 0x00, 0x00);
+    }
+
+    for (size_t i = 0; i < g_tabButtons.size(); i++) {
+        if (!g_tabButtons[i]) continue;
+        if (static_cast<int>(i) == g_currentTab) {
+            g_tabButtons[i].Background(MakeBrush(tabBackgroundColor.A, tabBackgroundColor.R, tabBackgroundColor.G, tabBackgroundColor.B));
+            g_tabButtons[i].BorderBrush(MakeBrush(tabBorderColor.A, tabBorderColor.R, tabBorderColor.G, tabBorderColor.B));
+            g_tabButtons[i].BorderThickness(Thickness{2, 2, 2, 2});
+        } else {
+            g_tabButtons[i].Background(MakeBrush(0, 0, 0, 0));
+            g_tabButtons[i].BorderBrush(MakeBrush(0, 0, 0, 0));
+            g_tabButtons[i].BorderThickness(Thickness{0, 0, 0, 0});
+        }
+    }
+
+        } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"ApplyResourceFlyoutContentUI failed: %s", ex.message().c_str());
+        } catch (...) {
+        Wh_Log(L"ApplyResourceFlyoutContentUI failed (unknown error)");
+        }
+    }
+
+void UpdateResourceFlyoutContent() {
+    if (!g_graphCanvas || !g_graphLine || !g_graphFill || !g_statsGrid) return;
+    int gpuIndex = g_selectedGpuIndex;
+    RunInBackground([gpuIndex] {
+        resource::Initialize();
+        auto usage = resource::GetUsage();
+        auto detailed = resource::GetDetailedInfo(gpuIndex);
+        RunOnUiThread([usage, detailed] {
+            try {
+                ApplyResourceFlyoutContentUI(usage, detailed);
+            } catch (...) {
+            }
+        });
+    });
+}
+
+// Populate the resource flyout (with tabs, graph, stats)
+void PopulateResourceFlyout() {
+    if (!g_resourcePanel) return;
+    try {
+
+    g_populatingPanel = true;
+    struct Guard {
+        ~Guard() { g_populatingPanel = false; }
+    } guard;
+
+    auto children = g_resourcePanel.Children();
+    children.Clear();
+
+    // Title
+    children.Append(MakePanelTitle(L"Resource Monitor"));
+
+    // Tab buttons
+    wuxc::StackPanel tabPanel;
+    tabPanel.Orientation(wuxc::Orientation::Horizontal);
+    tabPanel.Spacing(4);
+    tabPanel.Margin(Thickness{0, 0, 0, 8});
+
+    auto makeTabButton = [&](PCWSTR name, int tabIndex) -> wuxc::Button {
+        auto btn = MakeGhostButton(name, kRowCorner);
+        auto text = MakeText(nullptr, name, 13);
+        text.HorizontalAlignment(HorizontalAlignment::Center);
+        text.TextAlignment(TextAlignment::Center);
+        btn.Content(text);
+        btn.Padding(Thickness{12, 6, 12, 6});
+        btn.HorizontalAlignment(HorizontalAlignment::Stretch);
+        btn.Width(70);
+        btn.Click([tabIndex](auto&&, auto&&) {
+            g_currentTab = tabIndex;
+            UpdateResourceFlyoutContent();
+        });
+        return btn;
+    };
+
+    auto cpuTab = makeTabButton(L"CPU", 0);
+    auto ramTab = makeTabButton(L"RAM", 1);
+    auto gpuTab = makeTabButton(L"GPU", 2);
+    tabPanel.Children().Append(cpuTab);
+    tabPanel.Children().Append(ramTab);
+    tabPanel.Children().Append(gpuTab);
+    children.Append(tabPanel);
+
+    // Store tab buttons for highlighting
+    g_tabButtons.clear();
+    g_tabButtons.push_back(cpuTab);
+    g_tabButtons.push_back(ramTab);
+    g_tabButtons.push_back(gpuTab);
+
+    // Info Island (component details)
+    wuxc::Border infoIsland;
+    infoIsland.Name(L"InfoIsland");
+    infoIsland.Background(MakeBrush(0x15, 0xFF, 0xFF, 0xFF));
+    infoIsland.CornerRadius(MakeCorner(6));
+    infoIsland.BorderBrush(MakeBrush(0x20, 0xFF, 0xFF, 0xFF));
+    infoIsland.BorderThickness(Thickness{1, 1, 1, 1});
+    infoIsland.Margin(Thickness{0, 0, 0, 8});
+    infoIsland.Padding(Thickness{10, 8, 10, 8});
+    infoIsland.HorizontalAlignment(HorizontalAlignment::Stretch);
+    infoIsland.VerticalAlignment(VerticalAlignment::Top); // Prevent it from stretching to fill the ScrollViewer
+
+    wuxc::StackPanel infoStack;
+    infoStack.Spacing(4);
+    infoStack.VerticalAlignment(VerticalAlignment::Center); // Centers the text inside the Border
+
+    // CPU Name
+    g_infoCpuLabel = MakeText(nullptr, L"CPU", 10, false, 0.6);
+    g_infoCpuName = MakeText(nullptr, L"Loading...", 13, true);
+    infoStack.Children().Append(g_infoCpuLabel);
+    infoStack.Children().Append(g_infoCpuName);
+
+    // RAM Name
+    g_infoRamLabel = MakeText(nullptr, L"Memory", 10, false, 0.6);
+    g_infoRamName = MakeText(nullptr, L"Loading...", 13, true);
+    infoStack.Children().Append(g_infoRamLabel);
+    infoStack.Children().Append(g_infoRamName);
+
+    // GPU Combo
+    g_infoGpuLabel = MakeText(nullptr, L"GPU", 10, false, 0.6);
+    g_infoGpuCombo = wuxc::ComboBox();
+    g_infoGpuCombo.Name(L"GpuSelector");
+    g_infoGpuCombo.HorizontalAlignment(HorizontalAlignment::Stretch);
+    g_infoGpuCombo.Margin(Thickness{0, 0, 0, 0});
+    g_infoGpuCombo.Padding(Thickness{8, 4, 8, 4});
+    g_infoGpuCombo.Background(MakeBrush(0x30, 0xFF, 0xFF, 0xFF));
+    g_infoGpuCombo.Foreground(MakeBrush(0xFF, 0xFF, 0xFF, 0xFF));
+    g_infoGpuCombo.CornerRadius(MakeCorner(4));
+
+    // Drop-down changed handler
+    g_infoGpuCombo.SelectionChanged([](auto&& sender, auto&&) {
+        if (g_populatingPanel) return;
+        auto combo = sender.template as<wuxc::ComboBox>();
+        int index = combo.SelectedIndex();
+        if (index >= 0 && index != g_selectedGpuIndex) {
+            g_selectedGpuIndex = index;
+            Wh_SetIntValue(L"selectedGpuIndex", index);
+            UpdateResourceFlyoutContent();
+        }
+    });
+
+    infoStack.Children().Append(g_infoGpuLabel);
+    infoStack.Children().Append(g_infoGpuCombo);
+
+    infoIsland.Child(infoStack);
+    children.Append(infoIsland);
+
+    // Content area: graph + stats
+    wuxc::Grid contentGrid;
+    contentGrid.RowDefinitions().Append(wuxc::RowDefinition()); // graph row
+    contentGrid.RowDefinitions().Append(wuxc::RowDefinition()); // stats row
+
+    // Graph Canvas (wrapped in Border for rounded corners)
+    wuxc::Canvas graphCanvas;
+    graphCanvas.Height(150);
+    graphCanvas.HorizontalAlignment(HorizontalAlignment::Stretch);
+    wuxc::Border graphBorder;
+    graphBorder.Height(150);
+    graphBorder.Background(MakeBrush(0x10, 0xFF, 0xFF, 0xFF));
+    graphBorder.CornerRadius(MakeCorner(6));
+    graphBorder.HorizontalAlignment(HorizontalAlignment::Stretch);
+    graphBorder.Child(graphCanvas);
+
+    // Graph fill (Polygon – behind the line)
+    winrt::Windows::UI::Xaml::Shapes::Polygon fill;
+    fill.Stretch(wuxm::Stretch::None);
+    fill.Points().Clear();
+    graphCanvas.Children().Append(fill);
+
+    // Graph line (on top of fill)
+    winrt::Windows::UI::Xaml::Shapes::Polyline line;
+    line.Stroke(MakeBrush(0xFF, GetSystemAccentColor().R, GetSystemAccentColor().G, GetSystemAccentColor().B));
+    line.StrokeThickness(2);
+    line.Stretch(wuxm::Stretch::None);
+    graphCanvas.Children().Append(line);
+
+    contentGrid.Children().Append(graphBorder);
+    wuxc::Grid::SetRow(graphBorder, 0);
+
+    // Stats grid (2x2, Task Manager style)
+    wuxc::Grid statsGrid;
+    statsGrid.Margin(Thickness{10, 8, 10, 8});
+    statsGrid.HorizontalAlignment(HorizontalAlignment::Stretch);
+    statsGrid.VerticalAlignment(VerticalAlignment::Stretch);
+    statsGrid.RowSpacing(8);
+    statsGrid.ColumnSpacing(12);
+    
+    for (int i = 0; i < 2; i++) {
+        statsGrid.RowDefinitions().Append(wuxc::RowDefinition());
+        statsGrid.ColumnDefinitions().Append(wuxc::ColumnDefinition());
+    }
+
+    // Helper to create a stat cell (centered)
+    auto makeStatCell = [&](int row, int col, PCWSTR labelText, wuxc::TextBlock& labelOut, wuxc::TextBlock& valueOut, wuxc::StackPanel& cellOut) {
+        wuxc::StackPanel cell;
+        cell.Spacing(2);
+        cell.HorizontalAlignment(HorizontalAlignment::Center);
+        auto label = MakeText(nullptr, labelText, 11, false, 0.6);
+        label.HorizontalAlignment(HorizontalAlignment::Center);
+        label.TextAlignment(TextAlignment::Center);
+        auto value = MakeText(nullptr, L"-", 20, true);
+        value.HorizontalAlignment(HorizontalAlignment::Center);
+        value.TextAlignment(TextAlignment::Center);
+        labelOut = label;
+        valueOut = value;
+        cell.Children().Append(label);
+        cell.Children().Append(value);
+        wuxc::Grid::SetRow(cell, row);
+        wuxc::Grid::SetColumn(cell, col);
+        statsGrid.Children().Append(cell);
+        
+        cellOut = cell; // Store the cell container
+    };
+
+    makeStatCell(0, 0, L"CPU Usage", g_statLabel0, g_statValue0, g_statCell0);
+    makeStatCell(0, 1, L"Clock Speed", g_statLabel1, g_statValue1, g_statCell1);
+    makeStatCell(1, 0, L"Cores", g_statLabel2, g_statValue2, g_statCell2);
+    makeStatCell(1, 1, L"Threads", g_statLabel3, g_statValue3, g_statCell3);
+
+    contentGrid.Children().Append(statsGrid);
+    wuxc::Grid::SetRow(statsGrid, 1);
+
+    children.Append(contentGrid);
+
+    // Store references for updates
+    g_graphCanvas = graphCanvas;
+    g_graphLine = line;
+    g_graphFill = fill;
+    g_statsGrid = statsGrid;
+
+    // Update content immediately
+    UpdateResourceFlyoutContent();
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"PopulateResourceFlyout failed: %s", ex.message().c_str());
+    } catch (...) {
+        Wh_Log(L"PopulateResourceFlyout failed (unknown error)");
+    }
 }
 
 void PopulateBatteryPanel() {
@@ -5652,25 +7223,26 @@ void RegisterNamed(PCWSTR name, FrameworkElement const& element) {
 // Gets the current desktop wallpaper and returns an ImageBrush from it.
 // Returns an empty brush if wallpaper is missing or fails to load.
 wuxm::ImageBrush GetWallpaperBrush() {
-    
     wuxm::ImageBrush brush;
 
     wchar_t wallpaperPath[MAX_PATH] = {0};
     if (SystemParametersInfo(SPI_GETDESKWALLPAPER, MAX_PATH, wallpaperPath, 0) && wallpaperPath[0]) {
-        // Convert Windows path to a file URI: replace '\' with '/'
         std::wstring uriPath = wallpaperPath;
         std::replace(uriPath.begin(), uriPath.end(), L'\\', L'/');
-        uriPath = L"file:///" + uriPath;
+        // Cache-busting query so WinRT re-decodes when the file content changes
+        // at the same path (e.g. TranscodedWallpaper).
+        wchar_t suffix[32];
+        swprintf_s(suffix, L"?v=%llu", static_cast<unsigned long long>(GetTickCount64()));
+        uriPath = L"file:///" + uriPath + suffix;
 
         try {
             wuxm::Imaging::BitmapImage bitmap;
             bitmap.UriSource(wf::Uri(winrt::hstring(uriPath)));
             brush.ImageSource(bitmap);
             brush.Stretch(wuxm::Stretch::UniformToFill);
-            brush.AlignmentX(wuxm::AlignmentX::Left);   // Show the left side (optional)
-            brush.AlignmentY(wuxm::AlignmentY::Top);    // Show the top portion
+            brush.AlignmentX(wuxm::AlignmentX::Left);
+            brush.AlignmentY(wuxm::AlignmentY::Top);
         } catch (...) {
-            // Failed to parse or load, leave brush empty
         }
     }
     return brush;
@@ -5681,13 +7253,24 @@ void UpdateWallpaperIfChanged() {
     if (!g_wallpaperLayer) return;
 
     wchar_t wallpaperPath[MAX_PATH] = {0};
-    if (SystemParametersInfo(SPI_GETDESKWALLPAPER, MAX_PATH, wallpaperPath, 0) && wallpaperPath[0]) {
-        std::wstring currentPath = wallpaperPath;
-        if (currentPath != g_lastWallpaperPath) {
-            g_lastWallpaperPath = currentPath;
-            g_wallpaperLayer.Background(GetWallpaperBrush());
-            Wh_Log(L"TopBar: Wallpaper updated: %s", currentPath.c_str());
-        }
+    if (!SystemParametersInfo(SPI_GETDESKWALLPAPER, MAX_PATH, wallpaperPath, 0) || !wallpaperPath[0]) {
+        return;
+    }
+    std::wstring currentPath = wallpaperPath;
+    unsigned long long stamp = 0;
+    WIN32_FILE_ATTRIBUTE_DATA fad{};
+    if (GetFileAttributesExW(currentPath.c_str(), GetFileExInfoStandard, &fad)) {
+        stamp = (static_cast<unsigned long long>(fad.ftLastWriteTime.dwHighDateTime) << 32) |
+                fad.ftLastWriteTime.dwLowDateTime;
+    }
+    static std::wstring s_lastPath;
+    static unsigned long long s_lastStamp = 0;
+    if (currentPath != s_lastPath || stamp != s_lastStamp) {
+        s_lastPath = currentPath;
+        s_lastStamp = stamp;
+        g_lastWallpaperPath = currentPath;
+        g_wallpaperLayer.Background(GetWallpaperBrush());
+        Wh_Log(L"TopBar: Wallpaper updated: %s", currentPath.c_str());
     }
 }
 // Wheel over the Display and Sound buttons adjusts brightness and volume in
@@ -5728,7 +7311,7 @@ void AttachWheelHandler(wuxc::Button const& button, bool isVolume) {
 
                 if (isVolume) {
                     int newVolume = std::clamp(audio::GetMasterVolume() + step * direction, 0, 100);
-                    RunInBackground([newVolume] { audio::SetMasterVolume(newVolume); });
+                    SetMasterVolumeCoalesced(newVolume);
                     ShowVolumePercent(newVolume);
 
                     if (!g_volumeRevertTimer) {
@@ -5742,14 +7325,8 @@ void AttachWheelHandler(wuxc::Button const& button, bool isVolume) {
                     g_volumeRevertTimer.Stop();
                     g_volumeRevertTimer.Start();
                 } else {
-                    static bool brightnessPending = false;
-                    if (brightnessPending) return;
-                    brightnessPending = true;
                     int newBrightness = std::clamp(brightness::GetFast() + step * direction, 0, 100);
-                    RunInBackground([newBrightness] {
-                        brightness::Set(newBrightness);
-                        brightnessPending = false;
-                    });
+                    SetBrightnessCoalesced(newBrightness);
                     ShowBrightnessPercent(newBrightness);
 
                     if (!g_brightnessRevertTimer) {
@@ -5800,6 +7377,116 @@ wuxc::Button MakeControlButton(PCWSTR name,
     RegisterNamed(name, button);
     return button;
 }
+std::wstring ReadTrayOrder() {
+    std::vector<wchar_t> buffer(1024);
+    size_t length = Wh_GetStringValue(L"trayOrder", buffer.data(), buffer.size());
+    return std::wstring(buffer.data(), length);
+}
+
+void WriteTrayOrder(const std::wstring& value) {
+    Wh_SetStringValue(L"trayOrder", value.c_str());
+}
+
+void ApplyTrayOrderToPanel() {
+    if (!g_trayPanel) {
+        return;
+    }
+    std::map<std::wstring, UIElement> byName;
+    for (auto&& child : g_trayPanel.Children()) {
+        if (auto fe = child.try_as<FrameworkElement>()) {
+            std::wstring childName(fe.Name());
+            if (!childName.empty()) {
+                byName.insert_or_assign(childName, child);
+            }
+        }
+    }
+    g_trayPanel.Children().Clear();
+    for (const auto& childName : g_trayOrder) {
+        auto found = byName.find(childName);
+        if (found != byName.end()) {
+            g_trayPanel.Children().Append(found->second);
+            byName.erase(found);
+        }
+    }
+    for (auto& leftover : byName) {
+        g_trayPanel.Children().Append(leftover.second);
+    }
+}
+
+void MoveTrayItem(const std::wstring& name, int direction) {
+    auto it = std::find(g_trayOrder.begin(), g_trayOrder.end(), name);
+    if (it == g_trayOrder.end()) {
+        return;
+    }
+    int index = static_cast<int>(it - g_trayOrder.begin());
+    int target = index + direction;
+    if (target < 0 || target >= static_cast<int>(g_trayOrder.size())) {
+        return;
+    }
+
+    std::swap(g_trayOrder[index], g_trayOrder[target]);
+
+    std::wstring serialized;
+    for (size_t i = 0; i < g_trayOrder.size(); i++) {
+        if (i > 0) {
+            serialized += L",";
+        }
+        serialized += g_trayOrder[i];
+    }
+    WriteTrayOrder(serialized);
+    g_settings.trayOrder = serialized;
+
+    ApplyTrayOrderToPanel();
+}
+
+void MoveTrayItemTo(const std::wstring& draggedName, const std::wstring& targetName) {
+    if (draggedName.empty() || draggedName == targetName) {
+        return;
+    }
+    auto fromIt = std::find(g_trayOrder.begin(), g_trayOrder.end(), draggedName);
+    auto toIt = std::find(g_trayOrder.begin(), g_trayOrder.end(), targetName);
+    if (fromIt == g_trayOrder.end() || toIt == g_trayOrder.end()) {
+        return;
+    }
+
+    int fromIdx = static_cast<int>(fromIt - g_trayOrder.begin());
+    int toIdx = static_cast<int>(toIt - g_trayOrder.begin());
+    std::wstring item = g_trayOrder[fromIdx];
+    g_trayOrder.erase(g_trayOrder.begin() + fromIdx);
+    if (fromIdx < toIdx) {
+        toIdx--;
+    }
+    g_trayOrder.insert(g_trayOrder.begin() + toIdx, item);
+
+    std::wstring serialized;
+    for (size_t i = 0; i < g_trayOrder.size(); i++) {
+        if (i > 0) {
+            serialized += L",";
+        }
+        serialized += g_trayOrder[i];
+    }
+    WriteTrayOrder(serialized);
+    g_settings.trayOrder = serialized;
+
+    ApplyTrayOrderToPanel();
+}
+
+void AttachTrayReorderMenu(wuxc::Button const& button, std::wstring name) {
+    button.RightTapped([name](wf::IInspectable const& sender,
+                              Input::RightTappedRoutedEventArgs const& args) {
+        try {
+            args.Handled(true);
+            wuxc::MenuFlyout menu;
+            StyleMenuFlyout(menu);
+            auto items = menu.Items();
+            items.Append(MakeMenuItem(L"Move left", [name]() { MoveTrayItem(name, -1); }));
+            items.Append(MakeMenuItem(L"Move right", [name]() { MoveTrayItem(name, 1); }));
+            menu.ShowAt(sender.as<FrameworkElement>());
+        } catch (...) {
+        }
+    });
+}
+
 void EnsureAutoRefreshTimers() {
     if (!g_wifiAutoRefreshTimer) {
         g_wifiAutoRefreshTimer = DispatcherTimer();
@@ -5820,7 +7507,7 @@ void EnsureAutoRefreshTimers() {
     }
     if (!g_bluetoothAutoRefreshTimer) {
         g_bluetoothAutoRefreshTimer = DispatcherTimer();
-        g_bluetoothAutoRefreshTimer.Interval(std::chrono::seconds(60));
+        g_bluetoothAutoRefreshTimer.Interval(std::chrono::seconds(15)); // more frequent
         g_bluetoothAutoRefreshTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
             if (!g_bluetoothFlyout || !g_bluetoothFlyout.IsOpen()) {
                 g_bluetoothAutoRefreshTimer.Stop();
@@ -5959,6 +7646,9 @@ FrameworkElement BuildTopBarContent() {
     wuxc::Grid::SetColumn(taskPanel, 1);
     root.Children().Append(taskPanel);
     g_taskListPanel = taskPanel;
+g_taskListPanel.SizeChanged([](auto&&, auto&&) {
+    AdjustTaskButtonWidths();
+});
     RegisterNamed(L"TaskListPanel", taskPanel);
 
     // ---- Right cluster: control centre + clock -----------------------------
@@ -5971,7 +7661,7 @@ FrameworkElement BuildTopBarContent() {
     g_soundFlyout = MakeControlFlyout(L"SoundFlyoutRoot", g_soundPanel);
     g_wifiFlyout = MakeControlFlyout(L"WifiFlyoutRoot", g_wifiPanel);
     g_bluetoothFlyout = MakeControlFlyout(L"BluetoothFlyoutRoot", g_bluetoothPanel);
-    g_trayFlyout = MakeControlFlyout(L"TrayFlyoutRoot", g_trayPanel);
+    
     g_batteryFlyout = MakeControlFlyout(L"BatteryFlyoutRoot", g_batteryPanel);
 
     g_wifiFlyout.Closed([](auto&&, auto&&) {
@@ -6012,7 +7702,7 @@ FrameworkElement BuildTopBarContent() {
                     if (available) {
                         auto icon = BuildVectorIcon(nullptr, L"", icons::kBrightnessStroke, 24, 18, 1.6);
                         children.Append(MakeSliderRow(icon, brightnessValue,
-                            [](int value) { RunInBackground([value] { brightness::Set(value); }); }));
+                            [](int value) { SetBrightnessCoalesced(value); }));
                     } else {
                         children.Append(MakeStatusText(L"Brightness control isn't available on this display."));
                     }
@@ -6094,58 +7784,102 @@ RunOnUiThread([status, networks = std::move(networks)]() mutable {
     {
         auto icon = BuildVectorIcon(nullptr, L"", icons::kBluetoothStroke, 24, 18, 1.8);
 
-g_bluetoothButton = MakeControlButton(L"BluetoothButton", icon, g_bluetoothFlyout, [] {
-    // Show loading
-    if (g_bluetoothPanel) {
-        g_populatingPanel = true;
-        auto children = g_bluetoothPanel.Children();
-        children.Clear();
-        children.Append(MakePanelTitle(L"Bluetooth"));
-        children.Append(MakeStatusText(L"Loading…"));
-        g_populatingPanel = false;
-    }
-    RefreshBluetoothRadioState(); // update radio state in background
-    RunInBackground([] {
-        auto devices = bluetooth::Enumerate(false);
-        RunOnUiThread([devices = std::move(devices)]() mutable {
-            g_bluetoothDevices = std::move(devices);
-            PopulateBluetoothPanel();
-            EnsureAutoRefreshTimers();
-            if (g_bluetoothAutoRefreshTimer) g_bluetoothAutoRefreshTimer.Start();
+    g_bluetoothButton = MakeControlButton(L"BluetoothButton", icon, g_bluetoothFlyout, [] {
+        // Show loading
+        if (g_bluetoothPanel) {
+            g_populatingPanel = true;
+            auto children = g_bluetoothPanel.Children();
+            children.Clear();
+            children.Append(MakePanelTitle(L"Bluetooth"));
+            children.Append(MakeStatusText(L"Loading…"));
+            g_populatingPanel = false;
+        }
+        RefreshBluetoothRadioState(); // update radio state in background
+        // First load paired devices (fast, no scan)
+        RunInBackground([] {
+            auto devices = bluetooth::Enumerate(false); // no inquiry, instant
+            RunOnUiThread([devices = std::move(devices)]() mutable {
+                g_bluetoothDevices = std::move(devices);
+                PopulateBluetoothPanel();
+                // Do a single scan for new devices (no auto-refresh loop)
+                StartBluetoothScan(true);
+            });
         });
     });
-});
 
         rightPanel.Children().Append(g_bluetoothButton);
     }
 
-    // Battery button (with percentage text and charging icon)
+    // Battery button. The percentage is drawn inside the icon, so no separate
+    // text label is added next to it.
     {
         BatteryInfo info = GetBatteryInfo();
-        auto batteryIcon = BuildBatteryIcon(16, info.charging);
-        auto batteryStack = wuxc::StackPanel();
-        batteryStack.Orientation(wuxc::Orientation::Horizontal);
-        batteryStack.Spacing(4);
-        batteryStack.VerticalAlignment(VerticalAlignment::Center);
-        batteryStack.HorizontalAlignment(HorizontalAlignment::Center);
+        auto batteryIcon = BuildBatteryIcon(20, info.percentage, info.charging);
         if (batteryIcon) {
             batteryIcon.VerticalAlignment(VerticalAlignment::Center);
-            batteryStack.Children().Append(batteryIcon);
         }
-        auto percentText = MakeText(nullptr, std::to_wstring(info.percentage) + L"%", 12);
-        percentText.VerticalAlignment(VerticalAlignment::Center);
-        batteryStack.Children().Append(percentText);
-
-        g_batteryButton = MakeControlButton(L"BatteryButton", batteryStack, g_batteryFlyout,
+        g_batteryButton = MakeControlButton(L"BatteryButton", batteryIcon, g_batteryFlyout,
                                             [] { PopulateBatteryPanel(); });
         rightPanel.Children().Append(g_batteryButton);
     }
 
-     g_trayButton = MakeControlButton(L"TrayButton",
-                                 BuildVectorIcon(nullptr, L"", icons::kChevronUp, 24, 16,
-                                                 2.0),
-                                 g_trayFlyout, [] { PopulateTrayPanel(); });
-    rightPanel.Children().Append(g_trayButton);
+    // Resource usage button (CPU/RAM/GPU)
+    {
+        auto resourceButton = MakeGhostButton(L"ResourceButton", g_settings.cornerRadius);
+        resourceButton.VerticalAlignment(VerticalAlignment::Stretch);
+        resourceButton.Margin(Thickness{5, 4, 5, 4});
+        resourceButton.Padding(Thickness{7, 0, 7, 0});
+        resourceButton.HorizontalContentAlignment(HorizontalAlignment::Center);
+        {
+            int metrics = (g_settings.showCpuUsage ? 1 : 0) +
+                          (g_settings.showRamUsage ? 1 : 0) +
+                          (g_settings.showGpuUsage ? 1 : 0);
+            if (metrics < 1) metrics = 1;
+            resourceButton.Width(metrics * 64.0 + 10.0);
+        }
+        // Placeholder text; will be updated periodically
+        resourceButton.Content(MakeText(nullptr, L"CPU: 0% RAM: 0% GPU: 0%", 12));
+
+        // Create the flyout with toggles
+        g_resourceFlyout = MakeControlFlyout(L"ResourceFlyoutRoot", g_resourcePanel);
+
+g_resourceFlyout.Opening([](auto&&, auto&&) {
+    try {
+        PopulateResourceFlyout();
+        ApplyAllControlStyles();
+        if (!g_resourceFlyoutTimer) {
+            g_resourceFlyoutTimer = DispatcherTimer();
+            g_resourceFlyoutTimer.Interval(std::chrono::seconds(1));
+            g_resourceFlyoutTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+                try {
+                    UpdateResourceFlyoutContent();
+                } catch (...) {}
+            });
+        }
+        g_resourceFlyoutTimer.Start();
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Resource flyout opening failed: %s", ex.message().c_str());
+    } catch (...) {
+        Wh_Log(L"Resource flyout opening failed (unknown error)");
+    }
+});
+
+        g_resourceFlyout.Closed([](auto&&, auto&&) {
+            if (g_resourceFlyoutTimer) g_resourceFlyoutTimer.Stop();
+        });
+resourceButton.Flyout(g_resourceFlyout);
+resourceButton.Click([](auto&&, auto&&) {
+    if (g_resourceFlyout && !g_resourceFlyout.IsOpen()) {
+        g_resourceFlyout.ShowAt(g_resourceButton);
+    }
+});
+
+g_resourceButton = resourceButton;
+RegisterNamed(L"ResourceButton", resourceButton);
+rightPanel.Children().Append(resourceButton);
+    }
+
+
 
     {
         auto clockButton = MakeGhostButton(L"ClockButton", g_settings.cornerRadius);
@@ -6165,6 +7899,20 @@ g_bluetoothButton = MakeControlButton(L"BluetoothButton", icon, g_bluetoothFlyou
         RegisterNamed(L"ClockText", clockText);
         RegisterNamed(L"ClockButton", clockButton);
         rightPanel.Children().Append(clockButton);
+    }
+
+    g_trayPanel = rightPanel;
+    ApplyTrayOrderToPanel();
+
+    for (auto&& child : rightPanel.Children()) {
+        if (auto button = child.try_as<wuxc::Button>()) {
+            std::wstring childName(button.Name());
+            if (!childName.empty() &&
+                std::find(kDefaultTrayOrder.begin(), kDefaultTrayOrder.end(), childName) !=
+                    kDefaultTrayOrder.end()) {
+                AttachTrayReorderMenu(button, childName);
+            }
+        }
     }
 
     wuxc::Grid::SetColumn(rightPanel, 2);
@@ -6285,21 +8033,32 @@ void UnregisterAppBar(HWND hwnd) {
 }
 
 // ============================================================================
-// Background transparency
-//
-// Three separate things can put an opaque plate behind the XAML content, and
-// the "legacy black background" is whichever of them is still in effect:
-//
-//   1. the window class background brush, painted by DefWindowProc;
-//   2. the DWM redirection surface, which starts out black and shows through
-//      wherever the XAML content isn't fully opaque;
-//   3. XAML's own island root elements, which the island creates above our
-//      content and which carry a theme background of their own.
-//
-// All three are addressed below. The accent policy is what actually makes the
-// window composite against the desktop rather than against black, and it is
-// applied only when the configured bar background is itself translucent.
+// Background Blur and rounded corners
 // ============================================================================
+
+// DWM window corner preference (Windows 11 build 22000+)
+#ifndef DWMWA_WINDOW_CORNER_PREFERENCE
+#define DWMWA_WINDOW_CORNER_PREFERENCE 33
+#endif
+
+void ApplyRoundedCornersToWindow(HWND hwnd) {
+    DWM_WINDOW_CORNER_PREFERENCE preference = DWMWCP_ROUND;
+    HRESULT hr = DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE,
+                                       &preference, sizeof(preference));
+    if (FAILED(hr)) {
+        // Fallback for Windows 10: use a rounded window region.
+        // This clips the whole window, but we only do this if the native API
+        // is unavailable (older OS). The radius matches the flyout corner.
+        RECT rect;
+        GetWindowRect(hwnd, &rect);
+        int width = rect.right - rect.left;
+        int height = rect.bottom - rect.top;
+        HRGN rgn = CreateRoundRectRgn(0, 0, width + 1, height + 1, 16, 16);
+        if (rgn) {
+            SetWindowRgn(hwnd, rgn, TRUE);
+        }
+    }
+}
 
 enum ACCENT_STATE {
     ACCENT_DISABLED = 0,
@@ -6369,6 +8128,8 @@ void ApplyWindowBackdrop(HWND hwnd) {
     ApplyBlurToWindow(hwnd);
 }
 
+
+
 void ApplyBlurToAllOpenPopups() {
     EnumWindows([](HWND hwnd, LPARAM) -> BOOL {
         DWORD pid = 0;
@@ -6381,6 +8142,7 @@ void ApplyBlurToAllOpenPopups() {
                 wcsstr(className, L"Menu") || wcsstr(className, L"Flyout") ||
                 wcsstr(className, L"ToolWindow") || wcsstr(className, L"Window")) {
                 ApplyBlurToWindow(hwnd);
+                ApplyRoundedCornersToWindow(hwnd);  // new function
             }
         }
         return TRUE;
@@ -6454,7 +8216,18 @@ void CALLBACK WindowEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObje
     if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF) return;
     if (event == EVENT_OBJECT_CREATE || event == EVENT_OBJECT_DESTROY ||
         event == EVENT_OBJECT_NAMECHANGE || event == EVENT_OBJECT_SHOW || event == EVENT_OBJECT_HIDE) {
-        RunOnUiThread([] { RefreshTaskList(false); });
+        RunOnUiThread([] {
+            if (!g_taskRefreshTimer) {
+                g_taskRefreshTimer = DispatcherTimer();
+                g_taskRefreshTimer.Interval(std::chrono::milliseconds(200));
+                g_taskRefreshTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+                    g_taskRefreshTimer.Stop();
+                    RefreshTaskList(false);
+                });
+            }
+            g_taskRefreshTimer.Stop();
+            g_taskRefreshTimer.Start();
+        });
     }
 }
 
@@ -6486,13 +8259,60 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
         case WM_APPBAR_CALLBACK:
             switch (wParam) {
                 case ABN_POSCHANGED:
-                case ABN_FULLSCREENAPP:
                     PositionAppBar(hwnd, g_barHeightPx);
+                    break;
+                case ABN_FULLSCREENAPP:
+                    {
+                        // lParam carries TRUE when a full-screen app is opening
+                        // and FALSE when it is closing. Win+D (Show Desktop)
+                        // makes the shell incorrectly report TRUE even though
+                        // it's really the desktop being shown. Verify the
+                        // foreground window is actually a fullscreen app
+                        // covering the whole monitor.
+                        bool isFullscreen = (lParam != 0);
+                        if (isFullscreen) {
+                            HWND fg = GetForegroundWindow();
+                            bool verified = false;
+                            if (fg) {
+                                wchar_t cls[256] = {0};
+                                GetClassName(fg, cls, ARRAYSIZE(cls));
+                                if (wcscmp(cls, L"Progman") != 0 &&
+                                    wcscmp(cls, L"WorkerW") != 0) {
+                                    RECT fgRect{};
+                                    HMONITOR mon = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
+                                    MONITORINFO mi{};
+                                    mi.cbSize = sizeof(mi);
+                                    if (GetWindowRect(fg, &fgRect) &&
+                                        GetMonitorInfo(mon, &mi)) {
+                                        if (fgRect.left <= mi.rcMonitor.left &&
+                                            fgRect.top <= mi.rcMonitor.top &&
+                                            fgRect.right >= mi.rcMonitor.right &&
+                                            fgRect.bottom >= mi.rcMonitor.bottom) {
+                                            verified = true;
+                                        }
+                                    }
+                                }
+                            }
+                            isFullscreen = verified;
+                        }
+                        g_fullScreenAppActive = isFullscreen;
+                        SetWindowPos(hwnd,
+                                     isFullscreen ? HWND_NOTOPMOST : HWND_TOPMOST,
+                                     0, 0, 0, 0,
+                                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                    }
                     break;
             }
             return 0;
 
         case WM_SIZE:
+            // If we get minimized, restore immediately (unless shutting down).
+            // Never allow the shell to minimize the bar via Win+D.
+            if (wParam == SIZE_MINIMIZED && !g_allowHide) {
+                ShowWindow(hwnd, SW_RESTORE);
+                ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+                return 0;
+            }
             if (g_islandHwnd) {
                 SetWindowPos(g_islandHwnd, nullptr, 0, 0, LOWORD(lParam), HIWORD(lParam),
                              SWP_NOZORDER | SWP_SHOWWINDOW);
@@ -6538,9 +8358,13 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                 case HOTKEY_ID_BLUETOOTH:
                     ToggleFlyout(g_bluetoothFlyout, g_bluetoothButton);
                     break;
-                case HOTKEY_ID_TRAY:
-                    ToggleFlyout(g_trayFlyout, g_trayButton);
+                case HOTKEY_ID_RESOURCE:
+                    ToggleFlyout(g_resourceFlyout, g_resourceButton);
                     break;
+                case HOTKEY_ID_BATTERY:
+                    ToggleFlyout(g_batteryFlyout, g_batteryButton);
+                    break;
+
                 case HOTKEY_ID_START_MENU:
                     if (g_startContextMenu) {
                         auto it = g_namedElements.find(L"StartButton");
@@ -6568,14 +8392,45 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             }
             break;
 
+        case WM_SYSCOMMAND:
+            if ((wParam & 0xFFF0) == SC_MINIMIZE) {
+                return 0;   // block minimization
+            }
+            break;
+
+
+
+        case WM_SHOWWINDOW:
+            if (wParam == FALSE && !g_allowHide && !g_fullScreenAppActive) {
+                ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+                DwmSetWindowAttribute(hwnd, DWMWA_CLOAK, FALSE, sizeof(BOOL));
+                // Immediately reapply topmost
+                SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                return 0;
+            }
+            break;
+
         case WM_DESTROY:
             UnregisterHotKey(hwnd, HOTKEY_ID_DISPLAY);
             UnregisterHotKey(hwnd, HOTKEY_ID_SOUND);
             UnregisterHotKey(hwnd, HOTKEY_ID_WIFI);
             UnregisterHotKey(hwnd, HOTKEY_ID_BLUETOOTH);
-            UnregisterHotKey(hwnd, HOTKEY_ID_TRAY);
+            UnregisterHotKey(hwnd, HOTKEY_ID_RESOURCE);
+            UnregisterHotKey(hwnd, HOTKEY_ID_BATTERY);
             UnregisterAppBar(hwnd);
             PostQuitMessage(0);
+            return 0;
+
+        case WM_WINDOWPOSCHANGING:
+            {
+                WINDOWPOS* wp = reinterpret_cast<WINDOWPOS*>(lParam);
+                // Block hide whenever not shutting down. Fullscreen apps should
+                // cover the bar via z-order, never hide it.
+                if ((wp->flags & SWP_HIDEWINDOW) && !g_allowHide) {
+                    wp->flags &= ~SWP_HIDEWINDOW; // cancel the hide
+                }
+            }
             return 0;
     }
 
@@ -6594,9 +8449,12 @@ void ForegroundEventProcInstall() {
     }
 
     // Additional hook for window creation/destruction/rename to refresh task list
-    g_windowEventHook = SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_NAMECHANGE,
+    g_windowEventHook = SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_HIDE,
                                         nullptr, WindowEventProc, 0, 0,
                                         WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    g_windowEventNameHook = SetWinEventHook(EVENT_OBJECT_NAMECHANGE, EVENT_OBJECT_NAMECHANGE,
+                                            nullptr, WindowEventProc, 0, 0,
+                                            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
 }
 
 DWORD WINAPI TopBarThreadProc(LPVOID) {
@@ -6709,12 +8567,17 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
 
         ApplyAllControlStyles();
         ApplyVisibilitySettings();
+        UpdateResourceButton();
 
         // Once the content is live, clear whatever opaque roots the island put
         // above it.
         StripInheritedIslandBackgrounds();
 
         ShowWindow(g_topBarHwnd, SW_SHOWNOACTIVATE);
+        // Set topmost so the bar stays above the desktop when Win+D is pressed.
+        // When a fullscreen app starts, ABN_FULLSCREENAPP will remove topmost.
+        SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         UpdateWindow(g_topBarHwnd);
         // Re-apply backdrop after window becomes visible (fixes blur on top bar)
         ApplyWindowBackdrop(g_topBarHwnd);
@@ -6726,7 +8589,8 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
             RegisterHotKey(g_topBarHwnd, HOTKEY_ID_SOUND, MOD_CONTROL | MOD_ALT, '2');
             RegisterHotKey(g_topBarHwnd, HOTKEY_ID_WIFI, MOD_CONTROL | MOD_ALT, '3');
             RegisterHotKey(g_topBarHwnd, HOTKEY_ID_BLUETOOTH, MOD_CONTROL | MOD_ALT, '4');
-            RegisterHotKey(g_topBarHwnd, HOTKEY_ID_TRAY, MOD_CONTROL | MOD_ALT, '5');
+            RegisterHotKey(g_topBarHwnd, HOTKEY_ID_RESOURCE, MOD_CONTROL | MOD_ALT, '0');
+            RegisterHotKey(g_topBarHwnd, HOTKEY_ID_BATTERY, MOD_CONTROL | MOD_ALT, '5');
             RegisterHotKey(g_topBarHwnd, HOTKEY_ID_START_MENU, MOD_CONTROL | MOD_ALT, '6');
             RegisterHotKey(g_topBarHwnd, HOTKEY_ID_TASK_MENU, MOD_CONTROL | MOD_ALT, '7');
         }
@@ -6743,6 +8607,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
             try {
                 UpdateClockText();
                 UpdateBatteryButton();
+                UpdateWallpaperIfChanged();
             } catch (...) {
             }
         });
@@ -6757,6 +8622,115 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
             }
         });
         g_taskListTimer.Start();
+
+        // Resource usage timer (updates every 1 second)
+        g_resourceTimer = DispatcherTimer();
+        g_resourceTimer.Interval(std::chrono::seconds(1));
+        g_resourceTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+            try {
+                UpdateResourceButton();
+            } catch (...) {
+            }
+        });
+        g_resourceTimer.Start();
+
+        // Timer to restore the top bar if it gets minimized/hidden/cloaked by Show Desktop
+        g_restoreTimer = DispatcherTimer();
+        g_restoreTimer.Interval(std::chrono::milliseconds(1000));
+
+        g_restoreTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+            try {
+                if (!g_topBarHwnd || g_allowHide) {
+                    return;
+                }
+
+                // Always ensure visible.
+                if (IsIconic(g_topBarHwnd)) {
+                    ShowWindow(g_topBarHwnd, SW_RESTORE);
+                }
+                BOOL cloaked = FALSE;
+                if (SUCCEEDED(DwmGetWindowAttribute(g_topBarHwnd, DWMWA_CLOAKED,
+                                                    &cloaked, sizeof(cloaked))) &&
+                    cloaked) {
+                    DwmSetWindowAttribute(g_topBarHwnd, DWMWA_CLOAK, FALSE, sizeof(BOOL));
+                }
+                if (!IsWindowVisible(g_topBarHwnd)) {
+                    ShowWindow(g_topBarHwnd, SW_SHOWNOACTIVATE);
+                }
+
+                // Classify the current foreground window.
+                HWND fg = GetForegroundWindow();
+                bool desktopFg = false;
+                bool fullscreenFg = false;
+                if (fg && fg != g_topBarHwnd) {
+                    wchar_t cls[256] = {0};
+                    GetClassName(fg, cls, ARRAYSIZE(cls));
+                    desktopFg = (wcscmp(cls, L"Progman") == 0 ||
+                                 wcscmp(cls, L"WorkerW") == 0);
+                    if (!desktopFg) {
+                        RECT r{};
+                        HMONITOR mon = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
+                        MONITORINFO mi{};
+                        mi.cbSize = sizeof(mi);
+                        if (GetWindowRect(fg, &r) && GetMonitorInfo(mon, &mi)) {
+                            if (r.left   <= mi.rcMonitor.left &&
+                                r.top    <= mi.rcMonitor.top &&
+                                r.right  >= mi.rcMonitor.right &&
+                                r.bottom >= mi.rcMonitor.bottom) {
+                                fullscreenFg = true;
+                            }
+                        }
+                    }
+                }
+
+                // Only touch z-order when the classification actually changed:
+                // calling SetWindowPos once a second while a full-screen game
+                // is foreground can kick it out of exclusive full-screen.
+                static HWND s_lastRestoreFg = nullptr;
+                static int s_lastRestoreClass = -1; // 0 normal, 1 desktop, 2 fullscreen
+                int currentClass = fullscreenFg ? 2 : (desktopFg ? 1 : 0);
+                bool classChanged =
+                    (fg != s_lastRestoreFg || currentClass != s_lastRestoreClass);
+                s_lastRestoreFg = fg;
+                s_lastRestoreClass = currentClass;
+
+                if (classChanged) {
+                    if (fullscreenFg) {
+                        // Place the bar DIRECTLY BEHIND the fullscreen window.
+                        // Works whether the fullscreen app is topmost or not.
+                        g_fullScreenAppActive = true;
+                        SetWindowPos(g_topBarHwnd, fg, 0, 0, 0, 0,
+                                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                                     SWP_NOOWNERZORDER);
+                    } else if (desktopFg) {
+                        // Win+D: re-stack above the desktop (which is itself topmost).
+                        g_fullScreenAppActive = false;
+                        SetWindowPos(g_topBarHwnd, HWND_BOTTOM, 0, 0, 0, 0,
+                                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                        SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                    } else {
+                        // Normal window foreground: keep ourselves above it.
+                        g_fullScreenAppActive = false;
+                        SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                    }
+                }
+
+                // Reposition if drifted.
+                RECT wanted = GetBarMonitorRect();
+                wanted.bottom = wanted.top + g_barHeightPx;
+                RECT current{};
+                GetWindowRect(g_topBarHwnd, &current);
+                if (current.left != wanted.left || current.top != wanted.top ||
+                    current.right != wanted.right || current.bottom != wanted.bottom) {
+                    PositionAppBar(g_topBarHwnd, g_barHeightPx);
+                }
+            } catch (...) {
+            }
+        });
+
+        g_restoreTimer.Start();
 
         // Wallpaper updates are handled by WM_SETTINGCHANGE – no timer needed.
 
@@ -6787,34 +8761,53 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
             UnhookWinEvent(g_foregroundHook);
             g_foregroundHook = nullptr;
         }
+        if (g_windowEventHook) {
+            UnhookWinEvent(g_windowEventHook);
+            g_windowEventHook = nullptr;
+        }
+        if (g_windowEventNameHook) {
+            UnhookWinEvent(g_windowEventNameHook);
+            g_windowEventNameHook = nullptr;
+        }
 
         // The topbar has been closed. Stop all timers before the DLL unloads.
         if (g_clockTimer) g_clockTimer.Stop();
-
+        if (g_taskRefreshTimer) g_taskRefreshTimer.Stop();
+        if (g_taskClickTimer) g_taskClickTimer.Stop();
         if (g_taskListTimer) g_taskListTimer.Stop();
         if (g_wifiAutoRefreshTimer) g_wifiAutoRefreshTimer.Stop();
         if (g_bluetoothAutoRefreshTimer) g_bluetoothAutoRefreshTimer.Stop();
-        if (g_taskClickTimer) g_taskClickTimer.Stop();
         if (g_volumeRevertTimer) g_volumeRevertTimer.Stop();
         if (g_brightnessRevertTimer) g_brightnessRevertTimer.Stop();
-
+        if (g_resourceTimer) g_resourceTimer.Stop();
+        if (g_resourceFlyoutTimer) g_resourceFlyoutTimer.Stop();
+        if (g_restoreTimer) g_restoreTimer.Stop();
+        if (g_restoreTimer) g_restoreTimer = nullptr;
+        g_allowHide = true;  // allow hiding during final teardown
         // Release XAML and COM objects on this thread (before it exits)
         if (g_clockTimer) g_clockTimer = nullptr;
+        if (g_taskRefreshTimer) g_taskRefreshTimer = nullptr;
+        if (g_taskClickTimer) g_taskClickTimer = nullptr;
+        g_taskClickPendingHwnd = nullptr;
+        g_lastDoubleTapTick = 0;
 
         if (g_wifiAutoRefreshTimer) g_wifiAutoRefreshTimer = nullptr;
         if (g_bluetoothAutoRefreshTimer) g_bluetoothAutoRefreshTimer = nullptr;
-        if (g_taskClickTimer) g_taskClickTimer = nullptr;
         if (g_volumeRevertTimer) g_volumeRevertTimer = nullptr;
         if (g_brightnessRevertTimer) g_brightnessRevertTimer = nullptr;
+        if (g_resourceTimer) g_resourceTimer = nullptr;
+        if (g_resourceFlyoutTimer) g_resourceFlyoutTimer = nullptr;
 
         // Release wallpaper layer and other no_destroy globals
         if (g_wallpaperLayer) g_wallpaperLayer = nullptr;
         if (g_displayFlyout) g_displayFlyout = nullptr;
-        if (g_trayFlyout) g_trayFlyout = nullptr;
+                if (g_resourceFlyout) g_resourceFlyout = nullptr;
         if (g_displayButton) g_displayButton = nullptr;
-        if (g_trayButton) g_trayButton = nullptr;
+        
+        if (g_resourceButton) g_resourceButton = nullptr;
         if (g_displayPanel) g_displayPanel = nullptr;
-        if (g_trayPanel) g_trayPanel = nullptr;
+        
+        if (g_resourcePanel) g_resourcePanel = nullptr;
 
         if (g_rootElement) {
             try {
@@ -6840,11 +8833,12 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         g_startContextMenu = nullptr;
         g_taskMenuToggleItem = nullptr;
         g_mediaContainer = nullptr;
+        g_tabButtons.clear();
 
         // Release COM pointers
         audio::g_cachedEndpointVolume = nullptr;
         brightness::g_cachedWmiServices = nullptr;
-        tray::g_automation = nullptr;
+        
 
         // Unregister the window class (now safe because thread exits)
         if (g_modModule) {
@@ -6890,9 +8884,12 @@ void LoadSettings() {
     g_settings.showSoundButton = Wh_GetIntSetting(L"showSoundButton") != 0;
     g_settings.showWifiButton = Wh_GetIntSetting(L"showWifiButton") != 0;
     g_settings.showBluetoothButton = Wh_GetIntSetting(L"showBluetoothButton") != 0;
-    g_settings.showTrayButton = Wh_GetIntSetting(L"showTrayButton") != 0;
+    g_settings.showTrayButton = false;
     g_settings.showBatteryButton = Wh_GetIntSetting(L"showBatteryButton") != 0;
     
+    g_settings.showCpuUsage = Wh_GetIntSetting(L"showCpuUsage") != 0;
+    g_settings.showRamUsage = Wh_GetIntSetting(L"showRamUsage") != 0;
+    g_settings.showGpuUsage = Wh_GetIntSetting(L"showGpuUsage") != 0;
     g_settings.enableHotkeys = Wh_GetIntSetting(L"enableHotkeys") != 0;
     g_settings.showClock = Wh_GetIntSetting(L"showClock") != 0;
     g_settings.timeFormat = GetStringSettingCopy(L"timeFormat");
@@ -6901,6 +8898,29 @@ void LoadSettings() {
     g_settings.iconColor = GetStringSettingCopy(L"iconColor");
     if (g_settings.iconColor.empty()) {
         g_settings.iconColor = L"#FFFFFF";
+    }
+
+    g_settings.trayOrder = ReadTrayOrder();
+    g_trayOrder.clear();
+    {
+        size_t pos = 0;
+        while (pos <= g_settings.trayOrder.size()) {
+            size_t comma = g_settings.trayOrder.find(L',', pos);
+            std::wstring token = TrimWs(g_settings.trayOrder.substr(
+                pos, comma == std::wstring::npos ? std::wstring::npos : comma - pos));
+            if (!token.empty()) {
+                g_trayOrder.push_back(token);
+            }
+            if (comma == std::wstring::npos) {
+                break;
+            }
+            pos = comma + 1;
+        }
+    }
+    for (const auto& known : kDefaultTrayOrder) {
+        if (std::find(g_trayOrder.begin(), g_trayOrder.end(), known) == g_trayOrder.end()) {
+            g_trayOrder.push_back(known);
+        }
     }
 
     g_styleConstants.clear();
@@ -7003,6 +9023,7 @@ void WhTool_ModSettingsChanged() {
         BuildTaskContextMenu();
         ApplyAllControlStyles();
         ApplyVisibilitySettings();
+        UpdateResourceButton();
         StripInheritedIslandBackgrounds();
         ApplyWindowBackdrop(g_topBarHwnd);
         PositionAppBar(g_topBarHwnd, g_barHeightPx);
@@ -7013,7 +9034,8 @@ void WhTool_ModSettingsChanged() {
             UnregisterHotKey(g_topBarHwnd, HOTKEY_ID_SOUND);
             UnregisterHotKey(g_topBarHwnd, HOTKEY_ID_WIFI);
             UnregisterHotKey(g_topBarHwnd, HOTKEY_ID_BLUETOOTH);
-            UnregisterHotKey(g_topBarHwnd, HOTKEY_ID_TRAY);
+            UnregisterHotKey(g_topBarHwnd, HOTKEY_ID_RESOURCE);
+            UnregisterHotKey(g_topBarHwnd, HOTKEY_ID_BATTERY);
             UnregisterHotKey(g_topBarHwnd, HOTKEY_ID_START_MENU);
             UnregisterHotKey(g_topBarHwnd, HOTKEY_ID_TASK_MENU);
             if (g_settings.enableHotkeys) {
@@ -7021,7 +9043,8 @@ void WhTool_ModSettingsChanged() {
                 RegisterHotKey(g_topBarHwnd, HOTKEY_ID_SOUND, MOD_CONTROL | MOD_ALT, '2');
                 RegisterHotKey(g_topBarHwnd, HOTKEY_ID_WIFI, MOD_CONTROL | MOD_ALT, '3');
                 RegisterHotKey(g_topBarHwnd, HOTKEY_ID_BLUETOOTH, MOD_CONTROL | MOD_ALT, '4');
-                RegisterHotKey(g_topBarHwnd, HOTKEY_ID_TRAY, MOD_CONTROL | MOD_ALT, '5');
+                RegisterHotKey(g_topBarHwnd, HOTKEY_ID_RESOURCE, MOD_CONTROL | MOD_ALT, '0');
+                RegisterHotKey(g_topBarHwnd, HOTKEY_ID_BATTERY, MOD_CONTROL | MOD_ALT, '5');
                 RegisterHotKey(g_topBarHwnd, HOTKEY_ID_START_MENU, MOD_CONTROL | MOD_ALT, '6');
                 RegisterHotKey(g_topBarHwnd, HOTKEY_ID_TASK_MENU, MOD_CONTROL | MOD_ALT, '7');
             }
@@ -7032,6 +9055,7 @@ void WhTool_ModSettingsChanged() {
 
 void WhTool_ModUninit() {
     InterlockedExchange(&g_shuttingDown, 1);
+    g_allowHide = true;   // allow the bar to hide during shutdown
 
     // Signal the stop event so background workers can exit early.
     if (g_stopEvent) {
@@ -7053,7 +9077,11 @@ void WhTool_ModUninit() {
         handles = g_workerThreads;
     }
     if (!handles.empty()) {
-        WaitForMultipleObjects(static_cast<DWORD>(handles.size()), handles.data(), TRUE, 10000);
+        const size_t kMaxWaitObjects = 64;
+        for (size_t offset = 0; offset < handles.size(); offset += kMaxWaitObjects) {
+            size_t batchCount = std::min<size_t>(handles.size() - offset, kMaxWaitObjects);
+            WaitForMultipleObjects(static_cast<DWORD>(batchCount), handles.data() + offset, TRUE, 10000);
+        }
     }
     // Close all worker handles
     for (HANDLE h : handles) {
