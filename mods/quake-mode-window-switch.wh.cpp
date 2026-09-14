@@ -375,6 +375,17 @@ static bool LoadPersistedParkedState(HWND& hwndOut, LONG_PTR& exStyleOut, LONG_P
     return true;
 }
 
+// WS_VISIBLE is owned by ShowWindow/SetWindowPlacement, not by
+// SetWindowLongPtr: writing a captured style dword back wholesale would
+// reassert whatever WS_VISIBLE happened to be at capture time onto a
+// window that may currently be SW_HIDE'd, making IsWindowVisible() report
+// true for a window that isn't actually mapped to the screen.
+static void SetStylePreservingVisibility(HWND hwnd, LONG_PTR style)
+{
+    LONG_PTR liveStyle = GetWindowLongPtrW(hwnd, GWL_STYLE);
+    SetWindowLongPtrW(hwnd, GWL_STYLE, (style & ~static_cast<LONG_PTR>(WS_VISIBLE)) | (liveStyle & WS_VISIBLE));
+}
+
 // Restores styles and the original WINDOWPLACEMENT (position, size, and
 // minimized/maximized state) onto whichever window ApplyWindowStyles last
 // captured. Also undoes the SW_HIDE used to park the window off-screen.
@@ -395,7 +406,7 @@ static void RestoreOriginalState()
     // SW_HIDE'd with no way for a later instance to recover it.
     if (IsWindow(hwnd)) {
         SetWindowLongPtrW(hwnd, GWL_EXSTYLE, g_originalExStyle);
-        SetWindowLongPtrW(hwnd, GWL_STYLE, g_originalStyle);
+        SetStylePreservingVisibility(hwnd, g_originalStyle);
         SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 
@@ -457,7 +468,7 @@ static void ApplyWindowStyles(HWND hwnd, bool useRecoveredState = false)
     }
 
     SetWindowLongPtrW(hwnd, GWL_EXSTYLE, exStyle);
-    SetWindowLongPtrW(hwnd, GWL_STYLE, style);
+    SetStylePreservingVisibility(hwnd, style);
     SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 
@@ -495,35 +506,34 @@ static HWND FindTargetWindow()
     }
 
     HWND found = nullptr;
-    EnumWindows(FindTargetWindowProc, reinterpret_cast<LPARAM>(&found));
-
     bool useRecoveredState = false;
 
-    if (!found) {
-        // Nothing visible matched - the tool process may have ended
-        // abnormally (crash, killed, or a hung target that outlasted the
-        // uninit join) while the window was parked SW_HIDE'd, leaving it
-        // invisible with no taskbar button and no Alt+Tab entry. Recover
-        // it via the pre-dock state persisted in PersistParkedState,
-        // rather than scanning for any hidden window of the process -
-        // that could grab an unrelated tray app's helper window, or adopt
-        // the parked window's *current*, already-damaged state as the
-        // "original" to restore later.
-        HWND parkedHwnd = nullptr;
-        LONG_PTR parkedExStyle = 0;
-        LONG_PTR parkedStyle = 0;
-        WINDOWPLACEMENT parkedPlacement = {};
-        if (LoadPersistedParkedState(parkedHwnd, parkedExStyle, parkedStyle, parkedPlacement) &&
-            IsWindow(parkedHwnd)) {
-            std::wstring processName;
-            if (GetWindowProcessName(parkedHwnd, processName) && processName == g_processName) {
-                found = parkedHwnd;
-                g_originalExStyle = parkedExStyle;
-                g_originalStyle = parkedStyle;
-                g_originalPlacement = parkedPlacement;
-                useRecoveredState = true;
-            }
-        }
+    // Check the persisted pre-dock record first, before scanning for a
+    // visible window: the tool process may have ended abnormally (crash,
+    // killed, or a hung target that outlasted the uninit join) while the
+    // window was parked either hidden (SW_HIDE'd, invisible, no taskbar
+    // button/Alt+Tab entry) or docked (visible, but with taskbar/title-bar
+    // tweaks already applied and sitting in the docked rect) - in both
+    // cases the window's *current* state is the damaged one, not the
+    // original to restore later. Falling through to EnumWindows would find
+    // the still-visible docked window and re-capture (and re-persist) that
+    // damaged state as "original", permanently losing the real one.
+    HWND parkedHwnd = nullptr;
+    LONG_PTR parkedExStyle = 0;
+    LONG_PTR parkedStyle = 0;
+    WINDOWPLACEMENT parkedPlacement = {};
+    std::wstring parkedProcessName;
+    if (LoadPersistedParkedState(parkedHwnd, parkedExStyle, parkedStyle, parkedPlacement) &&
+        IsWindow(parkedHwnd) &&
+        GetWindowProcessName(parkedHwnd, parkedProcessName) &&
+        parkedProcessName == g_processName) {
+        found = parkedHwnd;
+        g_originalExStyle = parkedExStyle;
+        g_originalStyle = parkedStyle;
+        g_originalPlacement = parkedPlacement;
+        useRecoveredState = true;
+    } else {
+        EnumWindows(FindTargetWindowProc, reinterpret_cast<LPARAM>(&found));
     }
 
     if (found != g_targetHwnd) {
