@@ -2,7 +2,7 @@
 // @id              vector-screen-holder
 // @name            Vector Screen Holder
 // @description     Fills a display you choose with generative line art and keeps the PC from idling while it runs
-// @version         1.0.2
+// @version         1.0.3
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
@@ -35,27 +35,28 @@ underneath it. The overlay is below the window, not over it.
 ## Controls
 
 The overlay is clean when it opens -- no labels, no chrome, nothing on screen
-but the art. The style name and its two readouts appear only while you are
-actively changing something, then fade away again.
+but the art. When you change something, a single line appears along the bottom
+naming the style, its parameter value and the amount notch, then fades after
+about two seconds. That line is the only text the mod ever draws.
 
 | Input | What it does |
 | --- | --- |
-| **Esc** | Close the overlay |
+| **Esc** | Close the overlay (focus it first, or see below) |
 | **Left click** | Cycle to the next enabled style |
 | **Right click** | Step the amount: how much information is on screen |
 | **Mouse wheel** | Adjust the current style's parameter |
 | **Hold Space** | Slide the colour around the hue wheel |
 | **Ctrl+Alt+H** | Toggle the overlay on and off (configurable below) |
 
-Click, right click and wheel need the overlay focused -- click it once. **Hold
-Space** slides the colour from anywhere while the overlay is running, and the
-key is passed straight through so typing is never disturbed. **Esc always
-closes it**, from any window, so you can never get stuck.
+All of these need the overlay focused -- click it once and it takes them,
+without ever coming to the front. **Ctrl+Alt+H works from anywhere**, so you
+can always close the overlay even when something else has focus.
 
-The overlay is otherwise completely clean -- no labels, no chrome. When you
-change something, a single line appears along the bottom showing the style, its
-parameter value and the amount notch, then fades away after about two seconds.
-That line is the only text the mod ever draws.
+If you would rather **Esc** and **Space** reached the overlay from any
+application, turn on **Global Esc and Space** in the settings. It is off by
+default on purpose: Esc is a heavily used key, and a reflexive press meant for
+a dialog or a search box in another window would end the session and release
+the keep-awake with nothing on screen to say it had happened.
 
 The overlay sits above your wallpaper but *below* your windows: anything you
 open covers it normally, and it never steals focus by itself or appears in
@@ -106,9 +107,12 @@ Then make an ordinary Windows shortcut to that `.vbs` and give it whatever icon
 you like. Running it toggles the overlay. `wscript.exe` opens no console, so
 nothing flashes on screen.
 
-The event lives in the `Local\` (per-session) namespace and grants only
-`EVENT_MODIFY_STATE`, so it can be signalled but not otherwise touched, and a
-second logged-in user cannot toggle your overlay.
+The event lives in the `Local\` (per-session) namespace, so a second
+logged-in user cannot toggle your overlay. It grants `EVENT_MODIFY_STATE` and
+`SYNCHRONIZE` only -- `SetEvent` needs the first, and `OpenExisting` asks for
+both, so the one-liner above fails with "Access to the path is denied" without
+it. It is still far short of full access: the event cannot be deleted, nor its
+permissions or owner changed.
 
 ## Performance
 
@@ -250,7 +254,7 @@ pair-programmers Claude and Big-Pickle (opencode).
     Let Esc close the overlay and Space slide the colour from any application,
     not just when the overlay has focus. Off by default: Esc is a heavily used
     key, and a reflexive press in another window would end the session and
-    release the keep-awake without any visible sign. The toggle hotkey below
+    release the keep-awake without any visible sign. The toggle hotkey above
     always works regardless of this setting.
 - keepAwake: true
   $name: Keep the PC awake
@@ -907,7 +911,6 @@ class ContourScene : public Scene {
         levels_ = LevelsFor(ctx.amount);
 
         Advance(ctx.dt);
-        frame_++;
         age_ += ctx.dt;
 
         // Contours are a full redraw each frame.
@@ -1041,7 +1044,6 @@ class ContourScene : public Scene {
     float w_ = 0, h_ = 0, cw_ = 1, ch_ = 1;
     int cols_ = 0, rows_ = 0, levels_ = 21;
     float scale_ = 3, z_ = 0, warp_ = 0.3f;
-    int frame_ = 0;
     float age_ = 0;
     static constexpr float kLifeSecs = 300.0f;   // wall clock, not frames
     static constexpr float kCycleSecs = 0.5f;
@@ -1921,7 +1923,6 @@ void Overlay::Render(float dtSec) {
     }
 
     if (scene_ && phase_ != kPhaseOut) {
-        ctx.target = rt_;
         scene_->PaintCrisp(ctx, rt_);
     }
 
@@ -2022,6 +2023,11 @@ LRESULT CALLBACK Overlay::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 return 0;
             }
             break;
+        case WM_KILLFOCUS:
+            // No WM_KEYUP arrives if the overlay is alt-tabbed away mid-hold,
+            // which would leave the hue sliding indefinitely.
+            Controller_SetSpace(false);
+            return 0;
         case WM_ERASEBKGND:
             return 1;
         case WM_PAINT: {
@@ -2077,7 +2083,7 @@ static int FirstEnabledStyle() {
 
 // A wheel notch used to write three values straight through, so a fast
 // scroll hammered the store dozens of times a second. Mark dirty instead and
-// flush on hide, rotation and teardown.
+// flush on hide and teardown.
 static std::atomic<bool> g_stateDirty{false};
 static int g_pendingStyle = 0, g_pendingAmount = 2, g_pendingParam = 500;
 
@@ -2176,6 +2182,7 @@ static LRESULT CALLBACK LowLevelKbdProc(int nCode, WPARAM wParam, LPARAM lParam)
 }
 
 static HANDLE g_hookThread = nullptr;
+static HANDLE g_hookReady = nullptr;
 static std::atomic<DWORD> g_hookThreadId{0};
 
 static DWORD WINAPI KbdHookThread(LPVOID) {
@@ -2184,6 +2191,9 @@ static DWORD WINAPI KbdHookThread(LPVOID) {
     MSG seed;
     PeekMessageW(&seed, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
     g_hookThreadId = GetCurrentThreadId();
+    if (g_hookReady) {
+        SetEvent(g_hookReady);   // id published and queue exists
+    }
 
     HMODULE mod = nullptr;
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -2217,10 +2227,15 @@ static void InstallKbdHook() {
     if (g_hookThread) {
         return;
     }
+    g_hookReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_hookThread = CreateThread(nullptr, 0, KbdHookThread, nullptr, 0, nullptr);
     if (!g_hookThread) {
         Wh_Log(L"Could not start the keyboard hook thread (%u)",
                GetLastError());
+        if (g_hookReady) {
+            CloseHandle(g_hookReady);
+            g_hookReady = nullptr;
+        }
     }
 }
 
@@ -2228,17 +2243,25 @@ static void UninstallKbdHook() {
     if (!g_hookThread) {
         return;
     }
-    DWORD tid = g_hookThreadId.load();
-    if (tid && !PostThreadMessageW(tid, WM_VSH_QUIT, 0, 0)) {
+    // Wait for the thread to publish its id before posting; otherwise the
+    // post is skipped and the wait below never ends.
+    if (g_hookReady) {
+        WaitForSingleObject(g_hookReady, INFINITE);
+    }
+    if (!PostThreadMessageW(g_hookThreadId.load(), WM_VSH_QUIT, 0, 0)) {
         Wh_Log(L"PostThreadMessage to the hook thread failed (%u)",
                GetLastError());
     }
-    // Wait without a timeout. Abandoning the thread would leave the hook
-    // installed with g_hookThread nulled, so the next show would install a
-    // second one; its remaining work is just UnhookWindowsHookEx and return.
+    // No timeout: abandoning the thread would leave the hook installed with
+    // g_hookThread nulled, so the next show would install a second one. Its
+    // remaining work is just UnhookWindowsHookEx and return.
     WaitForSingleObject(g_hookThread, INFINITE);
     CloseHandle(g_hookThread);
     g_hookThread = nullptr;
+    if (g_hookReady) {
+        CloseHandle(g_hookReady);
+        g_hookReady = nullptr;
+    }
 }
 
 static void ApplyExecutionState() {
@@ -2342,7 +2365,7 @@ static void ShowOverlays() {
     }
     float param = ClampT(paramMilli, 0, 1000) / 1000.0f;
 
-    unsigned seed = (unsigned)GetTickCount();
+    unsigned seed = (unsigned)GetTickCount64();
     for (size_t i = 0; i < targets.size(); i++) {
         Overlay* ov = new Overlay(g_factory, targets[i], seed + (unsigned)i * 7919u);
         ov->style = style;
@@ -2623,15 +2646,20 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         ShowOverlays();
     }
 
-    LARGE_INTEGER freq, prev, lastRender;
+    LARGE_INTEGER freq, lastRender;
     QueryPerformanceFrequency(&freq);
-    QueryPerformanceCounter(&prev);
-    lastRender = prev;
+    QueryPerformanceCounter(&lastRender);
 
     while (g_running) {
-        DWORD waitMs =
-            g_active ? (DWORD)(1000 / g_settings.fps)
-                     : INFINITE;
+        DWORD waitMs = INFINITE;
+        if (g_active) {
+            LARGE_INTEGER nowW;
+            QueryPerformanceCounter(&nowW);
+            float sinceW = (float)(nowW.QuadPart - lastRender.QuadPart) /
+                           (float)freq.QuadPart;
+            float remain = 1.0f / (float)g_settings.fps - sinceW;
+            waitMs = remain <= 0.0f ? 0 : (DWORD)(remain * 1000.0f);
+        }
         DWORD count = g_toggleEvent ? 1 : 0;
         HANDLE handles[1] = {g_toggleEvent};
 
@@ -2698,7 +2726,6 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             continue;
         }
         lastRender = now;
-        prev = now;
         float dt = since > 0.25f ? 0.25f : since;
 
         // hue: the automatic ramp and the Space key are independent, so the
