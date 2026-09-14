@@ -2,9 +2,11 @@
 // @id              vector-screen-holder
 // @name            Vector Screen Holder
 // @description     Fills a display you choose with generative line art and keeps the PC from idling while it runs
-// @version         1.0.1
+// @version         1.0.2
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
+// @homepage        https://vector.akilluminati47.pages.dev/
+// @license         MIT
 // @include         windhawk.exe
 // @compilerOptions -ld2d1 -ldwrite -ladvapi32 -luser32 -lshell32
 // ==/WindhawkMod==
@@ -124,6 +126,14 @@ stay further out of its way:
 - or pick flow field or harmonograph, which draw themselves and then idle,
   rather than contours, which redraw continuously.
 
+## Source, screenshots and the prototype
+
+The mod lives at
+[github.com/akilluminati47/vector-screen-holder](https://github.com/akilluminati47/vector-screen-holder),
+along with the browser prototype the four algorithms were developed in before
+the Direct2D port. There is a short showcase of all four styles at
+[vector.akilluminati47.pages.dev](https://vector.akilluminati47.pages.dev/).
+
 ## Notes
 
 - Runs as a Windhawk *tool mod* in its own dedicated `windhawk.exe` process, so
@@ -234,6 +244,14 @@ pair-programmers Claude and Big-Pickle (opencode).
 - opacity: 100
   $name: Opacity (%)
   $description: Below 100 the desktop shows through the overlay. Clamped to 10-100.
+- globalKeys: false
+  $name: Global Esc and Space
+  $description: >-
+    Let Esc close the overlay and Space slide the colour from any application,
+    not just when the overlay has focus. Off by default: Esc is a heavily used
+    key, and a reflexive press in another window would end the session and
+    release the keep-awake without any visible sign. The toggle hotkey below
+    always works regardless of this setting.
 - keepAwake: true
   $name: Keep the PC awake
   $description: >-
@@ -243,7 +261,7 @@ pair-programmers Claude and Big-Pickle (opencode).
   $name: Start active
   $description: Show the overlay as soon as the mod loads.
 - underTaskbar: false
-  $name: Draw under the taskbar
+  $name: Stay inside the work area
   $description: >-
     Keep the overlay inside each display's work area instead of covering the
     whole display, so it never draws over the taskbar.
@@ -890,6 +908,7 @@ class ContourScene : public Scene {
 
         Advance(ctx.dt);
         frame_++;
+        age_ += ctx.dt;
 
         // Contours are a full redraw each frame.
         D2D1_COLOR_F clear = ToColorF(pal_->bg, 0.0f);
@@ -924,7 +943,7 @@ class ContourScene : public Scene {
                 g->Release();
             }
         }
-        return frame_ > 20000;
+        return age_ > kLifeSecs;
     }
 
     bool Continuous() const override { return true; }
@@ -1023,6 +1042,8 @@ class ContourScene : public Scene {
     int cols_ = 0, rows_ = 0, levels_ = 21;
     float scale_ = 3, z_ = 0, warp_ = 0.3f;
     int frame_ = 0;
+    float age_ = 0;
+    static constexpr float kLifeSecs = 300.0f;   // wall clock, not frames
     static constexpr float kCycleSecs = 0.5f;
     static constexpr float kDz = 0.015f;
     float zA_ = 0, zB_ = 0, blend_ = 0;
@@ -1109,9 +1130,11 @@ class GrowthScene : public Scene {
         int steps = clock_.Take((1.0f + ctx.param * 4.0f) * 30.0f, ctx.dt);
         for (int i = 0; i < steps; i++) {
             Simulate();
-            if (i == 0) {
-                Paint(ctx, ctx.target, 0.05f);
-            }
+        }
+        // Stamp the trail on the step budget rather than once per frame, so
+        // the accumulated density is the same at any frame rate.
+        if (steps > 0) {
+            Paint(ctx, ctx.target, 0.05f * (float)steps / 5.0f);
         }
         return Total() >= maxNodes_;
     }
@@ -1445,6 +1468,7 @@ struct Settings {
     int spaceSpeed = 90;
     int fps = 60;
     int opacity = 100;
+    bool globalKeys = false;
     bool keepAwake = true;
     bool startActive = false;
     bool underTaskbar = false;
@@ -1604,7 +1628,6 @@ class Overlay {
     // Briefly show what just changed. The overlay is otherwise completely
     // clean -- this is the only text it ever draws.
     void FlashHud();
-    HWND Hwnd() const { return hwnd_; }
 
     int style = kStyleFlow;
     int amount = 2;
@@ -1652,7 +1675,7 @@ bool Overlay::Create() {
         WS_EX_TOOLWINDOW, kWindowClass, L"",
         WS_POPUP, rect_.left, rect_.top, rect_.right - rect_.left,
         rect_.bottom - rect_.top, nullptr, nullptr,
-        GetModuleHandleW(nullptr), this);
+        GetModuleHandleW(nullptr), nullptr);
     if (!hwnd_) {
         Wh_Log(L"CreateWindowEx failed (%u)", GetLastError());
         return false;
@@ -1838,7 +1861,10 @@ void Overlay::Render(float dtSec) {
     } else {
         done = true;
     }
-    buf_->EndDraw(nullptr, nullptr);
+    if (buf_->EndDraw(nullptr, nullptr) == D2DERR_RECREATE_TARGET) {
+        DiscardDeviceResources();
+        return;
+    }
 
     phaseT_ += dtSec;
     if (phase_ == kPhaseIn) {
@@ -2026,8 +2052,9 @@ static float g_rotateTimer = 0;
 
 static const UINT WM_VSH_SETTINGS = WM_APP + 1;
 static const UINT WM_VSH_QUIT = WM_APP + 2;
-static const UINT WM_VSH_REBUILD = WM_APP + 4;
+
 static const UINT WM_VSH_CLOSE = WM_APP + 3;
+static const UINT WM_VSH_REBUILD = WM_APP + 4;
 
 static int NextEnabledStyle(int from) {
     for (int i = 1; i <= kStyleCount; i++) {
@@ -2103,22 +2130,27 @@ static void Controller_SetSpace(bool down) {
 
 
 
-static void ShowOverlays();
-static void HideOverlays();
-
 static void Controller_RequestClose() {
     DWORD tid = g_workerThreadId.load();
-    if (tid) {
-        PostThreadMessageW(tid, WM_VSH_CLOSE, 0, 0);
+    if (tid && !PostThreadMessageW(tid, WM_VSH_CLOSE, 0, 0)) {
+        Wh_Log(L"PostThreadMessage(CLOSE) failed (%u)", GetLastError());
     }
 }
 
 // Monitor geometry changed; ask the worker to tear the overlays down and
 // re-run the display selection from scratch.
+static std::atomic<bool> g_rebuildQueued{false};
+
 static void Controller_RequestRebuild() {
+    // Every overlay gets its own WM_DISPLAYCHANGE, and each rebuild tears the
+    // hook thread down and back up; collapse the burst into one.
+    if (g_rebuildQueued.exchange(true)) {
+        return;
+    }
     DWORD tid = g_workerThreadId.load();
-    if (tid) {
-        PostThreadMessageW(tid, WM_VSH_REBUILD, 0, 0);
+    if (tid && !PostThreadMessageW(tid, WM_VSH_REBUILD, 0, 0)) {
+        g_rebuildQueued = false;
+        Wh_Log(L"PostThreadMessage(REBUILD) failed (%u)", GetLastError());
     }
 }
 
@@ -2147,6 +2179,10 @@ static HANDLE g_hookThread = nullptr;
 static std::atomic<DWORD> g_hookThreadId{0};
 
 static DWORD WINAPI KbdHookThread(LPVOID) {
+    // Force the message queue into existence before publishing the id:
+    // PostThreadMessageW fails until the thread owns one.
+    MSG seed;
+    PeekMessageW(&seed, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
     g_hookThreadId = GetCurrentThreadId();
 
     HMODULE mod = nullptr;
@@ -2193,10 +2229,14 @@ static void UninstallKbdHook() {
         return;
     }
     DWORD tid = g_hookThreadId.load();
-    if (tid) {
-        PostThreadMessageW(tid, WM_VSH_QUIT, 0, 0);
+    if (tid && !PostThreadMessageW(tid, WM_VSH_QUIT, 0, 0)) {
+        Wh_Log(L"PostThreadMessage to the hook thread failed (%u)",
+               GetLastError());
     }
-    WaitForSingleObject(g_hookThread, 5000);
+    // Wait without a timeout. Abandoning the thread would leave the hook
+    // installed with g_hookThread nulled, so the next show would install a
+    // second one; its remaining work is just UnhookWindowsHookEx and return.
+    WaitForSingleObject(g_hookThread, INFINITE);
     CloseHandle(g_hookThread);
     g_hookThread = nullptr;
 }
@@ -2321,7 +2361,9 @@ static void ShowOverlays() {
     g_active = true;
     g_spaceDown = false;   // a hide while Space was held must not stick
     g_rotateTimer = 0;
-    InstallKbdHook();
+    if (g_settings.globalKeys) {
+        InstallKbdHook();
+    }
     ApplyExecutionState();
     Wh_Log(L"Screen Holder shown on %d display(s)", (int)g_overlays.size());
 }
@@ -2447,8 +2489,8 @@ static HANDLE CreateToggleEvent() {
 // Settings loading
 // ---------------------------------------------------------------------------
 static std::wstring GetStringSetting(PCWSTR name) {
-    PCWSTR v = Wh_GetStringSetting(name);
-    std::wstring s = v ? v : L"";
+    PCWSTR v = Wh_GetStringSetting(name);   // never NULL; L"" when unset
+    std::wstring s = v;
     Wh_FreeStringSetting(v);
     return s;
 }
@@ -2494,6 +2536,7 @@ static void LoadSettings() {
     g_settings.spaceSpeed = ClampT(Wh_GetIntSetting(L"spaceSpeed"), 1, 720);
     g_settings.fps = ClampT(Wh_GetIntSetting(L"fps"), 10, 240);
     g_settings.opacity = ClampT(Wh_GetIntSetting(L"opacity"), 10, 100);
+    g_settings.globalKeys = Wh_GetIntSetting(L"globalKeys") != 0;
     g_settings.keepAwake = Wh_GetIntSetting(L"keepAwake") != 0;
     g_settings.startActive = Wh_GetIntSetting(L"startActive") != 0;
     g_settings.underTaskbar = Wh_GetIntSetting(L"underTaskbar") != 0;
@@ -2525,6 +2568,9 @@ static void RegisterHotkeyFromSettings() {
 static std::atomic<bool> g_running{true};
 
 static DWORD WINAPI WorkerThread(LPVOID) {
+    // Same as the hook thread: the queue must exist before anyone can post.
+    MSG seed;
+    PeekMessageW(&seed, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
     g_workerThreadId = GetCurrentThreadId();
 
     // Per-monitor DPI awareness on this thread only, so monitor rectangles are
@@ -2547,7 +2593,10 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     wc.hInstance = GetModuleHandleW(nullptr);
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.lpszClassName = kWindowClass;
-    RegisterClassExW(&wc);
+    if (!RegisterClassExW(&wc)) {
+        Wh_Log(L"RegisterClassEx failed (%u); no overlay can be created",
+               GetLastError());
+    }
 
     LoadSettings();
 
@@ -2574,9 +2623,10 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         ShowOverlays();
     }
 
-    LARGE_INTEGER freq, prev;
+    LARGE_INTEGER freq, prev, lastRender;
     QueryPerformanceFrequency(&freq);
     QueryPerformanceCounter(&prev);
+    lastRender = prev;
 
     while (g_running) {
         DWORD waitMs =
@@ -2616,6 +2666,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
                     continue;
                 }
                 if (msg.message == WM_VSH_REBUILD) {
+                    g_rebuildQueued = false;
                     // Displays added, removed or resized. Rebuild so the
                     // overlay follows the new geometry rather than sitting at
                     // the old size on a display that may no longer exist.
@@ -2630,18 +2681,25 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             }
         }
 
-        LARGE_INTEGER now;
-        QueryPerformanceCounter(&now);
-        float dt = (float)(now.QuadPart - prev.QuadPart) /
-                   (float)freq.QuadPart;
-        prev = now;
-        if (dt > 0.25f) {
-            dt = 0.25f;
-        }
-
         if (!g_active) {
+            QueryPerformanceCounter(&lastRender);
             continue;
         }
+
+        // Only render when the frame clock says so. MsgWaitForMultipleObjects
+        // wakes for input as well as for the timeout, so rendering on every
+        // wake-up ignored the fps setting entirely and spun the GPU whenever
+        // the mouse crossed the overlay.
+        LARGE_INTEGER now;
+        QueryPerformanceCounter(&now);
+        float since = (float)(now.QuadPart - lastRender.QuadPart) /
+                      (float)freq.QuadPart;
+        if (since < 1.0f / (float)g_settings.fps) {
+            continue;
+        }
+        lastRender = now;
+        prev = now;
+        float dt = since > 0.25f ? 0.25f : since;
 
         // hue: the automatic ramp and the Space key are independent, so the
         // ramp can be set slower or faster than holding Space
@@ -2715,8 +2773,8 @@ void WhTool_ModSettingsChanged() {
 void WhTool_ModUninit() {
     g_running = false;
     DWORD tid = g_workerThreadId.load();
-    if (tid) {
-        PostThreadMessageW(tid, WM_VSH_QUIT, 0, 0);
+    if (tid && !PostThreadMessageW(tid, WM_VSH_QUIT, 0, 0)) {
+        Wh_Log(L"PostThreadMessage(QUIT) failed (%u)", GetLastError());
     }
     // Wh_ModUninit calls ExitProcess right after this. Without the join that
     // would terminate the worker inside Direct2D, which can wedge DLL
