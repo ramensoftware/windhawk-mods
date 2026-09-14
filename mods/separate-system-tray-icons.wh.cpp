@@ -4,10 +4,10 @@
 // @description     Replaces the grouped Windows 11 system tray button with separate sound, Bluetooth, network, Control Center, and battery buttons.
 // @version         1.0.0
 // @author          Asteski
-// @github          https://github.com/Asteski
+// @github          https://www.github.com/Asteski
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lshell32 -lole32 -loleaut32 -lruntimeobject -luuid -liphlpapi -lwlanapi -lbthprops
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lshell32 -lole32 -loleaut32 -lruntimeobject -luuid -liphlpapi -lwlanapi -lbthprops
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -16,12 +16,10 @@
 
 Replaces the grouped Windows 11 system tray button with separate sound,
 Bluetooth, network, Control Center, and battery buttons. The original grouped
-button is hidden while the mod is active and restored when it is unloaded. 
+button is hidden while the mod is active and restored when it is unloaded.
 
 This mod injects real XAML `FontIcon` elements into the Windows 11 taskbar tray.
 That means icons are drawn as XAML text/vector glyphs instead of rasterized HICON bitmaps.
-
-Additional improvements made by [kaoshipaws](https://github.com/kaoshipaws).
 
 Buttons:
 
@@ -212,8 +210,11 @@ menu presenter receives its name after creation.
 */
 // ==/WindhawkModSettings==
 
+// WIN32_LEAN_AND_MEAN must be a compiler option: Windhawk preincludes windows.h.
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <objbase.h>
+#include <mmsystem.h>
 #include <windhawk_utils.h>
 #include <memory>
 #include <functional>
@@ -567,9 +568,20 @@ static wuxm::Brush MakeIconBrush() {
 }
 
 static wuxm::Brush MakeUnderlayBrush() {
+    // Share the native foreground without changing its opacity: the glyph
+    // applies the native 20% underlay opacity independently.
+    if (auto native = g_originalGroupedButton.try_as<wuc::Control>()) {
+        if (auto brush = native.Foreground()) return brush;
+    }
+    try {
+        auto control = wuxmk::XamlReader::Load(
+            LR"(<ContentControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>)")
+            .as<wuc::ContentControl>();
+        if (auto brush = control.Foreground()) return brush;
+    } catch (...) {}
     wu::Color color{};
-    color.A = 255;
-    const BYTE channel = IsSystemLightTheme() ? 0xC4 : 0x49;
+    color.A = IsSystemLightTheme() ? 0xE4 : 0xFF;
+    const BYTE channel = IsSystemLightTheme() ? 0x00 : 0xFF;
     color.R = channel;
     color.G = channel;
     color.B = channel;
@@ -3851,7 +3863,8 @@ static void UpdateDynamicXamlIcons() {
                 SetTrayOpacity(g_bluetoothButton, 1.0);
             }
             SetTrayVisibility(g_bluetoothIcon.primary, wux::Visibility::Visible);
-            SetTrayOpacity(g_bluetoothIcon.primary, 1.0);
+            SetTrayOpacity(g_bluetoothIcon.primary,
+                (bluetoothAvailable || !g_settings.changeBluetoothGlyphWhenDisabled) ? 1.0 : 0.2);
             // Keep the Bluetooth glyph visible when disabled; the overlay is
             // responsible for marking the unavailable state.
             SetTrayGlyph(g_bluetoothIcon.primary, L"\xE702");
@@ -5367,6 +5380,7 @@ static IconLayers CreateTrayIconLayers(PCWSTR primaryGlyph) {
 
     layers.host = host;
     layers.underlay = CreateTrayFontIcon(L"", MakeUnderlayBrush());
+    layers.underlay.Opacity(0.2);
     layers.primary = CreateTrayFontIcon(primaryGlyph, MakeIconBrush());
     layers.overlay = CreateTrayFontIcon(L"", MakeIconBrush());
     layers.underlay.Name(L"SeparateTrayIconUnderlay");
