@@ -2412,12 +2412,15 @@ static HANDLE CreateToggleEvent() {
     sa.nLength = sizeof(sa);
     PSECURITY_DESCRIPTOR psd = nullptr;
 
-    // EVENT_MODIFY_STATE (0x0002) only -- SetEvent is all the shortcut needs;
-    // GENERIC_ALL would also hand out DELETE/WRITE_DAC/WRITE_OWNER. The low
-    // integrity label lets a normal medium-integrity shortcut signal it even
-    // when Windhawk runs elevated.
+    // EVENT_MODIFY_STATE | SYNCHRONIZE (0x100002). SetEvent alone only needs
+    // EVENT_MODIFY_STATE, but the documented shortcut calls
+    // EventWaitHandle.OpenExisting(name), which asks for Modify | Synchronize
+    // and is refused without the latter. Still far short of GENERIC_ALL, which
+    // would also hand out DELETE / WRITE_DAC / WRITE_OWNER. The low integrity
+    // label lets a normal medium-integrity shortcut signal it even when
+    // Windhawk runs elevated.
     if (ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            L"D:(A;;0x0002;;;WD)S:(ML;;NW;;;LW)", SDDL_REVISION_1, &psd,
+            L"D:(A;;0x100002;;;WD)S:(ML;;NW;;;LW)", SDDL_REVISION_1, &psd,
             nullptr)) {
         sa.lpSecurityDescriptor = psd;
     }
