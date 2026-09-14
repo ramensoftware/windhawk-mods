@@ -52,6 +52,9 @@ Checking events on other dates:
 - Events are refreshed every time the notification pane is opened.
     - If events can't be fetched (e.g. no internet connection),
 previously-fetched events are shown.
+    - Smart caching avoids redundant fetches if the file has not been modified.
+    - You can click the Refresh button in the calendar header at any time to
+force an immediate refresh.
 - The mod resiliently accepts errors; if you have a problem, enable logging.
 - Injection logic has been ported from m417z's *Start Menu Styler*.
 - The creation of this mod was assisted by AI:
@@ -66,25 +69,34 @@ generated using AI.
 ## FAQ
 |Problem|Solution|
 |---|---|
-|My local `.ics` file does not work!|Unblock it from its *Properties* pane in File Explorer.| 
-|The bottom corners of the *Notifications* pane (immediately above the agenda) are not rounded!|Set a maximum height for the Agenda in the mod settings to stop it from clipping the *Notifications* pane.|
+|My local `.ics` file gives an access error (CreateFileW failed 5)!|Windows
+`ShellExperienceHost` runs inside an AppContainer sandbox. Grant read
+permissions to AppContainer packages by running: `icacls
+"C:\path\to\calendar.ics" /grant "*S-1-15-2-1:(R)"` in PowerShell, or place the
+file in a shared directory like `C:\ProgramData\`.| |My local `.ics` file does
+not work!|Unblock it from its *Properties* pane in File Explorer.| |The bottom
+corners of the *Notifications* pane (immediately above the agenda) are not
+rounded!|Set a maximum height for the Agenda in the mod settings to stop it from
+clipping the *Notifications* pane.|
 
 */
 // ==/WindhawkModReadme==
-
-
 
 // ==WindhawkModSettings==
 /*
 - icsPath: ""
   $name: Path to .ics
-  $description: Local file path or remote URL to the .ics calendar file. If your local .ics calendar file is not working, make sure it is unblocked (in Properties).
+  $description: Local file path or remote URL to the .ics calendar file. If your
+local .ics calendar file is not working, make sure it is unblocked (in
+Properties).
 - maxHeight: 400
   $name: Max height (in pixels)
-  $description: Maximum visible height of the events list in pixels before the list starts to scroll.
+  $description: Maximum visible height of the events list in pixels before the
+list starts to scroll. Set to 0 to disable.
 - hideFocusSession: true
   $name: Hide Focus Session
-  $description: Hide the Focus Session control in the calendar/notification center flyout.
+  $description: Hide the Focus Session control in the calendar/notification
+center flyout.
 */
 // ==/WindhawkModSettings==
 
@@ -119,6 +131,8 @@ generated using AI.
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #undef GetCurrentTime
@@ -135,17 +149,196 @@ generated using AI.
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/base.h>
 
+#include <windhawk_utils.h>
+
+#include <tlhelp32.h>
+
 namespace wf = winrt::Windows::Foundation;
 namespace wux = winrt::Windows::UI::Xaml;
 namespace wuxc = winrt::Windows::UI::Xaml::Controls;
 namespace wuxm = winrt::Windows::UI::Xaml::Media;
 namespace wuc = winrt::Windows::UI::Core;
 
+static constexpr GUID IID_ICoreWindowInterop = {
+    0x45d64a29,
+    0xa63e,
+    0x4cb6,
+    {0xb4, 0x98, 0x57, 0x81, 0xd2, 0x98, 0xcb, 0x4f}};
+
+struct ICoreWindowInterop : ::IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE get_WindowHandle(HWND* hwnd) = 0;
+    virtual HRESULT STDMETHODCALLTYPE put_MessageHandled(boolean value) = 0;
+};
+
+std::vector<HWND> g_coreWindows;
+std::mutex g_coreWindowsMutex;
+wuc::CoreDispatcher g_uiDispatcher{nullptr};
+std::mutex g_dispatcherMutex;
+
+inline void RecordCoreWindow(HWND hWnd) {
+    if (!hWnd)
+        return;
+    std::lock_guard<std::mutex> lock(g_coreWindowsMutex);
+    for (HWND existing : g_coreWindows) {
+        if (existing == hWnd)
+            return;
+    }
+    g_coreWindows.push_back(hWnd);
+    Wh_Log(L"Recorded CoreWindow HWND: %08X", (DWORD)(ULONG_PTR)hWnd);
+}
+
+inline void RecordDispatcher(wuc::CoreDispatcher const& dispatcher) {
+    if (!dispatcher)
+        return;
+    std::lock_guard<std::mutex> lock(g_dispatcherMutex);
+    g_uiDispatcher = dispatcher;
+}
+
+inline HWND GetHwndFromCoreWindow(wuc::CoreWindow const& coreWindow) {
+    if (!coreWindow)
+        return nullptr;
+    try {
+        IUnknown* unk = reinterpret_cast<IUnknown*>(winrt::get_abi(coreWindow));
+        if (unk) {
+            ICoreWindowInterop* interop = nullptr;
+            if (SUCCEEDED(
+                    unk->QueryInterface(IID_ICoreWindowInterop,
+                                        reinterpret_cast<void**>(&interop))) &&
+                interop) {
+                HWND hWnd = nullptr;
+                HRESULT hr = interop->get_WindowHandle(&hWnd);
+                interop->Release();
+                if (SUCCEEDED(hr)) {
+                    return hWnd;
+                }
+            }
+        }
+    } catch (...) {
+    }
+    return nullptr;
+}
+
 std::atomic<bool> g_initialized = false;
 std::atomic<ULONGLONG> g_lastOpenTick = 0;
 std::atomic<ULONGLONG> g_lastFetchTick = 0;
 
+inline void NormalizeSystemTime(SYSTEMTIME& st) {
+    FILETIME ft{};
+    if (SystemTimeToFileTime(&st, &ft)) {
+        FileTimeToSystemTime(&ft, &st);
+    }
+}
+
+inline SYSTEMTIME ShiftLocalDate(const SYSTEMTIME& stLocal, int deltaDays) {
+    if (deltaDays == 0)
+        return stLocal;
+    FILETIME ft{};
+    SystemTimeToFileTime(&stLocal, &ft);
+    ULARGE_INTEGER uli;
+    uli.LowPart = ft.dwLowDateTime;
+    uli.HighPart = ft.dwHighDateTime;
+    ULONGLONG dayTicks = 864000000000ULL;
+    if (deltaDays > 0) {
+        uli.QuadPart += (ULONGLONG)deltaDays * dayTicks;
+    } else {
+        uli.QuadPart -= (ULONGLONG)(-deltaDays) * dayTicks;
+    }
+    ft.dwLowDateTime = uli.LowPart;
+    ft.dwHighDateTime = uli.HighPart;
+    SYSTEMTIME result{};
+    FileTimeToSystemTime(&ft, &result);
+    return result;
+}
+
+inline int64_t ToFileTimeDays(const SYSTEMTIME& st) {
+    SYSTEMTIME dOnly = st;
+    dOnly.wHour = dOnly.wMinute = dOnly.wSecond = dOnly.wMilliseconds = 0;
+    FILETIME ft{};
+    SystemTimeToFileTime(&dOnly, &ft);
+    ULARGE_INTEGER uli;
+    uli.LowPart = ft.dwLowDateTime;
+    uli.HighPart = ft.dwHighDateTime;
+    return static_cast<int64_t>(uli.QuadPart / 864000000000ULL);
+}
+
+inline int DaysBetween(const SYSTEMTIME& from, const SYSTEMTIME& to) {
+    return static_cast<int>(ToFileTimeDays(to) - ToFileTimeDays(from));
+}
+
+inline bool IsSameDate(const SYSTEMTIME& a, const SYSTEMTIME& b) {
+    return a.wYear == b.wYear && a.wMonth == b.wMonth && a.wDay == b.wDay;
+}
+
+inline int CompareDateOnly(const SYSTEMTIME& a, const SYSTEMTIME& b) {
+    if (a.wYear != b.wYear)
+        return (a.wYear < b.wYear) ? -1 : 1;
+    if (a.wMonth != b.wMonth)
+        return (a.wMonth < b.wMonth) ? -1 : 1;
+    if (a.wDay != b.wDay)
+        return (a.wDay < b.wDay) ? -1 : 1;
+    return 0;
+}
+
+inline std::wstring FormatDateYmd(const SYSTEMTIME& st) {
+    WCHAR buf[16];
+    swprintf_s(buf, L"%04d%02d%02d", st.wYear, st.wMonth, st.wDay);
+    return std::wstring(buf);
+}
+
+inline SYSTEMTIME ApplyOffsetToUtc(const SYSTEMTIME& stRaw, int offsetMinutes) {
+    FILETIME ft{};
+    SystemTimeToFileTime(&stRaw, &ft);
+    ULARGE_INTEGER uli;
+    uli.LowPart = ft.dwLowDateTime;
+    uli.HighPart = ft.dwHighDateTime;
+
+    int64_t offsetTicks = static_cast<int64_t>(offsetMinutes) * 600000000LL;
+    int64_t utcTicks = static_cast<int64_t>(uli.QuadPart) - offsetTicks;
+    if (utcTicks < 0)
+        utcTicks = 0;
+    uli.QuadPart = static_cast<ULONGLONG>(utcTicks);
+
+    ft.dwLowDateTime = uli.LowPart;
+    ft.dwHighDateTime = uli.HighPart;
+    SYSTEMTIME stUtc{};
+    FileTimeToSystemTime(&ft, &stUtc);
+    return stUtc;
+}
+
+inline SYSTEMTIME TzToSystemLocal(const SYSTEMTIME& stRaw, int offsetMinutes) {
+    SYSTEMTIME stUtc = ApplyOffsetToUtc(stRaw, offsetMinutes);
+    SYSTEMTIME stLocal{};
+    if (SystemTimeToTzSpecificLocalTime(nullptr, &stUtc, &stLocal)) {
+        return stLocal;
+    }
+    return stUtc;
+}
+
+inline SYSTEMTIME ToLocal(const SYSTEMTIME& stUtc, bool isUtc) {
+    if (!isUtc)
+        return stUtc;
+    SYSTEMTIME stLocal{};
+    if (SystemTimeToTzSpecificLocalTime(nullptr, &stUtc, &stLocal)) {
+        return stLocal;
+    }
+    return stUtc;
+}
+
+enum class RecurrenceFreq { None, Daily, Weekly, Monthly, Yearly };
+
+struct RecurrenceRule {
+    RecurrenceFreq freq = RecurrenceFreq::None;
+    int interval = 1;
+    int count = 0;  // 0 = unlimited
+    SYSTEMTIME untilUtc{};
+    bool hasUntil = false;
+    uint8_t byDayMask = 0;  // bit 0 = Sun, 1 = Mon, ..., 6 = Sat
+};
+
 struct CalendarEvent {
+    std::wstring uid;
+    std::wstring recurrenceId;
+    std::wstring status;
     SYSTEMTIME startLocal{};
     SYSTEMTIME endLocal{};
     bool hasEnd = false;
@@ -154,62 +347,393 @@ struct CalendarEvent {
     std::wstring name;
     std::wstring location;
     std::wstring notes;
+    bool hasRRule = false;
+    RecurrenceRule rrule;
+    std::vector<std::wstring> exDates;
 };
 
 std::vector<CalendarEvent> g_allParsedEvents;
-std::vector<CalendarEvent> g_cachedEvents;
-bool g_hasCachedEvents = false;
 std::mutex g_eventsMutex;
 SYSTEMTIME g_selectedDate{};
 bool g_hasSelectedDate = false;
 
+std::mutex g_cacheMutex;
+std::wstring g_lastFetchedPath;
+FILETIME g_lastLocalFileWriteTime{};
+ULONGLONG g_lastSuccessfulFetchTick = 0;
+std::wstring g_cachedIcsContent;
+
+inline int SafeParseIntW(const std::wstring& s, size_t pos, size_t len) {
+    if (pos + len > s.size())
+        return 0;
+    int val = 0;
+    for (size_t i = 0; i < len; ++i) {
+        wchar_t c = s[pos + i];
+        if (c < L'0' || c > L'9')
+            return 0;
+        val = val * 10 + (c - L'0');
+    }
+    return val;
+}
+
+inline bool ParseIcsDateTimeW(const std::wstring& val,
+                              SYSTEMTIME& st,
+                              bool& isUtc) {
+    ZeroMemory(&st, sizeof(st));
+    isUtc = false;
+    bool hasTime = false;
+    if (val.length() >= 8) {
+        st.wYear = (WORD)SafeParseIntW(val, 0, 4);
+        st.wMonth = (WORD)SafeParseIntW(val, 4, 2);
+        st.wDay = (WORD)SafeParseIntW(val, 6, 2);
+    }
+    if (val.length() >= 15 && (val[8] == L'T' || val[8] == L't')) {
+        hasTime = true;
+        st.wHour = (WORD)SafeParseIntW(val, 9, 2);
+        st.wMinute = (WORD)SafeParseIntW(val, 11, 2);
+        st.wSecond = (WORD)SafeParseIntW(val, 13, 2);
+    }
+    if (!val.empty() && (val.back() == L'Z' || val.back() == L'z')) {
+        isUtc = true;
+    }
+    NormalizeSystemTime(st);
+    return hasTime;
+}
+
+inline bool MatchesRecurrenceId(const std::wstring& recId,
+                                const SYSTEMTIME& tDate,
+                                const std::wstring& targetYmd) {
+    if (recId.find(targetYmd) != std::wstring::npos) {
+        return true;
+    }
+    SYSTEMTIME stRec{};
+    bool isUtc = false;
+    if (ParseIcsDateTimeW(recId, stRec, isUtc)) {
+        SYSTEMTIME localRec = isUtc ? ToLocal(stRec, true) : stRec;
+        if (localRec.wYear == tDate.wYear && localRec.wMonth == tDate.wMonth &&
+            localRec.wDay == tDate.wDay) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline bool MatchesExDate(const std::wstring& exDateStr,
+                          const SYSTEMTIME& tDate,
+                          const std::wstring& targetYmd) {
+    if (exDateStr.find(targetYmd) != std::wstring::npos) {
+        return true;
+    }
+    SYSTEMTIME stEx{};
+    bool isUtc = false;
+    if (ParseIcsDateTimeW(exDateStr, stEx, isUtc)) {
+        SYSTEMTIME localEx = isUtc ? ToLocal(stEx, true) : stEx;
+        if (localEx.wYear == tDate.wYear && localEx.wMonth == tDate.wMonth &&
+            localEx.wDay == tDate.wDay) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline int ParseUtcOffsetMinutes(const std::wstring& s) {
+    size_t first = s.find_first_not_of(L" \t\r\n");
+    if (first == std::wstring::npos)
+        return 0;
+    size_t last = s.find_last_not_of(L" \t\r\n");
+    std::wstring offsetStr = s.substr(first, last - first + 1);
+
+    size_t start = 0;
+    int sign = 1;
+    if (offsetStr[0] == L'+') {
+        sign = 1;
+        start = 1;
+    } else if (offsetStr[0] == L'-') {
+        sign = -1;
+        start = 1;
+    }
+    if (start + 4 <= offsetStr.size()) {
+        if (iswdigit(offsetStr[start]) && iswdigit(offsetStr[start + 1]) &&
+            iswdigit(offsetStr[start + 2]) && iswdigit(offsetStr[start + 3])) {
+            int hours =
+                (offsetStr[start] - L'0') * 10 + (offsetStr[start + 1] - L'0');
+            int mins = (offsetStr[start + 2] - L'0') * 10 +
+                       (offsetStr[start + 3] - L'0');
+            return sign * (hours * 60 + mins);
+        }
+    }
+    return 0;
+}
+
+inline RecurrenceRule ParseRRule(const std::wstring& rruleStr) {
+    RecurrenceRule rule;
+    std::wstringstream ss(rruleStr);
+    std::wstring part;
+    while (std::getline(ss, part, L';')) {
+        size_t eq = part.find(L'=');
+        if (eq == std::wstring::npos)
+            continue;
+        std::wstring key = part.substr(0, eq);
+        std::wstring val = part.substr(eq + 1);
+
+        if (key == L"FREQ") {
+            if (val == L"DAILY")
+                rule.freq = RecurrenceFreq::Daily;
+            else if (val == L"WEEKLY")
+                rule.freq = RecurrenceFreq::Weekly;
+            else if (val == L"MONTHLY")
+                rule.freq = RecurrenceFreq::Monthly;
+            else if (val == L"YEARLY")
+                rule.freq = RecurrenceFreq::Yearly;
+        } else if (key == L"INTERVAL") {
+            try {
+                rule.interval = std::stoi(val);
+            } catch (...) {
+                rule.interval = 1;
+            }
+            if (rule.interval <= 0)
+                rule.interval = 1;
+        } else if (key == L"COUNT") {
+            try {
+                rule.count = std::stoi(val);
+            } catch (...) {
+                rule.count = 0;
+            }
+        } else if (key == L"UNTIL") {
+            bool isUtc = false;
+            ParseIcsDateTimeW(val, rule.untilUtc, isUtc);
+            rule.hasUntil = true;
+        } else if (key == L"BYDAY") {
+            std::wstringstream dayss(val);
+            std::wstring dayToken;
+            while (std::getline(dayss, dayToken, L',')) {
+                if (dayToken.find(L"SU") != std::wstring::npos)
+                    rule.byDayMask |= (1 << 0);
+                else if (dayToken.find(L"MO") != std::wstring::npos)
+                    rule.byDayMask |= (1 << 1);
+                else if (dayToken.find(L"TU") != std::wstring::npos)
+                    rule.byDayMask |= (1 << 2);
+                else if (dayToken.find(L"WE") != std::wstring::npos)
+                    rule.byDayMask |= (1 << 3);
+                else if (dayToken.find(L"TH") != std::wstring::npos)
+                    rule.byDayMask |= (1 << 4);
+                else if (dayToken.find(L"FR") != std::wstring::npos)
+                    rule.byDayMask |= (1 << 5);
+                else if (dayToken.find(L"SA") != std::wstring::npos)
+                    rule.byDayMask |= (1 << 6);
+            }
+        }
+    }
+    return rule;
+}
+
 std::vector<CalendarEvent> FilterEventsForDate(
     std::vector<CalendarEvent> const& allEvents,
     SYSTEMTIME const& targetDate) {
-    std::vector<CalendarEvent> result;
-    for (const auto& ev : allEvents) {
-        bool matches = false;
-        if (ev.isAllDay && ev.hasEnd) {
-            FILETIME ftStart{}, ftEnd{}, ftTarget{};
-            SYSTEMTIME sOnly = ev.startLocal;
-            sOnly.wHour = sOnly.wMinute = sOnly.wSecond = sOnly.wMilliseconds =
-                0;
-            SYSTEMTIME eOnly = ev.endLocal;
-            eOnly.wHour = eOnly.wMinute = eOnly.wSecond = eOnly.wMilliseconds =
-                0;
-            SYSTEMTIME tOnly = targetDate;
-            tOnly.wHour = tOnly.wMinute = tOnly.wSecond = tOnly.wMilliseconds =
-                0;
-            SystemTimeToFileTime(&sOnly, &ftStart);
-            SystemTimeToFileTime(&eOnly, &ftEnd);
-            SystemTimeToFileTime(&tOnly, &ftTarget);
-            ULARGE_INTEGER uStart{};
-            uStart.LowPart = ftStart.dwLowDateTime;
-            uStart.HighPart = ftStart.dwHighDateTime;
-            ULARGE_INTEGER uEnd{};
-            uEnd.LowPart = ftEnd.dwLowDateTime;
-            uEnd.HighPart = ftEnd.dwHighDateTime;
-            ULARGE_INTEGER uTarget{};
-            uTarget.LowPart = ftTarget.dwLowDateTime;
-            uTarget.HighPart = ftTarget.dwHighDateTime;
+    SYSTEMTIME tDate = targetDate;
+    NormalizeSystemTime(tDate);
+    std::wstring targetYmd = FormatDateYmd(tDate);
 
-            if (uTarget.QuadPart >= uStart.QuadPart &&
-                uTarget.QuadPart < uEnd.QuadPart) {
-                matches = true;
-            } else if (uStart.QuadPart == uEnd.QuadPart &&
-                       uTarget.QuadPart == uStart.QuadPart) {
-                matches = true;
+    std::unordered_set<std::wstring> cancelledMasterUids;
+    std::unordered_set<std::wstring> overriddenUidsForTarget;
+
+    // Pass 1: find cancellations and overridden instances
+    for (const auto& ev : allEvents) {
+        if (ev.uid.empty())
+            continue;
+
+        if (ev.status == L"CANCELLED") {
+            if (ev.recurrenceId.empty()) {
+                cancelledMasterUids.insert(ev.uid);
+            } else {
+                if (MatchesRecurrenceId(ev.recurrenceId, tDate, targetYmd)) {
+                    overriddenUidsForTarget.insert(ev.uid);
+                }
             }
         } else {
-            if (ev.startLocal.wYear == targetDate.wYear &&
-                ev.startLocal.wMonth == targetDate.wMonth &&
-                ev.startLocal.wDay == targetDate.wDay) {
-                matches = true;
+            if (!ev.recurrenceId.empty()) {
+                if (MatchesRecurrenceId(ev.recurrenceId, tDate, targetYmd)) {
+                    overriddenUidsForTarget.insert(ev.uid);
+                }
+            }
+        }
+    }
+
+    // Pass 2: filter single events and expand recurrences
+    std::vector<CalendarEvent> result;
+
+    for (const auto& ev : allEvents) {
+        if (!ev.uid.empty() && cancelledMasterUids.count(ev.uid)) {
+            continue;
+        }
+        if (ev.status == L"CANCELLED") {
+            continue;
+        }
+
+        if (!ev.hasRRule) {
+            bool matches = false;
+            if (ev.isAllDay && ev.hasEnd) {
+                FILETIME ftStart{}, ftEnd{}, ftTarget{};
+                SYSTEMTIME sOnly = ev.startLocal;
+                sOnly.wHour = sOnly.wMinute = sOnly.wSecond =
+                    sOnly.wMilliseconds = 0;
+                SYSTEMTIME eOnly = ev.endLocal;
+                eOnly.wHour = eOnly.wMinute = eOnly.wSecond =
+                    eOnly.wMilliseconds = 0;
+                SYSTEMTIME tOnly = tDate;
+                tOnly.wHour = tOnly.wMinute = tOnly.wSecond =
+                    tOnly.wMilliseconds = 0;
+                SystemTimeToFileTime(&sOnly, &ftStart);
+                SystemTimeToFileTime(&eOnly, &ftEnd);
+                SystemTimeToFileTime(&tOnly, &ftTarget);
+                ULARGE_INTEGER uStart{}, uEnd{}, uTarget{};
+                uStart.LowPart = ftStart.dwLowDateTime;
+                uStart.HighPart = ftStart.dwHighDateTime;
+                uEnd.LowPart = ftEnd.dwLowDateTime;
+                uEnd.HighPart = ftEnd.dwHighDateTime;
+                uTarget.LowPart = ftTarget.dwLowDateTime;
+                uTarget.HighPart = ftTarget.dwHighDateTime;
+
+                if (uTarget.QuadPart >= uStart.QuadPart &&
+                    uTarget.QuadPart < uEnd.QuadPart) {
+                    matches = true;
+                } else if (uStart.QuadPart == uEnd.QuadPart &&
+                           uTarget.QuadPart == uStart.QuadPart) {
+                    matches = true;
+                }
+            } else {
+                if (ev.startLocal.wYear == tDate.wYear &&
+                    ev.startLocal.wMonth == tDate.wMonth &&
+                    ev.startLocal.wDay == tDate.wDay) {
+                    matches = true;
+                } else if (ev.hasEnd) {
+                    if (CompareDateOnly(ev.startLocal, tDate) < 0 &&
+                        CompareDateOnly(tDate, ev.endLocal) <= 0) {
+                        if (CompareDateOnly(tDate, ev.endLocal) < 0 ||
+                            (ev.endLocal.wHour > 0 || ev.endLocal.wMinute > 0 ||
+                             ev.endLocal.wSecond > 0)) {
+                            matches = true;
+                        }
+                    }
+                }
+            }
+
+            if (matches) {
+                result.push_back(ev);
+            }
+            continue;
+        }
+
+        // Recurring master event
+        if (!ev.uid.empty() && overriddenUidsForTarget.count(ev.uid)) {
+            continue;
+        }
+
+        bool isExcluded = false;
+        for (const auto& ex : ev.exDates) {
+            if (MatchesExDate(ex, tDate, targetYmd)) {
+                isExcluded = true;
+                break;
+            }
+        }
+        if (isExcluded)
+            continue;
+
+        if (CompareDateOnly(tDate, ev.startLocal) < 0) {
+            continue;
+        }
+
+        if (ev.rrule.hasUntil) {
+            SYSTEMTIME untilLocal = TzToSystemLocal(ev.rrule.untilUtc, 0);
+            if (CompareDateOnly(tDate, untilLocal) > 0) {
+                continue;
             }
         }
 
-        if (matches) {
-            result.push_back(ev);
+        int interval = (ev.rrule.interval > 0) ? ev.rrule.interval : 1;
+        bool ruleMatches = false;
+
+        if (ev.rrule.freq == RecurrenceFreq::Daily) {
+            int days = DaysBetween(ev.startLocal, tDate);
+            if (days >= 0 && (days % interval == 0)) {
+                int occIndex = days / interval;
+                if (ev.rrule.count == 0 || occIndex < ev.rrule.count) {
+                    ruleMatches = true;
+                }
+            }
+        } else if (ev.rrule.freq == RecurrenceFreq::Weekly) {
+            uint8_t mask = ev.rrule.byDayMask;
+            if (mask == 0) {
+                mask = (1 << ev.startLocal.wDayOfWeek);
+            }
+            if ((mask & (1 << tDate.wDayOfWeek)) != 0) {
+                int startWeekStartDays =
+                    static_cast<int>(ToFileTimeDays(ev.startLocal)) -
+                    ev.startLocal.wDayOfWeek;
+                int targetWeekStartDays =
+                    static_cast<int>(ToFileTimeDays(tDate)) - tDate.wDayOfWeek;
+                int diffDays = targetWeekStartDays - startWeekStartDays;
+                if (diffDays >= 0) {
+                    int weekDiff = diffDays / 7;
+                    if (weekDiff % interval == 0) {
+                        if (ev.rrule.count == 0) {
+                            ruleMatches = true;
+                        } else {
+                            int countSoFar = 0;
+                            for (int w = 0; w <= weekDiff; w += interval) {
+                                for (int d = 0; d < 7; ++d) {
+                                    if ((mask & (1 << d)) != 0) {
+                                        if (w == 0 &&
+                                            d < ev.startLocal.wDayOfWeek)
+                                            continue;
+                                        if (w == weekDiff &&
+                                            d > tDate.wDayOfWeek)
+                                            break;
+                                        countSoFar++;
+                                    }
+                                }
+                            }
+                            if (countSoFar <= ev.rrule.count) {
+                                ruleMatches = true;
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (ev.rrule.freq == RecurrenceFreq::Monthly) {
+            int monthDiff = (tDate.wYear - ev.startLocal.wYear) * 12 +
+                            (tDate.wMonth - ev.startLocal.wMonth);
+            if (monthDiff >= 0 && (monthDiff % interval == 0) &&
+                (ev.startLocal.wDay == tDate.wDay)) {
+                int occIndex = monthDiff / interval;
+                if (ev.rrule.count == 0 || occIndex < ev.rrule.count) {
+                    ruleMatches = true;
+                }
+            }
+        } else if (ev.rrule.freq == RecurrenceFreq::Yearly) {
+            int yearDiff = tDate.wYear - ev.startLocal.wYear;
+            if (yearDiff >= 0 && (yearDiff % interval == 0) &&
+                (ev.startLocal.wMonth == tDate.wMonth &&
+                 ev.startLocal.wDay == tDate.wDay)) {
+                int occIndex = yearDiff / interval;
+                if (ev.rrule.count == 0 || occIndex < ev.rrule.count) {
+                    ruleMatches = true;
+                }
+            }
+        }
+
+        if (ruleMatches) {
+            int days = DaysBetween(ev.startLocal, tDate);
+            CalendarEvent occ = ev;
+            occ.startLocal = ShiftLocalDate(ev.startLocal, days);
+            if (ev.hasEnd) {
+                occ.endLocal = ShiftLocalDate(ev.endLocal, days);
+            }
+            FILETIME ft{};
+            SystemTimeToFileTime(&occ.startLocal, &ft);
+            occ.sortKey =
+                ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+            result.push_back(occ);
         }
     }
 
@@ -225,13 +749,15 @@ std::vector<CalendarEvent> FilterEventsForDate(
 
 void OnCalendarOpened();
 void TriggerBackgroundFetch(bool force = false);
+void StartWorkerThread();
+void StopWorkerThread();
 
 std::wstring GetIcsPathSetting() {
-    PCWSTR str = Wh_GetStringSetting(L"icsPath");
-    std::wstring result = str ? str : L"";
-    if (str) {
-        Wh_FreeStringSetting(str);
-    }
+    WindhawkUtils::StringSetting string =
+        WindhawkUtils::StringSetting::make(L"icsPath");  // RAII
+
+    std::wstring result = string.get();
+
     while (!result.empty() &&
            (result.front() == L' ' || result.front() == L'\t' ||
             result.front() == L'"')) {
@@ -246,8 +772,7 @@ std::wstring GetIcsPathSetting() {
 }
 
 int GetMaxHeightSetting() {
-    int val = Wh_GetIntSetting(L"maxHeight");
-    return (val > 0) ? val : 400;
+    return Wh_GetIntSetting(L"maxHeight");
 }
 
 bool ShouldHideFocusSession() {
@@ -269,44 +794,73 @@ HMODULE GetCurrentModuleHandle() {
     return module;
 }
 
-std::wstring FormatTimeAmPm(SYSTEMTIME const& st) {
-    int hour = st.wHour;
-    const wchar_t* ampm = L"AM";
-    if (hour >= 12) {
-        ampm = L"PM";
-        if (hour > 12) {
-            hour -= 12;
-        }
-    } else if (hour == 0) {
-        hour = 12;
+std::wstring DecodeIcsBytes(const char* data, size_t size) {
+    if (!data || size == 0)
+        return {};
+
+    const unsigned char* bytes = reinterpret_cast<const unsigned char*>(data);
+
+    // Check UTF-16 LE BOM: FF FE
+    if (size >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE) {
+        size_t wcharCount = (size - 2) / sizeof(wchar_t);
+        return std::wstring(reinterpret_cast<const wchar_t*>(data + 2),
+                            wcharCount);
     }
 
-    WCHAR buf[32];
-    swprintf_s(buf, L"%d:%02d %s", hour, st.wMinute, ampm);
-    return buf;
+    // Check UTF-16 BE BOM: FE FF
+    if (size >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF) {
+        size_t wcharCount = (size - 2) / sizeof(wchar_t);
+        std::wstring result(wcharCount, L'\0');
+        for (size_t i = 0; i < wcharCount; ++i) {
+            unsigned char b1 = bytes[2 + i * 2];
+            unsigned char b2 = bytes[2 + i * 2 + 1];
+            result[i] = static_cast<wchar_t>((b1 << 8) | b2);
+        }
+        return result;
+    }
+
+    // Check UTF-8 BOM: EF BB BF
+    size_t offset = 0;
+    if (size >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF) {
+        offset = 3;
+    }
+
+    const char* utf8Data = data + offset;
+    size_t utf8Size = size - offset;
+
+    // Try decoding as UTF-8
+    int wlen = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, utf8Data,
+                                   static_cast<int>(utf8Size), nullptr, 0);
+    if (wlen > 0) {
+        std::wstring result(wlen, L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, utf8Data, static_cast<int>(utf8Size),
+                            &result[0], wlen);
+        return result;
+    }
+
+    // Fallback: CP_ACP (ANSI)
+    wlen = MultiByteToWideChar(CP_ACP, 0, utf8Data, static_cast<int>(utf8Size),
+                               nullptr, 0);
+    if (wlen > 0) {
+        std::wstring result(wlen, L'\0');
+        MultiByteToWideChar(CP_ACP, 0, utf8Data, static_cast<int>(utf8Size),
+                            &result[0], wlen);
+        return result;
+    }
+
+    return {};
 }
 
-std::wstring Utf8ToWide(const std::string& str) {
-    if (str.empty())
-        return {};
-    int size = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.length(),
-                                   nullptr, 0);
-    std::wstring wstr(size, 0);
-    MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.length(), &wstr[0],
-                        size);
-    return wstr;
-}
-
-std::string UnescapeIcsText(const std::string& str) {
-    std::string result;
+std::wstring UnescapeIcsText(const std::wstring& str) {
+    std::wstring result;
     result.reserve(str.size());
     for (size_t i = 0; i < str.size(); ++i) {
-        if (str[i] == '\\' && i + 1 < str.size()) {
-            char next = str[i + 1];
-            if (next == 'n' || next == 'N') {
-                result.push_back('\n');
+        if (str[i] == L'\\' && i + 1 < str.size()) {
+            wchar_t next = str[i + 1];
+            if (next == L'n' || next == L'N') {
+                result.push_back(L'\n');
                 ++i;
-            } else if (next == ',' || next == ';' || next == '\\') {
+            } else if (next == L',' || next == L';' || next == L'\\') {
                 result.push_back(next);
                 ++i;
             } else {
@@ -319,60 +873,16 @@ std::string UnescapeIcsText(const std::string& str) {
     return result;
 }
 
-inline int SafeParseInt(const std::string& s, size_t pos, size_t len) {
-    if (pos + len > s.size())
-        return 0;
-    int val = 0;
-    for (size_t i = 0; i < len; ++i) {
-        char c = s[pos + i];
-        if (c < '0' || c > '9')
-            return 0;
-        val = val * 10 + (c - '0');
-    }
-    return val;
-}
-
-bool ParseIcsDateTime(const std::string& val, SYSTEMTIME& stUtc, bool& isUtc) {
-    ZeroMemory(&stUtc, sizeof(stUtc));
-    isUtc = false;
-    bool hasTime = false;
-    if (val.length() >= 8) {
-        stUtc.wYear = (WORD)SafeParseInt(val, 0, 4);
-        stUtc.wMonth = (WORD)SafeParseInt(val, 4, 2);
-        stUtc.wDay = (WORD)SafeParseInt(val, 6, 2);
-    }
-    if (val.length() >= 15 && (val[8] == 'T' || val[8] == 't')) {
-        hasTime = true;
-        stUtc.wHour = (WORD)SafeParseInt(val, 9, 2);
-        stUtc.wMinute = (WORD)SafeParseInt(val, 11, 2);
-        stUtc.wSecond = (WORD)SafeParseInt(val, 13, 2);
-    }
-    if (!val.empty() && (val.back() == 'Z' || val.back() == 'z')) {
-        isUtc = true;
-    }
-    return hasTime;
-}
-
-SYSTEMTIME ToLocal(const SYSTEMTIME& stUtc, bool isUtc) {
-    if (!isUtc)
-        return stUtc;
-    SYSTEMTIME stLocal{};
-    if (SystemTimeToTzSpecificLocalTime(nullptr, &stUtc, &stLocal)) {
-        return stLocal;
-    }
-    return stUtc;
-}
-
-std::vector<CalendarEvent> ParseIcs(const std::string& icsContent) {
-    std::string unfolded;
+std::vector<CalendarEvent> ParseIcs(const std::wstring& icsContent) {
+    std::wstring unfolded;
     unfolded.reserve(icsContent.size());
     for (size_t i = 0; i < icsContent.size(); ++i) {
-        if ((icsContent[i] == '\r' && i + 1 < icsContent.size() &&
-             icsContent[i + 1] == '\n') ||
-            icsContent[i] == '\n') {
-            size_t nextPos = (icsContent[i] == '\r') ? i + 2 : i + 1;
+        if ((icsContent[i] == L'\r' && i + 1 < icsContent.size() &&
+             icsContent[i + 1] == L'\n') ||
+            icsContent[i] == L'\n') {
+            size_t nextPos = (icsContent[i] == L'\r') ? i + 2 : i + 1;
             if (nextPos < icsContent.size() &&
-                (icsContent[nextPos] == ' ' || icsContent[nextPos] == '\t')) {
+                (icsContent[nextPos] == L' ' || icsContent[nextPos] == L'\t')) {
                 i = nextPos;
                 continue;
             }
@@ -380,101 +890,196 @@ std::vector<CalendarEvent> ParseIcs(const std::string& icsContent) {
         unfolded.push_back(icsContent[i]);
     }
 
+    std::unordered_map<std::wstring, int> tzOffsets;
+    tzOffsets[L"UTC"] = 0;
+    tzOffsets[L"GMT"] = 0;
+    tzOffsets[L"Z"] = 0;
+
+    std::wstring currentTzid;
+    bool inVTimezone = false;
+
     std::vector<CalendarEvent> events;
-    std::istringstream stream(unfolded);
-    std::string line;
+    std::wistringstream stream(unfolded);
+    std::wstring line;
     bool inEvent = false;
     CalendarEvent currentEvent;
 
     while (std::getline(stream, line)) {
-        if (!line.empty() && line.back() == '\r')
+        if (!line.empty() && line.back() == L'\r')
             line.pop_back();
         if (line.empty())
             continue;
 
-        if (line == "BEGIN:VEVENT") {
+        if (line == L"BEGIN:VTIMEZONE") {
+            inVTimezone = true;
+            currentTzid.clear();
+            continue;
+        }
+        if (line == L"END:VTIMEZONE") {
+            inVTimezone = false;
+            currentTzid.clear();
+            continue;
+        }
+
+        if (inVTimezone) {
+            size_t colon = line.find(L':');
+            if (colon != std::wstring::npos) {
+                std::wstring keyPart = line.substr(0, colon);
+                std::wstring valPart = line.substr(colon + 1);
+                size_t semi = keyPart.find(L';');
+                std::wstring key = (semi != std::wstring::npos)
+                                       ? keyPart.substr(0, semi)
+                                       : keyPart;
+
+                if (key == L"TZID") {
+                    currentTzid = valPart;
+                    if (currentTzid.size() >= 2 &&
+                        currentTzid.front() == L'"' &&
+                        currentTzid.back() == L'"') {
+                        currentTzid =
+                            currentTzid.substr(1, currentTzid.size() - 2);
+                    }
+                } else if (key == L"TZOFFSETTO" && !currentTzid.empty()) {
+                    tzOffsets[currentTzid] = ParseUtcOffsetMinutes(valPart);
+                }
+            }
+            continue;
+        }
+
+        if (line == L"BEGIN:VEVENT") {
             inEvent = true;
             currentEvent = CalendarEvent{};
             continue;
         }
-        if (line == "END:VEVENT") {
+        if (line == L"END:VEVENT") {
             if (inEvent) {
-                if (!currentEvent.isAllDay &&
-                    currentEvent.startLocal.wHour == 0 &&
-                    currentEvent.startLocal.wMinute == 0) {
-                    if (currentEvent.hasEnd) {
-                        if ((currentEvent.endLocal.wHour == 12 &&
-                             currentEvent.endLocal.wMinute == 0) ||
-                            (currentEvent.endLocal.wHour == 23 &&
-                             currentEvent.endLocal.wMinute == 59) ||
-                            (currentEvent.endLocal.wHour == 0 &&
-                             currentEvent.endLocal.wMinute == 0 &&
-                             (currentEvent.endLocal.wDay !=
-                                  currentEvent.startLocal.wDay ||
-                              currentEvent.endLocal.wMonth !=
-                                  currentEvent.startLocal.wMonth))) {
-                            currentEvent.isAllDay = true;
-                        }
-                    }
-                }
                 events.push_back(currentEvent);
                 inEvent = false;
             }
             continue;
         }
+
         if (!inEvent)
             continue;
 
-        size_t colon = line.find(':');
-        if (colon == std::string::npos)
+        size_t colon = line.find(L':');
+        if (colon == std::wstring::npos)
             continue;
 
-        std::string keyPart = line.substr(0, colon);
-        std::string valPart = line.substr(colon + 1);
+        std::wstring keyPart = line.substr(0, colon);
+        std::wstring valPart = line.substr(colon + 1);
 
-        size_t semi = keyPart.find(';');
-        std::string key =
-            (semi != std::string::npos) ? keyPart.substr(0, semi) : keyPart;
+        size_t semi = keyPart.find(L';');
+        std::wstring key =
+            (semi != std::wstring::npos) ? keyPart.substr(0, semi) : keyPart;
 
-        if (key == "SUMMARY") {
-            currentEvent.name = Utf8ToWide(UnescapeIcsText(valPart));
-        } else if (key == "LOCATION") {
-            currentEvent.location = Utf8ToWide(UnescapeIcsText(valPart));
-        } else if (key == "DESCRIPTION") {
-            currentEvent.notes = Utf8ToWide(UnescapeIcsText(valPart));
+        if (key == L"UID") {
+            currentEvent.uid = valPart;
+        } else if (key == L"STATUS") {
+            currentEvent.status = valPart;
+            std::transform(currentEvent.status.begin(),
+                           currentEvent.status.end(),
+                           currentEvent.status.begin(), ::towupper);
+        } else if (key == L"RECURRENCE-ID") {
+            currentEvent.recurrenceId = valPart;
+        } else if (key == L"RRULE") {
+            currentEvent.rrule = ParseRRule(valPart);
+            currentEvent.hasRRule =
+                (currentEvent.rrule.freq != RecurrenceFreq::None);
+        } else if (key == L"EXDATE") {
+            std::wstringstream exss(valPart);
+            std::wstring exToken;
+            while (std::getline(exss, exToken, L',')) {
+                if (!exToken.empty()) {
+                    currentEvent.exDates.push_back(exToken);
+                }
+            }
+        } else if (key == L"SUMMARY") {
+            currentEvent.name = UnescapeIcsText(valPart);
+        } else if (key == L"LOCATION") {
+            currentEvent.location = UnescapeIcsText(valPart);
+        } else if (key == L"DESCRIPTION") {
+            currentEvent.notes = UnescapeIcsText(valPart);
             for (auto& ch : currentEvent.notes) {
                 if (ch == L'\r' || ch == L'\n')
                     ch = L' ';
             }
-        } else if (key == "X-MICROSOFT-CDO-ALLDAYEVENT" ||
-                   key == "X-MICROSOFT-MSNCALENDAR-ALL-DAY-EVENT") {
-            if (_stricmp(valPart.c_str(), "TRUE") == 0 || valPart == "1") {
+        } else if (key == L"X-MICROSOFT-CDO-ALLDAYEVENT" ||
+                   key == L"X-MICROSOFT-MSNCALENDAR-ALL-DAY-EVENT") {
+            if (_wcsicmp(valPart.c_str(), L"TRUE") == 0 || valPart == L"1") {
                 currentEvent.isAllDay = true;
             }
-        } else if (key == "DTSTART") {
+        } else if (key == L"DTSTART") {
+            bool isValueDate =
+                (keyPart.find(L"VALUE=DATE") != std::wstring::npos);
+            std::wstring tzid;
+            size_t tzidPos = keyPart.find(L"TZID=");
+            if (tzidPos != std::wstring::npos) {
+                tzid = keyPart.substr(tzidPos + 5);
+                size_t semi2 = tzid.find(L';');
+                if (semi2 != std::wstring::npos)
+                    tzid = tzid.substr(0, semi2);
+                if (tzid.size() >= 2 && tzid.front() == L'"' &&
+                    tzid.back() == L'"')
+                    tzid = tzid.substr(1, tzid.size() - 2);
+            }
+
             SYSTEMTIME stUtc{};
             bool isUtc = false;
-            bool hasTime = ParseIcsDateTime(valPart, stUtc, isUtc);
-            if (!hasTime || keyPart.find("VALUE=DATE") != std::string::npos) {
+            bool hasTime = ParseIcsDateTimeW(valPart, stUtc, isUtc);
+            if (!hasTime || isValueDate) {
                 currentEvent.isAllDay = true;
                 currentEvent.startLocal = stUtc;
+            } else if (isUtc) {
+                currentEvent.startLocal = TzToSystemLocal(stUtc, 0);
+            } else if (!tzid.empty()) {
+                auto it = tzOffsets.find(tzid);
+                if (it != tzOffsets.end()) {
+                    currentEvent.startLocal =
+                        TzToSystemLocal(stUtc, it->second);
+                } else {
+                    currentEvent.startLocal = stUtc;
+                }
             } else {
-                currentEvent.startLocal = ToLocal(stUtc, isUtc);
+                currentEvent.startLocal = stUtc;
             }
 
             FILETIME ft{};
             SystemTimeToFileTime(&currentEvent.startLocal, &ft);
             currentEvent.sortKey =
                 ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
-        } else if (key == "DTEND") {
+        } else if (key == L"DTEND") {
+            bool isValueDate =
+                (keyPart.find(L"VALUE=DATE") != std::wstring::npos);
+            std::wstring tzid;
+            size_t tzidPos = keyPart.find(L"TZID=");
+            if (tzidPos != std::wstring::npos) {
+                tzid = keyPart.substr(tzidPos + 5);
+                size_t semi2 = tzid.find(L';');
+                if (semi2 != std::wstring::npos)
+                    tzid = tzid.substr(0, semi2);
+                if (tzid.size() >= 2 && tzid.front() == L'"' &&
+                    tzid.back() == L'"')
+                    tzid = tzid.substr(1, tzid.size() - 2);
+            }
+
             SYSTEMTIME stUtc{};
             bool isUtc = false;
-            bool hasTime = ParseIcsDateTime(valPart, stUtc, isUtc);
-            if (!hasTime || keyPart.find("VALUE=DATE") != std::string::npos) {
+            bool hasTime = ParseIcsDateTimeW(valPart, stUtc, isUtc);
+            if (!hasTime || isValueDate) {
                 currentEvent.isAllDay = true;
                 currentEvent.endLocal = stUtc;
+            } else if (isUtc) {
+                currentEvent.endLocal = TzToSystemLocal(stUtc, 0);
+            } else if (!tzid.empty()) {
+                auto it = tzOffsets.find(tzid);
+                if (it != tzOffsets.end()) {
+                    currentEvent.endLocal = TzToSystemLocal(stUtc, it->second);
+                } else {
+                    currentEvent.endLocal = stUtc;
+                }
             } else {
-                currentEvent.endLocal = ToLocal(stUtc, isUtc);
+                currentEvent.endLocal = stUtc;
             }
             currentEvent.hasEnd = true;
         }
@@ -483,46 +1088,83 @@ std::vector<CalendarEvent> ParseIcs(const std::string& icsContent) {
     return events;
 }
 
-std::string FetchIcsContent(std::wstring const& pathOrUrl) {
-    std::wstring trimmed = pathOrUrl;
-    while (!trimmed.empty() &&
-           (trimmed.front() == L' ' || trimmed.front() == L'\t' ||
-            trimmed.front() == L'"')) {
-        trimmed.erase(trimmed.begin());
-    }
-    while (!trimmed.empty() &&
-           (trimmed.back() == L' ' || trimmed.back() == L'\t' ||
-            trimmed.back() == L'"')) {
-        trimmed.pop_back();
+std::wstring FetchIcsContent(std::wstring const& pathOrUrl,
+                             bool force,
+                             bool& outFromCache) {
+    outFromCache = false;
+    bool isRemote = (_wcsnicmp(pathOrUrl.c_str(), L"http://", 7) == 0 ||
+                     _wcsnicmp(pathOrUrl.c_str(), L"https://", 8) == 0);
+
+    {
+        std::lock_guard<std::mutex> lock(g_cacheMutex);
+        if (!force && pathOrUrl == g_lastFetchedPath &&
+            !g_cachedIcsContent.empty()) {
+            if (isRemote) {
+                ULONGLONG now = GetTickCount64();
+                // 5 minutes TTL = 300,000 ms
+                if (now - g_lastSuccessfulFetchTick < 300000ULL) {
+                    Wh_Log(L"Using cached remote ICS content (TTL remaining)");
+                    outFromCache = true;
+                    return g_cachedIcsContent;
+                }
+            } else {
+                std::wstring localPath = pathOrUrl;
+                if (_wcsnicmp(localPath.c_str(), L"file:///", 8) == 0)
+                    localPath = localPath.substr(8);
+                else if (_wcsnicmp(localPath.c_str(), L"file://", 7) == 0)
+                    localPath = localPath.substr(7);
+                for (auto& ch : localPath) {
+                    if (ch == L'/')
+                        ch = L'\\';
+                }
+
+                WIN32_FILE_ATTRIBUTE_DATA attr{};
+                if (GetFileAttributesExW(localPath.c_str(),
+                                         GetFileExInfoStandard, &attr)) {
+                    if (attr.ftLastWriteTime.dwLowDateTime ==
+                            g_lastLocalFileWriteTime.dwLowDateTime &&
+                        attr.ftLastWriteTime.dwHighDateTime ==
+                            g_lastLocalFileWriteTime.dwHighDateTime) {
+                        Wh_Log(
+                            L"Using cached local ICS content (file write time "
+                            L"unchanged)");
+                        outFromCache = true;
+                        return g_cachedIcsContent;
+                    }
+                }
+            }
+        }
     }
 
-    if (_wcsnicmp(trimmed.c_str(), L"http://", 7) == 0 ||
-        _wcsnicmp(trimmed.c_str(), L"https://", 8) == 0) {
-        Wh_Log(L"Fetching remote URL: %s", trimmed.c_str());
+    std::wstring decodedContent;
+    FILETIME newWriteTime{};
+
+    if (isRemote) {
+        Wh_Log(L"Fetching remote URL: %s", pathOrUrl.c_str());
         const WH_URL_CONTENT* content =
-            Wh_GetUrlContent(trimmed.c_str(), nullptr);
+            Wh_GetUrlContent(pathOrUrl.c_str(), nullptr);
         if (content && content->statusCode == 200 && content->data) {
-            std::string result(content->data, content->length);
+            decodedContent = DecodeIcsBytes(
+                reinterpret_cast<const char*>(content->data), content->length);
             Wh_FreeUrlContent(content);
-            Wh_Log(L"Successfully fetched %zu bytes from remote URL",
-                   result.size());
-            return result;
-        }
-        if (content) {
-            Wh_Log(L"Wh_GetUrlContent returned HTTP status %d",
-                   content->statusCode);
-            Wh_FreeUrlContent(content);
+            Wh_Log(L"Successfully fetched %zu characters from remote URL",
+                   decodedContent.size());
         } else {
-            Wh_Log(L"Wh_GetUrlContent returned null");
+            if (content) {
+                Wh_Log(L"Wh_GetUrlContent returned HTTP status %d",
+                       content->statusCode);
+                Wh_FreeUrlContent(content);
+            } else {
+                Wh_Log(L"Wh_GetUrlContent returned null");
+            }
+            return {};
         }
-        return {};
     } else {
-        std::wstring localPath = trimmed;
-        if (_wcsnicmp(localPath.c_str(), L"file:///", 8) == 0) {
+        std::wstring localPath = pathOrUrl;
+        if (_wcsnicmp(localPath.c_str(), L"file:///", 8) == 0)
             localPath = localPath.substr(8);
-        } else if (_wcsnicmp(localPath.c_str(), L"file://", 7) == 0) {
+        else if (_wcsnicmp(localPath.c_str(), L"file://", 7) == 0)
             localPath = localPath.substr(7);
-        }
 
         for (auto& ch : localPath) {
             if (ch == L'/')
@@ -530,6 +1172,12 @@ std::string FetchIcsContent(std::wstring const& pathOrUrl) {
         }
 
         Wh_Log(L"Reading local file: %s", localPath.c_str());
+
+        WIN32_FILE_ATTRIBUTE_DATA attr{};
+        if (GetFileAttributesExW(localPath.c_str(), GetFileExInfoStandard,
+                                 &attr)) {
+            newWriteTime = attr.ftLastWriteTime;
+        }
 
         HANDLE hFile =
             CreateFileW(localPath.c_str(), GENERIC_READ, FILE_SHARE_READ,
@@ -542,6 +1190,7 @@ std::string FetchIcsContent(std::wstring const& pathOrUrl) {
         }
 
         DWORD fileSize = GetFileSize(hFile, nullptr);
+
         if (fileSize == INVALID_FILE_SIZE || fileSize == 0) {
             CloseHandle(hFile);
             Wh_Log(L"Local file is empty or size invalid: %s",
@@ -549,9 +1198,9 @@ std::string FetchIcsContent(std::wstring const& pathOrUrl) {
             return {};
         }
 
-        std::string result(fileSize, '\0');
+        std::vector<char> buf(fileSize);
         DWORD bytesRead = 0;
-        if (!ReadFile(hFile, &result[0], fileSize, &bytesRead, nullptr)) {
+        if (!ReadFile(hFile, buf.data(), fileSize, &bytesRead, nullptr)) {
             CloseHandle(hFile);
             Wh_Log(L"ReadFile failed (%u) for local path: %s", GetLastError(),
                    localPath.c_str());
@@ -559,38 +1208,26 @@ std::string FetchIcsContent(std::wstring const& pathOrUrl) {
         }
 
         CloseHandle(hFile);
-        result.resize(bytesRead);
-        Wh_Log(L"Successfully read %u bytes from local file", bytesRead);
-        return result;
+        decodedContent = DecodeIcsBytes(buf.data(), bytesRead);
+        Wh_Log(
+            L"Successfully read %u bytes, decoded %zu characters from local "
+            L"file",
+            bytesRead, decodedContent.size());
     }
+
+    if (!decodedContent.empty()) {
+        std::lock_guard<std::mutex> lock(g_cacheMutex);
+        g_cachedIcsContent = decodedContent;
+        g_lastFetchedPath = pathOrUrl;
+        g_lastLocalFileWriteTime = newWriteTime;
+        g_lastSuccessfulFetchTick = GetTickCount64();
+    }
+
+    return decodedContent;
 }
 
 SYSTEMTIME AdjustDays(SYSTEMTIME const& stLocal, int days) {
-    SYSTEMTIME stUtc{};
-    TzSpecificLocalTimeToSystemTime(nullptr, &stLocal, &stUtc);
-
-    FILETIME ft{};
-    SystemTimeToFileTime(&stUtc, &ft);
-
-    ULARGE_INTEGER uli;
-    uli.LowPart = ft.dwLowDateTime;
-    uli.HighPart = ft.dwHighDateTime;
-
-    ULONGLONG dayTicks = 864000000000ULL;
-    if (days >= 0) {
-        uli.QuadPart += (ULONGLONG)days * dayTicks;
-    } else {
-        uli.QuadPart -= (ULONGLONG)(-days) * dayTicks;
-    }
-
-    ft.dwLowDateTime = uli.LowPart;
-    ft.dwHighDateTime = uli.HighPart;
-
-    FileTimeToSystemTime(&ft, &stUtc);
-
-    SYSTEMTIME newLocal{};
-    SystemTimeToTzSpecificLocalTime(nullptr, &stUtc, &newLocal);
-    return newLocal;
+    return ShiftLocalDate(stLocal, days);
 }
 
 wf::DateTime SystemTimeToWinRtDateTime(SYSTEMTIME const& stLocal) {
@@ -715,24 +1352,62 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
     VisualTreeWatcher(const VisualTreeWatcher&) = delete;
     VisualTreeWatcher& operator=(const VisualTreeWatcher&) = delete;
 
-    ~VisualTreeWatcher() {
-        Wh_Log(L"Destroying VisualTreeWatcher");
-        if (m_prevDayButton && m_prevBtnToken.value != 0) {
-            m_prevDayButton.Click(m_prevBtnToken);
-            m_prevBtnToken = {};
+    ~VisualTreeWatcher() = default;
+
+    void RestoreCalendarContent() {
+        if (m_hostScrollViewer) {
+            try {
+                if (m_originalCalendarContent) {
+                    m_hostScrollViewer.Content(m_originalCalendarContent);
+                    Wh_Log(
+                        L"Restored original CalendarControlScrollViewer "
+                        L"content");
+                } else if (m_hostScrollViewer.Content() == m_rootGrid) {
+                    m_hostScrollViewer.Content(nullptr);
+                    Wh_Log(
+                        L"Detached custom root grid from "
+                        L"CalendarControlScrollViewer");
+                }
+                m_hostScrollViewer.VerticalScrollBarVisibility(
+                    wuxc::ScrollBarVisibility::Auto);
+                m_hostScrollViewer.HorizontalScrollBarVisibility(
+                    wuxc::ScrollBarVisibility::Disabled);
+            } catch (...) {
+                Wh_Log(
+                    L"Failed to restore original CalendarControlScrollViewer "
+                    L"content: %08X",
+                    winrt::to_hresult());
+            }
+            m_originalCalendarContent = nullptr;
+            m_hostScrollViewer = nullptr;
         }
-        if (m_nextDayButton && m_nextBtnToken.value != 0) {
-            m_nextDayButton.Click(m_nextBtnToken);
-            m_nextBtnToken = {};
+
+        if (m_rootGrid) {
+            try {
+                m_rootGrid.Children().Clear();
+            } catch (...) {
+            }
         }
-        if (m_refreshButton && m_refreshBtnToken.value != 0) {
-            m_refreshButton.Click(m_refreshBtnToken);
-            m_refreshBtnToken = {};
+        if (m_itemsControl) {
+            try {
+                m_itemsControl.Items().Clear();
+            } catch (...) {
+            }
         }
-        if (m_datePicker && m_dateChangedToken.value != 0) {
-            m_datePicker.DateChanged(m_dateChangedToken);
-            m_dateChangedToken = {};
+
+        if (m_focusSessionControl) {
+            try {
+                m_focusSessionControl.Visibility(wux::Visibility::Visible);
+                Wh_Log(L"Restored FocusSessionControl visibility to Visible");
+            } catch (...) {
+                Wh_Log(
+                    L"Failed to restore FocusSessionControl visibility: %08X",
+                    winrt::to_hresult());
+            }
         }
+    }
+
+    void UnregisterFocusSessionControl() {
         if (m_focusSessionControl && m_focusSessionVisibilityToken != 0) {
             try {
                 m_focusSessionControl.UnregisterPropertyChangedCallback(
@@ -742,15 +1417,6 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
             }
             m_focusSessionVisibilityToken = 0;
         }
-        m_focusSessionControl = nullptr;
-        m_prevDayButton = nullptr;
-        m_nextDayButton = nullptr;
-        m_refreshButton = nullptr;
-        m_datePicker = nullptr;
-        m_headerGrid = nullptr;
-        m_rootGrid = nullptr;
-        m_eventsScrollViewer = nullptr;
-        m_itemsControl = nullptr;
     }
 
     void UnadviseVisualTreeChange() {
@@ -765,33 +1431,37 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
             Wh_Log(L"UnadviseVisualTreeChange failed: %08X", hr);
         }
 
-        if (m_prevDayButton && m_prevBtnToken.value != 0) {
-            m_prevDayButton.Click(m_prevBtnToken);
-            m_prevBtnToken = {};
+        try {
+            if (m_prevDayButton && m_prevBtnToken.value != 0) {
+                m_prevDayButton.Click(m_prevBtnToken);
+                m_prevBtnToken = {};
+            }
+        } catch (...) {
         }
-        if (m_nextDayButton && m_nextBtnToken.value != 0) {
-            m_nextDayButton.Click(m_nextBtnToken);
-            m_nextBtnToken = {};
+        try {
+            if (m_nextDayButton && m_nextBtnToken.value != 0) {
+                m_nextDayButton.Click(m_nextBtnToken);
+                m_nextBtnToken = {};
+            }
+        } catch (...) {
         }
-        if (m_refreshButton && m_refreshBtnToken.value != 0) {
-            m_refreshButton.Click(m_refreshBtnToken);
-            m_refreshBtnToken = {};
+        try {
+            if (m_refreshButton && m_refreshBtnToken.value != 0) {
+                m_refreshButton.Click(m_refreshBtnToken);
+                m_refreshBtnToken = {};
+            }
+        } catch (...) {
         }
-        if (m_datePicker && m_dateChangedToken.value != 0) {
-            m_datePicker.DateChanged(m_dateChangedToken);
-            m_dateChangedToken = {};
+        try {
+            if (m_datePicker && m_dateChangedToken.value != 0) {
+                m_datePicker.DateChanged(m_dateChangedToken);
+                m_dateChangedToken = {};
+            }
+        } catch (...) {
         }
 
         m_xamlDiagnostics = nullptr;
-        if (m_focusSessionControl && m_focusSessionVisibilityToken != 0) {
-            try {
-                m_focusSessionControl.UnregisterPropertyChangedCallback(
-                    wux::UIElement::VisibilityProperty(),
-                    m_focusSessionVisibilityToken);
-            } catch (...) {
-            }
-            m_focusSessionVisibilityToken = 0;
-        }
+        UnregisterFocusSessionControl();
         m_focusSessionControl = nullptr;
         m_prevDayButton = nullptr;
         m_nextDayButton = nullptr;
@@ -801,6 +1471,8 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
         m_rootGrid = nullptr;
         m_eventsScrollViewer = nullptr;
         m_itemsControl = nullptr;
+        m_hostScrollViewer = nullptr;
+        m_originalCalendarContent = nullptr;
     }
 
     void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
@@ -903,11 +1575,22 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
                 endTimeTb.Text(L"Day");
                 endTimeTb.Opacity(0.8);
             } else {
-                startTimeTb.Text(winrt::hstring(FormatTimeAmPm(ev.startLocal)));
-                if (ev.hasEnd) {
-                    endTimeTb.Text(winrt::hstring(FormatTimeAmPm(ev.endLocal)));
+                WCHAR buf[64];
+
+                if (GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS,
+                                    &ev.startLocal, nullptr, buf,
+                                    ARRAYSIZE(buf)) != 0) {
+                    startTimeTb.Text(winrt::hstring(buf));
                 }
-                endTimeTb.Opacity(0.7);
+
+                if (ev.hasEnd &&
+                    GetTimeFormatEx(LOCALE_NAME_USER_DEFAULT, TIME_NOSECONDS,
+                                    &ev.endLocal, nullptr, buf,
+                                    ARRAYSIZE(buf)) != 0) {
+                    endTimeTb.Text(winrt::hstring(buf));
+                }
+
+                endTimeTb.Opacity(0.7);  // slightly greyer than start time
             }
 
             // Location then separator '-' then event notes: Column 1, Row 1
@@ -955,7 +1638,6 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
             g_selectedDate = newDate;
             g_hasSelectedDate = true;
             filtered = FilterEventsForDate(g_allParsedEvents, newDate);
-            g_cachedEvents = filtered;
         }
 
         PopulateItemsControl(filtered);
@@ -999,7 +1681,6 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
             g_selectedDate = selected;
             g_hasSelectedDate = true;
             filtered = FilterEventsForDate(g_allParsedEvents, selected);
-            g_cachedEvents = filtered;
         }
 
         PopulateItemsControl(filtered);
@@ -1029,7 +1710,6 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
                         g_selectedDate = today;
                         g_hasSelectedDate = true;
                         events = FilterEventsForDate(g_allParsedEvents, today);
-                        g_cachedEvents = events;
                     }
                     strongThis->PopulateItemsControl(events);
                 }
@@ -1063,7 +1743,7 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
     }
 
     void UpdateMaxHeight(int maxHeight) {
-        if (!m_eventsScrollViewer) {
+        if (!m_eventsScrollViewer || maxHeight <= 0) {
             return;
         }
 
@@ -1118,8 +1798,12 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
                     }
 
                     int maxHeight = GetMaxHeightSetting();
-                    strongThis->m_eventsScrollViewer.MaxHeight(
-                        (double)maxHeight);
+
+                    if (maxHeight > 0) {
+                        strongThis->m_eventsScrollViewer.MaxHeight(
+                            (double)maxHeight);
+                    }
+
                     strongThis->m_eventsScrollViewer.Height(
                         std::numeric_limits<double>::quiet_NaN());
 
@@ -1134,9 +1818,11 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
                         strongThis->m_datePicker.Margin(
                             wux::Thickness{0, 0, 0, 6});
                         strongThis->m_datePicker.IsTodayHighlighted(true);
+
                         strongThis->m_datePicker.DateFormat(
-                            L"{dayofweek.full}, "
-                            L"{day.integer(2)}/{month.integer(2)}/{year.full}");
+                            L"{dayofweek.full}, {month.abbreviated} "
+                            L"{day.integer}, {year.full}");  // use locale
+
                         strongThis->m_datePicker.Date(winrt::clock::now());
 
                         strongThis->m_dateChangedToken =
@@ -1316,9 +2002,39 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
                         std::lock_guard<std::mutex> lock(g_eventsMutex);
                         currentEvents =
                             FilterEventsForDate(g_allParsedEvents, today);
-                        g_cachedEvents = currentEvents;
                     }
                     strongThis->PopulateItemsControl(currentEvents);
+
+                    if (strongThis->m_rootGrid) {
+                        if (auto parent = strongThis->m_rootGrid.Parent()) {
+                            if (auto parentContentControl =
+                                    parent.try_as<wuxc::ContentControl>()) {
+                                if (parentContentControl.Content() ==
+                                    strongThis->m_rootGrid) {
+                                    parentContentControl.Content(nullptr);
+                                }
+                            } else if (auto parentPanel =
+                                           parent.try_as<wuxc::Panel>()) {
+                                uint32_t index = 0;
+                                if (parentPanel.Children().IndexOf(
+                                        strongThis->m_rootGrid, index)) {
+                                    parentPanel.Children().RemoveAt(index);
+                                }
+                            }
+                        }
+                    }
+
+                    if (!strongThis->m_originalCalendarContent &&
+                        host.Content() != strongThis->m_rootGrid) {
+                        strongThis->m_originalCalendarContent = host.Content();
+                        Wh_Log(
+                            L"Captured original CalendarControlScrollViewer "
+                            L"content: %p",
+                            winrt::get_abi(
+                                strongThis->m_originalCalendarContent));
+                    }
+                    strongThis->m_hostScrollViewer = host;
+                    RecordDispatcher(host.Dispatcher());
 
                     host.VerticalScrollBarVisibility(
                         wuxc::ScrollBarVisibility::Disabled);
@@ -1374,6 +2090,11 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
     }
 
     void HandleFocusSessionControl(wux::FrameworkElement const& element) {
+        if (m_focusSessionControl == element) {
+            return;
+        }
+
+        UnregisterFocusSessionControl();
         m_focusSessionControl = element;
 
         auto dispatcher = element.Dispatcher();
@@ -1387,6 +2108,9 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
                 auto watcher = weakThis.get();
                 auto el = weakEl.get();
                 if (!watcher || !el)
+                    return;
+
+                if (watcher->m_focusSessionControl != el)
                     return;
 
                 try {
@@ -1520,6 +2244,8 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
     winrt::event_token m_refreshBtnToken{};
     wux::FrameworkElement m_focusSessionControl{nullptr};
     int64_t m_focusSessionVisibilityToken{0};
+    wuxc::ScrollViewer m_hostScrollViewer{nullptr};
+    winrt::Windows::Foundation::IInspectable m_originalCalendarContent{nullptr};
 };
 
 // -----------------------------------------------------------------------------
@@ -1532,7 +2258,138 @@ static constexpr CLSID CLSID_WindhawkTAP = {
     0x40e8,
     {0xa4, 0x32, 0xf5, 0x91, 0x6b, 0x64, 0x27, 0xe5}};
 
-winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
+// Released with `g_visualTreeWatcher = nullptr;` on the UI thread in
+// Wh_ModUninit.
+[[clang::no_destroy]] winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
+std::mutex g_watcherMutex;
+
+HANDLE g_hWorkerThread = nullptr;
+HANDLE g_hWorkEvent = nullptr;
+HANDLE g_hStopEvent = nullptr;
+std::atomic<bool> g_workerForceFetch{false};
+
+DWORD WINAPI WorkerThreadProc(LPVOID) {
+    HANDLE events[2] = {g_hStopEvent, g_hWorkEvent};
+    while (true) {
+        DWORD waitRes = WaitForMultipleObjects(2, events, FALSE, INFINITE);
+        if (waitRes == WAIT_OBJECT_0) {
+            // Stop event signaled - exit worker thread immediately
+            break;
+        }
+        if (waitRes != WAIT_OBJECT_0 + 1) {
+            // Error or unexpected
+            break;
+        }
+
+        bool forceFetch = g_workerForceFetch.exchange(false);
+        std::wstring icsPath = GetIcsPathSetting();
+        if (icsPath.empty()) {
+            Wh_Log(L"No ICS path configured in settings");
+            winrt::com_ptr<VisualTreeWatcher> watcher;
+            {
+                std::lock_guard<std::mutex> lock(g_watcherMutex);
+                watcher = g_visualTreeWatcher;
+            }
+            if (watcher) {
+                watcher->DispatchUpdateEvents({});
+            }
+            continue;
+        }
+
+        Wh_Log(L"Fetching ICS from: %s (force=%d)", icsPath.c_str(),
+               forceFetch ? 1 : 0);
+
+        bool fromCache = false;
+        std::wstring content = FetchIcsContent(icsPath, forceFetch, fromCache);
+
+        if (WaitForSingleObject(g_hStopEvent, 0) == WAIT_OBJECT_0) {
+            break;
+        }
+
+        if (content.empty()) {
+            Wh_Log(
+                L"Failed to fetch ICS content (or empty), keeping existing "
+                L"content");
+            continue;
+        }
+
+        std::vector<CalendarEvent> allEvents;
+        if (fromCache) {
+            std::lock_guard<std::mutex> lock(g_eventsMutex);
+            if (!g_allParsedEvents.empty()) {
+                allEvents = g_allParsedEvents;
+            }
+        }
+
+        if (allEvents.empty()) {
+            allEvents = ParseIcs(content);
+            Wh_Log(L"Parsed %zu total events from ICS", allEvents.size());
+        } else {
+            Wh_Log(L"Reusing %zu parsed events from cache", allEvents.size());
+        }
+
+        if (WaitForSingleObject(g_hStopEvent, 0) == WAIT_OBJECT_0) {
+            break;
+        }
+
+        SYSTEMTIME targetDate;
+        {
+            std::lock_guard<std::mutex> lock(g_eventsMutex);
+            g_allParsedEvents = allEvents;
+            if (g_hasSelectedDate) {
+                targetDate = g_selectedDate;
+            } else {
+                GetLocalTime(&targetDate);
+                g_selectedDate = targetDate;
+                g_hasSelectedDate = true;
+            }
+        }
+
+        auto filteredEvents = FilterEventsForDate(allEvents, targetDate);
+        Wh_Log(L"Found %zu events for date %04d-%02d-%02d",
+               filteredEvents.size(), targetDate.wYear, targetDate.wMonth,
+               targetDate.wDay);
+
+        winrt::com_ptr<VisualTreeWatcher> watcher;
+        {
+            std::lock_guard<std::mutex> lock(g_watcherMutex);
+            watcher = g_visualTreeWatcher;
+        }
+        if (watcher) {
+            watcher->DispatchUpdateEvents(filteredEvents);
+        }
+    }
+    return 0;
+}
+
+void StartWorkerThread() {
+    if (g_hWorkerThread) {
+        return;
+    }
+    g_hWorkEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    g_hStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_hWorkerThread =
+        CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, nullptr);
+}
+
+void StopWorkerThread() {
+    if (g_hWorkerThread) {
+        if (g_hStopEvent) {
+            SetEvent(g_hStopEvent);
+        }
+        WaitForSingleObject(g_hWorkerThread, INFINITE);
+        CloseHandle(g_hWorkerThread);
+        g_hWorkerThread = nullptr;
+    }
+    if (g_hWorkEvent) {
+        CloseHandle(g_hWorkEvent);
+        g_hWorkEvent = nullptr;
+    }
+    if (g_hStopEvent) {
+        CloseHandle(g_hStopEvent);
+        g_hStopEvent = nullptr;
+    }
+}
 
 void TriggerBackgroundFetch(bool force) {
     ULONGLONG currentTick = GetTickCount64();
@@ -1541,65 +2398,11 @@ void TriggerBackgroundFetch(bool force) {
     }
     g_lastFetchTick = currentTick;
 
-    HANDLE thread = CreateThread(
-        nullptr, 0,
-        [](LPVOID) -> DWORD {
-            std::wstring icsPath = GetIcsPathSetting();
-            if (icsPath.empty()) {
-                Wh_Log(L"No ICS path configured in settings");
-                if (g_visualTreeWatcher) {
-                    g_visualTreeWatcher->DispatchUpdateEvents({});
-                }
-                return 0;
-            }
-
-            Wh_Log(L"Fetching ICS from: %s", icsPath.c_str());
-
-            std::string content = FetchIcsContent(icsPath);
-            if (content.empty()) {
-                Wh_Log(
-                    L"Failed to fetch ICS content (or empty), keeping existing "
-                    L"content");
-                return 0;
-            }
-
-            auto allEvents = ParseIcs(content);
-            Wh_Log(L"Parsed %zu total events from ICS", allEvents.size());
-
-            SYSTEMTIME targetDate;
-            {
-                std::lock_guard<std::mutex> lock(g_eventsMutex);
-                g_allParsedEvents = allEvents;
-                g_hasCachedEvents = true;
-                if (g_hasSelectedDate) {
-                    targetDate = g_selectedDate;
-                } else {
-                    GetLocalTime(&targetDate);
-                    g_selectedDate = targetDate;
-                    g_hasSelectedDate = true;
-                }
-            }
-
-            auto filteredEvents = FilterEventsForDate(allEvents, targetDate);
-            Wh_Log(L"Found %zu events for date %04d-%02d-%02d",
-                   filteredEvents.size(), targetDate.wYear, targetDate.wMonth,
-                   targetDate.wDay);
-
-            {
-                std::lock_guard<std::mutex> lock(g_eventsMutex);
-                g_cachedEvents = filteredEvents;
-            }
-
-            if (g_visualTreeWatcher) {
-                g_visualTreeWatcher->DispatchUpdateEvents(filteredEvents);
-            }
-
-            return 0;
-        },
-        nullptr, 0, nullptr);
-
-    if (thread) {
-        CloseHandle(thread);
+    if (force) {
+        g_workerForceFetch = true;
+    }
+    if (g_hWorkEvent) {
+        SetEvent(g_hWorkEvent);
     }
 }
 
@@ -1614,8 +2417,13 @@ void OnCalendarOpened() {
         L"Calendar opened, resetting date picker to today and triggering "
         L"background fetch");
 
-    if (g_visualTreeWatcher) {
-        g_visualTreeWatcher->ResetDatePickerToToday();
+    winrt::com_ptr<VisualTreeWatcher> watcher;
+    {
+        std::lock_guard<std::mutex> lock(g_watcherMutex);
+        watcher = g_visualTreeWatcher;
+    }
+    if (watcher) {
+        watcher->ResetDatePickerToToday();
     }
 
     TriggerBackgroundFetch();
@@ -1625,9 +2433,16 @@ class WindhawkTAP
     : public winrt::implements<WindhawkTAP, IObjectWithSite, winrt::non_agile> {
    public:
     HRESULT STDMETHODCALLTYPE SetSite(IUnknown* pUnkSite) override {
-        if (g_visualTreeWatcher) {
-            g_visualTreeWatcher->UnadviseVisualTreeChange();
+        winrt::com_ptr<VisualTreeWatcher> oldWatcher;
+        {
+            std::lock_guard<std::mutex> lock(g_watcherMutex);
+            oldWatcher = g_visualTreeWatcher;
             g_visualTreeWatcher = nullptr;
+        }
+
+        if (oldWatcher) {
+            oldWatcher->RestoreCalendarContent();
+            oldWatcher->UnadviseVisualTreeChange();
         }
 
         m_site = nullptr;
@@ -1646,7 +2461,22 @@ class WindhawkTAP
             FreeLibrary(module);
         }
 
-        g_visualTreeWatcher = winrt::make_self<VisualTreeWatcher>(m_site);
+        try {
+            auto coreWindow = wuc::CoreWindow::GetForCurrentThread();
+            if (coreWindow) {
+                RecordDispatcher(coreWindow.Dispatcher());
+                HWND hWnd = GetHwndFromCoreWindow(coreWindow);
+                if (hWnd) {
+                    RecordCoreWindow(hWnd);
+                }
+            }
+        } catch (...) {
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(g_watcherMutex);
+            g_visualTreeWatcher = winrt::make_self<VisualTreeWatcher>(m_site);
+        }
 
         return S_OK;
     }
@@ -1789,34 +2619,77 @@ HRESULT InjectWindhawkTAP() {
 // Start Menu Styler initialization pattern for CoreWindow
 // -----------------------------------------------------------------------------
 
+struct ThreadCoreWindowData {
+    wuc::CoreWindow coreWindow{nullptr};
+    winrt::event_token activatedToken{};
+    winrt::event_token visibilityChangedToken{};
+};
+thread_local ThreadCoreWindowData t_coreWindowData;
+
 void RegisterCoreWindowEvents() {
     try {
-        auto coreWindow = wuc::CoreWindow::GetForCurrentThread();
-        if (coreWindow) {
-            Wh_Log(
-                L"Registering CoreWindow Activated & VisibilityChanged for "
-                L"thread %u",
-                GetCurrentThreadId());
-
-            coreWindow.Activated(
-                [](auto&&, wuc::WindowActivatedEventArgs const& args) {
-                    if (args.WindowActivationState() !=
-                        wuc::CoreWindowActivationState::Deactivated) {
-                        Wh_Log(L"CoreWindow Activated");
-                        OnCalendarOpened();
-                    }
-                });
-
-            coreWindow.VisibilityChanged(
-                [](auto&&, wuc::VisibilityChangedEventArgs const& args) {
-                    if (args.Visible()) {
-                        Wh_Log(L"CoreWindow VisibilityChanged: Visible");
-                        OnCalendarOpened();
-                    }
-                });
+        if (t_coreWindowData.coreWindow) {
+            return;
         }
+        auto coreWindow = wuc::CoreWindow::GetForCurrentThread();
+        if (!coreWindow) {
+            return;
+        }
+
+        RecordDispatcher(coreWindow.Dispatcher());
+        HWND hWnd = GetHwndFromCoreWindow(coreWindow);
+        if (hWnd) {
+            RecordCoreWindow(hWnd);
+        }
+
+        Wh_Log(
+            L"Registering CoreWindow Activated & VisibilityChanged for "
+            L"thread %u (hWnd=%08X)",
+            GetCurrentThreadId(), (DWORD)(ULONG_PTR)hWnd);
+
+        t_coreWindowData.coreWindow = coreWindow;
+
+        t_coreWindowData.activatedToken = coreWindow.Activated(
+            [](auto&&, wuc::WindowActivatedEventArgs const& args) {
+                if (args.WindowActivationState() !=
+                    wuc::CoreWindowActivationState::Deactivated) {
+                    Wh_Log(L"CoreWindow Activated");
+                    OnCalendarOpened();
+                }
+            });
+
+        t_coreWindowData.visibilityChangedToken = coreWindow.VisibilityChanged(
+            [](auto&&, wuc::VisibilityChangedEventArgs const& args) {
+                if (args.Visible()) {
+                    Wh_Log(L"CoreWindow VisibilityChanged: Visible");
+                    OnCalendarOpened();
+                }
+            });
     } catch (...) {
         Wh_Log(L"Failed to register CoreWindow events: %08X",
+               winrt::to_hresult());
+    }
+}
+
+void UnregisterCoreWindowEvents() {
+    try {
+        if (t_coreWindowData.coreWindow) {
+            Wh_Log(L"Unregistering CoreWindow events for thread %u",
+                   GetCurrentThreadId());
+            if (t_coreWindowData.activatedToken.value != 0) {
+                t_coreWindowData.coreWindow.Activated(
+                    t_coreWindowData.activatedToken);
+                t_coreWindowData.activatedToken = {};
+            }
+            if (t_coreWindowData.visibilityChangedToken.value != 0) {
+                t_coreWindowData.coreWindow.VisibilityChanged(
+                    t_coreWindowData.visibilityChangedToken);
+                t_coreWindowData.visibilityChangedToken = {};
+            }
+            t_coreWindowData.coreWindow = nullptr;
+        }
+    } catch (...) {
+        Wh_Log(L"Failed to unregister CoreWindow events: %08X",
                winrt::to_hresult());
     }
 }
@@ -1839,9 +2712,16 @@ void InitializeSettingsAndTap() {
 }
 
 void UninitializeSettingsAndTap() {
-    if (g_visualTreeWatcher) {
-        g_visualTreeWatcher->UnadviseVisualTreeChange();
+    winrt::com_ptr<VisualTreeWatcher> watcher;
+    {
+        std::lock_guard<std::mutex> lock(g_watcherMutex);
+        watcher = g_visualTreeWatcher;
         g_visualTreeWatcher = nullptr;
+    }
+
+    if (watcher) {
+        watcher->RestoreCalendarContent();
+        watcher->UnadviseVisualTreeChange();
     }
 
     g_initialized = false;
@@ -1906,6 +2786,7 @@ void OnWindowCreated(HWND hWnd, LPCWSTR lpClassName, PCSTR funcName) {
         Wh_Log(L"Initializing - Created core window: %08X via %S",
                (DWORD)(ULONG_PTR)hWnd, funcName);
 
+        RecordCoreWindow(hWnd);
         InitializeSettingsAndTap();
     }
 }
@@ -1991,34 +2872,61 @@ HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
 }
 
 std::vector<HWND> GetCoreWnds() {
-    struct ENUM_WINDOWS_PARAM {
-        std::vector<HWND>* hWnds;
-    };
-
     std::vector<HWND> hWnds;
-    ENUM_WINDOWS_PARAM param = {&hWnds};
-    EnumWindows(
-        [](HWND hWnd, LPARAM lParam) -> BOOL {
-            ENUM_WINDOWS_PARAM& param = *(ENUM_WINDOWS_PARAM*)lParam;
 
-            DWORD dwProcessId = 0;
-            if (!GetWindowThreadProcessId(hWnd, &dwProcessId) ||
-                dwProcessId != GetCurrentProcessId()) {
-                return TRUE;
+    // 1. Check recorded CoreWindows from CreateWindowInBand(Ex), SetSite,
+    // RegisterCoreWindowEvents
+    {
+        std::lock_guard<std::mutex> lock(g_coreWindowsMutex);
+        for (HWND hWnd : g_coreWindows) {
+            if (IsWindow(hWnd)) {
+                hWnds.push_back(hWnd);
             }
+        }
+    }
 
-            WCHAR szClassName[32];
-            if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
-                return TRUE;
-            }
+    if (!hWnds.empty()) {
+        return hWnds;
+    }
 
-            if (_wcsicmp(szClassName, L"Windows.UI.Core.CoreWindow") == 0) {
-                param.hWnds->push_back(hWnd);
-            }
+    // 2. Fallback: CoreWindows created in private Z-order bands are NOT
+    // returned by EnumWindows. Snapshot threads of the current process and use
+    // EnumThreadWindows, which discovers windows in ANY band.
+    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (hSnapshot != INVALID_HANDLE_VALUE) {
+        THREADENTRY32 te{};
+        te.dwSize = sizeof(te);
+        DWORD currentPid = GetCurrentProcessId();
 
-            return TRUE;
-        },
-        (LPARAM)&param);
+        if (Thread32First(hSnapshot, &te)) {
+            do {
+                if (te.th32OwnerProcessID == currentPid) {
+                    EnumThreadWindows(
+                        te.th32ThreadID,
+                        [](HWND hWnd, LPARAM lParam) -> BOOL {
+                            auto* pWnds =
+                                reinterpret_cast<std::vector<HWND>*>(lParam);
+                            WCHAR szClassName[64];
+                            if (GetClassNameW(hWnd, szClassName,
+                                              ARRAYSIZE(szClassName)) > 0) {
+                                if (_wcsicmp(szClassName,
+                                             L"Windows.UI.Core.CoreWindow") ==
+                                    0) {
+                                    pWnds->push_back(hWnd);
+                                }
+                            }
+                            return TRUE;
+                        },
+                        reinterpret_cast<LPARAM>(&hWnds));
+                }
+            } while (Thread32Next(hSnapshot, &te));
+        }
+        CloseHandle(hSnapshot);
+    }
+
+    for (HWND hWnd : hWnds) {
+        RecordCoreWindow(hWnd);
+    }
 
     return hWnds;
 }
@@ -2030,23 +2938,24 @@ std::vector<HWND> GetCoreWnds() {
 BOOL Wh_ModInit() {
     Wh_Log(L"Calendar XAML mod initializing");
 
-    HMODULE user32Module =
-        LoadLibraryExW(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    StartWorkerThread();
+
+    HMODULE user32Module = GetModuleHandleW(L"user32.dll");
     if (user32Module) {
-        void* pCreateWindowInBand =
-            (void*)GetProcAddress(user32Module, "CreateWindowInBand");
+        auto pCreateWindowInBand = (CreateWindowInBand_t)GetProcAddress(
+            user32Module, "CreateWindowInBand");
         if (pCreateWindowInBand) {
-            Wh_SetFunctionHook(pCreateWindowInBand,
-                               (void*)CreateWindowInBand_Hook,
-                               (void**)&CreateWindowInBand_Original);
+            WindhawkUtils::SetFunctionHook(pCreateWindowInBand,
+                                           CreateWindowInBand_Hook,
+                                           &CreateWindowInBand_Original);
         }
 
-        void* pCreateWindowInBandEx =
-            (void*)GetProcAddress(user32Module, "CreateWindowInBandEx");
+        auto pCreateWindowInBandEx = (CreateWindowInBandEx_t)GetProcAddress(
+            user32Module, "CreateWindowInBandEx");
         if (pCreateWindowInBandEx) {
-            Wh_SetFunctionHook(pCreateWindowInBandEx,
-                               (void*)CreateWindowInBandEx_Hook,
-                               (void**)&CreateWindowInBandEx_Original);
+            WindhawkUtils::SetFunctionHook(pCreateWindowInBandEx,
+                                           CreateWindowInBandEx_Hook,
+                                           &CreateWindowInBandEx_Original);
         }
     }
 
@@ -2072,10 +2981,17 @@ void Wh_ModAfterInit() {
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Settings changed");
-    if (g_visualTreeWatcher) {
+    winrt::com_ptr<VisualTreeWatcher> watcher;
+    {
+        std::lock_guard<std::mutex> lock(g_watcherMutex);
+        watcher = g_visualTreeWatcher;
+    }
+    if (watcher) {
         int maxHeight = GetMaxHeightSetting();
-        g_visualTreeWatcher->UpdateMaxHeight(maxHeight);
-        g_visualTreeWatcher->UpdateFocusSessionVisibility();
+        if (maxHeight > 0) {
+            watcher->UpdateMaxHeight(maxHeight);
+        }
+        watcher->UpdateFocusSessionVisibility();
     }
     TriggerBackgroundFetch(true);
 }
@@ -2083,5 +2999,23 @@ void Wh_ModSettingsChanged() {
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    UninitializeSettingsAndTap();
+    StopWorkerThread();
+
+    // If the mod was initialized and modified ShellExperienceHost's visual
+    // tree, exit the process with code 0. ShellExperienceHost is a transient
+    // shell process that Windows automatically relaunches on demand the moment
+    // the user opens the clock or notification center.
+    //
+    // Terminating cleanly (matching the behavior of other XAML mods like
+    // Windows 11 Start Menu Styler) ensures the entire mutated XAML visual
+    // tree, button click handlers, and diagnostics callbacks are destroyed by
+    // the OS. This eliminates any possibility of dangling delegates, buttons
+    // crashing upon being clicked, or stale UI remaining in the calendar pane
+    // after disabling the mod.
+    if (g_initialized) {
+        Wh_Log(
+            L"Exiting ShellExperienceHost process for clean mod "
+            L"uninitialization");
+        ExitProcess(0);
+    }
 }
