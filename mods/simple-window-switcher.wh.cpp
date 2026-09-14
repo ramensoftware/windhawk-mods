@@ -40,6 +40,9 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
 - DPI-aware, multi-monitor aware
 - Rounded corners for switcher and task thumbnails (optional)
 - Dynamic UI adjustments (e.g., intelligent close button placement over thumbnails)
+- Drag to cancel clicks (cancels card selection or close button when cursor is dragged away)
+- Gaming Full Screen Experience ("Xbox Mode") and Tablet Mode support with full window enumeration
+- Precision touchpad sub-notch smoothing (smooth 2-finger panning without overscrolling)
 - Highly reliable Explorer restart prompt handling without infinite loops
 
 ## Screenshots
@@ -642,6 +645,24 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
     - sortMinimizedWindowsToEnd: true
       $name: Sort Minimized Windows to the End
       $description: Sort minimized windows after all active windows. Disable this to keep minimized windows in their Z-order.
+    - showMinimizedIndicator: false
+      $name: Show Minimized Window Indicator
+      $description: Display a visual indicator for minimized windows (especially helpful in Dock Layout where minimized windows have no active screen presence).
+    - minimizedIndicatorStyle: dimIcon
+      $name: Minimized Window Indicator Style
+      $description: Visual style used to indicate minimized windows.
+      $options:
+      - dimIcon: Dimmed Icon (Translucent)
+      - dot: Subtle Pill/Dot Indicator
+      - badge: Minimize Badge
+      - dimAndDot: Dimmed Icon + Dot Indicator
+      - dimAndBadge: Dimmed Icon + Minimize Badge
+    - minimizedIconOpacity: 55
+      $name: Minimized Icon Opacity (%)
+      $description: Opacity percentage applied to minimized window icons when using dimmed icon indicator styles (20-90%).
+    - handleTouchpadGestures: true
+      $name: Handle Touchpad Switcher Gestures
+      $description: Intercept touchpad task-switching gestures in Explorer to invoke Simple Window Switcher instead of the native Windows switcher.
   $name: Accessibility
 - ExcludedWindows:
     - excludeByTitle: ""
@@ -650,6 +671,9 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
     - excludeByExe: ""
       $name: Exclude by Executable Name
       $description: "Executable name patterns to exclude, separated by ';' (wildcards supported: * matches any characters, ? matches one). Example: notepad.exe;chrome.exe"
+    - excludeXboxMode: false
+      $name: Exclude in Xbox Mode (Gaming Full Screen Experience)
+      $description: When enabled, Simple Window Switcher yields Alt+Tab to the native Windows switcher while Windows is running in Gaming Full Screen Experience (Xbox Mode).
   $name: Excluded Windows
   $description: Exclude specific windows from appearing in the switcher.
 - customHeader:
@@ -687,6 +711,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
 #include <string>
 #include <algorithm>
 #include <gdiplus.h>
+#include <windhawk_utils.h>
 
 #define SWS_CLASSNAME       L"WindhawkSWS_Switcher"
 #define SWS_ICON_SIZE       16
@@ -727,6 +752,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
 #define SWS_ALT_POLL_TIMER_ID   102
 #define SWS_CLOSE_VERIFY_TIMER_ID 103
 #define SWS_ANIM_TIMER_ID       104
+#define SWS_TOUCHPAD_IDLE_TIMER_ID 105
 // Posted by the low-level mouse hook so the heavy CycleLinear work runs in the
 // wndproc instead of on the synchronous raw-input path. WPARAM is the direction.
 #define WM_SWS_SCROLL           (WM_APP + 1)
@@ -737,6 +763,40 @@ typedef HWND (WINAPI *GhostWindowFromHungWindow_t)(HWND);
 struct ACCENT_POLICY { DWORD AccentState; DWORD AccentFlags; DWORD GradientColor; DWORD AnimationId; };
 struct WINDOWCOMPOSITIONATTRIBDATA { DWORD dwAttrib; PVOID pvData; SIZE_T cbData; };
 typedef BOOL(WINAPI *SetWindowCompositionAttribute_t)(HWND, WINDOWCOMPOSITIONATTRIBDATA*);
+
+#ifndef ZBID_SYSTEM_TOOLS
+#define ZBID_SYSTEM_TOOLS 16
+#endif
+
+typedef HWND (WINAPI *CreateWindowInBand_t)(
+    DWORD dwExStyle,
+    LPCWSTR lpClassName,
+    LPCWSTR lpWindowName,
+    DWORD dwStyle,
+    int X,
+    int Y,
+    int nWidth,
+    int nHeight,
+    HWND hWndParent,
+    HMENU hMenu,
+    HINSTANCE hInstance,
+    LPVOID lpParam,
+    DWORD dwBand
+);
+
+static HWND CreateSWSWindow(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle,
+                            int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu,
+                            HINSTANCE hInstance, LPVOID lpParam) {
+    static auto pCreateWindowInBand = (CreateWindowInBand_t)GetProcAddress(GetModuleHandleW(L"user32.dll"), "CreateWindowInBand");
+    if (pCreateWindowInBand) {
+        HWND hWnd = pCreateWindowInBand(dwExStyle, lpClassName, lpWindowName, dwStyle,
+                                        X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam,
+                                        ZBID_SYSTEM_TOOLS);
+        if (hWnd) return hWnd;
+    }
+    return CreateWindowExW(dwExStyle, lpClassName, lpWindowName, dwStyle,
+                           X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
+}
 
 struct WindowEntry {
     HWND hWnd; HICON hIcon; WCHAR title[256]; std::map<HWND, HTHUMBNAIL> hThumbs;
@@ -806,6 +866,9 @@ struct Settings {
     bool restoreAllWindows;
     bool hideMinimizedWindows;
     bool sortMinimizedWindowsToEnd;
+    bool showMinimizedIndicator;
+    WCHAR minimizedIndicatorStyle[32];
+    int minimizedIconOpacity;
     int customCornerRadius;
     WCHAR switcherPosition[32];
     int switcherPositionMargin;
@@ -840,6 +903,8 @@ struct Settings {
     bool enableSelectionAnimation;
     bool enableScrollAnimation;
     bool enableHoverAnimation;
+    bool excludeXboxMode;
+    bool handleTouchpadGestures;
 };
 
 static std::vector<std::wstring> g_excludeTitlePatterns;
@@ -856,6 +921,115 @@ static bool IsSwitcherWindow(HWND hWnd) {
         if (hWnd == h) return true;
     }
     return false;
+}
+
+using GetWindowBand_t = BOOL(WINAPI*)(HWND hWnd, PDWORD pdwBand);
+static GetWindowBand_t pGetWindowBand = nullptr;
+
+using GetThreadDescription_t = HRESULT(WINAPI*)(HANDLE hThread, PWSTR* ppszThreadDescription);
+static GetThreadDescription_t pGetThreadDescription = nullptr;
+
+#ifndef ZBID_SYSTEM_TOOLS
+#define ZBID_SYSTEM_TOOLS 16
+#endif
+
+static bool IsNativeAltTabWindow(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd)) return false;
+
+    HWND hRoot = GetAncestor(hWnd, GA_ROOT);
+    if (!hRoot) hRoot = hWnd;
+
+    WCHAR cls[64] = {0};
+    if (!GetClassNameW(hRoot, cls, ARRAYSIZE(cls))) return false;
+
+    bool isIsland = (wcscmp(cls, L"XamlExplorerHostIslandWindow") == 0);
+    bool isMultiView = (wcscmp(cls, L"MultitaskingViewFrame") == 0);
+    bool isClassic = (wcscmp(cls, L"TaskSwitcherWnd") == 0);
+
+    if (!isIsland && !isMultiView && !isClassic) {
+        return false;
+    }
+
+    // Classic Windows 7 switcher class is dedicated
+    if (isClassic) return true;
+
+    // 1. Process check: ensure the window belongs to explorer.exe
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hRoot, &pid);
+    if (pid != GetCurrentProcessId()) {
+        HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (!hProcess) return false;
+        WCHAR path[MAX_PATH] = {0};
+        DWORD size = MAX_PATH;
+        bool isExplorer = false;
+        if (QueryFullProcessImageNameW(hProcess, 0, path, &size)) {
+            WCHAR* fileName = PathFindFileNameW(path);
+            if (fileName && _wcsicmp(fileName, L"explorer.exe") == 0) {
+                isExplorer = true;
+            }
+        }
+        CloseHandle(hProcess);
+        if (!isExplorer) return false;
+    }
+
+    // 2. Window Title check: Alt+Tab is always titled L"Task Switching"
+    WCHAR title[64] = {0};
+    GetWindowTextW(hRoot, title, ARRAYSIZE(title));
+    if (wcscmp(title, L"Task Switching") != 0) {
+        return false;
+    }
+
+    // 3. Z-Band check: Alt+Tab is strictly assigned to ZBID_SYSTEM_TOOLS (16)
+    if (!pGetWindowBand) {
+        HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+        if (hUser32) {
+            pGetWindowBand = (GetWindowBand_t)GetProcAddress(hUser32, "GetWindowBand");
+        }
+    }
+    if (pGetWindowBand) {
+        DWORD band = 0;
+        if (pGetWindowBand(hRoot, &band) && band != ZBID_SYSTEM_TOOLS) {
+            return false;
+        }
+    }
+
+    // 4. Thread Description check for Win11 XAML Island host
+    if (isIsland) {
+        if (!pGetThreadDescription) {
+            HMODULE hKernel = GetModuleHandleW(L"kernelbase.dll");
+            if (!hKernel) hKernel = GetModuleHandleW(L"kernel32.dll");
+            if (hKernel) {
+                pGetThreadDescription = (GetThreadDescription_t)GetProcAddress(hKernel, "GetThreadDescription");
+            }
+        }
+        if (pGetThreadDescription) {
+            DWORD tid = GetWindowThreadProcessId(hRoot, nullptr);
+            if (tid) {
+                HANDLE hThread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, tid);
+                if (hThread) {
+                    PWSTR desc = nullptr;
+                    if (SUCCEEDED(pGetThreadDescription(hThread, &desc)) && desc) {
+                        bool isMultitasking = (wcscmp(desc, L"MultitaskingView") == 0);
+                        LocalFree(desc);
+                        if (!isMultitasking) {
+                            CloseHandle(hThread);
+                            return false;
+                        }
+                    }
+                    CloseHandle(hThread);
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
+static bool IsNativeSwitcherWindow(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd)) return false;
+    HWND hRoot = GetAncestor(hWnd, GA_ROOT);
+    if (!hRoot) hRoot = hWnd;
+    return IsNativeAltTabWindow(hRoot);
 }
 static IVirtualDesktopManager* g_pVirtualDesktopManager = NULL;
 static bool g_showAllMonitors = false;
@@ -1083,6 +1257,28 @@ static bool DockShowPreview() {
 }
 static bool BadgeIconPositionIs(const WCHAR* v) { return wcscmp(g_settings.badgeIconPosition, v) == 0; }
 static bool BadgeTitleIsTop() { return wcscmp(g_settings.badgeTitlePosition, L"top") == 0; }
+static inline bool IsEntryMinimized(const WindowEntry& w) {
+    if (g_settings.showApplications && !w.groupWindows.empty()) {
+        for (HWND hw : w.groupWindows) {
+            if (IsWindow(hw) && !IsIconic(hw)) return false;
+        }
+        return true;
+    }
+    return IsIconic(w.hWnd) != FALSE;
+}
+static inline bool MinimizedStyleUsesDimming() {
+    return wcscmp(g_settings.minimizedIndicatorStyle, L"dimIcon") == 0 ||
+           wcscmp(g_settings.minimizedIndicatorStyle, L"dimAndDot") == 0 ||
+           wcscmp(g_settings.minimizedIndicatorStyle, L"dimAndBadge") == 0;
+}
+static inline bool MinimizedStyleUsesDot() {
+    return wcscmp(g_settings.minimizedIndicatorStyle, L"dot") == 0 ||
+           wcscmp(g_settings.minimizedIndicatorStyle, L"dimAndDot") == 0;
+}
+static inline bool MinimizedStyleUsesBadge() {
+    return wcscmp(g_settings.minimizedIndicatorStyle, L"badge") == 0 ||
+           wcscmp(g_settings.minimizedIndicatorStyle, L"dimAndBadge") == 0;
+}
 static int GetHeaderIconSizeBase() {
     if (DockLayoutActive()) return g_settings.dockIconSize > 0 ? g_settings.dockIconSize : 48;
     if (BadgeLayoutActive()) {
@@ -1281,6 +1477,11 @@ static RECT g_rcChevronPrev = {0, 0, 0, 0};
 static RECT g_rcChevronNext = {0, 0, 0, 0};
 static int g_hoverChevron = 0;   // -1 = prev, +1 = next, 0 = none
 static int g_pressedChevron = 0; // -1 = prev, +1 = next, 0 = none
+
+// Mouse drag-to-cancel & click target integrity tracking
+static POINT g_ptLButtonDown = {0, 0};
+static int g_pressedIndex = -1; // -1 = none/bg, -2 = dock central preview, >= 0 = card index
+static bool g_isDragging = false;
 
 static float g_animChevronAlphaPrev = 0.0f;
 static float g_animChevronAlphaNext = 0.0f;
@@ -3115,19 +3316,68 @@ static HICON LoadWindowIcon(HWND hWnd) {
 
 static void GetWindowGroupKey(HWND hWnd, WCHAR* out, size_t cch);
 
+typedef BOOL (WINAPI *pfnIsGamingFullScreenExperienceActive)();
+
+static bool IsGamingExperienceActive() {
+    static HMODULE s_hGamemode = LoadLibraryW(L"api-ms-win-gaming-experience-l1-1-0.dll");
+    if (!s_hGamemode) {
+        s_hGamemode = LoadLibraryW(L"gamemode.dll");
+    }
+    if (!s_hGamemode) return false;
+    static pfnIsGamingFullScreenExperienceActive s_pfn = 
+        (pfnIsGamingFullScreenExperienceActive)GetProcAddress(s_hGamemode, "IsGamingFullScreenExperienceActive");
+    return s_pfn ? (s_pfn() != FALSE) : false;
+}
+
+static bool IsXboxModeOrForeground() {
+    if (IsGamingExperienceActive()) return true;
+    HWND hFg = GetForegroundWindow();
+    if (hFg) {
+        WCHAR cls[64] = {0};
+        GetClassNameW(hFg, cls, 64);
+        if (wcscmp(cls, L"ApplicationFrameWindow") == 0) {
+            WCHAR title[64] = {0};
+            GetWindowTextW(hFg, title, 64);
+            if (_wcsicmp(title, L"Xbox") == 0 || _wcsicmp(title, L"XBOX") == 0) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 static bool IsEligibleWindow(HWND hWnd, WindowEntry* outEntry = nullptr) {
-    if (!hWnd || !IsWindow(hWnd) || IsSwitcherWindow(hWnd)) return false;
+    if (!hWnd || !IsWindow(hWnd) || IsSwitcherWindow(hWnd) || IsNativeSwitcherWindow(hWnd)) return false;
     if (!IsAltTabWindow(hWnd)) return false;
 
     BOOL cloaked = FALSE;
     DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
     if (cloaked) {
-        if (wcscmp(g_settings.virtualDesktopBehavior, L"allDesktops") == 0 && g_pVirtualDesktopManager) {
+        // Exclude windows cloaked by the app itself (e.g. dormant/suspended UWP background frames)
+        if (cloaked & DWM_CLOAKED_APP) return false;
+
+        // Shell cloaked (DWM_CLOAKED_SHELL):
+        // In Gaming Full Screen Experience (Xbox Mode) or Tablet Mode, the Windows
+        // Shell cloaks background desktop windows on the current desktop.
+        // These are valid open applications and MUST be shown in Alt+Tab!
+        if (g_pVirtualDesktopManager) {
             BOOL onCurrent = FALSE;
-            if (SUCCEEDED(g_pVirtualDesktopManager->IsWindowOnCurrentVirtualDesktop(hWnd, &onCurrent)) && !onCurrent) {
-                // allow cloaked window since it's just on another virtual desktop
-            } else return false;
-        } else return false;
+            if (SUCCEEDED(g_pVirtualDesktopManager->IsWindowOnCurrentVirtualDesktop(hWnd, &onCurrent))) {
+                if (onCurrent) {
+                    // Valid window on current desktop cloaked by the shell -> keep it!
+                } else {
+                    if (wcscmp(g_settings.virtualDesktopBehavior, L"allDesktops") != 0) {
+                        return false;
+                    }
+                }
+            } else {
+                return false;
+            }
+        } else {
+            if (wcscmp(g_settings.virtualDesktopBehavior, L"allDesktops") != 0) {
+                return false;
+            }
+        }
     }
 
     bool isPrimaryOnly = (wcscmp(g_settings.switcherDisplayBehavior, L"primaryOnly") == 0);
@@ -3166,6 +3416,9 @@ static bool IsEligibleWindow(HWND hWnd, WindowEntry* outEntry = nullptr) {
         wcscmp(cls, L"Progman") == 0 ||
         wcscmp(cls, L"WorkerW") == 0 ||
         wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0 ||
+        wcscmp(cls, L"XamlExplorerHostIslandWindow") == 0 ||
+        wcscmp(cls, L"XamlExplorerHostIslandWindow_WASDK") == 0 ||
+        wcscmp(cls, L"DesktopWindowContentBridge") == 0 ||
         wcscmp(cls, L"InputNonClientPointerSource") == 0 ||
         wcsstr(cls, L"DesktopChildSiteBridge") != nullptr ||
         wcsstr(cls, L"AvaloniaSimpleWindow") != nullptr ||
@@ -3227,6 +3480,9 @@ static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
 // === UWP Icon Extraction (Explorer IPC) ===
 
 UINT g_WM_SWS_GET_UWP_ICON = 0;
+UINT g_WM_SWS_TOUCHPAD_TRIGGER = 0;
+UINT g_WM_SWS_TOUCHPAD_DISMISS = 0;
+static bool g_isTouchpadGestureActive = false;
 std::map<std::wstring, HICON> g_uwpIconCache;
 
 struct FindCoreWindowData { HWND coreHwnd; };
@@ -3670,18 +3926,12 @@ static void BuildWindowList() {
     if (g_settings.hideMinimizedWindows) {
         g_windows.erase(std::remove_if(g_windows.begin(), g_windows.end(),
             [](const WindowEntry& w) {
-                if (g_settings.showApplications) {
-                    for (HWND hw : w.groupWindows) {
-                        if (!IsIconic(hw)) return false;  // keep: has a visible window
-                    }
-                    return true;  // all windows minimized: hide
-                }
-                return IsIconic(w.hWnd) != FALSE;  // hide if minimized
+                return IsEntryMinimized(w);
             }), g_windows.end());
     }
     if (g_settings.sortMinimizedWindowsToEnd) {
         std::stable_sort(g_windows.begin(), g_windows.end(), [](const WindowEntry& a, const WindowEntry& b) {
-            return IsIconic(a.hWnd) < IsIconic(b.hWnd);
+            return IsEntryMinimized(a) < IsEntryMinimized(b);
         });
     }
 }
@@ -5568,7 +5818,16 @@ static void DrawTaskEntry(HDC hdc, WindowEntry& e, HWND hWnd, int padLeft, int r
         e.drawnIconX = iconX;
         e.drawnIconY = iconY;
         e.drawnIconSz = iconSz;
-        if (alpha < 0.99f) {
+
+        float iconAlpha = alpha;
+        bool isMin = g_settings.showMinimizedIndicator && IsEntryMinimized(e);
+        if (isMin && MinimizedStyleUsesDimming()) {
+            float minDim = (float)g_settings.minimizedIconOpacity / 100.0f;
+            if (isHovered) { minDim = std::min(1.0f, minDim + 0.15f); }
+            iconAlpha *= minDim;
+        }
+
+        if (iconAlpha < 0.99f) {
             Gdiplus::Graphics gfx(hdc);
             Gdiplus::Bitmap bmp(e.hIcon);
             Gdiplus::ImageAttributes imgAtt;
@@ -5576,7 +5835,7 @@ static void DrawTaskEntry(HDC hdc, WindowEntry& e, HWND hWnd, int padLeft, int r
                 { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
                 { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
                 { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
-                { 0.0f, 0.0f, 0.0f, alpha, 0.0f },
+                { 0.0f, 0.0f, 0.0f, iconAlpha, 0.0f },
                 { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
             }};
             imgAtt.SetColorMatrix(&cm);
@@ -5584,6 +5843,37 @@ static void DrawTaskEntry(HDC hdc, WindowEntry& e, HWND hWnd, int padLeft, int r
                           0, 0, bmp.GetWidth(), bmp.GetHeight(), Gdiplus::UnitPixel, &imgAtt);
         } else {
             DrawIconEx(hdc, iconX, iconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
+        }
+
+        if (isMin && MinimizedStyleUsesBadge()) {
+            int badgeSz = DpiScale(12, g_dpiX);
+            int badgeX = iconX + iconSz - badgeSz + DpiScale(2, g_dpiX);
+            int badgeY = iconY + iconSz - badgeSz + DpiScale(2, g_dpiY);
+            Gdiplus::Graphics gfxBadge(hdc);
+            gfxBadge.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            COLORREF bgC = g_isDarkMode ? RGB(40, 40, 40) : RGB(235, 235, 235);
+            COLORREF fgC = g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT;
+            BYTE bAlpha = (BYTE)roundf(230.0f * (alpha < 1.0f ? alpha : 1.0f));
+            Gdiplus::SolidBrush bgBrush(Gdiplus::Color(bAlpha, GetRValue(bgC), GetGValue(bgC), GetBValue(bgC)));
+            gfxBadge.FillEllipse(&bgBrush, badgeX, badgeY, badgeSz, badgeSz);
+            Gdiplus::Pen pen(Gdiplus::Color(bAlpha, GetRValue(fgC), GetGValue(fgC), GetBValue(fgC)), 1.5f);
+            pen.SetStartCap(Gdiplus::LineCapRound);
+            pen.SetEndCap(Gdiplus::LineCapRound);
+            int lineW = DpiScale(5, g_dpiX);
+            int lx1 = badgeX + (badgeSz - lineW) / 2;
+            int lx2 = lx1 + lineW;
+            int ly = badgeY + badgeSz / 2;
+            gfxBadge.DrawLine(&pen, lx1, ly, lx2, ly);
+        } else if (isMin && MinimizedStyleUsesDot()) {
+            int dotSz = DpiScale(4, g_dpiX);
+            int dotX = iconX + (iconSz - dotSz) / 2;
+            int dotY = iconY + iconSz + DpiScale(2, g_dpiY);
+            Gdiplus::Graphics gfxDot(hdc);
+            gfxDot.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            COLORREF dotCol = g_isDarkMode ? RGB(255, 255, 255) : RGB(0, 0, 0);
+            BYTE dotAlpha = (BYTE)roundf((g_isDarkMode ? 180.0f : 140.0f) * (alpha < 1.0f ? alpha : 1.0f));
+            Gdiplus::SolidBrush dotBrush(Gdiplus::Color(dotAlpha, GetRValue(dotCol), GetGValue(dotCol), GetBValue(dotCol)));
+            gfxDot.FillEllipse(&dotBrush, dotX, dotY, dotSz, dotSz);
         }
     } else {
         e.drawnIconX = contentLeft;
@@ -5710,6 +6000,13 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
         e.drawnIconSz = iconSz;
 
         float itemAlpha = (g_layoutTransition.active && e.isNewEntry) ? e.enterAlpha : 1.0f;
+        bool isMin = g_settings.showMinimizedIndicator && IsEntryMinimized(e);
+        if (isMin && MinimizedStyleUsesDimming()) {
+            float minDim = (float)g_settings.minimizedIconOpacity / 100.0f;
+            if (i == g_selectedIndex || i == g_hoverIndex) { minDim = std::min(1.0f, minDim + 0.15f); }
+            itemAlpha *= minDim;
+        }
+
         if (itemAlpha < 0.99f) {
             Gdiplus::Graphics gfx(hdc);
             Gdiplus::Bitmap bmp(e.hIcon);
@@ -5726,6 +6023,43 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
                           0, 0, bmp.GetWidth(), bmp.GetHeight(), Gdiplus::UnitPixel, &imgAtt);
         } else {
             DrawIconEx(hdc, iconX, iconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
+        }
+
+        if (isMin && MinimizedStyleUsesBadge()) {
+            int badgeSz = DpiScale(14, g_dpiX);
+            int badgeX = iconX + iconSz - badgeSz + DpiScale(2, g_dpiX);
+            int badgeY = iconY + iconSz - badgeSz + DpiScale(2, g_dpiY);
+            Gdiplus::Graphics gfxBadge(hdc);
+            gfxBadge.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            COLORREF bgC = g_isDarkMode ? RGB(40, 40, 40) : RGB(235, 235, 235);
+            COLORREF fgC = g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT;
+            BYTE bAlpha = (BYTE)roundf(230.0f * (itemAlpha < 1.0f ? itemAlpha : 1.0f));
+            Gdiplus::SolidBrush bgBrush(Gdiplus::Color(bAlpha, GetRValue(bgC), GetGValue(bgC), GetBValue(bgC)));
+            gfxBadge.FillEllipse(&bgBrush, badgeX, badgeY, badgeSz, badgeSz);
+            Gdiplus::Pen pen(Gdiplus::Color(bAlpha, GetRValue(fgC), GetGValue(fgC), GetBValue(fgC)), 1.5f);
+            pen.SetStartCap(Gdiplus::LineCapRound);
+            pen.SetEndCap(Gdiplus::LineCapRound);
+            int lineW = DpiScale(6, g_dpiX);
+            int lx1 = badgeX + (badgeSz - lineW) / 2;
+            int lx2 = lx1 + lineW;
+            int ly = badgeY + badgeSz / 2;
+            gfxBadge.DrawLine(&pen, lx1, ly, lx2, ly);
+        } else if (isMin && MinimizedStyleUsesDot()) {
+            int dotW = DpiScale(10, g_dpiX);
+            int dotH = DpiScale(3, g_dpiY);
+            int dotX = iconX + (iconSz - dotW) / 2;
+            int dotY = DockIconIsTop() ? (iconY + iconSz + DpiScale(3, g_dpiY)) : (iconY - dotH - DpiScale(3, g_dpiY));
+            Gdiplus::Graphics gfxDot(hdc);
+            gfxDot.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            COLORREF dotCol = g_isDarkMode ? RGB(255, 255, 255) : RGB(0, 0, 0);
+            BYTE dotAlpha = (BYTE)roundf((g_isDarkMode ? 160.0f : 130.0f) * (itemAlpha < 1.0f ? itemAlpha : 1.0f));
+            if (i == g_selectedIndex || i == g_hoverIndex) dotAlpha = (BYTE)roundf(230.0f * (itemAlpha < 1.0f ? itemAlpha : 1.0f));
+            Gdiplus::SolidBrush dotBrush(Gdiplus::Color(dotAlpha, GetRValue(dotCol), GetGValue(dotCol), GetBValue(dotCol)));
+            Gdiplus::GraphicsPath dotPath;
+            dotPath.AddArc((Gdiplus::REAL)dotX, (Gdiplus::REAL)dotY, (Gdiplus::REAL)dotH, (Gdiplus::REAL)dotH, 90, 180);
+            dotPath.AddArc((Gdiplus::REAL)(dotX + dotW - dotH), (Gdiplus::REAL)dotY, (Gdiplus::REAL)dotH, (Gdiplus::REAL)dotH, 270, 180);
+            dotPath.CloseFigure();
+            gfxDot.FillPath(&dotBrush, &dotPath);
         }
     }
 
@@ -5900,7 +6234,7 @@ static void DrawSwitcherStaticContent(HDC hdc, bool fillBg, HWND hWnd) {
 
 // Rendering
 
-static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon, int* pOutIconX = NULL, int* pOutIconY = NULL, int* pOutIconSz = NULL) {
+static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon, int* pOutIconX = NULL, int* pOutIconY = NULL, int* pOutIconSz = NULL, bool isMinimized = false) {
     if (!BadgeLayoutActive() || !g_settings.showIcon || !hIcon) return;
     int iconSz = GetHeaderIconSizePx();
     int thumbW = rcThumbActual.right - rcThumbActual.left;
@@ -5934,6 +6268,12 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
     if (pOutIconY) *pOutIconY = bIconY;
     if (pOutIconSz) *pOutIconSz = iconSz;
 
+    bool isMin = g_settings.showMinimizedIndicator && isMinimized;
+    float iconDim = 1.0f;
+    if (isMin && MinimizedStyleUsesDimming()) {
+        iconDim = (float)g_settings.minimizedIconOpacity / 100.0f;
+    }
+
     Gdiplus::Graphics gfx(hdc);
     gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
 
@@ -5944,7 +6284,10 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
         
         COLORREF bgC = GetIconBackgroundColor();
         int op = g_isDarkMode ? g_settings.iconBgOpacityDark : g_settings.iconBgOpacityLight;
-        int alpha = (op * 255) / 100;
+        float baseAlpha = (float)op * 2.55f;
+        int alpha = (int)roundf(baseAlpha * (isMin && MinimizedStyleUsesDimming() ? iconDim : 1.0f));
+        if (alpha > 255) alpha = 255;
+        if (alpha < 0) alpha = 0;
         Gdiplus::SolidBrush bgBrush(Gdiplus::Color(alpha, GetRValue(bgC), GetGValue(bgC), GetBValue(bgC)));
         
         Gdiplus::REAL r = (Gdiplus::REAL)GetBadgeIconBackgroundCornerRadiusPx(bgSize / 2);
@@ -5990,7 +6333,22 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
         } else {
             gfx.FillRectangle(&bgBrush, bgX, bgY, bgSize, bgSize);
         }
-        DrawIconEx(hdc, bIconX, bIconY, hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
+        if (iconDim < 0.99f) {
+            Gdiplus::Bitmap bmp(hIcon);
+            Gdiplus::ImageAttributes imgAtt;
+            Gdiplus::ColorMatrix cm = {{
+                { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
+                { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 0.0f, iconDim, 0.0f },
+                { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
+            }};
+            imgAtt.SetColorMatrix(&cm);
+            gfx.DrawImage(&bmp, Gdiplus::Rect(bIconX, bIconY, iconSz, iconSz),
+                          0, 0, bmp.GetWidth(), bmp.GetHeight(), Gdiplus::UnitPixel, &imgAtt);
+        } else {
+            DrawIconEx(hdc, bIconX, bIconY, hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
+        }
     } else {
         bool drawShadow = IsWin11OrGreater() || g_settings.showThumbnailShadow;
         if (drawShadow) {
@@ -6004,7 +6362,53 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
                 delete pBmp;
             }
         }
-        DrawIconEx(hdc, bIconX, bIconY, hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
+        if (iconDim < 0.99f) {
+            Gdiplus::Bitmap bmp(hIcon);
+            Gdiplus::ImageAttributes imgAtt;
+            Gdiplus::ColorMatrix cm = {{
+                { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
+                { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 0.0f, iconDim, 0.0f },
+                { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
+            }};
+            imgAtt.SetColorMatrix(&cm);
+            gfx.DrawImage(&bmp, Gdiplus::Rect(bIconX, bIconY, iconSz, iconSz),
+                          0, 0, bmp.GetWidth(), bmp.GetHeight(), Gdiplus::UnitPixel, &imgAtt);
+        } else {
+            DrawIconEx(hdc, bIconX, bIconY, hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
+        }
+    }
+
+    if (isMin && MinimizedStyleUsesBadge()) {
+        int badgeSz = DpiScale(12, g_dpiX);
+        int badgeX = bIconX + iconSz - badgeSz + DpiScale(2, g_dpiX);
+        int badgeY = bIconY + iconSz - badgeSz + DpiScale(2, g_dpiY);
+        Gdiplus::Graphics gfxBadge(hdc);
+        gfxBadge.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        COLORREF bgC = g_isDarkMode ? RGB(40, 40, 40) : RGB(235, 235, 235);
+        COLORREF fgC = g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT;
+        BYTE bAlpha = 230;
+        Gdiplus::SolidBrush bgBrush(Gdiplus::Color(bAlpha, GetRValue(bgC), GetGValue(bgC), GetBValue(bgC)));
+        gfxBadge.FillEllipse(&bgBrush, badgeX, badgeY, badgeSz, badgeSz);
+        Gdiplus::Pen pen(Gdiplus::Color(bAlpha, GetRValue(fgC), GetGValue(fgC), GetBValue(fgC)), 1.5f);
+        pen.SetStartCap(Gdiplus::LineCapRound);
+        pen.SetEndCap(Gdiplus::LineCapRound);
+        int lineW = DpiScale(5, g_dpiX);
+        int lx1 = badgeX + (badgeSz - lineW) / 2;
+        int lx2 = lx1 + lineW;
+        int ly = badgeY + badgeSz / 2;
+        gfxBadge.DrawLine(&pen, lx1, ly, lx2, ly);
+    } else if (isMin && MinimizedStyleUsesDot()) {
+        int dotSz = DpiScale(4, g_dpiX);
+        int dotX = bIconX + (iconSz - dotSz) / 2;
+        int dotY = bIconY + iconSz + DpiScale(2, g_dpiY);
+        Gdiplus::Graphics gfxDot(hdc);
+        gfxDot.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        COLORREF dotCol = g_isDarkMode ? RGB(255, 255, 255) : RGB(0, 0, 0);
+        BYTE dotAlpha = g_isDarkMode ? 180 : 140;
+        Gdiplus::SolidBrush dotBrush(Gdiplus::Color(dotAlpha, GetRValue(dotCol), GetGValue(dotCol), GetBValue(dotCol)));
+        gfxDot.FillEllipse(&dotBrush, dotX, dotY, dotSz, dotSz);
     }
 }
 
@@ -6157,7 +6561,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
         int drawnIconY = e.drawnIconY + offY;
         int drawnIconSz = e.drawnIconSz;
         if (!DockLayoutActive()) {
-            DrawBadgeIconOverlay(hdc, rcThumbActual, e.hIcon, &drawnIconX, &drawnIconY, &drawnIconSz);
+            DrawBadgeIconOverlay(hdc, rcThumbActual, e.hIcon, &drawnIconX, &drawnIconY, &drawnIconSz, IsEntryMinimized(e));
         }
 
         // Close button (rendered for any entry with closeBtnAlpha > 0.01f, enabling smooth cross-fades between entries)
@@ -6757,27 +7161,68 @@ static void CancelPendingShow() {
     g_pendingSwitcherRect = { 0, 0, 0, 0 };
 }
 
+// Precision Touchpad & Mouse Wheel Sub-notch Accumulators
+static int s_wheelDeltaAccum = 0;
+static int s_hwheelDeltaAccum = 0;
+static ULONGLONG s_lastTouchpadScrollTick = 0;
+
+static void ResetScrollWheelAccumulators() {
+    s_wheelDeltaAccum = 0;
+    s_hwheelDeltaAccum = 0;
+    s_lastTouchpadScrollTick = 0;
+}
+
 static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode == HC_ACTION && g_isVisible && wParam == WM_MOUSEWHEEL) {
+    if (nCode == HC_ACTION && g_isVisible && (wParam == WM_MOUSEWHEEL || wParam == WM_MOUSEHWHEEL)) {
         MSLLHOOKSTRUCT* pMouseStruct = (MSLLHOOKSTRUCT*)lParam;
-        bool ok = ScrollIs(L"always") || (ScrollIs(L"stickyOnly") && g_isSticky);
+        bool ok = ScrollIs(L"always") || (ScrollIs(L"stickyOnly") && g_isSticky) || g_settings.handleTouchpadGestures;
         if (ok) {
-            int dir = (short)HIWORD(pMouseStruct->mouseData) > 0 ? -1 : 1;
-            if (g_settings.reverseScrollDirection) dir = -dir;
-            
-            bool modActive = false;
-            if (wcscmp(g_settings.scrollSecondaryModifier, L"shift") == 0) modActive = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-            else if (wcscmp(g_settings.scrollSecondaryModifier, L"ctrl") == 0) modActive = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-            else if (wcscmp(g_settings.scrollSecondaryModifier, L"alt") == 0) modActive = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+            short rawDelta = (short)HIWORD(pMouseStruct->mouseData);
+            int notches = 0;
+            if (wParam == WM_MOUSEWHEEL) {
+                s_wheelDeltaAccum += rawDelta;
+                while (s_wheelDeltaAccum >= WHEEL_DELTA) {
+                    notches--; // positive wheel = scroll up / previous
+                    s_wheelDeltaAccum -= WHEEL_DELTA;
+                }
+                while (s_wheelDeltaAccum <= -WHEEL_DELTA) {
+                    notches++; // negative wheel = scroll down / next
+                    s_wheelDeltaAccum += WHEEL_DELTA;
+                }
+            } else if (wParam == WM_MOUSEHWHEEL) {
+                s_hwheelDeltaAccum += rawDelta;
+                while (s_hwheelDeltaAccum >= WHEEL_DELTA) {
+                    notches++; // positive tilt = scroll right / next
+                    s_hwheelDeltaAccum -= WHEEL_DELTA;
+                }
+                while (s_hwheelDeltaAccum <= -WHEEL_DELTA) {
+                    notches--; // negative tilt = scroll left / previous
+                    s_hwheelDeltaAccum += WHEEL_DELTA;
+                }
+            }
 
-            const WCHAR* actionStr = modActive ? g_settings.scrollSecondaryAction : g_settings.scrollWheelAction;
-            
-            int action = 0; // 0 = none, 1 = selection, 2 = page
-            if (wcscmp(actionStr, L"selection") == 0) action = 1;
-            else if (wcscmp(actionStr, L"page") == 0) action = 2;
+            if (notches != 0) {
+                if (g_settings.reverseScrollDirection) notches = -notches;
+                
+                bool modActive = false;
+                if (wcscmp(g_settings.scrollSecondaryModifier, L"shift") == 0) modActive = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+                else if (wcscmp(g_settings.scrollSecondaryModifier, L"ctrl") == 0) modActive = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+                else if (wcscmp(g_settings.scrollSecondaryModifier, L"alt") == 0) modActive = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
 
-            if (action > 0) {
-                PostMessage(g_hSwitcher, WM_SWS_SCROLL, (WPARAM)dir, (LPARAM)action);
+                const WCHAR* actionStr = modActive ? g_settings.scrollSecondaryAction : g_settings.scrollWheelAction;
+                
+                int action = 0; // 0 = none, 1 = selection, 2 = page
+                if (wcscmp(actionStr, L"selection") == 0) action = 1;
+                else if (wcscmp(actionStr, L"page") == 0) action = 2;
+
+                if (action > 0) {
+                    s_lastTouchpadScrollTick = GetTickCount64();
+                    PostMessage(g_hSwitcher, WM_SWS_SCROLL, (WPARAM)notches, (LPARAM)action);
+                    return 1;
+                }
+            } else {
+                // Absorbed sub-notch delta, swallow to prevent background window scrolling
+                s_lastTouchpadScrollTick = GetTickCount64();
                 return 1;
             }
         }
@@ -6864,6 +7309,7 @@ static void RevealPendingSwitcher() {
         ShowWindow(g_hCloseBtnWnd, SW_SHOWNA);
     }
     ShowWindow(g_hSwitcher, SW_SHOWNA);
+    BringWindowToTop(g_hSwitcher);
     SetForegroundWindow(g_hSwitcher);
 
     if (g_animEntranceActive) {
@@ -6877,7 +7323,7 @@ static void RevealPendingSwitcher() {
         }
     }
 
-    if (!g_isSticky) {
+    if (!g_isSticky && !g_isTouchpadGestureActive) {
         SetTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID, 50, NULL);
     } else {
         KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
@@ -7026,7 +7472,7 @@ static BOOL WINAPI MirrorEnumProc(HMONITOR hM, HDC, LPRECT, LPARAM) {
         GetMonitorInfoW(hM, &mInfo);
         int mx, my;
         GetSwitcherPosition(mInfo.rcWork, &mx, &my);
-        HWND hMirror = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED, SWS_CLASSNAME, L"", WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, mx, my, g_winW, g_winH, g_hSwitcher, NULL, GetModuleHandle(NULL), NULL);
+        HWND hMirror = CreateSWSWindow(WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED, SWS_CLASSNAME, L"", WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, mx, my, g_winW, g_winH, g_hSwitcher, NULL, GetModuleHandle(NULL), NULL);
         if (hMirror) {
             ApplyThemeToWindow(hMirror);
             g_hMirrorSwitchers.push_back(hMirror);
@@ -7065,7 +7511,7 @@ static void ApplySwitcherRegion() {
     }
 }
 
-static void ShowSwitcher(bool sticky) {
+static void ShowSwitcher(bool sticky, bool immediate = false) {
     RefreshClientAreaAnimCache();
     DestroyMirrorSwitchers();
 
@@ -7160,7 +7606,7 @@ static void ShowSwitcher(bool sticky) {
     }
 
     constexpr int kRapidAltTabGraceThresholdMs = 75;
-    int effectiveDelay = !sticky ? ((g_settings.showDelay > 0) ? std::max(g_settings.showDelay, kRapidAltTabGraceThresholdMs) : kRapidAltTabGraceThresholdMs) : 0;
+    int effectiveDelay = (!sticky && !immediate) ? ((g_settings.showDelay > 0) ? std::max(g_settings.showDelay, kRapidAltTabGraceThresholdMs) : kRapidAltTabGraceThresholdMs) : 0;
     if (effectiveDelay > 0) {
         g_isPendingShow = true;
         g_isVisible = false;
@@ -7181,6 +7627,7 @@ static void ShowSwitcher(bool sticky) {
         // Position directly at target coordinates
         SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
         ShowWindow(g_hSwitcher, SW_SHOWNA);
+        BringWindowToTop(g_hSwitcher);
 
         // Establishing foreground ownership ensures UIPI does not block input tracking
         // (WM_KEYUP, GetAsyncKeyState) when invoked over elevated/Admin windows
@@ -7190,7 +7637,9 @@ static void ShowSwitcher(bool sticky) {
             ShowWindow(g_hCloseBtnWnd, SW_HIDE);
         }
 
-        SetTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID, 50, NULL);
+        if (!sticky && !g_isTouchpadGestureActive) {
+            SetTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID, 50, NULL);
+        }
         SetTimer(g_hSwitcher, SWS_SHOW_DELAY_TIMER_ID, effectiveDelay, NULL);
         return;
     }
@@ -7241,6 +7690,7 @@ static void ShowSwitcher(bool sticky) {
         ShowWindow(g_hCloseBtnWnd, SW_SHOWNA);
     }
     ShowWindow(g_hSwitcher, SW_SHOWNA);
+    BringWindowToTop(g_hSwitcher);
     SetForegroundWindow(g_hSwitcher);
 
     if (g_animEntranceActive) {
@@ -7254,7 +7704,7 @@ static void ShowSwitcher(bool sticky) {
         }
     }
 
-    if (!sticky) {
+    if (!sticky && !g_isTouchpadGestureActive) {
         SetTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID, 50, NULL);
     }
 }
@@ -7308,9 +7758,15 @@ static void HideSwitcher() {
     for (auto& w : g_windows) {
         w.closeBtnAlpha = 0.0f;
     }
+    if (g_hSwitcher && GetCapture() == g_hSwitcher) {
+        ReleaseCapture();
+    }
+    g_isDragging = false;
+    g_pressedIndex = -1;
     g_isClosePressed = false;
     g_hoverChevron = 0;
     g_pressedChevron = 0;
+    ResetScrollWheelAccumulators();
     g_hoverIndex = -1;
     g_hoverThumbIndex = -1;
     g_hoverWnd = NULL;
@@ -7326,9 +7782,11 @@ static void HideSwitcher() {
     g_savedAppList.clear();
     g_consumeEscUp = false;
     g_isPaginatedView = false;
+    g_isTouchpadGestureActive = false;
     if (g_hSwitcher) {
         KillTimer(g_hSwitcher, SWS_CLOSE_VERIFY_TIMER_ID);
         KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
+        KillTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID);
     }
     s_pendingCloseWindows.clear();
     s_pendingCloseRetries = 0;
@@ -8967,8 +9425,27 @@ static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND
     if (GetAncestor(hwnd, GA_ROOT) != hwnd) return;
 
     if (event == EVENT_OBJECT_SHOW) {
+        if (g_settings.handleTouchpadGestures && IsNativeSwitcherWindow(hwnd)) {
+            ShowWindow(hwnd, SW_HIDE);
+            if (g_hSwitcher) {
+                g_isTouchpadGestureActive = true;
+                BringWindowToTop(g_hSwitcher);
+                SetForegroundWindow(g_hSwitcher);
+                CycleLinear(1);
+                s_lastTouchpadScrollTick = GetTickCount64();
+                SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, 1500, NULL);
+            }
+            return;
+        }
         AddWindowEntry(hwnd);
     } else if (event == EVENT_OBJECT_HIDE || event == EVENT_OBJECT_DESTROY) {
+        if (g_settings.handleTouchpadGestures && g_isTouchpadGestureActive && IsNativeSwitcherWindow(hwnd)) {
+            Wh_Log(L"SWS: WinEvent native switcher hide detected -> commit gesture");
+            g_isTouchpadGestureActive = false;
+            KillTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID);
+            SwitchToSelected();
+            return;
+        }
         if (!IsWindowVisible(hwnd) || event == EVENT_OBJECT_DESTROY) {
             if (!IsIconic(hwnd) || event == EVENT_OBJECT_DESTROY) {
                 RemoveWindowEntryByHwnd(hwnd);
@@ -9034,6 +9511,39 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         return TRUE;
     }
 
+    if (g_WM_SWS_TOUCHPAD_TRIGGER && uMsg == g_WM_SWS_TOUCHPAD_TRIGGER) {
+        Wh_Log(L"SWS: Received touchpad trigger message (flags=0x%IX, source=%IX, isVisible=%d)", wParam, lParam, g_isVisible);
+        g_isTouchpadGestureActive = true;
+        s_lastTouchpadScrollTick = GetTickCount64();
+        if (!g_isVisible && !g_animExitActive) {
+            ShowSwitcher(false, true);
+        } else if (g_isPendingShow) {
+            RevealPendingSwitcher();
+        }
+        int step = 1;
+        if (lParam == 1) {
+            // Source is twinui Show hook: check if backward flag (0x01) is set
+            if (wParam & 0x01) {
+                step = -1;
+            }
+        }
+        CycleLinear(step);
+        BringWindowToTop(g_hSwitcher);
+        SetForegroundWindow(g_hSwitcher);
+        SetTimer(hWnd, SWS_TOUCHPAD_IDLE_TIMER_ID, 1500, NULL);
+        return 0;
+    }
+
+    if (g_WM_SWS_TOUCHPAD_DISMISS && uMsg == g_WM_SWS_TOUCHPAD_DISMISS) {
+        Wh_Log(L"SWS: Received touchpad dismiss message (active=%d, isVisible=%d)", g_isTouchpadGestureActive, g_isVisible);
+        if (g_isTouchpadGestureActive && (g_isVisible || g_isPendingShow)) {
+            g_isTouchpadGestureActive = false;
+            KillTimer(hWnd, SWS_TOUCHPAD_IDLE_TIMER_ID);
+            SwitchToSelected();
+        }
+        return 0;
+    }
+
     if (uMsg == WM_TIMER) {
         if (wParam == SWS_HOTKEY_RETRY_TIMER_ID) {
             SWS_RegisterHotkeys();
@@ -9046,8 +9556,24 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
 
         if (wParam == SWS_ALT_POLL_TIMER_ID) {
+            if (g_isTouchpadGestureActive) {
+                return 0; // Physical Alt key polling strictly disabled during touchpad gestures
+            }
             if (!g_isSticky && (GetAsyncKeyState(VK_MENU) & 0x8000) == 0) {
+                if (GetTickCount64() - s_lastTouchpadScrollTick < 1200) {
+                    return 0; // Grace period while user is scrolling/gesturing with touchpad
+                }
                 KillTimer(hWnd, SWS_ALT_POLL_TIMER_ID);
+                SwitchToSelected();
+            }
+            return 0;
+        }
+
+        if (wParam == SWS_TOUCHPAD_IDLE_TIMER_ID) {
+            KillTimer(hWnd, SWS_TOUCHPAD_IDLE_TIMER_ID);
+            if (g_isTouchpadGestureActive && (g_isVisible || g_isPendingShow)) {
+                Wh_Log(L"SWS: Touchpad idle timeout reached -> committing selection");
+                g_isTouchpadGestureActive = false;
                 SwitchToSelected();
             }
             return 0;
@@ -9088,6 +9614,19 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
     }
     if (uMsg == WM_HOTKEY) {
+        if (g_settings.excludeXboxMode && IsXboxModeOrForeground()) {
+            SWS_UnregisterHotkeys();
+            INPUT inputs[2] = {};
+            inputs[0].type = INPUT_KEYBOARD;
+            inputs[0].ki.wVk = VK_TAB;
+            inputs[1].type = INPUT_KEYBOARD;
+            inputs[1].ki.wVk = VK_TAB;
+            inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+            SendInput(2, inputs, sizeof(INPUT));
+            SetTimer(g_hSwitcher, SWS_HOTKEY_RETRY_TIMER_ID, 500, NULL);
+            return 0;
+        }
+
         int id = (int)wParam;
         bool isBackward = false;
         bool isCtrl = false;
@@ -9132,7 +9671,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 
         if (!g_isVisible && !g_isPendingShow) {
             HWND hFg = GetForegroundWindow();
-            if (hFg && !IsSwitcherWindow(hFg)) {
+            if (hFg && !IsSwitcherWindow(hFg) && IsEligibleWindow(hFg)) {
                 UpdateMruWindow(hFg);
             }
             if (isAltBacktickTrigger) g_isAltBacktickSameApp = true;
@@ -9450,9 +9989,17 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             int dir = (int)wParam;
             int action = (int)lParam;
             if (action == 1) { // selection
-                CycleLinear(dir);
+                if (dir > 0) {
+                    for (int k = 0; k < dir; k++) CycleLinear(1);
+                } else if (dir < 0) {
+                    for (int k = 0; k < -dir; k++) CycleLinear(-1);
+                }
             } else if (action == 2) { // page
-                CyclePage(dir);
+                if (dir > 0) {
+                    for (int k = 0; k < dir; k++) CyclePage(1);
+                } else if (dir < 0) {
+                    for (int k = 0; k < -dir; k++) CyclePage(-1);
+                }
             }
         }
         return 0;
@@ -9477,25 +10024,46 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         TrackMouseEvent(&tme);
 
         int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
-        UpdateHoverAtPoint(hWnd, x, y, true);
+        if (GetCapture() == hWnd && !g_isDragging) {
+            int dx = abs(x - g_ptLButtonDown.x);
+            int dy = abs(y - g_ptLButtonDown.y);
+            int dragX = GetSystemMetrics(SM_CXDRAG);
+            int dragY = GetSystemMetrics(SM_CYDRAG);
+            if (dragX <= 0) dragX = 4;
+            if (dragY <= 0) dragY = 4;
+            if (dx >= dragX || dy >= dragY) {
+                g_isDragging = true;
+                if (g_isClosePressed || g_pressedChevron != 0) {
+                    g_isClosePressed = false;
+                    g_pressedChevron = 0;
+                    PaintSwitcherOverlay();
+                }
+            }
+        }
+
+        if (!g_isDragging) {
+            UpdateHoverAtPoint(hWnd, x, y, true);
+        }
         return 0;
     }
     case WM_MOUSELEAVE: {
-        if (g_pressedChevron != 0) {
-            g_pressedChevron = 0;
-            PaintSwitcherOverlay();
-        }
-        if (g_hoverChevron != 0) {
-            g_hoverChevron = 0;
-            PaintSwitcherOverlay();
-        }
-        if (g_hoverWnd == hWnd) {
-            g_hoverIndex = -1;
-            g_hoverThumbIndex = -1;
-            g_hoverWnd = NULL;
-            g_isCloseHovered = false;
-            TriggerHoverAnimation(-1);
-            PaintSwitcher();
+        if (GetCapture() != hWnd) {
+            if (g_pressedChevron != 0) {
+                g_pressedChevron = 0;
+                PaintSwitcherOverlay();
+            }
+            if (g_hoverChevron != 0) {
+                g_hoverChevron = 0;
+                PaintSwitcherOverlay();
+            }
+            if (g_hoverWnd == hWnd) {
+                g_hoverIndex = -1;
+                g_hoverThumbIndex = -1;
+                g_hoverWnd = NULL;
+                g_isCloseHovered = false;
+                TriggerHoverAnimation(-1);
+                PaintSwitcher();
+            }
         }
         return 0;
     }
@@ -9510,76 +10078,132 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     case WM_LBUTTONDOWN: {
         if (!g_isVisible) return 0;
         int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
+        g_ptLButtonDown.x = x;
+        g_ptLButtonDown.y = y;
+        g_isDragging = false;
+        SetCapture(hWnd);
+
         int cDir = HitTestChevron(hWnd, x, y);
         if (cDir != 0) {
             g_pressedChevron = cDir;
-            SetCapture(hWnd);
+            g_pressedIndex = -1;
+            g_isClosePressed = false;
             PaintSwitcherOverlay();
             return 0;
         }
         if (g_isCloseHovered && g_hoverIndex >= 0) {
             g_isClosePressed = true;
-            SetCapture(hWnd);
+            g_pressedIndex = g_hoverIndex;
+            g_pressedChevron = 0;
             PaintSwitcherOverlay();
             return 0;
         }
+        g_isClosePressed = false;
+        g_pressedChevron = 0;
+
+        if (DockLayoutActive() && DockShowPreview()) {
+            POINT pt = { x, y };
+            if (PtInRect(&g_rcCentralPreview, pt)) {
+                g_pressedIndex = -2;
+                return 0;
+            }
+        }
+        g_pressedIndex = HitTest(x, y);
         return 0;
     }
     case WM_CAPTURECHANGED: {
-        if (g_pressedChevron != 0) {
-            g_pressedChevron = 0;
-            PaintSwitcherOverlay();
+        if (GetCapture() != hWnd) {
+            g_isDragging = false;
+            if (g_pressedChevron != 0 || g_isClosePressed) {
+                g_pressedChevron = 0;
+                g_isClosePressed = false;
+                PaintSwitcherOverlay();
+            }
         }
-        if (g_isClosePressed) {
-            g_isClosePressed = false;
-            PaintSwitcherOverlay();
+        return 0;
+    }
+    case WM_CANCELMODE: {
+        if (GetCapture() == hWnd) {
+            ReleaseCapture();
         }
+        g_isDragging = false;
+        g_pressedIndex = -1;
+        g_pressedChevron = 0;
+        g_isClosePressed = false;
         return 0;
     }
     case WM_LBUTTONUP: {
         if (!g_isVisible) return 0;
         int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
+
+        // Snapshot interaction variables BEFORE ReleaseCapture()
+        // because ReleaseCapture() synchronously triggers WM_CAPTURECHANGED!
+        bool wasDragging = g_isDragging;
+        g_isDragging = false;
+        int pressedIdx = g_pressedIndex;
+        g_pressedIndex = -1;
+        int pressedChev = g_pressedChevron;
+        g_pressedChevron = 0;
+        bool wasClose = g_isClosePressed;
+        g_isClosePressed = false;
+
         if (GetCapture() == hWnd) {
             ReleaseCapture();
         }
-        if (g_isClosePressed) {
-            g_isClosePressed = false;
+
+        if (wasClose || pressedChev != 0) {
             PaintSwitcherOverlay();
-            if (g_isCloseHovered && g_hoverIndex >= 0) {
-                CloseSwitcherEntry(g_hoverIndex);
-                return 0;
-            }
         }
-        if (g_pressedChevron != 0) {
-            int wasPressed = g_pressedChevron;
-            g_pressedChevron = 0;
-            PaintSwitcherOverlay();
-            int cDir = HitTestChevron(hWnd, x, y);
-            if (cDir == wasPressed) {
-                CyclePage(cDir);
-                return 0;
-            }
-        }
-        int cDir = HitTestChevron(hWnd, x, y);
-        if (cDir != 0) {
-            CyclePage(cDir);
+
+        // Drop during drag does nothing (Issue #5488)
+        if (wasDragging) {
             return 0;
         }
-        int idx = HitTest(x, y);
-        if (idx < 0 && DockLayoutActive() && DockShowPreview()) {
-            POINT pt = { x, y };
-            if (PtInRect(&g_rcCentralPreview, pt)) {
-                idx = g_selectedIndex;
+
+        // Close button: execute if close button was pressed or mouse is released directly on close button
+        if (wasClose || (g_isCloseHovered && g_hoverIndex >= 0 && g_hoverIndex == pressedIdx)) {
+            int closeIdx = (pressedIdx >= 0) ? pressedIdx : g_hoverIndex;
+            if (closeIdx >= 0) {
+                CloseSwitcherEntry(closeIdx);
             }
+            return 0;
         }
-        if (idx >= 0) {
-            if (g_isCloseHovered && idx == g_hoverIndex) {
-                CloseSwitcherEntry(idx);
-            } else {
-                g_selectedIndex = idx;
+
+        // Chevron page navigation
+        if (pressedChev != 0) {
+            int cDir = HitTestChevron(hWnd, x, y);
+            if (cDir == pressedChev) {
+                CyclePage(cDir);
+            }
+            return 0;
+        }
+
+        // Dock central preview click
+        if (pressedIdx == -2) {
+            POINT pt = { x, y };
+            if (DockLayoutActive() && DockShowPreview() && PtInRect(&g_rcCentralPreview, pt)) {
+                SwitchToSelected();
+            }
+            return 0;
+        }
+
+        // Card / Thumbnail click
+        if (pressedIdx >= 0) {
+            int releaseIdx = HitTest(x, y);
+            if (releaseIdx == pressedIdx) {
+                g_selectedIndex = pressedIdx;
+                SwitchToSelected();
+            }
+            return 0;
+        } else {
+            // Robust fallback: if down wasn't caught on a card (e.g. fast tap), check release position
+            int releaseIdx = HitTest(x, y);
+            if (releaseIdx >= 0) {
+                g_selectedIndex = releaseIdx;
                 SwitchToSelected();
             }
         }
+
         return 0;
     }
     case WM_MBUTTONUP: {
@@ -9596,6 +10220,28 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         if (wParam == WA_INACTIVE && (g_isVisible || g_isPendingShow)) {
             if (g_animExitActive) return 0;
             HWND hNewActive = (HWND)lParam;
+            HWND hCheck = hNewActive ? hNewActive : GetForegroundWindow();
+            if (g_settings.handleTouchpadGestures && hCheck && IsNativeSwitcherWindow(hCheck)) {
+                ShowWindow(hCheck, SW_HIDE);
+                BringWindowToTop(g_hSwitcher);
+                SetForegroundWindow(g_hSwitcher);
+                CycleLinear(1);
+                s_lastTouchpadScrollTick = GetTickCount64();
+                SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, 1500, NULL);
+                return 0;
+            }
+            if (g_isTouchpadGestureActive) {
+                return 0; // Touchpad gesture in progress; preserve switcher visibility
+            }
+            if (hNewActive == NULL) {
+                HWND hFg = GetForegroundWindow();
+                if (hFg == g_hSwitcher || hFg == g_hCloseBtnWnd || (hFg && IsNativeSwitcherWindow(hFg))) {
+                    return 0;
+                }
+                if (GetTickCount64() - s_lastTouchpadScrollTick < 1200) {
+                    return 0;
+                }
+            }
             if (!IsSwitcherWindow(hNewActive)) {
                 HideSwitcher();
             }
@@ -9606,6 +10252,28 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         if (g_isVisible || g_isPendingShow) {
             if (g_animExitActive) return 0;
             HWND hNewFocus = (HWND)wParam;
+            HWND hCheck = hNewFocus ? hNewFocus : GetForegroundWindow();
+            if (g_settings.handleTouchpadGestures && hCheck && IsNativeSwitcherWindow(hCheck)) {
+                ShowWindow(hCheck, SW_HIDE);
+                BringWindowToTop(g_hSwitcher);
+                SetForegroundWindow(g_hSwitcher);
+                CycleLinear(1);
+                s_lastTouchpadScrollTick = GetTickCount64();
+                SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, 1500, NULL);
+                return 0;
+            }
+            if (g_isTouchpadGestureActive) {
+                return 0; // Touchpad gesture in progress; preserve switcher visibility
+            }
+            if (hNewFocus == NULL) {
+                HWND hFg = GetForegroundWindow();
+                if (hFg == g_hSwitcher || hFg == g_hCloseBtnWnd || (hFg && IsNativeSwitcherWindow(hFg))) {
+                    return 0;
+                }
+                if (GetTickCount64() - s_lastTouchpadScrollTick < 1200) {
+                    return 0;
+                }
+            }
             if (!IsSwitcherWindow(hNewFocus)) {
                 HideSwitcher();
             }
@@ -9908,6 +10576,17 @@ static void LoadSettings() {
     g_settings.restoreAllWindows = Wh_GetIntSetting(L"Grouping.restoreAllWindows");
     g_settings.hideMinimizedWindows = Wh_GetIntSetting(L"Accessibility.hideMinimizedWindows");
     g_settings.sortMinimizedWindowsToEnd = Wh_GetIntSetting(L"Accessibility.sortMinimizedWindowsToEnd");
+    g_settings.showMinimizedIndicator = Wh_GetIntSetting(L"Accessibility.showMinimizedIndicator") != 0;
+    LoadStringSetting(L"Accessibility.minimizedIndicatorStyle", g_settings.minimizedIndicatorStyle, L"dimIcon");
+    if (wcscmp(g_settings.minimizedIndicatorStyle, L"dimIcon") != 0 &&
+        wcscmp(g_settings.minimizedIndicatorStyle, L"dot") != 0 &&
+        wcscmp(g_settings.minimizedIndicatorStyle, L"badge") != 0 &&
+        wcscmp(g_settings.minimizedIndicatorStyle, L"dimAndDot") != 0 &&
+        wcscmp(g_settings.minimizedIndicatorStyle, L"dimAndBadge") != 0) {
+        wcsncpy_s(g_settings.minimizedIndicatorStyle, L"dimIcon", _TRUNCATE);
+    }
+    g_settings.minimizedIconOpacity = Wh_GetIntSetting(L"Accessibility.minimizedIconOpacity");
+    if (g_settings.minimizedIconOpacity < 20 || g_settings.minimizedIconOpacity > 90) g_settings.minimizedIconOpacity = 55;
     LoadStringSetting(L"Grouping.showTitles", g_settings.showTitles, L"windowTitle");
     if (wcscmp(g_settings.showTitles, L"windowTitle") != 0 &&
         wcscmp(g_settings.showTitles, L"appName") != 0 &&
@@ -10135,6 +10814,9 @@ static void LoadSettings() {
     }
     if (v) Wh_FreeStringSetting(v);
 
+    g_settings.excludeXboxMode = LoadBoolSetting(L"ExcludedWindows.excludeXboxMode", false);
+    g_settings.handleTouchpadGestures = LoadBoolSetting(L"Accessibility.handleTouchpadGestures", true);
+
     // Custom per-process header (array of { process, iconPath, appName }).
     g_customHeaderRules.clear();
     auto trimWs = [](std::wstring s) -> std::wstring {
@@ -10169,7 +10851,7 @@ static void LoadSettings() {
 }
 
 
-// RegisterHotKey hook for explorer.exe
+// Explorer.exe hooks for Alt+Tab hotkey
 
 static bool SWS_IsAltTabHotkey(UINT fsModifiers, UINT vk) {
     UINT baseMods = fsModifiers & ~MOD_NOREPEAT;
@@ -10187,6 +10869,88 @@ static BOOL WINAPI RegisterHotKey_Hook(HWND hWnd, int id, UINT fsModifiers, UINT
         return TRUE;
     }
     return RegisterHotKey_Original(hWnd, id, fsModifiers, vk);
+}
+
+using XamlAltTabViewHost_Show_t = HRESULT(WINAPI*)(void* pThis, void* param1, int param2, void* param3);
+static XamlAltTabViewHost_Show_t XamlAltTabViewHost_Show_Original = nullptr;
+
+using CAltTabViewHost_Show_t = HRESULT(WINAPI*)(void* pThis, void* param1, int param2, void* param3);
+static CAltTabViewHost_Show_t CAltTabViewHost_Show_Original = nullptr;
+
+static HRESULT WINAPI XamlAltTabViewHost_Show_Hook(void* pThis, void* param1, int param2, void* param3) {
+    Wh_Log(L"SWS: Intercepted Win11 native switcher Show (flags=0x%X)", param2);
+    if (g_settings.handleTouchpadGestures) {
+        HWND hSwitcher = FindWindowW(SWS_CLASSNAME, NULL);
+        if (hSwitcher) {
+            DWORD swsPid = 0;
+            GetWindowThreadProcessId(hSwitcher, &swsPid);
+            if (swsPid) {
+                AllowSetForegroundWindow(swsPid);
+            }
+            if (!g_WM_SWS_TOUCHPAD_TRIGGER) {
+                g_WM_SWS_TOUCHPAD_TRIGGER = RegisterWindowMessageW(L"Windhawk_SWS_TouchpadTrigger");
+            }
+            PostMessageW(hSwitcher, g_WM_SWS_TOUCHPAD_TRIGGER, (WPARAM)param2, 1);
+        }
+        return S_OK;
+    }
+    return XamlAltTabViewHost_Show_Original(pThis, param1, param2, param3);
+}
+
+static HRESULT WINAPI CAltTabViewHost_Show_Hook(void* pThis, void* param1, int param2, void* param3) {
+    Wh_Log(L"SWS: Intercepted Win10 native switcher Show (flags=0x%X)", param2);
+    if (g_settings.handleTouchpadGestures) {
+        HWND hSwitcher = FindWindowW(SWS_CLASSNAME, NULL);
+        if (hSwitcher) {
+            DWORD swsPid = 0;
+            GetWindowThreadProcessId(hSwitcher, &swsPid);
+            if (swsPid) {
+                AllowSetForegroundWindow(swsPid);
+            }
+            if (!g_WM_SWS_TOUCHPAD_TRIGGER) {
+                g_WM_SWS_TOUCHPAD_TRIGGER = RegisterWindowMessageW(L"Windhawk_SWS_TouchpadTrigger");
+            }
+            PostMessageW(hSwitcher, g_WM_SWS_TOUCHPAD_TRIGGER, (WPARAM)param2, 1);
+        }
+        return S_OK;
+    }
+    return CAltTabViewHost_Show_Original(pThis, param1, param2, param3);
+}
+
+using ShowWindow_t = decltype(&ShowWindow);
+static ShowWindow_t ShowWindow_Original = nullptr;
+
+static BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
+    if (g_settings.handleTouchpadGestures && IsNativeAltTabWindow(hWnd)) {
+        HWND hSwitcher = FindWindowW(SWS_CLASSNAME, NULL);
+        if (hSwitcher) {
+            DWORD swsPid = 0;
+            GetWindowThreadProcessId(hSwitcher, &swsPid);
+            if (swsPid) {
+                AllowSetForegroundWindow(swsPid);
+            }
+
+            if (nCmdShow == SW_HIDE) {
+                Wh_Log(L"SWS: Intercepted native switcher SW_HIDE (gesture commit)");
+                if (!g_WM_SWS_TOUCHPAD_DISMISS) {
+                    g_WM_SWS_TOUCHPAD_DISMISS = RegisterWindowMessageW(L"Windhawk_SWS_TouchpadDismiss");
+                }
+                PostMessageW(hSwitcher, g_WM_SWS_TOUCHPAD_DISMISS, 0, 0);
+            } else {
+                Wh_Log(L"SWS: Intercepted & suppressed native switcher ShowWindow (cmd=%d)", nCmdShow);
+                if (!XamlAltTabViewHost_Show_Original && !CAltTabViewHost_Show_Original) {
+                    if (!g_WM_SWS_TOUCHPAD_TRIGGER) {
+                        g_WM_SWS_TOUCHPAD_TRIGGER = RegisterWindowMessageW(L"Windhawk_SWS_TouchpadTrigger");
+                    }
+                    PostMessageW(hSwitcher, g_WM_SWS_TOUCHPAD_TRIGGER, (WPARAM)nCmdShow, 0);
+                }
+            }
+        }
+        if (nCmdShow != SW_HIDE) {
+            return TRUE; // Suppress native window display
+        }
+    }
+    return ShowWindow_Original(hWnd, nCmdShow);
 }
 
 // Background thread for tool mod process
@@ -10225,17 +10989,29 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     // without the system caption buttons. We remove the frame via WM_NCCALCSIZE.
     DWORD dwStyle = WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
     DWORD exStyle = WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED;
-    g_hSwitcher = CreateWindowExW(exStyle, SWS_CLASSNAME, L"",
+    g_hSwitcher = CreateSWSWindow(exStyle, SWS_CLASSNAME, L"",
         dwStyle, 0, 0, 0, 0, NULL, NULL, GetModuleHandleW(NULL), NULL);
     if (!g_hSwitcher) { Wh_Log(L"Failed to create switcher window"); return 1; }
 
-    g_hCloseBtnWnd = CreateWindowExW(
+    g_hCloseBtnWnd = CreateSWSWindow(
         WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT,
         SWS_CLASSNAME, L"",
         WS_POPUP, 0, 0, 0, 0, g_hSwitcher, NULL, GetModuleHandleW(NULL), NULL);
 
     BOOL bExclude = TRUE;
     DwmSetWindowAttribute(g_hSwitcher, DWMWA_EXCLUDED_FROM_PEEK, &bExclude, sizeof(bExclude));
+    if (!g_WM_SWS_TOUCHPAD_TRIGGER) {
+        g_WM_SWS_TOUCHPAD_TRIGGER = RegisterWindowMessageW(L"Windhawk_SWS_TouchpadTrigger");
+    }
+    if (g_WM_SWS_TOUCHPAD_TRIGGER) {
+        ChangeWindowMessageFilterEx(g_hSwitcher, g_WM_SWS_TOUCHPAD_TRIGGER, MSGFLT_ALLOW, NULL);
+    }
+    if (!g_WM_SWS_TOUCHPAD_DISMISS) {
+        g_WM_SWS_TOUCHPAD_DISMISS = RegisterWindowMessageW(L"Windhawk_SWS_TouchpadDismiss");
+    }
+    if (g_WM_SWS_TOUCHPAD_DISMISS) {
+        ChangeWindowMessageFilterEx(g_hSwitcher, g_WM_SWS_TOUCHPAD_DISMISS, MSGFLT_ALLOW, NULL);
+    }
 
     g_hTheme = OpenThemeData(NULL, L"CompositedWindow::Window");
     g_shellHookMsg = RegisterWindowMessageW(L"SHELLHOOK");
@@ -10328,6 +11104,12 @@ thread_exit:
 
 BOOL WhTool_ModInit() {
     Wh_Log(L"Simple Window Switcher: WhTool_ModInit");
+    if (!g_WM_SWS_TOUCHPAD_TRIGGER) {
+        g_WM_SWS_TOUCHPAD_TRIGGER = RegisterWindowMessageW(L"Windhawk_SWS_TouchpadTrigger");
+    }
+    if (!g_WM_SWS_TOUCHPAD_DISMISS) {
+        g_WM_SWS_TOUCHPAD_DISMISS = RegisterWindowMessageW(L"Windhawk_SWS_TouchpadDismiss");
+    }
     g_hSwitcherThread = CreateThread(NULL, 0, SwitcherThread, NULL, 0, &g_dwSwitcherThreadId);
     return g_hSwitcherThread != NULL;
 }
@@ -10416,13 +11198,21 @@ BOOL Wh_ModInit() {
         }
     }
 
-    // --- explorer.exe path: hook RegisterHotKey only ---
+    // --- explorer.exe path: hook RegisterHotKey, ShowWindow, and twinui.pcshell.dll ---
     if (_wcsicmp(exeName, L"explorer.exe") == 0) {
         g_isExplorer = true;
-        Wh_Log(L"SWS: Loaded into explorer.exe, hooking RegisterHotKey");
+        Wh_Log(L"SWS: Loaded into explorer.exe, setting up hooks");
+
+        g_settings.handleTouchpadGestures = LoadBoolSetting(L"Accessibility.handleTouchpadGestures", true);
 
         if (!g_WM_SWS_GET_UWP_ICON) {
             g_WM_SWS_GET_UWP_ICON = RegisterWindowMessageW(L"Windhawk_SWS_GetUwpIcon");
+        }
+        if (!g_WM_SWS_TOUCHPAD_TRIGGER) {
+            g_WM_SWS_TOUCHPAD_TRIGGER = RegisterWindowMessageW(L"Windhawk_SWS_TouchpadTrigger");
+        }
+        if (!g_WM_SWS_TOUCHPAD_DISMISS) {
+            g_WM_SWS_TOUCHPAD_DISMISS = RegisterWindowMessageW(L"Windhawk_SWS_TouchpadDismiss");
         }
         g_explorerIpcThread = CreateThread(NULL, 0, ExplorerIpcThread, NULL, 0, &g_explorerIpcThreadId);
 
@@ -10431,6 +11221,32 @@ BOOL Wh_ModInit() {
             void* pRegisterHotKey = (void*)GetProcAddress(hUser32, "RegisterHotKey");
             if (pRegisterHotKey) {
                 Wh_SetFunctionHook(pRegisterHotKey, (void*)RegisterHotKey_Hook, (void**)&RegisterHotKey_Original);
+            }
+            void* pShowWindow = (void*)GetProcAddress(hUser32, "ShowWindow");
+            if (pShowWindow) {
+                Wh_SetFunctionHook(pShowWindow, (void*)ShowWindow_Hook, (void**)&ShowWindow_Original);
+            }
+        }
+
+        HMODULE hTwinui = LoadLibraryW(L"twinui.pcshell.dll");
+        if (hTwinui) {
+            // twinui.pcshell.dll
+            WindhawkUtils::SYMBOL_HOOK twinuiPcshellHooks[] = {
+                {
+                    {LR"(public: virtual long __cdecl XamlAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
+                    (void**)&XamlAltTabViewHost_Show_Original,
+                    (void*)XamlAltTabViewHost_Show_Hook,
+                    true,
+                },
+                {
+                    {LR"(public: virtual long __cdecl CAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
+                    (void**)&CAltTabViewHost_Show_Original,
+                    (void*)CAltTabViewHost_Show_Hook,
+                    true,
+                },
+            };
+            if (!WindhawkUtils::HookSymbols(hTwinui, twinuiPcshellHooks, ARRAYSIZE(twinuiPcshellHooks))) {
+                Wh_Log(L"SWS: HookSymbols on twinui.pcshell.dll failed or symbols still loading");
             }
         }
 
@@ -10610,6 +11426,7 @@ void Wh_ModAfterInit() {
 
 void Wh_ModSettingsChanged() {
     if (g_isExplorer) {
+        g_settings.handleTouchpadGestures = LoadBoolSetting(L"Accessibility.handleTouchpadGestures", true);
         return;
     }
 
