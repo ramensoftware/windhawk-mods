@@ -822,12 +822,23 @@ static void SnapshotAdobeModules() {
     }
 }
 
+// The range of this thread's last match: consecutive calls mostly come from one module.
+thread_local uintptr_t g_lastAdobeBegin = 0;
+thread_local uintptr_t g_lastAdobeEnd = 0;
+
 static bool IsAdobeUICaller(void* caller) {
     auto p = reinterpret_cast<uintptr_t>(caller);
+
+    if (p >= g_lastAdobeBegin && p < g_lastAdobeEnd) {
+        return true;
+    }
+
     LONG count = g_moduleRangeCount;
 
     for (LONG i = 0; i < count; i++) {
         if (p >= g_moduleRanges[i].begin && p < g_moduleRanges[i].end) {
+            g_lastAdobeBegin = g_moduleRanges[i].begin;
+            g_lastAdobeEnd = g_moduleRanges[i].end;
             return true;
         }
     }
@@ -1225,8 +1236,9 @@ static const DvaColorRGBA* StoreColor(uintptr_t key, const DvaColorRGBA& src,
     returned — into a temporary, or into a COLORREF — and builds a brush from
     the copy, and when one hooked call makes another with the color it was
     given. Both happen on the same thread within the same paint, so each
-    thread remembers only the last few colors it produced, and forgets them at
-    the top of every dvaui paint.
+    thread remembers only the last few colors it produced, forgets them at the
+    top of every dvaui paint, and lets each go after a quarter of a second
+    anyway — the GDI and menu paths run outside any dvaui paint.
 
     Remembering them for good would be wrong: a value the mod produces is also
     a real Premiere gray — Onyx turns #3F3F3F into #1D1D1D, the stock panel
@@ -1234,8 +1246,10 @@ static const DvaColorRGBA* StoreColor(uintptr_t key, const DvaColorRGBA& src,
     RGB, so it survives a round trip through a COLORREF.
 */
 constexpr int kRecentProduced = 16;
+constexpr ULONGLONG kRecentProducedMs = 250;
 
 thread_local LONG g_recentProduced[kRecentProduced];
+thread_local ULONGLONG g_recentProducedAt[kRecentProduced];
 thread_local int g_recentNext = 0;
 
 static LONG PackColorKey(const DvaColorRGBA& c) {
@@ -1249,14 +1263,17 @@ static LONG PackColorKey(const DvaColorRGBA& c) {
 
 static void RememberProduced(const DvaColorRGBA& c) {
     g_recentProduced[g_recentNext] = PackColorKey(c);
+    g_recentProducedAt[g_recentNext] = GetTickCount64();
     g_recentNext = (g_recentNext + 1) % kRecentProduced;
 }
 
 static bool IsProducedColor(const DvaColorRGBA& c) {
     LONG key = PackColorKey(c);
+    ULONGLONG now = GetTickCount64();
 
-    for (LONG recent : g_recentProduced) {
-        if (recent == key) {
+    for (int i = 0; i < kRecentProduced; i++) {
+        if (g_recentProduced[i] == key &&
+            now - g_recentProducedAt[i] < kRecentProducedMs) {
             return true;
         }
     }
@@ -1663,7 +1680,8 @@ static bool InContentScope() {
 
 // A content scope only changes what the brush and GDI layers do.
 static bool ContentScopesMatter() {
-    return CurrentSettings().brushHook || CurrentSettings().gdiHook;
+    const Settings& s = CurrentSettings();
+    return s.brushHook || s.gdiHook;
 }
 
 /*
@@ -2137,7 +2155,8 @@ volatile LONG g_uifHooked = FALSE;
     Premiere if an update ever breaks one of these hooks.
 */
 static bool WantsPremiereHooks() {
-    return CurrentSettings().dvauiHook || CurrentSettings().brushHook || CurrentSettings().gdiHook;
+    const Settings& s = CurrentSettings();
+    return s.dvauiHook || s.brushHook || s.gdiHook;
 }
 
 static bool HookLoadedModules() {
@@ -3229,7 +3248,8 @@ HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, LPCWSTR className,
                                          y, width, height, parent, menu, instance,
                                          param);
 
-    if (hwnd) {
+    // A message-only window never shows, so there is nothing to theme.
+    if (hwnd && parent != HWND_MESSAGE) {
         ApplyDarkModeToWindow(hwnd);
     }
 
@@ -3254,7 +3274,8 @@ HWND WINAPI CreateWindowExA_Hook(DWORD exStyle, LPCSTR className,
                                          y, width, height, parent, menu, instance,
                                          param);
 
-    if (hwnd) {
+    // A message-only window never shows, so there is nothing to theme.
+    if (hwnd && parent != HWND_MESSAGE) {
         ApplyDarkModeToWindow(hwnd);
     }
 
@@ -3551,6 +3572,7 @@ static void ForgetMenuTheme(HTHEME theme) {
 using OpenThemeData_t = HTHEME(WINAPI*)(HWND, LPCWSTR);
 using OpenThemeDataForDpi_t = HTHEME(WINAPI*)(HWND, LPCWSTR, UINT);
 using OpenNcThemeData_t = HTHEME(WINAPI*)(HWND, LPCWSTR);
+using OpenThemeDataEx_t = HTHEME(WINAPI*)(HWND, LPCWSTR, DWORD);
 using CloseThemeData_t = HRESULT(WINAPI*)(HTHEME);
 using DrawThemeBackground_t = HRESULT(WINAPI*)(HTHEME, HDC, int, int, const RECT*,
                                                const RECT*);
@@ -3564,6 +3586,7 @@ using DrawThemeTextEx_t = HRESULT(WINAPI*)(HTHEME, HDC, int, int, LPCWSTR, int,
 OpenThemeData_t OpenThemeData_Original = nullptr;
 OpenThemeDataForDpi_t OpenThemeDataForDpi_Original = nullptr;
 OpenNcThemeData_t OpenNcThemeData_Original = nullptr;
+OpenThemeDataEx_t OpenThemeDataEx_Original = nullptr;
 CloseThemeData_t CloseThemeData_Original = nullptr;
 DrawThemeBackground_t DrawThemeBackground_Original = nullptr;
 DrawThemeBackgroundEx_t DrawThemeBackgroundEx_Original = nullptr;
@@ -3625,7 +3648,9 @@ static HTHEME TrackMenuTheme(HTHEME theme, LPCWSTR classList) {
             which comes through that export, and then hands the same value back
             for another class. Dropping it the moment it reappears as a
             non-menu class keeps a stale handle from making PaintMenuPart
-            repaint that control in menu colors.
+            repaint that control in menu colors. All four public openers are
+            hooked — OpenThemeData, OpenThemeDataForDpi, OpenThemeDataEx and
+            OpenNcThemeData — so whichever one hands the value back, it is seen.
         */
         ForgetMenuTheme(theme);
     }
@@ -3655,6 +3680,19 @@ HTHEME WINAPI OpenThemeDataForDpi_Hook(HWND hwnd, LPCWSTR classList, UINT dpi) {
 
     return TrackMenuTheme(OpenThemeDataForDpi_Original(hwnd, classList, dpi),
                           classList);
+}
+
+// comctl32's opener when it wants OTD_NONCLIENT or OTD_FORCE_RECT_SIZING.
+HTHEME WINAPI OpenThemeDataEx_Hook(HWND hwnd, LPCWSTR classList, DWORD flags) {
+    if (CurrentSettings().menuHook && classList && _wcsicmp(classList, L"Menu") == 0) {
+        HTHEME dark = OpenThemeDataEx_Original(hwnd, L"DarkMode::Menu", flags);
+
+        if (dark) {
+            return TrackMenuTheme(dark, classList);
+        }
+    }
+
+    return TrackMenuTheme(OpenThemeDataEx_Original(hwnd, classList, flags), classList);
 }
 
 // Non-client menu themes, the menu bar's among them, come through here.
@@ -3963,6 +4001,8 @@ class MenuBarTheme {
 
         if (m_theme && close) {
             close(m_theme);
+        } else if (m_theme) {
+            Wh_Log(L"CloseThemeData could not be resolved; a menu bar theme leaks");
         }
     }
 
@@ -5086,6 +5126,8 @@ BOOL Wh_ModInit() {
     HookOrLog(UxThemeProc<OpenThemeDataForDpi_t>("OpenThemeDataForDpi"),
               OpenThemeDataForDpi_Hook, &OpenThemeDataForDpi_Original,
               L"OpenThemeDataForDpi");
+    HookOrLog(UxThemeProc<OpenThemeDataEx_t>("OpenThemeDataEx"), OpenThemeDataEx_Hook,
+              &OpenThemeDataEx_Original, L"OpenThemeDataEx");
 
     // Ordinal 49: this is where the menu bar picks up its theme.
     HookOrLog(UxThemeOrdinal<OpenNcThemeData_t>(49), OpenNcThemeData_Hook,
@@ -5250,20 +5292,21 @@ void Wh_ModSettingsChanged() {
 
     RecomputeColorTable(false);
 
-    ApplyAppMode(CurrentSettings().nativeDarkMode);
+    const Settings& now = CurrentSettings();
 
-    if (previous.nativeDarkMode && !CurrentSettings().nativeDarkMode) {
+    ApplyAppMode(now.nativeDarkMode);
+
+    if (previous.nativeDarkMode && !now.nativeDarkMode) {
         RevertThemedWindows();
-    } else if (!previous.nativeDarkMode && CurrentSettings().nativeDarkMode) {
+    } else if (!previous.nativeDarkMode && now.nativeDarkMode) {
         ApplyThemeToExistingWindows();
-    } else if (CurrentSettings().nativeDarkMode &&
-               memcmp(&previous.palette, &CurrentSettings().palette, sizeof(Palette)) !=
-                   0) {
+    } else if (now.nativeDarkMode &&
+               memcmp(&previous.palette, &now.palette, sizeof(Palette)) != 0) {
         RecolorThemedFrames();
     }
 
     // ApplyAppMode flushes these itself when the mode changes.
-    if (previous.menuHook != CurrentSettings().menuHook && g_FlushMenuThemes) {
+    if (previous.menuHook != now.menuHook && g_FlushMenuThemes) {
         g_FlushMenuThemes();
     }
 
