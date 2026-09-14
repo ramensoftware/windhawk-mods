@@ -599,6 +599,7 @@ namespace AnimConstants {
     constexpr int ClassicShowDesktopCollectionQuietMs = 75;
     constexpr int ClassicShowDesktopCollectionMaxMs = 1500;
     constexpr int ClassicShowDesktopOwnerPrepareMs = 2000;
+    constexpr int ClassicShowDesktopOwnerProbeMs = 1000;
     constexpr int ShowDesktopNativeSettleMs = 250;
     constexpr int ShowDesktopSwitchGhostWaitMs = 1100;
     constexpr int Win10MinRestoreMs = 280;
@@ -665,9 +666,14 @@ static constexpr PCWSTR kPropClassicShowDesktopOwnerDispatch =
     L"windows-animations.ClassicShowDesktopOwnerDispatchV2";
 static constexpr PCWSTR kPropClassicShowDesktopOwnerPrepared =
     L"windows-animations.ClassicShowDesktopOwnerPreparedV2";
-static constexpr PCWSTR kPropClassicShowDesktopOwnerProtocol =
+static constexpr PCWSTR kPropClassicShowDesktopOwnerProtocolLegacy =
     L"windows-animations.ClassicShowDesktopOwnerProtocolV1";
-static constexpr ULONG_PTR kClassicShowDesktopOwnerProtocolVersion = 1;
+static constexpr PCWSTR kPropClassicShowDesktopOwnerProtocol =
+    L"windows-animations.ClassicShowDesktopOwnerProtocolV2";
+static constexpr PCWSTR kPropClassicShowDesktopOwnerProbePending =
+    L"windows-animations.ClassicShowDesktopOwnerProbePendingV2";
+static constexpr ULONG_PTR kClassicShowDesktopOwnerProtocolVersion = 2;
+static constexpr LPARAM kClassicShowDesktopOwnerProbe = 0x57415052;
 UINT g_classicShowDesktopOwnerDispatchMessage = 0;
 // The HWND properties bridge taskbar-side Explorer hooks and the target app's
 // hooks. The pair token's low nibble stores style+1; the remaining bits are a
@@ -1171,9 +1177,37 @@ static void PublishClassicShowDesktopOwnerProtocol(HWND hWnd) {
     DWORD processId = 0;
     GetWindowThreadProcessId(hWnd, &processId);
     if (processId != GetCurrentProcessId()) return;
-    SetPropW(hWnd, kPropClassicShowDesktopOwnerProtocol,
-             reinterpret_cast<HANDLE>(
-                 kClassicShowDesktopOwnerProtocolVersion));
+    // A property written directly from an API hook only proves that this DLL
+    // is loaded. It doesn't prove that the window procedure forwards private
+    // messages to DefWindowProc; waiting on such a window held Win+D for the
+    // full owner timeout. Publish support only after this probe comes back
+    // through DefWindowProcW_Hook on the owning UI thread.
+    if (HasClassicShowDesktopOwnerProtocol(hWnd)) return;
+    RemovePropW(hWnd, kPropClassicShowDesktopOwnerProtocolLegacy);
+    if (!g_classicShowDesktopOwnerDispatchMessage) return;
+    const DWORD now = GetTickCount();
+    const DWORD pendingDeadline = static_cast<DWORD>(
+        reinterpret_cast<ULONG_PTR>(GetPropW(
+            hWnd, kPropClassicShowDesktopOwnerProbePending)));
+    if (pendingDeadline &&
+        static_cast<LONG>(pendingDeadline - now) > 0) {
+        return;
+    }
+    if (pendingDeadline) {
+        RemovePropW(hWnd, kPropClassicShowDesktopOwnerProbePending);
+    }
+    DWORD probeDeadline =
+        now + AnimConstants::ClassicShowDesktopOwnerProbeMs;
+    if (!probeDeadline) probeDeadline = 1;
+    if (!SetPropW(hWnd, kPropClassicShowDesktopOwnerProbePending,
+                  reinterpret_cast<HANDLE>(
+                      static_cast<ULONG_PTR>(probeDeadline)))) {
+        return;
+    }
+    if (!PostMessageW(hWnd, g_classicShowDesktopOwnerDispatchMessage, 0,
+                      kClassicShowDesktopOwnerProbe)) {
+        RemovePropW(hWnd, kPropClassicShowDesktopOwnerProbePending);
+    }
 }
 
 static BOOL CALLBACK PublishClassicShowDesktopOwnerProtocolEnumProc(
@@ -4082,9 +4116,14 @@ POINT GetTaskbarButtonPositionAsync(
         return softFallback;
     }
     POINT result = softFallback;
-    if (waitMs > 0) {
+    // A learned HWND/process position is accurate enough for the current
+    // animation. Let this worker refresh the cache without holding the app or
+    // taskbar UI thread; only a never-located window pays the bounded lookup.
+    const DWORD effectiveWaitMs = hasLearnedFallback ? 0 : waitMs;
+    if (effectiveWaitMs > 0) {
         const DWORD wait =
-            WaitForHandleWithSentMessagePump(pending->done, waitMs);
+            WaitForHandleWithSentMessagePump(pending->done,
+                                             effectiveWaitMs);
         if (wait == WAIT_OBJECT_0 && pending->found) {
             result = pending->targetPosition;
         }
@@ -11757,9 +11796,8 @@ static bool IsClassicShowDesktopOperation() {
                          std::memory_order_acquire),
                      now)) {
         // The optional-symbol fallback may outlive the physical key chord.
-        // Refresh on every window so long classic batches stay serialized.
-        g_localShowDesktopOperationUntilTick.store(
-            now + 2000, std::memory_order_release);
+        // Keep its original deadline fixed so waits across several windows
+        // share one bounded budget instead of multiplying per target.
         return true;
     }
     const bool winDDown =
@@ -11768,10 +11806,20 @@ static bool IsClassicShowDesktopOperation() {
          (GetAsyncKeyState(VK_RWIN) & 0x8000));
     if (!winDDown) return false;
     // Fallback for builds where the optional CTray symbol isn't available.
-    // Refreshing this on each minimize covers a long multi-window batch.
+    // This fixed deadline is also the whole fallback batch's wait budget.
     g_localShowDesktopOperationUntilTick.store(
         now + 2000, std::memory_order_release);
     return true;
+}
+
+static DWORD GetClassicShowDesktopOperationDeadline() {
+    const DWORD now = GetTickCount();
+    if (g_showDesktopIntentHookActive) {
+        return now + AnimConstants::ClassicShowDesktopWaitMs;
+    }
+    const DWORD deadline = g_localShowDesktopOperationUntilTick.load(
+        std::memory_order_acquire);
+    return IsFutureTick(deadline, now) ? deadline : now;
 }
 
 struct AnimationSessionSearch {
@@ -11825,11 +11873,14 @@ public:
         g_classicShowDesktopCaptureClaimed = false;
     }
 
-    bool Acquire(HWND hWnd) {
+    bool Acquire(HWND hWnd, DWORD operationDeadline = 0) {
         if (!IsClassicShowDesktopOperation()) return true;
 
+        const DWORD now = GetTickCount();
         const DWORD deadline =
-            GetTickCount() + AnimConstants::ClassicShowDesktopWaitMs;
+            operationDeadline
+                ? operationDeadline
+                : now + AnimConstants::ClassicShowDesktopWaitMs;
         bool observedBlocker = false;
         while (!g_unloading.load(std::memory_order_relaxed) &&
                !g_showDesktopTopWindowOnly.load(std::memory_order_relaxed) &&
@@ -12254,7 +12305,8 @@ static bool QueueClassicShowDesktopMinimize(HWND hWnd, int showCmd) {
     return true;
 }
 
-static bool PrepareClassicShowDesktopMinimizeInOwner(HWND hWnd) {
+static bool PrepareClassicShowDesktopMinimizeInOwner(
+    HWND hWnd, DWORD operationDeadline = 0) {
     if (!IsShellExplorerProcess() || !hWnd ||
         !IsClassicShowDesktopOperation()) {
         return false;
@@ -12297,8 +12349,13 @@ static bool PrepareClassicShowDesktopMinimizeInOwner(HWND hWnd) {
     }
 
     RemovePropW(hWnd, kPropClassicShowDesktopOwnerPrepared);
-    DWORD deadline =
-        now + AnimConstants::ClassicShowDesktopOwnerPrepareMs;
+    DWORD deadline = now + AnimConstants::ClassicShowDesktopOwnerPrepareMs;
+    if (operationDeadline &&
+        (!IsFutureTick(operationDeadline, now) ||
+         static_cast<LONG>(deadline - operationDeadline) > 0)) {
+        deadline = operationDeadline;
+    }
+    if (!IsFutureTick(deadline, now)) return false;
     if (!deadline) deadline = 1;
     if (!SetPropW(hWnd, kPropClassicShowDesktopOwnerDispatch,
                   reinterpret_cast<HANDLE>(
@@ -12455,8 +12512,10 @@ static MinimizeKick KickMinimizeAnimation(HWND hWnd, bool desktopFocusOnUnhide =
         // capture and foreign windows are handed to their owning UI thread.
         return MinimizeKick::Deferred;
     }
+    const DWORD classicOperationDeadline =
+        GetClassicShowDesktopOperationDeadline();
     ClassicShowDesktopCaptureClaim classicCaptureClaim;
-    if (!classicCaptureClaim.Acquire(hWnd)) {
+    if (!classicCaptureClaim.Acquire(hWnd, classicOperationDeadline)) {
         // A hung/very long previous animation must not make the next screen
         // capture include that ghost or churn DWM transitions before falling
         // back. Let this window use the native Show Desktop path instead.
@@ -12464,7 +12523,8 @@ static MinimizeKick KickMinimizeAnimation(HWND hWnd, bool desktopFocusOnUnhide =
                                              showDesktopAnimationToken);
         return MinimizeKick::None;
     }
-    if (PrepareClassicShowDesktopMinimizeInOwner(hWnd)) {
+    if (PrepareClassicShowDesktopMinimizeInOwner(
+            hWnd, classicOperationDeadline)) {
         ReleaseShowDesktopAnimationIfCurrent(hWnd,
                                              showDesktopAnimationToken);
         // The owner already has the first custom frame in place. Continue the
@@ -12807,9 +12867,11 @@ static void RestoreClassicShowDesktopBatchBeforeShell() {
     }
 
     // This one deadline covers both the preceding-animation handoff and every
-    // target-owned restore request below. The hook runs synchronously on
-    // CTray's thread, so a per-window budget would multiply into a long taskbar
-    // stall. Once this budget expires, the original CTray operation immediately
+    // target-owned restore request below. This handoff can't move behind the
+    // original call: as soon as _RaiseDesktop returns, CTray can expose all real
+    // HWNDs and recreate the duplicate-window/flicker race. Because the hook
+    // therefore runs synchronously on CTray's thread, never restart the budget
+    // per window. Once it expires, the original CTray operation immediately
     // following this function remains the authoritative native fallback.
     const DWORD batchDeadline =
         GetTickCount() + AnimConstants::ClassicShowDesktopWaitMs;
@@ -13567,6 +13629,17 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
     }
     if (!IsOurWindow(hWnd)) return DefWindowProcW_Original(hWnd, msg, wParam, lParam);
     if (classicShowDesktopOwnerDispatchMessage) {
+        if (!wParam && lParam == kClassicShowDesktopOwnerProbe) {
+            const bool probePending = GetPropW(
+                hWnd, kPropClassicShowDesktopOwnerProbePending) != nullptr;
+            RemovePropW(hWnd, kPropClassicShowDesktopOwnerProbePending);
+            if (probePending) {
+                SetPropW(hWnd, kPropClassicShowDesktopOwnerProtocol,
+                         reinterpret_cast<HANDLE>(
+                             kClassicShowDesktopOwnerProtocolVersion));
+            }
+            return 0;
+        }
         const DWORD requestDeadline = static_cast<DWORD>(wParam);
         const DWORD currentDeadline = static_cast<DWORD>(
             reinterpret_cast<ULONG_PTR>(GetPropW(
@@ -14027,7 +14100,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
     g_classicShowDesktopOwnerDispatchMessage = RegisterWindowMessageW(
-        L"Windhawk.WindowsAnimations.ClassicShowDesktopOwnerDispatch.1");
+        L"Windhawk.WindowsAnimations.ClassicShowDesktopOwnerDispatch.2");
     if (!g_classicShowDesktopOwnerDispatchMessage) {
         Wh_Log(L"Failed to register Show Desktop owner dispatch message");
         return FALSE;
@@ -14209,7 +14282,9 @@ static BOOL CALLBACK ClearPersistentAnimationPropertiesOnUninit(
         kPropTaskbarDockIdentity,
         kPropClassicShowDesktopOwnerDispatch,
         kPropClassicShowDesktopOwnerPrepared,
+        kPropClassicShowDesktopOwnerProtocolLegacy,
         kPropClassicShowDesktopOwnerProtocol,
+        kPropClassicShowDesktopOwnerProbePending,
         kPropShowDesktopNativeMinimize,
         kPropShowDesktopInstantMinimize,
         kPropShowDesktopAnimationOwner,
