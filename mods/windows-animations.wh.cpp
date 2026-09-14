@@ -188,7 +188,7 @@ You can deeply customize the feel and pacing of every animation via the Windhawk
 * **Rounded corners:** Minimize, restore, and launch effects preserve Windows 11's rounded window silhouette. Maximized windows and apps that explicitly request square corners stay square. This does not add a synthetic window shadow.
 * **Hybrid GPU acceleration:** Separate toggles allow the mod to use GPU rendering where it is measurably beneficial. The minimize/restore toggle accelerates restores and launches; normal minimizes intentionally remain on CPU. The close toggle accelerates only sufficiently large 1 px Thanos/Perlin workloads; ordinary close effects remain on CPU. Turn a toggle off to force that whole group to CPU. See **Why 1.3.5 uses a hybrid renderer** above for the complete routing rules and fallbacks.
 * **Performance telemetry:** An optional diagnostic setting writes one compact timing and resource summary after each animation, including the selected D3D adapter, display refresh, average pacing wait, and CPU canvas-clear/effect/presentation breakdown. It also enables supporting animation-start, routing, taskbar-lookup, reversal, settings, and GPU-lifecycle events. It is disabled by default and never logs individual frames.
-* **Optional Show Desktop optimization:** By default, Win+D uses the classic behavior and custom-animates eligible windows in sequence. Enable **Optimize Show Desktop** to custom-animate only the foreground/top window while background windows minimize immediately without Windows' native minimize transition. The matching Win+D restore remains native for those background windows; opening one individually later uses the normal custom restore path again.
+* **Optional Show Desktop optimization:** By default, Win+D custom-animates the eligible windows in each minimize/restore batch in sequence. Enable **Optimize Show Desktop** to custom-animate only the foreground/top window while background windows minimize immediately without Windows' native minimize transition. The matching Win+D restore remains native for those background windows; opening one individually later uses the normal custom restore path again.
 * **Reveal taskbar during Genie (auto-hide):** If the taskbar is already visible or hovered, Genie stays behind it without changing focus. Otherwise, Genie briefly reveals it and defers the real minimize until the animation finishes. Ignored for Windows 10, Ink Splash, Scorch, Splinter, Mirage, Stipple, and Swell.
 */
 // ==/WindhawkModReadme==
@@ -499,11 +499,13 @@ struct WindowAnimData {
     NativeMinimizeBarrier* nativeMinimizeBarrier{};
     BOOL fastShowDesktopStart{};
     ULONG_PTR showDesktopAnimationToken{};
+    ULONG_PTR animationSessionToken{};
 };
 struct LaunchAnimData {
     HWND hWnd;
     LONG_PTR originalExStyle;
     ULONG_PTR snapshotToken;
+    BOOL hiddenByCloak;
 };
 struct AsyncRestoreAnimData {
     HWND hWnd;
@@ -581,6 +583,10 @@ namespace AnimConstants {
     constexpr int TaskbarExpandWaitMs = 250;
     constexpr int GpuFrameLatencyWaitMs = 250;
     constexpr int ClassicShowDesktopWaitMs = 8000;
+    constexpr int ClassicShowDesktopCollectionFirstMs = 1000;
+    constexpr int ClassicShowDesktopCollectionQuietMs = 75;
+    constexpr int ClassicShowDesktopCollectionMaxMs = 1500;
+    constexpr int ClassicShowDesktopOwnerPrepareMs = 2000;
     constexpr int ShowDesktopNativeSettleMs = 250;
     constexpr int ShowDesktopSwitchGhostWaitMs = 1100;
     constexpr int Win10MinRestoreMs = 280;
@@ -639,6 +645,16 @@ static constexpr PCWSTR kPropSwitchAnimationGhost =
     L"windows-animations.SwitchAnimationGhostV1";
 static constexpr PCWSTR kPropSwitchAnimationActive =
     L"windows-animations.SwitchAnimationActiveV1";
+static constexpr PCWSTR kPropAnimationSession =
+    L"windows-animations.AnimationSessionV1";
+static constexpr PCWSTR kPropAnimationGhost =
+    L"windows-animations.AnimationGhostV1";
+static constexpr PCWSTR kPropClassicShowDesktopOwnerDispatch =
+    L"windows-animations.ClassicShowDesktopOwnerDispatchV2";
+static constexpr PCWSTR kPropClassicShowDesktopOwnerPrepared =
+    L"windows-animations.ClassicShowDesktopOwnerPreparedV2";
+static constexpr LPARAM kClassicShowDesktopOwnerDispatchTag =
+    static_cast<LPARAM>(0x57415344u);  // "WASD"
 // The HWND properties bridge taskbar-side Explorer hooks and the target app's
 // hooks. The pair token's low nibble stores style+1; the remaining bits are a
 // nonce so an old worker can't clear a newer pair.
@@ -647,6 +663,7 @@ std::atomic<ULONG_PTR> g_NextSnapshotCacheToken{0};
 std::atomic<ULONG_PTR> g_NextTaskbarDockIdentityToken{0};
 std::atomic<ULONG_PTR> g_NextShowDesktopMarkerToken{0};
 std::atomic<ULONG_PTR> g_NextShowDesktopAnimationToken{0};
+std::atomic<ULONG_PTR> g_NextAnimationSessionToken{0};
 struct TaskbarDockWindowIdentity {
     DWORD processId = 0;
     DWORD threadId = 0;
@@ -746,8 +763,11 @@ struct alignas(8) SharedAnimState {
     volatile LONG showDesktopTargetWindow;
     volatile LONG showDesktopLastAnimatedWindow;
 };
-static constexpr PCWSTR kSharedStateName = L"Local\\Windhawk_Anim_State_121";
-static constexpr LONG kSharedStateMagic = 0x57415339;
+// Use a new mapping generation after removing the 1.3.12/1.3.13 driver-only
+// field. A process still unloading an experimental build must never interpret
+// this smaller layout as the old one.
+static constexpr PCWSTR kSharedStateName = L"Local\\Windhawk_Anim_State_123";
+static constexpr LONG kSharedStateMagic = 0x5741533B;
 static constexpr LONG kSharedHeartbeatStaleMs = 2500;
 HANDLE g_hMapFile = NULL;
 SharedAnimState* g_pSharedState = nullptr;
@@ -1551,7 +1571,8 @@ static void RestoreZOrderAfterGhostAsync(HWND hWnd, LONG_PTR originalExStyle) {
 static BOOL WindowRestoresMaximized(HWND hWnd) {
     if (!hWnd || !IsWindow(hWnd)) return FALSE;
     if (IsZoomed(hWnd)) return TRUE;
-    WINDOWPLACEMENT placement{sizeof(placement)};
+    WINDOWPLACEMENT placement{};
+    placement.length = sizeof(placement);
     return GetWindowPlacement(hWnd, &placement) &&
            ((placement.flags & WPF_RESTORETOMAXIMIZED) != 0 ||
             placement.showCmd == SW_SHOWMAXIMIZED);
@@ -1580,7 +1601,8 @@ static void RestoreWindowUnderGhost(HWND hWnd, LONG_PTR originalExStyle,
     if (!IsIconic(hWnd)) {
         return;
     }
-    WINDOWPLACEMENT wp = {sizeof(wp)};
+    WINDOWPLACEMENT wp{};
+    wp.length = sizeof(wp);
     if (GetWindowPlacement(hWnd, &wp)) {
         wp.showCmd = SW_SHOWNOACTIVATE;
         SetWindowPlacement_Original(hWnd, &wp);
@@ -1788,6 +1810,36 @@ static ULONG_PTR TryClaimShowDesktopAnimation(HWND hWnd) {
     }
     return token;
 }
+
+static ULONG_PTR PublishAnimationSession(HWND hWnd,
+                                         bool* publicationFailed = nullptr) {
+    if (publicationFailed) *publicationFailed = false;
+    if (!hWnd || !IsWindow(hWnd)) return 0;
+
+    const ULONG_PTR serial =
+        g_NextAnimationSessionToken.fetch_add(1, std::memory_order_relaxed) + 1;
+    ULONG_PTR token =
+        serial ^ reinterpret_cast<ULONG_PTR>(hWnd) ^
+        (static_cast<ULONG_PTR>(GetCurrentProcessId()) *
+         static_cast<ULONG_PTR>(0x85EBCA6Bu)) ^
+        static_cast<ULONG_PTR>(GetTickCount());
+    if (!token) token = 1;
+    if (!SetPropW(hWnd, kPropAnimationSession,
+                  reinterpret_cast<HANDLE>(token))) {
+        if (publicationFailed) *publicationFailed = true;
+        return 0;
+    }
+    return token;
+}
+
+static void ClearAnimationSessionIfCurrent(HWND hWnd, ULONG_PTR token) {
+    if (!hWnd || !token) return;
+    if (reinterpret_cast<ULONG_PTR>(GetPropW(hWnd, kPropAnimationSession)) ==
+        token) {
+        RemovePropW(hWnd, kPropAnimationSession);
+    }
+}
+
 static void ArmMaximizedRestoreGuard(HWND hWnd, DWORD durationMs) {
     if (!hWnd || !IsWindow(hWnd)) return;
     DWORD expires = GetTickCount() + std::max<DWORD>(durationMs, 1);
@@ -2027,6 +2079,9 @@ static void CleanupWindowData(HWND hWnd) {
     ClearMinRestorePair(hWnd);
     ClearMaximizedRestoreGuard(hWnd);
     RemovePropW(hWnd, kPropShowDesktopNativeMinimize);
+    RemovePropW(hWnd, kPropClassicShowDesktopOwnerDispatch);
+    RemovePropW(hWnd, kPropClassicShowDesktopOwnerPrepared);
+    RemovePropW(hWnd, kPropAnimationSession);
     std::lock_guard<std::mutex> lock(g_StateMutex);
     EraseSnapshotLocked(hWnd);
     g_TaskbarDockPositions.erase(hWnd);
@@ -4163,7 +4218,7 @@ DWORD WINAPI SwitchingAnimThread(LPVOID lpParam) {
         float cy = offsetY + H / 2.0f;
         int thumbX = (int)(cx - thumbW / 2.0f);
         int thumbY = (int)(cy - thumbH / 2.0f);
-        DWM_THUMBNAIL_PROPERTIES props = {0};
+        DWM_THUMBNAIL_PROPERTIES props{};
         props.dwFlags = DWM_TNP_VISIBLE | DWM_TNP_RECTDESTINATION | DWM_TNP_OPACITY;
         props.fVisible = TRUE;
         props.opacity = (BYTE)(255.0f * ease);
@@ -5339,7 +5394,12 @@ struct GpuRenderService {
     ComPtr<ID3D11RasterizerState> rasterizerState;
 };
 
-static GpuRenderService g_gpuRenderService;
+// Windhawk's controlled unload path explicitly shuts this service down after
+// joining every worker. At host-process exit those callbacks aren't invoked,
+// and an automatic global destructor would release D3D/DXGI/DirectComposition
+// COM objects under the loader lock after the other threads are gone. Let the
+// OS reclaim them on process exit instead of running that unsafe destructor.
+[[clang::no_destroy]] static GpuRenderService g_gpuRenderService;
 
 static void ReleaseGpuDeviceResourcesLocked() {
     auto& service = g_gpuRenderService;
@@ -5368,7 +5428,9 @@ static void ReleaseGpuDeviceResourcesLocked() {
     service.quadConstants.Reset();
     service.quadPixelShader.Reset();
     service.quadVertexShader.Reset();
-    service.adapterDescription.clear();
+    // Fully release the string allocation too: the service destructor is
+    // intentionally suppressed, including during a controlled DLL unload.
+    std::wstring{}.swap(service.adapterDescription);
     service.adapterDedicatedVideoMemory = 0;
     service.adapterVendorId = 0;
     service.adapterDeviceId = 0;
@@ -8247,6 +8309,8 @@ public:
         if (!hGhost) return false;
         g_animationGhostCount.fetch_add(1, std::memory_order_acq_rel);
         ghostCounted = true;
+        SetPropW(hGhost, kPropAnimationGhost,
+                 reinterpret_cast<HANDLE>(data->hRealWnd));
         if (keepGhostBelowTaskbar) {
             SetPropW(hGhost, L"NonRudeHWND", reinterpret_cast<HANDLE>(TRUE));
         }
@@ -8663,15 +8727,19 @@ public:
         bf.BlendFlags = 0;
         bf.SourceConstantAlpha = (BYTE)(255.0f * fade);
         bf.AlphaFormat = AC_SRC_ALPHA;
-        UpdateLayeredWindow(hGhost, hScreenDC, &ptDst, &sz, hCanvasDC, &ptSrc, 0, &bf, ULW_ALPHA);
+        const BOOL presented = UpdateLayeredWindow(
+            hGhost, hScreenDC, &ptDst, &sz, hCanvasDC, &ptSrc, 0, &bf,
+            ULW_ALPHA);
         const bool synchronizePilotHandoff =
             !data->fastShowDesktopStart && !data->isClosing &&
             (minRestoreEffect == 6 || minRestoreEffect == 7);
-        OnFramePresented(synchronizePilotHandoff);
+        if (presented) {
+            OnFramePresented(synchronizePilotHandoff);
+        }
         RecordTelemetryCpuPhase(
             presentStartTick, telemetryCpuPresentTicks,
             telemetryCpuWorstPresentTicks, telemetryCpuPresentSamples);
-        return true;
+        return presented != FALSE;
     }
     bool PresentGpuQuad(const QuadFrame& frame) {
         if (!gpuPresenter.PresentQuad(frame)) {
@@ -9697,6 +9765,7 @@ public:
     }
     void FinishClose() {
         if (!data->isClosing) return;
+        const bool deferredHide = data->closeMsg == ANIM_DEFER_SW_HIDE;
         if (data->hWaitFinish) {
             SetEvent(data->hWaitFinish);
             CloseHandle(data->hWaitFinish);
@@ -9704,7 +9773,9 @@ public:
         }
         if (data->closeMsg == WM_DESTROY || !IsWindow(data->hRealWnd)) return;
         SetPropW(data->hRealWnd, kPropCloseBypass, (HANDLE)1);
-        if (data->closeMsg == ANIM_DEFER_SW_HIDE) ShowWindowAsync_Original(data->hRealWnd, SW_HIDE);
+        if (deferredHide) {
+            ShowWindowAsync_Original(data->hRealWnd, SW_HIDE);
+        }
         else if (data->closeMsg == WM_CLOSE) PostMessageW(data->hRealWnd, WM_CLOSE, 0, 0);
         else if (data->closeMsg == WM_SYSCOMMAND) PostMessageW(data->hRealWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
         else PostMessageW(data->hRealWnd, data->closeMsg, 0, 0);
@@ -10073,6 +10144,9 @@ public:
         ReleaseShowDesktopAnimationIfCurrent(
             data->hRealWnd, data->showDesktopAnimationToken);
         data->showDesktopAnimationToken = 0;
+        ClearAnimationSessionIfCurrent(data->hRealWnd,
+                                       data->animationSessionToken);
+        data->animationSessionToken = 0;
         delete data;
         data = nullptr;
     }
@@ -10251,6 +10325,27 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
     const DWORD targetThreadId = GetWindowThreadProcessId(hWnd, nullptr);
     const bool onTargetThread =
         targetThreadId && targetThreadId == GetCurrentThreadId();
+    bool animationSessionPublicationFailed = false;
+    const ULONG_PTR animationSessionToken = PublishAnimationSession(
+        hWnd, &animationSessionPublicationFailed);
+    const DWORD animationSessionPublicationError =
+        animationSessionPublicationFailed ? GetLastError() : ERROR_SUCCESS;
+    if (!isClosing && !onTargetThread &&
+        animationSessionPublicationFailed &&
+        IsClassicShowDesktopOperation()) {
+        if (IsDiagnosticLoggingEnabled()) {
+            Wh_Log(L"Classic Show Desktop delegated after session property "
+                   L"failure hwnd=%p err=%lu",
+                   hWnd, animationSessionPublicationError);
+        }
+        FailAnimationStart(hWnd, rising, originalExStyle, cloakHidden);
+        std::lock_guard<std::mutex> lock(g_StateMutex);
+        g_AnimActive.erase(hWnd);
+        g_AnimWantRising.erase(hWnd);
+        g_AnimRestoreRequestForeground.erase(hWnd);
+        g_AsyncRestoreReservations.erase(hWnd);
+        return false;
+    }
     LONG_PTR storedExStyle = originalExStyle;
     if (!isClosing) {
         const LONG_PTR currentExStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
@@ -10356,11 +10451,13 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
         FALSE,
         nativeBarrierOwner.release(),
         fastShowDesktopStart,
-        showDesktopAnimationToken
+        showDesktopAnimationToken,
+        animationSessionToken
     };
     const bool initiatingHookWillSubmitMinimize =
         !rising && suppressNativeMinimizeOnFailure != nullptr;
     auto finalizeClaimAfterStartFailure = [&]() {
+        ClearAnimationSessionIfCurrent(hWnd, animationSessionToken);
         if (suppliedSnapshotToken &&
             !IsLaunchAnimationCurrent(hWnd, suppliedSnapshotToken)) {
             return;
@@ -10935,7 +11032,9 @@ static bool RunCloseAnimation(HWND hWnd, UINT closeMsg) {
     }
 
     if (started) {
-        if (wait) WaitForCloseAnimation(wait);
+        if (wait) {
+            WaitForCloseAnimation(wait);
+        }
     } else if (workerWait) {
         CloseHandle(workerWait);
     }
@@ -11351,9 +11450,53 @@ static void PublishShowDesktopIntent(HWND target, DWORD untilTick,
 }
 
 thread_local bool g_showDesktopIntentHookActive = false;
+struct DeferredClassicShowDesktopMinimize {
+    HWND hWnd{};
+    int showCmd{};
+    int zOrderRank{};
+};
+struct ClassicShowDesktopRestoreWindow {
+    HWND hWnd{};
+    DWORD processId{};
+    DWORD threadId{};
+};
+std::mutex g_deferredClassicShowDesktopMutex;
+bool g_collectDeferredClassicShowDesktopMinimizes = false;
+uint64_t g_deferredClassicShowDesktopGeneration = 0;
+DWORD g_deferredClassicShowDesktopLastQueuedTick = 0;
+std::vector<DeferredClassicShowDesktopMinimize>
+    g_deferredClassicShowDesktopMinimizes;
+std::vector<ClassicShowDesktopRestoreWindow>
+    g_classicShowDesktopRestoreWindows;
+std::atomic<uint64_t> g_classicShowDesktopRestoreGeneration{0};
 static void RestoreAllShowDesktopInstantMinimizeTransitions();
 static bool CanPrepareRestoreAnimation(HWND hWnd);
+static bool PrepareRestoreAnimation(HWND hWnd);
+static bool CommitRestoreAnimation(HWND hWnd, BOOL restoreMaximizedHint);
+static void DrainDeferredClassicShowDesktopMinimizes(
+    std::vector<DeferredClassicShowDesktopMinimize>& pending);
+static void ScheduleDeferredClassicShowDesktopDrain(uint64_t generation);
+static void RestoreClassicShowDesktopBatchBeforeShell();
 DWORD WINAPI AsyncRestoreAnimThread(LPVOID lpParam);
+
+static std::vector<ClassicShowDesktopRestoreWindow>
+CaptureClassicShowDesktopRestoreWindows() {
+    std::vector<ClassicShowDesktopRestoreWindow> windows;
+    for (HWND hWnd = GetTopWindow(nullptr); hWnd;
+         hWnd = GetWindow(hWnd, GW_HWNDNEXT)) {
+        if (!IsVisibleShowDesktopCandidate(hWnd)) continue;
+        DWORD processId = 0;
+        const DWORD threadId =
+            GetWindowThreadProcessId(hWnd, &processId);
+        if (!processId || !threadId) continue;
+        try {
+            windows.push_back({hWnd, processId, threadId});
+        } catch (const std::exception&) {
+            break;
+        }
+    }
+    return windows;
+}
 
 static void __cdecl RaiseDesktop_Hook(void* pThis, int flags) {
     if (!RaiseDesktop_Original) return;
@@ -11455,8 +11598,61 @@ static void __cdecl RaiseDesktop_Hook(void* pThis, int flags) {
         }
         FlushDwmOrYield();
     }
+    const bool collectDeferredMinimizes =
+        !optimizeTopWindow && flags == 3;
+    uint64_t deferredMinimizeGeneration = 0;
+    if (collectDeferredMinimizes) {
+        std::vector<ClassicShowDesktopRestoreWindow> restoreWindows =
+            g_minimizeAnimation.load(std::memory_order_relaxed)
+                ? CaptureClassicShowDesktopRestoreWindows()
+                : std::vector<ClassicShowDesktopRestoreWindow>{};
+        std::lock_guard<std::mutex> lock(
+            g_deferredClassicShowDesktopMutex);
+        g_deferredClassicShowDesktopMinimizes.clear();
+        g_collectDeferredClassicShowDesktopMinimizes = true;
+        deferredMinimizeGeneration =
+            ++g_deferredClassicShowDesktopGeneration;
+        g_deferredClassicShowDesktopLastQueuedTick = GetTickCount();
+        g_classicShowDesktopRestoreWindows = std::move(restoreWindows);
+        uint64_t restoreGeneration =
+            g_classicShowDesktopRestoreGeneration.fetch_add(
+                1, std::memory_order_acq_rel) +
+            1;
+        if (!restoreGeneration) {
+            restoreGeneration =
+                g_classicShowDesktopRestoreGeneration.fetch_add(
+                    1, std::memory_order_acq_rel) +
+                1;
+        }
+        if (IsDiagnosticLoggingEnabled()) {
+            Wh_Log(L"Classic Show Desktop queue collection started "
+                   L"generation=%llu restore_generation=%llu "
+                   L"restore_windows=%zu",
+                   static_cast<unsigned long long>(
+                       deferredMinimizeGeneration),
+                   static_cast<unsigned long long>(restoreGeneration),
+                   g_classicShowDesktopRestoreWindows.size());
+        }
+    }
+
+    if (!optimizeTopWindow && flags == 2) {
+        // CTray can change every remembered HWND to the restored state without
+        // routing each transition through the process-local hooks. Restore the
+        // captured classic batch through those owner hooks first, then let the
+        // original shell operation preserve its own Show Desktop bookkeeping
+        // and final Z-order.
+        RestoreClassicShowDesktopBatchBeforeShell();
+    }
+
     RaiseDesktop_Original(pThis, flags);
 
+    if (collectDeferredMinimizes) {
+        // CTray posts the per-window work after _RaiseDesktop returns. Keep
+        // collecting on a tracked worker until that burst becomes quiet, then
+        // animate the captured batch in its real visual order.
+        ScheduleDeferredClassicShowDesktopDrain(
+            deferredMinimizeGeneration);
+    }
     if (restoreReserved) {
         auto* restoreData = new (std::nothrow) AsyncRestoreAnimData{
             target, restoreOriginalExStyle, restoreReservationGeneration,
@@ -11474,7 +11670,11 @@ static void __cdecl RaiseDesktop_Hook(void* pThis, int flags) {
     }
 
     g_localShowDesktopOperationUntilTick.store(
-        GetTickCount() + 500, std::memory_order_release);
+        GetTickCount() +
+            (collectDeferredMinimizes
+                 ? AnimConstants::ClassicShowDesktopCollectionMaxMs
+                 : 500),
+        std::memory_order_release);
     if (optimizeTopWindow) {
         if (g_showDesktopTopWindowOnly.load(std::memory_order_relaxed)) {
             PublishShowDesktopIntent(target, GetTickCount() + 500, false);
@@ -11538,6 +11738,47 @@ static bool IsClassicShowDesktopOperation() {
     return true;
 }
 
+struct AnimationSessionSearch {
+    HWND target{};
+    HWND blocker{};
+};
+
+static BOOL CALLBACK FindAnimationSessionEnumProc(HWND candidate,
+                                                   LPARAM lParam) {
+    auto* search = reinterpret_cast<AnimationSessionSearch*>(lParam);
+    if (!search) return FALSE;
+    const HWND ghostTarget = reinterpret_cast<HWND>(
+        GetPropW(candidate, kPropAnimationGhost));
+    const DWORD ownerDispatchDeadline = static_cast<DWORD>(
+        reinterpret_cast<ULONG_PTR>(GetPropW(
+            candidate, kPropClassicShowDesktopOwnerDispatch)));
+    const bool ownerDispatchPending =
+        !search->target && IsFutureTick(ownerDispatchDeadline);
+    if ((!search->target &&
+         (GetPropW(candidate, kPropAnimationSession) || ghostTarget ||
+          ownerDispatchPending)) ||
+        (search->target && ghostTarget == search->target)) {
+        search->blocker = candidate;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static HWND FindAnyAnimationSessionWindow() {
+    AnimationSessionSearch search{};
+    EnumWindows(FindAnimationSessionEnumProc,
+                reinterpret_cast<LPARAM>(&search));
+    return search.blocker;
+}
+
+static HWND FindAnimationGhostForTarget(HWND target) {
+    if (!target) return nullptr;
+    AnimationSessionSearch search{target};
+    EnumWindows(FindAnimationSessionEnumProc,
+                reinterpret_cast<LPARAM>(&search));
+    return search.blocker;
+}
+
 class ClassicShowDesktopCaptureClaim {
     bool held_ = false;
 
@@ -11549,13 +11790,6 @@ public:
     }
 
     bool Acquire(HWND hWnd) {
-        const DWORD targetThreadId =
-            GetWindowThreadProcessId(hWnd, nullptr);
-        if (targetThreadId && targetThreadId == GetCurrentThreadId()) {
-            // Owner-thread paths use PrintWindow rather than composed-screen
-            // capture, so another ghost can't contaminate their bitmap.
-            return true;
-        }
         if (!IsClassicShowDesktopOperation()) return true;
 
         const DWORD deadline =
@@ -11565,10 +11799,16 @@ public:
                !g_showDesktopTopWindowOnly.load(std::memory_order_relaxed) &&
                IsWindow(hWnd) &&
                static_cast<LONG>(GetTickCount() - deadline) < 0) {
-            bool blocker = false;
+            // g_AnimActive and g_animationGhostCount are process-local. The
+            // HWND properties let Explorer observe both the startup handoff
+            // and the live ghost of animations started by another injected
+            // process before it captures the next classic Win+D window.
+            const HWND crossProcessBlocker =
+                FindAnyAnimationSessionWindow();
+            bool blocker = crossProcessBlocker != nullptr;
             {
                 std::lock_guard<std::mutex> lock(g_StateMutex);
-                blocker = g_classicShowDesktopCaptureClaimed;
+                blocker = blocker || g_classicShowDesktopCaptureClaimed;
                 if (!blocker) {
                     for (HWND activeHwnd : g_AnimActive) {
                         if (activeHwnd != hWnd && IsWindow(activeHwnd)) {
@@ -11604,6 +11844,20 @@ public:
             MSG msg{};
             PeekMessageW(&msg, nullptr, 0, 0,
                          PM_NOREMOVE | PM_QS_SENDMESSAGE);
+        }
+        if (IsDiagnosticLoggingEnabled() && IsWindow(hWnd)) {
+            const HWND blocker = FindAnyAnimationSessionWindow();
+            DWORD blockerProcessId = 0;
+            WCHAR blockerClass[96]{};
+            if (blocker) {
+                GetWindowThreadProcessId(blocker, &blockerProcessId);
+                GetClassNameW(blocker, blockerClass,
+                              ARRAYSIZE(blockerClass));
+            }
+            Wh_Log(L"Classic Show Desktop serialization timed out hwnd=%p "
+                   L"blocker=%p blocker_pid=%lu blocker_class=%s",
+                   hWnd, blocker, blockerProcessId,
+                   blockerClass[0] ? blockerClass : L"none");
         }
         return false;
     }
@@ -11933,6 +12187,146 @@ static bool WaitForForeignSwitchAnimation(HWND hWnd) {
            !GetPropW(hWnd, kPropSwitchAnimationActive);
 }
 
+static bool QueueClassicShowDesktopMinimize(HWND hWnd, int showCmd) {
+    if (!IsShellExplorerProcess() || !hWnd ||
+        !IsClassicShowDesktopOperation()) {
+        return false;
+    }
+
+    DWORD targetProcessId = 0;
+    GetWindowThreadProcessId(hWnd, &targetProcessId);
+    if (!targetProcessId) return false;
+
+    std::lock_guard<std::mutex> lock(
+        g_deferredClassicShowDesktopMutex);
+    if (!g_collectDeferredClassicShowDesktopMinimizes) return false;
+    g_deferredClassicShowDesktopLastQueuedTick = GetTickCount();
+    const auto existing = std::find_if(
+        g_deferredClassicShowDesktopMinimizes.begin(),
+        g_deferredClassicShowDesktopMinimizes.end(),
+        [hWnd](const DeferredClassicShowDesktopMinimize& item) {
+            return item.hWnd == hWnd;
+        });
+    if (existing == g_deferredClassicShowDesktopMinimizes.end()) {
+        g_deferredClassicShowDesktopMinimizes.push_back({hWnd, showCmd});
+        if (IsDiagnosticLoggingEnabled()) {
+            Wh_Log(L"Classic Show Desktop queued minimize hwnd=%p "
+                   L"target_pid=%lu",
+                   hWnd, targetProcessId);
+        }
+    }
+    return true;
+}
+
+static bool PrepareClassicShowDesktopMinimizeInOwner(HWND hWnd) {
+    if (!IsShellExplorerProcess() || !hWnd ||
+        !IsClassicShowDesktopOperation()) {
+        return false;
+    }
+
+    DWORD targetProcessId = 0;
+    GetWindowThreadProcessId(hWnd, &targetProcessId);
+    if (!targetProcessId || targetProcessId == GetCurrentProcessId()) {
+        return false;
+    }
+
+    // Explorer can observe Show Desktop requests for foreign HWNDs, but it
+    // can't reliably capture those windows once another real surface is above
+    // them. Ask the owning window procedure to prepare its local animation,
+    // but leave the actual minimize to the original Explorer call. This keeps
+    // the native state transition as close to CTray's path as possible. The
+    // captured classic batch later routes the matching restore through each
+    // owner before CTray finalizes its bookkeeping.
+    //
+    // The request and acknowledgement contain the same deadline token. A
+    // deadline also prevents a window that doesn't route WM_SYSCOMMAND through
+    // DefWindowProc from retaining a permanent cross-process marker.
+    const DWORD now = GetTickCount();
+    const DWORD existingDeadline = static_cast<DWORD>(
+        reinterpret_cast<ULONG_PTR>(
+            GetPropW(hWnd, kPropClassicShowDesktopOwnerDispatch)));
+    if (IsFutureTick(existingDeadline, now)) return false;
+    if (existingDeadline) {
+        RemovePropW(hWnd, kPropClassicShowDesktopOwnerDispatch);
+    }
+
+    RemovePropW(hWnd, kPropClassicShowDesktopOwnerPrepared);
+    DWORD deadline =
+        now + AnimConstants::ClassicShowDesktopOwnerPrepareMs;
+    if (!deadline) deadline = 1;
+    if (!SetPropW(hWnd, kPropClassicShowDesktopOwnerDispatch,
+                  reinterpret_cast<HANDLE>(
+                      static_cast<ULONG_PTR>(deadline)))) {
+        if (IsDiagnosticLoggingEnabled()) {
+            Wh_Log(L"Classic Show Desktop owner dispatch marker failed "
+                   L"hwnd=%p target_pid=%lu error=%lu",
+                   hWnd, targetProcessId, GetLastError());
+        }
+        return false;
+    }
+
+    if (!PostMessageW(hWnd, WM_SYSCOMMAND, SC_MINIMIZE,
+                      kClassicShowDesktopOwnerDispatchTag)) {
+        const DWORD error = GetLastError();
+        RemovePropW(hWnd, kPropClassicShowDesktopOwnerDispatch);
+        if (IsDiagnosticLoggingEnabled()) {
+            Wh_Log(L"Classic Show Desktop owner dispatch failed hwnd=%p "
+                   L"target_pid=%lu error=%lu",
+                   hWnd, targetProcessId, error);
+        }
+        return false;
+    }
+
+    bool prepared = false;
+    while (IsWindow(hWnd) &&
+           !g_unloading.load(std::memory_order_relaxed) &&
+           static_cast<LONG>(GetTickCount() - deadline) < 0) {
+        const ULONG_PTR acknowledgement = reinterpret_cast<ULONG_PTR>(
+            GetPropW(hWnd, kPropClassicShowDesktopOwnerPrepared));
+        if (acknowledgement == static_cast<ULONG_PTR>(deadline)) {
+            prepared = true;
+            break;
+        }
+
+        const DWORD currentRequest = static_cast<DWORD>(
+            reinterpret_cast<ULONG_PTR>(GetPropW(
+                hWnd, kPropClassicShowDesktopOwnerDispatch)));
+        if (currentRequest != deadline) {
+            // A target-side SetProp acknowledgement can fail even after the
+            // animation session was published. Accept that independently
+            // observable session rather than starting a duplicate capture in
+            // Explorer.
+            prepared = GetPropW(hWnd, kPropAnimationSession) != nullptr ||
+                       FindAnimationGhostForTarget(hWnd) != nullptr;
+            break;
+        }
+
+        MsgWaitForMultipleObjectsEx(0, nullptr, 10, QS_SENDMESSAGE,
+                                    MWMO_INPUTAVAILABLE);
+        MSG message{};
+        PeekMessageW(&message, nullptr, 0, 0,
+                     PM_NOREMOVE | PM_QS_SENDMESSAGE);
+    }
+
+    if (static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(GetPropW(
+            hWnd, kPropClassicShowDesktopOwnerDispatch))) == deadline) {
+        RemovePropW(hWnd, kPropClassicShowDesktopOwnerDispatch);
+    }
+    if (reinterpret_cast<ULONG_PTR>(GetPropW(
+            hWnd, kPropClassicShowDesktopOwnerPrepared)) ==
+        static_cast<ULONG_PTR>(deadline)) {
+        RemovePropW(hWnd, kPropClassicShowDesktopOwnerPrepared);
+    }
+
+    if (IsDiagnosticLoggingEnabled()) {
+        Wh_Log(L"Classic Show Desktop owner preparation %s hwnd=%p "
+               L"target_pid=%lu",
+               prepared ? L"ready" : L"unavailable", hWnd,
+               targetProcessId);
+    }
+    return prepared;
+}
+
 enum class MinimizeKick { None, Immediate, Deferred };
 static MinimizeKick KickMinimizeAnimation(HWND hWnd, bool desktopFocusOnUnhide = false,
                                           bool allowUnhide = true, int showCmd = 0,
@@ -11947,6 +12341,23 @@ static MinimizeKick KickMinimizeAnimation(HWND hWnd, bool desktopFocusOnUnhide =
         return MinimizeKick::Deferred;
     }
     if (retarget == MinRestoreRetarget::BusyOther) return MinimizeKick::None;
+    const bool foreignSessionActive =
+        GetPropW(hWnd, kPropAnimationSession) != nullptr;
+    if (HWND existingGhost = FindAnimationGhostForTarget(hWnd);
+        foreignSessionActive || existingGhost) {
+        if (IsDiagnosticLoggingEnabled()) {
+            DWORD ghostProcessId = 0;
+            if (existingGhost) {
+                GetWindowThreadProcessId(existingGhost, &ghostProcessId);
+            }
+            Wh_Log(L"Minimize animation already represented by foreign "
+                   L"session hwnd=%p ghost=%p ghost_pid=%lu",
+                   hWnd, existingGhost, ghostProcessId);
+        }
+        // The other process already owns the custom visual. Continue only the
+        // exact native minimize requested by this nested hook.
+        return MinimizeKick::Immediate;
+    }
     if (!g_minimizeAnimation.load(std::memory_order_relaxed)) return MinimizeKick::None;
     if (!IsWindowVisible(hWnd) || IsIconic(hWnd)) return MinimizeKick::None;
     const ShowDesktopBatchDecision showDesktopDecision =
@@ -11989,6 +12400,32 @@ static MinimizeKick KickMinimizeAnimation(HWND hWnd, bool desktopFocusOnUnhide =
         }
         return MinimizeKick::None;
     }
+    if (QueueClassicShowDesktopMinimize(hWnd, showCmd)) {
+        ReleaseShowDesktopAnimationIfCurrent(hWnd,
+                                             showDesktopAnimationToken);
+        // Hold the shell request only for the short initial burst. Once the
+        // collection closes, same-process windows can use Explorer's normal
+        // capture and foreign windows are handed to their owning UI thread.
+        return MinimizeKick::Deferred;
+    }
+    ClassicShowDesktopCaptureClaim classicCaptureClaim;
+    if (!classicCaptureClaim.Acquire(hWnd)) {
+        // A hung/very long previous animation must not make the next screen
+        // capture include that ghost or churn DWM transitions before falling
+        // back. Let this window use the native Show Desktop path instead.
+        ReleaseShowDesktopAnimationIfCurrent(hWnd,
+                                             showDesktopAnimationToken);
+        return MinimizeKick::None;
+    }
+    if (PrepareClassicShowDesktopMinimizeInOwner(hWnd)) {
+        ReleaseShowDesktopAnimationIfCurrent(hWnd,
+                                             showDesktopAnimationToken);
+        // The owner already has the first custom frame in place. Continue the
+        // initiating Explorer hook so its exact native minimize remains in the
+        // shell path. The captured batch independently preserves the matching
+        // owner-side restore animation even when CTray bypasses that hook.
+        return MinimizeKick::Immediate;
+    }
     ClearShowDesktopMarkerAfterRestore(hWnd);
     if (showDesktopDecision == ShowDesktopBatchDecision::Animate) {
         // Don't reveal/focus an auto-hidden taskbar in the middle of a batch.
@@ -12011,7 +12448,8 @@ static MinimizeKick KickMinimizeAnimation(HWND hWnd, bool desktopFocusOnUnhide =
         hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
         hTray = FindTaskbarForMonitor(hMon);
         if (hTray) {
-            APPBARDATA abd = { sizeof(APPBARDATA) };
+            APPBARDATA abd{};
+            abd.cbSize = sizeof(abd);
             abd.hWnd = hTray;
             const UINT uState = (UINT)SHAppBarMessage(ABM_GETSTATE, &abd);
             if ((uState & ABS_AUTOHIDE) &&
@@ -12021,15 +12459,6 @@ static MinimizeKick KickMinimizeAnimation(HWND hWnd, bool desktopFocusOnUnhide =
                 if (!desktopFocusOnUnhide) hNext = FindNextAppWindow(hWnd, hTray);
             }
         }
-    }
-    ClassicShowDesktopCaptureClaim classicCaptureClaim;
-    if (!classicCaptureClaim.Acquire(hWnd)) {
-        // A hung/very long previous animation must not make the next screen
-        // capture include that ghost or churn DWM transitions before falling
-        // back. Let this window use the native Show Desktop path instead.
-        ReleaseShowDesktopAnimationIfCurrent(hWnd,
-                                             showDesktopAnimationToken);
-        return MinimizeKick::None;
     }
     UpdateDwmTransitions(hWnd, FALSE);
     if (showDesktopDecision == ShowDesktopBatchDecision::Animate) {
@@ -12080,6 +12509,351 @@ static MinimizeKick KickMinimizeAnimation(HWND hWnd, bool desktopFocusOnUnhide =
     if (started) return MinimizeKick::Immediate;
     return suppressNativeMinimize ? MinimizeKick::Deferred : MinimizeKick::None;
 }
+
+static void DrainDeferredClassicShowDesktopMinimizes(
+    std::vector<DeferredClassicShowDesktopMinimize>& pending) {
+    pending.erase(
+        std::remove_if(
+            pending.begin(), pending.end(),
+            [](const DeferredClassicShowDesktopMinimize& item) {
+                return !IsWindow(item.hWnd) || !IsWindowVisible(item.hWnd) ||
+                       IsIconic(item.hWnd);
+            }),
+        pending.end());
+    if (pending.empty()) return;
+
+    auto zOrderRank = [](HWND hWnd) {
+        int rank = 0;
+        for (HWND candidate = GetWindow(hWnd, GW_HWNDPREV);
+             candidate && rank < 4096;
+             candidate = GetWindow(candidate, GW_HWNDPREV)) {
+            ++rank;
+        }
+        return rank;
+    };
+    for (auto& item : pending) {
+        item.zOrderRank = zOrderRank(item.hWnd);
+    }
+    std::stable_sort(
+        pending.begin(), pending.end(),
+        [](const DeferredClassicShowDesktopMinimize& left,
+           const DeferredClassicShowDesktopMinimize& right) {
+            return left.zOrderRank < right.zOrderRank;
+        });
+
+    for (const auto& item : pending) {
+        if (g_unloading.load(std::memory_order_relaxed) ||
+            !IsWindow(item.hWnd) || !IsWindowVisible(item.hWnd) ||
+            IsIconic(item.hWnd)) {
+            continue;
+        }
+
+        g_localShowDesktopOperationUntilTick.store(
+            GetTickCount() + 5000, std::memory_order_release);
+        const int showCmd = IsMinimizeCommand(item.showCmd)
+                                ? item.showCmd
+                                : SW_MINIMIZE;
+        if (IsDiagnosticLoggingEnabled()) {
+            DWORD targetProcessId = 0;
+            GetWindowThreadProcessId(item.hWnd, &targetProcessId);
+            Wh_Log(L"Classic Show Desktop draining queued minimize "
+                   L"hwnd=%p target_pid=%lu z_rank=%d",
+                   item.hWnd, targetProcessId, item.zOrderRank);
+        }
+
+        NativeMinimizeBarrier* barrier = CreateNativeMinimizeBarrier();
+        if (!barrier) {
+            ShowWindowAsync_Original(item.hWnd, showCmd);
+            continue;
+        }
+        AddRefNativeMinimizeBarrier(barrier);
+        const MinimizeKick kick = KickMinimizeAnimation(
+            item.hWnd, /*desktopFocusOnUnhide=*/true,
+            /*allowUnhide=*/false, showCmd, barrier);
+        if (kick == MinimizeKick::Deferred) {
+            CompleteNativeMinimizeBarrier(
+                barrier, NativeMinimizeState::Cancelled);
+            continue;
+        }
+        if (!BeginNativeMinimizeSubmission(barrier)) {
+            CompleteNativeMinimizeBarrier(
+                barrier, NativeMinimizeState::Cancelled);
+            ClearShowDesktopMarkerAfterRestore(item.hWnd);
+            continue;
+        }
+        const BOOL result =
+            ShowWindowAsync_Original(item.hWnd, showCmd);
+        CompleteNativeMinimizeBarrier(
+            barrier, result ? NativeMinimizeState::AsyncSubmitted
+                            : NativeMinimizeState::Failed);
+        if (kick == MinimizeKick::None && result) {
+            SettleClassicShowDesktopNativeMinimize(item.hWnd);
+        }
+        ClearShowDesktopMarkerAfterRestore(item.hWnd);
+    }
+}
+
+static bool CloseDeferredClassicShowDesktopCollection(
+    uint64_t generation,
+    std::vector<DeferredClassicShowDesktopMinimize>* pending) {
+    if (!pending) return false;
+    std::lock_guard<std::mutex> lock(
+        g_deferredClassicShowDesktopMutex);
+    if (!g_collectDeferredClassicShowDesktopMinimizes ||
+        g_deferredClassicShowDesktopGeneration != generation) {
+        return false;
+    }
+    g_collectDeferredClassicShowDesktopMinimizes = false;
+    pending->swap(g_deferredClassicShowDesktopMinimizes);
+    return true;
+}
+
+static DWORD WINAPI DeferredClassicShowDesktopDrainThread(LPVOID parameter) {
+    std::unique_ptr<uint64_t> generationOwner(
+        static_cast<uint64_t*>(parameter));
+    if (!generationOwner) return 0;
+    const uint64_t generation = *generationOwner;
+    const DWORD startedAt = GetTickCount();
+
+    for (;;) {
+        if (g_unloading.load(std::memory_order_relaxed)) return 0;
+        const DWORD now = GetTickCount();
+        bool current = false;
+        bool haveQueuedWindows = false;
+        DWORD lastQueuedAt = startedAt;
+        {
+            std::lock_guard<std::mutex> lock(
+                g_deferredClassicShowDesktopMutex);
+            current = g_collectDeferredClassicShowDesktopMinimizes &&
+                      g_deferredClassicShowDesktopGeneration == generation;
+            if (current) {
+                haveQueuedWindows =
+                    !g_deferredClassicShowDesktopMinimizes.empty();
+                lastQueuedAt =
+                    g_deferredClassicShowDesktopLastQueuedTick;
+            }
+        }
+        if (!current) return 0;
+
+        const bool collectionQuiet =
+            haveQueuedWindows &&
+            static_cast<DWORD>(now - lastQueuedAt) >=
+                AnimConstants::ClassicShowDesktopCollectionQuietMs;
+        const bool noFirstWindow =
+            !haveQueuedWindows &&
+            static_cast<DWORD>(now - startedAt) >=
+                AnimConstants::ClassicShowDesktopCollectionFirstMs;
+        const bool maximumElapsed =
+            static_cast<DWORD>(now - startedAt) >=
+            AnimConstants::ClassicShowDesktopCollectionMaxMs;
+        if (collectionQuiet || noFirstWindow || maximumElapsed) break;
+        Sleep(10);
+    }
+
+    std::vector<DeferredClassicShowDesktopMinimize> pending;
+    if (!CloseDeferredClassicShowDesktopCollection(generation, &pending)) {
+        return 0;
+    }
+    if (IsDiagnosticLoggingEnabled()) {
+        Wh_Log(L"Classic Show Desktop queue collection finished "
+               L"generation=%llu windows=%zu",
+               static_cast<unsigned long long>(generation), pending.size());
+    }
+    DrainDeferredClassicShowDesktopMinimizes(pending);
+    return 0;
+}
+
+static void ScheduleDeferredClassicShowDesktopDrain(uint64_t generation) {
+    auto* generationData = new (std::nothrow) uint64_t(generation);
+    if (generationData && StartWorkerThread(
+                              DeferredClassicShowDesktopDrainThread,
+                              generationData)) {
+        return;
+    }
+    delete generationData;
+
+    // A thread-allocation failure must not strand the HWNDs whose native
+    // minimizes were already suppressed while _RaiseDesktop was running.
+    std::vector<DeferredClassicShowDesktopMinimize> pending;
+    if (CloseDeferredClassicShowDesktopCollection(generation, &pending)) {
+        DrainDeferredClassicShowDesktopMinimizes(pending);
+    }
+}
+
+static bool IsClassicShowDesktopRestoreWindowCurrent(
+    const ClassicShowDesktopRestoreWindow& window) {
+    if (!window.hWnd || !IsWindow(window.hWnd)) return false;
+    DWORD processId = 0;
+    const DWORD threadId =
+        GetWindowThreadProcessId(window.hWnd, &processId);
+    return processId == window.processId && threadId == window.threadId;
+}
+
+static bool IsClassicShowDesktopRestoreBatchCurrent(uint64_t generation) {
+    return generation &&
+           g_classicShowDesktopRestoreGeneration.load(
+               std::memory_order_acquire) == generation &&
+           !g_unloading.load(std::memory_order_relaxed);
+}
+
+static bool HasPublishedAnimationForWindow(HWND hWnd) {
+    return GetPropW(hWnd, kPropAnimationSession) != nullptr ||
+           FindAnimationGhostForTarget(hWnd) != nullptr;
+}
+
+static bool WaitForClassicShowDesktopRestoreEndpoint(
+    const ClassicShowDesktopRestoreWindow& window,
+    uint64_t generation) {
+    const DWORD deadline =
+        GetTickCount() + AnimConstants::NativeStateWaitMs;
+    DWORD stableSince = 0;
+    bool observedAnimation = false;
+    while (IsClassicShowDesktopRestoreBatchCurrent(generation) &&
+           IsClassicShowDesktopRestoreWindowCurrent(window) &&
+           static_cast<LONG>(GetTickCount() - deadline) < 0) {
+        const bool publishedAnimation =
+            HasPublishedAnimationForWindow(window.hWnd);
+        observedAnimation = observedAnimation || publishedAnimation;
+        const bool busy = IsIconic(window.hWnd) || publishedAnimation;
+        if (busy) {
+            stableSince = 0;
+        } else {
+            const DWORD now = GetTickCount();
+            if (!stableSince) stableSince = now ? now : 1;
+            if (static_cast<DWORD>(now - stableSince) >= 20) {
+                return observedAnimation;
+            }
+        }
+        Sleep(10);
+    }
+    return observedAnimation;
+}
+
+static void RestoreClassicShowDesktopBatchBeforeShell() {
+    uint64_t generation = 0;
+    std::vector<ClassicShowDesktopRestoreWindow> windows;
+    {
+        std::lock_guard<std::mutex> lock(
+            g_deferredClassicShowDesktopMutex);
+        // Keep the captured HWND identities and their cancellation generation
+        // from the same minimize batch.
+        generation = g_classicShowDesktopRestoreGeneration.load(
+            std::memory_order_acquire);
+        windows.swap(g_classicShowDesktopRestoreWindows);
+    }
+    if (!generation || windows.empty() ||
+        !g_restoreAnimation.load(std::memory_order_relaxed) ||
+        !IsClassicShowDesktopRestoreBatchCurrent(generation)) {
+        return;
+    }
+
+    if (IsDiagnosticLoggingEnabled()) {
+        Wh_Log(L"Classic Show Desktop owner restore batch started "
+               L"generation=%llu windows=%zu",
+               static_cast<unsigned long long>(generation), windows.size());
+    }
+
+    // A previous target-side minimize can still be removing its session
+    // property when the user invokes the restore half quickly. Don't overlap
+    // that endpoint with the first restore capture.
+    const DWORD existingAnimationDeadline =
+        GetTickCount() + AnimConstants::NativeStateWaitMs;
+    while (IsClassicShowDesktopRestoreBatchCurrent(generation) &&
+           FindAnyAnimationSessionWindow() &&
+           static_cast<LONG>(GetTickCount() - existingAnimationDeadline) < 0) {
+        Sleep(10);
+    }
+
+    size_t alreadyRestored = 0;
+    size_t requested = 0;
+    size_t animated = 0;
+    size_t failed = 0;
+    // The snapshot was captured in top-to-bottom Z-order. Restore in reverse
+    // so the original top window is the last owner request. CTray still runs
+    // afterward and remains authoritative for its final Z-order bookkeeping.
+    for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
+        if (!IsClassicShowDesktopRestoreBatchCurrent(generation)) {
+            break;
+        }
+        g_localShowDesktopOperationUntilTick.store(
+            GetTickCount() + 5000, std::memory_order_release);
+        if (!IsClassicShowDesktopRestoreWindowCurrent(*it)) continue;
+        if (!IsIconic(it->hWnd)) {
+            ++alreadyRestored;
+            continue;
+        }
+
+        if (IsDiagnosticLoggingEnabled()) {
+            Wh_Log(L"Classic Show Desktop requesting owner restore "
+                   L"hwnd=%p target_pid=%lu",
+                   it->hWnd, it->processId);
+        }
+        bool restoreSubmitted = false;
+        if (it->threadId == GetCurrentThreadId()) {
+            // A File Explorer window can share CTray's thread. Posting and
+            // waiting here would deadlock that queue, so run the same prepare,
+            // native-state, and commit sequence directly on its owner thread.
+            const BOOL restoreMaximized = WindowRestoresMaximized(it->hWnd);
+            if (PrepareRestoreAnimation(it->hWnd)) {
+                if (restoreMaximized) {
+                    ArmMaximizedRestoreGuard(
+                        it->hWnd,
+                        static_cast<DWORD>(
+                            AnimConstants::MaximizedRestoreGuardMs));
+                }
+                ShowWindow_Original(it->hWnd, SW_RESTORE);
+                CommitRestoreAnimation(it->hWnd, restoreMaximized);
+                restoreSubmitted = true;
+            }
+        } else {
+            restoreSubmitted =
+                PostMessageW(it->hWnd, WM_SYSCOMMAND, SC_RESTORE,
+                             static_cast<LPARAM>(-1)) != FALSE;
+        }
+        if (!restoreSubmitted) {
+            if (it->threadId == GetCurrentThreadId()) {
+                ShowWindow_Original(it->hWnd, SW_RESTORE);
+                restoreSubmitted = true;
+            } else if (!ShowWindowAsync_Original(it->hWnd, SW_RESTORE)) {
+                ++failed;
+                continue;
+            } else {
+                restoreSubmitted = true;
+            }
+        }
+        ++requested;
+        if (WaitForClassicShowDesktopRestoreEndpoint(*it, generation)) {
+            ++animated;
+        }
+        if (!IsClassicShowDesktopRestoreBatchCurrent(generation)) {
+            break;
+        }
+        if (IsClassicShowDesktopRestoreWindowCurrent(*it) &&
+            IsIconic(it->hWnd)) {
+            // A custom window procedure can consume WM_SYSCOMMAND without
+            // reaching DefWindowProc. Preserve the functional restore even if
+            // that application can't use the custom animation path.
+            BOOL restored = TRUE;
+            if (it->threadId == GetCurrentThreadId()) {
+                ShowWindow_Original(it->hWnd, SW_RESTORE);
+            } else {
+                restored = ShowWindowAsync_Original(it->hWnd, SW_RESTORE);
+            }
+            if (!restored) {
+                ++failed;
+            }
+        }
+    }
+
+    if (IsDiagnosticLoggingEnabled()) {
+        Wh_Log(L"Classic Show Desktop owner restore batch completed "
+               L"generation=%llu windows=%zu already=%zu requested=%zu "
+               L"animated=%zu failed=%zu",
+               static_cast<unsigned long long>(generation), windows.size(),
+               alreadyRestored, requested, animated, failed);
+    }
+}
+
 static MinimizeKick TryMinimizeAnim(HWND hWnd, NativeMinimizeBarrier* nativeMinimizeBarrier = nullptr,
                                    int showCmd = 0) {
     return KickMinimizeAnimation(hWnd, /*desktopFocusOnUnhide=*/true, /*allowUnhide=*/false,
@@ -12094,6 +12868,8 @@ static bool CanPrepareRestoreAnimation(HWND hWnd) {
 }
 static bool PrepareRestoreAnimation(HWND hWnd) {
     if (!CanPrepareRestoreAnimation(hWnd)) return false;
+    ClassicShowDesktopCaptureClaim classicCaptureClaim;
+    if (!classicCaptureClaim.Acquire(hWnd)) return false;
     UpdateDwmTransitions(hWnd, FALSE);
     SetWindowCloak(hWnd, TRUE);
     if (GetShowDesktopBatchDecision(hWnd) ==
@@ -12163,7 +12939,8 @@ static bool AreAsyncRestoreBoundsReady(HWND hWnd) {
     }
 
     if (!expectedWidth || !expectedHeight) {
-        WINDOWPLACEMENT placement{sizeof(placement)};
+        WINDOWPLACEMENT placement{};
+        placement.length = sizeof(placement);
         if (GetWindowPlacement(hWnd, &placement)) {
             expectedWidth = placement.rcNormalPosition.right -
                             placement.rcNormalPosition.left;
@@ -12233,8 +13010,19 @@ DWORD WINAPI AsyncRestoreAnimThread(LPVOID lpParam) {
                                          showDesktopAnimationToken);
     return 0;
 }
+static void KeepLaunchWindowTransparent(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd)) return;
+    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+    if (!(exStyle & WS_EX_LAYERED)) {
+        SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+    }
+    SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
+}
+
 static bool PrepareLaunchAnim(HWND hWnd, int nCmdShow, LONG_PTR* origExOut,
-                              ULONG_PTR* snapshotTokenOut) {
+                              ULONG_PTR* snapshotTokenOut,
+                              BOOL* hiddenByCloakOut) {
+    if (hiddenByCloakOut) *hiddenByCloakOut = FALSE;
     if (g_unloading.load(std::memory_order_relaxed)) return false;
     if (!g_launchAnimation.load(std::memory_order_relaxed)) return false;
     if (!IsLaunchCommand(nCmdShow)) return false;
@@ -12251,8 +13039,12 @@ static bool PrepareLaunchAnim(HWND hWnd, int nCmdShow, LONG_PTR* origExOut,
     UpdateDwmTransitions(hWnd, FALSE);
     *origExOut = exStyle;
     if (snapshotTokenOut) *snapshotTokenOut = 0;
-    SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
-    SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
+    KeepLaunchWindowTransparent(hWnd);
+    const BOOL cloak = TRUE;
+    if (SUCCEEDED(DwmSetWindowAttribute(
+            hWnd, DWMWA_CLOAK, &cloak, sizeof(cloak)))) {
+        if (hiddenByCloakOut) *hiddenByCloakOut = TRUE;
+    }
     return true;
 }
 static bool CaptureLaunchSnapshot(HWND hWnd, ULONG_PTR* snapshotTokenOut) {
@@ -12318,8 +13110,9 @@ static bool CaptureLaunchSnapshot(HWND hWnd, ULONG_PTR* snapshotTokenOut) {
     return true;
 }
 static void CommitLaunchAnim(HWND hWnd, LONG_PTR originalExStyle,
-                             ULONG_PTR snapshotToken) {
+                             ULONG_PTR snapshotToken, BOOL hiddenByCloak) {
     if (!snapshotToken && !CaptureLaunchSnapshot(hWnd, &snapshotToken)) {
+        if (hiddenByCloak) SetWindowCloak(hWnd, FALSE);
         RestoreLayeredOpacity(hWnd, originalExStyle);
         UpdateDwmTransitions(hWnd, TRUE);
         std::lock_guard<std::mutex> lock(g_StateMutex);
@@ -12327,7 +13120,7 @@ static void CommitLaunchAnim(HWND hWnd, LONG_PTR originalExStyle,
         return;
     }
     auto* ld = new (std::nothrow) LaunchAnimData{
-        hWnd, originalExStyle, snapshotToken};
+        hWnd, originalExStyle, snapshotToken, hiddenByCloak};
     if (!ld || !StartWorkerThread(LaunchAnimThread, ld)) {
         delete ld;
         {
@@ -12335,6 +13128,7 @@ static void CommitLaunchAnim(HWND hWnd, LONG_PTR originalExStyle,
             EraseSnapshotIfCurrentLocked(hWnd, snapshotToken);
         }
         ClearLaunchAnimationIfCurrent(hWnd, snapshotToken);
+        if (hiddenByCloak) SetWindowCloak(hWnd, FALSE);
         RestoreLayeredOpacity(hWnd, originalExStyle);
         UpdateDwmTransitions(hWnd, TRUE);
         std::lock_guard<std::mutex> lock(g_StateMutex);
@@ -12470,10 +13264,18 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
     }
     LONG_PTR originalStyle;
     ULONG_PTR launchSnapshotToken = 0;
+    BOOL launchHiddenByCloak = FALSE;
     if (PrepareLaunchAnim(hWnd, cmd, &originalStyle,
-                          &launchSnapshotToken)) {
+                          &launchSnapshotToken, &launchHiddenByCloak)) {
         BOOL result = ShowWindow_Original(hWnd, cmd);
-        CommitLaunchAnim(hWnd, originalStyle, launchSnapshotToken);
+        // Some frameworks rebuild their native surface or extended style while
+        // processing the first show. Reassert the pre-show alpha guard before
+        // snapshot capture so that surface can't become visible ahead of the
+        // launch ghost.
+        if (launchHiddenByCloak) SetWindowCloak(hWnd, TRUE);
+        KeepLaunchWindowTransparent(hWnd);
+        CommitLaunchAnim(hWnd, originalStyle, launchSnapshotToken,
+                         launchHiddenByCloak);
         if (mayCreateStableWindow) ScheduleStableGpuWarmup();
         return result;
     }
@@ -12614,10 +13416,14 @@ BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int cmd) {
     }
     LONG_PTR originalStyle;
     ULONG_PTR launchSnapshotToken = 0;
+    BOOL launchHiddenByCloak = FALSE;
     if (PrepareLaunchAnim(hWnd, cmd, &originalStyle,
-                          &launchSnapshotToken)) {
+                          &launchSnapshotToken, &launchHiddenByCloak)) {
         BOOL result = ShowWindowAsync_Original(hWnd, cmd);
-        CommitLaunchAnim(hWnd, originalStyle, launchSnapshotToken);
+        if (launchHiddenByCloak) SetWindowCloak(hWnd, TRUE);
+        KeepLaunchWindowTransparent(hWnd);
+        CommitLaunchAnim(hWnd, originalStyle, launchSnapshotToken,
+                         launchHiddenByCloak);
         if (mayCreateStableWindow) ScheduleStableGpuWarmup();
         return result;
     }
@@ -12648,10 +13454,14 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND insertAfter, int x, int y, int cx,
     if (flags & SWP_SHOWWINDOW) {
         LONG_PTR originalStyle;
         ULONG_PTR launchSnapshotToken = 0;
+        BOOL launchHiddenByCloak = FALSE;
         if (PrepareLaunchAnim(hWnd, SW_SHOW, &originalStyle,
-                              &launchSnapshotToken)) {
+                              &launchSnapshotToken, &launchHiddenByCloak)) {
             BOOL result = SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, flags);
-            CommitLaunchAnim(hWnd, originalStyle, launchSnapshotToken);
+            if (launchHiddenByCloak) SetWindowCloak(hWnd, TRUE);
+            KeepLaunchWindowTransparent(hWnd);
+            CommitLaunchAnim(hWnd, originalStyle, launchSnapshotToken,
+                             launchHiddenByCloak);
             if (mayCreateStableWindow) ScheduleStableGpuWarmup();
             return result;
         }
@@ -12703,16 +13513,81 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
     if (msg == WM_SYSCOMMAND) {
         const UINT cmd = wParam & 0xFFF0;
         if (cmd == SC_MINIMIZE) {
+            const bool taggedOwnerPreparation =
+                lParam == kClassicShowDesktopOwnerDispatchTag;
+            const DWORD ownerDispatchDeadline = static_cast<DWORD>(
+                reinterpret_cast<ULONG_PTR>(GetPropW(
+                    hWnd, kPropClassicShowDesktopOwnerDispatch)));
+            const bool classicShowDesktopOwnerDispatch =
+                taggedOwnerPreparation &&
+                IsFutureTick(ownerDispatchDeadline);
+            if (ownerDispatchDeadline &&
+                !classicShowDesktopOwnerDispatch) {
+                RemovePropW(hWnd,
+                            kPropClassicShowDesktopOwnerDispatch);
+            }
+            auto clearOwnerDispatchIfCurrent = [&]() {
+                if (ownerDispatchDeadline &&
+                    static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(
+                        GetPropW(
+                            hWnd,
+                            kPropClassicShowDesktopOwnerDispatch))) ==
+                        ownerDispatchDeadline) {
+                    RemovePropW(
+                        hWnd, kPropClassicShowDesktopOwnerDispatch);
+                }
+            };
+            if (classicShowDesktopOwnerDispatch) {
+                // This posted SC_MINIMIZE is only a cross-process preparation
+                // request. Start/retarget the target-owned animation, publish
+                // the acknowledgement, and suppress this synthetic command.
+                // Explorer will then execute its original native minimize. A
+                // shell-side batch routes the matching restore through this
+                // owner hook before CTray finalizes its own bookkeeping.
+                const MinimizeKick kick = KickMinimizeAnimation(
+                    hWnd, /*desktopFocusOnUnhide=*/true,
+                    /*allowUnhide=*/false, SW_MINIMIZE, nullptr);
+                const bool prepared = kick != MinimizeKick::None;
+                if (prepared) {
+                    SetPropW(hWnd, kPropClassicShowDesktopOwnerPrepared,
+                             reinterpret_cast<HANDLE>(
+                                 static_cast<ULONG_PTR>(
+                                     ownerDispatchDeadline)));
+                }
+                clearOwnerDispatchIfCurrent();
+                if (IsDiagnosticLoggingEnabled()) {
+                    Wh_Log(L"Classic Show Desktop owner preparation %s "
+                           L"hwnd=%p",
+                           prepared ? L"accepted" : L"failed", hWnd);
+                }
+                return 0;
+            }
+            if (taggedOwnerPreparation) {
+                // A timed-out/cancelled synthetic request must never become a
+                // late ordinary minimize after Explorer has already resumed
+                // its original Show Desktop path.
+                clearOwnerDispatchIfCurrent();
+                if (IsDiagnosticLoggingEnabled()) {
+                    Wh_Log(L"Classic Show Desktop ignored stale owner "
+                           L"preparation hwnd=%p",
+                           hWnd);
+                }
+                return 0;
+            }
             NativeMinimizeBarrier* barrier = CreateNativeMinimizeBarrier();
             if (!barrier) {
+                clearOwnerDispatchIfCurrent();
                 if (RetargetLiveMinRestore(hWnd, false) == MinRestoreRetarget::Accepted) {
                     return 0;
                 }
                 return DefWindowProcW_Original(hWnd, msg, wParam, lParam);
             }
             AddRefNativeMinimizeBarrier(barrier);
-            if (KickMinimizeAnimation(hWnd, false, true, 0, barrier) ==
-                MinimizeKick::Deferred) {
+            const MinimizeKick kick = KickMinimizeAnimation(
+                hWnd, /*desktopFocusOnUnhide=*/false,
+                /*allowUnhide=*/true, 0, barrier);
+            clearOwnerDispatchIfCurrent();
+            if (kick == MinimizeKick::Deferred) {
                 CompleteNativeMinimizeBarrier(barrier, NativeMinimizeState::Cancelled);
                 return 0;
             }
@@ -12880,18 +13755,39 @@ DWORD WINAPI LaunchAnimThread(LPVOID lpParam) {
     HWND hWnd = ld->hWnd;
     LONG_PTR originalExStyle = ld->originalExStyle;
     ULONG_PTR snapshotToken = ld->snapshotToken;
+    const BOOL launchHiddenByCloak = ld->hiddenByCloak;
     delete ld;
     if (!IsLaunchAnimationCurrent(hWnd, snapshotToken)) {
         std::lock_guard<std::mutex> lock(g_StateMutex);
         EraseSnapshotIfCurrentLocked(hWnd, snapshotToken);
         return 0;
     }
-    Sleep(60);
-    for (int i = 0; i < 30; ++i) {
+    // Keep the alpha guard asserted while the framework finishes its first
+    // native show. Tauri/WebView2 can rebuild the top-level surface or style in
+    // this interval, which otherwise exposes the real window before the launch
+    // worker reaches StartAnimation.
+    for (int i = 0; i < 6; ++i) {
+        if (!IsWindow(hWnd) ||
+            !IsLaunchAnimationCurrent(hWnd, snapshotToken) ||
+            g_unloading.load(std::memory_order_relaxed)) {
+            break;
+        }
+        if (launchHiddenByCloak) SetWindowCloak(hWnd, TRUE);
+        KeepLaunchWindowTransparent(hWnd);
+        Sleep(10);
+    }
+    for (int i = 0; !launchHiddenByCloak && i < 30; ++i) {
         if (!IsWindow(hWnd) ||
             !IsLaunchAnimationCurrent(hWnd, snapshotToken) ||
             g_unloading.load(std::memory_order_relaxed)) break;
-        UINT cloaked = 0; if (FAILED(DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) || !cloaked) break; Sleep(50);
+        UINT cloaked = 0;
+        if (FAILED(DwmGetWindowAttribute(
+                hWnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) ||
+            !cloaked) {
+            break;
+        }
+        KeepLaunchWindowTransparent(hWnd);
+        Sleep(50);
     }
     if (g_unloading.load(std::memory_order_relaxed) || !IsWindow(hWnd) ||
         !IsLaunchAnimationCurrent(hWnd, snapshotToken) ||
@@ -12899,6 +13795,7 @@ DWORD WINAPI LaunchAnimThread(LPVOID lpParam) {
         const bool identityCurrent =
             IsLaunchAnimationCurrent(hWnd, snapshotToken);
         if (identityCurrent) {
+            if (launchHiddenByCloak) SetWindowCloak(hWnd, FALSE);
             RestoreLayeredOpacity(hWnd, originalExStyle);
             UpdateDwmTransitions(hWnd, TRUE);
         }
@@ -12910,13 +13807,24 @@ DWORD WINAPI LaunchAnimThread(LPVOID lpParam) {
         }
         return 0;
     }
-    if (!StartAnimation(hWnd, TRUE, originalExStyle, FALSE,
+    KeepLaunchWindowTransparent(hWnd);
+    if (launchHiddenByCloak) {
+        // The cloak was installed before the native show. Reassert and commit
+        // it before removing the temporary layered alpha. From this point the
+        // normal rising-animation handoff owns the cloak and removes it only
+        // after the final ghost frame is ready.
+        SetWindowCloak(hWnd, TRUE);
+        FlushDwmOrYield();
+        RestoreLayeredOpacity(hWnd, originalExStyle);
+    }
+    if (!StartAnimation(hWnd, TRUE, originalExStyle, launchHiddenByCloak,
                         FALSE, 0, nullptr,
                         FALSE, FALSE, nullptr, 0, -1, FALSE, nullptr, 0,
                         nullptr, FALSE, snapshotToken)) {
         const bool identityCurrent =
             IsLaunchAnimationCurrent(hWnd, snapshotToken);
         if (identityCurrent) {
+            if (launchHiddenByCloak) SetWindowCloak(hWnd, FALSE);
             RestoreLayeredOpacity(hWnd, originalExStyle);
             UpdateDwmTransitions(hWnd, TRUE);
         }
@@ -13186,6 +14094,15 @@ void Wh_ModSettingsChanged() {
 }
 void Wh_ModBeforeUninit() {
     g_unloading.store(true, std::memory_order_relaxed);
+    {
+        std::lock_guard<std::mutex> lock(
+            g_deferredClassicShowDesktopMutex);
+        g_collectDeferredClassicShowDesktopMinimizes = false;
+        g_deferredClassicShowDesktopMinimizes.clear();
+        g_classicShowDesktopRestoreWindows.clear();
+        g_classicShowDesktopRestoreGeneration.fetch_add(
+            1, std::memory_order_acq_rel);
+    }
     CancelPendingGpuWarmup();
     // The ownership probe is a registered worker and is the only worker that
     // can request the separately-owned Explorer foreground thread. Join it
@@ -13196,6 +14113,63 @@ void Wh_ModBeforeUninit() {
     g_stableGpuWarmupRunning.store(false, std::memory_order_release);
     StopSwitchThreads();
 }
+
+static BOOL CALLBACK ClearPersistentAnimationPropertiesOnUninit(
+    HWND hWnd, LPARAM currentProcessIdValue) {
+    DWORD windowProcessId = 0;
+    GetWindowThreadProcessId(hWnd, &windowProcessId);
+    if (windowProcessId != static_cast<DWORD>(currentProcessIdValue)) {
+        return TRUE;
+    }
+
+    const ULONG_PTR showDesktopOwner = reinterpret_cast<ULONG_PTR>(
+        GetPropW(hWnd, kPropShowDesktopAnimationOwner));
+    const bool restoreAnimationCloak =
+        showDesktopOwner ||
+        GetPropW(hWnd, kPropShowDesktopRestorePrepared) ||
+        GetPropW(hWnd, kPropShowDesktopOwnedSurfaceCloak) ||
+        GetPropW(hWnd, kPropShowDesktopLocalCloakWatch) ||
+        GetPropW(hWnd, kPropShowDesktopCloakReady);
+    RestoreShowDesktopInstantMinimizeTransition(hWnd);
+    if (showDesktopOwner) {
+        ReleaseShowDesktopAnimationIfCurrent(hWnd, showDesktopOwner);
+    }
+    if (GetPropW(hWnd, kPropShowDesktopOwnedSurfaceCloak)) {
+        RemovePropW(hWnd, kPropShowDesktopOwnedSurfaceCloak);
+    }
+    if (restoreAnimationCloak && IsWindow(hWnd)) {
+        SetWindowCloak(hWnd, FALSE);
+        UpdateDwmTransitions(hWnd, TRUE);
+    }
+
+    constexpr PCWSTR properties[] = {
+        kPropCloseBypass,
+        kPropClosed,
+        kPropMinRestorePair,
+        kPropMaximizedRestoreGuard,
+        kPropLaunchAnimation,
+        kPropTaskbarDockIdentity,
+        kPropClassicShowDesktopOwnerDispatch,
+        kPropClassicShowDesktopOwnerPrepared,
+        kPropShowDesktopNativeMinimize,
+        kPropShowDesktopInstantMinimize,
+        kPropShowDesktopAnimationOwner,
+        kPropShowDesktopAnimationOwnerUntil,
+        kPropShowDesktopRestorePrepared,
+        kPropShowDesktopOwnedSurfaceCloak,
+        kPropShowDesktopLocalCloakWatch,
+        kPropShowDesktopCloakEndpoint,
+        kPropShowDesktopCloakReady,
+        kPropSwitchAnimationActive,
+        kPropAnimationSession,
+        kPropAnimationGhost,
+    };
+    for (PCWSTR property : properties) {
+        RemovePropW(hWnd, property);
+    }
+    return TRUE;
+}
+
 void Wh_ModUninit() {
     std::vector<HWND> stuck;
     std::vector<std::pair<HWND, ULONG_PTR>> showDesktopMarkers;
@@ -13220,6 +14194,11 @@ void Wh_ModUninit() {
         RemovePropW(hWnd, kPropCloseBypass);
         RemovePropW(hWnd, kPropClosed);
     }
+    // Properties live on the HWND rather than in this DLL, so they survive a
+    // controlled mod reload unless removed explicitly. Workers are already
+    // joined, making it safe to clear this process's remaining bookkeeping.
+    EnumWindows(ClearPersistentAnimationPropertiesOnUninit,
+                static_cast<LPARAM>(GetCurrentProcessId()));
     RestoreAllShowDesktopInstantMinimizeTransitions();
     for (const auto& [hWnd, token] : showDesktopMarkers) {
         ClearShowDesktopMarkerPropertyIfCurrent(hWnd, token);
