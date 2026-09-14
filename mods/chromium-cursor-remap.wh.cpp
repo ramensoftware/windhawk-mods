@@ -639,11 +639,11 @@ static bool IsChromiumProcess() {
 }
 
 // A non-empty --type= switch marks a Chromium child process, which never owns
-// the windows. Not a substring search: a URL or path on the browser's command
-// line can contain "--type=". Follows base::CommandLine::ParseFromString: trim,
-// split with CommandLineToArgvW, trim each argument, stop at "--" or
-// --single-argument, switch prefixes "--", "-" and "/", names lowercased, last
-// value wins.
+// the windows. A substring test only rules it out: a URL or path on the
+// browser's command line can contain "--type=", so any hit is parsed. The parse
+// follows base::CommandLine::ParseFromString: trim, split with
+// CommandLineToArgvW, trim each argument, stop at "--" or --single-argument,
+// switch prefixes "--", "-" and "/", names lowercased, last value wins.
 static bool IsChromiumWhitespace(wchar_t c) {
     return (c >= 0x09 && c <= 0x0D) || c == 0x20 || c == 0x85 ||
            c == 0xA0 || c == 0x1680 || (c >= 0x2000 && c <= 0x200A) ||
@@ -658,11 +658,22 @@ static std::wstring TrimChromiumWhitespace(const wchar_t* s) {
     return std::wstring(s, end);
 }
 
-// Returns true when the line cannot be split, so that the mod leaves a process
-// it cannot tell apart from a child.
+// Returns true when a line containing "type=" cannot be split, so that the mod
+// leaves a process it cannot tell apart from a child.
 static bool HasChromiumTypeSwitch(const wchar_t* commandLine) {
     std::wstring line = TrimChromiumWhitespace(commandLine);
     if (line.empty()) return false;
+
+    // Without "type=" in the line, quotes removed and ASCII-lowercased, no
+    // argument can hold the switch: splitting deletes quotes, and a backslash
+    // it deletes always leaves a backslash or a quote in its place. A browser
+    // line without "type=" then never loads shell32.dll.
+    std::wstring folded;
+    for (wchar_t c : line) {
+        if (c == L'"') continue;
+        folded += (c >= L'A' && c <= L'Z') ? (wchar_t)(c - L'A' + L'a') : c;
+    }
+    if (folded.find(L"type=") == std::wstring::npos) return false;
 
     // Loaded here rather than linked, so that shell32.dll is not pulled into
     // every process the mod is loaded into; this runs only in Chromium.
