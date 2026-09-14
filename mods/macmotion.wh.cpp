@@ -200,8 +200,16 @@ static bool GetPhysicalWindowRect(HWND hWnd, RECT* rect) {
            rect->right > rect->left && rect->bottom > rect->top;
 }
 
+static bool IsWindowCloaked(HWND hWnd) {
+    BOOL cloaked = FALSE;
+    return SUCCEEDED(DwmGetWindowAttribute(
+               hWnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) &&
+           cloaked;
+}
+
 static bool IsEligibleWindow(HWND hWnd) {
     if (!IsWindow(hWnd) || !IsWindowVisible(hWnd) || IsIconic(hWnd) ||
+        IsWindowCloaked(hWnd) ||
         GetAncestor(hWnd, GA_ROOT) != hWnd ||
         GetWindow(hWnd, GW_OWNER) != nullptr ||
         IsExactExcludedClass(hWnd)) {
