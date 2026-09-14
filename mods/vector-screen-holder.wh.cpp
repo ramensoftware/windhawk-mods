@@ -2,7 +2,7 @@
 // @id              vector-screen-holder
 // @name            Vector Screen Holder
 // @description     Fills a display you choose with generative line art and keeps the PC from idling while it runs
-// @version         1.0.3
+// @version         1.0.4
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
@@ -17,9 +17,10 @@
 
 Fills a display of your choosing with generative line art, and holds the screen
 awake for as long as it runs. Every frame is drawn as strokes through Direct2D
-on the GPU -- no images, no video file, and no fixed resolution. The art is
-generated for whatever size the display you pick actually is, so a 1080p side
-monitor and a 4K portrait panel each get correctly proportioned artwork.
+on the GPU. There are no images, no video file, and no fixed resolution, so
+the artwork is
+drawn for whatever size the display you pick actually is: a 1080p side monitor
+and a 4K portrait panel each get correctly proportioned art.
 
 Downloading a large file, or running a long build, render or backup, and you
 need the machine not to sign you out or drop to idle? Start the Screen Holder,
@@ -34,7 +35,7 @@ underneath it. The overlay is below the window, not over it.
 
 ## Controls
 
-The overlay is clean when it opens -- no labels, no chrome, nothing on screen
+The overlay is clean when it opens: no labels, no chrome, nothing on screen
 but the art. When you change something, a single line appears along the bottom
 naming the style, its parameter value and the amount notch, then fades after
 about two seconds. That line is the only text the mod ever draws.
@@ -48,7 +49,7 @@ about two seconds. That line is the only text the mod ever draws.
 | **Hold Space** | Slide the colour around the hue wheel |
 | **Ctrl+Alt+H** | Toggle the overlay on and off (configurable below) |
 
-All of these need the overlay focused -- click it once and it takes them,
+All of these need the overlay focused. Click it once and it takes them,
 without ever coming to the front. **Ctrl+Alt+H works from anywhere**, so you
 can always close the overlay even when something else has focus.
 
@@ -71,9 +72,9 @@ it there is. Amount has five notches: minimal, sparse, balanced, dense, maximal.
 | Style | Parameter (wheel) | Amount (right click) |
 | --- | --- | --- |
 | **Flow field** | turbulence of the underlying field | how tightly ribbons pack: a few broad ones through to many fine ones |
-| **Contours** | relief -- how rough the terrain is | number of contour levels, 6 through 46 |
-| **Differential growth** | vigor -- how hard the colony pushes outward | number of colonies, 1 through 6 |
-| **Harmonograph** | tempo -- how fast the figure is drawn | number of overlaid figures, 1 through 6 |
+| **Contours** | relief (how rough the terrain is) | number of contour levels, 6 through 46 |
+| **Differential growth** | vigor (how hard the colony pushes outward) | number of colonies, 1 through 6 |
+| **Harmonograph** | tempo (how fast the figure is drawn) | number of overlaid figures, 1 through 6 |
 
 ![The four styles: flow field, contours, differential growth, harmonograph](https://raw.githubusercontent.com/akilluminati47/vector-screen-holder/main/assets/styles.png)
 
@@ -109,7 +110,7 @@ nothing flashes on screen.
 
 The event lives in the `Local\` (per-session) namespace, so a second
 logged-in user cannot toggle your overlay. It grants `EVENT_MODIFY_STATE` and
-`SYNCHRONIZE` only -- `SetEvent` needs the first, and `OpenExisting` asks for
+`SYNCHRONIZE` only. `SetEvent` needs the first, and `OpenExisting` asks for
 both, so the one-liner above fails with "Access to the path is denied" without
 it. It is still far short of full access: the event cannot be deleted, nor its
 permissions or owner changed.
@@ -124,7 +125,7 @@ rebuilds 46 path geometries every frame.
 If you are holding the screen for a long build or render and want the mod to
 stay further out of its way:
 
-- drop **Frames per second** to 30 -- motion is paced against wall-clock time,
+- drop **Frames per second** to 30, since motion is paced against the clock
   so it stays smooth rather than becoming choppy;
 - or step the **amount** down a notch or two with right click;
 - or pick flow field or harmonograph, which draw themselves and then idle,
@@ -145,8 +146,9 @@ the Direct2D port. There is a short showcase of all four styles at
 - The display numbers come from the `\\.\DISPLAYn` device names. These
   normally line up with the numbers Windows Settings shows, but the two are
   produced by different parts of Windows and can disagree after displays are
-  re-arranged. The list of connected displays -- number, resolution, position
-  and device name -- is written to the mod log when it loads; use that, and
+  re-arranged. The list of connected displays, with number, resolution,
+  position and device name, is written to the mod log when it loads. Use that,
+  and
   the resolution in particular, to confirm which display is which.
 - Parameter, amount and the current style are remembered across restarts.
 
@@ -167,7 +169,8 @@ pair-programmers Claude and Big-Pickle (opencode).
 - monitor: primary
   $name: Display
   $description: >-
-    Which display to hold. Any resolution and orientation works -- the art is
+    Which display to hold. Any resolution and orientation works, because the
+    art is
     generated to fit whatever the display actually is. The numbered choices
     are the display numbers Windows Settings shows (1, 2, 3, ...). The full
     list of connected displays with their Windows numbers and device names is
@@ -205,7 +208,8 @@ pair-programmers Claude and Big-Pickle (opencode).
 - amount: balanced
   $name: Amount
   $description: >-
-    Starting amount notch -- how much information is on screen. Right click the
+    Starting amount notch, meaning how much information is on screen. Right
+    click the
     overlay to step it.
   $options:
   - minimal: Minimal
@@ -216,8 +220,9 @@ pair-programmers Claude and Big-Pickle (opencode).
 - parameter: 50
   $name: Parameter (%)
   $description: >-
-    Starting value for the per-style parameter that the mouse wheel adjusts.
-    Clamped to 0-100.
+    Starting value for the parameter the mouse wheel adjusts. It is a single
+    value carried across the styles rather than one per style, so the notch you
+    set for one style is the notch the next one starts from. Clamped to 0-100.
 - palette: aurora
   $name: Palette
   $options:
@@ -264,7 +269,7 @@ pair-programmers Claude and Big-Pickle (opencode).
 - startActive: false
   $name: Start active
   $description: Show the overlay as soon as the mod loads.
-- underTaskbar: false
+- workAreaOnly: false
   $name: Stay inside the work area
   $description: >-
     Keep the overlay inside each display's work area instead of covering the
@@ -275,6 +280,7 @@ pair-programmers Claude and Big-Pickle (opencode).
 #include <windows.h>
 #include <d2d1.h>
 #include <dwrite.h>
+#include <windhawk_utils.h>
 #include <sddl.h>
 
 #include <algorithm>
@@ -292,7 +298,7 @@ pair-programmers Claude and Big-Pickle (opencode).
 // ---------------------------------------------------------------------------
 
 // Declared by hand so the mod never depends on __uuidof or on the import
-// library exporting the GUID -- both are toolchain sensitive.
+// library exporting the GUID. Both are toolchain sensitive.
 static const GUID kIID_ID2D1Factory = {
     0x06152247, 0x6f50, 0x465a,
     {0x92, 0x45, 0x11, 0x8b, 0xfd, 0x3b, 0x60, 0x07}};
@@ -302,6 +308,10 @@ static const GUID kIID_IDWriteFactory = {
     {0xa2, 0xe8, 0x1a, 0xdc, 0x7d, 0x93, 0xdb, 0x48}};
 
 static IDWriteFactory* g_dwrite = nullptr;
+
+// Global hue offset in degrees, shared by every overlay so the displays stay
+// in step with one another.
+static float g_hue = 0;
 
 static const WCHAR kWindowClass[] = L"WindhawkVectorScreenHolderWnd";
 static const WCHAR kEventLocal[] = L"Local\\WindhawkVectorScreenHolderToggle";
@@ -645,7 +655,7 @@ static void SetInk(SceneCtx& ctx, const Rgb& base, float alpha) {
 }
 
 // ---------------------------------------------------------------------------
-// Style 1 -- flow field ribbons
+// Style 1: flow field ribbons
 //
 // Curves are traced up front against a packing grid; a curve that dies before
 // a minimum length has the cells it claimed rolled back and is discarded, so
@@ -863,7 +873,7 @@ class FlowScene : public Scene {
 };
 
 // ---------------------------------------------------------------------------
-// Style 2 -- topographic contours (marching squares over a warped fbm field)
+// Style 2: topographic contours (marching squares over a warped fbm field)
 //
 // The sampling grid is area budgeted rather than tied to pixel count, so the
 // per-frame cost is the same on a 1080p panel and a 4K one; only the cell size
@@ -1054,7 +1064,7 @@ class ContourScene : public Scene {
 };
 
 // ---------------------------------------------------------------------------
-// Style 3 -- differential growth
+// Style 3: differential growth
 //
 // Closed loops of nodes that attract along the curve and repel through a
 // shared spatial hash, subdividing as they stretch. Every step is stamped into
@@ -1333,7 +1343,7 @@ class GrowthScene : public Scene {
 };
 
 // ---------------------------------------------------------------------------
-// Style 4 -- harmonograph
+// Style 4: harmonograph
 //
 // Two decaying pendulums per axis. Integer frequency ratios read as deliberate
 // figures; a single shared decay per figure makes it spiral inward
@@ -1473,7 +1483,7 @@ struct Settings {
     bool globalKeys = false;
     bool keepAwake = true;
     bool startActive = false;
-    bool underTaskbar = false;
+    bool workAreaOnly = false;
     std::wstring hotkey = L"Ctrl+Alt+H";
 };
 
@@ -1608,7 +1618,7 @@ static std::vector<MonitorEntry> EnumerateMonitors() {
 }
 
 // ---------------------------------------------------------------------------
-// Overlay -- one per held display
+// Overlay: one per held display
 // ---------------------------------------------------------------------------
 enum Phase { kPhaseIn, kPhaseBuild, kPhaseHold, kPhaseOut };
 
@@ -1628,7 +1638,7 @@ class Overlay {
     void Render(float dtSec);
     void NewScene();
     // Briefly show what just changed. The overlay is otherwise completely
-    // clean -- this is the only text it ever draws.
+    // clean, and this is the only text it ever draws.
     void FlashHud();
 
     int style = kStyleFlow;
@@ -1826,8 +1836,6 @@ void Overlay::FlashHud() {
     hudT_ = kHudSecs;
 }
 
-extern float g_hue;
-
 static float EaseInOut(float t) {
     return t < 0.5f ? 2 * t * t : 1 - (2 - 2 * t) * (2 - 2 * t) * 0.5f;
 }
@@ -1903,7 +1911,7 @@ void Overlay::Render(float dtSec) {
     }
 
     // Composite: background, then the accumulation buffer at the fade opacity.
-    // A true linear fade -- repeatedly blending a translucent background over
+    // A true linear fade. Repeatedly blending a translucent background over
     // the artwork instead plateaus once the per-frame delta rounds below one
     // 8-bit step.
     rt_->BeginDraw();
@@ -2045,8 +2053,6 @@ LRESULT CALLBACK Overlay::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 // ---------------------------------------------------------------------------
 // Controller
 // ---------------------------------------------------------------------------
-float g_hue = 0;
-
 static std::vector<Overlay*> g_overlays;
 static std::atomic<bool> g_active{false};
 static std::atomic<bool> g_spaceDown{false};
@@ -2106,28 +2112,40 @@ static void FlushState() {
     Wh_SetIntValue(L"state.paramFrom", g_settings.parameter);
 }
 
+// Clicks fan out to every overlay, the way the rotation timer already does,
+// so multiple displays stay in step instead of drifting apart.
 static void Controller_CycleStyle(Overlay* ov) {
-    ov->style = NextEnabledStyle(ov->style);
-    ov->NewScene();
+    int next = NextEnabledStyle(ov->style);
+    for (size_t i = 0; i < g_overlays.size(); i++) {
+        g_overlays[i]->style = next;
+        g_overlays[i]->NewScene();
+        g_overlays[i]->FlashHud();
+    }
     SaveState(ov);
-    ov->FlashHud();
 }
 
 static void Controller_StepAmount(Overlay* ov) {
-    ov->amount = (ov->amount + 1) % kAmountCount;
-    // Contours re-level in place; the others are structural, so rebuild.
-    if (ov->style != kStyleContour) {
-        ov->NewScene();
+    int next = (ov->amount + 1) % kAmountCount;
+    for (size_t i = 0; i < g_overlays.size(); i++) {
+        Overlay* o = g_overlays[i];
+        o->amount = next;
+        // Contours re-level in place; the others are structural, so rebuild.
+        if (o->style != kStyleContour) {
+            o->NewScene();
+        }
+        o->FlashHud();
     }
     SaveState(ov);
-    ov->FlashHud();
 }
 
 static void Controller_Wheel(Overlay* ov, int delta) {
     float d = (delta > 0) ? 0.04f : -0.04f;
-    ov->param = ClampT(ov->param + d, 0.0f, 1.0f);
+    float next = ClampT(ov->param + d, 0.0f, 1.0f);
+    for (size_t i = 0; i < g_overlays.size(); i++) {
+        g_overlays[i]->param = next;
+        g_overlays[i]->FlashHud();
+    }
     SaveState(ov);
-    ov->FlashHud();
 }
 
 static void Controller_SetSpace(bool down) {
@@ -2306,7 +2324,7 @@ static void ShowOverlays() {
 
     std::vector<RECT> targets;
     auto targetRect = [&](const MonitorEntry& m) -> RECT {
-        return g_settings.underTaskbar ? m.work : m.rect;
+        return g_settings.workAreaOnly ? m.work : m.rect;
     };
     if (g_settings.monitor == L"all") {
         for (size_t i = 0; i < mons.size(); i++) {
@@ -2350,7 +2368,7 @@ static void ShowOverlays() {
     if (!g_settings.enable[style]) {
         style = FirstEnabledStyle();
     }
-    // If the setting changed since the state was saved, the setting wins --
+    // If the setting changed since the state was saved, the setting wins;
     // otherwise "Starting amount notch" and "Starting parameter" would be
     // silently ignored forever after the first scroll or right click.
     int amount = g_settings.amount;
@@ -2512,10 +2530,7 @@ static HANDLE CreateToggleEvent() {
 // Settings loading
 // ---------------------------------------------------------------------------
 static std::wstring GetStringSetting(PCWSTR name) {
-    PCWSTR v = Wh_GetStringSetting(name);   // never NULL; L"" when unset
-    std::wstring s = v;
-    Wh_FreeStringSetting(v);
-    return s;
+    return WindhawkUtils::StringSetting::make(name).get();
 }
 
 // The amount notch is stored by name so the setting can carry $options.
@@ -2562,7 +2577,7 @@ static void LoadSettings() {
     g_settings.globalKeys = Wh_GetIntSetting(L"globalKeys") != 0;
     g_settings.keepAwake = Wh_GetIntSetting(L"keepAwake") != 0;
     g_settings.startActive = Wh_GetIntSetting(L"startActive") != 0;
-    g_settings.underTaskbar = Wh_GetIntSetting(L"underTaskbar") != 0;
+    g_settings.workAreaOnly = Wh_GetIntSetting(L"workAreaOnly") != 0;
     g_settings.hotkey = GetStringSetting(L"hotkey");
 
     BuildPalette();
@@ -2586,7 +2601,7 @@ static void RegisterHotkeyFromSettings() {
 }
 
 // ---------------------------------------------------------------------------
-// Worker thread -- owns the windows, the render loop and the execution state
+// Worker thread: owns the windows, the render loop and the execution state
 // ---------------------------------------------------------------------------
 static std::atomic<bool> g_running{true};
 
@@ -2805,7 +2820,7 @@ void WhTool_ModUninit() {
     }
     // Wh_ModUninit calls ExitProcess right after this. Without the join that
     // would terminate the worker inside Direct2D, which can wedge DLL
-    // teardown and leave the tool-mod mutex held -- making the next enable
+    // teardown and leave the tool-mod mutex held, making the next enable
     // fail with "Tool mod already running".
     if (g_workerThread) {
         WaitForSingleObject(g_workerThread, INFINITE);
@@ -2820,6 +2835,13 @@ void WhTool_ModUninit() {
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 //
 // The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
