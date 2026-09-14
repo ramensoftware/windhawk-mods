@@ -25,6 +25,11 @@ put it on a side monitor next to your task monitor, and go to lunch. The work
 keeps running, the screen stays awake, and you can still see progress at a
 glance from across the room.
 
+![The overlay running on a portrait monitor while a note is typed in Notepad](https://raw.githubusercontent.com/akilluminati47/windhawk-mods/assets/vector-screen-holder/typing.gif)
+
+Above: a note being written on the side monitor while the art keeps running
+underneath it. The overlay is below the window, not over it.
+
 ## Controls
 
 The overlay is clean when it opens -- no labels, no chrome, nothing on screen
@@ -66,6 +71,10 @@ it there is. Amount has five notches: minimal, sparse, balanced, dense, maximal.
 | **Contours** | relief -- how rough the terrain is | number of contour levels, 6 through 46 |
 | **Differential growth** | vigor -- how hard the colony pushes outward | number of colonies, 1 through 6 |
 | **Harmonograph** | tempo -- how fast the figure is drawn | number of overlaid figures, 1 through 6 |
+
+![The four styles: flow field, contours, differential growth, harmonograph](https://raw.githubusercontent.com/akilluminati47/windhawk-mods/assets/vector-screen-holder/styles.png)
+
+Left to right: flow field, contours, differential growth, harmonograph.
 
 Flow field, growth and harmonograph draw themselves in progressively, hold the
 finished piece, fade out and begin a new one. Contours redraw continuously and
