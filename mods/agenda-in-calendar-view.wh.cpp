@@ -64,9 +64,11 @@ Checking events on other dates:
 
 ## FAQ
 * **My local `.ics` file gives an access error (`CreateFileW failed 5`)!**  
-  Windows `ShellExperienceHost` runs inside an AppContainer sandbox. Grant read permissions to AppContainer packages by running:  
-  `icacls "C:\path\to\calendar.ics" /grant "*S-1-15-2-1:(R)"`  
-  in PowerShell, or place the file in an accessible directory like `C:\ProgramData\`.
+  Windows `ShellExperienceHost` runs inside an AppContainer sandbox.  
+  - **Recommended:** Place your `.ics` file in an accessible directory such as `C:\ProgramData\` (e.g. `C:\ProgramData\calendar.ics`), which is readable by AppContainer packages by default.  
+  - Alternatively, grant read permissions on your file to AppContainers by running:  
+    `icacls "C:\path\to\calendar.ics" /grant "*S-1-15-2-1:(R)"`  
+    in PowerShell. *Note: `*S-1-15-2-1` grants read permissions to ALL APPLICATION PACKAGES (all UWP/packaged apps).*
 * **My local `.ics` file does not work!**  
   Unblock it from its *Properties* pane in File Explorer.
 * **The bottom corners of the *Notifications* pane (immediately above the agenda) are not rounded!**  
@@ -214,10 +216,6 @@ inline int DaysBetween(const SYSTEMTIME& from, const SYSTEMTIME& to) {
     return static_cast<int>(ToFileTimeDays(to) - ToFileTimeDays(from));
 }
 
-inline bool IsSameDate(const SYSTEMTIME& a, const SYSTEMTIME& b) {
-    return a.wYear == b.wYear && a.wMonth == b.wMonth && a.wDay == b.wDay;
-}
-
 inline int CompareDateOnly(const SYSTEMTIME& a, const SYSTEMTIME& b) {
     if (a.wYear != b.wYear)
         return (a.wYear < b.wYear) ? -1 : 1;
@@ -331,6 +329,7 @@ SYSTEMTIME g_selectedDate{};
 bool g_hasSelectedDate = false;
 
 std::mutex g_cacheMutex;
+std::mutex g_watcherMutex;
 std::wstring g_lastFetchedPath;
 FILETIME g_lastLocalFileWriteTime{};
 ULONGLONG g_lastSuccessfulFetchTick = 0;
@@ -1524,8 +1523,8 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
 
         if (m_focusSessionControl) {
             try {
-                m_focusSessionControl.Visibility(wux::Visibility::Visible);
-                Wh_Log(L"Restored FocusSessionControl visibility to Visible");
+                m_focusSessionControl.Visibility(m_originalFocusSessionVisibility);
+                Wh_Log(L"Restored FocusSessionControl visibility to original value");
             } catch (...) {
                 Wh_Log(L"Failed to restore FocusSessionControl visibility: %08X",
                        winrt::to_hresult());
@@ -1568,9 +1567,9 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
                     Wh_Log(L"Detached custom root grid from CalendarControlScrollViewer");
                 }
                 m_hostScrollViewer.VerticalScrollBarVisibility(
-                    wuxc::ScrollBarVisibility::Auto);
+                    m_originalVerticalScrollBarVisibility);
                 m_hostScrollViewer.HorizontalScrollBarVisibility(
-                    wuxc::ScrollBarVisibility::Disabled);
+                    m_originalHorizontalScrollBarVisibility);
             } catch (...) {
                 Wh_Log(L"Failed to restore original CalendarControlScrollViewer content: %08X",
                        winrt::to_hresult());
@@ -1585,12 +1584,21 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
             } catch (...) {}
             m_rootGrid = nullptr;
         }
-        if (m_itemsControl) {
-            try {
-                m_itemsControl.Items().Clear();
-            } catch (...) {}
-            m_itemsControl = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(g_watcherMutex);
+            if (m_itemsControl) {
+                try {
+                    m_itemsControl.Items().Clear();
+                } catch (...) {}
+                m_itemsControl = nullptr;
+            }
         }
+        m_eventsScrollViewer = nullptr;
+        m_headerGrid = nullptr;
+        m_prevDayButton = nullptr;
+        m_nextDayButton = nullptr;
+        m_refreshButton = nullptr;
+        m_datePicker = nullptr;
     }
 
     void UnadviseVisualTreeChange() {
@@ -1854,11 +1862,16 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
     }
 
     void DispatchUpdateEvents(std::vector<CalendarEvent> events) {
-        if (!m_itemsControl) {
+        wuxc::ItemsControl itemsControl{nullptr};
+        {
+            std::lock_guard<std::mutex> lock(g_watcherMutex);
+            itemsControl = m_itemsControl;
+        }
+        if (!itemsControl) {
             return;
         }
 
-        auto dispatcher = m_itemsControl.Dispatcher();
+        auto dispatcher = itemsControl.Dispatcher();
         if (!dispatcher) {
             return;
         }
@@ -1925,9 +1938,13 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
                 m_originalCalendarContent = nullptr;
                 m_hostScrollViewer = nullptr;
             }
-                    if (!strongThis->m_itemsControl) {
-                        strongThis->m_itemsControl = wuxc::ItemsControl();
-                    }
+
+            {
+                std::lock_guard<std::mutex> lock(g_watcherMutex);
+                if (!strongThis->m_itemsControl) {
+                    strongThis->m_itemsControl = wuxc::ItemsControl();
+                }
+            }
 
                     if (!strongThis->m_eventsScrollViewer) {
                         strongThis->m_eventsScrollViewer = wuxc::ScrollViewer();
@@ -2381,7 +2398,6 @@ static constexpr CLSID CLSID_WindhawkTAP = {
 
 // Released with `g_visualTreeWatcher = nullptr;` on the UI thread in Wh_ModUninit.
 [[clang::no_destroy]] winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
-std::mutex g_watcherMutex;
 
 std::mutex g_uiDispatchersMutex;
 std::vector<winrt::weak_ref<wuc::CoreDispatcher>> g_uiDispatchers;
