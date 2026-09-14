@@ -4,7 +4,7 @@
 // @description     Replaces the grouped Windows 11 system tray button with separate sound, Bluetooth, network, Control Center, and battery buttons.
 // @version         1.0.0
 // @author          Asteski
-// @github          https://github.com/Asteski
+// @github          https://www.github.com/Asteski
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -DWIN32_LEAN_AND_MEAN -lshell32 -lole32 -loleaut32 -lruntimeobject -luuid -liphlpapi -lwlanapi -lbthprops
@@ -341,6 +341,7 @@ static void EnsureTrayRefreshWindow();
 static void DestroyTrayRefreshWindow();
 static void StartStatusEvents(HWND hwnd);
 static void StopStatusEvents();
+static void RestoreGridTrayMutation();
 static void InvalidateEnergySaverRead();
 static winrt::hstring GetNetworkGlyph(NetworkState const& state);
 static NetworkState g_displayNetworkState;
@@ -352,11 +353,11 @@ using TrayUI_StartTaskbar_t = void(WINAPI*)(void*);
 
 static Settings g_settings;
 static HWND g_taskbarWnd = nullptr;
-static wux::FrameworkElement g_bluetoothButton{nullptr};
-static wux::FrameworkElement g_networkButton{nullptr};
-static wux::FrameworkElement g_soundButton{nullptr};
-static wux::FrameworkElement g_batteryButton{nullptr};
-static wux::FrameworkElement g_compactGroupedButton{nullptr};
+[[clang::no_destroy]] static wux::FrameworkElement g_bluetoothButton{nullptr};
+[[clang::no_destroy]] static wux::FrameworkElement g_networkButton{nullptr};
+[[clang::no_destroy]] static wux::FrameworkElement g_soundButton{nullptr};
+[[clang::no_destroy]] static wux::FrameworkElement g_batteryButton{nullptr};
+[[clang::no_destroy]] static wux::FrameworkElement g_compactGroupedButton{nullptr};
 struct IconLayers {
     wuc::Grid host{nullptr};
     wuc::FontIcon underlay{nullptr};
@@ -364,12 +365,12 @@ struct IconLayers {
     wuc::FontIcon overlay{nullptr};
 };
 
-static IconLayers g_bluetoothIcon;
-static IconLayers g_networkIcon;
-static IconLayers g_soundIcon;
-static IconLayers g_compactGroupedIcon;
-static IconLayers g_batteryIcon;
-static wuc::TextBlock g_batteryPercentageText{nullptr};
+[[clang::no_destroy]] static IconLayers g_bluetoothIcon;
+[[clang::no_destroy]] static IconLayers g_networkIcon;
+[[clang::no_destroy]] static IconLayers g_soundIcon;
+[[clang::no_destroy]] static IconLayers g_compactGroupedIcon;
+[[clang::no_destroy]] static IconLayers g_batteryIcon;
+[[clang::no_destroy]] static wuc::TextBlock g_batteryPercentageText{nullptr};
 static std::atomic<int> g_batteryPercentageEnabled{-1};
 static std::wstring g_batteryTooltipCache;
 
@@ -388,17 +389,17 @@ static std::wstring g_soundTooltipCache;
 // The taskbar host ignores the placement properties of ToolTipService for
 // injected controls and falls back to mouse-relative placement. Keep one
 // XAML Popup for our three controls instead, positioned from the taskbar edge.
-static wucp::Popup g_fixedTrayTooltipPopup{nullptr};
-static wuc::Border g_fixedTrayTooltipBorder{nullptr};
-static wuc::TextBlock g_fixedTrayTooltipText{nullptr};
-static wux::FrameworkElement g_fixedTrayTooltipTarget{nullptr};
+[[clang::no_destroy]] static wucp::Popup g_fixedTrayTooltipPopup{nullptr};
+[[clang::no_destroy]] static wuc::Border g_fixedTrayTooltipBorder{nullptr};
+[[clang::no_destroy]] static wuc::TextBlock g_fixedTrayTooltipText{nullptr};
+[[clang::no_destroy]] static wux::FrameworkElement g_fixedTrayTooltipTarget{nullptr};
 static bool g_fixedTrayTooltipOpened = false;
-static wuc::MenuFlyout g_activeTrayContextFlyout{nullptr};
-static wuc::Panel g_trayPanel{nullptr};
-static wux::FrameworkElement g_trayControlCenterButton{nullptr};
-static wux::FrameworkElement g_originalGroupedButton{nullptr};
-static wux::Style g_nativeGroupedButtonStyle{nullptr};
-static wux::Style g_nativeNotifyIconStyle{nullptr};
+[[clang::no_destroy]] static wuc::MenuFlyout g_activeTrayContextFlyout{nullptr};
+[[clang::no_destroy]] static wuc::Panel g_trayPanel{nullptr};
+[[clang::no_destroy]] static wux::FrameworkElement g_trayControlCenterButton{nullptr};
+[[clang::no_destroy]] static wux::FrameworkElement g_originalGroupedButton{nullptr};
+[[clang::no_destroy]] static wux::Style g_nativeGroupedButtonStyle{nullptr};
+[[clang::no_destroy]] static wux::Style g_nativeNotifyIconStyle{nullptr};
 static wux::Visibility g_originalGroupedVisibility = wux::Visibility::Visible;
 static double g_originalGroupedWidth = NAN;
 static double g_originalGroupedMinWidth = 0;
@@ -408,9 +409,9 @@ static double g_originalGroupedMaxWidth = INFINITY;
 static double g_trayButtonWidth = 28;
 static double g_trayButtonHeight = 32;
 static int g_notifyMetricDiagnosticCount = 0;
-static wux::DispatcherTimer g_updateTimer{nullptr};
-static wux::DispatcherTimer g_retryTimer{nullptr};
-static wux::DispatcherTimer g_metricRefreshTimer{nullptr};
+[[clang::no_destroy]] static wux::DispatcherTimer g_updateTimer{nullptr};
+[[clang::no_destroy]] static wux::DispatcherTimer g_retryTimer{nullptr};
+[[clang::no_destroy]] static wux::DispatcherTimer g_metricRefreshTimer{nullptr};
 static int g_retryCount = 0;
 static std::atomic<bool> g_unloading{false};
 static void WorkerLog(PCWSTR format, ...) {
@@ -422,22 +423,45 @@ static void WorkerLog(PCWSTR format, ...) {
     OutputDebugStringW(text);
 }
 
+static SRWLOCK g_workerThreadsLock = SRWLOCK_INIT;
+static std::vector<HANDLE> g_workerThreads;
+
 static HANDLE StartOwnedWorker(std::function<void()> task) {
-    struct Work { HMODULE owner; std::function<void()> task; };
-    HMODULE owner = nullptr;
-    if (g_unloading || !GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-        reinterpret_cast<PCWSTR>(&StartOwnedWorker), &owner)) return nullptr;
-    auto work = new (std::nothrow) Work{owner, std::move(task)};
-    if (!work) { FreeLibrary(owner); return nullptr; }
+    struct Work { std::function<void()> task; };
+    AcquireSRWLockShared(&g_workerThreadsLock);
+    if (g_unloading) { ReleaseSRWLockShared(&g_workerThreadsLock); return nullptr; }
+    auto work = new (std::nothrow) Work{std::move(task)};
+    if (!work) { ReleaseSRWLockShared(&g_workerThreadsLock); return nullptr; }
     HANDLE thread = CreateThread(nullptr, 0, [](void* parameter) -> DWORD {
         auto work = static_cast<Work*>(parameter);
-        const HMODULE owner = work->owner;
         try { work->task(); } catch (...) {}
         delete work;
-        FreeLibraryAndExitThread(owner, 0);
+        return 0;
     }, work, 0, nullptr);
-    if (!thread) { delete work; FreeLibrary(owner); }
+    if (thread) {
+        HANDLE tracked = nullptr;
+        if (!DuplicateHandle(GetCurrentProcess(), thread, GetCurrentProcess(),
+            &tracked, 0, FALSE, DUPLICATE_SAME_ACCESS)) {
+            CloseHandle(thread);
+            thread = nullptr;
+        } else {
+            g_workerThreads.push_back(tracked);
+        }
+    } else delete work;
+    ReleaseSRWLockShared(&g_workerThreadsLock);
     return thread;
+}
+
+static void WaitForOwnedWorkers() {
+    std::vector<HANDLE> workers;
+    AcquireSRWLockExclusive(&g_workerThreadsLock);
+    workers = std::move(g_workerThreads);
+    g_workerThreads.clear();
+    ReleaseSRWLockExclusive(&g_workerThreadsLock);
+    for (auto thread : workers) {
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+    }
 }
 
 static std::vector<std::function<void()>> g_uiEventRevokers;
@@ -455,8 +479,8 @@ static std::atomic<ULONGLONG> g_lastMediaTooltipQueryTick{0};
 static std::atomic<bool> g_mediaTooltipQueryInProgress{false};
 static bool g_metricRefreshPending = false;
 static int g_metricRefreshSettlePasses = 0;
-static wux::FrameworkElement g_sizeRefreshTrayElement{nullptr};
-static wux::FrameworkElement g_sizeRefreshControlCenterButton{nullptr};
+[[clang::no_destroy]] static wux::FrameworkElement g_sizeRefreshTrayElement{nullptr};
+[[clang::no_destroy]] static wux::FrameworkElement g_sizeRefreshControlCenterButton{nullptr};
 static winrt::event_token g_sizeRefreshTrayToken{};
 static winrt::event_token g_sizeRefreshControlCenterToken{};
 
@@ -1052,7 +1076,6 @@ static bool IsAirplaneModeLikelyEnabled() {
 
 struct RadioChangeWork {
     bool enabled;
-    HMODULE owner;
 };
 
 static DWORD WINAPI SetAirplaneModeLikelyEnabledThreadProc(void* param) {
@@ -1087,24 +1110,19 @@ static DWORD WINAPI SetAirplaneModeLikelyEnabledThreadProc(void* param) {
     }
     if (coInitialized) CoUninitialize();
     RequestTrayRefresh(true);
-    FreeLibraryAndExitThread(work.owner, 0);
+    return 0;
 }
 
 static void SetAirplaneModeLikelyEnabled(bool enabled) {
-    HMODULE owner = nullptr;
-    if (g_unloading || !GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-        reinterpret_cast<PCWSTR>(&SetAirplaneModeLikelyEnabledThreadProc), &owner)) return;
-    auto* value = new (std::nothrow) RadioChangeWork{enabled, owner};
-    if (!value) { FreeLibrary(owner); return; }
-
-    HANDLE thread = CreateThread(nullptr, 0,
-                                 SetAirplaneModeLikelyEnabledThreadProc,
-                                 value, 0, nullptr);
+    if (g_unloading) return;
+    auto* value = new (std::nothrow) RadioChangeWork{enabled};
+    HANDLE thread = value ? StartOwnedWorker([value] {
+        SetAirplaneModeLikelyEnabledThreadProc(value);
+    }) : nullptr;
     if (thread) {
         CloseHandle(thread);
     } else {
         delete value;
-        FreeLibrary(owner);
     }
 }
 
@@ -2743,6 +2761,7 @@ static void RemoveInjectedControls(wuc::Panel const& parent) {
             children.RemoveAt(index);
         }
     }
+    RestoreGridTrayMutation();
 
     g_bluetoothButton = nullptr;
     g_networkButton = nullptr;
@@ -2766,7 +2785,31 @@ struct NativeTrayPropertyOverride {
     wux::DependencyProperty property;
     wf::IInspectable originalValue;
 };
-static std::vector<NativeTrayPropertyOverride> g_nativeTrayPropertyOverrides;
+[[clang::no_destroy]] static std::vector<NativeTrayPropertyOverride> g_nativeTrayPropertyOverrides;
+
+struct GridTrayMutation {
+    winrt::weak_ref<wuc::Grid> grid;
+    std::vector<wuc::ColumnDefinition> columns;
+    std::vector<std::pair<winrt::weak_ref<wux::FrameworkElement>, int>> shiftedChildren;
+};
+[[clang::no_destroy]] static GridTrayMutation g_gridTrayMutation;
+
+static void RestoreGridTrayMutation() {
+    auto grid = g_gridTrayMutation.grid.get();
+    if (!grid) { g_gridTrayMutation = {}; return; }
+    try {
+        for (auto const& [childRef, column] : g_gridTrayMutation.shiftedChildren) {
+            if (auto child = childRef.get()) wuc::Grid::SetColumn(child, column);
+        }
+        auto columns = grid.ColumnDefinitions();
+        for (auto const& inserted : g_gridTrayMutation.columns) {
+            for (uint32_t i = 0; i < columns.Size(); ++i) {
+                if (columns.GetAt(i) == inserted) { columns.RemoveAt(i); break; }
+            }
+        }
+    } catch (...) {}
+    g_gridTrayMutation = {};
+}
 
 
 
@@ -3402,7 +3445,7 @@ static std::wstring GetNetworkTooltip(NetworkState const& state) {
 
 namespace bt = winrt::Windows::Devices::Bluetooth;
 namespace de = winrt::Windows::Devices::Enumeration;
-static wf::IAsyncOperation<de::DeviceInformationCollection> g_btQueries[3]{nullptr, nullptr, nullptr};
+[[clang::no_destroy]] static wf::IAsyncOperation<de::DeviceInformationCollection> g_btQueries[3]{nullptr, nullptr, nullptr};
 static std::wstring g_btConnectedNames;
 static size_t g_btConnectedCount = 0;
 static ULONGLONG g_btQueryTick = 0;
@@ -3945,7 +3988,8 @@ static SRWLOCK g_refreshLock = SRWLOCK_INIT;
 static HWND g_refreshWindow = nullptr;
 static unsigned g_refreshPending = 0;
 static constexpr UINT kRefreshMessage = WM_APP + 164;
-static constexpr PCWSTR kRefreshWindowClass = L"SeparateSystemTrayIcons.Refresh.0.6";
+static constexpr UINT kDestroyRefreshWindowMessage = kRefreshMessage + 2;
+static constexpr PCWSTR kRefreshWindowClass = L"SeparateSystemTrayIcons.Refresh";
 
 static void RequestTrayRefresh(bool radiosChanged) {
     AcquireSRWLockExclusive(&g_refreshLock);
@@ -3963,6 +4007,10 @@ static LRESULT CALLBACK TrayRefreshWindowProc(HWND hwnd, UINT message,
     if (message == kRefreshMessage + 1) {
         SetPropW(hwnd, L"StatusEventSources", reinterpret_cast<HANDLE>(wp));
         Wh_Log(L"Status event subscriptions ready: 0x%X", static_cast<unsigned>(wp));
+        return 0;
+    }
+    if (message == kDestroyRefreshWindowMessage) {
+        DestroyTrayRefreshWindow();
         return 0;
     }
     if (message == WM_POWERBROADCAST) {
@@ -4007,9 +4055,13 @@ static void EnsureTrayRefreshWindow() {
     cls.lpfnWndProc = TrayRefreshWindowProc;
     cls.hInstance = owner;
     cls.lpszClassName = kRefreshWindowClass;
-    if (!RegisterClassW(&cls) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) return;
+    if (!RegisterClassW(&cls)) return;
     HWND hwnd = CreateWindowExW(0, kRefreshWindowClass, L"", 0, 0, 0, 0, 0,
                                 HWND_MESSAGE, nullptr, owner, nullptr);
+    if (!hwnd) {
+        UnregisterClassW(kRefreshWindowClass, owner);
+        return;
+    }
     AcquireSRWLockExclusive(&g_refreshLock);
     g_refreshWindow = hwnd;
     ReleaseSRWLockExclusive(&g_refreshLock);
@@ -4060,9 +4112,9 @@ static void WINAPI WirelessStatusChanged(PWLAN_NOTIFICATION_DATA, void*) {
 struct StatusEventWork {
     HWND window;
     HANDLE stop;
-    HMODULE owner;
 };
-static HANDLE g_statusEventStop = nullptr; // UI thread owns a duplicate handle.
+static HANDLE g_statusEventStop = nullptr;
+static HANDLE g_statusEventThread = nullptr;
 
 static DWORD WINAPI StatusEventThread(void* parameter) {
     const auto work = *static_cast<StatusEventWork*>(parameter);
@@ -4185,37 +4237,33 @@ static DWORD WINAPI StatusEventThread(void* parameter) {
     for (auto key : keys) if (key) RegCloseKey(key);
     for (auto event : keyEvents) if (event) CloseHandle(event);
     if (SUCCEEDED(initialized)) CoUninitialize();
-    } // Release C++ storage before FreeLibraryAndExitThread bypasses unwinding.
-    CloseHandle(work.stop);
-    FreeLibraryAndExitThread(work.owner, 0);
+    }
+    return 0;
 }
 
 static void StartStatusEvents(HWND hwnd) {
     if (g_statusEventStop || g_unloading) return;
-    HMODULE owner = nullptr;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-        reinterpret_cast<PCWSTR>(&StatusEventThread), &owner)) return;
     HANDLE stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!stop || !DuplicateHandle(GetCurrentProcess(), stop, GetCurrentProcess(),
-        &g_statusEventStop, 0, FALSE, DUPLICATE_SAME_ACCESS)) {
-        if (stop) CloseHandle(stop);
-        FreeLibrary(owner); return;
-    }
-    auto work = new (std::nothrow) StatusEventWork{hwnd, stop, owner};
+    if (!stop) return;
+    auto work = new (std::nothrow) StatusEventWork{hwnd, stop};
     HANDLE thread = work ? CreateThread(nullptr, 0, StatusEventThread, work, 0, nullptr) : nullptr;
-    if (thread) CloseHandle(thread);
+    if (thread) {
+        g_statusEventStop = stop;
+        g_statusEventThread = thread;
+    }
     else {
-        delete work; CloseHandle(stop); CloseHandle(g_statusEventStop);
-        g_statusEventStop = nullptr; FreeLibrary(owner);
+        delete work; CloseHandle(stop);
     }
 }
 
 static void StopStatusEvents() {
-    if (g_statusEventStop) {
-        SetEvent(g_statusEventStop);
-        CloseHandle(g_statusEventStop);
-        g_statusEventStop = nullptr;
+    if (g_statusEventStop) SetEvent(g_statusEventStop);
+    if (g_statusEventThread) {
+        WaitForSingleObject(g_statusEventThread, INFINITE);
+        CloseHandle(g_statusEventThread);
+        g_statusEventThread = nullptr;
     }
+    if (g_statusEventStop) { CloseHandle(g_statusEventStop); g_statusEventStop = nullptr; }
 }
 
 enum class ButtonKind {
@@ -4718,13 +4766,13 @@ static bool ReadBatteryBooleanSetting(
 }
 
 static std::atomic<bool> g_energySaverBusy{false};
-static std::atomic<ULONGLONG> g_energySaverQueryTick{0};
-static void InvalidateEnergySaverRead() { g_energySaverQueryTick.store(0); }
+static void InvalidateEnergySaverRead() {
+    g_energySaverState.store(-1);
+}
 static SRWLOCK g_energySaverQueueLock = SRWLOCK_INIT;
 static unsigned g_batteryOperationsQueued = 0;
 
 struct EnergySaverWork {
-    HMODULE owner;
     int operation;  // 0: refresh, 1: energy saver toggle, 2: percentage toggle.
 };
 
@@ -4762,7 +4810,6 @@ nextOperation:
         if (work.operation != 2) g_energySaverState.store(-1);
     }
     if (initialized) winrt::uninit_apartment();
-    g_energySaverQueryTick.store(GetTickCount64());
     if (FAILED(error) && work.operation) {
         MessageBoxW(nullptr, L"Windows could not change the battery setting. Check Power and sleep settings.",
                     L"Battery settings", MB_OK | MB_ICONWARNING);
@@ -4777,9 +4824,7 @@ nextOperation:
     g_energySaverBusy.store(false);
     ReleaseSRWLockExclusive(&g_energySaverQueueLock);
     if (work.operation || stateChanged) RequestTrayRefresh();
-    // Do not call Windhawk or XAML from this worker. A slow Settings operation
-    // must not hold up taskbar teardown or execute code from an unloaded DLL.
-    FreeLibraryAndExitThread(work.owner, 0);
+    return 0;
 }
 
 static void QueueEnergySaverWork(int operation) {
@@ -4792,25 +4837,21 @@ static void QueueEnergySaverWork(int operation) {
         return;
     }
     ReleaseSRWLockExclusive(&g_energySaverQueueLock);
-    HMODULE owner = nullptr;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-            reinterpret_cast<PCWSTR>(&EnergySaverWorker), &owner)) {
-        g_energySaverBusy.store(false);
-        return;
-    }
-    auto work = new (std::nothrow) EnergySaverWork{owner, operation};
-    HANDLE thread = work ? CreateThread(nullptr, 0, EnergySaverWorker, work, 0, nullptr) : nullptr;
+    auto work = new (std::nothrow) EnergySaverWork{operation};
+    HANDLE thread = work ? StartOwnedWorker([work] { EnergySaverWorker(work); }) : nullptr;
     if (thread) {
         CloseHandle(thread);
     } else {
         delete work;
-        FreeLibrary(owner);
         g_energySaverBusy.store(false);
     }
 }
 
 static void RefreshEnergySaverStateAsync() {
-    if (GetTickCount64() - g_energySaverQueryTick.load() >= 2000)
+    // Registry/power notifications invalidate the cache. Do not continuously
+    // create a Settings apartment merely to poll an unchanged preference.
+    if (g_batteryButton && g_energySaverState.load() < 0 &&
+        !g_energySaverBusy.load())
         QueueEnergySaverWork(false);
 }
 
@@ -5267,20 +5308,10 @@ static HWND FindVisibleShellFlyoutWindow() {
     return search.hwnd;
 }
 
-static void SendEscapeToDismissFlyout(HWND flyoutWindow) {
-    // Escape is how the native system flyouts dismiss themselves.  Only send
-    // it after confirming that the matching shell flyout is visibly open.
-    if (flyoutWindow) {
-        SetForegroundWindow(flyoutWindow);
-    }
-
-    INPUT inputs[2]{};
-    inputs[0].type = INPUT_KEYBOARD;
-    inputs[0].ki.wVk = VK_ESCAPE;
-    inputs[1].type = INPUT_KEYBOARD;
-    inputs[1].ki.wVk = VK_ESCAPE;
-    inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
-    SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT));
+static void DismissFlyout(HWND flyoutWindow) {
+    // Do not inject Escape system-wide: foreground activation can fail and
+    // deliver it to an unrelated app. Ask the selected shell flyout to close.
+    if (flyoutWindow) PostMessageW(flyoutWindow, WM_CLOSE, 0, 0);
 }
 
 static bool SoundUsesQuickSettings() {
@@ -5301,7 +5332,7 @@ static bool HandleTrayButtonClick(ButtonKind kind) {
         if (HWND flyout = FindVisibleShellFlyoutWindow()) {
             Wh_Log(L"Repeated %d tray click: dismissing visible shell flyout %p.",
                    buttonIndex, flyout);
-            SendEscapeToDismissFlyout(flyout);
+            DismissFlyout(flyout);
             g_lastOpenedFlyoutButton = -1;
             g_lastOpenedFlyoutTick = 0;
             return true;
@@ -6051,6 +6082,8 @@ static void InsertGridTrayButtons(wuc::Grid const& trayGrid,
         return;
     }
 
+    RestoreGridTrayMutation();
+    g_gridTrayMutation.grid = winrt::make_weak(trayGrid);
     for (int i = 0; i < buttonCount; ++i) {
         wuc::ColumnDefinition column;
         column.Width({1.0, wux::GridUnitType::Auto});
@@ -6060,6 +6093,7 @@ static void InsertGridTrayButtons(wuc::Grid const& trayGrid,
         } else {
             trayGrid.ColumnDefinitions().InsertAt(insertCol + i, column);
         }
+        g_gridTrayMutation.columns.push_back(column);
     }
 
     for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
@@ -6071,6 +6105,8 @@ static void InsertGridTrayButtons(wuc::Grid const& trayGrid,
 
         int childCol = wuc::Grid::GetColumn(child);
         if (childCol >= insertCol) {
+            g_gridTrayMutation.shiftedChildren.emplace_back(
+                winrt::make_weak(child), childCol);
             wuc::Grid::SetColumn(child, childCol + buttonCount);
         }
     }
@@ -6351,7 +6387,7 @@ static bool RunFromWindowThread(HWND hwnd,
     if (!g_runFromWindowThreadRegisteredMsg) {
         g_runFromWindowThreadRegisteredMsg =
             RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_"
-                                   L"separate-quick-settings-tray-icons-xaml");
+                                   WH_MOD_ID);
     }
 
     DWORD threadId = GetWindowThreadProcessId(hwnd, nullptr);
@@ -6457,7 +6493,19 @@ void Wh_ModSettingsChanged() {
 void Wh_ModUninit() {
     g_unloading = true;
     g_taskbarWnd = FindCurrentProcessTaskbarWnd();
+    bool removed = false;
     if (g_taskbarWnd) {
-        RunFromWindowThread(g_taskbarWnd, RemoveXamlButtonsProc, nullptr);
+        removed = RunFromWindowThread(g_taskbarWnd, RemoveXamlButtonsProc, nullptr);
     }
+    if (!removed) {
+        // XAML must remain on its owner thread, but native resources cannot
+        // survive merely because Shell_TrayWnd is temporarily unavailable.
+        HWND refresh = nullptr;
+        AcquireSRWLockShared(&g_refreshLock);
+        refresh = g_refreshWindow;
+        ReleaseSRWLockShared(&g_refreshLock);
+        if (refresh) SendMessageW(refresh, kDestroyRefreshWindowMessage, 0, 0);
+        else StopStatusEvents();
+    }
+    WaitForOwnedWorkers();
 }
