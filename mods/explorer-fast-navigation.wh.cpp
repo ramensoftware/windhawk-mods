@@ -21,6 +21,8 @@ This mod does not remove ribbon to avoid breaking the command bar.
 Tested on Windows 11 X64/ARM64 as well as Windows Server 2022 x64
 Conceptually this should work down to Windows 8 but may require changes to this code.
 
+Comparasion gifs may be added later, not right now.
+
 Disclosure: This mod was mainly created by GPT6-Astra, however the discovery was made much earlier: https://x.com/VivyVCCS/status/1698420723344187879
 */
 // ==/WindhawkModReadme==
@@ -1148,13 +1150,6 @@ static BOOL InitializeMod() {
     WH_HOOK_SYMBOLS_OPTIONS options{};
     options.optionsSize = sizeof(options);
     HookAvailableSymbols(frame, L"ExplorerFrame.dll", frameSymbols, ARRAYSIZE(frameSymbols), &options);
-    if (!FileTransition::navigateOriginal && !FileTransition::resetOriginal &&
-        !RibbonWork::navigatedOriginal && !RibbonWork::navStateOriginal &&
-        !XamlWork::enabled) {
-        Wh_Log(L"No usable hooks on this build");
-        return FALSE;
-    }
-
     HookAvailableSymbols(shell, L"shell32.dll", shellSymbols, ARRAYSIZE(shellSymbols), &options);
     if (!RibbonWork::destroyOriginal) {
         Wh_Log(L"Classic ribbon deferral disabled: DestroyRibbonUI hook unavailable");
@@ -1206,6 +1201,13 @@ static BOOL InitializeMod() {
         if (!trackBatchActions) {
             Wh_Log(L"DUser.dll!DeleteHandle unavailable or hook installation failed");
         }
+    }
+
+    if (!FileTransition::navigateOriginal && !FileTransition::resetOriginal &&
+        !RibbonWork::navigatedOriginal && !RibbonWork::navStateOriginal &&
+        !XamlWork::enabled) {
+        Wh_Log(L"No usable hooks on this build");
+        return FALSE;
     }
 
     FileTransition::completionTracking = FileTransition::batchOriginal && (nativeBatchTracking || trackBatchActions);
