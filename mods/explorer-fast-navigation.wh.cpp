@@ -2,7 +2,7 @@
 // @id              explorer-fast-navigation
 // @name            Explorer Fast Navigation
 // @description     Improves explorer navigation latency
-// @version         0.9.3
+// @version         0.9.4
 // @author          Vivy
 // @github          https://github.com/enginelesscc
 // @twitter         https://x.com/VivyVCCS
@@ -13,12 +13,13 @@
 
 // ==WindhawkModReadme==
 /*
-This mod fixes the navigation flicker introduced in windows 8 and reduces the latency introduced by ribbon and xaml islands.
+This mod fixes the navigation flicker introduced in Windows 8 and reduces the latency introduced by Ribbon and Xaml islands.
 Mostly done by delaying heavy work and redraws until after navigation finish.
 Navigation now feels like it used to in Windows 7 and earlier.
 This mod does not remove ribbon to avoid breaking the command bar.
 
-Only tested on Windows 11 x64, but in theory - with some edits - should also work on earlier versions (as they are affected by the same problems).
+Tested on Windows 11 X64/ARM64 as well as Windows Server 2022 x64
+Conceptually this should work down to Windows 8 but may require changes to this code.
 
 Disclosure: This mod was mainly created by GPT6-Astra, however the discovery was made much earlier: https://x.com/VivyVCCS/status/1698420723344187879
 */
@@ -162,9 +163,9 @@ public:
         // A nested WM_CLOSE during Flush only requests closure. The outer
         // drain destroys the window after releasing its outstanding COM refs.
         std::unique_lock lock(mutex);
-        changed.wait(lock, [this] {
-            return windows.empty() && callbacks == 0;
-        });
+        while (!changed.wait_for(lock, std::chrono::seconds(2), [this] { return windows.empty() && callbacks == 0; })) {
+            Wh_Log(L"Still waiting for %zu queue window(s) and %zu callback(s)", windows.size(), callbacks);
+        }
     }
 };
 
@@ -1043,11 +1044,13 @@ static void ReleaseModules() {
 
 static BOOL InitializeMod() {
     LoadSettings();
+
     frame = LoadLibraryExW(L"ExplorerFrame.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     shell = LoadLibraryExW(L"shell32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (settings.duserBatching || settings.deferralDeadlineMs) {
         duser = LoadLibraryExW(L"DUser.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     }
+
     // ExplorerFrame.dll
     const SymbolHook frameSymbols[] = {
         {L"private: static void __cdecl UIItemsView::s_BatchTimerCallback(struct GMA_ACTIONINFO *)",
@@ -1087,6 +1090,7 @@ static BOOL InitializeMod() {
          &RibbonWork::navStateOriginal,
          RibbonWork::NavStateHook},
     };
+
     // shell32.dll
     const SymbolHook shellSymbols[] = {
         {L"private: void __cdecl CDUIViewFrame::_RedrawFrame(void)",
@@ -1096,24 +1100,33 @@ static BOOL InitializeMod() {
          &renderSizerOriginal,
          RenderSizerHook},
     };
+
     WH_HOOK_SYMBOLS_OPTIONS options{};
     options.optionsSize = sizeof(options);
-    HookAvailableSymbols(frame, L"ExplorerFrame.dll", frameSymbols, ARRAYSIZE(frameSymbols),
-                         &options);
+    HookAvailableSymbols(frame, L"ExplorerFrame.dll", frameSymbols, ARRAYSIZE(frameSymbols), &options);
+    if (!FileTransition::navigateOriginal && !FileTransition::resetOriginal &&
+        !RibbonWork::navigatedOriginal && !RibbonWork::navStateOriginal &&
+        !XamlWork::enabled) {
+        Wh_Log(L"No usable hooks on this build");
+        return FALSE;
+    }
+
     HookAvailableSymbols(shell, L"shell32.dll", shellSymbols, ARRAYSIZE(shellSymbols), &options);
     if (!RibbonWork::destroyOriginal) {
         Wh_Log(L"Classic ribbon deferral disabled: DestroyRibbonUI hook unavailable");
     }
+
     // Server 2022 has CExplorerRibbon but no CommandBarViewAdapter. Report
     // classic capabilities separately so expected XAML misses aren't mistaken
     // for disabled ribbon deferral.
     bool deferral = FileTransition::navigateOriginal && settings.deferralDeadlineMs;
     Wh_Log(L"Classic ribbon deferral: navigation=%d, events=%d; navigation bar=%d",
-           deferral && settings.classicRibbon && RibbonWork::destroyOriginal &&
-               RibbonWork::changedOriginal && RibbonWork::navigatedOriginal,
-           deferral && settings.classicRibbon && RibbonWork::destroyOriginal &&
-               FileTransition::invokeOriginal,
-           deferral && settings.navigationBar && RibbonWork::navStateOriginal);
+            deferral && settings.classicRibbon && RibbonWork::destroyOriginal &&
+            RibbonWork::changedOriginal && RibbonWork::navigatedOriginal,
+            deferral && settings.classicRibbon && RibbonWork::destroyOriginal &&
+            FileTransition::invokeOriginal,
+            deferral && settings.navigationBar && RibbonWork::navStateOriginal);
+    
     updateWindowOriginal = UpdateWindow;
     redrawWindowOriginal = RedrawWindow;
     setWindowPosOriginal = SetWindowPos;
@@ -1121,18 +1134,18 @@ static BOOL InitializeMod() {
     bool layoutPaint = Hook(redrawWindowOriginal, RedrawWindowHook);
     bool positionPaint = Hook(setWindowPosOriginal, SetWindowPosHook);
     if (!paint || !layoutPaint || !positionPaint) {
-        Wh_Log(L"Paint hook availability: UpdateWindow=%d, RedrawWindow=%d, SetWindowPos=%d",
-               paint, layoutPaint, positionPaint);
+        Wh_Log(L"Paint hook availability: UpdateWindow=%d, RedrawWindow=%d, SetWindowPos=%d", paint, layoutPaint, positionPaint);
     }
+
     if (!RibbonWork::Initialize()) {
         Wh_Log(L"Required deferred UI hooks unavailable");
         return FALSE;
     }
+
     XamlWork::Initialize(&options);
     bool batches = false;
     if (batchCallback && duser) {
-        createActionOriginal =
-            reinterpret_cast<CreateAction>(GetProcAddress(duser, "CreateAction"));
+        createActionOriginal = reinterpret_cast<CreateAction>(GetProcAddress(duser, "CreateAction"));
         batches = Hook(createActionOriginal, CreateActionHook);
         if (!batches) {
             Wh_Log(L"DUser.dll!CreateAction unavailable or hook installation failed");
@@ -1140,25 +1153,28 @@ static BOOL InitializeMod() {
     } else if (settings.duserBatching && !duser) {
         Wh_Log(L"Batching module unavailable: DUser.dll");
     }
+
     bool nativeBatchTracking = FileTransition::ensureOriginal && FileTransition::deleteOriginal;
     if (!nativeBatchTracking && batches && settings.deferralDeadlineMs) {
-        deleteActionOriginal =
-            reinterpret_cast<DeleteAction>(GetProcAddress(duser, "DeleteHandle"));
+        deleteActionOriginal = reinterpret_cast<DeleteAction>(GetProcAddress(duser, "DeleteHandle"));
         trackBatchActions = Hook(deleteActionOriginal, DeleteActionHook);
         if (!trackBatchActions) {
             Wh_Log(L"DUser.dll!DeleteHandle unavailable or hook installation failed");
         }
     }
-    FileTransition::completionTracking = FileTransition::batchOriginal &&
-                                   (nativeBatchTracking || trackBatchActions);
-    Wh_Log(L"UI completion tracking: native=%d, DUser=%d; deadline is a maximum",
-           nativeBatchTracking && FileTransition::batchOriginal, trackBatchActions);
+
+    FileTransition::completionTracking = FileTransition::batchOriginal && (nativeBatchTracking || trackBatchActions);
+
+    Wh_Log(L"UI completion tracking: native=%d, DUser=%d; deadline is a maximum", 
+            nativeBatchTracking && FileTransition::batchOriginal, trackBatchActions);
+
     if (!FileTransition::completionTracking) {
         Wh_Log(L"Early UI completion unavailable; using deferral deadline fallback");
     }
+
     Wh_Log(L"Ribbon preserved. Hooks: batching=%d, activation paint=%d, layout paint=%d",
-           batches && settings.duserBatching,
-           paint, layoutPaint);
+           batches && settings.duserBatching, paint, layoutPaint);
+
     return TRUE;
 }
 
