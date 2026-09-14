@@ -8935,6 +8935,35 @@
         "version": "1.7.2"
       }
     },
+    "mouse-trail": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1789406855000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1789406855000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "MCheng404",
+        "compilerOptions": "-ld2d1 -ld3d11 -ldxgi -ldcomp -ldwmapi -lole32 -lgdi32 -lshell32 -ld3dcompiler -lavrt -lksuser",
+        "description": "Highly customizable cursor trail with D3D11 rendering, 23 color modes, 10 trail shapes, 2.5D particles, click effects, centripetal vortex, particle physics, music reactive. DirectComposition acceleration, low idle CPU.",
+        "github": "https://github.com/MCheng404",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Mouse Trail",
+        "version": "3.4.1"
+      }
+    },
     "move-window-to-monitor": {
       "details": {
         "defaultSorting": 1312,
