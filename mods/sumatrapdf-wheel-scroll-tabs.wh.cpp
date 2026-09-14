@@ -32,8 +32,8 @@ does it for browsers.
 * Only plain wheel events over the tab bar are intercepted. Ctrl+wheel (zoom),
   Shift+wheel (horizontal scrolling) and wheel events anywhere else are left to
   SumatraPDF.
-* Works with the regular tab bar as well as with tabs in the title bar
-  (`UseTabs` / `TabsInTitlebar` advanced settings).
+* Works with the tab bar in SumatraPDF's own title bar (the default with
+  `UseTabs = true`) as well as with a plain tab bar below the menu.
 * Both the installed (`SumatraPDF.exe`) and the portable
   (`SumatraPDF-x.y.z-64.exe`) builds are covered.
 
