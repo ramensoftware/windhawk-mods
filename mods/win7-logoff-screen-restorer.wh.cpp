@@ -2595,7 +2595,6 @@ static bool ShowWin7LogoffDialog(UINT flags, DWORD reason, bool* outForce) {
 
 static BOOL WINAPI ExitWindowsEx_Hook(UINT flags, DWORD reason) {
     InFlightHook guard;
-    // TEMP DIAGNOSTIC: remove after finding which process handles OpenShell sign-out.
     {
         wchar_t exePath[MAX_PATH]{};
         GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath));
@@ -2624,7 +2623,6 @@ static DWORD WINAPI InitiateShutdownW_Hook(LPWSTR machineName, LPWSTR message,
                                            DWORD gracePeriod, DWORD shutdownFlags,
                                            DWORD reason) {
     InFlightHook guard;
-    // TEMP DIAGNOSTIC: remove after finding which process handles OpenShell sign-out.
     {
         wchar_t exePath[MAX_PATH]{};
         GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath));
@@ -2764,31 +2762,26 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    // Only start the UI thread itself once at least one hook is live (the
-    // synchronization events it uses already exist from above). Starting the
-    // thread before the hooks meant the !anyHook path above returned FALSE
-    // (so Windhawk frees the image and never calls Wh_ModUninit) with the UI
-    // thread still sitting in GetMessage -- a dangling-window-class crash.
-    // Started here, a shutdown arriving before the thread is ready fails open
-    // (ShowWin7LogoffDialog returns its callers' true), which is safe.
-    //
-    // Only explorer.exe needs the thread up front, for the preview hotkey
-    // (g_isExplorer gates ApplyHotkey/WM_HOTKEY already). Every other host
-    // only ever needs it for an actual shutdown/logoff attempt, which is rare
-    // and often never happens in that process's lifetime at all -- so there
-    // it is started lazily, from ShowWin7LogoffDialog on the first request,
-    // instead of sitting in GetMessage with two registered window classes
-    // for the whole session.
-    if (g_isExplorer && !StartUiThread()) {
-        Wh_Log(L"UI thread unavailable; the mod will stay out of the way");
-    }
-
-    // TEMP DIAGNOSTIC: remove together with the other TEMP DIAGNOSTIC blocks.
+    // The eager UI-thread start for explorer.exe (needed for the preview
+    // hotkey) is deliberately NOT done here: Wh_ModInit runs on the target
+    // process's main thread before the process starts executing, and
+    // StartUiThread() waits up to 5 s on g_uiReady, which serializes
+    // Explorer's startup behind RegisterClassW + CreateWindowExW on a
+    // freshly created thread. It is done in Wh_ModAfterInit instead, which
+    // runs after the process is up.
     Wh_Log(L"Mod loaded successfully in %s", exePath);
 
     return TRUE;
 }
 
+// Runs after the process is fully initialized. Starting the UI thread here
+// (rather than in Wh_ModInit) means the wait for g_uiReady can no longer
+// stall Explorer's own startup on every boot/restart.
+void Wh_ModAfterInit() {
+    if (g_isExplorer && !StartUiThread()) {
+        Wh_Log(L"UI thread unavailable; the mod will stay out of the way");
+    }
+}
 // Windhawk calls this when the user presses Save in the settings. Skin,
 // language and hotkey are picked up on the UI thread; if the screen happens
 // to be on display it is repainted (or, when the master switch was turned
