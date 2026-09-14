@@ -1876,15 +1876,13 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
             return;
         }
 
-        dispatcher.TryRunAsync(
-            wuc::CoreDispatcherPriority::Normal,
-            [weakThis = winrt::make_weak(get_strong()),
-             allEvents = std::move(allEvents)]() {
-                if (auto strongThis = weakThis.get()) {
-                    strongThis->PopulateItemsControl(FilterEventsForDate(
-                        allEvents, strongThis->m_currentFilterDate));
-                }
-            });
+        dispatcher.TryRunAsync(wuc::CoreDispatcherPriority::Normal,
+        [weakThis = winrt::make_weak(get_strong()), allEvents = std::move(allEvents)]() {
+            if (auto strongThis = weakThis.get()) {
+                strongThis->PopulateItemsControl(
+                    FilterEventsForDate(allEvents, strongThis->m_currentFilterDate));
+            }
+        });
     }
 
     void UpdateMaxHeight(int maxHeight) {
