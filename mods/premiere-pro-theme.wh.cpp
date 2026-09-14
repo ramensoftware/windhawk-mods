@@ -442,8 +442,7 @@ static int ClampInt(int v, int lo, int hi) {
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
-static float Blend(float original, float target) {
-    float strength = CurrentSettings().strength;
+static float BlendWith(float strength, float original, float target) {
     return original * (1.0f - strength) + target * strength;
 }
 
@@ -958,13 +957,12 @@ static bool ShouldConvert(const DvaColorRGBA& in) {
 
 /*
     The tone `in` becomes: a ramp stop for a gray, the highlight shade for a
-    blue. One settings snapshot for the whole decision, so a palette change
-    cannot pair one palette's test with another's shades. No side effects, so
-    the stylesheet rewrite shares it.
+    blue. The caller passes one settings snapshot for the whole conversion, so
+    a palette change cannot pair one palette's test with another's shades or
+    strength. No side effects, so the stylesheet rewrite shares it.
 */
-static bool PaletteTarget(const DvaColorRGBA& in, COLORREF* target, int* blue) {
-    const Settings& s = CurrentSettings();
-
+static bool PaletteTarget(const Settings& s, const DvaColorRGBA& in, COLORREF* target,
+                          int* blue) {
     if (!ShouldConvertWith(s, in)) {
         return false;
     }
@@ -980,10 +978,11 @@ static bool PaletteTarget(const DvaColorRGBA& in, COLORREF* target, int* blue) {
 volatile LONG64 g_bluesRecolored = 0;
 
 static bool ConvertDvaColor(const DvaColorRGBA& in, DvaColorRGBA* out) {
+    const Settings& s = CurrentSettings();
     COLORREF target = 0;
     int blue = -1;
 
-    if (!PaletteTarget(in, &target, &blue)) {
+    if (!PaletteTarget(s, in, &target, &blue)) {
         return false;
     }
 
@@ -995,9 +994,9 @@ static bool ConvertDvaColor(const DvaColorRGBA& in, DvaColorRGBA* out) {
         }
     }
 
-    out->r = Blend(in.r, GetRValue(target) / 255.0f);
-    out->g = Blend(in.g, GetGValue(target) / 255.0f);
-    out->b = Blend(in.b, GetBValue(target) / 255.0f);
+    out->r = BlendWith(s.strength, in.r, GetRValue(target) / 255.0f);
+    out->g = BlendWith(s.strength, in.g, GetGValue(target) / 255.0f);
+    out->b = BlendWith(s.strength, in.b, GetBValue(target) / 255.0f);
     out->a = in.a;
 
     return true;
@@ -1118,8 +1117,6 @@ static bool IsConvertedSlot(const void* address) {
 */
 volatile LONG g_generation = 0;
 
-static void RememberProduced(const DvaColorRGBA& c);
-
 /*
     Recomputes one slot's dst from its src under the settings in force now.
     With restoreOriginals, or with "Premiere interface" off, dst goes back to
@@ -1129,9 +1126,8 @@ static void RefreshSlot(ColorSlot& slot, LONG generation, bool restoreOriginals)
     // ConvertDvaColor leaves dst untouched when it declines.
     DvaColorRGBA dst = slot.src;
 
-    if (!restoreOriginals && CurrentSettings().dvauiHook &&
-        ConvertDvaColor(slot.src, &dst)) {
-        RememberProduced(dst);
+    if (!restoreOriginals && CurrentSettings().dvauiHook) {
+        ConvertDvaColor(slot.src, &dst);
     }
 
     slot.dst = dst;
@@ -1225,73 +1221,53 @@ static const DvaColorRGBA* StoreColor(uintptr_t key, const DvaColorRGBA& src,
 /*
     Second line of defense against converting a color twice, by value.
 
-    A converted color arrives again when a brush is built from it, and
-    converting twice pushes everything toward the darkest stop. The address
-    settles that when the brush gets the table's own pointer (IsConvertedSlot),
-    but not once the caller has copied the color. So every color produced goes
-    into this set, and one found in it passes through. The key is 8-bit RGB, so
-    it survives a round trip through another format.
-*/
-constexpr size_t kProducedSlots = 8192;
+    A converted color comes back when Adobe copies what a theme function
+    returned — into a temporary, or into a COLORREF — and builds a brush from
+    the copy, and when one hooked call makes another with the color it was
+    given. Both happen on the same thread within the same paint, so each
+    thread remembers only the last few colors it produced, and forgets them at
+    the top of every dvaui paint.
 
-volatile LONG g_produced[kProducedSlots];
+    Remembering them for good would be wrong: a value the mod produces is also
+    a real Premiere gray — Onyx turns #3F3F3F into #1D1D1D, the stock panel
+    gray — and every later fill of it would pass unconverted. The key is 8-bit
+    RGB, so it survives a round trip through a COLORREF.
+*/
+constexpr int kRecentProduced = 16;
+
+thread_local LONG g_recentProduced[kRecentProduced];
+thread_local int g_recentNext = 0;
 
 static LONG PackColorKey(const DvaColorRGBA& c) {
     int r = ClampInt(static_cast<int>(c.r * 255.0f + 0.5f), 0, 255);
     int g = ClampInt(static_cast<int>(c.g * 255.0f + 0.5f), 0, 255);
     int b = ClampInt(static_cast<int>(c.b * 255.0f + 0.5f), 0, 255);
 
-    // +1 because 0 means an empty slot.
+    // +1 because 0 means an empty entry.
     return static_cast<LONG>((r << 16) | (g << 8) | b) + 1;
 }
 
-static size_t ProducedIndex(LONG key) {
-    return FibonacciIndex<kProducedSlots>(static_cast<uint32_t>(key));
-}
-
-/*
-    Almost every color is already in the set, so slots are read plainly and only
-    an empty one is claimed with an interlocked exchange.
-*/
 static void RememberProduced(const DvaColorRGBA& c) {
-    LONG key = PackColorKey(c);
-    size_t start = ProducedIndex(key);
-
-    for (size_t probe = 0; probe < 32; probe++) {
-        size_t i = (start + probe) & (kProducedSlots - 1);
-        LONG cur = g_produced[i];
-
-        if (cur == key) {
-            return;
-        }
-
-        if (cur == 0) {
-            cur = InterlockedCompareExchange(&g_produced[i], key, 0);
-
-            if (cur == 0 || cur == key) {
-                return;
-            }
-        }
-    }
+    g_recentProduced[g_recentNext] = PackColorKey(c);
+    g_recentNext = (g_recentNext + 1) % kRecentProduced;
 }
 
-// Plain reads: an aligned LONG is read atomically on x86-64.
 static bool IsProducedColor(const DvaColorRGBA& c) {
     LONG key = PackColorKey(c);
-    size_t start = ProducedIndex(key);
 
-    for (size_t probe = 0; probe < 32; probe++) {
-        LONG cur = g_produced[(start + probe) & (kProducedSlots - 1)];
-
-        if (cur == 0) {
-            return false;
-        }
-        if (cur == key) {
+    for (LONG recent : g_recentProduced) {
+        if (recent == key) {
             return true;
         }
     }
 
     return false;
+}
+
+static void ForgetRecentProduced() {
+    for (LONG& recent : g_recentProduced) {
+        recent = 0;
+    }
 }
 
 static const DvaColorRGBA* ConvertColorRef(const DvaColorRGBA* original) {
@@ -1308,12 +1284,17 @@ static const DvaColorRGBA* ConvertColorRef(const DvaColorRGBA* original) {
         return original;
     }
 
-    RememberProduced(converted);
-
     const DvaColorRGBA* stored = StoreColor(reinterpret_cast<uintptr_t>(original),
                                             *original, converted, generation);
 
-    return stored ? stored : original;
+    if (!stored) {
+        return original;
+    }
+
+    // What Premiere now holds, in case it copies it into a brush this paint.
+    RememberProduced(*stored);
+
+    return stored;
 }
 
 /*
@@ -1327,12 +1308,6 @@ static const DvaColorRGBA* ConvertColorRef(const DvaColorRGBA* original) {
     slots are in use.
 */
 static size_t RecomputeColorTable(bool restoreOriginals) {
-    // Emptied and refilled below, or a color from the previous palette would
-    // look already converted.
-    for (size_t i = 0; i < kProducedSlots; i++) {
-        g_produced[i] = 0;
-    }
-
     if (!g_slots) {
         return 0;
     }
@@ -1693,7 +1668,7 @@ static bool ContentScopesMatter() {
 
 /*
     Cheapest test first: most colors arriving here are saturated or too light,
-    and float comparisons turn them away before the hash lookup.
+    and float comparisons turn them away before the recent colors are read.
 */
 static bool ConvertForPaint(const DvaColorRGBA* in, DvaColorRGBA* out) {
     if (!CurrentSettings().brushHook || !in || InContentScope()) {
@@ -1710,7 +1685,7 @@ static bool ConvertForPaint(const DvaColorRGBA* in, DvaColorRGBA* out) {
         return false;
     }
 
-    // Only now the table, and only for what is left.
+    // Only now the recent colors, and only for what is left.
     if (IsProducedColor(*in)) {
         return false;
     }
@@ -1788,6 +1763,9 @@ void* EraseBackgroundCtor_Hook(void* self, void* nodeManager,
 
 void DispatchDrawFromRoot_Hook(void* self, const DvaColorRGBA* color,
                                void* drawbot, bool flag) {
+    // A new paint: nothing this thread produced before it is coming back.
+    ForgetRecentProduced();
+
     DvaColorRGBA converted{};
 
     if (ConvertForPaint(color, &converted)) {
@@ -2380,15 +2358,16 @@ static bool IsCssWordChar(char c) {
 // What an 8-bit stylesheet color becomes, in place; false leaves it as written.
 static bool RecolorCssChannels(int rgb[3]) {
     DvaColorRGBA in{rgb[0] / 255.0f, rgb[1] / 255.0f, rgb[2] / 255.0f, 1.0f};
+    const Settings& s = CurrentSettings();
     COLORREF target = 0;
     int blue = -1;
 
-    if (!PaletteTarget(in, &target, &blue)) {
+    if (!PaletteTarget(s, in, &target, &blue)) {
         return false;
     }
 
-    auto channel = [](float original, BYTE wanted) {
-        float v = Blend(original, wanted / 255.0f) * 255.0f + 0.5f;
+    auto channel = [&](float original, BYTE wanted) {
+        float v = BlendWith(s.strength, original, wanted / 255.0f) * 255.0f + 0.5f;
         return ClampInt(static_cast<int>(v), 0, 255);
     };
 
@@ -2647,11 +2626,13 @@ static wchar_t* AppendDecimal(wchar_t* out, unsigned long value) {
 }
 
 /*
-    A temporary file holding `bytes`, opened with the caller's
-    FILE_FLAG_OVERLAPPED and positioned at the start. Windows deletes it when
-    the handle closes, and also if Premiere exits without closing it.
+    A temporary file holding `bytes`, handed back open with the caller's own
+    access, security and flags. The mod writes it through a handle of its own
+    that marks it delete-on-close, so Windows removes it once the caller's
+    handle closes too, and also if Premiere exits without closing it.
 */
-static HANDLE WriteTemporaryCopy(const std::vector<char>& bytes, DWORD callerFlags) {
+static HANDLE WriteTemporaryCopy(const std::vector<char>& bytes, DWORD access,
+                                 LPSECURITY_ATTRIBUTES security, DWORD flags) {
     wchar_t folder[MAX_PATH + 1]{};
     DWORD length = GetTempPathW(ARRAYSIZE(folder), folder);
 
@@ -2659,17 +2640,16 @@ static HANDLE WriteTemporaryCopy(const std::vector<char>& bytes, DWORD callerFla
         return INVALID_HANDLE_VALUE;
     }
 
-    bool overlapped = (callerFlags & FILE_FLAG_OVERLAPPED) != 0;
-    HANDLE copy = INVALID_HANDLE_VALUE;
+    wchar_t name[MAX_PATH + 64]{};
+    HANDLE writer = INVALID_HANDLE_VALUE;
 
     /*
         CREATE_NEW, never CREATE_ALWAYS: the name is predictable, so whatever
         already sits at it — a leftover, or a link planted to redirect the
         write — is stepped around rather than opened or followed.
     */
-    for (int attempt = 0; attempt < 8 && copy == INVALID_HANDLE_VALUE; attempt++) {
+    for (int attempt = 0; attempt < 8 && writer == INVALID_HANDLE_VALUE; attempt++) {
         constexpr wchar_t kPrefix[] = L"premiere-pro-theme-";
-        wchar_t name[MAX_PATH + 64]{};
         wchar_t* end = name;
 
         wmemcpy(end, folder, length);
@@ -2682,14 +2662,13 @@ static HANDLE WriteTemporaryCopy(const std::vector<char>& bytes, DWORD callerFla
             end, static_cast<unsigned long>(InterlockedIncrement(&g_stylesheetSerial)));
         wmemcpy(end, L".css", 5);  // and its terminator
 
-        copy = CreateFileW_Original(
-            name, GENERIC_READ | GENERIC_WRITE | DELETE,
-            FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr, CREATE_NEW,
-            FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE |
-                (overlapped ? FILE_FLAG_OVERLAPPED : 0),
-            nullptr);
+        writer = CreateFileW_Original(name, GENERIC_WRITE | DELETE,
+                                      FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr,
+                                      CREATE_NEW,
+                                      FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE,
+                                      nullptr);
 
-        DWORD error = copy == INVALID_HANDLE_VALUE ? GetLastError() : ERROR_SUCCESS;
+        DWORD error = writer == INVALID_HANDLE_VALUE ? GetLastError() : ERROR_SUCCESS;
 
         if (error != ERROR_SUCCESS && error != ERROR_FILE_EXISTS &&
             error != ERROR_ALREADY_EXISTS) {
@@ -2697,36 +2676,26 @@ static HANDLE WriteTemporaryCopy(const std::vector<char>& bytes, DWORD callerFla
         }
     }
 
-    if (copy == INVALID_HANDLE_VALUE) {
-        return copy;
+    if (writer == INVALID_HANDLE_VALUE) {
+        return writer;
     }
 
     auto size = static_cast<DWORD>(bytes.size());
     DWORD written = 0;
-    bool ok = false;
+    HANDLE copy = INVALID_HANDLE_VALUE;
 
-    if (overlapped) {
-        OVERLAPPED io{};
-        io.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-
-        ok = io.hEvent &&
-             (WriteFile(copy, bytes.data(), size, nullptr, &io) ||
-              GetLastError() == ERROR_IO_PENDING) &&
-             GetOverlappedResult(copy, &io, &written, TRUE);
-
-        if (io.hEvent) {
-            CloseHandle(io.hEvent);
-        }
-    } else {
-        LARGE_INTEGER start{};
-        ok = WriteFile(copy, bytes.data(), size, &written, nullptr) &&
-             SetFilePointerEx(copy, start, nullptr, FILE_BEGIN);
+    /*
+        The caller's handle is opened while the writer's is still open, so its
+        share mode has to admit the writer's rights. Once the writer closes,
+        the file only waits for the caller's handle to go.
+    */
+    if (WriteFile(writer, bytes.data(), size, &written, nullptr) && written == size) {
+        copy = CreateFileW_Original(name, access,
+                                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                    security, OPEN_EXISTING, flags, nullptr);
     }
 
-    if (!ok || written != size) {
-        CloseHandle(copy);
-        return INVALID_HANDLE_VALUE;
-    }
+    CloseHandle(writer);
 
     return copy;
 }
@@ -2736,7 +2705,8 @@ static HANDLE WriteTemporaryCopy(const std::vector<char>& bytes, DWORD callerFla
     the caller to open the file itself: when there is nothing to recolor, and
     when anything fails.
 */
-static HANDLE OpenThemedStylesheet(LPCWSTR path, LPCWSTR relative, DWORD flags) {
+static HANDLE OpenThemedStylesheet(LPCWSTR path, LPCWSTR relative, DWORD access,
+                                   LPSECURITY_ATTRIBUTES security, DWORD flags) {
     std::vector<char> bytes;
 
     if (!ReadWholeFile(path, &bytes)) {
@@ -2749,7 +2719,7 @@ static HANDLE OpenThemedStylesheet(LPCWSTR path, LPCWSTR relative, DWORD flags) 
         return INVALID_HANDLE_VALUE;
     }
 
-    HANDLE copy = WriteTemporaryCopy(bytes, flags);
+    HANDLE copy = WriteTemporaryCopy(bytes, access, security, flags);
 
     if (copy == INVALID_HANDLE_VALUE) {
         DWORD error = GetLastError();
@@ -2780,7 +2750,7 @@ HANDLE WINAPI CreateFileW_Hook(LPCWSTR path, DWORD access, DWORD share,
 
     if (CurrentSettings().uxpPanels && IsPlainRead(access, disposition, flags) &&
         IsBundledStylesheet(path, &relative)) {
-        HANDLE copy = OpenThemedStylesheet(path, relative, flags);
+        HANDLE copy = OpenThemedStylesheet(path, relative, access, security, flags);
 
         if (copy != INVALID_HANDLE_VALUE) {
             return copy;
@@ -2799,7 +2769,9 @@ HANDLE WINAPI CreateFile2_Hook(LPCWSTR path, DWORD access, DWORD share,
 
     if (CurrentSettings().uxpPanels && IsPlainRead(access, disposition, flags) &&
         IsBundledStylesheet(path, &relative)) {
-        HANDLE copy = OpenThemedStylesheet(path, relative, flags);
+        HANDLE copy = OpenThemedStylesheet(
+            path, relative, access, parameters ? parameters->lpSecurityAttributes : nullptr,
+            flags);
 
         if (copy != INVALID_HANDLE_VALUE) {
             return copy;
@@ -2984,7 +2956,7 @@ constexpr COLORREF kDwmColorDefault = 0xFFFFFFFF;  // DWMWA_COLOR_DEFAULT
     Destroyed windows are not removed as they go: the map drops dead handles
     whenever it doubles, and the revert re-checks each handle.
 */
-constexpr BYTE kThemedClass = 1;  // SetWindowTheme(DarkMode_Explorer)
+constexpr BYTE kThemedClass = 1;  // DarkMode_Explorer, on the classes WantsExplorerTheme names
 constexpr BYTE kThemedFrame = 2;  // immersive dark mode, and caption colors on 22000+
 
 SRWLOCK g_themedLock = SRWLOCK_INIT;
@@ -3051,6 +3023,25 @@ static void SetFrameColors(HWND hwnd, COLORREF border, COLORREF caption,
                           sizeof(text));
 }
 
+/*
+    The classes DarkMode_Explorer changes anything for. SetWindowTheme sends
+    WM_THEMECHANGED — from the hook, inside CreateWindowEx, before the creator
+    has its handle — and MFC and ProfUIS windows are known to deadlock on it;
+    Premiere hosts third-party plugin dialogs. Every other window only gets
+    AllowDarkModeForWindow, which sends nothing.
+*/
+static bool WantsExplorerTheme(HWND hwnd) {
+    wchar_t name[64];
+
+    if (!GetClassNameW(hwnd, name, ARRAYSIZE(name))) {
+        return false;
+    }
+
+    return _wcsicmp(name, L"SysListView32") == 0 ||
+           _wcsicmp(name, L"SysTreeView32") == 0 ||
+           _wcsicmp(name, L"SysHeader32") == 0 || _wcsicmp(name, L"ScrollBar") == 0;
+}
+
 static void ApplyDarkModeToWindow(HWND hwnd) {
     if (!hwnd || !CurrentSettings().nativeDarkMode) {
         return;
@@ -3062,7 +3053,7 @@ static void ApplyDarkModeToWindow(HWND hwnd) {
         g_AllowDarkModeForWindow(hwnd, true);
     }
 
-    if (g_SetWindowTheme &&
+    if (g_SetWindowTheme && WantsExplorerTheme(hwnd) &&
         SUCCEEDED(g_SetWindowTheme(hwnd, L"DarkMode_Explorer", nullptr))) {
         applied |= kThemedClass;
     }
@@ -4140,9 +4131,11 @@ static bool PaintMenuBarItem(HWND hwnd, LPARAM lParam) {
     opts.dwFlags = kDttTextColor;
     opts.crText = disabled ? p.dimText : p.text;
 
+    // A copy: the API takes an LPRECT, and this one belongs to user32's message.
+    RECT rect = draw->dis.rcItem;
+
     HRESULT hr = drawText(theme->get(), draw->um.hdc, kMenuBarItem, 1, label,
-                          static_cast<int>(itemInfo.cch), flags,
-                          &draw->dis.rcItem, &opts);
+                          static_cast<int>(itemInfo.cch), flags, &rect, &opts);
 
     return SUCCEEDED(hr);
 }
@@ -4313,9 +4306,9 @@ static COLORREF DvaToGdi(const DvaColorRGBA& color) {
     The same conversion and the same guard as for dvaui's colors. Adobe code
     often turns a color that already came out of a theme function into a
     COLORREF before it builds a brush or pen from it, and converting it again
-    would push it toward the darkest stop. The produced set is keyed on 8-bit
-    channels, so a COLORREF compares equal to the float color it was made
-    from.
+    would push it toward the darkest stop. The recent produced colors are keyed
+    on 8-bit channels, so a COLORREF compares equal to the float color it was
+    made from.
 */
 static COLORREF ConvertGdiColor(COLORREF color) {
     DvaColorRGBA in = GdiToDva(color);
