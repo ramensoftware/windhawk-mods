@@ -21,6 +21,8 @@ button is hidden while the mod is active and restored when it is unloaded.
 This mod injects real XAML `FontIcon` elements into the Windows 11 taskbar tray.
 That means icons are drawn as XAML text/vector glyphs instead of rasterized HICON bitmaps.
 
+![Demonstration](https://github.com/Asteski/Windhawk-Mods/blob/e02d89d70dfb0ad3815b806e3eb2a49e56cb86b8/img/separate-system-tray-icons/separate-system-tray-icons.gif)
+
 Buttons:
 
 - Bluetooth -> Bluetooth flyout
