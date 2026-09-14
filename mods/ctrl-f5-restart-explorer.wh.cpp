@@ -9,6 +9,12 @@
 // @architecture    x86-64
 // ==/WindhawkMod==
 
+// ==WindhawkModReadme==
+/*
+Restarts explorer.exe when Ctrl+F5 is pressed on the desktop or in a File Explorer window.
+*/
+// ==/WindhawkModReadme==
+
 #include <Windows.h>
 #include <windhawk_utils.h>
 
