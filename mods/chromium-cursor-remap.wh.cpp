@@ -8,7 +8,6 @@
 // @twitter         https://x.com/tomazany
 // @donateUrl       https://ko-fi.com/mazany
 // @include         *
-// @architecture    x86-64
 // @compilerOptions -lgdi32 -luser32
 // @license         MIT
 // ==/WindhawkMod==
@@ -66,6 +65,9 @@ Settings take effect without restarting the app.
 
 - Microsoft Edge 152 and 153, and Google Chrome 152: all ten cursor types replaced.
 - MarkText 0.19.1, an Electron app.
+- A 32-bit NW.js app: the mod stays in its main process and leaves its helper
+  processes, and its bundled cursor images were checked to be recognised by
+  the 32-bit build.
 - The cursor images bundled with VS Code, Obsidian, Vivaldi and Steam's built-in
   browser (CEF) were checked to be recognised. Windhawk does not load mods into
   Steam installed under `Program Files` unless it is removed from Windhawk's
@@ -90,8 +92,7 @@ web page's own cursor image has no resource behind it and is left alone.
 
 ## Known limitations
 
-- 64-bit apps only. On ARM64 Windows the mod is also built for ARM64 apps;
-  that has not been tested.
+- The mod is also built for ARM64 apps; that build has not been tested.
 - On screen, only 150% display scaling has been checked; other sizes were
   checked by loading the cursors at those sizes.
 - Apps that host WebView2 in visual (composition) mode set the cursor from
@@ -205,6 +206,7 @@ CSS cursor type in the Windhawk mods repository on GitHub
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <windhawk_utils.h>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -562,8 +564,8 @@ static bool HasChromiumExeMarkers(HMODULE exe) {
                        (LONG_PTR)&hasCursors);
     if (hasCursors) return true;
 
-    // The import walk fails closed on anything that is not a well-formed PE32+
-    // image, and reads only the headers and sections the image maps readable:
+    // The import walk fails closed on anything that is not a well-formed image
+    // of the mod's own bitness, and reads only the headers and sections the image maps readable:
     // a mod loaded into every process must not fault on a packed executable.
     BYTE* base = (BYTE*)exe;
     auto dos = (IMAGE_DOS_HEADER*)base;
@@ -575,12 +577,12 @@ static bool HasChromiumExeMarkers(HMODULE exe) {
         dos->e_lfanew >= 0x10000000) {
         return false;
     }
-    auto nt = (IMAGE_NT_HEADERS64*)(base + dos->e_lfanew);
+    auto nt = (IMAGE_NT_HEADERS*)(base + dos->e_lfanew);
     if (nt->Signature != IMAGE_NT_SIGNATURE ||
-        nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC ||
+        nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR_MAGIC ||
         nt->OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_IMPORT ||
         nt->FileHeader.SizeOfOptionalHeader <
-            offsetof(IMAGE_OPTIONAL_HEADER64, DataDirectory) +
+            offsetof(IMAGE_OPTIONAL_HEADER, DataDirectory) +
                 (IMAGE_DIRECTORY_ENTRY_IMPORT + 1) * sizeof(IMAGE_DATA_DIRECTORY)) {
         return false;
     }
@@ -589,7 +591,7 @@ static bool HasChromiumExeMarkers(HMODULE exe) {
     auto sections = IMAGE_FIRST_SECTION(nt);
     const WORD sectionCount = nt->FileHeader.NumberOfSections;
     if (headersSize > imageSize ||
-        (DWORD)dos->e_lfanew + sizeof(IMAGE_NT_HEADERS64) > headersSize ||
+        (DWORD)dos->e_lfanew + sizeof(IMAGE_NT_HEADERS) > headersSize ||
         (size_t)((BYTE*)(sections + sectionCount) - base) > headersSize) {
         return false;
     }
@@ -736,13 +738,6 @@ static void CacheSystemCursors() {
 
 static const wchar_t kKeepOriginalKey[] = L"keepOriginal";
 
-static std::wstring ReadStringSetting(const wchar_t* name) {
-    PCWSTR val = Wh_GetStringSetting(name);
-    std::wstring result = val ? val : L"";
-    if (val) Wh_FreeStringSetting(val);
-    return result;
-}
-
 // Reads the settings and resolves every replacement to a handle. Loads
 // cursors, so it must not run under g_lock.
 static ModSettings LoadSettings() {
@@ -752,7 +747,8 @@ static ModSettings LoadSettings() {
     // Test mode overrides every per-type setting.
     HCURSOR testCursor = NULL;
     if (Wh_GetIntSetting(L"TestMode.enabled") != 0) {
-        std::wstring testSource = ReadStringSetting(L"TestMode.testCursor");
+        std::wstring testSource =
+            WindhawkUtils::StringSetting::make(L"TestMode.testCursor").get();
         if (testSource.empty()) testSource = L"IDC_WAIT";
         testCursor = LoadCursorFromSource(testSource);
         Wh_Log(L"Test mode: '%s' -> %p", testSource.c_str(), testCursor);
@@ -787,7 +783,7 @@ static ModSettings LoadSettings() {
         }
 
         wsprintfW(key, L"%s.curFile", t.section);
-        std::wstring source = ReadStringSetting(key);
+        std::wstring source = WindhawkUtils::StringSetting::make(key).get();
         slot = LoadCursorFromSource(source);
         if (!slot) {
             slot = LoadCursorW(NULL, t.defaultId);
@@ -902,33 +898,28 @@ BOOL Wh_ModInit() {
     // leaves nothing behind.
     //
     // Windows 11 exports DestroyCursor and DestroyIcon at one address, where a
-    // second hook fails. Compared through GetProcAddress because &DestroyIcon
-    // and &DestroyCursor are distinct import stubs inside the mod.
+    // second hook fails. Compared through GetProcAddress: the compiler may fold
+    // &DestroyCursor == &DestroyIcon to false, since they are distinct functions.
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    void* destroyCursor = user32 ? (void*)GetProcAddress(user32, "DestroyCursor") : nullptr;
-    void* destroyIcon = user32 ? (void*)GetProcAddress(user32, "DestroyIcon") : nullptr;
+    auto destroyCursor = user32 ? (DestroyCursor_t)GetProcAddress(user32, "DestroyCursor") : nullptr;
+    auto destroyIcon = user32 ? (DestroyIcon_t)GetProcAddress(user32, "DestroyIcon") : nullptr;
     if (!destroyCursor || !destroyIcon) {
         Wh_Log(L"user32 destroy exports not found, unloading");
         return FALSE;
     }
-    bool separateDestroyIcon = destroyIcon != destroyCursor;
-    struct { void* target; void* hook; void** original; const wchar_t* name; }
-    hooks[] = {
-        {(void*)SetCursor, (void*)SetCursor_Hook,
-         (void**)&SetCursor_Original, L"SetCursor"},
-        {destroyCursor, (void*)DestroyCursor_Hook,
-         (void**)&DestroyCursor_Original, L"DestroyCursor"},
-        {destroyIcon, (void*)DestroyIcon_Hook,
-         (void**)&DestroyIcon_Original, L"DestroyIcon"},
-    };
-    for (const auto& h : hooks) {
-        if (h.hook == (void*)DestroyIcon_Hook && !separateDestroyIcon) {
-            continue;
-        }
-        if (!Wh_SetFunctionHook(h.target, h.hook, h.original)) {
-            Wh_Log(L"%s hook failed, unloading", h.name);
-            return FALSE;
-        }
+    if (!WindhawkUtils::SetFunctionHook(SetCursor, SetCursor_Hook, &SetCursor_Original)) {
+        Wh_Log(L"SetCursor hook failed, unloading");
+        return FALSE;
+    }
+    if (!WindhawkUtils::SetFunctionHook(destroyCursor, DestroyCursor_Hook,
+                                        &DestroyCursor_Original)) {
+        Wh_Log(L"DestroyCursor hook failed, unloading");
+        return FALSE;
+    }
+    if ((void*)destroyIcon != (void*)destroyCursor &&
+        !WindhawkUtils::SetFunctionHook(destroyIcon, DestroyIcon_Hook, &DestroyIcon_Original)) {
+        Wh_Log(L"DestroyIcon hook failed, unloading");
+        return FALSE;
     }
 
     // Last, after everything that can give up: settings may load cursor files,
