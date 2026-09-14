@@ -14,7 +14,7 @@
 // ==WindhawkModReadme==
 /*
 # Agenda in Calendar
-![VImage](https://i.imgur.com/lQhwoAL.png)
+![Agenda in Calendar](https://i.imgur.com/lQhwoAL.png)
 ## Bring back the Windows 10 Agenda to Windows 11
 
 This mod brings the Windows 10-style agenda to Windows 11, allowing you to
@@ -67,17 +67,16 @@ generated using AI.
 
 
 ## FAQ
-|Problem|Solution|
-|---|---|
-|My local `.ics` file gives an access error (CreateFileW failed 5)!|Windows
-`ShellExperienceHost` runs inside an AppContainer sandbox. Grant read
+* **My local `.ics` file gives an access error (`CreateFileW failed 5`)!**
+  Windows `ShellExperienceHost` runs inside an AppContainer sandbox. Grant read
 permissions to AppContainer packages by running: `icacls
 "C:\path\to\calendar.ics" /grant "*S-1-15-2-1:(R)"` in PowerShell, or place the
-file in a shared directory like `C:\ProgramData\`.| |My local `.ics` file does
-not work!|Unblock it from its *Properties* pane in File Explorer.| |The bottom
-corners of the *Notifications* pane (immediately above the agenda) are not
-rounded!|Set a maximum height for the Agenda in the mod settings to stop it from
-clipping the *Notifications* pane.|
+file in an accessible directory like `C:\ProgramData\`.
+* **My local `.ics` file does not work!**
+  Unblock it from its *Properties* pane in File Explorer.
+* **The bottom corners of the *Notifications* pane (immediately above the
+agenda) are not rounded!** Set a maximum height for the Agenda in the mod
+settings to stop it from clipping the *Notifications* pane.
 
 */
 // ==/WindhawkModReadme==
@@ -151,72 +150,16 @@ center flyout.
 
 #include <windhawk_utils.h>
 
-#include <tlhelp32.h>
+#include <cstdio>
+#include <cstring>
+#include <cwchar>
+#include <cwctype>
 
 namespace wf = winrt::Windows::Foundation;
 namespace wux = winrt::Windows::UI::Xaml;
 namespace wuxc = winrt::Windows::UI::Xaml::Controls;
 namespace wuxm = winrt::Windows::UI::Xaml::Media;
 namespace wuc = winrt::Windows::UI::Core;
-
-static constexpr GUID IID_ICoreWindowInterop = {
-    0x45d64a29,
-    0xa63e,
-    0x4cb6,
-    {0xb4, 0x98, 0x57, 0x81, 0xd2, 0x98, 0xcb, 0x4f}};
-
-struct ICoreWindowInterop : ::IUnknown {
-    virtual HRESULT STDMETHODCALLTYPE get_WindowHandle(HWND* hwnd) = 0;
-    virtual HRESULT STDMETHODCALLTYPE put_MessageHandled(boolean value) = 0;
-};
-
-std::vector<HWND> g_coreWindows;
-std::mutex g_coreWindowsMutex;
-wuc::CoreDispatcher g_uiDispatcher{nullptr};
-std::mutex g_dispatcherMutex;
-
-inline void RecordCoreWindow(HWND hWnd) {
-    if (!hWnd)
-        return;
-    std::lock_guard<std::mutex> lock(g_coreWindowsMutex);
-    for (HWND existing : g_coreWindows) {
-        if (existing == hWnd)
-            return;
-    }
-    g_coreWindows.push_back(hWnd);
-    Wh_Log(L"Recorded CoreWindow HWND: %08X", (DWORD)(ULONG_PTR)hWnd);
-}
-
-inline void RecordDispatcher(wuc::CoreDispatcher const& dispatcher) {
-    if (!dispatcher)
-        return;
-    std::lock_guard<std::mutex> lock(g_dispatcherMutex);
-    g_uiDispatcher = dispatcher;
-}
-
-inline HWND GetHwndFromCoreWindow(wuc::CoreWindow const& coreWindow) {
-    if (!coreWindow)
-        return nullptr;
-    try {
-        IUnknown* unk = reinterpret_cast<IUnknown*>(winrt::get_abi(coreWindow));
-        if (unk) {
-            ICoreWindowInterop* interop = nullptr;
-            if (SUCCEEDED(
-                    unk->QueryInterface(IID_ICoreWindowInterop,
-                                        reinterpret_cast<void**>(&interop))) &&
-                interop) {
-                HWND hWnd = nullptr;
-                HRESULT hr = interop->get_WindowHandle(&hWnd);
-                interop->Release();
-                if (SUCCEEDED(hr)) {
-                    return hWnd;
-                }
-            }
-        }
-    } catch (...) {
-    }
-    return nullptr;
-}
 
 std::atomic<bool> g_initialized = false;
 std::atomic<ULONGLONG> g_lastOpenTick = 0;
@@ -1180,7 +1123,8 @@ std::wstring FetchIcsContent(std::wstring const& pathOrUrl,
         }
 
         HANDLE hFile =
-            CreateFileW(localPath.c_str(), GENERIC_READ, FILE_SHARE_READ,
+            CreateFileW(localPath.c_str(), GENERIC_READ,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                         nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
 
         if (hFile == INVALID_HANDLE_VALUE) {
@@ -1189,18 +1133,19 @@ std::wstring FetchIcsContent(std::wstring const& pathOrUrl,
             return {};
         }
 
-        DWORD fileSize = GetFileSize(hFile, nullptr);
-
-        if (fileSize == INVALID_FILE_SIZE || fileSize == 0) {
+        LARGE_INTEGER fileSize{};
+        if (!GetFileSizeEx(hFile, &fileSize) || fileSize.QuadPart <= 0 ||
+            fileSize.QuadPart > 50 * 1024 * 1024) {
             CloseHandle(hFile);
-            Wh_Log(L"Local file is empty or size invalid: %s",
+            Wh_Log(L"Local file is empty, invalid, or exceeds 50MB: %s",
                    localPath.c_str());
             return {};
         }
 
-        std::vector<char> buf(fileSize);
+        std::vector<char> buf(static_cast<size_t>(fileSize.QuadPart));
         DWORD bytesRead = 0;
-        if (!ReadFile(hFile, buf.data(), fileSize, &bytesRead, nullptr)) {
+        if (!ReadFile(hFile, buf.data(), static_cast<DWORD>(fileSize.QuadPart),
+                      &bytesRead, nullptr)) {
             CloseHandle(hFile);
             Wh_Log(L"ReadFile failed (%u) for local path: %s", GetLastError(),
                    localPath.c_str());
@@ -1224,10 +1169,6 @@ std::wstring FetchIcsContent(std::wstring const& pathOrUrl,
     }
 
     return decodedContent;
-}
-
-SYSTEMTIME AdjustDays(SYSTEMTIME const& stLocal, int days) {
-    return ShiftLocalDate(stLocal, days);
 }
 
 wf::DateTime SystemTimeToWinRtDateTime(SYSTEMTIME const& stLocal) {
@@ -1354,7 +1295,62 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
 
     ~VisualTreeWatcher() = default;
 
+    void UnregisterFocusSessionControl() {
+        if (m_focusSessionControl && m_focusSessionVisibilityToken != 0) {
+            try {
+                m_focusSessionControl.UnregisterPropertyChangedCallback(
+                    wux::UIElement::VisibilityProperty(),
+                    m_focusSessionVisibilityToken);
+            } catch (...) {
+            }
+            m_focusSessionVisibilityToken = 0;
+        }
+    }
+
     void RestoreCalendarContent() {
+        UnregisterFocusSessionControl();
+
+        if (m_focusSessionControl) {
+            try {
+                m_focusSessionControl.Visibility(wux::Visibility::Visible);
+                Wh_Log(L"Restored FocusSessionControl visibility to Visible");
+            } catch (...) {
+                Wh_Log(
+                    L"Failed to restore FocusSessionControl visibility: %08X",
+                    winrt::to_hresult());
+            }
+            m_focusSessionControl = nullptr;
+        }
+
+        try {
+            if (m_prevDayButton && m_prevBtnToken.value != 0) {
+                m_prevDayButton.Click(m_prevBtnToken);
+                m_prevBtnToken = {};
+            }
+        } catch (...) {
+        }
+        try {
+            if (m_nextDayButton && m_nextBtnToken.value != 0) {
+                m_nextDayButton.Click(m_nextBtnToken);
+                m_nextBtnToken = {};
+            }
+        } catch (...) {
+        }
+        try {
+            if (m_refreshButton && m_refreshBtnToken.value != 0) {
+                m_refreshButton.Click(m_refreshBtnToken);
+                m_refreshBtnToken = {};
+            }
+        } catch (...) {
+        }
+        try {
+            if (m_datePicker && m_dateChangedToken.value != 0) {
+                m_datePicker.DateChanged(m_dateChangedToken);
+                m_dateChangedToken = {};
+            }
+        } catch (...) {
+        }
+
         if (m_hostScrollViewer) {
             try {
                 if (m_originalCalendarContent) {
@@ -1387,35 +1383,14 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
                 m_rootGrid.Children().Clear();
             } catch (...) {
             }
+            m_rootGrid = nullptr;
         }
         if (m_itemsControl) {
             try {
                 m_itemsControl.Items().Clear();
             } catch (...) {
             }
-        }
-
-        if (m_focusSessionControl) {
-            try {
-                m_focusSessionControl.Visibility(wux::Visibility::Visible);
-                Wh_Log(L"Restored FocusSessionControl visibility to Visible");
-            } catch (...) {
-                Wh_Log(
-                    L"Failed to restore FocusSessionControl visibility: %08X",
-                    winrt::to_hresult());
-            }
-        }
-    }
-
-    void UnregisterFocusSessionControl() {
-        if (m_focusSessionControl && m_focusSessionVisibilityToken != 0) {
-            try {
-                m_focusSessionControl.UnregisterPropertyChangedCallback(
-                    wux::UIElement::VisibilityProperty(),
-                    m_focusSessionVisibilityToken);
-            } catch (...) {
-            }
-            m_focusSessionVisibilityToken = 0;
+            m_itemsControl = nullptr;
         }
     }
 
@@ -1431,48 +1406,7 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
             Wh_Log(L"UnadviseVisualTreeChange failed: %08X", hr);
         }
 
-        try {
-            if (m_prevDayButton && m_prevBtnToken.value != 0) {
-                m_prevDayButton.Click(m_prevBtnToken);
-                m_prevBtnToken = {};
-            }
-        } catch (...) {
-        }
-        try {
-            if (m_nextDayButton && m_nextBtnToken.value != 0) {
-                m_nextDayButton.Click(m_nextBtnToken);
-                m_nextBtnToken = {};
-            }
-        } catch (...) {
-        }
-        try {
-            if (m_refreshButton && m_refreshBtnToken.value != 0) {
-                m_refreshButton.Click(m_refreshBtnToken);
-                m_refreshBtnToken = {};
-            }
-        } catch (...) {
-        }
-        try {
-            if (m_datePicker && m_dateChangedToken.value != 0) {
-                m_datePicker.DateChanged(m_dateChangedToken);
-                m_dateChangedToken = {};
-            }
-        } catch (...) {
-        }
-
         m_xamlDiagnostics = nullptr;
-        UnregisterFocusSessionControl();
-        m_focusSessionControl = nullptr;
-        m_prevDayButton = nullptr;
-        m_nextDayButton = nullptr;
-        m_refreshButton = nullptr;
-        m_datePicker = nullptr;
-        m_headerGrid = nullptr;
-        m_rootGrid = nullptr;
-        m_eventsScrollViewer = nullptr;
-        m_itemsControl = nullptr;
-        m_hostScrollViewer = nullptr;
-        m_originalCalendarContent = nullptr;
     }
 
     void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
@@ -1522,10 +1456,10 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
 
             auto eventGrid = wuxc::Grid();
 
-            // Column 0: fixed width, enough to accompany XX:XX XM + some
-            // padding
+            // Column 0: Auto width to accompany localized times without
+            // clipping
             wuxc::ColumnDefinition col0{};
-            col0.Width(wux::GridLength{65, wux::GridUnitType::Pixel});
+            col0.Width(wux::GridLength{0, wux::GridUnitType::Auto});
             eventGrid.ColumnDefinitions().Append(col0);
 
             // Column 1: * width
@@ -1622,7 +1556,7 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
     }
 
     void ChangeSelectedDay(int deltaDays) {
-        SYSTEMTIME newDate = AdjustDays(m_currentFilterDate, deltaDays);
+        SYSTEMTIME newDate = ShiftLocalDate(m_currentFilterDate, deltaDays);
         m_currentFilterDate = newDate;
 
         Wh_Log(L"ChangeSelectedDay(%d) -> %04d-%02d-%02d", deltaDays,
@@ -1743,7 +1677,7 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
     }
 
     void UpdateMaxHeight(int maxHeight) {
-        if (!m_eventsScrollViewer || maxHeight <= 0) {
+        if (!m_eventsScrollViewer) {
             return;
         }
 
@@ -1756,7 +1690,9 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
             wuc::CoreDispatcherPriority::Normal,
             [weakSv = winrt::make_weak(m_eventsScrollViewer), maxHeight]() {
                 if (auto sv = weakSv.get()) {
-                    sv.MaxHeight((double)maxHeight);
+                    sv.MaxHeight(maxHeight > 0
+                                     ? (double)maxHeight
+                                     : std::numeric_limits<double>::infinity());
                     sv.Height(std::numeric_limits<double>::quiet_NaN());
                 }
             });
@@ -1802,6 +1738,9 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
                     if (maxHeight > 0) {
                         strongThis->m_eventsScrollViewer.MaxHeight(
                             (double)maxHeight);
+                    } else {
+                        strongThis->m_eventsScrollViewer.MaxHeight(
+                            std::numeric_limits<double>::infinity());
                     }
 
                     strongThis->m_eventsScrollViewer.Height(
@@ -1818,11 +1757,6 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
                         strongThis->m_datePicker.Margin(
                             wux::Thickness{0, 0, 0, 6});
                         strongThis->m_datePicker.IsTodayHighlighted(true);
-
-                        strongThis->m_datePicker.DateFormat(
-                            L"{dayofweek.full}, {month.abbreviated} "
-                            L"{day.integer}, {year.full}");  // use locale
-
                         strongThis->m_datePicker.Date(winrt::clock::now());
 
                         strongThis->m_dateChangedToken =
@@ -2034,7 +1968,6 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
                                 strongThis->m_originalCalendarContent));
                     }
                     strongThis->m_hostScrollViewer = host;
-                    RecordDispatcher(host.Dispatcher());
 
                     host.VerticalScrollBarVisibility(
                         wuxc::ScrollBarVisibility::Disabled);
@@ -2192,11 +2125,6 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
                                L"ActionCenter.FocusSessionControl") == 0)) {
                 Wh_Log(L"FOUND FocusSessionControl");
                 HandleFocusSessionControl(frameworkElement);
-            } else if (name == L"SeeMoreLessViewInstance" ||
-                       name == L"SeeMoreLessButton" ||
-                       (element.Type &&
-                        wcsstr(element.Type, L"ActionCenter"))) {
-                OnCalendarOpened();
             }
         } catch (...) {
             HRESULT hr = winrt::to_hresult();
@@ -2461,18 +2389,6 @@ class WindhawkTAP
             FreeLibrary(module);
         }
 
-        try {
-            auto coreWindow = wuc::CoreWindow::GetForCurrentThread();
-            if (coreWindow) {
-                RecordDispatcher(coreWindow.Dispatcher());
-                HWND hWnd = GetHwndFromCoreWindow(coreWindow);
-                if (hWnd) {
-                    RecordCoreWindow(hWnd);
-                }
-            }
-        } catch (...) {
-        }
-
         {
             std::lock_guard<std::mutex> lock(g_watcherMutex);
             g_visualTreeWatcher = winrt::make_self<VisualTreeWatcher>(m_site);
@@ -2636,16 +2552,10 @@ void RegisterCoreWindowEvents() {
             return;
         }
 
-        RecordDispatcher(coreWindow.Dispatcher());
-        HWND hWnd = GetHwndFromCoreWindow(coreWindow);
-        if (hWnd) {
-            RecordCoreWindow(hWnd);
-        }
-
         Wh_Log(
-            L"Registering CoreWindow Activated & VisibilityChanged for "
-            L"thread %u (hWnd=%08X)",
-            GetCurrentThreadId(), (DWORD)(ULONG_PTR)hWnd);
+            L"Registering CoreWindow Activated & VisibilityChanged for thread "
+            L"%u",
+            GetCurrentThreadId());
 
         t_coreWindowData.coreWindow = coreWindow;
 
@@ -2786,7 +2696,7 @@ void OnWindowCreated(HWND hWnd, LPCWSTR lpClassName, PCSTR funcName) {
         Wh_Log(L"Initializing - Created core window: %08X via %S",
                (DWORD)(ULONG_PTR)hWnd, funcName);
 
-        RecordCoreWindow(hWnd);
+        RegisterCoreWindowEvents();
         InitializeSettingsAndTap();
     }
 }
@@ -2872,61 +2782,34 @@ HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
 }
 
 std::vector<HWND> GetCoreWnds() {
+    struct ENUM_WINDOWS_PARAM {
+        std::vector<HWND>* hWnds;
+    };
+
     std::vector<HWND> hWnds;
+    ENUM_WINDOWS_PARAM param = {&hWnds};
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            ENUM_WINDOWS_PARAM& param = *(ENUM_WINDOWS_PARAM*)lParam;
 
-    // 1. Check recorded CoreWindows from CreateWindowInBand(Ex), SetSite,
-    // RegisterCoreWindowEvents
-    {
-        std::lock_guard<std::mutex> lock(g_coreWindowsMutex);
-        for (HWND hWnd : g_coreWindows) {
-            if (IsWindow(hWnd)) {
-                hWnds.push_back(hWnd);
+            DWORD dwProcessId = 0;
+            if (!GetWindowThreadProcessId(hWnd, &dwProcessId) ||
+                dwProcessId != GetCurrentProcessId()) {
+                return TRUE;
             }
-        }
-    }
 
-    if (!hWnds.empty()) {
-        return hWnds;
-    }
+            WCHAR szClassName[32];
+            if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
+                return TRUE;
+            }
 
-    // 2. Fallback: CoreWindows created in private Z-order bands are NOT
-    // returned by EnumWindows. Snapshot threads of the current process and use
-    // EnumThreadWindows, which discovers windows in ANY band.
-    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-    if (hSnapshot != INVALID_HANDLE_VALUE) {
-        THREADENTRY32 te{};
-        te.dwSize = sizeof(te);
-        DWORD currentPid = GetCurrentProcessId();
+            if (_wcsicmp(szClassName, L"Windows.UI.Core.CoreWindow") == 0) {
+                param.hWnds->push_back(hWnd);
+            }
 
-        if (Thread32First(hSnapshot, &te)) {
-            do {
-                if (te.th32OwnerProcessID == currentPid) {
-                    EnumThreadWindows(
-                        te.th32ThreadID,
-                        [](HWND hWnd, LPARAM lParam) -> BOOL {
-                            auto* pWnds =
-                                reinterpret_cast<std::vector<HWND>*>(lParam);
-                            WCHAR szClassName[64];
-                            if (GetClassNameW(hWnd, szClassName,
-                                              ARRAYSIZE(szClassName)) > 0) {
-                                if (_wcsicmp(szClassName,
-                                             L"Windows.UI.Core.CoreWindow") ==
-                                    0) {
-                                    pWnds->push_back(hWnd);
-                                }
-                            }
-                            return TRUE;
-                        },
-                        reinterpret_cast<LPARAM>(&hWnds));
-                }
-            } while (Thread32Next(hSnapshot, &te));
-        }
-        CloseHandle(hSnapshot);
-    }
-
-    for (HWND hWnd : hWnds) {
-        RecordCoreWindow(hWnd);
-    }
+            return TRUE;
+        },
+        (LPARAM)&param);
 
     return hWnds;
 }
@@ -2988,9 +2871,7 @@ void Wh_ModSettingsChanged() {
     }
     if (watcher) {
         int maxHeight = GetMaxHeightSetting();
-        if (maxHeight > 0) {
-            watcher->UpdateMaxHeight(maxHeight);
-        }
+        watcher->UpdateMaxHeight(maxHeight);
         watcher->UpdateFocusSessionVisibility();
     }
     TriggerBackgroundFetch(true);
@@ -3001,21 +2882,25 @@ void Wh_ModUninit() {
 
     StopWorkerThread();
 
-    // If the mod was initialized and modified ShellExperienceHost's visual
-    // tree, exit the process with code 0. ShellExperienceHost is a transient
-    // shell process that Windows automatically relaunches on demand the moment
-    // the user opens the clock or notification center.
-    //
-    // Terminating cleanly (matching the behavior of other XAML mods like
-    // Windows 11 Start Menu Styler) ensures the entire mutated XAML visual
-    // tree, button click handlers, and diagnostics callbacks are destroyed by
-    // the OS. This eliminates any possibility of dangling delegates, buttons
-    // crashing upon being clicked, or stale UI remaining in the calendar pane
-    // after disabling the mod.
-    if (g_initialized) {
-        Wh_Log(
-            L"Exiting ShellExperienceHost process for clean mod "
-            L"uninitialization");
-        ExitProcess(0);
+    for (HWND hCoreWnd : GetCoreWnds()) {
+        Wh_Log(L"Uninitializing for %08X", (DWORD)(ULONG_PTR)hCoreWnd);
+        RunFromWindowThread(
+            hCoreWnd,
+            [](PVOID) {
+                try {
+                    auto coreWindow = wuc::CoreWindow::GetForCurrentThread();
+                    if (coreWindow && coreWindow.Dispatcher()) {
+                        coreWindow.Dispatcher().ProcessEvents(
+                            wuc::CoreProcessEventsOption::ProcessAllIfPresent);
+                    }
+                } catch (...) {
+                }
+
+                UnregisterCoreWindowEvents();
+                UninitializeSettingsAndTap();
+            },
+            nullptr);
     }
+
+    UninitializeSettingsAndTap();
 }
