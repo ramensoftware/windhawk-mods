@@ -2198,7 +2198,9 @@ static DWORD WINAPI AudioThreadProc(void*) {
             g_pendingMuteRequest.exchange(0);
         unsigned muteCommand = static_cast<unsigned>(muteRequest & 3);
         unsigned long long muteDeadline = muteRequest >> 2;
-        if (muteCommand != 0 && now <= muteDeadline) {
+        bool muteRequestExpired =
+            muteCommand == 3 && now > muteDeadline;
+        if (muteCommand != 0 && !muteRequestExpired) {
             bool requireOwnedEndpoint = muteCommand == 3;
             bool targetMuted = muteCommand == 2;
             bool endpointMatches =
@@ -2230,6 +2232,10 @@ static DWORD WINAPI AudioThreadProc(void*) {
                 }
             }
         } else {
+            if (muteRequestExpired) {
+                RecordDiagnosticEvent(
+                    L"Expired headset-owned unmute request");
+            }
             unsigned int toggles = g_pendingMuteToggles.exchange(0);
             if ((toggles & 1U) != 0) {
                 BOOL muted = FALSE;
