@@ -967,45 +967,44 @@ BOOL ExtTextOutAlignRect(HDC hdc, POINT point, SIZE textSize, RECT& textRect, UI
     return TRUE;
 }
 
-// When the caller supplies explicit per-character advances, GDI positions
-// glyphs using those instead of the font's own design metrics -
-// GetTextExtentPoint32W/GetTextExtentPointI have no lpDx parameter and
-// always measure using natural advances, so their result can be far
-// narrower than what's actually drawn (e.g. a single glyph stretched into
-// a long underline via lpDx with c == 1). Recover the real width by
-// summing lpDx instead.
-static INT ExtTextOutDxWidth(UINT options, const INT* lpDx, UINT c)
-{
-    INT width = 0;
-    UINT stride = (options & ETO_PDY) ? 2 : 1; // ETO_PDY: lpDx holds (dx,dy) pairs
+VOID ExtTextOutDxWidth(UINT options, const INT* lpDx, UINT c, SIZE& textSize)
+{    
+    INT dx = 0;
+    INT dy = 0;
+    UINT stride = (options & ETO_PDY) ? 2 : 1;
+    
     for (UINT i = 0; i < c; i++)
-        width += lpDx[i * stride];
-    return width;
+    {
+        dx += lpDx[i * stride];
+        if (options & ETO_PDY)
+            dy += lpDx[i * stride + 1];
+    }
+    
+    textSize.cx = dx;
+    if (options & ETO_PDY)
+        textSize.cy += abs(dy); // Expand height to encompass the vertical shifting
 }
+
 
 // Calculate text boundaries
 BOOL ExtTextOutCalcRect(HDC hdc, POINT point, UINT options, RECT& textRect, LPCRECT lprect, LPCWSTR lpString, UINT c, const INT* lpDx)
 {   
     SIZE textSize = {0};
     UINT ta = GetTextAlign(hdc);
+    BOOL res = TRUE;
 
-    if (lprect && !IsRectEmpty(lprect))
-        textRect = *lprect;
-    else if (options & ETO_GLYPH_INDEX && GetTextExtentPointI(hdc, (WORD*)lpString, c, &textSize))
-    {
-        if (lpDx)
-            textSize.cx = ExtTextOutDxWidth(options, lpDx, c);
-        if (!ExtTextOutAlignRect(hdc, point, textSize, textRect, ta))
-            return FALSE;
-    }
-    else if (GetTextExtentPoint32W(hdc, lpString, c, &textSize))
-    {
-        if (lpDx)
-            textSize.cx = ExtTextOutDxWidth(options, lpDx, c);
-        if (!ExtTextOutAlignRect(hdc, point, textSize, textRect, ta))
-            return FALSE;
-    }
+    if (options & ETO_GLYPH_INDEX)
+        res = GetTextExtentPointI(hdc, (WORD*)lpString, c, &textSize);
     else
+        res = GetTextExtentPoint32W(hdc, lpString, c, &textSize);
+    
+    if (!res)
+        return res;
+
+    if (lpDx)
+        ExtTextOutDxWidth(options, lpDx, c, textSize);
+    
+    if (!ExtTextOutAlignRect(hdc, point, textSize, textRect, ta))
         return FALSE;
 
     if (IsRectEmpty(&textRect))
