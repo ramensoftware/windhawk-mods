@@ -2,7 +2,7 @@
 // @id              vector-screen-holder
 // @name            Vector Screen Holder
 // @description     Fills a display you choose with generative line art and keeps the PC from idling while it runs
-// @version         1.0.4
+// @version         1.0.5
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
@@ -113,7 +113,9 @@ logged-in user cannot toggle your overlay. It grants `EVENT_MODIFY_STATE` and
 `SYNCHRONIZE` only. `SetEvent` needs the first, and `OpenExisting` asks for
 both, so the one-liner above fails with "Access to the path is denied" without
 it. It is still far short of full access: the event cannot be deleted, nor its
-permissions or owner changed.
+permissions or owner changed. The integrity label is Medium rather than Low:
+an ordinary shortcut runs at Medium, and stopping there keeps sandboxed
+processes such as browser renderers from reaching it.
 
 ## Performance
 
@@ -184,6 +186,8 @@ pair-programmers Claude and Big-Pickle (opencode).
   - "4": Display 4
   - "5": Display 5
   - "6": Display 6
+  - "7": Display 7
+  - "8": Display 8
 - fps: 60
   $name: Frames per second
   $description: >-
@@ -1830,8 +1834,9 @@ void Overlay::FlashHud() {
     int st = ClampT(style, 0, kStyleCount - 1);
     int am = ClampT(amount, 0, kAmountCount - 1);
     WCHAR buf[160];
-    swprintf_s(buf, ARRAYSIZE(buf), L"%s     %s %.2f     amount %s",
-               kStyleNames[st], kStyleParams[st], param, kAmountNames[am]);
+    swprintf_s(buf, ARRAYSIZE(buf), L"%s     %s %d%%     amount %s",
+               kStyleNames[st], kStyleParams[st],
+               (int)(param * 100.0f + 0.5f), kAmountNames[am]);
     hudText_ = buf;
     hudT_ = kHudSecs;
 }
@@ -1971,7 +1976,13 @@ void Overlay::Render(float dtSec) {
 
     HRESULT hr = rt_->EndDraw(nullptr, nullptr);
     if (hr == D2DERR_RECREATE_TARGET) {
+        // The accumulation buffer goes with the device, but the scene keeps
+        // its progress, so resuming would paint only the remaining strokes
+        // onto an empty buffer. Start the piece again instead.
         DiscardDeviceResources();
+        if (CreateDeviceResources()) {
+            NewScene();
+        }
     }
 }
 
@@ -2246,14 +2257,20 @@ static void InstallKbdHook() {
         return;
     }
     g_hookReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_hookReady) {
+        // Without it the uninstall path cannot know when the id is published,
+        // so it could post nothing and then wait forever. Better to run
+        // without the global keys than to risk hanging teardown.
+        Wh_Log(L"CreateEvent failed (%u); global keys disabled",
+               GetLastError());
+        return;
+    }
     g_hookThread = CreateThread(nullptr, 0, KbdHookThread, nullptr, 0, nullptr);
     if (!g_hookThread) {
         Wh_Log(L"Could not start the keyboard hook thread (%u)",
                GetLastError());
-        if (g_hookReady) {
-            CloseHandle(g_hookReady);
-            g_hookReady = nullptr;
-        }
+        CloseHandle(g_hookReady);
+        g_hookReady = nullptr;
     }
 }
 
@@ -2512,7 +2529,7 @@ static HANDLE CreateToggleEvent() {
     // label lets a normal medium-integrity shortcut signal it even when
     // Windhawk runs elevated.
     if (ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            L"D:(A;;0x100002;;;WD)S:(ML;;NW;;;LW)", SDDL_REVISION_1, &psd,
+            L"D:(A;;0x100002;;;WD)S:(ML;;NW;;;ME)", SDDL_REVISION_1, &psd,
             nullptr)) {
         sa.lpSecurityDescriptor = psd;
     }
@@ -2665,23 +2682,51 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     QueryPerformanceFrequency(&freq);
     QueryPerformanceCounter(&lastRender);
 
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
+#endif
+    // High resolution needs Windows 10 1803; fall back to an ordinary timer,
+    // which is still far better than a quantized timeout.
+    HANDLE frameTimer = CreateWaitableTimerExW(
+        nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+        TIMER_ALL_ACCESS);
+    if (!frameTimer) {
+        frameTimer = CreateWaitableTimerW(nullptr, FALSE, nullptr);
+    }
+    if (!frameTimer) {
+        Wh_Log(L"CreateWaitableTimer failed (%u); pacing will be coarse",
+               GetLastError());
+    }
+
     while (g_running) {
-        DWORD waitMs = INFINITE;
-        if (g_active) {
+        HANDLE handles[2];
+        DWORD count = 0;
+        DWORD toggleIdx = (DWORD)-1;
+        if (g_toggleEvent) {
+            toggleIdx = count;
+            handles[count++] = g_toggleEvent;
+        }
+        if (g_active && frameTimer) {
             LARGE_INTEGER nowW;
             QueryPerformanceCounter(&nowW);
             float sinceW = (float)(nowW.QuadPart - lastRender.QuadPart) /
                            (float)freq.QuadPart;
             float remain = 1.0f / (float)g_settings.fps - sinceW;
-            waitMs = remain <= 0.0f ? 0 : (DWORD)(remain * 1000.0f);
+            LARGE_INTEGER due;
+            // negative is relative, in 100 ns units
+            due.QuadPart = remain <= 0.0f
+                               ? -1LL
+                               : -(LONGLONG)(remain * 10000000.0f);
+            SetWaitableTimer(frameTimer, &due, 0, nullptr, nullptr, FALSE);
+            // The wall-clock gate below decides whether to draw; the timer is
+            // only here to make the wait end at the right moment.
+            handles[count++] = frameTimer;
         }
-        DWORD count = g_toggleEvent ? 1 : 0;
-        HANDLE handles[1] = {g_toggleEvent};
 
         DWORD r = MsgWaitForMultipleObjects(count, count ? handles : nullptr,
-                                            FALSE, waitMs, QS_ALLINPUT);
+                                            FALSE, INFINITE, QS_ALLINPUT);
 
-        if (count && r == WAIT_OBJECT_0) {
+        if (toggleIdx != (DWORD)-1 && r == WAIT_OBJECT_0 + toggleIdx) {
             ToggleOverlays();
         } else if (r == WAIT_OBJECT_0 + count) {
             MSG msg;
@@ -2778,6 +2823,10 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     }
 
     HideOverlays();
+    if (frameTimer) {
+        CancelWaitableTimer(frameTimer);
+        CloseHandle(frameTimer);
+    }
     if (g_hotkeyRegistered) {
         UnregisterHotKey(nullptr, kHotkeyId);
         g_hotkeyRegistered = false;
@@ -2807,8 +2856,8 @@ BOOL WhTool_ModInit() {
 
 void WhTool_ModSettingsChanged() {
     DWORD tid = g_workerThreadId.load();
-    if (tid) {
-        PostThreadMessageW(tid, WM_VSH_SETTINGS, 0, 0);
+    if (!tid || !PostThreadMessageW(tid, WM_VSH_SETTINGS, 0, 0)) {
+        Wh_Log(L"Could not deliver the settings change (%u)", GetLastError());
     }
 }
 
