@@ -13,34 +13,27 @@
 /*
 # Theme Aware Video Wallpaper
 
-Plays a video as desktop wallpaper using ffmpeg and `UpdateLayeredWindow`.
-Automatically switches between two videos based on the current Windows light/dark theme.
+Plays a video as desktop wallpaper via ffmpeg pipe + UpdateLayeredWindow.
+Auto-switches between light/dark mode videos based on Windows theme.
 
 ### Requirements
-- **ffmpeg.exe** — must be provided via the mod settings. Only the main `ffmpeg.exe` binary is needed;
-  no additional DLLs or codecs are required.
-- **Windows 11** — tested and developed for the latest Windows 11 only.
+- **ffmpeg.exe** (standalone binary, no extra DLLs/codecs needed)
+- **Windows 11** (latest only)
 
 ### Settings
-- **ffmpeg.exe path**: Full path to a standalone `ffmpeg.exe`.
-- **Light mode video / folder path**: Path to a single video **file**, or a **folder** containing videos.
-  When a folder is selected, files are sorted by modification time (newest first) and played in that order.
-- **Dark mode video / folder path**: Leave empty to reuse the light-mode path.
+- **ffmpeg.exe path**
+- **Light mode video / folder path** — file or folder; folder plays by modification time (newest first)
+- **Dark mode video / folder path** — leave empty to reuse light-mode path
+- **Video window opacity** — 10–100%, default 90%
 
 ### Behavior
-- ffmpeg scales the video to the virtual desktop resolution before rendering. Multi-monitor setups
-  are supported — the wallpaper covers the combined desktop area.
-- When a **maximized or fullscreen window** is active, rendering stops but ffmpeg keeps decoding
-  (the pipeline is not paused, only new frames are dropped to minimize visual flicker on resume).
-- Audio playback is **not supported** — ffmpeg is invoked with audio disabled.
+- Video is scaled to the virtual desktop resolution; multi-monitor supported.
+- Video window sits between `Progman` and `WorkerW`, so desktop icons remain visible.
+- Pauses rendering when a maximized/fullscreen window is active (ffmpeg keeps decoding).
+- Audio playback is not supported.
+- Stops auto-play after 3 consecutive ffmpeg errors to avoid infinite crash loops.
 
-### Known limitations
-- Desktop icons are covered by the video wallpaper — icons remain functional (you can click them)
-  but they are not visible. This is a known Z-order issue; the video window is placed below all
-  desktop layers rather than between `Progman` and `WorkerW` where icons live.
-- Scaling mode (fit / fill / center) is not configurable; the frame is always stretched to fill the
-  virtual desktop.
-- Hoping someone else will carry on development — PRs welcome.
+Hoping someone else will carry on development — PRs welcome.
 */
 // ==/WindhawkModReadme==
 
