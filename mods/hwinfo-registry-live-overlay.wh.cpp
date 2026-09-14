@@ -1995,6 +1995,13 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
         case WM_MOUSEMOVE:
             if (settings.dragModeEnabled && settings.dragging) {
+                if (!(wParam & MK_LBUTTON)) {
+                    settings.dragging = false;
+                    ReleaseCapture();
+                    SaveDraggedPosition();
+                    return 0;
+                }
+
                 POINT currentMouse = {};
                 GetCursorPos(&currentMouse);
 
@@ -2059,7 +2066,10 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             return 0;
 
         case WM_CAPTURECHANGED:
-            settings.dragging = false;
+            if (settings.dragging) {
+                settings.dragging = false;
+                SaveDraggedPosition();
+            }
             return 0;
 
         case WM_DESTROY:
@@ -2703,7 +2713,7 @@ async function copyRows() {
     }
 
 document.getElementById('status').textContent =
-    'Copied Rows YAML for ' + document.getElementById('rowCount').textContent + ' sensors to clipboard. Replace only the existing rows: section in Windhawk\\'s textual settings editor. Do not replace the whole settings document.';
+    "Copied Rows YAML for " + document.getElementById('rowCount').textContent + " sensors to clipboard. Replace only the existing rows: section in Windhawk's textual settings editor. Do not replace the whole settings document.";
 }
 
 window.addEventListener('DOMContentLoaded', rebuildRows);
