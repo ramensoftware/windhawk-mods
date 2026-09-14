@@ -1,3 +1,11 @@
+## 0.10.55 ([Sep 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/34c05c49402b8bc15fd2bc7241fd1231f0f6435c/mods/island-media-controls.wh.cpp))
+
+- Adds the new unified display mode setting for fullsize, compact, and side expansion layouts.
+- Refreshes the preview gallery with dark, light, compact, and fullsize layout previews.
+- Reorganizes settings so core mode/material/position/artwork controls are easier to find.
+- Keeps the elastic animation effect enabled by default while exposing it as a clearer toggle.
+- Preserves legacy setting fallback for existing users.
+
 ## 0.9.211 ([Jul 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/427a0adad1078cb37b0f397ce82f77b39ed9bd3b/mods/island-media-controls.wh.cpp))
 
 - Add a compact expanded layout that places the album cover beside the title and artist, reducing pointer travel to the playback controls.

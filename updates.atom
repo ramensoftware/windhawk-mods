@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-14T17:27:35.000Z</updated>
+    <updated>2026-09-14T18:18:55.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Island Media Controls 0.10.55]]></title>
+        <id>https://windhawk.net/mods/island-media-controls#34c05c49402b8bc15fd2bc7241fd1231f0f6435c</id>
+        <link href="https://windhawk.net/mods/island-media-controls"/>
+        <updated>2026-09-14T18:18:55.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Adds the new unified display mode setting for fullsize, compact, and side expansion layouts.</li>
+<li>Refreshes the preview gallery with dark, light, compact, and fullsize layout previews.</li>
+<li>Reorganizes settings so core mode/material/position/artwork controls are easier to find.</li>
+<li>Keeps the elastic animation effect enabled by default while exposing it as a clearer toggle.</li>
+<li>Preserves legacy setting fallback for existing users.</li>
+</ul>]]></content>
+        <author>
+            <name>usho</name>
+            <uri>https://github.com/usho-lear</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mouse Trail 3.4.1]]></title>
         <id>https://windhawk.net/mods/mouse-trail#661af3e4a08ace7fd48652ca56e1a7d7df712da4</id>
@@ -671,31 +688,6 @@ mixes those with <code>SM_CXVSCROLL</code> may lay out slightly oddly.</li>
         <author>
             <name>AmazingBodilyFluids</name>
             <uri>https://github.com/AmazingBodilyFluids</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove Context Menu Items 1.12.0]]></title>
-        <id>https://windhawk.net/mods/remove-context-menu-items#00d16690c8ac0726d4b9c16db136b0a9c772b8b2</id>
-        <link href="https://windhawk.net/mods/remove-context-menu-items"/>
-        <updated>2026-09-11T12:57:28.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added Polish language support (thanks to <a href="https://github.com/FadeMind">FadeMind</a>)</li>
-<li>Added French language support (thanks to <a href="https://github.com/Catif">Catif</a>)</li>
-<li>Skipped the expensive file-lookup step for every right-click menu unless extension filtering is actually turned on, so menus open faster</li>
-<li>Fixed file selection being pulled from the wrong window/tab, and made it more reliable when using tabs or keyboard shortcuts to open menus</li>
-<li>Fixed a crash that could happen when a menu item with a submenu (like "Open with" or "Send to") got removed</li>
-<li>Added menu filtering limitation to actual file/folder right-click menus, so it no longer accidentally affects the taskbar, tray icons, or Start menu</li>
-<li>Removed Ctrl as a bypass key option (since it's also used for selecting multiple files) and kept Alt as the only bypass key, off by default</li>
-<li>Fixed a crash risk where the mod could message the wrong window while looking up which files were selected, and restored a more reliable way to find that information</li>
-<li>Fixed the left-hand folder tree (navigation pane) being skipped by filtering, so right-clicking there now behaves the same as right-clicking the main file list</li>
-<li>Added support for filtering menu items inside submenus like "Send to," "New," and "Open with," which weren't being caught before</li>
-<li>Fixed right-clicking on empty space not behaving consistently everywhere, including special folders like This PC and Recycle Bin</li>
-<li>Fixed file extension detection breaking on files with very long folder paths</li>
-<li>Blocked a custom rule of just "*" from accidentally wiping out the entire right-click menu</li>
-</ul>]]></content>
-        <author>
-            <name>Armaninyow</name>
-            <uri>https://github.com/armaninyow</uri>
         </author>
     </entry>
 </feed>

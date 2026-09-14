@@ -7745,7 +7745,7 @@
           116
         ],
         "ratingUsers": 158,
-        "updated": 1784382822000,
+        "updated": 1789409935000,
         "users": 6708
       },
       "metadata": {
@@ -7753,7 +7753,7 @@
           "x86-64"
         ],
         "author": "usho",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lwindowsapp -luuid -luser32 -lshell32 -lgdi32 -lmsimg32 -lshlwapi -lwindowscodecs -ldwmapi -luiautomationcore -ld3d11 -ldxgi -ld2d1 -ldcomp -lcomctl32",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lwindowsapp -luuid -luser32 -lgdi32 -lmsimg32 -lshlwapi -lwindowscodecs -ldwmapi -ld3d11 -ld2d1 -ldcomp -lcomctl32",
         "description": "Dynamic island-like media controls for the Windows 11 taskbar.",
         "github": "https://github.com/usho-lear",
         "include": [
@@ -7761,7 +7761,7 @@
         ],
         "license": "MIT",
         "name": "Island Media Controls",
-        "version": "0.9.211"
+        "version": "0.10.55"
       }
     },
     "isretailready-false": {
