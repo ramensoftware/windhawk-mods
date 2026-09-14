@@ -55,6 +55,9 @@ Automatically switches between two videos based on the current Windows light/dar
 - darkVideoPath: ""
   $name: Dark mode video / folder path
   $description: Leave empty to reuse light mode.
+- opacity: 90
+  $name: Video window opacity (%)
+  $description: Overall transparency of the video wallpaper. 100 = fully opaque, lower values let the desktop show through. Range 10-100.
 */
 // ==/WindhawkModSettings==
 
@@ -75,6 +78,7 @@ static std::vector<BYTE> g_frameBuf;
 WCHAR g_ffmpegPath[MAX_PATH] = {0};
 WCHAR g_lightPath[MAX_PATH] = {0};
 WCHAR g_darkPath[MAX_PATH] = {0};
+int g_opacity = 230;
 const bool g_pauseOnFullscreen = true;
 
 HANDLE g_renderThread = NULL;
@@ -87,6 +91,8 @@ bool g_lastIsDark = false;
 HANDLE g_mutex = NULL;
 std::vector<std::wstring> g_videoList;
 size_t g_videoIndex = 0;
+int g_consecutiveErrors = 0;
+static const int MAX_CONSECUTIVE_ERRORS = 3;
 
 typedef BOOL(WINAPI* UpdateLayeredWindow_t)(HWND, HDC, POINT*, SIZE*, HDC, POINT*, COLORREF, BLENDFUNCTION*, DWORD);
 typedef HDC(WINAPI* CreateCompatibleDC_t)(HDC);
@@ -126,6 +132,22 @@ HWND FindProgman()
     HWND p = FindWindowW(L"Progman", L"Program Manager");
     for (int i = 0; i < 20 && !p; i++) { Sleep(250); p = FindWindowW(L"Progman", L"Program Manager"); }
     return p;
+}
+
+HWND FindWorkerW()
+{
+    HWND worker = NULL;
+    EnumWindows([](HWND hwnd, LPARAM lParam) -> BOOL {
+        if (!IsWindowVisible(hwnd)) return TRUE;
+        WCHAR cls[64] = {};
+        GetClassNameW(hwnd, cls, 64);
+        if (_wcsicmp(cls, L"WorkerW") == 0) {
+            *(HWND*)lParam = hwnd;
+            return FALSE;
+        }
+        return TRUE;
+    }, (LPARAM)&worker);
+    return worker;
 }
 
 bool IsVideoExt(const WCHAR* ext)
@@ -250,7 +272,9 @@ bool CreateVideoWindow()
         g_classRegistered = true;
     }
 
-    // g_progman = FindProgman();
+    g_progman = FindProgman();
+    HWND workerw = FindWorkerW();
+    Wh_Log(L"CreateVideoWindow: progman=%p workerw=%p", g_progman, workerw);
 
     Wh_Log(L"CreateVideoWindow: before CreateWindowExW");
     g_videoHwnd = CreateWindowExW(
@@ -268,12 +292,17 @@ bool CreateVideoWindow()
     ShowWindow(g_videoHwnd, SW_SHOW);
     Wh_Log(L"CreateVideoWindow: before SetWindowPos");
     SetLastError(ERROR_SUCCESS);
-    BOOL positioned = SetWindowPos(g_videoHwnd, HWND_BOTTOM, 0, 0, sw, sh, SWP_NOACTIVATE);
+    HWND insertAfter = g_progman ? g_progman : HWND_BOTTOM;
+    BOOL positioned = SetWindowPos(g_videoHwnd, insertAfter, 0, 0, sw, sh, SWP_NOACTIVATE);
     if (!positioned) {
         Wh_Log(L"CreateVideoWindow: SetWindowPos failed err=%lu", GetLastError());
         DestroyWindow(g_videoHwnd);
         g_videoHwnd = NULL;
         return false;
+    }
+
+    if (workerw) {
+        SetWindowPos(workerw, g_videoHwnd, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 
     Wh_Log(L"CreateVideoWindow: video=%p top-level layered OK", g_videoHwnd);
@@ -367,8 +396,8 @@ DWORD WINAPI RenderThread(LPVOID)
         POINT ptSrc = {0, 0};
         SIZE sz = {sw, sh};
         POINT ptDst = {0, 0};
-        BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, 0};
-        BOOL ok = pUpdateLayeredWindow(g_videoHwnd, hScreen, &ptDst, &sz, hMem, &ptSrc, 0, &bf, ULW_OPAQUE);
+        BLENDFUNCTION bf = {AC_SRC_OVER, 0, (BYTE)g_opacity, 0};
+        BOOL ok = pUpdateLayeredWindow(g_videoHwnd, hScreen, &ptDst, &sz, hMem, &ptSrc, 0, &bf, ULW_ALPHA);
 
         if (!dibOk || !ok) {
             Wh_Log(L"RenderThread: draw failed dib=%d layered=%d err=%lu frame=%d",
@@ -486,10 +515,21 @@ bool StartFfmpeg(const WCHAR* videoPath)
     return true;
 }
 
-void PlayNext()
+bool PlayNext()
 {
-    if (g_videoList.empty()) return;
-    StartFfmpeg(g_videoList[g_videoIndex++ % g_videoList.size()].c_str());
+    if (g_videoList.empty()) return false;
+    if (g_consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+        Wh_Log(L"PlayNext: too many consecutive errors (%d), giving up. Reload to retry.", g_consecutiveErrors);
+        return false;
+    }
+    const WCHAR* next = g_videoList[g_videoIndex++ % g_videoList.size()].c_str();
+    Wh_Log(L"PlayNext: trying %s (consecutive errors=%d)", next, g_consecutiveErrors);
+    bool ok = StartFfmpeg(next);
+    if (!ok) {
+        g_consecutiveErrors++;
+        Wh_Log(L"PlayNext: StartFfmpeg failed, consecutive errors=%d", g_consecutiveErrors);
+    }
+    return ok;
 }
 
 void ReloadWallpaper()
@@ -498,7 +538,7 @@ void ReloadWallpaper()
 
     if (g_dirChangeHandle != INVALID_HANDLE_VALUE) { FindCloseChangeNotification(g_dirChangeHandle); g_dirChangeHandle = INVALID_HANDLE_VALUE; }
 
-    g_videoList.clear(); g_videoIndex = 0;
+    g_videoList.clear(); g_videoIndex = 0; g_consecutiveErrors = 0;
     bool dark = IsDark();
     g_lastIsDark = dark;
 
@@ -521,15 +561,35 @@ void ReloadWallpaper()
 void Wh_ModSettingsChanged()
 {
     PCWSTR s = Wh_GetStringSetting(L"ffmpegPath");
-    if (s) { wcscpy_s(g_ffmpegPath, MAX_PATH, s); Wh_FreeStringSetting(s); } else g_ffmpegPath[0] = 0;
+    WCHAR newFfmpegPath[MAX_PATH] = {0};
+    if (s) { wcscpy_s(newFfmpegPath, MAX_PATH, s); Wh_FreeStringSetting(s); }
 
     s = Wh_GetStringSetting(L"lightVideoPath");
-    if (s) { wcscpy_s(g_lightPath, MAX_PATH, s); Wh_FreeStringSetting(s); } else g_lightPath[0] = 0;
+    WCHAR newLightPath[MAX_PATH] = {0};
+    if (s) { wcscpy_s(newLightPath, MAX_PATH, s); Wh_FreeStringSetting(s); }
 
     s = Wh_GetStringSetting(L"darkVideoPath");
-    if (s) { wcscpy_s(g_darkPath, MAX_PATH, s); Wh_FreeStringSetting(s); } else g_darkPath[0] = 0;
+    WCHAR newDarkPath[MAX_PATH] = {0};
+    if (s) { wcscpy_s(newDarkPath, MAX_PATH, s); Wh_FreeStringSetting(s); }
 
-    ReloadWallpaper();
+    int pct = Wh_GetIntSetting(L"opacity");
+    g_opacity = (pct >= 0 && pct <= 100) ? (pct * 255 / 100) : 255;
+
+    bool needReload =
+        wcscmp(newFfmpegPath, g_ffmpegPath) != 0 ||
+        wcscmp(newLightPath, g_lightPath) != 0 ||
+        wcscmp(newDarkPath, g_darkPath) != 0;
+
+    wcscpy_s(g_ffmpegPath, MAX_PATH, newFfmpegPath);
+    wcscpy_s(g_lightPath, MAX_PATH, newLightPath);
+    wcscpy_s(g_darkPath, MAX_PATH, newDarkPath);
+
+    if (needReload) {
+        Wh_Log(L"Wh_ModSettingsChanged: path/ffmpeg changed, reloading");
+        ReloadWallpaper();
+    } else {
+        Wh_Log(L"Wh_ModSettingsChanged: opacity only=%d (no reload needed)", g_opacity);
+    }
 }
 
 DWORD WINAPI MonitorThread(LPVOID)
@@ -575,8 +635,20 @@ DWORD WINAPI MonitorThread(LPVOID)
         if (g_ffmpegProc) {
             DWORD code = 0;
             if (GetExitCodeProcess(g_ffmpegProc, &code) && code != STILL_ACTIVE) {
-                Wh_Log(L"ffmpeg exited unexpectedly code=%lu, restarting", code);
-                PlayNext(); continue;
+                if (code == 0) {
+                    g_consecutiveErrors = 0;
+                    Wh_Log(L"ffmpeg finished playing normally, moving to next");
+                } else {
+                    g_consecutiveErrors++;
+                    Wh_Log(L"ffmpeg exited with error code=%lu, consecutive errors=%d", code, g_consecutiveErrors);
+                }
+                if (g_consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+                    Wh_Log(L"Too many consecutive errors (%d), stopping auto-play. Reload or change settings to retry.", g_consecutiveErrors);
+                    StopFfmpeg();
+                } else {
+                    PlayNext();
+                }
+                continue;
             }
         }
 
