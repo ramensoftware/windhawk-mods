@@ -1879,15 +1879,10 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
         dispatcher.TryRunAsync(
             wuc::CoreDispatcherPriority::Normal,
             [weakThis = winrt::make_weak(get_strong()),
-             events = std::move(events)]() {
+             allEvents = std::move(allEvents)]() {
                 if (auto strongThis = weakThis.get()) {
-                    try {
-                        strongThis->PopulateItemsControl(events);
-                        Wh_Log(L"Updated UI with %zu events", events.size());
-                    } catch (...) {
-                        Wh_Log(L"PopulateItemsControl failed: %08X",
-                               winrt::to_hresult());
-                    }
+                    strongThis->PopulateItemsControl(FilterEventsForDate(
+                        allEvents, strongThis->m_currentFilterDate));
                 }
             });
     }
