@@ -2,7 +2,7 @@
 // @id              taskbar-volume-percentage
 // @name            Taskbar Volume Percentage Indicator
 // @description     Shows the master volume percentage in the Windows 11 system tray volume icon
-// @version         1.5.4
+// @version         1.5.6
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
@@ -75,7 +75,7 @@ level, updated in real time.
 
 ## Credits
 
-- Inspired by the taskbar visual customization concepts from [m417z](https://github.com/m417z).
+- Inspired by the taskbar visual customization concepts from [m417z](https://github.com/m417z) and [taskbar-tray-system-icon-tweaks](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-tray-system-icon-tweaks.wh.cpp).
 */
 // ==/WindhawkModReadme==
 
@@ -109,9 +109,10 @@ level, updated in real time.
 - fixedContainerWidth: 0
   $name: Container width
   $description: >-
-    Width in pixels of the volume icon container to keep adjacent icons from
-    shifting when the number of digits changes. Set to 0 for an automatic width
-    dynamically adapted to the text, or to -1 to leave the width to Windows.
+    Width in device-independent pixels (DIPs) of the volume icon container to
+    keep adjacent icons from shifting when the number of digits changes. Set to
+    0 for an automatic width dynamically adapted to the text, or to -1 to leave
+    the width to Windows.
 */
 // ==/WindhawkModSettings==
 
@@ -198,7 +199,7 @@ winrt::hstring g_spatialSoundName;
 // The IconData most recently produced by a volume data model. The view model
 // receives that same object right afterwards on the same thread, so pointer
 // identity tells the volume icon's view model apart from other text icons.
-winrt::Windows::Foundation::IUnknown g_volumeIconData;
+[[clang::no_destroy]] winrt::Windows::Foundation::IUnknown g_volumeIconData;
 
 // The text the mod last set on the volume view model. The XAML binding puts
 // it in the InnerTextBlock of the TextIconContent showing the volume icon,
@@ -209,7 +210,8 @@ std::wstring g_volumeText;
 // the next measure passes.
 bool g_volumeTextChanged;
 
-// The view model of the volume text icon.
+// The view model of the volume text icon. Held temporarily during initial
+// layout lookup to restore the native speaker glyph, then cleared.
 void* g_volumeViewModel = nullptr;
 
 // The native speaker glyph captured from Windows.
@@ -235,7 +237,8 @@ using FrameworkElementLayoutUpdatedEventRevoker = winrt::impl::event_revoker<
 
 // Layout properties set from inside a measure pass are not picked up by it,
 // so the width of a view found there is applied once the pass is over.
-FrameworkElementLayoutUpdatedEventRevoker g_layoutUpdatedRevoker;
+[[clang::no_destroy]] FrameworkElementLayoutUpdatedEventRevoker
+    g_layoutUpdatedRevoker;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Taskbar thread
@@ -604,8 +607,9 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
 
     auto resetEl = [](FrameworkElement const& el) {
         if (el) {
-            el.Visibility(Visibility::Visible);
-            Controls::Grid::SetColumn(el, 0);
+            el.ClearValue(UIElement::VisibilityProperty());
+            el.ClearValue(FrameworkElement::HorizontalAlignmentProperty());
+            el.ClearValue(Controls::Grid::ColumnProperty());
         }
     };
     resetEl(tracked.baseElement.get());
@@ -781,17 +785,22 @@ bool IsVolumeTextIconContent(FrameworkElement const& textIconContent) {
         return true;
     }
 
-    FrameworkElement child = container;
-    if ((child = FindChildByName(child, L"Base")) &&
-        (child = FindChildByName(child, L"InnerTextBlock"))) {
-        if (auto textBlock = child.try_as<Controls::TextBlock>()) {
-            std::wstring text{textBlock.Text()};
-            if (!g_volumeText.empty() && text == g_volumeText) {
-                return true;
-            }
-            if (IsDualBoxStyle() && !text.empty()) {
-                wchar_t ch = text[0];
-                return ch == L'\uE74F' || (ch >= L'\uE992' && ch <= L'\uE995');
+    FrameworkElement baseChild = FindChildByName(container, L"Base");
+    if (baseChild) {
+        FrameworkElement innerTextChild =
+            FindChildByName(baseChild, L"InnerTextBlock");
+        if (innerTextChild) {
+            if (auto textBlock = innerTextChild.try_as<Controls::TextBlock>()) {
+                std::wstring text{textBlock.Text()};
+                if (!g_volumeText.empty() && text == g_volumeText) {
+                    return true;
+                }
+                if (IsDualBoxStyle() && !text.empty()) {
+                    wchar_t ch = text[0];
+                    return ch == L'\uE74F' || ch == L'\uEA85' ||
+                           ch == L'\uEBC5' ||
+                           (ch >= L'\uE992' && ch <= L'\uE995');
+                }
             }
         }
     }
@@ -861,17 +870,21 @@ void LookUpVolumeIconView(FrameworkElement const& textIconContent) {
         winrt::auto_revoke,
         [wasEmpty](winrt::Windows::Foundation::IInspectable const&,
                    winrt::Windows::Foundation::IInspectable const&) {
+            const bool wasEmptyLocal = wasEmpty;
             g_layoutUpdatedRevoker.revoke();
 
             try {
                 ApplyVolumeIconViewsWidth();
-                if (wasEmpty && IsDualBoxStyle()) {
+                if (wasEmptyLocal && IsDualBoxStyle()) {
                     RestoreNativeBaseGlyph();
                     RefreshVolumeIcons();
                 }
             } catch (...) {
                 HRESULT hr = winrt::to_hresult();
                 Wh_Log(L"Error %08X", hr);
+            }
+            if (wasEmptyLocal) {
+                g_volumeViewModel = nullptr;
             }
         });
 }
