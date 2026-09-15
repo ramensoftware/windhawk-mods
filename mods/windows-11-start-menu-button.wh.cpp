@@ -1,15 +1,15 @@
 // ==WindhawkMod==
 // @id              windows-11-start-menu-button
 // @name            Windows 11 Start Button Customizer
-// @description     Custom icon and recolor (animation-preserving, with depth gradient and press-sweep) for the Windows 11 taskbar Start button
-// @version         1.2
+// @description     Recolor (animation-preserving, with depth gradient and press-sweep) for the Windows 11 taskbar Start button
+// @version         1.3
 // @author          AristideBH
 // @github          https://github.com/AristideBH
 // @homepage        https://aristide-bh.com/
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshcore
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -28,7 +28,6 @@ Customize the Windows 11 taskbar Start button's icon, without losing its
 native hover/press animation:
 
 - **System default** — leave the icon untouched.
-- **Custom icon** — replace the stock icon with your own PNG/ICO file.
 - **Recolor** — tint the stock icon to any color, or follow the system
   accent color live, with two independent add-ons:
   - **Gradient shading** — a diagonal light-to-dark tint across the icon's
@@ -57,18 +56,11 @@ taskbar instance (multi-monitor).
   $name: Icon mode
   $description: >-
     What the taskbar's Start icon should look like. "System default" leaves
-    it untouched. "Custom icon" replaces it with your own image. "Recolor"
-    tints the built-in icon while keeping its native hover/press animation.
+    it untouched. "Recolor" tints the built-in icon while keeping its
+    native hover/press animation.
   $options:
   - default: System default
-  - customIcon: Custom icon
   - recolor: Recolor
-- customIcon:
-  - path: ""
-    $name: Image file
-    $description: PNG or ICO file to show instead of the stock icon.
-  $name: Custom icon
-  $description: Settings used when Icon mode is "Custom icon".
 - recolor:
   - useAccentColor: false
     $name: Use system accent color
@@ -172,7 +164,6 @@ taskbar instance (multi-monitor).
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
-#include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/base.h>
@@ -192,13 +183,11 @@ using namespace winrt::Windows::UI::Xaml;
 
 enum class IconMode {
     Default,
-    CustomIcon,
     Recolor,
 };
 
 struct {
     IconMode mode;
-    std::wstring customIconPath;
     bool recolorUseAccentColor;
     std::wstring recolorColor;
     std::wstring recolorShimmerColor;
@@ -222,6 +211,10 @@ struct {
 // "still idle since the last applied frame, safe to skip" without diffing
 // every individual field.
 int g_settingsGeneration = 0;
+
+// Parsed once in LoadSettings instead of re-parsing the hex string every
+// render frame.
+std::optional<winrt::Windows::UI::Color> g_cachedShimmerColor;
 
 enum ButtonState {
     kStateDefault = 0,
@@ -248,7 +241,11 @@ struct TrackedButton {
     ULONGLONG iconLastFrameTimeMs = 0;
     bool iconPressSweepActive = false;
     ULONGLONG iconPressSweepStartMs = 0;
-    winrt::Windows::UI::Xaml::Controls::Image customIconOverlay{nullptr};
+    // Whether pointer/toggle handlers and the persistent render loop are
+    // currently attached - only true while mode is Recolor. Lets settings
+    // changes attach/detach them on an already-tracked button without
+    // rediscovering it via the padding hook.
+    bool recolorActive = false;
     // Last frame actually pushed to the Composition tree, so the render
     // loop (StartPersistentIconColorMaintenance) can skip the tree walk
     // and brush recreation entirely once the icon is sitting idle at rest
@@ -266,8 +263,12 @@ struct TrackedButton {
     winrt::event_token pointerCaptureLostToken;
     winrt::event_token checkedToken;
     winrt::event_token uncheckedToken;
-    // Held so Wh_ModBeforeUninit can revoke the CompositionTarget.Rendering
-    // subscription synchronously and unconditionally on unload - see
+    // Revoked, and the entry pruned from g_trackedButtons, when the button
+    // itself unloads (taskbar recreated on a monitor/DPI change) - see the
+    // Unloaded handler in EnsureTrackedButton.
+    winrt::event_token unloadedToken;
+    // Held so teardown can revoke the CompositionTarget.Rendering
+    // subscription synchronously and unconditionally - see
     // StartPersistentIconColorMaintenance / StopIconColorMaintenance for
     // why relying on the render callback to notice g_unloading and
     // self-revoke on its own next invocation isn't safe.
@@ -383,18 +384,24 @@ FrameworkElement FindIconElement(FrameworkElement panel) {
 // Mutating an existing brush's .Color() only works for a plain
 // CompositionColorBrush - it silently no-ops (try_as fails) on a
 // CompositionLinearGradientBrush/CompositionRadialGradientBrush, which is
-// what the Start icon's flag squares actually use (confirmed: user reports
-// the resting squares are a blue *gradient*, unaffected by our .Color()
-// writes, while a separate solid-brush shape - the hover/press highlight
-// overlay - did visibly change, which is what read as "shimmer only while
-// animating"). Fix: replace the whole FillBrush/StrokeBrush/Visual.Brush
-// with a freshly created solid CompositionColorBrush, which works
-// regardless of the original brush's type. The original brush object
-// (gradient or otherwise) is captured by shape/visual identity before the
-// first replacement, so Default mode can restore the exact original -
-// including the gradient - rather than guessing a fallback.
-std::unordered_map<void*, winrt::Windows::UI::Composition::CompositionBrush>
-    g_originalIconBrushes;
+// what the Start icon's flag squares actually use (confirmed: the resting
+// squares are a blue *gradient*, unaffected by our .Color() writes, while
+// a separate solid-brush shape - the hover/press highlight overlay - did
+// visibly change, which is what read as "shimmer only while animating").
+// Fix: replace the whole FillBrush/StrokeBrush/Visual.Brush with a freshly
+// created solid CompositionColorBrush, which works regardless of the
+// original brush's type. The original brush object (gradient or
+// otherwise) is captured by shape/visual identity before the first
+// replacement, so Default mode can restore the exact original - including
+// the gradient - rather than guessing a fallback.
+//
+// Holds strong Composition refs, so it must never be destroyed off the
+// taskbar UI thread - wrapped so the automatic static destructor at
+// arbitrary-thread DLL unload / process shutdown is skipped; controlled
+// teardown (TeardownAllTrackedButtonsProc) clears it explicitly instead.
+[[clang::no_destroy]] std::optional<
+    std::unordered_map<void*, winrt::Windows::UI::Composition::CompositionBrush>>
+    g_originalIconBrushes{std::in_place};
 
 template <typename T>
 void* Identity(T const& obj) {
@@ -473,7 +480,7 @@ winrt::Windows::UI::Color AdjustLightness(winrt::Windows::UI::Color color,
 // top-left-to-bottom-right diagonal regardless of how that specific tile is
 // rotated/mirrored.
 //
-// A live full-tree dump (see conversation) proved two things Absolute-mode
+// A live full-tree dump proved two things Absolute-mode
 // absolute-position math (the previous approach) couldn't work around:
 // 1. Two of the four tile shapes use a genuine 90d/-90d rotation matrix
 //    (zero on the diagonal, e.g. tm=[0,-1,1,0]) - mathematically impossible
@@ -711,12 +718,12 @@ int ReplaceBrush(
 
     if (frameParams) {
         if (currentBrush) {
-            g_originalIconBrushes.try_emplace(identity, currentBrush);
+            g_originalIconBrushes->try_emplace(identity, currentBrush);
         }
         setter(CreateRecolorBrush(compositor, *frameParams, shapeMatrix));
     } else {
-        auto it = g_originalIconBrushes.find(identity);
-        if (it != g_originalIconBrushes.end()) {
+        auto it = g_originalIconBrushes->find(identity);
+        if (it != g_originalIconBrushes->end()) {
             setter(it->second);
         }
     }
@@ -878,17 +885,61 @@ std::optional<winrt::Windows::UI::Color> ParseHexColor(std::wstring hex) {
     return winrt::Windows::UI::Color{a, r, g, b};
 }
 
+// UISettings is activated once (not per-frame - COM activation is not
+// cheap) and its accent color read once, then kept fresh via
+// ColorValuesChanged instead of being polled every render tick.
+// ColorValuesChanged can fire off the UI thread; g_cachedAccentColor is a
+// plain 4-byte Color, so the resulting race is the same low-risk class
+// already accepted elsewhere for plain settings fields, not a new one.
+winrt::Windows::UI::ViewManagement::UISettings g_uiSettings{nullptr};
+winrt::event_token g_uiSettingsColorChangedToken{};
+bool g_uiSettingsSubscribed = false;
+winrt::Windows::UI::Color g_cachedAccentColor{};
+
+void EnsureAccentColorTracking() {
+    if (g_uiSettingsSubscribed) {
+        return;
+    }
+    try {
+        g_uiSettings = winrt::Windows::UI::ViewManagement::UISettings();
+        g_cachedAccentColor = g_uiSettings.GetColorValue(
+            winrt::Windows::UI::ViewManagement::UIColorType::Accent);
+        g_uiSettingsColorChangedToken = g_uiSettings.ColorValuesChanged(
+            [](auto&&, auto&&) {
+                try {
+                    g_cachedAccentColor = g_uiSettings.GetColorValue(
+                        winrt::Windows::UI::ViewManagement::UIColorType::Accent);
+                } catch (...) {
+                }
+            });
+        g_uiSettingsSubscribed = true;
+    } catch (...) {
+        g_uiSettings = nullptr;
+        g_uiSettingsSubscribed = false;
+    }
+}
+
+// Teardown counterpart to EnsureAccentColorTracking - must run on the
+// taskbar UI thread, same as everything else ColorValuesChanged touches.
+void StopAccentColorTracking() {
+    if (!g_uiSettingsSubscribed) {
+        return;
+    }
+    try {
+        g_uiSettings.ColorValuesChanged(g_uiSettingsColorChangedToken);
+    } catch (...) {
+    }
+    g_uiSettings = nullptr;
+    g_uiSettingsSubscribed = false;
+}
+
 // Resolves the recolor mode's resting icon color: the system accent color
 // when "Use system accent color" is on, otherwise the manual hex field.
 std::optional<winrt::Windows::UI::Color> GetRecolorBaseColor() {
     if (g_settings.recolorUseAccentColor) {
-        try {
-            winrt::Windows::UI::ViewManagement::UISettings uiSettings;
-            return uiSettings.GetColorValue(
-                winrt::Windows::UI::ViewManagement::UIColorType::Accent);
-        } catch (...) {
-            return std::nullopt;
-        }
+        EnsureAccentColorTracking();
+        return g_uiSettingsSubscribed ? std::optional(g_cachedAccentColor)
+                                       : std::nullopt;
     }
     return ParseHexColor(g_settings.recolorColor);
 }
@@ -953,15 +1004,11 @@ void StartPersistentIconColorMaintenance(
     winrt::Microsoft::UI::Xaml::Controls::AnimatedVisualPlayer player,
     FrameworkElement button) {
     auto token = std::make_shared<winrt::event_token>();
-    auto frameCounter = std::make_shared<int>(0);
     *token = Media::CompositionTarget::Rendering(
-        [player, button, token, frameCounter](
+        [player, button, token](
             winrt::Windows::Foundation::IInspectable const&,
             winrt::Windows::Foundation::IInspectable const&) {
           try {
-            (*frameCounter)++;
-            bool logThisFrame = (*frameCounter % 60) == 0;
-
             // Unloading is handled explicitly and synchronously by
             // StopIconColorMaintenance (called from Wh_ModBeforeUninit),
             // which revokes this callback outright - so this is just a
@@ -987,28 +1034,17 @@ void StartPersistentIconColorMaintenance(
                         g_settingsGeneration) {
                     return;
                 }
-                int touched = RecolorAnimatedVisualPlayer(player, std::nullopt);
+                RecolorAnimatedVisualPlayer(player, std::nullopt);
                 if (tracked) {
                     tracked->hasLastApplied = true;
                     tracked->lastAppliedSettingsGeneration = g_settingsGeneration;
-                }
-                if (logThisFrame) {
-                    Wh_Log(L"Icon color maintenance: mode!=Recolor, "
-                           L"restoring original, touched=%d",
-                           touched);
                 }
                 return;
             }
 
             auto baseColor = GetRecolorBaseColor();
             if (!tracked || !baseColor) {
-                int touched = RecolorAnimatedVisualPlayer(player, std::nullopt);
-                if (logThisFrame) {
-                    Wh_Log(L"Icon color maintenance: no tracked button or "
-                           L"unparsable resting color, restoring original, "
-                           L"touched=%d",
-                           touched);
-                }
+                RecolorAnimatedVisualPlayer(player, std::nullopt);
                 return;
             }
 
@@ -1035,7 +1071,7 @@ void StartPersistentIconColorMaintenance(
             }
 
             // One-shot sweep: triggered directly from the PointerPressed
-            // handler (see SetupButtonTracking), not inferred here by
+            // handler (see AttachRecolorHandlers), not inferred here by
             // polling tracked->lastState - a fast click's Pressed->Hover
             // round trip can complete entirely between two Rendering ticks
             // (both are dispatched synchronously on the UI thread as part
@@ -1064,7 +1100,7 @@ void StartPersistentIconColorMaintenance(
             // compositing a translucent white (e.g. #4Cffffff) on top of
             // it - so it always reads as a highlight regardless of how
             // light or dark the resting color already is.
-            auto shimmerColor = ParseHexColor(g_settings.recolorShimmerColor);
+            auto& shimmerColor = g_cachedShimmerColor;
             winrt::Windows::UI::Color bandColor =
                 shimmerColor
                     ? *shimmerColor
@@ -1095,37 +1131,16 @@ void StartPersistentIconColorMaintenance(
                 tracked->lastAppliedElevatedAmount == tracked->iconElevatedAmount &&
                 ColorsEqual(tracked->lastAppliedBaseColor, *baseColor) &&
                 ColorsEqual(tracked->lastAppliedBandColor, bandColor)) {
-                if (logThisFrame) {
-                    Wh_Log(L"Icon color maintenance: idle, skipping reapply");
-                }
                 return;
             }
 
-            int touched = RecolorAnimatedVisualPlayer(player, params);
+            RecolorAnimatedVisualPlayer(player, params);
             tracked->hasLastApplied = true;
             tracked->lastAppliedSettingsGeneration = g_settingsGeneration;
             tracked->lastAppliedElevatedAmount = tracked->iconElevatedAmount;
             tracked->lastAppliedSweepActive = sweepActiveNow;
             tracked->lastAppliedBaseColor = *baseColor;
             tracked->lastAppliedBandColor = bandColor;
-            // Unthrottled while the sweep is running (~a few dozen frames
-            // at most) so a capture can't miss it the way the 60-frame
-            // throttle below did - this is the direct evidence for whether
-            // the PointerPressed-triggered fix above actually fires and
-            // for how the band renders frame-by-frame.
-            if (sweepProgress >= 0.0f) {
-                Wh_Log(L"Icon color maintenance: SWEEP progress=%.3f "
-                       L"bandColor=(A%d,R%d,G%d,B%d) touched=%d",
-                       sweepProgress, bandColor.A, bandColor.R, bandColor.G,
-                       bandColor.B, touched);
-            }
-            if (logThisFrame) {
-                Wh_Log(
-                    L"Icon color maintenance: state=%d menuOpen=%d "
-                    L"elevated=%.2f sweep=%.2f touched=%d",
-                    (int)tracked->lastState, (int)tracked->menuOpen,
-                    tracked->iconElevatedAmount, sweepProgress, touched);
-            }
           } catch (winrt::hresult_error const& ex) {
             // Never let an exception escape this native callback - one bad
             // WinRT call here must not be able to take Explorer down with
@@ -1146,124 +1161,41 @@ void StartPersistentIconColorMaintenance(
     }
 }
 
-std::wstring FilePathToFileUri(const std::wstring& path) {
-    std::wstring uri = L"file:///";
-    for (wchar_t c : path) {
-        uri += (c == L'\\') ? L'/' : c;
-    }
-    return uri;
-}
-
 // -----------------------------------------------------------------------
-// Icon mode application (custom icon overlay / recolor foreground
-// fallback). Not per-state - mode/customIconPath/recolorColor don't vary
-// with hover/press, so this only needs to run on setup and on settings
-// change, not on every pointer transition.
+// Icon mode application (recolor foreground fallback for the plain
+// IconElement path). Not per-state - mode/recolorColor don't vary with
+// hover/press, so this only needs to run on setup and on settings change.
 // -----------------------------------------------------------------------
 
-void ApplyIconMode(FrameworkElement panel, TrackedButton& tracked) {
+void ApplyIconMode(FrameworkElement panel) {
     auto iconElement = FindIconElement(panel);
-    if (iconElement) {
-        Wh_Log(L"Icon element found: class=%s name=%s",
-               winrt::get_class_name(iconElement).c_str(),
-               iconElement.Name().c_str());
-    } else {
-        Wh_Log(L"Icon element NOT found under panel (class=%s)",
-               winrt::get_class_name(panel).c_str());
-        int childCount = Media::VisualTreeHelper::GetChildrenCount(panel);
-        for (int i = 0; i < childCount; i++) {
-            auto child = Media::VisualTreeHelper::GetChild(panel, i)
-                             .try_as<FrameworkElement>();
-            if (child) {
-                Wh_Log(L"  panel child %d: class=%s name=%s", i,
-                       winrt::get_class_name(child).c_str(),
-                       child.Name().c_str());
-            }
-        }
+    if (!iconElement) {
+        return;
     }
 
-    const std::wstring& iconPath = g_settings.customIconPath;
+    iconElement.Visibility(Visibility::Visible);
 
-    if (g_settings.mode == IconMode::CustomIcon && !iconPath.empty()) {
-        // Hide the native icon and overlay our own Image element. The panel
-        // (Taskbar.TaskListButtonPanel) is a Panel, not necessarily a Grid,
-        // so insert into its generic Children collection rather than
-        // requiring Grid row/column semantics.
-        if (iconElement) {
-            iconElement.Visibility(Visibility::Collapsed);
-        }
-
-        auto panelAsPanel = panel.try_as<Controls::Panel>();
-        if (panelAsPanel) {
-            if (!tracked.customIconOverlay) {
-                Controls::Image image;
-                image.Stretch(Media::Stretch::Uniform);
-                image.HorizontalAlignment(HorizontalAlignment::Center);
-                image.VerticalAlignment(VerticalAlignment::Center);
-                if (iconElement) {
-                    image.Width(iconElement.ActualWidth() > 0
-                                    ? iconElement.ActualWidth()
-                                    : iconElement.Width());
-                    image.Height(iconElement.ActualHeight() > 0
-                                     ? iconElement.ActualHeight()
-                                     : iconElement.Height());
-                    if (auto grid = panel.try_as<Controls::Grid>()) {
-                        Controls::Grid::SetRow(image,
-                                                Controls::Grid::GetRow(iconElement));
-                        Controls::Grid::SetColumn(
-                            image, Controls::Grid::GetColumn(iconElement));
-                    }
-                }
-                panelAsPanel.Children().Append(image);
-                tracked.customIconOverlay = image;
+    // AnimatedVisualPlayer (the Start icon's actual type) is NOT handled
+    // here: its Lottie shape-brush colors get fought/reset by native
+    // hover/press animation playback, so it needs continuous per-frame
+    // enforcement rather than a one-shot property set - see
+    // StartPersistentIconColorMaintenance, run once per button for its
+    // whole lifetime.
+    if (auto iconElementAsIcon = iconElement.try_as<Controls::IconElement>()) {
+        if (g_settings.mode == IconMode::Recolor) {
+            if (auto color = GetRecolorBaseColor()) {
+                iconElementAsIcon.Foreground(Media::SolidColorBrush{*color});
             }
-
-            Media::Imaging::BitmapImage bitmap;
-            bitmap.UriSource(
-                winrt::Windows::Foundation::Uri{FilePathToFileUri(iconPath)});
-            tracked.customIconOverlay.Source(bitmap);
-            tracked.customIconOverlay.Visibility(Visibility::Visible);
         } else {
-            Wh_Log(L"Panel is not a Panel-derived element, cannot overlay icon");
-        }
-    } else {
-        // Not custom-icon mode (or no path set): remove any overlay and
-        // restore the native icon.
-        if (tracked.customIconOverlay) {
-            tracked.customIconOverlay.Visibility(Visibility::Collapsed);
-        }
-        if (iconElement) {
-            iconElement.Visibility(Visibility::Visible);
-
-            // AnimatedVisualPlayer (the Start icon's actual type) is NOT
-            // handled here: its Lottie shape-brush colors get fought/reset
-            // by native hover/press animation playback, so it needs
-            // continuous per-frame enforcement rather than a one-shot
-            // property set. See StartPersistentIconColorMaintenance, run
-            // once per button for its whole lifetime.
-            if (auto iconElementAsIcon =
-                    iconElement.try_as<Controls::IconElement>()) {
-                if (g_settings.mode == IconMode::Recolor) {
-                    auto color = GetRecolorBaseColor();
-                    if (color) {
-                        iconElementAsIcon.Foreground(
-                            Media::SolidColorBrush{*color});
-                    }
-                } else {
-                    iconElementAsIcon.ClearValue(
-                        Controls::IconElement::ForegroundProperty());
-                }
-            }
+            iconElementAsIcon.ClearValue(
+                Controls::IconElement::ForegroundProperty());
         }
     }
 }
 
-// Unload/mode-switch restore: undo whatever ApplyIconMode did, so the
-// button is left showing the stock native icon.
-void RestoreIconMode(FrameworkElement panel, TrackedButton& tracked) {
-    if (tracked.customIconOverlay) {
-        tracked.customIconOverlay.Visibility(Visibility::Collapsed);
-    }
+// Undo whatever ApplyIconMode did, so the button is left showing the
+// stock native icon.
+void RestoreIconMode(FrameworkElement panel) {
     auto iconElement = FindIconElement(panel);
     if (iconElement) {
         iconElement.Visibility(Visibility::Visible);
@@ -1274,24 +1206,20 @@ void RestoreIconMode(FrameworkElement panel, TrackedButton& tracked) {
 }
 
 // -----------------------------------------------------------------------
-// Pointer state tracking - only feeds TrackedButton::lastState, which the
-// icon depth-gradient animation (elevated brighten, press sweep) reads.
-// No box styling is applied here; native hover/press animations are
-// untouched regardless.
+// Recolor-mode handler attach/detach. Split from tracking discovery so a
+// mode toggle in settings can add/remove these on an already-discovered
+// button, instead of leaving them (and the per-frame render loop) running
+// unconditionally, including in "System default" mode - see
+// AttachRecolorHandlers's TrackedButton::recolorActive guard.
 // -----------------------------------------------------------------------
 
-void SetupButtonTracking(FrameworkElement button, FrameworkElement panel) {
-    if (FindTrackedButton(button)) {
-        Wh_Log(L"Button already tracked, skipping setup");
+void AttachRecolorHandlers(TrackedButton& tracked,
+                            FrameworkElement button,
+                            FrameworkElement panel) {
+    if (tracked.recolorActive) {
         return;
     }
-
-    Wh_Log(L"Setting up tracking for new button instance");
-
-    g_trackedButtons.push_back({});
-    TrackedButton& tracked = g_trackedButtons.back();
-    tracked.buttonRef = button;
-    tracked.panelRef = panel;
+    tracked.recolorActive = true;
 
     auto setState = [](FrameworkElement button, ButtonState state) {
         if (auto t = FindTrackedButton(button)) {
@@ -1302,19 +1230,16 @@ void SetupButtonTracking(FrameworkElement button, FrameworkElement panel) {
     tracked.pointerEnteredToken = button.PointerEntered(
         [setState](winrt::Windows::Foundation::IInspectable const& sender,
                     auto const&) {
-            Wh_Log(L"PointerEntered fired");
             setState(sender.try_as<FrameworkElement>(), kStateHover);
         });
     tracked.pointerExitedToken = button.PointerExited(
         [setState](winrt::Windows::Foundation::IInspectable const& sender,
                     auto const&) {
-            Wh_Log(L"PointerExited fired");
             setState(sender.try_as<FrameworkElement>(), kStateDefault);
         });
     tracked.pointerPressedToken = button.PointerPressed(
         [setState](winrt::Windows::Foundation::IInspectable const& sender,
                     auto const&) {
-            Wh_Log(L"PointerPressed fired");
             auto pressedButton = sender.try_as<FrameworkElement>();
             setState(pressedButton, kStatePressed);
             // Trigger the sweep here, not by polling lastState in the
@@ -1324,23 +1249,16 @@ void SetupButtonTracking(FrameworkElement button, FrameworkElement panel) {
             if (auto t = FindTrackedButton(pressedButton)) {
                 t->iconPressSweepActive = true;
                 t->iconPressSweepStartMs = GetTickCount64();
-                Wh_Log(L"Sweep armed: active=%d startMs=%llu",
-                       (int)t->iconPressSweepActive,
-                       (unsigned long long)t->iconPressSweepStartMs);
-            } else {
-                Wh_Log(L"PointerPressed: FindTrackedButton failed, sweep NOT armed");
             }
         });
     tracked.pointerReleasedToken = button.PointerReleased(
         [setState](winrt::Windows::Foundation::IInspectable const& sender,
                     auto const&) {
-            Wh_Log(L"PointerReleased fired");
             setState(sender.try_as<FrameworkElement>(), kStateHover);
         });
     tracked.pointerCaptureLostToken = button.PointerCaptureLost(
         [setState](winrt::Windows::Foundation::IInspectable const& sender,
                     auto const&) {
-            Wh_Log(L"PointerCaptureLost fired");
             setState(sender.try_as<FrameworkElement>(), kStateDefault);
         });
 
@@ -1357,14 +1275,13 @@ void SetupButtonTracking(FrameworkElement button, FrameworkElement panel) {
     // Unchecked are the only reliably-firing "a click just happened"
     // signal available here, so the press sweep is armed from both of
     // them (every click, whether it opens or closes the menu, counts as
-    // a "press" for sweep purposes) - the PointerPressed arming below is
-    // kept as a harmless no-op fallback in case a future build does
-    // route it through normally.
+    // a "press" for sweep purposes) - the PointerPressed arming above is
+    // kept as a harmless no-op fallback in case a future build does route
+    // it through normally.
     if (auto toggleButton = button.try_as<Controls::Primitives::ToggleButton>()) {
         tracked.checkedToken = toggleButton.Checked(
             [](winrt::Windows::Foundation::IInspectable const& sender,
                auto const&) {
-                Wh_Log(L"Checked fired");
                 if (auto t = FindTrackedButton(sender.try_as<FrameworkElement>())) {
                     t->menuOpen = true;
                     t->iconPressSweepActive = true;
@@ -1374,19 +1291,13 @@ void SetupButtonTracking(FrameworkElement button, FrameworkElement panel) {
         tracked.uncheckedToken = toggleButton.Unchecked(
             [](winrt::Windows::Foundation::IInspectable const& sender,
                auto const&) {
-                Wh_Log(L"Unchecked fired");
                 if (auto t = FindTrackedButton(sender.try_as<FrameworkElement>())) {
                     t->menuOpen = false;
                     t->iconPressSweepActive = true;
                     t->iconPressSweepStartMs = GetTickCount64();
                 }
             });
-    } else {
-        Wh_Log(L"Button is not a ToggleButton, menu-open icon state will "
-               L"not be detected");
     }
-
-    ApplyIconMode(panel, tracked);
 
     if (auto iconElement = FindIconElement(panel)) {
         if (auto player =
@@ -1397,17 +1308,74 @@ void SetupButtonTracking(FrameworkElement button, FrameworkElement panel) {
     }
 }
 
-void ReapplyAllTrackedButtons() {
-    for (auto& tracked : g_trackedButtons) {
-        auto panel = tracked.panelRef.get();
-        if (!panel) {
-            continue;
+void DetachRecolorHandlers(TrackedButton& tracked, FrameworkElement button) {
+    if (!tracked.recolorActive) {
+        return;
+    }
+    tracked.recolorActive = false;
+
+    // Revokes the render subscription and restores the original brushes.
+    StopIconColorMaintenance(tracked);
+
+    if (!button) {
+        return;
+    }
+    auto revoke = [](auto&& fn) {
+        try {
+            fn();
+        } catch (winrt::hresult_error const&) {
         }
-        if (g_unloading) {
-            RestoreIconMode(panel, tracked);
-        } else {
-            ApplyIconMode(panel, tracked);
-        }
+    };
+    revoke([&] { button.PointerEntered(tracked.pointerEnteredToken); });
+    revoke([&] { button.PointerExited(tracked.pointerExitedToken); });
+    revoke([&] { button.PointerPressed(tracked.pointerPressedToken); });
+    revoke([&] { button.PointerReleased(tracked.pointerReleasedToken); });
+    revoke([&] { button.PointerCaptureLost(tracked.pointerCaptureLostToken); });
+    if (auto toggleButton = button.try_as<Controls::Primitives::ToggleButton>()) {
+        revoke([&] { toggleButton.Checked(tracked.checkedToken); });
+        revoke([&] { toggleButton.Unchecked(tracked.uncheckedToken); });
+    }
+}
+
+// -----------------------------------------------------------------------
+// Tracking discovery - called from the UpdateButtonPadding hook whenever a
+// Start button panel is found. Creates the TrackedButton entry (once) and
+// prunes it via Unloaded when the button goes away (taskbar recreated on
+// a monitor/DPI change) - independent of AttachRecolorHandlers, which
+// only fires the pointer/toggle/render subscriptions while mode is
+// Recolor.
+// -----------------------------------------------------------------------
+
+void EnsureTrackedButton(FrameworkElement button, FrameworkElement panel) {
+    TrackedButton* tracked = FindTrackedButton(button);
+    if (!tracked) {
+        Wh_Log(L"Setting up tracking for new button instance");
+        g_trackedButtons.push_back({});
+        tracked = &g_trackedButtons.back();
+        tracked->buttonRef = button;
+        tracked->panelRef = panel;
+        tracked->unloadedToken = button.Unloaded(
+            [](winrt::Windows::Foundation::IInspectable const& sender,
+               auto const&) {
+                auto elem = sender.try_as<FrameworkElement>();
+                if (!elem) {
+                    return;
+                }
+                for (auto it = g_trackedButtons.begin();
+                     it != g_trackedButtons.end(); ++it) {
+                    auto btn = it->buttonRef.get();
+                    if (btn && btn == elem) {
+                        DetachRecolorHandlers(*it, btn);
+                        g_trackedButtons.erase(it);
+                        break;
+                    }
+                }
+            });
+    }
+
+    ApplyIconMode(panel);
+    if (g_settings.mode == IconMode::Recolor) {
+        AttachRecolorHandlers(*tracked, button, panel);
     }
 }
 
@@ -1473,7 +1441,7 @@ void WINAPI ExperienceToggleButton_UpdateButtonPadding_Hook(void* pThis) {
     }
 
     Wh_Log(L"Found panel, setting up tracking");
-    SetupButtonTracking(toggleButtonElement, panelElement);
+    EnsureTrackedButton(toggleButtonElement, panelElement);
 }
 
 // -----------------------------------------------------------------------
@@ -1524,13 +1492,100 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 }
 
 // -----------------------------------------------------------------------
+// UI-thread marshaling. Wh_ModBeforeUninit/Wh_ModUninit/Wh_ModSettingsChanged
+// run on the Windhawk engine thread, never the taskbar UI thread that owns
+// every XAML/Composition object this mod touches (see the mod-lifetime
+// wiki page) - calling into them directly throws RPC_E_WRONG_THREAD, or
+// (for event revocation) silently fails to remove anything, leaving a
+// callback registered against this module's memory after it's unloaded.
+// RunFromWindowThread hands work to the owning thread's message loop and
+// blocks until it's done, so by the time a caller returns, the work
+// genuinely happened there.
+// -----------------------------------------------------------------------
+
+using RunFromWindowThreadProc_t = void(WINAPI*)(void*);
+
+bool RunFromWindowThread(HWND window, RunFromWindowThreadProc_t proc, void* param) {
+    static const UINT registeredMsg =
+        RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
+    struct RunParam {
+        RunFromWindowThreadProc_t proc;
+        void* param;
+    };
+
+    DWORD threadId = GetWindowThreadProcessId(window, nullptr);
+    if (!threadId) {
+        return false;
+    }
+    if (threadId == GetCurrentThreadId()) {
+        proc(param);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookEx(
+        WH_CALLWNDPROC,
+        [](int code, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (code == HC_ACTION) {
+                auto* cwp = (const CWPSTRUCT*)lParam;
+                if (cwp->message == registeredMsg) {
+                    auto* p = (RunParam*)cwp->lParam;
+                    p->proc(p->param);
+                }
+            }
+            return CallNextHookEx(nullptr, code, wParam, lParam);
+        },
+        nullptr, threadId);
+    if (!hook) {
+        return false;
+    }
+
+    RunParam runParam{proc, param};
+    SendMessage(window, registeredMsg, 0, (LPARAM)&runParam);
+    UnhookWindowsHookEx(hook);
+    return true;
+}
+
+std::vector<HWND> FindCurrentProcessTaskbarWindows() {
+    std::vector<HWND> result;
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD pid = 0;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &pid) &&
+                pid == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                (_wcsicmp(className, L"Shell_TrayWnd") == 0 ||
+                 _wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0)) {
+                ((std::vector<HWND>*)lParam)->push_back(hWnd);
+            }
+            return TRUE;
+        },
+        (LPARAM)&result);
+    return result;
+}
+
+// Runs proc once per distinct taskbar UI thread (primary/secondary
+// monitors may share or differ), synchronously.
+void RunOnAllTaskbarThreads(RunFromWindowThreadProc_t proc, void* param) {
+    std::vector<DWORD> doneThreads;
+    for (HWND wnd : FindCurrentProcessTaskbarWindows()) {
+        DWORD threadId = GetWindowThreadProcessId(wnd, nullptr);
+        if (!threadId ||
+            std::find(doneThreads.begin(), doneThreads.end(), threadId) !=
+                doneThreads.end()) {
+            continue;
+        }
+        doneThreads.push_back(threadId);
+        RunFromWindowThread(wnd, proc, param);
+    }
+}
+
+// -----------------------------------------------------------------------
 // Settings load / lifecycle
 // -----------------------------------------------------------------------
 
 IconMode ParseMode(PCWSTR value) {
-    if (wcscmp(value, L"customIcon") == 0) {
-        return IconMode::CustomIcon;
-    }
     if (wcscmp(value, L"recolor") == 0) {
         return IconMode::Recolor;
     }
@@ -1538,10 +1593,7 @@ IconMode ParseMode(PCWSTR value) {
 }
 
 std::wstring GetStringSetting(PCWSTR name) {
-    PCWSTR value = Wh_GetStringSetting(name);
-    std::wstring result = value ? value : L"";
-    Wh_FreeStringSetting(value);
-    return result;
+    return WindhawkUtils::StringSetting::make(name).get();
 }
 
 void LoadSettings() {
@@ -1549,7 +1601,6 @@ void LoadSettings() {
 
     auto modeStr = GetStringSetting(L"mode");
     g_settings.mode = ParseMode(modeStr.c_str());
-    g_settings.customIconPath = GetStringSetting(L"customIcon.path");
     g_settings.recolorUseAccentColor =
         Wh_GetIntSetting(L"recolor.useAccentColor") != 0;
     g_settings.recolorColor = GetStringSetting(L"recolor.color");
@@ -1564,12 +1615,15 @@ void LoadSettings() {
         Wh_GetIntSetting(L"recolor.elevate.lightenBoostPercent") / 100.0f;
     g_settings.elevatedDarkenRelief =
         Wh_GetIntSetting(L"recolor.elevate.darkenReliefPercent") / 100.0f;
+    // Clamped to 1: used as a ramp-step divisor in the per-frame loop, and
+    // 0 is a reachable user input ("Fade speed" has no built-in minimum).
     g_settings.hoverTransitionMs =
-        (float)Wh_GetIntSetting(L"recolor.elevate.transitionMs");
+        std::max(1.0f, (float)Wh_GetIntSetting(L"recolor.elevate.transitionMs"));
 
     g_settings.shimmerEnabled =
         Wh_GetIntSetting(L"recolor.shimmer.enabled") != 0;
     g_settings.recolorShimmerColor = GetStringSetting(L"recolor.shimmer.color");
+    g_cachedShimmerColor = ParseHexColor(g_settings.recolorShimmerColor);
     g_settings.shimmerAutoAmount =
         Wh_GetIntSetting(L"recolor.shimmer.autoLightenPercent") / 100.0f;
     g_settings.sweepDurationMs =
@@ -1590,13 +1644,14 @@ BOOL Wh_ModInit() {
         }
     } else {
         Wh_Log(L"Taskbar view module not loaded yet");
-        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
-        auto pKernelBaseLoadLibraryExW =
-            (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
-                                                        "LoadLibraryExW");
-        WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
-                                        LoadLibraryExW_Hook,
-                                        &LoadLibraryExW_Original);
+        if (HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll")) {
+            auto pKernelBaseLoadLibraryExW =
+                (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
+                                                            "LoadLibraryExW");
+            WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
+                                            LoadLibraryExW_Hook,
+                                            &LoadLibraryExW_Original);
+        }
     }
 
     return TRUE;
@@ -1615,22 +1670,61 @@ void Wh_ModAfterInit() {
     }
 }
 
+// Runs on each taskbar UI thread via RunOnAllTaskbarThreads. Detaches every
+// tracked button's handlers/render loop, restores its native icon, and
+// releases the globals that hold strong Composition/UISettings refs -
+// synchronously, so nothing is left registered against this module's
+// memory once Wh_ModBeforeUninit returns and the DLL can be unloaded.
+void WINAPI TeardownAllTrackedButtonsProc(void*) {
+    for (auto& tracked : g_trackedButtons) {
+        if (auto button = tracked.buttonRef.get()) {
+            DetachRecolorHandlers(tracked, button);
+            try {
+                button.Unloaded(tracked.unloadedToken);
+            } catch (winrt::hresult_error const&) {
+            }
+        }
+        if (auto panel = tracked.panelRef.get()) {
+            RestoreIconMode(panel);
+        }
+    }
+    g_trackedButtons.clear();
+    g_originalIconBrushes->clear();
+    StopAccentColorTracking();
+}
+
 void Wh_ModBeforeUninit() {
     g_unloading = true;
-    // Stop every button's persistent render-loop subscription synchronously
-    // before anything else - see StopIconColorMaintenance for why this
-    // can't be left to the render callback noticing g_unloading on its own.
-    for (auto& tracked : g_trackedButtons) {
-        StopIconColorMaintenance(tracked);
-    }
-    ReapplyAllTrackedButtons();  // restores native icon (RestoreIconMode, via g_unloading)
+    RunOnAllTaskbarThreads(TeardownAllTrackedButtonsProc, nullptr);
 }
 
 void Wh_ModUninit() {
-    g_trackedButtons.clear();
+}
+
+// Runs on each taskbar UI thread via RunOnAllTaskbarThreads. Re-applies the
+// resting foreground for every tracked button and attaches/detaches the
+// recolor handlers as the new mode requires; prunes any entry whose button
+// or panel no longer resolves.
+void WINAPI ApplySettingsChangedProc(void*) {
+    for (auto it = g_trackedButtons.begin(); it != g_trackedButtons.end();) {
+        auto button = it->buttonRef.get();
+        auto panel = it->panelRef.get();
+        if (!button || !panel) {
+            it = g_trackedButtons.erase(it);
+            continue;
+        }
+
+        ApplyIconMode(panel);
+        if (g_settings.mode == IconMode::Recolor) {
+            AttachRecolorHandlers(*it, button, panel);
+        } else {
+            DetachRecolorHandlers(*it, button);
+        }
+        ++it;
+    }
 }
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
-    ReapplyAllTrackedButtons();
+    RunOnAllTaskbarThreads(ApplySettingsChangedProc, nullptr);
 }
