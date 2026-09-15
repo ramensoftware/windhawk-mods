@@ -20,8 +20,6 @@ Auto-switches between light/dark mode videos based on Windows theme.
 
 ### Requirements
 - **ffmpeg.exe** (standalone binary, no extra DLLs/codecs needed)
-- **Windows 11** (latest only)
-- Audio playback is not supported now.
 
 Hoping someone else will carry on development — PRs welcome.
 */
