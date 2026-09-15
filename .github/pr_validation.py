@@ -6,6 +6,7 @@ COPYRIGHT:   Copyright 2023 Mark Jansen <mark.jansen@reactos.org>
 '''
 
 import json
+import math
 import os
 import re
 import sys
@@ -884,16 +885,299 @@ def validate_settings(path: Path, mod_source: str) -> int:
     return warnings
 
 
+class SettingsYamlLoader(yaml.SafeLoader):
+    """PyYAML loader that behaves like js-yaml's JSON_SCHEMA, which Windhawk
+    parses the settings block with.
+
+    Plain scalars resolve only to null, bool, int and float, with js-yaml's
+    patterns (so e.g. `yes`, `2024-01-01` and `<<` are plain strings), explicit
+    tags are limited to the same set, mapping keys are strings, and duplicate
+    keys are an error.
+    """
+
+    # The failsafe types and the fallback for unknown tags; the JSON_SCHEMA
+    # scalar types are registered with add_scalar_type below.
+    yaml_constructors = {
+        tag: yaml.SafeLoader.yaml_constructors[tag]
+        for tag in (
+            None,
+            'tag:yaml.org,2002:str',
+            'tag:yaml.org,2002:seq',
+            'tag:yaml.org,2002:map',
+        )
+    }
+    yaml_implicit_resolvers = {}
+
+    @classmethod
+    def add_scalar_type(cls, tag: str, regexp: re.Pattern, construct: Callable):
+        """Register a scalar type that plain scalars matching regexp resolve to.
+
+        Like js-yaml, an explicit tag on a scalar that doesn't match is an error.
+        """
+
+        def construct_checked(loader, node):
+            value = loader.construct_scalar(node)
+            if not regexp.match(value):
+                raise yaml.constructor.ConstructorError(
+                    None,
+                    None,
+                    f'cannot resolve {value!r} with explicit tag {node.tag}',
+                    node.start_mark,
+                )
+            return construct(loader, node)
+
+        cls.add_implicit_resolver(tag, regexp, None)
+        cls.add_constructor(tag, construct_checked)
+
+    def construct_mapping(self, node, deep=False):
+        if not isinstance(node, yaml.MappingNode):
+            raise yaml.constructor.ConstructorError(
+                None,
+                None,
+                f'expected a mapping node, but found {node.id}',
+                node.start_mark,
+            )
+        mapping = {}
+        for key_node, value_node in node.value:
+            key = self.key_string(key_node)
+            if key in mapping:
+                raise yaml.constructor.ConstructorError(
+                    None, None, f'found duplicate key {key!r}', key_node.start_mark
+                )
+            mapping[key] = self.construct_object(value_node, deep=deep)
+        return mapping
+
+    def key_string(self, key_node) -> str:
+        """The mapping key as JavaScript's String() would render it."""
+        key = self.construct_object(key_node)
+        if key is None:
+            return 'null'
+        if isinstance(key, bool):
+            return 'true' if key else 'false'
+        # Integral floats print without a fraction, up to where JavaScript
+        # switches to exponent notation.
+        if isinstance(key, float) and key.is_integer() and abs(key) < 1e21:
+            return str(int(key))
+        if isinstance(key, (int, float, str)):
+            return str(key)
+        raise yaml.constructor.ConstructorError(
+            None, None, 'complex mapping keys are not supported', key_node.start_mark
+        )
+
+
+def construct_js_number(loader: SettingsYamlLoader, node):
+    """Number construction with js-yaml's semantics for both int and float."""
+    value = loader.construct_scalar(node).replace('_', '')
+    sign = -1 if value.startswith('-') else 1
+    value = value.lstrip('+-')
+    if value.lower() == '.inf':
+        return sign * math.inf
+    if value.lower() == '.nan':
+        return math.nan
+    if value[:2] in ('0b', '0x', '0o'):
+        return sign * int(value, 0)
+    if value.isdigit():
+        return sign * int(value)
+    return sign * float(value)
+
+
+# js-yaml's JSON_SCHEMA scalar types, in its resolution order.
+for _tag, _pattern, _construct in [
+    ('null', r'~|null|Null|NULL|', lambda loader, node: None),
+    (
+        'bool',
+        r'true|True|TRUE|false|False|FALSE',
+        lambda loader, node: loader.construct_scalar(node) in ('true', 'True', 'TRUE'),
+    ),
+    (
+        'int',
+        r'[-+]?(?:0b[01_]*[01]|0x[0-9a-fA-F_]*[0-9a-fA-F]|0o[0-7_]*[0-7]'
+        r'|[1-9][0-9_]*(?<!_)|0(?:[0-9][0-9_]*(?<!_))?)',
+        construct_js_number,
+    ),
+    (
+        'float',
+        r'(?:[-+]?[0-9][0-9_]*(?:\.[0-9_]*)?(?:[eE][-+]?[0-9]+)?'
+        r'|\.[0-9_]+(?:[eE][-+]?[0-9]+)?)(?<!_)'
+        r'|[-+]?\.(?:inf|Inf|INF)|\.(?:nan|NaN|NAN)',
+        construct_js_number,
+    ),
+]:
+    SettingsYamlLoader.add_scalar_type(
+        f'tag:yaml.org,2002:{_tag}', re.compile(rf'(?:{_pattern})\Z'), _construct
+    )
+
+
+def is_js_number(value) -> bool:
+    """A finite number, as JSON schema's "number" type accepts it. Unlike in
+    Python, a boolean is not a number."""
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+    )
+
+
+class SettingsSchemaError(Exception):
+    """A settings structure that Windhawk rejects, located by its YAML node."""
+
+    def __init__(self, node, message: str):
+        super().__init__(message)
+        self.node = node
+
+
+class SettingsSchemaChecker:
+    """Checks a parsed settings node tree against the structure Windhawk
+    accepts: a non-empty array of objects, each with exactly one setting key
+    plus optional $name, $description and $options (each optionally suffixed
+    with a :language), where a setting's value is a boolean, number, string,
+    array of numbers, array of strings, nested settings, or array of nested
+    settings.
+    """
+
+    SETTING_KEY_RE = re.compile(r'[0-9A-Za-z_-]+')
+    TEXT_META_KEY_RE = re.compile(r'\$(?:name|description)(?::[a-z]{2}(?:-[A-Z]{2})?)?')
+    OPTIONS_META_KEY_RE = re.compile(r'\$options(?::[a-z]{2}(?:-[A-Z]{2})?)?')
+
+    def __init__(self, loader: SettingsYamlLoader):
+        self.loader = loader
+
+    def value(self, node):
+        return self.loader.construct_object(node)
+
+    def check_settings(self, node):
+        if not isinstance(node, yaml.SequenceNode):
+            raise SettingsSchemaError(node, 'Settings must be a YAML array')
+        if not node.value:
+            raise SettingsSchemaError(
+                node, 'Settings array must have at least one item'
+            )
+        for item_node in node.value:
+            self.check_settings_object(item_node)
+
+    def check_settings_object(self, node):
+        if not isinstance(node, yaml.MappingNode):
+            raise SettingsSchemaError(node, 'Settings array items must be objects')
+        if not node.value:
+            raise SettingsSchemaError(
+                node, 'Settings object must have at least one property'
+            )
+
+        setting_keys = []
+        for key_node, value_node in node.value:
+            key = self.loader.key_string(key_node)
+            if self.SETTING_KEY_RE.fullmatch(key):
+                setting_keys.append(key)
+                self.check_setting_value(key, value_node)
+            elif self.TEXT_META_KEY_RE.fullmatch(key):
+                if not isinstance(self.value(value_node), str):
+                    raise SettingsSchemaError(
+                        value_node, f'Settings property "{key}" must be a string'
+                    )
+            elif self.OPTIONS_META_KEY_RE.fullmatch(key):
+                self.check_options(key, value_node)
+            elif key.startswith('$'):
+                raise SettingsSchemaError(
+                    key_node,
+                    f'Unsupported settings property "{key}"; only $name, $description'
+                    ' and $options are allowed, optionally with a :language suffix',
+                )
+            else:
+                raise SettingsSchemaError(
+                    key_node,
+                    f'Invalid settings key "{key}"; keys may only contain letters,'
+                    ' digits, "_" and "-"',
+                )
+
+        if not setting_keys:
+            raise SettingsSchemaError(
+                node, 'Settings object has no setting key, only $ properties'
+            )
+        if len(setting_keys) > 1:
+            raise SettingsSchemaError(
+                node,
+                'Settings object has more than one setting key: '
+                + ', '.join(setting_keys),
+            )
+
+    def check_setting_value(self, key: str, node):
+        value = self.value(node)
+        if isinstance(value, (bool, str)) or is_js_number(value):
+            return
+        if value is None:
+            raise SettingsSchemaError(node, f'Setting "{key}" has no value')
+        if isinstance(value, float):
+            raise SettingsSchemaError(node, f'Setting "{key}" must be a finite number')
+        if isinstance(value, dict):
+            raise SettingsSchemaError(
+                node,
+                f'Setting "{key}" must not be an object; nested settings are an'
+                ' array of objects',
+            )
+        if not isinstance(value, list):
+            raise SettingsSchemaError(
+                node, f'Setting "{key}" must be a boolean, number, string or array'
+            )
+
+        if not value:
+            raise SettingsSchemaError(
+                node, f'Setting "{key}" array must have at least one item'
+            )
+        if all(is_js_number(x) for x in value) or all(
+            isinstance(x, str) for x in value
+        ):
+            return
+        if all(isinstance(x, dict) for x in value):
+            self.check_settings(node)
+        elif all(isinstance(x, list) for x in value):
+            for item_node in node.value:
+                self.check_settings(item_node)
+        else:
+            raise SettingsSchemaError(
+                node,
+                f'Setting "{key}" array must contain only numbers, only strings, or'
+                ' only nested settings',
+            )
+
+    def check_options(self, key: str, node):
+        value = self.value(node)
+        if not isinstance(value, list):
+            raise SettingsSchemaError(
+                node, f'Settings property "{key}" must be an array'
+            )
+        if len(value) < 2:
+            raise SettingsSchemaError(
+                node, f'Settings property "{key}" must have at least two items'
+            )
+        for item_node in node.value:
+            if not isinstance(self.value(item_node), dict):
+                raise SettingsSchemaError(
+                    item_node, f'Settings property "{key}" items must be objects'
+                )
+            if len(item_node.value) != 1:
+                raise SettingsSchemaError(
+                    item_node,
+                    f'Settings property "{key}" items must have exactly one property',
+                )
+            ((_, label_node),) = item_node.value
+            if not isinstance(self.value(label_node), str):
+                raise SettingsSchemaError(
+                    label_node, f'Settings property "{key}" labels must be strings'
+                )
+
+
 def validate_settings_yaml(path: Path, mod_source: str) -> int:
     """Validate that the settings block parses as the structure Windhawk expects.
 
-    Mirrors the engine's extraction (windhawk-utils mod-source settings.rs): the
-    block body must be valid YAML, a non-empty array, with every item a non-empty
-    object. The structural integrity of the comment block itself (markers, /* */
-    placement, etc.) is reported separately by validate_marker_block, so a block
-    that doesn't match the pattern below is simply skipped here.
+    Mirrors Windhawk's extraction (windhawk-vscode modSourceUtils.ts,
+    extractInitialSettings): the block body is parsed like js-yaml with its
+    JSON_SCHEMA and then checked against Windhawk's settings schema, so that
+    anything Windhawk rejects is reported here. The structural integrity of the
+    comment block itself (markers, /* */ placement, etc.) is reported separately
+    by validate_marker_block, so a block that doesn't match the pattern below is
+    simply skipped here.
     """
-    # Use the same extraction the engine uses. The surrounding \s* consumes the
+    # Use the same extraction Windhawk uses. The surrounding \s* consumes the
     # whitespace around the body, so we parse exactly the text Windhawk feeds to
     # its YAML parser.
     block_re = re.compile(
@@ -909,8 +1193,15 @@ def validate_settings_yaml(path: Path, mod_source: str) -> int:
     body = match.group(1)
     body_start_line = mod_source.count('\n', 0, match.start(1)) + 1
 
+    loader = SettingsYamlLoader(body)
     try:
-        settings = yaml.safe_load(body)
+        node = loader.get_single_node()
+        if node is None:
+            return add_warning(path, body_start_line, 'Settings must be a YAML array')
+        # Constructing the whole document reports duplicate keys and bad tags,
+        # and caches every node's value for the checker to read.
+        loader.construct_object(node, deep=True)
+        SettingsSchemaChecker(loader).check_settings(node)
     except yaml.YAMLError as e:
         line = body_start_line
         mark = getattr(e, 'problem_mark', None)
@@ -918,26 +1209,10 @@ def validate_settings_yaml(path: Path, mod_source: str) -> int:
             # problem_mark.line is 0-based and relative to the parsed body.
             line = body_start_line + mark.line
         return add_warning(path, line, f'Settings block is not valid YAML: {e}')
-
-    if not isinstance(settings, list):
-        return add_warning(path, body_start_line, 'Settings block must be a YAML array')
-
-    if len(settings) == 0:
-        return add_warning(
-            path, body_start_line, 'Settings block array must have at least one item'
-        )
-
-    for item in settings:
-        if not isinstance(item, dict):
-            return add_warning(
-                path, body_start_line, 'Settings block array items must be objects'
-            )
-        if len(item) == 0:
-            return add_warning(
-                path,
-                body_start_line,
-                'Settings block objects must have at least one property',
-            )
+    except SettingsSchemaError as e:
+        return add_warning(path, body_start_line + e.node.start_mark.line, str(e))
+    finally:
+        loader.dispose()
 
     return 0
 
@@ -1081,21 +1356,23 @@ def validate_specific_keywords(path: Path, mod_source: str):
     # form feed and similar, hiding them from the control character check.
     mod_source_lines = mod_source.split('\n')
 
-    # Words to check (pattern, description)
+    # fmt: off
     keyword_patterns = [
-        (r'InternalWh', 'InternalWh'),
-        (r'WH_EDITING', 'WH_EDITING'),
-        (r'\bWH_MOD\b', 'WH_MOD'),
-        (r'(^|,)\s*GWL_WNDPROC', 'GWL_WNDPROC'),
-        (r'(^|,)\s*GWLP_WNDPROC', 'GWLP_WNDPROC'),
-        (r'Wh_FindFirstSymbol', 'Wh_FindFirstSymbol'),
-        (r'Wh_FindNextSymbol', 'Wh_FindNextSymbol'),
-        (r'Wh_FindCloseSymbol', 'Wh_FindCloseSymbol'),
-        (r'noUndecoratedSymbols', 'noUndecoratedSymbols'),
+        (r'\bInternalWh', 'InternalWh', 'Avoid using internal API unless absolutely necessary'),
+        (r'\bWH_EDITING\b', 'WH_EDITING', 'Avoid using WH_EDITING unless absolutely necessary'),
+        (r'\bWH_MOD\b', 'WH_MOD', 'Avoid using WH_MOD unless absolutely necessary'),
+        (r'(^|,)\s*GWL_WNDPROC\b', 'GWL_WNDPROC', '`WindhawkUtils::SetWindowSubclassFromAnyThread` is usually preferred for subclassing'),
+        (r'(^|,)\s*GWLP_WNDPROC\b', 'GWLP_WNDPROC', '`WindhawkUtils::SetWindowSubclassFromAnyThread` is usually preferred for subclassing'),
+        (r'\bWh_FindFirstSymbol\b', 'Wh_FindFirstSymbol', '`WindhawkUtils::HookSymbols` is usually preferred for symbol hooking'),
+        (r'\bWh_FindNextSymbol\b', 'Wh_FindNextSymbol', '`WindhawkUtils::HookSymbols` is usually preferred for symbol hooking'),
+        (r'\bWh_FindCloseSymbol\b', 'Wh_FindCloseSymbol', '`WindhawkUtils::HookSymbols` is usually preferred for symbol hooking'),
+        (r'\bnoUndecoratedSymbols\b', 'noUndecoratedSymbols', 'Decorated symbols don\'t support online caching, undecorated symbols are usually preferred'),
+        (r'\bWh_SetFunctionHookT\b', 'Wh_SetFunctionHookT', 'Deprecated, use `WindhawkUtils::SetFunctionHook` instead'),
     ]
+    # fmt: on
 
     for line_num, line in enumerate(mod_source_lines, start=1):
-        for pattern, word in keyword_patterns:
+        for pattern, word, description in keyword_patterns:
             if re.search(pattern, line):
                 # Skip GWL(P)_WNDPROC when used with GetWindowLong(Ptr)
                 if word in ('GWL_WNDPROC', 'GWLP_WNDPROC') and re.search(
@@ -1104,7 +1381,7 @@ def validate_specific_keywords(path: Path, mod_source: str):
                     continue
 
                 warnings += add_warning(
-                    path, line_num, f'Line requires manual inspection for "{word}"'
+                    path, line_num, f'Line requires manual inspection for "{word}": {description}'
                 )
 
         hidden_ws = [
