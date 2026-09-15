@@ -15,6 +15,7 @@
 
 Customize native Windows window shadows: make them lighter or more pronounced,
 and adjust their size and blur.
+- Shadows change accordingly to already present and newer windows.
 
 ## Examples
 
