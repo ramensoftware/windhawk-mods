@@ -2,7 +2,7 @@
 // @id              taskbar-volume-percentage
 // @name            Taskbar Volume Percentage Indicator
 // @description     Shows the master volume percentage in the Windows 11 system tray volume icon
-// @version         1.5.6
+// @version         1.5.7
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
@@ -23,36 +23,13 @@ level, updated in real time.
 ![Taskbar Volume Percentage Preview 3](https://i.imgur.com/27iyViO.png)
 ![Taskbar Volume Percentage Preview 4](https://i.imgur.com/1alQd1j.png)
 
-## Features
+## Settings
 
-- **Volume display**: six selectable styles to display the audio level in the taskbar:
+- **Display style**: Format of the volume indicator in the taskbar:
   - Percentage (`50%`)
   - Number only (`50`)
   - Prefix and percentage (`Vol 50%`, with custom prefix)
   - Icon and percentage (`🔊 50%`)
-  - Percentage and native icon (`50% `)
-  - Number and native icon (`50 `)
-- **Dual sub-box layout**: when a style with a native icon is selected, the volume
-  container hosts two independent sub-boxes side-by-side (one for the text
-  and one for the native icon), guaranteeing crisp typography and
-  vertical alignment without font conflicts between Segoe UI Variable and
-  Segoe Fluent Icons.
-- **Mute indicator**: when muted, shows `MUT`, `Mute`, `0%`, `✕`, `🔇`, the
-  native mute icon, or custom text.
-- **Dynamic and fixed container width**: the volume container automatically
-  adapts its width to digit count changes and active DPI scaling to prevent adjacent
-  tray icons from shifting, with an optional manual pixel width override.
-- **Seamless integration**: hooks directly into the Windows 11 system tray XAML
-  tree for instantaneous, event-driven updates without polling, and cleanly
-  restores original icons and layouts on mod unload.
-
-## Settings
-
-- **Display style**: Format of the volume indicator in the taskbar:
-  - Percentage
-  - Number only
-  - Prefix and percentage
-  - Icon and percentage
   - Percentage and native icon
   - Number and native icon
 - **Custom prefix**: Text prefix used with the "Prefix and percentage" style (default: `Vol `).
@@ -65,7 +42,7 @@ level, updated in real time.
   - Native mute icon
   - Custom text
 - **Custom mute text**: Text used when the "Custom text" mute style is selected (default: `Mute`).
-- **Container width**: Width in pixels of the volume container (`0` for dynamic auto-calculation, `-1` for Windows default).
+- **Container width**: Width in device-independent pixels (DIPs) of the volume container to prevent adjacent icons from shifting when digit count changes (`0` for dynamic auto-calculation, `-1` for Windows default).
 
 ## Compatibility
 
@@ -122,8 +99,9 @@ level, updated in real time.
 #include <algorithm>
 #include <atomic>
 #include <cmath>
-#include <functional>
+#include <list>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #undef GetCurrentTime
@@ -228,6 +206,7 @@ struct TrackedVolumeContent {
     winrt::weak_ref<FrameworkElement> baseElement;
     winrt::weak_ref<FrameworkElement> underlayElement;
     winrt::weak_ref<Controls::TextBlock> subBlock;
+    bool isDualBoxConfigured = false;
 };
 std::vector<TrackedVolumeContent> g_trackedVolumeContents;
 
@@ -237,8 +216,8 @@ using FrameworkElementLayoutUpdatedEventRevoker = winrt::impl::event_revoker<
 
 // Layout properties set from inside a measure pass are not picked up by it,
 // so the width of a view found there is applied once the pass is over.
-[[clang::no_destroy]] FrameworkElementLayoutUpdatedEventRevoker
-    g_layoutUpdatedRevoker;
+[[clang::no_destroy]] std::list<FrameworkElementLayoutUpdatedEventRevoker>
+    g_autoRevokerList;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Taskbar thread
@@ -327,45 +306,13 @@ bool RunFromTaskbarThread(RunFromWindowThreadProc_t proc) {
 ////////////////////////////////////////////////////////////////////////////////
 // Visual tree
 
-FrameworkElement EnumParentElements(
-    FrameworkElement const& element,
-    std::function<bool(FrameworkElement const&)> const& enumCallback) {
-    auto parent = element;
-    while (true) {
-        parent = Media::VisualTreeHelper::GetParent(parent)
-                     .try_as<FrameworkElement>();
-        if (!parent) {
-            return nullptr;
-        }
-
-        if (enumCallback(parent)) {
-            return parent;
-        }
-    }
-}
-
 FrameworkElement GetParentElementByClassName(FrameworkElement const& element,
                                              PCWSTR className) {
-    return EnumParentElements(element, [className](FrameworkElement const& parent) {
-        return winrt::get_class_name(parent) == className;
-    });
-}
-
-FrameworkElement EnumChildElements(
-    FrameworkElement const& element,
-    std::function<bool(FrameworkElement const&)> const& enumCallback) {
-    int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
-
-    for (int i = 0; i < childrenCount; i++) {
-        auto child = Media::VisualTreeHelper::GetChild(element, i)
-                         .try_as<FrameworkElement>();
-        if (!child) {
-            Wh_Log(L"Failed to get child %d of %d", i + 1, childrenCount);
-            continue;
-        }
-
-        if (enumCallback(child)) {
-            return child;
+    auto parent = element;
+    while ((parent = Media::VisualTreeHelper::GetParent(parent)
+                         .try_as<FrameworkElement>())) {
+        if (winrt::get_class_name(parent) == className) {
+            return parent;
         }
     }
 
@@ -373,9 +320,17 @@ FrameworkElement EnumChildElements(
 }
 
 FrameworkElement FindChildByName(FrameworkElement const& element, PCWSTR name) {
-    return EnumChildElements(element, [name](FrameworkElement const& child) {
-        return child.Name() == name;
-    });
+    int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
+    for (int i = 0; i < childrenCount; i++) {
+        if (auto child = Media::VisualTreeHelper::GetChild(element, i)
+                             .try_as<FrameworkElement>()) {
+            if (child.Name() == name) {
+                return child;
+            }
+        }
+    }
+
+    return nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -388,44 +343,33 @@ bool IsDualBoxStyle() {
 
 std::wstring FormatVolumeText(float volumeLevel, bool isMuted) {
     if (isMuted) {
-        switch (g_settings.muteStyle) {
-        case MuteStyle::mute:
-            return L"Mute";
-        case MuteStyle::zero:
-            return L"0%";
-        case MuteStyle::cross:
-            return L"\u2715";
-        case MuteStyle::emoji:
-            return L"\U0001F507";
-        case MuteStyle::glyph:
-            return L"\uE74F";
-        case MuteStyle::custom:
-            return g_settings.customMuteText.get();
-        case MuteStyle::mut:
-        default:
-            return L"MUT";
-        }
+        return (g_settings.muteStyle == MuteStyle::mute)    ? L"Mute"
+               : (g_settings.muteStyle == MuteStyle::zero)  ? L"0%"
+               : (g_settings.muteStyle == MuteStyle::cross) ? L"\u2715"
+               : (g_settings.muteStyle == MuteStyle::emoji) ? L"\U0001F507"
+               : (g_settings.muteStyle == MuteStyle::glyph) ? L"\uE74F"
+               : (g_settings.muteStyle == MuteStyle::custom)
+                   ? g_settings.customMuteText.get()
+                   : L"MUT";
     }
 
     int percentage =
         std::clamp((int)std::lround(volumeLevel * 100.0f), 0, 100);
     std::wstring number = std::to_wstring(percentage);
 
-    switch (g_settings.displayStyle) {
-    case DisplayStyle::glyphNumber:
-    case DisplayStyle::number:
+    if (g_settings.displayStyle == DisplayStyle::number ||
+        g_settings.displayStyle == DisplayStyle::glyphNumber) {
         return number;
-    case DisplayStyle::prefix: {
+    }
+    if (g_settings.displayStyle == DisplayStyle::prefix) {
         PCWSTR prefix = g_settings.customPrefix.get();
         return (prefix ? prefix : L"") + number + L"%";
     }
-    case DisplayStyle::emoji:
+    if (g_settings.displayStyle == DisplayStyle::emoji) {
         return L"\U0001F50A " + number + L"%";
-    case DisplayStyle::glyphRight:
-    case DisplayStyle::percentage:
-    default:
-        return number + L"%";
     }
+
+    return number + L"%";
 }
 
 std::wstring GetNativeVolumeGlyph(float volumeLevel, bool isMuted) {
@@ -453,26 +397,12 @@ double CalculateAutoWidth() {
         estimatedWidth += 20.0; // Native speaker icon (~16 DIPs) + column gap (4 DIPs)
     }
 
-    double minFloor = 30.0;
-    switch (g_settings.displayStyle) {
-    case DisplayStyle::emoji:
-        minFloor = 50.0;
-        break;
-    case DisplayStyle::glyphRight:
-        minFloor = 54.0;
-        break;
-    case DisplayStyle::glyphNumber:
-        minFloor = 48.0;
-        break;
-    case DisplayStyle::prefix:
-        minFloor = 42.0;
-        break;
-    case DisplayStyle::percentage:
-        minFloor = 38.0;
-        break;
-    default:
-        break;
-    }
+    double minFloor = (g_settings.displayStyle == DisplayStyle::glyphRight)    ? 54.0
+                      : (g_settings.displayStyle == DisplayStyle::emoji)       ? 50.0
+                      : (g_settings.displayStyle == DisplayStyle::glyphNumber) ? 48.0
+                      : (g_settings.displayStyle == DisplayStyle::prefix)      ? 42.0
+                      : (g_settings.displayStyle == DisplayStyle::percentage)  ? 38.0
+                                                                               : 30.0;
 
     return (std::max)(estimatedWidth, minFloor);
 }
@@ -506,11 +436,13 @@ void ApplyIconViewWidth(FrameworkElement const& iconView) {
 ////////////////////////////////////////////////////////////////////////////////
 // Object tracking
 
-VolumeDataModel* FindVolumeDataModel(void* pThis) {
+void PruneVolumeDataModels() {
     std::erase_if(g_volumeDataModels, [](const auto& dataModel) {
         return !dataModel.weakRef.get();
     });
+}
 
+VolumeDataModel* FindVolumeDataModel(void* pThis) {
     for (auto& dataModel : g_volumeDataModels) {
         if (dataModel.pThis == pThis) {
             return &dataModel;
@@ -523,6 +455,8 @@ VolumeDataModel* FindVolumeDataModel(void* pThis) {
 void RememberVolumeDataModel(
     void* pThis,
     winrt::Windows::Foundation::IInspectable const& dataModel) {
+    PruneVolumeDataModels();
+
     if (g_unloading || FindVolumeDataModel(pThis)) {
         return;
     }
@@ -553,25 +487,17 @@ void ApplyVolumeIconViewsWidth() {
     }
 }
 
-bool HasLiveVolumeIconView() {
-    for (const auto& weakRef : g_volumeIconViews) {
-        if (weakRef.get()) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // Layout management
 
-TrackedVolumeContent* FindTrackedVolumeContent(
-    FrameworkElement const& textIconContent) {
+void PruneTrackedVolumeContents() {
     std::erase_if(g_trackedVolumeContents, [](const auto& tracked) {
         return !tracked.textIconContent.get();
     });
+}
 
+TrackedVolumeContent* FindTrackedVolumeContent(
+    FrameworkElement const& textIconContent) {
     for (auto& tracked : g_trackedVolumeContents) {
         if (tracked.textIconContent.get() == textIconContent) {
             return &tracked;
@@ -603,6 +529,10 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
         tracked.subBlock = nullptr;
     }
 
+    if (!tracked.isDualBoxConfigured) {
+        return;
+    }
+
     containerGrid.ColumnDefinitions().Clear();
 
     auto resetEl = [](FrameworkElement const& el) {
@@ -614,9 +544,12 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
     };
     resetEl(tracked.baseElement.get());
     resetEl(tracked.underlayElement.get());
+
+    tracked.isDualBoxConfigured = false;
 }
 
 void RestoreAllVolumeLayouts() {
+    g_autoRevokerList.clear();
     for (auto& tracked : g_trackedVolumeContents) {
         RestoreVolumeLayout(tracked);
     }
@@ -645,6 +578,8 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
     FrameworkElement underlayElement =
         FindChildByName(containerGrid, L"Underlay");
 
+    PruneTrackedVolumeContents();
+
     TrackedVolumeContent* tracked = FindTrackedVolumeContent(textIconContent);
     if (!tracked) {
         g_trackedVolumeContents.push_back({
@@ -653,6 +588,7 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
             baseElement,
             underlayElement,
             nullptr,
+            false,
         });
         tracked = &g_trackedVolumeContents.back();
     } else {
@@ -699,6 +635,14 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         }
     }
 
+    auto applyLayout = [](FrameworkElement const& el, int col, Visibility vis) {
+        if (el) {
+            el.Visibility(vis);
+            el.HorizontalAlignment(HorizontalAlignment::Center);
+            Controls::Grid::SetColumn(el, col);
+        }
+    };
+
     if (g_isMuted) {
         // In mute state, display a single centered indicator rather than
         // two indicators side-by-side.
@@ -718,15 +662,8 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
 
         Visibility baseVis =
             isMuteGlyph ? Visibility::Visible : Visibility::Collapsed;
-        auto setMuteEl = [baseVis](FrameworkElement const& el) {
-            if (el) {
-                el.Visibility(baseVis);
-                el.HorizontalAlignment(HorizontalAlignment::Center);
-                Controls::Grid::SetColumn(el, 0);
-            }
-        };
-        setMuteEl(baseElement);
-        setMuteEl(underlayElement);
+        applyLayout(baseElement, 0, baseVis);
+        applyLayout(underlayElement, 0, baseVis);
     } else {
         // Unmuted: dual-column layout (percentage on left, speaker on right).
         if (containerGrid.ColumnDefinitions().Size() < 2) {
@@ -744,31 +681,30 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         subBlock.Visibility(Visibility::Visible);
         Controls::Grid::SetColumn(subBlock, 0);
 
-        auto setDualEl = [](FrameworkElement const& el) {
-            if (el) {
-                el.Visibility(Visibility::Visible);
-                el.HorizontalAlignment(HorizontalAlignment::Center);
-                Controls::Grid::SetColumn(el, 1);
-            }
-        };
-        setDualEl(baseElement);
-        setDualEl(underlayElement);
+        applyLayout(baseElement, 1, Visibility::Visible);
+        applyLayout(underlayElement, 1, Visibility::Visible);
     }
+
+    tracked->isDualBoxConfigured = true;
 }
 
 void UpdateAllVolumeLayouts() {
-    std::erase_if(g_trackedVolumeContents, [](const auto& tracked) {
-        return !tracked.textIconContent.get();
-    });
+    PruneTrackedVolumeContents();
 
     if (g_trackedVolumeContents.empty()) {
         g_volumeViewModel = nullptr;
     }
 
+    std::vector<FrameworkElement> targets;
+    targets.reserve(g_trackedVolumeContents.size());
     for (auto& tracked : g_trackedVolumeContents) {
         if (auto textIconContent = tracked.textIconContent.get()) {
-            SetupVolumeLayout(textIconContent);
+            targets.push_back(textIconContent);
         }
+    }
+
+    for (auto const& textIconContent : targets) {
+        SetupVolumeLayout(textIconContent);
     }
 }
 
@@ -786,23 +722,24 @@ bool IsVolumeTextIconContent(FrameworkElement const& textIconContent) {
     }
 
     FrameworkElement baseChild = FindChildByName(container, L"Base");
-    if (baseChild) {
-        FrameworkElement innerTextChild =
-            FindChildByName(baseChild, L"InnerTextBlock");
-        if (innerTextChild) {
-            if (auto textBlock = innerTextChild.try_as<Controls::TextBlock>()) {
-                std::wstring text{textBlock.Text()};
-                if (!g_volumeText.empty() && text == g_volumeText) {
-                    return true;
-                }
-                if (IsDualBoxStyle() && !text.empty()) {
-                    wchar_t ch = text[0];
-                    return ch == L'\uE74F' || ch == L'\uEA85' ||
-                           ch == L'\uEBC5' ||
-                           (ch >= L'\uE992' && ch <= L'\uE995');
-                }
-            }
-        }
+    if (!baseChild) {
+        return false;
+    }
+
+    auto textBlock = FindChildByName(baseChild, L"InnerTextBlock")
+                         .try_as<Controls::TextBlock>();
+    if (!textBlock) {
+        return false;
+    }
+
+    std::wstring text{textBlock.Text()};
+    if (!g_volumeText.empty() && text == g_volumeText) {
+        return true;
+    }
+    if (IsDualBoxStyle() && !text.empty()) {
+        wchar_t ch = text[0];
+        return ch == L'\uE74F' || ch == L'\uEA85' || ch == L'\uEBC5' ||
+               (ch >= L'\uE992' && ch <= L'\uE995');
     }
 
     return false;
@@ -811,21 +748,30 @@ bool IsVolumeTextIconContent(FrameworkElement const& textIconContent) {
 // Whether the element showing the volume text has to be looked up: after the
 // text changed, or while no IconView is known to show it (Explorer start, tray
 // rebuild).
-bool IsVolumeIconViewLookupPending() {
-    return !g_unloading && !g_volumeText.empty() &&
-           (g_volumeTextChanged || !HasLiveVolumeIconView());
+bool IsVolumeIconViewLookupPending(FrameworkElement const& textIconContent) {
+    if (g_unloading || g_volumeText.empty()) {
+        return false;
+    }
+
+    return g_volumeTextChanged || !FindTrackedVolumeContent(textIconContent);
 }
 
 // Setters taking winrt::hstring by value. On x64 that is a pointer to a
-// caller-provided hstring which the callee destroys and nulls, so a local
-// winrt::hstring passed by address is consumed and then destructs as empty.
-using TextIconContentViewModel_SetText_t = void(WINAPI*)(void* pThis,
-                                                         winrt::hstring* text);
+using TextIconContentViewModel_SetText_t = void(WINAPI*)(void*, winrt::hstring*);
 TextIconContentViewModel_SetText_t TextIconContentViewModel_BaseText_Original;
 TextIconContentViewModel_SetText_t
     TextIconContentViewModel_UnderlayText_Original;
 
 void RefreshVolumeIcons();
+
+template <typename F>
+void SafeXamlCall(F&& func) {
+    try {
+        func();
+    } catch (...) {
+        Wh_Log(L"Error %08X", winrt::to_hresult());
+    }
+}
 
 void RestoreNativeBaseGlyph() {
     if (g_volumeViewModel) {
@@ -836,6 +782,7 @@ void RestoreNativeBaseGlyph() {
                       GetNativeVolumeGlyph(g_volumeLevel, g_isMuted))};
         TextIconContentViewModel_BaseText_Original(g_volumeViewModel,
                                                    &nativeText);
+        g_volumeViewModel = nullptr;
     }
 }
 
@@ -866,26 +813,24 @@ void LookUpVolumeIconView(FrameworkElement const& textIconContent) {
 
     RememberVolumeIconView(iconView);
 
-    g_layoutUpdatedRevoker = iconView.LayoutUpdated(
-        winrt::auto_revoke,
-        [wasEmpty](winrt::Windows::Foundation::IInspectable const&,
-                   winrt::Windows::Foundation::IInspectable const&) {
-            const bool wasEmptyLocal = wasEmpty;
-            g_layoutUpdatedRevoker.revoke();
+    g_autoRevokerList.emplace_back();
+    auto autoRevokerIt = g_autoRevokerList.end();
+    --autoRevokerIt;
 
-            try {
+    *autoRevokerIt = iconView.LayoutUpdated(
+        winrt::auto_revoke_t{},
+        [autoRevokerIt, wasEmpty](
+            winrt::Windows::Foundation::IInspectable const&,
+            winrt::Windows::Foundation::IInspectable const&) {
+            const bool wasEmptyLocal = wasEmpty;
+            g_autoRevokerList.erase(autoRevokerIt);
+
+            SafeXamlCall([wasEmptyLocal] {
                 ApplyVolumeIconViewsWidth();
                 if (wasEmptyLocal && IsDualBoxStyle()) {
-                    RestoreNativeBaseGlyph();
                     RefreshVolumeIcons();
                 }
-            } catch (...) {
-                HRESULT hr = winrt::to_hresult();
-                Wh_Log(L"Error %08X", hr);
-            }
-            if (wasEmptyLocal) {
-                g_volumeViewModel = nullptr;
-            }
+            });
         });
 }
 
@@ -895,37 +840,28 @@ void LookUpVolumeIconView(FrameworkElement const& textIconContent) {
 // The hstring is the spatial sound format name, which only shows up in the
 // tooltip. The icon glyph is derived from the level and the mute state.
 using VolumeSystemTrayIconDataModel_UpdateVolume_t =
-    void(WINAPI*)(void* pThis,
-                  float volumeLevel,
-                  bool isMuted,
-                  winrt::hstring* spatialSoundName);
+    void(WINAPI*)(void*, float, bool, winrt::hstring*);
 VolumeSystemTrayIconDataModel_UpdateVolume_t
     VolumeSystemTrayIconDataModel_UpdateVolume_Original;
 
-// The IIconDataModel::CurrentData ABI thunk, called on the interface pointer.
 using VolumeSystemTrayIconDataModel_get_CurrentData_t =
-    HRESULT(WINAPI*)(void* pThis, void** iconData);
+    HRESULT(WINAPI*)(void*, void**);
 VolumeSystemTrayIconDataModel_get_CurrentData_t
     VolumeSystemTrayIconDataModel_get_CurrentData_Original;
 
-// Returns a winrt::SystemTray::IconData through a hidden return pointer.
 using VolumeSystemTrayIconDataModel_CurrentData_t =
-    void*(WINAPI*)(void* pThis, void** iconData);
+    void*(WINAPI*)(void*, void**);
 VolumeSystemTrayIconDataModel_CurrentData_t
     VolumeSystemTrayIconDataModel_CurrentData_Original;
 
-// Called with the IconData right after the text properties were set from it.
-using TextIconContentViewModel_UpdateStyles_t =
-    void(WINAPI*)(void* pThis, void** iconData);
+using TextIconContentViewModel_UpdateStyles_t = void(WINAPI*)(void*, void**);
 TextIconContentViewModel_UpdateStyles_t
     TextIconContentViewModel_UpdateStyles_Original;
 
-// The IFrameworkElementOverrides::MeasureOverride ABI thunk of the element,
-// called on the interface pointer.
 using TextIconContent_MeasureOverride_t =
-    int(WINAPI*)(void* pThis,
-                 winrt::Windows::Foundation::Size size,
-                 winrt::Windows::Foundation::Size* resultSize);
+    int(WINAPI*)(void*,
+                 winrt::Windows::Foundation::Size,
+                 winrt::Windows::Foundation::Size*);
 TextIconContent_MeasureOverride_t TextIconContent_MeasureOverride_Original;
 
 void WINAPI TextIconContentViewModel_BaseText_Hook(void* pThis,
@@ -981,7 +917,7 @@ void* WINAPI VolumeSystemTrayIconDataModel_CurrentData_Hook(void* pThis,
 
     winrt::copy_from_abi(g_volumeIconData, *iconData);
 
-    try {
+    SafeXamlCall([pThis] {
         if (g_gettingCurrentDataModel) {
             winrt::Windows::Foundation::IInspectable dataModel = nullptr;
             winrt::copy_from_abi(dataModel, g_gettingCurrentDataModel);
@@ -989,10 +925,7 @@ void* WINAPI VolumeSystemTrayIconDataModel_CurrentData_Hook(void* pThis,
                 RememberVolumeDataModel(pThis, dataModel);
             }
         }
-    } catch (...) {
-        HRESULT hr = winrt::to_hresult();
-        Wh_Log(L"Error %08X", hr);
-    }
+    });
 
     return ret;
 }
@@ -1003,7 +936,11 @@ void WINAPI TextIconContentViewModel_UpdateStyles_Hook(void* pThis,
                      *iconData == winrt::get_abi(g_volumeIconData));
     if (isVolume) {
         g_capturingVolumeGlyph = true;
-        g_volumeViewModel = pThis;
+        if (IsDualBoxStyle() && g_trackedVolumeContents.empty()) {
+            g_volumeViewModel = pThis;
+        } else {
+            g_volumeViewModel = nullptr;
+        }
     }
 
     struct FlagGuard {
@@ -1023,7 +960,7 @@ void WINAPI TextIconContentViewModel_UpdateStyles_Hook(void* pThis,
 
     Wh_Log(L"> Volume view model %p", pThis);
 
-    try {
+    SafeXamlCall([pThis] {
         g_volumeText = FormatVolumeText(g_volumeLevel, g_isMuted);
         g_volumeTextChanged = true;
 
@@ -1044,10 +981,7 @@ void WINAPI TextIconContentViewModel_UpdateStyles_Hook(void* pThis,
 
         UpdateAllVolumeLayouts();
         ApplyVolumeIconViewsWidth();
-    } catch (...) {
-        HRESULT hr = winrt::to_hresult();
-        Wh_Log(L"Error %08X", hr);
-    }
+    });
 }
 
 int WINAPI TextIconContent_MeasureOverride_Hook(
@@ -1056,7 +990,7 @@ int WINAPI TextIconContent_MeasureOverride_Hook(
     winrt::Windows::Foundation::Size* resultSize) {
     int ret = TextIconContent_MeasureOverride_Original(pThis, size, resultSize);
 
-    try {
+    SafeXamlCall([pThis, resultSize] {
         FrameworkElement textIconContent = nullptr;
         ((IUnknown*)pThis)->QueryInterface(winrt::guid_of<FrameworkElement>(), winrt::put_abi(textIconContent));
 
@@ -1073,14 +1007,11 @@ int WINAPI TextIconContent_MeasureOverride_Hook(
                 }
             }
 
-            if (IsVolumeIconViewLookupPending()) {
+            if (IsVolumeIconViewLookupPending(textIconContent)) {
                 LookUpVolumeIconView(textIconContent);
             }
         }
-    } catch (...) {
-        HRESULT hr = winrt::to_hresult();
-        Wh_Log(L"Error %08X", hr);
-    }
+    });
 
     return ret;
 }
@@ -1096,15 +1027,20 @@ void RefreshVolumeIcons() {
         return;
     }
 
-    for (auto& dataModel : g_volumeDataModels) {
-        auto dataModelRef = dataModel.weakRef.get();
-        if (!dataModelRef) {
-            continue;
-        }
+    PruneVolumeDataModels();
 
+    std::vector<void*> targets;
+    targets.reserve(g_volumeDataModels.size());
+    for (const auto& dataModel : g_volumeDataModels) {
+        if (dataModel.weakRef.get()) {
+            targets.push_back(dataModel.pThis);
+        }
+    }
+
+    for (void* pThis : targets) {
         winrt::hstring spatialSoundName = g_spatialSoundName;
         VolumeSystemTrayIconDataModel_UpdateVolume_Original(
-            dataModel.pThis, g_volumeLevel, g_isMuted, &spatialSoundName);
+            pThis, g_volumeLevel, g_isMuted, &spatialSoundName);
     }
 }
 
@@ -1114,40 +1050,26 @@ void RefreshVolumeIcons() {
 bool HookSystemTraySymbols(HMODULE module) {
     // SystemTray.dll, Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
-        {
-            {LR"(public: void __cdecl winrt::SystemTray::implementation::VolumeSystemTrayIconDataModel::UpdateVolume(float,bool,struct winrt::hstring))"},
-            &VolumeSystemTrayIconDataModel_UpdateVolume_Original,
-            VolumeSystemTrayIconDataModel_UpdateVolume_Hook,
-        },
-        {
-            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::VolumeSystemTrayIconDataModel,struct winrt::SystemTray::IIconDataModel>::get_CurrentData(void * *))"},
-            &VolumeSystemTrayIconDataModel_get_CurrentData_Original,
-            VolumeSystemTrayIconDataModel_get_CurrentData_Hook,
-        },
-        {
-            {LR"(public: struct winrt::SystemTray::IconData __cdecl winrt::SystemTray::implementation::VolumeSystemTrayIconDataModel::CurrentData(void))"},
-            &VolumeSystemTrayIconDataModel_CurrentData_Original,
-            VolumeSystemTrayIconDataModel_CurrentData_Hook,
-        },
-        {
-            {LR"(private: void __cdecl winrt::SystemTray::implementation::TextIconContentViewModel::UpdateStyles(struct winrt::SystemTray::IconData const &))"},
-            &TextIconContentViewModel_UpdateStyles_Original,
-            TextIconContentViewModel_UpdateStyles_Hook,
-        },
-        {
-            {LR"(public: void __cdecl winrt::SystemTray::implementation::TextIconContentViewModel::BaseText(struct winrt::hstring))"},
-            &TextIconContentViewModel_BaseText_Original,
-            TextIconContentViewModel_BaseText_Hook,
-        },
-        {
-            {LR"(public: void __cdecl winrt::SystemTray::implementation::TextIconContentViewModel::UnderlayText(struct winrt::hstring))"},
-            &TextIconContentViewModel_UnderlayText_Original,
-        },
-        {
-            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::TextIconContent,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::MeasureOverride(struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
-            &TextIconContent_MeasureOverride_Original,
-            TextIconContent_MeasureOverride_Hook,
-        },
+        {{LR"(public: void __cdecl winrt::SystemTray::implementation::VolumeSystemTrayIconDataModel::UpdateVolume(float,bool,struct winrt::hstring))"},
+         &VolumeSystemTrayIconDataModel_UpdateVolume_Original,
+         VolumeSystemTrayIconDataModel_UpdateVolume_Hook},
+        {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::VolumeSystemTrayIconDataModel,struct winrt::SystemTray::IIconDataModel>::get_CurrentData(void * *))"},
+         &VolumeSystemTrayIconDataModel_get_CurrentData_Original,
+         VolumeSystemTrayIconDataModel_get_CurrentData_Hook},
+        {{LR"(public: struct winrt::SystemTray::IconData __cdecl winrt::SystemTray::implementation::VolumeSystemTrayIconDataModel::CurrentData(void))"},
+         &VolumeSystemTrayIconDataModel_CurrentData_Original,
+         VolumeSystemTrayIconDataModel_CurrentData_Hook},
+        {{LR"(private: void __cdecl winrt::SystemTray::implementation::TextIconContentViewModel::UpdateStyles(struct winrt::SystemTray::IconData const &))"},
+         &TextIconContentViewModel_UpdateStyles_Original,
+         TextIconContentViewModel_UpdateStyles_Hook},
+        {{LR"(public: void __cdecl winrt::SystemTray::implementation::TextIconContentViewModel::BaseText(struct winrt::hstring))"},
+         &TextIconContentViewModel_BaseText_Original,
+         TextIconContentViewModel_BaseText_Hook},
+        {{LR"(public: void __cdecl winrt::SystemTray::implementation::TextIconContentViewModel::UnderlayText(struct winrt::hstring))"},
+         &TextIconContentViewModel_UnderlayText_Original},
+        {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::TextIconContent,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::MeasureOverride(struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
+         &TextIconContent_MeasureOverride_Original,
+         TextIconContent_MeasureOverride_Hook},
     };
 
     if (!WindhawkUtils::HookSymbols(module, symbolHooks,
@@ -1163,15 +1085,10 @@ VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
     void* pFixedFileInfo = nullptr;
     UINT uPtrLen = 0;
 
-    HRSRC hResource =
-        FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
-    if (hResource) {
-        HGLOBAL hGlobal = LoadResource(hModule, hResource);
-        if (hGlobal) {
-            void* pData = LockResource(hGlobal);
-            if (pData) {
-                if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) ||
-                    uPtrLen == 0) {
+    if (HRSRC hRes = FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION)) {
+        if (HGLOBAL hGlobal = LoadResource(hModule, hRes)) {
+            if (void* pData = LockResource(hGlobal)) {
+                if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) || uPtrLen == 0) {
                     pFixedFileInfo = nullptr;
                     uPtrLen = 0;
                 }
@@ -1183,7 +1100,7 @@ VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
         *puPtrLen = uPtrLen;
     }
 
-    return (VS_FIXEDFILEINFO*)pFixedFileInfo;
+    return static_cast<VS_FIXEDFILEINFO*>(pFixedFileInfo);
 }
 
 // Returns the module that hosts winrt::SystemTray::* in the current build.
@@ -1239,41 +1156,26 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 
 void LoadSettings() {
     auto displayStyle = WindhawkUtils::StringSetting::make(L"displayStyle");
-    PCWSTR ds = displayStyle.get();
-    if (wcscmp(ds, L"number") == 0) {
-        g_settings.displayStyle = DisplayStyle::number;
-    } else if (wcscmp(ds, L"prefix") == 0) {
-        g_settings.displayStyle = DisplayStyle::prefix;
-    } else if (wcscmp(ds, L"emoji") == 0) {
-        g_settings.displayStyle = DisplayStyle::emoji;
-    } else if (wcscmp(ds, L"glyphRight") == 0) {
-        g_settings.displayStyle = DisplayStyle::glyphRight;
-    } else if (wcscmp(ds, L"glyphNumber") == 0) {
-        g_settings.displayStyle = DisplayStyle::glyphNumber;
-    } else {
-        g_settings.displayStyle = DisplayStyle::percentage;
-    }
+    std::wstring_view ds = displayStyle.get();
+    g_settings.displayStyle = (ds == L"number")        ? DisplayStyle::number
+                              : (ds == L"prefix")      ? DisplayStyle::prefix
+                              : (ds == L"emoji")       ? DisplayStyle::emoji
+                              : (ds == L"glyphRight")  ? DisplayStyle::glyphRight
+                              : (ds == L"glyphNumber") ? DisplayStyle::glyphNumber
+                                                       : DisplayStyle::percentage;
 
     g_settings.customPrefix =
         WindhawkUtils::StringSetting::make(L"customPrefix");
 
     auto muteStyle = WindhawkUtils::StringSetting::make(L"muteStyle");
-    PCWSTR ms = muteStyle.get();
-    if (wcscmp(ms, L"mute") == 0) {
-        g_settings.muteStyle = MuteStyle::mute;
-    } else if (wcscmp(ms, L"zero") == 0) {
-        g_settings.muteStyle = MuteStyle::zero;
-    } else if (wcscmp(ms, L"cross") == 0) {
-        g_settings.muteStyle = MuteStyle::cross;
-    } else if (wcscmp(ms, L"emoji") == 0) {
-        g_settings.muteStyle = MuteStyle::emoji;
-    } else if (wcscmp(ms, L"glyph") == 0) {
-        g_settings.muteStyle = MuteStyle::glyph;
-    } else if (wcscmp(ms, L"custom") == 0) {
-        g_settings.muteStyle = MuteStyle::custom;
-    } else {
-        g_settings.muteStyle = MuteStyle::mut;
-    }
+    std::wstring_view ms = muteStyle.get();
+    g_settings.muteStyle = (ms == L"mute")     ? MuteStyle::mute
+                           : (ms == L"zero")   ? MuteStyle::zero
+                           : (ms == L"cross")  ? MuteStyle::cross
+                           : (ms == L"emoji")  ? MuteStyle::emoji
+                           : (ms == L"glyph")  ? MuteStyle::glyph
+                           : (ms == L"custom") ? MuteStyle::custom
+                                               : MuteStyle::mut;
 
     g_settings.customMuteText =
         WindhawkUtils::StringSetting::make(L"customMuteText");
@@ -1329,16 +1231,13 @@ void Wh_ModBeforeUninit() {
     g_unloading = true;
 
     RunFromTaskbarThread([](void*) {
-        g_layoutUpdatedRevoker.revoke();
+        g_autoRevokerList.clear();
 
-        try {
+        SafeXamlCall([] {
             RestoreAllVolumeLayouts();
             RefreshVolumeIcons();
             ApplyVolumeIconViewsWidth();
-        } catch (...) {
-            HRESULT hr = winrt::to_hresult();
-            Wh_Log(L"Error %08X", hr);
-        }
+        });
 
         g_trackedVolumeContents.clear();
         g_volumeIconViews.clear();
@@ -1365,14 +1264,11 @@ void Wh_ModSettingsChanged() {
     if (!RunFromTaskbarThread([](void*) {
             LoadSettings();
 
-            try {
+            SafeXamlCall([] {
                 UpdateAllVolumeLayouts();
                 RefreshVolumeIcons();
                 ApplyVolumeIconViewsWidth();
-            } catch (...) {
-                HRESULT hr = winrt::to_hresult();
-                Wh_Log(L"Error %08X", hr);
-            }
+            });
         })) {
         LoadSettings();
     }
