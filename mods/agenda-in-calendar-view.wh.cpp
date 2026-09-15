@@ -134,6 +134,7 @@ Checking events on other dates:
 #include <windows.h>
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <limits>
 #include <mutex>
 #include <sstream>
@@ -159,7 +160,6 @@ Checking events on other dates:
 #include <windhawk_utils.h>
 
 #include <cstdio>
-#include <cstring>
 #include <cwchar>
 #include <cwctype>
 
@@ -325,8 +325,6 @@ struct CalendarEvent {
 
 std::vector<CalendarEvent> g_allParsedEvents;
 std::mutex g_eventsMutex;
-SYSTEMTIME g_selectedDate{};
-bool g_hasSelectedDate = false;
 
 std::mutex g_cacheMutex;
 std::mutex g_watcherMutex;
@@ -891,6 +889,7 @@ std::vector<CalendarEvent> FilterEventsForDate(
 }
 
 void OnCalendarOpened();
+void RegisterCoreWindowEvents();
 void TriggerBackgroundFetch(bool force = false);
 void StartWorkerThread();
 void StopWorkerThread();
@@ -1506,6 +1505,10 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
 
     ~VisualTreeWatcher() = default;
 
+    DWORD OwnerThreadId() const noexcept {
+        return m_ownerThreadId;
+    }
+
     void UnregisterFocusSessionControl() {
         if (m_focusSessionControl && m_focusSessionVisibilityToken != 0) {
             try {
@@ -1780,8 +1783,6 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
         std::vector<CalendarEvent> filtered;
         {
             std::lock_guard<std::mutex> lock(g_eventsMutex);
-            g_selectedDate = newDate;
-            g_hasSelectedDate = true;
             filtered = FilterEventsForDate(g_allParsedEvents, newDate);
         }
 
@@ -1823,8 +1824,6 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
         std::vector<CalendarEvent> filtered;
         {
             std::lock_guard<std::mutex> lock(g_eventsMutex);
-            g_selectedDate = selected;
-            g_hasSelectedDate = true;
             filtered = FilterEventsForDate(g_allParsedEvents, selected);
         }
 
@@ -1852,8 +1851,6 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
                     std::vector<CalendarEvent> events;
                     {
                         std::lock_guard<std::mutex> lock(g_eventsMutex);
-                        g_selectedDate = today;
-                        g_hasSelectedDate = true;
                         events = FilterEventsForDate(g_allParsedEvents, today);
                     }
                     strongThis->PopulateItemsControl(events);
@@ -1861,7 +1858,7 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
             });
     }
 
-    void DispatchUpdateEvents(std::vector<CalendarEvent> events) {
+    void DispatchUpdateEvents(std::vector<CalendarEvent> allEvents) {
         wuxc::ItemsControl itemsControl{nullptr};
         {
             std::lock_guard<std::mutex> lock(g_watcherMutex);
@@ -1876,28 +1873,40 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
             return;
         }
 
-        dispatcher.TryRunAsync(wuc::CoreDispatcherPriority::Normal,
-        [weakThis = winrt::make_weak(get_strong()), allEvents = std::move(events)]() {
-            if (auto strongThis = weakThis.get()) {
-                strongThis->PopulateItemsControl(
-                    FilterEventsForDate(allEvents, strongThis->m_currentFilterDate));
-            }
-        });
+        dispatcher.TryRunAsync(
+            wuc::CoreDispatcherPriority::Normal,
+            [weakThis = winrt::make_weak(get_strong()),
+             allEvents = std::move(allEvents)]() {
+                if (auto strongThis = weakThis.get()) {
+                    try {
+                        strongThis->PopulateItemsControl(FilterEventsForDate(
+                            allEvents, strongThis->m_currentFilterDate));
+                    } catch (...) {
+                        Wh_Log(L"PopulateItemsControl failed: %08X",
+                               winrt::to_hresult());
+                    }
+                }
+            });
     }
 
     void UpdateMaxHeight(int maxHeight) {
-        if (!m_eventsScrollViewer) {
+        wuxc::ScrollViewer sv{nullptr};
+        {
+            std::lock_guard<std::mutex> lock(g_watcherMutex);
+            sv = m_eventsScrollViewer;
+        }
+        if (!sv) {
             return;
         }
 
-        auto dispatcher = m_eventsScrollViewer.Dispatcher();
+        auto dispatcher = sv.Dispatcher();
         if (!dispatcher) {
             return;
         }
 
         dispatcher.TryRunAsync(
             wuc::CoreDispatcherPriority::Normal,
-            [weakSv = winrt::make_weak(m_eventsScrollViewer), maxHeight]() {
+            [weakSv = winrt::make_weak(sv), maxHeight]() {
                 if (auto sv = weakSv.get()) {
                     sv.MaxHeight(maxHeight > 0
                                     ? (double)maxHeight
@@ -1911,6 +1920,9 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
         if (!host) {
             return;
         }
+
+        m_ownerThreadId = GetCurrentThreadId();
+        RegisterCoreWindowEvents();
 
         auto strongThis = get_strong();
 
@@ -2196,7 +2208,7 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
                 wuxc::ScrollBarVisibility::Disabled);
             host.Content(m_rootGrid);
 
-            TriggerBackgroundFetch();
+            OnCalendarOpened();
 
             Wh_Log(
                 L"Successfully replaced CalendarControlScrollViewer "
@@ -2208,10 +2220,15 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
     }
 
     void UpdateFocusSessionVisibility() {
-        if (!m_focusSessionControl)
+        wux::FrameworkElement fsControl{nullptr};
+        {
+            std::lock_guard<std::mutex> lock(g_watcherMutex);
+            fsControl = m_focusSessionControl;
+        }
+        if (!fsControl)
             return;
 
-        auto dispatcher = m_focusSessionControl.Dispatcher();
+        auto dispatcher = fsControl.Dispatcher();
         if (!dispatcher)
             return;
 
@@ -2219,12 +2236,19 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
             wuc::CoreDispatcherPriority::Normal,
             [weakThis = winrt::make_weak(get_strong())]() {
                 if (auto watcher = weakThis.get()) {
-                    if (watcher->m_focusSessionControl) {
+                    wux::FrameworkElement ctrl{nullptr};
+                    wux::Visibility origVis{wux::Visibility::Visible};
+                    {
+                        std::lock_guard<std::mutex> lock(g_watcherMutex);
+                        ctrl = watcher->m_focusSessionControl;
+                        origVis = watcher->m_originalFocusSessionVisibility;
+                    }
+                    if (ctrl) {
                         try {
                             bool hide = ShouldHideFocusSession();
-                            watcher->m_focusSessionControl.Visibility(
+                            ctrl.Visibility(
                                 hide ? wux::Visibility::Collapsed
-                                     : watcher->m_originalFocusSessionVisibility);
+                                     : origVis);
                             Wh_Log(L"Set FocusSessionControl visibility to %s",
                                    hide ? L"Collapsed" : L"Visible");
                         } catch (...) {
@@ -2292,6 +2316,10 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
                        VisualElement element,
                        VisualMutationType mutationType) override {
         UNREFERENCED_PARAMETER(relation);
+
+        if (m_ownerThreadId != 0 && GetCurrentThreadId() != m_ownerThreadId) {
+            return S_OK;
+        }
 
         try {
             if (mutationType != Add) {
@@ -2377,6 +2405,7 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
     wuxc::ScrollBarVisibility m_originalVerticalScrollBarVisibility{wuxc::ScrollBarVisibility::Auto};
     wuxc::ScrollBarVisibility m_originalHorizontalScrollBarVisibility{wuxc::ScrollBarVisibility::Disabled};
     wux::Visibility m_originalFocusSessionVisibility{wux::Visibility::Visible};
+    DWORD m_ownerThreadId{0};
 };
 
 // -----------------------------------------------------------------------------
@@ -2470,23 +2499,10 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
             break;
         }
 
-        SYSTEMTIME targetDate;
         {
             std::lock_guard<std::mutex> lock(g_eventsMutex);
             g_allParsedEvents = allEvents;
-            if (g_hasSelectedDate) {
-                targetDate = g_selectedDate;
-            } else {
-                GetLocalTime(&targetDate);
-                g_selectedDate = targetDate;
-                g_hasSelectedDate = true;
-            }
         }
-
-        auto filteredEvents = FilterEventsForDate(allEvents, targetDate);
-        Wh_Log(L"Found %zu events for date %04d-%02d-%02d",
-               filteredEvents.size(), targetDate.wYear, targetDate.wMonth,
-               targetDate.wDay);
 
         winrt::com_ptr<VisualTreeWatcher> watcher;
         {
@@ -2494,7 +2510,7 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
             watcher = g_visualTreeWatcher;
         }
         if (watcher) {
-            watcher->DispatchUpdateEvents(filteredEvents);
+            watcher->DispatchUpdateEvents(allEvents);
         }
     }
     return 0;
@@ -2511,20 +2527,17 @@ void StartWorkerThread() {
 
 void StopWorkerThread() {
     HANDLE workerThread = g_hWorkerThread.exchange(nullptr);
-    HANDLE stopEvent = g_hStopEvent.exchange(nullptr);
-    HANDLE workEvent = g_hWorkEvent.exchange(nullptr);
-
-    if (stopEvent) {
+    if (HANDLE stopEvent = g_hStopEvent.load()) {
         SetEvent(stopEvent);
     }
     if (workerThread) {
         WaitForSingleObject(workerThread, INFINITE);
         CloseHandle(workerThread);
     }
-    if (workEvent) {
+    if (HANDLE workEvent = g_hWorkEvent.exchange(nullptr)) {
         CloseHandle(workEvent);
     }
-    if (stopEvent) {
+    if (HANDLE stopEvent = g_hStopEvent.exchange(nullptr)) {
         CloseHandle(stopEvent);
     }
 }
@@ -2564,7 +2577,8 @@ void OnCalendarOpened() {
         watcher->ResetDatePickerToToday();
     }
 
-    TriggerBackgroundFetch();
+    bool force = (GetMinFetchIntervalSetting() <= 0);
+    TriggerBackgroundFetch(force);
 }
 
 class WindhawkTAP
@@ -2580,7 +2594,6 @@ class WindhawkTAP
             }
 
             if (oldWatcher) {
-                oldWatcher->RestoreCalendarContent();
                 oldWatcher->UnadviseVisualTreeChange();
             }
 
@@ -2758,26 +2771,19 @@ thread_local ThreadCoreWindowData t_coreWindowData;
 
 void RegisterCoreWindowEvents() {
     try {
-        if (t_coreWindowData.coreWindow) {
-            return;
-        }
         auto coreWindow = wuc::CoreWindow::GetForCurrentThread();
         if (!coreWindow) {
             return;
         }
-
-        if (coreWindow.Dispatcher()) {
-            std::lock_guard<std::mutex> lock(g_uiDispatchersMutex);
-            g_uiDispatchers.push_back(winrt::make_weak(coreWindow.Dispatcher()));
+        if (t_coreWindowData.coreWindow && t_coreWindowData.coreWindow == coreWindow) {
+            return;
         }
 
         Wh_Log(
             L"Registering CoreWindow Activated & VisibilityChanged for thread %u",
             GetCurrentThreadId());
 
-        t_coreWindowData.coreWindow = coreWindow;
-
-        t_coreWindowData.activatedToken = coreWindow.Activated(
+        auto activatedToken = coreWindow.Activated(
             [](auto&&, wuc::WindowActivatedEventArgs const& args) {
                 if (args.WindowActivationState() !=
                     wuc::CoreWindowActivationState::Deactivated) {
@@ -2786,13 +2792,22 @@ void RegisterCoreWindowEvents() {
                 }
             });
 
-        t_coreWindowData.visibilityChangedToken = coreWindow.VisibilityChanged(
+        auto visibilityChangedToken = coreWindow.VisibilityChanged(
             [](auto&&, wuc::VisibilityChangedEventArgs const& args) {
                 if (args.Visible()) {
                     Wh_Log(L"CoreWindow VisibilityChanged: Visible");
                     OnCalendarOpened();
                 }
             });
+
+        if (coreWindow.Dispatcher()) {
+            std::lock_guard<std::mutex> lock(g_uiDispatchersMutex);
+            g_uiDispatchers.push_back(winrt::make_weak(coreWindow.Dispatcher()));
+        }
+
+        t_coreWindowData.coreWindow = coreWindow;
+        t_coreWindowData.activatedToken = activatedToken;
+        t_coreWindowData.visibilityChangedToken = visibilityChangedToken;
     } catch (...) {
         Wh_Log(L"Failed to register CoreWindow events: %08X",
                winrt::to_hresult());
@@ -2839,20 +2854,24 @@ void InitializeSettingsAndTap() {
     }
 }
 
-void UninitializeSettingsAndTap() {
+void UninitializeForCurrentThread() {
+    UnregisterCoreWindowEvents();
+
     winrt::com_ptr<VisualTreeWatcher> watcher;
     {
         std::lock_guard<std::mutex> lock(g_watcherMutex);
-        watcher = g_visualTreeWatcher;
-        g_visualTreeWatcher = nullptr;
+        if (g_visualTreeWatcher &&
+            (g_visualTreeWatcher->OwnerThreadId() == 0 ||
+             g_visualTreeWatcher->OwnerThreadId() == GetCurrentThreadId())) {
+            watcher = g_visualTreeWatcher;
+            g_visualTreeWatcher = nullptr;
+        }
     }
 
     if (watcher) {
         watcher->RestoreCalendarContent();
         watcher->UnadviseVisualTreeChange();
     }
-
-    g_initialized = false;
 }
 
 using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
@@ -3100,18 +3119,39 @@ void Wh_ModUninit() {
 
     StopWorkerThread();
 
+    // Unadvise VisualTreeWatcher up-front. Unadvising is COM/MTA-safe.
+    winrt::com_ptr<VisualTreeWatcher> watcher;
+    {
+        std::lock_guard<std::mutex> lock(g_watcherMutex);
+        watcher = g_visualTreeWatcher;
+    }
+    if (watcher) {
+        watcher->UnadviseVisualTreeChange();
+    }
+
     for (HWND hCoreWnd : GetCoreWnds()) {
         Wh_Log(L"Uninitializing for %08X", (DWORD)(ULONG_PTR)hCoreWnd);
         RunFromWindowThread(
             hCoreWnd,
             [](PVOID) {
-                UnregisterCoreWindowEvents();
-                UninitializeSettingsAndTap();
+                UninitializeForCurrentThread();
             },
             nullptr);
     }
 
-    UninitializeSettingsAndTap();
+    // If the watcher was not restored by a window thread (e.g. windows already destroyed
+    // or mod never attached to a tree), release the reference safely without invoking
+    // UI methods across threads.
+    {
+        std::lock_guard<std::mutex> lock(g_watcherMutex);
+        watcher = g_visualTreeWatcher;
+        g_visualTreeWatcher = nullptr;
+    }
+    if (watcher) {
+        watcher->UnadviseVisualTreeChange();
+    }
+
+    g_initialized = false;
 
     // Wh_ModUninit runs on a Windhawk worker thread, not a UI thread.
     // Block on a low-priority no-op on each CoreDispatcher to ensure all pending
@@ -3127,7 +3167,8 @@ void Wh_ModUninit() {
         if (auto d = weakDispatcher.get()) {
             try {
                 if (auto action = d.TryRunAsync(wuc::CoreDispatcherPriority::Low, []() {})) {
-                    action.get();
+                    using namespace std::chrono_literals;
+                    action.wait_for(500ms);
                 }
             } catch (...) {
                 Wh_Log(L"Dispatcher flush threw an exception");
