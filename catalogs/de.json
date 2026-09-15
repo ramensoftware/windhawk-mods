@@ -7530,6 +7530,35 @@
         "version": "1.3.4"
       }
     },
+    "hwinfo-registry-live-overlay": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1789495574000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1789495574000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "SilverAmd",
+        "compilerOptions": "-lgdi32 -lmsimg32 -lshell32 -lole32 -luuid",
+        "description": "Displays HWiNFO sensor values from the Registry as a lightweight desktop overlay.",
+        "github": "https://github.com/SilverAmd",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "HWiNFO Registry Live Overlay",
+        "version": "1.5.0"
+      }
+    },
     "icon-customizer": {
       "details": {
         "defaultSorting": 6174,

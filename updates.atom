@@ -2,12 +2,116 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-15T17:59:54.000Z</updated>
+    <updated>2026-09-15T18:06:14.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[HWiNFO Registry Live Overlay 1.5.0]]></title>
+        <id>https://windhawk.net/mods/hwinfo-registry-live-overlay#ef8174354647d2f0af22d3e6ecf9e12d246a3b70</id>
+        <link href="https://windhawk.net/mods/hwinfo-registry-live-overlay"/>
+        <updated>2026-09-15T18:06:14.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="hwinforegistryliveoverlay">HWiNFO Registry Live Overlay</h1>
+<p>A lightweight desktop overlay for displaying selected HWiNFO sensor values from the HWiNFO Gadget/VSB Registry output.</p>
+<p>The mod can be used to monitor values such as CPU power, GPU power, GPU temperature, VRAM usage, water-cooling pump RPM, coolant temperature, flow rate, PSU power, and other sensor values exposed by HWiNFO.</p>
+<h2 id="screenshots">Screenshots</h2>
+<p><img src="https://i.imgur.com/tajpyvb.png" alt="HWiNFO Registry Live Overlay desktop overlay less sensors" /></p>
+<p><em>Shows the desktop overlay with selected HWiNFO Gadget/VSB sensor values, auto height, background gradient, and optional Water Age.</em></p>
+<p><img src="https://i.imgur.com/8yz5LV6.png" alt="HWiNFO Registry Live Overlay desktop overlay more sensors" /></p>
+<p><em>Shows the desktop overlay with more selected HWiNFO Gadget/VSB sensor values, auto height, background gradient, and optional Water Age.</em></p>
+<p><img src="https://i.imgur.com/StZ9Mum.png" alt="HWiNFO Registry Live Overlay export helper" /></p>
+<p><em>Shows the HTML registry export helper.</em></p>
+<p><img src="https://i.imgur.com/a2a69Gh.png" alt="HWiNFO64 Sensor Settings Gadget setup" /></p>
+<p><em>Shows where to enable HWiNFO Gadget reporting: enable reporting to Gadget, select a sensor, enable “Report value in Gadget”, note the index number, and click OK.</em></p>
+<p><em>Alternatively, use the built-in registry export helper to look up the Label and Registry value name for each sensor, then add a row for it in the Rows setting.</em></p>
+<p><img src="https://i.imgur.com/D9D4hVT.png" alt="HWiNFO Registry Live Overlay Rows input field" /></p>
+<p><em>Shows the Rows setting. Each row has a Label and a Registry value name, managed with Add/Remove/Reorder. Use Ctrl+Alt+R to export available HWiNFO Gadget/VSB values as HTML.</em></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Displays selected HWiNFO Gadget/VSB Registry values on the desktop</li>
+<li>Configurable sensor rows using a native array setting (Label + Registry value name)</li>
+<li>Custom font family, size, weight, and style</li>
+<li>Separate label and value colors</li>
+<li>Left/right alignment for label and value columns</li>
+<li>Optional background with opacity</li>
+<li>Optional gradient background</li>
+<li>Optional rounded corners and border</li>
+<li>Optional always-on-top mode</li>
+<li>Toggle hotkey to show or hide the overlay</li>
+<li>Drag hotkey for live positioning</li>
+<li>Optional remembered drag position</li>
+<li>Auto height based on visible rows and Water Age</li>
+<li>Optional Water Age display based on a configured coolant fill date</li>
+<li>HTML export of the current HWiNFO Gadget/VSB Registry sensor list</li>
+<li>Helpful message and HTML page when no HWiNFO Gadget/VSB sensors are found</li>
+</ul>
+<h2 id="hwinfosetup">HWiNFO setup</h2>
+<p>This mod reads the HWiNFO Gadget/VSB Registry output.</p>
+<p>In HWiNFO:</p>
+<ol>
+<li>Open the Sensors window.</li>
+<li>Click Configure Sensors.</li>
+<li>Open the HWiNFO Gadget tab.</li>
+<li>Enable reporting to Gadget globally.</li>
+<li>Select the sensor values you want to use.</li>
+<li>Enable Report value in Gadget for each selected value.</li>
+<li>Press OK.</li>
+<li>Use the registry export hotkey to create an HTML sensor list.</li>
+</ol>
+<p>The default registry path is:</p>
+<pre><code class="txt language-txt">HKCU\SOFTWARE\HWiNFO64\VSB
+</code></pre>
+<p>Typical value names are:</p>
+<pre><code class="txt language-txt">Sensor0 / Label0 / Value0 / ValueRaw0 / Color0
+Sensor1 / Label1 / Value1 / ValueRaw1 / Color1
+...
+</code></pre>
+<p>Rows are configured using the native Rows array setting. Each row has two fields:</p>
+<pre><code class="txt language-txt">Label:                Example Sensor
+Registry value name:  Value0
+</code></pre>
+<p>Use Add/Remove/Reorder in the Rows setting to manage rows. Use the export hotkey to find out which registry value name (<code>ValueN</code>) belongs to which HWiNFO sensor.</p>
+<h2 id="hotkeys">Hotkeys</h2>
+<p>Default hotkeys:</p>
+<pre><code class="txt language-txt">Ctrl + Alt + H = Show/hide overlay
+Ctrl + Alt + D = Toggle drag mode
+Ctrl + Alt + R = Export HWiNFO Gadget/VSB Registry sensor list as HTML
+</code></pre>
+<p>The hotkeys can be changed in the mod settings.</p>
+<h2 id="waterage">Water Age</h2>
+<p>The optional Water Age feature calculates the number of days since a configured coolant fill date.</p>
+<p>Example:</p>
+<pre><code class="txt language-txt">Water fill date: 2024-11-18
+Water max age: 730 days
+</code></pre>
+<p>The Water Age text can change color based on warning and alarm percentage thresholds.</p>
+<h2 id="notes">Notes</h2>
+<p>This mod does not read all HWiNFO sensors directly. It only reads values that HWiNFO exposes through its Gadget/VSB Registry reporting feature.</p>
+<p>This mod does not use HWiNFO Shared Memory.</p>
+<p>This is a separate mod from Taskbar System Info and Desktop Live Overlay because it is focused on arbitrary user-selected HWiNFO Gadget/VSB Registry values. Taskbar System Info can use the HWiNFO Gadget Registry for limited taskbar temperature display, while Desktop Live Overlay provides generic desktop metrics. This mod instead provides a dedicated multi-row desktop table for HWiNFO ValueN entries, an HTML registry export helper for mapping those entries to Windhawk rows, and the optional Water Age row.</p>
+<p>HWiNFO must be installed and running, and the desired sensor values must be enabled for Gadget reporting in HWiNFO.</p>
+<h2 id="creditsandthanks">Credits and thanks</h2>
+<p>Special thanks to Martin Malik / REALiX, the developer of HWiNFO, for creating HWiNFO and for providing the HWiNFO Gadget/VSB Registry reporting feature.</p>
+<p>Martin Malik kindly granted permission to go ahead with this mod.</p>
+<p>This mod is not affiliated with HWiNFO / REALiX. All sensor data is provided by HWiNFO. The mod only reads the registry values that the user explicitly enables in HWiNFO Sensor Settings.</p>
+<p>Please respect the HWiNFO license terms. If you like HWiNFO and use it regularly, please consider supporting development by purchasing a HWiNFO license, especially for professional or commercial use.</p>
+<h2 id="development">Development</h2>
+<p>Created by SilverAmd / Zarko.</p>
+<p>Development assistance:</p>
+<ul>
+<li>ChatGPT by OpenAI</li>
+<li>Claude by Anthropic</li>
+<li>Mistral Vibe</li>
+</ul>
+<h2 id="license">License</h2>
+<p>MIT</p>]]></content>
+        <author>
+            <name>SilverAmd</name>
+            <uri>https://github.com/SilverAmd</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Chromium Cursor Remap 1.0]]></title>
         <id>https://windhawk.net/mods/chromium-cursor-remap#e180d87d310cc4a74135669933034a8185ebc852</id>
@@ -680,21 +784,6 @@ Original overlay/smear architecture inspired by <a href="https://github.com/Thea
         <author>
             <name>digART</name>
             <uri>https://github.com/digart11</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.4.5]]></title>
-        <id>https://windhawk.net/mods/taskbar-labels#cc00cec7e715c06c8242113ce8ce2fe117e120e1</id>
-        <link href="https://windhawk.net/mods/taskbar-labels"/>
-        <updated>2026-09-12T12:21:02.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved compatibility with the new small taskbar.</li>
-<li>Fixed icons being cut off for some settings, such as for large values of "Left and right padding size".</li>
-<li>Fixed an uncommon crash with some running indicator styles.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

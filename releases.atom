@@ -2,12 +2,116 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-15T17:59:54.000Z</updated>
+    <updated>2026-09-15T18:06:14.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[HWiNFO Registry Live Overlay 1.5.0]]></title>
+        <id>https://windhawk.net/mods/hwinfo-registry-live-overlay#ef8174354647d2f0af22d3e6ecf9e12d246a3b70</id>
+        <link href="https://windhawk.net/mods/hwinfo-registry-live-overlay"/>
+        <updated>2026-09-15T18:06:14.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="hwinforegistryliveoverlay">HWiNFO Registry Live Overlay</h1>
+<p>A lightweight desktop overlay for displaying selected HWiNFO sensor values from the HWiNFO Gadget/VSB Registry output.</p>
+<p>The mod can be used to monitor values such as CPU power, GPU power, GPU temperature, VRAM usage, water-cooling pump RPM, coolant temperature, flow rate, PSU power, and other sensor values exposed by HWiNFO.</p>
+<h2 id="screenshots">Screenshots</h2>
+<p><img src="https://i.imgur.com/tajpyvb.png" alt="HWiNFO Registry Live Overlay desktop overlay less sensors" /></p>
+<p><em>Shows the desktop overlay with selected HWiNFO Gadget/VSB sensor values, auto height, background gradient, and optional Water Age.</em></p>
+<p><img src="https://i.imgur.com/8yz5LV6.png" alt="HWiNFO Registry Live Overlay desktop overlay more sensors" /></p>
+<p><em>Shows the desktop overlay with more selected HWiNFO Gadget/VSB sensor values, auto height, background gradient, and optional Water Age.</em></p>
+<p><img src="https://i.imgur.com/StZ9Mum.png" alt="HWiNFO Registry Live Overlay export helper" /></p>
+<p><em>Shows the HTML registry export helper.</em></p>
+<p><img src="https://i.imgur.com/a2a69Gh.png" alt="HWiNFO64 Sensor Settings Gadget setup" /></p>
+<p><em>Shows where to enable HWiNFO Gadget reporting: enable reporting to Gadget, select a sensor, enable “Report value in Gadget”, note the index number, and click OK.</em></p>
+<p><em>Alternatively, use the built-in registry export helper to look up the Label and Registry value name for each sensor, then add a row for it in the Rows setting.</em></p>
+<p><img src="https://i.imgur.com/D9D4hVT.png" alt="HWiNFO Registry Live Overlay Rows input field" /></p>
+<p><em>Shows the Rows setting. Each row has a Label and a Registry value name, managed with Add/Remove/Reorder. Use Ctrl+Alt+R to export available HWiNFO Gadget/VSB values as HTML.</em></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Displays selected HWiNFO Gadget/VSB Registry values on the desktop</li>
+<li>Configurable sensor rows using a native array setting (Label + Registry value name)</li>
+<li>Custom font family, size, weight, and style</li>
+<li>Separate label and value colors</li>
+<li>Left/right alignment for label and value columns</li>
+<li>Optional background with opacity</li>
+<li>Optional gradient background</li>
+<li>Optional rounded corners and border</li>
+<li>Optional always-on-top mode</li>
+<li>Toggle hotkey to show or hide the overlay</li>
+<li>Drag hotkey for live positioning</li>
+<li>Optional remembered drag position</li>
+<li>Auto height based on visible rows and Water Age</li>
+<li>Optional Water Age display based on a configured coolant fill date</li>
+<li>HTML export of the current HWiNFO Gadget/VSB Registry sensor list</li>
+<li>Helpful message and HTML page when no HWiNFO Gadget/VSB sensors are found</li>
+</ul>
+<h2 id="hwinfosetup">HWiNFO setup</h2>
+<p>This mod reads the HWiNFO Gadget/VSB Registry output.</p>
+<p>In HWiNFO:</p>
+<ol>
+<li>Open the Sensors window.</li>
+<li>Click Configure Sensors.</li>
+<li>Open the HWiNFO Gadget tab.</li>
+<li>Enable reporting to Gadget globally.</li>
+<li>Select the sensor values you want to use.</li>
+<li>Enable Report value in Gadget for each selected value.</li>
+<li>Press OK.</li>
+<li>Use the registry export hotkey to create an HTML sensor list.</li>
+</ol>
+<p>The default registry path is:</p>
+<pre><code class="txt language-txt">HKCU\SOFTWARE\HWiNFO64\VSB
+</code></pre>
+<p>Typical value names are:</p>
+<pre><code class="txt language-txt">Sensor0 / Label0 / Value0 / ValueRaw0 / Color0
+Sensor1 / Label1 / Value1 / ValueRaw1 / Color1
+...
+</code></pre>
+<p>Rows are configured using the native Rows array setting. Each row has two fields:</p>
+<pre><code class="txt language-txt">Label:                Example Sensor
+Registry value name:  Value0
+</code></pre>
+<p>Use Add/Remove/Reorder in the Rows setting to manage rows. Use the export hotkey to find out which registry value name (<code>ValueN</code>) belongs to which HWiNFO sensor.</p>
+<h2 id="hotkeys">Hotkeys</h2>
+<p>Default hotkeys:</p>
+<pre><code class="txt language-txt">Ctrl + Alt + H = Show/hide overlay
+Ctrl + Alt + D = Toggle drag mode
+Ctrl + Alt + R = Export HWiNFO Gadget/VSB Registry sensor list as HTML
+</code></pre>
+<p>The hotkeys can be changed in the mod settings.</p>
+<h2 id="waterage">Water Age</h2>
+<p>The optional Water Age feature calculates the number of days since a configured coolant fill date.</p>
+<p>Example:</p>
+<pre><code class="txt language-txt">Water fill date: 2024-11-18
+Water max age: 730 days
+</code></pre>
+<p>The Water Age text can change color based on warning and alarm percentage thresholds.</p>
+<h2 id="notes">Notes</h2>
+<p>This mod does not read all HWiNFO sensors directly. It only reads values that HWiNFO exposes through its Gadget/VSB Registry reporting feature.</p>
+<p>This mod does not use HWiNFO Shared Memory.</p>
+<p>This is a separate mod from Taskbar System Info and Desktop Live Overlay because it is focused on arbitrary user-selected HWiNFO Gadget/VSB Registry values. Taskbar System Info can use the HWiNFO Gadget Registry for limited taskbar temperature display, while Desktop Live Overlay provides generic desktop metrics. This mod instead provides a dedicated multi-row desktop table for HWiNFO ValueN entries, an HTML registry export helper for mapping those entries to Windhawk rows, and the optional Water Age row.</p>
+<p>HWiNFO must be installed and running, and the desired sensor values must be enabled for Gadget reporting in HWiNFO.</p>
+<h2 id="creditsandthanks">Credits and thanks</h2>
+<p>Special thanks to Martin Malik / REALiX, the developer of HWiNFO, for creating HWiNFO and for providing the HWiNFO Gadget/VSB Registry reporting feature.</p>
+<p>Martin Malik kindly granted permission to go ahead with this mod.</p>
+<p>This mod is not affiliated with HWiNFO / REALiX. All sensor data is provided by HWiNFO. The mod only reads the registry values that the user explicitly enables in HWiNFO Sensor Settings.</p>
+<p>Please respect the HWiNFO license terms. If you like HWiNFO and use it regularly, please consider supporting development by purchasing a HWiNFO license, especially for professional or commercial use.</p>
+<h2 id="development">Development</h2>
+<p>Created by SilverAmd / Zarko.</p>
+<p>Development assistance:</p>
+<ul>
+<li>ChatGPT by OpenAI</li>
+<li>Claude by Anthropic</li>
+<li>Mistral Vibe</li>
+</ul>
+<h2 id="license">License</h2>
+<p>MIT</p>]]></content>
+        <author>
+            <name>SilverAmd</name>
+            <uri>https://github.com/SilverAmd</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Chromium Cursor Remap 1.0]]></title>
         <id>https://windhawk.net/mods/chromium-cursor-remap#e180d87d310cc4a74135669933034a8185ebc852</id>
@@ -969,162 +1073,6 @@ use the mod <code>Taskbar tray icon spacing and grid</code>.</p>
         <author>
             <name>Dron007</name>
             <uri>https://github.com/Dron007</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Start Button Centered Origin 0.1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-centered-start-split-icons#439154bf481990369a27159931010092934dbb06</id>
-        <link href="https://windhawk.net/mods/taskbar-centered-start-split-icons"/>
-        <updated>2026-09-05T17:13:54.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarstartbuttoncenteredorigin">Taskbar Start Button Centered Origin</h1>
-<p>Pins the Windows/Start button to the exact horizontal center of the primary
-monitor, regardless of how many taskbar icons are present. Running-app
-taskbar buttons are split into two groups that flank the Start button:</p>
-<ul>
-<li>A button goes to the <strong>left</strong> group if its window's current on-screen
-position is left of screen-center.</li>
-<li>A button goes to the <strong>right</strong> group if its window is right of
-screen-center.</li>
-<li>Pinned-but-not-running apps have no window to check the position of, so
-they're classified by the <code>leftApps</code>/<code>rightApps</code> name lists below, falling
-back to <code>unresolvedAppsDefaultSide</code> if unlisted. Within whichever side
-they land on, <code>pinnedAppsAnchor</code> picks whether they sit at the far edge
-or right next to Start.</li>
-</ul>
-<p><img src="https://raw.githubusercontent.com/rycalvo/w11tb_centerer/main/screenshots/leftside.png" alt="Window left of screen-center" /><br />
-<em>The crosshair-marked window sits left of screen-center - its taskbar icon
-follows, landing left of Start.</em></p>
-<p><img src="https://raw.githubusercontent.com/rycalvo/w11tb_centerer/main/screenshots/rightdefault.png" alt="Window right of screen-center" /><br />
-<em>The same window moved right of screen-center - its icon moves with it,
-to the right of Start.</em></p>
-<p>When you drag a window across the center line of the screen, its taskbar
-button switches sides to follow it. Side-switching is driven by a periodic
-poll of tracked windows' positions and is best-effort: it happens shortly
-after a drag/move settles, not on every intermediate pixel of the drag.</p>
-<p>Search, Task View and Widgets can either stay at the far left edge, or move
-right next to Start on whichever side you prefer.</p>
-<p>The window-tracking behind position-based splitting and drag-follow can be
-turned off entirely with <code>trackWindowPositions</code>, if you'd rather keep just
-the centered Start button and system-button placement with no background
-probing of taskbar buttons and no periodic position polling - every app is
-then classified the same way as a pinned-but-not-running one instead.</p>
-<h2 id="knownlimitationspleasereadbeforereportingissues">Known limitations (please read before reporting issues)</h2>
-<ul>
-<li><strong>Windows 11 only.</strong> Windows 10's taskbar has no XAML layer to hook into.</li>
-<li><strong>Primary monitor only</strong>, for both the Start button's position and
-window-side classification - and on a multi-monitor setup this is a
-bigger limitation than it might sound: a window's side is decided by
-comparing its position against the <em>primary</em> monitor's center line, so
-every window on a monitor entirely to one side of the primary reads as a
-fixed left/right regardless of where on that monitor it actually sits -
-only movement within the primary monitor (or across its center line) is
-tracked per-pixel. Taskbars on secondary displays aren't specially
-handled either (their icons keep Windows' default layout) - the mod's
-positioning plan is only ever computed on the primary taskbar's own
-thread, so secondary-monitor elements are simply never included in it
-and fall through to Windows' native positioning.</li>
-<li><strong>Don't enable alongside "Start button always on the left".</strong> Both mods
-hook the same process-wide <code>IUIElement::Arrange</code> vtable slot, and both
-write their own X position for the Start button - with both enabled,
-they simply disagree, and whichever one's hook runs last for a given
-Arrange call wins for that pass. This mod's <code>systemButtonsPlacement:
-far-left</code> setting covers the same "keep everything else out of Start's
-way" goal that mod's <code>otherSystemButtonsOnTheLeft</code> option does, so
-there's no reason to run both together. This mod is intentionally scoped
-to true screen-center plus position-based icon splitting specifically -
-not a general Start-position picker - so this conflict is a documented
-incompatibility to avoid rather than something planned to be resolved by
-merging the two mods or their positioning logic.</li>
-<li><strong>The Start menu itself doesn't follow the repositioned Start button.</strong>
-This mod only moves the Start <em>button</em> - nothing decides where the Start
-<em>menu</em> opens. With the taskbar's own "Taskbar alignment" set to
-"Center", the menu happens to open near screen-center anyway since
-that's where Windows expects it by default, but with alignment set to
-"Left", the button sits at true center while the menu still opens at the
-left edge. This is a solvable limitation rather than a permanent one -
-<code>taskbar-start-button-position.wh.cpp</code> repositions the menu itself by
-hooking <code>StartMenuExperienceHost.exe</code> - just not something this mod
-does today.</li>
-<li><strong>A very crowded side compresses instead of overflowing cleanly.</strong> If
-enough app icons pile up on one side that they'd run into the system
-tray/clock on the right (or, in "far left" placement, into Search/Task
-View/Widgets on the left), icon spacing on that side is compressed just
-enough to keep the whole group within bounds - icons still render at
-full size, so once genuinely crowded they visually overlap each other
-rather than being hidden or scrolled the way the taskbar's own overflow
-handling would.</li>
-<li><strong>Windows' own "Combine taskbar buttons and hide labels: When taskbar
-is full" doesn't shrink icons under this mod</strong> (icons stay full-size and
-compress/overlap instead, per the point above) - "Always" isn't
-affected and works normally. Likely because the "when full" decision is
-made by native layout logic (this mod only overrides each button's
-final X position afterward, it never touches sizing), evaluated against
-the taskbar's native, unsplit layout rather than this mod's split one -
-unconfirmed, not yet investigated further.</li>
-<li><strong>A grouped button (multiple windows combined under one icon) follows
-only its first window.</strong> With "Combine taskbar buttons" set to "Always",
-a group's side and ordering are both decided by whichever of its windows
-happens to be first in the taskbar's own internal list - not necessarily
-the one you'd expect - so a group whose windows straddle the center line
-won't visually reflect all of them. There's no exposed way to pick a
-more meaningful "primary" window for a group, so this is a documented
-tradeoff rather than a bug.</li>
-<li><strong>The taskbar's own overflow button, when it appears on a crowded
-taskbar, keeps its native position</strong> rather than being classified and
-placed like the buttons around it - this mod doesn't give it a slot in
-the split layout.</li>
-<li><strong>Undocumented internals.</strong> This mod hooks private, unversioned classes
-inside <code>taskbar.dll</code> and <code>Taskbar.View.dll</code> (via symbols resolved from
-Microsoft's public symbol server at runtime, not hardcoded offsets). A
-Windows update can change these internals and break the mod until it's
-updated. If that happens, disable the mod rather than filing against
-explorer.exe crashing.</li>
-<li>The "resolve which HWND a taskbar button represents" step reuses a
-technique from other taskbar-reordering mods (synchronously reporting a
-sentinel "click" to the taskbar's internal click handler, which is
-intercepted before it does anything, to read back the window handle) -
-but unlike those mods, which only ever dispatch it from an actual user
-gesture on one specific button, this mod dispatches it unattended, on
-its own background timer, against every button it hasn't resolved yet.
-It runs on a periodic timer rather than inline during layout, and
-Arrange only ever reads whatever the timer has already cached - running
-it synchronously from inside the taskbar's own layout pass was the
-confirmed cause of an explorer.exe crash (specifically when Windows'
-"show taskbar apps on" setting is anything other than "All taskbars",
-since that's when a window moving across monitors structurally adds/
-removes taskbar buttons rather than just repositioning them). As a
-further safeguard, the very first such probe of a session is held back
-until a real (non-sentinel) click has been seen passing through the same
-interception point, and three misses on a path that has never once
-succeeded latch this mod's probing off entirely on that path (see
-<code>Wh_Log</code> for which) - so a running app's icon may briefly show on its
-default side, rather than by window position, until you click any
-taskbar button once. That gate
-only covers <em>before</em> interception is ever confirmed working, though: if
-a future Windows update breaks interception in a way that still lets a
-probe reach the taskbar's real click handler afterward, the probe's
-sentinel value gets delivered as that handler's real argument, and the
-realistic worst case is a stray window activate/minimize or an access
-violation in explorer.exe, not merely icons freezing on their default
-side.</li>
-<li><strong>Taskbar buttons can disappear when a display is deactivated</strong> (via
-Settings, unplugging, or a third-party display on/off tool) - if
-"Taskbar behaviors &gt; When using multiple displays, show my taskbar apps
-on" isn't set to "All taskbars", Windows itself can drop a window's
-taskbar button entirely until you switch to that window (e.g. via
-Alt+Tab), rather than migrating it to the remaining taskbar. Reactivating
-a display doesn't trigger this. This is native Explorer/taskbar.dll
-behavior upstream of anything the mod hooks into, not something this mod
-causes or can work around.</li>
-</ul>
-<h2 id="disclosures">Disclosures</h2>
-<p>I am not a software developer. The present mod was developed using the
-Claude Code extension in VS Code. This mod was created for my own
-interests and shared for targeted development by members of the Windhawk
-community.</p>]]></content>
-        <author>
-            <name>rick</name>
-            <uri>https://github.com/rycalvo</uri>
         </author>
     </entry>
 </feed>
