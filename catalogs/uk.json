@@ -17557,7 +17557,7 @@
           3
         ],
         "ratingUsers": 3,
-        "updated": 1789132705000,
+        "updated": 1789493677000,
         "users": 77
       },
       "metadata": {
@@ -17572,7 +17572,7 @@
         ],
         "license": "MIT",
         "name": "Windows 11 Native Four Column Snap Layout",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "windows-11-notification-center-styler": {

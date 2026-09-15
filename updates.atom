@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-14T23:29:05.000Z</updated>
+    <updated>2026-09-15T17:34:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Native Four Column Snap Layout 1.1]]></title>
+        <id>https://windhawk.net/mods/windows-11-native-four-column-snap-layout#81d32eea1d5d2e9656c2e39c51188c471f6b2cec</id>
+        <link href="https://windhawk.net/mods/windows-11-native-four-column-snap-layout"/>
+        <updated>2026-09-15T17:34:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the Snap Layout picker height for varying suggestion counts when only one or two windows are available</li>
+</ul>]]></content>
+        <author>
+            <name>Hoffelhas</name>
+            <uri>https://github.com/Hoffelhas</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[AltDrag 1.0]]></title>
         <id>https://windhawk.net/mods/alt-drag#cade2e296c8b0d782b05940db9585aed8a438680</id>
@@ -580,45 +593,6 @@ Replacer</a> mod.</p>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide Empty Optical Drives 1.0.0]]></title>
-        <id>https://windhawk.net/mods/hide-empty-optical-drives-shell#aa233acc7e301068b9f3f7baf35221c635507ca5</id>
-        <link href="https://windhawk.net/mods/hide-empty-optical-drives-shell"/>
-        <updated>2026-09-11T13:28:04.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="hideemptyopticaldrives">Hide Empty Optical Drives</h1>
-<p>Hides empty optical drives from <strong>This PC</strong> while leaving the device and its
-drive letter fully available to Windows.</p>
-<p><img src="https://raw.githubusercontent.com/Solomag/windhawk-assets/main/hide-empty-optical-drives/demo.gif" alt="Demo" /></p>
-<p>Unlike the built-in "Hide empty drives" option, this mod is intended for
-optical CD/DVD/BD drives that still remain visible in This PC when empty.</p>
-<p>The mod only affects the main <strong>This PC</strong> view in File Explorer
-(<code>explorer.exe</code>). The navigation pane, address-bar dropdown, file dialogs and
-third-party file managers are not modified.</p>
-<p>When an empty drive is hidden, Explorer's context-menu <strong>Eject</strong> command is no
-longer available for it. Use the drive's physical eject button instead.</p>
-<h3 id="compatibility">Compatibility</h3>
-<p>Tested on:</p>
-<ul>
-<li>Windows 10 22H2 (build 19045)</li>
-<li>Windows 11 25H2</li>
-</ul>
-<p>Verified behavior includes hiding an empty optical drive, showing it after media
-insertion, hiding it again after eject, and keeping the correct state after
-restarting Explorer.</p>
-<p>Media detection is event-driven. There is no permanent polling. After Windows
-reports media insertion, a background worker retries briefly while an optical
-disc spins up.</p>
-<p>Detection behavior:</p>
-<ul>
-<li>media confirmed present -&gt; show;</li>
-<li>no media, or a drive that remains not ready after the spin-up grace window -&gt; hide;</li>
-<li>other inconclusive probe failures -&gt; show (fail open).</li>
-</ul>]]></content>
-        <author>
-            <name>Solo_mag</name>
-            <uri>https://github.com/Solomag</uri>
         </author>
     </entry>
 </feed>
