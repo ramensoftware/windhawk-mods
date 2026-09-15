@@ -324,13 +324,13 @@
           0
         ],
         "ratingUsers": 0,
-        "updated": 1789428545000,
+        "updated": 1789501993000,
         "users": 0
       },
       "metadata": {
         "author": "m417z",
         "compilerOptions": "-lcomctl32",
-        "description": "Move any window by holding Alt and dragging it from anywhere, without having to grab the title bar",
+        "description": "Move or resize any window by holding Alt and dragging it from anywhere, without having to grab the title bar or the borders",
         "github": "https://github.com/m417z",
         "homepage": "https://m417z.com/",
         "include": [
@@ -338,7 +338,7 @@
         ],
         "name": "AltDrag",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "alt-tab-delayer": {

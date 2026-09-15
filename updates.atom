@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-15T18:23:09.000Z</updated>
+    <updated>2026-09-15T19:53:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[AltDrag 1.1]]></title>
+        <id>https://windhawk.net/mods/alt-drag#09d24cc8eb03bb94ebb7d7f79158dacc9c9d2902</id>
+        <link href="https://windhawk.net/mods/alt-drag"/>
+        <updated>2026-09-15T19:53:13.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the ability to resize any window by holding Alt and dragging it with the right mouse button.</li>
+<li>The mouse buttons and the keys can now be changed in the mod settings.</li>
+<li>A delay can now be configured, such that move/resize only start when the mouse is held for the specified amount of time. A shorter press behaves as a regular click.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Tray Keyboard Layout Indicator 6.1.0]]></title>
         <id>https://windhawk.net/mods/classic-tray-keyboard-layout-indicator#5c768b0801763b3a8374c9bed5a0f2de49690b82</id>
@@ -783,20 +798,6 @@ Original overlay/smear architecture inspired by <a href="https://github.com/Thea
 <li>Several target controls can now be specified for the same styles by separating them with commas, for example: <code>ParentClass &gt; Class#Name1, ParentClass &gt; Class#Name2</code>.</li>
 <li>Style variables now get the value from whichever capturing control is closest. Previously, the value was undefined if there was more than one control publishing the same variable.</li>
 <li>Improved handling for remote images and added local caching. Internet connection is no longer needed once remote images are downloaded.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start button colorizer 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-start-button-colorizer#008f818567e8e0627aa0f86e93dfe62595e03eff</id>
-        <link href="https://windhawk.net/mods/taskbar-start-button-colorizer"/>
-        <updated>2026-09-12T14:57:25.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option to use the system accent color.</li>
-<li>Fixed the color not applying on startup until the Start button is hovered.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>
