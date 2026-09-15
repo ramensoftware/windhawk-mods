@@ -2,12 +2,111 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-15T17:42:45.000Z</updated>
+    <updated>2026-09-15T17:59:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Chromium Cursor Remap 1.0]]></title>
+        <id>https://windhawk.net/mods/chromium-cursor-remap#e180d87d310cc4a74135669933034a8185ebc852</id>
+        <link href="https://windhawk.net/mods/chromium-cursor-remap"/>
+        <updated>2026-09-15T17:59:54.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="chromiumcursorremap">Chromium Cursor Remap</h1>
+<p>Chromium browsers and Electron apps draw ten CSS cursors from bitmaps of their
+own instead of asking Windows: <code>grab</code>, <code>grabbing</code>, <code>zoom-in</code>, <code>zoom-out</code>,
+<code>cell</code>, <code>vertical-text</code>, <code>alias</code>, <code>copy</code>, <code>col-resize</code> and <code>row-resize</code>. Those
+bitmaps don't follow your Windows cursor scheme. This mod replaces them with
+cursors from that scheme, or with <code>.cur</code> / <code>.ani</code> files of your choice.</p>
+<p><img src="https://raw.githubusercontent.com/mazany/windhawk-images/5d2c26f93a023738d3597a6a7c8805a9124dc9b2/chromium-cursor-remap/before-after.png" alt="Chromium's own cursors (top) and the Windows cursors that replace them (bottom), in Microsoft Edge at 150% display scale" /></p>
+<p>Cursors that Chromium already takes from Windows (<code>default</code>, <code>pointer</code>, <code>text</code>,
+<code>wait</code>, <code>not-allowed</code>, the directional resize cursors and so on) are not
+touched, and neither are cursor images that a web page sets itself with
+<code>cursor: url(...)</code>.</p>
+<h2 id="defaultreplacements">Default replacements</h2>
+<p>| CSS cursor              | Replaced with                        |
+|-------------------------|--------------------------------------|
+| grab                    | Link select (<code>IDC_HAND</code>)             |
+| grabbing                | Move (<code>IDC_SIZEALL</code>)                 |
+| zoom-in, zoom-out, cell | Precision select (<code>IDC_CROSS</code>)       |
+| vertical-text           | Text select (<code>IDC_IBEAM</code>)            |
+| alias, copy             | Normal select (<code>IDC_ARROW</code>)          |
+| col-resize              | Horizontal resize (<code>IDC_SIZEWE</code>)     |
+| row-resize              | Vertical resize (<code>IDC_SIZENS</code>)       |</p>
+<h2 id="settings">Settings</h2>
+<p>Each cursor type has two settings:</p>
+<ul>
+<li><strong>Keep Chromium's own cursor</strong> leaves that type alone.</li>
+<li><strong>Custom cursor source</strong> takes either an <code>IDC_*</code> name - <code>IDC_ARROW</code>,
+<code>IDC_IBEAM</code>, <code>IDC_WAIT</code>, <code>IDC_CROSS</code>, <code>IDC_UPARROW</code>, <code>IDC_SIZENWSE</code>,
+<code>IDC_SIZENESW</code>, <code>IDC_SIZEWE</code>, <code>IDC_SIZENS</code>, <code>IDC_SIZEALL</code>, <code>IDC_NO</code>,
+<code>IDC_HAND</code>, <code>IDC_APPSTARTING</code>, <code>IDC_HELP</code>, <code>IDC_PIN</code>, <code>IDC_PERSON</code> - or the
+full path of a <code>.cur</code> or <code>.ani</code> file, such as <code>C:\Cursors\grab.ani</code>. Leave it
+empty for the default above; a source that cannot be loaded also falls back
+to the default.</li>
+</ul>
+<p><strong>Test mode</strong> puts one cursor (by default the busy cursor, <code>IDC_WAIT</code>) on every
+cursor the mod recognises, whatever the per-type settings say, so you can see at
+a glance which ones it catches. If the test cursor cannot be loaded, the
+per-type settings stay in force.</p>
+<p>Settings take effect without restarting the app.</p>
+<h2 id="testedwith">Tested with</h2>
+<ul>
+<li>Microsoft Edge 152 and 153, and Google Chrome 152: all ten cursor types replaced.</li>
+<li>MarkText 0.19.1, an Electron app.</li>
+<li>A 32-bit NW.js app: the mod stays in its main process and leaves its helper
+processes, and its bundled cursor images were checked to be recognised by
+the 32-bit build.</li>
+<li>The cursor images bundled with VS Code, Obsidian, Vivaldi and Steam's built-in
+browser (CEF) were checked to be recognised. Windhawk does not load mods into
+Steam installed under <code>Program Files</code> unless it is removed from Windhawk's
+process exclusion list, which lists it by default as a game folder.</li>
+</ul>
+<p>Other Chromium-based browsers and Electron or CEF apps should work the same way.</p>
+<h2 id="howitworks">How it works</h2>
+<p>The mod is set to load into every program, because Electron and CEF apps can
+have any file name and a list of names misses most of them. It stays only in
+the main process of a Chromium-based app, which it recognises from the program
+file itself before installing any hook; anywhere else, including Chromium's own
+helper processes, it unloads again at once.</p>
+<p>In the processes where it stays, it watches <code>SetCursor</code>. The first time a cursor
+appears, the mod asks Windows which module and resource it was loaded from,
+loads that resource again at 32x32 and compares it with Chromium's ten bundled
+images. The answer does not depend on the size the app loaded the cursor at
+(checked from 32 to 72 px, which covers display scaling from 100% to 225%). A
+web page's own cursor image has no resource behind it and is left alone.</p>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>The mod is also built for ARM64 apps; that build has not been tested.</li>
+<li>On screen, only 150% display scaling has been checked; other sizes were
+checked by loading the cursors at those sizes.</li>
+<li>Apps that host WebView2 in visual (composition) mode set the cursor from
+their own process, so their web content keeps Chromium's cursors.</li>
+<li>A CEF app that loads <code>libcef.dll</code> only after it has started is not
+recognised.</li>
+<li>Chromium's middle-click autoscroll cursors are not replaced.</li>
+<li>A <code>.cur</code> / <code>.ani</code> file is read once per app session. After editing a file in
+place, restart the app, or turn the mod off and on again.</li>
+<li>Custom files are loaded at the cursor size set in Windows.</li>
+</ul>
+<h2 id="compatibility">Compatibility</h2>
+<p><strong>Icon Resource Redirect</strong> can also theme cursors, by redirecting the resources
+apps load them from; this mod was tested with it enabled. A Chromium cursor that
+Icon Resource Redirect has already redirected no longer matches Chromium's own
+images, so this mod leaves it as Icon Resource Redirect drew it.</p>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p>Turn on logging for this mod in Windhawk. Each new cursor gets one log line
+naming the module and resource it came from, a hash of its image and the
+verdict. If a Chromium cursor stops being replaced after a browser update,
+Chromium has probably redrawn it: please report that log line together with the
+CSS cursor type in the Windhawk mods repository on GitHub
+(ramensoftware/windhawk-mods).</p>]]></content>
+        <author>
+            <name>mazany</name>
+            <uri>https://github.com/mazany</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Double-Click Window Edge to Maximize Width 1.0]]></title>
         <id>https://windhawk.net/mods/edge-doubleclick-resize#c69dab54e3f2d6439b4cc6775ac4a9441d3766b8</id>
@@ -1026,73 +1125,6 @@ community.</p>]]></content>
         <author>
             <name>rick</name>
             <uri>https://github.com/rycalvo</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Num Lock Lockdown 1.1.9]]></title>
-        <id>https://windhawk.net/mods/numlock-lockdown#4ff551adf85080f58bc3d6ad8afd0832d177bd4a</id>
-        <link href="https://windhawk.net/mods/numlock-lockdown"/>
-        <updated>2026-09-05T16:26:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="numlocklockdown">Num Lock Lockdown</h1>
-<p>Keeps Num Lock ON with almost no background work. A low-level keyboard hook
-watches the Num Lock key and the override modifier. There is no fast polling.
-An optional slow safety check (off, or every few seconds; 10 s by default)
-covers the few cases the hook cannot see.</p>
-<h2 id="behavior">Behavior</h2>
-<p>| Situation | Result |
-| --- | --- |
-| Normal use | Num Lock stays ON. The Num Lock key does nothing (default). |
-| Hold Shift + press Num Lock | Normal toggle is allowed. |
-| Release Shift | Num Lock is forced back ON if it is off. |
-| Sleep/wake, RDP, or another program turns it off | Forced back ON on the next event, on unlock/resume/focus change, or on the safety check. |
-| Mod disabled | The Num Lock <em>key</em> behaves normally again. The LED is left ON (the last forced state), not restored to whatever it was before the mod ran. |</p>
-<p>Hold <strong>Left Shift</strong> or <strong>Right Shift</strong> and press Num Lock to toggle it
-normally for as long as you keep Shift down. While Shift is held, numpad
-arrows are Shift+Arrow in most apps (extend selection), not plain arrows.
-Ctrl, Alt, and Win have the same kind of extra meaning. Release the
-override and Num Lock is turned back on.</p>
-<p><strong>Block</strong> (the default) swallows Num Lock for every process, so a game or app
-that uses Num Lock as a hotkey will not see the key. Use <strong>Allow</strong> if you need
-those binds; the mod still forces Num Lock back ON on key-up.</p>
-<h2 id="whyatoolmod">Why a tool mod?</h2>
-<p>The mod is loaded into a dedicated <code>windhawk.exe</code> process (<code>@include
-windhawk.exe</code>). It does not inject into Explorer or every running app. That
-keeps overhead low and avoids tying Num Lock to the shell process.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The keyboard hook cannot see keystrokes sent to a higher-integrity
-(elevated) window because of UIPI. <code>SendInput</code> is also subject to UIPI:
-when an elevated window is focused, the injected Num Lock pulse is
-dropped and neither the return value nor <code>GetLastError</code> reports it. Run
-Windhawk as administrator if you need the force-on to work while an
-elevated app is in front. When focus moves back to a normal window, a
-foreground-change hook retries the pulse. The safety check is a slower
-fallback for cases with no focus change.</li>
-<li>The hook also cannot see some Remote Desktop / KVM paths. Session-unlock
-/ resume handlers and the safety check cover those.</li>
-<li>If the hook misses a modifier key-up (elevated window or secure desktop),
-the next Num Lock event re-reads the real modifier state from the OS, and
-the worker does the same before skipping a force-on.</li>
-<li><strong>Block</strong> also swallows the ToggleKeys accessibility shortcut (hold Num
-Lock for 5 seconds) and the MouseKeys shortcut (Left Alt + Left Shift +
-Num Lock) whenever your override modifier is not Shift or Alt. Use
-<strong>Allow</strong> if you need those shortcuts.</li>
-<li>Synthetic Num Lock presses this mod sends are tagged and ignored by
-<em>this</em> hook, so the force-on path cannot fight itself. Other apps still
-see those injected presses (the pulse has to reach the OS to move the
-LED). A game bound to Num Lock can therefore see a synthetic press when
-a force-on fires, even in <strong>Block</strong> mode.</li>
-<li>In "allow" mode, holding Num Lock without the modifier can leave it off
-until you release the key. Auto-repeat is swallowed so the LED does not
-flicker; force-on runs on key-up. If the safety check is on (10 s by
-default), it can still force Num Lock back ON while the key is held.</li>
-<li>The Win key is never blocked. Only Num Lock is filtered. If you hold Win and
-press numpad 1/3/5/9, Windows may type those digits because Win+Numpad1 is
-not the same shortcut as Win+1 on the number row. That is OS behavior.</li>
-</ul>]]></content>
-        <author>
-            <name>tonythethompson</name>
-            <uri>https://github.com/tonythethompson</uri>
         </author>
     </entry>
 </feed>

@@ -2,12 +2,111 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-15T17:42:45.000Z</updated>
+    <updated>2026-09-15T17:59:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Chromium Cursor Remap 1.0]]></title>
+        <id>https://windhawk.net/mods/chromium-cursor-remap#e180d87d310cc4a74135669933034a8185ebc852</id>
+        <link href="https://windhawk.net/mods/chromium-cursor-remap"/>
+        <updated>2026-09-15T17:59:54.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="chromiumcursorremap">Chromium Cursor Remap</h1>
+<p>Chromium browsers and Electron apps draw ten CSS cursors from bitmaps of their
+own instead of asking Windows: <code>grab</code>, <code>grabbing</code>, <code>zoom-in</code>, <code>zoom-out</code>,
+<code>cell</code>, <code>vertical-text</code>, <code>alias</code>, <code>copy</code>, <code>col-resize</code> and <code>row-resize</code>. Those
+bitmaps don't follow your Windows cursor scheme. This mod replaces them with
+cursors from that scheme, or with <code>.cur</code> / <code>.ani</code> files of your choice.</p>
+<p><img src="https://raw.githubusercontent.com/mazany/windhawk-images/5d2c26f93a023738d3597a6a7c8805a9124dc9b2/chromium-cursor-remap/before-after.png" alt="Chromium's own cursors (top) and the Windows cursors that replace them (bottom), in Microsoft Edge at 150% display scale" /></p>
+<p>Cursors that Chromium already takes from Windows (<code>default</code>, <code>pointer</code>, <code>text</code>,
+<code>wait</code>, <code>not-allowed</code>, the directional resize cursors and so on) are not
+touched, and neither are cursor images that a web page sets itself with
+<code>cursor: url(...)</code>.</p>
+<h2 id="defaultreplacements">Default replacements</h2>
+<p>| CSS cursor              | Replaced with                        |
+|-------------------------|--------------------------------------|
+| grab                    | Link select (<code>IDC_HAND</code>)             |
+| grabbing                | Move (<code>IDC_SIZEALL</code>)                 |
+| zoom-in, zoom-out, cell | Precision select (<code>IDC_CROSS</code>)       |
+| vertical-text           | Text select (<code>IDC_IBEAM</code>)            |
+| alias, copy             | Normal select (<code>IDC_ARROW</code>)          |
+| col-resize              | Horizontal resize (<code>IDC_SIZEWE</code>)     |
+| row-resize              | Vertical resize (<code>IDC_SIZENS</code>)       |</p>
+<h2 id="settings">Settings</h2>
+<p>Each cursor type has two settings:</p>
+<ul>
+<li><strong>Keep Chromium's own cursor</strong> leaves that type alone.</li>
+<li><strong>Custom cursor source</strong> takes either an <code>IDC_*</code> name - <code>IDC_ARROW</code>,
+<code>IDC_IBEAM</code>, <code>IDC_WAIT</code>, <code>IDC_CROSS</code>, <code>IDC_UPARROW</code>, <code>IDC_SIZENWSE</code>,
+<code>IDC_SIZENESW</code>, <code>IDC_SIZEWE</code>, <code>IDC_SIZENS</code>, <code>IDC_SIZEALL</code>, <code>IDC_NO</code>,
+<code>IDC_HAND</code>, <code>IDC_APPSTARTING</code>, <code>IDC_HELP</code>, <code>IDC_PIN</code>, <code>IDC_PERSON</code> - or the
+full path of a <code>.cur</code> or <code>.ani</code> file, such as <code>C:\Cursors\grab.ani</code>. Leave it
+empty for the default above; a source that cannot be loaded also falls back
+to the default.</li>
+</ul>
+<p><strong>Test mode</strong> puts one cursor (by default the busy cursor, <code>IDC_WAIT</code>) on every
+cursor the mod recognises, whatever the per-type settings say, so you can see at
+a glance which ones it catches. If the test cursor cannot be loaded, the
+per-type settings stay in force.</p>
+<p>Settings take effect without restarting the app.</p>
+<h2 id="testedwith">Tested with</h2>
+<ul>
+<li>Microsoft Edge 152 and 153, and Google Chrome 152: all ten cursor types replaced.</li>
+<li>MarkText 0.19.1, an Electron app.</li>
+<li>A 32-bit NW.js app: the mod stays in its main process and leaves its helper
+processes, and its bundled cursor images were checked to be recognised by
+the 32-bit build.</li>
+<li>The cursor images bundled with VS Code, Obsidian, Vivaldi and Steam's built-in
+browser (CEF) were checked to be recognised. Windhawk does not load mods into
+Steam installed under <code>Program Files</code> unless it is removed from Windhawk's
+process exclusion list, which lists it by default as a game folder.</li>
+</ul>
+<p>Other Chromium-based browsers and Electron or CEF apps should work the same way.</p>
+<h2 id="howitworks">How it works</h2>
+<p>The mod is set to load into every program, because Electron and CEF apps can
+have any file name and a list of names misses most of them. It stays only in
+the main process of a Chromium-based app, which it recognises from the program
+file itself before installing any hook; anywhere else, including Chromium's own
+helper processes, it unloads again at once.</p>
+<p>In the processes where it stays, it watches <code>SetCursor</code>. The first time a cursor
+appears, the mod asks Windows which module and resource it was loaded from,
+loads that resource again at 32x32 and compares it with Chromium's ten bundled
+images. The answer does not depend on the size the app loaded the cursor at
+(checked from 32 to 72 px, which covers display scaling from 100% to 225%). A
+web page's own cursor image has no resource behind it and is left alone.</p>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>The mod is also built for ARM64 apps; that build has not been tested.</li>
+<li>On screen, only 150% display scaling has been checked; other sizes were
+checked by loading the cursors at those sizes.</li>
+<li>Apps that host WebView2 in visual (composition) mode set the cursor from
+their own process, so their web content keeps Chromium's cursors.</li>
+<li>A CEF app that loads <code>libcef.dll</code> only after it has started is not
+recognised.</li>
+<li>Chromium's middle-click autoscroll cursors are not replaced.</li>
+<li>A <code>.cur</code> / <code>.ani</code> file is read once per app session. After editing a file in
+place, restart the app, or turn the mod off and on again.</li>
+<li>Custom files are loaded at the cursor size set in Windows.</li>
+</ul>
+<h2 id="compatibility">Compatibility</h2>
+<p><strong>Icon Resource Redirect</strong> can also theme cursors, by redirecting the resources
+apps load them from; this mod was tested with it enabled. A Chromium cursor that
+Icon Resource Redirect has already redirected no longer matches Chromium's own
+images, so this mod leaves it as Icon Resource Redirect drew it.</p>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p>Turn on logging for this mod in Windhawk. Each new cursor gets one log line
+naming the module and resource it came from, a hash of its image and the
+verdict. If a Chromium cursor stops being replaced after a browser update,
+Chromium has probably redrawn it: please report that log line together with the
+CSS cursor type in the Windhawk mods repository on GitHub
+(ramensoftware/windhawk-mods).</p>]]></content>
+        <author>
+            <name>mazany</name>
+            <uri>https://github.com/mazany</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Double-Click Window Edge to Maximize Width 1.0]]></title>
         <id>https://windhawk.net/mods/edge-doubleclick-resize#c69dab54e3f2d6439b4cc6775ac4a9441d3766b8</id>
@@ -596,25 +695,6 @@ Original overlay/smear architecture inspired by <a href="https://github.com/Thea
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[TopBar for Windows 1.1.0]]></title>
-        <id>https://windhawk.net/mods/windhawk-topbar#50b1da24769a21b15ee5293e97d03a04e98f4499</id>
-        <link href="https://windhawk.net/mods/windhawk-topbar"/>
-        <updated>2026-09-11T15:56:51.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add Resource Monitor to show CPU, GPU, and RAM Usage on the topbar.</li>
-<li>Fixed Rough Corners for the flyouts, and context menus.(Note: uses DWM to round corners which is Windows 11 exclusive)</li>
-<li>Added option for moving or rearranging the TrayPanel(right panel) items.</li>
-<li>Made Battery Icon look better</li>
-<li>Fixed Win+D(Show Desktop) hides the TopBar.</li>
-<li>Fixed Bluetooth panel not finding new devices.</li>
-<li>Updated themes: NoIslands, and GreenBar.</li>
-</ul>]]></content>
-        <author>
-            <name>WasiXGamer</name>
-            <uri>https://github.com/wasixgamer</uri>
         </author>
     </entry>
 </feed>
