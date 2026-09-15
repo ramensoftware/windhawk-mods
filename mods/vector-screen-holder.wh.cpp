@@ -2,7 +2,7 @@
 // @id              vector-screen-holder
 // @name            Vector Screen Holder
 // @description     Fills a display you choose with generative line art and keeps the PC from idling while it runs
-// @version         1.0.5
+// @version         1.0.6
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
@@ -61,7 +61,13 @@ the keep-awake with nothing on screen to say it had happened.
 
 The overlay sits above your wallpaper but *below* your windows: anything you
 open covers it normally, and it never steals focus by itself or appears in
-Alt+Tab. It only goes away for good when you press Esc or toggle it off.
+Alt+Tab.
+
+It does cover the desktop icons on the display it runs on, and a click there
+goes to the overlay rather than the desktop. That is inherent to sitting above
+the wallpaper, and it is why the mod is built around holding a monitor you are
+not working on. The **Display** setting defaults to your primary screen, so
+pick the side monitor if you would rather keep your icons reachable. It only goes away for good when you press Esc or toggle it off.
 
 ## The four styles
 
@@ -272,7 +278,10 @@ pair-programmers Claude and Big-Pickle (opencode).
     SetThreadExecutionState.
 - startActive: false
   $name: Start active
-  $description: Show the overlay as soon as the mod loads.
+  $description: >-
+    Show the overlay as soon as the mod loads. Ticking it here does not open
+    the overlay straight away; it applies the next time the mod loads. Use the
+    hotkey or the shortcut to open it now.
 - workAreaOnly: false
   $name: Stay inside the work area
   $description: >-
@@ -1635,7 +1644,10 @@ class Overlay {
     Overlay(ID2D1Factory* factory, const RECT& rc, unsigned seed)
         : factory_(factory), rect_(rc), seed_(seed) {}
 
-    ~Overlay() { Destroy(); }
+    ~Overlay() {
+        Destroy();
+        SafeRelease(&hudFormat_);
+    }
 
     bool Create();
     void Destroy();
@@ -1662,6 +1674,7 @@ class Overlay {
 
     ID2D1HwndRenderTarget* rt_ = nullptr;
     ID2D1BitmapRenderTarget* buf_ = nullptr;
+    ID2D1Bitmap* bufBitmap_ = nullptr;
     ID2D1SolidColorBrush* brush_ = nullptr;
 
     std::unique_ptr<Scene> scene_;
@@ -1771,6 +1784,17 @@ bool Overlay::CreateDeviceResources() {
     }
     buf_->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
 
+    // GetBitmap hands back the same object with an AddRef each time, so hold
+    // one reference for the life of the buffer rather than one per frame.
+    if (FAILED(buf_->GetBitmap(&bufBitmap_))) {
+        Wh_Log(L"GetBitmap failed");
+        DiscardDeviceResources();
+        return false;
+    }
+
+    // hudFormat_ deliberately outlives a device loss: IDWriteTextFormat is
+    // device independent, so it is built once per overlay and released in the
+    // destructor rather than rebuilt on every recreate.
     if (g_dwrite && !hudFormat_) {
         float px = std::max(15.0f, (float)(rect_.bottom - rect_.top) * 0.018f);
         if (FAILED(g_dwrite->CreateTextFormat(
@@ -1791,8 +1815,8 @@ bool Overlay::CreateDeviceResources() {
 }
 
 void Overlay::DiscardDeviceResources() {
-    SafeRelease(&hudFormat_);
     SafeRelease(&brush_);
+    SafeRelease(&bufBitmap_);
     SafeRelease(&buf_);
     SafeRelease(&rt_);
 }
@@ -1846,8 +1870,15 @@ static float EaseInOut(float t) {
 }
 
 void Overlay::Render(float dtSec) {
-    if ((!rt_ || !buf_ || !brush_) && !CreateDeviceResources()) {
-        return;
+    if (!rt_ || !buf_ || !brush_) {
+        if (!CreateDeviceResources()) {
+            return;
+        }
+        // The accumulation buffer went with the device while the scene kept
+        // its progress, so resuming would paint only the strokes that were
+        // still to come onto an empty buffer. Start the piece again. This is
+        // the single place every recreate path passes through.
+        NewScene();
     }
 
     const float kFadeIn = 0.75f, kFadeOut = 2.2f;
@@ -1923,16 +1954,14 @@ void Overlay::Render(float dtSec) {
     D2D1_COLOR_F bg = ToColorF(g_palette.bg, 1.0f);
     rt_->Clear(&bg);
 
-    ID2D1Bitmap* bmp = nullptr;
-    if (SUCCEEDED(buf_->GetBitmap(&bmp)) && bmp) {
+    if (bufBitmap_) {
         D2D1_RECT_F dst;
         dst.left = 0;
         dst.top = 0;
         dst.right = ctx.w;
         dst.bottom = ctx.h;
-        rt_->DrawBitmap(bmp, &dst, artAlpha_,
+        rt_->DrawBitmap(bufBitmap_, &dst, artAlpha_,
                         D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, nullptr);
-        bmp->Release();
     }
 
     if (scene_ && phase_ != kPhaseOut) {
@@ -1976,13 +2005,8 @@ void Overlay::Render(float dtSec) {
 
     HRESULT hr = rt_->EndDraw(nullptr, nullptr);
     if (hr == D2DERR_RECREATE_TARGET) {
-        // The accumulation buffer goes with the device, but the scene keeps
-        // its progress, so resuming would paint only the remaining strokes
-        // onto an empty buffer. Start the piece again instead.
+        // The next frame rebuilds and restarts through the entry path.
         DiscardDeviceResources();
-        if (CreateDeviceResources()) {
-            NewScene();
-        }
     }
 }
 
@@ -1999,6 +2023,13 @@ LRESULT CALLBACK Overlay::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             wpos->flags &= ~SWP_NOZORDER;
             return 0;
         }
+        case WM_SETTINGCHANGE:
+            // The taskbar can move or resize without any display change, so
+            // the work area shifts under a window sized to it.
+            if (g_settings.workAreaOnly && wp == SPI_SETWORKAREA) {
+                Controller_RequestRebuild();
+            }
+            return 0;
         case WM_DISPLAYCHANGE:
         case WM_DPICHANGED:
             // Monitor geometry moved under us; rebuild every overlay.
@@ -2199,7 +2230,7 @@ static LRESULT CALLBACK LowLevelKbdProc(int nCode, WPARAM wParam, LPARAM lParam)
         bool up = wParam == WM_KEYUP || wParam == WM_SYSKEYUP;
         if (k->vkCode == VK_ESCAPE) {
             if (down) {
-                PostThreadMessageW(g_workerThreadId.load(), WM_VSH_CLOSE, 0, 0);
+                Controller_RequestClose();
             }
         } else if (k->vkCode == VK_SPACE) {
             if (down || up) {
@@ -2525,9 +2556,9 @@ static HANDLE CreateToggleEvent() {
     // EVENT_MODIFY_STATE, but the documented shortcut calls
     // EventWaitHandle.OpenExisting(name), which asks for Modify | Synchronize
     // and is refused without the latter. Still far short of GENERIC_ALL, which
-    // would also hand out DELETE / WRITE_DAC / WRITE_OWNER. The low integrity
-    // label lets a normal medium-integrity shortcut signal it even when
-    // Windhawk runs elevated.
+    // would also hand out DELETE / WRITE_DAC / WRITE_OWNER. The Medium
+    // integrity label still lets an ordinary shortcut signal it when Windhawk
+    // is elevated, while keeping sandboxed processes below that level out.
     if (ConvertStringSecurityDescriptorToSecurityDescriptorW(
             L"D:(A;;0x100002;;;WD)S:(ML;;NW;;;ME)", SDDL_REVISION_1, &psd,
             nullptr)) {
@@ -2606,6 +2637,11 @@ static void RegisterHotkeyFromSettings() {
         g_hotkeyRegistered = false;
     }
     UINT mods = 0, vk = 0;
+    if (!g_settings.hotkey.empty() &&
+        !ParseHotkey(g_settings.hotkey, &mods, &vk)) {
+        Wh_Log(L"Could not parse the hotkey '%s'; no hotkey is registered",
+               g_settings.hotkey.c_str());
+    }
     if (ParseHotkey(g_settings.hotkey, &mods, &vk)) {
         if (RegisterHotKey(nullptr, kHotkeyId, mods, vk)) {
             g_hotkeyRegistered = true;
@@ -2723,8 +2759,11 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             handles[count++] = frameTimer;
         }
 
+        // Without a timer the wait must still end on its own, or the overlay
+        // would advance only when a message happened to arrive.
+        DWORD waitMs = (g_active && !frameTimer) ? 1 : INFINITE;
         DWORD r = MsgWaitForMultipleObjects(count, count ? handles : nullptr,
-                                            FALSE, INFINITE, QS_ALLINPUT);
+                                            FALSE, waitMs, QS_ALLINPUT);
 
         if (toggleIdx != (DWORD)-1 && r == WAIT_OBJECT_0 + toggleIdx) {
             ToggleOverlays();
