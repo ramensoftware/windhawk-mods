@@ -1877,7 +1877,7 @@ class VisualTreeWatcher : public winrt::implements<VisualTreeWatcher,
         }
 
         dispatcher.TryRunAsync(wuc::CoreDispatcherPriority::Normal,
-        [weakThis = winrt::make_weak(get_strong()), allEvents = std::move(allEvents)]() {
+        [weakThis = winrt::make_weak(get_strong()), allEvents = std::move(events)]() {
             if (auto strongThis = weakThis.get()) {
                 strongThis->PopulateItemsControl(
                     FilterEventsForDate(allEvents, strongThis->m_currentFilterDate));
