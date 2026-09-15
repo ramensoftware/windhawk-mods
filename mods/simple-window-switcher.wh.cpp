@@ -481,22 +481,31 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
         - dockSwitcherPadding: 11
           $name: Dock Layout Padding (px)
           $description: Padding between the switcher window border and dock elements in pixels for Dock Layout (before DPI scaling). Default 11.
-        - dockCloseButtonPosition: previewTopRight
+        - dockCloseButtonPosition: topRight
           $name: Close Button Position
-          $description: Placement of the close button in Dock Layout. "Central Preview" places the button on the live preview of the selected window. "Icon Strip" displays a close button when hovering over individual icons in the dock strip.
+          $description: Placement of the close button inside the icon area in Dock Layout. Displays when hovering over individual tasks.
           $options:
-          - previewTopRight: Central Preview (Top-Right - Default)
-          - previewTopLeft: Central Preview (Top-Left)
-          - iconStrip: Icon Strip (Hover on Icon)
+          - topLeft: Top-Left
+          - top: Top
+          - topRight: Top-Right (Default)
+          - left: Left
+          - right: Right
+          - bottomLeft: Bottom-Left
+          - bottom: Bottom
+          - bottomRight: Bottom-Right
           - hidden: Hidden
-        - dockGroupIndicatorPosition: onIconBadge
+        - dockGroupIndicatorPosition: bottomRight
           $name: Group Indicator Position
-          $description: Placement and style of the grouped window count indicator in Dock Layout when "Group Windows by Application" is enabled.
+          $description: Placement of the grouped window count indicator inside the icon area in Dock Layout when "Group Windows by Application" is enabled.
           $options:
-          - onIconBadge: Icon Badge (Top-Right of Icon - Default)
-          - belowIcons: Below Icons
-          - aboveIcons: Above Icons
-          - insidePreview: Central Preview Overlay
+          - topLeft: Top-Left
+          - top: Top
+          - topRight: Top-Right
+          - left: Left
+          - right: Right
+          - bottomLeft: Bottom-Left
+          - bottom: Bottom
+          - bottomRight: Bottom-Right (Default)
           - hidden: Hidden
       $name: Dock Layout Settings
       $description: Configuration options applied when Switcher Layout is set to Dock / Strip Layout.
@@ -1412,20 +1421,51 @@ static bool DockIconIsTop() {
 static bool DockShowPreview() {
     return g_settings.dockShowPreview && g_settings.showThumbnails;
 }
-static bool DockCloseButtonIsPreviewTopRight() { return wcscmp(g_settings.dockCloseButtonPosition, L"previewTopRight") == 0; }
-static bool DockCloseButtonIsPreviewTopLeft() { return wcscmp(g_settings.dockCloseButtonPosition, L"previewTopLeft") == 0; }
-static bool DockCloseButtonIsPreview() {
-    return DockShowPreview() && (DockCloseButtonIsPreviewTopRight() || DockCloseButtonIsPreviewTopLeft());
-}
-static bool DockCloseButtonIsIconStrip() {
-    return wcscmp(g_settings.dockCloseButtonPosition, L"iconStrip") == 0 || (!DockShowPreview() && wcscmp(g_settings.dockCloseButtonPosition, L"hidden") != 0);
-}
-static bool DockCloseButtonIsHidden() { return wcscmp(g_settings.dockCloseButtonPosition, L"hidden") == 0; }
+static RECT GetDockIconAreaElementRect(const RECT& rcCell, int itemW, int itemH, const WCHAR* position) {
+    if (!position || !position[0] || wcscmp(position, L"hidden") == 0) {
+        return { 0, 0, 0, 0 };
+    }
 
-static bool DockGroupIndicatorIsOnIconBadge() { return wcscmp(g_settings.dockGroupIndicatorPosition, L"onIconBadge") == 0; }
-static bool DockGroupIndicatorIsBelowIcons() { return wcscmp(g_settings.dockGroupIndicatorPosition, L"belowIcons") == 0; }
-static bool DockGroupIndicatorIsAboveIcons() { return wcscmp(g_settings.dockGroupIndicatorPosition, L"aboveIcons") == 0; }
-static bool DockGroupIndicatorIsInsidePreview() { return wcscmp(g_settings.dockGroupIndicatorPosition, L"insidePreview") == 0; }
+    int margin = DpiScale(2, g_dpiX);
+    int cellW = rcCell.right - rcCell.left;
+    int cellH = rcCell.bottom - rcCell.top;
+    if (cellW <= 0 || cellH <= 0) return { 0, 0, 0, 0 };
+
+    int x = 0, y = 0;
+
+    if (wcscmp(position, L"topLeft") == 0) {
+        x = rcCell.left + margin;
+        y = rcCell.top + margin;
+    } else if (wcscmp(position, L"top") == 0) {
+        x = rcCell.left + (cellW - itemW) / 2;
+        y = rcCell.top + margin;
+    } else if (wcscmp(position, L"topRight") == 0) {
+        x = rcCell.right - itemW - margin;
+        y = rcCell.top + margin;
+    } else if (wcscmp(position, L"left") == 0) {
+        x = rcCell.left + margin;
+        y = rcCell.top + (cellH - itemH) / 2;
+    } else if (wcscmp(position, L"right") == 0) {
+        x = rcCell.right - itemW - margin;
+        y = rcCell.top + (cellH - itemH) / 2;
+    } else if (wcscmp(position, L"bottomLeft") == 0) {
+        x = rcCell.left + margin;
+        y = rcCell.bottom - itemH - margin;
+    } else if (wcscmp(position, L"bottom") == 0) {
+        x = rcCell.left + (cellW - itemW) / 2;
+        y = rcCell.bottom - itemH - margin;
+    } else if (wcscmp(position, L"bottomRight") == 0) {
+        x = rcCell.right - itemW - margin;
+        y = rcCell.bottom - itemH - margin;
+    } else {
+        x = rcCell.right - itemW - margin;
+        y = rcCell.top + margin;
+    }
+
+    return { x, y, x + itemW, y + itemH };
+}
+
+static bool DockCloseButtonIsHidden() { return wcscmp(g_settings.dockCloseButtonPosition, L"hidden") == 0; }
 static bool DockGroupIndicatorIsHidden() { return wcscmp(g_settings.dockGroupIndicatorPosition, L"hidden") == 0; }
 static bool BadgeIconPositionIs(const WCHAR* v) { return wcscmp(g_settings.badgeIconPosition, v) == 0; }
 static bool BadgeTitleIsTop() { return wcscmp(g_settings.badgeTitlePosition, L"top") == 0; }
@@ -2915,7 +2955,6 @@ static void OnAnimationTick() {
     bool closeBtnAnimActive = false;
     for (int i = 0; i < (int)g_windows.size(); i++) {
         float target = (i == g_hoverIndex && g_settings.showCloseButton && !IsWindowTruncated(i)) ? 1.0f : 0.0f;
-        if (DockLayoutActive() && DockCloseButtonIsPreview() && i != g_selectedIndex) target = 0.0f;
         if (DockLayoutActive() && DockCloseButtonIsHidden()) target = 0.0f;
         if (fabsf(g_windows[i].closeBtnAlpha - target) > 0.01f) {
             closeBtnAnimActive = true;
@@ -5636,26 +5675,8 @@ static RECT GetCloseButtonRect(const RECT& rcCell, const RECT& rcThumbActual, co
         if (DockCloseButtonIsHidden()) {
             return { 0, 0, 0, 0 };
         }
-        if (DockCloseButtonIsPreview()) {
-            int btnSz = DpiScale(24, g_dpiX);
-            int pad = DpiScale(8, g_dpiX);
-            int bx = 0, by = 0;
-            if (DockCloseButtonIsPreviewTopLeft()) {
-                bx = rcThumbActual.left + pad;
-                by = rcThumbActual.top + pad;
-            } else { // previewTopRight
-                bx = rcThumbActual.right - btnSz - pad;
-                by = rcThumbActual.top + pad;
-            }
-            return { bx, by, bx + btnSz, by + btnSz };
-        }
-        if (DockCloseButtonIsIconStrip()) {
-            int btnSz = DpiScale(16, g_dpiX);
-            int bx = rcCell.right - btnSz - DpiScale(1, g_dpiX);
-            int by = rcCell.top + DpiScale(1, g_dpiY);
-            return { bx, by, bx + btnSz, by + btnSz };
-        }
-        return { 0, 0, 0, 0 };
+        int btnSz = DpiScale(16, g_dpiX);
+        return GetDockIconAreaElementRect(rcCell, btnSz, btnSz, g_settings.dockCloseButtonPosition);
     }
 
     int rowTitleH = GetHeaderRowHeightPx();
@@ -5735,8 +5756,8 @@ static void DrawCloseButton(HDC hdc, const RECT& btnRc, float btnAlpha, float ho
     int btnRadius = GetCloseButtonCornerRadiusPx();
     if ((float)(btnRadius * 2) > btnW) btnRadius = (int)(btnW / 2.0f);
 
-    // 1. Solid idle plate for contrast against bright or dark thumbnails (configured by setting / Win11 default)
-    BYTE idlePlateAlpha = g_settings.showCloseButtonBackground ? (BYTE)roundf(255.0f * btnAlpha) : 0;
+    // 1. Solid idle plate for contrast against bright or dark thumbnails / icons (configured by setting / Dock Layout)
+    BYTE idlePlateAlpha = (g_settings.showCloseButtonBackground || DockLayoutActive()) ? (BYTE)roundf(255.0f * btnAlpha) : 0;
     if (idlePlateAlpha > 0) {
         COLORREF plateCol = g_isDarkMode ? RGB(45, 45, 45) : RGB(255, 255, 255);
         Gdiplus::SolidBrush idleBrush(Gdiplus::Color(idlePlateAlpha, GetRValue(plateCol), GetGValue(plateCol), GetBValue(plateCol)));
@@ -6783,38 +6804,30 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             DrawBadgeIconOverlay(hdc, rcThumbActual, e.hIcon, &drawnIconX, &drawnIconY, &drawnIconSz, IsEntryMinimized(e));
         }
 
-        // Close button (rendered for any entry with closeBtnAlpha > 0.01f, enabling smooth cross-fades between entries)
-        if (g_settings.showCloseButton && e.closeBtnAlpha > 0.01f) {
-            if (!DockLayoutActive() || DockCloseButtonIsIconStrip() || (DockCloseButtonIsPreview() && i == g_selectedIndex)) {
-                RECT btnRc = GetCloseButtonRect(rcCell, rcThumbActual, rcThumbSlot);
-                if (btnRc.right > btnRc.left && btnRc.bottom > btnRc.top) {
-                    float hoverPlateAlpha = (i == g_hoverIndex && g_hoverWnd == hWnd && g_isCloseHovered) ? g_animCloseBtnHoverAlpha : 0.0f;
-                    bool isBtnPressed = (i == g_hoverIndex && g_hoverWnd == hWnd && g_isClosePressed);
-                    DrawCloseButton(hdc, btnRc, e.closeBtnAlpha, hoverPlateAlpha, isBtnPressed);
-                }
-            }
+        // 1. Calculate Close Button rect if close button is enabled
+        RECT btnRc = { 0, 0, 0, 0 };
+        bool canShowCloseBtn = (g_settings.showCloseButton && e.closeBtnAlpha > 0.01f);
+        if (DockLayoutActive() && DockCloseButtonIsHidden()) canShowCloseBtn = false;
+        if (canShowCloseBtn) {
+            btnRc = GetCloseButtonRect(rcCell, rcThumbActual, rcThumbSlot);
         }
 
-        // Grouped window count badge
+        // 2. Calculate Grouped window count badge rect if enabled
         bool showThisGroupBadge = g_settings.showGroupIndicator && g_settings.showApplications && (e.groupWindows.size() > 1);
-        if (DockLayoutActive()) {
-            if (DockGroupIndicatorIsHidden()) showThisGroupBadge = false;
-            else if (DockGroupIndicatorIsInsidePreview() && (i != g_selectedIndex || !DockShowPreview())) showThisGroupBadge = false;
-        }
+        if (DockLayoutActive() && DockGroupIndicatorIsHidden()) showThisGroupBadge = false;
+
+        RECT badgeRc = { 0, 0, 0, 0 };
+        int badgeX = 0, badgeY = 0, badgeW = 0, badgeH = 0;
+        WCHAR countText[8] = { 0 };
+        int badgeFontSz = DpiScale(10, g_dpiX);
+        int fontStyle = Gdiplus::FontStyleBold;
+        LPCWSTR family = L"Segoe UI";
+        Gdiplus::StringFormat sf;
+        sf.SetAlignment(Gdiplus::StringAlignmentCenter);
+        sf.SetLineAlignment(Gdiplus::StringAlignmentCenter);
 
         if (showThisGroupBadge) {
-            Gdiplus::Graphics gfx(hdc);
-            gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-            gfx.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAlias);
-
-            // Badge text
-            WCHAR countText[8];
             _snwprintf_s(countText, ARRAYSIZE(countText), _TRUNCATE, L"%d", (int)e.groupWindows.size());
-
-            // Badge font
-            int badgeFontSz = DpiScale(10, g_dpiX);
-            int fontStyle = Gdiplus::FontStyleBold;
-            LPCWSTR family = L"Segoe UI";
             if (g_settings.applyToGroupIndicator && g_settings.fontFamily[0]) {
                 family = g_settings.fontFamily;
                 badgeFontSz = MulDiv(g_settings.fontSize, g_dpiY, 72);
@@ -6825,83 +6838,86 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             } else if (IsWin11OrGreater() && DoesFontExist(L"Segoe UI Variable Text")) {
                 family = L"Segoe UI Variable Text";
             }
+            Gdiplus::Graphics gfxMeasure(hdc);
             Gdiplus::Font badgeFont(family, (Gdiplus::REAL)badgeFontSz, fontStyle, Gdiplus::UnitPixel);
-
-            // Measure text
-            Gdiplus::StringFormat sf;
-            sf.SetAlignment(Gdiplus::StringAlignmentCenter);
-            sf.SetLineAlignment(Gdiplus::StringAlignmentCenter);
             Gdiplus::RectF measureRect(0, 0, 100, 100);
             Gdiplus::RectF textBounds;
-            gfx.MeasureString(countText, -1, &badgeFont, measureRect, &sf, &textBounds);
+            gfxMeasure.MeasureString(countText, -1, &badgeFont, measureRect, &sf, &textBounds);
 
             int badgePadX = DpiScale(4, g_dpiX);
             int badgePadY = DpiScale(2, g_dpiY);
-            int badgeW = (int)(textBounds.Width + badgePadX * 2);
-            int badgeH = (int)(textBounds.Height + badgePadY * 2);
-            int minW = badgeH;  // pill shape: at least as wide as tall
+            badgeW = (int)(textBounds.Width + badgePadX * 2);
+            badgeH = (int)(textBounds.Height + badgePadY * 2);
+            int minW = badgeH;
             if (badgeW < minW) badgeW = minW;
 
-            // Position:
-            int badgeX = 0, badgeY = 0;
             if (DockLayoutActive()) {
-                if (DockGroupIndicatorIsInsidePreview()) {
-                    int pad = DpiScale(8, g_dpiX);
-                    badgeX = g_rcCentralPreview.left + pad + offX;
-                    badgeY = g_rcCentralPreview.top + pad + offY;
-                } else if (DockGroupIndicatorIsBelowIcons()) {
-                    badgeX = drawnIconX + (drawnIconSz - badgeW) / 2;
-                    badgeY = drawnIconY + drawnIconSz + DpiScale(2, g_dpiY);
-                } else if (DockGroupIndicatorIsAboveIcons()) {
-                    badgeX = drawnIconX + (drawnIconSz - badgeW) / 2;
-                    badgeY = drawnIconY - badgeH - DpiScale(2, g_dpiY);
-                } else if (DockGroupIndicatorIsOnIconBadge()) {
-                    badgeX = drawnIconX + drawnIconSz - (badgeW / 2);
-                    badgeY = drawnIconY - (badgeH / 2);
-                } else {
-                    badgeX = drawnIconX + drawnIconSz - (badgeW / 2);
-                    badgeY = drawnIconY - (badgeH / 2);
-                }
+                badgeRc = GetDockIconAreaElementRect(rcCell, badgeW, badgeH, g_settings.dockGroupIndicatorPosition);
+                badgeX = badgeRc.left;
+                badgeY = badgeRc.top;
             } else if (drawnIconSz > 0) {
                 badgeX = drawnIconX + drawnIconSz - (badgeW / 2);
                 badgeY = drawnIconY - (badgeH / 2);
+                badgeRc = { badgeX, badgeY, badgeX + badgeW, badgeY + badgeH };
             } else {
                 int cellPad = DpiScale(4, g_dpiX);
                 badgeX = rcCell.right - badgeW - cellPad;
                 badgeY = rcCell.top + cellPad;
+                badgeRc = { badgeX, badgeY, badgeX + badgeW, badgeY + badgeH };
             }
+        }
 
-            // Background pill
+        // 3. Overlap resolution between Group Indicator and Close Button
+        float groupBadgeFade = 1.0f;
+        if (showThisGroupBadge && canShowCloseBtn && btnRc.right > btnRc.left && badgeRc.right > badgeRc.left) {
+            RECT rcIntersect = { 0, 0, 0, 0 };
+            if (IntersectRect(&rcIntersect, &btnRc, &badgeRc)) {
+                groupBadgeFade = std::max(0.0f, 1.0f - e.closeBtnAlpha);
+            }
+        }
+
+        // 4. Render Grouped window count badge FIRST (with overlap fade modulation)
+        if (showThisGroupBadge && groupBadgeFade > 0.01f && badgeRc.right > badgeRc.left) {
+            Gdiplus::Graphics gfx(hdc);
+            gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            gfx.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAlias);
+            Gdiplus::Font badgeFont(family, (Gdiplus::REAL)badgeFontSz, fontStyle, Gdiplus::UnitPixel);
+
             COLORREF bgC = GetIndicatorBackgroundColor();
             int op = g_isDarkMode ? g_settings.indicatorBgOpacityDark : g_settings.indicatorBgOpacityLight;
-            int alpha = (op * 255) / 100;
+            int alpha = (int)roundf(((float)(op * 255) / 100.0f) * groupBadgeFade);
+            if (alpha > 255) alpha = 255;
+            if (alpha < 0) alpha = 0;
             Gdiplus::SolidBrush pillBrush(Gdiplus::Color(alpha, GetRValue(bgC), GetGValue(bgC), GetBValue(bgC)));
             Gdiplus::REAL pillRadius = (Gdiplus::REAL)GetGroupIndicatorCornerRadiusPx(badgeH / 2);
-            
+
             if (g_settings.showGroupIndicatorShadow) {
                 for (int pass = 5; pass > 0; --pass) {
                     int shadowAlpha = 15 - (pass * 2);
                     if (shadowAlpha < 1) shadowAlpha = 1;
-                    Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(shadowAlpha, 0, 0, 0));
-                    int sp = pass;
-                    Gdiplus::REAL sx = (Gdiplus::REAL)(badgeX - sp);
-                    Gdiplus::REAL sy = (Gdiplus::REAL)(badgeY - sp + 1);
-                    Gdiplus::REAL sw = (Gdiplus::REAL)(badgeW + sp * 2);
-                    Gdiplus::REAL sh = (Gdiplus::REAL)(badgeH + sp * 2);
-                    Gdiplus::REAL sd = pillRadius * 2.0f + sp * 2.0f;
-                    if (sd > sw) sd = sw;
-                    if (sd > sh) sd = sh;
-                    
-                    if (pillRadius > 0) {
-                        Gdiplus::GraphicsPath sPath;
-                        sPath.AddArc(sx, sy, sd, sd, 180, 90);
-                        sPath.AddArc(sx + sw - sd, sy, sd, sd, 270, 90);
-                        sPath.AddArc(sx + sw - sd, sy + sh - sd, sd, sd, 0, 90);
-                        sPath.AddArc(sx, sy + sh - sd, sd, sd, 90, 90);
-                        sPath.CloseFigure();
-                        gfx.FillPath(&shadowBrush, &sPath);
-                    } else {
-                        gfx.FillRectangle(&shadowBrush, sx, sy, sw, sh);
+                    shadowAlpha = (int)roundf((float)shadowAlpha * groupBadgeFade);
+                    if (shadowAlpha > 0) {
+                        Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(shadowAlpha, 0, 0, 0));
+                        int sp = pass;
+                        Gdiplus::REAL sx = (Gdiplus::REAL)(badgeX - sp);
+                        Gdiplus::REAL sy = (Gdiplus::REAL)(badgeY - sp + 1);
+                        Gdiplus::REAL sw = (Gdiplus::REAL)(badgeW + sp * 2);
+                        Gdiplus::REAL sh = (Gdiplus::REAL)(badgeH + sp * 2);
+                        Gdiplus::REAL sd = pillRadius * 2.0f + sp * 2.0f;
+                        if (sd > sw) sd = sw;
+                        if (sd > sh) sd = sh;
+
+                        if (pillRadius > 0) {
+                            Gdiplus::GraphicsPath sPath;
+                            sPath.AddArc(sx, sy, sd, sd, 180, 90);
+                            sPath.AddArc(sx + sw - sd, sy, sd, sd, 270, 90);
+                            sPath.AddArc(sx + sw - sd, sy + sh - sd, sd, sd, 0, 90);
+                            sPath.AddArc(sx, sy + sh - sd, sd, sd, 90, 90);
+                            sPath.CloseFigure();
+                            gfx.FillPath(&shadowBrush, &sPath);
+                        } else {
+                            gfx.FillRectangle(&shadowBrush, sx, sy, sw, sh);
+                        }
                     }
                 }
             }
@@ -6921,12 +6937,21 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
                 gfx.FillRectangle(&pillBrush, badgeX, badgeY, badgeW, badgeH);
             }
 
-            // Badge text
             COLORREF txtC = GetIndicatorTextColor();
-            Gdiplus::SolidBrush textBrush(Gdiplus::Color(255, GetRValue(txtC), GetGValue(txtC), GetBValue(txtC)));
+            int txtAlpha = (int)roundf(255.0f * groupBadgeFade);
+            if (txtAlpha > 255) txtAlpha = 255;
+            if (txtAlpha < 0) txtAlpha = 0;
+            Gdiplus::SolidBrush textBrush(Gdiplus::Color(txtAlpha, GetRValue(txtC), GetGValue(txtC), GetBValue(txtC)));
             Gdiplus::RectF pillRect((Gdiplus::REAL)badgeX, (Gdiplus::REAL)badgeY,
                                     (Gdiplus::REAL)badgeW, (Gdiplus::REAL)badgeH);
             gfx.DrawString(countText, -1, &badgeFont, pillRect, &sf, &textBrush);
+        }
+
+        // 5. Render Close button SECOND on top
+        if (canShowCloseBtn && btnRc.right > btnRc.left && btnRc.bottom > btnRc.top) {
+            float hoverPlateAlpha = (i == g_hoverIndex && g_hoverWnd == hWnd && g_isCloseHovered) ? g_animCloseBtnHoverAlpha : 0.0f;
+            bool isBtnPressed = (i == g_hoverIndex && g_hoverWnd == hWnd && g_isClosePressed);
+            DrawCloseButton(hdc, btnRc, e.closeBtnAlpha, hoverPlateAlpha, isBtnPressed);
         }
     }
 
@@ -9028,15 +9053,6 @@ static void UpdateHoverAtPoint(HWND hWnd, int x, int y, bool allowAnimation) {
 
     // Entry hover (for close button, selection, card hover)
     int entryIdx = (cDir != 0) ? -1 : HitTest(x, y);
-    if (DockLayoutActive() && entryIdx < 0 && DockShowPreview() && g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
-        POINT pt = { x, y };
-        if (DockCloseButtonIsPreview()) {
-            if (HitTestCloseButton(g_windows[g_selectedIndex], pt) || PtInRect(&g_rcCentralPreview, pt)) {
-                entryIdx = g_selectedIndex;
-            }
-        }
-    }
-
     // Thumbnail hover (strictly when cursor is over thumbnail itself, or entire card for zoom)
     int thumbIdx = (cDir != 0 || !g_settings.showThumbnails) ? -1 : HitTestThumb(x, y);
     if (thumbIdx < 0 && entryIdx >= 0 && g_settings.showThumbnails && !DockLayoutActive() && ThumbnailHoverIsZoom()) {
@@ -9045,7 +9061,7 @@ static void UpdateHoverAtPoint(HWND hWnd, int x, int y, bool allowAnimation) {
 
     bool closeHovered = false;
     if (g_settings.showCloseButton && entryIdx >= 0 && entryIdx < (int)g_windows.size() && !IsWindowTruncated(entryIdx)) {
-        if (!DockLayoutActive() || DockCloseButtonIsIconStrip() || (DockCloseButtonIsPreview() && entryIdx == g_selectedIndex)) {
+        if (!DockLayoutActive() || !DockCloseButtonIsHidden()) {
             POINT pt = { x, y };
             closeHovered = HitTestCloseButton(g_windows[entryIdx], pt);
         }
@@ -9093,7 +9109,6 @@ static void UpdateHoverAtPoint(HWND hWnd, int x, int y, bool allowAnimation) {
             g_animCloseBtnHoverAlpha = (closeHovered && g_animCloseBtnAlpha > 0.05f) ? 1.0f : 0.0f;
             for (int i = 0; i < (int)g_windows.size(); i++) {
                 bool shouldShowClose = (i == entryIdx && g_settings.showCloseButton && !IsWindowTruncated(i));
-                if (DockLayoutActive() && DockCloseButtonIsPreview() && i != g_selectedIndex) shouldShowClose = false;
                 if (DockLayoutActive() && DockCloseButtonIsHidden()) shouldShowClose = false;
                 g_windows[i].closeBtnAlpha = shouldShowClose ? 1.0f : 0.0f;
                 float s = (ThumbnailHoverIsZoom() && i == thumbIdx && !IsWindowTruncated(i)) ? (1.0f + SWS_HOVER_ZOOM_DELTA) : 1.0f;
@@ -10969,21 +10984,37 @@ static void LoadSettings() {
     g_settings.dockSwitcherPadding = LoadIntSetting(L"Appearance.DockLayout.dockSwitcherPadding", 11);
     if (g_settings.dockSwitcherPadding < 0) g_settings.dockSwitcherPadding = 11;
 
-    LoadStringSetting(L"Appearance.DockLayout.dockCloseButtonPosition", g_settings.dockCloseButtonPosition, L"previewTopRight");
-    if (wcscmp(g_settings.dockCloseButtonPosition, L"previewTopRight") != 0 &&
-        wcscmp(g_settings.dockCloseButtonPosition, L"previewTopLeft") != 0 &&
-        wcscmp(g_settings.dockCloseButtonPosition, L"iconStrip") != 0 &&
-        wcscmp(g_settings.dockCloseButtonPosition, L"hidden") != 0) {
-        wcsncpy_s(g_settings.dockCloseButtonPosition, L"previewTopRight", _TRUNCATE);
+    auto IsValidDockIconPosition = [](const WCHAR* pos) -> bool {
+        return wcscmp(pos, L"topLeft") == 0 ||
+               wcscmp(pos, L"top") == 0 ||
+               wcscmp(pos, L"topRight") == 0 ||
+               wcscmp(pos, L"left") == 0 ||
+               wcscmp(pos, L"right") == 0 ||
+               wcscmp(pos, L"bottomLeft") == 0 ||
+               wcscmp(pos, L"bottom") == 0 ||
+               wcscmp(pos, L"bottomRight") == 0 ||
+               wcscmp(pos, L"hidden") == 0;
+    };
+
+    LoadStringSetting(L"Appearance.DockLayout.dockCloseButtonPosition", g_settings.dockCloseButtonPosition, L"topRight");
+    if (wcscmp(g_settings.dockCloseButtonPosition, L"previewTopLeft") == 0) {
+        wcsncpy_s(g_settings.dockCloseButtonPosition, L"topLeft", _TRUNCATE);
+    } else if (wcscmp(g_settings.dockCloseButtonPosition, L"previewTopRight") == 0 ||
+               wcscmp(g_settings.dockCloseButtonPosition, L"iconStrip") == 0) {
+        wcsncpy_s(g_settings.dockCloseButtonPosition, L"topRight", _TRUNCATE);
+    } else if (!IsValidDockIconPosition(g_settings.dockCloseButtonPosition)) {
+        wcsncpy_s(g_settings.dockCloseButtonPosition, L"topRight", _TRUNCATE);
     }
 
-    LoadStringSetting(L"Appearance.DockLayout.dockGroupIndicatorPosition", g_settings.dockGroupIndicatorPosition, L"onIconBadge");
-    if (wcscmp(g_settings.dockGroupIndicatorPosition, L"onIconBadge") != 0 &&
-        wcscmp(g_settings.dockGroupIndicatorPosition, L"belowIcons") != 0 &&
-        wcscmp(g_settings.dockGroupIndicatorPosition, L"aboveIcons") != 0 &&
-        wcscmp(g_settings.dockGroupIndicatorPosition, L"insidePreview") != 0 &&
-        wcscmp(g_settings.dockGroupIndicatorPosition, L"hidden") != 0) {
-        wcsncpy_s(g_settings.dockGroupIndicatorPosition, L"onIconBadge", _TRUNCATE);
+    LoadStringSetting(L"Appearance.DockLayout.dockGroupIndicatorPosition", g_settings.dockGroupIndicatorPosition, L"bottomRight");
+    if (wcscmp(g_settings.dockGroupIndicatorPosition, L"onIconBadge") == 0 ||
+        wcscmp(g_settings.dockGroupIndicatorPosition, L"aboveIcons") == 0 ||
+        wcscmp(g_settings.dockGroupIndicatorPosition, L"insidePreview") == 0) {
+        wcsncpy_s(g_settings.dockGroupIndicatorPosition, L"topRight", _TRUNCATE);
+    } else if (wcscmp(g_settings.dockGroupIndicatorPosition, L"belowIcons") == 0) {
+        wcsncpy_s(g_settings.dockGroupIndicatorPosition, L"bottom", _TRUNCATE);
+    } else if (!IsValidDockIconPosition(g_settings.dockGroupIndicatorPosition)) {
+        wcsncpy_s(g_settings.dockGroupIndicatorPosition, L"bottomRight", _TRUNCATE);
     }
 
     // Grouped indicator
