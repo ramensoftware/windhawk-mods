@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              windows-11-start-menu-button
-// @name            Windows 11 Start Button Customizer
+// @name            Windows 11 Start Button Tinter
 // @description     Recolor (animation-preserving, with depth gradient and press-sweep) for the Windows 11 taskbar Start button
-// @version         1.3
+// @version         1.4
 // @author          AristideBH
 // @github          https://github.com/AristideBH
 // @homepage        https://aristide-bh.com/
@@ -14,7 +14,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Windows 11 Start Button Customizer
+# Windows 11 Start Button Tinter
 
 > **Note:** This mod is vibe-coded - built largely with AI assistance and
 > tested manually by the author, without a full independent code audit. Use
@@ -67,7 +67,7 @@ taskbar instance (multi-monitor).
     $description: >-
       Follow Windows' current accent color instead of Icon color below.
       Updates live when the accent color changes in Settings.
-  - color: "#BABABA"
+  - color: "#F2F2F2"
     $name: Icon color
     $description: >-
       Hex color (#RRGGBB or #AARRGGBB) for the icon at rest. Ignored when
@@ -83,7 +83,7 @@ taskbar instance (multi-monitor).
     - lightenPercent: 18
       $name: Light side strength
       $description: How much lighter the icon's light side is than Icon color.
-    - darkenPercent: 18
+    - darkenPercent: 15
       $name: Dark side strength
       $description: How much darker the icon's dark side is than Icon color.
     $name: Gradient shading
@@ -99,16 +99,16 @@ taskbar instance (multi-monitor).
       $description: >-
         Hex color for the sweep highlight. Leave empty to auto-lighten Icon
         color instead (see "Auto shimmer lighten" below).
-    - autoLightenPercent: 30
+    - autoLightenPercent: 65
       $name: Auto shimmer lighten
       $description: >-
         Only used when Shimmer color is empty: how strongly to lighten Icon
         color for the sweep, like laying a white overlay over it at this
         opacity.
-    - durationMs: 250
+    - durationMs: 350
       $name: Sweep duration (ms)
       $description: How long the shimmer takes to sweep across the icon.
-    - bandWidthPercent: 500
+    - bandWidthPercent: 350
       $name: Sweep width
       $description: >-
         Width of the moving highlight band, as a percent of the icon's
@@ -119,16 +119,18 @@ taskbar instance (multi-monitor).
       The one-shot highlight sweep played on click. Works whether or not
       Gradient shading is on.
   - elevate:
-    - lightenBoostPercent: 100
+    - lightenBoostPercent: 50
       $name: Extra brightness
       $description: >-
-        How much brighter the icon gets, on top of the normal shading,
-        while hovered, pressed, or the Start menu is open.
+        How much brighter the light side gets, as a percentage of the
+        normal Light side strength above, while hovered, pressed, or the
+        Start menu is open. 100% doubles it; it never overshoots white.
     - darkenReliefPercent: 100
       $name: Shadow reduction
       $description: >-
-        How much the dark side lightens up while hovered, pressed, or the
-        Start menu is open.
+        How much the dark side's shading eases off, as a percentage of the
+        normal Dark side strength above, while hovered, pressed, or the
+        Start menu is open. 100% removes the darkening entirely.
     - transitionMs: 180
       $name: Fade speed (ms)
       $description: >-
@@ -408,72 +410,6 @@ void* Identity(T const& obj) {
     return winrt::get_abi(obj);
 }
 
-// Lightness-only adjustment (HSL), so the derived shade keeps the chosen
-// color's hue/saturation instead of just blending toward white/black.
-winrt::Windows::UI::Color AdjustLightness(winrt::Windows::UI::Color color,
-                                           float delta) {
-    float r = color.R / 255.0f;
-    float g = color.G / 255.0f;
-    float b = color.B / 255.0f;
-
-    float maxC = std::max({r, g, b});
-    float minC = std::min({r, g, b});
-    float l = (maxC + minC) / 2.0f;
-    float s = 0.0f;
-    float h = 0.0f;
-
-    if (maxC != minC) {
-        float d = maxC - minC;
-        s = l > 0.5f ? d / (2.0f - maxC - minC) : d / (maxC + minC);
-        if (maxC == r) {
-            h = (g - b) / d + (g < b ? 6.0f : 0.0f);
-        } else if (maxC == g) {
-            h = (b - r) / d + 2.0f;
-        } else {
-            h = (r - g) / d + 4.0f;
-        }
-        h /= 6.0f;
-    }
-
-    l = std::clamp(l + delta, 0.0f, 1.0f);
-
-    auto hueToRgb = [](float p, float q, float t) {
-        if (t < 0) {
-            t += 1;
-        }
-        if (t > 1) {
-            t -= 1;
-        }
-        if (t < 1.0f / 6) {
-            return p + (q - p) * 6 * t;
-        }
-        if (t < 1.0f / 2) {
-            return q;
-        }
-        if (t < 2.0f / 3) {
-            return p + (q - p) * (2.0f / 3 - t) * 6;
-        }
-        return p;
-    };
-
-    float outR, outG, outB;
-    if (s == 0.0f) {
-        outR = outG = outB = l;
-    } else {
-        float q = l < 0.5f ? l * (1 + s) : l + s - l * s;
-        float p = 2 * l - q;
-        outR = hueToRgb(p, q, h + 1.0f / 3);
-        outG = hueToRgb(p, q, h);
-        outB = hueToRgb(p, q, h - 1.0f / 3);
-    }
-
-    auto toByte = [](float v) {
-        return (BYTE)std::round(std::clamp(v, 0.0f, 1.0f) * 255.0f);
-    };
-    return winrt::Windows::UI::Color{color.A, toByte(outR), toByte(outG),
-                                      toByte(outB)};
-}
-
 // -----------------------------------------------------------------------
 // Depth gradient: per-tile Relative-mode gradient (0..1 of that shape's own
 // render box), oriented so its direction matches the icon's global
@@ -554,6 +490,21 @@ winrt::Windows::UI::Color LerpColor(winrt::Windows::UI::Color a,
                                       lerpByte(a.G, b.G), lerpByte(a.B, b.B)};
 }
 
+// Tint/shade toward white/black (a "screen"/"multiply"-style RGB blend)
+// instead of an HSL lightness add: raw HSL-L manipulation pushes saturated
+// colors toward white/black fast once anything else (e.g. the elevate
+// boost below) stacks another delta on top, since it's recomputing hue/
+// saturation geometry rather than proportionally blending. Blending in RGB
+// keeps the shift feeling like a subtle sheen rather than a wash-out.
+winrt::Windows::UI::Color Tint(winrt::Windows::UI::Color color, float amount) {
+    return LerpColor(color, winrt::Windows::UI::Color{255, 255, 255, 255},
+                      amount);
+}
+
+winrt::Windows::UI::Color Shade(winrt::Windows::UI::Color color, float amount) {
+    return LerpColor(color, winrt::Windows::UI::Color{255, 0, 0, 0}, amount);
+}
+
 bool ColorsEqual(winrt::Windows::UI::Color a, winrt::Windows::UI::Color b) {
     return a.A == b.A && a.R == b.R && a.G == b.G && a.B == b.B;
 }
@@ -590,22 +541,30 @@ winrt::Windows::UI::Composition::CompositionBrush CreateDepthGradientBrush(
     if (!g_settings.recolorGradient) {
         colorStart = colorEnd = params.baseColor;
     } else {
-        float lightenDelta =
-            g_settings.gradientLightenAmount +
-            g_settings.elevatedLightenBoost * params.elevatedAmount;
-        float darkenDelta =
-            std::max(0.0f, g_settings.gradientDarkenAmount -
-                               g_settings.elevatedDarkenRelief *
-                                   params.elevatedAmount);
+        // Elevate boost/relief scale the base amount rather than adding an
+        // independent absolute delta - "50% brighter" means the lighten
+        // amount grows by up to 50% of itself at full elevation, whatever
+        // that base amount is, instead of always adding the same fixed
+        // chunk of the whole white-black range regardless of how subtle
+        // the base gradient was set to. Tint/Shade below also clamp their
+        // blend amount to [0,1], so this can't overshoot even at extreme
+        // settings.
+        float lightenDelta = g_settings.gradientLightenAmount *
+                              (1.0f + g_settings.elevatedLightenBoost *
+                                          params.elevatedAmount);
+        float darkenDelta = g_settings.gradientDarkenAmount *
+                             (1.0f - g_settings.elevatedDarkenRelief *
+                                         params.elevatedAmount);
+        darkenDelta = std::max(0.0f, darkenDelta);
         if (trace > 1.0f) {
-            colorStart = AdjustLightness(params.baseColor, lightenDelta);
+            colorStart = Tint(params.baseColor, lightenDelta);
             colorEnd = params.baseColor;
         } else if (trace < -1.0f) {
             colorStart = params.baseColor;
-            colorEnd = AdjustLightness(params.baseColor, -darkenDelta);
+            colorEnd = Shade(params.baseColor, darkenDelta);
         } else {
-            colorStart = AdjustLightness(params.baseColor, lightenDelta * 0.25f);
-            colorEnd = AdjustLightness(params.baseColor, -darkenDelta * 0.25f);
+            colorStart = Tint(params.baseColor, lightenDelta * 0.25f);
+            colorEnd = Shade(params.baseColor, darkenDelta * 0.25f);
         }
     }
 
