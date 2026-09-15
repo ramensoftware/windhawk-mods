@@ -20,6 +20,7 @@ Auto-switches between light/dark mode videos based on Windows theme.
 
 ### Requirements
 - **ffmpeg.exe** (standalone binary, no extra DLLs/codecs needed)
+- Better developers.
 
 Hoping someone else will carry on development — PRs welcome.
 */
