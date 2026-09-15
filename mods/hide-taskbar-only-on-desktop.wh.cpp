@@ -2,7 +2,7 @@
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Hides selected taskbars while their displays show only the desktop
-// @version         6.6.0
+// @version         6.7.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -14,7 +14,8 @@
 
 # Hide Taskbar Only on Desktop
 
-This Windhawk mod hides selected taskbars when their corresponding display is showing only the desktop. Each display is evaluated independently.
+Hides selected taskbars when their displays show only the desktop. Each display
+is evaluated independently.
 
 ## Demo
 
@@ -26,102 +27,57 @@ This Windhawk mod hides selected taskbars when their corresponding display is sh
 
 ![Single Display](https://raw.githubusercontent.com/Sahil-Dashoni/Hide-Taskbar-Only-on-Desktop-Windhawk-Mod/refs/heads/main/Assets/single-display.gif)
 
-## How It Works
+## Features
 
-For each selected display, the mod checks whether a relevant visible, non-minimized application is present. Active, uncloaked supported Windows shell surfaces and desktop infrastructure are excluded from the normal application check. Explorer XAML desktop/Start host variants are also recognized so shell interaction does not get mistaken for a normal application.
+- Per-display taskbar hiding when the display is desktop-only
+- Independent per-display bottom-edge hover reveal
+- Multi-monitor support, including windows spanning multiple displays
+- Keyboard taskbar interaction such as Win+T and Win+B
+- Supported Start/Search, taskbar popups, notifications, and shell UI are handled separately from normal applications
+- Borderless fullscreen sessions are tracked per display
+- Taskbar state is restored after taskbar recreation or tool-process restart
 
-When a display is showing only the desktop, its selected bottom-docked taskbar can be hidden. An application on that display, keyboard-driven taskbar focus such as Win+T or Win+B, or a supported shell surface can keep the corresponding taskbar visible. Mouse interaction with the taskbar does not prevent it from hiding after hover dismissal. Borderless fullscreen content is tracked per display after it enters fullscreen and keeps that display's taskbar hidden even if another display later becomes foreground. A visible fullscreen owner suppresses hover and keyboard taskbar reveal; a cached owner that is hidden, minimized, or DWM-cloaked does not block those reveal paths. Explicit fullscreen lifecycle transitions clear the tracked state.
+## Settings
 
-Applications spanning multiple displays are considered for every display they intersect, so each affected display can independently remain visible.
+**Taskbars to hide on desktop** selects the displays affected by desktop-only hiding.
 
-The taskbar is hidden using layered-window transparency rather than Windows' native auto-hide mode, so the mod does not intentionally change the desktop work area.
+**Reveal taskbar on bottom-edge hover** selects the displays where bottom-edge hover
+can reveal the taskbar.
 
-## Per-Display Settings
+Display selections use the current logical monitor order reported by Windows.
 
-You can configure independently:
+## Difference from `taskbar-fade`
 
-- Which displays should hide their taskbar on the desktop
-- Which displays should support bottom-edge hover reveal
+`taskbar-fade` is the closest existing mod and uses a similar layered-taskbar
+mechanism and bottom-edge hover behavior. Its focus is configurable fading/idle
+behavior, including Smart Idle (hide when the desktop is showing).
 
-You can select all displays or individual logical display numbers. The settings use the current logical monitor order rather than the internal Windows `DISPLAYn` device identifier.
+This mod instead makes **desktop-only state the primary rule and evaluates it
+independently per display**. It also hides immediately rather than waiting for an
+idle timeout. One display can therefore keep its taskbar visible because an
+application is open while another display hides its selected taskbar because it
+is showing only the desktop.
 
-Display selections are evaluated using the current logical monitor numbering each time the display list is refreshed. If Windows changes the logical display order after a display is added, removed, or rearranged, the configured display numbers follow the new current numbering.
+The two mods should not be used together on the same taskbar because both modify
+its window style/transparency state.
 
-## Hover Reveal
+## Implementation
 
-For bottom-docked taskbars, moving the cursor into the configured bottom-edge area reveals the taskbar. The hover zone follows the taskbar's actual height and display scaling, with an optional extra margin. A taskbar on a display with a visible fullscreen owner does not reveal from bottom-edge hover; a cached owner that is hidden, minimized, or DWM-cloaked does not block hover reveal.
-
-After the cursor leaves the area, the taskbar hides again after the configured delay. Moving the cursor between displays also updates which taskbar is currently revealed.
-
-Hover tracking uses a dedicated cursor-sampling thread. It samples at 50 ms while any taskbar is hidden, backs off when no hidden taskbar needs hover tracking, and backs off further after repeated cursor-position failures. Hover-eligible taskbars that would currently be hidden are published to the sampler so cursor-leave detection does not depend solely on the periodic safety poll.
-
-Hover reveal does not apply to taskbars docked to the top or sides. Desktop-based hiding also applies only to bottom-docked taskbars.
-
-## Windows Shell Interactions
-
-The mod recognizes supported Windows shell surfaces separately from normal application windows. This prevents shell UI from being mistaken for an ordinary application when deciding whether a display is desktop-only.
-
-Supported shell surfaces include:
-
-- Start menu and Start/Search hosts
-- Taskbar menus and popups
-- Tray and notification overflow
-- Notification and Quick Settings surfaces
-- Alt+Tab and related task-switching UI
-- Windows Search surfaces
-
-Shell surfaces are tracked per display, including foreground transitions, so keyboard-opened Start/Search UI reveals the taskbar immediately and closing it returns the taskbar to the normal desktop-only state. Taskbar-owned popup menus are also checked during hover dismissal; generic desktop context menus do not count as taskbar popups.
-
-The taskbar is treated as occupied when it receives keyboard-driven foreground focus, preventing keyboard navigation such as `Win+T`, `Win+B`, or `Win+number` from operating on an invisible taskbar. A taskbar focused by mouse interaction can still hide normally after the hover grace period ends.
-
-## Taskbar State and Recovery
-
-The mod uses `WS_EX_LAYERED` with `SetLayeredWindowAttributes` and alpha 0 to hide the taskbar without changing its normal `ShowWindow` visibility state. It runs the state-management logic in a dedicated `windhawk.exe` tool-mod process rather than injecting a taskbar `ShowWindow` hook into Explorer.
-
-Before hiding a taskbar, the mod records the relevant original extended-window style and layered-window attributes on the taskbar itself. Hiding makes the taskbar transparent before enabling click-through input, and showing restores input behavior before restoring visible alpha. An ownership marker identifies taskbars whose transparency was applied by this mod.
-
-If a taskbar is recreated, the new taskbar is rediscovered and evaluated again. If the dedicated tool process is restarted after an unexpected termination, a new instance can reclaim taskbars still carrying the ownership marker. If another component removes `WS_EX_LAYERED` while the mod still has ownership, the stale ownership data is discarded safely and only the mod-owned `WS_EX_LAYERED`/`WS_EX_TRANSPARENT` bits are cleared before a later hide recaptures the current taskbar state. Restoring a taskbar changes only the extended-style bits owned by this mod; unrelated extended-style changes are preserved.
-
-## Multi-Monitor Behavior
-
-Each selected display is evaluated independently. For example, an application can remain open on display 1 while the selected taskbar on display 2 hides because display 2 is showing only the desktop.
-
-An application spanning multiple displays keeps the taskbars on every intersected display visible. A taskbar can also be revealed independently by hovering its own configured bottom-edge area.
-
-The mod supports up to 16 display/taskbar entries and uses the current logical display numbering reported by monitor enumeration.
-
-## Fullscreen and Multi-Monitor State
-
-Borderless fullscreen content is tracked as a sticky session for the display that owns it. The fullscreen test accepts borderless windows even when they retain a normal overlapped window style; it uses the exact monitor rectangle (within a small tolerance), the absence of a caption and resize frame, and explicit exclusion of Windows shell, desktop, and taskbar windows. It does not require WS_POPUP.
-
-Once a fullscreen window enters the foreground, its HMONITOR remains associated with that fullscreen owner while focus moves between displays. Normal desktop/taskbar/shell transitions and the ordinary safety refresh do not invalidate that ownership. Explicit move and minimize lifecycle transitions validate or clear the tracked owner, while a hidden, minimized, or DWM-cloaked cached owner no longer suppresses hover or keyboard reveal. This keeps a secondary-display desktop click from exposing the primary taskbar while fullscreen content remains active.
-
-## Performance and Refreshing
-
-The full application, shell-surface, and display scan runs in the dedicated tool process rather than inside Explorer. The mod uses:
-
-- A dedicated worker thread for state management
-- A lightweight cursor-sampling thread for hover detection
-- Event-driven refreshes for relevant foreground, minimize/move, display, theme, settings, and taskbar recreation changes
-- A periodic 2 second safety poll for missed or unusual transitions
-- A one-shot hover-dismissal timer, with qualifying taskbar popups rechecked every 250 ms while dismissal is pending
-
-The 2 second safety poll is intentionally retained as a fallback and does not replace the normal event-driven refresh path. Native Windows taskbar auto-hide state is cached and refreshed when settings or relevant shell/taskbar changes occur rather than being queried on every safety tick.
-
-When no displays are configured for desktop-based hiding, the mod skips the application and shell-popup scans and restores any taskbars that may still be hidden by an earlier configuration.
+The mod runs its state-management logic in a dedicated Windhawk tool process and
+uses layered-window transparency rather than Windows' native auto-hide. This
+keeps the normal desktop work area unchanged.
 
 ## Limitations
 
-- Desktop-based hiding and hover reveal are supported only for bottom-docked taskbars.
-- Hiding the taskbar does not increase the desktop work area, so maximized windows may still leave the normal taskbar space reserved.
-- Windows display device names such as `\\.\DISPLAY1` may differ from the logical display numbers used by the settings UI. The settings intentionally follow the current logical monitor numbering rather than device identities.
-- The display-selection configuration supports up to 16 display entries.
-- The mod keeps Windows' native taskbar auto-hide setting separate from its own hiding behavior. If native auto-hide is enabled, this mod does not take over that taskbar.
-- Because the taskbar is made fully transparent, flashing taskbar buttons and tray notifications are not visually available while that taskbar is hidden by the mod.
-- If the dedicated tool process is terminated unexpectedly, taskbars carrying the ownership marker remain recoverable by the next tool-process startup.
-- Other taskbar transparency/customization mods that modify the same taskbar window can conflict with this mod.
-- Borderless fullscreen detection intentionally treats a visible, monitor-sized, captionless and non-resizable application as fullscreen; unusual applications with that exact window presentation may therefore keep their taskbar hidden.
-- Windows shell window classes and processes can change between Windows releases, so shell-interaction detection may need updates for future Windows versions.
+- Desktop-only hiding and hover reveal currently apply only to bottom-docked taskbars.
+- The taskbar remains part of the normal work area while hidden, so maximized windows do not gain the reserved space.
+- Display selection follows current logical monitor numbering; Windows may assign a different physical display to a number after display topology changes.
+- Up to 16 display/taskbar entries are supported.
+- Flashing taskbar buttons and tray notifications are not visible while the taskbar is transparent.
+- Native Windows taskbar auto-hide is kept separate; if it is enabled, this mod does not take over that taskbar.
+- Other mods that modify the same taskbar's transparency or styles can conflict with this mod.
+- Borderless monitor-sized, captionless, non-resizable applications may be treated as fullscreen.
+- Windows shell classes and processes can change between Windows releases.
 
 */
 // ==/WindhawkModReadme==
@@ -214,7 +170,7 @@ constexpr UINT WM_APP_SETTINGS = WM_APP + 2;
 constexpr UINT_PTR kSafetyTimerId = 1;
 constexpr UINT_PTR kHoverExpireTimerId = 2;
 constexpr UINT_PTR kPostMinimizeReassertTimerId = 3;
-constexpr UINT_PTR kFullscreenValidationTimerId = 3;
+constexpr UINT_PTR kFullscreenValidationTimerId = 4;
 
 struct {
     int extraHoverMarginPx;
@@ -1792,11 +1748,11 @@ void SetTaskbarState(TaskbarMonitorState& state, bool show) {
 
         if (!(exStyle & WS_EX_LAYERED) ||
             GetPropW(state.hwnd, kTaskbarOwnershipProp) == nullptr) {
-            if (GetPropW(state.hwnd, kTaskbarOwnershipProp) != nullptr &&
-                DropStaleTaskbarOwnership(state.hwnd, exStyle)) {
-                state.hiddenByMod = false;
-            } else {
-                RemoveTaskbarOwnershipProperties(state.hwnd);
+            // The state table still says the mod hid this taskbar, so clear any
+            // remaining mod-owned style bits even if another component removed
+            // the ownership marker. This prevents stale WS_EX_TRANSPARENT from
+            // surviving into a later hide/show cycle.
+            if (DropStaleTaskbarOwnership(state.hwnd, exStyle)) {
                 state.hiddenByMod = false;
             }
         } else {
@@ -1916,13 +1872,8 @@ void ScanVisibleShellPopupsOnce(const MonitorList& monitors, ShellPopupScanResul
 }
 
 int FindMonitorIndex(const MonitorList& monitors, HMONITOR monitor) {
-    for (size_t i = 0; i < monitors.count; ++i) {
-        if (monitors.entries[i].monitor == monitor) {
-            return static_cast<int>(i);
-        }
-    }
-
-    return -1;
+    const int monitorNumber = GetMonitorNumber(monitors, monitor);
+    return monitorNumber > 0 ? monitorNumber - 1 : -1;
 }
 
 int GetHoverZonePx(HWND hTaskbar, UINT dpi) {
@@ -2137,7 +2088,7 @@ bool IsCursorInConfiguredHoverZoneAtSnapshot(POINT pt, HMONITOR cursorMonitor) {
 
 void UpdateTaskbarState() {
 
-        MonitorList monitors =
+    MonitorList monitors =
         GetCurrentMonitors();
 
     RefreshTaskbarMonitorStates(monitors);
@@ -3030,8 +2981,6 @@ DWORD WINAPI WorkerThread(LPVOID) {
         }
 
         if (msg.message == WM_TIMER) {
-            if (msg.hwnd == nullptr) {
-            }
             if (msg.hwnd && msg.hwnd == g_workerMessageWindow) {
                 DispatchMessageW(&msg);
                 continue;
@@ -3361,8 +3310,33 @@ bool WaitForThreadWithTimeout(HANDLE thread, DWORD timeoutMs, const wchar_t* thr
 
 void WhTool_ModUninit() {
 
+    // Stop new cursor-triggered refreshes first, then shut down the worker that
+    // owns all visibility decisions. This prevents the worker from changing the
+    // taskbar while final restoration is in progress.
     if (g_cursorStopEvent) {
         SetEvent(g_cursorStopEvent);
+    }
+
+    if (g_workerThread) {
+        if (!PostThreadMessageW(
+                g_workerThreadId,
+                WM_QUIT,
+                0,
+                0
+            )) {
+            Wh_Log(L"Failed to post worker shutdown message");
+        }
+
+        if (!WaitForThreadWithTimeout(
+                g_workerThread,
+                5000,
+                L"worker"
+            )) {
+            RestoreAllTaskbars();
+            ExitProcess(1);
+        }
+
+        SafeCloseHandle(g_workerThread);
     }
 
     if (g_cursorThread) {
@@ -3379,34 +3353,9 @@ void WhTool_ModUninit() {
     }
 
     SafeCloseHandle(g_cursorStopEvent);
-
-    if (g_workerThread) {
-        if (!PostThreadMessageW(
-                g_workerThreadId,
-                WM_QUIT,
-                0,
-                0
-            )) {
-                Wh_Log(L"Failed to post worker shutdown message");
-            }
-
-        if (!WaitForThreadWithTimeout(
-                g_workerThread,
-                5000,
-                L"worker"
-            )) {
-            RestoreAllTaskbars();
-            ExitProcess(1);
-        }
-
-        SafeCloseHandle(g_workerThread);
-    }
-
     SafeCloseHandle(g_workerReadyEvent);
 
-    /*
-     * Restore all currently discoverable taskbars when the tool exits.
-     */
+    // Restore all currently discoverable taskbars when the tool exits.
     RestoreAllTaskbars();
 }
 
