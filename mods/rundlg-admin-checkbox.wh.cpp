@@ -14,25 +14,23 @@
 /*
 # Run Dialog Admin Checkbox
 
-Task Manager's Create new task dialog has a checkbox to run the command as
-administrator. Win+R does not, even though both dialogs are the same shell32
-code. This mod puts that checkbox on Win+R. Ctrl+Shift+Enter hotkey is also restored.
+Task Manager's Create new task dialog has a checkbox to run the command as administrator. Win+R does not, even though both dialogs are the same shell32 code. This mod puts that checkbox on Win+R.
+The mod only adds the checkbox, it does not affect Ctrl+Shift+Enter. To enable the shortcut, please install the **Always Allow CTRL+SHIFT+ENTER** mod by aubymori.
 
 Tested and works on 10 21H2 and 11 24H2.
+
+![Picture](https://raw.githubusercontent.com/repensky/local-wh-mods/refs/heads/main/explorer_1789508130.png)
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- consentHotkey: false
-  $name: Also accept Ctrl+Shift+Enter
-  $description: Ask Windows to accept Ctrl+Shift+Enter as well as the checkbox. Unrelated to the checkbox, which works either way. Only useful on a Windows 7 shell, where the shortcut does nothing on its own, since every later shell already enables it.
 - label: ""
   $name: Checkbox label
   $description: Wording for the checkbox. Leave empty to use the text Windows already ships in its own admin dialog.
 - edgeMargin: 2
   $name: Gap from the screen edge
-  $description: Gap kept between the dialog and the taskbar when the taller dialog has to be nudged back on screen. Measured in dialog units so it follows the display scaling, 3 is about 6 pixels at 100 percent. Set to 0 to sit flush against it.
+  $description: Gap kept between the dialog and the taskbar when the taller dialog has to be nudged back on screen. Set to 0 to sit flush against it.
 */
 // ==/WindhawkModSettings==
 
@@ -54,10 +52,6 @@ Tested and works on 10 21H2 and 11 24H2.
 #define IDC_RUN_ADMIN    12307
 #define IDC_RUN_BROWSE   12288
 
-// Asks the Run dialog to keep its Ctrl+Shift+Enter handling
-// Community name, Microsoft does not publish one for this bit
-#define RFD_CONSENTHOTKEY 0x100
-
 // Template 1011 geometry in dialog units, measured from the checkbox top
 #define SEPMEM_TOP_UNITS  12
 #define BUTTON_TOP_UNITS  32
@@ -70,10 +64,11 @@ static std::mutex g_lockLabel;
 
 static std::atomic<int> g_nEdgeMargin{ 3 };
 
-static std::atomic<bool> g_fConsentHotkey{ false };
-
 // Thread that is handing an OK press to shell32 with the box ticked
 static std::atomic<DWORD> g_dwRunAsThread{ 0 };
+
+// Held so its ShellExecuteExW cannot unload while hooked
+static HMODULE g_hStorage = NULL;
 
 // Asks a dialog on its own thread to put itself back the way it was
 static UINT g_uRevertMsg = 0;
@@ -101,7 +96,6 @@ static void LoadSettings()
         nMargin = 0;
 
     g_nEdgeMargin.store(nMargin);
-    g_fConsentHotkey.store(Wh_GetIntSetting(L"consentHotkey") != 0);
 
     std::lock_guard<std::mutex> guard(g_lockLabel);
     g_strLabel = label.get();
@@ -544,7 +538,7 @@ static bool IsPlainRunDialog(HWND hWnd)
     if (!hWnd)
         return false;
 
-    // Cheapest test first, this runs for every message on a busy shell thread
+    // Class name first, it rules out every other window cheaply
     WCHAR szClass[16];
     if (!GetClassNameW(hWnd, szClass, ARRAYSIZE(szClass))
         || lstrcmpW(szClass, L"#32770") != 0)
@@ -564,7 +558,9 @@ LRESULT CALLBACK RunDlgWatchProc(int nCode, WPARAM wParam, LPARAM lParam)
     if (nCode == HC_ACTION) {
         CWPSTRUCT *pcw = (CWPSTRUCT *)lParam;
 
-        if (pcw && IsPlainRunDialog(pcw->hwnd)) {
+        // Only the setup message, anything earlier comes before shell32's layout
+        if (pcw && pcw->message == WM_INITDIALOG
+            && IsPlainRunDialog(pcw->hwnd)) {
             RUNDLG_STATE *pState = new RUNDLG_STATE{};
             SetPropW(pcw->hwnd, kStateProp, (HANDLE)pState);
 
@@ -574,10 +570,6 @@ LRESULT CALLBACK RunDlgWatchProc(int nCode, WPARAM wParam, LPARAM lParam)
 
                 // Nothing left to watch for, so stop running on every message
                 DropWatch(GetCurrentThreadId());
-
-                // Setup is handled in the subclass, after shell32 has laid out
-                if (pcw->message != WM_INITDIALOG)
-                    AddAdminCheckbox(pcw->hwnd);
             } else {
                 RemovePropW(pcw->hwnd, kStateProp);
                 delete pState;
@@ -590,35 +582,75 @@ LRESULT CALLBACK RunDlgWatchProc(int nCode, WPARAM wParam, LPARAM lParam)
 
 //---Launch hook--------------------------------------------
 
-// The test shell32 makes before it trusts the verb, same call and same rules
-// A folder or a URL has no runas verb, and asking for one there would fail
+// Decides whether the runas verb makes sense for what the Run dialog launches
+// A bare name never matches a file association, so it is judged by extension
 static bool CanRunAs(PCWSTR pszFile)
 {
     if (!pszFile || !*pszFile)
         return false;
 
+    // Folders and URLs have no runas verb, asking for one would only fail
+    if (UrlIsW(pszFile, URLIS_URL) || PathIsDirectoryW(pszFile))
+        return false;
+
+    PCWSTR pszExt = PathFindExtensionW(pszFile);
+    if (!*pszExt) {
+        // A bare command name resolves through App Paths or PATH
+        return PathFindFileNameW(pszFile) == pszFile;
+    }
+
+    // The query shell32 makes, given the extension rather than the whole name
     DWORD cchOut = 0;
-    HRESULT hr = AssocQueryStringW(ASSOCF_NONE, ASSOCSTR_COMMAND, pszFile,
+    HRESULT hr = AssocQueryStringW(ASSOCF_NONE, ASSOCSTR_COMMAND, pszExt,
                                    L"runas", NULL, &cchOut);
 
     return SUCCEEDED(hr) && cchOut != 0;
 }
 
 using ShellExecuteExW_t = decltype(&ShellExecuteExW);
-static ShellExecuteExW_t ShellExecuteExW_Original;
 
-BOOL WINAPI ShellExecuteExW_Hook(SHELLEXECUTEINFOW *pExecInfo)
+// Build 19041 launches through shell32's copy, 26100 through windows.storage's
+static ShellExecuteExW_t ShellExecuteExW_Shell32_Original;
+static ShellExecuteExW_t ShellExecuteExW_Storage_Original;
+
+// Shared by both copies, each passes in the original it wraps
+static BOOL LaunchRunDlgCommand(SHELLEXECUTEINFOW *pExecInfo,
+                                ShellExecuteExW_t pfnOriginal)
 {
     // Only the one launch the ticked Run dialog is in the middle of making
     if (pExecInfo && g_dwRunAsThread.load() == GetCurrentThreadId()
-        && (!pExecInfo->lpVerb || !*pExecInfo->lpVerb)
-        && CanRunAs(pExecInfo->lpFile)) {
+        && (!pExecInfo->lpVerb || !*pExecInfo->lpVerb)) {
 
-        Wh_Log(L"Elevating the Run dialog command");
-        pExecInfo->lpVerb = L"runas";
+        if (!CanRunAs(pExecInfo->lpFile)) {
+            Wh_Log(L"Not elevating %s, it has no runas verb",
+                   pExecInfo->lpFile ? pExecInfo->lpFile : L"(none)");
+            return pfnOriginal(pExecInfo);
+        }
+
+        Wh_Log(L"Elevating %s", pExecInfo->lpFile);
+
+        // A copy carries the verb, shell32 still owns the struct it passed in
+        // Once set, the nested call into the other copy sees a verb and passes
+        SHELLEXECUTEINFOW sei = *pExecInfo;
+        sei.lpVerb = L"runas";
+
+        BOOL fResult = pfnOriginal(&sei);
+        pExecInfo->hInstApp = sei.hInstApp;
+        pExecInfo->hProcess = sei.hProcess;
+        return fResult;
     }
 
-    return ShellExecuteExW_Original(pExecInfo);
+    return pfnOriginal(pExecInfo);
+}
+
+BOOL WINAPI ShellExecuteExW_Shell32_Hook(SHELLEXECUTEINFOW *pExecInfo)
+{
+    return LaunchRunDlgCommand(pExecInfo, ShellExecuteExW_Shell32_Original);
+}
+
+BOOL WINAPI ShellExecuteExW_Storage_Hook(SHELLEXECUTEINFOW *pExecInfo)
+{
+    return LaunchRunDlgCommand(pExecInfo, ShellExecuteExW_Storage_Original);
 }
 
 //---Run dialog hook----------------------------------------
@@ -643,10 +675,6 @@ void WINAPI RunFileDlg_Hook(HWND hwndParent, HICON hIcon,
         UnhookWindowsHookEx(hWatch);
         Wh_Log(L"No free watch slot, this dialog gets no checkbox");
     }
-
-    // Only ever added, so leaving the setting off cannot disable the shortcut
-    if (g_fConsentHotkey.load())
-        dwFlags |= RFD_CONSENTHOTKEY;
 
     RunFileDlg_Original(hwndParent, hIcon, pszWorkingDir, pszTitle,
                         pszPrompt, dwFlags);
@@ -699,8 +727,28 @@ BOOL Wh_ModInit()
 
     WindhawkUtils::SetFunctionHook(pfnRunFileDlg, RunFileDlg_Hook,
                                    &RunFileDlg_Original);
-    WindhawkUtils::SetFunctionHook(ShellExecuteExW, ShellExecuteExW_Hook,
-                                   &ShellExecuteExW_Original);
+
+    // On 26100 this export is only a jump into windows.storage
+    ShellExecuteExW_t pfnShell32Exec =
+        (ShellExecuteExW_t)GetProcAddress(hShell, "ShellExecuteExW");
+    bool fShell32 = pfnShell32Exec
+        && WindhawkUtils::SetFunctionHook(pfnShell32Exec,
+                                          ShellExecuteExW_Shell32_Hook,
+                                          &ShellExecuteExW_Shell32_Original);
+
+    // The copy the Run dialog really calls on 26100, loaded from System32 only
+    g_hStorage = LoadLibraryExW(L"windows.storage.dll", NULL,
+                                LOAD_LIBRARY_SEARCH_SYSTEM32);
+    ShellExecuteExW_t pfnStorageExec = g_hStorage
+        ? (ShellExecuteExW_t)GetProcAddress(g_hStorage, "ShellExecuteExW")
+        : nullptr;
+    bool fStorage = pfnStorageExec && pfnStorageExec != pfnShell32Exec
+        && WindhawkUtils::SetFunctionHook(pfnStorageExec,
+                                          ShellExecuteExW_Storage_Hook,
+                                          &ShellExecuteExW_Storage_Original);
+
+    Wh_Log(L"ShellExecuteExW hooks, shell32 %d, windows.storage %d",
+           (int)fShell32, (int)fStorage);
 
     return TRUE;
 }
@@ -725,4 +773,10 @@ void Wh_ModBeforeUninit()
 void Wh_ModUninit()
 {
     Wh_Log(L"Uninit");
+
+    // Hooks are already gone by now, so the reference can go too
+    if (g_hStorage) {
+        FreeLibrary(g_hStorage);
+        g_hStorage = NULL;
+    }
 }
