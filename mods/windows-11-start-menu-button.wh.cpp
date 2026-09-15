@@ -1481,9 +1481,8 @@ void WINAPI ExperienceToggleButton_UpdateButtonPadding_Hook(void* pThis) {
 // -----------------------------------------------------------------------
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    // Taskbar.View.dll (or ExplorerExtensions.dll on some builds - see
-    // GetTaskbarViewModuleHandle).
-    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {LR"(protected: virtual void __cdecl winrt::Taskbar::implementation::ExperienceToggleButton::UpdateButtonPadding(void))"},
             &ExperienceToggleButton_UpdateButtonPadding_Original,
@@ -1491,7 +1490,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         },
     };
 
-    return HookSymbols(module, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks));
+    return HookSymbols(module, hooks, ARRAYSIZE(hooks));
 }
 
 HMODULE GetTaskbarViewModuleHandle() {
