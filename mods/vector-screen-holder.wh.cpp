@@ -2,7 +2,7 @@
 // @id              vector-screen-holder
 // @name            Vector Screen Holder
 // @description     Fills a display you choose with generative line art and keeps the PC from idling while it runs
-// @version         1.0.8
+// @version         1.1.0
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
@@ -46,7 +46,7 @@ about two seconds. That line is the only text the mod ever draws.
 | **Left click** | Cycle to the next enabled style |
 | **Right click** | Step the amount: how much information is on screen |
 | **Mouse wheel** | Adjust the current style's parameter |
-| **Hold Space** | Slide the colour around the hue wheel |
+| **Space** | Step to the next palette |
 | **Ctrl+Alt+H** | Toggle the overlay on and off (configurable below) |
 
 All of these need the overlay focused. Click it once and it takes them,
@@ -68,6 +68,22 @@ goes to the overlay rather than the desktop. That is inherent to sitting above
 the wallpaper, and it is why the mod is built around holding a monitor you are
 not working on. The **Display** setting defaults to your primary screen, so
 pick the side monitor if you would rather keep your icons reachable. It only goes away for good when you press Esc or toggle it off.
+
+## Colour
+
+Seven palettes: aurora, ember, ocean, neon, forest, mono, and custom, which
+takes its colours from the two custom settings. **Space** steps to the next
+one while the overlay is running, and the one you land on is remembered, so
+you can pick a palette by eye instead of by name. Changing the palette in the
+settings overrides whatever you stepped to, so the setting is never a dead
+control.
+
+**Hue shift** rotates the whole palette by a fixed number of degrees, which is
+the quickest way to tune the colours without writing a custom palette. Turn on
+the **automatic colour ramp** and the hue rotates continuously from there.
+
+Turning the ramp back off returns the colours to the hue shift you set, rather
+than leaving them wherever the rotation happened to stop.
 
 ## The four styles
 
@@ -250,24 +266,32 @@ pair-programmers Claude and Big-Pickle (opencode).
 - customBackground: "#05070d"
   $name: Custom background
   $description: Background #rrggbb. Used when the palette is Custom.
+- hueOffset: 0
+  $name: Hue shift (degrees)
+  $description: >-
+    Rotates the palette by a fixed amount, so you can tune the colours without
+    editing a custom palette. 0 leaves the palette exactly as defined. This is
+    the colour you get whenever the automatic ramp is off, and the colour the
+    artwork returns to the moment you turn the ramp off. Clamped to 0-359.
 - colorRamp: false
   $name: Automatic colour ramp
-  $description: Continuously rotate the hue of the artwork.
+  $description: >-
+    Continuously rotate the hue of the artwork, starting from the hue shift
+    above. While this is on, the hue shift setting is the starting point
+    rather than a fixed value. Turn it off and the colours return to the hue
+    shift you set, instead of stopping wherever the rotation happened to be.
 - rampSpeed: 12
   $name: Ramp speed (degrees/sec)
   $description: >-
-    Speed of the automatic ramp. Independent of the Space key, so it can be set
-    slower or faster than holding Space. Clamped to 1-360.
-- spaceSpeed: 90
-  $name: Space key speed (degrees/sec)
-  $description: How fast holding Space slides the colour. Clamped to 1-720.
+    How fast the automatic ramp rotates the hue. Only used while the ramp is
+    on. Clamped to 1-360.
 - opacity: 100
   $name: Opacity (%)
   $description: Below 100 the desktop shows through the overlay. Clamped to 10-100.
 - globalKeys: false
   $name: Global Esc and Space
   $description: >-
-    Let Esc close the overlay and Space slide the colour from any application,
+    Let Esc close the overlay and Space change the palette from any application,
     not just when the overlay has focus. Off by default: Esc is a heavily used
     key, and a reflexive press in another window would end the session and
     release the keep-awake without any visible sign. The toggle hotkey above
@@ -1537,9 +1561,9 @@ struct Settings {
     std::wstring palette = L"aurora";
     std::wstring customColors;
     std::wstring customBackground;
+    int hueOffset = 0;
     bool colorRamp = false;
     int rampSpeed = 12;
-    int spaceSpeed = 90;
     int fps = 60;
     int opacity = 100;
     bool globalKeys = false;
@@ -1566,24 +1590,48 @@ static unsigned ParseHex(const std::wstring& s) {
     return v;
 }
 
-static void BuildPalette() {
-    struct Preset {
-        const wchar_t* name;
-        unsigned bg;
-        unsigned ink[5];
-    };
-    static const Preset kPresets[] = {
+struct Preset {
+    const wchar_t* name;
+    unsigned bg;
+    unsigned ink[5];
+};
+
+// "custom" is the last entry so stepping with Space reaches it too; its
+// colours come from the two custom settings rather than from this table.
+static const Preset kPresets[] = {
         {L"aurora", 0x05070d, {0x7fe7cf, 0x5fb3ff, 0xa68bff, 0xff7fd0, 0xe8f3ff}},
         {L"ember",  0x0d0603, {0xffb066, 0xff6a3d, 0xffd98a, 0xe0503a, 0xfff0d8}},
         {L"ocean",  0x02080f, {0x4fd1f5, 0x59a5ff, 0x8fe9ff, 0x3b6fd4, 0xdff6ff}},
         {L"neon",   0x05010a, {0xff2ec4, 0x00f0ff, 0xb026ff, 0x39ff14, 0xffffff}},
         {L"forest", 0x030a06, {0x34d399, 0xa3e635, 0x059669, 0xd9f99d, 0xecfccb}},
-        {L"mono",   0x07070a, {0xe8e9ee, 0xb9bcc6, 0x8a8f9c, 0x5e636f, 0xffffff}},
-    };
+    {L"mono",   0x07070a, {0xe8e9ee, 0xb9bcc6, 0x8a8f9c, 0x5e636f, 0xffffff}},
+    {L"custom", 0x05070d, {0x29d0a5, 0x3aa0ff, 0x7b5cff, 0xff5ec4, 0xe8f3ff}},
+};
+static const int kPaletteCount =
+    (int)(sizeof(kPresets) / sizeof(kPresets[0]));
 
+// Which preset is live. Space steps it, the setting seeds it, and it is
+// remembered across restarts like the style and amount are.
+static int g_paletteIndex = 0;
+
+static int PaletteIndexFromName(const std::wstring& name) {
+    for (int i = 0; i < kPaletteCount; i++) {
+        if (name == kPresets[i].name) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+static const wchar_t* PaletteName(int idx) {
+    return kPresets[ClampT(idx, 0, kPaletteCount - 1)].name;
+}
+
+static void BuildPalette() {
+    const Preset& chosen = kPresets[ClampT(g_paletteIndex, 0, kPaletteCount - 1)];
     g_palette.ink.clear();
 
-    if (g_settings.palette == L"custom") {
+    if (std::wstring(chosen.name) == L"custom") {
         g_palette.bg = RgbFromHex(g_settings.customBackground.empty()
                                       ? 0x05070d
                                       : ParseHex(g_settings.customBackground));
@@ -1605,20 +1653,13 @@ static void BuildPalette() {
         if (g_palette.ink.size() >= 2) {
             return;
         }
-        // fall through to the default if the custom list was unusable
+        // an unusable custom list falls back to this preset's own colours
         g_palette.ink.clear();
     }
 
-    const Preset* chosen = &kPresets[0];
-    for (size_t i = 0; i < sizeof(kPresets) / sizeof(kPresets[0]); i++) {
-        if (g_settings.palette == kPresets[i].name) {
-            chosen = &kPresets[i];
-            break;
-        }
-    }
-    g_palette.bg = RgbFromHex(chosen->bg);
+    g_palette.bg = RgbFromHex(chosen.bg);
     for (int i = 0; i < 5; i++) {
-        g_palette.ink.push_back(RgbFromHex(chosen->ink[i]));
+        g_palette.ink.push_back(RgbFromHex(chosen.ink[i]));
     }
 }
 
@@ -1743,7 +1784,7 @@ static void Controller_StepAmount(Overlay* ov);
 static void Controller_Wheel(Overlay* ov, int delta);
 static void Controller_RequestRebuild();
 static void Controller_RequestClose();
-static void Controller_SetSpace(bool down);
+static void Controller_CyclePalette();
 
 bool Overlay::Create() {
     // Bottom of the z-order: it sits above the wallpaper but under every
@@ -1907,9 +1948,10 @@ void Overlay::FlashHud() {
     int st = ClampT(style, 0, kStyleCount - 1);
     int am = ClampT(amount, 0, kAmountCount - 1);
     WCHAR buf[160];
-    swprintf_s(buf, ARRAYSIZE(buf), L"%s     %s %d%%     amount %s",
+    swprintf_s(buf, ARRAYSIZE(buf), L"%s     %s %d%%     amount %s     %s",
                kStyleNames[st], kStyleParams[st],
-               (int)(param * 100.0f + 0.5f), kAmountNames[am]);
+               (int)(param * 100.0f + 0.5f), kAmountNames[am],
+               PaletteName(g_paletteIndex));
     hudText_ = buf;
     hudT_ = kHudSecs;
 }
@@ -2112,13 +2154,11 @@ LRESULT CALLBACK Overlay::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 return 0;
             }
             if (wp == VK_SPACE) {
-                Controller_SetSpace(true);
-                return 0;
-            }
-            break;
-        case WM_KEYUP:
-            if (wp == VK_SPACE) {
-                Controller_SetSpace(false);
+                // bit 30 is the previous key state: ignore auto-repeat so a
+                // held Space does not race through every palette
+                if (!(lp & (1 << 30))) {
+                    Controller_CyclePalette();
+                }
                 return 0;
             }
             break;
@@ -2127,11 +2167,6 @@ LRESULT CALLBACK Overlay::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             // DefWindowProc and destroy the window without the controller
             // knowing. Route it the same way Esc goes.
             Controller_RequestClose();
-            return 0;
-        case WM_KILLFOCUS:
-            // No WM_KEYUP arrives if the overlay is alt-tabbed away mid-hold,
-            // which would leave the hue sliding indefinitely.
-            Controller_SetSpace(false);
             return 0;
         case WM_ERASEBKGND:
             return 1;
@@ -2152,7 +2187,6 @@ LRESULT CALLBACK Overlay::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 // ---------------------------------------------------------------------------
 static std::vector<Overlay*> g_overlays;
 static std::atomic<bool> g_active{false};
-static std::atomic<bool> g_spaceDown{false};
 static HANDLE g_toggleEvent = nullptr;
 static std::atomic<DWORD> g_workerThreadId{0};
 static HHOOK g_kbdHook = nullptr;
@@ -2252,8 +2286,18 @@ static void Controller_Wheel(Overlay* ov, int delta) {
     SaveState(ov);
 }
 
-static void Controller_SetSpace(bool down) {
-    g_spaceDown = down;
+// Space steps through the palettes, live, the way click steps the style.
+// It used to slide the hue while held, which left the colours stranded at an
+// arbitrary rotation with no way to get back to a named palette.
+static void Controller_CyclePalette() {
+    g_paletteIndex = (g_paletteIndex + 1) % kPaletteCount;
+    BuildPalette();
+    Wh_SetIntValue(L"state.palette", g_paletteIndex);
+    Wh_SetIntValue(L"state.paletteFrom",
+                   PaletteIndexFromName(g_settings.palette));
+    for (size_t i = 0; i < g_overlays.size(); i++) {
+        g_overlays[i]->FlashHud();
+    }
 }
 
 
@@ -2295,8 +2339,14 @@ static LRESULT CALLBACK LowLevelKbdProc(int nCode, WPARAM wParam, LPARAM lParam)
                 Controller_RequestClose();
             }
         } else if (k->vkCode == VK_SPACE) {
-            if (down || up) {
-                Controller_SetSpace(down);
+            // The hook gets no repeat flag, so latch the key down ourselves
+            // and step once per physical press.
+            static bool spaceHeld = false;
+            if (down && !spaceHeld) {
+                spaceHeld = true;
+                Controller_CyclePalette();
+            } else if (up) {
+                spaceHeld = false;
             }
         }
     }
@@ -2481,6 +2531,17 @@ static void ShowOverlays() {
     // If the setting changed since the state was saved, the setting wins;
     // otherwise "Starting amount notch" and "Starting parameter" would be
     // silently ignored forever after the first scroll or right click.
+    // Same rule as amount and parameter: a live change sticks, but editing
+    // the setting overrides it, so the settings UI is never a dead control.
+    int fromSetting = PaletteIndexFromName(g_settings.palette);
+    g_paletteIndex = fromSetting;
+    if (Wh_GetIntValue(L"state.paletteFrom", -1) == fromSetting) {
+        g_paletteIndex =
+            ClampT(Wh_GetIntValue(L"state.palette", fromSetting), 0,
+                   kPaletteCount - 1);
+    }
+    BuildPalette();
+
     int amount = g_settings.amount;
     if (Wh_GetIntValue(L"state.amountFrom", -1) == g_settings.amount) {
         amount = Wh_GetIntValue(L"state.amount", g_settings.amount);
@@ -2510,7 +2571,6 @@ static void ShowOverlays() {
         return;
     }
     g_active = true;
-    g_spaceDown = false;   // a hide while Space was held must not stick
     g_rotateTimer = 0;
     if (g_settings.globalKeys) {
         InstallKbdHook();
@@ -2530,7 +2590,6 @@ static void HideOverlays() {
     }
     g_overlays.clear();
     g_active = false;
-    g_spaceDown = false;
     ApplyExecutionState();
     Wh_Log(L"Screen Holder hidden");
 }
@@ -2679,9 +2738,9 @@ static void LoadSettings() {
     g_settings.palette = GetStringSetting(L"palette");
     g_settings.customColors = GetStringSetting(L"customColors");
     g_settings.customBackground = GetStringSetting(L"customBackground");
+    g_settings.hueOffset = ClampT(Wh_GetIntSetting(L"hueOffset"), 0, 359);
     g_settings.colorRamp = Wh_GetIntSetting(L"colorRamp") != 0;
     g_settings.rampSpeed = ClampT(Wh_GetIntSetting(L"rampSpeed"), 1, 360);
-    g_settings.spaceSpeed = ClampT(Wh_GetIntSetting(L"spaceSpeed"), 1, 720);
     g_settings.fps = ClampT(Wh_GetIntSetting(L"fps"), 10, 240);
     g_settings.opacity = ClampT(Wh_GetIntSetting(L"opacity"), 10, 100);
     g_settings.globalKeys = Wh_GetIntSetting(L"globalKeys") != 0;
@@ -2889,17 +2948,17 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         lastRender = now;
         float dt = since > 0.25f ? 0.25f : since;
 
-        // hue: the automatic ramp and the Space key are independent, so the
-        // ramp can be set slower or faster than holding Space
-        if (g_spaceDown) {
-            g_hue += (float)g_settings.spaceSpeed * dt;
-        }
+        // hue
         if (g_settings.colorRamp) {
             g_hue += (float)g_settings.rampSpeed * dt;
-        }
-        g_hue = std::fmod(g_hue, 360.0f);
-        if (g_hue < 0) {
-            g_hue += 360.0f;
+            g_hue = std::fmod(g_hue, 360.0f);
+            if (g_hue < 0) {
+                g_hue += 360.0f;
+            }
+        } else {
+            // With the ramp off the colour is whatever the user set, not
+            // wherever a previous rotation happened to stop.
+            g_hue = (float)g_settings.hueOffset;
         }
 
         if (g_settings.rotate) {
