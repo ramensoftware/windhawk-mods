@@ -133,8 +133,9 @@ from reference artwork, and **Comfy** is the lightest, for long sessions.
 **Blossom** is pastel in its text and border only: a pastel background would
 leave Premiere's own light text unreadable. **Threshold** is
 threshold-editor.com.br's `#050505`, `#FFFFFF` and `#DC2626`. **Miku** is the
-one palette that sets a band of its own, `#04090C`, darker than its panels so
-the picture carries against the teal.
+one palette that sets a band of its own, `#020F13` — darker than its own
+deepest step, and holding more of the teal than that step does, so the picture
+carries against it instead of against flat gray.
 
 The accent stays out of the ramp, which is interpolated, so it only shows on
 hovered menu items and system highlights; each one is at least 4.5:1 against
@@ -364,7 +365,7 @@ This mod is MIT as well.
   - amethyst: Amethyst — near black with a strong purple
   - crimson: Crimson — near black with a strong red
   - threshold: Threshold — the threshold-editor.com.br palette
-  - miku: Miku — deep teal, cyan accent, near-black band
+  - miku: Miku — deep teal, cyan accent, a deep teal band of its own
   - custom: Custom — the colors in the group below
 - customTheme:
   - base: "#050505"
@@ -3051,7 +3052,8 @@ static wchar_t* AppendDecimal(wchar_t* out, unsigned long value) {
     handle closes too, and also if Premiere exits without closing it.
 */
 static HANDLE WriteTemporaryCopy(const std::vector<char>& bytes, DWORD access,
-                                 LPSECURITY_ATTRIBUTES security, DWORD flags) {
+                                 DWORD share, LPSECURITY_ATTRIBUTES security,
+                                 DWORD flags) {
     wchar_t folder[MAX_PATH + 1]{};
     DWORD length = GetTempPathW(ARRAYSIZE(folder), folder);
 
@@ -3104,14 +3106,28 @@ static HANDLE WriteTemporaryCopy(const std::vector<char>& bytes, DWORD access,
     HANDLE copy = INVALID_HANDLE_VALUE;
 
     /*
-        The caller's handle is opened while the writer's is still open, so its
-        share mode has to admit the writer's rights. Once the writer closes,
-        the file only waits for the caller's handle to go.
+        The caller's own share mode first, so the handle it gets back behaves
+        like the one it asked for.
+
+        It can legitimately fail. This handle is opened while the writer's is
+        still open — it has to be, since the file is delete-on-close and would
+        go the moment the writer let it go — so a caller asking for a share
+        mode that excludes the writer's GENERIC_WRITE | DELETE gets a sharing
+        violation. A mode wide enough to admit the writer is the fallback:
+        only until CloseHandle below, after which the file waits for the
+        caller's handle alone.
     */
     if (WriteFile(writer, bytes.data(), size, &written, nullptr) && written == size) {
-        copy = CreateFileW_Original(name, access,
-                                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                                    security, OPEN_EXISTING, flags, nullptr);
+        constexpr DWORD kAdmitsWriter =
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
+
+        copy = CreateFileW_Original(name, access, share, security, OPEN_EXISTING,
+                                    flags, nullptr);
+
+        if (copy == INVALID_HANDLE_VALUE && share != kAdmitsWriter) {
+            copy = CreateFileW_Original(name, access, kAdmitsWriter, security,
+                                        OPEN_EXISTING, flags, nullptr);
+        }
     }
 
     CloseHandle(writer);
@@ -3125,7 +3141,8 @@ static HANDLE WriteTemporaryCopy(const std::vector<char>& bytes, DWORD access,
     when anything fails.
 */
 static HANDLE OpenThemedStylesheet(LPCWSTR path, LPCWSTR relative, DWORD access,
-                                   LPSECURITY_ATTRIBUTES security, DWORD flags) {
+                                   DWORD share, LPSECURITY_ATTRIBUTES security,
+                                   DWORD flags) {
     /*
         Both the read and the copy go through CreateFileW's trampoline, so the
         CreateFile2 path needs it too — the two are hooked separately, and a
@@ -3147,7 +3164,7 @@ static HANDLE OpenThemedStylesheet(LPCWSTR path, LPCWSTR relative, DWORD access,
         return INVALID_HANDLE_VALUE;
     }
 
-    HANDLE copy = WriteTemporaryCopy(bytes, access, security, flags);
+    HANDLE copy = WriteTemporaryCopy(bytes, access, share, security, flags);
 
     if (copy == INVALID_HANDLE_VALUE) {
         DWORD error = GetLastError();
@@ -3178,7 +3195,8 @@ HANDLE WINAPI CreateFileW_Hook(LPCWSTR path, DWORD access, DWORD share,
 
     if (CurrentSettings().uxpPanels && IsPlainRead(access, disposition, flags) &&
         IsBundledStylesheet(path, &relative)) {
-        HANDLE copy = OpenThemedStylesheet(path, relative, access, security, flags);
+        HANDLE copy =
+            OpenThemedStylesheet(path, relative, access, share, security, flags);
 
         if (copy != INVALID_HANDLE_VALUE) {
             return copy;
@@ -3192,14 +3210,20 @@ HANDLE WINAPI CreateFileW_Hook(LPCWSTR path, DWORD access, DWORD share,
 HANDLE WINAPI CreateFile2_Hook(LPCWSTR path, DWORD access, DWORD share,
                                DWORD disposition,
                                LPCREATEFILE2_EXTENDED_PARAMETERS parameters) {
-    DWORD flags = parameters ? parameters->dwFileFlags : 0;
+    /*
+        CreateFile2 splits what CreateFileW takes as one word, so both halves
+        are put back together for the substitute — the attributes are the
+        caller's to keep as much as the flags are.
+    */
+    DWORD flags = parameters ? (parameters->dwFileFlags | parameters->dwFileAttributes)
+                             : 0;
     LPCWSTR relative = nullptr;
 
     if (CurrentSettings().uxpPanels && IsPlainRead(access, disposition, flags) &&
         IsBundledStylesheet(path, &relative)) {
         HANDLE copy = OpenThemedStylesheet(
-            path, relative, access, parameters ? parameters->lpSecurityAttributes : nullptr,
-            flags);
+            path, relative, access, share,
+            parameters ? parameters->lpSecurityAttributes : nullptr, flags);
 
         if (copy != INVALID_HANDLE_VALUE) {
             return copy;
@@ -3497,11 +3521,24 @@ static void ApplyDarkModeToWindow(HWND hwnd) {
     }
 
     /*
-        Frame attributes only apply to a top-level window. The style bit, not
-        GetParent: for an owned popup such as a dialog, GetParent returns the
-        owner.
+        Frame attributes only apply to a top-level window that has a frame.
+
+        The style bit and not GetParent, because for an owned popup such as a
+        dialog GetParent returns the owner. And a caption or a sizing border,
+        because everything else here is a window with no frame to color:
+        Premiere opens menu popups, tooltips and combo dropdowns constantly,
+        and each one was costing four round trips to DWM plus an insert under
+        the themed-window lock, inside CreateWindowEx, to set colors on a
+        frame that does not exist.
+
+        A window that gains a caption after it is created is picked up the
+        next time ApplyThemeToExistingWindows runs, which a settings change
+        does.
     */
-    if (!(GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_CHILD)) {
+    constexpr LONG_PTR kFramed = WS_CAPTION | WS_THICKFRAME;
+    LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+
+    if (!(style & WS_CHILD) && (style & kFramed)) {
         BOOL dark = TRUE;
 
         DwmSetWindowAttribute(hwnd,
@@ -4035,9 +4072,9 @@ DrawThemeTextEx_t DrawThemeTextEx_Original = nullptr;
     stay light. "DarkMode::Menu" is dark regardless. The result is checked,
     because the class can be missing.
 */
-static HTHEME OpenDarkMenuTheme(HWND hwnd, LPCWSTR classList,
-                                OpenNcThemeData_t opener) {
-    if (!CurrentSettings().menuHook || !classList || !opener) {
+template <typename Open>
+static HTHEME OpenDarkMenuTheme(HWND hwnd, LPCWSTR classList, Open open) {
+    if (!CurrentSettings().menuHook || !classList) {
         return nullptr;
     }
 
@@ -4045,11 +4082,14 @@ static HTHEME OpenDarkMenuTheme(HWND hwnd, LPCWSTR classList,
         return nullptr;
     }
 
-    // Window first: it carries the DPI, and menu metrics depend on it.
-    HTHEME theme = opener(hwnd, L"DarkMode::Menu");
+    // Window first: it carries the DPI, and menu metrics depend on it. The
+    // retry without one covers a window uxtheme will not open a theme for,
+    // and all four openers take it, since any of them can be the one that
+    // fails.
+    HTHEME theme = open(hwnd, L"DarkMode::Menu");
 
     if (!theme && hwnd) {
-        theme = opener(nullptr, L"DarkMode::Menu");
+        theme = open(nullptr, L"DarkMode::Menu");
     }
 
     return theme;
@@ -4088,7 +4128,8 @@ static HTHEME TrackMenuTheme(HTHEME theme, LPCWSTR classList) {
 }
 
 HTHEME WINAPI OpenThemeData_Hook(HWND hwnd, LPCWSTR classList) {
-    HTHEME dark = OpenDarkMenuTheme(hwnd, classList, OpenThemeData_Original);
+    auto open = [](HWND w, LPCWSTR c) { return OpenThemeData_Original(w, c); };
+    HTHEME dark = OpenDarkMenuTheme(hwnd, classList, open);
 
     if (dark) {
         return TrackMenuTheme(dark, classList);
@@ -4098,13 +4139,13 @@ HTHEME WINAPI OpenThemeData_Hook(HWND hwnd, LPCWSTR classList) {
 }
 
 HTHEME WINAPI OpenThemeDataForDpi_Hook(HWND hwnd, LPCWSTR classList, UINT dpi) {
-    if (CurrentSettings().menuHook && classList && _wcsicmp(classList, L"Menu") == 0) {
-        HTHEME dark =
-            OpenThemeDataForDpi_Original(hwnd, L"DarkMode::Menu", dpi);
+    auto open = [dpi](HWND w, LPCWSTR c) {
+        return OpenThemeDataForDpi_Original(w, c, dpi);
+    };
+    HTHEME dark = OpenDarkMenuTheme(hwnd, classList, open);
 
-        if (dark) {
-            return TrackMenuTheme(dark, classList);
-        }
+    if (dark) {
+        return TrackMenuTheme(dark, classList);
     }
 
     return TrackMenuTheme(OpenThemeDataForDpi_Original(hwnd, classList, dpi),
@@ -4113,12 +4154,13 @@ HTHEME WINAPI OpenThemeDataForDpi_Hook(HWND hwnd, LPCWSTR classList, UINT dpi) {
 
 // comctl32's opener when it wants OTD_NONCLIENT or OTD_FORCE_RECT_SIZING.
 HTHEME WINAPI OpenThemeDataEx_Hook(HWND hwnd, LPCWSTR classList, DWORD flags) {
-    if (CurrentSettings().menuHook && classList && _wcsicmp(classList, L"Menu") == 0) {
-        HTHEME dark = OpenThemeDataEx_Original(hwnd, L"DarkMode::Menu", flags);
+    auto open = [flags](HWND w, LPCWSTR c) {
+        return OpenThemeDataEx_Original(w, c, flags);
+    };
+    HTHEME dark = OpenDarkMenuTheme(hwnd, classList, open);
 
-        if (dark) {
-            return TrackMenuTheme(dark, classList);
-        }
+    if (dark) {
+        return TrackMenuTheme(dark, classList);
     }
 
     return TrackMenuTheme(OpenThemeDataEx_Original(hwnd, classList, flags), classList);
@@ -4126,7 +4168,8 @@ HTHEME WINAPI OpenThemeDataEx_Hook(HWND hwnd, LPCWSTR classList, DWORD flags) {
 
 // Non-client menu themes, the menu bar's among them, come through here.
 HTHEME WINAPI OpenNcThemeData_Hook(HWND hwnd, LPCWSTR classList) {
-    HTHEME dark = OpenDarkMenuTheme(hwnd, classList, OpenNcThemeData_Original);
+    auto open = [](HWND w, LPCWSTR c) { return OpenNcThemeData_Original(w, c); };
+    HTHEME dark = OpenDarkMenuTheme(hwnd, classList, open);
 
     if (dark) {
         return TrackMenuTheme(dark, classList);
@@ -5039,7 +5082,7 @@ static const NamedPalette kPalettes[] = {
       RGB(0x71, 0x8B, 0x91),
       RGB(0x0E, 0x74, 0x78),
       RGB(0x63, 0xF3, 0xEE),
-      RGB(0x04, 0x09, 0x0C)}},
+      RGB(0x02, 0x0F, 0x13)}},
 };
 
 /*
@@ -5614,6 +5657,12 @@ static bool MonitorBandHooksReady() {
     With the layer off nothing is ever recorded, so forgetting costs a walk of
     eight empty slots — and checking would mean state recorded before the
     switch went off could still be there when it came back on.
+
+    The slots are this thread's, and a command list is recorded, closed and
+    reset on one thread because D3D12 requires it. A list closed on another
+    thread would leave its slot behind until the ring came round to it, which
+    costs one stale entry and no wrong color: the slot is only ever reached
+    again through that same list's address.
 */
 HRESULT STDMETHODCALLTYPE
 MonitorReset_Hook(ID3D12GraphicsCommandList* commandList,
@@ -5638,36 +5687,54 @@ MonitorClose_Hook(ID3D12GraphicsCommandList* commandList) {
     atomic loads and a range compare — what a caller Premiere uses for its own
     rendering pays, per call.
 */
+/*
+    The band is recolored by whichever of the three completes the picture.
+
+    It takes a viewport, a scissor and a color to decide, and only the order
+    DisplaySurface happens to record them in says which arrives last. The
+    usual D3D12 order puts the surface first and the per-draw constants after,
+    and that is what the builds measured here do — but a build that set the
+    color first would otherwise stop being recolored with nothing in the log.
+    So all three try, and the two that are too early are turned away by
+    IsFullMonitorState or by hasRoot1Color being false.
+*/
+static bool RecolorBandConstants(ID3D12GraphicsCommandList* commandList,
+                                 MonitorCommandState* state);
+
 void STDMETHODCALLTYPE
 MonitorRSSetViewports_Hook(ID3D12GraphicsCommandList* commandList,
                            UINT numViewports,
                            const D3D12_VIEWPORT* viewports) {
+    MonitorRSSetViewports_Original(commandList, numViewports, viewports);
+
     if (numViewports > 0 && viewports &&
         IsDisplaySurfaceCall(__builtin_return_address(0)) &&
         MonitorBandActive(CurrentSettings())) {
         if (MonitorCommandState* state = MonitorStateFor(commandList)) {
             state->hasViewport = true;
             state->viewport = viewports[0];
+
+            RecolorBandConstants(commandList, state);
         }
     }
-
-    MonitorRSSetViewports_Original(commandList, numViewports, viewports);
 }
 
 void STDMETHODCALLTYPE
 MonitorRSSetScissorRects_Hook(ID3D12GraphicsCommandList* commandList,
                               UINT numRects,
                               const D3D12_RECT* rects) {
+    MonitorRSSetScissorRects_Original(commandList, numRects, rects);
+
     if (numRects > 0 && rects &&
         IsDisplaySurfaceCall(__builtin_return_address(0)) &&
         MonitorBandActive(CurrentSettings())) {
         if (MonitorCommandState* state = MonitorStateFor(commandList)) {
             state->hasScissor = true;
             state->scissor = rects[0];
+
+            RecolorBandConstants(commandList, state);
         }
     }
-
-    MonitorRSSetScissorRects_Original(commandList, numRects, rects);
 }
 
 /*
@@ -5849,8 +5916,11 @@ static bool InstallMonitorBandHooks(ID3D12Device* device) {
     if (!ok) {
         Wh_Log(L"monitor band: one or more D3D12 hooks failed; the band keeps "
                L"Premiere's gray rather than running on half a layer");
+        return false;
     }
 
+    // Only a layer that went in whole; the unload line below tells a band
+    // nobody recognized from a layer that never got the chance.
     InterlockedExchange(&g_monitorBandInstalled, TRUE);
 
     return true;
@@ -5884,9 +5954,17 @@ HRESULT WINAPI D3D12CreateDevice_Hook(IUnknown* adapter, D3D_FEATURE_LEVEL level
         return hr;
     }
 
-    if (Claim(&g_monitorBandTried) && InstallMonitorBandHooks(created) &&
-        !Wh_ApplyHookOperations()) {
-        Wh_Log(L"monitor band: could not apply the D3D12 hooks");
+    if (Claim(&g_monitorBandTried)) {
+        if (InstallMonitorBandHooks(created)) {
+            if (!Wh_ApplyHookOperations()) {
+                Wh_Log(L"monitor band: could not apply the D3D12 hooks");
+            }
+        } else {
+            // The attempt is what the latch stands for, not the failure: a
+            // device this one could not be built from must not lock the other
+            // entry point out of trying its own.
+            InterlockedExchange(&g_monitorBandTried, FALSE);
+        }
     }
 
     created->Release();
@@ -5959,6 +6037,10 @@ static bool InstallMonitorBandFromProbe() {
                      reinterpret_cast<void**>(&device));
 
     if (FAILED(hr) || !device) {
+        // A driver reset or a session with no device to give is not a reason
+        // to keep the hook on Premiere's own device from ever trying.
+        InterlockedExchange(&g_monitorBandTried, FALSE);
+
         Wh_Log(L"monitor band: no D3D12 device (0x%08X); the band around the "
                L"picture keeps Premiere's gray",
                static_cast<unsigned>(hr));
@@ -5968,6 +6050,10 @@ static bool InstallMonitorBandFromProbe() {
     bool registered = InstallMonitorBandHooks(device);
 
     device->Release();
+
+    if (!registered) {
+        InterlockedExchange(&g_monitorBandTried, FALSE);
+    }
 
     return registered;
 }
@@ -6233,11 +6319,17 @@ void Wh_ModSettingsChanged() {
 
     /*
         A setting that works through Premiere's modules may just have come on.
-        "Monitor band" governs the D3D12 layer, and Premiere's device
-        exists by now, so that one is taken from a device of the mod's own.
+        "Monitor band" needs both tries: the probe takes the layer from a
+        device of the mod's own, which is only safe once the monitors have
+        drawn, and the export catches Premiere making its device when they
+        have not. Without the second, turning the switch on while Premiere is
+        still starting would leave the layer off for the rest of the session —
+        the export is not hooked when the switch is off, and nothing else
+        would come back to it.
     */
     bool registered = HookLoadedModules();
 
+    registered = HookD3D12CreateDevice() || registered;
     registered = InstallMonitorBandFromProbe() || registered;
 
     if (registered && !Wh_ApplyHookOperations()) {
