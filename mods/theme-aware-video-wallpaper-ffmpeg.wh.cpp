@@ -1,7 +1,9 @@
 // ==WindhawkMod==
 // @id              theme-aware-video-wallpaper-ffmpeg
-// @name            Theme Aware Video Wallpaper
-// @description     Auto switch video wallpaper via ffmpeg pipe + UpdateLayeredWindow. Currently only supports the latest Windows 11. Audio playback is temporarily not supported. Hoping someone else will carry on development.
+// @name            Video Wallpaper (Follow Theme)
+// @name:zh-CN      视频壁纸（跟随主题）
+// @description     Auto switch video wallpaper based on Windows theme. Currently only tested on the latest Windows 11. Desktop icon layering issue and audio playback not yet resolved. Community contributions welcome.
+// @description:zh-CN  根据 Windows 主题自动切换深浅色视频。仅在最新版 Win11 进行测试，尚未解决桌面图标层级问题和声音播放需求。有待大家一起开发。
 // @version         1.0
 // @author          wakhh@qq.com
 // @github          https://github.com/wakhh
@@ -19,19 +21,7 @@ Auto-switches between light/dark mode videos based on Windows theme.
 ### Requirements
 - **ffmpeg.exe** (standalone binary, no extra DLLs/codecs needed)
 - **Windows 11** (latest only)
-
-### Settings
-- **ffmpeg.exe path**
-- **Light mode video / folder path** — file or folder; folder plays by modification time (newest first)
-- **Dark mode video / folder path** — leave empty to reuse light-mode path
-- **Video window opacity** — 10–100%, default 90%
-
-### Behavior
-- Video is scaled to the virtual desktop resolution; multi-monitor supported.
-- Video window sits between `Progman` and `WorkerW`, so desktop icons remain visible.
-- Pauses rendering when a maximized/fullscreen window is active (ffmpeg keeps decoding).
-- Audio playback is not supported.
-- Stops auto-play after 3 consecutive ffmpeg errors to avoid infinite crash loops.
+- Audio playback is not supported now.
 
 Hoping someone else will carry on development — PRs welcome.
 */
@@ -41,16 +31,100 @@ Hoping someone else will carry on development — PRs welcome.
 /*
 - ffmpegPath: ""
   $name: ffmpeg.exe path
+  $name:zh-CN: ffmpeg.exe 路径
   $description: Full path to ffmpeg.exe
+  $description:zh-CN: ffmpeg.exe 的完整路径
 - lightVideoPath: ""
   $name: Light mode video / folder path
-  $description: Full path to video file OR folder containing videos. Folder latest first.
+  $name:zh-CN: 浅色模式视频 / 文件夹路径
+  $description: "Full path to video file OR folder containing videos (folder plays by latest modified time)"
+  $description:zh-CN: "视频文件完整路径，或包含视频的文件夹路径（文件夹按修改时间最新排序播放）"
 - darkVideoPath: ""
   $name: Dark mode video / folder path
-  $description: Leave empty to reuse light mode.
+  $name:zh-CN: 深色模式视频 / 文件夹路径
+  $description: "Leave empty to reuse light mode"
+  $description:zh-CN: "留空则复用浅色模式设置"
+- sortMode: "0"
+  $name: Folder playback sort order
+  $name:zh-CN: 文件夹播放排序方式
+  $description: "Sort order when playing videos from a folder"
+  $description:zh-CN: "文件夹模式下视频的排序方式"
+  $options:
+    - "0": "Modified time (newest first)"
+    - "1": "Modified time (oldest first)"
+    - "2": "Name (A to Z)"
+    - "3": "Name (Z to A)"
+    - "4": "Created time (oldest first)"
+    - "5": "Created time (newest first)"
+    - "6": "Size (largest first)"
+    - "7": "Size (smallest first)"
+  $options:zh-CN:
+    - "0": "修改时间（新到旧）"
+    - "1": "修改时间（旧到新）"
+    - "2": "文件名（A 到 Z）"
+    - "3": "文件名（Z 到 A）"
+    - "4": "创建时间（旧到新）"
+    - "5": "创建时间（新到旧）"
+    - "6": "文件大小（大到小）"
+    - "7": "文件大小（小到大）"
 - opacity: 90
   $name: Video window opacity (%)
-  $description: Overall transparency of the video wallpaper. 100 = fully opaque, lower values let the desktop show through. Range 10-100.
+  $name:zh-CN: 视频窗口透明度（%）
+  $description: "Overall transparency of the video wallpaper. 100 = fully opaque, lower values let the desktop show through. Range 10-100"
+  $description:zh-CN: "视频壁纸的整体透明度。100 = 完全不透明，值越低桌面越明显。范围 10-100"
+- fps: 15
+  $name: Frame rate (fps)
+  $name:zh-CN: 帧率（fps）
+  $description: "Output frame rate. Range 10-60. Lower values save CPU. Videos with a lower native fps will have frames duplicated"
+  $description:zh-CN: "输出帧率。范围 10-60。值越低越省 CPU。视频原始帧率低于设置值时会重复帧"
+- scalingMode: "0"
+  $name: Video scaling mode
+  $name:zh-CN: 视频缩放模式
+  $description: "How the video is scaled to fit the screen"
+  $description:zh-CN: "视频如何缩放以适应屏幕"
+  $options:
+    - "0": "Cover (fill screen, keep ratio, crop edges)"
+    - "1": "Contain (fit screen, keep ratio, pad bars)"
+    - "2": "Center (original size, centered, pad bars)"
+    - "3": "Stretch (fill screen, may distort)"
+  $options:zh-CN:
+    - "0": "填充（保持比例，裁剪边缘）"
+    - "1": "适应（保持比例，可能有空置边缘）"
+    - "2": "居中（原尺寸居中，可能有空置边缘）"
+    - "3": "拉伸（填满屏幕，可能变形）"
+- padColorMode: "black"
+  $name: Pad color (for Contain/Center modes)
+  $name:zh-CN: 空置边缘颜色（适应/居中模式）
+  $description: "Color of the padding area around the video"
+  $description:zh-CN: "视频周围空置边缘的颜色"
+  $options:
+    - "black": "Black"
+    - "white": "White"
+    - "dynamic": "Dynamic (white in light mode, black in dark mode)"
+    - "transparent": "Transparent (shows desktop wallpaper underneath)"
+    - "custom": "Custom color (set below)"
+  $options:zh-CN:
+    - "black": "黑色"
+    - "white": "白色"
+    - "dynamic": "动态（浅色模式白色，深色模式黑色）"
+    - "transparent": "透明（露出底下的桌面壁纸）"
+    - "custom": "自定义颜色（在下方设置）"
+- padColorCustom: ""
+  $name: Custom pad color (hex)
+  $name:zh-CN: 自定义边缘颜色（十六进制）
+  $description: "Custom color for padding when Pad color is set to Custom. 6-digit RGB or 8-digit ARGB. Examples: #FF0000 for red, #80FF0000 for semi-transparent red, #00000000 for fully transparent"
+  $description:zh-CN: "空置边缘颜色设为自定义时使用。6 位 RGB 或 8 位 ARGB。例如 #FF0000 为红色，#80FF0000 为半透明红，#00000000 为全透明"
+- applyMode: "on_next"
+  $name: Settings/theme apply timing
+  $name:zh-CN: 设置/主题生效时机
+  $description: "When a setting is changed, theme switches, or files change"
+  $description:zh-CN: "当设置改变、主题切换或文件变化时"
+  $options:
+    - "on_next": "Wait until current video finishes, then apply"
+    - "instant": "Instant (stop current video, apply immediately)"
+  $options:zh-CN:
+    - "on_next": "等当前视频播完后生效"
+    - "instant": "立即停止当前视频并生效"
 */
 // ==/WindhawkModSettings==
 
@@ -72,6 +146,14 @@ WCHAR g_ffmpegPath[MAX_PATH] = {0};
 WCHAR g_lightPath[MAX_PATH] = {0};
 WCHAR g_darkPath[MAX_PATH] = {0};
 int g_opacity = 230;
+int g_fps = 15;
+int g_scalingMode = 0;
+WCHAR g_padColorMode[32] = {L"black"};
+WCHAR g_padColorCustom[32] = {0};
+bool g_isPadTransparent = false;
+WCHAR g_applyMode[16] = {L"instant"};
+int g_sortMode = 0;
+volatile bool g_pendingReload = false;
 const bool g_pauseOnFullscreen = true;
 
 HANDLE g_renderThread = NULL;
@@ -119,6 +201,8 @@ void LoadGdiProcs()
 }
 
 void ReloadWallpaper();
+void ReloadVideoList();
+bool PlayNext();
 
 HWND FindProgman()
 {
@@ -153,7 +237,10 @@ bool IsVideoExt(const WCHAR* ext)
 
 struct VideoEntry {
     std::wstring path;
+    std::wstring name;
     FILETIME writeTime;
+    FILETIME createTime;
+    ULONGLONG size;
 };
 
 std::vector<std::wstring> EnumVideos(const WCHAR* folder)
@@ -171,16 +258,39 @@ std::vector<std::wstring> EnumVideos(const WCHAR* folder)
             if (IsVideoExt(ext)) {
                 WCHAR full[MAX_PATH];
                 swprintf_s(full, L"%s\\%s", folder, fd.cFileName);
-                entries.push_back({full, fd.ftLastWriteTime});
+                ULONGLONG size = ((ULONGLONG)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
+                entries.push_back({full, fd.cFileName, fd.ftLastWriteTime, fd.ftCreationTime, size});
             }
         }
     } while (FindNextFileW(hFind, &fd));
     FindClose(hFind);
+
     std::sort(entries.begin(), entries.end(), [](const VideoEntry& a, const VideoEntry& b) {
-        if (a.writeTime.dwHighDateTime != b.writeTime.dwHighDateTime)
-            return a.writeTime.dwHighDateTime > b.writeTime.dwHighDateTime;
-        return a.writeTime.dwLowDateTime > b.writeTime.dwLowDateTime;
+        switch (g_sortMode) {
+            case 1:
+                if (a.writeTime.dwHighDateTime != b.writeTime.dwHighDateTime)
+                    return a.writeTime.dwHighDateTime < b.writeTime.dwHighDateTime;
+                return a.writeTime.dwLowDateTime < b.writeTime.dwLowDateTime;
+            case 2: return _wcsicmp(a.name.c_str(), b.name.c_str()) < 0;
+            case 3: return _wcsicmp(a.name.c_str(), b.name.c_str()) > 0;
+            case 4:
+                if (a.createTime.dwHighDateTime != b.createTime.dwHighDateTime)
+                    return a.createTime.dwHighDateTime < b.createTime.dwHighDateTime;
+                return a.createTime.dwLowDateTime < b.createTime.dwLowDateTime;
+            case 5:
+                if (a.createTime.dwHighDateTime != b.createTime.dwHighDateTime)
+                    return a.createTime.dwHighDateTime > b.createTime.dwHighDateTime;
+                return a.createTime.dwLowDateTime > b.createTime.dwLowDateTime;
+            case 6: return a.size > b.size;
+            case 7: return a.size < b.size;
+            case 0:
+            default:
+                if (a.writeTime.dwHighDateTime != b.writeTime.dwHighDateTime)
+                    return a.writeTime.dwHighDateTime > b.writeTime.dwHighDateTime;
+                return a.writeTime.dwLowDateTime > b.writeTime.dwLowDateTime;
+        }
     });
+
     std::vector<std::wstring> result;
     result.reserve(entries.size());
     for (auto& e : entries) result.push_back(std::move(e.path));
@@ -325,6 +435,8 @@ DWORD WINAPI RenderThread(LPVOID)
     }
 
     int frameCount = 0;
+    DWORD frameIntervalMs = g_fps > 0 ? 1000 / (DWORD)g_fps : 66;
+    DWORD lastTick = GetTickCount();
     while (g_running && g_pipeRead)
     {
         if (!g_frameSize) { Sleep(10); continue; }
@@ -389,7 +501,8 @@ DWORD WINAPI RenderThread(LPVOID)
         POINT ptSrc = {0, 0};
         SIZE sz = {sw, sh};
         POINT ptDst = {0, 0};
-        BLENDFUNCTION bf = {AC_SRC_OVER, 0, (BYTE)g_opacity, 0};
+        BYTE alphaFormat = g_isPadTransparent ? AC_SRC_ALPHA : 0;
+        BLENDFUNCTION bf = {AC_SRC_OVER, 0, (BYTE)g_opacity, alphaFormat};
         BOOL ok = pUpdateLayeredWindow(g_videoHwnd, hScreen, &ptDst, &sz, hMem, &ptSrc, 0, &bf, ULW_ALPHA);
 
         if (!dibOk || !ok) {
@@ -403,6 +516,12 @@ DWORD WINAPI RenderThread(LPVOID)
 
         if (frameCount == 0) Wh_Log(L"RenderThread: first frame ok=%d err=%lu", ok, GetLastError());
         frameCount++;
+
+        DWORD elapsed = GetTickCount() - lastTick;
+        if (elapsed < frameIntervalMs) {
+            Sleep(frameIntervalMs - elapsed);
+        }
+        lastTick = GetTickCount();
     }
 
     ReleaseDC(NULL, hScreen);
@@ -432,9 +551,70 @@ bool StartFfmpeg(const WCHAR* videoPath)
     Wh_Log(L"StartFfmpeg: pipes ready read=%p write=%p errRead=%p errWrite=%p",
         hRead, hWrite, hErrRead, hErrWrite);
 
-    WCHAR cmd[MAX_PATH * 4];
-    swprintf_s(cmd, L"\"%s\" -nostdin -hide_banner -loglevel error -i \"%s\" -an -f rawvideo -pix_fmt bgra -s %dx%d -r 30 -",
-        g_ffmpegPath, videoPath, sw, sh);
+    WCHAR cmd[MAX_PATH * 6];
+    const WCHAR* vfArg = nullptr;
+
+    WCHAR padColor[64] = {0};
+    bool isPadTransparent = false;
+    if (wcscmp(g_padColorMode, L"white") == 0) {
+        wcscpy_s(padColor, L"color=white");
+    } else if (wcscmp(g_padColorMode, L"black") == 0) {
+        wcscpy_s(padColor, L"color=black");
+    } else if (wcscmp(g_padColorMode, L"transparent") == 0) {
+        wcscpy_s(padColor, L"color=0x00000000");
+        isPadTransparent = true;
+    } else if (wcscmp(g_padColorMode, L"dynamic") == 0) {
+        wcscpy_s(padColor, g_lastIsDark ? L"color=black" : L"color=white");
+    } else if (wcscmp(g_padColorMode, L"custom") == 0 && g_padColorCustom[0]) {
+        const WCHAR* src = g_padColorCustom[0] == L'#' ? g_padColorCustom + 1 : g_padColorCustom;
+        size_t len = wcslen(src);
+        bool valid = (len == 6 || len == 8);
+        if (valid) {
+            for (size_t i = 0; i < len; i++) {
+                WCHAR c = src[i];
+                if (!((c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'f') || (c >= L'A' && c <= L'F'))) { valid = false; break; }
+            }
+        }
+        WCHAR hex[16] = {0};
+        if (!valid) {
+            Wh_Log(L"padColorCustom: invalid value '%s', fallback to black", g_padColorCustom);
+            wcscpy_s(hex, L"0xFF000000");
+        } else if (len == 6) {
+            swprintf_s(hex, L"0xFF%s", src);
+        } else {
+            swprintf_s(hex, L"0x%s", src);
+            if (src[0] == L'0' && src[1] == L'0') isPadTransparent = true;
+        }
+        swprintf_s(padColor, L"color=%s", hex);
+    } else {
+        wcscpy_s(padColor, L"color=black");
+    }
+
+    switch (g_scalingMode) {
+        case 0: vfArg = L" -vf \"scale=%d:%d:force_original_aspect_ratio=increase,crop=%d:%d\""; break;
+        case 1: vfArg = L" -vf \"scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2:%s\""; break;
+        case 2: vfArg = L" -vf \"color=c=%s:s=%dx%d:r=%d,format=bgra[bg];[0:v]format=bgra[v];[bg][v]overlay=(W-w)/2:(H-h)/2:shortest=1,format=bgra\""; break;
+        case 3: vfArg = nullptr; break;
+        default: vfArg = nullptr; break;
+    }
+    if (vfArg) {
+        WCHAR vfBuf[512];
+        if (g_scalingMode == 0) {
+            swprintf_s(vfBuf, vfArg, sw, sh, sw, sh);
+        } else if (g_scalingMode == 2) {
+            const WCHAR* colorVal = padColor;
+            if (wcsncmp(padColor, L"color=", 6) == 0) colorVal = padColor + 6;
+            swprintf_s(vfBuf, vfArg, colorVal, sw, sh, g_fps);
+        } else {
+            swprintf_s(vfBuf, vfArg, sw, sh, sw, sh, padColor);
+        }
+        swprintf_s(cmd, L"\"%s\" -nostdin -hide_banner -loglevel error -i \"%s\" -an -f rawvideo -pix_fmt bgra%s -r %d -",
+            g_ffmpegPath, videoPath, vfBuf, g_fps);
+    } else {
+        swprintf_s(cmd, L"\"%s\" -nostdin -hide_banner -loglevel error -i \"%s\" -an -f rawvideo -pix_fmt bgra -s %dx%d -r %d -",
+            g_ffmpegPath, videoPath, sw, sh, g_fps);
+    }
+    g_isPadTransparent = isPadTransparent;
     Wh_Log(L"StartFfmpeg cmd: %s", cmd);
 
     STARTUPINFOW si = {sizeof(si)};
@@ -508,27 +688,8 @@ bool StartFfmpeg(const WCHAR* videoPath)
     return true;
 }
 
-bool PlayNext()
+void ReloadVideoList()
 {
-    if (g_videoList.empty()) return false;
-    if (g_consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-        Wh_Log(L"PlayNext: too many consecutive errors (%d), giving up. Reload to retry.", g_consecutiveErrors);
-        return false;
-    }
-    const WCHAR* next = g_videoList[g_videoIndex++ % g_videoList.size()].c_str();
-    Wh_Log(L"PlayNext: trying %s (consecutive errors=%d)", next, g_consecutiveErrors);
-    bool ok = StartFfmpeg(next);
-    if (!ok) {
-        g_consecutiveErrors++;
-        Wh_Log(L"PlayNext: StartFfmpeg failed, consecutive errors=%d", g_consecutiveErrors);
-    }
-    return ok;
-}
-
-void ReloadWallpaper()
-{
-    StopFfmpeg();
-
     if (g_dirChangeHandle != INVALID_HANDLE_VALUE) { FindCloseChangeNotification(g_dirChangeHandle); g_dirChangeHandle = INVALID_HANDLE_VALUE; }
 
     g_videoList.clear(); g_videoIndex = 0; g_consecutiveErrors = 0;
@@ -547,8 +708,34 @@ void ReloadWallpaper()
     } else if (PathExists(target)) {
         g_videoList.emplace_back(target);
     }
+}
 
+void ReloadWallpaper()
+{
+    StopFfmpeg();
+    ReloadVideoList();
     if (!g_videoList.empty()) PlayNext();
+}
+
+bool PlayNext()
+{
+    if (g_pendingReload) {
+        g_pendingReload = false;
+        ReloadVideoList();
+    }
+    if (g_videoList.empty()) return false;
+    if (g_consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+        Wh_Log(L"PlayNext: too many consecutive errors (%d), giving up. Reload to retry.", g_consecutiveErrors);
+        return false;
+    }
+    const WCHAR* next = g_videoList[g_videoIndex++ % g_videoList.size()].c_str();
+    Wh_Log(L"PlayNext: trying %s (consecutive errors=%d)", next, g_consecutiveErrors);
+    bool ok = StartFfmpeg(next);
+    if (!ok) {
+        g_consecutiveErrors++;
+        Wh_Log(L"PlayNext: StartFfmpeg failed, consecutive errors=%d", g_consecutiveErrors);
+    }
+    return ok;
 }
 
 void Wh_ModSettingsChanged()
@@ -565,21 +752,69 @@ void Wh_ModSettingsChanged()
     WCHAR newDarkPath[MAX_PATH] = {0};
     if (s) { wcscpy_s(newDarkPath, MAX_PATH, s); Wh_FreeStringSetting(s); }
 
+    s = Wh_GetStringSetting(L"sortMode");
+    WCHAR sortStr[8] = {0};
+    if (s) { wcscpy_s(sortStr, 8, s); Wh_FreeStringSetting(s); }
+    int newSortMode = _wtoi(sortStr);
+    if (newSortMode < 0 || newSortMode > 7) newSortMode = 0;
+
     int pct = Wh_GetIntSetting(L"opacity");
     g_opacity = (pct >= 0 && pct <= 100) ? (pct * 255 / 100) : 255;
+
+    int fps = Wh_GetIntSetting(L"fps");
+    if (fps < 10) fps = 10;
+    if (fps > 60) fps = 60;
+    int oldFps = g_fps;
+    g_fps = fps;
+
+    s = Wh_GetStringSetting(L"scalingMode");
+    WCHAR scalingStr[8] = {0};
+    if (s) { wcscpy_s(scalingStr, 8, s); Wh_FreeStringSetting(s); }
+    int scaling = _wtoi(scalingStr);
+    if (scaling < 0 || scaling > 3) scaling = 0;
+    int oldScaling = g_scalingMode;
+    g_scalingMode = scaling;
+
+    s = Wh_GetStringSetting(L"padColorMode");
+    WCHAR newPadMode[32] = {0};
+    if (s) { wcscpy_s(newPadMode, 32, s); Wh_FreeStringSetting(s); }
+    if (!newPadMode[0]) wcscpy_s(newPadMode, 32, L"black");
+
+    s = Wh_GetStringSetting(L"padColorCustom");
+    WCHAR newPadCustom[32] = {0};
+    if (s) { wcscpy_s(newPadCustom, 32, s); Wh_FreeStringSetting(s); }
+
+    s = Wh_GetStringSetting(L"applyMode");
+    WCHAR newApplyMode[16] = {0};
+    if (s) { wcscpy_s(newApplyMode, 16, s); Wh_FreeStringSetting(s); }
+    if (!newApplyMode[0]) wcscpy_s(newApplyMode, 16, L"instant");
 
     bool needReload =
         wcscmp(newFfmpegPath, g_ffmpegPath) != 0 ||
         wcscmp(newLightPath, g_lightPath) != 0 ||
-        wcscmp(newDarkPath, g_darkPath) != 0;
+        wcscmp(newDarkPath, g_darkPath) != 0 ||
+        newSortMode != g_sortMode ||
+        g_fps != oldFps ||
+        g_scalingMode != oldScaling ||
+        wcscmp(newPadMode, g_padColorMode) != 0 ||
+        wcscmp(newPadCustom, g_padColorCustom) != 0;
 
     wcscpy_s(g_ffmpegPath, MAX_PATH, newFfmpegPath);
     wcscpy_s(g_lightPath, MAX_PATH, newLightPath);
     wcscpy_s(g_darkPath, MAX_PATH, newDarkPath);
+    g_sortMode = newSortMode;
+    wcscpy_s(g_padColorMode, 32, newPadMode);
+    wcscpy_s(g_padColorCustom, 32, newPadCustom);
+    wcscpy_s(g_applyMode, 16, newApplyMode);
 
     if (needReload) {
-        Wh_Log(L"Wh_ModSettingsChanged: path/ffmpeg changed, reloading");
-        ReloadWallpaper();
+        if (wcscmp(newApplyMode, L"on_next") == 0 && g_ffmpegProc != NULL) {
+            Wh_Log(L"Wh_ModSettingsChanged: deferred until next video");
+            g_pendingReload = true;
+        } else {
+            Wh_Log(L"Wh_ModSettingsChanged: path/settings changed, reloading");
+            ReloadWallpaper();
+        }
     } else {
         Wh_Log(L"Wh_ModSettingsChanged: opacity only=%d (no reload needed)", g_opacity);
     }
@@ -620,8 +855,15 @@ DWORD WINAPI MonitorThread(LPVOID)
 
         if (waitRet >= WAIT_OBJECT_0 && waitRet < WAIT_OBJECT_0 + hc) {
             int idx = waitRet - WAIT_OBJECT_0;
-            if (handles[idx] == hThemeEvt && IsDark() != g_lastIsDark) ReloadWallpaper();
-            else if (handles[idx] == g_dirChangeHandle) { ReloadWallpaper(); FindNextChangeNotification(g_dirChangeHandle); }
+            bool isOnNext = (wcscmp(g_applyMode, L"on_next") == 0);
+            if (handles[idx] == hThemeEvt && IsDark() != g_lastIsDark) {
+                if (isOnNext && g_ffmpegProc) { Wh_Log(L"Theme switch deferred until next video"); g_pendingReload = true; }
+                else { ReloadWallpaper(); }
+            } else if (handles[idx] == g_dirChangeHandle) {
+                if (isOnNext && g_ffmpegProc) { Wh_Log(L"File change deferred until next video"); g_pendingReload = true; }
+                else { ReloadWallpaper(); }
+                FindNextChangeNotification(g_dirChangeHandle);
+            }
             continue;
         }
 
