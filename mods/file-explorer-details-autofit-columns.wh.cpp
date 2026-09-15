@@ -69,6 +69,9 @@ Only affects `Details view`. Other view modes (Icons, Tiles, List, etc.) are unt
   - maxScanItems: 100
     $name: Max Items to Scan
     $description: "If a folder has more items than this, fall back to Visible Rows Only for that folder to avoid a delay. Applies when Fit Mode is set to Scan Entire Folder or Elastic."
+  - maxColumnWidth: 800
+    $name: Max Column Width (px)
+    $description: "Upper bound on any single fitted column's width, at 96 DPI (scaled with display scaling). Does not apply to the Name column in Elastic mode, which is already bounded by the window width."
   $name: Fit Mode Settings
   $description: Controls how columns are measured and sized.
 */
@@ -76,17 +79,16 @@ Only affects `Details view`. Other view modes (Icons, Tiles, List, etc.) are unt
 
 #include <initguid.h>
 #include <shobjidl.h>
-#include <propkey.h>
 #include <propsys.h>
 #include <shlobj.h>
 #include <shlguid.h>
 #include <servprov.h>
-#include <exdisp.h>
 #include <commctrl.h>
 #include <uiautomation.h>
 #include <memory>
 #include <vector>
 #include <unordered_map>
+#include <optional>
 #include <windhawk_utils.h>
 
 DEFINE_GUID(IID_IFolderView2_,
@@ -113,10 +115,6 @@ static const PCWSTR kSubclassTargets[] = {
     L"ToolbarWindow32",
 };
 
-// Cap on any single fitted column's width (Name in Elastic mode is bounded
-// separately by the available viewport, so it's exempt from this cap).
-static constexpr int kMaxColumnWidthDips = 800;
-
 // Delay between steps of the timer-driven fit state machine below.
 static constexpr UINT kFitStepDelayMs = 40;
 
@@ -130,9 +128,14 @@ static CRITICAL_SECTION g_cs;
 static CRITICAL_SECTION g_settingsCs;
 
 enum class FitMode { Visible, Full, Elastic };
-static FitMode g_fitMode = FitMode::Visible;
-static UINT g_delayMs = 400;
-static int g_maxScanItems = 100;
+
+struct Settings {
+    UINT delayMs = 400;
+    int maxScanItems = 100;
+    FitMode fitMode = FitMode::Visible;
+    int maxColumnWidthDips = 800;
+};
+static Settings g_settings;
 
 static UINT g_shellNotifyMsg = 0;  // registered in Wh_ModInit; replaces a WM_APP-relative id
 static UINT g_cleanupMsg = 0;      // registered in Wh_ModInit; marshals teardown onto the owning thread
@@ -144,7 +147,10 @@ struct FitContext;
 static std::unordered_map<HWND, IShellView*> g_tabShellViews;
 static std::unordered_map<HWND, HWND>        g_windowToTab;
 static std::unordered_map<HWND, ULONG>       g_tabNotifyReg;
-static std::unordered_map<HWND, std::unique_ptr<FitContext>> g_fitContexts;
+
+// Holds thread-affine COM objects; must not auto-destroy at process shutdown (Explorer can terminate without calling Wh_ModUninit).
+[[clang::no_destroy]] std::optional<std::unordered_map<HWND, std::unique_ptr<FitContext>>>
+    g_fitContexts{std::in_place};
 
 // Cached settings
 
@@ -155,24 +161,27 @@ static void LoadSettings() {
     int maxScan = Wh_GetIntSetting(L"fitModeSettings.maxScanItems");
     if (maxScan <= 0) maxScan = 100;
 
+    int maxColWidth = Wh_GetIntSetting(L"fitModeSettings.maxColumnWidth");
+    if (maxColWidth <= 0) maxColWidth = 800;
+
     FitMode mode = FitMode::Visible;
     auto fitModeStr = WindhawkUtils::StringSetting::make(L"fitModeSettings.fitMode");
     if (wcscmp(fitModeStr.get(), L"full") == 0) mode = FitMode::Full;
     else if (wcscmp(fitModeStr.get(), L"elastic") == 0) mode = FitMode::Elastic;
 
     EnterCriticalSection(&g_settingsCs);
-    g_delayMs = delay;
-    g_maxScanItems = maxScan;
-    g_fitMode = mode;
+    g_settings.delayMs = delay;
+    g_settings.maxScanItems = maxScan;
+    g_settings.fitMode = mode;
+    g_settings.maxColumnWidthDips = maxColWidth;
     LeaveCriticalSection(&g_settingsCs);
 }
 
-static void GetCachedSettings(UINT& delayMs, int& maxScanItems, FitMode& fitMode) {
+static Settings GetCachedSettings() {
     EnterCriticalSection(&g_settingsCs);
-    delayMs = g_delayMs;
-    maxScanItems = g_maxScanItems;
-    fitMode = g_fitMode;
+    Settings s = g_settings;
     LeaveCriticalSection(&g_settingsCs);
+    return s;
 }
 
 // Small helpers
@@ -231,30 +240,11 @@ static bool ElementHasHorizontalScroll(IUIAutomationElement* pElement) {
     IUIAutomationScrollPattern* pScroll = nullptr;
     HRESULT hrPat = pElement->GetCurrentPatternAs(UIA_ScrollPatternId, IID_PPV_ARGS(&pScroll));
     if (SUCCEEDED(hrPat) && pScroll) {
-        double horzPercent = 0.0;
-        if (SUCCEEDED(pScroll->get_CurrentHorizontalScrollPercent(&horzPercent))) {
-            // UIA_ScrollPatternNoScroll (-1) means the content already
-            // fits; any value in [0, 100] means it's scrollable.
-            result = (horzPercent >= 0.0);
-        }
+        BOOL scrollable = FALSE;
+        if (SUCCEEDED(pScroll->get_CurrentHorizontallyScrollable(&scrollable)))
+            result = (scrollable != FALSE);
         pScroll->Release();
     }
-    return result;
-}
-
-// Fast path: query a known SysListView32 handle directly (no subtree
-// search needed).
-static bool ListViewHasHorizontalScroll(HWND hwndListView) {
-    if (!hwndListView) return false;
-
-    IUIAutomation* pAuto = GetThreadAutomation();
-    if (!pAuto) return false;
-
-    IUIAutomationElement* pElement = nullptr;
-    if (FAILED(pAuto->ElementFromHandle(hwndListView, &pElement)) || !pElement)
-        return false;
-    bool result = ElementHasHorizontalScroll(pElement);
-    pElement->Release();
     return result;
 }
 
@@ -299,8 +289,6 @@ static IUIAutomationElement* FindListElementViaUIA(HWND hwndView) {
 // Timer-driven full/elastic fit state machine: no nested pump, no Sleep, per-window re-entrancy.
 
 struct FitContext {
-    HWND hwndOwner = nullptr;
-
     IShellView* pShellView = nullptr;   // AddRef'd for the lifetime of this context
     IFolderView2* pFV2 = nullptr;       // AddRef'd (ownership transferred from QueryInterface)
     IColumnManager* pCM = nullptr;      // AddRef'd (ownership transferred from QueryInterface)
@@ -360,9 +348,9 @@ struct FitContext {
         if (hFont) DeleteObject(hFont);
         if (hdc) DeleteDC(hdc);
         if (pidlFolder) ILFree(pidlFolder);
-        if (pidlRestoreTarget) CoTaskMemFree(pidlRestoreTarget);
+        if (pidlRestoreTarget) ILFree(pidlRestoreTarget);
         for (auto p : pidlWidestForColumn)
-            if (p) CoTaskMemFree(p);
+            if (p) ILFree(p);
         if (pCM) pCM->Release();
         if (pFV2) pFV2->Release();
         if (pShellView) pShellView->Release();
@@ -404,6 +392,7 @@ static void ScanItemsAndSeedColumns(FitContext* ctx) {
         GetClientRect(ctx->hwndListView, &rcClient);
         int clientHeight = rcClient.bottom - rcClient.top;
         RECT rcItem = {};
+        rcItem.left = LVIR_BOUNDS;
         if (SendMessageW(ctx->hwndListView, LVM_GETITEMRECT, 0, reinterpret_cast<LPARAM>(&rcItem))) {
             int rowHeight = rcItem.bottom - rcItem.top;
             if (rowHeight > 0 && clientHeight > 0)
@@ -421,9 +410,8 @@ static void ScanItemsAndSeedColumns(FitContext* ctx) {
             continue;
 
         if (i == restoreIndex) {
-            if (ctx->pidlRestoreTarget) CoTaskMemFree(ctx->pidlRestoreTarget);
-            ctx->pidlRestoreTarget = reinterpret_cast<PITEMID_CHILD>(
-                ILClone(reinterpret_cast<PCIDLIST_ABSOLUTE>(pidl)));
+            if (ctx->pidlRestoreTarget) ILFree(ctx->pidlRestoreTarget);
+            ctx->pidlRestoreTarget = ILCloneChild(pidl);
         }
 
         PIDLIST_ABSOLUTE pidlFull = ILCombine(ctx->pidlFolder, pidl);
@@ -449,13 +437,11 @@ static void ScanItemsAndSeedColumns(FitContext* ctx) {
                         if (w > ctx->rawTextMax[c]) {
                             ctx->rawTextMax[c] = w;
                             if (c == 0) {
-                                if (pidlWidestName) CoTaskMemFree(pidlWidestName);
-                                pidlWidestName = reinterpret_cast<PITEMID_CHILD>(
-                                    ILClone(reinterpret_cast<PCIDLIST_ABSOLUTE>(pidl)));
+                                if (pidlWidestName) ILFree(pidlWidestName);
+                                pidlWidestName = ILCloneChild(pidl);
                             } else {
-                                if (ctx->pidlWidestForColumn[c]) CoTaskMemFree(ctx->pidlWidestForColumn[c]);
-                                ctx->pidlWidestForColumn[c] = reinterpret_cast<PITEMID_CHILD>(
-                                    ILClone(reinterpret_cast<PCIDLIST_ABSOLUTE>(pidl)));
+                                if (ctx->pidlWidestForColumn[c]) ILFree(ctx->pidlWidestForColumn[c]);
+                                ctx->pidlWidestForColumn[c] = ILCloneChild(pidl);
                             }
                         }
                         if (i < presumedVisibleCount && w > ctx->rawTextMaxVisible[c])
@@ -475,7 +461,7 @@ static void ScanItemsAndSeedColumns(FitContext* ctx) {
         ctx->pidlWidestForColumn[0] = pidlWidestName;
         ctx->colExactFromScroll[0] = true;
     } else if (pidlWidestName) {
-        CoTaskMemFree(pidlWidestName);
+        ILFree(pidlWidestName);
     }
     for (UINT c = 1; c < ctx->colCount; c++) {
         if (ctx->pidlWidestForColumn[c])
@@ -559,7 +545,7 @@ static void Step_ReadExactAndRestore(FitContext* ctx, HWND hwndOwner) {
 static void Step_ApplyCalibration(FitContext* ctx, HWND hwndOwner) {
     bool any = false;
     for (UINT c = 0; c < ctx->colCount; c++) {
-        if (!ctx->colExactFromScroll[c]) {
+        if (!ctx->colExactFromScroll[c] && !(c == 0 && ctx->elasticMode)) {
             any = true;
             CM_COLUMNINFO ci = {};
             ci.cbSize = sizeof(ci);
@@ -579,7 +565,7 @@ static void Step_ApplyCalibration(FitContext* ctx, HWND hwndOwner) {
 // Reads back calibration widths, derives padding, computes the Elastic Name width, and finalizes.
 static void Step_ReadCalibrationAndFinish(FitContext* ctx, HWND hwndOwner) {
     for (UINT c = 0; c < ctx->colCount; c++) {
-        if (!ctx->colExactFromScroll[c]) {
+        if (!ctx->colExactFromScroll[c] && !(c == 0 && ctx->elasticMode)) {
             CM_COLUMNINFO ciResult = {};
             ciResult.cbSize = sizeof(ciResult);
             ciResult.dwMask = CM_MASK_WIDTH;
@@ -646,7 +632,7 @@ static void Step_ReadCalibrationAndFinish(FitContext* ctx, HWND hwndOwner) {
     // Guard against pathologically long content (e.g. a single very long
     // filename) blowing a column out to an unreasonable width. Name in
     // Elastic mode is exempt -- it's already bounded by the viewport above.
-    int capPx = static_cast<int>(kMaxColumnWidthDips * ctx->dpiScale);
+    int capPx = static_cast<int>(GetCachedSettings().maxColumnWidthDips * ctx->dpiScale);
     for (UINT c = 0; c < ctx->colCount; c++) {
         if (ctx->elasticMode && c == 0) continue;
         if (ctx->maxWidths[c] > capPx) ctx->maxWidths[c] = capPx;
@@ -712,10 +698,11 @@ static void Step_VerifyElasticFit(FitContext* ctx, HWND hwndOwner) {
         }
     }
 
-    // Header/scroll-range checks are a fast first pass; UI Automation is the fallback.
-    bool uiaSaysScrolling = ctx->pElasticListElement
-        ? ElementHasHorizontalScroll(ctx->pElasticListElement)
-        : ListViewHasHorizontalScroll(ctx->hwndListView);
+    // Only fall back to UI Automation when there's no classic list view to
+    // query; the header/scroll-range checks above are authoritative when there is one.
+    bool uiaSaysScrolling = false;
+    if (!ctx->hwndListView && ctx->pElasticListElement)
+        uiaSaysScrolling = ElementHasHorizontalScroll(ctx->pElasticListElement);
 
     int minNameWidth = static_cast<int>(60 * ctx->dpiScale);
     bool canShrink = ctx->maxWidths[0] > minNameWidth;
@@ -775,9 +762,14 @@ static void Step_Finalize(FitContext* ctx, HWND hwndOwner) {
     ApplyAllColumnWidths(ctx);
     Wh_Log(L"Auto-fitted %u column(s) via full folder scan (%d items)", ctx->colCount, ctx->itemCount);
 
+    std::unique_ptr<FitContext> ctxToDestroy;
     EnterCriticalSection(&g_cs);
-    g_fitContexts.erase(hwndOwner);  // destroys ctx, releasing everything on this (owning) thread
+    if (auto it = g_fitContexts->find(hwndOwner); it != g_fitContexts->end()) {
+        ctxToDestroy = std::move(it->second);
+        g_fitContexts->erase(it);
+    }
     LeaveCriticalSection(&g_cs);
+    // ctxToDestroy is destroyed here, outside the lock, on the owning thread.
 }
 
 // Called from WM_TIMER(FITSTEP_TIMER_ID) on the owning window's thread to
@@ -785,8 +777,8 @@ static void Step_Finalize(FitContext* ctx, HWND hwndOwner) {
 static void AdvanceFitContext(HWND hwndOwner) {
     FitContext* ctx = nullptr;
     EnterCriticalSection(&g_cs);
-    auto it = g_fitContexts.find(hwndOwner);
-    if (it != g_fitContexts.end()) ctx = it->second.get();
+    auto it = g_fitContexts->find(hwndOwner);
+    if (it != g_fitContexts->end()) ctx = it->second.get();
     LeaveCriticalSection(&g_cs);
     if (!ctx) return;
 
@@ -802,11 +794,16 @@ static void AdvanceFitContext(HWND hwndOwner) {
 // Entry point: starts (or, for Visible mode, immediately performs) a fit
 // for pShellView, whose window messages/timers are owned by hwndOwner.
 static void StartAutoFit(IShellView* pShellView, HWND hwndOwner) {
-    // One fit sequence per owning window/tab at a time; others are unaffected.
+    Settings settings = GetCachedSettings();
+
+    // One fit per window/tab at a time; re-arms the trigger timer instead of dropping it if one's already running.
     EnterCriticalSection(&g_cs);
-    bool alreadyRunning = g_fitContexts.find(hwndOwner) != g_fitContexts.end();
+    bool alreadyRunning = g_fitContexts->find(hwndOwner) != g_fitContexts->end();
     LeaveCriticalSection(&g_cs);
-    if (alreadyRunning) return;
+    if (alreadyRunning) {
+        SetTimer(hwndOwner, AUTOFIT_TIMER_ID, settings.delayMs, nullptr);
+        return;
+    }
 
     IFolderView2* pFV2 = nullptr;
     if (FAILED(pShellView->QueryInterface(IID_IFolderView2_, reinterpret_cast<void**>(&pFV2))) || !pFV2)
@@ -840,13 +837,7 @@ static void StartAutoFit(IShellView* pShellView, HWND hwndOwner) {
         return;
     }
 
-    UINT delayMs;
-    int maxScanItems;
-    FitMode fitMode;
-    GetCachedSettings(delayMs, maxScanItems, fitMode);
-    (void)delayMs;
-
-    if (fitMode == FitMode::Visible) {
+    if (settings.fitMode == FitMode::Visible) {
         for (UINT i = 0; i < colCount; i++) {
             CM_COLUMNINFO ci = {};
             ci.cbSize = sizeof(ci);
@@ -862,7 +853,7 @@ static void StartAutoFit(IShellView* pShellView, HWND hwndOwner) {
 
     int itemCount = 0;
     HRESULT hrCount = pFV2->ItemCount(SVGIO_ALLVIEW, &itemCount);
-    if (FAILED(hrCount) || itemCount > maxScanItems) {
+    if (FAILED(hrCount) || itemCount > settings.maxScanItems) {
         // Folder too large (or count unavailable) for a full/elastic scan
         // this time -- fall back to the fast built-in autosize so the user
         // still gets a reasonable result without the extra delay.
@@ -880,14 +871,13 @@ static void StartAutoFit(IShellView* pShellView, HWND hwndOwner) {
     }
 
     auto ctx = std::make_unique<FitContext>();
-    ctx->hwndOwner = hwndOwner;
     pShellView->AddRef();
     ctx->pShellView = pShellView;
     ctx->pFV2 = pFV2;  // ownership of the QueryInterface AddRef transfers to ctx
     ctx->pCM = pCM;    // ownership of the QueryInterface AddRef transfers to ctx
     ctx->keys = std::move(keys);
     ctx->colCount = colCount;
-    ctx->elasticMode = (fitMode == FitMode::Elastic);
+    ctx->elasticMode = (settings.fitMode == FitMode::Elastic);
     ctx->itemCount = itemCount;
     ctx->maxWidths.assign(colCount, 0);
     ctx->rawTextMax.assign(colCount, 0);
@@ -963,7 +953,7 @@ static void StartAutoFit(IShellView* pShellView, HWND hwndOwner) {
 
     FitContext* rawCtx = ctx.get();
     EnterCriticalSection(&g_cs);
-    g_fitContexts[hwndOwner] = std::move(ctx);
+    (*g_fitContexts)[hwndOwner] = std::move(ctx);
     LeaveCriticalSection(&g_cs);
 
     Step_SelectWidest(rawCtx, hwndOwner);
@@ -981,6 +971,14 @@ static HWND FindTabWindow(HWND hwnd) {
         cur = GetParent(cur);
     }
     return nullptr;
+}
+
+// True if hwnd is subclassed and will process WM_TIMER (and thus can KillTimer it).
+static bool IsWindowSubclassed(HWND hwnd) {
+    EnterCriticalSection(&g_cs);
+    bool found = g_windowToTab.find(hwnd) != g_windowToTab.end();
+    LeaveCriticalSection(&g_cs);
+    return found;
 }
 
 // Check if a window class is one we want to subclass
@@ -1016,23 +1014,23 @@ static void CleanupWindowState(HWND hwnd) {
         regToDeregister = itReg->second;
         g_tabNotifyReg.erase(itReg);
     }
-    auto itCtx = g_fitContexts.find(hwnd);
-    if (itCtx != g_fitContexts.end()) {
+    auto itCtx = g_fitContexts->find(hwnd);
+    if (itCtx != g_fitContexts->end()) {
         ctxToDestroy = std::move(itCtx->second);
-        g_fitContexts.erase(itCtx);
+        g_fitContexts->erase(itCtx);
     }
     LeaveCriticalSection(&g_cs);
 
     // Both of these -- and ctxToDestroy's destructor, which releases
     // pFV2/pCM -- run here, on the window's own owning thread, so this is
     // valid for the apartment-threaded COM objects involved.
+    bool wasTabWindow = (pSVToRelease != nullptr);
     if (pSVToRelease) pSVToRelease->Release();
     if (regToDeregister) SHChangeNotifyDeregister(regToDeregister);
 
-    // This runs once per call, harmlessly, even when multiple windows on
-    // the same thread (e.g. several tabs in one Explorer window) each
-    // trigger it -- ReleaseThreadAutomation() is a no-op once already null.
-    ReleaseThreadAutomation();
+    // Only drop the cached UIA client when the tab itself is torn down, not for incidental toolbar/rebar teardowns on the same thread.
+    if (wasTabWindow)
+        ReleaseThreadAutomation();
 }
 
 // Subclass proc
@@ -1052,12 +1050,6 @@ static LRESULT CALLBACK ExplorerSubclassProc(
     if (uMsg == WM_KEYDOWN && wParam == VK_F5)
         isRefresh = true;
 
-    if (uMsg == WM_NOTIFY) {
-        NMHDR* hdr = reinterpret_cast<NMHDR*>(lParam);
-        if (hdr && hdr->code == -715 && hdr->idFrom == 0)
-            isRefresh = true;
-    }
-
     // Shell-level change notification for this tab's folder, via a registered message id.
     if (g_shellNotifyMsg != 0 && uMsg == g_shellNotifyMsg) {
         LONG lEvent = 0;
@@ -1073,11 +1065,7 @@ static LRESULT CALLBACK ExplorerSubclassProc(
 
     // Live re-layout on resize, only in Elastic mode; settings read from cache.
     if (uMsg == WM_SIZE) {
-        UINT delayMs;
-        int maxScanItems;
-        FitMode fitMode;
-        GetCachedSettings(delayMs, maxScanItems, fitMode);
-        if (fitMode == FitMode::Elastic) isRefresh = true;
+        if (GetCachedSettings().fitMode == FitMode::Elastic) isRefresh = true;
     }
 
     if (isRefresh) {
@@ -1090,12 +1078,8 @@ static LRESULT CALLBACK ExplorerSubclassProc(
             LeaveCriticalSection(&g_cs);
         }
 
-        UINT delayMs;
-        int maxScanItems;
-        FitMode fitMode;
-        GetCachedSettings(delayMs, maxScanItems, fitMode);
         HWND hwndTimer = hwndTab ? hwndTab : hwnd;
-        SetTimer(hwndTimer, AUTOFIT_TIMER_ID, delayMs, nullptr);
+        SetTimer(hwndTimer, AUTOFIT_TIMER_ID, GetCachedSettings().delayMs, nullptr);
     }
 
     if (uMsg == WM_TIMER && wParam == AUTOFIT_TIMER_ID) {
@@ -1133,7 +1117,6 @@ static LRESULT CALLBACK ExplorerSubclassProc(
 
     if (uMsg == WM_NCDESTROY) {
         CleanupWindowState(hwnd);
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, ExplorerSubclassProc);
 
         EnterCriticalSection(&g_cs);
         g_windowToTab.erase(hwnd);
@@ -1148,9 +1131,14 @@ static LRESULT CALLBACK ExplorerSubclassProc(
 static void SubclassTargetIfNeeded(HWND hwnd, HWND hwndTab) {
     if (!hwnd || !IsSubclassTarget(hwnd)) return;
 
+    // A window that lives under a tab belongs to that tab -- don't let the
+    // tab that happens to be activating claim other tabs in the same frame.
+    if (HWND hwndOwnTab = FindTabWindow(hwnd))
+        hwndTab = hwndOwnTab;
+
     EnterCriticalSection(&g_cs);
     bool isNew = g_windowToTab.find(hwnd) == g_windowToTab.end();
-    g_windowToTab[hwnd] = hwndTab; // always update tab association
+    g_windowToTab[hwnd] = hwndTab;
     LeaveCriticalSection(&g_cs);
 
     if (isNew)
@@ -1204,7 +1192,7 @@ static void RegisterFolderChangeNotify(HWND hwndTab, IShellView* pShellView) {
     ULONG newReg = SHChangeNotifyRegister(
         hwndTab,
         SHCNRF_ShellLevel | SHCNRF_NewDelivery,
-        SHCNE_UPDATEDIR | SHCNE_UPDATEITEM | SHCNE_MKDIR | SHCNE_RMDIR |
+        SHCNE_UPDATEDIR | SHCNE_MKDIR | SHCNE_RMDIR |
             SHCNE_CREATE | SHCNE_DELETE | SHCNE_RENAMEITEM | SHCNE_RENAMEFOLDER,
         g_shellNotifyMsg,
         1,
@@ -1236,10 +1224,11 @@ HRESULT __thiscall CDefView_UIActivate_hook(void* pThis, UINT uState) {
         if (!hwndView) return hr;
 
         HWND hwndTab = FindTabWindow(hwndView);
+        if (!hwndTab) return hr;  // no tab ancestor -- e.g. the desktop's own CDefView; nothing to fit
         HWND hwndTop = GetAncestor(hwndView, GA_ROOT);
 
         // Update stored IShellView for this tab
-        if (hwndTab) {
+        {
             EnterCriticalSection(&g_cs);
             auto it = g_tabShellViews.find(hwndTab);
             if (it != g_tabShellViews.end() && it->second)
@@ -1277,16 +1266,10 @@ HRESULT __thiscall CDefView_UIActivate_hook(void* pThis, UINT uState) {
         // Register for shell-level change notifications on this folder so
         // we catch refreshes triggered by the modern command bar (or any
         // other mechanism) that don't produce classic window messages.
-        if (hwndTab)
-            RegisterFolderChangeNotify(hwndTab, pShellView);
+        RegisterFolderChangeNotify(hwndTab, pShellView);
 
         // Auto-fit on open/navigate/tab switch
-        UINT delayMs;
-        int maxScanItems;
-        FitMode fitMode;
-        GetCachedSettings(delayMs, maxScanItems, fitMode);
-        HWND hwndTimer = hwndTab ? hwndTab : hwndTop;
-        SetTimer(hwndTimer, AUTOFIT_TIMER_ID, delayMs, nullptr);
+        SetTimer(hwndTab, AUTOFIT_TIMER_ID, GetCachedSettings().delayMs, nullptr);
     }
     return hr;
 }
@@ -1308,11 +1291,11 @@ HRESULT __thiscall CDefView_Refresh_hook(void* pThis) {
             HWND hwndTab = FindTabWindow(hwndView);
             HWND hwndTimer = hwndTab ? hwndTab : hwndView;
 
-            UINT delayMs;
-            int maxScanItems;
-            FitMode fitMode;
-            GetCachedSettings(delayMs, maxScanItems, fitMode);
-            SetTimer(hwndTimer, AUTOFIT_TIMER_ID, delayMs, nullptr);
+            // hwndView is only reliably subclassed once UIActivate has run
+            // for it; if activation hasn't happened yet, arming a timer
+            // here would leave nothing to ever KillTimer it.
+            if (IsWindowSubclassed(hwndTimer))
+                SetTimer(hwndTimer, AUTOFIT_TIMER_ID, GetCachedSettings().delayMs, nullptr);
         }
     }
 
@@ -1347,11 +1330,8 @@ static void TriggerAutoFitFromShellBrowser(IUnknown* pUnk) {
         HWND hwndTab = FindTabWindow(hwndView);
         HWND hwndTimer = hwndTab ? hwndTab : hwndView;
 
-        UINT delayMs;
-        int maxScanItems;
-        FitMode fitMode;
-        GetCachedSettings(delayMs, maxScanItems, fitMode);
-        SetTimer(hwndTimer, AUTOFIT_TIMER_ID, delayMs, nullptr);
+        if (IsWindowSubclassed(hwndTimer))
+            SetTimer(hwndTimer, AUTOFIT_TIMER_ID, GetCachedSettings().delayMs, nullptr);
     }
     pSV->Release();
     pSB->Release();
@@ -1485,7 +1465,7 @@ void Wh_ModUninit() {
     g_windowToTab.clear();
     g_tabShellViews.clear();  // already emptied via the cleanup messages above
     g_tabNotifyReg.clear();   // already emptied via the cleanup messages above
-    g_fitContexts.clear();    // already emptied via the cleanup messages above
+    g_fitContexts.reset();  // already emptied via the cleanup messages above; frees the map itself
     LeaveCriticalSection(&g_cs);
 
     DeleteCriticalSection(&g_settingsCs);
@@ -1495,10 +1475,7 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     LoadSettings();
 
-    UINT delayMs;
-    int maxScanItems;
-    FitMode fitMode;
-    GetCachedSettings(delayMs, maxScanItems, fitMode);
-    Wh_Log(L"SettingsChanged — delay: %ums, fit mode: %d, max scan items: %d",
-           delayMs, static_cast<int>(fitMode), maxScanItems);
+    Settings s = GetCachedSettings();
+    Wh_Log(L"SettingsChanged — delay: %ums, fit mode: %d, max scan items: %d, max column width: %dpx",
+           s.delayMs, static_cast<int>(s.fitMode), s.maxScanItems, s.maxColumnWidthDips);
 }
