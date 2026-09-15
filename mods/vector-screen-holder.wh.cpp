@@ -2,7 +2,7 @@
 // @id              vector-screen-holder
 // @name            Vector Screen Holder
 // @description     Fills a display you choose with generative line art and keeps the PC from idling while it runs
-// @version         1.0.6
+// @version         1.0.7
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
@@ -178,11 +178,12 @@ pair-programmers Claude and Big-Pickle (opencode).
   $name: Display
   $description: >-
     Which display to hold. Any resolution and orientation works, because the
-    art is
-    generated to fit whatever the display actually is. The numbered choices
-    are the display numbers Windows Settings shows (1, 2, 3, ...). The full
-    list of connected displays with their Windows numbers and device names is
-    written to the mod log when the mod loads.
+    art is generated to fit whatever the display actually is. The numbered
+    choices come from the \\.\DISPLAYn device names. Those usually match the
+    numbers Windows Settings shows, but the two are produced by different
+    parts of Windows and can disagree after displays are re-arranged. The mod
+    log lists every display with its number, resolution and position when the
+    mod loads; use the resolution to confirm which is which.
   $options:
   - primary: Primary display
   - all: All displays
@@ -2073,6 +2074,12 @@ LRESULT CALLBACK Overlay::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 return 0;
             }
             break;
+        case WM_CLOSE:
+            // Alt+F4 with the overlay focused would otherwise reach
+            // DefWindowProc and destroy the window without the controller
+            // knowing. Route it the same way Esc goes.
+            Controller_RequestClose();
+            return 0;
         case WM_KILLFOCUS:
             // No WM_KEYUP arrives if the overlay is alt-tabbed away mid-hold,
             // which would leave the hue sliding indefinitely.
@@ -2181,8 +2188,15 @@ static void Controller_StepAmount(Overlay* ov) {
 }
 
 static void Controller_Wheel(Overlay* ov, int delta) {
-    float d = (delta > 0) ? 0.04f : -0.04f;
-    float next = ClampT(ov->param + d, 0.0f, 1.0f);
+    // Only the worker thread reaches this, so a plain static is enough.
+    static int wheelAcc = 0;
+    wheelAcc += delta;
+    int notches = wheelAcc / WHEEL_DELTA;
+    if (notches == 0) {
+        return;
+    }
+    wheelAcc -= notches * WHEEL_DELTA;
+    float next = ClampT(ov->param + 0.04f * notches, 0.0f, 1.0f);
     for (size_t i = 0; i < g_overlays.size(); i++) {
         g_overlays[i]->param = next;
         g_overlays[i]->FlashHud();
@@ -2637,11 +2651,6 @@ static void RegisterHotkeyFromSettings() {
         g_hotkeyRegistered = false;
     }
     UINT mods = 0, vk = 0;
-    if (!g_settings.hotkey.empty() &&
-        !ParseHotkey(g_settings.hotkey, &mods, &vk)) {
-        Wh_Log(L"Could not parse the hotkey '%s'; no hotkey is registered",
-               g_settings.hotkey.c_str());
-    }
     if (ParseHotkey(g_settings.hotkey, &mods, &vk)) {
         if (RegisterHotKey(nullptr, kHotkeyId, mods, vk)) {
             g_hotkeyRegistered = true;
@@ -2650,6 +2659,11 @@ static void RegisterHotkeyFromSettings() {
             Wh_Log(L"RegisterHotKey failed for '%s' (%u)",
                    g_settings.hotkey.c_str(), GetLastError());
         }
+    } else if (!g_settings.hotkey.empty()) {
+        // An empty value is the documented way to turn the hotkey off, so
+        // only a non-empty string that will not parse is worth reporting.
+        Wh_Log(L"Could not parse the hotkey '%s'; no hotkey is registered",
+               g_settings.hotkey.c_str());
     }
 }
 
