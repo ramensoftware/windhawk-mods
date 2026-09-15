@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.6.3
+// @version         1.6.4
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -2282,18 +2282,24 @@ static bool ParseAnthropicUsage(const std::string& body, AccountData* d, std::ws
             d->extraLines += line;
         }
         if (auto eu = GetObj(usage, L"extra_usage"); eu && GetBool(eu, L"is_enabled")) {
-            // monthly_limit/used_credits are cents; a null limit means unlimited. utilization is
-            // null until the first spend of the cycle, so gate the bar on the limit instead and
-            // treat the missing value as 0% or the bar would vanish every month start.
+            // monthly_limit/used_credits are cents; an explicit null limit means unlimited (an
+            // absent or malformed key must not claim that). utilization is null until the
+            // first spend of the cycle, so gate the bar on the limit instead and treat the
+            // missing value as 0% or the bar would vanish every month start. Either of
+            // utilization/used_credits derives the other so the bar and amount text agree.
             double limitCents = GetNum(eu, L"monthly_limit");
             double usedCents = GetNum(eu, L"used_credits");
             double utilization = GetNum(eu, L"utilization");
-            if (limitCents < 0) {
+            bool limitIsNull = eu.HasKey(L"monthly_limit") &&
+                               eu.GetNamedValue(L"monthly_limit").ValueType() == JsonValueType::Null;
+            if (limitIsNull) {
                 if (!d->extraLines.empty()) d->extraLines += L"\n";
                 d->extraLines += L"extra usage: unlimited";
             } else if (limitCents > 0) {
                 if (!std::isfinite(utilization) || utilization < 0) {
                     utilization = usedCents > 0 ? usedCents * 100.0 / limitCents : 0;
+                } else if (usedCents < 0) {
+                    usedCents = utilization * limitCents / 100.0;
                 }
                 d->extraUsage.pct = utilization;
                 d->extraUsedAmount = std::max(usedCents, 0.0) / 100.0;
