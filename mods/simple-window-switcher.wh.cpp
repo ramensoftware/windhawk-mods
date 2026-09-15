@@ -1108,7 +1108,6 @@ static RECT g_pendingSwitcherRect = {0, 0, 0, 0};
 static int g_switcherBaseX = 0;
 static int g_switcherBaseY = 0;
 static bool g_switcherBaseInitialized = false;
-static bool g_nativeBackdropActive = false;
 static bool g_isWin11OrGreater = false;
 
 static bool IsWin11OrGreater() {
@@ -7439,8 +7438,6 @@ static void RevealPendingSwitcher() {
 }
 
 static void ApplyThemeToWindow(HWND hWnd) {
-    g_nativeBackdropActive = false;
-
     if (ThemeIs(L"none")) {
         // 1. Explicitly clear all DWM system backdrops on Windows 11
         if (IsWin11OrGreater()) {
@@ -7488,8 +7485,8 @@ static void ApplyThemeToWindow(HWND hWnd) {
 
     // --- Non-layered path (Mica / Acrylic) ---
     // Strip WS_EX_LAYERED: Windows DWM never renders hardware system backdrops
-    // (Mica DWMSBT_MAINWINDOW or Acrylic DWMSBT_TRANSIENTWINDOW) or Windows 10
-    // acrylic composition blur on windows with the WS_EX_LAYERED style.
+    // (Mica DWMSBT_MAINWINDOW) or Windows 10/11 acrylic composition blur on
+    // windows with the WS_EX_LAYERED style.
     LONG_PTR exs = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
     if (exs & WS_EX_LAYERED) {
         SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exs & ~WS_EX_LAYERED);
@@ -7508,8 +7505,6 @@ static void ApplyThemeToWindow(HWND hWnd) {
         DwmSetWindowAttribute(hWnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &dark, sizeof(dark));
     }
 
-    bool useNativeBackdrop = false;
-
     if (ThemeIs(L"mica")) {
         if (IsWin11OrGreater()) {
             int micaVal = 2; // DWMSBT_MAINWINDOW
@@ -7525,37 +7520,27 @@ static void ApplyThemeToWindow(HWND hWnd) {
             SendMessage(hWnd, WM_NCACTIVATE, TRUE, 0);
         }
     } else if (ThemeIs(L"backdrop")) {
+        // Clear Windows 11 hardware system backdrops to prevent Desktop Acrylic fallback interference
         if (IsWin11OrGreater()) {
-            int backdropVal = 3; // DWMSBT_TRANSIENTWINDOW (Desktop Acrylic)
-            HRESULT hr = DwmSetWindowAttribute(hWnd, 38 /* DWMWA_SYSTEMBACKDROP_TYPE */, &backdropVal, sizeof(backdropVal));
-            if (SUCCEEDED(hr)) {
-                useNativeBackdrop = true;
-                g_nativeBackdropActive = true;
-                int disableOldMica = 0;
-                DwmSetWindowAttribute(hWnd, 1029 /* DWMWA_MICA_EFFECT */, &disableOldMica, sizeof(disableOldMica));
-                SendMessage(hWnd, WM_NCACTIVATE, TRUE, 0);
-            }
+            int noneVal = 1; // DWMSBT_NONE
+            DwmSetWindowAttribute(hWnd, 38 /* DWMWA_SYSTEMBACKDROP_TYPE */, &noneVal, sizeof(noneVal));
+            int disableMica = 0;
+            DwmSetWindowAttribute(hWnd, 1029 /* DWMWA_MICA_EFFECT */, &disableMica, sizeof(disableMica));
         }
-        if (!useNativeBackdrop) {
-            // Windows 10 or Win11 fallback: SetWindowCompositionAttribute
-            if (IsWin11OrGreater()) {
-                int noneVal = 1; // DWMSBT_NONE
-                DwmSetWindowAttribute(hWnd, 38, &noneVal, sizeof(noneVal));
-            }
-            if (g_SetWindowCompositionAttribute) {
-                DWORD blur = (DWORD)((g_settings.opacity / 100.0) * 255);
-                COLORREF bg = GetBgColor();
-                ACCENT_POLICY accent = {};
-                accent.AccentState = 4 /* ACCENT_ENABLE_ACRYLICBLURBEHIND */;
-                accent.AccentFlags = 0;
-                accent.GradientColor = (blur << 24) | (bg & 0x00FFFFFF);
-                WINDOWCOMPOSITIONATTRIBDATA data = {19, &accent, sizeof(accent)};
-                g_SetWindowCompositionAttribute(hWnd, &data);
-            }
+        // SetWindowCompositionAttribute Acrylic blur behind (supported across Windows 10 and Windows 11)
+        if (g_SetWindowCompositionAttribute) {
+            DWORD blur = (DWORD)((g_settings.opacity / 100.0) * 255);
+            COLORREF bg = GetBgColor();
+            ACCENT_POLICY accent = {};
+            accent.AccentState = 4 /* ACCENT_ENABLE_ACRYLICBLURBEHIND */;
+            accent.AccentFlags = 0;
+            accent.GradientColor = (blur << 24) | (bg & 0x00FFFFFF);
+            WINDOWCOMPOSITIONATTRIBDATA data = {19, &accent, sizeof(accent)};
+            g_SetWindowCompositionAttribute(hWnd, &data);
         }
     }
 
-    MARGINS marGlassInset = (ThemeIs(L"mica") || useNativeBackdrop) ? MARGINS{-1, -1, -1, -1} : MARGINS{0, 0, 0, 0};
+    MARGINS marGlassInset = ThemeIs(L"mica") ? MARGINS{-1, -1, -1, -1} : MARGINS{0, 0, 0, 0};
     DwmExtendFrameIntoClientArea(hWnd, &marGlassInset);
 
     SetClassLongPtrW(hWnd, GCLP_HBRBACKGROUND, (LONG_PTR)GetStockObject(BLACK_BRUSH));
@@ -9634,12 +9619,12 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     if (uMsg == WM_NCCALCSIZE && wParam == TRUE) {
         return 0; // Remove standard frame for WS_OVERLAPPED
     }
-    if (uMsg == WM_NCPAINT) {
-        return 0; // Suppress default non-client frame and border painting
+    if (uMsg == WM_NCPAINT && ThemeIs(L"none")) {
+        return 0; // Only suppress default frame painting for layered none theme
     }
     if (uMsg == WM_NCACTIVATE) {
-        // Prevent DefWindowProc from painting the active/inactive hardware window border
-        return TRUE;
+        // Force DWM to keep the active visual state (Mica/Backdrop) even when unfocused
+        return DefWindowProcW(hWnd, uMsg, TRUE, lParam);
     }
 
     if (g_WM_SWS_TOUCHPAD_TRIGGER && uMsg == g_WM_SWS_TOUCHPAD_TRIGGER) {
