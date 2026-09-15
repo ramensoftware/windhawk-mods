@@ -120,7 +120,7 @@ For any suggestions or problems it is recommended to contact the author of this 
   - zh: 中文（简体）(Chinese, simplified)
   - ja: 日本語 (Japanese)
   - ko: 한국어 (Korean)
-- previewHotkey: ctrlaltshiftl
+- previewHotkey: none
   $name: Preview shortcut
   $description: >-
     This setting picks the shortcut that previews the screen without logging
