@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-15T18:20:32.000Z</updated>
+    <updated>2026-09-15T18:23:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Tray Keyboard Layout Indicator 6.1.0]]></title>
+        <id>https://windhawk.net/mods/classic-tray-keyboard-layout-indicator#5c768b0801763b3a8374c9bed5a0f2de49690b82</id>
+        <link href="https://windhawk.net/mods/classic-tray-keyboard-layout-indicator"/>
+        <updated>2026-09-15T18:23:09.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="keyboardlayouttrayindicator">Keyboard Layout Tray Indicator</h1>
+<p><img src="https://i.imgur.com/L4i2WhE.png" alt="Screenshot" /></p>
+<p>Displays current keyboard layout in the system tray as a two-letter code, 
+in the style of Windows 2000. This is an alternative to the default indicator.
+On right click a menu with layout selection is displayed.</p>
+<ul>
+<li><strong>Left click</strong> — cycle through installed layouts</li>
+<li><strong>Right click</strong> — pick layout from list</li>
+</ul>
+<p>The mod may go out on sync in elevated windows if you're using more than two layouts.</p>
+<p><strong>Note:</strong> This mod only works with the classic taskbar.</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Minimize to tray 1.0]]></title>
         <id>https://windhawk.net/mods/minimize-to-tray#0917d9c94623b841e260a07b9cf02ac6d6b5cadf</id>
@@ -776,19 +797,6 @@ Original overlay/smear architecture inspired by <a href="https://github.com/Thea
         <content type="html"><![CDATA[<ul>
 <li>Added an option to use the system accent color.</li>
 <li>Fixed the color not applying on startup until the Start button is hovered.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Always show all taskbar tray icons 1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-notification-icons-show-all#c314fe0b7407dba42d04212b30f3d7fff2e80553</id>
-        <link href="https://windhawk.net/mods/taskbar-notification-icons-show-all"/>
-        <updated>2026-09-12T13:18:51.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a mode to hide all tray icons.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

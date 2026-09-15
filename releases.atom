@@ -2,12 +2,33 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-15T18:20:32.000Z</updated>
+    <updated>2026-09-15T18:23:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Tray Keyboard Layout Indicator 6.1.0]]></title>
+        <id>https://windhawk.net/mods/classic-tray-keyboard-layout-indicator#5c768b0801763b3a8374c9bed5a0f2de49690b82</id>
+        <link href="https://windhawk.net/mods/classic-tray-keyboard-layout-indicator"/>
+        <updated>2026-09-15T18:23:09.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="keyboardlayouttrayindicator">Keyboard Layout Tray Indicator</h1>
+<p><img src="https://i.imgur.com/L4i2WhE.png" alt="Screenshot" /></p>
+<p>Displays current keyboard layout in the system tray as a two-letter code, 
+in the style of Windows 2000. This is an alternative to the default indicator.
+On right click a menu with layout selection is displayed.</p>
+<ul>
+<li><strong>Left click</strong> — cycle through installed layouts</li>
+<li><strong>Right click</strong> — pick layout from list</li>
+</ul>
+<p>The mod may go out on sync in elevated windows if you're using more than two layouts.</p>
+<p><strong>Note:</strong> This mod only works with the classic taskbar.</p>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Minimize to tray 1.0]]></title>
         <id>https://windhawk.net/mods/minimize-to-tray#0917d9c94623b841e260a07b9cf02ac6d6b5cadf</id>
@@ -1044,23 +1065,6 @@ and to all context menus.</p>
         <author>
             <name>WasiXGamer</name>
             <uri>https://github.com/wasixgamer</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Adjustable tray icons padding for Win10 taskbar 1.0]]></title>
-        <id>https://windhawk.net/mods/dense-tray-icons-padding-old-taskbar#70b2e94eb5a6d619418a6a4b47ad9a164b21b3ab</id>
-        <link href="https://windhawk.net/mods/dense-tray-icons-padding-old-taskbar"/>
-        <updated>2026-09-07T19:03:44.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="adjustabletrayiconspaddingforwin10taskbar">Adjustable tray icons padding for Win10 taskbar</h1>
-<p>This is a port of functionality of 7+ Taskbar Tweaker that allows to adjust the padding of the tray icons
-in legacy (Win10) taskbar (running either under Windows 10 or Windows 11). To adjust the tray icons padding on the new Win11 taskbar,
-use the mod <code>Taskbar tray icon spacing and grid</code>.</p>
-<p><img src="https://i.imgur.com/NjGhXuc.png" alt="screenshot" /></p>
-<p>The default padding value is set to 2, the same as under Windows 95-Windows XP, more dense than under Windows 7, but can be changed in mod's options.</p>
-<p>Explorer should be restarted after enabling this mod.</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
