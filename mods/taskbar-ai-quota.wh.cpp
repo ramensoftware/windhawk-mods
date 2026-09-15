@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.6.2
+// @version         1.6.3
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -325,7 +325,7 @@ struct QuotaUiInstance {
     ULONGLONG buildSettingsGeneration = 0;
     bool buildVisualTestMode = false;
     Grid quotaGrid{nullptr};
-    Grid injectionParent{nullptr};
+    Panel injectionParent{nullptr};
     ColumnDefinition quotaColumnDefinition{nullptr};
     std::vector<PointerHandlers> pointerHandlers;
     std::vector<MenuItemClickHandler> menuItemClickHandlers;
@@ -5425,14 +5425,14 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     }
 }
 
-static void RemoveQuotaChildren(Grid const& targetGrid, QuotaUiInstance& state) {
-    if (!targetGrid) return;
+static void RemoveQuotaChildren(Panel const& targetPanel, QuotaUiInstance& state) {
+    if (!targetPanel) return;
     ClearQuotaEventState(state);
 
-    for (int i = (int)targetGrid.Children().Size() - 1; i >= 0; --i) {
-        auto fe = targetGrid.Children().GetAt(i).try_as<FrameworkElement>();
+    for (int i = (int)targetPanel.Children().Size() - 1; i >= 0; --i) {
+        auto fe = targetPanel.Children().GetAt(i).try_as<FrameworkElement>();
         if (fe && fe.Name() == kRootName) {
-            try { targetGrid.Children().RemoveAt(i); } catch (...) {}
+            try { targetPanel.Children().RemoveAt(i); } catch (...) {}
         }
     }
 }
@@ -5452,10 +5452,10 @@ static void RemoveQuotaGridFromState(QuotaUiInstance& state) {
     }
 
     try {
-        auto targetGrid = state.injectionParent;
-        RemoveQuotaChildren(targetGrid, state);
+        RemoveQuotaChildren(state.injectionParent, state);
+        auto targetGrid = state.injectionParent.try_as<Grid>();
         int ownedCol = -1;
-        if (state.quotaColumnDefinition) {
+        if (targetGrid && state.quotaColumnDefinition) {
             auto definitions = targetGrid.ColumnDefinitions();
             for (uint32_t i = 0; i < definitions.Size(); ++i) {
                 auto definition = definitions.GetAt(i);
@@ -5468,7 +5468,7 @@ static void RemoveQuotaGridFromState(QuotaUiInstance& state) {
 
         // If another component already removed our definition, it also owns the resulting
         // child shifts. Never substitute a numeric column belonging to somebody else.
-        if (ownedCol >= 0 && ownedCol < (int)targetGrid.ColumnDefinitions().Size()) {
+        if (targetGrid && ownedCol >= 0 && ownedCol < (int)targetGrid.ColumnDefinitions().Size()) {
             targetGrid.ColumnDefinitions().RemoveAt(ownedCol);
             for (uint32_t i = 0; i < targetGrid.Children().Size(); ++i) {
                 auto child = targetGrid.Children().GetAt(i).try_as<FrameworkElement>();
@@ -5535,12 +5535,20 @@ static bool InjectQuotaGrid(HWND hWnd) {
         auto root = xamlRoot.Content().try_as<FrameworkElement>();
         if (!root) return fail(L"no XamlRoot content");
         auto trayFrame = FindChildByName(root, L"SystemTrayFrameGrid");
-        auto trayGrid = trayFrame ? trayFrame.try_as<Grid>() : nullptr;
         // On a cold start the XamlRoot is ready before the system tray contents are realized
         // in the visual tree, so SystemTrayFrameGrid may be missing for the first attempts.
         // Bail and let the retry loop poll until it appears; never inject elsewhere, which
         // would render the bars on top of the clock/tray.
-        if (!trayGrid) return fail(L"no SystemTrayFrameGrid");
+        if (!trayFrame) return fail(L"no SystemTrayFrameGrid");
+        auto trayPanel = trayFrame.try_as<Panel>();
+        auto trayGrid = trayFrame.try_as<Grid>();
+        // Newer Windows taskbars keep the name but use a StackPanel. Don't assume other
+        // panel types share its child-order layout semantics.
+        if (!trayPanel || (!trayGrid && !trayFrame.try_as<StackPanel>())) {
+            std::wstring reason = L"unsupported SystemTrayFrameGrid type: ";
+            reason += winrt::get_class_name(trayFrame);
+            return fail(reason.c_str());
+        }
 
         state = FindUiState(hWnd);
         if (!state) {
@@ -5564,11 +5572,11 @@ static bool InjectQuotaGrid(HWND hWnd) {
             state->windowSubclassed = true;
             // Remove a visual left by an earlier failed teardown, but don't guess which column
             // definition it owned.
-            RemoveQuotaChildren(trayGrid, *state);
+            RemoveQuotaChildren(trayPanel, *state);
         } else {
             RemoveQuotaGridFromState(*state);
         }
-        state->injectionParent = trayGrid;
+        state->injectionParent = trayPanel;
         double rasterizationScale = xamlRoot.RasterizationScale();
         state->rasterizationScale = rasterizationScale > 0 ? rasterizationScale : 1.0;
         Grid quota = BuildQuotaGrid(*state);
@@ -5578,23 +5586,28 @@ static bool InjectQuotaGrid(HWND hWnd) {
             return fail(L"BuildQuotaGrid failed");
         }
 
-        ColumnDefinition newCol;
-        newCol.Width({1.0, GridUnitType::Auto});
-        state->quotaColumnDefinition = newCol;
-        trayGrid.ColumnDefinitions().InsertAt(0, newCol);
-        // Inserting at the left edge means no existing child can span across the new column.
-        for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
-            auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
-            if (child) Grid::SetColumn(child, Grid::GetColumn(child) + 1);
+        if (trayGrid) {
+            ColumnDefinition newCol;
+            newCol.Width({1.0, GridUnitType::Auto});
+            state->quotaColumnDefinition = newCol;
+            trayGrid.ColumnDefinitions().InsertAt(0, newCol);
+            // Inserting at the left edge means no existing child can span across the new column.
+            for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
+                auto child = trayGrid.Children().GetAt(i).try_as<FrameworkElement>();
+                if (child) Grid::SetColumn(child, Grid::GetColumn(child) + 1);
+            }
+            Grid::SetColumn(quota, 0);
+            trayGrid.Children().Append(quota);
+        } else {
+            // StackPanel layout follows child order; no column is created or owned.
+            trayPanel.Children().InsertAt(0, quota);
         }
-        Grid::SetColumn(quota, 0);
-        trayGrid.Children().Append(quota);
 
         state->quotaGrid = quota;
         g_uiInjected.store(true, std::memory_order_release);
         state->applied.clear();
         UpdateQuotaUi(*state);
-        Wh_Log(L"Injected quota bars");
+        Wh_Log(L"Injected quota bars into %s", winrt::get_class_name(trayPanel).c_str());
         return true;
     } catch (...) {
         if (state) {
