@@ -43,6 +43,11 @@ on a flat-colored icon, gradient shading with no shimmer, both, or neither.
 Only Windows 11 25H2 is supported. Applies to the Start button on every
 taskbar instance (multi-monitor).
 
+After installing or updating this mod, restart Explorer once (Task
+Manager -> Windows Explorer -> Restart) so it picks up the Start button.
+Without a restart, it only notices the button on its next layout change
+(e.g. a monitor/DPI change), not immediately.
+
 ## Requirements
 
 - Windows 11 25H2, build 26200.9445 or later, 64-bit
