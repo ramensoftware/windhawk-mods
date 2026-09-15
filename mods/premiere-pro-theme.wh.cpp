@@ -22,14 +22,23 @@ different ways.
 
 ## Screenshots
 
-The same project in each palette. First, Premiere without the mod: the Spectrum
-gray `#1D1D1D`, under the light title bar and menu bar that Windows gives it.
+The same project, palette by palette. First, Premiere without the mod:
+the Spectrum gray `#1D1D1D`, under the light title bar and menu bar that
+Windows gives it.
 
 ![Premiere Pro without the mod](https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/stock.png)
 
 **Onyx** — the default: near black, and neutral:
 
 ![Onyx palette](https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/onyx.png)
+
+**Abyss** — absolute black, for an OLED panel:
+
+![Abyss palette](https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/abyss.png)
+
+**Contrast** — black panels with light dividers and pure white text:
+
+![Contrast palette](https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/contrast.png)
 
 **Premiere** — the violet sampled from the app icon:
 
@@ -39,13 +48,33 @@ gray `#1D1D1D`, under the light title bar and menu bar that Windows gives it.
 
 ![Comfy palette](https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/comfy.png)
 
-**Neon** — near black with magenta:
-
-![Neon palette](https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/neon.png)
-
 **Glitch** — acid green with a magenta accent:
 
 ![Glitch palette](https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/glitch.png)
+
+**Violet** — a purple interface, not just a purple accent:
+
+![Violet palette](https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/violet.png)
+
+**Blossom** — dark rose, pastel in its text and border:
+
+![Blossom palette](https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/blossom.png)
+
+**Ember** — near black under a strong orange:
+
+![Ember palette](https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/ember.png)
+
+**Crimson** — near black under a strong red:
+
+![Crimson palette](https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/crimson.png)
+
+**Amethyst** — neutral panels, the purple only on the edges:
+
+![Amethyst palette](https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/amethyst.png)
+
+**Threshold** — `#050505`, `#FFFFFF` and `#DC2626`:
+
+![Threshold palette](https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/threshold.png)
 
 ## Palettes
 
@@ -73,16 +102,16 @@ Tinted:
 
 Vivid — the hue is in the ramp, so the panels themselves carry it:
 
-| Level     | Violet    | Blossom   | Ember     | Crimson   |
-|-----------|-----------|-----------|-----------|-----------|
-| Base      | `#0A0414` | `#120A0E` | `#0C0703` | `#0D0405` |
-| Panel     | `#120827` | `#180D13` | `#140B04` | `#150609` |
-| Surface   | `#1C0C3B` | `#241320` | `#1F1206` | `#200A0E` |
-| Raised    | `#2A1257` | `#341B2E` | `#2E1A08` | `#300F15` |
-| Border    | `#4B2088` | `#5A2C4A` | `#55300C` | `#591A24` |
-| Text      | `#E2D4FA` | `#FBDCE8` | `#FBE3C8` | `#F7D9DD` |
-| Accent    | `#6D28D9` | `#864160` | `#944108` | `#B91C1C` |
-| Highlight | `#7737DC` | `#934869` | `#9F4608` | `#BB2222` |
+| Level     | Violet    | Blossom   | Ember     | Crimson   | Miku      |
+|-----------|-----------|-----------|-----------|-----------|-----------|
+| Base      | `#0A0414` | `#120A0E` | `#0C0703` | `#0D0405` | `#061014` |
+| Panel     | `#120827` | `#180D13` | `#140B04` | `#150609` | `#0A1920` |
+| Surface   | `#1C0C3B` | `#241320` | `#1F1206` | `#200A0E` | `#10262D` |
+| Raised    | `#2A1257` | `#341B2E` | `#2E1A08` | `#300F15` | `#173740` |
+| Border    | `#4B2088` | `#5A2C4A` | `#55300C` | `#591A24` | `#28515C` |
+| Text      | `#E2D4FA` | `#FBDCE8` | `#FBE3C8` | `#F7D9DD` | `#DDFBFF` |
+| Accent    | `#6D28D9` | `#864160` | `#944108` | `#B91C1C` | `#0E7478` |
+| Highlight | `#7737DC` | `#934869` | `#9F4608` | `#BB2222` | `#2B6A68` |
 
 Strong accent on near black — the panels stay neutral, and the color is only the
 edge, the accent and the highlight:
@@ -103,7 +132,9 @@ from reference artwork, and **Comfy** is the lightest, for long sessions.
 **Contrast** keeps a `#4A4A4A` border so edges stay legible on black panels.
 **Blossom** is pastel in its text and border only: a pastel background would
 leave Premiere's own light text unreadable. **Threshold** is
-threshold-editor.com.br's `#050505`, `#FFFFFF` and `#DC2626`.
+threshold-editor.com.br's `#050505`, `#FFFFFF` and `#DC2626`. **Miku** is the
+one palette that sets a band of its own, `#04090C`, darker than its panels so
+the picture carries against the teal.
 
 The accent stays out of the ramp, which is interpolated, so it only shows on
 hovered menu items and system highlights; each one is at least 4.5:1 against
@@ -117,42 +148,70 @@ keeps its contrast. The row is the track-targeting shade; Contrast's is the gray
 
 ## Custom themes
 
-**Custom** reads a whole theme from one setting, as JSON, so a theme can be
-shared as text and imported by pasting it into **Custom theme (JSON)**:
+**Custom** takes its colors from the **Custom theme** group in the settings,
+one field each:
 
-```json
-{
-  "name": "Threshold",
-  "author": "Threshold Editor",
-  "base": "#050505",
-  "panel": "#0A0A0A",
-  "surface": "#121212",
-  "raised": "#1C1C1C",
-  "border": "#2B2B2B",
-  "text": "#FFFFFF",
-  "accent": "#DC2626",
-  "highlight": "#DC2626"
-}
+| Field                  |          | What it colors                                                |
+|------------------------|----------|---------------------------------------------------------------|
+| **Base**               | required | the darkest step: the deepest background                      |
+| **Panel**              | required | the second step, and the title bar and menu bar               |
+| **Surface**            | required | the middle step                                               |
+| **Raised**             | required | the fourth step                                               |
+| **Border**             | required | the lightest step: dividers and edges                         |
+| **Text**               | required | menu and title bar text                                       |
+| **Accent**             | optional | hovered menu items; the border when left empty                |
+| **Disabled text**      | optional | disabled menu items; halfway from text to panel when empty    |
+| **Highlight**          | optional | the hue Premiere's blue takes; the blue stays when left empty |
+| **Monitor background** | optional | the band around the picture; the panel tone when left empty   |
+
+Colors are `#RRGGBB`. The group starts as Onyx, with **Highlight** and
+**Monitor background** empty. A required field left empty or misspelled falls
+back to Onyx's color, named in the log, so the interface never ends up half
+themed.
+
+**Monitor background** is the one worth setting on purpose. Stock Premiere
+paints the band around the picture the same tone as its panels, which is what
+the built-in palettes do and why this is left empty by default — Miku is the
+exception. Give it a darker value than **Panel** and the picture stands out
+against it; give it a lighter one to judge a shot against a brighter
+surround.
+
+### Sharing one
+
+The **Settings** tab has a text mode next to the visual one, and what it holds
+is the settings as YAML — the palette, then `customTheme` as a block under it:
+
+```yaml
+palette: custom
+customTheme:
+  base: '#050505'
+  panel: '#0A0A0A'
+  surface: '#121212'
+  raised: '#1C1C1C'
+  border: '#2B2B2B'
+  text: '#FFFFFF'
+  accent: '#DC2626'
+  disabledText: '#8A8A8A'
+  highlight: '#DC2626'
+  monitor: ''
 ```
 
-| Key              |          | What it colors                                                  |
-|------------------|----------|-----------------------------------------------------------------|
-| `base`           | required | the darkest step: the deepest background                        |
-| `panel`          | required | the second step, and the title bar and menu bar                 |
-| `surface`        | required | the middle step                                                 |
-| `raised`         | required | the fourth step                                                 |
-| `border`         | required | the lightest step: dividers and edges                           |
-| `text`           | required | menu and title bar text                                         |
-| `accent`         | optional | hovered menu items; the border when left out                    |
-| `disabledText`   | optional | disabled menu items; halfway from text to panel when left out   |
-| `highlight`      | optional | the hue Premiere's blue takes; the blue stays when left out     |
-| `name`, `author` | optional | written to the log                                              |
+**To use a theme someone sent you**, paste it into that box over what is there
+and save. The colors need their quotes: a bare `#` starts a comment in YAML.
 
-Colors are `"#RRGGBB"`; an optional key left empty (`""`) takes its default, so
-`"highlight": ""` keeps Premiere's blue. The setting starts with every key and
-Onyx's colors. Unknown keys, and anything copied around the braces, are
-ignored. Invalid JSON is not applied — Onyx stays and the log says where it
-broke — and a missing required color falls back to Onyx's, logged by name.
+**To copy your own out**, put the palette on **Custom** and read the mod's log.
+It writes the theme as one line, in YAML's flow form, which that box reads the
+same as the block above:
+
+```yaml
+{palette: custom, customTheme: {base: '#050505', panel: '#0A0A0A', ...}}
+```
+
+The theme is what travels, not the document around it. Saving that box replaces
+every setting it is given, so a whole document from someone else would bring
+their layer switches along with their colors; anything you leave out goes back
+to its default. The log writes only the palette and the colors for that reason,
+and writes them resolved — a field left empty travels as the color it became.
 
 Keep the five steps dark and in order: Premiere's own text is light and is not
 recolored.
@@ -163,15 +222,17 @@ Each layer has its own switch in the settings:
 
 - **Premiere interface** — the theme colors served by `dvaui.dll`, Adobe's UI
   toolkit: panels, timeline, monitors.
-- **Direct fills** — surfaces Premiere paints without asking the theme, most of
-  the monitor and timeline chrome.
+- **Direct fills** — surfaces Premiere paints without asking the theme: most of
+  the monitor and timeline chrome, and the band around the picture in the
+  monitors, which Premiere draws on the GPU.
 - **Window and system dialogs** — dark title bar, border and native dialogs.
 - **Menu bar and menus** — the File / Edit / Clip bar and its dropdowns.
 - **GDI surfaces** — brushes, pens and text backgrounds created by Premiere's
   own modules.
 - **UXP panels** — the Text panel, Import, Export, Quick Export, Progress,
   Preset Manager and the Home screen, which Premiere draws from stylesheets of
-  their own.
+  their own. Off by default, because those panels only follow it across a
+  restart.
 - **Palette highlight** — Premiere's blue, on the palettes that carry a
   highlight.
 
@@ -205,18 +266,30 @@ mod's process **exclusion** list and this one takes over.
 
 ## Known limitations
 
-**UXP panels change on restart.** Premiere reads their stylesheets once, when a
-panel loads, and the mod recolors that read — a temporary copy, deleted as soon
-as it is closed; nothing on disk changes. So a palette switch, or disabling the
-mod, shows on those panels after Premiere restarts. Frame.io and Adobe Stock
-carry no Spectrum grays and keep their own look.
+**UXP panels change on restart**, which is why they are off by default.
+Premiere reads their stylesheets once, when a panel loads, and the mod recolors
+that read — a temporary copy, deleted as soon as it is closed; nothing on disk
+changes. So turning the switch on, a palette switch, and turning it back off or
+disabling the mod all show on those panels after Premiere restarts. Frame.io
+and Adobe Stock carry no Spectrum grays and keep their own look.
 
-**The band around the video, with a tinted palette.** Zoomed out, the monitors
-paint the area around the picture a gray made from the red channel of the panel
-color, cached until Premiere restarts. On the neutral palettes it matches the
-panels; with a hue it shows as a neutral band (Glitch's `#101907` gives
-`#101010`), which is why the warm palettes keep their panels' red low. Its
-painter has not been found, so the mod leaves it alone rather than patch blind.
+**The band around the video is drawn on the GPU.** Zoomed out, the monitors
+paint the area around the picture outside every layer above: Premiere lays
+Spectrum's `#1D1D1D` over that area as a quad per side of the picture, through
+`DisplaySurface.dll`. The mod recognizes those calls by the module they come
+from and gives them the theme's **Monitor background**, or its panel tone when
+that is left empty.
+
+Only those quads change. What shows between them — behind the picture — is
+black, and that same black is what a clip with an alpha channel is composited
+onto and what the monitor shows over a gap in the timeline. It is left exactly
+as Premiere draws it, which is why a transparent PNG still sits on black.
+
+**Direct fills** turns the layer off with the rest, and switches it back on
+without a restart: with the switch on as Premiere starts it is set up from the
+device Premiere itself creates, and turned on later it is set up from a device
+of the mod's own, which is only safe once the monitors have drawn — by then
+Premiere has settled which graphics runtime it uses.
 
 The black *inside* the sequence frame is the rendered picture, not chrome, and
 stays black in every palette.
@@ -235,9 +308,19 @@ builds:
 
 The four missing on 2023 do not exist there under any name, and their surfaces
 fall back to the Spectrum family, which both have. The window frame, the menu
-bar and the native dialogs do not depend on the Premiere version. Native dark
+bar, the native dialogs and the band around the picture do not depend on the
+Premiere version: the band is recognized by the module that draws it and the
+shape of the work, not by an address inside it. Native dark
 mode needs Windows 10 build 17763 or newer; below that the mod still themes the
 interface and paints the menus itself.
+
+## Questions, bugs and palettes
+
+Bug reports and palette suggestions are welcome on
+[Discord](https://discord.gg/m5kVMR8Vuu), where a Premiere build and a
+screenshot are usually all it takes to work one out.
+
+![Threshold on Discord](https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/discord.png)
 
 ## Credits
 
@@ -268,15 +351,51 @@ This mod is MIT as well.
   - amethyst: Amethyst — near black with a strong purple
   - crimson: Crimson — near black with a strong red
   - threshold: Threshold — the threshold-editor.com.br palette
-  - custom: Custom — the theme JSON below
-- customTheme: '{"name": "My theme", "author": "", "base": "#050505", "panel": "#090909", "surface": "#0E0E0E", "raised": "#161616", "border": "#242424", "text": "#E6E6E6", "disabledText": "#777777", "accent": "#2E2E2E", "highlight": ""}'
-  $name: Custom theme (JSON)
+  - miku: Miku — deep teal, cyan accent, near-black band
+  - custom: Custom — the colors in the group below
+- customTheme:
+  - base: "#050505"
+    $name: Base
+    $description: The darkest step — the deepest background.
+  - panel: "#090909"
+    $name: Panel
+    $description: The second step, and the title bar and the menu bar.
+  - surface: "#0E0E0E"
+    $name: Surface
+    $description: The middle step.
+  - raised: "#161616"
+    $name: Raised
+    $description: The fourth step.
+  - border: "#242424"
+    $name: Border
+    $description: The lightest step — dividers and edges.
+  - text: "#E6E6E6"
+    $name: Text
+    $description: Menu and title bar text.
+  - accent: "#2E2E2E"
+    $name: Accent
+    $description: Hovered menu items. Left empty, the border is used.
+  - disabledText: "#777777"
+    $name: Disabled text
+    $description: >-
+      Disabled menu items. Left empty, halfway from the text to the panel is
+      used.
+  - highlight: ""
+    $name: Highlight
+    $description: >-
+      The hue Premiere's blue — track targeting, the focused panel, the active
+      tool — takes. Left empty, the blue stays.
+  - monitor: ""
+    $name: Monitor background
+    $description: >-
+      The band around the picture in the Source and Program monitors. Left
+      empty, the panel tone is used, which is what Premiere itself does.
+  $name: Custom theme
   $description: >-
-    Used when the palette is Custom. Paste a theme someone shared, or edit this
-    one, which starts with every key and Onyx's colors. Colors are "#RRGGBB".
-    base, panel, surface, raised, border and text are required; accent,
-    disabledText and highlight can be left empty for their defaults, and an
-    empty highlight keeps Premiere's blue. The readme has the full format.
+    Used when the palette is Custom. It starts as Onyx. Colors are #RRGGBB; the
+    six required fields fall back to Onyx's one at a time when left empty or
+    unreadable, which the log names. Themes are shared through this tab's text
+    mode: the log writes the one in force as a line to paste into it.
 - strength: 100
   $name: Strength
   $description: How much of the palette is applied over the original color, in percent. 100 = palette only.
@@ -293,9 +412,10 @@ This mod is MIT as well.
 - brushHook: true
   $name: Direct fills
   $description: >-
-    Also intercepts the Direct2D brush factory and the UIFramework drawing
-    primitives — surfaces painted without consulting the theme, which is most of
-    the monitor and timeline chrome. Turn this off if a panel paints wrong.
+    Also intercepts the Direct2D brush factory, the UIFramework drawing
+    primitives and the monitors' own GPU drawing — surfaces painted without
+    consulting the theme, which is most of the monitor and timeline chrome plus
+    the band around the picture. Turn this off if a panel paints wrong.
 - nativeDarkMode: true
   $name: Window and system dialogs
   $description: Immersive dark mode, title bar, border and native dialogs.
@@ -305,25 +425,28 @@ This mod is MIT as well.
 - gdiHook: true
   $name: GDI surfaces
   $description: Darkens GDI brushes, pens and text backgrounds created by Premiere's own modules.
-- uxpPanels: true
+- uxpPanels: false
   $name: UXP panels
   $description: >-
     The Text panel, Import, Export, Quick Export, Progress, Preset Manager and
-    the Home screen, which Premiere draws from stylesheets of their own. Those
-    are read once, when a panel loads, so this switch, a palette change and
-    disabling the mod all show there after Premiere restarts.
+    the Home screen, which Premiere draws from stylesheets of their own. Off by
+    default because those are read once, when a panel loads: this switch, a
+    palette change and disabling the mod all show there only after Premiere
+    restarts.
 - highlight: true
   $name: Palette highlight
   $description: >-
     Gives Premiere's blue — track targeting, the focused panel's border, the
     active tool, selections and links — the palette's own hue, each blue at its
-    own brightness. Contrast, Violet, Blossom, Ember, Amethyst, Crimson and
-    Threshold carry one, and a custom theme can; the others keep the blue.
+    own brightness. Contrast, Violet, Blossom, Ember, Amethyst, Crimson,
+    Threshold and Miku carry one, and a custom theme can; the others keep the
+    blue.
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <dwmapi.h>
+#include <d3d12.h>
 #include <uxtheme.h>
 
 #include <windhawk_utils.h>
@@ -337,7 +460,6 @@ This mod is MIT as well.
 #include <cwchar>
 #include <new>
 #include <optional>
-#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -370,6 +492,15 @@ struct Palette {
         CLR_INVALID keeps the blue, as Onyx through Glitch do.
     */
     COLORREF highlight = CLR_INVALID;
+
+    /*
+        The band around the picture in the Source and Program monitors, which
+        the mod paints on the GPU. CLR_INVALID takes the panel tone, which is
+        what Premiere itself does: stock, that band is the same #1D1D1D as the
+        panels around it. A theme can pull it apart — darker, so the picture
+        stands out, or lighter, to judge a shot against a brighter surround.
+    */
+    COLORREF monitor = CLR_INVALID;
 };
 
 /*
@@ -535,20 +666,38 @@ static bool Claim(volatile LONG* flag) {
     loader notification.
 */
 struct ModuleRange {
+    /*
+        begin is written once, before the entry is published, and never
+        changes again; end is the one field that moves, and zero means the
+        module is gone. A reader therefore never sees one module's begin
+        paired with another's end, without taking a lock for it.
+    */
     uintptr_t begin;
-    uintptr_t end;
+    std::atomic<uintptr_t> end;
 };
 
 /*
     Premiere 2026 maps 59 dva* modules plus UIFramework and the executable;
-    the rest is headroom for versions that add more.
+    the rest is headroom for versions that add more, and for the plugin and
+    codec modules that come and go during a session. A module that unloads
+    leaves its entry behind with end cleared, and reloading it at the same
+    base — which is what the loader normally does — revives that entry
+    instead of taking another.
 */
-constexpr size_t kMaxModuleRanges = 256;
+constexpr size_t kMaxModuleRanges = 512;
 
 ModuleRange g_moduleRanges[kMaxModuleRanges];
 volatile LONG g_moduleRangeCount = 0;
 volatile LONG g_moduleRangesFullLogged = FALSE;
 SRWLOCK g_moduleRangeLock = SRWLOCK_INIT;
+
+/*
+    Bumped whenever a range is added or dropped. IsAdobeUICaller caches its
+    last hit per thread, and that cache would otherwise outlive the module it
+    came from; comparing the epoch throws it away the moment the table moves.
+    It starts at 1, so the zero every thread starts with never matches.
+*/
+volatile LONG g_moduleRangeEpoch = 1;
 
 /*
     Adobe's whole UI toolkit is prefixed dva (dvaui, dvacore, ...).
@@ -577,36 +726,117 @@ static void AddModuleRange(uintptr_t begin, uintptr_t end) {
     AcquireSRWLockExclusive(&g_moduleRangeLock);
 
     LONG count = g_moduleRangeCount;
-    bool known = false;
+    bool stored = false;
 
-    for (LONG i = 0; i < count; i++) {
-        if (g_moduleRanges[i].begin == begin) {
-            known = true;
-            break;
+    for (LONG i = 0; i < count && !stored; i++) {
+        if (g_moduleRanges[i].begin != begin) {
+            continue;
         }
+
+        /*
+            Either already known, or an entry whose module unloaded and has
+            been mapped over. Writing end is the whole update: begin is
+            already this base, and end is what publishes the entry again.
+        */
+        g_moduleRanges[i].end.store(end, std::memory_order_release);
+        InterlockedIncrement(&g_moduleRangeEpoch);
+        stored = true;
     }
 
-    bool full = !known && count >= static_cast<LONG>(kMaxModuleRanges);
-
-    if (!known && !full) {
-        g_moduleRanges[count] = {begin, end};
+    if (!stored && count < static_cast<LONG>(kMaxModuleRanges)) {
+        g_moduleRanges[count].begin = begin;
+        g_moduleRanges[count].end.store(end, std::memory_order_release);
         InterlockedExchange(&g_moduleRangeCount, count + 1);
+        InterlockedIncrement(&g_moduleRangeEpoch);
+        stored = true;
     }
 
     ReleaseSRWLockExclusive(&g_moduleRangeLock);
 
-    if (full && Claim(&g_moduleRangesFullLogged)) {
+    if (!stored && Claim(&g_moduleRangesFullLogged)) {
         Wh_Log(L"module range table full; GDI calls from Adobe modules loaded "
                L"from now on will not be recognized");
     }
 }
 
 /*
-    Every module mapped after init, including the dependencies LoadLibraryExW
-    never returns, which is how most dva* modules arrive in Premiere. The
-    notification carries the name, base and size, so nothing here asks the
-    loader anything. It runs with the loader lock held, and it is unregistered
-    in Wh_ModUninit, before the image that contains it goes away.
+    A module that unloads stops counting as Adobe UI: its address range is
+    about to be handed to whatever the loader maps there next, and a
+    third-party plugin painting from a dead dva module's base must not be
+    recolored. Clearing end is a single store, so a reader either sees the
+    module or does not.
+*/
+static void DropModuleRange(uintptr_t begin) {
+    AcquireSRWLockExclusive(&g_moduleRangeLock);
+
+    LONG count = g_moduleRangeCount;
+
+    for (LONG i = 0; i < count; i++) {
+        if (g_moduleRanges[i].begin != begin ||
+            g_moduleRanges[i].end.load(std::memory_order_relaxed) == 0) {
+            continue;
+        }
+
+        g_moduleRanges[i].end.store(0, std::memory_order_release);
+        InterlockedIncrement(&g_moduleRangeEpoch);
+        break;
+    }
+
+    ReleaseSRWLockExclusive(&g_moduleRangeLock);
+}
+
+/*
+    DisplaySurface.dll, which draws the picture area of the Source and Program
+    monitors, is tracked apart from the Adobe UI set: it is not a dva module,
+    and the only thing asked of it is whether a return address came from it —
+    see the monitor band layer. It rides the same loader notification, so no
+    hook on a D3D12 path ever has to take the loader lock, and the range is
+    cleared the moment the module unloads rather than pointing at whatever is
+    mapped there next.
+*/
+std::atomic<uintptr_t> g_displaySurfaceBegin{0};
+std::atomic<uintptr_t> g_displaySurfaceEnd{0};
+
+static bool IsDisplaySurfaceName(const wchar_t* name, size_t length) {
+    constexpr wchar_t kName[] = L"DisplaySurface.dll";
+    constexpr size_t kLength = ARRAYSIZE(kName) - 1;
+
+    return length == kLength && _wcsnicmp(name, kName, kLength) == 0;
+}
+
+// end is written last and cleared first, as in ModuleRange, so a reader never
+// pairs a live begin with a stale end.
+static void SetDisplaySurfaceRange(uintptr_t begin, uintptr_t end) {
+    if (!end) {
+        g_displaySurfaceEnd.store(0, std::memory_order_release);
+        g_displaySurfaceBegin.store(0, std::memory_order_relaxed);
+        return;
+    }
+
+    g_displaySurfaceBegin.store(begin, std::memory_order_relaxed);
+    g_displaySurfaceEnd.store(end, std::memory_order_release);
+}
+
+// Any code in DisplaySurface: what scopes the monitor band bookkeeping.
+static bool IsDisplaySurfaceCall(void* returnAddress) {
+    uintptr_t end = g_displaySurfaceEnd.load(std::memory_order_acquire);
+
+    if (!end) {
+        return false;
+    }
+
+    auto p = reinterpret_cast<uintptr_t>(returnAddress);
+
+    return p >= g_displaySurfaceBegin.load(std::memory_order_relaxed) && p < end;
+}
+
+/*
+    Every module mapped or unmapped after init, including the dependencies
+    LoadLibraryExW never returns, which is how most dva* modules arrive in
+    Premiere. The notification carries the name, base and size, so nothing
+    here asks the loader anything. It runs with the loader lock held, and it
+    is unregistered in Wh_ModUninit, before the image that contains it goes
+    away.
 */
 struct LdrUnicodeString {
     USHORT length;  // in bytes, and not terminated
@@ -623,6 +853,7 @@ struct LdrDllLoadedData {
 };
 
 constexpr ULONG kLdrDllLoaded = 1;
+constexpr ULONG kLdrDllUnloaded = 2;
 
 using LdrDllNotification_t = VOID(CALLBACK*)(ULONG, const LdrDllLoadedData*,
                                              PVOID);
@@ -634,18 +865,34 @@ PVOID g_dllNotificationCookie = nullptr;
 
 static VOID CALLBACK OnDllNotification(ULONG reason,
                                        const LdrDllLoadedData* data, PVOID) {
-    if (reason != kLdrDllLoaded || !data || !data->baseDllName ||
-        !data->baseDllName->buffer) {
+    if ((reason != kLdrDllLoaded && reason != kLdrDllUnloaded) || !data ||
+        !data->baseDllName || !data->baseDllName->buffer) {
         return;
     }
 
     const LdrUnicodeString& name = *data->baseDllName;
+    size_t length = name.length / sizeof(wchar_t);
 
-    if (!IsAdobeUIName(name.buffer, name.length / sizeof(wchar_t))) {
+    auto base = reinterpret_cast<uintptr_t>(data->dllBase);
+    bool loaded = reason == kLdrDllLoaded;
+
+    // Tracked on its own, and not as part of the Adobe UI set; see above.
+    if (IsDisplaySurfaceName(name.buffer, length)) {
+        SetDisplaySurfaceRange(loaded ? base : 0,
+                               loaded ? base + data->sizeOfImage : 0);
         return;
     }
 
-    auto base = reinterpret_cast<uintptr_t>(data->dllBase);
+    if (!IsAdobeUIName(name.buffer, length)) {
+        return;
+    }
+
+    // Both reasons carry the same fields; unloaded only needs the base.
+    if (!loaded) {
+        DropModuleRange(base);
+        return;
+    }
+
     AddModuleRange(base, base + data->sizeOfImage);
 }
 
@@ -678,8 +925,21 @@ static void StopWatchingModuleLoads() {
                     GetProcAddress(ntdll, "LdrUnregisterDllNotification"))
               : nullptr;
 
-    if (unregisterNotification) {
-        unregisterNotification(g_dllNotificationCookie);
+    /*
+        If this ever failed, the callback would stay registered into an image
+        that is about to be unmapped, so the status is worth a line even
+        though there is nothing left to try.
+    */
+    if (!unregisterNotification) {
+        Wh_Log(L"LdrUnregisterDllNotification is missing; the DLL "
+               L"notification could not be unregistered");
+    } else {
+        LONG status = unregisterNotification(g_dllNotificationCookie);
+
+        if (status != 0) {
+            Wh_Log(L"LdrUnregisterDllNotification failed (0x%08X)",
+                   static_cast<unsigned>(status));
+        }
     }
 
     g_dllNotificationCookie = nullptr;
@@ -738,6 +998,35 @@ static void NoteKnownModules() {
     NoteModuleFromHeaders(GetModuleHandleW(L"UIFramework.dll"));
 }
 
+/*
+    Enable the mod while Premiere is already running and DisplaySurface is
+    mapped already, which the loader notification will never mention. Its
+    headers are safe to read here for the same reason the four above are: it
+    is held for the life of the process once a monitor exists.
+*/
+static void NoteDisplaySurface() {
+    HMODULE module = GetModuleHandleW(L"DisplaySurface.dll");
+
+    if (!module) {
+        return;
+    }
+
+    auto base = reinterpret_cast<uintptr_t>(module);
+    auto dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
+
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) {
+        return;
+    }
+
+    auto nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
+
+    if (nt->Signature != IMAGE_NT_SIGNATURE) {
+        return;
+    }
+
+    SetDisplaySurfaceRange(base, base + nt->OptionalHeader.SizeOfImage);
+}
+
 static void SnapshotAdobeModules() {
     /*
         These are recorded first, whatever the enumeration below manages. It
@@ -746,6 +1035,7 @@ static void SnapshotAdobeModules() {
         notification could see it. A module recorded twice is deduplicated.
     */
     NoteKnownModules();
+    NoteDisplaySurface();
 
     HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
 
@@ -769,29 +1059,44 @@ static void SnapshotAdobeModules() {
     HANDLE process = GetCurrentProcess();
     HMODULE executable = GetModuleHandleW(nullptr);
 
-    std::vector<HMODULE> modules(1024);
+    std::vector<HMODULE> modules;
     DWORD needed = 0;
     DWORD bytes = 0;
 
-    // Modules can load between two calls, so a retry may still come up short.
-    for (int attempt = 0; attempt < 3; attempt++) {
-        bytes = static_cast<DWORD>(modules.size() * sizeof(HMODULE));
+    /*
+        The one allocation on the mod's startup path, and the one place it
+        could throw back into Windhawk. Short of memory, the four modules
+        noted above are all the mod knows about — the same degradation as an
+        enumeration that fails outright.
+    */
+    try {
+        modules.resize(1024);
 
-        if (!enumModules(process, modules.data(), bytes, &needed)) {
-            Wh_Log(L"module enumeration failed (%u); besides the executable, "
-                   L"dvaui, dvacore and UIFramework, only dva modules loaded "
-                   L"from now on will be recognized as Adobe UI",
-                   GetLastError());
-            return;
-        }
+        // Modules can load between two calls, so a retry may still come up short.
+        for (int attempt = 0; attempt < 3; attempt++) {
+            bytes = static_cast<DWORD>(modules.size() * sizeof(HMODULE));
 
-        if (needed <= bytes) {
-            break;
-        }
+            if (!enumModules(process, modules.data(), bytes, &needed)) {
+                Wh_Log(L"module enumeration failed (%u); besides the executable, "
+                       L"dvaui, dvacore and UIFramework, only dva modules loaded "
+                       L"from now on will be recognized as Adobe UI",
+                       GetLastError());
+                return;
+            }
 
-        if (attempt < 2) {
-            modules.resize(needed / sizeof(HMODULE) + 64);
+            if (needed <= bytes) {
+                break;
+            }
+
+            if (attempt < 2) {
+                modules.resize(needed / sizeof(HMODULE) + 64);
+            }
         }
+    } catch (const std::bad_alloc&) {
+        Wh_Log(L"not enough memory to enumerate modules; besides the "
+               L"executable, dvaui, dvacore and UIFramework, only dva modules "
+               L"loaded from now on will be recognized as Adobe UI");
+        return;
     }
 
     size_t count = std::min(needed, bytes) / sizeof(HMODULE);
@@ -822,23 +1127,40 @@ static void SnapshotAdobeModules() {
     }
 }
 
-// The range of this thread's last match: consecutive calls mostly come from one module.
+/*
+    The range of this thread's last match: consecutive calls mostly come from
+    one module. The epoch it was taken under comes with it, so the cache is
+    dropped the moment any module is added or unloaded rather than outliving
+    the module it names.
+*/
 thread_local uintptr_t g_lastAdobeBegin = 0;
 thread_local uintptr_t g_lastAdobeEnd = 0;
+thread_local LONG g_lastAdobeEpoch = 0;
 
 static bool IsAdobeUICaller(void* caller) {
     auto p = reinterpret_cast<uintptr_t>(caller);
+    LONG epoch = g_moduleRangeEpoch;
 
-    if (p >= g_lastAdobeBegin && p < g_lastAdobeEnd) {
+    // Read before the scan, so a change during it only costs the next call.
+    if (epoch == g_lastAdobeEpoch && p >= g_lastAdobeBegin && p < g_lastAdobeEnd) {
         return true;
     }
 
     LONG count = g_moduleRangeCount;
 
     for (LONG i = 0; i < count; i++) {
-        if (p >= g_moduleRanges[i].begin && p < g_moduleRanges[i].end) {
-            g_lastAdobeBegin = g_moduleRanges[i].begin;
-            g_lastAdobeEnd = g_moduleRanges[i].end;
+        uintptr_t end = g_moduleRanges[i].end.load(std::memory_order_acquire);
+
+        if (end == 0) {
+            continue;  // unloaded
+        }
+
+        uintptr_t begin = g_moduleRanges[i].begin;
+
+        if (p >= begin && p < end) {
+            g_lastAdobeBegin = begin;
+            g_lastAdobeEnd = end;
+            g_lastAdobeEpoch = epoch;
             return true;
         }
     }
@@ -962,10 +1284,6 @@ static bool ShouldConvertWith(const Settings& s, const DvaColorRGBA& in) {
     return HighlightIndex(s, in) >= 0;
 }
 
-static bool ShouldConvert(const DvaColorRGBA& in) {
-    return ShouldConvertWith(CurrentSettings(), in);
-}
-
 /*
     The tone `in` becomes: a ramp stop for a gray, the highlight shade for a
     blue. The caller passes one settings snapshot for the whole conversion, so
@@ -988,8 +1306,15 @@ static bool PaletteTarget(const Settings& s, const DvaColorRGBA& in, COLORREF* t
 // One bit per kInterfaceBlues entry a hook recolored, logged at unload.
 volatile LONG64 g_bluesRecolored = 0;
 
-static bool ConvertDvaColor(const DvaColorRGBA& in, DvaColorRGBA* out) {
-    const Settings& s = CurrentSettings();
+static_assert(kInterfaceBlueCount <= 64,
+              "one bit of g_bluesRecolored per interface blue");
+
+/*
+    The caller passes the snapshot it already took, for the same reason
+    PaletteTarget does: one decision is made with one set of settings.
+*/
+static bool ConvertDvaColorWith(const Settings& s, const DvaColorRGBA& in,
+                                DvaColorRGBA* out) {
     COLORREF target = 0;
     int blue = -1;
 
@@ -1011,6 +1336,10 @@ static bool ConvertDvaColor(const DvaColorRGBA& in, DvaColorRGBA* out) {
     out->a = in.a;
 
     return true;
+}
+
+static bool ConvertDvaColor(const DvaColorRGBA& in, DvaColorRGBA* out) {
+    return ConvertDvaColorWith(CurrentSettings(), in, out);
 }
 
 // ============================================================================
@@ -1134,11 +1463,13 @@ volatile LONG g_generation = 0;
     src.
 */
 static void RefreshSlot(ColorSlot& slot, LONG generation, bool restoreOriginals) {
-    // ConvertDvaColor leaves dst untouched when it declines.
+    const Settings& s = CurrentSettings();
+
+    // ConvertDvaColorWith leaves dst untouched when it declines.
     DvaColorRGBA dst = slot.src;
 
-    if (!restoreOriginals && CurrentSettings().dvauiHook) {
-        ConvertDvaColor(slot.src, &dst);
+    if (!restoreOriginals && s.dvauiHook) {
+        ConvertDvaColorWith(s, slot.src, &dst);
     }
 
     slot.dst = dst;
@@ -1689,7 +2020,9 @@ static bool ContentScopesMatter() {
     and float comparisons turn them away before the recent colors are read.
 */
 static bool ConvertForPaint(const DvaColorRGBA* in, DvaColorRGBA* out) {
-    if (!CurrentSettings().brushHook || !in || InContentScope()) {
+    const Settings& s = CurrentSettings();
+
+    if (!s.brushHook || !in || InContentScope()) {
         return false;
     }
 
@@ -1699,7 +2032,7 @@ static bool ConvertForPaint(const DvaColorRGBA* in, DvaColorRGBA* out) {
     }
 
     // Cheap float test, rejects the majority.
-    if (!ShouldConvert(*in)) {
+    if (!ShouldConvertWith(s, *in)) {
         return false;
     }
 
@@ -1708,7 +2041,7 @@ static bool ConvertForPaint(const DvaColorRGBA* in, DvaColorRGBA* out) {
         return false;
     }
 
-    if (!ConvertDvaColor(*in, out)) {
+    if (!ConvertDvaColorWith(s, *in, out)) {
         return false;
     }
 
@@ -2063,11 +2396,36 @@ constexpr size_t kNodeClassSlots = 2048;
 
 volatile LONG64 g_nodeClasses[kNodeClassSlots];
 
+// The module generation the entries above were resolved under; see below.
+volatile LONG g_nodeClassEpoch = 1;
+
 static bool IsContentNode(const void* node) {
     uintptr_t vtable = *static_cast<const uintptr_t*>(node);
 
     if (!vtable || (vtable & 7)) {
         return false;
+    }
+
+    /*
+        A vtable address belongs to the module it came from, so the whole
+        table goes whenever a module is mapped or unmapped — the same reason
+        IsAdobeUICaller throws away its cached range. Without this, a module
+        unloading and another mapping over it would leave a class decision
+        behind that no longer describes anything.
+
+        Whoever notices first clears it. A call already reading an entry at
+        that moment can still get the stale answer, which costs one node one
+        paint; every entry written from here on is resolved against memory as
+        it is now.
+    */
+    LONG epoch = g_moduleRangeEpoch;
+    LONG seen = g_nodeClassEpoch;
+
+    if (epoch != seen &&
+        InterlockedCompareExchange(&g_nodeClassEpoch, epoch, seen) == seen) {
+        for (volatile LONG64& entry : g_nodeClasses) {
+            InterlockedExchange64(&entry, 0);
+        }
     }
 
     size_t start = FibonacciIndex<kNodeClassSlots>(vtable >> 3);
@@ -2212,6 +2570,10 @@ static bool HookLoadedModules() {
 */
 using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
 
+// Defined with the monitor band layer, far below; this hook is where d3d12
+// is first seen, the same way dvaui is.
+static bool HookD3D12CreateDevice();
+
 LoadLibraryExW_t LoadLibraryExW_Original = nullptr;
 
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD flags) {
@@ -2231,8 +2593,12 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD flags) {
         returned: it usually arrives as a dependency of something else. Once
         both are hooked, this is a couple of plain reads.
     */
-    if ((!g_dvauiHooked || !g_uifHooked) && HookLoadedModules() &&
-        !Wh_ApplyHookOperations()) {
+    bool registered = (!g_dvauiHooked || !g_uifHooked) && HookLoadedModules();
+
+    // And d3d12, whose CreateDevice is how the monitor layer gets in.
+    registered = HookD3D12CreateDevice() || registered;
+
+    if (registered && !Wh_ApplyHookOperations()) {
         Wh_Log(L"failed to apply hooks for a late-loaded module");
     }
 
@@ -2419,15 +2785,29 @@ static bool RecolorCssHex(char* text, size_t size, size_t hash) {
         return false;
     }
 
-    int rgb[3];
+    /*
+        The case follows the letters already there, the alpha pair included:
+        the first letter across the whole run decides, so #00ff00AA stays
+        lowercase and #001100AA is written uppercase.
+    */
     bool upper = false;
 
-    for (int k = 0; k < 3; k++) {
-        char high = text[start + 2 * k];
-        char low = text[start + 2 * k + 1];
+    for (size_t i = start; i < end; i++) {
+        if (text[i] >= 'A' && text[i] <= 'F') {
+            upper = true;
+            break;
+        }
 
-        rgb[k] = CssHexDigit(high) * 16 + CssHexDigit(low);
-        upper = upper || (high >= 'A' && high <= 'F') || (low >= 'A' && low <= 'F');
+        if (text[i] >= 'a' && text[i] <= 'f') {
+            break;
+        }
+    }
+
+    int rgb[3];
+
+    for (int k = 0; k < 3; k++) {
+        rgb[k] = CssHexDigit(text[start + 2 * k]) * 16 +
+                 CssHexDigit(text[start + 2 * k + 1]);
     }
 
     if (!RecolorCssChannels(rgb)) {
@@ -2726,6 +3106,15 @@ static HANDLE WriteTemporaryCopy(const std::vector<char>& bytes, DWORD access,
 */
 static HANDLE OpenThemedStylesheet(LPCWSTR path, LPCWSTR relative, DWORD access,
                                    LPSECURITY_ATTRIBUTES security, DWORD flags) {
+    /*
+        Both the read and the copy go through CreateFileW's trampoline, so the
+        CreateFile2 path needs it too — the two are hooked separately, and a
+        kernelbase without one of them would otherwise be a null call.
+    */
+    if (!CreateFileW_Original) {
+        return INVALID_HANDLE_VALUE;
+    }
+
     std::vector<char> bytes;
 
     if (!ReadWholeFile(path, &bytes)) {
@@ -2989,12 +3378,22 @@ static void RememberThemedWindow(HWND hwnd, BYTE applied) {
 
     AcquireSRWLockExclusive(&g_themedLock);
 
-    g_themedWindows[hwnd] |= applied;
+    /*
+        Growing the map allocates, and this runs inside CreateWindowEx. Short
+        of memory the window simply goes unrecorded, and the revert then
+        leaves it alone — the same as for a window that existed before the mod
+        loaded. Letting the throw out would unwind into user32 and leave this
+        lock held for the rest of the session.
+    */
+    try {
+        g_themedWindows[hwnd] |= applied;
 
-    if (g_themedWindows.size() >= g_themedPruneAt) {
-        std::erase_if(g_themedWindows,
-                      [](const auto& entry) { return !IsWindow(entry.first); });
-        g_themedPruneAt = std::max<size_t>(256, g_themedWindows.size() * 2);
+        if (g_themedWindows.size() >= g_themedPruneAt) {
+            std::erase_if(g_themedWindows,
+                          [](const auto& entry) { return !IsWindow(entry.first); });
+            g_themedPruneAt = std::max<size_t>(256, g_themedWindows.size() * 2);
+        }
+    } catch (const std::bad_alloc&) {
     }
 
     ReleaseSRWLockExclusive(&g_themedLock);
@@ -3167,8 +3566,18 @@ static void RecolorThemedFrames() {
         return;
     }
 
+    std::unordered_map<HWND, BYTE> windows;
+
+    // The copy allocates; the lock is released whatever it does, and short of
+    // memory the captions simply keep the color they have.
     AcquireSRWLockShared(&g_themedLock);
-    std::unordered_map<HWND, BYTE> windows = g_themedWindows;
+
+    try {
+        windows = g_themedWindows;
+    } catch (const std::bad_alloc&) {
+        windows.clear();
+    }
+
     ReleaseSRWLockShared(&g_themedLock);
 
     const Palette& p = CurrentSettings().palette;
@@ -4092,6 +4501,8 @@ static bool PaintMenuBarBackground(HWND hwnd, LPARAM lParam) {
     return true;
 }
 
+volatile LONG g_menuBarTextFailedLogged = FALSE;
+
 static bool PaintMenuBarItem(HWND hwnd, LPARAM lParam) {
     auto* draw = reinterpret_cast<UahDrawMenuItem*>(lParam);
 
@@ -4118,7 +4529,9 @@ static bool PaintMenuBarItem(HWND hwnd, LPARAM lParam) {
     /*
         Everything that can fail is resolved before anything is painted.
         Filling first and failing after would hand the item back to
-        DefWindowProc, which then paints it again on top of the fill.
+        DefWindowProc, which then paints it again on top of the fill — which
+        is also why, once the fill is down, this returns true whatever
+        DrawThemeTextEx says.
     */
     DrawThemeTextEx_t drawText = nullptr;
     std::optional<MenuBarTheme> theme;
@@ -4177,7 +4590,18 @@ static bool PaintMenuBarItem(HWND hwnd, LPARAM lParam) {
     HRESULT hr = drawText(theme->get(), draw->um.hdc, kMenuBarItem, 1, label,
                           static_cast<int>(itemInfo.cch), flags, &rect, &opts);
 
-    return SUCCEEDED(hr);
+    /*
+        The background is painted; only the label is missing. Handing the item
+        back to DefWindowProc now would redraw it in the Windows gray, so this
+        keeps the item and logs once — the bar repaints constantly.
+    */
+    if (FAILED(hr) && Claim(&g_menuBarTextFailedLogged)) {
+        Wh_Log(L"a menu bar item's text could not be drawn (0x%08X); its "
+               L"background is still painted",
+               static_cast<unsigned>(hr));
+    }
+
+    return true;
 }
 
 /*
@@ -4350,11 +4774,11 @@ static COLORREF DvaToGdi(const DvaColorRGBA& color) {
     on 8-bit channels, so a COLORREF compares equal to the float color it was
     made from.
 */
-static COLORREF ConvertGdiColor(COLORREF color) {
+static COLORREF ConvertGdiColor(const Settings& s, COLORREF color) {
     DvaColorRGBA in = GdiToDva(color);
     DvaColorRGBA out{};
 
-    if (IsProducedColor(in) || !ConvertDvaColor(in, &out)) {
+    if (IsProducedColor(in) || !ConvertDvaColorWith(s, in, &out)) {
         return color;
     }
 
@@ -4367,10 +4791,11 @@ static COLORREF ConvertGdiColor(COLORREF color) {
     Cheapest test first: the color test turns most calls away on its own, so
     the module ranges are only walked for the dark grays that may be
     converted. The caller's address is read in the hook and passed in; read in
-    here, it would be the hook's own address unless this was inlined.
+    here, it would be the hook's own address unless this was inlined. The
+    settings snapshot is the hook's, and the same one the conversion gets.
 */
-static bool ShouldConvertGdi(COLORREF color, void* caller) {
-    return CurrentSettings().gdiHook && ShouldConvert(GdiToDva(color)) &&
+static bool ShouldConvertGdi(const Settings& s, COLORREF color, void* caller) {
+    return s.gdiHook && ShouldConvertWith(s, GdiToDva(color)) &&
            !InContentScope() && IsAdobeUICaller(caller);
 }
 
@@ -4383,24 +4808,30 @@ CreatePen_t CreatePen_Original = nullptr;
 SetBkColor_t SetBkColor_Original = nullptr;
 
 HBRUSH WINAPI CreateSolidBrush_Hook(COLORREF color) {
-    if (ShouldConvertGdi(color, __builtin_return_address(0))) {
-        color = ConvertGdiColor(color);
+    const Settings& s = CurrentSettings();
+
+    if (ShouldConvertGdi(s, color, __builtin_return_address(0))) {
+        color = ConvertGdiColor(s, color);
     }
 
     return CreateSolidBrush_Original(color);
 }
 
 HPEN WINAPI CreatePen_Hook(int style, int width, COLORREF color) {
-    if (ShouldConvertGdi(color, __builtin_return_address(0))) {
-        color = ConvertGdiColor(color);
+    const Settings& s = CurrentSettings();
+
+    if (ShouldConvertGdi(s, color, __builtin_return_address(0))) {
+        color = ConvertGdiColor(s, color);
     }
 
     return CreatePen_Original(style, width, color);
 }
 
 COLORREF WINAPI SetBkColor_Hook(HDC hdc, COLORREF color) {
-    if (ShouldConvertGdi(color, __builtin_return_address(0))) {
-        color = ConvertGdiColor(color);
+    const Settings& s = CurrentSettings();
+
+    if (ShouldConvertGdi(s, color, __builtin_return_address(0))) {
+        color = ConvertGdiColor(s, color);
     }
 
     return SetBkColor_Original(hdc, color);
@@ -4463,10 +4894,13 @@ struct NamedPalette {
     Violet and Blossom put the hue in the ramp; Amethyst and Crimson hold it
     out, on near-black panels. Blossom is pastel only in its text and border:
     Premiere's own text passes above the ceiling, so a pastel background would
-    be light on light. The warm palettes keep the panel's red channel low for
-    the monitor surround, and every accent is at least 4.5:1 against its text.
-    Contrast through Threshold also carry a highlight, the hue Premiere's blue
-    takes; Threshold is threshold-editor.com.br's #050505 / #FFFFFF / #DC2626.
+    be light on light. Every accent is at least 4.5:1 against its own text,
+    which is what darkened Blossom's, Ember's, Amethyst's and Miku's: read at
+    full strength they were a hovered menu item nobody could read.
+
+    Contrast through Miku also carry a highlight, the hue Premiere's blue
+    takes; Threshold is threshold-editor.com.br's #050505 / #FFFFFF / #DC2626,
+    and Miku is the only one to name a monitor band of its own.
 */
 static const NamedPalette kPalettes[] = {
     {L"onyx",
@@ -4573,423 +5007,148 @@ static const NamedPalette kPalettes[] = {
       RGB(0x80, 0x80, 0x80),
       RGB(0xDC, 0x26, 0x26),
       RGB(0xDC, 0x26, 0x26)}},
+
+    {L"miku",
+     {{RGB(0x06, 0x10, 0x14), RGB(0x0A, 0x19, 0x20), RGB(0x10, 0x26, 0x2D),
+       RGB(0x17, 0x37, 0x40), RGB(0x28, 0x51, 0x5C)},
+      RGB(0xDD, 0xFB, 0xFF),
+      RGB(0x71, 0x8B, 0x91),
+      RGB(0x0E, 0x74, 0x78),
+      RGB(0x63, 0xF3, 0xEE),
+      RGB(0x04, 0x09, 0x0C)}},
 };
 
 /*
-    A custom theme is one JSON object in a single setting, so it can be shared
-    as text; the readme lists the keys. The text comes from other people, so it
-    is read strictly and within fixed bounds: JSON that does not parse is
-    rejected whole. Anything before the first brace or after the object, like a
-    code fence, is ignored, and unknown members are skipped however nested.
+    A custom theme is nine settings in one group, so each color gets its own
+    labelled field in Windhawk's settings and only ParseHexColor is needed to
+    validate it. Sharing a theme is Windhawk's own job: the Advanced tab
+    exports and imports a mod's whole settings as text.
+
+    present says the field had something in it, which is what tells an empty
+    field — the default for the three optional ones — from a typo.
 */
-constexpr size_t kMaxThemeLength = 16384;
-constexpr size_t kMaxThemeMembers = 64;
-constexpr int kMaxThemeDepth = 16;
+static bool ReadThemeColor(PCWSTR setting, COLORREF* color, bool* present) {
+    auto value = WindhawkUtils::StringSetting::make(setting);
+    PCWSTR text = value;
 
-struct JsonCursor {
-    const wchar_t* p;
-    const wchar_t* end;
-};
+    *present = text && *text;
 
-struct ThemeMember {
-    std::wstring key;
-    std::wstring value;
-    bool isString = false;
-    bool isNull = false;
-};
-
-static void SkipJsonSpace(JsonCursor& c) {
-    while (c.p < c.end &&
-           (*c.p == L' ' || *c.p == L'\t' || *c.p == L'\n' || *c.p == L'\r')) {
-        c.p++;
-    }
-}
-
-static int JsonHexDigit(wchar_t c) {
-    if (c >= L'0' && c <= L'9') {
-        return c - L'0';
-    }
-
-    if (c >= L'a' && c <= L'f') {
-        return c - L'a' + 10;
-    }
-
-    if (c >= L'A' && c <= L'F') {
-        return c - L'A' + 10;
-    }
-
-    return -1;
-}
-
-// A string at the cursor, unescaped into `out`, or only skipped when it is null.
-static bool ReadJsonString(JsonCursor& c, std::wstring* out) {
-    if (c.p >= c.end || *c.p != L'"') {
-        return false;
-    }
-
-    c.p++;
-
-    while (c.p < c.end) {
-        wchar_t ch = *c.p++;
-
-        if (ch == L'"') {
-            return true;
-        }
-
-        if (ch < 0x20) {
-            return false;  // a raw control character, which JSON does not allow
-        }
-
-        if (ch == L'\\') {
-            if (c.p >= c.end) {
-                return false;
-            }
-
-            wchar_t escape = *c.p++;
-
-            switch (escape) {
-                case L'"':
-                case L'\\':
-                case L'/':
-                    ch = escape;
-                    break;
-                case L'b':
-                    ch = L'\b';
-                    break;
-                case L'f':
-                    ch = L'\f';
-                    break;
-                case L'n':
-                    ch = L'\n';
-                    break;
-                case L'r':
-                    ch = L'\r';
-                    break;
-                case L't':
-                    ch = L'\t';
-                    break;
-                case L'u': {
-                    if (c.end - c.p < 4) {
-                        return false;
-                    }
-
-                    int code = 0;
-
-                    for (int k = 0; k < 4; k++) {
-                        int digit = JsonHexDigit(c.p[k]);
-
-                        if (digit < 0) {
-                            return false;
-                        }
-
-                        code = code * 16 + digit;
-                    }
-
-                    c.p += 4;
-                    ch = static_cast<wchar_t>(code);  // UTF-16, as the setting is
-                    break;
-                }
-                default:
-                    return false;
-            }
-        }
-
-        if (out) {
-            out->push_back(ch);
-        }
-    }
-
-    return false;  // unterminated
-}
-
-static bool SkipJsonValue(JsonCursor& c, int depth);
-
-static bool SkipJsonWord(JsonCursor& c, const wchar_t* word) {
-    size_t length = wcslen(word);
-
-    if (static_cast<size_t>(c.end - c.p) < length || wcsncmp(c.p, word, length) != 0) {
-        return false;
-    }
-
-    c.p += length;
-    return true;
-}
-
-static bool SkipJsonDigits(JsonCursor& c) {
-    const wchar_t* start = c.p;
-
-    while (c.p < c.end && *c.p >= L'0' && *c.p <= L'9') {
-        c.p++;
-    }
-
-    return c.p > start;
-}
-
-static bool SkipJsonNumber(JsonCursor& c) {
-    if (c.p < c.end && *c.p == L'-') {
-        c.p++;
-    }
-
-    if (!SkipJsonDigits(c)) {
-        return false;
-    }
-
-    if (c.p < c.end && *c.p == L'.') {
-        c.p++;
-
-        if (!SkipJsonDigits(c)) {
-            return false;
-        }
-    }
-
-    if (c.p < c.end && (*c.p == L'e' || *c.p == L'E')) {
-        c.p++;
-
-        if (c.p < c.end && (*c.p == L'+' || *c.p == L'-')) {
-            c.p++;
-        }
-
-        if (!SkipJsonDigits(c)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-// An object or an array, skipped whole; `depth` bounds how far it nests.
-static bool SkipJsonContainer(JsonCursor& c, int depth) {
-    if (depth > kMaxThemeDepth) {
-        return false;
-    }
-
-    bool object = *c.p == L'{';
-    wchar_t close = object ? L'}' : L']';
-
-    c.p++;
-    SkipJsonSpace(c);
-
-    if (c.p < c.end && *c.p == close) {
-        c.p++;
-        return true;
-    }
-
-    for (;;) {
-        if (object) {
-            if (!ReadJsonString(c, nullptr)) {
-                return false;
-            }
-
-            SkipJsonSpace(c);
-
-            if (c.p >= c.end || *c.p != L':') {
-                return false;
-            }
-
-            c.p++;
-        }
-
-        if (!SkipJsonValue(c, depth + 1)) {
-            return false;
-        }
-
-        SkipJsonSpace(c);
-
-        if (c.p >= c.end) {
-            return false;
-        }
-
-        if (*c.p == close) {
-            c.p++;
-            return true;
-        }
-
-        if (*c.p != L',') {
-            return false;
-        }
-
-        c.p++;
-        SkipJsonSpace(c);
-    }
-}
-
-static bool SkipJsonValue(JsonCursor& c, int depth) {
-    SkipJsonSpace(c);
-
-    if (c.p >= c.end) {
-        return false;
-    }
-
-    switch (*c.p) {
-        case L'"':
-            return ReadJsonString(c, nullptr);
-        case L'{':
-        case L'[':
-            return SkipJsonContainer(c, depth);
-        case L't':
-            return SkipJsonWord(c, L"true");
-        case L'f':
-            return SkipJsonWord(c, L"false");
-        case L'n':
-            return SkipJsonWord(c, L"null");
-        default:
-            return SkipJsonNumber(c);
-    }
+    return *present && ParseHexColor(text, color);
 }
 
 /*
-    The members of the first object in `text`. False when it does not parse,
-    with `errorAt` the offset where reading stopped.
+    "#RRGGBB" into out, or the empty string for a color the theme leaves to its
+    default. Written by hand rather than with a formatter, for the same reason
+    the CSS rewrite writes its own digits: this runs where a locale-aware
+    printf has no business being.
 */
-static bool ReadThemeMembers(PCWSTR text, std::vector<ThemeMember>* members,
-                             size_t* errorAt) {
-    size_t length = wcsnlen(text, kMaxThemeLength + 1);
-    *errorAt = 0;
-
-    if (length > kMaxThemeLength) {
-        *errorAt = kMaxThemeLength;
-        return false;
+static void FormatHexColor(COLORREF color, wchar_t out[8]) {
+    if (color == CLR_INVALID) {
+        out[0] = L'\0';
+        return;
     }
 
-    const wchar_t* open = wcschr(text, L'{');
+    constexpr wchar_t kDigits[] = L"0123456789ABCDEF";
+    const BYTE channels[3] = {GetRValue(color), GetGValue(color),
+                              GetBValue(color)};
 
-    if (!open) {
-        return false;
+    out[0] = L'#';
+
+    for (int i = 0; i < 3; i++) {
+        out[1 + i * 2] = kDigits[channels[i] >> 4];
+        out[2 + i * 2] = kDigits[channels[i] & 0x0F];
     }
 
-    JsonCursor c{open + 1, text + length};
-    SkipJsonSpace(c);
-
-    if (c.p < c.end && *c.p == L'}') {
-        return true;
-    }
-
-    for (;;) {
-        ThemeMember member;
-
-        bool ok = ReadJsonString(c, &member.key);
-
-        if (ok) {
-            SkipJsonSpace(c);
-            ok = c.p < c.end && *c.p == L':';
-        }
-
-        if (ok) {
-            c.p++;
-            SkipJsonSpace(c);
-
-            member.isString = c.p < c.end && *c.p == L'"';
-            member.isNull = c.p < c.end && *c.p == L'n';  // SkipJsonValue checks the rest
-            ok = member.isString ? ReadJsonString(c, &member.value)
-                                 : SkipJsonValue(c, 1);
-        }
-
-        if (ok && members->size() < kMaxThemeMembers) {
-            members->push_back(std::move(member));
-        }
-
-        if (ok) {
-            SkipJsonSpace(c);
-            ok = c.p < c.end && (*c.p == L'}' || *c.p == L',');
-        }
-
-        if (!ok) {
-            *errorAt = static_cast<size_t>(c.p - text);
-            return false;
-        }
-
-        if (*c.p++ == L'}') {
-            return true;
-        }
-
-        SkipJsonSpace(c);
-    }
+    out[7] = L'\0';
 }
 
-// The last member named `key`, as JSON readers usually take it, case aside.
-static const ThemeMember* FindThemeMember(const std::vector<ThemeMember>& members,
-                                          PCWSTR key) {
-    const ThemeMember* found = nullptr;
+/*
+    The theme in force, written out as the settings text Windhawk itself reads,
+    so it can be handed to someone else.
 
-    for (const ThemeMember& member : members) {
-        if (_wcsicmp(member.key.c_str(), key) == 0) {
-            found = &member;
-        }
-    }
+    The mod's Settings tab has a text mode beside the visual one, and what it
+    holds is YAML: the palette, then customTheme as a block under it. This
+    writes the same thing in YAML's flow form, which is one line and parses
+    identically — so a theme is a line to copy out of the log and paste into
+    that box.
 
-    return found;
-}
+    Only the theme goes out. The document in that box also carries the layer
+    switches, and saving it replaces every setting, so a whole document shared
+    as-is would hand the sharer's switches to whoever pasted it.
+*/
+static void LogThemeForSharing(const Palette& p) {
+    wchar_t base[8], panel[8], surface[8], raised[8], border[8], text[8];
+    wchar_t accent[8], disabledText[8], highlight[8], monitor[8];
 
-static bool ReadThemeColor(const ThemeMember* member, COLORREF* out) {
-    return member && member->isString && ParseHexColor(member->value.c_str(), out);
+    FormatHexColor(p.ramp[0], base);
+    FormatHexColor(p.ramp[1], panel);
+    FormatHexColor(p.ramp[2], surface);
+    FormatHexColor(p.ramp[3], raised);
+    FormatHexColor(p.ramp[4], border);
+    FormatHexColor(p.text, text);
+    FormatHexColor(p.accent, accent);
+    FormatHexColor(p.dimText, disabledText);
+    FormatHexColor(p.highlight, highlight);
+    FormatHexColor(p.monitor, monitor);
+
+    Wh_Log(L"custom theme, to share — paste this into the text mode of the "
+           L"Settings tab: {palette: custom, customTheme: {base: '%s', "
+           L"panel: '%s', surface: '%s', raised: '%s', border: '%s', "
+           L"text: '%s', accent: '%s', disabledText: '%s', highlight: '%s', "
+           L"monitor: '%s'}}",
+           base, panel, surface, raised, border, text, accent, disabledText,
+           highlight, monitor);
 }
 
 /*
     The palette a custom theme describes. The six colors every surface needs
-    fall back to Onyx's one at a time, each logged; the optional ones have
+    fall back to Onyx's one at a time, each logged; the other three have
     defaults of their own.
 */
 static Palette LoadCustomTheme(const Palette& onyx) {
-    auto json = WindhawkUtils::StringSetting::make(L"customTheme");
-    PCWSTR text = json;
-
-    std::vector<ThemeMember> members;
-    size_t errorAt = 0;
-
-    if (!*text) {
-        Wh_Log(L"custom theme is empty; Onyx is used instead");
-        return onyx;
-    }
-
-    if (!ReadThemeMembers(text, &members, &errorAt)) {
-        bool curly = wcschr(text, L'“') || wcschr(text, L'”');
-
-        Wh_Log(L"custom theme is not valid JSON (it stops making sense at "
-               L"character %u)%s; Onyx is used instead",
-               static_cast<unsigned>(errorAt + 1),
-               curly ? L", and it has curly quotes where straight ones belong" : L"");
-        return onyx;
-    }
-
     Palette p = onyx;
 
     const struct {
-        PCWSTR key;
+        PCWSTR setting;
+        PCWSTR name;
         COLORREF* color;
     } kRequired[] = {
-        {L"base", &p.ramp[0]},   {L"panel", &p.ramp[1]},  {L"surface", &p.ramp[2]},
-        {L"raised", &p.ramp[3]}, {L"border", &p.ramp[4]}, {L"text", &p.text},
+        {L"customTheme.base", L"Base", &p.ramp[0]},
+        {L"customTheme.panel", L"Panel", &p.ramp[1]},
+        {L"customTheme.surface", L"Surface", &p.ramp[2]},
+        {L"customTheme.raised", L"Raised", &p.ramp[3]},
+        {L"customTheme.border", L"Border", &p.ramp[4]},
+        {L"customTheme.text", L"Text", &p.text},
     };
 
     for (const auto& field : kRequired) {
-        if (!ReadThemeColor(FindThemeMember(members, field.key), field.color)) {
-            Wh_Log(L"custom theme: \"%s\" is missing or not a #RRGGBB color; "
-                   L"Onyx's is used",
-                   field.key);
+        bool present = false;
+
+        if (!ReadThemeColor(field.setting, field.color, &present)) {
+            Wh_Log(L"custom theme: %s is %s; Onyx's is used", field.name,
+                   present ? L"not a #RRGGBB color" : L"empty");
         }
     }
 
     /*
-        Absent, empty or null takes the default without a word — the shipped
-        template lists every key, with "highlight": "" — while a value that is
-        there but unreadable is worth a line.
+        Left empty takes the default without a word — highlight ships that way
+        — while a value that is there but unreadable is worth a line.
     */
-    auto optional = [&](PCWSTR key, COLORREF* color) {
-        const ThemeMember* member = FindThemeMember(members, key);
+    auto optional = [](PCWSTR setting, PCWSTR name, COLORREF* color) {
+        bool present = false;
 
-        if (!member || member->isNull || (member->isString && member->value.empty())) {
-            return false;
-        }
-
-        if (ReadThemeColor(member, color)) {
+        if (ReadThemeColor(setting, color, &present)) {
             return true;
         }
 
-        Wh_Log(L"custom theme: \"%s\" is not a #RRGGBB color; left out", key);
+        if (present) {
+            Wh_Log(L"custom theme: %s is not a #RRGGBB color; left out", name);
+        }
+
         return false;
     };
 
-    if (!optional(L"accent", &p.accent)) {
+    if (!optional(L"customTheme.accent", L"Accent", &p.accent)) {
         p.accent = p.ramp[4];
     }
 
@@ -4998,25 +5157,21 @@ static Palette LoadCustomTheme(const Palette& onyx) {
         palettes put disabled text, and it always lies between the two, which
         Onyx's #777777 would not once a theme's text is darker than that.
     */
-    if (!optional(L"disabledText", &p.dimText)) {
+    if (!optional(L"customTheme.disabledText", L"Disabled text", &p.dimText)) {
         p.dimText = RGB((GetRValue(p.text) + GetRValue(p.ramp[1])) / 2,
                         (GetGValue(p.text) + GetGValue(p.ramp[1])) / 2,
                         (GetBValue(p.text) + GetBValue(p.ramp[1])) / 2);
     }
 
-    if (!optional(L"highlight", &p.highlight)) {
+    if (!optional(L"customTheme.highlight", L"Highlight", &p.highlight)) {
         p.highlight = CLR_INVALID;
     }
 
-    const ThemeMember* name = FindThemeMember(members, L"name");
-    const ThemeMember* author = FindThemeMember(members, L"author");
-
-    if (name && name->isString && !name->value.empty()) {
-        bool by = author && author->isString && !author->value.empty();
-
-        Wh_Log(L"custom theme: %.64s%s%.64s", name->value.c_str(),
-               by ? L", by " : L"", by ? author->value.c_str() : L"");
+    if (!optional(L"customTheme.monitor", L"Monitor background", &p.monitor)) {
+        p.monitor = CLR_INVALID;
     }
+
+    LogThemeForSharing(p);
 
     return p;
 }
@@ -5070,6 +5225,610 @@ static void LoadSettings() {
 }
 
 // ============================================================================
+// D3D12 PROGRAM/SOURCE MONITOR BAND
+// ============================================================================
+
+/*
+    The band around the picture in the Source and Program monitors. Premiere
+    2026 draws that area through DisplaySurface.dll on D3D12: the surface is
+    cleared to black, and Spectrum's #1D1D1D is then laid over it as a quad per
+    side of the picture. Neither goes through dvaui, so none of the layers
+    above sees it.
+
+    What the quads do not cover is the middle, and what shows there is the
+    clear — which is also the black the picture is composited onto. So the
+    clear is not this layer's to touch: coloring it comes back through
+    anything the picture does not cover, whether that is a gap in the timeline
+    or the transparent part of a clip with an alpha channel.
+
+    The quads are. Each carries the color it paints in root parameter 1, and
+    that is both how the band is recognized and how it is changed: an opaque
+    dark neutral that is not black is the band, and it is replaced on its way
+    to the shader. Black is the backing, and is left alone.
+
+    Which calls those are is decided by the module they come from, the way
+    everything else in the mod is decided by a name: DisplaySurface's range is
+    tracked from the loader notification, and a return address outside it is
+    not this layer's business. No offset into anyone's code appears here, so
+    the layer does not depend on a Premiere build.
+
+    The rest of the test is the shape of the work: a viewport and a scissor
+    that cover the whole render target, with no sub-rectangle taken out of
+    either. Anything smaller than 400x300 is not a monitor and is left alone,
+    and "Direct fills" switches the layer off with the rest.
+*/
+
+struct MonitorCommandState {
+    bool hasViewport = false;
+    D3D12_VIEWPORT viewport{};
+
+    bool hasScissor = false;
+    D3D12_RECT scissor{};
+
+    /*
+        Root parameter 1 is the float4 the draw paints with, kept as the raw
+        words the caller passed. It is what tells the band from everything
+        else, and it is what gets replaced.
+    */
+    bool hasRoot1Color = false;
+    UINT root1Color[4]{};
+};
+
+using MonitorStates =
+    std::unordered_map<ID3D12GraphicsCommandList*, MonitorCommandState>;
+
+/*
+    A pointer, deliberately leaked, rather than the map itself.
+
+    A thread_local with a destructor runs that destructor when the thread ends,
+    and Windhawk unmaps this image the moment the mod is disabled or updated —
+    a Premiere thread ending afterwards would call into memory that is no
+    longer there. A pointer has no destructor, so nothing of this mod runs at
+    thread exit; one small map per recording thread is left behind instead, the
+    same trade the color table makes.
+
+    Only DisplaySurface's own command lists are ever recorded, so in practice
+    this holds a handful of entries on one thread. The cap is there so that a
+    build which recycles command lists differently cannot grow it without one.
+*/
+constexpr size_t kMaxMonitorStates = 128;
+
+thread_local MonitorStates* g_monitorStates = nullptr;
+
+volatile LONG g_monitorStatesFullLogged = FALSE;
+volatile LONG g_monitorBandMatched = FALSE;
+
+// One install attempt per process, whichever way in gets there first.
+volatile LONG g_monitorBandTried = FALSE;
+volatile LONG g_monitorBandInstalled = FALSE;
+volatile LONG g_d3d12CreateDeviceHooked = FALSE;
+
+using D3D12CreateDevice_t = HRESULT(WINAPI*)(IUnknown*, D3D_FEATURE_LEVEL, REFIID,
+                                             void**);
+
+D3D12CreateDevice_t D3D12CreateDevice_Original = nullptr;
+
+static MonitorCommandState* MonitorStateFor(ID3D12GraphicsCommandList* commandList) {
+    if (!commandList) {
+        return nullptr;
+    }
+
+    // A hook must not throw into Adobe's code: short of memory, the band is
+    // simply left as Premiere painted it.
+    try {
+        if (!g_monitorStates) {
+            g_monitorStates = new (std::nothrow) MonitorStates();
+
+            if (!g_monitorStates) {
+                return nullptr;
+            }
+        }
+
+        if (g_monitorStates->size() >= kMaxMonitorStates &&
+            !g_monitorStates->count(commandList)) {
+            g_monitorStates->clear();
+
+            if (Claim(&g_monitorStatesFullLogged)) {
+                Wh_Log(L"monitor band: too many command lists on one thread; "
+                       L"the band may show Premiere's gray for a frame");
+            }
+        }
+
+        return &(*g_monitorStates)[commandList];
+    } catch (const std::bad_alloc&) {
+        return nullptr;
+    }
+}
+
+// A list already being recorded, without starting to record a new one.
+static MonitorCommandState* KnownMonitorState(
+    ID3D12GraphicsCommandList* commandList) {
+    if (!commandList || !g_monitorStates) {
+        return nullptr;
+    }
+
+    auto it = g_monitorStates->find(commandList);
+
+    return it != g_monitorStates->end() ? &it->second : nullptr;
+}
+
+// Whether this layer changes anything at all right now.
+static bool MonitorBandActive(const Settings& s) {
+    return s.brushHook && s.strength > 0.0f;
+}
+
+static float MonitorBitsToFloat(UINT bits) {
+    float value = 0.0f;
+    static_assert(sizeof(value) == sizeof(bits));
+    memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+static UINT MonitorFloatToBits(float value) {
+    UINT bits = 0;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+/*
+    Whether the color this draw carries is the band's.
+
+    The exact gray is not the signature, and cannot be: stock it is #1D1D1D,
+    but the layers above have already been through it by the time it reaches
+    DisplaySurface, so under Onyx it arrives as #0E0E0E. What holds either way
+    is the shape of the value — opaque, dark, neutral, and not black.
+
+    Not black is the part that matters. Everything the monitor shows through
+    the picture is black: the empty sequence frame over a gap in the timeline,
+    and the backing a clip with an alpha channel is composited onto. Requiring
+    a nonzero gray leaves all of it alone.
+*/
+static bool IsMonitorBandColor(const MonitorCommandState& state) {
+    if (!state.hasRoot1Color) {
+        return false;
+    }
+
+    float r = MonitorBitsToFloat(state.root1Color[0]);
+    float g = MonitorBitsToFloat(state.root1Color[1]);
+    float b = MonitorBitsToFloat(state.root1Color[2]);
+    float a = MonitorBitsToFloat(state.root1Color[3]);
+
+    if (!std::isfinite(r) || !std::isfinite(g) || !std::isfinite(b) ||
+        !std::isfinite(a)) {
+        return false;
+    }
+
+    constexpr float kNeutral = 0.0015f;
+    constexpr float kAlpha = 0.0015f;
+    constexpr float kBlack = 1.0f / 255.0f;
+    constexpr float kCeiling = 0.25f;
+
+    float hi = r > g ? (r > b ? r : b) : (g > b ? g : b);
+    float lo = r < g ? (r < b ? r : b) : (g < b ? g : b);
+    float gray = (r + g + b) / 3.0f;
+
+    return std::fabs(a - 1.0f) <= kAlpha && (hi - lo) <= kNeutral &&
+           gray > kBlack && gray <= kCeiling;
+}
+
+/*
+    A draw that covers the whole render target, which the band does and a
+    thumbnail or a scope does not. The floor keeps the layer off surfaces far
+    too small to be a monitor.
+*/
+static bool IsFullMonitorState(const MonitorCommandState& state) {
+    if (!state.hasViewport || !state.hasScissor) {
+        return false;
+    }
+
+    float scissorWidth =
+        static_cast<float>(state.scissor.right - state.scissor.left);
+    float scissorHeight =
+        static_cast<float>(state.scissor.bottom - state.scissor.top);
+
+    return state.viewport.TopLeftX == 0.0f &&
+           state.viewport.TopLeftY == 0.0f &&
+           state.scissor.left == 0 &&
+           state.scissor.top == 0 &&
+           state.viewport.Width >= 400.0f &&
+           state.viewport.Height >= 300.0f &&
+           std::fabs(state.viewport.Width - scissorWidth) <= 1.0f &&
+           std::fabs(state.viewport.Height - scissorHeight) <= 1.0f;
+}
+
+/*
+    The band's color, blended toward the theme's, as the mod's other layers
+    blend: at half strength the band lands halfway between what Premiere would
+    have painted and what the theme asks for. The original is the value the
+    draw itself carries, not a fixed gray, because by the time it arrives the
+    layers above may already have moved it.
+*/
+static void MonitorBandColor(const Settings& s, const MonitorCommandState& state,
+                             FLOAT out[4]) {
+    COLORREF band = s.palette.monitor != CLR_INVALID ? s.palette.monitor
+                                                     : s.palette.ramp[1];
+    const BYTE target[3] = {GetRValue(band), GetGValue(band), GetBValue(band)};
+
+    for (int i = 0; i < 3; i++) {
+        out[i] = BlendWith(s.strength, MonitorBitsToFloat(state.root1Color[i]),
+                           target[i] / 255.0f);
+    }
+
+    out[3] = MonitorBitsToFloat(state.root1Color[3]);
+}
+
+using MonitorRSSetViewports_t =
+    void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, UINT,
+                             const D3D12_VIEWPORT*);
+
+using MonitorRSSetScissorRects_t =
+    void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, UINT,
+                             const D3D12_RECT*);
+
+using MonitorSetGraphicsRoot32BitConstant_t =
+    void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, UINT, UINT, UINT);
+
+using MonitorSetGraphicsRoot32BitConstants_t =
+    void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, UINT, UINT,
+                             const void*, UINT);
+
+MonitorRSSetViewports_t MonitorRSSetViewports_Original = nullptr;
+MonitorRSSetScissorRects_t MonitorRSSetScissorRects_Original = nullptr;
+MonitorSetGraphicsRoot32BitConstant_t
+    MonitorSetGraphicsRoot32BitConstant_Original = nullptr;
+MonitorSetGraphicsRoot32BitConstants_t
+    MonitorSetGraphicsRoot32BitConstants_Original = nullptr;
+
+/*
+    These sit on the D3D12 command list itself, which every D3D12 caller in the
+    process shares, so each one turns away anything that did not come from
+    DisplaySurface before it touches a map or reads a setting. That test is two
+    atomic loads and a range compare — what a caller Premiere uses for its own
+    rendering pays, per call.
+*/
+void STDMETHODCALLTYPE
+MonitorRSSetViewports_Hook(ID3D12GraphicsCommandList* commandList,
+                           UINT numViewports,
+                           const D3D12_VIEWPORT* viewports) {
+    if (numViewports > 0 && viewports &&
+        IsDisplaySurfaceCall(__builtin_return_address(0)) &&
+        MonitorBandActive(CurrentSettings())) {
+        if (MonitorCommandState* state = MonitorStateFor(commandList)) {
+            state->hasViewport = true;
+            state->viewport = viewports[0];
+        }
+    }
+
+    MonitorRSSetViewports_Original(commandList, numViewports, viewports);
+}
+
+void STDMETHODCALLTYPE
+MonitorRSSetScissorRects_Hook(ID3D12GraphicsCommandList* commandList,
+                              UINT numRects,
+                              const D3D12_RECT* rects) {
+    if (numRects > 0 && rects &&
+        IsDisplaySurfaceCall(__builtin_return_address(0)) &&
+        MonitorBandActive(CurrentSettings())) {
+        if (MonitorCommandState* state = MonitorStateFor(commandList)) {
+            state->hasScissor = true;
+            state->scissor = rects[0];
+        }
+    }
+
+    MonitorRSSetScissorRects_Original(commandList, numRects, rects);
+}
+
+/*
+    The color the next draws will paint with. DisplaySurface sets it itself,
+    but a list it is recording may be handed to a helper elsewhere for a call
+    or two, so a list already being followed keeps being followed whoever sets
+    it.
+*/
+static MonitorCommandState* MonitorStateForColor(
+    void* returnAddress, ID3D12GraphicsCommandList* commandList) {
+    if (!MonitorBandActive(CurrentSettings())) {
+        return nullptr;
+    }
+
+    return IsDisplaySurfaceCall(returnAddress) ? MonitorStateFor(commandList)
+                                               : KnownMonitorState(commandList);
+}
+
+/*
+    Where the band actually changes color.
+
+    The band is painted by quads that cover the sides of the picture, and what
+    shows between them is the clear — which is black, and is also the backing
+    the picture is composited onto. So the clear is left alone: coloring it
+    would come back through anything the picture does not cover, whether that
+    is a gap in the timeline or the transparent part of a clip with an alpha
+    channel.
+
+    Instead the color those quads carry is replaced on its way to the shader.
+    Root constants stay set until they are set again, so one replacement covers
+    every quad drawn with it, and hasRoot1Color goes back to false so the next
+    color Premiere sets is judged on its own.
+*/
+static bool RecolorBandConstants(ID3D12GraphicsCommandList* commandList,
+                                 MonitorCommandState* state) {
+    if (!state || !MonitorSetGraphicsRoot32BitConstants_Original ||
+        !IsFullMonitorState(*state) || !IsMonitorBandColor(*state)) {
+        return false;
+    }
+
+    FLOAT band[4];
+    MonitorBandColor(CurrentSettings(), *state, band);
+
+    for (int i = 0; i < 4; i++) {
+        state->root1Color[i] = MonitorFloatToBits(band[i]);
+    }
+
+    state->hasRoot1Color = false;
+
+    // Straight to the original: this must not come back through the hook.
+    MonitorSetGraphicsRoot32BitConstants_Original(commandList, 1, 4, band, 0);
+
+    InterlockedExchange(&g_monitorBandMatched, TRUE);
+
+    return true;
+}
+
+void STDMETHODCALLTYPE
+MonitorSetGraphicsRoot32BitConstant_Hook(ID3D12GraphicsCommandList* commandList,
+                                         UINT rootParameterIndex,
+                                         UINT srcData,
+                                         UINT destOffsetIn32BitValues) {
+    MonitorSetGraphicsRoot32BitConstant_Original(commandList, rootParameterIndex,
+                                                 srcData,
+                                                 destOffsetIn32BitValues);
+
+    if (rootParameterIndex == 1 && destOffsetIn32BitValues < 4) {
+        if (MonitorCommandState* state =
+                MonitorStateForColor(__builtin_return_address(0), commandList)) {
+            state->root1Color[destOffsetIn32BitValues] = srcData;
+
+            // Only the last word of the four completes a color to judge.
+            if (destOffsetIn32BitValues == 3) {
+                state->hasRoot1Color = true;
+                RecolorBandConstants(commandList, state);
+            }
+        }
+    }
+}
+
+void STDMETHODCALLTYPE
+MonitorSetGraphicsRoot32BitConstants_Hook(ID3D12GraphicsCommandList* commandList,
+                                          UINT rootParameterIndex,
+                                          UINT num32BitValuesToSet,
+                                          const void* srcData,
+                                          UINT destOffsetIn32BitValues) {
+    MonitorSetGraphicsRoot32BitConstants_Original(
+        commandList, rootParameterIndex, num32BitValuesToSet, srcData,
+        destOffsetIn32BitValues);
+
+    if (rootParameterIndex == 1 && srcData && destOffsetIn32BitValues < 4) {
+        if (MonitorCommandState* state =
+                MonitorStateForColor(__builtin_return_address(0), commandList)) {
+            auto values = static_cast<const UINT*>(srcData);
+            UINT count = num32BitValuesToSet;
+
+            if (destOffsetIn32BitValues + count > 4) {
+                count = 4 - destOffsetIn32BitValues;
+            }
+
+            for (UINT i = 0; i < count; i++) {
+                state->root1Color[destOffsetIn32BitValues + i] = values[i];
+            }
+
+            if (destOffsetIn32BitValues + count == 4) {
+                state->hasRoot1Color = true;
+                RecolorBandConstants(commandList, state);
+            }
+        }
+    }
+}
+
+/*
+    The entry points are the command list's own, and the vtable is the same
+    code for every list a device hands out — so any ID3D12Device is enough to
+    find them, and one throwaway list is all it takes.
+
+    Registers the hooks and leaves applying them to the caller, the way
+    HookLoadedModules does.
+*/
+static bool InstallMonitorBandHooks(ID3D12Device* device) {
+    ID3D12CommandAllocator* allocator = nullptr;
+
+    HRESULT hr = device->CreateCommandAllocator(
+        D3D12_COMMAND_LIST_TYPE_DIRECT, __uuidof(ID3D12CommandAllocator),
+        reinterpret_cast<void**>(&allocator));
+
+    if (FAILED(hr) || !allocator) {
+        Wh_Log(L"monitor band: no command allocator (0x%08X); the band around "
+               L"the picture keeps Premiere's gray",
+               static_cast<unsigned>(hr));
+        return false;
+    }
+
+    ID3D12GraphicsCommandList* commandList = nullptr;
+
+    hr = device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator,
+                                   nullptr, __uuidof(ID3D12GraphicsCommandList),
+                                   reinterpret_cast<void**>(&commandList));
+
+    if (FAILED(hr) || !commandList) {
+        allocator->Release();
+        Wh_Log(L"monitor band: no command list (0x%08X); the band around the "
+               L"picture keeps Premiere's gray",
+               static_cast<unsigned>(hr));
+        return false;
+    }
+
+    void** vtable = *reinterpret_cast<void***>(commandList);
+
+    /*
+        Slots in ID3D12GraphicsCommandList's vtable, counted off the order
+        d3d12.h declares the methods in: 0-2 IUnknown, 3-6 ID3D12Object, 7
+        ID3D12DeviceChild, 8 ID3D12CommandList, then Close at 9 and the rest
+        in declaration order. A published COM interface cannot reorder or
+        insert a method without breaking every program built against it, so
+        this is the one number in the mod that is not looked up by name — and
+        it is a slot in a Microsoft interface, not an offset into Adobe's
+        code, which is what the layer deliberately avoids.
+    */
+    void* setViewports = vtable[21];      // RSSetViewports
+    void* setScissors = vtable[22];       // RSSetScissorRects
+    void* setRootConstant = vtable[34];   // SetGraphicsRoot32BitConstant
+    void* setRootConstants = vtable[36];  // SetGraphicsRoot32BitConstants
+
+    commandList->Release();
+    allocator->Release();
+
+    bool ok = true;
+
+    ok &= WindhawkUtils::SetFunctionHook(
+        reinterpret_cast<MonitorRSSetViewports_t>(setViewports),
+        MonitorRSSetViewports_Hook, &MonitorRSSetViewports_Original);
+
+    ok &= WindhawkUtils::SetFunctionHook(
+        reinterpret_cast<MonitorRSSetScissorRects_t>(setScissors),
+        MonitorRSSetScissorRects_Hook, &MonitorRSSetScissorRects_Original);
+
+    ok &= WindhawkUtils::SetFunctionHook(
+        reinterpret_cast<MonitorSetGraphicsRoot32BitConstant_t>(setRootConstant),
+        MonitorSetGraphicsRoot32BitConstant_Hook,
+        &MonitorSetGraphicsRoot32BitConstant_Original);
+
+    ok &= WindhawkUtils::SetFunctionHook(
+        reinterpret_cast<MonitorSetGraphicsRoot32BitConstants_t>(setRootConstants),
+        MonitorSetGraphicsRoot32BitConstants_Hook,
+        &MonitorSetGraphicsRoot32BitConstants_Original);
+
+    if (!ok) {
+        Wh_Log(L"monitor band: one or more D3D12 hooks failed");
+    }
+
+    InterlockedExchange(&g_monitorBandInstalled, TRUE);
+
+    return true;
+}
+
+/*
+    Premiere's own device, the moment it makes one.
+
+    Taking the vtable from Premiere's device rather than from one of the mod's
+    own is the whole point of hooking this: a process can select a different
+    D3D12 runtime through the Agility SDK, and `SetSDKVersion` fails outright
+    once any device exists. A device built in Wh_ModInit would both settle that
+    choice ahead of Premiere and pull the graphics driver onto its startup
+    path.
+*/
+HRESULT WINAPI D3D12CreateDevice_Hook(IUnknown* adapter, D3D_FEATURE_LEVEL level,
+                                      REFIID riid, void** device) {
+    HRESULT hr = D3D12CreateDevice_Original(adapter, level, riid, device);
+
+    // A null device is a capability query, which creates nothing.
+    if (FAILED(hr) || !device || !*device || g_monitorBandTried ||
+        !CurrentSettings().brushHook) {
+        return hr;
+    }
+
+    ID3D12Device* created = nullptr;
+
+    if (FAILED(static_cast<IUnknown*>(*device)->QueryInterface(
+            __uuidof(ID3D12Device), reinterpret_cast<void**>(&created))) ||
+        !created) {
+        return hr;
+    }
+
+    if (Claim(&g_monitorBandTried) && InstallMonitorBandHooks(created) &&
+        !Wh_ApplyHookOperations()) {
+        Wh_Log(L"monitor band: could not apply the D3D12 hooks");
+    }
+
+    created->Release();
+
+    return hr;
+}
+
+/*
+    Hooked as soon as d3d12 is in the process, from the same LoadLibraryExW
+    hook that catches Premiere's UI modules. Nothing here loads a library, so
+    it is safe to run with the loader lock held.
+*/
+static bool HookD3D12CreateDevice() {
+    if (g_d3d12CreateDeviceHooked) {
+        return false;
+    }
+
+    HMODULE d3d12 = GetModuleHandleW(L"d3d12.dll");
+
+    auto create = d3d12 ? reinterpret_cast<D3D12CreateDevice_t>(
+                              GetProcAddress(d3d12, "D3D12CreateDevice"))
+                        : nullptr;
+
+    if (!create || !Claim(&g_d3d12CreateDeviceHooked)) {
+        return false;
+    }
+
+    if (!WindhawkUtils::SetFunctionHook(create, D3D12CreateDevice_Hook,
+                                        &D3D12CreateDevice_Original)) {
+        Wh_Log(L"failed to hook d3d12!D3D12CreateDevice");
+        return false;
+    }
+
+    return true;
+}
+
+/*
+    The other way in: the mod enabled while Premiere is already running, where
+    the device was created long before any hook existed and D3D12CreateDevice
+    will not be called again. Only then is a device of the mod's own built, and
+    only if d3d12 is already in the process — never loaded here, so a Premiere
+    that does not use it pays nothing.
+
+    DisplaySurface being mapped is what says so: it is the module that renders
+    the monitors, so by the time it is in the process Premiere has made its
+    device and there is no SDK version left to settle. Premiere starting up
+    reaches here with it absent, and the hook covers that case instead.
+*/
+static bool InstallMonitorBandFromProbe() {
+    if (g_monitorBandTried || !CurrentSettings().brushHook ||
+        !g_displaySurfaceEnd.load(std::memory_order_acquire)) {
+        return false;
+    }
+
+    HMODULE d3d12 = GetModuleHandleW(L"d3d12.dll");
+
+    auto createDevice = d3d12 ? reinterpret_cast<D3D12CreateDevice_t>(
+                                    GetProcAddress(d3d12, "D3D12CreateDevice"))
+                              : nullptr;
+
+    if (!createDevice || !Claim(&g_monitorBandTried)) {
+        return false;
+    }
+
+    ID3D12Device* device = nullptr;
+
+    HRESULT hr =
+        createDevice(nullptr, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device),
+                     reinterpret_cast<void**>(&device));
+
+    if (FAILED(hr) || !device) {
+        Wh_Log(L"monitor band: no D3D12 device (0x%08X); the band around the "
+               L"picture keeps Premiere's gray",
+               static_cast<unsigned>(hr));
+        return false;
+    }
+
+    bool registered = InstallMonitorBandHooks(device);
+
+    device->Release();
+
+    return registered;
+}
+
+// ============================================================================
 // LIFECYCLE
 // ============================================================================
 
@@ -5103,6 +5862,10 @@ BOOL Wh_ModInit() {
     WatchModuleLoads();
     SnapshotAdobeModules();
     InitNativeDarkMode();
+
+    // Only the export, which costs nothing; the monitor layer goes in when
+    // Premiere makes its device. See D3D12CreateDevice_Hook.
+    HookD3D12CreateDevice();
 
     /*
         Every Windows hook is installed whatever the settings say, and each one
@@ -5186,10 +5949,16 @@ BOOL Wh_ModInit() {
                L"loads its UI modules after this point will not be themed");
     }
 
-    // The UXP runtime reads the panels' stylesheets through these two.
-    FindUxpPluginsDir();
+    /*
+        The UXP runtime reads the panels' stylesheets through these two, and
+        they are the only hooks the mod puts on a path every file open in the
+        process takes. So unlike the rest, they go in only when "UXP panels"
+        is on as the mod loads — turning it on later needs Premiere restarted,
+        which that layer needs anyway, since a panel reads its stylesheet once.
+    */
+    if (kernelBase && CurrentSettings().uxpPanels) {
+        FindUxpPluginsDir();
 
-    if (kernelBase) {
         HookOrLog(reinterpret_cast<CreateFileW_t>(
                       GetProcAddress(kernelBase, "CreateFileW")),
                   CreateFileW_Hook, &CreateFileW_Original, L"kernelbase!CreateFileW");
@@ -5215,6 +5984,18 @@ BOOL Wh_ModInit() {
 */
 void Wh_ModAfterInit() {
     ApplyThemeToExistingWindows();
+
+    /*
+        Enable the mod while Premiere is already running and its D3D12 device
+        was created long before any hook existed, so D3D12CreateDevice will
+        never be called again. This is the only path that builds a device of
+        the mod's own, and it does nothing when d3d12 is not already in the
+        process — which is the case when Premiere is only starting, where the
+        hook covers it instead.
+    */
+    if (InstallMonitorBandFromProbe() && !Wh_ApplyHookOperations()) {
+        Wh_Log(L"monitor band: could not apply the D3D12 hooks");
+    }
 }
 
 void Wh_ModUninit() {
@@ -5237,6 +6018,16 @@ void Wh_ModUninit() {
            std::popcount(static_cast<uint64_t>(g_bluesRecolored)),
            static_cast<unsigned>(kInterfaceBlueCount));
 
+    /*
+        The layer went in but never recognized a surround — a Premiere that
+        draws the monitors some other way. Saying so is how a user learns why
+        the band stayed gray, instead of guessing at the palette.
+    */
+    if (g_monitorBandInstalled && !g_monitorBandMatched) {
+        Wh_Log(L"monitor band: no surround was recognized this session; the "
+               L"band around the picture kept Premiere's own gray");
+    }
+
     // Nothing to hand back there: Premiere parsed those stylesheets already.
     if (g_stylesheetsRecolored) {
         Wh_Log(L"%ld UXP stylesheets were recolored this session; those panels "
@@ -5258,7 +6049,12 @@ void Wh_ModUninit() {
 
     RedrawProcessWindows();
 
-    // The g_sysBrushes brushes are never deleted; see the comment above them.
+    /*
+        Left behind on purpose, each for the reason given where it is declared:
+        the color table, the g_sysBrushes brushes, and the monitor layer's
+        per-thread state maps. All three are reachable by Premiere or by a
+        thread after this image is gone.
+    */
 
     if (g_uxtheme) {
         FreeLibrary(g_uxtheme);
@@ -5285,8 +6081,16 @@ void Wh_ModSettingsChanged() {
     LoadSettings();
     InterlockedIncrement(&g_generation);
 
-    // A setting that works through Premiere's modules may just have come on.
-    if (HookLoadedModules() && !Wh_ApplyHookOperations()) {
+    /*
+        A setting that works through Premiere's modules may just have come on.
+        "Direct fills" also governs the monitor layer, and Premiere's device
+        exists by now, so that one is taken from a device of the mod's own.
+    */
+    bool registered = HookLoadedModules();
+
+    registered = InstallMonitorBandFromProbe() || registered;
+
+    if (registered && !Wh_ApplyHookOperations()) {
         Wh_Log(L"failed to apply hooks after a settings change");
     }
 
