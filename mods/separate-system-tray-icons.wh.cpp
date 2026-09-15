@@ -286,12 +286,6 @@ namespace wuxm = winrt::Windows::UI::Xaml::Media;
 
 
 struct Settings {
-    // Retained internally for compatibility with the existing injection path;
-    // the original grouped button is now always hidden and the compact control
-    // is the permanent Control Center replacement.
-    std::wstring groupedButtonMode = L"compact";
-    std::wstring compactGroupedButtonGlyph = L"F4C3";
-    std::wstring groupedButtonAction = L"ms-controlcenter:";
     std::wstring soundClickAction = L"sound_output";
     int volumeWheelStep = 0;
     std::wstring controlCenterGlyph = L"F4C3";
@@ -407,14 +401,6 @@ struct MediaTooltipInfo {
 static std::wstring g_bluetoothTooltipCache;
 static std::wstring g_networkTooltipCache;
 static std::wstring g_soundTooltipCache;
-// The taskbar host ignores the placement properties of ToolTipService for
-// injected controls and falls back to mouse-relative placement. Keep one
-// XAML Popup for our three controls instead, positioned from the taskbar edge.
-[[clang::no_destroy]] static wucp::Popup g_fixedTrayTooltipPopup{nullptr};
-[[clang::no_destroy]] static wuc::Border g_fixedTrayTooltipBorder{nullptr};
-[[clang::no_destroy]] static wuc::TextBlock g_fixedTrayTooltipText{nullptr};
-[[clang::no_destroy]] static wux::FrameworkElement g_fixedTrayTooltipTarget{nullptr};
-static bool g_fixedTrayTooltipOpened = false;
 [[clang::no_destroy]] static wuc::MenuFlyout g_activeTrayContextFlyout{nullptr};
 [[clang::no_destroy]] static wuc::Panel g_trayPanel{nullptr};
 [[clang::no_destroy]] static wux::FrameworkElement g_trayControlCenterButton{nullptr};
@@ -450,7 +436,7 @@ static HANDLE StartOwnedWorker(std::function<void()> task) {
         try { work->task(); } catch (...) {}
         delete work;
         return 0;
-    }, work, 0, nullptr);
+    }, work, CREATE_SUSPENDED, nullptr);
     if (thread) {
         // Retain only workers that are still executing. The tracked duplicate
         // is needed for unload, but completed workers must not accumulate
@@ -463,10 +449,22 @@ static HANDLE StartOwnedWorker(std::function<void()> task) {
         HANDLE tracked = nullptr;
         if (!DuplicateHandle(GetCurrentProcess(), thread, GetCurrentProcess(),
             &tracked, 0, FALSE, DUPLICATE_SAME_ACCESS)) {
+            // The worker has not started yet, so it can be discarded without
+            // leaving code that unload cannot join.
+            TerminateThread(thread, ERROR_NOT_ENOUGH_MEMORY);
             CloseHandle(thread);
+            delete work;
             thread = nullptr;
         } else {
             g_workerThreads.push_back(tracked);
+            if (ResumeThread(thread) == static_cast<DWORD>(-1)) {
+                g_workerThreads.pop_back();
+                CloseHandle(tracked);
+                TerminateThread(thread, GetLastError());
+                CloseHandle(thread);
+                delete work;
+                thread = nullptr;
+            }
         }
     } else delete work;
     ReleaseSRWLockExclusive(&g_workerThreadsLock);
@@ -486,6 +484,7 @@ static void WaitForOwnedWorkers() {
 }
 
 static std::vector<std::function<void()>> g_uiEventRevokers;
+static std::vector<std::function<void()>> g_contextMenuEventRevokers;
 static std::vector<std::function<void()>> g_timerEventRevokers;
 static void RevokeEvents(std::vector<std::function<void()>>& revokers) {
     auto saved = std::move(revokers);
@@ -499,7 +498,7 @@ static MediaTooltipInfo g_mediaTooltipInfo;
 static std::atomic<ULONGLONG> g_lastMediaTooltipQueryTick{0};
 static std::atomic<bool> g_mediaTooltipQueryInProgress{false};
 static bool g_metricRefreshPending = false;
-static int g_metricRefreshSettlePasses = 0;
+static ULONGLONG g_lastMetricRebuildTick = 0;
 [[clang::no_destroy]] static wux::FrameworkElement g_sizeRefreshTrayElement{nullptr};
 [[clang::no_destroy]] static wux::FrameworkElement g_sizeRefreshControlCenterButton{nullptr};
 static winrt::event_token g_sizeRefreshTrayToken{};
@@ -510,6 +509,8 @@ static TaskbarHost_FrameHeight_t TaskbarHost_FrameHeight_Original = nullptr;
 static Std_Ref_Decref_t Std_Ref_Decref_Original = nullptr;
 static TrayUI_StartTaskbar_t TrayUI_StartTaskbar_Original = nullptr;
 static void* CTaskBand_ITaskListWndSite_vftable = nullptr;
+static HMODULE g_batterySettingsModule = nullptr;
+static HMODULE g_powerProfileModule = nullptr;
 
 static std::wstring GetStringSettingWithDefault(PCWSTR name,
                                                 PCWSTR fallback) {
@@ -522,9 +523,7 @@ static std::wstring GetStringSettingWithDefault(PCWSTR name,
 static std::wstring LoadButtonOrderSetting() {
     std::wstring order;
     for (int index = 0; index < 5; ++index) {
-        wchar_t key[64]{};
-        swprintf_s(key, L"buttonOrder[%d]", index);
-        PCWSTR value = Wh_GetStringSetting(key);
+        PCWSTR value = Wh_GetStringSetting(L"buttonOrder[%d]", index);
         if (!*value) {
             Wh_FreeStringSetting(value);
             break;
@@ -561,9 +560,6 @@ static void LoadSettings() {
     g_settings.changeBluetoothGlyphWhenDisabled = Wh_GetIntSetting(L"bluetooth.changeGlyphWhenDisabled") != 0;
     g_settings.showSignalStrengthInTooltip = Wh_GetIntSetting(L"network.showSignalStrengthInTooltip") != 0;
     g_settings.speedTestUrl = GetStringSettingWithDefault(L"network.speedTestUrl", L"https://www.speedtest.net/run");
-    g_settings.groupedButtonMode = L"compact";
-    g_settings.compactGroupedButtonGlyph = g_settings.controlCenterGlyph;
-    g_settings.groupedButtonAction = g_settings.controlCenterAction;
     g_settings.showBluetoothButton =
         Wh_GetIntSetting(L"visibility.showBluetoothButton") != 0;
     g_settings.showNetworkButton =
@@ -618,19 +614,29 @@ static wuxm::Brush MakeUnderlayBrush() {
     if (auto native = g_originalGroupedButton.try_as<wuc::Control>()) {
         if (auto brush = native.Foreground()) return brush;
     }
+    static bool cachedThemeIsLight = false;
+    [[clang::no_destroy]] static wuxm::Brush cachedFallback{nullptr};
+    const bool light = IsSystemLightTheme();
+    if (cachedFallback && cachedThemeIsLight == light) return cachedFallback;
     try {
         auto control = wuxmk::XamlReader::Load(
             LR"(<ContentControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>)")
             .as<wuc::ContentControl>();
-        if (auto brush = control.Foreground()) return brush;
+        if (auto brush = control.Foreground()) {
+            cachedThemeIsLight = light;
+            cachedFallback = brush;
+            return cachedFallback;
+        }
     } catch (...) {}
     wu::Color color{};
-    color.A = IsSystemLightTheme() ? 0xE4 : 0xFF;
-    const BYTE channel = IsSystemLightTheme() ? 0x00 : 0xFF;
+    color.A = light ? 0xE4 : 0xFF;
+    const BYTE channel = light ? 0x00 : 0xFF;
     color.R = channel;
     color.G = channel;
     color.B = channel;
-    return wuxm::SolidColorBrush(color);
+    cachedThemeIsLight = light;
+    cachedFallback = wuxm::SolidColorBrush(color);
+    return cachedFallback;
 }
 
 static winrt::hstring GlyphFromHexSetting(std::wstring const& setting,
@@ -651,10 +657,6 @@ static winrt::hstring GlyphFromHexSetting(std::wstring const& setting,
 
     wchar_t glyph[2] = {static_cast<wchar_t>(value), 0};
     return winrt::hstring(glyph);
-}
-
-static bool GroupedButtonModeIs(PCWSTR mode) {
-    return _wcsicmp(g_settings.groupedButtonMode.c_str(), mode) == 0;
 }
 
 static std::wstring ToLower(std::wstring s) {
@@ -848,7 +850,7 @@ static bool TryParseShortcut(std::wstring_view shortcut,
 
 static bool SendShortcut(UINT modifiers, UINT vk) {
     std::vector<INPUT> inputs;
-    inputs.reserve(10);
+    inputs.reserve(18);
 
     auto addKey = [&inputs](WORD key, DWORD flags) {
         INPUT input{};
@@ -857,6 +859,23 @@ static bool SendShortcut(UINT modifiers, UINT vk) {
         input.ki.dwFlags = flags;
         inputs.push_back(input);
     };
+
+    struct Modifier { UINT flag; WORD key; };
+    constexpr Modifier allModifiers[] = {
+        {MOD_CONTROL, VK_CONTROL}, {MOD_SHIFT, VK_SHIFT},
+        {MOD_ALT, VK_MENU}, {MOD_WIN, VK_LWIN},
+    };
+    std::vector<WORD> released;
+    // Prevent an unrelated held modifier (for example Shift) from changing a
+    // built-in shortcut into a different command. Restore it afterwards when
+    // the physical key is still down.
+    for (auto const& modifier : allModifiers) {
+        if (!(modifiers & modifier.flag) &&
+            (GetAsyncKeyState(modifier.key) & 0x8000)) {
+            addKey(modifier.key, KEYEVENTF_KEYUP);
+            released.push_back(modifier.key);
+        }
+    }
 
     if (modifiers & MOD_CONTROL) addKey(VK_CONTROL, 0);
     if (modifiers & MOD_SHIFT) addKey(VK_SHIFT, 0);
@@ -870,6 +889,10 @@ static bool SendShortcut(UINT modifiers, UINT vk) {
     if (modifiers & MOD_ALT) addKey(VK_MENU, KEYEVENTF_KEYUP);
     if (modifiers & MOD_SHIFT) addKey(VK_SHIFT, KEYEVENTF_KEYUP);
     if (modifiers & MOD_CONTROL) addKey(VK_CONTROL, KEYEVENTF_KEYUP);
+
+    for (auto it = released.rbegin(); it != released.rend(); ++it) {
+        if (GetAsyncKeyState(*it) & 0x8000) addKey(*it, 0);
+    }
 
     UINT sent = SendInput(static_cast<UINT>(inputs.size()), inputs.data(),
                           sizeof(INPUT));
@@ -1412,10 +1435,6 @@ static void OpenControlPanelWindow(PCWSTR parameters, PCWSTR label) {
     }
 }
 
-static void OpenLegacySoundSettings() {
-    OpenControlPanelWindow(L"/name Microsoft.Sound", L"legacy sound settings");
-}
-
 static void OpenSpeakerSetup() {
     OpenControlPanelWindow(L"mmsys.cpl,,0", L"speaker setup");
 }
@@ -1893,67 +1912,29 @@ static void SetDefaultAudioOutput(std::wstring id) {
     QueueAudioWork([id = std::move(id)] { SetDefaultAudioOutputWorker(id); });
 }
 
-static bool ContainsAsciiInsensitive(char const* text,
-                                    size_t textLength,
-                                    char const* needle) {
-    if (!text || !needle || !*needle) {
-        return false;
-    }
-
-    const size_t needleLength = strlen(needle);
-    if (needleLength > textLength) {
-        return false;
-    }
-
-    for (size_t i = 0; i + needleLength <= textLength; ++i) {
-        bool match = true;
-        for (size_t j = 0; j < needleLength; ++j) {
-            char a = text[i + j];
-            char b = needle[j];
-            if (a >= 'A' && a <= 'Z') {
-                a = static_cast<char>(a - 'A' + 'a');
-            }
-            if (b >= 'A' && b <= 'Z') {
-                b = static_cast<char>(b - 'A' + 'a');
-            }
-            if (a != b) {
-                match = false;
-                break;
-            }
-        }
-
-        if (match) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-static bool IsLikelyRealEthernet(MIB_IFROW const& row) {
-    if (row.dwType != IF_TYPE_ETHERNET_CSMACD || row.dwPhysAddrLen == 0) {
-        return false;
-    }
-
-    char const* description =
-        reinterpret_cast<char const*>(row.bDescr);
-    const size_t length = row.dwDescrLen;
-    PCSTR virtualMarkers[] = {
-        "bluetooth", "hyper-v", "loopback", "npcap", "pseudo",
-        "tailscale", "tap",     "tun",     "virtual", "virtualbox",
-        "vmware",    "vpn",     "wireguard", "wintun", "zerotier",
-    };
-
-    for (PCSTR marker : virtualMarkers) {
-        if (ContainsAsciiInsensitive(description, length, marker)) {
-            return false;
-        }
-    }
-
-    return true;
+static bool IsPhysicalEthernet(MIB_IF_ROW2 const& row) {
+    return row.Type == IF_TYPE_ETHERNET_CSMACD &&
+           row.InterfaceAndOperStatusFlags.HardwareInterface &&
+           !row.InterfaceAndOperStatusFlags.FilterInterface &&
+           row.MediaConnectState == MediaConnectStateConnected;
 }
 
 static bool IsBluetoothAvailable() {
+    // Radio enumeration reports the user-visible Bluetooth toggle state. The
+    // legacy Bluetooth APIs below only answer whether a hardware radio exists.
+    try {
+        auto radios = wdr::Radio::GetRadiosAsync().get();
+        for (auto const& radio : radios) {
+            if (radio.Kind() == wdr::RadioKind::Bluetooth) {
+                return radio.State() == wdr::RadioState::On;
+            }
+        }
+        return false;
+    } catch (...) {
+        // Keep the legacy probe as a compatibility fallback for builds where
+        // Windows does not expose the Radio API to Explorer.
+    }
+
     BLUETOOTH_FIND_RADIO_PARAMS params{};
     params.dwSize = sizeof(params);
 
@@ -2089,40 +2070,16 @@ static NetworkState GetNetworkState() {
         return state;
     }
 
-    ULONG size = 0;
-    DWORD ret = GetIfTable(nullptr, &size, FALSE);
-    if (ret != ERROR_INSUFFICIENT_BUFFER || !size) {
-        if (sawWifi) {
-            state.kind =
-                sawEnabledWifi ? NetworkKind::WifiDisconnected
-                               : NetworkKind::WifiDisabled;
-        }
-        return state;
-    }
-
-    auto* table =
-        static_cast<MIB_IFTABLE*>(HeapAlloc(GetProcessHeap(), 0, size));
-    if (!table) {
-        return state;
-    }
-
-    ret = GetIfTable(table, &size, FALSE);
-    if (ret == NO_ERROR) {
-        for (DWORD i = 0; i < table->dwNumEntries; ++i) {
-            MIB_IFROW const& row = table->table[i];
-            if (row.dwOperStatus != IF_OPER_STATUS_OPERATIONAL ||
-                row.dwType == IF_TYPE_SOFTWARE_LOOPBACK) {
-                continue;
-            }
-
-            if (IsLikelyRealEthernet(row)) {
+    PMIB_IF_TABLE2 table = nullptr;
+    if (GetIfTable2(&table) == NO_ERROR && table) {
+        for (ULONG i = 0; i < table->NumEntries; ++i) {
+            if (IsPhysicalEthernet(table->Table[i])) {
                 state.kind = NetworkKind::Ethernet;
                 break;
             }
         }
+        FreeMibTable(table);
     }
-
-    HeapFree(GetProcessHeap(), 0, table);
     if (state.kind == NetworkKind::Ethernet ||
         state.kind == NetworkKind::WifiConnecting) {
         return state;
@@ -2218,8 +2175,10 @@ static wux::XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd) {
     void* taskbarHostSharedPtr[2]{};
     CTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite,
                                       taskbarHostSharedPtr);
-    if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) {
+    if (!taskbarHostSharedPtr[0]) {
         Wh_Log(L"GetTaskbarXamlRoot: TaskbarHost shared_ptr is empty.");
+        if (taskbarHostSharedPtr[1] && Std_Ref_Decref_Original)
+            Std_Ref_Decref_Original(taskbarHostSharedPtr[1]);
         return nullptr;
     }
 
@@ -2336,110 +2295,6 @@ static void DumpXamlTree(wux::DependencyObject const& root,
     }
 }
 
-static std::wstring GetElementSelector(wux::DependencyObject const& object) {
-    std::wstring selector = winrt::get_class_name(object).c_str();
-    if (auto element = object.try_as<wux::FrameworkElement>()) {
-        if (!element.Name().empty()) {
-            selector += L"#";
-            selector += element.Name().c_str();
-        }
-    }
-    return selector;
-}
-
-static void DumpInjectedButtonVisualPaths(wux::DependencyObject const& root,
-                                          std::wstring const& path,
-                                          int depth = 0,
-                                          int maxDepth = 5) {
-    if (!root || depth > maxDepth) {
-        return;
-    }
-
-    std::wstring currentPath =
-        path.empty() ? GetElementSelector(root)
-                     : path + L" > " + GetElementSelector(root);
-    Wh_Log(L"Injected tray visual path: %s", currentPath.c_str());
-
-    int childCount = 0;
-    try {
-        childCount = wuxm::VisualTreeHelper::GetChildrenCount(root);
-    } catch (...) {
-        return;
-    }
-
-    for (int i = 0; i < childCount; ++i) {
-        DumpInjectedButtonVisualPaths(
-            wuxm::VisualTreeHelper::GetChild(root, i), currentPath, depth + 1,
-            maxDepth);
-    }
-}
-
-static void DumpInjectedButtonDiagnostics(wux::FrameworkElement const& button) {
-    if (!button) {
-        return;
-    }
-
-    Wh_Log(L"Injected tray button diagnostics for %s#%s.",
-           winrt::get_class_name(button).c_str(), button.Name().c_str());
-    DumpInjectedButtonVisualPaths(button, L"", 0, 5);
-}
-
-static void LogVisualStateGroups(wux::FrameworkElement const& root) {
-    if (!root) {
-        return;
-    }
-
-    try {
-        std::vector<wux::DependencyObject> stack;
-        stack.push_back(root);
-
-        while (!stack.empty()) {
-            auto current = stack.back();
-            stack.pop_back();
-
-            if (auto element = current.try_as<wux::FrameworkElement>()) {
-                auto groups = wux::VisualStateManager::GetVisualStateGroups(
-                    element);
-                if (groups.Size() > 0) {
-                    for (uint32_t i = 0; i < groups.Size(); ++i) {
-                        auto group = groups.GetAt(i);
-                        std::wstring states;
-                        auto groupStates = group.States();
-                        for (uint32_t j = 0; j < groupStates.Size(); ++j) {
-                            if (!states.empty()) {
-                                states += L",";
-                            }
-                            states += groupStates.GetAt(j).Name().c_str();
-                        }
-
-                        Wh_Log(L"Injected tray visual states on %s#%s: group=%s states=[%s].",
-                               winrt::get_class_name(element).c_str(),
-                               element.Name().c_str(), group.Name().c_str(),
-                               states.c_str());
-                    }
-                }
-            }
-
-            int childCount = 0;
-            try {
-                childCount = wuxm::VisualTreeHelper::GetChildrenCount(current);
-            } catch (...) {
-                childCount = 0;
-            }
-            for (int i = 0; i < childCount; ++i) {
-                auto child = wuxm::VisualTreeHelper::GetChild(current, i);
-                if (child) {
-                    stack.push_back(child);
-                }
-            }
-        }
-    } catch (...) {
-        Wh_Log(L"LogVisualStateGroups failed for %s#%s: 0x%08X",
-               winrt::get_class_name(root).c_str(), root.Name().c_str(),
-               winrt::to_hresult());
-    }
-}
-
 static double GetTargetHighlightHeight() {
     if (g_trayButtonHeight <= 34) {
         return 28;
@@ -2483,35 +2338,6 @@ static void ApplyHoverBackgroundMetrics(wux::FrameworkElement const& button) {
         Wh_Log(L"ApplyHoverBackgroundMetrics failed for %s#%s: 0x%08X",
                winrt::get_class_name(button).c_str(), button.Name().c_str(),
                winrt::to_hresult());
-    }
-}
-
-static bool GoToInjectedButtonState(wux::FrameworkElement const& button,
-                                    PCWSTR stateName) {
-    if (!button || !stateName) {
-        return false;
-    }
-
-    try {
-        bool changed = wux::VisualStateManager::GoToState(
-            button.try_as<wuc::Control>(), stateName, true);
-        static int logCount = 0;
-        if (!changed && logCount < 24) {
-            ++logCount;
-            Wh_Log(L"VisualStateManager::GoToState(%s#%s, %s) -> 0.",
-                   winrt::get_class_name(button).c_str(),
-                   button.Name().c_str(), stateName);
-        }
-        return changed;
-    } catch (...) {
-        static int logCount = 0;
-        if (logCount < 24) {
-            ++logCount;
-            Wh_Log(L"VisualStateManager::GoToState(%s#%s, %s) failed: 0x%08X.",
-                   winrt::get_class_name(button).c_str(),
-                   button.Name().c_str(), stateName, winrt::to_hresult());
-        }
-        return false;
     }
 }
 
@@ -2570,17 +2396,6 @@ static bool IsInjectedElement(wux::FrameworkElement const& element) {
     return std::wstring_view(name).starts_with(L"SeparateQuickSettingsXaml");
 }
 
-static void HideFixedTrayTooltip() {
-    try {
-        if (g_fixedTrayTooltipPopup) {
-            g_fixedTrayTooltipPopup.IsOpen(false);
-        }
-    } catch (...) {
-    }
-    g_fixedTrayTooltipOpened = false;
-    g_fixedTrayTooltipTarget = nullptr;
-}
-
 static bool GetTaskbarGeometry(RECT* taskbarRect, RECT* hostRect,
                                bool* horizontal, bool* nearFirstEdge) {
     HWND taskbar = g_taskbarWnd ? g_taskbarWnd
@@ -2608,138 +2423,6 @@ static bool GetTaskbarGeometry(RECT* taskbarRect, RECT* hostRect,
                          abs(monitorInfo.rcMonitor.right - taskbarRect->right);
     }
     return true;
-}
-
-static void EnsureFixedTrayTooltip() {
-    if (g_fixedTrayTooltipPopup) {
-        return;
-    }
-
-    const bool light = IsSystemLightTheme();
-    wu::Color background{};
-    background.A = 255;
-    background.R = light ? 0xF9 : 0x2C;
-    background.G = light ? 0xF9 : 0x2C;
-    background.B = light ? 0xF9 : 0x2C;
-    wu::Color foreground{};
-    foreground.A = 255;
-    foreground.R = light ? 0x1A : 0xF5;
-    foreground.G = light ? 0x1A : 0xF5;
-    foreground.B = light ? 0x1A : 0xF5;
-
-    g_fixedTrayTooltipText = wuc::TextBlock();
-    g_fixedTrayTooltipText.FontSize(12);
-    g_fixedTrayTooltipText.Foreground(wuxm::SolidColorBrush(foreground));
-    g_fixedTrayTooltipText.IsHitTestVisible(false);
-
-    g_fixedTrayTooltipBorder = wuc::Border();
-    g_fixedTrayTooltipBorder.Background(wuxm::SolidColorBrush(background));
-    g_fixedTrayTooltipBorder.BorderThickness({1, 1, 1, 1});
-    g_fixedTrayTooltipBorder.BorderBrush(
-        wuxm::SolidColorBrush(light ? wu::Color{255, 224, 224, 224}
-                               : wu::Color{255, 70, 70, 70}));
-    g_fixedTrayTooltipBorder.CornerRadius({4, 4, 4, 4});
-    g_fixedTrayTooltipBorder.Padding({10, 7, 10, 7});
-    g_fixedTrayTooltipBorder.IsHitTestVisible(false);
-    g_fixedTrayTooltipBorder.Child(g_fixedTrayTooltipText);
-
-    g_fixedTrayTooltipPopup = wucp::Popup();
-    g_fixedTrayTooltipPopup.Child(g_fixedTrayTooltipBorder);
-    g_fixedTrayTooltipPopup.IsLightDismissEnabled(false);
-    {
-        auto eventSource = g_fixedTrayTooltipPopup;
-        auto eventToken = eventSource.Opened([](wf::IInspectable const&,
-                                      wf::IInspectable const&) {
-        if (g_unloading) return;
-        g_fixedTrayTooltipOpened = true;
-        Wh_Log(L"Fixed tray tooltip popup opened for %s#%s.",
-               g_fixedTrayTooltipTarget
-                   ? winrt::get_class_name(g_fixedTrayTooltipTarget).c_str()
-                   : L"(none)",
-               g_fixedTrayTooltipTarget
-                   ? g_fixedTrayTooltipTarget.Name().c_str()
-                   : L"");
-        // The stock tooltip is retained as a fallback until this event proves
-        // the Popup was attached to Shell's XAML popup root.
-        if (g_fixedTrayTooltipTarget) {
-            wuc::ToolTipService::SetToolTip(g_fixedTrayTooltipTarget, nullptr);
-        }
-    });
-        g_uiEventRevokers.push_back([weakSource = winrt::make_weak(eventSource), eventToken] {
-            if (auto source = weakSource.get()) source.Opened(eventToken);
-        });
-    }
-    if (auto popup3 = g_fixedTrayTooltipPopup.try_as<wucp::IPopup3>()) {
-        popup3.ShouldConstrainToRootBounds(false);
-    }
-}
-
-static double GetTaskbarDpiScale(HWND taskbar) {
-    using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
-    auto getDpiForWindow = reinterpret_cast<GetDpiForWindow_t>(
-        GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForWindow"));
-    const UINT dpi = (taskbar && getDpiForWindow) ? getDpiForWindow(taskbar)
-                                                   : 96;
-    return dpi ? static_cast<double>(dpi) / 96.0 : 1.0;
-}
-
-static void ShowFixedTrayTooltip(wux::FrameworkElement const& targetButton,
-                                 std::wstring const& tooltip) {
-    if (!targetButton || tooltip.empty()) {
-        return;
-    }
-
-    try {
-        EnsureFixedTrayTooltip();
-        g_fixedTrayTooltipText.Text(tooltip);
-        g_fixedTrayTooltipBorder.Measure({640.0f, 320.0f});
-        const wf::Size desired = g_fixedTrayTooltipBorder.DesiredSize();
-
-        RECT taskbarRect{};
-        RECT hostRect{};
-        bool horizontal = true;
-        bool nearFirstEdge = true;
-        if (!GetTaskbarGeometry(&taskbarRect, &hostRect, &horizontal,
-                                &nearFirstEdge)) {
-            return;
-        }
-
-        HWND taskbar = g_taskbarWnd ? g_taskbarWnd
-                                    : FindWindowW(L"Shell_TrayWnd", nullptr);
-        const double scale = GetTaskbarDpiScale(taskbar);
-        const auto transform = targetButton.TransformToVisual(nullptr);
-        const wf::Point target = transform.TransformPoint({0.0f, 0.0f});
-        constexpr double kGap = 12.0;
-        double x = target.X + (targetButton.ActualWidth() - desired.Width) / 2.0;
-        double y = target.Y + (targetButton.ActualHeight() - desired.Height) / 2.0;
-
-        if (horizontal) {
-            const double taskbarEdge = nearFirstEdge
-                                           ? (taskbarRect.bottom - hostRect.top) / scale
-                                           : (taskbarRect.top - hostRect.top) / scale;
-            y = nearFirstEdge ? taskbarEdge + kGap
-                              : taskbarEdge - desired.Height - kGap;
-        } else {
-            const double taskbarEdge = nearFirstEdge
-                                           ? (taskbarRect.right - hostRect.left) / scale
-                                           : (taskbarRect.left - hostRect.left) / scale;
-            x = nearFirstEdge ? taskbarEdge + kGap
-                              : taskbarEdge - desired.Width - kGap;
-        }
-
-        g_fixedTrayTooltipPopup.HorizontalOffset(x);
-        g_fixedTrayTooltipPopup.VerticalOffset(y);
-        g_fixedTrayTooltipTarget = targetButton;
-        g_fixedTrayTooltipOpened = false;
-        g_fixedTrayTooltipPopup.IsOpen(true);
-        Wh_Log(L"Requested fixed tray tooltip for %s#%s at %.1f,%.1f.",
-               winrt::get_class_name(targetButton).c_str(),
-               targetButton.Name().c_str(), x, y);
-    } catch (...) {
-        Wh_Log(L"ShowFixedTrayTooltip failed for %s#%s: 0x%08X",
-               winrt::get_class_name(targetButton).c_str(),
-               targetButton.Name().c_str(), winrt::to_hresult());
-    }
 }
 
 // Shell chooses its own mouse-relative geometry while it opens a tooltip.
@@ -2836,10 +2519,6 @@ static void SetCachedTrayToolTip(wux::FrameworkElement const& targetButton,
             SetTrayToolTip(targetButton, tooltip);
         }
         wuxa::AutomationProperties::SetName(targetButton, tooltip);
-        if (g_fixedTrayTooltipTarget == targetButton &&
-            g_fixedTrayTooltipPopup && g_fixedTrayTooltipPopup.IsOpen()) {
-            ShowFixedTrayTooltip(targetButton, tooltip);
-        }
         Wh_Log(L"Updated tray tooltip for %s#%s: [%s]",
                winrt::get_class_name(targetButton).c_str(),
                targetButton.Name().c_str(), tooltip.c_str());
@@ -2858,8 +2537,6 @@ static void RemoveInjectedControls(wuc::Panel const& parent) {
     RevokeEvents(g_uiEventRevokers);
     try { if (g_activeTrayContextFlyout) g_activeTrayContextFlyout.Hide(); } catch (...) {}
     g_activeTrayContextFlyout = nullptr;
-    HideFixedTrayTooltip();
-
     auto children = parent.Children();
     for (uint32_t i = children.Size(); i > 0; --i) {
         uint32_t index = i - 1;
@@ -2887,13 +2564,6 @@ static void RemoveInjectedControls(wuc::Panel const& parent) {
     g_soundTooltipCache.clear();
 }
 
-struct NativeTrayPropertyOverride {
-    winrt::weak_ref<wux::DependencyObject> element;
-    wux::DependencyProperty property;
-    wf::IInspectable originalValue;
-};
-[[clang::no_destroy]] static std::vector<NativeTrayPropertyOverride> g_nativeTrayPropertyOverrides;
-
 struct GridTrayMutation {
     winrt::weak_ref<wuc::Grid> grid;
     std::vector<wuc::ColumnDefinition> columns;
@@ -2920,68 +2590,7 @@ static void RestoreGridTrayMutation() {
 
 
 
-static void SetNativeTrayDouble(wux::DependencyObject const& element,
-                                wux::DependencyProperty const& property,
-                                double value) {
-    for (auto it = g_nativeTrayPropertyOverrides.begin();
-         it != g_nativeTrayPropertyOverrides.end();) {
-        auto existing = it->element.get();
-        if (!existing) {
-            it = g_nativeTrayPropertyOverrides.erase(it);
-        } else {
-            if (existing == element && it->property == property) {
-                if (winrt::unbox_value<double>(element.GetValue(property)) != value)
-                    element.SetValue(property, winrt::box_value(value));
-                return;
-            }
-            ++it;
-        }
-    }
-    g_nativeTrayPropertyOverrides.push_back(
-        {winrt::make_weak(element), property, element.ReadLocalValue(property)});
-    element.SetValue(property, winrt::box_value(value));
-}
-
-static wux::FrameworkElement FindDirectTrayChild(
-    wux::DependencyObject const& parent, PCWSTR klass, PCWSTR name = nullptr) {
-    if (!parent) return nullptr;
-    const int count = wuxm::VisualTreeHelper::GetChildrenCount(parent);
-    for (int i = 0; i < count; ++i) {
-        auto element = wuxm::VisualTreeHelper::GetChild(parent, i)
-                           .try_as<wux::FrameworkElement>();
-        if (element && winrt::get_class_name(element) == klass &&
-            (!name || element.Name() == name)) return element;
-    }
-    return nullptr;
-}
-
-static void RefreshNativeTrayStyling() {
-    if (!g_originalGroupedButton) return;
-    // Follow the exact native template path; don't change other StackPanels.
-    auto grid = FindDirectTrayChild(g_originalGroupedButton, L"Windows.UI.Xaml.Controls.Grid");
-    auto content = FindDirectTrayChild(grid, L"Windows.UI.Xaml.Controls.ContentPresenter", L"ContentPresenter");
-    auto items = FindDirectTrayChild(content, L"Windows.UI.Xaml.Controls.ItemsPresenter");
-    auto panel = FindDirectTrayChild(items, L"Windows.UI.Xaml.Controls.StackPanel");
-    if (panel)
-        SetNativeTrayDouble(panel, wuc::StackPanel::SpacingProperty(), 0);
-
-}
-
 static void RestoreOriginalGroupedButton() {
-    for (auto const& saved : g_nativeTrayPropertyOverrides) {
-        try {
-            if (auto element = saved.element.get()) {
-                if (saved.originalValue == wux::DependencyProperty::UnsetValue())
-                    element.ClearValue(saved.property);
-                else
-                    element.SetValue(saved.property, saved.originalValue);
-            }
-        } catch (...) {}
-    }
-    // This vector has no automatic destructor so that XAML references are
-    // never released from the CRT shutdown thread. Release both its elements
-    // and retained allocation explicitly on the taskbar UI thread instead.
-    std::vector<NativeTrayPropertyOverride>().swap(g_nativeTrayPropertyOverrides);
     if (g_originalGroupedButton) {
         try { g_originalGroupedButton.Visibility(g_originalGroupedVisibility); } catch (...) {}
         try { g_originalGroupedButton.Width(g_originalGroupedWidth); } catch (...) {}
@@ -3199,14 +2808,16 @@ static void ApplyTrayButtonMetrics(wux::FrameworkElement const& element) {
 }
 
 static bool ApplyXamlButtons();
+static void RefreshInjectedButtonMetrics();
 
 static void ScheduleMetricRefresh() {
-    if (g_unloading || g_metricRefreshPending) {
+    const ULONGLONG now = GetTickCount64();
+    if (g_unloading || g_metricRefreshPending ||
+        (g_lastMetricRebuildTick && now - g_lastMetricRebuildTick < 1000)) {
         return;
     }
 
     g_metricRefreshPending = true;
-    g_metricRefreshSettlePasses = 0;
     if (!g_metricRefreshTimer) {
         g_metricRefreshTimer = wux::DispatcherTimer();
         g_metricRefreshTimer.Interval(std::chrono::milliseconds(250));
@@ -3219,23 +2830,12 @@ static void ScheduleMetricRefresh() {
                 g_metricRefreshTimer.Stop();
             }
             g_metricRefreshPending = false;
-            ++g_metricRefreshSettlePasses;
-            Wh_Log(L"Running delayed tray metric refresh.");
+            g_lastMetricRebuildTick = GetTickCount64();
+            // Explorer commits the compact template asynchronously. Rebuild
+            // once after it settles, then ignore the layout events produced by
+            // that rebuild for a short cooldown.
+            Wh_Log(L"Rebuilding the tray once after a size transition.");
             ApplyXamlButtons();
-            ApplyHoverBackgroundMetrics(g_bluetoothButton);
-            ApplyHoverBackgroundMetrics(g_networkButton);
-            ApplyHoverBackgroundMetrics(g_soundButton);
-            ApplyHoverBackgroundMetrics(g_compactGroupedButton);
-            ApplyHoverBackgroundMetrics(g_batteryButton);
-            if (g_trayPanel) {
-                g_trayPanel.InvalidateMeasure();
-                g_trayPanel.InvalidateArrange();
-                g_trayPanel.UpdateLayout();
-            }
-            if (g_metricRefreshSettlePasses < 3) {
-                g_metricRefreshPending = true;
-                g_metricRefreshTimer.Start();
-            }
         });
         g_timerEventRevokers.push_back([weakSource = winrt::make_weak(eventSource), eventToken] {
             if (auto source = weakSource.get()) source.Tick(eventToken);
@@ -3276,10 +2876,6 @@ static void RefreshInjectedButtonMetrics() {
         g_trayPanel.InvalidateArrange();
         g_trayPanel.UpdateLayout();
     }
-    // Explorer updates the taskbar size and the private tray template in
-    // separate layout passes.  Recreate our injected controls after the native
-    // tray has settled so BackgroundBorder gets measured against the new size.
-    ScheduleMetricRefresh();
 }
 
 static void AttachTaskbarSizeRefreshHandlers(
@@ -3504,11 +3100,8 @@ static std::wstring GetNetworkTooltip(NetworkState const& state) {
         case NetworkKind::Wifi: {
             std::wstring name = state.name.empty() ? L"Wi-Fi" : state.name;
             if (!g_settings.showSignalStrengthInTooltip) return name + L"\n" + accessLine();
-            wchar_t buffer[256]{};
-            swprintf_s(buffer, L"%s\n%s\n\nSignal strength: %lu%%",
-                       name.c_str(),
-                       accessLine(), state.signal);
-            return buffer;
+            return name + L"\n" + accessLine() + L"\n\nSignal strength: " +
+                   std::to_wstring(state.signal) + L"%";
         }
         case NetworkKind::WifiConnecting: {
             if (!state.name.empty()) {
@@ -3827,16 +3420,10 @@ static std::wstring GetSoundTooltip(SoundState const& state) {
         percent = 100;
     }
 
-    wchar_t buffer[256]{};
     std::wstring name =
         state.outputName.empty() ? L"Volume" : state.outputName;
-    std::wstring tooltip;
-    if (state.muted) {
-        swprintf_s(buffer, L"%s: Muted", name.c_str());
-    } else {
-        swprintf_s(buffer, L"%s: %d%%", name.c_str(), percent);
-    }
-    tooltip = buffer;
+    std::wstring tooltip = state.muted ? name + L": Muted"
+                                       : name + L": " + std::to_wstring(percent) + L"%";
 
     MediaTooltipInfo media = GetCurrentlyPlayingMediaInfo();
     if (media.hasMedia) {
@@ -3984,7 +3571,6 @@ static void UpdateDynamicXamlIcons() {
     updating = true;
     try {
         RefreshEnergySaverStateAsync();
-        RefreshNativeTrayStyling();
         UpdateSeparateBatteryButton();
         auto primaryBrush = MakeIconBrush();
         auto underlayBrush = MakeUnderlayBrush();
@@ -4112,7 +3698,6 @@ static void RequestTrayRefresh(bool radiosChanged) {
 static LRESULT CALLBACK TrayRefreshWindowProc(HWND hwnd, UINT message,
                                              WPARAM wp, LPARAM lp) {
     if (message == kRefreshMessage + 1) {
-        SetPropW(hwnd, L"StatusEventSources", reinterpret_cast<HANDLE>(wp));
         Wh_Log(L"Status event subscriptions ready: 0x%X", static_cast<unsigned>(wp));
         return 0;
     }
@@ -4236,7 +3821,6 @@ static DWORD WINAPI StatusEventThread(void* parameter) {
                         CreateEventW(nullptr, FALSE, FALSE, nullptr)};
     HPOWERNOTIFY power[2]{};
     std::vector<std::pair<HANDLE, HDEVNOTIFY>> radios;
-    HDEVNOTIFY devices = nullptr;
     winrt::com_ptr<IMMDeviceEnumerator> enumerator;
     winrt::com_ptr<IAudioEndpointVolume> volume;
     auto observer = winrt::make_self<AudioStatusObserver>();
@@ -4294,11 +3878,6 @@ static DWORD WINAPI StatusEventThread(void* parameter) {
     power[0] = RegisterPowerSettingNotification(work.window, &GUID_ACDC_POWER_SOURCE, DEVICE_NOTIFY_WINDOW_HANDLE);
     power[1] = RegisterPowerSettingNotification(work.window, &GUID_BATTERY_PERCENTAGE_REMAINING, DEVICE_NOTIFY_WINDOW_HANDLE);
     if (power[0] && power[1]) sources |= 16;
-    DEV_BROADCAST_DEVICEINTERFACE_W interfaceFilter{};
-    interfaceFilter.dbcc_size = sizeof(interfaceFilter);
-    interfaceFilter.dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE;
-    devices = RegisterDeviceNotificationW(work.window, &interfaceFilter,
-        DEVICE_NOTIFY_WINDOW_HANDLE | DEVICE_NOTIFY_ALL_INTERFACE_CLASSES);
     bindRadios();
     for (auto [handle, notification] : radios) if (notification) sources |= 32;
     RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
@@ -4345,7 +3924,6 @@ static DWORD WINAPI StatusEventThread(void* parameter) {
         if (notification) UnregisterDeviceNotification(notification);
         CloseHandle(handle);
     }
-    if (devices) UnregisterDeviceNotification(devices);
     for (auto notification : power) if (notification) UnregisterPowerSettingNotification(notification);
     for (auto key : keys) if (key) RegCloseKey(key);
     for (auto event : keyEvents) if (event) CloseHandle(event);
@@ -4539,128 +4117,6 @@ static void ExecuteTrayContextCommand(TrayContextCommand command) {
     }
 }
 
-static void AppendWin32ContextItem(HMENU menu, PCWSTR text,
-                                   TrayContextCommand command) {
-    AppendMenuW(menu, MF_STRING, static_cast<UINT_PTR>(command), text);
-}
-
-static void AppendWin32BluetoothContextMenu(HMENU menu) {
-    AppendWin32ContextItem(menu, L"Troubleshoot bluetooth problems",
-                           TrayContextCommand::BluetoothTroubleshoot);
-    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendWin32ContextItem(menu, L"Bluetooth settings",
-                           TrayContextCommand::BluetoothSettings);
-    AppendWin32ContextItem(menu, L"Connect a new device",
-                           TrayContextCommand::BluetoothAddDevice);
-    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendWin32ContextItem(menu, L"Send a File",
-                           TrayContextCommand::BluetoothSendFile);
-    AppendWin32ContextItem(menu, L"Receive a File",
-                           TrayContextCommand::BluetoothReceiveFile);
-}
-
-constexpr UINT kAudioOutputMenuIdFirst = 0x7000;
-
-static bool IsEthernetConnected() {
-    return GetNetworkState().kind == NetworkKind::Ethernet;
-}
-
-static void AppendWin32SoundContextMenu(
-    HMENU menu, std::vector<AudioOutputEndpoint> const& outputs) {
-    AppendWin32ContextItem(menu, L"Troubleshoot sound problems",
-                           TrayContextCommand::SoundTroubleshoot);
-    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendWin32ContextItem(menu, L"Sound settings",
-                           TrayContextCommand::SoundSettings);
-    AppendWin32ContextItem(menu, L"Open volume mixer",
-                           TrayContextCommand::SoundMixer);
-    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-
-    HMENU outputMenu = CreatePopupMenu();
-    if (outputs.empty()) {
-        AppendMenuW(outputMenu, MF_STRING | MF_GRAYED, 0,
-                    L"No output devices");
-    } else {
-        for (size_t i = 0; i < outputs.size(); ++i) {
-            const UINT flags = MF_STRING | (outputs[i].isDefault ? MF_CHECKED : 0);
-            AppendMenuW(outputMenu, flags, kAudioOutputMenuIdFirst +
-                                            static_cast<UINT>(i),
-                        outputs[i].name.c_str());
-        }
-    }
-    AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(outputMenu),
-                L"Output device");
-
-    AppendWin32ContextItem(menu, L"Sounds", TrayContextCommand::SoundSounds);
-}
-
-static void AppendWin32NetworkContextMenu(HMENU menu) {
-    RefreshAirplaneModeAsync();
-    const bool airplaneEnabled = g_airplaneModeState.load() == 1;
-    AppendWin32ContextItem(menu, L"Troubleshoot network problems",
-                           TrayContextCommand::NetworkTroubleshoot);
-    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendWin32ContextItem(menu, L"Network and Internet settings",
-                           TrayContextCommand::NetworkSettings);
-    AppendWin32ContextItem(menu, L"Firewall protection",
-                           TrayContextCommand::NetworkFirewallProtection);
-    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendWin32ContextItem(menu, L"Perform speed test",
-                           TrayContextCommand::NetworkSpeedTest);
-    AppendMenuW(menu, MF_STRING | (airplaneEnabled ? MF_CHECKED : 0),
-                static_cast<UINT_PTR>(
-                    TrayContextCommand::NetworkToggleAirplaneMode),
-                airplaneEnabled ? L"Disable Airplane mode"
-                                : L"Enable Airplane mode");
-}
-
-static void AppendWin32QuickSettingsContextMenu(HMENU menu) {
-    AppendWin32ContextItem(menu, L"Task Manager",
-                           TrayContextCommand::QuickSettingsTaskManager);
-    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendWin32ContextItem(menu, L"System settings",
-                           TrayContextCommand::QuickSettingsTaskbarSettings);
-}
-
-static void ShowWin32TrayContextMenu(ButtonKind kind) {
-    HMENU menu = CreatePopupMenu();
-    if (!menu) {
-        Wh_Log(L"CreatePopupMenu failed: %lu", GetLastError());
-        return;
-    }
-
-    std::vector<AudioOutputEndpoint> audioOutputs;
-    if (kind == ButtonKind::Bluetooth) {
-        AppendWin32BluetoothContextMenu(menu);
-    } else if (kind == ButtonKind::Sound) {
-        audioOutputs = GetActiveAudioOutputEndpoints();
-        AppendWin32SoundContextMenu(menu, audioOutputs);
-    } else if (kind == ButtonKind::Network) {
-        AppendWin32NetworkContextMenu(menu);
-    } else if (kind == ButtonKind::QuickSettings) {
-        AppendWin32QuickSettingsContextMenu(menu);
-    }
-
-    POINT point{};
-    GetCursorPos(&point);
-    HWND owner = g_taskbarWnd ? g_taskbarWnd : FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (owner) {
-        SetForegroundWindow(owner);
-    }
-    const UINT selected = TrackPopupMenuEx(
-        menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY, point.x, point.y,
-        owner, nullptr);
-    DestroyMenu(menu);
-
-    if (selected >= kAudioOutputMenuIdFirst &&
-        selected < kAudioOutputMenuIdFirst + audioOutputs.size()) {
-        SetDefaultAudioOutput(
-            audioOutputs[selected - kAudioOutputMenuIdFirst].id);
-    } else if (selected) {
-        ExecuteTrayContextCommand(static_cast<TrayContextCommand>(selected));
-    }
-}
-
 static void AppendWinUiContextItem(
     wfc::IVector<wuc::MenuFlyoutItemBase> const& items, PCWSTR text,
     TrayContextCommand command, PCWSTR glyph = nullptr) {
@@ -4682,7 +4138,7 @@ static void AppendWinUiContextItem(
         if (g_unloading) return;
         ExecuteTrayContextCommand(command);
     });
-        g_uiEventRevokers.push_back([weakSource = winrt::make_weak(eventSource), eventToken] {
+        g_contextMenuEventRevokers.push_back([weakSource = winrt::make_weak(eventSource), eventToken] {
             if (auto source = weakSource.get()) source.Click(eventToken);
         });
     }
@@ -4753,7 +4209,7 @@ static void AppendWinUiSoundContextMenu(wuc::MenuFlyout const& flyout) {
         if (g_unloading) return;
                 SetDefaultAudioOutput(id);
             });
-        g_uiEventRevokers.push_back([weakSource = winrt::make_weak(eventSource), eventToken] {
+        g_contextMenuEventRevokers.push_back([weakSource = winrt::make_weak(eventSource), eventToken] {
             if (auto source = weakSource.get()) source.Click(eventToken);
         });
     }
@@ -4802,7 +4258,7 @@ static void AppendWinUiNetworkContextMenu(wuc::MenuFlyout const& flyout) {
         if (g_unloading) return;
         ExecuteTrayContextCommand(TrayContextCommand::NetworkToggleAirplaneMode);
     });
-        g_uiEventRevokers.push_back([weakSource = winrt::make_weak(eventSource), eventToken] {
+        g_contextMenuEventRevokers.push_back([weakSource = winrt::make_weak(eventSource), eventToken] {
             if (auto source = weakSource.get()) source.Click(eventToken);
         });
     }
@@ -4840,12 +4296,14 @@ __CRT_UUID_DECL(BatterySettingItem, 0x40c037cc, 0xd8bf, 0x489e,
                 0x86, 0x97, 0xd6, 0x6b, 0xaa, 0x32, 0x21, 0xbf)
 
 static winrt::com_ptr<BatterySettingItem> GetBatteryBooleanSetting(PCWSTR settingName = L"SystemSettings_PowerAndBattery_EnergySaverAlwaysOn") {
-    static HMODULE module = LoadLibraryExW(
-        L"SettingsHandlers_OneCore_BatterySaver.dll", nullptr,
-        LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!g_batterySettingsModule) {
+        g_batterySettingsModule = LoadLibraryExW(
+            L"SettingsHandlers_OneCore_BatterySaver.dll", nullptr,
+            LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
     using GetSetting = HRESULT(WINAPI*)(HSTRING, ::IInspectable**);
-    const auto getSetting = module ? reinterpret_cast<GetSetting>(
-        GetProcAddress(module, "GetSetting")) : nullptr;
+    const auto getSetting = g_batterySettingsModule ? reinterpret_cast<GetSetting>(
+        GetProcAddress(g_batterySettingsModule, "GetSetting")) : nullptr;
     if (!getSetting) winrt::throw_hresult(E_NOTIMPL);
     winrt::hstring name{settingName};
     winrt::com_ptr<::IInspectable> object;
@@ -4972,7 +4430,7 @@ static void AppendWinUiEnergySaverItem(wuc::MenuFlyout const& flyout) {
         if (g_unloading) return;
         QueueEnergySaverWork(true);
     });
-        g_uiEventRevokers.push_back([weakSource = winrt::make_weak(eventSource), eventToken] {
+        g_contextMenuEventRevokers.push_back([weakSource = winrt::make_weak(eventSource), eventToken] {
             if (auto source = weakSource.get()) source.Click(eventToken);
         });
     }
@@ -5003,7 +4461,7 @@ static void AppendWinUiBatteryPercentageItem(wuc::MenuFlyout const& flyout) {
         if (g_unloading) return;
         QueueEnergySaverWork(2);
     });
-        g_uiEventRevokers.push_back([weakSource = winrt::make_weak(eventSource), eventToken] {
+        g_contextMenuEventRevokers.push_back([weakSource = winrt::make_weak(eventSource), eventToken] {
             if (auto source = weakSource.get()) source.Click(eventToken);
         });
     }
@@ -5013,8 +4471,10 @@ static void AppendWinUiBatteryContextMenu(wuc::MenuFlyout const& flyout) {
     // Separate user preferences for AC and DC, not legacy power-plan GUIDs.
     using GetMode = DWORD(WINAPI*)(GUID*);
     using SetMode = DWORD(WINAPI*)(const GUID*);
-    static HMODULE powerModule = LoadLibraryExW(L"powrprof.dll", nullptr,
-                                                LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!g_powerProfileModule) {
+        g_powerProfileModule = LoadLibraryExW(L"powrprof.dll", nullptr,
+                                              LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
     const GUID modes[] = {
         {0x961cc777, 0x2547, 0x4f9d, {0x81,0x74,0x7d,0x86,0x18,0x1b,0x8a,0x7a}},
         {},
@@ -5034,9 +4494,9 @@ static void AppendWinUiBatteryContextMenu(wuc::MenuFlyout const& flyout) {
     const bool supplyKnown = GetSystemPowerStatus(&supplyStatus) && supplyStatus.ACLineStatus != 255;
     const bool ac = supplyKnown && supplyStatus.ACLineStatus == 1;
     {
-        auto getMode = powerModule ? reinterpret_cast<GetMode>(GetProcAddress(powerModule,
+        auto getMode = g_powerProfileModule ? reinterpret_cast<GetMode>(GetProcAddress(g_powerProfileModule,
             ac ? "PowerGetUserConfiguredACPowerMode" : "PowerGetUserConfiguredDCPowerMode")) : nullptr;
-        auto setMode = powerModule ? reinterpret_cast<SetMode>(GetProcAddress(powerModule,
+        auto setMode = g_powerProfileModule ? reinterpret_cast<SetMode>(GetProcAddress(g_powerProfileModule,
             ac ? "PowerSetUserConfiguredACPowerMode" : "PowerSetUserConfiguredDCPowerMode")) : nullptr;
 
 
@@ -5057,7 +4517,7 @@ static void AppendWinUiBatteryContextMenu(wuc::MenuFlyout const& flyout) {
                     Wh_Log(L"Changing power mode failed: %lu", error);
                 }
             });
-        g_uiEventRevokers.push_back([weakSource = winrt::make_weak(eventSource), eventToken] {
+        g_contextMenuEventRevokers.push_back([weakSource = winrt::make_weak(eventSource), eventToken] {
             if (auto source = weakSource.get()) source.Click(eventToken);
         });
     }
@@ -5173,7 +4633,7 @@ static void ShowWinUiFlyoutNearTaskbar(wuc::MenuFlyout const& flyout,
             Wh_Log(L"Menu placement failed: 0x%08X", winrt::to_hresult());
         }
     });
-        g_uiEventRevokers.push_back([weakSource = winrt::make_weak(eventSource), eventToken] {
+        g_contextMenuEventRevokers.push_back([weakSource = winrt::make_weak(eventSource), eventToken] {
             if (auto source = weakSource.get()) source.Opened(eventToken);
         });
     }
@@ -5187,6 +4647,12 @@ static bool ShowWinUiTrayContextMenu(wux::FrameworkElement const& target,
     }
 
     try {
+        // Menu event handlers belong to the current flyout. Revoke the old
+        // set before replacing it so repeated right-clicks do not retain
+        // delegates for every menu previously opened this session.
+        if (g_activeTrayContextFlyout) g_activeTrayContextFlyout.Hide();
+        g_activeTrayContextFlyout = nullptr;
+        RevokeEvents(g_contextMenuEventRevokers);
         auto flyout = wuc::MenuFlyout();
         if (kind == ButtonKind::Bluetooth) {
             AppendWinUiBluetoothContextMenu(flyout);
@@ -5340,30 +4806,21 @@ static bool IsShellHostedWindow(HWND hwnd) {
     PCWSTR name = ok ? wcsrchr(path, L'\\') : nullptr;
     name = name ? name + 1 : path;
     return ok && (_wcsicmp(name, L"ShellHost.exe") == 0 ||
-                  _wcsicmp(name, L"ShellExperienceHost.exe") == 0);
+                  _wcsicmp(name, L"ShellExperienceHost.exe") == 0 ||
+                  _wcsicmp(name, L"explorer.exe") == 0);
 }
 
 static bool IsRecordedTrayFlyout(HWND hwnd) {
     wchar_t className[128]{};
-    if (!hwnd || !IsWindowVisible(hwnd) || !IsShellHostedWindow(hwnd) ||
+    if (!hwnd || !IsShellHostedWindow(hwnd) ||
         !GetClassNameW(hwnd, className, ARRAYSIZE(className))) return false;
-    // A flyout can have different shell window classes between builds, but it
-    // is never the taskbar or desktop itself.
+    // A flyout can have different shell window classes between builds (some
+    // are Explorer-hosted), but it is never a taskbar, desktop or folder.
     return _wcsicmp(className, L"Shell_TrayWnd") != 0 &&
            _wcsicmp(className, L"Shell_SecondaryTrayWnd") != 0 &&
            _wcsicmp(className, L"CabinetWClass") != 0 &&
            _wcsicmp(className, L"Progman") != 0 &&
            _wcsicmp(className, L"WorkerW") != 0;
-}
-
-static bool DismissForegroundShellFlyout() {
-    HWND foreground = GetForegroundWindow();
-    if (!IsRecordedTrayFlyout(foreground)) return false;
-    // Target Escape to the foreground shell window only. Unlike SendInput,
-    // this cannot affect the user's active application.
-    PostMessageW(foreground, WM_KEYDOWN, VK_ESCAPE, 1);
-    PostMessageW(foreground, WM_KEYUP, VK_ESCAPE, 0xC0000001);
-    return true;
 }
 
 static void CaptureOpenedTrayFlyoutAsync(ButtonKind kind) {
@@ -5415,7 +4872,7 @@ static bool HandleTrayButtonClick(ButtonKind kind) {
     } else if (kind == ButtonKind::Network) {
         OpenNetwork();
     } else if (kind == ButtonKind::QuickSettings) {
-        ExecuteAction(g_settings.groupedButtonAction);
+        ExecuteAction(g_settings.controlCenterAction);
     } else if (kind == ButtonKind::Battery) {
         ExecuteAction(g_settings.batteryAction);
     } else {
@@ -5911,8 +5368,6 @@ static wux::FrameworkElement CreateTrayButton(ButtonKind kind,
 
 struct OrderedTrayButtons {
     std::vector<wux::FrameworkElement> all;
-    std::vector<wux::FrameworkElement> beforeNativeQuickSettings;
-    std::vector<wux::FrameworkElement> afterNativeQuickSettings;
 };
 
 static std::vector<ButtonKind> GetVisibleButtonOrder();
@@ -6023,7 +5478,7 @@ static OrderedTrayButtons CreateTrayButtons() {
 
     if (g_settings.showControlCenterButton) {
         auto compactGlyph =
-            GlyphFromHexSetting(g_settings.compactGroupedButtonGlyph, L'\xF4C3');
+            GlyphFromHexSetting(g_settings.controlCenterGlyph, L'\xF4C3');
         g_compactGroupedButton =
             CreateTrayButton(ButtonKind::QuickSettings, compactGlyph.c_str(),
                              L"SeparateQuickSettingsXamlControlCenter",
@@ -6032,30 +5487,9 @@ static OrderedTrayButtons CreateTrayButtons() {
         g_compactGroupedButton = nullptr;
     }
 
-    bool nativeQuickSettingsSeen = false;
     for (auto kind : GetVisibleButtonOrder()) {
-        if (kind == ButtonKind::QuickSettings) {
-            if (GroupedButtonModeIs(L"native")) {
-                nativeQuickSettingsSeen = true;
-            } else if (auto compact = ButtonElementForKind(kind)) {
-                buttons.all.push_back(compact);
-            }
-            continue;
-        }
-
         auto element = ButtonElementForKind(kind);
-        if (!element) {
-            continue;
-        }
-
-        buttons.all.push_back(element);
-        if (GroupedButtonModeIs(L"native")) {
-            if (nativeQuickSettingsSeen) {
-                buttons.afterNativeQuickSettings.push_back(element);
-            } else {
-                buttons.beforeNativeQuickSettings.push_back(element);
-            }
-        }
+        if (element) buttons.all.push_back(element);
     }
 
     return buttons;
@@ -6094,29 +5528,9 @@ static bool TryInjectBesideControlCenterButton(wux::FrameworkElement const& root
         }
 
         auto buttons = CreateTrayButtons();
-        if (GroupedButtonModeIs(L"native")) {
-            for (uint32_t i = 0; i < buttons.beforeNativeQuickSettings.size();
-                 ++i) {
-                children.InsertAt(
-                    insertIndex + i,
-                    buttons.beforeNativeQuickSettings[i].as<wux::UIElement>());
-            }
-
-            uint32_t afterIndex = insertIndex +
-                                  static_cast<uint32_t>(
-                                      buttons.beforeNativeQuickSettings.size()) +
-                                  1;
-            for (uint32_t i = 0; i < buttons.afterNativeQuickSettings.size();
-                 ++i) {
-                children.InsertAt(
-                    afterIndex + i,
-                    buttons.afterNativeQuickSettings[i].as<wux::UIElement>());
-            }
-        } else {
-            for (uint32_t i = 0; i < buttons.all.size(); ++i) {
-                children.InsertAt(insertIndex + i,
-                                  buttons.all[i].as<wux::UIElement>());
-            }
+        for (uint32_t i = 0; i < buttons.all.size(); ++i) {
+            children.InsertAt(insertIndex + i,
+                              buttons.all[i].as<wux::UIElement>());
         }
 
         UpdateDynamicXamlIcons();
@@ -6251,17 +5665,7 @@ static bool ApplyXamlButtons() {
     }
 
     auto buttons = CreateTrayButtons();
-    if (GroupedButtonModeIs(L"native")) {
-        InsertGridTrayButtons(trayGrid, buttons.beforeNativeQuickSettings,
-                              insertCol);
-        const int nativeQuickSettingsCol =
-            insertCol +
-            static_cast<int>(buttons.beforeNativeQuickSettings.size());
-        InsertGridTrayButtons(trayGrid, buttons.afterNativeQuickSettings,
-                              nativeQuickSettingsCol + 1);
-    } else {
-        InsertGridTrayButtons(trayGrid, buttons.all, insertCol);
-    }
+    InsertGridTrayButtons(trayGrid, buttons.all, insertCol);
 
     EnsureUpdateTimer();
 
@@ -6321,7 +5725,11 @@ static void RemoveXamlButtons() {
         try { DestroyTrayRefreshWindow(); }
         catch (...) { Wh_Log(L"DestroyTrayRefreshWindow error: 0x%08X", winrt::to_hresult()); }
     }
-    try { RevokeEvents(g_timerEventRevokers); RevokeEvents(g_uiEventRevokers); }
+    try {
+        RevokeEvents(g_timerEventRevokers);
+        RevokeEvents(g_contextMenuEventRevokers);
+        RevokeEvents(g_uiEventRevokers);
+    }
     catch (...) { Wh_Log(L"Event revocation error: 0x%08X", winrt::to_hresult()); }
     try { if (g_activeTrayContextFlyout) g_activeTrayContextFlyout.Hide(); } catch (...) {}
     g_activeTrayContextFlyout = nullptr;
@@ -6335,10 +5743,6 @@ static void RemoveXamlButtons() {
     g_btConnectedCount = 0;
     g_btQueryTick = 0;
     try {
-        HideFixedTrayTooltip();
-        g_fixedTrayTooltipPopup = nullptr;
-        g_fixedTrayTooltipBorder = nullptr;
-        g_fixedTrayTooltipText = nullptr;
         if (g_updateTimer) {
             g_updateTimer.Stop();
             g_updateTimer = nullptr;
@@ -6354,7 +5758,6 @@ static void RemoveXamlButtons() {
         }
         g_retryCount = 0;
         g_metricRefreshPending = false;
-        g_metricRefreshSettlePasses = 0;
         if (g_sizeRefreshTrayElement) {
             g_sizeRefreshTrayElement.SizeChanged(g_sizeRefreshTrayToken);
             g_sizeRefreshTrayElement = nullptr;
@@ -6405,7 +5808,6 @@ static void RemoveXamlButtons() {
     g_batteryPercentageText = nullptr;
     g_trayPanel = nullptr;
     g_nativeGroupedButtonStyle = g_nativeNotifyIconStyle = nullptr;
-    g_fixedTrayTooltipTarget = nullptr;
     g_sizeRefreshTrayElement = g_sizeRefreshControlCenterButton = nullptr;
 }
 
@@ -6420,11 +5822,6 @@ static void WINAPI ApplyXamlButtonsProc(PVOID) {
 static void WINAPI RemoveXamlButtonsProc(PVOID) {
     try { RemoveXamlButtons(); }
     catch (...) { Wh_Log(L"RemoveXamlButtonsProc error: 0x%08X", winrt::to_hresult()); }
-}
-
-static void WINAPI ReapplyXamlButtonsProc(PVOID) {
-    try { RemoveXamlButtons(); ApplyXamlButtonsWithRetry(); }
-    catch (...) { Wh_Log(L"ReapplyXamlButtonsProc error: 0x%08X", winrt::to_hresult()); }
 }
 
 static void WINAPI ReloadSettingsAndReapplyProc(PVOID) {
@@ -6559,9 +5956,13 @@ void Wh_ModAfterInit() {
 void Wh_ModSettingsChanged() {
     if (HWND currentTaskbar = FindCurrentProcessTaskbarWnd())
         g_taskbarWnd = currentTaskbar;
-    if (g_taskbarWnd) {
-        RunFromWindowThread(g_taskbarWnd, ReloadSettingsAndReapplyProc, nullptr);
-    }
+    if (g_taskbarWnd &&
+        RunFromWindowThread(g_taskbarWnd, ReloadSettingsAndReapplyProc, nullptr))
+        return;
+
+    // Explorer can briefly have no taskbar during a rebuild. Preserve the new
+    // values so the next TrayUI::StartTaskbar injection uses them.
+    LoadSettings();
 }
 
 void Wh_ModUninit() {
@@ -6583,6 +5984,27 @@ void Wh_ModUninit() {
         refresh = g_refreshWindow;
         ReleaseSRWLockShared(&g_refreshLock);
         if (refresh) SendMessageW(refresh, kDestroyRefreshWindowMessage, 0, 0);
+        // If the taskbar thread has gone away, prevent timers and delegates
+        // from calling into an unloaded module. The injected visual children
+        // may remain until Explorer rebuilds its tree, but they are inert.
+        try {
+            if (g_updateTimer) g_updateTimer.Stop();
+            if (g_retryTimer) g_retryTimer.Stop();
+            if (g_metricRefreshTimer) g_metricRefreshTimer.Stop();
+            RevokeEvents(g_timerEventRevokers);
+            RevokeEvents(g_contextMenuEventRevokers);
+            RevokeEvents(g_uiEventRevokers);
+        } catch (...) {
+            Wh_Log(L"Wh_ModUninit fallback cleanup failed: 0x%08X", winrt::to_hresult());
+        }
     }
     WaitForOwnedWorkers();
+    if (g_batterySettingsModule) {
+        FreeLibrary(g_batterySettingsModule);
+        g_batterySettingsModule = nullptr;
+    }
+    if (g_powerProfileModule) {
+        FreeLibrary(g_powerProfileModule);
+        g_powerProfileModule = nullptr;
+    }
 }
