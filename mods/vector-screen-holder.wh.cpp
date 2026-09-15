@@ -2,7 +2,7 @@
 // @id              vector-screen-holder
 // @name            Vector Screen Holder
 // @description     Fills a display you choose with generative line art and keeps the PC from idling while it runs
-// @version         1.0.7
+// @version         1.0.8
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
@@ -936,6 +936,7 @@ class ContourScene : public Scene {
 
         Advance(ctx.dt);
         age_ += ctx.dt;
+        MarchAll();
 
         // Contours are a full redraw each frame.
         D2D1_COLOR_F clear = ToColorF(pal_->bg, 0.0f);
@@ -944,7 +945,6 @@ class ContourScene : public Scene {
         const size_t inkN = pal_->ink.size();
         for (int k = 0; k < levels_; k++) {
             float t = levels_ > 1 ? (float)k / (levels_ - 1) : 0.0f;
-            float level = -0.42f + t * 0.84f;
             bool emph = (k % 5 == 0);
 
             // blend across the palette by depth so the map reads as one system
@@ -957,13 +957,12 @@ class ContourScene : public Scene {
             c.g = pal_->ink[i0].g + (pal_->ink[i1].g - pal_->ink[i0].g) * ft;
             c.b = pal_->ink[i0].b + (pal_->ink[i1].b - pal_->ink[i0].b) * ft;
 
-            segs_.clear();
-            March(level);
-            if (segs_.empty()) {
+            const std::vector<D2D1_POINT_2F>& segs = segsByLevel_[k];
+            if (segs.empty()) {
                 continue;
             }
             SetInk(ctx, c, emph ? 0.95f : 0.38f);
-            ID2D1PathGeometry* g = MakeSegments(ctx.factory, segs_);
+            ID2D1PathGeometry* g = MakeSegments(ctx.factory, segs);
             if (g) {
                 ctx.target->DrawGeometry(g, ctx.brush, emph ? 1.15f : 0.6f,
                                          nullptr);
@@ -1012,51 +1011,100 @@ class ContourScene : public Scene {
         return field_[(size_t)j * (cols_ + 1) + i];
     }
 
-    void Emit(float ax, float ay, float bx, float by) {
-        segs_.push_back(Pt(ax, ay));
-        segs_.push_back(Pt(bx, by));
+    static void Emit(std::vector<D2D1_POINT_2F>& out,
+                     float ax, float ay, float bx, float by) {
+        out.push_back(Pt(ax, ay));
+        out.push_back(Pt(bx, by));
     }
 
-    void March(float level) {
+    // One pass over the grid for every level at once.
+    //
+    // The levels are evenly spaced, so a cell can only cross the ones that
+    // fall between the minimum and maximum of its four corners. Bracketing
+    // against that leaves most cells touching one or two levels instead of
+    // being re-tested against all of them, which at the maximal setting is
+    // the difference between about 830k cell tests per frame and roughly one
+    // pass over the grid. The output is identical.
+    void MarchAll() {
+        if ((int)segsByLevel_.size() < levels_) {
+            segsByLevel_.resize(levels_);
+        }
+        for (int k = 0; k < levels_; k++) {
+            segsByLevel_[k].clear();
+        }
+        if (levels_ < 2) {
+            return;
+        }
+
+        const float kBase = -0.42f, kSpan = 0.84f;
+        const float step = kSpan / (levels_ - 1);
+
         for (int j = 0; j < rows_; j++) {
             for (int i = 0; i < cols_; i++) {
                 float v0 = At(i, j), v1 = At(i + 1, j);
                 float v2 = At(i + 1, j + 1), v3 = At(i, j + 1);
-                int code = 0;
-                if (v0 > level) code |= 1;
-                if (v1 > level) code |= 2;
-                if (v2 > level) code |= 4;
-                if (v3 > level) code |= 8;
-                if (code == 0 || code == 15) {
+
+                float vmin = std::min(std::min(v0, v1), std::min(v2, v3));
+                float vmax = std::max(std::max(v0, v1), std::max(v2, v3));
+
+                // Widen by one notch each way: the level is recomputed below
+                // the same way the colour ramp does it, and that expression
+                // can land a hair either side of base + k * step. A spare
+                // level costs one rejected code test; a missed one would drop
+                // a segment.
+                int kFrom = (int)std::floor((vmin - kBase) / step) - 1;
+                int kTo = (int)std::ceil((vmax - kBase) / step) + 1;
+                if (kFrom < 0) {
+                    kFrom = 0;
+                }
+                if (kTo > levels_ - 1) {
+                    kTo = levels_ - 1;
+                }
+                if (kFrom > kTo) {
                     continue;
                 }
+
                 float x0 = i * cw_, y0 = j * ch_;
                 float x1 = x0 + cw_, y1 = y0 + ch_;
-                // linear interpolation along each crossed edge
-                float tT = (level - v0) / ((v1 - v0) != 0 ? (v1 - v0) : 1e-6f);
-                float tR = (level - v1) / ((v2 - v1) != 0 ? (v2 - v1) : 1e-6f);
-                float tB = (level - v3) / ((v2 - v3) != 0 ? (v2 - v3) : 1e-6f);
-                float tL = (level - v0) / ((v3 - v0) != 0 ? (v3 - v0) : 1e-6f);
-                float Tx = x0 + (x1 - x0) * tT, Ty = y0;
-                float Rx = x1, Ry = y0 + (y1 - y0) * tR;
-                float Bx = x0 + (x1 - x0) * tB, By = y1;
-                float Lx = x0, Ly = y0 + (y1 - y0) * tL;
-                switch (code) {
-                    case 1: case 14: Emit(Lx, Ly, Tx, Ty); break;
-                    case 2: case 13: Emit(Tx, Ty, Rx, Ry); break;
-                    case 3: case 12: Emit(Lx, Ly, Rx, Ry); break;
-                    case 4: case 11: Emit(Rx, Ry, Bx, By); break;
-                    case 6: case 9:  Emit(Tx, Ty, Bx, By); break;
-                    case 7: case 8:  Emit(Lx, Ly, Bx, By); break;
-                    case 5:
-                        Emit(Lx, Ly, Tx, Ty);
-                        Emit(Rx, Ry, Bx, By);
-                        break;
-                    case 10:
-                        Emit(Tx, Ty, Rx, Ry);
-                        Emit(Lx, Ly, Bx, By);
-                        break;
-                    default: break;
+
+                for (int k = kFrom; k <= kTo; k++) {
+                    float level =
+                        kBase + ((float)k / (levels_ - 1)) * kSpan;
+                    int code = 0;
+                    if (v0 > level) code |= 1;
+                    if (v1 > level) code |= 2;
+                    if (v2 > level) code |= 4;
+                    if (v3 > level) code |= 8;
+                    if (code == 0 || code == 15) {
+                        continue;
+                    }
+                    std::vector<D2D1_POINT_2F>& out = segsByLevel_[k];
+                    // linear interpolation along each crossed edge
+                    float dT = (v1 - v0) != 0 ? (v1 - v0) : 1e-6f;
+                    float dR = (v2 - v1) != 0 ? (v2 - v1) : 1e-6f;
+                    float dB = (v2 - v3) != 0 ? (v2 - v3) : 1e-6f;
+                    float dL = (v3 - v0) != 0 ? (v3 - v0) : 1e-6f;
+                    float Tx = x0 + (x1 - x0) * ((level - v0) / dT), Ty = y0;
+                    float Rx = x1, Ry = y0 + (y1 - y0) * ((level - v1) / dR);
+                    float Bx = x0 + (x1 - x0) * ((level - v3) / dB), By = y1;
+                    float Lx = x0, Ly = y0 + (y1 - y0) * ((level - v0) / dL);
+                    switch (code) {
+                        case 1: case 14: Emit(out, Lx, Ly, Tx, Ty); break;
+                        case 2: case 13: Emit(out, Tx, Ty, Rx, Ry); break;
+                        case 3: case 12: Emit(out, Lx, Ly, Rx, Ry); break;
+                        case 4: case 11: Emit(out, Rx, Ry, Bx, By); break;
+                        case 6: case 9:  Emit(out, Tx, Ty, Bx, By); break;
+                        case 7: case 8:  Emit(out, Lx, Ly, Bx, By); break;
+                        case 5:
+                            Emit(out, Lx, Ly, Tx, Ty);
+                            Emit(out, Rx, Ry, Bx, By);
+                            break;
+                        case 10:
+                            Emit(out, Tx, Ty, Rx, Ry);
+                            Emit(out, Lx, Ly, Bx, By);
+                            break;
+                        default: break;
+                    }
                 }
             }
         }
@@ -1074,7 +1122,7 @@ class ContourScene : public Scene {
     static constexpr float kDz = 0.015f;
     float zA_ = 0, zB_ = 0, blend_ = 0;
     std::vector<float> field_, fieldA_, fieldB_;
-    std::vector<D2D1_POINT_2F> segs_;
+    std::vector<std::vector<D2D1_POINT_2F>> segsByLevel_;
 };
 
 // ---------------------------------------------------------------------------
