@@ -98,7 +98,8 @@ struct {
 } g_settings;
 
 // Window classes of SumatraPDF's main window and of the document canvas
-// (FRAME_CLASS_NAME / CANVAS_CLASS_NAME in src/SumatraPDF.h).
+// (FRAME_CLASS_NAME / CANVAS_CLASS_NAME in SumatraPDF 3.x, kFrameClassName /
+// kCanvasClassName in the current source).
 constexpr PCWSTR kFrameClassName = L"SUMATRA_PDF_FRAME";
 constexpr PCWSTR kCanvasClassName = L"SUMATRA_PDF_CANVAS";
 
@@ -130,12 +131,13 @@ std::atomic<bool> g_tabCommandsResolved;
 std::mutex g_tabCommandsMutex;
 WORD g_cmdNextTab;
 WORD g_cmdPrevTab;
+// The table that most recently resolved the ids. Several of SumatraPDF's
+// tables contain the shortcuts, and all of them are destroyed together before
+// a rebuild, so it doesn't matter which one it is.
 HACCEL g_resolvedFromTable;
 // Tables already scanned via their handle. Only used while the ids aren't
-// known yet and no table creation has been observed, i.e. when the mod was
-// loaded into a running SumatraPDF.
+// known yet, e.g. when the mod was loaded into a running SumatraPDF.
 std::vector<HACCEL> g_scannedAccelTables;
-std::atomic<bool> g_tableCreationObserved;
 
 // Reads the file version (major.minor) of the executable of the current
 // process, i.e. the SumatraPDF version.
@@ -192,14 +194,17 @@ bool ResolveTabCommandsFromAccels(const ACCEL* accels,
     }
 
     if (!next || !prev) {
-        // Expected for SumatraPDF's reduced tables (edit control, tree view).
-        // For the main table, what's bound to PageUp/PageDown is the useful
-        // diagnostic, so log just those entries.
-        Wh_Log(L"Tab commands not found in table with %d entries", count);
-        for (int i = 0; i < count; i++) {
-            if (accels[i].key == VK_NEXT || accels[i].key == VK_PRIOR) {
-                Wh_Log(L"  fVirt=%02X key=%04X cmd=%u", accels[i].fVirt,
-                       accels[i].key, accels[i].cmd);
+        // Expected for SumatraPDF's reduced tables (edit control, tree view),
+        // which are created after the main one. Only if nothing resolved the
+        // ids so far is this worth a diagnostic, and then what's bound to
+        // PageUp/PageDown is the useful part.
+        if (!g_tabCommandsResolved.load(std::memory_order_relaxed)) {
+            Wh_Log(L"Tab commands not found in table with %d entries", count);
+            for (int i = 0; i < count; i++) {
+                if (accels[i].key == VK_NEXT || accels[i].key == VK_PRIOR) {
+                    Wh_Log(L"  fVirt=%02X key=%04X cmd=%u", accels[i].fVirt,
+                           accels[i].key, accels[i].cmd);
+                }
             }
         }
         return false;
@@ -322,6 +327,12 @@ bool OnMouseWheel(HWND hWnd,
     if (keys) {
         // A modifier key or mouse button is held down, e.g. Ctrl+wheel (zoom)
         // or Shift+wheel (horizontal scrolling). Leave that to SumatraPDF.
+        return false;
+    }
+
+    if (!IsWindowEnabled(hWnd)) {
+        // A modal dialog is open. SumatraPDF wouldn't act on the shortcut
+        // either, so don't switch tabs behind the dialog.
         return false;
     }
 
@@ -587,10 +598,6 @@ HACCEL WINAPI CreateAcceleratorTableWHook(LPACCEL paccel, int cAccel) {
         // Only a table that contains both shortcuts updates the ids, the
         // reduced tables leave them alone.
         ResolveTabCommandsFromAccels(paccel, cAccel, hAccel);
-
-        // From now on every live table has been seen here, the handle based
-        // lookup in TranslateAcceleratorWHook is no longer needed.
-        g_tableCreationObserved.store(true, std::memory_order_relaxed);
     }
 
     return hAccel;
@@ -623,8 +630,7 @@ BOOL WINAPI DestroyAcceleratorTableHook(HACCEL hAccel) {
 using TranslateAcceleratorW_t = decltype(&TranslateAcceleratorW);
 TranslateAcceleratorW_t pOriginalTranslateAcceleratorW;
 int WINAPI TranslateAcceleratorWHook(HWND hWnd, HACCEL hAccTable, LPMSG lpMsg) {
-    if (hAccTable && !g_tabCommandsResolved.load(std::memory_order_acquire) &&
-        !g_tableCreationObserved.load(std::memory_order_relaxed)) {
+    if (hAccTable && !g_tabCommandsResolved.load(std::memory_order_acquire)) {
         ResolveTabCommandsFromTable(hAccTable);
     }
 
