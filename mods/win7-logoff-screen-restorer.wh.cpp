@@ -44,7 +44,7 @@ The mod has been tested on Windows 10 21H2, Windows 11 24H2, and Windows 11 25H2
 
 ## Try it without logging off
 
-To try the mod without logging off, it is recommended to press `Ctrl+Alt+Shift+L` any time to preview the screen. You can change or disable this shortcut in settings. `Win+L` can't be used — Windows reserves it for locking the PC.
+To try the mod without logging off, you can enable a preview shortcut in the mod's settings (`previewHotkey`) and press it any time to preview the screen. The preview shortcut is off by default. `Win+L` can't be used as a shortcut — Windows reserves it for locking the PC.
 
 ---
 
@@ -120,7 +120,7 @@ For any suggestions or problems it is recommended to contact the author of this 
   - zh: 中文（简体）(Chinese, simplified)
   - ja: 日本語 (Japanese)
   - ko: 한국어 (Korean)
-- previewHotkey: none
+- previewHotkey: ctrlaltshiftl
   $name: Preview shortcut
   $description: >-
     This setting picks the shortcut that previews the screen without logging
@@ -213,6 +213,10 @@ struct ShutdownRequest {
     // carry on normally, without the "force" flag being added behind the
     // user's back.
     bool proceed = false;
+    // Thread that called ExitWindowsEx/posted this request. Its own windows
+    // (e.g. Task Manager's own UI) are blocked on this very call and must not
+    // be reported as hung to the user because of that.
+    DWORD requestingThreadId = 0;
 };
 
 // Requests that arrived while a screen was already up (the WM_APP_SHOW fast
@@ -1014,6 +1018,11 @@ struct OpenProgram {
     bool blocking = false;
 };
 static std::vector<OpenProgram> g_openPrograms;
+// Thread id of the request currently being shown, so CollectVisibleWindows
+// can skip the hung-app check for that thread's own windows (see
+// ShowWin7LogoffDialog / ShowScreenOnUiThread). 0 when nothing requested it
+// (e.g. the preview hotkey path), in which case nothing is skipped.
+static DWORD g_requestingThreadId = 0;
 static std::wstring ProgramListSignature() {
     std::wstring r;
     for (const auto& p : g_openPrograms) { r += p.blocking ? L"!" : L"-"; r += p.name; r += L"\n"; }
@@ -1213,7 +1222,14 @@ static BOOL CALLBACK CollectVisibleWindows(HWND w, LPARAM) {
         if (!exeName.empty()) x += L" (" + exeName + L")";
         // A window that no longer pumps messages is what actually holds the
         // shutdown back, so remember it: those entries are listed first.
-        bool blocking = IsHungAppWindow(w) != FALSE;
+        // Skip the check for the requesting thread's own windows: that
+        // thread is blocked inside ShowWin7LogoffDialog for as long as this
+        // screen is up, so IsHungAppWindow would always flag them, even
+        // though nothing is actually wrong (e.g. Task Manager's own window
+        // when the shutdown was triggered from its Shut Down menu).
+        DWORD ownerTid = GetWindowThreadProcessId(w, nullptr);
+        bool blocking = (g_requestingThreadId == 0 || ownerTid != g_requestingThreadId)
+                         && IsHungAppWindow(w) != FALSE;
         g_openPrograms.push_back({x, GetProgramIcon(w, pid, path), pid, blocking});
     } catch (...) {}
     return TRUE;
@@ -1817,6 +1833,7 @@ static void ShowScreenOnUiThread(ShutdownRequest* req, ActionKind action) {
     if (req) { req->force = false; req->proceed = false; }
     g_action = action;
     g_listScroll = 0; g_draggingThumb = false; // always open at the top of the list
+    g_requestingThreadId = req ? req->requestingThreadId : 0;
     RefreshOpenPrograms();
 
     // Nothing is holding the logoff back, so there is nothing to report and
@@ -2532,7 +2549,8 @@ static bool ShowWin7LogoffDialog(UINT flags, DWORD reason, bool* outForce) {
     // preview hotkey path runs directly on the UI thread once it's up, so it
     // needs no such wait.
     WaitForSingleObject(g_uiReady, 5000);
-    if (!g_uiThreadId || !g_hotkeyWindow) return true;
+    HWND ctrl = g_hotkeyWindow.load(std::memory_order_acquire);
+    if (!g_uiThreadId || !ctrl) return true;
 
     // Heap-allocated, not stack: on the (last-resort) timeout/WM_QUIT paths
     // below, this function gives up on waiting while the UI thread may still
@@ -2545,6 +2563,10 @@ static bool ShowWin7LogoffDialog(UINT flags, DWORD reason, bool* outForce) {
     if (!req) return true;   // fail open: never block a logoff
     req->reply = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!req->reply) { delete req; return true; }   // fail open: never block a logoff
+    // Recorded so CollectVisibleWindows can skip the hung check for this
+    // thread's own windows: this thread is about to block for as long as
+    // the screen is up, so it would otherwise flag itself as hung.
+    req->requestingThreadId = GetCurrentThreadId();
 
     // Which wording the screen uses is decided here, once. EWX_REBOOT is
     // tested first because a restart also carries the shutdown semantics, and
@@ -2555,7 +2577,7 @@ static bool ShowWin7LogoffDialog(UINT flags, DWORD reason, bool* outForce) {
                 : (flags & (EWX_SHUTDOWN | EWX_POWEROFF))  ? kActionShutdown
                 : kActionLogoff;
 
-    if (!PostMessageW(g_hotkeyWindow, WM_APP_SHOW, (WPARAM)req->action,
+    if (!PostMessageW(ctrl, WM_APP_SHOW, (WPARAM)req->action,
                       reinterpret_cast<LPARAM>(req))) {
         CloseHandle(req->reply);
         delete req;
@@ -2818,8 +2840,17 @@ void Wh_ModAfterInit() {
 // to be on display it is repainted (or, when the master switch was turned
 // off, dismissed) on the spot, rather than only on the next shutdown.
 void Wh_ModSettingsChanged() {
-    if (g_hotkeyWindow)
-        PostMessageW(g_hotkeyWindow, WM_APP_APPLYSETTINGS, 0, 0);
+    if (HWND ctrl = g_hotkeyWindow.load(std::memory_order_acquire)) {
+        PostMessageW(ctrl, WM_APP_APPLYSETTINGS, 0, 0);
+        return;
+    }
+    // No UI thread yet: re-read the settings here so g_hotkeyVk/g_hotkeyMods
+    // are current, and bring the thread up if the preview shortcut was just
+    // switched on (it starts with previewHotkey: none, so Wh_ModAfterInit
+    // never started it eagerly).
+    LoadSkinSetting();
+    if (g_isExplorer && g_hotkeyVk != 0)
+        StartUiThread();
 }
 
 // Signals the UI thread to wind up, using its thread id (valid the instant
