@@ -15,6 +15,7 @@
 
 Customize native Windows window shadows: make them lighter or more pronounced,
 and adjust their size and blur.
+Shadows change accordingly to already present and newer windows.
 
 ## Examples
 
@@ -51,7 +52,7 @@ visual refresh so existing windows receive the current shadows.
 ## Compatibility
 
 The mod resolves uDWM functions through Microsoft public symbols. Tested on
-Windows 11 25h2 build 26200.9445 / 24H2 26100.9457. On other
+Windows 11 <TODO: e.g. 23H2, build 22631.x / 24H2, build 26100.x>. On other
 builds, if the required uDWM shadow functions can't be resolved, the mod logs
 this and does not load.
 
@@ -73,7 +74,6 @@ this and does not load.
 #include <windhawk_utils.h>
 
 #include <algorithm>
-#include <atomic>
 #include <cstdint>
 #include <cstring>
 
@@ -112,8 +112,6 @@ float opacityScale = 1.0f;
 float sizeScale = 1.0f;
 
 uint32_t cacheKey = 0;
-
-std::atomic<bool> stopping{false};
 
 // Tracks calls to GetShadowParameters that originate from the keyed
 // GetBorderBrush path. A thread-local counter also supports nested calls.
@@ -158,8 +156,7 @@ HRESULT __cdecl GetBorderBrush_Hook(float radius,
                                     int borderStyle,
                                     int shadowStyle,
                                     void* output) {
-    if (stopping.load(std::memory_order_relaxed) ||
-        shadowStyle == 0) {
+    if (shadowStyle == 0) {
         return getBorderBrush_Original(
             radius,
             dpi,
@@ -187,6 +184,14 @@ HRESULT __cdecl GetBorderBrush_Hook(float radius,
     // the low bit would produce a subnormal that FTZ can flush back to zero.
     const bool keyed =
         std::memcmp(&keyedColor, color, sizeof(keyedColor)) != 0;
+
+    Wh_Log(
+        L"BRUSH radius=%.2f dpi=%d borderStyle=%d shadowStyle=%d keyed=%d",
+        static_cast<double>(radius),
+        dpi,
+        borderStyle,
+        shadowStyle,
+        keyed);
 
     // GetShadowParameters modifies values only while DWM is creating a brush
     // whose cache key has also been changed by this hook. If the key isn't
@@ -231,9 +236,12 @@ void __cdecl GetShadowParameters_Hook(int style,
     // Only modify parameters while GetBorderBrush is using the settings-based
     // cache key. This prevents modified parameters from being stored in DWM's
     // normal, unmodified cache entries.
-    if (stopping.load(std::memory_order_relaxed) ||
-        style == 0 ||
-        shadowBuildDepth == 0) {
+    if (style == 0 || shadowBuildDepth == 0) {
+        Wh_Log(
+            L"SHADOW style=%d dpi=%d not scaled (depth=%u)",
+            style,
+            dpi,
+            shadowBuildDepth);
         return;
     }
 
@@ -354,8 +362,11 @@ void Wh_ModAfterInit() {
     RequestDwmRefresh();
 }
 
-void Wh_ModBeforeUninit() {
-    stopping.store(true, std::memory_order_relaxed);
+void Wh_ModUninit() {
+    // The mod's hooks are removed once Wh_ModBeforeUninit returns, so by the
+    // time Wh_ModUninit runs this refresh necessarily rebuilds shadows
+    // through DWM's original, unmodified code path. No "stopping" flag is
+    // needed to race against in-flight hook calls.
     RequestDwmRefresh();
 }
 
