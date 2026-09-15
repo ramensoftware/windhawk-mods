@@ -2,7 +2,7 @@
 // @id              taskbar-ai-quota
 // @name            Taskbar AI Quota Bars
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, and Google Antigravity on the Windows 11 taskbar
-// @version         1.6.4
+// @version         1.6.5
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -2481,9 +2481,13 @@ static bool ParseOpenAiUsage(const std::string& body, AccountData* d, std::wstri
             }
             if (std::isfinite(balance) && balance >= 0) d->creditsBalance = balance;
         }
-        // A credits-only payload (no rate-limit windows) is still usable data.
-        bool parsed = d->win5h.pct >= 0 || d->winWeek.pct >= 0 || d->creditsBalance >= 0 ||
-                      d->creditsUnlimited;
+        // A credits-only payload (no rate-limit windows) is still usable data, but say so in
+        // the tooltip: the 5h/weekly bars auto-hide, and without this line a reshaped
+        // rate_limit object would look identical to an account that simply has none.
+        bool hasWindowUsage = d->win5h.pct >= 0 || d->winWeek.pct >= 0;
+        bool parsed = hasWindowUsage || d->creditsBalance >= 0 || d->creditsUnlimited ||
+                      d->hasCredits;
+        if (parsed && !hasWindowUsage) d->extraLines = L"rate limits: none reported";
         if (!parsed && error) *error = L"unexpected response format (" + DescribeJsonBody(body) + L")";
         return parsed;
     } catch (...) {
