@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              win7-classic-autoplay-restorer
-// @name            Windows 7 Classic AutoPlay Dialog
+// @name            Windows 7 Classic AutoPlay Dialog Restorer
 // @description     This mod restores the classic Windows 7 AutoPlay dialog for removable drives and optical media
-// @version         1.0.0
+// @version         1.1.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
@@ -35,6 +35,13 @@ A privacy setting can hide the volume or device name in this mod only.
 
 The mod has been tested on Windows 10 21H2 and Windows 11 24H2.
 This mod is a best-effort reimplementation using native Windows components.
+On some Windows builds or configurations, the drive context-menu/UI-object
+hook may fail to install as a safety precaution (e.g. if the relevant
+shell32 function pointer cannot be verified). When this happens, the
+classic AutoPlay dialog still works, but right-click "AutoPlay" behavior
+on drive icons in Explorer may fall back to the native one. Check the
+Windhawk debug log for "Drive folder GetUIObjectOf hook" to confirm.
+
 Native AutoPlay is suppressed by intercepting the shell's enumeration of
 `IQueryCancelAutoPlay` CLSIDs under
 `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\AutoplayHandlers\CancelAutoplay\CLSID`
@@ -3582,18 +3589,82 @@ static bool InstallAutoplayContextMenuHooks() {
 }
 
 static bool g_getUIObjectOfHookInstalled = false;
+
+// IShellFolder's vtable slot for GetUIObjectOf is fixed by the COM ABI
+// (3 IUnknown slots + ParseDisplayName, EnumObjects, BindToObject,
+// BindToStorage, CompareIDs, CreateViewObject, GetAttributesOf ->
+// GetUIObjectOf is slot index 10). That part of the layout is not the
+// risk. The real risk is binding to the *wrong drive's* shell folder
+// object at startup (e.g. an empty/no-media optical or card-reader
+// drive), or to an object whose vtable does not actually live in
+// shell32.dll (a 3rd-party shell extension replacing the drive folder,
+// or a folder-view object rather than the real drive IShellFolder).
+// Hooking such a pointer can corrupt unrelated Explorer state (drive
+// enumeration/labels in the Navigation Pane and Computer folder).
+// Guard against that by validating the resolved function pointer
+// actually resides in a legitimate, already-loaded shell module before
+// patching it, and by preferring a *real, ready* fixed/removable drive
+// over an empty optical drive as the probe target.
+static bool IsPointerInKnownShellModule(void* addr, std::wstring* outModuleName = nullptr) {
+    if (!addr) return false;
+    HMODULE mod = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                            reinterpret_cast<LPCWSTR>(addr), &mod) || !mod)
+        return false;
+    WCHAR name[MAX_PATH] = {};
+    GetModuleFileNameW(mod, name, ARRAYSIZE(name));
+    FreeLibrary(mod);  // GetModuleHandleExW added a ref; we only needed the name
+    if (outModuleName) *outModuleName = name;
+    static const wchar_t* kAllowed[] = {
+        L"\\shell32.dll", L"\\windows.storage.dll", L"\\twinui.pcshell.dll",
+    };
+    for (const wchar_t* suffix : kAllowed) {
+        size_t nameLen = wcslen(name);
+        size_t sufLen = wcslen(suffix);
+        if (nameLen >= sufLen &&
+            _wcsicmp(name + (nameLen - sufLen), suffix) == 0)
+            return true;
+    }
+    return false;
+}
+
+// Pick the first drive that is actually ready (has media / is accessible)
+// rather than just the first non-DRIVE_NO_ROOT_DIR letter, so we don't
+// probe an empty optical drive whose shell folder object may behave
+// differently.
+static bool PickProbeDriveRoot(WCHAR outRoot[4]) {
+    WCHAR drives[512] = {};
+    if (!GetLogicalDriveStringsW(ARRAYSIZE(drives) - 1, drives)) return false;
+    WCHAR fallback[4] = {};
+    for (WCHAR* p = drives; *p; p += wcslen(p) + 1) {
+        UINT dt = GetDriveTypeW(p);
+        if (dt == DRIVE_NO_ROOT_DIR) continue;
+        if (!fallback[0]) wcscpy_s(fallback, p);
+        // Prefer a fixed or ready removable drive: GetDiskFreeSpaceExW
+        // fails fast on a drive with no media, without blocking.
+        if (dt == DRIVE_FIXED || dt == DRIVE_REMOVABLE) {
+            ULARGE_INTEGER free{};
+            if (GetDiskFreeSpaceExW(p, &free, nullptr, nullptr)) {
+                wcscpy_s(outRoot, 4, p);
+                return true;
+            }
+        }
+    }
+    if (!fallback[0]) return false;
+    wcscpy_s(outRoot, 4, fallback);
+    return true;
+}
+
+// NOTE: on some Windows builds this hook may legitimately refuse to
+// install (see IsPointerInKnownShellModule). This is a deliberate
+// trade-off: better to silently skip the drive context-menu hook than
+// risk corrupting Explorer's drive enumeration/display, as happened
+// in https://github.com/ramensoftware/windhawk-mods/issues/5463.
 static bool InstallDriveFolderGetUIObjectHook() {
     if (g_getUIObjectOfHookInstalled) return true;
 
-    WCHAR drives[512] = {};
-    if (!GetLogicalDriveStringsW(ARRAYSIZE(drives) - 1, drives)) return false;
     WCHAR root[4] = {};
-    for (WCHAR* p = drives; *p; p += wcslen(p) + 1) {
-        if (GetDriveTypeW(p) == DRIVE_NO_ROOT_DIR) continue;
-        wcscpy_s(root, p);
-        break;
-    }
-    if (!root[0]) return false;
+    if (!PickProbeDriveRoot(root)) return false;
 
     ApScopedCoInit coInit;
     if (!coInit.available()) return false;
@@ -3607,13 +3678,24 @@ static bool InstallDriveFolderGetUIObjectHook() {
     if (SUCCEEDED(hr) && parent) {
         void** pvt = *reinterpret_cast<void***>(parent);
         auto guiObj = pvt ? (decltype(g_GetUIObjectOf_Original))pvt[10] : nullptr;
-        ok = guiObj && Wh_SetFunctionHook((void*)guiObj,
-                                          (void*)GetUIObjectOfHook,
-                                          (void**)&g_GetUIObjectOf_Original);
-        if (ok && !g_pinnedGetUIObjectOfModule)
-            g_pinnedGetUIObjectOfModule = PinForeignModule((void*)guiObj);
+        std::wstring moduleName;
+        if (guiObj && IsPointerInKnownShellModule((void*)guiObj, &moduleName)) {
+            ok = Wh_SetFunctionHook((void*)guiObj,
+                                    (void*)GetUIObjectOfHook,
+                                    (void**)&g_GetUIObjectOf_Original);
+            if (ok && !g_pinnedGetUIObjectOfModule)
+                g_pinnedGetUIObjectOfModule = PinForeignModule((void*)guiObj);
+            Wh_Log(L"Drive folder GetUIObjectOf hook installed=%d root=%s module=%s",
+                   ok ? 1 : 0, root, moduleName.c_str());
+        } else {
+            Wh_Log(L"Drive folder GetUIObjectOf hook aborted: pointer=%p root=%s not in a "
+                   L"known shell module (module=%s) - refusing to patch an unexpected vtable slot",
+                   guiObj, root, moduleName.empty() ? L"?" : moduleName.c_str());
+        }
+    } else {
+        Wh_Log(L"Drive folder GetUIObjectOf hook: could not bind root=%s hr=0x%08X",
+               root, (unsigned)hr);
     }
-    Wh_Log(L"Drive folder GetUIObjectOf hook installed=%d", ok ? 1 : 0);
     if (parent) parent->Release();
     if (pidl) CoTaskMemFree(pidl);
     if (ok) g_getUIObjectOfHookInstalled = true;
@@ -3621,15 +3703,8 @@ static bool InstallDriveFolderGetUIObjectHook() {
 }
 
 static bool InstallDriveContextMenuHooks() {
-    WCHAR drives[512] = {};
-    if (!GetLogicalDriveStringsW(ARRAYSIZE(drives) - 1, drives)) return false;
     WCHAR root[4] = {};
-    for (WCHAR* p = drives; *p; p += wcslen(p) + 1) {
-        if (GetDriveTypeW(p) == DRIVE_NO_ROOT_DIR) continue;
-        wcscpy_s(root, p);
-        break;
-    }
-    if (!root[0]) return false;
+    if (!PickProbeDriveRoot(root)) return false;
 
     ApScopedCoInit coInit;
     if (!coInit.available()) return false;
