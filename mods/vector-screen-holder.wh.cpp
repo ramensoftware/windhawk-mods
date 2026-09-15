@@ -2,7 +2,7 @@
 // @id              vector-screen-holder
 // @name            Vector Screen Holder
 // @description     Fills a display you choose with generative line art and keeps the PC from idling while it runs
-// @version         1.1.0
+// @version         1.1.1
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
@@ -189,7 +189,9 @@ pair-programmers Claude and Big-Pickle (opencode).
   $name: Toggle hotkey
   $description: >-
     Global hotkey to show and hide the overlay. Modifiers are Ctrl, Alt, Shift
-    and Win, joined with "+". Leave empty to disable.
+    and Win, joined with "+". The key itself can be A-Z, 0-9 or F1-F24; other
+    keys such as arrows, numpad and punctuation are not supported and the mod
+    logs that no hotkey was registered. Leave empty to disable.
 - monitor: primary
   $name: Display
   $description: >-
@@ -304,9 +306,8 @@ pair-programmers Claude and Big-Pickle (opencode).
 - startActive: false
   $name: Start active
   $description: >-
-    Show the overlay as soon as the mod loads. Ticking it here does not open
-    the overlay straight away; it applies the next time the mod loads. Use the
-    hotkey or the shortcut to open it now.
+    Show the overlay as soon as the mod loads, and open it straight away when
+    you tick it here.
 - workAreaOnly: false
   $name: Stay inside the work area
   $description: >-
@@ -356,6 +357,10 @@ static const WCHAR kEventLocal[] = L"Local\\WindhawkVectorScreenHolderToggle";
 
 // Thread hot keys must use 0x0000-0xBFFF; 0xC000+ is reserved for atoms.
 static const int kHotkeyId = 0x4A21;
+
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
+#endif
 static const float kPi = 3.14159265358979f;
 
 enum StyleId {
@@ -1175,7 +1180,13 @@ class GrowthScene : public Scene {
         maxLen_ = m * 0.0085f;
         baseRepel_ = maxLen_ * 2.4f;
         repel_ = baseRepel_;
-        cellSize_ = baseRepel_ * 1.6f;
+        // Step scales repel_ up to baseRepel_ * 1.9, and a 3x3 bucket search
+        // only reaches cellSize_. Sizing for the smaller figure meant that
+        // above about three quarters of the wheel some neighbours inside the
+        // radius fell in non-adjacent cells and were skipped, so "vigor"
+        // stopped responding and the form spaced unevenly rather than simply
+        // less. The bucket count barely changes.
+        cellSize_ = baseRepel_ * 1.9f * 1.05f;
         zt_ = rng_.Range(0.0f, 40.0f);
 
         int nLoops = LoopsFor(amount);
@@ -1743,6 +1754,7 @@ class Overlay {
     void Destroy();
     void Render(float dtSec);
     void NewScene();
+    bool Occluded() const { return occluded_; }
     // Briefly show what just changed. The overlay is otherwise completely
     // clean, and this is the only text it ever draws.
     void FlashHud();
@@ -1765,6 +1777,7 @@ class Overlay {
     ID2D1HwndRenderTarget* rt_ = nullptr;
     ID2D1BitmapRenderTarget* buf_ = nullptr;
     ID2D1Bitmap* bufBitmap_ = nullptr;
+    bool occluded_ = false;
     ID2D1SolidColorBrush* brush_ = nullptr;
 
     std::unique_ptr<Scene> scene_;
@@ -1814,9 +1827,9 @@ bool Overlay::Create() {
     }
     NewScene();
 
+    // ShowWindow goes through WM_WINDOWPOSCHANGING, which forces
+    // hwndInsertAfter to HWND_BOTTOM, so no separate sink is needed.
     ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
-    SetWindowPos(hwnd_, HWND_BOTTOM, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     return true;
 }
 
@@ -1970,6 +1983,19 @@ void Overlay::Render(float dtSec) {
         // still to come onto an empty buffer. Start the piece again. This is
         // the single place every recreate path passes through.
         NewScene();
+    }
+
+    // The premise of the mod is that it runs for hours beside a heavy job, and
+    // the two cases where it is invisible are exactly the ones that job
+    // creates: the workstation locked, or a fullscreen window over the display
+    // it holds, which always hides it because it sits at HWND_BOTTOM. Direct2D
+    // reports both. Left unchecked, contours at maximal would spend about a
+    // core on frames nobody can see, competing with the work being waited on.
+    // The state reflects the last present, so it is re-read every frame rather
+    // than latched; the keep-awake is unaffected and the display stays on.
+    occluded_ = (rt_->CheckWindowState() & D2D1_WINDOW_STATE_OCCLUDED) != 0;
+    if (occluded_) {
+        return;
     }
 
     const float kFadeIn = 0.75f, kFadeOut = 2.2f;
@@ -2192,6 +2218,9 @@ static std::atomic<DWORD> g_workerThreadId{0};
 static HHOOK g_kbdHook = nullptr;
 static bool g_hotkeyRegistered = false;
 static float g_rotateTimer = 0;
+// True only while every overlay reports itself hidden, which drops the loop to
+// a slow poll instead of stopping it, so the state can clear again.
+static bool g_allOccluded = false;
 
 static const UINT WM_VSH_SETTINGS = WM_APP + 1;
 static const UINT WM_VSH_QUIT = WM_APP + 2;
@@ -2839,14 +2868,11 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     QueryPerformanceFrequency(&freq);
     QueryPerformanceCounter(&lastRender);
 
-#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
-#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
-#endif
     // High resolution needs Windows 10 1803; fall back to an ordinary timer,
     // which is still far better than a quantized timeout.
     HANDLE frameTimer = CreateWaitableTimerExW(
         nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
-        TIMER_ALL_ACCESS);
+        TIMER_MODIFY_STATE | SYNCHRONIZE);
     if (!frameTimer) {
         frameTimer = CreateWaitableTimerW(nullptr, FALSE, nullptr);
     }
@@ -2868,7 +2894,8 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             QueryPerformanceCounter(&nowW);
             float sinceW = (float)(nowW.QuadPart - lastRender.QuadPart) /
                            (float)freq.QuadPart;
-            float remain = 1.0f / (float)g_settings.fps - sinceW;
+            float period = g_allOccluded ? 0.5f : 1.0f / (float)g_settings.fps;
+            float remain = period - sinceW;
             LARGE_INTEGER due;
             // negative is relative, in 100 ns units
             due.QuadPart = remain <= 0.0f
@@ -2900,7 +2927,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
                     HideOverlays();
                     LoadSettings();
                     RegisterHotkeyFromSettings();
-                    if (wasActive) {
+                    if (wasActive || g_settings.startActive) {
                         ShowOverlays();
                     }
                     continue;
@@ -2942,7 +2969,8 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         QueryPerformanceCounter(&now);
         float since = (float)(now.QuadPart - lastRender.QuadPart) /
                       (float)freq.QuadPart;
-        if (since < 1.0f / (float)g_settings.fps) {
+        float gate = g_allOccluded ? 0.5f : 1.0f / (float)g_settings.fps;
+        if (since < gate) {
             continue;
         }
         lastRender = now;
@@ -2977,9 +3005,12 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             }
         }
 
+        bool allOccluded = !g_overlays.empty();
         for (size_t i = 0; i < g_overlays.size(); i++) {
             g_overlays[i]->Render(dt);
+            allOccluded = allOccluded && g_overlays[i]->Occluded();
         }
+        g_allOccluded = allOccluded;
     }
 
     HideOverlays();
