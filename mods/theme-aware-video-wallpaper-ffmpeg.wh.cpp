@@ -76,6 +76,17 @@ Hoping someone else will carry on development — PRs welcome.
   $name:zh-CN: 帧率（fps）
   $description: "Output frame rate. Range 10-60. Lower values save CPU. Videos with a lower native fps will have frames duplicated"
   $description:zh-CN: "输出帧率。范围 10-60。值越低越省 CPU。视频原始帧率低于设置值时会重复帧"
+- hwaccelMode: "0"
+  $name: Hardware acceleration
+  $name:zh-CN: 硬件加速
+  $description: "D3D11VA hardware decoding via ffmpeg. May fail on some GPUs or codecs"
+  $description:zh-CN: "通过 ffmpeg 使用 D3D11VA 硬件解码，部分显卡或编码可能不支持"
+  $options:
+    - "0": "Disabled (software decode)"
+    - "1": "Enabled (D3D11VA)"
+  $options:zh-CN:
+    - "0": "关闭（纯 CPU 软解）"
+    - "1": "开启（D3D11VA）"
 - scalingMode: "0"
   $name: Video scaling mode
   $name:zh-CN: 视频缩放模式
@@ -152,6 +163,7 @@ WCHAR g_padColorCustom[32] = {0};
 bool g_isPadTransparent = false;
 WCHAR g_applyMode[16] = {L"instant"};
 int g_sortMode = 0;
+int g_hwaccelMode = 0;
 volatile bool g_pendingReload = false;
 const bool g_pauseOnFullscreen = true;
 
@@ -596,6 +608,8 @@ bool StartFfmpeg(const WCHAR* videoPath)
         case 3: vfArg = nullptr; break;
         default: vfArg = nullptr; break;
     }
+    const WCHAR* hwaccelArg = (g_hwaccelMode == 1) ? L" -hwaccel d3d11va" : L"";
+
     if (vfArg) {
         WCHAR vfBuf[512];
         if (g_scalingMode == 0) {
@@ -607,11 +621,11 @@ bool StartFfmpeg(const WCHAR* videoPath)
         } else {
             swprintf_s(vfBuf, vfArg, sw, sh, sw, sh, padColor);
         }
-        swprintf_s(cmd, L"\"%s\" -nostdin -hide_banner -loglevel error -i \"%s\" -an -f rawvideo -pix_fmt bgra%s -r %d -",
-            g_ffmpegPath, videoPath, vfBuf, g_fps);
+        swprintf_s(cmd, L"\"%s\" -nostdin -hide_banner -loglevel error%s -i \"%s\" -an -f rawvideo -pix_fmt bgra%s -r %d -",
+            g_ffmpegPath, hwaccelArg, videoPath, vfBuf, g_fps);
     } else {
-        swprintf_s(cmd, L"\"%s\" -nostdin -hide_banner -loglevel error -i \"%s\" -an -f rawvideo -pix_fmt bgra -s %dx%d -r %d -",
-            g_ffmpegPath, videoPath, sw, sh, g_fps);
+        swprintf_s(cmd, L"\"%s\" -nostdin -hide_banner -loglevel error%s -i \"%s\" -an -f rawvideo -pix_fmt bgra -s %dx%d -r %d -",
+            g_ffmpegPath, hwaccelArg, videoPath, sw, sh, g_fps);
     }
     g_isPadTransparent = isPadTransparent;
     Wh_Log(L"StartFfmpeg cmd: %s", cmd);
@@ -788,11 +802,18 @@ void Wh_ModSettingsChanged()
     if (s) { wcscpy_s(newApplyMode, 16, s); Wh_FreeStringSetting(s); }
     if (!newApplyMode[0]) wcscpy_s(newApplyMode, 16, L"instant");
 
+    s = Wh_GetStringSetting(L"hwaccelMode");
+    WCHAR hwaccelStr[4] = {0};
+    if (s) { wcscpy_s(hwaccelStr, 4, s); Wh_FreeStringSetting(s); }
+    int newHwaccel = _wtoi(hwaccelStr);
+    if (newHwaccel < 0 || newHwaccel > 1) newHwaccel = 0;
+
     bool needReload =
         wcscmp(newFfmpegPath, g_ffmpegPath) != 0 ||
         wcscmp(newLightPath, g_lightPath) != 0 ||
         wcscmp(newDarkPath, g_darkPath) != 0 ||
         newSortMode != g_sortMode ||
+        newHwaccel != g_hwaccelMode ||
         g_fps != oldFps ||
         g_scalingMode != oldScaling ||
         wcscmp(newPadMode, g_padColorMode) != 0 ||
@@ -802,6 +823,7 @@ void Wh_ModSettingsChanged()
     wcscpy_s(g_lightPath, MAX_PATH, newLightPath);
     wcscpy_s(g_darkPath, MAX_PATH, newDarkPath);
     g_sortMode = newSortMode;
+    g_hwaccelMode = newHwaccel;
     wcscpy_s(g_padColorMode, 32, newPadMode);
     wcscpy_s(g_padColorCustom, 32, newPadCustom);
     wcscpy_s(g_applyMode, 16, newApplyMode);
