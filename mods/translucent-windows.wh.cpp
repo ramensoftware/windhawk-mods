@@ -2,7 +2,7 @@
 // @id              translucent-windows
 // @name            Translucent Windows
 // @description     Enables native translucent effects in Windows 11
-// @version         1.8.1
+// @version         1.8.2
 // @author          Undisputed00x
 // @github          https://github.com/Undisputed00x
 // @include         *
@@ -862,29 +862,32 @@ VOID GenerateTextAlphaGammaLUT()
 
 BOOL ExtTextOutBkPaint(HDC hdc, LPCRECT lprect, UINT options)
 {
-    if ((options & ETO_OPAQUE) && lprect) 
+    if (!(options & ETO_OPAQUE)) 
+        return TRUE;
+        
+    // Make opaque highlighted text background rectangle
+    if (GetBkColor(hdc) == GetSysColor(COLOR_HIGHLIGHT)) 
     {
-        // Make opaque highlighted text background rectangle
-        if (GetBkColor(hdc) == GetSysColor(COLOR_HIGHLIGHT)) 
-        {
-            BP_PAINTPARAMS params = { sizeof(BP_PAINTPARAMS) };
-            HDC memDC = nullptr;
-            HPAINTBUFFER hpb = BeginBufferedPaint(hdc, lprect, BPBF_TOPDOWNDIB, &params, &memDC); 
-            if (!hpb) {
-                Wh_Log(L"Failed BeginBufferedPaint error:0x%08x", GetLastError());
-                return FALSE;
-            }
-
-            FillRect(memDC, lprect, GetSysColorBrush(COLOR_HIGHLIGHT));
-            BufferedPaintMakeOpaque(hpb, lprect);
-
-            EndBufferedPaint(hpb, TRUE);
+        BP_PAINTPARAMS params = { sizeof(BP_PAINTPARAMS) };
+        HDC memDC = nullptr;
+        HPAINTBUFFER hpb = BeginBufferedPaint(hdc, lprect, BPBF_TOPDOWNDIB, &params, &memDC); 
+        if (!hpb) {
+            Wh_Log(L"Failed BeginBufferedPaint error:0x%08x", GetLastError());
+            return FALSE;
         }
-        else {
-            HBRUSH brush = CreateSolidBrush(GetBkColor(hdc));
-            FillRect(hdc, lprect, brush);
-            DeleteObject(brush);
+
+        FillRect(memDC, lprect, GetSysColorBrush(COLOR_HIGHLIGHT));
+        BufferedPaintMakeOpaque(hpb, lprect);
+
+        if (FAILED(EndBufferedPaint(hpb, TRUE))) {
+            Wh_Log(L"EndBufferedPaint failed error:0x%08x", GetLastError());
+            return FALSE;
         }
+    }
+    else {
+        HBRUSH brush = CreateSolidBrush(GetBkColor(hdc));
+        FillRect(hdc, lprect, brush);
+        DeleteObject(brush);
     }
     return TRUE;
 }
@@ -916,7 +919,7 @@ BOOL ExtTextOutComposition(HDC hdc, HPAINTBUFFER hpb, LPCRECT pTextRect)
                 continue;
             
             // Greyscale alpha
-            BYTE luma = (BYTE)((px.rgbBlue + (px.rgbGreen << 1) + px.rgbRed) >> 2);          
+            BYTE luma = (px.rgbBlue + (px.rgbGreen << 1) + px.rgbRed) >> 2;          
             // Gamma alpha correction
             BYTE txtA = g_textAlphaGammaLUT[luma];
             
@@ -930,37 +933,98 @@ BOOL ExtTextOutComposition(HDC hdc, HPAINTBUFFER hpb, LPCRECT pTextRect)
     return TRUE;
 }
 
-// Calculate text boundaries
-BOOL ExtTextOutCalcRect(HDC hdc, POINT point, UINT options, RECT& textRect, LPCRECT lprect, LPCWSTR lpString, UINT c)
+BOOL ExtTextOutAlignRect(HDC hdc, POINT point, SIZE textSize, RECT& textRect, UINT textAlignment)
 {
-    SIZE textSize = {0};
+    // TA_BASELINE's bits are a superset of TA_BOTTOM's, and TA_CENTER's are
+    // a superset of TA_RIGHT's - mask the field and compare for equality
+    // rather than testing individual bits, or TA_CENTER/TA_BASELINE get
+    // misread as TA_RIGHT/TA_BOTTOM.
+    UINT vAlign = textAlignment & (TA_BOTTOM | TA_BASELINE);
+    UINT hAlign = textAlignment & (TA_RIGHT | TA_CENTER);
 
-    if (lprect)
-        textRect = *lprect;
-    else if (options & ETO_GLYPH_INDEX && GetTextExtentPointI(hdc, (WORD*)lpString, c, &textSize))
+    INT top = point.y;
+    if (vAlign == TA_BASELINE)
     {
-        textRect.left   = point.x;
-        textRect.top    = point.y;
-        textRect.right  = point.x + textSize.cx;
-        textRect.bottom = point.y + textSize.cy;
-    }
-    else if (options == ETO_IGNORELANGUAGE) {
-        if(!GetClipBox(hdc, &textRect))
+        TEXTMETRIC tm;
+        if (!GetTextMetrics(hdc, &tm))
             return FALSE;
+        top = point.y - tm.tmAscent;
     }
-    else if (options && GetTextExtentPoint32W(hdc, lpString, c, &textSize)) {
-        textRect.left   = point.x;
-        textRect.top    = point.y;
-        textRect.right  = point.x + textSize.cx;
-        textRect.bottom = point.y + textSize.cy; 
-    }
-    else
-        return FALSE;
+    else if (vAlign == TA_BOTTOM)
+        top = point.y - textSize.cy;
+
+    INT left = point.x;
+    if (hAlign == TA_CENTER)
+        left = point.x - textSize.cx / 2;
+    else if (hAlign == TA_RIGHT)
+        left = point.x - textSize.cx;
+
+    textRect.left   = left;
+    textRect.top    = top;
+    textRect.right  = left + textSize.cx;
+    textRect.bottom = top + textSize.cy;
+
+    return TRUE;
+}
+
+VOID ExtTextOutDxWidth(UINT options, const INT* lpDx, UINT c, SIZE& textSize)
+{    
+    INT dx = 0;
+    INT dy = 0;
+    UINT stride = (options & ETO_PDY) ? 2 : 1;
     
-    if (RECTWIDTH(&textRect) <= 0 || RECTHEIGHT(&textRect) <= 0)
+    for (UINT i = 0; i < c; i++)
+    {
+        dx += lpDx[i * stride];
+        if (options & ETO_PDY)
+            dy += lpDx[i * stride + 1];
+    }
+    
+    textSize.cx = dx;
+    if (options & ETO_PDY)
+        textSize.cy += abs(dy); // Expand height to encompass the vertical shifting
+}
+
+
+// Calculate text boundaries
+BOOL ExtTextOutCalcRect(HDC hdc, POINT point, UINT options, RECT& textRect, LPCRECT lprect, LPCWSTR lpString, UINT c, const INT* lpDx)
+{   
+    SIZE textSize = {0};
+    UINT ta = GetTextAlign(hdc);
+    BOOL res = TRUE;
+
+    if (options & ETO_GLYPH_INDEX)
+        res = GetTextExtentPointI(hdc, (WORD*)lpString, c, &textSize);
+    else
+        res = GetTextExtentPoint32W(hdc, lpString, c, &textSize);
+    
+    if (!res)
+        return res;
+
+    if (lpDx)
+        ExtTextOutDxWidth(options, lpDx, c, textSize);
+    
+    if (!ExtTextOutAlignRect(hdc, point, textSize, textRect, ta))
+        return FALSE;
+
+    if (IsRectEmpty(&textRect))
         return FALSE;
 
     return TRUE;
+}
+
+BOOL ExtTextOutShouldSkip(HDC hdc, UINT options, LPCRECT lprect, LPCWSTR lpString, INT c)
+{
+    BOOL filtered = FALSE;
+
+    if (!hdc || !lpString || !c || !options || GetTextAlign(hdc) & TA_UPDATECP)
+        filtered = TRUE;
+    
+    if (options & (ETO_OPAQUE | ETO_CLIPPED))
+        if (!lprect || IsRectEmpty(lprect))
+            filtered = TRUE;
+    
+    return filtered;
 }
 
 BOOL WINAPI HookedExtTextOutW(
@@ -972,17 +1036,23 @@ BOOL WINAPI HookedExtTextOutW(
     LPCWSTR lpString,
     UINT c,
     const INT* lpDx)
-{
-    if (!hdc || !lpString || !c)
+{   
+    if (ExtTextOutShouldSkip(hdc, options, lprect, lpString, c))
         return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
 
     RECT textRect {0};
-    if (!ExtTextOutCalcRect(hdc, {x, y}, options, textRect, lprect, lpString, c))
+    if (!ExtTextOutCalcRect(hdc, {x, y}, options, textRect, lprect, lpString, c, lpDx))
         return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
-        
+
+    if (!ExtTextOutBkPaint(hdc, lprect, options))
+        return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
+            
     // https://devblogs.microsoft.com/oldnewthing/20110520-00/?p=10613
     BP_PAINTPARAMS params = { sizeof(BP_PAINTPARAMS) };
-    params.dwFlags = (options & ETO_CLIPPED) ? BPPF_ERASE : BPPF_NOCLIP | BPPF_ERASE;
+    params.dwFlags = BPPF_NOCLIP | BPPF_ERASE;
+    BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    params.pBlendFunction = &blend;
+
     HDC memDC = nullptr;
     // Acquire OS cached bitmap
     HPAINTBUFFER hpb = BeginBufferedPaint(hdc, &textRect, BPBF_TOPDOWNDIB, &params, &memDC);
@@ -993,26 +1063,23 @@ BOOL WINAPI HookedExtTextOutW(
 
     SelectObject(memDC, GetCurrentObject(hdc, OBJ_FONT));
     SetTextAlign(memDC, GetTextAlign(hdc));
+    SetLayout(memDC, GetLayout(hdc));
+    SetGraphicsMode(memDC, GetGraphicsMode(hdc));
     SetBkMode(memDC, TRANSPARENT);
     SetTextColor(memDC, RGB(255, 255, 255)); // White text mask
 
-    if (!ExtTextOutBkPaint(hdc, lprect, options)) {
-        EndBufferedPaint(hpb, FALSE);
-        return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
-    }
-
-    // Remove default background painting operation, as it done by us
+    // Remove default background painting operation, as it done by our ExtTextOutBkPaint helper
     WINBOOL res = ExtTextOutW_orig(memDC, x, y, options & ~ETO_OPAQUE, lprect, lpString, c, lpDx);
 
     // Text greyscale alpha composition
     if (!ExtTextOutComposition(hdc, hpb, &textRect))
         return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
 
-    BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-    AlphaBlend(hdc, textRect.left, textRect.top, RECTWIDTH(&textRect), RECTHEIGHT(&textRect),
-            memDC, textRect.left, textRect.top, RECTWIDTH(&textRect), RECTHEIGHT(&textRect), blend);
-
-    EndBufferedPaint(hpb, FALSE);
+    // EndBufferedPaint executes AlphaBlend only on DIBs otherwise applies BitBlt.
+    if (FAILED(EndBufferedPaint(hpb, TRUE))) {
+        Wh_Log(L"EndBufferedPaint failed error:0x%08x", GetLastError());
+        return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
+    }
     return res;
 }
 
@@ -1373,6 +1440,10 @@ HRESULT WINAPI HookedGetColorTheme(HTHEME hTheme, INT iPartId, INT iStateId, INT
     }
     else if (ThemeClassName == L"PreviewPane" && iPropId == TMT_TEXTCOLOR) {
         *pColor = g_IsSysThemeDarkMode ? RGB(255, 255, 255) : *pColor;
+        return S_OK;
+    }
+    else if (iPropId == TMT_TEXTCOLOR && ThemeClassName == L"ControlPanel" && iPartId == CPANEL_HELPLINK) {
+        *pColor = (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(96,205,255);
         return S_OK;
     }  
     else if (ThemeClassName == L"ControlPanelStyle" && iPropId == TMT_TEXTCOLOR)
@@ -3582,7 +3653,7 @@ BOOL CThemeCache::CacheTreeViewButton(INT iPartId, INT iStateId, INT stateIndex)
 
         if (iStateId == TREIS_SELECTED || iStateId == TREIS_SELECTEDNOTFOCUS || iStateId == TREIS_HOTSELECTED)
         {
-            FLOAT pillOffsetY = 7, pillWidth = 2.f + round(scale), pillRadius = 1.f + round(scale);
+            FLOAT pillOffsetY = 7, pillWidth = round(3.4f + scale), pillRadius = round(1.4f + scale);
             brush->SetColor(IsAccentColorPossibleD2D(102, 206, 255, SystemAccentColorLight2));
             pRenderTarget->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x, y + pillOffsetY, x + pillWidth, height - pillOffsetY), pillRadius, pillRadius),brush.Get());
         }
@@ -4900,7 +4971,14 @@ HRESULT WINAPI HookedDrawThemeBackgroundEx(
 {    
     std::wstring ThemeClassName = GetThemeClass(hTheme);
 
-    if (ThemeClassName == L"ListView")
+    if (ThemeClassName == L"ScrollBar")
+    {
+        if (PaintScroll(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+        else if (PaintScrollBarArrows(hdc, iPartId, iStateId, pRect))
+            return S_OK;
+    }
+    else if (ThemeClassName == L"ListView")
     {
         if (PaintListView(hdc, iPartId, iStateId, pRect))
             return S_OK;
@@ -5258,7 +5336,7 @@ void __fastcall Hooked_BorderRect(HDC hdc, COLORREF color, LPRECT pRect, INT cxT
     auto BorderComposition = [&](RECT rcBorder)
     {
         BP_PAINTPARAMS params = { sizeof(BP_PAINTPARAMS) };
-        params.dwFlags = BPPF_ERASE | BPPF_NONCLIENT;
+        params.dwFlags = BPPF_NOCLIP;
         HDC memDC = NULL;
 
         HPAINTBUFFER hpb = BeginBufferedPaint(hdc, &rcBorder, BPBF_TOPDOWNDIB, &params, &memDC);
@@ -5269,8 +5347,7 @@ void __fastcall Hooked_BorderRect(HDC hdc, COLORREF color, LPRECT pRect, INT cxT
 
         SetBkColor(memDC, color);
         ExtTextOutW(memDC, pRect->left, pRect->top, ETO_OPAQUE, pRect, NULL, NULL, NULL);
-
-        BufferedPaintSetAlpha(hpb, pRect, 255);
+        BufferedPaintMakeOpaque(hpb, pRect);
         EndBufferedPaint(hpb, TRUE);
     };
 
