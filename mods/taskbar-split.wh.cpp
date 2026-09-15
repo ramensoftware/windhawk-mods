@@ -2,7 +2,7 @@
 // @id              taskbar-split
 // @name            Taskbar Split: Running Left, Pinned Right
 // @description     Places running apps on the left and closed pinned apps on the right, with flexible empty space between them (Windows 11).
-// @version         0.3.0
+// @version         0.3.1
 // @author          Arkadiusz
 // @github          https://github.com/Artllex
 // @homepage        https://github.com/Artllex/taskbar-split
@@ -61,6 +61,10 @@ Creates two dynamic application zones on the Windows 11 taskbar:
 `[Start/System] [Running apps]  <flexible empty space>  [Closed pinned apps] [Tray/Clock]`
 
 Launching a pinned app moves it to the left zone and restores its normal size.
+Newly running buttons are appended to the right end of the running zone.
+Existing running buttons retain their order for the lifetime of their XAML
+containers. Manual drag-to-reorder is not yet supported reliably; version
+0.3.1 fixes launch ordering only, not the reported drag/drop issue.
 Closing it returns it to the right zone, where pinned icons can be made smaller
 and packed more densely. The persistent Windows pin list is not changed.
 
@@ -529,6 +533,36 @@ struct ButtonInfo {
     bool running;
 };
 
+// Taskbar-thread only. Preserve the order of already running buttons; a
+// newly running button is appended, regardless of its pinned-list position.
+// Weak references prevent retaining detached XAML buttons.
+std::vector<winrt::weak_ref<FrameworkElement>> g_runningOrder;
+
+void OrderRunningButtons(std::vector<ButtonInfo*>& running) {
+    std::vector<ButtonInfo*> ordered;
+    for (auto const& reference : g_runningOrder) {
+        auto element = reference.get();
+        if (!element) {
+            continue;
+        }
+        auto found = std::find_if(running.begin(), running.end(),
+            [&](auto item) { return item->element == element; });
+        if (found != running.end()) {
+            ordered.push_back(*found);
+        }
+    }
+    for (auto item : running) {
+        if (std::find(ordered.begin(), ordered.end(), item) == ordered.end()) {
+            ordered.push_back(item);
+        }
+    }
+    g_runningOrder.clear();
+    for (auto item : ordered) {
+        g_runningOrder.emplace_back(item->element);
+    }
+    running = std::move(ordered);
+}
+
 struct Placement {
     winrt::weak_ref<FrameworkElement> element;
     float x;
@@ -647,6 +681,7 @@ bool BuildLayoutPlan() {
         for (auto& button : buttons) {
             (button.running ? running : pinned).push_back(&button);
         }
+        OrderRunningButtons(running);
         ButtonInfo overflowInfo{overflow, overflow ? ElementWidth(overflow) : 0, true};
         if (overflowInfo.width > 0) {
             running.push_back(&overflowInfo);
@@ -1081,6 +1116,7 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
+    g_runningOrder.clear();
     g_visualStates.clear();
     g_lastRunningState.clear();
     g_repeaterCache = nullptr;
