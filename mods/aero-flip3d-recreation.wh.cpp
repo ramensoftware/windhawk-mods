@@ -1235,136 +1235,64 @@ static HWND FindPlainDesktopWindow() {
     return progman;
 }
 
-// Captures the real, currently-visible desktop (wallpaper + icons + taskbar)
-// into a GDI bitmap. All DCs and bitmaps are RAII-owned, so no early return
-// can leak. Must be called BEFORE the overlay window becomes visible,
-// otherwise the overlay itself would be captured.
-// Captures the desktop background (WorkerW/Progman) into a bitmap by
-// routing through a DWM live thumbnail instead of PrintWindow/BitBlt on
-// the source window directly.
+// Captures the desktop background (WorkerW/Progman, or any other desktop
+// HWND) at the *source window's own native size* via PrintWindow, then
+// BitBlts the sub-rect that corresponds to the target monitor into memDc.
 //
-// Rationale: PW_RENDERFULLCONTENT forces a GPU-redirected capture of the
-// *source* window itself. That is fine for ordinary occluded app windows,
-// but WorkerW/Progman are exactly the windows live wallpaper engines (e.g.
-// Wallpaper Engine) render into via their own D3D/DirectComposition
-// surfaces - redirecting those directly has been observed to hand back a
-// wrong/blended buffer on multi-monitor setups, producing a "merged"
-// wallpaper across monitors (see ramensoftware/windhawk-mods#5490).
-// DwmRegisterThumbnail instead asks DWM itself - the same component that
-// already composites the desktop correctly every frame, wallpaper engines
-// included - to render the source into a destination window we control.
-// We then read that destination window's own (DWM-composited, not
-// source-redirected) surface with a plain BitBlt.
-//
-// This is a best-effort, fully self-contained path: every failure mode
-// (window/class registration, DWM calls, timing) simply returns false, and
-// the caller falls back to the existing, already-safe capture logic. All
-// resources are RAII-owned so no partial failure can leak a window or a
-// thumbnail registration, and the whole attempt is wrapped in try/catch as
-// an extra safety net around the Win32/DWM calls.
-static bool CaptureDesktopSnapshotViaDwmThumbnail(HWND desktopHwnd, HDC memDc,
-                                                    int width, int height) {
-    try {
-        if (!desktopHwnd || !IsWindow(desktopHwnd) || !memDc ||
-            width <= 0 || height <= 0) {
-            return false;
-        }
-
-        HINSTANCE hInstance = GetCurrentModuleHandle();
-        if (!hInstance) {
-            return false;
-        }
-
-        static const wchar_t* kHostClassName = L"Flip3DDwmThumbHostWndClass";
-        static bool hostClassRegistered = false;
-        if (!hostClassRegistered) {
-            WNDCLASSEXW wc = {};
-            wc.cbSize = sizeof(wc);
-            wc.lpfnWndProc = DefWindowProcW;
-            wc.hInstance = hInstance;
-            wc.lpszClassName = kHostClassName;
-            if (!RegisterClassExW(&wc) &&
-                GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
-                Wh_Log(L"CaptureDesktopSnapshotViaDwmThumbnail: RegisterClassExW failed (%u)",
-                       static_cast<unsigned>(GetLastError()));
-                return false;
-            }
-            hostClassRegistered = true;
-        }
-
-        // Layered + zero alpha: DWM still composites thumbnails registered
-        // against this window, but nothing is ever visible to the user,
-        // wherever it ends up on screen. Parked off the virtual desktop as
-        // an extra precaution.
-        ScopedHostWindow host(CreateWindowExW(
-            WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-            kHostClassName, L"", WS_POPUP,
-            -32000, -32000, std::max(1, width), std::max(1, height),
-            nullptr, nullptr, hInstance, nullptr));
-        if (!host) {
-            Wh_Log(L"CaptureDesktopSnapshotViaDwmThumbnail: CreateWindowExW failed (%u)",
-                   static_cast<unsigned>(GetLastError()));
-            return false;
-        }
-
-        if (!SetLayeredWindowAttributes(host.get(), 0, 0, LWA_ALPHA)) {
-            return false;
-        }
-        ShowWindow(host.get(), SW_SHOWNOACTIVATE);
-
-        ScopedThumbnail thumb;
-        if (FAILED(DwmRegisterThumbnail(host.get(), desktopHwnd, thumb.put()))) {
-            Wh_Log(L"CaptureDesktopSnapshotViaDwmThumbnail: DwmRegisterThumbnail failed");
-            return false;
-        }
-
-        DWM_THUMBNAIL_PROPERTIES props = {};
-        props.dwFlags = DWM_TNP_VISIBLE | DWM_TNP_RECTDESTINATION | DWM_TNP_OPACITY;
-        props.fVisible = TRUE;
-        props.opacity = 255;
-        props.rcDestination = {0, 0, width, height};
-        if (FAILED(DwmUpdateThumbnailProperties(thumb.get(), &props))) {
-            Wh_Log(L"CaptureDesktopSnapshotViaDwmThumbnail: DwmUpdateThumbnailProperties failed");
-            return false;
-        }
-
-        // Give DWM a few composition passes to actually paint the
-        // thumbnail into the host window before reading it back.
-        // DwmFlush() blocks until the next present; a small bounded retry
-        // loop tolerates a busy compositor without risking a hang.
-        for (int attempt = 0; attempt < 3; ++attempt) {
-            DwmFlush();
-
-            ScopedDc hostDc = ScopedDc::fromScreen(host.get());
-            if (!hostDc) {
-                continue;
-            }
-            if (!BitBlt(memDc, 0, 0, width, height, hostDc.get(), 0, 0, SRCCOPY)) {
-                continue;
-            }
-
-            // Reject an all-black readback: it means DWM hasn't composited
-            // the thumbnail yet rather than the desktop genuinely being
-            // black, so retry instead of accepting a blank frame.
-            bool allBlack = true;
-            static constexpr int kSampleCount = 9;
-            for (int i = 0; i < kSampleCount && allBlack; ++i) {
-                const int sx = (width * (i + 1)) / (kSampleCount + 1);
-                const int sy = (height * (i + 1)) / (kSampleCount + 1);
-                COLORREF c = GetPixel(memDc, sx, sy);
-                if (c != CLR_INVALID && c != RGB(0, 0, 0)) {
-                    allBlack = false;
-                }
-            }
-            if (!allBlack) {
-                return true;
-            }
-        }
-        return false;
-    } catch (...) {
-        Wh_Log(L"CaptureDesktopSnapshotViaDwmThumbnail: exception");
+// Rationale: on multi-monitor setups, WorkerW/Progman spans the entire
+// virtual desktop, while the snapshot bitmap is sized to a single monitor
+// (see GetPrimaryMonitorRect() in the caller). Calling PrintWindow directly
+// into a single-monitor-sized bitmap forces GDI to squash the full
+// multi-monitor content into that smaller target, which is what produced
+// the "merged" wallpaper report (see ramensoftware/windhawk-mods#5490):
+// this is a coordinate/size mismatch, not a wallpaper-engine redirection
+// problem. Capturing at native size first and cropping afterwards fixes it
+// while still going through the same PrintWindow(PW_RENDERFULLCONTENT)
+// path that already works correctly for everyone else.
+static bool CaptureDesktopSnapshotViaPrintWindowNativeSize(HWND desktopHwnd,
+                                                             HDC screenDc,
+                                                             HDC memDc,
+                                                             const RECT& destRect,
+                                                             int width,
+                                                             int height) {
+    if (!desktopHwnd || !IsWindow(desktopHwnd) || !screenDc || !memDc ||
+        width <= 0 || height <= 0) {
         return false;
     }
+
+    RECT srcRect = {};
+    if (!GetWindowRect(desktopHwnd, &srcRect)) {
+        return false;
+    }
+    const int srcW = RectWidth(srcRect);
+    const int srcH = RectHeight(srcRect);
+    if (srcW <= 0 || srcH <= 0) {
+        return false;
+    }
+
+    // One extra full-size bitmap on top of the destination snapshot bitmap;
+    // the caller's GdiBudgetAllowsBitmaps()/MemoryPressureAllowsSnapshot()
+    // checks are sized to account for it.
+    ScopedBitmap full(CreateCompatibleBitmap(screenDc, srcW, srcH));
+    if (!full) {
+        return false;
+    }
+    ScopedDc fullDc = ScopedDc::compatible(screenDc);
+    if (!fullDc) {
+        return false;
+    }
+    ScopedSelectObject<HBITMAP> fullSel(fullDc.get(), full.get());
+    if (!fullSel.succeeded()) {
+        return false;
+    }
+
+    if (!PrintWindow(desktopHwnd, fullDc.get(), PW_RENDERFULLCONTENT)) {
+        return false;
+    }
+
+    return BitBlt(memDc, 0, 0, width, height, fullDc.get(),
+                   destRect.left - srcRect.left, destRect.top - srcRect.top,
+                   SRCCOPY) != FALSE;
 }
 
 // Captures the real, currently-visible desktop (wallpaper + icons + taskbar)
@@ -1457,40 +1385,32 @@ static void CaptureDesktopSnapshot() {
         return hits >= kSampleCount;
     };
 
-    // Wallpaper engines (e.g. Wallpaper Engine) render live content into the
-    // WorkerW/Progman desktop windows via their own GPU surfaces. Forcing a
-    // GPU-redirected capture of those specific windows with
-    // PW_RENDERFULLCONTENT is known to make such engines hand back the wrong
-    // (or a blended/overlapping) swap-chain buffer on multi-monitor setups,
-    // producing a "merged" wallpaper across monitors in the captured
-    // snapshot (see ramensoftware/windhawk-mods#5490).
+    // On multi-monitor setups, WorkerW/Progman spans the entire virtual
+    // desktop, while `width`/`height` above are sized to a single monitor.
+    // PrintWindow rendering the full-size source directly into that
+    // smaller bitmap is exactly the coordinate/size mismatch that produced
+    // the "merged" wallpaper report (see ramensoftware/windhawk-mods#5490):
+    // capture at the source's native size first, then crop to the target
+    // monitor's rect.
     //
-    // Capture order for WorkerW/Progman:
-    //   1. CaptureDesktopSnapshotViaDwmThumbnail - let DWM itself composite
-    //      the source (same as it does on screen every frame, wallpaper
-    //      engines included) into a window we control, then BitBlt that.
-    //   2. Plain BitBlt from the screen DC - reads the real composited
+    // Capture order:
+    //   1. CaptureDesktopSnapshotViaPrintWindowNativeSize - PrintWindow at
+    //      native size, cropped via BitBlt to the target monitor.
+    //   2. PrintWindow directly into the destination bitmap - correct on a
+    //      single-monitor setup, kept as a fallback for HWNDs whose native
+    //      size already matches the target (e.g. non-WorkerW/Progman desktop
+    //      HWNDs), and for edge cases where GetWindowRect disagrees with
+    //      GetPrimaryMonitorRect.
+    //   3. Plain BitBlt from the screen DC - reads the real composited
     //      desktop pixels directly, no window-specific redirection at all.
-    // PrintWindow(PW_RENDERFULLCONTENT) is only used as a last resort, and
-    // only for the rare case where FindPlainDesktopWindow() couldn't find a
-    // WorkerW/Progman and we ended up with the raw desktop HWND instead -
-    // that path isn't where wallpaper engines render, so it's unaffected by
-    // the bug above.
-    WCHAR desktopClassName[64] = {};
-    GetClassNameW(desktopHwnd, desktopClassName, ARRAYSIZE(desktopClassName));
-    const bool isWorkerOrProgman =
-        lstrcmpW(desktopClassName, L"WorkerW") == 0 ||
-        lstrcmpW(desktopClassName, L"Progman") == 0;
-
-    BOOL ok = FALSE;
-    if (isWorkerOrProgman) {
-        ok = CaptureDesktopSnapshotViaDwmThumbnail(desktopHwnd, memDc.get(), width, height)
-                 ? TRUE : FALSE;
-        if (ok && isBlankCapture()) {
-            ok = FALSE;
-        }
+    BOOL ok = CaptureDesktopSnapshotViaPrintWindowNativeSize(
+        desktopHwnd, screenDc.get(), memDc.get(), desktopRect, width, height)
+                  ? TRUE
+                  : FALSE;
+    if (ok && isBlankCapture()) {
+        ok = FALSE;
     }
-    if (!ok && !isWorkerOrProgman) {
+    if (!ok) {
         ok = PrintWindow(desktopHwnd, memDc.get(), PW_RENDERFULLCONTENT);
         if (ok && isBlankCapture()) {
             ok = FALSE;
