@@ -245,11 +245,10 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
           - dock: Dock / Strip Layout
       $name: Layout
     - Corners:
-        - cornerPreference: auto
+        - cornerPreference: default
           $name: Corner Preference
           $description: Corner radius for the switcher window and its elements.
           $options:
-          - auto: Auto (Squared on Windows 10, Rounded on Windows 11)
           - default: Default (Let Windows decide)
           - none: Squared
           - round: Rounded
@@ -1130,6 +1129,60 @@ static bool IsWin11OrGreater() {
     }
     s_cached = 0;
     return false;
+}
+
+static int g_systemDwmRadius = 8;
+static int g_systemDwmSmallRadius = 4;
+static bool g_customCornerRadiusModActive = false;
+
+static void DetectSystemDwmCornerRadius() {
+    HKEY hKey = NULL;
+    LONG lRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                              L"SOFTWARE\\Windhawk\\Engine\\Mods\\custom-corner-radius",
+                              0, KEY_READ | KEY_WOW64_64KEY, &hKey);
+    bool modActive = false;
+    if (lRes == ERROR_SUCCESS) {
+        DWORD disabled = 0, sz = sizeof(disabled);
+        if (RegQueryValueExW(hKey, L"Disabled", NULL, NULL, (LPBYTE)&disabled, &sz) == ERROR_SUCCESS) {
+            modActive = (disabled == 0);
+        }
+        RegCloseKey(hKey);
+    }
+
+    if (modActive) {
+        HKEY hSetKey = NULL;
+        lRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                             L"SOFTWARE\\Windhawk\\Engine\\Mods\\custom-corner-radius\\Settings",
+                             0, KEY_READ | KEY_WOW64_64KEY, &hSetKey);
+        if (lRes == ERROR_SUCCESS) {
+            DWORD rVal = (DWORD)-1, sz = sizeof(rVal);
+            if (RegQueryValueExW(hSetKey, L"radius", NULL, NULL, (LPBYTE)&rVal, &sz) == ERROR_SUCCESS) {
+                if (rVal != (DWORD)-1 && (int)rVal >= 0) {
+                    DWORD sVal = (DWORD)-1;
+                    sz = sizeof(sVal);
+                    RegQueryValueExW(hSetKey, L"smallRadius", NULL, NULL, (LPBYTE)&sVal, &sz);
+                    int smallDIP = (sVal != (DWORD)-1 && (int)sVal >= 0) ? (int)sVal : (int)roundf((float)rVal * 0.5f);
+
+                    g_systemDwmRadius = (int)rVal;
+                    g_systemDwmSmallRadius = smallDIP;
+                    g_customCornerRadiusModActive = true;
+                    RegCloseKey(hSetKey);
+                    return;
+                }
+            }
+            RegCloseKey(hSetKey);
+        }
+    }
+
+    // Native OS Fallback
+    g_customCornerRadiusModActive = false;
+    if (IsWin11OrGreater()) {
+        g_systemDwmRadius = 8;
+        g_systemDwmSmallRadius = 4;
+    } else {
+        g_systemDwmRadius = 0;
+        g_systemDwmSmallRadius = 0;
+    }
 }
 
 // Forward declarations
@@ -2869,43 +2922,61 @@ static int GetHeaderRowHeightPx() {
     return h;
 }
 static INT GetCornerPref() {
-    if (wcscmp(g_settings.cornerPreference, L"default") == 0) return 0;
-    if (wcscmp(g_settings.cornerPreference, L"none") == 0) return 1;
-    if (wcscmp(g_settings.cornerPreference, L"roundSmall") == 0) return 3;
+    if (wcscmp(g_settings.cornerPreference, L"none") == 0) return 1; // DWMWCP_DONOTROUND
+    if (wcscmp(g_settings.cornerPreference, L"roundSmall") == 0) return 3; // DWMWCP_ROUNDSMALL
+    if (wcscmp(g_settings.cornerPreference, L"round") == 0) return 2; // DWMWCP_ROUND
     if (wcscmp(g_settings.cornerPreference, L"custom") == 0) {
         if (g_settings.customCornerRadius <= 0) return 1; // DONOTROUND (0px sharp rectangle)
         if (g_settings.customCornerRadius <= 5) return 3; // ROUNDSMALL (~4px)
         return 2; // ROUND (~8px)
     }
-    return 2; // Default to round
+    // "default" or legacy "auto":
+    // If DWM system radius is 0, explicitly tell DWM not to round
+    if (g_systemDwmRadius <= 0) return 1; // DWMWCP_DONOTROUND
+    return 0; // DWMWCP_DEFAULT (Let Windows / DWM mod decide)
+}
+
+static void GetResolvedCornerRadiiDIP(int* outStdDIP, int* outSmallDIP) {
+    int stdDIP = 0;
+    int smallDIP = 0;
+
+    if (wcscmp(g_settings.cornerPreference, L"none") == 0) {
+        stdDIP = 0;
+        smallDIP = 0;
+    } else if (wcscmp(g_settings.cornerPreference, L"roundSmall") == 0) {
+        stdDIP = 4;
+        smallDIP = 4;
+    } else if (wcscmp(g_settings.cornerPreference, L"round") == 0) {
+        stdDIP = 8;
+        smallDIP = 4;
+    } else if (wcscmp(g_settings.cornerPreference, L"custom") == 0) {
+        stdDIP = g_settings.customCornerRadius;
+        smallDIP = (stdDIP <= 0) ? 0 : std::max(1, (stdDIP + 1) / 2);
+    } else { // "default" or legacy "auto"
+        stdDIP = g_systemDwmRadius;
+        smallDIP = g_systemDwmSmallRadius;
+    }
+
+    // Invariant: if standard radius is 0 (square mode), all child elements are strictly 0
+    if (stdDIP <= 0) {
+        stdDIP = 0;
+        smallDIP = 0;
+    }
+
+    if (outStdDIP) *outStdDIP = stdDIP;
+    if (outSmallDIP) *outSmallDIP = smallDIP;
 }
 
 static int GetWindowCornerRadiusPx() {
-    if (wcscmp(g_settings.cornerPreference, L"none") == 0) {
+    int stdDIP = 0, smallDIP = 0;
+    GetResolvedCornerRadiiDIP(&stdDIP, &smallDIP);
+    if (stdDIP <= 0) return 0;
+
+    // On Windows 10 without layered window, Acrylic blur is physically 90° rectangular
+    if (!IsWin11OrGreater() && !ThemeIs(L"none")) {
         return 0;
     }
-    // For Theme: none, 32-bit layered window supports arbitrary custom radius
-    if (ThemeIs(L"none")) {
-        if (wcscmp(g_settings.cornerPreference, L"custom") == 0) {
-            return MulDiv(g_settings.customCornerRadius, g_dpiX, 96);
-        }
-        if (wcscmp(g_settings.cornerPreference, L"roundSmall") == 0) {
-            return MulDiv(4, g_dpiX, 96);
-        }
-        if (wcscmp(g_settings.cornerPreference, L"default") == 0 || wcscmp(g_settings.cornerPreference, L"auto") == 0) {
-            return IsWin11OrGreater() ? MulDiv(8, g_dpiX, 96) : 0;
-        }
-        return MulDiv(8, g_dpiX, 96);
-    }
-    // On Windows 10, Acrylic blur is physically a 90° rectangle
-    if (!IsWin11OrGreater()) {
-        return 0;
-    }
-    // On Windows 11 with Mica or Desktop Acrylic, outer window matches DWM hardware backdrop geometry
-    INT cp = GetCornerPref();
-    if (cp == 1) return 0;
-    if (cp == 3) return MulDiv(4, g_dpiX, 96);
-    return MulDiv(8, g_dpiX, 96);
+    return MulDiv(stdDIP, g_dpiX, 96);
 }
 
 static bool UseTaskRoundedCorners() {
@@ -2916,19 +2987,10 @@ static int GetTaskUiCornerRadiusPx() {
     if (!UseTaskRoundedCorners()) {
         return 0;
     }
-    if (wcscmp(g_settings.cornerPreference, L"none") == 0) {
-        return 0;
-    }
-    if (wcscmp(g_settings.cornerPreference, L"custom") == 0) {
-        return MulDiv(g_settings.customCornerRadius, g_dpiX, 96);
-    }
-    if (wcscmp(g_settings.cornerPreference, L"roundSmall") == 0) {
-        return MulDiv(4, g_dpiX, 96);
-    }
-    if (wcscmp(g_settings.cornerPreference, L"default") == 0 || wcscmp(g_settings.cornerPreference, L"auto") == 0) {
-        return IsWin11OrGreater() ? MulDiv(8, g_dpiX, 96) : 0;
-    }
-    return MulDiv(8, g_dpiX, 96);
+    int stdDIP = 0, smallDIP = 0;
+    GetResolvedCornerRadiiDIP(&stdDIP, &smallDIP);
+    if (stdDIP <= 0) return 0;
+    return MulDiv(stdDIP, g_dpiX, 96);
 }
 
 // Thumbnail corner rounding is controlled independently from the task border /
@@ -2937,52 +2999,35 @@ static int GetThumbnailCornerRadiusPx() {
     if (!g_settings.roundThumbnailCorners) {
         return 0;
     }
-    if (wcscmp(g_settings.cornerPreference, L"none") == 0) {
-        return 0;
-    }
-    if (wcscmp(g_settings.cornerPreference, L"custom") == 0) {
-        return MulDiv(g_settings.customCornerRadius, g_dpiX, 96);
-    }
-    if (wcscmp(g_settings.cornerPreference, L"roundSmall") == 0) {
-        return MulDiv(4, g_dpiX, 96);
-    }
-    if (wcscmp(g_settings.cornerPreference, L"default") == 0 || wcscmp(g_settings.cornerPreference, L"auto") == 0) {
-        // Windows 11 controls, preview cards, and tiles use 4px rounding at 96 DPI (DWMWCP_ROUNDSMALL)
-        return IsWin11OrGreater() ? MulDiv(4, g_dpiX, 96) : 0;
-    }
-    return MulDiv(8, g_dpiX, 96);
+    int stdDIP = 0, smallDIP = 0;
+    GetResolvedCornerRadiiDIP(&stdDIP, &smallDIP);
+    if (stdDIP <= 0 || smallDIP <= 0) return 0;
+    int effectiveDIP = std::min(smallDIP, stdDIP);
+    return MulDiv(effectiveDIP, g_dpiX, 96);
 }
 
 static int GetGroupIndicatorCornerRadiusPx(int maxRadius) {
     if (!g_settings.roundGroupIndicator) {
         return 0;
     }
-    if (wcscmp(g_settings.cornerPreference, L"none") == 0) {
-        return 0;
-    }
-    int radius = 0;
-    if (wcscmp(g_settings.cornerPreference, L"custom") == 0) {
-        radius = MulDiv(g_settings.customCornerRadius, g_dpiX, 96);
-    } else {
-        radius = MulDiv(4, g_dpiX, 96);
-    }
-    return (radius > maxRadius) ? maxRadius : radius;
+    int stdDIP = 0, smallDIP = 0;
+    GetResolvedCornerRadiiDIP(&stdDIP, &smallDIP);
+    if (stdDIP <= 0 || smallDIP <= 0) return 0;
+    int effectiveDIP = std::min(smallDIP, stdDIP);
+    int r = MulDiv(effectiveDIP, g_dpiX, 96);
+    return (r > maxRadius) ? maxRadius : r;
 }
 
 static int GetBadgeIconBackgroundCornerRadiusPx(int maxRadius) {
     if (!g_settings.roundBadgeIconBackground) {
         return 0;
     }
-    if (wcscmp(g_settings.cornerPreference, L"none") == 0) {
-        return 0;
-    }
-    int radius = 0;
-    if (wcscmp(g_settings.cornerPreference, L"custom") == 0) {
-        radius = MulDiv(g_settings.customCornerRadius, g_dpiX, 96);
-    } else {
-        radius = MulDiv(4, g_dpiX, 96);
-    }
-    return (radius > maxRadius) ? maxRadius : radius;
+    int stdDIP = 0, smallDIP = 0;
+    GetResolvedCornerRadiiDIP(&stdDIP, &smallDIP);
+    if (stdDIP <= 0 || smallDIP <= 0) return 0;
+    int effectiveDIP = std::min(smallDIP, stdDIP);
+    int r = MulDiv(effectiveDIP, g_dpiX, 96);
+    return (r > maxRadius) ? maxRadius : r;
 }
 
 static void GetSwitcherPosition(const RECT& workArea, int* outX, int* outY) {
@@ -3011,7 +3056,11 @@ static void GetSwitcherPosition(const RECT& workArea, int* outX, int* outY) {
 }
 
 static int GetCloseButtonCornerRadiusPx() {
-    return GetTaskUiCornerRadiusPx();
+    int stdDIP = 0, smallDIP = 0;
+    GetResolvedCornerRadiiDIP(&stdDIP, &smallDIP);
+    if (stdDIP <= 0 || smallDIP <= 0) return 0;
+    int effectiveDIP = std::min(smallDIP, stdDIP);
+    return MulDiv(effectiveDIP, g_dpiX, 96);
 }
 static bool ShouldUseDarkMode() {
     if (wcscmp(g_settings.colorScheme, L"light") == 0) return false;
@@ -5660,7 +5709,7 @@ static void DrawCloseButton(HDC hdc, const RECT& btnRc, float btnAlpha, float ho
     if (penWidth < 1.0f) penWidth = 1.0f;
 
     Gdiplus::Pen xPen(Gdiplus::Color(xAlpha, r, g, b), penWidth);
-    Gdiplus::LineCap cap = (btnRadius > 0 && IsWin11OrGreater()) ? Gdiplus::LineCapRound : Gdiplus::LineCapFlat;
+    Gdiplus::LineCap cap = (btnRadius > 0) ? Gdiplus::LineCapRound : Gdiplus::LineCapFlat;
     xPen.SetStartCap(cap);
     xPen.SetEndCap(cap);
 
@@ -10594,18 +10643,19 @@ static void LoadSettings() {
     if (wcscmp(g_settings.theme, L"auto") == 0) {
         wcsncpy_s(g_settings.theme, IsWin11OrGreater() ? L"mica" : L"backdrop", _TRUNCATE);
     }
+    DetectSystemDwmCornerRadius();
     LoadStringSetting(L"Style.colorScheme", g_settings.colorScheme, L"system");
-    LoadStringSetting(L"Appearance.Corners.cornerPreference", g_settings.cornerPreference, L"auto");
+    LoadStringSetting(L"Appearance.Corners.cornerPreference", g_settings.cornerPreference, L"default");
     if (wcscmp(g_settings.cornerPreference, L"auto") == 0) {
-        wcsncpy_s(g_settings.cornerPreference, IsWin11OrGreater() ? L"default" : L"none", _TRUNCATE);
+        wcsncpy_s(g_settings.cornerPreference, L"default", _TRUNCATE);
     }
     g_settings.customCornerRadius = Wh_GetIntSetting(L"Appearance.Corners.customCornerRadius");
     if (g_settings.customCornerRadius < 0) g_settings.customCornerRadius = 0;
     if (g_settings.customCornerRadius > 32) g_settings.customCornerRadius = 32;
-    g_settings.taskRoundedCorners = LoadAutoBoolSetting(L"Appearance.Corners.taskRoundedCorners", IsWin11OrGreater());
-    g_settings.roundThumbnailCorners = LoadAutoBoolSetting(L"Appearance.Corners.roundThumbnailCorners", IsWin11OrGreater());
-    g_settings.roundGroupIndicator = LoadAutoBoolSetting(L"Appearance.Corners.roundGroupIndicator", IsWin11OrGreater());
-    g_settings.roundBadgeIconBackground = LoadAutoBoolSetting(L"Appearance.Corners.roundBadgeIconBackground", IsWin11OrGreater());
+    g_settings.taskRoundedCorners = LoadAutoBoolSetting(L"Appearance.Corners.taskRoundedCorners", g_systemDwmRadius > 0);
+    g_settings.roundThumbnailCorners = LoadAutoBoolSetting(L"Appearance.Corners.roundThumbnailCorners", g_systemDwmRadius > 0);
+    g_settings.roundGroupIndicator = LoadAutoBoolSetting(L"Appearance.Corners.roundGroupIndicator", g_systemDwmRadius > 0);
+    g_settings.roundBadgeIconBackground = LoadAutoBoolSetting(L"Appearance.Corners.roundBadgeIconBackground", g_systemDwmRadius > 0);
     LoadStringSetting(L"Accessibility.scrollWheelBehavior", g_settings.scrollWheelBehavior, L"never");
     LoadStringSetting(L"Accessibility.scrollWheelAction", g_settings.scrollWheelAction, L"selection");
     LoadStringSetting(L"Accessibility.scrollSecondaryAction", g_settings.scrollSecondaryAction, L"page");
