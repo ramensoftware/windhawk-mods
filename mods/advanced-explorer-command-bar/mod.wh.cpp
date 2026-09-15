@@ -29,7 +29,7 @@ An extended version of the Windows 11 File Explorer command bar mod that introdu
 ---
 *Based on the original [Explorer Command Bar](https://windhawk.net/mods/explorer-command-bar) mod by DanRotaru.*
 
-![Advanced Explorer Command Bar Preview](https://raw.githubusercontent.com/<YOUR_GITHUB_USERNAME>/windhawk-mods/main/mods/advanced-explorer-command-bar/preview.png)
+![Advanced Explorer Command Bar Preview](https://raw.githubusercontent.com/ArvindSaini978/windhawk-mods/advanced-explorer-command-bar/mods/advanced-explorer-command-bar/Preview.png)
 
 ![Explorer Command Bar demo](https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/explorer-command-bar/screenshots/main.gif)
 
