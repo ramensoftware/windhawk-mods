@@ -50,8 +50,10 @@ visual refresh so existing windows receive the current shadows.
 
 ## Compatibility
 
-The mod resolves uDWM functions through Microsoft public symbols and supports
-Windows 11 builds that expose the required shadow functions.
+The mod resolves uDWM functions through Microsoft public symbols. Tested on
+Windows 11 25h2 build 26200.9445 / 24H2. On other
+builds, if the required uDWM shadow functions can't be resolved, the mod logs
+this and does not load.
 
 */
 // ==/WindhawkModReadme==
@@ -178,23 +180,33 @@ HRESULT __cdecl GetBorderBrush_Hook(float radius,
     SetStableCacheKeyPart(&keyedColor.r, cacheKey, 12);
     SetStableCacheKeyPart(&keyedColor.g, cacheKey >> 12, 3);
 
-    if (std::memcmp(&keyedColor, color, sizeof(keyedColor)) == 0) {
-        SetStableCacheKeyPart(&keyedColor.b, cacheKey ^ 1u, 1);
-    }
+    // SetStableCacheKeyPart assigns bits rather than flipping them, so it can
+    // be a no-op if the caller's color already carries the same payload.
+    // Derive "keyed" from the actual comparison rather than assuming success:
+    // this covers every case, including a b of exactly 0.0f where flipping
+    // the low bit would produce a subnormal that FTZ can flush back to zero.
+    const bool keyed =
+        std::memcmp(&keyedColor, color, sizeof(keyedColor)) != 0;
 
     // GetShadowParameters modifies values only while DWM is creating a brush
-    // whose cache key has also been changed by this hook.
-    ++shadowBuildDepth;
+    // whose cache key has also been changed by this hook. If the key isn't
+    // actually different, fall through unkeyed so nothing gets scaled and
+    // nothing modified ends up under DWM's normal, unrevertable cache entries.
+    if (keyed) {
+        ++shadowBuildDepth;
+    }
 
     const HRESULT result = getBorderBrush_Original(
         radius,
         dpi,
-        &keyedColor,
+        keyed ? &keyedColor : color,
         borderStyle,
         shadowStyle,
         output);
 
-    --shadowBuildDepth;
+    if (keyed) {
+        --shadowBuildDepth;
+    }
 
     return result;
 }
