@@ -5211,7 +5211,8 @@ static void RegisterThumbnails() {
             if (offX != 0 || offY != 0) {
                 OffsetRect(&p.rcDestination, offX, offY);
             }
-            p.opacity = (BYTE)(g_animEntranceCurrentAlpha * 255.0f);
+            float _itemAlpha = (g_layoutTransition.active && w.isNewEntry) ? w.enterAlpha : 1.0f;
+            p.opacity = (BYTE)roundf(g_animEntranceCurrentAlpha * _itemAlpha * 255.0f);
             p.fVisible = TRUE;
             // Only set DWM_TNP_RECTSOURCE when the crop is non-trivial (e.g. maximized
             // windows with invisible frame borders) or when the window is minimized.
@@ -8275,83 +8276,386 @@ static void EnterAppGroup() {
     std::vector<HWND> members = g_windows[g_selectedIndex].groupWindows;
     if (members.size() <= 1) return;  // nothing to expand
 
-    UnregisterThumbnails();  // release app-list thumbnails before stashing
-    g_savedAppList = std::move(g_windows);
-    g_savedSelectedIndex = g_selectedIndex;
-    g_savedLayoutStartIndex = g_layoutStartIndex;
+    if (AreAnimationsGloballyEnabled() && g_settings.enableAnimations) {
+        // ── Animated drill-down path ──────────────────────────────────
 
-    g_windows.clear();
-    for (HWND hw : members) {
-        if (!IsWindow(hw)) continue;
-        WindowEntry e = {};
-        e.hWnd = hw;
-        GetWindowTextW(hw, e.title, 256);
-        if (!e.title[0]) InternalGetWindowText(hw, e.title, 256);
-        e.hIcon = LoadWindowIcon(hw);
-        g_windows.push_back(std::move(e));
-    }
-    if (g_windows.empty()) {  // every window closed in the meantime; abort
-        g_windows = std::move(g_savedAppList);
+        // 1. Abort any in-flight layout transition cleanly
+        if (g_layoutTransition.active) {
+            g_layoutTransition.active   = false;
+            g_layoutTransition.progress = 1.0f;
+            for (auto& dep : g_layoutTransition.departingItems) {
+                for (const auto& kv : dep.hThumbs) {
+                    if (kv.second) DwmUnregisterThumbnail(kv.second);
+                }
+            }
+            g_layoutTransition.departingItems.clear();
+            for (auto& w : g_windows) {
+                w.rcCell        = w.rcCellTarget;
+                w.rcThumbActual = w.rcThumbTarget;
+                w.isNewEntry    = false;
+            }
+        }
+
+        // 2. Capture current window rect as animation start
+        RECT curWnd = {};
+        GetWindowRect(g_hSwitcher, &curWnd);
+        g_layoutTransition.rcWndStart = ToRectF(curWnd);
+
+        // 3. Snapshot visible app-list items as departing entries
+        for (auto& w : g_windows) {
+            if (w.rcCell.left == 0 && w.rcCell.right == 0 &&
+                w.rcCell.top == 0  && w.rcCell.bottom == 0) continue;
+            DepartingEntrySnapshot snap = {};
+            snap.hWnd            = w.hWnd;
+            snap.rcCellStart     = w.rcCell;
+            snap.rcCellCurrent   = w.rcCell;
+            snap.rcThumbStart    = w.rcThumbActual;
+            snap.rcThumbCurrent  = w.rcThumbActual;
+            snap.alpha           = 1.0f;
+            snap.scale           = 1.0f;
+            snap.hIcon           = w.hIcon;
+            wcsncpy_s(snap.title, w.title, _TRUNCATE);
+            snap.groupWindows    = w.groupWindows;
+            if (DockLayoutActive()) {
+                // Dock: unregister live thumbnails; icon cross-fade via DrawSwitcherStaticContent
+                for (const auto& kv : w.hThumbs) {
+                    if (kv.second) DwmUnregisterThumbnail(kv.second);
+                }
+                w.hThumbs.clear();
+                snap.hThumbs.clear();
+            } else {
+                // Grid/Badge: transfer thumbnail handles for smooth DWM cross-fade
+                snap.hThumbs = w.hThumbs;
+                w.hThumbs.clear();
+            }
+            g_layoutTransition.departingItems.push_back(std::move(snap));
+        }
+
+        // 4. Stash app list and populate drilled-in window entries
+        g_savedAppList          = std::move(g_windows);
+        g_savedSelectedIndex    = g_selectedIndex;
+        g_savedLayoutStartIndex = g_layoutStartIndex;
+
+        g_windows.clear();
+        for (HWND hw : members) {
+            if (!IsWindow(hw)) continue;
+            WindowEntry e = {};
+            e.hWnd = hw;
+            GetWindowTextW(hw, e.title, 256);
+            if (!e.title[0]) InternalGetWindowText(hw, e.title, 256);
+            e.hIcon = LoadWindowIcon(hw);
+            g_windows.push_back(std::move(e));
+        }
+        if (g_windows.empty()) {  // every window closed in the meantime; abort
+            g_windows = std::move(g_savedAppList);
+            // Restore thumbnails from departing snapshots
+            for (auto& dep : g_layoutTransition.departingItems) {
+                for (auto& w : g_windows) {
+                    if (w.hWnd == dep.hWnd && !DockLayoutActive()) {
+                        w.hThumbs = std::move(dep.hThumbs);
+                        break;
+                    }
+                }
+            }
+            g_layoutTransition.departingItems.clear();
+            RecomputeAndReposition();
+            return;
+        }
+        g_drilledIn             = true;
+        g_selectedIndex         = 0;
+        g_layoutStartIndex      = 0;
+        g_hoverIndex            = -1;
+        g_hoverThumbIndex       = -1;
+        g_hoverWnd              = NULL;
+        g_isCloseHovered        = false;
+        g_animHoverActive       = false;
+        g_animHoverAlphaCurrent = 0.0f;
+        g_animHoverAlphaTarget  = 0.0f;
+
+        // 5. Compute new layout to get target cell rects
+        HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
+        for (auto& w : g_windows) RefreshEntrySourceSize(w);
+        ComputeLayout(hMon);
+        if (DockLayoutActive()) UpdateDockPreviewForSelection();
+        UpdateChevronLayout(g_hSwitcher);
+        UpdateChevronAnimationTargets(false);
+
+        // 6. Compute target window rect
+        MONITORINFO mi = { sizeof(mi) };
+        GetMonitorInfoW(hMon, &mi);
+        int cx, cy;
+        GetSwitcherPosition(mi.rcWork, &cx, &cy);
+        g_layoutTransition.rcWndTarget = { (float)cx, (float)cy, (float)(cx + g_winW), (float)(cy + g_winH) };
+
+        // 7. Mark incoming entries: blossom in from 0.94x / alpha=0
+        for (auto& w : g_windows) {
+            w.rcCellTarget  = w.rcCell;
+            w.rcThumbTarget = w.rcThumbActual;
+            w.isNewEntry    = true;
+            w.enterAlpha    = 0.0f;
+            w.enterScale    = 0.94f;
+            int cw  = w.rcCellTarget.right  - w.rcCellTarget.left;
+            int ch  = w.rcCellTarget.bottom - w.rcCellTarget.top;
+            int mcx = (w.rcCellTarget.left + w.rcCellTarget.right)  / 2;
+            int mcy = (w.rcCellTarget.top  + w.rcCellTarget.bottom) / 2;
+            int curCw = (int)roundf(cw * 0.94f);
+            int curCh = (int)roundf(ch * 0.94f);
+            w.rcCellStart = { mcx - curCw / 2, mcy - curCh / 2, mcx + curCw / 2, mcy + curCh / 2 };
+            w.rcCell      = w.rcCellStart;
+            if (!DockLayoutActive()) {
+                int tw  = w.rcThumbTarget.right  - w.rcThumbTarget.left;
+                int th  = w.rcThumbTarget.bottom - w.rcThumbTarget.top;
+                int tmx = (w.rcThumbTarget.left + w.rcThumbTarget.right)  / 2;
+                int tmy = (w.rcThumbTarget.top  + w.rcThumbTarget.bottom) / 2;
+                int curTw = (int)roundf(tw * 0.94f);
+                int curTh = (int)roundf(th * 0.94f);
+                w.rcThumbStart  = { tmx - curTw / 2, tmy - curTh / 2, tmx + curTw / 2, tmy + curTh / 2 };
+                w.rcThumbActual = w.rcThumbStart;
+            }
+        }
+
+        // 8. Register thumbnails at initial opacity (enterAlpha=0 applied in RegisterThumbnails)
+        RegisterThumbnails();
+
+        // 9. Snap selection indicator to target cell – no glide across the drill boundary
+        g_animSelectionCurrent = ToRectF(g_windows[0].rcCellTarget);
+        g_animSelectionTarget  = g_animSelectionCurrent;
+        g_animSelectionStart   = g_animSelectionCurrent;
+        g_animSelectionActive  = false;
+
+        g_scrollTransition.active           = false;
+        g_scrollTransition.offsetCurrentX   = 0.0f;
+        g_scrollTransition.offsetCurrentY   = 0.0f;
+        g_scrollTransition.outgoingItems.clear();
+        g_scrollTransition.preservingThumbnails = false;
+
+        // 10. Launch the 280ms WinUI 3 layout transition
+        g_layoutTransition.progress = 0.0f;
+        g_layoutTransition.duration = 0.280f;
+        g_layoutTransition.active   = true;
+        InvalidateStaticCache();
+        StartAnimationTicker();
+        PaintSwitcher();
+        UpdateHoverFromCursor(false);
+    } else {
+        // ── Instant fallback path (animations disabled) ───────────────
+        UnregisterThumbnails();
+        g_savedAppList          = std::move(g_windows);
+        g_savedSelectedIndex    = g_selectedIndex;
+        g_savedLayoutStartIndex = g_layoutStartIndex;
+
+        g_windows.clear();
+        for (HWND hw : members) {
+            if (!IsWindow(hw)) continue;
+            WindowEntry e = {};
+            e.hWnd = hw;
+            GetWindowTextW(hw, e.title, 256);
+            if (!e.title[0]) InternalGetWindowText(hw, e.title, 256);
+            e.hIcon = LoadWindowIcon(hw);
+            g_windows.push_back(std::move(e));
+        }
+        if (g_windows.empty()) {
+            g_windows = std::move(g_savedAppList);
+            RecomputeAndReposition();
+            return;
+        }
+        g_drilledIn             = true;
+        g_selectedIndex         = 0;
+        g_layoutStartIndex      = 0;
+        g_hoverIndex            = -1;
+        g_hoverThumbIndex       = -1;
+        g_hoverWnd              = NULL;
+        g_isCloseHovered        = false;
+        g_animHoverActive       = false;
+        g_animHoverAlphaCurrent = 0.0f;
+        g_animHoverAlphaTarget  = 0.0f;
         RecomputeAndReposition();
-        return;
+        if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
+            g_animSelectionCurrent = ToRectF(g_windows[g_selectedIndex].rcCell);
+            g_animSelectionTarget  = g_animSelectionCurrent;
+            g_animSelectionActive  = false;
+        }
+        g_scrollTransition.active           = false;
+        g_scrollTransition.offsetCurrentX   = 0.0f;
+        g_scrollTransition.offsetCurrentY   = 0.0f;
+        g_scrollTransition.outgoingItems.clear();
+        g_scrollTransition.preservingThumbnails = false;
+        PaintSwitcher();
+        UpdateHoverFromCursor(false);
     }
-    g_drilledIn = true;
-    g_selectedIndex = 0;
-    g_layoutStartIndex = 0;
-    g_hoverIndex = -1;
-    g_hoverThumbIndex = -1;
-    g_hoverWnd = NULL;
-    g_isCloseHovered = false;
-    g_animHoverActive = false;
-    g_animHoverAlphaCurrent = 0.0f;
-    g_animHoverAlphaTarget = 0.0f;
-    RecomputeAndReposition();
-    if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
-        g_animSelectionCurrent = ToRectF(g_windows[g_selectedIndex].rcCell);
-        g_animSelectionTarget = g_animSelectionCurrent;
-        g_animSelectionActive = false;
-    }
-    g_scrollTransition.active = false;
-    g_scrollTransition.offsetCurrentX = 0.0f;
-    g_scrollTransition.offsetCurrentY = 0.0f;
-    g_scrollTransition.outgoingItems.clear();
-    g_scrollTransition.preservingThumbnails = false;
-    PaintSwitcher();
-    UpdateHoverFromCursor(false);
 }
 
 // Leave the drilled-in window view and restore the grouped application list.
 static void ExitAppGroup() {
     if (!g_drilledIn) return;
-    UnregisterThumbnails();  // release drilled-window thumbnails
-    g_windows = std::move(g_savedAppList);
-    g_savedAppList.clear();
-    g_selectedIndex = g_savedSelectedIndex;
-    g_layoutStartIndex = g_savedLayoutStartIndex;
-    if (g_selectedIndex >= (int)g_windows.size()) g_selectedIndex = (int)g_windows.size() - 1;
-    if (g_selectedIndex < 0) g_selectedIndex = 0;
-    g_drilledIn = false;
-    g_hoverIndex = -1;
-    g_hoverThumbIndex = -1;
-    g_hoverWnd = NULL;
-    g_isCloseHovered = false;
-    g_animHoverActive = false;
-    g_animHoverAlphaCurrent = 0.0f;
-    g_animHoverAlphaTarget = 0.0f;
-    RecomputeAndReposition();
-    if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
-        g_animSelectionCurrent = ToRectF(g_windows[g_selectedIndex].rcCell);
-        g_animSelectionTarget = g_animSelectionCurrent;
-        g_animSelectionActive = false;
+
+    if (AreAnimationsGloballyEnabled() && g_settings.enableAnimations) {
+        // ── Animated return path ──────────────────────────────────────
+
+        // 1. Abort any in-flight layout transition cleanly
+        if (g_layoutTransition.active) {
+            g_layoutTransition.active   = false;
+            g_layoutTransition.progress = 1.0f;
+            for (auto& dep : g_layoutTransition.departingItems) {
+                for (const auto& kv : dep.hThumbs) {
+                    if (kv.second) DwmUnregisterThumbnail(kv.second);
+                }
+            }
+            g_layoutTransition.departingItems.clear();
+            for (auto& w : g_windows) {
+                w.rcCell        = w.rcCellTarget;
+                w.rcThumbActual = w.rcThumbTarget;
+                w.isNewEntry    = false;
+            }
+        }
+
+        // 2. Capture current window rect as animation start
+        RECT curWnd = {};
+        GetWindowRect(g_hSwitcher, &curWnd);
+        g_layoutTransition.rcWndStart = ToRectF(curWnd);
+
+        // 3. Snapshot visible drilled-in items as departing entries
+        for (auto& w : g_windows) {
+            if (w.rcCell.left == 0 && w.rcCell.right == 0 &&
+                w.rcCell.top == 0  && w.rcCell.bottom == 0) continue;
+            DepartingEntrySnapshot snap = {};
+            snap.hWnd            = w.hWnd;
+            snap.rcCellStart     = w.rcCell;
+            snap.rcCellCurrent   = w.rcCell;
+            snap.rcThumbStart    = w.rcThumbActual;
+            snap.rcThumbCurrent  = w.rcThumbActual;
+            snap.alpha           = 1.0f;
+            snap.scale           = 1.0f;
+            snap.hIcon           = w.hIcon;
+            wcsncpy_s(snap.title, w.title, _TRUNCATE);
+            snap.groupWindows    = w.groupWindows;
+            if (DockLayoutActive()) {
+                for (const auto& kv : w.hThumbs) {
+                    if (kv.second) DwmUnregisterThumbnail(kv.second);
+                }
+                w.hThumbs.clear();
+                snap.hThumbs.clear();
+            } else {
+                snap.hThumbs = w.hThumbs;
+                w.hThumbs.clear();
+            }
+            g_layoutTransition.departingItems.push_back(std::move(snap));
+        }
+
+        // 4. Restore app list and selection state
+        g_windows          = std::move(g_savedAppList);
+        g_savedAppList.clear();
+        g_selectedIndex    = g_savedSelectedIndex;
+        g_layoutStartIndex = g_savedLayoutStartIndex;
+        if (g_selectedIndex >= (int)g_windows.size()) g_selectedIndex = (int)g_windows.size() - 1;
+        if (g_selectedIndex < 0) g_selectedIndex = 0;
+        g_drilledIn             = false;
+        g_hoverIndex            = -1;
+        g_hoverThumbIndex       = -1;
+        g_hoverWnd              = NULL;
+        g_isCloseHovered        = false;
+        g_animHoverActive       = false;
+        g_animHoverAlphaCurrent = 0.0f;
+        g_animHoverAlphaTarget  = 0.0f;
+
+        // 5. Compute restored layout to get target rects
+        HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
+        for (auto& w : g_windows) RefreshEntrySourceSize(w);
+        ComputeLayout(hMon);
+        if (DockLayoutActive()) UpdateDockPreviewForSelection();
+        UpdateChevronLayout(g_hSwitcher);
+        UpdateChevronAnimationTargets(false);
+
+        // 6. Compute target window rect
+        MONITORINFO mi = { sizeof(mi) };
+        GetMonitorInfoW(hMon, &mi);
+        int cx, cy;
+        GetSwitcherPosition(mi.rcWork, &cx, &cy);
+        g_layoutTransition.rcWndTarget = { (float)cx, (float)cy, (float)(cx + g_winW), (float)(cy + g_winH) };
+
+        // 7. Mark incoming app-list entries: blossom in from 0.94x / alpha=0
+        for (auto& w : g_windows) {
+            w.rcCellTarget  = w.rcCell;
+            w.rcThumbTarget = w.rcThumbActual;
+            w.isNewEntry    = true;
+            w.enterAlpha    = 0.0f;
+            w.enterScale    = 0.94f;
+            int cw  = w.rcCellTarget.right  - w.rcCellTarget.left;
+            int ch  = w.rcCellTarget.bottom - w.rcCellTarget.top;
+            int mcx = (w.rcCellTarget.left + w.rcCellTarget.right)  / 2;
+            int mcy = (w.rcCellTarget.top  + w.rcCellTarget.bottom) / 2;
+            int curCw = (int)roundf(cw * 0.94f);
+            int curCh = (int)roundf(ch * 0.94f);
+            w.rcCellStart = { mcx - curCw / 2, mcy - curCh / 2, mcx + curCw / 2, mcy + curCh / 2 };
+            w.rcCell      = w.rcCellStart;
+            if (!DockLayoutActive()) {
+                int tw  = w.rcThumbTarget.right  - w.rcThumbTarget.left;
+                int th  = w.rcThumbTarget.bottom - w.rcThumbTarget.top;
+                int tmx = (w.rcThumbTarget.left + w.rcThumbTarget.right)  / 2;
+                int tmy = (w.rcThumbTarget.top  + w.rcThumbTarget.bottom) / 2;
+                int curTw = (int)roundf(tw * 0.94f);
+                int curTh = (int)roundf(th * 0.94f);
+                w.rcThumbStart  = { tmx - curTw / 2, tmy - curTh / 2, tmx + curTw / 2, tmy + curTh / 2 };
+                w.rcThumbActual = w.rcThumbStart;
+            }
+        }
+
+        // 8. Register thumbnails at initial opacity (enterAlpha=0 in RegisterThumbnails)
+        RegisterThumbnails();
+
+        // 9. Snap selection indicator
+        if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
+            g_animSelectionCurrent = ToRectF(g_windows[g_selectedIndex].rcCellTarget);
+            g_animSelectionTarget  = g_animSelectionCurrent;
+            g_animSelectionStart   = g_animSelectionCurrent;
+            g_animSelectionActive  = false;
+        }
+
+        g_scrollTransition.active           = false;
+        g_scrollTransition.offsetCurrentX   = 0.0f;
+        g_scrollTransition.offsetCurrentY   = 0.0f;
+        g_scrollTransition.outgoingItems.clear();
+        g_scrollTransition.preservingThumbnails = false;
+
+        // 10. Launch the 280ms WinUI 3 layout transition
+        g_layoutTransition.progress = 0.0f;
+        g_layoutTransition.duration = 0.280f;
+        g_layoutTransition.active   = true;
+        InvalidateStaticCache();
+        StartAnimationTicker();
+        PaintSwitcher();
+        UpdateHoverFromCursor(false);
+    } else {
+        // ── Instant fallback path (animations disabled) ───────────────
+        UnregisterThumbnails();
+        g_windows          = std::move(g_savedAppList);
+        g_savedAppList.clear();
+        g_selectedIndex    = g_savedSelectedIndex;
+        g_layoutStartIndex = g_savedLayoutStartIndex;
+        if (g_selectedIndex >= (int)g_windows.size()) g_selectedIndex = (int)g_windows.size() - 1;
+        if (g_selectedIndex < 0) g_selectedIndex = 0;
+        g_drilledIn             = false;
+        g_hoverIndex            = -1;
+        g_hoverThumbIndex       = -1;
+        g_hoverWnd              = NULL;
+        g_isCloseHovered        = false;
+        g_animHoverActive       = false;
+        g_animHoverAlphaCurrent = 0.0f;
+        g_animHoverAlphaTarget  = 0.0f;
+        RecomputeAndReposition();
+        if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
+            g_animSelectionCurrent = ToRectF(g_windows[g_selectedIndex].rcCell);
+            g_animSelectionTarget  = g_animSelectionCurrent;
+            g_animSelectionActive  = false;
+        }
+        g_scrollTransition.active           = false;
+        g_scrollTransition.offsetCurrentX   = 0.0f;
+        g_scrollTransition.offsetCurrentY   = 0.0f;
+        g_scrollTransition.outgoingItems.clear();
+        g_scrollTransition.preservingThumbnails = false;
+        PaintSwitcher();
+        UpdateHoverFromCursor(false);
     }
-    g_scrollTransition.active = false;
-    g_scrollTransition.offsetCurrentX = 0.0f;
-    g_scrollTransition.offsetCurrentY = 0.0f;
-    g_scrollTransition.outgoingItems.clear();
-    g_scrollTransition.preservingThumbnails = false;
-    PaintSwitcher();
-    UpdateHoverFromCursor(false);
-    PaintSwitcher();
 }
 
 static void ToggleAppDrill() {
