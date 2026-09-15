@@ -2263,9 +2263,11 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         // "0 programs" and failed-CreateWindow fail-open paths, which never
         // reach WM_DESTROY and so never populate g_waiters in the first
         // place; only a request that actually got a screen on-screen does).
+        // req is never null here any more: the preview path now supplies its
+        // own ShutdownRequest (with a null reply) instead of nullptr, so this
+        // always has an outcome to copy.
         for (auto* w : g_waiters) {
             if (req) { w->force = req->force; w->proceed = req->proceed; }
-            else     { w->force = false;      w->proceed = true; }  // preview: nothing to decide, proceed
             if (w->reply) SetEvent(w->reply);
         }
         g_waiters.clear();
@@ -2335,11 +2337,18 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     }
     case WM_HOTKEY:
         if (wp == kHotkeyId && !g_dialog) {
-            // Preview only: pass nullptr for the request, so WM_DESTROY finds
-            // nothing to signal (nothing is waiting on it). With no program
-            // open the screen skips itself like a real logoff.
+            // Preview only: reply stays null, so nothing is signalled and
+            // nothing needs closing -- but the request still gets recorded
+            // into GWLP_USERDATA, so any real request that parks in
+            // g_waiters while the preview is up inherits the user's actual
+            // force/proceed choice instead of being force-fed "proceed"
+            // blindly (a real Shut down parked behind Cancel must not go
+            // through). UI thread only, trivially destructible: safe as a
+            // function-local static, no [[clang::no_destroy]] needed.
+            static ShutdownRequest previewReq;
+            previewReq = ShutdownRequest{};
             try {
-                ShowScreenOnUiThread(nullptr, kActionLogoff);
+                ShowScreenOnUiThread(&previewReq, kActionLogoff);
                 if (g_totalPrograms == 0)
                     Wh_Log(L"Preview skipped: no program is currently open");
             } catch (...) {
@@ -2516,6 +2525,13 @@ static bool ShowWin7LogoffDialog(UINT flags, DWORD reason, bool* outForce) {
     // trigger in that process. StartUiThread()'s own `if (g_uiThread) return
     // true;` guard makes calling it here on every request harmless.
     if (!g_uiThreadId && !StartUiThread()) return true;   // fail open
+    // StartUiThreadOnce no longer waits for the control window to exist
+    // (see its comment), so that wait happens here instead, right before the
+    // first thing that actually needs g_hotkeyWindow to be valid. This is
+    // the only caller that must not post before the window exists; the
+    // preview hotkey path runs directly on the UI thread once it's up, so it
+    // needs no such wait.
+    WaitForSingleObject(g_uiReady, 5000);
     if (!g_uiThreadId || !g_hotkeyWindow) return true;
 
     // Heap-allocated, not stack: on the (last-resort) timeout/WM_QUIT paths
@@ -2685,10 +2701,19 @@ static void StartUiThreadOnce() {
         return;
     }
     g_uiThreadId.store(tid, std::memory_order_release);
-    // Do not post anything to the control window before the thread has
-    // actually created it.
-    WaitForSingleObject(g_uiReady, 5000);
-    g_uiThreadStartOk = (g_hotkeyWindow.load(std::memory_order_acquire) != nullptr);
+    // Do not wait for g_uiReady here: on explorer.exe this runs from
+    // Wh_ModAfterInit, which -- despite its name -- still executes on the
+    // target process's main thread before the process starts running (see
+    // the mod lifetime chart: Wh_ModInit -> Wh_ApplyHookOperations ->
+    // Wh_ModAfterInit, all pre-execution). Blocking here would serialize
+    // every Explorer start (boot, sign-in, Explorer restart) behind
+    // CreateThread + 2x RegisterClassW + CreateWindowExW + RegisterHotKey on
+    // the freshly created thread -- normally a few ms, but up to 5 s in the
+    // worst case. Nothing on this path needs the wait: the UI thread
+    // registers its own hotkey, and the only caller that must not post
+    // before the control window exists is ShowWin7LogoffDialog, which now
+    // waits on g_uiReady itself, right before its PostMessageW.
+    g_uiThreadStartOk = true;
 }
 
 static bool StartUiThread() {
@@ -2778,7 +2803,13 @@ BOOL Wh_ModInit() {
 // (rather than in Wh_ModInit) means the wait for g_uiReady can no longer
 // stall Explorer's own startup on every boot/restart.
 void Wh_ModAfterInit() {
-    if (g_isExplorer && !StartUiThread()) {
+    // Only start eagerly if the preview hotkey is actually enabled
+    // (g_hotkeyVk != 0); with previewHotkey set to "None" there is nothing
+    // for an eagerly-started thread to do, so let ShowWin7LogoffDialog's
+    // lazy start bring it up on the first real shutdown/logoff attempt
+    // instead of spinning up a thread, two window classes and a
+    // message-only window in every Explorer process for a disabled feature.
+    if (g_isExplorer && g_hotkeyVk != 0 && !StartUiThread()) {
         Wh_Log(L"UI thread unavailable; the mod will stay out of the way");
     }
 }
