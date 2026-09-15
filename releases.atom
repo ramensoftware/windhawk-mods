@@ -2,12 +2,59 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-15T18:06:14.000Z</updated>
+    <updated>2026-09-15T18:20:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Minimize to tray 1.0]]></title>
+        <id>https://windhawk.net/mods/minimize-to-tray#0917d9c94623b841e260a07b9cf02ac6d6b5cadf</id>
+        <link href="https://windhawk.net/mods/minimize-to-tray"/>
+        <updated>2026-09-15T18:20:32.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="minimizetotray">Minimize to tray</h1>
+<p>Right-click a window's minimize button to hide the window in the system tray.</p>
+<p><img src="https://raw.githubusercontent.com/0Allu/minimize-to-tray/main/assets/minimize-to-tray-demo.gif" alt="Minimize to tray demo" /></p>
+<h2 id="usage">Usage</h2>
+<ul>
+<li>Right-click a window's minimize button to send it to the tray.</li>
+<li>Left-click its tray icon to restore it.</li>
+<li>Right-click its tray icon to restore or close the window.</li>
+</ul>
+<p>The application continues running while its window is hidden.</p>
+<h2 id="customtitlebars">Custom title bars</h2>
+<p>Standard Windows minimize buttons work automatically. For applications which
+draw their own title bar, the mod also uses an approximate Windows-style caption
+button layout. This compatibility detection is enabled by default and can be
+disabled in the mod settings if it conflicts with a particular application.</p>
+<p>Custom rules can override the generic geometry for applications with unusual
+title bars, such as Steam. A custom rule uses this format:</p>
+<p><code>executable|window class|height|min right|max right</code></p>
+<p>The three numeric values are in DPI-independent pixels. <code>height</code> is the maximum
+distance below the top of the window, and <code>min right</code> / <code>max right</code> define the
+button's distance from the right edge.</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>Windows 10 version 1703 or later is required.</p>
+<p>Applications running with administrator privileges are not supported when the
+mod is running at normal user privileges. This is due to Windows User Interface
+Privilege Isolation (UIPI).</p>
+<p>Custom title bar compatibility detection applies only to unowned top-level
+application windows. Tool windows, non-activating windows, child windows,
+dialogs and owned popups are ignored.</p>
+<h2 id="safety">Safety</h2>
+<p>A tray icon is created before a window is hidden. If the tray icon cannot be
+created, the window is left visible. If the mod is disabled or unloaded
+normally, restore requests are posted for all windows hidden by the mod. Hidden
+windows are also recovered if the dedicated mod process restarts.</p>
+<p>If the dedicated tool process is forcibly terminated and the mod is then
+disabled before it can restart, recovery code cannot run. In that unusual case,
+the affected application may need to be restarted manually.</p>]]></content>
+        <author>
+            <name>0Allu</name>
+            <uri>https://github.com/0Allu</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[HWiNFO Registry Live Overlay 1.5.0]]></title>
         <id>https://windhawk.net/mods/hwinfo-registry-live-overlay#ef8174354647d2f0af22d3e6ecf9e12d246a3b70</id>
@@ -1014,65 +1061,6 @@ use the mod <code>Taskbar tray icon spacing and grid</code>.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Chrome Native UI Tweaks 1.0]]></title>
-        <id>https://windhawk.net/mods/chrome-native-ui-tweaks#6075adc388cffe962678b6dd3c3d35618d4595df</id>
-        <link href="https://windhawk.net/mods/chrome-native-ui-tweaks"/>
-        <updated>2026-09-05T17:20:33.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="chromenativeuitweaks">Chrome Native UI Tweaks</h1>
-<p>Customize parts of Chrome's native browser interface without affecting web content.</p>
-<p><img src="https://i.imgur.com/AQoyFDj.png" alt="Example configuration" /></p>
-<h2 id="gettingstarted">Getting started</h2>
-<ol>
-<li>Enable the mod.</li>
-<li>Restart Chrome once.</li>
-<li>Open the mod settings, adjust the options you want, and click <strong>Save settings</strong>.</li>
-</ol>
-<p>All settings default to Chrome's normal UI. Once the mod is active, saved setting changes are applied immediately without restarting Chrome.</p>
-<p>Disabling or uninstalling the mod restores the original UI in the running Chrome instance. Re-enabling the mod in that same Chrome instance requires a restart.</p>
-<h2 id="features">Features</h2>
-<h3 id="bookmarks">Bookmarks</h3>
-<ul>
-<li>Adjust the bookmark bar font size.</li>
-<li>Replace Chrome's bookmark folder icon with the Windows system folder icon.</li>
-</ul>
-<h3 id="addressbar">Address bar</h3>
-<ul>
-<li>Adjust the font size of URL and search text in the address bar.</li>
-</ul>
-<h3 id="tabs">Tabs</h3>
-<ul>
-<li>Adjust the tab title font size.</li>
-<li>Hide tab close (×) buttons and reclaim the reserved space.</li>
-<li>Adjust the spacing between the favicon and tab title.</li>
-</ul>
-<h3 id="extensions">Extensions</h3>
-<ul>
-<li>Reduce spacing between pinned extension icons.</li>
-</ul>
-<h3 id="menus">Menus</h3>
-<ul>
-<li>Adjust font size in bookmark folder, context, and three-dot menus.</li>
-<li>Reduce vertical spacing between menu items.</li>
-<li>Adjust popup menu corner radius.</li>
-</ul>
-<p><img src="https://i.imgur.com/M6PIC6Z.png" alt="Menu customization" /></p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Tested with <strong>Google Chrome 152.0.7977.76 x64</strong>.</li>
-<li>The mod relies on Chrome's internal native UI symbols, so Chrome updates can occasionally require compatibility adjustments.</li>
-<li>After a Chrome update, Windhawk may need to download and resolve new <code>chrome.dll</code> symbols. The mod waits up to 5 seconds for cached symbols. If resolution takes longer, Chrome continues with its normal UI while symbol preparation finishes in the background. A temporary tray icon shows the current status on hover and displays short balloon messages when preparation starts and finishes. Keep that Chrome instance open until the status says the symbols are ready, then restart Chrome once to activate the mod.</li>
-<li>A full fresh-symbol fallback can be large. In a Chrome 152.0.7977.76 test with the local PDB and Windhawk symbol cache removed, the resulting uncompressed <code>chrome.dll.pdb</code> was <strong>5.59 GB (5.21 GiB)</strong> and total preparation took <strong>139.5 seconds</strong> on a <strong>75 Mbit/s</strong> connection and an <strong>Intel Core i7-8700K</strong>. The download finished after roughly two minutes and symbol analysis took roughly another 20 seconds. Symbol-server delivery is compressed, so the network transfer is much smaller than the final PDB. Times vary with connection, CPU, and Chrome build.</li>
-<li>Disabling, updating, or uninstalling the mod while fresh symbol preparation is still running can leave Windhawk in <code>uninitializing</code> until that work completes. This is intentional: the symbol resolver can't be cancelled safely while code from the mod is still executing.</li>
-<li>Chrome processes launched with <code>--remote-debugging-pipe</code> (for example, Playwright/CDP automation sessions) are intentionally skipped so auxiliary browser instances don't pay the native UI symbol-resolution cost.</li>
-<li>The optional Windows folder icon is a fixed Windows raster icon. It doesn't follow Chrome's theme colors and isn't fully DPI-aware on high-DPI or mixed-DPI monitor setups.</li>
-<li>The older <strong>Chrome UI Tweaks</strong> mod overlaps with this mod's menu spacing and corner-radius options. If both mods are used on a Chrome version where they work, configure those overlapping menu options in only one mod to avoid conflicting results.</li>
-</ul>]]></content>
-        <author>
-            <name>Dron007</name>
-            <uri>https://github.com/Dron007</uri>
         </author>
     </entry>
 </feed>

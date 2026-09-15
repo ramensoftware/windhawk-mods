@@ -8870,6 +8870,36 @@
         "version": "2.0.1"
       }
     },
+    "minimize-to-tray": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1789496432000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1789496432000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "0Allu",
+        "compilerOptions": "-lshell32 -lshcore",
+        "description": "Right-click a window's minimize button to hide it in the system tray.",
+        "github": "https://github.com/0Allu",
+        "homepage": "https://github.com/0Allu/minimize-to-tray",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Minimize to tray",
+        "version": "1.0"
+      }
+    },
     "mix-files-and-folders-sorting": {
       "details": {
         "defaultSorting": 970,

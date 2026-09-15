@@ -2,12 +2,59 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-15T18:06:14.000Z</updated>
+    <updated>2026-09-15T18:20:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Minimize to tray 1.0]]></title>
+        <id>https://windhawk.net/mods/minimize-to-tray#0917d9c94623b841e260a07b9cf02ac6d6b5cadf</id>
+        <link href="https://windhawk.net/mods/minimize-to-tray"/>
+        <updated>2026-09-15T18:20:32.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="minimizetotray">Minimize to tray</h1>
+<p>Right-click a window's minimize button to hide the window in the system tray.</p>
+<p><img src="https://raw.githubusercontent.com/0Allu/minimize-to-tray/main/assets/minimize-to-tray-demo.gif" alt="Minimize to tray demo" /></p>
+<h2 id="usage">Usage</h2>
+<ul>
+<li>Right-click a window's minimize button to send it to the tray.</li>
+<li>Left-click its tray icon to restore it.</li>
+<li>Right-click its tray icon to restore or close the window.</li>
+</ul>
+<p>The application continues running while its window is hidden.</p>
+<h2 id="customtitlebars">Custom title bars</h2>
+<p>Standard Windows minimize buttons work automatically. For applications which
+draw their own title bar, the mod also uses an approximate Windows-style caption
+button layout. This compatibility detection is enabled by default and can be
+disabled in the mod settings if it conflicts with a particular application.</p>
+<p>Custom rules can override the generic geometry for applications with unusual
+title bars, such as Steam. A custom rule uses this format:</p>
+<p><code>executable|window class|height|min right|max right</code></p>
+<p>The three numeric values are in DPI-independent pixels. <code>height</code> is the maximum
+distance below the top of the window, and <code>min right</code> / <code>max right</code> define the
+button's distance from the right edge.</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>Windows 10 version 1703 or later is required.</p>
+<p>Applications running with administrator privileges are not supported when the
+mod is running at normal user privileges. This is due to Windows User Interface
+Privilege Isolation (UIPI).</p>
+<p>Custom title bar compatibility detection applies only to unowned top-level
+application windows. Tool windows, non-activating windows, child windows,
+dialogs and owned popups are ignored.</p>
+<h2 id="safety">Safety</h2>
+<p>A tray icon is created before a window is hidden. If the tray icon cannot be
+created, the window is left visible. If the mod is disabled or unloaded
+normally, restore requests are posted for all windows hidden by the mod. Hidden
+windows are also recovered if the dedicated mod process restarts.</p>
+<p>If the dedicated tool process is forcibly terminated and the mod is then
+disabled before it can restart, recovery code cannot run. In that unusual case,
+the affected application may need to be restarted manually.</p>]]></content>
+        <author>
+            <name>0Allu</name>
+            <uri>https://github.com/0Allu</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[HWiNFO Registry Live Overlay 1.5.0]]></title>
         <id>https://windhawk.net/mods/hwinfo-registry-live-overlay#ef8174354647d2f0af22d3e6ecf9e12d246a3b70</id>
@@ -746,44 +793,6 @@ Original overlay/smear architecture inspired by <a href="https://github.com/Thea
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Title Bar Label 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-title-bar-label#12ff4e1fed9336f02f00ae94d92f5962a1112e93</id>
-        <link href="https://windhawk.net/mods/explorer-title-bar-label"/>
-        <updated>2026-09-12T12:37:10.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorertitlebarlabel">Explorer Title Bar Label</h1>
-<p>Add custom text, date and time to the right side of the Windows 11 File Explorer title bar.</p>
-<p><img src="https://raw.githubusercontent.com/digart11/explorer-title-bar-label/main/images/screenshot.png" alt="Explorer Title Bar Label" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Custom text, date and time</li>
-<li>Flexible date display</li>
-<li>12-hour or 24-hour time with optional seconds</li>
-<li>Font, size, weight and color</li>
-<li>Opacity and spacing</li>
-<li>Live updates</li>
-</ul>
-<h2 id="dateandtime">Date and time</h2>
-<p>Choose the date parts and order you prefer:</p>
-<ul>
-<li><strong>Weekday:</strong> None, Mon, Monday</li>
-<li><strong>Day number:</strong> 1, 01</li>
-<li><strong>Month:</strong> 8, 08, Aug, August</li>
-<li><strong>Year:</strong> None, 26, 2026</li>
-<li><strong>Date order:</strong> Month-Day-Year, Day-Month-Year, Year-Month-Day</li>
-<li><strong>Numeric separator:</strong> <code>/</code>, <code>-</code>, <code>.</code></li>
-</ul>
-<p>Time can use <strong>12-hour or 24-hour format</strong>, with optional seconds.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>This mod does not use XAML Diagnostics, so it can be used together with <strong>Windows 11 File Explorer Styler</strong> and other tools/mods that consume File Explorer XAML diagnostics.</p>
-<p>If the mod is enabled while File Explorer windows are already open, the label may only appear in newly opened windows or after Explorer rebuilds the relevant tab UI (for example, after tab activity). This is a limitation of avoiding XAML Diagnostics.</p>
-<h2 id="credits">Credits</h2>
-<p>Parts of the File Explorer hook and XAML discovery plumbing are adapted from <strong>Explorer Command Bar</strong> by <strong>DanRotaru</strong>, licensed under the MIT License.</p>]]></content>
-        <author>
-            <name>digART</name>
-            <uri>https://github.com/digart11</uri>
         </author>
     </entry>
 </feed>
