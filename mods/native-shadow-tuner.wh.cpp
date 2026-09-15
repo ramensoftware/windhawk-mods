@@ -51,7 +51,7 @@ visual refresh so existing windows receive the current shadows.
 ## Compatibility
 
 The mod resolves uDWM functions through Microsoft public symbols. Tested on
-Windows 11 25h2 build 26200.9445 / 24H2. On other
+Windows 11 25h2 build 26200.9445 / 24H2 26100.9457. On other
 builds, if the required uDWM shadow functions can't be resolved, the mod logs
 this and does not load.
 
