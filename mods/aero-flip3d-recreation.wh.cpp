@@ -2,7 +2,7 @@
 // @id              aero-flip3d-recreation
 // @name            Aero Flip 3D Recreation
 // @description     This mod recreates the classic Windows Vista/7 Flip 3D effect in modern Windows versions
-// @version         1.1.0
+// @version         1.2.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         windhawk.exe
@@ -22,9 +22,9 @@ This mod recreates the classic Windows Vista/7 Flip 3D window switcher on modern
 
 It keeps window previews live and displays them in a 3D-style cascade similar to the original effect.
 
-This is the first version, so some details may still be improved. To help the author improve the mod, feel free to send suggestions.
+To help the author improve the mod, feel free to send suggestions.
 
-The mod has been tested on Windows 10 1809.
+The mod has been tested on Windows 10 1809, Windows 10 21H2 and Windows 11 24H2.
 ## Keyboard shortcuts
 
 | Shortcut | Action |
@@ -65,6 +65,7 @@ More thumbnail strips are used to make the edges smoother while keeping the orig
 - The native Alt+Tab window switcher is not modified and continues to work normally.
 - While the mod is enabled, the Win+Tab shortcut is redirected from the modern Task View interface to the classic Flip 3D experience.
 - To restore the original Windows Task View behavior, simply disable or uninstall the mod.
+- The minimized windows are not included in the animation.
 */
 // ==/WindhawkModReadme==
 
@@ -276,8 +277,7 @@ private:
 
 // Device context owner. Knows whether it must ReleaseDC (GetDC) or
 // DeleteDC (CreateCompatibleDC) and does the right thing on destruction.
-class ScopedDc {
-public:
+class ScopedDc {public:
     ScopedDc() = default;
 
     ~ScopedDc() {
@@ -349,6 +349,105 @@ private:
     HDC dc_ = nullptr;
     HWND owner_ = nullptr;
     Kind kind_ = Kind::Release;
+};
+
+// HTHUMBNAIL owner. Unregisters the DWM thumbnail relationship on
+// destruction (DwmUnregisterThumbnail), so a thrown exception or an early
+// return can never leak a live thumbnail registration.
+class ScopedThumbnail {
+public:
+    ScopedThumbnail() = default;
+    explicit ScopedThumbnail(HTHUMBNAIL thumb) : thumb_(thumb) {}
+
+    ~ScopedThumbnail() {
+        reset();
+    }
+
+    ScopedThumbnail(const ScopedThumbnail&) = delete;
+    ScopedThumbnail& operator=(const ScopedThumbnail&) = delete;
+
+    ScopedThumbnail(ScopedThumbnail&& other) noexcept : thumb_(other.thumb_) {
+        other.thumb_ = nullptr;
+    }
+
+    ScopedThumbnail& operator=(ScopedThumbnail&& other) noexcept {
+        if (this != &other) {
+            reset();
+            thumb_ = other.thumb_;
+            other.thumb_ = nullptr;
+        }
+        return *this;
+    }
+
+    void reset(HTHUMBNAIL newThumb = nullptr) {
+        if (thumb_) {
+            DwmUnregisterThumbnail(thumb_);
+        }
+        thumb_ = newThumb;
+    }
+
+    HTHUMBNAIL get() const {
+        return thumb_;
+    }
+
+    HTHUMBNAIL* put() {
+        reset();
+        return &thumb_;
+    }
+
+    explicit operator bool() const {
+        return thumb_ != nullptr;
+    }
+
+private:
+    HTHUMBNAIL thumb_ = nullptr;
+};
+
+// Owner for a temporary top-level HWND created purely as a DWM thumbnail
+// host (never shown to the user). Destroys the window on scope exit so a
+// failed/aborted capture attempt never leaves a stray window behind.
+class ScopedHostWindow {
+public:
+    ScopedHostWindow() = default;
+    explicit ScopedHostWindow(HWND hwnd) : hwnd_(hwnd) {}
+
+    ~ScopedHostWindow() {
+        reset();
+    }
+
+    ScopedHostWindow(const ScopedHostWindow&) = delete;
+    ScopedHostWindow& operator=(const ScopedHostWindow&) = delete;
+
+    ScopedHostWindow(ScopedHostWindow&& other) noexcept : hwnd_(other.hwnd_) {
+        other.hwnd_ = nullptr;
+    }
+
+    ScopedHostWindow& operator=(ScopedHostWindow&& other) noexcept {
+        if (this != &other) {
+            reset();
+            hwnd_ = other.hwnd_;
+            other.hwnd_ = nullptr;
+        }
+        return *this;
+    }
+
+    void reset(HWND newHwnd = nullptr) {
+        if (hwnd_ && IsWindow(hwnd_)) {
+            DestroyWindow(hwnd_);
+        }
+        hwnd_ = newHwnd;
+    }
+
+    HWND get() const {
+        return hwnd_;
+    }
+
+    explicit operator bool() const {
+        return hwnd_ != nullptr && IsWindow(hwnd_);
+    }
+
+private:
+    HWND hwnd_ = nullptr;
 };
 
 // Restores the previous GDI object selected into a DC when leaving scope.
@@ -1140,7 +1239,142 @@ static HWND FindPlainDesktopWindow() {
 // into a GDI bitmap. All DCs and bitmaps are RAII-owned, so no early return
 // can leak. Must be called BEFORE the overlay window becomes visible,
 // otherwise the overlay itself would be captured.
+// Captures the desktop background (WorkerW/Progman) into a bitmap by
+// routing through a DWM live thumbnail instead of PrintWindow/BitBlt on
+// the source window directly.
+//
+// Rationale: PW_RENDERFULLCONTENT forces a GPU-redirected capture of the
+// *source* window itself. That is fine for ordinary occluded app windows,
+// but WorkerW/Progman are exactly the windows live wallpaper engines (e.g.
+// Wallpaper Engine) render into via their own D3D/DirectComposition
+// surfaces - redirecting those directly has been observed to hand back a
+// wrong/blended buffer on multi-monitor setups, producing a "merged"
+// wallpaper across monitors (see ramensoftware/windhawk-mods#5490).
+// DwmRegisterThumbnail instead asks DWM itself - the same component that
+// already composites the desktop correctly every frame, wallpaper engines
+// included - to render the source into a destination window we control.
+// We then read that destination window's own (DWM-composited, not
+// source-redirected) surface with a plain BitBlt.
+//
+// This is a best-effort, fully self-contained path: every failure mode
+// (window/class registration, DWM calls, timing) simply returns false, and
+// the caller falls back to the existing, already-safe capture logic. All
+// resources are RAII-owned so no partial failure can leak a window or a
+// thumbnail registration, and the whole attempt is wrapped in try/catch as
+// an extra safety net around the Win32/DWM calls.
+static bool CaptureDesktopSnapshotViaDwmThumbnail(HWND desktopHwnd, HDC memDc,
+                                                    int width, int height) {
+    try {
+        if (!desktopHwnd || !IsWindow(desktopHwnd) || !memDc ||
+            width <= 0 || height <= 0) {
+            return false;
+        }
+
+        HINSTANCE hInstance = GetCurrentModuleHandle();
+        if (!hInstance) {
+            return false;
+        }
+
+        static const wchar_t* kHostClassName = L"Flip3DDwmThumbHostWndClass";
+        static bool hostClassRegistered = false;
+        if (!hostClassRegistered) {
+            WNDCLASSEXW wc = {};
+            wc.cbSize = sizeof(wc);
+            wc.lpfnWndProc = DefWindowProcW;
+            wc.hInstance = hInstance;
+            wc.lpszClassName = kHostClassName;
+            if (!RegisterClassExW(&wc) &&
+                GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+                Wh_Log(L"CaptureDesktopSnapshotViaDwmThumbnail: RegisterClassExW failed (%u)",
+                       static_cast<unsigned>(GetLastError()));
+                return false;
+            }
+            hostClassRegistered = true;
+        }
+
+        // Layered + zero alpha: DWM still composites thumbnails registered
+        // against this window, but nothing is ever visible to the user,
+        // wherever it ends up on screen. Parked off the virtual desktop as
+        // an extra precaution.
+        ScopedHostWindow host(CreateWindowExW(
+            WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+            kHostClassName, L"", WS_POPUP,
+            -32000, -32000, std::max(1, width), std::max(1, height),
+            nullptr, nullptr, hInstance, nullptr));
+        if (!host) {
+            Wh_Log(L"CaptureDesktopSnapshotViaDwmThumbnail: CreateWindowExW failed (%u)",
+                   static_cast<unsigned>(GetLastError()));
+            return false;
+        }
+
+        if (!SetLayeredWindowAttributes(host.get(), 0, 0, LWA_ALPHA)) {
+            return false;
+        }
+        ShowWindow(host.get(), SW_SHOWNOACTIVATE);
+
+        ScopedThumbnail thumb;
+        if (FAILED(DwmRegisterThumbnail(host.get(), desktopHwnd, thumb.put()))) {
+            Wh_Log(L"CaptureDesktopSnapshotViaDwmThumbnail: DwmRegisterThumbnail failed");
+            return false;
+        }
+
+        DWM_THUMBNAIL_PROPERTIES props = {};
+        props.dwFlags = DWM_TNP_VISIBLE | DWM_TNP_RECTDESTINATION | DWM_TNP_OPACITY;
+        props.fVisible = TRUE;
+        props.opacity = 255;
+        props.rcDestination = {0, 0, width, height};
+        if (FAILED(DwmUpdateThumbnailProperties(thumb.get(), &props))) {
+            Wh_Log(L"CaptureDesktopSnapshotViaDwmThumbnail: DwmUpdateThumbnailProperties failed");
+            return false;
+        }
+
+        // Give DWM a few composition passes to actually paint the
+        // thumbnail into the host window before reading it back.
+        // DwmFlush() blocks until the next present; a small bounded retry
+        // loop tolerates a busy compositor without risking a hang.
+        for (int attempt = 0; attempt < 3; ++attempt) {
+            DwmFlush();
+
+            ScopedDc hostDc = ScopedDc::fromScreen(host.get());
+            if (!hostDc) {
+                continue;
+            }
+            if (!BitBlt(memDc, 0, 0, width, height, hostDc.get(), 0, 0, SRCCOPY)) {
+                continue;
+            }
+
+            // Reject an all-black readback: it means DWM hasn't composited
+            // the thumbnail yet rather than the desktop genuinely being
+            // black, so retry instead of accepting a blank frame.
+            bool allBlack = true;
+            static constexpr int kSampleCount = 9;
+            for (int i = 0; i < kSampleCount && allBlack; ++i) {
+                const int sx = (width * (i + 1)) / (kSampleCount + 1);
+                const int sy = (height * (i + 1)) / (kSampleCount + 1);
+                COLORREF c = GetPixel(memDc, sx, sy);
+                if (c != CLR_INVALID && c != RGB(0, 0, 0)) {
+                    allBlack = false;
+                }
+            }
+            if (!allBlack) {
+                return true;
+            }
+        }
+        return false;
+    } catch (...) {
+        Wh_Log(L"CaptureDesktopSnapshotViaDwmThumbnail: exception");
+        return false;
+    }
+}
+
+// Captures the real, currently-visible desktop (wallpaper + icons + taskbar)
+// into a GDI bitmap. All DCs and bitmaps are RAII-owned, so no early return
+// can leak. Must be called BEFORE the overlay window becomes visible,
+// otherwise the overlay itself would be captured.
 static void CaptureDesktopSnapshot() {
+    // Always start from a clean slate: CleanupFlipResourcesOnOverlayThread
+
+
     // Always start from a clean slate: CleanupFlipResourcesOnOverlayThread
     // releases the snapshot on every close, so there is never a stale bitmap
     // to reuse here.
@@ -1223,14 +1457,49 @@ static void CaptureDesktopSnapshot() {
         return hits >= kSampleCount;
     };
 
-    BOOL ok = PrintWindow(desktopHwnd, memDc.get(), PW_RENDERFULLCONTENT);
-    if (ok && isBlankCapture()) {
-        ok = FALSE;
-    }
-    if (!ok) {
-        ok = PrintWindow(desktopHwnd, memDc.get(), 0);
+    // Wallpaper engines (e.g. Wallpaper Engine) render live content into the
+    // WorkerW/Progman desktop windows via their own GPU surfaces. Forcing a
+    // GPU-redirected capture of those specific windows with
+    // PW_RENDERFULLCONTENT is known to make such engines hand back the wrong
+    // (or a blended/overlapping) swap-chain buffer on multi-monitor setups,
+    // producing a "merged" wallpaper across monitors in the captured
+    // snapshot (see ramensoftware/windhawk-mods#5490).
+    //
+    // Capture order for WorkerW/Progman:
+    //   1. CaptureDesktopSnapshotViaDwmThumbnail - let DWM itself composite
+    //      the source (same as it does on screen every frame, wallpaper
+    //      engines included) into a window we control, then BitBlt that.
+    //   2. Plain BitBlt from the screen DC - reads the real composited
+    //      desktop pixels directly, no window-specific redirection at all.
+    // PrintWindow(PW_RENDERFULLCONTENT) is only used as a last resort, and
+    // only for the rare case where FindPlainDesktopWindow() couldn't find a
+    // WorkerW/Progman and we ended up with the raw desktop HWND instead -
+    // that path isn't where wallpaper engines render, so it's unaffected by
+    // the bug above.
+    WCHAR desktopClassName[64] = {};
+    GetClassNameW(desktopHwnd, desktopClassName, ARRAYSIZE(desktopClassName));
+    const bool isWorkerOrProgman =
+        lstrcmpW(desktopClassName, L"WorkerW") == 0 ||
+        lstrcmpW(desktopClassName, L"Progman") == 0;
+
+    BOOL ok = FALSE;
+    if (isWorkerOrProgman) {
+        ok = CaptureDesktopSnapshotViaDwmThumbnail(desktopHwnd, memDc.get(), width, height)
+                 ? TRUE : FALSE;
         if (ok && isBlankCapture()) {
             ok = FALSE;
+        }
+    }
+    if (!ok && !isWorkerOrProgman) {
+        ok = PrintWindow(desktopHwnd, memDc.get(), PW_RENDERFULLCONTENT);
+        if (ok && isBlankCapture()) {
+            ok = FALSE;
+        }
+        if (!ok) {
+            ok = PrintWindow(desktopHwnd, memDc.get(), 0);
+            if (ok && isBlankCapture()) {
+                ok = FALSE;
+            }
         }
     }
     if (!ok) {
@@ -1749,6 +2018,14 @@ static bool IsFlipEligibleWindow(HWND hwnd) {
         return false;
     }
     if (!IsWindowVisible(hwnd)) {
+        return false;
+    }
+
+    // Minimized windows produce a black thumbnail with the public DWM APIs
+    // alone: after minimization the compositor no longer reliably keeps the
+    // window surface, so the registered thumbnail stays empty/black.
+    // They are therefore excluded from the deck.
+    if (IsIconic(hwnd)) {
         return false;
     }
 
