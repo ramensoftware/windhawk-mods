@@ -7,7 +7,7 @@
 // @github          https://github.com/Louis047
 // @include         windhawk.exe
 // @include         explorer.exe
-// @compilerOptions -ldwmapi -luxtheme -lgdi32 -lshlwapi -loleaut32 -lole32 -lcomctl32 -lgdiplus -lversion -lwinmm
+// @compilerOptions -ldwmapi -luxtheme -lgdi32 -lshlwapi -loleaut32 -lole32 -lcomctl32 -lgdiplus -lversion -lwinmm -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -1134,55 +1134,137 @@ static bool IsWin11OrGreater() {
 static int g_systemDwmRadius = 8;
 static int g_systemDwmSmallRadius = 4;
 static bool g_customCornerRadiusModActive = false;
+static HANDLE g_hDwmCornerWatchThread = NULL;
+static HANDLE g_hDwmCornerWatchStopEvent = NULL;
 
-static void DetectSystemDwmCornerRadius() {
-    HKEY hKey = NULL;
-    LONG lRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-                              L"SOFTWARE\\Windhawk\\Engine\\Mods\\custom-corner-radius",
-                              0, KEY_READ | KEY_WOW64_64KEY, &hKey);
-    bool modActive = false;
-    if (lRes == ERROR_SUCCESS) {
+static bool DetectSystemDwmCornerRadiusValues(int* outRadius, int* outSmallRadius) {
+    const WCHAR* modKeys[] = {
+        L"SOFTWARE\\Windhawk\\Engine\\Mods\\custom-corner-radius",
+        L"SOFTWARE\\Windhawk\\Engine\\Mods\\local@custom-corner-radius"
+    };
+
+    for (const auto* modKeyPath : modKeys) {
+        HKEY hKey = NULL;
+        LONG lRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE, modKeyPath, 0, KEY_READ | KEY_WOW64_64KEY, &hKey);
+        if (lRes != ERROR_SUCCESS) {
+            continue;
+        }
+
         DWORD disabled = 0, sz = sizeof(disabled);
+        bool modActive = true;
         if (RegQueryValueExW(hKey, L"Disabled", NULL, NULL, (LPBYTE)&disabled, &sz) == ERROR_SUCCESS) {
             modActive = (disabled == 0);
         }
         RegCloseKey(hKey);
-    }
 
-    if (modActive) {
-        HKEY hSetKey = NULL;
-        lRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-                             L"SOFTWARE\\Windhawk\\Engine\\Mods\\custom-corner-radius\\Settings",
-                             0, KEY_READ | KEY_WOW64_64KEY, &hSetKey);
-        if (lRes == ERROR_SUCCESS) {
-            DWORD rVal = (DWORD)-1, sz = sizeof(rVal);
-            if (RegQueryValueExW(hSetKey, L"radius", NULL, NULL, (LPBYTE)&rVal, &sz) == ERROR_SUCCESS) {
-                if (rVal != (DWORD)-1 && (int)rVal >= 0) {
-                    DWORD sVal = (DWORD)-1;
-                    sz = sizeof(sVal);
-                    RegQueryValueExW(hSetKey, L"smallRadius", NULL, NULL, (LPBYTE)&sVal, &sz);
-                    int smallDIP = (sVal != (DWORD)-1 && (int)sVal >= 0) ? (int)sVal : (int)roundf((float)rVal * 0.5f);
+        if (modActive) {
+            WCHAR settingsPath[MAX_PATH];
+            swprintf_s(settingsPath, L"%s\\Settings", modKeyPath);
+            HKEY hSetKey = NULL;
+            lRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE, settingsPath, 0, KEY_READ | KEY_WOW64_64KEY, &hSetKey);
+            if (lRes == ERROR_SUCCESS) {
+                DWORD rVal = (DWORD)-1, szVal = sizeof(rVal);
+                LONG rRes = RegQueryValueExW(hSetKey, L"radius", NULL, NULL, (LPBYTE)&rVal, &szVal);
 
-                    g_systemDwmRadius = (int)rVal;
-                    g_systemDwmSmallRadius = smallDIP;
-                    g_customCornerRadiusModActive = true;
-                    RegCloseKey(hSetKey);
-                    return;
+                DWORD sVal = (DWORD)-1;
+                szVal = sizeof(sVal);
+                LONG sRes = RegQueryValueExW(hSetKey, L"smallRadius", NULL, NULL, (LPBYTE)&sVal, &szVal);
+                RegCloseKey(hSetKey);
+
+                int finalRadius = 8;
+                if (rRes == ERROR_SUCCESS) {
+                    if (rVal == (DWORD)-1) {
+                        finalRadius = IsWin11OrGreater() ? 8 : 0;
+                    } else {
+                        finalRadius = (int)rVal;
+                    }
+                } else {
+                    finalRadius = 12; // custom-corner-radius mod default is 12
                 }
+
+                int finalSmallRadius = 4;
+                if (sRes == ERROR_SUCCESS) {
+                    if (sVal == (DWORD)-1) {
+                        finalSmallRadius = IsWin11OrGreater() ? 4 : 0;
+                    } else {
+                        finalSmallRadius = (int)sVal;
+                    }
+                } else {
+                    if (rRes == ERROR_SUCCESS && rVal != (DWORD)-1) {
+                        finalSmallRadius = (int)roundf((float)rVal * 0.5f);
+                    } else {
+                        finalSmallRadius = 6; // custom-corner-radius mod default is 6
+                    }
+                }
+
+                if (outRadius) *outRadius = finalRadius;
+                if (outSmallRadius) *outSmallRadius = finalSmallRadius;
+                return true;
             }
-            RegCloseKey(hSetKey);
         }
     }
 
     // Native OS Fallback
-    g_customCornerRadiusModActive = false;
-    if (IsWin11OrGreater()) {
-        g_systemDwmRadius = 8;
-        g_systemDwmSmallRadius = 4;
-    } else {
-        g_systemDwmRadius = 0;
-        g_systemDwmSmallRadius = 0;
+    if (outRadius) *outRadius = IsWin11OrGreater() ? 8 : 0;
+    if (outSmallRadius) *outSmallRadius = IsWin11OrGreater() ? 4 : 0;
+    return false;
+}
+
+static void DetectSystemDwmCornerRadius() {
+    int r = 8, s = 4;
+    g_customCornerRadiusModActive = DetectSystemDwmCornerRadiusValues(&r, &s);
+    g_systemDwmRadius = r;
+    g_systemDwmSmallRadius = s;
+}
+
+static DWORD WINAPI DwmCornerWatchThread(LPVOID lpParam) {
+    HKEY hKey = NULL;
+    LONG lRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                              L"SOFTWARE\\Windhawk\\Engine\\Mods",
+                              0, KEY_NOTIFY | KEY_READ | KEY_WOW64_64KEY, &hKey);
+    if (lRes != ERROR_SUCCESS) {
+        return 0;
     }
+
+    HANDLE hChangeEvt = CreateEvent(NULL, FALSE, FALSE, NULL);
+    if (!hChangeEvt) {
+        RegCloseKey(hKey);
+        return 0;
+    }
+
+    HANDLE waitHandles[2] = { g_hDwmCornerWatchStopEvent, hChangeEvt };
+
+    while (true) {
+        lRes = RegNotifyChangeKeyValue(hKey, TRUE,
+                                       REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_LAST_SET,
+                                       hChangeEvt, TRUE);
+        if (lRes != ERROR_SUCCESS) {
+            break;
+        }
+
+        DWORD dwWait = WaitForMultipleObjects(2, waitHandles, FALSE, INFINITE);
+        if (dwWait == WAIT_OBJECT_0) {
+            // Stop event signaled
+            break;
+        } else if (dwWait == WAIT_OBJECT_0 + 1) {
+            // Registry change detected: debounce 50ms for batch multi-value writes
+            Sleep(50);
+
+            int newR = 8, newS = 4;
+            DetectSystemDwmCornerRadiusValues(&newR, &newS);
+            if (newR != g_systemDwmRadius || newS != g_systemDwmSmallRadius) {
+                if (g_hSwitcher && IsWindow(g_hSwitcher)) {
+                    PostMessage(g_hSwitcher, WM_SWS_SETTINGS_CHANGED, 0, 0);
+                }
+            }
+        } else {
+            break;
+        }
+    }
+
+    CloseHandle(hChangeEvt);
+    RegCloseKey(hKey);
+    return 0;
 }
 
 // Forward declarations
@@ -7653,6 +7735,18 @@ static void ApplySwitcherRegion() {
 }
 
 static void ShowSwitcher(bool sticky, bool immediate = false) {
+    int oldDwmRadius = g_systemDwmRadius;
+    int oldDwmSmallRadius = g_systemDwmSmallRadius;
+    DetectSystemDwmCornerRadius();
+    if (g_systemDwmRadius != oldDwmRadius || g_systemDwmSmallRadius != oldDwmSmallRadius) {
+        LoadSettings();
+        if (g_hSwitcher) {
+            ApplyThemeToWindow(g_hSwitcher);
+        }
+        InvalidateStaticCache();
+        FreeCachedBuffers();
+    }
+
     RefreshClientAreaAnimCache();
     DestroyMirrorSwitchers();
 
@@ -11241,6 +11335,11 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     timeBeginPeriod(1);
     UpdateRefreshRateTiming();
 
+    g_hDwmCornerWatchStopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    if (g_hDwmCornerWatchStopEvent) {
+        g_hDwmCornerWatchThread = CreateThread(NULL, 0, DwmCornerWatchThread, NULL, 0, NULL);
+    }
+
     Wh_Log(L"Simple Window Switcher initialized, entering message loop");
 
     MSG msg;
@@ -11306,6 +11405,18 @@ thread_exit:
     FinishAnimations();
     StopAnimationTicker();
     FreeCachedBuffers();
+    if (g_hDwmCornerWatchStopEvent) {
+        SetEvent(g_hDwmCornerWatchStopEvent);
+    }
+    if (g_hDwmCornerWatchThread) {
+        WaitForSingleObject(g_hDwmCornerWatchThread, 1000);
+        CloseHandle(g_hDwmCornerWatchThread);
+        g_hDwmCornerWatchThread = NULL;
+    }
+    if (g_hDwmCornerWatchStopEvent) {
+        CloseHandle(g_hDwmCornerWatchStopEvent);
+        g_hDwmCornerWatchStopEvent = NULL;
+    }
     timeEndPeriod(1);
     CoUninitialize();
     Wh_Log(L"SwitcherThread exiting");
@@ -11338,6 +11449,18 @@ void WhTool_ModUninit() {
         CloseHandle(g_hSwitcherThread);
         g_hSwitcherThread = NULL;
         g_dwSwitcherThreadId = 0;
+    }
+    if (g_hDwmCornerWatchStopEvent) {
+        SetEvent(g_hDwmCornerWatchStopEvent);
+    }
+    if (g_hDwmCornerWatchThread) {
+        WaitForSingleObject(g_hDwmCornerWatchThread, 1000);
+        CloseHandle(g_hDwmCornerWatchThread);
+        g_hDwmCornerWatchThread = NULL;
+    }
+    if (g_hDwmCornerWatchStopEvent) {
+        CloseHandle(g_hDwmCornerWatchStopEvent);
+        g_hDwmCornerWatchStopEvent = NULL;
     }
     for (auto& pair : g_uwpIconCache) {
         if (pair.second) DestroyIcon(pair.second);
