@@ -80,7 +80,7 @@ The mod uses `WS_EX_LAYERED` with `SetLayeredWindowAttributes` and alpha 0 to hi
 
 Before hiding a taskbar, the mod records the relevant original extended-window style and layered-window attributes on the taskbar itself. Hiding makes the taskbar transparent before enabling click-through input, and showing restores input behavior before restoring visible alpha. An ownership marker identifies taskbars whose transparency was applied by this mod.
 
-If a taskbar is recreated, the new taskbar is rediscovered and evaluated again. If the dedicated tool process is restarted after an unexpected termination, a new instance can reclaim taskbars still carrying the ownership marker. The launcher also attempts this recovery when the mod is disabled after the tool process has already terminated unexpectedly. If another component removes `WS_EX_LAYERED` while the mod still has ownership, the stale ownership data is discarded safely and only the mod-owned `WS_EX_LAYERED`/`WS_EX_TRANSPARENT` bits are cleared before a later hide recaptures the current taskbar state. Restoring a taskbar changes only the extended-style bits owned by this mod; unrelated extended-style changes are preserved.
+If a taskbar is recreated, the new taskbar is rediscovered and evaluated again. If the dedicated tool process is restarted after an unexpected termination, a new instance can reclaim taskbars still carrying the ownership marker. If another component removes `WS_EX_LAYERED` while the mod still has ownership, the stale ownership data is discarded safely and only the mod-owned `WS_EX_LAYERED`/`WS_EX_TRANSPARENT` bits are cleared before a later hide recaptures the current taskbar state. Restoring a taskbar changes only the extended-style bits owned by this mod; unrelated extended-style changes are preserved.
 
 ## Multi-Monitor Behavior
 
@@ -94,7 +94,7 @@ The mod supports up to 16 display/taskbar entries and uses the current logical d
 
 Borderless fullscreen content is tracked as a sticky session for the display that owns it. The fullscreen test accepts borderless windows even when they retain a normal overlapped window style; it uses the exact monitor rectangle (within a small tolerance), the absence of a caption and resize frame, and explicit exclusion of Windows shell, desktop, and taskbar windows. It does not require WS_POPUP.
 
-Once a fullscreen window enters the foreground, its HMONITOR remains associated with that fullscreen owner while focus moves between displays. Normal desktop/taskbar/shell transitions, transient hide or cloak notifications, and the ordinary safety refresh do not invalidate that ownership. The session ends only when the owner explicitly leaves fullscreen while foreground, completes a real minimize, is destroyed, or moves to another monitor. This keeps a secondary-display desktop click from exposing the primary taskbar while fullscreen content remains active.
+Once a fullscreen window enters the foreground, its HMONITOR remains associated with that fullscreen owner while focus moves between displays. Normal desktop/taskbar/shell transitions and the ordinary safety refresh do not invalidate that ownership. Explicit move and minimize lifecycle transitions validate or clear the tracked owner, while a hidden, minimized, or DWM-cloaked cached owner no longer suppresses hover or keyboard reveal. This keeps a secondary-display desktop click from exposing the primary taskbar while fullscreen content remains active.
 
 ## Performance and Refreshing
 
@@ -118,7 +118,7 @@ When no displays are configured for desktop-based hiding, the mod skips the appl
 - The display-selection configuration supports up to 16 display entries.
 - The mod keeps Windows' native taskbar auto-hide setting separate from its own hiding behavior. If native auto-hide is enabled, this mod does not take over that taskbar.
 - Because the taskbar is made fully transparent, flashing taskbar buttons and tray notifications are not visually available while that taskbar is hidden by the mod.
-- If the dedicated tool process is terminated unexpectedly, the launcher attempts to reclaim taskbars still carrying the ownership marker. A later tool-process startup also reclaims any marked taskbars.
+- If the dedicated tool process is terminated unexpectedly, taskbars carrying the ownership marker remain recoverable by the next tool-process startup.
 - Other taskbar transparency/customization mods that modify the same taskbar window can conflict with this mod.
 - Borderless fullscreen detection intentionally treats a visible, monitor-sized, captionless and non-resizable application as fullscreen; unusual applications with that exact window presentation may therefore keep their taskbar hidden.
 - Windows shell window classes and processes can change between Windows releases, so shell-interaction detection may need updates for future Windows versions.
@@ -213,6 +213,7 @@ constexpr UINT WM_APP_REFRESH = WM_APP + 1;
 constexpr UINT WM_APP_SETTINGS = WM_APP + 2;
 constexpr UINT_PTR kSafetyTimerId = 1;
 constexpr UINT_PTR kHoverExpireTimerId = 2;
+constexpr UINT_PTR kPostMinimizeReassertTimerId = 3;
 constexpr UINT_PTR kFullscreenValidationTimerId = 3;
 
 struct {
@@ -253,6 +254,7 @@ HWINEVENTHOOK g_minimizeHook = nullptr;
 HWINEVENTHOOK g_moveHook = nullptr;
 HWINEVENTHOOK g_fullscreenLocationHook = nullptr;
 HWINEVENTHOOK g_shellSurfaceHook = nullptr;
+HWINEVENTHOOK g_taskbarFocusHook = nullptr;
 
 HANDLE g_workerThread = nullptr;
 DWORD g_workerThreadId = 0;
@@ -653,10 +655,10 @@ HMONITOR g_hoverMonitor = nullptr;
 ULONGLONG g_hoverDeadline = 0;
 LONG g_refreshPosted = 0;
 UINT g_fullscreenValidationAttempt = 0;
-// Tracks whether the current foreground taskbar activation came from mouse
-// interaction rather than keyboard-driven taskbar navigation. Mouse activation
-// must not make a desktop-only taskbar stay visible after hover dismissal.
-bool g_taskbarForegroundMouseActivated = false;
+// True while the taskbar is foreground because keyboard navigation focused it.
+// This is tracked separately so keyboard taskbar navigation works even when
+// the cursor is on another display.
+bool g_taskbarForegroundKeyboardActivated = false;
 // True while the taskbar is foreground only because a shell surface (for
 // example Start/Search) just closed. Do not treat that transient foreground
 // state as user taskbar activation, or the desktop-only taskbar can remain
@@ -664,6 +666,9 @@ bool g_taskbarForegroundMouseActivated = false;
 bool g_taskbarForegroundAfterShell = false;
 bool g_lastForegroundWasShellSurface = false;
 ULONGLONG g_lastMinimizeEventTick = 0;
+// True from minimize start until minimize end. Taskbar focus generated by
+// Windows during this transition must not be treated as keyboard activation.
+bool g_minimizeInProgress = false;
 // A fullscreen window is cached only after that window has actually entered
 // the foreground. The cache is keyed by the HMONITOR itself rather than by
 // monitor-enumeration index. Once claimed, ownership is sticky until an explicit
@@ -716,6 +721,19 @@ bool IsDesktopInfrastructureWindow(HWND hwnd, const WCHAR* className) {
         wcscmp(className, L"WorkerW") == 0
     ) {
         return true;
+    }
+
+    // Windows can make the zero-sized Explorer XAML host foreground when the
+    // desktop context menu is opened. It is shell infrastructure, not an
+    // application window. Treat only this transient zero-sized host as desktop
+    // infrastructure so it cannot turn desktopOnly off and reveal the taskbar.
+    if (wcscmp(className, L"XamlExplorerHostIslandWindow_WASDK") == 0) {
+        RECT rect = {};
+        if (GetWindowRect(hwnd, &rect) &&
+            rect.left == rect.right &&
+            rect.top == rect.bottom) {
+            return true;
+        }
     }
 
     HWND shellWindow = GetShellWindow();
@@ -2191,14 +2209,17 @@ void UpdateTaskbarState() {
         g_lastMinimizeEventTick != 0 &&
         GetTickCount64() - g_lastMinimizeEventTick < 1000;
 
-    const bool taskbarForegroundMouseActivated =
-        g_taskbarForegroundMouseActivated;
+    // A taskbar foreground state marked during minimize is only a transient
+    // Windows shell state. Do not let that mouse-activation marker survive
+    // past the grace period and keep a hover-revealed taskbar visible. Keep a
+    // genuine keyboard-focus marker intact so keyboard taskbar navigation can
+    // still take over after the transient state clears.
+    if (g_lastMinimizeEventTick != 0 && !postMinimizeTaskbarForeground) {
+        g_lastMinimizeEventTick = 0;
+    }
 
-    // The foreground taskbar override is applied only after the current cursor
-    // monitor is known. Windows may report the primary Shell_TrayWnd as the
-    // foreground window after a click on another display's desktop. That must
-    // not make the primary taskbar visible while the cursor is on the secondary
-    // display.
+    const bool taskbarForegroundKeyboardActivated =
+        g_taskbarForegroundKeyboardActivated;
 
     POINT cursorPoint = {};
     HMONITOR cursorMonitor = nullptr;
@@ -2213,12 +2234,10 @@ void UpdateTaskbarState() {
         g_taskbarForegroundAfterShell;
 
     if (!postMinimizeTaskbarForeground &&
-        !taskbarForegroundMouseActivated &&
         !taskbarForegroundAfterShell &&
-        cursorMonitor) {
+        foreground) {
         for (size_t i = 0; i < g_taskbarStateCount; ++i) {
-            if (g_taskbarStates[i].hwnd != foreground ||
-                g_taskbarStates[i].monitor != cursorMonitor) {
+            if (g_taskbarStates[i].hwnd != foreground) {
                 continue;
             }
 
@@ -2228,7 +2247,8 @@ void UpdateTaskbarState() {
                 monitorIndex >= 0 &&
                 scan.fullscreenOnMonitor[monitorIndex];
 
-            if (!fullscreenOnTaskbarMonitor) {
+            if (!fullscreenOnTaskbarMonitor &&
+                taskbarForegroundKeyboardActivated) {
                 g_taskbarStates[i].desktopOnly = false;
             }
 
@@ -2560,6 +2580,49 @@ DWORD WINAPI CursorSamplingThread(LPVOID) {
 }
 
 void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD, DWORD) {
+    if (event == EVENT_OBJECT_FOCUS) {
+        if (!hwnd) {
+            return;
+        }
+
+        HWND root = GetAncestor(hwnd, GA_ROOT);
+        if (!root) {
+            return;
+        }
+
+        // Ignore a plain window-level focus notification for Shell_TrayWnd.
+        // Windows can generate that as a side effect of desktop interaction,
+        // including desktop context-menu invocation. Actual keyboard taskbar
+        // navigation focuses a taskbar child/control and is still tracked.
+        if (root == hwnd &&
+            idObject == OBJID_WINDOW &&
+            idChild == CHILDID_SELF) {
+            return;
+        }
+
+        // A taskbar child can also receive an accessibility focus event while
+        // desktop interaction is active. Count it as keyboard taskbar focus
+        // only when the taskbar root is actually the foreground window. This
+        // keeps desktop context-menu/focus changes from pinning the taskbar
+        // visible while preserving Win+T/Win+B style keyboard navigation.
+        if (GetForegroundWindow() != root) {
+            return;
+        }
+
+        if (g_minimizeInProgress) {
+            return;
+        }
+
+        for (size_t i = 0; i < g_taskbarStateCount; ++i) {
+            if (g_taskbarStates[i].hwnd == root) {
+                g_taskbarForegroundKeyboardActivated = true;
+                PostRefresh();
+                break;
+            }
+        }
+        return;
+    }
+
     if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF) {
         return;
     }
@@ -2617,6 +2680,7 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
 
         if (!isTaskbarForeground) {
             g_taskbarForegroundAfterShell = false;
+            g_taskbarForegroundKeyboardActivated = false;
             DWORD pid = 0;
             if (hwnd) {
                 GetWindowThreadProcessId(hwnd, &pid);
@@ -2629,8 +2693,7 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
                     foregroundClassName,
                     GetShellProcessKind(pid)
                 );
-            g_taskbarForegroundMouseActivated = false;
-            const HMONITOR foregroundMonitor = hwnd ? MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) : nullptr;
+                const HMONITOR foregroundMonitor = hwnd ? MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) : nullptr;
             const int fullscreenOwnerIndex = FindFullscreenOwnerIndex(foregroundMonitor);
             if (g_workerMessageWindow && fullscreenOwnerIndex >= 0 && g_fullscreenOwners[fullscreenOwnerIndex].hwnd == hwnd) {
                 g_fullscreenValidationAttempt = 0;
@@ -2646,8 +2709,8 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
             g_lastForegroundWasShellSurface;
         g_lastForegroundWasShellSurface = false;
 
-        if (postMinimizeTaskbarForeground) {
-            g_taskbarForegroundMouseActivated = true;
+        if (g_minimizeInProgress || postMinimizeTaskbarForeground) {
+            g_taskbarForegroundKeyboardActivated = false;
             g_taskbarForegroundAfterShell = false;
             PostRefresh();
             return;
@@ -2669,20 +2732,44 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
             (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0 ||
             (GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0;
         const bool mouseActivated = cursorOverTaskbar || mouseButtonDown;
-        g_taskbarForegroundMouseActivated = mouseActivated;
-        g_taskbarForegroundAfterShell = wasShellForeground && !mouseActivated;
+        const bool keyboardActivated =
+            g_taskbarForegroundKeyboardActivated && !mouseActivated;
+        g_taskbarForegroundKeyboardActivated = keyboardActivated;
+        g_taskbarForegroundAfterShell =
+            wasShellForeground && !mouseActivated && !keyboardActivated;
+
+        // A mouse click can reveal the taskbar without first creating a hover
+        // session. Start the same hover-dismiss lifecycle so leaving the
+        // taskbar starts the normal auto-hide countdown.
+        if (mouseActivated) {
+            const HMONITOR taskbarMonitor =
+                MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            if (taskbarMonitor) {
+                g_hoverActive = true;
+                g_hoverMonitor = taskbarMonitor;
+                g_hoverDeadline = 0;
+                CancelHoverExpireTimer();
+            }
+        }
+
         PostRefresh();
         return;
     }
 
     if (event == EVENT_SYSTEM_MINIMIZESTART) {
+        g_minimizeInProgress = true;
         g_lastMinimizeEventTick = GetTickCount64();
-        g_taskbarForegroundMouseActivated = true;
+        g_taskbarForegroundKeyboardActivated = false;
+        g_hoverActive = false;
+        g_hoverMonitor = nullptr;
+        g_hoverDeadline = 0;
+        CancelHoverExpireTimer();
         PostRefresh();
         return;
     }
 
     if (event == EVENT_SYSTEM_MINIMIZEEND) {
+        g_minimizeInProgress = false;
         g_lastMinimizeEventTick = GetTickCount64();
         g_hoverActive = false;
         g_hoverMonitor = nullptr;
@@ -2700,11 +2787,22 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
             }
         }
         if (foregroundIsTaskbar) {
-            g_taskbarForegroundMouseActivated = true;
+            g_taskbarForegroundKeyboardActivated = false;
         }
 
         if (hwnd && IsIconic(hwnd)) {
             ClearFullscreenOwnersForWindow(hwnd);
+        }
+
+        // Windows can re-show the taskbar shortly after minimize completes.
+        // Re-assert the desired state after that transient shell activity.
+        if (g_workerMessageWindow) {
+            SetTimer(
+                g_workerMessageWindow,
+                kPostMinimizeReassertTimerId,
+                1200,
+                nullptr
+            );
         }
 
         PostRefresh();
@@ -2734,6 +2832,14 @@ LRESULT CALLBACK WorkerMessageWindowProc(HWND hwnd, UINT message, WPARAM wParam,
     if (message == WM_TIMER && wParam == kHoverExpireTimerId) {
         KillTimer(hwnd, kHoverExpireTimerId);
         PostRefresh();
+        return 0;
+    }
+
+    if (message == WM_TIMER && wParam == kPostMinimizeReassertTimerId) {
+        KillTimer(hwnd, kPostMinimizeReassertTimerId);
+        g_lastMinimizeEventTick = 0;
+        g_taskbarForegroundKeyboardActivated = false;
+        UpdateTaskbarState();
         return 0;
     }
 
@@ -2897,6 +3003,12 @@ DWORD WINAPI WorkerThread(LPVOID) {
         Wh_Log(L"Failed to install shell surface WinEvent hook");
     }
 
+    g_taskbarFocusHook =
+        SetWinEventHook(EVENT_OBJECT_FOCUS, EVENT_OBJECT_FOCUS, nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    if (!g_taskbarFocusHook) {
+        Wh_Log(L"Failed to install taskbar focus WinEvent hook");
+    }
+
     UpdateTaskbarState();
 
     // Keep a true periodic safety poll. It is only a fallback for shell/window
@@ -2918,6 +3030,8 @@ DWORD WINAPI WorkerThread(LPVOID) {
         }
 
         if (msg.message == WM_TIMER) {
+            if (msg.hwnd == nullptr) {
+            }
             if (msg.hwnd && msg.hwnd == g_workerMessageWindow) {
                 DispatchMessageW(&msg);
                 continue;
@@ -2968,6 +3082,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
     SafeUnhookWinEvent(g_moveHook);
     SafeUnhookWinEvent(g_fullscreenLocationHook);
     SafeUnhookWinEvent(g_shellSurfaceHook);
+    SafeUnhookWinEvent(g_taskbarFocusHook);
 
     DestroyWorkerMessageWindow();
 
@@ -3295,21 +3410,6 @@ void WhTool_ModUninit() {
     RestoreAllTaskbars();
 }
 
-void RecoverOrphanedTaskbarsIfNeeded() {
-    HANDLE toolModMutex =
-        OpenMutexW(
-            SYNCHRONIZE,
-            FALSE,
-            L"windhawk-tool-mod_" WH_MOD_ID
-        );
-
-    if (toolModMutex) {
-        CloseHandle(toolModMutex);
-        return;
-    }
-
-    EnumWindows(RestoreMarkedTaskbarProc, 0);
-}
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
@@ -3482,7 +3582,6 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModUninit() {
     if (g_isToolModProcessLauncher) {
-        RecoverOrphanedTaskbarsIfNeeded();
         return;
     }
 
