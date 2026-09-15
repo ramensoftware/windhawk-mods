@@ -213,8 +213,9 @@ their layer switches along with their colors; anything you leave out goes back
 to its default. The log writes only the palette and the colors for that reason,
 and writes them resolved — a field left empty travels as the color it became.
 
-Keep the five steps dark and in order: Premiere's own text is light and is not
-recolored.
+Keep the five steps dark and in order. Premiere's own text is light and is not
+recolored, and the monitor band is recognized by working back along the ramp,
+which a ramp that doubles back on itself would confuse.
 
 ## What it changes, and what it leaves alone
 
@@ -223,8 +224,10 @@ Each layer has its own switch in the settings:
 - **Premiere interface** — the theme colors served by `dvaui.dll`, Adobe's UI
   toolkit: panels, timeline, monitors.
 - **Direct fills** — surfaces Premiere paints without asking the theme: most of
-  the monitor and timeline chrome, and the band around the picture in the
-  monitors, which Premiere draws on the GPU.
+  the monitor and timeline chrome.
+- **Monitor band** — the band around the picture in the Source and Program
+  monitors, which Premiere draws on the GPU. The only layer that hooks
+  Direct3D, so it has a switch of its own.
 - **Window and system dialogs** — dark title bar, border and native dialogs.
 - **Menu bar and menus** — the File / Edit / Clip bar and its dropdowns.
 - **GDI surfaces** — brushes, pens and text backgrounds created by Premiere's
@@ -255,7 +258,8 @@ caches of its own.
 If a Premiere update ever makes a panel misbehave with the mod on, switch off
 **Premiere interface**, **Direct fills** and **GDI surfaces** together and
 restart Premiere. With all three off when the mod loads, it does not hook
-Premiere's own modules at all.
+Premiere's own modules at all — and **Monitor band** off means it does not
+touch Direct3D either, not even to watch for the device.
 
 ## Other mods that darken menus
 
@@ -275,21 +279,30 @@ and Adobe Stock carry no Spectrum grays and keep their own look.
 
 **The band around the video is drawn on the GPU.** Zoomed out, the monitors
 paint the area around the picture outside every layer above: Premiere lays
-Spectrum's `#1D1D1D` over that area as a quad per side of the picture, through
+its panel gray over that area as a quad per side of the picture, through
 `DisplaySurface.dll`. The mod recognizes those calls by the module they come
-from and gives them the theme's **Monitor background**, or its panel tone when
-that is left empty.
+from and by the color they carry, and gives them the theme's **Monitor
+background**, or its panel tone when that is left empty.
 
 Only those quads change. What shows between them — behind the picture — is
 black, and that same black is what a clip with an alpha channel is composited
 onto and what the monitor shows over a gap in the timeline. It is left exactly
 as Premiere draws it, which is why a transparent PNG still sits on black.
 
-**Direct fills** turns the layer off with the rest, and switches it back on
-without a restart: with the switch on as Premiere starts it is set up from the
-device Premiere itself creates, and turned on later it is set up from a device
-of the mod's own, which is only safe once the monitors have drawn — by then
-Premiere has settled which graphics runtime it uses.
+**Monitor band** is its own switch, because this is the only layer that hooks
+Direct3D — and on entry points every D3D12 program in the process shares, not
+on anything of Adobe's. Turn it off first if the monitors misbehave; the rest
+of the theme is unaffected. It goes in without a restart either way: with the
+switch on as Premiere starts, from the device Premiere itself creates, and
+turned on later from a device of the mod's own, which is only safe once the
+monitors have drawn — by then Premiere has settled which graphics runtime it
+uses.
+
+Two things about it are worth knowing. It answers to **Strength** but not to
+the **brightness ceiling**: the band is recognized by its own shape, and takes
+the **Monitor background** color directly rather than a stop on the ramp. And
+it leaves a monitor smaller than 400x300 alone, so a Source or Program panel
+squeezed very narrow keeps Premiere's own gray while the other one is themed.
 
 The black *inside* the sequence frame is the rendered picture, not chrome, and
 stays black in every palette.
@@ -412,10 +425,18 @@ This mod is MIT as well.
 - brushHook: true
   $name: Direct fills
   $description: >-
-    Also intercepts the Direct2D brush factory, the UIFramework drawing
-    primitives and the monitors' own GPU drawing — surfaces painted without
-    consulting the theme, which is most of the monitor and timeline chrome plus
-    the band around the picture. Turn this off if a panel paints wrong.
+    Also intercepts the Direct2D brush factory and the UIFramework drawing
+    primitives — surfaces painted without consulting the theme, which is most
+    of the monitor and timeline chrome. Turn this off if a panel paints wrong.
+- monitorBand: true
+  $name: Monitor band
+  $description: >-
+    The band around the picture in the Source and Program monitors, which
+    Premiere draws on the GPU. This is the only layer that hooks Direct3D, on
+    entry points every D3D12 program in the process shares, so it has a switch
+    of its own: turn it off first if the monitors misbehave. It is set up from
+    the device Premiere creates, or from one of the mod's own when it is turned
+    on later.
 - nativeDarkMode: true
   $name: Window and system dialogs
   $description: Immersive dark mode, title bar, border and native dialogs.
@@ -535,6 +556,7 @@ struct Settings {
     float ceiling;   // 0.0 .. 1.0
     bool dvauiHook;
     bool brushHook;
+    bool monitorBand;
     bool nativeDarkMode;
     bool menuHook;
     bool gdiHook;
@@ -970,25 +992,37 @@ using GetModuleInformation_t = BOOL(WINAPI*)(HANDLE, HMODULE, ModuleInformation*
     PE headers. Those stay mapped for the life of the process, so reading their
     headers is safe here, unlike for an arbitrary module out of an enumeration.
 */
-static void NoteModuleFromHeaders(HMODULE module) {
+static bool ModuleImageRange(HMODULE module, uintptr_t* begin, uintptr_t* end) {
     if (!module) {
-        return;
+        return false;
     }
 
     auto base = reinterpret_cast<uintptr_t>(module);
     auto dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
 
     if (dos->e_magic != IMAGE_DOS_SIGNATURE) {
-        return;
+        return false;
     }
 
     auto nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
 
     if (nt->Signature != IMAGE_NT_SIGNATURE) {
-        return;
+        return false;
     }
 
-    AddModuleRange(base, base + nt->OptionalHeader.SizeOfImage);
+    *begin = base;
+    *end = base + nt->OptionalHeader.SizeOfImage;
+
+    return true;
+}
+
+static void NoteModuleFromHeaders(HMODULE module) {
+    uintptr_t begin = 0;
+    uintptr_t end = 0;
+
+    if (ModuleImageRange(module, &begin, &end)) {
+        AddModuleRange(begin, end);
+    }
 }
 
 static void NoteKnownModules() {
@@ -1005,26 +1039,12 @@ static void NoteKnownModules() {
     is held for the life of the process once a monitor exists.
 */
 static void NoteDisplaySurface() {
-    HMODULE module = GetModuleHandleW(L"DisplaySurface.dll");
+    uintptr_t begin = 0;
+    uintptr_t end = 0;
 
-    if (!module) {
-        return;
+    if (ModuleImageRange(GetModuleHandleW(L"DisplaySurface.dll"), &begin, &end)) {
+        SetDisplaySurfaceRange(begin, end);
     }
-
-    auto base = reinterpret_cast<uintptr_t>(module);
-    auto dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
-
-    if (dos->e_magic != IMAGE_DOS_SIGNATURE) {
-        return;
-    }
-
-    auto nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
-
-    if (nt->Signature != IMAGE_NT_SIGNATURE) {
-        return;
-    }
-
-    SetDisplaySurfaceRange(base, base + nt->OptionalHeader.SizeOfImage);
 }
 
 static void SnapshotAdobeModules() {
@@ -4409,6 +4429,10 @@ class MenuBarTheme {
                          : UxThemeProc<CloseThemeData_t>("CloseThemeData");
 
         if (m_theme && close) {
+            // As CloseThemeData_Hook does: uxtheme hands the same handle value
+            // back for another class, and a stale entry would have
+            // PaintMenuPart repaint that one in menu colors.
+            ForgetMenuTheme(m_theme);
             close(m_theme);
         } else if (m_theme) {
             Wh_Log(L"CloseThemeData could not be resolved; a menu bar theme leaks");
@@ -5204,6 +5228,7 @@ static void LoadSettings() {
 
     next.dvauiHook = Wh_GetIntSetting(L"dvauiHook") != 0;
     next.brushHook = Wh_GetIntSetting(L"brushHook") != 0;
+    next.monitorBand = Wh_GetIntSetting(L"monitorBand") != 0;
     next.nativeDarkMode = Wh_GetIntSetting(L"nativeDarkMode") != 0;
     next.menuHook = Wh_GetIntSetting(L"menuHook") != 0;
     next.gdiHook = Wh_GetIntSetting(L"gdiHook") != 0;
@@ -5255,7 +5280,7 @@ static void LoadSettings() {
     The rest of the test is the shape of the work: a viewport and a scissor
     that cover the whole render target, with no sub-rectangle taken out of
     either. Anything smaller than 400x300 is not a monitor and is left alone,
-    and "Direct fills" switches the layer off with the rest.
+    and "Monitor band", the layer's own switch, turns it off.
 */
 
 struct MonitorCommandState {
@@ -5274,26 +5299,30 @@ struct MonitorCommandState {
     UINT root1Color[4]{};
 };
 
-using MonitorStates =
-    std::unordered_map<ID3D12GraphicsCommandList*, MonitorCommandState>;
-
 /*
-    A pointer, deliberately leaked, rather than the map itself.
+    One fixed slot per command list being recorded, per thread.
 
-    A thread_local with a destructor runs that destructor when the thread ends,
-    and Windhawk unmaps this image the moment the mod is disabled or updated —
-    a Premiere thread ending afterwards would call into memory that is no
-    longer there. A pointer has no destructor, so nothing of this mod runs at
-    thread exit; one small map per recording thread is left behind instead, the
-    same trade the color table makes.
+    A thread_local with a destructor runs that destructor when the thread
+    ends, and Windhawk unmaps this image the moment the mod is disabled or
+    updated — a Premiere thread ending afterwards would call into memory that
+    is no longer there. Plain slots have no destructor, so nothing of this mod
+    runs at thread exit, nothing is allocated inside a render hook, and
+    nothing is left behind either.
 
     Only DisplaySurface's own command lists are ever recorded, so in practice
-    this holds a handful of entries on one thread. The cap is there so that a
-    build which recycles command lists differently cannot grow it without one.
+    one or two of these are ever in use. A list that is Reset gives its slot
+    back; past that, the oldest slot is taken in turn, so no set of lists can
+    hold them all.
 */
-constexpr size_t kMaxMonitorStates = 128;
+constexpr size_t kMaxMonitorStates = 8;
 
-thread_local MonitorStates* g_monitorStates = nullptr;
+struct MonitorStateSlot {
+    ID3D12GraphicsCommandList* commandList;
+    MonitorCommandState state;
+};
+
+thread_local MonitorStateSlot g_monitorStates[kMaxMonitorStates]{};
+thread_local size_t g_monitorStateNext = 0;
 
 volatile LONG g_monitorStatesFullLogged = FALSE;
 volatile LONG g_monitorBandMatched = FALSE;
@@ -5308,53 +5337,68 @@ using D3D12CreateDevice_t = HRESULT(WINAPI*)(IUnknown*, D3D_FEATURE_LEVEL, REFII
 
 D3D12CreateDevice_t D3D12CreateDevice_Original = nullptr;
 
+// A list already being recorded, without starting to record a new one.
+static MonitorCommandState* KnownMonitorState(
+    ID3D12GraphicsCommandList* commandList) {
+    if (!commandList) {
+        return nullptr;
+    }
+
+    for (MonitorStateSlot& slot : g_monitorStates) {
+        if (slot.commandList == commandList) {
+            return &slot.state;
+        }
+    }
+
+    return nullptr;
+}
+
 static MonitorCommandState* MonitorStateFor(ID3D12GraphicsCommandList* commandList) {
     if (!commandList) {
         return nullptr;
     }
 
-    // A hook must not throw into Adobe's code: short of memory, the band is
-    // simply left as Premiere painted it.
-    try {
-        if (!g_monitorStates) {
-            g_monitorStates = new (std::nothrow) MonitorStates();
-
-            if (!g_monitorStates) {
-                return nullptr;
-            }
-        }
-
-        if (g_monitorStates->size() >= kMaxMonitorStates &&
-            !g_monitorStates->count(commandList)) {
-            g_monitorStates->clear();
-
-            if (Claim(&g_monitorStatesFullLogged)) {
-                Wh_Log(L"monitor band: too many command lists on one thread; "
-                       L"the band may show Premiere's gray for a frame");
-            }
-        }
-
-        return &(*g_monitorStates)[commandList];
-    } catch (const std::bad_alloc&) {
-        return nullptr;
+    if (MonitorCommandState* known = KnownMonitorState(commandList)) {
+        return known;
     }
+
+    for (MonitorStateSlot& slot : g_monitorStates) {
+        if (!slot.commandList) {
+            slot.commandList = commandList;
+            slot.state = MonitorCommandState{};
+            return &slot.state;
+        }
+    }
+
+    MonitorStateSlot& slot = g_monitorStates[g_monitorStateNext];
+    g_monitorStateNext = (g_monitorStateNext + 1) % kMaxMonitorStates;
+
+    slot.commandList = commandList;
+    slot.state = MonitorCommandState{};
+
+    if (Claim(&g_monitorStatesFullLogged)) {
+        Wh_Log(L"monitor band: more than %u command lists recorded on one "
+               L"thread; the band may show Premiere's gray for a frame",
+               static_cast<unsigned>(kMaxMonitorStates));
+    }
+
+    return &slot.state;
 }
 
-// A list already being recorded, without starting to record a new one.
-static MonitorCommandState* KnownMonitorState(
-    ID3D12GraphicsCommandList* commandList) {
-    if (!commandList || !g_monitorStates) {
-        return nullptr;
+// The recording this list was doing is over; see MonitorReset_Hook.
+static void ForgetMonitorState(ID3D12GraphicsCommandList* commandList) {
+    for (MonitorStateSlot& slot : g_monitorStates) {
+        if (slot.commandList == commandList) {
+            slot.commandList = nullptr;
+            slot.state = MonitorCommandState{};
+            return;
+        }
     }
-
-    auto it = g_monitorStates->find(commandList);
-
-    return it != g_monitorStates->end() ? &it->second : nullptr;
 }
 
 // Whether this layer changes anything at all right now.
 static bool MonitorBandActive(const Settings& s) {
-    return s.brushHook && s.strength > 0.0f;
+    return s.monitorBand && s.strength > 0.0f;
 }
 
 static float MonitorBitsToFloat(UINT bits) {
@@ -5370,20 +5414,80 @@ static UINT MonitorFloatToBits(float value) {
     return bits;
 }
 
+constexpr float kBandNeutral = 0.0015f;
+constexpr float kBandAlpha = 0.0015f;
+constexpr float kBandBlack = 1.0f / 255.0f;
+constexpr float kBandCeiling = 0.25f;
+constexpr float kBandTone = 2.5f / 255.0f;  // a round trip through 8 bits
+
+// The color a dark neutral gray of this brightness becomes under `s`, which is
+// what the layers above did to the band's own gray before it got here.
+static void MonitorPaletteTone(const Settings& s, float brightness,
+                               float out[3]) {
+    COLORREF target = PickTarget(s, brightness);
+    const BYTE channels[3] = {GetRValue(target), GetGValue(target),
+                              GetBValue(target)};
+
+    for (int i = 0; i < 3; i++) {
+        out[i] = BlendWith(s.strength, brightness, channels[i] / 255.0f);
+    }
+}
+
+/*
+    Whether this is a color the mod itself produced from a dark neutral gray.
+
+    What a gray becomes gets brighter as the gray does — the ramp rises, and
+    the blend is with the gray itself — so bisection finds the gray that would
+    have produced this brightness, and the three channels then say whether it
+    really did.
+*/
+static bool IsPaletteTone(const Settings& s, float r, float g, float b) {
+    float observed = (r + g + b) / 3.0f;
+    float lo = 0.0f;
+    float hi = s.ceiling;
+    float tone[3];
+
+    for (int step = 0; step < 24; step++) {
+        float mid = (lo + hi) / 2.0f;
+        MonitorPaletteTone(s, mid, tone);
+
+        if ((tone[0] + tone[1] + tone[2]) / 3.0f < observed) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+
+    MonitorPaletteTone(s, (lo + hi) / 2.0f, tone);
+
+    return std::fabs(tone[0] - r) <= kBandTone &&
+           std::fabs(tone[1] - g) <= kBandTone &&
+           std::fabs(tone[2] - b) <= kBandTone;
+}
+
 /*
     Whether the color this draw carries is the band's.
 
-    The exact gray is not the signature, and cannot be: stock it is #1D1D1D,
-    but the layers above have already been through it by the time it reaches
-    DisplaySurface, so under Onyx it arrives as #0E0E0E. What holds either way
-    is the shape of the value — opaque, dark, neutral, and not black.
+    The gray is not a fixed value to compare against. Stock it is #1D1D1D, but
+    the band's color comes from the theme before DisplaySurface paints with
+    it, so with "Premiere interface" on it arrives already converted: #0C0C0C
+    under Onyx, #0E2128 under Miku.
 
-    Not black is the part that matters. Everything the monitor shows through
-    the picture is black: the empty sequence frame over a gap in the timeline,
-    and the backing a clip with an alpha channel is composited onto. Requiring
-    a nonzero gray leaves all of it alone.
+    Requiring a neutral value, which this test first did, therefore only ever
+    matched the five neutral palettes. The ten that carry a hue in the ramp
+    never recolored at all — Miku among them, the one palette that ships a
+    band color of its own. So two shapes are accepted, both dark, opaque and
+    not black: a neutral gray, which is the color arriving untouched, and a
+    tone this mod's own conversion produces, which is the color arriving
+    converted.
+
+    Not black is the part that carries the weight. Everything the monitor
+    shows through the picture is black: the empty sequence frame over a gap in
+    the timeline, and the backing a clip with an alpha channel is composited
+    onto. Requiring a nonzero value leaves all of it alone.
 */
-static bool IsMonitorBandColor(const MonitorCommandState& state) {
+static bool IsMonitorBandColor(const Settings& s,
+                               const MonitorCommandState& state) {
     if (!state.hasRoot1Color) {
         return false;
     }
@@ -5398,17 +5502,16 @@ static bool IsMonitorBandColor(const MonitorCommandState& state) {
         return false;
     }
 
-    constexpr float kNeutral = 0.0015f;
-    constexpr float kAlpha = 0.0015f;
-    constexpr float kBlack = 1.0f / 255.0f;
-    constexpr float kCeiling = 0.25f;
-
     float hi = r > g ? (r > b ? r : b) : (g > b ? g : b);
     float lo = r < g ? (r < b ? r : b) : (g < b ? g : b);
     float gray = (r + g + b) / 3.0f;
 
-    return std::fabs(a - 1.0f) <= kAlpha && (hi - lo) <= kNeutral &&
-           gray > kBlack && gray <= kCeiling;
+    if (std::fabs(a - 1.0f) > kBandAlpha || gray <= kBandBlack ||
+        gray > kBandCeiling) {
+        return false;
+    }
+
+    return (hi - lo) <= kBandNeutral || IsPaletteTone(s, r, g, b);
 }
 
 /*
@@ -5465,19 +5568,68 @@ using MonitorRSSetScissorRects_t =
     void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, UINT,
                              const D3D12_RECT*);
 
-using MonitorSetGraphicsRoot32BitConstant_t =
-    void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, UINT, UINT, UINT);
-
 using MonitorSetGraphicsRoot32BitConstants_t =
     void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, UINT, UINT,
                              const void*, UINT);
 
+using MonitorReset_t =
+    HRESULT(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*,
+                                ID3D12CommandAllocator*, ID3D12PipelineState*);
+
+using MonitorClose_t = HRESULT(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*);
+
 MonitorRSSetViewports_t MonitorRSSetViewports_Original = nullptr;
 MonitorRSSetScissorRects_t MonitorRSSetScissorRects_Original = nullptr;
-MonitorSetGraphicsRoot32BitConstant_t
-    MonitorSetGraphicsRoot32BitConstant_Original = nullptr;
 MonitorSetGraphicsRoot32BitConstants_t
     MonitorSetGraphicsRoot32BitConstants_Original = nullptr;
+MonitorReset_t MonitorReset_Original = nullptr;
+MonitorClose_t MonitorClose_Original = nullptr;
+
+/*
+    Every hook this layer needs is in place.
+
+    They are registered together but can fail one at a time, and the two that
+    bound a recording are the ones a partial install would quietly drop —
+    leaving the recolor running on state nothing invalidates. So the layer
+    only acts when it is whole.
+*/
+static bool MonitorBandHooksReady() {
+    return MonitorRSSetViewports_Original && MonitorRSSetScissorRects_Original &&
+           MonitorSetGraphicsRoot32BitConstants_Original &&
+           MonitorReset_Original && MonitorClose_Original;
+}
+
+/*
+    A slot describes one recording and no more.
+
+    Reset begins a recording, clearing the list's viewport, scissor and root
+    constants; Close ends it. Between those two, what the mod recorded is what
+    the list is really carrying. Outside them it is stale, and a released
+    list's address can be handed to a new one — whose owner would otherwise
+    inherit a full-surface viewport it never set, and have its own dark gray
+    taken for the band. Both ends drop the slot, so a recording's state cannot
+    outlive it.
+
+    These two are the only hooks here that do not check the setting first.
+    With the layer off nothing is ever recorded, so forgetting costs a walk of
+    eight empty slots — and checking would mean state recorded before the
+    switch went off could still be there when it came back on.
+*/
+HRESULT STDMETHODCALLTYPE
+MonitorReset_Hook(ID3D12GraphicsCommandList* commandList,
+                  ID3D12CommandAllocator* allocator,
+                  ID3D12PipelineState* initialState) {
+    ForgetMonitorState(commandList);
+
+    return MonitorReset_Original(commandList, allocator, initialState);
+}
+
+HRESULT STDMETHODCALLTYPE
+MonitorClose_Hook(ID3D12GraphicsCommandList* commandList) {
+    ForgetMonitorState(commandList);
+
+    return MonitorClose_Original(commandList);
+}
 
 /*
     These sit on the D3D12 command list itself, which every D3D12 caller in the
@@ -5551,13 +5703,15 @@ static MonitorCommandState* MonitorStateForColor(
 */
 static bool RecolorBandConstants(ID3D12GraphicsCommandList* commandList,
                                  MonitorCommandState* state) {
-    if (!state || !MonitorSetGraphicsRoot32BitConstants_Original ||
-        !IsFullMonitorState(*state) || !IsMonitorBandColor(*state)) {
+    const Settings& s = CurrentSettings();
+
+    if (!state || !MonitorBandHooksReady() || !MonitorBandActive(s) ||
+        !IsFullMonitorState(*state) || !IsMonitorBandColor(s, *state)) {
         return false;
     }
 
     FLOAT band[4];
-    MonitorBandColor(CurrentSettings(), *state, band);
+    MonitorBandColor(s, *state, band);
 
     for (int i = 0; i < 4; i++) {
         state->root1Color[i] = MonitorFloatToBits(band[i]);
@@ -5574,29 +5728,6 @@ static bool RecolorBandConstants(ID3D12GraphicsCommandList* commandList,
 }
 
 void STDMETHODCALLTYPE
-MonitorSetGraphicsRoot32BitConstant_Hook(ID3D12GraphicsCommandList* commandList,
-                                         UINT rootParameterIndex,
-                                         UINT srcData,
-                                         UINT destOffsetIn32BitValues) {
-    MonitorSetGraphicsRoot32BitConstant_Original(commandList, rootParameterIndex,
-                                                 srcData,
-                                                 destOffsetIn32BitValues);
-
-    if (rootParameterIndex == 1 && destOffsetIn32BitValues < 4) {
-        if (MonitorCommandState* state =
-                MonitorStateForColor(__builtin_return_address(0), commandList)) {
-            state->root1Color[destOffsetIn32BitValues] = srcData;
-
-            // Only the last word of the four completes a color to judge.
-            if (destOffsetIn32BitValues == 3) {
-                state->hasRoot1Color = true;
-                RecolorBandConstants(commandList, state);
-            }
-        }
-    }
-}
-
-void STDMETHODCALLTYPE
 MonitorSetGraphicsRoot32BitConstants_Hook(ID3D12GraphicsCommandList* commandList,
                                           UINT rootParameterIndex,
                                           UINT num32BitValuesToSet,
@@ -5606,25 +5737,32 @@ MonitorSetGraphicsRoot32BitConstants_Hook(ID3D12GraphicsCommandList* commandList
         commandList, rootParameterIndex, num32BitValuesToSet, srcData,
         destOffsetIn32BitValues);
 
-    if (rootParameterIndex == 1 && srcData && destOffsetIn32BitValues < 4) {
-        if (MonitorCommandState* state =
-                MonitorStateForColor(__builtin_return_address(0), commandList)) {
-            auto values = static_cast<const UINT*>(srcData);
-            UINT count = num32BitValuesToSet;
+    /*
+        Exactly the float4, written whole at the start of the parameter, which
+        is the shape the band is painted in.
 
-            if (destOffsetIn32BitValues + count > 4) {
-                count = 4 - destOffsetIn32BitValues;
-            }
+        Anything else is left alone rather than picked apart: a larger block
+        bound at the same parameter — a transform and a color, say — is not
+        this layer's to judge, and a color assembled from several smaller
+        writes could mix words that belong to different draws. The companion
+        SetGraphicsRoot32BitConstant, which can only ever carry one word, is
+        not hooked at all for the same reason.
+    */
+    if (rootParameterIndex != 1 || !srcData || destOffsetIn32BitValues != 0 ||
+        num32BitValuesToSet != 4) {
+        return;
+    }
 
-            for (UINT i = 0; i < count; i++) {
-                state->root1Color[destOffsetIn32BitValues + i] = values[i];
-            }
+    if (MonitorCommandState* state =
+            MonitorStateForColor(__builtin_return_address(0), commandList)) {
+        auto values = static_cast<const UINT*>(srcData);
 
-            if (destOffsetIn32BitValues + count == 4) {
-                state->hasRoot1Color = true;
-                RecolorBandConstants(commandList, state);
-            }
+        for (int i = 0; i < 4; i++) {
+            state->root1Color[i] = values[i];
         }
+
+        state->hasRoot1Color = true;
+        RecolorBandConstants(commandList, state);
     }
 }
 
@@ -5676,9 +5814,10 @@ static bool InstallMonitorBandHooks(ID3D12Device* device) {
         it is a slot in a Microsoft interface, not an offset into Adobe's
         code, which is what the layer deliberately avoids.
     */
+    void* close = vtable[9];              // Close
+    void* reset = vtable[10];             // Reset
     void* setViewports = vtable[21];      // RSSetViewports
     void* setScissors = vtable[22];       // RSSetScissorRects
-    void* setRootConstant = vtable[34];   // SetGraphicsRoot32BitConstant
     void* setRootConstants = vtable[36];  // SetGraphicsRoot32BitConstants
 
     commandList->Release();
@@ -5695,17 +5834,21 @@ static bool InstallMonitorBandHooks(ID3D12Device* device) {
         MonitorRSSetScissorRects_Hook, &MonitorRSSetScissorRects_Original);
 
     ok &= WindhawkUtils::SetFunctionHook(
-        reinterpret_cast<MonitorSetGraphicsRoot32BitConstant_t>(setRootConstant),
-        MonitorSetGraphicsRoot32BitConstant_Hook,
-        &MonitorSetGraphicsRoot32BitConstant_Original);
-
-    ok &= WindhawkUtils::SetFunctionHook(
         reinterpret_cast<MonitorSetGraphicsRoot32BitConstants_t>(setRootConstants),
         MonitorSetGraphicsRoot32BitConstants_Hook,
         &MonitorSetGraphicsRoot32BitConstants_Original);
 
+    ok &= WindhawkUtils::SetFunctionHook(
+        reinterpret_cast<MonitorReset_t>(reset), MonitorReset_Hook,
+        &MonitorReset_Original);
+
+    ok &= WindhawkUtils::SetFunctionHook(
+        reinterpret_cast<MonitorClose_t>(close), MonitorClose_Hook,
+        &MonitorClose_Original);
+
     if (!ok) {
-        Wh_Log(L"monitor band: one or more D3D12 hooks failed");
+        Wh_Log(L"monitor band: one or more D3D12 hooks failed; the band keeps "
+               L"Premiere's gray rather than running on half a layer");
     }
 
     InterlockedExchange(&g_monitorBandInstalled, TRUE);
@@ -5729,7 +5872,7 @@ HRESULT WINAPI D3D12CreateDevice_Hook(IUnknown* adapter, D3D_FEATURE_LEVEL level
 
     // A null device is a capability query, which creates nothing.
     if (FAILED(hr) || !device || !*device || g_monitorBandTried ||
-        !CurrentSettings().brushHook) {
+        !CurrentSettings().monitorBand) {
         return hr;
     }
 
@@ -5757,7 +5900,8 @@ HRESULT WINAPI D3D12CreateDevice_Hook(IUnknown* adapter, D3D_FEATURE_LEVEL level
     it is safe to run with the loader lock held.
 */
 static bool HookD3D12CreateDevice() {
-    if (g_d3d12CreateDeviceHooked) {
+    // With the layer off, d3d12 is not touched at all — not even this.
+    if (g_d3d12CreateDeviceHooked || !CurrentSettings().monitorBand) {
         return false;
     }
 
@@ -5793,7 +5937,7 @@ static bool HookD3D12CreateDevice() {
     reaches here with it absent, and the hook covers that case instead.
 */
 static bool InstallMonitorBandFromProbe() {
-    if (g_monitorBandTried || !CurrentSettings().brushHook ||
+    if (g_monitorBandTried || !CurrentSettings().monitorBand ||
         !g_displaySurfaceEnd.load(std::memory_order_acquire)) {
         return false;
     }
@@ -5863,15 +6007,21 @@ BOOL Wh_ModInit() {
     SnapshotAdobeModules();
     InitNativeDarkMode();
 
-    // Only the export, which costs nothing; the monitor layer goes in when
-    // Premiere makes its device. See D3D12CreateDevice_Hook.
+    /*
+        Only the export, and only when "Monitor band" is on: the layer itself
+        goes in when Premiere makes its device, and with the switch off d3d12
+        is left alone entirely. Turning it on later is covered by the loader
+        hook, which tries this again, and by the probe in
+        Wh_ModSettingsChanged. See D3D12CreateDevice_Hook.
+    */
     HookD3D12CreateDevice();
 
     /*
-        Every Windows hook is installed whatever the settings say, and each one
-        checks its own setting every time it runs — so one whose setting is off
-        only forwards the call it received. Installing them all is what lets
-        Wh_ModSettingsChanged apply a change without reloading the mod.
+        The Windows hooks below are installed whatever the settings say, and
+        each one checks its own setting every time it runs — so one whose
+        setting is off only forwards the call it received. Installing them all
+        is what lets Wh_ModSettingsChanged apply a change without reloading the
+        mod.
         Premiere's own modules are the exception; see HookLoadedModules.
     */
     HookOrLog(CreateWindowExW, CreateWindowExW_Hook, &CreateWindowExW_Original,
@@ -6083,7 +6233,7 @@ void Wh_ModSettingsChanged() {
 
     /*
         A setting that works through Premiere's modules may just have come on.
-        "Direct fills" also governs the monitor layer, and Premiere's device
+        "Monitor band" governs the D3D12 layer, and Premiere's device
         exists by now, so that one is taken from a device of the mod's own.
     */
     bool registered = HookLoadedModules();
