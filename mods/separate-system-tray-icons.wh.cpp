@@ -18,10 +18,10 @@ Replaces the grouped Windows 11 system tray button with separate sound,
 Bluetooth, network, Control Center, and battery buttons. The original grouped
 button is hidden while the mod is active and restored when it is unloaded.
 
+![Demonstration](https://raw.githubusercontent.com/Asteski/Windhawk-Mods/e02d89d70dfb0ad3815b806e3eb2a49e56cb86b8/img/separate-system-tray-icons/separate-system-tray-icons.gif)
+
 This mod injects real XAML `FontIcon` elements into the Windows 11 taskbar tray.
 That means icons are drawn as XAML text/vector glyphs instead of rasterized HICON bitmaps.
-
-![Demonstration](https://github.com/Asteski/Windhawk-Mods/blob/e02d89d70dfb0ad3815b806e3eb2a49e56cb86b8/img/separate-system-tray-icons/separate-system-tray-icons.gif)
 
 Buttons:
 
@@ -72,8 +72,9 @@ Examples: `key:Ctrl+Alt+D`, `hotkey:Win+R`, `key:0x7B` (F12 by VK code).
 
 ## Taskbar Styler targets
 
-Status changes use Windows notifications where available, with a five-second
-fallback refresh. Layout checks and the Wi-Fi connecting animation remain faster.
+Status changes use Windows notifications where available, with a 60-second
+fallback refresh. The Wi-Fi connecting animation updates every 500 ms while
+Windows reports an active connection attempt.
 This version currently manages the primary taskbar; separate-monitor taskbars
 are not supported by the current implementation.
 
@@ -4082,7 +4083,7 @@ static void UpdateDynamicXamlIcons() {
 static SRWLOCK g_refreshLock = SRWLOCK_INIT;
 static HWND g_refreshWindow = nullptr;
 static unsigned g_refreshPending = 0;
-static HANDLE g_statusRefreshEvent = nullptr;
+static std::atomic<HANDLE> g_statusRefreshEvent{nullptr};
 static constexpr UINT kRefreshMessage = WM_APP + 164;
 static constexpr UINT kDestroyRefreshWindowMessage = kRefreshMessage + 2;
 static constexpr PCWSTR kRefreshWindowClass = L"SeparateSystemTrayIcons.Refresh";
@@ -4101,7 +4102,10 @@ static void PostTrayRefresh(bool radiosChanged) {
 static void RequestTrayRefresh(bool radiosChanged) {
     // Status callbacks can run on arbitrary threads. Signal the collector and
     // keep the current snapshot painted until the replacement is ready.
-    if (!g_unloading && g_statusRefreshEvent) SetEvent(g_statusRefreshEvent);
+    if (!g_unloading) {
+        if (HANDLE refreshEvent = g_statusRefreshEvent.load())
+            SetEvent(refreshEvent);
+    }
     PostTrayRefresh(radiosChanged);
 }
 
@@ -4179,7 +4183,6 @@ static void DestroyTrayRefreshWindow() {
     g_refreshWindow = nullptr;
     g_refreshPending = 0;
     ReleaseSRWLockExclusive(&g_refreshLock);
-    StopStatusEvents();
     if (hwnd) {
         auto owner = reinterpret_cast<HINSTANCE>(GetWindowLongPtrW(hwnd, GWLP_HINSTANCE));
         KillTimer(hwnd, 1);
@@ -4364,7 +4367,7 @@ static void StartStatusEvents(HWND hwnd) {
     HANDLE thread = work ? CreateThread(nullptr, 0, StatusEventThread, work, 0, nullptr) : nullptr;
     if (thread) {
         g_statusEventStop = stop;
-        g_statusRefreshEvent = refresh;
+        g_statusRefreshEvent.store(refresh);
         g_statusEventThread = thread;
     }
     else {
@@ -4374,14 +4377,15 @@ static void StartStatusEvents(HWND hwnd) {
 
 static void StopStatusEvents() {
     if (g_statusEventStop) SetEvent(g_statusEventStop);
-    if (g_statusRefreshEvent) SetEvent(g_statusRefreshEvent);
+    HANDLE refreshEvent = g_statusRefreshEvent.exchange(nullptr);
+    if (refreshEvent) SetEvent(refreshEvent);
     if (g_statusEventThread) {
         WaitForSingleObject(g_statusEventThread, INFINITE);
         CloseHandle(g_statusEventThread);
         g_statusEventThread = nullptr;
     }
     if (g_statusEventStop) { CloseHandle(g_statusEventStop); g_statusEventStop = nullptr; }
-    if (g_statusRefreshEvent) { CloseHandle(g_statusRefreshEvent); g_statusRefreshEvent = nullptr; }
+    if (refreshEvent) CloseHandle(refreshEvent);
 }
 
 enum class ButtonKind {
@@ -5336,8 +5340,7 @@ static bool IsShellHostedWindow(HWND hwnd) {
     PCWSTR name = ok ? wcsrchr(path, L'\\') : nullptr;
     name = name ? name + 1 : path;
     return ok && (_wcsicmp(name, L"ShellHost.exe") == 0 ||
-                  _wcsicmp(name, L"ShellExperienceHost.exe") == 0 ||
-                  _wcsicmp(name, L"explorer.exe") == 0);
+                  _wcsicmp(name, L"ShellExperienceHost.exe") == 0);
 }
 
 static bool IsRecordedTrayFlyout(HWND hwnd) {
@@ -5401,10 +5404,10 @@ static bool HandleTrayButtonClick(ButtonKind kind) {
             g_openedTrayFlyoutTick[index] = 0;
             return true;
         }
-        if (DismissForegroundShellFlyout()) {
-            g_openedTrayFlyoutTick[index] = 0;
-            return true;
-        }
+        // A hidden/destroyed recorded flyout means it was dismissed outside
+        // this button. Open a fresh one; never send Escape to another window.
+        g_openedTrayFlyout[index] = nullptr;
+        g_openedTrayFlyoutTick[index] = 0;
     }
 
     if (kind == ButtonKind::Bluetooth) {
@@ -6311,8 +6314,13 @@ static void ApplyXamlButtonsWithRetry() {
 }
 
 static void RemoveXamlButtons() {
-    try { DestroyTrayRefreshWindow(); }
-    catch (...) { Wh_Log(L"DestroyTrayRefreshWindow error: 0x%08X", winrt::to_hresult()); }
+    // Settings reapplication rebuilds XAML only. Its status subscriptions are
+    // independent of the settings and must stay alive rather than making the
+    // taskbar thread wait for an in-flight RPC snapshot.
+    if (g_unloading) {
+        try { DestroyTrayRefreshWindow(); }
+        catch (...) { Wh_Log(L"DestroyTrayRefreshWindow error: 0x%08X", winrt::to_hresult()); }
+    }
     try { RevokeEvents(g_timerEventRevokers); RevokeEvents(g_uiEventRevokers); }
     catch (...) { Wh_Log(L"Event revocation error: 0x%08X", winrt::to_hresult()); }
     try { if (g_activeTrayContextFlyout) g_activeTrayContextFlyout.Hide(); } catch (...) {}
@@ -6549,7 +6557,8 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    g_taskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (HWND currentTaskbar = FindCurrentProcessTaskbarWnd())
+        g_taskbarWnd = currentTaskbar;
     if (g_taskbarWnd) {
         RunFromWindowThread(g_taskbarWnd, ReloadSettingsAndReapplyProc, nullptr);
     }
@@ -6557,6 +6566,9 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModUninit() {
     g_unloading = true;
+    // This can wait for network/audio RPC, so do it on Windhawk's unload
+    // thread before any XAML cleanup is marshalled to Explorer's UI thread.
+    StopStatusEvents();
     if (HWND currentTaskbar = FindCurrentProcessTaskbarWnd())
         g_taskbarWnd = currentTaskbar;
     bool removed = false;
@@ -6571,11 +6583,6 @@ void Wh_ModUninit() {
         refresh = g_refreshWindow;
         ReleaseSRWLockShared(&g_refreshLock);
         if (refresh) SendMessageW(refresh, kDestroyRefreshWindowMessage, 0, 0);
-        else StopStatusEvents();
     }
     WaitForOwnedWorkers();
-    // The refresh window can disappear with the taskbar before the fallback
-    // message is delivered. Joining is idempotent and prevents its worker
-    // from executing code after Windhawk unloads this module.
-    StopStatusEvents();
 }
