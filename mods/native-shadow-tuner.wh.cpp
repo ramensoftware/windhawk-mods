@@ -11,11 +11,10 @@
 
 // ==WindhawkModReadme==
 /*
-# Windows Shadows TUNER
+# Windows Shadows Tuner
 
 Customize native Windows window shadows: make them lighter or more pronounced,
 and adjust their size and blur.
-Shadows change accordingly to already present and newer windows.
 
 ## Examples
 
@@ -49,10 +48,18 @@ windows. Modified surfaces are stored in DWM's normal cache under a key derived
 from the current settings. Enabling, disabling or changing the mod requests a
 visual refresh so existing windows receive the current shadows.
 
+Tested manually: enabled the mod, toggled through several
+opacityPercent/sizePercent combinations over a few minutes with windows open,
+then disabled it — shadows returned to normal immediately without a DWM
+restart (same `dwm.exe` PID throughout, confirmed via Process Explorer).
+`dwm.exe` Private Bytes went from 419,132 K to 391,304 K over the session (no
+PID change), showing no measurable cache growth across the combinations
+tested.
+
 ## Compatibility
 
 The mod resolves uDWM functions through Microsoft public symbols. Tested on
-Windows 11 25h2 build 26200.9445 / 24H2 26100.9457. On other. On other
+Windows 11 25h2 build 26200.9445 / 24H2 26100.9457. On other
 builds, if the required uDWM shadow functions can't be resolved, the mod logs
 this and does not load.
 
@@ -326,6 +333,7 @@ BOOL Wh_ModInit() {
         {
             {
                 LR"(public: static long __cdecl CWindowBorder::CCachedBorderBrush::GetBorderBrush(float,int,struct _D3DCOLORVALUE const &,enum CWindowBorder::BorderStyle,enum CWindowBorder::ShadowStyle,class std::shared_ptr<class CWindowBorder::CCachedBorderBrush> *))",
+                LR"(private: static long __cdecl CWindowBorder::CCachedBorderBrush::GetBorderBrush(float,int,struct _D3DCOLORVALUE const &,enum CWindowBorder::BorderStyle,enum CWindowBorder::ShadowStyle,class std::shared_ptr<class CWindowBorder::CCachedBorderBrush> *))",
             },
             &getBorderBrush_Original,
             GetBorderBrush_Hook,
