@@ -1230,12 +1230,7 @@ static bool ThemeIs(const WCHAR* v) {
     return wcscmp(g_settings.theme, v) == 0;
 }
 static bool ShouldFillBackground() {
-    if (ThemeIs(L"none")) return true;
-    if (ThemeIs(L"mica")) return false;
-    if (ThemeIs(L"backdrop")) {
-        return g_nativeBackdropActive;
-    }
-    return false;
+    return ThemeIs(L"none");
 }
 static bool ScrollIs(const WCHAR* v) { return wcscmp(g_settings.scrollWheelBehavior, v) == 0; }
 static bool LayoutIsVertical() { return wcscmp(g_settings.taskListOrientation, L"vertical") == 0; }
@@ -6011,7 +6006,7 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
     RECT rcClient; GetClientRect(g_hSwitcher, &rcClient);
     int w = rcClient.right, h = rcClient.bottom;
 
-    if (fillBg && !ThemeIs(L"mica")) {
+    if (fillBg && ThemeIs(L"none")) {
         BYTE bgA = (BYTE)(g_settings.opacity * 255 / 100);
         if (bgA == 0) bgA = 1; // Prevent full transparency click-through
         COLORREF bgC = GetBgColor();
@@ -6239,7 +6234,7 @@ static void DrawSwitcherContentInner(HDC hdc, bool fillBg, HWND hWnd, bool inclu
     RECT rcClient; GetClientRect(g_hSwitcher, &rcClient);
     int w = rcClient.right, h = rcClient.bottom;
 
-    if (fillBg && !ThemeIs(L"mica")) {
+    if (fillBg && ThemeIs(L"none")) {
         BYTE bgA = (BYTE)(g_settings.opacity * 255 / 100);
         if (bgA == 0) bgA = 1; // Prevent full transparency click-through
         COLORREF bgC = GetBgColor();
@@ -7239,19 +7234,10 @@ static void PaintSwitcher() {
         ReleaseDC(NULL, hdcScreen);
         PaintSwitcherOverlay();
     } else {
-        // Acrylic / Mica: modulate window alpha via SetLayeredWindowAttributes
-        // in lockstep with the layered overlay window and live DWM thumbnails.
-        float combinedAlpha = g_animEntranceCurrentAlpha * g_animExitCurrentAlpha;
-        if (combinedAlpha < 0.0f) combinedAlpha = 0.0f;
-        if (combinedAlpha > 1.0f) combinedAlpha = 1.0f;
-        BYTE finalAlpha = (BYTE)roundf(combinedAlpha * 255.0f);
-
-        SetLayeredWindowAttributes(g_hSwitcher, 0, finalAlpha, LWA_ALPHA);
         InvalidateRect(g_hSwitcher, NULL, FALSE);
         UpdateWindow(g_hSwitcher);
         for (HWND hMirror : g_hMirrorSwitchers) {
             if (IsWindow(hMirror)) {
-                SetLayeredWindowAttributes(hMirror, 0, finalAlpha, LWA_ALPHA);
                 InvalidateRect(hMirror, NULL, FALSE);
                 UpdateWindow(hMirror);
             }
@@ -7501,16 +7487,14 @@ static void ApplyThemeToWindow(HWND hWnd) {
     }
 
     // --- Non-layered path (Mica / Acrylic) ---
-    // Ensure window has WS_EX_LAYERED so SetLayeredWindowAttributes can modulate
-    // overall window opacity during WinUI 3 entrance / exit animations in lockstep
-    // with the overlay and live DWM thumbnails.
+    // Strip WS_EX_LAYERED: Windows DWM never renders hardware system backdrops
+    // (Mica DWMSBT_MAINWINDOW or Acrylic DWMSBT_TRANSIENTWINDOW) or Windows 10
+    // acrylic composition blur on windows with the WS_EX_LAYERED style.
     LONG_PTR exs = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
-    if (!(exs & WS_EX_LAYERED)) {
-        SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exs | WS_EX_LAYERED);
+    if (exs & WS_EX_LAYERED) {
+        SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exs & ~WS_EX_LAYERED);
         SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     }
-    BYTE initAlpha = (AreAnimationsGloballyEnabled() && g_settings.enableEntranceAnimation) ? 0 : 255;
-    SetLayeredWindowAttributes(hWnd, 0, initAlpha, LWA_ALPHA);
 
     // Reset legacy accent policy by default
     if (g_SetWindowCompositionAttribute) {
@@ -7594,7 +7578,8 @@ static BOOL WINAPI MirrorEnumProc(HMONITOR hM, HDC, LPRECT, LPARAM) {
         GetMonitorInfoW(hM, &mInfo);
         int mx, my;
         GetSwitcherPosition(mInfo.rcWork, &mx, &my);
-        HWND hMirror = CreateSWSWindow(WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED, SWS_CLASSNAME, L"", WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, mx, my, g_winW, g_winH, g_hSwitcher, NULL, GetModuleHandle(NULL), NULL);
+        DWORD mirrorExStyle = WS_EX_TOOLWINDOW | WS_EX_TOPMOST | (ThemeIs(L"none") ? WS_EX_LAYERED : 0);
+        HWND hMirror = CreateSWSWindow(mirrorExStyle, SWS_CLASSNAME, L"", WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, mx, my, g_winW, g_winH, g_hSwitcher, NULL, GetModuleHandle(NULL), NULL);
         if (hMirror) {
             ApplyThemeToWindow(hMirror);
             g_hMirrorSwitchers.push_back(hMirror);
@@ -7733,21 +7718,18 @@ static void ShowSwitcher(bool sticky, bool immediate = false) {
         g_isPendingShow = true;
         g_isVisible = false;
 
-        // Ensure WS_EX_LAYERED is active so we can set 100% transparency
-        LONG_PTR exStyle = GetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE);
-        SetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
-
-        // Suppress DWM hardware border so no visual artifact appears anywhere on screen
-        if (IsWin11OrGreater()) {
-            COLORREF colorNone = 0xFFFFFFFE; // DWMWA_COLOR_NONE
-            DwmSetWindowAttribute(g_hSwitcher, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
+        if (ThemeIs(L"none")) {
+            LONG_PTR exStyle = GetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE);
+            if (!(exStyle & WS_EX_LAYERED)) {
+                SetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+            }
+            SetLayeredWindowAttributes(g_hSwitcher, 0, 0, LWA_ALPHA);
+            SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
+        } else {
+            // Non-layered (Mica / Acrylic): Keep window off-screen during grace period
+            // to avoid corrupting DWM hardware backdrop state with WS_EX_LAYERED.
+            SetWindowPos(g_hSwitcher, HWND_TOPMOST, -32000, -32000, g_winW, g_winH, SWP_NOACTIVATE);
         }
-
-        // 100% transparent: zero pixels rendered
-        SetLayeredWindowAttributes(g_hSwitcher, 0, 0, LWA_ALPHA);
-
-        // Position directly at target coordinates
-        SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
         ShowWindow(g_hSwitcher, SW_SHOWNA);
         BringWindowToTop(g_hSwitcher);
 
@@ -11183,7 +11165,7 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     // Use WS_POPUP | WS_THICKFRAME to get DWM rounded corners and shadows, 
     // without the system caption buttons. We remove the frame via WM_NCCALCSIZE.
     DWORD dwStyle = WS_POPUP | WS_THICKFRAME | WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
-    DWORD exStyle = WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED;
+    DWORD exStyle = WS_EX_TOOLWINDOW | WS_EX_TOPMOST | (ThemeIs(L"none") ? WS_EX_LAYERED : 0);
     g_hSwitcher = CreateSWSWindow(exStyle, SWS_CLASSNAME, L"",
         dwStyle, 0, 0, 0, 0, NULL, NULL, GetModuleHandleW(NULL), NULL);
     if (!g_hSwitcher) { Wh_Log(L"Failed to create switcher window"); return 1; }
