@@ -2,12 +2,57 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-15T17:34:37.000Z</updated>
+    <updated>2026-09-15T17:42:45.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Double-Click Window Edge to Maximize Width 1.0]]></title>
+        <id>https://windhawk.net/mods/edge-doubleclick-resize#c69dab54e3f2d6439b4cc6775ac4a9441d3766b8</id>
+        <link href="https://windhawk.net/mods/edge-doubleclick-resize"/>
+        <updated>2026-09-15T17:42:45.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="doubleclickwindowedgetomaximizewidth">Double-Click Window Edge to Maximize Width</h1>
+<p>Double-click on a window's border to resize it along one axis, without
+affecting the other:</p>
+<ul>
+<li>Left or right edge -&gt; maximizes the width (height stays unchanged).
+Double-click the same edge again to restore the previous width.</li>
+<li>Top or bottom edge -&gt; handled by Windows' own built-in vertical
+maximize/restore toggle (unchanged by this mod).</li>
+<li>A corner -&gt; maximizes both width and height together. Double-click
+the same corner again to restore the previous size.</li>
+</ul>
+<p>This adds a horizontal counterpart to Windows' existing vertical
+double-click-to-maximize behavior, which only covers the top/bottom
+edges natively.</p>
+<p><img src="https://i.imgur.com/B4HtYLf.gif" alt="demo" /></p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Applies to all windows (<code>@include *</code>).</li>
+<li>Only affects resizable windows that are not already maximized or
+minimized.</li>
+<li>Apps that implement their own non-client hit testing and never
+forward <code>WM_NCLBUTTONDBLCLK</code> to the default window procedure
+(e.g. many Chromium/Electron, WinUI, and Qt frameless windows) are
+not affected by this mod, since there's no reliable hook point for
+those. This is a limitation of the approach, not a bug.</li>
+<li>Uses the work area (excludes the taskbar) rather than the full
+monitor bounds.</li>
+</ul>
+<hr />
+<h2 id="">دبل كليك على حافة النافذة لتكبير العرض أو الطول</h2>
+<ul>
+<li>الحافة اليسرى أو اليمنى -&gt; يكبّر العرض بالكامل (يبقى الطول كما هو). دبل كليك مرة ثانية يرجّع العرض السابق.</li>
+<li>الحافة العلوية أو السفلية -&gt; يُترك سلوك ويندوز الأصلي (تكبير/استعادة الطول) كما هو.</li>
+<li>الزاوية -&gt; يكبّر الاثنين معاً. دبل كليك على نفس الزاوية يرجّع الحجم السابق.</li>
+</ul>]]></content>
+        <author>
+            <name>Hamid</name>
+            <uri>https://github.com/nh4700-ai</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 Native Four Column Snap Layout 1.1]]></title>
         <id>https://windhawk.net/mods/windows-11-native-four-column-snap-layout#81d32eea1d5d2e9656c2e39c51188c471f6b2cec</id>
@@ -570,29 +615,6 @@ Original overlay/smear architecture inspired by <a href="https://github.com/Thea
         <author>
             <name>WasiXGamer</name>
             <uri>https://github.com/wasixgamer</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start button colorizer 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-start-button-colorizer#e0a0b51bcad52f7f2dc5edc42be0026f2a093b59</id>
-        <link href="https://windhawk.net/mods/taskbar-start-button-colorizer"/>
-        <updated>2026-09-11T14:06:00.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="startbuttoncolorizer">Start button colorizer</h1>
-<p>Customize the Windows logo of the Start button on the taskbar:</p>
-<ul>
-<li><strong>Color</strong>: recolor the icon with one of the built-in colors, such as red,
-green or pink.</li>
-<li><strong>Effects</strong>: fine tune the icon with the hue, saturation, brightness and
-opacity effects.</li>
-<li><strong>Size</strong>: set the size of the icon.</li>
-</ul>
-<p>To use a custom image instead of the built-in icon, refer to the <a href="https://windhawk.net/mods/start-button-replacer">Start Button
-Replacer</a> mod.</p>
-<p>Only Windows 11 is supported.</p>
-<p><img src="https://i.imgur.com/GebA6hR.png" alt="Screenshot" /></p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

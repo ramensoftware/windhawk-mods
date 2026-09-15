@@ -4704,6 +4704,35 @@
         "version": "0.3.9"
       }
     },
+    "edge-doubleclick-resize": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1789494165000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1789494165000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Hamid",
+        "compilerOptions": "-ldwmapi",
+        "description": "Double-click the left/right window edge to maximize the width (a corner maximizes both axes); the top/bottom edge keeps Windows' built-in vertical maximize",
+        "github": "https://github.com/nh4700-ai",
+        "include": [
+          "*"
+        ],
+        "license": "MIT",
+        "name": "Double-Click Window Edge to Maximize Width",
+        "version": "1.0"
+      }
+    },
     "edge-hot-corner-desktop-switch": {
       "details": {
         "defaultSorting": 500,
