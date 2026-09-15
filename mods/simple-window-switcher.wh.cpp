@@ -5524,11 +5524,13 @@ static RECT GetCloseButtonRect(const RECT& rcCell, const RECT& rcThumbActual, co
             }
             return { bx, by, bx + btnSz, by + btnSz };
         }
-        // iconStrip
-        int btnSz = DpiScale(16, g_dpiX);
-        int bx = rcCell.right - btnSz - DpiScale(1, g_dpiX);
-        int by = rcCell.top + DpiScale(1, g_dpiY);
-        return { bx, by, bx + btnSz, by + btnSz };
+        if (DockCloseButtonIsIconStrip()) {
+            int btnSz = DpiScale(16, g_dpiX);
+            int bx = rcCell.right - btnSz - DpiScale(1, g_dpiX);
+            int by = rcCell.top + DpiScale(1, g_dpiY);
+            return { bx, by, bx + btnSz, by + btnSz };
+        }
+        return { 0, 0, 0, 0 };
     }
 
     int rowTitleH = GetHeaderRowHeightPx();
@@ -6658,7 +6660,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
 
         // Close button (rendered for any entry with closeBtnAlpha > 0.01f, enabling smooth cross-fades between entries)
         if (g_settings.showCloseButton && e.closeBtnAlpha > 0.01f) {
-            if (!DockLayoutActive() || !DockCloseButtonIsPreview() || i == g_selectedIndex) {
+            if (!DockLayoutActive() || DockCloseButtonIsIconStrip() || (DockCloseButtonIsPreview() && i == g_selectedIndex)) {
                 RECT btnRc = GetCloseButtonRect(rcCell, rcThumbActual, rcThumbSlot);
                 if (btnRc.right > btnRc.left && btnRc.bottom > btnRc.top) {
                     float hoverPlateAlpha = (i == g_hoverIndex && g_hoverWnd == hWnd && g_isCloseHovered) ? g_animCloseBtnHoverAlpha : 0.0f;
@@ -6728,7 +6730,10 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
                 } else if (DockGroupIndicatorIsAboveIcons()) {
                     badgeX = drawnIconX + (drawnIconSz - badgeW) / 2;
                     badgeY = drawnIconY - badgeH - DpiScale(2, g_dpiY);
-                } else { // onIconBadge
+                } else if (DockGroupIndicatorIsOnIconBadge()) {
+                    badgeX = drawnIconX + drawnIconSz - (badgeW / 2);
+                    badgeY = drawnIconY - (badgeH / 2);
+                } else {
                     badgeX = drawnIconX + drawnIconSz - (badgeW / 2);
                     badgeY = drawnIconY - (badgeH / 2);
                 }
@@ -8930,7 +8935,7 @@ static void UpdateHoverAtPoint(HWND hWnd, int x, int y, bool allowAnimation) {
 
     bool closeHovered = false;
     if (g_settings.showCloseButton && entryIdx >= 0 && entryIdx < (int)g_windows.size() && !IsWindowTruncated(entryIdx)) {
-        if (!DockLayoutActive() || !DockCloseButtonIsPreview() || entryIdx == g_selectedIndex) {
+        if (!DockLayoutActive() || DockCloseButtonIsIconStrip() || (DockCloseButtonIsPreview() && entryIdx == g_selectedIndex)) {
             POINT pt = { x, y };
             closeHovered = HitTestCloseButton(g_windows[entryIdx], pt);
         }
