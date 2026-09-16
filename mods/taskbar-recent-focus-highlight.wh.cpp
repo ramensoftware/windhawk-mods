@@ -2,7 +2,7 @@
 // @id              taskbar-recent-focus-highlight
 // @name            Taskbar Recent Focus Highlight
 // @description     Visually highlight the most recently focused running apps on the taskbar
-// @version         0.9.19
+// @version         0.9.20
 // @author          Jakub Vlášek
 // @github          https://github.com/jvlasek
 // @include         explorer.exe
@@ -46,8 +46,8 @@ last focused window of that app is rank 1 in the flyout even if you used
 other apps more recently. Single-window flyouts are left alone.
 
 Preview styles (default **hybrid**): whole-card plate for rank 1 and a title
-tint for ranks 2+; or a thin bar under the title, a soft title tint, a
-whole-card plate, or a ring.
+tint for ranks 2+; or a thin bar under the title, a soft title tint, or a
+whole-card plate.
 
 ## Settings (short)
 
@@ -229,13 +229,11 @@ to clear highlights.
         How to mark ranked windows. Hybrid (default) = whole plate for rank 1,
         title wash for ranks 2+. Title bar = thin line under the title.
         Title background = soft wash behind the title. Plate = tint the whole card.
-        Ring = hollow border around the card.
       $options:
       - titleBar: Bar under window title
       - titleBg: Title background tint
       - plate: Whole preview plate
       - plateTitle: Hybrid (plate rank 1, title tint 2+)
-      - ring: Ring / frame
     - intensityRank1: 100
       $name: Intensity rank 1
       $description: Strength for the most recent window in the flyout (0–100)
@@ -379,7 +377,6 @@ enum class PromoteMode {
 
 // Thumbnail flyout highlight (independent of icon GlowStyle).
 enum class PreviewStyle {
-    Ring,       // hollow frame around the whole preview (placeholder)
     TitleBg,    // tint behind the window title text
     Plate,      // tint whole preview card (hover-like plate)
     TitleBar,   // thin bar under the title, above the thumbnail image
@@ -490,6 +487,7 @@ struct PendingFocus {
     ULONGLONG previewStartTick = 0;  // HWND-level; resets when instance changes
     // Post-deadline Alt-Tab / tray / IME wait. 0 = still inside min-focus.
     ULONGLONG transientRetryStartTick = 0;
+    ULONGLONG previewTransientRetryStartTick = 0;
     GUID desktopId{};
     bool valid = false;
 };
@@ -498,7 +496,7 @@ struct PendingFocus {
 struct WindowFocusInfo {
     HWND hwnd = nullptr;
     DWORD pid = 0;              // reject recycled HWND with a new process
-    std::wstring processKey;    // UPPER path
+    std::wstring processKey;    // rank key: UPPER path or APPID:…
     std::wstring windowTitle;   // fallback match
     ULONGLONG lastConfirmedTick = 0;
     ULONGLONG confirmSeq = 0;  // unique per confirm (breaks GetTickCount ties)
@@ -735,7 +733,7 @@ constexpr PCWSTR kThumbGlowLayerNames[] = {
     L"WhRecentFocusThumbGlowL0",
     L"WhRecentFocusThumbGlowL1",
 };
-// Title-area overlays (separate so plate/ring host can sit full-card).
+// Title-area overlays (separate so plate host can sit full-card).
 constexpr PCWSTR kThumbTitleBgName = L"WhRecentFocusThumbTitleBg";
 constexpr PCWSTR kThumbTitleBarName = L"WhRecentFocusThumbTitleBar";
 // Marker: we tinted native BackgroundBorder. Tag holds the previous Brush
@@ -1690,14 +1688,10 @@ void ConfirmPreviewFocusNow(HWND hwnd, DWORD expectedPid = 0) {
     }
 
     const ULONGLONG now = GetTickCount64();
-    std::wstring processKey = PathFromAppKey(key);
-    if (processKey.empty()) {
-        processKey = ToUpper(GetProcessImagePath(processId));
-    }
     {
         std::lock_guard<std::mutex> lock(g_stateMutex);
         auto& desk = CurrentDeskLocked();
-        StampWindowRecencyLocked(desk, hwnd, processKey, windowTitle, now);
+        StampWindowRecencyLocked(desk, hwnd, key, windowTitle, now);
         Wh_Log(L"Preview click confirmed: hwnd=%p %s title=\"%s\" (map=%zu "
                L"desktop=%s)",
                hwnd, displayName.c_str(), windowTitle.c_str(),
@@ -2650,6 +2644,9 @@ void RestoreIconPanelNativeZOrder(FrameworkElement iconPanel) {
                 }
                 ++dest;
             }
+            // Snapshot is from first glow. OverlayIcon (mail badge) can appear
+            // later — compaction would leave it behind the glyph.
+            EnsureOverlayIconAboveGlyph(iconPanel);
             return;
         }
 
@@ -2889,10 +2886,8 @@ PCWSTR PreviewStyleName(PreviewStyle s) {
         case PreviewStyle::TitleBar:
             return L"titleBar";
         case PreviewStyle::PlateTitle:
-            return L"plateTitle";
-        case PreviewStyle::Ring:
         default:
-            return L"ring";
+            return L"plateTitle";
     }
 }
 
@@ -3447,6 +3442,7 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
                     g_cachedAccent.load(std::memory_order_relaxed) &&
                 painted.edge == edge && painted.boxW == boxWi &&
                 painted.boxH == boxHi && ButtonHasOurChrome(button)) {
+                EnsureOverlayIconAboveGlyph(iconPanel);
                 return;
             }
         }
@@ -3962,18 +3958,22 @@ std::wstring EnsureButtonPathCached(FrameworkElement button, bool force) {
                 // the same TaskListButton flips to running.
                 const bool haveIdentity = !it->second.pathUpper.empty() ||
                                           !it->second.appIdUpper.empty();
-                if (haveIdentity ||
-                    now - it->second.lastResolveTick < kUnresolvedRetryMs ||
-                    it->second.emptyResolveAttempts >=
-                        kMaxEmptyResolveAttempts) {
-                    cachedPath = it->second.pathUpper;
-                    if (!haveIdentity || !running) {
+                const bool throttled =
+                    now - it->second.lastResolveTick < kUnresolvedRetryMs;
+                if (!haveIdentity) {
+                    if (throttled || it->second.emptyResolveAttempts >=
+                                         kMaxEmptyResolveAttempts) {
+                        cachedPath = it->second.pathUpper;
                         skipResolve = true;
-                    } else {
-                        checkStale = true;
-                        cachedHwnd = it->second.sampleHwnd;
-                        cachedAppId = it->second.appIdUpper;
                     }
+                } else if (!running || throttled) {
+                    cachedPath = it->second.pathUpper;
+                    skipResolve = true;
+                } else {
+                    cachedPath = it->second.pathUpper;
+                    checkStale = true;
+                    cachedHwnd = it->second.sampleHwnd;
+                    cachedAppId = it->second.appIdUpper;
                 }
             }
         }
@@ -3983,6 +3983,12 @@ std::wstring EnsureButtonPathCached(FrameworkElement button, bool force) {
     }
     if (checkStale &&
         !CachedButtonIdentityStale(cachedHwnd, cachedPath, cachedAppId)) {
+        std::lock_guard<std::mutex> lock(g_buttonPathMutex);
+        auto it = g_buttonPathCache.find(id);
+        if (it != g_buttonPathCache.end() &&
+            WeakIsSameElement(it->second.button, button)) {
+            it->second.lastResolveTick = now;
+        }
         return cachedPath;
     }
     if (checkStale) {
@@ -4351,9 +4357,11 @@ void ApplyAllHighlights_UIThread() {
     g_lastFullRefreshTick = GetTickCount64();
 
     std::vector<AppFocusInfo> ranks;
+    GUID deskId{};
     {
         std::lock_guard<std::mutex> lock(g_stateMutex);
         ranks = CurrentDeskLocked().rankedApps;
+        deskId = g_currentDesktopId;
     }
 
     std::vector<FrameworkElement> live = CollectLiveButtonsOnThisDispatcher();
@@ -4362,8 +4370,7 @@ void ApplyAllHighlights_UIThread() {
         Wh_Log(L"  rank list[%zu]: %s", i + 1, ranks[i].displayName.c_str());
     }
     Wh_Log(L"ApplyAllHighlights: %zu tracked buttons, %zu ranks desktop=%s",
-           live.size(), ranks.size(),
-           GuidToLogString(g_currentDesktopId).c_str());
+           live.size(), ranks.size(), GuidToLogString(deskId).c_str());
 
     if (g_unloading.load() || ranks.empty()) {
         for (auto& button : live) {
@@ -5205,6 +5212,10 @@ void ClearThumbnailHighlight(FrameworkElement thumbView) {
         return;
     }
     try {
+        if (!FindDescendantByName(thumbView, kThumbGlowElementName) &&
+            !FindDescendantByName(thumbView, kThumbNativeStyleMarker)) {
+            return;
+        }
         RemoveNamedDescendant(thumbView, kThumbGlowElementName);
         RemoveNamedDescendant(thumbView, kThumbTitleBgName);
         RemoveNamedDescendant(thumbView, kThumbTitleBarName);
@@ -5651,37 +5662,7 @@ void ApplyThumbnailHighlight(FrameworkElement thumbView, int rankOneBased) {
         Controls::Grid host = EnsureThumbOverlayHost(panel);
         HideThumbOverlayChildren(host);
 
-        if (paintStyle == PreviewStyle::Ring) {
-            const double inset = 3.0;
-            const double corner =
-                (std::max)(12.0, (std::min)(cardW, cardH) - 2.0 * inset) *
-                roundnessFrac;
-
-            for (int i = 0; i < 2; ++i) {
-                auto rect = FindChildByName(host, kThumbGlowLayerNames[i])
-                                .try_as<Shapes::Rectangle>();
-                if (!rect) {
-                    continue;
-                }
-                const double step = i == 0 ? 0.0 : 3.0;
-                const double layerInset = inset + step;
-                const int strokeA =
-                    static_cast<int>((140 + 100 * t) * (1.0 - 0.2 * i));
-                const double opacity = 0.75 + 0.25 * t;
-                const double th =
-                    (std::max)(1.5, thickness * (1.0 - 0.15 * i));
-                const double size = (std::max)(
-                    8.0, (std::min)(cardW, cardH) - 2.0 * layerInset);
-                rect.Stroke(Media::SolidColorBrush{withAlpha(base, strokeA)});
-                rect.StrokeThickness(th);
-                rect.Fill(Media::SolidColorBrush{
-                    winrt::Windows::UI::Color{0, 0, 0, 0}});
-                rect.RadiusX(corner + step);
-                rect.RadiusY(corner + step);
-                rect.Opacity(opacity);
-                PlaceOverlayChild(rect, layerInset, layerInset, size, size);
-            }
-        } else if (paintStyle == PreviewStyle::TitleBg) {
+        if (paintStyle == PreviewStyle::TitleBg) {
             double top = 4.0;
             double stripH = 28.0;
             double titleTop = 0, titleBottom = 0;
@@ -6981,14 +6962,14 @@ void OnPreviewMinFocusTimerElapsed(MinFocusConfirmMode mode) {
                                         ? pending.previewStartTick
                                         : pending.focusStartTick;
             const ULONGLONG now = GetTickCount64();
-            ULONGLONG retryStart = pending.transientRetryStartTick;
+            ULONGLONG retryStart = pending.previewTransientRetryStartTick;
             const ULONGLONG delay = TransientRetryDelayMs(
                 start, settings->previewMinFocusSeconds, now, retryStart);
             {
                 std::lock_guard<std::mutex> lock(g_stateMutex);
                 if (g_pendingFocus.valid &&
                     g_pendingFocus.hwnd == pending.hwnd) {
-                    g_pendingFocus.transientRetryStartTick = retryStart;
+                    g_pendingFocus.previewTransientRetryStartTick = retryStart;
                 }
             }
             if (delay == 0) {
@@ -7003,10 +6984,6 @@ void OnPreviewMinFocusTimerElapsed(MinFocusConfirmMode mode) {
         return;
     }
 
-    std::wstring processKey = PathFromAppKey(pending.key);
-    if (processKey.empty()) {
-        processKey = ToUpper(GetProcessImagePath(pending.processId));
-    }
     const ULONGLONG now = GetTickCount64();
     {
         std::lock_guard<std::mutex> lock(g_stateMutex);
@@ -7014,7 +6991,15 @@ void OnPreviewMinFocusTimerElapsed(MinFocusConfirmMode mode) {
             InlineIsEqualGUID(pending.desktopId, GUID_NULL)
                 ? CurrentDeskLocked()
                 : DeskStateLocked(pending.desktopId);
-        StampWindowRecencyLocked(desk, confirmHwnd, processKey, title, now);
+        StampWindowRecencyLocked(desk, confirmHwnd, pending.key, title, now);
+        auto appIt = desk.appFocusMap.find(pending.key);
+        const bool appAlreadyConfirmed =
+            appIt != desk.appFocusMap.end() &&
+            appIt->second.lastConfirmedFocusTick > 0;
+        if (appAlreadyConfirmed && g_pendingFocus.valid &&
+            g_pendingFocus.hwnd == pending.hwnd) {
+            g_pendingFocus = {};
+        }
         Wh_Log(L"Preview focus confirmed: hwnd=%p %s title=\"%s\" (map=%zu "
                L"desktop=%s)",
                confirmHwnd, pending.displayName.c_str(), title.c_str(),
@@ -7023,6 +7008,7 @@ void OnPreviewMinFocusTimerElapsed(MinFocusConfirmMode mode) {
     }
 
     EnsureDecayTimerArmed();
+    StopDecayTimerIfIdle();
     RequestApplyPreviewVisuals();
 }
 
@@ -7112,13 +7098,6 @@ void OnMinFocusTimerElapsed(MinFocusConfirmMode mode) {
         settings->previewHighlightEnabled &&
         settings->previewMinFocusSeconds <=
             (std::max)(0, settings->minFocusSeconds);
-    std::wstring processKey;
-    if (alsoConfirmPreviewWindow && pending.hwnd && IsWindow(pending.hwnd)) {
-        processKey = PathFromAppKey(pending.key);
-        if (processKey.empty()) {
-            processKey = ToUpper(GetProcessImagePath(pending.processId));
-        }
-    }
 
     const ULONGLONG now = GetTickCount64();
     {
@@ -7146,7 +7125,7 @@ void OnMinFocusTimerElapsed(MinFocusConfirmMode mode) {
         // longer, leave pending so the preview timer can still fire.
         if (alsoConfirmPreviewWindow && pending.hwnd &&
             IsWindow(pending.hwnd)) {
-            StampWindowRecencyLocked(desk, pending.hwnd, processKey,
+            StampWindowRecencyLocked(desk, pending.hwnd, pending.key,
                                      pending.windowTitle, now);
         }
 
@@ -7368,6 +7347,7 @@ void HandleForegroundChanged(HWND hWnd) {
             g_pendingFocus.hwnd = hWnd;
             g_pendingFocus.processId = processId;
             g_pendingFocus.transientRetryStartTick = 0;
+            g_pendingFocus.previewTransientRetryStartTick = 0;
             if (!windowTitle.empty()) {
                 g_pendingFocus.windowTitle = windowTitle;
             }
@@ -7901,9 +7881,7 @@ void LoadSettings() {
 
     auto previewStyle = WindhawkUtils::StringSetting::make(L"previews.style");
     s.previewStyle = PreviewStyle::PlateTitle;
-    if (wcscmp(previewStyle.get(), L"ring") == 0) {
-        s.previewStyle = PreviewStyle::Ring;
-    } else if (wcscmp(previewStyle.get(), L"titleBg") == 0) {
+    if (wcscmp(previewStyle.get(), L"titleBg") == 0) {
         s.previewStyle = PreviewStyle::TitleBg;
     } else if (wcscmp(previewStyle.get(), L"plate") == 0) {
         s.previewStyle = PreviewStyle::Plate;
@@ -7912,6 +7890,7 @@ void LoadSettings() {
     } else if (wcscmp(previewStyle.get(), L"plateTitle") == 0) {
         s.previewStyle = PreviewStyle::PlateTitle;
     }
+    // Saved "ring" (removed) falls through to hybrid.
 
     s.excludedPrograms.clear();
     for (int i = 0;; i++) {
@@ -7943,10 +7922,6 @@ void LoadSettings() {
 // ---------------------------------------------------------------------------
 // Windhawk entry points
 // ---------------------------------------------------------------------------
-
-#ifndef WH_MOD_VERSION
-#define WH_MOD_VERSION L"0.9.19"
-#endif
 
 BOOL Wh_ModInit() {
     Wh_Log(L"> init " WH_MOD_VERSION);
