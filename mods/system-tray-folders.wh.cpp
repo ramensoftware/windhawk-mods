@@ -60,8 +60,9 @@ To see the exact names of your icons, turn on **Debug logging** in the mod's
 **Advanced** tab, open the tray overflow once, then click **Show log output**.
 Each icon is listed as `Icon: app="..." tooltip="..."`.
 
-Only Windows 11 builds that host the tray in `SystemTray.dll` are supported.
-Developed and tested on Windows 11 build 26300.
+Windows 11 only. Tested on build 26300, where the tray is hosted in
+`SystemTray.dll`. Older builds that host it in `Taskbar.View.dll` may work, but
+haven't been tested.
 */
 // ==/WindhawkModReadme==
 
@@ -1493,9 +1494,6 @@ INT64 WINAPI OverflowXamlIslandManager_OnWindowMessage_Hook(void* pThis,
                                                              wParam, lParam);
 }
 
-using OverflowXamlIslandManager_Hide_t = void(WINAPI*)(void* pThis);
-OverflowXamlIslandManager_Hide_t OverflowXamlIslandManager_Hide_Original;
-
 ////////////////////////////////////////////////////////////////////////////////
 // Threading helpers
 
@@ -1733,12 +1731,6 @@ bool HookSystemTraySymbols(HMODULE module) {
             {LR"(private: __int64 __cdecl winrt::SystemTray::OverflowXamlIslandManager::OnWindowMessage(struct HWND__ *,unsigned int,unsigned __int64,__int64))"},
             &OverflowXamlIslandManager_OnWindowMessage_Original,
             OverflowXamlIslandManager_OnWindowMessage_Hook,
-        },
-        {
-            {LR"(public: void __cdecl winrt::SystemTray::OverflowXamlIslandManager::Hide(void))"},
-            &OverflowXamlIslandManager_Hide_Original,
-            nullptr,
-            true,
         },
         {
             {LR"(const winrt::impl::produce<struct winrt::SystemTray::implementation::NotificationAreaOverflow,struct winrt::SystemTray::INotificationAreaOverflow>::`vftable')"},
