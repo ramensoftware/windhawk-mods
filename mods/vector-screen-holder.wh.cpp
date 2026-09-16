@@ -40,7 +40,7 @@
 // @homepage        https://vector.akilluminati47.pages.dev/
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -ld2d1 -ldwrite -ladvapi32 -luser32 -lshell32 -finput-charset=utf-8
+// @compilerOptions -ld2d1 -ldwrite -ladvapi32 -luser32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
