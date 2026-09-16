@@ -345,6 +345,7 @@ static void StartStatusEvents(HWND hwnd);
 static void StopStatusEvents();
 static void RestoreGridTrayMutation();
 static void InvalidateEnergySaverRead();
+static void RefreshMediaTooltipInfoFromStatusWorker();
 static winrt::hstring GetNetworkGlyph(NetworkState const& state);
 static NetworkState g_displayNetworkState;
 
@@ -422,6 +423,9 @@ static bool g_updateTimerFast = false;
 [[clang::no_destroy]] static wux::DispatcherTimer g_metricRefreshTimer{nullptr};
 static int g_retryCount = 0;
 static std::atomic<bool> g_unloading{false};
+static HWINEVENTHOOK g_foregroundEventHook = nullptr;
+static void CALLBACK TrayFlyoutForegroundChanged(HWINEVENTHOOK, DWORD, HWND,
+                                                 LONG, LONG, DWORD, DWORD);
 static SRWLOCK g_workerThreadsLock = SRWLOCK_INIT;
 static std::vector<HANDLE> g_workerThreads;
 
@@ -2101,6 +2105,7 @@ static void RefreshStatusSnapshot() {
         snapshot.network = GetNetworkState();
         snapshot.sound = GetSoundState();
         snapshot.audioOutputs = GetActiveAudioOutputEndpoints();
+        RefreshMediaTooltipInfoFromStatusWorker();
         snapshot.ready = true;
     } catch (...) {
         Wh_Log(L"Status snapshot refresh failed: 0x%08X", winrt::to_hresult());
@@ -3392,6 +3397,16 @@ static MediaTooltipInfo GetCurrentlyPlayingMediaInfo() {
     return LoadMediaTooltipInfo();
 }
 
+static void RefreshMediaTooltipInfoFromStatusWorker() {
+    if (!g_settings.showCurrentlyPlayingInSoundTooltip) {
+        StoreMediaTooltipInfo({});
+        return;
+    }
+    // The status worker already owns the COM/RPC refresh path. Trigger the
+    // existing cached query here so XAML tooltip rendering never creates work.
+    GetCurrentlyPlayingMediaInfo();
+}
+
 static std::wstring GetMediaTooltipTrackText(MediaTooltipInfo const& media) {
     if (!media.artist.empty() && !media.title.empty()) {
         return media.artist + L" - " + media.title;
@@ -3425,7 +3440,7 @@ static std::wstring GetSoundTooltip(SoundState const& state) {
     std::wstring tooltip = state.muted ? name + L": Muted"
                                        : name + L": " + std::to_wstring(percent) + L"%";
 
-    MediaTooltipInfo media = GetCurrentlyPlayingMediaInfo();
+    MediaTooltipInfo media = LoadMediaTooltipInfo();
     if (media.hasMedia) {
         tooltip += media.paused ? L"\n\nPaused:\n"
                                 : L"\n\nCurrently playing:\n";
@@ -3759,10 +3774,18 @@ static void EnsureTrayRefreshWindow() {
     AcquireSRWLockExclusive(&g_refreshLock);
     g_refreshWindow = hwnd;
     ReleaseSRWLockExclusive(&g_refreshLock);
+    g_foregroundEventHook = SetWinEventHook(
+        EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
+        TrayFlyoutForegroundChanged, GetCurrentProcessId(), 0,
+        WINEVENT_OUTOFCONTEXT);
     if (hwnd) StartStatusEvents(hwnd);
 }
 
 static void DestroyTrayRefreshWindow() {
+    if (g_foregroundEventHook) {
+        UnhookWinEvent(g_foregroundEventHook);
+        g_foregroundEventHook = nullptr;
+    }
     AcquireSRWLockExclusive(&g_refreshLock);
     HWND hwnd = g_refreshWindow;
     g_refreshWindow = nullptr;
@@ -4791,7 +4814,18 @@ static bool SoundUsesQuickSettings() {
 
 static std::atomic<HWND> g_openedTrayFlyout[5]{};
 static std::atomic<ULONGLONG> g_openedTrayFlyoutTick[5]{};
-static constexpr ULONGLONG kFlyoutToggleLifetimeMs = 5 * 60 * 1000;
+static void CALLBACK TrayFlyoutForegroundChanged(HWINEVENTHOOK, DWORD event,
+                                                 HWND hwnd, LONG, LONG,
+                                                 DWORD, DWORD) {
+    if (event != EVENT_SYSTEM_FOREGROUND || g_unloading) return;
+    for (size_t i = 0; i < ARRAYSIZE(g_openedTrayFlyout); ++i) {
+        const HWND recorded = g_openedTrayFlyout[i].load();
+        if (recorded && recorded != hwnd) {
+            g_openedTrayFlyout[i] = nullptr;
+            g_openedTrayFlyoutTick[i] = 0;
+        }
+    }
+}
 
 static bool IsShellHostedWindow(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return false;
@@ -4853,8 +4887,7 @@ static bool HandleTrayButtonClick(ButtonKind kind) {
     const size_t index = static_cast<size_t>(kind);
     const bool canToggle = kind != ButtonKind::Sound || SoundUsesQuickSettings();
     const HWND opened = g_openedTrayFlyout[index].load();
-    if (canToggle && GetTickCount64() - g_openedTrayFlyoutTick[index].load() <=
-            kFlyoutToggleLifetimeMs) {
+    if (canToggle && g_openedTrayFlyoutTick[index].load()) {
         if (IsRecordedTrayFlyout(opened)) {
             PostMessageW(opened, WM_CLOSE, 0, 0);
             g_openedTrayFlyout[index] = nullptr;
