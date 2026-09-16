@@ -1020,6 +1020,7 @@ struct {
     bool showBluetoothButton = true;
     bool showBatteryButton = true;
     bool showSettingsButton = true;
+    bool showWeatherButton = true;
 
     std::wstring leftItems = L"StartButton,SearchButton";
     std::wstring centerItems = L"ResourceButton,WeatherButton,SettingsButton";
@@ -1451,6 +1452,7 @@ static const std::map<std::wstring, int>& IntDefaults() {
         { L"showBluetoothButton", 1 },
         { L"showBatteryButton", 1 },
         { L"showSettingsButton", 1 },
+        { L"showWeatherButton", 1 },
         { L"showClock", 1 },
         { L"showDate", 1 },
         { L"showCpuUsage", 1 },
@@ -2469,6 +2471,7 @@ void ApplyVisibilitySettings() {
     
     setVis(L"BatteryButton", g_settings.showBatteryButton);
     setVis(L"SettingsButton", g_settings.showSettingsButton);
+    setVis(L"WeatherButton", g_settings.showWeatherButton);
     setVis(L"ResourceButton", (g_settings.showCpuUsage || g_settings.showRamUsage || g_settings.showGpuUsage));
     setVis(L"ClockButton", g_settings.showClock || g_settings.showDate);
 }
@@ -6765,8 +6768,12 @@ std::string HttpGet(const std::wstring& url) {
             body.append(buf.data(), read);
         } while (avail > 0);
     } else {
-        Wh_Log(L"[Weather] HTTP request failed (%lu)", GetLastError());
+        Wh_Log(L"[Weather] HTTP request failed (%lu) url=%s", GetLastError(),
+               url.c_str());
     }
+
+    Wh_Log(L"[Weather] HTTP response: %d bytes from %s", (int)body.size(),
+           url.c_str());
 
     WinHttpCloseHandle(request);
     WinHttpCloseHandle(connect);
@@ -6932,6 +6939,8 @@ std::vector<WeatherSearchResult> GeocodeMulti(const std::wstring& query) {
     std::wstring url =
         L"https://geocoding-api.open-meteo.com/v1/search?name=" +
         UrlEncode(query) + L"&count=15&language=en&format=json";
+    Wh_Log(L"[Weather] GeocodeMulti query='%s' url='%s'", query.c_str(),
+           url.c_str());
     std::string body = HttpGet(url);
     if (body.empty()) {
         return out;
@@ -9046,38 +9055,41 @@ void RefreshWeatherButtonContent() {
     stack.Children().Append(MakeText(nullptr, buf, 12, true));
 }
 
-void BuildWeatherLocationPicker(const wf::Collections::IVector<UIElement>& children) {
-    children.Append(MakePanelTitle(L"Change Location"));
+void RebuildWeatherSearchResultsPanel() {
+    auto it = g_namedElements.find(L"WeatherSearchResults");
+    if (it == g_namedElements.end()) return;
+    auto panel = it->second.try_as<wuxc::StackPanel>();
+    if (!panel) return;
 
-    wuxc::TextBox searchBox;
-    searchBox.Name(L"WeatherSearchBox");
-    searchBox.PlaceholderText(L"Type a city name (e.g. Warsaw)");
-    searchBox.Text(g_weatherSearchQuery);
-    searchBox.Margin(Thickness{0, 0, 0, 6});
-    searchBox.CornerRadius(MakeCorner(kRowCorner));
-    children.Append(searchBox);
-
-    wuxc::StackPanel resultsPanel;
-    resultsPanel.Name(L"WeatherSearchResults");
-    resultsPanel.Spacing(2);
-    children.Append(resultsPanel);
-
-    auto rebuildResults = [resultsPanel](const std::vector<WeatherSearchResult>& results) {
-        resultsPanel.Children().Clear();
-        if (results.empty()) {
-            if (!g_weatherSearchQuery.empty()) {
-                resultsPanel.Children().Append(MakeStatusText(L"No cities found."));
-            }
-            return;
+    // Preserve the search box's caret across the rebuild. On some systems
+    // a XAML TextBox drops its SelectionStart when its sibling panel
+    // reflows, which made the caret jump to position 0 mid-typing.
+    int savedCaret = -1;
+    auto boxIt = g_namedElements.find(L"WeatherSearchBox");
+    if (boxIt != g_namedElements.end()) {
+        if (auto box = boxIt->second.try_as<wuxc::TextBox>()) {
+            try {
+                if (box.FocusState() != FocusState::Unfocused) {
+                    savedCaret = box.SelectionStart();
+                }
+            } catch (...) {}
         }
-        for (const auto& city : results) {
+    }
+
+    panel.Children().Clear();
+    if (g_weatherSearchResults.empty()) {
+        if (!g_weatherSearchQuery.empty()) {
+            panel.Children().Append(MakeStatusText(L"No cities found."));
+        }
+    } else {
+        for (const auto& city : g_weatherSearchResults) {
             std::wstring secondary = city.admin1;
             if (!city.country.empty()) {
                 if (!secondary.empty()) secondary += L", ";
                 secondary += city.country;
             }
             WeatherSearchResult captured = city;
-            resultsPanel.Children().Append(
+            panel.Children().Append(
                 MakeListRow(nullptr, city.name, secondary, nullptr, [captured] {
                     g_settings.weatherLocationName = captured.name;
                     g_settings.weatherLatitude = captured.lat;
@@ -9088,12 +9100,51 @@ void BuildWeatherLocationPicker(const wf::Collections::IVector<UIElement>& child
                     g_weatherLocationPickerActive = false;
                     g_weatherSearchResults.clear();
                     g_weatherSearchQuery.clear();
-                    weather::EnsureFresh();
+                    RunInBackground([] {
+                        weather::EnsureFresh();
+                        RunOnUiThread([] {
+                            RefreshWeatherButtonContent();
+                            PopulateWeatherPanel();
+                        });
+                    });
                 }));
         }
-    };
+    }
 
-    rebuildResults(g_weatherSearchResults);
+    if (savedCaret >= 0) {
+        auto boxIt2 = g_namedElements.find(L"WeatherSearchBox");
+        if (boxIt2 != g_namedElements.end()) {
+            if (auto box = boxIt2->second.try_as<wuxc::TextBox>()) {
+                try { box.SelectionStart(savedCaret); } catch (...) {}
+            }
+        }
+    }
+}
+
+void BuildWeatherLocationPicker(const wf::Collections::IVector<UIElement>& children) {
+    children.Append(MakePanelTitle(L"Change Location"));
+
+    wuxc::TextBox searchBox;
+    searchBox.Name(L"WeatherSearchBox");
+    searchBox.PlaceholderText(L"Type a city name (e.g. Warsaw)");
+    searchBox.Text(g_weatherSearchQuery);
+    // Setting Text() resets the caret to position 0. Restoring it to the
+    // end keeps the caret where a typing user expects it after a rebuild.
+    if (!g_weatherSearchQuery.empty()) {
+        try { searchBox.SelectionStart(g_weatherSearchQuery.size()); } catch (...) {}
+    }
+    searchBox.Margin(Thickness{0, 0, 0, 6});
+    searchBox.CornerRadius(MakeCorner(kRowCorner));
+    children.Append(searchBox);
+    g_namedElements.insert_or_assign(L"WeatherSearchBox", searchBox);
+
+    wuxc::StackPanel resultsPanel;
+    resultsPanel.Name(L"WeatherSearchResults");
+    resultsPanel.Spacing(2);
+    children.Append(resultsPanel);
+    g_namedElements.insert_or_assign(L"WeatherSearchResults", resultsPanel);
+
+    RebuildWeatherSearchResultsPanel();
 
     searchBox.TextChanged([](auto&& sender, auto&&) {
         try {
@@ -9102,14 +9153,12 @@ void BuildWeatherLocationPicker(const wf::Collections::IVector<UIElement>& child
             g_weatherSearchQuery = query;
             if (query.empty()) {
                 g_weatherSearchResults.clear();
-                if (g_weatherLocationPickerActive) {
-                    RepopulateLater(PopulateWeatherPanel);
-                }
+                RebuildWeatherSearchResultsPanel();
                 return;
             }
-            // Debounce: only fire the geocoding request once the user has
-            // stopped typing. Without this, typing "Amsterdam" issues one
-            // HTTP request per keystroke against the public Open-Meteo API.
+            // Debounce: only fire the geocoding request 400 ms after the
+            // last keystroke, so typing "Amsterdam" issues one request
+            // instead of nine against the public Open-Meteo API.
             if (!g_weatherSearchDebounceTimer) {
                 g_weatherSearchDebounceTimer = DispatcherTimer();
                 g_weatherSearchDebounceTimer.Interval(
@@ -9121,14 +9170,20 @@ void BuildWeatherLocationPicker(const wf::Collections::IVector<UIElement>& child
                         if (q.empty()) return;
                         int token = g_weatherSearchToken.load();
                         RunInBackground([q, token] {
+                            Wh_Log(L"[Weather] Searching: '%s' (token %d)",
+                                   q.c_str(), token);
                             auto results = weather::GeocodeMulti(q);
+                            Wh_Log(L"[Weather] Results: %d for '%s' (token %d)",
+                                   (int)results.size(), q.c_str(), token);
                             RunOnUiThread([results = std::move(results),
-                                           token]() mutable {
-                                if (g_weatherSearchToken.load() != token) return;
-                                g_weatherSearchResults = std::move(results);
-                                if (g_weatherLocationPickerActive) {
-                                    RepopulateLater(PopulateWeatherPanel);
+                                           token, q]() mutable {
+                                if (g_weatherSearchToken.load() != token) {
+                                    Wh_Log(L"[Weather] Discarding stale response for '%s'",
+                                           q.c_str());
+                                    return;
                                 }
+                                g_weatherSearchResults = std::move(results);
+                                RebuildWeatherSearchResultsPanel();
                             });
                         });
                     });
@@ -11418,6 +11473,7 @@ void BuildButtonsPage(wuxc::StackPanel& p) {
     AddBoolRow(p, L"Show Bluetooth button", L"showBluetoothButton");
     AddBoolRow(p, L"Show Battery button",   L"showBatteryButton");
     AddBoolRow(p, L"Show Settings button",  L"showSettingsButton");
+    AddBoolRow(p, L"Show Weather button",   L"showWeatherButton");
 
     p.Children().Append(MakeHeading(L"Clock & Date"));
     AddBoolRow(p, L"Show clock", L"showClock");
@@ -11465,6 +11521,7 @@ static std::wstring BuildSettingsJson() {
     addInt(L"showWifiButton");
     addInt(L"showBluetoothButton");
     addInt(L"showBatteryButton");
+    addInt(L"showWeatherButton");
     addInt(L"showCpuUsage");
     addInt(L"showRamUsage");
     addInt(L"showGpuUsage");
@@ -12070,6 +12127,7 @@ wuxc::Grid BuildWindowContent() {
                 L"centerContent", L"showStartButton", L"showSearchButton",
                 L"showDisplayButton", L"showSoundButton", L"showWifiButton",
                 L"showBluetoothButton", L"showBatteryButton",
+                L"showWeatherButton",
                 L"showCpuUsage", L"showRamUsage", L"showGpuUsage",
             };
             for (auto* k : keys) Wh_SetStringValue(k, L"");
@@ -14122,6 +14180,10 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
             g_weatherSearchDebounceTimer.Stop();
             g_weatherSearchDebounceTimer = nullptr;
         }
+        if (g_weatherSearchDebounceTimer) {
+            g_weatherSearchDebounceTimer.Stop();
+            g_weatherSearchDebounceTimer = nullptr;
+        }
 
         // Release wallpaper layer and other no_destroy globals
         if (g_wallpaperLayer) g_wallpaperLayer = nullptr;
@@ -14224,6 +14286,7 @@ void LoadSettings() {
     g_settings.showBluetoothButton = ReadIntSetting(L"showBluetoothButton", 1) != 0;
     g_settings.showBatteryButton = ReadIntSetting(L"showBatteryButton", 1) != 0;
     g_settings.showSettingsButton = ReadIntSetting(L"showSettingsButton", 1) != 0;
+    g_settings.showWeatherButton = ReadIntSetting(L"showWeatherButton", 1) != 0;
 
     g_settings.leftItems = GetStringSettingCopy(L"leftItems");
     g_settings.centerItems = GetStringSettingCopy(L"centerItems");
