@@ -93,6 +93,9 @@ You can add your own shortcuts using these templates in the settings:
   * Path: `vlc.exe` | Args: `%f` | Mode: `batch`
 * **Copy Just File Names to Clipboard**
   * Path: `powershell.exe` | Args: `-WindowStyle Hidden -Command "Set-Clipboard -Value '%n'"` | Mode: `batch`
+
+### Attribution & Acknowledgments
+Shell window inspection logic and COM GUID declarations adapt techniques from `explorer-command-bar` (m417z, MIT). Settings toggling follows patterns established in `toggle-hidden-files` (m417z, MIT).
 */
 // ==/WindhawkModReadme==
 
@@ -166,6 +169,8 @@ You can add your own shortcuts using these templates in the settings:
 #include <shlguid.h>
 #include <shlwapi.h>
 #include <vector>
+#include <functional>
+#include <mutex>
 #include <string>
 #include <algorithm>
 #include <atomic>
@@ -188,7 +193,9 @@ struct CustomShortcut {
 std::vector<CustomShortcut> g_shortcuts;
 std::wstring g_escAction = L"disabled";
 static std::atomic<bool> g_isExecutingInternal{false};
-static std::atomic<long> g_activeThreads{0};
+static std::mutex g_threadsMutex;
+static std::vector<HANDLE> g_threads;
+static std::atomic<bool> g_unloading{false};
 
 static constexpr CLSID kCLSID_ShellWindows = {
     0x9ba05972, 0xf6a8, 0x11cf, {0xa4, 0x42, 0x00, 0xa0, 0xc9, 0x0a, 0x8f, 0x39}
@@ -393,9 +400,8 @@ IShellView* GetActiveShellView(HWND hExplorerWnd) {
     return nullptr;
 }
 
-std::wstring GetActiveFolderPath(HWND hwndExplorer) {
+std::wstring GetActiveFolderPath(IShellView* psv) {
     std::wstring result;
-    IShellView* psv = GetActiveShellView(hwndExplorer);
     if (!psv) return result;
 
     IFolderView* pfv = nullptr;
@@ -404,10 +410,12 @@ std::wstring GetActiveFolderPath(HWND hwndExplorer) {
         if (SUCCEEDED(pfv->GetFolder(IID_PPV_ARGS(&ppf2)))) {
             PIDLIST_ABSOLUTE pidl = nullptr;
             if (SUCCEEDED(ppf2->GetCurFolder(&pidl)) && pidl) {
-                // Support extended paths beyond MAX_PATH (up to 32,767 chars)
                 std::vector<WCHAR> buffer(UNICODE_STRING_MAX_CHARS);
                 if (SHGetPathFromIDListEx(pidl, buffer.data(), static_cast<DWORD>(buffer.size()), GPFIDL_DEFAULT)) {
                     result = buffer.data();
+                    if (result.rfind(L"\\\\?\\", 0) == 0) {
+                        result = result.substr(4);
+                    }
                 }
                 CoTaskMemFree(pidl);
             }
@@ -415,13 +423,11 @@ std::wstring GetActiveFolderPath(HWND hwndExplorer) {
         }
         pfv->Release();
     }
-    psv->Release();
     return result;
 }
 
-std::vector<std::wstring> GetSelectedPaths(HWND hwndExplorer) {
+std::vector<std::wstring> GetSelectedPaths(IShellView* psv) {
     std::vector<std::wstring> files;
-    IShellView* psv = GetActiveShellView(hwndExplorer);
     if (!psv) return files;
 
     IDataObject* pdo = nullptr;
@@ -432,7 +438,6 @@ std::vector<std::wstring> GetSelectedPaths(HWND hwndExplorer) {
             HDROP hDrop = (HDROP)stg.hGlobal;
             UINT fileCount = DragQueryFileW(hDrop, 0xFFFFFFFF, nullptr, 0);
             for (UINT j = 0; j < fileCount; j++) {
-                // Pass NULL to get the exact required buffer length, including terminator
                 UINT requiredLen = DragQueryFileW(hDrop, j, nullptr, 0);
                 if (requiredLen > 0) {
                     std::vector<WCHAR> pathBuf(requiredLen + 1);
@@ -445,61 +450,9 @@ std::vector<std::wstring> GetSelectedPaths(HWND hwndExplorer) {
         }
         pdo->Release();
     }
-    psv->Release();
     return files;
 }
-void RefreshAllExplorerViews() {
-    IShellWindows* pShellWindows = nullptr;
-    if (FAILED(CoCreateInstance(kCLSID_ShellWindows, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&pShellWindows))) || !pShellWindows) {
-        return;
-    }
 
-    long count = 0;
-    pShellWindows->get_Count(&count);
-
-    for (long i = 0; i < count; i++) {
-        VARIANT index;
-        VariantInit(&index);
-        index.vt = VT_I4;
-        index.lVal = i;
-
-        IDispatch* pDispatch = nullptr;
-        if (SUCCEEDED(pShellWindows->Item(index, &pDispatch)) && pDispatch) {
-            IServiceProvider* pServiceProvider = nullptr;
-            if (SUCCEEDED(pDispatch->QueryInterface(IID_PPV_ARGS(&pServiceProvider)))) {
-                IShellBrowser* pShellBrowser = nullptr;
-                if (SUCCEEDED(pServiceProvider->QueryService(kSID_STopLevelBrowser, IID_PPV_ARGS(&pShellBrowser)))) {
-                    HWND hBrowserWnd = nullptr;
-                    if (SUCCEEDED(pShellBrowser->GetWindow(&hBrowserWnd)) && hBrowserWnd) {
-                        // 41504 is the native shell command ID for Refresh in File Explorer
-                        PostMessageW(hBrowserWnd, WM_COMMAND, 41504, 0);
-                    } else {
-                        // Fallback to COM refresh if browser HWND is unavailable
-                        IShellView* pShellView = nullptr;
-                        if (SUCCEEDED(pShellBrowser->QueryActiveShellView(&pShellView)) && pShellView) {
-                            pShellView->Refresh();
-                            pShellView->Release();
-                        }
-                    }
-                    pShellBrowser->Release();
-                }
-                pServiceProvider->Release();
-            }
-            pDispatch->Release();
-        }
-    }
-
-    pShellWindows->Release();
-}
-
-void ReplaceAll(std::wstring& str, const std::wstring& from, const std::wstring& to) {
-    if (from.empty()) return;
-    size_t start_pos = 0;
-    while ((start_pos = str.find(from, start_pos)) != std::wstring::npos) {
-        str.replace(start_pos, from.length(), to);
-        start_pos += to.length();
-    }
-}
 
 std::wstring JoinPaths(const std::vector<std::wstring>& paths, bool forceQuotes = true) {
     std::wstring res;
@@ -518,10 +471,8 @@ std::wstring GetFileNamesOnly(const std::vector<std::wstring>& paths, bool force
     std::wstring res;
     for (const auto& p : paths) {
         if (!res.empty()) res += L" ";
-        WCHAR nameBuf[MAX_PATH];
-        wcscpy_s(nameBuf, p.c_str());
-        PathStripPathW(nameBuf);
-        std::wstring name(nameBuf);
+        PCWSTR namePtr = PathFindFileNameW(p.c_str());
+std::wstring name = namePtr ? namePtr : L"";
         if (forceQuotes || name.find(L' ') != std::wstring::npos) {
             res += L"\"" + name + L"\"";
         } else {
@@ -537,47 +488,74 @@ std::wstring GetFileExtension(const std::vector<std::wstring>& paths) {
     return ext ? ext : L"";
 }
 std::wstring ExpandTokens(
-    std::wstring pattern,
+    const std::wstring& pattern,
     const std::wstring& activeDir,
     const std::vector<std::wstring>& allItems,
     const std::vector<std::wstring>& filesOnly,
     const std::vector<std::wstring>& foldersOnly
 ) {
-    // 1. Longest compound tokens first
-    ReplaceAll(pattern, L"%files", JoinPaths(filesOnly, true));
-    ReplaceAll(pattern, L"%folders", JoinPaths(foldersOnly, true));
+    std::wstring result;
+    result.reserve(pattern.size() * 2);
 
-    std::wstring smartDir = !foldersOnly.empty() ? foldersOnly[0] : activeDir;
-    if (!smartDir.empty() && smartDir.back() == L'\\') smartDir += L'\\';
-    ReplaceAll(pattern, L"%d_smart", smartDir);
+    for (size_t i = 0; i < pattern.size(); ) {
+        if (pattern[i] != L'%') {
+            result.push_back(pattern[i++]);
+            continue;
+        }
 
-    // Parent directory %p
-    WCHAR parentBuf[MAX_PATH];
-    wcscpy_s(parentBuf, activeDir.c_str());
-    PathRemoveBackslashW(parentBuf);
-    PathRemoveFileSpecW(parentBuf);
-    ReplaceAll(pattern, L"%p", parentBuf);
-
-    // 2. Secondary & single-character tokens
-    ReplaceAll(pattern, L"%f", JoinPaths(allItems, true));
-    ReplaceAll(pattern, L"%1", allItems.empty() ? L"" : (L"\"" + allItems[0] + L"\""));
-    ReplaceAll(pattern, L"%n", GetFileNamesOnly(allItems, true));
-    ReplaceAll(pattern, L"%c", std::to_wstring(allItems.size()));
-    ReplaceAll(pattern, L"%ext", GetFileExtension(allItems));
-    ReplaceAll(pattern, L"%s", JoinPaths(allItems, false));
-
-    std::wstring activeWithTrailing = activeDir;
-    if (!activeWithTrailing.empty() && activeWithTrailing.back() == L'\\') activeWithTrailing += L'\\';
-    ReplaceAll(pattern, L"%d", activeWithTrailing);
-
-    return pattern;
+        if (pattern.compare(i, 6, L"%files") == 0) {
+            result += JoinPaths(filesOnly, true);
+            i += 6;
+        } else if (pattern.compare(i, 8, L"%folders") == 0) {
+            result += JoinPaths(foldersOnly, true);
+            i += 8;
+        } else if (pattern.compare(i, 8, L"%d_smart") == 0) {
+            std::wstring smartDir = !foldersOnly.empty() ? foldersOnly[0] : activeDir;
+            if (!smartDir.empty() && smartDir.back() == L'\\') smartDir += L'\\';
+            result += smartDir;
+            i += 8;
+        } else if (pattern.compare(i, 4, L"%ext") == 0) {
+            result += GetFileExtension(allItems);
+            i += 4;
+        } else if (pattern.compare(i, 2, L"%f") == 0) {
+            result += JoinPaths(allItems, true);
+            i += 2;
+        } else if (pattern.compare(i, 2, L"%1") == 0) {
+            result += allItems.empty() ? L"" : (L"\"" + allItems[0] + L"\"");
+            i += 2;
+        } else if (pattern.compare(i, 2, L"%n") == 0) {
+            result += GetFileNamesOnly(allItems, true);
+            i += 2;
+        } else if (pattern.compare(i, 2, L"%c") == 0) {
+            result += std::to_wstring(allItems.size());
+            i += 2;
+        } else if (pattern.compare(i, 2, L"%s") == 0) {
+            result += JoinPaths(allItems, false);
+            i += 2;
+        } else if (pattern.compare(i, 2, L"%d") == 0) {
+            std::wstring activeWithTrailing = activeDir;
+            if (!activeWithTrailing.empty() && activeWithTrailing.back() == L'\\') activeWithTrailing += L'\\';
+            result += activeWithTrailing;
+            i += 2;
+        } else if (pattern.compare(i, 2, L"%p") == 0) {
+            std::wstring parent = activeDir;
+            while (!parent.empty() && parent.back() == L'\\') parent.pop_back();
+            size_t slash = parent.find_last_of(L'\\');
+            result += (slash == std::wstring::npos) ? std::wstring() : parent.substr(0, slash);
+            i += 2;
+        } else {
+            result.push_back(pattern[i++]);
+        }
+    }
+    return result;
 }
-void ExecuteApp(const std::wstring& cmd, const std::wstring& params, const std::wstring& workDir, HWND hwndParent) {
+
+void ExecuteApp(const std::wstring& cmd, const std::wstring& params, const std::wstring& workDir) {
     std::wstring targetPath = ResolveCommandPath(cmd);
 
     SHELLEXECUTEINFOW sei = { sizeof(sei) };
-    sei.fMask = SEE_MASK_NOASYNC;
-    sei.hwnd = hwndParent;
+    sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+    sei.hwnd = nullptr;
     sei.lpVerb = L"open";
     sei.lpFile = targetPath.c_str();
     sei.lpParameters = params.empty() ? nullptr : params.c_str();
@@ -589,27 +567,59 @@ void ExecuteApp(const std::wstring& cmd, const std::wstring& params, const std::
     }
 }
 
-void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd) {
-    // 1. Open Folder Options
-    if (_wcsicmp(command.c_str(), L"internal:folderOptions") == 0) {
-        SHELLEXECUTEINFOW sei = { sizeof(sei) };
-        sei.fMask = SEE_MASK_NOASYNC;
-        sei.hwnd = rootHwnd;
-        sei.lpVerb = L"open";
-        sei.lpFile = L"rundll32.exe";
-        sei.lpParameters = L"shell32.dll,Options_RunDLL 0";
-        sei.nShow = SW_SHOWNORMAL;
-        ShellExecuteExW(&sei);
-        return;
+void QueueBackgroundWork(std::function<void()> task) {
+    auto* fnPtr = new std::function<void()>(std::move(task));
+
+    HANDLE hThread = CreateThread(nullptr, 0, [](LPVOID param) -> DWORD {
+        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+        std::unique_ptr<std::function<void()>> fn(reinterpret_cast<std::function<void()>*>(param));
+        
+        (*fn)();
+
+        CoUninitialize();
+        return 0;
+    }, fnPtr, 0, nullptr);
+
+    if (hThread) {
+        std::lock_guard<std::mutex> lock(g_threadsMutex);
+        auto it = g_threads.begin();
+        while (it != g_threads.end()) {
+            if (WaitForSingleObject(*it, 0) == WAIT_OBJECT_0) {
+                CloseHandle(*it);
+                it = g_threads.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        g_threads.push_back(hThread);
+    } else {
+        delete fnPtr;
     }
+}
+
+void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd) {
+// 1. Open Folder Options (Async via background worker)
+if (_wcsicmp(command.c_str(), L"internal:folderOptions") == 0) {
+    QueueBackgroundWork([]() {
+        ExecuteApp(L"rundll32.exe", L"shell32.dll,Options_RunDLL 0", L"");
+    });
+    return;
+}
+
 
     // 2. Create New Text Document & Focus/Select
     if (_wcsicmp(command.c_str(), L"internal:newTextFile") == 0) {
         if (g_isExecutingInternal.exchange(true)) return;
         struct AutoReset { ~AutoReset() { g_isExecutingInternal = false; } } autoReset;
 
-        std::wstring currentDir = GetActiveFolderPath(rootHwnd);
-        if (currentDir.empty()) return;
+        IShellView* psv = GetActiveShellView(rootHwnd);
+        if (!psv) return;
+
+        std::wstring currentDir = GetActiveFolderPath(psv);
+        if (currentDir.empty()) {
+            psv->Release();
+            return;
+        }
 
         std::wstring targetFilePath = currentDir + L"\\New Text Document.txt";
         int counter = 2;
@@ -621,21 +631,17 @@ void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd) {
         if (hFile != INVALID_HANDLE_VALUE) {
             CloseHandle(hFile);
             SHChangeNotify(SHCNE_CREATE, SHCNF_PATHW, targetFilePath.c_str(), nullptr);
-            Sleep(80);
 
-            IShellView* psv = GetActiveShellView(rootHwnd);
-            if (psv) {
-                PIDLIST_ABSOLUTE pidlTarget = nullptr;
-                if (SUCCEEDED(SHParseDisplayName(targetFilePath.c_str(), nullptr, &pidlTarget, 0, nullptr)) && pidlTarget) {
-                    PITEMID_CHILD pidlChild = ILFindLastID(pidlTarget);
-                    if (pidlChild) {
-                        psv->SelectItem(pidlChild, SVSI_SELECT | SVSI_FOCUSED | SVSI_DESELECTOTHERS | SVSI_ENSUREVISIBLE);
-                    }
-                    CoTaskMemFree(pidlTarget);
+            PIDLIST_ABSOLUTE pidlTarget = nullptr;
+            if (SUCCEEDED(SHParseDisplayName(targetFilePath.c_str(), nullptr, &pidlTarget, 0, nullptr)) && pidlTarget) {
+                PITEMID_CHILD pidlChild = ILFindLastID(pidlTarget);
+                if (pidlChild) {
+                    psv->SelectItem(pidlChild, SVSI_SELECT | SVSI_FOCUSED | SVSI_DESELECTOTHERS | SVSI_ENSUREVISIBLE);
                 }
-                psv->Release();
+                CoTaskMemFree(pidlTarget);
             }
         }
+        psv->Release();
         return;
     }
 
@@ -644,8 +650,14 @@ void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd) {
         if (g_isExecutingInternal.exchange(true)) return;
         struct AutoReset { ~AutoReset() { g_isExecutingInternal = false; } } autoReset;
 
-        std::wstring currentDir = GetActiveFolderPath(rootHwnd);
-        if (currentDir.empty()) return;
+        IShellView* psv = GetActiveShellView(rootHwnd);
+        if (!psv) return;
+
+        std::wstring currentDir = GetActiveFolderPath(psv);
+        if (currentDir.empty()) {
+            psv->Release();
+            return;
+        }
 
         std::wstring targetFolderPath = currentDir + L"\\New Folder";
         int counter = 2;
@@ -655,21 +667,17 @@ void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd) {
 
         if (CreateDirectoryW(targetFolderPath.c_str(), nullptr)) {
             SHChangeNotify(SHCNE_MKDIR, SHCNF_PATHW, targetFolderPath.c_str(), nullptr);
-            Sleep(80);
 
-            IShellView* psv = GetActiveShellView(rootHwnd);
-            if (psv) {
-                PIDLIST_ABSOLUTE pidlTarget = nullptr;
-                if (SUCCEEDED(SHParseDisplayName(targetFolderPath.c_str(), nullptr, &pidlTarget, 0, nullptr)) && pidlTarget) {
-                    PITEMID_CHILD pidlChild = ILFindLastID(pidlTarget);
-                    if (pidlChild) {
-                        psv->SelectItem(pidlChild, SVSI_SELECT | SVSI_EDIT | SVSI_DESELECTOTHERS | SVSI_ENSUREVISIBLE);
-                    }
-                    CoTaskMemFree(pidlTarget);
+            PIDLIST_ABSOLUTE pidlTarget = nullptr;
+            if (SUCCEEDED(SHParseDisplayName(targetFolderPath.c_str(), nullptr, &pidlTarget, 0, nullptr)) && pidlTarget) {
+                PITEMID_CHILD pidlChild = ILFindLastID(pidlTarget);
+                if (pidlChild) {
+                    psv->SelectItem(pidlChild, SVSI_SELECT | SVSI_EDIT | SVSI_DESELECTOTHERS | SVSI_ENSUREVISIBLE);
                 }
-                psv->Release();
+                CoTaskMemFree(pidlTarget);
             }
         }
+        psv->Release();
         return;
     }
 
@@ -698,49 +706,31 @@ void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd) {
 
     // 5. Empty Recycle Bin Safely (Using Native OS Confirmation Prompt)
     if (_wcsicmp(command.c_str(), L"internal:emptyRecycleBin") == 0) {
+    QueueBackgroundWork([rootHwnd]() {
         SHEmptyRecycleBinW(rootHwnd, nullptr, 0);
-        return;
-    }
+    });
+    return;
+}
 
     // 6. Toggle Hidden Files & Force Refresh Active View
     if (_wcsicmp(command.c_str(), L"internal:toggleHiddenFiles") == 0) {
-        HKEY hKey;
-        if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", 0, KEY_READ | KEY_WRITE, &hKey) == ERROR_SUCCESS) {
-            DWORD val = 1, size = sizeof(val);
-            if (RegQueryValueExW(hKey, L"Hidden", nullptr, nullptr, (LPBYTE)&val, &size) == ERROR_SUCCESS) {
-                val = (val == 1) ? 2 : 1;
-                RegSetValueExW(hKey, L"Hidden", 0, REG_DWORD, (const BYTE*)&val, sizeof(val));
-                RegFlushKey(hKey); // Commit immediately to disk
-            }
-            RegCloseKey(hKey);
-
-            // Small delay to let the WinUI folder collection recognize registry state
-            Sleep(40);
-
-            RefreshAllExplorerViews();
-        }
-        return;
-    }
+    SHELLSTATE ss{};
+    SHGetSetSettings(&ss, SSF_SHOWALLOBJECTS, FALSE);
+    ss.fShowAllObjects = !ss.fShowAllObjects;
+    SHGetSetSettings(&ss, SSF_SHOWALLOBJECTS, TRUE);
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+    return;
+}
 
     // 7. Toggle File Name Extensions & Force Refresh Active View
     if (_wcsicmp(command.c_str(), L"internal:toggleFileExtensions") == 0) {
-        HKEY hKey;
-        if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", 0, KEY_READ | KEY_WRITE, &hKey) == ERROR_SUCCESS) {
-            DWORD val = 0, size = sizeof(val);
-            if (RegQueryValueExW(hKey, L"HideFileExt", nullptr, nullptr, (LPBYTE)&val, &size) == ERROR_SUCCESS) {
-                val = (val == 0) ? 1 : 0;
-                RegSetValueExW(hKey, L"HideFileExt", 0, REG_DWORD, (const BYTE*)&val, sizeof(val));
-                RegFlushKey(hKey); // Commit immediately to disk
-            }
-            RegCloseKey(hKey);
-
-            // Small delay to let the WinUI folder collection recognize registry state
-            Sleep(40);
-
-            RefreshAllExplorerViews();
-        }
-        return;
-    }
+    SHELLSTATE ss{};
+    SHGetSetSettings(&ss, SSF_SHOWEXTENSIONS, FALSE);
+    ss.fShowExtensions = !ss.fShowExtensions;
+    SHGetSetSettings(&ss, SSF_SHOWEXTENSIONS, TRUE);
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+    return;
+}
 
     Wh_Log(L"Unknown internal command: %s", command.c_str());
 }
@@ -749,7 +739,6 @@ struct LaunchTask {
     std::wstring path;
     std::vector<std::wstring> commands;
     std::wstring workDir;
-    HWND parentHwnd;
 };
 
 void RunShortcut(const CustomShortcut& sc, HWND rootHwnd) {
@@ -759,9 +748,13 @@ void RunShortcut(const CustomShortcut& sc, HWND rootHwnd) {
         return;
     }
 
-    // 2. Query COM/Explorer state directly on UI thread
-    std::wstring activeDir = GetActiveFolderPath(rootHwnd);
-    std::vector<std::wstring> allSelected = GetSelectedPaths(rootHwnd);
+    // 2. Query COM/Explorer state ONCE on the UI thread
+    IShellView* psv = GetActiveShellView(rootHwnd);
+    std::wstring activeDir = GetActiveFolderPath(psv);
+    std::vector<std::wstring> allSelected = GetSelectedPaths(psv);
+    if (psv) {
+        psv->Release();
+    }
 
     std::vector<std::wstring> filesOnly;
     std::vector<std::wstring> foldersOnly;
@@ -774,11 +767,10 @@ void RunShortcut(const CustomShortcut& sc, HWND rootHwnd) {
         }
     }
 
-    // 3. Build launch parameters using ExpandTokens
+    // 3. Build launch task parameters using single-pass ExpandTokens
     auto* task = new LaunchTask();
     task->path = sc.path;
     task->workDir = activeDir;
-    task->parentHwnd = rootHwnd;
 
     if (sc.launchMode == L"loop_files") {
         for (const auto& file : filesOnly) {
@@ -794,21 +786,39 @@ void RunShortcut(const CustomShortcut& sc, HWND rootHwnd) {
         task->commands.push_back(ExpandTokens(sc.argsPattern, activeDir, allSelected, filesOnly, foldersOnly));
     }
 
-    // 4. Launch in background thread safely without leaking handles
-    g_activeThreads.fetch_add(1);
+    // 4. Launch safely in worker thread with COM init and unload tracking
     HANDLE hThread = CreateThread(nullptr, 0, [](LPVOID param) -> DWORD {
+        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
         std::unique_ptr<LaunchTask> t(reinterpret_cast<LaunchTask*>(param));
+
         for (const auto& cmdArgs : t->commands) {
-            ExecuteApp(t->path, cmdArgs, t->workDir, t->parentHwnd);
+            if (g_unloading.load()) {
+                break;
+            }
+            ExecuteApp(t->path, cmdArgs, t->workDir);
         }
-        g_activeThreads.fetch_sub(1);
+
+        CoUninitialize();
         return 0;
     }, task, 0, nullptr);
 
     if (hThread) {
-        CloseHandle(hThread); // Prevents handle leak
+        std::lock_guard<std::mutex> lock(g_threadsMutex);
+
+        // Lazily reap handles of threads that finished executing
+        auto it = g_threads.begin();
+        while (it != g_threads.end()) {
+            if (WaitForSingleObject(*it, 0) == WAIT_OBJECT_0) {
+                CloseHandle(*it);
+                it = g_threads.erase(it);
+            } else {
+                ++it;
+            }
+        }
+
+        // Store active handle so Wh_ModUninit can join safely
+        g_threads.push_back(hThread);
     } else {
-        g_activeThreads.fetch_sub(1);
         delete task;
     }
 }
@@ -952,8 +962,14 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
-    // Wait for running background worker threads before unmapping DLL
-    while (g_activeThreads.load() > 0) {
-        Sleep(20);
+    g_unloading = true;
+    std::vector<HANDLE> threadsToJoin;
+    {
+        std::lock_guard<std::mutex> lock(g_threadsMutex);
+        threadsToJoin.swap(g_threads);
+    }
+    for (HANDLE h : threadsToJoin) {
+        WaitForSingleObject(h, INFINITE);
+        CloseHandle(h);
     }
 }
