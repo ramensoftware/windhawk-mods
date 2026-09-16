@@ -57,7 +57,7 @@ and make sure that `LogonUI.exe` is in the list.
 ## Notes for advanced users
 * Please make sure `LogonUI.exe` isn't excluded by any means, such as a wildcard entry in the global exclusion list or process inclusion options in this mod's advanced settings page.
 * This mod includes safety checks before enabling classic logoff behavior, such as verifying that the mod loaded successfully into LogonUI.exe, to prevent the logoff sequence from getting stuck when misconfigured.
-    * You may disable the safety checks by enabling the last option on the mod settings page, but before doing so, please remember to press Ctrl+Alt+Del if logoff gets stuck. This will help you get out of such a state.
+    * You may disable the safety checks by enabling the skip option on the mod settings page, but before doing so, please remember to press Ctrl+Alt+Del if logoff gets stuck. This will help you get out of such a state.
 * To see the mod log output during a logoff, run `"C:\Program Files\Windhawk\UI\resources\app\extensions\windhawk\files\DbgViewMini.exe" --pattern "[WH] *" --no-buffering` and open another blocking window (e.g. unsaved mspaint).
     * It survives longer than the Windhawk UI, and it usually stays alive when Cancel is pressed.
     * Replace the `C:\Program Files\Windhawk` part with your Windhawk installation directory if you installed it elsewhere.
@@ -94,8 +94,8 @@ and make sure that `LogonUI.exe` is in the list.
 - authUxCancelHandling: false
   $name: (Advanced) Use alternative workaround for canceling BSDR with the classic logoff sequence
   $name:ko-KR: (고급) 고전 로그오프 절차를 사용 중일 때 다른 임시 해결책 사용
-  $description: Try enabling this if you are experiencing problematic behavior when clicking Cancel with the old logoff sequence option enabled, especially if you had no such issue with the original AuthUX BSDR.
-  $description:ko-KR: 고전 로그오프 절차 옵션을 활성화한 채로 취소 버튼을 누를 때 이상 동작이 발생할 경우 이 옵셥을 사용해보십시오. 원본 AuthUX BSDR에서 그러한 문제를 겪지 않았을 경우 특히 시도해 보십시오.
+  $description: "Try enabling this if you are experiencing problematic behavior when clicking Cancel with the old logoff sequence option enabled, especially if you had no such issue with the original AuthUX BSDR.\nThis option will make the mod force exit LogonUI after clicking Cancel, just like AuthUX BSDR. This option has no effect if the old sequence option is not enabled."
+  $description:ko-KR: "고전 로그오프 절차 옵션을 활성화한 채로 취소 버튼을 누를 때 이상 동작이 발생할 경우 이 옵션을 사용해보십시오. 원본 AuthUX BSDR에서 그러한 문제를 겪지 않았을 경우 특히 시도해 보십시오.\n이 옵션은 AuthUX BSDR처럼 취소를 클릭하면 모드가 LogonUI를 강제로 종료하게 합니다. 고전 로그오프 절차 옵션이 꺼져 있으면 이 옵션은 아무것도 하지 않습니다."
 */
 // ==/WindhawkModSettings==
 
@@ -1923,6 +1923,7 @@ namespace CustomBSDR {
     bool isCanceling = false;
     int appListWidth = 0;
     int scrollBarWidth = 0;
+    int lastDpi = 96;
 
     // app list data stuff
     struct AppTile {
@@ -2826,7 +2827,7 @@ void CustomBSDR::UpdateAppListLayout(bool dpiChanged) {
         maxHeight = minHeight;
 
     int newHeight = totalContentHeight;
-    // Ignore previous height on DPI change when calculating wheter to allow resizing
+    // Ignore previous height on DPI change when calculating whether to allow resizing
     if (!dpiChanged && paintedFirstFrame && newHeight < visibleHeight)
         newHeight = visibleHeight;
     // Allow decreasing before the first hBgWnd WM_PAINT or on DPI change
@@ -2862,6 +2863,10 @@ void CustomBSDR::UpdateAppListLayout(bool dpiChanged) {
     // Calculate scroll info
     int maxScroll = totalContentHeight - visibleHeight;
     if (maxScroll < 0) maxScroll = 0;
+
+    if (dpiChanged) {
+        scrollPos = MulDiv(scrollPos, GetDpiForWindow(hDlg), lastDpi);
+    }
 
     if (scrollPos > maxScroll) {
         scrollPos = maxScroll;
@@ -2966,8 +2971,19 @@ void CustomBSDR::Cancel(bool noExitProcess) {
         // causing issues with subsequent session ends, unless it's killed manually or Ctrl+Alt+Del is pressed once
         // It happens because the event created in CLogonController::DoModal never gets fired in this state somehow
         // and makes the thread stuck in WaitForSingleObject
-        // So force signal the event as a not so clean workaround (still better than previous ExitProcess workaround)
-        // (I still haven't found neither the culprint nor which code signals that event)
+
+        // The new default desktop cancel workaround below, introduced in this mod seems to cause a weird behavior with rare chance,
+        // such as Winlogon not getting out of the mid-logoff state until Ctrl+Alt+Del is pressed
+        // I have no idea why, how, when this error even occurs
+        // If I recall correctly, the original AuthUX BSDR (which only used ExitProcess workaround) had no such issue, so make this an option
+        // and wait for user feedback until enough data about this error is collected (to properly fix or just remove the new workaround)
+        bool isExiting = g_isExiting.load();
+        if (!isExiting && !noExitProcess && Wh_GetIntSetting(L"authUxCancelHandling")) {
+            ExitProcess(0);
+        }
+
+        // Force signal the event as a not so clean workaround (still better than previous ExitProcess workaround)
+        // (I still haven't found neither the culprit nor which code signals that event)
         bool signaled = false;
         {
             std::lock_guard lock(g_doModalExitEventMutex);
@@ -2983,7 +2999,7 @@ void CustomBSDR::Cancel(bool noExitProcess) {
             }
         }
 
-        if (!signaled && !noExitProcess && !g_isExiting.load()) {
+        if (!signaled && !noExitProcess && !isExiting) {
             // Event capture failed, oh noes!
             // Here comes the old terrible workaround
             // Note: this does not cause any user-facing issues because there is no visible LogonUI window in the default desktop at this point
@@ -3080,6 +3096,10 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             return FALSE;
         }
         dlgInitFailed = false;
+
+        lastDpi = GetDpiForWindow(hWndDlg);
+        if (!lastDpi)
+            lastDpi = 96;
 
         // Original Windows Vista/7 app tile coords
         tileLayoutWithReason = {
@@ -3322,16 +3342,6 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             }
             Resolve(BlockedShutdownResolution_Cancel);
             ShowWindow(hBgWnd, SW_HIDE);
-            // The new default desktop cancel workaround introduced in this mod seems to cause a weird behavior with rare chance,
-            // such as Winlogon not getting out of the mid-logoff state until Ctrl+Alt+Del is pressed
-            // I have no idea why, how, when this error even occurs
-            // If I recall correctly, the original AuthUX BSDR (which only used ExitProcess workaround) had no such issue, so make this an option
-            // and wait for user feedback until enough data about this error is collected (to properly fix or just remove the new workaround)
-            if (Wh_GetIntSetting(L"authUxCancelHandling")) {
-                Sleep(1000);
-                ExitProcess(0);
-                return TRUE;
-            }
             // Make sure the resolve request reaches winlogon
             // Otherwise, winlogon might just decide to force resolve after LogonUI has fully closed
             if (!SetTimer(hWndDlg, BSDR_CANCEL_TIMER, BSDR_CANCEL_TIMER_MS, nullptr)) {
@@ -3573,6 +3583,10 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         if (newDescFont && oldDescFont) {
             DeleteObject(oldDescFont);
         }
+
+        lastDpi = GetDpiForWindow(hWndDlg);
+        if (!lastDpi)
+            lastDpi = 96;
         return TRUE;
     }
     }
@@ -3727,11 +3741,10 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         return 0;
     }
     case WM_SETTINGCHANGE: {
-        Wh_Log(L"WM_SETTINGCHANGE, %d", wParam);
         if (wParam == SPI_SETWHEELSCROLLLINES) {
             wheelRemainder = 0;
             SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &scrollLines, 0);
-            return TRUE;
+            return 0;
         }
         // SPI_SETHIGHCONTRAST: Windows 7 BSDR never updated the high-contrast status on runtime, so don't update it here either. We already skipped taking screenshot too
         break;
@@ -3900,7 +3913,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
     paintedFirstFrame = false;
     isOnSecureDesktop = true;
 
-    // Ignore failure (for older versions, etc.)
+    // Ignore failure (on pre-1703, etc.)
     // LogonUI is per-monitor V1 scaled by manifest anyway
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
@@ -4114,7 +4127,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
 }
 
 // LogonUI calls the BSDR interface in the following order:
-// (Winlogon) ShutdownWindowsWorkerThread -> LogonUI launch -> BSDR::Start -> add_Resolved -> AddApplication * n (either before or after dlg open) ->
+// (Winlogon) ShutdownWindowsWorkerThread -> LogonUI launch -> BSDR::Start -> add_Resolved -> (get_ScaleFactor + AddApplication) * n (either before or after dlg open) ->
 // (Force logoff chosen) -> BSDR::Hide -> get_WasClicked -> BSDR::Stop -> LogonUI exit -> Session teardown (Winlogon exit)
 void CustomBSDR::Start(LogonUIState state) {
     std::lock_guard lock(workerMutex);
@@ -4266,6 +4279,8 @@ long __fastcall BlockedShutdownUXImpl_get_ScaleFactor_hook(void* thisPtr, unsign
         return E_POINTER;
 
     // This function's output controls the quality of app icons that the BSDR backend sends
+    // This is called before every AddApplication
+    // (DPICHANGED: I have no idea how to manually refetch icons so keep and scale old icons)
     *scaleFactor = CustomBSDR::GetScaleFactor();
     return S_OK;
 }
@@ -4275,13 +4290,10 @@ long __fastcall BlockedShutdownUXImpl_get_WasClicked_hook(void* thisPtr, unsigne
     if (!wasClicked)
         return E_POINTER;
 
-    {
-        std::lock_guard lock(g_resolvedMutex);
-        // If this is false, resolving with cancel somehow makes winlogon lock the session after stopping BSDR
-        // which is not wanted in any cases (no version of stock BSDR locks the screen!)
-        // Always set as true, to prevent locking even on forced cancel with Ctrl+Alt+Del
-        *wasClicked = true;
-    }
+    // If this is false, resolving with cancel somehow makes winlogon lock the session after stopping BSDR
+    // which is not wanted in any cases (no version of stock BSDR locks the screen!)
+    // Always set as true, to prevent locking even on forced cancel with Ctrl+Alt+Del
+    *wasClicked = true;
     return S_OK;
 }
 
@@ -4453,7 +4465,9 @@ CLogonController__DoModal_t CLogonController__DoModal_orig;
 long __cdecl CLogonController__DoModal_hook(void* pThis, unsigned long a2, unsigned long a3, unsigned long a4, unsigned long a5) {
     Wh_Log(L"DoModal");
 
-    g_doModalThreadId.store(GetCurrentThreadId(), std::memory_order_release);
+    const DWORD tid = GetCurrentThreadId();
+    DWORD expected = 0;
+    const bool owned = g_doModalThreadId.compare_exchange_strong(expected, tid);
 
     long result = CLogonController__DoModal_orig(pThis, a2, a3, a4, a5);
 
@@ -4468,7 +4482,9 @@ long __cdecl CLogonController__DoModal_hook(void* pThis, unsigned long a2, unsig
         CloseHandle(eventToClose);
     }
 
-    g_doModalThreadId.store(0, std::memory_order_release);
+    if (owned) {
+        g_doModalThreadId.store(0, std::memory_order_release);
+    }
     return result;
 }
 
