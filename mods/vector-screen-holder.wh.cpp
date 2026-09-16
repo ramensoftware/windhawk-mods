@@ -34,7 +34,7 @@
 // @description:ko-KR 선택한 디스플레이를 제너러티브 라인 아트로 채우고 실행 중에는 PC가 유휴 상태로 전환되지 않도록 합니다
 // @description:ar   يملأ الشاشة التي تختارها بفن خطي توليدي ويمنع الكمبيوتر من الخمول أثناء تشغيله
 // @description:he   ממלא מסך לבחירתך באמנות קווית גנרטיבית ומונע מהמחשב לעבור למצב סרק בזמן שהוא פועל
-// @version         1.3.0
+// @version         1.3.1
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
@@ -111,6 +111,11 @@ cycle the style as usual.
 **Ctrl+Alt+H works from anywhere**, so you can always close the overlay even
 when something else has focus.
 
+The mod also listens on a named event, `Local\WindhawkVectorScreenHolderToggle`,
+so an ordinary Windows shortcut can toggle the overlay without opening Windhawk
+at all. The one line recipe is on
+[the site](https://vector.akilluminati47.pages.dev/).
+
 If you would rather **Esc** and **Space** reached the overlay from any
 application, turn on **Global Esc and Space** in the settings. It is off by
 default on purpose: Esc is a heavily used key, and a reflexive press meant for
@@ -148,6 +153,12 @@ whatever the hue shift is set to. Turning the ramp back off returns the colors
 to that value, rather than leaving them wherever the rotation happened to
 stop.
 
+One thing to expect when you step the palette mid-composition: flow field,
+growth and harmonograph build up into a buffer, so the new palette takes the
+background and everything drawn from that moment on, while the strokes already
+laid down keep the colors they were drawn in until the next scene begins.
+Contours redraw every frame, so they change over wholesale.
+
 ## The four styles
 
 Each has its own **parameter** (the wheel) and its own **amount** (right click).
@@ -179,6 +190,27 @@ are cleared the moment you close it.
 It does **not** fake keystrokes or mouse movement. Some corporate presence
 tools (Teams, Slack) track real input rather than display state and will still
 mark you away.
+
+## What it costs
+
+The overlay is real work on the GPU and the CPU, and the whole point is to run
+it *while* something else is busy, so it is worth being plain about the price.
+The heaviest combination by far is **contours at maximal amount**: it marches
+about 46 iso levels across an 18,000 cell grid and rebuilds up to 46 path
+geometries every frame. At 60 frames per second that is close to a saturated
+core, sitting right next to the long build you are waiting on.
+
+Three ways to give the rest of the machine more room, in the order worth
+trying:
+
+- drop **Frames per second** to 30. The artwork is paced against the clock
+  rather than the frame count, so it stays smooth instead of becoming choppy.
+- step the **amount** down a notch or two with right click.
+- pick flow field or harmonograph, which draw themselves and then idle, rather
+  than contours, which redraw continuously.
+
+The other styles are far cheaper than contours at the same amount, and nothing
+is simulated at all while the overlay is genuinely occluded.
 
 ## Source and credits
 
@@ -1480,6 +1512,9 @@ static IDWriteFactory* g_dwrite = nullptr;
 static float g_hue = 0;
 
 static const WCHAR kWindowClass[] = L"WindhawkVectorScreenHolderWnd";
+
+// The mod's own image, which owns the window class and the window procedure.
+static HINSTANCE g_modInstance = nullptr;
 static const WCHAR kEventLocal[] = L"Local\\WindhawkVectorScreenHolderToggle";
 
 // Thread hot keys must use 0x0000-0xBFFF; 0xC000+ is reserved for atoms.
@@ -1988,8 +2023,6 @@ static ID2D1PathGeometry* MakeSegments(ID2D1Factory* factory,
 // Scene interface
 // ---------------------------------------------------------------------------
 struct SceneCtx {
-    float w = 0;
-    float h = 0;
     ID2D1Factory* factory = nullptr;
     ID2D1RenderTarget* target = nullptr;      // accumulation buffer
     ID2D1SolidColorBrush* brush = nullptr;
@@ -3849,6 +3882,7 @@ static void Controller_StepAmount(Overlay* ov);
 static void Controller_Wheel(Overlay* ov, int delta);
 static void Controller_RequestRebuild();
 static void Controller_RequestClose();
+static void Controller_RequestPalette();
 static void Controller_CyclePalette();
 
 bool Overlay::Create() {
@@ -3859,7 +3893,7 @@ bool Overlay::Create() {
         WS_EX_TOOLWINDOW, kWindowClass, L"",
         WS_POPUP, rect_.left, rect_.top, rect_.right - rect_.left,
         rect_.bottom - rect_.top, nullptr, nullptr,
-        GetModuleHandleW(nullptr), nullptr);
+        g_modInstance, nullptr);
     if (!hwnd_) {
         Wh_Log(L"CreateWindowEx failed (%u)", GetLastError());
         return false;
@@ -4177,10 +4211,12 @@ void Overlay::Render(float dtSec) {
     // core on frames nobody can see, competing with the work being waited on.
     // The state reflects the last present, so it is re-read every frame rather
     // than latched; the keep-awake is unaffected and the display stays on.
+    // CheckWindowState reports the state as of the last EndDraw, because
+    // Direct2D only learns the window is visible again by presenting. Bailing
+    // out here without presenting would latch occluded_ on for good, so the
+    // frame is still drawn and presented; what is skipped is the simulation
+    // below. The worker's slow poll is what keeps the cost down.
     occluded_ = (rt_->CheckWindowState() & D2D1_WINDOW_STATE_OCCLUDED) != 0;
-    if (occluded_) {
-        return;
-    }
 
     const float kFadeIn = 0.75f, kFadeOut = 2.2f;
     // A fixed hold. This used to borrow rotateSeconds when rotation was on,
@@ -4188,9 +4224,10 @@ void Overlay::Render(float dtSec) {
     // around the rotation boundary.
     const float holdSecs = 8.0f;
 
+    const float vw = (float)(rect_.right - rect_.left);
+    const float vh = (float)(rect_.bottom - rect_.top);
+
     SceneCtx ctx;
-    ctx.w = (float)(rect_.right - rect_.left);
-    ctx.h = (float)(rect_.bottom - rect_.top);
     ctx.factory = factory_;
     ctx.target = buf_;
     ctx.brush = brush_;
@@ -4203,7 +4240,11 @@ void Overlay::Render(float dtSec) {
     bool done = false;
     // Step in every phase, fade-out included, so contours and growth keep
     // moving all the way through the transition instead of freezing.
-    if (scene_) {
+    //
+    // Nothing is simulated while the window is occluded: the frame is still
+    // presented, which is what lets Direct2D notice the window is back, but
+    // advancing the art for a screen nobody can see is the part worth saving.
+    if (scene_ && !occluded_) {
         done = scene_->Step(ctx);
     } else {
         done = true;
@@ -4259,8 +4300,8 @@ void Overlay::Render(float dtSec) {
         D2D1_RECT_F dst;
         dst.left = 0;
         dst.top = 0;
-        dst.right = ctx.w;
-        dst.bottom = ctx.h;
+        dst.right = vw;
+        dst.bottom = vh;
         rt_->DrawBitmap(bufBitmap_, &dst, artAlpha_,
                         D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, nullptr);
     }
@@ -4276,11 +4317,11 @@ void Overlay::Render(float dtSec) {
             float a = ClampT(hudT_ / kHudFade, 0.0f, 1.0f);
             // The side gutter is whatever the fitting pass settled on.
             float marginX = hudMarginX_;
-            float marginY = std::max(24.0f, ctx.h * 0.035f);
+            float marginY = std::max(24.0f, vh * 0.035f);
             D2D1_RECT_F box;
             box.left = marginX;
-            box.top = ctx.h - marginY * 2.0f;
-            box.right = ctx.w - marginX;
+            box.top = vh - marginY * 2.0f;
+            box.right = vw - marginX;
             // Tall enough for the line whatever size it was fitted to, since
             // DrawText clips to this rectangle.
             box.bottom = box.top + std::max(marginY * 1.5f, hudPx_ * 2.0f);
@@ -4400,9 +4441,13 @@ LRESULT CALLBACK Overlay::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             if (wp == VK_SPACE) {
                 // bit 30 is the previous key state: ignore auto-repeat so a
-                // held Space does not race through every palette
-                if (!(lp & (1 << 30))) {
-                    Controller_CyclePalette();
+                // held Space does not race through every palette.
+                //
+                // With Global Esc and Space on, the hook has already handled
+                // this press and the key reaches the focused overlay as well,
+                // which would step the palette twice for one press.
+                if (!(lp & (1 << 30)) && !g_settings.globalKeys) {
+                    Controller_RequestPalette();
                 }
                 return 0;
             }
@@ -4446,6 +4491,7 @@ static const UINT WM_VSH_QUIT = WM_APP + 2;
 
 static const UINT WM_VSH_CLOSE = WM_APP + 3;
 static const UINT WM_VSH_REBUILD = WM_APP + 4;
+static const UINT WM_VSH_PALETTE = WM_APP + 5;
 
 static int NextEnabledStyle(int from) {
     for (int i = 1; i <= kStyleCount; i++) {
@@ -4550,6 +4596,19 @@ static void Controller_CyclePalette() {
 
 
 
+// The low level keyboard hook cannot call Controller_CyclePalette itself.
+// BuildPalette clears and refills g_palette while the worker thread is inside
+// Render reading it, g_overlays is owned by the worker, and a hook callback
+// holds up every keystroke on the system until it returns, with Windows
+// silently dropping the hook past LowLevelHooksTimeout. So the hook posts and
+// the worker does the work, the same way Esc already does.
+static void Controller_RequestPalette() {
+    DWORD tid = g_workerThreadId.load();
+    if (tid && !PostThreadMessageW(tid, WM_VSH_PALETTE, 0, 0)) {
+        Wh_Log(L"PostThreadMessage(PALETTE) failed (%u)", GetLastError());
+    }
+}
+
 static void Controller_RequestClose() {
     DWORD tid = g_workerThreadId.load();
     if (tid && !PostThreadMessageW(tid, WM_VSH_CLOSE, 0, 0)) {
@@ -4577,6 +4636,11 @@ static void Controller_RequestRebuild() {
 // A global low-level keyboard hook so Space and Esc work even when no overlay
 // owns the keyboard focus. It only watches the two keys and never swallows
 // anything, so normal typing is completely unaffected.
+// The hook gets no repeat flag, so the key down is latched here to step once
+// per physical press. It lives outside the callback because the hook can be
+// torn down and reinstalled with the key still held.
+static std::atomic<bool> g_spaceHeld{false};
+
 static LRESULT CALLBACK LowLevelKbdProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION && g_active) {
         KBDLLHOOKSTRUCT* k = (KBDLLHOOKSTRUCT*)lParam;
@@ -4589,12 +4653,11 @@ static LRESULT CALLBACK LowLevelKbdProc(int nCode, WPARAM wParam, LPARAM lParam)
         } else if (k->vkCode == VK_SPACE) {
             // The hook gets no repeat flag, so latch the key down ourselves
             // and step once per physical press.
-            static bool spaceHeld = false;
-            if (down && !spaceHeld) {
-                spaceHeld = true;
-                Controller_CyclePalette();
+            if (down && !g_spaceHeld) {
+                g_spaceHeld = true;
+                Controller_RequestPalette();
             } else if (up) {
-                spaceHeld = false;
+                g_spaceHeld = false;
             }
         }
     }
@@ -4647,6 +4710,9 @@ static void InstallKbdHook() {
     if (g_hookThread) {
         return;
     }
+    // A press held across a hide would otherwise leave this latched, and the
+    // first press after the next show would be swallowed.
+    g_spaceHeld = false;
     g_hookReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_hookReady) {
         // Without it the uninstall path cannot know when the id is published,
@@ -5048,14 +5114,25 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         }
     }
 
+    // The window procedure lives in the mod image, not in windhawk.exe, so
+    // the class is registered against the mod's own instance and given back in
+    // the teardown below rather than left behind.
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&Overlay::WndProc, &g_modInstance);
+    if (!g_modInstance) {
+        g_modInstance = GetModuleHandleW(nullptr);
+    }
+
     WNDCLASSEXW wc;
     ZeroMemory(&wc, sizeof(wc));
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = Overlay::WndProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.hInstance = g_modInstance;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.lpszClassName = kWindowClass;
-    if (!RegisterClassExW(&wc)) {
+    bool classRegistered = RegisterClassExW(&wc) != 0;
+    if (!classRegistered) {
         Wh_Log(L"RegisterClassEx failed (%u); no overlay can be created",
                GetLastError());
     }
@@ -5161,6 +5238,10 @@ static DWORD WINAPI WorkerThread(LPVOID) {
                     HideOverlays();
                     continue;
                 }
+                if (msg.message == WM_VSH_PALETTE) {
+                    Controller_CyclePalette();
+                    continue;
+                }
                 if (msg.message == WM_VSH_REBUILD) {
                     g_rebuildQueued = false;
                     // Displays added, removed or resized. Rebuild so the
@@ -5252,6 +5333,9 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     ReleaseEmbeddedFonts();
     g_hudFontResolved = false;
     g_hudFont = HudFont();
+    if (classRegistered) {
+        UnregisterClassW(kWindowClass, g_modInstance);
+    }
     SafeRelease(&g_dwrite);
     SafeRelease(&g_factory);
     SetThreadExecutionState(ES_CONTINUOUS);
