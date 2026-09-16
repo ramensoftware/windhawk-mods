@@ -43,6 +43,15 @@ More themes, stylings, etc can be found and contributed from:
 - **Full styling** via Control styles
 - **Background translucency** tinting for TopBar, BlurBehind for Flyouts and context menus.
 
+## Weather data
+
+The weather widget is powered by **[Open-Meteo](https://open-meteo.com/)** — a
+free, no-API-key weather service. The city search sends the text you type to
+`geocoding-api.open-meteo.com`; once a location is picked, the bar sends its
+latitude/longitude to `api.open-meteo.com` for the forecast. No account, no
+API key, no personal data — only the coordinates (or search string) you
+provided.
+
 ## Process model
 
 The bar runs in its own Explorer tool process (`explorer.exe -tool-mod windhawk-topbar`).
@@ -137,7 +146,7 @@ Any style rule that sets `Background:=<WindhawkBlur .../>` on one of those eleme
     Select a TopBar theme.
 - monitorIndex: 0
   $name: Monitor
-  $description: 1 = primary monitor. Otherwise the secondary monitor number.
+  $description: 0 or 1 = primary monitor. 2+ selects the corresponding secondary monitor.
 - controlStyles:
   - - target: ""
       $name: Target
@@ -969,6 +978,7 @@ void PopulateBluetoothPanel();
 void RefreshBluetoothRadioState();
 void PopulateBatteryPanel();
 void PopulateWeatherPanel();
+void RefreshWeatherButtonContent();
 void PopulateRecycleBinPanel();
 void PopulateSettingsPanel();
 void ApplyBlurToAllOpenPopups();
@@ -1061,6 +1071,7 @@ bool g_weatherLocationPickerActive = false;
 std::wstring g_weatherSearchQuery;
 std::vector<WeatherSearchResult> g_weatherSearchResults;
 std::atomic<int> g_weatherSearchToken{0};
+[[clang::no_destroy]] DispatcherTimer g_weatherSearchDebounceTimer{nullptr};
 
 bool g_recycleBinConfirming = false;
 
@@ -6645,15 +6656,34 @@ std::wstring DescribeCode(int code) {
 }
 
 std::wstring UrlEncode(const std::wstring& value) {
+    // Convert to UTF-8 first, then percent-encode byte-by-byte, so non-ASCII
+    // city names ("Kraków", "München") reach Open-Meteo intact.
+    if (value.empty()) return L"";
+    int needed = WideCharToMultiByte(CP_UTF8, 0, value.c_str(),
+                                     static_cast<int>(value.size()),
+                                     nullptr, 0, nullptr, nullptr);
+    if (needed <= 0) return L"";
+    std::string utf8(needed, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, value.c_str(),
+                        static_cast<int>(value.size()),
+                        utf8.data(), needed, nullptr, nullptr);
+
+    static const char kHex[] = "0123456789ABCDEF";
     std::wstring out;
-    for (wchar_t c : value) {
-        if (iswalnum(c) || c == L'-' || c == L'_' || c == L'.' || c == L'~') {
-            out.push_back(c);
-        } else if (c == L' ') {
+    out.reserve(utf8.size() * 3);
+    for (unsigned char b : utf8) {
+        if ((b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') ||
+            (b >= '0' && b <= '9') ||
+            b == '-' || b == '_' || b == '.' || b == '~') {
+            out.push_back(static_cast<wchar_t>(b));
+        } else if (b == ' ') {
             out += L"%20";
         } else {
-            wchar_t buf[8];
-            swprintf_s(buf, L"%%%02X", static_cast<unsigned>(c & 0xFF));
+            wchar_t buf[4];
+            buf[0] = L'%';
+            buf[1] = kHex[(b >> 4) & 0xF];
+            buf[2] = kHex[b & 0xF];
+            buf[3] = 0;
             out += buf;
         }
     }
@@ -6875,12 +6905,26 @@ void Fetch(double lat, double lon, WeatherState* out) {
 }
 
 void EnsureFresh() {
-    if (!g_settings.weatherLatitude.empty() && !g_settings.weatherLongitude.empty()) {
-        double lat = _wtof(g_settings.weatherLatitude.c_str());
-        double lon = _wtof(g_settings.weatherLongitude.c_str());
-        Fetch(lat, lon, &g_weatherState);
-        g_weatherState.locationName = g_settings.weatherLocationName;
-    }
+    // Must be called on the UI thread. Reads g_settings by value before
+    // dispatching, and only writes g_weatherState via RunOnUiThread, so
+    // the worker never races LoadSettings() or the UI reader.
+    std::wstring latStr = g_settings.weatherLatitude;
+    std::wstring lonStr = g_settings.weatherLongitude;
+    std::wstring locName = g_settings.weatherLocationName;
+    if (latStr.empty() || lonStr.empty()) return;
+
+    double lat = _wtof(latStr.c_str());
+    double lon = _wtof(lonStr.c_str());
+    RunInBackground([lat, lon, locName] {
+        WeatherState fresh;
+        Fetch(lat, lon, &fresh);
+        fresh.locationName = locName;
+        RunOnUiThread([fresh = std::move(fresh)]() mutable {
+            g_weatherState = std::move(fresh);
+            RefreshWeatherButtonContent();
+            PopulateWeatherPanel();
+        });
+    });
 }
 
 std::vector<WeatherSearchResult> GeocodeMulti(const std::wstring& query) {
@@ -9044,39 +9088,54 @@ void BuildWeatherLocationPicker(const wf::Collections::IVector<UIElement>& child
                     g_weatherLocationPickerActive = false;
                     g_weatherSearchResults.clear();
                     g_weatherSearchQuery.clear();
-                    RunInBackground([] {
-                        weather::EnsureFresh();
-                        RunOnUiThread([] {
-                            RefreshWeatherButtonContent();
-                            PopulateWeatherPanel();
-                        });
-                    });
+                    weather::EnsureFresh();
                 }));
         }
     };
 
     rebuildResults(g_weatherSearchResults);
 
-    searchBox.TextChanged([rebuildResults](auto&& sender, auto&&) {
+    searchBox.TextChanged([](auto&& sender, auto&&) {
         try {
             auto box = sender.template as<wuxc::TextBox>();
             std::wstring query{box.Text()};
             g_weatherSearchQuery = query;
             if (query.empty()) {
                 g_weatherSearchResults.clear();
-                rebuildResults({});
+                if (g_weatherLocationPickerActive) {
+                    RepopulateLater(PopulateWeatherPanel);
+                }
                 return;
             }
-            int myToken = ++g_weatherSearchToken;
-            RunInBackground([query, myToken, rebuildResults] {
-                auto results = weather::GeocodeMulti(query);
-                RunOnUiThread([results = std::move(results), myToken,
-                               rebuildResults]() mutable {
-                    if (g_weatherSearchToken.load() != myToken) return;
-                    g_weatherSearchResults = std::move(results);
-                    rebuildResults(g_weatherSearchResults);
-                });
-            });
+            // Debounce: only fire the geocoding request once the user has
+            // stopped typing. Without this, typing "Amsterdam" issues one
+            // HTTP request per keystroke against the public Open-Meteo API.
+            if (!g_weatherSearchDebounceTimer) {
+                g_weatherSearchDebounceTimer = DispatcherTimer();
+                g_weatherSearchDebounceTimer.Interval(
+                    std::chrono::milliseconds(400));
+                g_weatherSearchDebounceTimer.Tick(
+                    [](wf::IInspectable const&, wf::IInspectable const&) {
+                        g_weatherSearchDebounceTimer.Stop();
+                        std::wstring q = g_weatherSearchQuery;
+                        if (q.empty()) return;
+                        int token = g_weatherSearchToken.load();
+                        RunInBackground([q, token] {
+                            auto results = weather::GeocodeMulti(q);
+                            RunOnUiThread([results = std::move(results),
+                                           token]() mutable {
+                                if (g_weatherSearchToken.load() != token) return;
+                                g_weatherSearchResults = std::move(results);
+                                if (g_weatherLocationPickerActive) {
+                                    RepopulateLater(PopulateWeatherPanel);
+                                }
+                            });
+                        });
+                    });
+            }
+            g_weatherSearchToken.fetch_add(1);
+            g_weatherSearchDebounceTimer.Stop();
+            g_weatherSearchDebounceTimer.Start();
         } catch (...) {
         }
     });
@@ -10716,11 +10775,11 @@ namespace wut  = winrt::Windows::UI::Text;
 
 static HWND s_hwnd = nullptr;
 static HWND s_islandHwnd = nullptr;
-static wuxh::DesktopWindowXamlSource s_xamlSource{ nullptr };
-static winrt::com_ptr<IDesktopWindowXamlSourceNative2> s_native2;
-static wuxc::StackPanel s_contentPanel{ nullptr };
+[[clang::no_destroy]] static wuxh::DesktopWindowXamlSource s_xamlSource{ nullptr };
+[[clang::no_destroy]] static winrt::com_ptr<IDesktopWindowXamlSourceNative2> s_native2;
+[[clang::no_destroy]] static wuxc::StackPanel s_contentPanel{ nullptr };
 static int s_currentPage = 0;
-static wux::DispatcherTimer s_applyTimer{ nullptr };
+[[clang::no_destroy]] static wux::DispatcherTimer s_applyTimer{ nullptr };
 static const wchar_t* kClassName = L"TopBarSettingsWnd";
 
 wuxm::SolidColorBrush MakeSolid(uint8_t a, uint8_t r, uint8_t g, uint8_t b) {
@@ -11417,9 +11476,9 @@ static std::wstring BuildSettingsJson() {
 
 void BuildAboutPage(wuxc::StackPanel& p) {
     p.Children().Append(MakeHeading(L"TopBar for Windows", 22));
-    p.Children().Append(MakeLabel(L"Version 1.1.0 (Beta)", 13, false, 0.65));
+    p.Children().Append(MakeLabel(L"Version 1.2.0", 13, false, 0.65));
     auto info = MakeLabel(
-        L"By WasiXGamer. Hosted by a dedicated explorer.exe tool process through Windhawk.",
+        L"Mod Created By WasiXGamer. Settings App inspired by Taskbar Fluent Media Player mod by Slayts, Windhawk Blur imported from Windows 11 Taskbar Styler by m417z.",
         12, false, 0.8);
     info.TextWrapping(TextWrapping::Wrap);
     info.MaxWidth(420);
@@ -12075,6 +12134,77 @@ wuxc::Grid BuildWindowContent() {
         });
         footer.Children().Append(donateBtn);
 
+        // Social row: [Discord] [YouTube] side by side, below Patreon.
+        // Fill-only vector paths (24x24 viewport). Swap the two URLs for the
+        // real invite/channel if these guesses are wrong.
+        constexpr PCWSTR kDiscordPath =
+            L"M20.32 4.37a16.1 16.1 0 0 0-4.02-1.24.06.06 0 0 0-.06.03c-.17.31-.37.72-.51 1.04"
+            L"a14.85 14.85 0 0 0-4.47 0 10.2 10.2 0 0 0-.52-1.04.06.06 0 0 0-.06-.03 16.1 16.1 0 0 0"
+            L"-4.02 1.24.06.06 0 0 0-.03.02C4.11 9.09 3.31 13.66 3.7 18.18a.07.07 0 0 0 .03.05c1.69"
+            L" 1.24 3.33 2 4.94 2.5a.07.07 0 0 0 .07-.03c.38-.52.72-1.07 1.01-1.64a.06.06 0 0 0-.03"
+            L"-.09c-.54-.2-1.05-.45-1.55-.73a.06.06 0 0 1-.01-.11c.1-.08.21-.16.31-.24a.06.06 0 0 1"
+            L".07-.01c3.25 1.48 6.77 1.48 9.98 0a.06.06 0 0 1 .07.01c.1.08.2.16.31.24a.06.06 0 0 1"
+            L"-.01.11c-.49.29-1.01.53-1.55.73a.06.06 0 0 0-.03.09c.3.58.64 1.12 1.01 1.64a.07.07 0"
+            L" 0 0 .07.03c1.62-.5 3.26-1.26 4.95-2.5a.07.07 0 0 0 .03-.05c.46-5.22-.77-9.76-3.27-13"
+            L".79a.05.05 0 0 0-.02-.02zM10.34 15.35c-.98 0-1.78-.89-1.78-1.99s.79-2 1.78-2c1 0 1.8"
+            L".9 1.78 2 0 1.1-.79 1.99-1.78 1.99zm5.32 0c-.98 0-1.78-.89-1.78-1.99s.79-2 1.78-2c1"
+            L" 0 1.8.9 1.78 2 0 1.1-.78 1.99-1.78 1.99z";
+
+        constexpr PCWSTR kYoutubePath =
+            L"M23.5 6.19a3.02 3.02 0 0 0-2.12-2.14C19.5 3.55 12 3.55 12 3.55s-7.5 0-9.38.5A3.02 3"
+            L".02 0 0 0 .5 6.19C0 8.08 0 12 0 12s0 3.92.5 5.81a3.02 3.02 0 0 0 2.12 2.14c1.88.5 9"
+            L".38.5 9.38.5s7.5 0 9.38-.5a3.02 3.02 0 0 0 2.12-2.14C24 15.92 24 12 24 12s0-3.92-.5-"
+            L"5.81zM9.55 15.57V8.43L15.82 12l-6.27 3.57z";
+
+        auto makeSocialBtn = [](PCWSTR fillPath, const std::wstring& label,
+                                PCWSTR url) {
+            auto btn = MakeGhostButton(nullptr, 6);
+            btn.HorizontalAlignment(HorizontalAlignment::Stretch);
+            btn.Padding(Thickness{ 10, 8, 10, 8 });
+            btn.HorizontalContentAlignment(HorizontalAlignment::Center);
+            btn.Background(MakeSolid(0x18, 0xFF, 0xFF, 0xFF));
+            btn.BorderThickness(Thickness{ 0, 0, 0, 0 });
+
+            wuxc::StackPanel row;
+            row.Orientation(wuxc::Orientation::Horizontal);
+            row.Spacing(8);
+            row.VerticalAlignment(VerticalAlignment::Center);
+            row.HorizontalAlignment(HorizontalAlignment::Center);
+
+            if (auto icon = BuildVectorIcon(nullptr, fillPath, L"", 24, 16, 1.5)) {
+                icon.VerticalAlignment(VerticalAlignment::Center);
+                row.Children().Append(icon);
+            }
+            row.Children().Append(MakeLabel(label, 12, true));
+            btn.Content(row);
+
+            std::wstring urlStr = url;
+            btn.Click([urlStr](auto&&, auto&&) {
+                ShellExecute(nullptr, L"open", urlStr.c_str(),
+                             nullptr, nullptr, SW_SHOWNORMAL);
+            });
+            return btn;
+        };
+
+        auto socialGrid = wuxc::Grid();
+        socialGrid.ColumnSpacing(6);
+        socialGrid.Margin(Thickness{ 0, 6, 0, 0 });
+        wuxc::ColumnDefinition sc1; sc1.Width(GridLength{ 1, GridUnitType::Star });
+        wuxc::ColumnDefinition sc2; sc2.Width(GridLength{ 1, GridUnitType::Star });
+        socialGrid.ColumnDefinitions().Append(sc1);
+        socialGrid.ColumnDefinitions().Append(sc2);
+
+        auto discordBtn = makeSocialBtn(kDiscordPath, L"Discord",
+                                        L"https://discord.gg/BTQYJSpUgX");
+        auto ytBtn = makeSocialBtn(kYoutubePath, L"YouTube",
+                                   L"https://www.youtube.com/@WasiCustomization");
+        wuxc::Grid::SetColumn(discordBtn, 0);
+        wuxc::Grid::SetColumn(ytBtn, 1);
+        socialGrid.Children().Append(discordBtn);
+        socialGrid.Children().Append(ytBtn);
+
+        footer.Children().Append(socialGrid);
+
         nav.PaneFooter(footer);
     }
 
@@ -12187,7 +12317,11 @@ void CreateWindowOnCurrentThread() {
 
     WNDCLASSEX wc{ sizeof(wc) };
     wc.lpfnWndProc = WndProc;
-    wc.hInstance = GetModuleHandle(nullptr);
+    // The window procedure lives in the mod image, not in explorer.exe, so
+    // register the class against the mod module (matching the topbar's own
+    // class) to avoid a dangling lpfnWndProc if this ever runs without an
+    // immediate ExitProcess.
+    wc.hInstance = g_modModule ? g_modModule : GetModuleHandle(nullptr);
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wc.hIcon = g_settingsLargeIcon;
     wc.hIconSm = g_settingsSmallIcon;
@@ -12271,8 +12405,18 @@ bool PreTranslateSettingsMessage(MSG* msg) {
 }
 
 void DestroySettingsWindowNow() {
+    // Stop the debounce timer on the UI thread before tearing anything else
+    // down — it's UI-thread-affine and must not be released from the
+    // shutdown thread.
+    if (s_applyTimer) {
+        s_applyTimer.Stop();
+        s_applyTimer = nullptr;
+    }
     if (s_hwnd && IsWindow(s_hwnd)) {
         DestroyWindow(s_hwnd);
+    }
+    if (g_modModule) {
+        UnregisterClass(kClassName, g_modModule);
     }
 }
 
@@ -12785,13 +12929,7 @@ g_centerPanel.Children().Append(resourceButton);
             PopulateWeatherPanel();
             if (!g_settings.weatherLatitude.empty() &&
                 !g_settings.weatherLongitude.empty()) {
-                RunInBackground([] {
-                    weather::EnsureFresh();
-                    RunOnUiThread([] {
-                        RefreshWeatherButtonContent();
-                        PopulateWeatherPanel();
-                    });
-                });
+                weather::EnsureFresh();
             }
         });
         weatherFlyout.Closed([](auto&&, auto&&) {
@@ -12810,12 +12948,7 @@ g_centerPanel.Children().Append(resourceButton);
         // Kick off an initial background fetch when we have a saved location.
         if (!g_settings.weatherLatitude.empty() &&
             !g_settings.weatherLongitude.empty()) {
-            RunInBackground([] {
-                weather::EnsureFresh();
-                RunOnUiThread([] {
-                    RefreshWeatherButtonContent();
-                });
-            });
+            weather::EnsureFresh();
         }
     }
 
@@ -13477,6 +13610,8 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             UnregisterHotKey(hwnd, HOTKEY_ID_BATTERY);
             UnregisterHotKey(hwnd, HOTKEY_ID_WEATHER);
             UnregisterHotKey(hwnd, HOTKEY_ID_RECYCLEBIN);
+            UnregisterHotKey(hwnd, HOTKEY_ID_START_MENU);
+            UnregisterHotKey(hwnd, HOTKEY_ID_TASK_MENU);
             UnregisterAppBar(hwnd);
             PostQuitMessage(0);
             return 0;
@@ -13810,6 +13945,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         g_resourceTimer.Start();
 
         // Timer to restore the top bar if it gets minimized/hidden/cloaked by Show Desktop
+        // Timer to restore the top bar if it gets minimized/hidden/cloaked by Show Desktop
         g_restoreTimer = DispatcherTimer();
         g_restoreTimer.Interval(std::chrono::milliseconds(1000));
 
@@ -13982,6 +14118,10 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         if (g_brightnessRevertTimer) g_brightnessRevertTimer = nullptr;
         if (g_resourceTimer) g_resourceTimer = nullptr;
         if (g_resourceFlyoutTimer) g_resourceFlyoutTimer = nullptr;
+        if (g_weatherSearchDebounceTimer) {
+            g_weatherSearchDebounceTimer.Stop();
+            g_weatherSearchDebounceTimer = nullptr;
+        }
 
         // Release wallpaper layer and other no_destroy globals
         if (g_wallpaperLayer) g_wallpaperLayer = nullptr;
