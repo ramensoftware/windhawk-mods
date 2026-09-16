@@ -2,9 +2,9 @@
 // @id              taskbar-appearance-tuner
 // @name            Taskbar appearance tuner
 // @name:zh-CN      任务栏外观调节器
-// @description     Adjust taskbar brightness and transparency, separately for the background and for the icons and text; optionally hide the taskbar top line and drag grip
-// @description:zh-CN 分别调整任务栏背景与图标文字的亮度和不透明度，可隐藏任务栏顶部线和拖拽手柄
-// @version         1.4.1
+// @description     Dim the taskbar for a healthier brightness: brightness (dimming only) and transparency, separately for the background and for the icons and text, plus a toggle for the taskbar top line
+// @description:zh-CN 为更健康的亮度而调暗任务栏：可分别调整任务栏背景与图标文字的亮度（仅调暗）和不透明度，并提供任务栏顶部线开关
+// @version         1.5.1
 // @author          lzxujun
 // @homepage        https://github.com/lzxujun
 // @license         GPL-3.0
@@ -30,10 +30,11 @@
 > **中文：** 将 Windows 11 任务栏调暗至舒适的水平，不必整日对着全亮的面板——
 > 亮度更健康，护眼的同时也更好地保护 OLED 显示器，防止烧屏。
 
-Fine-grained appearance control for the Windows 11 taskbar. Three independent
+Fine-grained appearance control for the Windows 11 taskbar. Two independent
 adjustments, each of which can be applied to three different targets:
 
-* **Brightness** - from -100 (black) to 100 (white).
+* **Brightness** - from -100 (black) to 0 (unchanged). Dimming only: the mod
+  exists to make the taskbar easier on the eyes, so it never brightens.
 * **Opacity** - from 0 (fully transparent) to 100 (unchanged).
 
 Each adjustment has its own target selector:
@@ -46,26 +47,46 @@ Additionally:
 
 * **Show the taskbar top line** - shows or hides the thin line at the top
   edge of the taskbar.
-* **Hide the taskbar drag grip** - hides the small gray rounded handle at
-  the top center of the taskbar. That handle is part of Windows itself
-  (it shows while the taskbar is unlocked), it is not drawn by this mod,
-  but it can be hidden here.
+* The small gray rounded drag handle at the top center of the taskbar is
+  always hidden while the mod is active. That handle is part of Windows itself
+  (it shows while the taskbar is unlocked), it is not drawn by this mod.
 
 ## How it works
 
 The background is adjusted with a composition effect graph (a color matrix
 shader over a live backdrop brush), which is pixel-accurate. The icons and
-text are XAML content which cannot be filtered with shaders, so brightness
-for that target is approximated with a black or white overlay which is drawn
-on top of the icons. The overlay is a composition visual rather than a XAML
-element, so it takes no part in the taskbar layout and cannot move anything.
-Opacity is exact for all targets.
+text are XAML content which cannot be filtered with shaders, so the dimming
+for that target is approximated with a black overlay which is drawn on top of
+the icons. The overlay is a composition visual rather than a XAML element, so
+it takes no part in the taskbar layout and cannot move anything. Opacity is
+exact for all targets.
 
 The icons and text layer is found by walking the taskbar visual tree: every
 subtree which contains neither the background nor a flyout host is adjusted
 as a unit. This covers all icon areas (the Start, search and Task View
 buttons, the task buttons and the system tray) on every Windows build,
 without depending on the class names of the individual containers.
+
+## Compared with other mods
+
+* **Windows 11 Taskbar Styler** can restyle the top line, the drag grip and
+  the background (and much more), but it takes style rules. This mod is a
+  zero-configuration dial instead: one brightness and one opacity value cover
+  the whole taskbar at once, no rules to write, and the drag grip is hidden
+  automatically.
+* **Taskbar Background Helper** and **Dynamic Taskbar Transparency** adjust
+  the background only (blur/acrylic/color, or per-shell-state opacity). This
+  mod adjusts the background brightness and opacity as well, but additionally
+  dims the icons and text as a whole layer.
+* **Taskbar Fade** also dims the taskbar for OLED burn-in protection. This mod
+  extends that idea to the icons and text layer - the brightest part of the
+  taskbar and the main burn-in risk - via a composition overlay which does not
+  disturb the XAML layout.
+
+The icons and text adjustment is the capability none of the existing mods
+offer, and the reason this mod exists as a separate, deliberately simple one:
+the goal is a single healthy-brightness dial for the whole taskbar, not a
+theming framework.
 
 ## Notes
 
@@ -84,10 +105,11 @@ without depending on the class names of the individual containers.
   $name: Brightness
   $name:zh-CN: 亮度
   $description: >-
-    Taskbar brightness adjustment, from -100 (black) to 100 (white), 0 means
-    no change. For the icons and text target this is approximated with a
-    black or white overlay.
-  $description:zh-CN: 任务栏亮度调整，范围 -100（全黑）到 100（全白），0 表示不调整。当作用对象为“仅图标和文字”时，该效果用黑色或白色叠加层近似实现。
+    Taskbar dimming, from -100 (black) to 0 (no change). The mod only dims,
+    because its purpose is a brightness which is easier on the eyes and
+    healthier for OLED displays. For the icons and text target this is
+    approximated with a black overlay.
+  $description:zh-CN: 任务栏亮度调暗，范围 -100（全黑）到 0（不调整）。本 mod 只调暗不调亮，因为它的目的是让亮度更护眼、对 OLED 显示器更健康。当作用对象为“仅图标和文字”时，该效果用黑色叠加层近似实现。
 - brightnessTarget: both
   $name: Brightness target
   $name:zh-CN: 亮度作用对象
@@ -129,14 +151,6 @@ without depending on the class names of the individual containers.
     Whether to show the thin line at the top edge of the taskbar. When
     disabled, the line is hidden by clearing the taskbar border stroke.
   $description:zh-CN: 是否显示任务栏顶部的细线。关闭后通过清除任务栏边框描边来隐藏该线。
-- hideGrip: false
-  $name: Hide the taskbar drag grip
-  $name:zh-CN: 隐藏任务栏拖拽手柄
-  $description: >-
-    Hides the small gray rounded handle at the top center of the taskbar
-    (Rectangle#Gripper, a Windows element which shows while the taskbar is
-    unlocked). It is part of Windows itself, not drawn by this mod.
-  $description:zh-CN: 隐藏任务栏顶部中央的灰色圆角拖拽手柄（Rectangle#Gripper，Windows 自带元素，任务栏未锁定时显示，并非本 mod 绘制）。
 */
 // ==/WindhawkModSettings==
 
@@ -145,10 +159,8 @@ without depending on the class names of the individual containers.
 #include <algorithm>
 #include <atomic>
 #include <cmath>
-#include <cstdarg>
-#include <cstdio>
 #include <cwchar>
-#include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -158,11 +170,9 @@ without depending on the class names of the individual containers.
 
 #include <d2d1_1.h>
 
-#include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Graphics.Effects.h>
 #include <winrt/Windows.UI.Composition.h>
-#include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
@@ -410,86 +420,6 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-// Diagnostics
-//
-// Wh_Log() output is only visible with a debug output viewer attached. The same
-// messages are mirrored into a small text file in the temp directory, which
-// makes a field report a single file to look at. The file is truncated on every
-// settings change, so it always holds the most recent run.
-
-void AppendDebugFile(std::wstring const& text) {
-    if (text.empty()) {
-        return;
-    }
-
-    WCHAR tempPath[MAX_PATH];
-    DWORD tempPathLength = GetTempPath(ARRAYSIZE(tempPath), tempPath);
-    if (!tempPathLength || tempPathLength > ARRAYSIZE(tempPath) - 40) {
-        return;
-    }
-
-    std::wstring path(tempPath);
-    path += L"taskbar-appearance-tuner.txt";
-
-    HANDLE file = CreateFileW(path.c_str(), FILE_APPEND_DATA,
-                              FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
-                              OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) {
-        return;
-    }
-
-    int utf8Length = WideCharToMultiByte(CP_UTF8, 0, text.c_str(),
-                                         (int)text.size(), nullptr, 0, nullptr,
-                                         nullptr);
-    if (utf8Length > 0) {
-        std::string utf8(utf8Length, '\0');
-        WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(),
-                            utf8.data(), utf8Length, nullptr, nullptr);
-
-        DWORD written = 0;
-        WriteFile(file, utf8.data(), (DWORD)utf8.size(), &written, nullptr);
-        WriteFile(file, "\r\n", 2, &written, nullptr);
-    }
-
-    CloseHandle(file);
-}
-
-void ResetDebugFile() {
-    WCHAR tempPath[MAX_PATH];
-    DWORD tempPathLength = GetTempPath(ARRAYSIZE(tempPath), tempPath);
-    if (!tempPathLength || tempPathLength > ARRAYSIZE(tempPath) - 40) {
-        return;
-    }
-
-    std::wstring path(tempPath);
-    path += L"taskbar-appearance-tuner.txt";
-    DeleteFileW(path.c_str());
-}
-
-// Logs a line to Wh_Log() and to the debug file.
-void DiagLine(std::wstring const& text) {
-    Wh_Log(L"%s", text.c_str());
-    AppendDebugFile(text);
-}
-
-// Logs a printf-style line (ASCII class names and numbers).
-void Diag(const char* format, ...) {
-    char buffer[1024];
-    va_list args;
-    va_start(args, format);
-    vsnprintf(buffer, sizeof(buffer), format, args);
-    va_end(args);
-
-    WCHAR wideBuffer[1024];
-    if (!MultiByteToWideChar(CP_UTF8, 0, buffer, -1, wideBuffer,
-                             ARRAYSIZE(wideBuffer))) {
-        return;
-    }
-
-    DiagLine(wideBuffer);
-}
-
-////////////////////////////////////////////////////////////////////////////////
 // BackdropAdjustBrush: renders the live backdrop (what is behind the taskbar)
 // with a brightness adjustment via a color matrix effect.
 class BackdropAdjustBrush
@@ -515,25 +445,24 @@ private:
     wuc::CompositionBrush CreateEffectBrush() {
         auto backdropBrush = m_compositor.CreateBackdropBrush();
 
-        // Brightness: negative scales toward black, positive fades toward
-        // white (pivot at mid-gray), both linear and clamped.
+        // Dimming: the color matrix scales the color channels toward black.
+        // Brightening is not supported (the mod exists to make the taskbar
+        // dimmer), so the bias row of the matrix stays at zero.
         auto brightMatrix = winrt::make_self<ColorMatrixEffect>();
         brightMatrix->Source = wuc::CompositionEffectSourceParameter(L"source");
 
-        float b = std::clamp(m_brightness, -1.0f, 1.0f);
-        float scale = b < 0.0f ? 1.0f + b : 1.0f;
-        float offset = b > 0.0f ? b : 0.0f;
+        float brightness = std::clamp(m_brightness, -1.0f, 0.0f);
+        float scale = 1.0f + brightness;
         auto& bm = brightMatrix->Matrix;
         bm[0] = scale; bm[1] = 0.0f;  bm[2] = 0.0f;  bm[3] = 0.0f;
         bm[4] = 0.0f;  bm[5] = scale; bm[6] = 0.0f;  bm[7] = 0.0f;
         bm[8] = 0.0f;  bm[9] = 0.0f;  bm[10] = scale; bm[11] = 0.0f;
         bm[12] = 0.0f; bm[13] = 0.0f; bm[14] = 0.0f; bm[15] = 1.0f;
-        bm[16] = offset; bm[17] = offset; bm[18] = offset; bm[19] = 0.0f;
+        bm[16] = 0.0f; bm[17] = 0.0f; bm[18] = 0.0f; bm[19] = 0.0f;
         brightMatrix->ClampOutput = true;
         brightMatrix->Name(L"BrightnessEffect");
 
-        Diag("Effect graph: brightness=%.2f (scale=%.2f, offset=%.2f)", b,
-             scale, offset);
+        Wh_Log(L"Effect graph: dimming=%.2f (scale=%.2f)", brightness, scale);
 
         auto factory = m_compositor.CreateEffectFactory(*brightMatrix);
         auto brush = factory.CreateBrush();
@@ -557,45 +486,76 @@ enum class AppearanceTarget {
     Both,
 };
 
-// The legacy numeric values are still accepted, so that a configuration saved
-// by an older version of the mod doesn't silently change behaviour.
 AppearanceTarget ParseTarget(PCWSTR value) {
-    if (!value) {
-        return AppearanceTarget::Both;
-    }
-    if (wcscmp(value, L"background") == 0 || wcscmp(value, L"0") == 0) {
+    if (wcscmp(value, L"background") == 0) {
         return AppearanceTarget::Background;
     }
-    if (wcscmp(value, L"icons") == 0 || wcscmp(value, L"1") == 0) {
+    if (wcscmp(value, L"icons") == 0) {
         return AppearanceTarget::Icons;
     }
     return AppearanceTarget::Both;
 }
 
 struct {
-    int brightness;  // -100..100, 0 = no change
+    int brightness;  // -100..0, 0 = no change (dimming only)
     AppearanceTarget brightnessTarget;
     int opacity;  // 0..100, 100 = no change
     AppearanceTarget opacityTarget;
     bool topLine;  // false = hide the taskbar top line
-    bool hideGrip;  // true = hide the taskbar drag grip handle
 } g_settings;
 
 std::atomic<bool> g_unloading{false};
 
-// The taskbar XAML tree is dumped to the diagnostic file once per mod load,
-// and only after it turned out to be populated.
+// The taskbar XAML tree is dumped to the log once per mod load, and only
+// after it turned out to be populated.
 std::atomic<bool> g_treeDumped{false};
 
-// Narrow, because it is only used with the printf-style Diag() helper.
-const char* TargetName(AppearanceTarget target) {
+// Finds a direct child by its XAML name.
+FrameworkElement FindChildByName(FrameworkElement element, PCWSTR name) {
+    int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
+    for (int i = 0; i < childrenCount; i++) {
+        auto child = Media::VisualTreeHelper::GetChild(element, i)
+                         .try_as<FrameworkElement>();
+        if (child) {
+            try {
+                if (child.Name() == name) {
+                    return child;
+                }
+            } catch (...) {
+            }
+        }
+    }
+    return nullptr;
+}
+
+// Finds a direct child by its XAML class name.
+FrameworkElement FindChildByClassName(FrameworkElement element,
+                                      PCWSTR className) {
+    int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
+    for (int i = 0; i < childrenCount; i++) {
+        auto child = Media::VisualTreeHelper::GetChild(element, i)
+                         .try_as<FrameworkElement>();
+        if (child) {
+            try {
+                if (winrt::get_class_name(child) == className) {
+                    return child;
+                }
+            } catch (...) {
+            }
+        }
+    }
+    return nullptr;
+}
+
+// Describes an appearance target for the log.
+PCWSTR TargetName(AppearanceTarget target) {
     switch (target) {
         case AppearanceTarget::Background:
-            return "background";
+            return L"background";
         case AppearanceTarget::Icons:
-            return "icons";
+            return L"icons";
         default:
-            return "both";
+            return L"both";
     }
 }
 
@@ -623,7 +583,12 @@ struct AppearanceState {
     std::vector<winrt::weak_ref<FrameworkElement>> overlays;
 };
 
-std::vector<AppearanceState> g_states;
+// AppearanceState holds strong XAML brushes, which must not be released by the
+// automatic destructor at process shutdown (Explorer's shutdown path runs
+// global destructors after the XAML core is gone). States are released via
+// RestoreAllStates() on the taskbar UI thread instead, and the buffer is
+// dropped in Wh_ModUninit.
+[[clang::no_destroy]] std::optional<std::vector<AppearanceState>> g_states;
 
 HWND FindCurrentProcessTaskbarWnd() {
     HWND hTaskbarWnd = nullptr;
@@ -646,9 +611,17 @@ HWND FindCurrentProcessTaskbarWnd() {
     return hTaskbarWnd;
 }
 
-// Recursively enumerates all descendants of the given element.
-void EnumDescendants(FrameworkElement element,
-                     std::function<bool(FrameworkElement)> enumCallback) {
+// Recursively enumerates all descendants of the given element. The walk is
+// bounded: an unexpectedly deep tree stops the enumeration instead of
+// overflowing the stack. The callback is a template parameter so that no
+// std::function is allocated per call.
+template <typename T>
+void EnumDescendants(FrameworkElement element, T&& enumCallback, int depth = 0) {
+    constexpr int kMaxDepth = 12;
+    if (depth > kMaxDepth) {
+        return;
+    }
+
     int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
 
     for (int i = 0; i < childrenCount; i++) {
@@ -662,7 +635,7 @@ void EnumDescendants(FrameworkElement element,
             return;
         }
 
-        EnumDescendants(child, enumCallback);
+        EnumDescendants(child, enumCallback, depth + 1);
     }
 }
 
@@ -675,26 +648,6 @@ FrameworkElement FindDescendantByName(FrameworkElement element, PCWSTR name) {
         }
         return false;
     });
-    return result;
-}
-
-// Describes an element for the log as "Class#Name".
-// Converts a wide string to UTF-8, for the printf-style logging helper.
-std::string Narrow(std::wstring const& text) {
-    if (text.empty()) {
-        return std::string();
-    }
-
-    int length = WideCharToMultiByte(CP_UTF8, 0, text.c_str(),
-                                     (int)text.size(), nullptr, 0, nullptr,
-                                     nullptr);
-    if (length <= 0) {
-        return std::string();
-    }
-
-    std::string result(length, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(),
-                        result.data(), length, nullptr, nullptr);
     return result;
 }
 
@@ -719,7 +672,7 @@ std::wstring DescribeElement(FrameworkElement element) {
 }
 
 // Describes the bounds of the element relative to the content element as
-// "(x, y w x h)", for the diagnostics file.
+// "(x, y w x h)", for the log.
 std::wstring DescribeRect(FrameworkElement element, FrameworkElement content) {
     try {
         auto origin = element.TransformToVisual(content)
@@ -923,8 +876,8 @@ void CollectIconLayers(FrameworkElement element,
 
         if (withinVisibleTaskbar) {
             elements.push_back(element);
-            DiagLine(L"Icon layer: " + DescribeElement(element) + L" " +
-                     DescribeRect(element, content));
+            Wh_Log(L"Icon layer: %s %s", DescribeElement(element).c_str(),
+                   DescribeRect(element, content).c_str());
             return;
         }
     }
@@ -955,7 +908,6 @@ void CollectIconLayers(FrameworkElement element,
 // depth, class name and (if set) the element name. Used for diagnostics when
 // expected elements are missing on an unknown Windows build.
 void DumpVisualTree(FrameworkElement root, int maxDepth, int maxElements) {
-    std::wstring dump;
     int logged = 0;
 
     auto walk = [&](auto&& self, FrameworkElement element, int depth) -> void {
@@ -964,9 +916,9 @@ void DumpVisualTree(FrameworkElement root, int maxDepth, int maxElements) {
         }
 
         logged++;
-        dump.append((size_t)depth * 2, L' ');
-        dump += DescribeElement(element);
-        dump += L"\r\n";
+        std::wstring line((size_t)depth * 2, L' ');
+        line += DescribeElement(element);
+        Wh_Log(L"%s", line.c_str());
 
         int childrenCount = 0;
         try {
@@ -986,7 +938,6 @@ void DumpVisualTree(FrameworkElement root, int maxDepth, int maxElements) {
     };
 
     walk(walk, root, 0);
-    AppendDebugFile(dump);
 }
 
 // Collects the containers which form the icons and text layer. Elements which
@@ -1005,15 +956,15 @@ std::vector<FrameworkElement> CollectForegroundElements(
     std::vector<FrameworkElement> elements;
     CollectIconLayers(content, content, bandTop, bandBottom, 0, elements);
 
-    Diag("Icon layers: %d, content %.0fx%.0f, visible band %.0f..%.0f",
-         (int)elements.size(), content.ActualWidth(), content.ActualHeight(),
-         bandTop, bandBottom);
+    Wh_Log(L"Icon layers: %d, content %.0fx%.0f, visible band %.0f..%.0f",
+           (int)elements.size(), content.ActualWidth(), content.ActualHeight(),
+           bandTop, bandBottom);
 
     if (elements.empty()) {
         static bool dumped = false;
         if (!dumped) {
             dumped = true;
-            DiagLine(L"Icon and text layer not found");
+            Wh_Log(L"Icon and text layer not found");
         }
     }
 
@@ -1059,19 +1010,23 @@ void RestoreState(AppearanceState& state) {
 // are back to their defaults, or when the mod is unloading, so that nothing is
 // left adjusted.
 void RestoreAllStates() {
-    for (auto& state : g_states) {
-        RestoreState(state);
-    }
+    if (g_states) {
+        for (auto& state : *g_states) {
+            RestoreState(state);
+        }
 
-    g_states.clear();
+        g_states->clear();
+    }
 }
 
 std::pair<AppearanceState*, size_t> FindStateForRoot(
     FrameworkElement root) {
-    for (size_t i = 0; i < g_states.size(); i++) {
-        if (auto stateRoot = g_states[i].root.get(); stateRoot &&
-                                                    stateRoot == root) {
-            return {&g_states[i], i};
+    if (g_states) {
+        for (size_t i = 0; i < g_states->size(); i++) {
+            if (auto stateRoot = (*g_states)[i].root.get();
+                stateRoot && stateRoot == root) {
+                return {&(*g_states)[i], i};
+            }
         }
     }
 
@@ -1089,11 +1044,11 @@ bool ShouldAdjustForeground(AppearanceTarget target) {
 
 bool IsNeutral() {
     return g_settings.brightness == 0 && g_settings.opacity == 100 &&
-           g_settings.topLine && !g_settings.hideGrip;
+           g_settings.topLine;
 }
 
-// Applies the brightness approximation to one foreground element: a solid
-// black or white visual is drawn on top of the element's content.
+// Applies the dimming approximation to one foreground element: a solid black
+// visual is drawn on top of the element's content.
 //
 // The overlay deliberately is not an element of the XAML tree. The taskbar
 // lays its content out in StackPanels, where an inserted child consumes layout
@@ -1109,6 +1064,7 @@ bool ApplyBrightnessOverlay(FrameworkElement element,
     double width = element.ActualWidth();
     double height = element.ActualHeight();
     if (!(width > 0) || !(height > 0)) {
+        // Not laid out yet; a retry pass will try again.
         return false;
     }
 
@@ -1118,13 +1074,28 @@ bool ApplyBrightnessOverlay(FrameworkElement element,
                 GetElementVisual(element)
                     .Compositor();
 
+        // SetElementChildVisual has a single child visual slot per element.
+        // If something is already there (Windows itself, or another mod),
+        // leave it alone instead of silently replacing it here and destroying
+        // it on restore.
+        if (winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::
+                GetElementChildVisual(element)) {
+            Wh_Log(L"  child visual slot occupied, skipping: %s",
+                   DescribeElement(element).c_str());
+            return false;
+        }
+
         BYTE alphaByte =
             (BYTE)std::lround(std::clamp(alpha, 0.0, 1.0) * 255.0);
 
         auto overlay = compositor.CreateSpriteVisual();
         overlay.Brush(compositor.CreateColorBrush(
             winrt::Windows::UI::Color{alphaByte, r, g, b}));
-        overlay.Size({(float)width, (float)height});
+        // Track the host element's visual size instead of snapshotting it, so
+        // that the overlay keeps covering the element when it resizes (task
+        // buttons appear and disappear, tray icons change, the taskbar is
+        // moved or the DPI changes).
+        overlay.RelativeSizeAdjustment({1.0f, 1.0f});
 
         // SetElementChildVisual adds the visual as the last child of the
         // element's visual tree, which is the top of its z-order.
@@ -1132,10 +1103,11 @@ bool ApplyBrightnessOverlay(FrameworkElement element,
             SetElementChildVisual(element, overlay);
         return true;
     } catch (winrt::hresult_error const& e) {
-        Diag("  brightness overlay failed: %08X", (unsigned)e.code().value);
+        Wh_Log(L"  brightness overlay failed: %08X",
+               (unsigned)e.code().value);
         return false;
     } catch (...) {
-        Diag("  brightness overlay failed (unknown error)");
+        Wh_Log(L"  brightness overlay failed (unknown error)");
         return false;
     }
 }
@@ -1152,9 +1124,9 @@ void RemoveBrightnessOverlay(FrameworkElement element) {
     }
 }
 
-// How much of a full black or white overlay corresponds to a brightness of
-// -100 or 100 for the icons and text target. Below 1.0 so that the icons
-// stay recognizable at the extremes.
+// How much of a full black overlay corresponds to a brightness of -100 for the
+// icons and text target. Below 1.0 so that the icons stay recognizable at the
+// extreme.
 constexpr double kForegroundBrightnessStrength = 0.8;
 
 // The vertical bounds of the visible taskbar area in content coordinates.
@@ -1208,13 +1180,13 @@ void ApplyTopLineStyle(FrameworkElement content,
     }
 
     if (!topLineElem) {
-        Diag("BackgroundStroke not found");
+        Wh_Log(L"BackgroundStroke not found");
         return;
     }
 
     auto topLineRect = topLineElem.try_as<Shapes::Rectangle>();
     if (!topLineRect) {
-        Diag("BackgroundStroke is not a Rectangle");
+        Wh_Log(L"BackgroundStroke is not a Rectangle");
         return;
     }
 
@@ -1227,30 +1199,30 @@ void ApplyTopLineStyle(FrameworkElement content,
         topLineRect.Fill(nullptr);
         topLineRect.StrokeThickness(0);
         topLineRect.Visibility(Visibility::Collapsed);
-        Diag("Top line hidden (original stroke thickness=%.1f)",
-             state.originalTopLineThickness);
+        Wh_Log(L"Top line hidden (original stroke thickness=%.1f)",
+               state.originalTopLineThickness);
     }
 }
 
-// Records and optionally hides the drag grip handle: the small gray rounded
-// handle at the top center of the taskbar (Rectangle#Gripper inside
-// Taskbar.Gripper#GripperControl). It is part of Windows (it shows while the
-// taskbar is unlocked) and is not affected by the brightness and opacity
-// adjustments, but it can be hidden on request.
+// Records and hides the drag grip handle: the small gray rounded handle at the
+// top center of the taskbar (Rectangle#Gripper inside Taskbar.Gripper#
+// GripperControl). It is part of Windows (it shows while the taskbar is
+// unlocked) and is not affected by the brightness and opacity adjustments, so
+// it is always hidden while the mod is active - a gray handle would otherwise
+// stick out of an otherwise dimmed taskbar. The original state is recorded so
+// that RestoreState can bring it back.
 void ApplyGripStyle(FrameworkElement content, AppearanceState& state) {
     auto gripElem = FindDescendantByName(content, L"Gripper");
     if (!gripElem) {
-        Diag("Grip handle not found");
+        Wh_Log(L"Grip handle not found");
         return;
     }
 
     state.grip = winrt::make_weak(gripElem);
     state.originalGripVisibility = gripElem.Visibility();
 
-    if (g_settings.hideGrip) {
-        gripElem.Visibility(Visibility::Collapsed);
-        Diag("Grip handle hidden");
-    }
+    gripElem.Visibility(Visibility::Collapsed);
+    Wh_Log(L"Grip handle hidden");
 }
 
 // Adjusts the background rectangle: opacity directly, brightness by replacing
@@ -1268,7 +1240,7 @@ void ApplyBackgroundStyle(Shapes::Rectangle const& backgroundFill) {
     }
 
     if (!hasBrightness) {
-        Diag("Background: no effect requested");
+        Wh_Log(L"Background: no effect requested");
         return;
     }
 
@@ -1280,13 +1252,13 @@ void ApplyBackgroundStyle(Shapes::Rectangle const& backgroundFill) {
         float brightness = g_settings.brightness / 100.0f;
         auto brush = winrt::make<BackdropAdjustBrush>(compositor, brightness);
         backgroundFill.Fill(brush);
-        Diag("Background fill replaced (brightness=%.2f)", brightness);
+        Wh_Log(L"Background fill replaced (brightness=%.2f)", brightness);
     } catch (winrt::hresult_error const& e) {
-        Diag("Failed to create backdrop brush: %08X (error)",
-             (unsigned)e.code().value);
+        Wh_Log(L"Failed to create backdrop brush: %08X (error)",
+               (unsigned)e.code().value);
         // Keep going with the other adjustments.
     } catch (...) {
-        Diag("Failed to create backdrop brush (unknown error)");
+        Wh_Log(L"Failed to create backdrop brush (unknown error)");
         // Keep going with the other adjustments.
     }
 }
@@ -1302,11 +1274,10 @@ void ApplyForegroundStyle(std::vector<FrameworkElement> const& elements,
         ShouldAdjustForeground(g_settings.brightnessTarget) &&
         g_settings.brightness != 0;
 
-    Diag("Foreground elements found: %d", (int)elements.size());
+    Wh_Log(L"Foreground elements found: %d", (int)elements.size());
 
     for (auto& element : elements) {
-        Diag("Foreground element: %s",
-             Narrow(DescribeElement(element)).c_str());
+        Wh_Log(L"Foreground element: %s", DescribeElement(element).c_str());
 
         if (hasOpacity) {
             state.foregroundOpacity.emplace_back(winrt::make_weak(element),
@@ -1318,21 +1289,37 @@ void ApplyForegroundStyle(std::vector<FrameworkElement> const& elements,
             continue;
         }
 
-        double b = g_settings.brightness / 100.0;
-        bool black = b < 0;
-        double alpha =
-            (black ? -b : b) * kForegroundBrightnessStrength;
-        BYTE color = black ? 0 : 255;
+        // Dimming only, so the overlay is always black: the value is a
+        // negative percentage, and 0 means no change.
+        double dimming = -g_settings.brightness / 100.0;
+        double alpha = dimming * kForegroundBrightnessStrength;
+        constexpr BYTE kBlack = 0;
 
-        if (ApplyBrightnessOverlay(element, color, color, color, alpha)) {
+        if (ApplyBrightnessOverlay(element, kBlack, kBlack, kBlack, alpha)) {
             state.overlays.push_back(winrt::make_weak(element));
-            Diag("  brightness overlay: %s alpha=%.2f (%.0fx%.0f)",
-                 black ? "black" : "white", alpha, element.ActualWidth(),
-                 element.ActualHeight());
+            Wh_Log(L"  dimming overlay: alpha=%.2f (%.0fx%.0f)", alpha,
+                   element.ActualWidth(), element.ActualHeight());
         } else {
-            Diag("  brightness overlay skipped (element has no size)");
+            Wh_Log(L"  dimming overlay skipped");
         }
     }
+}
+
+// Locates the taskbar background rectangle. The known tree path is walked
+// explicitly first: flyouts contain rectangles with the same names, and a
+// depth-first search just takes whatever it reaches first. The search falls
+// back to a bounded tree walk for Windows builds with a different structure.
+FrameworkElement FindBackgroundFill(FrameworkElement content) {
+    FrameworkElement child = content;
+    if ((child = FindChildByName(child, L"RootGrid")) &&
+        (child = FindChildByName(child, L"BackgroundControl")) &&
+        (child = FindChildByClassName(
+             child, L"Windows.UI.Xaml.Controls.Grid")) &&
+        (child = FindChildByName(child, L"BackgroundFill"))) {
+        return child;
+    }
+
+    return FindDescendantByName(content, L"BackgroundFill");
 }
 
 bool ApplyStyle(XamlRoot xamlRoot) {
@@ -1341,38 +1328,38 @@ bool ApplyStyle(XamlRoot xamlRoot) {
         return false;
     }
 
-    Diag("Applying settings: brightness=%d (%s), opacity=%d (%s)",
-         g_settings.brightness, TargetName(g_settings.brightnessTarget),
-         g_settings.opacity, TargetName(g_settings.opacityTarget));
+    Wh_Log(L"Applying settings: brightness=%d (%s), opacity=%d (%s)",
+           g_settings.brightness, TargetName(g_settings.brightnessTarget),
+           g_settings.opacity, TargetName(g_settings.opacityTarget));
 
     // The visual tree is keyed by the root content element.
     // When all settings are back to their defaults, or when the mod is
     // unloading, everything must be restored to its original appearance.
     if (g_unloading || IsNeutral()) {
-        Diag("%s, restoring original appearance",
-             g_unloading ? "Mod is unloading" : "All settings are neutral");
+        Wh_Log(L"%s, restoring original appearance",
+               g_unloading ? L"Mod is unloading" : L"All settings are neutral");
         RestoreAllStates();
         return true;
     }
 
     auto [state, stateIndex] = FindStateForRoot(content);
 
-    // Locate the taskbar background rectangle and the root grid.
-    auto backgroundFillElem = FindDescendantByName(content, L"BackgroundFill");
+    // Locate the taskbar background rectangle.
+    auto backgroundFillElem = FindBackgroundFill(content);
     if (!backgroundFillElem) {
-        Diag("BackgroundFill not found (unsupported taskbar?)");
+        Wh_Log(L"BackgroundFill not found (unsupported taskbar?)");
         return false;
     }
 
     auto backgroundFill = backgroundFillElem.try_as<Shapes::Rectangle>();
     if (!backgroundFill) {
-        Diag("BackgroundFill is not a Rectangle");
+        Wh_Log(L"BackgroundFill is not a Rectangle");
         return false;
     }
 
     // The tree is populated (the background rectangle exists), so dump it once
-    // per mod load: a field report then always contains the real element names
-    // and the real structure of the Windows build it was made on.
+    // per mod load: the log then always contains the real element names and
+    // the real structure of the Windows build it was made on.
     if (!g_treeDumped.exchange(true)) {
         DumpVisualTree(content, 7, 260);
     }
@@ -1396,7 +1383,7 @@ bool ApplyStyle(XamlRoot xamlRoot) {
         foregroundElements =
             CollectForegroundElements(content, bandTop, bandBottom);
         if (foregroundElements.empty()) {
-            Diag("Icon and text layer is empty, taskbar not laid out yet");
+            Wh_Log(L"Icon and text layer is empty, taskbar not laid out yet");
             return false;
         }
     }
@@ -1404,7 +1391,7 @@ bool ApplyStyle(XamlRoot xamlRoot) {
     // Restore any previous state for this root before re-applying.
     if (state) {
         RestoreState(*state);
-        g_states.erase(g_states.begin() + stateIndex);
+        g_states->erase(g_states->begin() + stateIndex);
     }
 
     AppearanceState newState;
@@ -1424,7 +1411,7 @@ bool ApplyStyle(XamlRoot xamlRoot) {
         ApplyForegroundStyle(foregroundElements, newState);
     }
 
-    g_states.push_back(std::move(newState));
+    g_states->push_back(std::move(newState));
     return true;
 }
 
@@ -1606,10 +1593,6 @@ struct ApplyPassResult {
 void WINAPI ApplyPassOnTaskbarThread(void* parameter) {
     ApplyPassResult* result = (ApplyPassResult*)parameter;
 
-    // The debug file holds the report of the most recent pass only, so that a
-    // field report always describes the current state.
-    ResetDebugFile();
-
     Wh_Log(L"Applying settings");
 
     EnumThreadWindows(
@@ -1635,8 +1618,14 @@ void WINAPI ApplyPassOnTaskbarThread(void* parameter) {
 
             if (g_unloading.load()) {
                 // Stop a retry which is still in flight, so that no timer
-                // callback can outlive the mod.
+                // callback can outlive the mod, and restore unconditionally:
+                // RestoreAllStates() works off the stored weak refs and does
+                // not need a XamlRoot. A skipped restore would leave the
+                // taskbar holding brushes and overlays which live in the mod
+                // image, which crashes Explorer once the mod is unloaded.
                 StopApplyRetry(hWnd);
+                RestoreAllStates();
+                return TRUE;
             }
 
             if (!xamlRoot) {
@@ -1677,8 +1666,26 @@ constexpr UINT_PTR kApplyRetryTimerId = 0x7A9C;
 constexpr UINT kApplyRetryIntervalMs = 150;
 constexpr ULONGLONG kApplyRetryTotalMs = 8000;
 
-// Only ever touched on the taskbar window thread.
-ULONGLONG g_applyRetryDeadline = 0;
+// The retry deadline is stored per taskbar window (there can be several on
+// multi-monitor systems, and a shared global would make whichever timer fires
+// first drive the retry window of all of them). Only ever touched on the
+// taskbar window thread.
+constexpr const wchar_t* kApplyRetryDeadlineProp =
+    L"Windhawk_TaskbarAppearanceTuner_RetryDeadline";
+
+ULONGLONG GetApplyRetryDeadline(HWND hWnd) {
+    auto value = (ULONGLONG)(ULONG_PTR)GetProp(hWnd, kApplyRetryDeadlineProp);
+    return value;
+}
+
+void SetApplyRetryDeadline(HWND hWnd, ULONGLONG deadline) {
+    SetProp(hWnd, kApplyRetryDeadlineProp,
+            (HANDLE)(ULONG_PTR)deadline);
+}
+
+void RemoveApplyRetryDeadline(HWND hWnd) {
+    RemoveProp(hWnd, kApplyRetryDeadlineProp);
+}
 
 void CALLBACK ApplyRetryTimerProc(HWND hWnd, UINT, UINT_PTR idEvent, DWORD) {
     if (idEvent != kApplyRetryTimerId) {
@@ -1689,11 +1696,11 @@ void CALLBACK ApplyRetryTimerProc(HWND hWnd, UINT, UINT_PTR idEvent, DWORD) {
     ApplyPassOnTaskbarThread(&result);
 
     if ((result.sawTaskbar && result.allReady) ||
-        GetTickCount64() >= g_applyRetryDeadline) {
+        GetTickCount64() >= GetApplyRetryDeadline(hWnd)) {
         Wh_Log(L"Apply retry finished (tree ready: %s)",
                result.allReady ? L"yes" : L"no");
         KillTimer(hWnd, kApplyRetryTimerId);
-        g_applyRetryDeadline = 0;
+        RemoveApplyRetryDeadline(hWnd);
     }
 }
 
@@ -1702,8 +1709,9 @@ void ScheduleApplyRetry(HWND hTaskbarWnd) {
     // The deadline is only ever set once. The passes driven by the timer itself
     // report the same "not ready" state, and must not extend the retry window,
     // otherwise the timer would never stop.
-    if (g_applyRetryDeadline == 0) {
-        g_applyRetryDeadline = GetTickCount64() + kApplyRetryTotalMs;
+    if (GetApplyRetryDeadline(hTaskbarWnd) == 0) {
+        SetApplyRetryDeadline(hTaskbarWnd,
+                              GetTickCount64() + kApplyRetryTotalMs);
     }
 
     // Idempotent: re-arming a running timer just restarts it.
@@ -1719,7 +1727,7 @@ void ScheduleApplyRetry(HWND hTaskbarWnd) {
 // Must be called on the taskbar window thread.
 void StopApplyRetry(HWND hTaskbarWnd) {
     KillTimer(hTaskbarWnd, kApplyRetryTimerId);
-    g_applyRetryDeadline = 0;
+    RemoveApplyRetryDeadline(hTaskbarWnd);
 }
 
 using TrayUI_StartTaskbar_t = void(WINAPI*)(void* pThis);
@@ -1831,13 +1839,14 @@ void LoadSettings() {
     auto opacityTarget =
         WindhawkUtils::StringSetting::make(L"opacityTarget");
 
+    // Dimming only: positive values are clamped away, so that a configuration
+    // written by an older version of the mod cannot brighten the taskbar.
     g_settings.brightness =
-        std::clamp(Wh_GetIntSetting(L"brightness"), -100, 100);
+        std::clamp(Wh_GetIntSetting(L"brightness"), -100, 0);
     g_settings.brightnessTarget = ParseTarget(brightnessTarget.get());
     g_settings.opacity = std::clamp(Wh_GetIntSetting(L"opacity"), 0, 100);
     g_settings.opacityTarget = ParseTarget(opacityTarget.get());
     g_settings.topLine = Wh_GetIntSetting(L"topLine") != 0;
-    g_settings.hideGrip = Wh_GetIntSetting(L"hideGrip") != 0;
 }
 
 BOOL Wh_ModInit() {
@@ -1845,7 +1854,7 @@ BOOL Wh_ModInit() {
 
     // Wh_ModInit can run again without the DLL having been unloaded.
     g_treeDumped = false;
-    g_applyRetryDeadline = 0;
+    g_states.emplace();
 
     LoadSettings();
 
@@ -1878,6 +1887,12 @@ void Wh_ModBeforeUninit() {
 
 void Wh_ModUninit() {
     Wh_Log(L">");
+
+    // RestoreAllStates() already ran on the taskbar UI thread during unload
+    // (see ApplyPassOnTaskbarThread), so the vector is empty here. Dropping
+    // the buffer keeps the automatic destructor from ever touching the strong
+    // XAML references at process shutdown.
+    g_states.reset();
 }
 
 void Wh_ModSettingsChanged() {
