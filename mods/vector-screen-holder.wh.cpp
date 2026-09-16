@@ -115,8 +115,17 @@ when something else has focus.
 
 The mod also listens on a named event, `Local\WindhawkVectorScreenHolderToggle`,
 so an ordinary Windows shortcut can toggle the overlay without opening Windhawk
-at all. The one line recipe is on
-[the site](https://vector.akilluminati47.pages.dev/).
+at all. Save this as `toggle-screen-holder.vbs` and make an ordinary shortcut
+to it:
+
+```vbs
+CreateObject("WScript.Shell").Run "powershell -nop -w hidden -c ""[Threading.EventWaitHandle]::OpenExisting('Local\WindhawkVectorScreenHolderToggle').Set()""", 0, False
+```
+
+`wscript.exe` opens no console, so nothing flashes on screen. The event lives
+in the per-session `Local\` namespace, so another logged-in user cannot reach
+yours, and it grants only `EVENT_MODIFY_STATE` and `SYNCHRONIZE`: enough to
+set it and to open it, not enough to delete it or change its permissions.
 
 If you would rather **Esc** and **Space** reached the overlay from any
 application, turn on **Global Esc and Space** in the settings. It is off by
@@ -3557,6 +3566,10 @@ static IDWriteFontCollection* BuildEmbeddedFonts() {
     SafeRelease(&set);
     SafeRelease(&builder);
     SafeRelease(&file);
+    // CreateInMemoryFontFileReference was given a null owner, which is the
+    // case where DirectWrite keeps its own copy, so nothing below needs these.
+    g_embeddedFontBytes.clear();
+    g_embeddedFontBytes.shrink_to_fit();
     if (unpacked) {
         if (fragmentCtx) {
             unpacked->ReleaseFileFragment(fragmentCtx);
@@ -3801,6 +3814,13 @@ static void ApplyFallback(IDWriteTextFormat* fmt) {
 static HudFont g_hudFont;
 static bool g_hudFontResolved = false;
 
+// The widest readout the mod can produce, measured once at the reference size.
+// It depends on the resolved face and the active language, so it is the same
+// for every display; only the fitting arithmetic below is per overlay. Driving
+// six displays would otherwise lay out the same 140 strings six times on every
+// show.
+static float g_hudWidestAtRef = 0;
+
 // Called when the language changes: the words are different, so the fitted
 // size and possibly the face itself have to be worked out again.
 static void ResetHudFontChoice();
@@ -3867,10 +3887,21 @@ class Overlay {
     // that same click: it reports the current state instead of changing it,
     // which is the only sign the overlay has taken focus.
     void ArmFocusClick() { focusClickArmed_ = true; }
-    bool TakeFocusClick() {
-        bool armed = focusClickArmed_;
+    // Called on every button down. It spends the arming, so a press that is
+    // dragged off the window and released elsewhere cannot leave it set for
+    // the next click to trip over: that next press simply finds nothing armed.
+    void BeginClick() {
+        reportOnUp_ = focusClickArmed_;
         focusClickArmed_ = false;
-        return armed;
+    }
+    bool TakeReportClick() {
+        bool report = reportOnUp_;
+        reportOnUp_ = false;
+        return report;
+    }
+    void ClearFocusClick() {
+        focusClickArmed_ = false;
+        reportOnUp_ = false;
     }
 
     int style = kStyleFlow;
@@ -3903,6 +3934,7 @@ class Overlay {
     float hudMarginX_ = 24.0f;
     bool hudCrisp_ = false;
     bool focusClickArmed_ = false;
+    bool reportOnUp_ = false;
 
     Phase phase_ = kPhaseIn;
     float phaseT_ = 0;
@@ -4035,6 +4067,7 @@ bool Overlay::CreateDeviceResources() {
 
 static void ResetHudFontChoice() {
     SafeRelease(&g_hudFallback);
+    g_hudWidestAtRef = 0;
     g_hudFontResolved = false;
     g_hudFont = HudFont();
 }
@@ -4107,9 +4140,9 @@ void Overlay::CreateHudFormat() {
     // linearly with the font size, so one pass gives the exact size at which
     // the worst case fits, without a search.
     const float kRef = 32.0f;
-    float widest = 0;
+    float widest = g_hudWidestAtRef;
     IDWriteTextFormat* probe = nullptr;
-    if (SUCCEEDED(g_dwrite->CreateTextFormat(
+    if (widest <= 0 && SUCCEEDED(g_dwrite->CreateTextFormat(
             font.family.c_str(), font.collection, weight,
             DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, kRef, L"",
             &probe))) {
@@ -4137,6 +4170,7 @@ void Overlay::CreateHudFormat() {
             }
         }
         probe->Release();
+        g_hudWidestAtRef = widest;
     }
 
     // A pixel design only lands on whole pixels at whole multiples of the grid
@@ -4282,7 +4316,9 @@ void Overlay::Render(float dtSec) {
     // advancing the art for a screen nobody can see is the part worth saving.
     if (scene_ && !occluded_) {
         done = scene_->Step(ctx);
-    } else {
+    } else if (!scene_) {
+        // Nothing to draw at all is finished by definition. Occluded is not:
+        // that piece is paused, not over.
         done = true;
     }
     if (buf_->EndDraw(nullptr, nullptr) == D2DERR_RECREATE_TARGET) {
@@ -4290,37 +4326,46 @@ void Overlay::Render(float dtSec) {
         return;
     }
 
-    phaseT_ += dtSec;
-    if (phase_ == kPhaseIn) {
-        artAlpha_ = EaseInOut(ClampT(phaseT_ / kFadeIn, 0.0f, 1.0f));
-        if (phaseT_ >= kFadeIn) {
-            phase_ = kPhaseBuild;
-            phaseT_ = 0;
-            artAlpha_ = 1;
-        }
-    } else if (phase_ == kPhaseBuild) {
-        if (done) {
-            if (scene_ && scene_->Continuous()) {
-                // Contours and growth keep animating through the hold so they
-                // never sit still.
-                phase_ = kPhaseHold;
+    // The phase clock belongs to the artwork, so it stops when the artwork
+    // does. Advancing it while the overlay is covered would fade the piece
+    // out and begin another that nobody asked for and nobody saw, and under
+    // a fullscreen window it would cycle scenes for as long as that window
+    // was up, rebuilding a contour field every time. The composite below
+    // still runs, so the frozen picture is presented and Direct2D can see
+    // the window come back.
+    if (!occluded_) {
+        phaseT_ += dtSec;
+        if (phase_ == kPhaseIn) {
+            artAlpha_ = EaseInOut(ClampT(phaseT_ / kFadeIn, 0.0f, 1.0f));
+            if (phaseT_ >= kFadeIn) {
+                phase_ = kPhaseBuild;
                 phaseT_ = 0;
-            } else {
-                // One-shot styles fade away the moment they fill the screen.
+                artAlpha_ = 1;
+            }
+        } else if (phase_ == kPhaseBuild) {
+            if (done) {
+                if (scene_ && scene_->Continuous()) {
+                    // Contours and growth keep animating through the hold so they
+                    // never sit still.
+                    phase_ = kPhaseHold;
+                    phaseT_ = 0;
+                } else {
+                    // One-shot styles fade away the moment they fill the screen.
+                    phase_ = kPhaseOut;
+                    phaseT_ = 0;
+                }
+            }
+        } else if (phase_ == kPhaseHold) {
+            if (phaseT_ >= holdSecs) {
                 phase_ = kPhaseOut;
                 phaseT_ = 0;
             }
-        }
-    } else if (phase_ == kPhaseHold) {
-        if (phaseT_ >= holdSecs) {
-            phase_ = kPhaseOut;
-            phaseT_ = 0;
-        }
-    } else {
-        artAlpha_ = 1 - EaseInOut(ClampT(phaseT_ / kFadeOut, 0.0f, 1.0f));
-        if (phaseT_ >= kFadeOut) {
-            NewScene();
-            return;
+        } else {
+            artAlpha_ = 1 - EaseInOut(ClampT(phaseT_ / kFadeOut, 0.0f, 1.0f));
+            if (phaseT_ >= kFadeOut) {
+                NewScene();
+                return;
+            }
         }
     }
 
@@ -4440,12 +4485,18 @@ LRESULT CALLBACK Overlay::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             // Focus went elsewhere without the click ever landing here, so the
             // arming is stale.
             if (self) {
-                self->TakeFocusClick();
+                self->ClearFocusClick();
+            }
+            return 0;
+        case WM_LBUTTONDOWN:
+        case WM_RBUTTONDOWN:
+            if (self) {
+                self->BeginClick();
             }
             return 0;
         case WM_LBUTTONUP:
             if (self) {
-                if (self->TakeFocusClick()) {
+                if (self->TakeReportClick()) {
                     self->FlashHud();
                 } else {
                     Controller_CycleStyle(self);
@@ -4454,7 +4505,7 @@ LRESULT CALLBACK Overlay::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         case WM_RBUTTONUP:
             if (self) {
-                if (self->TakeFocusClick()) {
+                if (self->TakeReportClick()) {
                     self->FlashHud();
                 } else {
                     Controller_StepAmount(self);
@@ -5253,7 +5304,18 @@ static DWORD WINAPI WorkerThread(LPVOID) {
 
         if (toggleIdx != (DWORD)-1 && r == WAIT_OBJECT_0 + toggleIdx) {
             ToggleOverlays();
-        } else if (r == WAIT_OBJECT_0 + count) {
+        }
+
+        // MsgWaitForMultipleObjects reports only the lowest signaled index and
+        // the queue is always last, so any signaled handle hides pending
+        // messages for that iteration. The frame timer is armed to fire
+        // immediately whenever the loop is behind schedule, which is the
+        // steady state as soon as a frame costs more than its budget: on a
+        // single display EndDraw waits for the refresh, so any frame rate
+        // above the panel's does it, and so does a heavy contour scene. The
+        // queue is therefore drained unconditionally; the wait result decides
+        // what woke us, not whether input is read at all.
+        {
             MSG msg;
             while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
                 if (msg.message == WM_HOTKEY && msg.wParam == kHotkeyId) {
