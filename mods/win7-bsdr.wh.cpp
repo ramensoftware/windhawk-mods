@@ -3574,8 +3574,8 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         }
 
         UpdateAppListLayout(true);
-        CenterWindow(hDlg);
-        RedrawWindow(hDlg, nullptr, nullptr, RDW_INVALIDATE | RDW_FRAME);
+        CenterWindow(hWndDlg);
+        RedrawWindow(hWndDlg, nullptr, nullptr, RDW_INVALIDATE | RDW_FRAME);
 
         if (newTitleFont && oldTitleFont) {
             DeleteObject(oldTitleFont);
@@ -3915,6 +3915,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
 
     // Ignore failure (on pre-1703, etc.)
     // LogonUI is per-monitor V1 scaled by manifest anyway
+    // Runtime DPI change is not a big deal - not advertised in readme. Only advertised in changelog so tell 1703+ requirement there
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     // Attempt to create window on the input desktop, as the thread is always running in secure desktop at this point,
@@ -4757,29 +4758,31 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
-    if (kernelBase) {
-        CreateEventW_t pCreateEventW = (CreateEventW_t)GetProcAddress(kernelBase, "CreateEventW");
-        if (pCreateEventW) {
-            if (!WindhawkUtils::SetFunctionHook(pCreateEventW, CreateEventW_hook, &CreateEventW_orig)) {
-                Wh_Log(L"CreateEventW hook failed");
-                // not critical, well, there still is a terrrible workaround path
+    if (Wh_GetIntSetting(L"disableAsyncLogoff")) {
+        HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+        if (kernelBase) {
+            CreateEventW_t pCreateEventW = (CreateEventW_t)GetProcAddress(kernelBase, "CreateEventW");
+            if (pCreateEventW) {
+                if (!WindhawkUtils::SetFunctionHook(pCreateEventW, CreateEventW_hook, &CreateEventW_orig)) {
+                    Wh_Log(L"CreateEventW hook failed");
+                    // not critical, well, there still is a different workaround path
+                }
+            } else {
+                Wh_Log(L"GetProcAddress CreateEventW failed??");
             }
         } else {
-            Wh_Log(L"GetProcAddress CreateEventW failed??");
+            Wh_Log(L"GetModuleHandle kernelbase failed??");
         }
-    } else {
-        Wh_Log(L"GetModuleHandle kernelbase failed??");
-    }
 
-    g_hLogonControllerDll = LoadLibraryExW(L"LogonController.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (g_hLogonControllerDll) {
-        if (!WindhawkUtils::HookSymbols(g_hLogonControllerDll, logonControllerDllHooks, ARRAYSIZE(logonControllerDllHooks))) {
-            Wh_Log(L"Failed to hook symbols in LogonController.dll");
-            // Ditto
+        g_hLogonControllerDll = LoadLibraryExW(L"LogonController.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (g_hLogonControllerDll) {
+            if (!WindhawkUtils::HookSymbols(g_hLogonControllerDll, logonControllerDllHooks, ARRAYSIZE(logonControllerDllHooks))) {
+                Wh_Log(L"Failed to hook symbols in LogonController.dll");
+                // Ditto
+            }
+        } else {
+            Wh_Log(L"Failed to load LogonController.dll");
         }
-    } else {
-        Wh_Log(L"Failed to load LogonController.dll");
     }
 
     g_hBlockedShutdownDll = LoadLibraryExW(L"Windows.UI.BlockedShutdown.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -4933,6 +4936,8 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
 
     // resDllPath: only used by LogonUI during shutdown sequence which is unlikely timing for a settings change
     // and reloading already loaded resources/dialog etc. is tedious so just ignore it
+    // Ditto for disableAsyncLogoff: the dialog has already shown in one desktop (which can't be changed on runtime),
+    // and there's no point of reloading the mod (for updating some hooks) only to force close(cancel) the dialog
     // Note: LogonUI just exits when idle. It isn't even running most of the time;
     // it's more likely to be not running when the user changes the mod settings from the WH UI
     return TRUE;
