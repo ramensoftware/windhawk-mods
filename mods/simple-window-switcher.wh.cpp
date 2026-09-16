@@ -1285,6 +1285,7 @@ static INT GetCornerPref();
 static int GetWindowCornerRadiusPx();
 static void DrawSwitcherStaticContent(HDC hdc, bool fillBg, HWND hWnd);
 static void PreRenderScrollCanvases();
+static void ClearIconBitmapCache();
 static void UpdateThumbnailAnimations();
 static void UpdateDockThumbnailDwm();
 static void UpdateDockPreviewForSelection();
@@ -1901,6 +1902,7 @@ static void FreeCachedBuffers() {
         s_cachedScrollToW = 0;
         s_cachedScrollToH = 0;
     }
+    ClearIconBitmapCache();
     g_staticContentDirty = true;
 }
 
@@ -5425,6 +5427,146 @@ static Gdiplus::Bitmap* CreateIconShadowBitmap(HICON hIcon, int width, int heigh
     return shadowBmpCopy;
 }
 
+static std::map<std::pair<HICON, int>, Gdiplus::Bitmap*> g_iconBitmapCache;
+
+static void ClearIconBitmapCache() {
+    for (auto& kv : g_iconBitmapCache) {
+        if (kv.second) delete kv.second;
+    }
+    g_iconBitmapCache.clear();
+}
+
+static Gdiplus::Bitmap* GetCachedIconBitmap(HICON hIcon, int size) {
+    if (!hIcon || size <= 0) return nullptr;
+    auto key = std::make_pair(hIcon, size);
+    auto it = g_iconBitmapCache.find(key);
+    if (it != g_iconBitmapCache.end()) return it->second;
+
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = size;
+    bmi.bmiHeader.biHeight = -size; // top-down
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* pBlackBits = nullptr;
+    void* pWhiteBits = nullptr;
+    HDC hdcScreen = GetDC(NULL);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    HBITMAP hBmpBlack = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, &pBlackBits, NULL, 0);
+    HBITMAP hBmpWhite = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, &pWhiteBits, NULL, 0);
+
+    if (!hBmpBlack || !hBmpWhite || !pBlackBits || !pWhiteBits) {
+        if (hBmpBlack) DeleteObject(hBmpBlack);
+        if (hBmpWhite) DeleteObject(hBmpWhite);
+        DeleteDC(hdcMem);
+        ReleaseDC(NULL, hdcScreen);
+        return nullptr;
+    }
+
+    RECT rc = { 0, 0, size, size };
+    HBRUSH blackBrush = CreateSolidBrush(RGB(0, 0, 0));
+    HBITMAP hOld = (HBITMAP)SelectObject(hdcMem, hBmpBlack);
+    FillRect(hdcMem, &rc, blackBrush);
+    DrawIconEx(hdcMem, 0, 0, hIcon, size, size, 0, NULL, DI_NORMAL);
+    DeleteObject(blackBrush);
+
+    HBRUSH whiteBrush = CreateSolidBrush(RGB(255, 255, 255));
+    SelectObject(hdcMem, hBmpWhite);
+    FillRect(hdcMem, &rc, whiteBrush);
+    DrawIconEx(hdcMem, 0, 0, hIcon, size, size, 0, NULL, DI_NORMAL);
+    DeleteObject(whiteBrush);
+
+    SelectObject(hdcMem, hOld);
+    DeleteDC(hdcMem);
+    ReleaseDC(NULL, hdcScreen);
+
+    BYTE* pPixels = new BYTE[size * size * 4];
+    const BYTE* blackPtr = (const BYTE*)pBlackBits;
+    const BYTE* whitePtr = (const BYTE*)pWhiteBits;
+
+    for (int i = 0; i < size * size; ++i) {
+        int idx = i * 4;
+        int wb = whitePtr[idx];
+        int bb = blackPtr[idx];
+        int wg = whitePtr[idx + 1];
+        int bg = blackPtr[idx + 1];
+        int wr = whitePtr[idx + 2];
+        int br = blackPtr[idx + 2];
+
+        int deltaB = wb - bb;
+        int deltaG = wg - bg;
+        int deltaR = wr - br;
+        int delta = (deltaB + deltaG + deltaR) / 3;
+        int a = 255 - delta;
+        if (a < 0) a = 0;
+        if (a > 255) a = 255;
+
+        if (a == 0) {
+            pPixels[idx] = 0;
+            pPixels[idx + 1] = 0;
+            pPixels[idx + 2] = 0;
+            pPixels[idx + 3] = 0;
+        } else {
+            int b = (bb * 255) / a;
+            int g = (bg * 255) / a;
+            int r = (br * 255) / a;
+            pPixels[idx] = (BYTE)(b > 255 ? 255 : (b < 0 ? 0 : b));
+            pPixels[idx + 1] = (BYTE)(g > 255 ? 255 : (g < 0 ? 0 : g));
+            pPixels[idx + 2] = (BYTE)(r > 255 ? 255 : (r < 0 ? 0 : r));
+            pPixels[idx + 3] = (BYTE)a;
+        }
+    }
+
+    DeleteObject(hBmpBlack);
+    DeleteObject(hBmpWhite);
+
+    Gdiplus::Bitmap* rawBmp = new Gdiplus::Bitmap(size, size, size * 4, PixelFormat32bppARGB, pPixels);
+    Gdiplus::Bitmap* pFinalBmp = rawBmp->Clone(0, 0, size, size, PixelFormat32bppARGB);
+    delete rawBmp;
+    delete[] pPixels;
+
+    g_iconBitmapCache[key] = pFinalBmp;
+    return pFinalBmp;
+}
+
+static void DrawDockIconWithAlpha(HDC hdc, const WindowEntry& e, int iconX, int iconY, int iconSz, float alphaMult = 1.0f) {
+    if (!e.hIcon || iconSz <= 0) return;
+    bool isMin = g_settings.showMinimizedIndicator && IsEntryMinimized(e);
+    float itemAlpha = alphaMult;
+    if (isMin && MinimizedStyleUsesDimming()) {
+        float minDim = (float)g_settings.minimizedIconOpacity / 100.0f;
+        int idx = FindWindowIndexByHwnd(e.hWnd);
+        if (idx == g_selectedIndex || idx == g_hoverIndex) {
+            minDim = std::min(1.0f, minDim + 0.15f);
+        }
+        itemAlpha *= minDim;
+    }
+    if (itemAlpha < 0.99f) {
+        Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(e.hIcon, iconSz);
+        if (pBmp) {
+            Gdiplus::Graphics gfx(hdc);
+            gfx.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+            gfx.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+            gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            Gdiplus::ImageAttributes imgAtt;
+            Gdiplus::ColorMatrix cm = {{
+                { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
+                { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 0.0f, itemAlpha, 0.0f },
+                { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
+            }};
+            imgAtt.SetColorMatrix(&cm);
+            gfx.DrawImage(pBmp, Gdiplus::Rect(iconX, iconY, iconSz, iconSz),
+                          0, 0, pBmp->GetWidth(), pBmp->GetHeight(), Gdiplus::UnitPixel, &imgAtt);
+            return;
+        }
+    }
+    DrawIconEx(hdc, iconX, iconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
+}
+
 static void MaskRectCorners(HDC hdc, const RECT& rc, int radiusPx, bool forceOpaque = false, COLORREF overrideBg = CLR_INVALID) {
     if (radiusPx <= 0) {
         return;
@@ -6140,19 +6282,26 @@ static void DrawTaskEntry(HDC hdc, WindowEntry& e, HWND hWnd, int padLeft, int r
         }
 
         if (iconAlpha < 0.99f) {
-            Gdiplus::Graphics gfx(hdc);
-            Gdiplus::Bitmap bmp(e.hIcon);
-            Gdiplus::ImageAttributes imgAtt;
-            Gdiplus::ColorMatrix cm = {{
-                { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
-                { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
-                { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
-                { 0.0f, 0.0f, 0.0f, iconAlpha, 0.0f },
-                { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
-            }};
-            imgAtt.SetColorMatrix(&cm);
-            gfx.DrawImage(&bmp, Gdiplus::Rect(iconX, iconY, iconSz, iconSz),
-                          0, 0, bmp.GetWidth(), bmp.GetHeight(), Gdiplus::UnitPixel, &imgAtt);
+            Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(e.hIcon, iconSz);
+            if (pBmp) {
+                Gdiplus::Graphics gfx(hdc);
+                gfx.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+                gfx.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+                gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+                Gdiplus::ImageAttributes imgAtt;
+                Gdiplus::ColorMatrix cm = {{
+                    { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
+                    { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
+                    { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
+                    { 0.0f, 0.0f, 0.0f, iconAlpha, 0.0f },
+                    { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
+                }};
+                imgAtt.SetColorMatrix(&cm);
+                gfx.DrawImage(pBmp, Gdiplus::Rect(iconX, iconY, iconSz, iconSz),
+                              0, 0, pBmp->GetWidth(), pBmp->GetHeight(), Gdiplus::UnitPixel, &imgAtt);
+            } else {
+                DrawIconEx(hdc, iconX, iconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
+            }
         } else {
             DrawIconEx(hdc, iconX, iconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
         }
@@ -6322,19 +6471,26 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
         }
 
         if (itemAlpha < 0.99f) {
-            Gdiplus::Graphics gfx(hdc);
-            Gdiplus::Bitmap bmp(e.hIcon);
-            Gdiplus::ImageAttributes imgAtt;
-            Gdiplus::ColorMatrix cm = {{
-                { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
-                { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
-                { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
-                { 0.0f, 0.0f, 0.0f, itemAlpha, 0.0f },
-                { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
-            }};
-            imgAtt.SetColorMatrix(&cm);
-            gfx.DrawImage(&bmp, Gdiplus::Rect(iconX, iconY, iconSz, iconSz),
-                          0, 0, bmp.GetWidth(), bmp.GetHeight(), Gdiplus::UnitPixel, &imgAtt);
+            Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(e.hIcon, iconSz);
+            if (pBmp) {
+                Gdiplus::Graphics gfx(hdc);
+                gfx.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+                gfx.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+                gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+                Gdiplus::ImageAttributes imgAtt;
+                Gdiplus::ColorMatrix cm = {{
+                    { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
+                    { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
+                    { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
+                    { 0.0f, 0.0f, 0.0f, itemAlpha, 0.0f },
+                    { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
+                }};
+                imgAtt.SetColorMatrix(&cm);
+                gfx.DrawImage(pBmp, Gdiplus::Rect(iconX, iconY, iconSz, iconSz),
+                              0, 0, pBmp->GetWidth(), pBmp->GetHeight(), Gdiplus::UnitPixel, &imgAtt);
+            } else {
+                DrawIconEx(hdc, iconX, iconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
+            }
         } else {
             DrawIconEx(hdc, iconX, iconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
         }
@@ -6387,19 +6543,24 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
             int iconX = dep.rcCellCurrent.left + (cellW - iconSz) / 2;
             int iconY = dep.rcCellCurrent.top + (cellH - iconSz) / 2;
 
-            Gdiplus::Graphics gfx(hdc);
-            Gdiplus::Bitmap bmp(dep.hIcon);
-            Gdiplus::ImageAttributes imgAtt;
-            Gdiplus::ColorMatrix cm = {{
-                { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
-                { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
-                { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
-                { 0.0f, 0.0f, 0.0f, dep.alpha, 0.0f },
-                { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
-            }};
-            imgAtt.SetColorMatrix(&cm);
-            gfx.DrawImage(&bmp, Gdiplus::Rect(iconX, iconY, iconSz, iconSz),
-                          0, 0, bmp.GetWidth(), bmp.GetHeight(), Gdiplus::UnitPixel, &imgAtt);
+            Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(dep.hIcon, iconSz);
+            if (pBmp) {
+                Gdiplus::Graphics gfx(hdc);
+                gfx.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+                gfx.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+                gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+                Gdiplus::ImageAttributes imgAtt;
+                Gdiplus::ColorMatrix cm = {{
+                    { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
+                    { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
+                    { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
+                    { 0.0f, 0.0f, 0.0f, dep.alpha, 0.0f },
+                    { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
+                }};
+                imgAtt.SetColorMatrix(&cm);
+                gfx.DrawImage(pBmp, Gdiplus::Rect(iconX, iconY, iconSz, iconSz),
+                              0, 0, pBmp->GetWidth(), pBmp->GetHeight(), Gdiplus::UnitPixel, &imgAtt);
+            }
         }
     }
 
@@ -6648,18 +6809,26 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
             gfx.FillRectangle(&bgBrush, bgX, bgY, bgSize, bgSize);
         }
         if (iconDim < 0.99f) {
-            Gdiplus::Bitmap bmp(hIcon);
-            Gdiplus::ImageAttributes imgAtt;
-            Gdiplus::ColorMatrix cm = {{
-                { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
-                { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
-                { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
-                { 0.0f, 0.0f, 0.0f, iconDim, 0.0f },
-                { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
-            }};
-            imgAtt.SetColorMatrix(&cm);
-            gfx.DrawImage(&bmp, Gdiplus::Rect(bIconX, bIconY, iconSz, iconSz),
-                          0, 0, bmp.GetWidth(), bmp.GetHeight(), Gdiplus::UnitPixel, &imgAtt);
+            Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(hIcon, iconSz);
+            if (pBmp) {
+                Gdiplus::Graphics gfxIcon(hdc);
+                gfxIcon.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+                gfxIcon.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+                gfxIcon.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+                Gdiplus::ImageAttributes imgAtt;
+                Gdiplus::ColorMatrix cm = {{
+                    { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
+                    { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
+                    { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
+                    { 0.0f, 0.0f, 0.0f, iconDim, 0.0f },
+                    { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
+                }};
+                imgAtt.SetColorMatrix(&cm);
+                gfxIcon.DrawImage(pBmp, Gdiplus::Rect(bIconX, bIconY, iconSz, iconSz),
+                                  0, 0, pBmp->GetWidth(), pBmp->GetHeight(), Gdiplus::UnitPixel, &imgAtt);
+            } else {
+                DrawIconEx(hdc, bIconX, bIconY, hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
+            }
         } else {
             DrawIconEx(hdc, bIconX, bIconY, hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
         }
@@ -6677,18 +6846,26 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
             }
         }
         if (iconDim < 0.99f) {
-            Gdiplus::Bitmap bmp(hIcon);
-            Gdiplus::ImageAttributes imgAtt;
-            Gdiplus::ColorMatrix cm = {{
-                { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
-                { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
-                { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
-                { 0.0f, 0.0f, 0.0f, iconDim, 0.0f },
-                { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
-            }};
-            imgAtt.SetColorMatrix(&cm);
-            gfx.DrawImage(&bmp, Gdiplus::Rect(bIconX, bIconY, iconSz, iconSz),
-                          0, 0, bmp.GetWidth(), bmp.GetHeight(), Gdiplus::UnitPixel, &imgAtt);
+            Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(hIcon, iconSz);
+            if (pBmp) {
+                Gdiplus::Graphics gfxIcon(hdc);
+                gfxIcon.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+                gfxIcon.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+                gfxIcon.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+                Gdiplus::ImageAttributes imgAtt;
+                Gdiplus::ColorMatrix cm = {{
+                    { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
+                    { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
+                    { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
+                    { 0.0f, 0.0f, 0.0f, iconDim, 0.0f },
+                    { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
+                }};
+                imgAtt.SetColorMatrix(&cm);
+                gfxIcon.DrawImage(pBmp, Gdiplus::Rect(bIconX, bIconY, iconSz, iconSz),
+                                  0, 0, pBmp->GetWidth(), pBmp->GetHeight(), Gdiplus::UnitPixel, &imgAtt);
+            } else {
+                DrawIconEx(hdc, bIconX, bIconY, hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
+            }
         } else {
             DrawIconEx(hdc, bIconX, bIconY, hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
         }
@@ -7379,8 +7556,7 @@ static void PaintSwitcher() {
                     DrawSelectionFillF(s_cachedMemDC, selRc);
                     auto& e = g_windows[g_selectedIndex];
                     if (!IsWindowTruncated(g_selectedIndex) && e.drawnIconSz > 0) {
-                        DrawIconEx(s_cachedMemDC, (int)roundf(e.drawnIconX + offX), (int)roundf(e.drawnIconY),
-                                   e.hIcon, e.drawnIconSz, e.drawnIconSz, 0, NULL, DI_NORMAL);
+                        DrawDockIconWithAlpha(s_cachedMemDC, e, (int)roundf(e.drawnIconX + offX), (int)roundf(e.drawnIconY), e.drawnIconSz);
                     }
                 }
 
@@ -8743,6 +8919,95 @@ static void ToggleAppDrill() {
     else EnterAppGroup();
 }
 
+static void ScrollDockWithDynamicResize(int targetStart, int targetSelected, int dir, ScrollNavType scrollType) {
+    CaptureOutgoingSnapshot();
+
+    RECT curWnd = {};
+    GetWindowRect(g_hSwitcher, &curWnd);
+    RECT startPreview = g_rcCentralPreview;
+    RECT startStrip = g_rcDockIconStrip;
+    RECT startTitle = g_rcDockTitleBar;
+
+    g_layoutStartIndex = targetStart;
+    g_selectedIndex = targetSelected;
+
+    if (!AreAnimationsGloballyEnabled() || !g_settings.enableAnimations) {
+        RecomputeAndReposition();
+        UpdateDockPreviewForSelection();
+        RegisterThumbnails();
+        TriggerScrollAnimationEx(dir, scrollType);
+        if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
+            RectF r = ToRectF(g_windows[g_selectedIndex].rcCell);
+            SnapSelectionTo(r);
+        }
+        UpdateChevronAnimationTargets(false);
+        InvalidateStaticCache();
+        PaintSwitcher();
+        return;
+    }
+
+    HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
+    ComputeLayout(hMon);
+    UpdateDockPreviewForSelection();
+
+    RECT targetPreview = g_rcCentralPreview;
+    RECT targetStrip = g_rcDockIconStrip;
+    RECT targetTitle = g_rcDockTitleBar;
+
+    MONITORINFO mi = { sizeof(mi) };
+    GetMonitorInfoW(hMon, &mi);
+    int cx, cy;
+    GetSwitcherPosition(mi.rcWork, &cx, &cy);
+    RectF targetWnd = { (float)cx, (float)cy, (float)(cx + g_winW), (float)(cy + g_winH) };
+
+    bool boundsChanged = (fabsf((targetWnd.right - targetWnd.left) - (float)(curWnd.right - curWnd.left)) > 1.0f ||
+                          fabsf((targetWnd.bottom - targetWnd.top) - (float)(curWnd.bottom - curWnd.top)) > 1.0f ||
+                          !EqualRect(&startPreview, &targetPreview));
+
+    if (boundsChanged) {
+        g_layoutTransition.rcWndStart = ToRectF(curWnd);
+        g_layoutTransition.rcWndTarget = targetWnd;
+        g_layoutTransition.rcDockPreviewStart = startPreview;
+        g_layoutTransition.rcDockPreviewTarget = targetPreview;
+        g_layoutTransition.rcDockStripStart = startStrip;
+        g_layoutTransition.rcDockStripTarget = targetStrip;
+        g_layoutTransition.rcDockTitleStart = startTitle;
+        g_layoutTransition.rcDockTitleTarget = targetTitle;
+
+        // Restore start visual state for smooth lerp
+        g_rcDockIconStrip = startStrip;
+        g_rcCentralPreview = startPreview;
+        g_rcDockTitleBar = startTitle;
+        if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
+            g_windows[g_selectedIndex].rcThumbActual = startPreview;
+        }
+
+        for (auto& w : g_windows) {
+            w.rcCellStart = w.rcCell;
+            w.rcCellTarget = w.rcCell;
+            w.isNewEntry = false;
+        }
+
+        RegisterThumbnails();
+        g_layoutTransition.progress = 0.0f;
+        g_layoutTransition.duration = 0.250f; // 250ms WinUI 3 RepositionThemeAnimation standard
+        g_layoutTransition.active = true;
+    } else {
+        SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
+        RegisterThumbnails();
+    }
+
+    TriggerScrollAnimationEx(dir, scrollType);
+    if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
+        RectF r = ToRectF(g_windows[g_selectedIndex].rcCell);
+        SnapSelectionTo(r);
+    }
+    UpdateChevronAnimationTargets(false);
+    InvalidateStaticCache();
+    PaintSwitcher();
+    StartAnimationTicker();
+}
+
 static void UpdateDockSelectionWithDynamicResize(int prevSelected) {
     if (!DockLayoutActive() || !DockShowPreview()) {
         UpdateDockPreviewForSelection();
@@ -8854,23 +9119,15 @@ static void CycleLinear(int delta) {
         }
 
         if (needsScroll && targetStart != g_layoutStartIndex) {
-            CaptureOutgoingSnapshot();
             int dir = (targetStart > g_layoutStartIndex) ? 1 : -1;
-            g_layoutStartIndex = targetStart;
-            RecomputeAndReposition();
-            UpdateDockPreviewForSelection();
-            TriggerScrollAnimationEx(dir, SCROLL_ROW);
-            if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
-                RectF r = ToRectF(g_windows[g_selectedIndex].rcCell);
-                SnapSelectionTo(r);
-            }
+            ScrollDockWithDynamicResize(targetStart, g_selectedIndex, dir, SCROLL_ROW);
         } else {
             TriggerSelectionAnimation(prevSelected);
             UpdateDockSelectionWithDynamicResize(prevSelected);
+            UpdateChevronAnimationTargets(false);
+            InvalidateStaticCache();
+            PaintSwitcher();
         }
-        UpdateChevronAnimationTargets(false);
-        InvalidateStaticCache();
-        PaintSwitcher();
         return;
     }
 
@@ -8957,19 +9214,13 @@ static void CyclePage(int dir) {
         if (newStart > n - visibleCount) newStart = n - visibleCount;
         if (newStart < 0) newStart = 0;
         if (newStart != g_layoutStartIndex) {
-            g_layoutStartIndex = newStart;
-            g_selectedIndex = (dir > 0) ? g_layoutStartIndex : std::min(n - 1, g_layoutStartIndex + visibleCount - 1);
-            RecomputeAndReposition();
-            UpdateDockPreviewForSelection();
-            TriggerScrollAnimationEx(dir, SCROLL_PAGE);
-            if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
-                RectF r = ToRectF(g_windows[g_selectedIndex].rcCell);
-                SnapSelectionTo(r);
-            }
+            int targetSelected = (dir > 0) ? newStart : std::min(n - 1, newStart + visibleCount - 1);
+            ScrollDockWithDynamicResize(newStart, targetSelected, dir, SCROLL_PAGE);
+        } else {
+            UpdateChevronAnimationTargets(false);
+            InvalidateStaticCache();
+            PaintSwitcher();
         }
-        UpdateChevronAnimationTargets(false);
-        InvalidateStaticCache();
-        PaintSwitcher();
         return;
     }
 
@@ -10589,8 +10840,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                     DrawSelectionFillF(hdcBuf, selRc);
                     auto& e = g_windows[g_selectedIndex];
                     if (!IsWindowTruncated(g_selectedIndex) && e.drawnIconSz > 0) {
-                        DrawIconEx(hdcBuf, (int)roundf(e.drawnIconX + offX), (int)roundf(e.drawnIconY),
-                                   e.hIcon, e.drawnIconSz, e.drawnIconSz, 0, NULL, DI_NORMAL);
+                        DrawDockIconWithAlpha(hdcBuf, e, (int)roundf(e.drawnIconX + offX), (int)roundf(e.drawnIconY), e.drawnIconSz);
                     }
                 }
 
