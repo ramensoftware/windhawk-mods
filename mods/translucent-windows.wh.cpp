@@ -980,11 +980,10 @@ VOID ExtTextOutDxWidth(UINT options, const INT* lpDx, UINT c, SIZE& textSize)
             dy += lpDx[i * stride + 1];
     }
     
-    textSize.cx = dx;
+    textSize.cx = std::max<LONG>(textSize.cx, dx);
     if (options & ETO_PDY)
         textSize.cy += abs(dy); // Expand height to encompass the vertical shifting
 }
-
 
 // Calculate text boundaries
 BOOL ExtTextOutCalcRect(HDC hdc, POINT point, UINT options, RECT& textRect, LPCRECT lprect, LPCWSTR lpString, UINT c, const INT* lpDx)
@@ -993,7 +992,9 @@ BOOL ExtTextOutCalcRect(HDC hdc, POINT point, UINT options, RECT& textRect, LPCR
     UINT ta = GetTextAlign(hdc);
     BOOL res = TRUE;
 
-    if (options & ETO_GLYPH_INDEX)
+    if (lprect)
+        textRect = *lprect;
+    else if (options & ETO_GLYPH_INDEX)
         res = GetTextExtentPointI(hdc, (WORD*)lpString, c, &textSize);
     else
         res = GetTextExtentPoint32W(hdc, lpString, c, &textSize);
@@ -1020,9 +1021,8 @@ BOOL ExtTextOutShouldSkip(HDC hdc, UINT options, LPCRECT lprect, LPCWSTR lpStrin
     if (!hdc || !lpString || !c || !options || GetTextAlign(hdc) & TA_UPDATECP)
         filtered = TRUE;
     
-    if (options & (ETO_OPAQUE | ETO_CLIPPED))
-        if (!lprect || IsRectEmpty(lprect))
-            filtered = TRUE;
+    if (options & (ETO_OPAQUE | ETO_CLIPPED) && (!lprect || IsRectEmpty(lprect)))
+        filtered = TRUE;
     
     return filtered;
 }
@@ -1049,7 +1049,7 @@ BOOL WINAPI HookedExtTextOutW(
             
     // https://devblogs.microsoft.com/oldnewthing/20110520-00/?p=10613
     BP_PAINTPARAMS params = { sizeof(BP_PAINTPARAMS) };
-    params.dwFlags = BPPF_NOCLIP | BPPF_ERASE;
+    params.dwFlags = BPPF_ERASE | BPPF_NOCLIP;
     BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
     params.pBlendFunction = &blend;
 
@@ -1064,7 +1064,6 @@ BOOL WINAPI HookedExtTextOutW(
     SelectObject(memDC, GetCurrentObject(hdc, OBJ_FONT));
     SetTextAlign(memDC, GetTextAlign(hdc));
     SetLayout(memDC, GetLayout(hdc));
-    SetGraphicsMode(memDC, GetGraphicsMode(hdc));
     SetBkMode(memDC, TRANSPARENT);
     SetTextColor(memDC, RGB(255, 255, 255)); // White text mask
 
@@ -4990,7 +4989,10 @@ HRESULT WINAPI HookedDrawThemeBackgroundEx(
     }
     else if (ThemeClassName == L"Button")
     {
-        if (PaintPushButton(hdc, iPartId, iStateId, pRect, &pOptions->rcClip))
+        RECT rcClip = *pRect;
+        if(pOptions && pOptions->dwFlags & DTBG_CLIPRECT)
+            rcClip = pOptions->rcClip;
+        if (PaintPushButton(hdc, iPartId, iStateId, pRect, &rcClip))
             return S_OK;
         else if (PaintRadioButton(hdc, iPartId, iStateId, pRect))
             return S_OK;
