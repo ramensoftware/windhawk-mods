@@ -141,7 +141,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
         - iconBgOpacity: 55
           $name: Badge Icon Background Opacity
           $description: Opacity percentage (0-100) for the badge icon background in dark mode.
-        - indicatorBgColorMode: default
+        - indicatorBgColorMode: accent
           $name: Group Indicator Background Color
           $description: Color source for the group indicator background pill in dark mode.
           $options:
@@ -209,7 +209,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
         - iconBgOpacity: 55
           $name: Badge Icon Background Opacity
           $description: Opacity percentage (0-100) for the badge icon background in light mode.
-        - indicatorBgColorMode: default
+        - indicatorBgColorMode: accent
           $name: Group Indicator Background Color
           $description: Color source for the group indicator background pill in light mode.
           $options:
@@ -586,9 +586,13 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
     - showGroupIndicator: true
       $name: Show Group Indicator
       $description: Show a count badge on grouped application entries indicating how many windows are in the group. Only visible when Group Windows by Application is enabled.
-    - showGroupIndicatorShadow: false
+    - showGroupIndicatorShadow: auto
       $name: Show Group Indicator Shadow
-      $description: Show a soft drop shadow behind the group indicator badge.
+      $description: Show a soft drop shadow behind the group indicator badge. Auto enables shadows on Windows 11 and disables them on Windows 10 and lower.
+      $options:
+      - auto: Auto (Enabled on Windows 11, Disabled on Windows 10)
+      - true: Enabled
+      - false: Disabled
     - groupCloseBehavior: closeRecent
       $name: Group Close Button Behavior
       $description: Action when closing a grouped application entry.
@@ -1730,7 +1734,7 @@ struct LayoutTransitionState {
     std::vector<DepartingEntrySnapshot> departingItems;
 };
 static LayoutTransitionState g_layoutTransition;
-static CubicBezierEasing g_easeLayout(0.4f, 0.0f, 0.2f, 1.0f);
+static CubicBezierEasing g_easeLayout(0.1f, 0.9f, 0.2f, 1.0f);
 
 struct DockPreviewSlideTransition {
     bool active = false;
@@ -2868,23 +2872,31 @@ static void OnAnimationTick() {
                 } else {
                     w.enterAlpha = 1.0f;
                     w.enterScale = 1.0f;
-                    if (w.rcCellStart.left == 0 && w.rcCellStart.right == 0 &&
-                        w.rcCellStart.top == 0 && w.rcCellStart.bottom == 0) {
-                        w.rcCellStart = w.rcCellTarget;
-                    }
-                    if (w.rcCellTarget.left == 0 && w.rcCellTarget.right == 0 &&
-                        w.rcCellTarget.top == 0 && w.rcCellTarget.bottom == 0) {
-                        w.rcCellTarget = w.rcCellStart;
-                    }
-                    RectF c = LerpRect(ToRectF(w.rcCellStart), ToRectF(w.rcCellTarget), t);
-                    w.rcCell = { (LONG)roundf(c.left), (LONG)roundf(c.top), (LONG)roundf(c.right), (LONG)roundf(c.bottom) };
-                    if (!DockLayoutActive()) {
+                    if (DockLayoutActive()) {
+                        if (g_scrollTransition.active) {
+                            w.rcCell = w.rcCellTarget;
+                        } else if (w.rcCellStart.right > w.rcCellStart.left && w.rcCellTarget.right > w.rcCellTarget.left) {
+                            RectF c = LerpRect(ToRectF(w.rcCellStart), ToRectF(w.rcCellTarget), t);
+                            w.rcCell = { (LONG)roundf(c.left), (LONG)roundf(c.top), (LONG)roundf(c.right), (LONG)roundf(c.bottom) };
+                        } else {
+                            w.rcCell = w.rcCellTarget;
+                        }
+                        w.rcThumbActual = (&w == &g_windows[g_selectedIndex] && DockShowPreview()) ? g_rcCentralPreview : RECT{ 0, 0, 0, 0 };
+                    } else {
+                        if (w.rcCellStart.left == 0 && w.rcCellStart.right == 0 &&
+                            w.rcCellStart.top == 0 && w.rcCellStart.bottom == 0) {
+                            w.rcCellStart = w.rcCellTarget;
+                        }
+                        if (w.rcCellTarget.left == 0 && w.rcCellTarget.right == 0 &&
+                            w.rcCellTarget.top == 0 && w.rcCellTarget.bottom == 0) {
+                            w.rcCellTarget = w.rcCellStart;
+                        }
+                        RectF c = LerpRect(ToRectF(w.rcCellStart), ToRectF(w.rcCellTarget), t);
+                        w.rcCell = { (LONG)roundf(c.left), (LONG)roundf(c.top), (LONG)roundf(c.right), (LONG)roundf(c.bottom) };
                         if (w.rcThumbStart.left == 0 && w.rcThumbStart.right == 0) w.rcThumbStart = w.rcThumbTarget;
                         if (w.rcThumbTarget.left == 0 && w.rcThumbTarget.right == 0) w.rcThumbTarget = w.rcThumbStart;
                         RectF th = LerpRect(ToRectF(w.rcThumbStart), ToRectF(w.rcThumbTarget), t);
                         w.rcThumbActual = { (LONG)roundf(th.left), (LONG)roundf(th.top), (LONG)roundf(th.right), (LONG)roundf(th.bottom) };
-                    } else {
-                        w.rcThumbActual = (&w == &g_windows[g_selectedIndex] && DockShowPreview()) ? g_rcCentralPreview : RECT{ 0, 0, 0, 0 };
                     }
                 }
             }
@@ -5583,7 +5595,9 @@ static void DrawSelectionFillF(HDC hdc, const RectF& rc) {
         Gdiplus::Graphics graphics(hdc);
         graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
-        Gdiplus::SolidBrush brush(Gdiplus::Color(64, r, g, b));
+        BYTE fillAlpha = g_isDarkMode ? 28 : 18;
+        BYTE strokeAlpha = g_isDarkMode ? 20 : 15;
+        Gdiplus::SolidBrush brush(Gdiplus::Color(fillAlpha, r, g, b));
 
         Gdiplus::REAL left = fillRc.left;
         Gdiplus::REAL top = fillRc.top;
@@ -5598,6 +5612,8 @@ static void DrawSelectionFillF(HDC hdc, const RectF& rc) {
         path.AddArc(left, top + h - d, d, d, 90, 90);
         path.CloseFigure();
         graphics.FillPath(&brush, &path);
+        Gdiplus::Pen strokePen(Gdiplus::Color(strokeAlpha, r, g, b), 1.0f);
+        graphics.DrawPath(&strokePen, &path);
         return;
     }
 
@@ -5613,8 +5629,12 @@ static void DrawSelectionFillF(HDC hdc, const RectF& rc) {
     Gdiplus::Graphics graphics(hdc);
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeNone);
     graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeNone);
-    Gdiplus::SolidBrush brush(Gdiplus::Color(64, r, g, b));
+    BYTE fillAlpha = g_isDarkMode ? 28 : 18;
+    BYTE strokeAlpha = g_isDarkMode ? 20 : 15;
+    Gdiplus::SolidBrush brush(Gdiplus::Color(fillAlpha, r, g, b));
     graphics.FillRectangle(&brush, snapLeft, snapTop, snapW, snapH);
+    Gdiplus::Pen strokePen(Gdiplus::Color(strokeAlpha, r, g, b), 1.0f);
+    graphics.DrawRectangle(&strokePen, snapLeft, snapTop, snapW, snapH);
 }
 
 static RECT GetHeaderContentRectForEntry(const RECT& rcCell, const RECT& rcThumbActual, const RECT& rcThumbSlot) {
@@ -5795,19 +5815,35 @@ static void DrawCloseButton(HDC hdc, const RECT& btnRc, float btnAlpha, float ho
     // 1. Solid idle plate for contrast against bright or dark thumbnails (configured by setting / Win11 default)
     BYTE idlePlateAlpha = g_settings.showCloseButtonBackground ? (BYTE)roundf(255.0f * btnAlpha) : 0;
     if (idlePlateAlpha > 0) {
-        COLORREF plateCol = g_isDarkMode ? RGB(45, 45, 45) : RGB(255, 255, 255);
+        COLORREF plateCol = g_isDarkMode ? RGB(36, 36, 36) : RGB(255, 255, 255);
         Gdiplus::SolidBrush idleBrush(Gdiplus::Color(idlePlateAlpha, GetRValue(plateCol), GetGValue(plateCol), GetBValue(plateCol)));
+        COLORREF borderCol = g_isDarkMode ? RGB(255, 255, 255) : RGB(0, 0, 0);
+        BYTE borderAlpha = (BYTE)roundf((g_isDarkMode ? 32.0f : 22.0f) * btnAlpha);
+        Gdiplus::Pen borderPen(Gdiplus::Color(borderAlpha, GetRValue(borderCol), GetGValue(borderCol), GetBValue(borderCol)), 1.0f);
+
         if (btnRadius > 0) {
-            Gdiplus::GraphicsPath path;
+            // Soft drop shadow for elevation contrast over complex thumbnail content
+            Gdiplus::GraphicsPath shadowPath;
             Gdiplus::REAL d = (Gdiplus::REAL)(btnRadius * 2);
+            shadowPath.AddArc((Gdiplus::REAL)bx, (Gdiplus::REAL)(by + 1.0f), d, d, 180.0f, 90.0f);
+            shadowPath.AddArc((Gdiplus::REAL)(bx + btnW) - d, (Gdiplus::REAL)(by + 1.0f), d, d, 270.0f, 90.0f);
+            shadowPath.AddArc((Gdiplus::REAL)(bx + btnW) - d, (Gdiplus::REAL)(by + btnH + 1.0f) - d, d, d, 0.0f, 90.0f);
+            shadowPath.AddArc((Gdiplus::REAL)bx, (Gdiplus::REAL)(by + btnH + 1.0f) - d, d, d, 90.0f, 90.0f);
+            shadowPath.CloseFigure();
+            Gdiplus::SolidBrush shadowBrush(Gdiplus::Color((BYTE)roundf(40.0f * btnAlpha), 0, 0, 0));
+            graphics.FillPath(&shadowBrush, &shadowPath);
+
+            Gdiplus::GraphicsPath path;
             path.AddArc((Gdiplus::REAL)bx, (Gdiplus::REAL)by, d, d, 180.0f, 90.0f);
             path.AddArc((Gdiplus::REAL)(bx + btnW) - d, (Gdiplus::REAL)by, d, d, 270.0f, 90.0f);
             path.AddArc((Gdiplus::REAL)(bx + btnW) - d, (Gdiplus::REAL)(by + btnH) - d, d, d, 0.0f, 90.0f);
             path.AddArc((Gdiplus::REAL)bx, (Gdiplus::REAL)(by + btnH) - d, d, d, 90.0f, 90.0f);
             path.CloseFigure();
             graphics.FillPath(&idleBrush, &path);
+            graphics.DrawPath(&borderPen, &path);
         } else {
             graphics.FillRectangle(&idleBrush, (Gdiplus::REAL)bx, (Gdiplus::REAL)by, (Gdiplus::REAL)btnW, (Gdiplus::REAL)btnH);
+            graphics.DrawRectangle(&borderPen, (Gdiplus::REAL)bx, (Gdiplus::REAL)by, (Gdiplus::REAL)btnW, (Gdiplus::REAL)btnH);
         }
     }
 
@@ -8707,65 +8743,75 @@ static void ToggleAppDrill() {
     else EnterAppGroup();
 }
 
-static void RecomputeDockWithDynamicResize(int dir = 0, int scrollMode = SCROLL_ROW) {
-    if (!DockLayoutActive()) {
-        RecomputeAndReposition();
+static void UpdateDockSelectionWithDynamicResize(int prevSelected) {
+    if (!DockLayoutActive() || !DockShowPreview()) {
+        UpdateDockPreviewForSelection();
         return;
     }
+    int n = (int)g_windows.size();
+    if (g_selectedIndex < 0 || g_selectedIndex >= n) return;
 
-    if (AreAnimationsGloballyEnabled() && g_settings.enableAnimations) {
-        RECT curWnd = {};
-        GetWindowRect(g_hSwitcher, &curWnd);
-        g_layoutTransition.rcWndStart = ToRectF(curWnd);
-        g_layoutTransition.rcDockStripStart = g_rcDockIconStrip;
-        g_layoutTransition.rcDockPreviewStart = g_rcCentralPreview;
-        g_layoutTransition.rcDockTitleStart = g_rcDockTitleBar;
-
-        for (auto& w : g_windows) {
-            w.rcCellStart = w.rcCell;
-            w.rcThumbStart = w.rcThumbActual;
-            w.isNewEntry = false;
-        }
-
-        HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
-        ComputeLayout(hMon);
-        UpdateDockPreviewForSelection();
-
-        g_layoutTransition.rcDockStripTarget = g_rcDockIconStrip;
-        g_layoutTransition.rcDockPreviewTarget = g_rcCentralPreview;
-        g_layoutTransition.rcDockTitleTarget = g_rcDockTitleBar;
-
-        // Restore start state so lerp begins smoothly from current visual layout
-        g_rcDockIconStrip = g_layoutTransition.rcDockStripStart;
-        g_rcCentralPreview = g_layoutTransition.rcDockPreviewStart;
-        g_rcDockTitleBar = g_layoutTransition.rcDockTitleStart;
-
-        UpdateChevronLayout(g_hSwitcher);
-        UpdateChevronAnimationTargets(false);
-
-        MONITORINFO mi = { sizeof(mi) };
-        GetMonitorInfoW(hMon, &mi);
-        int cx, cy;
-        GetSwitcherPosition(mi.rcWork, &cx, &cy);
-        g_layoutTransition.rcWndTarget = { (float)cx, (float)cy, (float)(cx + g_winW), (float)(cy + g_winH) };
-
-        for (auto& w : g_windows) {
-            w.rcCellTarget = w.rcCell;
-            w.rcThumbTarget = w.rcThumbActual;
-            w.rcCell = w.rcCellStart;
-            w.rcThumbActual = w.rcThumbStart;
-        }
-
-        RegisterThumbnails();
-        g_layoutTransition.progress = 0.0f;
-        g_layoutTransition.duration = 0.220f;
-        g_layoutTransition.active = true;
-        StartAnimationTicker();
-    } else {
+    if (!AreAnimationsGloballyEnabled() || !g_settings.enableAnimations) {
         RecomputeAndReposition();
         UpdateDockPreviewForSelection();
         RegisterThumbnails();
         PaintSwitcher();
+        return;
+    }
+
+    RECT curWnd = {};
+    GetWindowRect(g_hSwitcher, &curWnd);
+    RECT startPreview = g_rcCentralPreview;
+    RECT startStrip = g_rcDockIconStrip;
+    RECT startTitle = g_rcDockTitleBar;
+
+    HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
+    ComputeLayout(hMon);
+    UpdateDockPreviewForSelection();
+
+    RECT targetPreview = g_rcCentralPreview;
+    RECT targetStrip = g_rcDockIconStrip;
+    RECT targetTitle = g_rcDockTitleBar;
+
+    MONITORINFO mi = { sizeof(mi) };
+    GetMonitorInfoW(hMon, &mi);
+    int cx, cy;
+    GetSwitcherPosition(mi.rcWork, &cx, &cy);
+    RectF targetWnd = { (float)cx, (float)cy, (float)(cx + g_winW), (float)(cy + g_winH) };
+
+    bool boundsChanged = (fabsf((targetWnd.right - targetWnd.left) - (float)(curWnd.right - curWnd.left)) > 1.0f ||
+                          fabsf((targetWnd.bottom - targetWnd.top) - (float)(curWnd.bottom - curWnd.top)) > 1.0f ||
+                          !EqualRect(&startPreview, &targetPreview));
+
+    if (boundsChanged) {
+        g_layoutTransition.rcWndStart = ToRectF(curWnd);
+        g_layoutTransition.rcWndTarget = targetWnd;
+        g_layoutTransition.rcDockPreviewStart = startPreview;
+        g_layoutTransition.rcDockPreviewTarget = targetPreview;
+        g_layoutTransition.rcDockStripStart = startStrip;
+        g_layoutTransition.rcDockStripTarget = targetStrip;
+        g_layoutTransition.rcDockTitleStart = startTitle;
+        g_layoutTransition.rcDockTitleTarget = targetTitle;
+
+        // Restore start visual state for smooth lerp
+        g_rcDockIconStrip = startStrip;
+        g_rcCentralPreview = startPreview;
+        g_rcDockTitleBar = startTitle;
+        g_windows[g_selectedIndex].rcThumbActual = startPreview;
+
+        for (auto& w : g_windows) {
+            w.rcCellStart = w.rcCell;
+            w.rcCellTarget = w.rcCell;
+            w.isNewEntry = false;
+        }
+
+        RegisterThumbnails();
+        g_layoutTransition.progress = 0.0f;
+        g_layoutTransition.duration = 0.250f; // 250ms WinUI 3 RepositionThemeAnimation standard
+        g_layoutTransition.active = true;
+        StartAnimationTicker();
+    } else {
+        UpdateDockThumbnailDwm();
     }
 }
 
@@ -8811,7 +8857,8 @@ static void CycleLinear(int delta) {
             CaptureOutgoingSnapshot();
             int dir = (targetStart > g_layoutStartIndex) ? 1 : -1;
             g_layoutStartIndex = targetStart;
-            RecomputeDockWithDynamicResize(dir, SCROLL_ROW);
+            RecomputeAndReposition();
+            UpdateDockPreviewForSelection();
             TriggerScrollAnimationEx(dir, SCROLL_ROW);
             if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
                 RectF r = ToRectF(g_windows[g_selectedIndex].rcCell);
@@ -8819,7 +8866,7 @@ static void CycleLinear(int delta) {
             }
         } else {
             TriggerSelectionAnimation(prevSelected);
-            UpdateDockPreviewForSelection();
+            UpdateDockSelectionWithDynamicResize(prevSelected);
         }
         UpdateChevronAnimationTargets(false);
         InvalidateStaticCache();
@@ -8912,7 +8959,8 @@ static void CyclePage(int dir) {
         if (newStart != g_layoutStartIndex) {
             g_layoutStartIndex = newStart;
             g_selectedIndex = (dir > 0) ? g_layoutStartIndex : std::min(n - 1, g_layoutStartIndex + visibleCount - 1);
-            RecomputeDockWithDynamicResize(dir, SCROLL_PAGE);
+            RecomputeAndReposition();
+            UpdateDockPreviewForSelection();
             TriggerScrollAnimationEx(dir, SCROLL_PAGE);
             if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
                 RectF r = ToRectF(g_windows[g_selectedIndex].rcCell);
@@ -11421,7 +11469,7 @@ static void LoadSettings() {
 
     // Grouped indicator
     g_settings.showGroupIndicator = Wh_GetIntSetting(L"Grouping.showGroupIndicator");
-    g_settings.showGroupIndicatorShadow = Wh_GetIntSetting(L"Grouping.showGroupIndicatorShadow");
+    g_settings.showGroupIndicatorShadow = LoadAutoBoolSetting(L"Grouping.showGroupIndicatorShadow", IsWin11OrGreater());
     LoadStringSetting(L"Grouping.groupCloseBehavior", g_settings.groupCloseBehavior, L"closeRecent");
     if (wcscmp(g_settings.groupCloseBehavior, L"closeAll") != 0 &&
         wcscmp(g_settings.groupCloseBehavior, L"closeRecent") != 0) {
@@ -11456,7 +11504,7 @@ static void LoadSettings() {
     if (g_settings.iconBgOpacityDark < 0) g_settings.iconBgOpacityDark = 0;
     if (g_settings.iconBgOpacityDark > 100) g_settings.iconBgOpacityDark = 100;
 
-    LoadStringSetting(L"Style.DarkMode.indicatorBgColorMode", g_settings.indicatorBgColorModeDark, L"default");
+    LoadStringSetting(L"Style.DarkMode.indicatorBgColorMode", g_settings.indicatorBgColorModeDark, L"accent");
     LoadStringSetting(L"Style.DarkMode.customIndicatorBgColor", g_settings.customIndicatorBgColorDark, L"#333333");
     g_settings.indicatorBgOpacityDark = Wh_GetIntSetting(L"Style.DarkMode.indicatorBgOpacity");
     if (g_settings.indicatorBgOpacityDark < 0) g_settings.indicatorBgOpacityDark = 0;
@@ -11479,7 +11527,7 @@ static void LoadSettings() {
     if (g_settings.iconBgOpacityLight < 0) g_settings.iconBgOpacityLight = 0;
     if (g_settings.iconBgOpacityLight > 100) g_settings.iconBgOpacityLight = 100;
 
-    LoadStringSetting(L"Style.LightMode.indicatorBgColorMode", g_settings.indicatorBgColorModeLight, L"default");
+    LoadStringSetting(L"Style.LightMode.indicatorBgColorMode", g_settings.indicatorBgColorModeLight, L"accent");
     LoadStringSetting(L"Style.LightMode.customIndicatorBgColor", g_settings.customIndicatorBgColorLight, L"#EAEAEA");
     g_settings.indicatorBgOpacityLight = Wh_GetIntSetting(L"Style.LightMode.indicatorBgOpacity");
     if (g_settings.indicatorBgOpacityLight < 0) g_settings.indicatorBgOpacityLight = 0;
