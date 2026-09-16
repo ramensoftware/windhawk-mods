@@ -1534,6 +1534,13 @@ static const WCHAR kWindowClass[] = L"WindhawkVectorScreenHolderWnd";
 // The mod's own image, which owns the window class and the window procedure.
 static HINSTANCE g_modInstance = nullptr;
 
+// True only while the low level keyboard hook is actually running. The window
+// proc uses it to stay off keys the hook has already handled. It tracks the
+// hook rather than the setting that asks for it, because the hook can fail to
+// start, and gating on the setting would then leave the key dead in both
+// places.
+static std::atomic<bool> g_kbdHookLive{false};
+
 // Set when more than one display is being driven. The worker renders the
 // overlays one after another inside a single loop iteration, and a vsynced
 // EndDraw blocks until the next refresh, so three displays would each get a
@@ -4475,7 +4482,7 @@ LRESULT CALLBACK Overlay::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 // With Global Esc and Space on, the hook has already handled
                 // this press and the key reaches the focused overlay as well,
                 // which would step the palette twice for one press.
-                if (!(lp & (1 << 30)) && !g_settings.globalKeys) {
+                if (!(lp & (1 << 30)) && !g_kbdHookLive) {
                     Controller_RequestPalette();
                 }
                 return 0;
@@ -4752,6 +4759,7 @@ static void InstallKbdHook() {
         return;
     }
     g_hookThread = CreateThread(nullptr, 0, KbdHookThread, nullptr, 0, nullptr);
+    g_kbdHookLive = g_hookThread != nullptr;
     if (!g_hookThread) {
         Wh_Log(L"Could not start the keyboard hook thread (%u)",
                GetLastError());
@@ -4761,6 +4769,7 @@ static void InstallKbdHook() {
 }
 
 static void UninstallKbdHook() {
+    g_kbdHookLive = false;
     if (!g_hookThread) {
         return;
     }
