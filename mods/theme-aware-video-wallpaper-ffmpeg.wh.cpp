@@ -9,6 +9,7 @@
 // @github          https://github.com/wakhh
 // @include         explorer.exe
 // @architecture    x86-64
+// @compilerOptions -ldxgi -ld2d1 -ld3d11 -ldcomp -ldwmapi -lgdi32 -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -66,16 +67,6 @@ Hoping someone else will carry on development — PRs welcome.
     - "5": "创建时间（新到旧）"
     - "6": "文件大小（大到小）"
     - "7": "文件大小（小到大）"
-- opacity: 90
-  $name: Video window opacity (%)
-  $name:zh-CN: 视频窗口透明度（%）
-  $description: "Overall transparency of the video wallpaper. 100 = fully opaque, lower values let the desktop show through. Range 10-100"
-  $description:zh-CN: "视频壁纸的整体透明度。100 = 完全不透明，值越低桌面越明显。范围 10-100"
-- fps: 15
-  $name: Frame rate (fps)
-  $name:zh-CN: 帧率（fps）
-  $description: "Output frame rate. Range 10-60. Lower values save CPU. Videos with a lower native fps will have frames duplicated"
-  $description:zh-CN: "输出帧率。范围 10-60。值越低越省 CPU。视频原始帧率低于设置值时会重复帧"
 - hwaccelMode: "0"
   $name: Hardware acceleration
   $name:zh-CN: 硬件加速
@@ -87,6 +78,16 @@ Hoping someone else will carry on development — PRs welcome.
   $options:zh-CN:
     - "0": "关闭（纯 CPU 软解）"
     - "1": "开启（D3D11VA）"
+- fps: 15
+  $name: Frame rate (fps)
+  $name:zh-CN: 帧率（fps）
+  $description: "Output frame rate. Range 10-60. Lower values save CPU. Videos with a lower native fps will have frames duplicated"
+  $description:zh-CN: "输出帧率。范围 10-60。值越低越省 CPU。视频原始帧率低于设置值时会重复帧"
+- opacity: 100
+  $name: Video window opacity (%)
+  $name:zh-CN: 视频窗口不透明度（%）
+  $description: "Overall transparency of the video wallpaper. 100 = fully opaque, lower values let the desktop show through."
+  $description:zh-CN: "视频壁纸的整体不透明度。100 = 完全不透明，值越低桌面越明显。"
 - scalingMode: "0"
   $name: Video scaling mode
   $name:zh-CN: 视频缩放模式
@@ -140,35 +141,41 @@ Hoping someone else will carry on development — PRs welcome.
 
 #include <Windows.h>
 #include <windhawk_utils.h>
+#include <d2d1_1.h>
+#include <d2d1helper.h>
+#include <d3d11.h>
+#include <dcomp.h>
+#include <dwmapi.h>
+#include <dxgi1_3.h>
+#include <wrl/client.h>
 #include <vector>
 #include <string>
 #include <atomic>
 #include <algorithm>
 
 static HANDLE g_ffmpegProc = NULL;
+static HANDLE g_ffmpegWaitReg = NULL;
 static HANDLE g_pipeRead = NULL;
 static HANDLE g_pipeWrite = NULL;
 static HWND g_videoHwnd = NULL;
-static HWND g_progman = NULL;
 static int g_frameSize = 0;
 static std::vector<BYTE> g_frameBuf;
 WCHAR g_ffmpegPath[MAX_PATH] = {0};
 WCHAR g_lightPath[MAX_PATH] = {0};
 WCHAR g_darkPath[MAX_PATH] = {0};
-int g_opacity = 230;
+int g_opacity = 255;
 int g_fps = 15;
 int g_scalingMode = 0;
 WCHAR g_padColorMode[32] = {L"black"};
 WCHAR g_padColorCustom[32] = {0};
-bool g_isPadTransparent = false;
 WCHAR g_applyMode[16] = {L"instant"};
 int g_sortMode = 0;
 int g_hwaccelMode = 0;
 volatile bool g_pendingReload = false;
 const bool g_pauseOnFullscreen = true;
 
-HANDLE g_renderThread = NULL;
-HANDLE g_monitorThread = NULL;
+HANDLE g_pipeThread = NULL;
+std::atomic<bool> g_frameReady{false};
 HANDLE g_dirChangeHandle = INVALID_HANDLE_VALUE;
 bool g_classRegistered = false;
 std::atomic<bool> g_running{true};
@@ -180,62 +187,363 @@ size_t g_videoIndex = 0;
 int g_consecutiveErrors = 0;
 static const int MAX_CONSECUTIVE_ERRORS = 3;
 
-typedef BOOL(WINAPI* UpdateLayeredWindow_t)(HWND, HDC, POINT*, SIZE*, HDC, POINT*, COLORREF, BLENDFUNCTION*, DWORD);
-typedef HDC(WINAPI* CreateCompatibleDC_t)(HDC);
-typedef HBITMAP(WINAPI* CreateCompatibleBitmap_t)(HDC, int, int);
-typedef HGDIOBJ(WINAPI* SelectObject_t)(HDC, HGDIOBJ);
-typedef BOOL(WINAPI* SetDIBitsToDevice_t)(HDC, int, int, DWORD, DWORD, int, int, UINT, UINT, const VOID*, BITMAPINFO*, UINT);
-typedef BOOL(WINAPI* DeleteObject_t)(HGDIOBJ);
-typedef BOOL(WINAPI* DeleteDC_t)(HDC);
+HWND g_workerW = NULL;
+HKEY g_hThemeKey = NULL;
+HANDLE g_hThemeEvt = NULL;
+bool g_lastDarkChecked = false;
+bool g_prevFull = false;
 
-static UpdateLayeredWindow_t pUpdateLayeredWindow = NULL;
-static CreateCompatibleDC_t pCreateCompatibleDC = NULL;
-static CreateCompatibleBitmap_t pCreateCompatibleBitmap = NULL;
-static SelectObject_t pSelectObject = NULL;
-static SetDIBitsToDevice_t pSetDIBitsToDevice = NULL;
-static DeleteObject_t pDeleteObject = NULL;
-static DeleteDC_t pDeleteDC = NULL;
-static HMODULE g_gdiMod = NULL;
+UINT_PTR g_createVideoTimer = 0;
+constexpr UINT WM_APP_CLEANUP = WM_APP + 1;
+constexpr UINT WM_APP_FFMPEG_EXIT = WM_APP + 2;
 
-void LoadGdiProcs()
-{
-    if (g_gdiMod) return;
-    g_gdiMod = LoadLibraryW(L"gdi32.dll");
-    if (!g_gdiMod) { Wh_Log(L"LoadLibrary gdi32 failed err=%lu", GetLastError()); return; }
-    pUpdateLayeredWindow = (UpdateLayeredWindow_t)GetProcAddress(GetModuleHandleW(L"user32.dll"), "UpdateLayeredWindow");
-    pCreateCompatibleDC = (CreateCompatibleDC_t)GetProcAddress(g_gdiMod, "CreateCompatibleDC");
-    pCreateCompatibleBitmap = (CreateCompatibleBitmap_t)GetProcAddress(g_gdiMod, "CreateCompatibleBitmap");
-    pSelectObject = (SelectObject_t)GetProcAddress(g_gdiMod, "SelectObject");
-    pSetDIBitsToDevice = (SetDIBitsToDevice_t)GetProcAddress(g_gdiMod, "SetDIBitsToDevice");
-    pDeleteObject = (DeleteObject_t)GetProcAddress(g_gdiMod, "DeleteObject");
-    pDeleteDC = (DeleteDC_t)GetProcAddress(g_gdiMod, "DeleteDC");
-}
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+CreateWindowExW_t CreateWindowExW_Original;
 
-void ReloadWallpaper();
-void ReloadVideoList();
+[[clang::no_destroy]] Microsoft::WRL::ComPtr<ID3D11Device> g_d3dDevice;
+[[clang::no_destroy]] Microsoft::WRL::ComPtr<IDXGIDevice> g_dxgiDevice;
+[[clang::no_destroy]] Microsoft::WRL::ComPtr<IDXGIFactory2> g_dxgiFactory;
+[[clang::no_destroy]] Microsoft::WRL::ComPtr<ID2D1Factory1> g_d2dFactory;
+[[clang::no_destroy]] Microsoft::WRL::ComPtr<ID2D1Device> g_d2dDevice;
+[[clang::no_destroy]] Microsoft::WRL::ComPtr<IDXGISwapChain1> g_swapChain;
+[[clang::no_destroy]] Microsoft::WRL::ComPtr<ID2D1DeviceContext> g_dc;
+[[clang::no_destroy]] Microsoft::WRL::ComPtr<IDCompositionDevice> g_compositionDevice;
+[[clang::no_destroy]] Microsoft::WRL::ComPtr<IDCompositionTarget> g_compositionTarget;
+[[clang::no_destroy]] Microsoft::WRL::ComPtr<IDCompositionVisual> g_compositionVisual;
+[[clang::no_destroy]] Microsoft::WRL::ComPtr<ID2D1Bitmap> g_frameBitmap;
+
+bool g_dxInitSucceeded = false;
+bool g_dxInitialized = false;
+
+constexpr UINT TIMER_ID_MANAGER = 1;
+constexpr UINT TIMER_ID_RENDERER = 2;
+
 bool PlayNext();
+void RenderFrame();
+void StartRendererTimer();
+void StopRendererTimer();
+void StartManagerTimer();
+void StopManagerTimer();
+void ManagerTick();
+bool CreateVideoWindow();
+void Wh_ModSettingsChanged();
+HWND GetWorkerW();
 
-HWND FindProgman()
-{
-    HWND p = FindWindowW(L"Progman", L"Program Manager");
-    for (int i = 0; i < 20 && !p; i++) { Sleep(250); p = FindWindowW(L"Progman", L"Program Manager"); }
-    return p;
+HMODULE GetCurrentModuleHandle() {
+    HMODULE module = nullptr;
+    GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                      GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                      (LPCWSTR)&GetCurrentModuleHandle, &module);
+    return module;
 }
 
-HWND FindWorkerW()
+bool IsFolderViewWnd(HWND hWnd) {
+    WCHAR buffer[64];
+    if (!GetClassName(hWnd, buffer, ARRAYSIZE(buffer)) ||
+        _wcsicmp(buffer, L"SysListView32")) return false;
+    if (!GetWindowText(hWnd, buffer, ARRAYSIZE(buffer)) ||
+        _wcsicmp(buffer, L"FolderView")) return false;
+    HWND hParent = GetAncestor(hWnd, GA_PARENT);
+    if (!hParent) return false;
+    if (!GetClassName(hParent, buffer, ARRAYSIZE(buffer)) ||
+        _wcsicmp(buffer, L"SHELLDLL_DefView")) return false;
+    if (GetWindowTextLength(hParent) > 0) return false;
+    HWND hParent2 = GetAncestor(hParent, GA_PARENT);
+    if (!hParent2) return false;
+    if ((!GetClassName(hParent2, buffer, ARRAYSIZE(buffer)) ||
+         _wcsicmp(buffer, L"Progman")) && hParent2 != GetShellWindow()) return false;
+    return true;
+}
+
+using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
+
+bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* procParam) {
+    static const UINT registeredMsg = RegisterWindowMessage(L"Windhawk_RunFromWindowThread_VidWallpaper");
+    struct PARAM { RunFromWindowThreadProc_t proc; void* param; };
+    DWORD tid = GetWindowThreadProcessId(hWnd, nullptr);
+    if (!tid) return false;
+    if (tid == GetCurrentThreadId()) { proc(procParam); return true; }
+    HHOOK hook = SetWindowsHookEx(WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION) {
+                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
+                if (cwp->message == *(UINT*)&registeredMsg) {
+                    PARAM* p = (PARAM*)cwp->lParam;
+                    p->proc(p->param);
+                }
+            }
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        }, nullptr, tid);
+    if (!hook) return false;
+    PARAM param = { proc, procParam };
+    SendMessage(hWnd, registeredMsg, 0, (LPARAM)&param);
+    UnhookWindowsHookEx(hook);
+    return true;
+}
+
+HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
+    DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
+    HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, PVOID lpParam) {
+    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
+        dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
+    if (!hWnd || !IsFolderViewWnd(hWnd)) return hWnd;
+    if (!g_createVideoTimer) {
+        g_createVideoTimer = SetTimer(nullptr, 0, 1000,
+            [](HWND, UINT, UINT_PTR, DWORD) {
+                KillTimer(nullptr, g_createVideoTimer);
+                g_createVideoTimer = 0;
+                if (!CreateVideoWindow()) {
+                    Wh_Log(L"CreateVideoWindow failed in hook timer");
+                    return;
+                }
+                Wh_ModSettingsChanged();
+            });
+    }
+    return hWnd;
+}
+
+HWND GetProgmanWnd()
 {
-    HWND worker = NULL;
-    EnumWindows([](HWND hwnd, LPARAM lParam) -> BOOL {
-        if (!IsWindowVisible(hwnd)) return TRUE;
-        WCHAR cls[64] = {};
-        GetClassNameW(hwnd, cls, 64);
-        if (_wcsicmp(cls, L"WorkerW") == 0) {
-            *(HWND*)lParam = hwnd;
-            return FALSE;
-        }
-        return TRUE;
-    }, (LPARAM)&worker);
-    return worker;
+    HWND hProgman = FindWindowW(L"Progman", nullptr);
+    if (!hProgman) return nullptr;
+    DWORD progmanProcessId = 0;
+    GetWindowThreadProcessId(hProgman, &progmanProcessId);
+    if (progmanProcessId != GetCurrentProcessId()) return nullptr;
+    return hProgman;
+}
+
+HWND GetWorkerW()
+{
+    HWND hProgman = GetProgmanWnd();
+    if (!hProgman) return nullptr;
+
+    SendMessage(hProgman, 0x052C, 0xD, 0);
+    SendMessage(hProgman, 0x052C, 0xD, 1);
+
+    HWND hWorkerW = nullptr;
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            if (!FindWindowExW(hWnd, nullptr, L"SHELLDLL_DefView", nullptr)) return TRUE;
+            HWND hWorker = FindWindowExW(nullptr, hWnd, L"WorkerW", nullptr);
+            if (hWorker) { *(HWND*)lParam = hWorker; return FALSE; }
+            return TRUE;
+        },
+        (LPARAM)&hWorkerW);
+
+    if (!hWorkerW) {
+        SendMessage(hProgman, 0x052C, 0, 0);
+        EnumWindows(
+            [](HWND hWnd, LPARAM lParam) -> BOOL {
+                if (!FindWindowExW(hWnd, nullptr, L"SHELLDLL_DefView", nullptr)) return TRUE;
+                HWND hWorker = FindWindowExW(nullptr, hWnd, L"WorkerW", nullptr);
+                if (hWorker) { *(HWND*)lParam = hWorker; return FALSE; }
+                return TRUE;
+            },
+            (LPARAM)&hWorkerW);
+    }
+
+    if (!hWorkerW) hWorkerW = FindWindowExW(hProgman, nullptr, L"WorkerW", nullptr);
+    if (!hWorkerW) hWorkerW = hProgman;
+    return hWorkerW;
+}
+
+void RunDxgiWorkaroundForExplorerPatcher()
+{
+    auto dxgiModule = GetModuleHandleW(L"dxgi.dll");
+    if (!dxgiModule) return;
+
+    WCHAR dxgiPath[MAX_PATH];
+    DWORD len = GetModuleFileNameW(dxgiModule, dxgiPath, MAX_PATH);
+    if (len == 0 || len == MAX_PATH) return;
+
+    WCHAR epDxgiPath[MAX_PATH];
+    GetWindowsDirectoryW(epDxgiPath, MAX_PATH);
+    wcscat_s(epDxgiPath, L"\\dxgi.dll");
+
+    if (_wcsicmp(dxgiPath, epDxgiPath) != 0) return;
+
+    auto dxgiDeclare = (HRESULT(WINAPI*)())GetProcAddress(dxgiModule, "DXGIDeclareAdapterRemovalSupport");
+    if (dxgiDeclare) dxgiDeclare();
+}
+
+bool InitDirectX()
+{
+    HRESULT hr;
+
+    UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+    hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags,
+                           nullptr, 0, D3D11_SDK_VERSION, &g_d3dDevice, nullptr, nullptr);
+    if (FAILED(hr)) {
+        Wh_Log(L"D3D11CreateDevice HARDWARE failed: 0x%08X, trying WARP", hr);
+        hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, flags,
+                               nullptr, 0, D3D11_SDK_VERSION, &g_d3dDevice, nullptr, nullptr);
+        if (FAILED(hr)) { Wh_Log(L"D3D11CreateDevice WARP also failed: 0x%08X", hr); return false; }
+        Wh_Log(L"D3D11CreateDevice: using WARP (software)");
+    }
+
+    hr = g_d3dDevice.As(&g_dxgiDevice);
+    if (FAILED(hr)) { Wh_Log(L"QueryInterface IDXGIDevice failed: 0x%08X", hr); return false; }
+
+    hr = CreateDXGIFactory2(0, IID_PPV_ARGS(&g_dxgiFactory));
+    if (FAILED(hr)) { Wh_Log(L"CreateDXGIFactory2 failed: 0x%08X", hr); return false; }
+
+    hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, IID_PPV_ARGS(&g_d2dFactory));
+    if (FAILED(hr)) { Wh_Log(L"D2D1CreateFactory failed: 0x%08X", hr); return false; }
+
+    hr = g_d2dFactory->CreateDevice(g_dxgiDevice.Get(), &g_d2dDevice);
+    if (FAILED(hr)) { Wh_Log(L"D2D CreateDevice failed: 0x%08X", hr); return false; }
+
+    return true;
+}
+
+void UninitDirectX()
+{
+    g_frameBitmap.Reset();
+    g_swapChain.Reset();
+    g_dc.Reset();
+    g_compositionVisual.Reset();
+    g_compositionTarget.Reset();
+    g_compositionDevice.Reset();
+    g_d2dDevice.Reset();
+    g_d2dFactory.Reset();
+    g_dxgiFactory.Reset();
+    g_dxgiDevice.Reset();
+    g_d3dDevice.Reset();
+    g_dxInitialized = false;
+    g_dxInitSucceeded = false;
+}
+
+bool CreateSwapChainResources(UINT width, UINT height)
+{
+    HRESULT hr;
+
+    DXGI_FORMAT targetFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
+    D2D1_ALPHA_MODE d2dAlphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+
+    DXGI_SWAP_CHAIN_DESC1 scd = {};
+    scd.Width = width;
+    scd.Height = height;
+    scd.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    scd.SampleDesc.Count = 1;
+    scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    scd.BufferCount = 2;
+    scd.Scaling = DXGI_SCALING_STRETCH;
+    scd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    scd.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
+
+    hr = g_dxgiFactory->CreateSwapChainForComposition(g_dxgiDevice.Get(), &scd, nullptr, &g_swapChain);
+    if (FAILED(hr)) { Wh_Log(L"CreateSwapChainForComposition failed: 0x%08X", hr); return false; }
+
+    hr = g_d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &g_dc);
+    if (FAILED(hr)) { Wh_Log(L"CreateDeviceContext failed: 0x%08X", hr); return false; }
+
+    Microsoft::WRL::ComPtr<IDXGISurface2> surface;
+    hr = g_swapChain->GetBuffer(0, IID_PPV_ARGS(&surface));
+    if (FAILED(hr)) { Wh_Log(L"GetBuffer failed: 0x%08X", hr); return false; }
+
+    D2D1_BITMAP_PROPERTIES1 bitmapProperties = {};
+    bitmapProperties.pixelFormat.alphaMode = d2dAlphaMode;
+    bitmapProperties.pixelFormat.format = targetFormat;
+    bitmapProperties.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
+
+    Microsoft::WRL::ComPtr<ID2D1Bitmap1> targetBitmap;
+    hr = g_dc->CreateBitmapFromDxgiSurface(surface.Get(), bitmapProperties, &targetBitmap);
+    if (FAILED(hr)) { Wh_Log(L"CreateBitmapFromDxgiSurface failed: 0x%08X", hr); return false; }
+
+    g_dc->SetTarget(targetBitmap.Get());
+
+    hr = DCompositionCreateDevice(g_dxgiDevice.Get(), IID_PPV_ARGS(&g_compositionDevice));
+    if (FAILED(hr)) { Wh_Log(L"DCompositionCreateDevice failed: 0x%08X", hr); return false; }
+
+    hr = g_compositionDevice->CreateTargetForHwnd(g_videoHwnd, TRUE, &g_compositionTarget);
+    if (FAILED(hr)) { Wh_Log(L"CreateTargetForHwnd failed: 0x%08X", hr); return false; }
+
+    hr = g_compositionDevice->CreateVisual(&g_compositionVisual);
+    if (FAILED(hr)) { Wh_Log(L"CreateVisual failed: 0x%08X", hr); return false; }
+
+    hr = g_compositionVisual->SetContent(g_swapChain.Get());
+    if (FAILED(hr)) { Wh_Log(L"SetContent failed: 0x%08X", hr); return false; }
+
+    hr = g_compositionTarget->SetRoot(g_compositionVisual.Get());
+    if (FAILED(hr)) { Wh_Log(L"SetRoot failed: 0x%08X", hr); return false; }
+
+    hr = g_compositionDevice->Commit();
+    if (FAILED(hr)) { Wh_Log(L"Commit failed: 0x%08X", hr); return false; }
+
+    D2D1_BITMAP_PROPERTIES frameBitmapProps = D2D1::BitmapProperties(
+        D2D1::PixelFormat(targetFormat, d2dAlphaMode));
+    hr = g_dc->CreateBitmap(D2D1::SizeU(width, height), nullptr, width * 4, frameBitmapProps, &g_frameBitmap);
+    if (FAILED(hr)) { Wh_Log(L"CreateBitmap (frame) failed: 0x%08X", hr); return false; }
+
+    return true;
+}
+
+void ReleaseSwapChainResources()
+{
+    g_frameBitmap.Reset();
+    g_swapChain.Reset();
+    g_dc.Reset();
+    g_compositionVisual.Reset();
+    g_compositionTarget.Reset();
+    g_compositionDevice.Reset();
+}
+
+bool ResizeSwapChain(UINT width, UINT height)
+{
+    if (!g_swapChain || !g_dc) return false;
+
+    g_dc->SetTarget(nullptr);
+
+    HRESULT hr = g_swapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
+    if (FAILED(hr)) {
+        Wh_Log(L"ResizeBuffers failed: 0x%08X", hr);
+        return false;
+    }
+
+    Microsoft::WRL::ComPtr<IDXGISurface2> surface;
+    hr = g_swapChain->GetBuffer(0, IID_PPV_ARGS(&surface));
+    if (FAILED(hr)) {
+        Wh_Log(L"GetBuffer failed: 0x%08X", hr);
+        return false;
+    }
+
+    D2D1_BITMAP_PROPERTIES1 bitmapProperties = {};
+    bitmapProperties.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
+    bitmapProperties.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    bitmapProperties.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
+
+    Microsoft::WRL::ComPtr<ID2D1Bitmap1> targetBitmap;
+    hr = g_dc->CreateBitmapFromDxgiSurface(surface.Get(), bitmapProperties, &targetBitmap);
+    if (FAILED(hr)) {
+        Wh_Log(L"CreateBitmapFromDxgiSurface failed: 0x%08X", hr);
+        return false;
+    }
+
+    g_dc->SetTarget(targetBitmap.Get());
+
+    g_frameSize = (int)(width * height * 4);
+    g_frameBuf.clear();
+    g_frameBuf.resize(g_frameSize);
+
+    D2D1_BITMAP_PROPERTIES frameBitmapProps = D2D1::BitmapProperties(
+        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+    g_frameBitmap.Reset();
+    hr = g_dc->CreateBitmap(D2D1::SizeU(width, height), nullptr, width * 4, frameBitmapProps, &g_frameBitmap);
+    if (FAILED(hr)) {
+        Wh_Log(L"CreateBitmap (frame) failed: 0x%08X", hr);
+        return false;
+    }
+
+    return true;
+}
+
+bool EnsureDxInitialized()
+{
+    if (g_dxInitialized) return g_dxInitSucceeded;
+    g_dxInitialized = true;
+    RunDxgiWorkaroundForExplorerPatcher();
+    g_dxInitSucceeded = InitDirectX();
+    return g_dxInitSucceeded;
 }
 
 bool IsVideoExt(const WCHAR* ext)
@@ -308,12 +616,32 @@ std::vector<std::wstring> EnumVideos(const WCHAR* folder)
     return result;
 }
 
+void CALLBACK OnFfmpegExit(PVOID lpParam, BOOLEAN TimerOrWaitFired)
+{
+    if (TimerOrWaitFired) return;
+    HANDLE proc = (HANDLE)lpParam;
+    DWORD code = 0;
+    GetExitCodeProcess(proc, &code);
+    if (g_videoHwnd) PostMessage(g_videoHwnd, WM_APP_FFMPEG_EXIT, code, 0);
+}
+
 void StopFfmpeg()
 {
+    if (g_ffmpegWaitReg) { UnregisterWait(g_ffmpegWaitReg); g_ffmpegWaitReg = NULL; }
+    if (g_pipeThread) {
+        if (g_pipeRead) { CloseHandle(g_pipeRead); g_pipeRead = NULL; }
+        DWORD waitRet = WaitForSingleObject(g_pipeThread, 500);
+        if (waitRet != WAIT_OBJECT_0) {
+            Wh_Log(L"StopFfmpeg: pipe thread still alive after 500ms, terminating");
+            TerminateThread(g_pipeThread, 0);
+        }
+        CloseHandle(g_pipeThread);
+        g_pipeThread = NULL;
+    }
+    g_frameReady = false;
     if (g_pipeWrite) { CloseHandle(g_pipeWrite); g_pipeWrite = NULL; }
     if (g_pipeRead)  { CloseHandle(g_pipeRead);  g_pipeRead = NULL; }
     if (g_ffmpegProc){ TerminateProcess(g_ffmpegProc, 0); CloseHandle(g_ffmpegProc); g_ffmpegProc = NULL; }
-    if (g_renderThread) { WaitForSingleObject(g_renderThread, 2000); CloseHandle(g_renderThread); g_renderThread = NULL; }
 }
 
 bool IsDark()
@@ -344,7 +672,51 @@ bool PathExists(const WCHAR* p) { return GetFileAttributesW(p) != INVALID_FILE_A
 
 LRESULT CALLBACK VideoWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-    if (msg == WM_NCHITTEST) return HTTRANSPARENT;
+    switch (msg) {
+        case WM_NCHITTEST:
+            return HTTRANSPARENT;
+        case WM_TIMER:
+            if (wParam == TIMER_ID_MANAGER) { ManagerTick(); return 0; }
+            if (wParam == TIMER_ID_RENDERER) { if (g_opacity > 0) RenderFrame(); return 0; }
+            break;
+        case WM_WINDOWPOSCHANGED: {
+            const WINDOWPOS* wp = (const WINDOWPOS*)lParam;
+            if (!(wp->flags & SWP_NOSIZE) && g_d3dDevice) {
+                if (ResizeSwapChain((UINT)wp->cx, (UINT)wp->cy)) {
+                    if (g_opacity > 0) RenderFrame();
+                }
+            }
+            break;
+        }
+        case WM_APP_CLEANUP:
+            DestroyWindow(hwnd);
+            return 0;
+        case WM_APP_FFMPEG_EXIT: {
+            DWORD code = (DWORD)wParam;
+            if (code == 0) {
+                g_consecutiveErrors = 0;
+                Wh_Log(L"WM_APP_FFMPEG_EXIT: normal, moving to next");
+            } else {
+                g_consecutiveErrors++;
+                Wh_Log(L"WM_APP_FFMPEG_EXIT: error=%lu consecutive=%d", code, g_consecutiveErrors);
+            }
+            if (g_consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+                Wh_Log(L"Too many consecutive errors (%d), stopping auto-play", g_consecutiveErrors);
+                StopFfmpeg();
+            } else {
+                PlayNext();
+            }
+            return 0;
+        }
+        case WM_DESTROY:
+            Wh_Log(L"VideoWndProc WM_DESTROY");
+            StopManagerTimer();
+            StopRendererTimer();
+            g_running = false;
+            ReleaseSwapChainResources();
+            g_videoHwnd = NULL;
+            break;
+    }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
@@ -352,102 +724,84 @@ bool CreateVideoWindow()
 {
     if (g_videoHwnd && IsWindow(g_videoHwnd)) return true;
 
-    Wh_Log(L"CreateVideoWindow: begin");
-    Wh_Log(L"CreateVideoWindow: before LoadGdiProcs");
-    LoadGdiProcs();
-    Wh_Log(L"CreateVideoWindow: after LoadGdiProcs user=%p gdi=%p update=%p",
-        GetModuleHandleW(L"user32.dll"), g_gdiMod, pUpdateLayeredWindow);
-    if (!pUpdateLayeredWindow) { Wh_Log(L"UpdateLayeredWindow not available"); return false; }
+    if (g_opacity <= 0) {
+        Wh_Log(L"CreateVideoWindow: opacity=0, skipping window creation");
+        return false;
+    }
 
-    int sw = GetSystemMetrics(SM_CXSCREEN);
-    int sh = GetSystemMetrics(SM_CYSCREEN);
-    Wh_Log(L"CreateVideoWindow: metrics %dx%d", sw, sh);
+    if (!EnsureDxInitialized()) { Wh_Log(L"DX init failed"); return false; }
+
+    g_workerW = GetWorkerW();
+    if (!g_workerW) { Wh_Log(L"CreateVideoWindow: GetWorkerW failed"); return false; }
+
+    HWND hProgman = FindWindowW(L"Progman", nullptr);
+
+RECT rc;
+    GetWindowRect(g_workerW, &rc);
+    int sw = rc.right - rc.left;
+    int sh = rc.bottom - rc.top;
 
     if (!g_classRegistered) {
         WNDCLASSEXW wc = {sizeof(wc)};
         wc.lpfnWndProc = VideoWndProc;
-        wc.hInstance = GetModuleHandleW(NULL);
+        wc.hInstance = GetCurrentModuleHandle();
         wc.lpszClassName = L"VidWallpaperWnd";
         wc.hbrBackground = NULL;
-        Wh_Log(L"CreateVideoWindow: before RegisterClassExW");
         ATOM classAtom = RegisterClassExW(&wc);
-        Wh_Log(L"CreateVideoWindow: after RegisterClassExW atom=%u err=%lu",
-            classAtom, GetLastError());
         if (!classAtom) {
             DWORD err = GetLastError();
             if (err == ERROR_CLASS_ALREADY_EXISTS) {
-                // Stale class from a previous DLL load with dangling lpfnWndProc.
-                UnregisterClassW(L"VidWallpaperWnd", GetModuleHandleW(NULL));
+                UnregisterClassW(L"VidWallpaperWnd", GetCurrentModuleHandle());
                 classAtom = RegisterClassExW(&wc);
-                Wh_Log(L"CreateVideoWindow: re-registered atom=%u err=%lu", classAtom, GetLastError());
             }
         }
         if (!classAtom) { Wh_Log(L"RegisterClassExW failed"); return false; }
         g_classRegistered = true;
     }
 
-    g_progman = FindProgman();
-    HWND workerw = FindWorkerW();
-    Wh_Log(L"CreateVideoWindow: progman=%p workerw=%p", g_progman, workerw);
-
-    Wh_Log(L"CreateVideoWindow: before CreateWindowExW");
     g_videoHwnd = CreateWindowExW(
-        WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
+        WS_EX_NOREDIRECTIONBITMAP | WS_EX_NOACTIVATE,
         L"VidWallpaperWnd", L"",
-        WS_POPUP,
+        WS_CHILD | WS_VISIBLE,
         0, 0, sw, sh,
-        NULL, NULL, GetModuleHandleW(NULL), NULL);
+        g_workerW, NULL, GetCurrentModuleHandle(), NULL);
 
-    Wh_Log(L"CreateVideoWindow: after CreateWindowExW hwnd=%p err=%lu",
-        g_videoHwnd, GetLastError());
     if (!g_videoHwnd) { Wh_Log(L"CreateWindowExW failed err=%lu", GetLastError()); return false; }
 
-    Wh_Log(L"CreateVideoWindow: before ShowWindow");
-    ShowWindow(g_videoHwnd, SW_SHOW);
-    Wh_Log(L"CreateVideoWindow: before SetWindowPos");
-    SetLastError(ERROR_SUCCESS);
-    HWND insertAfter = g_progman ? g_progman : HWND_BOTTOM;
-    BOOL positioned = SetWindowPos(g_videoHwnd, insertAfter, 0, 0, sw, sh, SWP_NOACTIVATE);
-    if (!positioned) {
-        Wh_Log(L"CreateVideoWindow: SetWindowPos failed err=%lu", GetLastError());
+    if (!CreateSwapChainResources(sw, sh)) {
+        Wh_Log(L"CreateVideoWindow: CreateSwapChainResources failed");
         DestroyWindow(g_videoHwnd);
         g_videoHwnd = NULL;
         return false;
     }
 
-    if (workerw) {
-        SetWindowPos(workerw, g_videoHwnd, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    g_frameSize = sw * sh * 4;
+    if (g_frameBuf.size() != static_cast<size_t>(g_frameSize)) {
+        g_frameBuf.resize(g_frameSize);
     }
 
-    Wh_Log(L"CreateVideoWindow: video=%p top-level layered OK", g_videoHwnd);
     return true;
 }
 
-DWORD WINAPI RenderThread(LPVOID)
+DWORD WINAPI PipeReaderThread(LPVOID)
 {
-    LoadGdiProcs();
-    if (!pCreateCompatibleDC || !pCreateCompatibleBitmap ||
-        !pSelectObject || !pSetDIBitsToDevice || !pDeleteObject || !pDeleteDC || !pUpdateLayeredWindow) {
-        Wh_Log(L"RenderThread: GDI procs missing"); return 0;
+    int sw = 0, sh = 0;
+    if (g_videoHwnd) {
+        RECT rc;
+        GetClientRect(g_videoHwnd, &rc);
+        sw = rc.right - rc.left;
+        sh = rc.bottom - rc.top;
     }
-
-    int sw = GetSystemMetrics(SM_CXSCREEN);
-    int sh = GetSystemMetrics(SM_CYSCREEN);
-    int newFrameSize = sw * sh * 4;
-    if (g_frameBuf.size() != static_cast<size_t>(newFrameSize)) {
-        g_frameBuf.resize(newFrameSize);
+    if (sw <= 0) {
+        sw = GetSystemMetrics(SM_CXSCREEN);
+        sh = GetSystemMetrics(SM_CYSCREEN);
     }
-    g_frameSize = newFrameSize;
-
-    HDC hScreen = GetDC(NULL);
-    if (!hScreen) {
-        Wh_Log(L"RenderThread: GetDC failed err=%lu", GetLastError());
-        return 0;
+    g_frameSize = sw * sh * 4;
+    if (g_frameBuf.size() != static_cast<size_t>(g_frameSize)) {
+        g_frameBuf.resize(g_frameSize);
     }
 
     int frameCount = 0;
-    DWORD frameIntervalMs = g_fps > 0 ? 1000 / (DWORD)g_fps : 66;
-    DWORD lastTick = GetTickCount();
     while (g_running && g_pipeRead)
     {
         if (!g_frameSize) { Sleep(10); continue; }
@@ -479,65 +833,71 @@ DWORD WINAPI RenderThread(LPVOID)
         if (totalRead != (DWORD)g_frameSize) break;
 
         if (g_isPaused) continue;
-        if (!g_videoHwnd || !IsWindow(g_videoHwnd)) continue;
 
-        HDC hMem = pCreateCompatibleDC(hScreen);
-        if (!hMem) {
-            Wh_Log(L"RenderThread: CreateCompatibleDC failed err=%lu", GetLastError());
-            continue;
-        }
-
-        HBITMAP hBmp = pCreateCompatibleBitmap(hScreen, sw, sh);
-        if (!hBmp) {
-            Wh_Log(L"RenderThread: CreateCompatibleBitmap failed err=%lu", GetLastError());
-            pDeleteDC(hMem);
-            continue;
-        }
-
-        HBITMAP hOldBmp = (HBITMAP)pSelectObject(hMem, hBmp);
-        if (!hOldBmp || hOldBmp == HGDI_ERROR) {
-            Wh_Log(L"RenderThread: SelectObject failed err=%lu", GetLastError());
-            pDeleteObject(hBmp);
-            pDeleteDC(hMem);
-            continue;
-        }
-
-        BITMAPINFOHEADER bih = {0};
-        bih.biSize = sizeof(bih); bih.biPlanes = 1; bih.biBitCount = 32;
-        bih.biCompression = BI_RGB; bih.biWidth = sw; bih.biHeight = -sh;
-
-        BOOL dibOk = pSetDIBitsToDevice(hMem, 0, 0, sw, sh, 0, 0, 0, sh,
-            g_frameBuf.data(), (BITMAPINFO*)&bih, DIB_RGB_COLORS);
-
-        POINT ptSrc = {0, 0};
-        SIZE sz = {sw, sh};
-        POINT ptDst = {0, 0};
-        BYTE alphaFormat = g_isPadTransparent ? AC_SRC_ALPHA : 0;
-        BLENDFUNCTION bf = {AC_SRC_OVER, 0, (BYTE)g_opacity, alphaFormat};
-        BOOL ok = pUpdateLayeredWindow(g_videoHwnd, hScreen, &ptDst, &sz, hMem, &ptSrc, 0, &bf, ULW_ALPHA);
-
-        if (!dibOk || !ok) {
-            Wh_Log(L"RenderThread: draw failed dib=%d layered=%d err=%lu frame=%d",
-                dibOk, ok, GetLastError(), frameCount);
-        }
-
-        pSelectObject(hMem, hOldBmp);
-        pDeleteObject(hBmp);
-        pDeleteDC(hMem);
-
-        if (frameCount == 0) Wh_Log(L"RenderThread: first frame ok=%d err=%lu", ok, GetLastError());
+        g_frameReady = true;
         frameCount++;
-
-        DWORD elapsed = GetTickCount() - lastTick;
-        if (elapsed < frameIntervalMs) {
-            Sleep(frameIntervalMs - elapsed);
-        }
-        lastTick = GetTickCount();
     }
 
-    ReleaseDC(NULL, hScreen);
-    Wh_Log(L"RenderThread: exit %d frames", frameCount);
+    g_frameReady = false;
     return 0;
+}
+
+void RenderFrame()
+{
+    if (!g_frameReady) return;
+    if (g_opacity <= 0) { g_frameReady = false; return; }
+    if (g_isPaused) return;
+    if (!g_running) return;
+    if (!g_videoHwnd || !IsWindow(g_videoHwnd)) return;
+    if (!g_dc || !g_frameBitmap || !g_swapChain) return;
+    if (!g_frameSize) return;
+
+    int sw = 0, sh = 0;
+    RECT rc;
+    if (GetClientRect(g_videoHwnd, &rc)) {
+        sw = rc.right - rc.left;
+        sh = rc.bottom - rc.top;
+    }
+    if (sw <= 0 || sh <= 0) return;
+
+    HRESULT hr;
+    hr = g_frameBitmap->CopyFromMemory(nullptr, g_frameBuf.data(), sw * 4);
+    if (FAILED(hr)) {
+        Wh_Log(L"RenderFrame: CopyFromMemory failed 0x%08X", hr);
+        return;
+    }
+
+    g_dc->BeginDraw();
+    g_dc->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
+    if (g_opacity >= 255) {
+        g_dc->DrawBitmap(
+            g_frameBitmap.Get(),
+            D2D1::RectF(0, 0, (FLOAT)sw, (FLOAT)sh),
+            1.0f,
+            D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
+            D2D1::RectF(0, 0, (FLOAT)sw, (FLOAT)sh));
+    } else {
+        g_dc->DrawBitmap(
+            g_frameBitmap.Get(),
+            D2D1::RectF(0, 0, (FLOAT)sw, (FLOAT)sh),
+            (FLOAT)g_opacity / 255.0f,
+            D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
+            D2D1::RectF(0, 0, (FLOAT)sw, (FLOAT)sh));
+    }
+    hr = g_dc->EndDraw();
+    if (FAILED(hr)) {
+        Wh_Log(L"RenderFrame: EndDraw failed 0x%08X", hr);
+        return;
+    }
+
+    if (!g_running) return;
+    hr = g_swapChain->Present(0, 0);
+    if (FAILED(hr)) {
+        Wh_Log(L"RenderFrame: Present failed 0x%08X", hr);
+        return;
+    }
+
+    g_frameReady = false;
 }
 
 bool StartFfmpeg(const WCHAR* videoPath)
@@ -546,8 +906,17 @@ bool StartFfmpeg(const WCHAR* videoPath)
     if (!g_ffmpegPath[0]) { Wh_Log(L"StartFfmpeg: ffmpegPath is empty! Set it in mod settings."); return false; }
     if (!videoPath || !*videoPath || !PathExists(videoPath)) return false;
 
-    int sw = GetSystemMetrics(SM_CXSCREEN);
-    int sh = GetSystemMetrics(SM_CYSCREEN);
+    int sw = 0, sh = 0;
+    if (g_videoHwnd) {
+        RECT rc;
+        GetClientRect(g_videoHwnd, &rc);
+        sw = rc.right - rc.left;
+        sh = rc.bottom - rc.top;
+    }
+    if (sw <= 0) {
+        sw = GetSystemMetrics(SM_CXSCREEN);
+        sh = GetSystemMetrics(SM_CYSCREEN);
+    }
 
     SECURITY_ATTRIBUTES sa = {sizeof(sa), NULL, TRUE};
     HANDLE hRead = NULL, hWrite = NULL;
@@ -559,8 +928,6 @@ bool StartFfmpeg(const WCHAR* videoPath)
     SetHandleInformation(hRead, HANDLE_FLAG_INHERIT, 0);
     SetHandleInformation(hErrRead, HANDLE_FLAG_INHERIT, 0);
     g_pipeRead = hRead; g_pipeWrite = hWrite;
-    Wh_Log(L"StartFfmpeg: pipes ready read=%p write=%p errRead=%p errWrite=%p",
-        hRead, hWrite, hErrRead, hErrWrite);
 
     WCHAR cmd[MAX_PATH * 6];
     const WCHAR* vfArg = nullptr;
@@ -604,31 +971,33 @@ bool StartFfmpeg(const WCHAR* videoPath)
     switch (g_scalingMode) {
         case 0: vfArg = L" -vf \"scale=%d:%d:force_original_aspect_ratio=increase,crop=%d:%d\""; break;
         case 1: vfArg = L" -vf \"scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2:%s\""; break;
-        case 2: vfArg = L" -vf \"color=c=%s:s=%dx%d:r=%d,format=bgra[bg];[0:v]format=bgra[v];[bg][v]overlay=(W-w)/2:(H-h)/2:shortest=1,format=bgra\""; break;
         case 3: vfArg = nullptr; break;
         default: vfArg = nullptr; break;
     }
     const WCHAR* hwaccelArg = (g_hwaccelMode == 1) ? L" -hwaccel d3d11va" : L"";
+    const WCHAR* pixFmt = L"bgra";
 
-    if (vfArg) {
+    bool hasVf = (vfArg != nullptr) || g_scalingMode == 2;
+
+    if (hasVf) {
         WCHAR vfBuf[512];
-        if (g_scalingMode == 0) {
-            swprintf_s(vfBuf, vfArg, sw, sh, sw, sh);
-        } else if (g_scalingMode == 2) {
+        if (g_scalingMode == 2) {
             const WCHAR* colorVal = padColor;
             if (wcsncmp(padColor, L"color=", 6) == 0) colorVal = padColor + 6;
-            swprintf_s(vfBuf, vfArg, colorVal, sw, sh, g_fps);
+            swprintf_s(vfBuf,
+                L" -vf \"color=c=%s:s=%dx%d:r=%d,format=%s[bg];[0:v]format=%s[v];[bg][v]overlay=(W-w)/2:(H-h)/2:shortest=1,format=%s\"",
+                colorVal, sw, sh, g_fps, pixFmt, pixFmt, pixFmt);
+        } else if (g_scalingMode == 0) {
+            swprintf_s(vfBuf, vfArg, sw, sh, sw, sh);
         } else {
             swprintf_s(vfBuf, vfArg, sw, sh, sw, sh, padColor);
         }
-        swprintf_s(cmd, L"\"%s\" -nostdin -hide_banner -loglevel error%s -i \"%s\" -an -f rawvideo -pix_fmt bgra%s -r %d -",
-            g_ffmpegPath, hwaccelArg, videoPath, vfBuf, g_fps);
+        swprintf_s(cmd, L"\"%s\" -nostdin -hide_banner -loglevel error%s -i \"%s\" -an -f rawvideo -pix_fmt %s%s -r %d -",
+            g_ffmpegPath, hwaccelArg, videoPath, pixFmt, vfBuf, g_fps);
     } else {
-        swprintf_s(cmd, L"\"%s\" -nostdin -hide_banner -loglevel error%s -i \"%s\" -an -f rawvideo -pix_fmt bgra -s %dx%d -r %d -",
-            g_ffmpegPath, hwaccelArg, videoPath, sw, sh, g_fps);
+        swprintf_s(cmd, L"\"%s\" -nostdin -hide_banner -loglevel error%s -i \"%s\" -an -f rawvideo -pix_fmt %s -s %dx%d -r %d -",
+            g_ffmpegPath, hwaccelArg, videoPath, pixFmt, sw, sh, g_fps);
     }
-    g_isPadTransparent = isPadTransparent;
-    Wh_Log(L"StartFfmpeg cmd: %s", cmd);
 
     STARTUPINFOW si = {sizeof(si)};
     si.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
@@ -637,14 +1006,11 @@ bool StartFfmpeg(const WCHAR* videoPath)
     si.hStdError = hErrWrite;
 
     PROCESS_INFORMATION pi = {0};
-    Wh_Log(L"StartFfmpeg: CreateProcessW begin");
     if (!CreateProcessW(NULL, cmd, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
         Wh_Log(L"CreateProcess failed err=%lu", GetLastError());
         StopFfmpeg();
         return false;
     }
-    Wh_Log(L"StartFfmpeg: CreateProcessW success process=%p thread=%p pid=%lu",
-        pi.hProcess, pi.hThread, pi.dwProcessId);
     CloseHandle(pi.hThread);
     CloseHandle(hWrite);
     CloseHandle(hErrWrite);
@@ -655,26 +1021,16 @@ bool StartFfmpeg(const WCHAR* videoPath)
         char errBuf[2048] = {0};
         DWORD waited = 0;
         bool gotData = false;
-        Wh_Log(L"StartFfmpeg: waiting for ffmpeg stdout");
         while (waited < 5000 && g_running) {
             DWORD avail = 0;
-            BOOL peekOk = PeekNamedPipe(hRead, NULL, 0, NULL, &avail, NULL);
-            if (peekOk && avail > 0) {
+            if (PeekNamedPipe(hRead, NULL, 0, NULL, &avail, NULL) && avail > 0) {
                 gotData = true;
-                Wh_Log(L"StartFfmpeg: stdout data available bytes=%lu waited=%lu", avail, waited);
                 break;
-            }
-            if (!peekOk && GetLastError() != ERROR_NO_DATA) {
-                Wh_Log(L"StartFfmpeg: PeekNamedPipe failed err=%lu waited=%lu", GetLastError(), waited);
             }
             Sleep(50); waited += 50;
         }
-        Wh_Log(L"StartFfmpeg: stdout wait complete data=%d waited=%lu running=%d",
-            gotData, waited, g_running.load());
         DWORD errAvail = 0;
         BOOL errPeekOk = PeekNamedPipe(hErrRead, NULL, 0, NULL, &errAvail, NULL);
-        Wh_Log(L"StartFfmpeg: stderr peek ok=%d bytes=%lu err=%lu",
-            errPeekOk, errAvail, errPeekOk ? ERROR_SUCCESS : GetLastError());
         if (errPeekOk && errAvail > 0) {
             DWORD got = 0;
             if (ReadFile(hErrRead, errBuf, sizeof(errBuf) - 1, &got, NULL) && got > 0) {
@@ -695,9 +1051,9 @@ bool StartFfmpeg(const WCHAR* videoPath)
         return false;
     }
 
-    Wh_Log(L"StartFfmpeg: creating render thread");
-    g_renderThread = CreateThread(NULL, 0, RenderThread, NULL, 0, NULL);
-    Wh_Log(L"StartFfmpeg: render thread=%p err=%lu", g_renderThread, GetLastError());
+    g_pipeThread = CreateThread(NULL, 0, PipeReaderThread, NULL, 0, NULL);
+    RegisterWaitForSingleObject(&g_ffmpegWaitReg, g_ffmpegProc, OnFfmpegExit, g_ffmpegProc, INFINITE, WT_EXECUTEONLYONCE);
+    StartRendererTimer();
     return true;
 }
 
@@ -726,15 +1082,33 @@ void ReloadVideoList()
 void ReloadWallpaper()
 {
     StopFfmpeg();
+    if (g_opacity <= 0) {
+        Wh_Log(L"ReloadWallpaper: opacity=0, skipping ffmpeg start");
+        return;
+    }
+    if (!g_videoHwnd || !IsWindow(g_videoHwnd)) {
+        if (!CreateVideoWindow()) {
+            Wh_Log(L"ReloadWallpaper: CreateVideoWindow failed");
+            return;
+        }
+    }
     ReloadVideoList();
     if (!g_videoList.empty()) PlayNext();
 }
 
 bool PlayNext()
 {
+    if (g_opacity <= 0) return false;
+
     if (g_pendingReload) {
         g_pendingReload = false;
         ReloadVideoList();
+    }
+    if (!g_videoHwnd || !IsWindow(g_videoHwnd)) {
+        if (!CreateVideoWindow()) {
+            Wh_Log(L"PlayNext: CreateVideoWindow failed");
+            return false;
+        }
     }
     if (g_videoList.empty()) return false;
     if (g_consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
@@ -742,11 +1116,11 @@ bool PlayNext()
         return false;
     }
     const WCHAR* next = g_videoList[g_videoIndex++ % g_videoList.size()].c_str();
-    Wh_Log(L"PlayNext: trying %s (consecutive errors=%d)", next, g_consecutiveErrors);
     bool ok = StartFfmpeg(next);
     if (!ok) {
         g_consecutiveErrors++;
-        Wh_Log(L"PlayNext: StartFfmpeg failed, consecutive errors=%d", g_consecutiveErrors);
+    } else {
+        StartManagerTimer();
     }
     return ok;
 }
@@ -771,8 +1145,11 @@ void Wh_ModSettingsChanged()
     int newSortMode = _wtoi(sortStr);
     if (newSortMode < 0 || newSortMode > 7) newSortMode = 0;
 
+    int oldOpacity = g_opacity;
     int pct = Wh_GetIntSetting(L"opacity");
-    g_opacity = (pct >= 0 && pct <= 100) ? (pct * 255 / 100) : 255;
+    int newOpacity = (pct >= 0 && pct <= 100) ? (pct * 255 / 100) : 255;
+    bool oldWasZero = (oldOpacity <= 0);
+    bool newIsZero = (newOpacity <= 0);
 
     int fps = Wh_GetIntSetting(L"fps");
     if (fps < 10) fps = 10;
@@ -808,6 +1185,16 @@ void Wh_ModSettingsChanged()
     int newHwaccel = _wtoi(hwaccelStr);
     if (newHwaccel < 0 || newHwaccel > 1) newHwaccel = 0;
 
+    g_opacity = newOpacity;
+
+    if (!oldWasZero && newIsZero) {
+        Wh_Log(L"Opacity changed >0→0, stopping ffmpeg");
+        StopFfmpeg();
+        StopManagerTimer();
+        StopRendererTimer();
+        return;
+    }
+
     bool needReload =
         wcscmp(newFfmpegPath, g_ffmpegPath) != 0 ||
         wcscmp(newLightPath, g_lightPath) != 0 ||
@@ -828,121 +1215,138 @@ void Wh_ModSettingsChanged()
     wcscpy_s(g_padColorCustom, 32, newPadCustom);
     wcscpy_s(g_applyMode, 16, newApplyMode);
 
+    if (oldWasZero && !newIsZero) {
+        Wh_Log(L"Opacity changed 0→%d%, creating window and starting", pct);
+        if (!g_videoHwnd || !IsWindow(g_videoHwnd)) {
+            if (!CreateVideoWindow()) {
+                Wh_Log(L"Wh_ModSettingsChanged: CreateVideoWindow failed");
+                return;
+            }
+        }
+        ReloadWallpaper();
+        return;
+    }
+
     if (needReload) {
         if (wcscmp(newApplyMode, L"on_next") == 0 && g_ffmpegProc != NULL) {
-            Wh_Log(L"Wh_ModSettingsChanged: deferred until next video");
             g_pendingReload = true;
         } else {
-            Wh_Log(L"Wh_ModSettingsChanged: path/settings changed, reloading");
             ReloadWallpaper();
         }
-    } else {
-        Wh_Log(L"Wh_ModSettingsChanged: opacity only=%d (no reload needed)", g_opacity);
     }
 }
 
-DWORD WINAPI MonitorThread(LPVOID)
-{
-    Wh_Log(L"MonitorThread: initializing");
+void StartManagerTimer() {
+    if (!g_videoHwnd) return;
+    SetTimer(g_videoHwnd, TIMER_ID_MANAGER, 200, nullptr);
+}
 
-    // When this DLL is injected into an already-running explorer process,
-    // the newly created thread may not have its user32 thread info fully
-    // initialized (no message queue). PeekMessage forces USER32 to set up
-    // the THREADINFO and create a message queue, which CreateWindowExW
-    // implicitly depends on internally.
-    MSG dummyMsg;
-    PeekMessageW(&dummyMsg, NULL, 0, 0, PM_NOREMOVE);
-    if (!CreateVideoWindow()) {
-        Wh_Log(L"MonitorThread: video window creation failed");
-        return 0;
+void StopManagerTimer() {
+    if (g_videoHwnd) KillTimer(g_videoHwnd, TIMER_ID_MANAGER);
+}
+
+void StartRendererTimer() {
+    if (!g_videoHwnd) return;
+    DWORD interval = g_fps > 0 ? 1000 / (DWORD)g_fps : 66;
+    SetTimer(g_videoHwnd, TIMER_ID_RENDERER, interval, nullptr);
+}
+
+void StopRendererTimer() {
+    if (g_videoHwnd) KillTimer(g_videoHwnd, TIMER_ID_RENDERER);
+}
+
+void ManagerTick() {
+    if (!g_hThemeKey) {
+        RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", 0, KEY_NOTIFY, &g_hThemeKey);
+        if (g_hThemeKey) g_hThemeEvt = CreateEventW(NULL, TRUE, FALSE, NULL);
+        g_lastDarkChecked = IsDark();
     }
-    Wh_ModSettingsChanged();
 
-    HKEY hThemeKey = NULL; HANDLE hThemeEvt = NULL;
-    RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", 0, KEY_NOTIFY, &hThemeKey);
-    if (hThemeKey) hThemeEvt = CreateEventW(NULL, TRUE, FALSE, NULL);
-
-    bool prevFull = false;
-    while (g_running) {
-        HANDLE handles[2] = {0}; DWORD hc = 0;
-        if (hThemeKey && hThemeEvt) {
-            ResetEvent(hThemeEvt);
-            RegNotifyChangeKeyValue(hThemeKey, FALSE, REG_NOTIFY_CHANGE_LAST_SET, hThemeEvt, TRUE);
-            handles[hc++] = hThemeEvt;
+    if (g_hThemeKey && g_hThemeEvt) {
+        ResetEvent(g_hThemeEvt);
+        RegNotifyChangeKeyValue(g_hThemeKey, FALSE, REG_NOTIFY_CHANGE_LAST_SET, g_hThemeEvt, TRUE);
+        DWORD waitRet = WaitForSingleObject(g_hThemeEvt, 0);
+        if (waitRet == WAIT_OBJECT_0) {
+            bool isDark = IsDark();
+            if (isDark != g_lastDarkChecked) {
+                g_lastDarkChecked = isDark;
+                g_lastIsDark = isDark;
+                bool isOnNext = (wcscmp(g_applyMode, L"on_next") == 0);
+                if (isOnNext && g_ffmpegProc) { g_pendingReload = true; }
+                else { ReloadWallpaper(); return; }
+            }
         }
-        if (g_dirChangeHandle != INVALID_HANDLE_VALUE) handles[hc++] = g_dirChangeHandle;
+    }
 
-        DWORD waitRet = hc > 0 ? WaitForMultipleObjects(hc, handles, FALSE, 800) : WAIT_TIMEOUT;
-
-        if (waitRet >= WAIT_OBJECT_0 && waitRet < WAIT_OBJECT_0 + hc) {
-            int idx = waitRet - WAIT_OBJECT_0;
+    if (g_dirChangeHandle != INVALID_HANDLE_VALUE) {
+        DWORD waitRet = WaitForSingleObject(g_dirChangeHandle, 0);
+        if (waitRet == WAIT_OBJECT_0) {
             bool isOnNext = (wcscmp(g_applyMode, L"on_next") == 0);
-            if (handles[idx] == hThemeEvt && IsDark() != g_lastIsDark) {
-                if (isOnNext && g_ffmpegProc) { Wh_Log(L"Theme switch deferred until next video"); g_pendingReload = true; }
-                else { ReloadWallpaper(); }
-            } else if (handles[idx] == g_dirChangeHandle) {
-                if (isOnNext && g_ffmpegProc) { Wh_Log(L"File change deferred until next video"); g_pendingReload = true; }
-                else { ReloadWallpaper(); }
-                FindNextChangeNotification(g_dirChangeHandle);
-            }
-            continue;
-        }
-
-        if (g_ffmpegProc) {
-            DWORD code = 0;
-            if (GetExitCodeProcess(g_ffmpegProc, &code) && code != STILL_ACTIVE) {
-                if (code == 0) {
-                    g_consecutiveErrors = 0;
-                    Wh_Log(L"ffmpeg finished playing normally, moving to next");
-                } else {
-                    g_consecutiveErrors++;
-                    Wh_Log(L"ffmpeg exited with error code=%lu, consecutive errors=%d", code, g_consecutiveErrors);
-                }
-                if (g_consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-                    Wh_Log(L"Too many consecutive errors (%d), stopping auto-play. Reload or change settings to retry.", g_consecutiveErrors);
-                    StopFfmpeg();
-                } else {
-                    PlayNext();
-                }
-                continue;
-            }
-        }
-
-        if (g_pauseOnFullscreen) {
-            bool now = IsForegroundFull();
-            if (now != prevFull) { g_isPaused = now; prevFull = now; Wh_Log(L"Fullscreen pause=%d", now); }
+            if (isOnNext && g_ffmpegProc) { g_pendingReload = true; }
+            else { ReloadWallpaper(); return; }
+            FindNextChangeNotification(g_dirChangeHandle);
         }
     }
-    if (hThemeEvt) CloseHandle(hThemeEvt);
-    if (hThemeKey) RegCloseKey(hThemeKey);
-    return 0;
+
+    if (g_pauseOnFullscreen) {
+        bool now = IsForegroundFull();
+        if (now != g_prevFull) { g_isPaused = now; g_prevFull = now; }
+    }
 }
 
 BOOL Wh_ModInit()
 {
+    Wh_Log(L"Wh_ModInit: entering");
     g_mutex = CreateMutexW(NULL, TRUE, L"Local\\VidWallpaperOnlyOne");
     if (g_mutex && GetLastError() == ERROR_ALREADY_EXISTS) { CloseHandle(g_mutex); g_mutex = NULL; return FALSE; }
-    g_monitorThread = CreateThread(NULL, 0, MonitorThread, NULL, 0, NULL);
-    if (!g_monitorThread) {
-        if (g_mutex) { CloseHandle(g_mutex); g_mutex = NULL; }
-        return FALSE;
-    }
+    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook, (void**)&CreateWindowExW_Original);
+    Wh_Log(L"Wh_ModInit: OK");
     return TRUE;
+}
+
+void Wh_ModAfterInit()
+{
+    Wh_Log(L"Wh_ModAfterInit: entering");
+    HWND hWorkerW = GetWorkerW();
+    if (hWorkerW) {
+        RunFromWindowThread(hWorkerW, [](void*) {
+            if (!CreateVideoWindow()) {
+                Wh_Log(L"CreateVideoWindow failed in AfterInit");
+                return;
+            }
+            Wh_ModSettingsChanged();
+        }, nullptr);
+    } else {
+        Wh_Log(L"Wh_ModAfterInit: WorkerW not found, waiting for FolderView hook");
+    }
 }
 
 void Wh_ModUninit()
 {
+    Wh_Log(L"Wh_ModUninit: entering");
     g_running = false;
     StopFfmpeg();
     if (g_dirChangeHandle != INVALID_HANDLE_VALUE) { FindCloseChangeNotification(g_dirChangeHandle); g_dirChangeHandle = INVALID_HANDLE_VALUE; }
-    if (g_monitorThread) { WaitForSingleObject(g_monitorThread, 2000); TerminateThread(g_monitorThread, 0); CloseHandle(g_monitorThread); g_monitorThread = NULL; }
+
+    if (HWND hProgman = GetProgmanWnd()) {
+        RunFromWindowThread(hProgman, [](void*) {
+            if (g_createVideoTimer) { KillTimer(nullptr, g_createVideoTimer); g_createVideoTimer = 0; }
+            if (g_videoHwnd) { SendMessage(g_videoHwnd, WM_APP_CLEANUP, 0, 0); }
+        }, nullptr);
+    }
+
+    ReleaseSwapChainResources();
     if (g_videoHwnd) { DestroyWindow(g_videoHwnd); g_videoHwnd = NULL; }
     if (g_classRegistered) {
-        UnregisterClassW(L"VidWallpaperWnd", GetModuleHandleW(NULL));
+        UnregisterClassW(L"VidWallpaperWnd", GetCurrentModuleHandle());
         g_classRegistered = false;
     }
-    if (g_gdiMod) { FreeLibrary(g_gdiMod); g_gdiMod = NULL; }
+    UninitDirectX();
     g_frameBuf.clear();
     g_frameSize = 0;
+    g_workerW = NULL;
+    if (g_hThemeKey) { RegCloseKey(g_hThemeKey); g_hThemeKey = NULL; }
+    if (g_hThemeEvt) { CloseHandle(g_hThemeEvt); g_hThemeEvt = NULL; }
     if (g_mutex) { CloseHandle(g_mutex); g_mutex = NULL; }
+    Wh_Log(L"Wh_ModUninit: done");
 }
