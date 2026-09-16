@@ -5338,7 +5338,7 @@ void __fastcall Hooked_BorderRect(HDC hdc, COLORREF color, LPRECT pRect, INT cxT
     auto BorderComposition = [&](RECT rcBorder)
     {
         BP_PAINTPARAMS params = { sizeof(BP_PAINTPARAMS) };
-        params.dwFlags = BPPF_NOCLIP;
+        params.dwFlags = BPPF_ERASE | BPPF_NOCLIP;
         HDC memDC = NULL;
 
         HPAINTBUFFER hpb = BeginBufferedPaint(hdc, &rcBorder, BPBF_TOPDOWNDIB, &params, &memDC);
