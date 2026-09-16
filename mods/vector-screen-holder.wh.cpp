@@ -2,7 +2,7 @@
 // @id              vector-screen-holder
 // @name            Vector Screen Holder
 // @description     Fills a display you choose with generative line art and keeps the PC from idling while it runs
-// @version         1.1.1
+// @version         1.2.0
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
@@ -37,8 +37,10 @@ underneath it. The overlay is below the window, not over it.
 
 The overlay is clean when it opens: no labels, no chrome, nothing on screen
 but the art. When you change something, a single line appears along the bottom
-naming the style, its parameter value and the amount notch, then fades after
-about two seconds. That line is the only text the mod ever draws.
+naming the style, its parameter value, the amount notch and the palette, then
+fades after about two seconds. That line is the only text the mod ever draws,
+and only your own input brings it up: the rotation timer changes style in
+silence.
 
 | Input | What it does |
 | --- | --- |
@@ -50,8 +52,13 @@ about two seconds. That line is the only text the mod ever draws.
 | **Ctrl+Alt+H** | Toggle the overlay on and off (configurable below) |
 
 All of these need the overlay focused. Click it once and it takes them,
-without ever coming to the front. **Ctrl+Alt+H works from anywhere**, so you
-can always close the overlay even when something else has focus.
+without ever coming to the front. That first click, the one that moves focus,
+only brings up the readout: it shows you the click landed and the overlay is
+listening, without changing what is on screen. Clicks after that cycle the
+style as usual.
+
+**Ctrl+Alt+H works from anywhere**, so you can always close the overlay even
+when something else has focus.
 
 If you would rather **Esc** and **Space** reached the overlay from any
 application, turn on **Global Esc and Space** in the settings. It is off by
@@ -84,6 +91,22 @@ the **automatic colour ramp** and the hue rotates continuously from there.
 
 Turning the ramp back off returns the colours to the hue shift you set, rather
 than leaving them wherever the rotation happened to stop.
+
+## The readout
+
+The readout is set in [Fusion Pixel Font](https://github.com/TakWolf/fusion-pixel-font)
+when you have it installed: one pixel design covering Latin, Simplified and
+Traditional Chinese, Japanese and Korean, so the line keeps its shape whatever
+the system is set to. Install any of its families, any pixel size, monospaced
+or proportional, and the mod finds the best one on its own and snaps the text
+to a whole multiple of the font's pixel grid so it stays sharp. With none of
+them installed the readout falls back to a stock face and nothing else
+changes.
+
+Either way the size is picked by measuring the widest readout the mod can ever
+produce against the width of the display it is running on, so the line never
+wraps and never runs off the edge, on any combination of style, parameter,
+amount and palette.
 
 ## The four styles
 
@@ -1740,6 +1763,77 @@ enum Phase { kPhaseIn, kPhaseBuild, kPhaseHold, kPhaseOut };
 static const float kHudSecs = 2.2f;
 static const float kHudFade = 0.6f;
 
+// The readout text is built in one place so the fitting pass below can measure
+// every combination the mod is ever able to show.
+static std::wstring HudTextFor(int style, int amount, float param,
+                               int paletteIdx) {
+    int st = ClampT(style, 0, kStyleCount - 1);
+    WCHAR buf[160];
+    swprintf_s(buf, ARRAYSIZE(buf), L"%s     %s %d%%     amount %s     %s",
+               kStyleNames[st], kStyleParams[st],
+               (int)(param * 100.0f + 0.5f),
+               kAmountNames[ClampT(amount, 0, kAmountCount - 1)],
+               PaletteName(paletteIdx));
+    return buf;
+}
+
+// Fusion Pixel Font (https://github.com/TakWolf/fusion-pixel-font, OFL-1.1)
+// draws Latin and CJK off one pixel grid, so the readout keeps its shape
+// whatever the system locale is. The project ships a family per pixel size,
+// width mode and language rather than a single font, so take whichever of them
+// is installed, preferring the largest grid and the monospaced cut. None of
+// this is required: with none of them present the readout falls back to a
+// stock face.
+struct HudFont {
+    std::wstring family = L"Consolas";
+    int pixelSize = 0;   // 0 when the fallback face is in use
+};
+
+static bool FindPixelFamily(IDWriteFontCollection* sys, HudFont* out) {
+    static const int kGrids[] = {12, 10, 8};
+    static const wchar_t* kModes[] = {L"Mono", L"Prop"};
+    static const wchar_t* kLangs[] = {L"latin", L"zh_hans", L"zh_hant", L"ja",
+                                      L"ko"};
+    for (size_t g = 0; g < ARRAYSIZE(kGrids); g++) {
+        for (size_t m = 0; m < ARRAYSIZE(kModes); m++) {
+            for (size_t l = 0; l < ARRAYSIZE(kLangs); l++) {
+                WCHAR name[64];
+                swprintf_s(name, ARRAYSIZE(name), L"Fusion Pixel %dpx %s %s",
+                           kGrids[g], kModes[m], kLangs[l]);
+                UINT32 index = 0;
+                BOOL exists = FALSE;
+                if (SUCCEEDED(sys->FindFamilyName(name, &index, &exists)) &&
+                    exists) {
+                    out->family = name;
+                    out->pixelSize = kGrids[g];
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+// Resolved once. Only the worker thread builds overlays, so a plain flag is
+// enough, and a font installed mid-session is not worth a rescan per frame.
+static HudFont g_hudFont;
+static bool g_hudFontResolved = false;
+
+static const HudFont& HudFontOnce() {
+    if (g_hudFontResolved) {
+        return g_hudFont;
+    }
+    g_hudFontResolved = true;
+    IDWriteFontCollection* sys = nullptr;
+    if (g_dwrite && SUCCEEDED(g_dwrite->GetSystemFontCollection(&sys, FALSE)) &&
+        sys) {
+        FindPixelFamily(sys, &g_hudFont);
+        sys->Release();
+    }
+    Wh_Log(L"readout font: %s", g_hudFont.family.c_str());
+    return g_hudFont;
+}
+
 class Overlay {
    public:
     Overlay(ID2D1Factory* factory, const RECT& rc, unsigned seed)
@@ -1758,6 +1852,15 @@ class Overlay {
     // Briefly show what just changed. The overlay is otherwise completely
     // clean, and this is the only text it ever draws.
     void FlashHud();
+    // Arms on the click that activates an inactive overlay, and is spent by
+    // that same click: it reports the current state instead of changing it,
+    // which is the only sign the overlay has taken focus.
+    void ArmFocusClick() { focusClickArmed_ = true; }
+    bool TakeFocusClick() {
+        bool armed = focusClickArmed_;
+        focusClickArmed_ = false;
+        return armed;
+    }
 
     int style = kStyleFlow;
     int amount = 2;
@@ -1767,6 +1870,7 @@ class Overlay {
 
    private:
     bool CreateDeviceResources();
+    void CreateHudFormat();
     void DiscardDeviceResources();
 
     ID2D1Factory* factory_ = nullptr;
@@ -1784,6 +1888,9 @@ class Overlay {
     IDWriteTextFormat* hudFormat_ = nullptr;
     std::wstring hudText_;
     float hudT_ = 0;
+    float hudPx_ = 15.0f;
+    bool hudCrisp_ = false;
+    bool focusClickArmed_ = false;
 
     Phase phase_ = kPhaseIn;
     float phaseT_ = 0;
@@ -1899,13 +2006,7 @@ bool Overlay::CreateDeviceResources() {
     // device independent, so it is built once per overlay and released in the
     // destructor rather than rebuilt on every recreate.
     if (g_dwrite && !hudFormat_) {
-        float px = std::max(15.0f, (float)(rect_.bottom - rect_.top) * 0.018f);
-        if (FAILED(g_dwrite->CreateTextFormat(
-                L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
-                DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, px, L"",
-                &hudFormat_))) {
-            hudFormat_ = nullptr;   // readout is optional, never fatal
-        }
+        CreateHudFormat();
     }
 
     D2D1_COLOR_F white = {1, 1, 1, 1};
@@ -1915,6 +2016,89 @@ bool Overlay::CreateDeviceResources() {
         return false;
     }
     return true;
+}
+
+// Sizes the readout to the largest it can be while the widest line the mod is
+// able to produce still fits this display, so it never wraps and never runs
+// off the edge whatever happens to be showing.
+void Overlay::CreateHudFormat() {
+    if (!g_dwrite) {
+        return;
+    }
+    const HudFont& font = HudFontOnce();
+    float w = (float)(rect_.right - rect_.left);
+    float h = (float)(rect_.bottom - rect_.top);
+    float margin = std::max(24.0f, h * 0.035f);
+    float avail = std::max(80.0f, w - margin * 2.0f);
+    // A pixel font has one weight; asking for a heavier one makes DirectWrite
+    // embolden it algorithmically, which smears the grid.
+    DWRITE_FONT_WEIGHT weight = font.pixelSize > 0
+                                    ? DWRITE_FONT_WEIGHT_NORMAL
+                                    : DWRITE_FONT_WEIGHT_SEMI_BOLD;
+
+    // Measure every combination once at a reference size. Advance widths scale
+    // linearly with the font size, so one pass gives the exact size at which
+    // the worst case fits, without a search.
+    const float kRef = 32.0f;
+    float widest = 0;
+    IDWriteTextFormat* probe = nullptr;
+    if (SUCCEEDED(g_dwrite->CreateTextFormat(
+            font.family.c_str(), nullptr, weight, DWRITE_FONT_STYLE_NORMAL,
+            DWRITE_FONT_STRETCH_NORMAL, kRef, L"", &probe))) {
+        for (int st = 0; st < kStyleCount; st++) {
+            for (int am = 0; am < kAmountCount; am++) {
+                for (int pal = 0; pal < kPaletteCount; pal++) {
+                    // 100% is the widest the parameter ever reads.
+                    std::wstring line = HudTextFor(st, am, 1.0f, pal);
+                    IDWriteTextLayout* layout = nullptr;
+                    if (FAILED(g_dwrite->CreateTextLayout(
+                            line.c_str(), (UINT32)line.size(), probe, 100000.0f,
+                            kRef * 4.0f, &layout))) {
+                        continue;
+                    }
+                    DWRITE_TEXT_METRICS tm;
+                    if (SUCCEEDED(layout->GetMetrics(&tm))) {
+                        widest = std::max(widest, tm.width);
+                    }
+                    layout->Release();
+                }
+            }
+        }
+        probe->Release();
+    }
+
+    float target = std::max(15.0f, h * 0.018f);
+    float fit = widest > 0 ? kRef * avail / widest : target;
+    float px = std::min(target, fit);
+    hudCrisp_ = false;
+    if (font.pixelSize > 0) {
+        // A pixel design only lands on whole pixels at whole multiples of the
+        // grid it was drawn for.
+        int maxSteps = (int)(fit / (float)font.pixelSize);
+        int steps = (int)(target / (float)font.pixelSize + 0.5f);
+        if (steps < 1) {
+            steps = 1;
+        }
+        if (maxSteps >= 1) {
+            if (steps > maxSteps) {
+                steps = maxSteps;
+            }
+            px = (float)(steps * font.pixelSize);
+            hudCrisp_ = true;
+        }
+    }
+    px = std::max(8.0f, px);
+
+    if (FAILED(g_dwrite->CreateTextFormat(
+            font.family.c_str(), nullptr, weight, DWRITE_FONT_STYLE_NORMAL,
+            DWRITE_FONT_STRETCH_NORMAL, px, L"", &hudFormat_))) {
+        hudFormat_ = nullptr;   // the readout is optional, never fatal
+        return;
+    }
+    // Belt and braces behind the measuring above: whatever face DirectWrite
+    // ends up resolving to, the line stays on one line.
+    hudFormat_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    hudPx_ = px;
 }
 
 void Overlay::DiscardDeviceResources() {
@@ -1958,14 +2142,7 @@ void Overlay::NewScene() {
 }
 
 void Overlay::FlashHud() {
-    int st = ClampT(style, 0, kStyleCount - 1);
-    int am = ClampT(amount, 0, kAmountCount - 1);
-    WCHAR buf[160];
-    swprintf_s(buf, ARRAYSIZE(buf), L"%s     %s %d%%     amount %s     %s",
-               kStyleNames[st], kStyleParams[st],
-               (int)(param * 100.0f + 0.5f), kAmountNames[am],
-               PaletteName(g_paletteIndex));
-    hudText_ = buf;
+    hudText_ = HudTextFor(style, amount, param, g_paletteIndex);
     hudT_ = kHudSecs;
 }
 
@@ -2095,7 +2272,16 @@ void Overlay::Render(float dtSec) {
             box.left = margin;
             box.top = ctx.h - margin * 2.0f;
             box.right = ctx.w - margin;
-            box.bottom = ctx.h - margin * 0.5f;
+            // Tall enough for the line whatever size it was fitted to, since
+            // DrawText clips to this rectangle.
+            box.bottom = box.top + std::max(margin * 1.5f, hudPx_ * 2.0f);
+
+            D2D1_TEXT_ANTIALIAS_MODE prevAA = rt_->GetTextAntialiasMode();
+            if (hudCrisp_) {
+                // A pixel font sits on whole pixels; antialiasing would soften
+                // the grid it was drawn for.
+                rt_->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_ALIASED);
+            }
 
             const Rgb& fg = g_palette.ink[g_palette.ink.size() - 1];
             Rgb shifted = ShiftHue(fg, g_hue);
@@ -2117,6 +2303,10 @@ void Overlay::Render(float dtSec) {
                            hudFormat_, &box, brush_,
                            D2D1_DRAW_TEXT_OPTIONS_NONE,
                            DWRITE_MEASURING_MODE_NATURAL);
+
+            if (hudCrisp_) {
+                rt_->SetTextAntialiasMode(prevAA);
+            }
         }
     }
 
@@ -2153,16 +2343,36 @@ LRESULT CALLBACK Overlay::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             Controller_RequestRebuild();
             return 0;
         case WM_MOUSEACTIVATE:
-            // Focusable on click, but never raised.
+            // Focusable on click, but never raised. This message only arrives
+            // while the overlay is inactive, so the click carrying it is the
+            // one taking focus: arm it to report rather than act.
+            if (self) {
+                self->ArmFocusClick();
+            }
             return MA_ACTIVATE;
+        case WM_KILLFOCUS:
+            // Focus went elsewhere without the click ever landing here, so the
+            // arming is stale.
+            if (self) {
+                self->TakeFocusClick();
+            }
+            return 0;
         case WM_LBUTTONUP:
             if (self) {
-                Controller_CycleStyle(self);
+                if (self->TakeFocusClick()) {
+                    self->FlashHud();
+                } else {
+                    Controller_CycleStyle(self);
+                }
             }
             return 0;
         case WM_RBUTTONUP:
             if (self) {
-                Controller_StepAmount(self);
+                if (self->TakeFocusClick()) {
+                    self->FlashHud();
+                } else {
+                    Controller_StepAmount(self);
+                }
             }
             return 0;
         case WM_CONTEXTMENU:
@@ -2993,11 +3203,13 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             g_rotateTimer += dt;
             if (g_rotateTimer >= (float)g_settings.rotateSeconds) {
                 g_rotateTimer = 0;
+                // No readout here on purpose: the overlay is meant to be
+                // clean while it runs by itself, and only something you do
+                // brings the line up.
                 for (size_t i = 0; i < g_overlays.size(); i++) {
                     g_overlays[i]->style =
                         NextEnabledStyle(g_overlays[i]->style);
                     g_overlays[i]->NewScene();
-                    g_overlays[i]->FlashHud();
                 }
                 if (!g_overlays.empty()) {
                     SaveState(g_overlays[0]);
