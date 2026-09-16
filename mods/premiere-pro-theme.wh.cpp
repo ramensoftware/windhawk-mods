@@ -170,6 +170,13 @@ Colors are `#RRGGBB`. The group starts as Onyx, with **Highlight** and
 back to Onyx's color, named in the log, so the interface never ends up half
 themed.
 
+One thing to know before copying a value out of the palette tables above:
+**Highlight** there is the shade the hue produces, not the hue. Violet's row
+reads `#7737DC`, which is what its `#6D28D9` becomes at the brightness of
+Premiere's own blue — so a custom theme wanting Violet's highlight takes
+`#6D28D9`. Every other row in those tables is the value the field takes
+directly.
+
 **Monitor background** is the one worth setting on purpose. Stock Premiere
 paints the band around the picture the same tone as its panels, which is what
 the built-in palettes do and why this is left empty by default — Miku is the
@@ -228,7 +235,7 @@ Each layer has its own switch in the settings:
   the monitor and timeline chrome.
 - **Monitor band** — the band around the picture in the Source and Program
   monitors, which Premiere draws on the GPU. The only layer that hooks
-  Direct3D, so it has a switch of its own.
+  Direct3D, so it has a switch of its own, and it is off until you turn it on.
 - **Window and system dialogs** — dark title bar, border and native dialogs.
 - **Menu bar and menus** — the File / Edit / Clip bar and its dropdowns.
 - **GDI surfaces** — brushes, pens and text backgrounds created by Premiere's
@@ -314,12 +321,16 @@ black, and that same black is what a clip with an alpha channel is composited
 onto and what the monitor shows over a gap in the timeline. It is left exactly
 as Premiere draws it, which is why a transparent PNG still sits on black.
 
-**Monitor band** is its own switch, because this is the only layer that hooks
-Direct3D — and on entry points every D3D12 program in the process shares, not
-on anything of Adobe's. Turn it off first if the monitors misbehave; the rest
-of the theme is unaffected. It goes in without a restart either way: with the
-switch on as Premiere starts, from the device Premiere itself creates, and
-turned on later from a device of the mod's own, which is only safe once the
+**Monitor band** is its own switch and it ships off, because this is the only
+layer that hooks Direct3D — and on entry points every D3D12 program in the
+process shares, not on anything of Adobe's — and the only one that writes into
+a command list it does not own. Turn it on once the rest of the theme looks
+right on your build, and it is the first thing to turn off if the monitors
+misbehave; the rest of the theme is unaffected either way.
+
+No restart is needed in either direction. With the switch already on as
+Premiere starts, the layer goes in from the device Premiere itself creates;
+turned on later, from a device of the mod's own, which is only safe once the
 monitors have drawn — by then Premiere has settled which graphics runtime it
 uses.
 
@@ -357,8 +368,6 @@ interface and paints the menus itself.
 Bug reports and palette suggestions are welcome on
 [Discord](https://discord.gg/m5kVMR8Vuu), where a Premiere build and a
 screenshot are usually all it takes to work one out.
-
-![Threshold on Discord](https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/discord.png)
 
 ## Credits
 
@@ -454,15 +463,17 @@ This mod is MIT as well.
     Also intercepts the Direct2D brush factory and the UIFramework drawing
     primitives — surfaces painted without consulting the theme, which is most
     of the monitor and timeline chrome. Turn this off if a panel paints wrong.
-- monitorBand: true
+- monitorBand: false
   $name: Monitor band
   $description: >-
     The band around the picture in the Source and Program monitors, which
-    Premiere draws on the GPU. This is the only layer that hooks Direct3D, on
-    entry points every D3D12 program in the process shares, so it has a switch
-    of its own: turn it off first if the monitors misbehave. It is set up from
-    the device Premiere creates, or from one of the mod's own when it is turned
-    on later.
+    Premiere draws on the GPU. Off by default: this is the only layer that
+    hooks Direct3D, on entry points every D3D12 program in the process shares,
+    and the only one that writes into a command list it does not own — so it is
+    the one to turn on once the rest of the theme looks right on your build,
+    and the first to turn off if the monitors misbehave. No restart needed
+    either way: it is set up from the device Premiere creates, or from one of
+    the mod's own when it is turned on later.
 - nativeDarkMode: true
   $name: Window and system dialogs
   $description: Immersive dark mode, title bar, border and native dialogs.
@@ -2668,9 +2679,9 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD flags) {
 wchar_t g_uxpPluginsDir[MAX_PATH + 16] = {};  // folded, see FoldPathChar
 size_t g_uxpPluginsDirLength = 0;
 
-volatile LONG g_stylesheetSerial = 0;
-volatile LONG g_stylesheetFailureLogged = FALSE;
-volatile LONG g_stylesheetsRecolored = 0;  // logged at unload
+volatile LONG g_bundledSerial = 0;
+volatile LONG g_bundledFailureLogged = FALSE;
+volatile LONG g_bundledRecolored = 0;  // logged at unload
 
 // ASCII case and both separators; the rest of a path has to match exactly.
 static wchar_t FoldPathChar(wchar_t c) {
@@ -3262,7 +3273,7 @@ static HANDLE WriteTemporaryCopy(const std::vector<char>& bytes, BundledFile kin
         end = AppendDecimal(end, GetCurrentProcessId());
         *end++ = L'-';
         end = AppendDecimal(
-            end, static_cast<unsigned long>(InterlockedIncrement(&g_stylesheetSerial)));
+            end, static_cast<unsigned long>(InterlockedIncrement(&g_bundledSerial)));
         /*
             The copy stands in for the original, so it carries the same kind.
             A script substituted under a .css name is asking a runtime that
@@ -3362,7 +3373,7 @@ static HANDLE OpenThemedBundledFile(LPCWSTR path, LPCWSTR relative,
     if (copy == INVALID_HANDLE_VALUE) {
         DWORD error = GetLastError();
 
-        if (Claim(&g_stylesheetFailureLogged)) {
+        if (Claim(&g_bundledFailureLogged)) {
             Wh_Log(L"could not write a recolored UXP file (%u); those panels "
                    L"keep their own colors",
                    error);
@@ -3371,7 +3382,7 @@ static HANDLE OpenThemedBundledFile(LPCWSTR path, LPCWSTR relative,
         return INVALID_HANDLE_VALUE;
     }
 
-    InterlockedIncrement(&g_stylesheetsRecolored);
+    InterlockedIncrement(&g_bundledRecolored);
     Wh_Log(L"UXP %s recolored: %s, %u colors",
            kind == BundledFile::Script ? L"design tokens" : L"stylesheet",
            relative, static_cast<unsigned>(colors));
@@ -3663,8 +3674,24 @@ static void RememberThemedWindow(HWND hwnd, BYTE applied) {
     the window again right after.
 */
 static void ForgetThemedClass(HWND hwnd) {
+    /*
+        This runs on every SetWindowTheme in the process, almost none of them
+        for a window the mod recorded. So the lookup is shared — several
+        callers at once, and no writer shut out — and the exclusive lock is
+        only taken for a window that is actually in the map. ForgetMenuTheme
+        does the same for the same reason.
+    */
+    AcquireSRWLockShared(&g_themedLock);
+    bool known = g_themedWindows.find(hwnd) != g_themedWindows.end();
+    ReleaseSRWLockShared(&g_themedLock);
+
+    if (!known) {
+        return;
+    }
+
     AcquireSRWLockExclusive(&g_themedLock);
 
+    // Looked up again: the shared lock was let go, so the entry may be gone.
     auto entry = g_themedWindows.find(hwnd);
 
     if (entry != g_themedWindows.end()) {
@@ -5866,6 +5893,10 @@ using MonitorSetGraphicsRootSignature_t =
 using MonitorClearState_t =
     void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, ID3D12PipelineState*);
 
+using MonitorExecuteBundle_t =
+    void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*,
+                             ID3D12GraphicsCommandList*);
+
 MonitorRSSetViewports_t MonitorRSSetViewports_Original = nullptr;
 MonitorRSSetScissorRects_t MonitorRSSetScissorRects_Original = nullptr;
 MonitorSetGraphicsRoot32BitConstants_t
@@ -5875,6 +5906,7 @@ MonitorClose_t MonitorClose_Original = nullptr;
 MonitorSetGraphicsRootSignature_t MonitorSetGraphicsRootSignature_Original =
     nullptr;
 MonitorClearState_t MonitorClearState_Original = nullptr;
+MonitorExecuteBundle_t MonitorExecuteBundle_Original = nullptr;
 
 /*
     Every hook this layer needs is in place.
@@ -5889,7 +5921,8 @@ static bool MonitorBandHooksReady() {
     return MonitorRSSetViewports_Original && MonitorRSSetScissorRects_Original &&
            MonitorSetGraphicsRoot32BitConstants_Original &&
            MonitorReset_Original && MonitorClose_Original &&
-           MonitorSetGraphicsRootSignature_Original && MonitorClearState_Original;
+           MonitorSetGraphicsRootSignature_Original &&
+           MonitorClearState_Original && MonitorExecuteBundle_Original;
 }
 
 /*
@@ -5979,6 +6012,29 @@ MonitorClearState_Hook(ID3D12GraphicsCommandList* commandList,
     MonitorClearState_Original(commandList, pipelineState);
 
     ForgetMonitorState(commandList);
+}
+
+/*
+    And a bundle can change the root signature without this layer seeing it.
+
+    A bundle inherits the caller's bindings, may set a root signature and root
+    arguments of its own, and those stay on the parent list after it returns —
+    none of it through SetGraphicsRootSignature on this list. That is the last
+    way a replayed color could reach a signature that never received it.
+
+    Only the color is dropped, not the recording: RSSetViewports and
+    RSSetScissorRects are among the calls D3D12 does not allow in a bundle, so
+    the surface this layer recognized cannot have changed. Cheaper than
+    ClearState's answer, and true for the same reason.
+*/
+void STDMETHODCALLTYPE
+MonitorExecuteBundle_Hook(ID3D12GraphicsCommandList* commandList,
+                          ID3D12GraphicsCommandList* bundle) {
+    MonitorExecuteBundle_Original(commandList, bundle);
+
+    if (MonitorCommandState* state = KnownMonitorState(commandList)) {
+        state->hasRoot1Color = false;
+    }
 }
 
 /*
@@ -6140,6 +6196,25 @@ MonitorSetGraphicsRoot32BitConstants_Hook(ID3D12GraphicsCommandList* commandList
 }
 
 /*
+    How an install attempt ended, because only one of the two failures can be
+    tried again.
+
+    NoDevice means nothing was registered: this device could not give an
+    allocator, a list, or a vtable whose slots are all there. The other way in
+    must stay free to try its own, which is what g_monitorBandTried is
+    released for.
+
+    HooksFailed means some of the eight are already registered and only the
+    rest failed. Going round again would register a second hook over this
+    mod's own trampoline, and the trampoline for the second would be the first
+    hook's entry — a hook that calls itself, which the first viewport call
+    from DisplaySurface turns into a stack overflow. So that latch stays set:
+    half a layer that does nothing is the outcome, and the log says which
+    half-failure it was.
+*/
+enum class MonitorBandInstall { Ok, NoDevice, HooksFailed };
+
+/*
     The entry points are the command list's own, and the vtable is the same
     code for every list a device hands out — so any ID3D12Device is enough to
     find them, and one throwaway list is all it takes.
@@ -6147,7 +6222,7 @@ MonitorSetGraphicsRoot32BitConstants_Hook(ID3D12GraphicsCommandList* commandList
     Registers the hooks and leaves applying them to the caller, the way
     HookLoadedModules does.
 */
-static bool InstallMonitorBandHooks(ID3D12Device* device) {
+static MonitorBandInstall InstallMonitorBandHooks(ID3D12Device* device) {
     ID3D12CommandAllocator* allocator = nullptr;
 
     HRESULT hr = device->CreateCommandAllocator(
@@ -6158,7 +6233,7 @@ static bool InstallMonitorBandHooks(ID3D12Device* device) {
         Wh_Log(L"monitor band: no command allocator (0x%08X); the band around "
                L"the picture keeps Premiere's gray",
                static_cast<unsigned>(hr));
-        return false;
+        return MonitorBandInstall::NoDevice;
     }
 
     ID3D12GraphicsCommandList* commandList = nullptr;
@@ -6172,7 +6247,7 @@ static bool InstallMonitorBandHooks(ID3D12Device* device) {
         Wh_Log(L"monitor band: no command list (0x%08X); the band around the "
                L"picture keeps Premiere's gray",
                static_cast<unsigned>(hr));
-        return false;
+        return MonitorBandInstall::NoDevice;
     }
 
     void** vtable = *reinterpret_cast<void***>(commandList);
@@ -6190,6 +6265,7 @@ static bool InstallMonitorBandHooks(ID3D12Device* device) {
     void* close = vtable[9];              // Close
     void* reset = vtable[10];             // Reset
     void* clearState = vtable[11];        // ClearState
+    void* executeBundle = vtable[27];     // ExecuteBundle
     void* setViewports = vtable[21];      // RSSetViewports
     void* setScissors = vtable[22];       // RSSetScissorRects
     void* setRootSignature = vtable[30];  // SetGraphicsRootSignature
@@ -6197,6 +6273,22 @@ static bool InstallMonitorBandHooks(ID3D12Device* device) {
 
     commandList->Release();
     allocator->Release();
+
+    /*
+        All eight resolved before the first one is hooked, so a vtable that is
+        not the shape this expects is still NoDevice — nothing registered, and
+        the other way in free to try a device of its own. Past this point a
+        failure can only be the hook engine's, which is the one that must not
+        be tried again.
+    */
+    for (void* entry : {close, reset, clearState, setViewports, setScissors,
+                        executeBundle, setRootSignature, setRootConstants}) {
+        if (!entry) {
+            Wh_Log(L"monitor band: the command list vtable is not the shape "
+                   L"this expects; the band keeps Premiere's gray");
+            return MonitorBandInstall::NoDevice;
+        }
+    }
 
     bool ok = true;
 
@@ -6230,17 +6322,22 @@ static bool InstallMonitorBandHooks(ID3D12Device* device) {
         reinterpret_cast<MonitorClearState_t>(clearState),
         MonitorClearState_Hook, &MonitorClearState_Original);
 
+    ok &= WindhawkUtils::SetFunctionHook(
+        reinterpret_cast<MonitorExecuteBundle_t>(executeBundle),
+        MonitorExecuteBundle_Hook, &MonitorExecuteBundle_Original);
+
     if (!ok) {
-        Wh_Log(L"monitor band: one or more D3D12 hooks failed; the band keeps "
-               L"Premiere's gray rather than running on half a layer");
-        return false;
+        Wh_Log(L"monitor band: one or more D3D12 hooks failed — something else "
+               L"in this process may hold these entry points. The band keeps "
+               L"Premiere's gray for the session; this is not tried again");
+        return MonitorBandInstall::HooksFailed;
     }
 
     // Only a layer that went in whole; the unload line below tells a band
     // nobody recognized from a layer that never got the chance.
     InterlockedExchange(&g_monitorBandInstalled, TRUE);
 
-    return true;
+    return MonitorBandInstall::Ok;
 }
 
 /*
@@ -6272,14 +6369,17 @@ HRESULT WINAPI D3D12CreateDevice_Hook(IUnknown* adapter, D3D_FEATURE_LEVEL level
     }
 
     if (Claim(&g_monitorBandTried)) {
-        if (InstallMonitorBandHooks(created)) {
+        MonitorBandInstall installed = InstallMonitorBandHooks(created);
+
+        if (installed == MonitorBandInstall::Ok) {
             if (!Wh_ApplyHookOperations()) {
                 Wh_Log(L"monitor band: could not apply the D3D12 hooks");
             }
-        } else {
+        } else if (installed == MonitorBandInstall::NoDevice) {
             // The attempt is what the latch stands for, not the failure: a
             // device this one could not be built from must not lock the other
-            // entry point out of trying its own.
+            // entry point out of trying its own. A registration that failed
+            // partway keeps it — see MonitorBandInstall.
             InterlockedExchange(&g_monitorBandTried, FALSE);
         }
     }
@@ -6312,6 +6412,15 @@ static bool HookD3D12CreateDevice() {
 
     if (!WindhawkUtils::SetFunctionHook(create, D3D12CreateDevice_Hook,
                                         &D3D12CreateDevice_Original)) {
+        /*
+            Nothing was registered, so the latch goes back: the loader hook and
+            a settings change must both be free to try this again. The opposite
+            of InstallMonitorBandHooks, where a failure can leave hooks already
+            registered and trying again would double them — one export here,
+            and it either took or it did not.
+        */
+        InterlockedExchange(&g_d3d12CreateDeviceHooked, FALSE);
+
         Wh_Log(L"failed to hook d3d12!D3D12CreateDevice");
         return false;
     }
@@ -6364,15 +6473,16 @@ static bool InstallMonitorBandFromProbe() {
         return false;
     }
 
-    bool registered = InstallMonitorBandHooks(device);
+    MonitorBandInstall installed = InstallMonitorBandHooks(device);
 
     device->Release();
 
-    if (!registered) {
+    // Only the failure that registered nothing; see MonitorBandInstall.
+    if (installed == MonitorBandInstall::NoDevice) {
         InterlockedExchange(&g_monitorBandTried, FALSE);
     }
 
-    return registered;
+    return installed == MonitorBandInstall::Ok;
 }
 
 // ============================================================================
@@ -6583,10 +6693,10 @@ void Wh_ModUninit() {
     }
 
     // Nothing to hand back there: Premiere parsed those files already.
-    if (g_stylesheetsRecolored) {
+    if (g_bundledRecolored) {
         Wh_Log(L"%ld UXP files were recolored this session; those panels keep "
                L"the palette until Premiere restarts",
-               g_stylesheetsRecolored);
+               g_bundledRecolored);
     }
 
     RevertThemedWindows();
@@ -6605,9 +6715,14 @@ void Wh_ModUninit() {
 
     /*
         Left behind on purpose, each for the reason given where it is declared:
-        the color table, the g_sysBrushes brushes, and the monitor layer's
-        per-thread state maps. All three are reachable by Premiere or by a
-        thread after this image is gone.
+        the color table and the g_sysBrushes brushes. Both are reachable by
+        Premiere after this image is gone — the table because Premiere holds
+        pointers into it, which is why it lives in the process heap and not
+        here, and the brushes because a window may still be painting with one.
+
+        The monitor layer's per-thread slots are not in that set: they are
+        thread_local PODs inside this image, nothing outside the mod ever
+        reads them, and they go when the image does.
     */
 
     if (g_uxtheme) {
