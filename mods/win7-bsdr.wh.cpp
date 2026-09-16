@@ -2,7 +2,7 @@
 // @id              win7-bsdr
 // @name            Windows Vista/7 Blocked Shutdown UX & Logoff Sequence
 // @description     Bring back Windows Vista/7's shutdown experience
-// @version         1.1
+// @version         1.2
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -29,9 +29,19 @@
     * If your user account has no password, enabling the logoff sequence option may make the system automatically log on again after logging off.
     * Not compatible with a portable Windhawk installation, even when run as admin, because it doesn't survive a logoff long enough to handle BSDR.
 
+## ⚠ Important usage note ⚠
+
+This mod needs to hook into `LogonUI.exe` to work. Please navigate to Windhawk's
+Settings > Advanced settings > More advanced settings > Process inclusion list,
+and make sure that `LogonUI.exe` is in the list.
+
+![Advanced settings screenshot](https://i.imgur.com/LRhREtJ.png)
+
+## Screenshots
 ![Windows 7 Screenshot](https://raw.githubusercontent.com/Ingan121/files/refs/heads/master/vmware_gj0gqnHj8e.png)
 
 ![Windows Vista Screenshot](https://raw.githubusercontent.com/Ingan121/files/refs/heads/master/vmware_hBPq0On2jK.png)
+
 ## Using external DLL resources for localization or Vista BSDR
 * Loading resources from an external DLL is supported for localization or for using Vista's blocked shutdown resolver.
 * This requires one of the following:
@@ -44,14 +54,7 @@
 * This is not necessary if you only want to use the English version of Windows 7's blocked shutdown resolver.
     * Hardcoded resources will be used instead if the path is not set or the file is missing.
 
-## ⚠ Important usage note ⚠
-
-This mod needs to hook into `LogonUI.exe` to work. Please navigate to Windhawk's
-Settings > Advanced settings > More advanced settings > Process inclusion list,
-and make sure that `LogonUI.exe` is in the list.
-
-![Advanced settings screenshot](https://i.imgur.com/LRhREtJ.png)
-### Notes for advanced users
+## Notes for advanced users
 * Please make sure `LogonUI.exe` isn't excluded by any means, such as a wildcard entry in the global exclusion list or process inclusion options in this mod's advanced settings page.
 * This mod includes safety checks before enabling classic logoff behavior, such as verifying that the mod loaded successfully into LogonUI.exe, to prevent the logoff sequence from getting stuck when misconfigured.
     * You may disable the safety checks by enabling the last option on the mod settings page, but before doing so, please remember to press Ctrl+Alt+Del if logoff gets stuck. This will help you get out of such a state.
@@ -88,6 +91,7 @@ and make sure that `LogonUI.exe` is in the list.
   $name:ko-KR: (고급) 고전 로그오프 절차를 복원하기 전 안전 검사 생략
   $description: This mod verifies that LogonUI injection was successful before enabling the old sequence, to prevent the modern BSDR from showing on the invisible secure desktop, thus making the logoff sequence stuck. Before enabling this option, remember to press Ctrl+Alt+Del if logoff gets stuck.
   $description:ko-KR: 이 모드는 신형 BSDR이 보이지 않는 보안 데스크톱에 표시되어 로그오프 절차가 중단되지 않도록 고전 로그오프 절차를 복원하기 전에 LogonUI 인젝션이 성공적인지 검사합니다. 이 옵션을 활성화하기 전, 로그오프 절차가 멈출 경우 Ctrl+Alt+Del을 누르는 것을 기억하십시오.
+
 */
 // ==/WindhawkModSettings==
 
@@ -115,6 +119,7 @@ and make sure that `LogonUI.exe` is in the list.
 #include <shlwapi.h>
 #include <eventtoken.h>
 #include <Uxtheme.h>
+#include <wil/resource.h>
 
 #define WM_ADD_APP (WM_APP + 1)
 #define WM_REMOVE_APP (WM_APP + 2)
@@ -1862,7 +1867,7 @@ namespace CustomBSDR {
     // mutexes
     std::mutex workerMutex;
     std::mutex hBgWndMutex;
-    std::mutex pendingAppsMutex;
+    std::mutex dlgStateMutex;
     std::mutex cancelMutex;
 
     // functions
@@ -2251,7 +2256,9 @@ HBITMAP CustomBSDR::LoadAlphaBitmap(UINT resourceId, bool forceHardcoded) {
 
 void CustomBSDR::DrawSeparator(LPDRAWITEMSTRUCT pDIS) {
     RECT rcSep = pDIS->rcItem;
-    rcSep.bottom = rcSep.top + GetSystemMetrics(SM_CYBORDER);
+
+    const int dpi = GetDpiForWindow(pDIS->hwndItem);
+    rcSep.bottom = rcSep.top + GetSystemMetricsForDpi(SM_CYBORDER, dpi);
 
     BITMAP bm = {};
     if (separatorBitmap && !isHighContrast && GetObjectW(separatorBitmap, sizeof(bm), &bm) && bm.bmWidth > 2 && bm.bmHeight > 2) {
@@ -2317,7 +2324,7 @@ void CustomBSDR::DrawSeparator(LPDRAWITEMSTRUCT pDIS) {
         }
     } else {
         HBRUSH hBrush = GetSysColorBrush(COLOR_WINDOWTEXT);
-        RECT lineRect = { pDIS->rcItem.left, pDIS->rcItem.top, pDIS->rcItem.right, pDIS->rcItem.top + GetSystemMetrics(SM_CYBORDER) };
+        RECT lineRect = { pDIS->rcItem.left, pDIS->rcItem.top, pDIS->rcItem.right, pDIS->rcItem.top + GetSystemMetricsForDpi(SM_CYBORDER, dpi) };
         FillRect(pDIS->hDC, &lineRect, hBrush);
     }
 }
@@ -2492,10 +2499,12 @@ void CustomBSDR::DrawButton(LPDRAWITEMSTRUCT pDIS, bool isRed) {
     }
 
     if (drewAsHighContrast && isFocused && !GetPropW(pDIS->hwndItem, L"CustomBSDR_HideFocus")) {
-        const int cxEdge = GetSystemMetrics(SM_CXEDGE);
-        const int cxBorder = 2 * GetSystemMetrics(SM_CXBORDER) + cxEdge;
-        const int cyEdge = GetSystemMetrics(SM_CYEDGE);
-        const int cyBorder = 2 * GetSystemMetrics(SM_CYBORDER) + cyEdge;
+        const int dpi = GetDpiForWindow(pDIS->hwndItem);
+
+        const int cxEdge = GetSystemMetricsForDpi(SM_CXEDGE, dpi);
+        const int cxBorder = 2 * GetSystemMetricsForDpi(SM_CXBORDER, dpi) + cxEdge;
+        const int cyEdge = GetSystemMetricsForDpi(SM_CYEDGE, dpi);
+        const int cyBorder = 2 * GetSystemMetricsForDpi(SM_CYBORDER, dpi) + cyEdge;
 
         InflateRect(&rcButton, -cxBorder, -cyBorder);
         // It may draw 2px rectangle unlike Vista/7
@@ -2536,8 +2545,11 @@ void CustomBSDR::DrawAppIcon(LPDRAWITEMSTRUCT pDIS, HBITMAP hBitmap) {
     if (hBitmap && GetObjectW(hBitmap, sizeof(bm), &bm) && bm.bmWidth > 0 && bm.bmHeight > 0) {
         const int srcW = bm.bmWidth;
         const int srcH = bm.bmHeight;
-        const int dstW = GetSystemMetrics(SM_CXICON);
-        const int dstH = GetSystemMetrics(SM_CYICON);
+
+        const int dpi = GetDpiForWindow(pDIS->hwndItem);
+
+        const int dstW = GetSystemMetricsForDpi(SM_CXICON, dpi);
+        const int dstH = GetSystemMetricsForDpi(SM_CYICON, dpi);
 
         const int left = rcIcon.left + (controlWidth - dstW) / 2;
         const int top = rcIcon.top + (controlHeight - dstH) / 2;
@@ -2701,7 +2713,7 @@ void CustomBSDR::CreateAppTileControls(IShutdownBlockingApp* blockingApp, bool n
         GetString(stringId, defaultReason, _countof(defaultReason), isVista);
         blockReasonText = defaultReason;
     }
-    
+
     const int iconWidth = tileLayoutWithReason.icon.right - tileLayoutWithReason.icon.left;
     const int iconHeight = tileLayoutWithReason.icon.bottom - tileLayoutWithReason.icon.top;
     const int textWidth = tileLayoutWithReason.title.right - tileLayoutWithReason.title.left;
@@ -3073,7 +3085,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         // Set CustomBSDR::hDlg and clear pendingApps after possible dialog init fail point
         std::vector<Microsoft::WRL::ComPtr<IShutdownBlockingApp>> pendingAppsLocal;
         {
-            std::lock_guard lock(pendingAppsMutex);
+            std::lock_guard lock(dlgStateMutex);
             CustomBSDR::hDlg = hWndDlg;
             pendingAppsLocal.swap(*pendingApps);
         }
@@ -3433,16 +3445,6 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         }
         return TRUE;
     }
-    case WM_SETTINGCHANGE: {
-        if (wParam == SPI_SETWHEELSCROLLLINES) {
-            wheelRemainder = 0;
-            SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &scrollLines, 0);
-            return TRUE;
-        }
-        // SPI_SETHIGHCONTRAST: Windows 7 BSDR never updated the high-contrast status on runtime, so don't update it here either
-        // This event as well as WM_THEMECHANGED does not even reliably fire in mid-logoff state anyway
-        break;
-    }
     }
     return FALSE;
 }
@@ -3594,6 +3596,15 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         // (Win7 also leaves the empty area from resolution increase black)
         return 0;
     }
+    case WM_SETTINGCHANGE: {
+        if (wParam == SPI_SETWHEELSCROLLLINES) {
+            wheelRemainder = 0;
+            SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &scrollLines, 0);
+            return TRUE;
+        }
+        // SPI_SETHIGHCONTRAST: Windows 7 BSDR never updated the high-contrast status on runtime, so don't update it here either. We already skipped taking screenshot too
+        break;
+    }
     case WM_BSDR_SETFOCUS: {
         HWND fgWnd = GetForegroundWindow();
         DWORD myTid = GetCurrentThreadId();
@@ -3638,7 +3649,7 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
 
         HWND hDlgLocal = nullptr;
         {
-            std::lock_guard lock(pendingAppsMutex);
+            std::lock_guard lock(dlgStateMutex);
             hDlgLocal = hDlg;
             hDlg = nullptr;
         }
@@ -3667,7 +3678,7 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         appTiles.clear();
 
         {
-            std::lock_guard lock(pendingAppsMutex);
+            std::lock_guard lock(dlgStateMutex);
             pendingApps->clear();
         }
 
@@ -4022,7 +4033,7 @@ void CustomBSDR::Start(LogonUIState state) {
     }
 
     {
-        std::lock_guard lock(pendingAppsMutex);
+        std::lock_guard lock(dlgStateMutex);
         pendingApps->clear();
     }
 
@@ -4043,7 +4054,7 @@ void CustomBSDR::Start(LogonUIState state) {
 }
 
 void CustomBSDR::AddApplication(IShutdownBlockingApp* blockingApp) {
-    std::lock_guard lock(pendingAppsMutex);
+    std::lock_guard lock(dlgStateMutex);
     if (hDlg && IsWindow(hDlg)) {
         blockingApp->AddRef();
         if (!PostMessageW(hDlg, WM_ADD_APP, 0, reinterpret_cast<LPARAM>(blockingApp))) {
@@ -4055,7 +4066,7 @@ void CustomBSDR::AddApplication(IShutdownBlockingApp* blockingApp) {
 }
 
 void CustomBSDR::RemoveApplication(UINT appid) {
-    std::lock_guard lock(pendingAppsMutex);
+    std::lock_guard lock(dlgStateMutex);
     if (hDlg && IsWindow(hDlg)) {
         PostMessageW(hDlg, WM_REMOVE_APP, (WPARAM)appid, 0);
     } else {
@@ -4073,7 +4084,7 @@ void CustomBSDR::RemoveApplication(UINT appid) {
 }
 
 int CustomBSDR::GetScaleFactor() {
-    std::lock_guard lock(pendingAppsMutex);
+    std::lock_guard lock(dlgStateMutex);
     // Note: Win10+ LogonUI is per-monitor scaled by manifest, and we're only showing the dialog on the primary monitor,
     // so handling per-monitor DPI is not much trouble. Screenshotting works fine
     // Runtime DPI change might be problematic but the BSDR window isn't movable and the Settings app isn't accessible
@@ -4300,16 +4311,20 @@ WindhawkUtils::SYMBOL_HOOK blockedShutdownHooks[] = {
     }
 };
 
-thread_local bool g_enteringDoModal = false;
+std::atomic<DWORD> g_doModalThreadId = 0;
 
 typedef long (__cdecl *CLogonController__DoModal_t)(void* pThis, unsigned long a2, unsigned long a3, unsigned long a4, unsigned long a5);
 CLogonController__DoModal_t CLogonController__DoModal_orig;
 long __cdecl CLogonController__DoModal_hook(void* pThis, unsigned long a2, unsigned long a3, unsigned long a4, unsigned long a5) {
-    g_enteringDoModal = true;
     Wh_Log(L"DoModal");
 
+    g_doModalThreadId.store(GetCurrentThreadId(), std::memory_order_release);
+
+    auto clearThreadId = wil::scope_exit([] {
+        g_doModalThreadId.store(0, std::memory_order_release);
+    });
+
     long result = CLogonController__DoModal_orig(pThis, a2, a3, a4, a5);
-    g_enteringDoModal = false;
 
     HANDLE eventToClose = nullptr;
     {
@@ -4339,7 +4354,8 @@ using CreateEventW_t = decltype(&CreateEventW);
 CreateEventW_t CreateEventW_orig;
 HANDLE WINAPI CreateEventW_hook(LPSECURITY_ATTRIBUTES lpEventAttributes, WINBOOL bManualReset, WINBOOL bInitialState, LPCWSTR lpName) {
     HANDLE result = CreateEventW_orig(lpEventAttributes, bManualReset, bInitialState, lpName);
-    if (result && lpEventAttributes == 0 && bManualReset == 0 && bInitialState == 0 && lpName == 0 && g_enteringDoModal) {
+    if (result && lpEventAttributes == 0 && bManualReset == 0 && bInitialState == 0 && lpName == 0 &&
+        g_doModalThreadId.load(std::memory_order_acquire) == GetCurrentThreadId()) {
         void* returnAddress = __builtin_return_address(0);
         HMODULE callerModule;
         DWORD dwFlags = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
