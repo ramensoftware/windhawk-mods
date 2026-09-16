@@ -234,15 +234,19 @@ Each layer has its own switch in the settings:
 - **GDI surfaces** — brushes, pens and text backgrounds created by Premiere's
   own modules.
 - **UXP panels** — the Text panel, Import, Export, Quick Export, Progress,
-  Preset Manager and the Home screen, which Premiere draws from stylesheets of
-  their own. Off by default, because those panels only follow it across a
-  restart.
+  Preset Manager and the Home screen, which Premiere draws from stylesheets and
+  design tokens of their own. Off by default, because those panels only follow
+  it across a restart.
 - **Palette highlight** — Premiere's blue, on the palettes that carry a
   highlight.
 
 Saturated colors — clips, labels, warnings, and Premiere's blue unless the
 palette carries a highlight — pass through, and so does anything above the
-**brightness ceiling**: text, icons, and the `#4B4B4B` of disabled text.
+**brightness ceiling**: text, icons, and the `#4B4B4B` of disabled text. The
+UXP stylesheets are the exception, and only for borders and fills: a
+stylesheet says which property a color belongs to, so an input's outline is
+recolored a little past the ceiling while the disabled text at the very same
+value is not.
 Content is left alone whatever its color: the color picker's swatches, markers,
 Essential Graphics, and the parameter colors of Effect Controls, Lumetri and the
 monitors.
@@ -272,11 +276,31 @@ mod's process **exclusion** list and this one takes over.
 ## Known limitations
 
 **UXP panels change on restart**, which is why they are off by default.
-Premiere reads their stylesheets once, when a panel loads, and the mod recolors
-that read — a temporary copy, deleted as soon as it is closed; nothing on disk
+Premiere reads their files once, when a panel loads, and the mod recolors that
+read — a temporary copy, deleted as soon as it is closed; nothing on disk
 changes. So turning the switch on, a palette switch, and turning it back off or
 disabling the mod all show on those panels after Premiere restarts. Frame.io
 and Adobe Stock carry no Spectrum grays and keep their own look.
+
+A panel keeps its colors twice, and both copies have to be recolored. The
+stylesheet is one. The other is a table of design tokens in the panel's own
+script, which its components read and set as inline styles — and an inline
+style beats every rule a stylesheet can state. The search field in the Text
+panel is one of those: its fill comes from
+`"background-color":"rgb(37, 37, 37)"` in `main.js`, and no amount of
+recoloring `main.css` reaches it.
+
+So the mod recolors that shape too, and only that shape: a `<name>-color` key
+whose value is an `rgb()` string. It does not go looking for hex colors in a
+script the way it does in a stylesheet — the icons in the same file are hex,
+and an icon has to stay an icon — and it rewrites the digits inside the quotes
+at their own length, so the script parses exactly as it did.
+
+This costs a panel one extra read of its own script when it loads, because a
+file has to be read to know whether it holds any tokens at all. In Premiere
+2026 nine of the plugins' scripts do and the rest do not, so most of that read
+is spent finding nothing — which is why this rides on the same switch as the
+stylesheets rather than on its own.
 
 **The band around the video is drawn on the GPU.** Zoomed out, the monitors
 paint the area around the picture outside every layer above: Premiere lays
@@ -419,7 +443,8 @@ This mod is MIT as well.
     The highest brightness, in percent, still treated as background and
     darkened. Anything above passes through untouched. The default 28 sits just
     below the #4B4B4B that Spectrum uses for disabled text and dividers —
-    raising it starts erasing that text.
+    raising it starts erasing that text. In the UXP panels, borders and fills
+    get a little more room than this, since a stylesheet says which is which.
 - dvauiHook: true
   $name: Premiere interface
   $description: Intercepts the theme color functions in dvaui.dll. This is the layer that recolors panels, timeline and monitors.
@@ -451,7 +476,8 @@ This mod is MIT as well.
   $name: UXP panels
   $description: >-
     The Text panel, Import, Export, Quick Export, Progress, Preset Manager and
-    the Home screen, which Premiere draws from stylesheets of their own. Off by
+    the Home screen, which Premiere draws from stylesheets and design tokens of
+    their own. Off by
     default because those are read once, when a panel loads: this switch, a
     palette change and disabling the mod all show there only after Premiere
     restarts.
@@ -2702,15 +2728,35 @@ static void FindUxpPluginsDir() {
     A .css file under Premiere's own UXP\plugins folder. `relative` receives
     the part after that folder, for the log.
 */
-static bool IsBundledStylesheet(LPCWSTR path, LPCWSTR* relative) {
+/*
+    The two halves of a UXP plugin that carry its colors.
+
+    The stylesheet is the obvious one. The script is not, and it is where the
+    panels keep the design tokens their own components read — see
+    RecolorTokenTable.
+*/
+enum class BundledFile {
+    None,
+    Stylesheet,
+    Script,
+};
+
+// A .css or .js file under Premiere's own UXP\plugins folder. `relative`
+// receives the part after that folder, for the log.
+static BundledFile BundledFileKind(LPCWSTR path, LPCWSTR* relative) {
     if (!path || !g_uxpPluginsDirLength) {
-        return false;
+        return BundledFile::None;
     }
 
     size_t length = wcslen(path);
+    BundledFile kind = BundledFile::None;
 
-    if (length < 4 || _wcsicmp(path + length - 4, L".css") != 0) {
-        return false;
+    if (length >= 4 && _wcsicmp(path + length - 4, L".css") == 0) {
+        kind = BundledFile::Stylesheet;
+    } else if (length >= 3 && _wcsicmp(path + length - 3, L".js") == 0) {
+        kind = BundledFile::Script;
+    } else {
+        return BundledFile::None;
     }
 
     if (wcsncmp(path, L"\\\\?\\", 4) == 0) {
@@ -2719,25 +2765,25 @@ static bool IsBundledStylesheet(LPCWSTR path, LPCWSTR* relative) {
     }
 
     if (length <= g_uxpPluginsDirLength) {
-        return false;
+        return BundledFile::None;
     }
 
     for (size_t i = 0; i < g_uxpPluginsDirLength; i++) {
         if (FoldPathChar(path[i]) != g_uxpPluginsDir[i]) {
-            return false;
+            return BundledFile::None;
         }
     }
 
-    // A path that climbs back out of the folder is not one of its stylesheets.
+    // A path that climbs back out of the folder is not one of its files.
     if (wcsstr(path + g_uxpPluginsDirLength, L"..")) {
-        return false;
+        return BundledFile::None;
     }
 
     if (relative) {
         *relative = path + g_uxpPluginsDirLength;
     }
 
-    return true;
+    return kind;
 }
 
 static int CssHexDigit(char c) {
@@ -2762,14 +2808,51 @@ static bool IsCssWordChar(char c) {
 }
 
 // What an 8-bit stylesheet color becomes, in place; false leaves it as written.
-static bool RecolorCssChannels(int rgb[3]) {
+/*
+    How far above the brightness ceiling a border or a fill is still chrome.
+
+    The ceiling is there to protect text: raise it and Spectrum's #4B4B4B
+    disabled text starts disappearing. But it turns away borders as well, and
+    Spectrum paints 106 of those #494949 in the panels this rewrites — 28.6%,
+    six tenths of a point above the default 28. Everything below was themed
+    and those were not, which on a search field is the whole of the control:
+    a stock gray box on a themed panel.
+
+    Brightness cannot tell the two apart — #494949 and #4B4B4B are eight
+    tenths of a point from each other. The property can, and a stylesheet is
+    the one place in the mod that knows it. The slack stops well short of the
+    next neutral Spectrum uses for chrome, #696969 at 41.2%, so a light
+    divider or a focus ring is still left alone.
+*/
+constexpr float kCssChromeSlack = 0.07f;
+
+// A neutral just above the ceiling, which only a border or a fill can be.
+static bool IsCssChromeTone(const Settings& s, const DvaColorRGBA& in) {
+    if (!IsSaneChannel(in.r) || !IsSaneChannel(in.g) || !IsSaneChannel(in.b) ||
+        !IsNeutral(in.r, in.g, in.b, 0.035f)) {
+        return false;
+    }
+
+    float gray = (in.r + in.g + in.b) / 3.0f;
+
+    return gray > s.ceiling && gray <= s.ceiling + kCssChromeSlack;
+}
+
+static bool RecolorCssChannels(int rgb[3], bool chrome) {
     DvaColorRGBA in{rgb[0] / 255.0f, rgb[1] / 255.0f, rgb[2] / 255.0f, 1.0f};
     const Settings& s = CurrentSettings();
     COLORREF target = 0;
     int blue = -1;
 
     if (!PaletteTarget(s, in, &target, &blue)) {
-        return false;
+        if (!chrome || !IsCssChromeTone(s, in)) {
+            return false;
+        }
+
+        // Past the ceiling, PickTarget clamps to the lightest step — which is
+        // the tone the palette keeps for dividers and edges, and is what this
+        // is.
+        target = PickTarget(s, (in.r + in.g + in.b) / 3.0f);
     }
 
     auto channel = [&](float original, BYTE wanted) {
@@ -2792,7 +2875,7 @@ static bool RecolorCssChannels(int rgb[3]) {
 }
 
 // #rrggbb and #rrggbbaa, alpha kept. #rgb has no room for most results.
-static bool RecolorCssHex(char* text, size_t size, size_t hash) {
+static bool RecolorCssHex(char* text, size_t size, size_t hash, bool chrome) {
     size_t start = hash + 1;
     size_t end = start;
 
@@ -2831,7 +2914,7 @@ static bool RecolorCssHex(char* text, size_t size, size_t hash) {
                  CssHexDigit(text[start + 2 * k + 1]);
     }
 
-    if (!RecolorCssChannels(rgb)) {
+    if (!RecolorCssChannels(rgb, chrome)) {
         return false;
     }
 
@@ -2866,7 +2949,7 @@ static size_t WriteCssDecimal(char* out, int value) {
     digits are padded with spaces to the old length, and a color whose digits
     would not fit keeps its own.
 */
-static bool RecolorCssTriplet(char* text, size_t size, size_t from) {
+static bool RecolorCssTriplet(char* text, size_t size, size_t from, bool chrome) {
     size_t i = from;
     size_t first = 0;
     int rgb[3];
@@ -2910,7 +2993,7 @@ static bool RecolorCssTriplet(char* text, size_t size, size_t from) {
         rgb[k] = value;
     }
 
-    if (!RecolorCssChannels(rgb)) {
+    if (!RecolorCssChannels(rgb, chrome)) {
         return false;
     }
 
@@ -2937,6 +3020,46 @@ static bool RecolorCssTriplet(char* text, size_t size, size_t from) {
     return true;
 }
 
+/*
+    Whether the value at `at` belongs to a property that paints chrome rather
+    than text: a border, a fill, an outline.
+
+    The declaration is walked backwards to its colon and the property read off
+    in front of it, so `border-top-color` and `background-image` count and
+    `color`, `-webkit-text-fill-color` and `fill` — which is an icon, and a
+    darkened icon disappears — do not.
+*/
+static bool CssValueIsChrome(const char* text, size_t at) {
+    size_t colon = at;
+
+    while (colon > 0 && text[colon - 1] != ':' && text[colon - 1] != ';' &&
+           text[colon - 1] != '{' && text[colon - 1] != '}') {
+        colon--;
+    }
+
+    if (colon == 0 || text[colon - 1] != ':') {
+        return false;
+    }
+
+    size_t end = colon - 1;
+    size_t begin = end;
+
+    while (begin > 0 && IsCssWordChar(text[begin - 1])) {
+        begin--;
+    }
+
+    for (const char* prefix : {"background", "border", "outline"}) {
+        size_t length = strlen(prefix);
+
+        if (end - begin >= length &&
+            _strnicmp(text + begin, prefix, length) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 static bool CssPrecededBy(const char* text, size_t at, const char* word) {
     size_t length = strlen(word);
 
@@ -2948,6 +3071,63 @@ static bool CssPrecededBy(const char* text, size_t at, const char* word) {
     length, and returns how many changed. A value taken from a variable, like
     rgb(var(--x)), changes where the variable is defined.
 */
+/*
+    Whether a design token's key paints text rather than chrome.
+
+    The keys are the same words a stylesheet uses — background-color,
+    border-color, track-color, tip-color, text-color — so the same rule
+    applies: everything but text is chrome, and chrome gets the slack above
+    the ceiling that an input's border needs.
+*/
+static bool CssTokenKeyIsText(const char* text, size_t at) {
+    size_t begin = at;
+
+    while (begin > 0 && IsCssWordChar(text[begin - 1])) {
+        begin--;
+    }
+
+    return at - begin >= 4 && _strnicmp(text + at - 4, "text", 4) == 0;
+}
+
+/*
+    The design tokens in a panel's own script.
+
+    A UXP panel keeps its colors twice. The stylesheet has them, and so does a
+    table in the script beside it, which the panel's components read and apply
+    as inline styles — and an inline style beats every rule a stylesheet can
+    state. Premiere's Text panel sets its search field from
+    `"background-color":"rgb(37, 37, 37)"` there, so recoloring main.css, which
+    the mod already did correctly, never reached it.
+
+    Only that one shape is touched: a `<name>-color` key whose value is an
+    rgb() string literal. In Premiere 2026's Text panel all 264 of them are
+    design tokens and nothing else in 1.7 MB of script has the shape — the
+    icon strokes in the same file are `"#231f20"`, which is not it, and this
+    deliberately does not go looking for hex colors the way a stylesheet does.
+    The digits are rewritten inside the quotes at their own length, so the
+    script parses exactly as it did.
+*/
+static size_t RecolorTokenTable(char* text, size_t size) {
+    constexpr char kKey[] = "-color\":\"rgb(";
+    constexpr size_t kKeyLength = sizeof(kKey) - 1;
+
+    size_t changed = 0;
+
+    for (size_t i = 0; i + kKeyLength < size; i++) {
+        // One byte turns away almost every position of a 1.7 MB script.
+        if (text[i] != kKey[0] || memcmp(text + i, kKey, kKeyLength) != 0) {
+            continue;
+        }
+
+        if (RecolorCssTriplet(text, size, i + kKeyLength,
+                              !CssTokenKeyIsText(text, i))) {
+            changed++;
+        }
+    }
+
+    return changed;
+}
+
 static size_t RecolorStylesheet(char* text, size_t size) {
     size_t changed = 0;
 
@@ -2955,12 +3135,14 @@ static size_t RecolorStylesheet(char* text, size_t size) {
         bool recolored = false;
 
         if (text[i] == '#') {
-            recolored = RecolorCssHex(text, size, i);
+            recolored = RecolorCssHex(text, size, i, CssValueIsChrome(text, i));
         } else if (text[i] == ':' && CssPrecededBy(text, i, "-rgb")) {
-            recolored = RecolorCssTriplet(text, size, i + 1);
+            recolored =
+                RecolorCssTriplet(text, size, i + 1, CssValueIsChrome(text, i));
         } else if (text[i] == '(' &&
                    (CssPrecededBy(text, i, "rgb") || CssPrecededBy(text, i, "rgba"))) {
-            recolored = RecolorCssTriplet(text, size, i + 1);
+            recolored =
+                RecolorCssTriplet(text, size, i + 1, CssValueIsChrome(text, i));
         }
 
         changed += recolored ? 1 : 0;
@@ -2978,7 +3160,7 @@ CreateFileW_t CreateFileW_Original = nullptr;
 CreateFile2_t CreateFile2_Original = nullptr;
 
 // Far above any stylesheet Premiere ships.
-constexpr LONGLONG kMaxStylesheetBytes = 16LL << 20;
+constexpr LONGLONG kMaxBundledBytes = 16LL << 20;
 
 // A read of a file that already exists: what a copy can stand in for.
 static bool IsPlainRead(DWORD access, DWORD disposition, DWORD flags) {
@@ -3004,11 +3186,11 @@ static bool ReadWholeFile(LPCWSTR path, std::vector<char>* bytes) {
 
     LARGE_INTEGER size{};
     bool ok = GetFileSizeEx(file, &size) && size.QuadPart > 0 &&
-              size.QuadPart <= kMaxStylesheetBytes;
+              size.QuadPart <= kMaxBundledBytes;
 
     if (ok) {
         // A hook must not throw into Premiere: short of memory, the panel
-        // simply gets its own stylesheet.
+        // simply gets its own file.
         try {
             bytes->resize(static_cast<size_t>(size.QuadPart));
         } catch (const std::bad_alloc&) {
@@ -3051,9 +3233,9 @@ static wchar_t* AppendDecimal(wchar_t* out, unsigned long value) {
     that marks it delete-on-close, so Windows removes it once the caller's
     handle closes too, and also if Premiere exits without closing it.
 */
-static HANDLE WriteTemporaryCopy(const std::vector<char>& bytes, DWORD access,
-                                 DWORD share, LPSECURITY_ATTRIBUTES security,
-                                 DWORD flags) {
+static HANDLE WriteTemporaryCopy(const std::vector<char>& bytes, BundledFile kind,
+                                 DWORD access, DWORD share,
+                                 LPSECURITY_ATTRIBUTES security, DWORD flags) {
     wchar_t folder[MAX_PATH + 1]{};
     DWORD length = GetTempPathW(ARRAYSIZE(folder), folder);
 
@@ -3081,7 +3263,16 @@ static HANDLE WriteTemporaryCopy(const std::vector<char>& bytes, DWORD access,
         *end++ = L'-';
         end = AppendDecimal(
             end, static_cast<unsigned long>(InterlockedIncrement(&g_stylesheetSerial)));
-        wmemcpy(end, L".css", 5);  // and its terminator
+        /*
+            The copy stands in for the original, so it carries the same kind.
+            A script substituted under a .css name is asking a runtime that
+            looks at extensions to be surprised.
+        */
+        if (kind == BundledFile::Script) {
+            wmemcpy(end, L".js", 4);  // and its terminator
+        } else {
+            wmemcpy(end, L".css", 5);
+        }
 
         writer = CreateFileW_Original(name, GENERIC_WRITE | DELETE,
                                       FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr,
@@ -3136,13 +3327,13 @@ static HANDLE WriteTemporaryCopy(const std::vector<char>& bytes, DWORD access,
 }
 
 /*
-    The recolored copy of a bundled stylesheet, or INVALID_HANDLE_VALUE for
+    The recolored copy of a bundled file, or INVALID_HANDLE_VALUE for
     the caller to open the file itself: when there is nothing to recolor, and
     when anything fails.
 */
-static HANDLE OpenThemedStylesheet(LPCWSTR path, LPCWSTR relative, DWORD access,
-                                   DWORD share, LPSECURITY_ATTRIBUTES security,
-                                   DWORD flags) {
+static HANDLE OpenThemedBundledFile(LPCWSTR path, LPCWSTR relative,
+                                    BundledFile kind, DWORD access, DWORD share,
+                                    LPSECURITY_ATTRIBUTES security, DWORD flags) {
     /*
         Both the read and the copy go through CreateFileW's trampoline, so the
         CreateFile2 path needs it too — the two are hooked separately, and a
@@ -3158,19 +3349,21 @@ static HANDLE OpenThemedStylesheet(LPCWSTR path, LPCWSTR relative, DWORD access,
         return INVALID_HANDLE_VALUE;
     }
 
-    size_t colors = RecolorStylesheet(bytes.data(), bytes.size());
+    size_t colors = kind == BundledFile::Script
+                        ? RecolorTokenTable(bytes.data(), bytes.size())
+                        : RecolorStylesheet(bytes.data(), bytes.size());
 
     if (!colors) {
         return INVALID_HANDLE_VALUE;
     }
 
-    HANDLE copy = WriteTemporaryCopy(bytes, access, share, security, flags);
+    HANDLE copy = WriteTemporaryCopy(bytes, kind, access, share, security, flags);
 
     if (copy == INVALID_HANDLE_VALUE) {
         DWORD error = GetLastError();
 
         if (Claim(&g_stylesheetFailureLogged)) {
-            Wh_Log(L"could not write a recolored stylesheet (%u); UXP panels "
+            Wh_Log(L"could not write a recolored UXP file (%u); those panels "
                    L"keep their own colors",
                    error);
         }
@@ -3179,8 +3372,9 @@ static HANDLE OpenThemedStylesheet(LPCWSTR path, LPCWSTR relative, DWORD access,
     }
 
     InterlockedIncrement(&g_stylesheetsRecolored);
-    Wh_Log(L"UXP stylesheet recolored: %s, %u colors", relative,
-           static_cast<unsigned>(colors));
+    Wh_Log(L"UXP %s recolored: %s, %u colors",
+           kind == BundledFile::Script ? L"design tokens" : L"stylesheet",
+           relative, static_cast<unsigned>(colors));
 
     // A successful open of an existing file reports no error.
     SetLastError(ERROR_SUCCESS);
@@ -3193,10 +3387,14 @@ HANDLE WINAPI CreateFileW_Hook(LPCWSTR path, DWORD access, DWORD share,
                                DWORD flags, HANDLE templateFile) {
     LPCWSTR relative = nullptr;
 
-    if (CurrentSettings().uxpPanels && IsPlainRead(access, disposition, flags) &&
-        IsBundledStylesheet(path, &relative)) {
-        HANDLE copy =
-            OpenThemedStylesheet(path, relative, access, share, security, flags);
+    BundledFile kind = CurrentSettings().uxpPanels &&
+                               IsPlainRead(access, disposition, flags)
+                           ? BundledFileKind(path, &relative)
+                           : BundledFile::None;
+
+    if (kind != BundledFile::None) {
+        HANDLE copy = OpenThemedBundledFile(path, relative, kind, access, share,
+                                            security, flags);
 
         if (copy != INVALID_HANDLE_VALUE) {
             return copy;
@@ -3219,10 +3417,14 @@ HANDLE WINAPI CreateFile2_Hook(LPCWSTR path, DWORD access, DWORD share,
                              : 0;
     LPCWSTR relative = nullptr;
 
-    if (CurrentSettings().uxpPanels && IsPlainRead(access, disposition, flags) &&
-        IsBundledStylesheet(path, &relative)) {
-        HANDLE copy = OpenThemedStylesheet(
-            path, relative, access, share,
+    BundledFile kind = CurrentSettings().uxpPanels &&
+                               IsPlainRead(access, disposition, flags)
+                           ? BundledFileKind(path, &relative)
+                           : BundledFile::None;
+
+    if (kind != BundledFile::None) {
+        HANDLE copy = OpenThemedBundledFile(
+            path, relative, kind, access, share,
             parameters ? parameters->lpSecurityAttributes : nullptr, flags);
 
         if (copy != INVALID_HANDLE_VALUE) {
@@ -5352,12 +5554,14 @@ struct MonitorCommandState {
     runs at thread exit, nothing is allocated inside a render hook, and
     nothing is left behind either.
 
-    Only DisplaySurface's own command lists are ever recorded, so in practice
-    one or two of these are ever in use. A list that is Reset gives its slot
-    back; past that, the oldest slot is taken in turn, so no set of lists can
+    A list gives its slot back when its recording ends, at Reset or at Close,
+    so what this has to hold is how many DisplaySurface records at once. Eight
+    was a guess and it was wrong: a real session logged the overflow below, so
+    the cap is four times that, and the line stays to say if even that is not
+    enough. Past it the oldest slot is taken in turn, so no set of lists can
     hold them all.
 */
-constexpr size_t kMaxMonitorStates = 8;
+constexpr size_t kMaxMonitorStates = 32;
 
 struct MonitorStateSlot {
     ID3D12GraphicsCommandList* commandList;
@@ -6186,7 +6390,8 @@ BOOL Wh_ModInit() {
     }
 
     /*
-        The UXP runtime reads the panels' stylesheets through these two, and
+        The UXP runtime reads the panels' stylesheets and scripts through
+        these two, and
         they are the only hooks the mod puts on a path every file open in the
         process takes. So unlike the rest, they go in only when "UXP panels"
         is on as the mod loads — turning it on later needs Premiere restarted,
@@ -6264,10 +6469,10 @@ void Wh_ModUninit() {
                L"band around the picture kept Premiere's own gray");
     }
 
-    // Nothing to hand back there: Premiere parsed those stylesheets already.
+    // Nothing to hand back there: Premiere parsed those files already.
     if (g_stylesheetsRecolored) {
-        Wh_Log(L"%ld UXP stylesheets were recolored this session; those panels "
-               L"keep the palette until Premiere restarts",
+        Wh_Log(L"%ld UXP files were recolored this session; those panels keep "
+               L"the palette until Premiere restarts",
                g_stylesheetsRecolored);
     }
 
