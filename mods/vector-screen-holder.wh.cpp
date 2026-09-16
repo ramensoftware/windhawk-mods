@@ -178,9 +178,10 @@ it there is. Amount has five notches: minimal, sparse, balanced, dense, maximal.
 
 Left to right: flow field, contours, differential growth, harmonograph.
 
-Flow field, growth and harmonograph draw themselves in progressively, hold the
-finished piece, fade out and begin a new one. Contours redraw continuously and
-drift.
+All four draw themselves in progressively. Contours and growth keep moving
+once the picture is full, holding it a while before fading out; flow field and
+harmonograph are one-shot, and begin to fade the moment they finish. Either
+way a new piece follows.
 
 The wheel reaches flow field a little differently from the other three. Each
 ribbon traces its whole path at the moment it spawns, so a turn of the wheel
@@ -197,6 +198,11 @@ are cleared the moment you close it.
 It does **not** fake keystrokes or mouse movement. Some corporate presence
 tools (Teams, Slack) track real input rather than display state and will still
 mark you away.
+
+For the same reason it will not hold a managed workstation open. Suppressing
+the screen saver also suppresses the lock that rides on it, which covers the
+consumer default, but a machine-inactivity policy measures real input idle
+time and will lock on schedule regardless.
 
 ## What it costs
 
@@ -286,6 +292,11 @@ published at
     and Win, joined with "+". The key itself can be A-Z, 0-9 or F1-F24; other
     keys such as arrows, numpad and punctuation are not supported and the mod
     logs that no hotkey was registered. Leave empty to disable.
+
+    A letter or digit needs at least one modifier. A registered hotkey is taken
+    before any window sees it and stays registered while the mod is loaded, so
+    a bare "A" would cost you that letter everywhere; the mod refuses those and
+    logs why. Bare F1-F24 are accepted.
 - monitor: primary
   $name: Display
   $name:es-ES: Pantalla
@@ -311,7 +322,8 @@ published at
     numbers Windows Settings shows, but the two are produced by different
     parts of Windows and can disagree after displays are re-arranged. The mod
     log lists every display with its number, resolution and position when the
-    mod loads; use the resolution to confirm which is which.
+    mod loads; use the resolution to confirm which is which. The list stops at
+    Display 8; beyond that, use All displays.
   $options:
   - primary: Primary display
   - all: All displays
@@ -1534,11 +1546,11 @@ static const WCHAR kWindowClass[] = L"WindhawkVectorScreenHolderWnd";
 // The mod's own image, which owns the window class and the window procedure.
 static HINSTANCE g_modInstance = nullptr;
 
-// True only while the low level keyboard hook is actually running. The window
-// proc uses it to stay off keys the hook has already handled. It tracks the
-// hook rather than the setting that asks for it, because the hook can fail to
-// start, and gating on the setting would then leave the key dead in both
-// places.
+// True only once SetWindowsHookEx has actually returned a hook. The window
+// proc uses it to stay off keys the hook has already handled, so it has to
+// follow the hook itself: gating on the setting, or on the hook thread merely
+// starting, would leave the key dead in both places whenever the hook failed
+// to install.
 static std::atomic<bool> g_kbdHookLive{false};
 
 // Set when more than one display is being driven. The worker renders the
@@ -4761,6 +4773,11 @@ static DWORD WINAPI KbdHookThread(LPVOID) {
                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                        (LPCWSTR)&LowLevelKbdProc, &mod);
     g_kbdHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKbdProc, mod, 0);
+    // Published here rather than beside CreateThread: the thread starting says
+    // nothing about whether the hook itself took. Setting it early meant that
+    // if this call failed, the window proc would still stand aside for a hook
+    // that was not there, and Space would be dead in both places.
+    g_kbdHookLive = g_kbdHook != nullptr;
     if (!g_kbdHook) {
         Wh_Log(L"SetWindowsHookEx failed (%u)", GetLastError());
     }
@@ -4801,7 +4818,6 @@ static void InstallKbdHook() {
         return;
     }
     g_hookThread = CreateThread(nullptr, 0, KbdHookThread, nullptr, 0, nullptr);
-    g_kbdHookLive = g_hookThread != nullptr;
     if (!g_hookThread) {
         Wh_Log(L"Could not start the keyboard hook thread (%u)",
                GetLastError());
@@ -5055,6 +5071,16 @@ static bool ParseHotkey(const std::wstring& s, UINT* mods, UINT* vk) {
     if (!key) {
         return false;
     }
+    // A registered hotkey is consumed before the focused window ever sees it,
+    // and this one stays registered for as long as the mod is loaded rather
+    // than only while the overlay is up. So "A" on its own would cost the user
+    // that letter everywhere, all session, with nothing on screen to say why.
+    // Function keys are a fair thing to take bare; letters and digits are not.
+    if (m == 0 && !(key >= VK_F1 && key <= VK_F24)) {
+        Wh_Log(L"Hotkey '%s' has no modifier; letters and digits need one",
+               s.c_str());
+        return false;
+    }
     *mods = m | MOD_NOREPEAT;
     *vk = key;
     return true;
@@ -5077,7 +5103,7 @@ static HANDLE CreateToggleEvent() {
     // integrity label still lets an ordinary shortcut signal it when Windhawk
     // is elevated, while keeping sandboxed processes below that level out.
     if (ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            L"D:(A;;0x100002;;;WD)S:(ML;;NW;;;ME)", SDDL_REVISION_1, &psd,
+            L"D:(A;;0x100002;;;IU)S:(ML;;NW;;;ME)", SDDL_REVISION_1, &psd,
             nullptr)) {
         sa.lpSecurityDescriptor = psd;
     }
