@@ -1,14 +1,46 @@
 // ==WindhawkMod==
 // @id              vector-screen-holder
 // @name            Vector Screen Holder
+// @name:es-ES       Mantenedor de pantalla vectorial
+// @name:pt-BR       Mantenedor de tela vetorial
+// @name:fr-FR       Maintien d'écran vectoriel
+// @name:de-DE       Vektor-Bildschirmhalter
+// @name:it-IT       Mantenitore schermo vettoriale
+// @name:nl-NL       Vector schermhouder
+// @name:pl-PL       Wektorowy strażnik ekranu
+// @name:tr-TR       Vektörel ekran tutucu
+// @name:ru-RU       Векторный хранитель экрана
+// @name:uk-UA       Векторний хранитель екрана
+// @name:zh-CN       矢量屏幕守护
+// @name:zh-TW       向量螢幕守護
+// @name:ja-JP       ベクター スクリーンホルダー
+// @name:ko-KR       벡터 스크린 홀더
+// @name:ar          حافظ الشاشة المتجهي
+// @name:he          שומר מסך וקטורי
 // @description     Fills a display you choose with generative line art and keeps the PC from idling while it runs
-// @version         1.2.0
+// @description:es-ES Llena la pantalla que elijas con arte lineal generativo y evita que el PC entre en reposo mientras se ejecuta
+// @description:pt-BR Preenche a tela escolhida com arte de linhas generativa e impede que o PC entre em ociosidade enquanto roda
+// @description:fr-FR Remplit l'écran de votre choix d'art linéaire génératif et empêche le PC de passer en veille pendant son exécution
+// @description:de-DE Füllt einen gewählten Bildschirm mit generativer Linienkunst und hält den PC währenddessen aus dem Leerlauf
+// @description:it-IT Riempie lo schermo scelto con arte lineare generativa e impedisce al PC di andare in inattività mentre è in esecuzione
+// @description:nl-NL Vult een gekozen scherm met generatieve lijnkunst en voorkomt dat de pc inactief wordt zolang het draait
+// @description:pl-PL Wypełnia wybrany ekran generatywną grafiką liniową i zapobiega przejściu komputera w stan bezczynności
+// @description:tr-TR Seçtiğiniz ekranı üretken çizgi sanatıyla doldurur ve çalışırken bilgisayarın boşta kalmasını önler
+// @description:ru-RU Заполняет выбранный экран генеративной линейной графикой и не даёт компьютеру уйти в простой
+// @description:uk-UA Заповнює вибраний екран генеративною лінійною графікою й не дає комп'ютеру перейти в простій
+// @description:zh-CN 用生成式线条艺术填满所选显示器，并在运行期间防止电脑进入闲置状态
+// @description:zh-TW 以生成式線條藝術填滿所選螢幕，並在執行期間防止電腦進入閒置狀態
+// @description:ja-JP 選んだディスプレイをジェネラティブなライン アートで満たし、動作中は PC がアイドルにならないようにします
+// @description:ko-KR 선택한 디스플레이를 제너러티브 라인 아트로 채우고 실행 중에는 PC가 유휴 상태로 전환되지 않도록 합니다
+// @description:ar   يملأ الشاشة التي تختارها بفن خطي توليدي ويمنع الكمبيوتر من الخمول أثناء تشغيله
+// @description:he   ממלא מסך לבחירתך באמנות קווית גנרטיבית ומונע מהמחשב לעבור למצב סרק בזמן שהוא פועל
+// @version         1.3.0
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -ld2d1 -ldwrite -ladvapi32 -luser32 -lshell32
+// @compilerOptions -ld2d1 -ldwrite -ladvapi32 -luser32 -lshell32 -finput-charset=utf-8
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -213,6 +245,22 @@ pair-programmers Claude and Big-Pickle (opencode).
 /*
 - hotkey: Ctrl+Alt+H
   $name: Toggle hotkey
+  $name:es-ES: Atajo para alternar
+  $name:pt-BR: Atalho para alternar
+  $name:fr-FR: Raccourci de bascule
+  $name:de-DE: Tastenkürzel zum Umschalten
+  $name:it-IT: Scorciatoia di attivazione
+  $name:nl-NL: Sneltoets
+  $name:pl-PL: Skrót przełączający
+  $name:tr-TR: Açma kapama kısayolu
+  $name:ru-RU: Горячая клавиша
+  $name:uk-UA: Гаряча клавіша
+  $name:zh-CN: 开关快捷键
+  $name:zh-TW: 開關快速鍵
+  $name:ja-JP: 切り替えのホットキー
+  $name:ko-KR: 전환 단축키
+  $name:ar: مفتاح التبديل
+  $name:he: מקש קיצור להחלפה
   $description: >-
     Global hotkey to show and hide the overlay. Modifiers are Ctrl, Alt, Shift
     and Win, joined with "+". The key itself can be A-Z, 0-9 or F1-F24; other
@@ -220,6 +268,22 @@ pair-programmers Claude and Big-Pickle (opencode).
     logs that no hotkey was registered. Leave empty to disable.
 - monitor: primary
   $name: Display
+  $name:es-ES: Pantalla
+  $name:pt-BR: Tela
+  $name:fr-FR: Écran
+  $name:de-DE: Bildschirm
+  $name:it-IT: Schermo
+  $name:nl-NL: Scherm
+  $name:pl-PL: Ekran
+  $name:tr-TR: Ekran
+  $name:ru-RU: Экран
+  $name:uk-UA: Екран
+  $name:zh-CN: 显示器
+  $name:zh-TW: 螢幕
+  $name:ja-JP: ディスプレイ
+  $name:ko-KR: 디스플레이
+  $name:ar: الشاشة
+  $name:he: מסך
   $description: >-
     Which display to hold. Any resolution and orientation works, because the
     art is generated to fit whatever the display actually is. The numbered
@@ -239,29 +303,678 @@ pair-programmers Claude and Big-Pickle (opencode).
   - "6": Display 6
   - "7": Display 7
   - "8": Display 8
+  $options:es-ES:
+  - primary: Pantalla principal
+  - all: Todas las pantallas
+  - "1": Pantalla 1
+  - "2": Pantalla 2
+  - "3": Pantalla 3
+  - "4": Pantalla 4
+  - "5": Pantalla 5
+  - "6": Pantalla 6
+  - "7": Pantalla 7
+  - "8": Pantalla 8
+  $options:pt-BR:
+  - primary: Tela principal
+  - all: Todas as telas
+  - "1": Tela 1
+  - "2": Tela 2
+  - "3": Tela 3
+  - "4": Tela 4
+  - "5": Tela 5
+  - "6": Tela 6
+  - "7": Tela 7
+  - "8": Tela 8
+  $options:fr-FR:
+  - primary: Écran principal
+  - all: Tous les écrans
+  - "1": Écran 1
+  - "2": Écran 2
+  - "3": Écran 3
+  - "4": Écran 4
+  - "5": Écran 5
+  - "6": Écran 6
+  - "7": Écran 7
+  - "8": Écran 8
+  $options:de-DE:
+  - primary: Hauptbildschirm
+  - all: Alle Bildschirme
+  - "1": Bildschirm 1
+  - "2": Bildschirm 2
+  - "3": Bildschirm 3
+  - "4": Bildschirm 4
+  - "5": Bildschirm 5
+  - "6": Bildschirm 6
+  - "7": Bildschirm 7
+  - "8": Bildschirm 8
+  $options:it-IT:
+  - primary: Schermo principale
+  - all: Tutti gli schermi
+  - "1": Schermo 1
+  - "2": Schermo 2
+  - "3": Schermo 3
+  - "4": Schermo 4
+  - "5": Schermo 5
+  - "6": Schermo 6
+  - "7": Schermo 7
+  - "8": Schermo 8
+  $options:nl-NL:
+  - primary: Hoofdscherm
+  - all: Alle schermen
+  - "1": Scherm 1
+  - "2": Scherm 2
+  - "3": Scherm 3
+  - "4": Scherm 4
+  - "5": Scherm 5
+  - "6": Scherm 6
+  - "7": Scherm 7
+  - "8": Scherm 8
+  $options:pl-PL:
+  - primary: Ekran główny
+  - all: Wszystkie ekrany
+  - "1": Ekran 1
+  - "2": Ekran 2
+  - "3": Ekran 3
+  - "4": Ekran 4
+  - "5": Ekran 5
+  - "6": Ekran 6
+  - "7": Ekran 7
+  - "8": Ekran 8
+  $options:tr-TR:
+  - primary: Birincil ekran
+  - all: Tüm ekranlar
+  - "1": Ekran 1
+  - "2": Ekran 2
+  - "3": Ekran 3
+  - "4": Ekran 4
+  - "5": Ekran 5
+  - "6": Ekran 6
+  - "7": Ekran 7
+  - "8": Ekran 8
+  $options:ru-RU:
+  - primary: Основной экран
+  - all: Все экраны
+  - "1": Экран 1
+  - "2": Экран 2
+  - "3": Экран 3
+  - "4": Экран 4
+  - "5": Экран 5
+  - "6": Экран 6
+  - "7": Экран 7
+  - "8": Экран 8
+  $options:uk-UA:
+  - primary: Основний екран
+  - all: Усі екрани
+  - "1": Екран 1
+  - "2": Екран 2
+  - "3": Екран 3
+  - "4": Екран 4
+  - "5": Екран 5
+  - "6": Екран 6
+  - "7": Екран 7
+  - "8": Екран 8
+  $options:zh-CN:
+  - primary: 主显示器
+  - all: 所有显示器
+  - "1": 显示器 1
+  - "2": 显示器 2
+  - "3": 显示器 3
+  - "4": 显示器 4
+  - "5": 显示器 5
+  - "6": 显示器 6
+  - "7": 显示器 7
+  - "8": 显示器 8
+  $options:zh-TW:
+  - primary: 主螢幕
+  - all: 所有螢幕
+  - "1": 螢幕 1
+  - "2": 螢幕 2
+  - "3": 螢幕 3
+  - "4": 螢幕 4
+  - "5": 螢幕 5
+  - "6": 螢幕 6
+  - "7": 螢幕 7
+  - "8": 螢幕 8
+  $options:ja-JP:
+  - primary: メイン ディスプレイ
+  - all: すべてのディスプレイ
+  - "1": ディスプレイ 1
+  - "2": ディスプレイ 2
+  - "3": ディスプレイ 3
+  - "4": ディスプレイ 4
+  - "5": ディスプレイ 5
+  - "6": ディスプレイ 6
+  - "7": ディスプレイ 7
+  - "8": ディスプレイ 8
+  $options:ko-KR:
+  - primary: 주 디스플레이
+  - all: 모든 디스플레이
+  - "1": 디스플레이 1
+  - "2": 디스플레이 2
+  - "3": 디스플레이 3
+  - "4": 디스플레이 4
+  - "5": 디스플레이 5
+  - "6": 디스플레이 6
+  - "7": 디스플레이 7
+  - "8": 디스플레이 8
+  $options:ar:
+  - primary: الشاشة الرئيسية
+  - all: كل الشاشات
+  - "1": الشاشة 1
+  - "2": الشاشة 2
+  - "3": الشاشة 3
+  - "4": الشاشة 4
+  - "5": الشاشة 5
+  - "6": الشاشة 6
+  - "7": الشاشة 7
+  - "8": الشاشة 8
+  $options:he:
+  - primary: המסך הראשי
+  - all: כל המסכים
+  - "1": מסך 1
+  - "2": מסך 2
+  - "3": מסך 3
+  - "4": מסך 4
+  - "5": מסך 5
+  - "6": מסך 6
+  - "7": מסך 7
+  - "8": מסך 8
 - fps: 60
   $name: Frames per second
+  $name:es-ES: Fotogramas por segundo
+  $name:pt-BR: Quadros por segundo
+  $name:fr-FR: Images par seconde
+  $name:de-DE: Bilder pro Sekunde
+  $name:it-IT: Fotogrammi al secondo
+  $name:nl-NL: Beelden per seconde
+  $name:pl-PL: Klatki na sekundę
+  $name:tr-TR: Saniyedeki kare sayısı
+  $name:ru-RU: Кадров в секунду
+  $name:uk-UA: Кадрів на секунду
+  $name:zh-CN: 每秒帧数
+  $name:zh-TW: 每秒影格數
+  $name:ja-JP: フレームレート
+  $name:ko-KR: 초당 프레임 수
+  $name:ar: الإطارات في الثانية
+  $name:he: פריימים לשנייה
   $description: >-
     Render rate of the overlay. Higher is smoother; the artwork itself is paced
     by wall-clock time, so raising this makes the motion finer without making
     anything draw faster. Clamped to 10-240.
+- language: auto
+  $name: Readout language
+  $name:es-ES: Idioma del rótulo
+  $name:pt-BR: Idioma do rótulo
+  $name:fr-FR: Langue de l'affichage
+  $name:de-DE: Sprache der Anzeige
+  $name:it-IT: Lingua della scritta
+  $name:nl-NL: Taal van de tekstregel
+  $name:pl-PL: Język opisu
+  $name:tr-TR: Bilgi satırı dili
+  $name:ru-RU: Язык подписи
+  $name:uk-UA: Мова підпису
+  $name:zh-CN: 信息栏语言
+  $name:zh-TW: 資訊列語言
+  $name:ja-JP: 表示の言語
+  $name:ko-KR: 표시 언어
+  $name:ar: لغة السطر المعروض
+  $name:he: שפת השורה המוצגת
+  $description: >-
+    Language for the line the overlay draws when you change something, and for
+    this settings page. Automatic follows the Windows display language and
+    falls back to English when that language is not one of the ones listed.
+  $options:
+  - auto: Automatic (match Windows)
+  - en: English
+  - es-ES: Español
+  - pt-BR: Português (Brasil)
+  - fr-FR: Français
+  - de-DE: Deutsch
+  - it-IT: Italiano
+  - nl-NL: Nederlands
+  - pl-PL: Polski
+  - tr-TR: Türkçe
+  - ru-RU: Русский
+  - uk-UA: Українська
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  - ja-JP: 日本語
+  - ko-KR: 한국어
+  - ar: العربية
+  - he: עברית
+  $options:es-ES:
+  - auto: Automático (igual que Windows)
+  - en: English
+  - es-ES: Español
+  - pt-BR: Português (Brasil)
+  - fr-FR: Français
+  - de-DE: Deutsch
+  - it-IT: Italiano
+  - nl-NL: Nederlands
+  - pl-PL: Polski
+  - tr-TR: Türkçe
+  - ru-RU: Русский
+  - uk-UA: Українська
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  - ja-JP: 日本語
+  - ko-KR: 한국어
+  - ar: العربية
+  - he: עברית
+  $options:pt-BR:
+  - auto: Automático (igual ao Windows)
+  - en: English
+  - es-ES: Español
+  - pt-BR: Português (Brasil)
+  - fr-FR: Français
+  - de-DE: Deutsch
+  - it-IT: Italiano
+  - nl-NL: Nederlands
+  - pl-PL: Polski
+  - tr-TR: Türkçe
+  - ru-RU: Русский
+  - uk-UA: Українська
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  - ja-JP: 日本語
+  - ko-KR: 한국어
+  - ar: العربية
+  - he: עברית
+  $options:fr-FR:
+  - auto: Automatique (comme Windows)
+  - en: English
+  - es-ES: Español
+  - pt-BR: Português (Brasil)
+  - fr-FR: Français
+  - de-DE: Deutsch
+  - it-IT: Italiano
+  - nl-NL: Nederlands
+  - pl-PL: Polski
+  - tr-TR: Türkçe
+  - ru-RU: Русский
+  - uk-UA: Українська
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  - ja-JP: 日本語
+  - ko-KR: 한국어
+  - ar: العربية
+  - he: עברית
+  $options:de-DE:
+  - auto: Automatisch (wie Windows)
+  - en: English
+  - es-ES: Español
+  - pt-BR: Português (Brasil)
+  - fr-FR: Français
+  - de-DE: Deutsch
+  - it-IT: Italiano
+  - nl-NL: Nederlands
+  - pl-PL: Polski
+  - tr-TR: Türkçe
+  - ru-RU: Русский
+  - uk-UA: Українська
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  - ja-JP: 日本語
+  - ko-KR: 한국어
+  - ar: العربية
+  - he: עברית
+  $options:it-IT:
+  - auto: Automatica (come Windows)
+  - en: English
+  - es-ES: Español
+  - pt-BR: Português (Brasil)
+  - fr-FR: Français
+  - de-DE: Deutsch
+  - it-IT: Italiano
+  - nl-NL: Nederlands
+  - pl-PL: Polski
+  - tr-TR: Türkçe
+  - ru-RU: Русский
+  - uk-UA: Українська
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  - ja-JP: 日本語
+  - ko-KR: 한국어
+  - ar: العربية
+  - he: עברית
+  $options:nl-NL:
+  - auto: Automatisch (zoals Windows)
+  - en: English
+  - es-ES: Español
+  - pt-BR: Português (Brasil)
+  - fr-FR: Français
+  - de-DE: Deutsch
+  - it-IT: Italiano
+  - nl-NL: Nederlands
+  - pl-PL: Polski
+  - tr-TR: Türkçe
+  - ru-RU: Русский
+  - uk-UA: Українська
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  - ja-JP: 日本語
+  - ko-KR: 한국어
+  - ar: العربية
+  - he: עברית
+  $options:pl-PL:
+  - auto: Automatycznie (jak Windows)
+  - en: English
+  - es-ES: Español
+  - pt-BR: Português (Brasil)
+  - fr-FR: Français
+  - de-DE: Deutsch
+  - it-IT: Italiano
+  - nl-NL: Nederlands
+  - pl-PL: Polski
+  - tr-TR: Türkçe
+  - ru-RU: Русский
+  - uk-UA: Українська
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  - ja-JP: 日本語
+  - ko-KR: 한국어
+  - ar: العربية
+  - he: עברית
+  $options:tr-TR:
+  - auto: Otomatik (Windows ile aynı)
+  - en: English
+  - es-ES: Español
+  - pt-BR: Português (Brasil)
+  - fr-FR: Français
+  - de-DE: Deutsch
+  - it-IT: Italiano
+  - nl-NL: Nederlands
+  - pl-PL: Polski
+  - tr-TR: Türkçe
+  - ru-RU: Русский
+  - uk-UA: Українська
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  - ja-JP: 日本語
+  - ko-KR: 한국어
+  - ar: العربية
+  - he: עברית
+  $options:ru-RU:
+  - auto: Автоматически (как в Windows)
+  - en: English
+  - es-ES: Español
+  - pt-BR: Português (Brasil)
+  - fr-FR: Français
+  - de-DE: Deutsch
+  - it-IT: Italiano
+  - nl-NL: Nederlands
+  - pl-PL: Polski
+  - tr-TR: Türkçe
+  - ru-RU: Русский
+  - uk-UA: Українська
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  - ja-JP: 日本語
+  - ko-KR: 한국어
+  - ar: العربية
+  - he: עברית
+  $options:uk-UA:
+  - auto: Автоматично (як у Windows)
+  - en: English
+  - es-ES: Español
+  - pt-BR: Português (Brasil)
+  - fr-FR: Français
+  - de-DE: Deutsch
+  - it-IT: Italiano
+  - nl-NL: Nederlands
+  - pl-PL: Polski
+  - tr-TR: Türkçe
+  - ru-RU: Русский
+  - uk-UA: Українська
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  - ja-JP: 日本語
+  - ko-KR: 한국어
+  - ar: العربية
+  - he: עברית
+  $options:zh-CN:
+  - auto: 自动（跟随 Windows）
+  - en: English
+  - es-ES: Español
+  - pt-BR: Português (Brasil)
+  - fr-FR: Français
+  - de-DE: Deutsch
+  - it-IT: Italiano
+  - nl-NL: Nederlands
+  - pl-PL: Polski
+  - tr-TR: Türkçe
+  - ru-RU: Русский
+  - uk-UA: Українська
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  - ja-JP: 日本語
+  - ko-KR: 한국어
+  - ar: العربية
+  - he: עברית
+  $options:zh-TW:
+  - auto: 自動（跟隨 Windows）
+  - en: English
+  - es-ES: Español
+  - pt-BR: Português (Brasil)
+  - fr-FR: Français
+  - de-DE: Deutsch
+  - it-IT: Italiano
+  - nl-NL: Nederlands
+  - pl-PL: Polski
+  - tr-TR: Türkçe
+  - ru-RU: Русский
+  - uk-UA: Українська
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  - ja-JP: 日本語
+  - ko-KR: 한국어
+  - ar: العربية
+  - he: עברית
+  $options:ja-JP:
+  - auto: 自動 (Windows に合わせる)
+  - en: English
+  - es-ES: Español
+  - pt-BR: Português (Brasil)
+  - fr-FR: Français
+  - de-DE: Deutsch
+  - it-IT: Italiano
+  - nl-NL: Nederlands
+  - pl-PL: Polski
+  - tr-TR: Türkçe
+  - ru-RU: Русский
+  - uk-UA: Українська
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  - ja-JP: 日本語
+  - ko-KR: 한국어
+  - ar: العربية
+  - he: עברית
+  $options:ko-KR:
+  - auto: 자동(Windows에 맞춤)
+  - en: English
+  - es-ES: Español
+  - pt-BR: Português (Brasil)
+  - fr-FR: Français
+  - de-DE: Deutsch
+  - it-IT: Italiano
+  - nl-NL: Nederlands
+  - pl-PL: Polski
+  - tr-TR: Türkçe
+  - ru-RU: Русский
+  - uk-UA: Українська
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  - ja-JP: 日本語
+  - ko-KR: 한국어
+  - ar: العربية
+  - he: עברית
+  $options:ar:
+  - auto: تلقائي (حسب Windows)
+  - en: English
+  - es-ES: Español
+  - pt-BR: Português (Brasil)
+  - fr-FR: Français
+  - de-DE: Deutsch
+  - it-IT: Italiano
+  - nl-NL: Nederlands
+  - pl-PL: Polski
+  - tr-TR: Türkçe
+  - ru-RU: Русский
+  - uk-UA: Українська
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  - ja-JP: 日本語
+  - ko-KR: 한국어
+  - ar: العربية
+  - he: עברית
+  $options:he:
+  - auto: אוטומטי (לפי Windows)
+  - en: English
+  - es-ES: Español
+  - pt-BR: Português (Brasil)
+  - fr-FR: Français
+  - de-DE: Deutsch
+  - it-IT: Italiano
+  - nl-NL: Nederlands
+  - pl-PL: Polski
+  - tr-TR: Türkçe
+  - ru-RU: Русский
+  - uk-UA: Українська
+  - zh-CN: 简体中文
+  - zh-TW: 繁體中文
+  - ja-JP: 日本語
+  - ko-KR: 한국어
+  - ar: العربية
+  - he: עברית
 - enableFlow: true
   $name: "Style: flow field"
+  $name:es-ES: "Estilo: campo de flujo"
+  $name:pt-BR: "Estilo: campo de fluxo"
+  $name:fr-FR: "Style : champ de flux"
+  $name:de-DE: "Stil: Strömungsfeld"
+  $name:it-IT: "Stile: campo di flusso"
+  $name:nl-NL: "Stijl: stromingsveld"
+  $name:pl-PL: "Styl: pole przepływu"
+  $name:tr-TR: "Stil: akış alanı"
+  $name:ru-RU: "Стиль: поле потока"
+  $name:uk-UA: "Стиль: поле потоку"
+  $name:zh-CN: 样式：流场
+  $name:zh-TW: 樣式：流場
+  $name:ja-JP: "スタイル: フローフィールド"
+  $name:ko-KR: "스타일: 흐름장"
+  $name:ar: "النمط: حقل التدفق"
+  $name:he: "סגנון: שדה זרימה"
   $description: Include this style when cycling with a click or on the rotation timer.
 - enableContour: true
   $name: "Style: contours"
+  $name:es-ES: "Estilo: curvas de nivel"
+  $name:pt-BR: "Estilo: curvas de nível"
+  $name:fr-FR: "Style : courbes de niveau"
+  $name:de-DE: "Stil: Höhenlinien"
+  $name:it-IT: "Stile: curve di livello"
+  $name:nl-NL: "Stijl: hoogtelijnen"
+  $name:pl-PL: "Styl: poziomice"
+  $name:tr-TR: "Stil: eş yükselti eğrileri"
+  $name:ru-RU: "Стиль: изолинии"
+  $name:uk-UA: "Стиль: ізолінії"
+  $name:zh-CN: 样式：等高线
+  $name:zh-TW: 樣式：等高線
+  $name:ja-JP: "スタイル: 等高線"
+  $name:ko-KR: "스타일: 등고선"
+  $name:ar: "النمط: خطوط الكنتور"
+  $name:he: "סגנון: קווי גובה"
 - enableGrowth: true
   $name: "Style: differential growth"
+  $name:es-ES: "Estilo: crecimiento diferencial"
+  $name:pt-BR: "Estilo: crescimento diferencial"
+  $name:fr-FR: "Style : croissance différentielle"
+  $name:de-DE: "Stil: differenzielles Wachstum"
+  $name:it-IT: "Stile: crescita differenziale"
+  $name:nl-NL: "Stijl: differentiële groei"
+  $name:pl-PL: "Styl: wzrost różnicowy"
+  $name:tr-TR: "Stil: diferansiyel büyüme"
+  $name:ru-RU: "Стиль: дифференциальный рост"
+  $name:uk-UA: "Стиль: диференційний ріст"
+  $name:zh-CN: 样式：差异生长
+  $name:zh-TW: 樣式：差異生長
+  $name:ja-JP: "スタイル: 微分成長"
+  $name:ko-KR: "스타일: 미분 성장"
+  $name:ar: "النمط: النمو التفاضلي"
+  $name:he: "סגנון: צמיחה דיפרנציאלית"
 - enableHarmonograph: true
   $name: "Style: harmonograph"
+  $name:es-ES: "Estilo: armonógrafo"
+  $name:pt-BR: "Estilo: harmonógrafo"
+  $name:fr-FR: "Style : harmonographe"
+  $name:de-DE: "Stil: Harmonograph"
+  $name:it-IT: "Stile: armonografo"
+  $name:nl-NL: "Stijl: harmonograaf"
+  $name:pl-PL: "Styl: harmonograf"
+  $name:tr-TR: "Stil: harmonograf"
+  $name:ru-RU: "Стиль: гармонограф"
+  $name:uk-UA: "Стиль: гармонограф"
+  $name:zh-CN: 样式：谐波图
+  $name:zh-TW: 樣式：諧波圖
+  $name:ja-JP: "スタイル: ハーモノグラフ"
+  $name:ko-KR: "스타일: 하모노그래프"
+  $name:ar: "النمط: هارمونوغراف"
+  $name:he: "סגנון: הרמונוגרף"
 - rotate: false
   $name: Rotate through styles
+  $name:es-ES: Rotar entre estilos
+  $name:pt-BR: Alternar entre estilos
+  $name:fr-FR: Faire défiler les styles
+  $name:de-DE: Stile durchwechseln
+  $name:it-IT: Ruota tra gli stili
+  $name:nl-NL: Door stijlen roteren
+  $name:pl-PL: Przełączaj style
+  $name:tr-TR: Stiller arasında geçiş yap
+  $name:ru-RU: Менять стили по кругу
+  $name:uk-UA: Змінювати стилі по колу
+  $name:zh-CN: 轮换样式
+  $name:zh-TW: 輪換樣式
+  $name:ja-JP: スタイルを自動で切り替える
+  $name:ko-KR: 스타일 순환
+  $name:ar: التنقل بين الأنماط
+  $name:he: מעבר אוטומטי בין סגנונות
   $description: Automatically move to the next enabled style on a timer.
 - rotateSeconds: 300
   $name: Rotation interval (seconds)
+  $name:es-ES: Intervalo de rotación (segundos)
+  $name:pt-BR: Intervalo de alternância (segundos)
+  $name:fr-FR: Intervalle de rotation (secondes)
+  $name:de-DE: Wechselintervall (Sekunden)
+  $name:it-IT: Intervallo di rotazione (secondi)
+  $name:nl-NL: Rotatie-interval (seconden)
+  $name:pl-PL: Odstęp przełączania (sekundy)
+  $name:tr-TR: Geçiş aralığı (saniye)
+  $name:ru-RU: Интервал смены (секунды)
+  $name:uk-UA: Інтервал зміни (секунди)
+  $name:zh-CN: 轮换间隔（秒）
+  $name:zh-TW: 輪換間隔（秒）
+  $name:ja-JP: 切り替え間隔 (秒)
+  $name:ko-KR: 순환 간격(초)
+  $name:ar: فترة التنقل (ثوانٍ)
+  $name:he: מרווח המעבר (שניות)
   $description: Clamped to 10-7200.
 - amount: balanced
   $name: Amount
+  $name:es-ES: Cantidad
+  $name:pt-BR: Quantidade
+  $name:fr-FR: Quantité
+  $name:de-DE: Menge
+  $name:it-IT: Quantità
+  $name:nl-NL: Hoeveelheid
+  $name:pl-PL: Ilość
+  $name:tr-TR: Miktar
+  $name:ru-RU: Количество
+  $name:uk-UA: Кількість
+  $name:zh-CN: 数量
+  $name:zh-TW: 數量
+  $name:ja-JP: 量
+  $name:ko-KR: 양
+  $name:ar: الكمية
+  $name:he: כמות
   $description: >-
     Starting amount notch, meaning how much information is on screen. Right
     click the
@@ -272,14 +985,142 @@ pair-programmers Claude and Big-Pickle (opencode).
   - balanced: Balanced
   - dense: Dense
   - maximal: Maximal
+  $options:es-ES:
+  - minimal: Mínimo
+  - sparse: Escaso
+  - balanced: Equilibrado
+  - dense: Denso
+  - maximal: Máximo
+  $options:pt-BR:
+  - minimal: Mínimo
+  - sparse: Esparso
+  - balanced: Equilibrado
+  - dense: Denso
+  - maximal: Máximo
+  $options:fr-FR:
+  - minimal: Minimal
+  - sparse: Épars
+  - balanced: Équilibré
+  - dense: Dense
+  - maximal: Maximal
+  $options:de-DE:
+  - minimal: Minimal
+  - sparse: Spärlich
+  - balanced: Ausgewogen
+  - dense: Dicht
+  - maximal: Maximal
+  $options:it-IT:
+  - minimal: Minimo
+  - sparse: Rado
+  - balanced: Equilibrato
+  - dense: Denso
+  - maximal: Massimo
+  $options:nl-NL:
+  - minimal: Minimaal
+  - sparse: Schaars
+  - balanced: Gebalanceerd
+  - dense: Dicht
+  - maximal: Maximaal
+  $options:pl-PL:
+  - minimal: Minimalna
+  - sparse: Rzadka
+  - balanced: Zrównoważona
+  - dense: Gęsta
+  - maximal: Maksymalna
+  $options:tr-TR:
+  - minimal: En az
+  - sparse: Seyrek
+  - balanced: Dengeli
+  - dense: Yoğun
+  - maximal: En çok
+  $options:ru-RU:
+  - minimal: Минимум
+  - sparse: Разреженно
+  - balanced: Сбалансированно
+  - dense: Плотно
+  - maximal: Максимум
+  $options:uk-UA:
+  - minimal: Мінімум
+  - sparse: Розріджено
+  - balanced: Збалансовано
+  - dense: Щільно
+  - maximal: Максимум
+  $options:zh-CN:
+  - minimal: 极简
+  - sparse: 稀疏
+  - balanced: 均衡
+  - dense: 密集
+  - maximal: 极密
+  $options:zh-TW:
+  - minimal: 極簡
+  - sparse: 稀疏
+  - balanced: 均衡
+  - dense: 密集
+  - maximal: 極密
+  $options:ja-JP:
+  - minimal: 最小
+  - sparse: まばら
+  - balanced: 標準
+  - dense: 密
+  - maximal: 最大
+  $options:ko-KR:
+  - minimal: 최소
+  - sparse: 성김
+  - balanced: 균형
+  - dense: 조밀
+  - maximal: 최대
+  $options:ar:
+  - minimal: أدنى
+  - sparse: متناثر
+  - balanced: متوازن
+  - dense: كثيف
+  - maximal: أقصى
+  $options:he:
+  - minimal: מינימלי
+  - sparse: דליל
+  - balanced: מאוזן
+  - dense: צפוף
+  - maximal: מקסימלי
 - parameter: 50
   $name: Parameter (%)
+  $name:es-ES: Parámetro (%)
+  $name:pt-BR: Parâmetro (%)
+  $name:fr-FR: Paramètre (%)
+  $name:de-DE: Parameter (%)
+  $name:it-IT: Parametro (%)
+  $name:nl-NL: Parameter (%)
+  $name:pl-PL: Parametr (%)
+  $name:tr-TR: Parametre (%)
+  $name:ru-RU: Параметр (%)
+  $name:uk-UA: Параметр (%)
+  $name:zh-CN: 参数（%）
+  $name:zh-TW: 參數（%）
+  $name:ja-JP: パラメーター (%)
+  $name:ko-KR: 매개변수(%)
+  $name:ar: المعامل (%)
+  $name:he: פרמטר (%)
   $description: >-
     Starting value for the parameter the mouse wheel adjusts. It is a single
     value carried across the styles rather than one per style, so the notch you
     set for one style is the notch the next one starts from. Clamped to 0-100.
 - palette: aurora
   $name: Palette
+  $name:es-ES: Paleta
+  $name:pt-BR: Paleta
+  $name:fr-FR: Palette
+  $name:de-DE: Palette
+  $name:it-IT: Palette
+  $name:nl-NL: Palet
+  $name:pl-PL: Paleta
+  $name:tr-TR: Palet
+  $name:ru-RU: Палитра
+  $name:uk-UA: Палітра
+  $name:zh-CN: 配色
+  $name:zh-TW: 配色
+  $name:ja-JP: パレット
+  $name:ko-KR: 팔레트
+  $name:ar: لوحة الألوان
+  $name:he: פלטה
   $options:
   - aurora: Aurora (teal / blue / violet)
   - ember: Ember (orange / red / gold)
@@ -288,14 +1129,190 @@ pair-programmers Claude and Big-Pickle (opencode).
   - forest: Forest (green / lime)
   - mono: Monochrome
   - custom: Custom (see below)
+  $options:es-ES:
+  - aurora: Aurora (turquesa / azul / violeta)
+  - ember: Brasa (naranja / rojo / oro)
+  - ocean: Océano (cian / azul)
+  - neon: Neón (magenta / cian / lima)
+  - forest: Bosque (verde / lima)
+  - mono: Monocromo
+  - custom: Personalizada (ver abajo)
+  $options:pt-BR:
+  - aurora: Aurora (verde-azulado / azul / violeta)
+  - ember: Brasa (laranja / vermelho / dourado)
+  - ocean: Oceano (ciano / azul)
+  - neon: Néon (magenta / ciano / lima)
+  - forest: Floresta (verde / lima)
+  - mono: Monocromático
+  - custom: Personalizada (veja abaixo)
+  $options:fr-FR:
+  - aurora: Aurore (sarcelle / bleu / violet)
+  - ember: Braise (orange / rouge / or)
+  - ocean: Océan (cyan / bleu)
+  - neon: Néon (magenta / cyan / vert lime)
+  - forest: Forêt (vert / vert lime)
+  - mono: Monochrome
+  - custom: Personnalisée (voir ci-dessous)
+  $options:de-DE:
+  - aurora: Aurora (Petrol / Blau / Violett)
+  - ember: Glut (Orange / Rot / Gold)
+  - ocean: Ozean (Cyan / Blau)
+  - neon: Neon (Magenta / Cyan / Limette)
+  - forest: Wald (Grün / Limette)
+  - mono: Monochrom
+  - custom: Benutzerdefiniert (siehe unten)
+  $options:it-IT:
+  - aurora: Aurora (foglia di tè / blu / viola)
+  - ember: Brace (arancione / rosso / oro)
+  - ocean: Oceano (ciano / blu)
+  - neon: Neon (magenta / ciano / lime)
+  - forest: Foresta (verde / lime)
+  - mono: Monocromatica
+  - custom: Personalizzata (vedi sotto)
+  $options:nl-NL:
+  - aurora: Aurora (blauwgroen / blauw / violet)
+  - ember: Gloed (oranje / rood / goud)
+  - ocean: Oceaan (cyaan / blauw)
+  - neon: Neon (magenta / cyaan / limoen)
+  - forest: Bos (groen / limoen)
+  - mono: Monochroom
+  - custom: Aangepast (zie hieronder)
+  $options:pl-PL:
+  - aurora: Zorza (morski / niebieski / fioletowy)
+  - ember: Żar (pomarańczowy / czerwony / złoty)
+  - ocean: Ocean (cyjan / niebieski)
+  - neon: Neon (magenta / cyjan / limonka)
+  - forest: Las (zielony / limonka)
+  - mono: Monochromatyczna
+  - custom: Własna (patrz niżej)
+  $options:tr-TR:
+  - aurora: Kutup ışığı (deniz mavisi / mavi / mor)
+  - ember: Kor (turuncu / kırmızı / altın)
+  - ocean: Okyanus (camgöbeği / mavi)
+  - neon: Neon (macenta / camgöbeği / limon)
+  - forest: Orman (yeşil / limon)
+  - mono: Tek renk
+  - custom: Özel (aşağıya bakın)
+  $options:ru-RU:
+  - aurora: Сияние (бирюзовый / синий / фиолетовый)
+  - ember: Угли (оранжевый / красный / золотой)
+  - ocean: Океан (голубой / синий)
+  - neon: Неон (пурпурный / голубой / лайм)
+  - forest: Лес (зелёный / лайм)
+  - mono: Монохром
+  - custom: Своя (см. ниже)
+  $options:uk-UA:
+  - aurora: Сяйво (бірюзовий / синій / фіолетовий)
+  - ember: Жар (оранжевий / червоний / золотий)
+  - ocean: Океан (блакитний / синій)
+  - neon: Неон (пурпуровий / блакитний / лайм)
+  - forest: Ліс (зелений / лайм)
+  - mono: Монохром
+  - custom: Власна (див. нижче)
+  $options:zh-CN:
+  - aurora: 极光（青绿 / 蓝 / 紫）
+  - ember: 余烬（橙 / 红 / 金）
+  - ocean: 海洋（青 / 蓝）
+  - neon: 霓虹（品红 / 青 / 柠檬绿）
+  - forest: 森林（绿 / 柠檬绿）
+  - mono: 单色
+  - custom: 自定义（见下）
+  $options:zh-TW:
+  - aurora: 極光（青綠 / 藍 / 紫）
+  - ember: 餘燼（橙 / 紅 / 金）
+  - ocean: 海洋（青 / 藍）
+  - neon: 霓虹（洋紅 / 青 / 檸檬綠）
+  - forest: 森林（綠 / 檸檬綠）
+  - mono: 單色
+  - custom: 自訂（見下）
+  $options:ja-JP:
+  - aurora: オーロラ (ティール / ブルー / バイオレット)
+  - ember: 残り火 (オレンジ / レッド / ゴールド)
+  - ocean: オーシャン (シアン / ブルー)
+  - neon: ネオン (マゼンタ / シアン / ライム)
+  - forest: フォレスト (グリーン / ライム)
+  - mono: モノクロ
+  - custom: カスタム (下を参照)
+  $options:ko-KR:
+  - aurora: 오로라(청록 / 파랑 / 보라)
+  - ember: 잔불(주황 / 빨강 / 금색)
+  - ocean: 오션(청록 / 파랑)
+  - neon: 네온(마젠타 / 청록 / 라임)
+  - forest: 포레스트(초록 / 라임)
+  - mono: 흑백
+  - custom: 사용자 지정(아래 참조)
+  $options:ar:
+  - aurora: شفق (أزرق مخضر / أزرق / بنفسجي)
+  - ember: جمر (برتقالي / أحمر / ذهبي)
+  - ocean: محيط (سماوي / أزرق)
+  - neon: نيون (أرجواني / سماوي / ليموني)
+  - forest: غابة (أخضر / ليموني)
+  - mono: أحادي اللون
+  - custom: مخصص (انظر أدناه)
+  $options:he:
+  - aurora: זוהר (טורקיז / כחול / סגול)
+  - ember: גחלים (כתום / אדום / זהב)
+  - ocean: אוקיינוס (ציאן / כחול)
+  - neon: ניאון (מג'נטה / ציאן / ליים)
+  - forest: יער (ירוק / ליים)
+  - mono: מונוכרום
+  - custom: מותאם (ראו למטה)
 - customColors: "#29d0a5,#3aa0ff,#7b5cff,#ff5ec4,#e8f3ff"
   $name: Custom colors
+  $name:es-ES: Colores personalizados
+  $name:pt-BR: Cores personalizadas
+  $name:fr-FR: Couleurs personnalisées
+  $name:de-DE: Eigene Farben
+  $name:it-IT: Colori personalizzati
+  $name:nl-NL: Aangepaste kleuren
+  $name:pl-PL: Własne kolory
+  $name:tr-TR: Özel renkler
+  $name:ru-RU: Свои цвета
+  $name:uk-UA: Власні кольори
+  $name:zh-CN: 自定义颜色
+  $name:zh-TW: 自訂顏色
+  $name:ja-JP: カスタムの色
+  $name:ko-KR: 사용자 지정 색
+  $name:ar: ألوان مخصصة
+  $name:he: צבעים מותאמים
   $description: Two to six #rrggbb values, comma separated. Used when the palette is Custom.
 - customBackground: "#05070d"
   $name: Custom background
+  $name:es-ES: Fondo personalizado
+  $name:pt-BR: Fundo personalizado
+  $name:fr-FR: Arrière-plan personnalisé
+  $name:de-DE: Eigener Hintergrund
+  $name:it-IT: Sfondo personalizzato
+  $name:nl-NL: Aangepaste achtergrond
+  $name:pl-PL: Własne tło
+  $name:tr-TR: Özel arka plan
+  $name:ru-RU: Свой фон
+  $name:uk-UA: Власний фон
+  $name:zh-CN: 自定义背景
+  $name:zh-TW: 自訂背景
+  $name:ja-JP: カスタムの背景
+  $name:ko-KR: 사용자 지정 배경
+  $name:ar: خلفية مخصصة
+  $name:he: רקע מותאם
   $description: Background #rrggbb. Used when the palette is Custom.
 - hueOffset: 0
   $name: Hue shift (degrees)
+  $name:es-ES: Desplazamiento de tono (grados)
+  $name:pt-BR: Deslocamento de matiz (graus)
+  $name:fr-FR: Décalage de teinte (degrés)
+  $name:de-DE: Farbtonverschiebung (Grad)
+  $name:it-IT: Spostamento tonalità (gradi)
+  $name:nl-NL: Tintverschuiving (graden)
+  $name:pl-PL: Przesunięcie barwy (stopnie)
+  $name:tr-TR: Renk tonu kaydırma (derece)
+  $name:ru-RU: Сдвиг оттенка (градусы)
+  $name:uk-UA: Зсув відтінку (градуси)
+  $name:zh-CN: 色相偏移（度）
+  $name:zh-TW: 色相偏移（度）
+  $name:ja-JP: 色相のずらし (度)
+  $name:ko-KR: 색조 이동(도)
+  $name:ar: إزاحة تدرج اللون (درجات)
+  $name:he: הסטת גוון (מעלות)
   $description: >-
     Rotates the palette by a fixed amount, so you can tune the colours without
     editing a custom palette. 0 leaves the palette exactly as defined. This is
@@ -303,6 +1320,22 @@ pair-programmers Claude and Big-Pickle (opencode).
     artwork returns to the moment you turn the ramp off. Clamped to 0-359.
 - colorRamp: false
   $name: Automatic colour ramp
+  $name:es-ES: Rampa de color automática
+  $name:pt-BR: Rampa de cor automática
+  $name:fr-FR: Dégradé de couleur automatique
+  $name:de-DE: Automatischer Farbverlauf
+  $name:it-IT: Variazione automatica del colore
+  $name:nl-NL: Automatisch kleurverloop
+  $name:pl-PL: Automatyczna zmiana barwy
+  $name:tr-TR: Otomatik renk geçişi
+  $name:ru-RU: Автоматическая смена оттенка
+  $name:uk-UA: Автоматична зміна відтінку
+  $name:zh-CN: 自动色相渐变
+  $name:zh-TW: 自動色相漸變
+  $name:ja-JP: 色相の自動変化
+  $name:ko-KR: 자동 색조 변화
+  $name:ar: تدرج لوني تلقائي
+  $name:he: שינוי גוון אוטומטי
   $description: >-
     Continuously rotate the hue of the artwork, starting from the hue shift
     above. While this is on, the hue shift setting is the starting point
@@ -310,14 +1343,62 @@ pair-programmers Claude and Big-Pickle (opencode).
     shift you set, instead of stopping wherever the rotation happened to be.
 - rampSpeed: 12
   $name: Ramp speed (degrees/sec)
+  $name:es-ES: Velocidad de la rampa (grados/s)
+  $name:pt-BR: Velocidade da rampa (graus/s)
+  $name:fr-FR: Vitesse du dégradé (degrés/s)
+  $name:de-DE: Verlaufsgeschwindigkeit (Grad/s)
+  $name:it-IT: Velocità della variazione (gradi/s)
+  $name:nl-NL: Snelheid van het verloop (graden/s)
+  $name:pl-PL: Szybkość zmiany (stopnie/s)
+  $name:tr-TR: Geçiş hızı (derece/sn)
+  $name:ru-RU: Скорость смены (градусы/с)
+  $name:uk-UA: Швидкість зміни (градуси/с)
+  $name:zh-CN: 渐变速度（度/秒）
+  $name:zh-TW: 漸變速度（度/秒）
+  $name:ja-JP: 変化の速さ (度/秒)
+  $name:ko-KR: 변화 속도(도/초)
+  $name:ar: سرعة التدرج (درجة/ثانية)
+  $name:he: מהירות השינוי (מעלות/שנייה)
   $description: >-
     How fast the automatic ramp rotates the hue. Only used while the ramp is
     on. Clamped to 1-360.
 - opacity: 100
   $name: Opacity (%)
+  $name:es-ES: Opacidad (%)
+  $name:pt-BR: Opacidade (%)
+  $name:fr-FR: Opacité (%)
+  $name:de-DE: Deckkraft (%)
+  $name:it-IT: Opacità (%)
+  $name:nl-NL: Dekking (%)
+  $name:pl-PL: Krycie (%)
+  $name:tr-TR: Saydamlık (%)
+  $name:ru-RU: Непрозрачность (%)
+  $name:uk-UA: Непрозорість (%)
+  $name:zh-CN: 不透明度（%）
+  $name:zh-TW: 不透明度（%）
+  $name:ja-JP: 不透明度 (%)
+  $name:ko-KR: 불투명도(%)
+  $name:ar: العتامة (%)
+  $name:he: אטימות (%)
   $description: Below 100 the desktop shows through the overlay. Clamped to 10-100.
 - globalKeys: false
   $name: Global Esc and Space
+  $name:es-ES: Esc y Espacio globales
+  $name:pt-BR: Esc e Espaço globais
+  $name:fr-FR: Échap et Espace globaux
+  $name:de-DE: Esc und Leertaste global
+  $name:it-IT: Esc e Spazio globali
+  $name:nl-NL: Esc en spatie overal
+  $name:pl-PL: Globalne Esc i spacja
+  $name:tr-TR: Genel Esc ve Boşluk
+  $name:ru-RU: Глобальные Esc и пробел
+  $name:uk-UA: Глобальні Esc і пробіл
+  $name:zh-CN: 全局 Esc 和空格
+  $name:zh-TW: 全域 Esc 與空白鍵
+  $name:ja-JP: Esc とスペースを全体で有効
+  $name:ko-KR: 전역 Esc 및 스페이스
+  $name:ar: Esc والمسافة بشكل عام
+  $name:he: Esc ורווח גלובליים
   $description: >-
     Let Esc close the overlay and Space change the palette from any application,
     not just when the overlay has focus. Off by default: Esc is a heavily used
@@ -326,16 +1407,64 @@ pair-programmers Claude and Big-Pickle (opencode).
     always works regardless of this setting.
 - keepAwake: true
   $name: Keep the PC awake
+  $name:es-ES: Mantener el PC despierto
+  $name:pt-BR: Manter o PC acordado
+  $name:fr-FR: Empêcher la mise en veille
+  $name:de-DE: PC wach halten
+  $name:it-IT: Mantieni il PC sveglio
+  $name:nl-NL: Pc wakker houden
+  $name:pl-PL: Nie pozwól komputerowi zasnąć
+  $name:tr-TR: Bilgisayarı uyanık tut
+  $name:ru-RU: Не давать ПК уснуть
+  $name:uk-UA: Не давати ПК заснути
+  $name:zh-CN: 保持电脑唤醒
+  $name:zh-TW: 保持電腦喚醒
+  $name:ja-JP: PC をスリープさせない
+  $name:ko-KR: PC를 깨어 있게 유지
+  $name:ar: إبقاء الكمبيوتر مستيقظًا
+  $name:he: למנוע מהמחשב להירדם
   $description: >-
     Hold the display and system out of idle while the overlay is up, via
     SetThreadExecutionState.
 - startActive: false
   $name: Start active
+  $name:es-ES: Iniciar activo
+  $name:pt-BR: Iniciar ativo
+  $name:fr-FR: Démarrer actif
+  $name:de-DE: Aktiv starten
+  $name:it-IT: Avvia attivo
+  $name:nl-NL: Actief starten
+  $name:pl-PL: Uruchom aktywny
+  $name:tr-TR: Etkin başlat
+  $name:ru-RU: Запускать активным
+  $name:uk-UA: Запускати активним
+  $name:zh-CN: 启动即显示
+  $name:zh-TW: 啟動即顯示
+  $name:ja-JP: 起動時に表示する
+  $name:ko-KR: 시작할 때 켜기
+  $name:ar: البدء نشطًا
+  $name:he: להתחיל פעיל
   $description: >-
     Show the overlay as soon as the mod loads, and open it straight away when
     you tick it here.
 - workAreaOnly: false
   $name: Stay inside the work area
+  $name:es-ES: Permanecer en el área de trabajo
+  $name:pt-BR: Ficar dentro da área de trabalho
+  $name:fr-FR: Rester dans la zone de travail
+  $name:de-DE: Im Arbeitsbereich bleiben
+  $name:it-IT: Resta nell'area di lavoro
+  $name:nl-NL: Binnen het werkgebied blijven
+  $name:pl-PL: Pozostań w obszarze roboczym
+  $name:tr-TR: Çalışma alanının içinde kal
+  $name:ru-RU: Оставаться в рабочей области
+  $name:uk-UA: Залишатися в робочій області
+  $name:zh-CN: 限制在工作区内
+  $name:zh-TW: 限制在工作區內
+  $name:ja-JP: 作業領域の中に収める
+  $name:ko-KR: 작업 영역 안에 유지
+  $name:ar: البقاء داخل منطقة العمل
+  $name:he: להישאר בתוך אזור העבודה
   $description: >-
     Keep the overlay inside each display's work area instead of covering the
     whole display, so it never draws over the taskbar.
@@ -355,6 +1484,7 @@ pair-programmers Claude and Big-Pickle (opencode).
 #include <cstdio>
 #include <cstdlib>
 #include <cwctype>
+#include <cwchar>
 #include <memory>
 #include <string>
 #include <vector>
@@ -400,12 +1530,228 @@ enum StyleId {
 
 static const int kAmountCount = 5;
 
-static const wchar_t* kStyleNames[kStyleCount] = {
-    L"flow field", L"contours", L"differential growth", L"harmonograph"};
-static const wchar_t* kStyleParams[kStyleCount] = {L"turbulence", L"relief",
-                                                   L"vigor", L"tempo"};
-static const wchar_t* kAmountNames[kAmountCount] = {
-    L"minimal", L"sparse", L"balanced", L"dense", L"maximal"};
+// The words the overlay can put on screen, one row per language. Order within
+// each row follows the enums above: the four styles, the wheel parameter that
+// belongs to each, the five amount notches, the seven palettes.
+//
+// English is first and is the fallback for any language not listed. Adding a
+// language is a row here plus the matching $name and $options entries in the
+// settings block; nothing else needs to change, because the readout is sized
+// by measuring whatever is in this table.
+static const int kPaletteNames = 7;
+
+struct Strings {
+    const wchar_t* tag;
+    bool rtl;
+    const wchar_t* styles[kStyleCount];
+    const wchar_t* params[kStyleCount];
+    const wchar_t* amounts[kAmountCount];
+    const wchar_t* palettes[kPaletteNames];
+    const wchar_t* amount;
+};
+
+static const Strings kStrings[] = {
+    {L"en", false,
+     {L"flow field", L"contours", L"differential growth", L"harmonograph"},
+     {L"turbulence", L"relief", L"vigor", L"tempo"},
+     {L"minimal", L"sparse", L"balanced", L"dense", L"maximal"},
+     {L"aurora", L"ember", L"ocean", L"neon", L"forest", L"mono", L"custom"},
+     L"amount"},
+    {L"es-ES", false,
+     {L"campo de flujo", L"curvas de nivel", L"crecimiento diferencial", L"armonógrafo"},
+     {L"turbulencia", L"relieve", L"vigor", L"tempo"},
+     {L"mínimo", L"escaso", L"equilibrado", L"denso", L"máximo"},
+     {L"aurora", L"brasa", L"océano", L"neón", L"bosque", L"monocromo", L"personalizada"},
+     L"cantidad"},
+    {L"pt-BR", false,
+     {L"campo de fluxo", L"curvas de nível", L"crescimento diferencial", L"harmonógrafo"},
+     {L"turbulência", L"relevo", L"vigor", L"tempo"},
+     {L"mínimo", L"esparso", L"equilibrado", L"denso", L"máximo"},
+     {L"aurora", L"brasa", L"oceano", L"néon", L"floresta", L"monocromático", L"personalizada"},
+     L"quantidade"},
+    {L"fr-FR", false,
+     {L"champ de flux", L"courbes de niveau", L"croissance différentielle", L"harmonographe"},
+     {L"turbulence", L"relief", L"vigueur", L"tempo"},
+     {L"minimal", L"épars", L"équilibré", L"dense", L"maximal"},
+     {L"aurore", L"braise", L"océan", L"néon", L"forêt", L"monochrome", L"personnalisée"},
+     L"quantité"},
+    {L"de-DE", false,
+     {L"Strömungsfeld", L"Höhenlinien", L"differenzielles Wachstum", L"Harmonograph"},
+     {L"Turbulenz", L"Relief", L"Wuchskraft", L"Tempo"},
+     {L"minimal", L"spärlich", L"ausgewogen", L"dicht", L"maximal"},
+     {L"Aurora", L"Glut", L"Ozean", L"Neon", L"Wald", L"Monochrom", L"benutzerdefiniert"},
+     L"Menge"},
+    {L"it-IT", false,
+     {L"campo di flusso", L"curve di livello", L"crescita differenziale", L"armonografo"},
+     {L"turbolenza", L"rilievo", L"vigore", L"tempo"},
+     {L"minimo", L"rado", L"equilibrato", L"denso", L"massimo"},
+     {L"aurora", L"brace", L"oceano", L"neon", L"foresta", L"monocromatica", L"personalizzata"},
+     L"quantità"},
+    {L"nl-NL", false,
+     {L"stromingsveld", L"hoogtelijnen", L"differentiële groei", L"harmonograaf"},
+     {L"turbulentie", L"reliëf", L"groeikracht", L"tempo"},
+     {L"minimaal", L"schaars", L"gebalanceerd", L"dicht", L"maximaal"},
+     {L"aurora", L"gloed", L"oceaan", L"neon", L"bos", L"monochroom", L"aangepast"},
+     L"hoeveelheid"},
+    {L"pl-PL", false,
+     {L"pole przepływu", L"poziomice", L"wzrost różnicowy", L"harmonograf"},
+     {L"turbulencja", L"rzeźba", L"wigor", L"tempo"},
+     {L"minimalna", L"rzadka", L"zrównoważona", L"gęsta", L"maksymalna"},
+     {L"zorza", L"żar", L"ocean", L"neon", L"las", L"monochromatyczna", L"własna"},
+     L"ilość"},
+    {L"tr-TR", false,
+     {L"akış alanı", L"eş yükselti eğrileri", L"diferansiyel büyüme", L"harmonograf"},
+     {L"türbülans", L"kabartma", L"canlılık", L"tempo"},
+     {L"en az", L"seyrek", L"dengeli", L"yoğun", L"en çok"},
+     {L"kutup ışığı", L"kor", L"okyanus", L"neon", L"orman", L"tek renk", L"özel"},
+     L"miktar"},
+    {L"ru-RU", false,
+     {L"поле потока", L"изолинии", L"дифференциальный рост", L"гармонограф"},
+     {L"турбулентность", L"рельеф", L"энергия", L"темп"},
+     {L"минимум", L"разреженно", L"сбалансированно", L"плотно", L"максимум"},
+     {L"сияние", L"угли", L"океан", L"неон", L"лес", L"монохром", L"своя"},
+     L"количество"},
+    {L"uk-UA", false,
+     {L"поле потоку", L"ізолінії", L"диференційний ріст", L"гармонограф"},
+     {L"турбулентність", L"рельєф", L"енергія", L"темп"},
+     {L"мінімум", L"розріджено", L"збалансовано", L"щільно", L"максимум"},
+     {L"сяйво", L"жар", L"океан", L"неон", L"ліс", L"монохром", L"власна"},
+     L"кількість"},
+    {L"zh-CN", false,
+     {L"流场", L"等高线", L"差异生长", L"谐波图"},
+     {L"湍流", L"起伏", L"生长力", L"节奏"},
+     {L"极简", L"稀疏", L"均衡", L"密集", L"极密"},
+     {L"极光", L"余烬", L"海洋", L"霓虹", L"森林", L"单色", L"自定义"},
+     L"数量"},
+    {L"zh-TW", false,
+     {L"流場", L"等高線", L"差異生長", L"諧波圖"},
+     {L"湍流", L"起伏", L"生長力", L"節奏"},
+     {L"極簡", L"稀疏", L"均衡", L"密集", L"極密"},
+     {L"極光", L"餘燼", L"海洋", L"霓虹", L"森林", L"單色", L"自訂"},
+     L"數量"},
+    {L"ja-JP", false,
+     {L"フローフィールド", L"等高線", L"微分成長", L"ハーモノグラフ"},
+     {L"乱流", L"起伏", L"成長力", L"テンポ"},
+     {L"最小", L"まばら", L"標準", L"密", L"最大"},
+     {L"オーロラ", L"残り火", L"オーシャン", L"ネオン", L"フォレスト", L"モノクロ", L"カスタム"},
+     L"量"},
+    {L"ko-KR", false,
+     {L"흐름장", L"등고선", L"미분 성장", L"하모노그래프"},
+     {L"난류", L"기복", L"성장력", L"템포"},
+     {L"최소", L"성김", L"균형", L"조밀", L"최대"},
+     {L"오로라", L"잔불", L"오션", L"네온", L"포레스트", L"흑백", L"사용자 지정"},
+     L"양"},
+    {L"ar", true,
+     {L"حقل التدفق", L"خطوط الكنتور", L"النمو التفاضلي", L"هارمونوغراف"},
+     {L"اضطراب", L"تضاريس", L"حيوية", L"إيقاع"},
+     {L"أدنى", L"متناثر", L"متوازن", L"كثيف", L"أقصى"},
+     {L"شفق", L"جمر", L"محيط", L"نيون", L"غابة", L"أحادي اللون", L"مخصص"},
+     L"الكمية"},
+    {L"he", true,
+     {L"שדה זרימה", L"קווי גובה", L"צמיחה דיפרנציאלית", L"הרמונוגרף"},
+     {L"מערבולת", L"תבליט", L"מרץ", L"קצב"},
+     {L"מינימלי", L"דליל", L"מאוזן", L"צפוף", L"מקסימלי"},
+     {L"זוהר", L"גחלים", L"אוקיינוס", L"ניאון", L"יער", L"מונוכרום", L"מותאם"},
+     L"כמות"},
+};
+
+static const Strings* g_strings = &kStrings[0];
+
+static size_t PrimaryLen(const wchar_t* tag) {
+    size_t n = 0;
+    while (tag[n] && tag[n] != L'-') {
+        n++;
+    }
+    return n;
+}
+
+static bool TagEquals(const wchar_t* a, const wchar_t* b) {
+    while (*a && *b && towlower(*a) == towlower(*b)) {
+        a++;
+        b++;
+    }
+    return *a == *b;
+}
+
+// Does the tag carry this subtag, as in the "Hant" of "zh-Hant-HK".
+static bool HasSubtag(const wchar_t* tag, const wchar_t* sub) {
+    for (const wchar_t* p = tag; *p; p++) {
+        if (p != tag && p[-1] != L'-') {
+            continue;
+        }
+        size_t i = 0;
+        while (sub[i] && towlower(p[i]) == towlower(sub[i])) {
+            i++;
+        }
+        if (!sub[i] && (p[i] == 0 || p[i] == L'-')) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static const Strings* FindStrings(const wchar_t* tag) {
+    if (!tag || !*tag) {
+        return nullptr;
+    }
+    for (size_t i = 0; i < ARRAYSIZE(kStrings); i++) {
+        if (TagEquals(tag, kStrings[i].tag)) {
+            return &kStrings[i];
+        }
+    }
+    // Chinese needs the script and not just the language: Hong Kong and Macau
+    // are written in traditional characters, the same as Taiwan.
+    size_t primary = PrimaryLen(tag);
+    if (primary == 2 && towlower(tag[0]) == L'z' && towlower(tag[1]) == L'h') {
+        bool trad = HasSubtag(tag, L"Hant") || HasSubtag(tag, L"TW") ||
+                    HasSubtag(tag, L"HK") || HasSubtag(tag, L"MO");
+        return FindStrings(trad ? L"zh-TW" : L"zh-CN");
+    }
+    // Otherwise the language alone is enough: en-GB reads the English row and
+    // pt-PT the Portuguese one.
+    for (size_t i = 0; i < ARRAYSIZE(kStrings); i++) {
+        const wchar_t* cand = kStrings[i].tag;
+        if (PrimaryLen(cand) != primary) {
+            continue;
+        }
+        size_t j = 0;
+        while (j < primary && towlower(tag[j]) == towlower(cand[j])) {
+            j++;
+        }
+        if (j == primary) {
+            return &kStrings[i];
+        }
+    }
+    return nullptr;
+}
+
+// The languages the user actually asked Windows for, in their order of
+// preference, so someone running an English install with Russian second still
+// gets Russian if English were ever removed from the table.
+static const Strings* StringsFromSystem() {
+    ULONG num = 0, chars = 0;
+    if (GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &num, nullptr, &chars) &&
+        chars > 0) {
+        std::vector<wchar_t> buf(chars);
+        if (GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &num, buf.data(),
+                                        &chars)) {
+            const wchar_t* p = buf.data();
+            while (*p) {
+                const Strings* hit = FindStrings(p);
+                if (hit) {
+                    return hit;
+                }
+                p += wcslen(p) + 1;
+            }
+        }
+    }
+    WCHAR name[LOCALE_NAME_MAX_LENGTH];
+    if (LCIDToLocaleName(MAKELCID(GetUserDefaultUILanguage(), SORT_DEFAULT),
+                         name, ARRAYSIZE(name), 0)) {
+        return FindStrings(name);
+    }
+    return nullptr;
+}
 
 template <typename T>
 static T ClampT(T v, T lo, T hi) {
@@ -1609,6 +2955,7 @@ struct Settings {
     bool startActive = false;
     bool workAreaOnly = false;
     std::wstring hotkey = L"Ctrl+Alt+H";
+    std::wstring language = L"auto";
 };
 
 static Settings g_settings;
@@ -1650,6 +2997,9 @@ static const int kPaletteCount =
 
 // Which preset is live. Space steps it, the setting seeds it, and it is
 // remembered across restarts like the style and amount are.
+static_assert(kPaletteCount == kPaletteNames,
+              "add the new palette to every row of kStrings");
+
 static int g_paletteIndex = 0;
 
 static int PaletteIndexFromName(const std::wstring& name) {
@@ -1659,10 +3009,6 @@ static int PaletteIndexFromName(const std::wstring& name) {
         }
     }
     return 0;
-}
-
-static const wchar_t* PaletteName(int idx) {
-    return kPresets[ClampT(idx, 0, kPaletteCount - 1)].name;
 }
 
 static void BuildPalette() {
@@ -2201,13 +3547,14 @@ static void ReleaseEmbeddedFonts() {
 // every combination the mod is ever able to show.
 static std::wstring HudTextFor(int style, int amount, float param,
                                int paletteIdx) {
+    const Strings* t = g_strings;
     int st = ClampT(style, 0, kStyleCount - 1);
-    WCHAR buf[160];
-    swprintf_s(buf, ARRAYSIZE(buf), L"%s     %s %d%%     amount %s     %s",
-               kStyleNames[st], kStyleParams[st],
-               (int)(param * 100.0f + 0.5f),
-               kAmountNames[ClampT(amount, 0, kAmountCount - 1)],
-               PaletteName(paletteIdx));
+    WCHAR buf[256];
+    swprintf_s(buf, ARRAYSIZE(buf), L"%s     %s %d%%     %s %s     %s",
+               t->styles[st], t->params[st],
+               (int)(param * 100.0f + 0.5f), t->amount,
+               t->amounts[ClampT(amount, 0, kAmountCount - 1)],
+               t->palettes[ClampT(paletteIdx, 0, kPaletteNames - 1)]);
     return buf;
 }
 
@@ -2265,30 +3612,46 @@ static std::wstring SystemUiFontFamily() {
     return L"Segoe UI";
 }
 
-// x height as a fraction of the em, which is what the eye actually compares
-// when two faces sit on the same line.
-static float XHeightRatio(IDWriteFontCollection* collection,
-                          const wchar_t* family) {
+// The regular face of a family, from the given collection or from the system
+// one when that is null. Caller releases.
+static IDWriteFont* FirstFont(IDWriteFontCollection* collection,
+                              const wchar_t* family) {
     IDWriteFontCollection* owned = nullptr;
     if (!collection) {
         if (!g_dwrite ||
             FAILED(g_dwrite->GetSystemFontCollection(&owned, FALSE)) || !owned) {
-            return 0;
+            return nullptr;
         }
         collection = owned;
     }
-    float ratio = 0;
     UINT32 index = 0;
     BOOL exists = FALSE;
     IDWriteFontFamily* fam = nullptr;
     IDWriteFont* fnt = nullptr;
-    IDWriteFontFace* face = nullptr;
     if (SUCCEEDED(collection->FindFamilyName(family, &index, &exists)) && exists &&
-        SUCCEEDED(collection->GetFontFamily(index, &fam)) &&
-        SUCCEEDED(fam->GetFirstMatchingFont(DWRITE_FONT_WEIGHT_NORMAL,
-                                            DWRITE_FONT_STRETCH_NORMAL,
-                                            DWRITE_FONT_STYLE_NORMAL, &fnt)) &&
-        SUCCEEDED(fnt->CreateFontFace(&face))) {
+        SUCCEEDED(collection->GetFontFamily(index, &fam))) {
+        if (FAILED(fam->GetFirstMatchingFont(DWRITE_FONT_WEIGHT_NORMAL,
+                                             DWRITE_FONT_STRETCH_NORMAL,
+                                             DWRITE_FONT_STYLE_NORMAL, &fnt))) {
+            fnt = nullptr;
+        }
+    }
+    SafeRelease(&fam);
+    SafeRelease(&owned);
+    return fnt;
+}
+
+// x height as a fraction of the em, which is what the eye actually compares
+// when two faces sit on the same line.
+static float XHeightRatio(IDWriteFontCollection* collection,
+                          const wchar_t* family) {
+    IDWriteFont* fnt = FirstFont(collection, family);
+    if (!fnt) {
+        return 0;
+    }
+    float ratio = 0;
+    IDWriteFontFace* face = nullptr;
+    if (SUCCEEDED(fnt->CreateFontFace(&face))) {
         DWRITE_FONT_METRICS fm;
         face->GetMetrics(&fm);
         if (fm.designUnitsPerEm > 0 && fm.xHeight > 0) {
@@ -2296,10 +3659,42 @@ static float XHeightRatio(IDWriteFontCollection* collection,
         }
     }
     SafeRelease(&face);
-    SafeRelease(&fnt);
-    SafeRelease(&fam);
-    SafeRelease(&owned);
+    fnt->Release();
     return ratio;
+}
+
+// Can this face write every word the active language can put on screen? A
+// half pixel, half system font line looks worse than one drawn entirely in the
+// system font, so this decides which of the two the readout gets rather than
+// leaving the fallback to fill gaps mid word.
+static bool CoversActiveLanguage(IDWriteFontCollection* collection,
+                                 const wchar_t* family) {
+    IDWriteFont* fnt = FirstFont(collection, family);
+    if (!fnt) {
+        return false;
+    }
+    const Strings* t = g_strings;
+    std::wstring all = t->amount;
+    all += L"0123456789% ";
+    for (int i = 0; i < kStyleCount; i++) {
+        all += t->styles[i];
+        all += t->params[i];
+    }
+    for (int i = 0; i < kAmountCount; i++) {
+        all += t->amounts[i];
+    }
+    for (int i = 0; i < kPaletteNames; i++) {
+        all += t->palettes[i];
+    }
+    bool ok = true;
+    for (size_t i = 0; i < all.size() && ok; i++) {
+        BOOL has = FALSE;
+        if (FAILED(fnt->HasCharacter((UINT32)all[i], &has)) || !has) {
+            ok = false;
+        }
+    }
+    fnt->Release();
+    return ok;
 }
 
 // Everything the embedded font cannot draw goes to the user's interface font,
@@ -2341,6 +3736,15 @@ static IDWriteFontFallback* BuildFallbackChain(const HudFont& font) {
     return result;
 }
 
+// Arabic and Hebrew read the other way, which also puts the line in the other
+// bottom corner. DirectWrite handles the digits and the percent sign inside it.
+static void ApplyDirection(IDWriteTextFormat* fmt) {
+    if (fmt && g_strings->rtl) {
+        fmt->SetReadingDirection(DWRITE_READING_DIRECTION_RIGHT_TO_LEFT);
+        fmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    }
+}
+
 static void ApplyFallback(IDWriteTextFormat* fmt) {
     if (!fmt || !g_hudFallback) {
         return;
@@ -2357,6 +3761,10 @@ static void ApplyFallback(IDWriteTextFormat* fmt) {
 // enough, and a font installed mid-session is not worth a rescan per frame.
 static HudFont g_hudFont;
 static bool g_hudFontResolved = false;
+
+// Called when the language changes: the words are different, so the fitted
+// size and possibly the face itself have to be worked out again.
+static void ResetHudFontChoice();
 
 static const HudFont& HudFontOnce() {
     if (g_hudFontResolved) {
@@ -2376,6 +3784,15 @@ static const HudFont& HudFontOnce() {
             g_hudFont.pixelSize = kEmbeddedFontGrid;
             g_hudFont.collection = g_embeddedFonts;
         }
+    }
+    if (g_hudFont.pixelSize > 0 &&
+        !CoversActiveLanguage(g_hudFont.collection, g_hudFont.family.c_str())) {
+        // The embedded subset is Latin, Greek and Cyrillic. Installing the
+        // full family puts CJK back on the pixel grid and this check passes.
+        Wh_Log(L"pixel font cannot write %s; using the system font",
+               g_strings->tag);
+        g_hudFont = HudFont();
+        g_hudFont.family = SystemUiFontFamily();
     }
     Wh_Log(L"readout font: %s%s", g_hudFont.family.c_str(),
            g_hudFont.collection ? L" (embedded)" : L"");
@@ -2438,6 +3855,7 @@ class Overlay {
     std::wstring hudText_;
     float hudT_ = 0;
     float hudPx_ = 15.0f;
+    float hudMarginX_ = 24.0f;
     bool hudCrisp_ = false;
     bool focusClickArmed_ = false;
 
@@ -2567,6 +3985,55 @@ bool Overlay::CreateDeviceResources() {
     return true;
 }
 
+static void ResetHudFontChoice() {
+    SafeRelease(&g_hudFallback);
+    g_hudFontResolved = false;
+    g_hudFont = HudFont();
+}
+
+// Picks the language table, from the setting or from Windows when the setting
+// is automatic.
+static void SelectStrings(const std::wstring& setting) {
+    const Strings* chosen = nullptr;
+    if (setting.empty() || setting == L"auto") {
+        chosen = StringsFromSystem();
+    } else {
+        chosen = FindStrings(setting.c_str());
+    }
+    if (!chosen) {
+        chosen = &kStrings[0];
+    }
+    if (chosen != g_strings) {
+        g_strings = chosen;
+        Wh_Log(L"readout language: %s", g_strings->tag);
+        ResetHudFontChoice();
+    }
+}
+
+// The largest size at which the widest line still fits the width given,
+// snapped down to a whole multiple of a pixel font's grid.
+static float FitReadoutSize(float avail, float widest, float refSize,
+                            float target, int grid, bool* crisp) {
+    float fit = widest > 0 ? refSize * avail / widest : target;
+    float px = std::min(target, fit);
+    *crisp = false;
+    if (grid > 0) {
+        int maxSteps = (int)(fit / (float)grid);
+        int steps = (int)(target / (float)grid + 0.5f);
+        if (steps < 1) {
+            steps = 1;
+        }
+        if (maxSteps >= 1) {
+            if (steps > maxSteps) {
+                steps = maxSteps;
+            }
+            px = (float)(steps * grid);
+            *crisp = true;
+        }
+    }
+    return std::max(8.0f, px);
+}
+
 // Sizes the readout to the largest it can be while the widest line the mod is
 // able to produce still fits this display, so it never wraps and never runs
 // off the edge whatever happens to be showing.
@@ -2577,8 +4044,11 @@ void Overlay::CreateHudFormat() {
     const HudFont& font = HudFontOnce();
     float w = (float)(rect_.right - rect_.left);
     float h = (float)(rect_.bottom - rect_.top);
-    float margin = std::max(24.0f, h * 0.035f);
-    float avail = std::max(80.0f, w - margin * 2.0f);
+    // The side gutter comes from the width and the bottom one from the height.
+    // Taking both from the height put a gutter the size of a portrait screen's
+    // height down its narrow sides, which squeezed the text for no reason.
+    float marginX = std::max(24.0f, w * 0.025f);
+    float avail = std::max(80.0f, w - marginX * 2.0f);
     // A pixel font has one weight; asking for a heavier one makes DirectWrite
     // embolden it algorithmically, which smears the grid.
     DWRITE_FONT_WEIGHT weight = font.pixelSize > 0
@@ -2596,8 +4066,9 @@ void Overlay::CreateHudFormat() {
             DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, kRef, L"",
             &probe))) {
         // The measuring pass has to see exactly what the drawing pass will,
-        // fallback included, or the fitted size would be a guess.
+        // fallback and direction included, or the fitted size would be a guess.
         ApplyFallback(probe);
+        ApplyDirection(probe);
         for (int st = 0; st < kStyleCount; st++) {
             for (int am = 0; am < kAmountCount; am++) {
                 for (int pal = 0; pal < kPaletteCount; pal++) {
@@ -2620,27 +4091,29 @@ void Overlay::CreateHudFormat() {
         probe->Release();
     }
 
+    // A pixel design only lands on whole pixels at whole multiples of the grid
+    // it was drawn for, so the size comes down in steps rather than smoothly.
     float target = std::max(15.0f, h * 0.018f);
-    float fit = widest > 0 ? kRef * avail / widest : target;
-    float px = std::min(target, fit);
-    hudCrisp_ = false;
-    if (font.pixelSize > 0) {
-        // A pixel design only lands on whole pixels at whole multiples of the
-        // grid it was drawn for.
-        int maxSteps = (int)(fit / (float)font.pixelSize);
-        int steps = (int)(target / (float)font.pixelSize + 0.5f);
-        if (steps < 1) {
-            steps = 1;
-        }
-        if (maxSteps >= 1) {
-            if (steps > maxSteps) {
-                steps = maxSteps;
-            }
-            px = (float)(steps * font.pixelSize);
-            hudCrisp_ = true;
+    float px = FitReadoutSize(avail, widest, kRef, target, font.pixelSize,
+                              &hudCrisp_);
+
+    // Losing a whole grid step halves the text, which is a steep price for a
+    // wide gutter. Try the narrowest gutter before paying it: the gutter is
+    // decoration, the line is the point. Longer languages on narrow displays
+    // are exactly where this bites.
+    const float kTightMargin = 24.0f;
+    if (font.pixelSize > 0 && marginX > kTightMargin) {
+        bool tightCrisp = false;
+        float tightAvail = std::max(80.0f, w - kTightMargin * 2.0f);
+        float tightPx = FitReadoutSize(tightAvail, widest, kRef, target,
+                                       font.pixelSize, &tightCrisp);
+        if (tightPx > px) {
+            px = tightPx;
+            hudCrisp_ = tightCrisp;
+            marginX = kTightMargin;
         }
     }
-    px = std::max(8.0f, px);
+    hudMarginX_ = marginX;
 
     if (FAILED(g_dwrite->CreateTextFormat(
             font.family.c_str(), font.collection, weight,
@@ -2650,6 +4123,7 @@ void Overlay::CreateHudFormat() {
         return;
     }
     ApplyFallback(hudFormat_);
+    ApplyDirection(hudFormat_);
     // Belt and braces behind the measuring above: whatever face DirectWrite
     // ends up resolving to, the line stays on one line.
     hudFormat_->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
@@ -2822,14 +4296,16 @@ void Overlay::Render(float dtSec) {
         hudT_ -= dtSec;
         if (hudFormat_ && !hudText_.empty()) {
             float a = ClampT(hudT_ / kHudFade, 0.0f, 1.0f);
-            float margin = std::max(24.0f, ctx.h * 0.035f);
+            // The side gutter is whatever the fitting pass settled on.
+            float marginX = hudMarginX_;
+            float marginY = std::max(24.0f, ctx.h * 0.035f);
             D2D1_RECT_F box;
-            box.left = margin;
-            box.top = ctx.h - margin * 2.0f;
-            box.right = ctx.w - margin;
+            box.left = marginX;
+            box.top = ctx.h - marginY * 2.0f;
+            box.right = ctx.w - marginX;
             // Tall enough for the line whatever size it was fitted to, since
             // DrawText clips to this rectangle.
-            box.bottom = box.top + std::max(margin * 1.5f, hudPx_ * 2.0f);
+            box.bottom = box.top + std::max(marginY * 1.5f, hudPx_ * 2.0f);
 
             D2D1_TEXT_ANTIALIAS_MODE prevAA = rt_->GetTextAntialiasMode();
             if (hudCrisp_) {
@@ -3542,6 +5018,8 @@ static void LoadSettings() {
     g_settings.startActive = Wh_GetIntSetting(L"startActive") != 0;
     g_settings.workAreaOnly = Wh_GetIntSetting(L"workAreaOnly") != 0;
     g_settings.hotkey = GetStringSetting(L"hotkey");
+    g_settings.language = GetStringSetting(L"language");
+    SelectStrings(g_settings.language);
 
     BuildPalette();
 }
