@@ -114,18 +114,9 @@ cycle the style as usual.
 when something else has focus.
 
 The mod also listens on a named event, `Local\WindhawkVectorScreenHolderToggle`,
-so an ordinary Windows shortcut can toggle the overlay without opening Windhawk
-at all. Save this as `toggle-screen-holder.vbs` and make an ordinary shortcut
-to it:
-
-```vbs
-CreateObject("WScript.Shell").Run "powershell -nop -w hidden -c ""[Threading.EventWaitHandle]::OpenExisting('Local\WindhawkVectorScreenHolderToggle').Set()""", 0, False
-```
-
-`wscript.exe` opens no console, so nothing flashes on screen. The event lives
-in the per-session `Local\` namespace, so another logged-in user cannot reach
-yours, and it grants only `EVENT_MODIFY_STATE` and `SYNCHRONIZE`: enough to
-set it and to open it, not enough to delete it or change its permissions.
+in the per-session namespace, so an ordinary Windows shortcut can toggle the
+overlay without opening Windhawk at all. The one line that drives it is on
+[the site](https://vector.akilluminati47.pages.dev/).
 
 If you would rather **Esc** and **Space** reached the overlay from any
 application, turn on **Global Esc and Space** in the settings. It is off by
