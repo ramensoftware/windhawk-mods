@@ -4644,6 +4644,7 @@ void ShutdownWindowsWorkerThread(...)
     ...
     if (...) // Check if BSDR has shown
         info = WluiGetShutdownResolverInfo(...);
+    ...
 }
 So, create an event on LogonUI ModInit, check it in WluiInformLogonUI, and if the event is found, set g_fShutdownResolverDisabled to 1, and ignore the call
 This should have the same effect as having g_fShutdownResolverDisabled == 1 at the beginning of ShutdownWindowsWorkerThread
