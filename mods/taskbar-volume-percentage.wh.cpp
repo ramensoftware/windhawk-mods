@@ -2,7 +2,7 @@
 // @id              taskbar-volume-percentage
 // @name            Taskbar Volume Percentage Indicator
 // @description     Shows the master volume percentage in the Windows 11 system tray volume icon
-// @version         1.5.8
+// @version         1.5.9
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
@@ -188,10 +188,6 @@ std::wstring g_volumeText;
 // the next measure passes.
 bool g_volumeTextChanged;
 
-// The view model of the volume text icon. Held temporarily during initial
-// layout lookup to restore the native speaker glyph, then cleared.
-void* g_volumeViewModel = nullptr;
-
 // The native speaker glyph captured from Windows.
 winrt::hstring g_nativeVolumeGlyph;
 bool g_capturingVolumeGlyph = false;
@@ -204,7 +200,8 @@ struct TrackedIconView {
     winrt::Windows::Foundation::IInspectable origWidth{nullptr};
     winrt::Windows::Foundation::IInspectable origAlignment{nullptr};
 };
-std::vector<TrackedIconView> g_volumeIconViews;
+[[clang::no_destroy]] std::optional<std::vector<TrackedIconView>>
+    g_volumeIconViews{std::in_place};
 
 // Tracked TextIconContent and its sub-box hierarchy for dual-column mode.
 struct TrackedVolumeContent {
@@ -221,7 +218,8 @@ struct TrackedVolumeContent {
     winrt::Windows::Foundation::IInspectable origUnderlayColumn{nullptr};
     winrt::Windows::Foundation::IInspectable origBaseColumn{nullptr};
 };
-std::vector<TrackedVolumeContent> g_trackedVolumeContents;
+[[clang::no_destroy]] std::optional<std::vector<TrackedVolumeContent>>
+    g_trackedVolumeContents{std::in_place};
 
 using FrameworkElementLayoutUpdatedEventRevoker = winrt::impl::event_revoker<
     IFrameworkElement,
@@ -229,8 +227,9 @@ using FrameworkElementLayoutUpdatedEventRevoker = winrt::impl::event_revoker<
 
 // Layout properties set from inside a measure pass are not picked up by it,
 // so the width of a view found there is applied once the pass is over.
-[[clang::no_destroy]] std::list<FrameworkElementLayoutUpdatedEventRevoker>
-    g_autoRevokerList;
+[[clang::no_destroy]] std::optional<
+    std::list<FrameworkElementLayoutUpdatedEventRevoker>>
+    g_autoRevokerList{std::in_place};
 
 ////////////////////////////////////////////////////////////////////////////////
 // Taskbar thread
@@ -502,21 +501,29 @@ void RememberVolumeDataModel(
 }
 
 void RememberVolumeIconView(FrameworkElement const& iconView) {
-    std::erase_if(g_volumeIconViews,
+    if (!g_volumeIconViews) {
+        return;
+    }
+
+    std::erase_if(*g_volumeIconViews,
                   [](const auto& tracked) { return !tracked.iconView.get(); });
 
-    for (const auto& tracked : g_volumeIconViews) {
+    for (const auto& tracked : *g_volumeIconViews) {
         if (tracked.iconView.get() == iconView) {
             return;
         }
     }
 
     Wh_Log(L"Volume icon view %p", winrt::get_abi(iconView));
-    g_volumeIconViews.push_back({iconView});
+    g_volumeIconViews->push_back({iconView});
 }
 
 void ApplyVolumeIconViewsWidth() {
-    for (auto& tracked : g_volumeIconViews) {
+    if (!g_volumeIconViews) {
+        return;
+    }
+
+    for (auto& tracked : *g_volumeIconViews) {
         if (auto iconView = tracked.iconView.get()) {
             ApplyIconViewWidth(tracked, iconView);
         }
@@ -527,14 +534,22 @@ void ApplyVolumeIconViewsWidth() {
 // Layout management
 
 void PruneTrackedVolumeContents() {
-    std::erase_if(g_trackedVolumeContents, [](const auto& tracked) {
+    if (!g_trackedVolumeContents) {
+        return;
+    }
+
+    std::erase_if(*g_trackedVolumeContents, [](const auto& tracked) {
         return !tracked.textIconContent.get();
     });
 }
 
 TrackedVolumeContent* FindTrackedVolumeContent(
     FrameworkElement const& textIconContent) {
-    for (auto& tracked : g_trackedVolumeContents) {
+    if (!g_trackedVolumeContents) {
+        return nullptr;
+    }
+
+    for (auto& tracked : *g_trackedVolumeContents) {
         if (tracked.textIconContent.get() == textIconContent) {
             return &tracked;
         }
@@ -604,11 +619,14 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
 }
 
 void RestoreAllVolumeLayouts() {
-    g_autoRevokerList.clear();
-    for (auto& tracked : g_trackedVolumeContents) {
-        RestoreVolumeLayout(tracked);
+    if (g_autoRevokerList) {
+        g_autoRevokerList->clear();
     }
-    g_volumeViewModel = nullptr;
+    if (g_trackedVolumeContents) {
+        for (auto& tracked : *g_trackedVolumeContents) {
+            RestoreVolumeLayout(tracked);
+        }
+    }
 }
 
 void SetupVolumeLayout(FrameworkElement const& textIconContent) {
@@ -637,7 +655,10 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
 
     TrackedVolumeContent* tracked = FindTrackedVolumeContent(textIconContent);
     if (!tracked) {
-        g_trackedVolumeContents.push_back({
+        if (!g_trackedVolumeContents) {
+            g_trackedVolumeContents.emplace();
+        }
+        g_trackedVolumeContents->push_back({
             textIconContent,
             containerGrid,
             baseElement,
@@ -645,7 +666,7 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
             nullptr,
             false,
         });
-        tracked = &g_trackedVolumeContents.back();
+        tracked = &g_trackedVolumeContents->back();
     } else {
         tracked->containerGrid = containerGrid;
         tracked->baseElement = baseElement;
@@ -765,13 +786,13 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
 void UpdateAllVolumeLayouts() {
     PruneTrackedVolumeContents();
 
-    if (g_trackedVolumeContents.empty()) {
-        g_volumeViewModel = nullptr;
+    if (!g_trackedVolumeContents) {
+        return;
     }
 
     std::vector<FrameworkElement> targets;
-    targets.reserve(g_trackedVolumeContents.size());
-    for (auto& tracked : g_trackedVolumeContents) {
+    targets.reserve(g_trackedVolumeContents->size());
+    for (auto& tracked : *g_trackedVolumeContents) {
         if (auto textIconContent = tracked.textIconContent.get()) {
             targets.push_back(textIconContent);
         }
@@ -847,19 +868,6 @@ void SafeXamlCall(F&& func) {
     }
 }
 
-void RestoreNativeBaseGlyph() {
-    if (g_volumeViewModel) {
-        winrt::hstring nativeText{
-            !g_nativeVolumeGlyph.empty()
-                ? g_nativeVolumeGlyph
-                : winrt::hstring(
-                      GetNativeVolumeGlyph(g_volumeLevel, g_isMuted))};
-        TextIconContentViewModel_BaseText_Original(g_volumeViewModel,
-                                                   &nativeText);
-        g_volumeViewModel = nullptr;
-    }
-}
-
 // Finds the IconView hosting the volume icon once the text set on the view
 // model reached the element. Done from the element's measure, which follows a
 // text change and the creation of a new element.
@@ -875,20 +883,21 @@ void LookUpVolumeIconView(FrameworkElement const& textIconContent) {
         return;
     }
 
-    bool wasEmpty = g_trackedVolumeContents.empty();
+    bool wasEmpty =
+        !g_trackedVolumeContents || g_trackedVolumeContents->empty();
 
     SetupVolumeLayout(textIconContent);
-
-    if (wasEmpty && IsDualBoxStyle()) {
-        RestoreNativeBaseGlyph();
-    }
 
     g_volumeTextChanged = false;
 
     RememberVolumeIconView(iconView);
 
-    g_autoRevokerList.emplace_back();
-    auto autoRevokerIt = g_autoRevokerList.end();
+    if (!g_autoRevokerList) {
+        g_autoRevokerList.emplace();
+    }
+
+    g_autoRevokerList->emplace_back();
+    auto autoRevokerIt = g_autoRevokerList->end();
     --autoRevokerIt;
 
     *autoRevokerIt = iconView.LayoutUpdated(
@@ -897,7 +906,9 @@ void LookUpVolumeIconView(FrameworkElement const& textIconContent) {
             winrt::Windows::Foundation::IInspectable const&,
             winrt::Windows::Foundation::IInspectable const&) {
             const bool wasEmptyLocal = wasEmpty;
-            g_autoRevokerList.erase(autoRevokerIt);
+            if (g_autoRevokerList) {
+                g_autoRevokerList->erase(autoRevokerIt);
+            }
 
             SafeXamlCall([wasEmptyLocal] {
                 ApplyVolumeIconViewsWidth();
@@ -1010,11 +1021,6 @@ void WINAPI TextIconContentViewModel_UpdateStyles_Hook(void* pThis,
                      *iconData == winrt::get_abi(g_volumeIconData));
     if (isVolume) {
         g_capturingVolumeGlyph = true;
-        if (IsDualBoxStyle() && g_trackedVolumeContents.empty()) {
-            g_volumeViewModel = pThis;
-        } else {
-            g_volumeViewModel = nullptr;
-        }
     }
 
     struct FlagGuard {
@@ -1039,7 +1045,7 @@ void WINAPI TextIconContentViewModel_UpdateStyles_Hook(void* pThis,
         g_volumeTextChanged = true;
 
         if (IsDualBoxStyle()) {
-            if (g_trackedVolumeContents.empty()) {
+            if (!g_trackedVolumeContents || g_trackedVolumeContents->empty()) {
                 winrt::hstring triggerText{g_volumeText};
                 TextIconContentViewModel_BaseText_Original(pThis, &triggerText);
                 return;
@@ -1262,6 +1268,16 @@ void LoadSettings() {
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
+    if (!g_volumeIconViews) {
+        g_volumeIconViews.emplace();
+    }
+    if (!g_trackedVolumeContents) {
+        g_trackedVolumeContents.emplace();
+    }
+    if (!g_autoRevokerList) {
+        g_autoRevokerList.emplace();
+    }
+
     LoadSettings();
 
     if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
@@ -1305,8 +1321,10 @@ void Wh_ModBeforeUninit() {
 
     g_unloading = true;
 
-    RunFromTaskbarThread([](void*) {
-        g_autoRevokerList.clear();
+    auto cleanupTask = [](void*) {
+        if (g_autoRevokerList) {
+            g_autoRevokerList->clear();
+        }
 
         SafeXamlCall([] {
             RestoreAllVolumeLayouts();
@@ -1314,18 +1332,49 @@ void Wh_ModBeforeUninit() {
             ApplyVolumeIconViewsWidth();
         });
 
-        g_trackedVolumeContents.clear();
-        g_volumeIconViews.clear();
+        if (g_trackedVolumeContents) {
+            g_trackedVolumeContents->clear();
+            g_trackedVolumeContents.reset();
+        }
+        if (g_volumeIconViews) {
+            g_volumeIconViews->clear();
+            g_volumeIconViews.reset();
+        }
+        if (g_autoRevokerList) {
+            g_autoRevokerList.reset();
+        }
+
         g_volumeText.clear();
         g_volumeTextChanged = false;
         g_volumeIconData = nullptr;
         g_volumeDataModels.clear();
         g_spatialSoundName.clear();
         g_maxObservedWidth = 0.0;
-        g_volumeViewModel = nullptr;
         g_nativeVolumeGlyph.clear();
         g_capturingVolumeGlyph = false;
-    });
+    };
+
+    bool cleanedUp = false;
+    for (int attempt = 0; attempt < 5; ++attempt) {
+        if (RunFromTaskbarThread(cleanupTask)) {
+            cleanedUp = true;
+            break;
+        }
+        Sleep(50);
+    }
+
+    if (!cleanedUp) {
+        Wh_Log(L"Failed to reach taskbar thread during uninit; executing fallback revoker reset");
+        if (g_autoRevokerList) {
+            g_autoRevokerList.reset();
+        }
+        if (g_trackedVolumeContents) {
+            g_trackedVolumeContents.reset();
+        }
+        if (g_volumeIconViews) {
+            g_volumeIconViews.reset();
+        }
+    }
 }
 
 void Wh_ModUninit() {
