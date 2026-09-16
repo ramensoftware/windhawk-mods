@@ -180,7 +180,7 @@ It does **not** fake keystrokes or mouse movement. Some corporate presence
 tools (Teams, Slack) track real input rather than display state and will still
 mark you away.
 
-## Source, screenshots and the prototype
+## Source and credits
 
 The mod lives at
 [github.com/akilluminati47/vector-screen-holder](https://github.com/akilluminati47/vector-screen-holder),
@@ -188,14 +188,24 @@ along with the browser prototype the four algorithms were developed in before
 the Direct2D port. There is a short showcase of all four styles at
 [vector.akilluminati47.pages.dev](https://vector.akilluminati47.pages.dev/).
 
-## Credits
-
 Originally created by **akilluminati47**, developed with the help of the AI
 pair-programmers Claude and Big-Pickle (opencode).
 
-The readout is set in [Fusion Pixel Font](https://github.com/TakWolf/fusion-pixel-font) by
-[TakWolf](https://takwolf.com), used under the SIL Open Font License 1.1. The
-717 glyph subset the mod carries, and the script that cuts it, are published at
+None of the four techniques is original to this mod. They are well-trodden
+generative art, and these are the implementations and write-ups each scene was
+built from:
+
+| Style | Drawn after |
+| --- | --- |
+| **Flow field** | [moistkitteh/Flowfield_Generative_Art](https://github.com/moistkitteh/Flowfield_Generative_Art), itself after Tyler Hobbs' *Fidenza* |
+| **Contours** | [arthurxavierx/contour-lines](https://github.com/arthurxavierx/contour-lines) by Arthur Xavier |
+| **Differential growth** | [inconvergent/differential-line](https://github.com/inconvergent/differential-line) by inconvergent |
+| **Harmonograph** | [Paul Bourke's harmonograph notes](https://paulbourke.net/geometry/harmonograph/) |
+
+The readout is set in [Fusion Pixel Font](https://github.com/TakWolf/fusion-pixel-font)
+by [TakWolf](https://takwolf.com), used under the SIL Open Font License 1.1.
+The 717 glyph subset the mod carries, and the script that cuts it, are
+published at
 [akilluminati47/fusion-pixel-font](https://github.com/akilluminati47/fusion-pixel-font/releases/tag/vsh-subset-2026.09.01).
 */
 // ==/WindhawkModReadme==
