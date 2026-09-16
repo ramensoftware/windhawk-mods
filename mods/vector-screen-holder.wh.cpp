@@ -56,11 +56,13 @@ images, no video file and no fixed resolution, so the artwork is generated for
 whatever size the display you choose actually is: a 1080p monitor and a 4K
 portrait panel each get correctly proportioned art.
 
-Downloading a large file, or running a long build, render or backup, and you
-need the machine not to sign you out or drop to idle? Start the Screen Holder,
-put it on whichever display you can spare, and go to lunch. The work keeps
-running, the screen stays awake, and you can still see progress at a glance
-from across the room.
+Uploading a dataset, rendering out a model, updating a shelf of games,
+seeding torrents overnight, a long build or backup, a download that will take
+an hour, or a run of AI agents grinding through a queue. Anything where the
+machine has to stay awake and stay signed in, but a black screen tells you
+nothing. Start the Screen Holder, put it on whichever display you can spare,
+and go to lunch. The work keeps running, the screen stays awake, and you can
+still see progress at a glance from across the room.
 
 ![The overlay running on a portrait monitor while a note is typed in Notepad](https://raw.githubusercontent.com/akilluminati47/vector-screen-holder/main/assets/typing.gif)
 
@@ -180,6 +182,11 @@ Flow field, growth and harmonograph draw themselves in progressively, hold the
 finished piece, fade out and begin a new one. Contours redraw continuously and
 drift.
 
+The wheel reaches flow field a little differently from the other three. Each
+ribbon traces its whole path at the moment it spawns, so a turn of the wheel
+steers the ribbons drawn from then on and leaves the ones already on screen as
+they were drawn. The other three answer the wheel immediately.
+
 ## Keeping the PC awake
 
 While the overlay is up the mod calls `SetThreadExecutionState` with
@@ -195,22 +202,33 @@ mark you away.
 
 The overlay is real work on the GPU and the CPU, and the whole point is to run
 it *while* something else is busy, so it is worth being plain about the price.
-The heaviest combination by far is **contours at maximal amount**: it marches
-about 46 iso levels across an 18,000 cell grid and rebuilds up to 46 path
-geometries every frame. At 60 frames per second that is close to a saturated
-core, sitting right next to the long build you are waiting on.
 
-Three ways to give the rest of the machine more room, in the order worth
-trying:
+Measured, rather than guessed at: on a 1440x2560 portrait display driven at
+**180** frames per second, which is three times the default, differential
+growth at the *balanced* amount costs about **0.88 of one core**, and stepping
+it to *maximal* takes that to about **0.95**. On a sixteen core machine that
+is under 6% of the whole CPU. At the default 60 the same work comes to roughly
+a third of those figures.
 
-- drop **Frames per second** to 30. The artwork is paced against the clock
-  rather than the frame count, so it stays smooth instead of becoming choppy.
+The default is 60 on purpose rather than something lower. How smoothly the
+art moves is most of the first impression, and the default amount is
+*balanced* rather than maximal, so nobody lands on the expensive end by
+accident. **Frames per second** is yours to set anywhere from 10 to 240.
+
+Contours is the heaviest of the four, because it re-marches the field and
+rebuilds every contour level on every frame, where flow field, growth and
+harmonograph draw themselves in and then idle on the finished picture. If you
+want the mod further out of the way of a long job:
+
+- drop **Frames per second**. The artwork is paced against the clock rather
+  than the frame count, so a lower rate stays smooth instead of becoming
+  choppy.
 - step the **amount** down a notch or two with right click.
-- pick flow field or harmonograph, which draw themselves and then idle, rather
-  than contours, which redraw continuously.
+- prefer flow field or harmonograph over contours.
 
-The other styles are far cheaper than contours at the same amount, and nothing
-is simulated at all while the overlay is genuinely occluded.
+Nothing is simulated at all while the overlay is genuinely occluded, and on
+more than one display the overlays are presented without waiting on vsync, so
+they do not divide a single refresh between them.
 
 ## Source and credits
 
@@ -1515,6 +1533,15 @@ static const WCHAR kWindowClass[] = L"WindhawkVectorScreenHolderWnd";
 
 // The mod's own image, which owns the window class and the window procedure.
 static HINSTANCE g_modInstance = nullptr;
+
+// Set when more than one display is being driven. The worker renders the
+// overlays one after another inside a single loop iteration, and a vsynced
+// EndDraw blocks until the next refresh, so three displays would each get a
+// third of the refresh rate whatever the frame rate setting says. Presenting
+// immediately decouples them; the waitable timer is what paces frames anyway.
+// A single display keeps vsync, because there is nothing to decouple and
+// tearing is a real cost.
+static bool g_presentImmediately = false;
 static const WCHAR kEventLocal[] = L"Local\\WindhawkVectorScreenHolderToggle";
 
 // Thread hot keys must use 0x0000-0xBFFF; 0xC000+ is reserved for atoms.
@@ -3950,7 +3977,9 @@ bool Overlay::CreateDeviceResources() {
     hprops.hwnd = hwnd_;
     hprops.pixelSize.width = (UINT32)(rect_.right - rect_.left);
     hprops.pixelSize.height = (UINT32)(rect_.bottom - rect_.top);
-    hprops.presentOptions = D2D1_PRESENT_OPTIONS_NONE;
+    hprops.presentOptions = g_presentImmediately
+                                ? D2D1_PRESENT_OPTIONS_IMMEDIATELY
+                                : D2D1_PRESENT_OPTIONS_NONE;
 
     if (FAILED(factory_->CreateHwndRenderTarget(&props, &hprops, &rt_))) {
         Wh_Log(L"CreateHwndRenderTarget failed");
@@ -4836,6 +4865,8 @@ static void ShowOverlays() {
             }
         }
     }
+
+    g_presentImmediately = targets.size() > 1;
 
     int style = ClampT(Wh_GetIntValue(L"state.style", FirstEnabledStyle()), 0,
                        kStyleCount - 1);
