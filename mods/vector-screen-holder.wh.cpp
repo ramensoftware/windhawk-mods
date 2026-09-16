@@ -94,14 +94,18 @@ than leaving them wherever the rotation happened to stop.
 
 ## The readout
 
-The readout is set in [Fusion Pixel Font](https://github.com/TakWolf/fusion-pixel-font)
-when you have it installed: one pixel design covering Latin, Simplified and
-Traditional Chinese, Japanese and Korean, so the line keeps its shape whatever
-the system is set to. Install any of its families, any pixel size, monospaced
-or proportional, and the mod finds the best one on its own and snaps the text
-to a whole multiple of the font's pixel grid so it stays sharp. With none of
-them installed the readout falls back to a stock face and nothing else
-changes.
+The readout is set in [Fusion Pixel Font](https://github.com/TakWolf/fusion-pixel-font),
+which is carried inside the mod: the 96 printable ASCII glyphs of its 12px
+monospaced cut, under eight kilobytes, which is everything the readout can
+ever draw. Nothing to install, and it looks the same on every machine. The
+size snaps to a whole multiple of the font's pixel grid and the text is drawn
+with antialiasing off, so it lands on whole pixels rather than being smeared
+across them.
+
+If you have the full family installed, any pixel size, monospaced or
+proportional, any of the five language builds, the mod finds it and prefers it
+over the embedded copy. That is the only way to get the CJK coverage the
+design also has, which the ASCII subset does not carry.
 
 Either way the size is picked by measuring the widest readout the mod can ever
 produce against the width of the display it is running on, so the line never
@@ -342,6 +346,7 @@ pair-programmers Claude and Big-Pickle (opencode).
 #include <windows.h>
 #include <d2d1.h>
 #include <dwrite.h>
+#include <dwrite_3.h>
 #include <windhawk_utils.h>
 #include <sddl.h>
 
@@ -1763,6 +1768,378 @@ enum Phase { kPhaseIn, kPhaseBuild, kPhaseHold, kPhaseOut };
 static const float kHudSecs = 2.2f;
 static const float kHudFade = 0.6f;
 
+// ---------------------------------------------------------------------------
+// Embedded readout font
+// ---------------------------------------------------------------------------
+//
+// Fusion Pixel Font, the 12px monospaced Latin build, subset to the 96
+// printable ASCII glyphs that are everything the readout can ever draw. That
+// takes it from seven megabytes to under eight kilobytes, small enough to
+// travel inside the mod, so the readout looks the same on a machine with
+// nothing installed. The lookup above still prefers a full family when one is
+// installed, which is the only way to get the CJK coverage this design also
+// has.
+//
+//   Fusion Pixel Font   https://github.com/TakWolf/fusion-pixel-font
+//   Copyright (c) 2022, TakWolf (https://takwolf.com)
+//
+// The font data below is licensed under the SIL Open Font License 1.1, which
+// is reproduced in full. It covers the font data only: the mod itself is MIT
+// as declared at the top of this file.
+
+/*
+Fusion Pixel Font
+https://github.com/TakWolf/fusion-pixel-font
+
+Copyright (c) 2022, TakWolf (https://takwolf.com).
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+https://openfontlicense.org
+
+
+-----------------------------------------------------------
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+-----------------------------------------------------------
+
+PREAMBLE
+The goals of the Open Font License (OFL) are to stimulate worldwide
+development of collaborative font projects, to support the font creation
+efforts of academic and linguistic communities, and to provide a free and
+open framework in which fonts may be shared and improved in partnership
+with others.
+
+The OFL allows the licensed fonts to be used, studied, modified and
+redistributed freely as long as they are not sold by themselves. The
+fonts, including any derivative works, can be bundled, embedded,
+redistributed and/or sold with any software provided that any reserved
+names are not used by derivative works. The fonts and derivatives,
+however, cannot be released under any other type of license. The
+requirement for fonts to remain under this license does not apply
+to any document created using the fonts or their derivatives.
+
+DEFINITIONS
+"Font Software" refers to the set of files released by the Copyright
+Holder(s) under this license and clearly marked as such. This may
+include source files, build scripts and documentation.
+
+"Reserved Font Name" refers to any names specified as such after the
+copyright statement(s).
+
+"Original Version" refers to the collection of Font Software components as
+distributed by the Copyright Holder(s).
+
+"Modified Version" refers to any derivative made by adding to, deleting,
+or substituting -- in part or in whole -- any of the components of the
+Original Version, by changing formats or by porting the Font Software to a
+new environment.
+
+"Author" refers to any designer, engineer, programmer, technical
+writer or other person who contributed to the Font Software.
+
+PERMISSION & CONDITIONS
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of the Font Software, to use, study, copy, merge, embed, modify,
+redistribute, and sell modified and unmodified copies of the Font
+Software, subject to the following conditions:
+
+1) Neither the Font Software nor any of its individual components,
+in Original or Modified Versions, may be sold by itself.
+
+2) Original or Modified Versions of the Font Software may be bundled,
+redistributed and/or sold with any software, provided that each copy
+contains the above copyright notice and this license. These can be
+included either as stand-alone text files, human-readable headers or
+in the appropriate machine-readable metadata fields within text or
+binary files as long as those fields can be easily viewed by the user.
+
+3) No Modified Version of the Font Software may use the Reserved Font
+Name(s) unless explicit written permission is granted by the corresponding
+Copyright Holder. This restriction only applies to the primary font name as
+presented to the users.
+
+4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
+Software shall not be used to promote, endorse or advertise any
+Modified Version, except to acknowledge the contribution(s) of the
+Copyright Holder(s) and the Author(s) or with their explicit written
+permission.
+
+5) The Font Software, modified or unmodified, in part or in whole,
+must be distributed entirely under this license, and must not be
+distributed under any other license. The requirement for fonts to
+remain under this license does not apply to any document created
+using the Font Software.
+
+TERMINATION
+This license becomes null and void if any of the above conditions are
+not met.
+
+DISCLAIMER
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
+OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
+DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
+OTHER DEALINGS IN THE FONT SOFTWARE.
+*/
+
+static const wchar_t kEmbeddedFontFamily[] = L"Fusion Pixel 12px Mono latin";
+static const int kEmbeddedFontGrid = 12;
+
+static const GUID kIID_IDWriteFactory5 = {
+    0x958db99a, 0xbe2a, 0x4f09,
+    {0xaf, 0x7d, 0x65, 0x18, 0x98, 0x03, 0xd1, 0xd3}};
+
+// clang-format off
+static const char kEmbeddedFontB64[] =
+    "AAEAAAAKAIAAAwAgT1MvMkrdSjwAAAEoAAAAYGNtYXAADADRAAACTAAAADRnbHlmTDHOpwAA"
+    "A0QAABgiaGVhZDFS1pAAAACsAAAANmhoZWEImgPrAAAA5AAAACRobXR4CowFFAAAAYgAAADE"
+    "bG9jYSlEI00AAAKAAAAAwm1heHAAbgA2AAABCAAAACBuYW1lRiBlhAAAG2gAAAM6cG9zdP87"
+    "AGQAAB6kAAAAIAABAAAAAQAAEFVCW18PPPUAAwSwAAAAAOa7xgAAAAAA5s/LyAAA/zgEsAPo"
+    "AAAAAwACAAAAAAAAAAEAAAPo/zgAAASwAAAAAASwAAEAAAAAAAAAAAAAAAAAAAACAAEAAABg"
+    "ADQADQAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAwSeAZAABQAEAAAAAAAAAAAAAAAAAAAAAABk"
+    "AfQAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAPz8/PwAAACAAfgPo/zgAAAPoAMgAAAAB"
+    "AAAAAAJYAyAAAAAgAAAEsAAAAlgAAADIAGQAAAAAAAAAAADIAGQAZAAAAAAAZAAAAMgAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAMgAZABkAAAAZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGQAAABkAAAAAADIAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMgAZAAAAAAAAgAA"
+    "AAMAAAAUAAMAAQAAABQABAAgAAAABAAEAAEAAAB+//8AAAAg////4QABAAAAAAAAABUAFQAn"
+    "ADoAZACgAO0BMQE+AV8BgAGsAcAB0QHeAeoCCwI5Ak8CfgKtAswC8AMaAzUDZwOSA6QDuwPm"
+    "A/kEIwRKBHUEmAS7BOAE+QUQBSQFSAVfBXUFjgW+Bc0F7gYPBi8GSwZ6BpwG0AbhBvsHIAdG"
+    "B34HoAfHB9kH+QgLCC0IOQhKCGsIhgirCMcI7QkICSkJRQlfCXwJpwm9Cd4J+goaCjUKUApr"
+    "CqAKuwrYCvoLHgtWC34LoQvCC88L8AwRAAAAAgAA/zgEsAPoAAMABwAAESERIRMRIREEsPtQ"
+    "ZAPoA+j7UARM/BgD6AAAAgDIAAABLAMgAAMABwAAEzMRIxUzFSPIZGRkZAMg/ahkZAAAAgBk"
+    "AfQBkAMgAAMABwAAEzMRIxMzESNkZGTIZGQDIP7UASz+1AACAAAAAAH0AyAAGwAfAAATMxUz"
+    "NTMVMxUjFTMVIxUjNSMVIzUjNTM1IzUzFyMVM2RkZGRkZGRkZGRkZGRkZMhkZAMgyMjIZMhk"
+    "yMjIyGTIZGTIAAAFAAD/nAH0A4QAGwAfACMAJwArAAATMxUzFSMRMxUjFTMVIxUjNSM1MxEj"
+    "NTM1IzUzBzMVIyUzFSMRMxUjJTMVI8hkZGRkZGRkZGRkZGRkZMhkZAGQZGRkZP5wZGQDhGRk"
+    "/tRkyGRkZGQBLGTIZGTIyGT+1MhkZAANAAAAAAH0AyAAAwAHAAsADwATABcAGwAfACMAJwAr"
+    "AC8AMwAAEzMVIyUzFSMlMxUjNzMVIyMzFSM3MxUjIzMVIyMzFSM3MxUjITMVIzczFSM3MxUj"
+    "IzMVI2RkZAEsZGT+cGRkyGRkZGRkyGRkZGRkZGRkyGRk/tRkZMhkZMhkZGRkZAMgZGTIZGRk"
+    "ZGRkZMhkZGTIyGRkZGQACwAAAAAB9AMgAAMABwALAA8AEwAXABsAHwAjACcAKwAAEzMVIyMz"
+    "ESMBMxUjIzMVIyMzFSMlMxUjJTMVIzczFSMzMxUjIzMVIyUzFSNkyMhkZGQBLGRkZGRkZGRk"
+    "ASxkZP5wZGTIZGRkZGTIyMgBLGRkAyBk/tQBLMhkZGTIZMjIZGRkZGQAAAEAyAH0ASwDIAAD"
+    "AAATMxEjyGRkAyD+1AAABQBk/5wBkAOEAAMABwALAA8AEwAAATMVIyMzFSMjMxEjMzMVIzMz"
+    "FSMBLGRkZGRkZGRkZGRkZGRkA4RkyP5wyGQABQBk/5wBkAOEAAMABwALAA8AEwAAEzMVIzMz"
+    "FSMzMxEjIzMVIyMzFSNkZGRkZGRkZGRkZGRkZGQDhGTI/nDIZAAABQAAAGQB9AJYAAsADwAT"
+    "ABcAGwAAEzMVMxUjFSM1IzUzJzMVIyUzFSMFMxUjJTMVI8hkZGRkZGTIZGQBkGRk/nBkZAGQ"
+    "ZGQCWMhkyMhkZGRkZGRkZGQAAAEAAABkAfQCWAALAAATMxUzFSMVIzUjNTPIZMjIZMjIAljI"
+    "ZMjIZAACAGT/OAEsAGQAAwAHAAA3MxUjIzMVI8hkZGRkZGTIZAAAAQAAASwB9AGQAAMAABEh"
+    "FSEB9P4MAZBkAAABAMgAAAEsAGQAAwAANzMVI8hkZGRkAAAFAAD/nAH0A4QAAwAHAAsADwAT"
+    "AAABMxUjIzMVIyMzFSMjMxUjIzMVIwGQZGRkZGRkZGRkZGRkZGQDhMjIyMjIAAAFAAAAAAH0"
+    "AyAAAwALABMAFwAbAAATIRUhIzMRMxUjFSMBMxEjESM1MwczFSMHIRUhZAEs/tRkZGRkZAGQ"
+    "ZGRkZMhkZGQBLP7UAyBk/nBkZAJY/agBkGRkyMhkAAEAAAAAAfQDIAALAAATMxEzFSE1MxEj"
+    "NTPIZMj+DMjIyAMg/URkZAH0ZAAABwAAAAAB9AMgAAMABwALAA8AEwAXAB0AABMhFSEjMxUj"
+    "JTMVIyMzFSMjMxUjIzMVIyMzFSEVIWQBLP7UZGRkAZBkZGRkZGRkZGRkZGRkAZD+DAMgZGRk"
+    "yGRkZGRkAAcAAAAAAfQDIAADAAcACwAPABMAFwAbAAATIRUhIzMVIyUzFSMjMxUjMzMRIyUz"
+    "FSMzIRUhZAEs/tRkZGQBkGRkyMjIyGRk/nBkZGQBLP7UAyBkZGTIZP7UZGRkAAACAAAAAAH0"
+    "AyAADwATAAATMxEzFSMVIzUhETMVMxEjIzMVI8jIZGRk/tRkyGRkZGQDIP4MZMjIASzIAZDI"
+    "AAQAAAAAAfQDIAAHAAsADwATAAARIRUhFSEVISEzESMlMxUjMyEVIQH0/nABLP5wAZBkZP5w"
+    "ZGRkASz+1AMgZMhk/tRkZGQAAAUAAAAAAfQDIAADAAsADwATABcAABMhFSEjMxUhFSERIwEz"
+    "FSMVMxEjISEVIWQBLP7UZGQBLP7UZAGQZGRkZP7UASz+1AMgZMhk/tQCWGTI/tRkAAMAAAAA"
+    "AfQDIAAFAAkADQAAESERIzUhBTMVIyMzESMB9GT+cAEsZGRkZGQDIP7UyMjI/tQAAAcAAAAA"
+    "AfQDIAADAAcACwAPABMAFwAbAAATIRUhIzMVIyUzFSMhIRUhIzMRIwEzESMhIRUhZAEs/tRk"
+    "ZGQBkGRk/tQBLP7UZGRkAZBkZP7UASz+1AMgZMjIyGT+1AEs/tRkAAAFAAAAAAH0AyAAAwAH"
+    "AA8AEwAXAAATIRUhIzMRIwEzESM1ITUhBTMVIzMhFSFkASz+1GRkZAGQZGT+1AEs/nBkZGQB"
+    "LP7UAyBk/tQBLP2oyGTIZGQAAAIAyAAAASwCWAADAAcAABMzFSMRMxUjyGRkZGQCWGT+cGQA"
+    "AAMAZP84ASwCWAADAAcACwAAEzMVIxEzFSMjMxUjyGRkZGRkZGQCWGT+cMhkAAAHAGQAAAH0"
+    "ArwAAwAHAAsADwATABcAGwAAATMVIyMzFSMjMxUjIzMVIzMzFSMzMxUjMzMVIwGQZGRkZGRk"
+    "ZGRkZGRkZGRkZGRkZGQCvGRkZGRkZGQAAAIAAADIAfQB9AADAAcAABEhFSEVIRUhAfT+DAH0"
+    "/gwB9GRkZAAABwBkAAAB9AK8AAMABwALAA8AEwAXABsAABMzFSMzMxUjMzMVIzMzFSMjMxUj"
+    "IzMVIyMzFSNkZGRkZGRkZGRkZGRkZGRkZGRkZGQCvGRkZGRkZGQABgAAAAAB9AMgAAMABwAL"
+    "AA8AEwAXAAATIRUhIzMVIyUzFSMjMxUjIzMVIxUzFSNkASz+1GRkZAGQZGRkZGRkZGRkZAMg"
+    "ZGRkyGTIZGQABAAA/5wB9AMgAAMABwATABcAABMhFSEjMxEjATMRIREzETMRIzUzASEVIWQB"
+    "LP7UZGRkAZBk/tRkZGRk/tQBLP7UAyBk/UQCvP2oAZD+1AEsZP2oZAAEAAAAAAH0AyAAAwAL"
+    "AA8AEwAAEzMVIyMzFTM1MxEhIzMRIwEzESPIZGRkZGRk/tRkZGQBkGRkAyDIyMj+1P7UASz+"
+    "1AAAAwAAAAAB9AMgAAsADwATAAARIRUhFSEVIREhFSEBMxUjFTMRIwGQ/tQBLP7UASz+cAGQ"
+    "ZGRkZAMgZMhk/tRkArzIZP7UAAUAAAAAAfQDIAADAAcACwAPABMAABMhFSEjMxEjATMVIxEz"
+    "FSMhIRUhZAEs/tRkZGQBkGRkZGT+1AEs/tQDIGT9qAJYZP5wZGQAAgAAAAAB9AMgAAcACwAA"
+    "ESEVIREhFSEBMxEjAZD+1AEs/nABkGRkAyBk/ahkArz9qAABAAAAAAH0AyAACwAAESEVIRUh"
+    "FSERIRUhAfT+cAEs/tQBkP4MAyBkyGT+1GQAAQAAAAAB9AMgAAkAABEhFSEVIRUhESMB9P5w"
+    "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"
+    "MzMVIyMzESMjMxUjZMjIyGRkZGRkZGRkyMjIA4Rk/tRk/nBkAAUAAADIAfQB9AADAAcACwAP"
+    "ABMAABMzFSMjMxUjNzMVIzczFSMjMxUjZGRkZGRkyGRkyGRkZGRkAfRkZGRkZGRkAAAAAAAJ"
+    "AHIAAwABBAkAAABiAAAAAwABBAkAAQA4AGIAAwABBAkAAgAOAJoAAwABBAkAAwBeAKgAAwAB"
+    "BAkABABIAQYAAwABBAkABQAUAU4AAwABBAkABgBIAWIAAwABBAkADQCWAaoAAwABBAkADgCI"
+    "AkAAQwBvAHAAeQByAGkAZwBoAHQAIAAoAGMAKQAgADIAMAAyADIALAAgAFQAYQBrAFcAbwBs"
+    "AGYAIAAoAGgAdAB0AHAAcwA6AC8ALwB0AGEAawB3AG8AbABmAC4AYwBvAG0AKQBGAHUAcwBp"
+    "AG8AbgAgAFAAaQB4AGUAbAAgADEAMgBwAHgAIABNAG8AbgBvACAAbABhAHQAaQBuAFIAZQBn"
+    "AHUAbABhAHIARgB1AHMAaQBvAG4ALQBQAGkAeABlAGwALQAxADIAcAB4AC0ATQBvAG4AbwAt"
+    "AGwAYQB0AGkAbgAtAFIAZQBnAHUAbABhAHIAOwAyADAAMgA2AC4AMAA5AC4AMAAxAEYAdQBz"
+    "AGkAbwBuACAAUABpAHgAZQBsACAAMQAyAHAAeAAgAE0AbwBuAG8AIABsAGEAdABpAG4AIABS"
+    "AGUAZwB1AGwAYQByADIAMAAyADYALgAwADkALgAwADEARgB1AHMAaQBvAG4ALQBQAGkAeABl"
+    "AGwALQAxADIAcAB4AC0ATQBvAG4AbwAtAGwAYQB0AGkAbgAtAFIAZQBnAHUAbABhAHIAVABo"
+    "AGkAcwAgAEYAbwBuAHQAIABTAG8AZgB0AHcAYQByAGUAIABpAHMAIABsAGkAYwBlAG4AcwBl"
+    "AGQAIAB1AG4AZABlAHIAIAB0AGgAZQAgAFMASQBMACAATwBwAGUAbgAgAEYAbwBuAHQAIABM"
+    "AGkAYwBlAG4AcwBlACwAIABWAGUAcgBzAGkAbwBuACAAMQAuADEAaAB0AHQAcABzADoALwAv"
+    "AGcAaQB0AGgAdQBiAC4AYwBvAG0ALwBUAGEAawBXAG8AbABmAC8AZgB1AHMAaQBvAG4ALQBw"
+    "AGkAeABlAGwALQBmAG8AbgB0AC8AYgBsAG8AYgAvAG0AYQBzAHQAZQByAC8ATABJAEMARQBO"
+    "AFMARQAtAE8ARgBMAAAAAwAAAAAAAP84AGQAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
+// clang-format on
+
+// Registered for the life of the process and torn down beside the factory.
+static IDWriteFontFileLoader* g_fontLoader = nullptr;
+static IDWriteFontCollection* g_embeddedFonts = nullptr;
+static std::vector<BYTE> g_embeddedFontBytes;
+
+static std::vector<BYTE> DecodeBase64(const char* s, size_t len) {
+    std::vector<BYTE> out;
+    out.reserve(len / 4 * 3);
+    unsigned acc = 0;
+    int bits = 0;
+    for (size_t i = 0; i < len; i++) {
+        char c = s[i];
+        int v;
+        if (c >= 'A' && c <= 'Z') {
+            v = c - 'A';
+        } else if (c >= 'a' && c <= 'z') {
+            v = c - 'a' + 26;
+        } else if (c >= '0' && c <= '9') {
+            v = c - '0' + 52;
+        } else if (c == '+') {
+            v = 62;
+        } else if (c == '/') {
+            v = 63;
+        } else {
+            continue;   // padding, and any whitespace that creeps in
+        }
+        acc = (acc << 6) | (unsigned)v;
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            out.push_back((BYTE)((acc >> bits) & 0xFF));
+        }
+    }
+    return out;
+}
+
+// Turns the bytes above into a private font collection. This needs the
+// Windows 10 in memory font loader; on anything older it returns null and the
+// readout falls back to a stock face, which is why none of it is fatal.
+static IDWriteFontCollection* BuildEmbeddedFonts() {
+    IDWriteFactory5* f5 = nullptr;
+    if (!g_dwrite ||
+        FAILED(g_dwrite->QueryInterface(kIID_IDWriteFactory5, (void**)&f5)) ||
+        !f5) {
+        return nullptr;
+    }
+
+    g_embeddedFontBytes =
+        DecodeBase64(kEmbeddedFontB64, ARRAYSIZE(kEmbeddedFontB64) - 1);
+
+    IDWriteInMemoryFontFileLoader* loader = nullptr;
+    IDWriteFontFile* file = nullptr;
+    IDWriteFontSetBuilder1* builder = nullptr;
+    IDWriteFontSet* set = nullptr;
+    IDWriteFontCollection1* collection = nullptr;
+    IDWriteFontCollection* result = nullptr;
+
+    if (SUCCEEDED(f5->CreateInMemoryFontFileLoader(&loader)) &&
+        SUCCEEDED(g_dwrite->RegisterFontFileLoader(loader))) {
+        // The loader has to outlive every font file it hands out, so the
+        // teardown below owns it rather than this function.
+        g_fontLoader = loader;
+        if (SUCCEEDED(loader->CreateInMemoryFontFileReference(
+                g_dwrite, g_embeddedFontBytes.data(),
+                (UINT32)g_embeddedFontBytes.size(), nullptr, &file)) &&
+            SUCCEEDED(f5->CreateFontSetBuilder(&builder)) &&
+            SUCCEEDED(builder->AddFontFile(file)) &&
+            SUCCEEDED(builder->CreateFontSet(&set)) &&
+            SUCCEEDED(f5->CreateFontCollectionFromFontSet(set, &collection))) {
+            result = collection;
+            collection = nullptr;
+        }
+    } else {
+        SafeRelease(&loader);
+    }
+
+    SafeRelease(&collection);
+    SafeRelease(&set);
+    SafeRelease(&builder);
+    SafeRelease(&file);
+    f5->Release();
+    return result;
+}
+
+static void ReleaseEmbeddedFonts() {
+    SafeRelease(&g_embeddedFonts);
+    if (g_fontLoader) {
+        if (g_dwrite) {
+            g_dwrite->UnregisterFontFileLoader(g_fontLoader);
+        }
+        g_fontLoader->Release();
+        g_fontLoader = nullptr;
+    }
+    g_embeddedFontBytes.clear();
+    g_embeddedFontBytes.shrink_to_fit();
+}
+
 // The readout text is built in one place so the fitting pass below can measure
 // every combination the mod is ever able to show.
 static std::wstring HudTextFor(int style, int amount, float param,
@@ -1782,11 +2159,13 @@ static std::wstring HudTextFor(int style, int amount, float param,
 // whatever the system locale is. The project ships a family per pixel size,
 // width mode and language rather than a single font, so take whichever of them
 // is installed, preferring the largest grid and the monospaced cut. None of
-// this is required: with none of them present the readout falls back to a
-// stock face.
+// this is required: with none of them present the mod falls back to the copy
+// embedded below, and to a stock face if even that cannot be loaded.
 struct HudFont {
     std::wstring family = L"Consolas";
     int pixelSize = 0;   // 0 when the fallback face is in use
+    // null for anything the system already knows about
+    IDWriteFontCollection* collection = nullptr;
 };
 
 static bool FindPixelFamily(IDWriteFontCollection* sys, HudFont* out) {
@@ -1830,7 +2209,16 @@ static const HudFont& HudFontOnce() {
         FindPixelFamily(sys, &g_hudFont);
         sys->Release();
     }
-    Wh_Log(L"readout font: %s", g_hudFont.family.c_str());
+    if (g_hudFont.pixelSize == 0) {
+        g_embeddedFonts = BuildEmbeddedFonts();
+        if (g_embeddedFonts) {
+            g_hudFont.family = kEmbeddedFontFamily;
+            g_hudFont.pixelSize = kEmbeddedFontGrid;
+            g_hudFont.collection = g_embeddedFonts;
+        }
+    }
+    Wh_Log(L"readout font: %s%s", g_hudFont.family.c_str(),
+           g_hudFont.collection ? L" (embedded)" : L"");
     return g_hudFont;
 }
 
@@ -2043,8 +2431,9 @@ void Overlay::CreateHudFormat() {
     float widest = 0;
     IDWriteTextFormat* probe = nullptr;
     if (SUCCEEDED(g_dwrite->CreateTextFormat(
-            font.family.c_str(), nullptr, weight, DWRITE_FONT_STYLE_NORMAL,
-            DWRITE_FONT_STRETCH_NORMAL, kRef, L"", &probe))) {
+            font.family.c_str(), font.collection, weight,
+            DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, kRef, L"",
+            &probe))) {
         for (int st = 0; st < kStyleCount; st++) {
             for (int am = 0; am < kAmountCount; am++) {
                 for (int pal = 0; pal < kPaletteCount; pal++) {
@@ -2090,8 +2479,9 @@ void Overlay::CreateHudFormat() {
     px = std::max(8.0f, px);
 
     if (FAILED(g_dwrite->CreateTextFormat(
-            font.family.c_str(), nullptr, weight, DWRITE_FONT_STYLE_NORMAL,
-            DWRITE_FONT_STRETCH_NORMAL, px, L"", &hudFormat_))) {
+            font.family.c_str(), font.collection, weight,
+            DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, px, L"",
+            &hudFormat_))) {
         hudFormat_ = nullptr;   // the readout is optional, never fatal
         return;
     }
@@ -3238,6 +3628,9 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         CloseHandle(g_toggleEvent);
         g_toggleEvent = nullptr;
     }
+    ReleaseEmbeddedFonts();
+    g_hudFontResolved = false;
+    g_hudFont = HudFont();
     SafeRelease(&g_dwrite);
     SafeRelease(&g_factory);
     SetThreadExecutionState(ES_CONTINUOUS);
