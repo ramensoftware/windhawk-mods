@@ -2,7 +2,7 @@
 // @id              wobbly-windows
 // @name            Wobbly Windows
 // @description     The classic Compiz/KDE Plasma style Wobbly Windows effect for Windows 11!
-// @version         0.85
+// @version         0.94
 // @author          lalimatyus
 // @github          https://github.com/lalimatyus
 // @include         dwm.exe
@@ -42,8 +42,9 @@ initialize instead of using unverified addresses.
 * ARM64 isn't supported yet; the mod safely refuses to initialize on ARM64 systems.
 * If DWM stops servicing its scene thread while the mod is being disabled or updated,
   a transformed window can remain deformed until DWM recreates its visual.
+  Try minimizing and restoring or reopening the affected window to recover.
 * Some windows may show blur, ghosting, or temporary artifacts along their thin borders during wobble animations.
-  These effects can be more noticeable on high-refresh-rate displays.
+These effects can be more noticeable on high-refresh-rate displays.
 
 ## Feedback
 
@@ -86,7 +87,7 @@ The physics presets and edge-locking behavior are based on KDE Plasma/KWin's Wob
 
   - Drag: 90
     $name: Drag
-    $description: Custom movement damping. 1-100
+    $description: Velocity retention. Higher values mean less damping. 1-100
 
   - MoveFactor: 10
     $name: Move Factor
@@ -116,7 +117,7 @@ The physics presets and edge-locking behavior are based on KDE Plasma/KWin's Wob
 
 BOOL Wh_ModInit()
 {
-    Wh_Log(L"Wobbly Windows: ARM64 isn't supported");
+    Wh_Log(L"ARM64 isn't supported");
     return FALSE;
 }
 
@@ -159,6 +160,8 @@ struct WobblePoint
 static constexpr int GRID_WIDTH = 4;
 static constexpr int GRID_HEIGHT = 4;
 static constexpr int GRID_POINT_COUNT = GRID_WIDTH * GRID_HEIGHT;
+static constexpr double MAX_PHYSICS_STEP_MS = 10.0;
+static constexpr double MAX_VELOCITY_RETENTION = 0.99;
 
 struct WobbleMesh
 {
@@ -370,7 +373,7 @@ CTopLevelWindow3DDestructor_t g_topLevelWindow3DDestructorOriginal = nullptr;
 using CTopLevelWindowDestructor_t = void(__cdecl*)(void* pThis);
 CTopLevelWindowDestructor_t g_topLevelWindowDestructorOriginal = nullptr;
 using EnsureTopLevelWindow_t = long(__cdecl*)(void* pThis, void* windowData);
-EnsureTopLevelWindow_t g_ensureTopLevelWindowFunction = nullptr;
+EnsureTopLevelWindow_t g_ensureTopLevelWindowOriginal = nullptr;
 std::atomic<void*> g_desktopManagerVtable = nullptr;
 std::atomic<void*> g_windowListVtable = nullptr;
 std::atomic<void*> g_compositorVtable = nullptr;
@@ -613,7 +616,6 @@ struct WindowAnimationSlot
     ULONGLONG order;
     HWND hwnd;
     WobblySettings settings;
-    WobbleMesh previousMesh;
     WobbleMesh mesh;
     void* matrixTransformProxy;
     void* boundTopLevelVisualProxy;
@@ -637,6 +639,15 @@ thread_local bool g_insideWobblyScenePass = false;
 WindowAnimationSlot g_animationSlots[MAX_ANIMATION_SLOTS] = {};
 SRWLOCK g_animationSlotsLock = SRWLOCK_INIT;
 CONDITION_VARIABLE g_animationSlotsCondition = CONDITION_VARIABLE_INIT;
+
+static void ReleaseAnimationSlotPinLocked(WindowAnimationSlot& slot)
+{
+    if (slot.hookUsers > 0 && --slot.hookUsers == 0)
+    {
+        WakeAllConditionVariable(&g_animationSlotsCondition);
+    }
+}
+
 int g_dragAnimationSlot = -1;
 ULONGLONG g_animationOrderCounter = 0;
 std::atomic_bool g_unloading = false;
@@ -673,7 +684,8 @@ static void __cdecl DesktopManagerHandleThreadMessageHook(UINT message,
 static long __cdecl EnsureTopLevelWindowHook(void* pThis, void* windowData);
 static void __cdecl TopLevelWindowDestructorHook(void* pThis);
 static void __cdecl TopLevelWindow3DDestructorHook(void* pThis);
-static void ApplyAnimationSlotTransform(int slotIndex, double interpolationAlpha);
+static void ApplyAnimationSlotTransform(int slotIndex, bool identityOnly = false);
+static void RestorePendingAnimationIdentities();
 static void FinalizeRetiringSlots();
 static void EnsurePendingMatrixTransformProxies();
 static bool HasAnyAnimationSlots();
@@ -1116,6 +1128,7 @@ static bool IsAddressRangeWithin(const void* address, size_t size, const BYTE* b
 
 static bool IsReadableMemory(const void* address, size_t size)
 {
+    // Page accessibility only, not object lifetime; destructor hooks invalidate caches.
     if (!address || size == 0)
     {
         return false;
@@ -2260,7 +2273,7 @@ static void __cdecl WindowDataDestructorHook(void* pThis)
 
 static long __cdecl EnsureTopLevelWindowHook(void* pThis, void* windowData)
 {
-    long result = g_ensureTopLevelWindowFunction(pThis, windowData);
+    long result = g_ensureTopLevelWindowOriginal(pThis, windowData);
     if (result >= 0 && windowData &&
         HasExactDwmVtableTrusted(pThis, g_windowListVtable))
     {
@@ -2291,8 +2304,9 @@ static void __cdecl TopLevelWindow3DDestructorHook(void* pThis)
     g_topLevelWindow3DDestructorOriginal(pThis);
 }
 
-static void DropAnimationSlotsForSceneChange()
+static void DropAnimationSlotsForStoppedSceneThread()
 {
+    // Only called after the old owner stopped; its scene-only pins cannot return.
     unsigned int droppedSlots = 0;
     unsigned int retainedProxies = 0;
     AcquireSRWLockExclusive(&g_animationSlotsLock);
@@ -2358,7 +2372,7 @@ static bool RegisterDwmSceneThread(bool authoritative)
                                                        std::memory_order_acq_rel,
                                                        std::memory_order_acquire))
         {
-            DropAnimationSlotsForSceneChange();
+            DropAnimationSlotsForStoppedSceneThread();
             ClearAllDwmWindowMappings();
             g_dwmThreadMismatchLogged.store(false, std::memory_order_release);
             g_desktopManager.store(nullptr, std::memory_order_release);
@@ -2668,7 +2682,7 @@ static bool InitializeDwmHooks()
         {{L"private: long __cdecl CWindowList::EnsureTopLevelWindow(class CWindowData *)",
           L"?EnsureTopLevelWindow@CWindowList@@"
            L"AEAAJPEAVCWindowData@@@Z"},
-         &g_ensureTopLevelWindowFunction,
+         &g_ensureTopLevelWindowOriginal,
          EnsureTopLevelWindowHook,
          true},
         {{L"protected: virtual __cdecl CTopLevelWindow3D::~CTopLevelWindow3D(void)",
@@ -2821,7 +2835,7 @@ static bool InitializeDwmHooks()
         {L"CTopLevelWindow::~CTopLevelWindow",
          reinterpret_cast<void*>(g_topLevelWindowDestructorOriginal)},
         {L"CWindowList::EnsureTopLevelWindow",
-         reinterpret_cast<void*>(g_ensureTopLevelWindowFunction)}};
+         reinterpret_cast<void*>(g_ensureTopLevelWindowOriginal)}};
     bool missingCoreFunction = false;
     for (const RequiredDwmFunction& function : requiredFunctions)
     {
@@ -2923,7 +2937,7 @@ static bool InitializeDwmHooks()
     }
     size_t pairedTopLevelWindowOffset = SIZE_MAX;
     size_t pairedTopLevelWindow3DOffset = SIZE_MAX;
-    if (FindWindowDataTopLevelOffsets(reinterpret_cast<void*>(g_ensureTopLevelWindowFunction),
+    if (FindWindowDataTopLevelOffsets(reinterpret_cast<void*>(g_ensureTopLevelWindowOriginal),
                                       &pairedTopLevelWindowOffset,
                                       &pairedTopLevelWindow3DOffset) &&
         pairedTopLevelWindowOffset == g_windowDataTopLevelWindowOffset)
@@ -2979,7 +2993,7 @@ static bool InitializeDwmHooks()
 
 static void BindPendingAnimationSlotTransforms(bool validateCurrentVisuals)
 {
-    if (!IsOnDwmSceneThread())
+    if (!IsOnDwmSceneThread() || g_unloading.load(std::memory_order_acquire))
     {
         return;
     }
@@ -3057,8 +3071,9 @@ static void BindPendingAnimationSlotTransforms(bool validateCurrentVisuals)
         }
         else
         {
+            // Already-open/desktop-restored windows can need lazy scene initialization.
             if (!ResolveDwmWindowObjects(windowData, &topLevelWindow, &topLevelWindow3D) &&
-                g_ensureTopLevelWindowFunction(windowList, windowData) >= 0)
+                g_ensureTopLevelWindowOriginal(windowList, windowData) >= 0)
             {
                 ResolveDwmWindowObjects(windowData, &topLevelWindow, &topLevelWindow3D);
             }
@@ -3159,14 +3174,7 @@ static void BindPendingAnimationSlotTransforms(bool validateCurrentVisuals)
                 currentSlot.boundTransitionVisualProxy = nullptr;
             }
         }
-        if (currentSlot.hookUsers > 0)
-        {
-            currentSlot.hookUsers--;
-            if (currentSlot.hookUsers == 0)
-            {
-                WakeAllConditionVariable(&g_animationSlotsCondition);
-            }
-        }
+        ReleaseAnimationSlotPinLocked(currentSlot);
         ReleaseSRWLockExclusive(&g_animationSlotsLock);
         if (logBinding)
         {
@@ -3224,7 +3232,8 @@ static void BackfillExistingDwmWindowMappings()
         void* topLevelWindow = nullptr;
         void* topLevelWindow3D = nullptr;
         bool mapped = ResolveDwmWindowObjects(windowData, &topLevelWindow, &topLevelWindow3D);
-        if (!mapped && g_ensureTopLevelWindowFunction(windowList, windowData) >= 0)
+        // As in binding, initialize only verified window data on its scene owner.
+        if (!mapped && g_ensureTopLevelWindowOriginal(windowList, windowData) >= 0)
         {
             mapped = ResolveDwmWindowObjects(windowData, &topLevelWindow, &topLevelWindow3D);
         }
@@ -3257,13 +3266,16 @@ static void SubmitPendingWobblySceneWork()
     g_sceneWakeScheduled.store(false, std::memory_order_release);
     g_sceneWakePostTimestamp.store(0, std::memory_order_release);
     g_scenePassCounter.fetch_add(1, std::memory_order_release);
-    BackfillExistingDwmWindowMappings();
-    // Private compositor resources live only on the verified scene thread.
-    EnsurePendingMatrixTransformProxies();
-    // Submit immutable physics revisions on the scene thread.
-    for (int i = 0; i < MAX_ANIMATION_SLOTS; i++)
+    // Restore retiring/quiet windows before discovery, creation or normal rendering.
+    RestorePendingAnimationIdentities();
+    if (!g_unloading.load(std::memory_order_acquire))
     {
-        ApplyAnimationSlotTransform(i, 1.0);
+        BackfillExistingDwmWindowMappings();
+        EnsurePendingMatrixTransformProxies();
+        for (int i = 0; i < MAX_ANIMATION_SLOTS; i++)
+        {
+            ApplyAnimationSlotTransform(i);
+        }
     }
     FinalizeRetiringSlots();
     g_sceneSubmittedSerial.store(submittedThrough, std::memory_order_release);
@@ -3276,7 +3288,7 @@ static void SubmitPendingWobblySceneWork()
     // Wake again if the worker published a newer matrix.
     if (g_sceneRequestedSerial.load(std::memory_order_acquire) > submittedThrough)
     {
-        PostPendingDwmSceneWake(false);
+        PostPendingDwmSceneWake(g_unloading.load(std::memory_order_acquire));
     }
 }
 
@@ -3439,6 +3451,7 @@ static void __cdecl DesktopManagerHandleThreadMessageHook(UINT message,
     }
     else
     {
+        // Startup may not have a WindowList yet; wake native animation discovery.
         void* manager = g_desktopManager.load(std::memory_order_acquire);
         if (HasExactDwmVtableTrusted(manager, g_desktopManagerVtable) &&
             g_desktopManagerPostStartAnimations)
@@ -3453,11 +3466,6 @@ static void __cdecl DesktopManagerHandleThreadMessageHook(UINT message,
     }
     g_insideWobblyScenePass = false;
     acknowledgeWake();
-}
-
-static double Lerp(double a, double b, double t)
-{
-    return a + (b - a) * t;
 }
 
 static double SmoothSymmetricCompression(double value, double referenceRange)
@@ -3648,7 +3656,7 @@ static void ApplyWindowStateThrob(WobbleMesh& mesh, bool maximizing, bool seedIn
     }
     direction.x /= directionLength;
     direction.y /= directionLength;
-    double dragRatio = std::clamp(settings.drag / 100.0, 0.01, 0.99);
+    double dragRatio = std::clamp(settings.drag / 100.0, 0.01, MAX_VELOCITY_RETENTION);
     double moveRatio = std::clamp(settings.moveFactor / 100.0, 0.01, 0.25);
     double stiffnessProgress = std::clamp((15.0 - settings.stiffness) / 14.0, 0.0, 1.0);
     double dragProgress = std::clamp((settings.drag - 80.0) / 17.0, 0.0, 1.0);
@@ -3816,11 +3824,10 @@ static void CalculateMeshForces(WobbleMesh& mesh, const WobblySettings& settings
     SmoothMeshField(mesh, false);
 }
 
-static bool SimulateMeshStep(WobbleMesh& mesh, const WobblySettings& settings, double deltaTime)
+static void SimulateMeshSubstep(WobbleMesh& mesh, const WobblySettings& settings,
+                               double deltaTimeMilliseconds, double drag)
 {
     CalculateMeshForces(mesh, settings);
-    double deltaTimeMilliseconds = std::clamp(deltaTime * 1000.0, 0.0, 10.0);
-    double drag = std::clamp(settings.drag / 100.0, 0.01, 1.0);
     double accelerationSum = 0.0;
     for (int i = 0; i < GRID_POINT_COUNT; i++)
     {
@@ -3852,6 +3859,35 @@ static bool SimulateMeshStep(WobbleMesh& mesh, const WobblySettings& settings, d
     }
     ApplyResizeConstraints(mesh);
     mesh.active = !(accelerationSum < 0.5 && velocitySum < 0.5);
+}
+
+static double GetMaximumPhysicsStep(const WobblySettings& settings)
+{
+    double stiffness = std::clamp(settings.stiffness / 100.0, 0.01, 1.0);
+    double moveFactor = std::clamp(settings.moveFactor / 100.0, 0.01, 0.25);
+    double drag = std::clamp(settings.drag / 100.0, 0.01, MAX_VELOCITY_RETENTION);
+    // Conservative spring-step bound; all five presets retain the legacy step.
+    return std::min(MAX_PHYSICS_STEP_MS, std::sqrt(0.9 * (1.0 + drag) / (stiffness * moveFactor)));
+}
+
+static bool SimulateMeshStep(WobbleMesh& mesh, const WobblySettings& settings, double deltaTime)
+{
+    if (!std::isfinite(deltaTime) || deltaTime <= 0.0)
+    {
+        return mesh.active;
+    }
+    double milliseconds = std::min(deltaTime * 1000.0, MAX_PHYSICS_STEP_MS);
+    int substeps = static_cast<int>(std::ceil(milliseconds / GetMaximumPhysicsStep(settings)));
+    double drag = std::clamp(settings.drag / 100.0, 0.01, MAX_VELOCITY_RETENTION);
+    if (substeps > 1)
+    {
+        // Subdivision must not multiply the damping selected by the user.
+        drag = std::pow(drag, 1.0 / static_cast<double>(substeps));
+    }
+    for (int i = 0; i < substeps; i++)
+    {
+        SimulateMeshSubstep(mesh, settings, milliseconds / static_cast<double>(substeps), drag);
+    }
     return mesh.active;
 }
 
@@ -3891,7 +3927,6 @@ static bool ReplaceAnimationWithStateThrob(WindowAnimationSlot& slot, int width,
     slot.generation++;
     InitializeMesh(slot.mesh, static_cast<double>(width), static_cast<double>(height));
     ApplyWindowStateThrob(slot.mesh, maximizing, true, slot.settings, direction);
-    slot.previousMesh = slot.mesh;
     slot.dragging = false;
     slot.freeStepPending = true;
     slot.windowStateThrob = true;
@@ -4219,7 +4254,6 @@ static void FinalizeRetiringSlots()
         ReleaseSRWLockExclusive(&g_animationSlotsLock);
         if (matrixTransformProxy && IsOnDwmSceneThread())
         {
-            ResetMatrixTransformProxy(matrixTransformProxy);
             if (g_cBaseObjectRelease)
             {
                 // SetTransform(nullptr) isn't a valid detach operation on the
@@ -4508,7 +4542,7 @@ static bool CreateMatrixTransformProxy(void** matrixTransformProxy)
 
 static void EnsurePendingMatrixTransformProxies()
 {
-    if (!IsOnDwmSceneThread())
+    if (!IsOnDwmSceneThread() || g_unloading.load(std::memory_order_acquire))
     {
         return;
     }
@@ -4565,14 +4599,7 @@ static void EnsurePendingMatrixTransformProxies()
                 currentSlot.generation++;
             }
         }
-        if (currentSlot.hookUsers > 0)
-        {
-            currentSlot.hookUsers--;
-            if (currentSlot.hookUsers == 0)
-            {
-                WakeAllConditionVariable(&g_animationSlotsCondition);
-            }
-        }
+        ReleaseAnimationSlotPinLocked(currentSlot);
         ReleaseSRWLockExclusive(&g_animationSlotsLock);
         if (matrixTransformProxy && !stored)
         {
@@ -4759,7 +4786,6 @@ static int AcquireAnimationSlot(HWND hwnd, const WobblySettings& settings, doubl
                 }
             }
             BeginDrag(slot.mesh, mousePosition);
-            slot.previousMesh = slot.mesh;
             slot.dragging = true;
             slot.freeStepPending = false;
             slot.nextWindowValidation = GetTickCount64() + 250;
@@ -4798,7 +4824,6 @@ static int AcquireAnimationSlot(HWND hwnd, const WobblySettings& settings, doubl
             slot.windowStateThrob = false;
         }
         BeginDrag(slot.mesh, mousePosition);
-        slot.previousMesh = slot.mesh;
         slot.transformAttached = false;
         slot.transitionTransformAttached = false;
         slot.boundTopLevelVisualProxy = nullptr;
@@ -4851,7 +4876,6 @@ static int AcquireAnimationSlot(HWND hwnd, const WobblySettings& settings, doubl
     slot.order = ++g_animationOrderCounter;
     slot.hwnd = hwnd;
     slot.settings = settings;
-    slot.previousMesh = mesh;
     slot.mesh = mesh;
     slot.matrixTransformProxy = nullptr;
     slot.boundTopLevelVisualProxy = nullptr;
@@ -4931,7 +4955,6 @@ static void HandleMoveSizeStart(HWND hwnd)
     if (dragSlot.active && dragSlot.hwnd == hwnd)
     {
         SetMeshResizeMode(dragSlot.mesh, operationTypeKnown && operationResizing);
-        dragSlot.previousMesh = dragSlot.mesh;
         // A new move loop may replace the visual transform.
         dragSlot.transformRebindRevision++;
         dragSlot.meshRevision++;
@@ -4966,7 +4989,7 @@ static void HandleMoveSizeStart(HWND hwnd)
     RequestDwmScenePass();
 }
 
-static void ApplyAnimationSlotTransform(int slotIndex, double interpolationAlpha)
+static void ApplyAnimationSlotTransform(int slotIndex, bool identityOnly)
 {
     if (!IsOnDwmSceneThread() || slotIndex < 0 || slotIndex >= MAX_ANIMATION_SLOTS)
     {
@@ -4979,7 +5002,6 @@ static void ApplyAnimationSlotTransform(int slotIndex, double interpolationAlpha
         HWND hwnd;
         void* matrixTransformProxy;
         WobbleMesh mesh;
-        Vec2 previousPositions[GRID_POINT_COUNT];
     } snapshot = {};
     bool identityUpdate = false;
     AcquireSRWLockExclusive(&g_animationSlotsLock);
@@ -4988,18 +5010,23 @@ static void ApplyAnimationSlotTransform(int slotIndex, double interpolationAlpha
     if ((slot.active || slot.retiring) && slot.matrixTransformProxy &&
         HasMatrixTransformUpdate() &&
         (slot.retiring || slot.meshIdentityPending ||
-         slot.meshRevision != slot.submittedMeshRevision))
+         slot.meshRevision != slot.submittedMeshRevision ||
+         g_unloading.load(std::memory_order_acquire)) &&
+        (!identityOnly ||
+         ((!slot.identityApplied || slot.meshIdentityPending) &&
+          (slot.retiring || slot.meshIdentityPending || !slot.mesh.active ||
+           g_unloading.load(std::memory_order_acquire)))))
     {
         snapshot.generation = slot.generation;
         snapshot.meshRevision = slot.meshRevision;
         snapshot.hwnd = slot.hwnd;
         snapshot.matrixTransformProxy = slot.matrixTransformProxy;
-        snapshot.mesh = slot.mesh;
-        for (int i = 0; i < GRID_POINT_COUNT; i++)
+        identityUpdate = slot.retiring || slot.meshIdentityPending || !slot.mesh.active ||
+                         g_unloading.load(std::memory_order_acquire);
+        if (!identityUpdate)
         {
-            snapshot.previousPositions[i] = slot.previousMesh.points[i].position;
+            snapshot.mesh = slot.mesh;
         }
-        identityUpdate = slot.retiring || slot.meshIdentityPending || !slot.mesh.active;
         // Pin the slot while calling its proxy outside the lock.
         slot.hookUsers++;
     }
@@ -5035,14 +5062,7 @@ static void ApplyAnimationSlotTransform(int slotIndex, double interpolationAlpha
                 }
             }
         }
-        if (currentSlot.hookUsers > 0)
-        {
-            currentSlot.hookUsers--;
-        }
-        if (currentSlot.hookUsers == 0)
-        {
-            WakeAllConditionVariable(&g_animationSlotsCondition);
-        }
+        ReleaseAnimationSlotPinLocked(currentSlot);
         ReleaseSRWLockExclusive(&g_animationSlotsLock);
         if (logFailure)
         {
@@ -5063,17 +5083,11 @@ static void ApplyAnimationSlotTransform(int slotIndex, double interpolationAlpha
         finishUpdate(E_INVALIDARG, false);
         return;
     }
-    interpolationAlpha = std::clamp(interpolationAlpha, 0.0, 1.0);
-    Vec2 renderedPositions[GRID_POINT_COUNT] = {};
     Vec2 renderedCenter = {};
     for (int i = 0; i < GRID_POINT_COUNT; i++)
     {
-        const Vec2& previousPosition = snapshot.previousPositions[i];
-        const Vec2& currentPosition = snapshot.mesh.points[i].position;
-        renderedPositions[i] = {Lerp(previousPosition.x, currentPosition.x, interpolationAlpha),
-                                Lerp(previousPosition.y, currentPosition.y, interpolationAlpha)};
-        renderedCenter.x += renderedPositions[i].x;
-        renderedCenter.y += renderedPositions[i].y;
+        renderedCenter.x += snapshot.mesh.points[i].position.x;
+        renderedCenter.y += snapshot.mesh.points[i].position.y;
     }
     renderedCenter.x /= static_cast<double>(GRID_POINT_COUNT);
     renderedCenter.y /= static_cast<double>(GRID_POINT_COUNT);
@@ -5089,8 +5103,8 @@ static void ApplyAnimationSlotTransform(int slotIndex, double interpolationAlpha
         const Vec2& basePosition = snapshot.mesh.points[i].basePosition;
         double baseX = basePosition.x - baseCenter.x;
         double baseY = basePosition.y - baseCenter.y;
-        double renderedX = renderedPositions[i].x - renderedCenter.x;
-        double renderedY = renderedPositions[i].y - renderedCenter.y;
+        double renderedX = snapshot.mesh.points[i].position.x - renderedCenter.x;
+        double renderedY = snapshot.mesh.points[i].position.y - renderedCenter.y;
         denominatorX += baseX * baseX;
         denominatorY += baseY * baseY;
         numeratorXX += baseX * renderedX;
@@ -5157,7 +5171,7 @@ static void ApplyAnimationSlotTransform(int slotIndex, double interpolationAlpha
             for (int x = 0; x < GRID_WIDTH; x++)
             {
                 double weight = basisX[x] * basisY[y];
-                const Vec2& position = renderedPositions[GetPointIndex(x, y)];
+                const Vec2& position = snapshot.mesh.points[GetPointIndex(x, y)].position;
                 translationRendered.x += position.x * weight;
                 translationRendered.y += position.y * weight;
             }
@@ -5183,10 +5197,23 @@ static void ApplyAnimationSlotTransform(int slotIndex, double interpolationAlpha
     finishUpdate(updateResult, false);
 }
 
+static void RestorePendingAnimationIdentities()
+{
+    if (!IsOnDwmSceneThread())
+    {
+        return;
+    }
+    for (int i = 0; i < MAX_ANIMATION_SLOTS; i++)
+    {
+        ApplyAnimationSlotTransform(i, true);
+    }
+    FinalizeRetiringSlots();
+}
+
 static void StopAllAnimations()
 {
     int slotsToRetire[MAX_ANIMATION_SLOTS] = {};
-    HWND initialSceneWakeWindow = nullptr;
+    bool sceneCleanupNeeded = false;
     int retireCount = 0;
     AcquireSRWLockShared(&g_animationSlotsLock);
     for (int i = 0; i < MAX_ANIMATION_SLOTS; i++)
@@ -5194,57 +5221,55 @@ static void StopAllAnimations()
         if (g_animationSlots[i].active)
         {
             slotsToRetire[retireCount] = i;
-            if (!initialSceneWakeWindow)
-            {
-                initialSceneWakeWindow = g_animationSlots[i].hwnd;
-            }
             retireCount++;
         }
+        sceneCleanupNeeded |= g_animationSlots[i].matrixTransformProxy != nullptr;
     }
     ReleaseSRWLockShared(&g_animationSlotsLock);
     for (int i = 0; i < retireCount; i++)
     {
         RetireAnimationSlot(slotsToRetire[i]);
     }
-    // Repost the existing cleanup serial instead of creating a moving target.
-    if (initialSceneWakeWindow)
+    if (sceneCleanupNeeded)
     {
+        // Publish once even during unload, so native scene ticks can also clean up.
+        g_sceneRequestedSerial.fetch_add(1, std::memory_order_acq_rel);
         PostPendingDwmSceneWake(true);
     }
     ULONGLONG hookWaitDeadline = GetTickCount64() + DWM_UNLOAD_CLEANUP_TIMEOUT_MS;
     bool cleanupTimedOut = false;
     for (;;)
     {
-        bool cleanupPending = false;
-        HWND sceneWakeWindow = nullptr;
+        unsigned int pendingIdentities = 0;
+        unsigned int retainedProxies = 0;
+        unsigned int hookUsers = 0;
         AcquireSRWLockShared(&g_animationSlotsLock);
         for (int i = 0; i < MAX_ANIMATION_SLOTS; i++)
         {
-            if (g_animationSlots[i].hookUsers != 0 ||
-                (g_animationSlots[i].retiring && g_animationSlots[i].matrixTransformProxy))
+            const WindowAnimationSlot& slot = g_animationSlots[i];
+            hookUsers += slot.hookUsers;
+            if (slot.retiring && slot.matrixTransformProxy)
             {
-                cleanupPending = true;
-            }
-            if (!sceneWakeWindow && g_animationSlots[i].retiring &&
-                g_animationSlots[i].matrixTransformProxy)
-            {
-                sceneWakeWindow = g_animationSlots[i].hwnd;
+                retainedProxies++;
+                pendingIdentities += !slot.identityApplied;
             }
         }
         ReleaseSRWLockShared(&g_animationSlotsLock);
         bool wakePending = g_sceneWakeOutstanding.load(std::memory_order_acquire) != 0;
-        if (!cleanupPending && !wakePending)
+        if (!hookUsers && !retainedProxies && !wakePending)
         {
             break;
         }
         ULONGLONG now = GetTickCount64();
         if (now >= hookWaitDeadline)
         {
-            Wh_Log(L"Timed out waiting for DWM animation hooks");
+            Wh_Log(L"DWM cleanup timeout: pendingIdentities=%u retainedProxies=%u "
+                   L"hookUsers=%u wakePending=%d", pendingIdentities, retainedProxies,
+                   hookUsers, wakePending);
             cleanupTimedOut = true;
             break;
         }
-        if (sceneWakeWindow && !wakePending)
+        if (retainedProxies && !wakePending)
         {
             PostPendingDwmSceneWake(true);
         }
@@ -5355,16 +5380,15 @@ static void UpdateAnimationFrame()
         {
             continue;
         }
-        WobbleMesh simulatedMesh = snapshot.mesh;
-        WobbleMesh previousMesh = snapshot.mesh;
+        bool wasMeshActive = snapshot.mesh.active;
+        WobbleMesh& simulatedMesh = snapshot.mesh;
         double remainingMilliseconds = frameMilliseconds;
         bool simulated = false;
         bool freeStepPending = snapshot.freeStepPending;
         while (remainingMilliseconds > 0.0 &&
                (snapshot.dragging || simulatedMesh.active || freeStepPending))
         {
-            double stepMilliseconds = std::min(remainingMilliseconds, 10.0);
-            previousMesh = simulatedMesh;
+            double stepMilliseconds = std::min(remainingMilliseconds, MAX_PHYSICS_STEP_MS);
             bool wobbling =
                 SimulateMeshStep(simulatedMesh, snapshot.settings, stepMilliseconds / 1000.0);
             simulated = true;
@@ -5385,8 +5409,7 @@ static void UpdateAnimationFrame()
         if (currentSlot.active && currentSlot.generation == snapshot.generation)
         {
             bool renderRevisionNeeded =
-                simulatedMesh.active || snapshot.mesh.active != simulatedMesh.active;
-            currentSlot.previousMesh = previousMesh;
+                simulatedMesh.active || wasMeshActive != simulatedMesh.active;
             currentSlot.mesh = simulatedMesh;
             currentSlot.freeStepPending = false;
             if (renderRevisionNeeded)
@@ -5403,7 +5426,7 @@ static void UpdateAnimationFrame()
                 currentSlot.identityApplied = false;
                 currentSlot.meshIdentityPending = false;
             }
-            else if (currentSlot.dragging && (snapshot.mesh.active || !snapshot.identityApplied))
+            else if (currentSlot.dragging && (wasMeshActive || !snapshot.identityApplied))
             {
                 // Keep quiet grabbed state but render identity.
                 currentSlot.meshIdentityPending = true;
@@ -5703,7 +5726,6 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
             UpdateResizeEdges(slot.mesh, g_realDraggedWindowRect, rect);
             ApplyResizeConstraints(slot.mesh);
         }
-        slot.previousMesh = slot.mesh;
         slot.identityApplied = false;
         slot.meshIdentityPending = false;
         slot.meshRevision++;
@@ -5722,7 +5744,6 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
         ApplyWindowStateThrob(slot.mesh, maximizing, true, slot.settings, direction);
         ClearWindowStateThrobConstraints(slot.mesh);
         BeginDrag(slot.mesh, localMousePosition);
-        slot.previousMesh = slot.mesh;
         slot.windowStateThrob = true;
         g_interactiveStateThrob = kind;
         g_interactiveStateThrobDirection = EncodeWindowTransitionDirection(direction);
@@ -5767,28 +5788,18 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
             // Rebase custom-title-bar resize state into local DPI coordinates.
             InitializeMesh(slot.mesh, currentMeshWidth, currentMeshHeight);
             BeginDrag(slot.mesh, localMousePosition);
-            slot.previousMesh = slot.mesh;
             windowDeltaX = 0.0;
             windowDeltaY = 0.0;
         }
         if (!slot.mesh.resizing)
         {
             SetMeshResizeMode(slot.mesh, true);
-            SetMeshResizeMode(slot.previousMesh, true);
         }
         // Preserve screen-space points during top/left resize.
         OffsetMeshPositions(slot.mesh, -windowDeltaX, -windowDeltaY);
-        OffsetMeshPositions(slot.previousMesh, -windowDeltaX, -windowDeltaY);
         UpdateMeshBaseGrid(slot.mesh, currentMeshWidth, currentMeshHeight);
-        UpdateMeshBaseGrid(slot.previousMesh, currentMeshWidth, currentMeshHeight);
         UpdateResizeEdges(slot.mesh, g_realDraggedWindowRect, rect);
-        slot.previousMesh.resizing = slot.mesh.resizing;
-        slot.previousMesh.canWobbleTop = slot.mesh.canWobbleTop;
-        slot.previousMesh.canWobbleLeft = slot.mesh.canWobbleLeft;
-        slot.previousMesh.canWobbleRight = slot.mesh.canWobbleRight;
-        slot.previousMesh.canWobbleBottom = slot.mesh.canWobbleBottom;
         ApplyResizeConstraints(slot.mesh);
-        ApplyResizeConstraints(slot.previousMesh);
     }
     else if (g_interactiveStateThrob != InteractiveStateThrobKind::None &&
              slot.windowStateThrob)
@@ -5798,11 +5809,8 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
         if (sizeChanged)
         {
             ResizeMeshPreservingDeformation(slot.mesh, currentMeshWidth, currentMeshHeight);
-            ResizeMeshPreservingDeformation(slot.previousMesh, currentMeshWidth,
-                                             currentMeshHeight);
         }
         UpdateMeshDragOffset(slot.mesh, localMousePosition);
-        UpdateMeshDragOffset(slot.previousMesh, localMousePosition);
     }
     else if (rebaseMonitorTransition)
     {
@@ -5811,7 +5819,6 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
         InitializeMesh(slot.mesh, static_cast<double>(currentWidth),
                        static_cast<double>(currentHeight));
         BeginDrag(slot.mesh, localMousePosition);
-        slot.previousMesh = slot.mesh;
         slot.windowStateThrob = false;
     }
     else if (sizeChanged)
@@ -5832,12 +5839,10 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
             g_interactiveStateThrobFromPointerEdge = false;
         }
         BeginDrag(slot.mesh, localMousePosition);
-        slot.previousMesh = slot.mesh;
     }
     else
     {
         OffsetMeshPositions(slot.mesh, -windowDeltaX, -windowDeltaY);
-        OffsetMeshPositions(slot.previousMesh, -windowDeltaX, -windowDeltaY);
     }
     slot.mesh.active = true;
     slot.identityApplied = false;
@@ -6699,6 +6704,7 @@ static bool InitializeWindowEventHooks()
         const wchar_t* name;
     };
     constexpr DWORD standardFlags = WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS;
+    // Keep DWM-originated cloak/desktop events; only ordinary events skip our process.
     const HookSpec specs[WINDOW_EVENT_HOOK_COUNT] = {
         {EVENT_SYSTEM_MOVESIZESTART, EVENT_SYSTEM_MOVESIZEEND, standardFlags, L"move/size"},
         {EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, standardFlags, L"location"},
@@ -6707,7 +6713,7 @@ static bool InitializeWindowEventHooks()
         {EVENT_OBJECT_DESTROY, EVENT_OBJECT_DESTROY, standardFlags, L"destroy"},
         {EVENT_SYSTEM_DESKTOPSWITCH, EVENT_SYSTEM_DESKTOPSWITCH, WINEVENT_OUTOFCONTEXT,
          L"virtual desktop"},
-        {EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED, WINEVENT_OUTOFCONTEXT, L"window cloak"},
+        {EVENT_OBJECT_CLOAKED, EVENT_OBJECT_CLOAKED, WINEVENT_OUTOFCONTEXT, L"window cloak"},
     };
     for (int i = 0; i < WINDOW_EVENT_HOOK_COUNT; i++)
     {
@@ -6789,7 +6795,7 @@ static DWORD WINAPI WindowEventThreadProc(LPVOID)
         return 1;
     }
     DisableAnimationThreadPowerThrottling();
-    Wh_Log(L"Animation clock: refresh-synchronized high-resolution timer, EcoQoS disabled");
+    Wh_Log(L"Animation clock: display-rate-adapted high-resolution timer, EcoQoS disabled");
     if (!InitializeWindowEventHooks())
     {
         Wh_Log(L"Window event thread: hook initialization failed");
@@ -7048,7 +7054,7 @@ static void LoadSettings()
     AcquireSRWLockExclusive(&g_settingsLock);
     g_settings = settings;
     ReleaseSRWLockExclusive(&g_settingsLock);
-    Wh_Log(L"Wobbly Windows settings: "
+    Wh_Log(L"Settings: "
            L"WobblinessPreset=%d, "
            L"Advanced=%d, "
            L"ResizeWobble=%d, "
@@ -7070,7 +7076,7 @@ BOOL Wh_ModInit()
         RegisterWindowMessageW(L"Windhawk.WobblyWindows.DwmSceneWake");
     if (g_dwmSceneWakeMessage == 0)
     {
-        Wh_Log(L"Wobbly Windows: failed to register DWM scene wake message");
+        Wh_Log(L"Failed to register DWM scene wake message");
         return FALSE;
     }
     g_desktopManagerThreadIdOffset = SIZE_MAX;
@@ -7106,23 +7112,23 @@ BOOL Wh_ModInit()
     g_existingWindowBackfillMapped.store(0, std::memory_order_release);
     g_lastObservedScenePassCounter = 0;
     g_lastSceneProgressTimestamp = 0;
-    Wh_Log(L"Wobbly Windows 0.85: initializing");
+    Wh_Log(L"Initializing version " WH_MOD_VERSION);
     InitializeDpiSupport();
     LoadSettings();
     if (!InitializeDwmHooks())
     {
-        Wh_Log(L"Wobbly Windows: failed to initialize DWM hooks");
+        Wh_Log(L"Failed to initialize DWM hooks");
         UninitializeDpiSupport();
         return FALSE;
     }
     if (!StartWindowEventThread())
     {
-        Wh_Log(L"Wobbly Windows: failed to initialize event thread");
+        Wh_Log(L"Failed to initialize event thread");
         StopWindowEventThread();
         UninitializeDpiSupport();
         return FALSE;
     }
-    Wh_Log(L"Wobbly Windows: initialized successfully");
+    Wh_Log(L"Initialized successfully");
     return TRUE;
 }
 
@@ -7135,22 +7141,17 @@ void Wh_ModAfterInit()
 
 void Wh_ModSettingsChanged()
 {
-    Wh_Log(L"Wobbly Windows: settings changed");
+    Wh_Log(L"Settings changed");
     LoadSettings();
 }
 
 void Wh_ModBeforeUninit()
 {
     g_unloading.store(true, std::memory_order_release);
-    Wh_Log(L"Wobbly Windows: preparing to unload");
+    Wh_Log(L"Preparing to unload");
     // Restore scene resources before Windhawk removes the hooks.
     StopWindowEventThread();
     UninitializeDpiSupport();
-}
-
-void Wh_ModUninit()
-{
-    Wh_Log(L"Wobbly Windows: unloaded");
 }
 
 #endif
