@@ -2,7 +2,7 @@
 // @id              taskbar-split
 // @name            Taskbar Split: Running Left, Pinned Right
 // @description     Places running apps on the left and closed pinned apps on the right, with flexible empty space between them (Windows 11).
-// @version         0.3.17
+// @version         0.3.18
 // @author          Arkadiusz
 // @github          https://github.com/Artllex
 // @homepage        https://github.com/Artllex/taskbar-split
@@ -65,20 +65,25 @@ Creates two dynamic application zones on the Windows 11 taskbar:
 `[Start/System] [Running apps]  <flexible empty space>  [Closed pinned apps] [Tray/Clock]`
 
 Launching a pinned app moves it to the left zone and restores its normal size.
-Newly running buttons are appended to the right end of the running zone.
+Closing the app returns its pinned icon to the right zone, where icons can be
+smaller and packed more densely. Newly running buttons are appended to the right end of the running zone.
+
 Drag with the left mouse button to reorder within a section. The dragged
 icon follows the mouse within that section and neighbours make room as it
 crosses their centres. Escape cancels the move; sections cannot be crossed.
 Left-drag is intentionally handled by this mod to keep reordering inside each
 section. It replaces native left-drag for buttons with a recognized Appid.
+Disable "Enable section dragging" to use native input instead; section
+boundaries are then not enforced during dragging. The split layout stays active.
+
 Per-app order is saved in Windhawk storage after a completed drag and restored
 after Explorer restarts; Windows' persistent pin list is not changed. Buttons
 without a recognized stable Appid retain native input and are not persisted.
 Separate windows sharing one Appid share a rank; their relative window order
 is not persisted. Up to 256 app identities per section are remembered.
+
 Native Widgets space is reserved when system buttons retain their Windows positions.
-Closing it returns it to the right zone, where pinned icons can be made smaller
-and packed more densely. The persistent Windows pin list is not changed.
+For a left-aligned Start menu, also select Left taskbar alignment in Windows settings.
 
 Targets the horizontal primary taskbar on Windows 11 x64 and ARM64.
 Disable the mod to immediately return to the standard Windows layout.
@@ -121,6 +126,9 @@ easy to configure; enable only one positioning mod at a time.
 - pinnedIconScale: 90
   $name: Closed pinned icon size
   $description: Size and packing density of icons in the right group, as a percentage from 50 to 100. Running icons always use 100%.
+- sectionDragging: true
+  $name: Enable section dragging
+  $description: Reorder apps within each section with the left mouse button. Disable to retain native mouse handling; the split layout remains active, but drag boundaries are not enforced.
 - systemButtonsLeft: true
   $name: Keep system buttons on the left
   $description: Put Start, Search, Widgets and Task View at the left edge. Recommended for the intended split layout.
@@ -174,6 +182,7 @@ struct Settings {
     std::atomic<int> middleGap{48};
     std::atomic<int> pinnedIconScale{90};
     std::atomic<bool> systemButtonsLeft{true};
+    std::atomic<bool> sectionDragging{true};
 };
 
 Settings g_settings;
@@ -186,6 +195,7 @@ std::atomic<bool> g_taskbarSubclassed{false};
 thread_local bool g_insideArrange = false;
 
 void LoadSettings() {
+    g_settings.sectionDragging = Wh_GetIntSetting(L"sectionDragging") != 0;
     g_settings.leftPadding = std::max(0, Wh_GetIntSetting(L"leftPadding"));
     g_settings.runningGap = std::max(0, Wh_GetIntSetting(L"runningGap"));
     g_settings.trayGap = std::max(0, Wh_GetIntSetting(L"trayGap"));
@@ -1091,6 +1101,7 @@ struct SectionGesture {
     float originalSlotX = 0;
     media::Animation::TransitionCollection transitions{nullptr};
     bool previewPrepared = false;
+    bool ownsPointerCapture = false;
     std::wstring appId;
     std::vector<std::wstring> originalAppOrder;
     std::vector<winrt::weak_ref<FrameworkElement>> originalOrder;
@@ -1174,7 +1185,9 @@ void RestoreGestureVisual(SectionGesture const& gesture) {
             }
             try { source.Transitions(gesture.transitions); } catch (...) {}
         }
-        try { source.ReleasePointerCapture(gesture.pointer); } catch (...) {}
+        if (gesture.ownsPointerCapture) {
+            try { source.ReleasePointerCapture(gesture.pointer); } catch (...) {}
+        }
     }
 }
 
@@ -1274,7 +1287,10 @@ void QueueDrop(SectionGesture gesture) {
         }
         // Keep Translation and disabled XAML transitions intact until the
         // Arrange callback commits the destination.
-        source.ReleasePointerCapture(gesture.pointer);
+        if (gesture.ownsPointerCapture) {
+            source.ReleasePointerCapture(gesture.pointer);
+            g_pendingDrop->gesture.ownsPointerCapture = false;
+        }
         RequestRefresh();
     } catch (...) {
         if (g_pendingDrop) FlushPendingDrop();
@@ -1421,6 +1437,11 @@ bool IsGestureThread() {
 
 HRESULT WINAPI PointerPressed_Hook(void* self, void* rawArgs) {
     if (g_unloading || !IsGestureThread()) return PointerPressed_Original(self, rawArgs);
+    if (!g_settings.sectionDragging.load()) {
+        CancelSectionGesture();
+        FlushPendingDrop();
+        return PointerPressed_Original(self, rawArgs);
+    }
     FlushPendingDrop();
     // Windows receives the original press at the original time, exactly once.
     HRESULT result = PointerPressed_Original(self, rawArgs);
@@ -1494,8 +1515,7 @@ HRESULT WINAPI PointerMoved_Hook(void* self, void* rawArgs) {
             auto position = args.GetCurrentPoint(repeater).Position();
             // Coordinates are DIPs; use a small DPI-independent dead zone.
             if (!g_sectionGesture->dragged &&
-                (std::abs(position.X - g_sectionGesture->origin.X) >= 5 ||
-                 std::abs(position.Y - g_sectionGesture->origin.Y) >= 5)) {
+                std::abs(position.X - g_sectionGesture->origin.X) >= 5) {
                 g_sectionGesture->dragged = true;
                 g_sectionGesture->previewPrepared = true;
                 // Only the held button loses reposition transitions; its
@@ -1511,6 +1531,7 @@ HRESULT WINAPI PointerMoved_Hook(void* self, void* rawArgs) {
                     CancelSectionGesture();
                     return S_OK;
                 }
+                g_sectionGesture->ownsPointerCapture = true;
             }
             if (g_sectionGesture && g_sectionGesture->dragged) {
                 g_sectionGesture->desiredX = std::clamp(
