@@ -5479,13 +5479,13 @@ static void DrawIconWithAlpha(HDC hdc, int x, int y, HICON hIcon, int size, floa
         gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
 
         if (alpha < 0.999f) {
-            Gdiplus::ColorMatrix cm = {
-                1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-                0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
-                0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
-                0.0f, 0.0f, 0.0f, alpha, 0.0f,
-                0.0f, 0.0f, 0.0f, 0.0f, 1.0f
-            };
+            Gdiplus::ColorMatrix cm = {{
+                { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
+                { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 0.0f, alpha, 0.0f },
+                { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
+            }};
             Gdiplus::ImageAttributes attr;
             attr.SetColorMatrix(&cm, Gdiplus::ColorMatrixFlagsDefault, Gdiplus::ColorAdjustTypeBitmap);
             gfx.DrawImage(&bmp, Gdiplus::Rect(x, y, size, size), 0, 0, bmp.GetWidth(), bmp.GetHeight(), Gdiplus::UnitPixel, &attr);
