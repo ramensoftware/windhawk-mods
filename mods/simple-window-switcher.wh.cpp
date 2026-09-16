@@ -481,22 +481,31 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
         - dockSwitcherPadding: 11
           $name: Dock Layout Padding (px)
           $description: Padding between the switcher window border and dock elements in pixels for Dock Layout (before DPI scaling). Default 11.
-        - dockCloseButtonPosition: previewTopRight
+        - dockCloseButtonPosition: topRight
           $name: Close Button Position
-          $description: Placement of the close button in Dock Layout. "Central Preview" places the button on the live preview of the selected window. "Icon Strip" displays a close button when hovering over individual icons in the dock strip.
+          $description: Placement of the close button inside the icon area in Dock Layout. Positioned on any side around the icon.
           $options:
-          - previewTopRight: Central Preview (Top-Right - Default)
-          - previewTopLeft: Central Preview (Top-Left)
-          - iconStrip: Icon Strip (Hover on Icon)
+          - topRight: Top-Right (Default)
+          - topLeft: Top-Left
+          - bottomRight: Bottom-Right
+          - bottomLeft: Bottom-Left
+          - top: Top-Center
+          - bottom: Bottom-Center
+          - left: Left-Center
+          - right: Right-Center
           - hidden: Hidden
-        - dockGroupIndicatorPosition: onIconBadge
+        - dockGroupIndicatorPosition: bottomRight
           $name: Group Indicator Position
-          $description: Placement and style of the grouped window count indicator in Dock Layout when "Group Windows by Application" is enabled.
+          $description: Placement of the grouped window count indicator inside the icon area in Dock Layout when "Group Windows by Application" is enabled. Positioned on any side around the icon.
           $options:
-          - onIconBadge: Icon Badge (Top-Right of Icon - Default)
-          - belowIcons: Below Icons
-          - aboveIcons: Above Icons
-          - insidePreview: Central Preview Overlay
+          - bottomRight: Bottom-Right (Default)
+          - bottomLeft: Bottom-Left
+          - topRight: Top-Right
+          - topLeft: Top-Left
+          - top: Top-Center
+          - bottom: Bottom-Center
+          - left: Left-Center
+          - right: Right-Center
           - hidden: Hidden
       $name: Dock Layout Settings
       $description: Configuration options applied when Switcher Layout is set to Dock / Strip Layout.
@@ -1417,21 +1426,44 @@ static bool DockIconIsTop() {
 static bool DockShowPreview() {
     return g_settings.dockShowPreview && g_settings.showThumbnails;
 }
-static bool DockCloseButtonIsPreviewTopRight() { return wcscmp(g_settings.dockCloseButtonPosition, L"previewTopRight") == 0; }
-static bool DockCloseButtonIsPreviewTopLeft() { return wcscmp(g_settings.dockCloseButtonPosition, L"previewTopLeft") == 0; }
-static bool DockCloseButtonIsPreview() {
-    return DockShowPreview() && (DockCloseButtonIsPreviewTopRight() || DockCloseButtonIsPreviewTopLeft());
-}
-static bool DockCloseButtonIsIconStrip() {
-    return wcscmp(g_settings.dockCloseButtonPosition, L"iconStrip") == 0 || (!DockShowPreview() && wcscmp(g_settings.dockCloseButtonPosition, L"hidden") != 0);
-}
 static bool DockCloseButtonIsHidden() { return wcscmp(g_settings.dockCloseButtonPosition, L"hidden") == 0; }
-
-static bool DockGroupIndicatorIsOnIconBadge() { return wcscmp(g_settings.dockGroupIndicatorPosition, L"onIconBadge") == 0; }
-static bool DockGroupIndicatorIsBelowIcons() { return wcscmp(g_settings.dockGroupIndicatorPosition, L"belowIcons") == 0; }
-static bool DockGroupIndicatorIsAboveIcons() { return wcscmp(g_settings.dockGroupIndicatorPosition, L"aboveIcons") == 0; }
-static bool DockGroupIndicatorIsInsidePreview() { return wcscmp(g_settings.dockGroupIndicatorPosition, L"insidePreview") == 0; }
 static bool DockGroupIndicatorIsHidden() { return wcscmp(g_settings.dockGroupIndicatorPosition, L"hidden") == 0; }
+static bool DockPositionsOverlap() {
+    if (DockCloseButtonIsHidden() || DockGroupIndicatorIsHidden()) return false;
+    return wcscmp(g_settings.dockCloseButtonPosition, g_settings.dockGroupIndicatorPosition) == 0;
+}
+
+static RECT ComputeDockPerimeterRect(const RECT& rcCell, int itemW, int itemH, const WCHAR* posStr, int pad) {
+    if (!posStr || wcscmp(posStr, L"hidden") == 0) return { 0, 0, 0, 0 };
+    int bx = 0, by = 0;
+    if (wcscmp(posStr, L"topLeft") == 0) {
+        bx = rcCell.left + pad;
+        by = rcCell.top + pad;
+    } else if (wcscmp(posStr, L"bottomRight") == 0) {
+        bx = rcCell.right - itemW - pad;
+        by = rcCell.bottom - itemH - pad;
+    } else if (wcscmp(posStr, L"bottomLeft") == 0) {
+        bx = rcCell.left + pad;
+        by = rcCell.bottom - itemH - pad;
+    } else if (wcscmp(posStr, L"top") == 0 || wcscmp(posStr, L"topCenter") == 0) {
+        bx = (rcCell.left + rcCell.right - itemW) / 2;
+        by = rcCell.top + pad;
+    } else if (wcscmp(posStr, L"bottom") == 0 || wcscmp(posStr, L"bottomCenter") == 0) {
+        bx = (rcCell.left + rcCell.right - itemW) / 2;
+        by = rcCell.bottom - itemH - pad;
+    } else if (wcscmp(posStr, L"left") == 0 || wcscmp(posStr, L"leftCenter") == 0) {
+        bx = rcCell.left + pad;
+        by = (rcCell.top + rcCell.bottom - itemH) / 2;
+    } else if (wcscmp(posStr, L"right") == 0 || wcscmp(posStr, L"rightCenter") == 0) {
+        bx = rcCell.right - itemW - pad;
+        by = (rcCell.top + rcCell.bottom - itemH) / 2;
+    } else { // default: topRight
+        bx = rcCell.right - itemW - pad;
+        by = rcCell.top + pad;
+    }
+    return { bx, by, bx + itemW, by + itemH };
+}
+
 static bool BadgeIconPositionIs(const WCHAR* v) { return wcscmp(g_settings.badgeIconPosition, v) == 0; }
 static bool BadgeTitleIsTop() { return wcscmp(g_settings.badgeTitlePosition, L"top") == 0; }
 static inline bool IsEntryMinimized(const WindowEntry& w) {
@@ -2965,7 +2997,6 @@ static void OnAnimationTick() {
     bool closeBtnAnimActive = false;
     for (int i = 0; i < (int)g_windows.size(); i++) {
         float target = (i == g_hoverIndex && g_settings.showCloseButton && !IsWindowTruncated(i)) ? 1.0f : 0.0f;
-        if (DockLayoutActive() && DockCloseButtonIsPreview() && i != g_selectedIndex) target = 0.0f;
         if (DockLayoutActive() && DockCloseButtonIsHidden()) target = 0.0f;
         if (fabsf(g_windows[i].closeBtnAlpha - target) > 0.01f) {
             closeBtnAnimActive = true;
@@ -5855,26 +5886,9 @@ static RECT GetCloseButtonRect(const RECT& rcCell, const RECT& rcThumbActual, co
         if (DockCloseButtonIsHidden()) {
             return { 0, 0, 0, 0 };
         }
-        if (DockCloseButtonIsPreview()) {
-            int btnSz = DpiScale(24, g_dpiX);
-            int pad = DpiScale(8, g_dpiX);
-            int bx = 0, by = 0;
-            if (DockCloseButtonIsPreviewTopLeft()) {
-                bx = rcThumbActual.left + pad;
-                by = rcThumbActual.top + pad;
-            } else { // previewTopRight
-                bx = rcThumbActual.right - btnSz - pad;
-                by = rcThumbActual.top + pad;
-            }
-            return { bx, by, bx + btnSz, by + btnSz };
-        }
-        if (DockCloseButtonIsIconStrip()) {
-            int btnSz = DpiScale(16, g_dpiX);
-            int bx = rcCell.right - btnSz - DpiScale(1, g_dpiX);
-            int by = rcCell.top + DpiScale(1, g_dpiY);
-            return { bx, by, bx + btnSz, by + btnSz };
-        }
-        return { 0, 0, 0, 0 };
+        int btnSz = DpiScale(16, g_dpiX);
+        int pad = DpiScale(2, g_dpiX);
+        return ComputeDockPerimeterRect(rcCell, btnSz, btnSz, g_settings.dockCloseButtonPosition, pad);
     }
 
     int rowTitleH = GetHeaderRowHeightPx();
@@ -6036,20 +6050,20 @@ static void DrawCloseButton(HDC hdc, const RECT& btnRc, float btnAlpha, float ho
 
 // Multi-pass Fluent elevation drop shadow behind a thumbnail. Drawn in the
 // content layer below the DWM thumbnail, producing a subtle, soft ambient
-// feathering with gentle directional drop (cumulative alpha ~15% dark / ~10% light).
+// feathering with perfectly centered zero-offset distribution (cumulative alpha ~15% dark / ~10% light).
 struct ThumbnailShadowPass {
     int baseSpread;     // Outward expansion in base pixels (at 96 DPI)
-    int baseYOffset;    // Downward offset in base pixels (at 96 DPI)
+    int baseYOffset;    // Directional offset in base pixels (0 for centered)
     BYTE alphaDark;     // Pass alpha for dark mode (0-255)
     BYTE alphaLight;    // Pass alpha for light mode (0-255)
 };
 
 static const ThumbnailShadowPass kThumbnailShadowPasses[5] = {
-    { 8, 1,  3, 2 },  // Pass 0: Wide ambient feather
-    { 6, 1,  5, 3 },  // Pass 1: Ambient diffusion body
-    { 4, 2,  8, 5 },  // Pass 2: Directional key body
-    { 2, 2, 11, 7 },  // Pass 3: Directional core
-    { 1, 2, 14, 9 }   // Pass 4: Contact occlusion edge
+    { 10, 0,  2, 1 },  // Pass 0: Wide subtle ambient feather
+    {  7, 0,  3, 2 },  // Pass 1: Soft diffusion body
+    {  5, 0,  4, 3 },  // Pass 2: Centered ambient body
+    {  3, 0,  6, 4 },  // Pass 3: Centered core
+    {  1, 0,  7, 5 }   // Pass 4: Subtle contact occlusion edge
 };
 
 static void DrawThumbnailShadow(HDC hdc, const RECT& rc, int cornerRadius, float alphaMult = 1.0f, float elevationScale = 1.0f) {
@@ -6066,29 +6080,26 @@ static void DrawThumbnailShadow(HDC hdc, const RECT& rc, int cornerRadius, float
 
     // Dynamic elevation lift factors when zoomed (WinUI 3 Fluent elevation standards)
     float spreadScale = 1.0f;
-    float yOffScale = 1.0f;
     if (elevationScale > 1.0001f) {
         float elevProg = (elevationScale - 1.0f) / SWS_HOVER_ZOOM_DELTA;
         if (elevProg < 0.0f) elevProg = 0.0f;
         if (elevProg > 1.0f) elevProg = 1.0f;
         spreadScale = 1.0f + elevProg * 0.15f;
-        yOffScale   = 1.0f + elevProg * 0.25f;
     }
 
-    // During active layout transition (280ms), render a single-pass ambient shadow
+    // During active layout transition (250ms), render a single-pass ambient shadow
     // to maintain 144Hz frame pacing without CPU rasterization stutter.
     if (g_layoutTransition.active) {
         Gdiplus::Graphics gfx(hdc);
         gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-        BYTE baseAlpha = g_isDarkMode ? 24 : 16;
+        BYTE baseAlpha = g_isDarkMode ? 14 : 10;
         BYTE shadowAlpha = (BYTE)roundf(baseAlpha * alphaMult);
         if (shadowAlpha == 0) return;
         Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(shadowAlpha, 0, 0, 0));
         int sp = DpiScale((int)roundf(3.0f * spreadScale), g_dpiX);
         if (sp < 1) sp = 1;
-        int yOff = DpiScale((int)roundf(2.0f * yOffScale), g_dpiY);
         Gdiplus::REAL sx = (Gdiplus::REAL)(rc.left - sp);
-        Gdiplus::REAL sy = (Gdiplus::REAL)(rc.top - sp + yOff);
+        Gdiplus::REAL sy = (Gdiplus::REAL)(rc.top - sp);
         Gdiplus::REAL sw = (Gdiplus::REAL)(rcw + sp * 2);
         Gdiplus::REAL sh = (Gdiplus::REAL)(rch + sp * 2);
         if (shadowRadius > 0) {
@@ -6120,11 +6131,10 @@ static void DrawThumbnailShadow(HDC hdc, const RECT& rc, int cornerRadius, float
 
         int sp = DpiScale((int)roundf(pass.baseSpread * spreadScale), g_dpiX);
         if (sp < 1) sp = 1;
-        int yOff = DpiScale((int)roundf(pass.baseYOffset * yOffScale), g_dpiY);
 
         Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(shadowAlpha, 0, 0, 0));
         Gdiplus::REAL sx = (Gdiplus::REAL)(rc.left - sp);
-        Gdiplus::REAL sy = (Gdiplus::REAL)(rc.top - sp + yOff);
+        Gdiplus::REAL sy = (Gdiplus::REAL)(rc.top - sp);
         Gdiplus::REAL sw = (Gdiplus::REAL)(rcw + sp * 2);
         Gdiplus::REAL sh = (Gdiplus::REAL)(rch + sp * 2);
         if (shadowRadius > 0) {
@@ -6149,7 +6159,8 @@ static void DrawTaskEntry(HDC hdc, WindowEntry& e, HWND hWnd, int padLeft, int r
     if (alpha <= 0.01f) return;
 
     // Drop shadow behind the thumbnail (below the DWM thumbnail layer).
-    if (g_settings.showThumbnails && g_settings.showThumbnailShadow &&
+    // During active layout transition, shadows are rendered dynamically per-frame in PaintSwitcher to track resizing smoothly.
+    if (g_settings.showThumbnails && g_settings.showThumbnailShadow && !g_layoutTransition.active &&
         !(e.rcThumbActual.left == 0 && e.rcThumbActual.right == 0 &&
           e.rcThumbActual.top == 0 && e.rcThumbActual.bottom == 0)) {
         DrawThumbnailShadow(hdc, e.rcThumbActual, cornerRadius, alpha, 1.0f);
@@ -6415,7 +6426,8 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
             shadowRc.right += offX;
             shadowAlphaMult = g_dockPreviewSlide.currentAlpha;
         }
-        if (g_settings.showThumbnailShadow && shadowAlphaMult > 0.01f) {
+        // During active layout transition or preview slide, shadow is rendered dynamically per-frame in PaintSwitcher to track resizing smoothly
+        if (g_settings.showThumbnailShadow && shadowAlphaMult > 0.01f && !g_layoutTransition.active && !g_dockPreviewSlide.active) {
             DrawThumbnailShadow(hdc, shadowRc, cornerRadius, shadowAlphaMult);
         }
         if (cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
@@ -7057,7 +7069,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
 
         // Close button (rendered for any entry with closeBtnAlpha > 0.01f, enabling smooth cross-fades between entries)
         if (g_settings.showCloseButton && e.closeBtnAlpha > 0.01f) {
-            if (!DockLayoutActive() || DockCloseButtonIsIconStrip() || (DockCloseButtonIsPreview() && i == g_selectedIndex)) {
+            if (!DockLayoutActive() || !DockCloseButtonIsHidden()) {
                 RECT btnRc = GetCloseButtonRect(rcCell, rcThumbActual, rcThumbSlot);
                 if (btnRc.right > btnRc.left && btnRc.bottom > btnRc.top) {
                     float hoverPlateAlpha = (i == g_hoverIndex && g_hoverWnd == hWnd && g_isCloseHovered) ? g_animCloseBtnHoverAlpha : 0.0f;
@@ -7071,7 +7083,17 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
         bool showThisGroupBadge = g_settings.showGroupIndicator && g_settings.showApplications && (e.groupWindows.size() > 1);
         if (DockLayoutActive()) {
             if (DockGroupIndicatorIsHidden()) showThisGroupBadge = false;
-            else if (DockGroupIndicatorIsInsidePreview() && (i != g_selectedIndex || !DockShowPreview())) showThisGroupBadge = false;
+        }
+
+        float groupBadgeAlpha = 1.0f;
+        if (DockLayoutActive() && DockPositionsOverlap()) {
+            // Overlapping case: close button takes precedence in visibility when hovered over the button area
+            if (e.closeBtnAlpha > 0.01f) {
+                groupBadgeAlpha = (1.0f - e.closeBtnAlpha);
+                if (groupBadgeAlpha < 0.01f) {
+                    showThisGroupBadge = false;
+                }
+            }
         }
 
         if (showThisGroupBadge) {
@@ -7117,23 +7139,10 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             // Position:
             int badgeX = 0, badgeY = 0;
             if (DockLayoutActive()) {
-                if (DockGroupIndicatorIsInsidePreview()) {
-                    int pad = DpiScale(8, g_dpiX);
-                    badgeX = g_rcCentralPreview.left + pad + offX;
-                    badgeY = g_rcCentralPreview.top + pad + offY;
-                } else if (DockGroupIndicatorIsBelowIcons()) {
-                    badgeX = drawnIconX + (drawnIconSz - badgeW) / 2;
-                    badgeY = drawnIconY + drawnIconSz + DpiScale(2, g_dpiY);
-                } else if (DockGroupIndicatorIsAboveIcons()) {
-                    badgeX = drawnIconX + (drawnIconSz - badgeW) / 2;
-                    badgeY = drawnIconY - badgeH - DpiScale(2, g_dpiY);
-                } else if (DockGroupIndicatorIsOnIconBadge()) {
-                    badgeX = drawnIconX + drawnIconSz - (badgeW / 2);
-                    badgeY = drawnIconY - (badgeH / 2);
-                } else {
-                    badgeX = drawnIconX + drawnIconSz - (badgeW / 2);
-                    badgeY = drawnIconY - (badgeH / 2);
-                }
+                int pad = DpiScale(2, g_dpiX);
+                RECT bRc = ComputeDockPerimeterRect(rcCell, badgeW, badgeH, g_settings.dockGroupIndicatorPosition, pad);
+                badgeX = bRc.left;
+                badgeY = bRc.top;
             } else if (drawnIconSz > 0) {
                 badgeX = drawnIconX + drawnIconSz - (badgeW / 2);
                 badgeY = drawnIconY - (badgeH / 2);
@@ -7146,18 +7155,19 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             // Background pill
             COLORREF bgC = GetIndicatorBackgroundColor();
             int op = g_isDarkMode ? g_settings.indicatorBgOpacityDark : g_settings.indicatorBgOpacityLight;
-            int alpha = (op * 255) / 100;
+            int alpha = (int)roundf(((op * 255) / 100) * groupBadgeAlpha);
             Gdiplus::SolidBrush pillBrush(Gdiplus::Color(alpha, GetRValue(bgC), GetGValue(bgC), GetBValue(bgC)));
             Gdiplus::REAL pillRadius = (Gdiplus::REAL)GetGroupIndicatorCornerRadiusPx(badgeH / 2);
             
-            if (g_settings.showGroupIndicatorShadow) {
+            if (g_settings.showGroupIndicatorShadow && groupBadgeAlpha > 0.05f) {
                 for (int pass = 5; pass > 0; --pass) {
-                    int shadowAlpha = 15 - (pass * 2);
+                    int baseA = (pass == 1) ? 8 : (pass == 2) ? 6 : (pass == 3) ? 4 : (pass == 4) ? 3 : 2;
+                    int shadowAlpha = (int)roundf(baseA * groupBadgeAlpha);
                     if (shadowAlpha < 1) shadowAlpha = 1;
                     Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(shadowAlpha, 0, 0, 0));
                     int sp = pass;
                     Gdiplus::REAL sx = (Gdiplus::REAL)(badgeX - sp);
-                    Gdiplus::REAL sy = (Gdiplus::REAL)(badgeY - sp + 1);
+                    Gdiplus::REAL sy = (Gdiplus::REAL)(badgeY - sp);
                     Gdiplus::REAL sw = (Gdiplus::REAL)(badgeW + sp * 2);
                     Gdiplus::REAL sh = (Gdiplus::REAL)(badgeH + sp * 2);
                     Gdiplus::REAL sd = pillRadius * 2.0f + sp * 2.0f;
@@ -7195,7 +7205,8 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
 
             // Badge text
             COLORREF txtC = GetIndicatorTextColor();
-            Gdiplus::SolidBrush textBrush(Gdiplus::Color(255, GetRValue(txtC), GetGValue(txtC), GetBValue(txtC)));
+            BYTE txtAlpha = (BYTE)roundf(255.0f * groupBadgeAlpha);
+            Gdiplus::SolidBrush textBrush(Gdiplus::Color(txtAlpha, GetRValue(txtC), GetGValue(txtC), GetBValue(txtC)));
             Gdiplus::RectF pillRect((Gdiplus::REAL)badgeX, (Gdiplus::REAL)badgeY,
                                     (Gdiplus::REAL)badgeW, (Gdiplus::REAL)badgeH);
             gfx.DrawString(countText, -1, &badgeFont, pillRect, &sf, &textBrush);
@@ -7477,15 +7488,39 @@ static void PaintSwitcher() {
             BitBlt(s_cachedMemDC, 0, 0, w, h, s_cachedStaticDC, 0, 0, SRCCOPY);
 
             // Dynamic thumbnail drop shadow for any zoomed/animating thumbnails
-            if (g_settings.showThumbnails && g_settings.showThumbnailShadow && ThumbnailHoverIsZoom()) {
-                for (size_t i = 0; i < g_windows.size(); ++i) {
-                    const auto& e = g_windows[i];
-                    if (e.hoverScale > 1.0001f && !IsWindowTruncated((int)i)) {
-                        RECT scaledRc = GetScaledThumbRect(e);
-                        float shadowAlphaMult = (e.hoverScale - 1.0f) / SWS_HOVER_ZOOM_DELTA;
-                        if (shadowAlphaMult < 0.0f) shadowAlphaMult = 0.0f;
-                        if (shadowAlphaMult > 1.0f) shadowAlphaMult = 1.0f;
-                        DrawThumbnailShadow(s_cachedMemDC, scaledRc, GetThumbnailCornerRadiusPx(), shadowAlphaMult, e.hoverScale);
+            if (g_settings.showThumbnails && g_settings.showThumbnailShadow) {
+                if (DockLayoutActive() && DockShowPreview()) {
+                    if (g_layoutTransition.active || g_dockPreviewSlide.active) {
+                        RECT shadowRc = g_rcCentralPreview;
+                        float shadowAlphaMult = 1.0f;
+                        if (g_dockPreviewSlide.active) {
+                            int offX = (int)roundf(g_dockPreviewSlide.currentOffset);
+                            shadowRc.left += offX;
+                            shadowRc.right += offX;
+                            shadowAlphaMult = g_dockPreviewSlide.currentAlpha;
+                        }
+                        DrawThumbnailShadow(s_cachedMemDC, shadowRc, GetThumbnailCornerRadiusPx(), shadowAlphaMult);
+                    }
+                } else {
+                    if (g_layoutTransition.active) {
+                        for (size_t i = 0; i < g_windows.size(); ++i) {
+                            const auto& e = g_windows[i];
+                            if (e.rcThumbActual.right > e.rcThumbActual.left && !IsWindowTruncated((int)i)) {
+                                float itemAlpha = e.isNewEntry ? e.enterAlpha : 1.0f;
+                                DrawThumbnailShadow(s_cachedMemDC, e.rcThumbActual, GetThumbnailCornerRadiusPx(), itemAlpha);
+                            }
+                        }
+                    } else if (ThumbnailHoverIsZoom()) {
+                        for (size_t i = 0; i < g_windows.size(); ++i) {
+                            const auto& e = g_windows[i];
+                            if (e.hoverScale > 1.0001f && !IsWindowTruncated((int)i)) {
+                                RECT scaledRc = GetScaledThumbRect(e);
+                                float shadowAlphaMult = (e.hoverScale - 1.0f) / SWS_HOVER_ZOOM_DELTA;
+                                if (shadowAlphaMult < 0.0f) shadowAlphaMult = 0.0f;
+                                if (shadowAlphaMult > 1.0f) shadowAlphaMult = 1.0f;
+                                DrawThumbnailShadow(s_cachedMemDC, scaledRc, GetThumbnailCornerRadiusPx(), shadowAlphaMult, e.hoverScale);
+                            }
+                        }
                     }
                 }
             }
@@ -7517,6 +7552,17 @@ static void PaintSwitcher() {
                 SelectClipRgn(s_cachedMemDC, hWndClip);
                 if (s_cachedScrollToDC) {
                     BitBlt(s_cachedMemDC, 0, 0, w, h, s_cachedScrollToDC, 0, 0, SRCCOPY);
+                }
+                if (g_settings.showThumbnailShadow && DockShowPreview() && (g_layoutTransition.active || g_dockPreviewSlide.active)) {
+                    RECT shadowRc = g_rcCentralPreview;
+                    float shadowAlphaMult = 1.0f;
+                    if (g_dockPreviewSlide.active) {
+                        int offX = (int)roundf(g_dockPreviewSlide.currentOffset);
+                        shadowRc.left += offX;
+                        shadowRc.right += offX;
+                        shadowAlphaMult = g_dockPreviewSlide.currentAlpha;
+                    }
+                    DrawThumbnailShadow(s_cachedMemDC, shadowRc, GetThumbnailCornerRadiusPx(), shadowAlphaMult);
                 }
 
                 // 2. Clip strictly to the dock icon strip for sliding the icons
@@ -9762,10 +9808,8 @@ static void UpdateHoverAtPoint(HWND hWnd, int x, int y, bool allowAnimation) {
     int entryIdx = (cDir != 0) ? -1 : HitTest(x, y);
     if (DockLayoutActive() && entryIdx < 0 && DockShowPreview() && g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
         POINT pt = { x, y };
-        if (DockCloseButtonIsPreview()) {
-            if (HitTestCloseButton(g_windows[g_selectedIndex], pt) || PtInRect(&g_rcCentralPreview, pt)) {
-                entryIdx = g_selectedIndex;
-            }
+        if (PtInRect(&g_rcCentralPreview, pt)) {
+            entryIdx = g_selectedIndex;
         }
     }
 
@@ -9777,7 +9821,7 @@ static void UpdateHoverAtPoint(HWND hWnd, int x, int y, bool allowAnimation) {
 
     bool closeHovered = false;
     if (g_settings.showCloseButton && entryIdx >= 0 && entryIdx < (int)g_windows.size() && !IsWindowTruncated(entryIdx)) {
-        if (!DockLayoutActive() || DockCloseButtonIsIconStrip() || (DockCloseButtonIsPreview() && entryIdx == g_selectedIndex)) {
+        if (!DockLayoutActive() || !DockCloseButtonIsHidden()) {
             POINT pt = { x, y };
             closeHovered = HitTestCloseButton(g_windows[entryIdx], pt);
         }
@@ -9825,7 +9869,6 @@ static void UpdateHoverAtPoint(HWND hWnd, int x, int y, bool allowAnimation) {
             g_animCloseBtnHoverAlpha = (closeHovered && g_animCloseBtnAlpha > 0.05f) ? 1.0f : 0.0f;
             for (int i = 0; i < (int)g_windows.size(); i++) {
                 bool shouldShowClose = (i == entryIdx && g_settings.showCloseButton && !IsWindowTruncated(i));
-                if (DockLayoutActive() && DockCloseButtonIsPreview() && i != g_selectedIndex) shouldShowClose = false;
                 if (DockLayoutActive() && DockCloseButtonIsHidden()) shouldShowClose = false;
                 g_windows[i].closeBtnAlpha = shouldShowClose ? 1.0f : 0.0f;
                 float s = (ThumbnailHoverIsZoom() && i == thumbIdx && !IsWindowTruncated(i)) ? (1.0f + SWS_HOVER_ZOOM_DELTA) : 1.0f;
@@ -10762,15 +10805,39 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 BitBlt(hdcBuf, 0, 0, w, h, s_cachedStaticDC, 0, 0, SRCCOPY);
 
                 // Dynamic thumbnail drop shadow for any zoomed/animating thumbnails
-                if (g_settings.showThumbnails && g_settings.showThumbnailShadow && ThumbnailHoverIsZoom()) {
-                    for (size_t i = 0; i < g_windows.size(); ++i) {
-                        const auto& e = g_windows[i];
-                        if (e.hoverScale > 1.0001f && !IsWindowTruncated((int)i)) {
-                            RECT scaledRc = GetScaledThumbRect(e);
-                            float shadowAlphaMult = (e.hoverScale - 1.0f) / SWS_HOVER_ZOOM_DELTA;
-                            if (shadowAlphaMult < 0.0f) shadowAlphaMult = 0.0f;
-                            if (shadowAlphaMult > 1.0f) shadowAlphaMult = 1.0f;
-                            DrawThumbnailShadow(hdcBuf, scaledRc, GetThumbnailCornerRadiusPx(), shadowAlphaMult, e.hoverScale);
+                if (g_settings.showThumbnails && g_settings.showThumbnailShadow) {
+                    if (DockLayoutActive() && DockShowPreview()) {
+                        if (g_layoutTransition.active || g_dockPreviewSlide.active) {
+                            RECT shadowRc = g_rcCentralPreview;
+                            float shadowAlphaMult = 1.0f;
+                            if (g_dockPreviewSlide.active) {
+                                int offX = (int)roundf(g_dockPreviewSlide.currentOffset);
+                                shadowRc.left += offX;
+                                shadowRc.right += offX;
+                                shadowAlphaMult = g_dockPreviewSlide.currentAlpha;
+                            }
+                            DrawThumbnailShadow(hdcBuf, shadowRc, GetThumbnailCornerRadiusPx(), shadowAlphaMult);
+                        }
+                    } else {
+                        if (g_layoutTransition.active) {
+                            for (size_t i = 0; i < g_windows.size(); ++i) {
+                                const auto& e = g_windows[i];
+                                if (e.rcThumbActual.right > e.rcThumbActual.left && !IsWindowTruncated((int)i)) {
+                                    float itemAlpha = e.isNewEntry ? e.enterAlpha : 1.0f;
+                                    DrawThumbnailShadow(hdcBuf, e.rcThumbActual, GetThumbnailCornerRadiusPx(), itemAlpha);
+                                }
+                            }
+                        } else if (ThumbnailHoverIsZoom()) {
+                            for (size_t i = 0; i < g_windows.size(); ++i) {
+                                const auto& e = g_windows[i];
+                                if (e.hoverScale > 1.0001f && !IsWindowTruncated((int)i)) {
+                                    RECT scaledRc = GetScaledThumbRect(e);
+                                    float shadowAlphaMult = (e.hoverScale - 1.0f) / SWS_HOVER_ZOOM_DELTA;
+                                    if (shadowAlphaMult < 0.0f) shadowAlphaMult = 0.0f;
+                                    if (shadowAlphaMult > 1.0f) shadowAlphaMult = 1.0f;
+                                    DrawThumbnailShadow(hdcBuf, scaledRc, GetThumbnailCornerRadiusPx(), shadowAlphaMult, e.hoverScale);
+                                }
+                            }
                         }
                     }
                 }
@@ -10795,6 +10862,17 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 SelectClipRgn(hdcBuf, hWndClip);
                 if (s_cachedScrollToDC) {
                     BitBlt(hdcBuf, 0, 0, w, h, s_cachedScrollToDC, 0, 0, SRCCOPY);
+                }
+                if (g_settings.showThumbnailShadow && DockShowPreview() && (g_layoutTransition.active || g_dockPreviewSlide.active)) {
+                    RECT shadowRc = g_rcCentralPreview;
+                    float shadowAlphaMult = 1.0f;
+                    if (g_dockPreviewSlide.active) {
+                        int offX = (int)roundf(g_dockPreviewSlide.currentOffset);
+                        shadowRc.left += offX;
+                        shadowRc.right += offX;
+                        shadowAlphaMult = g_dockPreviewSlide.currentAlpha;
+                    }
+                    DrawThumbnailShadow(hdcBuf, shadowRc, GetThumbnailCornerRadiusPx(), shadowAlphaMult);
                 }
 
                 // 2. Clip strictly to the dock icon strip for sliding the icons
@@ -11700,21 +11778,43 @@ static void LoadSettings() {
     g_settings.dockSwitcherPadding = LoadIntSetting(L"Appearance.DockLayout.dockSwitcherPadding", 11);
     if (g_settings.dockSwitcherPadding < 0) g_settings.dockSwitcherPadding = 11;
 
-    LoadStringSetting(L"Appearance.DockLayout.dockCloseButtonPosition", g_settings.dockCloseButtonPosition, L"previewTopRight");
-    if (wcscmp(g_settings.dockCloseButtonPosition, L"previewTopRight") != 0 &&
-        wcscmp(g_settings.dockCloseButtonPosition, L"previewTopLeft") != 0 &&
-        wcscmp(g_settings.dockCloseButtonPosition, L"iconStrip") != 0 &&
-        wcscmp(g_settings.dockCloseButtonPosition, L"hidden") != 0) {
-        wcsncpy_s(g_settings.dockCloseButtonPosition, L"previewTopRight", _TRUNCATE);
+    LoadStringSetting(L"Appearance.DockLayout.dockCloseButtonPosition", g_settings.dockCloseButtonPosition, L"topRight");
+    if (wcscmp(g_settings.dockCloseButtonPosition, L"previewTopRight") == 0 ||
+        wcscmp(g_settings.dockCloseButtonPosition, L"iconStrip") == 0) {
+        wcsncpy_s(g_settings.dockCloseButtonPosition, L"topRight", _TRUNCATE);
+    } else if (wcscmp(g_settings.dockCloseButtonPosition, L"previewTopLeft") == 0) {
+        wcsncpy_s(g_settings.dockCloseButtonPosition, L"topLeft", _TRUNCATE);
+    } else if (wcscmp(g_settings.dockCloseButtonPosition, L"topRight") != 0 &&
+               wcscmp(g_settings.dockCloseButtonPosition, L"topLeft") != 0 &&
+               wcscmp(g_settings.dockCloseButtonPosition, L"bottomRight") != 0 &&
+               wcscmp(g_settings.dockCloseButtonPosition, L"bottomLeft") != 0 &&
+               wcscmp(g_settings.dockCloseButtonPosition, L"top") != 0 &&
+               wcscmp(g_settings.dockCloseButtonPosition, L"bottom") != 0 &&
+               wcscmp(g_settings.dockCloseButtonPosition, L"left") != 0 &&
+               wcscmp(g_settings.dockCloseButtonPosition, L"right") != 0 &&
+               wcscmp(g_settings.dockCloseButtonPosition, L"hidden") != 0) {
+        wcsncpy_s(g_settings.dockCloseButtonPosition, L"topRight", _TRUNCATE);
     }
 
-    LoadStringSetting(L"Appearance.DockLayout.dockGroupIndicatorPosition", g_settings.dockGroupIndicatorPosition, L"onIconBadge");
-    if (wcscmp(g_settings.dockGroupIndicatorPosition, L"onIconBadge") != 0 &&
-        wcscmp(g_settings.dockGroupIndicatorPosition, L"belowIcons") != 0 &&
-        wcscmp(g_settings.dockGroupIndicatorPosition, L"aboveIcons") != 0 &&
-        wcscmp(g_settings.dockGroupIndicatorPosition, L"insidePreview") != 0 &&
-        wcscmp(g_settings.dockGroupIndicatorPosition, L"hidden") != 0) {
-        wcsncpy_s(g_settings.dockGroupIndicatorPosition, L"onIconBadge", _TRUNCATE);
+    LoadStringSetting(L"Appearance.DockLayout.dockGroupIndicatorPosition", g_settings.dockGroupIndicatorPosition, L"bottomRight");
+    if (wcscmp(g_settings.dockGroupIndicatorPosition, L"onIconBadge") == 0) {
+        wcsncpy_s(g_settings.dockGroupIndicatorPosition, L"bottomRight", _TRUNCATE);
+    } else if (wcscmp(g_settings.dockGroupIndicatorPosition, L"belowIcons") == 0) {
+        wcsncpy_s(g_settings.dockGroupIndicatorPosition, L"bottom", _TRUNCATE);
+    } else if (wcscmp(g_settings.dockGroupIndicatorPosition, L"aboveIcons") == 0) {
+        wcsncpy_s(g_settings.dockGroupIndicatorPosition, L"top", _TRUNCATE);
+    } else if (wcscmp(g_settings.dockGroupIndicatorPosition, L"insidePreview") == 0) {
+        wcsncpy_s(g_settings.dockGroupIndicatorPosition, L"topRight", _TRUNCATE);
+    } else if (wcscmp(g_settings.dockGroupIndicatorPosition, L"bottomRight") != 0 &&
+               wcscmp(g_settings.dockGroupIndicatorPosition, L"bottomLeft") != 0 &&
+               wcscmp(g_settings.dockGroupIndicatorPosition, L"topRight") != 0 &&
+               wcscmp(g_settings.dockGroupIndicatorPosition, L"topLeft") != 0 &&
+               wcscmp(g_settings.dockGroupIndicatorPosition, L"top") != 0 &&
+               wcscmp(g_settings.dockGroupIndicatorPosition, L"bottom") != 0 &&
+               wcscmp(g_settings.dockGroupIndicatorPosition, L"left") != 0 &&
+               wcscmp(g_settings.dockGroupIndicatorPosition, L"right") != 0 &&
+               wcscmp(g_settings.dockGroupIndicatorPosition, L"hidden") != 0) {
+        wcsncpy_s(g_settings.dockGroupIndicatorPosition, L"bottomRight", _TRUNCATE);
     }
 
     // Grouped indicator
