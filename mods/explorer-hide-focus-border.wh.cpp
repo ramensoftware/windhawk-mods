@@ -20,9 +20,13 @@ Removes the white rectangular focus border around selected files, folders and
 drives in Windows 11 File Explorer while keeping the normal selection highlight
 intact.
 
-The mod is scoped to File Explorer folder windows and doesn't change selection
-colors. It also doesn't target the classic dotted focus rectangle. For that
-separate effect, use the **No Focus Rectangle** mod.
+This is different from [No Focus Rectangle](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/no-focus-rectangle.wh.cpp):
+that mod suppresses the classic dotted `DrawFocusRect`, while this mod targets
+the themed focus border used by the modern File Explorer item view.
+
+## Before / After
+
+![Before and after](https://raw.githubusercontent.com/NoMorePlz/windhawk-mods/main/assets/explorer-hide-focus-border-before-after.svg)
 
 ## Notes
 
