@@ -47,18 +47,20 @@
 /*
 # Vector Screen Holder
 
-Fills a display of your choosing with generative line art, and holds the screen
-awake for as long as it runs. Every frame is drawn as strokes through Direct2D
-on the GPU. There are no images, no video file, and no fixed resolution, so
-the artwork is
-drawn for whatever size the display you pick actually is: a 1080p side monitor
-and a 4K portrait panel each get correctly proportioned art.
+Fills a display with generative line art and holds the screen awake for as long
+as it runs. **It runs on your primary display, on any single display you name,
+or on all of them at once**, so one monitor is as well served as six.
+
+Every frame is drawn as strokes through Direct2D on the GPU. There are no
+images, no video file and no fixed resolution, so the artwork is generated for
+whatever size the display you choose actually is: a 1080p monitor and a 4K
+portrait panel each get correctly proportioned art.
 
 Downloading a large file, or running a long build, render or backup, and you
 need the machine not to sign you out or drop to idle? Start the Screen Holder,
-put it on a side monitor next to your task monitor, and go to lunch. The work
-keeps running, the screen stays awake, and you can still see progress at a
-glance from across the room.
+put it on whichever display you can spare, and go to lunch. The work keeps
+running, the screen stays awake, and you can still see progress at a glance
+from across the room.
 
 ![The overlay running on a portrait monitor while a note is typed in Notepad](https://raw.githubusercontent.com/akilluminati47/vector-screen-holder/main/assets/typing.gif)
 
@@ -66,13 +68,6 @@ Above: a note being written on the side monitor while the art keeps running
 underneath it. The overlay is below the window, not over it.
 
 ## Controls
-
-The overlay is clean when it opens: no labels, no chrome, nothing on screen
-but the art. When you change something, a single line appears along the bottom
-naming the style, its parameter value, the amount notch and the palette, then
-fades after about two seconds. That line is the only text the mod ever draws,
-and only your own input brings it up: the rotation timer changes style in
-silence.
 
 | Input | What it does |
 | --- | --- |
@@ -83,11 +78,35 @@ silence.
 | **Space** | Step to the next palette |
 | **Ctrl+Alt+H** | Toggle the overlay on and off (configurable below) |
 
-All of these need the overlay focused. Click it once and it takes them,
-without ever coming to the front. That first click, the one that moves focus,
-only brings up the readout: it shows you the click landed and the overlay is
-listening, without changing what is on screen. Clicks after that cycle the
-style as usual.
+![The readout naming the style, the wheel value, the amount notch and the palette](https://raw.githubusercontent.com/akilluminati47/vector-screen-holder/main/assets/readout.gif)
+
+Above: the mouse wheel taking vigor from 0 to 100 across a single growth cycle.
+
+The overlay opens clean, with no labels and no chrome, nothing on screen but
+the art. Adjusting anything raises one line along the bottom naming the style,
+its parameter value, the amount notch and the palette, which fades after about
+two seconds. That line is the only text the mod draws, and only your own input
+raises it: the rotation timer changes style in silence.
+
+That line is set in a pixel font carried inside the mod, so there is nothing to
+install and it looks identical on every machine. The wording is translated into
+sixteen languages and follows your Windows display language, unless you pick
+one in the settings.
+
+The font carries the Latin, Greek and Cyrillic alphabets. Scripts it does not
+carry, Chinese, Japanese, Korean, Arabic, Hebrew and the rest, are drawn in
+your own system interface font, size matched so the line still reads as a
+single typeface. Either way the size is worked out by measuring against your
+display before anything is drawn, so the line never wraps and never runs past
+the edge. The font is published on its own as
+[a TrueType release](https://github.com/akilluminati47/fusion-pixel-font/releases/tag/vsh-subset-2026.09.01)
+if you want it elsewhere.
+
+Every control except the hotkey needs the overlay focused. Click it once and it
+takes them, without ever coming to the front. That first click, the one that
+moves focus, only raises the readout: it confirms the click landed and the
+overlay is listening, without changing what is on screen. Clicks after that
+cycle the style as usual.
 
 **Ctrl+Alt+H works from anywhere**, so you can always close the overlay even
 when something else has focus.
@@ -104,44 +123,30 @@ Alt+Tab.
 
 It does cover the desktop icons on the display it runs on, and a click there
 goes to the overlay rather than the desktop. That is inherent to sitting above
-the wallpaper, and it is why the mod is built around holding a monitor you are
-not working on. The **Display** setting defaults to your primary screen, so
-pick the side monitor if you would rather keep your icons reachable. It only goes away for good when you press Esc or toggle it off.
+the wallpaper. The **Display** setting defaults to your primary screen, which
+is the right choice on a single monitor machine; on more than one, point it at
+whichever display you are not working on and your icons stay reachable. Either
+way the overlay only goes for good when you press Esc or toggle it off.
 
-## Colour
+## Color
 
 Seven palettes: aurora, ember, ocean, neon, forest, mono, and custom, which
-takes its colours from the two custom settings. **Space** steps to the next
-one while the overlay is running, and the one you land on is remembered, so
-you can pick a palette by eye instead of by name. Changing the palette in the
-settings overrides whatever you stepped to, so the setting is never a dead
-control.
+takes its colors from the two custom settings. **Space** steps to the next one
+while the overlay is running, and the one you land on is remembered, so you can
+pick a palette by eye instead of by name. Changing the palette in the settings
+overrides whatever you stepped to, so the setting is never a dead control.
 
-**Hue shift** rotates the whole palette by a fixed number of degrees, which is
-the quickest way to tune the colours without writing a custom palette. Turn on
-the **automatic colour ramp** and the hue rotates continuously from there.
+**Hue shift** rotates the whole palette by a fixed number of degrees. It is a
+dial across the color wheel rather than a switch: 180 of its 359 degrees lands
+on the opposite side and reads as a flip of the palette you picked, and values
+between shift it part of the way there. **Leave it at 0, the default**, to get
+each palette exactly as it was designed; reach for it when you want a variation
+without writing a custom palette.
 
-Turning the ramp back off returns the colours to the hue shift you set, rather
-than leaving them wherever the rotation happened to stop.
-
-## The readout
-
-![The readout naming the style, the wheel value, the amount notch and the palette](https://raw.githubusercontent.com/akilluminati47/vector-screen-holder/main/assets/readout.gif)
-
-Above: the wheel taking vigor from 0 to 100 across one growth cycle. The whole
-monitor on the left, the same thing close up on the right.
-
-One line along the bottom, and only while you are changing something. It names
-the style, what the wheel is set to, the amount notch and the palette, then
-fades. Nothing you do not ask for ever appears on screen.
-
-It is set in a pixel font that ships inside the mod, so there is nothing to
-install and it looks the same on every machine. The font covers the alphabets
-used across most of the world. For the writing it does not cover, Chinese,
-Japanese, Korean, Arabic, Hebrew, Thai and the rest, the mod borrows your own
-system font and matches it to size so the line still reads as one line. Either
-way it is measured against your display before it is drawn, so it never wraps
-and never runs off the edge.
+Turn on the **automatic color ramp** and the hue rotates continuously from
+whatever the hue shift is set to. Turning the ramp back off returns the colors
+to that value, rather than leaving them wherever the rotation happened to
+stop.
 
 ## The four styles
 
@@ -175,44 +180,6 @@ It does **not** fake keystrokes or mouse movement. Some corporate presence
 tools (Teams, Slack) track real input rather than display state and will still
 mark you away.
 
-## Launching it from a shortcut
-
-The mod listens on a named event, so a shortcut can toggle it. Save this as
-`toggle-screen-holder.vbs` anywhere:
-
-```vbs
-CreateObject("WScript.Shell").Run "powershell -nop -w hidden -c ""[Threading.EventWaitHandle]::OpenExisting('Local\WindhawkVectorScreenHolderToggle').Set()""", 0, False
-```
-
-Then make an ordinary Windows shortcut to that `.vbs` and give it whatever icon
-you like. Running it toggles the overlay. `wscript.exe` opens no console, so
-nothing flashes on screen.
-
-The event lives in the `Local\` (per-session) namespace, so a second
-logged-in user cannot toggle your overlay. It grants `EVENT_MODIFY_STATE` and
-`SYNCHRONIZE` only. `SetEvent` needs the first, and `OpenExisting` asks for
-both, so the one-liner above fails with "Access to the path is denied" without
-it. It is still far short of full access: the event cannot be deleted, nor its
-permissions or owner changed. The integrity label is Medium rather than Low:
-an ordinary shortcut runs at Medium, and stopping there keeps sandboxed
-processes such as browser renderers from reaching it.
-
-## Performance
-
-The overlay is real work on the GPU and CPU, and the whole point is to run it
-*while* something else is busy. The heaviest combination by far is **contours
-at maximal amount**, which marches 46 iso levels over the sampling grid and
-rebuilds 46 path geometries every frame.
-
-If you are holding the screen for a long build or render and want the mod to
-stay further out of its way:
-
-- drop **Frames per second** to 30, since motion is paced against the clock
-  so it stays smooth rather than becoming choppy;
-- or step the **amount** down a notch or two with right click;
-- or pick flow field or harmonograph, which draw themselves and then idle,
-  rather than contours, which redraw continuously.
-
 ## Source, screenshots and the prototype
 
 The mod lives at
@@ -221,23 +188,15 @@ along with the browser prototype the four algorithms were developed in before
 the Direct2D port. There is a short showcase of all four styles at
 [vector.akilluminati47.pages.dev](https://vector.akilluminati47.pages.dev/).
 
-## Notes
-
-- Runs as a Windhawk *tool mod* in its own dedicated `windhawk.exe` process, so
-  it is never injected into your applications.
-- The display numbers come from the `\\.\DISPLAYn` device names. These
-  normally line up with the numbers Windows Settings shows, but the two are
-  produced by different parts of Windows and can disagree after displays are
-  re-arranged. The list of connected displays, with number, resolution,
-  position and device name, is written to the mod log when it loads. Use that,
-  and
-  the resolution in particular, to confirm which display is which.
-- Parameter, amount and the current style are remembered across restarts.
-
 ## Credits
 
 Originally created by **akilluminati47**, developed with the help of the AI
 pair-programmers Claude and Big-Pickle (opencode).
+
+The readout is set in [Fusion Pixel Font](https://github.com/TakWolf/fusion-pixel-font) by
+[TakWolf](https://takwolf.com), used under the SIL Open Font License 1.1. The
+717 glyph subset the mod carries, and the script that cuts it, are published at
+[akilluminati47/fusion-pixel-font](https://github.com/akilluminati47/fusion-pixel-font/releases/tag/vsh-subset-2026.09.01).
 */
 // ==/WindhawkModReadme==
 
@@ -1314,12 +1273,12 @@ pair-programmers Claude and Big-Pickle (opencode).
   $name:ar: إزاحة تدرج اللون (درجات)
   $name:he: הסטת גוון (מעלות)
   $description: >-
-    Rotates the palette by a fixed amount, so you can tune the colours without
+    Rotates the palette by a fixed amount, so you can tune the colors without
     editing a custom palette. 0 leaves the palette exactly as defined. This is
-    the colour you get whenever the automatic ramp is off, and the colour the
+    the color you get whenever the automatic ramp is off, and the color the
     artwork returns to the moment you turn the ramp off. Clamped to 0-359.
 - colorRamp: false
-  $name: Automatic colour ramp
+  $name: Automatic color ramp
   $name:es-ES: Rampa de color automática
   $name:pt-BR: Rampa de cor automática
   $name:fr-FR: Dégradé de couleur automatique
@@ -1339,7 +1298,7 @@ pair-programmers Claude and Big-Pickle (opencode).
   $description: >-
     Continuously rotate the hue of the artwork, starting from the hue shift
     above. While this is on, the hue shift setting is the starting point
-    rather than a fixed value. Turn it off and the colours return to the hue
+    rather than a fixed value. Turn it off and the colors return to the hue
     shift you set, instead of stopping wherever the rotation happened to be.
 - rampSpeed: 12
   $name: Ramp speed (degrees/sec)
@@ -1866,7 +1825,7 @@ struct Noise {
 };
 
 // ---------------------------------------------------------------------------
-// Colour
+// Color
 // ---------------------------------------------------------------------------
 struct Rgb {
     float r, g, b;
@@ -1882,7 +1841,7 @@ static Rgb RgbFromHex(unsigned v) {
 
 // Hue rotation applied at stroke time. Direct2D 1.0 has no hue-rotate effect,
 // and doing it per stroke is the better look anyway: styles that redraw every
-// frame slide through colour wholesale, while styles that accumulate lay a
+// frame slide through color wholesale, while styles that accumulate lay a
 // gradient through the artwork as the hue drifts.
 static Rgb ShiftHue(const Rgb& in, float deg) {
     if (deg == 0.0f) {
@@ -2450,7 +2409,7 @@ class ContourScene : public Scene {
                 float vmax = std::max(std::max(v0, v1), std::max(v2, v3));
 
                 // Widen by one notch each way: the level is recomputed below
-                // the same way the colour ramp does it, and that expression
+                // the same way the color ramp does it, and that expression
                 // can land a hair either side of base + k * step. A spare
                 // level costs one rejected code test; a missed one would drop
                 // a segment.
@@ -2982,7 +2941,7 @@ struct Preset {
 };
 
 // "custom" is the last entry so stepping with Space reaches it too; its
-// colours come from the two custom settings rather than from this table.
+// colors come from the two custom settings rather than from this table.
 static const Preset kPresets[] = {
         {L"aurora", 0x05070d, {0x7fe7cf, 0x5fb3ff, 0xa68bff, 0xff7fd0, 0xe8f3ff}},
         {L"ember",  0x0d0603, {0xffb066, 0xff6a3d, 0xffd98a, 0xe0503a, 0xfff0d8}},
@@ -3037,7 +2996,7 @@ static void BuildPalette() {
         if (g_palette.ink.size() >= 2) {
             return;
         }
-        // an unusable custom list falls back to this preset's own colours
+        // an unusable custom list falls back to this preset's own colors
         g_palette.ink.clear();
     }
 
@@ -4557,7 +4516,7 @@ static void Controller_Wheel(Overlay* ov, int delta) {
 }
 
 // Space steps through the palettes, live, the way click steps the style.
-// It used to slide the hue while held, which left the colours stranded at an
+// It used to slide the hue while held, which left the colors stranded at an
 // arbitrary rotation with no way to get back to a named palette.
 static void Controller_CyclePalette() {
     g_paletteIndex = (g_paletteIndex + 1) % kPaletteCount;
@@ -5227,7 +5186,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
                 g_hue += 360.0f;
             }
         } else {
-            // With the ramp off the colour is whatever the user set, not
+            // With the ramp off the color is whatever the user set, not
             // wherever a previous rotation happened to stop.
             g_hue = (float)g_settings.hueOffset;
         }
