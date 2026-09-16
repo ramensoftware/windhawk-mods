@@ -2591,13 +2591,14 @@ constexpr PCWSTR kCpuChipStroke =
     L"M19 8 L21 8 M19 12 L21 12 M19 16 L21 16";
 
 constexpr PCWSTR kRamStickStroke =
-    L"M3 8.5 L21 8.5 L21 15.5 L3 15.5 Z "
-    L"M5 11 L7 11 L7 14 L5 14 Z "
-    L"M9 11 L11 11 L11 14 L9 14 Z "
-    L"M13 11 L15 11 L15 14 L13 14 Z "
-    L"M17 11 L19 11 L19 14 L17 14 Z "
-    L"M5 15.5 L5 17.5 M8 15.5 L8 17.5 M11 15.5 L11 17.5 "
-    L"M14 15.5 L14 17.5 M17 15.5 L17 17.5 M20 15.5 L20 17.5";
+    L"M3 3.5 L21 3.5 L21 16 L3 16 Z "
+    L"M5 6 L7.5 6 L7.5 13.5 L5 13.5 Z "
+    L"M9 6 L11.5 6 L11.5 13.5 L9 13.5 Z "
+    L"M13 6 L15.5 6 L15.5 13.5 L13 13.5 Z "
+    L"M17 6 L19.5 6 L19.5 13.5 L17 13.5 Z "
+    L"M4.5 16 L4.5 20.5 M7 16 L7 20.5 M9.5 16 L9.5 20.5 "
+    L"M12 16 L12 20.5 M14.5 16 L14.5 20.5 M17 16 L17 20.5 "
+    L"M19.5 16 L19.5 20.5";
 
 constexpr PCWSTR kGpuCardStroke =
     L"M2 3 L2 20 "
@@ -5465,11 +5466,22 @@ bool SetConnected(const BLUETOOTH_ADDRESS& address, bool connect) {
     }
     services.resize(serviceCount);
 
-    DWORD state = connect ? BLUETOOTH_SERVICE_ENABLE : BLUETOOTH_SERVICE_DISABLE;
     bool any = false;
-    for (const GUID& service : services) {
-        if (api.setServiceState(radio.radio, &info, &service, state) == ERROR_SUCCESS) {
-            any = true;
+    if (connect) {
+        for (const GUID& service : services) {
+            api.setServiceState(radio.radio, &info, &service, BLUETOOTH_SERVICE_DISABLE);
+        }
+        Sleep(200);
+        for (const GUID& service : services) {
+            if (api.setServiceState(radio.radio, &info, &service, BLUETOOTH_SERVICE_ENABLE) == ERROR_SUCCESS) {
+                any = true;
+            }
+        }
+    } else {
+        for (const GUID& service : services) {
+            if (api.setServiceState(radio.radio, &info, &service, BLUETOOTH_SERVICE_DISABLE) == ERROR_SUCCESS) {
+                any = true;
+            }
         }
     }
     return any;
@@ -5889,6 +5901,20 @@ void ApplyIconColorToElement(FrameworkElement element, const std::wstring& value
     std::function<void(DependencyObject)> walk = [&](DependencyObject node) {
         if (!node) return;
         try {
+            // Controls whose template draws its own Shape-based visuals
+            // (ToggleSwitch track + knob, Slider track + thumb, ProgressRing,
+            // ProgressBar, ScrollBar). Recoloring their internals overwrites
+            // state-driven fills -- in the ToggleSwitch case the walk paints
+            // a solid IconColor rectangle straight over the whole switch.
+            // None of them contain vector icons in this mod, so skipping
+            // their subtree is safe.
+            if (node.try_as<wuxc::ToggleSwitch>() ||
+                node.try_as<wuxc::Slider>() ||
+                node.try_as<wuxc::ProgressRing>() ||
+                node.try_as<wuxc::ProgressBar>() ||
+                node.try_as<wuxc::Primitives::ScrollBar>()) {
+                return;
+            }
             // Path, Rectangle, Ellipse, Line, Polygon, Polyline all derive
             // from Shape, so one check covers every vector glyph the mod
             // builds, including the Start logo which is four Rectangles.
@@ -8031,7 +8057,7 @@ void PopulateBluetoothPanel() {
             
             RunInBackground([captured, connect] {
                 bluetooth::SetConnected(captured.address, connect);
-                WaitForSingleObject(g_stopEvent, 1200);
+                WaitForSingleObject(g_stopEvent, 2500);
                 auto devices = bluetooth::Enumerate(false);
                 RunOnUiThread([devices = std::move(devices)]() mutable {
                     g_bluetoothDevices = std::move(devices);
@@ -8215,73 +8241,138 @@ int QueryBatteryHealth() {
     static int cachedHealth = -1;
     if (cachedHealth >= 0) return cachedHealth;
 
-    int health = 100;  // default
+    int health = 100;
+    ULONGLONG designCap = 0;
+    ULONGLONG fullCap = 0;
+
+    static const CLSID kCLSID_WbemLocator = {
+        0x4590f811, 0x1d3a, 0x11d0,
+        {0x89, 0x1f, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
+    static const IID kIID_IWbemLocator = {
+        0xdc12a687, 0x737f, 0x11cf,
+        {0x88, 0x4d, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
+
+    auto extract = [](const VARIANT& v) -> ULONGLONG {
+        switch (v.vt) {
+            case VT_UI1: return v.bVal;
+            case VT_UI2: return v.uiVal;
+            case VT_UI4: return v.ulVal;
+            case VT_UI8: return v.ullVal;
+            case VT_I1:  return (ULONGLONG)v.cVal;
+            case VT_I2:  return (ULONGLONG)v.iVal;
+            case VT_I4:  return (ULONGLONG)v.lVal;
+            case VT_I8:  return (ULONGLONG)v.llVal;
+            default:     return 0;
+        }
+    };
+
+    auto queryOne = [&](IWbemServices* services, PCWSTR cls, PCWSTR prop) -> ULONGLONG {
+        std::wstring q = L"SELECT ";
+        q += prop;
+        q += L" FROM ";
+        q += cls;
+        BSTR lang = SysAllocString(L"WQL");
+        BSTR query = SysAllocString(q.c_str());
+        winrt::com_ptr<IEnumWbemClassObject> enumerator;
+        HRESULT r = services->ExecQuery(
+            lang, query,
+            WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+            nullptr, enumerator.put());
+        SysFreeString(query);
+        SysFreeString(lang);
+        if (FAILED(r) || !enumerator) return 0;
+
+        IWbemClassObject* obj = nullptr;
+        ULONG returned = 0;
+        if (SUCCEEDED(enumerator->Next(2000, 1, &obj, &returned)) && returned && obj) {
+            VARIANT v;
+            VariantInit(&v);
+            ULONGLONG result = 0;
+            if (SUCCEEDED(obj->Get(prop, 0, &v, nullptr, nullptr))) {
+                result = extract(v);
+            }
+            VariantClear(&v);
+            obj->Release();
+            return result;
+        }
+        return 0;
+    };
+
     try {
         winrt::com_ptr<IWbemLocator> locator;
-        if (FAILED(CoCreateInstance(brightness::kCLSID_WbemLocator, nullptr, CLSCTX_INPROC_SERVER,
-                                    brightness::kIID_IWbemLocator, locator.put_void()))) {
-            return health;
-        }
-        BSTR ns = SysAllocString(L"root\\cimv2");
-        winrt::com_ptr<IWbemServices> services;
-        if (SUCCEEDED(locator->ConnectServer(ns, nullptr, nullptr, nullptr, 0, nullptr, nullptr,
-                                             services.put()))) {
+        if (SUCCEEDED(CoCreateInstance(kCLSID_WbemLocator, nullptr,
+                                       CLSCTX_INPROC_SERVER, kIID_IWbemLocator,
+                                       locator.put_void()))) {
+            BSTR ns = SysAllocString(L"root\\WMI");
+            winrt::com_ptr<IWbemServices> services;
+            HRESULT hr = locator->ConnectServer(ns, nullptr, nullptr, nullptr, 0,
+                                                nullptr, nullptr, services.put());
             SysFreeString(ns);
-            CoSetProxyBlanket(services.get(), RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr,
-                              RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE);
-            BSTR query = SysAllocString(L"SELECT FullChargeCapacity, DesignCapacity FROM Win32_Battery");
-            BSTR lang = SysAllocString(L"WQL");
-            winrt::com_ptr<IEnumWbemClassObject> enumerator;
-            if (SUCCEEDED(services->ExecQuery(lang, query, WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
-                                              nullptr, enumerator.put()))) {
-                IWbemClassObject* obj = nullptr;
-                ULONG returned = 0;
-                if (SUCCEEDED(enumerator->Next(2000, 1, &obj, &returned)) && returned) {
-                    VARIANT full, design;
-                    VariantInit(&full);
-                    VariantInit(&design);
-                    bool gotFull = false, gotDesign = false;
-                    if (SUCCEEDED(obj->Get(L"FullChargeCapacity", 0, &full, nullptr, nullptr)) &&
-                        SUCCEEDED(obj->Get(L"DesignCapacity", 0, &design, nullptr, nullptr))) {
-                        // Accept different integer types (some systems report unsigned values)
-                        ULONGLONG fullCap = 0, designCap = 0;
-                        switch (full.vt) {
-                            case VT_UI1: fullCap = full.bVal; break;
-                            case VT_UI2: fullCap = full.uiVal; break;
-                            case VT_UI4: fullCap = full.ulVal; break;
-                            case VT_UI8: fullCap = full.ullVal; break;
-                            case VT_I2:  fullCap = (ULONGLONG)full.iVal; break;
-                            case VT_I4:  fullCap = (ULONGLONG)full.lVal; break;
-                            case VT_I8:  fullCap = (ULONGLONG)full.llVal; break;
-                            default: break;
-                        }
-                        switch (design.vt) {
-                            case VT_UI1: designCap = design.bVal; break;
-                            case VT_UI2: designCap = design.uiVal; break;
-                            case VT_UI4: designCap = design.ulVal; break;
-                            case VT_UI8: designCap = design.ullVal; break;
-                            case VT_I2:  designCap = (ULONGLONG)design.iVal; break;
-                            case VT_I4:  designCap = (ULONGLONG)design.lVal; break;
-                            case VT_I8:  designCap = (ULONGLONG)design.llVal; break;
-                            default: break;
-                        }
-                        if (fullCap > 0 && designCap > 0) {
-                            health = (int)((fullCap * 100ULL) / designCap);
-                            if (health > 100) health = 100;
-                            if (health < 0) health = 0;
+            if (SUCCEEDED(hr) && services) {
+                CoSetProxyBlanket(services.get(), RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE,
+                                  nullptr, RPC_C_AUTHN_LEVEL_CALL,
+                                  RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE);
+                designCap = queryOne(services.get(), L"BatteryStaticData",
+                                     L"DesignedCapacity");
+                fullCap = queryOne(services.get(), L"BatteryFullChargedCapacity",
+                                   L"FullChargedCapacity");
+            }
+        }
+    } catch (...) {}
+
+    if (designCap == 0 || fullCap == 0) {
+        try {
+            winrt::com_ptr<IWbemLocator> locator;
+            if (SUCCEEDED(CoCreateInstance(kCLSID_WbemLocator, nullptr,
+                                           CLSCTX_INPROC_SERVER, kIID_IWbemLocator,
+                                           locator.put_void()))) {
+                BSTR ns = SysAllocString(L"root\\cimv2");
+                winrt::com_ptr<IWbemServices> services;
+                HRESULT hr = locator->ConnectServer(ns, nullptr, nullptr, nullptr, 0,
+                                                    nullptr, nullptr, services.put());
+                SysFreeString(ns);
+                if (SUCCEEDED(hr) && services) {
+                    CoSetProxyBlanket(services.get(), RPC_C_AUTHN_WINNT,
+                                      RPC_C_AUTHZ_NONE, nullptr, RPC_C_AUTHN_LEVEL_CALL,
+                                      RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE);
+                    BSTR query = SysAllocString(
+                        L"SELECT FullChargeCapacity, DesignCapacity FROM Win32_Battery");
+                    BSTR lang = SysAllocString(L"WQL");
+                    winrt::com_ptr<IEnumWbemClassObject> enumerator;
+                    if (SUCCEEDED(services->ExecQuery(
+                            lang, query,
+                            WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+                            nullptr, enumerator.put()))) {
+                        IWbemClassObject* obj = nullptr;
+                        ULONG returned = 0;
+                        if (SUCCEEDED(enumerator->Next(2000, 1, &obj, &returned)) &&
+                            returned && obj) {
+                            VARIANT full, design;
+                            VariantInit(&full);
+                            VariantInit(&design);
+                            if (SUCCEEDED(obj->Get(L"FullChargeCapacity", 0, &full,
+                                                   nullptr, nullptr)) &&
+                                SUCCEEDED(obj->Get(L"DesignCapacity", 0, &design,
+                                                   nullptr, nullptr))) {
+                                fullCap   = extract(full);
+                                designCap = extract(design);
+                            }
+                            VariantClear(&full);
+                            VariantClear(&design);
+                            obj->Release();
                         }
                     }
-                    VariantClear(&full);
-                    VariantClear(&design);
-                    obj->Release();
+                    SysFreeString(query);
+                    SysFreeString(lang);
                 }
             }
-            SysFreeString(query);
-            SysFreeString(lang);
-        } else {
-            SysFreeString(ns);
-        }
-    } catch (...) {
+        } catch (...) {}
+    }
+
+    if (designCap > 0 && fullCap > 0) {
+        health = static_cast<int>((fullCap * 100ULL) / designCap);
+        if (health > 100) health = 100;
+        if (health < 0) health = 0;
     }
     cachedHealth = health;
     return health;
