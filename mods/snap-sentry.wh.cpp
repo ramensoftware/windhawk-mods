@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.
-// @version         0.19.3
+// @version         0.19.4
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -180,7 +180,6 @@ DEFINE_GUID(IID_INotificationActivationCallback,
 // ============================================================================
 
 struct Settings {
-    ULONGLONG generation;
     int delaySeconds;
     bool deleteFile;
     bool popup;
@@ -194,6 +193,9 @@ struct Settings {
 
 static CRITICAL_SECTION g_lock;       // Guards g_settings and watcher/session state below.
 static Settings g_settings;
+// Bumped only when settings are reloaded, so a prompt on screen is cancelled
+// by an actual settings change and never by a watcher restart.
+static std::atomic<ULONGLONG> g_generation{0};
 static std::deque<std::wstring> g_queue;   // Full paths waiting to be processed.
 static std::set<std::wstring> g_inflight;  // Names queued or in progress (dedup).
 
@@ -238,8 +240,6 @@ static std::atomic<HWND> g_dialog{nullptr};  // Open action dialog, for shutdown
 // screenshot behind it. Running out is treated as Keep, since nobody chose to
 // delete anything.
 static constexpr DWORD kNoAnswerCapMs = 10 * 60 * 1000;
-// An unconfirmed notification settles well before the full no-answer cap.
-static constexpr DWORD kUnconfirmedCapMs = 30 * 1000;
 
 enum {
     ACTION_AUTO = 100,
@@ -352,8 +352,8 @@ static void LoadSettings() {
     }
 
     EnterCriticalSection(&g_lock);
-    s.generation = g_settings.generation + 1;
     g_settings = std::move(s);
+    ++g_generation;
     LeaveCriticalSection(&g_lock);
 }
 
@@ -596,8 +596,7 @@ enum class ImageCopy { Failed, Copied, CopiedFirstFrameOnly };
 // what makes the copied image survive deletion of the source file. Windows
 // synthesizes CF_DIB and CF_BITMAP from CF_DIBV5 on demand, so publishing those too
 // would just be another full-size copy of the bitmap (it runs in a 32-bit process).
-static ImageCopy ClipboardImage(const std::wstring& path,
-                                HANDLE lockedFile = INVALID_HANDLE_VALUE) {
+static ImageCopy ClipboardImage(const std::wstring& path) {
     IWICImagingFactory* factory = nullptr;
     if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr,
                                 CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory)))) {
@@ -613,14 +612,9 @@ static ImageCopy ClipboardImage(const std::wstring& path,
     bool multiFrame = false;
 
     do {
-        HRESULT decode = lockedFile != INVALID_HANDLE_VALUE
-            ? factory->CreateDecoderFromFileHandle((ULONG_PTR)lockedFile, nullptr,
-                                                  WICDecodeMetadataCacheOnDemand,
-                                                  &decoder)
-            : factory->CreateDecoderFromFilename(
+        if (FAILED(factory->CreateDecoderFromFilename(
                 path.c_str(), nullptr, GENERIC_READ,
-                WICDecodeMetadataCacheOnDemand, &decoder);
-        if (FAILED(decode)) {
+                WICDecodeMetadataCacheOnDemand, &decoder))) {
             break;
         }
         // A multi-page file (routinely a scanned TIFF) decodes only frame 0 onto
@@ -1136,6 +1130,48 @@ public:
 
 static ToastDismissListener g_toastDismissListener;
 
+using ToastFailedHandler = ABI::Windows::Foundation::ITypedEventHandler<
+    ABI::Windows::UI::Notifications::ToastNotification*,
+    ABI::Windows::UI::Notifications::ToastFailedEventArgs*>;
+
+// Windows raises this when it could not deliver the notification. That is the
+// platform's own answer to "was it shown", which notification-center history is
+// not: a banner can appear with center history switched off, and Do Not Disturb
+// files a toast into the center without ever showing a banner.
+static std::atomic<bool> g_toastFailed{false};
+
+class ToastFailListener : public ToastFailedHandler {
+public:
+    ULONG STDMETHODCALLTYPE AddRef() override { return 1; }
+    ULONG STDMETHODCALLTYPE Release() override { return 1; }  // Static lifetime.
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** obj) override {
+        if (riid == IID_IUnknown || riid == __uuidof(ToastFailedHandler)) {
+            *obj = static_cast<ToastFailedHandler*>(this);
+            return S_OK;
+        }
+        *obj = nullptr;
+        return E_NOINTERFACE;
+    }
+
+    HRESULT STDMETHODCALLTYPE
+    Invoke(ABI::Windows::UI::Notifications::IToastNotification* sender,
+           ABI::Windows::UI::Notifications::IToastFailedEventArgs* args) override {
+        if (sender != g_activeToast.load()) {
+            return S_OK;
+        }
+        HRESULT code = E_FAIL;
+        if (args) {
+            args->get_ErrorCode(&code);
+        }
+        Wh_Log(L"Notification was not delivered (0x%08lx); copy only", (unsigned long)code);
+        g_toastFailed.store(true);
+        SetEvent(g_toastActionEvent);
+        return S_OK;
+    }
+};
+
+static ToastFailListener g_toastFailListener;
+
 // ============================================================================
 // Toast notification display and wait
 // ============================================================================
@@ -1222,47 +1258,13 @@ static std::wstring BaseName(const std::wstring& path) {
     return path.substr(path.find_last_of(L"\\/") + 1);
 }
 
-// History is a delivery acknowledgement, not proof that a banner was visible.
-// An absent/unreadable entry must never authorize the automatic delete path.
-static bool ToastReachedHistory(const std::wstring& tag) {
-    using namespace ABI::Windows::UI::Notifications;
-    using Microsoft::WRL::ComPtr;
-    using Microsoft::WRL::Wrappers::HStringReference;
-    ComPtr<IToastNotificationManagerStatics> statics;
-    ComPtr<IToastNotificationManagerStatics2> statics2;
-    ComPtr<IToastNotificationHistory> history;
-    ComPtr<IToastNotificationHistory2> history2;
-    ComPtr<ABI::Windows::Foundation::Collections::IVectorView<ToastNotification*>> entries;
-    if (FAILED(RoGetActivationFactory(HStringReference(
-            RuntimeClass_Windows_UI_Notifications_ToastNotificationManager).Get(),
-            IID_PPV_ARGS(&statics))) || FAILED(statics.As(&statics2)) ||
-        FAILED(statics2->get_History(&history)) || FAILED(history.As(&history2)) ||
-        FAILED(history2->GetHistoryWithId(HStringReference(kAppUserModelId).Get(),
-                                          &entries))) return false;
-    UINT32 size = 0;
-    if (FAILED(entries->get_Size(&size))) return false;
-    for (UINT32 i = 0; i < size && i < 256; ++i) {
-        ComPtr<IToastNotification> entry;
-        ComPtr<IToastNotification2> entry2;
-        HSTRING value = nullptr;
-        if (FAILED(entries->GetAt(i, &entry)) || FAILED(entry.As(&entry2)) ||
-            FAILED(entry2->get_Tag(&value))) continue;
-        UINT32 length = 0;
-        const wchar_t* text = WindowsGetStringRawBuffer(value, &length);
-        bool match = text && tag.size() == length &&
-                     wmemcmp(text, tag.data(), length) == 0;
-        WindowsDeleteString(value);
-        if (match) return true;
-    }
-    return false;
-}
-
 // Builds and shows the toast, then waits up to s.delaySeconds for a button
 // click (via ToastActivator::Activate, dispatched by CoWaitForMultipleHandles)
 // or an explicit dismissal. Returns false, meaning "use the dialog instead",
 // if registration hasn't succeeded or any WinRT step fails, so the mod stays
 // usable even where toast notifications don't work.
-static bool ShowToast(const std::wstring& path, const Settings& s, int& action) {
+static bool ShowToast(const std::wstring& path, const Settings& s, int& action,
+                      ULONGLONG generation) {
     using namespace ABI::Windows::UI::Notifications;
     using namespace ABI::Windows::Foundation;
     using Microsoft::WRL::ComPtr;
@@ -1310,9 +1312,7 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
     }
 
     ResetEvent(g_toastActionEvent);
-    ComPtr<IToastNotification2> toast2;
-    if (FAILED(toast.As(&toast2)) || FAILED(toast2->put_Tag(
-            Microsoft::WRL::Wrappers::HStringReference(id.c_str()).Get()))) return false;
+    g_toastFailed.store(false);
     EnterCriticalSection(&g_toastLock);
     g_activeToastId = toastId;
     g_toastAction = ACTION_AUTO;
@@ -1323,6 +1323,9 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
     EventRegistrationToken dismissToken{};
     bool dismissHooked =
         SUCCEEDED(toast->add_Dismissed(&g_toastDismissListener, &dismissToken));
+    EventRegistrationToken failedToken{};
+    bool failedHooked =
+        SUCCEEDED(toast->add_Failed(&g_toastFailListener, &failedToken));
 
     if (FAILED(notifier->Show(toast.Get()))) {
         g_activeToast.store(nullptr);
@@ -1332,6 +1335,9 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
         if (dismissHooked) {
             toast->remove_Dismissed(dismissToken);
         }
+    if (failedHooked) {
+        toast->remove_Failed(failedToken);
+    }
         return false;
     }
 
@@ -1349,13 +1355,11 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
     HANDLE waits[] = {g_stopEvent, g_toastActionEvent};
     DWORD start = GetTickCount();
     bool removeToast = false;
-    bool delivered = false;
-    DWORD nextProbe = 250;
     // Outbound COM probes may dispatch an activation callback reentrantly.
     // Settle under the same lock as the callbacks, after every probe, so a Keep
     // already accepted cannot be overwritten by a timeout.
     auto settle = [&](int proposed) {
-        bool cancelled = WaitStop(0) || SnapshotSettings().generation != s.generation;
+        bool cancelled = WaitStop(0);
         EnterCriticalSection(&g_toastLock);
         if (cancelled) {
             action = ACTION_KEEP;
@@ -1371,40 +1375,31 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
     };
     for (;;) {
         DWORD elapsed = GetTickCount() - start;
-        if (WaitStop(0) || SnapshotSettings().generation != s.generation) {
+        if (WaitStop(0) || g_generation.load() != generation) {
             settle(ACTION_KEEP);
             break;
         }
         if (WaitForSingleObject(g_toastActionEvent, 0) == WAIT_OBJECT_0) {
             settle(ACTION_KEEP);
-            break;  // A real answer always wins over a history-probe timeout.
+            break;  // A real answer always wins over any timeout.
         }
-        // History only proves the notification reached the notification center.
-        // A banner can be on screen with history display switched off, so an
-        // unconfirmed toast is never pulled down and never replaced by a second
-        // prompt. It only means the countdown must not authorize a deletion.
-        if (!delivered && elapsed >= nextProbe) {
-            delivered = ToastReachedHistory(id);
-            nextProbe = elapsed + 500;
+        // Windows tells us when it could not deliver the notification. Until it
+        // says so the toast is treated as shown and is never pulled down, so a
+        // banner the user can see is never swapped for a second prompt.
+        if (g_toastFailed.load()) {
+            settle(ACTION_COPY_ONLY);
+            break;
         }
-        // Without a countdown an unconfirmed toast still cannot park the worker
-        // for the full no-answer cap, so it settles as copy only much sooner.
-        DWORD cap = (noCountdown && !delivered) ? kUnconfirmedCapMs : timeoutMs;
-        if (elapsed >= cap) {
+        if (elapsed >= timeoutMs) {
             NotificationSetting currentSetting = NotificationSetting_Enabled;
             bool enabled = SUCCEEDED(notifier->get_Setting(&currentSetting)) &&
                            currentSetting == NotificationSetting_Enabled;
-            bool mayDelete = delivered && enabled && !noCountdown;
-            if (!delivered) {
-                Wh_Log(L"Notification delivery not confirmed; copy only");
-            }
-            settle(mayDelete ? ACTION_AUTO : ACTION_COPY_ONLY);
+            settle(noCountdown || !enabled ? ACTION_COPY_ONLY : ACTION_AUTO);
             break;
         }
-        DWORD remaining = elapsed >= cap ? 0 : cap - elapsed;
-        // Poll only while delivery is unconfirmed; afterwards the deadline is
-        // fixed, so there is nothing to wake up for until it arrives.
-        DWORD slice = delivered ? remaining : 250;
+        DWORD remaining = timeoutMs - elapsed;
+        // The answer arrives on an event, so wait out the deadline in one go.
+        DWORD slice = remaining;
         DWORD result = MsgWaitForMultipleObjectsEx(
             ARRAYSIZE(waits), waits, slice, QS_ALLINPUT,
             MWMO_INPUTAVAILABLE | MWMO_ALERTABLE);
@@ -1493,7 +1488,7 @@ static HRESULT CALLBACK DialogCallback(HWND hwnd, UINT msg, WPARAM, LPARAM,
             g_dialog.store(hwnd);
             // If stop was signaled before the handle was stored, close now as Keep.
             if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0 ||
-                SnapshotSettings().generation != state->generation) {
+                g_generation.load() != state->generation) {
                 SendMessageW(hwnd, TDM_CLICK_BUTTON, ACTION_KEEP, 0);
                 break;
             }
@@ -1508,7 +1503,7 @@ static HRESULT CALLBACK DialogCallback(HWND hwnd, UINT msg, WPARAM, LPARAM,
             // TDN_CREATED stored our handle, WhTool_ModUninit couldn't dismiss us,
             // so close ourselves as Keep here rather than let the join hang.
             if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0 ||
-                SnapshotSettings().generation != state->generation) {
+                g_generation.load() != state->generation) {
                 SendMessageW(hwnd, TDM_CLICK_BUTTON, ACTION_KEEP, 0);
                 break;
             }
@@ -1536,7 +1531,7 @@ static int AskAction(const std::wstring& path, const Settings& s) {
     }
     std::wstring name = BaseName(path);
     DialogState state;
-    state.generation = s.generation;
+    state.generation = g_generation.load();
     state.started = GetTickCount();
     // Same backstop as the toast: without it, a dialog nobody answers holds the
     // worker and no later screenshot is copied or deleted until someone does.
@@ -1607,9 +1602,10 @@ static int AskAction(const std::wstring& path, const Settings& s) {
 
 // Tries the toast notification first; falls back to the dialog box if toast
 // registration didn't succeed on this machine or the WinRT call chain fails.
-static int ChooseAction(const std::wstring& path, const Settings& s) {
+static int ChooseAction(const std::wstring& path, const Settings& s,
+                        ULONGLONG generation) {
     int action = ACTION_AUTO;
-    if (ShowToast(path, s, action)) {
+    if (ShowToast(path, s, action, generation)) {
         return action;
     }
     return AskAction(path, s);
@@ -1769,6 +1765,7 @@ static bool WaitForStableFile(const std::wstring& path) {
 
 static void ProcessOne(std::wstring path) {
     Settings s = SnapshotSettings();
+    ULONGLONG generation = g_generation.load();
 
     DWORD t0 = GetTickCount();
     if (!WaitForStableFile(path)) {
@@ -1791,7 +1788,7 @@ static void ProcessOne(std::wstring path) {
     }
 
     DWORD t1 = GetTickCount();
-    int action = s.popup ? ChooseAction(path, s) : ACTION_AUTO;
+    int action = s.popup ? ChooseAction(path, s, generation) : ACTION_AUTO;
     if (s.logDetails) {
         Wh_Log(L"popup returned %d in %lu ms", action, GetTickCount() - t1);
     }
@@ -2198,7 +2195,6 @@ static void SnapshotExistingNames(const std::wstring& folder) {
         FindClose(h);
     }
     EnterCriticalSection(&g_lock);
-    ++g_settings.generation;
     g_preexisting = std::move(names);
     LeaveCriticalSection(&g_lock);
 }
