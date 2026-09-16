@@ -3609,6 +3609,16 @@ constexpr COLORREF kDwmColorDefault = 0xFFFFFFFF;  // DWMWA_COLOR_DEFAULT
     undoes exactly that and never touches a window the mod left alone.
     Destroyed windows are not removed as they go: the map drops dead handles
     whenever it doubles, and the revert re-checks each handle.
+
+    Which leaves one narrow window: a handle reused between two prunes carries
+    the old window's bits into the new one, and the revert then undoes on it
+    something the mod set on its predecessor. The cost is bounded and it is
+    paid once, at unload — immersive dark mode back to FALSE and the caption
+    colors back to the DWM default, which is where a Premiere window that the
+    mod did not touch already sits, or a theme class cleared on a window that
+    had one. Telling the two apart would need the destroy notification this
+    mod deliberately does not hook, for a window whose frame the revert is
+    about to set to what it already is.
 */
 constexpr BYTE kThemedClass = 1;  // DarkMode_Explorer, on the classes WantsExplorerTheme names
 constexpr BYTE kThemedFrame = 2;  // immersive dark mode, and caption colors on 22000+
@@ -5539,6 +5549,9 @@ struct MonitorCommandState {
         Root parameter 1 is the float4 the draw paints with, kept as the raw
         words the caller passed. It is what tells the band from everything
         else, and it is what gets replaced.
+
+        It is only good under the root signature it was set for, so a new one
+        takes it away — see MonitorSetGraphicsRootSignature_Hook.
     */
     bool hasRoot1Color = false;
     UINT root1Color[4]{};
@@ -5571,6 +5584,20 @@ struct MonitorStateSlot {
 thread_local MonitorStateSlot g_monitorStates[kMaxMonitorStates]{};
 thread_local size_t g_monitorStateNext = 0;
 
+/*
+    How many of those slots hold a recording, so a thread that has none walks
+    none of them.
+
+    Reset, Close, ClearState and SetGraphicsRootSignature are hooked on the
+    command list itself, which means they run for every D3D12 caller in the
+    process, not just for DisplaySurface — and unlike the other three they
+    cannot ask the return address first, since a list this layer follows may
+    have its recording ended or its bindings undone from somewhere else.
+    Without this they would each sweep two kilobytes of slots to learn there
+    was nothing to find.
+*/
+thread_local size_t g_monitorStatesLive = 0;
+
 volatile LONG g_monitorStatesFullLogged = FALSE;
 volatile LONG g_monitorBandMatched = FALSE;
 
@@ -5587,7 +5614,7 @@ D3D12CreateDevice_t D3D12CreateDevice_Original = nullptr;
 // A list already being recorded, without starting to record a new one.
 static MonitorCommandState* KnownMonitorState(
     ID3D12GraphicsCommandList* commandList) {
-    if (!commandList) {
+    if (!commandList || g_monitorStatesLive == 0) {
         return nullptr;
     }
 
@@ -5613,10 +5640,13 @@ static MonitorCommandState* MonitorStateFor(ID3D12GraphicsCommandList* commandLi
         if (!slot.commandList) {
             slot.commandList = commandList;
             slot.state = MonitorCommandState{};
+            g_monitorStatesLive++;
             return &slot.state;
         }
     }
 
+    // Every slot was taken to get here, so the count does not move: the oldest
+    // recording is dropped and this one takes its place.
     MonitorStateSlot& slot = g_monitorStates[g_monitorStateNext];
     g_monitorStateNext = (g_monitorStateNext + 1) % kMaxMonitorStates;
 
@@ -5634,10 +5664,15 @@ static MonitorCommandState* MonitorStateFor(ID3D12GraphicsCommandList* commandLi
 
 // The recording this list was doing is over; see MonitorReset_Hook.
 static void ForgetMonitorState(ID3D12GraphicsCommandList* commandList) {
+    if (g_monitorStatesLive == 0) {
+        return;
+    }
+
     for (MonitorStateSlot& slot : g_monitorStates) {
         if (slot.commandList == commandList) {
             slot.commandList = nullptr;
             slot.state = MonitorCommandState{};
+            g_monitorStatesLive--;
             return;
         }
     }
@@ -5825,25 +5860,36 @@ using MonitorReset_t =
 
 using MonitorClose_t = HRESULT(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*);
 
+using MonitorSetGraphicsRootSignature_t =
+    void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, ID3D12RootSignature*);
+
+using MonitorClearState_t =
+    void(STDMETHODCALLTYPE*)(ID3D12GraphicsCommandList*, ID3D12PipelineState*);
+
 MonitorRSSetViewports_t MonitorRSSetViewports_Original = nullptr;
 MonitorRSSetScissorRects_t MonitorRSSetScissorRects_Original = nullptr;
 MonitorSetGraphicsRoot32BitConstants_t
     MonitorSetGraphicsRoot32BitConstants_Original = nullptr;
 MonitorReset_t MonitorReset_Original = nullptr;
 MonitorClose_t MonitorClose_Original = nullptr;
+MonitorSetGraphicsRootSignature_t MonitorSetGraphicsRootSignature_Original =
+    nullptr;
+MonitorClearState_t MonitorClearState_Original = nullptr;
 
 /*
     Every hook this layer needs is in place.
 
-    They are registered together but can fail one at a time, and the two that
-    bound a recording are the ones a partial install would quietly drop —
-    leaving the recolor running on state nothing invalidates. So the layer
-    only acts when it is whole.
+    They are registered together but can fail one at a time, and the ones that
+    take state away are what a partial install would quietly drop: the two
+    that bound a recording, and the two that undo what the recolor reads.
+    Without them the recolor would be running on state nothing invalidates, so
+    the layer only acts when it is whole.
 */
 static bool MonitorBandHooksReady() {
     return MonitorRSSetViewports_Original && MonitorRSSetScissorRects_Original &&
            MonitorSetGraphicsRoot32BitConstants_Original &&
-           MonitorReset_Original && MonitorClose_Original;
+           MonitorReset_Original && MonitorClose_Original &&
+           MonitorSetGraphicsRootSignature_Original && MonitorClearState_Original;
 }
 
 /*
@@ -5885,6 +5931,57 @@ MonitorClose_Hook(ID3D12GraphicsCommandList* commandList) {
 }
 
 /*
+    A new root signature makes the color stale, so the color goes with it.
+
+    Root constants belong to the signature that was bound when they were set:
+    D3D12 makes every binding stale the moment a different signature is set,
+    and the newly expected ones must be set again before the next draw. The
+    color is replayed at root parameter 1, and a signature that holds a
+    descriptor table or a differently sized block of constants there would
+    take four words it never asked for — a debug-layer error, and in release a
+    removed device, which is the monitor going black or Premiere going down.
+
+    Setting the same signature again leaves its bindings alone, and this does
+    not tell the two apart. Dropping a color that was still good costs one
+    frame of Premiere's own gray; keeping one that was not costs the device.
+
+    The viewport and the scissor are not root state and outlive the change, so
+    they stay: what is dropped is only what the new signature no longer
+    accepts.
+*/
+void STDMETHODCALLTYPE
+MonitorSetGraphicsRootSignature_Hook(ID3D12GraphicsCommandList* commandList,
+                                     ID3D12RootSignature* rootSignature) {
+    MonitorSetGraphicsRootSignature_Original(commandList, rootSignature);
+
+    /*
+        Only a list already being followed. A signature set on any other is
+        nothing to this layer, and a thread that records none of
+        DisplaySurface's work does not look at all — see g_monitorStatesLive.
+        No settings read and no map either way.
+    */
+    if (MonitorCommandState* state = KnownMonitorState(commandList)) {
+        state->hasRoot1Color = false;
+    }
+}
+
+/*
+    And ClearState undoes all three at once.
+
+    It puts a direct command list back to how it was created: no root
+    signature, and the viewports and scissor rectangles emptied. Everything
+    this layer decides on is gone at once, so the recording is dropped whole,
+    which is the state Reset leaves behind as well.
+*/
+void STDMETHODCALLTYPE
+MonitorClearState_Hook(ID3D12GraphicsCommandList* commandList,
+                       ID3D12PipelineState* pipelineState) {
+    MonitorClearState_Original(commandList, pipelineState);
+
+    ForgetMonitorState(commandList);
+}
+
+/*
     These sit on the D3D12 command list itself, which every D3D12 caller in the
     process shares, so each one turns away anything that did not come from
     DisplaySurface before it touches a map or reads a setting. That test is two
@@ -5901,6 +5998,11 @@ MonitorClose_Hook(ID3D12GraphicsCommandList* commandList) {
     color first would otherwise stop being recolored with nothing in the log.
     So all three try, and the two that are too early are turned away by
     IsFullMonitorState or by hasRoot1Color being false.
+
+    A color that arrives first is only replayed while the signature it was set
+    for is still bound: MonitorSetGraphicsRootSignature_Hook drops it
+    otherwise, since root constants belong to a signature and writing them
+    under another one is undefined behavior.
 */
 static bool RecolorBandConstants(ID3D12GraphicsCommandList* commandList,
                                  MonitorCommandState* state);
@@ -6087,8 +6189,10 @@ static bool InstallMonitorBandHooks(ID3D12Device* device) {
     */
     void* close = vtable[9];              // Close
     void* reset = vtable[10];             // Reset
+    void* clearState = vtable[11];        // ClearState
     void* setViewports = vtable[21];      // RSSetViewports
     void* setScissors = vtable[22];       // RSSetScissorRects
+    void* setRootSignature = vtable[30];  // SetGraphicsRootSignature
     void* setRootConstants = vtable[36];  // SetGraphicsRoot32BitConstants
 
     commandList->Release();
@@ -6116,6 +6220,15 @@ static bool InstallMonitorBandHooks(ID3D12Device* device) {
     ok &= WindhawkUtils::SetFunctionHook(
         reinterpret_cast<MonitorClose_t>(close), MonitorClose_Hook,
         &MonitorClose_Original);
+
+    ok &= WindhawkUtils::SetFunctionHook(
+        reinterpret_cast<MonitorSetGraphicsRootSignature_t>(setRootSignature),
+        MonitorSetGraphicsRootSignature_Hook,
+        &MonitorSetGraphicsRootSignature_Original);
+
+    ok &= WindhawkUtils::SetFunctionHook(
+        reinterpret_cast<MonitorClearState_t>(clearState),
+        MonitorClearState_Hook, &MonitorClearState_Original);
 
     if (!ok) {
         Wh_Log(L"monitor band: one or more D3D12 hooks failed; the band keeps "
