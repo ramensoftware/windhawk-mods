@@ -7155,7 +7155,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             // Background pill
             COLORREF bgC = GetIndicatorBackgroundColor();
             int op = g_isDarkMode ? g_settings.indicatorBgOpacityDark : g_settings.indicatorBgOpacityLight;
-            int alpha = (int)roundf(((op * 255) / 100) * groupBadgeAlpha);
+            int alpha = (int)roundf(((float)(op * 255) / 100.0f) * groupBadgeAlpha);
             Gdiplus::SolidBrush pillBrush(Gdiplus::Color(alpha, GetRValue(bgC), GetGValue(bgC), GetBValue(bgC)));
             Gdiplus::REAL pillRadius = (Gdiplus::REAL)GetGroupIndicatorCornerRadiusPx(badgeH / 2);
             
