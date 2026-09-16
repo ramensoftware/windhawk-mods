@@ -289,37 +289,22 @@ changes. So turning the switch on, a palette switch, and turning it back off or
 disabling the mod all show on those panels after Premiere restarts. Frame.io
 and Adobe Stock carry no Spectrum grays and keep their own look.
 
-A panel keeps its colors twice, and both copies have to be recolored. The
-stylesheet is one. The other is a table of design tokens in the panel's own
-script, which its components read and set as inline styles — and an inline
-style beats every rule a stylesheet can state. The search field in the Text
-panel is one of those: its fill comes from
-`"background-color":"rgb(37, 37, 37)"` in `main.js`, and no amount of
-recoloring `main.css` reaches it.
+A panel keeps its colors twice — in its stylesheet and in a table of design
+tokens in its own script, which beats any stylesheet rule — and the mod
+recolors both, which is what makes the search fields and inputs in those
+panels match the rest instead of staying a stock gray box. It costs a panel
+one extra read of its own script as it loads. The how, with the measurements,
+is in the [repository readme](https://github.com/CakeDev4k/premiere-pro-theme).
 
-So the mod recolors that shape too, and only that shape: a `<name>-color` key
-whose value is an `rgb()` string. It does not go looking for hex colors in a
-script the way it does in a stylesheet — the icons in the same file are hex,
-and an icon has to stay an icon — and it rewrites the digits inside the quotes
-at their own length, so the script parses exactly as it did.
-
-This costs a panel one extra read of its own script when it loads, because a
-file has to be read to know whether it holds any tokens at all. In Premiere
-2026 nine of the plugins' scripts do and the rest do not, so most of that read
-is spent finding nothing — which is why this rides on the same switch as the
-stylesheets rather than on its own.
-
-**The band around the video is drawn on the GPU.** Zoomed out, the monitors
-paint the area around the picture outside every layer above: Premiere lays
-its panel gray over that area as a quad per side of the picture, through
-`DisplaySurface.dll`. The mod recognizes those calls by the module they come
-from and by the color they carry, and gives them the theme's **Monitor
+**The band around the video is drawn on the GPU**, outside every layer above,
+by `DisplaySurface.dll`. The mod recognizes those draws by the module they
+come from and by the color they carry, and gives them the theme's **Monitor
 background**, or its panel tone when that is left empty.
 
-Only those quads change. What shows between them — behind the picture — is
-black, and that same black is what a clip with an alpha channel is composited
-onto and what the monitor shows over a gap in the timeline. It is left exactly
-as Premiere draws it, which is why a transparent PNG still sits on black.
+What shows behind the picture is black, and stays black in every palette: it
+is what a clip with an alpha channel is composited onto and what the monitor
+shows over a gap in the timeline, which is why a transparent PNG still sits on
+black.
 
 **Monitor band** is its own switch and it ships off, because this is the only
 layer that hooks Direct3D — and on entry points every D3D12 program in the
@@ -328,11 +313,17 @@ a command list it does not own. Turn it on once the rest of the theme looks
 right on your build, and it is the first thing to turn off if the monitors
 misbehave; the rest of the theme is unaffected either way.
 
-No restart is needed in either direction. With the switch already on as
-Premiere starts, the layer goes in from the device Premiere itself creates;
-turned on later, from a device of the mod's own, which is only safe once the
-monitors have drawn — by then Premiere has settled which graphics runtime it
-uses.
+No restart is needed to see it change. With the switch already on as Premiere
+starts, the layer goes in from the device Premiere itself creates; turned on
+later, from a device of the mod's own, which is only safe once the monitors
+have drawn — by then Premiere has settled which graphics runtime it uses.
+
+Turning it off stops the recoloring at once, and the band is Premiere's own
+gray again from the next frame. What it does not do is take the hooks back
+out: once the layer has gone in, the command list entry points stay hooked
+until Premiere is restarted or the mod is disabled. That only matters if you
+are chasing a conflict with a GPU overlay or a capture tool — for that, turn
+the switch off and restart Premiere, or disable the mod.
 
 Two things about it are worth knowing. It answers to **Strength** but not to
 the **brightness ceiling**: the band is recognized by its own shape, and takes
@@ -3040,7 +3031,18 @@ static bool RecolorCssTriplet(char* text, size_t size, size_t from, bool chrome)
     `color`, `-webkit-text-fill-color` and `fill` — which is an icon, and a
     darkened icon disappears — do not.
 */
-static bool CssValueIsChrome(const char* text, size_t at) {
+/*
+    Where a color sits, which is two questions answered by one walk back.
+
+    NotAValue is the one that decides whether to rewrite at all: a run of six
+    hex digits is only a color when a property introduces it. `#1d1d1d { }` is
+    a selector, and rewriting it would leave a rule that matches nothing.
+    Chrome and Text then decide only how much slack the color gets above the
+    ceiling.
+*/
+enum class CssValueRole { NotAValue, Text, Chrome };
+
+static CssValueRole CssValueRoleAt(const char* text, size_t at) {
     size_t colon = at;
 
     while (colon > 0 && text[colon - 1] != ':' && text[colon - 1] != ';' &&
@@ -3049,7 +3051,7 @@ static bool CssValueIsChrome(const char* text, size_t at) {
     }
 
     if (colon == 0 || text[colon - 1] != ':') {
-        return false;
+        return CssValueRole::NotAValue;
     }
 
     size_t end = colon - 1;
@@ -3064,11 +3066,16 @@ static bool CssValueIsChrome(const char* text, size_t at) {
 
         if (end - begin >= length &&
             _strnicmp(text + begin, prefix, length) == 0) {
-            return true;
+            return CssValueRole::Chrome;
         }
     }
 
-    return false;
+    return CssValueRole::Text;
+}
+
+// The slack question on its own, for the two forms that can only be values.
+static bool CssValueIsChrome(const char* text, size_t at) {
+    return CssValueRoleAt(text, at) == CssValueRole::Chrome;
 }
 
 static bool CssPrecededBy(const char* text, size_t at, const char* word) {
@@ -3146,7 +3153,22 @@ static size_t RecolorStylesheet(char* text, size_t size) {
         bool recolored = false;
 
         if (text[i] == '#') {
-            recolored = RecolorCssHex(text, size, i, CssValueIsChrome(text, i));
+            /*
+                Only where a property introduced it. Six hex digits are also
+                what an id selector looks like, and `#1d1d1d { }` rewritten is
+                a rule that stops matching — the one form here that can be
+                something other than a color.
+
+                The two below cannot: `rgb(` is only ever a value, and the
+                `-rgb` one is a custom property's own name, whose colon is the
+                declaration's rather than a position inside a value.
+            */
+            CssValueRole role = CssValueRoleAt(text, i);
+
+            if (role != CssValueRole::NotAValue) {
+                recolored = RecolorCssHex(text, size, i,
+                                          role == CssValueRole::Chrome);
+            }
         } else if (text[i] == ':' && CssPrecededBy(text, i, "-rgb")) {
             recolored =
                 RecolorCssTriplet(text, size, i + 1, CssValueIsChrome(text, i));
@@ -4766,6 +4788,27 @@ static void PaintMenuBarBottomLine(HWND hwnd) {
     RECT line = client;
     line.bottom = line.top;
     line.top--;
+
+    /*
+        The edge the system leaves between the menu bar and the client area is
+        one pixel at 100% and follows SM_CYBORDER upward, so a fixed row leaves
+        a light hairline on a scaled display. GetMenuBarInfo already gave the
+        bar's own rectangle, so the gap is measured rather than computed from
+        a DPI — right at every scale, and no second system metric to agree
+        with.
+
+        Only when it is a plausible edge. A bar rectangle that overlaps the
+        client area, or is further off than any border would be, leaves the
+        single row this always painted.
+    */
+    RECT bar = barInfo.rcBar;
+    OffsetRect(&bar, -window.left, -window.top);
+
+    constexpr LONG kMaxEdge = 8;
+
+    if (bar.bottom < client.top && client.top - bar.bottom <= kMaxEdge) {
+        line.top = bar.bottom;
+    }
 
     HDC hdc = GetWindowDC(hwnd);
 
@@ -6647,6 +6690,25 @@ BOOL Wh_ModInit() {
     would ask it to paint again.
 */
 void Wh_ModAfterInit() {
+    /*
+        Once more for a module that arrived between Wh_ModInit returning and
+        the LoadLibraryExW hook going live.
+
+        A module mapped as a static dependency never passes through
+        LoadLibraryExW at all — the loader goes straight to its own path — so
+        a dvaui that arrives that way in the gap would leave the interface
+        layer off for the session. Premiere calls LoadLibraryExW hundreds of
+        times while it starts, so in practice the next one catches it, but the
+        race closes here for nothing.
+    */
+    bool registered = HookLoadedModules();
+
+    registered = HookD3D12CreateDevice() || registered;
+
+    if (registered && !Wh_ApplyHookOperations()) {
+        Wh_Log(L"failed to apply hooks for a module loaded during init");
+    }
+
     ApplyThemeToExistingWindows();
 
     /*
