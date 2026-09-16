@@ -60,6 +60,8 @@
 
 Creates two dynamic application zones on the Windows 11 taskbar:
 
+![Taskbar Split: running applications on the left and closed pinned applications on the right](https://raw.githubusercontent.com/Artllex/taskbar-split/main/assets/taskbar-split.png)
+
 `[Start/System] [Running apps]  <flexible empty space>  [Closed pinned apps] [Tray/Clock]`
 
 Launching a pinned app moves it to the left zone and restores its normal size.
@@ -92,6 +94,16 @@ This mod keeps Start at the left edge and uses the full space up to the tray
 for a launcher/workspace split. Centered Origin instead organizes windows
 around a centered Start button. Separate settings keep these distinct layouts
 easy to configure; enable only one positioning mod at a time.
+
+### Verification
+
+The screenshot above is from the submitter's working Windows taskbar.
+The submitter confirmed dragging in both sections and native Widgets clearance.
+The publication build removes the diagnostic log writer and sampling timer.
+Local tests cover layout math and selected C++ functions with stubbed UI objects;
+they do not replace Windows integration testing. Reboot/Explorer-restart tests,
+both Windows taskbar alignments, the complete flyout/hidden-button matrix and
+ARM64 runtime testing have not yet been confirmed.
 */
 // ==/WindhawkModReadme==
 
