@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.
-// @version         0.19.4
+// @version         0.19.5
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -132,6 +132,7 @@ stored in clipboard history, cloud sync, backups, or other programs.
 #include <initguid.h>  // Defines the GUIDs pulled in by the headers below in-TU.
 #include <knownfolders.h>
 #include <shlobj.h>
+#include <shellapi.h>  // SHQueryUserNotificationState
 #include <propkey.h>   // PKEY_AppUserModel_ID, PKEY_AppUserModel_ToastActivatorCLSID
 #include <commctrl.h>
 #include <wincodec.h>
@@ -231,6 +232,7 @@ static void MarkNameRecent(const std::wstring& name) {
 static HANDLE g_stopEvent;   // Manual-reset: set once at shutdown.
 static HANDLE g_reloadEvent; // Auto-reset: settings changed, re-open the folder.
 static HANDLE g_workEvent;   // Auto-reset: queue has work.
+static HANDLE g_settingsEvent;  // Manual reset: settings reloaded while a prompt is up.
 static HANDLE g_watchThread;
 static HANDLE g_workerThread;
 static std::atomic<HWND> g_dialog{nullptr};  // Open action dialog, for shutdown.
@@ -354,6 +356,7 @@ static void LoadSettings() {
     EnterCriticalSection(&g_lock);
     g_settings = std::move(s);
     ++g_generation;
+    SetEvent(g_settingsEvent);
     LeaveCriticalSection(&g_lock);
 }
 
@@ -1138,7 +1141,6 @@ using ToastFailedHandler = ABI::Windows::Foundation::ITypedEventHandler<
 // platform's own answer to "was it shown", which notification-center history is
 // not: a banner can appear with center history switched off, and Do Not Disturb
 // files a toast into the center without ever showing a banner.
-static std::atomic<bool> g_toastFailed{false};
 
 class ToastFailListener : public ToastFailedHandler {
 public:
@@ -1164,8 +1166,18 @@ public:
             args->get_ErrorCode(&code);
         }
         Wh_Log(L"Notification was not delivered (0x%08lx); copy only", (unsigned long)code);
-        g_toastFailed.store(true);
-        SetEvent(g_toastActionEvent);
+        EnterCriticalSection(&g_toastLock);
+        // Same shape as a dismissal: it is an answer, so it must be recorded,
+        // not just signalled, or the wait settles it as Keep and skips the copy.
+        bool mine = g_activeToastId != 0 && !g_toastAnswered;
+        if (mine) {
+            g_toastAction = ACTION_COPY_ONLY;
+            g_toastAnswered = true;
+        }
+        LeaveCriticalSection(&g_toastLock);
+        if (mine) {
+            SetEvent(g_toastActionEvent);
+        }
         return S_OK;
     }
 };
@@ -1312,7 +1324,7 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action,
     }
 
     ResetEvent(g_toastActionEvent);
-    g_toastFailed.store(false);
+    ResetEvent(g_settingsEvent);  // Only one prompt is ever up at a time.
     EnterCriticalSection(&g_toastLock);
     g_activeToastId = toastId;
     g_toastAction = ACTION_AUTO;
@@ -1352,12 +1364,12 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action,
     bool noCountdown = s.delaySeconds <= 0;
     DWORD timeoutMs =
         noCountdown ? kNoAnswerCapMs : (DWORD)s.delaySeconds * 1000;
-    HANDLE waits[] = {g_stopEvent, g_toastActionEvent};
+    HANDLE waits[] = {g_stopEvent, g_toastActionEvent, g_settingsEvent};
     DWORD start = GetTickCount();
     bool removeToast = false;
-    // Outbound COM probes may dispatch an activation callback reentrantly.
-    // Settle under the same lock as the callbacks, after every probe, so a Keep
-    // already accepted cannot be overwritten by a timeout.
+    // An activation callback can be dispatched reentrantly from the message
+    // pump below, so settle under the same lock the callbacks take: an answer
+    // already accepted is never overwritten by a timeout.
     auto settle = [&](int proposed) {
         bool cancelled = WaitStop(0);
         EnterCriticalSection(&g_toastLock);
@@ -1375,26 +1387,36 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action,
     };
     for (;;) {
         DWORD elapsed = GetTickCount() - start;
-        if (WaitStop(0) || g_generation.load() != generation) {
+        if (WaitStop(0)) {  // Unload: never copy, never delete.
             settle(ACTION_KEEP);
+            break;
+        }
+        // Stale settings are a reason not to run the automatic action, not a
+        // reason to drop the screenshot.
+        if (g_generation.load() != generation) {
+            settle(ACTION_COPY_ONLY);
             break;
         }
         if (WaitForSingleObject(g_toastActionEvent, 0) == WAIT_OBJECT_0) {
             settle(ACTION_KEEP);
             break;  // A real answer always wins over any timeout.
         }
-        // Windows tells us when it could not deliver the notification. Until it
-        // says so the toast is treated as shown and is never pulled down, so a
-        // banner the user can see is never swapped for a second prompt.
-        if (g_toastFailed.load()) {
-            settle(ACTION_COPY_ONLY);
-            break;
-        }
         if (elapsed >= timeoutMs) {
             NotificationSetting currentSetting = NotificationSetting_Enabled;
             bool enabled = SUCCEEDED(notifier->get_Setting(&currentSetting)) &&
                            currentSetting == NotificationSetting_Enabled;
-            settle(noCountdown || !enabled ? ACTION_COPY_ONLY : ACTION_AUTO);
+            // Focus assist, presentation mode, a full-screen app or the secure
+            // desktop all suppress the banner without failing delivery, so the
+            // countdown would be deleting for a prompt nobody was shown.
+            QUERY_USER_NOTIFICATION_STATE quns = QUNS_ACCEPTS_NOTIFICATIONS;
+            bool shown = SUCCEEDED(SHQueryUserNotificationState(&quns)) &&
+                         quns == QUNS_ACCEPTS_NOTIFICATIONS;
+            if (!shown) {
+                Wh_Log(L"Notifications are being held back (state=%d); copy only",
+                       (int)quns);
+            }
+            settle(noCountdown || !enabled || !shown ? ACTION_COPY_ONLY
+                                                    : ACTION_AUTO);
             break;
         }
         DWORD remaining = timeoutMs - elapsed;
@@ -1416,6 +1438,9 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action,
         if (result == WAIT_OBJECT_0 + 1) {
             settle(ACTION_KEEP);
             break;
+        }
+        if (result == WAIT_OBJECT_0 + 2) {
+            continue;  // Settings reloaded: handled at the top of the loop.
         }
         if (result == WAIT_OBJECT_0 + ARRAYSIZE(waits)) {
             MSG msg;
@@ -1477,6 +1502,7 @@ struct DialogState {
     bool showCountdown;   // False when there is no countdown, only the backstop.
     int expiryAction;     // What running out of time means (a real button id).
     bool expired;         // Set when the backstop closed it, not the user.
+    bool reloaded;    // Settings changed while the dialog was up.
     std::wstring baseText;
 };
 
@@ -1487,8 +1513,12 @@ static HRESULT CALLBACK DialogCallback(HWND hwnd, UINT msg, WPARAM, LPARAM,
         case TDN_CREATED:
             g_dialog.store(hwnd);
             // If stop was signaled before the handle was stored, close now as Keep.
-            if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0 ||
-                g_generation.load() != state->generation) {
+            if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) {
+                SendMessageW(hwnd, TDM_CLICK_BUTTON, ACTION_KEEP, 0);
+                break;
+            }
+            if (g_generation.load() != state->generation) {
+                state->reloaded = true;
                 SendMessageW(hwnd, TDM_CLICK_BUTTON, ACTION_KEEP, 0);
                 break;
             }
@@ -1502,8 +1532,12 @@ static HRESULT CALLBACK DialogCallback(HWND hwnd, UINT msg, WPARAM, LPARAM,
             // Backstop for unload: if the stop event fired in the window before
             // TDN_CREATED stored our handle, WhTool_ModUninit couldn't dismiss us,
             // so close ourselves as Keep here rather than let the join hang.
-            if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0 ||
-                g_generation.load() != state->generation) {
+            if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) {
+                SendMessageW(hwnd, TDM_CLICK_BUTTON, ACTION_KEEP, 0);
+                break;
+            }
+            if (g_generation.load() != state->generation) {
+                state->reloaded = true;
                 SendMessageW(hwnd, TDM_CLICK_BUTTON, ACTION_KEEP, 0);
                 break;
             }
@@ -1540,6 +1574,7 @@ static int AskAction(const std::wstring& path, const Settings& s) {
         state.showCountdown ? (DWORD)s.delaySeconds * 1000 : kNoAnswerCapMs;
     state.expiryAction = state.showCountdown ? ACTION_AUTO : ACTION_KEEP;
     state.expired = false;
+    state.reloaded = false;
     state.baseText = name + L"\n\nChoose an action, or wait for the configured "
                             L"automatic action.";
 
@@ -1582,6 +1617,9 @@ static int AskAction(const std::wstring& path, const Settings& s) {
     // The no-countdown backstop clicks Keep (a real button) on expiry; translate
     // that to copy-only, since nobody actually answered. A real Keep click, or a
     // countdown expiry (which uses ACTION_AUTO), is left as-is.
+    if (state.reloaded) {
+        return ACTION_COPY_ONLY;  // Stale settings, but the copy still happens.
+    }
     if (state.expired && !state.showCountdown) {
         return ACTION_COPY_ONLY;
     }
@@ -2319,6 +2357,7 @@ BOOL WhTool_ModInit() {
 
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);   // Manual reset.
     g_reloadEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);  // Auto reset.
+    g_settingsEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);  // Manual reset.
     g_workEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);    // Auto reset.
     g_toastActionEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);  // Auto reset.
     if (!g_stopEvent || !g_reloadEvent || !g_workEvent || !g_toastActionEvent) {
