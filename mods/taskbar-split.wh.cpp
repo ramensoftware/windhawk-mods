@@ -2,7 +2,7 @@
 // @id              taskbar-split
 // @name            Taskbar Split: Running Left, Pinned Right
 // @description     Places running apps on the left and closed pinned apps on the right, with flexible empty space between them (Windows 11).
-// @version         0.3.16
+// @version         0.3.17
 // @author          Arkadiusz
 // @github          https://github.com/Artllex
 // @homepage        https://github.com/Artllex/taskbar-split
@@ -69,7 +69,13 @@ Newly running buttons are appended to the right end of the running zone.
 Drag with the left mouse button to reorder within a section. The dragged
 icon follows the mouse within that section and neighbours make room as it
 crosses their centres. Escape cancels the move; sections cannot be crossed.
-Order is session-local and may reset when Windows recreates button containers.
+Left-drag is intentionally handled by this mod to keep reordering inside each
+section. It replaces native left-drag for buttons with a recognized Appid.
+Per-app order is saved in Windhawk storage after a completed drag and restored
+after Explorer restarts; Windows' persistent pin list is not changed. Buttons
+without a recognized stable Appid retain native input and are not persisted.
+Separate windows sharing one Appid share a rank; their relative window order
+is not persisted. Up to 256 app identities per section are remembered.
 Native Widgets space is reserved when system buttons retain their Windows positions.
 Closing it returns it to the right zone, where pinned icons can be made smaller
 and packed more densely. The persistent Windows pin list is not changed.
@@ -95,15 +101,6 @@ for a launcher/workspace split. Centered Origin instead organizes windows
 around a centered Start button. Separate settings keep these distinct layouts
 easy to configure; enable only one positioning mod at a time.
 
-### Verification
-
-The screenshot above is from the submitter's working Windows taskbar.
-The submitter confirmed dragging in both sections and native Widgets clearance.
-The publication build removes the diagnostic log writer and sampling timer.
-Local tests cover layout math and selected C++ functions with stubbed UI objects;
-they do not replace Windows integration testing. Reboot/Explorer-restart tests,
-both Windows taskbar alignments, the complete flyout/hidden-button matrix and
-ARM64 runtime testing have not yet been confirmed.
 */
 // ==/WindhawkModReadme==
 
@@ -430,27 +427,62 @@ SystemButtonKind GetSystemButtonKind(FrameworkElement const& element) {
     return SystemButtonKind::None;
 }
 
-void ReserveNativeWidgets(FrameworkElement const& node,
-                          FrameworkElement const& content,
-                          double& leftEdge, double& rightEdge, int depth = 0) {
-    if (!node || depth > 16 || node.Visibility() != Visibility::Visible) return;
-    if (GetSystemButtonKind(node) == SystemButtonKind::Widgets) {
-        double width = SystemButtonWidth(node);
-        if (width <= 0) return;
-        double x = ElementX(node, content);
-        // Widgets can be outside the task-button repeater. Reserve their
-        // native footprint on the side where Windows actually placed them.
-        if (x + width / 2 >= content.ActualWidth() / 2)
-            rightEdge = std::min(rightEdge, x);
-        else
-            leftEdge = std::max(leftEdge, x + width);
-        return;
-    }
+winrt::weak_ref<FrameworkElement> g_widgetsCache;
+winrt::weak_ref<FrameworkElement> g_widgetsFrame;
+ULONGLONG g_widgetsNextSearch = 0;
+std::atomic<bool> g_widgetsInvalidated{true};
+
+FrameworkElement FindWidgets(FrameworkElement const& node, int depth = 0) {
+    if (!node || depth > 16) return nullptr;
+    if (GetSystemButtonKind(node) == SystemButtonKind::Widgets) return node;
     int count = media::VisualTreeHelper::GetChildrenCount(node);
     for (int i = 0; i < count; ++i) {
         auto child = media::VisualTreeHelper::GetChild(node, i).try_as<FrameworkElement>();
-        if (child) ReserveNativeWidgets(child, content, leftEdge, rightEdge, depth + 1);
+        if (auto found = FindWidgets(child, depth + 1)) return found;
     }
+    return nullptr;
+}
+
+void ReserveNativeWidgets(FrameworkElement const& content,
+                          double& leftEdge, double& rightEdge) {
+    auto frame = FindDirectChildByClass(content, L"Taskbar.TaskbarFrame");
+    if (!frame) return;
+    if (g_widgetsInvalidated.exchange(false) || g_widgetsFrame.get() != frame) {
+        g_widgetsCache = nullptr;
+        g_widgetsFrame = frame;
+        g_widgetsNextSearch = 0;
+    }
+    auto widget = g_widgetsCache.get();
+    if (widget) {
+        // A detached but still live object must not reserve its former space.
+        auto parent = widget.as<DependencyObject>();
+        bool attached = false;
+        bool visible = true;
+        for (int depth = 0; parent && depth <= 16; ++depth) {
+            if (auto ancestor = parent.try_as<FrameworkElement>()) {
+                if (ancestor.Visibility() != Visibility::Visible) visible = false;
+            }
+            if (parent == frame) { attached = true; break; }
+            parent = media::VisualTreeHelper::GetParent(parent);
+        }
+        if (!attached) { widget = nullptr; g_widgetsCache = nullptr; g_widgetsNextSearch = 0; }
+        else if (!visible) return;
+    }
+    if (!widget) {
+        auto now = GetTickCount64();
+        if (now < g_widgetsNextSearch) return;
+        g_widgetsNextSearch = now + 1000; // Also cache an unsuccessful lookup.
+        widget = FindWidgets(frame);
+        g_widgetsCache = widget;
+    }
+    if (!widget || widget.Visibility() != Visibility::Visible) return;
+    double width = SystemButtonWidth(widget);
+    if (width <= 0) return;
+    double x = ElementX(widget, content);
+    if (x + width / 2 >= content.ActualWidth() / 2)
+        rightEdge = std::min(rightEdge, x);
+    else
+        leftEdge = std::max(leftEdge, x + width);
 }
 
 bool IsTaskButton(FrameworkElement const& element) {
@@ -583,80 +615,132 @@ struct ButtonInfo {
     FrameworkElement element;
     double width;
     bool running;
+    std::wstring appId;
 };
 
-// Taskbar-thread only. Preserve the order of already running buttons; a
-// newly running button is appended, regardless of its pinned-list position.
-// Weak references prevent retaining detached XAML buttons.
+// Weak lists are live gesture views only, rebuilt from app IDs on every layout.
 std::vector<winrt::weak_ref<FrameworkElement>> g_runningOrder;
 std::vector<winrt::weak_ref<FrameworkElement>> g_pinnedOrder;
-// Authoritative user order. Layout discovery must never rewrite this list.
-std::vector<winrt::weak_ref<FrameworkElement>> g_pinnedUserOrder;
+std::vector<std::wstring> g_runningAppOrder;
+std::vector<std::wstring> g_pinnedAppOrder;
+std::unordered_set<std::wstring> g_previousPinnedApps;
+bool g_orderLoaded = false;
 
-bool SameTaskButton(FrameworkElement const& first, FrameworkElement const& second) {
-    if (!first || !second) return false;
-    if (winrt::get_abi(first) == winrt::get_abi(second)) return true;
-    // FrameworkElement interface addresses need not be canonical identity.
-    // Resolve IID_IUnknown on both views (tree, weak ref, pointer event).
-    auto a = first.as<winrt::Windows::Foundation::IUnknown>();
-    auto b = second.as<winrt::Windows::Foundation::IUnknown>();
-    return winrt::get_abi(a) == winrt::get_abi(b);
+std::wstring ButtonAppId(FrameworkElement const& element) {
+    // Taskbar exposes "Appid: <AUMID or executable identity>". Read every
+    // time: a recycled XAML container may now represent a different app.
+    auto id = Automation::AutomationProperties::GetAutomationId(element);
+    std::wstring value(id.c_str(), id.size());
+    constexpr wchar_t prefix[] = L"Appid: ";
+    if (value.rfind(prefix, 0) != 0 || value.size() <= 7 || value.size() > 1031)
+        return {}; // Never persist captions, HWNDs or container addresses.
+    return value.substr(7);
 }
 
-void OrderRunningButtons(std::vector<ButtonInfo*>& running,
-    std::vector<winrt::weak_ref<FrameworkElement>>& order = g_runningOrder) {
-    std::vector<ButtonInfo*> ordered;
-    for (auto const& reference : order) {
-        auto element = reference.get();
-        if (!element) {
-            continue;
-        }
-        auto found = std::find_if(running.begin(), running.end(),
-            [&](auto item) { return SameTaskButton(item->element, element); });
-        if (found != running.end()) {
-            ordered.push_back(*found);
-        }
+// Bounded, length-prefixed format: IDs can contain punctuation/newlines.
+std::wstring EncodeAppOrder(std::vector<std::wstring> const& ids) {
+    std::wstring data = L"1;";
+    for (auto const& id : ids) {
+        if (id.empty() || id.size() > 1024) continue;
+        auto part = std::to_wstring(id.size()) + L":" + id;
+        if (data.size() + part.size() >= 65535) break;
+        data += part;
     }
-    for (auto item : running) {
-        if (std::find(ordered.begin(), ordered.end(), item) == ordered.end()) {
-            ordered.push_back(item);
-        }
-    }
-    std::vector<winrt::weak_ref<FrameworkElement>> nextOrder;
-    for (auto item : ordered) {
-        nextOrder.emplace_back(item->element);
-    }
-    order.swap(nextOrder);
-    running = std::move(ordered);
+    return data;
 }
 
-void OrderPinnedButtons(std::vector<ButtonInfo*>& pinned) {
-    // The right-hand layout has its own ordering path. Read the authoritative
-    // lists directly and assign a numeric rank BEFORE changing any list.
-    // Sorting only numbers avoids COM calls from a sorting comparator.
-    struct RankedButton { ButtonInfo* button; size_t rank; };
-    std::vector<RankedButton> ranked;
-    ranked.reserve(pinned.size());
-    auto rankIn = [](auto const& order, FrameworkElement const& element) {
-        for (size_t i = 0; i < order.size(); ++i) {
-            if (SameTaskButton(order[i].get(), element)) return i;
+std::vector<std::wstring> DecodeAppOrder(std::wstring const& data) {
+    std::vector<std::wstring> ids;
+    if (data.rfind(L"1;", 0) != 0 || data.size() >= 65535) return ids;
+    size_t pos = 2;
+    while (pos < data.size()) {
+        size_t length = 0, digits = 0;
+        while (pos < data.size() && data[pos] >= L'0' && data[pos] <= L'9') {
+            if (++digits > 4) return {};
+            length = length * 10 + (data[pos++] - L'0');
         }
-        return order.size();
+        if (!digits || !length || length > 1024 || pos >= data.size() || data[pos++] != L':' ||
+            length > data.size() - pos || ids.size() >= 256) return {};
+        auto id = data.substr(pos, length);
+        if (std::find(ids.begin(), ids.end(), id) == ids.end()) ids.push_back(id);
+        pos += length;
+    }
+    return ids;
+}
+
+void LoadAppOrders() {
+    if (g_orderLoaded) return;
+    g_orderLoaded = true;
+    auto read = [](wchar_t const* name) {
+        std::vector<wchar_t> buffer(65536, L'\0');
+        Wh_GetStringValue(name, buffer.data(), buffer.size());
+        buffer.back() = L'\0';
+        return DecodeAppOrder(std::wstring(buffer.data()));
     };
-    for (auto button : pinned) {
-        size_t rank = rankIn(g_pinnedUserOrder, button->element);
-        if (rank == g_pinnedUserOrder.size()) {
-            rank += rankIn(g_pinnedOrder, button->element);
-        }
-        ranked.push_back({button, rank});
+    g_runningAppOrder = read(L"running-app-order-v1");
+    g_pinnedAppOrder = read(L"pinned-app-order-v1");
+}
+
+void SaveAppOrder(bool running) {
+    auto const& ids = running ? g_runningAppOrder : g_pinnedAppOrder;
+    auto data = EncodeAppOrder(ids);
+    if (!Wh_SetStringValue(running ? L"running-app-order-v1" : L"pinned-app-order-v1", data.c_str()))
+        Wh_Log(L"Could not save section order");
+}
+
+void RememberApp(std::vector<std::wstring>& ids, std::wstring const& id) {
+    if (id.empty() || std::find(ids.begin(), ids.end(), id) != ids.end()) return;
+    if (ids.size() == 256) ids.erase(ids.begin());
+    ids.push_back(id);
+}
+
+void ApplyAppOrder(std::vector<ButtonInfo*>& buttons,
+                   std::vector<std::wstring>& ids,
+                   std::vector<winrt::weak_ref<FrameworkElement>>& liveOrder) {
+    struct Ranked { ButtonInfo* button; size_t rank; };
+    std::vector<Ranked> ranked;
+    for (auto button : buttons) RememberApp(ids, button->appId);
+    for (auto button : buttons) {
+        auto found = std::find(ids.begin(), ids.end(), button->appId);
+        ranked.push_back({button, size_t(found - ids.begin())});
     }
     std::stable_sort(ranked.begin(), ranked.end(),
         [](auto const& a, auto const& b) { return a.rank < b.rank; });
-    for (size_t i = 0; i < ranked.size(); ++i) pinned[i] = ranked[i].button;
-    std::vector<winrt::weak_ref<FrameworkElement>> published;
-    published.reserve(pinned.size());
-    for (auto button : pinned) published.emplace_back(button->element);
-    g_pinnedOrder.swap(published);
+    std::vector<winrt::weak_ref<FrameworkElement>> next;
+    for (size_t i = 0; i < ranked.size(); ++i) {
+        buttons[i] = ranked[i].button;
+        next.emplace_back(buttons[i]->element);
+    }
+    liveOrder.swap(next);
+}
+
+void OrderRunningButtons(std::vector<ButtonInfo*>& buttons) {
+    for (auto button : buttons) {
+        if (!button->appId.empty() && g_previousPinnedApps.count(button->appId)) {
+            auto& ids = g_runningAppOrder;
+            ids.erase(std::remove(ids.begin(), ids.end(), button->appId), ids.end());
+            RememberApp(ids, button->appId); // A newly launched app goes last.
+        }
+    }
+    ApplyAppOrder(buttons, g_runningAppOrder, g_runningOrder);
+}
+
+void OrderPinnedButtons(std::vector<ButtonInfo*>& buttons) {
+    ApplyAppOrder(buttons, g_pinnedAppOrder, g_pinnedOrder);
+    g_previousPinnedApps.clear();
+    for (auto button : buttons) if (!button->appId.empty()) g_previousPinnedApps.insert(button->appId);
+}
+
+// Reorder the visible subset without discarding saved ranks of overflow apps.
+void MergeVisibleAppOrder(std::vector<std::wstring>& saved,
+                          std::vector<std::wstring> const& visible) {
+    std::vector<std::wstring> unique;
+    for (auto const& id : visible) RememberApp(unique, id);
+    size_t next = 0;
+    for (auto& id : saved) {
+        if (std::find(unique.begin(), unique.end(), id) != unique.end()) id = unique[next++];
+    }
+    while (next < unique.size()) RememberApp(saved, unique[next++]);
 }
 
 struct Placement {
@@ -712,6 +796,7 @@ bool BuildLayoutPlan() {
         }
         double repeaterX = ElementX(repeater, content);
 
+        LoadAppOrders();
         auto children = RepeaterElements(repeater);
         PruneVisualStates(children);
         std::vector<ButtonInfo> buttons;
@@ -724,7 +809,7 @@ bool BuildLayoutPlan() {
             }
             if (IsTaskButton(child) && ElementWidth(child) > 0) {
                 buttons.push_back({child, ElementWidth(child),
-                                   ButtonIsRunning(child)});
+                                   ButtonIsRunning(child), ButtonAppId(child)});
             } else if (GetSystemButtonKind(child) != SystemButtonKind::None) {
                 systemButtons.push_back(child);
             } else if (winrt::get_class_name(child) == L"Taskbar.OverflowToggleButton" ||
@@ -772,7 +857,7 @@ bool BuildLayoutPlan() {
         double rightEdge = tray ? ElementX(tray, content)
                                 : static_cast<double>(content.ActualWidth());
         if (!g_settings.systemButtonsLeft.load()) {
-            ReserveNativeWidgets(content, content, leftEdge, rightEdge);
+            ReserveNativeWidgets(content, leftEdge, rightEdge);
         }
         leftEdge += g_settings.runningGap.load();
         rightEdge -= g_settings.trayGap.load();
@@ -784,7 +869,7 @@ bool BuildLayoutPlan() {
         }
         OrderRunningButtons(running);
         OrderPinnedButtons(pinned);
-        ButtonInfo overflowInfo{overflow, overflow ? ElementWidth(overflow) : 0, true};
+        ButtonInfo overflowInfo{overflow, overflow ? ElementWidth(overflow) : 0, true, {}};
         if (overflowInfo.width > 0) {
             running.push_back(&overflowInfo);
         }
@@ -926,6 +1011,23 @@ HRESULT WINAPI ArrangeOverride_Hook(
                        GetCurrentThreadId()) {
         return ArrangeOverride_Original(self, context, size, resultSize);
     }
+    // self is the ABI IVirtualizingLayoutOverrides pointer. Compare the
+    // canonical Layout identity, not just the shared Explorer UI thread.
+    try {
+        winrt::Windows::Foundation::IUnknown caller{nullptr};
+        winrt::copy_from_abi(caller, self);
+        auto layout = caller.try_as<winrt::Microsoft::UI::Xaml::Controls::Layout>();
+        auto element = GetTaskbarRepeater();
+        auto repeater = element ? element.try_as<winrt::Microsoft::UI::Xaml::Controls::ItemsRepeater>() : nullptr;
+        auto primary = repeater ? repeater.Layout() : nullptr;
+        if (!layout || !primary ||
+            layout.as<winrt::Windows::Foundation::IUnknown>() !=
+                primary.as<winrt::Windows::Foundation::IUnknown>()) {
+            return ArrangeOverride_Original(self, context, size, resultSize);
+        }
+    } catch (...) {
+        return ArrangeOverride_Original(self, context, size, resultSize);
+    }
     bool planReady = false;
     try {
         if (EnsureArrangeHook()) {
@@ -989,6 +1091,8 @@ struct SectionGesture {
     float originalSlotX = 0;
     media::Animation::TransitionCollection transitions{nullptr};
     bool previewPrepared = false;
+    std::wstring appId;
+    std::vector<std::wstring> originalAppOrder;
     std::vector<winrt::weak_ref<FrameworkElement>> originalOrder;
 };
 // The pointer object is released on the UI thread, not at CRT shutdown.
@@ -1185,7 +1289,7 @@ void CancelSectionGesture() {
     try {
         if (gesture.dragged) {
             (gesture.running ? g_runningOrder : g_pinnedOrder) = gesture.originalOrder;
-            if (!gesture.running) g_pinnedUserOrder = gesture.originalOrder;
+            (gesture.running ? g_runningAppOrder : g_pinnedAppOrder) = gesture.originalAppOrder;
         }
         RestoreGestureVisual(gesture);
         RequestRefresh();
@@ -1296,7 +1400,9 @@ void FinishSectionReorder(SectionGesture& gesture,
     }
     std::vector<winrt::weak_ref<FrameworkElement>> nextOrder;
     for (auto const& element : live) nextOrder.emplace_back(element);
-    if (!gesture.running) g_pinnedUserOrder = nextOrder;
+    std::vector<std::wstring> visibleIds;
+    for (auto const& element : live) visibleIds.push_back(ButtonAppId(element));
+    MergeVisibleAppOrder(gesture.running ? g_runningAppOrder : g_pinnedAppOrder, visibleIds);
     order.swap(nextOrder);
     RequestRefresh();
 }
@@ -1340,7 +1446,10 @@ HRESULT WINAPI PointerPressed_Hook(void* self, void* rawArgs) {
                 gesture.source = source;
                 gesture.pointer = args.Pointer();
                 gesture.origin = args.GetCurrentPoint(repeater).Position();
+                gesture.appId = ButtonAppId(source);
+                if (gesture.appId.empty()) return result;
                 gesture.running = ButtonIsRunning(source);
+                gesture.originalAppOrder = gesture.running ? g_runningAppOrder : g_pinnedAppOrder;
                 gesture.pointerId = args.Pointer().PointerId();
                 gesture.startX = gesture.desiredX = ElementX(source, repeater);
                 gesture.translation = source.Translation();
@@ -1376,7 +1485,7 @@ HRESULT WINAPI PointerMoved_Hook(void* self, void* rawArgs) {
         if (GestureMatches(source, args)) {
             args.Handled(true);
             auto repeater = GetTaskbarRepeater();
-            if (g_unloading || !repeater ||
+            if (g_unloading || !repeater || ButtonAppId(source) != g_sectionGesture->appId ||
                 !args.GetCurrentPoint(source).Properties().IsLeftButtonPressed() ||
                 (GetAsyncKeyState(VK_ESCAPE) & 0x8000)) {
                 CancelSectionGesture();
@@ -1433,12 +1542,14 @@ HRESULT WINAPI PointerReleased_Hook(void* self, void* rawArgs) {
             auto gesture = std::move(*g_sectionGesture);
             g_sectionGesture.reset();
             args.Handled(true);
-            if (g_unloading || (GetAsyncKeyState(VK_ESCAPE) & 0x8000)) {
+            if (g_unloading || ButtonAppId(source) != gesture.appId || (GetAsyncKeyState(VK_ESCAPE) & 0x8000)) {
                 (gesture.running ? g_runningOrder : g_pinnedOrder) = gesture.originalOrder;
-                if (!gesture.running) g_pinnedUserOrder = gesture.originalOrder;
+                (gesture.running ? g_runningAppOrder : g_pinnedAppOrder) = gesture.originalAppOrder;
                 RestoreGestureVisual(gesture);
                 RequestRefresh();
             } else {
+                try { SaveAppOrder(gesture.running); }
+                catch (...) { Wh_Log(L"Could not save section order"); }
                 QueueDrop(std::move(gesture));
             }
             return S_OK; // Native press was canceled at drag start.
@@ -1495,6 +1606,11 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND window, UINT message, WPARAM wParam,
     if (message == WM_NCDESTROY) {
         CancelSectionGesture();
         FlushPendingDrop();
+        g_widgetsInvalidated = true;
+        g_taskbarWindow = nullptr;
+        g_taskbarSubclassed = false;
+        g_refreshQueued = false;
+        g_repeaterCacheInvalidated = true;
     }
     if (message == RefreshMessage()) {
         g_refreshQueued = false;
@@ -1760,14 +1876,19 @@ void Wh_ModBeforeUninit() {
 void Wh_ModUninit() {
     g_runningOrder.clear();
     g_pinnedOrder.clear();
-    g_pinnedUserOrder.clear();
+    g_runningAppOrder.clear();
+    g_pinnedAppOrder.clear();
+    g_previousPinnedApps.clear();
     g_visualStates.clear();
     g_lastRunningState.clear();
     g_repeaterCache = nullptr;
+    g_widgetsCache = nullptr;
+    g_widgetsFrame = nullptr;
 }
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
+    g_widgetsInvalidated = true;
     g_settingsArrangeFollowup = true;
     RequestRefresh();
 }
