@@ -94,38 +94,22 @@ than leaving them wherever the rotation happened to stop.
 
 ## The readout
 
-The readout is set in [Fusion Pixel Font](https://github.com/TakWolf/fusion-pixel-font),
-which is carried inside the mod, so there is nothing to install and it looks
-the same on every machine. The size snaps to a whole multiple of the font's
-pixel grid and the text is drawn with antialiasing off, so it lands on whole
-pixels rather than being smeared across them.
+![The readout naming the style, the wheel value, the amount notch and the palette](https://raw.githubusercontent.com/akilluminati47/vector-screen-holder/main/assets/readout.gif)
 
-What is embedded is 717 glyphs in 8424 bytes: ASCII, Latin-1, Latin Extended-A
-and B, spacing and combining diacritics, Greek, Cyrillic and Cyrillic
-Supplement, and general punctuation. That is every language written in a
-Latin, Greek or Cyrillic alphabet, drawn in the pixel design. It is stored as
-WOFF2 and unpacked by DirectWrite on the way in, which is what keeps seven
-hundred glyphs down to the size a hundred would take raw.
+Above: the wheel taking vigor from 0 to 100 across one growth cycle. The whole
+monitor on the left, the same thing close up on the right.
 
-Anything outside that, CJK, Arabic, Hebrew, Thai, the Indic scripts, and the
-odd gap the upstream font has such as the euro sign, is drawn in **your own
-interface font**, the one Windows already picked to suit your locale: Segoe UI
-on an English install, Yu Gothic UI on a Japanese one, Malgun Gothic on a
-Korean one. The mod reads it from the system, then measures the x height of
-both faces and scales the fallback so its lowercase matches the pixel font's
-instead of sitting visibly larger or smaller on the same line. Behind that
-sits the system's own fallback chain, so a readout can never come out blank or
-boxed, whatever it is written in.
+One line along the bottom, and only while you are changing something. It names
+the style, what the wheel is set to, the amount notch and the palette, then
+fades. Nothing you do not ask for ever appears on screen.
 
-Installing the full family, any pixel size, monospaced or proportional, any of
-the five language builds, makes the mod prefer it over the embedded copy. That
-is the way to get the CJK coverage this design also has, drawn in pixels
-rather than borrowed from your interface font.
-
-Either way the size is picked by measuring the widest readout the mod can ever
-produce against the width of the display it is running on, so the line never
-wraps and never runs off the edge, on any combination of style, parameter,
-amount and palette.
+It is set in a pixel font that ships inside the mod, so there is nothing to
+install and it looks the same on every machine. The font covers the alphabets
+used across most of the world. For the writing it does not cover, Chinese,
+Japanese, Korean, Arabic, Hebrew, Thai and the rest, the mod borrows your own
+system font and matches it to size so the line still reads as one line. Either
+way it is measured against your display before it is drawn, so it never wraps
+and never runs off the edge.
 
 ## The four styles
 
