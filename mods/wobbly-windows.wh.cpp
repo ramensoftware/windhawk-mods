@@ -42,6 +42,8 @@ initialize instead of using unverified addresses.
 * ARM64 isn't supported yet; the mod safely refuses to initialize on ARM64 systems.
 * If DWM stops servicing its scene thread while the mod is being disabled or updated,
   a transformed window can remain deformed until DWM recreates its visual.
+* Some windows may show blur, ghosting, or temporary artifacts along their thin borders during wobble animations.
+  These effects can be more noticeable on high-refresh-rate displays.
 
 ## Feedback
 
