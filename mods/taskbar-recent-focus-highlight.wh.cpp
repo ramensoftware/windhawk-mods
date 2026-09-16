@@ -2,7 +2,7 @@
 // @id              taskbar-recent-focus-highlight
 // @name            Taskbar Recent Focus Highlight
 // @description     Visually highlight the most recently focused running apps on the taskbar
-// @version         0.9.10
+// @version         0.9.19
 // @author          Jakub Vlášek
 // @github          https://github.com/jvlasek
 // @include         explorer.exe
@@ -69,10 +69,14 @@ to clear highlights.
   (not the localized button label). If that resolve is unavailable, the icon
   is left unhighlighted rather than guessed from its name.
 - Preview cards prefer the flyout’s thumbnail index. If that is unavailable,
-  a unique window title is used as a last resort. Title cleanup understands
-  English “N running windows” / “pinned” suffixes; on other languages that
-  strip is a no-op, so two cards with the same stem may stay unmatched
-  instead of guessing.
+  a unique window title is used as a last resort — only against windows of
+  the same process (and the same AppUserModelID for hosted UWP), and only
+  when at least one card in that flyout already resolved an HWND exactly.
+  Title cleanup understands English “N running windows” / “pinned” suffixes;
+  on other languages that strip is a no-op, so two cards with the same stem
+  may stay unmatched instead of guessing.
+- File Explorer folder windows (`CabinetWClass`) are ranked like other apps.
+  The taskbar, desktop, Start, and IME stay ignored.
 - Multi-monitor: the same rank is applied on every taskbar that shows that
   app.
 - Verbose bind / preview-resolve lines go to Windhawk’s **Mod logs** (Advanced
@@ -484,6 +488,8 @@ struct PendingFocus {
     std::wstring windowTitle;
     ULONGLONG focusStartTick = 0;
     ULONGLONG previewStartTick = 0;  // HWND-level; resets when instance changes
+    // Post-deadline Alt-Tab / tray / IME wait. 0 = still inside min-focus.
+    ULONGLONG transientRetryStartTick = 0;
     GUID desktopId{};
     bool valid = false;
 };
@@ -592,6 +598,8 @@ std::atomic<bool> g_taskbarViewDllLoaded{false};
 // every button. UVS must not clear chrome just because this is set (flicker).
 std::atomic<bool> g_pendingOverlaySweep{false};
 std::atomic<bool> g_decayTimerArmed{false};
+// Hook thread only. Skip re-arming so a hover storm cannot postpone forever.
+bool g_fullRebindTimerArmed = false;
 
 std::mutex g_winEventHookThreadMutex;
 std::atomic<HANDLE> g_winEventHookThread{nullptr};
@@ -703,6 +711,8 @@ constexpr ULONGLONG kIsRunningGraceMs = 400;
 // Full identity rebind (all buttons). UVS only re-paints the cached rank;
 // siblings whose visuals Windows cleared without another UVS wait for this.
 constexpr ULONGLONG kFullRebindDebounceMs = 300;
+// After min-focus elapsed, poll this often while Alt-Tab / tray holds FG.
+constexpr ULONGLONG kTransientRetryPollMs = 200;
 // Empty identity (pinned, no task item) is retried; successful path/AUMID is not.
 constexpr ULONGLONG kUnresolvedRetryMs = 2000;
 // Widgets / Copilot / never-resolving buttons: stop probing after this many
@@ -959,6 +969,36 @@ ULONGLONG RemainingDeadlineMs(ULONGLONG startTick, int seconds, ULONGLONG now) {
         return 0;
     }
     return need - elapsed;
+}
+
+// Extra wait after the min-focus deadline while Alt-Tab / tray / IME holds
+// FG (the landed app often sends no second FOREGROUND). Same duration as
+// the original wait, at least 2s, then drop the candidate.
+ULONGLONG TransientGraceMs(int minFocusSeconds) {
+    const ULONGLONG wait =
+        static_cast<ULONGLONG>((std::max)(0, minFocusSeconds)) * 1000ULL;
+    return (std::max)(2000ULL, wait);
+}
+
+// Remaining delay while a transient window holds FG. 0 = give up.
+// Updates retryStartTick (0 until the original deadline has passed).
+ULONGLONG TransientRetryDelayMs(ULONGLONG startTick,
+                                int minFocusSeconds,
+                                ULONGLONG now,
+                                ULONGLONG& retryStartTick) {
+    const ULONGLONG remaining =
+        RemainingDeadlineMs(startTick, minFocusSeconds, now);
+    if (remaining > 0) {
+        retryStartTick = 0;
+        return remaining;
+    }
+    if (retryStartTick == 0) {
+        retryStartTick = now;
+    }
+    if (now - retryStartTick >= TransientGraceMs(minFocusSeconds)) {
+        return 0;
+    }
+    return kTransientRetryPollMs;
 }
 
 UINT ClampWinTimerMs(ULONGLONG ms) {
@@ -1363,9 +1403,15 @@ bool IsShellHostFileName(const std::wstring& fileNameUpper) {
            fileNameUpper == L"TEXTINPUTHOST.EXE";
 }
 
+// Ordinary File Explorer windows. Same process as the taskbar, but they are
+// a real app with a taskbar button — not Alt-Tab / desktop / tray.
+bool IsExplorerFolderWindowClass(const std::wstring& classUpper) {
+    return classUpper == L"CABINETWCLASS" || classUpper == L"EXPLOREWCLASS";
+}
+
 // Alt-Tab UI, taskbar, desktop, IME: not a real app switch. Must not cancel
 // an in-flight min-focus candidate — the landed app often sends no second
-// FOREGROUND after these.
+// FOREGROUND after these. Folder windows are a leave (and can be ranked).
 bool IsTransientForeground(HWND hWnd) {
     hWnd = NormalizeFocusHwnd(hWnd);
     if (ShouldIgnoreHwnd(hWnd)) {
@@ -1373,7 +1419,14 @@ bool IsTransientForeground(HWND hWnd) {
     }
     DWORD processId = 0;
     GetWindowThreadProcessId(hWnd, &processId);
-    if (!processId || IsOwnExplorerProcess(processId)) {
+    if (!processId) {
+        return true;
+    }
+    const std::wstring classUpper = ToUpper(GetWindowClassName(hWnd));
+    if (IsExplorerFolderWindowClass(classUpper)) {
+        return false;
+    }
+    if (IsOwnExplorerProcess(processId)) {
         return true;
     }
     return IsShellHostFileName(
@@ -1408,7 +1461,13 @@ bool ResolveAppIdentity(HWND hWnd,
 
     DWORD processId = 0;
     GetWindowThreadProcessId(hWnd, &processId);
-    if (!processId || IsOwnExplorerProcess(processId)) {
+    if (!processId) {
+        return false;
+    }
+
+    const std::wstring classUpper = ToUpper(GetWindowClassName(hWnd));
+    const bool explorerFolder = IsExplorerFolderWindowClass(classUpper);
+    if (IsOwnExplorerProcess(processId) && !explorerFolder) {
         return false;
     }
 
@@ -1421,12 +1480,11 @@ bool ResolveAppIdentity(HWND hWnd,
     std::wstring fileName = FileNameFromPath(path);
     std::wstring fileNameUpper = ToUpper(fileName);
 
-    if (IsShellHostFileName(fileNameUpper)) {
+    if (IsShellHostFileName(fileNameUpper) && !explorerFolder) {
         return false;
     }
 
     std::wstring appIdUpper = ToUpper(GetWindowAppUserModelId(hWnd));
-    std::wstring classUpper = ToUpper(GetWindowClassName(hWnd));
 
     if (IsUwpHostFileName(fileNameUpper) && appIdUpper.empty()) {
         return false;
@@ -5188,9 +5246,8 @@ void BringElementToFront(Controls::Panel panel, UIElement el) {
 // Thumbnail cards often use a Grid with rows (title | image). A normal child
 // lands in (0,0) — the title row — and expands that row (bar between icon and
 // text + card grows sideways). Same fix as icon glow: span every row/column
-// and Stretch to the arranged card size. Children are positioned with
-// RenderTransform so their layout slot stays tiny (Width×Height of the bar
-// only, transform ignored by measure).
+// and Stretch to the arranged card size. Children use Margin (not
+// RenderTransform — that clips the right end-cap).
 Controls::Grid EnsureThumbOverlayHost(Controls::Panel panel) {
     FrameworkElement hostEl =
         FindChildByName(panel.as<FrameworkElement>(), kThumbGlowElementName);
@@ -5234,8 +5291,8 @@ Controls::Grid EnsureThumbOverlayHost(Controls::Panel panel) {
     return host;
 }
 
-// Layout slot is width×height at (0,0); visual position is (x,y) via transform
-// so measure does not include the offset (avoids expanding the title row).
+// Position with Margin, not RenderTransform: the layout clip is the
+// un-transformed slot, so a translate of `pad` clipped the right end-cap.
 void PlaceOverlayChild(FrameworkElement el,
                        double x,
                        double y,
@@ -5247,21 +5304,22 @@ void PlaceOverlayChild(FrameworkElement el,
     try {
         el.HorizontalAlignment(HorizontalAlignment::Left);
         el.VerticalAlignment(VerticalAlignment::Top);
-        el.Margin(Thickness{0, 0, 0, 0});
+        el.Margin(Thickness{x, y, 0, 0});
+        el.ClearValue(UIElement::RenderTransformProperty());
         if (width > 0) {
             el.Width(width);
+            el.MaxWidth(width);
         } else {
             el.ClearValue(FrameworkElement::WidthProperty());
+            el.ClearValue(FrameworkElement::MaxWidthProperty());
         }
         if (height > 0) {
             el.Height(height);
+            el.MaxHeight(height);
         } else {
             el.ClearValue(FrameworkElement::HeightProperty());
+            el.ClearValue(FrameworkElement::MaxHeightProperty());
         }
-        Media::TranslateTransform tf;
-        tf.X(x);
-        tf.Y(y);
-        el.RenderTransform(tf);
         el.Visibility(Visibility::Visible);
     } catch (...) {
     }
@@ -5287,10 +5345,31 @@ void HideThumbOverlayChildren(Controls::Grid host) {
                 }
                 el.ClearValue(FrameworkElement::WidthProperty());
                 el.ClearValue(FrameworkElement::HeightProperty());
+                el.ClearValue(FrameworkElement::MaxWidthProperty());
+                el.ClearValue(FrameworkElement::MaxHeightProperty());
                 el.ClearValue(FrameworkElement::MarginProperty());
             } catch (...) {
             }
         }
+    }
+}
+
+// Keep the overlay host; only restore plate + hide children (style switch /
+// rank change). Full ClearThumbnailHighlight tears down the host and forces
+// XamlReader::Load on the next paint.
+void ResetThumbnailOverlayForRepaint(FrameworkElement thumbView) {
+    ClearThumbnailNativeStyles(thumbView);
+    try {
+        auto panel = GetThumbnailHostPanel(thumbView);
+        if (!panel) {
+            return;
+        }
+        auto hostEl =
+            FindChildByName(panel.as<FrameworkElement>(), kThumbGlowElementName);
+        if (auto host = hostEl.try_as<Controls::Grid>()) {
+            HideThumbOverlayChildren(host);
+        }
+    } catch (...) {
     }
 }
 
@@ -5438,8 +5517,9 @@ void ApplyThumbnailHighlight(FrameworkElement thumbView, int rankOneBased) {
     }
 
     try {
-        // Start clean so style switches don't leave mixed chrome.
-        ClearThumbnailHighlight(thumbView);
+        // Start clean so style switches don't leave mixed chrome. Keep the
+        // overlay host — re-parsing the markup on every ranked paint is wasted.
+        ResetThumbnailOverlayForRepaint(thumbView);
 
         auto panel = GetThumbnailHostPanel(thumbView);
         if (!panel) {
@@ -5614,28 +5694,25 @@ void ApplyThumbnailHighlight(FrameworkElement thumbView, int rankOneBased) {
                 // Layout not ready — default strip + one deferred remeasure.
                 SchedulePreviewFlyoutRefresh(thumbView);
             }
-            const double hPad = 8.0;
-            const double stripW = (std::max)(24.0, cardW - 2.0 * hPad);
-
             auto chip =
                 FindChildByName(host, kThumbTitleBgName).try_as<Controls::Border>();
             if (chip) {
-                // Soft wash above title glyphs. Rank-1 alpha follows tint
-                // opacity; lower ranks scale linearly with intensity. The old
-                // (0.55+0.45*t) floor made 100 vs 5 look almost the same.
                 const int maxA = (std::max)(
                     16, (std::min)(140, static_cast<int>(
                                             14 + fillOpacitySetting * 1.15)));
                 const int chipA = (std::max)(8, static_cast<int>(maxA * t));
                 chip.Background(Media::SolidColorBrush{withAlpha(base, chipA)});
-                chip.CornerRadius(CornerRadius{stripH * 0.35});
+                // Brace-init {4} only fills TopLeft (C++ struct). All four.
+                chip.CornerRadius(CornerRadius{4, 4, 4, 4});
                 chip.Opacity(1.0);
-                PlaceOverlayChild(chip, hPad, top, stripW, stripH);
+                const double pad = 8.0;
+                top = (std::max)(6.0, top);
+                PlaceOverlayChild(chip, pad, top,
+                                  (std::max)(24.0, cardW - 2.0 * pad), stripH);
             }
         } else {  // TitleBar — underline just under the title glyphs
-            // Prefer transform relative to host (same coordinate space as
-            // PlaceOverlayChild). Small gap under baseline — enough to avoid
-            // strikethrough, not so much that the bar hugs the thumbnail image.
+            // Small gap under baseline — enough to avoid strikethrough, not
+            // so much that the bar hugs the thumbnail image.
             constexpr double kGapBelowTitle = 2.0;
             double top = 30.0;  // fallback under a ~28px header
             double titleTop = 0, titleBottom = 0;
@@ -5650,8 +5727,6 @@ void ApplyThumbnailHighlight(FrameworkElement thumbView, int rankOneBased) {
 
             const double barH =
                 (std::max)(2.0, (std::min)(5.0, thickness + 0.5));
-            const double hPad = 10.0;
-            const double barW = (std::max)(24.0, cardW - 2.0 * hPad);
 
             auto bar = FindChildByName(host, kThumbTitleBarName)
                            .try_as<Shapes::Rectangle>();
@@ -5659,13 +5734,15 @@ void ApplyThumbnailHighlight(FrameworkElement thumbView, int rankOneBased) {
                 // Wider alpha range than the old rank-1-only bar so flyout
                 // ranks read as a ladder; t=1 stays fully opaque accent.
                 const int fillA = static_cast<int>(90 + 165 * t);
+                const double pad = 8.0;
                 bar.Fill(Media::SolidColorBrush{withAlpha(base, fillA)});
                 bar.Stroke(nullptr);
                 bar.StrokeThickness(0);
                 bar.RadiusX(barH * 0.5);
                 bar.RadiusY(barH * 0.5);
                 bar.Opacity(0.50 + 0.50 * t);
-                PlaceOverlayChild(bar, hPad, top, barW, barH);
+                PlaceOverlayChild(bar, pad, top,
+                                  (std::max)(24.0, cardW - 2.0 * pad), barH);
             }
         }
 
@@ -5702,14 +5779,21 @@ void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb) {
     }
 
     // Snap-group cards sit in the same ItemsRepeater as the windows.
-    // Never glow those; they are not a window HWND.
+    // Never glow those; they are not a window HWND. Compute once — the
+    // lookup walks IconsRepeater and takes the ctor-map mutex.
+    std::vector<char> isSnap(allViews.size(), 0);
+    for (size_t i = 0; i < allViews.size(); ++i) {
+        if (IsSnapGroupThumbnailView(allViews[i])) {
+            isSnap[i] = 1;
+        }
+    }
     std::vector<FrameworkElement> siblings;
     siblings.reserve(allViews.size());
-    for (auto& v : allViews) {
-        if (IsSnapGroupThumbnailView(v)) {
-            ClearThumbnailHighlight(v);
+    for (size_t i = 0; i < allViews.size(); ++i) {
+        if (isSnap[i]) {
+            ClearThumbnailHighlight(allViews[i]);
         } else {
-            siblings.push_back(v);
+            siblings.push_back(allViews[i]);
         }
     }
 
@@ -5728,10 +5812,11 @@ void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb) {
 
     // HWND pipeline (this flyout only — not a global window ladder):
     //   1. TaskItem — DataContext ↔ ctor map (COM identity, per card).
-    //   2. Repeater index + Thumbnails.GetAt — only for holes, and only if
-    //      that collection agrees with a DataContext HWND (it is a global
-    //      captured on TargetItemKey and can be another app's flyout).
-    //   3. Title unique — only for unresolved cards; each HWND once.
+    //   2. Repeater index + Thumbnails.GetAt — holes only. The collection is
+    //      cleared on TargetItemKey entry and recaptured for this target;
+    //      still skip GetAt if it disagrees with a DataContext HWND.
+    //   3. Title unique — unresolved cards, same process / AUMID; skip if
+    //      no sibling resolved exactly.
     enum class ResolveHow : int { None = 0, Repeater, TaskItem, Title };
     struct Scored {
         FrameworkElement view{nullptr};
@@ -5796,10 +5881,8 @@ void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb) {
     if (usedRepeater) {
         const int thumbCount = ThumbnailsCollectionSize();
         int nSnap = 0;
-        for (const auto& v : allViews) {
-            if (IsSnapGroupThumbnailView(v)) {
-                ++nSnap;
-            }
+        for (char snap : isSnap) {
+            nSnap += snap;
         }
         const int nRepeater = static_cast<int>(allViews.size());
         const int nWindows = nRepeater - nSnap;
@@ -5821,7 +5904,7 @@ void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb) {
         auto getAtIndexForSibling = [&](size_t siWant) -> int {
             size_t si = 0;
             for (size_t ri = 0; ri < allViews.size(); ++ri) {
-                if (IsSnapGroupThumbnailView(allViews[ri])) {
+                if (ri < isSnap.size() && isSnap[ri]) {
                     continue;
                 }
                 if (si == siWant) {
@@ -5867,18 +5950,49 @@ void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb) {
     }
 
     // Pass 3: unique-title fallback for cards still unresolved. Identical
-    // titles stay unmatched (do not steal another card's HWND).
+    // titles stay unmatched (do not steal another card's HWND). Scope to
+    // this flyout's processKey from the recency map (no OpenProcess /
+    // property-store on the UI thread). Skip when no exact sibling is in
+    // that map — fail closed, same as icons.
+    std::wstring flyoutKey;
+    for (const auto& s : scored) {
+        if (!s.hwnd || (s.how != ResolveHow::TaskItem &&
+                        s.how != ResolveHow::Repeater)) {
+            continue;
+        }
+        for (const auto& info : recent) {
+            if (info.hwnd == s.hwnd && !info.processKey.empty()) {
+                flyoutKey = info.processKey;
+                break;
+            }
+        }
+        if (!flyoutKey.empty()) {
+            break;
+        }
+    }
+
     const bool titlesDistinct = TitleKeysAreDistinct(cardTitles);
-    if (titlesDistinct) {
+    if (titlesDistinct && flyoutKey.empty()) {
+        Wh_Log(L"Preview resolve: skip unique-title (no exact HWND for this "
+               L"flyout)");
+    } else if (titlesDistinct) {
+        std::vector<WindowFocusInfo> recentSameApp;
+        recentSameApp.reserve(recent.size());
+        for (const auto& info : recent) {
+            if (info.processKey == flyoutKey) {
+                recentSameApp.push_back(info);
+            }
+        }
         for (size_t i = 0; i < siblings.size(); ++i) {
             if (scored[i].hwnd) {
                 continue;
             }
-            HWND h = MatchTitleToUnusedRecent(cardTitles[i], recent, usedHwnds);
+            HWND h =
+                MatchTitleToUnusedRecent(cardTitles[i], recentSameApp, usedHwnds);
             if (h) {
                 stampRecency(i, h);
                 if (scored[i].tick == 0) {
-                    for (const auto& info : recent) {
+                    for (const auto& info : recentSameApp) {
                         if (info.hwnd == h && info.lastConfirmedTick > 0) {
                             scored[i].tick = info.lastConfirmedTick;
                             break;
@@ -6610,6 +6724,10 @@ HWND HwndFromThumbnailsGetAt(int index) {
 
 HoverFlyoutModel_TargetItemKey_t HoverFlyoutModel_TargetItemKey_Original;
 void WINAPI HoverFlyoutModel_TargetItemKey_Hook(void* pThis, void* param1) {
+    // Drop the previous target's collection before this retarget. Refresh
+    // also runs from OnApplyTemplate / decay / click, and a matching window
+    // count used to bind the last app's HWNDs with no DataContext to check.
+    g_TaskGroup_Thumbnails = {};
     g_inHoverFlyoutModel_TargetItemKey = true;
     HoverFlyoutModel_TargetItemKey_Original(pThis, param1);
     g_inHoverFlyoutModel_TargetItemKey = false;
@@ -6862,12 +6980,24 @@ void OnPreviewMinFocusTimerElapsed(MinFocusConfirmMode mode) {
             const ULONGLONG start = pending.previewStartTick
                                         ? pending.previewStartTick
                                         : pending.focusStartTick;
-            ULONGLONG remaining = RemainingDeadlineMs(
-                start, settings->previewMinFocusSeconds, GetTickCount64());
-            if (remaining == 0) {
-                remaining = 200;
+            const ULONGLONG now = GetTickCount64();
+            ULONGLONG retryStart = pending.transientRetryStartTick;
+            const ULONGLONG delay = TransientRetryDelayMs(
+                start, settings->previewMinFocusSeconds, now, retryStart);
+            {
+                std::lock_guard<std::mutex> lock(g_stateMutex);
+                if (g_pendingFocus.valid &&
+                    g_pendingFocus.hwnd == pending.hwnd) {
+                    g_pendingFocus.transientRetryStartTick = retryStart;
+                }
             }
-            ArmHookTimer(kPreviewMinFocusTimerId, remaining);
+            if (delay == 0) {
+                Wh_Log(L"Preview min-focus: gave up waiting through transient "
+                       L"FG for %s",
+                       pending.displayName.c_str());
+                return;
+            }
+            ArmHookTimer(kPreviewMinFocusTimerId, delay);
         }
         // Focus left the app — drop only preview; app timer may still be pending.
         return;
@@ -6898,6 +7028,9 @@ void OnPreviewMinFocusTimerElapsed(MinFocusConfirmMode mode) {
 
 void OnMinFocusTimerElapsed(MinFocusConfirmMode mode) {
     auto settings = SettingsSnap();
+    if (g_unloading.load()) {
+        return;
+    }
     PendingFocus pending;
     {
         std::lock_guard<std::mutex> lock(g_stateMutex);
@@ -6923,26 +7056,48 @@ void OnMinFocusTimerElapsed(MinFocusConfirmMode mode) {
         if (mode == MinFocusConfirmMode::FromTimer &&
             IsTransientForeground(GetForegroundWindow())) {
             // Alt-Tab / taskbar stole FG briefly. WndProc already KillTimer'd;
-            // keep the candidate and wait out the rest of min-focus.
-            ULONGLONG remaining = RemainingDeadlineMs(
-                pending.focusStartTick, settings->minFocusSeconds,
-                GetTickCount64());
-            if (remaining == 0) {
-                remaining = 200;
+            // keep the candidate through a bounded grace, then drop.
+            const ULONGLONG now = GetTickCount64();
+            ULONGLONG retryStart = pending.transientRetryStartTick;
+            const ULONGLONG delay = TransientRetryDelayMs(
+                pending.focusStartTick, settings->minFocusSeconds, now,
+                retryStart);
+            {
+                std::lock_guard<std::mutex> lock(g_stateMutex);
+                if (g_pendingFocus.valid &&
+                    g_pendingFocus.hwnd == pending.hwnd) {
+                    g_pendingFocus.transientRetryStartTick = retryStart;
+                }
             }
-            ArmHookTimer(kMinFocusTimerId, remaining);
+            if (delay == 0) {
+                Wh_Log(L"Min-focus timer: gave up waiting through transient "
+                       L"FG for %s",
+                       pending.displayName.c_str());
+                {
+                    std::lock_guard<std::mutex> lock(g_stateMutex);
+                    if (g_pendingFocus.hwnd == pending.hwnd) {
+                        g_pendingFocus = {};
+                    }
+                }
+                StopDecayTimerIfIdle();
+                return;
+            }
+            ArmHookTimer(kMinFocusTimerId, delay);
             Wh_Log(L"Min-focus timer: transient FG, still waiting on %s "
                    L"(%llums left)",
                    pending.displayName.c_str(),
-                   static_cast<unsigned long long>(remaining));
+                   static_cast<unsigned long long>(delay));
             return;
         }
         Wh_Log(L"Min-focus timer: focus left %s before confirmation",
                pending.displayName.c_str());
-        std::lock_guard<std::mutex> lock(g_stateMutex);
-        if (g_pendingFocus.hwnd == pending.hwnd) {
-            g_pendingFocus = {};
+        {
+            std::lock_guard<std::mutex> lock(g_stateMutex);
+            if (g_pendingFocus.hwnd == pending.hwnd) {
+                g_pendingFocus = {};
+            }
         }
+        StopDecayTimerIfIdle();
         return;
     }
     pending.hwnd = confirmHwnd;
@@ -7212,6 +7367,7 @@ void HandleForegroundChanged(HWND hWnd) {
             hwndChanged = g_pendingFocus.hwnd != hWnd;
             g_pendingFocus.hwnd = hWnd;
             g_pendingFocus.processId = processId;
+            g_pendingFocus.transientRetryStartTick = 0;
             if (!windowTitle.empty()) {
                 g_pendingFocus.windowTitle = windowTitle;
             }
@@ -7220,15 +7376,17 @@ void HandleForegroundChanged(HWND hWnd) {
             }
             sameAppPending = true;
         } else {
-            g_pendingFocus.hwnd = hWnd;
-            g_pendingFocus.processId = processId;
-            g_pendingFocus.key = key;
-            g_pendingFocus.displayName = displayName;
-            g_pendingFocus.windowTitle = windowTitle;
-            g_pendingFocus.focusStartTick = now;
-            g_pendingFocus.previewStartTick = now;
-            g_pendingFocus.desktopId = g_currentDesktopId;
-            g_pendingFocus.valid = true;
+            PendingFocus next;
+            next.hwnd = hWnd;
+            next.processId = processId;
+            next.key = key;
+            next.displayName = displayName;
+            next.windowTitle = windowTitle;
+            next.focusStartTick = now;
+            next.previewStartTick = now;
+            next.desktopId = g_currentDesktopId;
+            next.valid = true;
+            g_pendingFocus = std::move(next);
         }
         deskForLog = g_pendingFocus.desktopId;
     }
@@ -7352,8 +7510,11 @@ LRESULT CALLBACK HookThreadWndProc(HWND hWnd,
             PostQuitMessage(0);
             return 0;
         case WM_APP_REQUEST_APPLY_DEBOUNCED:
-            SetTimer(hWnd, kFullRebindTimerId,
-                     static_cast<UINT>(kFullRebindDebounceMs), nullptr);
+            if (!g_fullRebindTimerArmed) {
+                g_fullRebindTimerArmed = true;
+                SetTimer(hWnd, kFullRebindTimerId,
+                         static_cast<UINT>(kFullRebindDebounceMs), nullptr);
+            }
             return 0;
         case WM_APP_REFRESH_ACCENT:
             RefreshCachedAccent();
@@ -7375,6 +7536,7 @@ LRESULT CALLBACK HookThreadWndProc(HWND hWnd,
                 OnDecayTimer();
             } else if (wParam == kFullRebindTimerId) {
                 KillTimer(hWnd, kFullRebindTimerId);
+                g_fullRebindTimerArmed = false;
                 RequestApplyVisuals();
             }
             return 0;
@@ -7383,6 +7545,7 @@ LRESULT CALLBACK HookThreadWndProc(HWND hWnd,
             KillTimer(hWnd, kPreviewMinFocusTimerId);
             KillTimer(hWnd, kDecayTimerId);
             KillTimer(hWnd, kFullRebindTimerId);
+            g_fullRebindTimerArmed = false;
             return 0;
     }
     return DefWindowProc(hWnd, msg, wParam, lParam);
@@ -7391,6 +7554,7 @@ LRESULT CALLBACK HookThreadWndProc(HWND hWnd,
 DWORD WINAPI WinEventHookThread(LPVOID /*param*/) {
     g_hookThreadId.store(GetCurrentThreadId(), std::memory_order_release);
     g_decayTimerArmed.store(false);
+    g_fullRebindTimerArmed = false;
 
     HMODULE hMod = nullptr;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -7780,8 +7944,12 @@ void LoadSettings() {
 // Windhawk entry points
 // ---------------------------------------------------------------------------
 
+#ifndef WH_MOD_VERSION
+#define WH_MOD_VERSION L"0.9.19"
+#endif
+
 BOOL Wh_ModInit() {
-    Wh_Log(L"> Taskbar Recent Focus Highlight init v0.9.10");
+    Wh_Log(L"> init " WH_MOD_VERSION);
 
     g_unloading = false;
     LoadSettings();
