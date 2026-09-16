@@ -188,8 +188,9 @@ along with the browser prototype the four algorithms were developed in before
 the Direct2D port. There is a short showcase of all four styles at
 [vector.akilluminati47.pages.dev](https://vector.akilluminati47.pages.dev/).
 
-Originally created by **akilluminati47**, developed with the help of the AI
-pair-programmers Claude and Big-Pickle (opencode).
+Originally created by [**akilluminati47**](https://akilluminati47.github.io/akilluminati47/),
+developed with the help of the AI pair-programmers Claude and Big-Pickle
+(opencode).
 
 None of the four techniques is original to this mod. They are well-trodden
 generative art, and these are the implementations and write-ups each scene was
