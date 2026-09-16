@@ -2,7 +2,7 @@
 // @id              taskbar-split
 // @name            Taskbar Split: Running Left, Pinned Right
 // @description     Places running apps on the left and closed pinned apps on the right, with flexible empty space between them (Windows 11).
-// @version         0.3.1
+// @version         0.3.16
 // @author          Arkadiusz
 // @github          https://github.com/Artllex
 // @homepage        https://github.com/Artllex/taskbar-split
@@ -28,6 +28,8 @@
 // https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-labels.wh.cpp
 // https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-start-button-position.wh.cpp
 // https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-centered-start-split-icons.wh.cpp
+// Pointer-handler ABI and symbol names follow m417z's GPL-3.0 mod:
+// https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-reorder-right-drag.wh.cpp
 //
 // Taskbar-host discovery also uses MIT-licensed code from Taskbar multi-tray
 // by EDM115 and Island Media Controls by usho. The following MIT notice is
@@ -62,9 +64,11 @@ Creates two dynamic application zones on the Windows 11 taskbar:
 
 Launching a pinned app moves it to the left zone and restores its normal size.
 Newly running buttons are appended to the right end of the running zone.
-Existing running buttons retain their order for the lifetime of their XAML
-containers. Manual drag-to-reorder is not yet supported reliably; version
-0.3.1 fixes launch ordering only, not the reported drag/drop issue.
+Drag with the left mouse button to reorder within a section. The dragged
+icon follows the mouse within that section and neighbours make room as it
+crosses their centres. Escape cancels the move; sections cannot be crossed.
+Order is session-local and may reset when Windows recreates button containers.
+Native Widgets space is reserved when system buttons retain their Windows positions.
 Closing it returns it to the right zone, where pinned icons can be made smaller
 and packed more densely. The persistent Windows pin list is not changed.
 
@@ -93,19 +97,19 @@ easy to configure; enable only one positioning mod at a time.
 
 // ==WindhawkModSettings==
 /*
-- leftPadding: 8
+- leftPadding: 0
   $name: Left edge padding
   $description: Empty space before the first system button, in device-independent pixels (DIPs).
-- runningGap: 8
+- runningGap: 0
   $name: Gap after system buttons
   $description: Space between Start/Search/Widgets/Task View and running apps.
 - trayGap: 8
   $name: Gap before tray
-  $description: Space between closed pinned apps and the notification area.
+  $description: Space between closed pinned apps and the notification area, or native Widgets placed before it.
 - middleGap: 48
   $name: Minimum middle gap
   $description: Preferred minimum empty space between running and closed pinned groups. When crowded, this gap shrinks to zero before icon spacing is compressed.
-- pinnedIconScale: 100
+- pinnedIconScale: 90
   $name: Closed pinned icon size
   $description: Size and packing density of icons in the right group, as a percentage from 50 to 100. Running icons always use 100%.
 - systemButtonsLeft: true
@@ -119,6 +123,10 @@ easy to configure; enable only one positioning mod at a time.
 #include <algorithm>
 #include <atomic>
 #include <functional>
+#include <optional>
+#include <cmath>
+#include <iterator>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -130,6 +138,14 @@ easy to configure; enable only one positioning mod at a time.
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Numerics.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Devices.Input.h>
+#include <winrt/Windows.UI.Input.h>
+#include <winrt/Windows.UI.Xaml.Input.h>
+#include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Windows.UI.Xaml.Media.Animation.h>
+#include <winrt/Windows.UI.Xaml.Hosting.h>
+#include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 #include <winrt/Windows.UI.Xaml.h>
@@ -143,17 +159,18 @@ namespace media = winrt::Windows::UI::Xaml::Media;
 namespace numerics = winrt::Windows::Foundation::Numerics;
 
 struct Settings {
-    std::atomic<int> leftPadding{8};
-    std::atomic<int> runningGap{8};
+    std::atomic<int> leftPadding{0};
+    std::atomic<int> runningGap{0};
     std::atomic<int> trayGap{8};
     std::atomic<int> middleGap{48};
-    std::atomic<int> pinnedIconScale{100};
+    std::atomic<int> pinnedIconScale{90};
     std::atomic<bool> systemButtonsLeft{true};
 };
 
 Settings g_settings;
 std::atomic<bool> g_unloading{false};
 std::atomic<bool> g_refreshQueued{false};
+std::atomic<bool> g_settingsArrangeFollowup{false};
 std::atomic<bool> g_viewHooksInstalled{false};
 std::atomic<HWND> g_taskbarWindow{nullptr};
 std::atomic<bool> g_taskbarSubclassed{false};
@@ -401,6 +418,29 @@ SystemButtonKind GetSystemButtonKind(FrameworkElement const& element) {
     return SystemButtonKind::None;
 }
 
+void ReserveNativeWidgets(FrameworkElement const& node,
+                          FrameworkElement const& content,
+                          double& leftEdge, double& rightEdge, int depth = 0) {
+    if (!node || depth > 16 || node.Visibility() != Visibility::Visible) return;
+    if (GetSystemButtonKind(node) == SystemButtonKind::Widgets) {
+        double width = SystemButtonWidth(node);
+        if (width <= 0) return;
+        double x = ElementX(node, content);
+        // Widgets can be outside the task-button repeater. Reserve their
+        // native footprint on the side where Windows actually placed them.
+        if (x + width / 2 >= content.ActualWidth() / 2)
+            rightEdge = std::min(rightEdge, x);
+        else
+            leftEdge = std::max(leftEdge, x + width);
+        return;
+    }
+    int count = media::VisualTreeHelper::GetChildrenCount(node);
+    for (int i = 0; i < count; ++i) {
+        auto child = media::VisualTreeHelper::GetChild(node, i).try_as<FrameworkElement>();
+        if (child) ReserveNativeWidgets(child, content, leftEdge, rightEdge, depth + 1);
+    }
+}
+
 bool IsTaskButton(FrameworkElement const& element) {
     return winrt::get_class_name(element) == L"Taskbar.TaskListButton";
 }
@@ -537,16 +577,30 @@ struct ButtonInfo {
 // newly running button is appended, regardless of its pinned-list position.
 // Weak references prevent retaining detached XAML buttons.
 std::vector<winrt::weak_ref<FrameworkElement>> g_runningOrder;
+std::vector<winrt::weak_ref<FrameworkElement>> g_pinnedOrder;
+// Authoritative user order. Layout discovery must never rewrite this list.
+std::vector<winrt::weak_ref<FrameworkElement>> g_pinnedUserOrder;
 
-void OrderRunningButtons(std::vector<ButtonInfo*>& running) {
+bool SameTaskButton(FrameworkElement const& first, FrameworkElement const& second) {
+    if (!first || !second) return false;
+    if (winrt::get_abi(first) == winrt::get_abi(second)) return true;
+    // FrameworkElement interface addresses need not be canonical identity.
+    // Resolve IID_IUnknown on both views (tree, weak ref, pointer event).
+    auto a = first.as<winrt::Windows::Foundation::IUnknown>();
+    auto b = second.as<winrt::Windows::Foundation::IUnknown>();
+    return winrt::get_abi(a) == winrt::get_abi(b);
+}
+
+void OrderRunningButtons(std::vector<ButtonInfo*>& running,
+    std::vector<winrt::weak_ref<FrameworkElement>>& order = g_runningOrder) {
     std::vector<ButtonInfo*> ordered;
-    for (auto const& reference : g_runningOrder) {
+    for (auto const& reference : order) {
         auto element = reference.get();
         if (!element) {
             continue;
         }
         auto found = std::find_if(running.begin(), running.end(),
-            [&](auto item) { return item->element == element; });
+            [&](auto item) { return SameTaskButton(item->element, element); });
         if (found != running.end()) {
             ordered.push_back(*found);
         }
@@ -556,11 +610,41 @@ void OrderRunningButtons(std::vector<ButtonInfo*>& running) {
             ordered.push_back(item);
         }
     }
-    g_runningOrder.clear();
+    std::vector<winrt::weak_ref<FrameworkElement>> nextOrder;
     for (auto item : ordered) {
-        g_runningOrder.emplace_back(item->element);
+        nextOrder.emplace_back(item->element);
     }
+    order.swap(nextOrder);
     running = std::move(ordered);
+}
+
+void OrderPinnedButtons(std::vector<ButtonInfo*>& pinned) {
+    // The right-hand layout has its own ordering path. Read the authoritative
+    // lists directly and assign a numeric rank BEFORE changing any list.
+    // Sorting only numbers avoids COM calls from a sorting comparator.
+    struct RankedButton { ButtonInfo* button; size_t rank; };
+    std::vector<RankedButton> ranked;
+    ranked.reserve(pinned.size());
+    auto rankIn = [](auto const& order, FrameworkElement const& element) {
+        for (size_t i = 0; i < order.size(); ++i) {
+            if (SameTaskButton(order[i].get(), element)) return i;
+        }
+        return order.size();
+    };
+    for (auto button : pinned) {
+        size_t rank = rankIn(g_pinnedUserOrder, button->element);
+        if (rank == g_pinnedUserOrder.size()) {
+            rank += rankIn(g_pinnedOrder, button->element);
+        }
+        ranked.push_back({button, rank});
+    }
+    std::stable_sort(ranked.begin(), ranked.end(),
+        [](auto const& a, auto const& b) { return a.rank < b.rank; });
+    for (size_t i = 0; i < ranked.size(); ++i) pinned[i] = ranked[i].button;
+    std::vector<winrt::weak_ref<FrameworkElement>> published;
+    published.reserve(pinned.size());
+    for (auto button : pinned) published.emplace_back(button->element);
+    g_pinnedOrder.swap(published);
 }
 
 struct Placement {
@@ -659,6 +743,8 @@ bool BuildLayoutPlan() {
             }
         } else {
             for (auto const& button : systemButtons) {
+                // Widgets are reserved separately, on their actual side.
+                if (GetSystemButtonKind(button) == SystemButtonKind::Widgets) continue;
                 double width = SystemButtonWidth(button);
                 if (width <= 0) {
                     continue;
@@ -668,12 +754,15 @@ bool BuildLayoutPlan() {
                                     nativeX + width);
             }
         }
-        leftEdge += g_settings.runningGap.load();
 
         auto tray = FindDirectChildByClass(content,
                                             L"SystemTray.SystemTrayFrame");
         double rightEdge = tray ? ElementX(tray, content)
                                 : static_cast<double>(content.ActualWidth());
+        if (!g_settings.systemButtonsLeft.load()) {
+            ReserveNativeWidgets(content, content, leftEdge, rightEdge);
+        }
+        leftEdge += g_settings.runningGap.load();
         rightEdge -= g_settings.trayGap.load();
 
         std::vector<ButtonInfo*> running;
@@ -682,6 +771,7 @@ bool BuildLayoutPlan() {
             (button.running ? running : pinned).push_back(&button);
         }
         OrderRunningButtons(running);
+        OrderPinnedButtons(pinned);
         ButtonInfo overflowInfo{overflow, overflow ? ElementWidth(overflow) : 0, true};
         if (overflowInfo.width > 0) {
             running.push_back(&overflowInfo);
@@ -750,8 +840,12 @@ void RequestRefresh();
 
 using ElementArrange_t = HRESULT(WINAPI*)(void*, winrt::Windows::Foundation::Rect);
 ElementArrange_t ElementArrange_Original = nullptr;
+void KeepDraggedSlot(FrameworkElement const& element,
+                     winrt::Windows::Foundation::Rect& rect);
+void CompletePendingDrop(FrameworkElement const& element);
 
 HRESULT WINAPI ElementArrange_Hook(void* self, winrt::Windows::Foundation::Rect rect) {
+    FrameworkElement arrangedElement{nullptr};
     if (g_useArrangePlan && !g_unloading) {
         try {
             FrameworkElement element{nullptr};
@@ -761,19 +855,26 @@ HRESULT WINAPI ElementArrange_Hook(void* self, winrt::Windows::Foundation::Rect 
                 auto found = g_arrangePlan.find(winrt::get_abi(element));
                 if (found != g_arrangePlan.end()) {
                     rect.X = found->second.x;
+                    KeepDraggedSlot(element, rect);
+                    arrangedElement = element;
                 }
             }
         } catch (...) {
             // Preserve the native rect if COM lookup fails.
         }
     }
-    return ElementArrange_Original(self, rect);
+    HRESULT result = ElementArrange_Original(self, rect);
+    if (SUCCEEDED(result) && arrangedElement) {
+        try { CompletePendingDrop(arrangedElement); } catch (...) {}
+    }
+    return result;
 }
 
 bool EnsureArrangeHook() {
     if (ElementArrange_Original) {
         return true;
     }
+    if (g_unloading) return false;
     // Same IUIElement ABI entry point used by m417z's positioning mod.
     Shapes::Rectangle rectangle;
     IUIElement element = rectangle;
@@ -786,6 +887,8 @@ bool EnsureArrangeHook() {
     Wh_ApplyHookOperations();
     return true;
 }
+
+void UpdateDragPreview();
 
 HRESULT WINAPI ArrangeOverride_Hook(
     void* self, void* context, winrt::Windows::Foundation::Size size,
@@ -823,17 +926,21 @@ HRESULT WINAPI ArrangeOverride_Hook(
     }
     HRESULT result = ArrangeOverride_Original(self, context, size, resultSize);
     g_useArrangePlan = false;
+    // After toggling system-button placement, native widget positions only
+    // become current after this pass. Recompute once from those positions.
+    if (g_settingsArrangeFollowup.exchange(false)) RequestRefresh();
     if (!g_unloading && planReady) {
         try {
-            // Only scale after the native pass. No Translation is ever used.
+            // Scale after the native pass; section positioning uses Arrange.
             for (auto const& [key, placement] : g_arrangePlan) {
                 if (auto element = placement.element.get()) {
                     ScaleElement(element, placement.scale);
-                    if (element.ActualWidth() != placement.measuredWidth) {
+                    if (std::abs(element.ActualWidth() - placement.measuredWidth) > 0.05) {
                         RequestRefresh();
                     }
                 }
             }
+            UpdateDragPreview();
             // Newly realized buttons weren't available when the plan was
             // built. One queued pass incorporates their measured dimensions.
             if (auto repeater = GetTaskbarRepeater()) {
@@ -852,6 +959,509 @@ HRESULT WINAPI ArrangeOverride_Hook(
     return result;
 }
 
+// Deliver the real press immediately. Once the drag threshold is crossed,
+// cancel that native press and own the drag; never replay old event args.
+struct SectionGesture {
+    winrt::weak_ref<FrameworkElement> source;
+    Input::Pointer pointer{nullptr};
+    winrt::Windows::Foundation::Point origin{};
+    bool running = false;
+    bool dragged = false;
+    unsigned int pointerId = 0;
+    double startX = 0;
+    double desiredX = 0;
+    double minX = 0;
+    double maxX = 0;
+    double width = 0;
+    numerics::float3 translation{};
+    float originalSlotX = 0;
+    media::Animation::TransitionCollection transitions{nullptr};
+    bool previewPrepared = false;
+    std::vector<winrt::weak_ref<FrameworkElement>> originalOrder;
+};
+// The pointer object is released on the UI thread, not at CRT shutdown.
+[[clang::no_destroy]] std::optional<SectionGesture> g_sectionGesture;
+
+struct PendingDrop {
+    SectionGesture gesture;
+    winrt::Windows::UI::Composition::ImplicitAnimationCollection implicitAnimations{nullptr};
+    bool arranged = false;
+    ULONGLONG started = 0;
+    unsigned int stableSamples = 0;
+};
+[[clang::no_destroy]] std::optional<PendingDrop> g_pendingDrop;
+HWND g_dropSettleWindow = nullptr;
+
+UINT_PTR DropSettleTimerId() {
+    return reinterpret_cast<UINT_PTR>(&g_dropSettleWindow);
+}
+bool g_cancelingNativePress = false; // Taskbar thread only.
+
+void KeepDraggedSlot(FrameworkElement const& element,
+                     winrt::Windows::Foundation::Rect& rect) {
+    if (g_sectionGesture && g_sectionGesture->dragged &&
+        g_sectionGesture->source.get() == element) {
+        // Neighbours get their new slots, but the held button's layout slot
+        // must not move underneath its pointer-relative visual offset.
+        rect.X = g_sectionGesture->originalSlotX;
+    }
+}
+
+double DragTranslationX(double originalTranslation, double startX, double desiredX) {
+    return originalTranslation + desiredX - startX;
+}
+
+void UpdateDragPreview() {
+    if (!g_sectionGesture || !g_sectionGesture->dragged) return;
+    auto source = g_sectionGesture->source.get();
+    if (!source) return;
+    auto translation = g_sectionGesture->translation;
+    translation.x = static_cast<float>(DragTranslationX(translation.x,
+        g_sectionGesture->startX, g_sectionGesture->desiredX));
+    // Absolute displacement from the frozen slot. Never integrate the
+    // current animated visual position back into the next frame.
+    source.Translation(translation);
+}
+
+void RestoreGestureVisual(SectionGesture const& gesture) {
+    if (auto source = gesture.source.get()) {
+        if (gesture.previewPrepared) {
+            try {
+                // XAML Transitions alone do not disable Composition's
+                // reposition animations. Keep the drag offset until layout
+                // has reached its destination, then remove it without an
+                // animated return to the former slot.
+                auto visual = Hosting::ElementCompositionPreview::GetElementVisual(source);
+                auto implicitAnimations = visual.ImplicitAnimations();
+                struct RestoreImplicitAnimations {
+                    winrt::Windows::UI::Composition::Visual visual;
+                    winrt::Windows::UI::Composition::ImplicitAnimationCollection animations;
+                    ~RestoreImplicitAnimations() {
+                        try { visual.ImplicitAnimations(animations); } catch (...) {}
+                    }
+                } restoreImplicit{visual, implicitAnimations};
+                visual.ImplicitAnimations(nullptr);
+                visual.StopAnimation(L"Offset");
+                visual.Properties().StopAnimation(L"Translation");
+                if (auto repeater = GetTaskbarRepeater()) {
+                    repeater.InvalidateArrange();
+                    repeater.UpdateLayout();
+                }
+                // The layout pass can start an explicit Offset animation,
+                // even with implicit animations disabled. Its final base
+                // value already reflects the new arrange rectangle.
+                visual.StopAnimation(L"Offset");
+                visual.Properties().StopAnimation(L"Translation");
+                source.Translation(gesture.translation);
+            } catch (...) {
+                try { source.Translation(gesture.translation); } catch (...) {}
+            }
+            try { source.Transitions(gesture.transitions); } catch (...) {}
+        }
+        try { source.ReleasePointerCapture(gesture.pointer); } catch (...) {}
+    }
+}
+
+void FlushPendingDrop() {
+    if (g_dropSettleWindow) KillTimer(g_dropSettleWindow, DropSettleTimerId());
+    g_dropSettleWindow = nullptr;
+    if (!g_pendingDrop) return;
+    auto pending = std::move(*g_pendingDrop);
+    g_pendingDrop.reset();
+    if (!pending.arranged) {
+        try { RestoreGestureVisual(pending.gesture); } catch (...) {}
+    } else {
+        // Layout is already committed. Do not invalidate it again just to
+        // restore transitions; that could schedule another reposition.
+        try {
+            if (auto source = pending.gesture.source.get()) {
+                source.Translation(pending.gesture.translation);
+                source.Transitions(pending.gesture.transitions);
+            }
+        } catch (...) {}
+    }
+    try {
+        if (auto source = pending.gesture.source.get()) {
+            Hosting::ElementCompositionPreview::GetElementVisual(source)
+                .ImplicitAnimations(pending.implicitAnimations);
+        }
+    } catch (...) {}
+}
+
+void CompletePendingDrop(FrameworkElement const& element) {
+    if (!g_pendingDrop || g_pendingDrop->gesture.source.get() != element) return;
+    // Called only AFTER this button's real, successful native Arrange with
+    // the final split-layout rect. An invalidation request is not sufficient.
+    auto& pending = *g_pendingDrop;
+    try {
+        auto visual = Hosting::ElementCompositionPreview::GetElementVisual(element);
+        visual.StopAnimation(L"Offset");
+        visual.Properties().StopAnimation(L"Translation");
+        // The trace proved that StopAnimation alone leaves the old BASE
+        // Offset (399.2) even after ActualOffset has changed to 355.2.
+        // Commit that base value explicitly; preserve vertical/depth offsets.
+        auto offset = visual.Offset();
+        offset.x = element.ActualOffset().x;
+        visual.Offset(offset);
+        pending.arranged = true;
+    } catch (...) {}
+    try { element.Translation(pending.gesture.translation); } catch (...) {}
+    // Do not re-enable transitions on Arrange return: the captured trace
+    // starts the queued reposition at +219ms and finishes it at +563ms.
+}
+
+void SettlePendingDrop() {
+    if (!g_pendingDrop) { FlushPendingDrop(); return; }
+    try {
+        auto source = g_pendingDrop->gesture.source.get();
+        if (!source || g_unloading) { FlushPendingDrop(); return; }
+        ULONGLONG elapsed = GetTickCount64() - g_pendingDrop->started;
+        if (g_pendingDrop->arranged) {
+            auto visual = Hosting::ElementCompositionPreview::GetElementVisual(source);
+            double target = source.ActualOffset().x;
+            double actual = visual.Offset().x;
+            if (std::abs(actual - target) > 0.05) {
+                CompletePendingDrop(source);
+                g_pendingDrop->stableSamples = 0;
+            } else {
+                ++g_pendingDrop->stableSamples;
+            }
+            // Bounded guard covering the observed delayed transition, not
+            // a sleep on Explorer's UI thread. New presses/unload flush it.
+            if (elapsed >= 750 && g_pendingDrop->stableSamples >= 3) {
+                FlushPendingDrop();
+                return;
+            }
+        }
+        if (elapsed >= 2000) {
+            Wh_Log(L"Drop did not settle in 2 seconds; restoring animation settings");
+            FlushPendingDrop();
+        }
+    } catch (...) { FlushPendingDrop(); }
+}
+
+void QueueDrop(SectionGesture gesture) {
+    FlushPendingDrop();
+    auto source = gesture.source.get();
+    if (!source) return;
+    try {
+        auto visual = Hosting::ElementCompositionPreview::GetElementVisual(source);
+        auto implicitAnimations = visual.ImplicitAnimations();
+        g_pendingDrop.emplace(PendingDrop{gesture, implicitAnimations});
+        g_pendingDrop->started = GetTickCount64();
+        visual.ImplicitAnimations(nullptr);
+        g_dropSettleWindow = g_taskbarWindow;
+        if (!g_dropSettleWindow ||
+            !SetTimer(g_dropSettleWindow, DropSettleTimerId(), 16, nullptr)) {
+            FlushPendingDrop();
+            return;
+        }
+        // Keep Translation and disabled XAML transitions intact until the
+        // Arrange callback commits the destination.
+        source.ReleasePointerCapture(gesture.pointer);
+        RequestRefresh();
+    } catch (...) {
+        if (g_pendingDrop) FlushPendingDrop();
+        else RestoreGestureVisual(gesture);
+    }
+}
+
+void CancelSectionGesture() {
+    if (!g_sectionGesture) return;
+    auto gesture = std::move(*g_sectionGesture);
+    g_sectionGesture.reset(); // CaptureLost can re-enter below.
+    try {
+        if (gesture.dragged) {
+            (gesture.running ? g_runningOrder : g_pinnedOrder) = gesture.originalOrder;
+            if (!gesture.running) g_pinnedUserOrder = gesture.originalOrder;
+        }
+        RestoreGestureVisual(gesture);
+        RequestRefresh();
+    } catch (...) {
+    }
+}
+
+template<typename T>
+T GestureInterface(void* value) {
+    T result{nullptr};
+    if (value) {
+        reinterpret_cast<::IUnknown*>(value)->QueryInterface(
+            winrt::guid_of<T>(), winrt::put_abi(result));
+    }
+    return result;
+}
+
+bool GestureMatches(FrameworkElement const& source,
+                    Input::PointerRoutedEventArgs const& args) {
+    return g_sectionGesture && source && args &&
+           g_sectionGesture->source.get() == source &&
+           g_sectionGesture->pointerId == args.Pointer().PointerId();
+}
+
+template<typename T>
+bool ReorderWithinSection(std::vector<T>& order, T const& source,
+                          T const& target, bool after) {
+    // A target outside this section is rejected without changing any order.
+    auto from = std::find(order.begin(), order.end(), source);
+    auto to = std::find(order.begin(), order.end(), target);
+    if (source == target || from == order.end() || to == order.end()) return false;
+    order.erase(from);
+    to = std::find(order.begin(), order.end(), target);
+    order.insert(after ? std::next(to) : to, source);
+    return true;
+}
+
+size_t DragDestination(std::vector<double> const& widths, size_t current,
+                       double relativeCentre) {
+    size_t target = current;
+    double x = 0;
+    for (size_t i = 0; i < widths.size(); ++i) {
+        double midpoint = x + widths[i] / 2;
+        if (i < current && relativeCentre <= midpoint) return i;
+        if (i > current && relativeCentre >= midpoint) target = i;
+        x += widths[i];
+    }
+    return target;
+}
+
+size_t PinnedDragDestination(std::vector<double> const& widths, size_t current,
+                            double relativeCentre) {
+    if (current >= widths.size()) return current;
+    // Choose the nearest SLOT, not an exact crossing of the neighbour's
+    // centre. At a clamped section edge the latter may be unreachable due
+    // to float XAML coordinates versus double fractional scaled widths.
+    double currentCentre = widths[current] / 2;
+    for (size_t i = 0; i < current; ++i) currentCentre += widths[i];
+    size_t target = current;
+    double bestDistance = std::abs(relativeCentre - currentCentre);
+    double x = 0;
+    for (size_t i = 0; i < widths.size(); ++i) {
+        double distance = std::abs(relativeCentre - (x + widths[i] / 2));
+        // A quarter DIP dead band prevents switching back and forth at ties.
+        if (distance + 0.25 < bestDistance) {
+            bestDistance = distance;
+            target = i;
+        }
+        x += widths[i];
+    }
+    return target;
+}
+
+void FinishSectionReorder(SectionGesture& gesture,
+                          Input::PointerRoutedEventArgs const&) {
+    auto source = gesture.source.get();
+    auto repeater = GetTaskbarRepeater();
+    if (!source || !repeater) return;
+    if (ButtonIsRunning(source) != gesture.running) {
+        return;
+    }
+    // Use section slots, not hit-testing of overlapping scaled rectangles.
+    // In 0.3.2 the dragged button itself could replace the intended target.
+    auto& order = gesture.running ? g_runningOrder : g_pinnedOrder;
+    std::vector<FrameworkElement> live;
+    std::vector<double> widths;
+    for (auto const& reference : order) {
+        auto element = reference.get();
+        if (!element || element.Visibility() != Visibility::Visible ||
+            ButtonIsRunning(element) != gesture.running) continue;
+        live.push_back(element);
+        widths.push_back(ElementWidth(element) * (gesture.running ? 1.0 :
+            g_settings.pinnedIconScale.load() / 100.0));
+    }
+    auto from = std::find(live.begin(), live.end(), source);
+    if (from == live.end()) return;
+    size_t current = static_cast<size_t>(from - live.begin());
+    double relativeCentre = gesture.desiredX + gesture.width / 2 - gesture.minX;
+    size_t targetIndex = gesture.running
+        ? DragDestination(widths, current, relativeCentre)
+        : PinnedDragDestination(widths, current, relativeCentre);
+    if (targetIndex == current) {
+        return;
+    }
+    auto target = live[targetIndex];
+    if (!ReorderWithinSection(live, source, target, targetIndex > current)) {
+        return;
+    }
+    std::vector<winrt::weak_ref<FrameworkElement>> nextOrder;
+    for (auto const& element : live) nextOrder.emplace_back(element);
+    if (!gesture.running) g_pinnedUserOrder = nextOrder;
+    order.swap(nextOrder);
+    RequestRefresh();
+}
+
+using PointerHandler_t = HRESULT(WINAPI*)(void*, void*);
+PointerHandler_t PointerPressed_Original = nullptr;
+PointerHandler_t PointerMoved_Original = nullptr;
+PointerHandler_t PointerReleased_Original = nullptr;
+PointerHandler_t PointerCaptureLost_Original = nullptr;
+PointerHandler_t PointerCanceled_Original = nullptr;
+
+bool IsGestureThread() {
+    HWND window = g_taskbarWindow;
+    return window && GetWindowThreadProcessId(window, nullptr) == GetCurrentThreadId();
+}
+
+HRESULT WINAPI PointerPressed_Hook(void* self, void* rawArgs) {
+    if (g_unloading || !IsGestureThread()) return PointerPressed_Original(self, rawArgs);
+    FlushPendingDrop();
+    // Windows receives the original press at the original time, exactly once.
+    HRESULT result = PointerPressed_Original(self, rawArgs);
+    if (FAILED(result)) return result;
+    try {
+        auto source = GestureInterface<FrameworkElement>(self);
+        auto args = GestureInterface<Input::PointerRoutedEventArgs>(rawArgs);
+        if (source && args && IsTaskButton(source) &&
+            args.Pointer().PointerDeviceType() ==
+                winrt::Windows::Devices::Input::PointerDeviceType::Mouse) {
+            auto props = args.GetCurrentPoint(source).Properties();
+            auto repeater = GetTaskbarRepeater();
+            bool inPrimary = false;
+            if (repeater && g_taskbarSubclassed) {
+                for (auto const& child : RepeaterElements(repeater)) {
+                    if (child == source) { inPrimary = true; break; }
+                }
+            }
+            if (inPrimary && props.IsLeftButtonPressed() &&
+                !props.IsRightButtonPressed() && !props.IsMiddleButtonPressed()) {
+                g_sectionGesture.reset();
+                SectionGesture gesture;
+                gesture.source = source;
+                gesture.pointer = args.Pointer();
+                gesture.origin = args.GetCurrentPoint(repeater).Position();
+                gesture.running = ButtonIsRunning(source);
+                gesture.pointerId = args.Pointer().PointerId();
+                gesture.startX = gesture.desiredX = ElementX(source, repeater);
+                gesture.translation = source.Translation();
+                gesture.originalSlotX = Controls::Primitives::LayoutInformation::GetLayoutSlot(source).X;
+                gesture.transitions = source.Transitions();
+                double scale = gesture.running ? 1.0 : g_settings.pinnedIconScale.load() / 100.0;
+                gesture.width = ElementWidth(source) * scale;
+                gesture.minX = gesture.startX;
+                double right = gesture.startX + gesture.width;
+                gesture.originalOrder = gesture.running ? g_runningOrder : g_pinnedOrder;
+                for (auto const& reference : gesture.originalOrder) {
+                    if (auto item = reference.get()) {
+                        double x = ElementX(item, repeater);
+                        gesture.minX = std::min(gesture.minX, x);
+                        right = std::max(right, x + ElementWidth(item) * scale);
+                    }
+                }
+                gesture.maxX = std::max(gesture.minX, right - gesture.width);
+                g_sectionGesture.emplace(std::move(gesture));
+            }
+        }
+    } catch (...) {
+        g_sectionGesture.reset();
+    }
+    return result;
+}
+
+HRESULT WINAPI PointerMoved_Hook(void* self, void* rawArgs) {
+    if (!IsGestureThread()) return PointerMoved_Original(self, rawArgs);
+    try {
+        auto source = GestureInterface<FrameworkElement>(self);
+        auto args = GestureInterface<Input::PointerRoutedEventArgs>(rawArgs);
+        if (GestureMatches(source, args)) {
+            args.Handled(true);
+            auto repeater = GetTaskbarRepeater();
+            if (g_unloading || !repeater ||
+                !args.GetCurrentPoint(source).Properties().IsLeftButtonPressed() ||
+                (GetAsyncKeyState(VK_ESCAPE) & 0x8000)) {
+                CancelSectionGesture();
+                return S_OK;
+            }
+            auto position = args.GetCurrentPoint(repeater).Position();
+            // Coordinates are DIPs; use a small DPI-independent dead zone.
+            if (!g_sectionGesture->dragged &&
+                (std::abs(position.X - g_sectionGesture->origin.X) >= 5 ||
+                 std::abs(position.Y - g_sectionGesture->origin.Y) >= 5)) {
+                g_sectionGesture->dragged = true;
+                g_sectionGesture->previewPrepared = true;
+                // Only the held button loses reposition transitions; its
+                // neighbours remain free to animate into their new slots.
+                source.Transitions(media::Animation::TransitionCollection());
+                struct NativeCancelGuard {
+                    NativeCancelGuard() { g_cancelingNativePress = true; }
+                    ~NativeCancelGuard() { g_cancelingNativePress = false; }
+                } guard;
+                // End IsPressed/native capture before owning the gesture.
+                PointerCanceled_Original(self, rawArgs);
+                if (!source.CapturePointer(args.Pointer())) {
+                    CancelSectionGesture();
+                    return S_OK;
+                }
+            }
+            if (g_sectionGesture && g_sectionGesture->dragged) {
+                g_sectionGesture->desiredX = std::clamp(
+                    g_sectionGesture->startX + position.X - g_sectionGesture->origin.X,
+                    g_sectionGesture->minX, g_sectionGesture->maxX);
+                FinishSectionReorder(*g_sectionGesture, args);
+                UpdateDragPreview();
+            }
+            return S_OK;
+        }
+    } catch (...) {
+        if (g_sectionGesture) { CancelSectionGesture(); return S_OK; }
+    }
+    return PointerMoved_Original(self, rawArgs);
+}
+
+HRESULT WINAPI PointerReleased_Hook(void* self, void* rawArgs) {
+    if (!IsGestureThread()) return PointerReleased_Original(self, rawArgs);
+    try {
+        auto source = GestureInterface<FrameworkElement>(self);
+        auto args = GestureInterface<Input::PointerRoutedEventArgs>(rawArgs);
+        if (GestureMatches(source, args)) {
+            if (!g_sectionGesture->dragged) {
+                g_sectionGesture.reset();
+                // Do not release native capture or change Handled before
+                // Windows processes the real release of a normal click.
+                return PointerReleased_Original(self, rawArgs);
+            }
+            auto gesture = std::move(*g_sectionGesture);
+            g_sectionGesture.reset();
+            args.Handled(true);
+            if (g_unloading || (GetAsyncKeyState(VK_ESCAPE) & 0x8000)) {
+                (gesture.running ? g_runningOrder : g_pinnedOrder) = gesture.originalOrder;
+                if (!gesture.running) g_pinnedUserOrder = gesture.originalOrder;
+                RestoreGestureVisual(gesture);
+                RequestRefresh();
+            } else {
+                QueueDrop(std::move(gesture));
+            }
+            return S_OK; // Native press was canceled at drag start.
+        }
+    } catch (...) {
+        CancelSectionGesture();
+        return S_OK; // Never turn a failed drag into an accidental click.
+    }
+    return PointerReleased_Original(self, rawArgs);
+}
+
+HRESULT WINAPI PointerCaptureLost_Hook(void* self, void* rawArgs) {
+    if (!IsGestureThread()) return PointerCaptureLost_Original(self, rawArgs);
+    try {
+        if (!g_cancelingNativePress && GestureMatches(GestureInterface<FrameworkElement>(self),
+                           GestureInterface<Input::PointerRoutedEventArgs>(rawArgs))) {
+            CancelSectionGesture();
+        }
+    } catch (...) {
+    }
+    return PointerCaptureLost_Original(self, rawArgs);
+}
+
+HRESULT WINAPI PointerCanceled_Hook(void* self, void* rawArgs) {
+    if (!IsGestureThread()) return PointerCanceled_Original(self, rawArgs);
+    try {
+        if (GestureMatches(GestureInterface<FrameworkElement>(self),
+                           GestureInterface<Input::PointerRoutedEventArgs>(rawArgs))) {
+            CancelSectionGesture();
+        }
+    } catch (...) {
+    }
+    return PointerCanceled_Original(self, rawArgs);
+}
+
 UINT RefreshMessage() {
     static UINT value =
         RegisterWindowMessageW(L"Windhawk_TaskbarSplit_Refresh_" WH_MOD_ID);
@@ -866,6 +1476,14 @@ UINT RestoreMessage() {
 
 LRESULT CALLBACK TaskbarSubclassProc(HWND window, UINT message, WPARAM wParam,
                                      LPARAM lParam, DWORD_PTR) {
+    if (message == WM_TIMER && wParam == DropSettleTimerId()) {
+        SettlePendingDrop();
+        return 0;
+    }
+    if (message == WM_NCDESTROY) {
+        CancelSectionGesture();
+        FlushPendingDrop();
+    }
     if (message == RefreshMessage()) {
         g_refreshQueued = false;
         if (!g_unloading) {
@@ -880,6 +1498,8 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND window, UINT message, WPARAM wParam,
         return 0;
     }
     if (message == RestoreMessage()) {
+        CancelSectionGesture();
+        FlushPendingDrop();
         RestoreVisualStates();
         try {
             if (auto repeater = GetTaskbarRepeater()) {
@@ -1011,6 +1631,16 @@ bool HookTaskbarHostSymbols() {
 bool HookTaskbarViewSymbols(HMODULE module) {
     // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
+        {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerPressed(void *))"},
+         &PointerPressed_Original, PointerPressed_Hook},
+        {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerMoved(void *))"},
+         &PointerMoved_Original, PointerMoved_Hook},
+        {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerReleased(void *))"},
+         &PointerReleased_Original, PointerReleased_Hook},
+        {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerCaptureLost(void *))"},
+         &PointerCaptureLost_Original, PointerCaptureLost_Hook},
+        {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerCanceled(void *))"},
+         &PointerCanceled_Original, PointerCanceled_Hook},
         {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarCollapsibleLayout,struct winrt::Microsoft::UI::Xaml::Controls::IVirtualizingLayoutOverrides>::ArrangeOverride(void *,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
          &ArrangeOverride_Original, ArrangeOverride_Hook},
         {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskListButton>::get_IsRunning(bool *))"},
@@ -1117,6 +1747,8 @@ void Wh_ModBeforeUninit() {
 
 void Wh_ModUninit() {
     g_runningOrder.clear();
+    g_pinnedOrder.clear();
+    g_pinnedUserOrder.clear();
     g_visualStates.clear();
     g_lastRunningState.clear();
     g_repeaterCache = nullptr;
@@ -1124,5 +1756,6 @@ void Wh_ModUninit() {
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
+    g_settingsArrangeFollowup = true;
     RequestRefresh();
 }
