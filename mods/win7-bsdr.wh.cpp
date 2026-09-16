@@ -3326,7 +3326,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
             // such as Winlogon not getting out of the mid-logoff state until Ctrl+Alt+Del is pressed
             // I have no idea why, how, when this error even occurs
             // If I recall correctly, the original AuthUX BSDR (which only used ExitProcess workaround) had no such issue, so make this an option
-            // and wait for user feedback for enough data
+            // and wait for user feedback until enough data about this error is collected (to properly fix or just remove the new workaround)
             if (Wh_GetIntSetting(L"authUxCancelHandling")) {
                 Sleep(1000);
                 ExitProcess(0);
@@ -3733,7 +3733,7 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
             SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &scrollLines, 0);
             return TRUE;
         }
-        // SPI_SETHIGHCONTRAST: Windows 7 BSDR never updated the high-contrast status on runtime, so don't update it here either. We aleady skipped taking screenshot too
+        // SPI_SETHIGHCONTRAST: Windows 7 BSDR never updated the high-contrast status on runtime, so don't update it here either. We already skipped taking screenshot too
         break;
     }
     case WM_BSDR_SETFOCUS: {
