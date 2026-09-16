@@ -33,6 +33,7 @@ mode, every `ItemsView` theme handle inside `explorer.exe` can be affected.
 
 ## Notes
 
+- Designed for Windows 11 File Explorer.
 - The implementation relies on an undocumented File Explorer theme detail:
   `ItemsView`, part 3, states 1 and 2 are used for the focus border on current
   Windows builds. A future Windows update may change this.
