@@ -2894,6 +2894,9 @@ static void OnAnimationTick() {
             g_switcherBaseX = curCx;
             g_switcherBaseY = curCy;
             g_switcherBaseInitialized = true;
+            if (ThemeIs(L"backdrop") && IsWin11OrGreater()) {
+                ApplySwitcherRegion();
+            }
 
             if (DockLayoutActive()) {
                 if (g_layoutTransition.rcDockStripTarget.right > g_layoutTransition.rcDockStripTarget.left) {
@@ -4422,19 +4425,13 @@ static void RegisterThumbnailsEarly() {
 }
 
 static int s_activeDockIndex = -1;
-static int s_outgoingDockIndex = -1;
-static ULONGLONG s_dockThumbTransitionStart = 0;
 
 static void UpdateDockThumbnailDwm() {
     if (!DockLayoutActive() || !DockShowPreview() || !g_hSwitcher) return;
     int n = (int)g_windows.size();
     if (g_selectedIndex < 0 || g_selectedIndex >= n) return;
 
-    if (g_selectedIndex != s_activeDockIndex) {
-        s_outgoingDockIndex = s_activeDockIndex;
-        s_activeDockIndex = g_selectedIndex;
-        s_dockThumbTransitionStart = GetTickCount64();
-    }
+    s_activeDockIndex = g_selectedIndex;
 
     // 1. Show and configure the selected window's thumbnail FIRST
     auto& selWnd = g_windows[g_selectedIndex];
@@ -4496,17 +4493,9 @@ static void UpdateDockThumbnailDwm() {
         }
     }
 
-    // 2. Hide all non-selected, non-transitioning thumbnails
-    // If an outgoing thumbnail exists and transition time has elapsed (>120ms or animations disabled), hide it too
-    bool keepOutgoing = (s_outgoingDockIndex >= 0 && s_outgoingDockIndex < n &&
-                         s_outgoingDockIndex != g_selectedIndex &&
-                         AreAnimationsGloballyEnabled() &&
-                         g_settings.enableSelectionAnimation &&
-                         (GetTickCount64() - s_dockThumbTransitionStart < 120));
-
+    // 2. Hide all non-selected thumbnails immediately to prevent overlapping previews
     for (int i = 0; i < n; i++) {
         if (i == g_selectedIndex) continue;
-        if (keepOutgoing && i == s_outgoingDockIndex) continue;
         for (const auto& kv : g_windows[i].hThumbs) {
             if (kv.second) {
                 DWM_THUMBNAIL_PROPERTIES p = {};
@@ -4515,10 +4504,6 @@ static void UpdateDockThumbnailDwm() {
                 DwmUpdateThumbnailProperties(kv.second, &p);
             }
         }
-    }
-
-    if (!keepOutgoing) {
-        s_outgoingDockIndex = -1;
     }
 }
 
@@ -4581,6 +4566,8 @@ static void ComputeDockLayout(HMONITOR hMon, const MONITORINFO& mi, UINT dpiX, U
     int cellPad = DpiScale(8, dpiX);
     int cellW = iconSz + cellPad * 2;
     int cellH = iconSz + cellPad * 2;
+    if ((cellW - iconSz) % 2 != 0) { cellW++; }
+    if ((cellH - iconSz) % 2 != 0) { cellH++; }
     int spacing = DpiScale(g_settings.dockIconSpacing, dpiX);
 
     int availStripW = maxW - 2 * masterPadX;
@@ -5056,6 +5043,12 @@ static void ComputeLayout(HMONITOR hMon) {
                 } else if (actualThumbH < thumbH) {
                     w.rcCell.bottom -= (thumbH - actualThumbH);
                 }
+            } else if (!g_settings.showTitle && g_settings.showIcon) {
+                int iconSz = GetHeaderIconSizePx();
+                int curCellW = w.rcCell.right - w.rcCell.left;
+                if ((curCellW - iconSz) % 2 != 0) w.rcCell.right++;
+                int curCellH = w.rcCell.bottom - w.rcCell.top;
+                if ((curCellH - iconSz) % 2 != 0) w.rcCell.bottom++;
             }
 
             if (g_settings.showThumbnails) {
@@ -5230,6 +5223,12 @@ static void ComputeLayout(HMONITOR hMon) {
                 } else if (actualThumbH < thumbH) {
                     w.rcCell.bottom -= (thumbH - actualThumbH);
                 }
+            } else if (!g_settings.showTitle && g_settings.showIcon) {
+                int iconSz = GetHeaderIconSizePx();
+                int curCellW = w.rcCell.right - w.rcCell.left;
+                if ((curCellW - iconSz) % 2 != 0) w.rcCell.right++;
+                int curCellH = w.rcCell.bottom - w.rcCell.top;
+                if ((curCellH - iconSz) % 2 != 0) w.rcCell.bottom++;
             }
 
             if (g_settings.showThumbnails) {
@@ -5335,9 +5334,15 @@ static void RegisterThumbnails() {
         for (const auto& kv : w.hThumbs) {
             HTHUMBNAIL hThumb = kv.second;
             if (!hThumb) continue;
-            // Skip truncated windows with zero destination rect
-            if (w.rcThumbActual.left == 0 && w.rcThumbActual.right == 0 &&
-                w.rcThumbActual.top == 0 && w.rcThumbActual.bottom == 0) continue;
+            // Truncated, off-page, or zero-size thumbnails must be explicitly hidden
+            if (w.rcThumbActual.right <= w.rcThumbActual.left ||
+                w.rcThumbActual.bottom <= w.rcThumbActual.top) {
+                DWM_THUMBNAIL_PROPERTIES p = {};
+                p.dwFlags = DWM_TNP_VISIBLE;
+                p.fVisible = FALSE;
+                DwmUpdateThumbnailProperties(hThumb, &p);
+                continue;
+            }
             DWM_THUMBNAIL_PROPERTIES p = {};
             p.dwFlags = DWM_TNP_SOURCECLIENTAREAONLY | DWM_TNP_RECTDESTINATION | DWM_TNP_VISIBLE | DWM_TNP_OPACITY;
             p.fSourceClientAreaOnly = FALSE;
@@ -6017,25 +6022,16 @@ static void DrawCloseButton(HDC hdc, const RECT& btnRc, float btnAlpha, float ho
         path.CloseFigure();
     }
 
-    // 1. Translucent Fluent smoke acrylic plate with subtle stroke
+    // 1. Solid idle plate for contrast against bright or dark thumbnails / icons
     bool showPlate = g_settings.showCloseButtonBackground || DockLayoutActive();
     if (showPlate) {
-        BYTE plateAlpha = (BYTE)roundf((g_isDarkMode ? 210.0f : 217.0f) * btnAlpha);
-        COLORREF plateCol = g_isDarkMode ? RGB(32, 32, 32) : RGB(255, 255, 255);
+        BYTE plateAlpha = (BYTE)roundf(255.0f * btnAlpha);
+        COLORREF plateCol = g_isDarkMode ? RGB(45, 45, 45) : RGB(255, 255, 255);
         Gdiplus::SolidBrush idleBrush(Gdiplus::Color(plateAlpha, GetRValue(plateCol), GetGValue(plateCol), GetBValue(plateCol)));
         if (btnRadius > 0) {
             graphics.FillPath(&idleBrush, &path);
         } else {
             graphics.FillRectangle(&idleBrush, (Gdiplus::REAL)bx, (Gdiplus::REAL)by, (Gdiplus::REAL)btnW, (Gdiplus::REAL)btnH);
-        }
-
-        BYTE strokeAlpha = (BYTE)roundf((g_isDarkMode ? 35.0f : 25.0f) * btnAlpha);
-        COLORREF strokeCol = g_isDarkMode ? RGB(255, 255, 255) : RGB(0, 0, 0);
-        Gdiplus::Pen strokePen(Gdiplus::Color(strokeAlpha, GetRValue(strokeCol), GetGValue(strokeCol), GetBValue(strokeCol)), 1.0f);
-        if (btnRadius > 0) {
-            graphics.DrawPath(&strokePen, &path);
-        } else {
-            graphics.DrawRectangle(&strokePen, (Gdiplus::REAL)bx, (Gdiplus::REAL)by, (Gdiplus::REAL)btnW, (Gdiplus::REAL)btnH);
         }
     }
 
@@ -6086,11 +6082,11 @@ struct ThumbnailShadowPass {
 };
 
 static const ThumbnailShadowPass kThumbnailShadowPasses[5] = {
-    { 8, 1,  3, 2 },  // Pass 0: Wide ambient feather
-    { 6, 1,  5, 3 },  // Pass 1: Ambient diffusion body
-    { 4, 2,  8, 5 },  // Pass 2: Directional key body
-    { 2, 2, 11, 7 },  // Pass 3: Directional core
-    { 1, 2, 14, 9 }   // Pass 4: Contact occlusion edge
+    { 8, 0,  3, 2 },  // Pass 0: Wide ambient feather
+    { 6, 0,  5, 3 },  // Pass 1: Ambient diffusion body
+    { 4, 0,  8, 5 },  // Pass 2: Directional key body
+    { 2, 0, 11, 7 },  // Pass 3: Directional core
+    { 1, 0, 14, 9 }   // Pass 4: Contact occlusion edge
 };
 
 static void DrawThumbnailShadow(HDC hdc, const RECT& rc, int cornerRadius, float alphaMult = 1.0f, float elevationScale = 1.0f) {
@@ -6107,13 +6103,11 @@ static void DrawThumbnailShadow(HDC hdc, const RECT& rc, int cornerRadius, float
 
     // Dynamic elevation lift factors when zoomed (WinUI 3 Fluent elevation standards)
     float spreadScale = 1.0f;
-    float yOffScale = 1.0f;
     if (elevationScale > 1.0001f) {
         float elevProg = (elevationScale - 1.0f) / SWS_HOVER_ZOOM_DELTA;
         if (elevProg < 0.0f) elevProg = 0.0f;
         if (elevProg > 1.0f) elevProg = 1.0f;
         spreadScale = 1.0f + elevProg * 0.15f;
-        yOffScale   = 1.0f + elevProg * 0.25f;
     }
 
     // During active layout transition (280ms), render a single-pass ambient shadow
@@ -6127,9 +6121,8 @@ static void DrawThumbnailShadow(HDC hdc, const RECT& rc, int cornerRadius, float
         Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(shadowAlpha, 0, 0, 0));
         int sp = DpiScale((int)roundf(3.0f * spreadScale), g_dpiX);
         if (sp < 1) sp = 1;
-        int yOff = DpiScale((int)roundf(2.0f * yOffScale), g_dpiY);
         Gdiplus::REAL sx = (Gdiplus::REAL)(rc.left - sp);
-        Gdiplus::REAL sy = (Gdiplus::REAL)(rc.top - sp + yOff);
+        Gdiplus::REAL sy = (Gdiplus::REAL)(rc.top - sp);
         Gdiplus::REAL sw = (Gdiplus::REAL)(rcw + sp * 2);
         Gdiplus::REAL sh = (Gdiplus::REAL)(rch + sp * 2);
         if (shadowRadius > 0) {
@@ -6161,11 +6154,10 @@ static void DrawThumbnailShadow(HDC hdc, const RECT& rc, int cornerRadius, float
 
         int sp = DpiScale((int)roundf(pass.baseSpread * spreadScale), g_dpiX);
         if (sp < 1) sp = 1;
-        int yOff = DpiScale((int)roundf(pass.baseYOffset * yOffScale), g_dpiY);
 
         Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(shadowAlpha, 0, 0, 0));
         Gdiplus::REAL sx = (Gdiplus::REAL)(rc.left - sp);
-        Gdiplus::REAL sy = (Gdiplus::REAL)(rc.top - sp + yOff);
+        Gdiplus::REAL sy = (Gdiplus::REAL)(rc.top - sp);
         Gdiplus::REAL sw = (Gdiplus::REAL)(rcw + sp * 2);
         Gdiplus::REAL sh = (Gdiplus::REAL)(rch + sp * 2);
         if (shadowRadius > 0) {
@@ -6436,7 +6428,7 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
         if (g_settings.showThumbnailShadow && shadowAlphaMult > 0.01f) {
             DrawThumbnailShadow(hdc, shadowRc, cornerRadius, shadowAlphaMult);
         }
-        if (cornerRadius > 0 && g_settings.roundThumbnailCorners) {
+        if (cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99 && g_settings.roundThumbnailCorners) {
             MaskRectCorners(hdc, shadowRc, cornerRadius);
         }
     }
@@ -6471,6 +6463,8 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
 
         int cellW = e.rcCell.right - e.rcCell.left;
         int cellH = e.rcCell.bottom - e.rcCell.top;
+        if ((cellW - iconSz) % 2 != 0) { e.rcCell.right++; cellW++; }
+        if ((cellH - iconSz) % 2 != 0) { e.rcCell.bottom++; cellH++; }
         int iconX = e.rcCell.left + (cellW - iconSz) / 2;
         int iconY = e.rcCell.top + (cellH - iconSz) / 2;
 
@@ -6928,7 +6922,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             }
             if (collidesWithIncoming) continue;
 
-            if (g_settings.showThumbnails && cornerRadius > 0 && g_settings.roundThumbnailCorners) {
+            if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
                 COLORREF maskColor = GetBgColor();
                 MaskRectCorners(hdc, snapThumb, cornerRadius, true, maskColor);
             }
@@ -6943,7 +6937,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             if (dep.alpha <= 0.01f) continue;
             RECT depThumb = dep.rcThumbCurrent;
 
-            if (g_settings.showThumbnails && cornerRadius > 0 && g_settings.roundThumbnailCorners) {
+            if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
                 COLORREF maskColor = GetBgColor();
                 MaskRectCorners(hdc, depThumb, cornerRadius, true, maskColor);
             }
@@ -6969,7 +6963,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             OffsetRect(&rcThumbSlot, offX, offY);
         }
 
-        if (g_settings.showThumbnails && cornerRadius > 0 && g_settings.roundThumbnailCorners) {
+        if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
             COLORREF maskColor = GetBgColor();
             if (i == g_selectedIndex && HighlightHasFill() && !DockLayoutActive()) {
                 maskColor = GetHighlightFillColor();
@@ -7081,7 +7075,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
                         Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(shadowAlpha, 0, 0, 0));
                         int sp = pass;
                         Gdiplus::REAL sx = (Gdiplus::REAL)(badgeX - sp);
-                        Gdiplus::REAL sy = (Gdiplus::REAL)(badgeY - sp + 1);
+                        Gdiplus::REAL sy = (Gdiplus::REAL)(badgeY - sp);
                         Gdiplus::REAL sw = (Gdiplus::REAL)(badgeW + sp * 2);
                         Gdiplus::REAL sh = (Gdiplus::REAL)(badgeH + sp * 2);
                         Gdiplus::REAL sd = pillRadius * 2.0f + sp * 2.0f;
@@ -7170,6 +7164,19 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
                 selRc.right += (float)offX;
                 selRc.top += (float)offY;
                 selRc.bottom += (float)offY;
+            }
+            if (DockLayoutActive()) {
+                int iconSz = DpiScale(g_settings.dockIconSize > 0 ? g_settings.dockIconSize : 48, g_dpiX);
+                int curW = (int)roundf(selRc.right - selRc.left);
+                int curH = (int)roundf(selRc.bottom - selRc.top);
+                if ((curW - iconSz) % 2 != 0) selRc.right = selRc.left + (float)(curW + 1);
+                if ((curH - iconSz) % 2 != 0) selRc.bottom = selRc.top + (float)(curH + 1);
+            } else if (!g_settings.showThumbnails && !g_settings.showTitle && g_settings.showIcon) {
+                int iconSz = GetHeaderIconSizePx();
+                int curW = (int)roundf(selRc.right - selRc.left);
+                int curH = (int)roundf(selRc.bottom - selRc.top);
+                if ((curW - iconSz) % 2 != 0) selRc.right = selRc.left + (float)(curW + 1);
+                if ((curH - iconSz) % 2 != 0) selRc.bottom = selRc.top + (float)(curH + 1);
             }
             DrawContourF(hdc, selRc, (float)SWS_CONTOUR_SIZE, 1, (float)GetTaskUiCornerRadiusPx());
         }
@@ -7867,41 +7874,27 @@ static void ApplyThemeToWindow(HWND hWnd) {
             SendMessage(hWnd, WM_NCACTIVATE, TRUE, 0);
         }
     } else if (ThemeIs(L"backdrop")) {
-        bool dwmBackdropSet = false;
+        // Clear Windows 11 hardware system backdrops to prevent Desktop Acrylic fallback interference
         if (IsWin11OrGreater()) {
-            int acrylicVal = 3; // DWMSBT_TRANSIENTWINDOW (Desktop Acrylic with hardware rounded corners)
-            HRESULT hr = DwmSetWindowAttribute(hWnd, 38 /* DWMWA_SYSTEMBACKDROP_TYPE */, &acrylicVal, sizeof(acrylicVal));
-            if (SUCCEEDED(hr)) {
-                dwmBackdropSet = true;
-                if (g_SetWindowCompositionAttribute) {
-                    ACCENT_POLICY a = {}; a.AccentState = 0;
-                    WINDOWCOMPOSITIONATTRIBDATA d = {19, &a, sizeof(a)};
-                    g_SetWindowCompositionAttribute(hWnd, &d);
-                }
-            }
+            int noneVal = 1; // DWMSBT_NONE
+            DwmSetWindowAttribute(hWnd, 38 /* DWMWA_SYSTEMBACKDROP_TYPE */, &noneVal, sizeof(noneVal));
+            int disableMica = 0;
+            DwmSetWindowAttribute(hWnd, 1029 /* DWMWA_MICA_EFFECT */, &disableMica, sizeof(disableMica));
         }
-        if (!dwmBackdropSet) {
-            // Windows 10 (or Win11 fallback): SetWindowCompositionAttribute Acrylic blur behind
-            if (IsWin11OrGreater()) {
-                int noneVal = 1; // DWMSBT_NONE
-                DwmSetWindowAttribute(hWnd, 38 /* DWMWA_SYSTEMBACKDROP_TYPE */, &noneVal, sizeof(noneVal));
-                int disableMica = 0;
-                DwmSetWindowAttribute(hWnd, 1029 /* DWMWA_MICA_EFFECT */, &disableMica, sizeof(disableMica));
-            }
-            if (g_SetWindowCompositionAttribute) {
-                DWORD blur = (DWORD)((g_settings.opacity / 100.0) * 255);
-                COLORREF bg = GetBgColor();
-                ACCENT_POLICY accent = {};
-                accent.AccentState = 4 /* ACCENT_ENABLE_ACRYLICBLURBEHIND */;
-                accent.AccentFlags = 0;
-                accent.GradientColor = (blur << 24) | (bg & 0x00FFFFFF);
-                WINDOWCOMPOSITIONATTRIBDATA data = {19, &accent, sizeof(accent)};
-                g_SetWindowCompositionAttribute(hWnd, &data);
-            }
+        // SetWindowCompositionAttribute Acrylic blur behind (supported across Windows 10 and Windows 11)
+        if (g_SetWindowCompositionAttribute) {
+            DWORD blur = (DWORD)((g_settings.opacity / 100.0) * 255);
+            COLORREF bg = GetBgColor();
+            ACCENT_POLICY accent = {};
+            accent.AccentState = 4 /* ACCENT_ENABLE_ACRYLICBLURBEHIND */;
+            accent.AccentFlags = 0;
+            accent.GradientColor = (blur << 24) | (bg & 0x00FFFFFF);
+            WINDOWCOMPOSITIONATTRIBDATA data = {19, &accent, sizeof(accent)};
+            g_SetWindowCompositionAttribute(hWnd, &data);
         }
     }
 
-    MARGINS marGlassInset = (ThemeIs(L"mica") || ThemeIs(L"backdrop")) ? MARGINS{-1, -1, -1, -1} : MARGINS{0, 0, 0, 0};
+    MARGINS marGlassInset = ThemeIs(L"mica") ? MARGINS{-1, -1, -1, -1} : MARGINS{0, 0, 0, 0};
     DwmExtendFrameIntoClientArea(hWnd, &marGlassInset);
 
     SetClassLongPtrW(hWnd, GCLP_HBRBACKGROUND, (LONG_PTR)GetStockObject(BLACK_BRUSH));
@@ -7955,11 +7948,40 @@ static void ApplySwitcherRegion() {
     if (!g_hSwitcher) return;
     static bool s_hasActiveRgn = false;
 
-    // Both Windows 11 (DWM hardware rounding) and Theme: none (per-pixel alpha layered window)
-    // do not need GDI SetWindowRgn. Windows 10 Acrylic blur is a 90° rectangle, where SetWindowRgn
-    // would only conflict with DWM composition.
+    // On Windows 11 with Acrylic (Theme: backdrop), SWCA blurs the full rectangle.
+    // Setting a rounded window region clips SWCA blur to the exact corner radius,
+    // completely eliminating the 4 square blur horns past rounded window borders.
+    if (ThemeIs(L"backdrop") && IsWin11OrGreater()) {
+        int r = GetWindowCornerRadiusPx();
+        RECT rcClient = {};
+        GetClientRect(g_hSwitcher, &rcClient);
+        int w = rcClient.right - rcClient.left;
+        int h = rcClient.bottom - rcClient.top;
+        if (w <= 0 || h <= 0) { w = g_winW; h = g_winH; }
+        if (r > 0 && w > 0 && h > 0) {
+            HRGN hRgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, r * 2, r * 2);
+            SetWindowRgn(g_hSwitcher, hRgn, TRUE);
+            s_hasActiveRgn = true;
+            for (HWND hMirror : g_hMirrorSwitchers) {
+                if (IsWindow(hMirror)) {
+                    RECT mrc = {};
+                    GetClientRect(hMirror, &mrc);
+                    int mw = mrc.right - mrc.left;
+                    int mh = mrc.bottom - mrc.top;
+                    if (mw <= 0 || mh <= 0) { mw = w; mh = h; }
+                    HRGN hMirrorRgn = CreateRoundRectRgn(0, 0, mw + 1, mh + 1, r * 2, r * 2);
+                    SetWindowRgn(hMirror, hMirrorRgn, TRUE);
+                }
+            }
+            return;
+        }
+    }
+
     if (s_hasActiveRgn) {
         SetWindowRgn(g_hSwitcher, NULL, TRUE);
+        for (HWND hMirror : g_hMirrorSwitchers) {
+            if (IsWindow(hMirror)) SetWindowRgn(hMirror, NULL, TRUE);
+        }
         s_hasActiveRgn = false;
     }
 }
@@ -8070,8 +8092,7 @@ static void ShowSwitcher(bool sticky, bool immediate = false) {
         );
     }
 
-    constexpr int kRapidAltTabGraceThresholdMs = 75;
-    int effectiveDelay = (!sticky && !immediate) ? ((g_settings.showDelay > 0) ? std::max(g_settings.showDelay, kRapidAltTabGraceThresholdMs) : kRapidAltTabGraceThresholdMs) : 0;
+    int effectiveDelay = (!sticky && !immediate) ? g_settings.showDelay : 0;
     if (effectiveDelay > 0) {
         g_isPendingShow = true;
         g_isVisible = false;
@@ -10775,13 +10796,6 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 SelectClipRgn(hdcBuf, NULL);
                 DeleteObject(hContentClip);
             }
-            }
-            if (g_animEntranceActive || g_animExitActive) {
-                float combinedAlpha = g_animEntranceCurrentAlpha * g_animExitCurrentAlpha;
-                if (combinedAlpha < 0.999f) {
-                    BYTE paintAlpha = (BYTE)roundf(std::max(0.0f, std::min(1.0f, combinedAlpha)) * 255.0f);
-                    BufferedPaintSetAlpha(hBP, &rc, paintAlpha);
-                }
             }
             EndBufferedPaint(hBP, TRUE);
         }
