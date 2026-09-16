@@ -2,12 +2,12 @@
 // @id              hide-taskbar-tooltips
 // @name            Hide Taskbar Tooltips
 // @description     Suppresses all native Windows 11 taskbar hover tooltips (clock, system tray icons, and taskbar buttons).
-// @version         1.0.1
+// @version         1.0.2
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -lruntimeobject
+// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -35,11 +35,34 @@ Restarting Explorer is recommended after installing or enabling the mod for chan
 #include <windhawk_utils.h>
 
 #include <commctrl.h>
-#include <roapi.h>
 #include <windows.h>
-#include <winstring.h>
 
 #include <atomic>
+
+#undef GetCurrentTime
+
+#include <winrt/Windows.UI.Xaml.Controls.h>
+
+static bool IsWindows11OrGreater() {
+    HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
+    if (!hNtdll) {
+        return false;
+    }
+
+    using fnRtlGetNtVersionNumbers =
+        void(WINAPI*)(LPDWORD major, LPDWORD minor, LPDWORD build);
+    auto RtlGetNtVersionNumbers =
+        reinterpret_cast<fnRtlGetNtVersionNumbers>(
+            GetProcAddress(hNtdll, "RtlGetNtVersionNumbers"));
+    if (!RtlGetNtVersionNumbers) {
+        return false;
+    }
+
+    DWORD major = 0, minor = 0, build = 0;
+    RtlGetNtVersionNumbers(&major, &minor, &build);
+    build &= ~0xF0000000;
+    return (major > 10) || (major == 10 && build >= 22000);
+}
 
 // WinRT IToolTip ABI: put_IsOpen is at vtable index 9
 using ToolTip_put_IsOpen_t = HRESULT(__stdcall*)(void* pThis, boolean value);
@@ -63,7 +86,16 @@ static void SuppressToolTip(void* pToolTip) {
         return;
     }
 
-    void** vtable = *(reinterpret_cast<void***>(pIToolTip));
+    // Verify and obtain true IToolTip vtable via QueryInterface
+    IUnknown* unk = reinterpret_cast<IUnknown*>(pIToolTip);
+    winrt::com_ptr<winrt::Windows::UI::Xaml::Controls::IToolTip> spToolTip;
+    if (FAILED(unk->QueryInterface(
+            winrt::guid_of<winrt::Windows::UI::Xaml::Controls::IToolTip>(),
+            spToolTip.put_void()))) {
+        return;
+    }
+
+    void** vtable = *reinterpret_cast<void***>(spToolTip.get());
     if (!vtable || !vtable[9]) {
         return;
     }
@@ -80,7 +112,7 @@ static void SuppressToolTip(void* pToolTip) {
     }
 
     // Immediately close the tooltip instance
-    put_IsOpen(pIToolTip, FALSE);
+    put_IsOpen(spToolTip.get(), FALSE);
 }
 
 // SystemTray.dll: TaskbarLocationHelpers::PositionTaskbarTooltip
@@ -198,41 +230,6 @@ static IsToolTipEnabled_t IsToolTipEnabled_LaunchList_Orig = nullptr;
 static IsToolTipEnabled_t IsToolTipEnabled_Augmented_Orig = nullptr;
 static IsToolTipEnabled_t IsToolTipEnabled_Recommended_Orig = nullptr;
 
-static BOOL CALLBACK InvalidateXamlIslandProc(HWND hWnd, LPARAM) {
-    WCHAR className[64] = {};
-    if (GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
-        wcscmp(className,
-               L"Windows.UI.Xaml.Hosting.DesktopWindowXamlSource") == 0) {
-        SetWindowPos(hWnd, nullptr, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
-                         SWP_FRAMECHANGED);
-        InvalidateRect(hWnd, nullptr, TRUE);
-    }
-    return TRUE;
-}
-
-// Refresh taskbar XAML elements on live-load to trigger immediate binding re-evaluation
-static void RefreshTaskbarWindows() {
-    auto InvalidateXamlIsland = [](HWND hParent) {
-        if (!hParent) {
-            return;
-        }
-        EnumChildWindows(hParent, InvalidateXamlIslandProc, 0);
-    };
-
-    HWND hPrimary = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (hPrimary) {
-        InvalidateXamlIsland(hPrimary);
-        PostMessageW(hPrimary, WM_SETTINGCHANGE, 0, 0);
-    }
-
-    HWND hSecondary = FindWindowW(L"Shell_SecondaryTrayWnd", nullptr);
-    if (hSecondary) {
-        InvalidateXamlIsland(hSecondary);
-        PostMessageW(hSecondary, WM_SETTINGCHANGE, 0, 0);
-    }
-}
-
 static std::atomic<bool> g_systemTrayHooked{false};
 static std::atomic<bool> g_taskbarViewHooked{false};
 
@@ -248,7 +245,7 @@ static bool HookSystemTraySymbols(HMODULE module) {
             },
             &PositionTaskbarTooltip_Original,
             PositionTaskbarTooltip_Hook,
-            true,
+            false,
         },
         {
             {
@@ -420,7 +417,6 @@ static void HandleLoadedModule(HMODULE module, LPCWSTR lpLibFileName) {
             Wh_Log(L"Loaded SystemTray.dll dynamically");
             if (HookSystemTraySymbols(module)) {
                 Wh_ApplyHookOperations();
-                RefreshTaskbarWindows();
             }
         }
     } else if (!g_taskbarViewHooked &&
@@ -429,7 +425,6 @@ static void HandleLoadedModule(HMODULE module, LPCWSTR lpLibFileName) {
             Wh_Log(L"Loaded Taskbar.View.dll dynamically");
             if (HookTaskbarViewSymbols(module)) {
                 Wh_ApplyHookOperations();
-                RefreshTaskbarWindows();
             }
         }
     }
@@ -450,11 +445,13 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 
 static HANDLE g_restartExplorerPromptThread = nullptr;
 static std::atomic<HWND> g_restartExplorerPromptWindow{nullptr};
+static std::atomic<bool> g_uninitializing{false};
+static bool g_isInitialExplorerStartup = false;
 
 static constexpr WCHAR kRestartExplorerPromptTitle[] =
     L"Hide Taskbar Tooltips - Windhawk";
 static constexpr WCHAR kRestartExplorerPromptText[] =
-    L"Restarting Explorer is recommended for the mod to take full effect across all existing taskbar buttons.\n\nDo you want to restart Explorer now?";
+    L"Restarting Explorer is required for the mod to take full effect across existing taskbar elements.\n\nDo you want to restart Explorer now?";
 static constexpr WCHAR kRestartExplorerCommand[] =
     LR"(cmd /c "echo Terminating Explorer...)"
     LR"( & taskkill /f /im explorer.exe)"
@@ -470,6 +467,9 @@ static HRESULT CALLBACK RestartExplorerDialogCallback(HWND hwnd, UINT msg,
     switch (msg) {
     case TDN_CREATED:
         g_restartExplorerPromptWindow = hwnd;
+        if (g_uninitializing) {
+            PostMessageW(hwnd, WM_CLOSE, 0, 0);
+        }
         SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
         break;
 
@@ -497,15 +497,15 @@ static DWORD WINAPI RestartExplorerThreadProc(LPVOID /*lpParameter*/) {
     int button = 0;
     if (SUCCEEDED(TaskDialogIndirect(&taskDialogConfig, &button, nullptr,
                                      nullptr)) &&
-        button == IDYES) {
+        button == IDYES && !g_uninitializing) {
         WCHAR commandLine[ARRAYSIZE(kRestartExplorerCommand)];
         memcpy(commandLine, kRestartExplorerCommand,
                sizeof(kRestartExplorerCommand));
         STARTUPINFO si{};
         si.cb = sizeof(si);
         PROCESS_INFORMATION pi{};
-        if (CreateProcess(nullptr, commandLine, nullptr, nullptr, FALSE, 0,
-                          nullptr, nullptr, &si, &pi)) {
+        if (CreateProcessW(nullptr, commandLine, nullptr, nullptr, FALSE, 0,
+                           nullptr, nullptr, &si, &pi)) {
             CloseHandle(pi.hThread);
             CloseHandle(pi.hProcess);
         }
@@ -515,6 +515,10 @@ static DWORD WINAPI RestartExplorerThreadProc(LPVOID /*lpParameter*/) {
 }
 
 static void PromptToRestartExplorer() {
+    if (g_uninitializing) {
+        return;
+    }
+
     if (g_restartExplorerPromptThread) {
         if (WaitForSingleObject(g_restartExplorerPromptThread, 0) !=
             WAIT_OBJECT_0) {
@@ -547,10 +551,23 @@ static bool IsExplorerAlreadyRunning() {
     return false;
 }
 
-static bool g_isInitialExplorerStartup = false;
+static bool IsTaskbarExplorerProcess() {
+    HWND hTrayWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (!hTrayWnd) {
+        return false;
+    }
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hTrayWnd, &processId);
+    return processId == GetCurrentProcessId();
+}
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"> Initializing Hide Taskbar Tooltips mod v1.0.1");
+    Wh_Log(L"> Initializing Hide Taskbar Tooltips mod v1.0.2");
+
+    if (!IsWindows11OrGreater()) {
+        Wh_Log(L"Hide Taskbar Tooltips: Only Windows 11 is supported");
+        return FALSE;
+    }
 
     // Check if Explorer is starting up fresh: Shell_TrayWnd does not exist yet at early startup
     if (!FindWindowW(L"Shell_TrayWnd", nullptr)) {
@@ -578,6 +595,7 @@ BOOL Wh_ModInit() {
         Wh_Log(L"> Applied initial hook operations in Wh_ModInit");
     }
 
+    bool waitingForModules = false;
     if (!g_systemTrayHooked || !g_taskbarViewHooked) {
         HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
         if (kernelBaseModule) {
@@ -589,11 +607,12 @@ BOOL Wh_ModInit() {
                                                LoadLibraryExW_Hook,
                                                &LoadLibraryExW_Original);
                 Wh_ApplyHookOperations();
+                waitingForModules = true;
             }
         }
     }
 
-    return hookedAny || g_toolTipPutIsOpenOriginal || (!g_systemTrayHooked);
+    return hookedAny || waitingForModules;
 }
 
 void Wh_ModAfterInit() {
@@ -626,18 +645,16 @@ void Wh_ModAfterInit() {
         Wh_Log(L"> Wh_ModAfterInit: applied pending hook operations");
     }
 
-    // Force taskbar XAML visual tree to re-evaluate bindings immediately
-    RefreshTaskbarWindows();
-    Wh_Log(L"> Refreshed taskbar XAML windows for live-load");
-
     // Only prompt on live injection into an already-running Explorer session with an existing taskbar
-    if (!g_isInitialExplorerStartup && IsExplorerAlreadyRunning()) {
+    if (!g_isInitialExplorerStartup && IsExplorerAlreadyRunning() &&
+        IsTaskbarExplorerProcess()) {
         PromptToRestartExplorer();
     }
 }
 
 void Wh_ModBeforeUninit() {
     Wh_Log(L"> Wh_ModBeforeUninit");
+    g_uninitializing = true;
     if (HWND hwnd = g_restartExplorerPromptWindow) {
         PostMessageW(hwnd, WM_CLOSE, 0, 0);
     }
@@ -646,7 +663,7 @@ void Wh_ModBeforeUninit() {
 void Wh_ModUninit() {
     Wh_Log(L"> Uninitializing Hide Taskbar Tooltips mod");
     if (g_restartExplorerPromptThread) {
-        WaitForSingleObject(g_restartExplorerPromptThread, 2000);
+        WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
         CloseHandle(g_restartExplorerPromptThread);
         g_restartExplorerPromptThread = nullptr;
     }
