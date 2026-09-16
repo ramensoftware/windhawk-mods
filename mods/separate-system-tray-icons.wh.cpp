@@ -341,6 +341,7 @@ static void UpdateDynamicXamlIcons();
 static void RequestTrayRefresh(bool radiosChanged = false);
 static void EnsureTrayRefreshWindow();
 static void DestroyTrayRefreshWindow();
+static void RemoveXamlButtons();
 static void StartStatusEvents(HWND hwnd);
 static void StopStatusEvents();
 static void RestoreGridTrayMutation();
@@ -3717,8 +3718,10 @@ static LRESULT CALLBACK TrayRefreshWindowProc(HWND hwnd, UINT message,
         return 0;
     }
     if (message == kDestroyRefreshWindowMessage) {
-        DestroyTrayRefreshWindow();
-        return 0;
+        // This window belongs to the XAML owner thread, even when the taskbar
+        // HWND has disappeared. Complete teardown before acknowledging unload.
+        RemoveXamlButtons();
+        return 1;
     }
     if (message == WM_POWERBROADCAST) {
         InvalidateEnergySaverRead();
@@ -3776,7 +3779,7 @@ static void EnsureTrayRefreshWindow() {
     ReleaseSRWLockExclusive(&g_refreshLock);
     g_foregroundEventHook = SetWinEventHook(
         EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
-        TrayFlyoutForegroundChanged, GetCurrentProcessId(), 0,
+        TrayFlyoutForegroundChanged, 0, 0,
         WINEVENT_OUTOFCONTEXT);
     if (hwnd) StartStatusEvents(hwnd);
 }
@@ -4814,15 +4817,36 @@ static bool SoundUsesQuickSettings() {
 
 static std::atomic<HWND> g_openedTrayFlyout[5]{};
 static std::atomic<ULONGLONG> g_openedTrayFlyoutTick[5]{};
+static std::atomic<ULONGLONG> g_trayFlyoutFocusHandoffUntil[5]{};
+
+static bool IsTaskbarForeground(HWND hwnd) {
+    wchar_t className[64]{};
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    return pid == GetCurrentProcessId() &&
+           GetClassNameW(hwnd, className, ARRAYSIZE(className)) &&
+           (_wcsicmp(className, L"Shell_TrayWnd") == 0 ||
+            _wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0);
+}
+
 static void CALLBACK TrayFlyoutForegroundChanged(HWINEVENTHOOK, DWORD event,
                                                  HWND hwnd, LONG, LONG,
                                                  DWORD, DWORD) {
     if (event != EVENT_SYSTEM_FOREGROUND || g_unloading) return;
+    // Out-of-context events can be delivered after a newer focus transition.
+    if (hwnd != GetForegroundWindow()) return;
     for (size_t i = 0; i < ARRAYSIZE(g_openedTrayFlyout); ++i) {
         const HWND recorded = g_openedTrayFlyout[i].load();
         if (recorded && recorded != hwnd) {
+            if (IsTaskbarForeground(hwnd)) {
+                // Pointer activation precedes Tapped. Preserve this one click
+                // even if Shell auto-dismisses its flyout while focusing tray.
+                g_trayFlyoutFocusHandoffUntil[i] = GetTickCount64() + 500;
+                continue;
+            }
             g_openedTrayFlyout[i] = nullptr;
             g_openedTrayFlyoutTick[i] = 0;
+            g_trayFlyoutFocusHandoffUntil[i] = 0;
         }
     }
 }
@@ -4839,9 +4863,16 @@ static bool IsShellHostedWindow(HWND hwnd) {
     CloseHandle(process);
     PCWSTR name = ok ? wcsrchr(path, L'\\') : nullptr;
     name = name ? name + 1 : path;
-    return ok && (_wcsicmp(name, L"ShellHost.exe") == 0 ||
-                  _wcsicmp(name, L"ShellExperienceHost.exe") == 0 ||
-                  _wcsicmp(name, L"explorer.exe") == 0);
+    if (!ok) return false;
+    if (_wcsicmp(name, L"explorer.exe") == 0) {
+        // Explorer also owns Run, properties sheets and other shell dialogs.
+        // Only its dedicated Control Center window is a toggle target.
+        wchar_t className[128]{};
+        return GetClassNameW(hwnd, className, ARRAYSIZE(className)) &&
+               _wcsicmp(className, L"ControlCenterWindow") == 0;
+    }
+    return _wcsicmp(name, L"ShellHost.exe") == 0 ||
+           _wcsicmp(name, L"ShellExperienceHost.exe") == 0;
 }
 
 static bool IsRecordedTrayFlyout(HWND hwnd) {
@@ -4860,6 +4891,7 @@ static bool IsRecordedTrayFlyout(HWND hwnd) {
 static void CaptureOpenedTrayFlyoutAsync(ButtonKind kind) {
     const size_t index = static_cast<size_t>(kind);
     g_openedTrayFlyout[index] = nullptr;
+    g_trayFlyoutFocusHandoffUntil[index] = 0;
     HANDLE thread = StartOwnedWorker([kind, index] {
         // The URI action creates the flyout asynchronously. Record only the
         // foreground shell window created by this click; never scan arbitrary
@@ -4888,10 +4920,16 @@ static bool HandleTrayButtonClick(ButtonKind kind) {
     const bool canToggle = kind != ButtonKind::Sound || SoundUsesQuickSettings();
     const HWND opened = g_openedTrayFlyout[index].load();
     if (canToggle && g_openedTrayFlyoutTick[index].load()) {
-        if (IsRecordedTrayFlyout(opened)) {
+        const HWND foreground = GetForegroundWindow();
+        const ULONGLONG handoffUntil = g_trayFlyoutFocusHandoffUntil[index].load();
+        // Tapped can also precede delivery of the foreground notification.
+        const bool trayHandoff = IsTaskbarForeground(foreground) &&
+            (!handoffUntil || GetTickCount64() <= handoffUntil);
+        if ((foreground == opened || trayHandoff) && IsRecordedTrayFlyout(opened)) {
             PostMessageW(opened, WM_CLOSE, 0, 0);
             g_openedTrayFlyout[index] = nullptr;
             g_openedTrayFlyoutTick[index] = 0;
+            g_trayFlyoutFocusHandoffUntil[index] = 0;
             return true;
         }
         // A hidden/destroyed recorded flyout means it was dismissed outside
@@ -6016,19 +6054,15 @@ void Wh_ModUninit() {
         AcquireSRWLockShared(&g_refreshLock);
         refresh = g_refreshWindow;
         ReleaseSRWLockShared(&g_refreshLock);
-        if (refresh) SendMessageW(refresh, kDestroyRefreshWindowMessage, 0, 0);
-        // If the taskbar thread has gone away, prevent timers and delegates
-        // from calling into an unloaded module. The injected visual children
-        // may remain until Explorer rebuilds its tree, but they are inert.
-        try {
-            if (g_updateTimer) g_updateTimer.Stop();
-            if (g_retryTimer) g_retryTimer.Stop();
-            if (g_metricRefreshTimer) g_metricRefreshTimer.Stop();
-            RevokeEvents(g_timerEventRevokers);
-            RevokeEvents(g_contextMenuEventRevokers);
-            RevokeEvents(g_uiEventRevokers);
-        } catch (...) {
-            Wh_Log(L"Wh_ModUninit fallback cleanup failed: 0x%08X", winrt::to_hresult());
+        if (refresh && IsWindow(refresh)) {
+            removed = SendMessageW(refresh, kDestroyRefreshWindowMessage,
+                                   0, 0) == 1;
+        }
+        if (!removed) {
+            // No owner window remains to marshal through. This is best effort
+            // only; thread-affine objects cannot be cleaned up here reliably.
+            Wh_Log(L"Owner-thread teardown unavailable; attempting final cleanup.");
+            RemoveXamlButtons();
         }
     }
     WaitForOwnedWorkers();
