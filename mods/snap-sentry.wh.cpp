@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.
-// @version         0.18.8
+// @version         0.19.5
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -84,13 +84,13 @@ stored in clipboard history, cloud sync, backups, or other programs.
 - clipboardMode: image
   $name: What to copy to the clipboard
   $options:
-  - image: The picture itself (best if you also delete)
-  - file: The file, for pasting into File Explorer (never deleted)
-  - path: The file's location as text (never deleted)
-  - none: Leave the clipboard alone
+  - image: Image, the picture itself (best if you also delete)
+  - file: File, for pasting into File Explorer (never deleted)
+  - path: Path, the file's location as text (never deleted)
+  - none: None, leave the clipboard alone
 - pathFormat: plain
-  $name: How to write the location
-  $description: Only used when copying the file's location. File link is clickable, and Markdown shows the picture when pasted into notes or a bug report.
+  $name: Path format
+  $description: Only used when What to copy is Path. File link is clickable, and Markdown shows the picture when pasted into notes or a bug report.
   $options:
   - plain: Plain path
   - quoted: Quoted path
@@ -132,6 +132,7 @@ stored in clipboard history, cloud sync, backups, or other programs.
 #include <initguid.h>  // Defines the GUIDs pulled in by the headers below in-TU.
 #include <knownfolders.h>
 #include <shlobj.h>
+#include <shellapi.h>  // SHQueryUserNotificationState
 #include <propkey.h>   // PKEY_AppUserModel_ID, PKEY_AppUserModel_ToastActivatorCLSID
 #include <commctrl.h>
 #include <wincodec.h>
@@ -191,8 +192,11 @@ struct Settings {
     bool logDetails;
 };
 
-static CRITICAL_SECTION g_lock;       // Guards g_settings, g_queue, g_inflight, g_recent, g_preexisting.
+static CRITICAL_SECTION g_lock;       // Guards g_settings and watcher/session state below.
 static Settings g_settings;
+// Bumped only when settings are reloaded, so a prompt on screen is cancelled
+// by an actual settings change and never by a watcher restart.
+static std::atomic<ULONGLONG> g_generation{0};
 static std::deque<std::wstring> g_queue;   // Full paths waiting to be processed.
 static std::set<std::wstring> g_inflight;  // Names queued or in progress (dedup).
 
@@ -228,6 +232,7 @@ static void MarkNameRecent(const std::wstring& name) {
 static HANDLE g_stopEvent;   // Manual-reset: set once at shutdown.
 static HANDLE g_reloadEvent; // Auto-reset: settings changed, re-open the folder.
 static HANDLE g_workEvent;   // Auto-reset: queue has work.
+static HANDLE g_settingsEvent;  // Manual reset: settings reloaded while a prompt is up.
 static HANDLE g_watchThread;
 static HANDLE g_workerThread;
 static std::atomic<HWND> g_dialog{nullptr};  // Open action dialog, for shutdown.
@@ -350,6 +355,8 @@ static void LoadSettings() {
 
     EnterCriticalSection(&g_lock);
     g_settings = std::move(s);
+    ++g_generation;
+    SetEvent(g_settingsEvent);
     LeaveCriticalSection(&g_lock);
 }
 
@@ -1126,6 +1133,57 @@ public:
 
 static ToastDismissListener g_toastDismissListener;
 
+using ToastFailedHandler = ABI::Windows::Foundation::ITypedEventHandler<
+    ABI::Windows::UI::Notifications::ToastNotification*,
+    ABI::Windows::UI::Notifications::ToastFailedEventArgs*>;
+
+// Windows raises this when it could not deliver the notification. That is the
+// platform's own answer to "was it shown", which notification-center history is
+// not: a banner can appear with center history switched off, and Do Not Disturb
+// files a toast into the center without ever showing a banner.
+
+class ToastFailListener : public ToastFailedHandler {
+public:
+    ULONG STDMETHODCALLTYPE AddRef() override { return 1; }
+    ULONG STDMETHODCALLTYPE Release() override { return 1; }  // Static lifetime.
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** obj) override {
+        if (riid == IID_IUnknown || riid == __uuidof(ToastFailedHandler)) {
+            *obj = static_cast<ToastFailedHandler*>(this);
+            return S_OK;
+        }
+        *obj = nullptr;
+        return E_NOINTERFACE;
+    }
+
+    HRESULT STDMETHODCALLTYPE
+    Invoke(ABI::Windows::UI::Notifications::IToastNotification* sender,
+           ABI::Windows::UI::Notifications::IToastFailedEventArgs* args) override {
+        if (sender != g_activeToast.load()) {
+            return S_OK;
+        }
+        HRESULT code = E_FAIL;
+        if (args) {
+            args->get_ErrorCode(&code);
+        }
+        Wh_Log(L"Notification was not delivered (0x%08lx); copy only", (unsigned long)code);
+        EnterCriticalSection(&g_toastLock);
+        // Same shape as a dismissal: it is an answer, so it must be recorded,
+        // not just signalled, or the wait settles it as Keep and skips the copy.
+        bool mine = g_activeToastId != 0 && !g_toastAnswered;
+        if (mine) {
+            g_toastAction = ACTION_COPY_ONLY;
+            g_toastAnswered = true;
+        }
+        LeaveCriticalSection(&g_toastLock);
+        if (mine) {
+            SetEvent(g_toastActionEvent);
+        }
+        return S_OK;
+    }
+};
+
+static ToastFailListener g_toastFailListener;
+
 // ============================================================================
 // Toast notification display and wait
 // ============================================================================
@@ -1217,7 +1275,8 @@ static std::wstring BaseName(const std::wstring& path) {
 // or an explicit dismissal. Returns false, meaning "use the dialog instead",
 // if registration hasn't succeeded or any WinRT step fails, so the mod stays
 // usable even where toast notifications don't work.
-static bool ShowToast(const std::wstring& path, const Settings& s, int& action) {
+static bool ShowToast(const std::wstring& path, const Settings& s, int& action,
+                      ULONGLONG generation) {
     using namespace ABI::Windows::UI::Notifications;
     using namespace ABI::Windows::Foundation;
     using Microsoft::WRL::ComPtr;
@@ -1265,6 +1324,7 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
     }
 
     ResetEvent(g_toastActionEvent);
+    ResetEvent(g_settingsEvent);  // Only one prompt is ever up at a time.
     EnterCriticalSection(&g_toastLock);
     g_activeToastId = toastId;
     g_toastAction = ACTION_AUTO;
@@ -1275,6 +1335,9 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
     EventRegistrationToken dismissToken{};
     bool dismissHooked =
         SUCCEEDED(toast->add_Dismissed(&g_toastDismissListener, &dismissToken));
+    EventRegistrationToken failedToken{};
+    bool failedHooked =
+        SUCCEEDED(toast->add_Failed(&g_toastFailListener, &failedToken));
 
     if (FAILED(notifier->Show(toast.Get()))) {
         g_activeToast.store(nullptr);
@@ -1284,6 +1347,9 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
         if (dismissHooked) {
             toast->remove_Dismissed(dismissToken);
         }
+    if (failedHooked) {
+        toast->remove_Failed(failedToken);
+    }
         return false;
     }
 
@@ -1298,50 +1364,95 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
     bool noCountdown = s.delaySeconds <= 0;
     DWORD timeoutMs =
         noCountdown ? kNoAnswerCapMs : (DWORD)s.delaySeconds * 1000;
-    HANDLE waits[] = {g_stopEvent, g_toastActionEvent};
+    HANDLE waits[] = {g_stopEvent, g_toastActionEvent, g_settingsEvent};
     DWORD start = GetTickCount();
     bool removeToast = false;
+    // An activation callback can be dispatched reentrantly from the message
+    // pump below, so settle under the same lock the callbacks take: an answer
+    // already accepted is never overwritten by a timeout.
+    auto settle = [&](int proposed) {
+        bool cancelled = WaitStop(0);
+        EnterCriticalSection(&g_toastLock);
+        if (cancelled) {
+            action = ACTION_KEEP;
+        } else if (g_toastAnswered) {
+            action = g_toastAction;
+        } else {
+            action = proposed;
+        }
+        g_toastAction = action;
+        g_toastAnswered = true;
+        LeaveCriticalSection(&g_toastLock);
+        removeToast = true;
+    };
     for (;;) {
         DWORD elapsed = GetTickCount() - start;
-        DWORD remaining = elapsed >= timeoutMs ? 0 : timeoutMs - elapsed;
+        if (WaitStop(0)) {  // Unload: never copy, never delete.
+            settle(ACTION_KEEP);
+            break;
+        }
+        // Stale settings are a reason not to run the automatic action, not a
+        // reason to drop the screenshot.
+        if (g_generation.load() != generation) {
+            settle(ACTION_COPY_ONLY);
+            break;
+        }
+        if (WaitForSingleObject(g_toastActionEvent, 0) == WAIT_OBJECT_0) {
+            settle(ACTION_KEEP);
+            break;  // A real answer always wins over any timeout.
+        }
+        if (elapsed >= timeoutMs) {
+            NotificationSetting currentSetting = NotificationSetting_Enabled;
+            bool enabled = SUCCEEDED(notifier->get_Setting(&currentSetting)) &&
+                           currentSetting == NotificationSetting_Enabled;
+            // Focus assist, presentation mode, a full-screen app or the secure
+            // desktop all suppress the banner without failing delivery, so the
+            // countdown would be deleting for a prompt nobody was shown.
+            QUERY_USER_NOTIFICATION_STATE quns = QUNS_ACCEPTS_NOTIFICATIONS;
+            bool shown = SUCCEEDED(SHQueryUserNotificationState(&quns)) &&
+                         quns == QUNS_ACCEPTS_NOTIFICATIONS;
+            if (!shown) {
+                Wh_Log(L"Notifications are being held back (state=%d); copy only",
+                       (int)quns);
+            }
+            settle(noCountdown || !enabled || !shown ? ACTION_COPY_ONLY
+                                                    : ACTION_AUTO);
+            break;
+        }
+        DWORD remaining = timeoutMs - elapsed;
+        // The answer arrives on an event, so wait out the deadline in one go.
+        DWORD slice = remaining;
         DWORD result = MsgWaitForMultipleObjectsEx(
-            ARRAYSIZE(waits), waits, remaining, QS_ALLINPUT,
+            ARRAYSIZE(waits), waits, slice, QS_ALLINPUT,
             MWMO_INPUTAVAILABLE | MWMO_ALERTABLE);
         if (result == WAIT_IO_COMPLETION) {
             continue;  // MWMO_ALERTABLE: an APC ran, keep waiting.
         }
         if (result == WAIT_TIMEOUT) {
-            if (noCountdown) {
-                // Nobody saw the toast to answer it, so copy but never delete.
-                Wh_Log(L"No answer to the notification; copy only");
-            }
-            action = noCountdown ? ACTION_COPY_ONLY : ACTION_AUTO;
-            removeToast = true;
-            break;
+            continue;  // Deadlines are checked above, not inferred from a slice.
         }
         if (result == WAIT_OBJECT_0) {  // Stop requested: never delete on shutdown.
-            action = ACTION_KEEP;
-            removeToast = true;
+            settle(ACTION_KEEP);
             break;
         }
         if (result == WAIT_OBJECT_0 + 1) {
-            EnterCriticalSection(&g_toastLock);
-            action = g_toastAction;
-            LeaveCriticalSection(&g_toastLock);
-            removeToast = true;
+            settle(ACTION_KEEP);
             break;
+        }
+        if (result == WAIT_OBJECT_0 + 2) {
+            continue;  // Settings reloaded: handled at the top of the loop.
         }
         if (result == WAIT_OBJECT_0 + ARRAYSIZE(waits)) {
             MSG msg;
-            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            for (unsigned count = 0; count < 32 &&
+                 PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE); ++count) {
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
             continue;
         }
         Wh_Log(L"Toast wait failed %lu", GetLastError());
-        action = ACTION_KEEP;
-        removeToast = true;  // Its buttons are dead to us now, so don't leave it up.
+        settle(ACTION_KEEP);
         break;
     }
 
@@ -1385,11 +1496,13 @@ static void PrewarmToast() {
 // ============================================================================
 
 struct DialogState {
+    ULONGLONG generation;
     DWORD started;
     DWORD timeoutMs;
     bool showCountdown;   // False when there is no countdown, only the backstop.
     int expiryAction;     // What running out of time means (a real button id).
     bool expired;         // Set when the backstop closed it, not the user.
+    bool reloaded;    // Settings changed while the dialog was up.
     std::wstring baseText;
 };
 
@@ -1404,6 +1517,11 @@ static HRESULT CALLBACK DialogCallback(HWND hwnd, UINT msg, WPARAM, LPARAM,
                 SendMessageW(hwnd, TDM_CLICK_BUTTON, ACTION_KEEP, 0);
                 break;
             }
+            if (g_generation.load() != state->generation) {
+                state->reloaded = true;
+                SendMessageW(hwnd, TDM_CLICK_BUTTON, ACTION_KEEP, 0);
+                break;
+            }
             SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                          SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             break;
@@ -1415,6 +1533,11 @@ static HRESULT CALLBACK DialogCallback(HWND hwnd, UINT msg, WPARAM, LPARAM,
             // TDN_CREATED stored our handle, WhTool_ModUninit couldn't dismiss us,
             // so close ourselves as Keep here rather than let the join hang.
             if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) {
+                SendMessageW(hwnd, TDM_CLICK_BUTTON, ACTION_KEEP, 0);
+                break;
+            }
+            if (g_generation.load() != state->generation) {
+                state->reloaded = true;
                 SendMessageW(hwnd, TDM_CLICK_BUTTON, ACTION_KEEP, 0);
                 break;
             }
@@ -1442,6 +1565,7 @@ static int AskAction(const std::wstring& path, const Settings& s) {
     }
     std::wstring name = BaseName(path);
     DialogState state;
+    state.generation = g_generation.load();
     state.started = GetTickCount();
     // Same backstop as the toast: without it, a dialog nobody answers holds the
     // worker and no later screenshot is copied or deleted until someone does.
@@ -1450,6 +1574,7 @@ static int AskAction(const std::wstring& path, const Settings& s) {
         state.showCountdown ? (DWORD)s.delaySeconds * 1000 : kNoAnswerCapMs;
     state.expiryAction = state.showCountdown ? ACTION_AUTO : ACTION_KEEP;
     state.expired = false;
+    state.reloaded = false;
     state.baseText = name + L"\n\nChoose an action, or wait for the configured "
                             L"automatic action.";
 
@@ -1492,6 +1617,9 @@ static int AskAction(const std::wstring& path, const Settings& s) {
     // The no-countdown backstop clicks Keep (a real button) on expiry; translate
     // that to copy-only, since nobody actually answered. A real Keep click, or a
     // countdown expiry (which uses ACTION_AUTO), is left as-is.
+    if (state.reloaded) {
+        return ACTION_COPY_ONLY;  // Stale settings, but the copy still happens.
+    }
     if (state.expired && !state.showCountdown) {
         return ACTION_COPY_ONLY;
     }
@@ -1512,9 +1640,10 @@ static int AskAction(const std::wstring& path, const Settings& s) {
 
 // Tries the toast notification first; falls back to the dialog box if toast
 // registration didn't succeed on this machine or the WinRT call chain fails.
-static int ChooseAction(const std::wstring& path, const Settings& s) {
+static int ChooseAction(const std::wstring& path, const Settings& s,
+                        ULONGLONG generation) {
     int action = ACTION_AUTO;
-    if (ShowToast(path, s, action)) {
+    if (ShowToast(path, s, action, generation)) {
         return action;
     }
     return AskAction(path, s);
@@ -1674,6 +1803,7 @@ static bool WaitForStableFile(const std::wstring& path) {
 
 static void ProcessOne(std::wstring path) {
     Settings s = SnapshotSettings();
+    ULONGLONG generation = g_generation.load();
 
     DWORD t0 = GetTickCount();
     if (!WaitForStableFile(path)) {
@@ -1696,7 +1826,7 @@ static void ProcessOne(std::wstring path) {
     }
 
     DWORD t1 = GetTickCount();
-    int action = s.popup ? ChooseAction(path, s) : ACTION_AUTO;
+    int action = s.popup ? ChooseAction(path, s, generation) : ACTION_AUTO;
     if (s.logDetails) {
         Wh_Log(L"popup returned %d in %lu ms", action, GetTickCount() - t1);
     }
@@ -1735,7 +1865,6 @@ static void ProcessOne(std::wstring path) {
                s.logDetails ? (L": " + path).c_str() : L"");
         return;  // Invariant: never delete when a requested copy failed.
     }
-
     // Deletion only makes sense for self-contained payloads (image / none).
     // File and Path payloads reference the file, so deleting would break them.
     bool payloadReferencesFile =
@@ -2228,6 +2357,7 @@ BOOL WhTool_ModInit() {
 
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);   // Manual reset.
     g_reloadEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);  // Auto reset.
+    g_settingsEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);  // Manual reset.
     g_workEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);    // Auto reset.
     g_toastActionEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);  // Auto reset.
     if (!g_stopEvent || !g_reloadEvent || !g_workEvent || !g_toastActionEvent) {
