@@ -7,7 +7,7 @@
 // @github          https://github.com/Louis047
 // @include         windhawk.exe
 // @include         explorer.exe
-// @compilerOptions -ldwmapi -luxtheme -lgdi32 -lshlwapi -loleaut32 -lole32 -lcomctl32 -lgdiplus -lversion -lwinmm -ladvapi32 -lmsimg32
+// @compilerOptions -ldwmapi -luxtheme -lgdi32 -lshlwapi -loleaut32 -lole32 -lcomctl32 -lgdiplus -lversion -lwinmm -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -141,7 +141,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
         - iconBgOpacity: 55
           $name: Badge Icon Background Opacity
           $description: Opacity percentage (0-100) for the badge icon background in dark mode.
-        - indicatorBgColorMode: accent
+        - indicatorBgColorMode: default
           $name: Group Indicator Background Color
           $description: Color source for the group indicator background pill in dark mode.
           $options:
@@ -151,7 +151,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
         - customIndicatorBgColor: "#333333"
           $name: Custom Group Indicator Background Color
           $description: HEX color value, used when Group Indicator Background Color is set to Custom.
-        - indicatorBgOpacity: 100
+        - indicatorBgOpacity: 85
           $name: Group Indicator Background Opacity
           $description: Opacity percentage (0-100) for the group indicator background in dark mode.
         - indicatorTextColorMode: default
@@ -209,7 +209,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
         - iconBgOpacity: 55
           $name: Badge Icon Background Opacity
           $description: Opacity percentage (0-100) for the badge icon background in light mode.
-        - indicatorBgColorMode: accent
+        - indicatorBgColorMode: default
           $name: Group Indicator Background Color
           $description: Color source for the group indicator background pill in light mode.
           $options:
@@ -219,7 +219,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
         - customIndicatorBgColor: "#EAEAEA"
           $name: Custom Group Indicator Background Color
           $description: HEX color value, used when Group Indicator Background Color is set to Custom.
-        - indicatorBgOpacity: 100
+        - indicatorBgOpacity: 85
           $name: Group Indicator Background Opacity
           $description: Opacity percentage (0-100) for the group indicator background in light mode.
         - indicatorTextColorMode: default
@@ -481,31 +481,22 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
         - dockSwitcherPadding: 11
           $name: Dock Layout Padding (px)
           $description: Padding between the switcher window border and dock elements in pixels for Dock Layout (before DPI scaling). Default 11.
-        - dockCloseButtonPosition: topRight
+        - dockCloseButtonPosition: previewTopRight
           $name: Close Button Position
-          $description: Placement of the close button inside the icon area in Dock Layout. Displays when hovering over individual tasks.
+          $description: Placement of the close button in Dock Layout. "Central Preview" places the button on the live preview of the selected window. "Icon Strip" displays a close button when hovering over individual icons in the dock strip.
           $options:
-          - topLeft: Top-Left
-          - top: Top
-          - topRight: Top-Right (Default)
-          - left: Left
-          - right: Right
-          - bottomLeft: Bottom-Left
-          - bottom: Bottom
-          - bottomRight: Bottom-Right
+          - previewTopRight: Central Preview (Top-Right - Default)
+          - previewTopLeft: Central Preview (Top-Left)
+          - iconStrip: Icon Strip (Hover on Icon)
           - hidden: Hidden
-        - dockGroupIndicatorPosition: bottomRight
+        - dockGroupIndicatorPosition: onIconBadge
           $name: Group Indicator Position
-          $description: Placement of the grouped window count indicator inside the icon area in Dock Layout when "Group Windows by Application" is enabled.
+          $description: Placement and style of the grouped window count indicator in Dock Layout when "Group Windows by Application" is enabled.
           $options:
-          - topLeft: Top-Left
-          - top: Top
-          - topRight: Top-Right
-          - left: Left
-          - right: Right
-          - bottomLeft: Bottom-Left
-          - bottom: Bottom
-          - bottomRight: Bottom-Right (Default)
+          - onIconBadge: Icon Badge (Top-Right of Icon - Default)
+          - belowIcons: Below Icons
+          - aboveIcons: Above Icons
+          - insidePreview: Central Preview Overlay
           - hidden: Hidden
       $name: Dock Layout Settings
       $description: Configuration options applied when Switcher Layout is set to Dock / Strip Layout.
@@ -540,13 +531,9 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
           - auto: Auto (Disabled on Windows 10, Enabled on Windows 11)
           - true: Enabled
           - false: Disabled
-        - enableEntranceAnimation: auto
+        - enableEntranceAnimation: true
           $name: Window Entrance Animation
-          $description: Smooth fade and entrance transition when the switcher opens. Auto enables on Windows 11 and disables on Windows 10.
-          $options:
-          - auto: Auto (Disabled on Windows 10, Enabled on Windows 11)
-          - true: Enabled
-          - false: Disabled
+          $description: Smooth fade and entrance transition when the switcher opens.
         - enableSelectionAnimation: true
           $name: Selection Highlight Animation
           $description: Smooth gliding transition when moving the selection highlight.
@@ -599,13 +586,9 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
     - showGroupIndicator: true
       $name: Show Group Indicator
       $description: Show a count badge on grouped application entries indicating how many windows are in the group. Only visible when Group Windows by Application is enabled.
-    - showGroupIndicatorShadow: auto
+    - showGroupIndicatorShadow: false
       $name: Show Group Indicator Shadow
-      $description: Show a soft drop shadow behind the group indicator badge. Auto enables on Windows 11 and disables on Windows 10.
-      $options:
-      - auto: Auto (Disabled on Windows 10, Enabled on Windows 11)
-      - true: Enabled
-      - false: Disabled
+      $description: Show a soft drop shadow behind the group indicator badge.
     - groupCloseBehavior: closeRecent
       $name: Group Close Button Behavior
       $description: Action when closing a grouped application entry.
@@ -818,28 +801,18 @@ typedef HWND (WINAPI *CreateWindowInBand_t)(
     DWORD dwBand
 );
 
-static bool IsWin11OrGreater();
-
 static HWND CreateSWSWindow(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle,
                             int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu,
                             HINSTANCE hInstance, LPVOID lpParam) {
     static auto pCreateWindowInBand = (CreateWindowInBand_t)GetProcAddress(GetModuleHandleW(L"user32.dll"), "CreateWindowInBand");
-    HWND hWnd = NULL;
     if (pCreateWindowInBand) {
-        hWnd = pCreateWindowInBand(dwExStyle, lpClassName, lpWindowName, dwStyle,
-                                   X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam,
-                                   ZBID_SYSTEM_TOOLS);
+        HWND hWnd = pCreateWindowInBand(dwExStyle, lpClassName, lpWindowName, dwStyle,
+                                        X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam,
+                                        ZBID_SYSTEM_TOOLS);
+        if (hWnd) return hWnd;
     }
-    if (!hWnd) {
-        hWnd = CreateWindowExW(dwExStyle, lpClassName, lpWindowName, dwStyle,
-                               X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
-    }
-    if (hWnd && IsWin11OrGreater()) {
-        COLORREF none = 0xFFFFFFFE; // DWMWA_COLOR_NONE
-        DwmSetWindowAttribute(hWnd, 34 /* DWMWA_BORDER_COLOR */, &none, sizeof(none));
-        DwmSetWindowAttribute(hWnd, 35 /* DWMWA_CAPTION_COLOR */, &none, sizeof(none));
-    }
-    return hWnd;
+    return CreateWindowExW(dwExStyle, lpClassName, lpWindowName, dwStyle,
+                           X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
 }
 
 struct WindowEntry {
@@ -1439,51 +1412,20 @@ static bool DockIconIsTop() {
 static bool DockShowPreview() {
     return g_settings.dockShowPreview && g_settings.showThumbnails;
 }
-static RECT GetDockIconAreaElementRect(const RECT& rcCell, int itemW, int itemH, const WCHAR* position) {
-    if (!position || !position[0] || wcscmp(position, L"hidden") == 0) {
-        return { 0, 0, 0, 0 };
-    }
-
-    int margin = DpiScale(2, g_dpiX);
-    int cellW = rcCell.right - rcCell.left;
-    int cellH = rcCell.bottom - rcCell.top;
-    if (cellW <= 0 || cellH <= 0) return { 0, 0, 0, 0 };
-
-    int x = 0, y = 0;
-
-    if (wcscmp(position, L"topLeft") == 0) {
-        x = rcCell.left + margin;
-        y = rcCell.top + margin;
-    } else if (wcscmp(position, L"top") == 0) {
-        x = rcCell.left + (cellW - itemW) / 2;
-        y = rcCell.top + margin;
-    } else if (wcscmp(position, L"topRight") == 0) {
-        x = rcCell.right - itemW - margin;
-        y = rcCell.top + margin;
-    } else if (wcscmp(position, L"left") == 0) {
-        x = rcCell.left + margin;
-        y = rcCell.top + (cellH - itemH) / 2;
-    } else if (wcscmp(position, L"right") == 0) {
-        x = rcCell.right - itemW - margin;
-        y = rcCell.top + (cellH - itemH) / 2;
-    } else if (wcscmp(position, L"bottomLeft") == 0) {
-        x = rcCell.left + margin;
-        y = rcCell.bottom - itemH - margin;
-    } else if (wcscmp(position, L"bottom") == 0) {
-        x = rcCell.left + (cellW - itemW) / 2;
-        y = rcCell.bottom - itemH - margin;
-    } else if (wcscmp(position, L"bottomRight") == 0) {
-        x = rcCell.right - itemW - margin;
-        y = rcCell.bottom - itemH - margin;
-    } else {
-        x = rcCell.right - itemW - margin;
-        y = rcCell.top + margin;
-    }
-
-    return { x, y, x + itemW, y + itemH };
+static bool DockCloseButtonIsPreviewTopRight() { return wcscmp(g_settings.dockCloseButtonPosition, L"previewTopRight") == 0; }
+static bool DockCloseButtonIsPreviewTopLeft() { return wcscmp(g_settings.dockCloseButtonPosition, L"previewTopLeft") == 0; }
+static bool DockCloseButtonIsPreview() {
+    return DockShowPreview() && (DockCloseButtonIsPreviewTopRight() || DockCloseButtonIsPreviewTopLeft());
 }
-
+static bool DockCloseButtonIsIconStrip() {
+    return wcscmp(g_settings.dockCloseButtonPosition, L"iconStrip") == 0 || (!DockShowPreview() && wcscmp(g_settings.dockCloseButtonPosition, L"hidden") != 0);
+}
 static bool DockCloseButtonIsHidden() { return wcscmp(g_settings.dockCloseButtonPosition, L"hidden") == 0; }
+
+static bool DockGroupIndicatorIsOnIconBadge() { return wcscmp(g_settings.dockGroupIndicatorPosition, L"onIconBadge") == 0; }
+static bool DockGroupIndicatorIsBelowIcons() { return wcscmp(g_settings.dockGroupIndicatorPosition, L"belowIcons") == 0; }
+static bool DockGroupIndicatorIsAboveIcons() { return wcscmp(g_settings.dockGroupIndicatorPosition, L"aboveIcons") == 0; }
+static bool DockGroupIndicatorIsInsidePreview() { return wcscmp(g_settings.dockGroupIndicatorPosition, L"insidePreview") == 0; }
 static bool DockGroupIndicatorIsHidden() { return wcscmp(g_settings.dockGroupIndicatorPosition, L"hidden") == 0; }
 static bool BadgeIconPositionIs(const WCHAR* v) { return wcscmp(g_settings.badgeIconPosition, v) == 0; }
 static bool BadgeTitleIsTop() { return wcscmp(g_settings.badgeTitlePosition, L"top") == 0; }
@@ -2021,18 +1963,12 @@ static void FinishAnimations() {
     g_scrollTransition.offsetCurrentY = 0.0f;
     for (auto& item : g_scrollTransition.outgoingItems) {
         int curIdx = FindWindowIndexByHwnd(item.hWnd);
-        if (curIdx == -1) {
+        if (curIdx == -1 || IsWindowTruncated(curIdx)) {
             for (const auto& kv : item.hThumbs) {
                 if (kv.second) DwmUnregisterThumbnail(kv.second);
             }
-        } else if (IsWindowTruncated(curIdx)) {
-            for (const auto& kv : item.hThumbs) {
-                if (kv.second) {
-                    DWM_THUMBNAIL_PROPERTIES p = {};
-                    p.dwFlags = DWM_TNP_VISIBLE;
-                    p.fVisible = FALSE;
-                    DwmUpdateThumbnailProperties(kv.second, &p);
-                }
+            if (curIdx != -1) {
+                g_windows[curIdx].hThumbs.clear();
             }
         }
     }
@@ -2077,18 +2013,12 @@ static void CaptureOutgoingSnapshot() {
     if (g_scrollTransition.active && !g_scrollTransition.outgoingItems.empty()) {
         for (auto& item : g_scrollTransition.outgoingItems) {
             int curIdx = FindWindowIndexByHwnd(item.hWnd);
-            if (curIdx == -1) {
+            if (curIdx == -1 || IsWindowTruncated(curIdx)) {
                 for (const auto& kv : item.hThumbs) {
                     if (kv.second) DwmUnregisterThumbnail(kv.second);
                 }
-            } else if (IsWindowTruncated(curIdx)) {
-                for (const auto& kv : item.hThumbs) {
-                    if (kv.second) {
-                        DWM_THUMBNAIL_PROPERTIES p = {};
-                        p.dwFlags = DWM_TNP_VISIBLE;
-                        p.fVisible = FALSE;
-                        DwmUpdateThumbnailProperties(kv.second, &p);
-                    }
+                if (curIdx != -1) {
+                    g_windows[curIdx].hThumbs.clear();
                 }
             }
         }
@@ -2198,7 +2128,6 @@ static void TriggerScrollAnimationEx(int dir, ScrollNavType type) {
         }
         g_scrollTransition.outgoingItems.clear();
         g_scrollTransition.preservingThumbnails = false;
-        UpdateThumbnailAnimations();
         UpdateHoverFromCursor(false);
         return;
     }
@@ -2311,7 +2240,6 @@ static void TriggerScrollAnimationEx(int dir, ScrollNavType type) {
     g_scrollTransition.active = true;
 
     UpdateChevronAnimationTargets(false);
-    UpdateThumbnailAnimations();
     StartAnimationTicker();
 }
 
@@ -2867,9 +2795,12 @@ static void OnAnimationTick() {
 
             InvalidateStaticCache();
             if (DockLayoutActive()) {
-                g_rcDockIconStrip = g_layoutTransition.rcDockStripTarget;
-                g_rcCentralPreview = g_layoutTransition.rcDockPreviewTarget;
-                g_rcDockTitleBar = g_layoutTransition.rcDockTitleTarget;
+                if (g_layoutTransition.rcDockStripTarget.right > g_layoutTransition.rcDockStripTarget.left)
+                    g_rcDockIconStrip = g_layoutTransition.rcDockStripTarget;
+                if (g_layoutTransition.rcDockPreviewTarget.right > g_layoutTransition.rcDockPreviewTarget.left)
+                    g_rcCentralPreview = g_layoutTransition.rcDockPreviewTarget;
+                if (g_layoutTransition.rcDockTitleTarget.right > g_layoutTransition.rcDockTitleTarget.left)
+                    g_rcDockTitleBar = g_layoutTransition.rcDockTitleTarget;
                 UpdateDockPreviewForSelection();
             }
             UpdateHoverFromCursor(true);
@@ -2894,9 +2825,6 @@ static void OnAnimationTick() {
             g_switcherBaseX = curCx;
             g_switcherBaseY = curCy;
             g_switcherBaseInitialized = true;
-            if (ThemeIs(L"backdrop") && IsWin11OrGreater()) {
-                ApplySwitcherRegion();
-            }
 
             if (DockLayoutActive()) {
                 if (g_layoutTransition.rcDockStripTarget.right > g_layoutTransition.rcDockStripTarget.left) {
@@ -3023,6 +2951,7 @@ static void OnAnimationTick() {
     bool closeBtnAnimActive = false;
     for (int i = 0; i < (int)g_windows.size(); i++) {
         float target = (i == g_hoverIndex && g_settings.showCloseButton && !IsWindowTruncated(i)) ? 1.0f : 0.0f;
+        if (DockLayoutActive() && DockCloseButtonIsPreview() && i != g_selectedIndex) target = 0.0f;
         if (DockLayoutActive() && DockCloseButtonIsHidden()) target = 0.0f;
         if (fabsf(g_windows[i].closeBtnAlpha - target) > 0.01f) {
             closeBtnAnimActive = true;
@@ -3190,8 +3119,9 @@ static int GetThumbnailCornerRadiusPx() {
     }
     int stdDIP = 0, smallDIP = 0;
     GetResolvedCornerRadiiDIP(&stdDIP, &smallDIP);
-    if (stdDIP <= 0) return 0;
-    return MulDiv(stdDIP, g_dpiX, 96);
+    if (stdDIP <= 0 || smallDIP <= 0) return 0;
+    int effectiveDIP = std::min(smallDIP, stdDIP);
+    return MulDiv(effectiveDIP, g_dpiX, 96);
 }
 
 static int GetGroupIndicatorCornerRadiusPx(int maxRadius) {
@@ -3775,62 +3705,6 @@ static BOOL CALLBACK FindCoreWindowProc(HWND hChild, LPARAM lParam) {
     return TRUE;
 }
 
-static HICON CreateIconFrom32bppBitmap(HBITMAP hBitmap, int width, int height) {
-    if (!hBitmap || width <= 0 || height <= 0) return NULL;
-
-    BITMAPINFO bmi = {};
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = width;
-    bmi.bmiHeader.biHeight = -height; // top-down
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
-
-    std::vector<DWORD> pixels(width * height);
-    HDC hdcScreen = GetDC(NULL);
-    if (!GetDIBits(hdcScreen, hBitmap, 0, height, pixels.data(), &bmi, DIB_RGB_COLORS)) {
-        ReleaseDC(NULL, hdcScreen);
-        return NULL;
-    }
-
-    int maskStride = ((width + 31) / 32) * 4;
-    std::vector<BYTE> maskBits(maskStride * height, 0);
-
-    bool hasAlpha = false;
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x) {
-            DWORD pixel = pixels[y * width + x];
-            BYTE a = (BYTE)(pixel >> 24);
-            if (a > 0) {
-                hasAlpha = true;
-            }
-            if (a == 0) {
-                // Set bit in mask (1 = transparent)
-                maskBits[y * maskStride + (x / 8)] |= (0x80 >> (x % 8));
-            }
-        }
-    }
-
-    if (!hasAlpha) {
-        std::fill(maskBits.begin(), maskBits.end(), 0);
-    }
-
-    HBITMAP hbmMask = CreateBitmap(width, height, 1, 1, maskBits.data());
-    ReleaseDC(NULL, hdcScreen);
-    if (!hbmMask) return NULL;
-
-    ICONINFO ii = {};
-    ii.fIcon = TRUE;
-    ii.xHotspot = 0;
-    ii.yHotspot = 0;
-    ii.hbmMask = hbmMask;
-    ii.hbmColor = hBitmap;
-
-    HICON hIcon = CreateIconIndirect(&ii);
-    DeleteObject(hbmMask);
-    return hIcon;
-}
-
 static HICON ResolveIconFromAumid(const WCHAR* aumid, int desiredSizePx) {
     HICON hIcon = NULL;
     Wh_Log(L"ResolveIconFromAumid: aumid=%s, desiredSizePx=%d", aumid, desiredSizePx);
@@ -3850,9 +3724,19 @@ static HICON ResolveIconFromAumid(const WCHAR* aumid, int desiredSizePx) {
             hr = psiif->GetImage(sz, SIIGBF_RESIZETOFIT | SIIGBF_ICONONLY, &hBitmap);
             if (SUCCEEDED(hr) && hBitmap) {
                 Wh_Log(L"ResolveIconFromAumid: GetImage succeeded");
-                hIcon = CreateIconFrom32bppBitmap(hBitmap, sz.cx, sz.cy);
-                if (hIcon) Wh_Log(L"ResolveIconFromAumid: Successfully converted to HICON via CreateIconIndirect");
-                else Wh_Log(L"ResolveIconFromAumid: CreateIconFrom32bppBitmap failed");
+                HIMAGELIST hImageList = ImageList_Create(sz.cx, sz.cy, ILC_COLOR32, 1, 0);
+                if (hImageList) {
+                    if (ImageList_Add(hImageList, hBitmap, NULL) != -1) {
+                        hIcon = ImageList_GetIcon(hImageList, 0, 0);
+                        if (hIcon) Wh_Log(L"ResolveIconFromAumid: Successfully converted to HICON");
+                        else Wh_Log(L"ResolveIconFromAumid: ImageList_GetIcon failed");
+                    } else {
+                        Wh_Log(L"ResolveIconFromAumid: ImageList_Add failed");
+                    }
+                    ImageList_Destroy(hImageList);
+                } else {
+                    Wh_Log(L"ResolveIconFromAumid: ImageList_Create failed");
+                }
                 DeleteObject(hBitmap);
             } else {
                 Wh_Log(L"ResolveIconFromAumid: GetImage failed, hr=0x%08X", hr);
@@ -4424,14 +4308,10 @@ static void RegisterThumbnailsEarly() {
     }
 }
 
-static int s_activeDockIndex = -1;
-
 static void UpdateDockThumbnailDwm() {
     if (!DockLayoutActive() || !DockShowPreview() || !g_hSwitcher) return;
     int n = (int)g_windows.size();
     if (g_selectedIndex < 0 || g_selectedIndex >= n) return;
-
-    s_activeDockIndex = g_selectedIndex;
 
     // 1. Show and configure the selected window's thumbnail FIRST
     auto& selWnd = g_windows[g_selectedIndex];
@@ -4493,7 +4373,7 @@ static void UpdateDockThumbnailDwm() {
         }
     }
 
-    // 2. Hide all non-selected thumbnails immediately to prevent overlapping previews
+    // 2. Hide all non-selected windows' thumbnails
     for (int i = 0; i < n; i++) {
         if (i == g_selectedIndex) continue;
         for (const auto& kv : g_windows[i].hThumbs) {
@@ -4918,13 +4798,9 @@ static void ComputeLayout(HMONITOR hMon) {
                 }
                 if (!keep) {
                     for (const auto& kv : g_windows[ji].hThumbs) {
-                        if (kv.second) {
-                            DWM_THUMBNAIL_PROPERTIES p = {};
-                            p.dwFlags = DWM_TNP_VISIBLE;
-                            p.fVisible = FALSE;
-                            DwmUpdateThumbnailProperties(kv.second, &p);
-                        }
+                        if (kv.second) DwmUnregisterThumbnail(kv.second);
                     }
+                    g_windows[ji].hThumbs.clear();
                 }
             }
         }
@@ -5451,12 +5327,6 @@ static COLORREF GetIndicatorBackgroundColor() {
 }
 
 static COLORREF GetIndicatorTextColor() {
-    const WCHAR* mode = g_isDarkMode ? g_settings.indicatorTextColorModeDark : g_settings.indicatorTextColorModeLight;
-    if (wcscmp(mode, L"default") == 0) {
-        COLORREF bg = GetIndicatorBackgroundColor();
-        double lum = (0.2126 * GetRValue(bg) + 0.7152 * GetGValue(bg) + 0.0722 * GetBValue(bg)) / 255.0;
-        return (lum > 0.55) ? RGB(0, 0, 0) : RGB(255, 255, 255);
-    }
     if (g_isDarkMode) {
         return ResolveColor(g_settings.indicatorTextColorModeDark,
                             g_settings.customIndicatorTextColorDark,
@@ -5465,130 +5335,6 @@ static COLORREF GetIndicatorTextColor() {
     return ResolveColor(g_settings.indicatorTextColorModeLight,
                         g_settings.customIndicatorTextColorLight,
                         RGB(0, 0, 0)); // #000000
-}
-
-static void DrawIconWithAlpha(HDC hdc, int x, int y, HICON hIcon, int size, float alpha) {
-    if (!hIcon || size <= 0 || alpha <= 0.001f) return;
-
-    // High quality bicubic antialiased rendering via GDI+
-    Gdiplus::Bitmap bmp(hIcon);
-    if (bmp.GetLastStatus() == Gdiplus::Ok && bmp.GetWidth() > 0 && bmp.GetHeight() > 0) {
-        Gdiplus::Graphics gfx(hdc);
-        gfx.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-        gfx.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
-        gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-
-        if (alpha < 0.999f) {
-            Gdiplus::ColorMatrix cm = {{
-                { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
-                { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
-                { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
-                { 0.0f, 0.0f, 0.0f, alpha, 0.0f },
-                { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
-            }};
-            Gdiplus::ImageAttributes attr;
-            attr.SetColorMatrix(&cm, Gdiplus::ColorMatrixFlagsDefault, Gdiplus::ColorAdjustTypeBitmap);
-            gfx.DrawImage(&bmp, Gdiplus::Rect(x, y, size, size), 0, 0, bmp.GetWidth(), bmp.GetHeight(), Gdiplus::UnitPixel, &attr);
-        } else {
-            gfx.DrawImage(&bmp, x, y, size, size);
-        }
-        return;
-    }
-
-    ICONINFO ii = {};
-    if (!GetIconInfo(hIcon, &ii)) return;
-
-    BITMAP bm = {};
-    if (ii.hbmColor && GetObjectW(ii.hbmColor, sizeof(bm), &bm) && bm.bmBitsPixel == 32) {
-        BITMAPINFO bmi = {};
-        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-        bmi.bmiHeader.biWidth = bm.bmWidth;
-        bmi.bmiHeader.biHeight = -bm.bmHeight; // top-down
-        bmi.bmiHeader.biPlanes = 1;
-        bmi.bmiHeader.biBitCount = 32;
-        bmi.bmiHeader.biCompression = BI_RGB;
-
-        void* pBits = nullptr;
-        HDC hdcMem = CreateCompatibleDC(hdc);
-        HBITMAP hDIB = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
-        if (hDIB && pBits) {
-            GetDIBits(hdcMem, ii.hbmColor, 0, bm.bmHeight, pBits, &bmi, DIB_RGB_COLORS);
-
-            DWORD* pPixels = (DWORD*)pBits;
-            int totalPixels = bm.bmWidth * bm.bmHeight;
-            bool hasAlpha = false;
-            for (int i = 0; i < totalPixels; ++i) {
-                if ((pPixels[i] & 0xFF000000) != 0) {
-                    hasAlpha = true;
-                    break;
-                }
-            }
-
-            if (!hasAlpha && ii.hbmMask) {
-                std::vector<BYTE> maskBits(((bm.bmWidth + 31) / 32) * 4 * bm.bmHeight);
-                BITMAPINFO maskBmi = {};
-                maskBmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-                maskBmi.bmiHeader.biWidth = bm.bmWidth;
-                maskBmi.bmiHeader.biHeight = -bm.bmHeight;
-                maskBmi.bmiHeader.biPlanes = 1;
-                maskBmi.bmiHeader.biBitCount = 1;
-                maskBmi.bmiHeader.biCompression = BI_RGB;
-                if (GetDIBits(hdcMem, ii.hbmMask, 0, bm.bmHeight, maskBits.data(), &maskBmi, DIB_RGB_COLORS)) {
-                    int maskStride = ((bm.bmWidth + 31) / 32) * 4;
-                    for (int row = 0; row < bm.bmHeight; ++row) {
-                        for (int col = 0; col < bm.bmWidth; ++col) {
-                            bool isTrans = (maskBits[row * maskStride + (col / 8)] & (0x80 >> (col % 8))) != 0;
-                            if (isTrans) {
-                                pPixels[row * bm.bmWidth + col] = 0;
-                            } else {
-                                pPixels[row * bm.bmWidth + col] |= 0xFF000000;
-                            }
-                        }
-                    }
-                }
-            }
-
-            HBITMAP hOldBmp = (HBITMAP)SelectObject(hdcMem, hDIB);
-            BLENDFUNCTION bf = { AC_SRC_OVER, 0, (BYTE)roundf(alpha * 255.0f), AC_SRC_ALPHA };
-            AlphaBlend(hdc, x, y, size, size, hdcMem, 0, 0, bm.bmWidth, bm.bmHeight, bf);
-            SelectObject(hdcMem, hOldBmp);
-            DeleteObject(hDIB);
-        }
-        DeleteDC(hdcMem);
-    } else {
-        BITMAPINFO bmi = {};
-        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-        bmi.bmiHeader.biWidth = size;
-        bmi.bmiHeader.biHeight = -size;
-        bmi.bmiHeader.biPlanes = 1;
-        bmi.bmiHeader.biBitCount = 32;
-        bmi.bmiHeader.biCompression = BI_RGB;
-
-        void* pBits = nullptr;
-        HDC hdcMem = CreateCompatibleDC(hdc);
-        HBITMAP hDIB = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
-        if (hDIB && pBits) {
-            ZeroMemory(pBits, size * size * 4);
-            HBITMAP hOldBmp = (HBITMAP)SelectObject(hdcMem, hDIB);
-            DrawIconEx(hdcMem, 0, 0, hIcon, size, size, 0, NULL, DI_NORMAL);
-
-            DWORD* pPixels = (DWORD*)pBits;
-            for (int i = 0; i < size * size; ++i) {
-                if ((pPixels[i] & 0x00FFFFFF) != 0 && (pPixels[i] & 0xFF000000) == 0) {
-                    pPixels[i] |= 0xFF000000;
-                }
-            }
-
-            BLENDFUNCTION bf = { AC_SRC_OVER, 0, (BYTE)roundf(alpha * 255.0f), AC_SRC_ALPHA };
-            AlphaBlend(hdc, x, y, size, size, hdcMem, 0, 0, size, size, bf);
-            SelectObject(hdcMem, hOldBmp);
-            DeleteObject(hDIB);
-        }
-        DeleteDC(hdcMem);
-    }
-
-    if (ii.hbmColor) DeleteObject(ii.hbmColor);
-    if (ii.hbmMask) DeleteObject(ii.hbmMask);
 }
 
 static Gdiplus::Bitmap* CreateIconShadowBitmap(HICON hIcon, int width, int height, float shadowAlphaMult) {
@@ -5667,7 +5413,7 @@ static Gdiplus::Bitmap* CreateIconShadowBitmap(HICON hIcon, int width, int heigh
     return shadowBmpCopy;
 }
 
-static void MaskRectCorners(HDC hdc, const RECT& rc, int radiusPx, bool forceOpaque = false, COLORREF overrideBg = CLR_INVALID, int overrideAlpha = -1) {
+static void MaskRectCorners(HDC hdc, const RECT& rc, int radiusPx, bool forceOpaque = false, COLORREF overrideBg = CLR_INVALID) {
     if (radiusPx <= 0) {
         return;
     }
@@ -5686,15 +5432,8 @@ static void MaskRectCorners(HDC hdc, const RECT& rc, int radiusPx, bool forceOpa
     }
 
     COLORREF bg = (overrideBg != CLR_INVALID) ? overrideBg : GetBgColor();
-    BYTE alpha = 0;
-    if (overrideAlpha >= 0) {
-        alpha = (BYTE)std::min(255, std::max(0, overrideAlpha));
-    } else if (ThemeIs(L"none") && !forceOpaque) {
-        alpha = 0;
-    } else {
-        alpha = (BYTE)roundf((float)g_settings.opacity * 255.0f / 100.0f);
-        if (alpha == 0) alpha = 1;
-    }
+    // In layered mode, punch fully transparent corners to force thumbnail clipping.
+    BYTE alpha = (ThemeIs(L"none") && !forceOpaque) ? 0 : 255;
 
     Gdiplus::Graphics graphics(hdc);
     if (alpha == 0) {
@@ -5954,8 +5693,26 @@ static RECT GetCloseButtonRect(const RECT& rcCell, const RECT& rcThumbActual, co
         if (DockCloseButtonIsHidden()) {
             return { 0, 0, 0, 0 };
         }
-        int btnSz = DpiScale(16, g_dpiX);
-        return GetDockIconAreaElementRect(rcCell, btnSz, btnSz, g_settings.dockCloseButtonPosition);
+        if (DockCloseButtonIsPreview()) {
+            int btnSz = DpiScale(24, g_dpiX);
+            int pad = DpiScale(8, g_dpiX);
+            int bx = 0, by = 0;
+            if (DockCloseButtonIsPreviewTopLeft()) {
+                bx = rcThumbActual.left + pad;
+                by = rcThumbActual.top + pad;
+            } else { // previewTopRight
+                bx = rcThumbActual.right - btnSz - pad;
+                by = rcThumbActual.top + pad;
+            }
+            return { bx, by, bx + btnSz, by + btnSz };
+        }
+        if (DockCloseButtonIsIconStrip()) {
+            int btnSz = DpiScale(16, g_dpiX);
+            int bx = rcCell.right - btnSz - DpiScale(1, g_dpiX);
+            int by = rcCell.top + DpiScale(1, g_dpiY);
+            return { bx, by, bx + btnSz, by + btnSz };
+        }
+        return { 0, 0, 0, 0 };
     }
 
     int rowTitleH = GetHeaderRowHeightPx();
@@ -6021,10 +5778,8 @@ static void DrawCloseButton(HDC hdc, const RECT& btnRc, float btnAlpha, float ho
     float origH = (float)(btnRc.bottom - btnRc.top);
     if (origW <= 0.0f || origH <= 0.0f) return;
 
-    // WinUI 3 Fluent scale blossom: gently expand from 85% to 100% as opacity fades in; compress to 95% on press
+    // WinUI 3 Fluent scale blossom: gently expand from 85% to 100% as opacity fades in
     float scale = (AreAnimationsGloballyEnabled() && btnAlpha < 1.0f) ? (0.85f + 0.15f * btnAlpha) : 1.0f;
-    if (isPressed) scale *= 0.95f;
-
     float btnW = origW * scale;
     float btnH = origH * scale;
     float bx = (float)btnRc.left + (origW - btnW) * 0.5f;
@@ -6037,35 +5792,38 @@ static void DrawCloseButton(HDC hdc, const RECT& btnRc, float btnAlpha, float ho
     int btnRadius = GetCloseButtonCornerRadiusPx();
     if ((float)(btnRadius * 2) > btnW) btnRadius = (int)(btnW / 2.0f);
 
-    Gdiplus::GraphicsPath path;
-    if (btnRadius > 0) {
-        Gdiplus::REAL d = (Gdiplus::REAL)(btnRadius * 2);
-        path.AddArc((Gdiplus::REAL)bx, (Gdiplus::REAL)by, d, d, 180.0f, 90.0f);
-        path.AddArc((Gdiplus::REAL)(bx + btnW) - d, (Gdiplus::REAL)by, d, d, 270.0f, 90.0f);
-        path.AddArc((Gdiplus::REAL)(bx + btnW) - d, (Gdiplus::REAL)(by + btnH) - d, d, d, 0.0f, 90.0f);
-        path.AddArc((Gdiplus::REAL)bx, (Gdiplus::REAL)(by + btnH) - d, d, d, 90.0f, 90.0f);
-        path.CloseFigure();
-    }
-
-    // 1. Solid idle plate for contrast against bright or dark thumbnails / icons
-    bool showPlate = g_settings.showCloseButtonBackground || DockLayoutActive();
-    if (showPlate) {
-        BYTE plateAlpha = (BYTE)roundf(255.0f * btnAlpha);
+    // 1. Solid idle plate for contrast against bright or dark thumbnails (configured by setting / Win11 default)
+    BYTE idlePlateAlpha = g_settings.showCloseButtonBackground ? (BYTE)roundf(255.0f * btnAlpha) : 0;
+    if (idlePlateAlpha > 0) {
         COLORREF plateCol = g_isDarkMode ? RGB(45, 45, 45) : RGB(255, 255, 255);
-        Gdiplus::SolidBrush idleBrush(Gdiplus::Color(plateAlpha, GetRValue(plateCol), GetGValue(plateCol), GetBValue(plateCol)));
+        Gdiplus::SolidBrush idleBrush(Gdiplus::Color(idlePlateAlpha, GetRValue(plateCol), GetGValue(plateCol), GetBValue(plateCol)));
         if (btnRadius > 0) {
+            Gdiplus::GraphicsPath path;
+            Gdiplus::REAL d = (Gdiplus::REAL)(btnRadius * 2);
+            path.AddArc((Gdiplus::REAL)bx, (Gdiplus::REAL)by, d, d, 180.0f, 90.0f);
+            path.AddArc((Gdiplus::REAL)(bx + btnW) - d, (Gdiplus::REAL)by, d, d, 270.0f, 90.0f);
+            path.AddArc((Gdiplus::REAL)(bx + btnW) - d, (Gdiplus::REAL)(by + btnH) - d, d, d, 0.0f, 90.0f);
+            path.AddArc((Gdiplus::REAL)bx, (Gdiplus::REAL)(by + btnH) - d, d, d, 90.0f, 90.0f);
+            path.CloseFigure();
             graphics.FillPath(&idleBrush, &path);
         } else {
             graphics.FillRectangle(&idleBrush, (Gdiplus::REAL)bx, (Gdiplus::REAL)by, (Gdiplus::REAL)btnW, (Gdiplus::REAL)btnH);
         }
     }
 
-    // 2. Interactive Crimson / Red Hover & Pressed Plate
+    // 2. Interactive Crimson / Red Hover Plate
     BYTE redAlpha = (BYTE)roundf(255.0f * hoverAlpha * btnAlpha);
     if (redAlpha > 0) {
-        COLORREF redPlateCol = isPressed ? RGB(168, 35, 22) : (IsWin11OrGreater() ? RGB(196, 43, 28) : RGB(232, 17, 35));
+        COLORREF redPlateCol = IsWin11OrGreater() ? RGB(196, 43, 28) : RGB(232, 17, 35);
         Gdiplus::SolidBrush redBrush(Gdiplus::Color(redAlpha, GetRValue(redPlateCol), GetGValue(redPlateCol), GetBValue(redPlateCol)));
         if (btnRadius > 0) {
+            Gdiplus::GraphicsPath path;
+            Gdiplus::REAL d = (Gdiplus::REAL)(btnRadius * 2);
+            path.AddArc((Gdiplus::REAL)bx, (Gdiplus::REAL)by, d, d, 180.0f, 90.0f);
+            path.AddArc((Gdiplus::REAL)(bx + btnW) - d, (Gdiplus::REAL)by, d, d, 270.0f, 90.0f);
+            path.AddArc((Gdiplus::REAL)(bx + btnW) - d, (Gdiplus::REAL)(by + btnH) - d, d, d, 0.0f, 90.0f);
+            path.AddArc((Gdiplus::REAL)bx, (Gdiplus::REAL)(by + btnH) - d, d, d, 90.0f, 90.0f);
+            path.CloseFigure();
             graphics.FillPath(&redBrush, &path);
         } else {
             graphics.FillRectangle(&redBrush, (Gdiplus::REAL)bx, (Gdiplus::REAL)by, (Gdiplus::REAL)btnW, (Gdiplus::REAL)btnH);
@@ -6073,8 +5831,10 @@ static void DrawCloseButton(HDC hdc, const RECT& btnRc, float btnAlpha, float ho
     }
 
     // 3. Crisp Anti-Aliased Vector 'X' Glyph with Rounded / Flat Caps
+    // Tactile displacement: 1px downward when pressed
+    float pressOff = isPressed ? 1.0f : 0.0f;
     float cx = bx + btnW * 0.5f;
-    float cy = by + btnH * 0.5f;
+    float cy = by + btnH * 0.5f + pressOff;
     float glyphSpan = ((origW == (float)DpiScale(16, g_dpiX)) ? (3.5f * g_dpiX / 96.0f) : (4.5f * g_dpiX / 96.0f)) * scale;
 
     COLORREF idleCol = g_isDarkMode ? RGB(230, 230, 230) : RGB(40, 40, 40);
@@ -6107,11 +5867,11 @@ struct ThumbnailShadowPass {
 };
 
 static const ThumbnailShadowPass kThumbnailShadowPasses[5] = {
-    { 8, 0,  3, 2 },  // Pass 0: Wide ambient feather
-    { 6, 0,  5, 3 },  // Pass 1: Ambient diffusion body
-    { 4, 0,  8, 5 },  // Pass 2: Directional key body
-    { 2, 0, 11, 7 },  // Pass 3: Directional core
-    { 1, 0, 14, 9 }   // Pass 4: Contact occlusion edge
+    { 8, 1,  3, 2 },  // Pass 0: Wide ambient feather
+    { 6, 1,  5, 3 },  // Pass 1: Ambient diffusion body
+    { 4, 2,  8, 5 },  // Pass 2: Directional key body
+    { 2, 2, 11, 7 },  // Pass 3: Directional core
+    { 1, 2, 14, 9 }   // Pass 4: Contact occlusion edge
 };
 
 static void DrawThumbnailShadow(HDC hdc, const RECT& rc, int cornerRadius, float alphaMult = 1.0f, float elevationScale = 1.0f) {
@@ -6128,11 +5888,13 @@ static void DrawThumbnailShadow(HDC hdc, const RECT& rc, int cornerRadius, float
 
     // Dynamic elevation lift factors when zoomed (WinUI 3 Fluent elevation standards)
     float spreadScale = 1.0f;
+    float yOffScale = 1.0f;
     if (elevationScale > 1.0001f) {
         float elevProg = (elevationScale - 1.0f) / SWS_HOVER_ZOOM_DELTA;
         if (elevProg < 0.0f) elevProg = 0.0f;
         if (elevProg > 1.0f) elevProg = 1.0f;
         spreadScale = 1.0f + elevProg * 0.15f;
+        yOffScale   = 1.0f + elevProg * 0.25f;
     }
 
     // During active layout transition (280ms), render a single-pass ambient shadow
@@ -6146,8 +5908,9 @@ static void DrawThumbnailShadow(HDC hdc, const RECT& rc, int cornerRadius, float
         Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(shadowAlpha, 0, 0, 0));
         int sp = DpiScale((int)roundf(3.0f * spreadScale), g_dpiX);
         if (sp < 1) sp = 1;
+        int yOff = DpiScale((int)roundf(2.0f * yOffScale), g_dpiY);
         Gdiplus::REAL sx = (Gdiplus::REAL)(rc.left - sp);
-        Gdiplus::REAL sy = (Gdiplus::REAL)(rc.top - sp);
+        Gdiplus::REAL sy = (Gdiplus::REAL)(rc.top - sp + yOff);
         Gdiplus::REAL sw = (Gdiplus::REAL)(rcw + sp * 2);
         Gdiplus::REAL sh = (Gdiplus::REAL)(rch + sp * 2);
         if (shadowRadius > 0) {
@@ -6179,10 +5942,11 @@ static void DrawThumbnailShadow(HDC hdc, const RECT& rc, int cornerRadius, float
 
         int sp = DpiScale((int)roundf(pass.baseSpread * spreadScale), g_dpiX);
         if (sp < 1) sp = 1;
+        int yOff = DpiScale((int)roundf(pass.baseYOffset * yOffScale), g_dpiY);
 
         Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(shadowAlpha, 0, 0, 0));
         Gdiplus::REAL sx = (Gdiplus::REAL)(rc.left - sp);
-        Gdiplus::REAL sy = (Gdiplus::REAL)(rc.top - sp);
+        Gdiplus::REAL sy = (Gdiplus::REAL)(rc.top - sp + yOff);
         Gdiplus::REAL sw = (Gdiplus::REAL)(rcw + sp * 2);
         Gdiplus::REAL sh = (Gdiplus::REAL)(rch + sp * 2);
         if (shadowRadius > 0) {
@@ -6213,10 +5977,8 @@ static void DrawTaskEntry(HDC hdc, WindowEntry& e, HWND hWnd, int padLeft, int r
         DrawThumbnailShadow(hdc, e.rcThumbActual, cornerRadius, alpha, 1.0f);
     }
 
-    if (g_settings.showThumbnails && cornerRadius > 0 && g_settings.roundThumbnailCorners) {
-        if (ThemeIs(L"none") || ThemeIs(L"backdrop")) {
-            MaskRectCorners(hdc, e.rcThumbActual, cornerRadius);
-        }
+    if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
+        MaskRectCorners(hdc, e.rcThumbActual, cornerRadius);
     }
 
     // ---- Badge layout rendering path ----
@@ -6341,7 +6103,23 @@ static void DrawTaskEntry(HDC hdc, WindowEntry& e, HWND hWnd, int padLeft, int r
             iconAlpha *= minDim;
         }
 
-        DrawIconWithAlpha(hdc, iconX, iconY, e.hIcon, iconSz, iconAlpha);
+        if (iconAlpha < 0.99f) {
+            Gdiplus::Graphics gfx(hdc);
+            Gdiplus::Bitmap bmp(e.hIcon);
+            Gdiplus::ImageAttributes imgAtt;
+            Gdiplus::ColorMatrix cm = {{
+                { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
+                { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 0.0f, iconAlpha, 0.0f },
+                { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
+            }};
+            imgAtt.SetColorMatrix(&cm);
+            gfx.DrawImage(&bmp, Gdiplus::Rect(iconX, iconY, iconSz, iconSz),
+                          0, 0, bmp.GetWidth(), bmp.GetHeight(), Gdiplus::UnitPixel, &imgAtt);
+        } else {
+            DrawIconEx(hdc, iconX, iconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
+        }
 
         if (isMin && MinimizedStyleUsesBadge()) {
             int badgeSz = DpiScale(12, g_dpiX);
@@ -6411,50 +6189,6 @@ static void DrawTaskEntry(HDC hdc, WindowEntry& e, HWND hWnd, int padLeft, int r
     }
 }
 
-static void DrawDockMinimizedIndicator(HDC hdc, int iconX, int iconY, int iconSz, const WindowEntry& e, float itemAlpha) {
-    bool isMin = g_settings.showMinimizedIndicator && IsEntryMinimized(e);
-    if (!isMin) return;
-
-    if (MinimizedStyleUsesBadge()) {
-        int badgeSz = DpiScale(14, g_dpiX);
-        int badgeX = iconX + iconSz - badgeSz + DpiScale(2, g_dpiX);
-        int badgeY = iconY + iconSz - badgeSz + DpiScale(2, g_dpiY);
-        Gdiplus::Graphics gfxBadge(hdc);
-        gfxBadge.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-        COLORREF bgC = g_isDarkMode ? RGB(40, 40, 40) : RGB(235, 235, 235);
-        COLORREF fgC = g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT;
-        BYTE bAlpha = (BYTE)roundf(230.0f * (itemAlpha < 1.0f ? itemAlpha : 1.0f));
-        Gdiplus::SolidBrush bgBrush(Gdiplus::Color(bAlpha, GetRValue(bgC), GetGValue(bgC), GetBValue(bgC)));
-        gfxBadge.FillEllipse(&bgBrush, badgeX, badgeY, badgeSz, badgeSz);
-        Gdiplus::Pen pen(Gdiplus::Color(bAlpha, GetRValue(fgC), GetGValue(fgC), GetBValue(fgC)), 1.5f);
-        pen.SetStartCap(Gdiplus::LineCapRound);
-        pen.SetEndCap(Gdiplus::LineCapRound);
-        int lineW = DpiScale(6, g_dpiX);
-        int lx1 = badgeX + (badgeSz - lineW) / 2;
-        int lx2 = lx1 + lineW;
-        int ly = badgeY + badgeSz / 2;
-        gfxBadge.DrawLine(&pen, lx1, ly, lx2, ly);
-    } else if (MinimizedStyleUsesDot()) {
-        int dotW = DpiScale(10, g_dpiX);
-        int dotH = DpiScale(3, g_dpiY);
-        int dotX = iconX + (iconSz - dotW) / 2;
-        int dotY = DockIconIsTop() ? (iconY + iconSz + DpiScale(3, g_dpiY)) : (iconY - dotH - DpiScale(3, g_dpiY));
-        Gdiplus::Graphics gfxDot(hdc);
-        gfxDot.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-        COLORREF dotCol = g_isDarkMode ? RGB(255, 255, 255) : RGB(0, 0, 0);
-        BYTE dotAlpha = (BYTE)roundf((g_isDarkMode ? 160.0f : 130.0f) * (itemAlpha < 1.0f ? itemAlpha : 1.0f));
-        if (&e == &g_windows[g_selectedIndex] || (g_hoverIndex >= 0 && g_hoverIndex < (int)g_windows.size() && &e == &g_windows[g_hoverIndex])) {
-            dotAlpha = (BYTE)roundf(230.0f * (itemAlpha < 1.0f ? itemAlpha : 1.0f));
-        }
-        Gdiplus::SolidBrush dotBrush(Gdiplus::Color(dotAlpha, GetRValue(dotCol), GetGValue(dotCol), GetBValue(dotCol)));
-        Gdiplus::GraphicsPath dotPath;
-        dotPath.AddArc((Gdiplus::REAL)dotX, (Gdiplus::REAL)dotY, (Gdiplus::REAL)dotH, (Gdiplus::REAL)dotH, 90, 180);
-        dotPath.AddArc((Gdiplus::REAL)(dotX + dotW - dotH), (Gdiplus::REAL)dotY, (Gdiplus::REAL)dotH, (Gdiplus::REAL)dotH, 270, 180);
-        dotPath.CloseFigure();
-        gfxDot.FillPath(&dotBrush, &dotPath);
-    }
-}
-
 static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSelectionFill) {
     RECT rcClient; GetClientRect(g_hSwitcher, &rcClient);
     int w = rcClient.right, h = rcClient.bottom;
@@ -6499,10 +6233,8 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
         if (g_settings.showThumbnailShadow && shadowAlphaMult > 0.01f) {
             DrawThumbnailShadow(hdc, shadowRc, cornerRadius, shadowAlphaMult);
         }
-        if (cornerRadius > 0 && g_settings.roundThumbnailCorners) {
-            if (ThemeIs(L"none") || ThemeIs(L"backdrop")) {
-                MaskRectCorners(hdc, shadowRc, cornerRadius);
-            }
+        if (cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
+            MaskRectCorners(hdc, shadowRc, cornerRadius);
         }
     }
 
@@ -6553,14 +6285,60 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
             itemAlpha *= minDim;
         }
 
-        if (!includeSelectionFill && i == g_selectedIndex && HighlightHasFill()) {
-            // In static cache pass, do not bake the selected icon under the selection fill.
-            // It will be drawn cleanly once over the selection fill dynamically in PaintSwitcher / WM_PAINT.
-            continue;
+        if (itemAlpha < 0.99f) {
+            Gdiplus::Graphics gfx(hdc);
+            Gdiplus::Bitmap bmp(e.hIcon);
+            Gdiplus::ImageAttributes imgAtt;
+            Gdiplus::ColorMatrix cm = {{
+                { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
+                { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 0.0f, itemAlpha, 0.0f },
+                { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
+            }};
+            imgAtt.SetColorMatrix(&cm);
+            gfx.DrawImage(&bmp, Gdiplus::Rect(iconX, iconY, iconSz, iconSz),
+                          0, 0, bmp.GetWidth(), bmp.GetHeight(), Gdiplus::UnitPixel, &imgAtt);
+        } else {
+            DrawIconEx(hdc, iconX, iconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
         }
 
-        DrawIconWithAlpha(hdc, iconX, iconY, e.hIcon, iconSz, itemAlpha);
-        DrawDockMinimizedIndicator(hdc, iconX, iconY, iconSz, e, itemAlpha);
+        if (isMin && MinimizedStyleUsesBadge()) {
+            int badgeSz = DpiScale(14, g_dpiX);
+            int badgeX = iconX + iconSz - badgeSz + DpiScale(2, g_dpiX);
+            int badgeY = iconY + iconSz - badgeSz + DpiScale(2, g_dpiY);
+            Gdiplus::Graphics gfxBadge(hdc);
+            gfxBadge.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            COLORREF bgC = g_isDarkMode ? RGB(40, 40, 40) : RGB(235, 235, 235);
+            COLORREF fgC = g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT;
+            BYTE bAlpha = (BYTE)roundf(230.0f * (itemAlpha < 1.0f ? itemAlpha : 1.0f));
+            Gdiplus::SolidBrush bgBrush(Gdiplus::Color(bAlpha, GetRValue(bgC), GetGValue(bgC), GetBValue(bgC)));
+            gfxBadge.FillEllipse(&bgBrush, badgeX, badgeY, badgeSz, badgeSz);
+            Gdiplus::Pen pen(Gdiplus::Color(bAlpha, GetRValue(fgC), GetGValue(fgC), GetBValue(fgC)), 1.5f);
+            pen.SetStartCap(Gdiplus::LineCapRound);
+            pen.SetEndCap(Gdiplus::LineCapRound);
+            int lineW = DpiScale(6, g_dpiX);
+            int lx1 = badgeX + (badgeSz - lineW) / 2;
+            int lx2 = lx1 + lineW;
+            int ly = badgeY + badgeSz / 2;
+            gfxBadge.DrawLine(&pen, lx1, ly, lx2, ly);
+        } else if (isMin && MinimizedStyleUsesDot()) {
+            int dotW = DpiScale(10, g_dpiX);
+            int dotH = DpiScale(3, g_dpiY);
+            int dotX = iconX + (iconSz - dotW) / 2;
+            int dotY = DockIconIsTop() ? (iconY + iconSz + DpiScale(3, g_dpiY)) : (iconY - dotH - DpiScale(3, g_dpiY));
+            Gdiplus::Graphics gfxDot(hdc);
+            gfxDot.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            COLORREF dotCol = g_isDarkMode ? RGB(255, 255, 255) : RGB(0, 0, 0);
+            BYTE dotAlpha = (BYTE)roundf((g_isDarkMode ? 160.0f : 130.0f) * (itemAlpha < 1.0f ? itemAlpha : 1.0f));
+            if (i == g_selectedIndex || i == g_hoverIndex) dotAlpha = (BYTE)roundf(230.0f * (itemAlpha < 1.0f ? itemAlpha : 1.0f));
+            Gdiplus::SolidBrush dotBrush(Gdiplus::Color(dotAlpha, GetRValue(dotCol), GetGValue(dotCol), GetBValue(dotCol)));
+            Gdiplus::GraphicsPath dotPath;
+            dotPath.AddArc((Gdiplus::REAL)dotX, (Gdiplus::REAL)dotY, (Gdiplus::REAL)dotH, (Gdiplus::REAL)dotH, 90, 180);
+            dotPath.AddArc((Gdiplus::REAL)(dotX + dotW - dotH), (Gdiplus::REAL)dotY, (Gdiplus::REAL)dotH, (Gdiplus::REAL)dotH, 270, 180);
+            dotPath.CloseFigure();
+            gfxDot.FillPath(&dotBrush, &dotPath);
+        }
     }
 
     // 4b. Draw departing icons in dock strip if layout transition is active
@@ -6573,7 +6351,19 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
             int iconX = dep.rcCellCurrent.left + (cellW - iconSz) / 2;
             int iconY = dep.rcCellCurrent.top + (cellH - iconSz) / 2;
 
-            DrawIconWithAlpha(hdc, iconX, iconY, dep.hIcon, iconSz, dep.alpha);
+            Gdiplus::Graphics gfx(hdc);
+            Gdiplus::Bitmap bmp(dep.hIcon);
+            Gdiplus::ImageAttributes imgAtt;
+            Gdiplus::ColorMatrix cm = {{
+                { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
+                { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 0.0f, dep.alpha, 0.0f },
+                { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
+            }};
+            imgAtt.SetColorMatrix(&cm);
+            gfx.DrawImage(&bmp, Gdiplus::Rect(iconX, iconY, iconSz, iconSz),
+                          0, 0, bmp.GetWidth(), bmp.GetHeight(), Gdiplus::UnitPixel, &imgAtt);
         }
     }
 
@@ -6821,7 +6611,22 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
         } else {
             gfx.FillRectangle(&bgBrush, bgX, bgY, bgSize, bgSize);
         }
-        DrawIconWithAlpha(hdc, bIconX, bIconY, hIcon, iconSz, iconDim);
+        if (iconDim < 0.99f) {
+            Gdiplus::Bitmap bmp(hIcon);
+            Gdiplus::ImageAttributes imgAtt;
+            Gdiplus::ColorMatrix cm = {{
+                { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
+                { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 0.0f, iconDim, 0.0f },
+                { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
+            }};
+            imgAtt.SetColorMatrix(&cm);
+            gfx.DrawImage(&bmp, Gdiplus::Rect(bIconX, bIconY, iconSz, iconSz),
+                          0, 0, bmp.GetWidth(), bmp.GetHeight(), Gdiplus::UnitPixel, &imgAtt);
+        } else {
+            DrawIconEx(hdc, bIconX, bIconY, hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
+        }
     } else {
         bool drawShadow = IsWin11OrGreater() || g_settings.showThumbnailShadow;
         if (drawShadow) {
@@ -6835,7 +6640,22 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
                 delete pBmp;
             }
         }
-        DrawIconWithAlpha(hdc, bIconX, bIconY, hIcon, iconSz, iconDim);
+        if (iconDim < 0.99f) {
+            Gdiplus::Bitmap bmp(hIcon);
+            Gdiplus::ImageAttributes imgAtt;
+            Gdiplus::ColorMatrix cm = {{
+                { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
+                { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
+                { 0.0f, 0.0f, 0.0f, iconDim, 0.0f },
+                { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
+            }};
+            imgAtt.SetColorMatrix(&cm);
+            gfx.DrawImage(&bmp, Gdiplus::Rect(bIconX, bIconY, iconSz, iconSz),
+                          0, 0, bmp.GetWidth(), bmp.GetHeight(), Gdiplus::UnitPixel, &imgAtt);
+        } else {
+            DrawIconEx(hdc, bIconX, bIconY, hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
+        }
     }
 
     if (isMin && MinimizedStyleUsesBadge()) {
@@ -6965,14 +6785,9 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             }
             if (collidesWithIncoming) continue;
 
-            if (g_settings.showThumbnails && cornerRadius > 0 && g_settings.roundThumbnailCorners) {
-                if (ThemeIs(L"none") || ThemeIs(L"backdrop")) {
-                    COLORREF maskColor = GetBgColor();
-                    int maskAlpha = (int)roundf((float)g_settings.opacity * 255.0f / 100.0f);
-                    MaskRectCorners(hdc, snapThumb, cornerRadius, true, maskColor, maskAlpha);
-                } else if (ThemeIs(L"mica")) {
-                    DrawContourF(hdc, ToRectF(snapThumb), 1.0f, 1, (float)cornerRadius, g_isDarkMode ? 40 : 30);
-                }
+            if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
+                COLORREF maskColor = GetBgColor();
+                MaskRectCorners(hdc, snapThumb, cornerRadius, true, maskColor);
             }
 
             DrawBadgeIconOverlay(hdc, snapThumb, snap.hIcon);
@@ -6985,14 +6800,9 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             if (dep.alpha <= 0.01f) continue;
             RECT depThumb = dep.rcThumbCurrent;
 
-            if (g_settings.showThumbnails && cornerRadius > 0 && g_settings.roundThumbnailCorners) {
-                if (ThemeIs(L"none") || ThemeIs(L"backdrop")) {
-                    COLORREF maskColor = GetBgColor();
-                    int maskAlpha = (int)roundf((float)g_settings.opacity * 255.0f / 100.0f);
-                    MaskRectCorners(hdc, depThumb, cornerRadius, true, maskColor, maskAlpha);
-                } else if (ThemeIs(L"mica")) {
-                    DrawContourF(hdc, ToRectF(depThumb), 1.0f, 1, (float)cornerRadius, g_isDarkMode ? 40 : 30);
-                }
+            if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
+                COLORREF maskColor = GetBgColor();
+                MaskRectCorners(hdc, depThumb, cornerRadius, true, maskColor);
             }
             DrawBadgeIconOverlay(hdc, depThumb, dep.hIcon);
         }
@@ -7016,18 +6826,12 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             OffsetRect(&rcThumbSlot, offX, offY);
         }
 
-        if (g_settings.showThumbnails && cornerRadius > 0 && g_settings.roundThumbnailCorners) {
-            if (ThemeIs(L"none") || ThemeIs(L"backdrop")) {
-                COLORREF maskColor = GetBgColor();
-                int maskAlpha = (int)roundf((float)g_settings.opacity * 255.0f / 100.0f);
-                if (i == g_selectedIndex && HighlightHasFill() && !DockLayoutActive()) {
-                    maskColor = GetHighlightFillColor();
-                    maskAlpha = 64;
-                }
-                MaskRectCorners(hdc, rcThumbActual, cornerRadius, true, maskColor, maskAlpha);
-            } else if (ThemeIs(L"mica")) {
-                DrawContourF(hdc, ToRectF(rcThumbActual), 1.0f, 1, (float)cornerRadius, g_isDarkMode ? 40 : 30);
+        if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
+            COLORREF maskColor = GetBgColor();
+            if (i == g_selectedIndex && HighlightHasFill() && !DockLayoutActive()) {
+                maskColor = GetHighlightFillColor();
             }
+            MaskRectCorners(hdc, rcThumbActual, cornerRadius, true, maskColor);
         }
 
         // Badge layout: draw icon overlay on thumbnail
@@ -7038,30 +6842,38 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             DrawBadgeIconOverlay(hdc, rcThumbActual, e.hIcon, &drawnIconX, &drawnIconY, &drawnIconSz, IsEntryMinimized(e));
         }
 
-        // 1. Calculate Close Button rect if close button is enabled
-        RECT btnRc = { 0, 0, 0, 0 };
-        bool canShowCloseBtn = (g_settings.showCloseButton && e.closeBtnAlpha > 0.01f);
-        if (DockLayoutActive() && DockCloseButtonIsHidden()) canShowCloseBtn = false;
-        if (canShowCloseBtn) {
-            btnRc = GetCloseButtonRect(rcCell, rcThumbActual, rcThumbSlot);
+        // Close button (rendered for any entry with closeBtnAlpha > 0.01f, enabling smooth cross-fades between entries)
+        if (g_settings.showCloseButton && e.closeBtnAlpha > 0.01f) {
+            if (!DockLayoutActive() || DockCloseButtonIsIconStrip() || (DockCloseButtonIsPreview() && i == g_selectedIndex)) {
+                RECT btnRc = GetCloseButtonRect(rcCell, rcThumbActual, rcThumbSlot);
+                if (btnRc.right > btnRc.left && btnRc.bottom > btnRc.top) {
+                    float hoverPlateAlpha = (i == g_hoverIndex && g_hoverWnd == hWnd && g_isCloseHovered) ? g_animCloseBtnHoverAlpha : 0.0f;
+                    bool isBtnPressed = (i == g_hoverIndex && g_hoverWnd == hWnd && g_isClosePressed);
+                    DrawCloseButton(hdc, btnRc, e.closeBtnAlpha, hoverPlateAlpha, isBtnPressed);
+                }
+            }
         }
 
-        // 2. Calculate Grouped window count badge rect if enabled
+        // Grouped window count badge
         bool showThisGroupBadge = g_settings.showGroupIndicator && g_settings.showApplications && (e.groupWindows.size() > 1);
-        if (DockLayoutActive() && DockGroupIndicatorIsHidden()) showThisGroupBadge = false;
-
-        RECT badgeRc = { 0, 0, 0, 0 };
-        int badgeX = 0, badgeY = 0, badgeW = 0, badgeH = 0;
-        WCHAR countText[8] = { 0 };
-        int badgeFontSz = DpiScale(10, g_dpiX);
-        int fontStyle = Gdiplus::FontStyleBold;
-        LPCWSTR family = L"Segoe UI";
-        Gdiplus::StringFormat sf;
-        sf.SetAlignment(Gdiplus::StringAlignmentCenter);
-        sf.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+        if (DockLayoutActive()) {
+            if (DockGroupIndicatorIsHidden()) showThisGroupBadge = false;
+            else if (DockGroupIndicatorIsInsidePreview() && (i != g_selectedIndex || !DockShowPreview())) showThisGroupBadge = false;
+        }
 
         if (showThisGroupBadge) {
+            Gdiplus::Graphics gfx(hdc);
+            gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            gfx.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAlias);
+
+            // Badge text
+            WCHAR countText[8];
             _snwprintf_s(countText, ARRAYSIZE(countText), _TRUNCATE, L"%d", (int)e.groupWindows.size());
+
+            // Badge font
+            int badgeFontSz = DpiScale(10, g_dpiX);
+            int fontStyle = Gdiplus::FontStyleBold;
+            LPCWSTR family = L"Segoe UI";
             if (g_settings.applyToGroupIndicator && g_settings.fontFamily[0]) {
                 family = g_settings.fontFamily;
                 badgeFontSz = MulDiv(g_settings.fontSize, g_dpiY, 72);
@@ -7072,86 +6884,83 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             } else if (IsWin11OrGreater() && DoesFontExist(L"Segoe UI Variable Text")) {
                 family = L"Segoe UI Variable Text";
             }
-            Gdiplus::Graphics gfxMeasure(hdc);
             Gdiplus::Font badgeFont(family, (Gdiplus::REAL)badgeFontSz, fontStyle, Gdiplus::UnitPixel);
+
+            // Measure text
+            Gdiplus::StringFormat sf;
+            sf.SetAlignment(Gdiplus::StringAlignmentCenter);
+            sf.SetLineAlignment(Gdiplus::StringAlignmentCenter);
             Gdiplus::RectF measureRect(0, 0, 100, 100);
             Gdiplus::RectF textBounds;
-            gfxMeasure.MeasureString(countText, -1, &badgeFont, measureRect, &sf, &textBounds);
+            gfx.MeasureString(countText, -1, &badgeFont, measureRect, &sf, &textBounds);
 
             int badgePadX = DpiScale(4, g_dpiX);
             int badgePadY = DpiScale(2, g_dpiY);
-            badgeW = (int)(textBounds.Width + badgePadX * 2);
-            badgeH = (int)(textBounds.Height + badgePadY * 2);
-            int minW = badgeH;
+            int badgeW = (int)(textBounds.Width + badgePadX * 2);
+            int badgeH = (int)(textBounds.Height + badgePadY * 2);
+            int minW = badgeH;  // pill shape: at least as wide as tall
             if (badgeW < minW) badgeW = minW;
 
+            // Position:
+            int badgeX = 0, badgeY = 0;
             if (DockLayoutActive()) {
-                badgeRc = GetDockIconAreaElementRect(rcCell, badgeW, badgeH, g_settings.dockGroupIndicatorPosition);
-                badgeX = badgeRc.left;
-                badgeY = badgeRc.top;
+                if (DockGroupIndicatorIsInsidePreview()) {
+                    int pad = DpiScale(8, g_dpiX);
+                    badgeX = g_rcCentralPreview.left + pad + offX;
+                    badgeY = g_rcCentralPreview.top + pad + offY;
+                } else if (DockGroupIndicatorIsBelowIcons()) {
+                    badgeX = drawnIconX + (drawnIconSz - badgeW) / 2;
+                    badgeY = drawnIconY + drawnIconSz + DpiScale(2, g_dpiY);
+                } else if (DockGroupIndicatorIsAboveIcons()) {
+                    badgeX = drawnIconX + (drawnIconSz - badgeW) / 2;
+                    badgeY = drawnIconY - badgeH - DpiScale(2, g_dpiY);
+                } else if (DockGroupIndicatorIsOnIconBadge()) {
+                    badgeX = drawnIconX + drawnIconSz - (badgeW / 2);
+                    badgeY = drawnIconY - (badgeH / 2);
+                } else {
+                    badgeX = drawnIconX + drawnIconSz - (badgeW / 2);
+                    badgeY = drawnIconY - (badgeH / 2);
+                }
             } else if (drawnIconSz > 0) {
                 badgeX = drawnIconX + drawnIconSz - (badgeW / 2);
                 badgeY = drawnIconY - (badgeH / 2);
-                badgeRc = { badgeX, badgeY, badgeX + badgeW, badgeY + badgeH };
             } else {
                 int cellPad = DpiScale(4, g_dpiX);
                 badgeX = rcCell.right - badgeW - cellPad;
                 badgeY = rcCell.top + cellPad;
-                badgeRc = { badgeX, badgeY, badgeX + badgeW, badgeY + badgeH };
             }
-        }
 
-        // 3. Overlap resolution between Group Indicator and Close Button
-        float groupBadgeFade = 1.0f;
-        if (showThisGroupBadge && canShowCloseBtn && btnRc.right > btnRc.left && badgeRc.right > badgeRc.left) {
-            RECT rcIntersect = { 0, 0, 0, 0 };
-            if (IntersectRect(&rcIntersect, &btnRc, &badgeRc)) {
-                groupBadgeFade = std::max(0.0f, 1.0f - e.closeBtnAlpha);
-            }
-        }
-
-        // 4. Render Grouped window count badge FIRST (with overlap fade modulation)
-        if (showThisGroupBadge && groupBadgeFade > 0.01f && badgeRc.right > badgeRc.left) {
-            Gdiplus::Graphics gfx(hdc);
-            gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-            gfx.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAlias);
-            Gdiplus::Font badgeFont(family, (Gdiplus::REAL)badgeFontSz, fontStyle, Gdiplus::UnitPixel);
-
+            // Background pill
             COLORREF bgC = GetIndicatorBackgroundColor();
             int op = g_isDarkMode ? g_settings.indicatorBgOpacityDark : g_settings.indicatorBgOpacityLight;
-            int alpha = (int)roundf(((float)(op * 255) / 100.0f) * groupBadgeFade);
-            if (alpha > 255) alpha = 255;
-            if (alpha < 0) alpha = 0;
+            int alpha = (op * 255) / 100;
             Gdiplus::SolidBrush pillBrush(Gdiplus::Color(alpha, GetRValue(bgC), GetGValue(bgC), GetBValue(bgC)));
             Gdiplus::REAL pillRadius = (Gdiplus::REAL)GetGroupIndicatorCornerRadiusPx(badgeH / 2);
-
+            
             if (g_settings.showGroupIndicatorShadow) {
                 for (int pass = 5; pass > 0; --pass) {
                     int shadowAlpha = 15 - (pass * 2);
                     if (shadowAlpha < 1) shadowAlpha = 1;
-                    shadowAlpha = (int)roundf((float)shadowAlpha * groupBadgeFade);
-                    if (shadowAlpha > 0) {
-                        Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(shadowAlpha, 0, 0, 0));
-                        int sp = pass;
-                        Gdiplus::REAL sx = (Gdiplus::REAL)(badgeX - sp);
-                        Gdiplus::REAL sy = (Gdiplus::REAL)(badgeY - sp);
-                        Gdiplus::REAL sw = (Gdiplus::REAL)(badgeW + sp * 2);
-                        Gdiplus::REAL sh = (Gdiplus::REAL)(badgeH + sp * 2);
-                        Gdiplus::REAL sd = pillRadius * 2.0f + sp * 2.0f;
-                        if (sd > sw) sd = sw;
-                        if (sd > sh) sd = sh;
-
-                        if (pillRadius > 0) {
-                            Gdiplus::GraphicsPath sPath;
-                            sPath.AddArc(sx, sy, sd, sd, 180, 90);
-                            sPath.AddArc(sx + sw - sd, sy, sd, sd, 270, 90);
-                            sPath.AddArc(sx + sw - sd, sy + sh - sd, sd, sd, 0, 90);
-                            sPath.AddArc(sx, sy + sh - sd, sd, sd, 90, 90);
-                            sPath.CloseFigure();
-                            gfx.FillPath(&shadowBrush, &sPath);
-                        } else {
-                            gfx.FillRectangle(&shadowBrush, sx, sy, sw, sh);
-                        }
+                    Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(shadowAlpha, 0, 0, 0));
+                    int sp = pass;
+                    Gdiplus::REAL sx = (Gdiplus::REAL)(badgeX - sp);
+                    Gdiplus::REAL sy = (Gdiplus::REAL)(badgeY - sp + 1);
+                    Gdiplus::REAL sw = (Gdiplus::REAL)(badgeW + sp * 2);
+                    Gdiplus::REAL sh = (Gdiplus::REAL)(badgeH + sp * 2);
+                    Gdiplus::REAL sd = pillRadius * 2.0f + sp * 2.0f;
+                    if (sd > sw) sd = sw;
+                    if (sd > sh) sd = sh;
+                    
+                    if (pillRadius > 0) {
+                        Gdiplus::GraphicsPath sPath;
+                        sPath.AddArc(sx, sy, sd, sd, 180, 90);
+                        sPath.AddArc(sx + sw - sd, sy, sd, sd, 270, 90);
+                        sPath.AddArc(sx + sw - sd, sy + sh - sd, sd, sd, 0, 90);
+                        sPath.AddArc(sx, sy + sh - sd, sd, sd, 90, 90);
+                        sPath.CloseFigure();
+                        gfx.FillPath(&shadowBrush, &sPath);
+                    } else {
+                        gfx.FillRectangle(&shadowBrush, sx, sy, sw, sh);
                     }
                 }
             }
@@ -7171,21 +6980,12 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
                 gfx.FillRectangle(&pillBrush, badgeX, badgeY, badgeW, badgeH);
             }
 
+            // Badge text
             COLORREF txtC = GetIndicatorTextColor();
-            int txtAlpha = (int)roundf(255.0f * groupBadgeFade);
-            if (txtAlpha > 255) txtAlpha = 255;
-            if (txtAlpha < 0) txtAlpha = 0;
-            Gdiplus::SolidBrush textBrush(Gdiplus::Color(txtAlpha, GetRValue(txtC), GetGValue(txtC), GetBValue(txtC)));
+            Gdiplus::SolidBrush textBrush(Gdiplus::Color(255, GetRValue(txtC), GetGValue(txtC), GetBValue(txtC)));
             Gdiplus::RectF pillRect((Gdiplus::REAL)badgeX, (Gdiplus::REAL)badgeY,
                                     (Gdiplus::REAL)badgeW, (Gdiplus::REAL)badgeH);
             gfx.DrawString(countText, -1, &badgeFont, pillRect, &sf, &textBrush);
-        }
-
-        // 5. Render Close button SECOND on top
-        if (canShowCloseBtn && btnRc.right > btnRc.left && btnRc.bottom > btnRc.top) {
-            float hoverPlateAlpha = (i == g_hoverIndex && g_hoverWnd == hWnd && g_isCloseHovered) ? g_animCloseBtnHoverAlpha : 0.0f;
-            bool isBtnPressed = (i == g_hoverIndex && g_hoverWnd == hWnd && g_isClosePressed);
-            DrawCloseButton(hdc, btnRc, e.closeBtnAlpha, hoverPlateAlpha, isBtnPressed);
         }
     }
 
@@ -7223,19 +7023,6 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
                 selRc.right += (float)offX;
                 selRc.top += (float)offY;
                 selRc.bottom += (float)offY;
-            }
-            if (DockLayoutActive()) {
-                int iconSz = DpiScale(g_settings.dockIconSize > 0 ? g_settings.dockIconSize : 48, g_dpiX);
-                int curW = (int)roundf(selRc.right - selRc.left);
-                int curH = (int)roundf(selRc.bottom - selRc.top);
-                if ((curW - iconSz) % 2 != 0) selRc.right = selRc.left + (float)(curW + 1);
-                if ((curH - iconSz) % 2 != 0) selRc.bottom = selRc.top + (float)(curH + 1);
-            } else if (!g_settings.showThumbnails && !g_settings.showTitle && g_settings.showIcon) {
-                int iconSz = GetHeaderIconSizePx();
-                int curW = (int)roundf(selRc.right - selRc.left);
-                int curH = (int)roundf(selRc.bottom - selRc.top);
-                if ((curW - iconSz) % 2 != 0) selRc.right = selRc.left + (float)(curW + 1);
-                if ((curH - iconSz) % 2 != 0) selRc.bottom = selRc.top + (float)(curH + 1);
             }
             DrawContourF(hdc, selRc, (float)SWS_CONTOUR_SIZE, 1, (float)GetTaskUiCornerRadiusPx());
         }
@@ -7501,13 +7288,7 @@ static void PaintSwitcher() {
                 if (DockLayoutActive()) {
                     auto& e = g_windows[g_selectedIndex];
                     if (!IsWindowTruncated(g_selectedIndex) && e.drawnIconSz > 0) {
-                        float selAlpha = 1.0f;
-                        if (IsEntryMinimized(e) && MinimizedStyleUsesDimming()) {
-                            float minDim = (float)g_settings.minimizedIconOpacity / 100.0f;
-                            selAlpha = std::min(1.0f, minDim + 0.15f);
-                        }
-                        DrawIconWithAlpha(s_cachedMemDC, e.drawnIconX, e.drawnIconY, e.hIcon, e.drawnIconSz, selAlpha);
-                        DrawDockMinimizedIndicator(s_cachedMemDC, e.drawnIconX, e.drawnIconY, e.drawnIconSz, e, selAlpha);
+                        DrawIconEx(s_cachedMemDC, e.drawnIconX, e.drawnIconY, e.hIcon, e.drawnIconSz, e.drawnIconSz, 0, NULL, DI_NORMAL);
                     }
                 }
             }
@@ -7562,13 +7343,8 @@ static void PaintSwitcher() {
                     DrawSelectionFillF(s_cachedMemDC, selRc);
                     auto& e = g_windows[g_selectedIndex];
                     if (!IsWindowTruncated(g_selectedIndex) && e.drawnIconSz > 0) {
-                        float selAlpha = 1.0f;
-                        if (IsEntryMinimized(e) && MinimizedStyleUsesDimming()) {
-                            float minDim = (float)g_settings.minimizedIconOpacity / 100.0f;
-                            selAlpha = std::min(1.0f, minDim + 0.15f);
-                        }
-                        DrawIconWithAlpha(s_cachedMemDC, (int)roundf(e.drawnIconX + offX), (int)roundf(e.drawnIconY),
-                                          e.hIcon, e.drawnIconSz, selAlpha);
+                        DrawIconEx(s_cachedMemDC, (int)roundf(e.drawnIconX + offX), (int)roundf(e.drawnIconY),
+                                   e.hIcon, e.drawnIconSz, e.drawnIconSz, 0, NULL, DI_NORMAL);
                     }
                 }
 
@@ -7776,10 +7552,10 @@ static void RevealPendingSwitcher() {
     DwmSetWindowAttribute(g_hSwitcher, DWMWA_NCRENDERING_POLICY, &enabled, sizeof(enabled));
 
     ApplyThemeToWindow(g_hSwitcher);
+    ApplySwitcherRegion();
 
     SetWindowPos(g_hSwitcher, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED | SWP_NOACTIVATE);
     CreateMirrorSwitchers();
-    ApplySwitcherRegion();
     if (g_hCloseBtnWnd) {
         SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
     }
@@ -8008,40 +7784,11 @@ static void ApplySwitcherRegion() {
     if (!g_hSwitcher) return;
     static bool s_hasActiveRgn = false;
 
-    // On Windows 11 with Acrylic (Theme: backdrop), SWCA blurs the full rectangle.
-    // Setting a rounded window region clips SWCA blur to the exact corner radius,
-    // completely eliminating the 4 square blur horns past rounded window borders.
-    if (ThemeIs(L"backdrop") && IsWin11OrGreater()) {
-        int r = GetWindowCornerRadiusPx();
-        RECT wr = {};
-        GetWindowRect(g_hSwitcher, &wr);
-        int w = wr.right - wr.left;
-        int h = wr.bottom - wr.top;
-        if (w <= 0 || h <= 0) { w = g_winW; h = g_winH; }
-        if (r > 0 && w > 0 && h > 0) {
-            HRGN hRgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, r * 2, r * 2);
-            SetWindowRgn(g_hSwitcher, hRgn, TRUE);
-            s_hasActiveRgn = true;
-            for (HWND hMirror : g_hMirrorSwitchers) {
-                if (IsWindow(hMirror)) {
-                    RECT mwr = {};
-                    GetWindowRect(hMirror, &mwr);
-                    int mw = mwr.right - mwr.left;
-                    int mh = mwr.bottom - mwr.top;
-                    if (mw <= 0 || mh <= 0) { mw = w; mh = h; }
-                    HRGN hMirrorRgn = CreateRoundRectRgn(0, 0, mw + 1, mh + 1, r * 2, r * 2);
-                    SetWindowRgn(hMirror, hMirrorRgn, TRUE);
-                }
-            }
-            return;
-        }
-    }
-
+    // Both Windows 11 (DWM hardware rounding) and Theme: none (per-pixel alpha layered window)
+    // do not need GDI SetWindowRgn. Windows 10 Acrylic blur is a 90° rectangle, where SetWindowRgn
+    // would only conflict with DWM composition.
     if (s_hasActiveRgn) {
         SetWindowRgn(g_hSwitcher, NULL, TRUE);
-        for (HWND hMirror : g_hMirrorSwitchers) {
-            if (IsWindow(hMirror)) SetWindowRgn(hMirror, NULL, TRUE);
-        }
         s_hasActiveRgn = false;
     }
 }
@@ -8152,7 +7899,8 @@ static void ShowSwitcher(bool sticky, bool immediate = false) {
         );
     }
 
-    int effectiveDelay = (!sticky && !immediate) ? g_settings.showDelay : 0;
+    constexpr int kRapidAltTabGraceThresholdMs = 75;
+    int effectiveDelay = (!sticky && !immediate) ? ((g_settings.showDelay > 0) ? std::max(g_settings.showDelay, kRapidAltTabGraceThresholdMs) : kRapidAltTabGraceThresholdMs) : 0;
     if (effectiveDelay > 0) {
         g_isPendingShow = true;
         g_isVisible = false;
@@ -8195,10 +7943,10 @@ static void ShowSwitcher(bool sticky, bool immediate = false) {
     }
 
     ApplyThemeToWindow(g_hSwitcher);
+    ApplySwitcherRegion();
 
     SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
     CreateMirrorSwitchers();
-    ApplySwitcherRegion();
     
     if (g_hCloseBtnWnd) {
         SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
@@ -8410,11 +8158,6 @@ static void StartExitAnimation(bool activateSelectedWindow) {
         return;
     }
 
-    // Seamlessly hand off from in-flight entrance animation to exit dissolve
-    if (g_animEntranceActive) {
-        g_animEntranceActive = false;
-    }
-
     g_animExitActive = true;
     g_animExitProgress = 0.0f;
     g_animExitDuration = 0.160f;
@@ -8576,11 +8319,9 @@ static void EnterAppGroup() {
         RECT curWnd = {};
         GetWindowRect(g_hSwitcher, &curWnd);
         g_layoutTransition.rcWndStart = ToRectF(curWnd);
-        if (DockLayoutActive()) {
-            g_layoutTransition.rcDockStripStart = g_rcDockIconStrip;
-            g_layoutTransition.rcDockPreviewStart = g_rcCentralPreview;
-            g_layoutTransition.rcDockTitleStart = g_rcDockTitleBar;
-        }
+        g_layoutTransition.rcDockStripStart = g_rcDockIconStrip;
+        g_layoutTransition.rcDockPreviewStart = g_rcCentralPreview;
+        g_layoutTransition.rcDockTitleStart = g_rcDockTitleBar;
 
         // 3. Snapshot visible app-list items as departing entries
         for (auto& w : g_windows) {
@@ -8657,15 +8398,17 @@ static void EnterAppGroup() {
         HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
         for (auto& w : g_windows) RefreshEntrySourceSize(w);
         ComputeLayout(hMon);
+        if (DockLayoutActive()) UpdateDockPreviewForSelection();
+        g_layoutTransition.rcDockStripTarget = g_rcDockIconStrip;
+        g_layoutTransition.rcDockPreviewTarget = g_rcCentralPreview;
+        g_layoutTransition.rcDockTitleTarget = g_rcDockTitleBar;
+
         if (DockLayoutActive()) {
-            UpdateDockPreviewForSelection();
-            g_layoutTransition.rcDockStripTarget = g_rcDockIconStrip;
-            g_layoutTransition.rcDockPreviewTarget = g_rcCentralPreview;
-            g_layoutTransition.rcDockTitleTarget = g_rcDockTitleBar;
             g_rcDockIconStrip = g_layoutTransition.rcDockStripStart;
             g_rcCentralPreview = g_layoutTransition.rcDockPreviewStart;
             g_rcDockTitleBar = g_layoutTransition.rcDockTitleStart;
         }
+
         UpdateChevronLayout(g_hSwitcher);
         UpdateChevronAnimationTargets(false);
 
@@ -8706,7 +8449,7 @@ static void EnterAppGroup() {
         // 8. Register thumbnails at initial opacity (enterAlpha=0 applied in RegisterThumbnails)
         RegisterThumbnails();
 
-        // 9. Snap selection indicator to target cell – no glide across the drill boundary
+        // 9. Snap selection indicator to target cell - no glide across the drill boundary
         g_animSelectionCurrent = ToRectF(g_windows[0].rcCellTarget);
         g_animSelectionTarget  = g_animSelectionCurrent;
         g_animSelectionStart   = g_animSelectionCurrent;
@@ -8725,12 +8468,11 @@ static void EnterAppGroup() {
         InvalidateStaticCache();
         StartAnimationTicker();
         PaintSwitcher();
-        UpdateHoverFromCursor(false);
     } else {
         // ── Instant fallback path (animations disabled) ───────────────
         UnregisterThumbnails();
-        g_savedAppList          = std::move(g_windows);
-        g_savedSelectedIndex    = g_selectedIndex;
+        g_savedAppList = std::move(g_windows);
+        g_savedSelectedIndex = g_selectedIndex;
         g_savedLayoutStartIndex = g_layoutStartIndex;
 
         g_windows.clear();
@@ -8748,25 +8490,25 @@ static void EnterAppGroup() {
             RecomputeAndReposition();
             return;
         }
-        g_drilledIn             = true;
-        g_selectedIndex         = 0;
-        g_layoutStartIndex      = 0;
-        g_hoverIndex            = -1;
-        g_hoverThumbIndex       = -1;
-        g_hoverWnd              = NULL;
-        g_isCloseHovered        = false;
-        g_animHoverActive       = false;
+        g_drilledIn = true;
+        g_selectedIndex = 0;
+        g_layoutStartIndex = 0;
+        g_hoverIndex = -1;
+        g_hoverThumbIndex = -1;
+        g_hoverWnd = NULL;
+        g_isCloseHovered = false;
+        g_animHoverActive = false;
         g_animHoverAlphaCurrent = 0.0f;
-        g_animHoverAlphaTarget  = 0.0f;
+        g_animHoverAlphaTarget = 0.0f;
         RecomputeAndReposition();
         if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
             g_animSelectionCurrent = ToRectF(g_windows[g_selectedIndex].rcCell);
-            g_animSelectionTarget  = g_animSelectionCurrent;
-            g_animSelectionActive  = false;
+            g_animSelectionTarget = g_animSelectionCurrent;
+            g_animSelectionActive = false;
         }
-        g_scrollTransition.active           = false;
-        g_scrollTransition.offsetCurrentX   = 0.0f;
-        g_scrollTransition.offsetCurrentY   = 0.0f;
+        g_scrollTransition.active = false;
+        g_scrollTransition.offsetCurrentX = 0.0f;
+        g_scrollTransition.offsetCurrentY = 0.0f;
         g_scrollTransition.outgoingItems.clear();
         g_scrollTransition.preservingThumbnails = false;
         PaintSwitcher();
@@ -8802,11 +8544,9 @@ static void ExitAppGroup() {
         RECT curWnd = {};
         GetWindowRect(g_hSwitcher, &curWnd);
         g_layoutTransition.rcWndStart = ToRectF(curWnd);
-        if (DockLayoutActive()) {
-            g_layoutTransition.rcDockStripStart = g_rcDockIconStrip;
-            g_layoutTransition.rcDockPreviewStart = g_rcCentralPreview;
-            g_layoutTransition.rcDockTitleStart = g_rcDockTitleBar;
-        }
+        g_layoutTransition.rcDockStripStart = g_rcDockIconStrip;
+        g_layoutTransition.rcDockPreviewStart = g_rcCentralPreview;
+        g_layoutTransition.rcDockTitleStart = g_rcDockTitleBar;
 
         // 3. Snapshot visible drilled-in items as departing entries
         for (auto& w : g_windows) {
@@ -8856,15 +8596,17 @@ static void ExitAppGroup() {
         HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
         for (auto& w : g_windows) RefreshEntrySourceSize(w);
         ComputeLayout(hMon);
+        if (DockLayoutActive()) UpdateDockPreviewForSelection();
+        g_layoutTransition.rcDockStripTarget = g_rcDockIconStrip;
+        g_layoutTransition.rcDockPreviewTarget = g_rcCentralPreview;
+        g_layoutTransition.rcDockTitleTarget = g_rcDockTitleBar;
+
         if (DockLayoutActive()) {
-            UpdateDockPreviewForSelection();
-            g_layoutTransition.rcDockStripTarget = g_rcDockIconStrip;
-            g_layoutTransition.rcDockPreviewTarget = g_rcCentralPreview;
-            g_layoutTransition.rcDockTitleTarget = g_rcDockTitleBar;
             g_rcDockIconStrip = g_layoutTransition.rcDockStripStart;
             g_rcCentralPreview = g_layoutTransition.rcDockPreviewStart;
             g_rcDockTitleBar = g_layoutTransition.rcDockTitleStart;
         }
+
         UpdateChevronLayout(g_hSwitcher);
         UpdateChevronAnimationTargets(false);
 
@@ -8936,23 +8678,23 @@ static void ExitAppGroup() {
         g_layoutStartIndex = g_savedLayoutStartIndex;
         if (g_selectedIndex >= (int)g_windows.size()) g_selectedIndex = (int)g_windows.size() - 1;
         if (g_selectedIndex < 0) g_selectedIndex = 0;
-        g_drilledIn             = false;
-        g_hoverIndex            = -1;
-        g_hoverThumbIndex       = -1;
-        g_hoverWnd              = NULL;
-        g_isCloseHovered        = false;
-        g_animHoverActive       = false;
+        g_drilledIn = false;
+        g_hoverIndex = -1;
+        g_hoverThumbIndex = -1;
+        g_hoverWnd = NULL;
+        g_isCloseHovered = false;
+        g_animHoverActive = false;
         g_animHoverAlphaCurrent = 0.0f;
-        g_animHoverAlphaTarget  = 0.0f;
+        g_animHoverAlphaTarget = 0.0f;
         RecomputeAndReposition();
         if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
             g_animSelectionCurrent = ToRectF(g_windows[g_selectedIndex].rcCell);
-            g_animSelectionTarget  = g_animSelectionCurrent;
-            g_animSelectionActive  = false;
+            g_animSelectionTarget = g_animSelectionCurrent;
+            g_animSelectionActive = false;
         }
-        g_scrollTransition.active           = false;
-        g_scrollTransition.offsetCurrentX   = 0.0f;
-        g_scrollTransition.offsetCurrentY   = 0.0f;
+        g_scrollTransition.active = false;
+        g_scrollTransition.offsetCurrentX = 0.0f;
+        g_scrollTransition.offsetCurrentY = 0.0f;
         g_scrollTransition.outgoingItems.clear();
         g_scrollTransition.preservingThumbnails = false;
         PaintSwitcher();
@@ -9070,6 +8812,7 @@ static void CycleLinear(int delta) {
             int dir = (targetStart > g_layoutStartIndex) ? 1 : -1;
             g_layoutStartIndex = targetStart;
             RecomputeDockWithDynamicResize(dir, SCROLL_ROW);
+            TriggerScrollAnimationEx(dir, SCROLL_ROW);
             if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
                 RectF r = ToRectF(g_windows[g_selectedIndex].rcCell);
                 SnapSelectionTo(r);
@@ -9170,6 +8913,7 @@ static void CyclePage(int dir) {
             g_layoutStartIndex = newStart;
             g_selectedIndex = (dir > 0) ? g_layoutStartIndex : std::min(n - 1, g_layoutStartIndex + visibleCount - 1);
             RecomputeDockWithDynamicResize(dir, SCROLL_PAGE);
+            TriggerScrollAnimationEx(dir, SCROLL_PAGE);
             if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
                 RectF r = ToRectF(g_windows[g_selectedIndex].rcCell);
                 SnapSelectionTo(r);
@@ -9717,6 +9461,15 @@ static void UpdateHoverAtPoint(HWND hWnd, int x, int y, bool allowAnimation) {
 
     // Entry hover (for close button, selection, card hover)
     int entryIdx = (cDir != 0) ? -1 : HitTest(x, y);
+    if (DockLayoutActive() && entryIdx < 0 && DockShowPreview() && g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
+        POINT pt = { x, y };
+        if (DockCloseButtonIsPreview()) {
+            if (HitTestCloseButton(g_windows[g_selectedIndex], pt) || PtInRect(&g_rcCentralPreview, pt)) {
+                entryIdx = g_selectedIndex;
+            }
+        }
+    }
+
     // Thumbnail hover (strictly when cursor is over thumbnail itself, or entire card for zoom)
     int thumbIdx = (cDir != 0 || !g_settings.showThumbnails) ? -1 : HitTestThumb(x, y);
     if (thumbIdx < 0 && entryIdx >= 0 && g_settings.showThumbnails && !DockLayoutActive() && ThumbnailHoverIsZoom()) {
@@ -9725,7 +9478,7 @@ static void UpdateHoverAtPoint(HWND hWnd, int x, int y, bool allowAnimation) {
 
     bool closeHovered = false;
     if (g_settings.showCloseButton && entryIdx >= 0 && entryIdx < (int)g_windows.size() && !IsWindowTruncated(entryIdx)) {
-        if (!DockLayoutActive() || !DockCloseButtonIsHidden()) {
+        if (!DockLayoutActive() || DockCloseButtonIsIconStrip() || (DockCloseButtonIsPreview() && entryIdx == g_selectedIndex)) {
             POINT pt = { x, y };
             closeHovered = HitTestCloseButton(g_windows[entryIdx], pt);
         }
@@ -9773,6 +9526,7 @@ static void UpdateHoverAtPoint(HWND hWnd, int x, int y, bool allowAnimation) {
             g_animCloseBtnHoverAlpha = (closeHovered && g_animCloseBtnAlpha > 0.05f) ? 1.0f : 0.0f;
             for (int i = 0; i < (int)g_windows.size(); i++) {
                 bool shouldShowClose = (i == entryIdx && g_settings.showCloseButton && !IsWindowTruncated(i));
+                if (DockLayoutActive() && DockCloseButtonIsPreview() && i != g_selectedIndex) shouldShowClose = false;
                 if (DockLayoutActive() && DockCloseButtonIsHidden()) shouldShowClose = false;
                 g_windows[i].closeBtnAlpha = shouldShowClose ? 1.0f : 0.0f;
                 float s = (ThumbnailHoverIsZoom() && i == thumbIdx && !IsWindowTruncated(i)) ? (1.0f + SWS_HOVER_ZOOM_DELTA) : 1.0f;
@@ -9973,11 +9727,6 @@ static void RemoveWindowEntryByHwnd(HWND hDestroyed) {
                 RECT curWnd = {};
                 GetWindowRect(g_hSwitcher, &curWnd);
                 g_layoutTransition.rcWndStart = ToRectF(curWnd);
-                if (DockLayoutActive()) {
-                    g_layoutTransition.rcDockStripStart = g_rcDockIconStrip;
-                    g_layoutTransition.rcDockPreviewStart = g_rcCentralPreview;
-                    g_layoutTransition.rcDockTitleStart = g_rcDockTitleBar;
-                }
 
                 for (auto& w : g_windows) {
                     w.rcCellStart = w.rcCell;
@@ -9993,12 +9742,6 @@ static void RemoveWindowEntryByHwnd(HWND hDestroyed) {
                 ComputeLayout(hMon);
                 if (DockLayoutActive()) {
                     UpdateDockPreviewForSelection();
-                    g_layoutTransition.rcDockStripTarget = g_rcDockIconStrip;
-                    g_layoutTransition.rcDockPreviewTarget = g_rcCentralPreview;
-                    g_layoutTransition.rcDockTitleTarget = g_rcDockTitleBar;
-                    g_rcDockIconStrip = g_layoutTransition.rcDockStripStart;
-                    g_rcCentralPreview = g_layoutTransition.rcDockPreviewStart;
-                    g_rcDockTitleBar = g_layoutTransition.rcDockTitleStart;
                 }
                 UpdateChevronLayout(g_hSwitcher);
                 UpdateChevronAnimationTargets(false);
@@ -10223,22 +9966,12 @@ static void AddWindowEntry(HWND hWnd) {
         UpdateEntryForWindow(e);
 
         auto insertPos = g_windows.end();
-        int targetRank = 10000;
-        for (size_t r = 0; r < g_mruWindows.size(); r++) {
-            if (g_mruWindows[r] == hWnd) { targetRank = (int)r; break; }
-        }
-        for (auto it = g_windows.begin(); it != g_windows.end(); ++it) {
-            if (g_settings.sortMinimizedWindowsToEnd && !IsIconic(hWnd) && IsIconic(it->hWnd)) {
-                insertPos = it;
-                break;
-            }
-            int itRank = 10000;
-            for (size_t r = 0; r < g_mruWindows.size(); r++) {
-                if (g_mruWindows[r] == it->hWnd) { itRank = (int)r; break; }
-            }
-            if (targetRank < itRank) {
-                insertPos = it;
-                break;
+        if (g_settings.sortMinimizedWindowsToEnd && !IsIconic(hWnd)) {
+            for (auto it = g_windows.begin(); it != g_windows.end(); ++it) {
+                if (IsIconic(it->hWnd)) {
+                    insertPos = it;
+                    break;
+                }
             }
         }
         g_windows.insert(insertPos, std::move(e));
@@ -10246,22 +9979,12 @@ static void AddWindowEntry(HWND hWnd) {
         UpdateEntryForWindow(e);
 
         auto insertPos = g_windows.end();
-        int targetRank = 10000;
-        for (size_t r = 0; r < g_mruWindows.size(); r++) {
-            if (g_mruWindows[r] == hWnd) { targetRank = (int)r; break; }
-        }
-        for (auto it = g_windows.begin(); it != g_windows.end(); ++it) {
-            if (g_settings.sortMinimizedWindowsToEnd && !IsIconic(hWnd) && IsIconic(it->hWnd)) {
-                insertPos = it;
-                break;
-            }
-            int itRank = 10000;
-            for (size_t r = 0; r < g_mruWindows.size(); r++) {
-                if (g_mruWindows[r] == it->hWnd) { itRank = (int)r; break; }
-            }
-            if (targetRank < itRank) {
-                insertPos = it;
-                break;
+        if (g_settings.sortMinimizedWindowsToEnd && !IsIconic(hWnd)) {
+            for (auto it = g_windows.begin(); it != g_windows.end(); ++it) {
+                if (IsIconic(it->hWnd)) {
+                    insertPos = it;
+                    break;
+                }
             }
         }
         g_windows.insert(insertPos, std::move(e));
@@ -10281,11 +10004,6 @@ static void AddWindowEntry(HWND hWnd) {
             RECT curWnd = {};
             GetWindowRect(g_hSwitcher, &curWnd);
             g_layoutTransition.rcWndStart = ToRectF(curWnd);
-            if (DockLayoutActive()) {
-                g_layoutTransition.rcDockStripStart = g_rcDockIconStrip;
-                g_layoutTransition.rcDockPreviewStart = g_rcCentralPreview;
-                g_layoutTransition.rcDockTitleStart = g_rcDockTitleBar;
-            }
 
             for (auto& w : g_windows) {
                 w.rcCellStart = w.rcCell;
@@ -10302,15 +10020,6 @@ static void AddWindowEntry(HWND hWnd) {
 
             HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
             ComputeLayout(hMon);
-            if (DockLayoutActive()) {
-                UpdateDockPreviewForSelection();
-                g_layoutTransition.rcDockStripTarget = g_rcDockIconStrip;
-                g_layoutTransition.rcDockPreviewTarget = g_rcCentralPreview;
-                g_layoutTransition.rcDockTitleTarget = g_rcDockTitleBar;
-                g_rcDockIconStrip = g_layoutTransition.rcDockStripStart;
-                g_rcCentralPreview = g_layoutTransition.rcDockPreviewStart;
-                g_rcDockTitleBar = g_layoutTransition.rcDockTitleStart;
-            }
             UpdateChevronLayout(g_hSwitcher);
             UpdateChevronAnimationTargets(false);
 
@@ -10605,64 +10314,14 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                     }
                 }
                 if (anyChanged) {
-                    if (AreAnimationsGloballyEnabled() && g_settings.enableAnimations) {
-                        RECT curWnd = {};
-                        GetWindowRect(g_hSwitcher, &curWnd);
-                        g_layoutTransition.rcWndStart = ToRectF(curWnd);
-                        if (DockLayoutActive()) {
-                            g_layoutTransition.rcDockStripStart = g_rcDockIconStrip;
-                            g_layoutTransition.rcDockPreviewStart = g_rcCentralPreview;
-                            g_layoutTransition.rcDockTitleStart = g_rcDockTitleBar;
-                        }
-                        for (auto& w : g_windows) {
-                            w.rcCellStart = w.rcCell;
-                            w.rcThumbStart = w.rcThumbActual;
-                            w.isNewEntry = false;
-                        }
-
-                        HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
-                        ComputeLayout(hMon);
-                        if (DockLayoutActive()) {
-                            UpdateDockPreviewForSelection();
-                            g_layoutTransition.rcDockStripTarget = g_rcDockIconStrip;
-                            g_layoutTransition.rcDockPreviewTarget = g_rcCentralPreview;
-                            g_layoutTransition.rcDockTitleTarget = g_rcDockTitleBar;
-                            g_rcDockIconStrip = g_layoutTransition.rcDockStripStart;
-                            g_rcCentralPreview = g_layoutTransition.rcDockPreviewStart;
-                            g_rcDockTitleBar = g_layoutTransition.rcDockTitleStart;
-                        }
-                        UpdateChevronLayout(g_hSwitcher);
-                        UpdateChevronAnimationTargets(false);
-
-                        MONITORINFO mi = { sizeof(mi) };
-                        GetMonitorInfoW(hMon, &mi);
-                        int cx, cy;
-                        GetSwitcherPosition(mi.rcWork, &cx, &cy);
-                        g_layoutTransition.rcWndTarget = { (float)cx, (float)cy, (float)(cx + g_winW), (float)(cy + g_winH) };
-
-                        for (auto& w : g_windows) {
-                            w.rcCellTarget = w.rcCell;
-                            w.rcThumbTarget = w.rcThumbActual;
-                            w.rcCell = w.rcCellStart;
-                            if (!DockLayoutActive()) {
-                                w.rcThumbActual = w.rcThumbStart;
-                            }
-                        }
-                        RegisterThumbnails();
-                        g_layoutTransition.progress = 0.0f;
-                        g_layoutTransition.duration = 0.220f;
-                        g_layoutTransition.active = true;
-                        StartAnimationTicker();
-                    } else {
-                        RecomputeAndReposition();
-                        if (DockLayoutActive()) {
-                            UpdateDockPreviewForSelection();
-                        }
-                        RegisterThumbnails();
-                        PaintSwitcher();
-                        if (g_hCloseBtnWnd) {
-                            PaintSwitcherOverlay();
-                        }
+                    RecomputeAndReposition();
+                    if (DockLayoutActive()) {
+                        UpdateDockPreviewForSelection();
+                    }
+                    RegisterThumbnails();
+                    PaintSwitcher();
+                    if (g_hCloseBtnWnd) {
+                        PaintSwitcherOverlay();
                     }
                 }
             }
@@ -10824,13 +10483,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                     if (DockLayoutActive()) {
                         auto& e = g_windows[g_selectedIndex];
                         if (!IsWindowTruncated(g_selectedIndex) && e.drawnIconSz > 0) {
-                            float selAlpha = 1.0f;
-                            if (IsEntryMinimized(e) && MinimizedStyleUsesDimming()) {
-                                float minDim = (float)g_settings.minimizedIconOpacity / 100.0f;
-                                selAlpha = std::min(1.0f, minDim + 0.15f);
-                            }
-                            DrawIconWithAlpha(hdcBuf, e.drawnIconX, e.drawnIconY, e.hIcon, e.drawnIconSz, selAlpha);
-                            DrawDockMinimizedIndicator(hdcBuf, e.drawnIconX, e.drawnIconY, e.drawnIconSz, e, selAlpha);
+                            DrawIconEx(hdcBuf, e.drawnIconX, e.drawnIconY, e.hIcon, e.drawnIconSz, e.drawnIconSz, 0, NULL, DI_NORMAL);
                         }
                     }
                 }
@@ -10888,13 +10541,8 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                     DrawSelectionFillF(hdcBuf, selRc);
                     auto& e = g_windows[g_selectedIndex];
                     if (!IsWindowTruncated(g_selectedIndex) && e.drawnIconSz > 0) {
-                        float selAlpha = 1.0f;
-                        if (IsEntryMinimized(e) && MinimizedStyleUsesDimming()) {
-                            float minDim = (float)g_settings.minimizedIconOpacity / 100.0f;
-                            selAlpha = std::min(1.0f, minDim + 0.15f);
-                        }
-                        DrawIconWithAlpha(hdcBuf, (int)roundf(e.drawnIconX + offX), (int)roundf(e.drawnIconY),
-                                          e.hIcon, e.drawnIconSz, selAlpha);
+                        DrawIconEx(hdcBuf, (int)roundf(e.drawnIconX + offX), (int)roundf(e.drawnIconY),
+                                   e.hIcon, e.drawnIconSz, e.drawnIconSz, 0, NULL, DI_NORMAL);
                     }
                 }
 
@@ -11632,7 +11280,7 @@ static void LoadSettings() {
 
     // Animations
     g_settings.enableAnimations = LoadAutoBoolSetting(L"Appearance.Animations.enableAnimations", IsWin11OrGreater());
-    g_settings.enableEntranceAnimation = LoadAutoBoolSetting(L"Appearance.Animations.enableEntranceAnimation", IsWin11OrGreater());
+    g_settings.enableEntranceAnimation = LoadBoolSetting(L"Appearance.Animations.enableEntranceAnimation", true);
     g_settings.enableSelectionAnimation = LoadBoolSetting(L"Appearance.Animations.enableSelectionAnimation", true);
     g_settings.enableScrollAnimation = LoadBoolSetting(L"Appearance.Animations.enableScrollAnimation", true);
     g_settings.enableHoverAnimation = LoadBoolSetting(L"Appearance.Animations.enableHoverAnimation", true);
@@ -11754,42 +11402,26 @@ static void LoadSettings() {
     g_settings.dockSwitcherPadding = LoadIntSetting(L"Appearance.DockLayout.dockSwitcherPadding", 11);
     if (g_settings.dockSwitcherPadding < 0) g_settings.dockSwitcherPadding = 11;
 
-    auto IsValidDockIconPosition = [](const WCHAR* pos) -> bool {
-        return wcscmp(pos, L"topLeft") == 0 ||
-               wcscmp(pos, L"top") == 0 ||
-               wcscmp(pos, L"topRight") == 0 ||
-               wcscmp(pos, L"left") == 0 ||
-               wcscmp(pos, L"right") == 0 ||
-               wcscmp(pos, L"bottomLeft") == 0 ||
-               wcscmp(pos, L"bottom") == 0 ||
-               wcscmp(pos, L"bottomRight") == 0 ||
-               wcscmp(pos, L"hidden") == 0;
-    };
-
-    LoadStringSetting(L"Appearance.DockLayout.dockCloseButtonPosition", g_settings.dockCloseButtonPosition, L"topRight");
-    if (wcscmp(g_settings.dockCloseButtonPosition, L"previewTopLeft") == 0) {
-        wcsncpy_s(g_settings.dockCloseButtonPosition, L"topLeft", _TRUNCATE);
-    } else if (wcscmp(g_settings.dockCloseButtonPosition, L"previewTopRight") == 0 ||
-               wcscmp(g_settings.dockCloseButtonPosition, L"iconStrip") == 0) {
-        wcsncpy_s(g_settings.dockCloseButtonPosition, L"topRight", _TRUNCATE);
-    } else if (!IsValidDockIconPosition(g_settings.dockCloseButtonPosition)) {
-        wcsncpy_s(g_settings.dockCloseButtonPosition, L"topRight", _TRUNCATE);
+    LoadStringSetting(L"Appearance.DockLayout.dockCloseButtonPosition", g_settings.dockCloseButtonPosition, L"previewTopRight");
+    if (wcscmp(g_settings.dockCloseButtonPosition, L"previewTopRight") != 0 &&
+        wcscmp(g_settings.dockCloseButtonPosition, L"previewTopLeft") != 0 &&
+        wcscmp(g_settings.dockCloseButtonPosition, L"iconStrip") != 0 &&
+        wcscmp(g_settings.dockCloseButtonPosition, L"hidden") != 0) {
+        wcsncpy_s(g_settings.dockCloseButtonPosition, L"previewTopRight", _TRUNCATE);
     }
 
-    LoadStringSetting(L"Appearance.DockLayout.dockGroupIndicatorPosition", g_settings.dockGroupIndicatorPosition, L"bottomRight");
-    if (wcscmp(g_settings.dockGroupIndicatorPosition, L"onIconBadge") == 0 ||
-        wcscmp(g_settings.dockGroupIndicatorPosition, L"aboveIcons") == 0 ||
-        wcscmp(g_settings.dockGroupIndicatorPosition, L"insidePreview") == 0) {
-        wcsncpy_s(g_settings.dockGroupIndicatorPosition, L"topRight", _TRUNCATE);
-    } else if (wcscmp(g_settings.dockGroupIndicatorPosition, L"belowIcons") == 0) {
-        wcsncpy_s(g_settings.dockGroupIndicatorPosition, L"bottom", _TRUNCATE);
-    } else if (!IsValidDockIconPosition(g_settings.dockGroupIndicatorPosition)) {
-        wcsncpy_s(g_settings.dockGroupIndicatorPosition, L"bottomRight", _TRUNCATE);
+    LoadStringSetting(L"Appearance.DockLayout.dockGroupIndicatorPosition", g_settings.dockGroupIndicatorPosition, L"onIconBadge");
+    if (wcscmp(g_settings.dockGroupIndicatorPosition, L"onIconBadge") != 0 &&
+        wcscmp(g_settings.dockGroupIndicatorPosition, L"belowIcons") != 0 &&
+        wcscmp(g_settings.dockGroupIndicatorPosition, L"aboveIcons") != 0 &&
+        wcscmp(g_settings.dockGroupIndicatorPosition, L"insidePreview") != 0 &&
+        wcscmp(g_settings.dockGroupIndicatorPosition, L"hidden") != 0) {
+        wcsncpy_s(g_settings.dockGroupIndicatorPosition, L"onIconBadge", _TRUNCATE);
     }
 
     // Grouped indicator
     g_settings.showGroupIndicator = Wh_GetIntSetting(L"Grouping.showGroupIndicator");
-    g_settings.showGroupIndicatorShadow = LoadAutoBoolSetting(L"Grouping.showGroupIndicatorShadow", IsWin11OrGreater());
+    g_settings.showGroupIndicatorShadow = Wh_GetIntSetting(L"Grouping.showGroupIndicatorShadow");
     LoadStringSetting(L"Grouping.groupCloseBehavior", g_settings.groupCloseBehavior, L"closeRecent");
     if (wcscmp(g_settings.groupCloseBehavior, L"closeAll") != 0 &&
         wcscmp(g_settings.groupCloseBehavior, L"closeRecent") != 0) {
@@ -11824,9 +11456,9 @@ static void LoadSettings() {
     if (g_settings.iconBgOpacityDark < 0) g_settings.iconBgOpacityDark = 0;
     if (g_settings.iconBgOpacityDark > 100) g_settings.iconBgOpacityDark = 100;
 
-    LoadStringSetting(L"Style.DarkMode.indicatorBgColorMode", g_settings.indicatorBgColorModeDark, L"accent");
+    LoadStringSetting(L"Style.DarkMode.indicatorBgColorMode", g_settings.indicatorBgColorModeDark, L"default");
     LoadStringSetting(L"Style.DarkMode.customIndicatorBgColor", g_settings.customIndicatorBgColorDark, L"#333333");
-    g_settings.indicatorBgOpacityDark = LoadIntSetting(L"Style.DarkMode.indicatorBgOpacity", 100);
+    g_settings.indicatorBgOpacityDark = Wh_GetIntSetting(L"Style.DarkMode.indicatorBgOpacity");
     if (g_settings.indicatorBgOpacityDark < 0) g_settings.indicatorBgOpacityDark = 0;
     if (g_settings.indicatorBgOpacityDark > 100) g_settings.indicatorBgOpacityDark = 100;
     
@@ -11847,9 +11479,9 @@ static void LoadSettings() {
     if (g_settings.iconBgOpacityLight < 0) g_settings.iconBgOpacityLight = 0;
     if (g_settings.iconBgOpacityLight > 100) g_settings.iconBgOpacityLight = 100;
 
-    LoadStringSetting(L"Style.LightMode.indicatorBgColorMode", g_settings.indicatorBgColorModeLight, L"accent");
+    LoadStringSetting(L"Style.LightMode.indicatorBgColorMode", g_settings.indicatorBgColorModeLight, L"default");
     LoadStringSetting(L"Style.LightMode.customIndicatorBgColor", g_settings.customIndicatorBgColorLight, L"#EAEAEA");
-    g_settings.indicatorBgOpacityLight = LoadIntSetting(L"Style.LightMode.indicatorBgOpacity", 100);
+    g_settings.indicatorBgOpacityLight = Wh_GetIntSetting(L"Style.LightMode.indicatorBgOpacity");
     if (g_settings.indicatorBgOpacityLight < 0) g_settings.indicatorBgOpacityLight = 0;
     if (g_settings.indicatorBgOpacityLight > 100) g_settings.indicatorBgOpacityLight = 100;
     
