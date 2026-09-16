@@ -5469,16 +5469,34 @@ static COLORREF GetIndicatorTextColor() {
 
 static void DrawIconWithAlpha(HDC hdc, int x, int y, HICON hIcon, int size, float alpha) {
     if (!hIcon || size <= 0 || alpha <= 0.001f) return;
-    if (alpha >= 0.999f) {
-        DrawIconEx(hdc, x, y, hIcon, size, size, 0, NULL, DI_NORMAL);
+
+    // High quality bicubic antialiased rendering via GDI+
+    Gdiplus::Bitmap bmp(hIcon);
+    if (bmp.GetLastStatus() == Gdiplus::Ok && bmp.GetWidth() > 0 && bmp.GetHeight() > 0) {
+        Gdiplus::Graphics gfx(hdc);
+        gfx.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+        gfx.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+        gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+
+        if (alpha < 0.999f) {
+            Gdiplus::ColorMatrix cm = {
+                1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+                0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+                0.0f, 0.0f, 0.0f, alpha, 0.0f,
+                0.0f, 0.0f, 0.0f, 0.0f, 1.0f
+            };
+            Gdiplus::ImageAttributes attr;
+            attr.SetColorMatrix(&cm, Gdiplus::ColorMatrixFlagsDefault, Gdiplus::ColorAdjustTypeBitmap);
+            gfx.DrawImage(&bmp, Gdiplus::Rect(x, y, size, size), 0, 0, bmp.GetWidth(), bmp.GetHeight(), Gdiplus::UnitPixel, &attr);
+        } else {
+            gfx.DrawImage(&bmp, x, y, size, size);
+        }
         return;
     }
 
     ICONINFO ii = {};
-    if (!GetIconInfo(hIcon, &ii)) {
-        DrawIconEx(hdc, x, y, hIcon, size, size, 0, NULL, DI_NORMAL);
-        return;
-    }
+    if (!GetIconInfo(hIcon, &ii)) return;
 
     BITMAP bm = {};
     if (ii.hbmColor && GetObjectW(ii.hbmColor, sizeof(bm), &bm) && bm.bmBitsPixel == 32) {
@@ -5649,7 +5667,7 @@ static Gdiplus::Bitmap* CreateIconShadowBitmap(HICON hIcon, int width, int heigh
     return shadowBmpCopy;
 }
 
-static void MaskRectCorners(HDC hdc, const RECT& rc, int radiusPx, bool forceOpaque = false, COLORREF overrideBg = CLR_INVALID) {
+static void MaskRectCorners(HDC hdc, const RECT& rc, int radiusPx, bool forceOpaque = false, COLORREF overrideBg = CLR_INVALID, int overrideAlpha = -1) {
     if (radiusPx <= 0) {
         return;
     }
@@ -5668,8 +5686,15 @@ static void MaskRectCorners(HDC hdc, const RECT& rc, int radiusPx, bool forceOpa
     }
 
     COLORREF bg = (overrideBg != CLR_INVALID) ? overrideBg : GetBgColor();
-    // In layered mode, punch fully transparent corners to force thumbnail clipping.
-    BYTE alpha = (ThemeIs(L"none") && !forceOpaque) ? 0 : 255;
+    BYTE alpha = 0;
+    if (overrideAlpha >= 0) {
+        alpha = (BYTE)std::min(255, std::max(0, overrideAlpha));
+    } else if (ThemeIs(L"none") && !forceOpaque) {
+        alpha = 0;
+    } else {
+        alpha = (BYTE)roundf((float)g_settings.opacity * 255.0f / 100.0f);
+        if (alpha == 0) alpha = 1;
+    }
 
     Gdiplus::Graphics graphics(hdc);
     if (alpha == 0) {
@@ -6188,8 +6213,10 @@ static void DrawTaskEntry(HDC hdc, WindowEntry& e, HWND hWnd, int padLeft, int r
         DrawThumbnailShadow(hdc, e.rcThumbActual, cornerRadius, alpha, 1.0f);
     }
 
-    if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
-        MaskRectCorners(hdc, e.rcThumbActual, cornerRadius);
+    if (g_settings.showThumbnails && cornerRadius > 0 && g_settings.roundThumbnailCorners) {
+        if (ThemeIs(L"none") || ThemeIs(L"backdrop")) {
+            MaskRectCorners(hdc, e.rcThumbActual, cornerRadius);
+        }
     }
 
     // ---- Badge layout rendering path ----
@@ -6384,6 +6411,50 @@ static void DrawTaskEntry(HDC hdc, WindowEntry& e, HWND hWnd, int padLeft, int r
     }
 }
 
+static void DrawDockMinimizedIndicator(HDC hdc, int iconX, int iconY, int iconSz, const WindowEntry& e, float itemAlpha) {
+    bool isMin = g_settings.showMinimizedIndicator && IsEntryMinimized(e);
+    if (!isMin) return;
+
+    if (MinimizedStyleUsesBadge()) {
+        int badgeSz = DpiScale(14, g_dpiX);
+        int badgeX = iconX + iconSz - badgeSz + DpiScale(2, g_dpiX);
+        int badgeY = iconY + iconSz - badgeSz + DpiScale(2, g_dpiY);
+        Gdiplus::Graphics gfxBadge(hdc);
+        gfxBadge.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        COLORREF bgC = g_isDarkMode ? RGB(40, 40, 40) : RGB(235, 235, 235);
+        COLORREF fgC = g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT;
+        BYTE bAlpha = (BYTE)roundf(230.0f * (itemAlpha < 1.0f ? itemAlpha : 1.0f));
+        Gdiplus::SolidBrush bgBrush(Gdiplus::Color(bAlpha, GetRValue(bgC), GetGValue(bgC), GetBValue(bgC)));
+        gfxBadge.FillEllipse(&bgBrush, badgeX, badgeY, badgeSz, badgeSz);
+        Gdiplus::Pen pen(Gdiplus::Color(bAlpha, GetRValue(fgC), GetGValue(fgC), GetBValue(fgC)), 1.5f);
+        pen.SetStartCap(Gdiplus::LineCapRound);
+        pen.SetEndCap(Gdiplus::LineCapRound);
+        int lineW = DpiScale(6, g_dpiX);
+        int lx1 = badgeX + (badgeSz - lineW) / 2;
+        int lx2 = lx1 + lineW;
+        int ly = badgeY + badgeSz / 2;
+        gfxBadge.DrawLine(&pen, lx1, ly, lx2, ly);
+    } else if (MinimizedStyleUsesDot()) {
+        int dotW = DpiScale(10, g_dpiX);
+        int dotH = DpiScale(3, g_dpiY);
+        int dotX = iconX + (iconSz - dotW) / 2;
+        int dotY = DockIconIsTop() ? (iconY + iconSz + DpiScale(3, g_dpiY)) : (iconY - dotH - DpiScale(3, g_dpiY));
+        Gdiplus::Graphics gfxDot(hdc);
+        gfxDot.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        COLORREF dotCol = g_isDarkMode ? RGB(255, 255, 255) : RGB(0, 0, 0);
+        BYTE dotAlpha = (BYTE)roundf((g_isDarkMode ? 160.0f : 130.0f) * (itemAlpha < 1.0f ? itemAlpha : 1.0f));
+        if (&e == &g_windows[g_selectedIndex] || (g_hoverIndex >= 0 && g_hoverIndex < (int)g_windows.size() && &e == &g_windows[g_hoverIndex])) {
+            dotAlpha = (BYTE)roundf(230.0f * (itemAlpha < 1.0f ? itemAlpha : 1.0f));
+        }
+        Gdiplus::SolidBrush dotBrush(Gdiplus::Color(dotAlpha, GetRValue(dotCol), GetGValue(dotCol), GetBValue(dotCol)));
+        Gdiplus::GraphicsPath dotPath;
+        dotPath.AddArc((Gdiplus::REAL)dotX, (Gdiplus::REAL)dotY, (Gdiplus::REAL)dotH, (Gdiplus::REAL)dotH, 90, 180);
+        dotPath.AddArc((Gdiplus::REAL)(dotX + dotW - dotH), (Gdiplus::REAL)dotY, (Gdiplus::REAL)dotH, (Gdiplus::REAL)dotH, 270, 180);
+        dotPath.CloseFigure();
+        gfxDot.FillPath(&dotBrush, &dotPath);
+    }
+}
+
 static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSelectionFill) {
     RECT rcClient; GetClientRect(g_hSwitcher, &rcClient);
     int w = rcClient.right, h = rcClient.bottom;
@@ -6428,8 +6499,10 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
         if (g_settings.showThumbnailShadow && shadowAlphaMult > 0.01f) {
             DrawThumbnailShadow(hdc, shadowRc, cornerRadius, shadowAlphaMult);
         }
-        if (cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99 && g_settings.roundThumbnailCorners) {
-            MaskRectCorners(hdc, shadowRc, cornerRadius);
+        if (cornerRadius > 0 && g_settings.roundThumbnailCorners) {
+            if (ThemeIs(L"none") || ThemeIs(L"backdrop")) {
+                MaskRectCorners(hdc, shadowRc, cornerRadius);
+            }
         }
     }
 
@@ -6480,44 +6553,14 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
             itemAlpha *= minDim;
         }
 
-        DrawIconWithAlpha(hdc, iconX, iconY, e.hIcon, iconSz, itemAlpha);
-
-        if (isMin && MinimizedStyleUsesBadge()) {
-            int badgeSz = DpiScale(14, g_dpiX);
-            int badgeX = iconX + iconSz - badgeSz + DpiScale(2, g_dpiX);
-            int badgeY = iconY + iconSz - badgeSz + DpiScale(2, g_dpiY);
-            Gdiplus::Graphics gfxBadge(hdc);
-            gfxBadge.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-            COLORREF bgC = g_isDarkMode ? RGB(40, 40, 40) : RGB(235, 235, 235);
-            COLORREF fgC = g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT;
-            BYTE bAlpha = (BYTE)roundf(230.0f * (itemAlpha < 1.0f ? itemAlpha : 1.0f));
-            Gdiplus::SolidBrush bgBrush(Gdiplus::Color(bAlpha, GetRValue(bgC), GetGValue(bgC), GetBValue(bgC)));
-            gfxBadge.FillEllipse(&bgBrush, badgeX, badgeY, badgeSz, badgeSz);
-            Gdiplus::Pen pen(Gdiplus::Color(bAlpha, GetRValue(fgC), GetGValue(fgC), GetBValue(fgC)), 1.5f);
-            pen.SetStartCap(Gdiplus::LineCapRound);
-            pen.SetEndCap(Gdiplus::LineCapRound);
-            int lineW = DpiScale(6, g_dpiX);
-            int lx1 = badgeX + (badgeSz - lineW) / 2;
-            int lx2 = lx1 + lineW;
-            int ly = badgeY + badgeSz / 2;
-            gfxBadge.DrawLine(&pen, lx1, ly, lx2, ly);
-        } else if (isMin && MinimizedStyleUsesDot()) {
-            int dotW = DpiScale(10, g_dpiX);
-            int dotH = DpiScale(3, g_dpiY);
-            int dotX = iconX + (iconSz - dotW) / 2;
-            int dotY = DockIconIsTop() ? (iconY + iconSz + DpiScale(3, g_dpiY)) : (iconY - dotH - DpiScale(3, g_dpiY));
-            Gdiplus::Graphics gfxDot(hdc);
-            gfxDot.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-            COLORREF dotCol = g_isDarkMode ? RGB(255, 255, 255) : RGB(0, 0, 0);
-            BYTE dotAlpha = (BYTE)roundf((g_isDarkMode ? 160.0f : 130.0f) * (itemAlpha < 1.0f ? itemAlpha : 1.0f));
-            if (i == g_selectedIndex || i == g_hoverIndex) dotAlpha = (BYTE)roundf(230.0f * (itemAlpha < 1.0f ? itemAlpha : 1.0f));
-            Gdiplus::SolidBrush dotBrush(Gdiplus::Color(dotAlpha, GetRValue(dotCol), GetGValue(dotCol), GetBValue(dotCol)));
-            Gdiplus::GraphicsPath dotPath;
-            dotPath.AddArc((Gdiplus::REAL)dotX, (Gdiplus::REAL)dotY, (Gdiplus::REAL)dotH, (Gdiplus::REAL)dotH, 90, 180);
-            dotPath.AddArc((Gdiplus::REAL)(dotX + dotW - dotH), (Gdiplus::REAL)dotY, (Gdiplus::REAL)dotH, (Gdiplus::REAL)dotH, 270, 180);
-            dotPath.CloseFigure();
-            gfxDot.FillPath(&dotBrush, &dotPath);
+        if (!includeSelectionFill && i == g_selectedIndex && HighlightHasFill()) {
+            // In static cache pass, do not bake the selected icon under the selection fill.
+            // It will be drawn cleanly once over the selection fill dynamically in PaintSwitcher / WM_PAINT.
+            continue;
         }
+
+        DrawIconWithAlpha(hdc, iconX, iconY, e.hIcon, iconSz, itemAlpha);
+        DrawDockMinimizedIndicator(hdc, iconX, iconY, iconSz, e, itemAlpha);
     }
 
     // 4b. Draw departing icons in dock strip if layout transition is active
@@ -6922,9 +6965,14 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             }
             if (collidesWithIncoming) continue;
 
-            if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
-                COLORREF maskColor = GetBgColor();
-                MaskRectCorners(hdc, snapThumb, cornerRadius, true, maskColor);
+            if (g_settings.showThumbnails && cornerRadius > 0 && g_settings.roundThumbnailCorners) {
+                if (ThemeIs(L"none") || ThemeIs(L"backdrop")) {
+                    COLORREF maskColor = GetBgColor();
+                    int maskAlpha = (int)roundf((float)g_settings.opacity * 255.0f / 100.0f);
+                    MaskRectCorners(hdc, snapThumb, cornerRadius, true, maskColor, maskAlpha);
+                } else if (ThemeIs(L"mica")) {
+                    DrawContourF(hdc, ToRectF(snapThumb), 1.0f, 1, (float)cornerRadius, g_isDarkMode ? 40 : 30);
+                }
             }
 
             DrawBadgeIconOverlay(hdc, snapThumb, snap.hIcon);
@@ -6937,9 +6985,14 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             if (dep.alpha <= 0.01f) continue;
             RECT depThumb = dep.rcThumbCurrent;
 
-            if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
-                COLORREF maskColor = GetBgColor();
-                MaskRectCorners(hdc, depThumb, cornerRadius, true, maskColor);
+            if (g_settings.showThumbnails && cornerRadius > 0 && g_settings.roundThumbnailCorners) {
+                if (ThemeIs(L"none") || ThemeIs(L"backdrop")) {
+                    COLORREF maskColor = GetBgColor();
+                    int maskAlpha = (int)roundf((float)g_settings.opacity * 255.0f / 100.0f);
+                    MaskRectCorners(hdc, depThumb, cornerRadius, true, maskColor, maskAlpha);
+                } else if (ThemeIs(L"mica")) {
+                    DrawContourF(hdc, ToRectF(depThumb), 1.0f, 1, (float)cornerRadius, g_isDarkMode ? 40 : 30);
+                }
             }
             DrawBadgeIconOverlay(hdc, depThumb, dep.hIcon);
         }
@@ -6963,12 +7016,18 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             OffsetRect(&rcThumbSlot, offX, offY);
         }
 
-        if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
-            COLORREF maskColor = GetBgColor();
-            if (i == g_selectedIndex && HighlightHasFill() && !DockLayoutActive()) {
-                maskColor = GetHighlightFillColor();
+        if (g_settings.showThumbnails && cornerRadius > 0 && g_settings.roundThumbnailCorners) {
+            if (ThemeIs(L"none") || ThemeIs(L"backdrop")) {
+                COLORREF maskColor = GetBgColor();
+                int maskAlpha = (int)roundf((float)g_settings.opacity * 255.0f / 100.0f);
+                if (i == g_selectedIndex && HighlightHasFill() && !DockLayoutActive()) {
+                    maskColor = GetHighlightFillColor();
+                    maskAlpha = 64;
+                }
+                MaskRectCorners(hdc, rcThumbActual, cornerRadius, true, maskColor, maskAlpha);
+            } else if (ThemeIs(L"mica")) {
+                DrawContourF(hdc, ToRectF(rcThumbActual), 1.0f, 1, (float)cornerRadius, g_isDarkMode ? 40 : 30);
             }
-            MaskRectCorners(hdc, rcThumbActual, cornerRadius, true, maskColor);
         }
 
         // Badge layout: draw icon overlay on thumbnail
@@ -7448,6 +7507,7 @@ static void PaintSwitcher() {
                             selAlpha = std::min(1.0f, minDim + 0.15f);
                         }
                         DrawIconWithAlpha(s_cachedMemDC, e.drawnIconX, e.drawnIconY, e.hIcon, e.drawnIconSz, selAlpha);
+                        DrawDockMinimizedIndicator(s_cachedMemDC, e.drawnIconX, e.drawnIconY, e.drawnIconSz, e, selAlpha);
                     }
                 }
             }
@@ -7716,10 +7776,10 @@ static void RevealPendingSwitcher() {
     DwmSetWindowAttribute(g_hSwitcher, DWMWA_NCRENDERING_POLICY, &enabled, sizeof(enabled));
 
     ApplyThemeToWindow(g_hSwitcher);
-    ApplySwitcherRegion();
 
     SetWindowPos(g_hSwitcher, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED | SWP_NOACTIVATE);
     CreateMirrorSwitchers();
+    ApplySwitcherRegion();
     if (g_hCloseBtnWnd) {
         SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
     }
@@ -7953,10 +8013,10 @@ static void ApplySwitcherRegion() {
     // completely eliminating the 4 square blur horns past rounded window borders.
     if (ThemeIs(L"backdrop") && IsWin11OrGreater()) {
         int r = GetWindowCornerRadiusPx();
-        RECT rcClient = {};
-        GetClientRect(g_hSwitcher, &rcClient);
-        int w = rcClient.right - rcClient.left;
-        int h = rcClient.bottom - rcClient.top;
+        RECT wr = {};
+        GetWindowRect(g_hSwitcher, &wr);
+        int w = wr.right - wr.left;
+        int h = wr.bottom - wr.top;
         if (w <= 0 || h <= 0) { w = g_winW; h = g_winH; }
         if (r > 0 && w > 0 && h > 0) {
             HRGN hRgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, r * 2, r * 2);
@@ -7964,10 +8024,10 @@ static void ApplySwitcherRegion() {
             s_hasActiveRgn = true;
             for (HWND hMirror : g_hMirrorSwitchers) {
                 if (IsWindow(hMirror)) {
-                    RECT mrc = {};
-                    GetClientRect(hMirror, &mrc);
-                    int mw = mrc.right - mrc.left;
-                    int mh = mrc.bottom - mrc.top;
+                    RECT mwr = {};
+                    GetWindowRect(hMirror, &mwr);
+                    int mw = mwr.right - mwr.left;
+                    int mh = mwr.bottom - mwr.top;
                     if (mw <= 0 || mh <= 0) { mw = w; mh = h; }
                     HRGN hMirrorRgn = CreateRoundRectRgn(0, 0, mw + 1, mh + 1, r * 2, r * 2);
                     SetWindowRgn(hMirror, hMirrorRgn, TRUE);
@@ -8135,10 +8195,10 @@ static void ShowSwitcher(bool sticky, bool immediate = false) {
     }
 
     ApplyThemeToWindow(g_hSwitcher);
-    ApplySwitcherRegion();
 
     SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
     CreateMirrorSwitchers();
+    ApplySwitcherRegion();
     
     if (g_hCloseBtnWnd) {
         SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
@@ -8905,6 +8965,68 @@ static void ToggleAppDrill() {
     else EnterAppGroup();
 }
 
+static void RecomputeDockWithDynamicResize(int dir = 0, int scrollMode = SCROLL_ROW) {
+    if (!DockLayoutActive()) {
+        RecomputeAndReposition();
+        return;
+    }
+
+    if (AreAnimationsGloballyEnabled() && g_settings.enableAnimations) {
+        RECT curWnd = {};
+        GetWindowRect(g_hSwitcher, &curWnd);
+        g_layoutTransition.rcWndStart = ToRectF(curWnd);
+        g_layoutTransition.rcDockStripStart = g_rcDockIconStrip;
+        g_layoutTransition.rcDockPreviewStart = g_rcCentralPreview;
+        g_layoutTransition.rcDockTitleStart = g_rcDockTitleBar;
+
+        for (auto& w : g_windows) {
+            w.rcCellStart = w.rcCell;
+            w.rcThumbStart = w.rcThumbActual;
+            w.isNewEntry = false;
+        }
+
+        HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
+        ComputeLayout(hMon);
+        UpdateDockPreviewForSelection();
+
+        g_layoutTransition.rcDockStripTarget = g_rcDockIconStrip;
+        g_layoutTransition.rcDockPreviewTarget = g_rcCentralPreview;
+        g_layoutTransition.rcDockTitleTarget = g_rcDockTitleBar;
+
+        // Restore start state so lerp begins smoothly from current visual layout
+        g_rcDockIconStrip = g_layoutTransition.rcDockStripStart;
+        g_rcCentralPreview = g_layoutTransition.rcDockPreviewStart;
+        g_rcDockTitleBar = g_layoutTransition.rcDockTitleStart;
+
+        UpdateChevronLayout(g_hSwitcher);
+        UpdateChevronAnimationTargets(false);
+
+        MONITORINFO mi = { sizeof(mi) };
+        GetMonitorInfoW(hMon, &mi);
+        int cx, cy;
+        GetSwitcherPosition(mi.rcWork, &cx, &cy);
+        g_layoutTransition.rcWndTarget = { (float)cx, (float)cy, (float)(cx + g_winW), (float)(cy + g_winH) };
+
+        for (auto& w : g_windows) {
+            w.rcCellTarget = w.rcCell;
+            w.rcThumbTarget = w.rcThumbActual;
+            w.rcCell = w.rcCellStart;
+            w.rcThumbActual = w.rcThumbStart;
+        }
+
+        RegisterThumbnails();
+        g_layoutTransition.progress = 0.0f;
+        g_layoutTransition.duration = 0.220f;
+        g_layoutTransition.active = true;
+        StartAnimationTicker();
+    } else {
+        RecomputeAndReposition();
+        UpdateDockPreviewForSelection();
+        RegisterThumbnails();
+        PaintSwitcher();
+    }
+}
+
 // Linear navigation: Tab, Shift+Tab, Left, Right, Hotkeys, Scroll
 static void CycleLinear(int delta) {
     if (g_windows.empty()) return;
@@ -8947,9 +9069,7 @@ static void CycleLinear(int delta) {
             CaptureOutgoingSnapshot();
             int dir = (targetStart > g_layoutStartIndex) ? 1 : -1;
             g_layoutStartIndex = targetStart;
-            RecomputeAndReposition();
-            UpdateDockPreviewForSelection();
-            TriggerScrollAnimationEx(dir, SCROLL_ROW);
+            RecomputeDockWithDynamicResize(dir, SCROLL_ROW);
             if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
                 RectF r = ToRectF(g_windows[g_selectedIndex].rcCell);
                 SnapSelectionTo(r);
@@ -9049,9 +9169,7 @@ static void CyclePage(int dir) {
         if (newStart != g_layoutStartIndex) {
             g_layoutStartIndex = newStart;
             g_selectedIndex = (dir > 0) ? g_layoutStartIndex : std::min(n - 1, g_layoutStartIndex + visibleCount - 1);
-            RecomputeAndReposition();
-            UpdateDockPreviewForSelection();
-            TriggerScrollAnimationEx(dir, SCROLL_PAGE);
+            RecomputeDockWithDynamicResize(dir, SCROLL_PAGE);
             if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
                 RectF r = ToRectF(g_windows[g_selectedIndex].rcCell);
                 SnapSelectionTo(r);
@@ -10105,12 +10223,22 @@ static void AddWindowEntry(HWND hWnd) {
         UpdateEntryForWindow(e);
 
         auto insertPos = g_windows.end();
-        if (g_settings.sortMinimizedWindowsToEnd && !IsIconic(hWnd)) {
-            for (auto it = g_windows.begin(); it != g_windows.end(); ++it) {
-                if (IsIconic(it->hWnd)) {
-                    insertPos = it;
-                    break;
-                }
+        int targetRank = 10000;
+        for (size_t r = 0; r < g_mruWindows.size(); r++) {
+            if (g_mruWindows[r] == hWnd) { targetRank = (int)r; break; }
+        }
+        for (auto it = g_windows.begin(); it != g_windows.end(); ++it) {
+            if (g_settings.sortMinimizedWindowsToEnd && !IsIconic(hWnd) && IsIconic(it->hWnd)) {
+                insertPos = it;
+                break;
+            }
+            int itRank = 10000;
+            for (size_t r = 0; r < g_mruWindows.size(); r++) {
+                if (g_mruWindows[r] == it->hWnd) { itRank = (int)r; break; }
+            }
+            if (targetRank < itRank) {
+                insertPos = it;
+                break;
             }
         }
         g_windows.insert(insertPos, std::move(e));
@@ -10118,12 +10246,22 @@ static void AddWindowEntry(HWND hWnd) {
         UpdateEntryForWindow(e);
 
         auto insertPos = g_windows.end();
-        if (g_settings.sortMinimizedWindowsToEnd && !IsIconic(hWnd)) {
-            for (auto it = g_windows.begin(); it != g_windows.end(); ++it) {
-                if (IsIconic(it->hWnd)) {
-                    insertPos = it;
-                    break;
-                }
+        int targetRank = 10000;
+        for (size_t r = 0; r < g_mruWindows.size(); r++) {
+            if (g_mruWindows[r] == hWnd) { targetRank = (int)r; break; }
+        }
+        for (auto it = g_windows.begin(); it != g_windows.end(); ++it) {
+            if (g_settings.sortMinimizedWindowsToEnd && !IsIconic(hWnd) && IsIconic(it->hWnd)) {
+                insertPos = it;
+                break;
+            }
+            int itRank = 10000;
+            for (size_t r = 0; r < g_mruWindows.size(); r++) {
+                if (g_mruWindows[r] == it->hWnd) { itRank = (int)r; break; }
+            }
+            if (targetRank < itRank) {
+                insertPos = it;
+                break;
             }
         }
         g_windows.insert(insertPos, std::move(e));
@@ -10348,11 +10486,12 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     if (uMsg == WM_NCCALCSIZE && wParam == TRUE) {
         return 0; // Remove standard frame for WS_OVERLAPPED
     }
-    if (uMsg == WM_NCPAINT) {
-        return 0; // Unconditionally suppress non-client frame painting across all themes
+    if (uMsg == WM_NCPAINT && ThemeIs(L"none")) {
+        return 0; // Only suppress default frame painting for layered none theme
     }
     if (uMsg == WM_NCACTIVATE) {
-        return TRUE; // Unconditionally keep active visual state without drawing borders
+        // Force DWM to keep the active visual state (Mica/Backdrop) even when unfocused
+        return DefWindowProcW(hWnd, uMsg, TRUE, lParam);
     }
 
     if (g_WM_SWS_TOUCHPAD_TRIGGER && uMsg == g_WM_SWS_TOUCHPAD_TRIGGER) {
@@ -10691,6 +10830,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                                 selAlpha = std::min(1.0f, minDim + 0.15f);
                             }
                             DrawIconWithAlpha(hdcBuf, e.drawnIconX, e.drawnIconY, e.hIcon, e.drawnIconSz, selAlpha);
+                            DrawDockMinimizedIndicator(hdcBuf, e.drawnIconX, e.drawnIconY, e.drawnIconSz, e, selAlpha);
                         }
                     }
                 }
