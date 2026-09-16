@@ -875,9 +875,9 @@ bool ProcessHotKey(HWND hwnd, WPARAM key) {
     }
     
     if (wcscmp(className, L"CabinetWClass") == 0 || wcscmp(className, L"ExploreWClass") == 0) {
-        bool ctrl  = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-        bool shift = (GetAsyncKeyState(VK_SHIFT)   & 0x8000) != 0;
-        bool alt   = (GetAsyncKeyState(VK_MENU)    & 0x8000) != 0;
+        bool ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+        bool shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
+        bool alt   = (GetKeyState(VK_MENU)    & 0x8000) != 0;
 
         if (key == VK_ESCAPE && !ctrl && !shift && !alt && g_escAction != L"disabled") {
             if (!IsInlineEditingActive(rootHwnd)) {
