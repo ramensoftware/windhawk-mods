@@ -42,31 +42,16 @@ When both controls are set to 100%, the mod doesn't install any hooks because
 the requested appearance is identical to the original Windows appearance.
 
 ## How it works
-
+ 
 The mod hooks a single uDWM function, `CWindowBorder::GetShadowParameters`,
-and scales the radius and alpha values it produces. No overlay windows, no
-DWM cache manipulation. Enabling, disabling or changing the mod requests a
-visual refresh so existing windows receive the current shadows.
-
-An earlier version of this mod also perturbed the border color passed to
-`CCachedBorderBrush::GetBorderBrush` so tuned brushes would land on a
-separate DWM cache entry, on the assumption that disabling the mod might
-otherwise leave modified brushes stuck in DWM's normal cache. Manual testing
-showed this wasn't needed: disabling the mod and letting the refresh run
-reverts shadows to stock immediately, with no DWM restart required, whether
-or not the cache key is perturbed. That mechanism was removed as a result.
-
-Tested manually: enabled the mod, toggled through several
-opacityPercent/sizePercent combinations over a few minutes with windows open,
-then disabled it — shadows returned to normal immediately without a DWM
-restart (same `dwm.exe` PID throughout, confirmed via Process Explorer).
-`dwm.exe` Private Bytes went from 419,132 K to 391,304 K over the session (no
-PID change), showing no measurable growth across the combinations tested.
+and scales the radius and alpha values it produces. No overlay windows and no
+DWM cache manipulation, so disabling the mod restores the stock shadows
+immediately — no `dwm.exe` restart, no sign-out, and nothing persisted.
 
 ## Compatibility
 
 The mod resolves uDWM functions through Microsoft public symbols. Tested on
-Windows 11 25h2 build 26200.9445 / 24H2 26100.9457. On other
+Windows 11 25H2 build 26200.9445 / 24H2 26100.9457. On other
 builds, if the required uDWM shadow function can't be resolved, the mod logs
 this and does not load.
 
