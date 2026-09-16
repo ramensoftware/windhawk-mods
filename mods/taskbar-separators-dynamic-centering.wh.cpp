@@ -43,6 +43,19 @@ separator position relative to the whole taskbar.
 > **Do not enable it together with the original Taskbar Separators mod** — both
 > mods rewrite taskbar button margins and will fight over the layout.
 
+> **`Opacity` defaults to `0`, and that is intentional.** The dividers
+> draw no line and, with the default **Divider gap** of `0`, reserve no space of
+> their own either, so what stays visible is the gap produced by dynamic
+> centering, not a line. Raise **Opacity** to make the dividers themselves
+> visible.
+
+> **No dynamic centering means no dividers.** The dividers are only the
+> mechanical means this fork uses to center the icon group, so the mod creates
+> them only while dynamic centering is in effect: on a **left-aligned,
+> horizontal** taskbar. On a centered taskbar, and on a vertical taskbar, no
+> dividers exist, and they are created again as soon as the taskbar is
+> left-aligned (and horizontal) again.
+
 ## Preview
 
 ![Taskbar Separators Dynamic Centering preview](https://raw.githubusercontent.com/Suioio/taskbar-separators-dynamic-centering/main/preview.png)
@@ -50,7 +63,8 @@ separator position relative to the whole taskbar.
 ## What this fork adds
 
 - **Dynamic centering**: the icons after a chosen position are centered as a
-  group relative to the whole taskbar
+  group relative to the whole taskbar. It is applied only while the taskbar is
+  left-aligned and horizontal, and the dividers exist only while it is applied
 - **Dynamic separator hiding**: hide the dynamic separator once the number of
   icons after the position reaches a configured count
 - **Drag freeze**: separator geometry is frozen while taskbar icons are being
@@ -94,52 +108,49 @@ application buttons.
 
 **Dynamic centering** centers the icons after **Dynamic centering position** as
 a group relative to the whole taskbar, by inserting a computed physical gap at
-that position. **Hide when middle icon count is at least** hides the dynamic
-separator when the number of icons after the position reaches the configured
+that position. It is applied only while the taskbar is **left-aligned and
+horizontal**. **Hide when middle icon count is at least** hides the dynamic
+divider when the number of icons after the position reaches the configured
 value.
 
-Dynamic centering can only place that group on a **left-aligned** taskbar, so it
-is applied automatically when the taskbar is left-aligned and does nothing when
-it is centered. The next section describes how that is detected.
+The dividers themselves are only the mechanical means of dynamic centering:
+**without dynamic centering there are no dividers.** While dynamic centering is
+not in effect — a centered taskbar, or a vertical taskbar — the mod creates no
+dividers and removes the ones that were there. The next section describes how
+that is detected.
 
 ## Taskbar alignment
 
 Windows centers the whole button row itself in its own **Center** taskbar
 alignment mode, which leaves no room for the mod to position the icons after the
 dynamic separator independently. Dynamic centering therefore only works on a
-**left-aligned** taskbar. The Windows setting behind this is `TaskbarAl`: `0`
-means left, any other value (usually `1`) means center.
+**left-aligned, horizontal** taskbar. The Windows setting behind this is
+`TaskbarAl`: `0` means left, any other value (usually `1`) means center.
 
 Dynamic centering has no separate on/off setting: it is applied whenever the
-taskbar is **left-aligned**, and it is never applied while the taskbar is
-centered, where Windows centers the whole button row itself.
+taskbar is **left-aligned and horizontal**, and it is never applied while the
+taskbar is centered or vertical.
 
 **The mod never writes the taskbar alignment or any other Windows setting.** It
 only reads `TaskbarAl` to find out whether the taskbar is left-aligned (`0`) or
 centered (any other value, usually `1`).
 
 **To use dynamic centering, switch the taskbar to Left alignment in Windows'
-taskbar settings**: with a centered taskbar nothing is applied, and the
-separators keep working as usual.
+taskbar settings.**
 
 - With a **centered** taskbar nothing is applied: Windows centers the whole
-  button row itself in that mode, and the mod deliberately does not change the
-  alignment behind your back. Switch the taskbar to **Left** alignment in
-  Windows' taskbar settings to use dynamic centering.
-- The alignment is read **once** per load and per settings change, so switching
-  the taskbar to left while the mod is running has no immediate effect: change
-  any setting (or reload the mod) to apply it.
-- A monitoring thread runs only while dynamic centering is active. If you change
-  the taskbar alignment back to **Center** yourself during that time, the mod
-  does not fight you: dynamic centering is turned off, the gap it reserved is
-  removed, and **the separators keep working**. The reason is written to the
+  button row itself in that mode, the mod deliberately does not change the
+  alignment behind your back, and **no dividers are created**.
+- The alignment monitor runs for as long as the mod does and reacts in **both
+  directions**. Switching the taskbar to **Center** while dynamic centering is
+  active turns dynamic centering off and removes the dividers; switching it back
+  to **Left** turns dynamic centering on again and recreates the dividers. No
+  setting change and no mod reload is needed. The reason is written to the
   Windhawk log:
-  `the user changed the taskbar alignment; dynamic centering is now off, the separators keep working`.
-  Dynamic centering does not start again by itself; change any setting, or
-  reload the mod, to use it again.
-- Dynamic centering is **not supported on vertical taskbars**: the separators
-  keep working there, but the reserved gap is computed for a horizontal taskbar
-  only.
+  `the user changed the taskbar alignment; dynamic centering is off and the dividers are removed`.
+- Dynamic centering is **not supported on vertical taskbars**, and a vertical
+  taskbar keeps no dividers either: the dividers exist only as the means of
+  dynamic centering.
 
 ## Settings
 
@@ -149,10 +160,12 @@ All appearance settings (`Style`, `Color`, `Opacity`, `Thickness`, `Length`,
 `Separator before first app`) work as in the original mod.
 
 **Opacity defaults to `0`, which is intentional**: the dividers then draw
-nothing and only reserve their space, so what stays visible is the gap, not a
-line. Raise **Opacity** to make the dividers themselves visible. The dynamic
-separator also needs its position listed in `Separators`, otherwise no gap is
-reserved for it.
+nothing and, with the default **Divider gap** of `0`, reserve no space of their
+own either, so what stays visible is the gap produced by dynamic centering, not
+a line. Raise **Opacity** to make the dividers themselves visible. The dynamic
+divider also needs its position listed in `Separators`, otherwise no gap is
+reserved for it, and the dividers themselves exist only while dynamic centering
+is in effect (a left-aligned, horizontal taskbar).
 
 The settings this fork adds:
 
@@ -164,8 +177,8 @@ The settings this fork adds:
 ## Compatibility
 
 - Windows 11 horizontal taskbars
-- Vertical taskbars via Vertical Taskbar for Windows 11 (separators only:
-  dynamic centering is not supported on a vertical taskbar)
+- Vertical taskbars via Vertical Taskbar for Windows 11: dynamic centering is
+  not supported there, and a vertical taskbar keeps no dividers either
 - Compatible with Windows 11 Taskbar Styler in normal configurations
 - Taskbar labels and uncombined or otherwise variable-width taskbar buttons
 - Mixed multi-monitor layouts with different button modes on each taskbar
@@ -176,12 +189,13 @@ The settings this fork adds:
 
 - The mod never writes the taskbar alignment or any other Windows setting, so
   there is nothing to restore: disabling or removing it simply stops dynamic
-  centering and the separators, and your own alignment applies as it always did.
+  centering and removes the dividers, and your own alignment applies as it
+  always did.
 - While dynamic centering is active, if you switch the taskbar alignment back to
   Center, the mod does not override your choice. It turns dynamic centering off,
-  removes the reserved gap, keeps the separators working, and logs the reason
-  (`the user changed the taskbar alignment; dynamic centering is now off, the separators keep working`).
-  Change any setting, or reload the mod, to use dynamic centering again.
+  removes the dividers, and logs the reason
+  (`the user changed the taskbar alignment; dynamic centering is off and the dividers are removed`).
+  Switching the alignment back to Left recreates the dividers automatically.
 
 ## License and attribution
 
@@ -204,9 +218,17 @@ contribution from mileso in GitHub PR #2.
 
 **请勿与原版 Taskbar Separators 同时启用**，两者都会改写任务栏按钮间距而互相冲突。
 
+> **`Opacity` 默认是 `0`，这是有意为之。** 分隔线不画线，本身也不额外占用空间
+> （**Divider gap** 默认同样是 `0`）；画面里留下的是动态居中产生的空隙，而不是线条。
+> 想让分隔线本身可见，就把 **Opacity** 调高。
+
+> **没有动态居中，就没有分隔线。** 分隔线只是本分叉用来把图标组居中的机械手段，因此
+> 模组只在动态居中生效期间——**左对齐且水平**的任务栏——创建分隔线。任务栏居中时、
+> 以及垂直任务栏上都不存在分隔线；任务栏切回左对齐（且水平）后会重新创建。
+
 ### 相对原版新增
 
-- **动态居中**：以指定位置为界，把其后的图标作为一组相对整条任务栏居中
+- **动态居中**：以指定位置为界，把其后的图标作为一组相对整条任务栏居中；它只在任务栏**左对齐且水平**时生效，分隔线也只在它生效期间存在
 - 右侧图标数量达到设定值时自动隐藏动态分隔线
 - 拖动/互换任务栏图标时冻结分隔线几何，避免布局反馈回环
 - 释放鼠标后连续多帧重建间距，修复临时边距残留
@@ -215,40 +237,39 @@ contribution from mileso in GitHub PR #2.
 
 ### 设置项
 
+**`Opacity` 默认是 `0`，这是有意为之**：此时分隔线不画线，本身也不额外占用空间
+（**Divider gap** 默认同样是 `0`），所以画面里留下的是动态居中产生的空隙，而不是线条。
+想让分隔线本身可见，就把 **Opacity** 调高。
+分隔线本身也只在动态居中生效（左对齐且水平）期间创建。
+
 | 设置 | 取值 | 含义 |
 | --- | --- | --- |
 | Dynamic centering position | 任务栏位置，默认 `4` | 动态居中与间距行为所使用的分隔线位置。该位置必须同时出现在 `Separators` 列表中，否则不会为它预留间距。 |
 | Hide when middle icon count is at least | 图标数量，默认 `11` | 当动态位置之后的图标数量达到该值时隐藏动态分隔线。 |
 
-**`Opacity` 默认是 `0`，这是有意为之**：此时分隔线不画线，只预留它占用的空间，
-所以默认看到的是间距而不是线条。想让分隔线可见就把 **Opacity** 调高。
-
-### 动态居中需要左对齐任务栏
+### 动态居中需要左对齐且水平
 
 Windows 在“居中”模式下由系统居中整排按钮，模组无法单独定位分隔线之后的那组图标，
-因此动态居中只在**左对齐**的任务栏上生效。任务栏对齐设置 `TaskbarAl` 中，`0` 表示左对齐，
+因此动态居中只在**左对齐且水平**的任务栏上生效。任务栏对齐设置 `TaskbarAl` 中，`0` 表示左对齐，
 其它值（通常是 `1`）表示居中。
 
 ### 任务栏对齐与动态居中
 
-动态居中**没有单独的开关**：任务栏是**左对齐**时就自动生效；任务栏居中时一律不生效，
-因为该模式下整排按钮已由系统居中。
+动态居中**没有单独的开关**：任务栏**左对齐且水平**时就自动生效；任务栏居中或垂直时一律不生效，
+因为该模式下整排按钮已由系统居中，或者预留间距只按水平任务栏计算。
 
 **模组从不写入任务栏对齐设置，也不写入任何其它 Windows 设置**，它只读取 `TaskbarAl`
 来判断任务栏是左对齐（`0`）还是居中（其它值，通常是 `1`）。
 
-**要使用动态居中，请在 Windows 的任务栏设置里把对齐方式改为左对齐**：任务栏居中时不会生效，
-分隔线则照常工作。
+**要使用动态居中，请在 Windows 的任务栏设置里把对齐方式改为左对齐。**
 
-- 任务栏**居中**时不会生效：该模式下整排按钮由系统居中，模组也不会背着你改对齐设置。
-  要使用动态居中，请在 Windows 的任务栏设置里把对齐方式改为**左**。
-- 对齐设置**每次加载、每次改设置只读取一次**：模组运行期间把任务栏改成左对齐不会立即生效，
-  改动任意一个设置（或重新加载模组）即可应用。
-- 监控线程只在动态居中生效期间运行。在这期间如果你自己把任务栏对齐切回**居中**，模组不会与你对抗：
-  它会关闭动态居中、撤掉预留的间距，并**保持分隔线正常工作**，同时在 Windhawk 日志里记录：
-  `the user changed the taskbar alignment; dynamic centering is now off, the separators keep working`。
-  动态居中不会自动重新启用，改动任意一个设置或重新加载模组即可。
-- **垂直任务栏不支持动态居中**：分隔线仍然可用，但预留间距只按水平任务栏计算。
+- 任务栏**居中**时不会生效：该模式下整排按钮由系统居中，模组也不会背着你改对齐设置，
+  并且**不创建任何分隔线**。
+- 对齐监控在模组运行期间常驻，并**双向**响应：把任务栏切到**居中**，动态居中会关闭并移除分隔线；
+  切回**左对齐**，动态居中会重新开启并重建分隔线。不需要改动设置，也不需要重新加载模组。
+  原因会写入 Windhawk 日志：
+  `the user changed the taskbar alignment; dynamic centering is off and the dividers are removed`。
+- **垂直任务栏不支持动态居中**，垂直任务栏上同样不保留分隔线，因为分隔线只是动态居中的实现手段。
 
 ## 许可与署名
 
@@ -282,14 +303,14 @@ Windows 在“居中”模式下由系统居中整排按钮，模组无法单独
   - diamond: Diamond
 - separatorGap: 0
   $name: Divider gap
-  $description: Extra physical space reserved at each divider position, from 0 to 32 pixels. Set to 0 for the original overlay-only behavior.
+  $description: Extra physical space reserved at each divider position, from 0 to 32 pixels. Set to 0 for the original overlay-only behavior. Only in effect while dynamic centering is applied, that is on a left-aligned, horizontal taskbar.
 - color: "#FFFF00"
   $name: Color
   $description: "Divider color in #RRGGBB or #AARRGGBB format."
 - opacity: 0
   $name: Opacity
-  $description: Divider opacity as a percentage, from 0 to 100. The default 0 draws nothing on purpose, so what stays visible is the space the divider reserves; raise this value to make the dividers visible.
-  $description:zh-CN: 分隔线不透明度百分比，取值 0 到 100。默认值 0 是有意为之：分隔线只占位、不画线；想让分隔线可见就把该值调高。
+  $description: The default 0 is intentional. The divider draws no line and, with the default Divider gap of 0, reserves no space of its own either; raise this value to make the dividers visible. Divider opacity as a percentage, from 0 to 100.
+  $description:zh-CN: 默认值 0 是有意为之：分隔线不画线，本身也不额外占用空间（Divider gap 默认同样是 0）；想让分隔线本身可见就把该值调高。分隔线不透明度百分比，取值 0 到 100。
 - width: 2
   $name: Thickness
   $description: Line thickness, and Ring stroke thickness, in pixels from 1 to 8.
@@ -319,8 +340,8 @@ Windows 在“居中”模式下由系统居中整排按钮，模组无法单独
 - dynamicPosition: 4
   $name: Dynamic centering position
   $name:zh-CN: 动态居中位置
-  $description: The separator position used for the dynamic centering and gap behavior. It must also be listed in Separators, otherwise no gap is reserved for it.
-  $description:zh-CN: 用于动态居中与间距行为的任务栏位置。该位置必须同时出现在 Separators 列表中，否则不会为它预留间距。
+  $description: The separator position used for the dynamic centering and gap behavior. It must also be listed in Separators, otherwise no gap is reserved for it. Dynamic centering is applied only on a left-aligned, horizontal taskbar.
+  $description:zh-CN: 用于动态居中与间距行为的任务栏位置。该位置必须同时出现在 Separators 列表中，否则不会为它预留间距。动态居中只在左对齐且水平的任务栏上生效。
 - hideWhenMiddleIconCountAtLeast: 11
   $name: Hide when middle icon count is at least
   $name:zh-CN: 右侧图标数量达到此值时隐藏
@@ -331,6 +352,9 @@ Windows 在“居中”模式下由系统居中整排按钮，模组无法单独
   $name: Separators
   $description: |
     Place dividers by taskbar position or app name.
+
+    Dividers exist only while dynamic centering is applied, that is on a
+    left-aligned, horizontal taskbar.
 
     + = before
     - = after
@@ -469,10 +493,12 @@ std::atomic<unsigned int> g_settingsGeneration{0};
 std::atomic<bool> g_taskbarViewDllLoaded{false};
 std::atomic<bool> g_unloading{false};
 
-// Dynamic centering: while it is active the mod watches the taskbar alignment
-// value (TaskbarAl) through RegNotifyChangeKeyValue. The mod never writes that
-// value: if the user switches it back to center, dynamic centering is turned
-// off and the separators keep working.
+// Dynamic centering: while the taskbar is left-aligned and horizontal the mod
+// watches the taskbar alignment value (TaskbarAl) through
+// RegNotifyChangeKeyValue. The mod never writes that value. The monitor is
+// resident and reacts in both directions: switching the taskbar to center turns
+// dynamic centering off (and with it the dividers), switching it back to left
+// turns it on again.
 // Stop uses an event so uninit never blocks on a long Sleep.
 // g_dynamicCenteringActive is the runtime answer to "is dynamic centering in
 // effect right now". The layout code must use this flag rather than re-reading
@@ -481,6 +507,11 @@ std::atomic<bool> g_alignMonitorStop{false};
 std::atomic<bool> g_dynamicCenteringActive{false};
 HANDLE g_alignMonitorThread = nullptr;
 HANDLE g_alignStopEvent = nullptr;
+// StartTaskbarAlignMonitor runs on the load/settings-change path (including any
+// explorer thread through LoadLibraryExW_Hook) while StopTaskbarAlignMonitor
+// runs on the unload path, so the monitor handles above are only touched under
+// this mutex.
+std::mutex g_alignMonitorMutex;
 
 struct AnimationDividerCache {
     winrt::weak_ref<Controls::Canvas> host;
@@ -595,6 +626,14 @@ struct TrackedTaskbarState {
     bool layoutMonitorAttached = false;
     winrt::event_token layoutUpdatedToken{};
     winrt::weak_ref<Controls::Panel> layoutMonitorPanel;
+    // The forced reconcile above writes margins, which schedules another layout
+    // pass and raises LayoutUpdated again, so this handler never re-enters
+    // itself and gives up after a bounded number of tries per observed
+    // realized-button count.
+    bool layoutForcedReconcileActive = false;
+    int layoutForcedReconcileAttempts = 0;
+    size_t layoutObservedButtonCount = 0;
+    bool layoutObservedButtonCountValid = false;
 
     // Drag freeze state for the dynamic gap.
     bool reorderDragActive = false;
@@ -968,6 +1007,24 @@ void LoadSettings() {
         Wh_FreeStringSetting(positionStr);
     }
 
+    // The dynamic position only reserves a gap while it is also a configured
+    // separator; the rebuild path silently ignores it otherwise.
+    if (std::none_of(settings.separators.begin(), settings.separators.end(),
+                     [&](SeparatorSettings const& separator) {
+                         int position = separator.position;
+                         if (separator.before) {
+                             if (position == 1) {
+                                 return false;
+                             }
+                             position--;
+                         }
+                         return position == settings.dynamicPosition;
+                     })) {
+        Wh_Log(L"dynamicPosition %d is not in the separators list; no gap is "
+               L"reserved for it",
+               settings.dynamicPosition);
+    }
+
     {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
         g_settings = settings;
@@ -1063,16 +1120,11 @@ HWND GetTaskbarDispatchWindow(HWND taskbarWnd) {
 
 using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
 
-// Adapted from the official Windows 11 Taskbar Styler mod. A true return
-// means the hook observed the message and the callback returned.
-//
-// SendMessageTimeout is used instead of SendMessage so that a hung taskbar
-// UI thread can never block the caller forever: the alignment monitor
-// thread runs this while it is being joined during unload. On timeout the
-// hook is removed, so a late delivery cannot call into a mod that may be
-// unloading, and the parameter is deliberately leaked: a late delivery may
-// still be inside the hook procedure, so freeing it would be a
-// use-after-free. That is one small block per hung taskbar UI thread.
+// Adapted from the official Windows 11 Taskbar Styler mod. SendMessage is
+// blocking: it returns only after the hook procedure has run the callback, so
+// the parameter can live on the caller's stack and be destroyed with it, and
+// the hook is always removed before this function returns. A true return means
+// the hook observed the message and the callback returned.
 bool RunFromWindowThread(HWND hWnd,
                          RunFromWindowThreadProc_t proc,
                          PVOID procParam) {
@@ -1117,25 +1169,12 @@ bool RunFromWindowThread(HWND hWnd,
         return false;
     }
 
-    constexpr UINT kRunFromWindowThreadTimeoutMs = 5000;
-    auto* param = new RUN_FROM_WINDOW_THREAD_PARAM{proc, procParam, false};
-    DWORD_PTR sendResult = 0;
-    LRESULT sent = SendMessageTimeoutW(
-        hWnd, runFromWindowThreadRegisteredMsg, 0,
-        reinterpret_cast<LPARAM>(param),
-        SMTO_ABORTIFHUNG | SMTO_BLOCK, kRunFromWindowThreadTimeoutMs,
-        &sendResult);
-    if (!sent) {
-        Wh_Log(L"SendMessageTimeout to the taskbar UI thread failed: %lu",
-               GetLastError());
-        UnhookWindowsHookEx(hook);
-        return false;
-    }
+    RUN_FROM_WINDOW_THREAD_PARAM param{proc, procParam, false};
+    SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0,
+                reinterpret_cast<LPARAM>(&param));
 
     UnhookWindowsHookEx(hook);
-    bool callbackRan = param->callbackRan;
-    delete param;
-    return callbackRan;
+    return param.callbackRan;
 }
 
 void* CTaskBand_ITaskListWndSite_vftable;
@@ -2708,6 +2747,13 @@ void AttachAnimationPointerHandlers(TrackedTaskbarState& taskbar,
     }
 }
 
+// At most this many forced reconciles per observed realized-button count: the
+// forced reconcile writes margins, which schedules another layout pass and can
+// raise LayoutUpdated again while the count still does not match (for example
+// while a removed button is still animating), so the handler is bounded instead
+// of spinning.
+constexpr int kMaxLayoutForcedReconciles = 3;
+
 // Layout-change monitor for the taskbar repeater panel.
 // Closing an app removes its TaskListButton out from under the split half-gap
 // margins: the removed button's halfGap disappears (gap halves) and, because
@@ -2722,6 +2768,13 @@ void OnTaskbarLayoutUpdated(
     winrt::Windows::Foundation::IInspectable const&) {
     auto* taskbarState = FindTrackedTaskbarById(taskbarId);
     if (!taskbarState || g_unloading.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    // Our own forced reconcile writes margins, which raises LayoutUpdated again
+    // while it is still running; that pass must not queue another forced
+    // reconcile.
+    if (taskbarState->layoutForcedReconcileActive) {
         return;
     }
 
@@ -2762,11 +2815,35 @@ void OnTaskbarLayoutUpdated(
         realizedButtonCount++;
     }
 
-    // A removed or added button left the split margins stale; force one
-    // structural reconcile to rebuild them.
-    if (realizedButtonCount != taskbarState->reconciledButtons.size()) {
-        ReconcileTaskbarRepeater(repeater, true);
+    // Only a count differing from the last observed one is a new situation,
+    // which makes the retries below worth resetting.
+    if (!taskbarState->layoutObservedButtonCountValid ||
+        taskbarState->layoutObservedButtonCount != realizedButtonCount) {
+        taskbarState->layoutObservedButtonCount = realizedButtonCount;
+        taskbarState->layoutObservedButtonCountValid = true;
+        taskbarState->layoutForcedReconcileAttempts = 0;
     }
+
+    if (realizedButtonCount == taskbarState->reconciledButtons.size()) {
+        return;
+    }
+
+    // A removed or added button left the split margins stale; force a
+    // structural reconcile to rebuild them. The attempts are bounded per
+    // observed count, and a LayoutUpdated raised by our own forced reconcile is
+    // ignored at the top of this handler.
+    if (taskbarState->layoutForcedReconcileAttempts >=
+        kMaxLayoutForcedReconciles) {
+        return;
+    }
+
+    taskbarState->layoutForcedReconcileAttempts++;
+    taskbarState->layoutForcedReconcileActive = true;
+    try {
+        ReconcileTaskbarRepeater(repeater, true);
+    } catch (...) {
+    }
+    taskbarState->layoutForcedReconcileActive = false;
 }
 
 void DetachLayoutChangeMonitor(TrackedTaskbarState& taskbar) {
@@ -4266,6 +4343,16 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                 taskbar.rootGrid = winrt::make_weak(rootGrid);
             }
 
+            // Product rule: the dividers are only the mechanical means of
+            // dynamic centering, so while dynamic centering is not in effect
+            // (taskbar center-aligned) the mod creates and keeps no dividers at
+            // all. The overlay container is dropped with them, and because this
+            // is re-decided on every rebuild, a later layout event cannot bring
+            // the dividers back on its own.
+            if (!dynamicCenteringActive) {
+                activeSeparators.clear();
+            }
+
             Controls::Canvas overlayCanvas = nullptr;
             bool needOverlay = !activeSeparators.empty();
 
@@ -4416,6 +4503,15 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                 TryGetPrimaryOrderingDirection(overlayCanvas, appButtons,
                                                taskbarOrientation,
                                                &primaryOrderingDirection);
+
+            // Dynamic centering is in effect only on a horizontal taskbar, so a
+            // vertical one keeps no dividers either. Nothing is created once the
+            // divider list is empty, and the shared "no active divider" cleanup
+            // below also drops the overlay container.
+            if (orientationValid &&
+                taskbarOrientation != TaskbarOrientation::horizontal) {
+                activeSeparators.clear();
+            }
 
             // Keep a stable base margin for each realized TaskListButton. Any
             // physical divider gap is then added as our own delta on top of
@@ -4580,10 +4676,12 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                         } else {
                             // Interior divider: split the requested space across the two
                             // neighboring buttons so the overlay stays centered in the new
-                            // physical gap. Each half is aligned to the physical
-                            // pixel grid independently (sum is preserved via fullGap - halfLeft)
-                            // so the margins never carry sub-pixel values that the layout engine
-                            // rounds differently for even/odd button counts (~0.7 DIP shift).
+                            // physical gap. Each half is snapped to the physical pixel
+                            // grid independently, so the two snapped halves can miss
+                            // fullGap by up to half a physical pixel. That rounding is
+                            // deliberate: it keeps the margins from carrying sub-pixel
+                            // values that the layout engine rounds differently for
+                            // even/odd button counts (~0.7 DIP shift).
                             double halfLeft = fullGap / 2.0;
                             double halfRight = fullGap - halfLeft;
                             if (overlayCanvas) {
@@ -5085,10 +5183,17 @@ void CleanupAllTaskbarsForUnload() {
             taskbar.overlayCanvas = {};
             taskbar.animationPointerSource = {};
             taskbar.animationPointerMovedHandler = nullptr;
+            taskbar.animationPointerExitedToken = {};
+            taskbar.animationPointerHandlersAttached = false;
+            taskbar.animationPointerExitedHandlerAttached = false;
             taskbar.reorderPointerSource = {};
+            taskbar.reorderPointerPressedHandler = nullptr;
             taskbar.reorderPointerReleasedHandler = nullptr;
             taskbar.reorderPointerHandlerAttached = false;
             taskbar.reorderStructuralReconcilePending = false;
+            taskbar.layoutMonitorPanel = {};
+            taskbar.layoutUpdatedToken = {};
+            taskbar.layoutMonitorAttached = false;
             ClearAnimationElementCache(taskbar);
         }
         g_trackedTaskbars->clear();
@@ -5437,19 +5542,21 @@ struct TaskbarAlignWatch {
 
 // Called when the user changes the taskbar alignment away from left while
 // dynamic centering is active. The mod does not fight the user: dynamic
-// centering is turned off and the gap it reserved is dropped, while the
-// separators keep working exactly as before. This runs on the alignment monitor
-// thread, which returns right after, so it never joins itself.
+// centering is turned off and the gap it reserved is dropped. The dividers
+// exist only as the means of dynamic centering, so they go away with it: the
+// reconcile run below removes them, and while g_dynamicCenteringActive is false
+// no later rebuild can create them again. This runs on the alignment monitor
+// thread, which no longer exits right after it, so it never joins itself.
 void YieldDynamicCenteringForUserAlignment() {
-    Wh_Log(L"the user changed the taskbar alignment; dynamic centering is now "
-           L"off, the separators keep working");
+    Wh_Log(L"the user changed the taskbar alignment; dynamic centering is off "
+           L"and the dividers are removed");
 
     g_dynamicCenteringActive.store(false, std::memory_order_release);
 
     // The alignment value belongs to the user: this mod never wrote it, so
-    // there is nothing to restore. One normal rebuild is enough to drop the
-    // reserved dynamic gap, and it goes through the usual reconcile path, so
-    // the separators are left in place.
+    // there is nothing to restore. One rebuild is enough to drop the reserved
+    // dynamic gap and the dividers, and it goes through the usual reconcile
+    // path.
     if (g_taskbarViewDllLoaded) {
         if (!RunReconcileOnTaskbarThread(false)) {
             Wh_Log(L"the dynamic gap could not be removed on the taskbar UI "
@@ -5462,7 +5569,8 @@ DWORD WINAPI TaskbarAlignMonitorThreadProc(LPVOID) {
     // Event-driven watch instead of registry polling: RegNotifyChangeKeyValue
     // reports a TaskbarAl change as soon as it happens, and the thread also
     // waits on the stop event, so unloading wakes it immediately instead of
-    // leaving it in a long Sleep.
+    // leaving it in a long Sleep. The thread is resident: it keeps watching in
+    // both directions instead of exiting after the first alignment change.
     TaskbarAlignWatch watch;
     if (!watch.Open()) {
         return 0;
@@ -5490,14 +5598,38 @@ DWORD WINAPI TaskbarAlignMonitorThreadProc(LPVOID) {
             watch.key, FALSE, REG_NOTIFY_CHANGE_LAST_SET, watch.changeEvent,
             TRUE);
         if (status != ERROR_SUCCESS) {
+            // A failed registration is not necessarily permanent, so the
+            // resident monitor waits and retries instead of exiting for good.
+            // Only the stop event ends this thread.
             Wh_Log(L"RegNotifyChangeKeyValue failed: %ld", status);
-            break;
+            if (WaitForSingleObject(g_alignStopEvent, 1000) != WAIT_TIMEOUT) {
+                break;
+            }
+            continue;
         }
 
+        // The monitor reacts in both directions. Leaving left turns dynamic
+        // centering off (and removes the dividers); coming back to left turns it
+        // on again and rebuilds the dividers. The registration above is one-shot
+        // and is renewed by the next iteration, so the loop keeps waiting here
+        // instead of exiting.
         DWORD taskbarAl = 0;
-        if (ReadTaskbarAl(&taskbarAl) && taskbarAl != 0) {
-            YieldDynamicCenteringForUserAlignment();
-            break;
+        if (ReadTaskbarAl(&taskbarAl)) {
+            if (taskbarAl != 0) {
+                if (g_dynamicCenteringActive.load(std::memory_order_acquire)) {
+                    YieldDynamicCenteringForUserAlignment();
+                }
+            } else if (!g_dynamicCenteringActive.load(
+                           std::memory_order_acquire)) {
+                Wh_Log(L"the taskbar is left-aligned again; dynamic centering "
+                       L"is applied again");
+                g_dynamicCenteringActive.store(true, std::memory_order_release);
+                if (g_taskbarViewDllLoaded &&
+                    !RunReconcileOnTaskbarThread(true)) {
+                    Wh_Log(L"the dividers could not be rebuilt on the taskbar "
+                           L"UI thread");
+                }
+            }
         }
 
         // The stop event wakes this thread for unloading, and the change event
@@ -5517,10 +5649,21 @@ DWORD WINAPI TaskbarAlignMonitorThreadProc(LPVOID) {
 }
 
 void StartTaskbarAlignMonitor() {
+    // Serialized against StopTaskbarAlignMonitor: the monitor is started on the
+    // load/settings-change path and stopped on the unload path, and those can
+    // run on different threads.
+    std::lock_guard<std::mutex> lock(g_alignMonitorMutex);
+
+    // Re-checked under the lock and before CreateThread: a start that raced with
+    // the unload must lose, or the thread would outlive the mod.
+    if (g_unloading.load(std::memory_order_acquire)) {
+        return;
+    }
+
     if (g_alignMonitorThread) {
-        // The monitor can have exited on its own after the user changed the
-        // taskbar alignment, so a stale handle is reaped here instead of
-        // blocking a later settings change from starting a new monitor.
+        // The monitor exits on the stop event, so a stale handle is reaped here
+        // instead of blocking a later settings change from starting a new
+        // monitor.
         if (WaitForSingleObject(g_alignMonitorThread, 0) != WAIT_OBJECT_0) {
             return;
         }
@@ -5550,6 +5693,10 @@ void StartTaskbarAlignMonitor() {
 }
 
 void StopTaskbarAlignMonitor() {
+    // Serialized with StartTaskbarAlignMonitor. The wait below is unbounded on
+    // purpose, so an unloaded image can never leave a mod thread running.
+    std::lock_guard<std::mutex> lock(g_alignMonitorMutex);
+
     g_alignMonitorStop.store(true, std::memory_order_release);
     if (g_alignStopEvent) {
         SetEvent(g_alignStopEvent);
@@ -5591,25 +5738,30 @@ void ApplyDynamicCenteringSetting() {
     if (!ReadTaskbarAl(&taskbarAl)) {
         Wh_Log(L"could not read the taskbar alignment; dynamic centering stays "
                L"inactive");
-        StopTaskbarAlignMonitor();
         g_dynamicCenteringActive.store(false, std::memory_order_release);
+        // The monitor stays resident: a readable alignment value is picked up
+        // without changing a setting or reloading the mod.
+        StartTaskbarAlignMonitor();
         return;
     }
 
     if (taskbarAl != 0) {
         // The taskbar is center-aligned: Windows centers the whole button row
-        // itself there, so dynamic centering is not applied. The alignment
-        // setting is not changed; switching the taskbar to Left alignment in
-        // Windows' taskbar settings is what enables dynamic centering.
+        // itself there, so dynamic centering is not applied, and with it no
+        // dividers exist. The alignment setting is not changed; switching the
+        // taskbar to Left alignment in Windows' taskbar settings is what enables
+        // dynamic centering.
         Wh_Log(L"the taskbar is center-aligned; dynamic centering stays "
                L"inactive");
-        StopTaskbarAlignMonitor();
         g_dynamicCenteringActive.store(false, std::memory_order_release);
+        // The monitor stays resident: it is what notices the taskbar being
+        // switched back to left, which turns dynamic centering on again.
+        StartTaskbarAlignMonitor();
         return;
     }
 
     // The taskbar is left-aligned: dynamic centering is applied, and the
-    // monitor watches for the user switching the alignment back.
+    // monitor watches in both directions.
     // StartTaskbarAlignMonitor is a no-op while the thread is already running.
     g_dynamicCenteringActive.store(true, std::memory_order_release);
     StartTaskbarAlignMonitor();
@@ -5669,17 +5821,19 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModBeforeUninit() {
-    // Stop the alignment monitor and wait for the thread to really exit:
-    // this mod never writes the alignment, so there is nothing to put
-    // back.
-    StopTaskbarAlignMonitor();
+    // The unloading flag is raised first: a concurrent start of the alignment
+    // monitor must see it and lose the race, and the monitor thread itself stops
+    // at its next iteration.
+    g_unloading.store(true, std::memory_order_release);
     g_dynamicCenteringActive.store(false, std::memory_order_release);
 
-    g_unloading.store(true, std::memory_order_release);
+    // Stop the alignment monitor and wait for the thread to really exit:
+    // this mod never writes the alignment, so there is nothing to put back.
+    StopTaskbarAlignMonitor();
 
     if (g_taskbarViewDllLoaded) {
-        // On success this stays synchronous, with a bounded wait, until all
-        // tracked taskbars have been cleaned on the taskbar UI thread.
+        // On success this stays synchronous, waiting for the taskbar UI
+        // thread, until all tracked taskbars have been cleaned.
         if (!RunReconcileOnTaskbarThread(false)) {
             Wh_Log(
                 L"Unload cleanup did not reach the taskbar UI "
