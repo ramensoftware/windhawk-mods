@@ -2,7 +2,7 @@
 // @id              taskbar-volume-percentage
 // @name            Taskbar Volume Percentage Indicator
 // @description     Shows the master volume percentage in the Windows 11 system tray volume icon
-// @version         1.5.7
+// @version         1.5.8
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
@@ -196,8 +196,15 @@ void* g_volumeViewModel = nullptr;
 winrt::hstring g_nativeVolumeGlyph;
 bool g_capturingVolumeGlyph = false;
 
-// IconView elements that were given a MinWidth, to clear it on unload.
-std::vector<winrt::weak_ref<FrameworkElement>> g_volumeIconViews;
+// IconView elements that were given a custom width, with snapshot for reversibility.
+struct TrackedIconView {
+    winrt::weak_ref<FrameworkElement> iconView;
+    bool hasCustomWidth = false;
+    winrt::Windows::Foundation::IInspectable origMinWidth{nullptr};
+    winrt::Windows::Foundation::IInspectable origWidth{nullptr};
+    winrt::Windows::Foundation::IInspectable origAlignment{nullptr};
+};
+std::vector<TrackedIconView> g_volumeIconViews;
 
 // Tracked TextIconContent and its sub-box hierarchy for dual-column mode.
 struct TrackedVolumeContent {
@@ -207,6 +214,12 @@ struct TrackedVolumeContent {
     winrt::weak_ref<FrameworkElement> underlayElement;
     winrt::weak_ref<Controls::TextBlock> subBlock;
     bool isDualBoxConfigured = false;
+    winrt::Windows::Foundation::IInspectable origUnderlayVisibility{nullptr};
+    winrt::Windows::Foundation::IInspectable origBaseVisibility{nullptr};
+    winrt::Windows::Foundation::IInspectable origUnderlayAlignment{nullptr};
+    winrt::Windows::Foundation::IInspectable origBaseAlignment{nullptr};
+    winrt::Windows::Foundation::IInspectable origUnderlayColumn{nullptr};
+    winrt::Windows::Foundation::IInspectable origBaseColumn{nullptr};
 };
 std::vector<TrackedVolumeContent> g_trackedVolumeContents;
 
@@ -420,16 +433,39 @@ double GetContainerWidth() {
     return (std::max)(CalculateAutoWidth(), g_maxObservedWidth);
 }
 
-void ApplyIconViewWidth(FrameworkElement const& iconView) {
+void ApplyIconViewWidth(TrackedIconView& tracked,
+                        FrameworkElement const& iconView) {
     double width = GetContainerWidth();
     if (width > 0) {
+        if (!tracked.hasCustomWidth) {
+            tracked.origMinWidth =
+                iconView.ReadLocalValue(FrameworkElement::MinWidthProperty());
+            tracked.origWidth =
+                iconView.ReadLocalValue(FrameworkElement::WidthProperty());
+            tracked.origAlignment = iconView.ReadLocalValue(
+                FrameworkElement::HorizontalAlignmentProperty());
+            tracked.hasCustomWidth = true;
+        }
         iconView.MinWidth(width);
         iconView.Width(width);
         iconView.HorizontalAlignment(HorizontalAlignment::Center);
-    } else {
-        iconView.ClearValue(FrameworkElement::MinWidthProperty());
-        iconView.ClearValue(FrameworkElement::WidthProperty());
-        iconView.ClearValue(FrameworkElement::HorizontalAlignmentProperty());
+    } else if (tracked.hasCustomWidth) {
+        auto restoreProp =
+            [](FrameworkElement const& el, DependencyProperty const& dp,
+               winrt::Windows::Foundation::IInspectable const& orig) {
+                if (!orig || orig == DependencyProperty::UnsetValue()) {
+                    el.ClearValue(dp);
+                } else {
+                    el.SetValue(dp, orig);
+                }
+            };
+        restoreProp(iconView, FrameworkElement::MinWidthProperty(),
+                    tracked.origMinWidth);
+        restoreProp(iconView, FrameworkElement::WidthProperty(),
+                    tracked.origWidth);
+        restoreProp(iconView, FrameworkElement::HorizontalAlignmentProperty(),
+                    tracked.origAlignment);
+        tracked.hasCustomWidth = false;
     }
 }
 
@@ -467,22 +503,22 @@ void RememberVolumeDataModel(
 
 void RememberVolumeIconView(FrameworkElement const& iconView) {
     std::erase_if(g_volumeIconViews,
-                  [](const auto& weakRef) { return !weakRef.get(); });
+                  [](const auto& tracked) { return !tracked.iconView.get(); });
 
-    for (const auto& weakRef : g_volumeIconViews) {
-        if (weakRef.get() == iconView) {
+    for (const auto& tracked : g_volumeIconViews) {
+        if (tracked.iconView.get() == iconView) {
             return;
         }
     }
 
     Wh_Log(L"Volume icon view %p", winrt::get_abi(iconView));
-    g_volumeIconViews.push_back(iconView);
+    g_volumeIconViews.push_back({iconView});
 }
 
 void ApplyVolumeIconViewsWidth() {
-    for (const auto& weakRef : g_volumeIconViews) {
-        if (auto iconView = weakRef.get()) {
-            ApplyIconViewWidth(iconView);
+    for (auto& tracked : g_volumeIconViews) {
+        if (auto iconView = tracked.iconView.get()) {
+            ApplyIconViewWidth(tracked, iconView);
         }
     }
 }
@@ -535,15 +571,34 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
 
     containerGrid.ColumnDefinitions().Clear();
 
-    auto resetEl = [](FrameworkElement const& el) {
-        if (el) {
-            el.ClearValue(UIElement::VisibilityProperty());
-            el.ClearValue(FrameworkElement::HorizontalAlignmentProperty());
-            el.ClearValue(Controls::Grid::ColumnProperty());
-        }
-    };
-    resetEl(tracked.baseElement.get());
-    resetEl(tracked.underlayElement.get());
+    auto restoreProp =
+        [](FrameworkElement const& el, DependencyProperty const& dp,
+           winrt::Windows::Foundation::IInspectable const& orig) {
+            if (el) {
+                if (!orig || orig == DependencyProperty::UnsetValue()) {
+                    el.ClearValue(dp);
+                } else {
+                    el.SetValue(dp, orig);
+                }
+            }
+        };
+
+    if (auto base = tracked.baseElement.get()) {
+        restoreProp(base, UIElement::VisibilityProperty(),
+                    tracked.origBaseVisibility);
+        restoreProp(base, FrameworkElement::HorizontalAlignmentProperty(),
+                    tracked.origBaseAlignment);
+        restoreProp(base, Controls::Grid::ColumnProperty(),
+                    tracked.origBaseColumn);
+    }
+    if (auto underlay = tracked.underlayElement.get()) {
+        restoreProp(underlay, UIElement::VisibilityProperty(),
+                    tracked.origUnderlayVisibility);
+        restoreProp(underlay, FrameworkElement::HorizontalAlignmentProperty(),
+                    tracked.origUnderlayAlignment);
+        restoreProp(underlay, Controls::Grid::ColumnProperty(),
+                    tracked.origUnderlayColumn);
+    }
 
     tracked.isDualBoxConfigured = false;
 }
@@ -642,6 +697,25 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
             Controls::Grid::SetColumn(el, col);
         }
     };
+
+    if (!tracked->isDualBoxConfigured) {
+        if (auto base = tracked->baseElement.get()) {
+            tracked->origBaseVisibility =
+                base.ReadLocalValue(UIElement::VisibilityProperty());
+            tracked->origBaseAlignment = base.ReadLocalValue(
+                FrameworkElement::HorizontalAlignmentProperty());
+            tracked->origBaseColumn =
+                base.ReadLocalValue(Controls::Grid::ColumnProperty());
+        }
+        if (auto underlay = tracked->underlayElement.get()) {
+            tracked->origUnderlayVisibility =
+                underlay.ReadLocalValue(UIElement::VisibilityProperty());
+            tracked->origUnderlayAlignment = underlay.ReadLocalValue(
+                FrameworkElement::HorizontalAlignmentProperty());
+            tracked->origUnderlayColumn =
+                underlay.ReadLocalValue(Controls::Grid::ColumnProperty());
+        }
+    }
 
     if (g_isMuted) {
         // In mute state, display a single centered indicator rather than
@@ -864,14 +938,6 @@ using TextIconContent_MeasureOverride_t =
                  winrt::Windows::Foundation::Size*);
 TextIconContent_MeasureOverride_t TextIconContent_MeasureOverride_Original;
 
-void WINAPI TextIconContentViewModel_BaseText_Hook(void* pThis,
-                                                   winrt::hstring* text) {
-    if (g_capturingVolumeGlyph && text && !text->empty()) {
-        g_nativeVolumeGlyph = *text;
-    }
-    TextIconContentViewModel_BaseText_Original(pThis, text);
-}
-
 void WINAPI VolumeSystemTrayIconDataModel_UpdateVolume_Hook(
     void* pThis,
     float volumeLevel,
@@ -928,6 +994,14 @@ void* WINAPI VolumeSystemTrayIconDataModel_CurrentData_Hook(void* pThis,
     });
 
     return ret;
+}
+
+void WINAPI TextIconContentViewModel_BaseText_Hook(void* pThis,
+                                                   winrt::hstring* text) {
+    if (g_capturingVolumeGlyph && text && !text->empty()) {
+        g_nativeVolumeGlyph = *text;
+    }
+    TextIconContentViewModel_BaseText_Original(pThis, text);
 }
 
 void WINAPI TextIconContentViewModel_UpdateStyles_Hook(void* pThis,
@@ -1029,15 +1103,16 @@ void RefreshVolumeIcons() {
 
     PruneVolumeDataModels();
 
-    std::vector<void*> targets;
+    std::vector<std::pair<winrt::Windows::Foundation::IInspectable, void*>>
+        targets;
     targets.reserve(g_volumeDataModels.size());
     for (const auto& dataModel : g_volumeDataModels) {
-        if (dataModel.weakRef.get()) {
-            targets.push_back(dataModel.pThis);
+        if (auto strong = dataModel.weakRef.get()) {
+            targets.emplace_back(std::move(strong), dataModel.pThis);
         }
     }
 
-    for (void* pThis : targets) {
+    for (const auto& [strong, pThis] : targets) {
         winrt::hstring spatialSoundName = g_spatialSoundName;
         VolumeSystemTrayIconDataModel_UpdateVolume_Original(
             pThis, g_volumeLevel, g_isMuted, &spatialSoundName);
