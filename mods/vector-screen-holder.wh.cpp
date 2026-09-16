@@ -3389,6 +3389,7 @@ static const char kEmbeddedFontB64[] =
 // Registered for the life of the process and torn down beside the factory.
 static IDWriteFontFileLoader* g_fontLoader = nullptr;
 static IDWriteFontCollection* g_embeddedFonts = nullptr;
+static bool g_embeddedFontsTried = false;
 static IDWriteFontFallback* g_hudFallback = nullptr;
 static std::vector<BYTE> g_embeddedFontBytes;
 
@@ -3511,6 +3512,7 @@ static void ReleaseEmbeddedFonts() {
     }
     g_embeddedFontBytes.clear();
     g_embeddedFontBytes.shrink_to_fit();
+    g_embeddedFontsTried = false;
 }
 
 // The readout text is built in one place so the fitting pass below can measure
@@ -3748,7 +3750,13 @@ static const HudFont& HudFontOnce() {
         sys->Release();
     }
     if (g_hudFont.pixelSize == 0) {
-        g_embeddedFonts = BuildEmbeddedFonts();
+        // Built at most once. Changing the readout language sends us back
+        // through here, and building a second time would register another font
+        // file loader against the factory and strand the first collection.
+        if (!g_embeddedFontsTried) {
+            g_embeddedFontsTried = true;
+            g_embeddedFonts = BuildEmbeddedFonts();
+        }
         if (g_embeddedFonts) {
             g_hudFont.family = kEmbeddedFontFamily;
             g_hudFont.pixelSize = kEmbeddedFontGrid;
