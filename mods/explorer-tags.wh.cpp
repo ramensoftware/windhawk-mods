@@ -21,7 +21,9 @@ Adds a **Tags** panel at the bottom of File Explorer's navigation pane, below
 Windows' own tags only work for file types with a property handler, so `.txt`,
 `.zip`, `.rar` and folders can't be tagged. These work for anything.
 
-![The Tags panel and the Tags submenu](https://raw.githubusercontent.com/buedgik/explorer-tags/main/docs/explorer-tags.png)
+![The Tags panel at the bottom of the navigation pane](https://raw.githubusercontent.com/buedgik/explorer-tags/main/docs/panel.png)
+
+![The Tags submenu in the file context menu](https://raw.githubusercontent.com/buedgik/explorer-tags/main/docs/menu.png)
 
 - **Tag something:** drag files or folders onto the tag.
 - **See a tag's files:** click it. The tab opens the tag's folder, with a
