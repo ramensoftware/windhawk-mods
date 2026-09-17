@@ -12632,6 +12632,35 @@
         "version": "1.4.1"
       }
     },
+    "sumatrapdf-wheel-scroll-tabs": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1789682157000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1789682157000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Martin Kaiser",
+        "compilerOptions": "-lcomctl32 -lversion",
+        "description": "Use the mouse wheel while hovering over the tab bar to switch between tabs in SumatraPDF",
+        "github": "https://github.com/Martin-Kaiser-0",
+        "include": [
+          "SumatraPDF*.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "SumatraPDF scroll tabs with mouse wheel",
+        "version": "1.0.0"
+      }
+    },
     "suppress-run-box-error-message": {
       "details": {
         "defaultSorting": 320,

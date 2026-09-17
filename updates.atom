@@ -2,12 +2,55 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-17T19:34:29.000Z</updated>
+    <updated>2026-09-17T21:55:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[SumatraPDF scroll tabs with mouse wheel 1.0.0]]></title>
+        <id>https://windhawk.net/mods/sumatrapdf-wheel-scroll-tabs#6b8f938410d8c4946775574001ed53728eff76f8</id>
+        <link href="https://windhawk.net/mods/sumatrapdf-wheel-scroll-tabs"/>
+        <updated>2026-09-17T21:55:57.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="sumatrapdfscrolltabswithmousewheel">SumatraPDF scroll tabs with mouse wheel</h1>
+<p><img src="https://i.imgur.com/xJ4gxoL.gif" alt="demonstration" /></p>
+<p>Use the mouse wheel while hovering over the tab bar of SumatraPDF to switch
+between tabs, the same way the "Chrome/Edge scroll tabs with mouse wheel" mod
+does it for browsers.</p>
+<ul>
+<li>Scrolling down switches to the next tab (to the right), scrolling up to the
+previous tab. SumatraPDF wraps around at both ends. The direction can be
+reversed in the settings.</li>
+<li>Only plain wheel events over the tab bar are intercepted. Ctrl+wheel (zoom),
+Shift+wheel (horizontal scrolling) and wheel events anywhere else are left to
+SumatraPDF.</li>
+<li>Works with the tab bar in SumatraPDF's own title bar (the default with
+<code>UseTabs = true</code>) as well as with a plain tab bar below the menu.</li>
+<li>Both the installed (<code>SumatraPDF.exe</code>) and the portable
+(<code>SumatraPDF-x.y.z-64.exe</code>) builds are covered.</li>
+</ul>
+<h2 id="howitworks">How it works</h2>
+<p>SumatraPDF 3.5 and newer have "Next Tab" / "Previous Tab" commands, bound to
+Ctrl+PageDown / Ctrl+PageUp by default. The mod reads the ids of these commands
+from the accelerator table SumatraPDF registers and posts the matching command
+to the main window, so a wheel notch does exactly the same as pressing the
+shortcut.</p>
+<p>This means the mod relies on Ctrl+PageDown / Ctrl+PageUp being bound to
+"Next Tab" / "Previous Tab". If you rebound these shortcuts to something else
+in the advanced settings (<code>Shortcuts</code>), the wheel triggers whatever they are
+bound to now.</p>
+<p>SumatraPDF versions before 3.5 aren't supported: they have no tab switching
+commands and use Ctrl+PageDown / Ctrl+PageUp for page navigation. The mod stays
+inactive there.</p>
+<h2 id="credits">Credits</h2>
+<p>Based on the <a href="https://windhawk.net/mods/chrome-wheel-scroll-tabs">Chrome/Edge scroll tabs with mouse wheel</a>
+mod by m417z (GPL-3.0).</p>]]></content>
+        <author>
+            <name>Martin Kaiser</name>
+            <uri>https://github.com/Martin-Kaiser-0</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[TopBar for Windows 1.2.0]]></title>
         <id>https://windhawk.net/mods/windhawk-topbar#d0ec196399e1da4244bdf8c73dc36fe04e291ecd</id>
@@ -794,21 +837,6 @@ Original overlay/smear architecture inspired by <a href="https://github.com/Thea
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[On-Screen Indicator Position 1.4.2]]></title>
-        <id>https://windhawk.net/mods/on-screen-indicator-position#6a06dbbff13cacd1cfd4bb530d53ca643b42a019</id>
-        <link href="https://windhawk.net/mods/on-screen-indicator-position"/>
-        <updated>2026-09-13T18:18:19.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Give the "Desktop N" popup that appears on virtual desktop change its own position, separate from other text indicators.</li>
-<li>New setting to make the indicator disappear straight away instead of sliding off screen.</li>
-<li>Keeps working on future Windows builds where the parts it hooks into get moved around.</li>
-</ul>]]></content>
-        <author>
-            <name>mario0318</name>
-            <uri>https://github.com/mario0318</uri>
         </author>
     </entry>
 </feed>
