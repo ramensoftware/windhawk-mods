@@ -737,6 +737,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
 #include <vector>
 #include <atomic>
 #include <map>
+#include <tuple>
 #include <string>
 #include <algorithm>
 #include <gdiplus.h>
@@ -1594,25 +1595,25 @@ static double s_animTargetIntervalMs = 1000.0 / 60.0;
 
 static void UpdateRefreshRateTiming() {
     double hz = 0.0;
-    HWND targetWnd = g_hSwitcher ? g_hSwitcher : GetDesktopWindow();
-    HMONITOR hMon = MonitorFromWindow(targetWnd, MONITOR_DEFAULTTONEAREST);
-    MONITORINFOEXW mi = {};
-    mi.cbSize = sizeof(mi);
-    if (GetMonitorInfoW(hMon, &mi)) {
-        DEVMODEW dm = {};
-        dm.dmSize = sizeof(dm);
-        if (EnumDisplaySettingsW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm) && dm.dmDisplayFrequency >= 50) {
-            hz = (double)dm.dmDisplayFrequency;
-        }
+    DWM_TIMING_INFO ti = {};
+    ti.cbSize = sizeof(ti);
+    if (SUCCEEDED(DwmGetCompositionTimingInfo(NULL, &ti)) && ti.rateRefresh.uiDenominator > 0) {
+        hz = (double)ti.rateRefresh.uiNumerator / (double)ti.rateRefresh.uiDenominator;
     }
     if (hz <= 0.0) {
-        DWM_TIMING_INFO ti = {};
-        ti.cbSize = sizeof(ti);
-        if (SUCCEEDED(DwmGetCompositionTimingInfo(NULL, &ti)) && ti.rateRefresh.uiDenominator > 0) {
-            hz = (double)ti.rateRefresh.uiNumerator / (double)ti.rateRefresh.uiDenominator;
+        HWND targetWnd = g_hSwitcher ? g_hSwitcher : GetDesktopWindow();
+        HMONITOR hMon = MonitorFromWindow(targetWnd, MONITOR_DEFAULTTONEAREST);
+        MONITORINFOEXW mi = {};
+        mi.cbSize = sizeof(mi);
+        if (GetMonitorInfoW(hMon, &mi)) {
+            DEVMODEW dm = {};
+            dm.dmSize = sizeof(dm);
+            if (EnumDisplaySettingsW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm) && dm.dmDisplayFrequency >= 48) {
+                hz = (double)dm.dmDisplayFrequency;
+            }
         }
     }
-    if (hz >= 50.0 && hz <= 360.0) {
+    if (hz >= 48.0 && hz <= 360.0) {
         s_animTargetIntervalMs = 1000.0 / hz;
     }
 }
@@ -1792,6 +1793,14 @@ static HBITMAP s_cachedOverlayOldBitmap = NULL;
 static void* s_cachedOverlayBits = NULL;
 static int s_cachedOverlayW = 0, s_cachedOverlayH = 0;
 
+// Static backing buffer cache for overlay (badge icon backgrounds, shadows, group badges) (<0.05ms BitBlt)
+static HDC s_cachedOverlayStaticDC = NULL;
+static HBITMAP s_cachedOverlayStaticBitmap = NULL;
+static HBITMAP s_cachedOverlayStaticOldBitmap = NULL;
+static void* s_cachedOverlayStaticBits = NULL;
+static int s_cachedOverlayStaticW = 0, s_cachedOverlayStaticH = 0;
+static bool g_overlayStaticDirty = true;
+
 // Static backing buffer cache for instant micro-interaction rendering (<0.1ms BitBlt)
 static HDC s_cachedStaticDC = NULL;
 static HBITMAP s_cachedStaticBitmap = NULL;
@@ -1851,6 +1860,7 @@ static void EnsureScrollBuffers(int w, int h) {
 
 static void InvalidateStaticCache() {
     g_staticContentDirty = true;
+    g_overlayStaticDirty = true;
 }
 
 static HRGN s_cachedRoundRectRgn = NULL;
@@ -1900,6 +1910,17 @@ static void FreeCachedBuffers() {
         s_cachedOverlayBits = NULL;
         s_cachedOverlayW = 0;
         s_cachedOverlayH = 0;
+    }
+    if (s_cachedOverlayStaticDC) {
+        if (s_cachedOverlayStaticOldBitmap) SelectObject(s_cachedOverlayStaticDC, s_cachedOverlayStaticOldBitmap);
+        if (s_cachedOverlayStaticBitmap) DeleteObject(s_cachedOverlayStaticBitmap);
+        DeleteDC(s_cachedOverlayStaticDC);
+        s_cachedOverlayStaticDC = NULL;
+        s_cachedOverlayStaticBitmap = NULL;
+        s_cachedOverlayStaticOldBitmap = NULL;
+        s_cachedOverlayStaticBits = NULL;
+        s_cachedOverlayStaticW = 0;
+        s_cachedOverlayStaticH = 0;
     }
     if (s_cachedStaticDC) {
         if (s_cachedStaticOldBitmap) SelectObject(s_cachedStaticDC, s_cachedStaticOldBitmap);
@@ -2446,7 +2467,12 @@ static void UpdateThumbnailAnimations() {
         if (w.rcThumbActual.left == 0 && w.rcThumbActual.right == 0 &&
             w.rcThumbActual.top == 0 && w.rcThumbActual.bottom == 0) {
             for (const auto& kv : w.hThumbs) {
-                updateThumb(kv.second, { 0, 0, 0, 0 }, 0);
+                if (kv.second) {
+                    auto it = s_lastThumbState.find(kv.second);
+                    if (it == s_lastThumbState.end() || it->second.visible) {
+                        updateThumb(kv.second, { 0, 0, 0, 0 }, 0);
+                    }
+                }
             }
             continue;
         }
@@ -2596,6 +2622,8 @@ static void OnAnimationTick() {
             if (s_cachedStaticDC && s_cachedScrollToDC && s_cachedStaticW == s_cachedScrollToW && s_cachedStaticH == s_cachedScrollToH) {
                 BitBlt(s_cachedStaticDC, 0, 0, s_cachedStaticW, s_cachedStaticH, s_cachedScrollToDC, 0, 0, SRCCOPY);
                 g_staticContentDirty = false;
+            } else {
+                g_staticContentDirty = true;
             }
             for (auto& item : g_scrollTransition.outgoingItems) {
                 int curIdx = FindWindowIndexByHwnd(item.hWnd);
@@ -5408,6 +5436,8 @@ static Gdiplus::Bitmap* CreateIconShadowBitmap(HICON hIcon, int width, int heigh
     
     // Draw on black
     HBITMAP hOld = (HBITMAP)SelectObject(hdcMem, hBmpBlack);
+    memset(pBlackBits, 0, (size_t)width * height * 4);
+    memset(pWhiteBits, 0, (size_t)width * height * 4);
     RECT rc = {0, 0, width, height};
     HBRUSH blackBrush = CreateSolidBrush(RGB(0, 0, 0));
     FillRect(hdcMem, &rc, blackBrush);
@@ -5422,6 +5452,7 @@ static Gdiplus::Bitmap* CreateIconShadowBitmap(HICON hIcon, int width, int heigh
     DeleteObject(whiteBrush);
     
     SelectObject(hdcMem, hOld);
+    GdiFlush();
     DeleteDC(hdcMem);
     ReleaseDC(NULL, hdc);
     
@@ -5458,7 +5489,7 @@ static Gdiplus::Bitmap* CreateIconShadowBitmap(HICON hIcon, int width, int heigh
     return shadowBmpCopy;
 }
 
-static std::map<std::pair<HICON, int>, Gdiplus::Bitmap*> g_iconBitmapCache;
+static std::map<std::tuple<HWND, HICON, int>, Gdiplus::Bitmap*> g_iconBitmapCache;
 
 static void ClearIconBitmapCache() {
     for (auto& kv : g_iconBitmapCache) {
@@ -5467,9 +5498,9 @@ static void ClearIconBitmapCache() {
     g_iconBitmapCache.clear();
 }
 
-static Gdiplus::Bitmap* GetCachedIconBitmap(HICON hIcon, int size) {
+static Gdiplus::Bitmap* GetCachedIconBitmap(HWND hWnd, HICON hIcon, int size) {
     if (!hIcon || size <= 0) return nullptr;
-    auto key = std::make_pair(hIcon, size);
+    auto key = std::make_tuple(hWnd, hIcon, size);
     auto it = g_iconBitmapCache.find(key);
     if (it != g_iconBitmapCache.end()) return it->second;
 
@@ -5491,10 +5522,14 @@ static Gdiplus::Bitmap* GetCachedIconBitmap(HICON hIcon, int size) {
     if (!hBmpBlack || !hBmpWhite || !pBlackBits || !pWhiteBits) {
         if (hBmpBlack) DeleteObject(hBmpBlack);
         if (hBmpWhite) DeleteObject(hBmpWhite);
-        DeleteDC(hdcMem);
-        ReleaseDC(NULL, hdcScreen);
+        if (hdcMem) DeleteDC(hdcMem);
+        if (hdcScreen) ReleaseDC(NULL, hdcScreen);
         return nullptr;
     }
+
+    // Zero-initialize DIB section buffers to prevent dirty page data recycling
+    memset(pBlackBits, 0, (size_t)size * size * 4);
+    memset(pWhiteBits, 0, (size_t)size * size * 4);
 
     RECT rc = { 0, 0, size, size };
     HBRUSH blackBrush = CreateSolidBrush(RGB(0, 0, 0));
@@ -5510,6 +5545,9 @@ static Gdiplus::Bitmap* GetCachedIconBitmap(HICON hIcon, int size) {
     DeleteObject(whiteBrush);
 
     SelectObject(hdcMem, hOld);
+    // Crucial: GdiFlush ensures all GDI batched rendering to DIB sections completes
+    // before the CPU accesses pBlackBits and pWhiteBits pointers directly!
+    GdiFlush();
     DeleteDC(hdcMem);
     ReleaseDC(NULL, hdcScreen);
 
@@ -5575,7 +5613,7 @@ static void DrawDockIconWithAlpha(HDC hdc, const WindowEntry& e, int iconX, int 
         itemAlpha *= minDim;
     }
     if (itemAlpha < 0.99f) {
-        Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(e.hIcon, iconSz);
+        Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(e.hWnd, e.hIcon, iconSz);
         if (pBmp) {
             Gdiplus::Graphics gfx(hdc);
             gfx.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
@@ -6293,7 +6331,7 @@ static void DrawTaskEntry(HDC hdc, WindowEntry& e, HWND hWnd, int padLeft, int r
         }
 
         if (iconAlpha < 0.99f) {
-            Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(e.hIcon, iconSz);
+            Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(e.hWnd, e.hIcon, iconSz);
             if (pBmp) {
                 Gdiplus::Graphics gfx(hdc);
                 gfx.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
@@ -6483,7 +6521,7 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
         }
 
         if (itemAlpha < 0.99f) {
-            Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(e.hIcon, iconSz);
+            Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(e.hWnd, e.hIcon, iconSz);
             if (pBmp) {
                 Gdiplus::Graphics gfx(hdc);
                 gfx.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
@@ -6555,7 +6593,7 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
             int iconX = dep.rcCellCurrent.left + (cellW - iconSz) / 2;
             int iconY = dep.rcCellCurrent.top + (cellH - iconSz) / 2;
 
-            Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(dep.hIcon, iconSz);
+            Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(dep.hWnd, dep.hIcon, iconSz);
             if (pBmp) {
                 Gdiplus::Graphics gfx(hdc);
                 gfx.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
@@ -6721,7 +6759,7 @@ static void DrawSwitcherStaticContent(HDC hdc, bool fillBg, HWND hWnd) {
 
 // Rendering
 
-static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon, int* pOutIconX = NULL, int* pOutIconY = NULL, int* pOutIconSz = NULL, bool isMinimized = false) {
+static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon, int* pOutIconX = NULL, int* pOutIconY = NULL, int* pOutIconSz = NULL, bool isMinimized = false, HWND hWnd = NULL) {
     if (!BadgeLayoutActive() || !g_settings.showIcon || !hIcon) return;
     int iconSz = GetHeaderIconSizePx();
     int thumbW = rcThumbActual.right - rcThumbActual.left;
@@ -6821,7 +6859,7 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
             gfx.FillRectangle(&bgBrush, bgX, bgY, bgSize, bgSize);
         }
         if (iconDim < 0.99f) {
-            Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(hIcon, iconSz);
+            Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(hWnd, hIcon, iconSz);
             if (pBmp) {
                 Gdiplus::Graphics gfxIcon(hdc);
                 gfxIcon.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
@@ -6858,7 +6896,7 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
             }
         }
         if (iconDim < 0.99f) {
-            Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(hIcon, iconSz);
+            Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(hWnd, hIcon, iconSz);
             if (pBmp) {
                 Gdiplus::Graphics gfxIcon(hdc);
                 gfxIcon.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
@@ -7015,7 +7053,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
                 MaskRectCorners(hdc, snapThumb, cornerRadius, true, maskColor);
             }
 
-            DrawBadgeIconOverlay(hdc, snapThumb, snap.hIcon);
+            DrawBadgeIconOverlay(hdc, snapThumb, snap.hIcon, NULL, NULL, NULL, false, snap.hWnd);
         }
     }
 
@@ -7029,7 +7067,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
                 COLORREF maskColor = GetBgColor();
                 MaskRectCorners(hdc, depThumb, cornerRadius, true, maskColor);
             }
-            DrawBadgeIconOverlay(hdc, depThumb, dep.hIcon);
+            DrawBadgeIconOverlay(hdc, depThumb, dep.hIcon, NULL, NULL, NULL, false, dep.hWnd);
         }
     }
 
@@ -7064,7 +7102,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
         int drawnIconY = e.drawnIconY + offY;
         int drawnIconSz = e.drawnIconSz;
         if (!DockLayoutActive()) {
-            DrawBadgeIconOverlay(hdc, rcThumbActual, e.hIcon, &drawnIconX, &drawnIconY, &drawnIconSz, IsEntryMinimized(e));
+            DrawBadgeIconOverlay(hdc, rcThumbActual, e.hIcon, &drawnIconX, &drawnIconY, &drawnIconSz, IsEntryMinimized(e), e.hWnd);
         }
 
         // Close button (rendered for any entry with closeBtnAlpha > 0.01f, enabling smooth cross-fades between entries)
@@ -7362,6 +7400,331 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
     }
 }
 
+static void DrawSwitcherOverlayStaticContent(HDC hdc, HWND hWnd) {
+    if (g_windows.empty()) return;
+    int cornerRadius = GetThumbnailCornerRadiusPx();
+
+    for (int idx = 0; idx < (int)g_windows.size(); idx++) {
+        int i = (g_layoutStartIndex + idx) % g_windows.size();
+        const auto& e = g_windows[i];
+        if (IsWindowTruncated(i)) continue;
+
+        RECT rcThumbActual = e.rcThumbActual;
+        RECT rcCell = e.rcCell;
+
+        if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
+            COLORREF maskColor = GetBgColor();
+            if (i == g_selectedIndex && HighlightHasFill() && !DockLayoutActive()) {
+                maskColor = GetHighlightFillColor();
+            }
+            MaskRectCorners(hdc, rcThumbActual, cornerRadius, true, maskColor);
+        }
+
+        // Badge layout: draw icon overlay on thumbnail
+        int drawnIconX = e.drawnIconX;
+        int drawnIconY = e.drawnIconY;
+        int drawnIconSz = e.drawnIconSz;
+        if (!DockLayoutActive()) {
+            DrawBadgeIconOverlay(hdc, rcThumbActual, e.hIcon, &drawnIconX, &drawnIconY, &drawnIconSz, IsEntryMinimized(e), e.hWnd);
+        }
+
+        // Grouped window count badge
+        bool showThisGroupBadge = g_settings.showGroupIndicator && g_settings.showApplications && (e.groupWindows.size() > 1);
+        if (DockLayoutActive()) {
+            if (DockGroupIndicatorIsHidden()) showThisGroupBadge = false;
+        }
+
+        float groupBadgeAlpha = 1.0f;
+        if (DockLayoutActive() && DockPositionsOverlap()) {
+            if (e.closeBtnAlpha > 0.01f) {
+                groupBadgeAlpha = (1.0f - e.closeBtnAlpha);
+                if (groupBadgeAlpha < 0.01f) {
+                    showThisGroupBadge = false;
+                }
+            }
+        }
+
+        if (showThisGroupBadge) {
+            Gdiplus::Graphics gfx(hdc);
+            gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            gfx.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAlias);
+
+            WCHAR countText[8];
+            _snwprintf_s(countText, ARRAYSIZE(countText), _TRUNCATE, L"%d", (int)e.groupWindows.size());
+
+            int badgeFontSz = DpiScale(10, g_dpiX);
+            int fontStyle = Gdiplus::FontStyleBold;
+            LPCWSTR family = L"Segoe UI";
+            if (g_settings.applyToGroupIndicator && g_settings.fontFamily[0]) {
+                family = g_settings.fontFamily;
+                badgeFontSz = MulDiv(g_settings.fontSize, g_dpiY, 72);
+                if (wcscmp(g_settings.fontStyle, L"regular") == 0 || wcscmp(g_settings.fontStyle, L"light") == 0) fontStyle = Gdiplus::FontStyleRegular;
+                else if (wcscmp(g_settings.fontStyle, L"semibold") == 0 || wcscmp(g_settings.fontStyle, L"bold") == 0) fontStyle = Gdiplus::FontStyleBold;
+                else if (wcscmp(g_settings.fontStyle, L"italic") == 0) fontStyle = Gdiplus::FontStyleItalic;
+                else if (wcscmp(g_settings.fontStyle, L"boldItalic") == 0) fontStyle = Gdiplus::FontStyleBoldItalic;
+            } else if (IsWin11OrGreater() && DoesFontExist(L"Segoe UI Variable Text")) {
+                family = L"Segoe UI Variable Text";
+            }
+            Gdiplus::Font badgeFont(family, (Gdiplus::REAL)badgeFontSz, fontStyle, Gdiplus::UnitPixel);
+
+            Gdiplus::StringFormat sf;
+            sf.SetAlignment(Gdiplus::StringAlignmentCenter);
+            sf.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+            Gdiplus::RectF measureRect(0, 0, 100, 100);
+            Gdiplus::RectF textBounds;
+            gfx.MeasureString(countText, -1, &badgeFont, measureRect, &sf, &textBounds);
+
+            int badgePadX = DpiScale(4, g_dpiX);
+            int badgePadY = DpiScale(2, g_dpiY);
+            int badgeW = (int)(textBounds.Width + badgePadX * 2);
+            int badgeH = (int)(textBounds.Height + badgePadY * 2);
+            int minW = badgeH;
+            if (badgeW < minW) badgeW = minW;
+
+            int badgeX = 0, badgeY = 0;
+            if (DockLayoutActive()) {
+                int pad = DpiScale(2, g_dpiX);
+                RECT bRc = ComputeDockPerimeterRect(rcCell, badgeW, badgeH, g_settings.dockGroupIndicatorPosition, pad);
+                badgeX = bRc.left;
+                badgeY = bRc.top;
+            } else if (drawnIconSz > 0) {
+                badgeX = drawnIconX + drawnIconSz - (badgeW / 2);
+                badgeY = drawnIconY - (badgeH / 2);
+            } else {
+                int cellPad = DpiScale(4, g_dpiX);
+                badgeX = rcCell.right - badgeW - cellPad;
+                badgeY = rcCell.top + cellPad;
+            }
+
+            COLORREF bgC = GetIndicatorBackgroundColor();
+            int op = g_isDarkMode ? g_settings.indicatorBgOpacityDark : g_settings.indicatorBgOpacityLight;
+            int alpha = (int)roundf(((float)(op * 255) / 100.0f) * groupBadgeAlpha);
+            Gdiplus::SolidBrush pillBrush(Gdiplus::Color(alpha, GetRValue(bgC), GetGValue(bgC), GetBValue(bgC)));
+            Gdiplus::REAL pillRadius = (Gdiplus::REAL)GetGroupIndicatorCornerRadiusPx(badgeH / 2);
+
+            if (g_settings.showGroupIndicatorShadow && groupBadgeAlpha > 0.05f) {
+                for (int pass = 5; pass > 0; --pass) {
+                    int baseA = (pass == 1) ? 8 : (pass == 2) ? 6 : (pass == 3) ? 4 : (pass == 4) ? 3 : 2;
+                    int shadowAlpha = (int)roundf(baseA * groupBadgeAlpha);
+                    if (shadowAlpha < 1) shadowAlpha = 1;
+                    Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(shadowAlpha, 0, 0, 0));
+                    int sp = pass;
+                    Gdiplus::REAL sx = (Gdiplus::REAL)(badgeX - sp);
+                    Gdiplus::REAL sy = (Gdiplus::REAL)(badgeY - sp);
+                    Gdiplus::REAL sw = (Gdiplus::REAL)(badgeW + sp * 2);
+                    Gdiplus::REAL sh = (Gdiplus::REAL)(badgeH + sp * 2);
+                    Gdiplus::REAL sd = pillRadius * 2.0f + sp * 2.0f;
+                    if (sd > sw) sd = sw;
+                    if (sd > sh) sd = sh;
+
+                    if (pillRadius > 0) {
+                        Gdiplus::GraphicsPath sPath;
+                        sPath.AddArc(sx, sy, sd, sd, 180, 90);
+                        sPath.AddArc(sx + sw - sd, sy, sd, sd, 270, 90);
+                        sPath.AddArc(sx + sw - sd, sy + sh - sd, sd, sd, 0, 90);
+                        sPath.AddArc(sx, sy + sh - sd, sd, sd, 90, 90);
+                        sPath.CloseFigure();
+                        gfx.FillPath(&shadowBrush, &sPath);
+                    } else {
+                        gfx.FillRectangle(&shadowBrush, sx, sy, sw, sh);
+                    }
+                }
+            }
+
+            if (pillRadius > 0) {
+                Gdiplus::GraphicsPath pillPath;
+                Gdiplus::REAL d = pillRadius * 2.0f;
+                Gdiplus::REAL px = (Gdiplus::REAL)badgeX, py = (Gdiplus::REAL)badgeY;
+                Gdiplus::REAL pw = (Gdiplus::REAL)badgeW, ph = (Gdiplus::REAL)badgeH;
+                pillPath.AddArc(px, py, d, d, 180, 90);
+                pillPath.AddArc(px + pw - d, py, d, d, 270, 90);
+                pillPath.AddArc(px + pw - d, py + ph - d, d, d, 0, 90);
+                pillPath.AddArc(px, py + ph - d, d, d, 90, 90);
+                pillPath.CloseFigure();
+                gfx.FillPath(&pillBrush, &pillPath);
+            } else {
+                gfx.FillRectangle(&pillBrush, badgeX, badgeY, badgeW, badgeH);
+            }
+
+            COLORREF txtC = GetIndicatorTextColor();
+            BYTE txtAlpha = (BYTE)roundf(255.0f * groupBadgeAlpha);
+            Gdiplus::SolidBrush textBrush(Gdiplus::Color(txtAlpha, GetRValue(txtC), GetGValue(txtC), GetBValue(txtC)));
+            Gdiplus::RectF pillRect((Gdiplus::REAL)badgeX, (Gdiplus::REAL)badgeY,
+                                    (Gdiplus::REAL)badgeW, (Gdiplus::REAL)badgeH);
+            gfx.DrawString(countText, -1, &badgeFont, pillRect, &sf, &textBrush);
+        }
+    }
+}
+
+static void DrawSwitcherOverlayDynamicContent(HDC hdc, HWND hWnd) {
+    if (g_windows.empty()) return;
+    int cornerRadius = GetThumbnailCornerRadiusPx();
+
+    // 1. Zoomed thumbnail override (if hover zoom is active for a specific entry)
+    if (ThumbnailHoverIsZoom() && g_hoverThumbIndex >= 0 && g_hoverThumbIndex < (int)g_windows.size() && !IsWindowTruncated(g_hoverThumbIndex)) {
+        const auto& e = g_windows[g_hoverThumbIndex];
+        if (e.hoverScale > 1.0001f) {
+            RECT rcThumbActual = GetScaledThumbRect(e);
+            if (g_settings.showThumbnails && cornerRadius > 0 && ThemeIs(L"none") && g_settings.opacity >= 99) {
+                COLORREF maskColor = GetBgColor();
+                if (g_hoverThumbIndex == g_selectedIndex && HighlightHasFill() && !DockLayoutActive()) {
+                    maskColor = GetHighlightFillColor();
+                }
+                MaskRectCorners(hdc, rcThumbActual, cornerRadius, true, maskColor);
+            }
+            int drawnIconX = e.drawnIconX;
+            int drawnIconY = e.drawnIconY;
+            int drawnIconSz = e.drawnIconSz;
+            if (!DockLayoutActive()) {
+                DrawBadgeIconOverlay(hdc, rcThumbActual, e.hIcon, &drawnIconX, &drawnIconY, &drawnIconSz, IsEntryMinimized(e), e.hWnd);
+            }
+        }
+    }
+
+    // 2. Close buttons for any entry animating/showing close button
+    if (g_settings.showCloseButton) {
+        for (int i = 0; i < (int)g_windows.size(); i++) {
+            const auto& e = g_windows[i];
+            if (IsWindowTruncated(i)) continue;
+            if (e.closeBtnAlpha > 0.01f) {
+                if (!DockLayoutActive() || !DockCloseButtonIsHidden()) {
+                    RECT rcThumbActual = (ThumbnailHoverIsZoom() && e.hoverScale > 1.0001f) ? GetScaledThumbRect(e) : e.rcThumbActual;
+                    RECT btnRc = GetCloseButtonRect(e.rcCell, rcThumbActual, e.rcThumbSlot);
+                    if (btnRc.right > btnRc.left && btnRc.bottom > btnRc.top) {
+                        float hoverPlateAlpha = (i == g_hoverIndex && g_hoverWnd == hWnd && g_isCloseHovered) ? g_animCloseBtnHoverAlpha : 0.0f;
+                        bool isBtnPressed = (i == g_hoverIndex && g_hoverWnd == hWnd && g_isClosePressed);
+                        DrawCloseButton(hdc, btnRc, e.closeBtnAlpha, hoverPlateAlpha, isBtnPressed);
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Animated hover focus highlight
+    if (g_animHoverAlphaCurrent > 0.01f && g_settings.showThumbnails && g_settings.showHoverBorder && !ThumbnailHoverIsZoom() && !DockLayoutActive()) {
+        bool isValidHover = (g_hoverThumbIndex >= 0 && g_hoverThumbIndex < (int)g_windows.size() &&
+                             !IsWindowTruncated(g_hoverThumbIndex));
+        if (isValidHover || (g_animHoverActive && g_animHoverAlphaTarget == 0.0f)) {
+            RectF hRc = (g_animHoverActive && AreAnimationsGloballyEnabled() && g_settings.enableHoverAnimation)
+                        ? g_animHoverCurrent
+                        : (isValidHover ? ToRectF(g_windows[g_hoverThumbIndex].rcThumbActual) : g_animHoverCurrent);
+            BYTE hoverAlpha = (BYTE)(g_animHoverAlphaCurrent * 255.0f);
+            float hoverRadius = (float)GetThumbnailCornerRadiusPx();
+            DrawContourF(hdc, hRc, 1.0f, 1, hoverRadius, hoverAlpha);
+        } else {
+            g_animHoverAlphaCurrent = 0.0f;
+            g_animHoverActive = false;
+        }
+    }
+
+    // 4. Active selection focus border (rendered on top of DWM thumbnails)
+    if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size() && !IsWindowTruncated(g_selectedIndex)) {
+        if (HighlightHasBorder()) {
+            RectF selRc = (g_animSelectionActive && AreAnimationsGloballyEnabled() && g_settings.enableSelectionAnimation)
+                          ? g_animSelectionCurrent
+                          : ToRectF(g_windows[g_selectedIndex].rcCell);
+            DrawContourF(hdc, selRc, (float)SWS_CONTOUR_SIZE, 1, (float)GetTaskUiCornerRadiusPx());
+        }
+    }
+
+    // 5. Modern Fluent vector overflow chevrons
+    if (g_settings.showOverflowIndicator && !g_windows.empty()) {
+        UpdateChevronLayout(hWnd);
+
+        auto DrawChevronGlyph = [&](int dir, const RECT& baseRc, float alpha) {
+            if (alpha <= 0.01f) return;
+            Gdiplus::Graphics gfx(hdc);
+            gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            gfx.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+
+            bool verticalLayout = LayoutIsVertical() || DockLayoutActive();
+            float slideDist = (float)DpiScale(4, verticalLayout ? g_dpiX : g_dpiY) * (1.0f - alpha);
+            float offsetX = 0.0f;
+            float offsetY = 0.0f;
+
+            if (dir < 0) {
+                if (verticalLayout) offsetX = -slideDist;
+                else offsetY = -slideDist;
+            } else {
+                if (verticalLayout) offsetX = slideDist;
+                else offsetY = slideDist;
+            }
+
+            if (g_pressedChevron == dir) {
+                float pressDist = 1.5f * (float)DpiScale(1, verticalLayout ? g_dpiX : g_dpiY);
+                if (verticalLayout) offsetX += (dir < 0) ? -pressDist : pressDist;
+                else offsetY += (dir < 0) ? -pressDist : pressDist;
+            }
+
+            Gdiplus::REAL px = (Gdiplus::REAL)baseRc.left + offsetX;
+            Gdiplus::REAL py = (Gdiplus::REAL)baseRc.top + offsetY;
+            Gdiplus::REAL pw = (Gdiplus::REAL)(baseRc.right - baseRc.left);
+            Gdiplus::REAL ph = (Gdiplus::REAL)(baseRc.bottom - baseRc.top);
+
+            Gdiplus::REAL cx = px + pw * 0.5f;
+            Gdiplus::REAL cy = py + ph * 0.5f;
+
+            Gdiplus::REAL wingAcross = 5.5f * (float)(verticalLayout ? g_dpiY : g_dpiX) / 96.0f;
+            Gdiplus::REAL wingAlong = 3.0f * (float)(verticalLayout ? g_dpiX : g_dpiY) / 96.0f;
+
+            float hoverA = (dir < 0) ? g_animChevronHoverAlphaPrev : g_animChevronHoverAlphaNext;
+            bool isPressed = (g_pressedChevron == dir);
+            float idleA = 178.0f;
+            float activeA = 255.0f;
+            float effectiveA = isPressed ? activeA : (idleA + (activeA - idleA) * hoverA);
+            BYTE glyphAlpha = (BYTE)roundf(effectiveA * alpha);
+            BYTE gR, gG, gB;
+            if (g_isDarkMode) {
+                gR = 255; gG = 255; gB = 255;
+            } else {
+                BYTE baseC = (BYTE)roundf(32.0f * (1.0f - hoverA));
+                gR = baseC; gG = baseC; gB = baseC;
+            }
+
+            Gdiplus::REAL penThickness = 2.25f * (float)g_dpiX / 96.0f;
+            if (penThickness < 1.5f) penThickness = 1.5f;
+
+            Gdiplus::Pen glyphPen(Gdiplus::Color(glyphAlpha, gR, gG, gB), penThickness);
+            glyphPen.SetLineCap(Gdiplus::LineCapRound, Gdiplus::LineCapRound, Gdiplus::DashCapRound);
+            glyphPen.SetLineJoin(Gdiplus::LineJoinRound);
+
+            Gdiplus::GraphicsPath glyphPath;
+            if (!verticalLayout) {
+                if (dir < 0) {
+                    glyphPath.AddLine(cx - wingAcross, cy + wingAlong, cx, cy - wingAlong);
+                    glyphPath.AddLine(cx, cy - wingAlong, cx + wingAcross, cy + wingAlong);
+                } else {
+                    glyphPath.AddLine(cx - wingAcross, cy - wingAlong, cx, cy + wingAlong);
+                    glyphPath.AddLine(cx, cy + wingAlong, cx + wingAcross, cy - wingAlong);
+                }
+            } else {
+                if (dir < 0) {
+                    glyphPath.AddLine(cx + wingAlong, cy - wingAcross, cx - wingAlong, cy);
+                    glyphPath.AddLine(cx - wingAlong, cy, cx + wingAlong, cy + wingAcross);
+                } else {
+                    glyphPath.AddLine(cx - wingAlong, cy - wingAcross, cx + wingAlong, cy);
+                    glyphPath.AddLine(cx + wingAlong, cy, cx - wingAlong, cy + wingAcross);
+                }
+            }
+            gfx.DrawPath(&glyphPen, &glyphPath);
+        };
+
+        if (g_animChevronAlphaPrev > 0.01f) {
+            DrawChevronGlyph(-1, g_rcChevronPrev, g_animChevronAlphaPrev);
+        }
+        if (g_animChevronAlphaNext > 0.01f) {
+            DrawChevronGlyph(1, g_rcChevronNext, g_animChevronAlphaNext);
+        }
+    }
+
+    if (g_settings.showSwitcherBorder) {
+        SelectClipRgn(hdc, NULL);
+        RECT wRc; GetClientRect(hWnd, &wRc);
+        int winRadius = GetWindowCornerRadiusPx();
+        DrawSwitcherOuterBorder(hdc, wRc.right, wRc.bottom, winRadius);
+    }
+}
+
 static void PaintSwitcherOverlay() {
     if (!g_hCloseBtnWnd || !g_isVisible) return;
     HWND targetWnd = g_hoverWnd ? g_hoverWnd : g_hSwitcher;
@@ -7387,16 +7750,53 @@ static void PaintSwitcherOverlay() {
         ReleaseDC(NULL, hdcScreen);
     }
 
-    // Fully clear persistent overlay bitmap so previous hover lines and contours never leave ghost traces
-    if (s_cachedOverlayBits) {
-        memset(s_cachedOverlayBits, 0, (size_t)w * h * sizeof(DWORD));
-    }
-
     int radius = GetWindowCornerRadiusPx();
-    HRGN hClip = GetCachedRoundRectRgn(w, h, radius);
-    SelectClipRgn(s_cachedOverlayDC, hClip);
 
-    DrawSwitcherOverlay(s_cachedOverlayDC, targetWnd);
+    if (!g_scrollTransition.active && !g_layoutTransition.active) {
+        // Ensure static overlay cache
+        if (!s_cachedOverlayStaticDC || s_cachedOverlayStaticW != w || s_cachedOverlayStaticH != h) {
+            if (s_cachedOverlayStaticDC) {
+                if (s_cachedOverlayStaticOldBitmap) SelectObject(s_cachedOverlayStaticDC, s_cachedOverlayStaticOldBitmap);
+                if (s_cachedOverlayStaticBitmap) DeleteObject(s_cachedOverlayStaticBitmap);
+                DeleteDC(s_cachedOverlayStaticDC);
+            }
+            HDC hdcScreen = GetDC(NULL);
+            s_cachedOverlayStaticDC = CreateCompatibleDC(hdcScreen);
+            BITMAPINFO bmi = {}; bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+            bmi.bmiHeader.biWidth = w; bmi.bmiHeader.biHeight = -h;
+            bmi.bmiHeader.biPlanes = 1; bmi.bmiHeader.biBitCount = 32; bmi.bmiHeader.biCompression = BI_RGB;
+            s_cachedOverlayStaticBitmap = CreateDIBSection(s_cachedOverlayStaticDC, &bmi, DIB_RGB_COLORS, &s_cachedOverlayStaticBits, NULL, 0);
+            s_cachedOverlayStaticOldBitmap = (HBITMAP)SelectObject(s_cachedOverlayStaticDC, s_cachedOverlayStaticBitmap);
+            s_cachedOverlayStaticW = w;
+            s_cachedOverlayStaticH = h;
+            ReleaseDC(NULL, hdcScreen);
+            g_overlayStaticDirty = true;
+        }
+
+        if (g_overlayStaticDirty) {
+            if (s_cachedOverlayStaticBits) {
+                memset(s_cachedOverlayStaticBits, 0, (size_t)w * h * sizeof(DWORD));
+            }
+            HRGN hClip = GetCachedRoundRectRgn(w, h, radius);
+            SelectClipRgn(s_cachedOverlayStaticDC, hClip);
+            DrawSwitcherOverlayStaticContent(s_cachedOverlayStaticDC, targetWnd);
+            g_overlayStaticDirty = false;
+        }
+
+        // Fast blit pre-rendered static overlay (<0.05ms)
+        BitBlt(s_cachedOverlayDC, 0, 0, w, h, s_cachedOverlayStaticDC, 0, 0, SRCCOPY);
+
+        HRGN hClip = GetCachedRoundRectRgn(w, h, radius);
+        SelectClipRgn(s_cachedOverlayDC, hClip);
+        DrawSwitcherOverlayDynamicContent(s_cachedOverlayDC, targetWnd);
+    } else {
+        if (s_cachedOverlayBits) {
+            memset(s_cachedOverlayBits, 0, (size_t)w * h * sizeof(DWORD));
+        }
+        HRGN hClip = GetCachedRoundRectRgn(w, h, radius);
+        SelectClipRgn(s_cachedOverlayDC, hClip);
+        DrawSwitcherOverlay(s_cachedOverlayDC, targetWnd);
+    }
 
     POINT ptSrc = {0,0}; SIZE sz = {w, h};
     int currentOffsetY = GetAnimationOffsetY();
@@ -7535,8 +7935,11 @@ static void PaintSwitcher() {
                 DrawSelectionFillF(s_cachedMemDC, fillRc);
                 if (DockLayoutActive()) {
                     auto& e = g_windows[g_selectedIndex];
-                    if (!IsWindowTruncated(g_selectedIndex) && e.drawnIconSz > 0) {
-                        DrawIconEx(s_cachedMemDC, e.drawnIconX, e.drawnIconY, e.hIcon, e.drawnIconSz, e.drawnIconSz, 0, NULL, DI_NORMAL);
+                    if (!IsWindowTruncated(g_selectedIndex)) {
+                        int iconSz = e.drawnIconSz > 0 ? e.drawnIconSz : DpiScale(g_settings.dockIconSize > 0 ? g_settings.dockIconSize : 48, g_dpiX);
+                        int iconX = (int)roundf(fillRc.left + (fillRc.right - fillRc.left - iconSz) / 2.0f);
+                        int iconY = (int)roundf(fillRc.top + (fillRc.bottom - fillRc.top - iconSz) / 2.0f);
+                        DrawDockIconWithAlpha(s_cachedMemDC, e, iconX, iconY, iconSz);
                     }
                 }
             }
@@ -7601,8 +8004,11 @@ static void PaintSwitcher() {
                     selRc.right += (float)offX;
                     DrawSelectionFillF(s_cachedMemDC, selRc);
                     auto& e = g_windows[g_selectedIndex];
-                    if (!IsWindowTruncated(g_selectedIndex) && e.drawnIconSz > 0) {
-                        DrawDockIconWithAlpha(s_cachedMemDC, e, (int)roundf(e.drawnIconX + offX), (int)roundf(e.drawnIconY), e.drawnIconSz);
+                    if (!IsWindowTruncated(g_selectedIndex)) {
+                        int iconSz = e.drawnIconSz > 0 ? e.drawnIconSz : DpiScale(g_settings.dockIconSize > 0 ? g_settings.dockIconSize : 48, g_dpiX);
+                        int iconX = (int)roundf(selRc.left + (selRc.right - selRc.left - iconSz) / 2.0f);
+                        int iconY = (int)roundf(selRc.top + (selRc.bottom - selRc.top - iconSz) / 2.0f);
+                        DrawDockIconWithAlpha(s_cachedMemDC, e, iconX, iconY, iconSz);
                     }
                 }
 
@@ -8026,7 +8432,14 @@ static BOOL WINAPI MirrorEnumProc(HMONITOR hM, HDC, LPRECT, LPARAM) {
 
 static void DestroyMirrorSwitchers() {
     for (HWND hMirror : g_hMirrorSwitchers) {
-        if (IsWindow(hMirror)) DestroyWindow(hMirror);
+        if (IsWindow(hMirror)) {
+            if (IsWin11OrGreater()) {
+                COLORREF colorNone = 0xFFFFFFFE;
+                DwmSetWindowAttribute(hMirror, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
+            }
+            ShowWindow(hMirror, SW_HIDE);
+            DestroyWindow(hMirror);
+        }
     }
     g_hMirrorSwitchers.clear();
 }
@@ -8048,6 +8461,10 @@ static void ApplySwitcherRegion() {
     if (s_hasActiveRgn) {
         SetWindowRgn(g_hSwitcher, NULL, TRUE);
         s_hasActiveRgn = false;
+    }
+    if (IsWin11OrGreater()) {
+        COLORREF colorNone = 0xFFFFFFFE; // DWMWA_COLOR_NONE
+        DwmSetWindowAttribute(g_hSwitcher, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
     }
 }
 
@@ -8280,17 +8697,20 @@ static void HideSwitcher() {
         ShowWindow(g_hCloseBtnWnd, SW_HIDE);
     }
     if (g_hSwitcher) {
+        if (IsWin11OrGreater()) {
+            COLORREF colorNone = 0xFFFFFFFE; // DWMWA_COLOR_NONE
+            DwmSetWindowAttribute(g_hSwitcher, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
+        }
+        LONG_PTR exStyle = GetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE);
+        if (!(exStyle & WS_EX_LAYERED)) {
+            SetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+        }
         SetLayeredWindowAttributes(g_hSwitcher, 0, 0, LWA_ALPHA);
         BLENDFUNCTION bf = { AC_SRC_OVER, 0, 0, AC_SRC_ALPHA };
         UpdateLayeredWindow(g_hSwitcher, NULL, NULL, NULL, NULL, NULL, 0, &bf, ULW_ALPHA);
         ShowWindow(g_hSwitcher, SW_HIDE);
-        LONG_PTR exStyle = GetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE);
         if (exStyle & WS_EX_TRANSPARENT) {
             SetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE, exStyle & ~WS_EX_TRANSPARENT);
-        }
-        if (IsWin11OrGreater()) {
-            COLORREF colorNone = 0xFFFFFFFE; // DWMWA_COLOR_NONE
-            DwmSetWindowAttribute(g_hSwitcher, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
         }
     }
 
@@ -8367,8 +8787,25 @@ static void StartExitAnimation(bool activateSelectedWindow) {
         // BEFORE activating target window, ensuring no white border, gray flash, or non-client
         // deactivation frame can ever be visible on screen!
         if (g_hSwitcher) {
+            if (IsWin11OrGreater()) {
+                COLORREF colorNone = 0xFFFFFFFE; // DWMWA_COLOR_NONE
+                DwmSetWindowAttribute(g_hSwitcher, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
+            }
+            LONG_PTR exStyle = GetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE);
+            if (!(exStyle & WS_EX_LAYERED)) {
+                SetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+            }
             SetLayeredWindowAttributes(g_hSwitcher, 0, 0, LWA_ALPHA);
             ShowWindow(g_hSwitcher, SW_HIDE);
+        }
+        for (HWND hMirror : g_hMirrorSwitchers) {
+            if (IsWindow(hMirror)) {
+                if (IsWin11OrGreater()) {
+                    COLORREF colorNone = 0xFFFFFFFE;
+                    DwmSetWindowAttribute(hMirror, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
+                }
+                ShowWindow(hMirror, SW_HIDE);
+            }
         }
         if (g_hCloseBtnWnd) {
             BLENDFUNCTION bf = { AC_SRC_OVER, 0, 0, AC_SRC_ALPHA };
@@ -8404,8 +8841,25 @@ static void StartExitAnimation(bool activateSelectedWindow) {
     // Dismissing without selection (Escape / Cancel):
     if (g_isPendingShow || !AreAnimationsGloballyEnabled()) {
         if (g_hSwitcher) {
+            if (IsWin11OrGreater()) {
+                COLORREF colorNone = 0xFFFFFFFE; // DWMWA_COLOR_NONE
+                DwmSetWindowAttribute(g_hSwitcher, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
+            }
+            LONG_PTR exStyle = GetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE);
+            if (!(exStyle & WS_EX_LAYERED)) {
+                SetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
+            }
             SetLayeredWindowAttributes(g_hSwitcher, 0, 0, LWA_ALPHA);
             ShowWindow(g_hSwitcher, SW_HIDE);
+        }
+        for (HWND hMirror : g_hMirrorSwitchers) {
+            if (IsWindow(hMirror)) {
+                if (IsWin11OrGreater()) {
+                    COLORREF colorNone = 0xFFFFFFFE;
+                    DwmSetWindowAttribute(hMirror, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
+                }
+                ShowWindow(hMirror, SW_HIDE);
+            }
         }
         if (g_hCloseBtnWnd) {
             BLENDFUNCTION bf = { AC_SRC_OVER, 0, 0, AC_SRC_ALPHA };
@@ -8525,12 +8979,20 @@ static void RecomputeAndReposition() {
         SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH,
                      SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOMOVE | SWP_NOREDRAW);
     }
+    if (IsWin11OrGreater()) {
+        COLORREF colorNone = 0xFFFFFFFE;
+        DwmSetWindowAttribute(g_hSwitcher, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
+    }
     for (HWND hMirror : g_hMirrorSwitchers) {
         if (!IsWindow(hMirror)) continue;
         MONITORINFO mInfo = { sizeof(mInfo) };
         GetMonitorInfoW(MonitorFromWindow(hMirror, MONITOR_DEFAULTTONEAREST), &mInfo);
         int mx, my; GetSwitcherPosition(mInfo.rcWork, &mx, &my);
         SetWindowPos(hMirror, HWND_TOPMOST, mx, my, g_winW, g_winH, SWP_NOACTIVATE);
+        if (IsWin11OrGreater()) {
+            COLORREF colorNone = 0xFFFFFFFE;
+            DwmSetWindowAttribute(hMirror, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
+        }
     }
     if (g_hCloseBtnWnd && g_isVisible && !g_isPendingShow) {
         SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
@@ -9040,6 +9502,10 @@ static void ScrollDockWithDynamicResize(int targetStart, int targetSelected, int
         g_layoutTransition.active = true;
     } else {
         SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
+        if (IsWin11OrGreater()) {
+            COLORREF colorNone = 0xFFFFFFFE;
+            DwmSetWindowAttribute(g_hSwitcher, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
+        }
         RegisterThumbnails();
     }
 
@@ -9049,7 +9515,6 @@ static void ScrollDockWithDynamicResize(int targetStart, int targetSelected, int
         SnapSelectionTo(r);
     }
     UpdateChevronAnimationTargets(false);
-    InvalidateStaticCache();
     PaintSwitcher();
     StartAnimationTicker();
 }
@@ -9441,155 +9906,179 @@ static void CycleDirectional(int vertDelta) {
         return;
     }
     int n = (int)g_windows.size();
+    if (n <= 1) return;
+
     int prevSelected = g_selectedIndex;
     bool verticalLayout = LayoutIsVertical();
+    HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
 
-    // Build layout-order mapping: layoutOrder[0] is the first window placed visually
-    auto buildLayoutOrder = [&](std::vector<int>& order) {
-        order.resize(n);
-        for (int idx = 0; idx < n; idx++)
-            order[idx] = (g_layoutStartIndex + idx) % n;
-    };
-
-    std::vector<int> layoutOrder;
-    buildLayoutOrder(layoutOrder);
-
-    // Find current selection's position in layout order
-    int layoutPos = 0;
-    for (int idx = 0; idx < n; idx++) {
-        if (layoutOrder[idx] == g_selectedIndex) { layoutPos = idx; break; }
-    }
-
-    // Save current selection's line anchor and perpendicular center.
+    // Save current selection's perpendicular center for nearest-column matching
     RECT rcPrev = g_windows[g_selectedIndex].rcCell;
-    int prevLineCoord = verticalLayout ? rcPrev.left : rcPrev.top;
     int prevPerpCenter = verticalLayout ? (rcPrev.top + rcPrev.bottom) / 2 : (rcPrev.left + rcPrev.right) / 2;
 
-    // Walk direction in layout order: DOWN = +1 (visually next), UP = -1 (visually prev)
-    int layoutDelta = vertDelta;
-    int current = -1;
-    bool foundDifferentRow = false;
+    int oldStart = g_layoutStartIndex;
+    int savedWinW = g_winW;
+    int savedWinH = g_winH;
+    bool savedPaginated = g_isPaginatedView;
 
-    for (int step = 0; step < n; step++) {
-        int nextPos = ((layoutPos + (step + 1) * layoutDelta) % n + n) % n;
-        int windowIdx = layoutOrder[nextPos];
+    // ── Step 1: Discover all row starts via dry-run layout passes from 0 ──
+    std::vector<int> rowStarts;
+    rowStarts.push_back(0);
 
-        if (nextPos == layoutPos) break; // Wrapped all the way around
+    g_isDryRunLayout = true;
+    int curStart = 0;
+    while (curStart < n) {
+        g_layoutStartIndex = curStart;
+        g_isPaginatedView = false;
+        ComputeLayout(hMon);
 
-        // Target window is off-screen — scroll layout to reveal it.
-        if (IsWindowTruncated(windowIdx)) {
-            CaptureOutgoingSnapshot();
+        int firstIdx = curStart % n;
+        int curLine = verticalLayout ? g_windows[firstIdx].rcCell.left : g_windows[firstIdx].rcCell.top;
+        int nextStart = -1;
 
-            int oldStart = g_layoutStartIndex;
-            HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
+        for (int step = 0; step < n; step++) {
+            int wi = (curStart + step) % n;
+            if (step > 0 && wi < curStart) break; // wrapped past array end
 
-            // If wrapping back to top (vertDelta > 0 but windowIdx < g_layoutStartIndex),
-            // start dry-run from index 0
-            g_isDryRunLayout = true;
-            if (vertDelta > 0 && windowIdx < g_layoutStartIndex) {
-                g_layoutStartIndex = 0;
-                ComputeLayout(hMon);
+            if (IsWindowTruncated(wi)) {
+                nextStart = wi;
+                break;
             }
 
-            int targetStart = g_layoutStartIndex;
-            int attempts = n;
-            while (IsWindowTruncated(windowIdx) && attempts-- > 0) {
-                int firstIdx = g_layoutStartIndex % n;
-                int firstLineCoord2 = verticalLayout ? g_windows[firstIdx].rcCell.left : g_windows[firstIdx].rcCell.top;
-                int newStart = g_layoutStartIndex;
-                for (int k = 0; k < n; k++) {
-                    int wi = (g_layoutStartIndex + k) % n;
-                    if (IsWindowTruncated(wi)) break;
-                    int lineCoord = verticalLayout ? g_windows[wi].rcCell.left : g_windows[wi].rcCell.top;
-                    if (lineCoord != firstLineCoord2) {
-                        newStart = wi;
-                        break;
-                    }
+            int lineCoord = verticalLayout ? g_windows[wi].rcCell.left : g_windows[wi].rcCell.top;
+            if (lineCoord != curLine) {
+                if (rowStarts.empty() || rowStarts.back() != wi) {
+                    rowStarts.push_back(wi);
                 }
-                if (newStart == g_layoutStartIndex) {
-                    targetStart = windowIdx;
-                    break;
-                } else {
-                    g_layoutStartIndex = newStart;
-                    targetStart = newStart;
-                }
-                ComputeLayout(hMon);
+                curLine = lineCoord;
             }
-            g_isDryRunLayout = false;
-
-            // Apply single real reflow
-            g_layoutStartIndex = targetStart;
-            RecomputeAndReposition();
-
-            // Direction logic:
-            // If layoutStartIndex decreased (e.g. wrapped from bottom row back to row 0): dir = -1 (scroll back to top).
-            // If layoutStartIndex increased (e.g. scrolled down to reveal bottom row): dir = 1 (scroll to bottom).
-            int dir;
-            if (g_layoutStartIndex < oldStart) {
-                dir = -1; // Scrolled back to top
-            } else if (g_layoutStartIndex > oldStart) {
-                dir = 1;  // Scrolled down to bottom
-            } else {
-                dir = (vertDelta >= 0) ? 1 : -1;
-            }
-
-            TriggerScrollAnimationEx(dir, SCROLL_ROW);
-
-            // Rebuild layout order after recompute
-            buildLayoutOrder(layoutOrder);
-            current = windowIdx;
-            foundDifferentRow = true;
-            break;
         }
 
-        int lineCoord = verticalLayout ? g_windows[windowIdx].rcCell.left : g_windows[windowIdx].rcCell.top;
-        if (lineCoord != prevLineCoord) {
-            current = windowIdx;
-            foundDifferentRow = true;
-            break;
+        if (nextStart > curStart) {
+            if (rowStarts.empty() || rowStarts.back() != nextStart) {
+                rowStarts.push_back(nextStart);
+            }
+            curStart = nextStart;
+        } else {
+            break; // All windows covered
         }
     }
 
-    if (!foundDifferentRow) {
-        // Only one line visible; nothing to jump to.
+    int numRows = (int)rowStarts.size();
+    if (numRows <= 1) {
+        // Only one row/column visible; nothing to navigate vertically
+        g_layoutStartIndex = oldStart;
+        g_winW = savedWinW;
+        g_winH = savedWinH;
+        g_isPaginatedView = savedPaginated;
+        ComputeLayout(hMon);
+        g_isDryRunLayout = false;
         return;
     }
 
-    // Find current's position in layout order for row scanning
-    int currentLayoutPos = 0;
-    for (int idx = 0; idx < n; idx++) {
-        if (layoutOrder[idx] == current) { currentLayoutPos = idx; break; }
-    }
-
-    // Found a window on a different line. Find nearest position match
-    // on that line (x-match for horizontal mode, y-match for vertical mode).
-    int targetLineCoord = verticalLayout ? g_windows[current].rcCell.left : g_windows[current].rcCell.top;
-    int bestIndex = current;
-    int bestDist = INT_MAX;
-
-    // Scan forward in layout order from current to find all windows on the target line.
-    for (int idx = currentLayoutPos; idx < n; idx++) {
-        int wi = layoutOrder[idx];
-        if (IsWindowTruncated(wi)) break;
-        int lineCoord = verticalLayout ? g_windows[wi].rcCell.left : g_windows[wi].rcCell.top;
-        if (lineCoord != targetLineCoord) break;
-
-        int perpCenter = verticalLayout ?
-            (g_windows[wi].rcCell.top + g_windows[wi].rcCell.bottom) / 2 :
-            (g_windows[wi].rcCell.left + g_windows[wi].rcCell.right) / 2;
-        int dist = abs(prevPerpCenter - perpCenter);
-        if (dist < bestDist) {
-            bestDist = dist;
-            bestIndex = wi;
+    // ── Step 2: Determine which row contains the current selection ──
+    int currentRow = 0;
+    for (int r = numRows - 1; r >= 0; r--) {
+        if (g_selectedIndex >= rowStarts[r]) {
+            currentRow = r;
+            break;
         }
     }
 
-    // Scan backward in layout order from current to cover the full line.
-    for (int idx = currentLayoutPos - 1; idx >= 0; idx--) {
-        int wi = layoutOrder[idx];
-        if (IsWindowTruncated(wi)) break;
+    // ── Step 3: Determine target row with symmetric wrap-around ──
+    int targetRow = ((currentRow + vertDelta) % numRows + numRows) % numRows;
+    if (targetRow == currentRow) {
+        g_layoutStartIndex = oldStart;
+        g_winW = savedWinW;
+        g_winH = savedWinH;
+        g_isPaginatedView = savedPaginated;
+        ComputeLayout(hMon);
+        g_isDryRunLayout = false;
+        return;
+    }
+
+    // ── Step 4: Check if targetRow is already visible in current layout (oldStart) ──
+    g_layoutStartIndex = oldStart;
+    g_winW = savedWinW;
+    g_winH = savedWinH;
+    g_isPaginatedView = savedPaginated;
+    ComputeLayout(hMon);
+
+    bool targetRowVisible = !IsWindowTruncated(rowStarts[targetRow]);
+    int targetStart = oldStart;
+    int dir = 0;
+
+    if (!targetRowVisible) {
+        // Target row is off-screen; compute new g_layoutStartIndex (targetStart) and scroll direction
+        if (vertDelta > 0) {
+            // Moving Down
+            if (targetRow == 0) {
+                // Wrap from bottom back to top
+                targetStart = rowStarts[0];
+                dir = -1; // scroll back up to top
+            } else {
+                // Scroll down: find row start R_top <= targetRow that keeps targetRow visible
+                int bestTop = targetRow;
+                for (int r = targetRow; r >= 0; r--) {
+                    g_layoutStartIndex = rowStarts[r];
+                    ComputeLayout(hMon);
+                    if (!IsWindowTruncated(rowStarts[targetRow])) {
+                        bestTop = r;
+                    } else {
+                        break;
+                    }
+                }
+                targetStart = rowStarts[bestTop];
+                dir = 1; // scroll down
+            }
+        } else {
+            // Moving Up
+            if (targetRow == numRows - 1) {
+                // Wrap from top row to the last row at the bottom
+                int bestTop = targetRow;
+                for (int r = targetRow; r >= 0; r--) {
+                    g_layoutStartIndex = rowStarts[r];
+                    ComputeLayout(hMon);
+                    if (!IsWindowTruncated(rowStarts[targetRow])) {
+                        bestTop = r;
+                    } else {
+                        break;
+                    }
+                }
+                targetStart = rowStarts[bestTop];
+                dir = 1; // scroll down to bottom
+            } else {
+                // Scroll up to reveal targetRow at top of visible view
+                targetStart = rowStarts[targetRow];
+                dir = -1; // scroll up
+            }
+        }
+    }
+
+    g_isDryRunLayout = false;
+
+    // ── Step 5: Apply reflow if layout start changed ──
+    if (targetStart != oldStart) {
+        CaptureOutgoingSnapshot();
+        g_winW = savedWinW;
+        g_winH = savedWinH;
+        g_layoutStartIndex = targetStart;
+        g_isPaginatedView = savedPaginated;
+        RecomputeAndReposition();
+        TriggerScrollAnimationEx(dir, SCROLL_ROW);
+    }
+
+    // ── Step 6: Find best column match on targetRow ──
+    int targetRowStart = rowStarts[targetRow];
+    int targetRowEnd = (targetRow + 1 < numRows) ? rowStarts[targetRow + 1] : n;
+    int targetLineCoord = verticalLayout ? g_windows[targetRowStart].rcCell.left : g_windows[targetRowStart].rcCell.top;
+    int bestIndex = targetRowStart;
+    int bestDist = INT_MAX;
+
+    for (int wi = targetRowStart; wi < targetRowEnd; wi++) {
+        if (IsWindowTruncated(wi)) continue;
         int lineCoord = verticalLayout ? g_windows[wi].rcCell.left : g_windows[wi].rcCell.top;
-        if (lineCoord != targetLineCoord) break;
+        if (lineCoord != targetLineCoord) continue;
 
         int perpCenter = verticalLayout ?
             (g_windows[wi].rcCell.top + g_windows[wi].rcCell.bottom) / 2 :
@@ -10544,6 +11033,9 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         // Force DWM to keep the active visual state (Mica/Backdrop) even when unfocused
         return DefWindowProcW(hWnd, uMsg, TRUE, lParam);
     }
+    if (uMsg == WM_MOVE || uMsg == WM_WINDOWPOSCHANGED) {
+        UpdateRefreshRateTiming();
+    }
 
     if (g_WM_SWS_TOUCHPAD_TRIGGER && uMsg == g_WM_SWS_TOUCHPAD_TRIGGER) {
         Wh_Log(L"SWS: Received touchpad trigger message (flags=0x%IX, source=%IX, isVisible=%d)", wParam, lParam, g_isVisible);
@@ -10848,8 +11340,11 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                     DrawSelectionFillF(hdcBuf, fillRc);
                     if (DockLayoutActive()) {
                         auto& e = g_windows[g_selectedIndex];
-                        if (!IsWindowTruncated(g_selectedIndex) && e.drawnIconSz > 0) {
-                            DrawIconEx(hdcBuf, e.drawnIconX, e.drawnIconY, e.hIcon, e.drawnIconSz, e.drawnIconSz, 0, NULL, DI_NORMAL);
+                        if (!IsWindowTruncated(g_selectedIndex)) {
+                            int iconSz = e.drawnIconSz > 0 ? e.drawnIconSz : DpiScale(g_settings.dockIconSize > 0 ? g_settings.dockIconSize : 48, g_dpiX);
+                            int iconX = (int)roundf(fillRc.left + (fillRc.right - fillRc.left - iconSz) / 2.0f);
+                            int iconY = (int)roundf(fillRc.top + (fillRc.bottom - fillRc.top - iconSz) / 2.0f);
+                            DrawDockIconWithAlpha(hdcBuf, e, iconX, iconY, iconSz);
                         }
                     }
                 }
@@ -10917,8 +11412,11 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                     selRc.right += (float)offX;
                     DrawSelectionFillF(hdcBuf, selRc);
                     auto& e = g_windows[g_selectedIndex];
-                    if (!IsWindowTruncated(g_selectedIndex) && e.drawnIconSz > 0) {
-                        DrawDockIconWithAlpha(hdcBuf, e, (int)roundf(e.drawnIconX + offX), (int)roundf(e.drawnIconY), e.drawnIconSz);
+                    if (!IsWindowTruncated(g_selectedIndex)) {
+                        int iconSz = e.drawnIconSz > 0 ? e.drawnIconSz : DpiScale(g_settings.dockIconSize > 0 ? g_settings.dockIconSize : 48, g_dpiX);
+                        int iconX = (int)roundf(selRc.left + (selRc.right - selRc.left - iconSz) / 2.0f);
+                        int iconY = (int)roundf(selRc.top + (selRc.bottom - selRc.top - iconSz) / 2.0f);
+                        DrawDockIconWithAlpha(hdcBuf, e, iconX, iconY, iconSz);
                     }
                 }
 
@@ -12166,6 +12664,14 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     timeBeginPeriod(1);
     UpdateRefreshRateTiming();
 
+    #ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+    #define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
+    #endif
+    HANDLE hAnimTimer = CreateWaitableTimerExW(NULL, NULL, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_MODIFY_STATE | SYNCHRONIZE);
+    if (!hAnimTimer) {
+        hAnimTimer = CreateWaitableTimerExW(NULL, NULL, 0, TIMER_MODIFY_STATE | SYNCHRONIZE);
+    }
+
     g_hDwmCornerWatchStopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (g_hDwmCornerWatchStopEvent) {
         g_hDwmCornerWatchThread = CreateThread(NULL, 0, DwmCornerWatchThread, NULL, 0, NULL);
@@ -12191,13 +12697,26 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
                 QueryPerformanceCounter(&frameEnd);
                 double spentMs = (double)(frameEnd.QuadPart - frameStart.QuadPart) * 1000.0 / (double)g_animPerfFreq.QuadPart;
                 double waitMs = s_animTargetIntervalMs - spentMs;
-                if (waitMs > 1.0) {
-                    MsgWaitForMultipleObjectsEx(
-                        0, NULL,
-                        (DWORD)floor(waitMs),
-                        QS_ALLINPUT,
-                        MWMO_ALERTABLE | MWMO_INPUTAVAILABLE
-                    );
+                if (waitMs > 0.5) {
+                    if (hAnimTimer) {
+                        LARGE_INTEGER dueTime;
+                        dueTime.QuadPart = -(LONGLONG)round(waitMs * 10000.0);
+                        SetWaitableTimer(hAnimTimer, &dueTime, 0, NULL, NULL, FALSE);
+                        HANDLE handles[1] = { hAnimTimer };
+                        MsgWaitForMultipleObjectsEx(
+                            1, handles,
+                            INFINITE,
+                            QS_ALLINPUT,
+                            MWMO_ALERTABLE | MWMO_INPUTAVAILABLE
+                        );
+                    } else {
+                        MsgWaitForMultipleObjectsEx(
+                            0, NULL,
+                            (DWORD)floor(waitMs),
+                            QS_ALLINPUT,
+                            MWMO_ALERTABLE | MWMO_INPUTAVAILABLE
+                        );
+                    }
                 } else if (waitMs > 0.0) {
                     SwitchToThread();
                 }
@@ -12213,6 +12732,10 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     }
 
 thread_exit:
+    if (hAnimTimer) {
+        CloseHandle(hAnimTimer);
+        hAnimTimer = NULL;
+    }
     SWS_UnregisterHotkeys();
     if (g_isVisible || g_isPendingShow) HideSwitcher();
     UnregisterThumbnails();
