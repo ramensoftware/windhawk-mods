@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-17T19:03:37.000Z</updated>
+    <updated>2026-09-17T19:08:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Aero Flip 3D Recreation 1.2.0]]></title>
+        <id>https://windhawk.net/mods/aero-flip3d-recreation#a59c744c4e60927da9e311c3d5127b9b826dbaa3</id>
+        <link href="https://windhawk.net/mods/aero-flip3d-recreation"/>
+        <updated>2026-09-17T19:08:02.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Made the implementation more robust</li>
+<li>Improved desktop background capture on multi-monitor setups</li>
+<li>Enhanced the handle of the previews</li>
+<li>Updated the README</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[MuteAlert - Microphone Activity Taskbar Widget 0.9.10]]></title>
         <id>https://windhawk.net/mods/mutealert#cfa9b1247d303811aded2063004f07525dc1345b</id>
@@ -779,23 +795,6 @@ Original overlay/smear architecture inspired by <a href="https://github.com/Thea
         <author>
             <name>Jona like it, code it</name>
             <uri>https://github.com/Stunning-dev</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Power Options Button 1.0.14]]></title>
-        <id>https://windhawk.net/mods/power-options-button#4ab1b3861c4072e44fcc9fc9b3d89a0a3e98d4b8</id>
-        <link href="https://windhawk.net/mods/power-options-button"/>
-        <updated>2026-09-13T16:46:29.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Detect duplicated Ultimate Performance plans language-independently by comparing the raw FriendlyName MUI reference with the built-in Ultimate Performance template.</li>
-<li>Use an exact localized FriendlyName comparison as a secondary fallback.</li>
-<li>Remove language-specific "Ultimate"/"Ultimativ" keyword matching.</li>
-<li>Add diagnostic logging for unavailable FriendlyName references.</li>
-<li>Clean up unreachable code.</li>
-</ul>]]></content>
-        <author>
-            <name>SilverAmd</name>
-            <uri>https://github.com/SilverAmd</uri>
         </author>
     </entry>
 </feed>
