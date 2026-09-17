@@ -2,7 +2,7 @@
 // @id              smart-process-priority-ram-optimizer
 // @name            Smart Process Priority & RAM Optimizer
 // @description     Boosts foreground responsiveness, shields audio and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.
-// @version         2.2.0
+// @version         2.4.0
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         windhawk.exe
@@ -14,53 +14,45 @@
 /*
 # Smart Process Priority & RAM Optimizer
 
-Boosts the responsiveness of the active foreground application, protects
-real-time audio and local AI engines from throttling or trimming, throttles
-CPU-heavy background tasks, and safely reclaims idle memory with
-hardware-protective SSD safeguards.
+An intelligent, highly configurable system responsiveness and memory engine for Windows. It boosts the active foreground application, restricts runaway background CPU tasks to efficiency cores (E-Cores) or lower priorities, shields real-time audio and local AI workloads, and safely reclaims dormant memory with SSD-protective safeguards.
 
-## Foreground Priority Boost
-Elevates the active window's entire process family to Above Normal or High CPU priority via a system event hook, ensuring maximum responsiveness, and restores original priority when focus moves away. Background tasks are throttled to low I/O priority during contention to grant the foreground application relative I/O precedence. The foreground process is never trimmed.
+## How It Works
 
-## Local AI Engine Handling
-Recognizes common local AI inference processes (llama-server, LM Studio, Ollama,
-KoboldCPP, Jan, ComfyUI, and others). While one is actively generating -
-detected from CPU usage or working-set changes, so GPU-offloaded inference is
-covered too - it keeps full priority and its memory is never trimmed. After a
-configurable period of inactivity, its memory can be released to the Windows
-standby cache and reloads almost instantly on the next prompt.
+### 1. Foreground Priority & Core Optimization (ProBalance)
+- Elevates the entire process family of the active foreground window (renderers, GPU helpers, worker processes) to Above Normal CPU priority and normal I/O precedence.
+- On hybrid Intel and AMD architectures, automatically assigns Performance Cores (P-Cores) to the primary foreground application for zero-stutter responsiveness.
+- Seamlessly restores original priorities as soon as focus moves away.
 
-## Audio & Multimedia Shield
-Monitors active WASAPI audio sessions and exempts the whole process family of an
-app currently playing audio (browser, renderer, and helper processes) from CPU
-throttling and memory trimming.
+### 2. Background Throttling & E-Core Confinement
+- Monitors background CPU consumption and overall system contention.
+- When background tasks threaten system responsiveness, their CPU priority is temporarily lowered (Below Normal) and their I/O priority is throttled to low.
+- On hybrid architectures, runaway background tasks are confined to Efficiency Cores (E-Cores), preserving 100% of P-Core compute bandwidth and L3 cache for the foreground app.
+- Transparent fallback on non-hybrid processors: standard Win32 scheduling prioritization ensures safe, cooperative multitasking without core restrictions.
 
-*Note for DAW / audio power users*: Applications utilizing exclusive ASIO drivers or virtual loopback devices that bypass the Windows standard audio engine session manager will not report audio sessions via WASAPI; such audio applications should be added to the Excluded Processes list.
+### 3. Audio & Multimedia Shield (WASAPI)
+- Continuously inspects active WASAPI audio render sessions.
+- Automatically protects the complete process tree of any media player, DAW, or browser tab playing sound from CPU throttling and memory trimming, preventing audio stutter and dropouts.
 
-## Multitasking vs Single-Task Adaptation
-Detects rapid window switching and extends grace periods and protects visible
-windows accordingly. Detects fullscreen/3D game windows and runs one preventive
-memory sweep before the game allocates its own memory.
+### 4. Local AI Inference Protection
+- Recognizes local AI inference engines (Ollama, LM Studio, llama-server, KoboldCPP, Jan, ComfyUI, etc.).
+- While generating tokens—detected via CPU usage or working-set dynamics—AI models maintain full priority and their memory is shielded.
+- After a 5-minute period of complete inactivity, dormant model pages can be safely released to the Windows standby cache, reloading instantly upon the next prompt.
 
-## Automatic Process Classification
-Skips processes outside the interactive user session (background services) and
-packaged UWP/MSIX apps (already managed by Windows itself), regardless of name,
-on top of the manual exclusion list.
+### 5. Multi-Monitor & Fullscreen Game Detection
+- Initialized with Per-Monitor V2 DPI Awareness to ensure exact pixel boundary checks across mixed-scaling multi-monitor setups (e.g. 4K 150% + 1440p 100%).
+- Interrogates DWM Extended Frame Bounds and Direct3D fullscreen states to detect borderless windowed and exclusive games.
+- Executes a single pre-game memory sweep when launching a 3D game to provide clean physical RAM before texture allocation.
 
-## SSD-Protective Memory Reclaim
-Trims idle background processes' working sets, gated by per-process cooldowns
-and free-RAM thresholds to avoid unnecessary SSD writes. Below 5% free RAM these
-cooldowns are relaxed so the mod can react before the system runs out of memory.
-
-## Panic Hotkey
-Ctrl+Alt+F11 triggers an immediate cleanup pass.
+### 6. SSD-Protective Memory Optimization
+- Reclaims unused physical working sets from idle background applications using native Windows memory prioritization (`MEMORY_PRIORITY_VERY_LOW`).
+- Physical trimming is gated by strict cooldowns, free RAM thresholds, and inactivity timers to eliminate SSD write amplification.
+- Suspends background cleanups on battery power to maximize laptop battery life.
+- Emergency Panic Hotkey: Pressing `Ctrl+Alt+F11` triggers an immediate memory cleanup pass.
 
 ## Credits & Acknowledgments
-- **Inspirations & Concepts**:
-  - **Process Lasso (Bitsum)**: Inspired by the ProBalance concept for
-foreground responsiveness and background runaway CPU restraint.
-  - **LiveTuner (LT)**: Inspired by dynamic real-time priority tuning and
-Pressing Ctrl+Alt+F11 triggers an immediate memory cleanup pass.
+- **Process Lasso (Bitsum)**: Inspiration for the ProBalance concept and foreground responsiveness prioritization.
+- **LiveTuner**: Inspiration for dynamic real-time priority tuning heuristics.
+- **Windhawk Community & m417z**: Tool-mod framework and low-level Windows customization engine.
 */
 // ==/WindhawkModReadme==
 
@@ -77,11 +69,11 @@ Pressing Ctrl+Alt+F11 triggers an immediate memory cleanup pass.
     - "aboveNormal": Above Normal (Balanced & Safe)
     - "high": High (Maximum Performance)
 - enableForegroundCpuSets: false
-  $name: Suggest P-Cores to Foreground Window (Experimental)
-  $description: Suggests performance cores (P-cores) to the main foreground window on hybrid Intel/AMD architectures. Child renderers remain free to use efficiency cores.
+  $name: Suggest P-Cores to Foreground Window (Gaming & Low Latency)
+  $description: Directs the main active window to Performance Cores (P-cores) on hybrid Intel/AMD CPUs to prevent micro-stutter. Recommended for gaming; disable if running heavy multi-threaded workloads like 3D rendering or video encoding.
 - enableBackgroundCpuSets: false
-  $name: Restrict Throttled Background Apps to E-Cores (Experimental)
-  $description: Assigns efficiency cores (E-cores) to throttled background processes on hybrid Intel/AMD architectures to preserve full P-core capacity for the active foreground window.
+  $name: Restrict Throttled Background Apps to E-Cores
+  $description: Confines throttled background processes to Efficiency Cores (E-cores) on hybrid Intel/AMD CPUs, preserving full P-core throughput and L3 cache for the foreground app.
 - enableBackgroundThrottling: true
   $name: Throttle CPU-Heavy Background Processes
   $description: Temporarily lowers the priority of background processes that consume excessive CPU while a foreground app is active.
@@ -322,30 +314,40 @@ static SystemHardwareProfile GetHardwareProfile() {
         if (g_pfnGetSystemCpuSetInformation(
                 reinterpret_cast<PSYSTEM_CPU_SET_INFORMATION>(buf.data()), len,
                 &len, GetCurrentProcess(), 0)) {
-          ULONG count = len / sizeof(SYSTEM_CPU_SET_INFORMATION);
           BYTE maxEff = 0;
           BYTE minEff = 255;
-          for (ULONG i = 0; i < count; i++) {
+          ULONG offset = 0;
+          while (offset + sizeof(SYSTEM_CPU_SET_INFORMATION) <= len) {
             auto *item = reinterpret_cast<PSYSTEM_CPU_SET_INFORMATION>(
-                buf.data() + i * sizeof(SYSTEM_CPU_SET_INFORMATION));
+                buf.data() + offset);
+            if (item->Size == 0) {
+              break;
+            }
             if (item->Type == CpuSetInformation) {
               BYTE eff = item->CpuSet.EfficiencyClass;
               if (eff > maxEff) maxEff = eff;
               if (eff < minEff) minEff = eff;
             }
+            offset += item->Size;
           }
           if (maxEff > minEff) {
             p.isHybridCpu = true;
-            for (ULONG i = 0; i < count; i++) {
+            offset = 0;
+            while (offset + sizeof(SYSTEM_CPU_SET_INFORMATION) <= len) {
               auto *item = reinterpret_cast<PSYSTEM_CPU_SET_INFORMATION>(
-                  buf.data() + i * sizeof(SYSTEM_CPU_SET_INFORMATION));
+                  buf.data() + offset);
+              if (item->Size == 0) {
+                break;
+              }
               if (item->Type == CpuSetInformation) {
                 if (item->CpuSet.EfficiencyClass == maxEff) {
                   p.pCoreCpuSetIds.push_back(item->CpuSet.Id);
-                } else if (item->CpuSet.EfficiencyClass == minEff) {
+                } else if (item->CpuSet.EfficiencyClass < maxEff) {
+                  // Collects all efficiency cores (standard E-cores and LP E-cores on Core Ultra architectures)
                   p.eCoreCpuSetIds.push_back(item->CpuSet.Id);
                 }
               }
+              offset += item->Size;
             }
           }
         }
@@ -457,6 +459,7 @@ struct BoostedProcessEntry {
   DWORD originalPriority = NORMAL_PRIORITY_CLASS;
   ULONG originalIoPriority = IoPriorityNormal;
   ULONG originalMemoryPriority = 5; // MEMORY_PRIORITY_NORMAL
+  bool cpuSetsApplied = false;
 };
 static DWORD g_currentBoostedPid = 0;
 static std::vector<BoostedProcessEntry> g_boostedProcesses;
@@ -511,6 +514,32 @@ static bool g_wasIdle = false;
 
 // Access-denied counter: tracks elevated/SYSTEM processes skipped while running in user session
 static std::atomic<DWORD> g_accessDeniedCount{0};
+
+// Dynamic Immunity Cache: Protects processes shielded by Anti-Cheat drivers (Vanguard, EAC,
+// BattlEye, FACEIT) or Windows PPL. As soon as OpenProcess fails with ERROR_ACCESS_DENIED,
+// the PID is remembered here so subsequent cycles skip it with zero calls to OpenProcess,
+// eliminating handle request spam and avoiding any watchdog or anti-cheat triggers.
+static std::mutex g_immunitySetMutex;
+static std::unordered_set<DWORD> g_accessDeniedImmunitySet;
+
+static bool IsAccessDeniedImmune(DWORD pid) {
+  std::lock_guard<std::mutex> lock(g_immunitySetMutex);
+  return g_accessDeniedImmunitySet.count(pid) != 0;
+}
+
+static void RecordAccessDeniedImmunity(DWORD pid) {
+  std::lock_guard<std::mutex> lock(g_immunitySetMutex);
+  g_accessDeniedImmunitySet.insert(pid);
+}
+
+static void PruneAccessDeniedImmunity(const std::unordered_set<DWORD> &alivePids) {
+  std::lock_guard<std::mutex> lock(g_immunitySetMutex);
+  for (auto it = g_accessDeniedImmunitySet.begin();
+       it != g_accessDeniedImmunitySet.end();) {
+    it = (alivePids.count(*it) == 0) ? g_accessDeniedImmunitySet.erase(it)
+                                     : std::next(it);
+  }
+}
 
 // Session stats.
 static std::chrono::steady_clock::time_point g_modStartTime{};
@@ -1060,7 +1089,7 @@ static void RestoreForegroundBoostLocked() {
         SetPriorityClass(entry.hProcess, entry.originalPriority);
         SetProcessIoPriorityHint(entry.hProcess, entry.originalIoPriority);
         SetProcessMemoryPriorityHint(entry.hProcess, entry.originalMemoryPriority);
-        if (g_pfnSetProcessDefaultCpuSets) {
+        if (entry.cpuSetsApplied && g_pfnSetProcessDefaultCpuSets) {
           g_pfnSetProcessDefaultCpuSets(entry.hProcess, nullptr, 0);
         }
       }
@@ -1143,12 +1172,15 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
   for (DWORD pid : pidsToBoost) {
     if (pid == 0 || pid == 4 || pid == currentPid)
       continue;
+    if (IsAccessDeniedImmune(pid))
+      continue;
 
     HANDLE hProc =
         OpenProcess(PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE,
                     FALSE, pid);
     if (!hProc) {
       if (GetLastError() == ERROR_ACCESS_DENIED) {
+        RecordAccessDeniedImmunity(pid);
         g_accessDeniedCount.fetch_add(1, std::memory_order_relaxed);
       }
       continue;
@@ -1199,11 +1231,14 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
         SetProcessIoPriorityHint(hProc, targetIo);
 
         // Hybrid Architecture Optimization: Suggest P-cores to the main foreground window only
+        bool appliedCpuSets = false;
         const SystemHardwareProfile &hw = GetHardwareProfile();
         if (settings.enableForegroundCpuSets && pid == newForegroundPid &&
             hw.isHybridCpu && g_pfnSetProcessDefaultCpuSets && !hw.pCoreCpuSetIds.empty()) {
-          g_pfnSetProcessDefaultCpuSets(hProc, hw.pCoreCpuSetIds.data(),
-                                        static_cast<ULONG>(hw.pCoreCpuSetIds.size()));
+          if (g_pfnSetProcessDefaultCpuSets(hProc, hw.pCoreCpuSetIds.data(),
+                                            static_cast<ULONG>(hw.pCoreCpuSetIds.size()))) {
+            appliedCpuSets = true;
+          }
         }
 
         BoostedProcessEntry entry;
@@ -1212,6 +1247,7 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
         entry.originalPriority = origPriority;
         entry.originalIoPriority = origIoPriority;
         entry.originalMemoryPriority = origMemoryPriority;
+        entry.cpuSetsApplied = appliedCpuSets;
         g_boostedProcesses.push_back(entry);
         continue;
       }
@@ -1815,11 +1851,15 @@ static void ApplyBackgroundThrottling(const ModSettings &settings,
       continue;
     }
 
+    if (IsAccessDeniedImmune(pid))
+      continue;
+
     HANDLE hProc =
         OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SET_INFORMATION | SYNCHRONIZE,
                     FALSE, pid);
     if (!hProc) {
       if (GetLastError() == ERROR_ACCESS_DENIED) {
+        RecordAccessDeniedImmunity(pid);
         g_accessDeniedCount.fetch_add(1, std::memory_order_relaxed);
       }
       continue;
@@ -1999,6 +2039,7 @@ static void ApplyBackgroundThrottling(const ModSettings &settings,
   PruneDeadPids(g_ioSamples, alivePids);
   PruneDeadPids(g_aiLastInferenceTime, alivePids);
   PruneDeadPids(g_aiLastWorkingSetSize, alivePids);
+  PruneAccessDeniedImmunity(alivePids);
 }
 
 // ---------------------------------------------------------------------------
@@ -2143,15 +2184,15 @@ TryTrimProcess(DWORD pid, const ModSettings &settings,
                bool forceHardTrim = false) {
   TrimAttemptResult result;
 
-  HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION |
-                                 PROCESS_SET_INFORMATION | PROCESS_SET_QUOTA | PROCESS_VM_READ,
-                             FALSE, pid);
-  if (!hProc) {
-    hProc = OpenProcess(PROCESS_SET_QUOTA | PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION,
-                        FALSE, pid);
-  }
+  if (IsAccessDeniedImmune(pid))
+    return result;
+
+  HANDLE hProc = OpenProcess(
+      PROCESS_SET_QUOTA | PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION,
+      FALSE, pid);
   if (!hProc) {
     if (GetLastError() == ERROR_ACCESS_DENIED) {
+      RecordAccessDeniedImmunity(pid);
       g_accessDeniedCount.fetch_add(1, std::memory_order_relaxed);
     }
     return result;
@@ -2318,6 +2359,8 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings &settings,
     if (IsInList(n, settings.excludedProcesses) ||
         IsEssentialSystemSecurityProcess(n))
       return false;
+    if (IsAccessDeniedImmune(p))
+      return false;
     if (!IsInteractiveSessionProcess(p))
       return false;
 
@@ -2379,6 +2422,9 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings &settings,
     bool capEligible = false;
     if (settings.enableElectronMemoryCap && isTargetListed &&
         p != foregroundPid && (!hasVisibleWindow || isMinimized)) {
+      if (IsAccessDeniedImmune(p)) {
+        return false;
+      }
       HANDLE hPeek = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, p);
       if (hPeek) {
         PROCESS_MEMORY_COUNTERS_EX pmc{};
@@ -2392,6 +2438,8 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings &settings,
           }
         }
         CloseHandle(hPeek);
+      } else if (GetLastError() == ERROR_ACCESS_DENIED) {
+        RecordAccessDeniedImmunity(p);
       }
     }
 
@@ -2470,6 +2518,7 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings &settings,
     PruneDeadPids(g_processLastFocusedTime, alivePids);
   }
   PruneDeadPids(g_processLastTrimmed, alivePids);
+  PruneAccessDeniedImmunity(alivePids);
 
   return stats;
 }
@@ -3196,6 +3245,10 @@ void WhTool_ModUninit() {
   {
     std::lock_guard<std::mutex> lock(g_priorityMutex);
     RestoreForegroundBoostLocked();
+  }
+  {
+    std::lock_guard<std::mutex> lock(g_immunitySetMutex);
+    g_accessDeniedImmunitySet.clear();
   }
 
   if (g_stopEvent) {
