@@ -173,7 +173,7 @@ static COLORREF LoadColorRef(PCWSTR name, COLORREF fallback) {
     return RGB(color.r, color.g, color.b);
 }
 static bool ResolveUxThemeSymbols(HMODULE uxTheme, bool requireDarkMode) {
-    WindhawkUtils::SYMBOL_HOOK symbols[] = {
+    WindhawkUtils::SYMBOL_HOOK uxThemeDllHooks[] = {
         {{L"GetThemeClass"}, &g_getThemeClass},
         {{L"AllowDarkModeForWindow"}, &g_allowDarkModeForWindow, nullptr,
          !requireDarkMode},
@@ -181,7 +181,7 @@ static bool ResolveUxThemeSymbols(HMODULE uxTheme, bool requireDarkMode) {
          !requireDarkMode},
     };
     if (!WindhawkUtils::HookSymbols(
-            uxTheme, symbols, ARRAYSIZE(symbols))) {
+            uxTheme, uxThemeDllHooks, ARRAYSIZE(uxThemeDllHooks))) {
         Wh_Log(L"[ERROR] Couldn't resolve required uxtheme.dll symbols");
         return false;
     }
