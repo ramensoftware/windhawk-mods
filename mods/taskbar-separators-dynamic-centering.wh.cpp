@@ -675,10 +675,14 @@ struct TrackedTaskbarState {
     bool layoutMonitorAttached = false;
     winrt::event_token layoutUpdatedToken{};
     winrt::weak_ref<Controls::Panel> layoutMonitorPanel;
-    // The forced reconcile above writes margins, which schedules another layout
-    // pass and raises LayoutUpdated again, so this handler never re-enters
-    // itself and gives up after a bounded number of tries per observed
-    // realized-button count.
+    // Reentrancy guard for the forced reconcile below: true only while that
+    // call is running, so a LayoutUpdated raised from inside it cannot start
+    // another one. It does not suppress the LayoutUpdated caused by the
+    // margins the reconcile writes, because nothing here forces a synchronous
+    // layout pass: that event is raised by a later pass, after the flag has
+    // already been cleared. What actually bounds that feedback loop is
+    // kMaxLayoutForcedReconciles, the cap on forced reconciles per observed
+    // realized-button count (at most 3 per observed count).
     bool layoutForcedReconcileActive = false;
     int layoutForcedReconcileAttempts = 0;
     size_t layoutObservedButtonCount = 0;
@@ -2927,9 +2931,11 @@ void OnTaskbarLayoutUpdated(
         return;
     }
 
-    // Our own forced reconcile writes margins, which raises LayoutUpdated again
-    // while it is still running; that pass must not queue another forced
-    // reconcile.
+    // Reentrancy guard only, not a feedback-loop bound: the flag is set while
+    // the forced reconcile at the end of this handler runs, and is already
+    // cleared by the time the LayoutUpdated caused by the margins it wrote
+    // arrives, so that event does reach this handler. What bounds the repeats
+    // it can cause is kMaxLayoutForcedReconciles.
     if (taskbarState->layoutForcedReconcileActive) {
         return;
     }
@@ -3002,9 +3008,9 @@ void OnTaskbarLayoutUpdated(
     }
 
     // A removed or added button left the split margins stale; force a
-    // structural reconcile to rebuild them. The attempts are bounded per
-    // observed count, and a LayoutUpdated raised by our own forced reconcile is
-    // ignored at the top of this handler.
+    // structural reconcile to rebuild them. The retries are bounded per
+    // observed count by kMaxLayoutForcedReconciles; that constant, not the
+    // reentrancy flag above, is what bounds the loop the margin writes feed.
     if (taskbarState->layoutForcedReconcileAttempts >=
         kMaxLayoutForcedReconciles) {
         return;
