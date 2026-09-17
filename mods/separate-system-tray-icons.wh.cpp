@@ -338,7 +338,16 @@ struct AudioOutputEndpoint {
 };
 
 static void UpdateDynamicXamlIcons();
-static void RequestTrayRefresh(bool radiosChanged = false);
+enum TrayRefreshReason : unsigned {
+    RefreshAudio = 1u << 0,
+    RefreshAudioDevices = 1u << 1,
+    RefreshNetwork = 1u << 2,
+    RefreshRadios = 1u << 3,
+    RefreshPower = 1u << 4,
+    RefreshMedia = 1u << 5,
+    RefreshAll = (1u << 6) - 1,
+};
+static void RequestTrayRefresh(unsigned reasons);
 static void EnsureTrayRefreshWindow();
 static void DestroyTrayRefreshWindow();
 static void RemoveXamlButtons();
@@ -904,19 +913,29 @@ static bool SendShortcut(UINT modifiers, UINT vk) {
     return sent == inputs.size();
 }
 
-static DWORD WINAPI ExecuteActionThreadProc(void* param) {
-    auto* raw = static_cast<std::wstring*>(param);
-    std::wstring action = raw ? *raw : L"";
-    delete raw;
+// Shell activation and audio-service RPC must never block Explorer's UI.
+static void QueueShellWork(std::function<void()> work) {
+    HANDLE thread = StartOwnedWorker([work = std::move(work)] {
+        const HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        if (FAILED(hr)) {
+            Wh_Log(L"Shell worker COM initialization failed: 0x%08X", hr);
+            return;
+        }
+        struct ApartmentCleanup { ~ApartmentCleanup() { CoUninitialize(); } } cleanup;
+        if (!g_unloading) work();
+    });
+    if (thread) CloseHandle(thread);
+}
 
+static void ExecuteActionWorker(std::wstring const& action) {
     if (action.empty()) {
-        return 0;
+        return;
     }
 
     if (StartsWithCI(action, L"web:")) {
         ShellExecuteW(nullptr, L"open", action.substr(4).c_str(), nullptr,
                       nullptr, SW_SHOWNORMAL);
-        return 0;
+        return;
     }
     if (StartsWithCI(action, L"ms-settings:") ||
         StartsWithCI(action, L"ms-controlcenter:") ||
@@ -924,13 +943,13 @@ static DWORD WINAPI ExecuteActionThreadProc(void* param) {
         StartsWithCI(action, L"ms-actioncenter:")) {
         ShellExecuteW(nullptr, L"open", action.c_str(), nullptr, nullptr,
                       SW_SHOWNORMAL);
-        return 0;
+        return;
     }
     if (StartsWithCI(action, L"cmd:")) {
         std::wstring args = L"/C " + action.substr(4);
         ShellExecuteW(nullptr, L"open", L"cmd.exe", args.c_str(), nullptr,
                       SW_HIDE);
-        return 0;
+        return;
     }
     if (StartsWithCI(action, L"ps:") || StartsWithCI(action, L"powershell:")) {
         const size_t prefixLength = StartsWithCI(action, L"ps:") ? 3 : 11;
@@ -939,7 +958,7 @@ static DWORD WINAPI ExecuteActionThreadProc(void* param) {
             action.substr(prefixLength);
         ShellExecuteW(nullptr, L"open", L"powershell.exe", args.c_str(),
                       nullptr, SW_HIDE);
-        return 0;
+        return;
     }
     if (StartsWithCI(action, L"key:") || StartsWithCI(action, L"hotkey:")) {
         std::wstring shortcut =
@@ -950,13 +969,13 @@ static DWORD WINAPI ExecuteActionThreadProc(void* param) {
         if (!TryParseShortcut(shortcut, &modifiers, &vk)) {
             Wh_Log(L"Invalid replacement button shortcut action: %s",
                    shortcut.c_str());
-            return 0;
+            return;
         }
         if (!SendShortcut(modifiers, vk)) {
             Wh_Log(L"Failed to send replacement button shortcut: %s",
                    shortcut.c_str());
         }
-        return 0;
+        return;
     }
     if (!action.empty() && action.front() == L'~') {
         std::wstring target = action.substr(1);
@@ -964,65 +983,54 @@ static DWORD WINAPI ExecuteActionThreadProc(void* param) {
         if (GetKnownFolderPath(target.c_str(), resolved)) {
             ShellExecuteW(nullptr, L"open", resolved.c_str(), nullptr, nullptr,
                           SW_SHOWNORMAL);
-            return 0;
+            return;
         }
         wchar_t buffer[MAX_PATH * 4]{};
         if (SearchPathW(nullptr, target.c_str(), nullptr, ARRAYSIZE(buffer),
                         buffer, nullptr)) {
             ShellExecuteW(nullptr, L"open", buffer, nullptr, nullptr,
                           SW_SHOWNORMAL);
-            return 0;
+            return;
         }
         Wh_Log(L"Replacement button ~search target not found: %s",
                target.c_str());
-        return 0;
+        return;
     }
 
     std::wstring path = StripQuotes(action);
     ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr,
                   SW_SHOWNORMAL);
-    return 0;
+    return;
 }
 
-static void ExecuteAction(std::wstring const& action) {
-    if (action.empty()) {
-        return;
-    }
 
-    auto* heapAction = new (std::nothrow) std::wstring(action);
-    if (!heapAction) {
-        return;
-    }
-
-    HANDLE thread =
-        StartOwnedWorker([heapAction] { ExecuteActionThreadProc(heapAction); });
-    if (thread) {
-        CloseHandle(thread);
-    } else {
-        delete heapAction;
-    }
+static void ExecuteAction(std::wstring const& action,
+                          std::function<void()> launched = {}) {
+    if (action.empty()) return;
+    QueueShellWork([action, launched = std::move(launched)] {
+        ExecuteActionWorker(action);
+        if (launched && !g_unloading) launched();
+    });
 }
 
-static void LaunchUri(PCWSTR uri) {
-    HINSTANCE result =
-        ShellExecuteW(nullptr, L"open", uri, nullptr, nullptr, SW_SHOWNORMAL);
-    Wh_Log(L"ShellExecuteW(%s) returned %p", uri, result);
+static void LaunchUri(PCWSTR uri, std::function<void()> launched = {}) {
+    ExecuteAction(uri, std::move(launched));
 }
 
-static void OpenBluetooth() {
-    LaunchUri(L"ms-controlcenter:bluetooth");
+static void OpenBluetooth(std::function<void()> launched = {}) {
+    LaunchUri(L"ms-controlcenter:bluetooth", std::move(launched));
 }
 
 static void OpenAddBluetoothDevice() {
-    HINSTANCE result = ShellExecuteW(nullptr, L"open",
-                                     L"DevicePairingWizard.exe",
-                                     L"/bluetooth", nullptr, SW_SHOWNORMAL);
-    Wh_Log(L"ShellExecuteW(DevicePairingWizard.exe /bluetooth) returned %p",
-           result);
+    QueueShellWork([] {
+        HINSTANCE result = ShellExecuteW(nullptr, L"open", L"DevicePairingWizard.exe",
+                                         L"/bluetooth", nullptr, SW_SHOWNORMAL);
+        Wh_Log(L"ShellExecuteW(DevicePairingWizard.exe /bluetooth) returned %p", result);
+    });
 }
 
-static void OpenNetwork() {
-    LaunchUri(L"ms-availablenetworks:");
+static void OpenNetwork(std::function<void()> launched = {}) {
+    LaunchUri(L"ms-availablenetworks:", std::move(launched));
 }
 
 static void OpenSoundOutput() {
@@ -1084,14 +1092,11 @@ static std::wstring GetDefaultAudioOutputEndpointId() {
 }
 
 static void OpenDefaultAudioDeviceProperties() {
-    std::wstring id = GetDefaultAudioOutputEndpointId();
-    if (id.empty()) {
-        ExecuteAction(L"ms-settings:sound-devices");
-        return;
-    }
-
-    ExecuteAction(L"ms-settings:sound-properties?endpointId=" +
-                  UriEncode(id));
+    QueueShellWork([] {
+        const std::wstring id = GetDefaultAudioOutputEndpointId();
+        ExecuteActionWorker(id.empty() ? L"ms-settings:sound-devices" :
+            L"ms-settings:sound-properties?endpointId=" + UriEncode(id));
+    });
 }
 
 static std::atomic<int> g_airplaneModeState{-1};
@@ -1142,7 +1147,7 @@ static void RefreshAirplaneModeAsync() {
         const bool enabled = QueryAirplaneModeLikelyEnabled();
         g_airplaneModeState.store(enabled ? 1 : 0);
         g_airplaneModeQueryBusy.store(false);
-        RequestTrayRefresh();
+        RequestTrayRefresh(RefreshNetwork);
     });
     if (thread) CloseHandle(thread);
     else g_airplaneModeQueryBusy.store(false);
@@ -1184,7 +1189,7 @@ static DWORD WINAPI SetAirplaneModeLikelyEnabledThreadProc(void* param) {
     }
     if (coInitialized) CoUninitialize();
     g_airplaneModeState.store(enabled ? 0 : 1);
-    RequestTrayRefresh(true);
+    RequestTrayRefresh(RefreshRadios | RefreshNetwork | RefreshAudio | RefreshAudioDevices);
     return 0;
 }
 
@@ -1340,13 +1345,13 @@ static void PositionWindowNearTaskbar(HWND hwnd, PCWSTR label) {
 
 struct PositionNearTaskbarRequest {
     HANDLE process = nullptr;
-    PCWSTR label = L"window";
+    std::wstring label = L"window";
 };
 
 static DWORD WINAPI PositionWindowNearTaskbarThreadProc(void* param) {
     auto* request = static_cast<PositionNearTaskbarRequest*>(param);
     HANDLE process = request ? request->process : nullptr;
-    PCWSTR label = request ? request->label : L"window";
+    std::wstring label = request ? std::move(request->label) : L"window";
     delete request;
     if (!process) {
         return 0;
@@ -1369,10 +1374,10 @@ static DWORD WINAPI PositionWindowNearTaskbarThreadProc(void* param) {
     }
 
     if (hwnd) {
-        PositionWindowNearTaskbar(hwnd, label);
+        PositionWindowNearTaskbar(hwnd, label.c_str());
     } else {
         Wh_Log(L"%s placement: no visible top-level window found for pid=%lu.",
-               label, pid);
+               label.c_str(), pid);
     }
 
     CloseHandle(process);
@@ -1380,65 +1385,71 @@ static DWORD WINAPI PositionWindowNearTaskbarThreadProc(void* param) {
 }
 
 static void OpenVolumeMixer() {
-    SHELLEXECUTEINFOW sei{};
-    sei.cbSize = sizeof(sei);
-    sei.fMask = SEE_MASK_NOCLOSEPROCESS;
-    sei.lpVerb = L"open";
-    sei.lpFile = L"sndvol.exe";
-    sei.nShow = SW_SHOWNORMAL;
+    QueueShellWork([] {
+        SHELLEXECUTEINFOW sei{};
+        sei.cbSize = sizeof(sei);
+        sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+        sei.lpVerb = L"open";
+        sei.lpFile = L"sndvol.exe";
+        sei.nShow = SW_SHOWNORMAL;
 
-    if (!ShellExecuteExW(&sei)) {
-        Wh_Log(L"ShellExecuteExW(sndvol.exe) failed: %lu", GetLastError());
-        return;
-    }
-
-    Wh_Log(L"ShellExecuteExW(sndvol.exe) process=%p", sei.hProcess);
-    if (sei.hProcess) {
-        auto* request = new (std::nothrow) PositionNearTaskbarRequest{
-            sei.hProcess, L"sndvol"};
-        HANDLE thread = request ? StartOwnedWorker([request] { PositionWindowNearTaskbarThreadProc(request); })
-                                : nullptr;
-        if (thread) {
-            CloseHandle(thread);
-        } else {
-            Wh_Log(L"sndvol placement: CreateThread failed: %lu",
-                   GetLastError());
-            delete request;
-            CloseHandle(sei.hProcess);
+        if (!ShellExecuteExW(&sei)) {
+            Wh_Log(L"ShellExecuteExW(sndvol.exe) failed: %lu", GetLastError());
+            return;
         }
-    }
+
+        Wh_Log(L"ShellExecuteExW(sndvol.exe) process=%p", sei.hProcess);
+        if (sei.hProcess) {
+            auto* request = new (std::nothrow) PositionNearTaskbarRequest{
+                sei.hProcess, L"sndvol"};
+            HANDLE thread = request ? StartOwnedWorker([request] { PositionWindowNearTaskbarThreadProc(request); })
+                                    : nullptr;
+            if (thread) {
+                CloseHandle(thread);
+            } else {
+                Wh_Log(L"sndvol placement: CreateThread failed: %lu",
+                       GetLastError());
+                delete request;
+                CloseHandle(sei.hProcess);
+            }
+        }
+    });
 }
+
 
 static void OpenControlPanelWindow(PCWSTR parameters, PCWSTR label) {
-    SHELLEXECUTEINFOW sei{};
-    sei.cbSize = sizeof(sei);
-    sei.fMask = SEE_MASK_NOCLOSEPROCESS;
-    sei.lpVerb = L"open";
-    sei.lpFile = L"control.exe";
-    sei.lpParameters = parameters;
-    sei.nShow = SW_SHOWNORMAL;
+    QueueShellWork([parameters = std::wstring(parameters), label = std::wstring(label)] {
+        SHELLEXECUTEINFOW sei{};
+        sei.cbSize = sizeof(sei);
+        sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+        sei.lpVerb = L"open";
+        sei.lpFile = L"control.exe";
+        sei.lpParameters = parameters.c_str();
+        sei.nShow = SW_SHOWNORMAL;
 
-    if (!ShellExecuteExW(&sei)) {
-        Wh_Log(L"ShellExecuteExW(control.exe %s) failed: %lu", parameters,
-               GetLastError());
-        return;
-    }
-
-    if (sei.hProcess) {
-        auto* request = new (std::nothrow) PositionNearTaskbarRequest{
-            sei.hProcess, label};
-        HANDLE thread = request ? StartOwnedWorker([request] { PositionWindowNearTaskbarThreadProc(request); })
-                                : nullptr;
-        if (thread) {
-            CloseHandle(thread);
-        } else {
-            Wh_Log(L"%s placement: CreateThread failed: %lu", label,
+        if (!ShellExecuteExW(&sei)) {
+            Wh_Log(L"ShellExecuteExW(control.exe %s) failed: %lu", parameters.c_str(),
                    GetLastError());
-            delete request;
-            CloseHandle(sei.hProcess);
+            return;
         }
-    }
+
+        if (sei.hProcess) {
+            auto* request = new (std::nothrow) PositionNearTaskbarRequest{
+                sei.hProcess, label};
+            HANDLE thread = request ? StartOwnedWorker([request] { PositionWindowNearTaskbarThreadProc(request); })
+                                    : nullptr;
+            if (thread) {
+                CloseHandle(thread);
+            } else {
+                Wh_Log(L"%s placement: CreateThread failed: %lu", label.c_str(),
+                       GetLastError());
+                delete request;
+                CloseHandle(sei.hProcess);
+            }
+        }
+    });
 }
+
 
 static void OpenSpeakerSetup() {
     OpenControlPanelWindow(L"mmsys.cpl,,0", L"speaker setup");
@@ -1453,13 +1464,16 @@ static void OpenBluetoothOptions() {
 }
 
 static void OpenBluetoothFileTransfer(bool send) {
-    ShellExecuteW(nullptr, L"open", L"fsquirt.exe",
-                  send ? L"-send" : L"-receive", nullptr, SW_SHOWNORMAL);
+    QueueShellWork([send] {
+        ShellExecuteW(nullptr, L"open", L"fsquirt.exe",
+                      send ? L"-send" : L"-receive", nullptr, SW_SHOWNORMAL);
+    });
 }
 
-static void OpenSound() {
+static void OpenSound(std::function<void()> launched = {}) {
     if (_wcsicmp(g_settings.soundClickAction.c_str(), L"sound_output") == 0) {
         OpenSoundOutput();
+        if (launched) launched();
         return;
     }
 
@@ -1468,7 +1482,7 @@ static void OpenSound() {
         return;
     }
 
-    LaunchUri(L"ms-controlcenter:");
+    LaunchUri(L"ms-controlcenter:", std::move(launched));
 }
 
 static bool GetDefaultEndpointVolume(IAudioEndpointVolume** outVolume,
@@ -1895,7 +1909,7 @@ static void SetDefaultAudioOutputWorker(std::wstring const& id) {
 static void QueueAudioWork(std::function<void()> work) {
     HANDLE thread = StartOwnedWorker([work = std::move(work)] {
         work();
-        RequestTrayRefresh();
+        RequestTrayRefresh(RefreshAudio);
     });
     if (thread) CloseHandle(thread);
 }
@@ -2099,29 +2113,34 @@ static NetworkState GetNetworkState() {
     return state;
 }
 
-static void RefreshStatusSnapshot() {
-    StatusSnapshot snapshot;
-    try {
-        snapshot.bluetoothAvailable = IsBluetoothAvailable();
-        snapshot.network = GetNetworkState();
-        snapshot.sound = GetSoundState();
-        snapshot.audioOutputs = GetActiveAudioOutputEndpoints();
-        RefreshMediaTooltipInfoFromStatusWorker();
-        snapshot.ready = true;
-    } catch (...) {
-        Wh_Log(L"Status snapshot refresh failed: 0x%08X", winrt::to_hresult());
-    }
-
-    AcquireSRWLockExclusive(&g_statusSnapshotLock);
-    g_statusSnapshot = std::move(snapshot);
-    ReleaseSRWLockExclusive(&g_statusSnapshotLock);
-}
-
 static StatusSnapshot GetStatusSnapshot() {
     AcquireSRWLockShared(&g_statusSnapshotLock);
     StatusSnapshot snapshot = g_statusSnapshot;
     ReleaseSRWLockShared(&g_statusSnapshotLock);
     return snapshot;
+}
+
+static void RefreshStatusSnapshot(unsigned reasons) {
+    // Preserve domains that didn't change, including their last good value if
+    // an individual service query fails. Only the status thread publishes.
+    StatusSnapshot snapshot = GetStatusSnapshot();
+    if (!snapshot.ready) reasons |= RefreshAll;
+    auto refresh = [&](unsigned domain, auto&& collect) {
+        if (!(reasons & domain)) return;
+        try { collect(); }
+        catch (...) {
+            Wh_Log(L"Status domain %u refresh failed: 0x%08X", domain, winrt::to_hresult());
+        }
+    };
+    refresh(RefreshRadios, [&] { snapshot.bluetoothAvailable = IsBluetoothAvailable(); });
+    refresh(RefreshNetwork, [&] { snapshot.network = GetNetworkState(); });
+    refresh(RefreshAudio, [&] { snapshot.sound = GetSoundState(); });
+    refresh(RefreshAudioDevices, [&] { snapshot.audioOutputs = GetActiveAudioOutputEndpoints(); });
+    refresh(RefreshMedia, [&] { RefreshMediaTooltipInfoFromStatusWorker(); });
+    snapshot.ready = true;
+    AcquireSRWLockExclusive(&g_statusSnapshotLock);
+    g_statusSnapshot = std::move(snapshot);
+    ReleaseSRWLockExclusive(&g_statusSnapshotLock);
 }
 
 static BOOL CALLBACK FindTaskbarWndProc(HWND hwnd, LPARAM lp) {
@@ -3132,6 +3151,7 @@ namespace de = winrt::Windows::Devices::Enumeration;
 static std::wstring g_btConnectedNames;
 static size_t g_btConnectedCount = 0;
 static ULONGLONG g_btQueryTick = 0;
+static bool g_btQueryInvalidated = true;
 
 // Windows' peripheral battery property, also exposed on headset audio devnodes.
 static constexpr auto kBluetoothBatteryProperty = L"{104EA319-6EE2-4701-BD47-8DDBF425BBE5} 2";
@@ -3235,7 +3255,11 @@ static std::wstring GetBluetoothTooltip(bool available) {
             g_btConnectedNames = std::move(connectedNames);
             g_btConnectedCount = devices.size();
         }
-        if (!g_btQueries[0] && GetTickCount64() - g_btQueryTick >= 1000) {
+        // Device/radio notifications invalidate immediately; the slow fallback
+        // catches battery-level updates for devices that don't notify Explorer.
+        if (!g_btQueries[0] && (g_btQueryInvalidated || !g_btQueryTick ||
+                               GetTickCount64() - g_btQueryTick >= 30000)) {
+            g_btQueryInvalidated = false;
             auto properties = winrt::single_threaded_vector<winrt::hstring>({
                 L"System.Devices.Aep.IsConnected", L"System.Devices.Aep.DeviceAddress",
                 L"System.Devices.Aep.ContainerId", kBluetoothBatteryProperty});
@@ -3443,8 +3467,7 @@ static std::wstring GetSoundTooltip(SoundState const& state) {
 
     MediaTooltipInfo media = LoadMediaTooltipInfo();
     if (media.hasMedia) {
-        tooltip += media.paused ? L"\n\nPaused:\n"
-                                : L"\n\nCurrently playing:\n";
+        tooltip += L"\n\nCurrently playing:\n";
         tooltip += GetMediaTooltipTrackText(media);
         if (!media.appName.empty()) {
             tooltip += L"\n\nSource: ";
@@ -3685,7 +3708,11 @@ static void UpdateDynamicXamlIcons() {
 static SRWLOCK g_refreshLock = SRWLOCK_INIT;
 static HWND g_refreshWindow = nullptr;
 static unsigned g_refreshPending = 0;
+// Protect status-thread publication and refresh-event lifetime. Never join a
+// thread while holding this lock: its notification callbacks can acquire it.
+static SRWLOCK g_statusEventsLock = SRWLOCK_INIT;
 static std::atomic<HANDLE> g_statusRefreshEvent{nullptr};
+static std::atomic<unsigned> g_statusRefreshReasons{0};
 static constexpr UINT kRefreshMessage = WM_APP + 164;
 static constexpr UINT kDestroyRefreshWindowMessage = kRefreshMessage + 2;
 static constexpr PCWSTR kRefreshWindowClass = L"SeparateSystemTrayIcons.Refresh";
@@ -3701,14 +3728,17 @@ static void PostTrayRefresh(bool radiosChanged) {
     ReleaseSRWLockExclusive(&g_refreshLock);
 }
 
-static void RequestTrayRefresh(bool radiosChanged) {
+static void RequestTrayRefresh(unsigned reasons) {
     // Status callbacks can run on arbitrary threads. Signal the collector and
     // keep the current snapshot painted until the replacement is ready.
+    AcquireSRWLockShared(&g_statusEventsLock);
     if (!g_unloading) {
+        g_statusRefreshReasons.fetch_or(reasons);
         if (HANDLE refreshEvent = g_statusRefreshEvent.load())
             SetEvent(refreshEvent);
     }
-    PostTrayRefresh(radiosChanged);
+    ReleaseSRWLockShared(&g_statusEventsLock);
+    PostTrayRefresh((reasons & RefreshRadios) != 0);
 }
 
 static LRESULT CALLBACK TrayRefreshWindowProc(HWND hwnd, UINT message,
@@ -3725,14 +3755,15 @@ static LRESULT CALLBACK TrayRefreshWindowProc(HWND hwnd, UINT message,
     }
     if (message == WM_POWERBROADCAST) {
         InvalidateEnergySaverRead();
-        RequestTrayRefresh();
+        RequestTrayRefresh(RefreshPower);
         return TRUE;
     }
     if (message == WM_DEVICECHANGE) {
-        RequestTrayRefresh(true);
+        RequestTrayRefresh(RefreshRadios | RefreshNetwork | RefreshAudio | RefreshAudioDevices);
         return TRUE;
     }
-    if (message == kRefreshMessage || (message == WM_TIMER && wp == 1)) {
+    if (message == kRefreshMessage ||
+        (message == WM_TIMER && (wp == 1 || wp == 2))) {
         KillTimer(hwnd, 1);
         AcquireSRWLockExclusive(&g_refreshLock);
         const unsigned pending = g_refreshPending;
@@ -3741,15 +3772,14 @@ static LRESULT CALLBACK TrayRefreshWindowProc(HWND hwnd, UINT message,
         if (g_unloading) return 0;
         if (pending & 2) {
             g_airplaneModeState.store(-1);
-            for (auto& query : g_btQueries) {
-                if (query) { try { query.Cancel(); } catch (...) {} }
-                query = nullptr;
-            }
-            // Keep the last snapshot visible until the replacement query completes.
-            g_btQueryTick = 0;
+            // Let an in-flight query finish, then collect the invalidated state.
+            // Repeated notifications must not continually cancel its results.
+            g_btQueryInvalidated = true;
         }
         RefreshAirplaneModeAsync();
         UpdateDynamicXamlIcons();
+        if (g_btQueries[0]) SetTimer(hwnd, 2, 250, nullptr);
+        else KillTimer(hwnd, 2);
         // One follow-up allows Windows' asynchronous state propagation to settle.
         if (message == kRefreshMessage) SetTimer(hwnd, 1, 150, nullptr);
         return 0;
@@ -3797,6 +3827,7 @@ static void DestroyTrayRefreshWindow() {
     if (hwnd) {
         auto owner = reinterpret_cast<HINSTANCE>(GetWindowLongPtrW(hwnd, GWLP_HINSTANCE));
         KillTimer(hwnd, 1);
+        KillTimer(hwnd, 2);
         DestroyWindow(hwnd);
         UnregisterClassW(kRefreshWindowClass, owner);
     }
@@ -3807,25 +3838,25 @@ struct AudioStatusObserver : winrt::implements<AudioStatusObserver,
     HANDLE changed = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     ~AudioStatusObserver() { if (changed) CloseHandle(changed); }
     HRESULT STDMETHODCALLTYPE OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA) override {
-        RequestTrayRefresh(); return S_OK;
+        RequestTrayRefresh(RefreshAudio); return S_OK;
     }
     HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow, ERole, LPCWSTR) override {
         if (flow == eRender) SetEvent(changed);
-        RequestTrayRefresh(); return S_OK;
+        return S_OK;
     }
     HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR) override { SetEvent(changed); return S_OK; }
     HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR) override { SetEvent(changed); return S_OK; }
     HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR, DWORD) override { SetEvent(changed); return S_OK; }
     HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR, const PROPERTYKEY) override {
-        RequestTrayRefresh(); return S_OK;
+        RequestTrayRefresh(RefreshAudio | RefreshAudioDevices); return S_OK;
     }
 };
 
 static void WINAPI NetworkInterfaceChanged(void*, PMIB_IPINTERFACE_ROW, MIB_NOTIFICATION_TYPE) {
-    RequestTrayRefresh();
+    RequestTrayRefresh(RefreshNetwork);
 }
 static void WINAPI WirelessStatusChanged(PWLAN_NOTIFICATION_DATA, void*) {
-    RequestTrayRefresh();
+    RequestTrayRefresh(RefreshNetwork);
 }
 
 struct StatusEventWork {
@@ -3917,22 +3948,34 @@ static DWORD WINAPI StatusEventThread(void* parameter) {
     armKey(0); armKey(1);
     if (keys[0] && keys[1]) sources |= 64;
     PostMessageW(work.window, kRefreshMessage + 1, sources, 0);
-    RefreshStatusSnapshot();
+    RefreshStatusSnapshot(RefreshAll);
     PostTrayRefresh(false);
+    ULONGLONG lastRecovery = GetTickCount64();
     if (observer->changed && keyEvents[0] && keyEvents[1]) {
         HANDLE waits[]{work.stop, work.refresh, observer->changed,
                        keyEvents[0], keyEvents[1]};
         while (true) {
-            const DWORD result = WaitForMultipleObjects(5, waits, FALSE, 30000);
+            const ULONGLONG elapsed = GetTickCount64() - lastRecovery;
+            const DWORD timeout = elapsed >= 30000 ? 0 : static_cast<DWORD>(30000 - elapsed);
+            const DWORD result = WaitForMultipleObjects(5, waits, FALSE, timeout);
             if (result == WAIT_OBJECT_0 || result == WAIT_FAILED) break;
-            if (result == WAIT_OBJECT_0 + 2) bindVolume();
+            unsigned reasons = g_statusRefreshReasons.exchange(0);
+            if (result == WAIT_OBJECT_0 + 2) {
+                bindVolume();
+                reasons |= RefreshAudio | RefreshAudioDevices;
+            }
             if (result == WAIT_OBJECT_0 + 3 || result == WAIT_OBJECT_0 + 4) {
                 armKey(static_cast<int>(result - WAIT_OBJECT_0 - 3));
                 InvalidateEnergySaverRead();
+                reasons |= RefreshPower;
             }
             // Recover radio handles after adapters are unplugged/reconnected.
-            if (result == WAIT_TIMEOUT) bindRadios();
-            RefreshStatusSnapshot();
+            if (GetTickCount64() - lastRecovery >= 30000) {
+                reasons |= RefreshAll;
+                lastRecovery = GetTickCount64();
+            }
+            if (reasons & RefreshRadios) bindRadios();
+            if (reasons) RefreshStatusSnapshot(reasons);
             PostTrayRefresh(false);
         }
     }
@@ -3959,12 +4002,17 @@ static DWORD WINAPI StatusEventThread(void* parameter) {
 }
 
 static void StartStatusEvents(HWND hwnd) {
-    if (g_statusEventStop || g_unloading) return;
+    AcquireSRWLockExclusive(&g_statusEventsLock);
+    if (g_statusEventStop || g_unloading) {
+        ReleaseSRWLockExclusive(&g_statusEventsLock);
+        return;
+    }
     HANDLE stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     HANDLE refresh = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!stop || !refresh) {
         if (stop) CloseHandle(stop);
         if (refresh) CloseHandle(refresh);
+        ReleaseSRWLockExclusive(&g_statusEventsLock);
         return;
     }
     auto work = new (std::nothrow) StatusEventWork{hwnd, stop, refresh};
@@ -3977,18 +4025,24 @@ static void StartStatusEvents(HWND hwnd) {
     else {
         delete work; CloseHandle(stop); CloseHandle(refresh);
     }
+    ReleaseSRWLockExclusive(&g_statusEventsLock);
 }
 
 static void StopStatusEvents() {
-    if (g_statusEventStop) SetEvent(g_statusEventStop);
+    // Unload sets g_unloading before taking this lock. A startup already in
+    // progress must publish its handles first; any later startup is rejected.
+    AcquireSRWLockExclusive(&g_statusEventsLock);
+    HANDLE stop = std::exchange(g_statusEventStop, nullptr);
+    HANDLE thread = std::exchange(g_statusEventThread, nullptr);
     HANDLE refreshEvent = g_statusRefreshEvent.exchange(nullptr);
+    if (stop) SetEvent(stop);
     if (refreshEvent) SetEvent(refreshEvent);
-    if (g_statusEventThread) {
-        WaitForSingleObject(g_statusEventThread, INFINITE);
-        CloseHandle(g_statusEventThread);
-        g_statusEventThread = nullptr;
+    ReleaseSRWLockExclusive(&g_statusEventsLock);
+    if (thread) {
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
     }
-    if (g_statusEventStop) { CloseHandle(g_statusEventStop); g_statusEventStop = nullptr; }
+    if (stop) CloseHandle(stop);
     if (refreshEvent) CloseHandle(refreshEvent);
 }
 
@@ -4405,7 +4459,7 @@ nextOperation:
     }
     g_energySaverBusy.store(false);
     ReleaseSRWLockExclusive(&g_energySaverQueueLock);
-    if (work.operation || stateChanged) RequestTrayRefresh();
+    if (work.operation || stateChanged) RequestTrayRefresh(RefreshPower);
     return 0;
 }
 
@@ -4938,21 +4992,20 @@ static bool HandleTrayButtonClick(ButtonKind kind) {
         g_openedTrayFlyoutTick[index] = 0;
     }
 
+    // Start capture after shell activation returns, so a slow cold launch
+    // doesn't consume the flyout detection window before anything appears.
+    std::function<void()> launched;
+    if (canToggle) launched = [kind] { CaptureOpenedTrayFlyoutAsync(kind); };
     if (kind == ButtonKind::Bluetooth) {
-        OpenBluetooth();
+        OpenBluetooth(std::move(launched));
     } else if (kind == ButtonKind::Network) {
-        OpenNetwork();
+        OpenNetwork(std::move(launched));
     } else if (kind == ButtonKind::QuickSettings) {
-        ExecuteAction(g_settings.controlCenterAction);
+        ExecuteAction(g_settings.controlCenterAction, std::move(launched));
     } else if (kind == ButtonKind::Battery) {
-        ExecuteAction(g_settings.batteryAction);
+        ExecuteAction(g_settings.batteryAction, std::move(launched));
     } else {
-        OpenSound();
-    }
-
-    if (canToggle) {
-        g_openedTrayFlyoutTick[index] = GetTickCount64();
-        CaptureOpenedTrayFlyoutAsync(kind);
+        OpenSound(std::move(launched));
     }
 
     return true;
