@@ -1,13 +1,13 @@
 // ==WindhawkMod==
 // @id              hide-taskbar-tooltips
 // @name            Hide Taskbar Tooltips
-// @description     Suppresses all native Windows 11 taskbar hover tooltips (clock, system tray icons, and taskbar buttons).
-// @version         1.0.2
+// @description     Suppresses native Windows 11 XAML hover tooltips in Explorer (taskbar buttons, system tray icons, and clock).
+// @version         1.0.3
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -loleaut32 -lruntimeobject
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -17,7 +17,7 @@
 /*
 # Hide Taskbar Tooltips
 
-Suppresses all native Windows 11 taskbar hover tooltips, including:
+Suppresses native Windows 11 taskbar hover tooltips, including:
 - Taskbar app icon tooltips and labels on hover
 - System tray status icons tooltips (Network, Volume, Battery, Clock)
 
@@ -34,13 +34,13 @@ Restarting Explorer is recommended after installing or enabling the mod for chan
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 
-#include <commctrl.h>
 #include <windows.h>
 
 #include <atomic>
 
 #undef GetCurrentTime
 
+#include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 
 static bool IsWindows11OrGreater() {
@@ -73,17 +73,20 @@ static HRESULT __stdcall ToolTip_put_IsOpen_Hook(void* pThis, boolean value) {
         // Suppress opening any tooltip popup in the XAML framework with zero overhead
         return S_OK;
     }
-    return g_toolTipPutIsOpenOriginal(pThis, value);
+    if (g_toolTipPutIsOpenOriginal) {
+        return g_toolTipPutIsOpenOriginal(pThis, value);
+    }
+    return S_OK;
 }
 
-static void SuppressToolTip(void* pToolTip) {
+static bool SuppressToolTip(void* pToolTip) {
     if (!pToolTip) {
-        return;
+        return false;
     }
 
     void* pIToolTip = *(reinterpret_cast<void**>(pToolTip));
     if (!pIToolTip) {
-        return;
+        return false;
     }
 
     // Verify and obtain true IToolTip vtable via QueryInterface
@@ -92,27 +95,30 @@ static void SuppressToolTip(void* pToolTip) {
     if (FAILED(unk->QueryInterface(
             winrt::guid_of<winrt::Windows::UI::Xaml::Controls::IToolTip>(),
             spToolTip.put_void()))) {
-        return;
+        return false;
     }
 
     void** vtable = *reinterpret_cast<void***>(spToolTip.get());
     if (!vtable || !vtable[9]) {
-        return;
+        return false;
     }
 
     auto put_IsOpen = reinterpret_cast<ToolTip_put_IsOpen_t>(vtable[9]);
 
-    // Install global hook on ToolTip::put_IsOpen if not already installed
-    if (!g_toolTipPutIsOpenOriginal) {
+    // Install global hook on ToolTip::put_IsOpen exactly once from the first live instance
+    static std::atomic<bool> s_hookInstalled{false};
+    if (!s_hookInstalled.exchange(true)) {
         WindhawkUtils::SetFunctionHook(
             reinterpret_cast<void*>(put_IsOpen),
             reinterpret_cast<void*>(ToolTip_put_IsOpen_Hook),
             reinterpret_cast<void**>(&g_toolTipPutIsOpenOriginal));
         Wh_ApplyHookOperations();
+        Wh_Log(L"> Successfully hooked ToolTip::put_IsOpen on first live instance");
     }
 
     // Immediately close the tooltip instance
     put_IsOpen(spToolTip.get(), FALSE);
+    return true;
 }
 
 // SystemTray.dll: TaskbarLocationHelpers::PositionTaskbarTooltip
@@ -124,42 +130,74 @@ using PositionTaskbarTooltip_t = void(__cdecl*)(void* pToolTip,
 static PositionTaskbarTooltip_t PositionTaskbarTooltip_Original = nullptr;
 
 static void __cdecl PositionTaskbarTooltip_Hook(void* pToolTip,
-                                                void* /*pTarget*/,
-                                                int /*location*/,
-                                                bool /*b1*/,
-                                                bool /*b2*/) {
-    SuppressToolTip(pToolTip);
+                                                void* pTarget,
+                                                int location,
+                                                bool b1,
+                                                bool b2) {
+    if (!SuppressToolTip(pToolTip) && PositionTaskbarTooltip_Original) {
+        PositionTaskbarTooltip_Original(pToolTip, pTarget, location, b1, b2);
+    }
 }
 
-// SystemTray.dll / Taskbar.View.dll: TaskbarLocationHelpers::ApplyTaskbarTooltipPlacement
-using ApplyTaskbarTooltipPlacement_t = void(__cdecl*)(void* pToolTip,
-                                                      int location,
-                                                      void* pSize,
-                                                      bool b1);
-static ApplyTaskbarTooltipPlacement_t ApplyTaskbarTooltipPlacement_Original =
-    nullptr;
+// SystemTray.dll & Taskbar.View.dll: TaskbarLocationHelpers::ApplyTaskbarTooltipPlacement (4 params)
+using ApplyTaskbarTooltipPlacement_t =
+    void(__cdecl*)(void* pToolTip,
+                   int location,
+                   winrt::Windows::Foundation::Size size1,
+                   winrt::Windows::Foundation::Size size2);
 
-static void __cdecl ApplyTaskbarTooltipPlacement_Hook(void* pToolTip,
-                                                      int /*location*/,
-                                                      void* /*pSize*/,
-                                                      bool /*b1*/) {
-    SuppressToolTip(pToolTip);
+static ApplyTaskbarTooltipPlacement_t
+    ApplyTaskbarTooltipPlacement_Tray_Original = nullptr;
+
+static void __cdecl ApplyTaskbarTooltipPlacement_Tray_Hook(
+    void* pToolTip,
+    int location,
+    winrt::Windows::Foundation::Size size1,
+    winrt::Windows::Foundation::Size size2) {
+    if (!SuppressToolTip(pToolTip) &&
+        ApplyTaskbarTooltipPlacement_Tray_Original) {
+        ApplyTaskbarTooltipPlacement_Tray_Original(pToolTip, location, size1,
+                                                   size2);
+    }
 }
 
-using ApplyTaskbarTooltipPlacement5_t = void(__cdecl*)(void* pToolTip,
-                                                       int location,
-                                                       void* pSize,
-                                                       bool b1,
-                                                       bool b2);
-static ApplyTaskbarTooltipPlacement5_t ApplyTaskbarTooltipPlacement5_Original =
+static ApplyTaskbarTooltipPlacement_t
+    ApplyTaskbarTooltipPlacement_View_Original = nullptr;
+
+static void __cdecl ApplyTaskbarTooltipPlacement_View_Hook(
+    void* pToolTip,
+    int location,
+    winrt::Windows::Foundation::Size size1,
+    winrt::Windows::Foundation::Size size2) {
+    if (!SuppressToolTip(pToolTip) &&
+        ApplyTaskbarTooltipPlacement_View_Original) {
+        ApplyTaskbarTooltipPlacement_View_Original(pToolTip, location, size1,
+                                                   size2);
+    }
+}
+
+// Taskbar.View.dll: TaskbarLocationHelpers::ApplyTaskbarTooltipPlacement (6 params)
+using ApplyTaskbarTooltipPlacement6_t =
+    void(__cdecl*)(void* pToolTip,
+                   int location,
+                   winrt::Windows::Foundation::Size size1,
+                   winrt::Windows::Foundation::Size size2,
+                   bool b1,
+                   bool b2);
+static ApplyTaskbarTooltipPlacement6_t ApplyTaskbarTooltipPlacement6_Original =
     nullptr;
 
-static void __cdecl ApplyTaskbarTooltipPlacement5_Hook(void* pToolTip,
-                                                       int /*location*/,
-                                                       void* /*pSize*/,
-                                                       bool /*b1*/,
-                                                       bool /*b2*/) {
-    SuppressToolTip(pToolTip);
+static void __cdecl ApplyTaskbarTooltipPlacement6_Hook(
+    void* pToolTip,
+    int location,
+    winrt::Windows::Foundation::Size size1,
+    winrt::Windows::Foundation::Size size2,
+    bool b1,
+    bool b2) {
+    if (!SuppressToolTip(pToolTip) && ApplyTaskbarTooltipPlacement6_Original) {
+        ApplyTaskbarTooltipPlacement6_Original(pToolTip, location, size1, size2,
+                                               b1, b2);
+    }
 }
 
 // Hover state hooks in Taskbar.View.dll (zero-cost no-ops)
@@ -245,16 +283,16 @@ static bool HookSystemTraySymbols(HMODULE module) {
             },
             &PositionTaskbarTooltip_Original,
             PositionTaskbarTooltip_Hook,
-            false,
+            true,
         },
         {
             {
                 LR"(?ApplyTaskbarTooltipPlacement@TaskbarLocationHelpers@@YAXAEBUToolTip@Controls@Xaml@UI@Windows@winrt@@W4TaskbarLocation@Shell@5WindowsUdk@7@USize@Foundation@67@2@Z)",
                 LR"(void __cdecl TaskbarLocationHelpers::ApplyTaskbarTooltipPlacement(struct winrt::Windows::UI::Xaml::Controls::ToolTip const &,enum winrt::WindowsUdk::UI::Shell::TaskbarLocation,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size))",
-                LR"(void __cdecl TaskbarLocationHelpers::ApplyTaskbarTooltipPlacement(struct winrt::Windows::UI::Xaml::Controls::ToolTip const &,enum winrt::WindowsUdk::Shell::TaskbarLocation,struct winrt::Windows::Foundation::Size,bool))",
+                LR"(void __cdecl TaskbarLocationHelpers::ApplyTaskbarTooltipPlacement(struct winrt::Windows::UI::Xaml::Controls::ToolTip const &,enum winrt::WindowsUdk::Shell::TaskbarLocation,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size))",
             },
-            &ApplyTaskbarTooltipPlacement_Original,
-            ApplyTaskbarTooltipPlacement_Hook,
+            &ApplyTaskbarTooltipPlacement_Tray_Original,
+            ApplyTaskbarTooltipPlacement_Tray_Hook,
             true,
         },
         {
@@ -383,20 +421,22 @@ static bool HookTaskbarViewSymbols(HMODULE module) {
         },
         {
             {
-                LR"(void __cdecl TaskbarLocationHelpers::ApplyTaskbarTooltipPlacement(struct winrt::Windows::UI::Xaml::Controls::ToolTip const &,enum winrt::WindowsUdk::Shell::TaskbarLocation,struct winrt::Windows::Foundation::Size,bool,bool))",
                 LR"(?ApplyTaskbarTooltipPlacement@TaskbarLocationHelpers@@YAXAEBUToolTip@Controls@Xaml@UI@Windows@winrt@@W4TaskbarLocation@Shell@5WindowsUdk@7@USize@Foundation@67@2_N3@Z)",
+                LR"(void __cdecl TaskbarLocationHelpers::ApplyTaskbarTooltipPlacement(struct winrt::Windows::UI::Xaml::Controls::ToolTip const &,enum winrt::WindowsUdk::UI::Shell::TaskbarLocation,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size,bool,bool))",
+                LR"(void __cdecl TaskbarLocationHelpers::ApplyTaskbarTooltipPlacement(struct winrt::Windows::UI::Xaml::Controls::ToolTip const &,enum winrt::WindowsUdk::Shell::TaskbarLocation,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size,bool,bool))",
             },
-            &ApplyTaskbarTooltipPlacement5_Original,
-            ApplyTaskbarTooltipPlacement5_Hook,
+            &ApplyTaskbarTooltipPlacement6_Original,
+            ApplyTaskbarTooltipPlacement6_Hook,
             true,
         },
         {
             {
-                LR"(void __cdecl TaskbarLocationHelpers::ApplyTaskbarTooltipPlacement(struct winrt::Windows::UI::Xaml::Controls::ToolTip const &,enum winrt::WindowsUdk::Shell::TaskbarLocation,struct winrt::Windows::Foundation::Size,bool))",
                 LR"(?ApplyTaskbarTooltipPlacement@TaskbarLocationHelpers@@YAXAEBUToolTip@Controls@Xaml@UI@Windows@winrt@@W4TaskbarLocation@Shell@5WindowsUdk@7@USize@Foundation@67@2@Z)",
+                LR"(void __cdecl TaskbarLocationHelpers::ApplyTaskbarTooltipPlacement(struct winrt::Windows::UI::Xaml::Controls::ToolTip const &,enum winrt::WindowsUdk::UI::Shell::TaskbarLocation,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size))",
+                LR"(void __cdecl TaskbarLocationHelpers::ApplyTaskbarTooltipPlacement(struct winrt::Windows::UI::Xaml::Controls::ToolTip const &,enum winrt::WindowsUdk::Shell::TaskbarLocation,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size))",
             },
-            &ApplyTaskbarTooltipPlacement_Original,
-            ApplyTaskbarTooltipPlacement_Hook,
+            &ApplyTaskbarTooltipPlacement_View_Original,
+            ApplyTaskbarTooltipPlacement_View_Hook,
             true,
         },
     };
@@ -407,25 +447,23 @@ static bool HookTaskbarViewSymbols(HMODULE module) {
     return res;
 }
 
-static void HandleLoadedModule(HMODULE module, LPCWSTR lpLibFileName) {
-    if (!module || !lpLibFileName) {
+static void HandleLoadedModule(HMODULE module) {
+    if (!module) {
         return;
     }
 
-    if (!g_systemTrayHooked && wcsstr(lpLibFileName, L"SystemTray.dll")) {
+    if (!g_systemTrayHooked && GetModuleHandleW(L"SystemTray.dll") == module) {
         if (!g_systemTrayHooked.exchange(true)) {
             Wh_Log(L"Loaded SystemTray.dll dynamically");
-            if (HookSystemTraySymbols(module)) {
-                Wh_ApplyHookOperations();
-            }
+            HookSystemTraySymbols(module);
+            Wh_ApplyHookOperations();
         }
     } else if (!g_taskbarViewHooked &&
-               wcsstr(lpLibFileName, L"Taskbar.View.dll")) {
+               GetModuleHandleW(L"Taskbar.View.dll") == module) {
         if (!g_taskbarViewHooked.exchange(true)) {
             Wh_Log(L"Loaded Taskbar.View.dll dynamically");
-            if (HookTaskbarViewSymbols(module)) {
-                Wh_ApplyHookOperations();
-            }
+            HookTaskbarViewSymbols(module);
+            Wh_ApplyHookOperations();
         }
     }
 }
@@ -438,166 +476,38 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
                                           DWORD dwFlags) {
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (module) {
-        HandleLoadedModule(module, lpLibFileName);
+        HandleLoadedModule(module);
     }
     return module;
 }
 
-static HANDLE g_restartExplorerPromptThread = nullptr;
-static std::atomic<HWND> g_restartExplorerPromptWindow{nullptr};
-static std::atomic<bool> g_uninitializing{false};
-static bool g_isInitialExplorerStartup = false;
-
-static constexpr WCHAR kRestartExplorerPromptTitle[] =
-    L"Hide Taskbar Tooltips - Windhawk";
-static constexpr WCHAR kRestartExplorerPromptText[] =
-    L"Restarting Explorer is required for the mod to take full effect across existing taskbar elements.\n\nDo you want to restart Explorer now?";
-static constexpr WCHAR kRestartExplorerCommand[] =
-    LR"(cmd /c "echo Terminating Explorer...)"
-    LR"( & taskkill /f /im explorer.exe)"
-    LR"( & timeout /t 1 /nobreak >nul)"
-    LR"( & start explorer.exe)"
-    LR"( & echo Starting Explorer...)"
-    LR"( & timeout /t 3 /nobreak >nul")";
-
-static HRESULT CALLBACK RestartExplorerDialogCallback(HWND hwnd, UINT msg,
-                                                      WPARAM /*wParam*/,
-                                                      LPARAM /*lParam*/,
-                                                      LONG_PTR /*lpRefData*/) {
-    switch (msg) {
-    case TDN_CREATED:
-        g_restartExplorerPromptWindow = hwnd;
-        if (g_uninitializing) {
-            PostMessageW(hwnd, WM_CLOSE, 0, 0);
-        }
-        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-        break;
-
-    case TDN_DESTROYED:
-        g_restartExplorerPromptWindow = nullptr;
-        break;
-
-    default:
-        break;
-    }
-
-    return S_OK;
-}
-
-static DWORD WINAPI RestartExplorerThreadProc(LPVOID /*lpParameter*/) {
-    TASKDIALOGCONFIG taskDialogConfig{};
-    taskDialogConfig.cbSize = sizeof(taskDialogConfig);
-    taskDialogConfig.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION;
-    taskDialogConfig.dwCommonButtons = TDCBF_YES_BUTTON | TDCBF_NO_BUTTON;
-    taskDialogConfig.pszWindowTitle = kRestartExplorerPromptTitle;
-    taskDialogConfig.pszMainIcon = TD_INFORMATION_ICON;
-    taskDialogConfig.pszContent = kRestartExplorerPromptText;
-    taskDialogConfig.pfCallback = RestartExplorerDialogCallback;
-
-    int button = 0;
-    if (SUCCEEDED(TaskDialogIndirect(&taskDialogConfig, &button, nullptr,
-                                     nullptr)) &&
-        button == IDYES && !g_uninitializing) {
-        WCHAR commandLine[ARRAYSIZE(kRestartExplorerCommand)];
-        memcpy(commandLine, kRestartExplorerCommand,
-               sizeof(kRestartExplorerCommand));
-        STARTUPINFO si{};
-        si.cb = sizeof(si);
-        PROCESS_INFORMATION pi{};
-        if (CreateProcessW(nullptr, commandLine, nullptr, nullptr, FALSE, 0,
-                           nullptr, nullptr, &si, &pi)) {
-            CloseHandle(pi.hThread);
-            CloseHandle(pi.hProcess);
-        }
-    }
-
-    return 0;
-}
-
-static void PromptToRestartExplorer() {
-    if (g_uninitializing) {
-        return;
-    }
-
-    if (g_restartExplorerPromptThread) {
-        if (WaitForSingleObject(g_restartExplorerPromptThread, 0) !=
-            WAIT_OBJECT_0) {
-            return;
-        }
-
-        CloseHandle(g_restartExplorerPromptThread);
-        g_restartExplorerPromptThread = nullptr;
-    }
-
-    g_restartExplorerPromptThread = CreateThread(
-        nullptr, 0, RestartExplorerThreadProc, nullptr, 0, nullptr);
-}
-
-static bool IsExplorerAlreadyRunning() {
-    FILETIME ftCreation{}, ftExit{}, ftKernel{}, ftUser{};
-    if (GetProcessTimes(GetCurrentProcess(), &ftCreation, &ftExit, &ftKernel,
-                        &ftUser)) {
-        FILETIME ftNow{};
-        GetSystemTimeAsFileTime(&ftNow);
-        ULARGE_INTEGER uCreation{.LowPart = ftCreation.dwLowDateTime,
-                                 .HighPart = ftCreation.dwHighDateTime};
-        ULARGE_INTEGER uNow{.LowPart = ftNow.dwLowDateTime,
-                            .HighPart = ftNow.dwHighDateTime};
-        // If Explorer has been running for more than 10 seconds (100,000,000 * 100ns)
-        if (uNow.QuadPart > uCreation.QuadPart + 100000000ULL) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static bool IsTaskbarExplorerProcess() {
-    HWND hTrayWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (!hTrayWnd) {
-        return false;
-    }
-    DWORD processId = 0;
-    GetWindowThreadProcessId(hTrayWnd, &processId);
-    return processId == GetCurrentProcessId();
-}
-
 BOOL Wh_ModInit() {
-    Wh_Log(L"> Initializing Hide Taskbar Tooltips mod v1.0.2");
+    Wh_Log(L"> Initializing Hide Taskbar Tooltips mod v1.0.3");
 
     if (!IsWindows11OrGreater()) {
         Wh_Log(L"Hide Taskbar Tooltips: Only Windows 11 is supported");
         return FALSE;
     }
 
-    // Check if Explorer is starting up fresh: Shell_TrayWnd does not exist yet at early startup
-    if (!FindWindowW(L"Shell_TrayWnd", nullptr)) {
-        g_isInitialExplorerStartup = true;
-    }
-
     bool hookedAny = false;
 
-    if (HMODULE systemTrayModule = GetModuleHandle(L"SystemTray.dll")) {
+    if (HMODULE systemTrayModule = GetModuleHandleW(L"SystemTray.dll")) {
         g_systemTrayHooked = true;
         if (HookSystemTraySymbols(systemTrayModule)) {
             hookedAny = true;
         }
     }
 
-    if (HMODULE taskbarViewModule = GetModuleHandle(L"Taskbar.View.dll")) {
+    if (HMODULE taskbarViewModule = GetModuleHandleW(L"Taskbar.View.dll")) {
         g_taskbarViewHooked = true;
         if (HookTaskbarViewSymbols(taskbarViewModule)) {
             hookedAny = true;
         }
     }
 
-    if (hookedAny) {
-        Wh_ApplyHookOperations();
-        Wh_Log(L"> Applied initial hook operations in Wh_ModInit");
-    }
-
     bool waitingForModules = false;
     if (!g_systemTrayHooked || !g_taskbarViewHooked) {
-        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+        HMODULE kernelBaseModule = GetModuleHandleW(L"kernelbase.dll");
         if (kernelBaseModule) {
             auto pKernelBaseLoadLibraryExW =
                 reinterpret_cast<decltype(&LoadLibraryExW)>(
@@ -606,7 +516,6 @@ BOOL Wh_ModInit() {
                 WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
                                                LoadLibraryExW_Hook,
                                                &LoadLibraryExW_Original);
-                Wh_ApplyHookOperations();
                 waitingForModules = true;
             }
         }
@@ -615,56 +524,6 @@ BOOL Wh_ModInit() {
     return hookedAny || waitingForModules;
 }
 
-void Wh_ModAfterInit() {
-    Wh_Log(L"> Wh_ModAfterInit");
-
-    bool needApply = false;
-
-    if (!g_systemTrayHooked) {
-        if (HMODULE systemTrayModule = GetModuleHandle(L"SystemTray.dll")) {
-            if (!g_systemTrayHooked.exchange(true)) {
-                if (HookSystemTraySymbols(systemTrayModule)) {
-                    needApply = true;
-                }
-            }
-        }
-    }
-
-    if (!g_taskbarViewHooked) {
-        if (HMODULE taskbarViewModule = GetModuleHandle(L"Taskbar.View.dll")) {
-            if (!g_taskbarViewHooked.exchange(true)) {
-                if (HookTaskbarViewSymbols(taskbarViewModule)) {
-                    needApply = true;
-                }
-            }
-        }
-    }
-
-    if (needApply) {
-        Wh_ApplyHookOperations();
-        Wh_Log(L"> Wh_ModAfterInit: applied pending hook operations");
-    }
-
-    // Only prompt on live injection into an already-running Explorer session with an existing taskbar
-    if (!g_isInitialExplorerStartup && IsExplorerAlreadyRunning() &&
-        IsTaskbarExplorerProcess()) {
-        PromptToRestartExplorer();
-    }
-}
-
-void Wh_ModBeforeUninit() {
-    Wh_Log(L"> Wh_ModBeforeUninit");
-    g_uninitializing = true;
-    if (HWND hwnd = g_restartExplorerPromptWindow) {
-        PostMessageW(hwnd, WM_CLOSE, 0, 0);
-    }
-}
-
 void Wh_ModUninit() {
     Wh_Log(L"> Uninitializing Hide Taskbar Tooltips mod");
-    if (g_restartExplorerPromptThread) {
-        WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
-        CloseHandle(g_restartExplorerPromptThread);
-        g_restartExplorerPromptThread = nullptr;
-    }
 }
