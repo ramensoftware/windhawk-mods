@@ -1,9 +1,10 @@
 // ==WindhawkMod==
-// @id             kde-desktop-selection-overlay
+// @id             kde-style-desktop-selection-overlay
 // @name           KDE Style Desktop Selection Overlay
 // @description    Draws a custom KDE-inspired rounded selection box when drag-selecting on the Desktop
 // @version        1.0
 // @author         Xezjk
+// @github         xezjk
 // @include        explorer.exe
 // @compilerOptions -lgdi32 -luser32 -lgdiplus
 // ==/WindhawkMod==
