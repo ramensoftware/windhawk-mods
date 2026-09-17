@@ -112,9 +112,9 @@ application buttons.
 **Dynamic centering** centers the icons after **Dynamic centering position** as
 a group relative to the whole taskbar, by inserting a computed physical gap at
 that position. It is applied only while the taskbar is **left-aligned and
-horizontal**. **Hide when middle icon count is at least** hides the dynamic
-divider when the number of icons after the position reaches the configured
-value.
+horizontal**. **Hide when the icon count after the position is at least** hides
+the dynamic divider when the number of icons after the position reaches the
+configured value.
 
 The dividers themselves are only the mechanical means of dynamic centering:
 **without dynamic centering there are no dividers.** While dynamic centering is
@@ -155,10 +155,16 @@ taskbar settings.**
 - The alignment monitor runs for as long as the mod does and reacts in **both
   directions**. Switching the taskbar to **Center** while dynamic centering is
   active turns dynamic centering off and removes the dividers; switching it back
-  to **Left** turns dynamic centering on again and recreates the dividers. No
-  setting change and no mod reload is needed. The reason is written to the
+  to **Left** turns dynamic centering on again and recreates the dividers. You
+  never have to touch the taskbar, change a setting, or reload the mod.
+  Switching the alignment slides the whole button row, so a gap computed while
+  the animation is still running can come out **collapsed**; the mod therefore
+  rebuilds repeatedly for a few seconds across the animation, and the rebuild
+  taken once the geometry has settled writes the real gap, so the centering
+  usually appears on its own in **under a second**. The reason is written to the
   Windhawk log:
-  `the user changed the taskbar alignment; dynamic centering is off and the dividers are removed`.
+  `the user changed the taskbar alignment; dynamic centering is off and the dividers are removed`
+  and `the taskbar is left-aligned again; dynamic centering is applied again`.
 - Dynamic centering is **not supported on vertical taskbars**, and a vertical
   taskbar keeps no dividers either: the dividers exist only as the means of
   dynamic centering.
@@ -183,7 +189,7 @@ The settings this fork adds:
 | Setting | Values | Meaning |
 | --- | --- | --- |
 | Dynamic centering position | taskbar position, default `4` | The separator position used for the dynamic centering and gap behavior. It must also be listed in `Separators`, otherwise no gap is reserved for it. An app-name separator that resolves to this position carries the centering gap just as well. It is not applied on a mirrored (right-to-left) taskbar. |
-| Hide when middle icon count is at least | icon count, default `11` | Hides the dynamic separator and stops dynamic centering once the number of icons after the dynamic position reaches this value. |
+| Hide when the icon count after the position is at least | icon count, default `11` | Hides the dynamic separator and stops dynamic centering once the number of icons after the dynamic position reaches this value. `0` never hides it. |
 
 ## Compatibility
 
@@ -243,7 +249,7 @@ contribution from mileso in GitHub PR #2.
 ### 相对原版新增
 
 - **动态居中**：以指定位置为界，把其后的图标作为一组相对整条任务栏居中；它只在任务栏**左对齐且水平**时生效，分隔线也只在它生效期间存在
-- 右侧图标数量达到设定值时隐藏动态分隔线，并同时停止动态居中
+- 位置之后的图标数量达到设定值时隐藏动态分隔线，并同时停止动态居中
 - 拖动/互换任务栏图标时冻结分隔线几何，避免布局反馈回环
 - 释放鼠标后连续多帧重建间距，修复临时边距残留
 - 监听任务栏面板布局，关闭应用后立即重建间距
@@ -254,8 +260,9 @@ contribution from mileso in GitHub PR #2.
 设置项的名称与取值同上面的英文一节，这里只强调两条本分叉新增的行为：
 **Dynamic centering position** 指定用于动态居中的分隔线位置，该位置必须同时出现在
 `Separators` 列表中，否则不会为它预留间距；按应用名配置的分割线解析后落在该位置也算。
-**Hide when middle icon count is at least** 在动态位置之后的图标数量达到该值时隐藏动态
-分隔线，并同时停止动态居中。
+**Hide when the icon count after the position is at least** 在动态位置之后的图标数量
+达到该值时隐藏动态分隔线，并同时停止动态居中。设为 0 表示永不隐藏，
+也永不因图标数量而停止动态居中。
 
 ### 动态居中需要左对齐且水平
 
@@ -274,9 +281,12 @@ Windows 在“居中”模式下由系统居中整排按钮，模组无法单独
 - 任务栏**居中**时不会生效：该模式下整排按钮由系统居中，模组也不会背着你改对齐设置，
   并且**不创建任何分隔线**。
 - 对齐监控在模组运行期间常驻，并**双向**响应：把任务栏切到**居中**，动态居中会关闭并移除分隔线；
-  切回**左对齐**，动态居中会重新开启并重建分隔线。不需要改动设置，也不需要重新加载模组。
+  切回**左对齐**，动态居中会重新开启并重建分隔线。无需触碰任务栏、无需改动设置，也无需重新加载
+  模组。切换对齐会让整排按钮滑动，动画期间算出的间距可能是**塌陷的**，因此模组会在动画期间
+  **重复重建几秒**：几何稳定后的那一次会写出正确间距，通常在**不到一秒**内居中就会自行出现。
   原因会写入 Windhawk 日志：
-  `the user changed the taskbar alignment; dynamic centering is off and the dividers are removed`。
+  `the user changed the taskbar alignment; dynamic centering is off and the dividers are removed`、
+  `the taskbar is left-aligned again; dynamic centering is applied again`。
 - **垂直任务栏不支持动态居中**，垂直任务栏上同样不保留分隔线，因为分隔线只是动态居中的实现手段。
 - **镜像（RTL）任务栏同样不支持动态居中**，也不保留分隔线。
 
@@ -312,7 +322,14 @@ Windows 在“居中”模式下由系统居中整排按钮，模组无法单独
   - diamond: Diamond
 - separatorGap: 0
   $name: Divider gap
-  $description: Extra physical space reserved at each divider position, from 0 to 32 pixels. Set to 0 for the original overlay-only behavior. Only in effect while dynamic centering is applied, that is on a left-aligned, horizontal taskbar.
+  $description: Extra physical space reserved at each divider position, from 0
+    to 32 pixels. Set to 0 for the original overlay-only behavior. Only in
+    effect while dynamic centering is applied, that is on a left-aligned,
+    horizontal taskbar. It has no effect at the dynamic centering position
+    itself, because the centering gap computed for that position overrides it.
+  $description:zh-CN: 每个分隔线位置额外预留的物理间距，取值 0 到 32 像素。设为 0
+    即恢复原先只画线、不额外占位的效果。仅在动态居中生效时有效，也就是左对齐且水平的
+    任务栏上。在动态居中位置本身它不生效，因为该位置的居中间距会覆盖它。
 - color: "#FFFF00"
   $name: Color
   $description: "Divider color in #RRGGBB or #AARRGGBB format."
@@ -352,10 +369,16 @@ Windows 在“居中”模式下由系统居中整排按钮，模组无法单独
   $description: The separator position used for the dynamic centering and gap behavior. It must also be listed in Separators, otherwise no gap is reserved for it. An app-name separator that resolves to this position carries the centering gap just as well. Dynamic centering is applied only on a left-aligned, horizontal taskbar, and never on a mirrored (right-to-left) one.
   $description:zh-CN: 用于动态居中与间距行为的任务栏位置。该位置必须同时出现在 Separators 列表中，否则不会为它预留间距。按应用名配置的分割线在解析后可能正好落在此位置，同样可以承载居中间距。动态居中只在左对齐且水平的任务栏上生效，镜像（从右到左）的任务栏上不生效。
 - hideWhenMiddleIconCountAtLeast: 11
-  $name: Hide when middle icon count is at least
-  $name:zh-CN: 右侧图标数量达到此值时隐藏
-  $description: Hide the dynamic separator and stop dynamic centering once the number of icons after the dynamic position reaches this value.
-  $description:zh-CN: 当动态位置之后的图标数量达到此值时隐藏动态分隔线，并停止动态居中。
+  $name: Hide when the icon count after the position is at least
+  $name:zh-CN: 位置之后的图标数量达到此值时隐藏
+  $description: Hide the dynamic separator and stop dynamic centering once the
+    number of icons after the position reaches this value, where that number
+    is every usable application button after the dynamic position. Set to 0 to
+    never hide the separator and never stop dynamic centering because of the
+    icon count.
+  $description:zh-CN: 动态位置之后的图标数量达到此值时隐藏动态分隔线，并停止动态居中。
+    该数量指动态位置之后所有可用应用按钮的数量。设为 0 表示永不隐藏分隔线，也永不因
+    图标数量而停止动态居中。
 - separators:
   - '4'
   $name: Separators
@@ -514,6 +537,12 @@ std::atomic<bool> g_unloading{false};
 // the taskbar alignment: this flag says what is actually applied.
 std::atomic<bool> g_alignMonitorStop{false};
 std::atomic<bool> g_dynamicCenteringActive{false};
+// Raised only by the alignment monitor, and only while it repeats the rebuild
+// after the taskbar was switched back to left alignment. The row is still
+// animating at that moment, so the dynamic gap branch of the reconcile logs
+// one line per run for exactly that window. Outside the window the flag stays
+// false, so the hot UpdateVisualStates path never logs.
+std::atomic<bool> g_alignmentRebuildLog{false};
 HANDLE g_alignMonitorThread = nullptr;
 HANDLE g_alignStopEvent = nullptr;
 // StartTaskbarAlignMonitor runs on the load/settings-change path (including any
@@ -633,6 +662,11 @@ struct TrackedTaskbarState {
     // Frames left to force a full reconcile after release.
     int postReleaseReconcileFrames = 0;
 
+    // Wall-clock end of the post-release settling window. Only the release
+    // path arms it: arming it from a successful reconcile would keep the
+    // window permanently open while the user hovers or clicks the taskbar.
+    AnimationClock::time_point postReleaseSettlingUntil{};
+
     // Layout-change monitor for the taskbar repeater panel.
     // Closing an app removes a button out from under the split margins,
     // which halves the gap until a reconcile runs; LayoutUpdated fires on
@@ -649,6 +683,10 @@ struct TrackedTaskbarState {
     int layoutForcedReconcileAttempts = 0;
     size_t layoutObservedButtonCount = 0;
     bool layoutObservedButtonCountValid = false;
+    // Last panel.Children().Size() seen by the LayoutUpdated handler, used as a
+    // cheap pre-filter before the per-child ABI-crossing walk. The invalid
+    // marker means the first pass always walks.
+    size_t layoutPanelChildCount = static_cast<size_t>(-1);
 
     // Drag freeze state for the dynamic gap.
     bool reorderDragActive = false;
@@ -914,8 +952,10 @@ void LoadSettings() {
     // Dynamic centering settings.
     settings.dynamicPosition =
         std::max(1, Wh_GetIntSetting(L"dynamicPosition"));
+    // 0 means never hide: the count check in CalculateDynamicCenteredGap is
+    // skipped for 0, so dynamic centering keeps running.
     settings.hideWhenMiddleIconCountAtLeast =
-        std::max(1, Wh_GetIntSetting(L"hideWhenMiddleIconCountAtLeast"));
+        std::max(0, Wh_GetIntSetting(L"hideWhenMiddleIconCountAtLeast"));
 
     auto orientationText = WindhawkUtils::StringSetting::make(L"orientation");
     if (wcscmp(orientationText.get(), L"horizontal") == 0) {
@@ -2431,8 +2471,22 @@ void OnAnimationRendering(size_t taskbarId,
         taskbar.draggedButton = {};
         taskbar.draggedButtonIndex = -1;
         taskbar.postReleaseReconcileFrames = 2;
+        // Arm the same settling window here: this is the release path used
+        // when the MUX drag swallows PointerReleased.
+        taskbar.postReleaseSettlingUntil =
+            AnimationClock::now() + kNativeSettlingTimeout;
         taskbar.reorderStructuralReconcilePending = true;
     }
+
+    // The press-time freeze is only released by PointerReleased or by the
+    // released-left-button check just above, which lives in this callback.
+    // Unsubscribing from CompositionTarget.Rendering while the freeze is in
+    // effect would kill that check and leave the freeze in place until the
+    // next press and release, so every tracking stop below that can
+    // unsubscribe is skipped while the dynamic gap is frozen. The frozen
+    // geometry itself is still rendered from the frozen values as before.
+    const bool frozenDynamicGap =
+        taskbar.reorderDragActive && taskbar.hasFrozenDynamicGap;
 
     if (taskbar.reorderStructuralReconcilePending) {
         taskbar.reorderStructuralReconcilePending = false;
@@ -2462,7 +2516,8 @@ void OnAnimationRendering(size_t taskbarId,
         }
 
         auto* refreshed = FindTrackedTaskbarById(taskbarId);
-        if (refreshed && !refreshed->nativeSettlingActive &&
+        if (refreshed && !frozenDynamicGap &&
+            !refreshed->nativeSettlingActive &&
             refreshed->animationLastActivity == AnimationClock::time_point{}) {
             StopAllGeometryTracking(*refreshed);
         }
@@ -2470,11 +2525,16 @@ void OnAnimationRendering(size_t taskbarId,
     }
 
     auto now = AnimationClock::now();
-    if (taskbar.animationLastActivity != AnimationClock::time_point{} &&
+    // Both timeouts end tracking, and both can unsubscribe from
+    // CompositionTarget.Rendering. While the dynamic-gap freeze is in effect
+    // that would stop the released-left-button check, the only way to unfreeze
+    // without PointerReleased, so they are held back until it is gone.
+    if (!frozenDynamicGap &&
+        taskbar.animationLastActivity != AnimationClock::time_point{} &&
         now - taskbar.animationLastActivity >= kAnimationTrackingTimeout) {
         StopAnimationTracking(taskbar);
     }
-    if (taskbar.nativeSettlingActive &&
+    if (!frozenDynamicGap && taskbar.nativeSettlingActive &&
         now - taskbar.nativeSettlingStarted >= kNativeSettlingTimeout) {
         StopNativeSettlingTracking(taskbar);
     }
@@ -2504,7 +2564,10 @@ void OnAnimationRendering(size_t taskbarId,
             return;
         }
 
-        if (taskbar.nativeSettlingActive) {
+        // The stable-frame count cannot make progress on real geometry while
+        // the freeze skips the refresh, and reaching the threshold would
+        // unsubscribe from the callback that owns the unfreeze check.
+        if (!frozenDynamicGap && taskbar.nativeSettlingActive) {
             taskbar.nativeSettlingStableFrames =
                 allStable ? taskbar.nativeSettlingStableFrames + 1 : 0;
             if (taskbar.nativeSettlingStableFrames >=
@@ -2520,8 +2583,12 @@ void OnAnimationRendering(size_t taskbarId,
                    AnimationClock::time_point{}) {
             taskbar.animationStableFrames =
                 allStable ? taskbar.animationStableFrames + 1 : 0;
-            if (taskbar.animationStableFrames >=
-                kGeometryStableFrameThreshold) {
+            // StopAnimationTracking unsubscribes when no native settling is
+            // tracked, so this stop is held back while frozen; the counter
+            // itself keeps tracking stability as before.
+            if (!frozenDynamicGap &&
+                taskbar.animationStableFrames >=
+                    kGeometryStableFrameThreshold) {
                 StopAnimationTracking(taskbar);
             }
         }
@@ -2674,6 +2741,11 @@ void OnReorderPointerReleased(size_t taskbarId,
     // Force a couple of post-release reconciliation frames so
     // the gap is recomputed against the final button order.
     taskbarState->postReleaseReconcileFrames = 2;
+    // Arm the settling window from the release path only. The frame counter
+    // is decremented before every forced reconcile, so it is already 0 on
+    // the second forced frame; this deadline is what still covers it.
+    taskbarState->postReleaseSettlingUntil =
+        AnimationClock::now() + kNativeSettlingTimeout;
     EnsureGeometryRenderingSubscribed(*taskbarState);
 }
 
@@ -2704,8 +2776,10 @@ void DetachReorderPointerHandler(TrackedTaskbarState& taskbar) {
     taskbar.reorderPointerSource = {};
     taskbar.reorderPointerHandlerAttached = false;
     taskbar.reorderStructuralReconcilePending = false;
-    // Reset the post-release reconcile frame counter.
+    // Reset the post-release reconcile frame counter and its settling
+    // window.
     taskbar.postReleaseReconcileFrames = 0;
+    taskbar.postReleaseSettlingUntil = {};
     taskbar.reorderDragActive = false;
     taskbar.draggedButton = {};
     taskbar.draggedButtonIndex = -1;
@@ -2876,6 +2950,23 @@ void OnTaskbarLayoutUpdated(
         return;
     }
 
+    // Cheap heuristic pre-filter: the walk below crosses the ABI twice per
+    // child and LayoutUpdated fires for every layout pass over that tree, so a
+    // panel whose child count is unchanged is left to the previous pass. The
+    // cost of the heuristic is that a relayout which removes one child and adds
+    // another in the same pass is not noticed, and the dividers stay stale
+    // until the next one. Our own overlay canvas is a child of this panel too,
+    // so its changes only make the walk run again, never skip a real
+    // child-count change. Issuing a forced reconcile resets this memory to
+    // the invalid marker, so the retry path is never blocked by the early
+    // exit.
+    const size_t panelChildCount =
+        static_cast<size_t>(panel.Children().Size());
+    if (taskbarState->layoutPanelChildCount == panelChildCount) {
+        return;
+    }
+    taskbarState->layoutPanelChildCount = panelChildCount;
+
     // Count the realized, usable TaskListButton children exactly the way
     // CaptureTaskbarReconciliationSnapshot does, so a match means the set the
     // last reconcile committed is still the set that is laid out right now.
@@ -2921,6 +3012,10 @@ void OnTaskbarLayoutUpdated(
 
     taskbarState->layoutForcedReconcileAttempts++;
     taskbarState->layoutForcedReconcileActive = true;
+    // Forget the remembered panel child count, so the LayoutUpdated raised
+    // by the margins we are about to write cannot take the cheap early
+    // exit above; the bounded retries then still get their frames.
+    taskbarState->layoutPanelChildCount = static_cast<size_t>(-1);
     try {
         ReconcileTaskbarRepeater(repeater, true);
     } catch (...) {
@@ -4668,6 +4763,11 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                     bool dynamicVisible = true;
 
                     if (isDynamic) {
+                        // Kept for the diagnostic line below: the raw value
+                        // the geometry returned before the settling fallback
+                        // replaces it. Negative means no geometry ran at all,
+                        // which is the frozen drag path taken above.
+                        double rawDynamicGap = -1.0;
                         if (taskbar.reorderDragActive &&
                             taskbar.hasFrozenDynamicGap) {
                             dynamicVisible =
@@ -4679,21 +4779,57 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                                 activeSeparator.settings.position,
                                 taskbarOrientation, &dynamicVisible,
                                 &taskbar.trayFrame);
-                            if (dynamicVisible && fullGap < 1.0) {
-                                // Right after a drag
-                                // release the buttons are still in the
-                                // settle animation and the live
-                                // geometry can be invalid, which makes
-                                // the centered-gap calculation return
-                                // ~0 and collapses the spacing (flash).
-                                // Fall back to the last valid value.
-                                fullGap =
-                                    taskbar.lastAppliedDynamicGap;
+                            rawDynamicGap = fullGap;
+                            // The last valid value is reused only inside the
+                            // post-release settling window, where the buttons
+                            // are still animating to their final positions and
+                            // the live geometry can be invalid: the centered
+                            // gap then collapses to ~0 and the spacing would
+                            // flash. That window is armed by the release path
+                            // alone - the forced post-release reconcile frames
+                            // plus a one-second deadline - so it still covers
+                            // the second forced frame, the one whose counter
+                            // has already reached 0. It is deliberately not
+                            // derived from nativeSettlingActive: that flag is
+                            // raised after every successful reconcile, so any
+                            // hover or click relayout would re-arm the window
+                            // forever and keep reusing a stale gap. Outside it
+                            // a sub-pixel gap is the real answer: a collapsed
+                            // desired gap, the tray clamp, or fewer realized
+                            // buttons than the position, so the old value is
+                            // not reused there and the tray clamp still
+                            // applies.
+                            const bool postReleaseSettling =
+                                taskbar.postReleaseReconcileFrames > 0 ||
+                                (taskbar.postReleaseSettlingUntil !=
+                                     AnimationClock::time_point{} &&
+                                 AnimationClock::now() <
+                                     taskbar.postReleaseSettlingUntil);
+                            if (dynamicVisible && fullGap < 1.0 &&
+                                postReleaseSettling) {
+                                fullGap = taskbar.lastAppliedDynamicGap;
                             }
                         }
                         taskbar.lastAppliedDynamicGap = fullGap;
                         taskbar.lastDynamicSeparatorVisible =
                             dynamicVisible;
+
+                        // One line per reconcile, and only inside the window
+                        // the alignment monitor opened after the switch back
+                        // to left alignment: it shows what the geometry saw
+                        // while the row was still settling.
+                        if (g_alignmentRebuildLog.load(
+                                std::memory_order_acquire)) {
+                            Wh_Log(L"alignment rebuild: raw dynamic gap %.2f, "
+                                   L"applied gap %.2f, dynamic visible %d, "
+                                   L"centering active %d, buttons %zu, "
+                                   L"position %d",
+                                   rawDynamicGap, fullGap,
+                                   dynamicVisible ? 1 : 0,
+                                   dynamicCenteringActive ? 1 : 0,
+                                   appButtons.size(),
+                                   activeSeparator.settings.position);
+                        }
                     }
 
                     if (activeSeparator.beforeFirst) {
@@ -4863,6 +4999,28 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                 activeSeparators.empty()) {
                 ApplyTrackedButtonGapMargins(taskbar, appButtons,
                                              gapContributions, &snapshot);
+            }
+
+            // Diagnostic for the slow-disappearance report: inside the
+            // alignment window this shows whether the margins this mod
+            // wrote are handed back in one pass or only a few buttons at a
+            // time. A count that falls across successive reconciles means
+            // the buttons were returned piecemeal; a count that is already
+            // zero means the disappearance has another cause. This only
+            // reads the tracked state, it changes nothing.
+            if (g_alignmentRebuildLog.load(std::memory_order_acquire)) {
+                size_t buttonsWithAppliedMargin = 0;
+                for (auto const& trackedMargin : taskbar.buttonMargins) {
+                    if (trackedMargin.hasAppliedMargin) {
+                        buttonsWithAppliedMargin++;
+                    }
+                }
+                Wh_Log(L"alignment rebuild: centering active %d, active "
+                       L"separators %zu, buttons with applied margin %zu "
+                       L"of %zu",
+                       dynamicCenteringActive ? 1 : 0,
+                       activeSeparators.size(), buttonsWithAppliedMargin,
+                       taskbar.buttonMargins.size());
             }
 
             std::vector<AnimationDividerCache> animationDividers;
@@ -5678,7 +5836,7 @@ struct TaskbarAlignWatch {
 // dynamic centering is active. The mod does not fight the user: dynamic
 // centering is turned off and the gap it reserved is dropped. The dividers
 // exist only as the means of dynamic centering, so they go away with it: the
-// reconcile run below removes them, and while g_dynamicCenteringActive is false
+// repeated reconcile the caller runs removes them, and while the flag is false
 // no later rebuild can create them again. This runs on the alignment monitor
 // thread, which no longer exits right after it, so it never joins itself.
 void YieldDynamicCenteringForUserAlignment() {
@@ -5688,15 +5846,66 @@ void YieldDynamicCenteringForUserAlignment() {
     g_dynamicCenteringActive.store(false, std::memory_order_release);
 
     // The alignment value belongs to the user: this mod never wrote it, so
-    // there is nothing to restore. One rebuild is enough to drop the reserved
-    // dynamic gap and the dividers, and it goes through the usual reconcile
-    // path.
-    if (g_taskbarViewDllLoaded) {
-        if (!RunReconcileOnTaskbarThread(false)) {
-            Wh_Log(L"the dynamic gap could not be removed on the taskbar UI "
-                   L"thread");
+    // there is nothing to restore. The rebuild is not run here: the caller
+    // repeats it across the same bounded window as the opposite direction,
+    // because the margin this mod applied is handed back one button per
+    // tracked entry and a single run taken while the row is still sliding
+    // can return only some of them. The window uses the normal rebuild
+    // (true), not the unload cleanup (false): the cleanup path destroys the
+    // tracked taskbar list and unbinds the layout monitor and the pointer
+    // handlers, and after that a later switch back to left alignment has
+    // nothing left to rebuild, so the centering can only come back on the
+    // next interaction with the taskbar. The visual result is the same,
+    // because g_dynamicCenteringActive is already false here: the divider
+    // gate at the top of the reconcile clears the active divider list, and
+    // the existing "no active divider" cleanup removes the overlay container
+    // and returns the margin delta this mod wrote, so the taskbar still ends
+    // up with no dividers and no reserved gap.
+}
+
+// The bounded rebuild window, shared by both alignment directions. The
+// first rebuild runs immediately and up to eight more follow at 500 ms
+// intervals. Switching the alignment slides the whole button row, so a
+// single rebuild can run while the geometry is still moving: it may compute
+// a collapsed gap when centering is applied, or hand back only some of the
+// buttons this mod moved when centering is turned off. Nothing is
+// guaranteed to rebuild afterwards, because the layout monitor early-outs
+// while the button count is unchanged and UpdateVisualStates only runs
+// again on an interaction with the taskbar, so a later attempt taken once
+// the geometry has settled finishes the job on its own. The diagnostic log
+// is raised for exactly this window and lowered again when it ends, and
+// either stop event ends the window early.
+void RepeatReconcileOnTaskbarThread(HANDLE stopEvent, HANDLE changeEvent) {
+    HANDLE handles[2] = {stopEvent, changeEvent};
+
+    g_alignmentRebuildLog.store(true, std::memory_order_release);
+    for (int attempt = 0; attempt <= 8; attempt++) {
+        if (attempt > 0) {
+            // The unload path waits for this thread to exit, so neither the
+            // remaining attempts nor the 500 ms wait may hold it up: both
+            // stop conditions end the loop.
+            if (g_alignMonitorStop.load(std::memory_order_acquire) ||
+                g_unloading.load(std::memory_order_acquire)) {
+                break;
+            }
+            // The alignment change event belongs in this wait as well: the
+            // user can switch the alignment again inside this window, and
+            // the loop must end at once instead of rebuilding for an
+            // alignment that is no longer in effect. The monitor reads the
+            // new value on its next iteration and acts on that instead.
+            DWORD retryResult =
+                WaitForMultipleObjects(2, handles, FALSE, 500);
+            if (retryResult != WAIT_TIMEOUT) {
+                break;
+            }
+        }
+        if (g_taskbarViewDllLoaded &&
+            !RunReconcileOnTaskbarThread(true)) {
+            Wh_Log(L"the dividers could not be rebuilt on the "
+                   L"taskbar UI thread");
         }
     }
+    g_alignmentRebuildLog.store(false, std::memory_order_release);
 }
 
 DWORD WINAPI TaskbarAlignMonitorThreadProc(LPVOID) {
@@ -5752,17 +5961,26 @@ DWORD WINAPI TaskbarAlignMonitorThreadProc(LPVOID) {
             if (taskbarAl != 0) {
                 if (g_dynamicCenteringActive.load(std::memory_order_acquire)) {
                     YieldDynamicCenteringForUserAlignment();
+                    // The margin this mod applied is handed back one
+                    // button per tracked entry, and the row is sliding
+                    // right now, so a single rebuild can return only part
+                    // of it: the rest would linger until some later
+                    // rebuild that nothing guarantees. The same bounded
+                    // window as the switch back to left alignment is
+                    // therefore run in this direction too.
+                    RepeatReconcileOnTaskbarThread(g_alignStopEvent,
+                                                   watch.changeEvent);
                 }
             } else if (!g_dynamicCenteringActive.load(
                            std::memory_order_acquire)) {
                 Wh_Log(L"the taskbar is left-aligned again; dynamic centering "
                        L"is applied again");
                 g_dynamicCenteringActive.store(true, std::memory_order_release);
-                if (g_taskbarViewDllLoaded &&
-                    !RunReconcileOnTaskbarThread(true)) {
-                    Wh_Log(L"the dividers could not be rebuilt on the taskbar "
-                           L"UI thread");
-                }
+                // Both directions share the bounded rebuild window: the
+                // first rebuild is immediate and the later attempts cover
+                // the slide animation, whose geometry has not settled yet.
+                RepeatReconcileOnTaskbarThread(g_alignStopEvent,
+                                               watch.changeEvent);
             }
         }
 
@@ -5827,24 +6045,40 @@ void StartTaskbarAlignMonitor() {
 }
 
 void StopTaskbarAlignMonitor() {
-    // Serialized with StartTaskbarAlignMonitor. The wait below is unbounded on
-    // purpose, so an unloaded image can never leave a mod thread running.
-    std::lock_guard<std::mutex> lock(g_alignMonitorMutex);
+    // Serialized with StartTaskbarAlignMonitor, but the unbounded wait below is
+    // not held under the mutex. The monitor thread can block on a taskbar UI
+    // thread that is itself waiting for this mutex in
+    // StartTaskbarAlignMonitor, which would deadlock the unload thread. Only
+    // the stop signal and the handle handoff happen under the lock; the wait
+    // itself is lock-free.
+    HANDLE monitorThread = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_alignMonitorMutex);
 
-    g_alignMonitorStop.store(true, std::memory_order_release);
-    if (g_alignStopEvent) {
-        SetEvent(g_alignStopEvent);
+        g_alignMonitorStop.store(true, std::memory_order_release);
+        if (g_alignStopEvent) {
+            SetEvent(g_alignStopEvent);
+        }
+
+        // The handle is taken out from under the lock and the stop event stays
+        // set, so a concurrent start can never create a second monitor thread:
+        // this stop path only runs with g_unloading raised first, and the start
+        // re-checks it under the same lock before CreateThread.
+        monitorThread = g_alignMonitorThread;
+        g_alignMonitorThread = nullptr;
     }
 
-    if (g_alignMonitorThread) {
+    if (monitorThread) {
         // The monitor waits on the stop event, so this returns immediately; the
         // wait is unbounded so that an unloaded image can never leave a mod
         // thread running. A failed wait must not abandon a thread that may
         // still be running, so it is retried rather than returning with the
         // handle left set: the handle is closed only once the thread has
-        // really exited.
+        // really exited. Waiting outside the mutex is what breaks the deadlock:
+        // the monitor thread can be blocked on the taskbar UI thread, which can
+        // itself be waiting for the mutex in StartTaskbarAlignMonitor.
         for (;;) {
-            if (WaitForSingleObject(g_alignMonitorThread, INFINITE) ==
+            if (WaitForSingleObject(monitorThread, INFINITE) ==
                 WAIT_OBJECT_0) {
                 break;
             }
@@ -5854,13 +6088,17 @@ void StopTaskbarAlignMonitor() {
             Sleep(1);
         }
 
-        CloseHandle(g_alignMonitorThread);
-        g_alignMonitorThread = nullptr;
+        CloseHandle(monitorThread);
     }
 
-    if (g_alignStopEvent) {
-        CloseHandle(g_alignStopEvent);
-        g_alignStopEvent = nullptr;
+    // Re-locked only to close the stop event, which happens after the thread
+    // has really exited and together with the handle, never half updated.
+    {
+        std::lock_guard<std::mutex> lock(g_alignMonitorMutex);
+        if (g_alignStopEvent) {
+            CloseHandle(g_alignStopEvent);
+            g_alignStopEvent = nullptr;
+        }
     }
 }
 
