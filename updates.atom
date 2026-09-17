@@ -2,12 +2,37 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-17T19:09:44.000Z</updated>
+    <updated>2026-09-17T19:34:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[TopBar for Windows 1.2.0]]></title>
+        <id>https://windhawk.net/mods/windhawk-topbar#d0ec196399e1da4244bdf8c73dc36fe04e291ecd</id>
+        <link href="https://windhawk.net/mods/windhawk-topbar"/>
+        <updated>2026-09-17T19:34:29.000Z</updated>
+        <content type="html"><![CDATA[<p>Additions:</p>
+<ul>
+<li>Added Weather Widget showing Temperature, Hourly weather, Rain probability, and a location selector.</li>
+<li>Added Support for WindhawkBlur for better custom Blurred backgrounds, applied to the top bar, flyouts, and context menus. Blur amount can be adjusted from settings.</li>
+<li>Added option to move TopBar widgets Left, Right, or Center of the TopBar (Accessible through the UI Alignment tab in the mod's settings app).</li>
+<li>Added Alternative for Tasklist: Application Name box showing the name of the active running application.</li>
+<li>Added Glyphs for Resource Monitor Items.</li>
+<li>Styling support was improved.</li>
+<li>Added Theme: OS27 GoldenGate.</li>
+</ul>
+<p>Updates:</p>
+<ul>
+<li>Settings are now shifted to a separate mod settings app (Accessible through the settings icon in the top bar OR through context menus).</li>
+<li>Updated Themes: GreenBar, and NoIslands.</li>
+</ul>]]></content>
+        <author>
+            <name>WasiXGamer</name>
+            <uri>https://github.com/wasixgamer</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows Vista/7 Blocked Shutdown UX & Logoff Sequence 1.2]]></title>
         <id>https://windhawk.net/mods/win7-bsdr#58d5161becfeb9a770c8aa4372a32c02f5f39206</id>
@@ -784,19 +809,6 @@ Original overlay/smear architecture inspired by <a href="https://github.com/Thea
         <author>
             <name>mario0318</name>
             <uri>https://github.com/mario0318</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Blob Shape 1.1.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-blob-shape#7e252f99133edd5fd4700e822286ca653da0b2cc</id>
-        <link href="https://windhawk.net/mods/taskbar-blob-shape"/>
-        <updated>2026-09-13T18:02:25.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Compatibility with newer Windows 11 builds: the tray host is matched as a Panel (<code>SystemTrayFrameGrid</code> became a StackPanel), the search icon button is matched by class (its name gained a generated suffix), and visual-state detection tolerates the new wrapper Grid inside the button panels. No behavior changes on older builds.</li>
-</ul>]]></content>
-        <author>
-            <name>Deen-0x</name>
-            <uri>https://github.com/Deen-0x</uri>
         </author>
     </entry>
 </feed>
