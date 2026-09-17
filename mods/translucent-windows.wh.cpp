@@ -933,7 +933,7 @@ BOOL ExtTextOutComposition(HDC hdc, HPAINTBUFFER hpb, LPCRECT pTextRect)
     return TRUE;
 }
 
-BOOL ExtTextOutAlignRect(HDC hdc, POINT point, SIZE textSize, RECT& textRect, UINT textAlignment)
+VOID ExtTextOutAlignRect(HDC hdc, POINT &point, SIZE textSize, RECT& textRect, UINT textAlignment)
 {
     // TA_BASELINE's bits are a superset of TA_BOTTOM's, and TA_CENTER's are
     // a superset of TA_RIGHT's - mask the field and compare for equality
@@ -941,30 +941,21 @@ BOOL ExtTextOutAlignRect(HDC hdc, POINT point, SIZE textSize, RECT& textRect, UI
     // misread as TA_RIGHT/TA_BOTTOM.
     UINT vAlign = textAlignment & (TA_BOTTOM | TA_BASELINE);
     UINT hAlign = textAlignment & (TA_RIGHT | TA_CENTER);
-
-    INT top = point.y;
     if (vAlign == TA_BASELINE)
     {
         TEXTMETRIC tm;
-        if (!GetTextMetrics(hdc, &tm))
-            return FALSE;
-        top = point.y - tm.tmAscent;
+        if (GetTextMetrics(hdc, &tm))
+            point.y = point.y - tm.tmAscent;        
     }
     else if (vAlign == TA_BOTTOM)
-        top = point.y - textSize.cy;
+        point.y = point.y - textSize.cy;
 
-    INT left = point.x;
     if (hAlign == TA_CENTER)
-        left = point.x - textSize.cx / 2;
+        point.x = point.x - textSize.cx / 2;
     else if (hAlign == TA_RIGHT)
-        left = point.x - textSize.cx;
+        point.x = point.x - textSize.cx;
 
-    textRect.left   = left;
-    textRect.top    = top;
-    textRect.right  = left + textSize.cx;
-    textRect.bottom = top + textSize.cy;
-
-    return TRUE;
+    return;
 }
 
 VOID ExtTextOutDxWidth(UINT options, const INT* lpDx, UINT c, SIZE& textSize)
@@ -992,8 +983,12 @@ BOOL ExtTextOutCalcRect(HDC hdc, POINT point, UINT options, RECT& textRect, LPCR
     UINT ta = GetTextAlign(hdc);
     BOOL res = TRUE;
 
-    if (lprect)
-        textRect = *lprect;
+    if (lprect) {
+        point.x = lprect->left;
+        point.y = lprect->top;
+        textSize.cx = RECTWIDTH(lprect);
+        textSize.cy = RECTHEIGHT(lprect);
+    }
     else if (options & ETO_GLYPH_INDEX)
         res = GetTextExtentPointI(hdc, (WORD*)lpString, c, &textSize);
     else
@@ -1005,8 +1000,12 @@ BOOL ExtTextOutCalcRect(HDC hdc, POINT point, UINT options, RECT& textRect, LPCR
     if (lpDx)
         ExtTextOutDxWidth(options, lpDx, c, textSize);
     
-    if (!ExtTextOutAlignRect(hdc, point, textSize, textRect, ta))
-        return FALSE;
+    ExtTextOutAlignRect(hdc, point, textSize, textRect, ta);
+
+    textRect.left   = point.x;
+    textRect.top    = point.y;
+    textRect.right  = point.x + textSize.cx;
+    textRect.bottom = point.y + textSize.cy;
 
     if (IsRectEmpty(&textRect))
         return FALSE;
