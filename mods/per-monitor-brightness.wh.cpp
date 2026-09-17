@@ -2473,16 +2473,8 @@ static HRESULT InjectWindhawkTAP() noexcept {
 // Windhawk lifecycle
 // ===========================================================================
 
-BOOL Wh_ModInit() {
-    Wh_Log(L">");
-
+void LoadSettings() {
     g_hideStockBrightness = Wh_GetIntSetting(L"hideStockBrightness") != 0;
-    Wh_Log(L"hideStockBrightness=%d", g_hideStockBrightness ? 1 : 0);
-
-    g_engine = new brightness::Engine();
-    g_engine->SetLogger(&EngineLog);
-    g_engine->SetOnChanged(&OnEngineChanged);
-    g_engine->SetVerboseWrites(Wh_GetIntSetting(L"debugLogging") != 0);
 
     brightness::FollowMode followMode = brightness::FollowMode::Relative;
     if (PCWSTR setting = Wh_GetStringSetting(L"followInternalBrightness")) {
@@ -2493,8 +2485,24 @@ BOOL Wh_ModInit() {
         }
         Wh_FreeStringSetting(setting);
     }
-    g_engine->SetFollowMode(followMode);
-    Wh_Log(L"followInternalBrightness=%d", static_cast<int>(followMode));
+
+    if (g_engine) {
+        g_engine->SetVerboseWrites(Wh_GetIntSetting(L"debugLogging") != 0);
+        g_engine->SetFollowMode(followMode);
+    }
+
+    Wh_Log(L"hideStockBrightness=%d followInternalBrightness=%d",
+           g_hideStockBrightness ? 1 : 0, static_cast<int>(followMode));
+}
+
+BOOL Wh_ModInit() {
+    Wh_Log(L">");
+
+    g_engine = new brightness::Engine();
+    g_engine->SetLogger(&EngineLog);
+    g_engine->SetOnChanged(&OnEngineChanged);
+
+    LoadSettings();
 
     g_engine->Start();
 
@@ -2518,11 +2526,17 @@ void Wh_ModAfterInit() {
     g_shellWatcher.Start();
 }
 
-// Toggling the setting changes what we inject, so the cleanest way to apply it
-// is a full reload: teardown restores the tree, init rebuilds it.
-void Wh_ModSettingsChanged(BOOL* bReload) {
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L">");
-    *bReload = TRUE;
+
+    bool previouslyHidden = g_hideStockBrightness;
+    LoadSettings();
+
+    // Follow mode and verbose logging are engine state and take effect at once.
+    // Hiding the stock slider changes what was injected into somebody else's
+    // visual tree, so only that one needs a reload to rebuild it.
+    *bReload = (g_hideStockBrightness != previouslyHidden);
+    return TRUE;
 }
 
 void Wh_ModUninit() {
