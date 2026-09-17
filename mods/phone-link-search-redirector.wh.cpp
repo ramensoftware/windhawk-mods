@@ -1,9 +1,10 @@
 // ==WindhawkMod==
 // @id              phone-link-search-redirector
-// @name            Phone Link Search Redirector
+// @name            Phone Link Redirector
 // @description     Redirect Bing searches opened by Phone Link to another search engine.
 // @version         1.0.0
 // @author          Rieversed
+// @github          https://github.com/Rieversed
 // @include         PhoneExperienceHost.exe
 // @compilerOptions -luser32
 // ==/WindhawkMod==
