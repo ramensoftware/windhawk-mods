@@ -27,18 +27,13 @@ Drive progress rendering replaces only the PROGRESS part/state pairs used by
 Explorer. Preview Pane fixes cover Explorer, Open/Save dialog hosts, and
 prevhost.exe.
 Selection and Progress settings apply immediately.
-
 ### Screenshots
-
 ![Explorer selections and drive progress](https://raw.githubusercontent.com/VitalSkib/files/refs/heads/main/explorer-visual-tweaks-dark-thispc.png)
-
 ![Preview Pane and plain-text preview](https://raw.githubusercontent.com/VitalSkib/files/refs/heads/main/explorer-visual-tweaks-dark-text.png)
-
 **Important:** Preview Pane tweaks require restarting File Explorer and any
 included host applications for changed values and colors to apply correctly.
 A restart is also required after disabling the mod to fully restore the
 default Preview Pane appearance.
-
 To style an Explorer-based Open/Save dialog, add its host application to
 Windhawk's Inclusion List.
 */
@@ -178,49 +173,17 @@ static COLORREF LoadColorRef(PCWSTR name, COLORREF fallback) {
     return RGB(color.r, color.g, color.b);
 }
 static bool ResolveUxThemeSymbols(HMODULE uxTheme, bool requireDarkMode) {
-    WH_FIND_SYMBOL_OPTIONS options = {};
-    options.optionsSize = sizeof(options);
-    WH_FIND_SYMBOL symbol = {};
-    HANDLE search = Wh_FindFirstSymbol(uxTheme, &options, &symbol);
-    if (!search) {
-        Wh_Log(L"[ERROR] Couldn't enumerate uxtheme.dll symbols");
+    WindhawkUtils::SYMBOL_HOOK symbols[] = {
+        {{L"GetThemeClass"}, &g_getThemeClass},
+        {{L"AllowDarkModeForWindow"}, &g_allowDarkModeForWindow, nullptr,
+         !requireDarkMode},
+        {{L"SetPreferredAppMode"}, &g_setPreferredAppMode, nullptr,
+         !requireDarkMode},
+    };
+    if (!WindhawkUtils::HookSymbols(
+            uxTheme, symbols, ARRAYSIZE(symbols))) {
+        Wh_Log(L"[ERROR] Couldn't resolve required uxtheme.dll symbols");
         return false;
-    }
-    void* themeClass = nullptr;
-    void* allowDark = nullptr;
-    void* preferredMode = nullptr;
-    unsigned themeClassMatches = 0;
-    unsigned allowDarkMatches = 0;
-    unsigned preferredModeMatches = 0;
-    do {
-        if (!symbol.symbol)
-            continue;
-        if (wcscmp(symbol.symbol, L"GetThemeClass") == 0) {
-            themeClass = symbol.address;
-            themeClassMatches++;
-        } else if (wcscmp(symbol.symbol, L"AllowDarkModeForWindow") == 0) {
-            allowDark = symbol.address;
-            allowDarkMatches++;
-        } else if (wcscmp(symbol.symbol, L"SetPreferredAppMode") == 0) {
-            preferredMode = symbol.address;
-            preferredModeMatches++;
-        }
-    } while (Wh_FindNextSymbol(search, &symbol));
-    Wh_FindCloseSymbol(search);
-    if (themeClassMatches != 1 ||
-        (requireDarkMode &&
-         (allowDarkMatches != 1 || preferredModeMatches != 1))) {
-        Wh_Log(L"[ERROR] uxtheme symbols: GetThemeClass=%u, "
-               L"AllowDarkModeForWindow=%u, SetPreferredAppMode=%u",
-               themeClassMatches, allowDarkMatches, preferredModeMatches);
-        return false;
-    }
-    g_getThemeClass = reinterpret_cast<GetThemeClass_t>(themeClass);
-    if (requireDarkMode) {
-        g_allowDarkModeForWindow =
-            reinterpret_cast<AllowDarkModeForWindow_t>(allowDark);
-        g_setPreferredAppMode =
-            reinterpret_cast<SetPreferredAppMode_t>(preferredMode);
     }
     return true;
 }
