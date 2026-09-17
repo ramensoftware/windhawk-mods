@@ -3267,9 +3267,12 @@ static bool QueueContextAutoPlay(PCWSTR verb, PCWSTR file) {
 
 static bool QueueContextAutoPlayA(LPCSTR verb, LPCSTR file) {
     if (!verb || !file) return false;
+    // lpVerb/lpFile may legally be MAKEINTRESOURCE ordinals; MultiByteToWideChar
+    // on a raw pointer would be an access violation inside Explorer.
+    if (IS_INTRESOURCE(verb) || IS_INTRESOURCE(file)) return false;
     WCHAR wverb[64] = {}, wfile[MAX_PATH] = {};
-    MultiByteToWideChar(CP_ACP, 0, verb, -1, wverb, ARRAYSIZE(wverb));
-    MultiByteToWideChar(CP_ACP, 0, file, -1, wfile, ARRAYSIZE(wfile));
+    if (!MultiByteToWideChar(CP_ACP, 0, verb, -1, wverb, ARRAYSIZE(wverb))) return false;
+    if (!MultiByteToWideChar(CP_ACP, 0, file, -1, wfile, ARRAYSIZE(wfile))) return false;
     return QueueContextAutoPlay(wverb, wfile);
 }
 
@@ -3601,10 +3604,6 @@ static bool g_getUIObjectOfHookInstalled = false;
 // or a folder-view object rather than the real drive IShellFolder).
 // Hooking such a pointer can corrupt unrelated Explorer state (drive
 // enumeration/labels in the Navigation Pane and Computer folder).
-// Guard against that by validating the resolved function pointer
-// actually resides in a legitimate, already-loaded shell module before
-// patching it, and by preferring a *real, ready* fixed/removable drive
-// over an empty optical drive as the probe target.
 static bool IsPointerInKnownShellModule(void* addr, std::wstring* outModuleName = nullptr) {
     if (!addr) return false;
     HMODULE mod = nullptr;
@@ -3635,6 +3634,10 @@ static bool IsPointerInKnownShellModule(void* addr, std::wstring* outModuleName 
 static bool PickProbeDriveRoot(WCHAR outRoot[4]) {
     WCHAR drives[512] = {};
     if (!GetLogicalDriveStringsW(ARRAYSIZE(drives) - 1, drives)) return false;
+    // Wh_ModInit runs before Explorer sets SEM_FAILCRITICALERRORS, so probing a
+    // removable root here can pop the modal "There is no disk in the drive" box.
+    DWORD oldMode = 0;
+    SetThreadErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX, &oldMode);
     WCHAR fallback[4] = {};
     for (WCHAR* p = drives; *p; p += wcslen(p) + 1) {
         UINT dt = GetDriveTypeW(p);
@@ -3646,10 +3649,12 @@ static bool PickProbeDriveRoot(WCHAR outRoot[4]) {
             ULARGE_INTEGER free{};
             if (GetDiskFreeSpaceExW(p, &free, nullptr, nullptr)) {
                 wcscpy_s(outRoot, 4, p);
+                SetThreadErrorMode(oldMode, nullptr);
                 return true;
             }
         }
     }
+    SetThreadErrorMode(oldMode, nullptr);
     if (!fallback[0]) return false;
     wcscpy_s(outRoot, 4, fallback);
     return true;
@@ -4520,16 +4525,10 @@ static void ExecuteProgram(const AutoPlayOption& opt) {
     sei.lpDirectory = g_driveRoot.c_str();
     sei.nShow = SW_SHOWNORMAL;
     if (ShellExecuteExW(&sei)) return;
-    DWORD err = GetLastError();
-    if (err == ERROR_ELEVATION_REQUIRED) {
-        sei.lpVerb = L"runas";
-        if (ShellExecuteExW(&sei))
-            Wh_Log(L"ExecuteProgram: elevated via runas");
-        else
-            Wh_Log(L"ExecuteProgram: runas failed %lu", GetLastError());
-        return;
-    }
-    Wh_Log(L"ExecuteProgram: ShellExecuteEx failed %lu", err);
+    if (ShellExecuteExW(&sei)) return;
+    // No automatic runas retry: an AutoPlay entry is not "run as administrator",
+    // and a pending UAC prompt would block Wh_ModUninit's join on the worker.
+    Wh_Log(L"ExecuteProgram: ShellExecuteEx failed %lu", GetLastError());
 }
 
 static bool FileExistsOnDisk(const wchar_t* path) {
