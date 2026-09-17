@@ -136,6 +136,11 @@ D2D initialization, and thread-safe teardown are adapted from
     - "5": "创建时间（新到旧）"
     - "6": "文件大小（大到小）"
     - "7": "文件大小（小到大）"
+- videoExtensions: ".mp4,.mkv,.mov,.webm,.avi,.m4v,.wmv"
+  $name: Recognized video extensions
+  $name:zh-CN: 识别的视频扩展名
+  $description: "Comma-separated list of file extensions to treat as videos. Only affects folder mode. Separate with commas, include the dot, e.g. .mp4,.mkv,.mov"
+  $description:zh-CN: "用逗号分隔的视频文件扩展名列表，仅文件夹模式生效。每个扩展名带点号，用逗号分隔，如 .mp4,.mkv,.mov"
 - enableAudio: "0"
   $name: Play audio
   $name:zh-CN: 播放音频
@@ -291,6 +296,7 @@ D2D initialization, and thread-safe teardown are adapted from
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -298,6 +304,10 @@ D2D initialization, and thread-safe teardown are adapted from
 static IAudioClient* g_audioClient = nullptr;
 static IAudioRenderClient* g_audioRenderClient = nullptr;
 static ISimpleAudioVolume* g_simpleAudioVol = nullptr;
+static int g_lastObservedEnableAudio = -1;
+static int g_lastObservedAudioVolume = -1;
+static float g_snapshotVol = -1.0f;
+static int g_lastHotkeyMuteObserved = -2;
 static HANDLE g_audioRenderEvent = NULL;
 static HANDLE g_audioThread = NULL;
 static std::atomic<bool> g_audioRunning{false};
@@ -335,6 +345,8 @@ WCHAR g_padColorMode[32] = {L"black"};
 WCHAR g_padColorCustom[32] = {L"#000000"};
 WCHAR g_applyMode[16] = {L"on_next"};
 int g_sortMode = 0;
+std::wstring g_videoExtsRaw;
+std::set<std::wstring> g_videoExtSet;
 int g_hwaccelMode = 1;
 int g_enableAudio = 0;
 int g_audioVolume = 100;
@@ -430,11 +442,12 @@ void RunDxgiWorkaroundForExplorerPatcher();
 bool InitWasapi();
 void ShutdownWasapi();
 void UpdateSessionVolume();
+void HandleHotkeyMuteTransition();
 
 bool StartFfmpeg(const WCHAR* videoPath);
 void StopFfmpeg();
 
-void ReloadVideoList();
+void ReloadVideoList(bool preserveIndex = false);
 bool PlayNext();
 bool PlayPrev();
 void ReloadWallpaper();
@@ -951,12 +964,36 @@ bool EnsureLazyInitialized() {
     return true;
 }
 
+void ParseVideoExts(const std::wstring& raw, std::set<std::wstring>& out) {
+    out.clear();
+    size_t start = 0;
+    while (start <= raw.size()) {
+        size_t comma = raw.find(L',', start);
+        std::wstring token = raw.substr(start, comma == std::wstring::npos ? std::wstring::npos : comma - start);
+        while (!token.empty() && (token.front() == L' ' || token.front() == L'\t'))
+            token.erase(token.begin());
+        while (!token.empty() && (token.back() == L' ' || token.back() == L'\t'))
+            token.pop_back();
+        if (!token.empty()) {
+            if (token[0] != L'.')
+                token.insert(token.begin(), L'.');
+            for (auto& c : token)
+                c = (WCHAR)towlower(c);
+            out.insert(token);
+        }
+        if (comma == std::wstring::npos)
+            break;
+        start = comma + 1;
+    }
+}
+
 bool IsVideoExt(const WCHAR* ext) {
-    return ext &&
-           (_wcsicmp(ext, L".mp4") == 0 || _wcsicmp(ext, L".mkv") == 0 ||
-            _wcsicmp(ext, L".mov") == 0 || _wcsicmp(ext, L".webm") == 0 ||
-            _wcsicmp(ext, L".avi") == 0 || _wcsicmp(ext, L".m4v") == 0 ||
-            _wcsicmp(ext, L".wmv") == 0);
+    if (!ext || !*ext)
+        return false;
+    std::wstring lower = ext;
+    for (auto& c : lower)
+        c = (WCHAR)towlower(c);
+    return g_videoExtSet.find(lower) != g_videoExtSet.end();
 }
 
 struct VideoEntry {
@@ -1118,7 +1155,15 @@ bool InitWasapi() {
     hr = g_audioClient->Start();
     if (FAILED(hr)) { goto fail; }
 
-    UpdateSessionVolume();
+    {
+        float initial = g_snapshotVol;
+        if (initial <= 0.0f && g_enableAudio && g_audioVolume > 0)
+            initial = g_audioVolume / 100.0f;
+        g_simpleAudioVol->SetMasterVolume(initial, NULL);
+    }
+    g_lastObservedEnableAudio = g_enableAudio;
+    g_lastObservedAudioVolume = g_audioVolume;
+    g_lastHotkeyMuteObserved = g_hotkeyMuteState;
     return true;
 
 fail:
@@ -1174,21 +1219,52 @@ void ShutdownWasapi() {
 void UpdateSessionVolume() {
     if (!g_simpleAudioVol)
         return;
-    float vol;
-    if (g_hotkeyMuteState == 1) {
-        vol = 0.0f;
-    } else if (g_hotkeyMuteState == 0) {
-        vol = g_audioVolume / 100.0f;
-        if (vol <= 0.0f)
-            vol = 1.0f;
-    } else {
-        if (!g_enableAudio) {
-            vol = 0.0f;
-        } else {
-            vol = g_audioVolume / 100.0f;
-        }
+
+    if (g_hotkeyMuteState == 1)
+        return;
+
+    float current = 0.0f;
+    g_simpleAudioVol->GetMasterVolume(&current);
+    if (g_snapshotVol >= 0.0f && current != g_snapshotVol) {
+        Wh_Log(L"[VOL] system volume changed: %.3f -> %.3f", g_snapshotVol, current);
     }
-    g_simpleAudioVol->SetMasterVolume(vol, NULL);
+    g_snapshotVol = current;
+
+    bool enableChanged = (g_enableAudio != g_lastObservedEnableAudio);
+    bool volChanged = (g_audioVolume != g_lastObservedAudioVolume);
+    if (enableChanged || volChanged) {
+        float target;
+        if (!g_enableAudio) {
+            target = 0.0f;
+        } else if (g_audioVolume <= 0) {
+            target = g_snapshotVol;
+        } else {
+            target = g_audioVolume / 100.0f;
+        }
+        g_simpleAudioVol->SetMasterVolume(target, NULL);
+        g_lastObservedEnableAudio = g_enableAudio;
+        g_lastObservedAudioVolume = g_audioVolume;
+        g_simpleAudioVol->GetMasterVolume(&current);
+        g_snapshotVol = current;
+    }
+}
+
+void HandleHotkeyMuteTransition() {
+    if (!g_simpleAudioVol)
+        return;
+
+    int now = g_hotkeyMuteState;
+    int prev = g_lastHotkeyMuteObserved;
+    if (prev == now)
+        return;
+
+    if (now == 1) {
+        g_simpleAudioVol->SetMasterVolume(0.0f, NULL);
+    } else if (prev == 1) {
+        g_simpleAudioVol->SetMasterVolume(g_snapshotVol, NULL);
+    }
+
+    g_lastHotkeyMuteObserved = now;
 }
 
 DWORD WINAPI AudioPlayThread(LPVOID) {
@@ -1222,6 +1298,7 @@ DWORD WINAPI AudioPlayThread(LPVOID) {
 
         WaitForSingleObject(g_audioRenderEvent, 100);
 
+        HandleHotkeyMuteTransition();
         UpdateSessionVolume();
 
         UINT32 padding = 0;
@@ -1734,17 +1811,7 @@ DWORD WINAPI PipeReaderThread(LPVOID) {
                 errAvail > 0) {
                 char errBuf[2048] = {0};
                 DWORD readNow = 0;
-                if (ReadFile(g_errRead, errBuf, sizeof(errBuf) - 1, &readNow,
-                             NULL) &&
-                    readNow > 0) {
-                    errBuf[readNow] = 0;
-                    int wlen = MultiByteToWideChar(CP_ACP, 0, errBuf, -1, NULL, 0);
-                    if (wlen > 0) {
-                        std::wstring werr(wlen, L'\0');
-                        MultiByteToWideChar(CP_ACP, 0, errBuf, -1, &werr[0], wlen);
-                        Wh_Log(L"[FFMPEG-ERR] %s", werr.c_str());
-                    }
-                }
+                ReadFile(g_errRead, errBuf, sizeof(errBuf) - 1, &readNow, NULL);
             }
         }
         if (!gotData && g_running) {
@@ -1785,17 +1852,7 @@ DWORD WINAPI PipeReaderThread(LPVOID) {
                 errAvail > 0) {
                 char errBuf[2048] = {0};
                 DWORD readNow = 0;
-                if (ReadFile(g_errRead, errBuf, sizeof(errBuf) - 1, &readNow,
-                             NULL) &&
-                    readNow > 0) {
-                    errBuf[readNow] = 0;
-                    int wlen = MultiByteToWideChar(CP_ACP, 0, errBuf, -1, NULL, 0);
-                    if (wlen > 0) {
-                        std::wstring werr(wlen, L'\0');
-                        MultiByteToWideChar(CP_ACP, 0, errBuf, -1, &werr[0], wlen);
-                        Wh_Log(L"[FFMPEG-ERR] %s", werr.c_str());
-                    }
-                }
+                ReadFile(g_errRead, errBuf, sizeof(errBuf) - 1, &readNow, NULL);
             }
         }
 
@@ -1953,10 +2010,9 @@ bool StartFfmpeg(const WCHAR* videoPath) {
 
     bool needsAudio;
     if (g_hotkeyMuteState >= 0) {
-        needsAudio = (g_hotkeyMuteState == 0) &&
-                     g_enableAudio != 0 && g_audioVolume > 0;
+        needsAudio = (g_hotkeyMuteState == 0 && g_snapshotVol > 0.0f);
     } else {
-        needsAudio = (g_enableAudio != 0 && g_audioVolume > 0);
+        needsAudio = (g_enableAudio != 0 && g_snapshotVol > 0.0f);
     }
     HANDLE hRead = NULL, hWrite = NULL;
     if (!CreatePipe(&hRead, &hWrite, &sa, 8 * 1024 * 1024)) {
@@ -2187,15 +2243,22 @@ static bool IsCurrentFileInNewTarget(const WCHAR* newTarget) {
     return (_wcsicmp(newTarget, currentFile) == 0);
 }
 
-void ReloadVideoList() {
+void ReloadVideoList(bool preserveIndex) {
     if (g_dirChangeHandle != INVALID_HANDLE_VALUE) {
         FindCloseChangeNotification(g_dirChangeHandle);
         g_dirChangeHandle = INVALID_HANDLE_VALUE;
     }
 
+    std::wstring currentPlaying;
+    if (preserveIndex && g_videoIndex >= 0 && g_videoIndex < (int)g_videoList.size()) {
+        currentPlaying = g_videoList[g_videoIndex];
+    }
+
     g_videoList.clear();
-    g_videoIndex = 0;
-    g_consecutiveErrors = 0;
+    if (!preserveIndex) {
+        g_videoIndex = 0;
+        g_consecutiveErrors = 0;
+    }
     bool dark = IsDark();
     g_lastIsDark = dark;
 
@@ -2220,6 +2283,19 @@ void ReloadVideoList() {
                 FILE_NOTIFY_CHANGE_LAST_WRITE);
     } else if (PathExists(target.c_str())) {
         g_videoList.emplace_back(target);
+    }
+
+    if (preserveIndex) {
+        bool found = false;
+        for (int i = 0; i < (int)g_videoList.size(); i++) {
+            if (_wcsicmp(g_videoList[i].c_str(), currentPlaying.c_str()) == 0) {
+                g_videoIndex = i;
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            g_videoIndex = g_videoList.empty() ? 0 : (g_videoList.size() - 1);
     }
 }
 
@@ -2380,6 +2456,14 @@ void LoadSettings() {
     if (g_sortMode < 0 || g_sortMode > 7)
         g_sortMode = 0;
 
+    s = Wh_GetStringSetting(L"videoExtensions");
+    g_videoExtsRaw = s ? s : L".mp4,.mkv,.mov,.webm,.avi,.m4v,.wmv";
+    if (s)
+        Wh_FreeStringSetting(s);
+    if (g_videoExtsRaw.empty())
+        g_videoExtsRaw = L".mp4,.mkv,.mov,.webm,.avi,.m4v,.wmv";
+    ParseVideoExts(g_videoExtsRaw, g_videoExtSet);
+
     int pct = Wh_GetIntSetting(L"opacity");
     g_opacity = (pct >= 0 && pct <= 100) ? (pct * 255 / 100) : 255;
 
@@ -2442,6 +2526,8 @@ void LoadSettings() {
     if (vol > 100)
         vol = 100;
     g_audioVolume = vol;
+    if (g_snapshotVol < 0.0f)
+        g_snapshotVol = g_enableAudio ? (g_audioVolume / 100.0f) : 0.0f;
 
     int mon = Wh_GetIntSetting(L"monitor");
     if (mon < 1)
@@ -2513,19 +2599,13 @@ void ApplySettingsChanged() {
     std::wstring oldFfmpegPath = g_ffmpegPath;
     std::wstring oldLightPath = g_lightPath;
     std::wstring oldDarkPath = g_darkPath;
+    std::wstring oldVideoExts = g_videoExtsRaw;
     WCHAR oldApplyMode[16] = {0};
     wcscpy_s(oldApplyMode, 16, g_applyMode);
 
     bool oldWasZero = (oldOpacity <= 0);
 
     LoadSettings();
-
-    Wh_Log(
-        L"ApplySettingsChanged: loaded new settings, opacity=%d fps=%d "
-        L"hwaccel=%d enableAudio=%d volume=%d monitor=%d sort=%d scaling=%d "
-        L"padMode=%s padCustom=%s",
-        g_opacity, g_fps, g_hwaccelMode, g_enableAudio, g_audioVolume,
-        g_monitor, g_sortMode, g_scalingMode, g_padColorMode, g_padColorCustom);
 
     bool newIsZero = (g_opacity <= 0);
 
@@ -2547,6 +2627,7 @@ void ApplySettingsChanged() {
 
     bool needPathChange =
         (g_lightPath != oldLightPath || g_darkPath != oldDarkPath);
+    bool pathChangedButSkip = false;
     if (needPathChange && g_ffmpegProc) {
         std::wstring newTarget;
         if (g_lastIsDark) {
@@ -2558,11 +2639,13 @@ void ApplySettingsChanged() {
             newTarget = g_lightPath;
         if (IsCurrentFileInNewTarget(newTarget.c_str())) {
             needPathChange = false;
+            pathChangedButSkip = true;
         }
     }
 
     bool needReload = g_ffmpegPath != oldFfmpegPath || needPathChange ||
                       g_sortMode != oldSortMode ||
+                      g_videoExtsRaw != oldVideoExts ||
                       g_hwaccelMode != oldHwaccel || needAudioReload ||
                       g_monitor != oldMonitor;
 
@@ -2590,16 +2673,31 @@ void ApplySettingsChanged() {
 
     if (needReload) {
         bool isOnNext = (wcscmp(g_applyMode, L"on_next") == 0);
-        bool onlyListChange = needPathChange || g_sortMode != oldSortMode;
-        bool shouldDefer = isOnNext && onlyListChange && g_ffmpegProc != NULL;
+        bool onlyListChange = needPathChange || g_sortMode != oldSortMode ||
+                              g_videoExtsRaw != oldVideoExts;
 
-        if (shouldDefer) {
-            g_pendingListReload = true;
+        if (onlyListChange && g_ffmpegProc) {
+            ReloadVideoList(true);
+            bool currentStillValid = (g_videoIndex >= 0 &&
+                                      g_videoIndex < (int)g_videoList.size());
+            if (currentStillValid) {
+                g_pendingListReload = false;
+            } else {
+                if (isOnNext) {
+                    g_pendingListReload = true;
+                } else {
+                    g_pendingListReload = false;
+                    ReloadWallpaper();
+                }
+            }
         } else {
             g_pendingListReload = false;
             ReloadWallpaper();
         }
     } else {
+        if (pathChangedButSkip) {
+            ReloadVideoList(true);
+        }
         if (g_pendingListReload) {
             g_pendingListReload = false;
         }
@@ -2649,6 +2747,8 @@ void ManagerTick() {
         } else
             newTarget = g_lightPath;
         if (g_ffmpegProc && IsCurrentFileInNewTarget(newTarget.c_str())) {
+            ReloadVideoList(true);
+            g_pendingListReload = false;
         } else {
             bool isOnNext = (wcscmp(g_applyMode, L"on_next") == 0);
             if (isOnNext && g_ffmpegProc) {
@@ -2688,6 +2788,8 @@ void ManagerTick() {
             bool canSkip = (g_ffmpegProc &&
                             IsCurrentFileInNewTarget(currentTarget.c_str()));
             if (canSkip) {
+                ReloadVideoList(true);
+                g_pendingListReload = false;
             } else {
                 bool isOnNext = (wcscmp(g_applyMode, L"on_next") == 0);
                 if (isOnNext && g_ffmpegProc) {
