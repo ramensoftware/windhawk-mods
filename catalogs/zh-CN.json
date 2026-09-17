@@ -9323,7 +9323,7 @@
           6
         ],
         "ratingUsers": 7,
-        "updated": 1788804130000,
+        "updated": 1789671817000,
         "users": 126
       },
       "metadata": {
@@ -9340,7 +9340,7 @@
         ],
         "license": "MIT",
         "name": "MuteAlert - Microphone Activity Taskbar Widget",
-        "version": "0.9.8"
+        "version": "0.9.10"
       }
     },
     "native-brightness": {

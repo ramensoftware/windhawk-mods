@@ -1,3 +1,10 @@
+## 0.9.10 ([Sep 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/cfa9b1247d303811aded2063004f07525dc1345b/mods/mutealert.wh.cpp))
+
+- recover an unmuted Windows input at startup only when MuteAlert recorded that it applied the preceding headset-driven mute
+- keep manual Windows privacy mutes intact and keep call-app unmute synchronization transition-driven
+- preserve fail-safe physical-mute enforcement for Windows input and active calls
+- organize settings into collapsible General, Headset, Slack, Teams, Zoom, and Google Meet groups
+
 ## 0.9.8 ([Sep 7, 2026](https://github.com/ramensoftware/windhawk-mods/blob/96af7a4c23f66842ccc6aa627b8cb0d611d81df4/mods/mutealert.wh.cpp))
 
 - Add Google Meet call and mute-state detection through Windows UI Automation.
