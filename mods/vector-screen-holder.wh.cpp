@@ -113,6 +113,10 @@ cycle the style as usual.
 **Ctrl+Alt+H works from anywhere**, so you can always close the overlay even
 when something else has focus.
 
+**Start active** brings the overlay up as soon as the mod loads. Windhawk loads
+its mods when you sign in, so that means it is waiting on your chosen display
+after every reboot, not just the time you ticked the box.
+
 The mod also listens on a named event, `Local\WindhawkVectorScreenHolderToggle`,
 in the per-session namespace, so an ordinary Windows shortcut can toggle the
 overlay without opening Windhawk at all. The one line that drives it is on
@@ -1478,7 +1482,9 @@ published at
   $name:he: להתחיל פעיל
   $description: >-
     Show the overlay as soon as the mod loads, and open it straight away when
-    you tick it here.
+    you tick it here. Windhawk loads its mods when you sign in, so leaving this
+    on means the overlay is already up on the display you chose after every
+    reboot, not only the time you ticked it.
 - workAreaOnly: false
   $name: Stay inside the work area
   $name:es-ES: Permanecer en el área de trabajo
@@ -5375,6 +5381,10 @@ static DWORD WINAPI WorkerThread(LPVOID) {
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
+        }
+
+        if (!g_running) {
+            break;   // the quit message was drained above
         }
 
         if (!g_active) {
