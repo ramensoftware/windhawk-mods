@@ -77,12 +77,14 @@ Only affects `Details view`. Other view modes (Icons, Tiles, List, etc.) are unt
 #include <initguid.h>
 #include <shobjidl.h>
 #include <propsys.h>
+#include <propkey.h>
 #include <shlobj.h>
 #include <shlguid.h>
 #include <servprov.h>
 #include <commctrl.h>
 #include <uiautomation.h>
 #include <oleauto.h>
+#include <algorithm>
 #include <atomic>
 #include <memory>
 #include <vector>
@@ -107,6 +109,11 @@ static constexpr UINT kFitStepDelayMs = 40;
 
 // Elastic mode's verify/correct loop needs settle time for slower-relayout views.
 static constexpr UINT kElasticVerifyDelayMs = 90;
+
+// Wall-clock budget for the folder scan, independent of item count: some property
+// columns (media metadata, network/cloud storage) can make GetDetailsEx a real,
+// possibly slow round trip per call, which item count alone doesn't bound.
+static constexpr ULONGLONG kScanTimeBudgetMs = 2000;
 
 // g_cs guards all global map access; g_settingsCs guards the cached-settings snapshot.
 static CRITICAL_SECTION g_cs;
@@ -141,11 +148,13 @@ static std::unordered_map<HWND, ULONG>       g_tabNotifyReg;
 [[clang::no_destroy]] std::optional<std::unordered_map<HWND, std::unique_ptr<FitContext>>>
     g_fitContexts{std::in_place};
 
-// Elastic mode's resize-only fast path: the other columns' widths from the last full fit, keyed by tab.
+// Elastic mode's resize-only fast path: the last full fit's column widths, keyed by tab.
+// Stored as a full snapshot (not "everything except index 0") since Elastic's Name
+// column is identified by property key, not position -- it isn't always index 0.
 struct TabWidthCache {
     UINT colCount = 0;
     std::vector<PROPERTYKEY> keys;
-    std::vector<int> otherColumnWidths;  // indices [1..colCount-1]
+    std::vector<int> allWidths;
 };
 static std::unordered_map<HWND, TabWidthCache> g_tabWidthCache;
 
@@ -157,6 +166,16 @@ static bool SameColumnKeys(const std::vector<PROPERTYKEY>& a, const std::vector<
             return false;
     }
     return true;
+}
+
+// Elastic mode stretches whichever column is actually the Name column, not
+// whichever happens to be first -- a user can reorder columns.
+static UINT FindNameColumnIndex(const std::vector<PROPERTYKEY>& keys) {
+    for (UINT i = 0; i < keys.size(); i++) {
+        if (IsEqualGUID(keys[i].fmtid, PKEY_ItemNameDisplay.fmtid) && keys[i].pid == PKEY_ItemNameDisplay.pid)
+            return i;
+    }
+    return 0;  // Name isn't in the visible column set (shouldn't normally happen)
 }
 
 // A resize-only trigger is downgraded back to a full trigger if a real
@@ -188,12 +207,13 @@ static bool ConsumeResizeOnlyFlag(HWND hwndTimer) {
 // Cached settings
 
 static void LoadSettings() {
-    UINT delay = static_cast<UINT>(Wh_GetIntSetting(L"delay"));
-    if (delay == 0) delay = 400;
+    int delayRaw = Wh_GetIntSetting(L"delay");
+    UINT delay = static_cast<UINT>(std::clamp(delayRaw, 0, 10000));
 
     int maxScan = Wh_GetIntSetting(L"fitModeSettings.maxScanItems");
     if (maxScan <= 0) maxScan = 500;
-    if (maxScan > 5000) maxScan = 5000;  // defensible ceiling even if the user cranks this up
+    // No hard ceiling here: the scan is now bounded by wall-clock time
+    // (kScanTimeBudgetMs) regardless of how high this is set.
 
     FitMode mode = FitMode::Visible;
     auto fitModeStr = WindhawkUtils::StringSetting::make(L"fitModeSettings.fitMode");
@@ -229,7 +249,7 @@ struct FindClassData { PCWSTR className; HWND result; };
 static BOOL CALLBACK FindClassEnumProc(HWND hwnd, LPARAM lp) {
     auto* data = reinterpret_cast<FindClassData*>(lp);
     WCHAR cls[64] = {};
-    GetClassNameW(hwnd, cls, 64);
+    GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
     if (wcscmp(cls, data->className) == 0) {
         data->result = hwnd;
         return FALSE;
@@ -243,7 +263,9 @@ static HWND FindDescendantByClass(HWND hwndRoot, PCWSTR className) {
     return data.result;
 }
 
-// Builds a font matching hwndSource's own font, falling back to a WinUI-style guess if unavailable.
+// Builds a font matching hwndSource's own font, falling back to a plain system guess.
+// Only used to rank items against each other for the widest-item scan; the final pixel
+// width always comes from the native autosize, so this doesn't need to be exact.
 static HFONT CreateFontFromWindowOrDefault(HWND hwndSource, UINT dpi) {
     if (hwndSource) {
         HFONT hSrcFont = reinterpret_cast<HFONT>(SendMessageW(hwndSource, WM_GETFONT, 0, 0));
@@ -257,21 +279,6 @@ static HFONT CreateFontFromWindowOrDefault(HWND hwndSource, UINT dpi) {
     LOGFONTW lf = {};
     BOOL gotFont = SystemParametersInfoForDpi(SPI_GETICONTITLELOGFONT, sizeof(lf), &lf, 0, dpi);
     if (!gotFont) SystemParametersInfoW(SPI_GETICONTITLELOGFONT, sizeof(lf), &lf, 0);
-
-    LOGFONTW lfVariable = lf;
-    wcscpy_s(lfVariable.lfFaceName, LF_FACESIZE, L"Segoe UI Variable Text");
-    HFONT hTestFont = CreateFontIndirectW(&lfVariable);
-    if (hTestFont) {
-        HDC hdcTest = GetDC(nullptr);
-        HFONT hOldTest = static_cast<HFONT>(SelectObject(hdcTest, hTestFont));
-        WCHAR actualFace[LF_FACESIZE] = {};
-        GetTextFaceW(hdcTest, LF_FACESIZE, actualFace);
-        SelectObject(hdcTest, hOldTest);
-        ReleaseDC(nullptr, hdcTest);
-        if (_wcsicmp(actualFace, L"Segoe UI Variable Text") == 0)
-            return hTestFont;
-        DeleteObject(hTestFont);
-    }
     return CreateFontIndirectW(&lf);
 }
 
@@ -353,8 +360,10 @@ static IUIAutomationElement* FindListElementViaUIA(HWND hwndView) {
 struct ScanResult {
     std::vector<int> headerFloor;             // header label width, used as a floor only
     std::vector<PITEMID_CHILD> widestPidl;    // owned; null if every item's value was empty
+    bool aborted = false;                     // hit the wall-clock budget before finishing
 };
 
+// Bounded by wall-clock time, not just item count: GetDetailsEx can be a real round trip on slow property handlers or network/cloud storage.
 static ScanResult ScanForWidestItems(
     IFolderView2* pFV2, IShellFolder2* pFolder2, const std::vector<PROPERTYKEY>& keys,
     UINT colCount, int itemCount, HFONT hFontHeader, HFONT hFontItem, HDC hdc)
@@ -379,7 +388,15 @@ static ScanResult ScanForWidestItems(
 
     SelectObject(hdc, hFontItem);
 
+    ULONGLONG deadline = GetTickCount64() + kScanTimeBudgetMs;
+    WCHAR dispBuf[512];
+
     for (int i = 0; i < itemCount; i++) {
+        if ((i & 0x1F) == 0 && GetTickCount64() > deadline) {
+            result.aborted = true;
+            break;
+        }
+
         PITEMID_CHILD pidl = nullptr;
         if (FAILED(pFV2->Item(i, &pidl)) || !pidl)
             continue;
@@ -393,11 +410,35 @@ static ScanResult ScanForWidestItems(
                 VariantInit(&converted);
                 bool haveConverted = false;
 
-                if (v.vt == VT_BSTR) {
-                    text = v.bstrVal;
-                } else if (SUCCEEDED(VariantChangeType(&converted, &v, 0, VT_BSTR))) {
-                    text = converted.bstrVal;
-                    haveConverted = true;
+                if ((v.vt & VT_ARRAY) && (v.vt & VT_TYPEMASK) == VT_BSTR) {
+                    // Multi-value property (e.g. Contributing Artists): PSFormatForDisplay
+                    // takes a PROPVARIANT, whose vector representation differs from a
+                    // VARIANT SAFEARRAY, so this is joined manually instead of converted.
+                    SAFEARRAY* psa = v.parray;
+                    if (psa) {
+                        LONG lBound = 0, uBound = -1;
+                        SafeArrayGetLBound(psa, 1, &lBound);
+                        SafeArrayGetUBound(psa, 1, &uBound);
+                        dispBuf[0] = L'\0';
+                        for (LONG idx = lBound; idx <= uBound; idx++) {
+                            BSTR item = nullptr;
+                            if (SUCCEEDED(SafeArrayGetElement(psa, &idx, &item)) && item) {
+                                if (dispBuf[0] != L'\0') wcsncat_s(dispBuf, L"; ", _TRUNCATE);
+                                wcsncat_s(dispBuf, item, _TRUNCATE);
+                                SysFreeString(item);
+                            }
+                        }
+                        text = dispBuf;
+                    }
+                } else if (!(v.vt & VT_ARRAY)) {
+                    // Scalar (string, number, date): layout matches between VARIANT and PROPVARIANT here.
+                    if (SUCCEEDED(PSFormatForDisplay(keys[c], *reinterpret_cast<const PROPVARIANT*>(&v),
+                                                      PDFF_DEFAULT, dispBuf, ARRAYSIZE(dispBuf))))
+                        text = dispBuf;
+                    else if (SUCCEEDED(VariantChangeType(&converted, &v, 0, VT_BSTR))) {
+                        text = converted.bstrVal;
+                        haveConverted = true;
+                    }
                 }
 
                 if (text) {
@@ -420,12 +461,12 @@ static ScanResult ScanForWidestItems(
     return result;
 }
 
-// Computes Name's width from whatever space is left after every other column's width,
-// the viewport width (classic control, UI Automation element, or view window, in that
-// preference order), and a vertical-scrollbar allowance when one is present.
+// Computes Name's width from leftover viewport space after other columns; never returns <= 0 (0 would mean CM_WIDTH_AUTOSIZE to the caller).
 static int ComputeElasticNameWidth(HWND hwndView, HWND hwndListView, IUIAutomationElement* pListElement,
-                                    const std::vector<int>& widths, UINT dpi, double dpiScale)
+                                    const std::vector<int>& widths, UINT nameColIndex, UINT dpi, double dpiScale)
 {
+    int minNameWidth = static_cast<int>(60 * dpiScale);
+
     int viewportWidth = 0;
     bool hasVScroll = false;
 
@@ -444,14 +485,17 @@ static int ComputeElasticNameWidth(HWND hwndView, HWND hwndListView, IUIAutomati
         viewportWidth = rc.right - rc.left;
     }
 
-    int minNameWidth = static_cast<int>(60 * dpiScale);
-    if (viewportWidth <= 0)
-        return widths.empty() ? minNameWidth : widths[0];
+    if (viewportWidth <= 0) {
+        if (nameColIndex < widths.size() && widths[nameColIndex] > 0) return widths[nameColIndex];
+        return minNameWidth;
+    }
 
     int minColWidth = static_cast<int>(40 * dpiScale);
     int otherColumnsTotal = 0;
-    for (size_t c = 1; c < widths.size(); c++)
+    for (size_t c = 0; c < widths.size(); c++) {
+        if (c == nameColIndex) continue;
         otherColumnsTotal += (widths[c] < minColWidth) ? minColWidth : widths[c];
+    }
 
     int scrollbarAllowance = hasVScroll ? GetSystemMetricsForDpi(SM_CXVSCROLL, dpi) : 0;
     int initialSafetyMargin = static_cast<int>(8 * dpiScale);
@@ -488,6 +532,7 @@ struct FitContext {
     UINT dpi = 96;
     double dpiScale = 1.0;
     bool elasticMode = false;
+    UINT nameColumnIndex = 0;  // index of PKEY_ItemNameDisplay within keys; not always 0
     int itemCount = 0;
 
     std::vector<int> headerFloor;               // used only as a floor under the measured width
@@ -530,7 +575,7 @@ static void Step_Finalize(FitContext* ctx, HWND hwndOwner) {
         TabWidthCache cache;
         cache.colCount = ctx->colCount;
         cache.keys = ctx->keys;
-        cache.otherColumnWidths.assign(ctx->maxWidths.begin() + 1, ctx->maxWidths.end());
+        cache.allWidths = ctx->maxWidths;
         EnterCriticalSection(&g_cs);
         g_tabWidthCache[hwndOwner] = std::move(cache);
         LeaveCriticalSection(&g_cs);
@@ -551,7 +596,7 @@ static void Step_SelectWidest(FitContext* ctx, HWND hwndOwner) {
     ctx->exactColumnQueue.clear();
     for (UINT c = 0; c < ctx->colCount; c++) {
         // Elastic mode's Name column comes from leftover viewport space, not content.
-        if (c == 0 && ctx->elasticMode) continue;
+        if (c == ctx->nameColumnIndex && ctx->elasticMode) continue;
         if (ctx->widestPidl[c]) ctx->exactColumnQueue.push_back(c);
     }
     ctx->exactQueueIndex = 0;
@@ -559,9 +604,9 @@ static void Step_SelectWidest(FitContext* ctx, HWND hwndOwner) {
     if (ctx->exactColumnQueue.empty()) {
         if (ctx->elasticMode) {
             ctx->pElasticListElement = ctx->hwndListView ? nullptr : FindListElementViaUIA(ctx->hwndView);
-            ctx->maxWidths[0] = ComputeElasticNameWidth(ctx->hwndView, ctx->hwndListView,
-                                                         ctx->pElasticListElement, ctx->maxWidths,
-                                                         ctx->dpi, ctx->dpiScale);
+            ctx->maxWidths[ctx->nameColumnIndex] = ComputeElasticNameWidth(
+                ctx->hwndView, ctx->hwndListView, ctx->pElasticListElement, ctx->maxWidths,
+                ctx->nameColumnIndex, ctx->dpi, ctx->dpiScale);
             ApplyColumnWidthsLiteral(ctx->pCM, ctx->keys, ctx->maxWidths);
             ctx->phase = FitContext::Phase::WaitElasticVerify;
             SetTimer(hwndOwner, FITSTEP_TIMER_ID, kElasticVerifyDelayMs, nullptr);
@@ -619,10 +664,11 @@ static void Step_ReadExactAndRestore(FitContext* ctx, HWND hwndOwner) {
         return;
     }
 
-    // Every column measured -- restore the real scroll position (by top
-    // row index for a classic list view; falling back to the previously
-    // focused item only when there's no list view handle to scroll).
+    // Ensuring the last item visible first, then the original top item, lands it exactly at the top again (not just "somewhere visible").
     if (ctx->hwndListView && ctx->topIndexBeforeFit >= 0) {
+        int lastIndex = static_cast<int>(SendMessageW(ctx->hwndListView, LVM_GETITEMCOUNT, 0, 0)) - 1;
+        if (lastIndex >= 0)
+            SendMessageW(ctx->hwndListView, LVM_ENSUREVISIBLE, lastIndex, FALSE);
         SendMessageW(ctx->hwndListView, LVM_ENSUREVISIBLE, ctx->topIndexBeforeFit, FALSE);
     } else if (ctx->pidlFocusedFallback) {
         PITEMID_CHILD apidlR[1] = { ctx->pidlFocusedFallback };
@@ -638,8 +684,9 @@ static void Step_ReadExactAndRestore(FitContext* ctx, HWND hwndOwner) {
 static void Step_FinishAfterRestore(FitContext* ctx, HWND hwndOwner) {
     if (ctx->elasticMode) {
         ctx->pElasticListElement = ctx->hwndListView ? nullptr : FindListElementViaUIA(ctx->hwndView);
-        ctx->maxWidths[0] = ComputeElasticNameWidth(ctx->hwndView, ctx->hwndListView, ctx->pElasticListElement,
-                                                     ctx->maxWidths, ctx->dpi, ctx->dpiScale);
+        ctx->maxWidths[ctx->nameColumnIndex] = ComputeElasticNameWidth(
+            ctx->hwndView, ctx->hwndListView, ctx->pElasticListElement, ctx->maxWidths,
+            ctx->nameColumnIndex, ctx->dpi, ctx->dpiScale);
     }
 
     ApplyColumnWidthsLiteral(ctx->pCM, ctx->keys, ctx->maxWidths);
@@ -700,22 +747,22 @@ static void Step_VerifyElasticFit(FitContext* ctx, HWND hwndOwner) {
         uiaSaysScrolling = ElementHasHorizontalScroll(ctx->pElasticListElement);
 
     int minNameWidth = static_cast<int>(60 * ctx->dpiScale);
-    bool canShrink = ctx->maxWidths[0] > minNameWidth;
+    bool canShrink = ctx->maxWidths[ctx->nameColumnIndex] > minNameWidth;
     bool haveAttemptsLeft = ctx->elasticAttempt < FitContext::kMaxElasticAttempts;
 
     if ((overflow > 0 || uiaSaysScrolling) && haveAttemptsLeft && canShrink) {
         int safetyMargin = static_cast<int>(10 * ctx->dpiScale);
         int shrinkBy = (overflow > 0) ? (overflow + safetyMargin) : static_cast<int>(24 * ctx->dpiScale);
-        int newNameWidth = ctx->maxWidths[0] - shrinkBy;
+        int newNameWidth = ctx->maxWidths[ctx->nameColumnIndex] - shrinkBy;
         if (newNameWidth < minNameWidth) newNameWidth = minNameWidth;
 
-        if (newNameWidth < ctx->maxWidths[0]) {
-            ctx->maxWidths[0] = newNameWidth;
+        if (newNameWidth < ctx->maxWidths[ctx->nameColumnIndex]) {
+            ctx->maxWidths[ctx->nameColumnIndex] = newNameWidth;
             CM_COLUMNINFO ci = {};
             ci.cbSize = sizeof(ci);
             ci.dwMask = CM_MASK_WIDTH;
             ci.uWidth = static_cast<UINT>(newNameWidth);
-            ctx->pCM->SetColumnInfo(ctx->keys[0], &ci);
+            ctx->pCM->SetColumnInfo(ctx->keys[ctx->nameColumnIndex], &ci);
 
             ctx->elasticAttempt++;
             ctx->elasticConfirmed = false;
@@ -753,7 +800,8 @@ static void AdvanceFitContext(HWND hwndOwner) {
 // Starts the Elastic verify loop, taking ownership of pFV2Owned/pCMOwned/pListElementOwned.
 static void StartElasticVerify(IShellView* pShellView, IFolderView2* pFV2Owned, IColumnManager* pCMOwned,
                                 HWND hwndOwner, HWND hwndView, HWND hwndListView, HWND hwndHeader,
-                                std::vector<PROPERTYKEY> keys, UINT colCount, UINT dpi, double dpiScale,
+                                std::vector<PROPERTYKEY> keys, UINT colCount, UINT nameColIndex,
+                                UINT dpi, double dpiScale,
                                 std::vector<int> widths, IUIAutomationElement* pListElementOwned)
 {
     auto ctx = std::make_unique<FitContext>();
@@ -766,6 +814,7 @@ static void StartElasticVerify(IShellView* pShellView, IFolderView2* pFV2Owned, 
     ctx->hwndHeader = hwndHeader;
     ctx->keys = std::move(keys);
     ctx->colCount = colCount;
+    ctx->nameColumnIndex = nameColIndex;
     ctx->dpi = dpi;
     ctx->dpiScale = dpiScale;
     ctx->maxWidths = std::move(widths);
@@ -790,8 +839,10 @@ static void StartAutoFit(IShellView* pShellView, HWND hwndOwner, bool resizeOnly
     bool alreadyRunning = g_fitContexts->find(hwndOwner) != g_fitContexts->end();
     LeaveCriticalSection(&g_cs);
     if (alreadyRunning) {
-        if (!g_unloading.load(std::memory_order_relaxed))
+        if (!g_unloading.load(std::memory_order_relaxed)) {
+            MarkFitTrigger(hwndOwner, resizeOnly);  // don't drop the hint on the retry
             SetTimer(hwndOwner, AUTOFIT_TIMER_ID, settings.delayMs, nullptr);
+        }
         return;
     }
 
@@ -835,6 +886,7 @@ static void StartAutoFit(IShellView* pShellView, HWND hwndOwner, bool resizeOnly
     }
 
     bool elasticMode = (settings.fitMode == FitMode::Elastic);
+    UINT nameColIndex = FindNameColumnIndex(keys);
     HWND hwndView = nullptr;
     pShellView->GetWindow(&hwndView);
     HWND hwndListView = hwndView ? FindDescendantByClass(hwndView, L"SysListView32") : nullptr;
@@ -858,17 +910,17 @@ static void StartAutoFit(IShellView* pShellView, HWND hwndOwner, bool resizeOnly
         LeaveCriticalSection(&g_cs);
 
         if (haveCache) {
-            std::vector<int> widths(colCount, 0);
-            for (UINT c = 1; c < colCount; c++)
-                widths[c] = cached.otherColumnWidths[c - 1];
+            std::vector<int> widths = cached.allWidths;
 
             IUIAutomationElement* pListElement = hwndListView ? nullptr : FindListElementViaUIA(hwndView);
-            widths[0] = ComputeElasticNameWidth(hwndView, hwndListView, pListElement, widths, dpi, dpiScale);
+            widths[nameColIndex] = ComputeElasticNameWidth(hwndView, hwndListView, pListElement, widths,
+                                                            nameColIndex, dpi, dpiScale);
             ApplyColumnWidthsLiteral(pCM, keys, widths);
             Wh_Log(L"Auto-fitted %u column(s) (elastic, resize)", colCount);
 
             StartElasticVerify(pShellView, pFV2, pCM, hwndOwner, hwndView, hwndListView, hwndHeader,
-                                std::move(keys), colCount, dpi, dpiScale, std::move(widths), pListElement);
+                                std::move(keys), colCount, nameColIndex, dpi, dpiScale,
+                                std::move(widths), pListElement);
             return;
         }
         // No usable cache -- fall through to a full scan.
@@ -907,6 +959,19 @@ static void StartAutoFit(IShellView* pShellView, HWND hwndOwner, bool resizeOnly
     if (hFontItem) DeleteObject(hFontItem);
     pFolder2->Release();
 
+    if (scan.aborted) {
+        // Ran past the wall-clock budget (slow property handlers, network/cloud
+        // storage, etc.) -- fall back to the fast built-in autosize rather than
+        // freezing the shell for an unbounded amount of time.
+        for (auto p : scan.widestPidl)
+            if (p) ILFree(p);
+        ApplyColumnWidthsLiteral(pCM, keys, std::vector<int>(colCount, 0));
+        Wh_Log(L"Auto-fitted %u column(s) (fallback: scan exceeded time budget)", colCount);
+        pCM->Release();
+        pFV2->Release();
+        return;
+    }
+
     auto ctx = std::make_unique<FitContext>();
     pShellView->AddRef();
     ctx->pShellView = pShellView;
@@ -917,13 +982,22 @@ static void StartAutoFit(IShellView* pShellView, HWND hwndOwner, bool resizeOnly
     ctx->hwndHeader = hwndHeader;
     ctx->keys = std::move(keys);
     ctx->colCount = colCount;
+    ctx->nameColumnIndex = nameColIndex;
     ctx->dpi = dpi;
     ctx->dpiScale = dpiScale;
     ctx->elasticMode = elasticMode;
     ctx->itemCount = itemCount;
     ctx->headerFloor = std::move(scan.headerFloor);
     ctx->widestPidl = std::move(scan.widestPidl);
-    ctx->maxWidths = ctx->headerFloor;  // seeded floor; exact measurement fills each column in
+    ctx->maxWidths.assign(colCount, 0);
+    if (elasticMode) {
+        // Elastic needs a known fixed width per column to compute Name's leftover space --
+        // CM_WIDTH_AUTOSIZE's actual result is decided by Explorer afterward and could
+        // exceed what was assumed here, overflowing the row.
+        int emptyColPad = static_cast<int>(20 * dpiScale);
+        for (UINT c = 0; c < colCount; c++)
+            if (!ctx->widestPidl[c]) ctx->maxWidths[c] = ctx->headerFloor[c] + emptyColPad;
+    }
 
     // Capture where the user actually is before any scrolling starts, so
     // it can be restored exactly once every column has been measured.
@@ -955,7 +1029,7 @@ static HWND FindTabWindow(HWND hwnd) {
     WCHAR cls[64] = {};
     HWND cur = hwnd;
     while (cur) {
-        GetClassNameW(cur, cls, 64);
+        GetClassNameW(cur, cls, ARRAYSIZE(cls));
         if (wcscmp(cls, L"ShellTabWindowClass") == 0)
             return cur;
         cur = GetAncestor(cur, GA_PARENT);
@@ -973,7 +1047,7 @@ static bool IsWindowSubclassed(HWND hwnd) {
 
 static bool IsSubclassTarget(HWND hwnd) {
     WCHAR cls[64] = {};
-    GetClassNameW(hwnd, cls, 64);
+    GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
     for (PCWSTR target : kSubclassTargets) {
         if (wcscmp(cls, target) == 0)
             return true;
@@ -1090,13 +1164,14 @@ HRESULT __thiscall CDefView_UIActivate_hook(void* pThis, UINT uState) {
         HWND hwndTop = GetAncestor(hwndView, GA_ROOT);
 
         {
+            IShellView* pOld = nullptr;
             EnterCriticalSection(&g_cs);
-            auto it = g_tabShellViews.find(hwndTab);
-            if (it != g_tabShellViews.end() && it->second)
-                it->second->Release();
+            if (auto it = g_tabShellViews.find(hwndTab); it != g_tabShellViews.end())
+                pOld = it->second;
             pShellView->AddRef();
             g_tabShellViews[hwndTab] = pShellView;
             LeaveCriticalSection(&g_cs);
+            if (pOld) pOld->Release();  // outside the lock -- can run arbitrary shell teardown
         }
 
         EnumChildData data = { hwndTab };
@@ -1229,7 +1304,6 @@ static LRESULT CALLBACK ExplorerSubclassProc(
     HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
     DWORD_PTR dwRefData)
 {
-    Settings settings = GetCachedSettings();
     bool isFullRefresh = false;
     bool isResizeRefresh = false;
 
@@ -1244,8 +1318,8 @@ static LRESULT CALLBACK ExplorerSubclassProc(
 
     // Shell-level change notification for this tab's folder, via a registered message id.
     if (g_shellNotifyMsg != 0 && uMsg == g_shellNotifyMsg) {
-        LONG lEvent = 0;
         PIDLIST_ABSOLUTE* rgpidl = nullptr;
+        LONG lEvent = 0;  // required out-param; the event itself isn't filtered on
         HANDLE hLock = SHChangeNotification_Lock(
             reinterpret_cast<HANDLE>(wParam), static_cast<DWORD>(lParam),
             &rgpidl, &lEvent);
@@ -1255,7 +1329,9 @@ static LRESULT CALLBACK ExplorerSubclassProc(
         }
     }
 
-    if (uMsg == WM_SIZE && settings.fitMode == FitMode::Elastic)
+    // SIZE_MINIMIZED gives an empty client rect, which would otherwise
+    // collapse the Name column to CM_WIDTH_AUTOSIZE until the next real fit.
+    if (uMsg == WM_SIZE && wParam != SIZE_MINIMIZED && GetCachedSettings().fitMode == FitMode::Elastic)
         isResizeRefresh = true;
 
     if (isFullRefresh || isResizeRefresh) {
@@ -1271,7 +1347,7 @@ static LRESULT CALLBACK ExplorerSubclassProc(
         HWND hwndTimer = hwndTab ? hwndTab : hwnd;
         MarkFitTrigger(hwndTimer, /*resizeOnly=*/isResizeRefresh && !isFullRefresh);
         if (!g_unloading.load(std::memory_order_relaxed))
-            SetTimer(hwndTimer, AUTOFIT_TIMER_ID, settings.delayMs, nullptr);
+            SetTimer(hwndTimer, AUTOFIT_TIMER_ID, GetCachedSettings().delayMs, nullptr);
     }
 
     if (uMsg == WM_TIMER && wParam == AUTOFIT_TIMER_ID) {
