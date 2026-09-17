@@ -5,20 +5,25 @@
 // @description     A complete video wallpaper for Windhawk. Follows Windows light/dark theme, plays folders or single files, smooth audio-video sync, configurable hotkeys, auto-pause in fullscreen.
 // @description:zh-CN  完整的视频壁纸 Windhawk 模组。跟随 Windows 深浅色主题自动切换，支持单个视频或文件夹循环播放，音画同步流畅，可配置全局快捷键，全屏时自动暂停。
 // @version         3.0
-// @author          wakhh@qq.com
+// @author          wakhh
+// @license         GPL-3.0
 // @github          https://github.com/wakhh
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -ldxgi -ld2d1 -ld3d11 -ldcomp -ldwmapi -lgdi32 -luser32 -lole32 -lmmdevapi -luuid
+// @compilerOptions -ldxgi -ld2d1 -ld3d11 -ldcomp -luser32 -lole32 -lmmdevapi -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # 视频壁纸 | A Video Wallpaper
 
-一个功能齐全的 Windhawk 视频壁纸模组，支持本地视频文件或文件夹循环播放，自动跟随系统明暗主题切换，流畅的影音同步，全局快捷键，全屏自动暂停，多种硬件加速模式等。
+一个功能齐全的 Windhawk
+视频壁纸模组，支持本地视频文件或文件夹循环播放，自动跟随系统明暗主题切换，流畅的影音同步，全局快捷键，全屏自动暂停，多种硬件加速模式等。
 
-A feature-rich Windhawk video wallpaper mod that plays local video files or folders, with automatic light/dark theme switching, smooth audio-video sync, global hotkeys, fullscreen auto-pause, multiple hardware acceleration modes, and more.
+A feature-rich Windhawk video wallpaper mod that plays local video files or
+folders, with automatic light/dark theme switching, smooth audio-video sync,
+global hotkeys, fullscreen auto-pause, multiple hardware acceleration modes, and
+more.
 
 ---
 
@@ -26,41 +31,68 @@ A feature-rich Windhawk video wallpaper mod that plays local video files or fold
 
 模组依赖外部 **ffmpeg.exe**，请下载后放置在系统 PATH 或模组设置指定路径中：
 
-This mod requires **ffmpeg.exe**. Download it and place it in your system PATH or the folder specified in mod settings:
+This mod requires **ffmpeg.exe**. Download it and place it in your system PATH
+or the folder specified in mod settings:
 
-👉 https://github.com/GyanD/codexffmpeg/releases/ （推荐 ffmpeg-release-full.7z | ffmpeg-release-full.7z recommended）
+👉 https://github.com/GyanD/codexffmpeg/releases/ （推荐 ffmpeg-release-full.7z
+| ffmpeg-release-full.7z recommended）
 
 ---
 
 ### 特色功能 | Features
 
-- 🎨 **主题跟随** — 明/暗模式分别设置不同视频，系统切换时自动切换  |  Separate videos for light/dark mode; auto-switches with Windows theme
-- 📁 **文件夹循环** — 支持单文件或整个文件夹，8 种排序方式自由选择  |  Single file or entire folder, 8 sort orders
-- 🎞️ **流畅影音** — 低延迟音频播放，音画自动同步，没有卡顿没有漂移  |  Smooth audio playback, auto AV sync, no lag or drift
-- 🚀 **硬件加速** — 自动识别最佳加速方案，也可手动指定  |  Auto-selects best option, or choose manually
-- ⌨️ **全局快捷键** — 暂停/播放、上一项、下一项、静音切换，按住只触发一次  |  Pause/Play, Prev, Next, Mute. Press-and-hold fires once only
-- 🖥️ **全屏自动暂停** — 游戏全屏或视频播放器最大化时自动暂停并禁用快捷键  |  Auto-pauses and disables hotkeys when other apps are fullscreen/maximized
+- 🎨 **主题跟随** — 明/暗模式分别设置不同视频，系统切换时自动切换  |  Separate
+videos for light/dark mode; auto-switches with Windows theme
+- 📁 **文件夹循环** — 支持单文件或整个文件夹，8 种排序方式自由选择  |  Single
+file or entire folder, 8 sort orders
+- 🎞️ **流畅影音** — 低延迟音频播放，音画自动同步，没有卡顿没有漂移  |  Smooth
+audio playback, auto AV sync, no lag or drift
+- 🚀 **硬件加速** — 自动识别最佳加速方案，也可手动指定  |  Auto-selects best
+option, or choose manually
+- ⌨️ **全局快捷键** — 暂停/播放、上一项、下一项、静音切换，按住只触发一次  |
+Pause/Play, Prev, Next, Mute. Press-and-hold fires once only
+- 🖥️ **全屏自动暂停** — 游戏全屏或视频播放器最大化时自动暂停并禁用快捷键  |
+Auto-pauses and disables hotkeys when other apps are fullscreen/maximized
 - 📺 **多显示器** — 选择在哪个屏幕显示  |  Choose which monitor
-- 🎚️ **缩放与填充** — Cover / Contain / Center / Stretch，多种填充色选项  |  Multiple scaling modes with configurable padding color
+- 🎚️ **缩放与填充** — Cover / Contain / Center / Stretch，多种填充色选项  |
+Multiple scaling modes with configurable padding color
 
 ### 默认快捷键 | Default Hotkeys
 
 | 功能 Action | 默认值 Default | 说明 Notes |
 |---|---|---|
 | 暂停 / 播放 Pause / Play | `Ctrl+Alt+F5` |  |  |
-| 上一个视频 Previous | `Ctrl+Alt+←` | 到顶自动跳到末尾  |  Wraps to last at top |
-| 下一个视频 Next | `Ctrl+Alt+→` | 到底自动跳到开头  |  Wraps to first at bottom |
-| 静音切换 Mute | *(未设置)* | 在静音和设置音量之间切换  |  Toggles between muted and configured volume |
+| 上一个视频 Previous | `Ctrl+Alt+←` | 到顶自动跳到末尾  |  Wraps to last at top
+| | 下一个视频 Next | `Ctrl+Alt+→` | 到底自动跳到开头  |  Wraps to first at
+bottom | | 静音切换 Mute | *(未设置)* | 在静音和设置音量之间切换  |  Toggles
+between muted and configured volume |
 
 ---
 
 ### 支持一下作者 | Support the Author
 
-这个模组从设计到实现花了不少心思，反复调试音画同步、修复各种边界情况，才有了现在流畅稳定的体验。如果觉得好用，欢迎打赏一杯咖啡 ☕️，你的支持就是我继续维护的动力！
+这个模组从设计到实现花了不少心思，反复调试音画同步、修复各种边界情况，才有了现在流畅稳定的体验。如果觉得好用，欢迎打赏一杯咖啡
+☕️，你的支持就是我继续维护的动力！
 
-This mod took a lot of care — from audio-video sync tuning to edge-case bug fixing — to feel smooth and stable. If you find it useful, a coffee is always appreciated. Thanks for your support!
+This mod took a lot of care — from audio-video sync tuning to edge-case bug
+fixing — to feel smooth and stable. If you find it useful, a coffee is always
+appreciated. Thanks for your support!
 
 ![赞助码](https://raw.githubusercontent.com/wakhh/PersonalLittleImageHosting/main/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20260917043237_6_7.jpg)
+
+---
+
+### 开源许可 | License
+
+本模组基于 **GPL-3.0** 协议开源。桌面窗口创建 / D2D 初始化 /
+线程安全卸载等部分代码参考自
+[desktop-live-overlay.wh.cpp](https://github.com/ramensoftware/windhawk-mods)（同样
+GPL-3.0）。
+
+This mod is licensed under **GPL-3.0**. Portions of the desktop window setup,
+D2D initialization, and thread-safe teardown are adapted from
+[desktop-live-overlay.wh.cpp](https://github.com/ramensoftware/windhawk-mods)
+(also GPL-3.0).
 */
 // ==/WindhawkModReadme==
 
@@ -241,22 +273,27 @@ This mod took a lot of care — from audio-video sync tuning to edge-case bug fi
 // ==/WindhawkModSettings==
 
 #include <Windows.h>
-#include <windhawk_utils.h>
+
+#include <wrl/client.h>
+
 #include <d2d1_1.h>
 #include <d2d1helper.h>
+
+#include <dxgi1_3.h>
 #include <d3d11.h>
 #include <dcomp.h>
-#include <dwmapi.h>
-#include <dxgi1_3.h>
-#include <wrl/client.h>
-#include <mmdeviceapi.h>
+
 #include <audioclient.h>
-#include <vector>
+#include <mmdeviceapi.h>
+
+#include <windhawk_utils.h>
+
+#include <algorithm>
+#include <atomic>
+#include <cstdint>
 #include <string>
 #include <unordered_map>
-#include <atomic>
-#include <algorithm>
-#include <cstdint>
+#include <vector>
 
 static IAudioClient* g_audioClient = nullptr;
 static IAudioRenderClient* g_audioRenderClient = nullptr;
@@ -264,82 +301,89 @@ static ISimpleAudioVolume* g_simpleAudioVol = nullptr;
 static HANDLE g_audioRenderEvent = NULL;
 static HANDLE g_audioThread = NULL;
 static std::atomic<bool> g_audioRunning{false};
+static UINT32 g_audioBlockAlign = 0;
+bool g_wasapiCoInit = false;
 
 static HANDLE g_ffmpegProc = NULL;
 static HANDLE g_ffmpegWaitReg = NULL;
 static HANDLE g_pipeRead = NULL;
 static HANDLE g_pipeWrite = NULL;
 static HANDLE g_audioPipeRead = NULL;
-static UINT32 g_audioBlockAlign = 0;
-static HWND g_videoHwnd = NULL;
+HANDLE g_pipeThread = NULL;
+HANDLE g_errRead = NULL;
 static int g_frameSize = 0;
 
 constexpr int VIDEO_QUEUE_SIZE = 8;
 static std::vector<BYTE> g_frameQueue[VIDEO_QUEUE_SIZE];
 static std::atomic<int> g_queueWriteIdx{0};
 static std::atomic<int> g_queueReadIdx{0};
-
 static HANDLE g_videoReadyEvent = NULL;
-
-static std::vector<BYTE> g_audioBuf;
+static HWND g_videoHwnd = NULL;
 
 std::atomic<uint32_t> g_videoFramesRead{0};
 std::atomic<uint32_t> g_videoFramesDisplayed{0};
 std::atomic<uint64_t> g_audioSamplesPlayed{0};
-WCHAR g_ffmpegPath[MAX_PATH] = {0};
-WCHAR g_lightPath[MAX_PATH] = {0};
-WCHAR g_darkPath[MAX_PATH] = {0};
+
+std::wstring g_ffmpegPath;
+std::wstring g_lightPath;
+std::wstring g_darkPath;
 int g_opacity = 255;
 int g_fps = 15;
+int g_effectiveFps = 15;
 int g_scalingMode = 0;
 WCHAR g_padColorMode[32] = {L"black"};
-WCHAR g_padColorCustom[32] = {0};
-WCHAR g_applyMode[16] = {L"instant"};
+WCHAR g_padColorCustom[32] = {L"#000000"};
+WCHAR g_applyMode[16] = {L"on_next"};
 int g_sortMode = 0;
-int g_hwaccelMode = 0;
+int g_hwaccelMode = 1;
 int g_enableAudio = 0;
 int g_audioVolume = 100;
 int g_monitor = 1;
-bool g_needWindowRecreate = false;
-volatile bool g_pendingReload = false;
 int g_pauseOnFullscreen = 1;
+bool g_needWindowRecreate = false;
 
 WCHAR g_hotkeyPauseStr[128] = {L"Ctrl+Alt+F5"};
 WCHAR g_hotkeyPrevStr[128] = {L"Ctrl+Alt+Left"};
 WCHAR g_hotkeyNextStr[128] = {L"Ctrl+Alt+Right"};
 WCHAR g_hotkeyMuteStr[128] = {0};
-
 static constexpr int HK_ID_PAUSE = 1;
 static constexpr int HK_ID_PREV = 2;
 static constexpr int HK_ID_NEXT = 3;
 static constexpr int HK_ID_MUTE = 4;
-
 int g_hotkeyPauseState = -1;
 int g_hotkeyMuteState = -1;
 bool g_hotkeysRegistered = false;
 
-HANDLE g_pipeThread = NULL;
-HANDLE g_dirChangeHandle = INVALID_HANDLE_VALUE;
+HWND g_workerW = NULL;
+HWND g_msgHwnd = NULL;
 bool g_classRegistered = false;
+bool g_msgClassRegistered = false;
+bool g_lastDarkChecked = false;
+static HANDLE g_dirChangeHandle = INVALID_HANDLE_VALUE;
+
+std::atomic<bool> g_unloading{false};
+std::atomic<bool> g_lazyInitialized{false};
+std::atomic<bool> g_initSucceeded{false};
 std::atomic<bool> g_running{true};
 std::atomic<bool> g_isPaused{false};
 std::atomic<bool> g_videoSwitching{false};
+std::atomic<bool> g_pendingListReload{false};
+
 bool g_lastIsDark = false;
-HANDLE g_mutex = NULL;
 std::vector<std::wstring> g_videoList;
 size_t g_videoIndex = 0;
 int g_consecutiveErrors = 0;
 static const int MAX_CONSECUTIVE_ERRORS = 3;
 
-HWND g_workerW = NULL;
-HKEY g_hThemeKey = NULL;
-HANDLE g_hThemeEvt = NULL;
-bool g_lastDarkChecked = false;
-bool g_prevFull = false;
-
 UINT_PTR g_createVideoTimer = 0;
 constexpr UINT WM_APP_CLEANUP = WM_APP + 1;
 constexpr UINT WM_APP_FFMPEG_EXIT = WM_APP + 2;
+constexpr UINT WM_APP_SETTINGS_CHANGED = WM_APP + 3;
+constexpr UINT WM_APP_FFMPEG_FAIL = WM_APP + 4;
+constexpr UINT TIMER_ID_MANAGER = 1;
+constexpr UINT TIMER_ID_RENDERER = 2;
+constexpr UINT TIMER_ID_MSG_RECREATE_VIDEO = 3;
+constexpr UINT TIMER_ID_MSG_DISPLAY_CHANGE = 4;
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_Original;
@@ -351,51 +395,103 @@ CreateWindowExW_t CreateWindowExW_Original;
 [[clang::no_destroy]] Microsoft::WRL::ComPtr<ID2D1Device> g_d2dDevice;
 [[clang::no_destroy]] Microsoft::WRL::ComPtr<IDXGISwapChain1> g_swapChain;
 [[clang::no_destroy]] Microsoft::WRL::ComPtr<ID2D1DeviceContext> g_dc;
-[[clang::no_destroy]] Microsoft::WRL::ComPtr<IDCompositionDevice> g_compositionDevice;
-[[clang::no_destroy]] Microsoft::WRL::ComPtr<IDCompositionTarget> g_compositionTarget;
-[[clang::no_destroy]] Microsoft::WRL::ComPtr<IDCompositionVisual> g_compositionVisual;
+[[clang::no_destroy]] Microsoft::WRL::ComPtr<IDCompositionDevice>
+    g_compositionDevice;
+[[clang::no_destroy]] Microsoft::WRL::ComPtr<IDCompositionTarget>
+    g_compositionTarget;
+[[clang::no_destroy]] Microsoft::WRL::ComPtr<IDCompositionVisual>
+    g_compositionVisual;
 [[clang::no_destroy]] Microsoft::WRL::ComPtr<ID2D1Bitmap> g_frameBitmap;
 
-bool g_dxInitSucceeded = false;
-bool g_dxInitialized = false;
+#define MESSAGE_WINDOW_CLASS L"VidWallpaperMsg_" WH_MOD_ID
 
-constexpr UINT TIMER_ID_MANAGER = 1;
-constexpr UINT TIMER_ID_RENDERER = 2;
+void StartWallpaper();
+void Wh_ModSettingsChanged();
+void Wh_ModAfterInit();
+void Wh_ModUninit();
 
+void LoadSettings();
+void ApplySettingsChanged();
+
+bool CreateVideoWindow();
+void CreateMessageWindow();
+void DestroyMessageWindow();
+void UnregisterMessageWindowClass();
+HWND GetWorkerW();
+
+bool InitDirectX();
+void UninitDirectX();
+bool CreateSwapChainResources(UINT w, UINT h);
+void ReleaseSwapChainResources();
+bool ResizeSwapChain(UINT w, UINT h);
+void RenderFrame();
+void RunDxgiWorkaroundForExplorerPatcher();
+
+bool InitWasapi();
+void ShutdownWasapi();
+void UpdateSessionVolume();
+
+bool StartFfmpeg(const WCHAR* videoPath);
+void StopFfmpeg();
+
+void ReloadVideoList();
 bool PlayNext();
 bool PlayPrev();
 void ReloadWallpaper();
-void RenderFrame();
-void StartRendererTimer();
-void StopRendererTimer();
+
 void StartManagerTimer();
 void StopManagerTimer();
+void StartRendererTimer(bool needsAudio);
+void StopRendererTimer();
 void ManagerTick();
-void UpdateSessionVolume();
-bool CreateVideoWindow();
-void Wh_ModSettingsChanged();
-HWND GetWorkerW();
+
+void InitHotkeyMaps();
+bool ParseHotkey(const WCHAR* str, UINT& mods, UINT& vk);
+void RegisterAllHotkeys(HWND hwnd);
+void UnregisterAllHotkeys(HWND hwnd);
+
+bool IsDark();
+bool IsForegroundFull();
+bool IsHotkeyTargetReady();
+bool IsFolderViewWnd(HWND hWnd);
+bool IsVideoExt(const WCHAR* ext);
+bool PathExists(const WCHAR* p);
+bool GetTargetMonitorRect(int& x, int& y, int& w, int& h);
+HWND GetProgmanWnd();
+bool RegisterMessageWindowClass();
+bool RunFromWindowThread(HWND hWnd, void (*fn)(void*), void* ctx);
+bool EnsureLazyInitialized();
 
 HMONITOR GetMonitorById(int monitorId) {
     HMONITOR result = nullptr;
     int idx = 0;
     auto proc = [&](HMONITOR hMonitor) -> BOOL {
-        if (idx == monitorId) { result = hMonitor; return FALSE; }
-        idx++; return TRUE;
+        if (idx == monitorId) {
+            result = hMonitor;
+            return FALSE;
+        }
+        idx++;
+        return TRUE;
     };
-    EnumDisplayMonitors(NULL, NULL, [](HMONITOR hMonitor, HDC, LPRECT, LPARAM dwData) -> BOOL {
-        auto& p = *reinterpret_cast<decltype(proc)*>(dwData);
-        return p(hMonitor);
-    }, reinterpret_cast<LPARAM>(&proc));
+    EnumDisplayMonitors(
+        NULL, NULL,
+        [](HMONITOR hMonitor, HDC, LPRECT, LPARAM dwData) -> BOOL {
+            auto& p = *reinterpret_cast<decltype(proc)*>(dwData);
+            return p(hMonitor);
+        },
+        reinterpret_cast<LPARAM>(&proc));
     return result;
 }
 
 bool GetTargetMonitorRect(int& x, int& y, int& w, int& h) {
     HMONITOR mon = GetMonitorById(g_monitor - 1);
-    if (!mon) mon = MonitorFromPoint({0, 0}, MONITOR_DEFAULTTONEAREST);
-    if (!mon) return false;
+    if (!mon)
+        mon = MonitorFromPoint({0, 0}, MONITOR_DEFAULTTONEAREST);
+    if (!mon)
+        return false;
     MONITORINFO mi{sizeof(mi)};
-    if (!GetMonitorInfoW(mon, &mi)) return false;
+    if (!GetMonitorInfoW(mon, &mi))
+        return false;
     int vsx = GetSystemMetrics(SM_XVIRTUALSCREEN);
     int vsy = GetSystemMetrics(SM_YVIRTUALSCREEN);
     x = mi.rcMonitor.left - vsx;
@@ -408,90 +504,165 @@ bool GetTargetMonitorRect(int& x, int& y, int& w, int& h) {
 HMODULE GetCurrentModuleHandle() {
     HMODULE module = nullptr;
     GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                      GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                          GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                       (LPCWSTR)&GetCurrentModuleHandle, &module);
     return module;
+}
+
+LRESULT CALLBACK MessageWndProc(HWND hWnd,
+                                UINT msg,
+                                WPARAM wParam,
+                                LPARAM lParam);
+
+bool RegisterMessageWindowClass() {
+    if (g_msgClassRegistered)
+        return true;
+    WNDCLASS wc = {};
+    wc.lpfnWndProc = MessageWndProc;
+    wc.hInstance = GetCurrentModuleHandle();
+    wc.lpszClassName = MESSAGE_WINDOW_CLASS;
+    if (!RegisterClass(&wc)) {
+        return false;
+    }
+    g_msgClassRegistered = true;
+    return true;
+}
+
+void UnregisterMessageWindowClass() {
+    if (g_msgClassRegistered) {
+        UnregisterClass(MESSAGE_WINDOW_CLASS, GetCurrentModuleHandle());
+        g_msgClassRegistered = false;
+    }
+}
+
+void CreateMessageWindow() {
+    if (g_msgHwnd)
+        return;
+    if (!RegisterMessageWindowClass())
+        return;
+    g_msgHwnd =
+        CreateWindowEx(0, MESSAGE_WINDOW_CLASS, nullptr, 0, 0, 0, 0, 0, nullptr,
+                       nullptr, GetCurrentModuleHandle(), nullptr);
+    if (!g_msgHwnd) {
+    }
+}
+
+void DestroyMessageWindow() {
+    if (g_msgHwnd) {
+        if (IsWindow(g_msgHwnd))
+            DestroyWindow(g_msgHwnd);
+        g_msgHwnd = NULL;
+    }
 }
 
 bool IsFolderViewWnd(HWND hWnd) {
     WCHAR buffer[64];
     if (!GetClassName(hWnd, buffer, ARRAYSIZE(buffer)) ||
-        _wcsicmp(buffer, L"SysListView32")) return false;
+        _wcsicmp(buffer, L"SysListView32"))
+        return false;
     if (!GetWindowText(hWnd, buffer, ARRAYSIZE(buffer)) ||
-        _wcsicmp(buffer, L"FolderView")) return false;
+        _wcsicmp(buffer, L"FolderView"))
+        return false;
     HWND hParent = GetAncestor(hWnd, GA_PARENT);
-    if (!hParent) return false;
+    if (!hParent)
+        return false;
     if (!GetClassName(hParent, buffer, ARRAYSIZE(buffer)) ||
-        _wcsicmp(buffer, L"SHELLDLL_DefView")) return false;
-    if (GetWindowTextLength(hParent) > 0) return false;
+        _wcsicmp(buffer, L"SHELLDLL_DefView"))
+        return false;
+    if (GetWindowTextLength(hParent) > 0)
+        return false;
     HWND hParent2 = GetAncestor(hParent, GA_PARENT);
-    if (!hParent2) return false;
+    if (!hParent2)
+        return false;
     if ((!GetClassName(hParent2, buffer, ARRAYSIZE(buffer)) ||
-         _wcsicmp(buffer, L"Progman")) && hParent2 != GetShellWindow()) return false;
+         _wcsicmp(buffer, L"Progman")) &&
+        hParent2 != GetShellWindow())
+        return false;
     return true;
 }
 
 using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
 
-bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* procParam) {
-    static const UINT registeredMsg = RegisterWindowMessage(L"Windhawk_RunFromWindowThread_VidWallpaper");
-    struct PARAM { RunFromWindowThreadProc_t proc; void* param; };
+bool RunFromWindowThread(HWND hWnd,
+                         RunFromWindowThreadProc_t proc,
+                         void* procParam) {
+    static const UINT registeredMsg =
+        RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+    struct PARAM {
+        RunFromWindowThreadProc_t proc;
+        void* param;
+    };
     DWORD tid = GetWindowThreadProcessId(hWnd, nullptr);
-    if (!tid) return false;
-    if (tid == GetCurrentThreadId()) { proc(procParam); return true; }
-    HHOOK hook = SetWindowsHookEx(WH_CALLWNDPROC,
+    if (!tid)
+        return false;
+    if (tid == GetCurrentThreadId()) {
+        proc(procParam);
+        return true;
+    }
+    HHOOK hook = SetWindowsHookEx(
+        WH_CALLWNDPROC,
         [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
             if (nCode == HC_ACTION) {
                 const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
-                if (cwp->message == *(UINT*)&registeredMsg) {
+                if (cwp->message == registeredMsg) {
                     PARAM* p = (PARAM*)cwp->lParam;
                     p->proc(p->param);
                 }
             }
             return CallNextHookEx(nullptr, nCode, wParam, lParam);
-        }, nullptr, tid);
-    if (!hook) return false;
-    PARAM param = { proc, procParam };
+        },
+        nullptr, tid);
+    if (!hook)
+        return false;
+    PARAM param = {proc, procParam};
     SendMessage(hWnd, registeredMsg, 0, (LPARAM)&param);
     UnhookWindowsHookEx(hook);
     return true;
 }
 
-HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
-    DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
-    HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, PVOID lpParam) {
+HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
+                                 LPCWSTR lpClassName,
+                                 LPCWSTR lpWindowName,
+                                 DWORD dwStyle,
+                                 int X,
+                                 int Y,
+                                 int nWidth,
+                                 int nHeight,
+                                 HWND hWndParent,
+                                 HMENU hMenu,
+                                 HINSTANCE hInstance,
+                                 PVOID lpParam) {
     HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
-        dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
-    if (!hWnd || !IsFolderViewWnd(hWnd)) return hWnd;
-    if (!g_createVideoTimer) {
-        g_createVideoTimer = SetTimer(nullptr, 0, 1000,
-            [](HWND, UINT, UINT_PTR, DWORD) {
-                KillTimer(nullptr, g_createVideoTimer);
-                g_createVideoTimer = 0;
-                if (!CreateVideoWindow()) {
-                    Wh_Log(L"CreateVideoWindow failed in hook timer");
-                    return;
-                }
-                Wh_ModSettingsChanged();
-            });
+                                         dwStyle, X, Y, nWidth, nHeight,
+                                         hWndParent, hMenu, hInstance, lpParam);
+    if (!hWnd || !IsFolderViewWnd(hWnd))
+        return hWnd;
+    if (!g_videoHwnd) {
+        g_createVideoTimer = SetTimer(nullptr, g_createVideoTimer, 1000,
+                                      [](HWND, UINT, UINT_PTR idEvent, DWORD) {
+                                          KillTimer(nullptr, idEvent);
+                                          g_createVideoTimer = 0;
+                                          StartWallpaper();
+                                      });
     }
     return hWnd;
 }
 
-HWND GetProgmanWnd()
-{
+HWND GetProgmanWnd() {
     HWND hProgman = FindWindowW(L"Progman", nullptr);
-    if (!hProgman) return nullptr;
+    if (!hProgman)
+        return nullptr;
     DWORD progmanProcessId = 0;
     GetWindowThreadProcessId(hProgman, &progmanProcessId);
-    if (progmanProcessId != GetCurrentProcessId()) return nullptr;
+    if (progmanProcessId != GetCurrentProcessId())
+        return nullptr;
     return hProgman;
 }
 
-HWND GetWorkerW()
-{
+HWND GetWorkerW() {
     HWND hProgman = GetProgmanWnd();
-    if (!hProgman) return nullptr;
+    if (!hProgman)
+        return nullptr;
 
     SendMessage(hProgman, 0x052C, 0xD, 0);
     SendMessage(hProgman, 0x052C, 0xD, 1);
@@ -499,9 +670,13 @@ HWND GetWorkerW()
     HWND hWorkerW = nullptr;
     EnumWindows(
         [](HWND hWnd, LPARAM lParam) -> BOOL {
-            if (!FindWindowExW(hWnd, nullptr, L"SHELLDLL_DefView", nullptr)) return TRUE;
+            if (!FindWindowExW(hWnd, nullptr, L"SHELLDLL_DefView", nullptr))
+                return TRUE;
             HWND hWorker = FindWindowExW(nullptr, hWnd, L"WorkerW", nullptr);
-            if (hWorker) { *(HWND*)lParam = hWorker; return FALSE; }
+            if (hWorker) {
+                *(HWND*)lParam = hWorker;
+                return FALSE;
+            }
             return TRUE;
         },
         (LPARAM)&hWorkerW);
@@ -510,70 +685,90 @@ HWND GetWorkerW()
         SendMessage(hProgman, 0x052C, 0, 0);
         EnumWindows(
             [](HWND hWnd, LPARAM lParam) -> BOOL {
-                if (!FindWindowExW(hWnd, nullptr, L"SHELLDLL_DefView", nullptr)) return TRUE;
-                HWND hWorker = FindWindowExW(nullptr, hWnd, L"WorkerW", nullptr);
-                if (hWorker) { *(HWND*)lParam = hWorker; return FALSE; }
+                if (!FindWindowExW(hWnd, nullptr, L"SHELLDLL_DefView", nullptr))
+                    return TRUE;
+                HWND hWorker =
+                    FindWindowExW(nullptr, hWnd, L"WorkerW", nullptr);
+                if (hWorker) {
+                    *(HWND*)lParam = hWorker;
+                    return FALSE;
+                }
                 return TRUE;
             },
             (LPARAM)&hWorkerW);
     }
 
-    if (!hWorkerW) hWorkerW = FindWindowExW(hProgman, nullptr, L"WorkerW", nullptr);
-    if (!hWorkerW) hWorkerW = hProgman;
+    if (!hWorkerW)
+        hWorkerW = FindWindowExW(hProgman, nullptr, L"WorkerW", nullptr);
+    if (!hWorkerW)
+        hWorkerW = hProgman;
     return hWorkerW;
 }
 
-void RunDxgiWorkaroundForExplorerPatcher()
-{
+void RunDxgiWorkaroundForExplorerPatcher() {
     auto dxgiModule = GetModuleHandleW(L"dxgi.dll");
-    if (!dxgiModule) return;
+    if (!dxgiModule)
+        return;
 
     WCHAR dxgiPath[MAX_PATH];
     DWORD len = GetModuleFileNameW(dxgiModule, dxgiPath, MAX_PATH);
-    if (len == 0 || len == MAX_PATH) return;
+    if (len == 0 || len == MAX_PATH)
+        return;
 
     WCHAR epDxgiPath[MAX_PATH];
     GetWindowsDirectoryW(epDxgiPath, MAX_PATH);
     wcscat_s(epDxgiPath, L"\\dxgi.dll");
 
-    if (_wcsicmp(dxgiPath, epDxgiPath) != 0) return;
+    if (_wcsicmp(dxgiPath, epDxgiPath) != 0)
+        return;
 
-    auto dxgiDeclare = (HRESULT(WINAPI*)())GetProcAddress(dxgiModule, "DXGIDeclareAdapterRemovalSupport");
-    if (dxgiDeclare) dxgiDeclare();
+    auto dxgiDeclare = (HRESULT(WINAPI*)())GetProcAddress(
+        dxgiModule, "DXGIDeclareAdapterRemovalSupport");
+    if (dxgiDeclare)
+        dxgiDeclare();
 }
 
-bool InitDirectX()
-{
+bool InitDirectX() {
     HRESULT hr;
 
     UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
     hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags,
-                           nullptr, 0, D3D11_SDK_VERSION, &g_d3dDevice, nullptr, nullptr);
+                           nullptr, 0, D3D11_SDK_VERSION, &g_d3dDevice, nullptr,
+                           nullptr);
     if (FAILED(hr)) {
-        Wh_Log(L"D3D11CreateDevice HARDWARE failed: 0x%08X, trying WARP", hr);
         hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, flags,
-                               nullptr, 0, D3D11_SDK_VERSION, &g_d3dDevice, nullptr, nullptr);
-        if (FAILED(hr)) { Wh_Log(L"D3D11CreateDevice WARP also failed: 0x%08X", hr); return false; }
-        Wh_Log(L"D3D11CreateDevice: using WARP (software)");
+                               nullptr, 0, D3D11_SDK_VERSION, &g_d3dDevice,
+                               nullptr, nullptr);
+        if (FAILED(hr)) {
+            return false;
+        }
     }
 
     hr = g_d3dDevice.As(&g_dxgiDevice);
-    if (FAILED(hr)) { Wh_Log(L"QueryInterface IDXGIDevice failed: 0x%08X", hr); return false; }
+    if (FAILED(hr)) {
+        return false;
+    }
 
     hr = CreateDXGIFactory2(0, IID_PPV_ARGS(&g_dxgiFactory));
-    if (FAILED(hr)) { Wh_Log(L"CreateDXGIFactory2 failed: 0x%08X", hr); return false; }
+    if (FAILED(hr)) {
+        return false;
+    }
 
-    hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, IID_PPV_ARGS(&g_d2dFactory));
-    if (FAILED(hr)) { Wh_Log(L"D2D1CreateFactory failed: 0x%08X", hr); return false; }
+    hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
+                           IID_PPV_ARGS(&g_d2dFactory));
+    if (FAILED(hr)) {
+        return false;
+    }
 
     hr = g_d2dFactory->CreateDevice(g_dxgiDevice.Get(), &g_d2dDevice);
-    if (FAILED(hr)) { Wh_Log(L"D2D CreateDevice failed: 0x%08X", hr); return false; }
+    if (FAILED(hr)) {
+        return false;
+    }
 
     return true;
 }
 
-void UninitDirectX()
-{
+void UninitDirectX() {
     g_frameBitmap.Reset();
     g_swapChain.Reset();
     g_dc.Reset();
@@ -585,12 +780,11 @@ void UninitDirectX()
     g_dxgiFactory.Reset();
     g_dxgiDevice.Reset();
     g_d3dDevice.Reset();
-    g_dxInitialized = false;
-    g_dxInitSucceeded = false;
+    g_lazyInitialized = false;
+    g_initSucceeded = false;
 }
 
-bool CreateSwapChainResources(UINT width, UINT height)
-{
+bool CreateSwapChainResources(UINT width, UINT height) {
     HRESULT hr;
 
     DXGI_FORMAT targetFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
@@ -607,55 +801,83 @@ bool CreateSwapChainResources(UINT width, UINT height)
     scd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     scd.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
 
-    hr = g_dxgiFactory->CreateSwapChainForComposition(g_dxgiDevice.Get(), &scd, nullptr, &g_swapChain);
-    if (FAILED(hr)) { Wh_Log(L"CreateSwapChainForComposition failed: 0x%08X", hr); return false; }
+    hr = g_dxgiFactory->CreateSwapChainForComposition(g_dxgiDevice.Get(), &scd,
+                                                      nullptr, &g_swapChain);
+    if (FAILED(hr)) {
+        return false;
+    }
 
-    hr = g_d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &g_dc);
-    if (FAILED(hr)) { Wh_Log(L"CreateDeviceContext failed: 0x%08X", hr); return false; }
+    hr = g_d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE,
+                                          &g_dc);
+    if (FAILED(hr)) {
+        return false;
+    }
 
     Microsoft::WRL::ComPtr<IDXGISurface2> surface;
     hr = g_swapChain->GetBuffer(0, IID_PPV_ARGS(&surface));
-    if (FAILED(hr)) { Wh_Log(L"GetBuffer failed: 0x%08X", hr); return false; }
+    if (FAILED(hr)) {
+        return false;
+    }
 
     D2D1_BITMAP_PROPERTIES1 bitmapProperties = {};
     bitmapProperties.pixelFormat.alphaMode = d2dAlphaMode;
     bitmapProperties.pixelFormat.format = targetFormat;
-    bitmapProperties.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
+    bitmapProperties.bitmapOptions =
+        D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
 
     Microsoft::WRL::ComPtr<ID2D1Bitmap1> targetBitmap;
-    hr = g_dc->CreateBitmapFromDxgiSurface(surface.Get(), bitmapProperties, &targetBitmap);
-    if (FAILED(hr)) { Wh_Log(L"CreateBitmapFromDxgiSurface failed: 0x%08X", hr); return false; }
+    hr = g_dc->CreateBitmapFromDxgiSurface(surface.Get(), bitmapProperties,
+                                           &targetBitmap);
+    if (FAILED(hr)) {
+        return false;
+    }
 
     g_dc->SetTarget(targetBitmap.Get());
 
-    hr = DCompositionCreateDevice(g_dxgiDevice.Get(), IID_PPV_ARGS(&g_compositionDevice));
-    if (FAILED(hr)) { Wh_Log(L"DCompositionCreateDevice failed: 0x%08X", hr); return false; }
+    hr = DCompositionCreateDevice(g_dxgiDevice.Get(),
+                                  IID_PPV_ARGS(&g_compositionDevice));
+    if (FAILED(hr)) {
+        return false;
+    }
 
-    hr = g_compositionDevice->CreateTargetForHwnd(g_videoHwnd, TRUE, &g_compositionTarget);
-    if (FAILED(hr)) { Wh_Log(L"CreateTargetForHwnd failed: 0x%08X", hr); return false; }
+    hr = g_compositionDevice->CreateTargetForHwnd(g_videoHwnd, TRUE,
+                                                  &g_compositionTarget);
+    if (FAILED(hr)) {
+        return false;
+    }
 
     hr = g_compositionDevice->CreateVisual(&g_compositionVisual);
-    if (FAILED(hr)) { Wh_Log(L"CreateVisual failed: 0x%08X", hr); return false; }
+    if (FAILED(hr)) {
+        return false;
+    }
 
     hr = g_compositionVisual->SetContent(g_swapChain.Get());
-    if (FAILED(hr)) { Wh_Log(L"SetContent failed: 0x%08X", hr); return false; }
+    if (FAILED(hr)) {
+        return false;
+    }
 
     hr = g_compositionTarget->SetRoot(g_compositionVisual.Get());
-    if (FAILED(hr)) { Wh_Log(L"SetRoot failed: 0x%08X", hr); return false; }
+    if (FAILED(hr)) {
+        return false;
+    }
 
     hr = g_compositionDevice->Commit();
-    if (FAILED(hr)) { Wh_Log(L"Commit failed: 0x%08X", hr); return false; }
+    if (FAILED(hr)) {
+        return false;
+    }
 
-    D2D1_BITMAP_PROPERTIES frameBitmapProps = D2D1::BitmapProperties(
-        D2D1::PixelFormat(targetFormat, d2dAlphaMode));
-    hr = g_dc->CreateBitmap(D2D1::SizeU(width, height), nullptr, width * 4, frameBitmapProps, &g_frameBitmap);
-    if (FAILED(hr)) { Wh_Log(L"CreateBitmap (frame) failed: 0x%08X", hr); return false; }
+    D2D1_BITMAP_PROPERTIES frameBitmapProps =
+        D2D1::BitmapProperties(D2D1::PixelFormat(targetFormat, d2dAlphaMode));
+    hr = g_dc->CreateBitmap(D2D1::SizeU(width, height), nullptr, width * 4,
+                            frameBitmapProps, &g_frameBitmap);
+    if (FAILED(hr)) {
+        return false;
+    }
 
     return true;
 }
 
-void ReleaseSwapChainResources()
-{
+void ReleaseSwapChainResources() {
     g_frameBitmap.Reset();
     g_swapChain.Reset();
     g_dc.Reset();
@@ -664,69 +886,77 @@ void ReleaseSwapChainResources()
     g_compositionDevice.Reset();
 }
 
-bool ResizeSwapChain(UINT width, UINT height)
-{
-    if (!g_swapChain || !g_dc) return false;
+bool ResizeSwapChain(UINT width, UINT height) {
+    if (!g_swapChain || !g_dc)
+        return false;
 
     g_dc->SetTarget(nullptr);
 
-    HRESULT hr = g_swapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
+    HRESULT hr =
+        g_swapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
     if (FAILED(hr)) {
-        Wh_Log(L"ResizeBuffers failed: 0x%08X", hr);
         return false;
     }
 
     Microsoft::WRL::ComPtr<IDXGISurface2> surface;
     hr = g_swapChain->GetBuffer(0, IID_PPV_ARGS(&surface));
     if (FAILED(hr)) {
-        Wh_Log(L"GetBuffer failed: 0x%08X", hr);
         return false;
     }
 
     D2D1_BITMAP_PROPERTIES1 bitmapProperties = {};
     bitmapProperties.pixelFormat.alphaMode = D2D1_ALPHA_MODE_PREMULTIPLIED;
     bitmapProperties.pixelFormat.format = DXGI_FORMAT_B8G8R8A8_UNORM;
-    bitmapProperties.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
+    bitmapProperties.bitmapOptions =
+        D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
 
     Microsoft::WRL::ComPtr<ID2D1Bitmap1> targetBitmap;
-    hr = g_dc->CreateBitmapFromDxgiSurface(surface.Get(), bitmapProperties, &targetBitmap);
+    hr = g_dc->CreateBitmapFromDxgiSurface(surface.Get(), bitmapProperties,
+                                           &targetBitmap);
     if (FAILED(hr)) {
-        Wh_Log(L"CreateBitmapFromDxgiSurface failed: 0x%08X", hr);
         return false;
     }
 
     g_dc->SetTarget(targetBitmap.Get());
 
     g_frameSize = (int)(width * height * 4);
-    for (int i = 0; i < VIDEO_QUEUE_SIZE; i++) g_frameQueue[i].clear();
+    for (int i = 0; i < VIDEO_QUEUE_SIZE; i++)
+        g_frameQueue[i].clear();
 
-    D2D1_BITMAP_PROPERTIES frameBitmapProps = D2D1::BitmapProperties(
-        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+    D2D1_BITMAP_PROPERTIES frameBitmapProps =
+        D2D1::BitmapProperties(D2D1::PixelFormat(
+            DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
     g_frameBitmap.Reset();
-    hr = g_dc->CreateBitmap(D2D1::SizeU(width, height), nullptr, width * 4, frameBitmapProps, &g_frameBitmap);
+    hr = g_dc->CreateBitmap(D2D1::SizeU(width, height), nullptr, width * 4,
+                            frameBitmapProps, &g_frameBitmap);
     if (FAILED(hr)) {
-        Wh_Log(L"CreateBitmap (frame) failed: 0x%08X", hr);
         return false;
     }
 
     return true;
 }
 
-bool EnsureDxInitialized()
-{
-    if (g_dxInitialized) return g_dxInitSucceeded;
-    g_dxInitialized = true;
+bool EnsureLazyInitialized() {
+    if (g_lazyInitialized.exchange(true)) {
+        return g_initSucceeded;
+    }
+
     RunDxgiWorkaroundForExplorerPatcher();
-    g_dxInitSucceeded = InitDirectX();
-    return g_dxInitSucceeded;
+
+    if (!InitDirectX()) {
+        return false;
+    }
+
+    g_initSucceeded = true;
+    return true;
 }
 
-bool IsVideoExt(const WCHAR* ext)
-{
-    return ext && (_wcsicmp(ext, L".mp4") == 0 || _wcsicmp(ext, L".mkv") == 0 ||
-        _wcsicmp(ext, L".mov") == 0 || _wcsicmp(ext, L".webm") == 0 ||
-        _wcsicmp(ext, L".avi") == 0 || _wcsicmp(ext, L".m4v") == 0 ||
-        _wcsicmp(ext, L".wmv") == 0);
+bool IsVideoExt(const WCHAR* ext) {
+    return ext &&
+           (_wcsicmp(ext, L".mp4") == 0 || _wcsicmp(ext, L".mkv") == 0 ||
+            _wcsicmp(ext, L".mov") == 0 || _wcsicmp(ext, L".webm") == 0 ||
+            _wcsicmp(ext, L".avi") == 0 || _wcsicmp(ext, L".m4v") == 0 ||
+            _wcsicmp(ext, L".wmv") == 0);
 }
 
 struct VideoEntry {
@@ -737,73 +967,95 @@ struct VideoEntry {
     ULONGLONG size;
 };
 
-std::vector<std::wstring> EnumVideos(const WCHAR* folder)
-{
+std::vector<std::wstring> EnumVideos(const WCHAR* folder) {
     std::vector<VideoEntry> entries;
-    WCHAR path[MAX_PATH];
-    swprintf_s(path, L"%s\\*", folder);
+    std::wstring path = std::wstring(folder) + L"\\*";
     WIN32_FIND_DATAW fd;
-    HANDLE hFind = FindFirstFileW(path, &fd);
-    if (hFind == INVALID_HANDLE_VALUE) return {};
+    HANDLE hFind = FindFirstFileW(path.c_str(), &fd);
+    if (hFind == INVALID_HANDLE_VALUE)
+        return {};
     do {
         if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
             WCHAR ext[_MAX_EXT];
-            _wsplitpath_s(fd.cFileName, NULL, 0, NULL, 0, NULL, 0, ext, _MAX_EXT);
+            _wsplitpath_s(fd.cFileName, NULL, 0, NULL, 0, NULL, 0, ext,
+                          _MAX_EXT);
             if (IsVideoExt(ext)) {
-                WCHAR full[MAX_PATH];
-                swprintf_s(full, L"%s\\%s", folder, fd.cFileName);
-                ULONGLONG size = ((ULONGLONG)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
-                entries.push_back({full, fd.cFileName, fd.ftLastWriteTime, fd.ftCreationTime, size});
+                std::wstring full = std::wstring(folder) + L"\\" + fd.cFileName;
+                ULONGLONG size =
+                    ((ULONGLONG)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
+                entries.push_back({full, fd.cFileName, fd.ftLastWriteTime,
+                                   fd.ftCreationTime, size});
             }
         }
     } while (FindNextFileW(hFind, &fd));
     FindClose(hFind);
 
-    std::sort(entries.begin(), entries.end(), [](const VideoEntry& a, const VideoEntry& b) {
-        switch (g_sortMode) {
-            case 1:
-                if (a.writeTime.dwHighDateTime != b.writeTime.dwHighDateTime)
-                    return a.writeTime.dwHighDateTime < b.writeTime.dwHighDateTime;
-                return a.writeTime.dwLowDateTime < b.writeTime.dwLowDateTime;
-            case 2: return _wcsicmp(a.name.c_str(), b.name.c_str()) < 0;
-            case 3: return _wcsicmp(a.name.c_str(), b.name.c_str()) > 0;
-            case 4:
-                if (a.createTime.dwHighDateTime != b.createTime.dwHighDateTime)
-                    return a.createTime.dwHighDateTime < b.createTime.dwHighDateTime;
-                return a.createTime.dwLowDateTime < b.createTime.dwLowDateTime;
-            case 5:
-                if (a.createTime.dwHighDateTime != b.createTime.dwHighDateTime)
-                    return a.createTime.dwHighDateTime > b.createTime.dwHighDateTime;
-                return a.createTime.dwLowDateTime > b.createTime.dwLowDateTime;
-            case 6: return a.size > b.size;
-            case 7: return a.size < b.size;
-            case 0:
-            default:
-                if (a.writeTime.dwHighDateTime != b.writeTime.dwHighDateTime)
-                    return a.writeTime.dwHighDateTime > b.writeTime.dwHighDateTime;
-                return a.writeTime.dwLowDateTime > b.writeTime.dwLowDateTime;
-        }
-    });
+    std::sort(entries.begin(), entries.end(),
+              [](const VideoEntry& a, const VideoEntry& b) {
+                  switch (g_sortMode) {
+                      case 1:
+                          if (a.writeTime.dwHighDateTime !=
+                              b.writeTime.dwHighDateTime)
+                              return a.writeTime.dwHighDateTime <
+                                     b.writeTime.dwHighDateTime;
+                          return a.writeTime.dwLowDateTime <
+                                 b.writeTime.dwLowDateTime;
+                      case 2:
+                          return _wcsicmp(a.name.c_str(), b.name.c_str()) < 0;
+                      case 3:
+                          return _wcsicmp(a.name.c_str(), b.name.c_str()) > 0;
+                      case 4:
+                          if (a.createTime.dwHighDateTime !=
+                              b.createTime.dwHighDateTime)
+                              return a.createTime.dwHighDateTime <
+                                     b.createTime.dwHighDateTime;
+                          return a.createTime.dwLowDateTime <
+                                 b.createTime.dwLowDateTime;
+                      case 5:
+                          if (a.createTime.dwHighDateTime !=
+                              b.createTime.dwHighDateTime)
+                              return a.createTime.dwHighDateTime >
+                                     b.createTime.dwHighDateTime;
+                          return a.createTime.dwLowDateTime >
+                                 b.createTime.dwLowDateTime;
+                      case 6:
+                          return a.size > b.size;
+                      case 7:
+                          return a.size < b.size;
+                      case 0:
+                      default:
+                          if (a.writeTime.dwHighDateTime !=
+                              b.writeTime.dwHighDateTime)
+                              return a.writeTime.dwHighDateTime >
+                                     b.writeTime.dwHighDateTime;
+                          return a.writeTime.dwLowDateTime >
+                                 b.writeTime.dwLowDateTime;
+                  }
+              });
 
     std::vector<std::wstring> result;
     result.reserve(entries.size());
-    for (auto& e : entries) result.push_back(std::move(e.path));
+    for (auto& e : entries)
+        result.push_back(std::move(e.path));
     return result;
 }
 
-void CALLBACK OnFfmpegExit(PVOID lpParam, BOOLEAN TimerOrWaitFired)
-{
-    if (TimerOrWaitFired) return;
+void CALLBACK OnFfmpegExit(PVOID lpParam, BOOLEAN TimerOrWaitFired) {
+    if (TimerOrWaitFired)
+        return;
     HANDLE proc = (HANDLE)lpParam;
     DWORD code = 0;
     GetExitCodeProcess(proc, &code);
-    if (g_videoHwnd) PostMessage(g_videoHwnd, WM_APP_FFMPEG_EXIT, code, 0);
+    if (g_videoHwnd)
+        PostMessage(g_videoHwnd, WM_APP_FFMPEG_EXIT, code, 0);
 }
 
 bool InitWasapi() {
+    g_wasapiCoInit = false;
     HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
-        Wh_Log(L"InitWasapi: CoInitialize failed 0x%08X", hr);
+    if (hr == S_OK) {
+        g_wasapiCoInit = true;
+    } else if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
         return false;
     }
 
@@ -812,21 +1064,23 @@ bool InitWasapi() {
     WAVEFORMATEX* pwfx = nullptr;
     WAVEFORMATEX fmt = {};
 
-    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&enumerator);
-    if (FAILED(hr)) { Wh_Log(L"InitWasapi: CoCreateInstance enumerator failed 0x%08X", hr); goto fail; }
+    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                          __uuidof(IMMDeviceEnumerator), (void**)&enumerator);
+    if (FAILED(hr)) { goto fail; }
 
     hr = enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device);
     enumerator->Release();
     enumerator = nullptr;
-    if (FAILED(hr)) { Wh_Log(L"InitWasapi: GetDefaultAudioEndpoint failed 0x%08X", hr); goto fail; }
+    if (FAILED(hr)) { goto fail; }
 
-    hr = device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&g_audioClient);
+    hr = device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr,
+                          (void**)&g_audioClient);
     device->Release();
     device = nullptr;
-    if (FAILED(hr)) { Wh_Log(L"InitWasapi: Activate IAudioClient failed 0x%08X", hr); goto fail; }
+    if (FAILED(hr)) { goto fail; }
 
     hr = g_audioClient->GetMixFormat(&pwfx);
-    if (FAILED(hr) || !pwfx) { Wh_Log(L"InitWasapi: GetMixFormat failed 0x%08X", hr); goto fail; }
+    if (FAILED(hr) || !pwfx) { goto fail; }
 
     fmt.wFormatTag = WAVE_FORMAT_IEEE_FLOAT;
     fmt.nChannels = 2;
@@ -836,7 +1090,6 @@ bool InitWasapi() {
     fmt.nAvgBytesPerSec = fmt.nSamplesPerSec * fmt.nBlockAlign;
     fmt.cbSize = 0;
 
-    Wh_Log(L"InitWasapi: using f32le ch=2 rate=48000 blockAlign=%d", fmt.nBlockAlign);
     g_audioBlockAlign = fmt.nBlockAlign;
 
     CoTaskMemFree(pwfx);
@@ -846,34 +1099,51 @@ bool InitWasapi() {
         AUDCLNT_SHAREMODE_SHARED,
         AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_NOPERSIST,
         200000, 0, &fmt, nullptr);
-    if (FAILED(hr)) { Wh_Log(L"InitWasapi: Initialize failed 0x%08X", hr); goto fail; }
+    if (FAILED(hr)) { goto fail; }
 
-    hr = g_audioClient->GetService(__uuidof(IAudioRenderClient), (void**)&g_audioRenderClient);
-    if (FAILED(hr)) { Wh_Log(L"InitWasapi: GetService RenderClient failed 0x%08X", hr); goto fail; }
+    hr = g_audioClient->GetService(__uuidof(IAudioRenderClient),
+                                   (void**)&g_audioRenderClient);
+    if (FAILED(hr)) { goto fail; }
 
-    hr = g_audioClient->GetService(__uuidof(ISimpleAudioVolume), (void**)&g_simpleAudioVol);
-    if (FAILED(hr)) { Wh_Log(L"InitWasapi: GetService SimpleAudioVol failed 0x%08X", hr); goto fail; }
+    hr = g_audioClient->GetService(__uuidof(ISimpleAudioVolume),
+                                   (void**)&g_simpleAudioVol);
+    if (FAILED(hr)) { goto fail; }
 
     g_audioRenderEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    if (!g_audioRenderEvent) { Wh_Log(L"InitWasapi: CreateEvent failed"); goto fail; }
+    if (!g_audioRenderEvent) { goto fail; }
 
     hr = g_audioClient->SetEventHandle(g_audioRenderEvent);
-    if (FAILED(hr)) { Wh_Log(L"InitWasapi: SetEventHandle failed 0x%08X", hr); goto fail; }
+    if (FAILED(hr)) { goto fail; }
 
     hr = g_audioClient->Start();
-    if (FAILED(hr)) { Wh_Log(L"InitWasapi: Start failed 0x%08X", hr); goto fail; }
+    if (FAILED(hr)) { goto fail; }
 
     UpdateSessionVolume();
-    Wh_Log(L"InitWasapi: OK");
     return true;
 
 fail:
-    if (g_audioClient) { g_audioClient->Release(); g_audioClient = nullptr; }
-    if (g_audioRenderClient) { g_audioRenderClient->Release(); g_audioRenderClient = nullptr; }
-    if (g_simpleAudioVol) { g_simpleAudioVol->Release(); g_simpleAudioVol = nullptr; }
-    if (g_audioRenderEvent) { CloseHandle(g_audioRenderEvent); g_audioRenderEvent = NULL; }
-    if (pwfx) CoTaskMemFree(pwfx);
-    CoUninitialize();
+    if (g_audioClient) {
+        g_audioClient->Release();
+        g_audioClient = nullptr;
+    }
+    if (g_audioRenderClient) {
+        g_audioRenderClient->Release();
+        g_audioRenderClient = nullptr;
+    }
+    if (g_simpleAudioVol) {
+        g_simpleAudioVol->Release();
+        g_simpleAudioVol = nullptr;
+    }
+    if (g_audioRenderEvent) {
+        CloseHandle(g_audioRenderEvent);
+        g_audioRenderEvent = NULL;
+    }
+    if (pwfx)
+        CoTaskMemFree(pwfx);
+    if (g_wasapiCoInit) {
+        CoUninitialize();
+        g_wasapiCoInit = false;
+    }
     return false;
 }
 
@@ -883,20 +1153,34 @@ void ShutdownWasapi() {
         g_audioClient->Release();
         g_audioClient = nullptr;
     }
-    if (g_audioRenderClient) { g_audioRenderClient->Release(); g_audioRenderClient = nullptr; }
-    if (g_simpleAudioVol) { g_simpleAudioVol->Release(); g_simpleAudioVol = nullptr; }
-    if (g_audioRenderEvent) { CloseHandle(g_audioRenderEvent); g_audioRenderEvent = NULL; }
-    CoUninitialize();
+    if (g_audioRenderClient) {
+        g_audioRenderClient->Release();
+        g_audioRenderClient = nullptr;
+    }
+    if (g_simpleAudioVol) {
+        g_simpleAudioVol->Release();
+        g_simpleAudioVol = nullptr;
+    }
+    if (g_audioRenderEvent) {
+        CloseHandle(g_audioRenderEvent);
+        g_audioRenderEvent = NULL;
+    }
+    if (g_wasapiCoInit) {
+        CoUninitialize();
+        g_wasapiCoInit = false;
+    }
 }
 
 void UpdateSessionVolume() {
-    if (!g_simpleAudioVol) return;
+    if (!g_simpleAudioVol)
+        return;
     float vol;
     if (g_hotkeyMuteState == 1) {
         vol = 0.0f;
     } else if (g_hotkeyMuteState == 0) {
-        int v = g_audioVolume > 0 ? g_audioVolume : 100;
-        vol = v / 100.0f;
+        vol = g_audioVolume / 100.0f;
+        if (vol <= 0.0f)
+            vol = 1.0f;
     } else {
         if (!g_enableAudio) {
             vol = 0.0f;
@@ -910,169 +1194,256 @@ void UpdateSessionVolume() {
 DWORD WINAPI AudioPlayThread(LPVOID) {
     HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     bool coInitOk = SUCCEEDED(hr) || hr == RPC_E_CHANGED_MODE;
-
+    if (!InitWasapi()) {
+        g_audioRunning = false;
+        if (coInitOk) CoUninitialize();
+        return 0;
+    }
     g_audioSamplesPlayed.store(0);
     g_audioRunning = true;
-    Wh_Log(L"AudioPlayThread: starting");
 
     if (g_videoReadyEvent) {
         WaitForSingleObject(g_videoReadyEvent, 5000);
     }
 
     while (g_audioRunning && g_running) {
-        if (!g_audioPipeRead) { Sleep(10); continue; }
-        if (!g_audioClient || !g_audioRenderClient) { Sleep(10); continue; }
-        if (g_isPaused) { Sleep(1); continue; }
+        if (!g_audioPipeRead) {
+            Sleep(10);
+            continue;
+        }
+        if (!g_audioClient || !g_audioRenderClient) {
+            Sleep(10);
+            continue;
+        }
+        if (g_isPaused) {
+            Sleep(1);
+            continue;
+        }
 
         WaitForSingleObject(g_audioRenderEvent, 100);
 
+        UpdateSessionVolume();
+
         UINT32 padding = 0;
         HRESULT hr2 = g_audioClient->GetCurrentPadding(&padding);
-        if (FAILED(hr2)) break;
+        if (FAILED(hr2))
+            break;
 
         UINT32 bufferSize = 0;
         hr2 = g_audioClient->GetBufferSize(&bufferSize);
-        if (FAILED(hr2)) break;
+        if (FAILED(hr2))
+            break;
 
         UINT32 available = bufferSize - padding;
-        if (available == 0) continue;
+        if (available == 0)
+            continue;
 
         BYTE* dest = nullptr;
         hr2 = g_audioRenderClient->GetBuffer(available, &dest);
-        if (FAILED(hr2)) break;
+        if (FAILED(hr2))
+            break;
 
         DWORD bytesToRead = available * g_audioBlockAlign;
         DWORD totalRead = 0;
         while (totalRead < bytesToRead && g_running) {
             DWORD got = 0;
-            BOOL ok = ReadFile(g_audioPipeRead, dest + totalRead, bytesToRead - totalRead, &got, NULL);
-            if (!ok || got == 0) break;
+            BOOL ok = ReadFile(g_audioPipeRead, dest + totalRead,
+                               bytesToRead - totalRead, &got, NULL);
+            if (!ok || got == 0)
+                break;
             totalRead += got;
         }
 
-        UINT32 framesRead = (g_audioBlockAlign > 0) ? (totalRead / g_audioBlockAlign) : 0;
+        UINT32 framesRead =
+            (g_audioBlockAlign > 0) ? (totalRead / g_audioBlockAlign) : 0;
         if (framesRead < available) {
-            memset(dest + totalRead, 0, (available - framesRead) * g_audioBlockAlign);
+            memset(dest + totalRead, 0,
+                   (available - framesRead) * g_audioBlockAlign);
         }
-        g_audioRenderClient->ReleaseBuffer(framesRead, 0);
-        g_audioSamplesPlayed.fetch_add(framesRead);
+        g_audioRenderClient->ReleaseBuffer(available, 0);
+        g_audioSamplesPlayed.fetch_add(available);
     }
-
-    Wh_Log(L"AudioPlayThread: exiting");
+    ShutdownWasapi();
     g_audioRunning = false;
-    if (coInitOk) CoUninitialize();
+    if (coInitOk)
+        CoUninitialize();
     return 0;
 }
 
-void StopFfmpeg()
-{
-    if (g_ffmpegWaitReg) { UnregisterWait(g_ffmpegWaitReg); g_ffmpegWaitReg = NULL; }
-
+void StopFfmpeg() {
+    g_videoSwitching.store(false);
     g_audioRunning = false;
-    if (g_audioThread) {
-        if (g_audioPipeRead) { CloseHandle(g_audioPipeRead); g_audioPipeRead = NULL; }
-        WaitForSingleObject(g_audioThread, 500);
-        CloseHandle(g_audioThread);
-        g_audioThread = NULL;
-    }
-    ShutdownWasapi();
 
-    if (g_pipeThread) {
-        if (g_pipeRead) { CloseHandle(g_pipeRead); g_pipeRead = NULL; }
-        DWORD waitRet = WaitForSingleObject(g_pipeThread, 500);
-        if (waitRet != WAIT_OBJECT_0) {
-            Wh_Log(L"StopFfmpeg: pipe thread still alive after 500ms, terminating");
-            TerminateThread(g_pipeThread, 0);
+    if (g_ffmpegProc) {
+        TerminateProcess(g_ffmpegProc, 0);
+        DWORD code = STILL_ACTIVE;
+        while (code == STILL_ACTIVE) {
+            Sleep(1);
+            GetExitCodeProcess(g_ffmpegProc, &code);
         }
+    }
+
+    if (g_ffmpegWaitReg) {
+        UnregisterWaitEx(g_ffmpegWaitReg, INVALID_HANDLE_VALUE);
+        g_ffmpegWaitReg = NULL;
+    }
+    if (g_pipeRead) {
+        CloseHandle(g_pipeRead);
+        g_pipeRead = NULL;
+    }
+    if (g_errRead) {
+        CloseHandle(g_errRead);
+        g_errRead = NULL;
+    }
+    if (g_audioPipeRead) {
+        CloseHandle(g_audioPipeRead);
+        g_audioPipeRead = NULL;
+    }
+    if (g_pipeThread) {
+        WaitForSingleObject(g_pipeThread, INFINITE);
         CloseHandle(g_pipeThread);
         g_pipeThread = NULL;
     }
+    if (g_audioThread) {
+        WaitForSingleObject(g_audioThread, INFINITE);
+        CloseHandle(g_audioThread);
+        g_audioThread = NULL;
+    }
+
     g_videoFramesRead.store(0);
     g_videoFramesDisplayed.store(0);
-    if (g_pipeWrite) { CloseHandle(g_pipeWrite); g_pipeWrite = NULL; }
-    if (g_pipeRead)  { CloseHandle(g_pipeRead);  g_pipeRead = NULL; }
-    if (g_ffmpegProc){ TerminateProcess(g_ffmpegProc, 0); CloseHandle(g_ffmpegProc); g_ffmpegProc = NULL; }
-    if (g_videoReadyEvent) { CloseHandle(g_videoReadyEvent); g_videoReadyEvent = NULL; }
+    if (g_videoReadyEvent) {
+        CloseHandle(g_videoReadyEvent);
+        g_videoReadyEvent = NULL;
+    }
+
+    if (g_pipeWrite) {
+        CloseHandle(g_pipeWrite);
+        g_pipeWrite = NULL;
+    }
+    if (g_ffmpegProc) {
+        CloseHandle(g_ffmpegProc);
+        g_ffmpegProc = NULL;
+    }
 }
 
-bool IsDark()
-{
-    DWORD val = 1, cb = sizeof(val); HKEY hKey;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-        RegQueryValueExW(hKey, L"AppsUseLightTheme", NULL, NULL, (LPBYTE)&val, &cb);
+bool IsDark() {
+    DWORD val = 1, cb = sizeof(val);
+    HKEY hKey;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER,
+                      L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\P"
+                      L"ersonalize",
+                      0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        RegQueryValueExW(hKey, L"AppsUseLightTheme", NULL, NULL, (LPBYTE)&val,
+                         &cb);
         RegCloseKey(hKey);
     }
     return val == 0;
 }
 
-bool IsForegroundFull()
-{
+bool IsForegroundFull() {
     HWND fg = GetForegroundWindow();
-    if (!fg) return false;
-    if (fg == GetDesktopWindow() || fg == GetShellWindow()) return false;
+    if (!fg)
+        return false;
+    if (fg == GetDesktopWindow() || fg == GetShellWindow())
+        return false;
     DWORD style = (DWORD)GetWindowLongW(fg, GWL_STYLE);
     if (!(style & WS_MAXIMIZE)) {
-        RECT rc; GetWindowRect(fg, &rc);
+        RECT rc;
+        GetWindowRect(fg, &rc);
         int w = rc.right - rc.left, h = rc.bottom - rc.top;
-        if (w < GetSystemMetrics(SM_CXSCREEN) - 200 || h < GetSystemMetrics(SM_CYSCREEN) - 200) return false;
+        if (w < GetSystemMetrics(SM_CXSCREEN) - 200 ||
+            h < GetSystemMetrics(SM_CYSCREEN) - 200)
+            return false;
     }
     return true;
 }
 
-bool IsHotkeyTargetReady()
-{
-    if (g_pauseOnFullscreen && IsForegroundFull()) return false;
+bool IsHotkeyTargetReady() {
+    if (g_pauseOnFullscreen && IsForegroundFull())
+        return false;
     return true;
 }
 
-bool PathExists(const WCHAR* p) { return GetFileAttributesW(p) != INVALID_FILE_ATTRIBUTES; }
+bool PathExists(const WCHAR* p) {
+    return GetFileAttributesW(p) != INVALID_FILE_ATTRIBUTES;
+}
 
 static std::unordered_map<std::wstring, UINT> g_hkVkMap;
 static std::unordered_map<std::wstring, UINT> g_hkModMap;
 static bool g_hkMapsInit = false;
 
 void InitHotkeyMaps() {
-    if (g_hkMapsInit) return;
+    if (g_hkMapsInit)
+        return;
     g_hkModMap = {
-        {L"ctrl", MOD_CONTROL}, {L"control", MOD_CONTROL},
-        {L"alt", MOD_ALT}, {L"shift", MOD_SHIFT}, {L"win", MOD_WIN},
+        {L"ctrl", MOD_CONTROL}, {L"control", MOD_CONTROL}, {L"alt", MOD_ALT},
+        {L"shift", MOD_SHIFT},  {L"win", MOD_WIN},
     };
-    for (int i = 0; i < 26; i++) g_hkVkMap[std::wstring(1, L'a' + i)] = 0x41 + i;
-    for (int i = 0; i <= 9; i++) g_hkVkMap[std::wstring(1, L'0' + i)] = 0x30 + i;
-    for (int i = 1; i <= 12; i++) { WCHAR buf[8]; swprintf_s(buf, L"f%d", i); g_hkVkMap[buf] = 0x6F + i; }
-    g_hkVkMap[L"space"] = 0x20; g_hkVkMap[L"spacebar"] = 0x20;
-    g_hkVkMap[L"left"] = 0x25; g_hkVkMap[L"up"] = 0x26; g_hkVkMap[L"right"] = 0x27; g_hkVkMap[L"down"] = 0x28;
-    g_hkVkMap[L"enter"] = 0x0D; g_hkVkMap[L"return"] = 0x0D;
-    g_hkVkMap[L"esc"] = 0x1B; g_hkVkMap[L"escape"] = 0x1B;
-    g_hkVkMap[L"tab"] = 0x09; g_hkVkMap[L"backspace"] = 0x08;
-    g_hkVkMap[L"home"] = 0x24; g_hkVkMap[L"end"] = 0x23;
-    g_hkVkMap[L"pageup"] = 0x21; g_hkVkMap[L"pagedown"] = 0x22;
-    g_hkVkMap[L"insert"] = 0x2D; g_hkVkMap[L"delete"] = 0x2E;
-    g_hkVkMap[L"prtsc"] = 0x2C; g_hkVkMap[L"printscreen"] = 0x2C;
+    for (int i = 0; i < 26; i++)
+        g_hkVkMap[std::wstring(1, L'a' + i)] = 0x41 + i;
+    for (int i = 0; i <= 9; i++)
+        g_hkVkMap[std::wstring(1, L'0' + i)] = 0x30 + i;
+    for (int i = 1; i <= 12; i++) {
+        WCHAR buf[8];
+        swprintf_s(buf, L"f%d", i);
+        g_hkVkMap[buf] = 0x6F + i;
+    }
+    g_hkVkMap[L"space"] = 0x20;
+    g_hkVkMap[L"spacebar"] = 0x20;
+    g_hkVkMap[L"left"] = 0x25;
+    g_hkVkMap[L"up"] = 0x26;
+    g_hkVkMap[L"right"] = 0x27;
+    g_hkVkMap[L"down"] = 0x28;
+    g_hkVkMap[L"enter"] = 0x0D;
+    g_hkVkMap[L"return"] = 0x0D;
+    g_hkVkMap[L"esc"] = 0x1B;
+    g_hkVkMap[L"escape"] = 0x1B;
+    g_hkVkMap[L"tab"] = 0x09;
+    g_hkVkMap[L"backspace"] = 0x08;
+    g_hkVkMap[L"home"] = 0x24;
+    g_hkVkMap[L"end"] = 0x23;
+    g_hkVkMap[L"pageup"] = 0x21;
+    g_hkVkMap[L"pagedown"] = 0x22;
+    g_hkVkMap[L"insert"] = 0x2D;
+    g_hkVkMap[L"delete"] = 0x2E;
+    g_hkVkMap[L"prtsc"] = 0x2C;
+    g_hkVkMap[L"printscreen"] = 0x2C;
     g_hkMapsInit = true;
 }
 
 bool ParseHotkey(const WCHAR* str, UINT& mods, UINT& vk) {
     InitHotkeyMaps();
-    mods = 0; vk = 0;
-    if (!str || !*str) return false;
+    mods = 0;
+    vk = 0;
+    if (!str || !*str)
+        return false;
     std::wstring s = str;
-    std::transform(s.begin(), s.end(), s.begin(), [](wchar_t c) { return towlower(c); });
+    std::transform(s.begin(), s.end(), s.begin(),
+                   [](wchar_t c) { return towlower(c); });
     std::wstring cur;
     std::vector<std::wstring> parts;
     for (wchar_t c : s) {
-        if (c == L'+') { if (!cur.empty()) parts.push_back(cur); cur.clear(); }
-        else cur += c;
+        if (c == L'+') {
+            if (!cur.empty())
+                parts.push_back(cur);
+            cur.clear();
+        } else
+            cur += c;
     }
-    if (!cur.empty()) parts.push_back(cur);
-    if (parts.empty()) return false;
+    if (!cur.empty())
+        parts.push_back(cur);
+    if (parts.empty())
+        return false;
     for (size_t i = 0; i < parts.size() - 1; i++) {
         auto it = g_hkModMap.find(parts[i]);
-        if (it == g_hkModMap.end()) return false;
+        if (it == g_hkModMap.end())
+            return false;
         mods |= it->second;
     }
     auto it = g_hkVkMap.find(parts.back());
-    if (it == g_hkVkMap.end()) return false;
+    if (it == g_hkVkMap.end())
+        return false;
     vk = it->second;
     return true;
 }
@@ -1080,27 +1451,38 @@ bool ParseHotkey(const WCHAR* str, UINT& mods, UINT& vk) {
 static bool g_hkRegistered[5] = {false};
 
 void UnregisterAllHotkeys(HWND hwnd) {
-    if (!hwnd) return;
+    if (!hwnd)
+        return;
     for (int id = HK_ID_PAUSE; id <= HK_ID_MUTE; id++) {
-        if (g_hkRegistered[id]) { UnregisterHotKey(hwnd, id); g_hkRegistered[id] = false; }
+        if (g_hkRegistered[id]) {
+            UnregisterHotKey(hwnd, id);
+            g_hkRegistered[id] = false;
+        }
     }
     g_hotkeysRegistered = false;
 }
 
 void RegisterAllHotkeys(HWND hwnd) {
-    if (!hwnd) return;
+    if (!hwnd)
+        return;
     UnregisterAllHotkeys(hwnd);
     bool multi = g_videoList.size() > 1;
-    struct { const WCHAR* str; int id; bool need; } entries[] = {
+    struct {
+        const WCHAR* str;
+        int id;
+        bool need;
+    } entries[] = {
         {g_hotkeyPauseStr, HK_ID_PAUSE, true},
-        {g_hotkeyPrevStr,  HK_ID_PREV,  multi},
-        {g_hotkeyNextStr,  HK_ID_NEXT,  multi},
-        {g_hotkeyMuteStr,  HK_ID_MUTE,  true},
+        {g_hotkeyPrevStr, HK_ID_PREV, multi},
+        {g_hotkeyNextStr, HK_ID_NEXT, multi},
+        {g_hotkeyMuteStr, HK_ID_MUTE, true},
     };
     bool any = false;
     for (auto& e : entries) {
-        if (!e.need) continue;
-        if (!e.str || !*e.str) continue;
+        if (!e.need)
+            continue;
+        if (!e.str || !*e.str)
+            continue;
         UINT mods = 0, vk = 0;
         if (ParseHotkey(e.str, mods, vk)) {
             if (RegisterHotKey(hwnd, e.id, mods | MOD_NOREPEAT, vk)) {
@@ -1112,44 +1494,106 @@ void RegisterAllHotkeys(HWND hwnd) {
     g_hotkeysRegistered = any;
 }
 
+LRESULT CALLBACK MessageWndProc(HWND hWnd,
+                                UINT msg,
+                                WPARAM wParam,
+                                LPARAM lParam) {
+    switch (msg) {
+        case WM_DISPLAYCHANGE:
+            if (!g_unloading.load()) {
+                KillTimer(hWnd, TIMER_ID_MSG_DISPLAY_CHANGE);
+                SetTimer(hWnd, TIMER_ID_MSG_DISPLAY_CHANGE, 200, nullptr);
+            }
+            return 0;
 
-LRESULT CALLBACK VideoWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
-{
+        case WM_APP_CLEANUP:
+            KillTimer(hWnd, TIMER_ID_MSG_DISPLAY_CHANGE);
+            KillTimer(hWnd, TIMER_ID_MSG_RECREATE_VIDEO);
+            if (IsWindow(hWnd))
+                DestroyWindow(hWnd);
+            g_msgHwnd = NULL;
+            return 0;
+
+        case WM_TIMER:
+            if (wParam == TIMER_ID_MSG_DISPLAY_CHANGE) {
+                KillTimer(hWnd, TIMER_ID_MSG_DISPLAY_CHANGE);
+                if (g_unloading.load() || !g_videoHwnd)
+                    return 0;
+                int nx = 0, ny = 0, nw = 0, nh = 0;
+                if (GetTargetMonitorRect(nx, ny, nw, nh) && nw > 0 && nh > 0) {
+                    SetWindowPos(g_videoHwnd, HWND_BOTTOM, nx, ny, nw, nh,
+                                 SWP_NOACTIVATE);
+                }
+            } else if (wParam == TIMER_ID_MSG_RECREATE_VIDEO) {
+                KillTimer(hWnd, TIMER_ID_MSG_RECREATE_VIDEO);
+                g_unloading.store(false);
+                if (!CreateVideoWindow()) {
+                    SetTimer(hWnd, TIMER_ID_MSG_RECREATE_VIDEO, 500, nullptr);
+                    return 0;
+                }
+                Wh_ModSettingsChanged();
+            }
+            return 0;
+    }
+    return DefWindowProcW(hWnd, msg, wParam, lParam);
+}
+
+LRESULT CALLBACK VideoWndProc(HWND hwnd,
+                              UINT msg,
+                              WPARAM wParam,
+                              LPARAM lParam) {
     switch (msg) {
         case WM_NCHITTEST:
             return HTTRANSPARENT;
         case WM_TIMER:
-            if (wParam == TIMER_ID_MANAGER) { ManagerTick(); return 0; }
-            if (wParam == TIMER_ID_RENDERER) { if (g_opacity > 0) RenderFrame(); return 0; }
+            if (wParam == TIMER_ID_MANAGER) {
+                ManagerTick();
+                return 0;
+            }
+            if (wParam == TIMER_ID_RENDERER) {
+                if (g_opacity > 0)
+                    RenderFrame();
+                return 0;
+            }
             break;
         case WM_HOTKEY: {
-            static DWORD s_lastHotkeyTime[5] = {0};
             int id = (int)wParam;
-            if (id < HK_ID_PAUSE || id > HK_ID_MUTE) return 0;
-            DWORD now = GetTickCount();
-            if (now - s_lastHotkeyTime[id] < 250) return 0;
-            s_lastHotkeyTime[id] = now;
+            if (id < HK_ID_PAUSE || id > HK_ID_MUTE)
+                return 0;
+            const WCHAR* name = L"?";
+            if (id == HK_ID_PAUSE)
+                name = L"pause";
+            else if (id == HK_ID_PREV)
+                name = L"prev";
+            else if (id == HK_ID_NEXT)
+                name = L"next";
+            else if (id == HK_ID_MUTE)
+                name = L"mute";
+
             if (id == HK_ID_PAUSE) {
                 g_hotkeyPauseState = (g_hotkeyPauseState == 1) ? 0 : 1;
-                Wh_Log(L"Hotkey pause toggle: state=%d", g_hotkeyPauseState);
+
             } else if (id == HK_ID_PREV) {
-                if (g_videoSwitching.load()) return 0;
+                if (g_videoSwitching.load()) {
+                    return 0;
+                }
                 g_hotkeyPauseState = -1;
                 PlayPrev();
             } else if (id == HK_ID_NEXT) {
-                if (g_videoSwitching.load()) return 0;
+                if (g_videoSwitching.load()) {
+                    return 0;
+                }
                 g_hotkeyPauseState = -1;
                 PlayNext();
             } else if (id == HK_ID_MUTE) {
-                g_hotkeyMuteState = (g_hotkeyMuteState == 1) ? 0 : 1;
-                Wh_Log(L"Hotkey mute toggle: state=%d", g_hotkeyMuteState);
-                if (!g_enableAudio && g_hotkeyMuteState == 0) {
+                bool currentlyMuted = (g_hotkeyMuteState == 1);
+                g_hotkeyMuteState = currentlyMuted ? 0 : 1;
+
+                if (!g_audioClient && g_hotkeyMuteState == 0) {
                     bool isOnNext = (wcscmp(g_applyMode, L"on_next") == 0);
                     if (!isOnNext) {
                         ReloadWallpaper();
                     }
-                } else {
-                    UpdateSessionVolume();
                 }
             }
             return 0;
@@ -1158,16 +1602,9 @@ LRESULT CALLBACK VideoWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             const WINDOWPOS* wp = (const WINDOWPOS*)lParam;
             if (!(wp->flags & SWP_NOSIZE) && g_d3dDevice) {
                 if (ResizeSwapChain((UINT)wp->cx, (UINT)wp->cy)) {
-                    if (g_opacity > 0) RenderFrame();
+                    if (g_opacity > 0)
+                        RenderFrame();
                 }
-            }
-            break;
-        }
-        case WM_DISPLAYCHANGE: {
-            Wh_Log(L"WM_DISPLAYCHANGE: resizing to monitor %d", g_monitor);
-            int nx = 0, ny = 0, nw = 0, nh = 0;
-            if (GetTargetMonitorRect(nx, ny, nw, nh) && nw > 0 && nh > 0) {
-                SetWindowPos(hwnd, HWND_BOTTOM, nx, ny, nw, nh, SWP_NOACTIVATE);
             }
             break;
         }
@@ -1175,53 +1612,65 @@ LRESULT CALLBACK VideoWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             DestroyWindow(hwnd);
             return 0;
         case WM_APP_FFMPEG_EXIT: {
-            if (g_videoSwitching.load()) return 0;
+            if (g_videoSwitching.load())
+                return 0;
             DWORD code = (DWORD)wParam;
             if (code == 0) {
                 g_consecutiveErrors = 0;
-                Wh_Log(L"WM_APP_FFMPEG_EXIT: normal, moving to next");
+
             } else {
                 g_consecutiveErrors++;
-                Wh_Log(L"WM_APP_FFMPEG_EXIT: error=%lu consecutive=%d", code, g_consecutiveErrors);
             }
             if (g_consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-                Wh_Log(L"Too many consecutive errors (%d), stopping auto-play", g_consecutiveErrors);
                 StopFfmpeg();
             } else {
                 PlayNext();
             }
             return 0;
         }
+        case WM_APP_FFMPEG_FAIL: {
+            StopFfmpeg();
+            ReloadWallpaper();
+            return 0;
+        }
+        case WM_APP_SETTINGS_CHANGED:
+            ApplySettingsChanged();
+            return 0;
         case WM_DESTROY:
-            Wh_Log(L"VideoWndProc WM_DESTROY");
+
             StopManagerTimer();
             StopRendererTimer();
             UnregisterAllHotkeys(hwnd);
-            g_running = false;
             ReleaseSwapChainResources();
             g_videoHwnd = NULL;
+            if (!g_unloading.load() && g_msgHwnd) {
+                SetTimer(g_msgHwnd, TIMER_ID_MSG_RECREATE_VIDEO, 500, nullptr);
+            }
             break;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-bool CreateVideoWindow()
-{
-    if (g_videoHwnd && IsWindow(g_videoHwnd)) return true;
+bool CreateVideoWindow() {
+    if (g_videoHwnd && IsWindow(g_videoHwnd)) {
+        return true;
+    }
 
     if (g_opacity <= 0) {
-        Wh_Log(L"CreateVideoWindow: opacity=0, skipping window creation");
         return false;
     }
 
-    if (!EnsureDxInitialized()) { Wh_Log(L"DX init failed"); return false; }
+    if (!EnsureLazyInitialized()) {
+        return false;
+    }
 
     g_workerW = GetWorkerW();
-    if (!g_workerW) { Wh_Log(L"CreateVideoWindow: GetWorkerW failed"); return false; }
+    if (!g_workerW) {
+        return false;
+    }
 
     int x = 0, y = 0, sw = 0, sh = 0;
     if (!GetTargetMonitorRect(x, y, sw, sh)) {
-        Wh_Log(L"CreateVideoWindow: GetTargetMonitorRect failed, using primary");
         sw = GetSystemMetrics(SM_CXSCREEN);
         sh = GetSystemMetrics(SM_CYSCREEN);
     }
@@ -1234,29 +1683,24 @@ bool CreateVideoWindow()
         wc.hbrBackground = NULL;
         ATOM classAtom = RegisterClassExW(&wc);
         if (!classAtom) {
-            DWORD err = GetLastError();
-            if (err == ERROR_CLASS_ALREADY_EXISTS) {
-                UnregisterClassW(L"VidWallpaperWnd", GetCurrentModuleHandle());
-                classAtom = RegisterClassExW(&wc);
-            }
+            return false;
         }
-        if (!classAtom) { Wh_Log(L"RegisterClassExW failed"); return false; }
         g_classRegistered = true;
     }
 
     g_videoHwnd = CreateWindowExW(
-        WS_EX_NOREDIRECTIONBITMAP | WS_EX_NOACTIVATE,
-        L"VidWallpaperWnd", L"",
-        WS_CHILD | WS_VISIBLE,
-        x, y, sw, sh,
-        g_workerW, NULL, GetCurrentModuleHandle(), NULL);
+        WS_EX_NOREDIRECTIONBITMAP | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
+        L"VidWallpaperWnd", L"", WS_CHILD | WS_VISIBLE, x, y, sw, sh, g_workerW,
+        NULL, GetCurrentModuleHandle(), NULL);
 
-    if (!g_videoHwnd) { Wh_Log(L"CreateWindowExW failed err=%lu", GetLastError()); return false; }
+    if (!g_videoHwnd) {
+        return false;
+    }
 
-    SetWindowPos(g_videoHwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    SetWindowPos(g_videoHwnd, HWND_BOTTOM, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 
     if (!CreateSwapChainResources(sw, sh)) {
-        Wh_Log(L"CreateVideoWindow: CreateSwapChainResources failed");
         DestroyWindow(g_videoHwnd);
         g_videoHwnd = NULL;
         return false;
@@ -1269,8 +1713,46 @@ bool CreateVideoWindow()
     return true;
 }
 
-DWORD WINAPI PipeReaderThread(LPVOID)
-{
+DWORD WINAPI PipeReaderThread(LPVOID) {
+    if (g_errRead) {
+        DWORD waited = 0;
+        bool gotData = false;
+        while (waited < 5000 && g_running && !gotData) {
+            DWORD avail = 0;
+            if (PeekNamedPipe(g_pipeRead, NULL, 0, NULL, &avail, NULL) &&
+                avail > 0) {
+                gotData = true;
+                break;
+            }
+            Sleep(50);
+            waited += 50;
+
+            DWORD errAvail = 0;
+            if (PeekNamedPipe(g_errRead, NULL, 0, NULL, &errAvail, NULL) &&
+                errAvail > 0) {
+                char errBuf[2048] = {0};
+                DWORD readNow = 0;
+                if (ReadFile(g_errRead, errBuf, sizeof(errBuf) - 1, &readNow,
+                             NULL) &&
+                    readNow > 0) {
+                    errBuf[readNow] = 0;
+                    int wlen = MultiByteToWideChar(CP_ACP, 0, errBuf, -1, NULL, 0);
+                    if (wlen > 0) {
+                        std::wstring werr(wlen, L'\0');
+                        MultiByteToWideChar(CP_ACP, 0, errBuf, -1, &werr[0], wlen);
+                        Wh_Log(L"[FFMPEG-ERR] %s", werr.c_str());
+                    }
+                }
+            }
+        }
+        if (!gotData && g_running) {
+            if (g_videoHwnd && IsWindow(g_videoHwnd)) {
+                PostMessage(g_videoHwnd, WM_APP_FFMPEG_FAIL, 0, 0);
+            }
+            return 0;
+        }
+    }
+
     int sw = 0, sh = 0;
     if (g_videoHwnd) {
         RECT rc;
@@ -1294,29 +1776,60 @@ DWORD WINAPI PipeReaderThread(LPVOID)
     g_videoFramesRead.store(0);
     g_videoFramesDisplayed.store(0);
 
-    while (g_running && g_pipeRead)
-    {
-        if (!g_frameSize) { Sleep(10); continue; }
+    while (g_running && g_pipeRead) {
+        if (g_errRead) {
+            DWORD errAvail = 0;
+            if (PeekNamedPipe(g_errRead, NULL, 0, NULL, &errAvail, NULL) &&
+                errAvail > 0) {
+                char errBuf[2048] = {0};
+                DWORD readNow = 0;
+                if (ReadFile(g_errRead, errBuf, sizeof(errBuf) - 1, &readNow,
+                             NULL) &&
+                    readNow > 0) {
+                    errBuf[readNow] = 0;
+                    int wlen = MultiByteToWideChar(CP_ACP, 0, errBuf, -1, NULL, 0);
+                    if (wlen > 0) {
+                        std::wstring werr(wlen, L'\0');
+                        MultiByteToWideChar(CP_ACP, 0, errBuf, -1, &werr[0], wlen);
+                        Wh_Log(L"[FFMPEG-ERR] %s", werr.c_str());
+                    }
+                }
+            }
+        }
 
-        if (g_isPaused) { Sleep(1); continue; }
+        if (!g_frameSize) {
+            Sleep(10);
+            continue;
+        }
+
+        if (g_isPaused) {
+            Sleep(1);
+            continue;
+        }
 
         int wIdx = g_queueWriteIdx.load();
         int nextW = (wIdx + 1) % VIDEO_QUEUE_SIZE;
-        if (nextW == g_queueReadIdx.load()) { Sleep(1); continue; }
+        if (nextW == g_queueReadIdx.load()) {
+            Sleep(1);
+            continue;
+        }
 
         std::vector<BYTE>& writeBuf = g_frameQueue[wIdx];
 
         DWORD totalRead = 0;
-        while (totalRead < (DWORD)g_frameSize && g_running)
-        {
+        while (totalRead < (DWORD)g_frameSize && g_running) {
             DWORD got = 0;
-            BOOL okR = ReadFile(g_pipeRead, writeBuf.data() + totalRead, g_frameSize - totalRead, &got, NULL);
-            if (!okR || got == 0) break;
+            BOOL okR = ReadFile(g_pipeRead, writeBuf.data() + totalRead,
+                                g_frameSize - totalRead, &got, NULL);
+            if (!okR || got == 0)
+                break;
             totalRead += got;
         }
-        if (totalRead != (DWORD)g_frameSize) break;
+        if (totalRead != (DWORD)g_frameSize)
+            break;
 
-        if (g_isPaused) continue;
+        if (g_isPaused)
+            continue;
 
         g_queueWriteIdx.store(nextW);
         uint32_t cnt = g_videoFramesRead.fetch_add(1) + 1;
@@ -1330,29 +1843,38 @@ DWORD WINAPI PipeReaderThread(LPVOID)
     return 0;
 }
 
-void RenderFrame()
-{
-    if (g_opacity <= 0) return;
-    if (g_isPaused) return;
-    if (!g_running) return;
-    if (!g_videoHwnd || !IsWindow(g_videoHwnd)) return;
-    if (!g_dc || !g_frameBitmap || !g_swapChain) return;
-    if (!g_frameSize) return;
+void RenderFrame() {
+    if (g_opacity <= 0)
+        return;
+    if (g_isPaused)
+        return;
+    if (!g_running)
+        return;
+    if (!g_videoHwnd || !IsWindow(g_videoHwnd))
+        return;
+    if (!g_dc || !g_frameBitmap || !g_swapChain)
+        return;
+    if (!g_frameSize)
+        return;
 
     int rIdx = g_queueReadIdx.load();
     int wIdx = g_queueWriteIdx.load();
-    if (rIdx == wIdx) return;
+    if (rIdx == wIdx)
+        return;
 
     uint32_t displayed = g_videoFramesDisplayed.load();
     uint32_t expectedFrame;
     if (g_enableAudio && g_audioClient) {
         uint64_t audioSamples = g_audioSamplesPlayed.load();
-        expectedFrame = (uint32_t)(audioSamples * (uint64_t)g_fps / 48000);
-        if (expectedFrame == 0) expectedFrame = 1;
+        expectedFrame =
+            (uint32_t)(audioSamples * (uint64_t)g_effectiveFps / 48000);
+        if (expectedFrame == 0)
+            expectedFrame = 1;
     } else {
         expectedFrame = displayed + 1;
     }
-    if (displayed + 1 > expectedFrame) return;
+    if (displayed + 1 > expectedFrame)
+        return;
 
     int sw = 0, sh = 0;
     RECT rc;
@@ -1360,44 +1882,39 @@ void RenderFrame()
         sw = rc.right - rc.left;
         sh = rc.bottom - rc.top;
     }
-    if (sw <= 0 || sh <= 0) return;
+    if (sw <= 0 || sh <= 0)
+        return;
 
     const std::vector<BYTE>& readBuf = g_frameQueue[rIdx];
 
     HRESULT hr;
     hr = g_frameBitmap->CopyFromMemory(nullptr, readBuf.data(), sw * 4);
     if (FAILED(hr)) {
-        Wh_Log(L"RenderFrame: CopyFromMemory failed 0x%08X", hr);
         return;
     }
 
     g_dc->BeginDraw();
     g_dc->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
     if (g_opacity >= 255) {
-        g_dc->DrawBitmap(
-            g_frameBitmap.Get(),
-            D2D1::RectF(0, 0, (FLOAT)sw, (FLOAT)sh),
-            1.0f,
-            D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
-            D2D1::RectF(0, 0, (FLOAT)sw, (FLOAT)sh));
+        g_dc->DrawBitmap(g_frameBitmap.Get(),
+                         D2D1::RectF(0, 0, (FLOAT)sw, (FLOAT)sh), 1.0f,
+                         D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
+                         D2D1::RectF(0, 0, (FLOAT)sw, (FLOAT)sh));
     } else {
         g_dc->DrawBitmap(
-            g_frameBitmap.Get(),
-            D2D1::RectF(0, 0, (FLOAT)sw, (FLOAT)sh),
-            (FLOAT)g_opacity / 255.0f,
-            D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
+            g_frameBitmap.Get(), D2D1::RectF(0, 0, (FLOAT)sw, (FLOAT)sh),
+            (FLOAT)g_opacity / 255.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
             D2D1::RectF(0, 0, (FLOAT)sw, (FLOAT)sh));
     }
     hr = g_dc->EndDraw();
     if (FAILED(hr)) {
-        Wh_Log(L"RenderFrame: EndDraw failed 0x%08X", hr);
         return;
     }
 
-    if (!g_running) return;
+    if (!g_running)
+        return;
     hr = g_swapChain->Present(0, 0);
     if (FAILED(hr)) {
-        Wh_Log(L"RenderFrame: Present failed 0x%08X", hr);
         return;
     }
 
@@ -1405,15 +1922,16 @@ void RenderFrame()
     g_videoFramesDisplayed.fetch_add(1);
 }
 
-bool StartFfmpeg(const WCHAR* videoPath)
-{
+bool StartFfmpeg(const WCHAR* videoPath) {
+    g_effectiveFps = g_fps;
     g_videoSwitching.store(true);
     StopFfmpeg();
-    if (!g_ffmpegPath[0]) {
-        Wh_Log(L"StartFfmpeg: ffmpegPath not set, searching PATH...");
-        wcscpy_s(g_ffmpegPath, MAX_PATH, L"ffmpeg.exe");
+    g_running = true;
+    std::wstring ffmpegPath = g_ffmpegPath.empty() ? L"ffmpeg.exe" : g_ffmpegPath;
+    if (!videoPath || !*videoPath || !PathExists(videoPath)) {
+        g_videoSwitching.store(false);
+        return false;
     }
-    if (!videoPath || !*videoPath || !PathExists(videoPath)) { g_videoSwitching.store(false); return false; }
 
     g_videoReadyEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
 
@@ -1431,29 +1949,42 @@ bool StartFfmpeg(const WCHAR* videoPath)
 
     SECURITY_ATTRIBUTES sa = {sizeof(sa), NULL, TRUE};
 
-    if (g_enableAudio) {
-        if (!InitWasapi()) {
-            Wh_Log(L"StartFfmpeg: InitWasapi failed, falling back to no audio");
-            g_enableAudio = false;
-        }
+    bool needsAudio;
+    if (g_enableAudio == 0 || g_audioVolume <= 0) {
+        needsAudio = false;
+    } else if (g_hotkeyMuteState >= 0) {
+        needsAudio = (g_hotkeyMuteState == 0);
+    } else {
+        needsAudio = true;
     }
-
     HANDLE hRead = NULL, hWrite = NULL;
-    if (!CreatePipe(&hRead, &hWrite, &sa, 8 * 1024 * 1024)) { Wh_Log(L"CreatePipe failed"); StopFfmpeg(); g_videoSwitching.store(false); return false; }
+    if (!CreatePipe(&hRead, &hWrite, &sa, 8 * 1024 * 1024)) {
+        StopFfmpeg();
+        g_videoSwitching.store(false);
+        return false;
+    }
     SetHandleInformation(hRead, HANDLE_FLAG_INHERIT, 0);
 
     HANDLE hErrRead = NULL, hErrWrite = NULL;
-    if (!CreatePipe(&hErrRead, &hErrWrite, &sa, 65536)) { Wh_Log(L"CreatePipe err failed"); StopFfmpeg(); g_videoSwitching.store(false); return false; }
+    if (!CreatePipe(&hErrRead, &hErrWrite, &sa, 65536)) {
+        StopFfmpeg();
+        g_videoSwitching.store(false);
+        return false;
+    }
     SetHandleInformation(hErrRead, HANDLE_FLAG_INHERIT, 0);
 
     HANDLE hAudioRead = NULL, hAudioWrite = NULL;
-    if (g_enableAudio) {
-        if (!CreatePipe(&hAudioRead, &hAudioWrite, &sa, 2 * 1024 * 1024)) { Wh_Log(L"CreatePipe audio failed"); StopFfmpeg(); g_videoSwitching.store(false); return false; }
+    if (needsAudio) {
+        if (!CreatePipe(&hAudioRead, &hAudioWrite, &sa, 2 * 1024 * 1024)) {
+            StopFfmpeg();
+            g_videoSwitching.store(false);
+            return false;
+        }
         SetHandleInformation(hAudioRead, HANDLE_FLAG_INHERIT, 0);
     }
 
-    g_pipeRead = hRead; g_pipeWrite = hWrite;
-    WCHAR cmd[MAX_PATH * 6];
+    g_pipeRead = hRead;
+    g_pipeWrite = hWrite;
     const WCHAR* vfArg = nullptr;
 
     WCHAR padColor[64] = {0};
@@ -1468,24 +1999,29 @@ bool StartFfmpeg(const WCHAR* videoPath)
     } else if (wcscmp(g_padColorMode, L"dynamic") == 0) {
         wcscpy_s(padColor, g_lastIsDark ? L"color=black" : L"color=white");
     } else if (wcscmp(g_padColorMode, L"custom") == 0 && g_padColorCustom[0]) {
-        const WCHAR* src = g_padColorCustom[0] == L'#' ? g_padColorCustom + 1 : g_padColorCustom;
+        const WCHAR* src = g_padColorCustom[0] == L'#' ? g_padColorCustom + 1
+                                                       : g_padColorCustom;
         size_t len = wcslen(src);
         bool valid = (len == 6 || len == 8);
         if (valid) {
             for (size_t i = 0; i < len; i++) {
                 WCHAR c = src[i];
-                if (!((c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'f') || (c >= L'A' && c <= L'F'))) { valid = false; break; }
+                if (!((c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'f') ||
+                      (c >= L'A' && c <= L'F'))) {
+                    valid = false;
+                    break;
+                }
             }
         }
         WCHAR hex[16] = {0};
         if (!valid) {
-            Wh_Log(L"padColorCustom: invalid value '%s', fallback to black", g_padColorCustom);
             wcscpy_s(hex, L"0xFF000000");
         } else if (len == 6) {
             swprintf_s(hex, L"0xFF%s", src);
         } else {
             swprintf_s(hex, L"0x%s", src);
-            if (src[0] == L'0' && src[1] == L'0') isPadTransparent = true;
+            if (src[0] == L'0' && src[1] == L'0')
+                isPadTransparent = true;
         }
         swprintf_s(padColor, L"color=%s", hex);
     } else {
@@ -1493,59 +2029,96 @@ bool StartFfmpeg(const WCHAR* videoPath)
     }
 
     switch (g_scalingMode) {
-        case 0: vfArg = L" -vf \"scale=%d:%d:force_original_aspect_ratio=increase,crop=%d:%d,fps=%d\""; break;
-        case 1: vfArg = L" -vf \"scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2:%s,fps=%d\""; break;
-        case 3: vfArg = L" -vf \"fps=%d\""; break;
-        default: vfArg = L" -vf \"fps=%d\""; break;
+        case 0:
+            vfArg =
+                L" -vf "
+                L"\"scale=%d:%d:force_original_aspect_ratio=increase,crop=%d:%"
+                L"d,fps=%d\"";
+            break;
+        case 1:
+            vfArg =
+                L" -vf "
+                L"\"scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:"
+                L"(ow-iw)/2:(oh-ih)/2:%s,fps=%d\"";
+            break;
+        case 3:
+            vfArg = L" -vf \"scale=%d:%d,fps=%d\"";
+            break;
+        default:
+            vfArg = L" -vf \"fps=%d\"";
+            break;
     }
     const WCHAR* hwaccelArg = L"";
     switch (g_hwaccelMode) {
-        case 1: hwaccelArg = L" -hwaccel auto"; break;
-        case 2: hwaccelArg = L" -hwaccel d3d12va"; break;
-        case 3: hwaccelArg = L" -hwaccel d3d11va"; break;
-        case 4: hwaccelArg = L" -hwaccel dxva2"; break;
-        case 5: hwaccelArg = L" -hwaccel qsv"; break;
-        case 6: hwaccelArg = L" -hwaccel cuda"; break;
-        case 7: hwaccelArg = L" -hwaccel amf"; break;
-        default: hwaccelArg = L""; break;
+        case 1:
+            hwaccelArg = L" -hwaccel auto";
+            break;
+        case 2:
+            hwaccelArg = L" -hwaccel d3d12va";
+            break;
+        case 3:
+            hwaccelArg = L" -hwaccel d3d11va";
+            break;
+        case 4:
+            hwaccelArg = L" -hwaccel dxva2";
+            break;
+        case 5:
+            hwaccelArg = L" -hwaccel qsv";
+            break;
+        case 6:
+            hwaccelArg = L" -hwaccel cuda";
+            break;
+        case 7:
+            hwaccelArg = L" -hwaccel amf";
+            break;
+        default:
+            hwaccelArg = L"";
+            break;
     }
     const WCHAR* pixFmt = L"bgra";
 
     WCHAR audioArg[256] = {0};
-    bool needsAudio;
-    if (g_hotkeyMuteState >= 0) {
-        needsAudio = (g_hotkeyMuteState == 0);
-    } else {
-        needsAudio = (g_enableAudio != 0);
-    }
     if (needsAudio) {
-        swprintf_s(audioArg, L" -map 0:a? -af volume=1.00,aformat=sample_fmts=fltp:channel_layouts=stereo:sample_rates=48000 -f f32le -ac 2 -ar 48000 pipe:2");
+        swprintf_s(
+            audioArg,
+            L" -map 0:a? -af "
+            L"volume=1.00,aformat=sample_fmts=fltp:channel_layouts=stereo:"
+            L"sample_rates=48000 -f f32le -ac 2 -ar 48000 pipe:2");
     } else {
         wcscpy_s(audioArg, L" -an");
     }
 
-    bool hasVf = (vfArg != nullptr) || g_scalingMode == 2;
-
-    if (hasVf) {
+    std::wstring cmd;
+    if (g_scalingMode == 2) {
         WCHAR vfBuf[512];
-        if (g_scalingMode == 2) {
-            const WCHAR* colorVal = padColor;
-            if (wcsncmp(padColor, L"color=", 6) == 0) colorVal = padColor + 6;
-            swprintf_s(vfBuf,
-                L" -vf \"color=c=%s:s=%dx%d:r=%d,format=%s[bg];[0:v]format=%s[v];[bg][v]overlay=(W-w)/2:(H-h)/2:shortest=1,format=%s,fps=%d\"",
-                colorVal, sw, sh, g_fps, pixFmt, pixFmt, pixFmt, g_fps);
-        } else if (g_scalingMode == 0) {
+        const WCHAR* colorVal = padColor;
+        if (wcsncmp(padColor, L"color=", 6) == 0)
+            colorVal = padColor + 6;
+        swprintf_s(
+            vfBuf,
+            L" -vf "
+            L"\"color=c=%s:s=%dx%d:r=%d,format=%s[bg];[0:v]format=%s[v];[bg][v]"
+            L"overlay=(W-w)/2:(H-h)/2:shortest=1,format=%s,fps=%d\"",
+            colorVal, sw, sh, g_fps, pixFmt, pixFmt, pixFmt, g_fps);
+        cmd = L"\"" + ffmpegPath +
+              L"\" -nostdin -hide_banner -loglevel error" + hwaccelArg +
+              L" -i \"" + videoPath + L"\" -map 0:v -f rawvideo -pix_fmt " +
+              pixFmt + vfBuf + L" -" + audioArg;
+    } else {
+        WCHAR vfBuf[512];
+        if (g_scalingMode == 0) {
             swprintf_s(vfBuf, vfArg, sw, sh, sw, sh, g_fps);
         } else if (g_scalingMode == 1) {
             swprintf_s(vfBuf, vfArg, sw, sh, sw, sh, padColor, g_fps);
+        } else if (g_scalingMode == 3) {
+            swprintf_s(vfBuf, vfArg, sw, sh, g_fps);
         } else {
             swprintf_s(vfBuf, vfArg, g_fps);
         }
-        swprintf_s(cmd, L"\"%s\" -nostdin -hide_banner -loglevel error%s -i \"%s\" -map 0:v -f rawvideo -pix_fmt %s%s -%s",
-            g_ffmpegPath, hwaccelArg, videoPath, pixFmt, vfBuf, audioArg);
-    } else {
-        swprintf_s(cmd, L"\"%s\" -nostdin -hide_banner -loglevel error%s -i \"%s\" -map 0:v -f rawvideo -pix_fmt %s -s %dx%d -vf \"fps=%d\" -%s",
-            g_ffmpegPath, hwaccelArg, videoPath, pixFmt, sw, sh, g_fps, audioArg);
+        cmd = L"\"" + ffmpegPath +
+              L"\" -nostdin -hide_banner -loglevel error" + hwaccelArg +
+              L" -i \"" + videoPath + L"\" -map 0:v -f rawvideo -pix_fmt " +
+              pixFmt + vfBuf + L" -" + audioArg;
     }
 
     DWORD creationFlags = CREATE_NO_WINDOW;
@@ -1555,13 +2128,12 @@ bool StartFfmpeg(const WCHAR* videoPath)
     siEx.StartupInfo.wShowWindow = SW_HIDE;
     siEx.StartupInfo.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
     siEx.StartupInfo.hStdOutput = hWrite;
-    siEx.StartupInfo.hStdError = g_enableAudio ? hAudioWrite : hErrWrite;
+    siEx.StartupInfo.hStdError = needsAudio ? hAudioWrite : hErrWrite;
 
     PROCESS_INFORMATION pi = {0};
-    BOOL ok = CreateProcessW(NULL, cmd, NULL, NULL, TRUE, creationFlags, NULL, NULL,
-        (LPSTARTUPINFOW)&siEx, &pi);
+    BOOL ok = CreateProcessW(NULL, cmd.data(), NULL, NULL, TRUE, creationFlags,
+                             NULL, NULL, (LPSTARTUPINFOW)&siEx, &pi);
     if (!ok) {
-        Wh_Log(L"CreateProcess failed err=%lu", GetLastError());
         StopFfmpeg();
         g_videoSwitching.store(false);
         return false;
@@ -1569,136 +2141,145 @@ bool StartFfmpeg(const WCHAR* videoPath)
     CloseHandle(pi.hThread);
     CloseHandle(hWrite);
     CloseHandle(hErrWrite);
-    if (hAudioWrite) CloseHandle(hAudioWrite);
+    if (hAudioWrite)
+        CloseHandle(hAudioWrite);
     g_pipeWrite = NULL;
-    g_audioPipeRead = g_enableAudio ? hAudioRead : NULL;
+    g_audioPipeRead = needsAudio ? hAudioRead : NULL;
+    g_errRead = hErrRead;
     g_ffmpegProc = pi.hProcess;
 
-    {
-        char errBuf[2048] = {0};
-        DWORD waited = 0;
-        bool gotData = false;
-        while (waited < 5000 && g_running) {
-            DWORD avail = 0;
-            if (PeekNamedPipe(hRead, NULL, 0, NULL, &avail, NULL) && avail > 0) {
-                gotData = true;
-                break;
-            }
-            Sleep(50); waited += 50;
-        }
-        DWORD errAvail = 0;
-        BOOL errPeekOk = PeekNamedPipe(hErrRead, NULL, 0, NULL, &errAvail, NULL);
-        if (errPeekOk && errAvail > 0) {
-            DWORD got = 0;
-            if (ReadFile(hErrRead, errBuf, sizeof(errBuf) - 1, &got, NULL) && got > 0) {
-                errBuf[got] = 0;
-                Wh_Log(L"ffmpeg stderr: %S", errBuf);
-            }
-        }
-        CloseHandle(hErrRead);
-        if (!gotData) {
-            Wh_Log(L"StartFfmpeg: no data from ffmpeg after %dms, aborting", waited);
-            StopFfmpeg(); g_videoSwitching.store(false); return false;
-        }
-    }
-
     if (!g_videoHwnd || !IsWindow(g_videoHwnd)) {
-        Wh_Log(L"StartFfmpeg: video window is not ready");
         StopFfmpeg();
         g_videoSwitching.store(false);
         return false;
     }
 
-    if (g_enableAudio) {
+    if (needsAudio) {
         g_audioThread = CreateThread(NULL, 0, AudioPlayThread, NULL, 0, NULL);
     }
 
     g_pipeThread = CreateThread(NULL, 0, PipeReaderThread, NULL, 0, NULL);
-    RegisterWaitForSingleObject(&g_ffmpegWaitReg, g_ffmpegProc, OnFfmpegExit, g_ffmpegProc, INFINITE, WT_EXECUTEONLYONCE);
-    StartRendererTimer();
+    RegisterWaitForSingleObject(&g_ffmpegWaitReg, g_ffmpegProc, OnFfmpegExit,
+                                g_ffmpegProc, INFINITE, WT_EXECUTEONLYONCE);
+    StartRendererTimer(needsAudio);
     return true;
 }
 
-void ReloadVideoList()
-{
-    if (g_dirChangeHandle != INVALID_HANDLE_VALUE) { FindCloseChangeNotification(g_dirChangeHandle); g_dirChangeHandle = INVALID_HANDLE_VALUE; }
+static bool IsCurrentFileInNewTarget(const WCHAR* newTarget) {
+    if (g_videoList.empty())
+        return false;
+    const WCHAR* currentFile = g_videoList[g_videoIndex].c_str();
 
-    g_videoList.clear(); g_videoIndex = 0; g_consecutiveErrors = 0;
+    DWORD attr = GetFileAttributesW(newTarget);
+    if (attr == INVALID_FILE_ATTRIBUTES)
+        return false;
+
+    if (attr & FILE_ATTRIBUTE_DIRECTORY) {
+        auto newList = EnumVideos(newTarget);
+        for (const auto& f : newList) {
+            if (_wcsicmp(f.c_str(), currentFile) == 0)
+                return true;
+        }
+        return false;
+    }
+
+    return (_wcsicmp(newTarget, currentFile) == 0);
+}
+
+void ReloadVideoList() {
+    if (g_dirChangeHandle != INVALID_HANDLE_VALUE) {
+        FindCloseChangeNotification(g_dirChangeHandle);
+        g_dirChangeHandle = INVALID_HANDLE_VALUE;
+    }
+
+    g_videoList.clear();
+    g_videoIndex = 0;
+    g_consecutiveErrors = 0;
     bool dark = IsDark();
     g_lastIsDark = dark;
 
-    WCHAR target[MAX_PATH] = {0};
-    if (dark) { if (g_darkPath[0]) wcscpy_s(target, g_darkPath); else wcscpy_s(target, g_lightPath); }
-    else wcscpy_s(target, g_lightPath);
+    std::wstring target;
+    if (dark) {
+        if (!g_darkPath.empty())
+            target = g_darkPath;
+        else
+            target = g_lightPath;
+    } else
+        target = g_lightPath;
 
-    DWORD attr = GetFileAttributesW(target);
+    if (target.empty())
+        return;
+
+    DWORD attr = GetFileAttributesW(target.c_str());
     if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY)) {
-        g_videoList = EnumVideos(target);
-        g_dirChangeHandle = FindFirstChangeNotificationW(target, FALSE,
-            FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_SIZE | FILE_NOTIFY_CHANGE_LAST_WRITE);
-    } else if (PathExists(target)) {
+        g_videoList = EnumVideos(target.c_str());
+        g_dirChangeHandle = FindFirstChangeNotificationW(
+            target.c_str(), FALSE,
+            FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_SIZE |
+                FILE_NOTIFY_CHANGE_LAST_WRITE);
+    } else if (PathExists(target.c_str())) {
         g_videoList.emplace_back(target);
     }
 }
 
-void ReloadWallpaper()
-{
+void ReloadWallpaper() {
     if (g_videoSwitching.load()) {
-        Wh_Log(L"ReloadWallpaper: video switching in progress, skipping");
         return;
     }
     StopFfmpeg();
     if (g_opacity <= 0) {
-        Wh_Log(L"ReloadWallpaper: opacity=0, skipping ffmpeg start");
         return;
     }
     if (g_needWindowRecreate && g_videoHwnd && IsWindow(g_videoHwnd)) {
-        Wh_Log(L"ReloadWallpaper: recreating window for monitor change");
         DestroyWindow(g_videoHwnd);
         g_videoHwnd = NULL;
         g_needWindowRecreate = false;
     }
     if (!g_videoHwnd || !IsWindow(g_videoHwnd)) {
         if (!CreateVideoWindow()) {
-            Wh_Log(L"ReloadWallpaper: CreateVideoWindow failed");
             return;
         }
     }
+
     ReloadVideoList();
+
     if (!g_videoList.empty()) {
         const WCHAR* first = g_videoList[g_videoIndex].c_str();
+
         bool ok = StartFfmpeg(first);
-        if (ok) StartManagerTimer();
+
+        if (ok)
+            StartManagerTimer();
     }
 }
 
-bool PlayPrev()
-{
+bool PlayPrev() {
     if (g_videoSwitching.load()) {
-        Wh_Log(L"PlayPrev: video switching in progress, skipping");
         return false;
     }
-    if (g_opacity <= 0) return false;
+    if (g_opacity <= 0)
+        return false;
 
-    if (g_pendingReload) {
-        g_pendingReload = false;
+    if (g_pendingListReload) {
+        g_pendingListReload = false;
         ReloadVideoList();
+        if (g_videoIndex >= g_videoList.size()) {
+            g_videoIndex = g_videoList.empty() ? 0 : (g_videoList.size() - 1);
+        }
     }
     if (g_needWindowRecreate && g_videoHwnd && IsWindow(g_videoHwnd)) {
-        Wh_Log(L"PlayPrev: recreating window for monitor change");
         DestroyWindow(g_videoHwnd);
         g_videoHwnd = NULL;
         g_needWindowRecreate = false;
     }
     if (!g_videoHwnd || !IsWindow(g_videoHwnd)) {
         if (!CreateVideoWindow()) {
-            Wh_Log(L"PlayPrev: CreateVideoWindow failed");
             return false;
         }
     }
-    if (g_videoList.empty()) return false;
+    if (g_videoList.empty())
+        return false;
     if (g_consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-        Wh_Log(L"PlayPrev: too many consecutive errors (%d)", g_consecutiveErrors);
         return false;
     }
     if (g_videoIndex == 0) {
@@ -1716,33 +2297,33 @@ bool PlayPrev()
     return ok;
 }
 
-bool PlayNext()
-{
+bool PlayNext() {
     if (g_videoSwitching.load()) {
-        Wh_Log(L"PlayNext: video switching in progress, skipping");
         return false;
     }
-    if (g_opacity <= 0) return false;
+    if (g_opacity <= 0)
+        return false;
 
-    if (g_pendingReload) {
-        g_pendingReload = false;
+    if (g_pendingListReload) {
+        g_pendingListReload = false;
         ReloadVideoList();
+        if (g_videoIndex >= g_videoList.size()) {
+            g_videoIndex = g_videoList.empty() ? 0 : (g_videoList.size() - 1);
+        }
     }
     if (g_needWindowRecreate && g_videoHwnd && IsWindow(g_videoHwnd)) {
-        Wh_Log(L"PlayNext: recreating window for monitor change");
         DestroyWindow(g_videoHwnd);
         g_videoHwnd = NULL;
         g_needWindowRecreate = false;
     }
     if (!g_videoHwnd || !IsWindow(g_videoHwnd)) {
         if (!CreateVideoWindow()) {
-            Wh_Log(L"PlayNext: CreateVideoWindow failed");
             return false;
         }
     }
-    if (g_videoList.empty()) return false;
+    if (g_videoList.empty())
+        return false;
     if (g_consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-        Wh_Log(L"PlayNext: too many consecutive errors (%d), giving up. Reload to retry.", g_consecutiveErrors);
         return false;
     }
     g_videoIndex = (g_videoIndex + 1) % g_videoList.size();
@@ -1756,159 +2337,249 @@ bool PlayNext()
     return ok;
 }
 
-void Wh_ModSettingsChanged()
-{
-    PCWSTR s = Wh_GetStringSetting(L"ffmpegPath");
-    WCHAR newFfmpegPath[MAX_PATH] = {0};
-    if (s) { wcscpy_s(newFfmpegPath, MAX_PATH, s); Wh_FreeStringSetting(s); }
+void Wh_ModSettingsChanged() {
+    if (g_videoHwnd && IsWindow(g_videoHwnd)) {
+        SendMessage(g_videoHwnd, WM_APP_SETTINGS_CHANGED, 0, 0);
+    } else {
+        ApplySettingsChanged();
+    }
+}
+
+void LoadSettings() {
+    PCWSTR s = Wh_GetStringSetting(L"applyMode");
+    if (s) {
+        wcscpy_s(g_applyMode, 16, s);
+        Wh_FreeStringSetting(s);
+    }
+    if (!g_applyMode[0])
+        wcscpy_s(g_applyMode, 16, L"on_next");
+
+    s = Wh_GetStringSetting(L"ffmpegPath");
+    g_ffmpegPath = s ? s : L"";
+    if (s)
+        Wh_FreeStringSetting(s);
 
     s = Wh_GetStringSetting(L"lightVideoPath");
-    WCHAR newLightPath[MAX_PATH] = {0};
-    if (s) { wcscpy_s(newLightPath, MAX_PATH, s); Wh_FreeStringSetting(s); }
+    g_lightPath = s ? s : L"";
+    if (s)
+        Wh_FreeStringSetting(s);
 
     s = Wh_GetStringSetting(L"darkVideoPath");
-    WCHAR newDarkPath[MAX_PATH] = {0};
-    if (s) { wcscpy_s(newDarkPath, MAX_PATH, s); Wh_FreeStringSetting(s); }
+    g_darkPath = s ? s : L"";
+    if (s)
+        Wh_FreeStringSetting(s);
 
     s = Wh_GetStringSetting(L"sortMode");
     WCHAR sortStr[8] = {0};
-    if (s) { wcscpy_s(sortStr, 8, s); Wh_FreeStringSetting(s); }
-    int newSortMode = _wtoi(sortStr);
-    if (newSortMode < 0 || newSortMode > 7) newSortMode = 0;
+    if (s) {
+        wcscpy_s(sortStr, 8, s);
+        Wh_FreeStringSetting(s);
+    }
+    g_sortMode = _wtoi(sortStr);
+    if (g_sortMode < 0 || g_sortMode > 7)
+        g_sortMode = 0;
 
-    int oldOpacity = g_opacity;
     int pct = Wh_GetIntSetting(L"opacity");
-    int newOpacity = (pct >= 0 && pct <= 100) ? (pct * 255 / 100) : 255;
-    bool oldWasZero = (oldOpacity <= 0);
-    bool newIsZero = (newOpacity <= 0);
+    g_opacity = (pct >= 0 && pct <= 100) ? (pct * 255 / 100) : 255;
 
     int fps = Wh_GetIntSetting(L"fps");
-    if (fps < 10) fps = 10;
-    if (fps > 60) fps = 60;
-    int oldFps = g_fps;
+    if (fps < 10)
+        fps = 10;
+    if (fps > 60)
+        fps = 60;
     g_fps = fps;
 
     s = Wh_GetStringSetting(L"scalingMode");
     WCHAR scalingStr[8] = {0};
-    if (s) { wcscpy_s(scalingStr, 8, s); Wh_FreeStringSetting(s); }
-    int scaling = _wtoi(scalingStr);
-    if (scaling < 0 || scaling > 3) scaling = 0;
-    int oldScaling = g_scalingMode;
-    g_scalingMode = scaling;
+    if (s) {
+        wcscpy_s(scalingStr, 8, s);
+        Wh_FreeStringSetting(s);
+    }
+    g_scalingMode = _wtoi(scalingStr);
+    if (g_scalingMode < 0 || g_scalingMode > 3)
+        g_scalingMode = 0;
 
     s = Wh_GetStringSetting(L"padColorMode");
-    WCHAR newPadMode[32] = {0};
-    if (s) { wcscpy_s(newPadMode, 32, s); Wh_FreeStringSetting(s); }
-    if (!newPadMode[0]) wcscpy_s(newPadMode, 32, L"black");
+    if (s) {
+        wcscpy_s(g_padColorMode, 32, s);
+        Wh_FreeStringSetting(s);
+    }
+    if (!g_padColorMode[0])
+        wcscpy_s(g_padColorMode, 32, L"black");
 
     s = Wh_GetStringSetting(L"padColorCustom");
-    WCHAR newPadCustom[32] = {0};
-    if (s) { wcscpy_s(newPadCustom, 32, s); Wh_FreeStringSetting(s); }
-
-    s = Wh_GetStringSetting(L"applyMode");
-    WCHAR newApplyMode[16] = {0};
-    if (s) { wcscpy_s(newApplyMode, 16, s); Wh_FreeStringSetting(s); }
-    if (!newApplyMode[0]) wcscpy_s(newApplyMode, 16, L"instant");
+    if (s) {
+        wcscpy_s(g_padColorCustom, 32, s);
+        Wh_FreeStringSetting(s);
+    }
+    if (!g_padColorCustom[0])
+        wcscpy_s(g_padColorCustom, 32, L"#000000");
 
     s = Wh_GetStringSetting(L"hwaccelMode");
     WCHAR hwaccelStr[4] = {0};
-    if (s) { wcscpy_s(hwaccelStr, 4, s); Wh_FreeStringSetting(s); }
-    int newHwaccel = _wtoi(hwaccelStr);
-    if (newHwaccel < 0 || newHwaccel > 7) newHwaccel = 1;
+    if (s) {
+        wcscpy_s(hwaccelStr, 4, s);
+        Wh_FreeStringSetting(s);
+    }
+    g_hwaccelMode = _wtoi(hwaccelStr);
+    if (g_hwaccelMode < 0 || g_hwaccelMode > 7)
+        g_hwaccelMode = 1;
 
     s = Wh_GetStringSetting(L"enableAudio");
     WCHAR eaStr[4] = {0};
-    if (s) { wcscpy_s(eaStr, 4, s); Wh_FreeStringSetting(s); }
-    int newEnableAudio = _wtoi(eaStr);
-    if (newEnableAudio < 0 || newEnableAudio > 1) newEnableAudio = 0;
+    if (s) {
+        wcscpy_s(eaStr, 4, s);
+        Wh_FreeStringSetting(s);
+    }
+    g_enableAudio = _wtoi(eaStr);
+    if (g_enableAudio < 0 || g_enableAudio > 1)
+        g_enableAudio = 0;
 
-    int newAudioVolume = Wh_GetIntSetting(L"audioVolume");
-    if (newAudioVolume < 0) newAudioVolume = 0;
-    if (newAudioVolume > 100) newAudioVolume = 100;
+    int vol = Wh_GetIntSetting(L"audioVolume");
+    if (vol < 0)
+        vol = 0;
+    if (vol > 100)
+        vol = 100;
+    g_audioVolume = vol;
 
-    int newMonitor = Wh_GetIntSetting(L"monitor");
-    if (newMonitor < 1) newMonitor = 1;
+    int mon = Wh_GetIntSetting(L"monitor");
+    if (mon < 1)
+        mon = 1;
+    g_monitor = mon;
 
     s = Wh_GetStringSetting(L"pauseOnFullscreen");
     WCHAR pfsStr[4] = {0};
-    if (s) { wcscpy_s(pfsStr, 4, s); Wh_FreeStringSetting(s); }
-    int newPauseOnFullscreen = _wtoi(pfsStr);
-    if (newPauseOnFullscreen < 0 || newPauseOnFullscreen > 1) newPauseOnFullscreen = 1;
+    if (s) {
+        wcscpy_s(pfsStr, 4, s);
+        Wh_FreeStringSetting(s);
+    }
+    g_pauseOnFullscreen = _wtoi(pfsStr);
+    if (g_pauseOnFullscreen < 0 || g_pauseOnFullscreen > 1)
+        g_pauseOnFullscreen = 1;
 
-    WCHAR newHotkeyPause[128] = {0};
-    WCHAR newHotkeyPrev[128] = {0};
-    WCHAR newHotkeyNext[128] = {0};
-    WCHAR newHotkeyMute[128] = {0};
     s = Wh_GetStringSetting(L"hotkeyPause");
-    if (s) { wcscpy_s(newHotkeyPause, 128, s); Wh_FreeStringSetting(s); }
+    if (s) {
+        wcscpy_s(g_hotkeyPauseStr, 128, s);
+        Wh_FreeStringSetting(s);
+    }
     s = Wh_GetStringSetting(L"hotkeyPrev");
-    if (s) { wcscpy_s(newHotkeyPrev, 128, s); Wh_FreeStringSetting(s); }
+    if (s) {
+        wcscpy_s(g_hotkeyPrevStr, 128, s);
+        Wh_FreeStringSetting(s);
+    }
     s = Wh_GetStringSetting(L"hotkeyNext");
-    if (s) { wcscpy_s(newHotkeyNext, 128, s); Wh_FreeStringSetting(s); }
+    if (s) {
+        wcscpy_s(g_hotkeyNextStr, 128, s);
+        Wh_FreeStringSetting(s);
+    }
     s = Wh_GetStringSetting(L"hotkeyMute");
-    if (s) { wcscpy_s(newHotkeyMute, 128, s); Wh_FreeStringSetting(s); }
+    if (s) {
+        wcscpy_s(g_hotkeyMuteStr, 128, s);
+        Wh_FreeStringSetting(s);
+    }
+}
 
-    g_opacity = newOpacity;
-    g_pauseOnFullscreen = newPauseOnFullscreen;
+void StartWallpaper() {
+    if (!CreateVideoWindow()) {
+        return;
+    }
+    CreateMessageWindow();
+    ReloadWallpaper();
+}
+
+void ApplySettingsChanged() {
+    int oldOpacity = g_opacity;
+    int oldFps = g_fps;
+    int oldScaling = g_scalingMode;
+    int oldMonitor = g_monitor;
+    int oldPauseOnFullscreen = g_pauseOnFullscreen;
+    int oldEnableAudio = g_enableAudio;
+    int oldAudioVolume = g_audioVolume;
+    int oldSortMode = g_sortMode;
+    int oldHwaccel = g_hwaccelMode;
+    WCHAR oldPadMode[32] = {0};
+    wcscpy_s(oldPadMode, 32, g_padColorMode);
+    WCHAR oldPadCustom[32] = {0};
+    wcscpy_s(oldPadCustom, 32, g_padColorCustom);
+    WCHAR oldHotkeyPause[128] = {0};
+    wcscpy_s(oldHotkeyPause, 128, g_hotkeyPauseStr);
+    WCHAR oldHotkeyPrev[128] = {0};
+    wcscpy_s(oldHotkeyPrev, 128, g_hotkeyPrevStr);
+    WCHAR oldHotkeyNext[128] = {0};
+    wcscpy_s(oldHotkeyNext, 128, g_hotkeyNextStr);
+    WCHAR oldHotkeyMute[128] = {0};
+    wcscpy_s(oldHotkeyMute, 128, g_hotkeyMuteStr);
+    std::wstring oldFfmpegPath = g_ffmpegPath;
+    std::wstring oldLightPath = g_lightPath;
+    std::wstring oldDarkPath = g_darkPath;
+    WCHAR oldApplyMode[16] = {0};
+    wcscpy_s(oldApplyMode, 16, g_applyMode);
+
+    bool oldWasZero = (oldOpacity <= 0);
+
+    LoadSettings();
+
+    Wh_Log(
+        L"ApplySettingsChanged: loaded new settings, opacity=%d fps=%d "
+        L"hwaccel=%d enableAudio=%d volume=%d monitor=%d sort=%d scaling=%d "
+        L"padMode=%s padCustom=%s",
+        g_opacity, g_fps, g_hwaccelMode, g_enableAudio, g_audioVolume,
+        g_monitor, g_sortMode, g_scalingMode, g_padColorMode, g_padColorCustom);
+
+    bool newIsZero = (g_opacity <= 0);
 
     if (!oldWasZero && newIsZero) {
-        Wh_Log(L"Opacity changed >0→0, stopping ffmpeg");
         StopFfmpeg();
         StopManagerTimer();
         StopRendererTimer();
         return;
     }
 
-    bool needReload =
-        wcscmp(newFfmpegPath, g_ffmpegPath) != 0 ||
-        wcscmp(newLightPath, g_lightPath) != 0 ||
-        wcscmp(newDarkPath, g_darkPath) != 0 ||
-        newSortMode != g_sortMode ||
-        newHwaccel != g_hwaccelMode ||
-        newEnableAudio != g_enableAudio ||
-        newAudioVolume != g_audioVolume ||
-        newMonitor != g_monitor ||
-        g_fps != oldFps ||
-        g_scalingMode != oldScaling ||
-        wcscmp(newPadMode, g_padColorMode) != 0 ||
-        wcscmp(newPadCustom, g_padColorCustom) != 0;
-
-    int oldMonitor = g_monitor;
-    g_monitor = newMonitor;
-    if (oldMonitor != newMonitor) {
-        g_needWindowRecreate = true;
-        Wh_Log(L"Monitor changed %d→%d, will recreate window", oldMonitor, newMonitor);
+    bool needAudioReload = false;
+    if (g_enableAudio != oldEnableAudio || g_audioVolume != oldAudioVolume) {
+        bool oldHasAudio = (oldEnableAudio != 0 && oldAudioVolume > 0);
+        bool newHasAudio = (g_enableAudio != 0 && g_audioVolume > 0);
+        if (newHasAudio && g_audioClient == nullptr && g_ffmpegProc != nullptr) {
+            needAudioReload = true;
+        }
     }
-    wcscpy_s(g_ffmpegPath, MAX_PATH, newFfmpegPath);
-    wcscpy_s(g_lightPath, MAX_PATH, newLightPath);
-    wcscpy_s(g_darkPath, MAX_PATH, newDarkPath);
-    g_sortMode = newSortMode;
-    g_hwaccelMode = newHwaccel;
-    g_enableAudio = newEnableAudio;
-    g_audioVolume = newAudioVolume;
-    UpdateSessionVolume();
-    wcscpy_s(g_padColorMode, 32, newPadMode);
-    wcscpy_s(g_padColorCustom, 32, newPadCustom);
-    wcscpy_s(g_applyMode, 16, newApplyMode);
 
-    bool hotkeysChanged =
-        wcscmp(newHotkeyPause, g_hotkeyPauseStr) != 0 ||
-        wcscmp(newHotkeyPrev, g_hotkeyPrevStr) != 0 ||
-        wcscmp(newHotkeyNext, g_hotkeyNextStr) != 0 ||
-        wcscmp(newHotkeyMute, g_hotkeyMuteStr) != 0;
-    if (hotkeysChanged) {
-        wcscpy_s(g_hotkeyPauseStr, 128, newHotkeyPause);
-        wcscpy_s(g_hotkeyPrevStr, 128, newHotkeyPrev);
-        wcscpy_s(g_hotkeyNextStr, 128, newHotkeyNext);
-        wcscpy_s(g_hotkeyMuteStr, 128, newHotkeyMute);
-        if (g_videoHwnd) RegisterAllHotkeys(g_videoHwnd);
+    bool needPathChange =
+        (g_lightPath != oldLightPath || g_darkPath != oldDarkPath);
+    if (needPathChange && g_ffmpegProc) {
+        std::wstring newTarget;
+        if (g_lastIsDark) {
+            if (!g_darkPath.empty())
+                newTarget = g_darkPath;
+            else
+                newTarget = g_lightPath;
+        } else
+            newTarget = g_lightPath;
+        if (IsCurrentFileInNewTarget(newTarget.c_str())) {
+            needPathChange = false;
+        }
+    }
+
+    bool needReload = g_ffmpegPath != oldFfmpegPath || needPathChange ||
+                      g_sortMode != oldSortMode ||
+                      g_hwaccelMode != oldHwaccel || needAudioReload ||
+                      g_monitor != oldMonitor;
+
+    if (oldMonitor != g_monitor) {
+        g_needWindowRecreate = true;
+    }
+
+    bool hotkeysChanged = wcscmp(g_hotkeyPauseStr, oldHotkeyPause) != 0 ||
+                          wcscmp(g_hotkeyPrevStr, oldHotkeyPrev) != 0 ||
+                          wcscmp(g_hotkeyNextStr, oldHotkeyNext) != 0 ||
+                          wcscmp(g_hotkeyMuteStr, oldHotkeyMute) != 0;
+    if (hotkeysChanged && g_videoHwnd) {
+        RegisterAllHotkeys(g_videoHwnd);
     }
 
     if (oldWasZero && !newIsZero) {
-        Wh_Log(L"Opacity changed 0→%d%, creating window and starting", pct);
         if (!g_videoHwnd || !IsWindow(g_videoHwnd)) {
             if (!CreateVideoWindow()) {
-                Wh_Log(L"Wh_ModSettingsChanged: CreateVideoWindow failed");
                 return;
             }
         }
@@ -1917,39 +2588,75 @@ void Wh_ModSettingsChanged()
     }
 
     if (needReload) {
-        if (wcscmp(newApplyMode, L"on_next") == 0 && g_ffmpegProc != NULL) {
-            g_pendingReload = true;
+        bool isOnNext = (wcscmp(g_applyMode, L"on_next") == 0);
+        bool onlyListChange = needPathChange || g_sortMode != oldSortMode;
+        bool shouldDefer = isOnNext && onlyListChange && g_ffmpegProc != NULL;
+
+        if (shouldDefer) {
+            g_pendingListReload = true;
         } else {
+            g_pendingListReload = false;
             ReloadWallpaper();
+        }
+    } else {
+        if (g_pendingListReload) {
+            g_pendingListReload = false;
         }
     }
 }
 
 void StartManagerTimer() {
-    if (!g_videoHwnd) return;
+    if (!g_videoHwnd)
+        return;
     SetTimer(g_videoHwnd, TIMER_ID_MANAGER, 200, nullptr);
 }
 
 void StopManagerTimer() {
-    if (g_videoHwnd) KillTimer(g_videoHwnd, TIMER_ID_MANAGER);
+    if (g_videoHwnd)
+        KillTimer(g_videoHwnd, TIMER_ID_MANAGER);
 }
 
-void StartRendererTimer() {
-    if (!g_videoHwnd) return;
-    DWORD frameInterval = g_fps > 0 ? 1000 / (DWORD)g_fps : 66;
-    DWORD interval = frameInterval / 2 > 1 ? frameInterval / 2 : 1;
+void StartRendererTimer(bool needsAudio) {
+    if (!g_videoHwnd)
+        return;
+    DWORD frameInterval =
+        g_effectiveFps > 0 ? 1000 / (DWORD)g_effectiveFps : 66;
+    DWORD interval = frameInterval;
+    if (needsAudio) {
+        interval = frameInterval / 2 > 1 ? frameInterval / 2 : 1;
+    }
     SetTimer(g_videoHwnd, TIMER_ID_RENDERER, interval, nullptr);
 }
 
 void StopRendererTimer() {
-    if (g_videoHwnd) KillTimer(g_videoHwnd, TIMER_ID_RENDERER);
+    if (g_videoHwnd)
+        KillTimer(g_videoHwnd, TIMER_ID_RENDERER);
 }
 
 void ManagerTick() {
-    if (!g_hThemeKey) {
-        RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", 0, KEY_NOTIFY, &g_hThemeKey);
-        if (g_hThemeKey) g_hThemeEvt = CreateEventW(NULL, TRUE, FALSE, NULL);
-        g_lastDarkChecked = IsDark();
+    bool isDarkNow = IsDark();
+    if (isDarkNow != g_lastDarkChecked) {
+        g_lastDarkChecked = isDarkNow;
+        g_lastIsDark = isDarkNow;
+
+        std::wstring newTarget;
+        if (isDarkNow) {
+            if (!g_darkPath.empty())
+                newTarget = g_darkPath;
+            else
+                newTarget = g_lightPath;
+        } else
+            newTarget = g_lightPath;
+        if (g_ffmpegProc && IsCurrentFileInNewTarget(newTarget.c_str())) {
+        } else {
+            bool isOnNext = (wcscmp(g_applyMode, L"on_next") == 0);
+            if (isOnNext && g_ffmpegProc) {
+                g_pendingListReload = true;
+            } else {
+                ReloadWallpaper();
+                return;
+            }
+        }
     }
 
     if (g_videoHwnd && IsWindow(g_videoHwnd)) {
@@ -1966,28 +2673,29 @@ void ManagerTick() {
         }
     }
 
-    if (g_hThemeKey && g_hThemeEvt) {
-        ResetEvent(g_hThemeEvt);
-        RegNotifyChangeKeyValue(g_hThemeKey, FALSE, REG_NOTIFY_CHANGE_LAST_SET, g_hThemeEvt, TRUE);
-        DWORD waitRet = WaitForSingleObject(g_hThemeEvt, 0);
-        if (waitRet == WAIT_OBJECT_0) {
-            bool isDark = IsDark();
-            if (isDark != g_lastDarkChecked) {
-                g_lastDarkChecked = isDark;
-                g_lastIsDark = isDark;
-                bool isOnNext = (wcscmp(g_applyMode, L"on_next") == 0);
-                if (isOnNext && g_ffmpegProc) { g_pendingReload = true; }
-                else { ReloadWallpaper(); return; }
-            }
-        }
-    }
-
     if (g_dirChangeHandle != INVALID_HANDLE_VALUE) {
         DWORD waitRet = WaitForSingleObject(g_dirChangeHandle, 0);
         if (waitRet == WAIT_OBJECT_0) {
-            bool isOnNext = (wcscmp(g_applyMode, L"on_next") == 0);
-            if (isOnNext && g_ffmpegProc) { g_pendingReload = true; }
-            else { ReloadWallpaper(); return; }
+            std::wstring currentTarget;
+            if (g_lastIsDark) {
+                if (!g_darkPath.empty())
+                    currentTarget = g_darkPath;
+                else
+                    currentTarget = g_lightPath;
+            } else
+                currentTarget = g_lightPath;
+            bool canSkip = (g_ffmpegProc &&
+                            IsCurrentFileInNewTarget(currentTarget.c_str()));
+            if (canSkip) {
+            } else {
+                bool isOnNext = (wcscmp(g_applyMode, L"on_next") == 0);
+                if (isOnNext && g_ffmpegProc) {
+                    g_pendingListReload = true;
+                } else {
+                    ReloadWallpaper();
+                    return;
+                }
+            }
             FindNextChangeNotification(g_dirChangeHandle);
         }
     }
@@ -2005,59 +2713,66 @@ void ManagerTick() {
     }
 }
 
-BOOL Wh_ModInit()
-{
-    Wh_Log(L"Wh_ModInit: entering");
-    g_mutex = CreateMutexW(NULL, TRUE, L"Local\\VidWallpaperOnlyOne");
-    if (g_mutex && GetLastError() == ERROR_ALREADY_EXISTS) { CloseHandle(g_mutex); g_mutex = NULL; return FALSE; }
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook, (void**)&CreateWindowExW_Original);
-    Wh_Log(L"Wh_ModInit: OK");
+BOOL Wh_ModInit() {
+    LoadSettings();
+
+    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
+                       (void**)&CreateWindowExW_Original);
+
     return TRUE;
 }
 
-void Wh_ModAfterInit()
-{
-    Wh_Log(L"Wh_ModAfterInit: entering");
+void Wh_ModAfterInit() {
     HWND hWorkerW = GetWorkerW();
     if (hWorkerW) {
-        RunFromWindowThread(hWorkerW, [](void*) {
-            if (!CreateVideoWindow()) {
-                Wh_Log(L"CreateVideoWindow failed in AfterInit");
-                return;
-            }
-            Wh_ModSettingsChanged();
-        }, nullptr);
-    } else {
-        Wh_Log(L"Wh_ModAfterInit: WorkerW not found, waiting for FolderView hook");
+        RunFromWindowThread(hWorkerW, [](void*) { StartWallpaper(); }, nullptr);
     }
 }
 
-void Wh_ModUninit()
-{
-    Wh_Log(L"Wh_ModUninit: entering");
+void Wh_ModUninit() {
+    g_unloading = true;
     g_running = false;
-    StopFfmpeg();
-    if (g_dirChangeHandle != INVALID_HANDLE_VALUE) { FindCloseChangeNotification(g_dirChangeHandle); g_dirChangeHandle = INVALID_HANDLE_VALUE; }
 
+    // The timer callback lives in the mod image, so it has to be gone before
+    // the image is unmapped. KillTimer only works from the thread that set the
+    // timer, which is the thread the desktop folder view belongs to.
     if (HWND hProgman = GetProgmanWnd()) {
-        RunFromWindowThread(hProgman, [](void*) {
-            if (g_createVideoTimer) { KillTimer(nullptr, g_createVideoTimer); g_createVideoTimer = 0; }
-            if (g_videoHwnd) { SendMessage(g_videoHwnd, WM_APP_CLEANUP, 0, 0); }
-        }, nullptr);
+        RunFromWindowThread(
+            hProgman,
+            [](void*) {
+                if (g_createVideoTimer) {
+                    KillTimer(nullptr, g_createVideoTimer);
+                    g_createVideoTimer = 0;
+                }
+            },
+            nullptr);
     }
 
-    ReleaseSwapChainResources();
-    if (g_videoHwnd) { DestroyWindow(g_videoHwnd); g_videoHwnd = NULL; }
+    StopFfmpeg();
+    if (g_dirChangeHandle != INVALID_HANDLE_VALUE) {
+        FindCloseChangeNotification(g_dirChangeHandle);
+        g_dirChangeHandle = INVALID_HANDLE_VALUE;
+    }
+
+    // Destroy windows from their owning thread via messages.
+    if (g_videoHwnd && IsWindow(g_videoHwnd)) {
+        SendMessage(g_videoHwnd, WM_APP_CLEANUP, 0, 0);
+    }
+    if (g_msgHwnd && IsWindow(g_msgHwnd)) {
+        SendMessage(g_msgHwnd, WM_APP_CLEANUP, 0, 0);
+    }
+
+    // Unregister classes regardless of whether windows still exist.
     if (g_classRegistered) {
         UnregisterClassW(L"VidWallpaperWnd", GetCurrentModuleHandle());
         g_classRegistered = false;
     }
+    UnregisterMessageWindowClass();
+
     UninitDirectX();
-    for (int i = 0; i < VIDEO_QUEUE_SIZE; i++) g_frameQueue[i].clear();
+
+    for (int i = 0; i < VIDEO_QUEUE_SIZE; i++)
+        g_frameQueue[i].clear();
     g_frameSize = 0;
     g_workerW = NULL;
-    if (g_hThemeKey) { RegCloseKey(g_hThemeKey); g_hThemeKey = NULL; }
-    if (g_hThemeEvt) { CloseHandle(g_hThemeEvt); g_hThemeEvt = NULL; }
-    if (g_mutex) { CloseHandle(g_mutex); g_mutex = NULL; }
-    Wh_Log(L"Wh_ModUninit: done");
 }
