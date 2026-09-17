@@ -1225,9 +1225,6 @@ void UpdateSessionVolume() {
 
     float current = 0.0f;
     g_simpleAudioVol->GetMasterVolume(&current);
-    if (g_snapshotVol >= 0.0f && current != g_snapshotVol) {
-        Wh_Log(L"[VOL] system volume changed: %.3f -> %.3f", g_snapshotVol, current);
-    }
     g_snapshotVol = current;
 
     bool enableChanged = (g_enableAudio != g_lastObservedEnableAudio);
