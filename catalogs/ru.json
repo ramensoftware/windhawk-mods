@@ -12734,7 +12734,7 @@
           7
         ],
         "ratingUsers": 11,
-        "updated": 1788370121000,
+        "updated": 1789671594000,
         "users": 91
       },
       "metadata": {
@@ -12750,7 +12750,7 @@
         ],
         "license": "MIT",
         "name": "Taskbar AI Quota Bars",
-        "version": "1.6.2"
+        "version": "1.6.5"
       }
     },
     "taskbar-audio-device-switcher": {

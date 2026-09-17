@@ -1,3 +1,9 @@
+## 1.6.5 ([Sep 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c037cba16d2734813aab18acabc5302060439454/mods/taskbar-ai-quota.wh.cpp))
+
+- Fix quota bars not appearing on newer Windows 11 taskbars.
+- Fix Anthropic extra-usage amounts and unlimited detection.
+- Fix OpenAI credits-only quota reporting.
+
 ## 1.6.2 ([Sep 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/0a4b26cb2cb709280cbafe70422c4f9aefce092b/mods/taskbar-ai-quota.wh.cpp))
 
 - Add OpenAI credits bar: balance shown against a per-account max, with thresholds and notifications
