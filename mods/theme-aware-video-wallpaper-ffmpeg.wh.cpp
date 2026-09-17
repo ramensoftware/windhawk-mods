@@ -1591,7 +1591,9 @@ LRESULT CALLBACK VideoWndProc(HWND hwnd,
 
                 if (!g_audioClient && g_hotkeyMuteState == 0) {
                     bool isOnNext = (wcscmp(g_applyMode, L"on_next") == 0);
-                    if (!isOnNext) {
+                    if (isOnNext) {
+                        g_pendingListReload = true;
+                    } else {
                         ReloadWallpaper();
                     }
                 }
@@ -1950,12 +1952,11 @@ bool StartFfmpeg(const WCHAR* videoPath) {
     SECURITY_ATTRIBUTES sa = {sizeof(sa), NULL, TRUE};
 
     bool needsAudio;
-    if (g_enableAudio == 0 || g_audioVolume <= 0) {
-        needsAudio = false;
-    } else if (g_hotkeyMuteState >= 0) {
-        needsAudio = (g_hotkeyMuteState == 0);
+    if (g_hotkeyMuteState >= 0) {
+        needsAudio = (g_hotkeyMuteState == 0) &&
+                     g_enableAudio != 0 && g_audioVolume > 0;
     } else {
-        needsAudio = true;
+        needsAudio = (g_enableAudio != 0 && g_audioVolume > 0);
     }
     HANDLE hRead = NULL, hWrite = NULL;
     if (!CreatePipe(&hRead, &hWrite, &sa, 8 * 1024 * 1024)) {
