@@ -2,13 +2,13 @@
 // @id              explorer-tags
 // @name            Explorer Tags
 // @description     Colored tags panel at the bottom of File Explorer's navigation pane, plus a Tags submenu in the file context menu
-// @version         0.2.2
+// @version         0.3.0
 // @author          buedgik
 // @github          https://github.com/buedgik
 // @homepage        https://github.com/buedgik/explorer-tags
 // @license         MIT
 // @include         explorer.exe
-// @compilerOptions -lole32 -loleaut32 -luuid -lshell32 -lshlwapi -lcomctl32 -lgdi32 -lgdiplus
+// @compilerOptions -lole32 -luuid -lshell32 -lshlwapi -lcomctl32 -lgdi32 -lgdiplus
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -16,7 +16,12 @@
 # Explorer Tags
 
 Adds a **Tags** panel at the bottom of File Explorer's navigation pane, below
-"This PC" and "Network".
+"This PC" and "Network", and a **Tags ▸** submenu to the file context menu.
+
+Windows' own tags only work for file types with a property handler, so `.txt`,
+`.zip`, `.rar` and folders can't be tagged. These work for anything.
+
+![The Tags panel and the Tags submenu](https://raw.githubusercontent.com/buedgik/explorer-tags/main/docs/explorer-tags.png)
 
 - **Tag something:** drag files or folders onto the tag.
 - **See a tag's files:** click it. The tab opens the tag's folder, with a
@@ -46,6 +51,18 @@ old name back brings it back.
 The tag registry lives in `%LOCALAPPDATA%` in the `WindhawkExplorerTags`
 folder, outside the tags folder: deleting or moving the tags folder doesn't
 lose them, the shortcuts are recreated.
+
+## Worth knowing
+
+- **Don't put the tags folder in a synced location** (OneDrive, Dropbox, a
+  network share). A shortcut that is missing while the folder syncs looks
+  exactly like a shortcut you deleted, and the tag goes with it.
+- **The tags folder and the registry stay after the mod is disabled**, and so
+  do your shortcuts. Nothing is created until you tag something for the first
+  time.
+- **Changing the tags folder in the settings leaves the old one behind.** The
+  shortcuts are rebuilt under the new folder; the old folders aren't deleted,
+  in case something else lives there.
 */
 // ==/WindhawkModReadme==
 
@@ -62,8 +79,11 @@ lose them, the shortcuts are recreated.
 - folder: ""
   $name: Tags folder
   $description: >-
-    Where the shortcut folders go, one per tag. Empty uses
-    %USERPROFILE%\Tags
+    Where the shortcut folders go, one per tag. Empty uses %USERPROFILE%\Tags.
+
+    Changing this rebuilds the shortcuts under the new folder and leaves the
+    old one behind. Avoid synced folders (OneDrive, Dropbox, network shares):
+    a shortcut missing mid-sync looks like a tag you removed.
 - maxRows: 8
   $name: Visible rows
   $description: With more tags than this, the panel scrolls with the mouse wheel
@@ -81,6 +101,7 @@ lose them, the shortcuts are recreated.
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -111,12 +132,15 @@ struct Settings {
     int maxRows = 8;
 };
 
-Settings g_settings;
+// Shared by pointer: the window threads read the settings on every mouse move,
+// every paint and every drag update, and copying the tag list each time was
+// pure waste. The pointed-to value is never modified, only replaced.
+std::shared_ptr<const Settings> g_settings = std::make_shared<const Settings>();
 SRWLOCK g_settingsLock = SRWLOCK_INIT;
 
-Settings GetSettings() {
+std::shared_ptr<const Settings> GetSettings() {
     AcquireSRWLockShared(&g_settingsLock);
-    Settings copy = g_settings;
+    std::shared_ptr<const Settings> copy = g_settings;
     ReleaseSRWLockShared(&g_settingsLock);
     return copy;
 }
@@ -259,8 +283,9 @@ void LoadSettings() {
     }
     s.maxRows = std::min(s.maxRows, 40);
 
+    auto loaded = std::make_shared<const Settings>(std::move(s));
     AcquireSRWLockExclusive(&g_settingsLock);
-    g_settings = s;
+    g_settings = loaded;
     ReleaseSRWLockExclusive(&g_settingsLock);
 }
 
@@ -772,6 +797,18 @@ void SyncTag(std::vector<Row>& rows, const std::wstring& tag, const std::wstring
         return;
     }
     if (folderState == Exists::No) {
+        // A tag with nothing in it gets no folder: enabling the mod, or
+        // adding a tag in the settings, shouldn't create folders on its own.
+        bool hasRows = false;
+        for (const auto& r : rows) {
+            if (r.tag == tag) {
+                hasRows = true;
+                break;
+            }
+        }
+        if (!hasRows) {
+            return;
+        }
         int err = SHCreateDirectoryExW(nullptr, folder.c_str(), nullptr);
         if (err != ERROR_SUCCESS && err != ERROR_ALREADY_EXISTS) {
             return;
@@ -890,8 +927,17 @@ void Commit(const std::wstring& dbPath, const std::vector<Row>& rows, bool chang
 // Copy of what the worker thread last read, so the window thread (panel
 // counts, checkmarks in the menu) never touches the disk or the mutex.
 std::vector<std::pair<std::wstring, int>> g_counts;
-std::vector<std::pair<std::wstring, std::wstring>> g_tagged;  // (tag, path)
+std::vector<std::pair<std::wstring, std::wstring>> g_tagged;      // (tag, path)
+std::unordered_map<std::wstring, std::wstring> g_linkTargets;     // lnk -> target
 SRWLOCK g_countsLock = SRWLOCK_INIT;
+
+std::wstring LowerPath(const std::wstring& path) {
+    std::wstring lower = path;
+    if (!lower.empty()) {
+        CharLowerBuffW(lower.data(), (DWORD)lower.size());
+    }
+    return lower;
+}
 
 void UpdateCounts(const std::vector<Row>& rows, const Settings& s) {
     std::vector<std::pair<std::wstring, int>> counts;
@@ -906,21 +952,33 @@ void UpdateCounts(const std::vector<Row>& rows, const Settings& s) {
     }
     std::vector<std::pair<std::wstring, std::wstring>> tagged;
     tagged.reserve(rows.size());
+    std::unordered_map<std::wstring, std::wstring> linkTargets;
+    linkTargets.reserve(rows.size());
     for (const auto& r : rows) {
         tagged.push_back({r.tag, r.path});
+        // The worker already knows where every shortcut it wrote points, so
+        // the window thread never has to open a .lnk to find out.
+        linkTargets[LowerPath(s.root + L"\\" + FolderNameFor(r.tag) + L"\\" + r.lnk)] = r.path;
     }
     AcquireSRWLockExclusive(&g_countsLock);
     g_counts.swap(counts);
     g_tagged.swap(tagged);
+    g_linkTargets.swap(linkTargets);
     ReleaseSRWLockExclusive(&g_countsLock);
 }
 
-std::wstring LowerPath(const std::wstring& path) {
-    std::wstring lower = path;
-    if (!lower.empty()) {
-        CharLowerBuffW(lower.data(), (DWORD)lower.size());
+// Window thread: a tag folder shortcut stands for the file it points to. Only
+// the worker's copy is consulted; an unknown shortcut is left as it is, and
+// the worker resolves it from disk when it processes the request.
+std::wstring TargetIfTagShortcutCached(const std::wstring& path) {
+    std::wstring target;
+    AcquireSRWLockShared(&g_countsLock);
+    auto it = g_linkTargets.find(LowerPath(path));
+    if (it != g_linkTargets.end()) {
+        target = it->second;
     }
-    return lower;
+    ReleaseSRWLockShared(&g_countsLock);
+    return target.empty() ? path : target;
 }
 
 struct TagHits {
@@ -1012,7 +1070,7 @@ void SaveLastRoot(const Settings& s) {
 }
 
 void SyncAll() {
-    Settings s = GetSettings();
+    auto s = GetSettings();
     DbLock lock;
     if (!lock.ok()) {
         return;
@@ -1026,21 +1084,21 @@ void SyncAll() {
     VolumeHandles volumes;
     bool changed = false;
     Pending pending;
-    bool rootChanged = RootChangedSinceLastSync(s);
+    bool rootChanged = RootChangedSinceLastSync(*s);
     bool stopped = false;
-    for (const auto& t : s.tags) {
+    for (const auto& t : s->tags) {
         if (Stopping()) {
             stopped = true;
             break;
         }
-        SyncTag(rows, t.name, s.root + L"\\" + t.folderName, rootChanged, volumes, changed, pending);
+        SyncTag(rows, t.name, s->root + L"\\" + t.folderName, rootChanged, volumes, changed, pending);
     }
     stopped |= Stopping();
     Commit(dbPath, rows, changed, pending);
     if (rootChanged && !stopped) {
-        SaveLastRoot(s);
+        SaveLastRoot(*s);
     }
-    UpdateCounts(rows, s);
+    UpdateCounts(rows, *s);
 }
 
 // A shortcut from inside a tag's folder stands for the file it targets.
@@ -1056,11 +1114,11 @@ std::wstring TargetIfTagShortcut(const std::wstring& path, const std::wstring& r
 }
 
 void AddPaths(const std::wstring& tag, const std::vector<std::wstring>& paths) {
-    Settings s = GetSettings();
+    auto s = GetSettings();
     std::wstring folder;
-    for (const auto& t : s.tags) {
+    for (const auto& t : s->tags) {
         if (t.name == tag) {
-            folder = s.root + L"\\" + t.folderName;
+            folder = s->root + L"\\" + t.folderName;
         }
     }
     if (folder.empty()) {
@@ -1082,23 +1140,30 @@ void AddPaths(const std::wstring& tag, const std::vector<std::wstring>& paths) {
     VolumeHandles volumes;
     bool changed = false;
     Pending pending;
-    SyncTag(rows, tag, folder, RootChangedSinceLastSync(s), volumes, changed, pending);
+    SyncTag(rows, tag, folder, RootChangedSinceLastSync(*s), volumes, changed, pending);
+    if (CheckExists(folder) == Exists::No) {
+        // First file of this tag: this is where its folder is born.
+        int err = SHCreateDirectoryExW(nullptr, folder.c_str(), nullptr);
+        if (err == ERROR_SUCCESS) {
+            NotifyShell(SHCNE_MKDIR, folder);
+        }
+    }
     if (CheckExists(folder) != Exists::Yes) {
         Commit(dbPath, rows, changed, pending);
         return;
     }
 
-    std::wstring rootPrefix = s.root + L"\\";
+    std::wstring rootPrefix = s->root + L"\\";
     for (std::wstring path : paths) {
         if (Stopping()) {
             break;
         }
-        path = TargetIfTagShortcut(path, s.root);
+        path = TargetIfTagShortcut(path, s->root);
         if (!IsUtf8Safe(path) || !PathExists(path)) {
             continue;
         }
         if (_wcsnicmp(path.c_str(), rootPrefix.c_str(), rootPrefix.size()) == 0 ||
-            _wcsicmp(path.c_str(), s.root.c_str()) == 0) {
+            _wcsicmp(path.c_str(), s->root.c_str()) == 0) {
             // The tag folders themselves don't get tagged.
             continue;
         }
@@ -1131,12 +1196,12 @@ void AddPaths(const std::wstring& tag, const std::vector<std::wstring>& paths) {
         changed = true;
     }
     Commit(dbPath, rows, changed, pending);
-    UpdateCounts(rows, s);
+    UpdateCounts(rows, *s);
 }
 
 // Empty tag: removes all tags from these files.
 void RemovePaths(const std::wstring& tag, const std::vector<std::wstring>& paths) {
-    Settings s = GetSettings();
+    auto s = GetSettings();
     DbLock lock;
     if (!lock.ok()) {
         return;
@@ -1154,7 +1219,7 @@ void RemovePaths(const std::wstring& tag, const std::vector<std::wstring>& paths
         if (Stopping()) {
             break;
         }
-        std::wstring path = TargetIfTagShortcut(original, s.root);
+        std::wstring path = TargetIfTagShortcut(original, s->root);
         std::wstring vol, id;
         GetFileIdentity(path, vol, id);
         for (size_t i = 0; i < rows.size();) {
@@ -1165,7 +1230,7 @@ void RemovePaths(const std::wstring& tag, const std::vector<std::wstring>& paths
                 // The shortcut goes away after saving; the watcher sees it
                 // disappear and no longer finds the row, so there's nothing
                 // to undo.
-                pending.deletes.push_back({s.root + L"\\" + FolderNameFor(r.tag), r.lnk});
+                pending.deletes.push_back({s->root + L"\\" + FolderNameFor(r.tag), r.lnk});
                 rows.erase(rows.begin() + i);
                 changed = true;
                 continue;
@@ -1174,7 +1239,7 @@ void RemovePaths(const std::wstring& tag, const std::vector<std::wstring>& paths
         }
     }
     Commit(dbPath, rows, changed, pending);
-    UpdateCounts(rows, s);
+    UpdateCounts(rows, *s);
 }
 
 // ---------------------------------------------------------------------------
@@ -1226,8 +1291,10 @@ void QueueSync() {
     SetEvent(g_workEvent);
 }
 
+// The root is never created here: enabling the mod shouldn't create folders.
+// It appears on the first tag, drop or tag click, and until then there is
+// nothing to watch.
 HANDLE WatchRoot(const std::wstring& root) {
-    SHCreateDirectoryExW(nullptr, root.c_str(), nullptr);
     return FindFirstChangeNotificationW(root.c_str(), TRUE,
                                         FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME);
 }
@@ -1235,7 +1302,7 @@ HANDLE WatchRoot(const std::wstring& root) {
 DWORD WINAPI WorkerThread(LPVOID) {
     HRESULT hrCom = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
-    std::wstring root = GetSettings().root;
+    std::wstring root = GetSettings()->root;
     HANDLE change = WatchRoot(root);
 
     SyncAll();
@@ -1344,10 +1411,12 @@ struct Panel {
     HWND wnd = nullptr;
     TagDropTarget* drop = nullptr;
     int panelHeight = 0;
+    std::wstring currentFolder;  // folder shown in the tab, for the open tag row
     int hot = -1;
     int pressed = -1;
     int dropHot = -1;
     int scroll = 0;
+    int wheelDelta = 0;
     bool trackingLeave = false;
     bool inLayout = false;
     HFONT iconFont = nullptr;
@@ -1367,7 +1436,7 @@ UINT g_msgRefresh;
 UINT g_msgLayout;
 UINT g_msgCancelMenu;
 
-bool g_collapsed;
+std::atomic<bool> g_collapsed;
 ULONG_PTR g_gdiplusToken;
 
 // Always looked up again: a stored HWND could die and be reused by a window
@@ -1481,14 +1550,14 @@ void LayoutPanel(Panel* p) {
     // Touching the tree can make DirectUI touch the container, which calls
     // this again.
     p->inLayout = true;
-    Settings s = GetSettings();
+    auto s = GetSettings();
     RECT rc;
     GetClientRect(p->sink, &rc);
     int width = rc.right;
     int height = rc.bottom;
 
-    Metrics m = GetMetrics(p, s, -1);
-    int wanted = WantedHeight(p, s);
+    Metrics m = GetMetrics(p, *s, -1);
+    int wanted = WantedHeight(p, *s);
     // The tree always keeps at least two rows.
     int ph = std::max(0, std::min(wanted, height - m.rowH * 2));
     p->panelHeight = ph;
@@ -1568,12 +1637,12 @@ void OpenTag(Panel* p, int index, bool newWindow) {
     // Count first, then check g_unloading: in the reverse order, unloading
     // could see zero between the two.
     BusyScope busy;
-    Settings s = GetSettings();
-    if (g_unloading || index < 0 || index >= (int)s.tags.size()) {
+    auto s = GetSettings();
+    if (g_unloading || index < 0 || index >= (int)s->tags.size()) {
         return;
     }
     HWND panelWnd = p->wnd;
-    std::wstring folder = s.root + L"\\" + s.tags[index].folderName;
+    std::wstring folder = s->root + L"\\" + s->tags[index].folderName;
     // On a network folder (share or mapped drive) this would hang the window
     // while the server doesn't respond; there, the worker thread creates it.
     WCHAR driveRoot[4] = {folder.size() > 2 ? folder[0] : L'\0', L':', L'\\', L'\0'};
@@ -1663,8 +1732,8 @@ void PaintPanel(Panel* p, HDC target) {
         return;
     }
 
-    Settings s = GetSettings();
-    Metrics m = GetMetrics(p, s, height);
+    auto s = GetSettings();
+    Metrics m = GetMetrics(p, *s, height);
     ClampScroll(p, m);
     Colors c = GetColors(p);
     int dpi = m.dpi;
@@ -1682,10 +1751,10 @@ void PaintPanel(Panel* p, HDC target) {
     FillRect(hdc, &sep, sepBrush);
     DeleteObject(sepBrush);
 
-    std::wstring current = GetCurrentFolder(p);
     int selected = HIT_NONE;
+    const std::wstring& current = p->currentFolder;
     for (int i = 0; i < m.tagCount; i++) {
-        std::wstring folder = s.root + L"\\" + s.tags[i].folderName;
+        std::wstring folder = s->root + L"\\" + s->tags[i].folderName;
         if (!current.empty() && _wcsicmp(current.c_str(), folder.c_str()) == 0) {
             selected = i;
         }
@@ -1697,12 +1766,11 @@ void PaintPanel(Panel* p, HDC target) {
     {
         Gdiplus::Graphics g(hdc);
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-        // A selecao da arvore ocupa a largura toda (medido).
-        int inset = 0;
+        // The tree's selection spans the full width (measured).
         int radius = Dip(4, dpi);
 
         if (p->hot == HIT_HEADER) {
-            FillRounded(g, c.hot, inset, headerTop, width - inset * 2, m.rowH, radius);
+            FillRounded(g, c.hot, 0, headerTop, width, m.rowH, radius);
         }
         for (int row = 0; row < m.rowsShown; row++) {
             int i = row + p->scroll;
@@ -1711,14 +1779,14 @@ void PaintPanel(Panel* p, HDC target) {
             }
             int y = rowsTop + row * m.rowH;
             if (i == p->dropHot) {
-                FillRounded(g, Blend(c.bk, s.tags[i].color, 0.35), inset, y, width - inset * 2, m.rowH, radius);
+                FillRounded(g, Blend(c.bk, s->tags[i].color, 0.35), 0, y, width, m.rowH, radius);
             } else if (i == selected) {
-                FillRounded(g, c.selected, inset, y, width - inset * 2, m.rowH, radius);
+                FillRounded(g, c.selected, 0, y, width, m.rowH, radius);
             } else if (i == p->hot) {
-                FillRounded(g, c.hot, inset, y, width - inset * 2, m.rowH, radius);
+                FillRounded(g, c.hot, 0, y, width, m.rowH, radius);
             }
 
-            COLORREF tc = s.tags[i].color;
+            COLORREF tc = s->tags[i].color;
             Gdiplus::SolidBrush dot(Gdiplus::Color(255, GetRValue(tc), GetGValue(tc), GetBValue(tc)));
             Gdiplus::REAL d = (Gdiplus::REAL)Dip(10, dpi);
             Gdiplus::REAL cx = (Gdiplus::REAL)Dip(47, dpi);
@@ -1752,7 +1820,7 @@ void PaintPanel(Panel* p, HDC target) {
                 break;
             }
             int y = rowsTop + row * m.rowH;
-            int count = GetCount(s.tags[i].name);
+            int count = GetCount(s->tags[i].name);
             int countW = 0;
             if (count > 0) {
                 std::wstring countText = std::to_wstring(count);
@@ -1763,7 +1831,7 @@ void PaintPanel(Panel* p, HDC target) {
                 DrawTextAt(hdc, countText, cr, c.dim, DT_RIGHT);
             }
             RECT tr = {Dip(61, dpi), y, width - Dip(12, dpi) - countW, y + m.rowH};
-            DrawTextAt(hdc, s.tags[i].name, tr, c.text, DT_LEFT);
+            DrawTextAt(hdc, s->tags[i].name, tr, c.text, DT_LEFT);
         }
     }
 
@@ -1780,8 +1848,8 @@ int HitTest(Panel* p, POINT pt) {
     if (pt.x < 0 || pt.x >= rc.right || pt.y < 0 || pt.y >= rc.bottom) {
         return HIT_NONE;
     }
-    Settings s = GetSettings();
-    Metrics m = GetMetrics(p, s, rc.bottom);
+    auto s = GetSettings();
+    Metrics m = GetMetrics(p, *s, rc.bottom);
     ClampScroll(p, m);
     if (pt.y >= m.topPad && pt.y < m.topPad + m.rowH) {
         return HIT_HEADER;
@@ -1983,10 +2051,10 @@ class TagDropTarget final : public IDropTarget {
         SetDropHot(HIT_NONE);
 
         if (index >= 0 && *effect != DROPEFFECT_NONE) {
-            Settings s = GetSettings();
+            auto s = GetSettings();
             std::vector<std::wstring> paths = GetDroppedPaths(data);
-            if (index < (int)s.tags.size() && !paths.empty()) {
-                QueueAdd(s.tags[index].name, std::move(paths));
+            if (index < (int)s->tags.size() && !paths.empty()) {
+                QueueAdd(s->tags[index].name, std::move(paths));
             } else {
                 *effect = DROPEFFECT_NONE;
             }
@@ -2055,10 +2123,10 @@ class TagDropTarget final : public IDropTarget {
         SetDropHot(index);
         if (m_data && index != m_described) {
             m_described = index;
-            Settings s = GetSettings();
-            if (index >= 0 && index < (int)s.tags.size()) {
+            auto s = GetSettings();
+            if (index >= 0 && index < (int)s->tags.size()) {
                 SetDropDescription(m_data, *effect == DROPEFFECT_LINK ? DROPIMAGE_LINK : DROPIMAGE_COPY,
-                                   L"Tag as %1", s.tags[index].name.c_str());
+                                   L"Tag as %1", s->tags[index].name.c_str());
             } else {
                 SetDropDescription(m_data, DROPIMAGE_INVALID, L"", L"");
             }
@@ -2092,6 +2160,7 @@ LRESULT CALLBACK PanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
 
     if (msg == g_msgRefresh) {
+        p->currentFolder = GetCurrentFolder(p);
         InvalidateRect(hWnd, nullptr, FALSE);
         return 0;
     }
@@ -2202,10 +2271,17 @@ LRESULT CALLBACK PanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         case WM_MOUSEWHEEL: {
             RECT rc;
             GetClientRect(hWnd, &rc);
-            Settings s = GetSettings();
-            Metrics m = GetMetrics(p, s, rc.bottom);
+            auto s = GetSettings();
+            Metrics m = GetMetrics(p, *s, rc.bottom);
             if (m.tagCount > m.rowsShown) {
-                p->scroll += GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? -1 : 1;
+                // Same feel as the tree above: system lines per notch, and
+                // partial notches (precision touchpads) accumulate.
+                UINT lines = 3;
+                SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &lines, 0);
+                p->wheelDelta += GET_WHEEL_DELTA_WPARAM(wParam);
+                int notches = p->wheelDelta / WHEEL_DELTA;
+                p->wheelDelta -= notches * WHEEL_DELTA;
+                p->scroll -= notches * (int)(lines ? lines : 1);
                 ClampScroll(p, m);
                 InvalidateRect(hWnd, nullptr, FALSE);
                 return 0;
@@ -2216,6 +2292,9 @@ LRESULT CALLBACK PanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         case WM_TIMER:
             if (wParam == TIMER_REPAINT) {
                 KillTimer(hWnd, TIMER_REPAINT);
+                // Only after navigation, not on every repaint: this is a COM
+                // round trip and repaints happen on every hover change.
+                p->currentFolder = GetCurrentFolder(p);
                 InvalidateRect(hWnd, nullptr, FALSE);
                 return 0;
             }
@@ -2327,7 +2406,10 @@ void Attach(HWND tree) {
     g_panels.push_back(p);
     ReleaseSRWLockExclusive(&g_panelsLock);
 
-    WindhawkUtils::SetWindowSubclassFromAnyThread(sink, SinkSubclassProc, 0);
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(sink, SinkSubclassProc, 0)) {
+        // Without it the panel doesn't follow the pane being resized.
+        Wh_Log(L"Couldn't subclass the container %p", sink);
+    }
 
     p->drop = new TagDropTarget(p->wnd);
     HRESULT hr = RegisterDragDrop(p->wnd, p->drop);
@@ -2337,6 +2419,7 @@ void Attach(HWND tree) {
         p->drop = nullptr;
     }
 
+    p->currentFolder = GetCurrentFolder(p);
     LayoutPanel(p);
     Wh_Log(L"Panel attached to tree %p", tree);
 }
@@ -2675,7 +2758,7 @@ const size_t MENU_MAX_CHECKED_SELECTION = 500;
 void RemoveTagMenu(TagMenu& tm);
 
 bool AddTagMenu(TagMenu& tm, HMENU menu, HWND defView, const std::vector<std::wstring>& paths) {
-    Settings s = GetSettings();
+    auto s = GetSettings();
     tm.base = FindFreeIdBase(menu);
     if (!tm.base) {
         return false;
@@ -2694,9 +2777,9 @@ bool AddTagMenu(TagMenu& tm, HMENU menu, HWND defView, const std::vector<std::ws
 
     int dpi = GetDpiForWindow(defView);
     int dotSize = GetSystemMetricsForDpi(SM_CXSMICON, dpi ? dpi : 96);
-    int n = std::min((int)s.tags.size(), MENU_MAX_TAGS);
+    int n = std::min((int)s->tags.size(), MENU_MAX_TAGS);
     for (int i = 0; i < n; i++) {
-        const TagDef& t = s.tags[i];
+        const TagDef& t = s->tags[i];
         tm.tags.push_back(t.name);
         auto hit = hits.perTag.find(t.name);
         bool allHave = knowState && hit != hits.perTag.end() && hit->second == (int)paths.size();
@@ -2845,15 +2928,11 @@ BOOL TrackWithTagMenu(HMENU menu, UINT flags, HWND owner, Original original) {
         return original();
     }
 
-    Settings s = GetSettings();
-    std::vector<std::wstring> paths;
-    paths = GetSelectedPaths(defView);
-    if (paths.size() <= MENU_MAX_CHECKED_SELECTION) {
-        // For the checkmark: a shortcut from a tag folder counts as its file.
-        // Above the limit, the worker thread resolves them.
-        for (auto& path : paths) {
-            path = TargetIfTagShortcut(path, s.root);
-        }
+    std::vector<std::wstring> paths = GetSelectedPaths(defView);
+    // A shortcut from a tag folder counts as its file. This is a lookup in the
+    // worker's copy: no .lnk is opened here, however many are selected.
+    for (auto& path : paths) {
+        path = TargetIfTagShortcutCached(path);
     }
     TagMenu tm;
     if (paths.empty() || !AddTagMenu(tm, menu, defView, paths)) {
@@ -2911,6 +2990,14 @@ BOOL WINAPI TrackPopupMenu_Hook(HMENU hMenu, UINT uFlags, int x, int y, int nRes
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
+    // Cheap insurance: state from a previous load of this image must never
+    // leave the mod inert.
+    g_unloading = false;
+    g_workerThread = nullptr;
+    g_busy = 0;
+    g_drags = 0;
+    g_hookCalls = 0;
+
     LoadSettings();
     g_collapsed = Wh_GetIntValue(L"collapsed", 0) != 0;
 
@@ -2949,12 +3036,21 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
-                       (void**)&CreateWindowExW_Original);
-    Wh_SetFunctionHook((void*)TrackPopupMenuEx, (void*)TrackPopupMenuEx_Hook,
-                       (void**)&TrackPopupMenuEx_Original);
-    Wh_SetFunctionHook((void*)TrackPopupMenu, (void*)TrackPopupMenu_Hook,
-                       (void**)&TrackPopupMenu_Original);
+    if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
+                                        &CreateWindowExW_Original)) {
+        Wh_Log(L"Couldn't hook CreateWindowExW: no panel will be created");
+        Gdiplus::GdiplusShutdown(g_gdiplusToken);
+        g_gdiplusToken = 0;
+        UnregisterClassW(PANEL_CLASS, THIS_MODULE);
+        return FALSE;
+    }
+    // The panel works without these two; only the context menu is lost.
+    if (!WindhawkUtils::SetFunctionHook(TrackPopupMenuEx, TrackPopupMenuEx_Hook,
+                                        &TrackPopupMenuEx_Original) ||
+        !WindhawkUtils::SetFunctionHook(TrackPopupMenu, TrackPopupMenu_Hook,
+                                        &TrackPopupMenu_Original)) {
+        Wh_Log(L"Couldn't hook the menu functions: no Tags submenu");
+    }
 
     StartWorker();
     return TRUE;
@@ -2965,31 +3061,15 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    std::wstring oldRoot = GetSettings().root;
+    std::wstring oldRoot = GetSettings()->root;
     LoadSettings();
-    if (GetSettings().root != oldRoot) {
+    if (GetSettings()->root != oldRoot) {
         StopWorker();
         StartWorker();
     } else {
         QueueSync();
     }
     BroadcastMessage(g_msgLayout);
-}
-
-// The DLL stays pinned in memory and the drop objects stay alive, so a late
-// call finds code and does nothing.
-void PinForLateCalls(PCWSTR reason) {
-    HMODULE pinned;
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
-                       (LPCWSTR)&PinForLateCalls, &pinned);
-    AcquireSRWLockShared(&g_panelsLock);
-    for (Panel* p : g_panels) {
-        if (p->drop) {
-            p->drop->AddRef();
-        }
-    }
-    ReleaseSRWLockShared(&g_panelsLock);
-    Wh_Log(L"On unload: %s; the DLL stays in memory", reason);
 }
 
 void Wh_ModBeforeUninit() {
@@ -3009,35 +3089,12 @@ void Wh_ModBeforeUninit() {
         PostMessageW(owner, WM_CANCELMODE, 0, 0);
     }
     ReleaseSRWLockShared(&g_panelsLock);
-    ULONGLONG busySince = GetTickCount64();
-    while (true) {
-        if (g_busy > 0) {
-            // A menu that doesn't close with WM_CANCELMODE waits for the
-            // user: after 5 s the DLL stays in memory and we move on. Code
-            // still on the stack doesn't use the Panel after returning (it
-            // rereads the HWND), and the queues see g_unloading.
-            if (GetTickCount64() - busySince > 5000) {
-                PinForLateCalls(L"mod code still mid-call (menu open?)");
-                break;
-            }
-            Sleep(20);
-            continue;
-        }
-        if (g_drags == 0) {
-            break;
-        }
-        // A drag with no DragOver for 10 s and no button held down: the
-        // source died, DragLeave isn't coming. But it could just be a
-        // stalled thread (network data rendering) that will still call the
-        // object again: the DLL stays pinned in memory and the drop objects
-        // stay alive, so a late call finds code and does nothing.
-        bool stale = GetTickCount64() - g_lastDragTick >= 10000;
-        bool buttons = ((GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON) |
-                         GetAsyncKeyState(VK_MBUTTON)) & 0x8000) != 0;
-        if (stale && !buttons) {
-            PinForLateCalls(L"drag with no end");
-            break;
-        }
+
+    // No deadline and no pinning: the module must be unloadable with a single
+    // FreeLibrary once Wh_ModUninit returns. OLE holds a vtable pointer into
+    // this image while a drag is in flight, and a thread can sit inside the
+    // menu hook, so the only correct answer is to wait for both to finish.
+    while (g_busy > 0 || g_drags > 0) {
         Sleep(20);
     }
 
@@ -3053,20 +3110,10 @@ void Wh_ModBeforeUninit() {
 
 void Wh_ModUninit() {
     // The hooks have already been removed; what's left is exiting calls that
-    // had already entered (an Explorer or toolbar menu open right now). A
-    // menu can stay open indefinitely: after 5 s the DLL stays pinned in
-    // memory and those calls return to code that still exists (they only
-    // touch globals and menus; the queues see g_unloading before using the
-    // closed events).
-    ULONGLONG waitStart = GetTickCount64();
+    // had already entered (an Explorer or taskbar menu open right now). Those
+    // return into this image, so wait for them, however long the menu stays
+    // open: returning while they run would unmap the code under them.
     while (g_hookCalls > 0) {
-        if (GetTickCount64() - waitStart > 5000) {
-            HMODULE pinned;
-            GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
-                               (LPCWSTR)&Wh_ModUninit, &pinned);
-            Wh_Log(L"Menu open on unload: the DLL stays in memory");
-            break;
-        }
         Sleep(20);
     }
     UnregisterClassW(PANEL_CLASS, THIS_MODULE);
