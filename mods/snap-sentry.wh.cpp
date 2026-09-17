@@ -2,12 +2,12 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.
-// @version         0.18.8
+// @version         0.19.7
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
 // @license         GPL-3.0
-// @compilerOptions -lole32 -lshell32 -lcomctl32 -lwindowscodecs -lruntimeobject -ladvapi32 -luuid
+// @compilerOptions -lole32 -lshell32 -lcomctl32 -lwindowscodecs -lruntimeobject -ladvapi32 -lbcrypt -luuid
 // ==/WindhawkMod==
 
 // Source code is published under the GNU General Public License v3.0.
@@ -40,6 +40,17 @@ notification.
 You can have SnapSentry rename each new screenshot from the window that was in
 front when it was taken, together with a timestamp, so a file ends up named for
 what it shows instead of Screenshot (1). The file stays in the same folder.
+
+## Identical recent screenshots
+
+When **Remove identical recent screenshots** is enabled, SnapSentry compares a
+new image with images handled recently by this running instance, within a short
+window of about ten minutes. It works only with the **Image** clipboard mode,
+because that is the mode that makes a durable copy before cleanup. An exact
+byte-for-byte match is always sent to the Recycle Bin on the automatic path,
+even when **Delete the screenshot after copying** is off. The older copy is kept
+when it still exists. The comparison is session-only and does not scan or touch
+files that were already in the folder when watching began.
 
 ## Which folder it watches
 
@@ -74,7 +85,8 @@ file saved or downloaded straight into the folder cannot be told apart from a
 capture, so avoid pointing the folder at a place where downloads land. By default a
 deleted screenshot goes to the Recycle Bin so it can be restored; if you turn that
 off, deletion is permanent. Deleting a screenshot does not remove copies already
-stored in clipboard history, cloud sync, backups, or other programs.
+stored in clipboard history, cloud sync, backups, or other programs. Duplicate
+detection keeps only short-lived hashes, not image data.
 */
 // ==/WindhawkModReadme==
 
@@ -84,13 +96,13 @@ stored in clipboard history, cloud sync, backups, or other programs.
 - clipboardMode: image
   $name: What to copy to the clipboard
   $options:
-  - image: The picture itself (best if you also delete)
-  - file: The file, for pasting into File Explorer (never deleted)
-  - path: The file's location as text (never deleted)
-  - none: Leave the clipboard alone
+  - image: Image, the picture itself (best if you also delete)
+  - file: File, for pasting into File Explorer (never deleted)
+  - path: Path, the file's location as text (never deleted)
+  - none: None, leave the clipboard alone
 - pathFormat: plain
-  $name: How to write the location
-  $description: Only used when copying the file's location. File link is clickable, and Markdown shows the picture when pasted into notes or a bug report.
+  $name: Path format
+  $description: Only used when What to copy is Path. File link is clickable, and Markdown shows the picture when pasted into notes or a bug report.
   $options:
   - plain: Plain path
   - quoted: Quoted path
@@ -104,6 +116,9 @@ stored in clipboard history, cloud sync, backups, or other programs.
 - recycle: true
   $name: Delete to the Recycle Bin
   $description: When something is deleted, whether automatically or from the popup buttons, the file goes to the Recycle Bin so you can get it back. Turn this off to delete for good.
+- removeExactDuplicates: false
+  $name: Remove identical recent screenshots
+  $description: In Image clipboard mode, recycles an exact byte-for-byte repeat seen in the recent ten-minute window, only on the automatic action. A detected duplicate always goes to the Recycle Bin, even when Delete the screenshot after copying is off. The comparison resets when settings change or folder watching restarts. It never scans or touches older files, and the older copy is kept when it still exists.
 
 # ---- The popup ----
 - showActionPopup: false
@@ -117,7 +132,6 @@ stored in clipboard history, cloud sync, backups, or other programs.
 - renameFromWindow: false
   $name: Rename screenshots after the active window
   $description: Names each screenshot after the window that was in front when you took it, plus a timestamp, so you can find it later without opening it. The file stays in the same folder.
-
 # ---- Advanced ----
 - folder: ""
   $name: Folder to watch (leave empty for Screenshots)
@@ -132,9 +146,11 @@ stored in clipboard history, cloud sync, backups, or other programs.
 #include <initguid.h>  // Defines the GUIDs pulled in by the headers below in-TU.
 #include <knownfolders.h>
 #include <shlobj.h>
+#include <shellapi.h>  // SHQueryUserNotificationState
 #include <propkey.h>   // PKEY_AppUserModel_ID, PKEY_AppUserModel_ToastActivatorCLSID
 #include <commctrl.h>
 #include <wincodec.h>
+#include <bcrypt.h>
 #include <roapi.h>
 #include <winstring.h>
 #include <windows.data.xml.dom.h>
@@ -166,6 +182,7 @@ DEFINE_GUID(IID_INotificationActivationCallback,
 #include <wrl/wrappers/corewrappers.h>
 
 #include <atomic>
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -174,6 +191,7 @@ DEFINE_GUID(IID_INotificationActivationCallback,
 #include <set>
 #include <string>
 #include <utility>
+#include <vector>
 
 // ============================================================================
 // Settings and shared state
@@ -188,11 +206,15 @@ struct Settings {
     std::wstring folder;
     bool recycle;
     bool renameFromWindow;
+    bool removeExactDuplicates;
     bool logDetails;
 };
 
-static CRITICAL_SECTION g_lock;       // Guards g_settings, g_queue, g_inflight, g_recent, g_preexisting.
+static CRITICAL_SECTION g_lock;       // Guards g_settings and watcher/session state below.
 static Settings g_settings;
+// Bumped only when settings are reloaded, so a prompt on screen is cancelled
+// by an actual settings change and never by a watcher restart.
+static std::atomic<ULONGLONG> g_generation{0};
 static std::deque<std::wstring> g_queue;   // Full paths waiting to be processed.
 static std::set<std::wstring> g_inflight;  // Names queued or in progress (dedup).
 
@@ -215,6 +237,15 @@ static std::set<std::wstring> g_preexisting;
 static std::deque<std::pair<std::wstring, ULONGLONG>> g_recent;
 static constexpr ULONGLONG kDuplicateEventWindowMs = 60000;  // Measured from when handling finished.
 
+struct RecentContent {
+    std::array<BYTE, 32> hash;
+    std::wstring keeper;
+    ULONGLONG expires;
+};
+static std::deque<RecentContent> g_recentContent;
+static constexpr ULONGLONG kContentDuplicateWindowMs = 10 * 60 * 1000;
+static constexpr size_t kMaxRecentContent = 64;
+
 // Pre-seed the recent-name set so a file event we cause ourselves (the rename
 // below) is swallowed by the watcher instead of being handled as a brand-new
 // screenshot, which would rename it again in a loop.
@@ -228,6 +259,7 @@ static void MarkNameRecent(const std::wstring& name) {
 static HANDLE g_stopEvent;   // Manual-reset: set once at shutdown.
 static HANDLE g_reloadEvent; // Auto-reset: settings changed, re-open the folder.
 static HANDLE g_workEvent;   // Auto-reset: queue has work.
+static HANDLE g_settingsEvent;  // Manual reset: settings reloaded while a prompt is up.
 static HANDLE g_watchThread;
 static HANDLE g_workerThread;
 static std::atomic<HWND> g_dialog{nullptr};  // Open action dialog, for shutdown.
@@ -244,6 +276,19 @@ enum {
     ACTION_COPY_DELETE = 102,
     ACTION_KEEP = 103,
     ACTION_COPY_ONLY = 104,  // Couldn't ask the user: do the configured copy, never delete.
+};
+
+// Audit outcomes describe the final state, not an attempted operation. In
+// particular, a failed recycle is Kept, so the audit never claims a destructive
+// action that did not actually happen. Deleted is separate because the user can
+// explicitly disable Recycle Bin use.
+enum class AuditOutcome {
+    Copied,
+    Kept,
+    Recycled,
+    RecycledDuplicate,
+    Skipped,
+    Deleted,
 };
 
 static CRITICAL_SECTION g_toastLock;   // Guards g_toastAction, g_toastAnswered, g_activeToastId.
@@ -302,6 +347,7 @@ static void LoadSettings() {
     s.popup = Wh_GetIntSetting(L"showActionPopup") != 0;
     s.recycle = Wh_GetIntSetting(L"recycle") != 0;
     s.renameFromWindow = Wh_GetIntSetting(L"renameFromWindow") != 0;
+    s.removeExactDuplicates = Wh_GetIntSetting(L"removeExactDuplicates") != 0;
     // Kept as its own toggle so file paths can be withheld from a log the user
     // might share; Windhawk's own logging switch is all-or-nothing.
     s.logDetails = Wh_GetIntSetting(L"logDetails") != 0;
@@ -309,6 +355,15 @@ static void LoadSettings() {
     s.mode = WindhawkUtils::StringSetting::make(L"clipboardMode").get();
     s.pathFormat = WindhawkUtils::StringSetting::make(L"pathFormat").get();
     s.folder = WindhawkUtils::StringSetting::make(L"folder").get();
+    const auto firstNonWhitespace = s.folder.find_first_not_of(L" \t\r\n");
+    const auto lastNonWhitespace = s.folder.find_last_not_of(L" \t\r\n");
+    s.folder = firstNonWhitespace == std::wstring::npos
+                   ? std::wstring()
+                   : s.folder.substr(firstNonWhitespace,
+                                     lastNonWhitespace - firstNonWhitespace + 1);
+    if (s.removeExactDuplicates && s.mode != L"image") {
+        Wh_Log(L"Exact duplicate removal requires Image clipboard mode; disabled for the current mode");
+    }
     if (s.folder.empty()) {
         s.folder = DefaultScreenshotsFolder();
     } else {
@@ -349,7 +404,10 @@ static void LoadSettings() {
     }
 
     EnterCriticalSection(&g_lock);
+    g_recentContent.clear();
     g_settings = std::move(s);
+    ++g_generation;
+    SetEvent(g_settingsEvent);
     LeaveCriticalSection(&g_lock);
 }
 
@@ -592,7 +650,8 @@ enum class ImageCopy { Failed, Copied, CopiedFirstFrameOnly };
 // what makes the copied image survive deletion of the source file. Windows
 // synthesizes CF_DIB and CF_BITMAP from CF_DIBV5 on demand, so publishing those too
 // would just be another full-size copy of the bitmap (it runs in a 32-bit process).
-static ImageCopy ClipboardImage(const std::wstring& path) {
+static ImageCopy ClipboardImage(const std::wstring& path,
+                                HANDLE lockedFile = INVALID_HANDLE_VALUE) {
     IWICImagingFactory* factory = nullptr;
     if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr,
                                 CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory)))) {
@@ -608,9 +667,14 @@ static ImageCopy ClipboardImage(const std::wstring& path) {
     bool multiFrame = false;
 
     do {
-        if (FAILED(factory->CreateDecoderFromFilename(
-                path.c_str(), nullptr, GENERIC_READ,
-                WICDecodeMetadataCacheOnDemand, &decoder))) {
+        HRESULT decode = lockedFile != INVALID_HANDLE_VALUE
+            ? factory->CreateDecoderFromFileHandle(
+                  (ULONG_PTR)lockedFile, nullptr,
+                  WICDecodeMetadataCacheOnDemand, &decoder)
+            : factory->CreateDecoderFromFilename(
+                  path.c_str(), nullptr, GENERIC_READ,
+                  WICDecodeMetadataCacheOnDemand, &decoder);
+        if (FAILED(decode)) {
             break;
         }
         // A multi-page file (routinely a scanned TIFF) decodes only frame 0 onto
@@ -1126,6 +1190,57 @@ public:
 
 static ToastDismissListener g_toastDismissListener;
 
+using ToastFailedHandler = ABI::Windows::Foundation::ITypedEventHandler<
+    ABI::Windows::UI::Notifications::ToastNotification*,
+    ABI::Windows::UI::Notifications::ToastFailedEventArgs*>;
+
+// Windows raises this when it could not deliver the notification. That is the
+// platform's own answer to "was it shown", which notification-center history is
+// not: a banner can appear with center history switched off, and Do Not Disturb
+// files a toast into the center without ever showing a banner.
+
+class ToastFailListener : public ToastFailedHandler {
+public:
+    ULONG STDMETHODCALLTYPE AddRef() override { return 1; }
+    ULONG STDMETHODCALLTYPE Release() override { return 1; }  // Static lifetime.
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** obj) override {
+        if (riid == IID_IUnknown || riid == __uuidof(ToastFailedHandler)) {
+            *obj = static_cast<ToastFailedHandler*>(this);
+            return S_OK;
+        }
+        *obj = nullptr;
+        return E_NOINTERFACE;
+    }
+
+    HRESULT STDMETHODCALLTYPE
+    Invoke(ABI::Windows::UI::Notifications::IToastNotification* sender,
+           ABI::Windows::UI::Notifications::IToastFailedEventArgs* args) override {
+        if (sender != g_activeToast.load()) {
+            return S_OK;
+        }
+        HRESULT code = E_FAIL;
+        if (args) {
+            args->get_ErrorCode(&code);
+        }
+        Wh_Log(L"Notification was not delivered (0x%08lx); copy only", (unsigned long)code);
+        EnterCriticalSection(&g_toastLock);
+        // Same shape as a dismissal: it is an answer, so it must be recorded,
+        // not just signalled, or the wait settles it as Keep and skips the copy.
+        bool mine = g_activeToastId != 0 && !g_toastAnswered;
+        if (mine) {
+            g_toastAction = ACTION_COPY_ONLY;
+            g_toastAnswered = true;
+        }
+        LeaveCriticalSection(&g_toastLock);
+        if (mine) {
+            SetEvent(g_toastActionEvent);
+        }
+        return S_OK;
+    }
+};
+
+static ToastFailListener g_toastFailListener;
+
 // ============================================================================
 // Toast notification display and wait
 // ============================================================================
@@ -1217,7 +1332,8 @@ static std::wstring BaseName(const std::wstring& path) {
 // or an explicit dismissal. Returns false, meaning "use the dialog instead",
 // if registration hasn't succeeded or any WinRT step fails, so the mod stays
 // usable even where toast notifications don't work.
-static bool ShowToast(const std::wstring& path, const Settings& s, int& action) {
+static bool ShowToast(const std::wstring& path, const Settings& s, int& action,
+                      ULONGLONG generation) {
     using namespace ABI::Windows::UI::Notifications;
     using namespace ABI::Windows::Foundation;
     using Microsoft::WRL::ComPtr;
@@ -1265,6 +1381,7 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
     }
 
     ResetEvent(g_toastActionEvent);
+    ResetEvent(g_settingsEvent);  // Only one prompt is ever up at a time.
     EnterCriticalSection(&g_toastLock);
     g_activeToastId = toastId;
     g_toastAction = ACTION_AUTO;
@@ -1275,6 +1392,9 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
     EventRegistrationToken dismissToken{};
     bool dismissHooked =
         SUCCEEDED(toast->add_Dismissed(&g_toastDismissListener, &dismissToken));
+    EventRegistrationToken failedToken{};
+    bool failedHooked =
+        SUCCEEDED(toast->add_Failed(&g_toastFailListener, &failedToken));
 
     if (FAILED(notifier->Show(toast.Get()))) {
         g_activeToast.store(nullptr);
@@ -1283,6 +1403,9 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
         LeaveCriticalSection(&g_toastLock);
         if (dismissHooked) {
             toast->remove_Dismissed(dismissToken);
+        }
+        if (failedHooked) {
+            toast->remove_Failed(failedToken);
         }
         return false;
     }
@@ -1298,12 +1421,63 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
     bool noCountdown = s.delaySeconds <= 0;
     DWORD timeoutMs =
         noCountdown ? kNoAnswerCapMs : (DWORD)s.delaySeconds * 1000;
-    HANDLE waits[] = {g_stopEvent, g_toastActionEvent};
+    HANDLE waits[] = {g_stopEvent, g_toastActionEvent, g_settingsEvent};
     DWORD start = GetTickCount();
     bool removeToast = false;
+    // An activation callback can be dispatched reentrantly from the message
+    // pump below, so settle under the same lock the callbacks take: an answer
+    // already accepted is never overwritten by a timeout.
+    auto settle = [&](int proposed) {
+        bool cancelled = WaitStop(0);
+        EnterCriticalSection(&g_toastLock);
+        if (cancelled) {
+            action = ACTION_KEEP;
+        } else if (g_toastAnswered) {
+            action = g_toastAction;
+        } else {
+            action = proposed;
+        }
+        g_toastAction = action;
+        g_toastAnswered = true;
+        LeaveCriticalSection(&g_toastLock);
+        removeToast = true;
+    };
     for (;;) {
         DWORD elapsed = GetTickCount() - start;
-        DWORD remaining = elapsed >= timeoutMs ? 0 : timeoutMs - elapsed;
+        if (WaitStop(0)) {  // Unload: never copy, never delete.
+            settle(ACTION_KEEP);
+            break;
+        }
+        // Stale settings are a reason not to run the automatic action, not a
+        // reason to drop the screenshot.
+        if (g_generation.load() != generation) {
+            settle(ACTION_COPY_ONLY);
+            break;
+        }
+        if (WaitForSingleObject(g_toastActionEvent, 0) == WAIT_OBJECT_0) {
+            settle(ACTION_KEEP);
+            break;  // A real answer always wins over any timeout.
+        }
+        if (elapsed >= timeoutMs) {
+            NotificationSetting currentSetting = NotificationSetting_Enabled;
+            bool enabled = SUCCEEDED(notifier->get_Setting(&currentSetting)) &&
+                           currentSetting == NotificationSetting_Enabled;
+            // Focus assist, presentation mode, a full-screen app or the secure
+            // desktop all suppress the banner without failing delivery, so the
+            // countdown would be deleting for a prompt nobody was shown.
+            QUERY_USER_NOTIFICATION_STATE quns = QUNS_ACCEPTS_NOTIFICATIONS;
+            bool shown = SUCCEEDED(SHQueryUserNotificationState(&quns)) &&
+                         quns == QUNS_ACCEPTS_NOTIFICATIONS;
+            if (!shown) {
+                Wh_Log(L"Notifications are being held back (state=%d); copy only",
+                       (int)quns);
+            }
+            settle(noCountdown || !enabled || !shown ? ACTION_COPY_ONLY
+                                                    : ACTION_AUTO);
+            break;
+        }
+        DWORD remaining = timeoutMs - elapsed;
+        // The answer arrives on an event, so wait out the deadline in one go.
         DWORD result = MsgWaitForMultipleObjectsEx(
             ARRAYSIZE(waits), waits, remaining, QS_ALLINPUT,
             MWMO_INPUTAVAILABLE | MWMO_ALERTABLE);
@@ -1311,37 +1485,30 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
             continue;  // MWMO_ALERTABLE: an APC ran, keep waiting.
         }
         if (result == WAIT_TIMEOUT) {
-            if (noCountdown) {
-                // Nobody saw the toast to answer it, so copy but never delete.
-                Wh_Log(L"No answer to the notification; copy only");
-            }
-            action = noCountdown ? ACTION_COPY_ONLY : ACTION_AUTO;
-            removeToast = true;
-            break;
+            continue;  // Deadlines are checked above, not inferred from a slice.
         }
         if (result == WAIT_OBJECT_0) {  // Stop requested: never delete on shutdown.
-            action = ACTION_KEEP;
-            removeToast = true;
+            settle(ACTION_KEEP);
             break;
         }
         if (result == WAIT_OBJECT_0 + 1) {
-            EnterCriticalSection(&g_toastLock);
-            action = g_toastAction;
-            LeaveCriticalSection(&g_toastLock);
-            removeToast = true;
+            settle(ACTION_KEEP);
             break;
+        }
+        if (result == WAIT_OBJECT_0 + 2) {
+            continue;  // Settings reloaded: handled at the top of the loop.
         }
         if (result == WAIT_OBJECT_0 + ARRAYSIZE(waits)) {
             MSG msg;
-            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            for (unsigned count = 0; count < 32 &&
+                 PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE); ++count) {
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
             continue;
         }
         Wh_Log(L"Toast wait failed %lu", GetLastError());
-        action = ACTION_KEEP;
-        removeToast = true;  // Its buttons are dead to us now, so don't leave it up.
+        settle(ACTION_KEEP);
         break;
     }
 
@@ -1351,6 +1518,9 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action) 
     LeaveCriticalSection(&g_toastLock);
     if (dismissHooked) {
         toast->remove_Dismissed(dismissToken);
+    }
+    if (failedHooked) {
+        toast->remove_Failed(failedToken);
     }
     if (removeToast) notifier->Hide(toast.Get());
     return true;
@@ -1385,11 +1555,13 @@ static void PrewarmToast() {
 // ============================================================================
 
 struct DialogState {
+    ULONGLONG generation;
     DWORD started;
     DWORD timeoutMs;
     bool showCountdown;   // False when there is no countdown, only the backstop.
     int expiryAction;     // What running out of time means (a real button id).
     bool expired;         // Set when the backstop closed it, not the user.
+    bool reloaded;    // Settings changed while the dialog was up.
     std::wstring baseText;
 };
 
@@ -1404,6 +1576,11 @@ static HRESULT CALLBACK DialogCallback(HWND hwnd, UINT msg, WPARAM, LPARAM,
                 SendMessageW(hwnd, TDM_CLICK_BUTTON, ACTION_KEEP, 0);
                 break;
             }
+            if (g_generation.load() != state->generation) {
+                state->reloaded = true;
+                SendMessageW(hwnd, TDM_CLICK_BUTTON, ACTION_KEEP, 0);
+                break;
+            }
             SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                          SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             break;
@@ -1415,6 +1592,11 @@ static HRESULT CALLBACK DialogCallback(HWND hwnd, UINT msg, WPARAM, LPARAM,
             // TDN_CREATED stored our handle, WhTool_ModUninit couldn't dismiss us,
             // so close ourselves as Keep here rather than let the join hang.
             if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) {
+                SendMessageW(hwnd, TDM_CLICK_BUTTON, ACTION_KEEP, 0);
+                break;
+            }
+            if (g_generation.load() != state->generation) {
+                state->reloaded = true;
                 SendMessageW(hwnd, TDM_CLICK_BUTTON, ACTION_KEEP, 0);
                 break;
             }
@@ -1442,6 +1624,7 @@ static int AskAction(const std::wstring& path, const Settings& s) {
     }
     std::wstring name = BaseName(path);
     DialogState state;
+    state.generation = g_generation.load();
     state.started = GetTickCount();
     // Same backstop as the toast: without it, a dialog nobody answers holds the
     // worker and no later screenshot is copied or deleted until someone does.
@@ -1450,6 +1633,7 @@ static int AskAction(const std::wstring& path, const Settings& s) {
         state.showCountdown ? (DWORD)s.delaySeconds * 1000 : kNoAnswerCapMs;
     state.expiryAction = state.showCountdown ? ACTION_AUTO : ACTION_KEEP;
     state.expired = false;
+    state.reloaded = false;
     state.baseText = name + L"\n\nChoose an action, or wait for the configured "
                             L"automatic action.";
 
@@ -1492,6 +1676,9 @@ static int AskAction(const std::wstring& path, const Settings& s) {
     // The no-countdown backstop clicks Keep (a real button) on expiry; translate
     // that to copy-only, since nobody actually answered. A real Keep click, or a
     // countdown expiry (which uses ACTION_AUTO), is left as-is.
+    if (state.reloaded) {
+        return ACTION_COPY_ONLY;  // Stale settings, but the copy still happens.
+    }
     if (state.expired && !state.showCountdown) {
         return ACTION_COPY_ONLY;
     }
@@ -1512,9 +1699,10 @@ static int AskAction(const std::wstring& path, const Settings& s) {
 
 // Tries the toast notification first; falls back to the dialog box if toast
 // registration didn't succeed on this machine or the WinRT call chain fails.
-static int ChooseAction(const std::wstring& path, const Settings& s) {
+static int ChooseAction(const std::wstring& path, const Settings& s,
+                        ULONGLONG generation) {
     int action = ACTION_AUTO;
-    if (ShowToast(path, s, action)) {
+    if (ShowToast(path, s, action, generation)) {
         return action;
     }
     return AskAction(path, s);
@@ -1560,6 +1748,32 @@ static void ShowKeptToast(const std::wstring& name) {
         return;
     }
     notifier->Show(toast.Get());
+}
+
+static const wchar_t* AuditOutcomeName(AuditOutcome outcome) {
+    switch (outcome) {
+        case AuditOutcome::Copied: return L"copied";
+        case AuditOutcome::Kept: return L"kept";
+        case AuditOutcome::Recycled: return L"recycled";
+        case AuditOutcome::RecycledDuplicate: return L"recycled-as-duplicate";
+        case AuditOutcome::Skipped: return L"skipped";
+        case AuditOutcome::Deleted: return L"deleted";
+    }
+    return L"skipped";
+}
+
+// Reporting is deliberately a sink: it does not decide whether a copy or
+// cleanup is allowed, and it never changes the ordering of those operations.
+// Every outcome is log-only; popup-driven outcomes therefore do not produce a
+// second notification, and popup-off keeps the mod's no-footprint contract.
+static void AuditResult(const Settings& s, AuditOutcome outcome,
+                        const wchar_t* reason, const std::wstring& path) {
+    if (s.logDetails) {
+        Wh_Log(L"Audit: %s; %s; %s", AuditOutcomeName(outcome), reason,
+               path.c_str());
+    } else {
+        Wh_Log(L"Audit: %s; %s", AuditOutcomeName(outcome), reason);
+    }
 }
 
 // ============================================================================
@@ -1611,27 +1825,32 @@ static bool RecycleFile(const std::wstring& path) {
 // act on something that redirects outside the folder. In Recycle Bin mode a file
 // that can't be recycled is kept rather than permanently deleted, so choosing
 // "recoverable" never silently turns into a permanent delete.
-static void DeleteWatched(const std::wstring& path, const Settings& s) {
+static AuditOutcome DeleteWatched(const std::wstring& path, const Settings& s) {
     DWORD attrs = GetFileAttributesW(path.c_str());
     if (attrs == INVALID_FILE_ATTRIBUTES) {
-        return;  // Already gone.
+        return AuditOutcome::Skipped;  // Already gone.
     }
     if (attrs & FILE_ATTRIBUTE_REPARSE_POINT) {
         Wh_Log(L"Refusing to delete reparse point%s",
                s.logDetails ? (L": " + path).c_str() : L"");
-        return;
+        return AuditOutcome::Kept;
     }
     if (s.recycle) {
-        if (!RecycleFile(path)) {
+        if (RecycleFile(path)) {
+            return AuditOutcome::Recycled;
+        } else {
             Wh_Log(L"Recycle failed, keeping file%s",
                    s.logDetails ? (L": " + path).c_str() : L"");
         }
-        return;
+        return AuditOutcome::Kept;
     }
-    if (!DeleteFileW(path.c_str())) {
+    if (DeleteFileW(path.c_str())) {
+        return AuditOutcome::Deleted;
+    } else {
         Wh_Log(L"Delete failed (%lu)%s", GetLastError(),
                s.logDetails ? (L": " + path).c_str() : L"");
     }
+    return AuditOutcome::Kept;
 }
 
 // Waits until the screenshot has finished being written, or the mod stops.
@@ -1672,11 +1891,141 @@ static bool WaitForStableFile(const std::wstring& path) {
     return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
 }
 
+static bool HashFile(HANDLE file, std::array<BYTE, 32>& digest) {
+    BCRYPT_ALG_HANDLE algorithm = nullptr;
+    BCRYPT_HASH_HANDLE hash = nullptr;
+    std::vector<BYTE> object;
+    bool ok = false;
+    do {
+        if (BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM,
+                                        nullptr, 0) != 0) break;
+        DWORD objectBytes = 0;
+        ULONG written = 0;
+        if (BCryptGetProperty(algorithm, BCRYPT_OBJECT_LENGTH,
+                              (PUCHAR)&objectBytes, sizeof(objectBytes),
+                              &written, 0) != 0 ||
+            written != sizeof(objectBytes) || objectBytes == 0) break;
+        object.resize(objectBytes);
+        if (BCryptCreateHash(algorithm, &hash, object.data(), objectBytes,
+                             nullptr, 0, 0) != 0) break;
+        LARGE_INTEGER start{};
+        if (file == INVALID_HANDLE_VALUE ||
+            !SetFilePointerEx(file, start, nullptr, FILE_BEGIN)) break;
+        BY_HANDLE_FILE_INFORMATION info{};
+        if (!GetFileInformationByHandle(file, &info) ||
+            (info.dwFileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT |
+                                      FILE_ATTRIBUTE_DIRECTORY)) ||
+            (info.nFileSizeHigh == 0 && info.nFileSizeLow == 0)) break;
+        std::array<BYTE, 64 * 1024> buffer;
+        for (;;) {
+            if (WaitStop(0)) break;
+            DWORD read = 0;
+            if (!ReadFile(file, buffer.data(), (DWORD)buffer.size(), &read,
+                          nullptr)) break;
+            if (read == 0) {
+                ok = BCryptFinishHash(hash, digest.data(), (ULONG)digest.size(),
+                                      0) == 0;
+                break;
+            }
+            if (BCryptHashData(hash, buffer.data(), read, 0) != 0) break;
+        }
+    } while (false);
+    if (hash) BCryptDestroyHash(hash);
+    if (algorithm) BCryptCloseAlgorithmProvider(algorithm, 0);
+    return ok;
+}
+
+static bool SeenRecentContentAndRemember(const std::array<BYTE, 32>& hash,
+                                         const std::wstring& path,
+                                         ULONGLONG now) {
+    while (!g_recentContent.empty() && g_recentContent.front().expires <= now)
+        g_recentContent.pop_front();
+    for (auto it = g_recentContent.begin(); it != g_recentContent.end();) {
+        if (it->hash != hash) {
+            ++it;
+            continue;
+        }
+        if (GetFileAttributesW(it->keeper.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            return true;
+        }
+        it = g_recentContent.erase(it);
+    }
+    g_recentContent.push_back({hash, path, now + kContentDuplicateWindowMs});
+    while (g_recentContent.size() > kMaxRecentContent)
+        g_recentContent.pop_front();
+    return false;
+}
+
+class LockedCapture {
+public:
+    HANDLE file = INVALID_HANDLE_VALUE;
+    HANDLE folder = INVALID_HANDLE_VALUE;
+    LockedCapture() = default;
+    LockedCapture(const LockedCapture&) = delete;
+    LockedCapture& operator=(const LockedCapture&) = delete;
+    ~LockedCapture() {
+        CloseFile();
+        if (folder != INVALID_HANDLE_VALUE) CloseHandle(folder);
+    }
+    void CloseFile() {
+        if (file != INVALID_HANDLE_VALUE) CloseHandle(file);
+        file = INVALID_HANDLE_VALUE;
+    }
+    bool Open(const std::wstring& path, const std::wstring& parent) {
+        auto split = path.find_last_of(L"\\/");
+        std::wstring comparisonParent = parent;
+        if (comparisonParent.size() > 1 &&
+            (comparisonParent.back() == L'\\' ||
+             comparisonParent.back() == L'/')) {
+            comparisonParent.pop_back();
+        }
+        if (split == std::wstring::npos ||
+            _wcsicmp(path.substr(0, split).c_str(), comparisonParent.c_str()) != 0 ||
+            path.find(L':', split) != std::wstring::npos) return false;
+        folder = CreateFileW(parent.c_str(), FILE_READ_ATTRIBUTES,
+                             FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                             OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS |
+                             FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+        BY_HANDLE_FILE_INFORMATION info{};
+        if (folder == INVALID_HANDLE_VALUE ||
+            !GetFileInformationByHandle(folder, &info) ||
+            !(info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
+            (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) return false;
+        file = CreateFileW(path.c_str(), GENERIC_READ | DELETE,
+                           FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr,
+                           OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+        if (file == INVALID_HANDLE_VALUE ||
+            !GetFileInformationByHandle(file, &info) ||
+            (info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY |
+                                      FILE_ATTRIBUTE_REPARSE_POINT)) ||
+            info.nNumberOfLinks != 1) {
+            CloseFile();
+            return false;
+        }
+        return true;
+    }
+};
+
+static AuditOutcome RecycleDuplicate(const std::wstring& path,
+                                     ULONGLONG generation,
+                                     LockedCapture& capture) {
+    if (WaitStop(0)) return AuditOutcome::Kept;
+    if (capture.file == INVALID_HANDLE_VALUE) return AuditOutcome::Kept;
+    capture.CloseFile();
+    if (g_generation.load() != generation || WaitStop(0))
+        return AuditOutcome::Kept;
+    return RecycleFile(path) ? AuditOutcome::RecycledDuplicate
+                             : AuditOutcome::Kept;
+}
+
 static void ProcessOne(std::wstring path) {
     Settings s = SnapshotSettings();
+    ULONGLONG generation = g_generation.load();
 
     DWORD t0 = GetTickCount();
     if (!WaitForStableFile(path)) {
+        AuditResult(s, AuditOutcome::Skipped,
+                    L"file was unavailable or processing stopped", path);
         return;
     }
     if (s.logDetails) {
@@ -1696,7 +2045,7 @@ static void ProcessOne(std::wstring path) {
     }
 
     DWORD t1 = GetTickCount();
-    int action = s.popup ? ChooseAction(path, s) : ACTION_AUTO;
+    int action = s.popup ? ChooseAction(path, s, generation) : ACTION_AUTO;
     if (s.logDetails) {
         Wh_Log(L"popup returned %d in %lu ms", action, GetTickCount() - t1);
     }
@@ -1705,21 +2054,31 @@ static void ProcessOne(std::wstring path) {
     // copy below (it just never deletes), so it passes through here.
     if (action != ACTION_AUTO && action != ACTION_DELETE &&
         action != ACTION_COPY_DELETE && action != ACTION_COPY_ONLY) {
+        AuditResult(s, AuditOutcome::Skipped, L"no action selected", path);
         return;
     }
     if (action == ACTION_DELETE) {
-        DeleteWatched(path, s);
+        AuditResult(s, DeleteWatched(path, s), L"requested deletion", path);
         return;
     }
 
     // ACTION_COPY_DELETE forces the durable image path + deletion regardless of
     // the configured clipboard mode. ACTION_AUTO / timeout uses the settings.
     bool forceImage = (action == ACTION_COPY_DELETE);
+    LockedCapture capture;
+    bool duplicateCandidate = s.removeExactDuplicates &&
+        (forceImage || s.mode == L"image");
+    if (duplicateCandidate && !capture.Open(path, s.folder)) {
+        // Lack of delete access must not prevent an otherwise valid clipboard copy
+        // or the configured normal cleanup path. It only disables deduplication
+        // for this file.
+        duplicateCandidate = false;
+    }
 
     bool copied;
     bool multiFrame = false;  // True when only frame 0 of a multi-frame image copied.
     if (forceImage || s.mode == L"image") {
-        ImageCopy r = ClipboardImage(path);
+        ImageCopy r = ClipboardImage(path, capture.file);
         copied = (r != ImageCopy::Failed);
         multiFrame = (r == ImageCopy::CopiedFirstFrameOnly);
     } else if (s.mode == L"file") {
@@ -1731,11 +2090,62 @@ static void ProcessOne(std::wstring path) {
     }
 
     if (!copied) {
-        Wh_Log(L"Clipboard copy failed%s",
-               s.logDetails ? (L": " + path).c_str() : L"");
+        AuditResult(s, AuditOutcome::Skipped, L"clipboard copy failed", path);
         return;  // Invariant: never delete when a requested copy failed.
     }
-
+    bool fullImageCopied = (forceImage || s.mode == L"image") && !multiFrame;
+    if (fullImageCopied && duplicateCandidate && !WaitStop(0)) {
+        std::array<BYTE, 32> digest;
+        if (HashFile(capture.file, digest)) {
+            EnterCriticalSection(&g_lock);
+            bool current = generation == g_generation.load();
+            bool duplicate = current && SeenRecentContentAndRemember(
+                digest, path, GetTickCount64());
+            LeaveCriticalSection(&g_lock);
+            if (!current) {
+                AuditResult(s, AuditOutcome::Copied,
+                            L"copy completed before settings changed", path);
+                return;
+            }
+            if (duplicate && action == ACTION_AUTO) {
+                DWORD delay = s.popup ? 0 : (DWORD)s.delaySeconds * 1000;
+                BY_HANDLE_FILE_INFORMATION beforeCleanup{};
+                if (!GetFileInformationByHandle(capture.file, &beforeCleanup)) {
+                    AuditResult(s, AuditOutcome::Kept,
+                                L"file changed before cleanup", path);
+                    return;
+                }
+                capture.CloseFile();
+                if (WaitStop(delay) || g_generation.load() != generation) {
+                    AuditResult(s, AuditOutcome::Kept,
+                                L"duplicate cleanup cancelled or stopped", path);
+                    return;
+                }
+                LockedCapture again;
+                BY_HANDLE_FILE_INFORMATION afterCleanup{};
+                if (!again.Open(path, s.folder) ||
+                    !GetFileInformationByHandle(again.file, &afterCleanup) ||
+                    beforeCleanup.dwVolumeSerialNumber !=
+                        afterCleanup.dwVolumeSerialNumber ||
+                    beforeCleanup.nFileIndexHigh != afterCleanup.nFileIndexHigh ||
+                    beforeCleanup.nFileIndexLow != afterCleanup.nFileIndexLow) {
+                    AuditResult(s, AuditOutcome::Kept,
+                                L"file changed before cleanup", path);
+                    return;
+                }
+                AuditOutcome outcome =
+                    RecycleDuplicate(path, generation, again);
+                AuditResult(s, outcome, outcome == AuditOutcome::RecycledDuplicate
+                                ? L"exact duplicate" : L"duplicate cleanup did not recycle",
+                            path);
+                return;
+            }
+        } else {
+            Wh_Log(L"Could not check screenshot for a recent duplicate%s",
+                   s.logDetails ? (L": " + path).c_str() : L"");
+        }
+    }
+    capture.CloseFile();
     // Deletion only makes sense for self-contained payloads (image / none).
     // File and Path payloads reference the file, so deleting would break them.
     bool payloadReferencesFile =
@@ -1748,26 +2158,35 @@ static void ProcessOne(std::wstring path) {
     // A multi-page or animated image copied only part of itself (frame 0), so
     // deleting the file would lose the rest. Keep it, the same treatment file/path
     // payloads get.
-    if (deleteRequested && multiFrame) {
-        Wh_Log(L"Multi-frame image: copied the first frame only, keeping the file%s",
-               s.logDetails ? (L": " + path).c_str() : L"");
-        // A popup was in play (an explicit Copy + delete, or letting the countdown
-        // run), so tell the user the file was kept instead of deleted, otherwise the
-        // button is a silent no-op. Fire-and-forget toast; a failure leaves the log.
-        if (s.popup) {
-            ShowKeptToast(BaseName(path));
+    if (multiFrame) {
+        if (deleteRequested) {
+            // A popup was in play (an explicit Copy + delete, or letting the countdown
+            // run), so tell the user the file was kept instead of deleted, otherwise the
+            // button is a silent no-op. Fire-and-forget toast; a failure leaves the log.
+            if (s.popup) {
+                ShowKeptToast(BaseName(path));
+            }
         }
+        AuditResult(s, AuditOutcome::Kept,
+                    L"multi-frame image was only partly copied", path);
     }
     bool wantsDelete = deleteRequested && !multiFrame;
     if (!wantsDelete) {
+        if (!multiFrame) {
+            AuditResult(s, AuditOutcome::Copied,
+                        L"copy completed and file was kept", path);
+        }
         return;
     }
 
     // With the popup, the countdown already elapsed, so delete immediately.
     DWORD delay = (s.popup || forceImage) ? 0 : (DWORD)s.delaySeconds * 1000;
-    if (!WaitStop(delay)) {
-        DeleteWatched(path, s);
+    if (WaitStop(delay)) {
+        AuditResult(s, AuditOutcome::Kept,
+                    L"cleanup cancelled or stopped", path);
+        return;
     }
+    AuditResult(s, DeleteWatched(path, s), L"automatic cleanup", path);
 }
 
 // ============================================================================
@@ -2104,6 +2523,7 @@ static void SnapshotExistingNames(const std::wstring& folder) {
         FindClose(h);
     }
     EnterCriticalSection(&g_lock);
+    g_recentContent.clear();
     g_preexisting = std::move(names);
     LeaveCriticalSection(&g_lock);
 }
@@ -2224,23 +2644,27 @@ static DWORD WINAPI WatchThread(LPVOID) {
 BOOL WhTool_ModInit() {
     InitializeCriticalSection(&g_lock);
     InitializeCriticalSection(&g_toastLock);
-    LoadSettings();
 
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);   // Manual reset.
     g_reloadEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);  // Auto reset.
+    g_settingsEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);  // Manual reset.
     g_workEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);    // Auto reset.
     g_toastActionEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);  // Auto reset.
-    if (!g_stopEvent || !g_reloadEvent || !g_workEvent || !g_toastActionEvent) {
+    if (!g_stopEvent || !g_reloadEvent || !g_settingsEvent || !g_workEvent ||
+        !g_toastActionEvent) {
         if (g_stopEvent) CloseHandle(g_stopEvent);
         if (g_reloadEvent) CloseHandle(g_reloadEvent);
+        if (g_settingsEvent) CloseHandle(g_settingsEvent);
         if (g_workEvent) CloseHandle(g_workEvent);
         if (g_toastActionEvent) CloseHandle(g_toastActionEvent);
-        g_stopEvent = g_reloadEvent = g_workEvent = g_toastActionEvent = nullptr;
+        g_stopEvent = g_reloadEvent = g_settingsEvent = g_workEvent =
+            g_toastActionEvent = nullptr;
         DeleteCriticalSection(&g_lock);
         DeleteCriticalSection(&g_toastLock);
         return FALSE;
     }
 
+    LoadSettings();
     g_workerThread = CreateThread(nullptr, 0, WorkerThread, nullptr, 0, nullptr);
     g_watchThread = CreateThread(nullptr, 0, WatchThread, nullptr, 0, nullptr);
     if (!g_workerThread || !g_watchThread) {
@@ -2252,10 +2676,12 @@ BOOL WhTool_ModInit() {
         if (g_workerThread) CloseHandle(g_workerThread);
         CloseHandle(g_stopEvent);
         CloseHandle(g_reloadEvent);
+        CloseHandle(g_settingsEvent);
         CloseHandle(g_workEvent);
         CloseHandle(g_toastActionEvent);
         g_watchThread = g_workerThread = nullptr;
-        g_stopEvent = g_reloadEvent = g_workEvent = g_toastActionEvent = nullptr;
+        g_stopEvent = g_reloadEvent = g_settingsEvent = g_workEvent =
+            g_toastActionEvent = nullptr;
         DeleteCriticalSection(&g_lock);
         DeleteCriticalSection(&g_toastLock);
         return FALSE;
@@ -2294,6 +2720,9 @@ void WhTool_ModUninit() {
     }
     if (g_reloadEvent) {
         CloseHandle(g_reloadEvent);
+    }
+    if (g_settingsEvent) {
+        CloseHandle(g_settingsEvent);
     }
     if (g_workEvent) {
         CloseHandle(g_workEvent);
