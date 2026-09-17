@@ -999,8 +999,8 @@ BOOL ExtTextOutCalcRect(HDC hdc, POINT point, UINT options, RECT& textRect, LPCR
 
     if (lpDx)
         ExtTextOutDxWidth(options, lpDx, c, textSize);
-    
-    ExtTextOutAlignRect(hdc, point, textSize, textRect, ta);
+    if (ta)
+    	ExtTextOutAlignRect(hdc, point, textSize, textRect, ta);
 
     textRect.left   = point.x;
     textRect.top    = point.y;
@@ -1053,7 +1053,6 @@ BOOL WINAPI HookedExtTextOutW(
     params.pBlendFunction = &blend;
 
     HDC memDC = nullptr;
-    // Acquire OS cached bitmap
     HPAINTBUFFER hpb = BeginBufferedPaint(hdc, &textRect, BPBF_TOPDOWNDIB, &params, &memDC);
     if (!hpb) {
         Wh_Log(L"Failed BeginBufferedPaint error:0x%08x", GetLastError());
