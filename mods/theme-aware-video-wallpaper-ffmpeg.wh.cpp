@@ -127,6 +127,7 @@ D2D initialization, and thread-safe teardown are adapted from
     - "5": "Created time (newest first)"
     - "6": "Size (largest first)"
     - "7": "Size (smallest first)"
+    - "8": "Random order"
   $options:zh-CN:
     - "0": "修改时间（新到旧）"
     - "1": "修改时间（旧到新）"
@@ -136,6 +137,7 @@ D2D initialization, and thread-safe teardown are adapted from
     - "5": "创建时间（新到旧）"
     - "6": "文件大小（大到小）"
     - "7": "文件大小（小到大）"
+    - "8": "随机顺序"
 - videoExtensions: ".mp4,.mkv,.mov,.webm,.avi,.m4v,.wmv"
   $name: Recognized video extensions
   $name:zh-CN: 识别的视频扩展名
@@ -295,6 +297,7 @@ D2D initialization, and thread-safe teardown are adapted from
 
 #include <algorithm>
 #include <atomic>
+#include <random>
 #include <cstdint>
 #include <set>
 #include <string>
@@ -1069,6 +1072,12 @@ std::vector<std::wstring> EnumVideos(const WCHAR* folder) {
                                  b.writeTime.dwLowDateTime;
                   }
               });
+
+    if (g_sortMode == 8 && !entries.empty()) {
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::shuffle(entries.begin(), entries.end(), gen);
+    }
 
     std::vector<std::wstring> result;
     result.reserve(entries.size());
@@ -2315,7 +2324,7 @@ void ReloadWallpaper() {
         }
     }
 
-    ReloadVideoList();
+    ReloadVideoList(true);
 
     if (!g_videoList.empty()) {
         const WCHAR* first = g_videoList[g_videoIndex].c_str();
@@ -2336,7 +2345,7 @@ bool PlayPrev() {
 
     if (g_pendingListReload) {
         g_pendingListReload = false;
-        ReloadVideoList();
+        ReloadVideoList(true);
         if (g_videoIndex >= g_videoList.size()) {
             g_videoIndex = g_videoList.empty() ? 0 : (g_videoList.size() - 1);
         }
@@ -2380,7 +2389,7 @@ bool PlayNext() {
 
     if (g_pendingListReload) {
         g_pendingListReload = false;
-        ReloadVideoList();
+        ReloadVideoList(true);
         if (g_videoIndex >= g_videoList.size()) {
             g_videoIndex = g_videoList.empty() ? 0 : (g_videoList.size() - 1);
         }
@@ -2450,7 +2459,7 @@ void LoadSettings() {
         Wh_FreeStringSetting(s);
     }
     g_sortMode = _wtoi(sortStr);
-    if (g_sortMode < 0 || g_sortMode > 7)
+    if (g_sortMode < 0 || g_sortMode > 8)
         g_sortMode = 0;
 
     s = Wh_GetStringSetting(L"videoExtensions");
