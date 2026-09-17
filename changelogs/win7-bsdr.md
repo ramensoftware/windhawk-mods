@@ -1,3 +1,9 @@
+## 1.2 ([Sep 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/58d5161becfeb9a770c8aa4372a32c02f5f39206/mods/win7-bsdr.wh.cpp))
+
+* Fix a critical LogonUI crash occurring in Windhawk 2.0 alpha 4 and newer
+* Add support for runtime DPI changes, which might occur if the monitor topology changes during a logoff (Windows 10 1703+ only)
+* Reorder the mod README to be clearer about the necessary setting change
+
 ## 1.1 ([Sep 7, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d7f29f93f17b01ab03c53367f421bdc0fc339ffe/mods/win7-bsdr.wh.cpp))
 
 * Add support for loading `winsrv.dll` from Windows Vista

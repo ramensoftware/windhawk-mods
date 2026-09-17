@@ -17000,7 +17000,7 @@
           1
         ],
         "ratingUsers": 1,
-        "updated": 1788817942000,
+        "updated": 1789672184000,
         "users": 197
       },
       "metadata": {
@@ -17019,7 +17019,7 @@
         "license": "GPL-3.0-only",
         "name": "Windows Vista/7 Blocked Shutdown UX & Logoff Sequence",
         "twitter": "https://twitter.com/Ingan121",
-        "version": "1.1"
+        "version": "1.2"
       }
     },
     "win7-classic-autoplay-restorer": {
