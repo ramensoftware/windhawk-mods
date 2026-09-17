@@ -2,12 +2,60 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-17T21:55:57.000Z</updated>
+    <updated>2026-09-17T23:11:06.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Split: Running Left, Pinned Right 0.3.18]]></title>
+        <id>https://windhawk.net/mods/taskbar-split#30a93c50006ebd91a988ef6ba6f461ac903cb5c3</id>
+        <link href="https://windhawk.net/mods/taskbar-split"/>
+        <updated>2026-09-17T23:11:06.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarsplit">Taskbar Split</h1>
+<p>Creates two dynamic application zones on the Windows 11 taskbar:</p>
+<p><img src="https://raw.githubusercontent.com/Artllex/taskbar-split/main/assets/taskbar-split.png" alt="Taskbar Split: running applications on the left and closed pinned applications on the right" /></p>
+<p><code>[Start/System] [Running apps]  &lt;flexible empty space&gt;  [Closed pinned apps] [Tray/Clock]</code></p>
+<p>Launching a pinned app moves it to the left zone and restores its normal size.
+Closing the app returns its pinned icon to the right zone, where icons can be
+smaller and packed more densely. Newly running buttons are appended to the right end of the running zone.</p>
+<p>Drag with the left mouse button to reorder within a section. The dragged
+icon follows the mouse within that section and neighbours make room as it
+crosses their centres. Escape cancels the move; sections cannot be crossed.
+Left-drag is intentionally handled by this mod to keep reordering inside each
+section. It replaces native left-drag for buttons with a recognized Appid.
+Disable "Enable section dragging" to use native input instead; section
+boundaries are then not enforced during dragging. The split layout stays active.</p>
+<p>Per-app order is saved in Windhawk storage after a completed drag and restored
+after Explorer restarts; Windows' persistent pin list is not changed. Buttons
+without a recognized stable Appid retain native input and are not persisted.
+Separate windows sharing one Appid share a rank; their relative window order
+is not persisted. Up to 256 app identities per section are remembered.</p>
+<p>Native Widgets space is reserved when system buttons retain their Windows positions.
+For a left-aligned Start menu, also select Left taskbar alignment in Windows settings.</p>
+<p>Targets the horizontal primary taskbar on Windows 11 x64 and ARM64.
+Disable the mod to immediately return to the standard Windows layout.</p>
+<p>Unlike "Taskbar Start Button Centered Origin", this mod splits by running
+versus closed pinned apps, not by window position on the screen.
+Do not combine with "Start button always on the left",
+"Taskbar Start Button Centered Origin" (taskbar-centered-start-split-icons), or other mods that
+reposition or scale taskbar buttons. They can override the same layout.
+On crowded taskbars, reduced spacing can overlap buttons; reduce the pinned
+icon size or the middle gap, or unpin applications to free space.</p>
+<p>Buttons are positioned through their native XAML arrange rectangles. Closed
+pinned buttons are additionally scaled, including their hover/focus visuals.
+The overflow button follows the running group; Windows still decides which
+applications appear in the overflow menu. Secondary taskbars stay unchanged.</p>
+<p>This mod keeps Start at the left edge and uses the full space up to the tray
+for a launcher/workspace split. Centered Origin instead organizes windows
+around a centered Start button. Separate settings keep these distinct layouts
+easy to configure; enable only one positioning mod at a time.</p>]]></content>
+        <author>
+            <name>Arkadiusz</name>
+            <uri>https://github.com/Artllex</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[SumatraPDF scroll tabs with mouse wheel 1.0.0]]></title>
         <id>https://windhawk.net/mods/sumatrapdf-wheel-scroll-tabs#6b8f938410d8c4946775574001ed53728eff76f8</id>
@@ -1011,31 +1059,6 @@ Windows continues to handle the actual copy, move, delete, conflicts, and errors
         <author>
             <name>digART</name>
             <uri>https://github.com/digart11</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Clock to Left 2.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-clock-to-left#66142e7d3d98559b85934b8d74a9915b63c8cead</id>
-        <link href="https://windhawk.net/mods/taskbar-clock-to-left"/>
-        <updated>2026-09-08T23:16:12.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarclocktoleft">Taskbar Clock to Left</h1>
-<p>Moves the native Windows 11 notification-center clock button to the left side
-of the taskbar. The clock is hosted in its own left-side layer. Instead of
-adding columns or invisible spacers, the mod preserves the native system-tray
-extent supplied to the taskbar layout engine. Centered Start/app buttons remain
-at their original position and the remaining tray stays flush with the right
-edge. Clock customization mods can load before or after this mod: customized
-text width only changes the left host and never becomes a taskbar-layout input.
-On a centered taskbar, the left host is placed after the Widgets/weather button
-when it is visible. If Windows is configured to left-align Start and app icons,
-the clock stays in its native position to avoid covering those buttons.</p>
-<p><img src="https://i.imgur.com/Wew0LZh.png" alt="Taskbar Clock to Left" /></p>
-<p>Windows 11's modern taskbar is required.</p>
-<h2 id="acknowledgements">Acknowledgements</h2>
-<p>This mod was inspired by <a href="https://windhawk.net/mods/taskbar-clock-customization">Taskbar Clock Customization</a> by <a href="https://github.com/m417z">m417z</a>.</p>]]></content>
-        <author>
-            <name>pleromyst</name>
-            <uri>https://github.com/pleromyst</uri>
         </author>
     </entry>
 </feed>

@@ -14474,6 +14474,39 @@
         "version": "1.0.2"
       }
     },
+    "taskbar-split": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1789686666000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1789686666000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Arkadiusz",
+        "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject",
+        "description": "Places running apps on the left and closed pinned apps on the right, with flexible empty space between them (Windows 11).",
+        "github": "https://github.com/Artllex",
+        "homepage": "https://github.com/Artllex/taskbar-split",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Taskbar Split: Running Left, Pinned Right",
+        "version": "0.3.18"
+      }
+    },
     "taskbar-start-button-colorizer": {
       "details": {
         "defaultSorting": 8310,
