@@ -118,8 +118,8 @@ This mod took a lot of care — from audio-video sync tuning to edge-case bug fi
 - audioVolume: 100
   $name: Volume (%)
   $name:zh-CN: 音量（%）
-  $description: "Volume of video playback. Only effective when Play audio is enabled"
-  $description:zh-CN: "视频文件内部音频播放音量。仅在播放音频开启时生效"
+  $description: "Volume of video playback. "
+  $description:zh-CN: "视频文件内部音频播放音量。"
 - pauseOnFullscreen: "1"
   $name: Pause when app is fullscreen
   $name:zh-CN: 有应用全屏时暂停
@@ -151,6 +151,17 @@ This mod took a lot of care — from audio-video sync tuning to edge-case bug fi
   $name:zh-CN: 快捷键 - 静音切换
   $description: "Toggle mute. Empty to disable"
   $description:zh-CN: "切换静音。留空禁用"
+- applyMode: "on_next"
+  $name: Theme/file/settings/audio change apply timing
+  $name:zh-CN: 主题/文件/声音/设置变化生效时机
+  $description: "When theme switches, files change, hotkey switches video while muted (audio reload), or settings are saved — may require"
+  $description:zh-CN: "当主题切换、文件变化、静音时载入的视频快捷键切换声音或保存修改一些设置时，可能要"
+  $options:
+    - "on_next": "Wait until current video finishes, then apply"
+    - "instant": "Instant (stop current video, apply immediately)"
+  $options:zh-CN:
+    - "on_next": "等当前视频播完后生效"
+    - "instant": "立即停止当前视频并生效"
 - fps: 15
   $name: Frame rate (fps)
   $name:zh-CN: 帧率（fps）
@@ -226,17 +237,6 @@ This mod took a lot of care — from audio-video sync tuning to edge-case bug fi
     - "5": "QSV（Intel Quick Sync，仅 Intel 显卡）"
     - "6": "CUDA/NVDEC（仅 NVIDIA 显卡）"
     - "7": "AMF（仅 AMD 显卡）"
-- applyMode: "on_next"
-  $name: Settings/theme apply timing
-  $name:zh-CN: 设置/主题生效时机
-  $description: "When a setting is changed, theme switches, or files change"
-  $description:zh-CN: "当设置改变、主题切换或文件变化时"
-  $options:
-    - "on_next": "Wait until current video finishes, then apply"
-    - "instant": "Instant (stop current video, apply immediately)"
-  $options:zh-CN:
-    - "on_next": "等当前视频播完后生效"
-    - "instant": "立即停止当前视频并生效"
 */
 // ==/WindhawkModSettings==
 
