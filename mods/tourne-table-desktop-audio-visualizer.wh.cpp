@@ -3,13 +3,12 @@
 // @name                Tourne'Table [Audio Visualizer]
 // @description         A real-time audio visualizer for the Windows desktop. Advanced settings without sacrificing resource efficiency. Near-headless rendering with CPU optimization for audio capture.
 // @description:ru-RU   Аудиовизуализатор реального времени для рабочего стола Windows. Расширенные настройки без ущерба для экономии ресурсов. Практически безинтерфейсный (near-headless) поток рендеринга с оптимизацией процессора для захвата звука.
-// @version             1.1.0
+// @version             1.2.0
 // @author              USER-TOURNE
 // @github              https://github.com/USER-TOURNE
 // @donateUrl           https://ko-fi.com/tourne
 // @license             MIT
 // @include             windhawk.exe
-// @architecture        x86-64
 // @compilerOptions     -ldxgi -ld2d1 -ld3d11 -ldcomp -ldwmapi -ldwrite -lgdi32 -lshcore -lshlwapi -lole32 -lshell32 -lksuser -lwindowscodecs -lruntimeobject -lwindowsapp -luuid -luser32 -ladvapi32
 // ==/WindhawkMod==
 
@@ -840,6 +839,7 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
 #include <cstring>
 #include <cwchar>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -1198,7 +1198,11 @@ static std::atomic<bool>  g_albumArtFetchPending{false};
 static std::atomic<DWORD> g_accentColorCache{0xFF0078D4};
 
 static HANDLE g_gsmtcStopEvent = nullptr;
-[[clang::no_destroy]] static std::thread g_gsmtcThread;
+// std::optional rather than a bare std::thread: there is no assignment that
+// empties a std::thread (move-assigning over a joinable one calls
+// std::terminate), so the optional is what gives teardown a join() + reset()
+// pair. This is the documented form for a global worker thread.
+[[clang::no_destroy]] static std::optional<std::thread> g_gsmtcThread;
 static std::thread* g_albumArtThread = nullptr;
 
 HMODULE GetCurrentModuleHandle() {
@@ -1235,7 +1239,11 @@ HMONITOR GetMonitorById(int monitorId) {
 
     EnumDisplayMonitors(
         nullptr, nullptr,
-        [](HMONITOR hMonitor, HDC, LPRECT, LPARAM dwData) -> BOOL {
+        // __stdcall is required: windhawk.exe is 32-bit on Windhawk 1.x, and
+        // there a capture-less lambda otherwise converts to a __cdecl pointer
+        // that will not bind to MONITORENUMPROC. On x86-64 there is only one
+        // calling convention, so this is a no-op there.
+        [](HMONITOR hMonitor, HDC, LPRECT, LPARAM dwData) __stdcall -> BOOL {
             auto& proc = *reinterpret_cast<decltype(monitorEnumProc)*>(dwData);
             return proc(hMonitor);
         },
@@ -1470,7 +1478,7 @@ bool IsFontInstalled(const std::wstring& family) {
     bool found = false;
     EnumFontFamiliesEx(
         hdc, &lf,
-        [](const LOGFONT*, const TEXTMETRIC*, DWORD, LPARAM param) -> int {
+        [](const LOGFONT*, const TEXTMETRIC*, DWORD, LPARAM param) __stdcall -> int {
             *reinterpret_cast<bool*>(param) = true;
             return 0;
         },
@@ -1544,7 +1552,7 @@ HWND GetWorkerW() {
 
     HWND hWorkerW = nullptr;
     EnumWindows(
-        [](HWND hWnd, LPARAM lParam) -> BOOL {
+        [](HWND hWnd, LPARAM lParam) __stdcall -> BOOL {
             if (!FindWindowEx(hWnd, nullptr, L"SHELLDLL_DefView", nullptr)) {
                 return TRUE;
             }
@@ -1560,7 +1568,7 @@ HWND GetWorkerW() {
     if (!hWorkerW) {
         SendMessage(hProgman, 0x052C, 0, 0);
         EnumWindows(
-            [](HWND hWnd, LPARAM lParam) -> BOOL {
+            [](HWND hWnd, LPARAM lParam) __stdcall -> BOOL {
                 if (!FindWindowEx(hWnd, nullptr, L"SHELLDLL_DefView", nullptr)) {
                     return TRUE;
                 }
@@ -1659,7 +1667,7 @@ int ComputeRectCoveragePercent(const RECT& target) {
     } ctx{target, coveredRgn};
 
     EnumWindows(
-        [](HWND hWnd, LPARAM lParam) -> BOOL {
+        [](HWND hWnd, LPARAM lParam) __stdcall -> BOOL {
             auto* c = reinterpret_cast<EnumCtx*>(lParam);
 
             if (!IsWindowVisible(hWnd) || IsIconic(hWnd)) return TRUE;
@@ -2019,7 +2027,7 @@ void InitGsmtcListener() {
     g_gsmtcStopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
     if (!g_gsmtcStopEvent) return;
 
-    g_gsmtcThread = std::thread([]() {
+    g_gsmtcThread.emplace([]() {
         try {
             winrt::init_apartment(winrt::apartment_type::multi_threaded);
             g_gsmtcMgr = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
@@ -3260,8 +3268,10 @@ struct VizLayout {
 // visualizer repositions it. Windhawk mods can only READ settings, not write
 // them back, so a dragged position can't land in the Position % fields the
 // settings UI shows -- instead it's kept as a runtime override here (which
-// ComputeVizLayout consults ahead of the Position settings) and persisted to
-// a small file of our own so it survives restarts silently.
+// ComputeVizLayout consults ahead of the Position settings) and persisted via
+// Wh_SetStringValue so it survives restarts silently. Settings are read-only
+// to a mod, but mod-owned values are not, and Windhawk removes them with the
+// mod rather than leaving anything behind.
 std::atomic<bool> g_dragOverrideActive{false};
 std::atomic<float> g_dragOverrideH{50.0f};
 std::atomic<float> g_dragOverrideV{50.0f};
@@ -3294,36 +3304,66 @@ float EffectivePeakFreqOffsetY() {
            (float)g_pfNudgeY.load(std::memory_order_relaxed);
 }
 
-std::wstring GetPositionOverridePath() {
-    WCHAR buf[MAX_PATH];
-    DWORD n = GetEnvironmentVariable(L"LOCALAPPDATA", buf, MAX_PATH);
-    if (n == 0 || n >= MAX_PATH) return L"";
-    std::wstring dir = std::wstring(buf) + L"\\TourneTable";
-    CreateDirectory(dir.c_str(), nullptr);
-    return dir + L"\\position_override.txt";
+// Up to and including v1.1.0 these placements lived in a file of our own under
+// %LOCALAPPDATA%. That does not work on portable Windhawk and it left state
+// behind after an uninstall, so they now go through Wh_SetStringValue /
+// Wh_GetStringValue, which are per-mod and are removed with the mod.
+//
+// This reads the old file once, carries its contents over, and deletes it
+// along with the directory, so an upgrade keeps your layout and leaves nothing
+// behind. It can be dropped in a later version. It runs from
+// LoadPositionOverride at init only, never from an input hook.
+static bool MigrateLegacyOverrideFile(WCHAR* out, size_t outChars) {
+    WCHAR local[MAX_PATH];
+    DWORD n = GetEnvironmentVariable(L"LOCALAPPDATA", local, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return false;
+
+    std::wstring dir = std::wstring(local) + L"\\TourneTable";
+    std::wstring path = dir + L"\\position_override.txt";
+
+    HANDLE h = CreateFile(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                          FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return false;
+
+    char narrow[128] = {};
+    DWORD read = 0;
+    BOOL ok = ReadFile(h, narrow, sizeof(narrow) - 1, &read, nullptr);
+    CloseHandle(h);
+
+    // Remove the file either way: if it could not be read it is of no further
+    // use, and leaving it behind is the thing this change exists to stop.
+    DeleteFile(path.c_str());
+    RemoveDirectory(dir.c_str());  // only succeeds if nothing else is in there
+
+    if (!ok || read == 0) return false;
+
+    // The payload was written as plain ASCII digits, spaces, dots and minus
+    // signs, so widening byte by byte is exact here.
+    size_t i = 0;
+    for (; i < read && i + 1 < outChars; i++) out[i] = (WCHAR)(unsigned char)narrow[i];
+    out[i] = L'\0';
+
+    Wh_SetStringValue(L"positionOverride", out);
+    return i > 0;
 }
 
 void LoadPositionOverride() {
-    std::wstring path = GetPositionOverridePath();
-    if (path.empty()) return;
-    HANDLE h = CreateFile(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
-                          FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) return;
-    char buf[128] = {};
-    DWORD read = 0;
-    ReadFile(h, buf, sizeof(buf) - 1, &read, nullptr);
-    CloseHandle(h);
+    WCHAR buf[192] = {};
+    Wh_GetStringValue(L"positionOverride", buf, ARRAYSIZE(buf));
+
+    if (!buf[0] && !MigrateLegacyOverrideFile(buf, ARRAYSIZE(buf))) return;
+    if (!buf[0]) return;
 
     // Two floats is the original format; the four trailing ints carrying the
-    // text nudges came later, so a file written by an older build still parses
+    // text nudges came later, so a value written by an older build still parses
     // and simply leaves the nudges at zero. A negative percentage is the
-    // sentinel for "no position override" -- needed now that the file can exist
-    // purely to hold text nudges, and an old file never contains one.
+    // sentinel for "no position override" -- needed now that the record can
+    // exist purely to hold text nudges, and an old one never contains one.
     float hPct = -1.0f, vPct = -1.0f;
     int npX = 0, npY = 0, pfX = 0, pfY = 0;
     float mediaH = -1.0f, mediaV = -1.0f;
-    int n = sscanf_s(buf, "%f %f %d %d %d %d %f %f", &hPct, &vPct, &npX, &npY, &pfX, &pfY,
-                     &mediaH, &mediaV);
+    int n = swscanf_s(buf, L"%f %f %d %d %d %d %f %f", &hPct, &vPct, &npX, &npY, &pfX, &pfY,
+                      &mediaH, &mediaV);
     if (n >= 2 && hPct >= 0.0f && vPct >= 0.0f) {
         g_dragOverrideH.store(std::clamp(hPct, 0.0f, 100.0f), std::memory_order_relaxed);
         g_dragOverrideV.store(std::clamp(vPct, 0.0f, 100.0f), std::memory_order_relaxed);
@@ -3342,13 +3382,10 @@ void LoadPositionOverride() {
     }
 }
 
-// One file holds all three runtime placements, so any change rewrites the whole
-// record rather than touching a field -- and when everything is back to its
-// default the file is removed outright, so nothing lingers to be reloaded.
+// One value holds all three runtime placements, so any change rewrites the
+// whole record rather than touching a field -- and when everything is back to
+// its default the value is cleared outright, so nothing lingers to be reloaded.
 void PersistOverrideState() {
-    std::wstring path = GetPositionOverridePath();
-    if (path.empty()) return;
-
     bool posActive = g_dragOverrideActive.load(std::memory_order_relaxed);
     bool mediaActive = g_mediaOverrideActive.load(std::memory_order_relaxed);
     int npX = g_npNudgeX.load(std::memory_order_relaxed);
@@ -3357,23 +3394,18 @@ void PersistOverrideState() {
     int pfY = g_pfNudgeY.load(std::memory_order_relaxed);
 
     if (!posActive && !mediaActive && !npX && !npY && !pfX && !pfY) {
-        DeleteFile(path.c_str());
+        Wh_SetStringValue(L"positionOverride", L"");
         return;
     }
 
-    HANDLE h = CreateFile(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
-                          FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) return;
-    char buf[192];
-    int len = sprintf_s(buf, "%.4f %.4f %d %d %d %d %.4f %.4f",
-                        posActive ? g_dragOverrideH.load(std::memory_order_relaxed) : -1.0f,
-                        posActive ? g_dragOverrideV.load(std::memory_order_relaxed) : -1.0f,
-                        npX, npY, pfX, pfY,
-                        mediaActive ? g_mediaOverrideH.load(std::memory_order_relaxed) : -1.0f,
-                        mediaActive ? g_mediaOverrideV.load(std::memory_order_relaxed) : -1.0f);
-    DWORD written = 0;
-    if (len > 0) WriteFile(h, buf, (DWORD)len, &written, nullptr);
-    CloseHandle(h);
+    WCHAR buf[192];
+    int len = swprintf_s(buf, L"%.4f %.4f %d %d %d %d %.4f %.4f",
+                         posActive ? g_dragOverrideH.load(std::memory_order_relaxed) : -1.0f,
+                         posActive ? g_dragOverrideV.load(std::memory_order_relaxed) : -1.0f,
+                         npX, npY, pfX, pfY,
+                         mediaActive ? g_mediaOverrideH.load(std::memory_order_relaxed) : -1.0f,
+                         mediaActive ? g_mediaOverrideV.load(std::memory_order_relaxed) : -1.0f);
+    if (len > 0) Wh_SetStringValue(L"positionOverride", buf);
 }
 
 void ClearPositionOverride() {
@@ -3810,9 +3842,9 @@ void EndDrag() {
 // discrete jump, applied to the same position override the drag path writes,
 // and picked up by whatever the next frame happens to be.
 
-// Asks the message window to (re)start a short timer that writes the override
-// to disk. Key repeat can fire dozens of nudges a second and each save is a
-// file create/write, so the write is deferred until the user stops moving.
+// Asks the message window to (re)start a short timer that saves the override.
+// Key repeat can fire dozens of nudges a second, so the write is deferred until
+// the user stops moving rather than run on every keystroke.
 void RequestPositionOverrideSave() {
     if (g_messageWnd) PostMessage(g_messageWnd, WM_APP_REQUEST_SAVE_POSITION, 0, 0);
 }
@@ -5558,9 +5590,9 @@ LRESULT CALLBACK MessageWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
             RefreshAccentColorCache();
             return 0;
 
-        // Key repeat can fire dozens of nudges a second and each save is a
-        // file create/write, so restart a short timer instead and write once
-        // the user stops moving. SetTimer with an existing id re-arms it.
+        // Key repeat can fire dozens of nudges a second, so restart a short
+        // timer instead and write once the user stops moving. SetTimer with an
+        // existing id re-arms it.
         case WM_APP_REQUEST_SAVE_POSITION:
             if (!g_unloading) {
                 SetTimer(hWnd, TIMER_ID_MSG_SAVE_POSITION, 700, nullptr);
@@ -6254,9 +6286,10 @@ void WhTool_ModUninit() {
     if (g_gsmtcStopEvent) {
         SetEvent(g_gsmtcStopEvent);
     }
-    if (g_gsmtcThread.joinable()) {
-        g_gsmtcThread.join();
+    if (g_gsmtcThread && g_gsmtcThread->joinable()) {
+        g_gsmtcThread->join();
     }
+    g_gsmtcThread.reset();
     if (g_gsmtcStopEvent) {
         CloseHandle(g_gsmtcStopEvent);
         g_gsmtcStopEvent = nullptr;
