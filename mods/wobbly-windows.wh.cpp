@@ -2,7 +2,7 @@
 // @id              wobbly-windows
 // @name            Wobbly Windows
 // @description     The classic Compiz/KDE Plasma style Wobbly Windows effect for Windows 11!
-// @version         0.94
+// @version         0.95
 // @author          lalimatyus
 // @github          https://github.com/lalimatyus
 // @include         dwm.exe
@@ -2993,7 +2993,8 @@ static bool InitializeDwmHooks()
 
 static void BindPendingAnimationSlotTransforms(bool validateCurrentVisuals)
 {
-    if (!IsOnDwmSceneThread() || g_unloading.load(std::memory_order_acquire))
+    if (!IsOnDwmSceneThread() || g_unloading.load(std::memory_order_acquire) ||
+        !HasAnyAnimationSlots())
     {
         return;
     }
@@ -4205,6 +4206,20 @@ static bool PostPendingDwmSceneWake(bool forceRepost)
         if (IsReadableMemory(threadIdField, sizeof(DWORD)))
         {
             sceneThreadId = *reinterpret_cast<DWORD*>(threadIdField);
+        }
+    }
+    if (sceneThreadId)
+    {
+        // A decoded or recycled ID must never target another process.
+        HANDLE sceneThread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, sceneThreadId);
+        bool ownThread = sceneThread && GetProcessIdOfThread(sceneThread) == GetCurrentProcessId();
+        if (sceneThread)
+        {
+            CloseHandle(sceneThread);
+        }
+        if (!ownThread)
+        {
+            sceneThreadId = 0;
         }
     }
     if (sceneThreadId)
