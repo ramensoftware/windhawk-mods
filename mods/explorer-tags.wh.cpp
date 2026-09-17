@@ -2,7 +2,7 @@
 // @id              explorer-tags
 // @name            Explorer Tags
 // @description     Colored tags panel at the bottom of File Explorer's navigation pane, plus a Tags submenu in the file context menu
-// @version         0.2.1
+// @version         0.2.2
 // @author          buedgik
 // @github          https://github.com/buedgik
 // @homepage        https://github.com/buedgik/explorer-tags
@@ -632,6 +632,13 @@ Resolved ResolveRow(const Row& r, VolumeHandles& volumes, std::wstring& currentP
 // Shortcuts
 // ---------------------------------------------------------------------------
 
+// Explorer windows showing a tag folder don't notice plain file API changes:
+// measured 2026-09-17, a renamed and then deleted shortcut stayed on screen.
+// Every change to a tag folder is announced to the shell.
+void NotifyShell(LONG event, const std::wstring& path) {
+    SHChangeNotify(event, SHCNF_PATHW, path.c_str(), nullptr);
+}
+
 bool WriteShortcut(const std::wstring& lnkPath, const std::wstring& target) {
     IShellLinkW* link = nullptr;
     if (FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
@@ -651,6 +658,10 @@ bool WriteShortcut(const std::wstring& lnkPath, const std::wstring& target) {
         }
     }
     link->Release();
+    if (ok) {
+        NotifyShell(SHCNE_UPDATEITEM, lnkPath);
+        NotifyShell(SHCNE_CREATE, lnkPath);
+    }
     return ok;
 }
 
@@ -679,7 +690,10 @@ bool ReadShortcutTarget(const std::wstring& lnkPath, std::wstring& target) {
 // The only function that deletes: only a .lnk directly inside the tag's folder.
 void DeleteLinkIn(const std::wstring& folder, const std::wstring& name) {
     if (IsSafeLinkName(name)) {
-        DeleteFileW((folder + L"\\" + name).c_str());
+        std::wstring lnkPath = folder + L"\\" + name;
+        if (DeleteFileW(lnkPath.c_str())) {
+            NotifyShell(SHCNE_DELETE, lnkPath);
+        }
     }
 }
 
@@ -762,6 +776,7 @@ void SyncTag(std::vector<Row>& rows, const std::wstring& tag, const std::wstring
         if (err != ERROR_SUCCESS && err != ERROR_ALREADY_EXISTS) {
             return;
         }
+        NotifyShell(SHCNE_MKDIR, folder);
     }
     std::wstring marker = folder + L"\\" MARKER_FILE_NAME;
     Exists markerState = CheckExists(marker);
@@ -1565,7 +1580,9 @@ void OpenTag(Panel* p, int index, bool newWindow) {
     if (!PathIsUNCW(folder.c_str()) && GetDriveTypeW(driveRoot) != DRIVE_REMOTE) {
         // The .tag marker protects a folder recreated here empty: the worker
         // thread rebuilds the shortcuts instead of removing the tags.
-        SHCreateDirectoryExW(nullptr, folder.c_str(), nullptr);
+        if (SHCreateDirectoryExW(nullptr, folder.c_str(), nullptr) == ERROR_SUCCESS) {
+            NotifyShell(SHCNE_MKDIR, folder);
+        }
     }
     if (newWindow) {
         ShellExecuteW(nullptr, L"open", folder.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
@@ -1680,7 +1697,8 @@ void PaintPanel(Panel* p, HDC target) {
     {
         Gdiplus::Graphics g(hdc);
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-        int inset = Dip(2, dpi);
+        // A selecao da arvore ocupa a largura toda (medido).
+        int inset = 0;
         int radius = Dip(4, dpi);
 
         if (p->hot == HIT_HEADER) {
@@ -1703,7 +1721,7 @@ void PaintPanel(Panel* p, HDC target) {
             COLORREF tc = s.tags[i].color;
             Gdiplus::SolidBrush dot(Gdiplus::Color(255, GetRValue(tc), GetGValue(tc), GetBValue(tc)));
             Gdiplus::REAL d = (Gdiplus::REAL)Dip(10, dpi);
-            Gdiplus::REAL cx = (Gdiplus::REAL)Dip(55, dpi);
+            Gdiplus::REAL cx = (Gdiplus::REAL)Dip(47, dpi);
             Gdiplus::REAL cy = (Gdiplus::REAL)y + m.rowH / 2.0f;
             g.FillEllipse(&dot, cx - d / 2, cy - d / 2, d, d);
         }
@@ -1713,7 +1731,7 @@ void PaintPanel(Panel* p, HDC target) {
 
     // Title: collapse arrow, tag icon, "Tags".
     HGDIOBJ oldFont = SelectObject(hdc, GetIconFont(p, dpi));
-    RECT chevron = {Dip(6, dpi), headerTop, Dip(22, dpi), headerTop + m.rowH};
+    RECT chevron = {Dip(8, dpi), headerTop, Dip(24, dpi), headerTop + m.rowH};
     DrawTextAt(hdc, g_collapsed ? L"\uE76C" : L"\uE70D", chevron, c.dim, DT_CENTER);
     RECT icon = {Dip(31, dpi), headerTop, Dip(47, dpi), headerTop + m.rowH};
     DrawTextAt(hdc, L"\uE8EC", icon, c.text, DT_CENTER);
@@ -1725,7 +1743,7 @@ void PaintPanel(Panel* p, HDC target) {
 
     if (!g_collapsed) {
         if (m.tagCount == 0 && m.rowsShown > 0) {
-            RECT r = {Dip(41, dpi), rowsTop, width - Dip(8, dpi), rowsTop + m.rowH};
+            RECT r = {Dip(61, dpi), rowsTop, width - Dip(8, dpi), rowsTop + m.rowH};
             DrawTextAt(hdc, L"Create tags in the mod settings", r, c.dim, DT_LEFT);
         }
         for (int row = 0; row < m.rowsShown; row++) {
@@ -1744,7 +1762,7 @@ void PaintPanel(Panel* p, HDC target) {
                 RECT cr = {width - Dip(12, dpi) - measure.right, y, width - Dip(12, dpi), y + m.rowH};
                 DrawTextAt(hdc, countText, cr, c.dim, DT_RIGHT);
             }
-            RECT tr = {Dip(71, dpi), y, width - Dip(12, dpi) - countW, y + m.rowH};
+            RECT tr = {Dip(61, dpi), y, width - Dip(12, dpi) - countW, y + m.rowH};
             DrawTextAt(hdc, s.tags[i].name, tr, c.text, DT_LEFT);
         }
     }
