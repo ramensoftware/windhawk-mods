@@ -210,6 +210,7 @@ struct WindowScanResult {
 HWINEVENTHOOK g_foregroundHook = nullptr;
 HWINEVENTHOOK g_minimizeHook = nullptr;
 HWINEVENTHOOK g_moveHook = nullptr;
+HWINEVENTHOOK g_fullscreenLocationHook = nullptr;
 HWINEVENTHOOK g_shellSurfaceHook = nullptr;
 HWINEVENTHOOK g_taskbarFocusHook = nullptr;
 HANDLE g_workerThread = nullptr;
@@ -2188,6 +2189,18 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
     if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF) {
         return;
     }
+    if (event == EVENT_OBJECT_LOCATIONCHANGE) {
+        if (!hwnd) {
+            return;
+        }
+        for (size_t i = 0; i < kMaxMonitorNumbers; ++i) {
+            if (g_fullscreenOwners[i].hwnd == hwnd) {
+                PostRefresh();
+                break;
+            }
+        }
+        return;
+    }
     if (event == EVENT_OBJECT_SHOW || event == EVENT_OBJECT_HIDE) {
         WCHAR className[256] = {};
         if (!hwnd ||
@@ -2491,6 +2504,11 @@ DWORD WINAPI WorkerThread(LPVOID) {
     if (!g_moveHook) {
         Wh_Log(L"Failed to install move/size WinEvent hook");
     }
+    g_fullscreenLocationHook =
+        SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    if (!g_fullscreenLocationHook) {
+        Wh_Log(L"Failed to install fullscreen location WinEvent hook");
+    }
     InstallShellSurfaceHook();
     g_taskbarFocusHook =
         SetWinEventHook(EVENT_OBJECT_FOCUS, EVENT_OBJECT_FOCUS, nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
@@ -2544,6 +2562,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
     SafeUnhookWinEvent(g_foregroundHook);
     SafeUnhookWinEvent(g_minimizeHook);
     SafeUnhookWinEvent(g_moveHook);
+    SafeUnhookWinEvent(g_fullscreenLocationHook);
     SafeUnhookWinEvent(g_shellSurfaceHook);
     SafeUnhookWinEvent(g_taskbarFocusHook);
     DestroyWorkerMessageWindow();
