@@ -240,6 +240,242 @@ A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite
     - 20px: 20 px (Large)
     - 24px: 24 px (Extra Large)
     - 32px: 32 px (Huge)
+
+- showRadialColorRing: true
+  $name: "Radial Menu: Show Color Swatches"
+  $description: Display outer 360-degree color ring and recent color expansion hub on the radial quick menu. Disable for a minimalist, focused action dial.
+
+- defaultWhiteboardMonitor: active
+  $name: "Whiteboard / Blackboard Default Screen"
+  $description: Choose which display is covered by the Whiteboard and Blackboard when activated via the radial menu or shortcut (K).
+  $options:
+    - active: Active Screen (Follows Cursor)
+    - all: All Screens (Span Multi-Monitor Desktop)
+    - primary: Primary Monitor Only
+    - 1: Screen 1
+    - 2: Screen 2
+    - 3: Screen 3
+    - 4: Screen 4
+
+- radialSlot1: clear
+  $name: "Radial Menu: Tool 1"
+  $description: Action assigned to radial dial sector 1.
+  $options:
+    - none: None (Disabled / Omit Sector)
+    - clear: Clear All Ink
+    - snapshot: Snapshot (Click for Snip, Ctrl+Click for Full)
+    - snip: Interactive Snip
+    - eraser: Eraser
+    - undo: Undo
+    - redo: Redo
+    - pointer: Pointer (Click-Through)
+    - ink_visible: Toggle Ink Visibility
+    - pan: Pan / Zoom Canvas
+    - pen: Pen (Draw Freehand)
+    - highlighter: Highlighter
+    - laser: Laser Pointer
+    - shape: Shape (Scroll wheel to switch)
+    - grid: Toggle Grid
+    - whiteboard: Toggle Whiteboard / Blackboard
+    - exit: Exit WinDraw
+
+- radialSlot2: snapshot
+  $name: "Radial Menu: Tool 2"
+  $description: Action assigned to radial dial sector 2.
+  $options:
+    - none: None (Disabled / Omit Sector)
+    - clear: Clear All Ink
+    - snapshot: Snapshot (Click for Snip, Ctrl+Click for Full)
+    - snip: Interactive Snip
+    - eraser: Eraser
+    - undo: Undo
+    - redo: Redo
+    - pointer: Pointer (Click-Through)
+    - ink_visible: Toggle Ink Visibility
+    - pan: Pan / Zoom Canvas
+    - pen: Pen (Draw Freehand)
+    - highlighter: Highlighter
+    - laser: Laser Pointer
+    - shape: Shape (Scroll wheel to switch)
+    - grid: Toggle Grid
+    - whiteboard: Toggle Whiteboard / Blackboard
+    - exit: Exit WinDraw
+
+- radialSlot3: eraser
+  $name: "Radial Menu: Tool 3"
+  $description: Action assigned to radial dial sector 3.
+  $options:
+    - none: None (Disabled / Omit Sector)
+    - clear: Clear All Ink
+    - snapshot: Snapshot (Click for Snip, Ctrl+Click for Full)
+    - snip: Interactive Snip
+    - eraser: Eraser
+    - undo: Undo
+    - redo: Redo
+    - pointer: Pointer (Click-Through)
+    - ink_visible: Toggle Ink Visibility
+    - pan: Pan / Zoom Canvas
+    - pen: Pen (Draw Freehand)
+    - highlighter: Highlighter
+    - laser: Laser Pointer
+    - shape: Shape (Scroll wheel to switch)
+    - grid: Toggle Grid
+    - whiteboard: Toggle Whiteboard / Blackboard
+    - exit: Exit WinDraw
+
+- radialSlot4: undo
+  $name: "Radial Menu: Tool 4"
+  $description: Action assigned to radial dial sector 4.
+  $options:
+    - none: None (Disabled / Omit Sector)
+    - clear: Clear All Ink
+    - snapshot: Snapshot (Click for Snip, Ctrl+Click for Full)
+    - snip: Interactive Snip
+    - eraser: Eraser
+    - undo: Undo
+    - redo: Redo
+    - pointer: Pointer (Click-Through)
+    - ink_visible: Toggle Ink Visibility
+    - pan: Pan / Zoom Canvas
+    - pen: Pen (Draw Freehand)
+    - highlighter: Highlighter
+    - laser: Laser Pointer
+    - shape: Shape (Scroll wheel to switch)
+    - grid: Toggle Grid
+    - whiteboard: Toggle Whiteboard / Blackboard
+    - exit: Exit WinDraw
+
+- radialSlot5: pointer
+  $name: "Radial Menu: Tool 5"
+  $description: Action assigned to radial dial sector 5.
+  $options:
+    - none: None (Disabled / Omit Sector)
+    - clear: Clear All Ink
+    - snapshot: Snapshot (Click for Snip, Ctrl+Click for Full)
+    - snip: Interactive Snip
+    - eraser: Eraser
+    - undo: Undo
+    - redo: Redo
+    - pointer: Pointer (Click-Through)
+    - ink_visible: Toggle Ink Visibility
+    - pan: Pan / Zoom Canvas
+    - pen: Pen (Draw Freehand)
+    - highlighter: Highlighter
+    - laser: Laser Pointer
+    - shape: Shape (Scroll wheel to switch)
+    - grid: Toggle Grid
+    - whiteboard: Toggle Whiteboard / Blackboard
+    - exit: Exit WinDraw
+
+- radialSlot6: ink_visible
+  $name: "Radial Menu: Tool 6"
+  $description: Action assigned to radial dial sector 6.
+  $options:
+    - none: None (Disabled / Omit Sector)
+    - clear: Clear All Ink
+    - snapshot: Snapshot (Click for Snip, Ctrl+Click for Full)
+    - snip: Interactive Snip
+    - eraser: Eraser
+    - undo: Undo
+    - redo: Redo
+    - pointer: Pointer (Click-Through)
+    - ink_visible: Toggle Ink Visibility
+    - pan: Pan / Zoom Canvas
+    - pen: Pen (Draw Freehand)
+    - highlighter: Highlighter
+    - laser: Laser Pointer
+    - shape: Shape (Scroll wheel to switch)
+    - grid: Toggle Grid
+    - whiteboard: Toggle Whiteboard / Blackboard
+    - exit: Exit WinDraw
+
+- radialSlot7: pan
+  $name: "Radial Menu: Tool 7"
+  $description: Action assigned to radial dial sector 7.
+  $options:
+    - none: None (Disabled / Omit Sector)
+    - clear: Clear All Ink
+    - snapshot: Snapshot (Click for Snip, Ctrl+Click for Full)
+    - snip: Interactive Snip
+    - eraser: Eraser
+    - undo: Undo
+    - redo: Redo
+    - pointer: Pointer (Click-Through)
+    - ink_visible: Toggle Ink Visibility
+    - pan: Pan / Zoom Canvas
+    - pen: Pen (Draw Freehand)
+    - highlighter: Highlighter
+    - laser: Laser Pointer
+    - shape: Shape (Scroll wheel to switch)
+    - grid: Toggle Grid
+    - whiteboard: Toggle Whiteboard / Blackboard
+    - exit: Exit WinDraw
+
+- radialSlot8: pen
+  $name: "Radial Menu: Tool 8"
+  $description: Action assigned to radial dial sector 8.
+  $options:
+    - none: None (Disabled / Omit Sector)
+    - clear: Clear All Ink
+    - snapshot: Snapshot (Click for Snip, Ctrl+Click for Full)
+    - snip: Interactive Snip
+    - eraser: Eraser
+    - undo: Undo
+    - redo: Redo
+    - pointer: Pointer (Click-Through)
+    - ink_visible: Toggle Ink Visibility
+    - pan: Pan / Zoom Canvas
+    - pen: Pen (Draw Freehand)
+    - highlighter: Highlighter
+    - laser: Laser Pointer
+    - shape: Shape (Scroll wheel to switch)
+    - grid: Toggle Grid
+    - whiteboard: Toggle Whiteboard / Blackboard
+    - exit: Exit WinDraw
+
+- radialSlot9: laser
+  $name: "Radial Menu: Tool 9"
+  $description: Action assigned to radial dial sector 9.
+  $options:
+    - none: None (Disabled / Omit Sector)
+    - clear: Clear All Ink
+    - snapshot: Snapshot (Click for Snip, Ctrl+Click for Full)
+    - snip: Interactive Snip
+    - eraser: Eraser
+    - undo: Undo
+    - redo: Redo
+    - pointer: Pointer (Click-Through)
+    - ink_visible: Toggle Ink Visibility
+    - pan: Pan / Zoom Canvas
+    - pen: Pen (Draw Freehand)
+    - highlighter: Highlighter
+    - laser: Laser Pointer
+    - shape: Shape (Scroll wheel to switch)
+    - grid: Toggle Grid
+    - whiteboard: Toggle Whiteboard / Blackboard
+    - exit: Exit WinDraw
+
+- radialSlot10: shape
+  $name: "Radial Menu: Tool 10"
+  $description: Action assigned to radial dial sector 10.
+  $options:
+    - none: None (Disabled / Omit Sector)
+    - clear: Clear All Ink
+    - snapshot: Snapshot (Click for Snip, Ctrl+Click for Full)
+    - snip: Interactive Snip
+    - eraser: Eraser
+    - undo: Undo
+    - redo: Redo
+    - pointer: Pointer (Click-Through)
+    - ink_visible: Toggle Ink Visibility
+    - pan: Pan / Zoom Canvas
+    - pen: Pen (Draw Freehand)
+    - highlighter: Highlighter
+    - laser: Laser Pointer
+    - shape: Shape (Scroll wheel to switch)
+    - grid: Toggle Grid
+    - whiteboard: Toggle Whiteboard / Blackboard
+    - exit: Exit WinDraw
 */
 // ==/WindhawkModSettings==
 
@@ -282,6 +518,36 @@ enum class CursorType {
     Brush
 };
 
+enum class CanvasMonitorScope {
+    ActiveCursor = -1, // Follows mouse cursor to whichever display it's currently on
+    AllMonitors = 0,   // Spans across all connected screens
+    Monitor1 = 1,      // Locked to Screen 1
+    Monitor2 = 2,      // Locked to Screen 2
+    Monitor3 = 3,      // Locked to Screen 3
+    Monitor4 = 4,      // Locked to Screen 4
+    Primary = 99       // Locked to Primary Monitor
+};
+
+enum class RadialAction {
+    None = 0,
+    Pen,
+    Eraser,
+    Highlighter,
+    Laser,
+    Shape,
+    Grid,
+    Whiteboard,
+    Undo,
+    Redo,
+    Clear,
+    Snapshot,
+    Snip,
+    Pan,
+    Pointer,
+    InkVisible,
+    Exit
+};
+
 struct ModSettings {
     UINT hotkeyMod;
     UINT hotkeyKey;
@@ -298,7 +564,12 @@ struct ModSettings {
     int laserTrailDuration;
     CursorType crossType;
     int crossSize;
+    bool showRadialColorRing;
+    CanvasMonitorScope defaultWhiteboardScope;
+    RadialAction radialSlots[10];
 } g_settings;
+
+static std::vector<RadialAction> g_activeRadialSlots;
 
 float GetFloatSetting(PCWSTR settingName, float defaultVal) {
     PCWSTR str = Wh_GetStringSetting(settingName);
@@ -310,6 +581,28 @@ float GetFloatSetting(PCWSTR settingName, float defaultVal) {
         Wh_FreeStringSetting(str);
     }
     return val;
+}
+
+RadialAction ParseRadialAction(PCWSTR str, RadialAction defaultAction) {
+    if (!str || str[0] == L'\0') return defaultAction;
+    if (_wcsicmp(str, L"none") == 0) return RadialAction::None;
+    if (_wcsicmp(str, L"pen") == 0) return RadialAction::Pen;
+    if (_wcsicmp(str, L"eraser") == 0) return RadialAction::Eraser;
+    if (_wcsicmp(str, L"highlighter") == 0) return RadialAction::Highlighter;
+    if (_wcsicmp(str, L"laser") == 0) return RadialAction::Laser;
+    if (_wcsicmp(str, L"shape") == 0) return RadialAction::Shape;
+    if (_wcsicmp(str, L"grid") == 0) return RadialAction::Grid;
+    if (_wcsicmp(str, L"whiteboard") == 0) return RadialAction::Whiteboard;
+    if (_wcsicmp(str, L"undo") == 0) return RadialAction::Undo;
+    if (_wcsicmp(str, L"redo") == 0) return RadialAction::Redo;
+    if (_wcsicmp(str, L"clear") == 0) return RadialAction::Clear;
+    if (_wcsicmp(str, L"snapshot") == 0) return RadialAction::Snapshot;
+    if (_wcsicmp(str, L"snip") == 0) return RadialAction::Snip;
+    if (_wcsicmp(str, L"pan") == 0) return RadialAction::Pan;
+    if (_wcsicmp(str, L"pointer") == 0) return RadialAction::Pointer;
+    if (_wcsicmp(str, L"ink_visible") == 0) return RadialAction::InkVisible;
+    if (_wcsicmp(str, L"exit") == 0) return RadialAction::Exit;
+    return defaultAction;
 }
 
 void LoadSettings() {
@@ -439,6 +732,56 @@ void LoadSettings() {
     } else {
         g_settings.crossSize = 16;
     }
+
+    g_settings.showRadialColorRing = Wh_GetIntSetting(L"showRadialColorRing") != 0;
+
+    PCWSTR wbMonStr = Wh_GetStringSetting(L"defaultWhiteboardMonitor");
+    if (wbMonStr) {
+        if (_wcsicmp(wbMonStr, L"all") == 0) g_settings.defaultWhiteboardScope = CanvasMonitorScope::AllMonitors;
+        else if (_wcsicmp(wbMonStr, L"primary") == 0) g_settings.defaultWhiteboardScope = CanvasMonitorScope::Primary;
+        else if (wcscmp(wbMonStr, L"1") == 0) g_settings.defaultWhiteboardScope = CanvasMonitorScope::Monitor1;
+        else if (wcscmp(wbMonStr, L"2") == 0) g_settings.defaultWhiteboardScope = CanvasMonitorScope::Monitor2;
+        else if (wcscmp(wbMonStr, L"3") == 0) g_settings.defaultWhiteboardScope = CanvasMonitorScope::Monitor3;
+        else if (wcscmp(wbMonStr, L"4") == 0) g_settings.defaultWhiteboardScope = CanvasMonitorScope::Monitor4;
+        else g_settings.defaultWhiteboardScope = CanvasMonitorScope::ActiveCursor;
+        Wh_FreeStringSetting(wbMonStr);
+    } else {
+        g_settings.defaultWhiteboardScope = CanvasMonitorScope::ActiveCursor;
+    }
+
+    RadialAction defaultRadialSlots[10] = {
+        RadialAction::Clear,
+        RadialAction::Snapshot,
+        RadialAction::Eraser,
+        RadialAction::Undo,
+        RadialAction::Pointer,
+        RadialAction::InkVisible,
+        RadialAction::Pan,
+        RadialAction::Pen,
+        RadialAction::Laser,
+        RadialAction::Shape
+    };
+
+    g_activeRadialSlots.clear();
+    for (int i = 0; i < 10; ++i) {
+        wchar_t slotKey[32];
+        wsprintfW(slotKey, L"radialSlot%d", i + 1);
+        PCWSTR valStr = Wh_GetStringSetting(slotKey);
+        g_settings.radialSlots[i] = ParseRadialAction(valStr, defaultRadialSlots[i]);
+        if (valStr) Wh_FreeStringSetting(valStr);
+
+        if (g_settings.radialSlots[i] != RadialAction::None) {
+            g_activeRadialSlots.push_back(g_settings.radialSlots[i]);
+        }
+    }
+
+    if (g_activeRadialSlots.empty()) {
+        for (int i = 0; i < 10; ++i) {
+            if (defaultRadialSlots[i] != RadialAction::None) {
+                g_activeRadialSlots.push_back(defaultRadialSlots[i]);
+            }
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -523,15 +866,6 @@ enum class CanvasBg {
     Transparent = 0,
     Whiteboard = 1,
     Blackboard = 2
-};
-
-enum class CanvasMonitorScope {
-    ActiveCursor = -1, // Follows mouse cursor to whichever display it's currently on
-    AllMonitors = 0,   // Spans across all connected screens
-    Monitor1 = 1,      // Locked to Screen 1
-    Monitor2 = 2,      // Locked to Screen 2
-    Monitor3 = 3,      // Locked to Screen 3
-    Monitor4 = 4
 };
 
 struct StrokePoint {
@@ -763,6 +1097,8 @@ static ID2D1HwndRenderTarget* g_pRenderTarget = NULL;
 static ID2D1StrokeStyle* g_pRoundStrokeStyle = NULL;
 static ID2D1StrokeStyle* g_pLaserFlatStrokeStyle = NULL;
 static ID2D1SolidColorBrush* g_pStrokeBrush = NULL;
+static ID2D1SolidColorBrush* g_pWhiteboardBrush = NULL;
+static ID2D1SolidColorBrush* g_pBlackboardBrush = NULL;
 static ID2D1Bitmap* g_pDesktopBitmap = NULL;
 static IDWriteFactory* g_pDWriteFactory = NULL;
 static IDWriteTextFormat* g_pTextFormat = NULL;
@@ -822,19 +1158,11 @@ const UINT_PTR TIMER_ID_LASER         = 3; // 16ms: High-precision laser trail p
 // Radial Menu State
 enum class RadialTarget {
     None = -1,
-    Clear = 0,       // 0: Clear All Ink
-    Snapshot = 1,    // 1: Snapshot
-    Eraser = 2,      // 2: Eraser
-    Undo = 3,        // 3: Undo
-    Pointer = 4,     // 4: Pointer
-    InkVisible = 5,  // 5: Ink Visible
-    Pan = 6,         // 6: Pan
-    Draw = 7,        // 7: Draw / Pen
-    Laser = 8,       // 8: Laser Pointer
-    Center = 9,      // Center Hub
-    ColorOrb = 10,   // Outer orbital colors
-    RecentHub = 11,  // 12 o'clock Recent Colors expansion hub
-    RecentOrb = 12   // Layer 2 Recent Color satellite orbs
+    Sector = 0,      // Dynamic tool sector (index in g_radialHoverSector)
+    Center = 1,      // Center Hub
+    ColorOrb = 2,    // Outer orbital colors
+    RecentHub = 3,   // 12 o'clock Recent Colors expansion hub
+    RecentOrb = 4    // Layer 2 Recent Color satellite orbs
 };
 static bool g_radialActive = false;
 static float g_radialX = 0;
@@ -1527,6 +1855,13 @@ HRESULT CreateD2DResources(HWND hwnd) {
             g_pRenderTarget->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 1.0f), &g_pStrokeBrush);
         }
 
+        if (!g_pWhiteboardBrush) {
+            g_pRenderTarget->CreateSolidColorBrush(D2D1::ColorF(0.96f, 0.96f, 0.98f, 1.0f), &g_pWhiteboardBrush);
+        }
+        if (!g_pBlackboardBrush) {
+            g_pRenderTarget->CreateSolidColorBrush(D2D1::ColorF(0.12f, 0.14f, 0.18f, 1.0f), &g_pBlackboardBrush);
+        }
+
         if (g_gridStyle != GridStyle::None) {
             RebuildGridBrush();
         }
@@ -1538,6 +1873,8 @@ HRESULT CreateD2DResources(HWND hwnd) {
 }
 
 void ReleaseD2DResources() {
+    if (g_pWhiteboardBrush) { g_pWhiteboardBrush->Release(); g_pWhiteboardBrush = nullptr; }
+    if (g_pBlackboardBrush) { g_pBlackboardBrush->Release(); g_pBlackboardBrush = nullptr; }
     if (g_pGridBrush) { g_pGridBrush->Release(); g_pGridBrush = nullptr; }
     if (g_pStrokeBrush) { g_pStrokeBrush->Release(); g_pStrokeBrush = nullptr; }
     if (g_pDesktopBitmap) { g_pDesktopBitmap->Release(); g_pDesktopBitmap = nullptr; }
@@ -1568,6 +1905,7 @@ void CycleCanvasBackground() {
     g_hoveredBackdropFlyoutItem = -1;
     if (g_canvasBg == CanvasBg::Transparent) {
         g_canvasBg = CanvasBg::Whiteboard;
+        g_canvasScope = g_settings.defaultWhiteboardScope;
         ShowToastNotification(L"Whiteboard Mode (Paper)");
     } else if (g_canvasBg == CanvasBg::Whiteboard) {
         g_canvasBg = CanvasBg::Blackboard;
@@ -1576,7 +1914,9 @@ void CycleCanvasBackground() {
         g_canvasBg = CanvasBg::Transparent;
         ShowToastNotification(L"Screen Mode (Transparent)");
     }
-    RebuildGridBrush();
+    if (g_gridStyle != GridStyle::None) {
+        RebuildGridBrush();
+    }
     InvalidateOverlay();
 }
 
@@ -1616,22 +1956,35 @@ struct MonitorBounds {
 };
 
 inline void GetMonitorBoundsAt(float clientX, float clientY, float& outLeft, float& outTop, float& outRight, float& outBottom) {
+    static float s_cachedL = 0, s_cachedT = 0, s_cachedR = 0, s_cachedB = 0;
+    if (s_cachedR > s_cachedL && clientX >= s_cachedL && clientX < s_cachedR && clientY >= s_cachedT && clientY < s_cachedB) {
+        outLeft   = s_cachedL;
+        outTop    = s_cachedT;
+        outRight  = s_cachedR;
+        outBottom = s_cachedB;
+        return;
+    }
+
     int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
     int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
     POINT pt = { (LONG)std::round(clientX + (float)vx), (LONG)std::round(clientY + (float)vy) };
     HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi = { sizeof(MONITORINFO) };
     if (hMon && GetMonitorInfo(hMon, &mi)) {
-        outLeft   = (float)(mi.rcMonitor.left - vx);
-        outTop    = (float)(mi.rcMonitor.top - vy);
-        outRight  = (float)(mi.rcMonitor.right - vx);
-        outBottom = (float)(mi.rcMonitor.bottom - vy);
+        s_cachedL = (float)(mi.rcMonitor.left - vx);
+        s_cachedT = (float)(mi.rcMonitor.top - vy);
+        s_cachedR = (float)(mi.rcMonitor.right - vx);
+        s_cachedB = (float)(mi.rcMonitor.bottom - vy);
     } else {
-        outLeft   = 0.0f;
-        outTop    = 0.0f;
-        outRight  = (float)GetSystemMetrics(SM_CXVIRTUALSCREEN);
-        outBottom = (float)GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        s_cachedL = 0.0f;
+        s_cachedT = 0.0f;
+        s_cachedR = (float)GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        s_cachedB = (float)GetSystemMetrics(SM_CYVIRTUALSCREEN);
     }
+    outLeft   = s_cachedL;
+    outTop    = s_cachedT;
+    outRight  = s_cachedR;
+    outBottom = s_cachedB;
 }
 
 struct MonitorEntry {
@@ -1641,26 +1994,32 @@ struct MonitorEntry {
     bool isPrimary;
 };
 
-inline std::vector<MonitorEntry> GetSystemMonitorList() {
+static std::vector<MonitorEntry> g_cachedMonitors;
+inline const std::vector<MonitorEntry>& GetSystemMonitorList(bool forceRefresh = false) {
+    if (!g_cachedMonitors.empty() && !forceRefresh) {
+        return g_cachedMonitors;
+    }
+    g_cachedMonitors.clear();
     int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
     int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
     struct EnumCtx {
         int vx;
         int vy;
-        std::vector<MonitorEntry> list;
+        std::vector<MonitorEntry>* pList;
     } ctx;
     ctx.vx = vx;
     ctx.vy = vy;
+    ctx.pList = &g_cachedMonitors;
 
     EnumDisplayMonitors(NULL, NULL, [](HMONITOR hMon, HDC, LPRECT lprc, LPARAM dwData) CALLBACK -> BOOL {
         auto* pCtx = reinterpret_cast<EnumCtx*>(dwData);
-        if (lprc && pCtx) {
+        if (lprc && pCtx && pCtx->pList) {
             MONITORINFO mi = { sizeof(MONITORINFO) };
             bool isPrimary = false;
             if (GetMonitorInfo(hMon, &mi)) {
                 isPrimary = (mi.dwFlags & MONITORINFOF_PRIMARY) != 0;
             }
-            int id = (int)pCtx->list.size() + 1;
+            int id = (int)pCtx->pList->size() + 1;
             wchar_t buf[64];
             int w = lprc->right - lprc->left;
             int h = lprc->bottom - lprc->top;
@@ -1675,12 +2034,12 @@ inline std::vector<MonitorEntry> GetSystemMonitorList() {
             entry.rect = D2D1::RectF((float)(lprc->left - pCtx->vx), (float)(lprc->top - pCtx->vy),
                                     (float)(lprc->right - pCtx->vx), (float)(lprc->bottom - pCtx->vy));
             entry.isPrimary = isPrimary;
-            pCtx->list.push_back(entry);
+            pCtx->pList->push_back(entry);
         }
         return TRUE;
     }, reinterpret_cast<LPARAM>(&ctx));
 
-    return ctx.list;
+    return g_cachedMonitors;
 }
 
 inline void ClampToolbarToScreen(float& x, float& y, float w, float h, float kPad = 6.0f) {
@@ -2811,8 +3170,9 @@ void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
     const float kOuterRingR = 96.0f * scale;
     const float kActionIconR = 70.0f * scale;
     const float kOrbitalRadius = 126.0f * scale;
-    const int kRadialSectorCount = 9;
-    const float kSectorAngle = (float)(2.0 * 3.14159265358979323846 / kRadialSectorCount);
+    const int kRadialSectorCount = (int)g_activeRadialSlots.size();
+    if (kRadialSectorCount <= 0) return;
+    const float kSectorAngle = (float)(2.0 * 3.14159265358979323846 / (double)kRadialSectorCount);
 
     // 1. Draw Action Ring Annulus (between 44px and 96px)
     float ringMidR = (kInnerRingR + kOuterRingR) * 0.5f;
@@ -2823,7 +3183,7 @@ void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
         pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), kOuterRingR, kOuterRingR), pBorderBrush, 1.2f);
     }
 
-    // 2. Draw 9 Radial Divider Spokes
+    // 2. Draw N Radial Divider Spokes
     if (pSpokeBrush) {
         for (int k = 0; k < kRadialSectorCount; ++k) {
             float spokeAngle = (float)(k * kSectorAngle + kSectorAngle * 0.5f);
@@ -2837,8 +3197,10 @@ void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
 
     // 3. Draw Hovered Sector Highlight
     if (g_radialHoverSector >= 0 && g_radialHoverSector < kRadialSectorCount) {
-        bool secDisabled = (g_radialHoverSector == (int)RadialTarget::Clear && g_strokes.empty()) ||
-                           (g_radialHoverSector == (int)RadialTarget::Undo && g_undoStack.empty());
+        RadialAction hoverAct = g_activeRadialSlots[g_radialHoverSector];
+        bool secDisabled = (hoverAct == RadialAction::Clear && g_strokes.empty() && g_laserStrokes.empty()) ||
+                           (hoverAct == RadialAction::Undo && g_undoStack.empty()) ||
+                           (hoverAct == RadialAction::Redo && g_redoStack.empty());
         if (!secDisabled) {
             float secAngle = (float)(g_radialHoverSector * kSectorAngle);
             float hx = cx + std::cos(secAngle) * kActionIconR;
@@ -2848,66 +3210,135 @@ void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
         }
     }
 
-    // 4. Draw the 9 Sector Action Icons
-    const wchar_t* sectorIcons[] = {
-        L"\uE74D", // 0: Clear All (Delete)
-        L"\uE722", // 1: Snapshot (Camera)
-        L"\uE75C", // 2: Eraser (EraseTool)
-        L"\uE7A7", // 3: Undo
-        L"\uE7C9", // 4: Pointer (TouchPointer)
-        g_inkVisible ? L"\uE890" : L"\uED1A", // 5: Ink Visible (View / Hide)
-        L"\uE7C2", // 6: Pan (Move - 4-way arrows)
-        L"\uEC87", // 7: Draw / Pen (Draw)
-        L"\uE814"  // 8: Laser Pointer (Beacon)
-    };
-
+    // 4. Draw Sector Action Icons
     for (int k = 0; k < kRadialSectorCount; ++k) {
+        RadialAction act = g_activeRadialSlots[k];
         float secAngle = (float)(k * kSectorAngle);
         float ix = cx + std::cos(secAngle) * kActionIconR;
         float iy = cy + std::sin(secAngle) * kActionIconR;
 
-        bool isSecDisabled = (k == 0 && g_strokes.empty()) ||
-                             (k == 3 && g_undoStack.empty());
+        bool isSecDisabled = (act == RadialAction::Clear && g_strokes.empty() && g_laserStrokes.empty()) ||
+                             (act == RadialAction::Undo && g_undoStack.empty()) ||
+                             (act == RadialAction::Redo && g_redoStack.empty());
 
-        if (k == 8) {
-            // Draw crisp optic vector laser beacon in Sector 8
-            ID2D1SolidColorBrush* pLaserBrush = nullptr;
-            pRT->CreateSolidColorBrush(
-                (g_currentTool == ToolMode::Laser) ? D2D1::ColorF(0.40f, 0.90f, 0.75f, 1.0f) : D2D1::ColorF(0.92f, 0.95f, 0.98f, 1.00f),
-                &pLaserBrush
-            );
-            if (pLaserBrush) {
+        bool isSecActive = false;
+        if (act == RadialAction::Pen && g_currentTool == ToolMode::Pen && g_currentShape == ShapeType::Freehand) isSecActive = true;
+        else if (act == RadialAction::Eraser && g_currentTool == ToolMode::Eraser) isSecActive = true;
+        else if (act == RadialAction::Highlighter && g_currentTool == ToolMode::Highlighter) isSecActive = true;
+        else if (act == RadialAction::Laser && g_currentTool == ToolMode::Laser) isSecActive = true;
+        else if (act == RadialAction::Pan && g_currentTool == ToolMode::Pan) isSecActive = true;
+        else if (act == RadialAction::Pointer && g_currentTool == ToolMode::Pointer) isSecActive = true;
+        else if (act == RadialAction::Shape && (g_currentShape != ShapeType::Freehand && g_currentTool == ToolMode::Pen)) isSecActive = true;
+        else if (act == RadialAction::Grid && g_gridStyle != GridStyle::None) isSecActive = true;
+        else if (act == RadialAction::Whiteboard && g_canvasBg != CanvasBg::Transparent) isSecActive = true;
+
+        ID2D1SolidColorBrush* pCustomBrush = nullptr;
+        if (isSecDisabled) {
+            pRT->CreateSolidColorBrush(D2D1::ColorF(0.40f, 0.44f, 0.52f, 0.38f), &pCustomBrush);
+        } else if (isSecActive) {
+            pRT->CreateSolidColorBrush(D2D1::ColorF(0.40f, 0.90f, 0.75f, 1.0f), &pCustomBrush);
+        }
+        ID2D1SolidColorBrush* pDrawBrush = pCustomBrush ? pCustomBrush : pTextBrush;
+
+        if (act == RadialAction::Laser) {
+            // Draw crisp optic vector laser beacon
+            if (pDrawBrush) {
                 D2D1_ELLIPSE coreEll = D2D1::Ellipse(D2D1::Point2F(ix, iy), 2.2f * scale, 2.2f * scale);
-                pRT->FillEllipse(coreEll, pLaserBrush);
+                pRT->FillEllipse(coreEll, pDrawBrush);
                 D2D1_ELLIPSE ringEll = D2D1::Ellipse(D2D1::Point2F(ix, iy), 5.5f * scale, 5.5f * scale);
-                pRT->DrawEllipse(ringEll, pLaserBrush, 1.2f);
-                pRT->DrawLine(D2D1::Point2F(ix - 8.0f * scale, iy), D2D1::Point2F(ix - 5.5f * scale, iy), pLaserBrush, 1.2f);
-                pRT->DrawLine(D2D1::Point2F(ix + 5.5f * scale, iy), D2D1::Point2F(ix + 8.0f * scale, iy), pLaserBrush, 1.2f);
-                pRT->DrawLine(D2D1::Point2F(ix, iy - 8.0f * scale), D2D1::Point2F(ix, iy - 5.5f * scale), pLaserBrush, 1.2f);
-                pRT->DrawLine(D2D1::Point2F(ix, iy + 5.5f * scale), D2D1::Point2F(ix, iy + 8.0f * scale), pLaserBrush, 1.2f);
-                pLaserBrush->Release();
+                pRT->DrawEllipse(ringEll, pDrawBrush, 1.2f);
+                pRT->DrawLine(D2D1::Point2F(ix - 8.0f * scale, iy), D2D1::Point2F(ix - 5.5f * scale, iy), pDrawBrush, 1.2f);
+                pRT->DrawLine(D2D1::Point2F(ix + 5.5f * scale, iy), D2D1::Point2F(ix + 8.0f * scale, iy), pDrawBrush, 1.2f);
+                pRT->DrawLine(D2D1::Point2F(ix, iy - 8.0f * scale), D2D1::Point2F(ix, iy - 5.5f * scale), pDrawBrush, 1.2f);
+                pRT->DrawLine(D2D1::Point2F(ix, iy + 5.5f * scale), D2D1::Point2F(ix, iy + 8.0f * scale), pDrawBrush, 1.2f);
+            }
+        }
+        else if (act == RadialAction::Grid) {
+            // Draw crisp vector grid icon
+            if (pDrawBrush) {
+                float half = 6.0f * scale;
+                float off = 2.4f * scale;
+                pRT->DrawLine(D2D1::Point2F(ix - half, iy - off), D2D1::Point2F(ix + half, iy - off), pDrawBrush, 1.25f, g_pRoundStrokeStyle);
+                pRT->DrawLine(D2D1::Point2F(ix - half, iy + off), D2D1::Point2F(ix + half, iy + off), pDrawBrush, 1.25f, g_pRoundStrokeStyle);
+                pRT->DrawLine(D2D1::Point2F(ix - off, iy - half), D2D1::Point2F(ix - off, iy + half), pDrawBrush, 1.25f, g_pRoundStrokeStyle);
+                pRT->DrawLine(D2D1::Point2F(ix + off, iy - half), D2D1::Point2F(ix + off, iy + half), pDrawBrush, 1.25f, g_pRoundStrokeStyle);
+            }
+        }
+        else if (act == RadialAction::Shape && g_currentShape == ShapeType::Triangle) {
+            // Draw crisp vector triangle
+            if (pDrawBrush) {
+                float triH = 12.0f * scale;
+                float triW = 13.0f * scale;
+                D2D1_POINT_2F p1 = D2D1::Point2F(ix, iy - triH * 0.5f);
+                D2D1_POINT_2F p2 = D2D1::Point2F(ix - triW * 0.5f, iy + triH * 0.5f);
+                D2D1_POINT_2F p3 = D2D1::Point2F(ix + triW * 0.5f, iy + triH * 0.5f);
+                pRT->DrawLine(p1, p2, pDrawBrush, 1.4f, g_pRoundStrokeStyle);
+                pRT->DrawLine(p2, p3, pDrawBrush, 1.4f, g_pRoundStrokeStyle);
+                pRT->DrawLine(p3, p1, pDrawBrush, 1.4f, g_pRoundStrokeStyle);
+            }
+        }
+        else if (act == RadialAction::Whiteboard) {
+            // Sleek vector Whiteboard / Blackboard easel icon (matching toolbar button 8)
+            D2D1_RECT_F boardR = D2D1::RectF(ix - 7.5f * scale, iy - 6.0f * scale, ix + 7.5f * scale, iy + 3.5f * scale);
+            if (pDrawBrush) {
+                // Board frame
+                pRT->DrawRoundedRectangle(D2D1::RoundedRect(boardR, 1.5f * scale, 1.5f * scale), pDrawBrush, 1.2f);
+                // Bottom tray
+                pRT->DrawLine(D2D1::Point2F(ix - 8.5f * scale, iy + 4.5f * scale), D2D1::Point2F(ix + 8.5f * scale, iy + 4.5f * scale), pDrawBrush, 1.2f);
+                // Easel legs
+                pRT->DrawLine(D2D1::Point2F(ix - 5.0f * scale, iy + 5.0f * scale), D2D1::Point2F(ix - 7.0f * scale, iy + 8.5f * scale), pDrawBrush, 1.1f);
+                pRT->DrawLine(D2D1::Point2F(ix + 5.0f * scale, iy + 5.0f * scale), D2D1::Point2F(ix + 7.0f * scale, iy + 8.5f * scale), pDrawBrush, 1.1f);
+
+                // If Whiteboard or Blackboard is active, draw a tiny scribble/dot inside
+                if (g_canvasBg == CanvasBg::Whiteboard) {
+                    pRT->DrawLine(D2D1::Point2F(ix - 4.0f * scale, iy - 1.0f * scale), D2D1::Point2F(ix + 4.0f * scale, iy - 1.0f * scale), pDrawBrush, 1.0f);
+                } else if (g_canvasBg == CanvasBg::Blackboard) {
+                    pRT->DrawLine(D2D1::Point2F(ix - 4.0f * scale, iy - 2.0f * scale), D2D1::Point2F(ix + 2.0f * scale, iy - 2.0f * scale), pDrawBrush, 1.0f);
+                    pRT->DrawLine(D2D1::Point2F(ix - 4.0f * scale, iy + 1.0f * scale), D2D1::Point2F(ix + 4.0f * scale, iy + 1.0f * scale), pDrawBrush, 1.0f);
+                }
             }
         }
         else {
-            D2D1_RECT_F iconRect = D2D1::RectF(ix - 16.0f * scale, iy - 16.0f * scale, ix + 16.0f * scale, iy + 16.0f * scale);
-            if (g_pRadialIconFormat) {
-                ID2D1SolidColorBrush* pIconBrush = nullptr;
-                if (isSecDisabled) {
-                    pRT->CreateSolidColorBrush(D2D1::ColorF(0.40f, 0.44f, 0.52f, 0.38f), &pIconBrush);
+            const wchar_t* iconText = L"";
+            switch (act) {
+                case RadialAction::Clear:       iconText = L"\uE74D"; break;
+                case RadialAction::Snapshot:    iconText = L"\uE722"; break;
+                case RadialAction::Snip:        iconText = L"\uF407"; break;
+                case RadialAction::Eraser:      iconText = L"\uE75C"; break;
+                case RadialAction::Undo:        iconText = L"\uE7A7"; break;
+                case RadialAction::Redo:        iconText = L"\uE7A6"; break;
+                case RadialAction::Pointer:     iconText = L"\uE7C9"; break;
+                case RadialAction::InkVisible:  iconText = g_inkVisible ? L"\uE890" : L"\uED1A"; break;
+                case RadialAction::Pan:         iconText = L"\uE7C2"; break;
+                case RadialAction::Pen:         iconText = L"\uEC87"; break;
+                case RadialAction::Highlighter: iconText = L"\uE7E6"; break;
+                case RadialAction::Exit:        iconText = L"\uE8BB"; break;
+                case RadialAction::Shape: {
+                    switch (g_currentShape) {
+                        case ShapeType::Line:      iconText = L"\uED5E"; break;
+                        case ShapeType::Arrow:     iconText = L"\uE72A"; break;
+                        case ShapeType::Rectangle: iconText = L"\uE739"; break;
+                        case ShapeType::Ellipse:   iconText = L"\uEA3A"; break;
+                        default:                   iconText = L"\uED5E"; break;
+                    }
+                    break;
                 }
-                ID2D1SolidColorBrush* pDrawBrush = pIconBrush ? pIconBrush : pTextBrush;
-                if (pDrawBrush) {
-                    pRT->DrawText(
-                        sectorIcons[k], (UINT32)wcslen(sectorIcons[k]),
-                        g_pRadialIconFormat,
-                        iconRect,
-                        pDrawBrush,
-                        D2D1_DRAW_TEXT_OPTIONS_NONE
-                    );
-                }
-                if (pIconBrush) pIconBrush->Release();
+                default: iconText = L"\uE7C9"; break;
+            }
+
+            if (g_pRadialIconFormat && pDrawBrush && iconText[0] != L'\0') {
+                D2D1_RECT_F iconRect = D2D1::RectF(ix - 16.0f * scale, iy - 16.0f * scale, ix + 16.0f * scale, iy + 16.0f * scale);
+                pRT->DrawText(
+                    iconText, (UINT32)wcslen(iconText),
+                    g_pRadialIconFormat,
+                    iconRect,
+                    pDrawBrush,
+                    D2D1_DRAW_TEXT_OPTIONS_NONE
+                );
             }
         }
+
+        if (pCustomBrush) pCustomBrush->Release();
     }
 
     // 5. Center Hub: Active Swatch & Pen/Highlighter/Laser Toggle
@@ -2938,137 +3369,139 @@ void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
         }
     }
 
-    // 6. Outer Color Wheel Guide track
-    if (pBorderBrush) pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), kOrbitalRadius, kOrbitalRadius), pBorderBrush, 0.8f);
+    if (g_settings.showRadialColorRing) {
+        // 6. Outer Color Wheel Guide track
+        if (pBorderBrush) pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), kOrbitalRadius, kOrbitalRadius), pBorderBrush, 0.8f);
 
-    // 7. 360-Degree Orbital Color Orbs (16 colors)
-    for (size_t i = 0; i < kPresetColorCount; ++i) {
-        float angle = (float)(i * (2.0 * 3.14159265358979323846 / kPresetColorCount) - 3.14159265358979323846 * 0.5);
-        float ox = cx + std::cos(angle) * kOrbitalRadius;
-        float oy = cy + std::sin(angle) * kOrbitalRadius;
+        // 7. 360-Degree Orbital Color Orbs (16 colors)
+        for (size_t i = 0; i < kPresetColorCount; ++i) {
+            float angle = (float)(i * (2.0 * 3.14159265358979323846 / kPresetColorCount) - 3.14159265358979323846 * 0.5);
+            float ox = cx + std::cos(angle) * kOrbitalRadius;
+            float oy = cy + std::sin(angle) * kOrbitalRadius;
 
-        bool isHovered = (g_hoveredOrb == (int)i);
-        float orbR = isHovered ? (15.5f * scale) : (11.5f * scale);
+            bool isHovered = (g_hoveredOrb == (int)i);
+            float orbR = isHovered ? (15.5f * scale) : (11.5f * scale);
 
-        if (i == 0) {
-            // 12 o'clock Recent Colors Expansion Hub
-            bool isHubHovered = (g_radialHoverTarget == RadialTarget::RecentHub || isHovered);
-            orbR = isHubHovered ? (15.5f * scale) : (12.0f * scale);
-            if (isHubHovered && pGlowBrush) {
-                pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(ox, oy), orbR + 4.0f * scale, orbR + 4.0f * scale), pGlowBrush);
-            }
-            ID2D1SolidColorBrush* pHubFill = nullptr;
-            pRT->CreateSolidColorBrush(g_customColor.activeColor, &pHubFill);
-            if (pHubFill) {
-                pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(ox, oy), orbR, orbR), pHubFill);
-                pHubFill->Release();
-            }
-            ID2D1SolidColorBrush* pHubBorder = nullptr;
-            pRT->CreateSolidColorBrush(isHubHovered ? D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.95f) : D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.50f), &pHubBorder);
-            if (pHubBorder) {
-                pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(ox, oy), orbR, orbR), pHubBorder, isHubHovered ? 2.0f : 1.2f);
-                pHubBorder->Release();
-            }
-            // Draw crisp plus icon centered in the RecentHub orb
-            float plusLen = isHubHovered ? (5.5f * scale) : (4.5f * scale);
-            ID2D1SolidColorBrush* pPlusShadow = nullptr;
-            pRT->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.65f), &pPlusShadow);
-            if (pPlusShadow) {
-                pRT->DrawLine(D2D1::Point2F(ox - plusLen, oy + 0.8f), D2D1::Point2F(ox + plusLen, oy + 0.8f), pPlusShadow, 2.6f, g_pRoundStrokeStyle);
-                pRT->DrawLine(D2D1::Point2F(ox, oy - plusLen + 0.8f), D2D1::Point2F(ox, oy + plusLen + 0.8f), pPlusShadow, 2.6f, g_pRoundStrokeStyle);
-                pPlusShadow->Release();
-            }
-            ID2D1SolidColorBrush* pPlusWhite = nullptr;
-            pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.95f), &pPlusWhite);
-            if (pPlusWhite) {
-                pRT->DrawLine(D2D1::Point2F(ox - plusLen, oy), D2D1::Point2F(ox + plusLen, oy), pPlusWhite, 2.0f, g_pRoundStrokeStyle);
-                pRT->DrawLine(D2D1::Point2F(ox, oy - plusLen), D2D1::Point2F(ox, oy + plusLen), pPlusWhite, 2.0f, g_pRoundStrokeStyle);
-                pPlusWhite->Release();
-            }
-            continue;
-        }
-
-        ID2D1SolidColorBrush* pOrbBrush = nullptr;
-        pRT->CreateSolidColorBrush(kPresetColors[i], &pOrbBrush);
-        if (pOrbBrush) {
-            if (isHovered) {
-                pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(ox, oy), orbR + 4.0f * scale, orbR + 4.0f * scale), pGlowBrush);
-            }
-            pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(ox, oy), orbR, orbR), pOrbBrush);
-
-            ID2D1SolidColorBrush* pOrbBorder = nullptr;
-            pRT->CreateSolidColorBrush(isHovered ? D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.95f) : D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.40f), &pOrbBorder);
-            if (pOrbBorder) {
-                pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(ox, oy), orbR, orbR), pOrbBorder, isHovered ? 2.0f : 1.0f);
-                pOrbBorder->Release();
-            }
-
-            pOrbBrush->Release();
-        }
-    }
-
-    // 8. Layer 2: Radial Menu Satellite Arc (Recent 5 Colors)
-    if (g_radialRecentFanOpen) {
-        const float kSatelliteRadius = 162.0f * scale;
-        const float kRad = 3.14159265358979323846f / 180.0f;
-        int numOrbs = std::min(5, (int)g_recentColors.size());
-
-        // Curved guide arc for satellite tier: starts exactly at orb 0 and ends exactly at last orb
-        if (numOrbs > 1) {
-            ID2D1PathGeometry* pArcGeom = nullptr;
-            if (g_pD2DFactory && SUCCEEDED(g_pD2DFactory->CreatePathGeometry(&pArcGeom))) {
-                ID2D1GeometrySink* pSink = nullptr;
-                if (SUCCEEDED(pArcGeom->Open(&pSink))) {
-                    float aStart = -90.0f * kRad + (float)(0 - 2) * (16.0f * kRad);
-                    float aEnd = -90.0f * kRad + (float)(numOrbs - 1 - 2) * (16.0f * kRad);
-                    pSink->BeginFigure(D2D1::Point2F(cx + std::cos(aStart) * kSatelliteRadius, cy + std::sin(aStart) * kSatelliteRadius), D2D1_FIGURE_BEGIN_HOLLOW);
-                    pSink->AddArc(D2D1::ArcSegment(
-                        D2D1::Point2F(cx + std::cos(aEnd) * kSatelliteRadius, cy + std::sin(aEnd) * kSatelliteRadius),
-                        D2D1::SizeF(kSatelliteRadius, kSatelliteRadius),
-                        0.0f,
-                        D2D1_SWEEP_DIRECTION_CLOCKWISE,
-                        D2D1_ARC_SIZE_SMALL
-                    ));
-                pSink->EndFigure(D2D1_FIGURE_END_OPEN);
-                pSink->Close();
-                pSink->Release();
-
-                ID2D1SolidColorBrush* pArcBrush = nullptr;
-                pRT->CreateSolidColorBrush(D2D1::ColorF(0.40f, 0.48f, 0.60f, 0.45f), &pArcBrush);
-                if (pArcBrush) {
-                    pRT->DrawGeometry(pArcGeom, pArcBrush, 1.2f);
-                    pArcBrush->Release();
+            if (i == 0) {
+                // 12 o'clock Recent Colors Expansion Hub
+                bool isHubHovered = (g_radialHoverTarget == RadialTarget::RecentHub || isHovered);
+                orbR = isHubHovered ? (15.5f * scale) : (12.0f * scale);
+                if (isHubHovered && pGlowBrush) {
+                    pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(ox, oy), orbR + 4.0f * scale, orbR + 4.0f * scale), pGlowBrush);
                 }
+                ID2D1SolidColorBrush* pHubFill = nullptr;
+                pRT->CreateSolidColorBrush(g_customColor.activeColor, &pHubFill);
+                if (pHubFill) {
+                    pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(ox, oy), orbR, orbR), pHubFill);
+                    pHubFill->Release();
+                }
+                ID2D1SolidColorBrush* pHubBorder = nullptr;
+                pRT->CreateSolidColorBrush(isHubHovered ? D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.95f) : D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.50f), &pHubBorder);
+                if (pHubBorder) {
+                    pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(ox, oy), orbR, orbR), pHubBorder, isHubHovered ? 2.0f : 1.2f);
+                    pHubBorder->Release();
+                }
+                // Draw crisp plus icon centered in the RecentHub orb
+                float plusLen = isHubHovered ? (5.5f * scale) : (4.5f * scale);
+                ID2D1SolidColorBrush* pPlusShadow = nullptr;
+                pRT->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.65f), &pPlusShadow);
+                if (pPlusShadow) {
+                    pRT->DrawLine(D2D1::Point2F(ox - plusLen, oy + 0.8f), D2D1::Point2F(ox + plusLen, oy + 0.8f), pPlusShadow, 2.6f, g_pRoundStrokeStyle);
+                    pRT->DrawLine(D2D1::Point2F(ox, oy - plusLen + 0.8f), D2D1::Point2F(ox, oy + plusLen + 0.8f), pPlusShadow, 2.6f, g_pRoundStrokeStyle);
+                    pPlusShadow->Release();
+                }
+                ID2D1SolidColorBrush* pPlusWhite = nullptr;
+                pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.95f), &pPlusWhite);
+                if (pPlusWhite) {
+                    pRT->DrawLine(D2D1::Point2F(ox - plusLen, oy), D2D1::Point2F(ox + plusLen, oy), pPlusWhite, 2.0f, g_pRoundStrokeStyle);
+                    pRT->DrawLine(D2D1::Point2F(ox, oy - plusLen), D2D1::Point2F(ox, oy + plusLen), pPlusWhite, 2.0f, g_pRoundStrokeStyle);
+                    pPlusWhite->Release();
+                }
+                continue;
             }
-                pArcGeom->Release();
+
+            ID2D1SolidColorBrush* pOrbBrush = nullptr;
+            pRT->CreateSolidColorBrush(kPresetColors[i], &pOrbBrush);
+            if (pOrbBrush) {
+                if (isHovered) {
+                    pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(ox, oy), orbR + 4.0f * scale, orbR + 4.0f * scale), pGlowBrush);
+                }
+                pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(ox, oy), orbR, orbR), pOrbBrush);
+
+                ID2D1SolidColorBrush* pOrbBorder = nullptr;
+                pRT->CreateSolidColorBrush(isHovered ? D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.95f) : D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.40f), &pOrbBorder);
+                if (pOrbBorder) {
+                    pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(ox, oy), orbR, orbR), pOrbBorder, isHovered ? 2.0f : 1.0f);
+                    pOrbBorder->Release();
+                }
+
+                pOrbBrush->Release();
             }
         }
 
-        // Draw the 5 Recent Satellite Orbs
-        for (int j = 0; j < (int)g_recentColors.size() && j < 5; ++j) {
-            float angle = -90.0f * kRad + (float)(j - 2) * (16.0f * kRad);
-            float sx = cx + std::cos(angle) * kSatelliteRadius;
-            float sy = cy + std::sin(angle) * kSatelliteRadius;
+        // 8. Layer 2: Radial Menu Satellite Arc (Recent 5 Colors)
+        if (g_radialRecentFanOpen) {
+            const float kSatelliteRadius = 162.0f * scale;
+            const float kRad = 3.14159265358979323846f / 180.0f;
+            int numOrbs = std::min(5, (int)g_recentColors.size());
 
-            bool isSatHovered = (g_hoveredRecentOrb == j);
-            float satR = isSatHovered ? (15.0f * scale) : (11.5f * scale);
+            // Curved guide arc for satellite tier: starts exactly at orb 0 and ends exactly at last orb
+            if (numOrbs > 1) {
+                ID2D1PathGeometry* pArcGeom = nullptr;
+                if (g_pD2DFactory && SUCCEEDED(g_pD2DFactory->CreatePathGeometry(&pArcGeom))) {
+                    ID2D1GeometrySink* pSink = nullptr;
+                    if (SUCCEEDED(pArcGeom->Open(&pSink))) {
+                        float aStart = -90.0f * kRad + (float)(0 - (numOrbs - 1) * 0.5f) * (16.0f * kRad);
+                        float aEnd = -90.0f * kRad + (float)(numOrbs - 1 - (numOrbs - 1) * 0.5f) * (16.0f * kRad);
+                        pSink->BeginFigure(D2D1::Point2F(cx + std::cos(aStart) * kSatelliteRadius, cy + std::sin(aStart) * kSatelliteRadius), D2D1_FIGURE_BEGIN_HOLLOW);
+                        pSink->AddArc(D2D1::ArcSegment(
+                            D2D1::Point2F(cx + std::cos(aEnd) * kSatelliteRadius, cy + std::sin(aEnd) * kSatelliteRadius),
+                            D2D1::SizeF(kSatelliteRadius, kSatelliteRadius),
+                            0.0f,
+                            D2D1_SWEEP_DIRECTION_CLOCKWISE,
+                            D2D1_ARC_SIZE_SMALL
+                        ));
+                        pSink->EndFigure(D2D1_FIGURE_END_OPEN);
+                        pSink->Close();
+                        pSink->Release();
 
-            ID2D1SolidColorBrush* pSatBrush = nullptr;
-            pRT->CreateSolidColorBrush(g_recentColors[j], &pSatBrush);
-            if (pSatBrush) {
-                if (isSatHovered && pGlowBrush) {
-                    pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(sx, sy), satR + 4.0f * scale, satR + 4.0f * scale), pGlowBrush);
+                        ID2D1SolidColorBrush* pArcBrush = nullptr;
+                        pRT->CreateSolidColorBrush(D2D1::ColorF(0.40f, 0.48f, 0.60f, 0.45f), &pArcBrush);
+                        if (pArcBrush) {
+                            pRT->DrawGeometry(pArcGeom, pArcBrush, 1.2f);
+                            pArcBrush->Release();
+                        }
+                    }
+                    pArcGeom->Release();
                 }
-                pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(sx, sy), satR, satR), pSatBrush);
+            }
 
-                ID2D1SolidColorBrush* pSatBorder = nullptr;
-                pRT->CreateSolidColorBrush(isSatHovered ? D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.95f) : D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.40f), &pSatBorder);
-                if (pSatBorder) {
-                    pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(sx, sy), satR, satR), pSatBorder, isSatHovered ? 2.0f : 1.0f);
-                    pSatBorder->Release();
+            // Draw the Recent Satellite Orbs
+            for (int j = 0; j < (int)g_recentColors.size() && j < 5; ++j) {
+                float angle = -90.0f * kRad + (float)(j - (numOrbs - 1) * 0.5f) * (16.0f * kRad);
+                float sx = cx + std::cos(angle) * kSatelliteRadius;
+                float sy = cy + std::sin(angle) * kSatelliteRadius;
+
+                bool isSatHovered = (g_hoveredRecentOrb == j);
+                float satR = isSatHovered ? (15.0f * scale) : (11.5f * scale);
+
+                ID2D1SolidColorBrush* pSatBrush = nullptr;
+                pRT->CreateSolidColorBrush(g_recentColors[j], &pSatBrush);
+                if (pSatBrush) {
+                    if (isSatHovered && pGlowBrush) {
+                        pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(sx, sy), satR + 4.0f * scale, satR + 4.0f * scale), pGlowBrush);
+                    }
+                    pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(sx, sy), satR, satR), pSatBrush);
+
+                    ID2D1SolidColorBrush* pSatBorder = nullptr;
+                    pRT->CreateSolidColorBrush(isSatHovered ? D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.95f) : D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.40f), &pSatBorder);
+                    if (pSatBorder) {
+                        pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(sx, sy), satR, satR), pSatBorder, isSatHovered ? 2.0f : 1.0f);
+                        pSatBorder->Release();
+                    }
+
+                    pSatBrush->Release();
                 }
-
-                pSatBrush->Release();
             }
         }
     }
@@ -4091,6 +4524,7 @@ void DrawBackdropFlyout(ID2D1HwndRenderTarget* pRT) {
     if (hasMultipleMonitors) {
         // Section 2: Target Display
         items.push_back({ L"Active Screen (Cursor)", L"", g_canvasScope == CanvasMonitorScope::ActiveCursor });
+        items.push_back({ L"Primary Screen", L"", g_canvasScope == CanvasMonitorScope::Primary });
         for (size_t i = 0; i < monitors.size(); ++i) {
             CanvasMonitorScope scope = (CanvasMonitorScope)(i + 1);
             items.push_back({ monitors[i].name, L"", g_canvasScope == scope });
@@ -4811,20 +5245,24 @@ void RenderOverlay() {
             float monL = 0, monT = 0, monR = 0, monB = 0;
             GetMonitorBoundsAt(g_cursorX, g_cursorY, monL, monT, monR, monB);
             targetRect = D2D1::RectF(monL, monT, monR, monB);
+        } else if (g_canvasScope == CanvasMonitorScope::Primary) {
+            const auto& mons = GetSystemMonitorList();
+            for (const auto& m : mons) {
+                if (m.isPrimary) {
+                    targetRect = m.rect;
+                    break;
+                }
+            }
         } else if (g_canvasScope > CanvasMonitorScope::AllMonitors) {
-            auto mons = GetSystemMonitorList();
+            const auto& mons = GetSystemMonitorList();
             int idx = (int)g_canvasScope - 1;
             if (idx >= 0 && idx < (int)mons.size()) {
                 targetRect = mons[idx].rect;
             }
         }
-        D2D1_COLOR_F bgColor = (g_canvasBg == CanvasBg::Whiteboard)
-            ? D2D1::ColorF(0.96f, 0.96f, 0.98f, 1.0f)   // Soft off-white paper
-            : D2D1::ColorF(0.12f, 0.14f, 0.18f, 1.0f);  // Matte dark slate
-        ID2D1SolidColorBrush* pBgBrush = nullptr;
-        if (SUCCEEDED(g_pRenderTarget->CreateSolidColorBrush(bgColor, &pBgBrush)) && pBgBrush) {
+        ID2D1SolidColorBrush* pBgBrush = (g_canvasBg == CanvasBg::Whiteboard) ? g_pWhiteboardBrush : g_pBlackboardBrush;
+        if (pBgBrush) {
             g_pRenderTarget->FillRectangle(targetRect, pBgBrush);
-            pBgBrush->Release();
         }
     }
     else if (g_settings.freezeScreen && g_pDesktopBitmap && g_currentTool != ToolMode::Pointer) {
@@ -5358,6 +5796,20 @@ void SetToolMode(ToolMode newMode) {
 
     if (g_hOverlayWnd) {
         if (newMode == ToolMode::Pointer) {
+            // Dismiss radial menu and modal flyouts before switching to click-through mode
+            if (g_radialActive) {
+                g_radialActive = false;
+                g_radialHoverTarget = RadialTarget::None;
+                g_radialHoverSector = -1;
+                g_hoveredOrb = -1;
+                g_hoveredRecentOrb = -1;
+                g_radialRecentFanOpen = false;
+            }
+            g_shapesFlyoutOpen = false;
+            g_gridFlyoutOpen = false;
+            g_backdropFlyoutOpen = false;
+            g_colorFlyoutOpen = false;
+
             // Enter Pointer (Click-Through) mode:
             // Window is already layered, so only toggle WS_EX_TRANSPARENT to avoid black flashing
             LONG_PTR exStyle = GetWindowLongPtr(g_hOverlayWnd, GWL_EXSTYLE);
@@ -5400,6 +5852,19 @@ void SetToolMode(ToolMode newMode) {
 LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_USER_TOGGLE_POINTER: {
+        if (g_radialActive) {
+            g_radialActive = false;
+            g_radialHoverTarget = RadialTarget::None;
+            g_radialHoverSector = -1;
+            g_hoveredOrb = -1;
+            g_hoveredRecentOrb = -1;
+            g_radialRecentFanOpen = false;
+        }
+        g_shapesFlyoutOpen = false;
+        g_gridFlyoutOpen = false;
+        g_backdropFlyoutOpen = false;
+        g_colorFlyoutOpen = false;
+
         if (g_isSnipping) {
             CancelSnipping();
         }
@@ -5424,6 +5889,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     }
 
     case WM_DISPLAYCHANGE: {
+        GetSystemMonitorList(true); // Refresh cached monitor topologies
         g_dpiScale = GetDpiScaleForHwnd(hwnd);
         int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
         int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
@@ -5468,6 +5934,97 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         ScreenToClient(hwnd, &wheelPt);
         g_cursorX = (float)wheelPt.x;
         g_cursorY = (float)wheelPt.y;
+
+        // Radial Menu Active: Scroll wheel over Shape sector (or active Shape) cycles shapes!
+        if (g_radialActive) {
+            bool isHoveringShape = false;
+            if (g_radialHoverTarget == RadialTarget::Sector && g_radialHoverSector >= 0 && g_radialHoverSector < (int)g_activeRadialSlots.size()) {
+                if (g_activeRadialSlots[g_radialHoverSector] == RadialAction::Shape) {
+                    isHoveringShape = true;
+                }
+            } else if (g_currentShape != ShapeType::Freehand && g_currentTool == ToolMode::Pen) {
+                isHoveringShape = true;
+            }
+
+            if (isHoveringShape) {
+                ShapeType shapeOrder[] = {
+                    ShapeType::Line,
+                    ShapeType::Arrow,
+                    ShapeType::Rectangle,
+                    ShapeType::Ellipse,
+                    ShapeType::Triangle
+                };
+                const int kShapeCount = 5;
+                int curIdx = 0;
+                for (int i = 0; i < kShapeCount; ++i) {
+                    if (g_currentShape == shapeOrder[i]) {
+                        curIdx = i;
+                        break;
+                    }
+                }
+                if (delta > 0) {
+                    curIdx = (curIdx + 1) % kShapeCount;
+                } else {
+                    curIdx = (curIdx - 1 + kShapeCount) % kShapeCount;
+                }
+                g_currentShape = shapeOrder[curIdx];
+
+                const wchar_t* shapeLabels[] = {
+                    L"Shape: Line (Hold Shift for Orthogonal)",
+                    L"Shape: Arrow",
+                    L"Shape: Rectangle (Hold Shift for Square)",
+                    L"Shape: Ellipse (Hold Shift for Circle)",
+                    L"Shape: Triangle (Hold Shift for Equilateral)"
+                };
+                ShowToastNotification(shapeLabels[curIdx]);
+                InvalidateOverlay();
+            }
+
+            bool isHoveringWhiteboard = false;
+            if (g_radialHoverTarget == RadialTarget::Sector && g_radialHoverSector >= 0 && g_radialHoverSector < (int)g_activeRadialSlots.size()) {
+                if (g_activeRadialSlots[g_radialHoverSector] == RadialAction::Whiteboard) {
+                    isHoveringWhiteboard = true;
+                }
+            }
+            if (isHoveringWhiteboard) {
+                auto mons = GetSystemMonitorList();
+                std::vector<CanvasMonitorScope> scopes = {
+                    CanvasMonitorScope::ActiveCursor,
+                    CanvasMonitorScope::AllMonitors,
+                    CanvasMonitorScope::Primary
+                };
+                for (size_t i = 0; i < mons.size(); ++i) {
+                    scopes.push_back((CanvasMonitorScope)(i + 1));
+                }
+                int curIdx = 0;
+                for (size_t i = 0; i < scopes.size(); ++i) {
+                    if (g_canvasScope == scopes[i]) {
+                        curIdx = (int)i;
+                        break;
+                    }
+                }
+                if (delta > 0) {
+                    curIdx = (curIdx + 1) % (int)scopes.size();
+                } else {
+                    curIdx = (curIdx - 1 + (int)scopes.size()) % (int)scopes.size();
+                }
+                g_canvasScope = scopes[curIdx];
+                if (g_canvasScope == CanvasMonitorScope::ActiveCursor) {
+                    ShowToastNotification(L"Whiteboard Display: Active Screen (Follows Cursor)");
+                } else if (g_canvasScope == CanvasMonitorScope::AllMonitors) {
+                    ShowToastNotification(L"Whiteboard Display: All Screens");
+                } else if (g_canvasScope == CanvasMonitorScope::Primary) {
+                    ShowToastNotification(L"Whiteboard Display: Primary Monitor");
+                } else {
+                    wchar_t buf[64];
+                    wsprintfW(buf, L"Whiteboard Display: Screen %d", (int)g_canvasScope);
+                    ShowToastNotification(buf);
+                }
+                InvalidateOverlay();
+                return 0;
+            }
+            return 0;
+        }
 
         // Holding Right-click OR in Eraser Mode: Scroll wheel resizes eraser radius!
         if (g_isRightMouseDown || g_isRightClickErasing || g_currentTool == ToolMode::Eraser) {
@@ -6049,65 +6606,95 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 g_radialHoverTarget = RadialTarget::Center;
                 g_radialRecentFanOpen = false;
             }
-            else if (dist > 40.0f * rScale && dist <= 106.0f * rScale) {
-                // 2. Action Ring: 9 Continuous Angular Sectors (Zero Dead Gaps)
+            else if (dist > 40.0f * rScale && dist <= (g_settings.showRadialColorRing ? 106.0f : 96.0f) * rScale) {
+                // 2. Action Ring: N Continuous Angular Sectors (Zero Dead Gaps)
                 g_radialRecentFanOpen = false;
-                float angle = std::atan2(dy, dx);
-                if (angle < 0) angle += 2.0f * 3.14159265358979323846f;
-                const float kSecStep = (float)(2.0 * 3.14159265358979323846 / 9.0);
-                int sector = (int)((angle + kSecStep * 0.5f) / kSecStep) % 9;
-                bool sectorDisabled = (sector == (int)RadialTarget::Clear && g_strokes.empty()) ||
-                                      (sector == (int)RadialTarget::Undo && g_undoStack.empty());
-                if (!sectorDisabled) {
-                    g_radialHoverSector = sector;
-                    g_radialHoverTarget = (RadialTarget)sector;
+                int nSectors = (int)g_activeRadialSlots.size();
+                if (nSectors > 0) {
+                    float angle = std::atan2(dy, dx);
+                    if (angle < 0) angle += 2.0f * 3.14159265358979323846f;
+                    const float kSecStep = (float)(2.0 * 3.14159265358979323846 / (double)nSectors);
+                    int sector = (int)((angle + kSecStep * 0.5f) / kSecStep) % nSectors;
+                    RadialAction act = g_activeRadialSlots[sector];
+                    bool sectorDisabled = (act == RadialAction::Clear && g_strokes.empty() && g_laserStrokes.empty()) ||
+                                          (act == RadialAction::Undo && g_undoStack.empty()) ||
+                                          (act == RadialAction::Redo && g_redoStack.empty());
+                    if (!sectorDisabled) {
+                        g_radialHoverSector = sector;
+                        g_radialHoverTarget = RadialTarget::Sector;
+                    }
                 }
             }
-            else {
+            else if (g_settings.showRadialColorRing) {
                 // 3. Outer Ring & Beyond: Color Orbs & Recent Colors Fan
-                // Check if cursor is pointing into the Recent Colors satellite fan at 12 o'clock
-                bool inRecentFan = false;
-                if (g_radialRecentFanOpen && dy < 0.0f && dist >= 135.0f * rScale && dist <= 210.0f * rScale && !g_recentColors.empty()) {
-                    const float kSatelliteRadius = 162.0f * rScale;
-                    const float kRad = 3.14159265358979323846f / 180.0f;
-                    float bestDistSq = 999999.0f;
-                    int bestJ = -1;
-                    for (int j = 0; j < (int)g_recentColors.size() && j < 5; ++j) {
-                        float sAngle = -90.0f * kRad + (float)(j - 2) * (16.0f * kRad);
-                        float sx = g_radialX + std::cos(sAngle) * kSatelliteRadius;
-                        float sy = g_radialY + std::sin(sAngle) * kSatelliteRadius;
-                        float d2 = DistanceSq(g_cursorX, g_cursorY, sx, sy);
-                        if (d2 < bestDistSq) {
-                            bestDistSq = d2;
-                            bestJ = j;
+                float angle = std::atan2(dy, dx);
+                float degAngle = angle * (180.0f / 3.14159265358979323846f); // -180 to +180
+
+                // Custom color hub center at 12 o'clock
+                float hubX = g_radialX;
+                float hubY = g_radialY - 126.0f * rScale;
+                float hubDist = std::sqrt(DistanceSq(g_cursorX, g_cursorY, hubX, hubY));
+
+                int numRecent = std::min(5, (int)g_recentColors.size());
+
+                // If the recent colors satellite fan is currently open:
+                if (g_radialRecentFanOpen && numRecent > 0) {
+                    // Check if cursor remains within the upper fan sector (-150 deg to -30 deg, dy < 0)
+                    bool inFanZone = (dy < 0.0f && degAngle >= -150.0f && degAngle <= -30.0f);
+                    if (inFanZone) {
+                        // User is inside the recent colors fan zone!
+                        // Distinguish between the Custom Color Hub at 12 o'clock (lower) and Satellite Arc (upper).
+                        // Transition threshold: midpoint between hub (126px) and satellite arc (162px) = 144px.
+                        if (dist >= 144.0f * rScale) {
+                            // In Satellite Arc: smoothly map by continuous angle to the nearest recent color orb
+                            int bestRecent = 0;
+                            float minAngleDiff = 999.0f;
+                            for (int j = 0; j < numRecent; ++j) {
+                                float orbAngle = -90.0f + (float)(j - (numRecent - 1) * 0.5f) * 16.0f;
+                                float diff = std::abs(degAngle - orbAngle);
+                                if (diff < minAngleDiff) {
+                                    minAngleDiff = diff;
+                                    bestRecent = j;
+                                }
+                            }
+                            g_hoveredRecentOrb = bestRecent;
+                            g_radialHoverTarget = RadialTarget::RecentOrb;
                         }
+                        else {
+                            // In Hub zone (closer to the 12 o'clock custom orb)
+                            g_radialHoverTarget = RadialTarget::RecentHub;
+                            g_hoveredRecentOrb = -1;
+                        }
+                        // Fan remains open throughout the entire fan zone
+                        g_radialRecentFanOpen = true;
+
+                        if (oldTarget != g_radialHoverTarget || oldSector != g_radialHoverSector || oldOrb != g_hoveredOrb || oldRecentOrb != g_hoveredRecentOrb) {
+                            InvalidateOverlay();
+                        }
+                        return 0;
                     }
-                    if (bestJ >= 0 && bestDistSq <= (36.0f * rScale) * (36.0f * rScale)) {
-                        g_hoveredRecentOrb = bestJ;
-                        g_radialHoverTarget = RadialTarget::RecentOrb;
-                        inRecentFan = true;
+                    else {
+                        // Cursor moved away from the fan zone; close fan and proceed to standard preset color mapping
+                        g_radialRecentFanOpen = false;
                     }
                 }
 
-                if (!inRecentFan) {
-                    // Map continuously by angle to the 16 preset color orbs
-                    float angle = std::atan2(dy, dx);
-                    float relAngle = angle - (-3.14159265358979323846f * 0.5f);
-                    while (relAngle < 0.0f) relAngle += 2.0f * 3.14159265358979323846f;
-                    while (relAngle >= 2.0f * 3.14159265358979323846f) relAngle -= 2.0f * 3.14159265358979323846f;
+                // Standard continuous angular mapping to the 16 preset color orbs
+                float relAngle = angle - (-3.14159265358979323846f * 0.5f);
+                while (relAngle < 0.0f) relAngle += 2.0f * 3.14159265358979323846f;
+                while (relAngle >= 2.0f * 3.14159265358979323846f) relAngle -= 2.0f * 3.14159265358979323846f;
 
-                    const float kOrbStep = (float)(2.0 * 3.14159265358979323846 / (double)kPresetColorCount);
-                    int orbIdx = (int)((relAngle + kOrbStep * 0.5f) / kOrbStep) % kPresetColorCount;
+                const float kOrbStep = (float)(2.0 * 3.14159265358979323846 / (double)kPresetColorCount);
+                int orbIdx = (int)((relAngle + kOrbStep * 0.5f) / kOrbStep) % kPresetColorCount;
 
-                    if (orbIdx == 0) {
-                        g_radialHoverTarget = RadialTarget::RecentHub;
-                        g_radialRecentFanOpen = true;
-                    }
-                    else {
-                        g_hoveredOrb = orbIdx;
-                        g_radialHoverTarget = RadialTarget::ColorOrb;
-                        g_radialRecentFanOpen = false;
-                    }
+                if (orbIdx == 0 || hubDist <= 22.0f * rScale) {
+                    g_radialHoverTarget = RadialTarget::RecentHub;
+                    g_radialRecentFanOpen = (numRecent > 0);
+                }
+                else {
+                    g_hoveredOrb = orbIdx;
+                    g_radialHoverTarget = RadialTarget::ColorOrb;
+                    g_radialRecentFanOpen = false;
                 }
             }
 
@@ -6457,42 +7044,107 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                     SetToolMode(ToolMode::Pen);
                 }
             }
-            else if (g_radialHoverTarget == RadialTarget::Clear) {
-                if (!g_strokes.empty() || !g_laserStrokes.empty()) {
-                    if (!g_strokes.empty()) PushUndoState();
-                    g_strokes.clear();
-                    g_laserStrokes.clear();
-                    if (!g_isLaserDrawing) KillTimer(hwnd, TIMER_ID_LASER);
+            else if (g_radialHoverTarget == RadialTarget::Sector && g_radialHoverSector >= 0 && g_radialHoverSector < (int)g_activeRadialSlots.size()) {
+                RadialAction act = g_activeRadialSlots[g_radialHoverSector];
+                switch (act) {
+                    case RadialAction::Clear: {
+                        if (!g_strokes.empty() || !g_laserStrokes.empty()) {
+                            if (!g_strokes.empty()) PushUndoState();
+                            g_strokes.clear();
+                            g_laserStrokes.clear();
+                            if (!g_isLaserDrawing) KillTimer(hwnd, TIMER_ID_LASER);
+                        }
+                        break;
+                    }
+                    case RadialAction::Snapshot: {
+                        if (GetKeyState(VK_CONTROL) & 0x8000) {
+                            CaptureFullScreenSnapshot();
+                        } else {
+                            StartSnipping();
+                        }
+                        break;
+                    }
+                    case RadialAction::Snip: {
+                        StartSnipping();
+                        break;
+                    }
+                    case RadialAction::Eraser: {
+                        SetToolMode(ToolMode::Eraser);
+                        break;
+                    }
+                    case RadialAction::Undo: {
+                        PerformUndo();
+                        break;
+                    }
+                    case RadialAction::Redo: {
+                        PerformRedo();
+                        break;
+                    }
+                    case RadialAction::Pointer: {
+                        SetToolMode(ToolMode::Pointer);
+                        break;
+                    }
+                    case RadialAction::InkVisible: {
+                        g_inkVisible = !g_inkVisible;
+                        break;
+                    }
+                    case RadialAction::Pan: {
+                        SetToolMode(ToolMode::Pan);
+                        break;
+                    }
+                    case RadialAction::Pen: {
+                        g_currentShape = ShapeType::Freehand;
+                        SetToolMode(ToolMode::Pen);
+                        BuildToolbarLayout(GetSystemMetrics(SM_CXVIRTUALSCREEN), GetSystemMetrics(SM_CYVIRTUALSCREEN));
+                        break;
+                    }
+                    case RadialAction::Highlighter: {
+                        SetToolMode(ToolMode::Highlighter);
+                        break;
+                    }
+                    case RadialAction::Laser: {
+                        SetToolMode(ToolMode::Laser);
+                        break;
+                    }
+                    case RadialAction::Shape: {
+                        if (g_currentShape == ShapeType::Freehand) {
+                            g_currentShape = ShapeType::Line;
+                        }
+                        SetToolMode(ToolMode::Pen);
+                        BuildToolbarLayout(GetSystemMetrics(SM_CXVIRTUALSCREEN), GetSystemMetrics(SM_CYVIRTUALSCREEN));
+                        break;
+                    }
+                    case RadialAction::Grid: {
+                        if (g_gridStyle == GridStyle::None) {
+                            g_gridStyle = GridStyle::DotGrid;
+                            ShowToastNotification(L"Grid: Dot Grid");
+                        } else if (g_gridStyle == GridStyle::DotGrid) {
+                            g_gridStyle = GridStyle::GraphLines;
+                            ShowToastNotification(L"Grid: Graph Lines");
+                        } else {
+                            g_gridStyle = GridStyle::None;
+                            ShowToastNotification(L"Grid: Off");
+                        }
+                        RebuildGridBrush();
+                        break;
+                    }
+                    case RadialAction::Whiteboard: {
+                        CycleCanvasBackground();
+                        break;
+                    }
+                    case RadialAction::Exit: {
+                        g_radialActive = false;
+                        g_radialHoverTarget = RadialTarget::None;
+                        g_radialHoverSector = -1;
+                        g_hoveredOrb = -1;
+                        g_hoveredRecentOrb = -1;
+                        g_radialRecentFanOpen = false;
+                        HideOverlay();
+                        return 0;
+                    }
+                    default:
+                        break;
                 }
-            }
-            else if (g_radialHoverTarget == RadialTarget::Snapshot) {
-                if (GetKeyState(VK_CONTROL) & 0x8000) {
-                    CaptureFullScreenSnapshot();
-                }
-                else {
-                    StartSnipping();
-                }
-            }
-            else if (g_radialHoverTarget == RadialTarget::Eraser) {
-                SetToolMode(ToolMode::Eraser);
-            }
-            else if (g_radialHoverTarget == RadialTarget::Undo) {
-                PerformUndo();
-            }
-            else if (g_radialHoverTarget == RadialTarget::Pointer) {
-                SetToolMode(ToolMode::Pointer);
-            }
-            else if (g_radialHoverTarget == RadialTarget::InkVisible) {
-                g_inkVisible = !g_inkVisible;
-            }
-            else if (g_radialHoverTarget == RadialTarget::Pan) {
-                SetToolMode(ToolMode::Pan);
-            }
-            else if (g_radialHoverTarget == RadialTarget::Draw) {
-                SetToolMode(ToolMode::Pen);
-            }
-            else if (g_radialHoverTarget == RadialTarget::Laser) {
-                SetToolMode(ToolMode::Laser);
             }
             else if (g_radialHoverTarget == RadialTarget::ColorOrb && g_hoveredOrb >= 0 && g_hoveredOrb < (int)kPresetColorCount) {
                 g_activeColor = kPresetColors[g_hoveredOrb];
@@ -6720,10 +7372,15 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                         g_canvasScope = CanvasMonitorScope::ActiveCursor;
                         ShowToastNotification(L"Target: Active Screen (Follows Cursor)");
                     }
-                    else if (monitorChoice >= 1 && monitorChoice <= (int)monitors.size()) {
-                        g_canvasScope = (CanvasMonitorScope)monitorChoice;
+                    else if (monitorChoice == 1) {
+                        g_canvasScope = CanvasMonitorScope::Primary;
+                        ShowToastNotification(L"Target: Primary Screen");
+                    }
+                    else if (monitorChoice >= 2 && monitorChoice <= 1 + (int)monitors.size()) {
+                        int scrIdx = monitorChoice - 1;
+                        g_canvasScope = (CanvasMonitorScope)scrIdx;
                         wchar_t buf[64];
-                        wsprintfW(buf, L"Target: Screen %d", monitorChoice);
+                        wsprintfW(buf, L"Target: Screen %d", scrIdx);
                         ShowToastNotification(buf);
                     }
                     else {
@@ -7523,7 +8180,7 @@ void ShowOverlay() {
         CreateD2DResources(g_hOverlayWnd);
     }
     else {
-        SetWindowPos(g_hOverlayWnd, HWND_TOPMOST, vx, vy, vw, vh, SWP_SHOWWINDOW);
+        SetWindowPos(g_hOverlayWnd, HWND_TOPMOST, vx, vy, vw, vh, SWP_NOACTIVATE);
         CreateD2DResources(g_hOverlayWnd);
         CaptureDesktop();
     }
@@ -7560,10 +8217,6 @@ void ShowOverlay() {
     g_hoveredColorStudioAction = -1;
     g_lastOverlayOpenTime = GetTickCount64();
 
-    ShowWindow(g_hOverlayWnd, SW_SHOW);
-    SetForegroundWindow(g_hOverlayWnd);
-    SetFocus(g_hOverlayWnd);
-    g_bIsActive = true;
     switch (g_settings.defaultStartupTool) {
         case 2: SetToolMode(ToolMode::Highlighter); break;
         case 3: SetToolMode(ToolMode::Laser); break;
@@ -7571,6 +8224,14 @@ void ShowOverlay() {
         case 1:
         default: SetToolMode(ToolMode::Pen); break;
     }
+
+    // Pre-render the fresh frame while hidden so DWM never composites a stale backbuffer
+    RenderOverlay();
+
+    ShowWindow(g_hOverlayWnd, SW_SHOW);
+    SetForegroundWindow(g_hOverlayWnd);
+    SetFocus(g_hOverlayWnd);
+    g_bIsActive = true;
 
     InvalidateOverlay();
 }
@@ -7615,6 +8276,12 @@ void HideOverlay() {
         if (exStyle & WS_EX_TRANSPARENT) {
             SetWindowLongPtr(g_hOverlayWnd, GWL_EXSTYLE, exStyle & ~WS_EX_TRANSPARENT);
             SetWindowPos(g_hOverlayWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+        }
+        // Wipe D2D surface clean on hide to guarantee no ghosting/flashing on next activation
+        if (g_pRenderTarget) {
+            g_pRenderTarget->BeginDraw();
+            g_pRenderTarget->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f));
+            g_pRenderTarget->EndDraw();
         }
         ShowWindow(g_hOverlayWnd, SW_HIDE);
     }
