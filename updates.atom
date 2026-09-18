@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-17T23:11:06.000Z</updated>
+    <updated>2026-09-18T00:36:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar on top for Windows 11 1.1.8]]></title>
+        <id>https://windhawk.net/mods/taskbar-on-top#a6ca3ccb45e4efc76e546d1704ef2fbe6c7f1370</id>
+        <link href="https://windhawk.net/mods/taskbar-on-top"/>
+        <updated>2026-09-18T00:36:27.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the jump lists (context menus) of task items not opening in the latest Windows version.</li>
+<li>Fixed the taskbar empty space context menu not clickable with the mouse in the latest Windows version.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Split: Running Left, Pinned Right 0.3.18]]></title>
         <id>https://windhawk.net/mods/taskbar-split#30a93c50006ebd91a988ef6ba6f461ac903cb5c3</id>
@@ -777,44 +791,6 @@ Original overlay/smear architecture inspired by <a href="https://github.com/Thea
         <author>
             <name>MCheng404</name>
             <uri>https://github.com/MCheng404</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Countdown Timer 1.16]]></title>
-        <id>https://windhawk.net/mods/taskbar-countdown-timer#864978cdce85019b2a86892e73681538a5328f1d</id>
-        <link href="https://windhawk.net/mods/taskbar-countdown-timer"/>
-        <updated>2026-09-13T20:09:16.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarcountdowntimer">Taskbar Countdown Timer</h1>
-<p>Adds a compact countdown timer directly to the Windows 11 taskbar.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Create a countdown in minutes from the taskbar</li>
-<li>Add a custom reminder message</li>
-<li>Live countdown display in the taskbar</li>
-<li>Cancel an active timer</li>
-<li>Snooze a completed timer</li>
-<li>Completion sound</li>
-<li>Reliable completion alert that doesn't depend on the taskbar XAML tree</li>
-<li>Timer state survives Explorer restarts and mod reloads</li>
-<li>Persisted timers use the Windows wall clock; changing the system time can shift an active timer</li>
-<li>Missed reminders older than 6 hours are discarded on restore</li>
-<li>Native XAML flyout for timer configuration</li>
-<li>Completion alert follows the Windows light/dark app theme</li>
-<li>No external application required</li>
-</ul>
-<h2 id="howtouse">How to use</h2>
-<ol>
-<li>Click <strong>⏱ Timer</strong> on the taskbar.</li>
-<li>Enter a reminder and duration.</li>
-<li>Click <strong>Start</strong>.</li>
-<li>The taskbar button shows the remaining time.</li>
-<li>When the countdown finishes, a completion alert appears with <strong>Snooze</strong> and <strong>Dismiss</strong>.</li>
-</ol>
-<p>The mod supports one active timer at a time and currently places its button on the primary taskbar.</p>
-<p><img src="https://raw.githubusercontent.com/richilp/taskbar-countdown-timer/main/16c5364b-0834-4a83-8796-1f6b1df4f702.png" alt="Taskbar Countdown Timer" /></p>]]></content>
-        <author>
-            <name>Richi</name>
-            <uri>https://github.com/richilp</uri>
         </author>
     </entry>
 </feed>

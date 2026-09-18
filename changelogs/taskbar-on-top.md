@@ -1,3 +1,8 @@
+## 1.1.8 ([Sep 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a6ca3ccb45e4efc76e546d1704ef2fbe6c7f1370/mods/taskbar-on-top.wh.cpp))
+
+* Fixed the jump lists (context menus) of task items not opening in the latest Windows version.
+* Fixed the taskbar empty space context menu not clickable with the mouse in the latest Windows version.
+
 ## 1.1.7 ([May 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6e1ccf5d5ff53ada6ae7d58fd31c81a9723e12ea/mods/taskbar-on-top.wh.cpp))
 
 * Fixed compatibility with recent Windows 11 versions.
