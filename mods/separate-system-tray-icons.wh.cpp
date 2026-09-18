@@ -342,6 +342,7 @@ struct AudioOutputEndpoint {
 };
 
 static void UpdateDynamicXamlIcons();
+static void RequestBluetoothTooltipRefresh();
 enum TrayRefreshReason : unsigned {
     RefreshAudio = 1u << 0,
     RefreshAudioDevices = 1u << 1,
@@ -2471,7 +2472,10 @@ static void SetTrayToolTip(wux::FrameworkElement const& targetButton,
                                  wux::RoutedEventArgs const&) {
         if (g_unloading) return;
             if (auto openedTip = sender.try_as<wuc::ToolTip>()) {
-                if (auto target = weakTarget.get()) ApplyNativeTrayToolTipPlacement(openedTip, target);
+                if (auto target = weakTarget.get()) {
+                    ApplyNativeTrayToolTipPlacement(openedTip, target);
+                    if (target == g_bluetoothButton) RequestBluetoothTooltipRefresh();
+                }
             }
         });
         g_uiEventRevokers.push_back([weakSource = winrt::make_weak(eventSource), eventToken] {
@@ -2966,11 +2970,11 @@ static void EnsureUpdateTimer() {
                           wf::IInspectable const&) mutable {
         if (g_unloading) return;
         const auto now = GetTickCount64();
-        if (!lastFallback || now - lastFallback >= 60000) {
+        if (!lastFallback || now - lastFallback >= 600000) {
             lastFallback = now;
             UpdateDynamicXamlIcons();
             // SizeChanged and StartTaskbar handle normal rebuilds. Keep this
-            // expensive tree walk as a low-frequency recovery fallback.
+            // expensive tree walk only as a ten-minute recovery fallback.
             if (!RefreshTaskbarLayoutIfRebuilt()) {
                 RefreshInjectedButtonMetrics();
             }
@@ -3118,6 +3122,7 @@ static std::wstring g_btConnectedNames;
 static size_t g_btConnectedCount = 0;
 static ULONGLONG g_btQueryTick = 0;
 static bool g_btQueryInvalidated = true;
+static bool g_btQueryRequested = false;
 
 // Windows' peripheral battery property, also exposed on headset audio devnodes.
 static constexpr auto kBluetoothBatteryProperty = L"{104EA319-6EE2-4701-BD47-8DDBF425BBE5} 2";
@@ -3149,6 +3154,7 @@ static std::wstring GetBluetoothTooltip(bool available) {
         g_btConnectedNames.clear();
         g_btConnectedCount = 0;
         g_btQueryTick = 0;
+        g_btQueryRequested = false;
         return available ? L"Bluetooth" : L"Bluetooth is off";
     }
     try {
@@ -3221,10 +3227,9 @@ static std::wstring GetBluetoothTooltip(bool available) {
             g_btConnectedNames = std::move(connectedNames);
             g_btConnectedCount = devices.size();
         }
-        // Device/radio notifications invalidate immediately; the slow fallback
-        // catches battery-level updates for devices that don't notify Explorer.
-        if (!g_btQueries[0] && (g_btQueryInvalidated || !g_btQueryTick ||
-                               GetTickCount64() - g_btQueryTick >= 30000)) {
+        // Enumeration is requested only when the user opens the tooltip.
+        if (!g_btQueries[0] && g_btQueryRequested) {
+            g_btQueryRequested = false;
             g_btQueryInvalidated = false;
             auto properties = winrt::single_threaded_vector<winrt::hstring>({
                 L"System.Devices.Aep.IsConnected", L"System.Devices.Aep.DeviceAddress",
@@ -3579,6 +3584,12 @@ static void UpdateDynamicXamlIcons() {
         UpdateSeparateBatteryButton();
         auto primaryBrush = MakeIconBrush();
         auto underlayBrush = MakeUnderlayBrush();
+        if (g_compactGroupedIcon.primary)
+            SetTrayForeground(g_compactGroupedIcon.primary, primaryBrush);
+        if (g_compactGroupedIcon.underlay)
+            SetTrayForeground(g_compactGroupedIcon.underlay, underlayBrush);
+        if (g_compactGroupedIcon.overlay)
+            SetTrayForeground(g_compactGroupedIcon.overlay, primaryBrush);
         const StatusSnapshot snapshot = GetStatusSnapshot();
 
         if (g_bluetoothIcon.primary) {
@@ -3707,6 +3718,22 @@ static void RequestTrayRefresh(unsigned reasons) {
     PostTrayRefresh((reasons & RefreshRadios) != 0);
 }
 
+static void RefreshBluetoothTooltipOnly() {
+    if (!g_bluetoothButton) return;
+    SetCachedTrayToolTip(g_bluetoothButton, g_bluetoothTooltipCache,
+                        GetBluetoothTooltip(GetStatusSnapshot().bluetoothAvailable));
+}
+
+static void RequestBluetoothTooltipRefresh() {
+    if (g_unloading || !g_refreshWindow || !g_settings.showConnectedDevicesInTooltip) return;
+    if (!g_btQueries[0] && (g_btQueryInvalidated || !g_btQueryTick ||
+                          GetTickCount64() - g_btQueryTick >= 30000)) {
+        g_btQueryRequested = true;
+        RefreshBluetoothTooltipOnly();
+    }
+    if (g_btQueries[0]) SetTimer(g_refreshWindow, 2, 250, nullptr);
+}
+
 static LRESULT CALLBACK TrayRefreshWindowProc(HWND hwnd, UINT message,
                                              WPARAM wp, LPARAM lp) {
     if (message == kRefreshMessage + 1) {
@@ -3732,8 +3759,22 @@ static LRESULT CALLBACK TrayRefreshWindowProc(HWND hwnd, UINT message,
         RequestTrayRefresh(RefreshRadios | RefreshNetwork | RefreshAudio | RefreshAudioDevices);
         return TRUE;
     }
-    if (message == kRefreshMessage ||
-        (message == WM_TIMER && (wp == 1 || wp == 2))) {
+    if (message == WM_TIMER && wp == 2) {
+        if (g_unloading || GetTickCount64() - g_btQueryTick >= 10000) {
+            for (auto& query : g_btQueries) {
+                if (query) { try { query.Cancel(); } catch (...) {} }
+                query = nullptr;
+            }
+            g_btQueryRequested = false;
+            g_btQueryInvalidated = true;
+        } else {
+            // Poll only this requested tooltip, not every tray glyph and API.
+            RefreshBluetoothTooltipOnly();
+        }
+        if (!g_btQueries[0]) KillTimer(hwnd, 2);
+        return 0;
+    }
+    if (message == kRefreshMessage || (message == WM_TIMER && wp == 1)) {
         KillTimer(hwnd, 1);
         AcquireSRWLockExclusive(&g_refreshLock);
         const unsigned pending = g_refreshPending;
@@ -3748,8 +3789,6 @@ static LRESULT CALLBACK TrayRefreshWindowProc(HWND hwnd, UINT message,
         }
         RefreshAirplaneModeAsync();
         UpdateDynamicXamlIcons();
-        if (g_btQueries[0]) SetTimer(hwnd, 2, 250, nullptr);
-        else KillTimer(hwnd, 2);
         // One follow-up allows Windows' asynchronous state propagation to settle.
         if (message == kRefreshMessage) SetTimer(hwnd, 1, 150, nullptr);
         return 0;
@@ -3867,11 +3906,18 @@ static DWORD WINAPI StatusEventThread(void* parameter) {
     {
     const HRESULT initialized = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     HANDLE ipNotification = nullptr, wlan = nullptr;
-    HKEY keys[2]{};
-    HANDLE keyEvents[2]{CreateEventW(nullptr, FALSE, FALSE, nullptr),
+    HKEY keys[3]{};
+    HANDLE keyEvents[3]{CreateEventW(nullptr, FALSE, FALSE, nullptr),
+                        CreateEventW(nullptr, FALSE, FALSE, nullptr),
                         CreateEventW(nullptr, FALSE, FALSE, nullptr)};
     HPOWERNOTIFY power[2]{};
     std::vector<std::pair<HANDLE, HDEVNOTIFY>> radios;
+    struct RadioStateSubscription {
+        wdr::Radio radio;
+        wdr::Radio::StateChanged_revoker changed;
+    };
+    // Keep event sources alive and revoke before releasing them/COM on exit.
+    std::vector<RadioStateSubscription> radioStates;
     winrt::com_ptr<IMMDeviceEnumerator> enumerator;
     winrt::com_ptr<IAudioEndpointVolume> volume;
     auto observer = winrt::make_self<AudioStatusObserver>();
@@ -3892,6 +3938,23 @@ static DWORD WINAPI StatusEventThread(void* parameter) {
         }
     };
     auto bindRadios = [&] {
+        try {
+            std::vector<RadioStateSubscription> next;
+            for (auto const& radio : wdr::Radio::GetRadiosAsync().get()) {
+                if (radio.Kind() != wdr::RadioKind::Bluetooth) continue;
+                auto changed = radio.StateChanged(winrt::auto_revoke,
+                    [](wdr::Radio const&, wf::IInspectable const&) {
+                        // Device arrival can precede the transition to On.
+                        // Collect again when the actual radio state changes.
+                        RequestTrayRefresh(RefreshRadios);
+                    });
+                next.push_back({radio, std::move(changed)});
+            }
+            radioStates.swap(next);
+        } catch (...) {
+            // Keep existing subscriptions if an adapter enumeration fails.
+            Wh_Log(L"Bluetooth state subscription failed: 0x%08X", winrt::to_hresult());
+        }
         for (auto [handle, notification] : radios) {
             if (notification) UnregisterDeviceNotification(notification);
             CloseHandle(handle);
@@ -3935,23 +3998,26 @@ static DWORD WINAPI StatusEventThread(void* parameter) {
         0, KEY_NOTIFY, &keys[0]);
     RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\Power",
         0, KEY_NOTIFY, &keys[1]);
+    RegOpenKeyExW(HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        0, KEY_NOTIFY, &keys[2]);
     auto armKey = [&](int i) {
         if (keys[i] && keyEvents[i])
             RegNotifyChangeKeyValue(keys[i], TRUE, REG_NOTIFY_CHANGE_LAST_SET, keyEvents[i], TRUE);
     };
-    armKey(0); armKey(1);
+    armKey(0); armKey(1); armKey(2);
     if (keys[0] && keys[1]) sources |= 64;
     PostMessageW(work.window, kRefreshMessage + 1, sources, 0);
     RefreshStatusSnapshot(RefreshAll);
     PostTrayRefresh(false);
     ULONGLONG lastRecovery = GetTickCount64();
-    if (observer->changed && keyEvents[0] && keyEvents[1]) {
+    if (observer->changed && keyEvents[0] && keyEvents[1] && keyEvents[2]) {
         HANDLE waits[]{work.stop, work.refresh, observer->changed,
-                       keyEvents[0], keyEvents[1]};
+                       keyEvents[0], keyEvents[1], keyEvents[2]};
         while (true) {
             const ULONGLONG elapsed = GetTickCount64() - lastRecovery;
             const DWORD timeout = elapsed >= 30000 ? 0 : static_cast<DWORD>(30000 - elapsed);
-            const DWORD result = WaitForMultipleObjects(5, waits, FALSE, timeout);
+            const DWORD result = WaitForMultipleObjects(6, waits, FALSE, timeout);
             if (result == WAIT_OBJECT_0 || result == WAIT_FAILED) break;
             unsigned reasons = g_statusRefreshReasons.exchange(0);
             if (result == WAIT_OBJECT_0 + 2 ||
@@ -3963,6 +4029,11 @@ static DWORD WINAPI StatusEventThread(void* parameter) {
                 armKey(static_cast<int>(result - WAIT_OBJECT_0 - 3));
                 InvalidateEnergySaverRead();
                 reasons |= RefreshPower;
+            }
+            if (result == WAIT_OBJECT_0 + 5) {
+                // Re-arm before publishing: the UI refresh recolors every glyph
+                // and percentage text without re-enumerating status domains.
+                armKey(2);
             }
             // Recover radio handles after adapters are unplugged/reconnected.
             if (GetTickCount64() - lastRecovery >= 30000) {
@@ -3997,6 +4068,7 @@ static DWORD WINAPI StatusEventThread(void* parameter) {
         }
     }
     // Never hold g_refreshLock while unregistering: APIs may wait for callbacks.
+    radioStates.clear();
     if (ipNotification) CancelMibChangeNotify2(ipNotification);
     if (wlan) {
         WlanRegisterNotification(wlan, WLAN_NOTIFICATION_SOURCE_NONE, TRUE,
@@ -5878,6 +5950,8 @@ static void RemoveXamlButtons() {
     g_btConnectedNames.clear();
     g_btConnectedCount = 0;
     g_btQueryTick = 0;
+    g_btQueryRequested = false;
+    g_btQueryInvalidated = true;
     try {
         if (g_updateTimer) {
             g_updateTimer.Stop();
