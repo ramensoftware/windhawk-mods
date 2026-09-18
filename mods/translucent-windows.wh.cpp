@@ -632,11 +632,12 @@ enum AccentColorShade
 class AccentPalette
 {
 public:
-    std::array<COLORREF, AccentColorCount> Colors{GetSysColor(COLOR_HIGHLIGHT)};
+    std::array<COLORREF, AccentColorCount> Colors{};
     BOOL LoadAccentPalette();
     AccentPalette()
     {
-        LoadAccentPalette();
+        if (!LoadAccentPalette())
+            Colors.fill(GetSysColor(COLOR_HIGHLIGHT));
     }
 };
 AccentPalette g_AccentPalette;
@@ -1903,12 +1904,13 @@ public:
     }
 
     VOID DeleteHDC(HDC& hDC)
-    {
-        if (hDC) {
-            DeleteObject((HBITMAP)GetCurrentObject(hDC, OBJ_BITMAP));
-            DeleteDC(std::exchange(hDC, nullptr));
-        }
+{
+    if (hDC) {
+        HBITMAP hBmp = (HBITMAP)GetCurrentObject(hDC, OBJ_BITMAP);
+        DeleteDC(std::exchange(hDC, nullptr));
+        DeleteObject(hBmp);
     }
+}
 
     ~CThemeCache()
     {
