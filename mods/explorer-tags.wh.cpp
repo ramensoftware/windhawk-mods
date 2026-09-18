@@ -2,7 +2,7 @@
 // @id              explorer-tags
 // @name            Explorer Tags
 // @description     Colored tags panel at the bottom of File Explorer's navigation pane, plus a Tags submenu in the file context menu
-// @version         0.3.2
+// @version         0.4.0
 // @author          buedgik
 // @github          https://github.com/buedgik
 // @homepage        https://github.com/buedgik/explorer-tags
@@ -71,6 +71,9 @@ lose them, the shortcuts are recreated.
 - **Changing the tags folder in the settings leaves the old one behind.** The
   shortcuts are rebuilt under the new folder; the old folders aren't deleted,
   in case something else lives there.
+- **The desktop and file dialogs are left alone.** The panel and the submenu
+  are for Explorer windows; right-clicking a file on the desktop shows the
+  usual menu, without Tags.
 */
 // ==/WindhawkModReadme==
 
@@ -234,8 +237,15 @@ void LoadSettings() {
         }
         std::wstring tagName = Trim(name.get());
         std::wstring tagColor = color.get();
-        // The database field separator is the tab character.
-        std::replace(tagName.begin(), tagName.end(), L'\t', L' ');
+        // The database is one record per line with tab-separated fields, so
+        // none of the three may survive in a tag name: a newline would split
+        // the record in two and lose every file with that tag on the next
+        // load.
+        for (wchar_t& c : tagName) {
+            if (c == L'\t' || c == L'\r' || c == L'\n') {
+                c = L' ';
+            }
+        }
         if (tagName.empty()) {
             continue;
         }
@@ -415,7 +425,11 @@ bool LoadRows(const std::wstring& dbPath, std::vector<Row>& rows) {
                            nullptr, OPEN_EXISTING, 0, nullptr);
     if (h == INVALID_HANDLE_VALUE) {
         DWORD err = GetLastError();
-        return err == ERROR_FILE_NOT_FOUND;
+        // Measured 2026-09-18: a missing parent folder gives
+        // ERROR_PATH_NOT_FOUND, not ERROR_FILE_NOT_FOUND. Treating that as a
+        // read error made every operation bail out on a machine where nothing
+        // had been tagged yet, silently and forever.
+        return err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND;
     }
     LARGE_INTEGER size;
     if (!GetFileSizeEx(h, &size) || size.QuadPart > 64 * 1024 * 1024) {
@@ -1442,6 +1456,8 @@ struct Panel {
     int dropHot = -1;
     int scroll = 0;
     int wheelDelta = 0;
+    int rowHeight = 0;    // from the tree, cached: see GetMetrics
+    int rowHeightDpi = 0;
     bool trackingLeave = false;
     bool inLayout = false;
     HFONT iconFont = nullptr;
@@ -1542,8 +1558,14 @@ Metrics GetMetrics(Panel* p, const Settings& s, int height) {
     if (!m.dpi) {
         m.dpi = 96;
     }
-    int itemH = TreeView_GetItemHeight(TreeViewOf(p));
-    m.rowH = itemH > 0 ? itemH : Dip(32, m.dpi);
+    // Asking the tree costs a FindWindowEx plus a SendMessage, and this runs
+    // on every mouse move; it only changes with the theme or the DPI.
+    if (p->rowHeight <= 0 || p->rowHeightDpi != m.dpi) {
+        int itemH = TreeView_GetItemHeight(TreeViewOf(p));
+        p->rowHeight = itemH > 0 ? itemH : Dip(32, m.dpi);
+        p->rowHeightDpi = m.dpi;
+    }
+    m.rowH = p->rowHeight;
     m.topPad = Dip(12, m.dpi);
     m.sepY = Dip(6, m.dpi);
     m.bottomPad = Dip(6, m.dpi);
@@ -1968,6 +1990,10 @@ void SetDropDescription(IDataObject* data, DROPIMAGETYPE type, PCWSTR message, P
         return;
     }
     DROPDESCRIPTION* dd = (DROPDESCRIPTION*)GlobalLock(stg.hGlobal);
+    if (!dd) {
+        GlobalFree(stg.hGlobal);
+        return;
+    }
     dd->type = type;
     lstrcpynW(dd->szMessage, message, ARRAYSIZE(dd->szMessage));
     lstrcpynW(dd->szInsert, insert, ARRAYSIZE(dd->szInsert));
@@ -2324,6 +2350,7 @@ LRESULT CALLBACK PanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             break;
 
         case WM_DPICHANGED_AFTERPARENT:
+            p->rowHeight = 0;
             LayoutPanel(p);
             return 0;
 
@@ -2536,6 +2563,8 @@ LRESULT CALLBACK TreeSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
         case WM_SYSCOLORCHANGE:
         case WM_SETTINGCHANGE:
             if (Panel* p = FindPanel(hWnd); p && p->wnd) {
+                // The tree's row height can change with the theme.
+                p->rowHeight = 0;
                 InvalidateRect(p->wnd, nullptr, FALSE);
             }
             break;
@@ -2721,8 +2750,11 @@ HBITMAP CreateDotBitmap(COLORREF color, int size) {
 }
 
 void CollectMenuIds(HMENU menu, std::vector<UINT>& ids, int depth) {
+    if (depth >= 8) {
+        return;
+    }
     int count = GetMenuItemCount(menu);
-    for (int i = 0; i < count && depth < 8; i++) {
+    for (int i = 0; i < count; i++) {
         MENUITEMINFOW mii = {sizeof(mii)};
         mii.fMask = MIIM_ID | MIIM_SUBMENU;
         if (GetMenuItemInfoW(menu, i, TRUE, &mii)) {
@@ -2779,6 +2811,16 @@ struct TagMenu {
 const size_t MENU_MAX_CHECKED_SELECTION = 500;
 
 void RemoveTagMenu(TagMenu& tm);
+
+// InsertMenu ignores the ID for a separator, so removing it later by command
+// would never find it. InsertMenuItem does keep it.
+void InsertSeparator(HMENU menu, int pos, UINT id) {
+    MENUITEMINFOW mii = {sizeof(mii)};
+    mii.fMask = MIIM_ID | MIIM_FTYPE;
+    mii.fType = MFT_SEPARATOR;
+    mii.wID = id;
+    InsertMenuItemW(menu, pos, TRUE, &mii);
+}
 
 bool AddTagMenu(TagMenu& tm, HMENU menu, HWND defView, const std::vector<std::wstring>& paths) {
     auto s = GetSettings();
@@ -2837,7 +2879,7 @@ bool AddTagMenu(TagMenu& tm, HMENU menu, HWND defView, const std::vector<std::ws
     bool prevIsSeparator = pos > 0 && GetMenuItemInfoW(menu, pos - 1, TRUE, &prev) &&
                            (prev.fType & MFT_SEPARATOR);
     if (pos > 0 && !prevIsSeparator) {
-        InsertMenuW(menu, pos++, MF_BYPOSITION | MF_SEPARATOR, tm.base + MENU_ID_SEPARATOR_BEFORE, nullptr);
+        InsertSeparator(menu, pos++, tm.base + MENU_ID_SEPARATOR_BEFORE);
     }
     MENUITEMINFOW mii = {sizeof(mii)};
     mii.fMask = MIIM_SUBMENU | MIIM_STRING;
@@ -2849,7 +2891,7 @@ bool AddTagMenu(TagMenu& tm, HMENU menu, HWND defView, const std::vector<std::ws
         return false;
     }
     if (pos + 1 < GetMenuItemCount(menu)) {
-        InsertMenuW(menu, pos + 1, MF_BYPOSITION | MF_SEPARATOR, tm.base + MENU_ID_SEPARATOR_AFTER, nullptr);
+        InsertSeparator(menu, pos + 1, tm.base + MENU_ID_SEPARATOR_AFTER);
     }
     return true;
 }
@@ -2986,8 +3028,14 @@ BOOL TrackWithTagMenu(HMENU menu, UINT flags, HWND owner, Original original) {
 
     RemoveTagMenu(tm);
 
+    // The reserved block is chosen from the IDs present when the menu opens,
+    // but shell submenus (Send to, Open with) fill themselves in later: check
+    // the command really belongs to our submenu before swallowing it.
     UINT id = (UINT)result;
-    if (result && id >= tm.base && id < tm.base + MENU_ID_RANGE) {
+    MENUITEMINFOW ours = {sizeof(ours)};
+    ours.fMask = MIIM_ID;
+    bool isOurs = tm.sub && IsMenu(tm.sub) && GetMenuItemInfoW(tm.sub, id, FALSE, &ours);
+    if (result && isOurs && id >= tm.base && id < tm.base + MENU_ID_RANGE) {
         RunTagMenuCommand(tm, id, paths);
         return 0;
     }
@@ -3038,8 +3086,9 @@ BOOL InitFailed() {
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
-    // Cheap insurance: state from a previous load of this image must never
-    // leave the mod inert.
+    // Windhawk loads a fresh copy of the image on every enable, so these are
+    // already zero; setting them costs nothing and means no future change to
+    // the teardown path can leave the mod inert without it being obvious.
     g_unloading = false;
     g_workerThread = nullptr;
     g_busy = 0;
@@ -3115,13 +3164,24 @@ void Wh_ModSettingsChanged() {
     BroadcastMessage(g_msgLayout);
 }
 
-BOOL CALLBACK CancelMenuModeProc(HWND hwnd, LPARAM) {
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-    if (pid == GetCurrentProcessId()) {
-        PostMessageW(hwnd, WM_CANCELMODE, 0, 0);
+// A menu the user leaves open would otherwise hold unloading forever. Waiting
+// is what keeps code from being unmapped under a live call, so it is worth
+// some patience, but not an unbounded hang of Windhawk's engine: past the
+// deadline it gives up and says so. Only the menu-driven counts get a
+// deadline; the drag count must not, because OLE holds a pointer into this
+// image until it releases the drop target.
+const DWORD UNLOAD_WAIT_MS = 10000;
+
+bool WaitForZero(const std::atomic<int>& counter, PCWSTR what) {
+    ULONGLONG start = GetTickCount64();
+    while (counter > 0) {
+        if (GetTickCount64() - start > UNLOAD_WAIT_MS) {
+            Wh_Log(L"Gave up waiting for %s (%d left); unloading anyway", what, counter.load());
+            return false;
+        }
+        Sleep(20);
     }
-    return TRUE;
+    return true;
 }
 
 void Wh_ModBeforeUninit() {
@@ -3142,13 +3202,6 @@ void Wh_ModBeforeUninit() {
     }
     ReleaseSRWLockShared(&g_panelsLock);
 
-    // Any popup menu in this process holds a hook call open, including ones
-    // the mod never touched (taskbar, tray, desktop), because the count is
-    // taken before the "is this a DefView menu" check. Ending menu mode in
-    // this process keeps unloading from waiting on a menu the user forgot
-    // open. Only this process, and only while unloading.
-    EnumWindows(CancelMenuModeProc, 0);
-
     // Detach FIRST, then wait. Detach revokes and releases the mod's own
     // reference on each drop target, so when OLE lets go of its reference the
     // object is destroyed and its destructor ends the drag. Waiting first
@@ -3167,11 +3220,11 @@ void Wh_ModBeforeUninit() {
         }
     }
 
-    // No deadline and no pinning: the module must be unloadable with a single
-    // FreeLibrary once Wh_ModUninit returns. OLE holds a vtable pointer into
-    // this image while a drag is in flight, and a thread can sit inside the
-    // menu hook, so the only correct answer is to wait for both to finish.
-    while (g_busy > 0 || g_drags > 0) {
+    WaitForZero(g_busy, L"mod code on a window thread");
+    // No deadline here: OLE still holds a pointer into this image, and detach
+    // above released the mod's own reference, so this ends as soon as OLE
+    // lets go, including when the drag source died.
+    while (g_drags > 0) {
         Sleep(20);
     }
 
@@ -3180,13 +3233,14 @@ void Wh_ModBeforeUninit() {
 
 void Wh_ModUninit() {
     // The hooks have already been removed; what's left is exiting calls that
-    // had already entered (an Explorer or taskbar menu open right now). Those
-    // return into this image, so wait for them, however long the menu stays
-    // open: returning while they run would unmap the code under them.
-    while (g_hookCalls > 0) {
-        Sleep(20);
+    // had already entered. The count covers every popup menu in the process,
+    // including ones the mod never touched, so this waits with a deadline.
+    WaitForZero(g_hookCalls, L"calls inside the hooks");
+    if (!UnregisterClassW(PANEL_CLASS, THIS_MODULE)) {
+        // The next load would then fail with ERROR_CLASS_ALREADY_EXISTS and
+        // the mod would be inert in this process with no trace of why.
+        Wh_Log(L"UnregisterClass failed: %u", GetLastError());
     }
-    UnregisterClassW(PANEL_CLASS, THIS_MODULE);
     if (g_gdiplusToken) {
         Gdiplus::GdiplusShutdown(g_gdiplusToken);
         g_gdiplusToken = 0;
