@@ -28,9 +28,11 @@ a client tenant side by side in two full Teams windows.
 3. Start Teams again. Every additional launch opens a new independent
    instance. Sign in to a different account/tenant in each one.
 
-Each instance has its own tray icon; the second one is usually hidden in the
-tray overflow (the `^` arrow). Quit each instance separately from its own
-tray icon or from inside its window.
+Only the first instance gets a tray icon: Teams registers it with a fixed
+GUID and Windows allows one icon per GUID, so later instances have none.
+Quit additional instances from inside their window (profile picture → Quit),
+or end them from Task Manager. Closing a window only minimises it — that
+instance keeps running in the background.
 
 **Restart Teams after enabling or disabling the mod.** A Teams instance that
 was already running when the mod was enabled is deliberately left untouched
@@ -49,6 +51,7 @@ rewritten in that process, so enabling the mod does not disturb an existing
 Teams instance.
 
 ## Limitations
+- Only the first instance shows a tray icon (see Usage).
 - All instances share the same profile directory
   (`%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache`). Reading is
   fine, but avoid signing in/out or changing settings in one instance while
