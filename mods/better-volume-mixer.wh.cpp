@@ -18,6 +18,8 @@
 A simple volume mixer for Windows 11. Control your overall volume and individual
 apps from one small window.
 
+![Better Volume Mixer demo](https://raw.githubusercontent.com/0Allu/better-volume-mixer/main/assets/better-volume-mixer-demo.png)
+
 Click the speaker icon in the system tray to open or close the mixer. If it is
 hidden, open the tray overflow menu and drag the icon onto the taskbar.
 
@@ -27,7 +29,9 @@ hidden, open the tray overflow menu and drag the icon onto the taskbar.
 * Use Previous and Next when there are more apps than fit on one page.
 
 Choose your theme, background transparency, animations, and apps per page in
-the mod settings. If an app is missing, try playing some audio in it first.
+the mod settings. If an app is missing, keep the mixer open and play some audio
+in it. Apps on other output devices are remembered after playing while the mixer
+is open, until their audio session ends.
 
 ## Hide the Windows volume icon
 
@@ -326,6 +330,7 @@ int g_dragRow = DRAG_NONE;
 bool g_mouseTracking;
 bool g_audioAvailable;
 bool g_trayVersion4;
+bool g_trayUsesGuid = true;
 bool g_showRequestPending;
 bool g_closeRequestPending;
 bool g_trayPressKnown;
@@ -360,11 +365,7 @@ void LoadSettings() {
     g_settings.backgroundOpacity = ClampInt(Wh_GetIntSetting(L"backgroundOpacity"), 0, 100);
     WindhawkUtils::StringSetting pageSize =
         WindhawkUtils::StringSetting::make(L"maxVisibleApps");
-    // Existing installations may still store the old numeric setting until
-    // the dropdown is saved. Preserve that value during the transition.
-    int appCount = pageSize.get() && *pageSize.get()
-        ? _wtoi(pageSize.get()) : Wh_GetIntSetting(L"maxVisibleApps");
-    g_settings.maxVisibleApps = ClampInt(appCount, 1, 15);
+    g_settings.maxVisibleApps = ClampInt(_wtoi(pageSize.get()), 1, 15);
     g_settings.volumeStep =
         ClampInt(Wh_GetIntSetting(L"volumeStep"), 1, 20);
 }
@@ -727,7 +728,7 @@ bool ShouldIncludeSession(AudioSessionState state, const std::wstring& id,
             g_activatedSessions.insert(id);
         }
     }
-    // Preserve 0.1.4's full default-output list. Only additional outputs need
+    // Include the full default-output list. Only additional outputs need
     // playback history, preventing their unused idle sessions from flooding it.
     // Playback state also works for muted apps, allowing users to unmute them.
     // If the ID query failed, show active sessions without remembering them.
@@ -773,7 +774,9 @@ void ToggleSourcePin(HWND window, int row) {
     if (row < 0 || row >= static_cast<int>(g_apps->size())) return;
     std::wstring key = (*g_apps)[row].pinKey;
     bool pinned = !(*g_apps)[row].pinned;
-    if (!Wh_SetIntValue(key.c_str(), pinned ? 1 : 0)) {
+    BOOL saved = pinned ? Wh_SetIntValue(key.c_str(), 1)
+                        : Wh_DeleteValue(key.c_str());
+    if (!saved) {
         Wh_Log(L"Mixer: could not save source pin");
         return;
     }
@@ -1267,7 +1270,7 @@ struct TextCaches {
     LabelCache percentages;
 };
 // Explicitly reset on the UI thread before fonts/GDI+ are destroyed.
-[[clang::no_destroy]] std::optional<TextCaches> g_textCache;
+std::optional<TextCaches> g_textCache;
 constexpr int TEXT_SUPERSAMPLE = 6;
 
 void ClearTextCache() {
@@ -1839,7 +1842,7 @@ bool GetTrayIconRect(RECT* rect) {
     identifier.cbSize = sizeof(identifier);
     identifier.hWnd = g_hWnd.load();
     identifier.uID = TRAY_ICON_ID;
-    identifier.guidItem = MIXER_TRAY_GUID;
+    if (g_trayUsesGuid) identifier.guidItem = MIXER_TRAY_GUID;
     return SUCCEEDED(Shell_NotifyIconGetRect(&identifier, rect));
 }
 
@@ -1869,8 +1872,12 @@ void PositionMixer(HWND hWnd) {
     x = ClampInt(x, info.rcWork.left, std::max(info.rcWork.left, info.rcWork.right - width));
     y = ClampInt(y, info.rcWork.top, std::max(info.rcWork.top, info.rcWork.bottom - height));
 
-    SetWindowPos(hWnd, HWND_TOPMOST, x, y, width, height,
-                 SWP_NOOWNERZORDER | SWP_NOACTIVATE);
+    RECT current = {};
+    if (!GetWindowRect(hWnd, &current) || current.left != x || current.top != y ||
+        current.right - current.left != width || current.bottom - current.top != height) {
+        SetWindowPos(hWnd, HWND_TOPMOST, x, y, width, height,
+                     SWP_NOOWNERZORDER | SWP_NOACTIVATE);
+    }
 }
 
 void ShowMixer(HWND hWnd) {
@@ -1893,10 +1900,13 @@ void ShowMixer(HWND hWnd) {
     }
     PositionMixer(hWnd);
     ShowWindow(hWnd, SW_SHOWNORMAL);
+    SetTimer(hWnd, TIMER_REFRESH, 1000, nullptr);
     SetPaintTimer(hWnd, g_motionEnabled ? 16 : 80);
     BOOL foreground = SetForegroundWindow(hWnd);
     if (foreground) {
         SetFocus(hWnd);
+    } else if (g_settings.closeWhenFocusIsLost) {
+        SetTimer(hWnd, TIMER_CHECK_FOCUS, 150, nullptr);
     }
     InvalidateRect(hWnd, nullptr, FALSE);
     UpdateWindow(hWnd);
@@ -1939,6 +1949,7 @@ void HideMixer(HWND hWnd) {
     g_showRequestPending = false;
     KillTimer(hWnd, TIMER_CHECK_FOCUS);
     KillTimer(hWnd, TIMER_METERS);
+    KillTimer(hWnd, TIMER_REFRESH);
     g_paintTimerInterval = 0;
     g_openTime = 0;
     g_dragRow = DRAG_NONE;
@@ -1946,6 +1957,9 @@ void HideMixer(HWND hWnd) {
         ReleaseCapture();
     }
     ShowWindow(hWnd, SW_HIDE);
+    g_blackFrame.Reset();
+    g_whiteFrame.Reset();
+    ClearTextCache();
 }
 
 enum class TrayAction { None, Open, Menu };
@@ -1971,6 +1985,7 @@ TrayAction GetTrayAction(UINT event, bool version4) {
 
 void AddTrayIcon(HWND hWnd) {
     g_trayVersion4 = false;
+    g_trayUsesGuid = true;
     NOTIFYICONDATAW data = {};
     data.cbSize = sizeof(data);
     data.hWnd = hWnd;
@@ -1981,8 +1996,16 @@ void AddTrayIcon(HWND hWnd) {
     data.hIcon = g_trayIcon;
     wcscpy_s(data.szTip, L"Better Volume Mixer");
     if (!Shell_NotifyIconW(NIM_ADD, &data)) {
-        Wh_Log(L"Mixer: tray icon registration failed");
-        return;
+        // A GUID can remain associated with an earlier Windhawk executable path.
+        // Keep the same identity mode for all later operations on this icon.
+        data.uFlags &= ~NIF_GUID;
+        data.guidItem = {};
+        g_trayUsesGuid = false;
+        if (!Shell_NotifyIconW(NIM_ADD, &data)) {
+            Wh_Log(L"Mixer: tray icon registration failed");
+            return;
+        }
+        Wh_Log(L"Mixer: tray icon registered using window/ID fallback");
     }
     Wh_Log(L"Mixer: tray icon registered");
 
@@ -1999,8 +2022,8 @@ void RemoveTrayIcon(HWND hWnd) {
     data.cbSize = sizeof(data);
     data.hWnd = hWnd;
     data.uID = TRAY_ICON_ID;
-    data.uFlags = NIF_GUID;
-    data.guidItem = MIXER_TRAY_GUID;
+    data.uFlags = g_trayUsesGuid ? NIF_GUID : 0;
+    if (g_trayUsesGuid) data.guidItem = MIXER_TRAY_GUID;
     Shell_NotifyIconW(NIM_DELETE, &data);
 }
 
@@ -2116,8 +2139,8 @@ void RefreshIconSizes(HWND hWnd) {
             data.cbSize = sizeof(data);
             data.hWnd = hWnd;
             data.uID = TRAY_ICON_ID;
-            data.guidItem = MIXER_TRAY_GUID;
-            data.uFlags = NIF_GUID | NIF_ICON;
+            if (g_trayUsesGuid) data.guidItem = MIXER_TRAY_GUID;
+            data.uFlags = NIF_ICON | (g_trayUsesGuid ? NIF_GUID : 0);
             data.hIcon = tray;
             if (!Shell_NotifyIconW(NIM_MODIFY, &data)) {
                 Wh_Log(L"Mixer: tray DPI icon update failed");
@@ -2243,7 +2266,6 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             ApplyTransparencyStyle(hWnd);
             DWORD corner = 2;  // DWMWCP_ROUND.
             DwmSetWindowAttribute(hWnd, 33, &corner, sizeof(corner));
-            SetTimer(hWnd, TIMER_REFRESH, 1000, nullptr);
             return 0;
         }
 
@@ -2320,9 +2342,9 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
                 return 0;
             }
             if (wParam == TIMER_REFRESH) {
-                RefreshAudioSessions(hWnd);
+                // KillTimer doesn't remove a timer message already in the queue.
                 if (IsWindowVisible(hWnd)) {
-                    ResizeMixer(hWnd);
+                    RefreshAudioSessions(hWnd);
                     PositionMixer(hWnd);
                 }
                 return 0;
@@ -2330,7 +2352,11 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             break;
 
         case WM_PAINT:
-            PaintMixer(hWnd);
+            if (IsWindowVisible(hWnd)) {
+                PaintMixer(hWnd);
+            } else {
+                ValidateRect(hWnd, nullptr);
+            }
             return 0;
 
         case WM_ERASEBKGND:
@@ -2478,7 +2504,10 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
                 UpdateTheme();
                 InvalidateRect(hWnd, nullptr, FALSE);
             }
-            RefreshIconSizes(hWnd);
+            if (lParam && wcscmp(reinterpret_cast<PCWSTR>(lParam),
+                                  L"ImmersiveColorSet") == 0) {
+                RefreshIconSizes(hWnd);
+            }
             break;
 
         case WM_DISPLAYCHANGE:
@@ -2672,24 +2701,31 @@ void WhTool_ModUninit() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Windhawk tool mod launcher. This runs the mod in a dedicated windhawk.exe
-// process, keeping the mixer window and audio work in the tool process.
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
 void WINAPI EntryPoint_Hook() {
-    Wh_Log(L"Mixer: tool entry point reached; UI thread owns the message loop");
+    Wh_Log(L">");
     ExitThread(0);
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Mixer: mod loaded, PID=%lu, architecture=%u-bit",
-           GetCurrentProcessId(), static_cast<unsigned>(sizeof(void*) * 8));
     DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
         sessionId == 0) {
-        Wh_Log(L"Mixer: skipping session 0");
         return FALSE;
     }
 
@@ -2697,9 +2733,9 @@ BOOL Wh_ModInit() {
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
-        Wh_Log(L"Mixer: command-line parsing failed, error %lu", GetLastError());
+        Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
 
@@ -2721,53 +2757,47 @@ BOOL Wh_ModInit() {
             break;
         }
     }
+
     LocalFree(argv);
 
     if (isExcluded) {
-        Wh_Log(L"Mixer: skipping service process");
         return FALSE;
     }
 
     if (isCurrentToolModProcess) {
-        Wh_Log(L"Mixer: recognized dedicated tool process");
         g_toolModProcessMutex =
-            CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
-            Wh_Log(L"Mixer: CreateMutex failed, error %lu", GetLastError());
+            Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
+
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"Mixer: another instance already owns the tool mutex");
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
         }
 
         if (!WhTool_ModInit()) {
-            Wh_Log(L"Mixer: tool initialization failed");
             ExitProcess(1);
         }
 
         IMAGE_DOS_HEADER* dosHeader =
-            reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandleW(nullptr));
-        IMAGE_NT_HEADERS* ntHeaders = reinterpret_cast<IMAGE_NT_HEADERS*>(
-            reinterpret_cast<BYTE*>(dosHeader) + dosHeader->e_lfanew);
-        void* entryPoint = reinterpret_cast<BYTE*>(dosHeader) +
-                           ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        if (!Wh_SetFunctionHook(entryPoint,
-                                reinterpret_cast<void*>(EntryPoint_Hook),
-                                nullptr)) {
-            Wh_Log(L"Mixer: entry-point hook failed");
-            ExitProcess(1);
-        }
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
 
     if (isToolModProcess) {
-        Wh_Log(L"Mixer: skipping another tool mod's process");
         return FALSE;
     }
 
     g_isToolModProcessLauncher = true;
-    Wh_Log(L"Mixer: launcher ready");
     return TRUE;
 }
 
@@ -2775,67 +2805,76 @@ void Wh_ModAfterInit() {
     if (!g_isToolModProcessLauncher) {
         return;
     }
-    Wh_Log(L"Mixer: launching dedicated process");
 
     WCHAR currentProcessPath[MAX_PATH];
-    DWORD length = GetModuleFileNameW(nullptr, currentProcessPath,
-                                      ARRAYSIZE(currentProcessPath));
-    if (!length || length >= ARRAYSIZE(currentProcessPath)) {
-        Wh_Log(L"Mixer: could not obtain launcher executable path");
-        return;
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
     }
 
-    WCHAR commandLine[MAX_PATH + 2 +
-        (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
 
-    HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
-        kernelModule = GetModuleHandleW(L"kernel32.dll");
-    }
-    if (!kernelModule) {
-        Wh_Log(L"Mixer: kernel module unavailable");
-        return;
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
     }
 
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES,
-        WINBOOL, DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW,
-        LPPROCESS_INFORMATION, PHANDLE);
-    auto createProcessInternal = reinterpret_cast<CreateProcessInternalW_t>(
-        GetProcAddress(kernelModule, "CreateProcessInternalW"));
-    if (!createProcessInternal) {
-        Wh_Log(L"Mixer: CreateProcessInternalW unavailable");
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
         return;
     }
 
-    STARTUPINFOW startupInfo = {};
-    startupInfo.cb = sizeof(startupInfo);
-    startupInfo.dwFlags = STARTF_FORCEOFFFEEDBACK;
-    PROCESS_INFORMATION processInfo = {};
-    if (createProcessInternal(nullptr, currentProcessPath, commandLine, nullptr,
-                              nullptr, FALSE, NORMAL_PRIORITY_CLASS, nullptr,
-                              nullptr, &startupInfo, &processInfo, nullptr)) {
-        Wh_Log(L"Mixer: tool process created, PID=%lu", processInfo.dwProcessId);
-        CloseHandle(processInfo.hProcess);
-        CloseHandle(processInfo.hThread);
-    } else {
-        Wh_Log(L"Mixer: process creation failed, error %lu", GetLastError());
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
     }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* reload) {
-    (void)reload;
-    if (!g_isToolModProcessLauncher) {
-        WhTool_ModSettingsChanged();
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
     }
-    return TRUE;
+
+    WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    if (!g_isToolModProcessLauncher) {
-        WhTool_ModUninit();
-        ExitProcess(0);
+    if (g_isToolModProcessLauncher) {
+        return;
     }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
