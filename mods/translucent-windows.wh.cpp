@@ -1021,7 +1021,7 @@ BOOL ExtTextOutShouldSkip(HDC hdc, UINT options, LPCRECT lprect, LPCWSTR lpStrin
     if (options & (ETO_OPAQUE | ETO_CLIPPED) && (!lprect || IsRectEmpty(lprect)))
         return TRUE;
     
-    return filtered;
+    return FALSE;
 }
 
 BOOL WINAPI HookedExtTextOutW(
