@@ -74,8 +74,8 @@ A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite
    - Press **`Shift + G`** to cycle grid density (Fine → Medium → Coarse) directly from the keyboard.
 
 9. **Region Snipping & Full Screenshots**:
-   - **Region Snip** (`S`): Click and drag a selection rectangle to crop and copy/save a specific screen region.
-   - **Full Snapshot** (`Ctrl + S`): Captures the full annotated screen to the Windows clipboard (`CF_DIB` / `CF_BITMAP`) and auto-saves to `%USERPROFILE%\Pictures\WinDraw\`.
+   - **Region Snip** (`S` key): Click and drag a selection rectangle to crop and copy/save a specific screen region.
+   - **Full Snapshot** (`Ctrl + S`): Captures the full annotated screen to the Windows clipboard (`CF_DIBV5` / `CF_DIB` / `CF_BITMAP`) and auto-saves to `%USERPROFILE%\Pictures\WinDraw\`.
 
 10. **Pan & Zoom Canvas Navigation**:
     - **Pan Mode** (`P` key): Click and drag to reposition drawings across large canvases.
@@ -91,14 +91,15 @@ A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite
     - **Hide/Show Ink** (`V` key): Temporarily toggles drawing visibility without clearing strokes.
 
 13. **Customizable Cursor Style & Size**:
-    - **Crosshair Style**: Displays a crisp, dual-contrast precision crosshair with configurable arm size (8px to 32px) and an active color center indicator.
-    - **Live Brush Style**: Displays the exact footprint and diameter of your active brush or highlighter with real-time color fill and dual-contrast outline.
+    - **Crosshair Style**: Displays a crisp, dual-contrast precision crosshair with configurable arm size (8px to 32px) and an active color/eraser center indicator across Pen, Highlighter, and Eraser.
+    - **Live Brush Style**: Displays the exact footprint and diameter of your active brush, highlighter, or eraser with real-time color fill and dual-contrast outline.
 
 14. **Temporary Whiteboard & Blackboard Mode (`K` or `Alt + B`)**:
-    - Instantly turns your transparent overlay into an off-white scratchpad whiteboard or a matte dark slate blackboard.
-    - Ephemeral mode: automatically resets on `ESC` while keeping ink strokes intact.
-    - Automatically captures solid background and all ink strokes when taking snapshots (`Ctrl + S`) or snips (`S` key).
-    - Smart contextual grid automatically switches between dark charcoal lines on white paper and vibrant cyan lines on dark slate.
+    - **Multi-Monitor Display Targeting**: Left-click the Whiteboard button on the toolbar to open a Fluent modal flyout where you can choose backdrop styles (`Transparent`, `Whiteboard`, `Blackboard`) and target displays (`Active Screen (Follows Cursor)`, `Primary Screen`, specific monitor `Screen 1`, `Screen 2`, or `All Screens`).
+    - **Live Reference Screen**: On multi-monitor setups, isolate your whiteboard/blackboard to a single monitor while keeping your other monitors 100% transparent live desktop for reference documents, IDEs, or communication apps.
+    - **Ephemeral Mode**: Automatically resets backdrop on `ESC` while keeping your ink strokes intact.
+    - **Full Snapshot & Snip Support**: Captures solid background and all ink strokes when taking snapshots (`Ctrl + S`) or snips (`S` key).
+    - **Smart Contextual Grids**: Automatically adapts grid line colors (dark charcoal on white paper, vibrant cyan on dark slate).
 
 ---
 
