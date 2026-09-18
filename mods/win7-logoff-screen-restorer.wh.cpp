@@ -6,8 +6,6 @@
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
-// @include        StartMenuExperienceHost.exe
-// @include        Taskmgr.exe
 // @architecture   x86-64
 // @compilerOptions -luser32 -lgdi32 -lmsimg32 -lpsapi -lshell32 -ldwmapi -ladvapi32
 // ==/WindhawkMod==
