@@ -392,8 +392,6 @@ std::atomic<void*> g_desktopManager = nullptr;
 void* g_desktopManagerVtableSymbol = nullptr;
 void* g_windowListVtableSymbol = nullptr;
 void* g_compositorVtableSymbol = nullptr;
-static constexpr std::wstring_view COMPOSITOR_PRIMARY_VTABLE_SYMBOL =
-    L"const CCompositor::`vftable'{for `Windows::UI::Composition::IInteropCompositorPartnerCallback'}";
 void* g_topLevelWindowVtableSymbol = nullptr;
 void* g_topLevelWindow3DVtableSymbol = nullptr;
 void* g_visualProxyVtableSymbol = nullptr;
@@ -2746,7 +2744,7 @@ static bool InitializeDwmHooks()
         // Offset-0 base on both compositor layouts; CBaseObject is at +8.
         // HookSymbols uses undecorated names by default. Do not reuse the old
         // decorated-only lookup: its missing-symbol result may already be cached.
-        {{COMPOSITOR_PRIMARY_VTABLE_SYMBOL},
+        {{L"const CCompositor::`vftable'{for `Windows::UI::Composition::IInteropCompositorPartnerCallback'}"},
          &g_compositorVtableSymbol,
          nullptr,
          true},
