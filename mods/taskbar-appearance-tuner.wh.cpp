@@ -1,10 +1,10 @@
 // ==WindhawkMod==
 // @id              taskbar-appearance-tuner
-// @name            Taskbar appearance tuner
-// @name:zh-CN      任务栏外观调节器
-// @description     Dim the taskbar for a healthier brightness: brightness (dimming only) and transparency, separately for the background and for the icons and text, plus a toggle for the taskbar top line
-// @description:zh-CN 为更健康的亮度而调暗任务栏：可分别调整任务栏背景与图标文字的亮度（仅调暗）和不透明度，并提供任务栏顶部线开关
-// @version         1.5.1
+// @name            Taskbar opacity tuner
+// @name:zh-CN      任务栏透明度调节器
+// @description     Adjust the opacity of the taskbar background and of the icons and text, for a clean, beautiful taskbar which is easier on the eyes and on OLED displays
+// @description:zh-CN 分别调整任务栏背景与图标文字的不透明度，定制出简洁漂亮的任务栏，也更护眼、更适合 OLED 显示器
+// @version         1.7.0
 // @author          lzxujun
 // @homepage        https://github.com/lzxujun
 // @license         GPL-3.0
@@ -21,27 +21,23 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar appearance tuner
+# Taskbar opacity tuner
 
-> **English:** Dim the Windows 11 taskbar to a comfortable level instead of
-> staring at full brightness all day — a healthier brightness for your eyes,
-> and better protection for OLED displays against burn-in.
+> **English:** Adjust the opacity of the taskbar background and of its icons
+> and text to build a clean, beautiful taskbar that fits your desktop — and a
+> taskbar which blends into it is also easier on the eyes and lighter on OLED
+> displays.
 >
-> **中文：** 将 Windows 11 任务栏调暗至舒适的水平，不必整日对着全亮的面板——
-> 亮度更健康，护眼的同时也更好地保护 OLED 显示器，防止烧屏。
+> **中文：** 调整任务栏背景与图标文字的不透明度，定制出简洁漂亮的任务栏——
+> 与桌面融为一体的任务栏，也更护眼、更适合 OLED 显示器。
 
-Fine-grained appearance control for the Windows 11 taskbar. Two independent
-adjustments, each of which can be applied to three different targets:
+The taskbar is adjusted in two independent layers, each displayed on a simple
+0-100 scale:
 
-* **Brightness** - from -100 (black) to 0 (unchanged). Dimming only: the mod
-  exists to make the taskbar easier on the eyes, so it never brightens.
-* **Opacity** - from 0 (fully transparent) to 100 (unchanged).
-
-Each adjustment has its own target selector:
-
-* **Taskbar background only** - the material behind the icons.
-* **Icons and text only** - buttons, tray icons and labels.
-* **Background, icons and text** - the whole taskbar.
+* **Taskbar background** - the material behind the icons. 0 means fully
+  transparent, 100 means unchanged.
+* **Icons and text** - buttons, labels and the system tray. 0 means fully
+  transparent, 100 means unchanged.
 
 Additionally:
 
@@ -51,15 +47,30 @@ Additionally:
   always hidden while the mod is active. That handle is part of Windows itself
   (it shows while the taskbar is unlocked), it is not drawn by this mod.
 
+## Screenshots
+
+**Task buttons area, transparency unchanged:**
+
+![Taskbar task button area when transparency has not been modified](https://i.imgur.com/L37dzXL.png)
+
+**Task buttons area, transparency set to 35%:**
+
+![Taskbar task button area when transparency is set to 35%](https://i.imgur.com/QHkfKZJ.png)
+
+**Task buttons area, transparency state:**
+
+![Taskbar task button area transparency state](https://i.imgur.com/DrMjBOY.png)
+
+**System tray area, transparency state:**
+
+![Taskbar system tray area transparency state](https://i.imgur.com/ACFLOFC.png)
+
 ## How it works
 
-The background is adjusted with a composition effect graph (a color matrix
-shader over a live backdrop brush), which is pixel-accurate. The icons and
-text are XAML content which cannot be filtered with shaders, so the dimming
-for that target is approximated with a black overlay which is drawn on top of
-the icons. The overlay is a composition visual rather than a XAML element, so
-it takes no part in the taskbar layout and cannot move anything. Opacity is
-exact for all targets.
+The two layers are XAML elements of the taskbar visual tree, and their
+opacity is adjusted exactly, with no visual tricks: the background blends
+into whatever is behind the taskbar, and the icons and text blend into the
+background.
 
 The icons and text layer is found by walking the taskbar visual tree: every
 subtree which contains neither the background nor a flyout host is adjusted
@@ -71,79 +82,36 @@ without depending on the class names of the individual containers.
 
 * **Windows 11 Taskbar Styler** can restyle the top line, the drag grip and
   the background (and much more), but it takes style rules. This mod is a
-  zero-configuration dial instead: one brightness and one opacity value cover
-  the whole taskbar at once, no rules to write, and the drag grip is hidden
-  automatically.
+  zero-configuration dial instead: two 0-100 values cover the whole taskbar
+  at once, no rules to write, and the drag grip is hidden automatically.
 * **Taskbar Background Helper** and **Dynamic Taskbar Transparency** adjust
   the background only (blur/acrylic/color, or per-shell-state opacity). This
-  mod adjusts the background brightness and opacity as well, but additionally
-  dims the icons and text as a whole layer.
-* **Taskbar Fade** also dims the taskbar for OLED burn-in protection. This mod
-  extends that idea to the icons and text layer - the brightest part of the
-  taskbar and the main burn-in risk - via a composition overlay which does not
-  disturb the XAML layout.
-
-The icons and text adjustment is the capability none of the existing mods
-offer, and the reason this mod exists as a separate, deliberately simple one:
-the goal is a single healthy-brightness dial for the whole taskbar, not a
-theming framework.
+  mod adjusts the background opacity as well, but additionally the icons and
+  text as a whole layer.
 
 ## Notes
 
 * Windows 11 only (the mod relies on the XAML taskbar visual tree).
-* The background adjustments replace the stock taskbar material with a live
-  backdrop of what is behind the taskbar. If the taskbar looks too plain with
-  brightness set, consider combining with other taskbar mods.
-* If nothing seems to happen, make sure at least one value differs from its
-  neutral value (brightness 0, opacity 100).
+* If nothing seems to happen, make sure at least one value differs from 100.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- brightness: 0
-  $name: Brightness
-  $name:zh-CN: 亮度
+- backgroundOpacity: 100
+  $name: Background opacity (0 = transparent, 100 = unchanged)
+  $name:zh-CN: 背景不透明度（0 = 全透明，100 = 不变）
   $description: >-
-    Taskbar dimming, from -100 (black) to 0 (no change). The mod only dims,
-    because its purpose is a brightness which is easier on the eyes and
-    healthier for OLED displays. For the icons and text target this is
-    approximated with a black overlay.
-  $description:zh-CN: 任务栏亮度调暗，范围 -100（全黑）到 0（不调整）。本 mod 只调暗不调亮，因为它的目的是让亮度更护眼、对 OLED 显示器更健康。当作用对象为“仅图标和文字”时，该效果用黑色叠加层近似实现。
-- brightnessTarget: both
-  $name: Brightness target
-  $name:zh-CN: 亮度作用对象
+    Opacity of the taskbar background material, from 0 (fully transparent)
+    to 100 (unchanged).
+  $description:zh-CN: 任务栏背景材质的不透明度，0 表示完全透明，100 表示不调整。
+- iconsOpacity: 100
+  $name: Icons and text opacity (0 = transparent, 100 = unchanged)
+  $name:zh-CN: 图标和文字不透明度（0 = 全透明，100 = 不变）
   $description: >-
-    Which part of the taskbar the brightness adjustment applies to.
-  $description:zh-CN: 亮度调整作用于任务栏的哪一部分。
-  $options:
-  - background: Taskbar background only
-  - icons: Icons and text only
-  - both: Background, icons and text
-  $options:zh-CN:
-  - background: 仅任务栏背景
-  - icons: 仅图标和文字
-  - both: 背景、图标和文字
-- opacity: 100
-  $name: Opacity
-  $name:zh-CN: 不透明度
-  $description: >-
-    Taskbar opacity, from 0 (fully transparent) to 100 (unchanged).
-  $description:zh-CN: 任务栏不透明度，范围 0（完全透明）到 100（不调整）。
-- opacityTarget: both
-  $name: Opacity target
-  $name:zh-CN: 不透明度作用对象
-  $description: >-
-    Which part of the taskbar the opacity adjustment applies to.
-  $description:zh-CN: 不透明度调整作用于任务栏的哪一部分。
-  $options:
-  - background: Taskbar background only
-  - icons: Icons and text only
-  - both: Background, icons and text
-  $options:zh-CN:
-  - background: 仅任务栏背景
-  - icons: 仅图标和文字
-  - both: 背景、图标和文字
+    Opacity of the task buttons, tray icons and labels, from 0 (fully
+    transparent) to 100 (unchanged).
+  $description:zh-CN: 任务按钮、托盘图标和文字标签的不透明度，0 表示完全透明，100 表示不调整。
 - topLine: true
   $name: Show the taskbar top line
   $name:zh-CN: 显示任务栏顶部线
@@ -158,7 +126,6 @@ theming framework.
 
 #include <algorithm>
 #include <atomic>
-#include <cmath>
 #include <cwchar>
 #include <optional>
 #include <string>
@@ -168,340 +135,21 @@ theming framework.
 
 #undef GetCurrentTime
 
-#include <d2d1_1.h>
-
 #include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.Graphics.Effects.h>
-#include <winrt/Windows.UI.Composition.h>
-#include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 #include <winrt/Windows.UI.Xaml.h>
 
-namespace wuc = winrt::Windows::UI::Composition;
-namespace wge = winrt::Windows::Graphics::Effects;
-
 using namespace winrt::Windows::UI::Xaml;
-
-////////////////////////////////////////////////////////////////////////////////
-// windows.graphics.effects.interop.h (subset, from Windows 11 Taskbar Styler)
-#ifndef BUILD_WINDOWS
-namespace ABI {
-#endif
-namespace Windows {
-namespace Graphics {
-namespace Effects {
-
-typedef interface IGraphicsEffectSource                         IGraphicsEffectSource;
-typedef interface IGraphicsEffectD2D1Interop                    IGraphicsEffectD2D1Interop;
-
-typedef enum GRAPHICS_EFFECT_PROPERTY_MAPPING
-{
-    GRAPHICS_EFFECT_PROPERTY_MAPPING_UNKNOWN,
-    GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT,
-    GRAPHICS_EFFECT_PROPERTY_MAPPING_VECTORX,
-    GRAPHICS_EFFECT_PROPERTY_MAPPING_VECTORY,
-    GRAPHICS_EFFECT_PROPERTY_MAPPING_VECTORZ,
-    GRAPHICS_EFFECT_PROPERTY_MAPPING_VECTORW,
-    GRAPHICS_EFFECT_PROPERTY_MAPPING_RECT_TO_VECTOR4,
-    GRAPHICS_EFFECT_PROPERTY_MAPPING_RADIANS_TO_DEGREES,
-    GRAPHICS_EFFECT_PROPERTY_MAPPING_COLORMATRIX_ALPHA_MODE,
-    GRAPHICS_EFFECT_PROPERTY_MAPPING_COLOR_TO_VECTOR3,
-    GRAPHICS_EFFECT_PROPERTY_MAPPING_COLOR_TO_VECTOR4
-} GRAPHICS_EFFECT_PROPERTY_MAPPING;
-
-#undef INTERFACE
-#define INTERFACE IGraphicsEffectD2D1Interop
-DECLARE_INTERFACE_IID_(IGraphicsEffectD2D1Interop, IUnknown, "2FC57384-A068-44D7-A331-30982FCF7177")
-{
-    STDMETHOD(GetEffectId)(
-        _Out_ GUID * id
-        ) PURE;
-
-    STDMETHOD(GetNamedPropertyMapping)(
-        LPCWSTR name,
-        _Out_ UINT * index,
-        _Out_ GRAPHICS_EFFECT_PROPERTY_MAPPING * mapping
-        ) PURE;
-
-    STDMETHOD(GetPropertyCount)(
-        _Out_ UINT * count
-        ) PURE;
-
-    STDMETHOD(GetProperty)(
-        UINT index,
-        _Outptr_ winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue> ** value
-        ) PURE;
-
-    STDMETHOD(GetSource)(
-        UINT index,
-        _Outptr_ IGraphicsEffectSource ** source
-        ) PURE;
-
-    STDMETHOD(GetSourceCount)(
-        _Out_ UINT * count
-        ) PURE;
-};
-
-} // namespace Effects
-} // namespace Graphics
-} // namespace Windows
-#ifndef BUILD_WINDOWS
-} // namespace ABI
-#endif
-
-template <> inline constexpr winrt::guid winrt::impl::guid_v<ABI::Windows::Graphics::Effects::IGraphicsEffectD2D1Interop>{
-    0x2FC57384, 0xA068, 0x44D7, { 0xA3, 0x31, 0x30, 0x98, 0x2F, 0xCF, 0x71, 0x77 }
-};
-
-// Required for the ABI IPropertyValue pointer used by GetProperty(): the
-// MinGW based compiler doesn't provide a uuid for the ABI projection of
-// IPropertyValue, so it is aliased to the projected interface's uuid here.
-template <> inline constexpr winrt::guid winrt::impl::guid_v<winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>>{
-    winrt::impl::guid_v<winrt::Windows::Foundation::IPropertyValue>
-};
-
-namespace awge = ABI::Windows::Graphics::Effects;
-
-// {921F03D6-641C-47DF-852D-B4BB6153AE11} - the Direct2D color matrix effect
-// CLSID. It is duplicated here as a local constant instead of using the
-// CLSID_D2D1ColorMatrix macro from d2d1effects.h, because that macro expands
-// to an extern declaration which the Windhawk linker can't resolve.
-constexpr GUID kColorMatrixEffectId{
-    0x921f03d6, 0x641c, 0x47df, {0x85, 0x2d, 0xb4, 0xbb, 0x61, 0x53, 0xae, 0x11}};
-
-////////////////////////////////////////////////////////////////////////////////
-// ColorMatrixEffect (from Windows 11 Taskbar Styler)
-struct ColorMatrixEffect
-    : winrt::implements<ColorMatrixEffect,
-                        wge::IGraphicsEffect,
-                        wge::IGraphicsEffectSource,
-                        awge::IGraphicsEffectD2D1Interop> {
-    wge::IGraphicsEffectSource Source{nullptr};
-
-    // D2D1_MATRIX_5X4_F: 5 rows x 4 columns (20 floats), identity by default.
-    // Rows are the output RGBA channels, columns are the input RGBA channels,
-    // and the last row holds the per-channel offsets.
-    float Matrix[20] = {
-        1, 0, 0, 0,
-        0, 1, 0, 0,
-        0, 0, 1, 0,
-        0, 0, 0, 1,
-        0, 0, 0, 0,
-    };
-
-    uint32_t AlphaMode = D2D1_COLORMATRIX_ALPHA_MODE_PREMULTIPLIED;
-    bool ClampOutput = false;
-
-    // IGraphicsEffectD2D1Interop
-    HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override {
-        if (!id) {
-            return E_INVALIDARG;
-        }
-
-        *id = kColorMatrixEffectId;
-        return S_OK;
-    }
-
-    HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(
-        LPCWSTR name,
-        UINT* index,
-        awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept override {
-        if (!index || !mapping) {
-            return E_INVALIDARG;
-        }
-
-        const std::wstring_view nameView(name);
-        if (nameView == L"ColorMatrix") {
-            *index = D2D1_COLORMATRIX_PROP_COLOR_MATRIX;
-            *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
-            return S_OK;
-        }
-
-        if (nameView == L"AlphaMode") {
-            *index = D2D1_COLORMATRIX_PROP_ALPHA_MODE;
-            *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
-            return S_OK;
-        }
-
-        if (nameView == L"ClampOutput") {
-            *index = D2D1_COLORMATRIX_PROP_CLAMP_OUTPUT;
-            *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
-            return S_OK;
-        }
-
-        return E_INVALIDARG;
-    }
-
-    HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override {
-        if (!count) {
-            return E_INVALIDARG;
-        }
-
-        *count = 3;
-        return S_OK;
-    }
-
-    HRESULT STDMETHODCALLTYPE GetProperty(
-        UINT index,
-        winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>**
-            value) noexcept override try {
-        if (!value) {
-            return E_INVALIDARG;
-        }
-
-        switch (index) {
-            case D2D1_COLORMATRIX_PROP_COLOR_MATRIX:
-                *value = winrt::Windows::Foundation::PropertyValue::
-                    CreateSingleArray(winrt::array_view<const float>(
-                        Matrix, Matrix + 20))
-                        .as<winrt::impl::abi_t<
-                            winrt::Windows::Foundation::IPropertyValue>>()
-                        .detach();
-                break;
-
-            case D2D1_COLORMATRIX_PROP_ALPHA_MODE:
-                *value = winrt::Windows::Foundation::PropertyValue::
-                    CreateUInt32(AlphaMode)
-                        .as<winrt::impl::abi_t<
-                            winrt::Windows::Foundation::IPropertyValue>>()
-                        .detach();
-                break;
-
-            case D2D1_COLORMATRIX_PROP_CLAMP_OUTPUT:
-                *value = winrt::Windows::Foundation::PropertyValue::
-                    CreateBoolean(ClampOutput)
-                        .as<winrt::impl::abi_t<
-                            winrt::Windows::Foundation::IPropertyValue>>()
-                        .detach();
-                break;
-
-            default:
-                return E_BOUNDS;
-        }
-
-        return S_OK;
-    }
-    catch (...) {
-        return winrt::to_hresult();
-    }
-
-    HRESULT STDMETHODCALLTYPE GetSource(
-        UINT index,
-        awge::IGraphicsEffectSource** source) noexcept override {
-        if (!source) {
-            return E_INVALIDARG;
-        }
-
-        if (index == 0 && Source) {
-            winrt::copy_to_abi(Source, *reinterpret_cast<void**>(source));
-            return S_OK;
-        }
-
-        return E_BOUNDS;
-    }
-
-    HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override {
-        if (!count) {
-            return E_INVALIDARG;
-        }
-
-        *count = 1;
-        return S_OK;
-    }
-
-    // IGraphicsEffect
-    winrt::hstring Name() { return m_name; }
-
-    void Name(winrt::hstring name) { m_name = std::move(name); }
-
-private:
-    winrt::hstring m_name = L"ColorMatrixEffect";
-};
-
-////////////////////////////////////////////////////////////////////////////////
-// BackdropAdjustBrush: renders the live backdrop (what is behind the taskbar)
-// with a brightness adjustment via a color matrix effect.
-class BackdropAdjustBrush
-    : public Media::XamlCompositionBrushBaseT<BackdropAdjustBrush> {
-public:
-    BackdropAdjustBrush(wuc::Compositor const& compositor, float brightness)
-        : m_compositor(compositor),
-          m_brightness(brightness) {}
-
-    void OnConnected() {
-        if (CompositionBrush()) {
-            return;
-        }
-
-        CompositionBrush(CreateEffectBrush());
-    }
-
-    void OnDisconnected() {
-        CompositionBrush(nullptr);
-    }
-
-private:
-    wuc::CompositionBrush CreateEffectBrush() {
-        auto backdropBrush = m_compositor.CreateBackdropBrush();
-
-        // Dimming: the color matrix scales the color channels toward black.
-        // Brightening is not supported (the mod exists to make the taskbar
-        // dimmer), so the bias row of the matrix stays at zero.
-        auto brightMatrix = winrt::make_self<ColorMatrixEffect>();
-        brightMatrix->Source = wuc::CompositionEffectSourceParameter(L"source");
-
-        float brightness = std::clamp(m_brightness, -1.0f, 0.0f);
-        float scale = 1.0f + brightness;
-        auto& bm = brightMatrix->Matrix;
-        bm[0] = scale; bm[1] = 0.0f;  bm[2] = 0.0f;  bm[3] = 0.0f;
-        bm[4] = 0.0f;  bm[5] = scale; bm[6] = 0.0f;  bm[7] = 0.0f;
-        bm[8] = 0.0f;  bm[9] = 0.0f;  bm[10] = scale; bm[11] = 0.0f;
-        bm[12] = 0.0f; bm[13] = 0.0f; bm[14] = 0.0f; bm[15] = 1.0f;
-        bm[16] = 0.0f; bm[17] = 0.0f; bm[18] = 0.0f; bm[19] = 0.0f;
-        brightMatrix->ClampOutput = true;
-        brightMatrix->Name(L"BrightnessEffect");
-
-        Wh_Log(L"Effect graph: dimming=%.2f (scale=%.2f)", brightness, scale);
-
-        auto factory = m_compositor.CreateEffectFactory(*brightMatrix);
-        auto brush = factory.CreateBrush();
-        brush.SetSourceParameter(L"source", backdropBrush);
-
-        return brush;
-    }
-
-    wuc::Compositor m_compositor;
-    float m_brightness;
-};
 
 ////////////////////////////////////////////////////////////////////////////////
 // Mod logic
 
-// Which part of the taskbar an adjustment is applied to. The settings are
-// string enumerations, which makes Windhawk render them as a drop-down list.
-enum class AppearanceTarget {
-    Background,
-    Icons,
-    Both,
-};
-
-AppearanceTarget ParseTarget(PCWSTR value) {
-    if (wcscmp(value, L"background") == 0) {
-        return AppearanceTarget::Background;
-    }
-    if (wcscmp(value, L"icons") == 0) {
-        return AppearanceTarget::Icons;
-    }
-    return AppearanceTarget::Both;
-}
-
+// All values are shown to the user on a 0-100 scale.
 struct {
-    int brightness;  // -100..0, 0 = no change (dimming only)
-    AppearanceTarget brightnessTarget;
-    int opacity;  // 0..100, 100 = no change
-    AppearanceTarget opacityTarget;
-    bool topLine;  // false = hide the taskbar top line
+    int backgroundOpacity;  // 0..100, 100 = no change
+    int iconsOpacity;       // 0..100, 100 = no change
+    bool topLine;           // false = hide the taskbar top line
 } g_settings;
 
 std::atomic<bool> g_unloading{false};
@@ -547,24 +195,11 @@ FrameworkElement FindChildByClassName(FrameworkElement element,
     return nullptr;
 }
 
-// Describes an appearance target for the log.
-PCWSTR TargetName(AppearanceTarget target) {
-    switch (target) {
-        case AppearanceTarget::Background:
-            return L"background";
-        case AppearanceTarget::Icons:
-            return L"icons";
-        default:
-            return L"both";
-    }
-}
-
 struct AppearanceState {
     // The XamlRoot content element of the taskbar this state belongs to. It is
     // used to look the state up again when the settings change.
     winrt::weak_ref<FrameworkElement> root;
     winrt::weak_ref<FrameworkElement> backgroundFill;
-    Media::Brush originalFill{nullptr};
     double originalFillOpacity = 1.0;
     // The taskbar top line rectangle and its original state.
     winrt::weak_ref<FrameworkElement> topLine;
@@ -577,17 +212,14 @@ struct AppearanceState {
     // Foreground elements with their original opacity.
     std::vector<std::pair<winrt::weak_ref<FrameworkElement>, double>>
         foregroundOpacity;
-    // Foreground elements which carry a brightness overlay visual. The visual
-    // is attached as a composition child of the element, so the element itself
-    // is what has to be remembered for the restore.
-    std::vector<winrt::weak_ref<FrameworkElement>> overlays;
 };
 
-// AppearanceState holds strong XAML brushes, which must not be released by the
-// automatic destructor at process shutdown (Explorer's shutdown path runs
-// global destructors after the XAML core is gone). States are released via
-// RestoreAllStates() on the taskbar UI thread instead, and the buffer is
-// dropped in Wh_ModUninit.
+// The state keeps only weak XAML references (the only strong one,
+// originalTopLineFill, is released with the state on the taskbar UI thread),
+// which must not happen from the automatic destructor at process shutdown
+// (Explorer's shutdown path runs global destructors after the XAML core is
+// gone). States are released via RestoreAllStates() on the taskbar UI thread
+// instead, and the buffer is dropped in Wh_ModUninit.
 [[clang::no_destroy]] std::optional<std::vector<AppearanceState>> g_states;
 
 HWND FindCurrentProcessTaskbarWnd() {
@@ -971,13 +603,8 @@ std::vector<FrameworkElement> CollectForegroundElements(
     return elements;
 }
 
-void RemoveBrightnessOverlay(FrameworkElement element);
-
 void RestoreState(AppearanceState& state) {
     if (auto backgroundFill = state.backgroundFill.get()) {
-        if (auto rect = backgroundFill.try_as<Shapes::Rectangle>()) {
-            rect.Fill(state.originalFill);
-        }
         backgroundFill.Opacity(state.originalFillOpacity);
     }
 
@@ -996,12 +623,6 @@ void RestoreState(AppearanceState& state) {
     for (auto& [element, originalOpacity] : state.foregroundOpacity) {
         if (auto elem = element.get()) {
             elem.Opacity(originalOpacity);
-        }
-    }
-
-    for (auto& overlayTarget : state.overlays) {
-        if (auto element = overlayTarget.get()) {
-            RemoveBrightnessOverlay(element);
         }
     }
 }
@@ -1033,101 +654,10 @@ std::pair<AppearanceState*, size_t> FindStateForRoot(
     return {nullptr, 0};
 }
 
-bool ShouldAdjustBackground(AppearanceTarget target) {
-    return target == AppearanceTarget::Background ||
-           target == AppearanceTarget::Both;
-}
-
-bool ShouldAdjustForeground(AppearanceTarget target) {
-    return target == AppearanceTarget::Icons || target == AppearanceTarget::Both;
-}
-
 bool IsNeutral() {
-    return g_settings.brightness == 0 && g_settings.opacity == 100 &&
-           g_settings.topLine;
+    return g_settings.backgroundOpacity == 100 &&
+           g_settings.iconsOpacity == 100 && g_settings.topLine;
 }
-
-// Applies the dimming approximation to one foreground element: a solid black
-// visual is drawn on top of the element's content.
-//
-// The overlay deliberately is not an element of the XAML tree. The taskbar
-// lays its content out in StackPanels, where an inserted child consumes layout
-// space of its own: the panel then grows by the width of the overlay and every
-// neighbouring element is pushed away (the icons visibly shift to the left).
-// A composition child visual is invisible to the XAML layout while still being
-// drawn on top of the element's content, so it cannot move anything.
-bool ApplyBrightnessOverlay(FrameworkElement element,
-                            BYTE r,
-                            BYTE g,
-                            BYTE b,
-                            double alpha) {
-    double width = element.ActualWidth();
-    double height = element.ActualHeight();
-    if (!(width > 0) || !(height > 0)) {
-        // Not laid out yet; a retry pass will try again.
-        return false;
-    }
-
-    try {
-        auto compositor =
-            winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::
-                GetElementVisual(element)
-                    .Compositor();
-
-        // SetElementChildVisual has a single child visual slot per element.
-        // If something is already there (Windows itself, or another mod),
-        // leave it alone instead of silently replacing it here and destroying
-        // it on restore.
-        if (winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::
-                GetElementChildVisual(element)) {
-            Wh_Log(L"  child visual slot occupied, skipping: %s",
-                   DescribeElement(element).c_str());
-            return false;
-        }
-
-        BYTE alphaByte =
-            (BYTE)std::lround(std::clamp(alpha, 0.0, 1.0) * 255.0);
-
-        auto overlay = compositor.CreateSpriteVisual();
-        overlay.Brush(compositor.CreateColorBrush(
-            winrt::Windows::UI::Color{alphaByte, r, g, b}));
-        // Track the host element's visual size instead of snapshotting it, so
-        // that the overlay keeps covering the element when it resizes (task
-        // buttons appear and disappear, tray icons change, the taskbar is
-        // moved or the DPI changes).
-        overlay.RelativeSizeAdjustment({1.0f, 1.0f});
-
-        // SetElementChildVisual adds the visual as the last child of the
-        // element's visual tree, which is the top of its z-order.
-        winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::
-            SetElementChildVisual(element, overlay);
-        return true;
-    } catch (winrt::hresult_error const& e) {
-        Wh_Log(L"  brightness overlay failed: %08X",
-               (unsigned)e.code().value);
-        return false;
-    } catch (...) {
-        Wh_Log(L"  brightness overlay failed (unknown error)");
-        return false;
-    }
-}
-
-// Removes a brightness overlay which was previously attached to the element.
-void RemoveBrightnessOverlay(FrameworkElement element) {
-    try {
-        winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::
-            SetElementChildVisual(
-                element, winrt::Windows::UI::Composition::Visual{nullptr});
-    } catch (...) {
-        // The element may already be gone, in which case there is nothing to
-        // restore.
-    }
-}
-
-// How much of a full black overlay corresponds to a brightness of -100 for the
-// icons and text target. Below 1.0 so that the icons stay recognizable at the
-// extreme.
-constexpr double kForegroundBrightnessStrength = 0.8;
 
 // The vertical bounds of the visible taskbar area in content coordinates.
 // The island which hosts the taskbar is larger than the visible taskbar (the
@@ -1207,10 +737,10 @@ void ApplyTopLineStyle(FrameworkElement content,
 // Records and hides the drag grip handle: the small gray rounded handle at the
 // top center of the taskbar (Rectangle#Gripper inside Taskbar.Gripper#
 // GripperControl). It is part of Windows (it shows while the taskbar is
-// unlocked) and is not affected by the brightness and opacity adjustments, so
-// it is always hidden while the mod is active - a gray handle would otherwise
-// stick out of an otherwise dimmed taskbar. The original state is recorded so
-// that RestoreState can bring it back.
+// unlocked) and is not affected by the opacity adjustments, so it is always
+// hidden while the mod is active - a gray handle would otherwise stick out of
+// an otherwise adjusted taskbar. The original state is recorded so that
+// RestoreState can bring it back.
 void ApplyGripStyle(FrameworkElement content, AppearanceState& state) {
     auto gripElem = FindDescendantByName(content, L"Gripper");
     if (!gripElem) {
@@ -1225,83 +755,28 @@ void ApplyGripStyle(FrameworkElement content, AppearanceState& state) {
     Wh_Log(L"Grip handle hidden");
 }
 
-// Adjusts the background rectangle: opacity directly, brightness by replacing
-// the fill with a live backdrop brush filtered by a color matrix effect.
+// Adjusts the background rectangle: opacity directly.
 void ApplyBackgroundStyle(Shapes::Rectangle const& backgroundFill) {
-    bool hasOpacity =
-        ShouldAdjustBackground(g_settings.opacityTarget) &&
-        g_settings.opacity != 100;
-    bool hasBrightness =
-        ShouldAdjustBackground(g_settings.brightnessTarget) &&
-        g_settings.brightness != 0;
-
-    if (hasOpacity) {
-        backgroundFill.Opacity(g_settings.opacity / 100.0);
-    }
-
-    if (!hasBrightness) {
-        Wh_Log(L"Background: no effect requested");
-        return;
-    }
-
-    try {
-        auto compositor =
-            winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::
-                GetElementVisual(backgroundFill)
-                    .Compositor();
-        float brightness = g_settings.brightness / 100.0f;
-        auto brush = winrt::make<BackdropAdjustBrush>(compositor, brightness);
-        backgroundFill.Fill(brush);
-        Wh_Log(L"Background fill replaced (brightness=%.2f)", brightness);
-    } catch (winrt::hresult_error const& e) {
-        Wh_Log(L"Failed to create backdrop brush: %08X (error)",
-               (unsigned)e.code().value);
-        // Keep going with the other adjustments.
-    } catch (...) {
-        Wh_Log(L"Failed to create backdrop brush (unknown error)");
-        // Keep going with the other adjustments.
+    if (g_settings.backgroundOpacity != 100) {
+        backgroundFill.Opacity(g_settings.backgroundOpacity / 100.0);
     }
 }
 
-// Adjusts the icon and text elements: opacity directly, brightness with a
-// black or white overlay visual on top of each element's content.
+// Adjusts the icon and text elements: opacity directly.
 void ApplyForegroundStyle(std::vector<FrameworkElement> const& elements,
                           AppearanceState& state) {
-    bool hasOpacity =
-        ShouldAdjustForeground(g_settings.opacityTarget) &&
-        g_settings.opacity != 100;
-    bool hasBrightness =
-        ShouldAdjustForeground(g_settings.brightnessTarget) &&
-        g_settings.brightness != 0;
-
     Wh_Log(L"Foreground elements found: %d", (int)elements.size());
+
+    if (g_settings.iconsOpacity == 100) {
+        return;
+    }
 
     for (auto& element : elements) {
         Wh_Log(L"Foreground element: %s", DescribeElement(element).c_str());
 
-        if (hasOpacity) {
-            state.foregroundOpacity.emplace_back(winrt::make_weak(element),
-                                                 element.Opacity());
-            element.Opacity(g_settings.opacity / 100.0);
-        }
-
-        if (!hasBrightness) {
-            continue;
-        }
-
-        // Dimming only, so the overlay is always black: the value is a
-        // negative percentage, and 0 means no change.
-        double dimming = -g_settings.brightness / 100.0;
-        double alpha = dimming * kForegroundBrightnessStrength;
-        constexpr BYTE kBlack = 0;
-
-        if (ApplyBrightnessOverlay(element, kBlack, kBlack, kBlack, alpha)) {
-            state.overlays.push_back(winrt::make_weak(element));
-            Wh_Log(L"  dimming overlay: alpha=%.2f (%.0fx%.0f)", alpha,
-                   element.ActualWidth(), element.ActualHeight());
-        } else {
-            Wh_Log(L"  dimming overlay skipped");
-        }
+        state.foregroundOpacity.emplace_back(winrt::make_weak(element),
+                                             element.Opacity());
+        element.Opacity(g_settings.iconsOpacity / 100.0);
     }
 }
 
@@ -1328,9 +803,8 @@ bool ApplyStyle(XamlRoot xamlRoot) {
         return false;
     }
 
-    Wh_Log(L"Applying settings: brightness=%d (%s), opacity=%d (%s)",
-           g_settings.brightness, TargetName(g_settings.brightnessTarget),
-           g_settings.opacity, TargetName(g_settings.opacityTarget));
+    Wh_Log(L"Applying settings: background opacity=%d, icons opacity=%d",
+           g_settings.backgroundOpacity, g_settings.iconsOpacity);
 
     // The visual tree is keyed by the root content element.
     // When all settings are back to their defaults, or when the mod is
@@ -1364,12 +838,7 @@ bool ApplyStyle(XamlRoot xamlRoot) {
         DumpVisualTree(content, 7, 260);
     }
 
-    bool hasForegroundOpacity =
-        ShouldAdjustForeground(g_settings.opacityTarget) &&
-        g_settings.opacity != 100;
-    bool hasForegroundBrightness =
-        ShouldAdjustForeground(g_settings.brightnessTarget) &&
-        g_settings.brightness != 0;
+    bool hasForegroundOpacity = g_settings.iconsOpacity != 100;
 
     // The icon and text layer is collected up front. If it is requested but
     // comes back empty, the taskbar content exists while not being laid out
@@ -1377,7 +846,7 @@ bool ApplyStyle(XamlRoot xamlRoot) {
     // is modified at all, so that the retry which covers this state doesn't
     // make the background flicker by re-applying itself over and over.
     std::vector<FrameworkElement> foregroundElements;
-    if (hasForegroundOpacity || hasForegroundBrightness) {
+    if (hasForegroundOpacity) {
         auto [bandTop, bandBottom] =
             GetVisibleBand(content, backgroundFillElem);
         foregroundElements =
@@ -1398,7 +867,6 @@ bool ApplyStyle(XamlRoot xamlRoot) {
     newState.root = winrt::make_weak(content);
     newState.backgroundFill =
         winrt::make_weak(backgroundFill.as<FrameworkElement>());
-    newState.originalFill = backgroundFill.Fill();
     newState.originalFillOpacity = backgroundFill.Opacity();
 
     ApplyTopLineStyle(content, backgroundFillElem, newState);
@@ -1407,7 +875,7 @@ bool ApplyStyle(XamlRoot xamlRoot) {
 
     ApplyBackgroundStyle(backgroundFill);
 
-    if (hasForegroundOpacity || hasForegroundBrightness) {
+    if (hasForegroundOpacity) {
         ApplyForegroundStyle(foregroundElements, newState);
     }
 
@@ -1621,8 +1089,8 @@ void WINAPI ApplyPassOnTaskbarThread(void* parameter) {
                 // callback can outlive the mod, and restore unconditionally:
                 // RestoreAllStates() works off the stored weak refs and does
                 // not need a XamlRoot. A skipped restore would leave the
-                // taskbar holding brushes and overlays which live in the mod
-                // image, which crashes Explorer once the mod is unloaded.
+                // taskbar holding a top line fill brush which lives in the
+                // mod image, which crashes Explorer once the mod is unloaded.
                 StopApplyRetry(hWnd);
                 RestoreAllStates();
                 return TRUE;
@@ -1834,18 +1302,12 @@ bool HookTaskbarDllSymbols() {
 }
 
 void LoadSettings() {
-    auto brightnessTarget =
-        WindhawkUtils::StringSetting::make(L"brightnessTarget");
-    auto opacityTarget =
-        WindhawkUtils::StringSetting::make(L"opacityTarget");
-
-    // Dimming only: positive values are clamped away, so that a configuration
-    // written by an older version of the mod cannot brighten the taskbar.
-    g_settings.brightness =
-        std::clamp(Wh_GetIntSetting(L"brightness"), -100, 0);
-    g_settings.brightnessTarget = ParseTarget(brightnessTarget.get());
-    g_settings.opacity = std::clamp(Wh_GetIntSetting(L"opacity"), 0, 100);
-    g_settings.opacityTarget = ParseTarget(opacityTarget.get());
+    // Values are clamped so that an out-of-range configuration cannot make
+    // the taskbar more than fully transparent or more than fully opaque.
+    g_settings.backgroundOpacity =
+        std::clamp(Wh_GetIntSetting(L"backgroundOpacity"), 0, 100);
+    g_settings.iconsOpacity =
+        std::clamp(Wh_GetIntSetting(L"iconsOpacity"), 0, 100);
     g_settings.topLine = Wh_GetIntSetting(L"topLine") != 0;
 }
 
