@@ -632,7 +632,7 @@ enum AccentColorShade
 class AccentPalette
 {
 public:
-    std::array<COLORREF, AccentColorCount> Colors;
+    std::array<COLORREF, AccentColorCount> Colors{GetSysColor(COLOR_HIGHLIGHT)};
     BOOL LoadAccentPalette();
     AccentPalette()
     {
@@ -670,7 +670,7 @@ BOOL AccentPalette::LoadAccentPalette()
     return TRUE;
 }
 
-BOOL GetAccentColor(COLORREF& outColor)
+COLORREF GetAccentColor()
 {
     // In some programs, e.g. snippingtool.exe, the default blue accent color is used instead of the Windows theme with DwmGetColorizationColor.
     // Use the immersive color API if available, fall back to DwmGetColorizationColor
@@ -690,19 +690,14 @@ BOOL GetAccentColor(COLORREF& outColor)
             TRUE,
             0
         );
-        outColor = RGB((AccentClr & 0xFF), (AccentClr >> 8) & 0xFF, (AccentClr >> 16) & 0xFF);
-        return TRUE;
+        return RGB((AccentClr & 0xFF), (AccentClr >> 8) & 0xFF, (AccentClr >> 16) & 0xFF);
     }
     else if (SUCCEEDED(DwmGetColorizationColor(&AccentClr, &opaque)))
     {
-        outColor = RGB((AccentClr >> 16) & 0xFF, (AccentClr >> 8) & 0xFF,  AccentClr & 0xFF);
-        return TRUE;
+        return RGB((AccentClr >> 16) & 0xFF, (AccentClr >> 8) & 0xFF,  AccentClr & 0xFF);
     }
     else
-    {
-        outColor = DWMWA_COLOR_DEFAULT;
-        return FALSE;
-    }
+        return g_AccentPalette.Colors[SystemAccentColorBase];
 }
 
 D2D1_COLOR_F MyD2D1Color(BYTE A, BYTE R, BYTE G, BYTE B)
@@ -983,7 +978,6 @@ BOOL ExtTextOutCalcRect(HDC hdc, POINT point, UINT options, RECT& textRect,
     SIZE textSize = {0};
     UINT ta = GetTextAlign(hdc);
 
-    // Always measure the run itself - that is what GDI actually draws.
     BOOL res = (options & ETO_GLYPH_INDEX)
         ? GetTextExtentPointI(hdc, (WORD*)lpString, c, &textSize)
         : GetTextExtentPoint32W(hdc, lpString, c, &textSize);
@@ -993,7 +987,7 @@ BOOL ExtTextOutCalcRect(HDC hdc, POINT point, UINT options, RECT& textRect,
     if (lpDx)
         ExtTextOutDxWidth(options, lpDx, c, textSize);
     if (ta)
-        ExtTextOutAlignRect(hdc, point, textSize, ta);   // origin-relative only
+        ExtTextOutAlignRect(hdc, point, textSize, ta);
 
     SetRect(&textRect, point.x, point.y, point.x + textSize.cx, point.y + textSize.cy);
 
@@ -1330,7 +1324,7 @@ static COLORREF GetCustomSysColor(INT nIndex)
     else if (nIndex == COLOR_HIGHLIGHT || nIndex == COLOR_MENUHILIGHT)
         return (g_settings.AccentColorize) ? g_settings.AccentColor : RGB(0, 120, 215);
     else if (nIndex == COLOR_BTNFACE)
-        return RGB(1, 1, 1);
+        return RGB(0, 0, 0);
     else if (nIndex == COLOR_GRAYTEXT)
         return RGB(128, 128, 128);
     else if (nIndex == COLOR_INACTIVECAPTIONTEXT)
@@ -5192,8 +5186,7 @@ static LRESULT WINAPI HookedDefWindowProcW(HWND hWnd, UINT msg, WPARAM wParam, L
 
             AcquireSRWLockExclusive(&g_ThemeChangeLock);
 
-            COLORREF crAccent;
-            GetAccentColor(crAccent);
+            COLORREF crAccent = (g_settings.AccentColorize) ? GetAccentColor() : g_settings.AccentColor;
 
             if (currentTheme != g_LastThemePath || g_settings.AccentColor != crAccent) 
             {
@@ -5205,7 +5198,7 @@ static LRESULT WINAPI HookedDefWindowProcW(HWND hWnd, UINT msg, WPARAM wParam, L
                 g_AccentPalette.LoadAccentPalette();
                 
                 if (g_settings.AccentColorize)
-                    g_settings.AccentColorize = GetAccentColor(g_settings.AccentColor);
+                    g_settings.AccentColor = crAccent;
 
                 if (g_settings.SetSystemColors)
                     ColorizeSysColors();
@@ -5491,34 +5484,10 @@ VOID ApplyForExistingWindows()
     EnumWindows(EnumWindowsProc, 0);
 }
 
-BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor) 
+COLORREF GetColorSetting(LPCWSTR hexColor) 
 {
     if (!hexColor)
-        return FALSE;
-    if (hexColor[0] == L'0' && hexColor[1] == L'\0')
-    {
-        outColor = DWMWA_COLOR_NONE;
-        return TRUE;
-    }
-    else if (hexColor[0] == L'1' && hexColor[1] == L'\0') 
-    {
-        outColor = DWMWA_COLOR_DEFAULT;
-        return TRUE;
-    }
-    else if (hexColor[0] == L'2' && hexColor[1] == L'\0') 
-    {
-        if (g_settings.AccentColorize)
-        {
-            outColor =  g_settings.AccentColor;
-            return TRUE;
-        }
-        if (GetAccentColor(outColor))
-        {
-            g_settings.AccentColor = outColor;
-            return TRUE;
-        }
-        return FALSE;
-    }
+        return DWMWA_COLOR_NONE;
     else 
     {
         size_t len = wcslen(hexColor);
@@ -5558,8 +5527,7 @@ BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor)
             rgb[i] = (high << 4) | low;
         }
 
-        outColor = (alpha << 24) | (rgb[2] << 16) | (rgb[1] << 8) | rgb[0];
-        return TRUE;
+        return (alpha << 24) | (rgb[2] << 16) | (rgb[1] << 8) | rgb[0];
     }
 }
 
@@ -6541,7 +6509,7 @@ VOID LoadWindowProcessRules()
             
             g_settings.AccentColorize = Wh_GetIntSetting(L"RuledPrograms[%d].RenderingMod.AccentColorControls", i);
             if (g_settings.AccentColorize)
-                g_settings.AccentColorize = GetAccentColor(g_settings.AccentColor);
+                g_settings.AccentColor = GetAccentColor();
             
             BOOL globalSetting_SetSysColorAPI = Wh_GetIntSetting(L"RenderingMod.Syscolors");
 
@@ -6569,7 +6537,7 @@ VOID LoadWindowProcessRules()
             else 
                 g_settings.BgType = g_settings.Default;
 
-            GetColorSetting(WindhawkUtils::StringSetting(Wh_GetStringSetting(L"RuledPrograms[%d].BackgroundEffects.AccentBlurBehind", i)), g_settings.AccentBlurBehindClr);
+            g_settings.AccentBlurBehindClr = GetColorSetting(WindhawkUtils::StringSetting(Wh_GetStringSetting(L"RuledPrograms[%d].BackgroundEffects.AccentBlurBehind", i)));
             
             break;
         }
@@ -6580,7 +6548,7 @@ VOID LoadSettings()
 {
     g_settings.AccentColorize = Wh_GetIntSetting(L"RenderingMod.AccentColorControls");
     if (g_settings.AccentColorize)
-       g_settings.AccentColorize = GetAccentColor(g_settings.AccentColor);
+       g_settings.AccentColor = GetAccentColor();
 
     g_settings.FillBg = Wh_GetIntSetting(L"RenderingMod.ThemeBackground");
     if (g_settings.FillBg)
@@ -6603,7 +6571,7 @@ VOID LoadSettings()
     else 
         g_settings.BgType = g_settings.Default;
     
-    GetColorSetting(WindhawkUtils::StringSetting(Wh_GetStringSetting(L"BackgroundEffects.AccentBlurBehind")), g_settings.AccentBlurBehindClr);
+    g_settings.AccentBlurBehindClr = GetColorSetting(WindhawkUtils::StringSetting(Wh_GetStringSetting(L"BackgroundEffects.AccentBlurBehind")));
 
     g_settings.FlyoutsEffects = Wh_GetIntSetting(L"FlyoutsEffects");
         
