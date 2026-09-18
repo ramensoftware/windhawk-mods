@@ -136,25 +136,25 @@ A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite
 
 // ==WindhawkModSettings==
 /*
-- hotkeyMod: 3
+- hotkeyMod: ctrl_alt
   $name: Hotkey Modifier Combo
   $description: Select the combination of modifier keys used to activate WinDraw.
   $options:
-    - 1: Alt
-    - 2: Ctrl
-    - 3: Ctrl + Alt (Default)
-    - 4: Shift
-    - 5: Shift + Alt
-    - 6: Ctrl + Shift
-    - 7: Ctrl + Shift + Alt
-    - 8: Win
-    - 9: Win + Alt
-    - 10: Win + Ctrl
-    - 11: Win + Ctrl + Alt
+    - alt: Alt
+    - ctrl: Ctrl
+    - ctrl_alt: Ctrl + Alt (Default)
+    - shift: Shift
+    - shift_alt: Shift + Alt
+    - ctrl_shift: Ctrl + Shift
+    - ctrl_shift_alt: Ctrl + Shift + Alt
+    - win: Win
+    - win_alt: Win + Alt
+    - win_ctrl: Win + Ctrl
+    - win_ctrl_alt: Win + Ctrl + Alt
 
 - hotkeyKey: G
-  $name: Activation Key (A-Z, 0-9)
-  $description: Type a single letter or number for the hotkey (e.g., G, D, P).
+  $name: Activation Key
+  $description: Enter the character key to press with your modifier combo (e.g. G, D, P, 1).
 
 - defaultPenWidth: "3.5"
   $name: Default Pen Width (px)
@@ -172,9 +172,15 @@ A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite
   $name: Show System Tray Icon
   $description: Show the WinDraw icon in the Windows notification area for quick access to settings and toggles.
 
-- cornerRadius: 5
-  $name: UI Corner Radius
-  $description: Adjust the roundness of the toolbar and menus (0 for square, 5 for Fluent, 8 for rounded).
+- cornerRadius: fluent
+  $name: UI Corner Roundness
+  $description: Adjust the corner roundness of the toolbar and floating menus.
+  $options:
+    - square: Square (0 px)
+    - subtle: Subtle (3 px)
+    - fluent: Fluent Rounded (5 px - Default)
+    - round: Rounded (8 px)
+    - pill: Full Pill (12 px)
 
 - autoSaveSnapshot: true
   $name: Auto-Save Snapshots
@@ -188,31 +194,31 @@ A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite
   $name: Custom Snapshot Folder
   $description: Leave blank to use Default (Pictures/WinDraw). Otherwise, paste a full folder path (e.g., C:\Snips).
 
-- defaultStartupTool: 1
+- defaultStartupTool: pen
   $name: Default Startup Tool
   $description: Choose which tool is active when you first open the overlay.
   $options:
-    - 1: Pen (Default)
-    - 2: Highlighter
-    - 3: Laser Pointer
-    - 4: Pointer (Click-Through)
+    - pen: Pen (Default)
+    - highlighter: Highlighter
+    - laser: Laser Pointer
+    - pointer: Pointer (Click-Through)
 
 - showToastNotifications: true
   $name: Show Toast Notifications
   $description: Display brief on-screen popups when taking snapshots or changing modes.
 
-- laserTrailDuration: 800
-  $name: Laser Trail Duration (ms)
-  $description: Time before the laser trail disappears (200ms to 5000ms).
+- laserTrailDuration: 800ms
+  $name: Laser Trail Duration
+  $description: Time before the laser trail disappears.
   $options:
-    - 200: 200 ms (Fastest - Min)
-    - 400: 400 ms (Fast)
-    - 600: 600 ms (Snappy)
-    - 800: 800 ms (Default)
-    - 1200: 1.2 seconds (Medium)
-    - 2000: 2.0 seconds (Long)
-    - 3500: 3.5 seconds (Very Long)
-    - 5000: 5.0 seconds (Persistent - Max)
+    - 200ms: 200 ms (Fastest - Min)
+    - 400ms: 400 ms (Fast)
+    - 600ms: 600 ms (Snappy)
+    - 800ms: 800 ms (Default)
+    - 1200ms: 1.2 seconds (Medium)
+    - 2000ms: 2.0 seconds (Long)
+    - 3500ms: 3.5 seconds (Very Long)
+    - 5000ms: 5.0 seconds (Persistent - Max)
 
 - crossType: cross
   $name: Cursor Style (Crosshair / Brush)
@@ -221,16 +227,16 @@ A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite
     - cross: Crosshair
     - brush: Brush (Show brush size & color)
 
-- crossSize: 16
-  $name: Crosshair Size (px)
-  $description: Length/size of the crosshair cursor arms when Crosshair style is active.
+- crossSize: 16px
+  $name: Crosshair Size
+  $description: Length of the crosshair cursor arms when Crosshair style is active.
   $options:
-    - 8: 8 px (Small)
-    - 12: 12 px (Compact)
-    - 16: 16 px (Medium - Default)
-    - 20: 20 px (Large)
-    - 24: 24 px (Extra Large)
-    - 32: 32 px (Huge)
+    - 8px: 8 px (Small)
+    - 12px: 12 px (Compact)
+    - 16px: 16 px (Medium - Default)
+    - 20px: 20 px (Large)
+    - 24px: 24 px (Extra Large)
+    - 32px: 32 px (Huge)
 */
 // ==/WindhawkModSettings==
 
@@ -253,6 +259,10 @@ A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite
 
 // Explicit definition of FOLDERID_Pictures to ensure clean linking across all MinGW toolchains
 static const GUID kWinDrawFolderID_Pictures = { 0x33e28130, 0x4e3a, 0x468b, { 0xb5, 0x8a, 0x3e, 0x24, 0xbf, 0x20, 0x29, 0xff } };
+
+#ifndef DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+#define DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 ((DPI_AWARENESS_CONTEXT)-4)
+#endif
 #include <vector>
 #include <deque>
 #include <cmath>
@@ -300,31 +310,37 @@ float GetFloatSetting(PCWSTR settingName, float defaultVal) {
 }
 
 void LoadSettings() {
-    g_settings.hotkeyMod = (UINT)Wh_GetIntSetting(L"hotkeyMod");
-    if (g_settings.hotkeyMod == 0) g_settings.hotkeyMod = MOD_CONTROL | MOD_ALT;
+    PCWSTR modStr = Wh_GetStringSetting(L"hotkeyMod");
+    if (modStr) {
+        if (_wcsicmp(modStr, L"alt") == 0 || wcscmp(modStr, L"1") == 0) g_settings.hotkeyMod = MOD_ALT;
+        else if (_wcsicmp(modStr, L"ctrl") == 0 || wcscmp(modStr, L"2") == 0) g_settings.hotkeyMod = MOD_CONTROL;
+        else if (_wcsicmp(modStr, L"shift") == 0 || wcscmp(modStr, L"4") == 0) g_settings.hotkeyMod = MOD_SHIFT;
+        else if (_wcsicmp(modStr, L"shift_alt") == 0 || wcscmp(modStr, L"5") == 0) g_settings.hotkeyMod = MOD_SHIFT | MOD_ALT;
+        else if (_wcsicmp(modStr, L"ctrl_shift") == 0 || wcscmp(modStr, L"6") == 0) g_settings.hotkeyMod = MOD_CONTROL | MOD_SHIFT;
+        else if (_wcsicmp(modStr, L"ctrl_shift_alt") == 0 || wcscmp(modStr, L"7") == 0) g_settings.hotkeyMod = MOD_CONTROL | MOD_SHIFT | MOD_ALT;
+        else if (_wcsicmp(modStr, L"win") == 0 || wcscmp(modStr, L"8") == 0) g_settings.hotkeyMod = MOD_WIN;
+        else if (_wcsicmp(modStr, L"win_alt") == 0 || wcscmp(modStr, L"9") == 0) g_settings.hotkeyMod = MOD_WIN | MOD_ALT;
+        else if (_wcsicmp(modStr, L"win_ctrl") == 0 || wcscmp(modStr, L"10") == 0) g_settings.hotkeyMod = MOD_WIN | MOD_CONTROL;
+        else if (_wcsicmp(modStr, L"win_ctrl_alt") == 0 || wcscmp(modStr, L"11") == 0) g_settings.hotkeyMod = MOD_WIN | MOD_CONTROL | MOD_ALT;
+        else g_settings.hotkeyMod = MOD_CONTROL | MOD_ALT;
+        Wh_FreeStringSetting(modStr);
+    } else {
+        g_settings.hotkeyMod = MOD_CONTROL | MOD_ALT;
+    }
 
-    // Parse single-character string (e.g. "G") or legacy virtual key code
+    // Direct character input (e.g. "G", "D", "P", "1")
     PCWSTR keyStr = Wh_GetStringSetting(L"hotkeyKey");
     if (keyStr && keyStr[0] != L'\0') {
-        if (keyStr[0] == L'0' && (keyStr[1] == L'x' || keyStr[1] == L'X')) {
-            g_settings.hotkeyKey = (UINT)wcstoul(keyStr, NULL, 16);
-        } else if (keyStr[0] >= L'0' && keyStr[0] <= L'9' && keyStr[1] >= L'0' && keyStr[1] <= L'9') {
-            g_settings.hotkeyKey = (UINT)wcstoul(keyStr, NULL, 10);
+        SHORT vk = VkKeyScanW(keyStr[0]);
+        if (vk != -1) {
+            g_settings.hotkeyKey = (UINT)(vk & 0xFF);
         } else {
-            SHORT vk = VkKeyScanW(keyStr[0]);
-            if (vk != -1) {
-                g_settings.hotkeyKey = (UINT)(vk & 0xFF);
-            } else {
-                g_settings.hotkeyKey = (UINT)towupper(keyStr[0]);
-            }
+            g_settings.hotkeyKey = (UINT)towupper(keyStr[0]);
         }
+        Wh_FreeStringSetting(keyStr);
     } else {
         g_settings.hotkeyKey = 'G';
     }
-    if (keyStr) {
-        Wh_FreeStringSetting(keyStr);
-    }
-    if (g_settings.hotkeyKey == 0) g_settings.hotkeyKey = 'G';
 
     // Safely parse decimals for accurate brush widths
     g_settings.defaultPenWidth = GetFloatSetting(L"defaultPenWidth", 3.5f);
@@ -335,8 +351,27 @@ void LoadSettings() {
 
     g_settings.showBottomToolbar = Wh_GetIntSetting(L"showBottomToolbar") != 0;
     g_settings.showTrayIcon = Wh_GetIntSetting(L"showTrayIcon") != 0;
-    g_settings.cornerRadius = Wh_GetIntSetting(L"cornerRadius");
-    if (g_settings.cornerRadius <= 0) g_settings.cornerRadius = 5;
+
+    PCWSTR radiusStr = Wh_GetStringSetting(L"cornerRadius");
+    if (radiusStr) {
+        if (_wcsicmp(radiusStr, L"square") == 0 || wcscmp(radiusStr, L"0") == 0) g_settings.cornerRadius = 0;
+        else if (_wcsicmp(radiusStr, L"subtle") == 0 || wcscmp(radiusStr, L"3") == 0) g_settings.cornerRadius = 3;
+        else if (_wcsicmp(radiusStr, L"round") == 0 || wcscmp(radiusStr, L"8") == 0) g_settings.cornerRadius = 8;
+        else if (_wcsicmp(radiusStr, L"pill") == 0 || wcscmp(radiusStr, L"12") == 0) g_settings.cornerRadius = 12;
+        else if (_wcsicmp(radiusStr, L"fluent") == 0 || wcscmp(radiusStr, L"5") == 0) g_settings.cornerRadius = 5;
+        else {
+            try {
+                int customR = std::stoi(radiusStr);
+                g_settings.cornerRadius = (customR < 0) ? 5 : customR;
+            } catch (...) {
+                g_settings.cornerRadius = 5;
+            }
+        }
+        Wh_FreeStringSetting(radiusStr);
+    } else {
+        int rInt = Wh_GetIntSetting(L"cornerRadius");
+        g_settings.cornerRadius = (rInt < 0) ? 5 : rInt;
+    }
 
     g_settings.autoSaveSnapshot = Wh_GetIntSetting(L"autoSaveSnapshot") != 0;
     g_settings.freezeScreen = Wh_GetIntSetting(L"freezeScreen") != 0;
@@ -349,18 +384,32 @@ void LoadSettings() {
         g_settings.customSnapshotPath = L"";
     }
 
-    g_settings.defaultStartupTool = Wh_GetIntSetting(L"defaultStartupTool");
-    if (g_settings.defaultStartupTool < 1 || g_settings.defaultStartupTool > 4) {
+    PCWSTR startupToolStr = Wh_GetStringSetting(L"defaultStartupTool");
+    if (startupToolStr) {
+        if (_wcsicmp(startupToolStr, L"highlighter") == 0 || wcscmp(startupToolStr, L"2") == 0) g_settings.defaultStartupTool = 2;
+        else if (_wcsicmp(startupToolStr, L"laser") == 0 || wcscmp(startupToolStr, L"3") == 0) g_settings.defaultStartupTool = 3;
+        else if (_wcsicmp(startupToolStr, L"pointer") == 0 || wcscmp(startupToolStr, L"4") == 0) g_settings.defaultStartupTool = 4;
+        else g_settings.defaultStartupTool = 1;
+        Wh_FreeStringSetting(startupToolStr);
+    } else {
         g_settings.defaultStartupTool = 1;
     }
 
     g_settings.showToastNotifications = Wh_GetIntSetting(L"showToastNotifications") != 0;
 
-    int laserDuration = Wh_GetIntSetting(L"laserTrailDuration");
-    if (laserDuration < 200 || laserDuration > 5000) {
-        g_settings.laserTrailDuration = 800;
+    PCWSTR laserStr = Wh_GetStringSetting(L"laserTrailDuration");
+    if (laserStr) {
+        if (_wcsicmp(laserStr, L"200ms") == 0 || wcscmp(laserStr, L"200") == 0) g_settings.laserTrailDuration = 200;
+        else if (_wcsicmp(laserStr, L"400ms") == 0 || wcscmp(laserStr, L"400") == 0) g_settings.laserTrailDuration = 400;
+        else if (_wcsicmp(laserStr, L"600ms") == 0 || wcscmp(laserStr, L"600") == 0) g_settings.laserTrailDuration = 600;
+        else if (_wcsicmp(laserStr, L"1200ms") == 0 || wcscmp(laserStr, L"1200") == 0) g_settings.laserTrailDuration = 1200;
+        else if (_wcsicmp(laserStr, L"2000ms") == 0 || wcscmp(laserStr, L"2000") == 0) g_settings.laserTrailDuration = 2000;
+        else if (_wcsicmp(laserStr, L"3500ms") == 0 || wcscmp(laserStr, L"3500") == 0) g_settings.laserTrailDuration = 3500;
+        else if (_wcsicmp(laserStr, L"5000ms") == 0 || wcscmp(laserStr, L"5000") == 0) g_settings.laserTrailDuration = 5000;
+        else g_settings.laserTrailDuration = 800;
+        Wh_FreeStringSetting(laserStr);
     } else {
-        g_settings.laserTrailDuration = laserDuration;
+        g_settings.laserTrailDuration = 800;
     }
 
     PCWSTR cTypeStr = Wh_GetStringSetting(L"crossType");
@@ -375,8 +424,18 @@ void LoadSettings() {
         g_settings.crossType = CursorType::Cross;
     }
 
-    int cSize = Wh_GetIntSetting(L"crossSize");
-    g_settings.crossSize = (cSize <= 0) ? 16 : cSize;
+    PCWSTR cSizeStr = Wh_GetStringSetting(L"crossSize");
+    if (cSizeStr) {
+        if (_wcsicmp(cSizeStr, L"8px") == 0 || wcscmp(cSizeStr, L"8") == 0) g_settings.crossSize = 8;
+        else if (_wcsicmp(cSizeStr, L"12px") == 0 || wcscmp(cSizeStr, L"12") == 0) g_settings.crossSize = 12;
+        else if (_wcsicmp(cSizeStr, L"20px") == 0 || wcscmp(cSizeStr, L"20") == 0) g_settings.crossSize = 20;
+        else if (_wcsicmp(cSizeStr, L"24px") == 0 || wcscmp(cSizeStr, L"24") == 0) g_settings.crossSize = 24;
+        else if (_wcsicmp(cSizeStr, L"32px") == 0 || wcscmp(cSizeStr, L"32") == 0) g_settings.crossSize = 32;
+        else g_settings.crossSize = 16;
+        Wh_FreeStringSetting(cSizeStr);
+    } else {
+        g_settings.crossSize = 16;
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -4785,7 +4844,7 @@ void SaveBitmapToPNG(HBITMAP hBitmap, const std::wstring& filePath) {
     if (!g_pWICFactory) return;
 
     IWICBitmap* pWicBitmap = nullptr;
-    HRESULT hr = g_pWICFactory->CreateBitmapFromHBITMAP(hBitmap, NULL, WICBitmapUseAlpha, &pWicBitmap);
+    HRESULT hr = g_pWICFactory->CreateBitmapFromHBITMAP(hBitmap, NULL, WICBitmapIgnoreAlpha, &pWicBitmap);
     if (FAILED(hr)) return;
 
     IWICStream* pStream = nullptr;
@@ -4807,7 +4866,7 @@ void SaveBitmapToPNG(HBITMAP hBitmap, const std::wstring& filePath) {
                             pWicBitmap->GetSize(&w, &h);
                             pFrame->SetSize(w, h);
 
-                            WICPixelFormatGUID format = GUID_WICPixelFormat32bppBGRA;
+                            WICPixelFormatGUID format = GUID_WICPixelFormat24bppBGR;
                             pFrame->SetPixelFormat(&format);
 
                             hr = pFrame->WriteSource(pWicBitmap, NULL);
@@ -4829,13 +4888,13 @@ void SaveBitmapToPNG(HBITMAP hBitmap, const std::wstring& filePath) {
 
 void CancelSnipping() {
     g_hideUIForCapture = false;
-    if (!g_isSnipping) return;
-    g_isSnipping = false;
-    g_isSnippingDrag = false;
     if (g_hSnipBackdrop) {
         DeleteObject(g_hSnipBackdrop);
         g_hSnipBackdrop = NULL;
     }
+    if (!g_isSnipping) return;
+    g_isSnipping = false;
+    g_isSnippingDrag = false;
     InvalidateOverlay();
 }
 
@@ -5137,7 +5196,17 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         return 0;
     }
 
+    case WM_DPICHANGED: {
+        g_dpiScale = (float)LOWORD(wParam) / 96.0f;
+        int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        BuildToolbarLayout(vw, vh);
+        InvalidateOverlay();
+        return 0;
+    }
+
     case WM_DISPLAYCHANGE: {
+        g_dpiScale = GetDpiScaleForHwnd(hwnd);
         int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
         int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
         int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
@@ -5470,7 +5539,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             InvalidateOverlay();
             return 0;
         }
-        if (wParam == 'K' || ((GetKeyState(VK_MENU) & 0x8000) && wParam == 'B')) {
+        if (wParam == 'K') {
             CycleCanvasBackground();
             return 0;
         }
@@ -5602,6 +5671,14 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             }
             g_sizePreviewTime = GetTickCount64();
             InvalidateOverlay();
+            return 0;
+        }
+        break;
+    }
+
+    case WM_SYSKEYDOWN: {
+        if (wParam == 'B') {
+            CycleCanvasBackground();
             return 0;
         }
         break;
@@ -7584,6 +7661,20 @@ LRESULT CALLBACK HotkeyWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 }
 
 DWORD WINAPI HotkeyThread(LPVOID) {
+    // Force message queue creation immediately so PostThreadMessage won't fail with ERROR_INVALID_THREAD_ID
+    MSG initMsg;
+    PeekMessageW(&initMsg, NULL, WM_USER, WM_USER, PM_NOREMOVE);
+
+    // Declare Per-Monitor DPI awareness V2
+    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+    if (hUser32) {
+        using SetThreadDpiAwarenessContext_t = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
+        auto pSetThreadDpiAwarenessContext = (SetThreadDpiAwarenessContext_t)GetProcAddress(hUser32, "SetThreadDpiAwarenessContext");
+        if (pSetThreadDpiAwarenessContext) {
+            pSetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        }
+    }
+
     CoInitialize(NULL);
 
     HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_MULTI_THREADED, &g_pD2DFactory);
@@ -7842,11 +7933,16 @@ void WhTool_ModUninit() {
     }
 
     if (g_hotkeyThreadId != 0) {
-        PostThreadMessageW(g_hotkeyThreadId, WM_QUIT, 0, 0);
+        for (int i = 0; i < 50; ++i) {
+            if (PostThreadMessageW(g_hotkeyThreadId, WM_QUIT, 0, 0)) {
+                break;
+            }
+            Sleep(10);
+        }
     }
 
     if (g_hHotkeyThread) {
-        WaitForSingleObject(g_hHotkeyThread, INFINITE);
+        WaitForSingleObject(g_hHotkeyThread, 5000);
         CloseHandle(g_hHotkeyThread);
         g_hHotkeyThread = NULL;
         g_hotkeyThreadId = 0;
