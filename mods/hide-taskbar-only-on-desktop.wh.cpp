@@ -2,7 +2,7 @@
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Hides selected taskbars while their displays show only the desktop
-// @version         6.8.0
+// @version         6.9.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -11,65 +11,60 @@
 
 // ==WindhawkModReadme==
 /*
-
 # Hide Taskbar Only on Desktop
 
-Hides selected taskbars when their displays show only the desktop. Each display is evaluated independently.
-
-## Demo
-
-### Multiple Displays
-
-![Multiple Display](https://raw.githubusercontent.com/Sahil-Dashoni/Hide-Taskbar-Only-on-Desktop-Windhawk-Mod/refs/heads/main/Assets/multiple-display.gif)
-
-### Single Display
-
-![Single Display](https://raw.githubusercontent.com/Sahil-Dashoni/Hide-Taskbar-Only-on-Desktop-Windhawk-Mod/refs/heads/main/Assets/single-display.gif)
+Hides selected bottom-docked taskbars when their display is showing only the desktop. Each display is evaluated independently.
 
 ## Features
 
-- Per-display desktop-only taskbar hiding
+- Per-display desktop-only hiding
 - Independent bottom-edge hover reveal
 - Multi-monitor and spanning-window support
 - Keyboard taskbar interaction such as Win+T and Win+B
-- Shell UI and taskbar popups handled separately from normal applications
+- Shell UI, taskbar popups, and desktop context-menu activity handled separately
 - Per-display borderless fullscreen tracking
-- Taskbar recovery after recreation or tool-process restart
+- Recovery after taskbar recreation or unexpected tool-process termination
 
 ## Settings
 
-**Taskbars to hide on desktop** selects displays for desktop-only hiding.
+**Extra hover margin (px)** adds to the taskbar-height-based bottom-edge reveal zone and is scaled for the display DPI.
 
-**Reveal taskbar on bottom-edge hover** selects displays where bottom-edge hover can reveal the taskbar.
+**Auto-hide delay after hover (ms)** controls how long the revealed taskbar stays visible after the cursor leaves the bottom-edge hover zone. It only affects hover dismissal; desktop-only hides remain immediate.
 
-Display selections use the current logical monitor order. Optional monitor-interface-name selectors provide stable physical display matching when the logical number changes.
+**Reveal taskbar on bottom-edge hover** selects the displays where bottom-edge hover can reveal the taskbar.
+
+**Hover-reveal displays by interface name** optionally selects physical displays by a case-insensitive substring of their Windows display interface name. Leave it empty to rely on the logical monitor selection.
+
+**Taskbars to hide on desktop** selects the displays whose taskbars participate in desktop-only hiding.
+
+**Taskbar displays to hide by interface name** optionally selects physical displays by interface-name substring when logical monitor numbering is unstable after reconnecting or rearranging displays.
+
+Logical monitor selections use the current monitor enumeration order. Interface-name selectors are optional and support up to 16 entries.
 
 ## Difference from `taskbar-fade`
 
-`taskbar-fade` uses a similar layered-taskbar mechanism and bottom-edge hover behavior, with configurable fade/idle behavior including Smart Idle.
+`taskbar-fade` and this mod both use layered taskbar transparency and can reveal the taskbar from the bottom edge, so they overlap in mechanism. This mod has a different primary state model: **desktop-only state is evaluated independently for each display and the taskbar hides immediately when that display has no relevant application**. It also carries the per-display fullscreen, shell-surface, keyboard, minimize, and recovery handling needed by that model.
 
-This mod instead makes **desktop-only state the primary rule and evaluates it independently per display**. It hides immediately rather than waiting for an idle timeout, so one display can remain visible while another selected display hides because it is showing only the desktop.
-
-The two mods should not be used together on the same taskbar because both modify its window style/transparency state.
+The two mods should not be used on the same taskbar because both modify the taskbar window's transparency/style state.
 
 ## Implementation
 
-The mod runs state management in a dedicated Windhawk tool process and uses layered-window transparency instead of Windows' native auto-hide, keeping the normal desktop work area unchanged.
+The state logic runs in a dedicated Windhawk tool process. Taskbars are hidden with layered-window transparency plus click-through behavior instead of Windows' native taskbar auto-hide, so the normal desktop work area is intentionally unchanged.
+
+Fullscreen ownership is tracked per display for borderless monitor-sized windows. Foreground, move/size, and window-location events are used to update fullscreen transitions promptly, while short validation timers and a periodic safety refresh cover transitions that do not produce a single reliable event.
 
 ## Limitations
 
-- Desktop-only hiding and hover reveal apply only to bottom-docked taskbars.
-- The hidden taskbar remains part of the normal work area.
-- A hidden taskbar is click-through.
-- Logical display numbers can change after topology changes; interface-name selectors can be used for stable matching.
+- Desktop-only hiding and hover reveal apply to bottom-docked taskbars.
+- The hidden taskbar remains part of the normal work area and is click-through.
+- Logical display numbers can change after topology changes; interface-name selectors can be used for stable physical-display matching.
 - Up to 16 logical displays and 16 interface-name selectors are supported.
-- Flashing taskbar buttons and tray notifications are not visible while transparent.
-- Native taskbar auto-hide remains separate.
-- Other taskbar transparency/style mods can conflict.
-- Borderless monitor-sized, captionless, non-resizable applications may be treated as fullscreen.
-- If the tool process terminates unexpectedly, owned taskbars are recoverable on the next tool-process startup.
-- Windows shell classes and processes can change between Windows releases.
-
+- Flashing taskbar buttons and tray notifications are not visible while the taskbar is transparent.
+- Native Windows taskbar auto-hide remains separate from this mod.
+- Other taskbar transparency/style mods can conflict when they modify the same taskbar.
+- A visible, monitor-sized, captionless, non-resizable application may be treated as fullscreen.
+- If the dedicated tool process terminates unexpectedly, the next tool-process startup attempts to recover taskbars still marked as owned by this mod. If a new tool-process startup is not available, restarting Windows Explorer recreates the taskbar window.
+- Windows shell classes/processes can change between Windows releases.
 */
 // ==/WindhawkModReadme==
 
@@ -210,7 +205,7 @@ struct WindowScanResult {
 HWINEVENTHOOK g_foregroundHook = nullptr;
 HWINEVENTHOOK g_minimizeHook = nullptr;
 HWINEVENTHOOK g_moveHook = nullptr;
-HWINEVENTHOOK g_fullscreenLocationHook = nullptr;
+HWINEVENTHOOK g_fullscreenLocationHooks[kMaxMonitorNumbers] = {};
 HWINEVENTHOOK g_shellSurfaceHook = nullptr;
 HWINEVENTHOOK g_taskbarFocusHook = nullptr;
 HANDLE g_workerThread = nullptr;
@@ -555,6 +550,9 @@ void ArmHoverExpireTimer(DWORD delayMs);
 void CancelHoverExpireTimer();
 void RestoreAllTaskbars();
 bool WaitForThreadWithTimeout(HANDLE thread, DWORD timeoutMs, const wchar_t* threadName);
+void SafeUnhookWinEvent(HWINEVENTHOOK& hook);
+void InstallFullscreenLocationHook(size_t index);
+void InstallTaskbarFocusHook();
 void CALLBACK WinEventProc(
     HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD);
 bool IsShellChromeClass(const WCHAR* className) {
@@ -1029,6 +1027,36 @@ bool IsFullscreenOwnerVisible(HMONITOR monitor) {
     }
     return !IsWindowCloaked(owner);
 }
+void ClearFullscreenOwnerAtIndex(size_t index) {
+    if (index >= kMaxMonitorNumbers) {
+        return;
+    }
+    SafeUnhookWinEvent(g_fullscreenLocationHooks[index]);
+    g_fullscreenOwners[index] = {};
+}
+void InstallFullscreenLocationHook(size_t index) {
+    if (index >= kMaxMonitorNumbers || !g_fullscreenOwners[index].hwnd) {
+        return;
+    }
+    SafeUnhookWinEvent(g_fullscreenLocationHooks[index]);
+    DWORD processId = 0;
+    GetWindowThreadProcessId(g_fullscreenOwners[index].hwnd, &processId);
+    if (!processId) {
+        return;
+    }
+    g_fullscreenLocationHooks[index] = SetWinEventHook(
+        EVENT_OBJECT_LOCATIONCHANGE,
+        EVENT_OBJECT_LOCATIONCHANGE,
+        nullptr,
+        WinEventProc,
+        processId,
+        0,
+        WINEVENT_OUTOFCONTEXT
+    );
+    if (!g_fullscreenLocationHooks[index]) {
+        Wh_Log(L"Failed to install fullscreen location WinEvent hook for owner %p", g_fullscreenOwners[index].hwnd);
+    }
+}
 void SetFullscreenOwner(HMONITOR monitor, HWND hwnd) {
     if (!monitor || !hwnd) {
         return;
@@ -1043,8 +1071,14 @@ void SetFullscreenOwner(HMONITOR monitor, HWND hwnd) {
         }
     }
     if (index >= 0) {
+        if (g_fullscreenOwners[index].hwnd != hwnd) {
+            SafeUnhookWinEvent(g_fullscreenLocationHooks[index]);
+        }
         g_fullscreenOwners[index].monitor = monitor;
         g_fullscreenOwners[index].hwnd = hwnd;
+        if (!g_fullscreenLocationHooks[index]) {
+            InstallFullscreenLocationHook(static_cast<size_t>(index));
+        }
     }
 }
 void ClearFullscreenOwnersForWindow(HWND hwnd) {
@@ -1053,7 +1087,7 @@ void ClearFullscreenOwnersForWindow(HWND hwnd) {
     }
     for (size_t i = 0; i < kMaxMonitorNumbers; ++i) {
         if (g_fullscreenOwners[i].hwnd == hwnd) {
-            g_fullscreenOwners[i] = {};
+            ClearFullscreenOwnerAtIndex(i);
         }
     }
 }
@@ -1064,7 +1098,7 @@ void ValidateFullscreenOwnerForMonitor(HMONITOR monitor, const MonitorList& moni
     }
     HWND owner = g_fullscreenOwners[index].hwnd;
     if (!IsFullscreenOwnerOnSameMonitor(owner, monitor)) {
-        g_fullscreenOwners[index] = {};
+        ClearFullscreenOwnerAtIndex(static_cast<size_t>(index));
         return;
     }
     if (GetForegroundWindow() != owner) {
@@ -1083,7 +1117,7 @@ void ValidateFullscreenOwnerForMonitor(HMONITOR monitor, const MonitorList& moni
                 monitors.entries[monitorIndex],
                 GetShellProcessKind(pid)
             )) {
-            g_fullscreenOwners[index] = {};
+            ClearFullscreenOwnerAtIndex(static_cast<size_t>(index));
         }
         break;
     }
@@ -1106,7 +1140,7 @@ void ClearInvalidFullscreenWindowCache(const MonitorList& monitors) {
         }
         if (!monitorStillPresent ||
             !IsFullscreenOwnerOnSameMonitor(owner, monitor)) {
-            g_fullscreenOwners[i] = {};
+            ClearFullscreenOwnerAtIndex(i);
         }
     }
 }
@@ -1149,7 +1183,7 @@ void ClearFullscreenOwnerForForegroundApplication(const MonitorList& monitors, H
         ValidateFullscreenOwnerForMonitor(monitor, monitors);
         return;
     }
-    g_fullscreenOwners[ownerIndex] = {};
+    ClearFullscreenOwnerAtIndex(static_cast<size_t>(ownerIndex));
 }
 void NoteForegroundFullscreenWindow(const MonitorList& monitors, HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) {
@@ -2080,6 +2114,33 @@ void InstallShellSurfaceHook() {
         Wh_Log(L"Failed to install shell surface WinEvent hook");
     }
 }
+void InstallTaskbarFocusHook() {
+    SafeUnhookWinEvent(g_taskbarFocusHook);
+    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (!taskbar) {
+        taskbar = GetShellWindow();
+    }
+    if (!taskbar) {
+        return;
+    }
+    DWORD processId = 0;
+    GetWindowThreadProcessId(taskbar, &processId);
+    if (!processId) {
+        return;
+    }
+    g_taskbarFocusHook = SetWinEventHook(
+        EVENT_OBJECT_FOCUS,
+        EVENT_OBJECT_FOCUS,
+        nullptr,
+        WinEventProc,
+        processId,
+        0,
+        WINEVENT_OUTOFCONTEXT
+    );
+    if (!g_taskbarFocusHook) {
+        Wh_Log(L"Failed to install taskbar focus WinEvent hook");
+    }
+}
 void SafeCloseHandle(HANDLE& handle) {
     if (handle) {
         CloseHandle(handle);
@@ -2125,6 +2186,10 @@ DWORD WINAPI CursorSamplingThread(LPVOID) {
         DWORD waitResult =
             WaitForSingleObject(g_cursorStopEvent, waitMs);
         if (waitResult == WAIT_OBJECT_0) {
+            break;
+        }
+        if (waitResult == WAIT_FAILED) {
+            Wh_Log(L"Cursor sampler wait failed: %lu", GetLastError());
             break;
         }
         POINT pt = {};
@@ -2362,7 +2427,7 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
             for (size_t i = 0; i < kMaxMonitorNumbers; ++i) {
                 if (g_fullscreenOwners[i].hwnd != hwnd) continue;
                 if (!IsFullscreenOwnerOnSameMonitor(hwnd, g_fullscreenOwners[i].monitor)) {
-                    g_fullscreenOwners[i] = {};
+                    ClearFullscreenOwnerAtIndex(i);
                 } else {
                     ValidateFullscreenOwnerForMonitor(g_fullscreenOwners[i].monitor, monitors);
                 }
@@ -2423,6 +2488,7 @@ LRESULT CALLBACK WorkerMessageWindowProc(HWND hwnd, UINT message, WPARAM wParam,
         message == WM_THEMECHANGED) {
         if (message == g_taskbarCreatedMessage) {
             InstallShellSurfaceHook();
+            InstallTaskbarFocusHook();
             RefreshNativeAutoHideState();
         } else if (message == WM_SETTINGCHANGE) {
             RefreshNativeAutoHideState();
@@ -2504,17 +2570,8 @@ DWORD WINAPI WorkerThread(LPVOID) {
     if (!g_moveHook) {
         Wh_Log(L"Failed to install move/size WinEvent hook");
     }
-    g_fullscreenLocationHook =
-        SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
-    if (!g_fullscreenLocationHook) {
-        Wh_Log(L"Failed to install fullscreen location WinEvent hook");
-    }
     InstallShellSurfaceHook();
-    g_taskbarFocusHook =
-        SetWinEventHook(EVENT_OBJECT_FOCUS, EVENT_OBJECT_FOCUS, nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
-    if (!g_taskbarFocusHook) {
-        Wh_Log(L"Failed to install taskbar focus WinEvent hook");
-    }
+    InstallTaskbarFocusHook();
     UpdateTaskbarState();
     constexpr UINT kSafetyPollIntervalMs = 2000;
     UINT_PTR timerId =
@@ -2562,7 +2619,9 @@ DWORD WINAPI WorkerThread(LPVOID) {
     SafeUnhookWinEvent(g_foregroundHook);
     SafeUnhookWinEvent(g_minimizeHook);
     SafeUnhookWinEvent(g_moveHook);
-    SafeUnhookWinEvent(g_fullscreenLocationHook);
+    for (size_t i = 0; i < kMaxMonitorNumbers; ++i) {
+        SafeUnhookWinEvent(g_fullscreenLocationHooks[i]);
+    }
     SafeUnhookWinEvent(g_shellSurfaceHook);
     SafeUnhookWinEvent(g_taskbarFocusHook);
     DestroyWorkerMessageWindow();
@@ -2825,6 +2884,7 @@ void WhTool_ModUninit() {
                 5000,
                 L"worker"
             )) {
+            RestoreAllTaskbars();
             ExitProcess(1);
         }
         SafeCloseHandle(g_workerThread);
@@ -2867,7 +2927,12 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    bool isService = false;
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+    bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
@@ -2878,8 +2943,10 @@ BOOL Wh_ModInit() {
     }
 
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0) {
-            isService = true;
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
             break;
         }
     }
@@ -2896,7 +2963,7 @@ BOOL Wh_ModInit() {
 
     LocalFree(argv);
 
-    if (isService) {
+    if (isExcluded) {
         return FALSE;
     }
 
