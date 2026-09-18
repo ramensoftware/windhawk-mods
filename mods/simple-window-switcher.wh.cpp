@@ -8442,7 +8442,13 @@ static void ShowSwitcher(bool sticky, bool immediate = false) {
         RefreshEntrySourceSize(w);
     }
     ComputeLayout(hMon);
-    if (g_winW <= 0 || g_winH <= 0) return;
+    if (g_winW <= 0 || g_winH <= 0) {
+        // A zero-sized layout means we never reveal. RegisterThumbnailsEarly above
+        // already registered DWM thumbnails for the new list; release them so this
+        // failed show doesn't leak HTHUMBNAIL handles.
+        UnregisterThumbnails();
+        return;
+    }
     if (DockLayoutActive()) {
         UpdateDockPreviewForSelection();
     }
@@ -8831,6 +8837,10 @@ static void StartExitAnimation(bool activateSelectedWindow) {
 }
 
 static void SwitchToSelected() {
+    // Idempotence guard: both the Alt-release keyup path and the ALT_POLL timer
+    // can trigger a commit. If neither a visible nor a pending switcher remains,
+    // the first commit already tore everything down — a second commit must no-op.
+    if (!g_isVisible && !g_isPendingShow) return;
     StartExitAnimation(true);
 }
 
@@ -10980,6 +10990,18 @@ static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND
 // entry at its exact position and preserves its MRU rank, so a window that
 // survives the close attempt (e.g. it showed a modal "save changes?" dialog)
 // never moves to the minimized boundary and never overlaps other entries.
+// Shared by Q / Ctrl+W / Del and the close button. Posts SC_CLOSE and arms the
+// close-verify timer exactly once per window, so rapid double-clicks or repeated
+// key presses can't queue duplicate SC_CLOSE messages (which could re-trigger or
+// dismiss an app's confirmation dialog).
+static void QueueCloseWindow(HWND hw) {
+    if (std::find(s_pendingCloseWindows.begin(), s_pendingCloseWindows.end(), hw) != s_pendingCloseWindows.end()) {
+        return; // close already in flight for this window
+    }
+    PostMessage(hw, WM_SYSCOMMAND, SC_CLOSE, 0);
+    s_pendingCloseWindows.push_back(hw);
+}
+
 static void CloseSwitcherEntry(int idx) {
     if (idx < 0 || idx >= (int)g_windows.size()) return;
 
@@ -10991,18 +11013,15 @@ static void CloseSwitcherEntry(int idx) {
             std::vector<HWND> toClose = g_windows[idx].groupWindows;
             for (HWND hw : toClose) {
                 if (CanCloseWindow(hw)) {
-                    PostMessage(hw, WM_SYSCOMMAND, SC_CLOSE, 0);
-                    s_pendingCloseWindows.push_back(hw);
+                    QueueCloseWindow(hw);
                 }
             }
         } else {
             // closeRecent (Default)
-            PostMessage(targetWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
-            s_pendingCloseWindows.push_back(targetWnd);
+            QueueCloseWindow(targetWnd);
         }
     } else {
-        PostMessage(targetWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
-        s_pendingCloseWindows.push_back(targetWnd);
+        QueueCloseWindow(targetWnd);
     }
 
     if (!s_pendingCloseWindows.empty() && g_hSwitcher) {
@@ -11934,7 +11953,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             if (it != s_pendingCloseWindows.end()) {
                 s_pendingCloseWindows.erase(it);
             }
-            if (g_isVisible) {
+            if (g_isVisible || g_isPendingShow) {
                 RemoveWindowEntryByHwnd(hS);
             }
         } else if (code == HSHELL_WINDOWCREATED || code == HSHELL_REDRAW) {
@@ -12721,10 +12740,13 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
                 double spentMs = (double)(frameEnd.QuadPart - frameStart.QuadPart) * 1000.0 / (double)g_animPerfFreq.QuadPart;
                 double waitMs = s_animTargetIntervalMs - spentMs;
                 if (waitMs > 0.5) {
+                    BOOL timerArmed = FALSE;
                     if (hAnimTimer) {
                         LARGE_INTEGER dueTime;
                         dueTime.QuadPart = -(LONGLONG)round(waitMs * 10000.0);
-                        SetWaitableTimer(hAnimTimer, &dueTime, 0, NULL, NULL, FALSE);
+                        timerArmed = SetWaitableTimer(hAnimTimer, &dueTime, 0, NULL, NULL, FALSE);
+                    }
+                    if (timerArmed) {
                         HANDLE handles[1] = { hAnimTimer };
                         MsgWaitForMultipleObjectsEx(
                             1, handles,
@@ -12733,6 +12755,8 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
                             MWMO_ALERTABLE | MWMO_INPUTAVAILABLE
                         );
                     } else {
+                        // No waitable timer (or arming failed): fall back to a plain
+                        // timeout wait so the animation can't stall indefinitely.
                         MsgWaitForMultipleObjectsEx(
                             0, NULL,
                             (DWORD)floor(waitMs),
