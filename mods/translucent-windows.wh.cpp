@@ -5192,7 +5192,10 @@ static LRESULT WINAPI HookedDefWindowProcW(HWND hWnd, UINT msg, WPARAM wParam, L
 
             AcquireSRWLockExclusive(&g_ThemeChangeLock);
 
-            if (currentTheme != g_LastThemePath) 
+            COLORREF crAccent;
+            GetAccentColor(crAccent);
+
+            if (currentTheme != g_LastThemePath || g_settings.AccentColor != crAccent) 
             {
                 g_LastThemePath = currentTheme; 
 
@@ -5203,6 +5206,9 @@ static LRESULT WINAPI HookedDefWindowProcW(HWND hWnd, UINT msg, WPARAM wParam, L
                 
                 if (g_settings.AccentColorize)
                     g_settings.AccentColorize = GetAccentColor(g_settings.AccentColor);
+
+                if (g_settings.SetSystemColors)
+                    ColorizeSysColors();
 
                 AcquireSRWLockExclusive(&g_SysColorsLock);
                 for (HBRUSH& brush : g_themeCachedCustomSysColorBrushes) {
