@@ -6,9 +6,8 @@
 // @author          ZainYousef
 // @github          https://github.com/ZainYoussef
 // @homepage        https://github.com/ZainYoussef/WinDraw
-// @include         explorer.exe
-// @architecture    x86-64
-// @compilerOptions -ld2d1 -ldwrite -lole32 -luser32 -lgdi32 -ldwmapi -lcomctl32 -lshlwapi -lwindowscodecs -lshell32
+// @include         windhawk.exe
+// @compilerOptions -ld2d1 -ldwrite -lole32 -luser32 -lgdi32 -ldwmapi -lwindowscodecs -lshell32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -16,7 +15,7 @@
 /*
 # WinDraw - Screen Inking & Annotation
 
-A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite running directly inside `explorer.exe` powered by **Direct2D**, **DirectWrite**, and **Windows Imaging Component (WIC)**.
+A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite running as a dedicated, high-performance tool process powered by **Direct2D**, **DirectWrite**, and **Windows Imaging Component (WIC)**.
 
 ![WinDraw Inking & Annotation](https://raw.githubusercontent.com/ZainYoussef/WinDraw/main/assets/Screenshot1.png)
 
@@ -69,7 +68,7 @@ A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite
    - Scroll wheel while in Laser mode instantly adjusts trail persistence.
 
 8. **Interactive Grid System (`G` key)**:
-   - Dot Grid, Squared Graph Grid, Engineering Grid, and Isometric 3D Triangle Grid overlays.
+   - Dot Grid and Graph Lines Grid overlays.
    - Flyout modal allows switching styles and toggling density between Low, Medium, and High.
 
 9. **Region Snipping & Full Screenshots**:
@@ -96,7 +95,7 @@ A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite
 14. **Temporary Whiteboard & Blackboard Mode (`K` or `Alt + B`)**:
     - Instantly turns your transparent overlay into an off-white scratchpad whiteboard or a matte dark slate blackboard.
     - Zero file-management bloat: completely ephemeral, vanishing cleanly on `ESC`.
-    - Automatically captures solid background and all ink strokes when taking snapshots (`Ctrl + S`) or snips (`Ctrl + Shift + S`).
+    - Automatically captures solid background and all ink strokes when taking snapshots (`Ctrl + S`) or snips (`S` key).
     - Smart contextual grid automatically switches between dark charcoal lines on white paper and vibrant cyan lines on dark slate.
 
 ---
@@ -130,7 +129,7 @@ A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite
 | **Ctrl + S** | Take Full Screen Snapshot & Copy to Clipboard |
 | **[** / **]** | Decrease / Increase Brush Size (or Laser Trail) |
 | **0** / **Ctrl + 0** | Reset Canvas Zoom & Pan |
-| **1 - 4** | Select Preset Colors (Red, Blue, Green, Yellow) |
+| **1 - 4** | Select Preset Colors (Crimson Red, Tangelo Orange, Amber Gold, Sun Yellow) |
 | **5** | Open Custom Color & Opacity Studio |
 */
 // ==/WindhawkModReadme==
@@ -157,11 +156,11 @@ A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite
   $name: Activation Key (A-Z, 0-9)
   $description: Type a single letter or number for the hotkey (e.g., G, D, P).
 
-- defaultPenWidth: 3.5
+- defaultPenWidth: "3.5"
   $name: Default Pen Width (px)
   $description: Initial drawing thickness for the pen. You can resize this with the mouse wheel while drawing.
 
-- defaultHighlighterWidth: 18.0
+- defaultHighlighterWidth: "18.0"
   $name: Default Highlighter Width (px)
   $description: Initial drawing thickness for the highlighter tool.
 
@@ -171,7 +170,7 @@ A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite
 
 - showTrayIcon: true
   $name: Show System Tray Icon
-  $description: Show the PenWorkspace icon in the taskbar for quick access to settings and toggles.
+  $description: Show the WinDraw icon in the Windows notification area for quick access to settings and toggles.
 
 - cornerRadius: 5
   $name: UI Corner Radius
@@ -251,6 +250,9 @@ A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite
 #include <wincodec.h>
 #include <shlobj.h>
 #include <shellapi.h>
+
+// Explicit definition of FOLDERID_Pictures to ensure clean linking across all MinGW toolchains
+static const GUID kWinDrawFolderID_Pictures = { 0x33e28130, 0x4e3a, 0x468b, { 0xb5, 0x8a, 0x3e, 0x24, 0xbf, 0x20, 0x29, 0xff } };
 #include <vector>
 #include <deque>
 #include <cmath>
@@ -284,14 +286,6 @@ struct ModSettings {
     CursorType crossType;
     int crossSize;
 } g_settings;
-
-bool GetBoolSetting(PCWSTR settingName, bool defaultVal) {
-    PCWSTR str = Wh_GetStringSetting(settingName);
-    if (!str) return defaultVal;
-    bool val = (wcscmp(str, L"0") != 0 && _wcsicmp(str, L"false") != 0 && str[0] != L'\0');
-    Wh_FreeStringSetting(str);
-    return val;
-}
 
 float GetFloatSetting(PCWSTR settingName, float defaultVal) {
     PCWSTR str = Wh_GetStringSetting(settingName);
@@ -339,13 +333,13 @@ void LoadSettings() {
     g_settings.defaultHighlighterWidth = GetFloatSetting(L"defaultHighlighterWidth", 18.0f);
     if (g_settings.defaultHighlighterWidth <= 1.0f) g_settings.defaultHighlighterWidth = 18.0f;
 
-    g_settings.showBottomToolbar = GetBoolSetting(L"showBottomToolbar", true);
-    g_settings.showTrayIcon = GetBoolSetting(L"showTrayIcon", true);
+    g_settings.showBottomToolbar = Wh_GetIntSetting(L"showBottomToolbar") != 0;
+    g_settings.showTrayIcon = Wh_GetIntSetting(L"showTrayIcon") != 0;
     g_settings.cornerRadius = Wh_GetIntSetting(L"cornerRadius");
     if (g_settings.cornerRadius <= 0) g_settings.cornerRadius = 5;
 
-    g_settings.autoSaveSnapshot = GetBoolSetting(L"autoSaveSnapshot", false);
-    g_settings.freezeScreen = GetBoolSetting(L"freezeScreen", true);
+    g_settings.autoSaveSnapshot = Wh_GetIntSetting(L"autoSaveSnapshot") != 0;
+    g_settings.freezeScreen = Wh_GetIntSetting(L"freezeScreen") != 0;
 
     PCWSTR pathStr = Wh_GetStringSetting(L"customSnapshotPath");
     if (pathStr) {
@@ -360,7 +354,7 @@ void LoadSettings() {
         g_settings.defaultStartupTool = 1;
     }
 
-    g_settings.showToastNotifications = GetBoolSetting(L"showToastNotifications", true);
+    g_settings.showToastNotifications = Wh_GetIntSetting(L"showToastNotifications") != 0;
 
     int laserDuration = Wh_GetIntSetting(L"laserTrailDuration");
     if (laserDuration < 200 || laserDuration > 5000) {
@@ -448,7 +442,7 @@ struct LaserStroke {
         ReleaseGeometry();
     }
 };
-static std::deque<LaserStroke> g_laserStrokes;
+[[clang::no_destroy]] static std::deque<LaserStroke> g_laserStrokes;
 static bool g_isLaserDrawing = false;
 
 enum class GridStyle {
@@ -639,10 +633,40 @@ static const size_t kPresetColorCount = sizeof(kPresetColors) / sizeof(kPresetCo
 // Application State
 // ----------------------------------------------------------------------------
 
+#define WM_APP_SETTINGS_CHANGED (WM_APP + 1)
+#define WM_APP_EXIT             (WM_APP + 2)
+
 static HWND g_hOverlayWnd = NULL;
 static HWND g_hHotkeyWnd = NULL;
 static HANDLE g_hHotkeyThread = NULL;
+static DWORD g_hotkeyThreadId = 0;
 static bool g_bIsActive = false;
+static float g_dpiScale = 1.0f;
+
+inline HMODULE GetCurrentModuleHandle() {
+    HMODULE hModule = nullptr;
+    if (!GetModuleHandleExW(
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        (LPCWSTR)GetCurrentModuleHandle,
+        &hModule)) {
+        return nullptr;
+    }
+    return hModule;
+}
+
+inline float GetDpiScaleForHwnd(HWND hWnd) {
+    UINT dpi = 96;
+    HMODULE hUser = GetModuleHandleW(L"user32.dll");
+    if (hUser) {
+        using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
+        auto pGetDpiForWindow = (GetDpiForWindow_t)GetProcAddress(hUser, "GetDpiForWindow");
+        if (pGetDpiForWindow && hWnd) {
+            dpi = pGetDpiForWindow(hWnd);
+        }
+    }
+    if (dpi == 0) dpi = 96;
+    return (float)dpi / 96.0f;
+}
 
 static ID2D1Factory* g_pD2DFactory = NULL;
 static ID2D1HwndRenderTarget* g_pRenderTarget = NULL;
@@ -660,9 +684,9 @@ static IDWriteTextFormat* g_pMenuKeyFormat = NULL;
 static IDWriteTextFormat* g_pToolbarKeyFormat = NULL;
 static IWICImagingFactory* g_pWICFactory = NULL;
 
-static std::vector<Stroke> g_strokes;
-static std::vector<std::vector<Stroke>> g_undoStack;
-static std::vector<std::vector<Stroke>> g_redoStack;
+[[clang::no_destroy]] static std::vector<Stroke> g_strokes;
+[[clang::no_destroy]] static std::vector<std::vector<Stroke>> g_undoStack;
+[[clang::no_destroy]] static std::vector<std::vector<Stroke>> g_redoStack;
 static const size_t kMaxUndoLevels = 20;
 
 void PushUndoState() {
@@ -672,7 +696,7 @@ void PushUndoState() {
     }
     g_redoStack.clear();
 }
-static Stroke g_currentStroke;
+[[clang::no_destroy]] static Stroke g_currentStroke;
 static bool g_isDrawing = false;
 
 static ToolMode g_currentTool = ToolMode::Pen;
@@ -1659,7 +1683,7 @@ void BuildToolbarLayout(int screenW, int screenH) {
     };
     const wchar_t* toolShortcuts[] = {
         L"H",
-        L"W",
+        L"D",
         L"E",
         L"P",
         L"M",
@@ -4836,6 +4860,7 @@ bool PreparePristineBackdrop() {
     if (g_hOverlayWnd) {
         InvalidateRect(g_hOverlayWnd, NULL, FALSE);
         UpdateWindow(g_hOverlayWnd);
+        DwmFlush();
     }
 
     int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
@@ -4956,9 +4981,10 @@ void SaveCroppedSnapshot(int left, int top, int width, int height) {
             }
         }
         if (targetDir.empty()) {
-            wchar_t picturesPath[MAX_PATH];
-            if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_MYPICTURES, NULL, 0, picturesPath))) {
-                targetDir = std::wstring(picturesPath) + L"\\WinDraw";
+            PWSTR pKnownPath = NULL;
+            if (SUCCEEDED(SHGetKnownFolderPath(kWinDrawFolderID_Pictures, 0, NULL, &pKnownPath)) && pKnownPath) {
+                targetDir = std::wstring(pKnownPath) + L"\\WinDraw";
+                CoTaskMemFree(pKnownPath);
                 EnsureDirectoryExists(targetDir);
             }
         }
@@ -5031,9 +5057,7 @@ void SaveCroppedSnapshot(int left, int top, int width, int height) {
         } else {
             g_toastMessage = L"Snapshot capture failed";
         }
-        if (g_toastStartTime != 0) {
-            g_toastStartTime = GetTickCount64();
-        }
+        g_toastStartTime = GetTickCount64();
         if (g_hOverlayWnd) SetTimer(g_hOverlayWnd, TIMER_ID_UI_ANIMATION, 30, NULL);
     }
 
@@ -5450,7 +5474,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             CycleCanvasBackground();
             return 0;
         }
-        if (wParam == 'W') { SetToolMode((g_currentTool == ToolMode::Laser) ? ToolMode::Pen : ToolMode::Laser); return 0; }
+        if (wParam == 'D' || wParam == 'W') { SetToolMode((g_currentTool == ToolMode::Laser) ? ToolMode::Pen : ToolMode::Laser); return 0; }
         if (wParam == 'E') { SetToolMode(ToolMode::Eraser); return 0; }
         if (wParam == 'P') { SetToolMode((g_currentTool == ToolMode::Pan) ? ToolMode::Pen : ToolMode::Pan); return 0; }
         if (wParam == 'M') { SetToolMode((g_currentTool == ToolMode::Pointer) ? ToolMode::Pen : ToolMode::Pointer); return 0; }
@@ -7148,7 +7172,7 @@ void ShowOverlay() {
     if (!g_hOverlayWnd) {
         WNDCLASSEXW wc = { sizeof(WNDCLASSEXW) };
         wc.lpfnWndProc = OverlayWndProc;
-        wc.hInstance = GetModuleHandleW(NULL);
+        wc.hInstance = GetCurrentModuleHandle();
         wc.lpszClassName = L"WindhawkNativeScreenInkOverlay";
         wc.hCursor = LoadCursor(NULL, IDC_ARROW);
         RegisterClassExW(&wc);
@@ -7163,6 +7187,7 @@ void ShowOverlay() {
         );
         SetLayeredWindowAttributes(g_hOverlayWnd, 0, 255, LWA_ALPHA);
 
+        g_dpiScale = GetDpiScaleForHwnd(g_hOverlayWnd);
         CreateD2DResources(g_hOverlayWnd);
     }
     else {
@@ -7354,8 +7379,18 @@ HICON CreateGlyphIcon(WCHAR glyph, int size) {
             HBITMAP hColorBitmap = CreateDIBSection(hdcScreen, (BITMAPINFO*)&bi, DIB_RGB_COLORS, &pDIBBits, NULL, 0);
             ReleaseDC(NULL, hdcScreen);
 
+            UINT stride = 0;
+            pLock->GetStride(&stride);
+
             if (hColorBitmap && pDIBBits) {
-                memcpy(pDIBBits, pBytes, size * size * 4);
+                BYTE* pDst = (BYTE*)pDIBBits;
+                BYTE* pSrc = pBytes;
+                UINT rowBytes = (UINT)size * 4;
+                for (int row = 0; row < size; ++row) {
+                    memcpy(pDst, pSrc, rowBytes);
+                    pDst += rowBytes;
+                    pSrc += stride;
+                }
 
                 HBITMAP hMonoMask = CreateBitmap(size, size, 1, 1, NULL);
                 if (hMonoMask) {
@@ -7523,69 +7558,39 @@ LRESULT CALLBACK HotkeyWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
         }
         return 0;
     }
+
+    if (msg == WM_APP_SETTINGS_CHANGED) {
+        LoadSettings();
+        g_currentPenWidth = (g_currentTool == ToolMode::Highlighter) ? g_settings.defaultHighlighterWidth : g_settings.defaultPenWidth;
+        UnregisterHotKey(hwnd, kHotkeyId);
+        RegisterHotKey(hwnd, kHotkeyId, g_settings.hotkeyMod | MOD_NOREPEAT, g_settings.hotkeyKey);
+        UpdateTrayIcon(hwnd);
+        if (g_hOverlayWnd && IsWindow(g_hOverlayWnd)) {
+            int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+            int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+            BuildToolbarLayout(vw, vh);
+            RebuildGridBrush();
+            InvalidateOverlay();
+        }
+        return 0;
+    }
+
+    if (msg == WM_APP_EXIT) {
+        PostQuitMessage(0);
+        return 0;
+    }
+
     return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
 DWORD WINAPI HotkeyThread(LPVOID) {
     CoInitialize(NULL);
 
-    g_wmTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
-
-    WNDCLASSEXW wc = { sizeof(WNDCLASSEXW) };
-    wc.lpfnWndProc = HotkeyWndProc;
-    wc.hInstance = GetModuleHandleW(NULL);
-    wc.lpszClassName = L"WindhawkNativeInkHotkeyReceiver";
-    RegisterClassExW(&wc);
-
-    g_hHotkeyWnd = CreateWindowExW(
-        0, wc.lpszClassName, L"WinDrawTrayReceiver",
-        WS_POPUP, 0, 0, 0, 0,
-        NULL, NULL, wc.hInstance, NULL
-    );
-
-    BOOL bHotOk = RegisterHotKey(g_hHotkeyWnd, kHotkeyId, g_settings.hotkeyMod, g_settings.hotkeyKey);
-    if (!bHotOk) {
-        Wh_Log(L"WinDraw: Warning - RegisterHotKey failed (error %lu)", GetLastError());
-    } else {
-        Wh_Log(L"WinDraw: Hotkey registered successfully");
-    }
-
-    UpdateTrayIcon(g_hHotkeyWnd);
-
-    MSG msg;
-    while (GetMessage(&msg, NULL, 0, 0)) {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
-    }
-
-    RemoveTrayIcon();
-    UnregisterHotKey(g_hHotkeyWnd, kHotkeyId);
-    DestroyWindow(g_hHotkeyWnd);
-    g_hHotkeyWnd = NULL;
-
-    CoUninitialize();
-    return 0;
-}
-
-// ----------------------------------------------------------------------------
-// Windhawk Mod Lifecycle
-// ----------------------------------------------------------------------------
-
-BOOL Wh_ModInit() {
-    Wh_Log(L"WinDraw: Initializing");
-
-    LoadSettings();
-    Wh_Log(L"WinDraw: Settings loaded");
-    LoadPersistentState();
-    Wh_Log(L"WinDraw: Persistent state loaded");
-    g_currentPenWidth = (g_currentTool == ToolMode::Highlighter) ? g_settings.defaultHighlighterWidth : g_settings.defaultPenWidth;
-
-    CoInitialize(NULL);
-
     HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_MULTI_THREADED, &g_pD2DFactory);
     if (FAILED(hr)) {
         Wh_Log(L"Failed to create Direct2D Factory (0x%08X)", hr);
-        return FALSE;
+        CoUninitialize();
+        return 1;
     }
 
     DWriteCreateFactory(
@@ -7729,32 +7734,50 @@ BOOL Wh_ModInit() {
         IID_PPV_ARGS(&g_pWICFactory)
     );
 
-    g_hHotkeyThread = CreateThread(NULL, 0, HotkeyThread, NULL, 0, NULL);
+    g_wmTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
 
-    Wh_Log(L"WinDraw: Ready (All features active. Press Hotkey to annotate)");
-    return TRUE;
-}
+    WNDCLASSEXW wc = { sizeof(WNDCLASSEXW) };
+    wc.lpfnWndProc = HotkeyWndProc;
+    wc.hInstance = GetCurrentModuleHandle();
+    wc.lpszClassName = L"WindhawkNativeInkHotkeyReceiver";
+    RegisterClassExW(&wc);
 
-void Wh_ModUninit() {
-    Wh_Log(L"WinDraw: Unloading");
+    g_hHotkeyWnd = CreateWindowExW(
+        0, wc.lpszClassName, L"WinDrawTrayReceiver",
+        WS_POPUP, 0, 0, 0, 0,
+        NULL, NULL, wc.hInstance, NULL
+    );
 
-    RemoveTrayIcon();
+    BOOL bHotOk = RegisterHotKey(g_hHotkeyWnd, kHotkeyId, g_settings.hotkeyMod | MOD_NOREPEAT, g_settings.hotkeyKey);
+    if (!bHotOk) {
+        Wh_Log(L"WinDraw: Warning - RegisterHotKey failed (error %lu)", GetLastError());
+    } else {
+        Wh_Log(L"WinDraw: Hotkey registered successfully");
+    }
+
+    UpdateTrayIcon(g_hHotkeyWnd);
+
+    MSG msg;
+    while (GetMessageW(&msg, NULL, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
     HideOverlay();
-
-    if (g_hHotkeyWnd) {
-        PostMessage(g_hHotkeyWnd, WM_QUIT, 0, 0);
-    }
-
-    if (g_hHotkeyThread) {
-        WaitForSingleObject(g_hHotkeyThread, 2000);
-        CloseHandle(g_hHotkeyThread);
-        g_hHotkeyThread = NULL;
-    }
+    RemoveTrayIcon();
 
     if (g_hOverlayWnd) {
         DestroyWindow(g_hOverlayWnd);
         g_hOverlayWnd = NULL;
     }
+    if (g_hHotkeyWnd) {
+        UnregisterHotKey(g_hHotkeyWnd, kHotkeyId);
+        DestroyWindow(g_hHotkeyWnd);
+        g_hHotkeyWnd = NULL;
+    }
+
+    UnregisterClassW(L"WindhawkNativeScreenInkOverlay", GetCurrentModuleHandle());
+    UnregisterClassW(L"WindhawkNativeInkHotkeyReceiver", GetCurrentModuleHandle());
 
     // Clean up all strokes and cached geometries before releasing D2D factory
     g_strokes.clear();
@@ -7777,24 +7800,228 @@ void Wh_ModUninit() {
     if (g_pD2DFactory) { g_pD2DFactory->Release(); g_pD2DFactory = nullptr; }
 
     CoUninitialize();
+    return 0;
+}
+
+// ----------------------------------------------------------------------------
+// Windhawk Tool Mod Lifecycle
+// ----------------------------------------------------------------------------
+
+BOOL WhTool_ModInit() {
+    Wh_Log(L"WinDraw Tool: Initializing");
+
+    LoadSettings();
+    Wh_Log(L"WinDraw Tool: Settings loaded");
+    LoadPersistentState();
+    Wh_Log(L"WinDraw Tool: Persistent state loaded");
+    g_currentPenWidth = (g_currentTool == ToolMode::Highlighter) ? g_settings.defaultHighlighterWidth : g_settings.defaultPenWidth;
+
+    g_hHotkeyThread = CreateThread(NULL, 0, HotkeyThread, NULL, 0, &g_hotkeyThreadId);
+    if (!g_hHotkeyThread) {
+        Wh_Log(L"WinDraw Tool: Failed to create HotkeyThread: %lu", GetLastError());
+        return FALSE;
+    }
+
+    Wh_Log(L"WinDraw Tool: Ready (Dedicated tool process active)");
+    return TRUE;
+}
+
+void WhTool_ModSettingsChanged() {
+    Wh_Log(L"WinDraw Tool: Settings Changed");
+    if (g_hHotkeyWnd) {
+        PostMessageW(g_hHotkeyWnd, WM_APP_SETTINGS_CHANGED, 0, 0);
+    }
+}
+
+void WhTool_ModUninit() {
+    Wh_Log(L"WinDraw Tool: Unloading");
+
+    if (g_hHotkeyWnd) {
+        PostMessageW(g_hHotkeyWnd, WM_CANCELMODE, 0, 0);
+        PostMessageW(g_hHotkeyWnd, WM_APP_EXIT, 0, 0);
+    }
+
+    if (g_hotkeyThreadId != 0) {
+        PostThreadMessageW(g_hotkeyThreadId, WM_QUIT, 0, 0);
+    }
+
+    if (g_hHotkeyThread) {
+        WaitForSingleObject(g_hHotkeyThread, INFINITE);
+        CloseHandle(g_hHotkeyThread);
+        g_hHotkeyThread = NULL;
+        g_hotkeyThreadId = 0;
+    }
+}
+
+// clang-format off
+// ============================================================================
+// Tool Mod Boilerplate
+// ============================================================================
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
-    Wh_Log(L"WinDraw: Settings Changed");
-    LoadSettings();
-    g_currentPenWidth = (g_currentTool == ToolMode::Highlighter) ? g_settings.defaultHighlighterWidth : g_settings.defaultPenWidth;
-
-    if (g_hHotkeyWnd) {
-        UnregisterHotKey(g_hHotkeyWnd, kHotkeyId);
-        RegisterHotKey(g_hHotkeyWnd, kHotkeyId, g_settings.hotkeyMod, g_settings.hotkeyKey);
-        PostMessageW(g_hHotkeyWnd, WM_USER_UPDATE_TRAY, 0, 0);
+    if (g_isToolModProcessLauncher) {
+        return;
     }
 
-    if (g_hOverlayWnd && IsWindow(g_hOverlayWnd)) {
-        int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-        int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-        BuildToolbarLayout(vw, vh);
-        RebuildGridBrush();
-        InvalidateOverlay();
-    }
+    WhTool_ModSettingsChanged();
 }
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
+}
+// clang-format on
