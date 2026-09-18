@@ -2,7 +2,7 @@
 // @id              explorer-tags
 // @name            Explorer Tags
 // @description     Colored tags panel at the bottom of File Explorer's navigation pane, plus a Tags submenu in the file context menu
-// @version         0.3.0
+// @version         0.3.1
 // @author          buedgik
 // @github          https://github.com/buedgik
 // @homepage        https://github.com/buedgik/explorer-tags
@@ -58,7 +58,13 @@ lose them, the shortcuts are recreated.
 
 - **Don't put the tags folder in a synced location** (OneDrive, Dropbox, a
   network share). A shortcut that is missing while the folder syncs looks
-  exactly like a shortcut you deleted, and the tag goes with it.
+  exactly like a shortcut you deleted, and the tag goes with it. For the same
+  reason, keep it somewhere quiet: the whole folder tree is watched, so a busy
+  folder means constant rechecking.
+- **Deleting a shortcut removes the tag; renaming or moving one isn't
+  tracked.** A renamed shortcut is left behind as a file the mod no longer
+  knows about, and moving a shortcut from one tag's folder into another's
+  removes the first tag without adding the second.
 - **The tags folder and the registry stay after the mod is disabled**, and so
   do your shortcuts. Nothing is created until you tag something for the first
   time.
@@ -85,7 +91,8 @@ lose them, the shortcuts are recreated.
 
     Changing this rebuilds the shortcuts under the new folder and leaves the
     old one behind. Avoid synced folders (OneDrive, Dropbox, network shares):
-    a shortcut missing mid-sync looks like a tag you removed.
+    a shortcut missing mid-sync looks like a tag you removed. The whole tree
+    under this folder is watched, so keep it out of busy folders.
 - maxRows: 8
   $name: Visible rows
   $description: With more tags than this, the panel scrolls with the mouse wheel
@@ -103,10 +110,13 @@ lose them, the shortcuts are recreated.
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstring>
+#include <cwchar>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include <windhawk_utils.h>
@@ -121,6 +131,9 @@ extern IMAGE_DOS_HEADER __ImageBase;
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
+
+// Reading the settings stops here, and everything else follows this number.
+const int MAX_TAGS = 64;
 
 struct TagDef {
     std::wstring name;
@@ -213,17 +226,14 @@ std::wstring FolderNameFor(const std::wstring& tagName) {
 void LoadSettings() {
     Settings s;
 
-    for (int i = 0; i < 64; i++) {
-        PCWSTR name = Wh_GetStringSetting(L"tags[%d].name", i);
-        PCWSTR color = Wh_GetStringSetting(L"tags[%d].color", i);
-        bool empty = !*name && !*color;
-        std::wstring tagName = Trim(name);
-        std::wstring tagColor = color;
-        Wh_FreeStringSetting(name);
-        Wh_FreeStringSetting(color);
-        if (empty) {
+    for (int i = 0; i < MAX_TAGS; i++) {
+        auto name = WindhawkUtils::StringSetting::make(L"tags[%d].name", i);
+        auto color = WindhawkUtils::StringSetting::make(L"tags[%d].color", i);
+        if (!*name.get() && !*color.get()) {
             break;
         }
+        std::wstring tagName = Trim(name.get());
+        std::wstring tagColor = color.get();
         // The database field separator is the tab character.
         std::replace(tagName.begin(), tagName.end(), L'\t', L' ');
         if (tagName.empty()) {
@@ -246,9 +256,8 @@ void LoadSettings() {
         s.tags.push_back(tag);
     }
 
-    PCWSTR folder = Wh_GetStringSetting(L"folder");
-    std::wstring root = Trim(folder);
-    Wh_FreeStringSetting(folder);
+    auto folder = WindhawkUtils::StringSetting::make(L"folder");
+    std::wstring root = Trim(folder.get());
     if (root.empty()) {
         root = L"%USERPROFILE%\\Tags";
     }
@@ -348,8 +357,16 @@ std::wstring DbPath() {
     if (n == 0 || n > ARRAYSIZE(base)) {
         return L"";
     }
-    SHCreateDirectoryExW(nullptr, base, nullptr);
+    // Not created here: reading a path shouldn't create a folder. The two
+    // functions that write call EnsureParentFolder first.
     return std::wstring(base) + L"\\tags.tsv";
+}
+
+void EnsureParentFolder(const std::wstring& filePath) {
+    size_t slash = filePath.rfind(L'\\');
+    if (slash != std::wstring::npos) {
+        SHCreateDirectoryExW(nullptr, filePath.substr(0, slash).c_str(), nullptr);
+    }
 }
 
 std::wstring FromUtf8(const std::string& s) {
@@ -462,6 +479,7 @@ bool SaveRows(const std::wstring& dbPath, const std::vector<Row>& rows) {
     }
     std::string data = ToUtf8(text);
 
+    EnsureParentFolder(dbPath);
     std::wstring tmp = dbPath + L".tmp";
     HANDLE h = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
                            FILE_ATTRIBUTE_HIDDEN, nullptr);
@@ -667,6 +685,7 @@ void NotifyShell(LONG event, const std::wstring& path) {
 }
 
 bool WriteShortcut(const std::wstring& lnkPath, const std::wstring& target) {
+    bool existed = CheckExists(lnkPath) == Exists::Yes;
     IShellLinkW* link = nullptr;
     if (FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER,
                                 IID_PPV_ARGS(&link)))) {
@@ -686,8 +705,7 @@ bool WriteShortcut(const std::wstring& lnkPath, const std::wstring& target) {
     }
     link->Release();
     if (ok) {
-        NotifyShell(SHCNE_UPDATEITEM, lnkPath);
-        NotifyShell(SHCNE_CREATE, lnkPath);
+        NotifyShell(existed ? SHCNE_UPDATEITEM : SHCNE_CREATE, lnkPath);
     }
     return ok;
 }
@@ -1058,6 +1076,7 @@ void SaveLastRoot(const Settings& s) {
         return;
     }
     std::string data = ToUtf8(s.root);
+    EnsureParentFolder(file);
     std::wstring tmp = file + L".tmp";
     HANDLE h = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, 0, nullptr);
     if (h == INVALID_HANDLE_VALUE) {
@@ -1388,6 +1407,10 @@ DWORD WINAPI WorkerThread(LPVOID) {
 void StartWorker() {
     ResetEvent(g_stopEvent);
     g_workerThread = CreateThread(nullptr, 0, WorkerThread, nullptr, 0, nullptr);
+    if (!g_workerThread) {
+        // Without it there are no counts, no sync and no watcher.
+        Wh_Log(L"Couldn't start the worker thread: %u", GetLastError());
+    }
 }
 
 // No deadline: the DLL can't be unloaded while this thread is still running.
@@ -1452,10 +1475,10 @@ HWND TreeViewOf(Panel* p) {
 std::atomic<int> g_busy;
 
 // Drags in progress over a panel: between DragEnter and DragLeave/Drop, OLE
-// keeps the object and calls it again. If the source dies mid-drag, DragLeave
-// never arrives; so a drag with no DragOver for 10 s counts as dead.
+// keeps the object and calls it again, so the module can't be unloaded while
+// the count is above zero. Unloading releases the mod's own reference first,
+// so a drag whose source died can still end when OLE lets go.
 std::atomic<int> g_drags;
-std::atomic<ULONGLONG> g_lastDragTick;
 
 struct BusyScope {
     BusyScope() { g_busy++; }
@@ -2005,7 +2028,6 @@ class TagDropTarget final : public IDropTarget {
 
     HRESULT STDMETHODCALLTYPE DragOver(DWORD, POINTL pt, DWORD* effect) override {
         BusyScope busy;
-        g_lastDragTick = GetTickCount64();
         if (!m_inDrag) {
             *effect = DROPEFFECT_NONE;
             return S_OK;
@@ -2071,7 +2093,6 @@ class TagDropTarget final : public IDropTarget {
 
    private:
     void BeginDrag() {
-        g_lastDragTick = GetTickCount64();
         if (!m_inDrag) {
             m_inDrag = true;
             g_drags++;
@@ -2598,7 +2619,7 @@ const UINT MENU_ID_SEPARATOR_BEFORE = 0xFD;
 const UINT MENU_ID_SEPARATOR_AFTER = 0xFC;
 const UINT MENU_ID_SEPARATOR_INNER = 0xFB;
 const UINT MENU_ID_NO_TAGS = 0xFA;
-const int MENU_MAX_TAGS = 0xF0;
+
 
 HWND DefViewFor(HWND owner) {
     if (!owner) {
@@ -2779,7 +2800,7 @@ bool AddTagMenu(TagMenu& tm, HMENU menu, HWND defView, const std::vector<std::ws
 
     int dpi = GetDpiForWindow(defView);
     int dotSize = GetSystemMetricsForDpi(SM_CXSMICON, dpi ? dpi : 96);
-    int n = std::min((int)s->tags.size(), MENU_MAX_TAGS);
+    int n = (int)s->tags.size();
     for (int i = 0; i < n; i++) {
         const TagDef& t = s->tags[i];
         tm.tags.push_back(t.name);
@@ -2936,6 +2957,15 @@ BOOL TrackWithTagMenu(HMENU menu, UINT flags, HWND owner, Original original) {
     for (auto& path : paths) {
         path = TargetIfTagShortcutCached(path);
     }
+    // Two shortcuts to the same file, or a file and its shortcut, are one
+    // item here: otherwise the count never reaches the selection size and the
+    // tag never shows as checked.
+    std::unordered_set<std::wstring> seen;
+    paths.erase(std::remove_if(paths.begin(), paths.end(),
+                               [&seen](const std::wstring& path) {
+                                   return !seen.insert(LowerPath(path)).second;
+                               }),
+                paths.end());
     TagMenu tm;
     if (paths.empty() || !AddTagMenu(tm, menu, defView, paths)) {
         return original();
@@ -2989,6 +3019,22 @@ BOOL WINAPI TrackPopupMenu_Hook(HMENU hMenu, UINT uFlags, int x, int y, int nRes
 // Mod lifecycle
 // ---------------------------------------------------------------------------
 
+void CloseHandles() {
+    for (HANDLE* h : {&g_dbMutex, &g_stopEvent, &g_workEvent}) {
+        if (*h) {
+            CloseHandle(*h);
+            *h = nullptr;
+        }
+    }
+}
+
+// Returning FALSE from Wh_ModInit means Wh_ModUninit never runs, and Windhawk
+// retries after every settings change: the handles have to go back here.
+BOOL InitFailed() {
+    CloseHandles();
+    return FALSE;
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
@@ -3007,7 +3053,7 @@ BOOL Wh_ModInit() {
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_workEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!g_dbMutex || !g_stopEvent || !g_workEvent) {
-        return FALSE;
+        return InitFailed();
     }
 
     g_msgAttach = RegisterWindowMessageW(L"WhExplorerTags_Attach");
@@ -3022,20 +3068,15 @@ BOOL Wh_ModInit() {
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.lpszClassName = PANEL_CLASS;
     if (!RegisterClassW(&wc)) {
-        // Class from a previous load that didn't unregister: it points to
-        // the old DLL's procedure.
-        UnregisterClassW(PANEL_CLASS, THIS_MODULE);
-        if (!RegisterClassW(&wc)) {
-            Wh_Log(L"RegisterClass failed: %u", GetLastError());
-            return FALSE;
-        }
+        Wh_Log(L"RegisterClass failed: %u", GetLastError());
+        return InitFailed();
     }
 
     Gdiplus::GdiplusStartupInput gdiplusInput;
     if (Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusInput, nullptr) != Gdiplus::Ok) {
         g_gdiplusToken = 0;
         UnregisterClassW(PANEL_CLASS, THIS_MODULE);
-        return FALSE;
+        return InitFailed();
     }
 
     if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
@@ -3044,7 +3085,7 @@ BOOL Wh_ModInit() {
         Gdiplus::GdiplusShutdown(g_gdiplusToken);
         g_gdiplusToken = 0;
         UnregisterClassW(PANEL_CLASS, THIS_MODULE);
-        return FALSE;
+        return InitFailed();
     }
     // The panel works without these two; only the context menu is lost.
     if (!WindhawkUtils::SetFunctionHook(TrackPopupMenuEx, TrackPopupMenuEx_Hook,
@@ -3092,19 +3133,46 @@ void Wh_ModBeforeUninit() {
     }
     ReleaseSRWLockShared(&g_panelsLock);
 
+    // Any popup menu in this process holds a hook call open, including ones
+    // the mod never touched (taskbar, tray, desktop), because the count is
+    // taken before the "is this a DefView menu" check. Ending menu mode in
+    // this process keeps unloading from waiting on a menu the user forgot
+    // open. Only this process, and only while unloading.
+    EnumWindows(
+        [](HWND hwnd, LPARAM) -> BOOL {
+            DWORD pid = 0;
+            GetWindowThreadProcessId(hwnd, &pid);
+            if (pid == GetCurrentProcessId()) {
+                PostMessageW(hwnd, WM_CANCELMODE, 0, 0);
+            }
+            return TRUE;
+        },
+        0);
+
+    // Detach FIRST, then wait. Detach revokes and releases the mod's own
+    // reference on each drop target, so when OLE lets go of its reference the
+    // object is destroyed and its destructor ends the drag. Waiting first
+    // would hang forever in exactly the case being guarded against: a drag
+    // whose source died never gets a DragLeave, and the mod's own reference
+    // would keep the count above zero.
+    //
+    // The reorder is safe because Detach runs on the window's own thread via
+    // SendMessage, so it can't interleave with an IDropTarget call, and the
+    // code already survives the panel disappearing under it (FindPanel then
+    // returns null and the drop methods do nothing).
+    for (HWND tree : trees) {
+        if (IsWindow(tree)) {
+            SendMessageW(tree, g_msgDetach, 0, 0);
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(tree, TreeSubclassProc);
+        }
+    }
+
     // No deadline and no pinning: the module must be unloadable with a single
     // FreeLibrary once Wh_ModUninit returns. OLE holds a vtable pointer into
     // this image while a drag is in flight, and a thread can sit inside the
     // menu hook, so the only correct answer is to wait for both to finish.
     while (g_busy > 0 || g_drags > 0) {
         Sleep(20);
-    }
-
-    for (HWND tree : trees) {
-        if (IsWindow(tree)) {
-            SendMessageW(tree, g_msgDetach, 0, 0);
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(tree, TreeSubclassProc);
-        }
     }
 
     StopWorker();
@@ -3121,15 +3189,8 @@ void Wh_ModUninit() {
     UnregisterClassW(PANEL_CLASS, THIS_MODULE);
     if (g_gdiplusToken) {
         Gdiplus::GdiplusShutdown(g_gdiplusToken);
+        g_gdiplusToken = 0;
     }
-    if (g_dbMutex) {
-        CloseHandle(g_dbMutex);
-    }
-    if (g_stopEvent) {
-        CloseHandle(g_stopEvent);
-    }
-    if (g_workEvent) {
-        CloseHandle(g_workEvent);
-    }
+    CloseHandles();
     Wh_Log(L"<");
 }
