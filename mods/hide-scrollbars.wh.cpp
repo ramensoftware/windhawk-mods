@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              hide-scrollbars
 // @name            Hide Scrollbars
-// @description     Hide vertical/horizontal scrollbars in selected processes (default: File Explorer) and reclaim the gutter space
-// @version         1.0.0
+// @description     Hides File Explorer's scrollbars and reclaims the gutter space
+// @version         1.0.1
 // @author          AmazingBodilyFluids
 // @github          https://github.com/AmazingBodilyFluids
 // @include         explorer.exe
