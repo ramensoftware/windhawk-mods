@@ -12,7 +12,7 @@
 // @include         StartMenuExperienceHost.exe
 // @include         RuntimeBroker.exe
 // @architecture    x86-64
-// @compilerOptions -D_WIN32_WINNT=0x0A00 -DWINVER=0x0A00 -luser32 -lgdi32
+// @compilerOptions -lole32 -lgdi32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -1206,4 +1206,3 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     LoadSettings();
 }
-
