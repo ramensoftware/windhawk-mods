@@ -14912,7 +14912,7 @@
           583
         ],
         "ratingUsers": 716,
-        "updated": 1781380705000,
+        "updated": 1789692337000,
         "users": 19944
       },
       "featured": true,
@@ -14933,7 +14933,7 @@
         ],
         "name": "Vertical Taskbar for Windows 11",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.3.13"
+        "version": "1.3.14"
       }
     },
     "taskbar-volume-control": {
@@ -15473,6 +15473,36 @@
         ],
         "name": "Touhou Keyboard Binds",
         "version": "1.0.0"
+      }
+    },
+    "tourne-table-desktop-audio-visualizer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1789692389000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "updated": 1789692389000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "USER-TOURNE",
+        "compilerOptions": "-ldxgi -ld2d1 -ld3d11 -ldcomp -ldwmapi -ldwrite -lgdi32 -lshcore -lshlwapi -lole32 -lshell32 -lksuser -lwindowscodecs -lruntimeobject -lwindowsapp -luuid -luser32 -ladvapi32",
+        "description": "A real-time audio visualizer for the Windows desktop. Advanced settings without sacrificing resource efficiency. Near-headless rendering with CPU optimization for audio capture.",
+        "donateUrl": "https://ko-fi.com/tourne",
+        "github": "https://github.com/USER-TOURNE",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Tourne'Table [Audio Visualizer]",
+        "version": "1.2.0"
       }
     },
     "translucent-flyouts-controller": {

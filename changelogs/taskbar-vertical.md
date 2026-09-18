@@ -1,3 +1,7 @@
+## 1.3.14 ([Sep 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/38468ddcc6fd3b16536af293da0a0a6cfa4ddbf2/mods/taskbar-vertical.wh.cpp))
+
+* Fixed misaligned task item labels in the latest Windows version.
+
 ## 1.3.13 ([Jun 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/79aee20d8e1ca2e951026060ecde060242d41ff0/mods/taskbar-vertical.wh.cpp))
 
 * Fixed ARM64 support in recent Windows 11 versions.

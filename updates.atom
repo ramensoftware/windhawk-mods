@@ -2,12 +2,281 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-18T00:36:27.000Z</updated>
+    <updated>2026-09-18T00:46:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Tourne'Table [Audio Visualizer] 1.2.0]]></title>
+        <id>https://windhawk.net/mods/tourne-table-desktop-audio-visualizer#9485e30106c141ddc8472442a43c1c740d7ce4b3</id>
+        <link href="https://windhawk.net/mods/tourne-table-desktop-audio-visualizer"/>
+        <updated>2026-09-18T00:46:29.000Z</updated>
+        <content type="html"><![CDATA[<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/BANNER/tourne-header.png" alt="Tourne'Table - a ghost in your desktop's shell" /></p>
+<h1 id="tournetableaudiovisualizer"><code>Tourne'Table</code> <strong>[Audio Visualizer]</strong></h1>
+<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/GIF/11.gif" alt="Tourne'Table Audio Visualizer" /></p>
+<p><em>The Oscilloscope shape running live audio: bottom-left placement, blurred panel, single-pixel border.</em></p>
+<blockquote>
+  <p><strong>A real-time audio visualizer that lives on your Windows desktop.</strong>
+  Built on the foundation of Salyts' Desktop Audio Visualizer, rebuilt around performance.</p>
+</blockquote>
+<p>Play music. Bars dance on your wallpaper. That's the whole idea.</p>
+<p>It listens to <strong>whatever your PC is already playing</strong> (Spotify, YouTube, a game, a call) and draws it behind your desktop icons. No virtual audio cable, no drivers, nothing to configure. It just picks up your system audio.</p>
+<p>It is built to be cheap to run. The render thread wakes only at the frame rate you ask for, the wallpaper blur is computed once instead of every frame, and the drawing surface is sized to the widget rather than the whole desktop, so at a 144 FPS target the visualizer costs about <strong>a third of one CPU core</strong> and <strong>one degree</strong> of CPU package temperature while it plays, and nothing at all while it doesn't.</p>
+<h2 id="aboutthisproject">ABOUT THIS PROJECT</h2>
+<p>Built with an emphasis on lower resource consumption, more efficient rendering, better frame pacing, expanded visualization options, dynamic album-art integration, native Windows media info, deeper customization, and power-conscious idle behavior.</p>
+<p>The goal is simple:</p>
+<blockquote>
+  <p><strong>Make the desktop move with the music, without making the CPU move mountains to do it.</strong></p>
+</blockquote>
+<h2 id="runsasitsownprocess">Runs as its own process</h2>
+<p>Tourne'Table doesn't live inside <code>explorer.exe</code>. It runs as its own dedicated process using Windhawk's tool-mod pattern, so you'll see it as its own entry in Task Manager, separate from the shell. Restarting <code>explorer.exe</code> doesn't kill it. It just reattaches behind the desktop icons once the shell is back. Requires a Windhawk build with tool-mod support (1.7.3+, including the 2.0 alpha line).</p>
+<hr />
+<h2 id="performanceataglance">◈ PERFORMANCE AT A GLANCE</h2>
+<p>Measured on an <strong>Intel Core Ultra 265KF</strong> (8 P-cores plus 12 E-cores), running a 120-bar oscilloscope at a 144 FPS target with background blur on, and with media controls, the peak-frequency readout, peak hold and beat flash all enabled.</p>
+<p>Every figure below is the <strong>change against an idle baseline</strong>, captured back to back in the same session with the same music playing in both, so what you are reading is the cost of the mod rather than whatever else the machine happened to be doing.</p>
+<p>| Metric | Cost of running it |
+|:--|--:|
+| Total CPU usage | <strong>+1.6 percentage points</strong> <em>(about 0.3 of one core)</em> |
+| Peak single-thread | <strong>+10.1 points</strong> |
+| CPU package power | <strong>+7.2 W</strong> |
+| CPU package temperature | <strong>+1.0 °C</strong> |</p>
+<p>Medians across 543 samples with it running and 384 without, at 1.25 s intervals. Medians rather than averages because both captures contained brief unrelated background spikes, and a median is not moved by them.</p>
+<p>When audio stops, rendering stops, not "slows down," <em>stops</em>.</p>
+<p>Full methodology, raw traces and caveats live in <a href="https://github.com/USER-TOURNE/TOURNE-TABLE">the project repo</a> rather than on this page.</p>
+<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/GIF/10.gif" alt="Tourne'Table Audio Visualizer" /></p>
+<p><em>Bottom-left placement against a dark wallpaper, with the Now Playing label sitting above the panel.</em></p>
+<hr />
+<h2 id="visualstyles">◆ VISUAL STYLES</h2>
+<h3 id="8shapes">8 Shapes</h3>
+<p>| Shape | What it does |
+|:--|:--|
+| <strong>Stereo</strong> | Classic equalizer bars. Low notes left, high notes right. |
+| <strong>Mountain</strong> | Peaks in the middle, tapers toward both edges. |
+| <strong>Mirror</strong> | The opposite, grows from the outside edges inward. |
+| <strong>Wave</strong> | Normal bars with a slow ripple rolling through them. |
+| <strong>Breathe</strong> | A gentle swell that rises with the music instead of jumping. |
+| <strong>Dots</strong> | Stacked dots instead of solid bars, old LED-meter look. |
+| <strong>Radial</strong> | Bars shoot outward from a center point, like a sunburst. |
+| <strong>Oscilloscope</strong> | A single line tracing the actual sound wave. |</p>
+<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/GIF/8.gif" alt="Oscilloscope closeup" /></p>
+<p><em>Closeup: the waveform drawn as one continuous line, with the Now Playing label and media buttons alongside.</em></p>
+<h3 id="9colormodes">9 Color Modes</h3>
+<p>| Mode | What it does |
+|:--|:--|
+| <strong>Solid</strong> | One flat color. |
+| <strong>Gradient</strong> | Fades between two colors across the bars. |
+| <strong>Reactive Gradient</strong> | Shifts toward the second color as things get <em>louder</em>. |
+| <strong>Windows Accent</strong> | Matches your Windows accent color, updating instantly. |
+| <strong>Album Art</strong> | Pulls the dominant color from the playing track's cover. |
+| <strong>Dynamic Album</strong> | Gradient between the cover art's two strongest colors. |
+| <strong>Acrylic</strong> | Grows more opaque the louder it gets, invisible in silence. |
+| <strong>Rainbow Cycle</strong> | Continuously cycling hue, adjustable speed. |
+| <strong>Tourne</strong> | Built-in teal → red gradient from my personal palette. |</p>
+<h3 id="plus">Plus</h3>
+<ul>
+<li><strong>2 orientations</strong>: bars grow vertically or horizontally</li>
+<li><strong>3 anchors</strong>: grow from the Bottom, the Top, or <strong>both directions from the Middle</strong></li>
+<li><strong>Peak Hold Caps</strong>: thin markers hang at each bar's recent peak and slowly fall <em>(classic hardware EQ)</em></li>
+<li><strong>Beat Flash</strong>: bars brighten on detected bass hits, on top of any color mode</li>
+<li><strong>Multiband Oscilloscope</strong>: the waveform tints toward whichever part of the spectrum is loudest</li>
+</ul>
+<hr />
+<h2 id="nowplayingdisplay">♪ NOW PLAYING DISPLAY</h2>
+<p>Shows the current <strong>artist and title</strong> above the visualizer, pulled from the same Windows media session that powers your volume popup. Works with Spotify, browsers, and most media players.</p>
+<p>Fades in on track change, fades out after a configurable delay. Custom color, font family and size.</p>
+<hr />
+<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/GIF/7.gif" alt="Oscilloscope closeup" /></p>
+<p><em>A narrower panel. The trace scales to whatever width the bar settings give it.</em></p>
+<h2 id="thepalette">◐ THE PALETTE</h2>
+<p>This project follows my personal theming palette: reflected in the repo screenshots. It can be changed to any hex / RGB / RGBA value you want.</p>
+<p>| Name | Hex | RGB |
+|:--|:--|:--|
+| Green | <code>#15ffa2</code> | <code>21, 255, 162</code> |
+| Red | <code>#ff8f8f</code> | <code>255, 143, 143</code> |
+| Pale Green | <code>#64aa89</code> | <code>100, 170, 137</code> |
+| Alt Pale Green | <code>#6ba6a0</code> | <code>107, 166, 160</code> |
+| Pale Red | <code>#a95d5d</code> | <code>169, 93, 93</code> |
+| Dark Teal <em>(background)</em> | <code>#121c21</code> | <code>18, 28, 33</code> |</p>
+<p>The built-in <strong>Tourne</strong> color mode is drawn from these.</p>
+<hr />
+<h1 id="everysettingexplained">✦ EVERY SETTING, EXPLAINED</h1>
+<p><strong>You don't need any of this to use the mod.</strong> The defaults work. This is for when you want to tweak something and you're wondering what a word means.</p>
+<h2 id="appearance">Appearance</h2>
+<p><strong>Shape</strong>: Which of the 8 styles above to draw.</p>
+<p><strong>Orientation</strong>: <em>Horizontal</em> = a row of bars growing up and down. <em>Vertical</em> = a column growing left and right.</p>
+<p><strong>Bar Count</strong>: How many bars. More = finer detail, wider visualizer. Range <strong>1-2048</strong> (enough to span a 4K or ultrawide screen).</p>
+<p><strong>Bar Width</strong>: How fat each bar is, in pixels.</p>
+<p><strong>Bar Gap</strong>: Space between bars, in pixels. Set to <code>0</code> and they touch.</p>
+<p><strong>Bar Max Size</strong>: How tall a bar gets at full volume. This is the overall height of the visualizer.</p>
+<p><strong>Bar Idle Size</strong>: How tall bars sit in silence. <code>0</code> makes them vanish completely; a few pixels leaves a thin resting line.</p>
+<p><strong>Bar Corner Radius</strong>: How rounded the bar corners are. One number rounds all four equally, or give four numbers separated by spaces for individual control: <code>top-left top-right bottom-right bottom-left</code>. Example: <code>5 5 0 0</code> rounds only the top.</p>
+<p><strong>Color Mode</strong>: Which of the 9 coloring styles above to use.</p>
+<p><strong>Color</strong>: The color used in Solid mode. Format is <code>#AARRGGBB</code> or <code>#RRGGBB</code>: that's <strong>A</strong>lpha (transparency), then <strong>R</strong>ed, <strong>G</strong>reen, <strong>B</strong>lue in hex. Lower the first two digits to make it see-through.</p>
+<p><strong>Gradient Color 1 / 2</strong>: Start and end colors for the gradient modes.</p>
+<p><strong>Sensitivity</strong>: How hard the bars react. Too low and quiet music barely moves them; too high and everything slams to max. Range 0-300. Turn it down for bass-heavy tracks, up for quiet recordings.</p>
+<p><strong>EQ Preset</strong>: Which frequencies get emphasized <em>visually</em>. Doesn't touch your actual audio.
+<code>Default</code> no adjustment · <code>Bass</code> boosts lows · <code>Rock</code> boosts mids and highs · <code>Pop</code> heavy on highs · <code>Jazz</code> warmer, gentler highs · <code>Electronic</code> boosts bass and treble, scoops the middle.</p>
+<p><strong>FFT Size</strong>: How finely sound gets analyzed. An FFT is the math that splits audio into separate frequencies: think of it as sorting sound into buckets by pitch. More buckets = finer detail, slightly more CPU.
+<code>1024</code> fastest, plenty for most · <code>2048</code> / <code>4096</code> noticeably crisper · <code>8192</code> maximum detail.</p>
+<blockquote>
+  <p><strong>Note. This is an admittedly 'beta' implementation for now.</strong> Everything up to <code>8192</code> runs near-flawlessly with almost no overhead, <em>with the caveat that you're using anything other than the Oscilloscope shape.</em></p>
+  <p><strong>One more note:</strong> the higher the FFT Size, the more accurate the Sensitivity slider becomes for your specific audio setup. The correlation generally runs: <strong>as FFT Size goes up, your Sensitivity will need to go up too.</strong> For now that means fine-tuning Sensitivity per EQ Preset <em>and</em> per FFT Size, for your particular placement, size and personal adjustments.</p>
+</blockquote>
+<p><strong>Frequency Scale</strong>: How the frequency range spreads across the bars. This matters more than it sounds.</p>
+<ul>
+<li><strong>Log</strong>: the natural-feeling default. Gives bass and treble roughly equal visual space, matching how humans hear pitch.</li>
+<li><strong>Linear</strong>: spreads by raw Hz. Since most musical energy lives low, this crams all the action into a sliver on the left and leaves the right mostly dead. Technically accurate, visually dull.</li>
+<li><strong>Mel</strong>: uses the <em>mel scale</em>, built from research on how people actually perceive pitch. Like Log, tuned to human hearing.</li>
+</ul>
+<p><strong>Peak Frequency Readout</strong>: Shows the loudest note as a live number, e.g. <code>1.2 kHz</code>.</p>
+<p><strong>Peak Readout Position</strong>: Where that number sits. Horizontal: Left / Center / Right. Vertical: Above / Top / Middle / Bottom / Below.</p>
+<blockquote>
+  <p><strong>Above</strong> and <strong>Below</strong> place it fully <em>outside</em> the bars so it never overlaps the visualization.</p>
+</blockquote>
+<p><strong>Multiband Oscilloscope Coloring</strong>: Only affects the Oscilloscope shape. The line tints toward whatever part of the spectrum is loudest: warm for bass, green for mids, blue for treble. Overrides Color Mode for that shape.</p>
+<p><strong>Anchor</strong>: Which edge bars grow from. <code>Bottom</code> rise upward <em>(classic)</em> · <code>Top</code> hang downward · <code>Middle</code> grow <strong>both directions</strong> from a center line.</p>
+<p><strong>Peak Hold Caps</strong>: Leaves a thin marker floating at each bar's recent peak, which slowly drifts down.</p>
+<p><strong>Beat Flash</strong> + <strong>Intensity</strong>: Flashes bars brighter on bass hits. Intensity controls how hard.</p>
+<p><strong>Rainbow Cycle Speed</strong>: How fast the rainbow rotates. Rainbow mode only.</p>
+<p><strong>Now Playing Text</strong>: Toggles the artist/title display.</p>
+<p><strong>Now Playing Color / Font / Font Size</strong>: Styling for that text. The font must be <strong>installed on your system</strong>: type the exact family name. Windows silently falls back to a default on a typo rather than erroring, so double-check spelling if nothing changes.</p>
+<blockquote>
+  <p>The Peak Frequency Readout shares these same font settings.</p>
+</blockquote>
+<p><strong>Now Playing Display Seconds</strong>: How long the text stays up after a track change before fading.</p>
+<h2 id="position">Position</h2>
+<p><strong>Horizontal Position</strong>: Left-to-right placement as a percentage. <code>0</code> hard left, <code>50</code> centered, <code>100</code> hard right.</p>
+<p><strong>Vertical Position</strong>: Top-to-bottom, same idea. <code>0</code> top, <code>100</code> bottom.</p>
+<p><strong>Monitor</strong>: Which screen to draw on. <code>1</code> is your first monitor.</p>
+<h2 id="background">Background</h2>
+<p><strong>Enabled</strong>: Draws a panel behind the bars. Turn off for bars floating directly on the wallpaper.</p>
+<p><strong>Color</strong>: Panel color in <code>#AARRGGBB</code>. The alpha controls transparency.</p>
+<p><strong>Padding</strong>: Breathing room between the bars and the panel edge.</p>
+<p><strong>Corner Radius</strong>: How rounded the panel corners are. Same one-or-four-value rules as bar radius.</p>
+<p><strong>Blur</strong>: Frosted-glass blur of your wallpaper behind the panel. <code>0</code> disables.</p>
+<blockquote>
+  <p>This used to be the single most expensive setting in the mod. It's now computed once and cached, so it's essentially free per frame.</p>
+</blockquote>
+<p><strong>Border Size / Border Color</strong>: A thin outline around the panel. <code>0</code> for none.</p>
+<h2 id="performance">Performance</h2>
+<p><strong>Target FPS</strong>: How many times per second it redraws. Higher = smoother, more CPU. Little point exceeding your monitor's refresh rate.</p>
+<p><strong>Pause On Fullscreen</strong>: Stops completely when a fullscreen app runs. Detects both true fullscreen <em>(games)</em> and borderless windows. Since the visualizer lives on the desktop it's invisible anyway. This just stops it burning power. Resumes automatically.</p>
+<p><strong>Pause When Silent (seconds)</strong>: After this long without audio, drops to a trickle instead of full speed. <code>0</code> disables.</p>
+<p><strong>Auto-Hide When Idle</strong> + <strong>Delay</strong>: Fades out entirely after prolonged silence. Once fully faded it <strong>stops rendering completely</strong>, not just invisible, genuinely doing nothing until audio returns.</p>
+<p><strong>Pause When Covered</strong>: Stops rendering <em>and</em> audio capture while fully hidden behind another window.</p>
+<blockquote>
+  <p><strong>Off by default.</strong> Reliably detecting "am I covered?" on Windows 11 is genuinely tricky: the shell is full of invisible windows that report themselves as visible. The check is deliberately conservative (only a fully-covering, real application window counts), but if the visualizer ever vanishes when it shouldn't, this is the switch to flip.</p>
+</blockquote>
+<hr />
+<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/GIF/4.gif" alt="Oscilloscope closeup" /></p>
+<p><em>The same shape in a warm colour: the Oscilloscope picks up Color Mode like every other shape.</em></p>
+<h1 id="wheretheefficiencycomesfrom">▲ WHERE THE EFFICIENCY COMES FROM</h1>
+<p>In rough order of measured impact.</p>
+<h3 id="1precisionframepacingthebiggestsinglewin">1. Precision frame pacing: the biggest single win</h3>
+<p>The obvious way to pace a desktop widget is <code>DwmFlush()</code>, which blocks until the monitor's next refresh. That wakes the render thread <strong>on every vertical blank, forever</strong> (60, 144, 240+ times a second) regardless of the target FPS, whether anything needs redrawing, or whether the visualizer is even visible.</p>
+<p>This barely registers as CPU% in Task Manager, because the thread is blocked, not spinning. But every wake-up drags a core out of deep idle. Do that continuously and the core never settles into its efficient sleep states, which reads as a small, permanent bump in package power and temperature. The classic "low usage, still runs warm" signature.</p>
+<blockquote>
+  <p><strong>Note:</strong> this becomes exponentially more noticeable on AMD architecture.</p>
+  <p><strong>Note:</strong> also exponentially more noticeable if you have <strong>C-States disabled</strong> in your BIOS or elsewhere. Shoutout to Process Lasso, Core Director, Park Control and HWiNFO64 for helping me work out why all my E-cores were sitting at 65-70 °C when they were supposed to be idle.</p>
+</blockquote>
+<p><strong>Instead:</strong> a high-resolution waitable timer firing only at the configured rate. Plain <code>Sleep()</code> isn't good enough. It's quantized to ~15.6 ms, which would turn a 60 FPS target into stuttery 30-40 FPS.</p>
+<h3 id="2prerenderedbackgroundblur">2. Pre-rendered background blur</h3>
+<p>A Gaussian blur is a full-image convolution: the most expensive thing Direct2D does in this scene. Recomputing it every frame is pure waste, because its input (your wallpaper) never changes.</p>
+<p><strong>Instead:</strong> it is computed exactly once into a cached bitmap, and each frame just copies that. The cache covers only the widget's bounding box, which is <strong>tens of KB of video memory rather than several MB</strong>. It re-bakes automatically if the widget moves or resizes.</p>
+<h3 id="3widgetsizedrendersurface">3. Widget-sized render surface</h3>
+<p>The visualizer occupies a thin strip, so a desktop-spanning render surface would clear and present millions of untouched pixels every frame, and park two full-desktop buffers in VRAM.</p>
+<p><strong>Instead:</strong> the surface is sized to the widget's bounding box, and the composition layer is offset to position it. That is roughly an order of magnitude less per-frame pixel work and VRAM.</p>
+<h3 id="4cachedgeometry">4. Cached geometry</h3>
+<p>Building the background panel and border means allocating a path geometry and constructing four lines and four arcs by hand. It is rebuilt only when size, padding, radii or border width actually change (in normal use, almost never) rather than every frame.</p>
+<h3 id="5cachedmonitorlookup">5. Cached monitor lookup</h3>
+<p><code>EnumDisplayMonitors()</code> is a real round-trip through the display driver stack. The monitor is resolved once and cached, refreshed on display change, instead of being looked up per frame.</p>
+<h3 id="6reducedframelatency">6. Reduced frame latency</h3>
+<p>DXGI queues up to three frames ahead by default. For a passive widget that's pure latency and power draw with no upside. Capped at <strong>1</strong>.</p>
+<h3 id="7genuineidleshutdown">7. Genuine idle shutdown</h3>
+<p><strong>Auto-Hide</strong> now stops rendering completely once faded: presents one blank frame, then exits the render path entirely. <strong>Pause When Covered</strong> stops rendering and capture while hidden, checked once per second rather than per frame.</p>
+<hr />
+<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/GIF/2.gif" alt="Tourne'Table Audio Visualizer" /></p>
+<p><em>The full-width strip in a red colour mode.</em></p>
+<h1 id="onthenumbers">▦ ON THE NUMBERS</h1>
+<p>The figures above come from HWiNFO64 sensor logging: two captures taken back to back in one session, one with the mod running and one with it disabled, with the same music playing throughout both so the only thing that changed was the mod itself. 543 samples running, 384 disabled, at 1.25 s intervals.</p>
+<p>The full write-up (raw tables, the method, run-to-run variance, and an honest account of where the measurements fall short) is in <a href="https://github.com/USER-TOURNE/TOURNE-TABLE">the project repo</a>. It does not belong on a catalog page, so it is not reproduced here.</p>
+<p>The caveats worth stating up front: <strong>HWiNFO measures the whole machine, not this process alone.</strong> A number quoted as the mod's cost therefore includes the work the mod causes elsewhere, in the compositor and the graphics driver, not only the time spent in its own threads. That makes it larger than a per-process trace would show, and it is the honest figure to quote, because it is what the machine actually pays. Both captures also contained short unrelated background spikes, which is why the numbers above are medians rather than averages.</p>
+<hr />
+<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/GIF/3.gif" alt="Tourne'Table Audio Visualizer" /></p>
+<p><em>Near-silence: the trace flattens out. When audio stops entirely, the render loop stops with it.</em></p>
+<h2 id="credits">♥ CREDITS</h2>
+<p><strong><a href="https://github.com/USER-TOURNE">USER-TOURNE</a></strong>: Author and maintainer: performance work, new features, benchmarking and documentation.</p>
+<p><strong><a href="https://github.com/Salyts">Salyts</a></strong>: Original author of Desktop Audio Visualizer. This project exists because the foundation was good enough to be worth optimizing. Author of his own mod and repo; and a base for this one.</p>
+<p><strong><a href="https://github.com/GR0UD">GR0UD</a></strong>: Audio visualizer code the original was adapted from. Author of his own work; and the base for Salyts.</p>
+<h3 id="acoincidenceworthacknowledging">A coincidence worth acknowledging</h3>
+<p>While I was midway through my initial testing, <strong>NeiZ</strong> (author/maintainer, with <strong>SuperSmile123</strong> contributing) released <a href="https://github.com/ramensoftware/windhawk-mods/commit/e01d0d0dbd6204804235831fd7f68821e4614028">Desktop Audio Visualizer Plus</a> (<code>neiz-supersmile-audio-visualizer</code>). I had planned to publish my own commit that same night: holy coincidence.</p>
+<p>His release spurred another round of testing on my end, and I've since gone through roughly twelve more iterations. I didn't want to ship something that essentially achieved what I was already going for, especially if they'd figuratively led me out to pasture to put a bullet in me: aha.</p>
+<p>To be explicit about attribution: <strong>I did not borrow from or reference NeiZ or SuperSmile123's work at any point</strong>, other than benchmarking theirs for efficiency to decide whether continuing development was worth it. Thanks to them and their contributors regardless.</p>
+<hr />
+<h2 id="license">◘ LICENSE</h2>
+<p>Released under the <strong>MIT License</strong>.</p>
+<pre><code>MIT License
+
+Copyright (c) 2026 USER-TOURNE
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+</code></pre>
+<h3 id="inthespiritofthewtfpl">In the spirit of the WTFPL</h3>
+<blockquote>
+  <p><strong>0. You just do what the fuck you want to.</strong></p>
+  <p>Take it. Fork it. Gut it. Rewrite the parts I got wrong. Ship it. Sell it.
+  Learn something from it and never speak to me again.</p>
+  <p>The only thing MIT actually asks is that the copyright line rides along: 
+  keep the notice, and we're square.</p>
+  <p><em>(I went with MIT over the real WTFPL for one boring reason: this thing
+runs a DLL loaded by Windhawk, and MIT comes with a warranty disclaimer.
+The WTFPL does not. Same energy, fewer ways for my life to get complicated.)</em></p>
+</blockquote>
+<h3 id="thirdpartynotices">Third-party notices</h3>
+<p>This project builds on upstream work by <strong>Salyts</strong> and <strong>GR0UD</strong>. Their original
+code carries its own license terms: if you redistribute this, carry their notices
+along with mine.</p>
+<hr />
+<h2 id="support">❖ SUPPORT</h2>
+<p>If this saved you some degrees, some watts, or just made your desktop nicer to
+look at, you can throw something in the hat. Entirely optional, genuinely appreciated.</p>
+<p><strong><a href="https://ko-fi.com/tourne">ko-fi.com/tourne</a></strong></p>]]></content>
+        <author>
+            <name>USER-TOURNE</name>
+            <uri>https://github.com/USER-TOURNE</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.3.14]]></title>
+        <id>https://windhawk.net/mods/taskbar-vertical#38468ddcc6fd3b16536af293da0a0a6cfa4ddbf2</id>
+        <link href="https://windhawk.net/mods/taskbar-vertical"/>
+        <updated>2026-09-18T00:45:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed misaligned task item labels in the latest Windows version.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar on top for Windows 11 1.1.8]]></title>
         <id>https://windhawk.net/mods/taskbar-on-top#a6ca3ccb45e4efc76e546d1704ef2fbe6c7f1370</id>
@@ -583,214 +852,6 @@ tool</a>.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Island Media Controls 0.10.55]]></title>
-        <id>https://windhawk.net/mods/island-media-controls#34c05c49402b8bc15fd2bc7241fd1231f0f6435c</id>
-        <link href="https://windhawk.net/mods/island-media-controls"/>
-        <updated>2026-09-14T18:18:55.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Adds the new unified display mode setting for fullsize, compact, and side expansion layouts.</li>
-<li>Refreshes the preview gallery with dark, light, compact, and fullsize layout previews.</li>
-<li>Reorganizes settings so core mode/material/position/artwork controls are easier to find.</li>
-<li>Keeps the elastic animation effect enabled by default while exposing it as a clearer toggle.</li>
-<li>Preserves legacy setting fallback for existing users.</li>
-</ul>]]></content>
-        <author>
-            <name>usho</name>
-            <uri>https://github.com/usho-lear</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mouse Trail 3.4.1]]></title>
-        <id>https://windhawk.net/mods/mouse-trail#661af3e4a08ace7fd48652ca56e1a7d7df712da4</id>
-        <link href="https://windhawk.net/mods/mouse-trail"/>
-        <updated>2026-09-14T17:27:35.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="mousetrail">Mouse Trail</h1>
-<p>A highly customizable mouse cursor trail with native D3D11 rendering, 23 color modes, 10 trail shapes, 2.5D particle effects, advanced particle physics system, centripetal vortex, music reactive framework, click effects, and cursor color extraction. DirectComposition hardware accelerated, runs as a dedicated process with low CPU usage when idle.</p>
-<h2 id="demos">Demos</h2>
-<p><img src="https://raw.githubusercontent.com/MCheng404/windhawk-mods/mouse-trail-assets/mods/mouse-trail-assets/demo1.gif" alt="Trail & Particles" /></p>
-<p><img src="https://raw.githubusercontent.com/MCheng404/windhawk-mods/mouse-trail-assets/mods/mouse-trail-assets/demo2.gif" alt="Centripetal Vortex" /></p>
-<p><img src="https://raw.githubusercontent.com/MCheng404/windhawk-mods/mouse-trail-assets/mods/mouse-trail-assets/demo3.gif" alt="Particle Physics" /></p>
-<hr />
-<h3 id="renderingarchitecture">Rendering Architecture</h3>
-<ul>
-<li><strong>Native D3D11 Rendering:</strong> Custom HLSL vertex/pixel shaders with instanced particle rendering. No D2D1 dependency for core trail/particle/shape rendering.</li>
-<li><strong>2.5D Particle Effects:</strong> Particles have per-instance z-depth with perspective projection and simple lighting. Particles scale with depth (near = larger, far = smaller) for a 3D feel.</li>
-<li><strong>DXGI Flip Swap Chain:</strong> Premultiplied alpha for tear-free composition with DirectComposition. HDR auto-detection with R16G16B16A16_FLOAT fallback.</li>
-<li><strong>Dual-Thread Design:</strong> UI thread handles window/message pump, render thread handles all D3D11/DComp work — mouse input never blocks.</li>
-<li><strong>Device Loss Recovery:</strong> Auto-rebuilds entire D3D/DComp stack on GPU TDR, driver update, or GPU switch.</li>
-<li><strong>Display Change Handling:</strong> Auto-resizes and repositions overlay on <code>WM_DISPLAYCHANGE</code>.</li>
-<li><strong>Additive Blend Glow:</strong> Trail/particle/ripple glow layers use SrcAlpha+One additive blending for more translucent halos.</li>
-<li><strong>Fast-Move Interpolation:</strong> When interval ≤10ms, particles are interpolated along the path to eliminate gaps during fast movement.</li>
-</ul>
-<h3 id="trailshapes10modes">Trail Shapes (10 modes)</h3>
-<ul>
-<li><strong>Tapered Ribbon:</strong> Classic fading ribbon with glow, shadow, and head highlight</li>
-<li><strong>Dot Chain:</strong> Beads along the path with configurable density</li>
-<li><strong>Function Curve:</strong> Custom mathematical function deforms the trail (sine, damped, heartbeat, swirl, or custom formula)</li>
-<li><strong>Wave Curve:</strong> Animated wave deformation</li>
-<li><strong>Shape Trail:</strong> Spawns hearts, stars, hexagrams, or circles along the path with random velocity, rotation, gravity, configurable interval/size/count/lifetime</li>
-<li><strong>Double Line:</strong> Two parallel trail ribbons</li>
-<li><strong>Dashed:</strong> Segmented dashed trail</li>
-<li><strong>Spiral:</strong> Spiral deformation along the path</li>
-<li><strong>Lightning:</strong> Random jagged lightning effect</li>
-<li><strong>Feather:</strong> Random spiky depth texture</li>
-</ul>
-<h3 id="colormodes23modes">Color Modes (23 modes)</h3>
-<p>Single / Flowing Gradient / Rainbow Flow / Warm Flow / Cool Flow / Neon Pulse / Velocity Color / Stripes / Fire / Aurora / Cursor Extract / Cursor Mix / Metallic Gold / Cyberpunk / Pastel / Hue Rotate / Dual Pulse / Sparkle / Heatmap / Phase Interference / Spectrum Split / Grain Jitter / Gradient Warp</p>
-<h3 id="gradientsystem">Gradient System</h3>
-<ul>
-<li><strong>Unlimited Colors:</strong> Add any number of gradient colors (up to 16), used as-is</li>
-<li><strong>OKLab Perceptual Interpolation:</strong> No gray midpoints, perceptually uniform color transitions</li>
-<li><strong>256-Color LUT:</strong> Precomputed lookup table for performance</li>
-<li><strong>Flowing Gradient:</strong> Gradient animates along the trail over time</li>
-</ul>
-<h3 id="cursorcolorshift6modes">Cursor Color Shift (6 modes)</h3>
-<p>Off / Complementary (180°) / Analogous (30°) / Triadic (120°) / Split Complement (150°) / Custom Angle</p>
-<h3 id="visualeffects">Visual Effects</h3>
-<ul>
-<li><strong>Bezier Smoothing:</strong> Catmull-Rom spline interpolation for buttery-smooth curves</li>
-<li><strong>Motion Blur:</strong> History frame overlay with decreasing opacity (1-5 strength)</li>
-<li><strong>Enhanced Glow:</strong> Dual-layer halo (outer + inner) with independent toggles</li>
-<li><strong>Head Highlight + Trail Shadow:</strong> Premium depth cues</li>
-<li><strong>Speed-Reactive Width:</strong> Trail widens when moving fast</li>
-</ul>
-<h3 id="particlesystem">Particle System</h3>
-<ul>
-<li>Released from trail head/middle/tail/custom/random position</li>
-<li>Cursor attraction + repulsion force creating orbiting motion</li>
-<li>Shapes: circle, star, hexagram, or random mix</li>
-<li>Colors fade over lifetime; configurable density, interval (0 = per-frame), acceleration</li>
-<li>Click starburst particle burst</li>
-<li><strong>Particle Mass System:</strong> Each particle has random mass (normal distribution via Box-Muller), affecting inertia, size (∝mass^(1/3)), lifetime, and acceleration (a=F/m)</li>
-<li><strong>Particle Gravity:</strong> Newton's law of universal gravitation F=G·m₁·m₂/r² with Plummer softening + Newton's second law a=F/m, supports binary/N-body systems (2-10 bodies)</li>
-<li><strong>Centripetal Vortex:</strong> Curved mouse motion captures particles into orbiting tracks with angular momentum conservation, Kepler velocity gradient, orbital precession, and 3D orbital inclination. Particles fly outward when motion stops.</li>
-<li><strong>Advanced Physics (optional):</strong> Elastic particle collisions (momentum + energy conservation), Lorentz force (charged particles in magnetic field), Brownian motion (thermal noise), multi-band audio linking</li>
-</ul>
-<h3 id="musicreactiveframeworkv34">Music Reactive Framework (v3.4)</h3>
-<ul>
-<li><strong>WASAPI Loopback Capture:</strong> Real-time system audio capture (48kHz stereo)</li>
-<li><strong>FFT Frequency Analysis:</strong> Cooley-Tukey FFT (256/512/1024/2048 points) with Hann window</li>
-<li><strong>Beat Detection:</strong> Three methods — energy threshold, spectral flux, multi-band detection. Low-frequency weighted.</li>
-<li><strong>Frequency Band Analysis:</strong> Bass / Mid / Treble energy levels</li>
-<li><strong>BPM Estimation:</strong> Real-time tempo estimation</li>
-<li><strong>Music-Physics Linking:</strong> Beat → velocity burst, bass → particle size, volume → gravity strength, beat → vortex energy, multi-band → gravity/magnetic/noise</li>
-</ul>
-<h3 id="clickeffects">Click Effects</h3>
-<ul>
-<li>Starburst particle burst on click</li>
-<li>Expanding ripple ring on click</li>
-<li>Both toggleable independently</li>
-</ul>
-<h3 id="performance">Performance</h3>
-<ul>
-<li><strong>Super Performance Mode:</strong> Removes all caps (particle/shape limits, fast-path downgrade)</li>
-<li><strong>Adaptive Backoff:</strong> Render thread waits 1ms when active, 16ms when idle</li>
-<li><strong>Game Detection:</strong> Auto-hide in fullscreen DirectX games</li>
-<li><strong>Zero CPU Idle:</strong> Window hidden when cursor stationary and no effects active</li>
-</ul>
-<h3 id="functiontrailvariables">Function Trail Variables</h3>
-<p>Available variables: <code>t</code> (normalized 0=head 1=tail), <code>d</code> (distance from head in px), <code>time</code> (seconds). Functions: sin cos exp sqrt abs. Operators: + - * / ^.</p>
-<p>Examples: <code>sin(d * 0.15) * 8</code>, <code>sin(d * 0.25) * exp(0 - t * 2.5) * 10</code>.</p>
-<h3 id="colorformat">Color Format</h3>
-<p>Hex RGB, e.g. <code>FF0000</code>=red, <code>00FF00</code>=green, <code>0000FF</code>=blue, <code>FFD700</code>=gold.</p>
-<h3 id="credits">Credits</h3>
-<p>Developed by <a href="https://github.com/MCheng404">MCheng404</a>.
-Original overlay/smear architecture inspired by <a href="https://github.com/TheatriChris">TheatriChris</a>'s cursor-motion-blur mod (MIT licensed).</p>
-<hr />
-<h1 id="">鼠标拖尾</h1>
-<p>高度可定制的鼠标拖尾特效，原生 D3D11 渲染，23种颜色模式，10种拖尾形状，2.5D 立体效果，高级粒子物理系统，向心力漩涡，音乐响应框架，点击特效，光标取色。DirectComposition 硬件加速，独立进程运行，闲置时低 CPU 占用。</p>
-<hr />
-<h3 id="-1">渲染架构</h3>
-<ul>
-<li><strong>原生 D3D11 渲染：</strong> 自定义 HLSL 顶点/像素着色器，粒子实例化渲染。核心拖尾/粒子/形状渲染不依赖 D2D1。</li>
-<li><strong>2.5D 粒子效果：</strong> 粒子具有实例级 z 深度 + 透视投影 + 简单光照。粒子随深度缩放（近大远小），营造 3D 空间感。</li>
-<li><strong>DXGI 翻转交换链：</strong> 预乘 alpha，与 DirectComposition 无撕裂合成。HDR 自动检测，R16G16B16A16_FLOAT 格式自动回退。</li>
-<li><strong>双线程设计：</strong> UI 线程处理窗口/消息泵，渲染线程处理所有 D3D11/DComp 工作——鼠标输入永不阻塞。</li>
-<li><strong>设备丢失恢复：</strong> GPU TDR、驱动更新或显卡切换时自动重建整个 D3D/DComp 栈。</li>
-<li><strong>显示变化处理：</strong> <code>WM_DISPLAYCHANGE</code> 时自动调整覆盖层大小和位置。</li>
-<li><strong>加法混合发光：</strong> 拖尾/粒子/波纹发光层使用 SrcAlpha+One 加法混合，光晕更通透。</li>
-<li><strong>快速移动插值：</strong> 间隔≤10ms 时沿路径插值补粒子，消除快速移动缝隙。</li>
-</ul>
-<h3 id="10">拖尾形状（10种）</h3>
-<ul>
-<li><strong>锥形飘带：</strong> 经典渐隐飘带，带发光、阴影和头部高光</li>
-<li><strong>圆点链：</strong> 沿路径排列的圆点，密度可调</li>
-<li><strong>函数曲线：</strong> 自定义数学函数变形轨迹（正弦、阻尼、心跳、漩涡或自定义公式）</li>
-<li><strong>波浪曲线：</strong> 动态波浪变形</li>
-<li><strong>形状拖尾：</strong> 沿路径生成爱心、五角星、六芒星或圆形，带随机速度、旋转、重力，间隔/大小/数量/存活时间可调</li>
-<li><strong>双线拖尾：</strong> 两条平行拖尾带</li>
-<li><strong>虚线拖尾：</strong> 分段虚线效果</li>
-<li><strong>螺旋拖尾：</strong> 沿路径螺旋变形</li>
-<li><strong>闪电拖尾：</strong> 随机锯齿闪电效果</li>
-<li><strong>羽毛拖尾：</strong> 随机毛刺深度纹理</li>
-</ul>
-<h3 id="23">颜色模式（23种）</h3>
-<p>单色 / 流动渐变 / 彩虹流动 / 暖色调流动 / 冷色调流动 / 霓虹脉冲 / 速度变色 / 流动条纹 / 火焰 / 极光 / 光标取色 / 光标混色 / 金属金 / 赛博朋克 / 粉彩 / 色相旋转 / 双色脉冲 / 星光闪烁 / 热力图 / 波纹干涉 / 色谱分裂 / 颗粒抖动 / 渐变扭曲</p>
-<h3 id="-2">渐变系统</h3>
-<ul>
-<li><strong>任意数量颜色：</strong> 添加任意数量渐变颜色（最多16种），写入多少用多少</li>
-<li><strong>OKLab 感知均匀插值：</strong> 无灰暗中点，感知均匀的色彩过渡</li>
-<li><strong>256色 LUT：</strong> 预计算查找表，保证性能</li>
-<li><strong>流动渐变：</strong> 渐变沿拖尾随时间流动</li>
-</ul>
-<h3 id="6">取色偏移（6种模式）</h3>
-<p>关闭 / 互补色(180°) / 类似色(30°) / 三角色(120°) / 分裂互补(150°) / 自定义角度</p>
-<h3 id="-3">视觉特效</h3>
-<ul>
-<li><strong>贝塞尔平滑：</strong> Catmull-Rom 样条插值，曲线如丝般顺滑</li>
-<li><strong>运动模糊：</strong> 历史帧叠加，透明度递减（1-5强度）</li>
-<li><strong>增强发光：</strong> 双层光晕（外晕+内辉），独立开关</li>
-<li><strong>头部高光 + 拖尾阴影：</strong> 高级质感深度提示</li>
-<li><strong>速度响应宽度：</strong> 快速移动时拖尾变宽</li>
-</ul>
-<h3 id="-4">粒子系统</h3>
-<ul>
-<li>从拖尾开头/中间/结尾/自定义/随机位置释放</li>
-<li>光标吸引 + 排斥力，形成绕飞运动</li>
-<li>形状：圆形、五角星、六芒星或随机混合</li>
-<li>颜色随生命周期渐变；密度、间隔（0=每帧）、加速度可调</li>
-<li>点击星爆粒子迸发</li>
-<li><strong>粒子质量系统：</strong> 每个粒子有随机质量（Box-Muller 正态分布），影响惯性、大小（∝质量^(1/3)）、生命周期和加速度（a=F/m）</li>
-<li><strong>粒子万有引力：</strong> 牛顿万有引力定律 F=G·m₁·m₂/r² + Plummer 软化 + 牛顿第二定律 a=F/m，支持双星/N体系统（2-10体）</li>
-<li><strong>向心力漩涡：</strong> 鼠标做曲线运动时，粒子被捕获到轨道上旋转，角动量守恒 + 开普勒速度梯度 + 轨道进动 + 3D轨道倾角。停止运动后粒子离心甩出。</li>
-<li><strong>高级物理（可选）：</strong> 粒子弹性碰撞（动量+动能守恒）、洛伦兹力（带电粒子在磁场中运动）、布朗运动（热噪声）、多频段音频联动</li>
-</ul>
-<h3 id="v34">音乐响应框架（v3.4）</h3>
-<ul>
-<li><strong>WASAPI 回环捕获：</strong> 实时系统音频捕获（48kHz 立体声）</li>
-<li><strong>FFT 频率分析：</strong> Cooley-Tukey FFT（256/512/1024/2048点）+ Hann 窗</li>
-<li><strong>节拍检测：</strong> 三种方式——能量阈值、频谱通量、多频段检测。低频权重最高。</li>
-<li><strong>频段分析：</strong> 低频/中频/高频能量级别</li>
-<li><strong>BPM 估计：</strong> 实时节拍速度估计</li>
-<li><strong>音乐物理联动：</strong> 节拍→速度爆发、低频→粒子大小、音量→引力强度、节拍→漩涡能量、多频段→引力/磁场/噪声</li>
-</ul>
-<h3 id="-5">点击特效</h3>
-<ul>
-<li>点击时星爆粒子迸发</li>
-<li>点击时扩散波纹环</li>
-<li>两者可独立开关</li>
-</ul>
-<h3 id="-6">性能</h3>
-<ul>
-<li><strong>超级性能模式：</strong> 解除所有上限（粒子/形状限制、快速路径降级）</li>
-<li><strong>自适应退避：</strong> 渲染线程活跃时等待1ms，闲置时16ms</li>
-<li><strong>游戏检测：</strong> 全屏 DirectX 游戏时自动隐藏</li>
-<li><strong>零 CPU 闲置：</strong> 鼠标静止且无特效时窗口隐藏，CPU 占用为 0</li>
-</ul>
-<h3 id="-7">函数轨迹变量</h3>
-<p>自定义公式中可使用：<code>t</code>（归一化位置 0=头 1=尾）、<code>d</code>（距头部像素距离）、<code>time</code>（秒）。支持函数：sin cos exp sqrt abs，运算符：+ - * / ^。</p>
-<p>示例：<code>sin(d * 0.15) * 8</code>，<code>sin(d * 0.25) * exp(0 - t * 2.5) * 10</code>。</p>
-<h3 id="-8">颜色格式</h3>
-<p>自定义颜色使用十六进制 RGB，例如：<code>FF0000</code>=红，<code>00FF00</code>=绿，<code>0000FF</code>=蓝，<code>FFD700</code>=金。</p>
-<h3 id="-9">致谢</h3>
-<p>开发者 <a href="https://github.com/MCheng404">MCheng404</a>。
-原始覆盖层/拖尾架构灵感来自 <a href="https://github.com/TheatriChris">TheatriChris</a> 的 cursor-motion-blur mod（MIT 许可证）。</p>]]></content>
-        <author>
-            <name>MCheng404</name>
-            <uri>https://github.com/MCheng404</uri>
         </author>
     </entry>
 </feed>
