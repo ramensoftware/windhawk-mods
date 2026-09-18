@@ -8,7 +8,6 @@
 // @homepage        https://github.com/ZainYoussef/WinDraw
 // @include         explorer.exe
 // @architecture    x86-64
-// @architecture    arm64
 // @compilerOptions -ld2d1 -ldwrite -lole32 -luser32 -lgdi32 -ldwmapi -lcomctl32 -lshlwapi -lwindowscodecs -lshell32
 // @license         MIT
 // ==/WindhawkMod==
@@ -1371,7 +1370,7 @@ inline std::vector<MonitorEntry> GetSystemMonitorList() {
     ctx.vx = vx;
     ctx.vy = vy;
 
-    EnumDisplayMonitors(NULL, NULL, [](HMONITOR hMon, HDC, LPRECT lprc, LPARAM dwData) -> BOOL {
+    EnumDisplayMonitors(NULL, NULL, [](HMONITOR hMon, HDC, LPRECT lprc, LPARAM dwData) CALLBACK -> BOOL {
         auto* pCtx = reinterpret_cast<EnumCtx*>(dwData);
         if (lprc && pCtx) {
             MONITORINFO mi = { sizeof(MONITORINFO) };
@@ -1414,7 +1413,7 @@ inline void ClampToolbarToScreen(float& x, float& y, float w, float h, float kPa
     ctx.vx = vx;
     ctx.vy = vy;
 
-    EnumDisplayMonitors(NULL, NULL, [](HMONITOR, HDC, LPRECT lprc, LPARAM dwData) -> BOOL {
+    EnumDisplayMonitors(NULL, NULL, [](HMONITOR, HDC, LPRECT lprc, LPARAM dwData) CALLBACK -> BOOL {
         EnumCtx* pCtx = reinterpret_cast<EnumCtx*>(dwData);
         if (lprc && pCtx) {
             MonitorBounds mb;
