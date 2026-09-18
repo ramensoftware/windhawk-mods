@@ -504,6 +504,7 @@ static const GUID kWinDrawFolderID_Pictures = { 0x33e28130, 0x4e3a, 0x468b, { 0x
 #endif
 #include <vector>
 #include <deque>
+#include <unordered_map>
 #include <cmath>
 #include <string>
 #include <algorithm>
@@ -1054,6 +1055,14 @@ inline HMODULE GetCurrentModuleHandle() {
     return hModule;
 }
 
+template <typename T>
+inline void SafeRelease(T*& p) {
+    if (p) {
+        p->Release();
+        p = nullptr;
+    }
+}
+
 inline float GetDpiScaleForMonitor(HMONITOR hMon) {
     if (!hMon) return 1.0f;
     static auto pGetDpiForMonitor = []() -> HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*) {
@@ -1076,6 +1085,13 @@ inline float GetDpiScaleAtPoint(float clientX, float clientY) {
     POINT pt = { (LONG)std::round(clientX + (float)vx), (LONG)std::round(clientY + (float)vy) };
     HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
     return GetDpiScaleForMonitor(hMon);
+}
+
+inline float GetFlyoutDpiScale(const D2D1_RECT_F& rect) {
+    if (rect.right > rect.left && rect.bottom > rect.top) {
+        return GetDpiScaleAtPoint((rect.left + rect.right) * 0.5f, (rect.top + rect.bottom) * 0.5f);
+    }
+    return g_toolbarDpiScale;
 }
 
 inline float GetDpiScaleForHwnd(HWND hWnd) {
@@ -1109,6 +1125,75 @@ static IDWriteTextFormat* g_pMenuTextFormat = NULL;
 static IDWriteTextFormat* g_pMenuKeyFormat = NULL;
 static IDWriteTextFormat* g_pToolbarKeyFormat = NULL;
 static IWICImagingFactory* g_pWICFactory = NULL;
+
+// Radial Satellite Arc Geometry Cache
+static ID2D1PathGeometry* g_pRadialSatelliteArcGeom = nullptr;
+static int g_cachedSatelliteNumOrbs = -1;
+static float g_cachedSatelliteScale = -1.0f;
+
+// DirectWrite Text Layout Cache
+struct CachedTextLayoutKey {
+    std::wstring text;
+    IDWriteTextFormat* pFormat;
+    int maxW;
+    int maxH;
+
+    bool operator==(const CachedTextLayoutKey& o) const {
+        return maxW == o.maxW && maxH == o.maxH && pFormat == o.pFormat && text == o.text;
+    }
+};
+
+struct CachedTextLayoutKeyHash {
+    size_t operator()(const CachedTextLayoutKey& k) const {
+        size_t h = std::hash<std::wstring>()(k.text);
+        h ^= std::hash<void*>()((void*)k.pFormat) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<int>()(k.maxW) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<int>()(k.maxH) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        return h;
+    }
+};
+
+static std::unordered_map<CachedTextLayoutKey, IDWriteTextLayout*, CachedTextLayoutKeyHash> g_textLayoutCache;
+
+inline IDWriteTextLayout* GetCachedTextLayout(const std::wstring& text, IDWriteTextFormat* pFormat, float maxW, float maxH) {
+    if (!g_pDWriteFactory || !pFormat) return nullptr;
+    int iw = (int)std::round(maxW);
+    int ih = (int)std::round(maxH);
+    CachedTextLayoutKey key{ text, pFormat, iw, ih };
+    auto it = g_textLayoutCache.find(key);
+    if (it != g_textLayoutCache.end()) {
+        return it->second;
+    }
+    IDWriteTextLayout* pLayout = nullptr;
+    HRESULT hr = g_pDWriteFactory->CreateTextLayout(
+        text.c_str(), (UINT32)text.length(), pFormat, maxW, maxH, &pLayout
+    );
+    if (SUCCEEDED(hr) && pLayout) {
+        g_textLayoutCache[key] = pLayout;
+        return pLayout;
+    }
+    return nullptr;
+}
+
+inline void ClearTextLayoutCache() {
+    for (auto& pair : g_textLayoutCache) {
+        SafeRelease(pair.second);
+    }
+    g_textLayoutCache.clear();
+}
+
+inline void DrawCachedText(ID2D1HwndRenderTarget* pRT, const std::wstring& text, IDWriteTextFormat* pFormat,
+                           const D2D1_RECT_F& rect, ID2D1Brush* pBrush) {
+    float w = rect.right - rect.left;
+    float h = rect.bottom - rect.top;
+    if (w <= 0.0f || h <= 0.0f) return;
+    IDWriteTextLayout* pLayout = GetCachedTextLayout(text, pFormat, w, h);
+    if (pLayout) {
+        pRT->DrawTextLayout(D2D1::Point2F(rect.left, rect.top), pLayout, pBrush);
+    } else {
+        pRT->DrawText(text.c_str(), (UINT32)text.length(), pFormat, rect, pBrush);
+    }
+}
 
 [[clang::no_destroy]] static std::vector<Stroke> g_strokes;
 [[clang::no_destroy]] static std::vector<std::vector<Stroke>> g_undoStack;
@@ -1529,13 +1614,14 @@ static float g_currentFontScale = 0.0f;
 static float g_currentRadialFontScale = 0.0f;
 
 void ReleaseTextFormats() {
-    if (g_pToolbarKeyFormat) { g_pToolbarKeyFormat->Release(); g_pToolbarKeyFormat = nullptr; }
-    if (g_pMenuKeyFormat) { g_pMenuKeyFormat->Release(); g_pMenuKeyFormat = nullptr; }
-    if (g_pMenuTextFormat) { g_pMenuTextFormat->Release(); g_pMenuTextFormat = nullptr; }
-    if (g_pCenterBadgeFormat) { g_pCenterBadgeFormat->Release(); g_pCenterBadgeFormat = nullptr; }
-    if (g_pRadialIconFormat) { g_pRadialIconFormat->Release(); g_pRadialIconFormat = nullptr; }
-    if (g_pIconFormat) { g_pIconFormat->Release(); g_pIconFormat = nullptr; }
-    if (g_pTextFormat) { g_pTextFormat->Release(); g_pTextFormat = nullptr; }
+    ClearTextLayoutCache();
+    SafeRelease(g_pToolbarKeyFormat);
+    SafeRelease(g_pMenuKeyFormat);
+    SafeRelease(g_pMenuTextFormat);
+    SafeRelease(g_pCenterBadgeFormat);
+    SafeRelease(g_pRadialIconFormat);
+    SafeRelease(g_pIconFormat);
+    SafeRelease(g_pTextFormat);
     g_currentFontScale = 0.0f;
     g_currentRadialFontScale = 0.0f;
 }
@@ -1873,14 +1959,18 @@ HRESULT CreateD2DResources(HWND hwnd) {
 }
 
 void ReleaseD2DResources() {
-    if (g_pWhiteboardBrush) { g_pWhiteboardBrush->Release(); g_pWhiteboardBrush = nullptr; }
-    if (g_pBlackboardBrush) { g_pBlackboardBrush->Release(); g_pBlackboardBrush = nullptr; }
-    if (g_pGridBrush) { g_pGridBrush->Release(); g_pGridBrush = nullptr; }
-    if (g_pStrokeBrush) { g_pStrokeBrush->Release(); g_pStrokeBrush = nullptr; }
-    if (g_pDesktopBitmap) { g_pDesktopBitmap->Release(); g_pDesktopBitmap = nullptr; }
-    if (g_pRoundStrokeStyle) { g_pRoundStrokeStyle->Release(); g_pRoundStrokeStyle = nullptr; }
-    if (g_pLaserFlatStrokeStyle) { g_pLaserFlatStrokeStyle->Release(); g_pLaserFlatStrokeStyle = nullptr; }
-    if (g_pRenderTarget) { g_pRenderTarget->Release(); g_pRenderTarget = nullptr; }
+    SafeRelease(g_pRadialSatelliteArcGeom);
+    g_cachedSatelliteNumOrbs = -1;
+    g_cachedSatelliteScale = -1.0f;
+    ClearTextLayoutCache();
+    SafeRelease(g_pWhiteboardBrush);
+    SafeRelease(g_pBlackboardBrush);
+    SafeRelease(g_pGridBrush);
+    SafeRelease(g_pStrokeBrush);
+    SafeRelease(g_pDesktopBitmap);
+    SafeRelease(g_pRoundStrokeStyle);
+    SafeRelease(g_pLaserFlatStrokeStyle);
+    SafeRelease(g_pRenderTarget);
 }
 
 void InvalidateOverlay() {
@@ -2463,8 +2553,7 @@ void DrawArrowhead(ID2D1HwndRenderTarget* pRT, ID2D1SolidColorBrush* pBrush, flo
     float rightY = basePy - ux * arrowW;
 
     ID2D1PathGeometry* pArrowGeo = nullptr;
-    g_pD2DFactory->CreatePathGeometry(&pArrowGeo);
-    if (pArrowGeo) {
+    if (g_pD2DFactory && SUCCEEDED(g_pD2DFactory->CreatePathGeometry(&pArrowGeo))) {
         ID2D1GeometrySink* pSink = nullptr;
         if (SUCCEEDED(pArrowGeo->Open(&pSink))) {
             pSink->BeginFigure(D2D1::Point2F(x2, y2), D2D1_FIGURE_BEGIN_FILLED);
@@ -2472,11 +2561,11 @@ void DrawArrowhead(ID2D1HwndRenderTarget* pRT, ID2D1SolidColorBrush* pBrush, flo
             pSink->AddLine(D2D1::Point2F(rightX, rightY));
             pSink->EndFigure(D2D1_FIGURE_END_CLOSED);
             pSink->Close();
-            pSink->Release();
+            SafeRelease(pSink);
 
             pRT->FillGeometry(pArrowGeo, pBrush);
         }
-        pArrowGeo->Release();
+        SafeRelease(pArrowGeo);
     }
 }
 
@@ -2516,12 +2605,12 @@ void BuildStrokeGeometry(Stroke& stroke) {
 
                 pSink->EndFigure(D2D1_FIGURE_END_OPEN);
                 pSink->Close();
-                pSink->Release();
+                SafeRelease(pSink);
 
                 stroke.pCachedGeometry = pGeometry;
             }
             else {
-                pGeometry->Release();
+                SafeRelease(pGeometry);
             }
         }
     }
@@ -2558,12 +2647,12 @@ void BuildStrokeGeometry(Stroke& stroke) {
                 pSink->AddLine(D2D1::Point2F(rightX, rightY));
                 pSink->EndFigure(D2D1_FIGURE_END_CLOSED);
                 pSink->Close();
-                pSink->Release();
+                SafeRelease(pSink);
 
                 stroke.pCachedGeometry = pArrowGeo;
             }
             else {
-                pArrowGeo->Release();
+                SafeRelease(pArrowGeo);
             }
         }
     }
@@ -2583,12 +2672,12 @@ void BuildStrokeGeometry(Stroke& stroke) {
                 pSink->AddLine(D2D1::Point2F(maxX, maxY));
                 pSink->EndFigure(D2D1_FIGURE_END_CLOSED);
                 pSink->Close();
-                pSink->Release();
+                SafeRelease(pSink);
 
                 stroke.pCachedGeometry = pGeo;
             }
             else {
-                pGeo->Release();
+                SafeRelease(pGeo);
             }
         }
     }
@@ -2735,11 +2824,11 @@ void DrawSmoothStroke(ID2D1HwndRenderTarget* pRT, Stroke& stroke) {
 
                             pSink->EndFigure(D2D1_FIGURE_END_OPEN);
                             pSink->Close();
-                            pSink->Release();
+                            SafeRelease(pSink);
 
                             pRT->DrawGeometry(pGeometry, g_pStrokeBrush, stroke.width, g_pRoundStrokeStyle);
                         }
-                        pGeometry->Release();
+                        SafeRelease(pGeometry);
                     }
                 }
             }
@@ -2795,7 +2884,7 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
         // 1. Left: Gripper icon (GripperTool \uE75E)
         if (g_pIconFormat && pTextBrush) {
             D2D1_RECT_F gripR = D2D1::RectF(g_toolbarRect.left + 6.0f * scale, g_toolbarRect.top, g_toolbarRect.left + 26.0f * scale, g_toolbarRect.bottom);
-            pRT->DrawText(L"\uE75E", 1, g_pIconFormat, gripR, pTextBrush);
+            DrawCachedText(pRT, L"\uE75E", g_pIconFormat, gripR, pTextBrush);
         }
 
         // 2. Middle: Active Tool / Color Swatch Dot (9px diameter)
@@ -2806,7 +2895,7 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
             pRT->CreateSolidColorBrush(D2D1::ColorF(0.18f, 0.22f, 0.28f, 1.0f), &pDotBack);
             if (pDotBack) {
                 pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(dotX, midY), dotR, dotR), pDotBack);
-                pDotBack->Release();
+                SafeRelease(pDotBack);
             }
         }
         ID2D1SolidColorBrush* pDotBrush = nullptr;
@@ -2814,37 +2903,39 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
         if (pDotBrush) {
             pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(dotX, midY), dotR, dotR), pDotBrush);
             pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(dotX, midY), dotR, dotR), isPillHovered && pMintGlow ? pMintGlow : pBorderBrush, 1.0f);
-            pDotBrush->Release();
+            SafeRelease(pDotBrush);
         }
 
         // 3. Right: Expand chevron glyph (\uE70E ChevronUp)
         if (g_pIconFormat && pTextBrush) {
             D2D1_RECT_F chevR = D2D1::RectF(g_toolbarRect.right - 28.0f * scale, g_toolbarRect.top, g_toolbarRect.right - 8.0f * scale, g_toolbarRect.bottom);
-            pRT->DrawText(L"\uE70E", 1, g_pIconFormat, chevR, isPillHovered && pMintGlow ? pMintGlow : pTextBrush);
+            DrawCachedText(pRT, L"\uE70E", g_pIconFormat, chevR, isPillHovered && pMintGlow ? pMintGlow : pTextBrush);
         }
 
-        if (pMintGlow) pMintGlow->Release();
-        if (pBgBrush) pBgBrush->Release();
-        if (pBorderBrush) pBorderBrush->Release();
-        if (pRimBrush) pRimBrush->Release();
-        if (pTextBrush) pTextBrush->Release();
+        SafeRelease(pMintGlow);
+        SafeRelease(pBgBrush);
+        SafeRelease(pBorderBrush);
+        SafeRelease(pRimBrush);
+        SafeRelease(pTextBrush);
         return;
     }
 
     float scale = g_toolbarDpiScale;
-    float r = (float)g_settings.cornerRadius * scale;
-    D2D1_ROUNDED_RECT roundRect = D2D1::RoundedRect(g_toolbarRect, r, r);
+    float cornerR = (float)g_settings.cornerRadius * scale;
+    D2D1_ROUNDED_RECT roundRect = D2D1::RoundedRect(g_toolbarRect, cornerR, cornerR);
 
     // Chassis background & 1px border
     pRT->FillRoundedRectangle(roundRect, pBgBrush);
     pRT->DrawRoundedRectangle(roundRect, pBorderBrush, 1.2f);
 
     // Specular top rim highlight
-    pRT->DrawLine(
-        D2D1::Point2F(g_toolbarRect.left + r + 2.0f * scale, g_toolbarRect.top + 1.5f),
-        D2D1::Point2F(g_toolbarRect.right - r - 2.0f * scale, g_toolbarRect.top + 1.5f),
-        pRimBrush, 1.0f
-    );
+    if (pRimBrush) {
+        pRT->DrawLine(
+            D2D1::Point2F(g_toolbarRect.left + cornerR + 2.0f * scale, g_toolbarRect.top + 1.2f),
+            D2D1::Point2F(g_toolbarRect.right - cornerR - 2.0f * scale, g_toolbarRect.top + 1.2f),
+            pRimBrush, 1.0f
+        );
+    }
 
     // Subtle vertical dividers
     float divY1 = g_toolbarRect.top + 7.0f * scale;
@@ -2868,7 +2959,7 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
                 pRT->CreateSolidColorBrush(D2D1::ColorF(0.18f, 0.22f, 0.28f, 1.0f), &pCheckDark);
                 if (pCheckDark) {
                     pRT->FillRoundedRectangle(penR, pCheckDark);
-                    pCheckDark->Release();
+                    SafeRelease(pCheckDark);
                 }
             }
 
@@ -2899,8 +2990,8 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
                     pRT->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.35f), &pPenBorder);
                     pRT->DrawRoundedRectangle(penR, pPenBorder, 1.0f);
                 }
-                if (pPenBorder) pPenBorder->Release();
-                pPenBrush->Release();
+                SafeRelease(pPenBorder);
+                SafeRelease(pPenBrush);
             }
 
             // 5th button: Custom color button shows a crisp plus icon to indicate it opens custom color picker
@@ -2915,7 +3006,7 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
                 if (pPlusShadow) {
                     pRT->DrawLine(D2D1::Point2F(cx - pLen, cy + 0.8f), D2D1::Point2F(cx + pLen, cy + 0.8f), pPlusShadow, 2.8f, g_pRoundStrokeStyle);
                     pRT->DrawLine(D2D1::Point2F(cx, cy - pLen + 0.8f), D2D1::Point2F(cx, cy + pLen + 0.8f), pPlusShadow, 2.8f, g_pRoundStrokeStyle);
-                    pPlusShadow->Release();
+                    SafeRelease(pPlusShadow);
                 }
 
                 // Crisp white plus icon
@@ -2924,7 +3015,7 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
                 if (pPlusWhite) {
                     pRT->DrawLine(D2D1::Point2F(cx - pLen, cy), D2D1::Point2F(cx + pLen, cy), pPlusWhite, 2.0f, g_pRoundStrokeStyle);
                     pRT->DrawLine(D2D1::Point2F(cx, cy - pLen), D2D1::Point2F(cx, cy + pLen), pPlusWhite, 2.0f, g_pRoundStrokeStyle);
-                    pPlusWhite->Release();
+                    SafeRelease(pPlusWhite);
                 }
             }
 
@@ -2942,22 +3033,15 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
                 pRT->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.45f), &pBadgeBacking);
                 if (pBadgeBacking) {
                     pRT->FillRoundedRectangle(badgePill, pBadgeBacking);
-                    pBadgeBacking->Release();
+                    SafeRelease(pBadgeBacking);
                 }
 
                 ID2D1SolidColorBrush* pBadgeText = nullptr;
                 pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.95f), &pBadgeText);
                 if (pBadgeText) {
                     D2D1_RECT_F textRect = D2D1::RectF(pillR - pillW, pillT, pillR - 1.5f * scale, pillT + pillH);
-                    pRT->DrawText(
-                        btn.shortcut.c_str(),
-                        (UINT32)btn.shortcut.length(),
-                        g_pToolbarKeyFormat,
-                        textRect,
-                        pBadgeText,
-                        D2D1_DRAW_TEXT_OPTIONS_NONE
-                    );
-                    pBadgeText->Release();
+                    DrawCachedText(pRT, btn.shortcut, g_pToolbarKeyFormat, textRect, pBadgeText);
+                    SafeRelease(pBadgeText);
                 }
             }
         }
@@ -2984,7 +3068,7 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
                 pRT->CreateSolidColorBrush(isToolActive ? D2D1::ColorF(0.20f, 0.32f, 0.44f, 0.95f) : D2D1::ColorF(0.18f, 0.22f, 0.30f, 0.85f), &pHoverBg);
                 if (pHoverBg) {
                     pRT->FillRoundedRectangle(D2D1::RoundedRect(btn.rect, 4.0f * scale, 4.0f * scale), pHoverBg);
-                    pHoverBg->Release();
+                    SafeRelease(pHoverBg);
                 }
             }
 
@@ -3064,16 +3148,9 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
                 }
                 else {
                     const wchar_t* iconText = (btn.id == 5) ? (g_inkVisible ? L"\uE890" : L"\uED1A") : btn.label.c_str();
-                    pRT->DrawText(
-                        iconText,
-                        (UINT32)wcslen(iconText),
-                        g_pIconFormat,
-                        btn.rect,
-                        pDrawBrush,
-                        D2D1_DRAW_TEXT_OPTIONS_NONE
-                    );
+                    DrawCachedText(pRT, iconText, g_pIconFormat, btn.rect, pDrawBrush);
                 }
-                if (pLblBrush) pLblBrush->Release();
+                SafeRelease(pLblBrush);
             }
 
             // Draw tiny downward caret for Shapes, Grid, and Whiteboard Flyout buttons
@@ -3085,7 +3162,7 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
                 if (pCaretBrush) {
                     pRT->DrawLine(D2D1::Point2F(cx - 2.5f * scale, cy - 1.5f * scale), D2D1::Point2F(cx, cy + 1.5f * scale), pCaretBrush, 1.0f);
                     pRT->DrawLine(D2D1::Point2F(cx, cy + 1.5f * scale), D2D1::Point2F(cx + 2.5f * scale, cy - 1.5f * scale), pCaretBrush, 1.0f);
-                    pCaretBrush->Release();
+                    SafeRelease(pCaretBrush);
                 }
             }
 
@@ -3124,24 +3201,17 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
                         btn.rect.right - 3.5f * scale,
                         btn.rect.top + 13.0f * scale
                     );
-                    pRT->DrawText(
-                        shortcut.c_str(),
-                        (UINT32)shortcut.length(),
-                        g_pToolbarKeyFormat,
-                        keyRect,
-                        pKeyBadgeBrush,
-                        D2D1_DRAW_TEXT_OPTIONS_NONE
-                    );
-                    pKeyBadgeBrush->Release();
+                    DrawCachedText(pRT, shortcut, g_pToolbarKeyFormat, keyRect, pKeyBadgeBrush);
+                    SafeRelease(pKeyBadgeBrush);
                 }
             }
         }
     }
 
-    if (pTextBrush) pTextBrush->Release();
-    if (pRimBrush) pRimBrush->Release();
-    if (pBorderBrush) pBorderBrush->Release();
-    if (pBgBrush) pBgBrush->Release();
+    SafeRelease(pTextBrush);
+    SafeRelease(pRimBrush);
+    SafeRelease(pBorderBrush);
+    SafeRelease(pBgBrush);
 }
 
 void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
@@ -3445,34 +3515,45 @@ void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
             const float kRad = 3.14159265358979323846f / 180.0f;
             int numOrbs = std::min(5, (int)g_recentColors.size());
 
-            // Curved guide arc for satellite tier: starts exactly at orb 0 and ends exactly at last orb
+            // Curved guide arc for satellite tier: cached hardware geometry
             if (numOrbs > 1) {
-                ID2D1PathGeometry* pArcGeom = nullptr;
-                if (g_pD2DFactory && SUCCEEDED(g_pD2DFactory->CreatePathGeometry(&pArcGeom))) {
-                    ID2D1GeometrySink* pSink = nullptr;
-                    if (SUCCEEDED(pArcGeom->Open(&pSink))) {
-                        float aStart = -90.0f * kRad + (float)(0 - (numOrbs - 1) * 0.5f) * (16.0f * kRad);
-                        float aEnd = -90.0f * kRad + (float)(numOrbs - 1 - (numOrbs - 1) * 0.5f) * (16.0f * kRad);
-                        pSink->BeginFigure(D2D1::Point2F(cx + std::cos(aStart) * kSatelliteRadius, cy + std::sin(aStart) * kSatelliteRadius), D2D1_FIGURE_BEGIN_HOLLOW);
-                        pSink->AddArc(D2D1::ArcSegment(
-                            D2D1::Point2F(cx + std::cos(aEnd) * kSatelliteRadius, cy + std::sin(aEnd) * kSatelliteRadius),
-                            D2D1::SizeF(kSatelliteRadius, kSatelliteRadius),
-                            0.0f,
-                            D2D1_SWEEP_DIRECTION_CLOCKWISE,
-                            D2D1_ARC_SIZE_SMALL
-                        ));
-                        pSink->EndFigure(D2D1_FIGURE_END_OPEN);
-                        pSink->Close();
-                        pSink->Release();
-
-                        ID2D1SolidColorBrush* pArcBrush = nullptr;
-                        pRT->CreateSolidColorBrush(D2D1::ColorF(0.40f, 0.48f, 0.60f, 0.45f), &pArcBrush);
-                        if (pArcBrush) {
-                            pRT->DrawGeometry(pArcGeom, pArcBrush, 1.2f);
-                            pArcBrush->Release();
+                if (!g_pRadialSatelliteArcGeom || g_cachedSatelliteNumOrbs != numOrbs || g_cachedSatelliteScale != scale) {
+                    SafeRelease(g_pRadialSatelliteArcGeom);
+                    g_cachedSatelliteNumOrbs = numOrbs;
+                    g_cachedSatelliteScale = scale;
+                    if (g_pD2DFactory && SUCCEEDED(g_pD2DFactory->CreatePathGeometry(&g_pRadialSatelliteArcGeom))) {
+                        ID2D1GeometrySink* pSink = nullptr;
+                        if (SUCCEEDED(g_pRadialSatelliteArcGeom->Open(&pSink))) {
+                            float aStart = -90.0f * kRad + (float)(0 - (numOrbs - 1) * 0.5f) * (16.0f * kRad);
+                            float aEnd = -90.0f * kRad + (float)(numOrbs - 1 - (numOrbs - 1) * 0.5f) * (16.0f * kRad);
+                            pSink->BeginFigure(D2D1::Point2F(std::cos(aStart) * kSatelliteRadius, std::sin(aStart) * kSatelliteRadius), D2D1_FIGURE_BEGIN_HOLLOW);
+                            pSink->AddArc(D2D1::ArcSegment(
+                                D2D1::Point2F(std::cos(aEnd) * kSatelliteRadius, std::sin(aEnd) * kSatelliteRadius),
+                                D2D1::SizeF(kSatelliteRadius, kSatelliteRadius),
+                                0.0f,
+                                D2D1_SWEEP_DIRECTION_CLOCKWISE,
+                                D2D1_ARC_SIZE_SMALL
+                            ));
+                            pSink->EndFigure(D2D1_FIGURE_END_OPEN);
+                            pSink->Close();
+                            SafeRelease(pSink);
+                        } else {
+                            SafeRelease(g_pRadialSatelliteArcGeom);
                         }
                     }
-                    pArcGeom->Release();
+                }
+
+                if (g_pRadialSatelliteArcGeom) {
+                    ID2D1SolidColorBrush* pArcBrush = nullptr;
+                    pRT->CreateSolidColorBrush(D2D1::ColorF(0.40f, 0.48f, 0.60f, 0.45f), &pArcBrush);
+                    if (pArcBrush) {
+                        D2D1_MATRIX_3X2_F oldXform;
+                        pRT->GetTransform(&oldXform);
+                        pRT->SetTransform(D2D1::Matrix3x2F::Translation(cx, cy) * oldXform);
+                        pRT->DrawGeometry(g_pRadialSatelliteArcGeom, pArcBrush, 1.2f);
+                        pRT->SetTransform(oldXform);
+                        SafeRelease(pArcBrush);
+                    }
                 }
             }
 
@@ -4050,7 +4131,7 @@ void DrawShapesFlyout(ID2D1HwndRenderTarget* pRT) {
     }
     if (!foundBtn) return;
 
-    float scale = g_toolbarDpiScale;
+    float scale = GetDpiScaleAtPoint((btnAbsLeft + btnAbsRight) * 0.5f, g_toolbarRect.top);
     const float flyoutW = 168.0f * scale;
     const float itemH = 32.0f * scale;
     const float padY = 6.0f * scale;
@@ -4133,7 +4214,7 @@ void DrawShapesFlyout(ID2D1HwndRenderTarget* pRT) {
         D2D1_POINT_2F p3 = D2D1::Point2F(tipX + 6.0f * scale, caretY - 0.5f);
 
         ID2D1PathGeometry* pCaretGeo = nullptr;
-        if (SUCCEEDED(g_pD2DFactory->CreatePathGeometry(&pCaretGeo))) {
+        if (g_pD2DFactory && SUCCEEDED(g_pD2DFactory->CreatePathGeometry(&pCaretGeo))) {
             ID2D1GeometrySink* pSink = nullptr;
             if (SUCCEEDED(pCaretGeo->Open(&pSink))) {
                 pSink->BeginFigure(p1, D2D1_FIGURE_BEGIN_FILLED);
@@ -4141,13 +4222,13 @@ void DrawShapesFlyout(ID2D1HwndRenderTarget* pRT) {
                 pSink->AddLine(p3);
                 pSink->EndFigure(D2D1_FIGURE_END_CLOSED);
                 pSink->Close();
-                pSink->Release();
+                SafeRelease(pSink);
 
                 pRT->FillGeometry(pCaretGeo, pBgBrush);
                 pRT->DrawLine(p1, p2, pBorderBrush, 1.2f);
                 pRT->DrawLine(p2, p3, pBorderBrush, 1.2f);
             }
-            pCaretGeo->Release();
+            SafeRelease(pCaretGeo);
         }
     }
 
@@ -4190,7 +4271,7 @@ void DrawShapesFlyout(ID2D1HwndRenderTarget* pRT) {
         // Active Checkmark (\uE73E CheckMark)
         if (isSelected && g_pIconFormat && pActiveAccentBrush) {
             D2D1_RECT_F checkR = D2D1::RectF(itemR.left + 4.0f * scale, itemTop, itemR.left + 20.0f * scale, itemTop + itemH);
-            pRT->DrawText(L"\uE73E", 1, g_pIconFormat, checkR, pActiveAccentBrush);
+            DrawCachedText(pRT, L"\uE73E", g_pIconFormat, checkR, pActiveAccentBrush);
         }
 
         // Icon
@@ -4211,32 +4292,32 @@ void DrawShapesFlyout(ID2D1HwndRenderTarget* pRT) {
         }
         else if (g_pIconFormat && pItemIconBrush) {
             D2D1_RECT_F iconR = D2D1::RectF(itemR.left + 22.0f * scale, itemTop, itemR.left + 42.0f * scale, itemTop + itemH);
-            pRT->DrawText(options[i].icon, (UINT32)wcslen(options[i].icon), g_pIconFormat, iconR, pItemIconBrush);
+            DrawCachedText(pRT, options[i].icon, g_pIconFormat, iconR, pItemIconBrush);
         }
 
         // Name
         if (g_pMenuTextFormat && pItemTextBrush) {
             D2D1_RECT_F textR = D2D1::RectF(itemR.left + 46.0f * scale, itemTop, itemR.right - 28.0f * scale, itemTop + itemH);
-            pRT->DrawText(options[i].name, (UINT32)wcslen(options[i].name), g_pMenuTextFormat, textR, pItemTextBrush);
+            DrawCachedText(pRT, options[i].name, g_pMenuTextFormat, textR, pItemTextBrush);
         }
 
         // Shortcut Key Badge
         if (g_pMenuKeyFormat && pItemKeyBrush) {
             D2D1_RECT_F keyR = D2D1::RectF(itemR.right - 26.0f * scale, itemTop, itemR.right - 6.0f * scale, itemTop + itemH);
-            pRT->DrawText(options[i].key, (UINT32)wcslen(options[i].key), g_pMenuKeyFormat, keyR, pItemKeyBrush);
+            DrawCachedText(pRT, options[i].key, g_pMenuKeyFormat, keyR, pItemKeyBrush);
         }
     }
 
-    if (pActiveAccentBrush) pActiveAccentBrush->Release();
-    if (pHoverBrush) pHoverBrush->Release();
-    if (pActiveHoverBrush) pActiveHoverBrush->Release();
-    if (pActiveBrush) pActiveBrush->Release();
-    if (pKeyBrush) pKeyBrush->Release();
-    if (pTextBrush) pTextBrush->Release();
-    if (pShadowBrush) pShadowBrush->Release();
-    if (pRimBrush) pRimBrush->Release();
-    if (pBorderBrush) pBorderBrush->Release();
-    if (pBgBrush) pBgBrush->Release();
+    SafeRelease(pActiveAccentBrush);
+    SafeRelease(pHoverBrush);
+    SafeRelease(pActiveHoverBrush);
+    SafeRelease(pActiveBrush);
+    SafeRelease(pKeyBrush);
+    SafeRelease(pTextBrush);
+    SafeRelease(pShadowBrush);
+    SafeRelease(pRimBrush);
+    SafeRelease(pBorderBrush);
+    SafeRelease(pBgBrush);
 }
 
 void RebuildGridBrush() {
@@ -4314,7 +4395,7 @@ void DrawGridFlyout(ID2D1HwndRenderTarget* pRT) {
     }
     if (!foundBtn) return;
 
-    float scale = g_toolbarDpiScale;
+    float scale = GetDpiScaleAtPoint((btnAbsLeft + btnAbsRight) * 0.5f, g_toolbarRect.top);
     const float flyoutW = 188.0f * scale;
     const float itemH = 30.0f * scale;
     const float padY = 6.0f * scale;
@@ -4399,7 +4480,7 @@ void DrawGridFlyout(ID2D1HwndRenderTarget* pRT) {
         D2D1_POINT_2F p3 = D2D1::Point2F(tipX + 6.0f * scale, caretY - 0.5f);
 
         ID2D1PathGeometry* pCaretGeo = nullptr;
-        if (SUCCEEDED(g_pD2DFactory->CreatePathGeometry(&pCaretGeo))) {
+        if (g_pD2DFactory && SUCCEEDED(g_pD2DFactory->CreatePathGeometry(&pCaretGeo))) {
             ID2D1GeometrySink* pSink = nullptr;
             if (SUCCEEDED(pCaretGeo->Open(&pSink))) {
                 pSink->BeginFigure(p1, D2D1_FIGURE_BEGIN_FILLED);
@@ -4407,13 +4488,13 @@ void DrawGridFlyout(ID2D1HwndRenderTarget* pRT) {
                 pSink->AddLine(p3);
                 pSink->EndFigure(D2D1_FIGURE_END_CLOSED);
                 pSink->Close();
-                pSink->Release();
+                SafeRelease(pSink);
 
                 pRT->FillGeometry(pCaretGeo, pBgBrush);
                 pRT->DrawLine(p1, p2, pBorderBrush, 1.2f);
                 pRT->DrawLine(p2, p3, pBorderBrush, 1.2f);
             }
-            pCaretGeo->Release();
+            SafeRelease(pCaretGeo);
         }
     }
 
@@ -4454,20 +4535,20 @@ void DrawGridFlyout(ID2D1HwndRenderTarget* pRT) {
         // Active Checkmark (\uE73E CheckMark)
         if (isSelected && g_pIconFormat && pActiveAccentBrush) {
             D2D1_RECT_F checkR = D2D1::RectF(itemR.left + 4.0f * scale, itemTop, itemR.left + 22.0f * scale, itemTop + itemH);
-            pRT->DrawText(L"\uE73E", 1, g_pIconFormat, checkR, pActiveAccentBrush);
+            DrawCachedText(pRT, L"\uE73E", g_pIconFormat, checkR, pActiveAccentBrush);
         }
 
         // Name
         if (g_pMenuTextFormat && pItemTextBrush) {
             float textRight = (wcslen(items[i].key) > 0) ? (itemR.right - 28.0f * scale) : (itemR.right - 8.0f * scale);
             D2D1_RECT_F textR = D2D1::RectF(itemR.left + 26.0f * scale, itemTop, textRight, itemTop + itemH);
-            pRT->DrawText(items[i].name, (UINT32)wcslen(items[i].name), g_pMenuTextFormat, textR, pItemTextBrush);
+            DrawCachedText(pRT, items[i].name, g_pMenuTextFormat, textR, pItemTextBrush);
         }
 
         // Shortcut Key Badge
         if (g_pMenuKeyFormat && pItemKeyBrush && wcslen(items[i].key) > 0) {
             D2D1_RECT_F keyR = D2D1::RectF(itemR.right - 26.0f * scale, itemTop, itemR.right - 6.0f * scale, itemTop + itemH);
-            pRT->DrawText(items[i].key, (UINT32)wcslen(items[i].key), g_pMenuKeyFormat, keyR, pItemKeyBrush);
+            DrawCachedText(pRT, items[i].key, g_pMenuKeyFormat, keyR, pItemKeyBrush);
         }
 
         // Divider between Style (0..2) and Density (3..5)
@@ -4477,17 +4558,17 @@ void DrawGridFlyout(ID2D1HwndRenderTarget* pRT) {
         }
     }
 
-    if (pDivBrush) pDivBrush->Release();
-    if (pActiveAccentBrush) pActiveAccentBrush->Release();
-    if (pHoverBrush) pHoverBrush->Release();
-    if (pActiveHoverBrush) pActiveHoverBrush->Release();
-    if (pActiveBrush) pActiveBrush->Release();
-    if (pKeyBrush) pKeyBrush->Release();
-    if (pTextBrush) pTextBrush->Release();
-    if (pShadowBrush) pShadowBrush->Release();
-    if (pRimBrush) pRimBrush->Release();
-    if (pBorderBrush) pBorderBrush->Release();
-    if (pBgBrush) pBgBrush->Release();
+    SafeRelease(pDivBrush);
+    SafeRelease(pActiveAccentBrush);
+    SafeRelease(pHoverBrush);
+    SafeRelease(pActiveHoverBrush);
+    SafeRelease(pActiveBrush);
+    SafeRelease(pKeyBrush);
+    SafeRelease(pTextBrush);
+    SafeRelease(pShadowBrush);
+    SafeRelease(pRimBrush);
+    SafeRelease(pBorderBrush);
+    SafeRelease(pBgBrush);
 }
 
 void DrawBackdropFlyout(ID2D1HwndRenderTarget* pRT) {
@@ -4532,7 +4613,7 @@ void DrawBackdropFlyout(ID2D1HwndRenderTarget* pRT) {
         items.push_back({ L"All Screens (Span All)", L"", g_canvasScope == CanvasMonitorScope::AllMonitors });
     }
 
-    float scale = g_toolbarDpiScale;
+    float scale = GetDpiScaleAtPoint((btnAbsLeft + btnAbsRight) * 0.5f, g_toolbarRect.top);
     const float flyoutW = 216.0f * scale;
     const float itemH = 30.0f * scale;
     const float padY = 6.0f * scale;
@@ -4618,7 +4699,7 @@ void DrawBackdropFlyout(ID2D1HwndRenderTarget* pRT) {
         D2D1_POINT_2F p3 = D2D1::Point2F(tipX + 6.0f * scale, caretY - 0.5f);
 
         ID2D1PathGeometry* pCaretGeo = nullptr;
-        if (SUCCEEDED(g_pD2DFactory->CreatePathGeometry(&pCaretGeo))) {
+        if (g_pD2DFactory && SUCCEEDED(g_pD2DFactory->CreatePathGeometry(&pCaretGeo))) {
             ID2D1GeometrySink* pSink = nullptr;
             if (SUCCEEDED(pCaretGeo->Open(&pSink))) {
                 pSink->BeginFigure(p1, D2D1_FIGURE_BEGIN_FILLED);
@@ -4626,13 +4707,13 @@ void DrawBackdropFlyout(ID2D1HwndRenderTarget* pRT) {
                 pSink->AddLine(p3);
                 pSink->EndFigure(D2D1_FIGURE_END_CLOSED);
                 pSink->Close();
-                pSink->Release();
+                SafeRelease(pSink);
 
                 pRT->FillGeometry(pCaretGeo, pBgBrush);
                 pRT->DrawLine(p1, p2, pBorderBrush, 1.2f);
                 pRT->DrawLine(p2, p3, pBorderBrush, 1.2f);
             }
-            pCaretGeo->Release();
+            SafeRelease(pCaretGeo);
         }
     }
 
@@ -4659,20 +4740,20 @@ void DrawBackdropFlyout(ID2D1HwndRenderTarget* pRT) {
         // Active Checkmark (\uE73E CheckMark)
         if (isSelected && g_pIconFormat && pActiveAccentBrush) {
             D2D1_RECT_F checkR = D2D1::RectF(itemR.left + 4.0f * scale, itemTop, itemR.left + 22.0f * scale, itemTop + itemH);
-            pRT->DrawText(L"\uE73E", 1, g_pIconFormat, checkR, pActiveAccentBrush);
+            DrawCachedText(pRT, L"\uE73E", g_pIconFormat, checkR, pActiveAccentBrush);
         }
 
         // Name
         if (g_pMenuTextFormat && pItemTextBrush) {
             float textRight = (items[i].key.length() > 0) ? (itemR.right - 28.0f * scale) : (itemR.right - 8.0f * scale);
             D2D1_RECT_F textR = D2D1::RectF(itemR.left + 26.0f * scale, itemTop, textRight, itemTop + itemH);
-            pRT->DrawText(items[i].name.c_str(), (UINT32)items[i].name.length(), g_pMenuTextFormat, textR, pItemTextBrush);
+            DrawCachedText(pRT, items[i].name, g_pMenuTextFormat, textR, pItemTextBrush);
         }
 
         // Shortcut Key Badge
         if (g_pMenuKeyFormat && pItemKeyBrush && items[i].key.length() > 0) {
             D2D1_RECT_F keyR = D2D1::RectF(itemR.right - 26.0f * scale, itemTop, itemR.right - 6.0f * scale, itemTop + itemH);
-            pRT->DrawText(items[i].key.c_str(), (UINT32)items[i].key.length(), g_pMenuKeyFormat, keyR, pItemKeyBrush);
+            DrawCachedText(pRT, items[i].key, g_pMenuKeyFormat, keyR, pItemKeyBrush);
         }
 
         // Divider between Backdrop Style (0..2) and Target Displays (3+)
@@ -4682,17 +4763,17 @@ void DrawBackdropFlyout(ID2D1HwndRenderTarget* pRT) {
         }
     }
 
-    if (pDivBrush) pDivBrush->Release();
-    if (pActiveAccentBrush) pActiveAccentBrush->Release();
-    if (pHoverBrush) pHoverBrush->Release();
-    if (pActiveHoverBrush) pActiveHoverBrush->Release();
-    if (pActiveBrush) pActiveBrush->Release();
-    if (pKeyBrush) pKeyBrush->Release();
-    if (pTextBrush) pTextBrush->Release();
-    if (pShadowBrush) pShadowBrush->Release();
-    if (pRimBrush) pRimBrush->Release();
-    if (pBorderBrush) pBorderBrush->Release();
-    if (pBgBrush) pBgBrush->Release();
+    SafeRelease(pDivBrush);
+    SafeRelease(pActiveAccentBrush);
+    SafeRelease(pHoverBrush);
+    SafeRelease(pActiveHoverBrush);
+    SafeRelease(pActiveBrush);
+    SafeRelease(pKeyBrush);
+    SafeRelease(pTextBrush);
+    SafeRelease(pShadowBrush);
+    SafeRelease(pRimBrush);
+    SafeRelease(pBorderBrush);
+    SafeRelease(pBgBrush);
 }
 
 void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
@@ -4716,7 +4797,7 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
     }
     if (!foundBtn) return;
 
-    float scale = g_toolbarDpiScale;
+    float scale = GetDpiScaleAtPoint((btnAbsLeft + btnAbsRight) * 0.5f, g_toolbarRect.top);
     const float flyoutW = 244.0f * scale;
     const float flyoutH = 312.0f * scale;
 
@@ -4806,9 +4887,9 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
             pRT->CreateSolidColorBrush(isHov ? D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.9f) : D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.4f), &pSwBorder);
             if (pSwBorder) {
                 pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(sx, sy), swatchDiam * 0.5f, swatchDiam * 0.5f), pSwBorder, isHov ? 1.5f : 1.0f);
-                pSwBorder->Release();
+                SafeRelease(pSwBorder);
             }
-            pSwBrush->Release();
+            SafeRelease(pSwBrush);
         }
     }
     curY += swatchDiam + 10.0f * scale;
@@ -4831,12 +4912,12 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
             pHorizStops,
             &pHorizBrush
         );
-        pHorizStops->Release();
+        SafeRelease(pHorizStops);
     }
     if (pHorizBrush) {
         D2D1_ROUNDED_RECT cr = D2D1::RoundedRect(canvasRect, 6.0f * scale, 6.0f * scale);
         pRT->FillRoundedRectangle(cr, pHorizBrush);
-        pHorizBrush->Release();
+        SafeRelease(pHorizBrush);
     }
 
     // Vertical linear gradient: Transparent to Black
@@ -4853,12 +4934,12 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
             pVertStops,
             &pVertBrush
         );
-        pVertStops->Release();
+        SafeRelease(pVertStops);
     }
     if (pVertBrush) {
         D2D1_ROUNDED_RECT cr = D2D1::RoundedRect(canvasRect, 6.0f * scale, 6.0f * scale);
         pRT->FillRoundedRectangle(cr, pVertBrush);
-        pVertBrush->Release();
+        SafeRelease(pVertBrush);
     }
 
     // Canvas border
@@ -4875,13 +4956,13 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
     pRT->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.75f), &pRetShadow);
     if (pRetShadow) {
         pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(retX, retY), 7.0f * scale, 7.0f * scale), pRetShadow, 2.5f * scale);
-        pRetShadow->Release();
+        SafeRelease(pRetShadow);
     }
     ID2D1SolidColorBrush* pRetWhite = nullptr;
     pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f), &pRetWhite);
     if (pRetWhite) {
         pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(retX, retY), 6.0f * scale, 6.0f * scale), pRetWhite, 2.0f * scale);
-        pRetWhite->Release();
+        SafeRelease(pRetWhite);
     }
 
     curY += canvasH + 10.0f * scale;
@@ -4909,9 +4990,9 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
             D2D1_ROUNDED_RECT hr = D2D1::RoundedRect(hueRect, 6.0f * scale, 6.0f * scale);
             pRT->FillRoundedRectangle(hr, pHueBrush);
             pRT->DrawRoundedRectangle(hr, pBorderBrush, 1.0f);
-            pHueBrush->Release();
+            SafeRelease(pHueBrush);
         }
-        pHueColl->Release();
+        SafeRelease(pHueColl);
     }
 
     // Hue Thumb
@@ -4927,10 +5008,10 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
         pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(hThumbX, hThumbY), 8.0f * scale, 8.0f * scale), pWhiteBrush);
         if (pHueColorBrush) {
             pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(hThumbX, hThumbY), 5.5f * scale, 5.5f * scale), pHueColorBrush);
-            pHueColorBrush->Release();
+            SafeRelease(pHueColorBrush);
         }
         pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(hThumbX, hThumbY), 8.0f * scale, 8.0f * scale), pBorderBrush, 1.0f);
-        pWhiteBrush->Release();
+        SafeRelease(pWhiteBrush);
     }
 
     curY += trackH + 10.0f * scale;
@@ -4943,7 +5024,7 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
     pRT->CreateSolidColorBrush(D2D1::ColorF(0.18f, 0.22f, 0.28f, 1.0f), &pCheckDark);
     if (pCheckDark) {
         pRT->FillRoundedRectangle(ar, pCheckDark);
-        pCheckDark->Release();
+        SafeRelease(pCheckDark);
     }
 
     D2D1_COLOR_F pureRGB = HSVtoRGB(g_customColor.hue, g_customColor.sat, g_customColor.val, 1.0f);
@@ -4962,9 +5043,9 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
         if (pABrush) {
             pRT->FillRoundedRectangle(ar, pABrush);
             pRT->DrawRoundedRectangle(ar, pBorderBrush, 1.0f);
-            pABrush->Release();
+            SafeRelease(pABrush);
         }
-        pAColl->Release();
+        SafeRelease(pAColl);
     }
 
     // Alpha Thumb
@@ -4981,7 +5062,7 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
             pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(aThumbX, aThumbY), 5.5f * scale, 5.5f * scale), pCurColorBrush);
         }
         pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(aThumbX, aThumbY), 8.0f * scale, 8.0f * scale), pBorderBrush, 1.0f);
-        pWhiteBrush->Release();
+        SafeRelease(pWhiteBrush);
     }
 
     curY += trackH + 12.0f * scale;
@@ -5001,9 +5082,8 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
 
     std::wstring hexStr = ColorToHex(g_customColor.activeColor, false);
     if (g_pMenuKeyFormat && pTextBrush) {
-        pRT->DrawText(hexStr.c_str(), (UINT32)hexStr.length(), g_pMenuKeyFormat,
-            D2D1::RectF(hexRect.left + 6.0f * scale, hexRect.top + 6.0f * scale, hexRect.right - 4.0f * scale, hexRect.bottom - 4.0f * scale),
-            pTextBrush);
+        D2D1_RECT_F hexTextR = D2D1::RectF(hexRect.left + 6.0f * scale, hexRect.top + 6.0f * scale, hexRect.right - 4.0f * scale, hexRect.bottom - 4.0f * scale);
+        DrawCachedText(pRT, hexStr, g_pMenuKeyFormat, hexTextR, pTextBrush);
     }
 
     // Preview Swatch Box
@@ -5012,7 +5092,7 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
     D2D1_ROUNDED_RECT prevR = D2D1::RoundedRect(prevRect, 4.0f * scale, 4.0f * scale);
     if (pCurColorBrush) {
         pRT->FillRoundedRectangle(prevR, pCurColorBrush);
-        pCurColorBrush->Release();
+        SafeRelease(pCurColorBrush);
     }
     pRT->DrawRoundedRectangle(prevR, pBorderBrush, 1.0f);
 
@@ -5025,11 +5105,11 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
     pRT->CreateSolidColorBrush(dropHov ? D2D1::ColorF(0.22f, 0.28f, 0.38f, 0.90f) : D2D1::ColorF(0.13f, 0.16f, 0.22f, 0.90f), &pBtnBg);
     if (pBtnBg) {
         pRT->FillRoundedRectangle(dropR, pBtnBg);
-        pBtnBg->Release();
+        SafeRelease(pBtnBg);
     }
     pRT->DrawRoundedRectangle(dropR, (g_isEyedropperActive && pMintBrush) ? pMintBrush : pBorderBrush, g_isEyedropperActive ? 1.8f : 1.0f);
     if (g_pIconFormat && pTextBrush) {
-        pRT->DrawText(L"\uEF3C", 1, g_pIconFormat, dropRect,
+        DrawCachedText(pRT, L"\uEF3C", g_pIconFormat, dropRect,
             (g_isEyedropperActive && pMintBrush) ? pMintBrush : pTextBrush);
     }
 
@@ -5042,21 +5122,21 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
     pRT->CreateSolidColorBrush(copyHov ? D2D1::ColorF(0.22f, 0.28f, 0.38f, 0.90f) : D2D1::ColorF(0.13f, 0.16f, 0.22f, 0.90f), &pCopyBg);
     if (pCopyBg) {
         pRT->FillRoundedRectangle(copyR, pCopyBg);
-        pCopyBg->Release();
+        SafeRelease(pCopyBg);
     }
     pRT->DrawRoundedRectangle(copyR, pBorderBrush, 1.0f);
     if (g_pIconFormat && pTextBrush) {
-        pRT->DrawText(L"\uE8C8", 1, g_pIconFormat, copyRect, pTextBrush);
+        DrawCachedText(pRT, L"\uE8C8", g_pIconFormat, copyRect, pTextBrush);
     }
 
     // Release chassis brushes
-    if (pBgBrush) pBgBrush->Release();
-    if (pBorderBrush) pBorderBrush->Release();
-    if (pRimBrush) pRimBrush->Release();
-    if (pShadowBrush) pShadowBrush->Release();
-    if (pTextBrush) pTextBrush->Release();
-    if (pMintBrush) pMintBrush->Release();
-    if (pCardBgBrush) pCardBgBrush->Release();
+    SafeRelease(pBgBrush);
+    SafeRelease(pBorderBrush);
+    SafeRelease(pRimBrush);
+    SafeRelease(pShadowBrush);
+    SafeRelease(pTextBrush);
+    SafeRelease(pMintBrush);
+    SafeRelease(pCardBgBrush);
 }
 
 void DrawLaserTrail(ID2D1HwndRenderTarget* pRT) {
@@ -5070,8 +5150,8 @@ void DrawLaserTrail(ID2D1HwndRenderTarget* pRT) {
     pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.92f, 0.95f, 1.0f), &pCoreBrush);
 
     if (!pGlowBrush || !pCoreBrush) {
-        if (pGlowBrush) pGlowBrush->Release();
-        if (pCoreBrush) pCoreBrush->Release();
+        SafeRelease(pGlowBrush);
+        SafeRelease(pCoreBrush);
         return;
     }
 
@@ -5133,11 +5213,11 @@ void DrawLaserTrail(ID2D1HwndRenderTarget* pRT) {
 
                         pSink->EndFigure(D2D1_FIGURE_END_OPEN);
                         pSink->Close();
-                        pSink->Release();
+                        SafeRelease(pSink);
 
                         stroke.pCachedGeometry = pGeom;
                     } else {
-                        pGeom->Release();
+                        SafeRelease(pGeom);
                     }
                 }
             }
@@ -5154,8 +5234,8 @@ void DrawLaserTrail(ID2D1HwndRenderTarget* pRT) {
         }
     }
 
-    pGlowBrush->Release();
-    pCoreBrush->Release();
+    SafeRelease(pGlowBrush);
+    SafeRelease(pCoreBrush);
 }
 
 void DrawLaserCursor(ID2D1HwndRenderTarget* pRT) {
@@ -5727,6 +5807,41 @@ void SaveCroppedSnapshot(int left, int top, int width, int height) {
     bool clipboardSucceeded = false;
     if (OpenClipboard(g_hOverlayWnd)) {
         if (EmptyClipboard()) {
+            // 1. Modern 32-bit DIBV5 with explicit alpha channel bitmasks (for Discord, Word, MS Paint, modern apps)
+            BITMAPV5HEADER bi5 = {};
+            bi5.bV5Size = sizeof(BITMAPV5HEADER);
+            bi5.bV5Width = width;
+            bi5.bV5Height = height;
+            bi5.bV5Planes = 1;
+            bi5.bV5BitCount = 32;
+            bi5.bV5Compression = BI_BITFIELDS;
+            bi5.bV5RedMask   = 0x00FF0000;
+            bi5.bV5GreenMask = 0x0000FF00;
+            bi5.bV5BlueMask  = 0x000000FF;
+            bi5.bV5AlphaMask = 0xFF000000;
+            bi5.bV5CSType    = LCS_sRGB;
+            bi5.bV5Intent    = LCS_GM_IMAGES;
+
+            DWORD dib5RowStride = width * 4;
+            DWORD dib5ImageSize = dib5RowStride * height;
+            DWORD dib5TotalSize = sizeof(BITMAPV5HEADER) + dib5ImageSize;
+
+            HGLOBAL hDIBV5 = GlobalAlloc(GHND, dib5TotalSize);
+            if (hDIBV5) {
+                BYTE* pDIBV5 = (BYTE*)GlobalLock(hDIBV5);
+                if (pDIBV5) {
+                    memcpy(pDIBV5, &bi5, sizeof(BITMAPV5HEADER));
+                    GetDIBits(hDstDC, hCroppedBmp, 0, height, pDIBV5 + sizeof(BITMAPV5HEADER), (BITMAPINFO*)&bi5, DIB_RGB_COLORS);
+                    GlobalUnlock(hDIBV5);
+                    if (!SetClipboardData(CF_DIBV5, hDIBV5)) {
+                        GlobalFree(hDIBV5);
+                    }
+                } else {
+                    GlobalFree(hDIBV5);
+                }
+            }
+
+            // 2. Standard CF_DIB fallback (24-bit RGB ensures legacy apps don't render transparent pixels as solid black boxes)
             BITMAPINFO bmi = {};
             bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
             bmi.bmiHeader.biWidth = width;
@@ -5751,6 +5866,7 @@ void SaveCroppedSnapshot(int left, int top, int width, int height) {
                 }
             }
 
+            // 3. Standard GDI DDB bitmap handle
             if (SetClipboardData(CF_BITMAP, hCroppedBmp)) {
                 clipboardSucceeded = true;
             }
@@ -5809,6 +5925,11 @@ void SetToolMode(ToolMode newMode) {
             g_gridFlyoutOpen = false;
             g_backdropFlyoutOpen = false;
             g_colorFlyoutOpen = false;
+
+            // Clear any lingering laser trails immediately so they don't orphan on top of desktop apps
+            g_laserStrokes.clear();
+            g_isLaserDrawing = false;
+            KillTimer(g_hOverlayWnd, TIMER_ID_LASER);
 
             // Enter Pointer (Click-Through) mode:
             // Window is already layered, so only toggle WS_EX_TRANSPARENT to avoid black flashing
@@ -6494,7 +6615,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
         // Color Picker Dragging
         if (g_pickerDrag != ColorPickerDrag::None) {
-            float scale = g_toolbarDpiScale;
+            float scale = GetFlyoutDpiScale(g_colorFlyoutRect);
             const float padX = 14.0f * scale;
             const float contentW = (g_colorFlyoutRect.right - g_colorFlyoutRect.left) - padX * 2.0f;
             float curY = g_colorFlyoutRect.top + (12.0f + 22.0f + 10.0f) * scale; // Top of canvas
@@ -6706,7 +6827,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
         // Check Shapes Flyout Item Hover
         if (g_shapesFlyoutOpen) {
-            float scale = g_toolbarDpiScale;
+            float scale = GetFlyoutDpiScale(g_shapesFlyoutRect);
             float padY = 6.0f * scale;
             float itemH = 32.0f * scale;
             int oldFlyoutHover = g_hoveredShapeFlyoutItem;
@@ -6726,7 +6847,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
         // Check Grid Flyout Item Hover
         if (g_gridFlyoutOpen) {
-            float scale = g_toolbarDpiScale;
+            float scale = GetFlyoutDpiScale(g_gridFlyoutRect);
             float padY = 6.0f * scale;
             float itemH = 30.0f * scale;
             float divH = 8.0f * scale;
@@ -6749,7 +6870,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
         // Check Backdrop Flyout Item Hover
         if (g_backdropFlyoutOpen) {
-            float scale = g_toolbarDpiScale;
+            float scale = GetFlyoutDpiScale(g_backdropFlyoutRect);
             float padY = 6.0f * scale;
             float itemH = 30.0f * scale;
             float divH = 8.0f * scale;
@@ -6786,7 +6907,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             if (g_cursorX >= g_colorFlyoutRect.left && g_cursorX <= g_colorFlyoutRect.right &&
                 g_cursorY >= g_colorFlyoutRect.top && g_cursorY <= g_colorFlyoutRect.bottom) {
 
-                float scale = g_toolbarDpiScale;
+                float scale = GetFlyoutDpiScale(g_colorFlyoutRect);
                 const float padX = 14.0f * scale;
                 const float contentW = (g_colorFlyoutRect.right - g_colorFlyoutRect.left) - padX * 2.0f;
                 float curY = g_colorFlyoutRect.top + 12.0f * scale;
@@ -6951,12 +7072,21 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                         float dSq = DistanceSq(adjX, adjY, pts.back().x, pts.back().y);
                         // Filter micro-movements to eliminate point clustering (which causes dotted artifacts)
                         if (dSq >= 9.0f) { // >= 3px
-                            // Subdivide large jumps to ensure buttery-smooth curves
+                            // Multi-step interpolation: subdivide large jumps based on distance to guarantee buttery-smooth curves
                             if (dSq > 144.0f) { // > 12px
-                                float midX = (pts.back().x + adjX) * 0.5f;
-                                float midY = (pts.back().y + adjY) * 0.5f;
-                                ULONGLONG midT = (pts.back().timestamp + GetTickCount64()) / 2;
-                                pts.push_back({ midX, midY, midT });
+                                float dist = std::sqrt(dSq);
+                                int steps = std::min(16, (int)std::ceil(dist / 10.0f));
+                                float startX = pts.back().x;
+                                float startY = pts.back().y;
+                                ULONGLONG startT = pts.back().timestamp;
+                                ULONGLONG nowT = GetTickCount64();
+                                for (int s = 1; s < steps; ++s) {
+                                    float t = (float)s / (float)steps;
+                                    float midX = startX + (adjX - startX) * t;
+                                    float midY = startY + (adjY - startY) * t;
+                                    ULONGLONG midT = startT + (ULONGLONG)((float)(nowT - startT) * t);
+                                    pts.push_back({ midX, midY, midT });
+                                }
                             }
                             pts.push_back({ adjX, adjY, GetTickCount64() });
                             g_laserStrokes.back().InvalidateGeometry();
@@ -7193,7 +7323,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         if (g_shapesFlyoutOpen) {
             if (x >= g_shapesFlyoutRect.left && x <= g_shapesFlyoutRect.right &&
                 y >= g_shapesFlyoutRect.top && y <= g_shapesFlyoutRect.bottom) {
-                float scale = g_toolbarDpiScale;
+                float scale = GetFlyoutDpiScale(g_shapesFlyoutRect);
                 float padY = 6.0f * scale;
                 float itemH = 32.0f * scale;
                 float relY = y - (g_shapesFlyoutRect.top + padY);
@@ -7248,7 +7378,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         if (g_gridFlyoutOpen) {
             if (x >= g_gridFlyoutRect.left && x <= g_gridFlyoutRect.right &&
                 y >= g_gridFlyoutRect.top && y <= g_gridFlyoutRect.bottom) {
-                float scale = g_toolbarDpiScale;
+                float scale = GetFlyoutDpiScale(g_gridFlyoutRect);
                 float padY = 6.0f * scale;
                 float itemH = 30.0f * scale;
                 float divH = 8.0f * scale;
@@ -7329,7 +7459,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         if (g_backdropFlyoutOpen) {
             if (x >= g_backdropFlyoutRect.left && x <= g_backdropFlyoutRect.right &&
                 y >= g_backdropFlyoutRect.top && y <= g_backdropFlyoutRect.bottom) {
-                float scale = g_toolbarDpiScale;
+                float scale = GetFlyoutDpiScale(g_backdropFlyoutRect);
                 float padY = 6.0f * scale;
                 float itemH = 30.0f * scale;
                 float divH = 8.0f * scale;
@@ -7430,7 +7560,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             if (x >= g_colorFlyoutRect.left && x <= g_colorFlyoutRect.right &&
                 y >= g_colorFlyoutRect.top && y <= g_colorFlyoutRect.bottom) {
 
-                float scale = g_toolbarDpiScale;
+                float scale = GetFlyoutDpiScale(g_colorFlyoutRect);
                 const float padX = 14.0f * scale;
                 const float contentW = (g_colorFlyoutRect.right - g_colorFlyoutRect.left) - padX * 2.0f;
                 float curY = g_colorFlyoutRect.top + 12.0f * scale;
@@ -8479,7 +8609,7 @@ LRESULT CALLBACK HotkeyWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
         UINT uMsg = LOWORD(lParam);
         static ULONGLONG s_lastTrayClickTime = 0;
 
-        if (uMsg == WM_LBUTTONUP) {
+        if (uMsg == WM_LBUTTONUP || uMsg == WM_LBUTTONDBLCLK) {
             ULONGLONG now = GetTickCount64();
             if (now - s_lastTrayClickTime < 250) return 0; // Debounce duplicate events
             s_lastTrayClickTime = now;
@@ -8497,23 +8627,30 @@ LRESULT CALLBACK HotkeyWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             GetCursorPos(&pt);
             HMENU hMenu = CreatePopupMenu();
             if (hMenu) {
-                AppendMenuW(hMenu, MF_STRING, 1, g_bIsActive ? L"Hide WinDraw\t(ESC)" : L"Open WinDraw\t(Ctrl+Alt+G)");
+                // Header & Primary Toggle
+                AppendMenuW(hMenu, MF_STRING, 1, g_bIsActive ? L"Hide WinDraw\tEsc" : L"Open WinDraw\tCtrl+Alt+G");
                 SetMenuDefaultItem(hMenu, 1, FALSE);
                 AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
-                AppendMenuW(hMenu, MF_STRING, 5, L"Region Snipping Tool\t(S)");
-                AppendMenuW(hMenu, MF_STRING, 2, L"Take Full-Screen Snapshot\t(Ctrl+S)");
-                AppendMenuW(hMenu, MF_STRING, 6, L"Cycle Whiteboard/Blackboard\t(K)");
+
+                // Quick Tools
+                AppendMenuW(hMenu, MF_STRING, 5, L"Region Snip\tS");
+                AppendMenuW(hMenu, MF_STRING, 2, L"Full Snapshot\tCtrl+S");
+                AppendMenuW(hMenu, MF_STRING, 6, L"Whiteboard Mode\tK");
+
                 UINT clearFlags = (g_bIsActive && (!g_strokes.empty() || !g_laserStrokes.empty())) ? MF_STRING : (MF_STRING | MF_GRAYED | MF_DISABLED);
-                AppendMenuW(hMenu, clearFlags, 3, L"Clear Canvas\t(C)");
-                AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
-                AppendMenuW(hMenu, MF_STRING, 4, L"Dismiss Overlay");
+                AppendMenuW(hMenu, clearFlags, 3, L"Clear Canvas\tC");
+
+                if (g_bIsActive) {
+                    AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
+                    AppendMenuW(hMenu, MF_STRING, 4, L"Hide Overlay");
+                }
 
                 SetForegroundWindow(hwnd);
                 int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd, NULL);
                 PostMessageW(hwnd, WM_NULL, 0, 0);
                 DestroyMenu(hMenu);
 
-                if (cmd == 1) {
+                if (cmd == 1 || cmd == 4) {
                     if (g_bIsActive) HideOverlay();
                     else ShowOverlay();
                 }
@@ -8535,9 +8672,6 @@ LRESULT CALLBACK HotkeyWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
                         if (!g_isLaserDrawing) KillTimer(hwnd, TIMER_ID_LASER);
                         InvalidateOverlay();
                     }
-                }
-                else if (cmd == 4) {
-                    HideOverlay();
                 }
             }
             return 0;
@@ -8728,19 +8862,12 @@ void WhTool_ModUninit() {
     if (g_hHotkeyWnd) {
         PostMessageW(g_hHotkeyWnd, WM_CANCELMODE, 0, 0);
         PostMessageW(g_hHotkeyWnd, WM_APP_EXIT, 0, 0);
-    }
-
-    if (g_hotkeyThreadId != 0) {
-        for (int i = 0; i < 50; ++i) {
-            if (PostThreadMessageW(g_hotkeyThreadId, WM_QUIT, 0, 0)) {
-                break;
-            }
-            Sleep(10);
-        }
+    } else if (g_hotkeyThreadId != 0) {
+        PostThreadMessageW(g_hotkeyThreadId, WM_QUIT, 0, 0);
     }
 
     if (g_hHotkeyThread) {
-        WaitForSingleObject(g_hHotkeyThread, 5000);
+        WaitForSingleObject(g_hHotkeyThread, 3000);
         CloseHandle(g_hHotkeyThread);
         g_hHotkeyThread = NULL;
         g_hotkeyThreadId = 0;
