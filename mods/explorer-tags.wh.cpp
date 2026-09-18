@@ -2,7 +2,7 @@
 // @id              explorer-tags
 // @name            Explorer Tags
 // @description     Colored tags panel at the bottom of File Explorer's navigation pane, plus a Tags submenu in the file context menu
-// @version         0.3.1
+// @version         0.3.2
 // @author          buedgik
 // @github          https://github.com/buedgik
 // @homepage        https://github.com/buedgik/explorer-tags
@@ -3115,6 +3115,15 @@ void Wh_ModSettingsChanged() {
     BroadcastMessage(g_msgLayout);
 }
 
+BOOL CALLBACK CancelMenuModeProc(HWND hwnd, LPARAM) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid == GetCurrentProcessId()) {
+        PostMessageW(hwnd, WM_CANCELMODE, 0, 0);
+    }
+    return TRUE;
+}
+
 void Wh_ModBeforeUninit() {
     AcquireSRWLockExclusive(&g_panelsLock);
     g_unloading = true;
@@ -3138,16 +3147,7 @@ void Wh_ModBeforeUninit() {
     // taken before the "is this a DefView menu" check. Ending menu mode in
     // this process keeps unloading from waiting on a menu the user forgot
     // open. Only this process, and only while unloading.
-    EnumWindows(
-        [](HWND hwnd, LPARAM) -> BOOL {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(hwnd, &pid);
-            if (pid == GetCurrentProcessId()) {
-                PostMessageW(hwnd, WM_CANCELMODE, 0, 0);
-            }
-            return TRUE;
-        },
-        0);
+    EnumWindows(CancelMenuModeProc, 0);
 
     // Detach FIRST, then wait. Detach revokes and releases the mod's own
     // reference on each drop target, so when OLE lets go of its reference the
