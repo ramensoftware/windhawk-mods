@@ -2,7 +2,7 @@
 // @id              tray-utility-customizer
 // @name            Tray Utility Customizer
 // @description     Granular per-icon control over the Windows tray utility icons — Show hidden icons, Emoji, touch keyboard, pen menu, virtual touchpad, and input/language indicator — arranged by one nestable layout expression.
-// @version         1.1
+// @version         2.0
 // @author          sb4ssman
 // @github          https://github.com/sb4ssman
 // @include         explorer.exe
@@ -32,7 +32,7 @@ positions each icon individually, at its native size by default.
 *Mod disabled: the chevron, Emoji, and touch keyboard sit in their native positions.*
 
 ![One row at the hidden-icons position](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/inline-overflow-emoji-touchkeyboard.png)
-*The default `overflow | emoji | touchKeyboard`: one row, native sizes.*
+*One row of three at native size — what `auto` produces on a single-height taskbar, and what `overflow | emoji | touchKeyboard` produces anywhere.*
 
 ![Chevron centered above a row of utilities](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/overflow-over-utility-row.png)
 *`overflow, (emoji | touchKeyboard)`: the chevron centered on its own row above the pair.*
@@ -58,42 +58,92 @@ positions each icon individually, at its native size by default.
 ![Right of Start, stacked on a double-height taskbar](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/tray-utility-customizer/assets/right-of-start-2x-taskmanager-height.png)
 *Right of Start on a double-height taskbar, stacked as a column beside Start.*
 
-## Layout expression
+## Upgrading from 1.x
 
-One string describes the whole arrangement:
+**Version 2.0 renames every setting, and your old values do not carry over.**
+The mod now uses the same grouped settings contract as the rest of this family
+(`Placement.Position`, `Layout.Arrangement`, `Size.ItemWidth`, and so on), and
+Windhawk cannot carry a value across a renamed key. Everything returns to its
+default, including the arrangement.
 
-- `|` places groups side by side along the **primary axis**
-- `,` stacks items along the crossed axis
-- parentheses nest, alternating axes
-- every group is centered (or start/end-aligned) against its siblings
+Two things are worth knowing before you retype your layout:
 
-Examples with the primary axis set to Row:
+- **The primary-axis setting is gone.** `|` is now ALWAYS horizontal and `,` is
+  ALWAYS vertical, at every depth. If you had Primary axis set to **Column**,
+  your old expression means its transpose under the new grammar — swap `|` and
+  `,` when you re-enter it. If you were on Row, the string means exactly what
+  it did before.
+- **The twelve per-icon nudge settings are gone.** A nudge now rides in the
+  arrangement itself: `emoji[+2,-1]`. One string, nothing to keep in sync.
+
+Nothing is silently reinterpreted — because the keys are new, the mod starts
+from `auto` rather than reading your old string with new rules.
+
+## Arrangement
+
+One string describes the whole layout, under `Layout` → `Arrangement`:
+
+- `|` places items **side by side**, always
+- `,` stacks them **on top of each other**, always
+- parentheses nest, to any depth
+- `name[dx,dy]` nudges one item; `(a, b)[dx,dy]` nudges a whole group
+- every group is centered against its siblings (see `Layout.Justify`)
+
+Examples:
 
 - `overflow | emoji | touchKeyboard` — one row of three icons
-- `overflow | emoji, touchKeyboard` — chevron centered beside a stacked pair
-- `overflow | emoji, touchKeyboard | penMenu` — the diamond: two centered
-  icons flanking a stacked middle column
+- `overflow, emoji, touchKeyboard` — a single column
+- `overflow | emoji, touchKeyboard` — chevron beside a stacked pair
+- `overflow | emoji, touchKeyboard | penMenu` — the diamond: two icons
+  flanking a stacked middle column
+- `overflow[0,-2] | emoji` — the same row with the chevron nudged up 2px
 
-Set the primary axis to Column and the same strings arrange top-to-bottom
-instead. Icons omitted from the expression, and icons Windows currently
-hides, simply don't participate; anything visible that you didn't place is
-appended after the group so nothing is ever lost. The group re-adapts
-automatically as icons appear and disappear (for example the transient touch
-keyboard).
+The default is the word **`auto`**, which fits the utilities you enabled to
+the taskbar's height: it takes the fewest columns that fit in the rows
+available, and `Layout.FillOrder` decides whether items fill across or down.
+Every time `auto` runs it writes the expression it generated to the Windhawk
+log, so you can paste that into the field and edit it.
+
+A separator is always required — `overflow (emoji | touchKeyboard)` is a parse
+error rather than an implied `|`, so a typo shows up in the log instead of
+silently becoming a different layout. A parse error falls back to `auto`.
 
 Tokens accept forgiving aliases: `chevron`/`hidden` for `overflow`,
 `keyboard` for `touchKeyboard`, `pen` for `penMenu`, `touchpad` for
-`virtualTouchpad`, and `input`/`language` for `inputIndicator`.
+`virtualTouchpad`, and `input`/`language` for `inputIndicator`. An unknown
+token is named in the log rather than silently dropped.
 
-Icons render at their native size unless you set explicit button sizes, and
-each icon has fine X/Y nudge settings. A tall column of native-size icons can
-overhang a single-height taskbar; set the icon width/height to about 16 px if
-you want it to fit.
+**Items your arrangement does not name.** Windows shows and hides these
+utilities live — the touch keyboard comes and goes, and the taskbar settings
+toggle the rest — so an arrangement you wrote earlier can be missing one.
+`Layout.NewItems` decides what happens then: **append** (the default) arranges
+them after what you wrote and logs that it did, and **ignore** leaves them out
+until you add them yourself.
+
+## Which utilities participate
+
+The `Content` group has one switch per utility. All six are on by default:
+a utility Windows is not currently showing contributes nothing either way, and
+on most machines the pen menu, virtual touchpad and input indicator are simply
+absent. Turn one off to leave it in its native position.
+
+## Size and adjustment
+
+Icons render at their native size unless you set `Size.ItemWidth` /
+`Size.ItemHeight`. A tall column of native-size icons can overhang a
+single-height taskbar; about 16 px makes it fit.
+
+`Size.ItemSpacing` is the gap between items and may be negative to pull them
+together. `Adjust.PadX` / `PadY` reserve space at the outside edges of the
+group and participate in layout — raising `PadY` gives `auto` fewer rows to
+work with. `Adjust.OffsetX` / `OffsetY` move the whole group visually and
+reserve nothing.
 
 ## Position
 
-The group can sit in the hidden-icons or Emoji column, or lease a dedicated
-tray column before the notification icons, before Wi-Fi/volume/battery,
+`Placement.Position` puts the group in the hidden-icons column (the default —
+that is where these utilities already are), the Emoji column, or a dedicated
+leased tray column before the notification icons, before Wi-Fi/volume/battery,
 before or after the clock, or after the Show Desktop strip. The lease is
 marker-tracked and fully reversible on unload.
 
@@ -106,9 +156,42 @@ taskbar re-centers. Primary taskbar only.
 
 Icons are identified by Windows' language-neutral runtime data-model classes,
 XAML names and content types, Automation IDs, and stable Segoe Fluent glyphs.
-Detection doesn't depend on translated accessibility labels. **Force
-MainStack** allows the complete native `MainStack` to participate as the
-`emoji` item when Windows doesn't expose a distinct identity.
+Detection doesn't depend on translated accessibility labels.
+`Behavior.Detection` → **Force MainStack** allows the complete native
+`MainStack` to participate as the `emoji` item when Windows doesn't expose a
+distinct identity.
+
+## Settings
+
+| Setting | Default | What it does |
+|---|---|---|
+| `Placement.Position` | `overflow` | Which tray column (or Start-adjacent spot) the group occupies |
+| `Content.*` | all on | One switch per utility: may it join the arrangement |
+| `Layout.Arrangement` | `auto` | The layout expression, or `auto` |
+| `Layout.FillOrder` | `rows` | Used by `auto`: fill across rows or down columns |
+| `Layout.Justify` | `center` | How a ragged row or column aligns against its siblings |
+| `Layout.NewItems` | `append` | What happens to a utility a written arrangement doesn't name |
+| `Size.ItemWidth` | `0` | 0 = the size Windows drew it at |
+| `Size.ItemHeight` | `0` | 0 = native; ~16 fits a column on a single-height taskbar |
+| `Size.ItemSpacing` | `0` | Gap between items; negative pulls them together |
+| `Adjust.PadX` / `PadY` | `0` | Space reserved at the group's edges; participates in layout |
+| `Adjust.OffsetX` / `OffsetY` | `0` | Moves the group visually; reserves nothing |
+| `Behavior.MinimumTrayHeight` | `44` | Below this tray height the mod leaves everything native |
+| `Behavior.Detection` | `auto` | Guarded detection, or Force MainStack |
+| `Behavior.DetailedLogging` | off | Tray hosts, glyph codepoints, and computed placements |
+
+## Taskbar position
+
+Windows 11 only puts the taskbar at the bottom, but two mods move it:
+
+- **[taskbar-on-top](https://windhawk.net/mods/taskbar-on-top) — supported.**
+  Nothing here positions against screen coordinates; everything is relative to
+  the taskbar's own XAML tree.
+- **[taskbar-vertical](https://windhawk.net/mods/taskbar-vertical) — not
+  compatible.** It rotates the same tray elements this mod positions, through
+  the same `RenderTransform` property. One property, two owners. This mod
+  detects a vertical taskbar, **leaves it completely untouched**, and says so
+  in the log rather than painting a rotated mess.
 
 ## Known limitations
 
@@ -119,127 +202,177 @@ MainStack** allows the complete native `MainStack` to participate as the
 - Left/Right of Start are experimental. The centered taskbar re-flows with
   an animation, and the group can briefly sit at a stale position until
   the taskbar's next layout pass settles it.
+
+## Changelog
+
+### 2.0
+
+- Adopted the shared settings contract: every key moved into a `Placement` /
+  `Content` / `Layout` / `Size` / `Adjust` / `Behavior` group. **This is a
+  clean settings break — see "Upgrading from 1.x" above.**
+- One `Layout.Arrangement` field replaces the layout expression, the primary
+  axis, the group alignment, and all twelve per-icon nudge settings. `|` is
+  always horizontal and `,` always vertical; nudges ride in the expression.
+- Added `auto`, which fits the enabled utilities to the taskbar height and
+  logs the expression it generated so it can be pasted back and edited.
+- Added `Content` switches per utility and `Layout.NewItems`, so a utility
+  that appears after you wrote your arrangement is not silently lost.
+- Added `Adjust.PadX` / `PadY` / `OffsetX` / `OffsetY`.
+- Row capacity is now computed in DIPs from the taskbar's real DPI instead of
+  raw pixels, so the automatic shape is correct at 125% and 150% scaling.
+- A vertical taskbar is now detected and the mod stands down completely
+  instead of arranging into a rotated coordinate space.
+- Restoring a borrowed element now puts back its exact previous local value,
+  or clears the property when it had none, instead of writing back a value
+  read from the live element. A tray element whose size or alignment came from
+  its template keeps that binding when the mod unloads.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- position: overflow
-  $name: Position
-  $description: >-
-    Where the utility group lives: a native utility column, a dedicated
-    leased tray column, or experimentally beside Start.
-  $options:
-  - overflow: Hidden-icons column
-  - emoji: Emoji column
-  - beforeIcons: Before notification icons
-  - beforeOmni: Before network, volume, and battery
-  - beforeClock: Before clock
-  - afterClock: After clock
-  - afterShowDesktop: After Show Desktop
-  - leftOfStart: Left of Start (experimental)
-  - rightOfStart: Right of Start (experimental)
+- Placement:
+  - Position: "overflow"
+    $name: Position
+    $description: >-
+      Where the utility group lives: a native utility column, a dedicated
+      leased tray column, or experimentally beside Start. The default is the
+      hidden-icons column because that is where these utilities already are -
+      the group takes the space it is already using instead of asking the
+      tray for more.
+    $options:
+    - "overflow": "Hidden-icons column (the chevron's own column)"
+    - "emoji": "Emoji column"
+    - "beforeIcons": "Before notification icons"
+    - "beforeOmni": "Before network, volume, and battery"
+    - "beforeClock": "Before clock"
+    - "afterClock": "After clock"
+    - "afterShowDesktop": "After Show Desktop"
+    - "leftOfStart": "Left of Start (experimental)"
+    - "rightOfStart": "Right of Start (experimental)"
+  $name: Placement
 
-- layout: "overflow | emoji | touchKeyboard"
-  $name: Layout expression
-  $description: >-
-    "|" places groups along the primary axis, "," stacks across it, and
-    parentheses nest (axes alternate). Tokens: overflow, emoji,
-    touchKeyboard, penMenu, virtualTouchpad, inputIndicator (aliases:
-    chevron, keyboard, pen, touchpad, input). Example diamond:
-    "overflow | emoji, touchKeyboard | penMenu". A single column:
-    "overflow, emoji, touchKeyboard" with the primary axis on Row. Icons
-    left out don't participate; visible unplaced icons are appended after
-    the group.
+- Content:
+  - Overflow: true
+    $name: Show hidden icons (the chevron)
+    $description: >-
+      Include this utility in the arrangement. A utility Windows is not
+      currently showing contributes nothing either way - pen menu, virtual
+      touchpad and the input indicator are absent on most machines.
+  - Emoji: true
+    $name: Emoji and more
+  - TouchKeyboard: true
+    $name: Touch keyboard
+  - PenMenu: true
+    $name: Pen menu
+  - VirtualTouchpad: true
+    $name: Virtual touchpad
+  - InputIndicator: true
+    $name: Input/language indicator
+  $name: Content
 
-- primaryAxis: row
-  $name: Primary axis
-  $description: The direction "|" runs; "," stacks the other way.
-  $options:
-  - row: Row
-  - column: Column
+- Layout:
+  - Arrangement: "auto"
+    $name: Arrangement
+    $description: >-
+      "auto" fits the utilities you enabled above to the taskbar height.
+      Anything else is an explicit layout: names side by side with "|",
+      stacked with ",", and grouped with parentheses - "overflow, emoji |
+      touchKeyboard" is the chevron over Emoji beside the touch keyboard.
+      "|" is ALWAYS horizontal and "," is ALWAYS vertical, at every depth.
+      Tokens are overflow, emoji, touchKeyboard, penMenu, virtualTouchpad and
+      inputIndicator (aliases: chevron, hidden, keyboard, pen, touchpad,
+      input, language). Append a pixel offset to nudge one item,
+      "emoji[+2,-1]", or a whole group, "(overflow, emoji)[3,0]". Every time
+      "auto" is applied its generated arrangement is written to the Windhawk
+      log, so you can paste it here and edit it. A parse error is logged and
+      falls back to automatic.
+  - FillOrder: "rows"
+    $name: Fill order
+    $description: Used by "auto". Whether items fill across rows or down columns first.
+    $options:
+    - "rows": "Fill rows first (left to right, then down)"
+    - "columns": "Fill columns first (top to bottom, then right)"
+  - Justify: "center"
+    $name: Short row or column
+    $description: How a ragged row or column is aligned against its siblings.
+    $options:
+    - "start": "Start"
+    - "center": "Center"
+    - "end": "End"
+  - NewItems: "append"
+    $name: Items your arrangement does not name
+    $description: >-
+      Windows shows and hides these utilities live - the touch keyboard comes
+      and goes, and the taskbar settings toggle the rest - so an arrangement
+      you wrote earlier can be missing one. Only applies to a written
+      arrangement; "auto" always includes every enabled utility Windows is
+      currently showing.
+    $options:
+    - "append": "Add them after the arrangement"
+    - "ignore": "Leave them out until I add them"
+  $name: Layout
 
-- crossAlign: center
-  $name: Group alignment
-  $description: How shorter groups align against their siblings.
-  $options:
-  - start: Start
-  - center: Center
-  - end: End
+- Size:
+  - ItemWidth: 0
+    $name: Item width (px, 0 = native size)
+    $description: >-
+      0 gives each utility the width Windows drew it at. A number puts every
+      item in a fixed box of that width instead, which lines columns up but
+      adds dead space around a narrower glyph.
+  - ItemHeight: 0
+    $name: Item height (px, 0 = native size)
+    $description: >-
+      0 uses the native size. A tall column of native-size icons can overhang
+      a single-height taskbar; about 16 here makes it fit.
+  - ItemSpacing: 0
+    $name: Item spacing (px)
+    $description: >-
+      Gap between items along each axis. Negative pulls them together and may
+      overlap. THIS is what tightens the cluster - horizontal padding only
+      reserves space at the two outside edges and can never change the
+      distance between items.
+  $name: Size
 
-- buttonWidth: 0
-  $name: Icon width (px, 0 = native)
+- Adjust:
+  - PadX: 0
+    $name: Horizontal padding (px)
+    $description: Space reserved on both sides of the group. Participates in layout.
+  - PadY: 0
+    $name: Vertical padding (px)
+    $description: >-
+      Space reserved above and below the group. Reserved before the
+      arrangement divides the taskbar height, so raising it gives "auto"
+      fewer rows to work with.
+  - OffsetX: 0
+    $name: Horizontal offset (px)
+    $description: Moves the whole group. Does not reserve space.
+  - OffsetY: 0
+    $name: Vertical offset (px)
+    $description: Moves the whole group up (negative) or down (positive).
+  $name: Adjust
 
-- buttonHeight: 0
-  $name: Icon height (px, 0 = native)
-
-- buttonSpacing: 0
-  $name: Icon spacing (px)
-  $description: Gap between placed items on both axes.
-
-- groupOffsetX: 0
-  $name: Group horizontal offset (px)
-
-- groupOffsetY: 0
-  $name: Group vertical offset (px)
-
-- overflowOffsetX: 0
-  $name: Hidden icons X nudge (px)
-
-- overflowOffsetY: 0
-  $name: Hidden icons Y nudge (px)
-
-- emojiOffsetX: 0
-  $name: Emoji X nudge (px)
-
-- emojiOffsetY: 0
-  $name: Emoji Y nudge (px)
-
-- touchKeyboardOffsetX: 0
-  $name: Touch keyboard X nudge (px)
-
-- touchKeyboardOffsetY: 0
-  $name: Touch keyboard Y nudge (px)
-
-- penMenuOffsetX: 0
-  $name: Pen menu X nudge (px)
-
-- penMenuOffsetY: 0
-  $name: Pen menu Y nudge (px)
-
-- virtualTouchpadOffsetX: 0
-  $name: Virtual touchpad X nudge (px)
-
-- virtualTouchpadOffsetY: 0
-  $name: Virtual touchpad Y nudge (px)
-
-- inputIndicatorOffsetX: 0
-  $name: Input indicator X nudge (px)
-
-- inputIndicatorOffsetY: 0
-  $name: Input indicator Y nudge (px)
-
-- minimumTrayHeight: 44
-  $name: Minimum tray height (px)
-  $description: >-
-    Below this height the mod leaves the native layout unchanged. Use 0 to
-    allow rearranging on any taskbar height.
-
-- mergeMode: auto
-  $name: Detection mode
-  $description: >-
-    Automatic is guarded and recommended. Force allows the complete native
-    MainStack to participate as the emoji item when Windows doesn't
-    identify its controls.
-  $options:
-  - auto: Automatic
-  - forceMainStack: Force MainStack (experimental)
-
-- detailedLogging: false
-  $name: Detailed discovery logging
-  $description: >-
-    Logs tray host names, classes, per-icon glyph codepoints, and the
-    computed placements.
+- Behavior:
+  - MinimumTrayHeight: 44
+    $name: Minimum tray height (px)
+    $description: >-
+      Below this height the mod leaves the native layout unchanged. Use 0 to
+      allow rearranging on any taskbar height.
+  - Detection: "auto"
+    $name: Detection mode
+    $description: >-
+      Automatic is guarded and recommended. Force allows the complete native
+      MainStack to participate as the emoji item when Windows doesn't
+      identify its controls.
+    $options:
+    - "auto": "Automatic"
+    - "forceMainStack": "Force MainStack (experimental)"
+  - DetailedLogging: false
+    $name: Detailed discovery logging
+    $description: >-
+      Logs tray host names, classes, per-icon glyph codepoints, and the
+      computed placements.
+  $name: Behavior
 */
 // ==/WindhawkModSettings==
 
@@ -273,25 +406,166 @@ using namespace winrt::Windows::UI::Xaml::Automation;
 using namespace winrt::Windows::UI::Xaml::Controls;
 using namespace winrt::Windows::UI::Xaml::Media;
 
-// ── Nested group layout ───────────────────────────────────────────────────
-// Template block: _templates/nested-group-layout.h v1.1 (verbatim copy —
+// ── Settings I/O ───────────────────────────────────────────────────────────
+// Template block: _templates/settings-io.h v1.0 (verbatim copy —
+// keep in sync with the template; Windhawk mods are single-file).
+
+namespace windhawk_mod_templates::settings_io {
+
+inline int Clamp(int value, int low, int high) {
+    return std::max(low, std::min(high, value));
+}
+
+// Frees on every path, including the ones a hand-written loader forgets.
+class StringSetting {
+public:
+    explicit StringSetting(PCWSTR key) : value_(Wh_GetStringSetting(key)) {}
+    ~StringSetting() {
+        if (value_) Wh_FreeStringSetting(value_);
+    }
+    StringSetting(StringSetting const&) = delete;
+    StringSetting& operator=(StringSetting const&) = delete;
+
+    // Never nullptr in practice, but do not rely on that at the call site.
+    PCWSTR Get() const { return value_ ? value_ : L""; }
+    bool Empty() const { return !value_ || !value_[0]; }
+
+private:
+    PCWSTR value_ = nullptr;
+};
+
+// Copy a string setting into a fixed buffer, always NUL-terminated. Fixed
+// buffers rather than std::wstring because a namespace-scope settings struct
+// must not own heap — see the exit-time destructor audit.
+template <size_t N>
+inline void LoadString(PCWSTR key, wchar_t (&buffer)[N]) {
+    StringSetting setting(key);
+    if (setting.Empty()) {
+        buffer[0] = L'\0';
+        return;
+    }
+    wcsncpy(buffer, setting.Get(), N - 1);
+    buffer[N - 1] = L'\0';
+}
+
+// Same, but substitutes `fallback` when the setting is empty.
+template <size_t N>
+inline void LoadString(PCWSTR key, wchar_t (&buffer)[N], PCWSTR fallback) {
+    LoadString(key, buffer);
+    if (!buffer[0] && fallback) {
+        wcsncpy(buffer, fallback, N - 1);
+        buffer[N - 1] = L'\0';
+    }
+}
+
+inline int LoadInt(PCWSTR key, int low, int high) {
+    return Clamp(Wh_GetIntSetting(key), low, high);
+}
+
+inline bool LoadBool(PCWSTR key) {
+    return Wh_GetIntSetting(key) != 0;
+}
+
+// A $options choice, matched case-insensitively against a table of tokens.
+// Returns the matching entry's value, or `fallback` when nothing matches —
+// which also covers the unset case, since an unset string is empty.
+//
+// Use this rather than a chain of _wcsicmp: after ANY option is renamed, a
+// stale literal in a hand-written chain fails silently and the mod quietly
+// falls back. That cost this lab a release (Indicator symbols reverted to
+// numbers because `labelFormat == L"dot"` was never true again).
+template <typename T>
+struct Choice {
+    wchar_t const* token;
+    T value;
+};
+
+template <typename T, size_t N>
+inline T LoadChoice(PCWSTR key, Choice<T> const (&choices)[N], T fallback) {
+    StringSetting setting(key);
+    if (setting.Empty()) return fallback;
+    for (auto const& choice : choices) {
+        if (_wcsicmp(setting.Get(), choice.token) == 0) return choice.value;
+    }
+    return fallback;
+}
+} // namespace windhawk_mod_templates::settings_io
+
+// ── Nested group layout ────────────────────────────────────────────────────
+// Template block: _templates/nested-group-layout.h v2.5 (verbatim copy —
 // keep in sync with the template; Windhawk mods are single-file).
 
 namespace windhawk_mod_templates::nested_group_layout {
 
-enum class Axis { Horizontal, Vertical };
-enum class CrossAlign { Start, Center, End };
+enum class Axis { Horizontal, Vertical };  // node orientation, not a setting
+enum class Justify { Start, Center, End };
+enum class FillOrder { Rows, Columns };
 
+// An item is sized either absolutely (width x height) or RELATIVE TO THE AXIS
+// its group happens to lay out along. Axis-relative sizing exists because an
+// item like a Task View button should be "as wide as it needs and as tall as
+// the buttons beside it" when it is a column, and the mirror image when it is
+// a row — and in a hand-written arrangement the mod cannot know which it will
+// be. The parent group knows its own axis, so it resolves this at measure and
+// arrange time:
+//
+//   thickness — extent ALONG the group's axis (its width as a column, its
+//               height as a row)
+//   cross     — extent ACROSS the group's axis; 0 means fill, i.e. match
+//               whatever the rest of the group measures
 struct Size {
     double width = 0.0;
     double height = 0.0;
-    bool Empty() const { return width <= 0.0 || height <= 0.0; }
+    bool axisRelative = false;
+    double thickness = 0.0;
+    double cross = 0.0;
+
+    bool Empty() const {
+        return axisRelative ? thickness <= 0.0
+                            : (width <= 0.0 || height <= 0.0);
+    }
+};
+
+// Size an item against its group's axis. cross = 0 fills the group.
+inline Size AlongAxis(double thickness, double cross = 0.0) {
+    Size size;
+    size.axisRelative = true;
+    size.thickness = thickness;
+    size.cross = cross;
+    return size;
+}
+
+// CONTENT-SIZED ITEMS. A settings-driven item size describes a GLYPH: a box of
+// a chosen width that a character is centered in. It does not describe TEXT.
+// "9%", "80%", and "100%" are three different widths, a font or locale change
+// moves them again, and a battery percentage grows while you watch it. Handing
+// such an item the same fixed width as its neighbours reserves too little
+// space, and the overflow is discovered at paint time — as a clipped edge.
+//
+// The SizeResolver is a callback precisely so a mod can answer with something
+// it measured. Measure the live element (native_glyph_surface::MeasureNatural)
+// and pass the result through here: the arrangement then RESERVES the real
+// width, the group's total grows to match, and nothing clips.
+//
+// `minimum` keeps a short value from collapsing below the item size the user
+// chose, so "9%" still lines up with the glyphs above it. Round `measured` up
+// and add a pixel or two of slack, or the item will re-measure every time its
+// text ticks over.
+inline Size ContentAlong(double measured, double minimum, double cross) {
+    return {std::max(measured, minimum), cross};
+}
+
+// Cosmetic per-leaf nudge parsed from the expression's "[dx,dy]" suffix.
+struct Offset {
+    double x = 0.0;
+    double y = 0.0;
 };
 
 struct Config {
-    Axis primaryAxis = Axis::Horizontal;
     double spacing = 0.0;
-    CrossAlign crossAlign = CrossAlign::Center;
+    Justify justify = Justify::Center;
+    double padX = 0.0;  // reserved on BOTH left and right
+    double padY = 0.0;  // reserved on BOTH top and bottom
 };
 
 struct Placement {
@@ -303,71 +577,130 @@ struct Placement {
 
 struct Node {
     std::wstring token;            // non-empty = leaf
+    Offset offset;                 // from the "[dx,dy]" suffix; leaf or group
     std::vector<Node> children;    // group children, laid along axis
     Axis axis = Axis::Horizontal;  // group axis (unused for leaves)
 };
 
+// Where an arrangement stopped making sense, and what was expected there.
+// Report both: a hand-edited expression is much easier to fix with a column
+// number than with "did not parse".
+struct ParseError {
+    size_t position = 0;
+    std::wstring expected;
+};
+
 class Parser {
 public:
-    Parser(std::wstring const& text, Axis axis)
-        : text_(text), axis_(axis) {}
+    explicit Parser(std::wstring const& text) : text_(text) {}
 
     bool Run(Node& root) {
         position_ = 0;
         valid_ = true;
-        root = ParseExpr(axis_);
+        root = ParseExpr();
         SkipSpace();
-        return valid_ && position_ >= text_.size();
+        if (valid_ && position_ < text_.size())
+            Fail(position_, L"a separator ('|' or ',') or end of arrangement");
+        return valid_;
     }
+
+    ParseError const& Error() const { return error_; }
 
 private:
-    Node ParseExpr(Axis axis) {
+    void Fail(size_t position, wchar_t const* expected) {
+        if (valid_) {  // keep the first failure; later ones are fallout
+            valid_ = false;
+            error_ = {position, expected};
+        }
+    }
+
+    Node ParseExpr() {
         Node node;
-        node.axis = axis;
-        node.children.push_back(ParseStack(axis));
+        node.axis = Axis::Horizontal;
+        node.children.push_back(ParseStack());
         while (Peek() == L'|') {
             ++position_;
-            node.children.push_back(ParseStack(axis));
+            node.children.push_back(ParseStack());
         }
         return node;
     }
 
-    Node ParseStack(Axis axis) {
+    Node ParseStack() {
         Node node;
-        node.axis = axis == Axis::Horizontal ? Axis::Vertical
-                                             : Axis::Horizontal;
-        node.children.push_back(ParseUnit(axis));
+        node.axis = Axis::Vertical;
+        node.children.push_back(ParseUnit());
         while (Peek() == L',') {
             ++position_;
-            node.children.push_back(ParseUnit(axis));
+            node.children.push_back(ParseUnit());
         }
         return node;
     }
 
-    Node ParseUnit(Axis axis) {
+    Node ParseUnit() {
         SkipSpace();
         if (position_ < text_.size() && text_[position_] == L'(') {
             ++position_;
-            Node inner = ParseExpr(axis);
+            Node inner = ParseExpr();
             SkipSpace();
-            if (position_ < text_.size() && text_[position_] == L')') {
+            if (position_ < text_.size() && text_[position_] == L')')
                 ++position_;
-            } else {
-                valid_ = false;
-            }
+            else
+                Fail(position_, L"a closing ')'");
+            // A group takes an offset too, moving everything inside it.
+            if (position_ < text_.size() && text_[position_] == L'[')
+                inner.offset = ParseOffset();
             return inner;
         }
+
         Node leaf;
         size_t start = position_;
-        while (position_ < text_.size() &&
-               text_[position_] != L'|' && text_[position_] != L',' &&
-               text_[position_] != L'(' && text_[position_] != L')' &&
-               !iswspace(text_[position_]))
+        while (position_ < text_.size() && !IsDelimiter(text_[position_]))
             ++position_;
         leaf.token = text_.substr(start, position_ - start);
-        if (leaf.token.empty())
-            valid_ = false;
+        if (leaf.token.empty()) {
+            Fail(position_, L"a name");
+            return leaf;
+        }
+        if (position_ < text_.size() && text_[position_] == L'[')
+            leaf.offset = ParseOffset();
         return leaf;
+    }
+
+    // "[dx,dy]" — signs optional, spaces allowed, both components required.
+    Offset ParseOffset() {
+        ++position_;  // consume '['
+        Offset offset;
+        offset.x = ParseNumber();
+        SkipSpace();
+        if (position_ < text_.size() && text_[position_] == L',')
+            ++position_;
+        else
+            Fail(position_, L"a ',' between the x and y offsets");
+        offset.y = ParseNumber();
+        SkipSpace();
+        if (position_ < text_.size() && text_[position_] == L']')
+            ++position_;
+        else
+            Fail(position_, L"a closing ']'");
+        return offset;
+    }
+
+    double ParseNumber() {
+        SkipSpace();
+        wchar_t* end = nullptr;
+        double value = std::wcstod(text_.c_str() + position_, &end);
+        size_t consumed = end ? (size_t)(end - (text_.c_str() + position_)) : 0;
+        if (!consumed) {
+            Fail(position_, L"a number");
+            return 0.0;
+        }
+        position_ += consumed;
+        return value;
+    }
+
+    static bool IsDelimiter(wchar_t c) {
+        return c == L'|' || c == L',' || c == L'(' || c == L')' ||
+               c == L'[' || c == L']' || iswspace(c);
     }
 
     wchar_t Peek() {
@@ -381,13 +714,61 @@ private:
     }
 
     std::wstring const& text_;
-    Axis axis_;
     size_t position_ = 0;
     bool valid_ = true;
+    ParseError error_;
 };
 
-inline bool Parse(std::wstring const& text, Axis primaryAxis, Node& root) {
-    return Parser(text, primaryAxis).Run(root);
+inline bool Parse(std::wstring const& text, Node& root,
+                  ParseError* error = nullptr) {
+    Parser parser(text);
+    bool ok = parser.Run(root);
+    if (!ok && error)
+        *error = parser.Error();
+    return ok;
+}
+
+// ---- Token vocabulary -------------------------------------------------------
+//
+// A token is an item's stable IDENTITY, never its displayed label. Labels are
+// not unique, can contain the expression's own delimiters, can be empty or an
+// emoji, and renaming one would silently break an arrangement the user wrote.
+// Each mod declares its vocabulary and documents it:
+//
+//   fixed set     -> semantic names: wifi, volume, battery, percent, clock
+//   dynamic set   -> 1, 2, 3, ... because the set changes at runtime
+//   either        -> an extra named item such as "master"
+//
+// A dynamic mod may accept a readable alias for a number (desktop2 == 2). Log
+// the token-to-label map next to the arrangement so a user can tell which
+// number is which item without the arrangement depending on the labels.
+//
+// Matching is case-insensitive: someone typing "Wifi" means wifi.
+
+inline bool TokenIs(std::wstring const& token, wchar_t const* name) {
+    size_t i = 0;
+    for (; i < token.size() && name[i]; ++i)
+        if (towlower(token[i]) != towlower(name[i]))
+            return false;
+    return i == token.size() && !name[i];
+}
+
+// "desktop2" -> 2 with prefix L"desktop"; 0 when the token does not match.
+inline int TokenIndexWithPrefix(std::wstring const& token,
+                                wchar_t const* prefix) {
+    size_t i = 0;
+    for (; prefix[i]; ++i)
+        if (i >= token.size() || towlower(token[i]) != towlower(prefix[i]))
+            return 0;
+    if (i >= token.size())
+        return 0;
+    int value = 0;
+    for (; i < token.size(); ++i) {
+        if (token[i] < L'0' || token[i] > L'9')
+            return 0;
+        value = value * 10 + (token[i] - L'0');
+    }
+    return value;
 }
 
 using SizeResolver = std::function<Size(std::wstring const&)>;
@@ -397,82 +778,385 @@ inline Size Measure(Node const& node, Config const& config,
     if (!node.token.empty())
         return resolve(node.token);
 
+    // The grammar wraps every unit in a group, so most groups have a single
+    // child. Such a group IS its child — pass the size through verbatim, or an
+    // axis-relative child would be flattened into a concrete size by its own
+    // wrapper before the real parent ever sees it.
+    {
+        Node const* only = nullptr;
+        int visible = 0;
+        for (auto const& child : node.children) {
+            if (Measure(child, config, resolve).Empty())
+                continue;
+            only = &child;
+            if (++visible > 1)
+                break;
+        }
+        if (visible == 1)
+            return Measure(*only, config, resolve);
+    }
+
     double main = 0.0;
     double cross = 0.0;
+    double fillFallback = 0.0;
     int placed = 0;
     for (auto const& child : node.children) {
         Size size = Measure(child, config, resolve);
         if (size.Empty())
             continue;
-        double childMain =
-            node.axis == Axis::Horizontal ? size.width : size.height;
-        double childCross =
-            node.axis == Axis::Horizontal ? size.height : size.width;
+        double childMain, childCross;
+        if (size.axisRelative) {
+            childMain = size.thickness;
+            // A filling item takes its cross extent FROM the group, so it must
+            // not drive the group's cross size — otherwise it would size itself.
+            childCross = size.cross;
+            fillFallback = std::max(fillFallback, size.thickness);
+        } else {
+            childMain =
+                node.axis == Axis::Horizontal ? size.width : size.height;
+            childCross =
+                node.axis == Axis::Horizontal ? size.height : size.width;
+        }
         main += (placed ? config.spacing : 0.0) + childMain;
         cross = std::max(cross, childCross);
         ++placed;
     }
     if (!placed)
         return {};
+    // Degenerate case: every child fills, so nothing established a cross size.
+    // Fall back to the largest thickness rather than collapsing the group.
+    if (cross <= 0.0)
+        cross = fillFallback;
     return node.axis == Axis::Horizontal ? Size{main, cross}
                                          : Size{cross, main};
 }
 
+// Resolve a child's size against its parent group's axis, so an axis-relative
+// item becomes concrete width x height.
+inline Size ConcreteSize(Size const& size, Axis axis, Size const& groupTotal) {
+    if (!size.axisRelative)
+        return size;
+    double groupCross =
+        axis == Axis::Horizontal ? groupTotal.height : groupTotal.width;
+    double cross = size.cross > 0.0 ? size.cross : groupCross;
+    return axis == Axis::Horizontal ? Size{size.thickness, cross}
+                                    : Size{cross, size.thickness};
+}
+
 inline void Arrange(Node const& node, Config const& config,
                     SizeResolver const& resolve, double x, double y,
-                    std::vector<Placement>& out) {
+                    std::vector<Placement>& out,
+                    Size const* resolvedSize = nullptr) {
     if (!node.token.empty()) {
-        Size size = resolve(node.token);
+        Size size = resolvedSize ? *resolvedSize : resolve(node.token);
         if (!size.Empty())
-            out.push_back({node.token, x, y, size});
+            out.push_back(
+                {node.token, x + node.offset.x, y + node.offset.y, size});
         return;
     }
 
     Size total = Measure(node, config, resolve);
     if (total.Empty())
         return;
+    // A group's own offset moves everything inside it and nothing outside.
+    x += node.offset.x;
+    y += node.offset.y;
+
+    // Single-child group: forward the size the real parent already resolved,
+    // so axis-relative sizing survives the grammar's per-unit wrapper.
+    {
+        Node const* only = nullptr;
+        int visible = 0;
+        for (auto const& child : node.children) {
+            if (Measure(child, config, resolve).Empty())
+                continue;
+            only = &child;
+            if (++visible > 1)
+                break;
+        }
+        if (visible == 1) {
+            Arrange(*only, config, resolve, x, y, out, resolvedSize);
+            return;
+        }
+    }
+
     double cursor = node.axis == Axis::Horizontal ? x : y;
     for (auto const& child : node.children) {
-        Size size = Measure(child, config, resolve);
-        if (size.Empty())
+        Size measured = Measure(child, config, resolve);
+        if (measured.Empty())
             continue;
+        Size size = ConcreteSize(measured, node.axis, total);
         double unused = node.axis == Axis::Horizontal
                             ? total.height - size.height
                             : total.width - size.width;
-        double crossOffset =
-            config.crossAlign == CrossAlign::Center ? unused / 2.0
-            : config.crossAlign == CrossAlign::End  ? unused
-                                                    : 0.0;
+        double crossOffset = config.justify == Justify::Center ? unused / 2.0
+                             : config.justify == Justify::End  ? unused
+                                                               : 0.0;
         if (node.axis == Axis::Horizontal) {
-            Arrange(child, config, resolve, cursor, y + crossOffset, out);
+            Arrange(child, config, resolve, cursor, y + crossOffset, out,
+                    &size);
             cursor += size.width + config.spacing;
         } else {
-            Arrange(child, config, resolve, x + crossOffset, cursor, out);
+            Arrange(child, config, resolve, x + crossOffset, cursor, out,
+                    &size);
             cursor += size.height + config.spacing;
         }
     }
 }
 
-// Parse + measure + arrange in one call. Returns false only on a parse
-// error (unbalanced parentheses / trailing garbage). placements come back
-// in expression order; totalSize is the tight bounding size of the group.
+// Parse + measure + arrange in one call. Returns false only on a parse error
+// (unbalanced parentheses, malformed offset, trailing garbage) — the caller
+// should then fall back to the auto expression and log that it did.
+// placements come back in expression order; totalSize is the group's bounding
+// box INCLUDING outer padding. A per-item offset shifts its leaf without
+// changing totalSize or any neighbor.
 inline bool Compute(std::wstring const& text, Config const& config,
                     SizeResolver const& resolve,
-                    std::vector<Placement>& placements, Size& totalSize) {
+                    std::vector<Placement>& placements, Size& totalSize,
+                    ParseError* error = nullptr) {
     Node root;
-    if (!Parse(text, config.primaryAxis, root))
+    if (!Parse(text, root, error))
         return false;
-    totalSize = Measure(root, config, resolve);
+    Size inner = Measure(root, config, resolve);
     placements.clear();
-    Arrange(root, config, resolve, 0.0, 0.0, placements);
+    if (inner.Empty()) {
+        // No visible items: an empty group has no padded box either.
+        totalSize = {};
+        return true;
+    }
+    if (inner.axisRelative) {
+        // The whole arrangement is one axis-relative item, so there is no group
+        // for it to fill against; square it off on its own thickness.
+        double cross = inner.cross > 0.0 ? inner.cross : inner.thickness;
+        inner = Size{inner.thickness, cross};
+    }
+    Arrange(root, config, resolve, config.padX, config.padY, placements,
+            &inner);
+    totalSize = {inner.width + config.padX * 2.0,
+                 inner.height + config.padY * 2.0};
     return true;
 }
 
+// ---- Taskbar metrics --------------------------------------------------------
+//
+// The taskbar rect comes from GetWindowRect in PHYSICAL pixels while every XAML
+// size is a DIP. Dividing one by the other is the DPI bug flagged on PR #4855
+// (blocking) and #4843. The mod supplies the raw numbers:
+//
+//   RECT r{}; GetWindowRect(hTaskbarWnd, &r);
+//   int rows = AvailableRows(r.bottom - r.top, GetDpiForWindow(hTaskbarWnd),
+//                            itemHeight, spacing);
+
+inline double PixelsToDip(double physicalPixels, unsigned dpi) {
+    return dpi ? physicalPixels * 96.0 / (double)dpi : physicalPixels;
+}
+
+// How many item rows fit in a height already expressed in DIPs. Pitch is one
+// item plus one gap; the trailing gap of the last row is not required, hence
+// the + spacing.
+//
+// RESERVE FIRST. This is the height available to the ITEM GRID, not the whole
+// taskbar. Anything else that occupies vertical space — outer padY, an extra
+// item shaped as a row (a sliver above or below) — must be subtracted before
+// calling, or the grid claims height that is already spoken for and the
+// assembled group overflows its host.
+inline int RowsInHeight(double heightDip, double itemHeight, double spacing) {
+    double pitch = itemHeight + std::max(0.0, spacing);
+    if (pitch <= 0.0 || heightDip <= 0.0)
+        return 1;
+    return std::max(1, (int)((heightDip + std::max(0.0, spacing)) / pitch));
+}
+
+// Convenience for the common case with nothing else reserved.
+inline int AvailableRows(double taskbarHeightPx, unsigned dpi,
+                         double itemHeight, double spacing) {
+    return RowsInHeight(PixelsToDip(taskbarHeightPx, dpi), itemHeight, spacing);
+}
+
+// ---- The auto shape ---------------------------------------------------------
+//
+// Deterministic, not scored. Take the smallest column count reachable within
+// the available rows — that is what "use the taskbar's height" means — and
+// among the row counts that produce it, the one with the fewest empty slots.
+// So 4 items with 3 rows available gives 2x2 rather than a ragged 3+1, and 5
+// items with 4 rows available gives 3x2 rather than 4+1.
+
+struct Shape {
+    int rows = 1;
+    int columns = 1;
+};
+
+inline Shape ChooseShape(int count, int maxRows) {
+    if (count <= 0)
+        return {0, 0};
+    int limit = std::max(1, std::min(maxRows, count));
+    Shape best{1, count};
+    int bestWaste = 0;
+    bool first = true;
+    for (int rows = 1; rows <= limit; ++rows) {
+        int columns = (count + rows - 1) / rows;
+        int waste = rows * columns - count;
+        if (first || columns < best.columns ||
+            (columns == best.columns && waste < bestWaste)) {
+            first = false;
+            best = {rows, columns};
+            bestWaste = waste;
+        }
+    }
+    return best;
+}
+
+// ---- Expression generation --------------------------------------------------
+//
+// Turn a rows x columns shape into an expression so the auto path and the
+// manual path are the same code below this point. Positions fill row-major
+// (left to right, then down) for FillOrder::Rows or column-major (top to
+// bottom, then right) for FillOrder::Columns. Grid positions past `count` are
+// simply absent, so a ragged final row or column yields fewer tokens and the
+// result is always a valid expression. Justify aligns that ragged group.
+//
+// Tokens come from namer(index); the default names items by 1-based number,
+// matching what a user reads on screen. The caller's SizeResolver must map
+// those same names back to pixel sizes.
+
+using TokenNamer = std::function<std::wstring(int index)>;
+
+inline std::wstring BuildGridExpression(int count, int rows, int columns,
+                                        FillOrder fill,
+                                        TokenNamer const& namer = {}) {
+    if (count <= 0 || rows <= 0 || columns <= 0)
+        return {};
+
+    auto name = [&](int index) -> std::wstring {
+        return namer ? namer(index) : std::to_wstring(index + 1);
+    };
+
+    // '|' groups are columns, ',' units are rows, always.
+    std::wstring expr;
+    for (int column = 0; column < columns; ++column) {
+        std::wstring stack;
+        for (int row = 0; row < rows; ++row) {
+            int index = fill == FillOrder::Rows ? row * columns + column
+                                                : column * rows + row;
+            if (index < 0 || index >= count)
+                continue;
+            if (!stack.empty())
+                stack += L", ";
+            stack += name(index);
+        }
+        if (stack.empty())
+            continue;
+        if (!expr.empty())
+            expr += L" | ";
+        expr += stack;
+    }
+    return expr;
+}
+
+inline std::wstring BuildAutoExpression(int count, int maxRows, FillOrder fill,
+                                        TokenNamer const& namer = {}) {
+    Shape shape = ChooseShape(count, maxRows);
+    return BuildGridExpression(count, shape.rows, shape.columns, fill, namer);
+}
+
+// ---- Items the arrangement forgot -------------------------------------------
+//
+// A hand-written arrangement names the items that existed when it was written.
+// When the set is dynamic — a desktop is added, a folder appears — the new item
+// is in no group, resolves to nothing, and silently vanishes from the taskbar.
+// That is a trap, so a mod with a dynamic set offers a policy:
+//
+//   Append (default) — arrange the unlisted items automatically and put that
+//                      block after everything the user wrote, so a new item is
+//                      always reachable and the written block stays intact.
+//   Ignore           — the arrangement is the whole truth; unlisted items stay
+//                      off the taskbar until the user adds them.
+//
+// A mod that appends should log that it did, so the user knows to fold the new
+// item into their arrangement when they next edit it.
+
+// Whether a token the user wrote refers to the same item as one the mod
+// expects. Defaults to a case-insensitive name match, which is WRONG for any
+// mod that accepts aliases: "desktop1" and "1" are the same button, and
+// comparing them as strings makes every aliased item look missing and get
+// appended a second time. A mod with a vocabulary must supply this.
+using TokenMatcher =
+    std::function<bool(std::wstring const& placed, std::wstring const& expected)>;
+
+inline std::vector<std::wstring> MissingTokens(
+    std::vector<std::wstring> const& expected,
+    std::vector<Placement> const& placements,
+    TokenMatcher const& same = {}) {
+    std::vector<std::wstring> missing;
+    for (auto const& token : expected) {
+        bool found = false;
+        for (auto const& placement : placements) {
+            bool match = same ? same(placement.token, token)
+                              : TokenIs(placement.token, token.c_str());
+            if (match) {
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            missing.push_back(token);
+    }
+    return missing;
+}
+
+inline std::wstring AppendMissing(std::wstring const& expression,
+                                  std::vector<std::wstring> const& missing,
+                                  int maxRows, FillOrder fill) {
+    if (missing.empty())
+        return expression;
+    auto namer = [&missing](int index) { return missing[index]; };
+    std::wstring block = BuildAutoExpression((int)missing.size(), maxRows, fill,
+                                             namer);
+    if (block.empty())
+        return expression;
+    if (expression.empty())
+        return block;
+    return L"(" + expression + L") | (" + block + L")";
+}
+
+// ---- The one setting --------------------------------------------------------
+//
+// Resolve `Layout.Arrangement` to the expression to arrange. Empty or the word
+// "auto" (any case, surrounding space ignored) means generate one. The caller
+// logs the result when wasAuto is true so the user can paste it back into the
+// same field and edit it.
+
+struct Arrangement {
+    std::wstring expression;
+    bool wasAuto = false;
+};
+
+inline bool IsAutoSetting(std::wstring const& setting) {
+    size_t first = setting.find_first_not_of(L" \t\r\n");
+    if (first == std::wstring::npos)
+        return true;
+    size_t last = setting.find_last_not_of(L" \t\r\n");
+    std::wstring trimmed = setting.substr(first, last - first + 1);
+    if (trimmed.size() != 4)
+        return false;
+    for (size_t i = 0; i < 4; ++i)
+        if (towlower(trimmed[i]) != L"auto"[i])
+            return false;
+    return true;
+}
+
+inline Arrangement ResolveArrangement(std::wstring const& setting, int count,
+                                      int maxRows, FillOrder fill,
+                                      TokenNamer const& namer = {}) {
+    if (IsAutoSetting(setting))
+        return {BuildAutoExpression(count, maxRows, fill, namer), true};
+    return {setting, false};
+}
 } // namespace windhawk_mod_templates::nested_group_layout
 
-// ── Visual tree walk ──────────────────────────────────────────────────────
-// Template block: _templates/visual-tree-walk.h v1.0 (verbatim copy — keep
-// in sync with the template; Windhawk mods are single-file).
+// ── Visual tree walk ───────────────────────────────────────────────────────
+// Template block: _templates/visual-tree-walk.h v1.0 (verbatim copy —
+// keep in sync with the template; Windhawk mods are single-file).
 
 namespace windhawk_mod_templates::visual_tree_walk {
 
@@ -549,11 +1233,473 @@ inline StackPanel FindInnerStackPanel(FrameworkElement const& root,
                       });
     return found;
 }
-
 } // namespace windhawk_mod_templates::visual_tree_walk
 
-// ── Injected grid column ──────────────────────────────────────────────────
-// Template block: _templates/injected-grid-column.h v1.2 (verbatim copy —
+// ── Property lease ─────────────────────────────────────────────────────────
+// Template block: _templates/property-lease.h v1.0 (verbatim copy —
+// keep in sync with the template; Windhawk mods are single-file).
+
+namespace windhawk_mod_templates::property_lease {
+
+using winrt::Windows::Foundation::IInspectable;
+using winrt::Windows::UI::Xaml::DependencyObject;
+using winrt::Windows::UI::Xaml::DependencyProperty;
+
+struct Snapshot {
+    DependencyObject object{nullptr};
+    DependencyProperty property{nullptr};
+    IInspectable localValue{nullptr};
+};
+
+// Reported per failed restore so the mod can log in its own voice.
+using RestoreErrorFn = std::function<void()>;
+
+class Lease {
+public:
+    // Announce a mutation BEFORE making it. Safe to call repeatedly; only the
+    // first call for a given (object, property) records anything.
+    void Track(DependencyObject const& object,
+               DependencyProperty const& property) {
+        if (!object || !property) return;
+        for (auto const& snapshot : snapshots_) {
+            if (snapshot.object == object && snapshot.property == property)
+                return;
+        }
+        snapshots_.push_back(
+            {object, property, object.ReadLocalValue(property)});
+    }
+
+    // Put everything back, newest first, and forget it. Call on the UI thread.
+    void RestoreAll(RestoreErrorFn const& onError = {}) {
+        for (auto it = snapshots_.rbegin(); it != snapshots_.rend(); ++it) {
+            try {
+                if (it->localValue == DependencyProperty::UnsetValue())
+                    it->object.ClearValue(it->property);
+                else
+                    it->object.SetValue(it->property, it->localValue);
+            } catch (...) {
+                if (onError) onError();
+            }
+        }
+        snapshots_.clear();
+    }
+
+    // Drop the snapshots WITHOUT restoring. For the case where the elements
+    // are already gone (an Explorer rebuild threw the tree away), so restoring
+    // would only throw. Do not use it to "skip" a restore that could run.
+    void Abandon() { snapshots_.clear(); }
+
+    size_t Count() const { return snapshots_.size(); }
+    bool Empty() const { return snapshots_.empty(); }
+
+private:
+    std::vector<Snapshot> snapshots_;
+};
+} // namespace windhawk_mod_templates::property_lease
+
+// ── Taskbar host ───────────────────────────────────────────────────────────
+// Template block: _templates/taskbar-host.h v1.0 (verbatim copy —
+// keep in sync with the template; Windhawk mods are single-file).
+
+namespace windhawk_mod_templates::taskbar_host {
+
+using winrt::Windows::UI::Xaml::FrameworkElement;
+using winrt::Windows::UI::Xaml::XamlRoot;
+
+// ---- Window discovery -------------------------------------------------------
+
+inline HWND FindCurrentProcessTaskbarWnd() {
+    HWND result = nullptr;
+    EnumWindows(
+        [](HWND window, LPARAM parameter) -> BOOL {
+            DWORD processId = 0;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(window, &processId) &&
+                processId == GetCurrentProcessId() &&
+                GetClassName(window, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(parameter) = window;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&result));
+    return result;
+}
+
+// ---- UI-thread marshalling --------------------------------------------------
+//
+// XAML may only be touched from the thread that owns it. This posts work onto
+// the taskbar's thread with a CALLWNDPROC hook and a private registered
+// message, and reports whether the callback actually ran — a caller that
+// assumes it did will corrupt its own state when the dispatch failed.
+
+using ThreadProc = void (*)(void*);
+using ExceptionLogFn = void (*)(PCWSTR context);
+
+inline ExceptionLogFn g_logException = nullptr;
+
+// Point this at the mod's logger once in Wh_ModInit so failures inside a UI
+// callback are reported in the mod's own voice.
+inline void SetExceptionLogger(ExceptionLogFn logger) {
+    g_logException = logger;
+}
+
+inline bool Invoke(ThreadProc proc, void* parameter) {
+    try {
+        proc(parameter);
+        return true;
+    } catch (...) {
+        if (g_logException) g_logException(L"UI callback");
+    }
+    return false;
+}
+
+struct Dispatch {
+    ThreadProc proc;
+    void* parameter;
+    bool succeeded = false;
+};
+
+// The private message this mod dispatches on. Set before the hook is
+// installed, and read by the hook proc to recognise its own message.
+//
+// A CALLWNDPROC HOOK SEES EVERY MESSAGE SENT TO EVERY WINDOW ON THE TASKBAR'S
+// UI THREAD. `lParam` for all of those is arbitrary — an integer, a flag, a
+// pointer to something else entirely. So the message MUST be checked first,
+// against a value that does not come from lParam, and only then may lParam be
+// treated as a Dispatch*. Reading anything out of lParam before that check
+// dereferences whatever happened to be in the message and takes Explorer down
+// with it — which is exactly what an earlier revision of this template did.
+// Atomic because the caller may be the retry thread while the hook proc runs
+// on the taskbar's UI thread. RegisterWindowMessageW returns the same value
+// for the same string for the lifetime of the session, so this settles on one
+// value immediately and never changes again — the pre-template code got the
+// same property from a function-local `static UINT` magic static, which a
+// parameterised template cannot use.
+inline std::atomic<UINT> g_dispatchMessage{0};
+
+// messageName must embed WH_MOD_ID, so two mods cannot collide on the message.
+inline bool RunFromWindowThread(HWND window, ThreadProc proc, void* parameter,
+                                PCWSTR messageName) {
+    UINT message = RegisterWindowMessageW(messageName);
+    if (!message) return false;
+
+    DWORD threadId = GetWindowThreadProcessId(window, nullptr);
+    if (!threadId) return false;
+    if (threadId == GetCurrentThreadId()) return Invoke(proc, parameter);
+
+    g_dispatchMessage.store(message, std::memory_order_release);
+
+    HHOOK hook = SetWindowsHookExW(
+        WH_CALLWNDPROC,
+        [](int code, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (code == HC_ACTION) {
+                auto const* call = reinterpret_cast<CWPSTRUCT const*>(lParam);
+                // Message first. Only our own private message carries a
+                // Dispatch* in lParam; everything else carries something we
+                // must not touch.
+                UINT expected =
+                    g_dispatchMessage.load(std::memory_order_acquire);
+                if (expected && call->message == expected) {
+                    if (auto* dispatch =
+                            reinterpret_cast<Dispatch*>(call->lParam)) {
+                        dispatch->succeeded =
+                            Invoke(dispatch->proc, dispatch->parameter);
+                    }
+                }
+            }
+            return CallNextHookEx(nullptr, code, wParam, lParam);
+        },
+        nullptr, threadId);
+    if (!hook) return false;
+
+    Dispatch dispatch{proc, parameter};
+    SendMessageW(window, message, 0, reinterpret_cast<LPARAM>(&dispatch));
+    UnhookWindowsHookEx(hook);
+    return dispatch.succeeded;
+}
+
+// ---- XamlRoot ---------------------------------------------------------------
+
+using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void*, void*);
+using TaskbarHost_FrameHeight_t = int(WINAPI*)(void*);
+using Ref_count_base_Decref_t = void(WINAPI*)(void*);
+using TrayUI_StartTaskbar_t = void(WINAPI*)(void*);
+
+inline CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original = nullptr;
+inline TaskbarHost_FrameHeight_t TaskbarHost_FrameHeight_Original = nullptr;
+inline Ref_count_base_Decref_t Ref_count_base_Decref_Original = nullptr;
+inline TrayUI_StartTaskbar_t TrayUI_StartTaskbar_Original = nullptr;
+inline void* CTaskBand_ITaskListWndSite_vftable = nullptr;
+
+// The mod's rebuild callback, invoked after Explorer rebuilds the taskbar.
+inline void (*g_onTaskbarRebuilt)() = nullptr;
+
+inline void WINAPI TrayUI_StartTaskbar_Hook(void* self) {
+    TrayUI_StartTaskbar_Original(self);
+    try {
+        if (g_onTaskbarRebuilt) g_onTaskbarRebuilt();
+    } catch (...) {
+        if (g_logException) g_logException(L"TrayUI::StartTaskbar hook");
+    }
+}
+
+inline bool HookTaskbarSymbols(void (*onTaskbarRebuilt)()) {
+    g_onTaskbarRebuilt = onTaskbarRebuilt;
+    HMODULE taskbar = LoadLibraryExW(L"taskbar.dll", nullptr,
+                                     LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!taskbar) return false;
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+        {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
+         &CTaskBand_ITaskListWndSite_vftable},
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
+         &CTaskBand_GetTaskbarHost_Original},
+        {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
+         &TaskbarHost_FrameHeight_Original},
+        {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
+         &Ref_count_base_Decref_Original},
+        {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
+         &TrayUI_StartTaskbar_Original, TrayUI_StartTaskbar_Hook},
+    };
+    return WindhawkUtils::HookSymbols(taskbar, taskbarDllHooks,
+                                      ARRAYSIZE(taskbarDllHooks));
+}
+
+// The FrameworkElement lives at an offset inside TaskbarHost that MOVES
+// between Windows builds, so it is read out of TaskbarHost::FrameHeight's
+// prologue at runtime rather than hardcoded.
+inline size_t FrameworkElementOffset() {
+    size_t offset = 0x10;
+#if defined(_M_X64)
+    BYTE const* code =
+        reinterpret_cast<BYTE const*>(TaskbarHost_FrameHeight_Original);
+    if (code[0] == 0x48 && code[1] == 0x83 && code[2] == 0xEC &&
+        code[4] == 0x48 && code[5] == 0x83 && code[6] == 0xC1 &&
+        code[7] <= 0x7F) {
+        offset = code[7];
+    }
+#elif defined(_M_ARM64)
+    DWORD const* code =
+        reinterpret_cast<DWORD const*>(TaskbarHost_FrameHeight_Original);
+    if (code[0] == 0xD503237F && (code[1] & 0xFFC07FFF) == 0xA9807BFD &&
+        code[2] == 0x910003FD && (code[3] & 0xFFF00FE0) == 0xF8400C00) {
+        offset = (code[3] >> 12) & 0xFF;
+    }
+#else
+#error "Unsupported architecture"
+#endif
+    return offset;
+}
+
+inline XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd) {
+    if (!CTaskBand_GetTaskbarHost_Original ||
+        !TaskbarHost_FrameHeight_Original || !Ref_count_base_Decref_Original ||
+        !CTaskBand_ITaskListWndSite_vftable)
+        return nullptr;
+
+    HWND taskSwWnd = (HWND)GetProp(taskbarWnd, L"TaskbandHWND");
+    if (!taskSwWnd) return nullptr;
+    void* taskBand = (void*)GetWindowLongPtr(taskSwWnd, 0);
+    if (!taskBand) return nullptr;
+
+    void* site = taskBand;
+    for (int i = 0; *(void**)site != CTaskBand_ITaskListWndSite_vftable; ++i) {
+        if (i == 20) return nullptr;
+        site = (void**)site + 1;
+    }
+
+    void* host[2]{};
+    CTaskBand_GetTaskbarHost_Original(site, host);
+    if (!host[0] || !host[1]) {
+        if (host[1]) Ref_count_base_Decref_Original(host[1]);
+        return nullptr;
+    }
+
+    auto* unknown =
+        *(IUnknown**)((BYTE*)host[0] + FrameworkElementOffset());
+    if (!unknown) {
+        Ref_count_base_Decref_Original(host[1]);
+        return nullptr;
+    }
+    FrameworkElement element = nullptr;
+    unknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                            winrt::put_abi(element));
+    auto result = element ? element.XamlRoot() : nullptr;
+    Ref_count_base_Decref_Original(host[1]);
+    return result;
+}
+
+// ---- Taskbar metrics and orientation ----------------------------------------
+//
+// WHERE THE TASKBAR IS, AND WHETHER THIS FAMILY CAN WORK THERE.
+//
+// Windows 11 itself only puts the taskbar at the bottom. Two mods by m417z
+// move it, and both are first-class parts of the ecosystem these mods have to
+// live in:
+//
+//   taskbar-on-top       — bottom -> top. FINE for this family. Everything
+//                          here is positioned relative to the taskbar's own
+//                          XAML tree, never to screen coordinates, so a top
+//                          taskbar is the same tree at a different y.
+//
+//   taskbar-vertical     — bottom -> left/right. NOT COMPATIBLE, and not for
+//                          a reason cooperation can fix. It walks the very
+//                          same path this family walks
+//                          (ControlCenterButton > Grid > ContentPresenter >
+//                          ItemsPresenter > StackPanel) and applies a
+//                          RotateTransform to `RenderTransform` on those
+//                          children. Positioning here sets a
+//                          TranslateTransform on the SAME property of the SAME
+//                          elements. One dependency property, two owners, last
+//                          writer wins — there is no version of this where
+//                          both mods are correct. m417z documents the same
+//                          class of conflict for taskbar-multirow.
+//
+// So: DETECT AND STAND DOWN, loudly, rather than fight and paint garbage. The
+// detection is the taskbar's own rect aspect, not a check for a specific mod —
+// it is the condition that matters, and it stays true however the taskbar got
+// that way.
+//
+// The rect is in PHYSICAL pixels and every XAML size is a DIP, so the DIP
+// conversion lives here too rather than being re-derived per mod. That is the
+// bug that was blocking on PR #4855 and #4843.
+
+enum class Orientation { Horizontal, Vertical };
+
+struct Metrics {
+    bool valid = false;
+    RECT rect{};
+    UINT dpi = 96;
+    Orientation orientation = Orientation::Horizontal;
+    // The extent this family's grid has to fit INTO: the taskbar's height when
+    // it runs across the screen, its width when it runs down the side.
+    double constrainedDip = 0.0;
+    // The extent it can run ALONG.
+    double alongDip = 0.0;
+};
+
+inline Metrics GetMetrics(HWND taskbarWnd) {
+    Metrics metrics;
+    if (!taskbarWnd || !GetWindowRect(taskbarWnd, &metrics.rect))
+        return metrics;
+
+    metrics.valid = true;
+    metrics.dpi = GetDpiForWindow(taskbarWnd);
+    if (!metrics.dpi) metrics.dpi = 96;
+
+    double width = (double)(metrics.rect.right - metrics.rect.left);
+    double height = (double)(metrics.rect.bottom - metrics.rect.top);
+    double scale = 96.0 / (double)metrics.dpi;
+
+    // Taller than wide means it runs down a side. Nothing else can produce
+    // that shape, so this needs no cooperation from whatever moved it.
+    metrics.orientation =
+        height > width ? Orientation::Vertical : Orientation::Horizontal;
+    if (metrics.orientation == Orientation::Horizontal) {
+        metrics.constrainedDip = height * scale;
+        metrics.alongDip = width * scale;
+    } else {
+        metrics.constrainedDip = width * scale;
+        metrics.alongDip = height * scale;
+    }
+    return metrics;
+}
+
+// Whether this family's layout model applies at all. A mod must check this
+// BEFORE touching anything and stand down cleanly if it is false — leaving the
+// taskbar exactly as it found it — rather than arranging into a coordinate
+// space someone else is rotating.
+inline bool LayoutModelApplies(Metrics const& metrics) {
+    return metrics.valid && metrics.orientation == Orientation::Horizontal;
+}
+
+inline wchar_t const* OrientationName(Orientation orientation) {
+    return orientation == Orientation::Vertical ? L"vertical" : L"horizontal";
+}
+
+// ---- Bounded retry ----------------------------------------------------------
+//
+// Stoppable and WAITED during unload. A detached thread that outlives
+// Wh_ModUninit runs mod code out of an unloaded DLL.
+
+class RetryLoop {
+public:
+    // applied: has the work finished? unloading: stop immediately.
+    using AppliedFn = bool (*)();
+    using AttemptFn = void (*)();
+
+    void Start(AttemptFn attempt, AppliedFn applied,
+               std::atomic<bool> const& unloading, int attempts = 5,
+               DWORD intervalMs = 2000) {
+        Stop();
+        if (unloading) return;
+        attempt_ = attempt;
+        applied_ = applied;
+        unloading_ = &unloading;
+        attempts_ = attempts;
+        intervalMs_ = intervalMs;
+        stopEvent_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!stopEvent_) return;
+        thread_ = CreateThread(
+            nullptr, 0,
+            [](void* parameter) -> DWORD {
+                auto* self = static_cast<RetryLoop*>(parameter);
+                for (int i = 0; i < self->attempts_ && !*self->unloading_;
+                     ++i) {
+                    if (self->applied_ && self->applied_()) break;
+                    if (i && WaitForSingleObject(self->stopEvent_,
+                                                 self->intervalMs_) !=
+                                 WAIT_TIMEOUT)
+                        break;
+                    if (self->attempt_) self->attempt_();
+                }
+                return 0;
+            },
+            this, 0, nullptr);
+        if (!thread_) {
+            CloseHandle(stopEvent_);
+            stopEvent_ = nullptr;
+        }
+    }
+
+    // Pumps sent messages while waiting: the retry thread marshals onto the UI
+    // thread with SendMessage, so a plain wait from that same UI thread would
+    // deadlock against the thread it is waiting for.
+    void Stop() {
+        if (stopEvent_) SetEvent(stopEvent_);
+        if (thread_) {
+            DWORD result;
+            do {
+                result = MsgWaitForMultipleObjects(1, &thread_, FALSE, INFINITE,
+                                                   QS_SENDMESSAGE);
+                if (result == WAIT_OBJECT_0 + 1) {
+                    MSG message;
+                    PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
+                }
+            } while (result == WAIT_OBJECT_0 + 1);
+            CloseHandle(thread_);
+            thread_ = nullptr;
+        }
+        if (stopEvent_) {
+            CloseHandle(stopEvent_);
+            stopEvent_ = nullptr;
+        }
+    }
+
+private:
+    HANDLE thread_ = nullptr;
+    HANDLE stopEvent_ = nullptr;
+    AttemptFn attempt_ = nullptr;
+    AppliedFn applied_ = nullptr;
+    std::atomic<bool> const* unloading_ = nullptr;
+    int attempts_ = 5;
+    DWORD intervalMs_ = 2000;
+};
+} // namespace windhawk_mod_templates::taskbar_host
+
+// ── Injected grid column ───────────────────────────────────────────────────
+// Template block: _templates/injected-grid-column.h v1.3 (verbatim copy —
 // keep in sync with the template; Windhawk mods are single-file).
 
 namespace windhawk_mod_templates::injected_grid_column {
@@ -562,6 +1708,8 @@ using winrt::Windows::UI::Xaml::FrameworkElement;
 using winrt::Windows::UI::Xaml::GridUnitType;
 using winrt::Windows::UI::Xaml::Controls::ColumnDefinition;
 using winrt::Windows::UI::Xaml::Controls::Grid;
+using winrt::Windows::UI::Xaml::Controls::Panel;
+using winrt::Windows::UI::Xaml::Controls::StackPanel;
 
 enum class Anchor {
     BeforeIcons,
@@ -571,13 +1719,67 @@ enum class Anchor {
     AfterShowDesktop,
 };
 
-struct Lease {
-    std::wstring markerName;
-    int column = -1;
+// Which layout contract the live tray panel follows.
+enum class Kind {
+    Unsupported,  // some other Panel: do not guess its layout semantics.
+    Columns,      // Grid. A slot is a column index.
+    Order,        // StackPanel. A slot is a child index.
 };
 
-inline FrameworkElement FindDirectChild(Grid const& parent,
+struct Lease {
+    std::wstring markerName;
+    int slot = -1;
+    Kind kind = Kind::Unsupported;
+};
+
+inline Kind Classify(FrameworkElement const& parent) {
+    if (!parent)
+        return Kind::Unsupported;
+    if (parent.try_as<Grid>())
+        return Kind::Columns;
+    if (parent.try_as<StackPanel>())
+        return Kind::Order;
+    return Kind::Unsupported;
+}
+
+// Class name of an unexpected panel, so a mod can log what it actually got
+// instead of reporting a bare "not found" for an element that is right there.
+inline std::wstring ClassName(FrameworkElement const& element) {
+    if (!element)
+        return L"(null)";
+    try {
+        return std::wstring(winrt::get_class_name(element));
+    } catch (...) {
+        return L"(unknown)";
+    }
+}
+
+// Named direct children, for logging when an anchor cannot be resolved. A tray
+// restructure shows up here as missing or renamed names, which is the one thing
+// a user's debug log otherwise cannot tell us.
+inline std::wstring DescribeChildren(Panel const& parent) {
+    if (!parent)
+        return L"(none)";
+    std::wstring names;
+    try {
+        for (auto const& child : parent.Children()) {
+            auto element = child.try_as<FrameworkElement>();
+            if (!element || element.Name().empty())
+                continue;
+            if (!names.empty())
+                names += L", ";
+            names += element.Name();
+        }
+    } catch (...) {
+        return L"(unreadable)";
+    }
+    return names.empty() ? L"(no named children)" : names;
+}
+
+inline FrameworkElement FindDirectChild(Panel const& parent,
                                         wchar_t const* name) {
+    if (!parent || !name)
+        return nullptr;
     for (auto const& child : parent.Children()) {
         auto element = child.try_as<FrameworkElement>();
         if (element && element.Name() == name)
@@ -586,9 +1788,23 @@ inline FrameworkElement FindDirectChild(Grid const& parent,
     return nullptr;
 }
 
-inline bool ResolveColumn(Grid const& parent, Anchor anchor, int& column) {
+inline int IndexOfChild(Panel const& parent, FrameworkElement const& child) {
+    if (!parent || !child)
+        return -1;
+    for (uint32_t i = 0; i < parent.Children().Size(); ++i) {
+        if (parent.Children().GetAt(i).try_as<FrameworkElement>() == child)
+            return static_cast<int>(i);
+    }
+    return -1;
+}
+
+inline bool ResolveSlot(Panel const& parent, Anchor anchor, int& slot) {
+    Kind kind = Classify(parent);
+    if (kind == Kind::Unsupported)
+        return false;
+
     if (anchor == Anchor::BeforeIcons) {
-        column = 0;
+        slot = 0;
         return true;
     }
 
@@ -614,80 +1830,147 @@ inline bool ResolveColumn(Grid const& parent, Anchor anchor, int& column) {
 
     auto reference = FindDirectChild(parent, referenceName);
     if (!reference)
-        return false; // Never silently turn an unavailable anchor into column 0.
-    column = Grid::GetColumn(reference) +
-             (after ? std::max(1, Grid::GetColumnSpan(reference)) : 0);
+        return false; // Never silently turn an unavailable anchor into slot 0.
+
+    if (kind == Kind::Columns) {
+        slot = Grid::GetColumn(reference) +
+               (after ? std::max(1, Grid::GetColumnSpan(reference)) : 0);
+        return true;
+    }
+
+    // Order: the reference's own child index is the slot. There is no span to
+    // step over -- a StackPanel child occupies exactly one position.
+    int index = IndexOfChild(parent, reference);
+    if (index < 0)
+        return false;
+    slot = index + (after ? 1 : 0);
     return true;
 }
 
-inline bool AcquireAt(Grid const& parent, int column,
+inline bool AcquireAt(Panel const& parent, int slot,
                       std::wstring const& markerName, Lease& lease) {
-    if (!parent || column < 0 || markerName.empty() ||
+    Kind kind = Classify(parent);
+    if (kind == Kind::Unsupported || slot < 0 || markerName.empty() ||
         FindDirectChild(parent, markerName.c_str()))
         return false;
-
-    ColumnDefinition definition;
-    definition.Width({1.0, GridUnitType::Auto});
-    if (static_cast<uint32_t>(column) < parent.ColumnDefinitions().Size())
-        parent.ColumnDefinitions().InsertAt(column, definition);
-    else
-        parent.ColumnDefinitions().Append(definition);
-
-    for (auto const& child : parent.Children()) {
-        auto element = child.try_as<FrameworkElement>();
-        if (!element) continue;
-        int start = Grid::GetColumn(element);
-        int span = Grid::GetColumnSpan(element);
-        if (start >= column)
-            Grid::SetColumn(element, start + 1);
-        else if (start + span > column)
-            Grid::SetColumnSpan(element, span + 1);
-    }
 
     Grid marker;
     marker.Name(markerName);
     marker.Width(0.0);
     marker.Height(0.0);
     marker.IsHitTestVisible(false);
-    Grid::SetColumn(marker, column);
-    parent.Children().Append(marker);
 
-    lease = {markerName, column};
+    if (kind == Kind::Columns) {
+        auto grid = parent.try_as<Grid>();
+        if (!grid)
+            return false;
+        ColumnDefinition definition;
+        definition.Width({1.0, GridUnitType::Auto});
+        if (static_cast<uint32_t>(slot) < grid.ColumnDefinitions().Size())
+            grid.ColumnDefinitions().InsertAt(slot, definition);
+        else
+            grid.ColumnDefinitions().Append(definition);
+
+        for (auto const& child : grid.Children()) {
+            auto element = child.try_as<FrameworkElement>();
+            if (!element) continue;
+            int start = Grid::GetColumn(element);
+            int span = Grid::GetColumnSpan(element);
+            if (start >= slot)
+                Grid::SetColumn(element, start + 1);
+            else if (start + span > slot)
+                Grid::SetColumnSpan(element, span + 1);
+        }
+
+        Grid::SetColumn(marker, slot);
+        grid.Children().Append(marker);
+    } else {
+        // Order: no column is created or owned. The marker simply holds the
+        // position, and PlaceChild drops the content next to it.
+        uint32_t index = std::min(static_cast<uint32_t>(slot),
+                                  parent.Children().Size());
+        parent.Children().InsertAt(index, marker);
+        slot = static_cast<int>(index);
+    }
+
+    lease = {markerName, slot, kind};
     return true;
 }
 
-inline bool Acquire(Grid const& parent, Anchor anchor,
+inline bool Acquire(Panel const& parent, Anchor anchor,
                     std::wstring const& markerName, Lease& lease) {
-    int column = -1;
-    if (!parent || !ResolveColumn(parent, anchor, column))
+    int slot = -1;
+    if (!parent || !ResolveSlot(parent, anchor, slot))
         return false;
-    return AcquireAt(parent, column, markerName, lease);
+    return AcquireAt(parent, slot, markerName, lease);
 }
 
-inline bool Release(Grid const& parent, Lease& lease) {
+// Live index of the lease marker. Other mods inject and remove siblings around
+// us, so the acquire-time index is a hint, never the truth at removal time.
+inline bool FindMarker(Panel const& parent, Lease const& lease,
+                       uint32_t& index) {
+    if (!parent || lease.markerName.empty())
+        return false;
+    for (uint32_t i = 0; i < parent.Children().Size(); ++i) {
+        auto element = parent.Children().GetAt(i).try_as<FrameworkElement>();
+        if (element && element.Name() == lease.markerName) {
+            index = i;
+            return true;
+        }
+    }
+    return false;
+}
+
+// Put mod content into the leased slot. On a Grid the content joins the leased
+// column; on a StackPanel it is inserted directly after the marker, so the
+// marker's position is the content's position.
+inline bool PlaceChild(Panel const& parent, Lease const& lease,
+                       FrameworkElement const& content) {
+    if (!parent || !content || lease.kind == Kind::Unsupported)
+        return false;
+
+    uint32_t markerIndex = 0;
+    if (!FindMarker(parent, lease, markerIndex))
+        return false;
+
+    if (lease.kind == Kind::Columns) {
+        auto marker = parent.Children().GetAt(markerIndex)
+                          .try_as<FrameworkElement>();
+        Grid::SetColumn(content, marker ? Grid::GetColumn(marker) : lease.slot);
+        parent.Children().Append(content);
+        return true;
+    }
+
+    parent.Children().InsertAt(markerIndex + 1, content);
+    return true;
+}
+
+inline bool Release(Panel const& parent, Lease& lease) {
     if (!parent || lease.markerName.empty())
         return false;
 
     uint32_t markerIndex = 0;
-    bool found = false;
-    int liveColumn = lease.column;
-    for (uint32_t i = 0; i < parent.Children().Size(); ++i) {
-        auto element = parent.Children().GetAt(i).try_as<FrameworkElement>();
-        if (element && element.Name() == lease.markerName) {
-            markerIndex = i;
-            liveColumn = Grid::GetColumn(element);
-            found = true;
-            break;
-        }
-    }
-    if (!found || liveColumn < 0)
+    if (!FindMarker(parent, lease, markerIndex))
         return false;
 
-    parent.Children().RemoveAt(markerIndex);
-    if (static_cast<uint32_t>(liveColumn) < parent.ColumnDefinitions().Size())
-        parent.ColumnDefinitions().RemoveAt(liveColumn);
+    if (lease.kind == Kind::Order) {
+        parent.Children().RemoveAt(markerIndex);
+        lease = {};
+        return true;
+    }
 
-    for (auto const& child : parent.Children()) {
+    auto grid = parent.try_as<Grid>();
+    auto marker =
+        parent.Children().GetAt(markerIndex).try_as<FrameworkElement>();
+    int liveColumn = marker ? Grid::GetColumn(marker) : lease.slot;
+    if (!grid || liveColumn < 0)
+        return false;
+
+    grid.Children().RemoveAt(markerIndex);
+    if (static_cast<uint32_t>(liveColumn) < grid.ColumnDefinitions().Size())
+        grid.ColumnDefinitions().RemoveAt(liveColumn);
+
+    for (auto const& child : grid.Children()) {
         auto element = child.try_as<FrameworkElement>();
         if (!element) continue;
         int start = Grid::GetColumn(element);
@@ -704,9 +1987,9 @@ inline bool Release(Grid const& parent, Lease& lease) {
 
 } // namespace windhawk_mod_templates::injected_grid_column
 
-// ── Start-adjacent placement ──────────────────────────────────────────────
-// Template block: _templates/start-placement.h v1.2 (verbatim copy — keep
-// in sync with the template; Windhawk mods are single-file).
+// ── Start-adjacent placement ───────────────────────────────────────────────
+// Template block: _templates/start-placement.h v1.3 (verbatim copy —
+// keep in sync with the template; Windhawk mods are single-file).
 
 namespace windhawk_mod_templates::start_placement {
 
@@ -725,6 +2008,7 @@ using winrt::Windows::UI::Xaml::Media::VisualTreeHelper;
 
 enum class Side {
     Left,
+    Over,   // overlays Start; reserves no space, nudged clear by the adopter
     Right,
 };
 
@@ -821,7 +2105,10 @@ inline bool Position(Lease& lease) noexcept {
         double rawX = point.X - currentShift;
 
         double spacing = std::max(0.0, lease.spacing);
-        double push = groupWidth + spacing;
+        bool overlays = lease.side == Side::Over;
+        // Over reserves nothing, so the repeater keeps its own margin. Writing
+        // the push here would open a lane the group is not going to occupy.
+        double push = overlays ? 0.0 : groupWidth + spacing;
         if (lease.taskItemsPanel) {
             auto margin = lease.taskItemsPanel.Margin();
             double needed =
@@ -840,7 +2127,9 @@ inline bool Position(Lease& lease) noexcept {
         // roles invert: the pushed items leave the Right gap by themselves,
         // and a Left group needs Start pushed out of the way instead.
         double neededShift;
-        if (lease.side == Side::Left)
+        if (overlays)
+            neededShift = 0.0;  // Start stays exactly where Windows put it
+        else if (lease.side == Side::Left)
             neededShift = lease.startInTaskItemsPanel ? 0.0 : push;
         else
             neededShift = lease.startInTaskItemsPanel ? -push : 0.0;
@@ -859,7 +2148,8 @@ inline bool Position(Lease& lease) noexcept {
 
         // Place the group relative to where Start actually ends up.
         double startFinalX = rawX + neededShift;
-        double left = lease.side == Side::Left
+        double left = overlays ? startFinalX
+                    : lease.side == Side::Left
                           ? startFinalX - groupWidth - spacing
                           : startFinalX + startWidth + spacing;
         if (left < 0.0)
@@ -867,10 +2157,21 @@ inline bool Position(Lease& lease) noexcept {
 
         // v1.2: center against the taskbar root; Start's own box is not a
         // reliable vertical reference.
+        // v1.3: except for Over, which is DEFINED relative to Start — the
+        // adopter's vertical offset nudges it above or below Start from there,
+        // and root-centering would make that nudge start from the wrong place.
+        // Start's box is still the weaker reference, so fall back to root when
+        // it reports nothing usable.
         double rootHeight = lease.rootGrid.ActualHeight();
-        double top = rootHeight > 0.0
-                         ? (rootHeight - groupHeight) / 2.0
-                         : point.Y + (startHeight - groupHeight) / 2.0;
+        double startCenteredTop = point.Y + (startHeight - groupHeight) / 2.0;
+        double top;
+        if (overlays)
+            top = startHeight > 0.0 || rootHeight <= 0.0
+                      ? startCenteredTop
+                      : (rootHeight - groupHeight) / 2.0;
+        else
+            top = rootHeight > 0.0 ? (rootHeight - groupHeight) / 2.0
+                                   : startCenteredTop;
         if (top < 0.0)
             top = 0.0;
         double rootWidth = lease.rootGrid.ActualWidth();
@@ -979,19 +2280,26 @@ inline bool Acquire(FrameworkElement const& root, Grid const& group,
         });
     return true;
 }
-
 } // namespace windhawk_mod_templates::start_placement
 
 namespace ngl = windhawk_mod_templates::nested_group_layout;
 namespace tree_walk = windhawk_mod_templates::visual_tree_walk;
 namespace lease_column = windhawk_mod_templates::injected_grid_column;
 namespace start_placement = windhawk_mod_templates::start_placement;
+namespace sio = windhawk_mod_templates::settings_io;
+namespace tbh = windhawk_mod_templates::taskbar_host;
+namespace please = windhawk_mod_templates::property_lease;
 
 // ── Settings ──────────────────────────────────────────────────────────────
 
 enum class MergeMode {
     Auto,
     ForceMainStack,
+};
+
+enum class NewItems {
+    Append,
+    Ignore,
 };
 
 enum class Position {
@@ -1006,28 +2314,42 @@ enum class Position {
     RightOfStart,
 };
 
+// The six utilities, in the order they are offered in Content. This is also
+// the token vocabulary: a stable identity per utility, never a displayed
+// label.
+enum class Utility {
+    Overflow,
+    Emoji,
+    TouchKeyboard,
+    PenMenu,
+    VirtualTouchpad,
+    InputIndicator,
+    Count,
+};
+
+static constexpr int kUtilityCount = static_cast<int>(Utility::Count);
+
+static constexpr PCWSTR kUtilityTokens[kUtilityCount] = {
+    L"overflow", L"emoji",           L"touchKeyboard",
+    L"penMenu",  L"virtualTouchpad", L"inputIndicator",
+};
+
+// Fixed buffers rather than std::wstring: a namespace-scope settings struct
+// must not own heap (exit-time destructor audit).
 struct Settings {
     Position position;
-    std::wstring layout;
-    ngl::Axis primaryAxis;
-    ngl::CrossAlign crossAlign;
-    int buttonWidth;   // 0 = native
-    int buttonHeight;  // 0 = native
-    int buttonSpacing;
-    int groupOffsetX;
-    int groupOffsetY;
-    int overflowOffsetX;
-    int overflowOffsetY;
-    int emojiOffsetX;
-    int emojiOffsetY;
-    int touchKeyboardOffsetX;
-    int touchKeyboardOffsetY;
-    int penMenuOffsetX;
-    int penMenuOffsetY;
-    int virtualTouchpadOffsetX;
-    int virtualTouchpadOffsetY;
-    int inputIndicatorOffsetX;
-    int inputIndicatorOffsetY;
+    bool content[kUtilityCount];
+    wchar_t arrangement[512];
+    ngl::FillOrder fillOrder;
+    ngl::Justify justify;
+    NewItems newItems;
+    int itemWidth;   // 0 = native
+    int itemHeight;  // 0 = native
+    int itemSpacing;
+    int padX;
+    int padY;
+    int offsetX;
+    int offsetY;
     int minimumTrayHeight;
     MergeMode mergeMode;
     bool detailedLogging;
@@ -1039,32 +2361,26 @@ struct Settings {
 static Settings g_settings{};  // exit-time-safe: heap-only
 static std::atomic<bool> g_unloading = false;
 static HWND g_taskbarWnd = nullptr;
-static HANDLE g_retryStopEvent = nullptr;
-static HANDLE g_retryThread = nullptr;
-static SRWLOCK g_retryLock = SRWLOCK_INIT;
-static std::atomic<bool> g_retryForceApply = false;
 
-// Property snapshot for every element the mod touches (tray hosts and the
-// individual IconViews inside them). Hosts additionally get a zero-size
-// marker child in the tray grid so their column survives live re-indexing.
-struct ElementSnapshot {
+// What the mod remembers about each tray host it borrowed. The hosts get a
+// zero-size marker child in the tray grid so their column survives live
+// re-indexing.
+// What a host needs REMEMBERED rather than merely restored. Its dependency
+// properties go to the lease, which puts back the exact prior local value (or
+// clears it, if there was none). Two things cannot come from a lease: the
+// column, because the marker tracks live re-indexing and is therefore a
+// better answer than the value captured at apply time, and the visible icon
+// count, which is drift detection rather than state.
+struct HostRecord {
     FrameworkElement element{nullptr};
     FrameworkElement columnMarker{nullptr};
     int column = 0;
     int columnSpan = 1;
     int row = 0;
     int rowSpan = 1;
-    double width = NAN;
-    double height = NAN;
-    double minWidth = 0;
-    double minHeight = 0;
-    double maxWidth = INFINITY;
-    double maxHeight = INFINITY;
-    Thickness margin{};
-    HorizontalAlignment horizontalAlignment = HorizontalAlignment::Stretch;
-    VerticalAlignment verticalAlignment = VerticalAlignment::Stretch;
-    Transform renderTransform{nullptr};
     int visibleIconViews = 0;
+    // True when the tray panel lays out by child order (StackPanel), not columns.
+    bool ordered = false;
 };
 
 // One placeable thing: a native IconView (per-icon control), or a whole
@@ -1076,16 +2392,23 @@ struct LayoutItem {
     bool hostLeaf = false;
     double naturalW = 0.0;
     double naturalH = 0.0;
-    int offsetX = 0;
-    int offsetY = 0;
 };
 
-[[clang::no_destroy]] static std::optional<std::vector<ElementSnapshot>>
-    g_hostSnapshots{std::in_place};
-[[clang::no_destroy]] static std::optional<std::vector<ElementSnapshot>>
-    g_iconSnapshots{std::in_place};
+[[clang::no_destroy]] static std::optional<std::vector<HostRecord>>
+    g_hostRecords{std::in_place};
+// Every dependency property this mod writes on a borrowed element, restored
+// exactly. Held as optional + no_destroy and reset on the UI thread
+// (property-lease.h ownership contract).
+[[clang::no_destroy]] static std::optional<please::Lease> g_lease{
+    std::in_place};
 static std::atomic<bool> g_layoutApplied = false;
-[[clang::no_destroy]] static Grid g_layoutGrid{nullptr};
+// A settled decision NOT to lay anything out — a vertical taskbar, or every
+// utility switched off. Distinct from "not applied yet": the retry must retire
+// on it, or the stand-down repeats once per attempt. Cleared on every apply
+// and on an Explorer rebuild, so the decision is re-made rather than cached.
+static std::atomic<bool> g_stoodDown = false;
+// Grid on older taskbars, StackPanel since 26200.9457; Panel covers both.
+[[clang::no_destroy]] static Panel g_layoutGrid{nullptr};
 [[clang::no_destroy]] static Grid g_group{nullptr};
 static lease_column::Lease g_columnLease;  // exit-time-safe: heap-only
 [[clang::no_destroy]] static start_placement::Lease g_startLease;
@@ -1184,105 +2507,80 @@ static void WatchHostVisibility(FrameworkElement const& element) {
     }
 }
 
-static int ClampSetting(int value, int low, int high) {
-    return value < low ? low : value > high ? high : value;
-}
-
-static std::wstring GetStringSetting(PCWSTR key) {
-    PCWSTR value = Wh_GetStringSetting(key);
-    std::wstring result = value;
-    Wh_FreeStringSetting(value);
-    return result;
-}
-
-static int GetOffsetSetting(PCWSTR key) {
-    return ClampSetting(Wh_GetIntSetting(key), -100, 100);
-}
-
+// Every $options value resolves to an enum AT LOAD, table-driven. A chain of
+// string compares keeps compiling after an option is renamed and silently
+// stops matching; that cost this lab a release (settings-io.h).
 static void LoadSettings() {
-    auto position = GetStringSetting(L"position");
-    if (position == L"emoji") {
-        g_settings.position = Position::Emoji;
-    } else if (position == L"beforeIcons") {
-        g_settings.position = Position::BeforeIcons;
-    } else if (position == L"beforeOmni") {
-        g_settings.position = Position::BeforeOmni;
-    } else if (position == L"beforeClock") {
-        g_settings.position = Position::BeforeClock;
-    } else if (position == L"afterClock") {
-        g_settings.position = Position::AfterClock;
-    } else if (position == L"afterShowDesktop") {
-        g_settings.position = Position::AfterShowDesktop;
-    } else if (position == L"leftOfStart") {
-        g_settings.position = Position::LeftOfStart;
-    } else if (position == L"rightOfStart") {
-        g_settings.position = Position::RightOfStart;
-    } else {
-        g_settings.position = Position::Overflow;
+    static constexpr sio::Choice<Position> kPositions[] = {
+        {L"overflow", Position::Overflow},
+        {L"emoji", Position::Emoji},
+        {L"beforeIcons", Position::BeforeIcons},
+        {L"beforeOmni", Position::BeforeOmni},
+        {L"beforeClock", Position::BeforeClock},
+        {L"afterClock", Position::AfterClock},
+        {L"afterShowDesktop", Position::AfterShowDesktop},
+        {L"leftOfStart", Position::LeftOfStart},
+        {L"rightOfStart", Position::RightOfStart},
+    };
+    static constexpr sio::Choice<ngl::FillOrder> kFillOrders[] = {
+        {L"rows", ngl::FillOrder::Rows},
+        {L"columns", ngl::FillOrder::Columns},
+    };
+    static constexpr sio::Choice<ngl::Justify> kJustifies[] = {
+        {L"start", ngl::Justify::Start},
+        {L"center", ngl::Justify::Center},
+        {L"end", ngl::Justify::End},
+    };
+    static constexpr sio::Choice<NewItems> kNewItems[] = {
+        {L"append", NewItems::Append},
+        {L"ignore", NewItems::Ignore},
+    };
+    static constexpr sio::Choice<MergeMode> kMergeModes[] = {
+        {L"auto", MergeMode::Auto},
+        {L"forceMainStack", MergeMode::ForceMainStack},
+    };
+
+    g_settings.position =
+        sio::LoadChoice(L"Placement.Position", kPositions, Position::Overflow);
+
+    static constexpr PCWSTR kContentKeys[kUtilityCount] = {
+        L"Content.Overflow",        L"Content.Emoji",
+        L"Content.TouchKeyboard",   L"Content.PenMenu",
+        L"Content.VirtualTouchpad", L"Content.InputIndicator",
+    };
+    for (int i = 0; i < kUtilityCount; i++) {
+        g_settings.content[i] = sio::LoadBool(kContentKeys[i]);
     }
 
-    g_settings.layout = GetStringSetting(L"layout");
-    if (g_settings.layout.empty()) {
-        g_settings.layout = L"overflow | emoji | touchKeyboard";
-    }
+    sio::LoadString(L"Layout.Arrangement", g_settings.arrangement, L"auto");
+    g_settings.fillOrder =
+        sio::LoadChoice(L"Layout.FillOrder", kFillOrders, ngl::FillOrder::Rows);
+    g_settings.justify =
+        sio::LoadChoice(L"Layout.Justify", kJustifies, ngl::Justify::Center);
+    g_settings.newItems =
+        sio::LoadChoice(L"Layout.NewItems", kNewItems, NewItems::Append);
 
-    g_settings.primaryAxis =
-        GetStringSetting(L"primaryAxis") == L"column"
-            ? ngl::Axis::Vertical
-            : ngl::Axis::Horizontal;
-    auto crossAlign = GetStringSetting(L"crossAlign");
-    if (crossAlign == L"start") {
-        g_settings.crossAlign = ngl::CrossAlign::Start;
-    } else if (crossAlign == L"end") {
-        g_settings.crossAlign = ngl::CrossAlign::End;
-    } else {
-        g_settings.crossAlign = ngl::CrossAlign::Center;
-    }
+    g_settings.itemWidth = sio::LoadInt(L"Size.ItemWidth", 0, 96);
+    g_settings.itemHeight = sio::LoadInt(L"Size.ItemHeight", 0, 96);
+    g_settings.itemSpacing = sio::LoadInt(L"Size.ItemSpacing", -16, 32);
 
-    g_settings.buttonWidth =
-        ClampSetting(Wh_GetIntSetting(L"buttonWidth"), 0, 96);
-    g_settings.buttonHeight =
-        ClampSetting(Wh_GetIntSetting(L"buttonHeight"), 0, 96);
-    g_settings.buttonSpacing =
-        ClampSetting(Wh_GetIntSetting(L"buttonSpacing"), -16, 32);
-
-    g_settings.groupOffsetX = GetOffsetSetting(L"groupOffsetX");
-    g_settings.groupOffsetY = GetOffsetSetting(L"groupOffsetY");
-    g_settings.overflowOffsetX = GetOffsetSetting(L"overflowOffsetX");
-    g_settings.overflowOffsetY = GetOffsetSetting(L"overflowOffsetY");
-    g_settings.emojiOffsetX = GetOffsetSetting(L"emojiOffsetX");
-    g_settings.emojiOffsetY = GetOffsetSetting(L"emojiOffsetY");
-    g_settings.touchKeyboardOffsetX =
-        GetOffsetSetting(L"touchKeyboardOffsetX");
-    g_settings.touchKeyboardOffsetY =
-        GetOffsetSetting(L"touchKeyboardOffsetY");
-    g_settings.penMenuOffsetX = GetOffsetSetting(L"penMenuOffsetX");
-    g_settings.penMenuOffsetY = GetOffsetSetting(L"penMenuOffsetY");
-    g_settings.virtualTouchpadOffsetX =
-        GetOffsetSetting(L"virtualTouchpadOffsetX");
-    g_settings.virtualTouchpadOffsetY =
-        GetOffsetSetting(L"virtualTouchpadOffsetY");
-    g_settings.inputIndicatorOffsetX =
-        GetOffsetSetting(L"inputIndicatorOffsetX");
-    g_settings.inputIndicatorOffsetY =
-        GetOffsetSetting(L"inputIndicatorOffsetY");
+    g_settings.padX = sio::LoadInt(L"Adjust.PadX", 0, 100);
+    g_settings.padY = sio::LoadInt(L"Adjust.PadY", 0, 100);
+    g_settings.offsetX = sio::LoadInt(L"Adjust.OffsetX", -100, 100);
+    g_settings.offsetY = sio::LoadInt(L"Adjust.OffsetY", -100, 100);
 
     g_settings.minimumTrayHeight =
-        ClampSetting(Wh_GetIntSetting(L"minimumTrayHeight"), 0, 160);
+        sio::LoadInt(L"Behavior.MinimumTrayHeight", 0, 160);
     g_settings.mergeMode =
-        GetStringSetting(L"mergeMode") == L"forceMainStack"
-            ? MergeMode::ForceMainStack
-            : MergeMode::Auto;
-    g_settings.detailedLogging =
-        Wh_GetIntSetting(L"detailedLogging") != 0;
+        sio::LoadChoice(L"Behavior.Detection", kMergeModes, MergeMode::Auto);
+    g_settings.detailedLogging = sio::LoadBool(L"Behavior.DetailedLogging");
 }
 
 // ── Taskbar plumbing ──────────────────────────────────────────────────────
-
-// Lifecycle v1.2 dispatcher (taskbar-xaml-lifecycle.template.cpp): contain
-// every UI-dispatch exception at the WH_CALLWNDPROC boundary.
-
-using WindowThreadProc = void (*)(void*);
+//
+// Window discovery, UI-thread dispatch, the XamlRoot walk, the taskbar.dll
+// symbol hooks and the taskbar metrics all live in taskbar-host.h now. What
+// remains here is the mod's own voice for failures and thin call-site names.
 
 static void LogCurrentUiException(PCWSTR context) noexcept {
     try {
@@ -1298,190 +2596,28 @@ static void LogCurrentUiException(PCWSTR context) noexcept {
     }
 }
 
-static bool InvokeWindowThreadProc(WindowThreadProc proc, void* parameter) {
-    try {
-        proc(parameter);
-        return true;
-    } catch (...) {
-        LogCurrentUiException(L"UI callback");
-    }
-    return false;
+// taskbar_host::Invoke calls this from inside its own catch, so rethrowing
+// there is what lets the logger above name the exception.
+static void LogUiCallbackFailure(PCWSTR context) {
+    LogCurrentUiException(context);
 }
 
-static bool RunFromWindowThread(HWND window, WindowThreadProc proc,
+static bool RunFromWindowThread(HWND window, tbh::ThreadProc proc,
                                 void* parameter) {
-    static UINT message = RegisterWindowMessageW(
+    return tbh::RunFromWindowThread(
+        window, proc, parameter,
         L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-    struct Dispatch {
-        WindowThreadProc proc;
-        void* parameter;
-        bool succeeded = false;
-    };
-    DWORD threadId = GetWindowThreadProcessId(window, nullptr);
-    if (!threadId) return false;
-    if (threadId == GetCurrentThreadId()) {
-        return InvokeWindowThreadProc(proc, parameter);
-    }
-
-    HHOOK hook = SetWindowsHookExW(
-        WH_CALLWNDPROC,
-        [](int code, WPARAM wParam, LPARAM lParam) -> LRESULT {
-            if (code == HC_ACTION) {
-                auto call = reinterpret_cast<CWPSTRUCT const*>(lParam);
-                static UINT dispatchMessage = RegisterWindowMessageW(
-                    L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-                if (call->message == dispatchMessage) {
-                    auto dispatch = reinterpret_cast<Dispatch*>(call->lParam);
-                    dispatch->succeeded = InvokeWindowThreadProc(
-                        dispatch->proc, dispatch->parameter);
-                }
-            }
-            return CallNextHookEx(nullptr, code, wParam, lParam);
-        },
-        nullptr, threadId);
-    if (!hook) return false;
-
-    Dispatch dispatch{proc, parameter};
-    SendMessageW(window, message, 0, reinterpret_cast<LPARAM>(&dispatch));
-    UnhookWindowsHookEx(hook);
-    return dispatch.succeeded;
 }
 
 static HWND FindCurrentProcessTaskbarWnd() {
-    HWND result = nullptr;
-    EnumWindows(
-        [](HWND hWnd, LPARAM lParam) -> BOOL {
-            DWORD processId = 0;
-            WCHAR className[32]{};
-            if (GetWindowThreadProcessId(hWnd, &processId) &&
-                processId == GetCurrentProcessId() &&
-                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
-                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
-                *reinterpret_cast<HWND*>(lParam) = hWnd;
-                return FALSE;
-            }
-            return TRUE;
-        },
-        reinterpret_cast<LPARAM>(&result));
-    return result;
+    return tbh::FindCurrentProcessTaskbarWnd();
 }
 
-using CTaskBand_GetTaskbarHost_t =
-    void* (WINAPI*)(void* pThis, void* taskbarHostSharedPtr);
-static CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original;
-
-using TaskbarHost_FrameHeight_t = int (WINAPI*)(void* pThis);
-static TaskbarHost_FrameHeight_t TaskbarHost_FrameHeight_Original;
-
-using std__Ref_count_base__Decref_t = void (WINAPI*)(void* pThis);
-static std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original;
-
-static void* CTaskBand_ITaskListWndSite_vftable = nullptr;
-
 static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
-    if (!CTaskBand_GetTaskbarHost_Original ||
-        !TaskbarHost_FrameHeight_Original ||
-        !std__Ref_count_base__Decref_Original ||
-        !CTaskBand_ITaskListWndSite_vftable) {
-        return nullptr;
-    }
-
-    HWND taskSwWnd =
-        reinterpret_cast<HWND>(GetProp(hTaskbarWnd, L"TaskbandHWND"));
-    if (!taskSwWnd) {
-        return nullptr;
-    }
-
-    void* taskBand =
-        reinterpret_cast<void*>(GetWindowLongPtr(taskSwWnd, 0));
-    if (!taskBand) {
-        return nullptr;
-    }
-
-    void* taskBandForSite = taskBand;
-    for (int i = 0;
-         *reinterpret_cast<void**>(taskBandForSite) !=
-             CTaskBand_ITaskListWndSite_vftable;
-         i++) {
-        if (i == 20) {
-            return nullptr;
-        }
-        taskBandForSite =
-            reinterpret_cast<void**>(taskBandForSite) + 1;
-    }
-
-    void* taskbarHostSharedPtr[2]{};
-    CTaskBand_GetTaskbarHost_Original(taskBandForSite,
-                                     taskbarHostSharedPtr);
-    if (!taskbarHostSharedPtr[0] || !taskbarHostSharedPtr[1]) {
-        if (taskbarHostSharedPtr[1]) {
-            std__Ref_count_base__Decref_Original(
-                taskbarHostSharedPtr[1]);
-        }
-        return nullptr;
-    }
-
-    size_t offset = 0x10;
-#if defined(_M_X64)
-    {
-        // 48:83EC 28 | sub rsp,28
-        // 48:83C1 48 | add rcx,48
-        const BYTE* bytes =
-            reinterpret_cast<const BYTE*>(TaskbarHost_FrameHeight_Original);
-        if (bytes[0] == 0x48 && bytes[1] == 0x83 &&
-            bytes[2] == 0xEC && bytes[4] == 0x48 &&
-            bytes[5] == 0x83 && bytes[6] == 0xC1 &&
-            bytes[7] <= 0x7F) {
-            offset = bytes[7];
-        } else {
-            Wh_Log(L"[XamlRoot] Unsupported TaskbarHost::FrameHeight");
-        }
-    }
-#elif defined(_M_ARM64)
-    {
-        // 7f2303d5 pacibsp
-        // fd7bbfa9 stp     fp, lr, [sp, #-0x10]!
-        // fd030091 mov     fp, sp
-        // 080c41f8 ldr     x8, [x0, #0x10]!
-        const DWORD* words =
-            reinterpret_cast<const DWORD*>(TaskbarHost_FrameHeight_Original);
-        if (words[0] == 0xD503237F &&
-            (words[1] & 0xFFC07FFF) == 0xA9807BFD &&
-            words[2] == 0x910003FD &&
-            (words[3] & 0xFFF00FE0) == 0xF8400C00) {
-            offset = (words[3] >> 12) & 0xFF;
-        } else {
-            Wh_Log(L"[XamlRoot] Unsupported TaskbarHost::FrameHeight");
-        }
-    }
-#else
-#error "Unsupported architecture"
-#endif
-
-    auto* unknown = *reinterpret_cast<IUnknown**>(
-        reinterpret_cast<BYTE*>(taskbarHostSharedPtr[0]) + offset);
-    if (!unknown) {
-        std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
-        return nullptr;
-    }
-
-    FrameworkElement taskbarElement = nullptr;
-    unknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
-                            winrt::put_abi(taskbarElement));
-    auto result =
-        taskbarElement ? taskbarElement.XamlRoot() : nullptr;
-    std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
-    return result;
+    return tbh::GetTaskbarXamlRoot(hTaskbarWnd);
 }
 
 // ── Utility discovery ─────────────────────────────────────────────────────
-
-static std::wstring ToLower(std::wstring value) {
-    for (auto& ch : value) {
-        ch = static_cast<wchar_t>(towlower(ch));
-    }
-    return value;
-}
 
 static bool ElementMatchesStableIdentity(
     FrameworkElement const& element,
@@ -1515,7 +2651,7 @@ static bool TreeContainsStableIdentity(
 }
 
 static FrameworkElement FindDirectTrayHost(
-    Grid const& trayGrid,
+    Panel const& trayGrid,
     FrameworkElement element) {
     DependencyObject current = element;
     while (current) {
@@ -1693,35 +2829,52 @@ static double NaturalHeight(FrameworkElement const& element) {
     return height > 0.0 ? std::min(width, height) : width;
 }
 
-// Forgiving token spelling: canonicalize what the user typed; empty result
-// means the token is unknown (worth a log line, not silent loss).
-static std::wstring CanonicalToken(std::wstring const& raw) {
-    auto lower = ToLower(raw);
+// Forgiving token spelling: canonicalize what the user typed. Returns
+// Utility::Count when the token is unknown, which is worth a log line rather
+// than silent loss.
+static Utility CanonicalUtility(std::wstring const& raw) {
     static constexpr struct {
         PCWSTR alias;
-        PCWSTR token;
+        Utility utility;
     } kAliases[] = {
-        {L"overflow", L"overflow"},
-        {L"chevron", L"overflow"},
-        {L"hidden", L"overflow"},
-        {L"hiddenicons", L"overflow"},
-        {L"emoji", L"emoji"},
-        {L"touchkeyboard", L"touchKeyboard"},
-        {L"keyboard", L"touchKeyboard"},
-        {L"penmenu", L"penMenu"},
-        {L"pen", L"penMenu"},
-        {L"virtualtouchpad", L"virtualTouchpad"},
-        {L"touchpad", L"virtualTouchpad"},
-        {L"inputindicator", L"inputIndicator"},
-        {L"input", L"inputIndicator"},
-        {L"language", L"inputIndicator"},
+        {L"overflow", Utility::Overflow},
+        {L"chevron", Utility::Overflow},
+        {L"hidden", Utility::Overflow},
+        {L"hiddenIcons", Utility::Overflow},
+        {L"emoji", Utility::Emoji},
+        {L"touchKeyboard", Utility::TouchKeyboard},
+        {L"keyboard", Utility::TouchKeyboard},
+        {L"penMenu", Utility::PenMenu},
+        {L"pen", Utility::PenMenu},
+        {L"virtualTouchpad", Utility::VirtualTouchpad},
+        {L"touchpad", Utility::VirtualTouchpad},
+        {L"inputIndicator", Utility::InputIndicator},
+        {L"input", Utility::InputIndicator},
+        {L"language", Utility::InputIndicator},
     };
     for (auto const& alias : kAliases) {
-        if (lower == alias.alias) {
-            return alias.token;
+        if (_wcsicmp(raw.c_str(), alias.alias) == 0) {
+            return alias.utility;
         }
     }
-    return L"";
+    return Utility::Count;
+}
+
+static std::wstring CanonicalToken(std::wstring const& raw) {
+    Utility utility = CanonicalUtility(raw);
+    return utility == Utility::Count
+               ? std::wstring()
+               : std::wstring(kUtilityTokens[static_cast<int>(utility)]);
+}
+
+// Two tokens name the same item when they canonicalize to the same utility.
+// Comparing them as STRINGS is the alias trap: "chevron" and "overflow" are
+// one button, and a string comparison makes an aliased item look missing and
+// appends it a second time (nested-group-layout.h TokenMatcher).
+static bool SameUtility(std::wstring const& placed,
+                        std::wstring const& expected) {
+    Utility a = CanonicalUtility(placed);
+    return a != Utility::Count && a == CanonicalUtility(expected);
 }
 
 static void CollectLeafTokens(ngl::Node const& node,
@@ -1735,8 +2888,31 @@ static void CollectLeafTokens(ngl::Node const& node,
     }
 }
 
+// A token nobody recognizes resolves to an empty size and is silently skipped,
+// which looks exactly like a utility Windows is not showing. Say which it is:
+// a typo in an arrangement is worth one log line, not a mystery.
+static void WarnUnknownTokens(std::wstring const& expression) {
+    ngl::Node root;
+    if (!ngl::Parse(expression, root)) {
+        return;  // the caller reports the parse error itself
+    }
+    std::vector<std::wstring> leaves;
+    CollectLeafTokens(root, leaves);
+    for (auto const& leaf : leaves) {
+        if (CanonicalUtility(leaf) != Utility::Count) {
+            continue;
+        }
+        Wh_Log(
+            L"[Layout] Unknown token '%s' in your arrangement — valid tokens "
+            L"are overflow, emoji, touchKeyboard, penMenu, virtualTouchpad "
+            L"and inputIndicator (aliases: chevron, hidden, keyboard, pen, "
+            L"touchpad, input, language)",
+            leaf.c_str());
+    }
+}
+
 static std::vector<LayoutItem> ResolveLayoutItems(
-    Grid const& trayGrid,
+    Panel const& trayGrid,
     FrameworkElement const& overflowHost,
     FrameworkElement const& mainStack,
     std::vector<std::wstring> const& wantedTokens) {
@@ -1759,8 +2935,6 @@ static std::vector<LayoutItem> ResolveLayoutItems(
             item.element = overflowHost;
             item.host = overflowHost;
             item.hostLeaf = true;
-            item.offsetX = g_settings.overflowOffsetX;
-            item.offsetY = g_settings.overflowOffsetY;
         } else {
             for (auto const& host : candidateHosts) {
                 std::vector<FrameworkElement> icons;
@@ -1790,23 +2964,6 @@ static std::vector<LayoutItem> ResolveLayoutItems(
                         visibleIcons,
                         g_settings.mergeMode == MergeMode::ForceMainStack);
                 }
-            }
-
-            if (item.token == L"emoji") {
-                item.offsetX = g_settings.emojiOffsetX;
-                item.offsetY = g_settings.emojiOffsetY;
-            } else if (item.token == L"touchKeyboard") {
-                item.offsetX = g_settings.touchKeyboardOffsetX;
-                item.offsetY = g_settings.touchKeyboardOffsetY;
-            } else if (item.token == L"penMenu") {
-                item.offsetX = g_settings.penMenuOffsetX;
-                item.offsetY = g_settings.penMenuOffsetY;
-            } else if (item.token == L"virtualTouchpad") {
-                item.offsetX = g_settings.virtualTouchpadOffsetX;
-                item.offsetY = g_settings.virtualTouchpadOffsetY;
-            } else if (item.token == L"inputIndicator") {
-                item.offsetX = g_settings.inputIndicatorOffsetX;
-                item.offsetY = g_settings.inputIndicatorOffsetY;
             }
         }
 
@@ -1893,32 +3050,49 @@ static void LogIconViews(FrameworkElement const& host, PCWSTR prefix) {
 }
 
 // ── Snapshot / restore ────────────────────────────────────────────────────
+//
+// Every property this mod writes on an element Windows owns goes through the
+// lease, which puts back the exact prior LOCAL value — or clears it, when
+// there was none. Clearing matters: a tray element's size and alignment are
+// usually driven by its template, and writing a "restored" concrete value
+// where no local value existed overrides that binding permanently.
 
-static ElementSnapshot CaptureElementState(FrameworkElement const& element) {
-    ElementSnapshot snapshot;
-    snapshot.element = element;
-    snapshot.column = Grid::GetColumn(element);
-    snapshot.columnSpan = Grid::GetColumnSpan(element);
-    snapshot.row = Grid::GetRow(element);
-    snapshot.rowSpan = Grid::GetRowSpan(element);
-    snapshot.width = element.Width();
-    snapshot.height = element.Height();
-    snapshot.minWidth = element.MinWidth();
-    snapshot.minHeight = element.MinHeight();
-    snapshot.maxWidth = element.MaxWidth();
-    snapshot.maxHeight = element.MaxHeight();
-    snapshot.margin = element.Margin();
-    snapshot.horizontalAlignment = element.HorizontalAlignment();
-    snapshot.verticalAlignment = element.VerticalAlignment();
-    snapshot.renderTransform = element.RenderTransform();
-    return snapshot;
+// Announce the placement writes BEFORE making them. First write wins inside
+// the lease, so calling this on a re-apply cannot capture the mod's own
+// values.
+static void TrackPlacement(FrameworkElement const& element) {
+    if (!element) {
+        return;
+    }
+    g_lease->Track(element, FrameworkElement::WidthProperty());
+    g_lease->Track(element, FrameworkElement::HeightProperty());
+    g_lease->Track(element, FrameworkElement::MinWidthProperty());
+    g_lease->Track(element, FrameworkElement::MinHeightProperty());
+    g_lease->Track(element, FrameworkElement::MaxWidthProperty());
+    g_lease->Track(element, FrameworkElement::MaxHeightProperty());
+    g_lease->Track(element, FrameworkElement::MarginProperty());
+    g_lease->Track(element, FrameworkElement::HorizontalAlignmentProperty());
+    g_lease->Track(element, FrameworkElement::VerticalAlignmentProperty());
+    g_lease->Track(element, UIElement::RenderTransformProperty());
 }
 
-static ElementSnapshot CaptureHost(FrameworkElement const& element,
-                                   Grid const& trayGrid,
-                                   int markerIndex) {
-    ElementSnapshot snapshot = CaptureElementState(element);
-    snapshot.visibleIconViews = CountVisibleIconViews(element);
+// The host's slot is deliberately NOT leased. A zero-size marker child left
+// where the host was follows the tray's live re-indexing, so the marker's
+// position at restore time is a better answer than the index captured when the
+// layout was applied. On a Grid the marker carries the column; on the 26200.9457
+// StackPanel it carries the child index, which is what order-based layout uses.
+static HostRecord CaptureHost(FrameworkElement const& element,
+                              Panel const& trayGrid,
+                              int markerIndex) {
+    HostRecord record;
+    record.element = element;
+    record.column = Grid::GetColumn(element);
+    record.columnSpan = Grid::GetColumnSpan(element);
+    record.row = Grid::GetRow(element);
+    record.rowSpan = Grid::GetRowSpan(element);
+    record.visibleIconViews = CountVisibleIconViews(element);
+    record.ordered =
+        lease_column::Classify(trayGrid) == lease_column::Kind::Order;
 
     Grid marker;
     marker.Name(
@@ -1931,51 +3105,75 @@ static ElementSnapshot CaptureHost(FrameworkElement const& element,
     marker.MaxWidth(0);
     marker.MaxHeight(0);
     marker.IsHitTestVisible(false);
-    Grid::SetColumn(marker, snapshot.column);
-    Grid::SetColumnSpan(marker, 1);
-    Grid::SetRow(marker, snapshot.row);
-    Grid::SetRowSpan(marker, snapshot.rowSpan);
-    trayGrid.Children().Append(marker);
-    snapshot.columnMarker = marker;
-    return snapshot;
+    if (record.ordered) {
+        // Insert where the host stands, so the marker holds its place in the
+        // child order. Appending would park it at the tray's far end.
+        int index = lease_column::IndexOfChild(trayGrid, element);
+        trayGrid.Children().InsertAt(
+            index < 0 ? trayGrid.Children().Size()
+                      : static_cast<uint32_t>(index),
+            marker);
+    } else {
+        Grid::SetColumn(marker, record.column);
+        Grid::SetColumnSpan(marker, 1);
+        Grid::SetRow(marker, record.row);
+        Grid::SetRowSpan(marker, record.rowSpan);
+        trayGrid.Children().Append(marker);
+    }
+    record.columnMarker = marker;
+    return record;
 }
 
-static void RestoreElement(ElementSnapshot& snapshot) {
-    try {
-        if (snapshot.element) {
-            int restoreColumn = snapshot.column;
-            if (snapshot.columnMarker) {
-                restoreColumn = Grid::GetColumn(snapshot.columnMarker);
-            }
+// Put a host back among the tray's children. A Grid child lands anywhere and is
+// positioned by its column afterwards; a StackPanel child has to land at the
+// right index, because there the index IS the position.
+static void ReturnHostToTray(FrameworkElement const& child) {
+    if (!child || !g_layoutGrid) {
+        return;
+    }
+    for (auto const& record : *g_hostRecords) {
+        if (record.element != child || !record.ordered ||
+            !record.columnMarker) {
+            continue;
+        }
+        int index = lease_column::IndexOfChild(g_layoutGrid,
+                                               record.columnMarker);
+        if (index >= 0) {
+            g_layoutGrid.Children().InsertAt(static_cast<uint32_t>(index),
+                                             child);
+            return;
+        }
+        break;
+    }
+    g_layoutGrid.Children().Append(child);
+}
 
-            Grid::SetColumn(snapshot.element, restoreColumn);
-            Grid::SetColumnSpan(snapshot.element, snapshot.columnSpan);
-            Grid::SetRow(snapshot.element, snapshot.row);
-            Grid::SetRowSpan(snapshot.element, snapshot.rowSpan);
-            snapshot.element.Width(snapshot.width);
-            snapshot.element.Height(snapshot.height);
-            snapshot.element.MinWidth(snapshot.minWidth);
-            snapshot.element.MinHeight(snapshot.minHeight);
-            snapshot.element.MaxWidth(snapshot.maxWidth);
-            snapshot.element.MaxHeight(snapshot.maxHeight);
-            snapshot.element.Margin(snapshot.margin);
-            snapshot.element.HorizontalAlignment(
-                snapshot.horizontalAlignment);
-            snapshot.element.VerticalAlignment(snapshot.verticalAlignment);
-            snapshot.element.RenderTransform(snapshot.renderTransform);
+static void RestoreHostPosition(HostRecord& record) {
+    try {
+        // On the ordered tray the host was already re-inserted at the marker's
+        // index by ReturnHostToTray; there is no column to write back.
+        if (record.element && !record.ordered) {
+            int restoreColumn = record.column;
+            if (record.columnMarker) {
+                restoreColumn = Grid::GetColumn(record.columnMarker);
+            }
+            Grid::SetColumn(record.element, restoreColumn);
+            Grid::SetColumnSpan(record.element, record.columnSpan);
+            Grid::SetRow(record.element, record.row);
+            Grid::SetRowSpan(record.element, record.rowSpan);
         }
 
-        if (snapshot.columnMarker && g_layoutGrid) {
+        if (record.columnMarker && g_layoutGrid) {
             uint32_t markerIndex = 0;
             if (g_layoutGrid.Children().IndexOf(
-                    snapshot.columnMarker, markerIndex)) {
+                    record.columnMarker, markerIndex)) {
                 g_layoutGrid.Children().RemoveAt(markerIndex);
             }
         }
     } catch (...) {
-        Wh_Log(L"[Restore] Element restore failed");
+        Wh_Log(L"[Restore] Host position restore failed");
     }
-    snapshot = {};
+    record = {};
 }
 
 static void RestoreLayout() {
@@ -1998,11 +3196,10 @@ static void RestoreLayout() {
         }
     }
 
-    // Icon properties first (icons live inside the hosts).
-    for (auto& snapshot : *g_iconSnapshots) {
-        RestoreElement(snapshot);
-    }
-    g_iconSnapshots->clear();
+    // Newest first, so the icons (written last, inside the hosts) come back
+    // before the hosts that carry them.
+    g_lease->RestoreAll(
+        []() { Wh_Log(L"[Restore] A leased property failed to restore"); });
 
     // Send the native hosts home, then take the owned group down.
     try {
@@ -2011,9 +3208,7 @@ static void RestoreLayout() {
                 auto child =
                     g_group.Children().GetAt(0).try_as<FrameworkElement>();
                 g_group.Children().RemoveAt(0);
-                if (child && g_layoutGrid) {
-                    g_layoutGrid.Children().Append(child);
-                }
+                ReturnHostToTray(child);
             }
             if (g_startLease.group) {
                 if (!start_placement::Release(g_startLease)) {
@@ -2032,6 +3227,9 @@ static void RestoreLayout() {
     g_group = nullptr;
     g_startLease = {};
 
+    // Release the leased column BEFORE reading the markers: releasing shifts
+    // every later column index down by one, and the markers shift with it, so
+    // reading them afterwards gives the corrected index.
     if (!g_columnLease.markerName.empty() && g_layoutGrid) {
         if (!lease_column::Release(g_layoutGrid, g_columnLease)) {
             Wh_Log(
@@ -2040,10 +3238,10 @@ static void RestoreLayout() {
             g_columnLease = {};
         }
     }
-    for (auto& snapshot : *g_hostSnapshots) {
-        RestoreElement(snapshot);
+    for (auto& record : *g_hostRecords) {
+        RestoreHostPosition(record);
     }
-    g_hostSnapshots->clear();
+    g_hostRecords->clear();
     g_layoutGrid = nullptr;
     g_layoutApplied = false;
     Wh_Log(L"[Restore] Native utility layout restored");
@@ -2056,6 +3254,7 @@ static void RestoreLayout() {
 static void ApplyLeafPlacement(FrameworkElement const& element,
                                double x, double y,
                                double width, double height) {
+    TrackPlacement(element);
     element.Width(width);
     element.Height(height);
     element.MinWidth(0);
@@ -2078,11 +3277,12 @@ struct IconTarget {
 
 static bool ApplyLayout() {
     ClearHostWatchers();
+    g_stoodDown = false;
 
     // After an in-place taskbar rebuild (TrayUI::StartTaskbar) the old XAML
     // tree is gone; drop stale references instead of restoring into it.
     if (!g_layoutApplied &&
-        (!g_hostSnapshots->empty() || !g_iconSnapshots->empty())) {
+        (!g_hostRecords->empty() || !g_lease->Empty())) {
         // We still own strong references to the old tree here, so revoke its
         // callbacks before releasing those references. Don't attempt full
         // placement restoration into a detached taskbar tree.
@@ -2099,8 +3299,10 @@ static bool ApplyLayout() {
             } catch (...) {
             }
         }
-        g_hostSnapshots->clear();
-        g_iconSnapshots->clear();
+        g_hostRecords->clear();
+        // The elements these snapshots describe no longer exist, so restoring
+        // would only throw (property-lease.h Abandon contract).
+        g_lease->Abandon();
         g_columnLease = {};
         g_startLease = {};
         g_group = nullptr;
@@ -2115,6 +3317,24 @@ static bool ApplyLayout() {
         return false;
     }
     g_taskbarWnd = hWnd;
+
+    // Stand down completely on a taskbar this family's layout model does not
+    // describe, BEFORE touching anything. A vertical taskbar is rotated by
+    // whichever mod moved it, and arranging into a coordinate space someone
+    // else is rotating produces garbage the user cannot diagnose.
+    auto metrics = tbh::GetMetrics(hWnd);
+    if (!tbh::LayoutModelApplies(metrics)) {
+        Wh_Log(
+            L"[Apply] Taskbar is %s (%.0fx%.0f DIP); leaving the native "
+            L"layout untouched",
+            tbh::OrientationName(metrics.orientation),
+            metrics.alongDip,
+            metrics.constrainedDip);
+        // Nothing left to wait for, so the retry loop retires. An Explorer
+        // rebuild re-evaluates if the user disables the vertical mod.
+        g_stoodDown = true;
+        return true;
+    }
 
     auto xamlRoot = GetTaskbarXamlRoot(hWnd);
     if (!xamlRoot) {
@@ -2132,9 +3352,18 @@ static bool ApplyLayout() {
         [](FrameworkElement const& element) {
             return element.Name() == L"SystemTrayFrameGrid";
         });
-    auto trayGrid = trayGridElement.try_as<Grid>();
-    if (!trayGrid) {
+    if (!trayGridElement) {
         Wh_Log(L"[Apply] SystemTrayFrameGrid not found");
+        return false;
+    }
+    // Windows 11 26200.9457 (KB5129195) kept the name SystemTrayFrameGrid but
+    // changed the element from a Grid to a StackPanel. Accept either; refuse to
+    // guess the layout semantics of anything else.
+    auto trayGrid = trayGridElement.try_as<Panel>();
+    lease_column::Kind trayKind = lease_column::Classify(trayGridElement);
+    if (!trayGrid || trayKind == lease_column::Kind::Unsupported) {
+        Wh_Log(L"[Apply] Unsupported SystemTrayFrameGrid type: %s",
+               lease_column::ClassName(trayGridElement).c_str());
         return false;
     }
 
@@ -2165,63 +3394,56 @@ static bool ApplyLayout() {
         return true;
     }
 
-    // Parse the expression first so token spellings can be canonicalized
-    // (aliases like "keyboard") and unknown tokens reported instead of
-    // silently dropped.
-    ngl::Config config;
-    config.primaryAxis = g_settings.primaryAxis;
-    config.spacing = static_cast<double>(g_settings.buttonSpacing);
-    config.crossAlign = g_settings.crossAlign;
-
-    ngl::Node exprRoot;
-    if (!ngl::Parse(g_settings.layout, config.primaryAxis, exprRoot)) {
-        Wh_Log(L"[Apply] Layout expression parse error; leaving native: %s",
-               g_settings.layout.c_str());
+    // Which utilities may participate at all. Content is the enable switch;
+    // the arrangement decides where the enabled ones go.
+    std::vector<std::wstring> enabledTokens;
+    for (int i = 0; i < kUtilityCount; i++) {
+        if (g_settings.content[i]) {
+            enabledTokens.push_back(kUtilityTokens[i]);
+        }
+    }
+    if (enabledTokens.empty()) {
+        Wh_Log(L"[Apply] Every utility is switched off in Content");
+        g_stoodDown = true;
         return true;
     }
 
-    std::vector<std::wstring> leafTokens;
-    CollectLeafTokens(exprRoot, leafTokens);
-    std::vector<std::wstring> wantedTokens;
-    for (auto const& raw : leafTokens) {
-        auto canonical = CanonicalToken(raw);
-        if (canonical.empty()) {
-            Wh_Log(
-                L"[Apply] Unknown layout token '%s' — valid: overflow, "
-                L"emoji, touchKeyboard, penMenu, virtualTouchpad, "
-                L"inputIndicator (aliases: chevron, keyboard, pen, "
-                L"touchpad, input)",
-                raw.c_str());
-            continue;
-        }
-        if (std::find(wantedTokens.begin(), wantedTokens.end(),
-                      canonical) == wantedTokens.end()) {
-            wantedTokens.push_back(std::move(canonical));
-        }
-    }
-    if (wantedTokens.empty()) {
-        Wh_Log(L"[Apply] Layout expression names no known tokens");
-        return true;
-    }
-
+    // Resolve every enabled utility up front: "auto" needs to know what
+    // actually exists, and a written arrangement needs the same list to tell
+    // which items it forgot to name.
     auto items = ResolveLayoutItems(trayGrid, overflowHost, mainStack,
-                                    wantedTokens);
+                                    enabledTokens);
     if (items.empty()) {
         Wh_Log(L"[Apply] No layout items found");
         return true;
     }
 
-    // Pixel-space placement from the parsed expression, sized natively
-    // unless the user set explicit icon sizes.
+    std::vector<std::wstring> presentTokens;
+    for (auto const& item : items) {
+        presentTokens.push_back(item.token);
+    }
+
+    ngl::Config config;
+    config.spacing = static_cast<double>(g_settings.itemSpacing);
+    config.justify = g_settings.justify;
+    config.padX = static_cast<double>(g_settings.padX);
+    config.padY = static_cast<double>(g_settings.padY);
+
+    // Pixel sizes, native unless the user set explicit item sizes. A token
+    // that resolves to nothing is skipped and consumes no space, which is how
+    // a utility Windows is not showing collapses out of the arrangement.
     auto resolve = [&](std::wstring const& raw) -> ngl::Size {
         auto token = CanonicalToken(raw);
+        if (token.empty()) {
+            return {};
+        }
         for (auto const& item : items) {
             if (item.token == token) {
-                double width = g_settings.buttonWidth > 0
-                                   ? g_settings.buttonWidth
+                double width = g_settings.itemWidth > 0
+                                   ? g_settings.itemWidth
                                    : item.naturalW;
-                double height = g_settings.buttonHeight > 0
-                                    ? g_settings.buttonHeight
+                double height = g_settings.itemHeight > 0
+                                    ? g_settings.itemHeight
                                     : item.naturalH;
                 return {width, height};
             }
@@ -2229,12 +3451,97 @@ static bool ApplyLayout() {
         return {};
     };
 
+    // Rows available to the ITEM GRID. RESERVE BEFORE YOU DIVIDE: the outer
+    // vertical padding is spoken for on both sides before the height is
+    // divided, or the assembled group overflows the taskbar. The height is in
+    // DIPs (taskbar_host::GetMetrics), never raw GetWindowRect pixels.
+    double rowHeight = static_cast<double>(g_settings.itemHeight);
+    if (rowHeight <= 0.0) {
+        for (auto const& item : items) {
+            rowHeight = std::max(rowHeight, item.naturalH);
+        }
+    }
+    double gridHeightDip =
+        std::max(0.0, metrics.constrainedDip - config.padY * 2.0);
+    int maxRows = ngl::RowsInHeight(gridHeightDip, rowHeight, config.spacing);
+
+    auto namer = [&presentTokens](int index) {
+        return presentTokens[index];
+    };
+    auto arrangement = ngl::ResolveArrangement(
+        g_settings.arrangement, static_cast<int>(presentTokens.size()),
+        maxRows, g_settings.fillOrder, namer);
+    std::wstring expression = arrangement.expression;
+    if (!arrangement.wasAuto) {
+        WarnUnknownTokens(expression);
+    }
+
     std::vector<ngl::Placement> placements;
-    ngl::Size total = ngl::Measure(exprRoot, config, resolve);
-    ngl::Arrange(exprRoot, config, resolve, 0.0, 0.0, placements);
+    ngl::Size total;
+    ngl::ParseError parseError;
+    if (!ngl::Compute(expression, config, resolve, placements, total,
+                      &parseError)) {
+        Wh_Log(
+            L"[Apply] Arrangement parse error at position %d: expected %s. "
+            L"Falling back to automatic. Arrangement was: %s",
+            static_cast<int>(parseError.position),
+            parseError.expected.c_str(),
+            expression.c_str());
+        expression = ngl::BuildAutoExpression(
+            static_cast<int>(presentTokens.size()), maxRows,
+            g_settings.fillOrder, namer);
+        arrangement.wasAuto = true;
+        if (!ngl::Compute(expression, config, resolve, placements, total)) {
+            Wh_Log(L"[Apply] Automatic arrangement failed to build");
+            return true;
+        }
+    }
+
+    // Windows shows and hides these utilities live, so an arrangement written
+    // earlier can be missing one entirely. Matching is by IDENTITY, not
+    // spelling: "chevron" and "overflow" are the same button, and comparing
+    // them as strings would append it a second time.
+    if (!arrangement.wasAuto && g_settings.newItems == NewItems::Append) {
+        auto missing =
+            ngl::MissingTokens(presentTokens, placements, SameUtility);
+        if (!missing.empty()) {
+            std::wstring appended = L"";
+            for (auto const& token : missing) {
+                if (!appended.empty()) {
+                    appended += L", ";
+                }
+                appended += token;
+            }
+            expression = ngl::AppendMissing(expression, missing, maxRows,
+                                            g_settings.fillOrder);
+            Wh_Log(
+                L"[Layout] Your arrangement does not name %s; appended after "
+                L"it. Fold it in when you next edit the arrangement, or set "
+                L"Layout.NewItems to \"ignore\".",
+                appended.c_str());
+            if (!ngl::Compute(expression, config, resolve, placements,
+                              total)) {
+                Wh_Log(L"[Apply] Appending the missing items broke the "
+                       L"arrangement; keeping what you wrote");
+                ngl::Compute(arrangement.expression, config, resolve,
+                             placements, total);
+                expression = arrangement.expression;
+            }
+        }
+    }
+
     if (placements.empty() || total.Empty()) {
         Wh_Log(L"[Apply] Layout produced no placements");
         return true;
+    }
+
+    if (arrangement.wasAuto) {
+        // The settings API is read-only, so this is the only way to hand the
+        // generated expression back: the user pastes it into Arrangement to
+        // take manual control.
+        Wh_Log(
+            L"[Layout] auto -> \"%s\"  (%d rows available, item pitch %.0f)",
+            expression.c_str(), maxRows, rowHeight);
     }
 
     // Per-element targets from the placements, plus stragglers: visible
@@ -2248,11 +3555,8 @@ static bool ApplyLayout() {
             if (item.token != placementToken) {
                 continue;
             }
-            targets.push_back({item.element,
-                               placement.x + item.offsetX,
-                               placement.y + item.offsetY,
-                               placement.size.width,
-                               placement.size.height});
+            targets.push_back({item.element, placement.x, placement.y,
+                               placement.size.width, placement.size.height});
             bool known = false;
             for (auto const& host : managedHosts) {
                 if (host == item.host) {
@@ -2276,8 +3580,12 @@ static bool ApplyLayout() {
         return false;
     };
 
-    bool horizontal = config.primaryAxis == ngl::Axis::Horizontal;
-    double extraCursor = horizontal ? total.width : total.height;
+    // Reparenting a host brings ALL of its icons along, named or not, so an
+    // icon the arrangement never mentioned would otherwise pile up at the
+    // group's origin underneath another one. This is a physical consequence
+    // of reparenting, not the Layout.NewItems policy: these are icons with no
+    // token at all, so no arrangement could have named them.
+    double extraCursor = total.width;
     for (auto const& host : managedHosts) {
         bool leafHost = false;
         for (auto const& item : items) {
@@ -2301,30 +3609,19 @@ static bool ApplyLayout() {
             straggler.element = icon;
             straggler.width = width;
             straggler.height = height;
-            if (horizontal) {
-                straggler.x = extraCursor + config.spacing;
-                straggler.y = std::max(0.0, (total.height - height) / 2.0);
-                extraCursor = straggler.x + width;
-            } else {
-                straggler.y = extraCursor + config.spacing;
-                straggler.x = std::max(0.0, (total.width - width) / 2.0);
-                extraCursor = straggler.y + height;
-            }
+            straggler.x = extraCursor + config.spacing;
+            straggler.y = std::max(0.0, (total.height - height) / 2.0);
+            extraCursor = straggler.x + width;
             targets.push_back(straggler);
         }
     }
-    if (horizontal) {
-        total.width = std::max(total.width, extraCursor);
-    } else {
-        total.height = std::max(total.height, extraCursor);
-    }
+    total.width = std::max(total.width, extraCursor);
 
     // From here on we mutate the tree: snapshot everything first.
     g_layoutGrid = trayGrid;
     g_layoutApplied = true;
     for (int i = 0; i < static_cast<int>(managedHosts.size()); i++) {
-        g_hostSnapshots->push_back(
-            CaptureHost(managedHosts[i], trayGrid, i));
+        g_hostRecords->push_back(CaptureHost(managedHosts[i], trayGrid, i));
     }
 
     // The owned group: one Grid the position options place; the native
@@ -2345,7 +3642,7 @@ static bool ApplyLayout() {
                         : start_placement::Side::Right;
         if (!start_placement::Acquire(
                 root, group, side,
-                std::max(0, g_settings.buttonSpacing), g_startLease)) {
+                std::max(0, g_settings.itemSpacing), g_startLease)) {
             Wh_Log(
                 L"[Apply] Start anchor unavailable; "
                 L"leaving the native layout unchanged");
@@ -2388,7 +3685,14 @@ static bool ApplyLayout() {
                     }
                 }
             }
-            column = Grid::GetColumn(anchorHost);
+            column = trayKind == lease_column::Kind::Order
+                         ? lease_column::IndexOfChild(trayGrid, anchorHost)
+                         : Grid::GetColumn(anchorHost);
+            if (column < 0) {
+                Wh_Log(L"[Apply] Anchor host is no longer a tray child");
+                RestoreLayout();
+                return false;
+            }
         } else {
             lease_column::Anchor anchor =
                 lease_column::Anchor::BeforeIcons;
@@ -2413,17 +3717,36 @@ static bool ApplyLayout() {
                                        g_columnLease)) {
                 Wh_Log(
                     L"[Apply] Requested position anchor unavailable; "
-                    L"leaving the native layout unchanged");
+                    L"leaving the native layout unchanged (tray %s holds: %s)",
+                    lease_column::ClassName(trayGridElement).c_str(),
+                    lease_column::DescribeChildren(trayGrid).c_str());
                 RestoreLayout();
                 return false;
             }
-            column = g_columnLease.column;
+            column = g_columnLease.slot;
         }
 
-        Grid::SetColumn(group, column);
         group.HorizontalAlignment(HorizontalAlignment::Center);
         group.VerticalAlignment(VerticalAlignment::Center);
-        trayGrid.Children().Append(group);
+        if (!g_columnLease.markerName.empty()) {
+            // The lease already holds the slot; drop the group into it.
+            if (!lease_column::PlaceChild(trayGrid, g_columnLease, group)) {
+                Wh_Log(L"[Apply] Could not place the group in the lease");
+                RestoreLayout();
+                return false;
+            }
+        } else if (trayKind == lease_column::Kind::Order) {
+            // Borrowed-anchor path, order-based tray: take the anchor host's
+            // index. Reparenting the managed hosts below removes siblings
+            // around the group, which keeps its place relative to the rest.
+            trayGrid.Children().InsertAt(
+                std::min(static_cast<uint32_t>(column),
+                         trayGrid.Children().Size()),
+                group);
+        } else {
+            Grid::SetColumn(group, column);
+            trayGrid.Children().Append(group);
+        }
         sharedColumn = column;
     }
     g_group = group;
@@ -2440,8 +3763,12 @@ static bool ApplyLayout() {
         group.Children().Append(host);
     }
 
-    double groupOffsetX = static_cast<double>(g_settings.groupOffsetX);
-    double groupOffsetY = static_cast<double>(g_settings.groupOffsetY);
+    // Adjust.OffsetX/Y move the group VISUALLY and reserve nothing, so they
+    // ride on the hosts rather than on the group itself — the group's own
+    // margin belongs to the Start lease, which repositions it every layout
+    // pass.
+    double groupOffsetX = static_cast<double>(g_settings.offsetX);
+    double groupOffsetY = static_cast<double>(g_settings.offsetY);
 
     for (auto const& host : managedHosts) {
         // Host-leaf items (the chevron, MainStack fallback) are placed as
@@ -2489,7 +3816,7 @@ static bool ApplyLayout() {
             if (!target) {
                 continue;
             }
-            g_iconSnapshots->push_back(CaptureElementState(icon));
+            TrackPlacement(icon);
             icon.Width(target->width);
             icon.Height(target->height);
             icon.MinWidth(0);
@@ -2520,20 +3847,20 @@ static bool ApplyLayout() {
                 return;
             }
             lastCheckTick = nowTick;
-            for (auto const& snapshot : *g_hostSnapshots) {
-                if (!snapshot.element) {
+            for (auto const& record : *g_hostRecords) {
+                if (!record.element) {
                     continue;
                 }
                 bool changed = false;
                 try {
                     changed =
-                        !VisualTreeHelper::GetParent(snapshot.element) ||
-                        snapshot.element.Visibility() !=
+                        !VisualTreeHelper::GetParent(record.element) ||
+                        record.element.Visibility() !=
                             Visibility::Visible;
                     if (!changed) {
                         changed =
-                            CountVisibleIconViews(snapshot.element) !=
-                            snapshot.visibleIconViews;
+                            CountVisibleIconViews(record.element) !=
+                            record.visibleIconViews;
                     }
                 } catch (...) {
                     changed = true;
@@ -2578,17 +3905,19 @@ static bool ApplyLayout() {
 
     Wh_Log(
         L"[Apply] Layout applied: items=%d targets=%d hosts=%d "
-        L"trayColumn=%d dedicated=%d groupSize=%.0fx%.0f trayHeight=%.1f "
-        L"expr=%s",
+        L"tray%s=%d dedicated=%d groupSize=%.0fx%.0f trayHeight=%.1f "
+        L"leased=%d expr=%s",
         static_cast<int>(items.size()),
         static_cast<int>(targets.size()),
         static_cast<int>(managedHosts.size()),
+        trayKind == lease_column::Kind::Order ? L"Index" : L"Column",
         sharedColumn,
         !g_columnLease.markerName.empty(),
         total.width,
         total.height,
         trayGrid.ActualHeight(),
-        g_settings.layout.c_str());
+        static_cast<int>(g_lease->Count()),
+        expression.c_str());
     return true;
 }
 
@@ -2612,131 +3941,42 @@ static void ApplyLayoutOnWindowThread() {
 
 // ── Hooks and lifecycle ───────────────────────────────────────────────────
 
-static void StartRetryThread(bool forceApply = false);
+// The bounded retry, the taskbar.dll symbol hooks and the TrayUI::StartTaskbar
+// rebuild trigger all come from taskbar-host.h. Three things kick an apply —
+// this retry, an Explorer taskbar rebuild, and the visibility watchers — and
+// all three converge on the one idempotent ApplyLayout.
+static tbh::RetryLoop g_retry;  // exit-time-safe: handles only
 
-// Explorer can rebuild the taskbar in place (TrayUI::StartTaskbar); the old
-// XAML tree and our snapshots are gone, so restart the bounded retry
-// (lifecycle v1.3 contract).
-using TrayUI_StartTaskbar_t = void (WINAPI*)(void*);
-static TrayUI_StartTaskbar_t TrayUI_StartTaskbar_Original;
-
-static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
-    TrayUI_StartTaskbar_Original(pThis);
-    if (!g_unloading) {
-        Wh_Log(L"[Hooks] TrayUI::StartTaskbar; rescheduling layout");
-        g_taskbarWnd = nullptr;
-        g_layoutApplied = false;
-        StartRetryThread();
-    }
+// "Applied" must mean the work is DONE, not that the tray was found: the
+// retry stops on the first true, so a premature one retires the retry while
+// the layout is still unresolved.
+static bool LayoutIsApplied() {
+    return g_layoutApplied || g_stoodDown;
 }
 
-static bool HookTaskbarDllSymbols() {
-    HMODULE module = LoadLibraryExW(
-        L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!module) {
-        return false;
-    }
-
-    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
-        {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
-         &CTaskBand_ITaskListWndSite_vftable},
-        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
-         &CTaskBand_GetTaskbarHost_Original},
-        {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
-         &TaskbarHost_FrameHeight_Original},
-        {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
-         &std__Ref_count_base__Decref_Original},
-        {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
-         &TrayUI_StartTaskbar_Original, TrayUI_StartTaskbar_Hook},
-    };
-    return WindhawkUtils::HookSymbols(
-        module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
+static void RetryAttempt() {
+    ApplyLayoutOnWindowThread();
 }
 
-static void StopRetryThread() {
-    AcquireSRWLockExclusive(&g_retryLock);
-    HANDLE retryThread = g_retryThread;
-    HANDLE retryStopEvent = g_retryStopEvent;
-    g_retryThread = nullptr;
-    g_retryStopEvent = nullptr;
-    if (retryStopEvent) {
-        SetEvent(retryStopEvent);
-    }
-    ReleaseSRWLockExclusive(&g_retryLock);
-
-    if (retryThread) {
-        DWORD result;
-        do {
-            result = MsgWaitForMultipleObjects(
-                1, &retryThread, FALSE, INFINITE, QS_SENDMESSAGE);
-            if (result == WAIT_OBJECT_0 + 1) {
-                MSG message;
-                PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
-            }
-        } while (result == WAIT_OBJECT_0 + 1);
-        CloseHandle(retryThread);
-    }
-    if (retryStopEvent) {
-        CloseHandle(retryStopEvent);
-    }
-}
-
-static void StartRetryThread(bool forceApply) {
-    StopRetryThread();
-    AcquireSRWLockExclusive(&g_retryLock);
-    if (g_unloading || g_retryThread || g_retryStopEvent) {
-        if (forceApply) {
-            g_retryForceApply = true;
-        }
-        ReleaseSRWLockExclusive(&g_retryLock);
+// Explorer can rebuild the taskbar in place; the old XAML tree and our
+// records are gone with it, so restart the bounded retry (lifecycle v1.3).
+static void OnTaskbarRebuilt() {
+    if (g_unloading) {
         return;
     }
-    g_retryForceApply = forceApply;
-    g_retryStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_retryStopEvent) {
-        ReleaseSRWLockExclusive(&g_retryLock);
-        return;
-    }
-    HANDLE stopEvent = g_retryStopEvent;
-    g_retryThread = CreateThread(
-        nullptr,
-        0,
-        [](void* parameter) -> DWORD {
-            HANDLE stopEvent = reinterpret_cast<HANDLE>(parameter);
-            for (int attempt = 0;
-                 attempt < 6 && !g_unloading;
-                 attempt++) {
-                bool forceApply = g_retryForceApply.exchange(false);
-                if (g_layoutApplied && !forceApply) {
-                    break;
-                }
-                if (attempt &&
-                    WaitForSingleObject(stopEvent, 1500) !=
-                        WAIT_TIMEOUT) {
-                    break;
-                }
-                if (attempt) {
-                    Wh_Log(L"[Retry] Layout attempt %d", attempt);
-                }
-                ApplyLayoutOnWindowThread();
-            }
-            return 0;
-        },
-        stopEvent,
-        0,
-        nullptr);
-    if (!g_retryThread) {
-        CloseHandle(g_retryStopEvent);
-        g_retryStopEvent = nullptr;
-    }
-    ReleaseSRWLockExclusive(&g_retryLock);
+    Wh_Log(L"[Hooks] TrayUI::StartTaskbar; rescheduling layout");
+    g_taskbarWnd = nullptr;
+    g_layoutApplied = false;
+    g_stoodDown = false;
+    g_retry.Start(RetryAttempt, LayoutIsApplied, g_unloading, 6, 1500);
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"[Init] Tray Utility Customizer v1.1");
+    Wh_Log(L"[Init] Tray Utility Customizer v2.0");
     LoadSettings();
+    tbh::SetExceptionLogger(LogUiCallbackFailure);
 
-    if (!HookTaskbarDllSymbols()) {
+    if (!tbh::HookTaskbarSymbols(OnTaskbarRebuilt)) {
         Wh_Log(L"[Init] taskbar.dll symbol hooks failed");
         return FALSE;
     }
@@ -2751,18 +3991,21 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    StopRetryThread();
+    g_retry.Stop();
     LoadSettings();
     Wh_Log(L"[Settings] Reapplying");
-    // Settings can land during a transient taskbar rebuild. The retry path is
-    // now handle-race-safe, so use it instead of silently losing the reapply.
-    StartRetryThread(true);
+    // Settings can land during a transient taskbar rebuild, so go through the
+    // retry rather than silently losing the reapply. Clearing the applied flag
+    // is what makes the first attempt actually run.
+    g_layoutApplied = false;
+    g_stoodDown = false;
+    g_retry.Start(RetryAttempt, LayoutIsApplied, g_unloading, 6, 1500);
 }
 
 void Wh_ModUninit() {
     g_unloading = true;
     Wh_Log(L"[Uninit]");
-    StopRetryThread();
+    g_retry.Stop();
 
     HWND hWnd =
         g_taskbarWnd ? g_taskbarWnd : FindCurrentProcessTaskbarWnd();
@@ -2787,8 +4030,8 @@ void Wh_ModUninit() {
                 }
                 RestoreLayout();
                 g_hostWatchers.reset();
-                g_iconSnapshots.reset();
-                g_hostSnapshots.reset();
+                g_lease.reset();
+                g_hostRecords.reset();
             },
             nullptr);
     } else {
