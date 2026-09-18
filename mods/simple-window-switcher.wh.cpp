@@ -1893,6 +1893,18 @@ static HRGN GetCachedRoundRectRgn(int w, int h, int radius) {
     return s_cachedRoundRectRgn;
 }
 
+// Reusable scratch DC + DIB for alpha-blended icon drawing, keyed by icon size.
+// Avoids allocating a fresh DC + DIB section per icon per frame during fades and
+// for dimmed minimized icons. Flushed below in FreeCachedBuffers(). The DIB stays
+// selected into its DC for the cache lifetime, and its pixel pointer is stable.
+struct IconAlphaScratch { HDC hdc = nullptr; HBITMAP dib = nullptr; void* bits = nullptr; };
+static std::map<int, IconAlphaScratch> s_iconAlphaScratch;
+
+// Cache of rendered icon shadow bitmaps, keyed by icon handle + size. The shadow
+// alpha multiplier is a constant (0.08f) at the single call site, so it is not
+// part of the key. Owned here; flushed in FreeCachedBuffers() and on unload.
+static std::map<std::pair<HICON, int>, Gdiplus::Bitmap*> s_iconShadowCache;
+
 static void FreeCachedBuffers() {
     if (s_cachedRoundRectRgn) {
         DeleteObject(s_cachedRoundRectRgn);
@@ -1967,6 +1979,15 @@ static void FreeCachedBuffers() {
         s_cachedScrollToW = 0;
         s_cachedScrollToH = 0;
     }
+    for (auto& kv : s_iconAlphaScratch) {
+        if (kv.second.dib) DeleteObject(kv.second.dib); // still selected into hdc; deleting detaches it
+        if (kv.second.hdc) DeleteDC(kv.second.hdc);
+    }
+    s_iconAlphaScratch.clear();
+    for (auto& kv : s_iconShadowCache) {
+        delete kv.second;
+    }
+    s_iconShadowCache.clear();
     g_staticContentDirty = true;
 }
 
@@ -4744,13 +4765,16 @@ static void ComputeLayout(HMONITOR hMon) {
     MONITORINFO mi = { sizeof(mi) }; GetMonitorInfoW(hMon, &mi);
     int monW = mi.rcWork.right - mi.rcWork.left, monH = mi.rcWork.bottom - mi.rcWork.top;
     UINT dpiX = 96, dpiY = 96;
-    HMODULE hShcore = LoadLibraryW(L"shcore.dll");
-    if (hShcore) {
-        typedef HRESULT(WINAPI*GDPFM)(HMONITOR,int,UINT*,UINT*);
-        auto fn = (GDPFM)GetProcAddress(hShcore, "GetDpiForMonitor");
-        if (fn) fn(hMon, 0, &dpiX, &dpiY);
-        FreeLibrary(hShcore);
-    }
+    // shcore.dll is always loaded in a modern Windows process; resolve the
+    // GetDpiForMonitor pointer once instead of LoadLibrary/GetProcAddress/FreeLibrary
+    // on every ComputeLayout (which runs on hot animation-adjacent paths).
+    typedef HRESULT(WINAPI*GDPFM)(HMONITOR,int,UINT*,UINT*);
+    static GDPFM s_pfnGetDpiForMonitor = []() -> GDPFM {
+        HMODULE hShcore = GetModuleHandleW(L"shcore.dll");
+        if (!hShcore) hShcore = LoadLibraryW(L"shcore.dll");
+        return hShcore ? (GDPFM)GetProcAddress(hShcore, "GetDpiForMonitor") : nullptr;
+    }();
+    if (s_pfnGetDpiForMonitor) s_pfnGetDpiForMonitor(hMon, 0, &dpiX, &dpiY);
     g_dpiX = dpiX; g_dpiY = dpiY;
 
     g_settings.switcherPadding = GetActiveSwitcherPadding();
@@ -5542,6 +5566,8 @@ static Gdiplus::Bitmap* CreateIconShadowBitmap(HICON hIcon, int width, int heigh
     return shadowBmpCopy;
 }
 
+// (s_iconAlphaScratch is defined above, near FreeCachedBuffers.)
+
 static void DrawIconWithAlpha(HDC hdc, int x, int y, HICON hIcon, int size, float alpha) {
     if (!hIcon || size <= 0 || alpha <= 0.001f) return;
     if (alpha >= 0.999f) {
@@ -5549,38 +5575,46 @@ static void DrawIconWithAlpha(HDC hdc, int x, int y, HICON hIcon, int size, floa
         return;
     }
 
-    BITMAPINFO bmi = {};
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = size;
-    bmi.bmiHeader.biHeight = -size; // top-down
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
+    auto it = s_iconAlphaScratch.find(size);
+    if (it == s_iconAlphaScratch.end()) {
+        BITMAPINFO bmi = {};
+        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bmi.bmiHeader.biWidth = size;
+        bmi.bmiHeader.biHeight = -size; // top-down
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
 
-    void* pBits = nullptr;
-    HDC hdcMem = CreateCompatibleDC(hdc);
-    HBITMAP hDIB = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
-    if (hDIB && pBits) {
-        ZeroMemory(pBits, (size_t)size * size * 4);
-        HBITMAP hOldBmp = (HBITMAP)SelectObject(hdcMem, hDIB);
-
-        DrawIconEx(hdcMem, 0, 0, hIcon, size, size, 0, NULL, DI_NORMAL);
-
-        DWORD* pPixels = (DWORD*)pBits;
-        for (int i = 0; i < size * size; ++i) {
-            if ((pPixels[i] & 0x00FFFFFF) != 0 && (pPixels[i] & 0xFF000000) == 0) {
-                pPixels[i] |= 0xFF000000;
-            }
+        IconAlphaScratch s;
+        s.hdc = CreateCompatibleDC(hdc);
+        s.dib = CreateDIBSection(s.hdc, &bmi, DIB_RGB_COLORS, &s.bits, NULL, 0);
+        if (!s.hdc || !s.dib || !s.bits) {
+            if (s.dib) DeleteObject(s.dib);
+            if (s.hdc) DeleteDC(s.hdc);
+            return;
         }
-
-        BLENDFUNCTION bf = { AC_SRC_OVER, 0, (BYTE)roundf(alpha * 255.0f), AC_SRC_ALPHA };
-        AlphaBlend(hdc, x, y, size, size, hdcMem, 0, 0, size, size, bf);
-
-        SelectObject(hdcMem, hOldBmp);
-        DeleteObject(hDIB);
+        SelectObject(s.hdc, s.dib); // keep the DIB selected for the cache lifetime
+        it = s_iconAlphaScratch.emplace(size, s).first;
     }
-    DeleteDC(hdcMem);
+
+    const IconAlphaScratch& s = it->second;
+    ZeroMemory(s.bits, (size_t)size * size * 4);
+    DrawIconEx(s.hdc, 0, 0, hIcon, size, size, 0, NULL, DI_NORMAL);
+
+    DWORD* pPixels = (DWORD*)s.bits;
+    for (int i = 0; i < size * size; ++i) {
+        if ((pPixels[i] & 0x00FFFFFF) != 0 && (pPixels[i] & 0xFF000000) == 0) {
+            pPixels[i] |= 0xFF000000;
+        }
+    }
+
+    BLENDFUNCTION bf = { AC_SRC_OVER, 0, (BYTE)roundf(alpha * 255.0f), AC_SRC_ALPHA };
+    AlphaBlend(hdc, x, y, size, size, s.hdc, 0, 0, size, size, bf);
+    // Intentionally not deleting hdc/dib: cached for reuse, freed in
+    // FreeCachedBuffers().
 }
+
+// (s_iconShadowCache is defined above, near FreeCachedBuffers.)
 
 static void DrawDockIconWithAlpha(HDC hdc, const WindowEntry& e, int iconX, int iconY, int iconSz, float alphaMult = 1.0f) {
     if (!e.hIcon || iconSz <= 0) return;
@@ -6772,14 +6806,23 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
     } else {
         bool drawShadow = IsWin11OrGreater() || g_settings.showThumbnailShadow;
         if (drawShadow) {
-            Gdiplus::Bitmap* pBmp = CreateIconShadowBitmap(hIcon, iconSz, iconSz, 0.08f);
+            auto shadowKey = std::make_pair(hIcon, iconSz);
+            Gdiplus::Bitmap* pBmp = nullptr;
+            auto shadowIt = s_iconShadowCache.find(shadowKey);
+            if (shadowIt != s_iconShadowCache.end()) {
+                pBmp = shadowIt->second;
+            } else {
+                pBmp = CreateIconShadowBitmap(hIcon, iconSz, iconSz, 0.08f);
+                if (pBmp) s_iconShadowCache[shadowKey] = pBmp; // cache owns it now
+            }
             if (pBmp) {
                 int dx[] = { 0, 1, 0, -1, 1 };
                 int dy[] = { 1, 0, -1, 0, 1 };
                 for (int p = 0; p < 5; ++p) {
                     gfx.DrawImage(pBmp, bIconX + DpiScale(dx[p], g_dpiX), bIconY + DpiScale(dy[p] + 2, g_dpiY), iconSz, iconSz);
                 }
-                delete pBmp;
+                // Do not delete pBmp: owned by s_iconShadowCache, flushed in
+                // FreeCachedBuffers().
             }
         }
         if (iconDim < 0.99f) {
