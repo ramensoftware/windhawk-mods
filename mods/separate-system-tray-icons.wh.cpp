@@ -37,7 +37,7 @@ hides that button; adding it back shows it when its visibility toggle is enabled
 button appears only when Windows reports a battery.
 
 Sound supports mouse-wheel volume adjustment (unmuting first) and middle-click
-muting. **Volume scroll step** selects Windows' default step or 2, 5, or 10
+muting. **Volume scroll step** selects Windows' default step or 1, 5, or 10
 percentage points per wheel notch.
 
 Partial movements from smooth-scrolling mice accumulate into full wheel notches;
@@ -133,7 +133,7 @@ menu presenter receives its name after creation.
       $description: "Volume change per mouse-wheel notch over Sound. System default uses Windows' normal volume steps."
       $options:
       - "0": System default
-      - "2": 2%
+      - "1": 1%
       - "5": 5%
       - "10": 10%
     - soundClickAction: sound_output
@@ -253,6 +253,8 @@ menu presenter receives its name after creation.
 #include <string_view>
 #include <vector>
 #include <optional>
+#include <deque>
+#include <mutex>
 
 #undef GetCurrentTime
 
@@ -347,6 +349,7 @@ enum TrayRefreshReason : unsigned {
     RefreshRadios = 1u << 3,
     RefreshPower = 1u << 4,
     RefreshMedia = 1u << 5,
+    RefreshAudioWork = 1u << 6,
     RefreshAll = (1u << 6) - 1,
 };
 static void RequestTrayRefresh(unsigned reasons);
@@ -559,7 +562,7 @@ static void LoadSettings() {
     g_settings.soundClickAction =
         GetStringSettingWithDefault(L"sound.soundClickAction", L"sound_output");
     const auto volumeStep = GetStringSettingWithDefault(L"sound.volumeWheelStep", L"0");
-    g_settings.volumeWheelStep = volumeStep == L"2" ? 2 :
+    g_settings.volumeWheelStep = volumeStep == L"1" ? 1 :
         volumeStep == L"5" ? 5 : volumeStep == L"10" ? 10 : 0;
     g_settings.controlCenterGlyph =
         GetStringSettingWithDefault(L"controlCenter.controlCenterGlyph", L"F4C3");
@@ -1484,55 +1487,6 @@ static void OpenSound(std::function<void()> launched = {}) {
     LaunchUri(L"ms-controlcenter:", std::move(launched));
 }
 
-static bool GetDefaultEndpointVolume(IAudioEndpointVolume** outVolume,
-                                     bool* outCoInitialized) {
-    *outVolume = nullptr;
-    *outCoInitialized = false;
-
-    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    bool coInitialized = SUCCEEDED(hr);
-    *outCoInitialized = coInitialized;
-    if (hr == RPC_E_CHANGED_MODE) {
-        hr = S_OK;
-    }
-    if (FAILED(hr)) {
-        return false;
-    }
-
-    IMMDeviceEnumerator* enumerator = nullptr;
-    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
-                          __uuidof(IMMDeviceEnumerator),
-                          reinterpret_cast<void**>(&enumerator));
-    if (FAILED(hr) || !enumerator) {
-        if (coInitialized) {
-            CoUninitialize();
-        }
-        return false;
-    }
-
-    IMMDevice* device = nullptr;
-    hr = enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device);
-    enumerator->Release();
-    if (FAILED(hr) || !device) {
-        if (coInitialized) {
-            CoUninitialize();
-        }
-        return false;
-    }
-
-    hr = device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr,
-                          reinterpret_cast<void**>(outVolume));
-    device->Release();
-    if (FAILED(hr) || !*outVolume) {
-        if (coInitialized) {
-            CoUninitialize();
-        }
-        return false;
-    }
-
-    return true;
-}
-
 static std::wstring GetAudioEndpointFriendlyName(IMMDevice* device) {
     if (!device) {
         return {};
@@ -1660,15 +1614,10 @@ static SoundState GetSoundState() {
     return state;
 }
 
-static void StepDefaultEndpointVolumeWorker(int steps, int configuredStep) {
+static void StepDefaultEndpointVolumeWorker(IAudioEndpointVolume* volume, int steps, int configuredStep) {
     if (!steps) return;
     const bool up = steps > 0;
-    IAudioEndpointVolume* volume = nullptr;
-    bool coInitialized = false;
-    if (!GetDefaultEndpointVolume(&volume, &coInitialized)) {
-        Wh_Log(L"Sound wheel: default endpoint not available.");
-        return;
-    }
+    if (!volume) return;
 
     BOOL muted = FALSE;
     HRESULT hr = volume->GetMute(&muted);
@@ -1680,7 +1629,7 @@ static void StepDefaultEndpointVolumeWorker(int steps, int configuredStep) {
         float current = 0;
         if (configuredStep > 0 &&
             SUCCEEDED(volume->GetMasterVolumeLevelScalar(&current))) {
-            const float step = configuredStep * steps / 100.0f;
+            const float step = static_cast<float>(configuredStep) * steps / 100.0f;
             const float target = (std::clamp)(current + step, 0.0f, 1.0f);
             hr = volume->SetMasterVolumeLevelScalar(target, nullptr);
         } else {
@@ -1692,19 +1641,10 @@ static void StepDefaultEndpointVolumeWorker(int steps, int configuredStep) {
     Wh_Log(L"Sound wheel: VolumeStep%s returned 0x%08X", up ? L"Up" : L"Down",
            hr);
 
-    volume->Release();
-    if (coInitialized) {
-        CoUninitialize();
-    }
 }
 
-static void ToggleDefaultEndpointMuteWorker() {
-    IAudioEndpointVolume* volume = nullptr;
-    bool coInitialized = false;
-    if (!GetDefaultEndpointVolume(&volume, &coInitialized)) {
-        Wh_Log(L"Sound middle-click mute: default endpoint not available.");
-        return;
-    }
+static void ToggleDefaultEndpointMuteWorker(IAudioEndpointVolume* volume) {
+    if (!volume) return;
 
     BOOL muted = FALSE;
     HRESULT hr = volume->GetMute(&muted);
@@ -1713,10 +1653,6 @@ static void ToggleDefaultEndpointMuteWorker() {
     }
     Wh_Log(L"Sound middle-click mute toggle returned 0x%08X", hr);
 
-    volume->Release();
-    if (coInitialized) {
-        CoUninitialize();
-    }
 }
 
 static std::vector<AudioOutputEndpoint> GetActiveAudioOutputEndpoints() {
@@ -1905,29 +1841,60 @@ static void SetDefaultAudioOutputWorker(std::wstring const& id) {
     if (coInitialized) CoUninitialize();
 }
 
-static void QueueAudioWork(std::function<void()> work) {
-    HANDLE thread = StartOwnedWorker([work = std::move(work)] {
-        work();
-        RequestTrayRefresh(RefreshAudio);
-    });
-    if (thread) CloseHandle(thread);
+enum class AudioWorkKind { Volume, Mute, Output };
+struct AudioWork {
+    AudioWorkKind kind;
+    int steps = 0;
+    int configuredStep = 0;
+    std::wstring outputId;
+};
+static std::mutex g_audioWorkLock;
+static std::deque<AudioWork> g_audioWork;
+
+static void AppendAudioWork(std::deque<AudioWork>& queue, AudioWork work) {
+    if (work.kind == AudioWorkKind::Volume && !queue.empty()) {
+        auto& last = queue.back();
+        // Preserve direction changes at 0/100%, mute/output boundaries, and
+        // the step setting captured at the time of the input.
+        if (last.kind == AudioWorkKind::Volume &&
+            last.configuredStep == work.configuredStep &&
+            (last.steps > 0) == (work.steps > 0) &&
+            std::abs(static_cast<long long>(last.steps) + work.steps) <= INT_MAX) {
+            last.steps += work.steps;
+            return;
+        }
+    }
+    queue.push_back(std::move(work));
+}
+
+static void QueueAudioWork(AudioWork work) {
+    {
+        std::lock_guard lock(g_audioWorkLock);
+        if (g_unloading) return;
+        AppendAudioWork(g_audioWork, std::move(work));
+    }
+    RequestTrayRefresh(RefreshAudioWork);
+}
+
+static std::deque<AudioWork> TakeAudioWork() {
+    std::lock_guard lock(g_audioWorkLock);
+    std::deque<AudioWork> work;
+    work.swap(g_audioWork);
+    return work;
 }
 
 static void StepDefaultEndpointVolume(int steps) {
     if (!steps) return;
-    const int configuredStep = g_settings.volumeWheelStep;
-    QueueAudioWork([steps, configuredStep] {
-        StepDefaultEndpointVolumeWorker(steps, configuredStep);
-    });
+    QueueAudioWork({AudioWorkKind::Volume, steps, g_settings.volumeWheelStep, {}});
 }
 
 static void ToggleDefaultEndpointMute() {
-    QueueAudioWork([] { ToggleDefaultEndpointMuteWorker(); });
+    QueueAudioWork({AudioWorkKind::Mute});
 }
 
 static void SetDefaultAudioOutput(std::wstring id) {
     if (id.empty()) return;
-    QueueAudioWork([id = std::move(id)] { SetDefaultAudioOutputWorker(id); });
+    QueueAudioWork({AudioWorkKind::Output, 0, 0, std::move(id)});
 }
 
 static bool IsPhysicalEthernet(MIB_IF_ROW2 const& row) {
@@ -3815,14 +3782,8 @@ static void EnsureTrayRefreshWindow() {
     cls.hInstance = owner;
     cls.lpszClassName = kRefreshWindowClass;
     if (!RegisterClassW(&cls)) {
-        const DWORD error = GetLastError();
-        WNDCLASSW existing{};
-        if (error != ERROR_CLASS_ALREADY_EXISTS ||
-            !GetClassInfoW(owner, kRefreshWindowClass, &existing) ||
-            existing.lpfnWndProc != TrayRefreshWindowProc) {
-            Wh_Log(L"Refresh window class registration failed: %lu", error);
-            return;
-        }
+        Wh_Log(L"Refresh window class registration failed: %lu", GetLastError());
+        return;
     }
     HWND hwnd = CreateWindowExW(0, kRefreshWindowClass, L"", 0, 0, 0, 0, 0,
                                 HWND_MESSAGE, nullptr, owner, nullptr);
@@ -3923,7 +3884,7 @@ static DWORD WINAPI StatusEventThread(void* parameter) {
         }
         if (enumerator) {
             winrt::com_ptr<IMMDevice> endpoint;
-            if (SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, endpoint.put())) &&
+            if (SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eRender, eConsole, endpoint.put())) &&
                 SUCCEEDED(endpoint->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL,
                     nullptr, volume.put_void()))) {
                 if (FAILED(volume->RegisterControlChangeNotify(observer.get()))) volume = nullptr;
@@ -3993,7 +3954,8 @@ static DWORD WINAPI StatusEventThread(void* parameter) {
             const DWORD result = WaitForMultipleObjects(5, waits, FALSE, timeout);
             if (result == WAIT_OBJECT_0 || result == WAIT_FAILED) break;
             unsigned reasons = g_statusRefreshReasons.exchange(0);
-            if (result == WAIT_OBJECT_0 + 2) {
+            if (result == WAIT_OBJECT_0 + 2 ||
+                WaitForSingleObject(observer->changed, 0) == WAIT_OBJECT_0) {
                 bindVolume();
                 reasons |= RefreshAudio | RefreshAudioDevices;
             }
@@ -4006,6 +3968,28 @@ static DWORD WINAPI StatusEventThread(void* parameter) {
             if (GetTickCount64() - lastRecovery >= 30000) {
                 reasons |= RefreshAll;
                 lastRecovery = GetTickCount64();
+            }
+            if (reasons & RefreshAudioWork) {
+                auto pending = TakeAudioWork();
+                for (auto const& command : pending) {
+                    if (g_unloading) break;
+                    try {
+                        if (command.kind == AudioWorkKind::Output) {
+                            SetDefaultAudioOutputWorker(command.outputId);
+                            bindVolume();
+                            reasons |= RefreshAudioDevices;
+                        } else {
+                            if (!volume) bindVolume();
+                            if (command.kind == AudioWorkKind::Volume)
+                                StepDefaultEndpointVolumeWorker(volume.get(), command.steps,
+                                                                command.configuredStep);
+                            else ToggleDefaultEndpointMuteWorker(volume.get());
+                        }
+                    } catch (...) {
+                        Wh_Log(L"Queued audio command failed: 0x%08X", winrt::to_hresult());
+                    }
+                }
+                reasons = (reasons & ~RefreshAudioWork) | RefreshAudio;
             }
             if (reasons & RefreshRadios) bindRadios();
             if (reasons) RefreshStatusSnapshot(reasons);
@@ -6124,6 +6108,7 @@ void Wh_ModUninit() {
     // This can wait for network/audio RPC, so do it on Windhawk's unload
     // thread before any XAML cleanup is marshalled to Explorer's UI thread.
     StopStatusEvents();
+    TakeAudioWork();
     if (HWND currentTaskbar = FindCurrentProcessTaskbarWnd())
         g_taskbarWnd = currentTaskbar;
     bool removed = false;
