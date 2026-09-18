@@ -60,15 +60,6 @@ To try the mod without logging off, you can enable a preview shortcut in the mod
 
 ---
 
-## Good to know
-
-- This only catches shutdowns started the normal way (Start menu, Alt+F4, Task Manager, etc.). It won't appear for shutdowns triggered directly by Windows internals or by another program/service.
-- If clicking Shut Down or Sign out from the Start menu doesn't show the screen, make sure `StartMenuExperienceHost.exe` isn't excluded in Windhawk's process list.
-- This screen is a visual step before shutdown, not a security screen — it doesn't replace the Windows lock/login screen.
-- "Force log off" only force-closes programs that have actually stopped responding. A program that's still running but has unsaved work is left alone, exactly like in the original Windows 7 behavior, so unsaved work should never be lost.
-
----
-
 ## Credits
 - Cips — testing on Windows 11 25H2
 
