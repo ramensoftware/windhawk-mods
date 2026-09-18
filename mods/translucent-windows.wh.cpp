@@ -1387,9 +1387,9 @@ VOID ColorizeSysColors()
 {   
     // Stop recalling SetSysColors if syscolor changes have been applied.
     // SetSysColors redraws all top level windows causing flickering.
-    if (GetSysColor(COLOR_WINDOW) == RGB(0, 0, 0))
+    if (GetSysColor_orig(COLOR_WINDOW) == RGB(0, 0, 0))
     {
-        if (g_settings.AccentColorize && GetSysColor(COLOR_HIGHLIGHT) == g_settings.AccentColor)
+        if (g_settings.AccentColorize && GetSysColor_orig(COLOR_HIGHLIGHT) == g_settings.AccentColor)
             return;
         else if (!g_settings.AccentColorize)
             return ;
