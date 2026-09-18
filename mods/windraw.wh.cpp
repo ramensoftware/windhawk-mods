@@ -26,6 +26,7 @@ A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite
 1. **Instant Activation & Dismissal**:
    - Press **`Ctrl + Alt + G`** (customizable) anywhere in Windows to begin annotating immediately.
    - Press **`ESC`** or click the **`✕`** Exit button to dismiss the overlay.
+   - Ink strokes survive dismissal so you can re-open WinDraw without losing your work. Press **`C`** (Clear All) whenever you want a completely fresh canvas.
 
 2. **Hardware-Accelerated Inking & Brushes**:
    - 144Hz+ butter-smooth Direct2D drawing with quadratic Bézier curve interpolation.
@@ -44,7 +45,7 @@ A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite
    - Floating **Shapes Flyout Modal** for visual selection.
 
 4. **Custom Color & Opacity Studio**:
-   - Click the **`+`** slot in the toolbar to open the full-fledged **Color Studio**.
+   - Click the **`+`** slot in the toolbar or press **`5`** to open the full-fledged **Color Studio**.
    - Interactive 2D Saturation-Value picker and continuous 360° Hue spectrum slider.
    - Live **Opacity / Alpha** slider (5% to 100%).
    - One-click **Eyedropper** tool to sample any pixel color directly from your desktop.
@@ -69,16 +70,17 @@ A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite
 
 8. **Interactive Grid System (`G` key)**:
    - Dot Grid and Graph Lines Grid overlays.
-   - Flyout modal allows switching styles and toggling density between Low, Medium, and High.
+   - Flyout modal allows switching styles and toggling density between Fine, Medium, and Coarse.
+   - Press **`Shift + G`** to cycle grid density (Fine → Medium → Coarse) directly from the keyboard.
 
 9. **Region Snipping & Full Screenshots**:
    - **Region Snip** (`S`): Click and drag a selection rectangle to crop and copy/save a specific screen region.
-   - **Full Snapshot** (`Ctrl + S`): Captures the full annotated screen to the Windows clipboard (`CF_BITMAP`) and auto-saves to `%USERPROFILE%\Pictures\WinDraw\`.
+   - **Full Snapshot** (`Ctrl + S`): Captures the full annotated screen to the Windows clipboard (`CF_DIB` / `CF_BITMAP`) and auto-saves to `%USERPROFILE%\Pictures\WinDraw\`.
 
 10. **Pan & Zoom Canvas Navigation**:
     - **Pan Mode** (`P` key): Click and drag to reposition drawings across large canvases.
     - **Canvas Zoom**: While holding Pan or using the mouse wheel, smoothly zoom in and out (15% to 800%) centered on the cursor.
-    - **Reset View**: Press `0` or `Ctrl + 0` to reset zoom to 100% and pan offset to (0, 0).
+    - **Reset View**: Press **`0`** (while in Pan mode) or **`Ctrl + 0`** (any mode) to reset zoom to 100% and pan offset to (0, 0).
 
 11. **Pointer / Click-Through Mode (`M` key)**:
     - Allows interacting with underlying Windows applications and games while keeping your drawings overlaid.
@@ -94,7 +96,7 @@ A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite
 
 14. **Temporary Whiteboard & Blackboard Mode (`K` or `Alt + B`)**:
     - Instantly turns your transparent overlay into an off-white scratchpad whiteboard or a matte dark slate blackboard.
-    - Zero file-management bloat: completely ephemeral, vanishing cleanly on `ESC`.
+    - Ephemeral mode: automatically resets on `ESC` while keeping ink strokes intact.
     - Automatically captures solid background and all ink strokes when taking snapshots (`Ctrl + S`) or snips (`S` key).
     - Smart contextual grid automatically switches between dark charcoal lines on white paper and vibrant cyan lines on dark slate.
 
@@ -105,7 +107,7 @@ A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite
 | Shortcut | Action |
 |---|---|
 | **Ctrl + Alt + G** | Activate / Open WinDraw Overlay (Customizable) |
-| **ESC** | Dismiss / Close WinDraw Overlay |
+| **ESC** | Dismiss / Close WinDraw Overlay (Preserves Ink) |
 | **F** | Freehand Pen Tool |
 | **H** | Highlighter Tool |
 | **D** | Vanishing Neon Laser Pointer |
@@ -118,7 +120,8 @@ A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite
 | **P** | Pan Canvas Mode |
 | **M** | Pointer (Click-Through) Mode |
 | **K** / **Alt + B** | Cycle Canvas Backdrop (Transparent → Whiteboard → Blackboard) |
-| **G** | Toggle Grid Overlay Flyout |
+| **G** | Toggle Grid Flyout / Cycle Grid Style |
+| **Shift + G** | Cycle Grid Density (Fine → Medium → Coarse) |
 | **B** | Collapse / Expand Toolbar Pill |
 | **Ctrl + Shift + B** | Reset Toolbar Position to Primary Screen Center |
 | **V** | Toggle Ink Visibility (Show/Hide) |
@@ -128,7 +131,7 @@ A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite
 | **S** | Region Snipping Tool (Crop & Copy to Clipboard) |
 | **Ctrl + S** | Take Full Screen Snapshot & Copy to Clipboard |
 | **[** / **]** | Decrease / Increase Brush Size (or Laser Trail) |
-| **0** / **Ctrl + 0** | Reset Canvas Zoom & Pan |
+| **0** / **Ctrl + 0** | Reset Canvas Zoom & Pan (`0` in Pan mode, `Ctrl + 0` anytime) |
 | **1 - 4** | Select Preset Colors (Crimson Red, Tangelo Orange, Amber Gold, Sun Yellow) |
 | **5** | Open Custom Color & Opacity Studio |
 */
@@ -701,6 +704,10 @@ static HANDLE g_hHotkeyThread = NULL;
 static DWORD g_hotkeyThreadId = 0;
 static bool g_bIsActive = false;
 static float g_dpiScale = 1.0f;
+static float g_toolbarDpiScale = 1.0f;
+static float g_radialDpiScale = 1.0f;
+static float g_toolbarExpandedWidth = 887.0f;
+static float g_toolbarPillWidth = 82.0f;
 
 inline HMODULE GetCurrentModuleHandle() {
     HMODULE hModule = nullptr;
@@ -711,6 +718,30 @@ inline HMODULE GetCurrentModuleHandle() {
         return nullptr;
     }
     return hModule;
+}
+
+inline float GetDpiScaleForMonitor(HMONITOR hMon) {
+    if (!hMon) return 1.0f;
+    static auto pGetDpiForMonitor = []() -> HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*) {
+        HMODULE hShcore = GetModuleHandleW(L"shcore.dll");
+        if (!hShcore) hShcore = LoadLibraryW(L"shcore.dll");
+        return hShcore ? (HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*))GetProcAddress(hShcore, "GetDpiForMonitor") : nullptr;
+    }();
+    if (pGetDpiForMonitor) {
+        UINT dpiX = 96, dpiY = 96;
+        if (SUCCEEDED(pGetDpiForMonitor(hMon, 0 /* MDT_EFFECTIVE_DPI */, &dpiX, &dpiY)) && dpiX > 0) {
+            return (float)dpiX / 96.0f;
+        }
+    }
+    return 1.0f;
+}
+
+inline float GetDpiScaleAtPoint(float clientX, float clientY) {
+    int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    POINT pt = { (LONG)std::round(clientX + (float)vx), (LONG)std::round(clientY + (float)vy) };
+    HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    return GetDpiScaleForMonitor(hMon);
 }
 
 inline float GetDpiScaleForHwnd(HWND hWnd) {
@@ -1119,7 +1150,6 @@ void InvalidateOverlay();
 void ShowToastNotification(const std::wstring& msg);
 void RenderOverlay();
 void DrawZoomPreview(ID2D1HwndRenderTarget* pRT);
-void CopySnapshotToClipboard();
 void EraseBrushAt(float x, float y, float radius);
 bool EraseWholeShapeAt(float x, float y, float radius);
 void SaveBitmapToPNG(HBITMAP hBitmap, const std::wstring& filePath);
@@ -1165,6 +1195,175 @@ static const wchar_t* GetIconFontFamilyName() {
     }
     s_fontName = L"Segoe Fluent Icons";
     return s_fontName;
+}
+
+static float g_currentFontScale = 0.0f;
+static float g_currentRadialFontScale = 0.0f;
+
+void ReleaseTextFormats() {
+    if (g_pToolbarKeyFormat) { g_pToolbarKeyFormat->Release(); g_pToolbarKeyFormat = nullptr; }
+    if (g_pMenuKeyFormat) { g_pMenuKeyFormat->Release(); g_pMenuKeyFormat = nullptr; }
+    if (g_pMenuTextFormat) { g_pMenuTextFormat->Release(); g_pMenuTextFormat = nullptr; }
+    if (g_pCenterBadgeFormat) { g_pCenterBadgeFormat->Release(); g_pCenterBadgeFormat = nullptr; }
+    if (g_pRadialIconFormat) { g_pRadialIconFormat->Release(); g_pRadialIconFormat = nullptr; }
+    if (g_pIconFormat) { g_pIconFormat->Release(); g_pIconFormat = nullptr; }
+    if (g_pTextFormat) { g_pTextFormat->Release(); g_pTextFormat = nullptr; }
+    g_currentFontScale = 0.0f;
+    g_currentRadialFontScale = 0.0f;
+}
+
+void CreateRadialTextFormats(float scale) {
+    if (!g_pDWriteFactory) return;
+    if (scale <= 0.1f) scale = 1.0f;
+    if (std::abs(scale - g_currentRadialFontScale) < 0.01f && g_pRadialIconFormat && g_pCenterBadgeFormat) return;
+
+    if (g_pRadialIconFormat) { g_pRadialIconFormat->Release(); g_pRadialIconFormat = nullptr; }
+    if (g_pCenterBadgeFormat) { g_pCenterBadgeFormat->Release(); g_pCenterBadgeFormat = nullptr; }
+    g_currentRadialFontScale = scale;
+    const wchar_t* iconFont = GetIconFontFamilyName();
+
+    // Radial Menu Icon Format (18.0f Segoe Fluent Icons)
+    g_pDWriteFactory->CreateTextFormat(
+        iconFont,
+        NULL,
+        DWRITE_FONT_WEIGHT_NORMAL,
+        DWRITE_FONT_STYLE_NORMAL,
+        DWRITE_FONT_STRETCH_NORMAL,
+        18.0f * scale,
+        L"en-us",
+        &g_pRadialIconFormat
+    );
+    if (g_pRadialIconFormat) {
+        g_pRadialIconFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        g_pRadialIconFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    }
+
+    // Radial Center Badge Format (14.0f Segoe Fluent Icons)
+    g_pDWriteFactory->CreateTextFormat(
+        iconFont,
+        NULL,
+        DWRITE_FONT_WEIGHT_SEMI_BOLD,
+        DWRITE_FONT_STYLE_NORMAL,
+        DWRITE_FONT_STRETCH_NORMAL,
+        14.0f * scale,
+        L"en-us",
+        &g_pCenterBadgeFormat
+    );
+    if (g_pCenterBadgeFormat) {
+        g_pCenterBadgeFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        g_pCenterBadgeFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    }
+}
+
+void CreateTextFormats(float scale) {
+    if (!g_pDWriteFactory) return;
+    if (scale <= 0.1f) scale = 1.0f;
+    if (std::abs(scale - g_currentFontScale) < 0.01f && g_pTextFormat) return;
+
+    if (g_pToolbarKeyFormat) { g_pToolbarKeyFormat->Release(); g_pToolbarKeyFormat = nullptr; }
+    if (g_pMenuKeyFormat) { g_pMenuKeyFormat->Release(); g_pMenuKeyFormat = nullptr; }
+    if (g_pMenuTextFormat) { g_pMenuTextFormat->Release(); g_pMenuTextFormat = nullptr; }
+    if (g_pIconFormat) { g_pIconFormat->Release(); g_pIconFormat = nullptr; }
+    if (g_pTextFormat) { g_pTextFormat->Release(); g_pTextFormat = nullptr; }
+
+    g_currentFontScale = scale;
+    const wchar_t* iconFont = GetIconFontFamilyName();
+
+    // General Text Format
+    g_pDWriteFactory->CreateTextFormat(
+        L"Segoe UI Variable Display",
+        NULL,
+        DWRITE_FONT_WEIGHT_SEMI_BOLD,
+        DWRITE_FONT_STYLE_NORMAL,
+        DWRITE_FONT_STRETCH_NORMAL,
+        13.0f * scale,
+        L"en-us",
+        &g_pTextFormat
+    );
+    if (g_pTextFormat) {
+        g_pTextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        g_pTextFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    }
+
+    // Toolbar Icon Format (16.0f Segoe Fluent Icons)
+    g_pDWriteFactory->CreateTextFormat(
+        iconFont,
+        NULL,
+        DWRITE_FONT_WEIGHT_NORMAL,
+        DWRITE_FONT_STYLE_NORMAL,
+        DWRITE_FONT_STRETCH_NORMAL,
+        16.0f * scale,
+        L"en-us",
+        &g_pIconFormat
+    );
+    if (g_pIconFormat) {
+        g_pIconFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        g_pIconFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    }
+
+    // Shapes Modal Menu Text Format (12.5f Segoe UI Variable Display)
+    g_pDWriteFactory->CreateTextFormat(
+        L"Segoe UI Variable Display",
+        NULL,
+        DWRITE_FONT_WEIGHT_SEMI_BOLD,
+        DWRITE_FONT_STYLE_NORMAL,
+        DWRITE_FONT_STRETCH_NORMAL,
+        12.5f * scale,
+        L"en-us",
+        &g_pMenuTextFormat
+    );
+    if (g_pMenuTextFormat) {
+        g_pMenuTextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+        g_pMenuTextFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    }
+
+    // Shapes Modal Key Hint Format (11.0f Segoe UI Variable Display)
+    g_pDWriteFactory->CreateTextFormat(
+        L"Segoe UI Variable Display",
+        NULL,
+        DWRITE_FONT_WEIGHT_NORMAL,
+        DWRITE_FONT_STYLE_NORMAL,
+        DWRITE_FONT_STRETCH_NORMAL,
+        11.0f * scale,
+        L"en-us",
+        &g_pMenuKeyFormat
+    );
+    if (g_pMenuKeyFormat) {
+        g_pMenuKeyFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
+        g_pMenuKeyFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    }
+
+    // Toolbar Key Badge Format (8.0f Segoe UI Variable Display)
+    HRESULT hrKey = g_pDWriteFactory->CreateTextFormat(
+        L"Segoe UI Variable Display",
+        NULL,
+        DWRITE_FONT_WEIGHT_SEMI_BOLD,
+        DWRITE_FONT_STYLE_NORMAL,
+        DWRITE_FONT_STRETCH_NORMAL,
+        8.0f * scale,
+        L"en-us",
+        &g_pToolbarKeyFormat
+    );
+    if (FAILED(hrKey)) {
+        g_pDWriteFactory->CreateTextFormat(
+            L"Segoe UI",
+            NULL,
+            DWRITE_FONT_WEIGHT_SEMI_BOLD,
+            DWRITE_FONT_STYLE_NORMAL,
+            DWRITE_FONT_STRETCH_NORMAL,
+            8.0f * scale,
+            L"en-us",
+            &g_pToolbarKeyFormat
+        );
+    }
+    if (g_pToolbarKeyFormat) {
+        g_pToolbarKeyFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
+        g_pToolbarKeyFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+    }
+
+    if (!g_pRadialIconFormat || !g_pCenterBadgeFormat) {
+        CreateRadialTextFormats(scale);
+    }
 }
 
 static float DistanceSq(float x1, float y1, float x2, float y2) {
@@ -1593,17 +1792,27 @@ void BuildToolbarLayout(int screenW, int screenH) {
     g_toolbarButtons.clear();
     g_toolbarDividers.clear();
 
-    if (g_toolbarCollapsed) {
-        const float pillW = 82.0f;
-        const float pillH = 30.0f;
+    // Query monitor DPI at toolbar center or fallback
+    int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    float checkX = (g_toolbarCustomX >= 0.0f) ? g_toolbarCustomX : (float)screenW * 0.5f;
+    float checkY = (g_toolbarCustomY >= 0.0f) ? g_toolbarCustomY : (float)screenH - 50.0f;
+    POINT pt = { (LONG)std::round(checkX + (float)vx), (LONG)std::round(checkY + (float)vy) };
+    HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    float scale = GetDpiScaleForMonitor(hMon);
+    if (scale <= 0.1f) scale = 1.0f;
+    g_toolbarDpiScale = scale;
+    CreateTextFormats(scale);
 
+    const float pillW = 82.0f * scale;
+    const float pillH = 30.0f * scale;
+    g_toolbarPillWidth = pillW;
+
+    if (g_toolbarCollapsed) {
         float startX = g_toolbarCustomX;
         float startY = g_toolbarCustomY;
 
         if (startX < 0.0f || startY < 0.0f) {
-            int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
-            int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
-
             HMONITOR hPrimaryMon = MonitorFromWindow(NULL, MONITOR_DEFAULTTOPRIMARY);
             MONITORINFO mi = { sizeof(MONITORINFO) };
             if (hPrimaryMon && GetMonitorInfo(hPrimaryMon, &mi)) {
@@ -1617,24 +1826,21 @@ void BuildToolbarLayout(int screenW, int screenH) {
                 }
                 if (startY < 0.0f) {
                     float workBottom = (float)(mi.rcWork.bottom - vy);
-                    startY = workBottom - pillH - 16.0f;
-                    if (startY + pillH > clientTop + monH - 8.0f) {
-                        startY = clientTop + monH - pillH - 8.0f;
+                    startY = workBottom - pillH - 16.0f * scale;
+                    if (startY + pillH > clientTop + monH - 8.0f * scale) {
+                        startY = clientTop + monH - pillH - 8.0f * scale;
                     }
                 }
             }
             else {
                 if (startX < 0.0f) startX = (screenW - pillW) * 0.5f;
-                if (startY < 0.0f) startY = (screenH - pillH - 24.0f);
+                if (startY < 0.0f) startY = (screenH - pillH - 24.0f * scale);
             }
         }
 
-        ClampToolbarToScreen(startX, startY, pillW, pillH, 6.0f);
-        if (startX != g_toolbarCustomX || startY != g_toolbarCustomY) {
-            g_toolbarCustomX = startX;
-            g_toolbarCustomY = startY;
-            SavePersistentToolbarState();
-        }
+        ClampToolbarToScreen(startX, startY, pillW, pillH, 6.0f * scale);
+        g_toolbarCustomX = startX;
+        g_toolbarCustomY = startY;
 
         g_toolbarRect = D2D1::RectF(startX, startY, startX + pillW, startY + pillH);
 
@@ -1648,24 +1854,25 @@ void BuildToolbarLayout(int screenW, int screenH) {
         return;
     }
 
-    const float btnH = 34.0f;
-    const float btnW = 34.0f;
-    const float padY = 6.0f;
+    const float btnH = 34.0f * scale;
+    const float btnW = 34.0f * scale;
+    const float padY = 6.0f * scale;
     const float barH = btnH + padY * 2.0f;
-    const float itemGap = 3.0f;
-    const float dividerGap = 10.0f;
+    const float itemGap = 3.0f * scale;
+    const float dividerGap = 10.0f * scale;
+    const float gripW = 20.0f * scale;
 
-    float curX = 6.0f;
+    float curX = 6.0f * scale;
 
     // Handle / Dock fold indicator
     ToolbarButton dockBtn;
     dockBtn.id = 0;
     dockBtn.isPen = false;
     dockBtn.label = L"\uE75E"; // GripperTool
-    dockBtn.rect = D2D1::RectF(curX, padY, curX + 20.0f, padY + btnH);
+    dockBtn.rect = D2D1::RectF(curX, padY, curX + gripW, padY + btnH);
     dockBtn.shortcut = L"";
     g_toolbarButtons.push_back(dockBtn);
-    curX += 20.0f + itemGap;
+    curX += gripW + itemGap;
 
     // Group 1: Pens (4 Preset Swatches + 1 Custom Color Studio Button)
     for (int i = 0; i < 4; ++i) {
@@ -1766,9 +1973,10 @@ void BuildToolbarLayout(int screenW, int screenH) {
     g_toolbarDividers.push_back(curX + dividerGap * 0.5f);
     curX += dividerGap;
 
-    // Group 4: Snapshot, Undo, Redo, Clear
-    int actionIds[] = { 10, 11, 12, 13 };
+    // Group 4: Capture & Edit Actions (Snip, Snapshot, Undo, Redo, Clear)
+    int actionIds[] = { 9, 10, 11, 12, 13 };
     const wchar_t* actionLabels[] = {
+        L"\uF407", // Snip (SnippingTool)
         L"\uE722", // Snapshot (Camera)
         L"\uE7A7", // Undo
         L"\uE7A6", // Redo
@@ -1776,11 +1984,12 @@ void BuildToolbarLayout(int screenW, int screenH) {
     };
     const wchar_t* actionShortcuts[] = {
         L"S",
+        L"^S",
         L"Z",
         L"Y",
         L"C"
     };
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 5; ++i) {
         ToolbarButton btn;
         btn.id = actionIds[i];
         btn.isPen = false;
@@ -1813,18 +2022,16 @@ void BuildToolbarLayout(int screenW, int screenH) {
     exitBtn.shortcut = L"Esc";
     exitBtn.rect = D2D1::RectF(curX, padY, curX + btnW, padY + btnH);
     g_toolbarButtons.push_back(exitBtn);
-    curX += btnW + 6.0f;
+    curX += btnW + 6.0f * scale;
 
     float barW = curX;
+    g_toolbarExpandedWidth = barW;
 
     // Default placement: centered at the bottom of the Primary / Main Screen
     float startX = g_toolbarCustomX;
     float startY = g_toolbarCustomY;
 
     if (startX < 0.0f || startY < 0.0f) {
-        int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
-        int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
-
         HMONITOR hPrimaryMon = MonitorFromWindow(NULL, MONITOR_DEFAULTTOPRIMARY);
         MONITORINFO mi = { sizeof(MONITORINFO) };
         if (hPrimaryMon && GetMonitorInfo(hPrimaryMon, &mi)) {
@@ -1838,24 +2045,21 @@ void BuildToolbarLayout(int screenW, int screenH) {
             }
             if (startY < 0.0f) {
                 float workBottom = (float)(mi.rcWork.bottom - vy);
-                startY = workBottom - barH - 16.0f;
-                if (startY + barH > clientTop + monH - 8.0f) {
-                    startY = clientTop + monH - barH - 8.0f;
+                startY = workBottom - barH - 16.0f * scale;
+                if (startY + barH > clientTop + monH - 8.0f * scale) {
+                    startY = clientTop + monH - barH - 8.0f * scale;
                 }
             }
         }
         else {
             if (startX < 0.0f) startX = (screenW - barW) * 0.5f;
-            if (startY < 0.0f) startY = (screenH - barH - 24.0f);
+            if (startY < 0.0f) startY = (screenH - barH - 24.0f * scale);
         }
     }
 
-    ClampToolbarToScreen(startX, startY, barW, barH, 6.0f);
-    if (startX != g_toolbarCustomX || startY != g_toolbarCustomY) {
-        g_toolbarCustomX = startX;
-        g_toolbarCustomY = startY;
-        SavePersistentToolbarState();
-    }
+    ClampToolbarToScreen(startX, startY, barW, barH, 6.0f * scale);
+    g_toolbarCustomX = startX;
+    g_toolbarCustomY = startY;
 
     g_toolbarRect = D2D1::RectF(startX, startY, startX + barW, startY + barH);
 
@@ -2198,11 +2402,12 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
     pRT->CreateSolidColorBrush(D2D1::ColorF(0.85f, 0.88f, 0.92f, 1.00f), &pTextBrush);
 
     if (g_toolbarCollapsed) {
+        float scale = g_toolbarDpiScale;
         bool isPillHovered = (g_hoveredToolbarBtn == 0 ||
                               (g_cursorX >= g_toolbarRect.left && g_cursorX <= g_toolbarRect.right &&
                                g_cursorY >= g_toolbarRect.top && g_cursorY <= g_toolbarRect.bottom));
 
-        float pillR = (float)g_settings.cornerRadius;
+        float pillR = (float)g_settings.cornerRadius * scale;
         D2D1_ROUNDED_RECT pillRoundRect = D2D1::RoundedRect(g_toolbarRect, pillR, pillR);
 
         // Fill frosted dark acrylic
@@ -2220,8 +2425,8 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
         // Specular top rim highlight
         if (pRimBrush) {
             pRT->DrawLine(
-                D2D1::Point2F(g_toolbarRect.left + pillR + 2.0f, g_toolbarRect.top + 1.2f),
-                D2D1::Point2F(g_toolbarRect.right - pillR - 2.0f, g_toolbarRect.top + 1.2f),
+                D2D1::Point2F(g_toolbarRect.left + pillR + 2.0f * scale, g_toolbarRect.top + 1.2f),
+                D2D1::Point2F(g_toolbarRect.right - pillR - 2.0f * scale, g_toolbarRect.top + 1.2f),
                 pRimBrush, 1.0f
             );
         }
@@ -2230,13 +2435,13 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
 
         // 1. Left: Gripper icon (GripperTool \uE75E)
         if (g_pIconFormat && pTextBrush) {
-            D2D1_RECT_F gripR = D2D1::RectF(g_toolbarRect.left + 6.0f, g_toolbarRect.top, g_toolbarRect.left + 26.0f, g_toolbarRect.bottom);
+            D2D1_RECT_F gripR = D2D1::RectF(g_toolbarRect.left + 6.0f * scale, g_toolbarRect.top, g_toolbarRect.left + 26.0f * scale, g_toolbarRect.bottom);
             pRT->DrawText(L"\uE75E", 1, g_pIconFormat, gripR, pTextBrush);
         }
 
         // 2. Middle: Active Tool / Color Swatch Dot (9px diameter)
-        float dotX = (g_toolbarRect.left + g_toolbarRect.right) * 0.5f - 2.0f;
-        float dotR = 4.5f;
+        float dotX = (g_toolbarRect.left + g_toolbarRect.right) * 0.5f - 2.0f * scale;
+        float dotR = 4.5f * scale;
         if (g_activeColor.a < 0.99f) {
             ID2D1SolidColorBrush* pDotBack = nullptr;
             pRT->CreateSolidColorBrush(D2D1::ColorF(0.18f, 0.22f, 0.28f, 1.0f), &pDotBack);
@@ -2255,7 +2460,7 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
 
         // 3. Right: Expand chevron glyph (\uE70E ChevronUp)
         if (g_pIconFormat && pTextBrush) {
-            D2D1_RECT_F chevR = D2D1::RectF(g_toolbarRect.right - 28.0f, g_toolbarRect.top, g_toolbarRect.right - 8.0f, g_toolbarRect.bottom);
+            D2D1_RECT_F chevR = D2D1::RectF(g_toolbarRect.right - 28.0f * scale, g_toolbarRect.top, g_toolbarRect.right - 8.0f * scale, g_toolbarRect.bottom);
             pRT->DrawText(L"\uE70E", 1, g_pIconFormat, chevR, isPillHovered && pMintGlow ? pMintGlow : pTextBrush);
         }
 
@@ -2267,7 +2472,8 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
         return;
     }
 
-    float r = (float)g_settings.cornerRadius;
+    float scale = g_toolbarDpiScale;
+    float r = (float)g_settings.cornerRadius * scale;
     D2D1_ROUNDED_RECT roundRect = D2D1::RoundedRect(g_toolbarRect, r, r);
 
     // Chassis background & 1px border
@@ -2276,14 +2482,14 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
 
     // Specular top rim highlight
     pRT->DrawLine(
-        D2D1::Point2F(g_toolbarRect.left + r + 2.0f, g_toolbarRect.top + 1.5f),
-        D2D1::Point2F(g_toolbarRect.right - r - 2.0f, g_toolbarRect.top + 1.5f),
+        D2D1::Point2F(g_toolbarRect.left + r + 2.0f * scale, g_toolbarRect.top + 1.5f),
+        D2D1::Point2F(g_toolbarRect.right - r - 2.0f * scale, g_toolbarRect.top + 1.5f),
         pRimBrush, 1.0f
     );
 
     // Subtle vertical dividers
-    float divY1 = g_toolbarRect.top + 7.0f;
-    float divY2 = g_toolbarRect.bottom - 7.0f;
+    float divY1 = g_toolbarRect.top + 7.0f * scale;
+    float divY2 = g_toolbarRect.bottom - 7.0f * scale;
     for (float divX : g_toolbarDividers) {
         pRT->DrawLine(D2D1::Point2F(divX, divY1), D2D1::Point2F(divX, divY2), pBorderBrush, 1.0f);
     }
@@ -2295,7 +2501,7 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
 
         if (btn.isPen) {
             // Pen swatch
-            D2D1_ROUNDED_RECT penR = D2D1::RoundedRect(btn.rect, 4.0f, 4.0f);
+            D2D1_ROUNDED_RECT penR = D2D1::RoundedRect(btn.rect, 4.0f * scale, 4.0f * scale);
 
             // If custom color button and alpha < 1.0, draw subtle checkerboard under fill
             if (btn.isCustomColor && btn.penColor.a < 0.99f) {
@@ -2342,7 +2548,7 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
             if (btn.isCustomColor) {
                 float cx = (btn.rect.left + btn.rect.right) * 0.5f;
                 float cy = (btn.rect.top + btn.rect.bottom) * 0.5f;
-                const float pLen = 5.0f;
+                const float pLen = 5.0f * scale;
 
                 // Contrast shadow behind plus icon
                 ID2D1SolidColorBrush* pPlusShadow = nullptr;
@@ -2365,13 +2571,13 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
 
             // Draw really small shortcut badge on pen swatch (1..5)
             if (g_pToolbarKeyFormat && !btn.shortcut.empty()) {
-                float pillW = 9.0f;
-                float pillH = 10.0f;
-                float pillR = btn.rect.right - 2.5f;
-                float pillT = btn.rect.top + 2.0f;
+                float pillW = 9.0f * scale;
+                float pillH = 10.0f * scale;
+                float pillR = btn.rect.right - 2.5f * scale;
+                float pillT = btn.rect.top + 2.0f * scale;
                 D2D1_ROUNDED_RECT badgePill = D2D1::RoundedRect(
                     D2D1::RectF(pillR - pillW, pillT, pillR, pillT + pillH),
-                    2.0f, 2.0f
+                    2.0f * scale, 2.0f * scale
                 );
                 ID2D1SolidColorBrush* pBadgeBacking = nullptr;
                 pRT->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.45f), &pBadgeBacking);
@@ -2383,7 +2589,7 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
                 ID2D1SolidColorBrush* pBadgeText = nullptr;
                 pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.95f), &pBadgeText);
                 if (pBadgeText) {
-                    D2D1_RECT_F textRect = D2D1::RectF(pillR - pillW, pillT, pillR - 1.5f, pillT + pillH);
+                    D2D1_RECT_F textRect = D2D1::RectF(pillR - pillW, pillT, pillR - 1.5f * scale, pillT + pillH);
                     pRT->DrawText(
                         btn.shortcut.c_str(),
                         (UINT32)btn.shortcut.length(),
@@ -2418,7 +2624,7 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
                 ID2D1SolidColorBrush* pHoverBg = nullptr;
                 pRT->CreateSolidColorBrush(isToolActive ? D2D1::ColorF(0.20f, 0.32f, 0.44f, 0.95f) : D2D1::ColorF(0.18f, 0.22f, 0.30f, 0.85f), &pHoverBg);
                 if (pHoverBg) {
-                    pRT->FillRoundedRectangle(D2D1::RoundedRect(btn.rect, 4.0f, 4.0f), pHoverBg);
+                    pRT->FillRoundedRectangle(D2D1::RoundedRect(btn.rect, 4.0f * scale, 4.0f * scale), pHoverBg);
                     pHoverBg->Release();
                 }
             }
@@ -2436,8 +2642,8 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
                 if (btn.id == 25 && g_currentShape == ShapeType::Triangle) {
                     float cx = (btn.rect.left + btn.rect.right) * 0.5f;
                     float cy = (btn.rect.top + btn.rect.bottom) * 0.5f - 1.0f;
-                    float triH = 12.0f;
-                    float triW = 13.0f;
+                    float triH = 12.0f * scale;
+                    float triW = 13.0f * scale;
                     D2D1_POINT_2F p1 = D2D1::Point2F(cx, cy - triH * 0.5f);
                     D2D1_POINT_2F p2 = D2D1::Point2F(cx - triW * 0.5f, cy + triH * 0.5f);
                     D2D1_POINT_2F p3 = D2D1::Point2F(cx + triW * 0.5f, cy + triH * 0.5f);
@@ -2450,8 +2656,8 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
                 else if (btn.id == 6) {
                     float cx = (btn.rect.left + btn.rect.right) * 0.5f;
                     float cy = (btn.rect.top + btn.rect.bottom) * 0.5f - 1.0f;
-                    float half = 6.0f;
-                    float off = 2.4f;
+                    float half = 6.0f * scale;
+                    float off = 2.4f * scale;
                     if (pDrawBrush) {
                         pRT->DrawLine(D2D1::Point2F(cx - half, cy - off), D2D1::Point2F(cx + half, cy - off), pDrawBrush, 1.25f, g_pRoundStrokeStyle);
                         pRT->DrawLine(D2D1::Point2F(cx - half, cy + off), D2D1::Point2F(cx + half, cy + off), pDrawBrush, 1.25f, g_pRoundStrokeStyle);
@@ -2464,36 +2670,36 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
                     float cx = (btn.rect.left + btn.rect.right) * 0.5f;
                     float cy = (btn.rect.top + btn.rect.bottom) * 0.5f;
                     if (pDrawBrush) {
-                        D2D1_ELLIPSE coreEll = D2D1::Ellipse(D2D1::Point2F(cx, cy), 2.2f, 2.2f);
+                        D2D1_ELLIPSE coreEll = D2D1::Ellipse(D2D1::Point2F(cx, cy), 2.2f * scale, 2.2f * scale);
                         pRT->FillEllipse(coreEll, pDrawBrush);
-                        D2D1_ELLIPSE ringEll = D2D1::Ellipse(D2D1::Point2F(cx, cy), 5.5f, 5.5f);
+                        D2D1_ELLIPSE ringEll = D2D1::Ellipse(D2D1::Point2F(cx, cy), 5.5f * scale, 5.5f * scale);
                         pRT->DrawEllipse(ringEll, pDrawBrush, 1.2f);
-                        pRT->DrawLine(D2D1::Point2F(cx - 8.0f, cy), D2D1::Point2F(cx - 5.5f, cy), pDrawBrush, 1.2f);
-                        pRT->DrawLine(D2D1::Point2F(cx + 5.5f, cy), D2D1::Point2F(cx + 8.0f, cy), pDrawBrush, 1.2f);
-                        pRT->DrawLine(D2D1::Point2F(cx, cy - 8.0f), D2D1::Point2F(cx, cy - 5.5f), pDrawBrush, 1.2f);
-                        pRT->DrawLine(D2D1::Point2F(cx, cy + 5.5f), D2D1::Point2F(cx, cy + 8.0f), pDrawBrush, 1.2f);
+                        pRT->DrawLine(D2D1::Point2F(cx - 8.0f * scale, cy), D2D1::Point2F(cx - 5.5f * scale, cy), pDrawBrush, 1.2f);
+                        pRT->DrawLine(D2D1::Point2F(cx + 5.5f * scale, cy), D2D1::Point2F(cx + 8.0f * scale, cy), pDrawBrush, 1.2f);
+                        pRT->DrawLine(D2D1::Point2F(cx, cy - 8.0f * scale), D2D1::Point2F(cx, cy - 5.5f * scale), pDrawBrush, 1.2f);
+                        pRT->DrawLine(D2D1::Point2F(cx, cy + 5.5f * scale), D2D1::Point2F(cx, cy + 8.0f * scale), pDrawBrush, 1.2f);
                     }
                 }
                 else if (btn.id == 8) {
                     // Sleek vector Whiteboard / Blackboard easel icon
                     float cx = (btn.rect.left + btn.rect.right) * 0.5f;
                     float cy = (btn.rect.top + btn.rect.bottom) * 0.5f - 1.0f;
-                    D2D1_RECT_F boardR = D2D1::RectF(cx - 7.5f, cy - 6.0f, cx + 7.5f, cy + 3.5f);
+                    D2D1_RECT_F boardR = D2D1::RectF(cx - 7.5f * scale, cy - 6.0f * scale, cx + 7.5f * scale, cy + 3.5f * scale);
                     if (pDrawBrush) {
                         // Board frame
-                        pRT->DrawRoundedRectangle(D2D1::RoundedRect(boardR, 1.5f, 1.5f), pDrawBrush, 1.2f);
+                        pRT->DrawRoundedRectangle(D2D1::RoundedRect(boardR, 1.5f * scale, 1.5f * scale), pDrawBrush, 1.2f);
                         // Bottom tray
-                        pRT->DrawLine(D2D1::Point2F(cx - 8.5f, cy + 4.5f), D2D1::Point2F(cx + 8.5f, cy + 4.5f), pDrawBrush, 1.2f);
+                        pRT->DrawLine(D2D1::Point2F(cx - 8.5f * scale, cy + 4.5f * scale), D2D1::Point2F(cx + 8.5f * scale, cy + 4.5f * scale), pDrawBrush, 1.2f);
                         // Easel legs
-                        pRT->DrawLine(D2D1::Point2F(cx - 5.0f, cy + 5.0f), D2D1::Point2F(cx - 7.0f, cy + 8.5f), pDrawBrush, 1.1f);
-                        pRT->DrawLine(D2D1::Point2F(cx + 5.0f, cy + 5.0f), D2D1::Point2F(cx + 7.0f, cy + 8.5f), pDrawBrush, 1.1f);
+                        pRT->DrawLine(D2D1::Point2F(cx - 5.0f * scale, cy + 5.0f * scale), D2D1::Point2F(cx - 7.0f * scale, cy + 8.5f * scale), pDrawBrush, 1.1f);
+                        pRT->DrawLine(D2D1::Point2F(cx + 5.0f * scale, cy + 5.0f * scale), D2D1::Point2F(cx + 7.0f * scale, cy + 8.5f * scale), pDrawBrush, 1.1f);
 
                         // If Whiteboard or Blackboard is active, draw a tiny scribble/dot inside
                         if (g_canvasBg == CanvasBg::Whiteboard) {
-                            pRT->DrawLine(D2D1::Point2F(cx - 4.0f, cy - 1.0f), D2D1::Point2F(cx + 4.0f, cy - 1.0f), pDrawBrush, 1.0f);
+                            pRT->DrawLine(D2D1::Point2F(cx - 4.0f * scale, cy - 1.0f * scale), D2D1::Point2F(cx + 4.0f * scale, cy - 1.0f * scale), pDrawBrush, 1.0f);
                         } else if (g_canvasBg == CanvasBg::Blackboard) {
-                            pRT->DrawLine(D2D1::Point2F(cx - 4.0f, cy - 2.0f), D2D1::Point2F(cx + 2.0f, cy - 2.0f), pDrawBrush, 1.0f);
-                            pRT->DrawLine(D2D1::Point2F(cx - 4.0f, cy + 1.0f), D2D1::Point2F(cx + 4.0f, cy + 1.0f), pDrawBrush, 1.0f);
+                            pRT->DrawLine(D2D1::Point2F(cx - 4.0f * scale, cy - 2.0f * scale), D2D1::Point2F(cx + 2.0f * scale, cy - 2.0f * scale), pDrawBrush, 1.0f);
+                            pRT->DrawLine(D2D1::Point2F(cx - 4.0f * scale, cy + 1.0f * scale), D2D1::Point2F(cx + 4.0f * scale, cy + 1.0f * scale), pDrawBrush, 1.0f);
                         }
                     }
                 }
@@ -2513,13 +2719,13 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
 
             // Draw tiny downward caret for Shapes, Grid, and Whiteboard Flyout buttons
             if (btn.id == 25 || btn.id == 6 || btn.id == 8) {
-                float cx = btn.rect.right - 5.0f;
-                float cy = btn.rect.bottom - 5.0f;
+                float cx = btn.rect.right - 5.0f * scale;
+                float cy = btn.rect.bottom - 5.0f * scale;
                 ID2D1SolidColorBrush* pCaretBrush = nullptr;
                 pRT->CreateSolidColorBrush(isToolActive ? D2D1::ColorF(0.40f, 0.90f, 0.75f, 0.85f) : D2D1::ColorF(0.70f, 0.75f, 0.82f, 0.65f), &pCaretBrush);
                 if (pCaretBrush) {
-                    pRT->DrawLine(D2D1::Point2F(cx - 2.5f, cy - 1.5f), D2D1::Point2F(cx, cy + 1.5f), pCaretBrush, 1.0f);
-                    pRT->DrawLine(D2D1::Point2F(cx, cy + 1.5f), D2D1::Point2F(cx + 2.5f, cy - 1.5f), pCaretBrush, 1.0f);
+                    pRT->DrawLine(D2D1::Point2F(cx - 2.5f * scale, cy - 1.5f * scale), D2D1::Point2F(cx, cy + 1.5f * scale), pCaretBrush, 1.0f);
+                    pRT->DrawLine(D2D1::Point2F(cx, cy + 1.5f * scale), D2D1::Point2F(cx + 2.5f * scale, cy - 1.5f * scale), pCaretBrush, 1.0f);
                     pCaretBrush->Release();
                 }
             }
@@ -2554,10 +2760,10 @@ void DrawToolbar(ID2D1HwndRenderTarget* pRT) {
 
                 if (pKeyBadgeBrush) {
                     D2D1_RECT_F keyRect = D2D1::RectF(
-                        btn.rect.left + 2.0f,
-                        btn.rect.top + 2.0f,
-                        btn.rect.right - 3.5f,
-                        btn.rect.top + 12.0f
+                        btn.rect.left + 2.0f * scale,
+                        btn.rect.top + 2.0f * scale,
+                        btn.rect.right - 3.5f * scale,
+                        btn.rect.top + 13.0f * scale
                     );
                     pRT->DrawText(
                         shortcut.c_str(),
@@ -2593,16 +2799,17 @@ void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
     pRT->CreateSolidColorBrush(D2D1::ColorF(0.24f, 0.28f, 0.38f, 0.90f), &pBorderBrush);
     pRT->CreateSolidColorBrush(D2D1::ColorF(0.20f, 0.24f, 0.32f, 0.80f), &pSpokeBrush);
     pRT->CreateSolidColorBrush(D2D1::ColorF(0.32f, 0.85f, 0.69f, 0.50f), &pGlowBrush);
-    pRT->CreateSolidColorBrush(D2D1::ColorF(0.20f, 0.35f, 0.48f, 0.92f), &pHoverBrush);
     pRT->CreateSolidColorBrush(D2D1::ColorF(0.92f, 0.95f, 0.98f, 1.00f), &pTextBrush);
 
     float cx = g_radialX;
     float cy = g_radialY;
-    const float kCenterRadius = 36.0f;
-    const float kInnerRingR = 44.0f;
-    const float kOuterRingR = 96.0f;
-    const float kActionIconR = 70.0f;
-    const float kOrbitalRadius = 126.0f;
+    float scale = g_radialDpiScale;
+    if (scale <= 0.1f) scale = 1.0f;
+    const float kCenterRadius = 36.0f * scale;
+    const float kInnerRingR = 44.0f * scale;
+    const float kOuterRingR = 96.0f * scale;
+    const float kActionIconR = 70.0f * scale;
+    const float kOrbitalRadius = 126.0f * scale;
     const int kRadialSectorCount = 9;
     const float kSectorAngle = (float)(2.0 * 3.14159265358979323846 / kRadialSectorCount);
 
@@ -2631,8 +2838,8 @@ void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
             float secAngle = (float)(g_radialHoverSector * kSectorAngle);
             float hx = cx + std::cos(secAngle) * kActionIconR;
             float hy = cy + std::sin(secAngle) * kActionIconR;
-            pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(hx, hy), 18.0f, 18.0f), pHoverBrush);
-            pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(hx, hy), 18.0f, 18.0f), pGlowBrush, 1.5f);
+            pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(hx, hy), 18.0f * scale, 18.0f * scale), pHoverBrush);
+            pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(hx, hy), 18.0f * scale, 18.0f * scale), pGlowBrush, 1.5f);
         }
     }
 
@@ -2665,19 +2872,19 @@ void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
                 &pLaserBrush
             );
             if (pLaserBrush) {
-                D2D1_ELLIPSE coreEll = D2D1::Ellipse(D2D1::Point2F(ix, iy), 2.2f, 2.2f);
+                D2D1_ELLIPSE coreEll = D2D1::Ellipse(D2D1::Point2F(ix, iy), 2.2f * scale, 2.2f * scale);
                 pRT->FillEllipse(coreEll, pLaserBrush);
-                D2D1_ELLIPSE ringEll = D2D1::Ellipse(D2D1::Point2F(ix, iy), 5.5f, 5.5f);
+                D2D1_ELLIPSE ringEll = D2D1::Ellipse(D2D1::Point2F(ix, iy), 5.5f * scale, 5.5f * scale);
                 pRT->DrawEllipse(ringEll, pLaserBrush, 1.2f);
-                pRT->DrawLine(D2D1::Point2F(ix - 8.0f, iy), D2D1::Point2F(ix - 5.5f, iy), pLaserBrush, 1.2f);
-                pRT->DrawLine(D2D1::Point2F(ix + 5.5f, iy), D2D1::Point2F(ix + 8.0f, iy), pLaserBrush, 1.2f);
-                pRT->DrawLine(D2D1::Point2F(ix, iy - 8.0f), D2D1::Point2F(ix, iy - 5.5f), pLaserBrush, 1.2f);
-                pRT->DrawLine(D2D1::Point2F(ix, iy + 5.5f), D2D1::Point2F(ix, iy + 8.0f), pLaserBrush, 1.2f);
+                pRT->DrawLine(D2D1::Point2F(ix - 8.0f * scale, iy), D2D1::Point2F(ix - 5.5f * scale, iy), pLaserBrush, 1.2f);
+                pRT->DrawLine(D2D1::Point2F(ix + 5.5f * scale, iy), D2D1::Point2F(ix + 8.0f * scale, iy), pLaserBrush, 1.2f);
+                pRT->DrawLine(D2D1::Point2F(ix, iy - 8.0f * scale), D2D1::Point2F(ix, iy - 5.5f * scale), pLaserBrush, 1.2f);
+                pRT->DrawLine(D2D1::Point2F(ix, iy + 5.5f * scale), D2D1::Point2F(ix, iy + 8.0f * scale), pLaserBrush, 1.2f);
                 pLaserBrush->Release();
             }
         }
         else {
-            D2D1_RECT_F iconRect = D2D1::RectF(ix - 16.0f, iy - 16.0f, ix + 16.0f, iy + 16.0f);
+            D2D1_RECT_F iconRect = D2D1::RectF(ix - 16.0f * scale, iy - 16.0f * scale, ix + 16.0f * scale, iy + 16.0f * scale);
             if (g_pRadialIconFormat) {
                 ID2D1SolidColorBrush* pIconBrush = nullptr;
                 if (isSecDisabled) {
@@ -2698,7 +2905,7 @@ void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
     // 5. Center Hub: Active Swatch & Pen/Highlighter/Laser Toggle
     bool centerHovered = (g_radialHoverTarget == RadialTarget::Center);
     if (centerHovered) {
-        pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), kCenterRadius + 3.0f, kCenterRadius + 3.0f), pGlowBrush);
+        pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), kCenterRadius + 3.0f * scale, kCenterRadius + 3.0f * scale), pGlowBrush);
     }
     pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), kCenterRadius, kCenterRadius), pBgBrush);
     pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), kCenterRadius, kCenterRadius), centerHovered ? pGlowBrush : pBorderBrush, centerHovered ? 2.0f : 1.5f);
@@ -2706,14 +2913,14 @@ void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
     ID2D1SolidColorBrush* pActiveBrush = nullptr;
     pRT->CreateSolidColorBrush(g_activeColor, &pActiveBrush);
     if (pActiveBrush) {
-        pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), 16.0f, 16.0f), pActiveBrush);
-        pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), 16.0f, 16.0f), pBorderBrush, 1.2f);
+        pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), 16.0f * scale, 16.0f * scale), pActiveBrush);
+        pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), 16.0f * scale, 16.0f * scale), pBorderBrush, 1.2f);
         pActiveBrush->Release();
     }
 
     const wchar_t* centerBadge = (g_currentTool == ToolMode::Highlighter) ? L"\uE7E6" : (g_currentTool == ToolMode::Laser ? L"\uE814" : L"\uEC87");
     if (g_pCenterBadgeFormat) {
-        D2D1_RECT_F centerTextRect = D2D1::RectF(cx - 14.0f, cy - 14.0f, cx + 14.0f, cy + 14.0f);
+        D2D1_RECT_F centerTextRect = D2D1::RectF(cx - 14.0f * scale, cy - 14.0f * scale, cx + 14.0f * scale, cy + 14.0f * scale);
         ID2D1SolidColorBrush* pWhite = nullptr;
         pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.95f), &pWhite);
         if (pWhite) {
@@ -2732,14 +2939,14 @@ void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
         float oy = cy + std::sin(angle) * kOrbitalRadius;
 
         bool isHovered = (g_hoveredOrb == (int)i);
-        float orbR = isHovered ? 15.5f : 11.5f;
+        float orbR = isHovered ? (15.5f * scale) : (11.5f * scale);
 
         if (i == 0) {
             // 12 o'clock Recent Colors Expansion Hub
             bool isHubHovered = (g_radialHoverTarget == RadialTarget::RecentHub || isHovered);
-            orbR = isHubHovered ? 15.5f : 12.0f;
+            orbR = isHubHovered ? (15.5f * scale) : (12.0f * scale);
             if (isHubHovered && pGlowBrush) {
-                pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(ox, oy), orbR + 4.0f, orbR + 4.0f), pGlowBrush);
+                pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(ox, oy), orbR + 4.0f * scale, orbR + 4.0f * scale), pGlowBrush);
             }
             ID2D1SolidColorBrush* pHubFill = nullptr;
             pRT->CreateSolidColorBrush(g_customColor.activeColor, &pHubFill);
@@ -2754,7 +2961,7 @@ void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
                 pHubBorder->Release();
             }
             // Draw crisp plus icon centered in the RecentHub orb
-            float plusLen = isHubHovered ? 5.5f : 4.5f;
+            float plusLen = isHubHovered ? (5.5f * scale) : (4.5f * scale);
             ID2D1SolidColorBrush* pPlusShadow = nullptr;
             pRT->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.65f), &pPlusShadow);
             if (pPlusShadow) {
@@ -2776,7 +2983,7 @@ void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
         pRT->CreateSolidColorBrush(kPresetColors[i], &pOrbBrush);
         if (pOrbBrush) {
             if (isHovered) {
-                pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(ox, oy), orbR + 4.0f, orbR + 4.0f), pGlowBrush);
+                pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(ox, oy), orbR + 4.0f * scale, orbR + 4.0f * scale), pGlowBrush);
             }
             pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(ox, oy), orbR, orbR), pOrbBrush);
 
@@ -2793,7 +3000,7 @@ void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
 
     // 8. Layer 2: Radial Menu Satellite Arc (Recent 5 Colors)
     if (g_radialRecentFanOpen) {
-        const float kSatelliteRadius = 162.0f;
+        const float kSatelliteRadius = 162.0f * scale;
         const float kRad = 3.14159265358979323846f / 180.0f;
         int numOrbs = std::min(5, (int)g_recentColors.size());
 
@@ -2835,13 +3042,13 @@ void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
             float sy = cy + std::sin(angle) * kSatelliteRadius;
 
             bool isSatHovered = (g_hoveredRecentOrb == j);
-            float satR = isSatHovered ? 15.0f : 11.5f;
+            float satR = isSatHovered ? (15.0f * scale) : (11.5f * scale);
 
             ID2D1SolidColorBrush* pSatBrush = nullptr;
             pRT->CreateSolidColorBrush(g_recentColors[j], &pSatBrush);
             if (pSatBrush) {
                 if (isSatHovered && pGlowBrush) {
-                    pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(sx, sy), satR + 4.0f, satR + 4.0f), pGlowBrush);
+                    pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(sx, sy), satR + 4.0f * scale, satR + 4.0f * scale), pGlowBrush);
                 }
                 pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(sx, sy), satR, satR), pSatBrush);
 
@@ -2851,6 +3058,7 @@ void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
                     pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(sx, sy), satR, satR), pSatBorder, isSatHovered ? 2.0f : 1.0f);
                     pSatBorder->Release();
                 }
+
                 pSatBrush->Release();
             }
         }
@@ -3400,29 +3608,30 @@ void DrawShapesFlyout(ID2D1HwndRenderTarget* pRT) {
     }
     if (!foundBtn) return;
 
-    const float flyoutW = 168.0f;
-    const float itemH = 32.0f;
-    const float padY = 6.0f;
+    float scale = g_toolbarDpiScale;
+    const float flyoutW = 168.0f * scale;
+    const float itemH = 32.0f * scale;
+    const float padY = 6.0f * scale;
     const int kItemCount = 5;
-    const float flyoutH = padY * 2.0f + kItemCount * itemH; // 172.0f
+    const float flyoutH = padY * 2.0f + kItemCount * itemH; // 172.0f * scale
 
     float monL = 0, monT = 0, monR = 0, monB = 0;
     GetMonitorBoundsAt((btnAbsLeft + btnAbsRight) * 0.5f, g_toolbarRect.top, monL, monT, monR, monB);
 
     float flyoutX = (btnAbsLeft + btnAbsRight) * 0.5f - flyoutW * 0.5f;
-    if (flyoutX < monL + 8.0f) flyoutX = monL + 8.0f;
-    if (flyoutX + flyoutW > monR - 8.0f) {
-        flyoutX = monR - flyoutW - 8.0f;
+    if (flyoutX < monL + 8.0f * scale) flyoutX = monL + 8.0f * scale;
+    if (flyoutX + flyoutW > monR - 8.0f * scale) {
+        flyoutX = monR - flyoutW - 8.0f * scale;
     }
 
-    float flyoutY = g_toolbarRect.top - flyoutH - 8.0f;
+    float flyoutY = g_toolbarRect.top - flyoutH - 8.0f * scale;
     bool showAbove = true;
-    if (flyoutY < monT + 8.0f) {
-        flyoutY = g_toolbarRect.bottom + 8.0f;
+    if (flyoutY < monT + 8.0f * scale) {
+        flyoutY = g_toolbarRect.bottom + 8.0f * scale;
         showAbove = false;
     }
-    if (flyoutY + flyoutH > monB - 8.0f) {
-        flyoutY = monB - flyoutH - 8.0f;
+    if (flyoutY + flyoutH > monB - 8.0f * scale) {
+        flyoutY = monB - flyoutH - 8.0f * scale;
     }
 
     g_shapesFlyoutRect = D2D1::RectF(flyoutX, flyoutY, flyoutX + flyoutW, flyoutY + flyoutH);
@@ -3453,22 +3662,22 @@ void DrawShapesFlyout(ID2D1HwndRenderTarget* pRT) {
     // Drop shadow
     if (pShadowBrush) {
         D2D1_ROUNDED_RECT shadowR = D2D1::RoundedRect(
-            D2D1::RectF(flyoutX + 2.0f, flyoutY + 2.0f, flyoutX + flyoutW + 2.0f, flyoutY + flyoutH + 2.0f),
-            8.0f, 8.0f
+            D2D1::RectF(flyoutX + 2.0f * scale, flyoutY + 2.0f * scale, flyoutX + flyoutW + 2.0f * scale, flyoutY + flyoutH + 2.0f * scale),
+            8.0f * scale, 8.0f * scale
         );
         pRT->FillRoundedRectangle(shadowR, pShadowBrush);
     }
 
     // Modal Background
-    D2D1_ROUNDED_RECT modalR = D2D1::RoundedRect(g_shapesFlyoutRect, 8.0f, 8.0f);
+    D2D1_ROUNDED_RECT modalR = D2D1::RoundedRect(g_shapesFlyoutRect, 8.0f * scale, 8.0f * scale);
     if (pBgBrush) pRT->FillRoundedRectangle(modalR, pBgBrush);
     if (pBorderBrush) pRT->DrawRoundedRectangle(modalR, pBorderBrush, 1.2f);
 
     // Specular top rim highlight (matching main toolbar)
     if (pRimBrush) {
         pRT->DrawLine(
-            D2D1::Point2F(flyoutX + 8.0f, flyoutY + 1.5f),
-            D2D1::Point2F(flyoutX + flyoutW - 8.0f, flyoutY + 1.5f),
+            D2D1::Point2F(flyoutX + 8.0f * scale, flyoutY + 1.5f),
+            D2D1::Point2F(flyoutX + flyoutW - 8.0f * scale, flyoutY + 1.5f),
             pRimBrush, 1.0f
         );
     }
@@ -3477,9 +3686,9 @@ void DrawShapesFlyout(ID2D1HwndRenderTarget* pRT) {
     if (showAbove && pBgBrush && pBorderBrush) {
         float tipX = (btnAbsLeft + btnAbsRight) * 0.5f;
         float caretY = flyoutY + flyoutH;
-        D2D1_POINT_2F p1 = D2D1::Point2F(tipX - 6.0f, caretY - 0.5f);
-        D2D1_POINT_2F p2 = D2D1::Point2F(tipX, caretY + 5.5f);
-        D2D1_POINT_2F p3 = D2D1::Point2F(tipX + 6.0f, caretY - 0.5f);
+        D2D1_POINT_2F p1 = D2D1::Point2F(tipX - 6.0f * scale, caretY - 0.5f);
+        D2D1_POINT_2F p2 = D2D1::Point2F(tipX, caretY + 5.5f * scale);
+        D2D1_POINT_2F p3 = D2D1::Point2F(tipX + 6.0f * scale, caretY - 0.5f);
 
         ID2D1PathGeometry* pCaretGeo = nullptr;
         if (SUCCEEDED(g_pD2DFactory->CreatePathGeometry(&pCaretGeo))) {
@@ -3517,8 +3726,8 @@ void DrawShapesFlyout(ID2D1HwndRenderTarget* pRT) {
 
     for (int i = 0; i < kItemCount; ++i) {
         float itemTop = flyoutY + padY + i * itemH;
-        D2D1_RECT_F itemR = D2D1::RectF(flyoutX + 5.0f, itemTop, flyoutX + flyoutW - 5.0f, itemTop + itemH);
-        D2D1_ROUNDED_RECT roundItem = D2D1::RoundedRect(itemR, 4.0f, 4.0f);
+        D2D1_RECT_F itemR = D2D1::RectF(flyoutX + 5.0f * scale, itemTop, flyoutX + flyoutW - 5.0f * scale, itemTop + itemH);
+        D2D1_ROUNDED_RECT roundItem = D2D1::RoundedRect(itemR, 4.0f * scale, 4.0f * scale);
 
         bool isSelected = (g_currentShape == options[i].type);
         bool isHovered = (g_hoveredShapeFlyoutItem == i);
@@ -3538,17 +3747,17 @@ void DrawShapesFlyout(ID2D1HwndRenderTarget* pRT) {
 
         // Active Checkmark (\uE73E CheckMark)
         if (isSelected && g_pIconFormat && pActiveAccentBrush) {
-            D2D1_RECT_F checkR = D2D1::RectF(itemR.left + 4.0f, itemTop, itemR.left + 20.0f, itemTop + itemH);
+            D2D1_RECT_F checkR = D2D1::RectF(itemR.left + 4.0f * scale, itemTop, itemR.left + 20.0f * scale, itemTop + itemH);
             pRT->DrawText(L"\uE73E", 1, g_pIconFormat, checkR, pActiveAccentBrush);
         }
 
         // Icon
         if (options[i].type == ShapeType::Triangle) {
-            D2D1_RECT_F iconR = D2D1::RectF(itemR.left + 22.0f, itemTop, itemR.left + 42.0f, itemTop + itemH);
+            D2D1_RECT_F iconR = D2D1::RectF(itemR.left + 22.0f * scale, itemTop, itemR.left + 42.0f * scale, itemTop + itemH);
             float cx = (iconR.left + iconR.right) * 0.5f;
             float cy = (iconR.top + iconR.bottom) * 0.5f;
-            float triH = 13.0f;
-            float triW = 14.0f;
+            float triH = 13.0f * scale;
+            float triW = 14.0f * scale;
             D2D1_POINT_2F p1 = D2D1::Point2F(cx, cy - triH * 0.5f);
             D2D1_POINT_2F p2 = D2D1::Point2F(cx - triW * 0.5f, cy + triH * 0.5f);
             D2D1_POINT_2F p3 = D2D1::Point2F(cx + triW * 0.5f, cy + triH * 0.5f);
@@ -3559,19 +3768,19 @@ void DrawShapesFlyout(ID2D1HwndRenderTarget* pRT) {
             }
         }
         else if (g_pIconFormat && pItemIconBrush) {
-            D2D1_RECT_F iconR = D2D1::RectF(itemR.left + 22.0f, itemTop, itemR.left + 42.0f, itemTop + itemH);
+            D2D1_RECT_F iconR = D2D1::RectF(itemR.left + 22.0f * scale, itemTop, itemR.left + 42.0f * scale, itemTop + itemH);
             pRT->DrawText(options[i].icon, (UINT32)wcslen(options[i].icon), g_pIconFormat, iconR, pItemIconBrush);
         }
 
         // Name
         if (g_pMenuTextFormat && pItemTextBrush) {
-            D2D1_RECT_F textR = D2D1::RectF(itemR.left + 46.0f, itemTop, itemR.right - 28.0f, itemTop + itemH);
+            D2D1_RECT_F textR = D2D1::RectF(itemR.left + 46.0f * scale, itemTop, itemR.right - 28.0f * scale, itemTop + itemH);
             pRT->DrawText(options[i].name, (UINT32)wcslen(options[i].name), g_pMenuTextFormat, textR, pItemTextBrush);
         }
 
         // Shortcut Key Badge
         if (g_pMenuKeyFormat && pItemKeyBrush) {
-            D2D1_RECT_F keyR = D2D1::RectF(itemR.right - 26.0f, itemTop, itemR.right - 6.0f, itemTop + itemH);
+            D2D1_RECT_F keyR = D2D1::RectF(itemR.right - 26.0f * scale, itemTop, itemR.right - 6.0f * scale, itemTop + itemH);
             pRT->DrawText(options[i].key, (UINT32)wcslen(options[i].key), g_pMenuKeyFormat, keyR, pItemKeyBrush);
         }
     }
@@ -3663,29 +3872,30 @@ void DrawGridFlyout(ID2D1HwndRenderTarget* pRT) {
     }
     if (!foundBtn) return;
 
-    const float flyoutW = 188.0f;
-    const float itemH = 30.0f;
-    const float padY = 6.0f;
-    const float divH = 8.0f;
+    float scale = g_toolbarDpiScale;
+    const float flyoutW = 188.0f * scale;
+    const float itemH = 30.0f * scale;
+    const float padY = 6.0f * scale;
+    const float divH = 8.0f * scale;
     const float flyoutH = padY * 2.0f + itemH * 6 + divH;
 
     float monL = 0, monT = 0, monR = 0, monB = 0;
     GetMonitorBoundsAt((btnAbsLeft + btnAbsRight) * 0.5f, g_toolbarRect.top, monL, monT, monR, monB);
 
     float flyoutX = (btnAbsLeft + btnAbsRight) * 0.5f - flyoutW * 0.5f;
-    if (flyoutX < monL + 8.0f) flyoutX = monL + 8.0f;
-    if (flyoutX + flyoutW > monR - 8.0f) {
-        flyoutX = monR - flyoutW - 8.0f;
+    if (flyoutX < monL + 8.0f * scale) flyoutX = monL + 8.0f * scale;
+    if (flyoutX + flyoutW > monR - 8.0f * scale) {
+        flyoutX = monR - flyoutW - 8.0f * scale;
     }
 
-    float flyoutY = g_toolbarRect.top - flyoutH - 8.0f;
+    float flyoutY = g_toolbarRect.top - flyoutH - 8.0f * scale;
     bool showAbove = true;
-    if (flyoutY < monT + 8.0f) {
-        flyoutY = g_toolbarRect.bottom + 8.0f;
+    if (flyoutY < monT + 8.0f * scale) {
+        flyoutY = g_toolbarRect.bottom + 8.0f * scale;
         showAbove = false;
     }
-    if (flyoutY + flyoutH > monB - 8.0f) {
-        flyoutY = monB - flyoutH - 8.0f;
+    if (flyoutY + flyoutH > monB - 8.0f * scale) {
+        flyoutY = monB - flyoutH - 8.0f * scale;
     }
 
     g_gridFlyoutRect = D2D1::RectF(flyoutX, flyoutY, flyoutX + flyoutW, flyoutY + flyoutH);
@@ -3718,22 +3928,22 @@ void DrawGridFlyout(ID2D1HwndRenderTarget* pRT) {
     // Drop shadow
     if (pShadowBrush) {
         D2D1_ROUNDED_RECT shadowR = D2D1::RoundedRect(
-            D2D1::RectF(flyoutX + 2.0f, flyoutY + 2.0f, flyoutX + flyoutW + 2.0f, flyoutY + flyoutH + 2.0f),
-            8.0f, 8.0f
+            D2D1::RectF(flyoutX + 2.0f * scale, flyoutY + 2.0f * scale, flyoutX + flyoutW + 2.0f * scale, flyoutY + flyoutH + 2.0f * scale),
+            8.0f * scale, 8.0f * scale
         );
         pRT->FillRoundedRectangle(shadowR, pShadowBrush);
     }
 
     // Modal Background
-    D2D1_ROUNDED_RECT modalR = D2D1::RoundedRect(g_gridFlyoutRect, 8.0f, 8.0f);
+    D2D1_ROUNDED_RECT modalR = D2D1::RoundedRect(g_gridFlyoutRect, 8.0f * scale, 8.0f * scale);
     if (pBgBrush) pRT->FillRoundedRectangle(modalR, pBgBrush);
     if (pBorderBrush) pRT->DrawRoundedRectangle(modalR, pBorderBrush, 1.2f);
 
     // Specular top rim highlight (matching main toolbar)
     if (pRimBrush) {
         pRT->DrawLine(
-            D2D1::Point2F(flyoutX + 8.0f, flyoutY + 1.5f),
-            D2D1::Point2F(flyoutX + flyoutW - 8.0f, flyoutY + 1.5f),
+            D2D1::Point2F(flyoutX + 8.0f * scale, flyoutY + 1.5f),
+            D2D1::Point2F(flyoutX + flyoutW - 8.0f * scale, flyoutY + 1.5f),
             pRimBrush, 1.0f
         );
     }
@@ -3742,9 +3952,9 @@ void DrawGridFlyout(ID2D1HwndRenderTarget* pRT) {
     if (showAbove && pBgBrush && pBorderBrush) {
         float tipX = (btnAbsLeft + btnAbsRight) * 0.5f;
         float caretY = flyoutY + flyoutH;
-        D2D1_POINT_2F p1 = D2D1::Point2F(tipX - 6.0f, caretY - 0.5f);
-        D2D1_POINT_2F p2 = D2D1::Point2F(tipX, caretY + 5.5f);
-        D2D1_POINT_2F p3 = D2D1::Point2F(tipX + 6.0f, caretY - 0.5f);
+        D2D1_POINT_2F p1 = D2D1::Point2F(tipX - 6.0f * scale, caretY - 0.5f);
+        D2D1_POINT_2F p2 = D2D1::Point2F(tipX, caretY + 5.5f * scale);
+        D2D1_POINT_2F p3 = D2D1::Point2F(tipX + 6.0f * scale, caretY - 0.5f);
 
         ID2D1PathGeometry* pCaretGeo = nullptr;
         if (SUCCEEDED(g_pD2DFactory->CreatePathGeometry(&pCaretGeo))) {
@@ -3781,8 +3991,8 @@ void DrawGridFlyout(ID2D1HwndRenderTarget* pRT) {
 
     for (int i = 0; i < 6; ++i) {
         float itemTop = flyoutY + padY + i * itemH + (i >= 3 ? divH : 0.0f);
-        D2D1_RECT_F itemR = D2D1::RectF(flyoutX + 5.0f, itemTop, flyoutX + flyoutW - 5.0f, itemTop + itemH);
-        D2D1_ROUNDED_RECT roundItem = D2D1::RoundedRect(itemR, 4.0f, 4.0f);
+        D2D1_RECT_F itemR = D2D1::RectF(flyoutX + 5.0f * scale, itemTop, flyoutX + flyoutW - 5.0f * scale, itemTop + itemH);
+        D2D1_ROUNDED_RECT roundItem = D2D1::RoundedRect(itemR, 4.0f * scale, 4.0f * scale);
 
         bool isSelected = items[i].isSelected;
         bool isHovered = (g_hoveredGridFlyoutItem == i);
@@ -3801,27 +4011,27 @@ void DrawGridFlyout(ID2D1HwndRenderTarget* pRT) {
 
         // Active Checkmark (\uE73E CheckMark)
         if (isSelected && g_pIconFormat && pActiveAccentBrush) {
-            D2D1_RECT_F checkR = D2D1::RectF(itemR.left + 4.0f, itemTop, itemR.left + 22.0f, itemTop + itemH);
+            D2D1_RECT_F checkR = D2D1::RectF(itemR.left + 4.0f * scale, itemTop, itemR.left + 22.0f * scale, itemTop + itemH);
             pRT->DrawText(L"\uE73E", 1, g_pIconFormat, checkR, pActiveAccentBrush);
         }
 
         // Name
         if (g_pMenuTextFormat && pItemTextBrush) {
-            float textRight = (wcslen(items[i].key) > 0) ? (itemR.right - 28.0f) : (itemR.right - 8.0f);
-            D2D1_RECT_F textR = D2D1::RectF(itemR.left + 26.0f, itemTop, textRight, itemTop + itemH);
+            float textRight = (wcslen(items[i].key) > 0) ? (itemR.right - 28.0f * scale) : (itemR.right - 8.0f * scale);
+            D2D1_RECT_F textR = D2D1::RectF(itemR.left + 26.0f * scale, itemTop, textRight, itemTop + itemH);
             pRT->DrawText(items[i].name, (UINT32)wcslen(items[i].name), g_pMenuTextFormat, textR, pItemTextBrush);
         }
 
         // Shortcut Key Badge
         if (g_pMenuKeyFormat && pItemKeyBrush && wcslen(items[i].key) > 0) {
-            D2D1_RECT_F keyR = D2D1::RectF(itemR.right - 26.0f, itemTop, itemR.right - 6.0f, itemTop + itemH);
+            D2D1_RECT_F keyR = D2D1::RectF(itemR.right - 26.0f * scale, itemTop, itemR.right - 6.0f * scale, itemTop + itemH);
             pRT->DrawText(items[i].key, (UINT32)wcslen(items[i].key), g_pMenuKeyFormat, keyR, pItemKeyBrush);
         }
 
         // Divider between Style (0..2) and Density (3..5)
         if (i == 2 && pDivBrush) {
             float divY = itemTop + itemH + divH * 0.5f;
-            pRT->DrawLine(D2D1::Point2F(flyoutX + 10.0f, divY), D2D1::Point2F(flyoutX + flyoutW - 10.0f, divY), pDivBrush, 1.0f);
+            pRT->DrawLine(D2D1::Point2F(flyoutX + 10.0f * scale, divY), D2D1::Point2F(flyoutX + flyoutW - 10.0f * scale, divY), pDivBrush, 1.0f);
         }
     }
 
@@ -3879,10 +4089,11 @@ void DrawBackdropFlyout(ID2D1HwndRenderTarget* pRT) {
         items.push_back({ L"All Screens (Span All)", L"", g_canvasScope == CanvasMonitorScope::AllMonitors });
     }
 
-    const float flyoutW = 216.0f;
-    const float itemH = 30.0f;
-    const float padY = 6.0f;
-    const float divH = 8.0f;
+    float scale = g_toolbarDpiScale;
+    const float flyoutW = 216.0f * scale;
+    const float itemH = 30.0f * scale;
+    const float padY = 6.0f * scale;
+    const float divH = 8.0f * scale;
     int totalItems = (int)items.size();
     const float flyoutH = padY * 2.0f + itemH * (float)totalItems + (hasMultipleMonitors ? divH : 0.0f);
 
@@ -3890,19 +4101,19 @@ void DrawBackdropFlyout(ID2D1HwndRenderTarget* pRT) {
     GetMonitorBoundsAt((btnAbsLeft + btnAbsRight) * 0.5f, g_toolbarRect.top, monL, monT, monR, monB);
 
     float flyoutX = (btnAbsLeft + btnAbsRight) * 0.5f - flyoutW * 0.5f;
-    if (flyoutX < monL + 8.0f) flyoutX = monL + 8.0f;
-    if (flyoutX + flyoutW > monR - 8.0f) {
-        flyoutX = monR - flyoutW - 8.0f;
+    if (flyoutX < monL + 8.0f * scale) flyoutX = monL + 8.0f * scale;
+    if (flyoutX + flyoutW > monR - 8.0f * scale) {
+        flyoutX = monR - flyoutW - 8.0f * scale;
     }
 
-    float flyoutY = g_toolbarRect.top - flyoutH - 8.0f;
+    float flyoutY = g_toolbarRect.top - flyoutH - 8.0f * scale;
     bool showAbove = true;
-    if (flyoutY < monT + 8.0f) {
-        flyoutY = g_toolbarRect.bottom + 8.0f;
+    if (flyoutY < monT + 8.0f * scale) {
+        flyoutY = g_toolbarRect.bottom + 8.0f * scale;
         showAbove = false;
     }
-    if (flyoutY + flyoutH > monB - 8.0f) {
-        flyoutY = monB - flyoutH - 8.0f;
+    if (flyoutY + flyoutH > monB - 8.0f * scale) {
+        flyoutY = monB - flyoutH - 8.0f * scale;
     }
 
     g_backdropFlyoutRect = D2D1::RectF(flyoutX, flyoutY, flyoutX + flyoutW, flyoutY + flyoutH);
@@ -3935,22 +4146,22 @@ void DrawBackdropFlyout(ID2D1HwndRenderTarget* pRT) {
     // Drop shadow
     if (pShadowBrush) {
         D2D1_ROUNDED_RECT shadowR = D2D1::RoundedRect(
-            D2D1::RectF(flyoutX + 2.0f, flyoutY + 2.0f, flyoutX + flyoutW + 2.0f, flyoutY + flyoutH + 2.0f),
-            8.0f, 8.0f
+            D2D1::RectF(flyoutX + 2.0f * scale, flyoutY + 2.0f * scale, flyoutX + flyoutW + 2.0f * scale, flyoutY + flyoutH + 2.0f * scale),
+            8.0f * scale, 8.0f * scale
         );
         pRT->FillRoundedRectangle(shadowR, pShadowBrush);
     }
 
     // Modal Background
-    D2D1_ROUNDED_RECT modalR = D2D1::RoundedRect(g_backdropFlyoutRect, 8.0f, 8.0f);
+    D2D1_ROUNDED_RECT modalR = D2D1::RoundedRect(g_backdropFlyoutRect, 8.0f * scale, 8.0f * scale);
     if (pBgBrush) pRT->FillRoundedRectangle(modalR, pBgBrush);
     if (pBorderBrush) pRT->DrawRoundedRectangle(modalR, pBorderBrush, 1.2f);
 
     // Specular top rim highlight
     if (pRimBrush) {
         pRT->DrawLine(
-            D2D1::Point2F(flyoutX + 8.0f, flyoutY + 1.5f),
-            D2D1::Point2F(flyoutX + flyoutW - 8.0f, flyoutY + 1.5f),
+            D2D1::Point2F(flyoutX + 8.0f * scale, flyoutY + 1.5f),
+            D2D1::Point2F(flyoutX + flyoutW - 8.0f * scale, flyoutY + 1.5f),
             pRimBrush, 1.0f
         );
     }
@@ -3959,9 +4170,9 @@ void DrawBackdropFlyout(ID2D1HwndRenderTarget* pRT) {
     if (showAbove && pBgBrush && pBorderBrush) {
         float tipX = (btnAbsLeft + btnAbsRight) * 0.5f;
         float caretY = flyoutY + flyoutH;
-        D2D1_POINT_2F p1 = D2D1::Point2F(tipX - 6.0f, caretY - 0.5f);
-        D2D1_POINT_2F p2 = D2D1::Point2F(tipX, caretY + 5.5f);
-        D2D1_POINT_2F p3 = D2D1::Point2F(tipX + 6.0f, caretY - 0.5f);
+        D2D1_POINT_2F p1 = D2D1::Point2F(tipX - 6.0f * scale, caretY - 0.5f);
+        D2D1_POINT_2F p2 = D2D1::Point2F(tipX, caretY + 5.5f * scale);
+        D2D1_POINT_2F p3 = D2D1::Point2F(tipX + 6.0f * scale, caretY - 0.5f);
 
         ID2D1PathGeometry* pCaretGeo = nullptr;
         if (SUCCEEDED(g_pD2DFactory->CreatePathGeometry(&pCaretGeo))) {
@@ -3985,8 +4196,8 @@ void DrawBackdropFlyout(ID2D1HwndRenderTarget* pRT) {
     // Draw Items
     for (int i = 0; i < totalItems; ++i) {
         float itemTop = flyoutY + padY + (float)i * itemH + (hasMultipleMonitors && i >= 3 ? divH : 0.0f);
-        D2D1_RECT_F itemR = D2D1::RectF(flyoutX + 5.0f, itemTop, flyoutX + flyoutW - 5.0f, itemTop + itemH);
-        D2D1_ROUNDED_RECT roundItem = D2D1::RoundedRect(itemR, 4.0f, 4.0f);
+        D2D1_RECT_F itemR = D2D1::RectF(flyoutX + 5.0f * scale, itemTop, flyoutX + flyoutW - 5.0f * scale, itemTop + itemH);
+        D2D1_ROUNDED_RECT roundItem = D2D1::RoundedRect(itemR, 4.0f * scale, 4.0f * scale);
 
         bool isSelected = items[i].isSelected;
         bool isHovered = (g_hoveredBackdropFlyoutItem == i);
@@ -4004,27 +4215,27 @@ void DrawBackdropFlyout(ID2D1HwndRenderTarget* pRT) {
 
         // Active Checkmark (\uE73E CheckMark)
         if (isSelected && g_pIconFormat && pActiveAccentBrush) {
-            D2D1_RECT_F checkR = D2D1::RectF(itemR.left + 4.0f, itemTop, itemR.left + 22.0f, itemTop + itemH);
+            D2D1_RECT_F checkR = D2D1::RectF(itemR.left + 4.0f * scale, itemTop, itemR.left + 22.0f * scale, itemTop + itemH);
             pRT->DrawText(L"\uE73E", 1, g_pIconFormat, checkR, pActiveAccentBrush);
         }
 
         // Name
         if (g_pMenuTextFormat && pItemTextBrush) {
-            float textRight = (items[i].key.length() > 0) ? (itemR.right - 28.0f) : (itemR.right - 8.0f);
-            D2D1_RECT_F textR = D2D1::RectF(itemR.left + 26.0f, itemTop, textRight, itemTop + itemH);
+            float textRight = (items[i].key.length() > 0) ? (itemR.right - 28.0f * scale) : (itemR.right - 8.0f * scale);
+            D2D1_RECT_F textR = D2D1::RectF(itemR.left + 26.0f * scale, itemTop, textRight, itemTop + itemH);
             pRT->DrawText(items[i].name.c_str(), (UINT32)items[i].name.length(), g_pMenuTextFormat, textR, pItemTextBrush);
         }
 
         // Shortcut Key Badge
         if (g_pMenuKeyFormat && pItemKeyBrush && items[i].key.length() > 0) {
-            D2D1_RECT_F keyR = D2D1::RectF(itemR.right - 26.0f, itemTop, itemR.right - 6.0f, itemTop + itemH);
+            D2D1_RECT_F keyR = D2D1::RectF(itemR.right - 26.0f * scale, itemTop, itemR.right - 6.0f * scale, itemTop + itemH);
             pRT->DrawText(items[i].key.c_str(), (UINT32)items[i].key.length(), g_pMenuKeyFormat, keyR, pItemKeyBrush);
         }
 
         // Divider between Backdrop Style (0..2) and Target Displays (3+)
         if (hasMultipleMonitors && i == 2 && pDivBrush) {
             float divY = itemTop + itemH + divH * 0.5f;
-            pRT->DrawLine(D2D1::Point2F(flyoutX + 10.0f, divY), D2D1::Point2F(flyoutX + flyoutW - 10.0f, divY), pDivBrush, 1.0f);
+            pRT->DrawLine(D2D1::Point2F(flyoutX + 10.0f * scale, divY), D2D1::Point2F(flyoutX + flyoutW - 10.0f * scale, divY), pDivBrush, 1.0f);
         }
     }
 
@@ -4062,24 +4273,25 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
     }
     if (!foundBtn) return;
 
-    const float flyoutW = 244.0f;
-    const float flyoutH = 312.0f;
+    float scale = g_toolbarDpiScale;
+    const float flyoutW = 244.0f * scale;
+    const float flyoutH = 312.0f * scale;
 
     float monL = 0, monT = 0, monR = 0, monB = 0;
     GetMonitorBoundsAt((btnAbsLeft + btnAbsRight) * 0.5f, g_toolbarRect.top, monL, monT, monR, monB);
 
     float flyoutX = (btnAbsLeft + btnAbsRight) * 0.5f - flyoutW * 0.5f;
-    if (flyoutX < monL + 8.0f) flyoutX = monL + 8.0f;
-    if (flyoutX + flyoutW > monR - 8.0f) {
-        flyoutX = monR - flyoutW - 8.0f;
+    if (flyoutX < monL + 8.0f * scale) flyoutX = monL + 8.0f * scale;
+    if (flyoutX + flyoutW > monR - 8.0f * scale) {
+        flyoutX = monR - flyoutW - 8.0f * scale;
     }
 
-    float flyoutY = g_toolbarRect.top - flyoutH - 8.0f;
-    if (flyoutY < monT + 8.0f) {
-        flyoutY = g_toolbarRect.bottom + 8.0f;
+    float flyoutY = g_toolbarRect.top - flyoutH - 8.0f * scale;
+    if (flyoutY < monT + 8.0f * scale) {
+        flyoutY = g_toolbarRect.bottom + 8.0f * scale;
     }
-    if (flyoutY + flyoutH > monB - 8.0f) {
-        flyoutY = monB - flyoutH - 8.0f;
+    if (flyoutY + flyoutH > monB - 8.0f * scale) {
+        flyoutY = monB - flyoutH - 8.0f * scale;
     }
 
     g_colorFlyoutRect = D2D1::RectF(flyoutX, flyoutY, flyoutX + flyoutW, flyoutY + flyoutH);
@@ -4104,30 +4316,30 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
     // Drop shadow
     if (pShadowBrush) {
         D2D1_ROUNDED_RECT shadowR = D2D1::RoundedRect(
-            D2D1::RectF(flyoutX + 2.0f, flyoutY + 2.0f, flyoutX + flyoutW + 2.0f, flyoutY + flyoutH + 2.0f),
-            8.0f, 8.0f
+            D2D1::RectF(flyoutX + 2.0f * scale, flyoutY + 2.0f * scale, flyoutX + flyoutW + 2.0f * scale, flyoutY + flyoutH + 2.0f * scale),
+            8.0f * scale, 8.0f * scale
         );
         pRT->FillRoundedRectangle(shadowR, pShadowBrush);
     }
 
     // Modal background
-    D2D1_ROUNDED_RECT modalR = D2D1::RoundedRect(g_colorFlyoutRect, 8.0f, 8.0f);
+    D2D1_ROUNDED_RECT modalR = D2D1::RoundedRect(g_colorFlyoutRect, 8.0f * scale, 8.0f * scale);
     if (pBgBrush) pRT->FillRoundedRectangle(modalR, pBgBrush);
     if (pBorderBrush) pRT->DrawRoundedRectangle(modalR, pBorderBrush, 1.2f);
     if (pRimBrush) {
         pRT->DrawLine(
-            D2D1::Point2F(flyoutX + 8.0f, flyoutY + 1.5f),
-            D2D1::Point2F(flyoutX + flyoutW - 8.0f, flyoutY + 1.5f),
+            D2D1::Point2F(flyoutX + 8.0f * scale, flyoutY + 1.5f),
+            D2D1::Point2F(flyoutX + flyoutW - 8.0f * scale, flyoutY + 1.5f),
             pRimBrush, 1.0f
         );
     }
 
-    const float padX = 14.0f;
-    const float contentW = flyoutW - padX * 2.0f; // 216.0f
-    float curY = flyoutY + 12.0f;
+    const float padX = 14.0f * scale;
+    const float contentW = flyoutW - padX * 2.0f;
+    float curY = flyoutY + 12.0f * scale;
 
     // 2. Recent Colors Bar (Top - 5 Swatches)
-    const float swatchDiam = 22.0f;
+    const float swatchDiam = 22.0f * scale;
     const float swatchGap = (contentW - 5.0f * swatchDiam) / 4.0f;
     for (int k = 0; k < 5; ++k) {
         float sx = flyoutX + padX + k * (swatchDiam + swatchGap) + swatchDiam * 0.5f;
@@ -4144,7 +4356,7 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
         pRT->CreateSolidColorBrush(c, &pSwBrush);
         if (pSwBrush) {
             if (isActive && pMintBrush) {
-                pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(sx, sy), swatchDiam * 0.5f + 2.5f, swatchDiam * 0.5f + 2.5f), pMintBrush, 2.0f);
+                pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(sx, sy), swatchDiam * 0.5f + 2.5f * scale, swatchDiam * 0.5f + 2.5f * scale), pMintBrush, 2.0f);
             }
             pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(sx, sy), swatchDiam * 0.5f, swatchDiam * 0.5f), pSwBrush);
             ID2D1SolidColorBrush* pSwBorder = nullptr;
@@ -4156,10 +4368,10 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
             pSwBrush->Release();
         }
     }
-    curY += swatchDiam + 10.0f;
+    curY += swatchDiam + 10.0f * scale;
 
     // 3. 2D Saturation / Value Canvas
-    const float canvasH = 118.0f;
+    const float canvasH = 118.0f * scale;
     D2D1_RECT_F canvasRect = D2D1::RectF(flyoutX + padX, curY, flyoutX + padX + contentW, curY + canvasH);
 
     // Horizontal linear gradient: White to pure Hue
@@ -4179,7 +4391,7 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
         pHorizStops->Release();
     }
     if (pHorizBrush) {
-        D2D1_ROUNDED_RECT cr = D2D1::RoundedRect(canvasRect, 6.0f, 6.0f);
+        D2D1_ROUNDED_RECT cr = D2D1::RoundedRect(canvasRect, 6.0f * scale, 6.0f * scale);
         pRT->FillRoundedRectangle(cr, pHorizBrush);
         pHorizBrush->Release();
     }
@@ -4201,13 +4413,13 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
         pVertStops->Release();
     }
     if (pVertBrush) {
-        D2D1_ROUNDED_RECT cr = D2D1::RoundedRect(canvasRect, 6.0f, 6.0f);
+        D2D1_ROUNDED_RECT cr = D2D1::RoundedRect(canvasRect, 6.0f * scale, 6.0f * scale);
         pRT->FillRoundedRectangle(cr, pVertBrush);
         pVertBrush->Release();
     }
 
     // Canvas border
-    D2D1_ROUNDED_RECT canvasBorderR = D2D1::RoundedRect(canvasRect, 6.0f, 6.0f);
+    D2D1_ROUNDED_RECT canvasBorderR = D2D1::RoundedRect(canvasRect, 6.0f * scale, 6.0f * scale);
     pRT->DrawRoundedRectangle(canvasBorderR, pBorderBrush, 1.0f);
 
     // Crosshair Reticle Ring
@@ -4219,20 +4431,20 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
     ID2D1SolidColorBrush* pRetShadow = nullptr;
     pRT->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.75f), &pRetShadow);
     if (pRetShadow) {
-        pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(retX, retY), 7.0f, 7.0f), pRetShadow, 2.5f);
+        pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(retX, retY), 7.0f * scale, 7.0f * scale), pRetShadow, 2.5f * scale);
         pRetShadow->Release();
     }
     ID2D1SolidColorBrush* pRetWhite = nullptr;
     pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f), &pRetWhite);
     if (pRetWhite) {
-        pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(retX, retY), 6.0f, 6.0f), pRetWhite, 2.0f);
+        pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(retX, retY), 6.0f * scale, 6.0f * scale), pRetWhite, 2.0f * scale);
         pRetWhite->Release();
     }
 
-    curY += canvasH + 10.0f;
+    curY += canvasH + 10.0f * scale;
 
     // 4. Rainbow Hue Slider Track
-    const float trackH = 12.0f;
+    const float trackH = 12.0f * scale;
     D2D1_RECT_F hueRect = D2D1::RectF(flyoutX + padX, curY, flyoutX + padX + contentW, curY + trackH);
     D2D1_GRADIENT_STOP hueStops[7] = {
         { 0.000f, D2D1::ColorF(1.0f, 0.0f, 0.0f, 1.0f) },
@@ -4251,7 +4463,7 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
             pHueColl, &pHueBrush
         );
         if (pHueBrush) {
-            D2D1_ROUNDED_RECT hr = D2D1::RoundedRect(hueRect, 6.0f, 6.0f);
+            D2D1_ROUNDED_RECT hr = D2D1::RoundedRect(hueRect, 6.0f * scale, 6.0f * scale);
             pRT->FillRoundedRectangle(hr, pHueBrush);
             pRT->DrawRoundedRectangle(hr, pBorderBrush, 1.0f);
             pHueBrush->Release();
@@ -4269,20 +4481,20 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
     ID2D1SolidColorBrush* pHueColorBrush = nullptr;
     pRT->CreateSolidColorBrush(HSVtoRGB(g_customColor.hue, 1.0f, 1.0f, 1.0f), &pHueColorBrush);
     if (pWhiteBrush) {
-        pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(hThumbX, hThumbY), 8.0f, 8.0f), pWhiteBrush);
+        pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(hThumbX, hThumbY), 8.0f * scale, 8.0f * scale), pWhiteBrush);
         if (pHueColorBrush) {
-            pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(hThumbX, hThumbY), 5.5f, 5.5f), pHueColorBrush);
+            pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(hThumbX, hThumbY), 5.5f * scale, 5.5f * scale), pHueColorBrush);
             pHueColorBrush->Release();
         }
-        pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(hThumbX, hThumbY), 8.0f, 8.0f), pBorderBrush, 1.0f);
+        pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(hThumbX, hThumbY), 8.0f * scale, 8.0f * scale), pBorderBrush, 1.0f);
         pWhiteBrush->Release();
     }
 
-    curY += trackH + 10.0f;
+    curY += trackH + 10.0f * scale;
 
     // 5. Opacity / Alpha Slider Track
     D2D1_RECT_F alphaRect = D2D1::RectF(flyoutX + padX, curY, flyoutX + padX + contentW, curY + trackH);
-    D2D1_ROUNDED_RECT ar = D2D1::RoundedRect(alphaRect, 6.0f, 6.0f);
+    D2D1_ROUNDED_RECT ar = D2D1::RoundedRect(alphaRect, 6.0f * scale, 6.0f * scale);
 
     ID2D1SolidColorBrush* pCheckDark = nullptr;
     pRT->CreateSolidColorBrush(D2D1::ColorF(0.18f, 0.22f, 0.28f, 1.0f), &pCheckDark);
@@ -4321,40 +4533,40 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
     ID2D1SolidColorBrush* pCurColorBrush = nullptr;
     pRT->CreateSolidColorBrush(g_customColor.activeColor, &pCurColorBrush);
     if (pWhiteBrush) {
-        pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(aThumbX, aThumbY), 8.0f, 8.0f), pWhiteBrush);
+        pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(aThumbX, aThumbY), 8.0f * scale, 8.0f * scale), pWhiteBrush);
         if (pCurColorBrush) {
-            pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(aThumbX, aThumbY), 5.5f, 5.5f), pCurColorBrush);
+            pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(aThumbX, aThumbY), 5.5f * scale, 5.5f * scale), pCurColorBrush);
         }
-        pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(aThumbX, aThumbY), 8.0f, 8.0f), pBorderBrush, 1.0f);
+        pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(aThumbX, aThumbY), 8.0f * scale, 8.0f * scale), pBorderBrush, 1.0f);
         pWhiteBrush->Release();
     }
 
-    curY += trackH + 12.0f;
+    curY += trackH + 12.0f * scale;
 
     // 6. Bottom Tools Row (Hex readout, Preview Swatch, Eyedropper, Copy)
-    const float rowH = 30.0f;
-    const float hexW = 92.0f;
-    const float swatchBoxW = 32.0f;
-    const float btnBoxW = 32.0f;
-    const float gap = 8.0f;
+    const float rowH = 30.0f * scale;
+    const float hexW = 92.0f * scale;
+    const float swatchBoxW = 32.0f * scale;
+    const float btnBoxW = 32.0f * scale;
+    const float gap = 8.0f * scale;
 
     // Hex Box
     D2D1_RECT_F hexRect = D2D1::RectF(flyoutX + padX, curY, flyoutX + padX + hexW, curY + rowH);
-    D2D1_ROUNDED_RECT hexR = D2D1::RoundedRect(hexRect, 4.0f, 4.0f);
+    D2D1_ROUNDED_RECT hexR = D2D1::RoundedRect(hexRect, 4.0f * scale, 4.0f * scale);
     if (pCardBgBrush) pRT->FillRoundedRectangle(hexR, pCardBgBrush);
     pRT->DrawRoundedRectangle(hexR, pBorderBrush, 1.0f);
 
     std::wstring hexStr = ColorToHex(g_customColor.activeColor, false);
     if (g_pMenuKeyFormat && pTextBrush) {
         pRT->DrawText(hexStr.c_str(), (UINT32)hexStr.length(), g_pMenuKeyFormat,
-            D2D1::RectF(hexRect.left + 6.0f, hexRect.top + 6.0f, hexRect.right - 4.0f, hexRect.bottom - 4.0f),
+            D2D1::RectF(hexRect.left + 6.0f * scale, hexRect.top + 6.0f * scale, hexRect.right - 4.0f * scale, hexRect.bottom - 4.0f * scale),
             pTextBrush);
     }
 
     // Preview Swatch Box
     float swatchLeft = hexRect.right + gap;
     D2D1_RECT_F prevRect = D2D1::RectF(swatchLeft, curY, swatchLeft + swatchBoxW, curY + rowH);
-    D2D1_ROUNDED_RECT prevR = D2D1::RoundedRect(prevRect, 4.0f, 4.0f);
+    D2D1_ROUNDED_RECT prevR = D2D1::RoundedRect(prevRect, 4.0f * scale, 4.0f * scale);
     if (pCurColorBrush) {
         pRT->FillRoundedRectangle(prevR, pCurColorBrush);
         pCurColorBrush->Release();
@@ -4364,7 +4576,7 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
     // Eyedropper Button
     float dropLeft = prevRect.right + gap;
     D2D1_RECT_F dropRect = D2D1::RectF(dropLeft, curY, dropLeft + btnBoxW, curY + rowH);
-    D2D1_ROUNDED_RECT dropR = D2D1::RoundedRect(dropRect, 4.0f, 4.0f);
+    D2D1_ROUNDED_RECT dropR = D2D1::RoundedRect(dropRect, 4.0f * scale, 4.0f * scale);
     bool dropHov = (g_hoveredColorStudioAction == 1);
     ID2D1SolidColorBrush* pBtnBg = nullptr;
     pRT->CreateSolidColorBrush(dropHov ? D2D1::ColorF(0.22f, 0.28f, 0.38f, 0.90f) : D2D1::ColorF(0.13f, 0.16f, 0.22f, 0.90f), &pBtnBg);
@@ -4381,7 +4593,7 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
     // Copy Hex Button
     float copyLeft = dropRect.right + gap;
     D2D1_RECT_F copyRect = D2D1::RectF(copyLeft, curY, copyLeft + btnBoxW, curY + rowH);
-    D2D1_ROUNDED_RECT copyR = D2D1::RoundedRect(copyRect, 4.0f, 4.0f);
+    D2D1_ROUNDED_RECT copyR = D2D1::RoundedRect(copyRect, 4.0f * scale, 4.0f * scale);
     bool copyHov = (g_hoveredColorStudioAction == 2);
     ID2D1SolidColorBrush* pCopyBg = nullptr;
     pRT->CreateSolidColorBrush(copyHov ? D2D1::ColorF(0.22f, 0.28f, 0.38f, 0.90f) : D2D1::ColorF(0.13f, 0.16f, 0.22f, 0.90f), &pCopyBg);
@@ -4974,10 +5186,6 @@ void CaptureFullScreenSnapshot() {
     SaveCroppedSnapshot(0, 0, g_snipBackdropW, g_snipBackdropH);
 }
 
-void CopySnapshotToClipboard() {
-    CaptureFullScreenSnapshot();
-}
-
 inline bool EnsureDirectoryExists(const std::wstring& path) {
     if (path.empty()) return false;
     DWORD attribs = GetFileAttributesW(path.c_str());
@@ -5077,9 +5285,10 @@ void SaveCroppedSnapshot(int left, int top, int width, int height) {
             bmi.bmiHeader.biWidth = width;
             bmi.bmiHeader.biHeight = height;
             bmi.bmiHeader.biPlanes = 1;
-            bmi.bmiHeader.biBitCount = 32;
+            bmi.bmiHeader.biBitCount = 24;
             bmi.bmiHeader.biCompression = BI_RGB;
-            DWORD dibSize = sizeof(BITMAPINFOHEADER) + width * height * 4;
+            DWORD rowStride = (width * 3 + 3) & ~3u;
+            DWORD dibSize = sizeof(BITMAPINFOHEADER) + rowStride * height;
             HGLOBAL hDIB = GlobalAlloc(GHND, dibSize);
             if (hDIB) {
                 BYTE* pDIB = (BYTE*)GlobalLock(hDIB);
@@ -5454,6 +5663,11 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 InvalidateOverlay();
                 return 0;
             }
+            if (g_isEyedropperActive) {
+                g_isEyedropperActive = false;
+                InvalidateOverlay();
+                return 0;
+            }
             if (g_shapesFlyoutOpen || g_gridFlyoutOpen || g_backdropFlyoutOpen || g_colorFlyoutOpen) {
                 g_shapesFlyoutOpen = false;
                 g_gridFlyoutOpen = false;
@@ -5565,13 +5779,6 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         if (wParam == 'R') { g_currentShape = ShapeType::Rectangle; SetToolMode(ToolMode::Pen); g_shapesFlyoutOpen = false; g_gridFlyoutOpen = false; g_backdropFlyoutOpen = false; BuildToolbarLayout(GetSystemMetrics(SM_CXVIRTUALSCREEN), GetSystemMetrics(SM_CYVIRTUALSCREEN)); InvalidateOverlay(); return 0; }
         if (wParam == 'O') { g_currentShape = ShapeType::Ellipse; SetToolMode(ToolMode::Pen); g_shapesFlyoutOpen = false; g_gridFlyoutOpen = false; g_backdropFlyoutOpen = false; BuildToolbarLayout(GetSystemMetrics(SM_CXVIRTUALSCREEN), GetSystemMetrics(SM_CYVIRTUALSCREEN)); InvalidateOverlay(); return 0; }
         if (wParam == 'T') { g_currentShape = ShapeType::Triangle; SetToolMode(ToolMode::Pen); g_shapesFlyoutOpen = false; g_gridFlyoutOpen = false; g_backdropFlyoutOpen = false; BuildToolbarLayout(GetSystemMetrics(SM_CXVIRTUALSCREEN), GetSystemMetrics(SM_CYVIRTUALSCREEN)); InvalidateOverlay(); return 0; }
-        if (wParam == VK_ESCAPE) {
-            if (g_isEyedropperActive) {
-                g_isEyedropperActive = false;
-                InvalidateOverlay();
-                return 0;
-            }
-        }
         if (wParam >= '1' && wParam <= '4') {
             int penIdx = (int)(wParam - '1');
             g_activeColor = kPresetColors[penIdx];
@@ -5586,6 +5793,11 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             g_shapesFlyoutOpen = false;
             g_gridFlyoutOpen = false;
             g_backdropFlyoutOpen = false;
+            if (g_colorFlyoutOpen && g_toolbarCollapsed) {
+                g_toolbarCollapsed = false;
+                BuildToolbarLayout(GetSystemMetrics(SM_CXVIRTUALSCREEN), GetSystemMetrics(SM_CYVIRTUALSCREEN));
+                SavePersistentToolbarState();
+            }
             SetToolMode(ToolMode::Pen);
             InvalidateOverlay();
             return 0;
@@ -5611,13 +5823,13 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
             if (!g_toolbarCollapsed) {
                 float pillCenterX = (g_toolbarRect.left + g_toolbarRect.right) * 0.5f;
-                g_toolbarCustomX = pillCenterX - 443.5f;
+                g_toolbarCustomX = pillCenterX - g_toolbarExpandedWidth * 0.5f;
                 if (g_toolbarCustomX < 10.0f) g_toolbarCustomX = 10.0f;
-                if (g_toolbarCustomX + 887.0f > (float)vw - 10.0f) g_toolbarCustomX = (float)vw - 887.0f - 10.0f;
+                if (g_toolbarCustomX + g_toolbarExpandedWidth > (float)vw - 10.0f) g_toolbarCustomX = (float)vw - g_toolbarExpandedWidth - 10.0f;
                 ShowToastNotification(L"Toolbar Expanded");
             } else {
                 float oldCenterX = (g_toolbarRect.left + g_toolbarRect.right) * 0.5f;
-                g_toolbarCustomX = oldCenterX - 41.0f;
+                g_toolbarCustomX = oldCenterX - g_toolbarPillWidth * 0.5f;
                 ShowToastNotification(L"Toolbar Collapsed");
             }
             BuildToolbarLayout(vw, vh);
@@ -5716,10 +5928,11 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
         // Color Picker Dragging
         if (g_pickerDrag != ColorPickerDrag::None) {
-            const float padX = 14.0f;
+            float scale = g_toolbarDpiScale;
+            const float padX = 14.0f * scale;
             const float contentW = (g_colorFlyoutRect.right - g_colorFlyoutRect.left) - padX * 2.0f;
-            float curY = g_colorFlyoutRect.top + 12.0f + 22.0f + 10.0f; // Top of canvas
-            const float canvasH = 118.0f;
+            float curY = g_colorFlyoutRect.top + (12.0f + 22.0f + 10.0f) * scale; // Top of canvas
+            const float canvasH = 118.0f * scale;
 
             if (g_pickerDrag == ColorPickerDrag::SatValCanvas) {
                 float s = (g_cursorX - (g_colorFlyoutRect.left + padX)) / contentW;
@@ -5757,13 +5970,13 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 float dx = g_cursorX - g_toolbarDragStart.x;
                 float dy = g_cursorY - g_toolbarDragStart.y;
 
-                const float pillW = 82.0f;
-                const float pillH = 30.0f;
+                const float pillW = g_toolbarPillWidth;
+                const float pillH = 30.0f * g_toolbarDpiScale;
 
                 float nextX = g_toolbarRect.left + dx;
                 float nextY = g_toolbarRect.top + dy;
 
-                ClampToolbarToScreen(nextX, nextY, pillW, pillH, 6.0f);
+                ClampToolbarToScreen(nextX, nextY, pillW, pillH, 6.0f * g_toolbarDpiScale);
 
                 g_toolbarCustomX = nextX;
                 g_toolbarCustomY = nextY;
@@ -5785,13 +5998,13 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
             float barW = g_toolbarRect.right - g_toolbarRect.left;
             float barH = g_toolbarRect.bottom - g_toolbarRect.top;
-            if (barW <= 0.0f) barW = 800.0f;
-            if (barH <= 0.0f) barH = 46.0f;
+            if (barW <= 0.0f) barW = 800.0f * g_toolbarDpiScale;
+            if (barH <= 0.0f) barH = 46.0f * g_toolbarDpiScale;
 
             float nextX = g_toolbarRect.left + dx;
             float nextY = g_toolbarRect.top + dy;
 
-            ClampToolbarToScreen(nextX, nextY, barW, barH, 6.0f);
+            ClampToolbarToScreen(nextX, nextY, barW, barH, 6.0f * g_toolbarDpiScale);
 
             g_toolbarCustomX = nextX;
             g_toolbarCustomY = nextY;
@@ -5809,6 +6022,8 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             float dx = g_cursorX - g_radialX;
             float dy = g_cursorY - g_radialY;
             float dist = std::sqrt(dx * dx + dy * dy);
+            float rScale = g_radialDpiScale;
+            if (rScale <= 0.1f) rScale = 1.0f;
 
             RadialTarget oldTarget = g_radialHoverTarget;
             int oldSector = g_radialHoverSector;
@@ -5820,12 +6035,12 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             g_hoveredOrb = -1;
             g_hoveredRecentOrb = -1;
 
-            if (dist <= 40.0f) {
+            if (dist <= 40.0f * rScale) {
                 // 1. Center Hub (Pen / Highlighter / Laser toggle)
                 g_radialHoverTarget = RadialTarget::Center;
                 g_radialRecentFanOpen = false;
             }
-            else if (dist > 40.0f && dist <= 106.0f) {
+            else if (dist > 40.0f * rScale && dist <= 106.0f * rScale) {
                 // 2. Action Ring: 9 Continuous Angular Sectors (Zero Dead Gaps)
                 g_radialRecentFanOpen = false;
                 float angle = std::atan2(dy, dx);
@@ -5843,8 +6058,8 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 // 3. Outer Ring & Beyond: Color Orbs & Recent Colors Fan
                 // Check if cursor is pointing into the Recent Colors satellite fan at 12 o'clock
                 bool inRecentFan = false;
-                if (g_radialRecentFanOpen && dy < 0.0f && dist >= 135.0f && dist <= 210.0f && !g_recentColors.empty()) {
-                    const float kSatelliteRadius = 162.0f;
+                if (g_radialRecentFanOpen && dy < 0.0f && dist >= 135.0f * rScale && dist <= 210.0f * rScale && !g_recentColors.empty()) {
+                    const float kSatelliteRadius = 162.0f * rScale;
                     const float kRad = 3.14159265358979323846f / 180.0f;
                     float bestDistSq = 999999.0f;
                     int bestJ = -1;
@@ -5858,7 +6073,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                             bestJ = j;
                         }
                     }
-                    if (bestJ >= 0 && bestDistSq <= 36.0f * 36.0f) {
+                    if (bestJ >= 0 && bestDistSq <= (36.0f * rScale) * (36.0f * rScale)) {
                         g_hoveredRecentOrb = bestJ;
                         g_radialHoverTarget = RadialTarget::RecentOrb;
                         inRecentFan = true;
@@ -5895,12 +6110,15 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
         // Check Shapes Flyout Item Hover
         if (g_shapesFlyoutOpen) {
+            float scale = g_toolbarDpiScale;
+            float padY = 6.0f * scale;
+            float itemH = 32.0f * scale;
             int oldFlyoutHover = g_hoveredShapeFlyoutItem;
             g_hoveredShapeFlyoutItem = -1;
             if (g_cursorX >= g_shapesFlyoutRect.left && g_cursorX <= g_shapesFlyoutRect.right &&
-                g_cursorY >= (g_shapesFlyoutRect.top + 6.0f) && g_cursorY <= (g_shapesFlyoutRect.bottom - 6.0f)) {
-                float relY = g_cursorY - (g_shapesFlyoutRect.top + 6.0f);
-                int idx = (int)(relY / 32.0f);
+                g_cursorY >= (g_shapesFlyoutRect.top + padY) && g_cursorY <= (g_shapesFlyoutRect.bottom - padY)) {
+                float relY = g_cursorY - (g_shapesFlyoutRect.top + padY);
+                int idx = (int)(relY / itemH);
                 if (idx >= 0 && idx < 5) {
                     g_hoveredShapeFlyoutItem = idx;
                 }
@@ -5912,16 +6130,20 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
         // Check Grid Flyout Item Hover
         if (g_gridFlyoutOpen) {
+            float scale = g_toolbarDpiScale;
+            float padY = 6.0f * scale;
+            float itemH = 30.0f * scale;
+            float divH = 8.0f * scale;
             int oldGridHover = g_hoveredGridFlyoutItem;
             g_hoveredGridFlyoutItem = -1;
             if (g_cursorX >= g_gridFlyoutRect.left && g_cursorX <= g_gridFlyoutRect.right &&
-                g_cursorY >= (g_gridFlyoutRect.top + 6.0f) && g_cursorY <= (g_gridFlyoutRect.bottom - 6.0f)) {
-                float relY = g_cursorY - (g_gridFlyoutRect.top + 6.0f);
-                if (relY >= 0.0f && relY < 90.0f) {
-                    g_hoveredGridFlyoutItem = (int)(relY / 30.0f);
+                g_cursorY >= (g_gridFlyoutRect.top + padY) && g_cursorY <= (g_gridFlyoutRect.bottom - padY)) {
+                float relY = g_cursorY - (g_gridFlyoutRect.top + padY);
+                if (relY >= 0.0f && relY < 3.0f * itemH) {
+                    g_hoveredGridFlyoutItem = (int)(relY / itemH);
                 }
-                else if (relY >= 98.0f && relY < 188.0f) {
-                    g_hoveredGridFlyoutItem = 3 + (int)((relY - 98.0f) / 30.0f);
+                else if (relY >= (3.0f * itemH + divH) && relY < (6.0f * itemH + divH)) {
+                    g_hoveredGridFlyoutItem = 3 + (int)((relY - (3.0f * itemH + divH)) / itemH);
                 }
             }
             if (oldGridHover != g_hoveredGridFlyoutItem) {
@@ -5931,18 +6153,22 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
         // Check Backdrop Flyout Item Hover
         if (g_backdropFlyoutOpen) {
+            float scale = g_toolbarDpiScale;
+            float padY = 6.0f * scale;
+            float itemH = 30.0f * scale;
+            float divH = 8.0f * scale;
             int oldBackdropHover = g_hoveredBackdropFlyoutItem;
             g_hoveredBackdropFlyoutItem = -1;
             if (g_cursorX >= g_backdropFlyoutRect.left && g_cursorX <= g_backdropFlyoutRect.right &&
-                g_cursorY >= (g_backdropFlyoutRect.top + 6.0f) && g_cursorY <= (g_backdropFlyoutRect.bottom - 6.0f)) {
-                float relY = g_cursorY - (g_backdropFlyoutRect.top + 6.0f);
+                g_cursorY >= (g_backdropFlyoutRect.top + padY) && g_cursorY <= (g_backdropFlyoutRect.bottom - padY)) {
+                float relY = g_cursorY - (g_backdropFlyoutRect.top + padY);
                 auto monitors = GetSystemMonitorList();
                 bool hasMulti = (monitors.size() > 1);
-                if (relY >= 0.0f && relY < 90.0f) {
-                    g_hoveredBackdropFlyoutItem = (int)(relY / 30.0f);
+                if (relY >= 0.0f && relY < 3.0f * itemH) {
+                    g_hoveredBackdropFlyoutItem = (int)(relY / itemH);
                 }
-                else if (hasMulti && relY >= 98.0f) {
-                    int secIdx = (int)((relY - 98.0f) / 30.0f);
+                else if (hasMulti && relY >= (3.0f * itemH + divH)) {
+                    int secIdx = (int)((relY - (3.0f * itemH + divH)) / itemH);
                     int maxSec = 1 + (int)monitors.size() + 1; // ActiveCursor + N monitors + AllMonitors
                     if (secIdx >= 0 && secIdx < maxSec) {
                         g_hoveredBackdropFlyoutItem = 3 + secIdx;
@@ -5964,33 +6190,36 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             if (g_cursorX >= g_colorFlyoutRect.left && g_cursorX <= g_colorFlyoutRect.right &&
                 g_cursorY >= g_colorFlyoutRect.top && g_cursorY <= g_colorFlyoutRect.bottom) {
 
-                const float padX = 14.0f;
+                float scale = g_toolbarDpiScale;
+                const float padX = 14.0f * scale;
                 const float contentW = (g_colorFlyoutRect.right - g_colorFlyoutRect.left) - padX * 2.0f;
-                float curY = g_colorFlyoutRect.top + 12.0f;
+                float curY = g_colorFlyoutRect.top + 12.0f * scale;
 
                 // Test Recent Swatches
-                const float swatchDiam = 22.0f;
+                const float swatchDiam = 22.0f * scale;
                 const float swatchGap = (contentW - 5.0f * swatchDiam) / 4.0f;
                 for (int k = 0; k < 5; ++k) {
                     float sx = g_colorFlyoutRect.left + padX + k * (swatchDiam + swatchGap) + swatchDiam * 0.5f;
                     float sy = curY + swatchDiam * 0.5f;
-                    if (DistanceSq(g_cursorX, g_cursorY, sx, sy) <= 14.0f * 14.0f) {
+                    if (DistanceSq(g_cursorX, g_cursorY, sx, sy) <= (14.0f * scale) * (14.0f * scale)) {
                         g_hoveredRecentSwatch = k;
                         break;
                     }
                 }
 
                 // Test Eyedropper and Copy buttons
-                float bottomY = curY + swatchDiam + 10.0f + 118.0f + 10.0f + 12.0f + 10.0f + 12.0f + 12.0f;
-                float hexW = 92.0f;
-                float swatchBoxW = 32.0f;
-                float btnBoxW = 32.0f;
-                const float gap = 8.0f;
+                float canvasH = 118.0f * scale;
+                float trackH = 12.0f * scale;
+                float bottomY = curY + swatchDiam + 10.0f * scale + canvasH + 10.0f * scale + trackH + 10.0f * scale + trackH + 12.0f * scale;
+                float hexW = 92.0f * scale;
+                float swatchBoxW = 32.0f * scale;
+                float btnBoxW = 32.0f * scale;
+                const float gap = 8.0f * scale;
 
                 float dropLeft = g_colorFlyoutRect.left + padX + hexW + gap + swatchBoxW + gap;
                 float copyLeft = dropLeft + btnBoxW + gap;
 
-                if (g_cursorY >= bottomY && g_cursorY <= bottomY + 30.0f) {
+                if (g_cursorY >= bottomY && g_cursorY <= bottomY + 30.0f * scale) {
                     if (g_cursorX >= dropLeft && g_cursorX <= dropLeft + btnBoxW) {
                         g_hoveredColorStudioAction = 1;
                     } else if (g_cursorX >= copyLeft && g_cursorX <= copyLeft + btnBoxW) {
@@ -6274,9 +6503,9 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 if (g_toolbarCollapsed) {
                     g_toolbarCollapsed = false;
                     float pillCenterX = (g_toolbarRect.left + g_toolbarRect.right) * 0.5f;
-                    g_toolbarCustomX = pillCenterX - 443.5f;
+                    g_toolbarCustomX = pillCenterX - g_toolbarExpandedWidth * 0.5f;
                     if (g_toolbarCustomX < 10.0f) g_toolbarCustomX = 10.0f;
-                    if (g_toolbarCustomX + 887.0f > (float)vw - 10.0f) g_toolbarCustomX = (float)vw - 887.0f - 10.0f;
+                    if (g_toolbarCustomX + g_toolbarExpandedWidth > (float)vw - 10.0f) g_toolbarCustomX = (float)vw - g_toolbarExpandedWidth - 10.0f;
                     g_colorFlyoutOpen = true;
                 } else {
                     g_colorFlyoutOpen = !g_colorFlyoutOpen;
@@ -6303,8 +6532,11 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         if (g_shapesFlyoutOpen) {
             if (x >= g_shapesFlyoutRect.left && x <= g_shapesFlyoutRect.right &&
                 y >= g_shapesFlyoutRect.top && y <= g_shapesFlyoutRect.bottom) {
-                float relY = y - (g_shapesFlyoutRect.top + 6.0f);
-                int idx = (int)(relY / 32.0f);
+                float scale = g_toolbarDpiScale;
+                float padY = 6.0f * scale;
+                float itemH = 32.0f * scale;
+                float relY = y - (g_shapesFlyoutRect.top + padY);
+                int idx = (int)(relY / itemH);
                 ShapeType shapeOptions[] = {
                     ShapeType::Line,
                     ShapeType::Arrow,
@@ -6355,13 +6587,17 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         if (g_gridFlyoutOpen) {
             if (x >= g_gridFlyoutRect.left && x <= g_gridFlyoutRect.right &&
                 y >= g_gridFlyoutRect.top && y <= g_gridFlyoutRect.bottom) {
-                float relY = y - (g_gridFlyoutRect.top + 6.0f);
+                float scale = g_toolbarDpiScale;
+                float padY = 6.0f * scale;
+                float itemH = 30.0f * scale;
+                float divH = 8.0f * scale;
+                float relY = y - (g_gridFlyoutRect.top + padY);
                 int clickedIdx = -1;
-                if (relY >= 0.0f && relY < 90.0f) {
-                    clickedIdx = (int)(relY / 30.0f);
+                if (relY >= 0.0f && relY < 3.0f * itemH) {
+                    clickedIdx = (int)(relY / itemH);
                 }
-                else if (relY >= 98.0f && relY < 188.0f) {
-                    clickedIdx = 3 + (int)((relY - 98.0f) / 30.0f);
+                else if (relY >= (3.0f * itemH + divH) && relY < (6.0f * itemH + divH)) {
+                    clickedIdx = 3 + (int)((relY - (3.0f * itemH + divH)) / itemH);
                 }
 
                 if (clickedIdx == 0) {
@@ -6432,15 +6668,19 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         if (g_backdropFlyoutOpen) {
             if (x >= g_backdropFlyoutRect.left && x <= g_backdropFlyoutRect.right &&
                 y >= g_backdropFlyoutRect.top && y <= g_backdropFlyoutRect.bottom) {
-                float relY = y - (g_backdropFlyoutRect.top + 6.0f);
+                float scale = g_toolbarDpiScale;
+                float padY = 6.0f * scale;
+                float itemH = 30.0f * scale;
+                float divH = 8.0f * scale;
+                float relY = y - (g_backdropFlyoutRect.top + padY);
                 auto monitors = GetSystemMonitorList();
                 bool hasMulti = (monitors.size() > 1);
                 int clickedIdx = -1;
-                if (relY >= 0.0f && relY < 90.0f) {
-                    clickedIdx = (int)(relY / 30.0f);
+                if (relY >= 0.0f && relY < 3.0f * itemH) {
+                    clickedIdx = (int)(relY / itemH);
                 }
-                else if (hasMulti && relY >= 98.0f) {
-                    int secIdx = (int)((relY - 98.0f) / 30.0f);
+                else if (hasMulti && relY >= (3.0f * itemH + divH)) {
+                    int secIdx = (int)((relY - (3.0f * itemH + divH)) / itemH);
                     int maxSec = 1 + (int)monitors.size() + 1;
                     if (secIdx >= 0 && secIdx < maxSec) {
                         clickedIdx = 3 + secIdx;
@@ -6524,17 +6764,18 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             if (x >= g_colorFlyoutRect.left && x <= g_colorFlyoutRect.right &&
                 y >= g_colorFlyoutRect.top && y <= g_colorFlyoutRect.bottom) {
 
-                const float padX = 14.0f;
+                float scale = g_toolbarDpiScale;
+                const float padX = 14.0f * scale;
                 const float contentW = (g_colorFlyoutRect.right - g_colorFlyoutRect.left) - padX * 2.0f;
-                float curY = g_colorFlyoutRect.top + 12.0f;
+                float curY = g_colorFlyoutRect.top + 12.0f * scale;
 
                 // 1. Recent Colors Swatches
-                const float swatchDiam = 22.0f;
+                const float swatchDiam = 22.0f * scale;
                 const float swatchGap = (contentW - 5.0f * swatchDiam) / 4.0f;
                 for (int k = 0; k < 5; ++k) {
                     float sx = g_colorFlyoutRect.left + padX + k * (swatchDiam + swatchGap) + swatchDiam * 0.5f;
                     float sy = curY + swatchDiam * 0.5f;
-                    if (DistanceSq(x, y, sx, sy) <= 14.0f * 14.0f) {
+                    if (DistanceSq(x, y, sx, sy) <= (14.0f * scale) * (14.0f * scale)) {
                         if (k < (int)g_recentColors.size()) {
                             g_customColor.activeColor = g_recentColors[k];
                             RGBtoHSV(g_customColor.activeColor, g_customColor.hue, g_customColor.sat, g_customColor.val);
@@ -6547,10 +6788,10 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                         return 0;
                     }
                 }
-                curY += swatchDiam + 10.0f;
+                curY += swatchDiam + 10.0f * scale;
 
                 // 2. 2D Saturation / Value Canvas
-                const float canvasH = 118.0f;
+                const float canvasH = 118.0f * scale;
                 if (x >= (g_colorFlyoutRect.left + padX) && x <= (g_colorFlyoutRect.right - padX) &&
                     y >= curY && y <= curY + canvasH) {
                     g_pickerDrag = ColorPickerDrag::SatValCanvas;
@@ -6564,12 +6805,12 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                     InvalidateOverlay();
                     return 0;
                 }
-                curY += canvasH + 10.0f;
+                curY += canvasH + 10.0f * scale;
 
                 // 3. Rainbow Hue Track
-                const float trackH = 12.0f;
+                const float trackH = 12.0f * scale;
                 if (x >= (g_colorFlyoutRect.left + padX) && x <= (g_colorFlyoutRect.right - padX) &&
-                    y >= (curY - 3.0f) && y <= (curY + trackH + 3.0f)) {
+                    y >= (curY - 3.0f * scale) && y <= (curY + trackH + 3.0f * scale)) {
                     g_pickerDrag = ColorPickerDrag::HueBar;
                     SetCapture(hwnd);
                     float h = ((x - (g_colorFlyoutRect.left + padX)) / contentW) * 360.0f;
@@ -6579,11 +6820,11 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                     InvalidateOverlay();
                     return 0;
                 }
-                curY += trackH + 10.0f;
+                curY += trackH + 10.0f * scale;
 
                 // 4. Alpha Track
                 if (x >= (g_colorFlyoutRect.left + padX) && x <= (g_colorFlyoutRect.right - padX) &&
-                    y >= (curY - 3.0f) && y <= (curY + trackH + 3.0f)) {
+                    y >= (curY - 3.0f * scale) && y <= (curY + trackH + 3.0f * scale)) {
                     g_pickerDrag = ColorPickerDrag::AlphaBar;
                     SetCapture(hwnd);
                     float a = (x - (g_colorFlyoutRect.left + padX)) / contentW;
@@ -6593,14 +6834,14 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                     InvalidateOverlay();
                     return 0;
                 }
-                curY += trackH + 12.0f;
+                curY += trackH + 12.0f * scale;
 
                 // 5. Bottom Row: Hex box, Eyedropper, Copy
-                const float rowH = 30.0f;
-                const float hexW = 92.0f;
-                const float swatchBoxW = 32.0f;
-                const float btnBoxW = 32.0f;
-                const float gap = 8.0f;
+                const float rowH = 30.0f * scale;
+                const float hexW = 92.0f * scale;
+                const float swatchBoxW = 32.0f * scale;
+                const float btnBoxW = 32.0f * scale;
+                const float gap = 8.0f * scale;
 
                 float dropLeft = g_colorFlyoutRect.left + padX + hexW + gap + swatchBoxW + gap;
                 float copyLeft = dropLeft + btnBoxW + gap;
@@ -6704,7 +6945,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         }
 
         if (g_hoveredToolbarBtn >= 0 && g_hoveredToolbarBtn < (int)g_toolbarButtons.size()) {
-            const auto& btn = g_toolbarButtons[g_hoveredToolbarBtn];
+            const auto btn = g_toolbarButtons[g_hoveredToolbarBtn];
             if (!btn.isPen) {
                 if ((btn.id == 11 && g_undoStack.empty()) ||
                     (btn.id == 12 && g_redoStack.empty()) ||
@@ -6989,9 +7230,9 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 float pillCenterX = (g_toolbarRect.left + g_toolbarRect.right) * 0.5f;
                 int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
                 int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-                g_toolbarCustomX = pillCenterX - 443.5f;
+                g_toolbarCustomX = pillCenterX - g_toolbarExpandedWidth * 0.5f;
                 if (g_toolbarCustomX < 10.0f) g_toolbarCustomX = 10.0f;
-                if (g_toolbarCustomX + 887.0f > (float)vw - 10.0f) g_toolbarCustomX = (float)vw - 887.0f - 10.0f;
+                if (g_toolbarCustomX + g_toolbarExpandedWidth > (float)vw - 10.0f) g_toolbarCustomX = (float)vw - g_toolbarExpandedWidth - 10.0f;
                 BuildToolbarLayout(vw, vh);
                 SavePersistentToolbarState();
                 ShowToastNotification(L"Toolbar Expanded");
@@ -7091,6 +7332,9 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 g_radialActive = true;
                 g_radialX = (float)GET_X_LPARAM(lParam);
                 g_radialY = (float)GET_Y_LPARAM(lParam);
+                g_radialDpiScale = GetDpiScaleAtPoint(g_radialX, g_radialY);
+                if (g_radialDpiScale <= 0.1f) g_radialDpiScale = 1.0f;
+                CreateRadialTextFormats(g_radialDpiScale);
                 g_radialHoverTarget = RadialTarget::None;
                 g_radialHoverSector = -1;
                 g_hoveredOrb = -1;
@@ -7690,133 +7934,7 @@ DWORD WINAPI HotkeyThread(LPVOID) {
         reinterpret_cast<IUnknown**>(&g_pDWriteFactory)
     );
 
-    if (g_pDWriteFactory) {
-        const wchar_t* iconFont = GetIconFontFamilyName();
-
-        // General Text Format
-        g_pDWriteFactory->CreateTextFormat(
-            L"Segoe UI Variable Display",
-            NULL,
-            DWRITE_FONT_WEIGHT_SEMI_BOLD,
-            DWRITE_FONT_STYLE_NORMAL,
-            DWRITE_FONT_STRETCH_NORMAL,
-            13.0f,
-            L"en-us",
-            &g_pTextFormat
-        );
-        if (g_pTextFormat) {
-            g_pTextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-            g_pTextFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-        }
-
-        // Toolbar Icon Format (16.0f Segoe Fluent Icons)
-        g_pDWriteFactory->CreateTextFormat(
-            iconFont,
-            NULL,
-            DWRITE_FONT_WEIGHT_NORMAL,
-            DWRITE_FONT_STYLE_NORMAL,
-            DWRITE_FONT_STRETCH_NORMAL,
-            16.0f,
-            L"en-us",
-            &g_pIconFormat
-        );
-        if (g_pIconFormat) {
-            g_pIconFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-            g_pIconFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-        }
-
-        // Radial Menu Icon Format (18.0f Segoe Fluent Icons)
-        g_pDWriteFactory->CreateTextFormat(
-            iconFont,
-            NULL,
-            DWRITE_FONT_WEIGHT_NORMAL,
-            DWRITE_FONT_STYLE_NORMAL,
-            DWRITE_FONT_STRETCH_NORMAL,
-            18.0f,
-            L"en-us",
-            &g_pRadialIconFormat
-        );
-        if (g_pRadialIconFormat) {
-            g_pRadialIconFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-            g_pRadialIconFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-        }
-
-        // Radial Center Badge Format (14.0f Segoe Fluent Icons)
-        g_pDWriteFactory->CreateTextFormat(
-            iconFont,
-            NULL,
-            DWRITE_FONT_WEIGHT_SEMI_BOLD,
-            DWRITE_FONT_STYLE_NORMAL,
-            DWRITE_FONT_STRETCH_NORMAL,
-            14.0f,
-            L"en-us",
-            &g_pCenterBadgeFormat
-        );
-        if (g_pCenterBadgeFormat) {
-            g_pCenterBadgeFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-            g_pCenterBadgeFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-        }
-
-        // Shapes Modal Menu Text Format (12.5f Segoe UI Variable Display, Left-Aligned)
-        g_pDWriteFactory->CreateTextFormat(
-            L"Segoe UI Variable Display",
-            NULL,
-            DWRITE_FONT_WEIGHT_SEMI_BOLD,
-            DWRITE_FONT_STYLE_NORMAL,
-            DWRITE_FONT_STRETCH_NORMAL,
-            12.5f,
-            L"en-us",
-            &g_pMenuTextFormat
-        );
-        if (g_pMenuTextFormat) {
-            g_pMenuTextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
-            g_pMenuTextFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-        }
-
-        // Shapes Modal Key Hint Format (11.0f Segoe UI Variable Display, Right-Aligned)
-        g_pDWriteFactory->CreateTextFormat(
-            L"Segoe UI Variable Display",
-            NULL,
-            DWRITE_FONT_WEIGHT_NORMAL,
-            DWRITE_FONT_STYLE_NORMAL,
-            DWRITE_FONT_STRETCH_NORMAL,
-            11.0f,
-            L"en-us",
-            &g_pMenuKeyFormat
-        );
-        if (g_pMenuKeyFormat) {
-            g_pMenuKeyFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
-            g_pMenuKeyFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-        }
-
-        // Toolbar Key Badge Format (8.0f Segoe UI Variable Display / Segoe UI, Right-Aligned)
-        HRESULT hrKey = g_pDWriteFactory->CreateTextFormat(
-            L"Segoe UI Variable Display",
-            NULL,
-            DWRITE_FONT_WEIGHT_SEMI_BOLD,
-            DWRITE_FONT_STYLE_NORMAL,
-            DWRITE_FONT_STRETCH_NORMAL,
-            8.0f,
-            L"en-us",
-            &g_pToolbarKeyFormat
-        );
-        if (FAILED(hrKey)) {
-            g_pDWriteFactory->CreateTextFormat(
-                L"Segoe UI",
-                NULL,
-                DWRITE_FONT_WEIGHT_SEMI_BOLD,
-                DWRITE_FONT_STYLE_NORMAL,
-                DWRITE_FONT_STRETCH_NORMAL,
-                8.0f,
-                L"en-us",
-                &g_pToolbarKeyFormat
-            );
-        }
-        if (g_pToolbarKeyFormat) {
-            g_pToolbarKeyFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
-            g_pToolbarKeyFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
-        }
-    }
+    CreateTextFormats(1.0f);
 
     CoCreateInstance(
         CLSID_WICImagingFactory,
@@ -7841,15 +7959,21 @@ DWORD WINAPI HotkeyThread(LPVOID) {
 
     BOOL bHotOk = RegisterHotKey(g_hHotkeyWnd, kHotkeyId, g_settings.hotkeyMod | MOD_NOREPEAT, g_settings.hotkeyKey);
     if (!bHotOk) {
-        Wh_Log(L"WinDraw: Warning - RegisterHotKey failed (error %lu)", GetLastError());
+        Wh_Log(L"Warning - RegisterHotKey failed (error %lu)", GetLastError());
     } else {
-        Wh_Log(L"WinDraw: Hotkey registered successfully");
+        Wh_Log(L"Hotkey registered successfully");
     }
 
     UpdateTrayIcon(g_hHotkeyWnd);
 
     MSG msg;
     while (GetMessageW(&msg, NULL, 0, 0)) {
+        if (msg.message == WM_APP_SETTINGS_CHANGED) {
+            if (g_hHotkeyWnd) {
+                SendMessageW(g_hHotkeyWnd, WM_APP_SETTINGS_CHANGED, 0, 0);
+            }
+            continue;
+        }
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
@@ -7880,13 +8004,7 @@ DWORD WINAPI HotkeyThread(LPVOID) {
     ReleaseD2DResources();
 
     if (g_pWICFactory) { g_pWICFactory->Release(); g_pWICFactory = nullptr; }
-    if (g_pToolbarKeyFormat) { g_pToolbarKeyFormat->Release(); g_pToolbarKeyFormat = nullptr; }
-    if (g_pMenuKeyFormat) { g_pMenuKeyFormat->Release(); g_pMenuKeyFormat = nullptr; }
-    if (g_pMenuTextFormat) { g_pMenuTextFormat->Release(); g_pMenuTextFormat = nullptr; }
-    if (g_pCenterBadgeFormat) { g_pCenterBadgeFormat->Release(); g_pCenterBadgeFormat = nullptr; }
-    if (g_pRadialIconFormat) { g_pRadialIconFormat->Release(); g_pRadialIconFormat = nullptr; }
-    if (g_pIconFormat) { g_pIconFormat->Release(); g_pIconFormat = nullptr; }
-    if (g_pTextFormat) { g_pTextFormat->Release(); g_pTextFormat = nullptr; }
+    ReleaseTextFormats();
     if (g_pDWriteFactory) { g_pDWriteFactory->Release(); g_pDWriteFactory = nullptr; }
     if (g_pD2DFactory) { g_pD2DFactory->Release(); g_pD2DFactory = nullptr; }
 
@@ -7899,33 +8017,35 @@ DWORD WINAPI HotkeyThread(LPVOID) {
 // ----------------------------------------------------------------------------
 
 BOOL WhTool_ModInit() {
-    Wh_Log(L"WinDraw Tool: Initializing");
+    Wh_Log(L"Initializing");
 
     LoadSettings();
-    Wh_Log(L"WinDraw Tool: Settings loaded");
+    Wh_Log(L"Settings loaded");
     LoadPersistentState();
-    Wh_Log(L"WinDraw Tool: Persistent state loaded");
+    Wh_Log(L"Persistent state loaded");
     g_currentPenWidth = (g_currentTool == ToolMode::Highlighter) ? g_settings.defaultHighlighterWidth : g_settings.defaultPenWidth;
 
     g_hHotkeyThread = CreateThread(NULL, 0, HotkeyThread, NULL, 0, &g_hotkeyThreadId);
     if (!g_hHotkeyThread) {
-        Wh_Log(L"WinDraw Tool: Failed to create HotkeyThread: %lu", GetLastError());
+        Wh_Log(L"Failed to create HotkeyThread: %lu", GetLastError());
         return FALSE;
     }
 
-    Wh_Log(L"WinDraw Tool: Ready (Dedicated tool process active)");
+    Wh_Log(L"Ready (Dedicated tool process active)");
     return TRUE;
 }
 
 void WhTool_ModSettingsChanged() {
-    Wh_Log(L"WinDraw Tool: Settings Changed");
+    Wh_Log(L"Settings Changed");
     if (g_hHotkeyWnd) {
         PostMessageW(g_hHotkeyWnd, WM_APP_SETTINGS_CHANGED, 0, 0);
+    } else if (g_hotkeyThreadId != 0) {
+        PostThreadMessageW(g_hotkeyThreadId, WM_APP_SETTINGS_CHANGED, 0, 0);
     }
 }
 
 void WhTool_ModUninit() {
-    Wh_Log(L"WinDraw Tool: Unloading");
+    Wh_Log(L"Unloading");
 
     if (g_hHotkeyWnd) {
         PostMessageW(g_hHotkeyWnd, WM_CANCELMODE, 0, 0);
