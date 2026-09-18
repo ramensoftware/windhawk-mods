@@ -1300,6 +1300,7 @@ static void SWS_UnregisterHotkeys();
 static void ApplySwitcherRegion();
 static void ApplyThemeToWindow(HWND hWnd);
 static void CreateMirrorSwitchers();
+static void ShowMirrorSwitchers();
 static void HideSwitcher();
 static void PaintSwitcher();
 static void PaintSwitcherOverlay();
@@ -8070,6 +8071,33 @@ static void RevealPendingSwitcher() {
         g_hMouseHook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, GetModuleHandle(NULL), 0);
     }
 
+    // Re-resolve the final switcher rect before reading it.
+    // CycleLinear (called from the WM_HOTKEY backward path during pending show)
+    // may have called ScrollDockWithDynamicResize / UpdateDockSelectionWithDynamicResize
+    // which recompute layout while the switcher is still off-screen at (-32000, -32000).
+    // That captures rcWndStart from GetWindowRect at the off-screen position, making the
+    // entrance animation interpolate from (-32000, -32000) → final position — the
+    // "flies from top-left" bug. Refreshing source sizes and recomputing layout here
+    // ensures g_winW/g_winH and g_pendingSwitcherRect are at the true final values
+    // before SetWindowPos is called, so rcWndStart == rcWndTarget == final position.
+    if (g_hCurrentMonitor) {
+        for (auto& w : g_windows) {
+            RefreshEntrySourceSize(w);
+        }
+        HMONITOR hMon = g_hCurrentMonitor;
+        ComputeLayout(hMon);
+        if (DockLayoutActive()) UpdateDockPreviewForSelection();
+        MONITORINFO rmi = { sizeof(rmi) };
+        GetMonitorInfoW(hMon, &rmi);
+        int rcx, rcy;
+        GetSwitcherPosition(rmi.rcWork, &rcx, &rcy);
+        g_pendingSwitcherRect = { rcx, rcy, rcx + g_winW, rcy + g_winH };
+        if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
+            RectF rr = ToRectF(g_windows[g_selectedIndex].rcCell);
+            SnapSelectionTo(rr);
+        }
+    }
+
     int x = g_pendingSwitcherRect.left;
     int y = g_pendingSwitcherRect.top;
     int w = g_pendingSwitcherRect.right - g_pendingSwitcherRect.left;
@@ -8138,6 +8166,9 @@ static void RevealPendingSwitcher() {
     ShowWindow(g_hSwitcher, SW_SHOWNA);
     BringWindowToTop(g_hSwitcher);
     SetForegroundWindow(g_hSwitcher);
+    // Mirrors already carry frame 0 (pushed by PaintSwitcher above); show them
+    // now so no unpainted white frame is ever composed.
+    ShowMirrorSwitchers();
 
     if (g_animEntranceActive) {
         StartAnimationTicker();
@@ -8290,8 +8321,9 @@ static BOOL WINAPI MirrorEnumProc(HMONITOR hM, HDC, LPRECT, LPARAM) {
             ApplyThemeToWindow(hMirror);
             g_hMirrorSwitchers.push_back(hMirror);
             SetWindowPos(hMirror, HWND_TOPMOST, mx, my, g_winW, g_winH, SWP_NOACTIVATE);
-            ShowWindow(hMirror, SW_SHOWNA);
-            SetActiveWindow(hMirror);
+            // NOTE: mirrors stay hidden here on purpose. They are shown by
+            // ShowMirrorSwitchers() only after PaintSwitcher() has pushed frame 0
+            // into them, so DWM never composes an unpainted (white border) frame.
         }
     }
     return TRUE;
@@ -8314,6 +8346,17 @@ static void DestroyMirrorSwitchers() {
 static void CreateMirrorSwitchers() {
     if (wcscmp(g_settings.switcherDisplayBehavior, L"allMonitors") == 0 || g_showAllMonitors) {
         EnumDisplayMonitors(NULL, NULL, MirrorEnumProc, 0);
+    }
+}
+
+// Shows previously created (hidden) mirrors after their first frame has been
+// painted. SW_SHOWNA keeps them non-activated so the main switcher window
+// retains foreground ownership established by SetForegroundWindow().
+static void ShowMirrorSwitchers() {
+    for (HWND hMirror : g_hMirrorSwitchers) {
+        if (IsWindow(hMirror) && !IsWindowVisible(hMirror)) {
+            ShowWindow(hMirror, SW_SHOWNA);
+        }
     }
 }
 
@@ -8393,6 +8436,15 @@ static void ShowSwitcher(bool sticky, bool immediate = false) {
     g_isCloseHovered = false;
 
     RegisterThumbnailsEarly();
+    // DWM often hasn't produced a surface for just-registered thumbnails yet,
+    // so the query inside RegisterThumbnailsEarly can leave sourceSize at 0
+    // (1x1 placeholder). Fall back to the live window rect for aspect so the
+    // FIRST layout — and therefore the initial centered position, which matters
+    // most for Dock's single-preview sizing — is already near-final. This avoids
+    // the "appears top-right then slides to center" correction right after reveal.
+    for (auto& w : g_windows) {
+        RefreshEntrySourceSize(w);
+    }
     ComputeLayout(hMon);
     if (g_winW <= 0 || g_winH <= 0) return;
     if (DockLayoutActive()) {
@@ -8525,6 +8577,9 @@ static void ShowSwitcher(bool sticky, bool immediate = false) {
     ShowWindow(g_hSwitcher, SW_SHOWNA);
     BringWindowToTop(g_hSwitcher);
     SetForegroundWindow(g_hSwitcher);
+    // Mirrors already carry frame 0 (pushed by PaintSwitcher above); show them
+    // now so no unpainted white frame is ever composed.
+    ShowMirrorSwitchers();
 
     if (g_animEntranceActive) {
         StartAnimationTicker();
@@ -8547,6 +8602,16 @@ static void HideSwitcher() {
     if (g_hSwitcher) {
         KillTimer(g_hSwitcher, SWS_DYNAMIC_RESIZE_TIMER_ID);
     }
+    // Hide every switcher window FIRST, before any teardown or WS_EX_LAYERED /
+    // DWM attribute juggling below, so DWM can never compose an intermediate
+    // (white border / unpainted / half-torn-down) frame on exit.
+    if (g_hCloseBtnWnd && IsWindowVisible(g_hCloseBtnWnd)) {
+        ShowWindow(g_hCloseBtnWnd, SW_HIDE);
+    }
+    DestroyMirrorSwitchers();
+    if (g_hSwitcher && IsWindowVisible(g_hSwitcher)) {
+        ShowWindow(g_hSwitcher, SW_HIDE);
+    }
     StopAnimationTicker();
     FinishAnimations();
     FreeCachedBuffers();
@@ -8554,8 +8619,6 @@ static void HideSwitcher() {
     g_showAllMonitors = false;
     CancelPendingShow();
     g_switcherBaseInitialized = false;
-
-    DestroyMirrorSwitchers();
 
     UnregisterThumbnails();
     if (g_hCloseBtnWnd) {
@@ -8650,6 +8713,22 @@ static void StartExitAnimation(bool activateSelectedWindow) {
     if ((!g_isVisible && !g_isPendingShow) || g_animExitActive) return;
 
     if (activateSelectedWindow) {
+        // Switching to target window: hide everything FIRST and only then do
+        // the alpha-zero teardown below, so the WS_EX_LAYERED flip + DWM
+        // attribute writes can never be composited as a white-border flash.
+        // (HideSwitcher() called at the end re-hides as a no-op and keeps the
+        // teardown state identical to before.)
+        if (g_hCloseBtnWnd && IsWindowVisible(g_hCloseBtnWnd)) {
+            ShowWindow(g_hCloseBtnWnd, SW_HIDE);
+        }
+        for (HWND hMirror : g_hMirrorSwitchers) {
+            if (IsWindow(hMirror) && IsWindowVisible(hMirror)) {
+                ShowWindow(hMirror, SW_HIDE);
+            }
+        }
+        if (g_hSwitcher && IsWindowVisible(g_hSwitcher)) {
+            ShowWindow(g_hSwitcher, SW_HIDE);
+        }
         // Switching to target window: immediately zero alpha and hide both switcher windows
         // BEFORE activating target window, ensuring no white border, gray flash, or non-client
         // deactivation frame can ever be visible on screen!
@@ -8801,6 +8880,11 @@ static void RecomputeAndReposition() {
         UnregisterThumbnails();
     }
     RegisterThumbnailsEarly();
+    // Refresh DWM source sizes (GetWindowRect fallback) before layout so that
+    // aspect ratios used in ComputeLayout are near-final on the first pass.
+    for (auto& w : g_windows) {
+        RefreshEntrySourceSize(w);
+    }
     HMONITOR hMon = g_hCurrentMonitor
                     ? g_hCurrentMonitor
                     : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
@@ -10612,6 +10696,35 @@ static void AddWindowEntry(HWND hWnd) {
     // If hideMinimizedWindows is enabled and window is iconic, ignore
     if (g_settings.hideMinimizedWindows && IsIconic(hWnd)) return;
 
+    // ── Purge pending-close tracking and departing ghost for this window ──
+    // When a window survives a close attempt (e.g. showed a modal dialog),
+    // HSHELL_REDRAW fires and we re-add it. The immediate RemoveWindowEntryByHwnd
+    // in CloseSwitcherEntry left a DepartingEntrySnapshot that would render as a
+    // ghost at the old cell position. Clear it now before re-inserting so only
+    // one entry exists and no two entries share the same rcCell.
+    {
+        auto pcIt = std::find(s_pendingCloseWindows.begin(), s_pendingCloseWindows.end(), hWnd);
+        if (pcIt != s_pendingCloseWindows.end()) {
+            s_pendingCloseWindows.erase(pcIt);
+        }
+        auto& deps = g_layoutTransition.departingItems;
+        for (auto dit = deps.begin(); dit != deps.end(); ++dit) {
+            if (dit->hWnd == hWnd) {
+                // Release DWM thumbnail handles held by the snapshot before erasing.
+                for (auto& kv : dit->hThumbs) {
+                    if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
+                }
+                deps.erase(dit);
+                break;
+            }
+        }
+    }
+
+    // Pre-populate effectiveSourceSize via GetWindowRect fallback so that the
+    // first ComputeLayout call (below) uses the correct aspect ratio instead of
+    // the 1:1 square fallback triggered by zero sourceSize.
+    RefreshEntrySourceSize(e);
+
     HWND currentSelectedWnd = (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size())
                               ? g_windows[g_selectedIndex].hWnd : NULL;
 
@@ -10667,29 +10780,56 @@ static void AddWindowEntry(HWND hWnd) {
         e.groupWindows.push_back(hWnd);
         UpdateEntryForWindow(e);
 
-        auto insertPos = g_windows.end();
-        if (g_settings.sortMinimizedWindowsToEnd && !IsIconic(hWnd)) {
-            for (auto it = g_windows.begin(); it != g_windows.end(); ++it) {
-                if (IsIconic(it->hWnd)) {
-                    insertPos = it;
-                    break;
+        // MRU-ranked insertion: same comparator as InitWindowList's stable_sort.
+        // Minimized entries are segregated to the end (when sortMinimizedWindowsToEnd),
+        // and within each tier windows are ordered by g_mruWindows rank (lower = more recent).
+        // This ensures a re-added window (e.g. after modal dialog) lands at rank 0 (index 0),
+        // not at the minimized boundary where the old IsIconic-only loop would place it.
+        {
+            auto getRank = [](HWND h) -> int {
+                for (size_t i = 0; i < g_mruWindows.size(); i++) {
+                    if (g_mruWindows[i] == h) return (int)i;
                 }
+                bool isTopmost = (GetWindowLongPtrW(h, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+                return isTopmost ? 20000 : 10000;
+            };
+            bool eMin = g_settings.sortMinimizedWindowsToEnd && IsEntryMinimized(e);
+            int  eRank = getRank(e.hWnd);
+            auto insertPos = g_windows.end();
+            for (auto it = g_windows.begin(); it != g_windows.end(); ++it) {
+                bool itMin = g_settings.sortMinimizedWindowsToEnd && IsEntryMinimized(*it);
+                if (eMin != itMin) {
+                    if (!eMin && itMin) { insertPos = it; break; }
+                    continue;
+                }
+                if (eRank < getRank(it->hWnd)) { insertPos = it; break; }
             }
+            g_windows.insert(insertPos, std::move(e));
         }
-        g_windows.insert(insertPos, std::move(e));
     } else {
         UpdateEntryForWindow(e);
 
-        auto insertPos = g_windows.end();
-        if (g_settings.sortMinimizedWindowsToEnd && !IsIconic(hWnd)) {
-            for (auto it = g_windows.begin(); it != g_windows.end(); ++it) {
-                if (IsIconic(it->hWnd)) {
-                    insertPos = it;
-                    break;
+        {
+            auto getRank = [](HWND h) -> int {
+                for (size_t i = 0; i < g_mruWindows.size(); i++) {
+                    if (g_mruWindows[i] == h) return (int)i;
                 }
+                bool isTopmost = (GetWindowLongPtrW(h, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+                return isTopmost ? 20000 : 10000;
+            };
+            bool eMin = g_settings.sortMinimizedWindowsToEnd && IsEntryMinimized(e);
+            int  eRank = getRank(e.hWnd);
+            auto insertPos = g_windows.end();
+            for (auto it = g_windows.begin(); it != g_windows.end(); ++it) {
+                bool itMin = g_settings.sortMinimizedWindowsToEnd && IsEntryMinimized(*it);
+                if (eMin != itMin) {
+                    if (!eMin && itMin) { insertPos = it; break; }
+                    continue;
+                }
+                if (eRank < getRank(it->hWnd)) { insertPos = it; break; }
             }
+            g_windows.insert(insertPos, std::move(e));
         }
-        g_windows.insert(insertPos, std::move(e));
     }
 
     if (currentSelectedWnd) {
@@ -10983,10 +11123,16 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             for (auto it = s_pendingCloseWindows.begin(); it != s_pendingCloseWindows.end(); ) {
                 HWND h = *it;
                 if (!IsWindow(h) || !IsWindowVisible(h)) {
+                    // Window truly closed (or hidden) — clean up.
                     toRemove.push_back(h);
                     it = s_pendingCloseWindows.erase(it);
                 } else {
-                    ++it;
+                    // Window is still alive and visible — it showed a modal dialog and
+                    // survived the close attempt. Re-add it at its correct MRU position
+                    // (AddWindowEntry already purges the departing ghost and inserts at
+                    // MRU rank 0). No need to retry this window further.
+                    AddWindowEntry(h);
+                    it = s_pendingCloseWindows.erase(it);
                 }
             }
             for (HWND h : toRemove) {
@@ -11012,7 +11158,11 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
 
         if (wParam == SWS_DYNAMIC_RESIZE_TIMER_ID) {
-            if (g_isVisible && !g_windows.empty() && !g_scrollTransition.active && !g_layoutTransition.active) {
+            // Never recenter/resize mid-entrance-fade: a SetWindowPos here is
+            // exactly the visible "drift to center" during reveal. Sizes are
+            // refreshed at show/reveal time, and the next tick after the
+            // entrance completes applies any genuinely late DWM size in one step.
+            if (g_isVisible && !g_windows.empty() && !g_scrollTransition.active && !g_layoutTransition.active && !g_animEntranceActive) {
                 bool anyChanged = false;
                 for (auto& w : g_windows) {
                     if (RefreshEntrySourceSize(w)) {
@@ -11133,10 +11283,17 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         RECT rc; GetClientRect(hWnd, &rc);
         int w = rc.right, h = rc.bottom;
         BP_PAINTPARAMS params = { sizeof(params) };
-        params.dwFlags = BPPF_ERASE;
+        // NOTE: no BPPF_ERASE here on purpose. Buffered-paint erase fills the
+        // buffer with opaque white for one frame (white border/corner flash on
+        // reveal). The buffer is explicitly cleared to transparent below and
+        // every branch overpaints it fully.
+        params.dwFlags = 0;
         HDC hdcBuf = NULL;
         HPAINTBUFFER hBP = BeginBufferedPaint(hdc, &rc, BPBF_TOPDOWNDIB, &params, &hdcBuf);
         if (hBP) {
+            if (w > 0 && h > 0) {
+                PatBlt(hdcBuf, 0, 0, w, h, BLACKNESS);
+            }
             if (!g_scrollTransition.active && w > 0 && h > 0) {
                 if (!s_cachedStaticDC || s_cachedStaticW != w || s_cachedStaticH != h) {
                     if (s_cachedStaticDC) {
