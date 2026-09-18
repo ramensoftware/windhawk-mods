@@ -2,7 +2,7 @@
 // @id              explorer-tags
 // @name            Explorer Tags
 // @description     Colored tags panel at the bottom of File Explorer's navigation pane, plus a Tags submenu in the file context menu
-// @version         0.4.1
+// @version         0.5.1
 // @author          buedgik
 // @github          https://github.com/buedgik
 // @homepage        https://github.com/buedgik/explorer-tags
@@ -33,7 +33,7 @@ Windows' own tags only work for file types with a property handler, so `.txt`,
 - **Collapse the panel:** click the "Tags" title.
 - **Right-click menu:** on selected files, a **Tags ▸** submenu appears, with
   one entry per tag. Checked means all selected items have it; picking it
-  removes it. Unchecked adds it to all of them. "Remove all tags" appears
+  removes it from all of them. Unchecked adds it to all of them. "Remove all tags" appears
   when at least one already has tags. Works in the classic menu (for example
   with the "Classic context menu" mod); the new Windows 11 menu isn't
   changed.
@@ -65,9 +65,10 @@ lose them, the shortcuts are recreated.
   tracked.** A renamed shortcut is left behind as a file the mod no longer
   knows about, and moving a shortcut from one tag's folder into another's
   removes the first tag without adding the second.
-- **The tags folder and the registry stay after the mod is disabled**, and so
-  do your shortcuts. Nothing is created until you tag something for the first
-  time.
+- **The tags folder and the record stay after the mod is disabled**, and so do
+  your shortcuts. A tag's folder appears the first time you tag something with
+  it, or the first time you click it in the panel; the record folder appears
+  with the first tag.
 - **Changing the tags folder in the settings leaves the old one behind.** The
   shortcuts are rebuilt under the new folder; the old folders aren't deleted,
   in case something else lives there.
@@ -218,13 +219,31 @@ COLORREF ParseColor(std::wstring s, COLORREF fallback) {
 // The folder depends only on the name, never on the list position, otherwise
 // reordering the tags would swap their folders. A name that had to be altered
 // gets a suffix from the exact name ("A/B" and "A:B" give different folders).
+// CON, NUL, COM1... can't be folder names: a tag called one of those would
+// never get a folder, and tagging would do nothing with no way to tell why.
+bool IsReservedDeviceName(const std::wstring& name) {
+    static const wchar_t* kReserved[] = {L"CON", L"PRN", L"AUX", L"NUL", L"COM1", L"COM2", L"COM3",
+                                         L"COM4", L"COM5", L"COM6", L"COM7", L"COM8", L"COM9",
+                                         L"LPT1", L"LPT2", L"LPT3", L"LPT4", L"LPT5", L"LPT6",
+                                         L"LPT7", L"LPT8", L"LPT9"};
+    std::wstring stem = name.substr(0, name.find(L'.'));
+    for (const wchar_t* reserved : kReserved) {
+        if (_wcsicmp(stem.c_str(), reserved) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::wstring FolderNameFor(const std::wstring& tagName) {
     std::wstring folder = SanitizeFileName(tagName);
-    if (folder != tagName || folder.empty() || folder[0] == L'.') {
+    if (folder != tagName || folder.empty() || folder[0] == L'.' || IsReservedDeviceName(folder)) {
         folder = (folder.empty() ? L"Tag" : folder) + L" " + ShortHash(tagName);
     }
     return folder;
 }
+
+std::wstring DbPath();
 
 void LoadSettings() {
     Settings s;
@@ -288,6 +307,24 @@ void LoadSettings() {
     }
     while (root.size() > 3 && (root.back() == L'\\' || root.back() == L'/')) {
         root.pop_back();
+    }
+    // The whole tree under the tags folder is watched, so a root that holds
+    // the profile, or the mod's own record, means every unrelated write in
+    // there triggers a full re-check, forever.
+    if (valid) {
+        std::wstring dbFolder = DbPath();
+        size_t slash = dbFolder.rfind(L'\\');
+        dbFolder = slash == std::wstring::npos ? L"" : dbFolder.substr(0, slash);
+        std::wstring prefix = root + L"\\";
+        bool holdsOwnRecord = !dbFolder.empty() && dbFolder.size() > prefix.size() &&
+                              _wcsnicmp(dbFolder.c_str(), prefix.c_str(), prefix.size()) == 0;
+        WCHAR profile[MAX_PATH * 2];
+        DWORD profileLen = ExpandEnvironmentStringsW(L"%USERPROFILE%", profile, ARRAYSIZE(profile));
+        bool isProfile = profileLen > 0 && profileLen <= ARRAYSIZE(profile) &&
+                         _wcsicmp(root.c_str(), profile) == 0;
+        if (holdsOwnRecord || isProfile) {
+            valid = false;
+        }
     }
     // A drive root would watch the entire drive ("C:" alone is
     // explorer.exe's current folder, which is System32).
@@ -963,6 +1000,7 @@ void Commit(const std::wstring& dbPath, const std::vector<Row>& rows, bool chang
 std::vector<std::pair<std::wstring, int>> g_counts;
 std::vector<std::pair<std::wstring, std::wstring>> g_tagged;      // (tag, path)
 std::unordered_map<std::wstring, std::wstring> g_linkTargets;     // lnk -> target
+std::unordered_set<std::wstring> g_readyFolders;  // tag folders known to exist
 SRWLOCK g_countsLock = SRWLOCK_INIT;
 
 std::wstring LowerPath(const std::wstring& path) {
@@ -994,11 +1032,29 @@ void UpdateCounts(const std::vector<Row>& rows, const Settings& s) {
         // the window thread never has to open a .lnk to find out.
         linkTargets[LowerPath(s.root + L"\\" + FolderNameFor(r.tag) + L"\\" + r.lnk)] = r.path;
     }
+    // Which tag folders exist, so the window thread can decide whether it can
+    // navigate to one without asking the disk itself.
+    std::unordered_set<std::wstring> ready;
+    for (const auto& t : s.tags) {
+        std::wstring folder = s.root + L"\\" + t.folderName;
+        if (CheckExists(folder) == Exists::Yes) {
+            ready.insert(LowerPath(folder));
+        }
+    }
+
     AcquireSRWLockExclusive(&g_countsLock);
     g_counts.swap(counts);
     g_tagged.swap(tagged);
     g_linkTargets.swap(linkTargets);
+    g_readyFolders.swap(ready);
     ReleaseSRWLockExclusive(&g_countsLock);
+}
+
+bool FolderIsReady(const std::wstring& folder) {
+    AcquireSRWLockShared(&g_countsLock);
+    bool ready = g_readyFolders.count(LowerPath(folder)) > 0;
+    ReleaseSRWLockShared(&g_countsLock);
+    return ready;
 }
 
 // Window thread: a tag folder shortcut stands for the file it points to. Only
@@ -1130,7 +1186,11 @@ void SyncAll() {
     }
     stopped |= Stopping();
     Commit(dbPath, rows, changed, pending);
-    if (rootChanged && !stopped) {
+    // Only worth remembering next to a database that exists: otherwise
+    // merely enabling the mod would create the folder, which the readme says
+    // it doesn't. Until then every sync rebuilds instead of trusting markers,
+    // which is the safe direction.
+    if (rootChanged && !stopped && !rows.empty()) {
         SaveLastRoot(*s);
     }
     UpdateCounts(rows, *s);
@@ -1234,6 +1294,33 @@ void AddPaths(const std::wstring& tag, const std::vector<std::wstring>& paths) {
     UpdateCounts(rows, *s);
 }
 
+// Worker: make a tag's folder exist so a window can navigate to it. No marker
+// is written, so the next sync rebuilds the shortcuts into it instead of
+// reading an empty folder as "the user removed these tags".
+void EnsureTagFolder(const std::wstring& tag) {
+    auto s = GetSettings();
+    for (const auto& t : s->tags) {
+        if (t.name != tag) {
+            continue;
+        }
+        std::wstring folder = s->root + L"\\" + t.folderName;
+        if (CheckExists(folder) == Exists::No &&
+            SHCreateDirectoryExW(nullptr, folder.c_str(), nullptr) == ERROR_SUCCESS) {
+            NotifyShell(SHCNE_MKDIR, folder);
+        }
+        bool exists = CheckExists(folder) == Exists::Yes;
+        AcquireSRWLockExclusive(&g_countsLock);
+        if (exists) {
+            g_readyFolders.insert(LowerPath(folder));
+        } else {
+            // Stops the panel from trying to open a folder that isn't there.
+            g_readyFolders.erase(LowerPath(folder));
+        }
+        ReleaseSRWLockExclusive(&g_countsLock);
+        return;
+    }
+}
+
 // Empty tag: removes all tags from these files.
 void RemovePaths(const std::wstring& tag, const std::vector<std::wstring>& paths) {
     auto s = GetSettings();
@@ -1281,10 +1368,12 @@ void RemovePaths(const std::wstring& tag, const std::vector<std::wstring>& paths
 // Worker thread: watches the tags folder and does all the disk work.
 // ---------------------------------------------------------------------------
 
+enum class WorkKind { Add, Remove, EnsureFolder };
+
 struct WorkItem {
     std::wstring tag;
     std::vector<std::wstring> paths;
-    bool remove;
+    WorkKind kind;
 };
 
 HANDLE g_workerThread;
@@ -1301,7 +1390,7 @@ void QueueAdd(const std::wstring& tag, std::vector<std::wstring> paths) {
         return;
     }
     AcquireSRWLockExclusive(&g_workLock);
-    g_workQueue.push_back(WorkItem{tag, std::move(paths), false});
+    g_workQueue.push_back(WorkItem{tag, std::move(paths), WorkKind::Add});
     ReleaseSRWLockExclusive(&g_workLock);
     SetEvent(g_workEvent);
 }
@@ -1311,7 +1400,19 @@ void QueueRemove(const std::wstring& tag, std::vector<std::wstring> paths) {
         return;
     }
     AcquireSRWLockExclusive(&g_workLock);
-    g_workQueue.push_back(WorkItem{tag, std::move(paths), true});
+    g_workQueue.push_back(WorkItem{tag, std::move(paths), WorkKind::Remove});
+    ReleaseSRWLockExclusive(&g_workLock);
+    SetEvent(g_workEvent);
+}
+
+// Clicking a tag whose folder doesn't exist yet: the folder is created here,
+// on the worker, and the panel navigates when it learns the folder is ready.
+void QueueEnsureFolder(const std::wstring& tag) {
+    if (g_unloading) {
+        return;
+    }
+    AcquireSRWLockExclusive(&g_workLock);
+    g_workQueue.push_back(WorkItem{tag, {}, WorkKind::EnsureFolder});
     ReleaseSRWLockExclusive(&g_workLock);
     SetEvent(g_workEvent);
 }
@@ -1334,6 +1435,24 @@ HANDLE WatchRoot(const std::wstring& root) {
                                         FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME);
 }
 
+// This thread is a single-threaded apartment (shell links are created here),
+// so it has to dispatch messages: an apartment that never pumps can deadlock
+// anything COM marshals into it, and both StopWorker and unloading wait on
+// this thread.
+DWORD WaitPumping(DWORD count, const HANDLE* handles, DWORD timeout) {
+    while (true) {
+        DWORD r = MsgWaitForMultipleObjects(count, handles, FALSE, timeout, QS_ALLINPUT);
+        if (r != WAIT_OBJECT_0 + count) {
+            return r;
+        }
+        MSG msg;
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+}
+
 DWORD WINAPI WorkerThread(LPVOID) {
     HRESULT hrCom = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
@@ -1344,14 +1463,33 @@ DWORD WINAPI WorkerThread(LPVOID) {
     BroadcastRefresh();
 
     while (!Stopping()) {
+        // The tags folder setting is picked up here instead of by restarting
+        // this thread: a restart makes Windhawk's engine thread wait for
+        // whatever file operation is in flight, and changing the folder is
+        // the user's way out of a location that has stopped responding.
+        std::wstring wanted = GetSettings()->root;
+        bool rootSwitched = wanted != root;
+        if (rootSwitched) {
+            if (change != INVALID_HANDLE_VALUE) {
+                FindCloseChangeNotification(change);
+            }
+            root = wanted;
+            change = WatchRoot(root);
+        }
+
         HANDLE handles[3] = {g_stopEvent, g_workEvent, change};
         bool watching = change != INVALID_HANDLE_VALUE;
-        DWORD r = WaitForMultipleObjects(watching ? 3 : 2, handles, FALSE, watching ? INFINITE : 5000);
+        // With nothing to watch (no tags folder yet) this only polls to see
+        // whether it appeared; a wake every 30 s is enough, and anything the
+        // user does signals the work event anyway.
+        DWORD r = rootSwitched
+                      ? (DWORD)WAIT_TIMEOUT
+                      : WaitPumping(watching ? 3 : 2, handles, watching ? INFINITE : 30000);
         if (r == WAIT_OBJECT_0) {
             break;
         }
 
-        bool sync = false;
+        bool sync = rootSwitched;
         if (r == WAIT_OBJECT_0 + 2) {
             // Wait for the folder to stay quiet for 400 ms (a copy of many
             // files), but never more than 3 s in a row.
@@ -1366,7 +1504,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
                     break;
                 }
                 HANDLE waits[2] = {g_stopEvent, change};
-                DWORD w = WaitForMultipleObjects(2, waits, FALSE, 400);
+                DWORD w = WaitPumping(2, waits, 400);
                 if (w == WAIT_OBJECT_0) {
                     stop = true;
                     break;
@@ -1379,7 +1517,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
                 break;
             }
             sync = true;
-        } else if (r == WAIT_TIMEOUT) {
+        } else if (r == WAIT_TIMEOUT && !rootSwitched) {
             change = WatchRoot(root);
             sync = change != INVALID_HANDLE_VALUE;
         }
@@ -1395,10 +1533,16 @@ DWORD WINAPI WorkerThread(LPVOID) {
             if (Stopping()) {
                 break;
             }
-            if (item.remove) {
-                RemovePaths(item.tag, item.paths);
-            } else {
-                AddPaths(item.tag, item.paths);
+            switch (item.kind) {
+                case WorkKind::Add:
+                    AddPaths(item.tag, item.paths);
+                    break;
+                case WorkKind::Remove:
+                    RemovePaths(item.tag, item.paths);
+                    break;
+                case WorkKind::EnsureFolder:
+                    EnsureTagFolder(item.tag);
+                    break;
             }
         }
         if (sync && !Stopping()) {
@@ -1451,6 +1595,8 @@ struct Panel {
     TagDropTarget* drop = nullptr;
     int panelHeight = 0;
     std::wstring currentFolder;  // folder shown in the tab, for the open tag row
+    std::wstring pendingOpen;    // tag folder to open once the worker made it
+    bool pendingOpenNewWindow = false;
     int hot = -1;
     int pressed = -1;
     int dropHot = -1;
@@ -1690,24 +1836,37 @@ void OpenTag(Panel* p, int index, bool newWindow) {
     }
     HWND panelWnd = p->wnd;
     std::wstring folder = s->root + L"\\" + s->tags[index].folderName;
-    // On a network folder (share or mapped drive) this would hang the window
-    // while the server doesn't respond; there, the worker thread creates it.
-    WCHAR driveRoot[4] = {folder.size() > 2 ? folder[0] : L'\0', L':', L'\\', L'\0'};
-    if (!PathIsUNCW(folder.c_str()) && GetDriveTypeW(driveRoot) != DRIVE_REMOTE) {
-        // The .tag marker protects a folder recreated here empty: the worker
-        // thread rebuilds the shortcuts instead of removing the tags.
-        if (SHCreateDirectoryExW(nullptr, folder.c_str(), nullptr) == ERROR_SUCCESS) {
-            NotifyShell(SHCNE_MKDIR, folder);
+
+    // Not one disk call on this thread: creating the folder here froze the
+    // whole Explorer window when the tags folder lived on a drive that had
+    // stopped responding. The worker makes the folder and the panel opens it
+    // when the answer comes back.
+    p->pendingOpen = folder;
+    p->pendingOpenNewWindow = newWindow;
+    QueueEnsureFolder(s->tags[index].name);
+
+    // Whether the folder exists is the worker's last word on it, which can be
+    // out of date: a folder deleted behind its back still reads as ready, and
+    // navigating there used to do nothing at all (measured 2026-09-18). So
+    // the open is attempted, and on failure it waits for the worker instead.
+    if (!FolderIsReady(folder)) {
+        return;
+    }
+    bool opened;
+    if (newWindow) {
+        opened = (INT_PTR)ShellExecuteW(nullptr, L"open", folder.c_str(), nullptr, nullptr,
+                                        SW_SHOWNORMAL) > 32;
+    } else {
+        opened = Navigate(p, folder);
+        if (opened) {
+            SetTimer(panelWnd, TIMER_REPAINT, 350, nullptr);
         }
     }
-    if (newWindow) {
-        ShellExecuteW(nullptr, L"open", folder.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-    } else {
-        Navigate(p, folder);
-        SetTimer(panelWnd, TIMER_REPAINT, 350, nullptr);
+    if (opened) {
+        p->pendingOpen.clear();
+        // Fixes shortcuts for files moved since last time.
+        QueueSync();
     }
-    // Fixes shortcuts for files moved since last time.
-    QueueSync();
 }
 
 struct Colors {
@@ -2209,6 +2368,18 @@ LRESULT CALLBACK PanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
 
     if (msg == g_msgRefresh) {
+        // A click that had to wait for its folder to be created.
+        if (!p->pendingOpen.empty() && FolderIsReady(p->pendingOpen)) {
+            std::wstring folder = p->pendingOpen;
+            bool newWindow = p->pendingOpenNewWindow;
+            p->pendingOpen.clear();
+            if (newWindow) {
+                ShellExecuteW(nullptr, L"open", folder.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            } else {
+                Navigate(p, folder);
+                SetTimer(hWnd, TIMER_REPAINT, 350, nullptr);
+            }
+        }
         p->currentFolder = GetCurrentFolder(p);
         InvalidateRect(hWnd, nullptr, FALSE);
         return 0;
@@ -2322,7 +2493,9 @@ LRESULT CALLBACK PanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             GetClientRect(hWnd, &rc);
             auto s = GetSettings();
             Metrics m = GetMetrics(p, *s, rc.bottom);
-            if (m.tagCount > m.rowsShown) {
+            // Collapsed there is nothing to scroll, and scrolling anyway
+            // drove p->scroll to the end of the list behind the user's back.
+            if (!g_collapsed && m.tagCount > m.rowsShown) {
                 // Same feel as the tree above: system lines per notch, and
                 // partial notches (precision touchpads) accumulate.
                 UINT lines = 3;
@@ -2332,6 +2505,13 @@ LRESULT CALLBACK PanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 p->wheelDelta -= notches * WHEEL_DELTA;
                 p->scroll -= notches * (int)(lines ? lines : 1);
                 ClampScroll(p, m);
+                // The rows moved under a cursor that didn't: without this the
+                // highlight stays on the row that used to be there.
+                POINT cursor;
+                if (GetCursorPos(&cursor)) {
+                    ScreenToClient(hWnd, &cursor);
+                    SetHot(p, HitTest(p, cursor));
+                }
                 InvalidateRect(hWnd, nullptr, FALSE);
                 return 0;
             }
@@ -2563,9 +2743,10 @@ LRESULT CALLBACK TreeSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
         case WM_SYSCOLORCHANGE:
         case WM_SETTINGCHANGE:
             if (Panel* p = FindPanel(hWnd); p && p->wnd) {
-                // The tree's row height can change with the theme.
+                // The tree's row height can change with the theme, and with it
+                // the height the panel needs.
                 p->rowHeight = 0;
-                InvalidateRect(p->wnd, nullptr, FALSE);
+                LayoutPanel(p);
             }
             break;
 
@@ -2805,11 +2986,6 @@ struct TagMenu {
     std::vector<HBITMAP> bitmaps;
 };
 
-// Above this, there are no checkmarks and no shortcuts are read on the
-// window thread: the menu has to open right away. Picking a tag adds it to
-// all of them.
-const size_t MENU_MAX_CHECKED_SELECTION = 500;
-
 void RemoveTagMenu(TagMenu& tm);
 
 // InsertMenu ignores the ID for a separator, so removing it later by command
@@ -2834,11 +3010,11 @@ bool AddTagMenu(TagMenu& tm, HMENU menu, HWND defView, const std::vector<std::ws
     }
     tm.parent = menu;
 
-    bool knowState = paths.size() <= MENU_MAX_CHECKED_SELECTION;
-    TagHits hits;
-    if (knowState) {
-        hits = CountTagHits(paths);
-    }
+    // No size cap: CountTagHits is one pass over the worker's copy with a
+    // hash set, and the shortcut targets come from that same copy, so a big
+    // selection costs no disk and no per-item work. A cap here meant a tag
+    // could only ever be added for large selections, never removed.
+    TagHits hits = CountTagHits(paths);
 
     int dpi = GetDpiForWindow(defView);
     int dotSize = GetSystemMetricsForDpi(SM_CXSMICON, dpi ? dpi : 96);
@@ -2847,7 +3023,7 @@ bool AddTagMenu(TagMenu& tm, HMENU menu, HWND defView, const std::vector<std::ws
         const TagDef& t = s->tags[i];
         tm.tags.push_back(t.name);
         auto hit = hits.perTag.find(t.name);
-        bool allHave = knowState && hit != hits.perTag.end() && hit->second == (int)paths.size();
+        bool allHave = hit != hits.perTag.end() && hit->second == (int)paths.size();
         tm.allHave.push_back(allHave);
         std::wstring text = EscapeMenuText(t.name);
         MENUITEMINFOW mii = {sizeof(mii)};
@@ -2866,7 +3042,7 @@ bool AddTagMenu(TagMenu& tm, HMENU menu, HWND defView, const std::vector<std::ws
         AppendMenuW(tm.sub, MF_STRING | MF_GRAYED, tm.base + MENU_ID_NO_TAGS,
                     L"No tags (create them in the mod settings)");
     }
-    if (!knowState || hits.withAnyTag > 0) {
+    if (hits.withAnyTag > 0) {
         AppendMenuW(tm.sub, MF_SEPARATOR, tm.base + MENU_ID_SEPARATOR_INNER, nullptr);
         AppendMenuW(tm.sub, MF_STRING, tm.base + MENU_ID_REMOVE_ALL, L"Remove all tags");
     }
@@ -3159,14 +3335,10 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    std::wstring oldRoot = GetSettings()->root;
     LoadSettings();
-    if (GetSettings()->root != oldRoot) {
-        StopWorker();
-        StartWorker();
-    } else {
-        QueueSync();
-    }
+    // The worker notices a changed tags folder by itself; stopping it here
+    // would block Windhawk's engine thread on whatever it is doing.
+    QueueSync();
     BroadcastMessage(g_msgLayout);
 }
 
