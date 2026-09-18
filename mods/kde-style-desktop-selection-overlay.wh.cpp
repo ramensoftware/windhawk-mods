@@ -4,7 +4,7 @@
 // @description    Draws a custom KDE-inspired rounded selection box when drag-selecting on the Desktop
 // @version        2.0
 // @author         Xezjk
-// @github         xezjk
+// @github         https://github.com/xezjk
 // @include        explorer.exe
 // @compilerOptions -lgdi32 -luser32 -lgdiplus
 // ==/WindhawkMod==
