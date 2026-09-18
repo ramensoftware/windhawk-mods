@@ -3941,6 +3941,7 @@ class Overlay {
     float hudT_ = 0;
     float hudPx_ = 15.0f;
     float hudMarginX_ = 24.0f;
+    float retryWait_ = 0.0f;
     bool hudCrisp_ = false;
     bool focusClickArmed_ = false;
     bool reportOnUp_ = false;
@@ -4272,9 +4273,19 @@ static float EaseInOut(float t) {
 
 void Overlay::Render(float dtSec) {
     if (!rt_ || !buf_ || !brush_) {
-        if (!CreateDeviceResources()) {
+        // A driver reset or a remote session detaching can leave the device
+        // unavailable for a long time, and retrying every frame means sixty
+        // failed CreateHwndRenderTarget calls a second per display for the
+        // whole outage. Once it has failed, try roughly twice a second.
+        if (retryWait_ > 0.0f) {
+            retryWait_ -= dtSec;
             return;
         }
+        if (!CreateDeviceResources()) {
+            retryWait_ = 0.5f;
+            return;
+        }
+        retryWait_ = 0.0f;
         // The accumulation buffer went with the device while the scene kept
         // its progress, so resuming would paint only the strokes that were
         // still to come onto an empty buffer. Start the piece again. This is
@@ -4574,6 +4585,13 @@ LRESULT CALLBACK Overlay::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 static std::vector<Overlay*> g_overlays;
 static std::atomic<bool> g_active{false};
 static HANDLE g_toggleEvent = nullptr;
+
+// Teardown cannot depend on a message arriving. PostThreadMessage fails once a
+// thread queue is full, and the worker's wait is INFINITE whenever the overlay
+// is hidden, so a failed post would leave Wh_ModUninit joining a thread that
+// nothing will ever wake. This event sits in the same wait set and setting it
+// cannot fail.
+static HANDLE g_quitEvent = nullptr;
 static std::atomic<DWORD> g_workerThreadId{0};
 static HHOOK g_kbdHook = nullptr;
 static bool g_hotkeyRegistered = false;
@@ -4846,10 +4864,14 @@ static void UninstallKbdHook() {
         Wh_Log(L"PostThreadMessage to the hook thread failed (%u)",
                GetLastError());
     }
-    // No timeout: abandoning the thread would leave the hook installed with
-    // g_hookThread nulled, so the next show would install a second one. Its
-    // remaining work is just UnhookWindowsHookEx and return.
-    WaitForSingleObject(g_hookThread, INFINITE);
+    // Bounded on purpose. Abandoning the thread leaves the hook installed, so
+    // the wait is generous; but waiting forever on a post that may have failed
+    // would hang the unload, and a hung unload takes Windhawk with it. Its
+    // remaining work is only UnhookWindowsHookEx and a return, so five seconds
+    // is far more than it can honestly need.
+    if (WaitForSingleObject(g_hookThread, 5000) != WAIT_OBJECT_0) {
+        Wh_Log(L"Keyboard hook thread did not exit in time; abandoning it");
+    }
     CloseHandle(g_hookThread);
     g_hookThread = nullptr;
     if (g_hookReady) {
@@ -5294,9 +5316,12 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     }
 
     while (g_running) {
-        HANDLE handles[2];
+        HANDLE handles[3];
         DWORD count = 0;
         DWORD toggleIdx = (DWORD)-1;
+        if (g_quitEvent) {
+            handles[count++] = g_quitEvent;   // wakes the wait, nothing more
+        }
         if (g_toggleEvent) {
             toggleIdx = count;
             handles[count++] = g_toggleEvent;
@@ -5347,10 +5372,16 @@ static DWORD WINAPI WorkerThread(LPVOID) {
                 }
                 if (msg.message == WM_VSH_SETTINGS) {
                     bool wasActive = g_active;
+                    bool hadStartActive = g_settings.startActive;
                     HideOverlays();
                     LoadSettings();
                     RegisterHotkeyFromSettings();
-                    if (wasActive || g_settings.startActive) {
+                    // Whatever the user left on screen is what they get back.
+                    // Carrying startActive into every settings change meant
+                    // dismissing the overlay with Esc and then editing an
+                    // unrelated setting brought it back. Ticking the box
+                    // itself is the one case that should still open it.
+                    if (wasActive || (g_settings.startActive && !hadStartActive)) {
                         ShowOverlays();
                     }
                     continue;
@@ -5420,7 +5451,10 @@ static DWORD WINAPI WorkerThread(LPVOID) {
             g_hue = (float)g_settings.hueOffset;
         }
 
-        if (g_settings.rotate) {
+        // Frozen with everything else while nobody can see the display: this
+        // clock used to keep running and build whole new scenes, contour
+        // fields included, behind a fullscreen window.
+        if (g_settings.rotate && !g_allOccluded) {
             g_rotateTimer += dt;
             if (g_rotateTimer >= (float)g_settings.rotateSeconds) {
                 g_rotateTimer = 0;
@@ -5476,6 +5510,12 @@ static HANDLE g_workerThread = nullptr;
 BOOL WhTool_ModInit() {
     Wh_Log(L"Vector Screen Holder starting");
     g_running = true;
+    g_quitEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_quitEvent) {
+        // Not fatal: the quit message is still posted below, this only removes
+        // the fallback if that post ever fails.
+        Wh_Log(L"CreateEvent for quit failed (%u)", GetLastError());
+    }
     g_workerThread = CreateThread(nullptr, 0, WorkerThread, nullptr, 0, nullptr);
     if (!g_workerThread) {
         Wh_Log(L"CreateThread failed");
@@ -5493,6 +5533,11 @@ void WhTool_ModSettingsChanged() {
 
 void WhTool_ModUninit() {
     g_running = false;
+    // The event first, because it cannot fail. The message is only for
+    // promptness: it wakes the wait the same way but also drains cleanly.
+    if (g_quitEvent) {
+        SetEvent(g_quitEvent);
+    }
     DWORD tid = g_workerThreadId.load();
     if (tid && !PostThreadMessageW(tid, WM_VSH_QUIT, 0, 0)) {
         Wh_Log(L"PostThreadMessage(QUIT) failed (%u)", GetLastError());
@@ -5505,6 +5550,10 @@ void WhTool_ModUninit() {
         WaitForSingleObject(g_workerThread, INFINITE);
         CloseHandle(g_workerThread);
         g_workerThread = nullptr;
+    }
+    if (g_quitEvent) {
+        CloseHandle(g_quitEvent);
+        g_quitEvent = nullptr;
     }
 }
 
