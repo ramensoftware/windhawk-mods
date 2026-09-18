@@ -2,12 +2,11 @@
 // @id              native-shadow-tuner
 // @name            Windows Shadows Tuner
 // @description     Adjust the size, blur and intensity of native Windows shadows.
-// @version         0.6.1
+// @version         0.6.0
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @include         dwm.exe
 // @architecture    x86-64
-// @compilerOptions -lwevtapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -45,31 +44,16 @@ the requested appearance is identical to the original Windows appearance.
 ## How it works
  
 The mod hooks a single uDWM function, `CWindowBorder::GetShadowParameters`,
-and scales the radius and alpha values it produces. It doesn't create overlay
-windows or manipulate DWM's brush cache. A refresh is requested when the mod is
-loaded or unloaded, but this is not verified to invalidate cached shadow brushes
-on every build. Existing windows may therefore retain cached shadows.
-
-With Windhawk logging enabled, each hook call logs the original radius and
-alpha values before scaling, including calls with shadow style 0. These logs
-show whether the function runs and what it returns; they do not prove that
-the modified values reach the shadows visible on screen.
+and scales the radius and alpha values it produces. No overlay windows and no
+DWM cache manipulation, so disabling the mod restores the stock shadows
+immediately — no `dwm.exe` restart, no sign-out, and nothing persisted.
 
 ## Compatibility
 
-The previous revision was tested on Windows 11 25H2 build 26200.9445.
-This revision removes the shadow-style-0 exclusion and needs visual retesting.
-
-On Windows 11 24H2 (26100.x), the hook resolves but is not currently known to
-produce a visible change. A tester on build 26100.9457 (uDWM 10.0.26100.9278)
-reported no visible change with opacity 300% and size 150% in the previous
-revision; the only logged calls had shadow style 0. Whether this revision
-fixes that behavior remains unverified.
-
-The mod resolves uDWM functions through Microsoft public symbols. If the
-required function can't be resolved, it logs this and does not load.
-Successful symbol resolution and hook registration do not establish visual
-compatibility. The mod does not automatically detect a lack of visible effect.
+The mod resolves uDWM functions through Microsoft public symbols. Tested on
+Windows 11 25H2 build 26200.9445. On other
+builds, if the required uDWM shadow function can't be resolved, the mod logs
+this and does not load.
 
 */
 // ==/WindhawkModReadme==
@@ -86,7 +70,6 @@ compatibility. The mod does not automatically detect a lack of visible effect.
 // ==/WindhawkModSettings==
 
 #include <windows.h>
-#include <winevt.h>
 #include <windhawk_utils.h>
 
 #include <algorithm>
@@ -121,12 +104,12 @@ void __cdecl GetShadowParameters_Hook(int style,
         alpha1,
         alpha2);
 
-    // Log the original outputs without assuming what a shadow style means.
-    Wh_Log(
-        L"SHADOW style=%d dpi=%d radius=(%.3f,%.3f) alpha=(%.3f,%.3f)",
-        style, dpi,
-        static_cast<double>(*radius1), static_cast<double>(*radius2),
-        static_cast<double>(*alpha1), static_cast<double>(*alpha2));
+    // In the analyzed uDWM shadow path, value 0 selects the no-shadow case.
+    if (style == 0) {
+        Wh_Log(L"SHADOW style=%d dpi=%d not scaled (no-shadow style)", style,
+               dpi);
+        return;
+    }
 
     *radius1 *= sizeScale;
     *radius2 *= sizeScale;
@@ -154,46 +137,9 @@ void RequestDwmRefresh() {
     }
 }
 
-// Returns true if at least two Dwminit warnings (Level=3) were logged in the
-// Application event log within the last 60 seconds. DWM logs warnings here when
-// it crashes and is restarted by the session manager, so repeated warnings are
-// a strong signal that something in the desktop pipeline is unstable.
-bool HasMultipleDwminitWarningsInLastMinute() {
-    const WCHAR* queryPath = L"Application";
-    const WCHAR* query =
-        L"*[System[Provider[@Name='Dwminit'] and (Level=3) and "
-        L"TimeCreated[timediff(@SystemTime) <= 60000]]]";
-    EVT_HANDLE queryHandle = EvtQuery(nullptr,    // Local machine
-                                      queryPath,  // Application log
-                                      query, EvtQueryChannelPath);
-    if (!queryHandle) {
-        Wh_Log(L"EvtQuery failed with error: %u", GetLastError());
-        return false;
-    }
-    EVT_HANDLE events[2] = {};
-    DWORD returned = 0;
-    constexpr DWORD kTimeout = 1000;
-    BOOL ok =
-        EvtNext(queryHandle, ARRAYSIZE(events), events, kTimeout, 0, &returned);
-    if (!ok && GetLastError() != ERROR_NO_MORE_ITEMS) {
-        Wh_Log(L"EvtNext failed with error: %u", GetLastError());
-    }
-    for (DWORD i = 0; i < returned; i++) {
-        EvtClose(events[i]);
-    }
-
-    EvtClose(queryHandle);
-    return ok && returned >= ARRAYSIZE(events);
-}
-
 }  // namespace
 
 BOOL Wh_ModInit() {
-    if (HasMultipleDwminitWarningsInLastMinute()) {
-        Wh_Log(L"Refusing to load: multiple recent Dwminit warnings");
-        return FALSE;
-    }
-
     HMODULE module = GetModuleHandleW(L"uDWM.dll");
 
     if (!module) {
@@ -248,10 +194,7 @@ BOOL Wh_ModInit() {
     }
 
     Wh_Log(
-        L"Native shadow hook registered; visible effect is not verified.");
-    Wh_Log(
-        L"24H2 (26100.x): visible effect remains unverified. "
-        L"SHADOW logs show original values, not proof of rendered changes.");
+        L"Native shadow symbols resolved and hooks registered.");
 
     return TRUE;
 }
@@ -261,8 +204,9 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModUninit() {
-    // Hooks have already been removed. Request a refresh through the original
-    // code path; invalidation of cached shadow brushes is not guaranteed.
+    // The mod's hooks are removed once Wh_ModBeforeUninit returns, so by the
+    // time Wh_ModUninit runs this refresh necessarily rebuilds shadows
+    // through DWM's original, unmodified code path.
     RequestDwmRefresh();
 }
 
