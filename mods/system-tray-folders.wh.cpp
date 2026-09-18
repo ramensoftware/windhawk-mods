@@ -59,7 +59,8 @@ A pattern without wildcards must match the whole name. Use `*` for any text
 and `?` for a single character, e.g. `Razer*` or `*Graphics Command Center`.
 
 An icon goes into the first folder with a matching pattern. Icons that match
-nothing stay in the main grid.
+nothing stay in the main grid. Until a folder has icons, the mod unloads itself
+and leaves the flyout alone.
 
 To see the exact names of your icons, turn on **Debug logging** in the mod's
 **Advanced** tab, open the tray overflow once, then click **Show log output**.
@@ -109,6 +110,7 @@ haven't been tested.
 #include <cwctype>
 #include <exception>
 #include <functional>
+#include <initializer_list>
 #include <memory>
 #include <optional>
 #include <string>
@@ -325,7 +327,8 @@ int FindFolderForIcon(std::initializer_list<std::wstring_view> lowerNames) {
 ////////////////////////////////////////////////////////////////////////////////
 // SystemTray.dll internals
 
-// WindowsUdk.UI.Shell.INotificationAreaIcon6 (public WinRT metadata).
+// WindowsUdk.UI.Shell.INotificationAreaIcon6, from the public WinRT metadata in
+// windowsudk.winmd, which is also where the IID and the member order come from.
 constexpr GUID IID_INotificationAreaIcon6 = {
     0xD76CAD80,
     0x3103,
@@ -393,10 +396,12 @@ void* g_createdOverflowManager;
 void* g_createdOverflowInterface;
 
 // The overflow manager is a plain C++ object, so its layout is not part of any
-// contract. The NotificationAreaOverflow interface is recorded when the manager
-// creates it. If the mod was loaded after that, instead of relying on a fixed
-// field offset, look for a field that points at it. Either way, it's verified
-// by its vtable before calling into it.
+// contract. The NotificationAreaOverflow interface is recorded while the
+// manager creates it, and the record is dropped once the manager has been
+// attached to, so that it can't outlive the control. Afterwards, and when the
+// mod was loaded after the control was created, look for a field that points at
+// it instead of relying on a fixed field offset. Either way, the candidate is
+// verified by its vtable before calling into it.
 Controls::Control FindOverflowControl(void* manager) {
     if (!manager || !g_overflowInterfaceVftable) {
         return nullptr;
@@ -613,6 +618,7 @@ struct OverflowState : std::enable_shared_from_this<OverflowState> {
     int64_t itemsSourceCallbackToken = 0;
     bool itemsSourceCallbackRegistered = false;
     winrt::event_token loadedToken{};
+    HWND islandWindow = nullptr;
 
     wfc::IObservableVector<wf::IInspectable> displayed{nullptr};
     wf::IInspectable originalItemsSource{nullptr};
@@ -657,8 +663,7 @@ wfc::IObservableVector<wf::IInspectable> GetOverflowIcons(
 }
 
 FrameworkElement FindDescendantByName(DependencyObject const& element,
-                                      std::wstring_view name,
-                                      int depth) {
+                                      std::wstring_view name) {
     int count = Media::VisualTreeHelper::GetChildrenCount(element);
     for (int i = 0; i < count; i++) {
         auto child = Media::VisualTreeHelper::GetChild(element, i);
@@ -667,10 +672,8 @@ FrameworkElement FindDescendantByName(DependencyObject const& element,
                 return frameworkElement;
             }
         }
-        if (depth > 0) {
-            if (auto found = FindDescendantByName(child, name, depth - 1)) {
-                return found;
-            }
+        if (auto found = FindDescendantByName(child, name)) {
+            return found;
         }
     }
     return nullptr;
@@ -766,10 +769,11 @@ Controls::TextBlock CreateGlyph(std::wstring const& glyph, double fontSize) {
     return textBlock;
 }
 
-UIElement CreateFolderPreview() {
-    return Markup::XamlReader::Load(LR"(
+UIElement CreateFolderPreview(double itemSize) {
+    std::wstring xaml = LR"(
 <Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-      Width="22" Height="22" CornerRadius="5" BorderThickness="1" Padding="1"
+      Width="{PLATE}" Height="{PLATE}" CornerRadius="{RADIUS}"
+      BorderThickness="1" Padding="1"
       Background="{ThemeResource ControlFillColorDefaultBrush}"
       BorderBrush="{ThemeResource SubtleFillColorTertiaryBrush}"
       IsHitTestVisible="False">
@@ -781,16 +785,27 @@ UIElement CreateFolderPreview() {
     <ColumnDefinition Width="*"/>
     <ColumnDefinition Width="*"/>
   </Grid.ColumnDefinitions>
-  <Image Grid.Row="0" Grid.Column="0" Width="8" Height="8" Stretch="Uniform"
+  <Image Grid.Row="0" Grid.Column="0" Width="{ICON}" Height="{ICON}" Stretch="Uniform"
          HorizontalAlignment="Center" VerticalAlignment="Center"/>
-  <Image Grid.Row="0" Grid.Column="1" Width="8" Height="8" Stretch="Uniform"
+  <Image Grid.Row="0" Grid.Column="1" Width="{ICON}" Height="{ICON}" Stretch="Uniform"
          HorizontalAlignment="Center" VerticalAlignment="Center"/>
-  <Image Grid.Row="1" Grid.Column="0" Width="8" Height="8" Stretch="Uniform"
+  <Image Grid.Row="1" Grid.Column="0" Width="{ICON}" Height="{ICON}" Stretch="Uniform"
          HorizontalAlignment="Center" VerticalAlignment="Center"/>
-  <Image Grid.Row="1" Grid.Column="1" Width="8" Height="8" Stretch="Uniform"
+  <Image Grid.Row="1" Grid.Column="1" Width="{ICON}" Height="{ICON}" Stretch="Uniform"
          HorizontalAlignment="Center" VerticalAlignment="Center"/>
-</Grid>)")
-        .as<UIElement>();
+</Grid>)";
+
+    auto replace = [&xaml](std::wstring_view from, std::wstring const& to) {
+        for (size_t pos = xaml.find(from); pos != std::wstring::npos;
+             pos = xaml.find(from, pos + to.size())) {
+            xaml.replace(pos, from.size(), to);
+        }
+    };
+    replace(L"{PLATE}", std::to_wstring((int)std::max(itemSize * 0.55, 12.0)));
+    replace(L"{RADIUS}", std::to_wstring((int)std::max(itemSize * 0.125, 3.0)));
+    replace(L"{ICON}", std::to_wstring((int)std::max(itemSize * 0.2, 5.0)));
+
+    return Markup::XamlReader::Load(xaml).as<UIElement>();
 }
 
 void OpenFolder(OverflowState& state, int folder);
@@ -818,12 +833,17 @@ Tile& EnsureFolderTile(OverflowState& state, int folder) {
 
     Tile& tile = state.folderTiles[folder];
     if (!tile.button) {
+        double width;
+        double height;
+        GetItemSize(state, &width, &height);
+        double itemSize = std::min(width, height);
+
         tile.button = CreateTileButton(state);
         const auto& glyph = g_settings.folders[folder].glyph;
         if (!glyph.empty()) {
-            tile.button.Content(CreateGlyph(glyph, 16));
+            tile.button.Content(CreateGlyph(glyph, std::max(itemSize * 0.4, 8.0)));
         } else {
-            tile.button.Content(CreateFolderPreview());
+            tile.button.Content(CreateFolderPreview(itemSize));
         }
         tile.clickToken = tile.button.Click(
             [weakState = state.weak_from_this(), folder](
@@ -841,8 +861,13 @@ Tile& EnsureFolderTile(OverflowState& state, int folder) {
 Tile& EnsureBackTile(OverflowState& state) {
     Tile& tile = state.backTile;
     if (!tile.button) {
+        double width;
+        double height;
+        GetItemSize(state, &width, &height);
+
         tile.button = CreateTileButton(state);
-        tile.button.Content(CreateGlyph(L"\uE72B", 14));
+        tile.button.Content(
+            CreateGlyph(L"\uE72B", std::max(std::min(width, height) * 0.35, 8.0)));
         tile.clickToken = tile.button.Click(
             [weakState = state.weak_from_this()](
                 wf::IInspectable const&, RoutedEventArgs const&) {
@@ -1113,10 +1138,14 @@ void SubscribeOriginalIcons(OverflowState& state,
         [weakState = state.weak_from_this()](
             wfc::IObservableVector<wf::IInspectable> const&,
             wfc::IVectorChangedEventArgs const&) {
-            if (auto state = weakState.lock();
-                state && state->attached && !state->detaching && !g_unloading) {
-                Rebuild(*state);
+            auto state = weakState.lock();
+            if (!state || !state->attached || state->detaching || g_unloading) {
+                return;
             }
+            if (state->islandWindow && !IsWindowVisible(state->islandWindow)) {
+                return;
+            }
+            Rebuild(*state);
         });
 }
 
@@ -1172,6 +1201,20 @@ void Attach(OverflowState& state,
             }
         });
     state.itemsSourceCallbackRegistered = true;
+
+    EnumThreadWindows(
+        GetCurrentThreadId(),
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            WCHAR className[64];
+            if (GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"TopLevelWindowForOverflowXamlIsland") ==
+                    0) {
+                *(HWND*)lParam = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        (LPARAM)&state.islandWindow);
 
     auto icons = GetOverflowIcons(overflow);
     state.itemsSourceOverridden = itemsControl.ItemsSource() != icons;
@@ -1290,6 +1333,7 @@ void Detach(OverflowState& state) {
     state.itemsSourceOverridden = false;
     state.itemsSourceCallbackToken = 0;
     state.openFolder = -1;
+    state.islandWindow = nullptr;
 }
 
 std::shared_ptr<OverflowState> FindState(void* manager) {
@@ -1331,7 +1375,7 @@ std::shared_ptr<OverflowState> EnsureAttached(void* manager) {
     }
     overflow.ApplyTemplate();
     auto itemsControl =
-        FindDescendantByName(overflow, L"OverflowItemsControl", 3)
+        FindDescendantByName(overflow, L"OverflowItemsControl")
             .try_as<Controls::ItemsControl>();
     if (state && state->attached && state->overflow.get() == overflow &&
         itemsControl && state->itemsControl.get() == itemsControl) {
@@ -1370,10 +1414,12 @@ std::shared_ptr<OverflowState> EnsureAttached(void* manager) {
                             return;
                         }
                         auto itemsControl =
-                            FindDescendantByName(overflow, L"OverflowItemsControl", 3)
+                            FindDescendantByName(overflow, L"OverflowItemsControl")
                                 .try_as<Controls::ItemsControl>();
                         if (itemsControl) {
                             Attach(*state, overflow, itemsControl);
+                        } else {
+                            Wh_Log(L"OverflowItemsControl not found");
                         }
                     } catch (...) {
                         Wh_Log(L"Loaded: attach failed");
@@ -1395,15 +1441,20 @@ using OverflowXamlIslandManager_InitializeIfNeeded_t =
 OverflowXamlIslandManager_InitializeIfNeeded_t
     OverflowXamlIslandManager_InitializeIfNeeded_Original;
 void WINAPI OverflowXamlIslandManager_InitializeIfNeeded_Hook(void* pThis) {
-    g_initializingManager = pThis;
-    OverflowXamlIslandManager_InitializeIfNeeded_Original(pThis);
-    g_initializingManager = nullptr;
+    {
+        g_initializingManager = pThis;
+        auto reset = ScopeExit([] { g_initializingManager = nullptr; });
+        OverflowXamlIslandManager_InitializeIfNeeded_Original(pThis);
+    }
 
     try {
         EnsureAttached(pThis);
     } catch (...) {
         Wh_Log(L"InitializeIfNeeded: attach failed");
     }
+
+    g_createdOverflowManager = nullptr;
+    g_createdOverflowInterface = nullptr;
 }
 
 using NotificationAreaOverflow_NotificationAreaOverflow_t =
@@ -1420,6 +1471,9 @@ void* WINAPI NotificationAreaOverflow_NotificationAreaOverflow_Hook(
     if (g_initializingManager) {
         for (size_t offset = 0; offset < 0x80; offset += sizeof(void*)) {
             void* candidate = (BYTE*)pThis + offset;
+            if (!IsReadable(candidate, sizeof(void*))) {
+                break;
+            }
             if (*(void**)candidate == g_overflowInterfaceVftable) {
                 g_createdOverflowManager = g_initializingManager;
                 g_createdOverflowInterface = candidate;
@@ -1522,6 +1576,24 @@ HWND GetOverflowThreadWindow() {
             },
             (LPARAM)&result);
     }
+
+    if (!result) {
+        EnumWindows(
+            [](HWND hWnd, LPARAM lParam) -> BOOL {
+                DWORD processId;
+                WCHAR className[32];
+                if (GetWindowThreadProcessId(hWnd, &processId) &&
+                    processId == GetCurrentProcessId() &&
+                    GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                    _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                    *(HWND*)lParam = hWnd;
+                    return FALSE;
+                }
+                return TRUE;
+            },
+            (LPARAM)&result);
+    }
+
     return result;
 }
 
@@ -1638,30 +1710,44 @@ bool HookSystemTraySymbols(HMODULE module) {
         {
             {LR"(struct guid::guid const winrt::impl::guid_v<struct winrt::SystemTray::IIconContentViewModel>)"},
             &g_iconContentViewModelIid,
+            nullptr,
+            true,
         },
         {
             {LR"(const winrt::impl::produce<struct winrt::SystemTray::implementation::ImageIconContentViewModel,struct winrt::SystemTray::IIconContentViewModel>::`vftable')"},
             &g_imageContentViewModelBaseVftable,
+            nullptr,
+            true,
         },
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::ImageIconContentViewModel,struct winrt::SystemTray::IIconContentViewModel>::get_ToolTipText(void * *))"},
             &g_imageContentViewModel_get_ToolTipText,
+            nullptr,
+            true,
         },
         {
             {LR"(struct guid::guid const winrt::impl::guid_v<struct winrt::SystemTray::IImageIconContentViewModel>)"},
             &g_imageContentViewModelIid,
+            nullptr,
+            true,
         },
         {
             {LR"(const winrt::impl::produce<struct winrt::SystemTray::implementation::ImageIconContentViewModel,struct winrt::SystemTray::IImageIconContentViewModel>::`vftable')"},
             &g_imageContentViewModelVftable,
+            nullptr,
+            true,
         },
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::ImageIconContentViewModel,struct winrt::SystemTray::IImageIconContentViewModel>::get_AutomationPropertyName(void * *))"},
             &g_imageContentViewModel_get_AutomationPropertyName,
+            nullptr,
+            true,
         },
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::ImageIconContentViewModel,struct winrt::SystemTray::IImageIconContentViewModel>::get_IconImageSource(void * *))"},
             &g_imageContentViewModel_get_IconImageSource,
+            nullptr,
+            true,
         },
     };
 
@@ -1730,6 +1816,10 @@ BOOL Wh_ModInit() {
     Wh_Log(L">");
 
     g_settings = LoadSettings();
+    if (g_settings.folders.empty()) {
+        Wh_Log(L"No folder has icons, nothing to do");
+        return FALSE;
+    }
 
     if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
         g_systemTrayModuleHooked = true;
@@ -1802,17 +1892,21 @@ void Wh_ModSettingsChanged() {
     Settings settings = LoadSettings();
 
     HWND hWnd = GetOverflowThreadWindow();
-    if (!hWnd) {
-        g_settings = std::move(settings);
-        return;
-    }
-
-    if (!RunFromWindowThread(
+    if (hWnd && RunFromWindowThread(
         hWnd,
         [settings = std::move(settings)]() mutable {
             if (g_unloading) {
                 return;
             }
+
+            bool glyphsChanged =
+                g_settings.folders.size() != settings.folders.size();
+            for (size_t i = 0; !glyphsChanged && i < settings.folders.size();
+                 i++) {
+                glyphsChanged =
+                    g_settings.folders[i].glyph != settings.folders[i].glyph;
+            }
+
             g_settings = std::move(settings);
             auto states = *g_states;
             for (auto& state : states) {
@@ -1824,7 +1918,9 @@ void Wh_ModSettingsChanged() {
                         Detach(*state);
                         std::erase(*g_states, state);
                     } else if (state->attached) {
-                        ClearTiles(*state);
+                        if (glyphsChanged) {
+                            ClearTiles(*state);
+                        }
                         state->openFolder = -1;
                         Rebuild(*state);
                     }
@@ -1833,6 +1929,9 @@ void Wh_ModSettingsChanged() {
                 }
             }
         })) {
-        Wh_Log(L"Applying settings could not complete");
+        return;
     }
+
+    Wh_Log(L"Applying settings without the overflow thread");
+    g_settings = LoadSettings();
 }
