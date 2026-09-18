@@ -3894,6 +3894,7 @@ class Overlay {
     void Render(float dtSec);
     void NewScene();
     bool Occluded() const { return occluded_; }
+    const RECT& Rect() const { return rect_; }
     // Briefly show what just changed. The overlay is otherwise completely
     // clean, and this is the only text it ever draws.
     void FlashHud();
@@ -4911,36 +4912,32 @@ static void ApplyExecutionState() {
 
 static ID2D1Factory* g_factory = nullptr;
 
-static void ShowOverlays() {
-    if (g_active) {
-        return;
+// The Display setting tells people to identify their screens from this list,
+// so it is written at startup and again whenever the layout changes.
+static void LogDisplays() {
+    std::vector<MonitorEntry> mons = EnumerateMonitors();
+    for (size_t i = 0; i < mons.size(); i++) {
+        Wh_Log(L"Windows display %d: %s [%s], %dx%d at (%d,%d)%s",
+               mons[i].winNum,
+               mons[i].deviceName.empty() ? L"Unknown" : mons[i].deviceName.c_str(),
+               mons[i].device.c_str(),
+               (int)(mons[i].rect.right - mons[i].rect.left),
+               (int)(mons[i].rect.bottom - mons[i].rect.top),
+               (int)mons[i].rect.left, (int)mons[i].rect.top,
+               mons[i].primary ? L" [primary]" : L"");
     }
-    if (!g_factory) {
-        D2D1_FACTORY_OPTIONS opts;
-        ZeroMemory(&opts, sizeof(opts));
-        if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
-                                     kIID_ID2D1Factory, &opts,
-                                     (void**)&g_factory))) {
-            Wh_Log(L"D2D1CreateFactory failed");
-            return;
-        }
-    }
-    if (!g_dwrite) {
-        // Optional: without it the art still runs, just with no readout.
-        if (FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,
-                                       kIID_IDWriteFactory,
-                                       (IUnknown**)&g_dwrite))) {
-            Wh_Log(L"DWriteCreateFactory failed; readout disabled");
-            g_dwrite = nullptr;
-        }
-    }
+}
 
+// Which rectangles the overlay should cover, given the current settings and
+// the displays actually attached. Pulled out of ShowOverlays so the rebuild
+// path can ask the question without tearing anything down to find out.
+static std::vector<RECT> ComputeTargetRects() {
+    std::vector<RECT> targets;
     std::vector<MonitorEntry> mons = EnumerateMonitors();
     if (mons.empty()) {
-        return;
+        return targets;
     }
 
-    std::vector<RECT> targets;
     auto targetRect = [&](const MonitorEntry& m) -> RECT {
         return g_settings.workAreaOnly ? m.work : m.rect;
     };
@@ -4979,6 +4976,59 @@ static void ShowOverlays() {
                 targets.push_back(targetRect(mons[0]));
             }
         }
+    }
+    return targets;
+}
+
+// What the overlays are covering right now.
+static std::vector<RECT> CurrentOverlayRects() {
+    std::vector<RECT> rects;
+    for (size_t i = 0; i < g_overlays.size(); i++) {
+        rects.push_back(g_overlays[i]->Rect());
+    }
+    return rects;
+}
+
+static bool SameRects(const std::vector<RECT>& a, const std::vector<RECT>& b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < a.size(); i++) {
+        if (a[i].left != b[i].left || a[i].top != b[i].top ||
+            a[i].right != b[i].right || a[i].bottom != b[i].bottom) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void ShowOverlays() {
+    if (g_active) {
+        return;
+    }
+    if (!g_factory) {
+        D2D1_FACTORY_OPTIONS opts;
+        ZeroMemory(&opts, sizeof(opts));
+        if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
+                                     kIID_ID2D1Factory, &opts,
+                                     (void**)&g_factory))) {
+            Wh_Log(L"D2D1CreateFactory failed");
+            return;
+        }
+    }
+    if (!g_dwrite) {
+        // Optional: without it the art still runs, just with no readout.
+        if (FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,
+                                       kIID_IDWriteFactory,
+                                       (IUnknown**)&g_dwrite))) {
+            Wh_Log(L"DWriteCreateFactory failed; readout disabled");
+            g_dwrite = nullptr;
+        }
+    }
+
+    std::vector<RECT> targets = ComputeTargetRects();
+    if (targets.empty()) {
+        return;
     }
 
     g_presentImmediately = targets.size() > 1;
@@ -5299,17 +5349,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
 
     LoadSettings();
 
-    std::vector<MonitorEntry> mons = EnumerateMonitors();
-    for (size_t i = 0; i < mons.size(); i++) {
-        Wh_Log(L"Windows display %d: %s [%s], %dx%d at (%d,%d)%s",
-               mons[i].winNum,
-               mons[i].deviceName.empty() ? L"Unknown" : mons[i].deviceName.c_str(),
-               mons[i].device.c_str(),
-               (int)(mons[i].rect.right - mons[i].rect.left),
-               (int)(mons[i].rect.bottom - mons[i].rect.top),
-               (int)mons[i].rect.left, (int)mons[i].rect.top,
-               mons[i].primary ? L" [primary]" : L"");
-    }
+    LogDisplays();
 
     g_toggleEvent = CreateToggleEvent();
     if (!g_toggleEvent) {
@@ -5427,9 +5467,25 @@ static DWORD WINAPI WorkerThread(LPVOID) {
                     // Displays added, removed or resized. Rebuild so the
                     // overlay follows the new geometry rather than sitting at
                     // the old size on a display that may no longer exist.
+                    //
+                    // Only when something actually moved, though. A DPI change
+                    // cannot move these rectangles at all, because the worker
+                    // is per-monitor aware and the targets are already
+                    // physical pixels; nor can a monitor waking, a game
+                    // switching mode and back, or a taskbar toggle with the
+                    // work area unused. This runs for hours, so a piece
+                    // restarting for no visible reason is exactly what gets
+                    // noticed.
                     if (g_active) {
-                        HideOverlays();
-                        ShowOverlays();
+                        // Re-logged because the Display setting tells people
+                        // to identify their screens from this list, which is
+                        // no help if it only ever describes the old layout.
+                        LogDisplays();
+                        if (!SameRects(ComputeTargetRects(),
+                                       CurrentOverlayRects())) {
+                            HideOverlays();
+                            ShowOverlays();
+                        }
                     }
                     continue;
                 }
