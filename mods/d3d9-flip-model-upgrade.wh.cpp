@@ -25,6 +25,12 @@ This mod doesn't target any process by default. In Windhawk, go to the mod's
 "Advanced" tab and scroll down to "Custom process inclusion list". In that box,
 put the filename of the game's `.exe`, then click "Save" and (re)start the game.
 
+**Don't disable, update or change the inclusion list of this mod while a game
+is running.** The game keeps using the Direct3D 9Ex device and the emulated
+textures, which only work with the mod loaded, so it will most likely break or
+crash. Close the game first. Changing the settings is fine, they apply the next
+time the game creates or resets its device.
+
 ## How to verify
 Use [PresentMon](https://github.com/GameTechDev/PresentMon) (or an overlay that
 shows the presentation mode, such as Special K or RTSS). A windowed D3D9 game
@@ -58,7 +64,11 @@ instead.
   games may misbehave or fail to reset their device after a resolution change.
 - D3D9 replacements that don't use the system `d3d9.dll` (DXVK, d3d9on12
   wrappers) bypass this mod entirely.
-- Disabling the mod while a game is running isn't supported; restart the game.
+- A Direct3D 9Ex device is never lost, and presenting can return the success
+  codes `S_PRESENT_OCCLUDED` and `S_PRESENT_MODE_CHANGED`. Games that compare
+  the result with `D3D_OK` may misbehave after Alt+Tab.
+- The flip model can only present to the device window. Games that present the
+  same swap chain to several windows will only draw to one of them.
 - No guarantees of anti-cheat compatibility.
 
 Enable the mod's logging (Advanced → Debug logging) to see exactly what was
@@ -110,10 +120,6 @@ changed and any failure codes.
 #include <mutex>
 #include <string>
 #include <vector>
-
-#ifndef D3DPRESENT_BACK_BUFFERS_MAX_EX
-#define D3DPRESENT_BACK_BUFFERS_MAX_EX 30
-#endif
 
 #ifndef D3DPRESENTFLAG_VIDEO
 #define D3DPRESENTFLAG_VIDEO 0x00000010
@@ -178,7 +184,6 @@ struct {
 
 std::mutex g_hookMutex;
 std::atomic<bool> g_exportsHooked;
-bool g_d3d9Hooked;
 bool g_deviceHooked;
 
 SRWLOCK g_flipDevicesLock = SRWLOCK_INIT;
@@ -240,7 +245,8 @@ bool ShouldUpgrade(const D3DPRESENT_PARAMETERS* pp) {
     return true;
 }
 
-// Returns false if the params are left alone.
+// Returns false if the params are left alone. Whether the flip model was
+// applied is reflected by pp->SwapEffect.
 bool AdjustPresentParams(D3DPRESENT_PARAMETERS* pp) {
     if (!ShouldUpgrade(pp)) {
         return false;
@@ -252,26 +258,23 @@ bool AdjustPresentParams(D3DPRESENT_PARAMETERS* pp) {
            pp->BackBufferCount, pp->MultiSampleType, pp->SwapEffect,
            pp->Windowed, pp->Flags, pp->PresentationInterval);
 
-    if (!g_settings.flipModel) {
-        Wh_Log(L"Flip model disabled, keeping the params");
-        return true;
-    }
-
-    if (!pp->Windowed) {
+    // Only the case with forceBorderless, see ShouldUpgrade.
+    bool madeWindowed = !pp->Windowed;
+    if (madeWindowed) {
         pp->Windowed = TRUE;
         pp->FullScreen_RefreshRateInHz = 0;
     }
 
+    if (!g_settings.flipModel) {
+        Wh_Log(L"Flip model disabled, keeping the swap effect");
+        return madeWindowed;
+    }
+
     pp->SwapEffect = D3DSWAPEFFECT_FLIPEX;
 
-    UINT count = pp->BackBufferCount;
-    if (count < (UINT)g_settings.backBufferCount) {
-        count = g_settings.backBufferCount;
+    if (pp->BackBufferCount < (UINT)g_settings.backBufferCount) {
+        pp->BackBufferCount = g_settings.backBufferCount;
     }
-    if (count > D3DPRESENT_BACK_BUFFERS_MAX_EX) {
-        count = D3DPRESENT_BACK_BUFFERS_MAX_EX;
-    }
-    pp->BackBufferCount = count;
 
     if (pp->MultiSampleType != D3DMULTISAMPLE_NONE) {
         Wh_Log(L"Dropping back buffer MSAA, not supported by FLIPEX");
@@ -340,10 +343,15 @@ void MakeBorderless(HWND hWnd) {
     style |= WS_POPUP;
     SetWindowLongPtrW(hWnd, GWL_STYLE, style);
 
+    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+    exStyle &= ~(WS_EX_CLIENTEDGE | WS_EX_WINDOWEDGE | WS_EX_DLGMODALFRAME |
+                 WS_EX_STATICEDGE);
+    SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle);
+
     const RECT& rc = mi.rcMonitor;
     SetWindowPos(hWnd, HWND_TOP, rc.left, rc.top, rc.right - rc.left,
                  rc.bottom - rc.top,
-                 SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                 SWP_FRAMECHANGED | SWP_NOACTIVATE);
     Wh_Log(L"Made window %p borderless: %dx%d", hWnd, rc.right - rc.left,
            rc.bottom - rc.top);
 }
@@ -359,6 +367,14 @@ HWND GetDeviceWindow(IDirect3DDevice9* dev, const D3DPRESENT_PARAMETERS* pp) {
     return nullptr;
 }
 
+void ApplyFrameLatency(IDirect3DDevice9Ex* dev) {
+    if (g_settings.maxFrameLatency > 0) {
+        HRESULT hr = dev->SetMaximumFrameLatency(g_settings.maxFrameLatency);
+        Wh_Log(L"SetMaximumFrameLatency(%d): 0x%08X",
+               g_settings.maxFrameLatency, hr);
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Device hooks
 
@@ -371,7 +387,7 @@ using ResetEx_t = HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice9Ex*,
                                               D3DDISPLAYMODEEX*);
 ResetEx_t ResetEx_Original;
 
-void ClearBoundTextures();
+void ClearBoundTextures(IDirect3DDevice9* dev);
 
 // mode is only used when useEx is set.
 HRESULT ResetCommon(IDirect3DDevice9* dev,
@@ -388,7 +404,7 @@ HRESULT ResetCommon(IDirect3DDevice9* dev,
     }
 
     // Reset unbinds all textures.
-    ClearBoundTextures();
+    ClearBoundTextures(dev);
 
     D3DPRESENT_PARAMETERS local = *pp;
     bool adjusted = AdjustPresentParams(&local);
@@ -398,12 +414,17 @@ HRESULT ResetCommon(IDirect3DDevice9* dev,
         g_inReset = true;
         hr = callOriginal(&local, nullptr);
         g_inReset = false;
-        Wh_Log(L"Reset%s with FLIPEX: 0x%08X", useEx ? L"Ex" : L"", hr);
+        Wh_Log(L"Reset%s with adjusted params: 0x%08X", useEx ? L"Ex" : L"",
+               hr);
     }
 
+    // dev was verified to be an Ex device.
+    IDirect3DDevice9Ex* devEx = (IDirect3DDevice9Ex*)dev;
+
     if (SUCCEEDED(hr)) {
-        SetFlipDevice(dev, true);
+        SetFlipDevice(dev, local.SwapEffect == D3DSWAPEFFECT_FLIPEX);
         WriteBackPresentParams(pp, local);
+        ApplyFrameLatency(devEx);
         MakeBorderless(GetDeviceWindow(dev, &local));
         return hr;
     }
@@ -413,7 +434,11 @@ HRESULT ResetCommon(IDirect3DDevice9* dev,
     g_inReset = false;
     Wh_Log(L"Reset%s with the game's params: 0x%08X", useEx ? L"Ex" : L"", hr);
     if (SUCCEEDED(hr)) {
-        SetFlipDevice(dev, false);
+        SetFlipDevice(dev, pp->SwapEffect == D3DSWAPEFFECT_FLIPEX);
+        ApplyFrameLatency(devEx);
+        if (pp->Windowed) {
+            MakeBorderless(GetDeviceWindow(dev, pp));
+        }
     }
     return hr;
 }
@@ -515,6 +540,10 @@ bool ConvertManagedPool(IDirect3DDevice9* dev, D3DPOOL* pool) {
     return true;
 }
 
+void EnsureTextureHooks(IDirect3DTexture9* texture);
+void EnsureTextureHooks(IDirect3DCubeTexture9* texture);
+void EnsureTextureHooks(IDirect3DVolumeTexture9* texture);
+
 // create(usage, pool, levels, &texture) calls the original creation function.
 template <typename T, typename CreateFn>
 HRESULT CreateManagedEmulation(UINT levels,
@@ -550,21 +579,16 @@ HRESULT CreateManagedEmulation(UINT levels,
         return hr;
     }
 
+    EnsureTextureHooks(systemTexture);
+
     *texture = systemTexture;
     return hr;
 }
 
-// {85C31227-3DE5-4F00-9B3A-F11AC38C18B5}
-static const GUID kIID_IDirect3DTexture9 = {
-    0x85C31227,
-    0x3DE5,
-    0x4F00,
-    {0x9B, 0x3A, 0xF1, 0x1A, 0xC3, 0x8C, 0x18, 0xB5}};
-
 // Returns the AddRef'd default pool twin of an emulated managed texture.
 IDirect3DBaseTexture9* GetVideoTexture(IDirect3DResource9* texture) {
     IDirect3DBaseTexture9* videoTexture = nullptr;
-    DWORD size = sizeof(videoTexture);
+    DWORD size = sizeof(IDirect3DBaseTexture9*);
     if (FAILED(texture->GetPrivateData(kShadowTextureGuid, &videoTexture,
                                        &size))) {
         return nullptr;
@@ -607,7 +631,7 @@ HRESULT STDMETHODCALLTYPE UpdateSurface_Hook(IDirect3DDevice9* dev,
     IDirect3DSurface9* videoSurface = nullptr;
 
     IDirect3DTexture9* container = nullptr;
-    if (dest && SUCCEEDED(dest->GetContainer(kIID_IDirect3DTexture9,
+    if (dest && SUCCEEDED(dest->GetContainer(__uuidof(IDirect3DTexture9),
                                              (void**)&container))) {
         if (IDirect3DBaseTexture9* videoTexture = GetVideoTexture(container)) {
             DWORD levelCount = container->GetLevelCount();
@@ -637,16 +661,33 @@ HRESULT STDMETHODCALLTYPE UpdateSurface_Hook(IDirect3DDevice9* dev,
     return hr;
 }
 
-// Emulated textures currently bound, AddRef'd. A managed texture is uploaded
-// when it's used for drawing, so binding time is too early: the game may fill
-// the texture after binding it, or keep it bound while refilling it.
+// Emulated textures currently bound, per device. A managed texture is uploaded
+// when it's used for drawing, so it's uploaded when bound, and again before a
+// draw call if the game modified it while it was bound.
+//
+// No references are held for bound textures, as that would keep the device
+// alive. The pointers of released textures may linger, so they are only ever
+// compared, never dereferenced. A texture waiting for upload is referenced, but
+// only until the next draw call.
 struct BoundTexture {
-    IDirect3DBaseTexture9* systemTexture;
-    IDirect3DBaseTexture9* videoTexture;
+    IDirect3DBaseTexture9* systemTexture;  // For comparing only.
+    IDirect3DBaseTexture9* videoTexture;   // For comparing only.
+    IDirect3DBaseTexture9* dirtyTexture;   // systemTexture, AddRef'd.
 };
+
 constexpr int kBoundTextureCount = 16 + 5;
-BoundTexture g_boundTextures[kBoundTextureCount];
-std::atomic<int> g_boundTextureCount;
+
+struct DeviceTextures {
+    IDirect3DDevice9* device;
+    BoundTexture bound[kBoundTextureCount];
+};
+
+SRWLOCK g_deviceTexturesLock = SRWLOCK_INIT;
+std::vector<DeviceTextures> g_deviceTextures;
+std::atomic<int> g_dirtyTextureCount;
+
+// Set while the mod itself uploads a texture, Direct3D may unlock internally.
+thread_local bool g_inTextureUpload;
 
 int BoundTextureIndex(DWORD stage) {
     if (stage < 16) {
@@ -659,42 +700,128 @@ int BoundTextureIndex(DWORD stage) {
     return -1;
 }
 
-// Takes over the videoTexture reference.
-void SetBoundTexture(DWORD stage,
-                     IDirect3DBaseTexture9* systemTexture,
-                     IDirect3DBaseTexture9* videoTexture) {
-    int index = BoundTextureIndex(stage);
-    if (index < 0) {
-        if (videoTexture) {
-            videoTexture->Release();
+// Must be called with g_deviceTexturesLock held.
+DeviceTextures* FindDeviceTextures(IDirect3DDevice9* dev, bool create) {
+    for (auto& deviceTextures : g_deviceTextures) {
+        if (deviceTextures.device == dev) {
+            return &deviceTextures;
         }
+    }
+    if (!create) {
+        return nullptr;
+    }
+    g_deviceTextures.push_back({dev});
+    return &g_deviceTextures.back();
+}
+
+// Must be called with g_deviceTexturesLock held. The returned texture has to
+// be released once the lock is no longer held.
+IDirect3DBaseTexture9* TakeDirtyTexture(BoundTexture& bound) {
+    IDirect3DBaseTexture9* dirtyTexture = bound.dirtyTexture;
+    if (dirtyTexture) {
+        bound.dirtyTexture = nullptr;
+        g_dirtyTextureCount--;
+    }
+    return dirtyTexture;
+}
+
+// texture must be a live texture.
+void MarkTextureDirty(IDirect3DBaseTexture9* texture) {
+    if (g_inTextureUpload) {
         return;
     }
 
-    BoundTexture& bound = g_boundTextures[index];
-    if (bound.systemTexture) {
-        bound.systemTexture->Release();
-        bound.videoTexture->Release();
-        g_boundTextureCount--;
+    AcquireSRWLockExclusive(&g_deviceTexturesLock);
+    for (auto& deviceTextures : g_deviceTextures) {
+        for (auto& bound : deviceTextures.bound) {
+            if (bound.systemTexture == texture && !bound.dirtyTexture) {
+                texture->AddRef();
+                bound.dirtyTexture = texture;
+                g_dirtyTextureCount++;
+            }
+        }
+    }
+    ReleaseSRWLockExclusive(&g_deviceTexturesLock);
+}
+
+// Copies the dirty regions only, fails while the game holds a lock. texture
+// must be a live texture.
+HRESULT UploadTexture(IDirect3DDevice9* dev, IDirect3DBaseTexture9* texture) {
+    IDirect3DBaseTexture9* videoTexture = GetVideoTexture(texture);
+    if (!videoTexture) {
+        return S_OK;
     }
 
-    bound.systemTexture = systemTexture;
-    bound.videoTexture = videoTexture;
-    if (systemTexture) {
-        systemTexture->AddRef();
-        g_boundTextureCount++;
+    g_inTextureUpload = true;
+    HRESULT hr = UpdateTexture_Original(dev, texture, videoTexture);
+    g_inTextureUpload = false;
+    videoTexture->Release();
+
+    if (FAILED(hr)) {
+        static std::atomic<int> logged;
+        if (logged < 20) {
+            logged++;
+            Wh_Log(L"Upload failed: 0x%08X", hr);
+        }
+    }
+    return hr;
+}
+
+// dev == nullptr clears the textures of all devices.
+void ClearBoundTextures(IDirect3DDevice9* dev) {
+    std::vector<IDirect3DBaseTexture9*> dirtyTextures;
+
+    AcquireSRWLockExclusive(&g_deviceTexturesLock);
+    for (auto& deviceTextures : g_deviceTextures) {
+        if (dev && deviceTextures.device != dev) {
+            continue;
+        }
+        for (auto& bound : deviceTextures.bound) {
+            if (auto* dirtyTexture = TakeDirtyTexture(bound)) {
+                dirtyTextures.push_back(dirtyTexture);
+            }
+            bound = {};
+        }
+    }
+    ReleaseSRWLockExclusive(&g_deviceTexturesLock);
+
+    for (auto* dirtyTexture : dirtyTextures) {
+        dirtyTexture->Release();
     }
 }
 
-void ClearBoundTextures() {
-    for (int i = 0; i < kBoundTextureCount; i++) {
-        BoundTexture& bound = g_boundTextures[i];
-        if (bound.systemTexture) {
-            bound.systemTexture->Release();
-            bound.videoTexture->Release();
-            bound = {};
-            g_boundTextureCount--;
+void UploadDirtyTextures(IDirect3DDevice9* dev) {
+    if (!g_dirtyTextureCount) {
+        return;
+    }
+
+    IDirect3DBaseTexture9* dirtyTextures[kBoundTextureCount];
+    int count = 0;
+
+    AcquireSRWLockExclusive(&g_deviceTexturesLock);
+    if (DeviceTextures* deviceTextures = FindDeviceTextures(dev, false)) {
+        for (auto& bound : deviceTextures->bound) {
+            if (auto* dirtyTexture = TakeDirtyTexture(bound)) {
+                dirtyTextures[count++] = dirtyTexture;
+            }
         }
+    }
+    ReleaseSRWLockExclusive(&g_deviceTexturesLock);
+
+    for (int i = 0; i < count; i++) {
+        // The same texture may be bound to several stages.
+        bool uploaded = false;
+        for (int j = 0; j < i; j++) {
+            uploaded = uploaded || dirtyTextures[j] == dirtyTextures[i];
+        }
+        if (!uploaded && FAILED(UploadTexture(dev, dirtyTextures[i]))) {
+            // Most likely still locked by the game.
+            MarkTextureDirty(dirtyTextures[i]);
+        }
+    }
+
+    for (int i = 0; i < count; i++) {
+        dirtyTextures[i]->Release();
     }
 }
 
@@ -707,38 +834,240 @@ HRESULT STDMETHODCALLTYPE SetTexture_Hook(IDirect3DDevice9* dev,
                                           IDirect3DBaseTexture9* texture) {
     IDirect3DBaseTexture9* videoTexture =
         texture ? GetVideoTexture(texture) : nullptr;
-    if (!videoTexture) {
-        SetBoundTexture(stage, nullptr, nullptr);
-        return SetTexture_Original(dev, stage, texture);
+
+    bool uploaded = !videoTexture || SUCCEEDED(UploadTexture(dev, texture));
+    HRESULT hr =
+        SetTexture_Original(dev, stage, videoTexture ? videoTexture : texture);
+
+    int index = BoundTextureIndex(stage);
+    if (index >= 0) {
+        IDirect3DBaseTexture9* dirtyTexture = nullptr;
+
+        AcquireSRWLockExclusive(&g_deviceTexturesLock);
+        if (DeviceTextures* deviceTextures =
+                FindDeviceTextures(dev, videoTexture != nullptr)) {
+            BoundTexture newBound = {texture, videoTexture};
+            if (!videoTexture) {
+                newBound = {};
+                // The game may bind a twin it got from GetTexture, in which
+                // case the texture is still in use.
+                for (auto& bound : deviceTextures->bound) {
+                    if (texture && bound.videoTexture == texture) {
+                        newBound = {bound.systemTexture, bound.videoTexture};
+                        break;
+                    }
+                }
+            }
+
+            BoundTexture& bound = deviceTextures->bound[index];
+            dirtyTexture = TakeDirtyTexture(bound);
+            bound = newBound;
+        }
+        ReleaseSRWLockExclusive(&g_deviceTexturesLock);
+
+        if (dirtyTexture) {
+            dirtyTexture->Release();
+        }
+
+        if (!uploaded) {
+            MarkTextureDirty(texture);
+        }
     }
 
-    HRESULT hr = SetTexture_Original(dev, stage, videoTexture);
-    SetBoundTexture(stage, texture, videoTexture);
+    if (videoTexture) {
+        videoTexture->Release();
+    }
     return hr;
 }
 
-void UploadBoundTextures(IDirect3DDevice9* dev) {
-    if (!g_boundTextureCount) {
+// The game modifying a bound texture is noticed by the following hooks. They
+// are set when the first emulated texture of each type is created.
+
+using TextureUnlockRect_t = HRESULT(STDMETHODCALLTYPE*)(IDirect3DTexture9*,
+                                                        UINT);
+TextureUnlockRect_t TextureUnlockRect_Original;
+HRESULT STDMETHODCALLTYPE TextureUnlockRect_Hook(IDirect3DTexture9* texture,
+                                                 UINT level) {
+    HRESULT hr = TextureUnlockRect_Original(texture, level);
+    MarkTextureDirty(texture);
+    return hr;
+}
+
+using TextureAddDirtyRect_t = HRESULT(STDMETHODCALLTYPE*)(IDirect3DTexture9*,
+                                                          const RECT*);
+TextureAddDirtyRect_t TextureAddDirtyRect_Original;
+HRESULT STDMETHODCALLTYPE TextureAddDirtyRect_Hook(IDirect3DTexture9* texture,
+                                                   const RECT* dirtyRect) {
+    HRESULT hr = TextureAddDirtyRect_Original(texture, dirtyRect);
+    MarkTextureDirty(texture);
+    return hr;
+}
+
+using CubeUnlockRect_t = HRESULT(STDMETHODCALLTYPE*)(IDirect3DCubeTexture9*,
+                                                     D3DCUBEMAP_FACES,
+                                                     UINT);
+CubeUnlockRect_t CubeUnlockRect_Original;
+HRESULT STDMETHODCALLTYPE CubeUnlockRect_Hook(IDirect3DCubeTexture9* texture,
+                                              D3DCUBEMAP_FACES face,
+                                              UINT level) {
+    HRESULT hr = CubeUnlockRect_Original(texture, face, level);
+    MarkTextureDirty(texture);
+    return hr;
+}
+
+using CubeAddDirtyRect_t = HRESULT(STDMETHODCALLTYPE*)(IDirect3DCubeTexture9*,
+                                                       D3DCUBEMAP_FACES,
+                                                       const RECT*);
+CubeAddDirtyRect_t CubeAddDirtyRect_Original;
+HRESULT STDMETHODCALLTYPE CubeAddDirtyRect_Hook(IDirect3DCubeTexture9* texture,
+                                                D3DCUBEMAP_FACES face,
+                                                const RECT* dirtyRect) {
+    HRESULT hr = CubeAddDirtyRect_Original(texture, face, dirtyRect);
+    MarkTextureDirty(texture);
+    return hr;
+}
+
+using VolumeUnlockBox_t = HRESULT(STDMETHODCALLTYPE*)(IDirect3DVolumeTexture9*,
+                                                      UINT);
+VolumeUnlockBox_t VolumeUnlockBox_Original;
+HRESULT STDMETHODCALLTYPE VolumeUnlockBox_Hook(IDirect3DVolumeTexture9* texture,
+                                               UINT level) {
+    HRESULT hr = VolumeUnlockBox_Original(texture, level);
+    MarkTextureDirty(texture);
+    return hr;
+}
+
+using VolumeAddDirtyBox_t = HRESULT(STDMETHODCALLTYPE*)(IDirect3DVolumeTexture9*,
+                                                        const D3DBOX*);
+VolumeAddDirtyBox_t VolumeAddDirtyBox_Original;
+HRESULT STDMETHODCALLTYPE
+VolumeAddDirtyBox_Hook(IDirect3DVolumeTexture9* texture,
+                       const D3DBOX* dirtyBox) {
+    HRESULT hr = VolumeAddDirtyBox_Original(texture, dirtyBox);
+    MarkTextureDirty(texture);
+    return hr;
+}
+
+// D3DX and some games lock the surfaces of a texture instead.
+void MarkSurfaceContainerDirty(IDirect3DSurface9* surface) {
+    if (g_inTextureUpload) {
         return;
     }
 
-    for (int i = 0; i < kBoundTextureCount; i++) {
-        BoundTexture& bound = g_boundTextures[i];
-        if (!bound.systemTexture) {
-            continue;
-        }
-
-        // Copies the dirty regions only, fails while the game holds a lock.
-        HRESULT hr = UpdateTexture_Original(dev, bound.systemTexture,
-                                            bound.videoTexture);
-        if (FAILED(hr)) {
-            static std::atomic<int> logged;
-            if (logged < 20) {
-                logged++;
-                Wh_Log(L"Upload failed: 0x%08X", hr);
-            }
-        }
+    IDirect3DBaseTexture9* container = nullptr;
+    if (SUCCEEDED(surface->GetContainer(__uuidof(IDirect3DBaseTexture9),
+                                        (void**)&container))) {
+        MarkTextureDirty(container);
+        container->Release();
     }
+}
+
+using SurfaceUnlockRect_t = HRESULT(STDMETHODCALLTYPE*)(IDirect3DSurface9*);
+SurfaceUnlockRect_t SurfaceUnlockRect_Original;
+HRESULT STDMETHODCALLTYPE SurfaceUnlockRect_Hook(IDirect3DSurface9* surface) {
+    HRESULT hr = SurfaceUnlockRect_Original(surface);
+    MarkSurfaceContainerDirty(surface);
+    return hr;
+}
+
+using SurfaceReleaseDC_t = HRESULT(STDMETHODCALLTYPE*)(IDirect3DSurface9*, HDC);
+SurfaceReleaseDC_t SurfaceReleaseDC_Original;
+HRESULT STDMETHODCALLTYPE SurfaceReleaseDC_Hook(IDirect3DSurface9* surface,
+                                                HDC hdc) {
+    HRESULT hr = SurfaceReleaseDC_Original(surface, hdc);
+    MarkSurfaceContainerDirty(surface);
+    return hr;
+}
+
+// Vtable slots: 19 LockRect/LockBox, 20 UnlockRect/UnlockBox, 21 AddDirtyRect/
+// AddDirtyBox for the textures; 14 UnlockRect, 16 ReleaseDC for the surface.
+enum {
+    kSlotTextureUnlock = 20,
+    kSlotTextureAddDirty = 21,
+    kSlotSurfaceUnlockRect = 14,
+    kSlotSurfaceReleaseDC = 16,
+};
+
+// Hooks a function unless one of the other texture types, sharing the
+// implementation, got there first.
+std::vector<void*> g_hookedTextureTargets;
+
+template <typename T>
+void SetTextureFunctionHook(void* target, T hook, T* original) {
+    auto& hookedTargets = g_hookedTextureTargets;
+    if (std::find(hookedTargets.begin(), hookedTargets.end(), target) !=
+        hookedTargets.end()) {
+        return;
+    }
+    hookedTargets.push_back(target);
+    WindhawkUtils::SetFunctionHook((T)target, hook, original);
+}
+
+void EnsureTextureHooks(IDirect3DTexture9* texture) {
+    std::lock_guard<std::mutex> guard(g_hookMutex);
+    static bool hooked;
+    if (hooked) {
+        return;
+    }
+    hooked = true;
+
+    void** vtbl = GetVtbl(texture);
+    SetTextureFunctionHook((void*)vtbl[kSlotTextureUnlock],
+                           TextureUnlockRect_Hook, &TextureUnlockRect_Original);
+    SetTextureFunctionHook((void*)vtbl[kSlotTextureAddDirty],
+                           TextureAddDirtyRect_Hook,
+                           &TextureAddDirtyRect_Original);
+
+    IDirect3DSurface9* surface = nullptr;
+    if (SUCCEEDED(texture->GetSurfaceLevel(0, &surface))) {
+        void** surfaceVtbl = GetVtbl(surface);
+        SetTextureFunctionHook((void*)surfaceVtbl[kSlotSurfaceUnlockRect],
+                               SurfaceUnlockRect_Hook,
+                               &SurfaceUnlockRect_Original);
+        SetTextureFunctionHook((void*)surfaceVtbl[kSlotSurfaceReleaseDC],
+                               SurfaceReleaseDC_Hook,
+                               &SurfaceReleaseDC_Original);
+        surface->Release();
+    }
+
+    Wh_ApplyHookOperations();
+    Wh_Log(L"Texture hooks installed");
+}
+
+void EnsureTextureHooks(IDirect3DCubeTexture9* texture) {
+    std::lock_guard<std::mutex> guard(g_hookMutex);
+    static bool hooked;
+    if (hooked) {
+        return;
+    }
+    hooked = true;
+
+    void** vtbl = GetVtbl(texture);
+    SetTextureFunctionHook((void*)vtbl[kSlotTextureUnlock], CubeUnlockRect_Hook,
+                           &CubeUnlockRect_Original);
+    SetTextureFunctionHook((void*)vtbl[kSlotTextureAddDirty],
+                           CubeAddDirtyRect_Hook, &CubeAddDirtyRect_Original);
+
+    Wh_ApplyHookOperations();
+    Wh_Log(L"Cube texture hooks installed");
+}
+
+void EnsureTextureHooks(IDirect3DVolumeTexture9* texture) {
+    std::lock_guard<std::mutex> guard(g_hookMutex);
+    static bool hooked;
+    if (hooked) {
+        return;
+    }
+    hooked = true;
+
+    void** vtbl = GetVtbl(texture);
+    SetTextureFunctionHook((void*)vtbl[kSlotTextureUnlock],
+                           VolumeUnlockBox_Hook, &VolumeUnlockBox_Original);
+    SetTextureFunctionHook((void*)vtbl[kSlotTextureAddDirty],
+                           VolumeAddDirtyBox_Hook, &VolumeAddDirtyBox_Original);
+
+    Wh_ApplyHookOperations();
+    Wh_Log(L"Volume texture hooks installed");
 }
 
 using DrawPrimitive_t = HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice9*,
@@ -750,7 +1079,7 @@ HRESULT STDMETHODCALLTYPE DrawPrimitive_Hook(IDirect3DDevice9* dev,
                                              D3DPRIMITIVETYPE type,
                                              UINT startVertex,
                                              UINT primitiveCount) {
-    UploadBoundTextures(dev);
+    UploadDirtyTextures(dev);
     return DrawPrimitive_Original(dev, type, startVertex, primitiveCount);
 }
 
@@ -769,7 +1098,7 @@ HRESULT STDMETHODCALLTYPE DrawIndexedPrimitive_Hook(IDirect3DDevice9* dev,
                                                     UINT numVertices,
                                                     UINT startIndex,
                                                     UINT primitiveCount) {
-    UploadBoundTextures(dev);
+    UploadDirtyTextures(dev);
     return DrawIndexedPrimitive_Original(dev, type, baseVertexIndex,
                                          minVertexIndex, numVertices,
                                          startIndex, primitiveCount);
@@ -786,7 +1115,7 @@ HRESULT STDMETHODCALLTYPE DrawPrimitiveUP_Hook(IDirect3DDevice9* dev,
                                                UINT primitiveCount,
                                                const void* vertexData,
                                                UINT vertexStride) {
-    UploadBoundTextures(dev);
+    UploadDirtyTextures(dev);
     return DrawPrimitiveUP_Original(dev, type, primitiveCount, vertexData,
                                     vertexStride);
 }
@@ -811,7 +1140,7 @@ DrawIndexedPrimitiveUP_Hook(IDirect3DDevice9* dev,
                             D3DFORMAT indexDataFormat,
                             const void* vertexData,
                             UINT vertexStride) {
-    UploadBoundTextures(dev);
+    UploadDirtyTextures(dev);
     return DrawIndexedPrimitiveUP_Original(dev, type, minVertexIndex,
                                            numVertices, primitiveCount,
                                            indexData, indexDataFormat,
@@ -1021,53 +1350,60 @@ void EnsureDeviceHooks(IDirect3DDevice9Ex* dev) {
     g_deviceHooked = true;
 
     void** vtbl = GetVtbl(dev);
-    Wh_SetFunctionHook(vtbl[kSlotDeviceQueryInterface],
-                       (void*)DeviceQueryInterface_Hook,
-                       (void**)&DeviceQueryInterface_Original);
-    Wh_SetFunctionHook(vtbl[kSlotReset], (void*)Reset_Hook,
-                       (void**)&Reset_Original);
-    Wh_SetFunctionHook(vtbl[kSlotPresent], (void*)Present_Hook,
-                       (void**)&Present_Original);
-    Wh_SetFunctionHook(vtbl[kSlotUpdateSurface], (void*)UpdateSurface_Hook,
-                       (void**)&UpdateSurface_Original);
-    Wh_SetFunctionHook(vtbl[kSlotUpdateTexture], (void*)UpdateTexture_Hook,
-                       (void**)&UpdateTexture_Original);
-    Wh_SetFunctionHook(vtbl[kSlotSetTexture], (void*)SetTexture_Hook,
-                       (void**)&SetTexture_Original);
-    Wh_SetFunctionHook(vtbl[kSlotDrawPrimitive], (void*)DrawPrimitive_Hook,
-                       (void**)&DrawPrimitive_Original);
-    Wh_SetFunctionHook(vtbl[kSlotDrawIndexedPrimitive],
-                       (void*)DrawIndexedPrimitive_Hook,
-                       (void**)&DrawIndexedPrimitive_Original);
-    Wh_SetFunctionHook(vtbl[kSlotDrawPrimitiveUP], (void*)DrawPrimitiveUP_Hook,
-                       (void**)&DrawPrimitiveUP_Original);
-    Wh_SetFunctionHook(vtbl[kSlotDrawIndexedPrimitiveUP],
-                       (void*)DrawIndexedPrimitiveUP_Hook,
-                       (void**)&DrawIndexedPrimitiveUP_Original);
-    Wh_SetFunctionHook(vtbl[kSlotCreateTexture], (void*)CreateTexture_Hook,
-                       (void**)&CreateTexture_Original);
-    Wh_SetFunctionHook(vtbl[kSlotCreateVolumeTexture],
-                       (void*)CreateVolumeTexture_Hook,
-                       (void**)&CreateVolumeTexture_Original);
-    Wh_SetFunctionHook(vtbl[kSlotCreateCubeTexture],
-                       (void*)CreateCubeTexture_Hook,
-                       (void**)&CreateCubeTexture_Original);
-    Wh_SetFunctionHook(vtbl[kSlotCreateVertexBuffer],
-                       (void*)CreateVertexBuffer_Hook,
-                       (void**)&CreateVertexBuffer_Original);
-    Wh_SetFunctionHook(vtbl[kSlotCreateIndexBuffer],
-                       (void*)CreateIndexBuffer_Hook,
-                       (void**)&CreateIndexBuffer_Original);
-    Wh_SetFunctionHook(vtbl[kSlotPresentEx], (void*)PresentEx_Hook,
-                       (void**)&PresentEx_Original);
-    Wh_SetFunctionHook(vtbl[kSlotResetEx], (void*)ResetEx_Hook,
-                       (void**)&ResetEx_Original);
+    WindhawkUtils::SetFunctionHook(
+        (DeviceQueryInterface_t)vtbl[kSlotDeviceQueryInterface],
+        DeviceQueryInterface_Hook, &DeviceQueryInterface_Original);
+    WindhawkUtils::SetFunctionHook((Reset_t)vtbl[kSlotReset], Reset_Hook,
+                                   &Reset_Original);
+    WindhawkUtils::SetFunctionHook((Present_t)vtbl[kSlotPresent], Present_Hook,
+                                   &Present_Original);
+    WindhawkUtils::SetFunctionHook(
+        (UpdateSurface_t)vtbl[kSlotUpdateSurface],
+        UpdateSurface_Hook, &UpdateSurface_Original);
+    WindhawkUtils::SetFunctionHook(
+        (UpdateTexture_t)vtbl[kSlotUpdateTexture],
+        UpdateTexture_Hook, &UpdateTexture_Original);
+    WindhawkUtils::SetFunctionHook(
+        (SetTexture_t)vtbl[kSlotSetTexture],
+        SetTexture_Hook, &SetTexture_Original);
+    WindhawkUtils::SetFunctionHook(
+        (DrawPrimitive_t)vtbl[kSlotDrawPrimitive],
+        DrawPrimitive_Hook, &DrawPrimitive_Original);
+    WindhawkUtils::SetFunctionHook(
+        (DrawIndexedPrimitive_t)vtbl[kSlotDrawIndexedPrimitive],
+        DrawIndexedPrimitive_Hook, &DrawIndexedPrimitive_Original);
+    WindhawkUtils::SetFunctionHook(
+        (DrawPrimitiveUP_t)vtbl[kSlotDrawPrimitiveUP],
+        DrawPrimitiveUP_Hook, &DrawPrimitiveUP_Original);
+    WindhawkUtils::SetFunctionHook(
+        (DrawIndexedPrimitiveUP_t)vtbl[kSlotDrawIndexedPrimitiveUP],
+        DrawIndexedPrimitiveUP_Hook, &DrawIndexedPrimitiveUP_Original);
+    WindhawkUtils::SetFunctionHook(
+        (CreateTexture_t)vtbl[kSlotCreateTexture],
+        CreateTexture_Hook, &CreateTexture_Original);
+    WindhawkUtils::SetFunctionHook(
+        (CreateVolumeTexture_t)vtbl[kSlotCreateVolumeTexture],
+        CreateVolumeTexture_Hook, &CreateVolumeTexture_Original);
+    WindhawkUtils::SetFunctionHook(
+        (CreateCubeTexture_t)vtbl[kSlotCreateCubeTexture],
+        CreateCubeTexture_Hook, &CreateCubeTexture_Original);
+    WindhawkUtils::SetFunctionHook(
+        (CreateVertexBuffer_t)vtbl[kSlotCreateVertexBuffer],
+        CreateVertexBuffer_Hook, &CreateVertexBuffer_Original);
+    WindhawkUtils::SetFunctionHook(
+        (CreateIndexBuffer_t)vtbl[kSlotCreateIndexBuffer],
+        CreateIndexBuffer_Hook, &CreateIndexBuffer_Original);
+    WindhawkUtils::SetFunctionHook(
+        (PresentEx_t)vtbl[kSlotPresentEx],
+        PresentEx_Hook, &PresentEx_Original);
+    WindhawkUtils::SetFunctionHook((ResetEx_t)vtbl[kSlotResetEx], ResetEx_Hook,
+                                   &ResetEx_Original);
 
     IDirect3DSwapChain9* swapChain = nullptr;
     if (SUCCEEDED(dev->GetSwapChain(0, &swapChain))) {
-        Wh_SetFunctionHook(GetVtbl(swapChain)[kSlotSwapChainPresent],
-                           (void*)SwapChainPresent_Hook,
-                           (void**)&SwapChainPresent_Original);
+        WindhawkUtils::SetFunctionHook(
+            (SwapChainPresent_t)GetVtbl(swapChain)[kSlotSwapChainPresent],
+            SwapChainPresent_Hook, &SwapChainPresent_Original);
         swapChain->Release();
     }
 
@@ -1115,21 +1451,14 @@ HRESULT STDMETHODCALLTYPE CreateDeviceEx_Hook(IDirect3D9Ex* d3d,
     if (adjusted) {
         hr = CreateDeviceEx_Original(d3d, adapter, deviceType, focusWindow,
                                      behaviorFlags, &local, nullptr, device);
-        Wh_Log(L"CreateDeviceEx with FLIPEX: 0x%08X", hr);
+        Wh_Log(L"CreateDeviceEx with adjusted params: 0x%08X", hr);
     }
 
     if (SUCCEEDED(hr)) {
         EnsureDeviceHooks(*device);
-        SetFlipDevice(*device, true);
+        SetFlipDevice(*device, local.SwapEffect == D3DSWAPEFFECT_FLIPEX);
         WriteBackPresentParams(pp, local);
-
-        if (g_settings.maxFrameLatency > 0) {
-            HRESULT hrLatency =
-                (*device)->SetMaximumFrameLatency(g_settings.maxFrameLatency);
-            Wh_Log(L"SetMaximumFrameLatency(%d): 0x%08X",
-                   g_settings.maxFrameLatency, hrLatency);
-        }
-
+        ApplyFrameLatency(*device);
         MakeBorderless(local.hDeviceWindow ? local.hDeviceWindow : focusWindow);
     } else {
         hr = CreateDeviceEx_Original(d3d, adapter, deviceType, focusWindow,
@@ -1138,7 +1467,13 @@ HRESULT STDMETHODCALLTYPE CreateDeviceEx_Hook(IDirect3D9Ex* d3d,
         if (SUCCEEDED(hr) && device && *device) {
             // Still an Ex device, the managed pool conversion is needed.
             EnsureDeviceHooks(*device);
-            SetFlipDevice(*device, false);
+            SetFlipDevice(*device,
+                          pp && pp->SwapEffect == D3DSWAPEFFECT_FLIPEX);
+            ApplyFrameLatency(*device);
+            if (pp && pp->Windowed) {
+                MakeBorderless(pp->hDeviceWindow ? pp->hDeviceWindow
+                                                 : focusWindow);
+            }
         }
     }
 
@@ -1204,68 +1539,78 @@ HRESULT STDMETHODCALLTYPE CreateDevice_Hook(IDirect3D9* d3d,
         return callOriginal();
     }
 
-    if (!IsFlipDevice(deviceEx)) {
+    if (g_settings.flipModel && !IsFlipDevice(deviceEx)) {
         // FLIPEX was refused, no reason to keep the Ex device.
         Wh_Log(L"FLIPEX refused, creating a regular device");
         deviceEx->Release();
         return callOriginal();
     }
 
-    Wh_Log(L"CreateDevice upgraded to D3D9Ex + FLIPEX: %p", deviceEx);
+    Wh_Log(L"CreateDevice upgraded to D3D9Ex%s: %p",
+           IsFlipDevice(deviceEx) ? L" + FLIPEX" : L"", deviceEx);
     *device = deviceEx;
     return hr;
 }
 
-// Must be called with g_hookMutex held.
-void HookD3D9Vtbl(void** vtbl, bool isEx) {
-    void* createDevice = vtbl[kSlotCreateDevice];
+// Must be called with g_hookMutex held. Returns true if a hook was set.
+bool HookD3D9Vtbl(void** vtbl, bool isEx) {
+    bool hooked = false;
 
-    static void* hookedCreateDevice[2];
+    auto createDevice = (CreateDevice_t)vtbl[kSlotCreateDevice];
+
+    static CreateDevice_t hookedCreateDevice[2];
     if (createDevice != hookedCreateDevice[0] &&
         createDevice != hookedCreateDevice[1]) {
         if (!hookedCreateDevice[0]) {
             hookedCreateDevice[0] = createDevice;
-            CreateDevice_t hook = CreateDevice_Hook<0>;
-            Wh_SetFunctionHook(createDevice, (void*)hook,
-                               (void**)&CreateDevice_Original[0]);
+            WindhawkUtils::SetFunctionHook(createDevice, CreateDevice_Hook<0>,
+                                           &CreateDevice_Original[0]);
+            hooked = true;
         } else if (!hookedCreateDevice[1]) {
             hookedCreateDevice[1] = createDevice;
-            CreateDevice_t hook = CreateDevice_Hook<1>;
-            Wh_SetFunctionHook(createDevice, (void*)hook,
-                               (void**)&CreateDevice_Original[1]);
+            WindhawkUtils::SetFunctionHook(createDevice, CreateDevice_Hook<1>,
+                                           &CreateDevice_Original[1]);
+            hooked = true;
         }
     }
 
-    if (isEx && !CreateDeviceEx_Original) {
-        Wh_SetFunctionHook(vtbl[kSlotCreateDeviceEx],
-                           (void*)CreateDeviceEx_Hook,
-                           (void**)&CreateDeviceEx_Original);
+    static bool createDeviceExHooked;
+    if (isEx && !createDeviceExHooked) {
+        createDeviceExHooked = true;
+        WindhawkUtils::SetFunctionHook(
+            (CreateDeviceEx_t)vtbl[kSlotCreateDeviceEx], CreateDeviceEx_Hook,
+            &CreateDeviceEx_Original);
+        hooked = true;
     }
+
+    return hooked;
 }
 
+// Called for every object, as the Ex and non-Ex ones may differ.
 void EnsureD3D9Hooks(IDirect3D9* d3d, bool isEx) {
     std::lock_guard<std::mutex> guard(g_hookMutex);
-    if (g_d3d9Hooked) {
-        return;
-    }
-    g_d3d9Hooked = true;
 
-    HookD3D9Vtbl(GetVtbl(d3d), isEx);
+    bool hooked = HookD3D9Vtbl(GetVtbl(d3d), isEx);
 
-    if (!isEx) {
+    static bool exObjectTried;
+    if (!isEx && !exObjectTried) {
+        exObjectTried = true;
+
         // A throwaway Ex object for the CreateDeviceEx address.
         IDirect3D9Ex* d3dEx = nullptr;
         HRESULT hr = Direct3DCreate9Ex_Original(D3D_SDK_VERSION, &d3dEx);
         if (SUCCEEDED(hr) && d3dEx) {
-            HookD3D9Vtbl(GetVtbl(d3dEx), true);
+            hooked = HookD3D9Vtbl(GetVtbl(d3dEx), true) || hooked;
             d3dEx->Release();
         } else {
             Wh_Log(L"Direct3DCreate9Ex failed (0x%08X), can't upgrade", hr);
         }
     }
 
-    Wh_ApplyHookOperations();
-    Wh_Log(L"IDirect3D9 hooks installed");
+    if (hooked) {
+        Wh_ApplyHookOperations();
+        Wh_Log(L"IDirect3D9 hooks installed");
+    }
 }
 
 IDirect3D9* WINAPI Direct3DCreate9_Hook(UINT sdkVersion) {
@@ -1369,14 +1714,13 @@ void LoadSettings() {
     int count = Wh_GetIntSetting(L"backBufferCount");
     g_settings.backBufferCount = count < 2 ? 2 : count > 8 ? 8 : count;
 
-    PCWSTR vsync = Wh_GetStringSetting(L"vsync");
+    auto vsync = WindhawkUtils::StringSetting::make(L"vsync");
     g_settings.vsync = VSyncMode::unchanged;
     if (wcscmp(vsync, L"on") == 0) {
         g_settings.vsync = VSyncMode::on;
     } else if (wcscmp(vsync, L"off") == 0) {
         g_settings.vsync = VSyncMode::off;
     }
-    Wh_FreeStringSetting(vsync);
 
     g_settings.forceBorderless = Wh_GetIntSetting(L"forceBorderless");
 
@@ -1398,6 +1742,11 @@ BOOL Wh_ModInit() {
     HMODULE kernelBaseModule = GetModuleHandleW(L"kernelbase.dll");
     auto pKernelBaseLoadLibraryExW = (LoadLibraryExW_t)GetProcAddress(
         kernelBaseModule, "LoadLibraryExW");
+    if (!pKernelBaseLoadLibraryExW) {
+        Wh_Log(L"LoadLibraryExW not found");
+        return FALSE;
+    }
+
     WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
                                        LoadLibraryExW_Hook,
                                        &LoadLibraryExW_Original);
@@ -1410,6 +1759,13 @@ void Wh_ModAfterInit() {
     if (HookD3D9ExportsIfLoaded()) {
         Wh_ApplyHookOperations();
     }
+}
+
+void Wh_ModUninit() {
+    Wh_Log(L">");
+
+    // Textures waiting for upload are referenced.
+    ClearBoundTextures(nullptr);
 }
 
 void Wh_ModSettingsChanged() {
