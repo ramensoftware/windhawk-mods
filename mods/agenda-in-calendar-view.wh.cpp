@@ -1,4 +1,4 @@
-﻿// ==WindhawkMod==
+// ==WindhawkMod==
 // @id              agenda-in-calendar-view
 // @name            Agenda in Calendar View
 // @description     Show .ics events in the calendar view in the Notification Centre like in Windows 10
@@ -1480,25 +1480,26 @@ wuxm::Brush GetCardBorderBrush() {
 
 
 namespace {
-    wuxc::Grid m_rootGrid{nullptr};
-    wuxc::Grid m_headerGrid{nullptr};
-    wuxc::Button m_prevDayButton{nullptr};
-    wuxc::Button m_nextDayButton{nullptr};
-    wuxi::KeyboardAccelerator m_prevDayAccel{nullptr};
-    wuxi::KeyboardAccelerator m_nextDayAccel{nullptr};
-    wuxc::Button m_refreshButton{nullptr};
-    wuxc::CalendarDatePicker m_datePicker{nullptr};
-    wuxc::ScrollViewer m_eventsScrollViewer{nullptr};
-    wuxc::ItemsControl m_itemsControl{nullptr};
+    [[clang::no_destroy]] wuxc::Grid m_rootGrid{nullptr};
+    [[clang::no_destroy]] wuxc::Grid m_headerGrid{nullptr};
+    [[clang::no_destroy]] wuxc::Button m_prevDayButton{nullptr};
+    [[clang::no_destroy]] wuxc::Button m_nextDayButton{nullptr};
+    [[clang::no_destroy]] wuxi::KeyboardAccelerator m_prevDayAccel{nullptr};
+    [[clang::no_destroy]] wuxi::KeyboardAccelerator m_nextDayAccel{nullptr};
+    [[clang::no_destroy]] wuxc::Button m_refreshButton{nullptr};
+    [[clang::no_destroy]] wuxc::CalendarDatePicker m_datePicker{nullptr};
+    [[clang::no_destroy]] wuxc::ScrollViewer m_eventsScrollViewer{nullptr};
+    [[clang::no_destroy]] wuxc::ItemsControl m_itemsControl{nullptr};
     SYSTEMTIME m_currentFilterDate{};
     winrt::event_token m_dateChangedToken{};
     winrt::event_token m_prevBtnToken{};
     winrt::event_token m_nextBtnToken{};
     winrt::event_token m_refreshBtnToken{};
-    wux::FrameworkElement m_focusSessionControl{nullptr};
+    [[clang::no_destroy]] wux::FrameworkElement m_focusSessionControl{nullptr};
     int64_t m_focusSessionVisibilityToken{0};
-    wuxc::ScrollViewer m_hostScrollViewer{nullptr};
-    winrt::Windows::Foundation::IInspectable m_originalCalendarContent{nullptr};
+    [[clang::no_destroy]] wuxc::ScrollViewer m_hostScrollViewer{nullptr};
+    [[clang::no_destroy]] winrt::Windows::Foundation::IInspectable m_originalCalendarContent{nullptr};
+
     wuxc::ScrollBarVisibility m_originalVerticalScrollBarVisibility{wuxc::ScrollBarVisibility::Auto};
     wuxc::ScrollBarVisibility m_originalHorizontalScrollBarVisibility{wuxc::ScrollBarVisibility::Disabled};
     wux::Visibility m_originalFocusSessionVisibility{wux::Visibility::Visible};
@@ -2064,9 +2065,9 @@ void WalkVisualTree(winrt::Windows::UI::Xaml::DependencyObject const& root) {
             auto name = fe.Name();
             if (name == L"CalendarControlScrollViewer") {
                 if (auto scrollViewer = fe.try_as<wuxc::ScrollViewer>()) {
-                    if (!m_rootGrid) ReplaceCalendarContent(scrollViewer);
+                    if (scrollViewer != m_hostScrollViewer) ReplaceCalendarContent(scrollViewer);
                 }
-            } else if (name == L"FocusSessionControl" || winrt::get_class_name(fe) == L"ActionCenter.FocusSessionControl") {
+            } else if (name == L"FocusSessionControl" || (!m_focusSessionControl && winrt::get_class_name(fe) == L"ActionCenter.FocusSessionControl")) {
                 HandleFocusSessionControl(fe);
             }
         }
@@ -2245,6 +2246,63 @@ void OnCalendarOpened() {
 }
 using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
 
+bool RunFromWindowThreadViaPostMessage(HWND hWnd,
+                                       RunFromWindowThreadProc_t proc,
+                                       PVOID procParam) {
+    static const UINT runFromWindowThreadRegisteredMsgViaPostMessage =
+        RegisterWindowMessage(
+            L"Windhawk_RunFromWindowThreadViaPostMessage_" WH_MOD_ID);
+
+    struct RUN_FROM_WINDOW_THREAD_PARAM {
+        RunFromWindowThreadProc_t proc;
+        PVOID procParam;
+        HHOOK hook;
+    };
+
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (dwThreadId == 0) {
+        return false;
+    }
+
+    HHOOK hook = SetWindowsHookEx(
+        WH_GETMESSAGE,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION && wParam == PM_REMOVE) {
+                MSG* msg = (MSG*)lParam;
+                if (msg->message ==
+                    runFromWindowThreadRegisteredMsgViaPostMessage) {
+                    auto* param = (RUN_FROM_WINDOW_THREAD_PARAM*)msg->lParam;
+                    if (param) {
+                        param->proc(param->procParam);
+                        UnhookWindowsHookEx(param->hook);
+                        delete param;
+                        msg->lParam = 0;
+                    }
+                }
+            }
+
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, dwThreadId);
+    if (!hook) {
+        return false;
+    }
+
+    auto* param = new RUN_FROM_WINDOW_THREAD_PARAM{
+        .proc = proc,
+        .procParam = procParam,
+        .hook = hook,
+    };
+    if (!PostMessage(hWnd, runFromWindowThreadRegisteredMsgViaPostMessage, 0,
+                     (LPARAM)param)) {
+        UnhookWindowsHookEx(hook);
+        delete param;
+        return false;
+    }
+
+    return true;
+}
+
 bool RunFromWindowThread(HWND hWnd,
                          RunFromWindowThreadProc_t proc,
                          PVOID procParam) {
@@ -2348,10 +2406,12 @@ void OnWindowCreated(HWND hWnd, LPCWSTR lpClassName, PCSTR funcName) {
         Wh_Log(L"Initializing - Created core window: %08X via %S",
                (DWORD)(ULONG_PTR)hWnd, funcName);
 
-        SetTimer(hWnd, 1, 50, [](HWND hWnd, UINT, UINT_PTR idEvent, DWORD) {
-            KillTimer(hWnd, idEvent);
-            RegisterCoreWindowEvents();
-        });
+        RunFromWindowThreadViaPostMessage(
+            hWnd,
+            [](PVOID) {
+                RegisterCoreWindowEvents();
+            },
+            nullptr);
     }
 }
 
