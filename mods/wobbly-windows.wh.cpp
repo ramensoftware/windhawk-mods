@@ -8,7 +8,7 @@
 // @include         dwm.exe
 // @architecture    x86-64
 // @compilerOptions -lwevtapi
-// @license         GPL-2.0-or-later
+// @license         GPL-3.0-only
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -46,6 +46,9 @@ initialize instead of using unverified addresses.
   Try minimizing and restoring or reopening the affected window to recover.
 * Some windows may show blur, ghosting, or temporary artifacts along their thin borders during wobble animations.
 These effects can be more noticeable on high-refresh-rate displays.
+* Snap detection intentionally uses permissive geometry checks to support custom
+  layouts such as PowerToys FancyZones, rather than only standard Windows Snap zones.
+  An unsnapped window placed close to a work-area corner may also trigger a snap wobble.
 
 ## Feedback
 
@@ -53,7 +56,17 @@ If you found a reproducible issue or need help, open an issue in the [GitHub rep
 
 ## Credits
 
-The physics presets and edge-locking behavior are based on KDE Plasma/KWin's Wobbly Windows effect.
+* The physics presets and edge-locking behavior are based on
+  [KDE Plasma/KWin's Wobbly Windows effect](https://invent.kde.org/plasma/kwin/-/tree/master/src/plugins/wobblywindows).
+* The Dwminit crash-loop guard and the `CWindowData::IsGhostWindow`-based HWND-offset
+  discovery draw on [Custom Window Corner Radius](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/custom-corner-radius.wh.cpp)
+  by m417z and contributors, published under GPLv3.
+
+## License
+
+This mod is distributed under the [GNU General Public License, version 3](https://www.gnu.org/licenses/gpl-3.0.html)
+(`GPL-3.0-only`). GPLv3 is used to accommodate the GPLv3-derived code credited above;
+the combined mod is not offered under GPLv2.
 */
 // ==/WindhawkModReadme==
 
