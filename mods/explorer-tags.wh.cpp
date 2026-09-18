@@ -2,7 +2,7 @@
 // @id              explorer-tags
 // @name            Explorer Tags
 // @description     Colored tags panel at the bottom of File Explorer's navigation pane, plus a Tags submenu in the file context menu
-// @version         0.5.1
+// @version         0.5.3
 // @author          buedgik
 // @github          https://github.com/buedgik
 // @homepage        https://github.com/buedgik/explorer-tags
@@ -316,8 +316,11 @@ void LoadSettings() {
         size_t slash = dbFolder.rfind(L'\\');
         dbFolder = slash == std::wstring::npos ? L"" : dbFolder.substr(0, slash);
         std::wstring prefix = root + L"\\";
-        bool holdsOwnRecord = !dbFolder.empty() && dbFolder.size() > prefix.size() &&
-                              _wcsnicmp(dbFolder.c_str(), prefix.c_str(), prefix.size()) == 0;
+        bool holdsOwnRecord =
+            !dbFolder.empty() &&
+            (_wcsicmp(dbFolder.c_str(), root.c_str()) == 0 ||
+             (dbFolder.size() > prefix.size() &&
+              _wcsnicmp(dbFolder.c_str(), prefix.c_str(), prefix.size()) == 0));
         WCHAR profile[MAX_PATH * 2];
         DWORD profileLen = ExpandEnvironmentStringsW(L"%USERPROFILE%", profile, ARRAYSIZE(profile));
         bool isProfile = profileLen > 0 && profileLen <= ARRAYSIZE(profile) &&
@@ -1440,8 +1443,16 @@ HANDLE WatchRoot(const std::wstring& root) {
 // anything COM marshals into it, and both StopWorker and unloading wait on
 // this thread.
 DWORD WaitPumping(DWORD count, const HANDLE* handles, DWORD timeout) {
+    ULONGLONG start = GetTickCount64();
     while (true) {
-        DWORD r = MsgWaitForMultipleObjects(count, handles, FALSE, timeout, QS_ALLINPUT);
+        // What is left of the deadline, not the whole of it again: messages
+        // arriving in a stream would otherwise keep pushing it back.
+        DWORD remaining = timeout;
+        if (timeout != INFINITE) {
+            ULONGLONG elapsed = GetTickCount64() - start;
+            remaining = elapsed >= timeout ? 0 : (DWORD)(timeout - elapsed);
+        }
+        DWORD r = MsgWaitForMultipleObjects(count, handles, FALSE, remaining, QS_ALLINPUT);
         if (r != WAIT_OBJECT_0 + count) {
             return r;
         }
@@ -1449,6 +1460,9 @@ DWORD WaitPumping(DWORD count, const HANDLE* handles, DWORD timeout) {
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
+        }
+        if (timeout != INFINITE && GetTickCount64() - start >= timeout) {
+            return WAIT_TIMEOUT;
         }
     }
 }
@@ -1545,6 +1559,14 @@ DWORD WINAPI WorkerThread(LPVOID) {
                     break;
             }
         }
+        // Work done while there was nothing to watch (a first tag on a clean
+        // machine): arm the watch now and sync, otherwise the marker that
+        // makes "delete the shortcut to untag" work wouldn't be written until
+        // the next poll.
+        if (!items.empty() && change == INVALID_HANDLE_VALUE) {
+            change = WatchRoot(root);
+            sync = sync || change != INVALID_HANDLE_VALUE;
+        }
         if (sync && !Stopping()) {
             SyncAll();
         }
@@ -1597,6 +1619,7 @@ struct Panel {
     std::wstring currentFolder;  // folder shown in the tab, for the open tag row
     std::wstring pendingOpen;    // tag folder to open once the worker made it
     bool pendingOpenNewWindow = false;
+    ULONGLONG pendingOpenAt = 0;
     int hot = -1;
     int pressed = -1;
     int dropHot = -1;
@@ -1835,6 +1858,9 @@ void OpenTag(Panel* p, int index, bool newWindow) {
         return;
     }
     HWND panelWnd = p->wnd;
+    // This click replaces any earlier one still waiting for its folder:
+    // otherwise the old one would open on top of this one when it arrives.
+    p->pendingOpen.clear();
     std::wstring folder = s->root + L"\\" + s->tags[index].folderName;
 
     // Not one disk call on this thread: creating the folder here froze the
@@ -1843,6 +1869,7 @@ void OpenTag(Panel* p, int index, bool newWindow) {
     // when the answer comes back.
     p->pendingOpen = folder;
     p->pendingOpenNewWindow = newWindow;
+    p->pendingOpenAt = GetTickCount64();
     QueueEnsureFolder(s->tags[index].name);
 
     // Whether the folder exists is the worker's last word on it, which can be
@@ -1863,7 +1890,11 @@ void OpenTag(Panel* p, int index, bool newWindow) {
         }
     }
     if (opened) {
-        p->pendingOpen.clear();
+        // Navigate and ShellExecute run messages: the panel can have been
+        // destroyed inside them. Only touch it if it is still the same one.
+        if ((Panel*)GetWindowLongPtrW(panelWnd, GWLP_USERDATA) == p) {
+            p->pendingOpen.clear();
+        }
         // Fixes shortcuts for files moved since last time.
         QueueSync();
     }
@@ -2368,16 +2399,34 @@ LRESULT CALLBACK PanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
 
     if (msg == g_msgRefresh) {
-        // A click that had to wait for its folder to be created.
+        // A click that had to wait for its folder to be created. If the
+        // folder never appeared (an unreachable drive), the click is dropped:
+        // opening the window minutes later is worse than not opening it.
+        if (!p->pendingOpen.empty() && GetTickCount64() - p->pendingOpenAt > 10000) {
+            p->pendingOpen.clear();
+        }
         if (!p->pendingOpen.empty() && FolderIsReady(p->pendingOpen)) {
             std::wstring folder = p->pendingOpen;
             bool newWindow = p->pendingOpenNewWindow;
             p->pendingOpen.clear();
-            if (newWindow) {
-                ShellExecuteW(nullptr, L"open", folder.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-            } else {
-                Navigate(p, folder);
-                SetTimer(hWnd, TIMER_REPAINT, 350, nullptr);
+            {
+                // Both of these run messages, so the panel can be destroyed
+                // inside them (the tab closing, or the mod being unloaded).
+                // The count keeps unloading from returning while we are in
+                // there; the Panel is re-read afterwards, never reused.
+                BusyScope busy;
+                if (!g_unloading) {
+                    if (newWindow) {
+                        ShellExecuteW(nullptr, L"open", folder.c_str(), nullptr, nullptr,
+                                      SW_SHOWNORMAL);
+                    } else if (Navigate(p, folder)) {
+                        SetTimer(hWnd, TIMER_REPAINT, 350, nullptr);
+                    }
+                }
+            }
+            p = (Panel*)GetWindowLongPtrW(hWnd, GWLP_USERDATA);
+            if (!p) {
+                return 0;
             }
         }
         p->currentFolder = GetCurrentFolder(p);
@@ -2493,17 +2542,23 @@ LRESULT CALLBACK PanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             GetClientRect(hWnd, &rc);
             auto s = GetSettings();
             Metrics m = GetMetrics(p, *s, rc.bottom);
-            // Collapsed there is nothing to scroll, and scrolling anyway
-            // drove p->scroll to the end of the list behind the user's back.
-            if (!g_collapsed && m.tagCount > m.rowsShown) {
+            // Nothing visible to scroll (collapsed, or a navigation pane too
+            // short for a single row) and scrolling anyway drove p->scroll to
+            // the end of the list behind the user's back.
+            if (!g_collapsed && m.rowsShown > 0 && m.tagCount > m.rowsShown) {
                 // Same feel as the tree above: system lines per notch, and
                 // partial notches (precision touchpads) accumulate.
                 UINT lines = 3;
                 SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &lines, 0);
+                // "One screen at a time" in the mouse settings reports
+                // WHEEL_PAGESCROLL (0xFFFFFFFF); taken as a line count that
+                // is -1, and the list scrolled backwards.
+                int step = lines == WHEEL_PAGESCROLL ? std::max(1, m.rowsShown)
+                                                     : (int)(lines ? lines : 1);
                 p->wheelDelta += GET_WHEEL_DELTA_WPARAM(wParam);
                 int notches = p->wheelDelta / WHEEL_DELTA;
                 p->wheelDelta -= notches * WHEEL_DELTA;
-                p->scroll -= notches * (int)(lines ? lines : 1);
+                p->scroll -= notches * step;
                 ClampScroll(p, m);
                 // The rows moved under a cursor that didn't: without this the
                 // highlight stays on the row that used to be there.
@@ -2744,9 +2799,11 @@ LRESULT CALLBACK TreeSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPa
         case WM_SETTINGCHANGE:
             if (Panel* p = FindPanel(hWnd); p && p->wnd) {
                 // The tree's row height can change with the theme, and with it
-                // the height the panel needs.
+                // the height the panel needs. The layout is deferred: the
+                // inner tree hasn't seen this message yet, so measuring it now
+                // would cache the old height and keep it.
                 p->rowHeight = 0;
-                LayoutPanel(p);
+                PostMessageW(p->wnd, g_msgLayout, 0, 0);
             }
             break;
 
