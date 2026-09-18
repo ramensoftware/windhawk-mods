@@ -933,7 +933,7 @@ BOOL ExtTextOutComposition(HDC hdc, HPAINTBUFFER hpb, LPCRECT pTextRect)
     return TRUE;
 }
 
-VOID ExtTextOutAlignRect(HDC hdc, POINT &point, SIZE textSize, RECT& textRect, UINT textAlignment)
+VOID ExtTextOutAlignRect(HDC hdc, POINT &point, SIZE textSize, UINT textAlignment)
 {
     // TA_BASELINE's bits are a superset of TA_BOTTOM's, and TA_CENTER's are
     // a superset of TA_RIGHT's - mask the field and compare for equality
@@ -977,40 +977,34 @@ VOID ExtTextOutDxWidth(UINT options, const INT* lpDx, UINT c, SIZE& textSize)
 }
 
 // Calculate text boundaries
-BOOL ExtTextOutCalcRect(HDC hdc, POINT point, UINT options, RECT& textRect, LPCRECT lprect, LPCWSTR lpString, UINT c, const INT* lpDx)
-{   
+BOOL ExtTextOutCalcRect(HDC hdc, POINT point, UINT options, RECT& textRect,
+                        LPCRECT lprect, LPCWSTR lpString, UINT c, const INT* lpDx)
+{
     SIZE textSize = {0};
     UINT ta = GetTextAlign(hdc);
-    BOOL res = TRUE;
 
-    if (lprect) {
-        point.x = lprect->left;
-        point.y = lprect->top;
-        textSize.cx = RECTWIDTH(lprect);
-        textSize.cy = RECTHEIGHT(lprect);
-    }
-    else if (options & ETO_GLYPH_INDEX)
-        res = GetTextExtentPointI(hdc, (WORD*)lpString, c, &textSize);
-    else
-        res = GetTextExtentPoint32W(hdc, lpString, c, &textSize);
-    
+    // Always measure the run itself - that is what GDI actually draws.
+    BOOL res = (options & ETO_GLYPH_INDEX)
+        ? GetTextExtentPointI(hdc, (WORD*)lpString, c, &textSize)
+        : GetTextExtentPoint32W(hdc, lpString, c, &textSize);
     if (!res)
-        return res;
+        return FALSE;
 
     if (lpDx)
         ExtTextOutDxWidth(options, lpDx, c, textSize);
     if (ta)
-    	ExtTextOutAlignRect(hdc, point, textSize, textRect, ta);
+        ExtTextOutAlignRect(hdc, point, textSize, ta);   // origin-relative only
 
-    textRect.left   = point.x;
-    textRect.top    = point.y;
-    textRect.right  = point.x + textSize.cx;
-    textRect.bottom = point.y + textSize.cy;
+    SetRect(&textRect, point.x, point.y, point.x + textSize.cx, point.y + textSize.cy);
 
-    if (IsRectEmpty(&textRect))
-        return FALSE;
+    if (lprect) {
+        if (options & ETO_CLIPPED)                        // GDI clips the glyphs to it
+            IntersectRect(&textRect, &textRect, lprect);
+        if (options & ETO_OPAQUE)                         // ...and fills it
+            UnionRect(&textRect, &textRect, lprect);
+    }
 
-    return TRUE;
+    return !IsRectEmpty(&textRect);
 }
 
 BOOL ExtTextOutShouldSkip(HDC hdc, UINT options, LPCRECT lprect, LPCWSTR lpString, INT c)
