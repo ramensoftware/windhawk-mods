@@ -2,7 +2,7 @@
 // @id              win7-bsdr
 // @name            Windows Vista/7 Blocked Shutdown UX & Logoff Sequence
 // @description     Bring back Windows Vista/7's shutdown experience
-// @version         1.1
+// @version         1.2
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -29,9 +29,19 @@
     * If your user account has no password, enabling the logoff sequence option may make the system automatically log on again after logging off.
     * Not compatible with a portable Windhawk installation, even when run as admin, because it doesn't survive a logoff long enough to handle BSDR.
 
+## ⚠ Important usage note ⚠
+
+This mod needs to hook into `LogonUI.exe` to work. Please navigate to Windhawk's
+Settings > Advanced settings > More advanced settings > Process inclusion list,
+and make sure that `LogonUI.exe` is in the list.
+
+![Advanced settings screenshot](https://i.imgur.com/LRhREtJ.png)
+
+## Screenshots
 ![Windows 7 Screenshot](https://raw.githubusercontent.com/Ingan121/files/refs/heads/master/vmware_gj0gqnHj8e.png)
 
 ![Windows Vista Screenshot](https://raw.githubusercontent.com/Ingan121/files/refs/heads/master/vmware_hBPq0On2jK.png)
+
 ## Using external DLL resources for localization or Vista BSDR
 * Loading resources from an external DLL is supported for localization or for using Vista's blocked shutdown resolver.
 * This requires one of the following:
@@ -44,17 +54,10 @@
 * This is not necessary if you only want to use the English version of Windows 7's blocked shutdown resolver.
     * Hardcoded resources will be used instead if the path is not set or the file is missing.
 
-## ⚠ Important usage note ⚠
-
-This mod needs to hook into `LogonUI.exe` to work. Please navigate to Windhawk's
-Settings > Advanced settings > More advanced settings > Process inclusion list,
-and make sure that `LogonUI.exe` is in the list.
-
-![Advanced settings screenshot](https://i.imgur.com/LRhREtJ.png)
-### Notes for advanced users
+## Notes for advanced users
 * Please make sure `LogonUI.exe` isn't excluded by any means, such as a wildcard entry in the global exclusion list or process inclusion options in this mod's advanced settings page.
 * This mod includes safety checks before enabling classic logoff behavior, such as verifying that the mod loaded successfully into LogonUI.exe, to prevent the logoff sequence from getting stuck when misconfigured.
-    * You may disable the safety checks by enabling the last option on the mod settings page, but before doing so, please remember to press Ctrl+Alt+Del if logoff gets stuck. This will help you get out of such a state.
+    * You may disable the safety checks by enabling the skip option on the mod settings page, but before doing so, please remember to press Ctrl+Alt+Del if logoff gets stuck. This will help you get out of such a state.
 * To see the mod log output during a logoff, run `"C:\Program Files\Windhawk\UI\resources\app\extensions\windhawk\files\DbgViewMini.exe" --pattern "[WH] *" --no-buffering` and open another blocking window (e.g. unsaved mspaint).
     * It survives longer than the Windhawk UI, and it usually stays alive when Cancel is pressed.
     * Replace the `C:\Program Files\Windhawk` part with your Windhawk installation directory if you installed it elsewhere.
@@ -88,6 +91,11 @@ and make sure that `LogonUI.exe` is in the list.
   $name:ko-KR: (고급) 고전 로그오프 절차를 복원하기 전 안전 검사 생략
   $description: This mod verifies that LogonUI injection was successful before enabling the old sequence, to prevent the modern BSDR from showing on the invisible secure desktop, thus making the logoff sequence stuck. Before enabling this option, remember to press Ctrl+Alt+Del if logoff gets stuck.
   $description:ko-KR: 이 모드는 신형 BSDR이 보이지 않는 보안 데스크톱에 표시되어 로그오프 절차가 중단되지 않도록 고전 로그오프 절차를 복원하기 전에 LogonUI 인젝션이 성공적인지 검사합니다. 이 옵션을 활성화하기 전, 로그오프 절차가 멈출 경우 Ctrl+Alt+Del을 누르는 것을 기억하십시오.
+- authUxCancelHandling: false
+  $name: (Advanced) Use alternative workaround for canceling BSDR with the classic logoff sequence
+  $name:ko-KR: (고급) 고전 로그오프 절차를 사용 중일 때 다른 임시 해결책 사용
+  $description: "Try enabling this if you are experiencing problematic behavior when clicking Cancel with the old logoff sequence option enabled, especially if you had no such issue with the original AuthUX BSDR.\nThis option will make the mod force exit LogonUI after clicking Cancel, just like AuthUX BSDR. This option has no effect if the old sequence option is not enabled."
+  $description:ko-KR: "고전 로그오프 절차 옵션을 활성화한 채로 취소 버튼을 누를 때 이상 동작이 발생할 경우 이 옵션을 사용해보십시오. 원본 AuthUX BSDR에서 그러한 문제를 겪지 않았을 경우 특히 시도해 보십시오.\n이 옵션은 AuthUX BSDR처럼 취소를 클릭하면 모드가 LogonUI를 강제로 종료하게 합니다. 고전 로그오프 절차 옵션이 꺼져 있으면 이 옵션은 아무것도 하지 않습니다."
 */
 // ==/WindhawkModSettings==
 
@@ -119,6 +127,7 @@ and make sure that `LogonUI.exe` is in the list.
 #define WM_ADD_APP (WM_APP + 1)
 #define WM_REMOVE_APP (WM_APP + 2)
 #define WM_BSDR_SETFOCUS (WM_APP + 3)
+#define WM_BSDR_DPICHANGED (WM_APP + 4)
 
 #define BSDR_CLASSNAME L"BlockedShutdownResolver_WH"
 #define BSDR_CLOSE 1337
@@ -1807,7 +1816,6 @@ using ResolvedHandler = ABI::Windows::Foundation::ITypedEventHandler<IBlockedShu
 [[clang::no_destroy]] Microsoft::WRL::ComPtr<ResolvedHandler> g_Resolved;
 std::mutex g_resolvedMutex;
 BlockedShutdownResolution g_resolvedValue = BlockedShutdownResolution_None;
-bool g_wasClicked = false;
 bool g_rejectNextResolved = false;
 
 void Resolve(BlockedShutdownResolution resolution, bool noInvoke = false) {
@@ -1818,7 +1826,6 @@ void Resolve(BlockedShutdownResolution resolution, bool noInvoke = false) {
         if (g_resolvedValue != BlockedShutdownResolution_None) {
             return; // already resolved
         }
-        g_wasClicked = true;
         g_resolvedValue = resolution;
         resolvedLocal = g_Resolved;
     }
@@ -1862,7 +1869,7 @@ namespace CustomBSDR {
     // mutexes
     std::mutex workerMutex;
     std::mutex hBgWndMutex;
-    std::mutex pendingAppsMutex;
+    std::mutex dlgStateMutex;
     std::mutex cancelMutex;
 
     // functions
@@ -1874,7 +1881,7 @@ namespace CustomBSDR {
     void DrawAppIcon(LPDRAWITEMSTRUCT pDIS, HBITMAP hBitmap);
     void CreateAppTileControls(IShutdownBlockingApp* blockingApp, bool noUpdateLayout = false);
     void RemoveAppTileControls(UINT appId, bool noUpdateLayout = false);
-    void UpdateAppListLayout();
+    void UpdateAppListLayout(bool dpiChanged = false);
     void Cancel(bool noExitProcess = false);
     LRESULT CALLBACK ButtonSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
     LRESULT CALLBACK AppListSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
@@ -1916,6 +1923,7 @@ namespace CustomBSDR {
     bool isCanceling = false;
     int appListWidth = 0;
     int scrollBarWidth = 0;
+    int lastDpi = 96;
 
     // app list data stuff
     struct AppTile {
@@ -2251,7 +2259,9 @@ HBITMAP CustomBSDR::LoadAlphaBitmap(UINT resourceId, bool forceHardcoded) {
 
 void CustomBSDR::DrawSeparator(LPDRAWITEMSTRUCT pDIS) {
     RECT rcSep = pDIS->rcItem;
-    rcSep.bottom = rcSep.top + GetSystemMetrics(SM_CYBORDER);
+
+    const int dpi = GetDpiForWindow(pDIS->hwndItem);
+    rcSep.bottom = rcSep.top + GetSystemMetricsForDpi(SM_CYBORDER, dpi);
 
     BITMAP bm = {};
     if (separatorBitmap && !isHighContrast && GetObjectW(separatorBitmap, sizeof(bm), &bm) && bm.bmWidth > 2 && bm.bmHeight > 2) {
@@ -2317,7 +2327,7 @@ void CustomBSDR::DrawSeparator(LPDRAWITEMSTRUCT pDIS) {
         }
     } else {
         HBRUSH hBrush = GetSysColorBrush(COLOR_WINDOWTEXT);
-        RECT lineRect = { pDIS->rcItem.left, pDIS->rcItem.top, pDIS->rcItem.right, pDIS->rcItem.top + GetSystemMetrics(SM_CYBORDER) };
+        RECT lineRect = { pDIS->rcItem.left, pDIS->rcItem.top, pDIS->rcItem.right, pDIS->rcItem.top + GetSystemMetricsForDpi(SM_CYBORDER, dpi) };
         FillRect(pDIS->hDC, &lineRect, hBrush);
     }
 }
@@ -2492,10 +2502,12 @@ void CustomBSDR::DrawButton(LPDRAWITEMSTRUCT pDIS, bool isRed) {
     }
 
     if (drewAsHighContrast && isFocused && !GetPropW(pDIS->hwndItem, L"CustomBSDR_HideFocus")) {
-        const int cxEdge = GetSystemMetrics(SM_CXEDGE);
-        const int cxBorder = 2 * GetSystemMetrics(SM_CXBORDER) + cxEdge;
-        const int cyEdge = GetSystemMetrics(SM_CYEDGE);
-        const int cyBorder = 2 * GetSystemMetrics(SM_CYBORDER) + cyEdge;
+        const int dpi = GetDpiForWindow(pDIS->hwndItem);
+
+        const int cxEdge = GetSystemMetricsForDpi(SM_CXEDGE, dpi);
+        const int cxBorder = 2 * GetSystemMetricsForDpi(SM_CXBORDER, dpi) + cxEdge;
+        const int cyEdge = GetSystemMetricsForDpi(SM_CYEDGE, dpi);
+        const int cyBorder = 2 * GetSystemMetricsForDpi(SM_CYBORDER, dpi) + cyEdge;
 
         InflateRect(&rcButton, -cxBorder, -cyBorder);
         // It may draw 2px rectangle unlike Vista/7
@@ -2536,8 +2548,11 @@ void CustomBSDR::DrawAppIcon(LPDRAWITEMSTRUCT pDIS, HBITMAP hBitmap) {
     if (hBitmap && GetObjectW(hBitmap, sizeof(bm), &bm) && bm.bmWidth > 0 && bm.bmHeight > 0) {
         const int srcW = bm.bmWidth;
         const int srcH = bm.bmHeight;
-        const int dstW = GetSystemMetrics(SM_CXICON);
-        const int dstH = GetSystemMetrics(SM_CYICON);
+
+        const int dpi = GetDpiForWindow(pDIS->hwndItem);
+
+        const int dstW = GetSystemMetricsForDpi(SM_CXICON, dpi);
+        const int dstH = GetSystemMetricsForDpi(SM_CYICON, dpi);
 
         const int left = rcIcon.left + (controlWidth - dstW) / 2;
         const int top = rcIcon.top + (controlHeight - dstH) / 2;
@@ -2701,7 +2716,7 @@ void CustomBSDR::CreateAppTileControls(IShutdownBlockingApp* blockingApp, bool n
         GetString(stringId, defaultReason, _countof(defaultReason), isVista);
         blockReasonText = defaultReason;
     }
-    
+
     const int iconWidth = tileLayoutWithReason.icon.right - tileLayoutWithReason.icon.left;
     const int iconHeight = tileLayoutWithReason.icon.bottom - tileLayoutWithReason.icon.top;
     const int textWidth = tileLayoutWithReason.title.right - tileLayoutWithReason.title.left;
@@ -2775,7 +2790,7 @@ void CustomBSDR::RemoveAppTileControls(UINT appId, bool noUpdateLayout) {
     }
 }
 
-void CustomBSDR::UpdateAppListLayout() {
+void CustomBSDR::UpdateAppListLayout(bool dpiChanged) {
     if (!hDlg) {
         return;
     }
@@ -2812,10 +2827,11 @@ void CustomBSDR::UpdateAppListLayout() {
         maxHeight = minHeight;
 
     int newHeight = totalContentHeight;
-    if (paintedFirstFrame && newHeight < visibleHeight)
+    // Ignore previous height on DPI change when calculating whether to allow resizing
+    if (!dpiChanged && paintedFirstFrame && newHeight < visibleHeight)
         newHeight = visibleHeight;
-    // Allow decreasing before the first hBgWnd WM_PAINT
-    else if (!paintedFirstFrame && newHeight < minHeight)
+    // Allow decreasing before the first hBgWnd WM_PAINT or on DPI change
+    else if ((dpiChanged || !paintedFirstFrame) && newHeight < minHeight)
         newHeight = minHeight;
     // Allow decreasing on resolution decrease
     if (newHeight > maxHeight)
@@ -2848,6 +2864,10 @@ void CustomBSDR::UpdateAppListLayout() {
     int maxScroll = totalContentHeight - visibleHeight;
     if (maxScroll < 0) maxScroll = 0;
 
+    if (dpiChanged) {
+        scrollPos = MulDiv(scrollPos, GetDpiForWindow(hDlg), lastDpi);
+    }
+
     if (scrollPos > maxScroll) {
         scrollPos = maxScroll;
     }
@@ -2875,8 +2895,24 @@ void CustomBSDR::UpdateAppListLayout() {
         const bool hasBlockReason = (tile.hBlockReason != nullptr);
         const int height = hasBlockReason ? itemHeight : itemHeightNoReason;
 
+        int iconWidth = 0;
+        int iconHeight = 0;
+        int textWidth = 0;
+        int titleHeight = 0;
+        int reasonHeight = 0;
+        UINT swpFlags = SWP_NOSIZE | SWP_NOZORDER | SWP_SHOWWINDOW;
+
+        if (dpiChanged) {
+            iconWidth = tileLayoutWithReason.icon.right - tileLayoutWithReason.icon.left;
+            iconHeight = tileLayoutWithReason.icon.bottom - tileLayoutWithReason.icon.top;
+            textWidth = tileLayoutWithReason.title.right - tileLayoutWithReason.title.left;
+            titleHeight = tileLayoutWithReason.title.bottom - tileLayoutWithReason.title.top;
+            reasonHeight = tileLayoutWithReason.reason.bottom - tileLayoutWithReason.reason.top;
+            swpFlags = SWP_NOZORDER | SWP_SHOWWINDOW;
+        }
+
         if (tile.hIcon) {
-            SetWindowPos(tile.hIcon, nullptr, tileLayoutWithReason.icon.left, yPos + tileLayoutWithReason.icon.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_SHOWWINDOW);
+            SetWindowPos(tile.hIcon, nullptr, tileLayoutWithReason.icon.left, yPos + tileLayoutWithReason.icon.top, iconWidth, iconHeight, swpFlags);
         }
 
         if (tile.hTitle) {
@@ -2885,11 +2921,18 @@ void CustomBSDR::UpdateAppListLayout() {
                 // Vertically center the title when there's no block reason
                 titleY = tileLayoutNoReason.title.top;
             }
-            SetWindowPos(tile.hTitle, nullptr, tileLayoutWithReason.title.left, yPos + titleY, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_SHOWWINDOW);
+            SetWindowPos(tile.hTitle, nullptr, tileLayoutWithReason.title.left, yPos + titleY, textWidth, titleHeight, swpFlags);
+            if (dpiChanged) {
+                SendMessageW(tile.hTitle, WM_SETFONT, (WPARAM)hDescFont, FALSE);
+            }
         }
 
         if (tile.hBlockReason) {
-            SetWindowPos(tile.hBlockReason, nullptr, tileLayoutWithReason.reason.left, yPos + tileLayoutWithReason.reason.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_SHOWWINDOW);
+            SetWindowPos(tile.hBlockReason, nullptr, tileLayoutWithReason.reason.left, yPos + tileLayoutWithReason.reason.top, textWidth, reasonHeight, swpFlags);
+            if (dpiChanged) {
+                HFONT hFont = (HFONT)SendMessageW(hDlg, WM_GETFONT, 0, 0);
+                SendMessageW(tile.hBlockReason, WM_SETFONT, (WPARAM)hFont, FALSE);
+            }
         }
 
         yPos += height;
@@ -2928,8 +2971,19 @@ void CustomBSDR::Cancel(bool noExitProcess) {
         // causing issues with subsequent session ends, unless it's killed manually or Ctrl+Alt+Del is pressed once
         // It happens because the event created in CLogonController::DoModal never gets fired in this state somehow
         // and makes the thread stuck in WaitForSingleObject
-        // So force signal the event as a not so clean workaround (still better than previous ExitProcess workaround)
-        // (I still haven't found neither the culprint nor which code signals that event)
+
+        // The new default desktop cancel workaround below, introduced in this mod seems to cause a weird behavior with rare chance,
+        // such as Winlogon not getting out of the mid-logoff state until Ctrl+Alt+Del is pressed
+        // I have no idea why, how, when this error even occurs
+        // If I recall correctly, the original AuthUX BSDR (which only used ExitProcess workaround) had no such issue, so make this an option
+        // and wait for user feedback until enough data about this error is collected (to properly fix or just remove the new workaround)
+        bool isExiting = g_isExiting.load();
+        if (!isExiting && !noExitProcess && Wh_GetIntSetting(L"authUxCancelHandling")) {
+            ExitProcess(0);
+        }
+
+        // Force signal the event as a not so clean workaround (still better than previous ExitProcess workaround)
+        // (I still haven't found neither the culprit nor which code signals that event)
         bool signaled = false;
         {
             std::lock_guard lock(g_doModalExitEventMutex);
@@ -2945,7 +2999,7 @@ void CustomBSDR::Cancel(bool noExitProcess) {
             }
         }
 
-        if (!signaled && !noExitProcess && !g_isExiting.load()) {
+        if (!signaled && !noExitProcess && !isExiting) {
             // Event capture failed, oh noes!
             // Here comes the old terrible workaround
             // Note: this does not cause any user-facing issues because there is no visible LogonUI window in the default desktop at this point
@@ -3043,6 +3097,10 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         }
         dlgInitFailed = false;
 
+        lastDpi = GetDpiForWindow(hWndDlg);
+        if (!lastDpi)
+            lastDpi = 96;
+
         // Original Windows Vista/7 app tile coords
         tileLayoutWithReason = {
             {0, 0, 256, 39},
@@ -3073,7 +3131,7 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         // Set CustomBSDR::hDlg and clear pendingApps after possible dialog init fail point
         std::vector<Microsoft::WRL::ComPtr<IShutdownBlockingApp>> pendingAppsLocal;
         {
-            std::lock_guard lock(pendingAppsMutex);
+            std::lock_guard lock(dlgStateMutex);
             CustomBSDR::hDlg = hWndDlg;
             pendingAppsLocal.swap(*pendingApps);
         }
@@ -3433,15 +3491,103 @@ INT_PTR CALLBACK CustomBSDR::DlgProc(HWND hWndDlg, UINT uMsg, WPARAM wParam, LPA
         }
         return TRUE;
     }
-    case WM_SETTINGCHANGE: {
-        if (wParam == SPI_SETWHEELSCROLLLINES) {
-            wheelRemainder = 0;
-            SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &scrollLines, 0);
-            return TRUE;
-        }
-        // SPI_SETHIGHCONTRAST: Windows 7 BSDR never updated the high-contrast status on runtime, so don't update it here either
-        // This event as well as WM_THEMECHANGED does not even reliably fire in mid-logoff state anyway
+    case WM_DPICHANGED_AFTERPARENT: {
+        // Let the Win32 dialog manager finish its job
+        PostMessageW(hWndDlg, WM_BSDR_DPICHANGED, 0, 0);
         break;
+    }
+    case WM_BSDR_DPICHANGED: {
+        tileLayoutWithReason = {
+            {0, 0, 256, 39},
+            {0, 8, 18, 23},
+            {23, 5, 251, 15},
+            {23, 17, 251, 34}
+        };
+
+        tileLayoutNoReason = {
+            {0, 0, 256, 29},
+            {0, 8, 18, 23},
+            {23, 9, 251, 19},
+            {}
+        };
+
+        MapDialogRect(hWndDlg, &tileLayoutWithReason.bounds);
+        MapDialogRect(hWndDlg, &tileLayoutWithReason.icon);
+        MapDialogRect(hWndDlg, &tileLayoutWithReason.title);
+        MapDialogRect(hWndDlg, &tileLayoutWithReason.reason);
+
+        MapDialogRect(hWndDlg, &tileLayoutNoReason.bounds);
+        MapDialogRect(hWndDlg, &tileLayoutNoReason.icon);
+        MapDialogRect(hWndDlg, &tileLayoutNoReason.title);
+
+        RECT rcAppList, rcScrollBar;
+        GetWindowRect(hAppList, &rcAppList);
+        GetWindowRect(hScrollBar, &rcScrollBar);
+
+        appListWidth = rcAppList.right - rcAppList.left;
+        scrollBarWidth = rcScrollBar.right - rcScrollBar.left;
+
+        // Somehow the dialog is not auto resized by the dialog manager on DPI change, so resize ourselves
+        // Use this hardcoded base rect as the dialog size is the same on all 35 Vista + 35 Win7 winsrv.dll.mui
+        RECT rcBaseDialog = { 0, 0, 266, 224 };
+        RECT rcBaseAppList = { 0, 0, 256, 85 };
+
+        MapDialogRect(hWndDlg, &rcBaseDialog);
+        MapDialogRect(hWndDlg, &rcBaseAppList);
+
+        const int currentListHeight = rcAppList.bottom - rcAppList.top;
+        const int baseListHeight = rcBaseAppList.bottom - rcBaseAppList.top;
+        const int currentExpandedHeight = currentListHeight - baseListHeight;
+        minHeight = baseListHeight;
+
+        SetWindowPos(hWndDlg, nullptr, 0, 0, rcBaseDialog.right, rcBaseDialog.bottom + currentExpandedHeight, SWP_NOMOVE | SWP_NOZORDER);
+
+        HFONT oldTitleFont = hTitleFont;
+        HFONT oldDescFont = hDescFont;
+
+        HFONT newTitleFont = nullptr;
+        HFONT newDescFont = nullptr;
+
+        HFONT hDialogFont = (HFONT)SendMessageW(hWndDlg, WM_GETFONT, 0, 0);
+        LOGFONTW lf = {};
+        if (hDialogFont && GetObjectW(hDialogFont, sizeof(lf), &lf)) {
+            const int originalHeight = lf.lfHeight;
+
+            lf.lfHeight = MulDiv(originalHeight, 160, 100);
+            newTitleFont = CreateFontIndirectW(&lf);
+            if (newTitleFont) {
+                hTitleFont = newTitleFont;
+                if (hTitleText) {
+                    SendMessageW(hTitleText, WM_SETFONT, (WPARAM)hTitleFont, FALSE);
+                }
+            }
+
+            lf.lfHeight = MulDiv(originalHeight, 120, 100);
+            newDescFont = CreateFontIndirectW(&lf);
+            if (newDescFont) {
+                hDescFont = newDescFont;
+                if (hWarningText)
+                    SendMessageW(hWarningText, WM_SETFONT, (WPARAM)hDescFont, FALSE);
+                if (hDescText)
+                    SendMessageW(hDescText, WM_SETFONT, (WPARAM)hDescFont, FALSE);
+            }
+        }
+
+        UpdateAppListLayout(true);
+        CenterWindow(hWndDlg);
+        RedrawWindow(hWndDlg, nullptr, nullptr, RDW_INVALIDATE | RDW_FRAME);
+
+        if (newTitleFont && oldTitleFont) {
+            DeleteObject(oldTitleFont);
+        }
+        if (newDescFont && oldDescFont) {
+            DeleteObject(oldDescFont);
+        }
+
+        lastDpi = GetDpiForWindow(hWndDlg);
+        if (!lastDpi)
+            lastDpi = 96;
+        return TRUE;
     }
     }
     return FALSE;
@@ -3587,12 +3733,21 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         if (hDlg) {
             CenterWindow(hDlg);
             UpdateAppListLayout();
-            RedrawWindow(hDlg, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_UPDATENOW);
+            RedrawWindow(hDlg, nullptr, nullptr, RDW_INVALIDATE | RDW_FRAME);
         }
         // Retaking screenshot requires temporarily hiding the window
         // Windows 7 doesn't do that either so skip that
         // (Win7 also leaves the empty area from resolution increase black)
         return 0;
+    }
+    case WM_SETTINGCHANGE: {
+        if (wParam == SPI_SETWHEELSCROLLLINES) {
+            wheelRemainder = 0;
+            SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &scrollLines, 0);
+            return 0;
+        }
+        // SPI_SETHIGHCONTRAST: Windows 7 BSDR never updated the high-contrast status on runtime, so don't update it here either. We already skipped taking screenshot too
+        break;
     }
     case WM_BSDR_SETFOCUS: {
         HWND fgWnd = GetForegroundWindow();
@@ -3638,7 +3793,7 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
 
         HWND hDlgLocal = nullptr;
         {
-            std::lock_guard lock(pendingAppsMutex);
+            std::lock_guard lock(dlgStateMutex);
             hDlgLocal = hDlg;
             hDlg = nullptr;
         }
@@ -3667,7 +3822,7 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         appTiles.clear();
 
         {
-            std::lock_guard lock(pendingAppsMutex);
+            std::lock_guard lock(dlgStateMutex);
             pendingApps->clear();
         }
 
@@ -3757,6 +3912,11 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
     minHeight = 0;
     paintedFirstFrame = false;
     isOnSecureDesktop = true;
+
+    // Ignore failure (on pre-1703, etc.)
+    // LogonUI is per-monitor V1 scaled by manifest anyway
+    // Runtime DPI change is not a big deal - not advertised in readme. Only advertised in changelog so tell 1703+ requirement there
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     // Attempt to create window on the input desktop, as the thread is always running in secure desktop at this point,
     // but the Windhawk mod can force this phase of session end to run in the default desktop
@@ -3968,7 +4128,7 @@ DWORD WINAPI CustomBSDR::ThreadProc(LPVOID lpParameter) {
 }
 
 // LogonUI calls the BSDR interface in the following order:
-// (Winlogon) ShutdownWindowsWorkerThread -> LogonUI launch -> BSDR::Start -> add_Resolved -> AddApplication * n (either before or after dlg open) ->
+// (Winlogon) ShutdownWindowsWorkerThread -> LogonUI launch -> BSDR::Start -> add_Resolved -> (get_ScaleFactor + AddApplication) * n (either before or after dlg open) ->
 // (Force logoff chosen) -> BSDR::Hide -> get_WasClicked -> BSDR::Stop -> LogonUI exit -> Session teardown (Winlogon exit)
 void CustomBSDR::Start(LogonUIState state) {
     std::lock_guard lock(workerMutex);
@@ -4012,7 +4172,6 @@ void CustomBSDR::Start(LogonUIState state) {
     {
         std::lock_guard lock(g_resolvedMutex);
         g_resolvedValue = BlockedShutdownResolution_None;
-        g_wasClicked = false;
         g_rejectNextResolved = false;
     }
 
@@ -4022,7 +4181,7 @@ void CustomBSDR::Start(LogonUIState state) {
     }
 
     {
-        std::lock_guard lock(pendingAppsMutex);
+        std::lock_guard lock(dlgStateMutex);
         pendingApps->clear();
     }
 
@@ -4043,7 +4202,7 @@ void CustomBSDR::Start(LogonUIState state) {
 }
 
 void CustomBSDR::AddApplication(IShutdownBlockingApp* blockingApp) {
-    std::lock_guard lock(pendingAppsMutex);
+    std::lock_guard lock(dlgStateMutex);
     if (hDlg && IsWindow(hDlg)) {
         blockingApp->AddRef();
         if (!PostMessageW(hDlg, WM_ADD_APP, 0, reinterpret_cast<LPARAM>(blockingApp))) {
@@ -4055,7 +4214,7 @@ void CustomBSDR::AddApplication(IShutdownBlockingApp* blockingApp) {
 }
 
 void CustomBSDR::RemoveApplication(UINT appid) {
-    std::lock_guard lock(pendingAppsMutex);
+    std::lock_guard lock(dlgStateMutex);
     if (hDlg && IsWindow(hDlg)) {
         PostMessageW(hDlg, WM_REMOVE_APP, (WPARAM)appid, 0);
     } else {
@@ -4073,7 +4232,7 @@ void CustomBSDR::RemoveApplication(UINT appid) {
 }
 
 int CustomBSDR::GetScaleFactor() {
-    std::lock_guard lock(pendingAppsMutex);
+    std::lock_guard lock(dlgStateMutex);
     // Note: Win10+ LogonUI is per-monitor scaled by manifest, and we're only showing the dialog on the primary monitor,
     // so handling per-monitor DPI is not much trouble. Screenshotting works fine
     // Runtime DPI change might be problematic but the BSDR window isn't movable and the Settings app isn't accessible
@@ -4121,6 +4280,8 @@ long __fastcall BlockedShutdownUXImpl_get_ScaleFactor_hook(void* thisPtr, unsign
         return E_POINTER;
 
     // This function's output controls the quality of app icons that the BSDR backend sends
+    // This is called before every AddApplication
+    // (DPICHANGED: I have no idea how to manually refetch icons so keep and scale old icons)
     *scaleFactor = CustomBSDR::GetScaleFactor();
     return S_OK;
 }
@@ -4130,12 +4291,10 @@ long __fastcall BlockedShutdownUXImpl_get_WasClicked_hook(void* thisPtr, unsigne
     if (!wasClicked)
         return E_POINTER;
 
-    {
-        std::lock_guard lock(g_resolvedMutex);
-        // If this is false, resolving with cancel somehow makes winlogon lock the session after stopping BSDR
-        // which is not wanted in any cases (no version of stock BSDR locks the screen!)
-        *wasClicked = g_wasClicked;
-    }
+    // If this is false, resolving with cancel somehow makes winlogon lock the session after stopping BSDR
+    // which is not wanted in any cases (no version of stock BSDR locks the screen!)
+    // Always set as true, to prevent locking even on forced cancel with Ctrl+Alt+Del
+    *wasClicked = true;
     return S_OK;
 }
 
@@ -4300,16 +4459,18 @@ WindhawkUtils::SYMBOL_HOOK blockedShutdownHooks[] = {
     }
 };
 
-thread_local bool g_enteringDoModal = false;
+std::atomic<DWORD> g_doModalThreadId = 0;
 
 typedef long (__cdecl *CLogonController__DoModal_t)(void* pThis, unsigned long a2, unsigned long a3, unsigned long a4, unsigned long a5);
 CLogonController__DoModal_t CLogonController__DoModal_orig;
 long __cdecl CLogonController__DoModal_hook(void* pThis, unsigned long a2, unsigned long a3, unsigned long a4, unsigned long a5) {
-    g_enteringDoModal = true;
     Wh_Log(L"DoModal");
 
+    const DWORD tid = GetCurrentThreadId();
+    DWORD expected = 0;
+    const bool owned = g_doModalThreadId.compare_exchange_strong(expected, tid);
+
     long result = CLogonController__DoModal_orig(pThis, a2, a3, a4, a5);
-    g_enteringDoModal = false;
 
     HANDLE eventToClose = nullptr;
     {
@@ -4320,6 +4481,10 @@ long __cdecl CLogonController__DoModal_hook(void* pThis, unsigned long a2, unsig
 
     if (eventToClose) {
         CloseHandle(eventToClose);
+    }
+
+    if (owned) {
+        g_doModalThreadId.store(0, std::memory_order_release);
     }
     return result;
 }
@@ -4339,7 +4504,8 @@ using CreateEventW_t = decltype(&CreateEventW);
 CreateEventW_t CreateEventW_orig;
 HANDLE WINAPI CreateEventW_hook(LPSECURITY_ATTRIBUTES lpEventAttributes, WINBOOL bManualReset, WINBOOL bInitialState, LPCWSTR lpName) {
     HANDLE result = CreateEventW_orig(lpEventAttributes, bManualReset, bInitialState, lpName);
-    if (result && lpEventAttributes == 0 && bManualReset == 0 && bInitialState == 0 && lpName == 0 && g_enteringDoModal) {
+    if (result && lpEventAttributes == 0 && bManualReset == 0 && bInitialState == 0 && lpName == 0 &&
+        g_doModalThreadId.load(std::memory_order_acquire) == GetCurrentThreadId()) {
         void* returnAddress = __builtin_return_address(0);
         HMODULE callerModule;
         DWORD dwFlags = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
@@ -4479,6 +4645,7 @@ void ShutdownWindowsWorkerThread(...)
     ...
     if (...) // Check if BSDR has shown
         info = WluiGetShutdownResolverInfo(...);
+    ...
 }
 So, create an event on LogonUI ModInit, check it in WluiInformLogonUI, and if the event is found, set g_fShutdownResolverDisabled to 1, and ignore the call
 This should have the same effect as having g_fShutdownResolverDisabled == 1 at the beginning of ShutdownWindowsWorkerThread
@@ -4591,29 +4758,31 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
-    if (kernelBase) {
-        CreateEventW_t pCreateEventW = (CreateEventW_t)GetProcAddress(kernelBase, "CreateEventW");
-        if (pCreateEventW) {
-            if (!WindhawkUtils::SetFunctionHook(pCreateEventW, CreateEventW_hook, &CreateEventW_orig)) {
-                Wh_Log(L"CreateEventW hook failed");
-                // not critical, well, there still is a terrrible workaround path
+    if (Wh_GetIntSetting(L"disableAsyncLogoff")) {
+        HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+        if (kernelBase) {
+            CreateEventW_t pCreateEventW = (CreateEventW_t)GetProcAddress(kernelBase, "CreateEventW");
+            if (pCreateEventW) {
+                if (!WindhawkUtils::SetFunctionHook(pCreateEventW, CreateEventW_hook, &CreateEventW_orig)) {
+                    Wh_Log(L"CreateEventW hook failed");
+                    // not critical, well, there still is a different workaround path
+                }
+            } else {
+                Wh_Log(L"GetProcAddress CreateEventW failed??");
             }
         } else {
-            Wh_Log(L"GetProcAddress CreateEventW failed??");
+            Wh_Log(L"GetModuleHandle kernelbase failed??");
         }
-    } else {
-        Wh_Log(L"GetModuleHandle kernelbase failed??");
-    }
 
-    g_hLogonControllerDll = LoadLibraryExW(L"LogonController.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (g_hLogonControllerDll) {
-        if (!WindhawkUtils::HookSymbols(g_hLogonControllerDll, logonControllerDllHooks, ARRAYSIZE(logonControllerDllHooks))) {
-            Wh_Log(L"Failed to hook symbols in LogonController.dll");
-            // Ditto
+        g_hLogonControllerDll = LoadLibraryExW(L"LogonController.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (g_hLogonControllerDll) {
+            if (!WindhawkUtils::HookSymbols(g_hLogonControllerDll, logonControllerDllHooks, ARRAYSIZE(logonControllerDllHooks))) {
+                Wh_Log(L"Failed to hook symbols in LogonController.dll");
+                // Ditto
+            }
+        } else {
+            Wh_Log(L"Failed to load LogonController.dll");
         }
-    } else {
-        Wh_Log(L"Failed to load LogonController.dll");
     }
 
     g_hBlockedShutdownDll = LoadLibraryExW(L"Windows.UI.BlockedShutdown.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -4767,6 +4936,8 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
 
     // resDllPath: only used by LogonUI during shutdown sequence which is unlikely timing for a settings change
     // and reloading already loaded resources/dialog etc. is tedious so just ignore it
+    // Ditto for disableAsyncLogoff: the dialog has already shown in one desktop (which can't be changed on runtime),
+    // and there's no point of reloading the mod (for updating some hooks) only to force close(cancel) the dialog
     // Note: LogonUI just exits when idle. It isn't even running most of the time;
     // it's more likely to be not running when the user changes the mod settings from the WH UI
     return TRUE;
