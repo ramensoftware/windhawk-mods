@@ -178,6 +178,11 @@ it there is. Amount has five notches: minimal, sparse, balanced, dense, maximal.
 | **Differential growth** | vigor (how hard the colony pushes outward) | number of colonies, 1 through 6 |
 | **Harmonograph** | tempo (how fast the figure is drawn) | number of overlaid figures, 1 through 6 |
 
+On flow field and growth the wheel is a pace control as well as a character
+one: turning turbulence or vigor up draws the piece as much as five times
+faster on its way to the same kind of result. Harmonograph's tempo is only
+speed, and contours is paced by the clock alone.
+
 ![The four styles: flow field, contours, differential growth, harmonograph](https://raw.githubusercontent.com/akilluminati47/vector-screen-holder/main/assets/styles.png)
 
 Left to right: flow field, contours, differential growth, harmonograph.
@@ -2488,7 +2493,9 @@ class ContourScene : public Scene {
     // the difference between about 830k cell tests per frame and roughly one
     // pass over the grid. The output is identical.
     void MarchAll() {
-        if ((int)segsByLevel_.size() < levels_) {
+        if ((int)segsByLevel_.size() != levels_) {
+            // Not just grow: stepping the amount back down used to leave this
+            // at the largest it had ever been for the life of the scene.
             segsByLevel_.resize(levels_);
         }
         for (int k = 0; k < levels_; k++) {
@@ -4641,11 +4648,21 @@ static int FirstEnabledStyle() {
 static std::atomic<bool> g_stateDirty{false};
 static int g_pendingStyle = 0, g_pendingAmount = 2, g_pendingParam = 500;
 
+// Seconds since the last change, counted only while something is unsaved. The
+// flush used to happen on hide alone, so a sign-out or a reboot that took the
+// process down without an unload lost whatever style, amount and parameter the
+// user had settled on, which is the opposite of what the readme promises about
+// the one you land on being remembered. Waiting out a short quiet period keeps
+// this to one write per burst of adjustment instead of one per wheel notch.
+static float g_stateQuiet = 0;
+static const float kStateFlushDelay = 2.0f;
+
 static void SaveState(const Overlay* ov) {
     g_pendingStyle = ov->style;
     g_pendingAmount = ov->amount;
     g_pendingParam = (int)(ov->param * 1000.0f);
     g_stateDirty = true;
+    g_stateQuiet = 0;   // each change restarts the quiet period
 }
 
 static void FlushState() {
@@ -5517,6 +5534,13 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         }
         lastRender = now;
         float dt = since > 0.25f ? 0.25f : since;
+
+        if (g_stateDirty) {
+            g_stateQuiet += dt;
+            if (g_stateQuiet >= kStateFlushDelay) {
+                FlushState();
+            }
+        }
 
         // hue
         if (g_settings.colorRamp) {
