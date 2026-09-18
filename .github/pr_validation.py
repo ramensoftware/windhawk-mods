@@ -1381,7 +1381,9 @@ def validate_specific_keywords(path: Path, mod_source: str):
                     continue
 
                 warnings += add_warning(
-                    path, line_num, f'Line requires manual inspection for "{word}": {description}'
+                    path,
+                    line_num,
+                    f'Line requires manual inspection for "{word}": {description}',
                 )
 
         hidden_ws = [
@@ -1449,18 +1451,31 @@ def validate_callback_signatures(path: Path, mod_source: str):
             assert m, sig
             expected.append((m.group(1), normalize_callback_param_types(m.group(2))))
 
-        # Match: previous word + whitespace + callback name + ( params ). The
-        # previous-word check naturally skips function calls (e.g. "= Wh_Mod..."
-        # or "(Wh_Mod...") since those aren't preceded by a bare identifier.
-        pattern = r'\b(\w+)\s+' + re.escape(callback_name) + r'\s*\(([^)]*)\)'
+        # Match: optional specifiers + return type + callback name + ( params ).
+        # Requiring a bare identifier before the name naturally skips function
+        # calls (e.g. "= Wh_Mod..." or "(Wh_Mod...").
+        pattern = (
+            r'((?:\b(?:static|extern(?:\s+"C")?|inline)\s+)*)\b(\w+)\s+'
+            + re.escape(callback_name)
+            + r'\s*\(([^)]*)\)'
+        )
         for match in re.finditer(pattern, mod_source):
             # Skip if inside a single-line comment.
             line_start = mod_source.rfind('\n', 0, match.start()) + 1
             if '//' in mod_source[line_start : match.start()]:
                 continue
 
-            return_type = match.group(1)
-            params = match.group(2)
+            line_num = 1 + mod_source[: match.start()].count('\n')
+            specifiers, return_type, params = match.groups()
+
+            if specifiers:
+                warnings += add_warning(
+                    path,
+                    line_num,
+                    f'Unexpected "{" ".join(specifiers.split())}" before'
+                    f' {callback_name}',
+                )
+
             normalized_return_type = normalize_return_type(return_type)
             normalized_params = normalize_callback_param_types(params)
 
@@ -1470,7 +1485,6 @@ def validate_callback_signatures(path: Path, mod_source: str):
             ):
                 continue
 
-            line_num = 1 + mod_source[: match.start()].count('\n')
             expected_list = ' or '.join(f'"{s}"' for s in expected_signatures)
             warnings += add_warning(
                 path,
