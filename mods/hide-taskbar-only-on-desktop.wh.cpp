@@ -2,7 +2,7 @@
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Hides selected taskbars while their displays show only the desktop
-// @version         6.9.0
+// @version         7.0.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -43,13 +43,9 @@ Hides selected bottom-docked taskbars when their display is showing only the des
 
 **Reveal taskbar on bottom-edge hover** selects the displays where bottom-edge hover can reveal the taskbar.
 
-**Hover-reveal displays by interface name** optionally selects physical displays by a case-insensitive substring of their Windows display interface name. Leave it empty to rely on the logical monitor selection.
-
 **Taskbars to hide on desktop** selects the displays whose taskbars participate in desktop-only hiding.
 
-**Taskbar displays to hide by interface name** optionally selects physical displays by interface-name substring when logical monitor numbering is unstable after reconnecting or rearranging displays.
-
-Logical monitor selections use the current monitor enumeration order. Interface-name selectors are optional and support up to 16 entries.
+Display selections use the current monitor enumeration order. The logical display number may change after display topology changes.
 
 ## Difference from `taskbar-fade`
 
@@ -67,10 +63,9 @@ Fullscreen ownership is tracked per display for borderless monitor-sized windows
 
 - Desktop-only hiding and hover reveal apply to bottom-docked taskbars.
 - The hidden taskbar remains part of the normal work area and is click-through.
-- Logical display numbers can change after topology changes; interface-name selectors can be used for stable physical-display matching.
-- Up to 16 logical displays and 16 interface-name selectors are supported.
+- Logical display numbers can change after display topology changes.
 - Flashing taskbar buttons and tray notifications are not visible while the taskbar is transparent.
-- Native Windows taskbar auto-hide remains separate from this mod.
+- Native Windows taskbar auto-hide remains separate from this mod; when it is enabled, this mod does not take over that taskbar.
 - Other taskbar transparency/style mods can conflict when they modify the same taskbar.
 - A visible, monitor-sized, captionless, non-resizable application may be treated as fullscreen.
 - If the dedicated tool process terminates unexpectedly, the next tool-process startup attempts to recover taskbars still marked as owned by this mod. If a new tool-process startup is not available, restarting Windows Explorer recreates the taskbar window.
@@ -119,17 +114,6 @@ Fullscreen ownership is tracked per display for borderless monitor-sized windows
   - monitor14: Display 14
   - monitor15: Display 15
   - monitor16: Display 16
-- hideOnMonitorInterfaces: [""]
-  $name: Taskbar displays to hide by interface name
-  $description: >-
-    Optional display interface-name substrings. A matching physical display is selected
-    even if its logical display number changes after reconnecting or rearranging monitors.
-    Leave empty to use only the logical display selections below.
-- hoverRevealOnMonitorInterfaces: [""]
-  $name: Hover-reveal displays by interface name
-  $description: >-
-    Optional display interface-name substrings for stable hover-reveal selection. Leave
-    empty to use only the logical display selections below.
 - hideOnMonitors: ["all"]
   $name: Taskbars to hide on desktop
   $description: >-
@@ -169,8 +153,6 @@ Fullscreen ownership is tracked per display for borderless monitor-sized windows
 #include <cstdlib>
 constexpr size_t kMaxMonitorNumbers = 16;
 constexpr size_t kMaxTaskbars = 16;
-constexpr size_t kMaxMonitorInterfaceSettings = 16;
-constexpr size_t kMaxMonitorInterfaceNameLength = 256;
 constexpr UINT WM_APP_REFRESH = WM_APP + 1;
 constexpr UINT WM_APP_SETTINGS = WM_APP + 2;
 constexpr UINT_PTR kHoverExpireTimerId = 2;
@@ -181,19 +163,12 @@ struct {
     DWORD autoHideDelayMs;
     bool hideAllMonitors;
     bool hideMonitor[kMaxMonitorNumbers + 1];
-    wchar_t hideMonitorInterfaces[kMaxMonitorInterfaceSettings]
-        [kMaxMonitorInterfaceNameLength];
-    size_t hideMonitorInterfaceCount;
     bool hoverAllMonitors;
     bool hoverMonitor[kMaxMonitorNumbers + 1];
-    wchar_t hoverMonitorInterfaces[kMaxMonitorInterfaceSettings]
-        [kMaxMonitorInterfaceNameLength];
-    size_t hoverMonitorInterfaceCount;
 } g_settings = {};
 struct MonitorEntry {
     HMONITOR monitor;
     RECT rect;
-    wchar_t interfaceName[kMaxMonitorInterfaceNameLength];
 };
 struct MonitorList {
     MonitorEntry entries[kMaxMonitorNumbers];
@@ -203,7 +178,6 @@ struct TaskbarMonitorState {
     HWND hwnd;
     HMONITOR monitor;
     int monitorNumber;
-    wchar_t interfaceName[kMaxMonitorInterfaceNameLength];
     bool desktopOnly;
     bool hiddenByMod;
 };
@@ -628,17 +602,6 @@ BOOL CALLBACK CollectMonitorProc(HMONITOR monitor, HDC, LPRECT, LPARAM lParam) {
         list->entries[list->count++];
     entry.monitor = monitor;
     entry.rect = info.rcMonitor;
-    entry.interfaceName[0] = L'\0';
-    DISPLAY_DEVICEW displayDevice = {};
-    displayDevice.cb = sizeof(displayDevice);
-    if (EnumDisplayDevicesW(
-            info.szDevice, 0, &displayDevice, EDD_GET_DEVICE_INTERFACE_NAME)) {
-        wcsncpy_s(
-            entry.interfaceName,
-            displayDevice.DeviceID,
-            _TRUNCATE
-        );
-    }
     return TRUE;
 }
 MonitorList GetCurrentMonitors() {
@@ -660,46 +623,15 @@ bool IsMonitorSelected(int monitorNumber, const bool* selected) {
            monitorNumber <= static_cast<int>(kMaxMonitorNumbers) &&
            selected[monitorNumber];
 }
-bool ContainsCaseInsensitive(const wchar_t* text, const wchar_t* substring) {
-    if (!text || !substring || !*substring) {
-        return false;
-    }
-    const size_t substringLength = wcslen(substring);
-    for (const wchar_t* p = text; *p; ++p) {
-        if (_wcsnicmp(p, substring, substringLength) == 0) {
-            return true;
-        }
-    }
-    return false;
-}
-bool IsMonitorInterfaceSelected(
-    const wchar_t* interfaceName,
-    const wchar_t selections[][kMaxMonitorInterfaceNameLength],
-    size_t count
-) {
-    if (!interfaceName || !*interfaceName) {
-        return false;
-    }
-    for (size_t i = 0; i < count; ++i) {
-        if (ContainsCaseInsensitive(interfaceName, selections[i])) {
-            return true;
-        }
-    }
-    return false;
-}
 bool ShouldHideMonitor(const TaskbarMonitorState& state) {
-    return g_settings.hideAllMonitors ||
-           IsMonitorSelected(state.monitorNumber, g_settings.hideMonitor) ||
-           IsMonitorInterfaceSelected(
-               state.interfaceName, g_settings.hideMonitorInterfaces,
-               g_settings.hideMonitorInterfaceCount);
+    return
+        g_settings.hideAllMonitors ||
+        IsMonitorSelected(state.monitorNumber, g_settings.hideMonitor);
 }
 bool ShouldRevealOnHover(const TaskbarMonitorState& state) {
-    return g_settings.hoverAllMonitors ||
-           IsMonitorSelected(state.monitorNumber, g_settings.hoverMonitor) ||
-           IsMonitorInterfaceSelected(
-               state.interfaceName, g_settings.hoverMonitorInterfaces,
-               g_settings.hoverMonitorInterfaceCount);
+    return
+        g_settings.hoverAllMonitors ||
+        IsMonitorSelected(state.monitorNumber, g_settings.hoverMonitor);
 }
 bool GetWindowProcessImageName(DWORD pid, wchar_t* output, size_t outputCount) {
     if (!pid || !output || outputCount == 0) {
@@ -1434,17 +1366,6 @@ void RefreshTaskbarMonitorStates(const MonitorList& monitors) {
         state.monitor = monitor;
         state.monitorNumber =
             GetMonitorNumber(monitors, monitor);
-        state.interfaceName[0] = L'\0';
-        for (size_t monitorIndex = 0; monitorIndex < monitors.count; ++monitorIndex) {
-            if (monitors.entries[monitorIndex].monitor == monitor) {
-                wcsncpy_s(
-                    state.interfaceName,
-                    monitors.entries[monitorIndex].interfaceName,
-                    _TRUNCATE
-                );
-                break;
-            }
-        }
         state.desktopOnly = true;
         state.hiddenByMod = false;
         for (size_t i = 0; i < oldCount; ++i) {
@@ -1823,8 +1744,7 @@ void UpdateTaskbarState() {
         GetCurrentMonitors();
     RefreshTaskbarMonitorStates(monitors);
     if (!g_settings.hideAllMonitors) {
-        bool anyHideMonitorSelected =
-            g_settings.hideMonitorInterfaceCount != 0;
+        bool anyHideMonitorSelected = false;
         for (size_t i = 1; !anyHideMonitorSelected &&
              i <= kMaxMonitorNumbers; ++i) {
             anyHideMonitorSelected = g_settings.hideMonitor[i];
@@ -1858,6 +1778,10 @@ void UpdateTaskbarState() {
                 monitors.entries[monitorIndex].monitor ==
                 state.monitor
             ) {
+                // Fullscreen counts as display activity, so keep the taskbar
+                // in the desktop-only state machine while fullscreen is active.
+                // Shell UI (such as Start/Search) and explicit keyboard taskbar
+                // activation may temporarily reveal it below.
                 state.desktopOnly =
                     scan.fullscreenOnMonitor[monitorIndex] ||
                     !scan.applicationOnMonitor[monitorIndex];
@@ -1897,13 +1821,11 @@ void UpdateTaskbarState() {
             if (g_taskbarStates[i].hwnd != foreground) {
                 continue;
             }
-            const int monitorIndex =
-                FindMonitorIndex(monitors, g_taskbarStates[i].monitor);
-            const bool fullscreenOnTaskbarMonitor =
-                monitorIndex >= 0 &&
-                scan.fullscreenOnMonitor[monitorIndex];
-            if (!fullscreenOnTaskbarMonitor &&
-                taskbarForegroundKeyboardActivated) {
+            if (taskbarForegroundKeyboardActivated) {
+                // Explicit keyboard taskbar navigation is allowed to reveal
+                // the taskbar even during fullscreen. Once focus returns to
+                // the fullscreen application, the foreground handler clears
+                // this flag and the normal fullscreen state hides it again.
                 g_taskbarStates[i].desktopOnly = false;
             }
             break;
@@ -1912,9 +1834,10 @@ void UpdateTaskbarState() {
     auto IsShellSurfaceVisibleOnMonitor =
         [&](HMONITOR monitor) {
             const int index = FindMonitorIndex(monitors, monitor);
+            // Shell UI is an explicit interaction with the taskbar and is
+            // allowed to reveal it even while a fullscreen owner is active.
             return index >= 0 &&
-                   scan.shellSurfaceOnMonitor[index] &&
-                   !scan.fullscreenOnMonitor[index];
+                   scan.shellSurfaceOnMonitor[index];
         };
     HWND cursorTaskbar = nullptr;
     bool cursorHoverConfigured = false;
@@ -2255,6 +2178,7 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
         for (size_t i = 0; i < g_taskbarStateCount; ++i) {
             if (g_taskbarStates[i].hwnd == root) {
                 g_taskbarForegroundKeyboardActivated = true;
+                g_taskbarForegroundAfterShell = false;
                 PostRefresh();
                 break;
             }
@@ -2286,6 +2210,17 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
             wcsncmp(className, L"XamlExplorerHostIslandWindow", wcslen(L"XamlExplorerHostIslandWindow")) == 0;
         if (!isXamlShell) {
             return;
+        }
+        if (event == EVENT_OBJECT_SHOW) {
+            // Opening Start/Search is an explicit shell interaction and may
+            // reveal a desktop-only taskbar even during fullscreen.
+            g_taskbarForegroundAfterShell = false;
+        } else {
+            // When the shell surface closes, release any keyboard/taskbar
+            // reveal state left by the interaction so a fullscreen display can
+            // return to its normal hidden-taskbar state immediately.
+            g_taskbarForegroundKeyboardActivated = false;
+            g_taskbarForegroundAfterShell = true;
         }
         PostRefresh();
         return;
@@ -2657,9 +2592,7 @@ void LoadSettings() {
     g_settings.autoHideDelayMs =
         static_cast<DWORD>(delay);
     g_settings.hideAllMonitors = false;
-    g_settings.hideMonitorInterfaceCount = 0;
     g_settings.hoverAllMonitors = false;
-    g_settings.hoverMonitorInterfaceCount = 0;
     for (
         size_t i = 1;
         i <= kMaxMonitorNumbers;
@@ -2667,10 +2600,6 @@ void LoadSettings() {
     ) {
         g_settings.hideMonitor[i] = false;
         g_settings.hoverMonitor[i] = false;
-    }
-    for (size_t i = 0; i < kMaxMonitorInterfaceSettings; ++i) {
-        g_settings.hideMonitorInterfaces[i][0] = L'\0';
-        g_settings.hoverMonitorInterfaces[i][0] = L'\0';
     }
     for (
         size_t i = 0;
@@ -2702,21 +2631,6 @@ void LoadSettings() {
             }
         }
     }
-    for (size_t i = 0; i < kMaxMonitorInterfaceSettings; ++i) {
-        auto value = WindhawkUtils::StringSetting::make(
-            L"hideOnMonitorInterfaces[%d]",
-            static_cast<int>(i)
-        );
-        if (!*value) {
-            break;
-        }
-        wcsncpy_s(
-            g_settings.hideMonitorInterfaces[g_settings.hideMonitorInterfaceCount],
-            value.get(),
-            _TRUNCATE
-        );
-        ++g_settings.hideMonitorInterfaceCount;
-    }
     for (
         size_t i = 0;
         i < kMaxMonitorNumbers;
@@ -2746,21 +2660,6 @@ void LoadSettings() {
                 g_settings.hoverMonitor[number] = true;
             }
         }
-    }
-    for (size_t i = 0; i < kMaxMonitorInterfaceSettings; ++i) {
-        auto value = WindhawkUtils::StringSetting::make(
-            L"hoverRevealOnMonitorInterfaces[%d]",
-            static_cast<int>(i)
-        );
-        if (!*value) {
-            break;
-        }
-        wcsncpy_s(
-            g_settings.hoverMonitorInterfaces[g_settings.hoverMonitorInterfaceCount],
-            value.get(),
-            _TRUNCATE
-        );
-        ++g_settings.hoverMonitorInterfaceCount;
     }
 }
 BOOL WhTool_ModInit() {
