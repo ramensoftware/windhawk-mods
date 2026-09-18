@@ -1015,13 +1015,11 @@ BOOL ExtTextOutCalcRect(HDC hdc, POINT point, UINT options, RECT& textRect, LPCR
 
 BOOL ExtTextOutShouldSkip(HDC hdc, UINT options, LPCRECT lprect, LPCWSTR lpString, INT c)
 {
-    BOOL filtered = FALSE;
-
     if (!hdc || !lpString || !c || !options || GetTextAlign(hdc) & TA_UPDATECP)
-        filtered = TRUE;
+        return TRUE;
     
     if (options & (ETO_OPAQUE | ETO_CLIPPED) && (!lprect || IsRectEmpty(lprect)))
-        filtered = TRUE;
+        return TRUE;
     
     return filtered;
 }
