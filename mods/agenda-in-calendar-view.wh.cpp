@@ -1,4 +1,4 @@
-// ==WindhawkMod==
+﻿// ==WindhawkMod==
 // @id              agenda-in-calendar-view
 // @name            Agenda in Calendar View
 // @description     Show .ics events in the calendar view in the Notification Centre like in Windows 10
@@ -2472,76 +2472,12 @@ std::vector<HWND> GetCoreWnds() {
 // Windhawk lifecycle
 // -----------------------------------------------------------------------------
 
-using LoadExperience_t = void*(WINAPI*)();
-LoadExperience_t LoadExperience_Original_ActionCenter;
-LoadExperience_t LoadExperience_Original_ClockFlyout;
-
-void* WINAPI LoadExperience_Hook_ActionCenter() {
-    Wh_Log(L"LoadExperience_Hook_ActionCenter called!");
-    void* result = LoadExperience_Original_ActionCenter();
-    Wh_Log(L"LoadExperience_Hook_ActionCenter returned: %p", result);
-    if (result) {
-        winrt::Windows::Foundation::IInspectable inspectable = nullptr;
-        winrt::copy_from_abi(inspectable, result);
-        if (auto fe = inspectable.try_as<winrt::Windows::UI::Xaml::FrameworkElement>()) {
-            Wh_Log(L"ActionCenter root FrameworkElement found! Name: %s", fe.Name().c_str());
-            fe.Loaded([](winrt::Windows::Foundation::IInspectable const& sender,
-                         winrt::Windows::UI::Xaml::RoutedEventArgs const&) {
-                Wh_Log(L"ActionCenter root Loaded event fired!");
-                if (auto senderFe = sender.try_as<winrt::Windows::UI::Xaml::FrameworkElement>()) {
-                    WalkVisualTree(senderFe);
-                }
-            });
-            WalkVisualTree(fe);
-        } else {
-            Wh_Log(L"ActionCenter root could not be cast to FrameworkElement.");
-        }
-    }
-    return result;
-}
-
-void* WINAPI LoadExperience_Hook_ClockFlyout() {
-    Wh_Log(L"LoadExperience_Hook_ClockFlyout called!");
-    void* result = LoadExperience_Original_ClockFlyout();
-    Wh_Log(L"LoadExperience_Hook_ClockFlyout returned: %p", result);
-    if (result) {
-        winrt::Windows::Foundation::IInspectable inspectable = nullptr;
-        winrt::copy_from_abi(inspectable, result);
-        if (auto fe = inspectable.try_as<winrt::Windows::UI::Xaml::FrameworkElement>()) {
-            Wh_Log(L"ClockFlyout root FrameworkElement found! Name: %s", fe.Name().c_str());
-            fe.Loaded([](winrt::Windows::Foundation::IInspectable const& sender,
-                         winrt::Windows::UI::Xaml::RoutedEventArgs const&) {
-                Wh_Log(L"ClockFlyout root Loaded event fired!");
-                if (auto senderFe = sender.try_as<winrt::Windows::UI::Xaml::FrameworkElement>()) {
-                    WalkVisualTree(senderFe);
-                }
-            });
-            WalkVisualTree(fe);
-        } else {
-            Wh_Log(L"ClockFlyout root could not be cast to FrameworkElement.");
-        }
-    }
-    return result;
-}
-
 BOOL Wh_ModInit() {
     Wh_Log(L"Calendar XAML mod initializing");
 
     StartWorkerThread();
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
-        {
-            {L"public: static class Platform::Object ^ __cdecl ActionCenter::App::LoadExperience(void)"},
-            (void**)&LoadExperience_Original_ActionCenter,
-            (void*)LoadExperience_Hook_ActionCenter
-        },
-        {
-            {L"public: static class Platform::Object ^ __cdecl ClockFlyoutExperience::App::LoadExperience(void)"},
-            (void**)&LoadExperience_Original_ClockFlyout,
-            (void*)LoadExperience_Hook_ClockFlyout
-        }
-    };
-    WindhawkUtils::HookSymbols(GetModuleHandle(NULL), hooks, ARRAYSIZE(hooks));
+    
 
     HMODULE user32Module = GetModuleHandleW(L"user32.dll");
     if (user32Module) {
