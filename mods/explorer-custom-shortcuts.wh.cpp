@@ -17,7 +17,7 @@
 
 Adds customizable, app-style keyboard shortcuts to Windows File Explorer with parameter substitution, built-in shell commands, and custom token expansion.
 
-> **Input Protection:** All custom shortcuts and configured Escape key actions are automatically suppressed while renaming files, typing into the Address/Breadcrumb bar, typing into the Search box, or while focus is actively inside dialogs (such as Properties, Delete/Replace confirmations). When focus returns to the main File Explorer window, shortcuts resume immediately.
+> **Input Protection:** All custom shortcuts are automatically suppressed while renaming files, typing into the Address/Breadcrumb bar, typing into the Search box, or while focus is actively inside dialogs (such as Properties, Delete/Replace confirmations). When focus returns to the main File Explorer window, shortcuts resume immediately.
 
 ---
 
@@ -28,7 +28,7 @@ Instead of specifying an executable path, set **Executable Path** to one of the 
 * **`internal:newTextFile`**: Creates a `New Text Document.txt` in the active folder and automatically selects/focuses it without UI freezes.
 * **`internal:newFolder`**: Creates a `New Folder` in the active folder and enters inline rename mode immediately.
 * **`internal:openRecycleBin`**: Navigates to the Recycle Bin in the current active tab.
-* **`internal:emptyRecycleBin`**: Silently empties the Recycle Bin after a native confirmation prompt.
+* **`internal:emptyRecycleBin`**: Empties the Recycle Bin with native Windows confirmation dialog and progress display.
 * **`internal:toggleHiddenFiles`**: Instantly toggle visibility of hidden files and folders with immediate view refresh.
 * **`internal:toggleFileExtensions`**: Instantly toggle file name extensions on or off with immediate view refresh.
 * **`internal:folderOptions`**: Opens the native File Explorer Folder Options dialog.
@@ -94,6 +94,11 @@ You can add your own shortcuts using these templates in the settings:
 * **Copy Just File Names to Clipboard**
   * Path: `powershell.exe` | Args: `-WindowStyle Hidden -Command "Set-Clipboard -Value '%n'"` | Mode: `batch`
 
+---
+
+### Comparison with Existing Mods
+While single-purpose mods exist for individual actions, **Explorer Custom Shortcuts** provides a single configurable shortcut table with dynamic selection tokens (`%f`, `%d_smart`, `%n`) and internal shell actions.
+
 ### Attribution & Acknowledgments
 Shell window inspection logic and COM GUID declarations adapt techniques from `explorer-command-bar` (DanRotaru, MIT). Settings toggling follows patterns established in `toggle-hidden-files` (Asteski).
 
@@ -153,13 +158,6 @@ Shell window inspection logic and COM GUID declarations adapt techniques from `e
     - mode: "batch"
   $name: "Custom Shortcuts"
   $description: "List of customizable shortcuts. Supported keys: A-Z, 0-9, and F1-F12. Letters and digits require at least one modifier key (Ctrl, Shift, or Alt). Function keys (F1-F12) can be used standalone."
-- escAction: "disabled"
-  $name: "Escape Key Action"
-  $description: "Action to perform when pressing Escape in File Explorer."
-  $options:
-    - disabled: "Disabled (Default Explorer behavior)"
-    - close_tab: "Close Active Tab"
-    - close_window: "Close Entire Window"
 */
 // ==/WindhawkModSettings==
 
@@ -192,7 +190,6 @@ struct CustomShortcut {
 };
 
 std::vector<CustomShortcut> g_shortcuts;
-std::wstring g_escAction = L"disabled";
 static std::atomic<bool> g_isExecutingInternal{false};
 static std::mutex g_threadsMutex;
 static std::vector<HANDLE> g_threads;
@@ -275,14 +272,6 @@ int ParseKey(std::wstring keyStr) {
 
 void LoadSettings() {
     g_shortcuts.clear();
-
-    PCWSTR escStr = Wh_GetStringSetting(L"escAction");
-    if (escStr) {
-        g_escAction = escStr;
-        Wh_FreeStringSetting(escStr);
-    } else {
-        g_escAction = L"disabled";
-    }
 
     for (int i = 0; i < 100; i++) {
         PCWSTR pathStr = Wh_GetStringSetting(L"shortcuts[%d].path", i);
@@ -458,7 +447,6 @@ std::vector<std::wstring> GetSelectedPaths(IShellView* psv) {
     return files;
 }
 
-
 std::wstring JoinPaths(const std::vector<std::wstring>& paths, bool forceQuotes = true) {
     std::wstring res;
     for (const auto& p : paths) {
@@ -477,7 +465,7 @@ std::wstring GetFileNamesOnly(const std::vector<std::wstring>& paths, bool force
     for (const auto& p : paths) {
         if (!res.empty()) res += L" ";
         PCWSTR namePtr = PathFindFileNameW(p.c_str());
-std::wstring name = namePtr ? namePtr : L"";
+        std::wstring name = namePtr ? namePtr : L"";
         if (forceQuotes || name.find(L' ') != std::wstring::npos) {
             res += L"\"" + name + L"\"";
         } else {
@@ -492,6 +480,7 @@ std::wstring GetFileExtension(const std::vector<std::wstring>& paths) {
     PCWSTR ext = PathFindExtensionW(paths[0].c_str());
     return ext ? ext : L"";
 }
+
 std::wstring ExpandTokens(
     const std::wstring& pattern,
     const std::wstring& activeDir,
@@ -604,14 +593,13 @@ void QueueBackgroundWork(std::function<void()> task) {
 }
 
 void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd) {
-// 1. Open Folder Options (Async via background worker)
-if (_wcsicmp(command.c_str(), L"internal:folderOptions") == 0) {
-    QueueBackgroundWork([]() {
-        ExecuteApp(L"rundll32.exe", L"shell32.dll,Options_RunDLL 0", L"");
-    });
-    return;
-}
-
+    // 1. Open Folder Options
+    if (_wcsicmp(command.c_str(), L"internal:folderOptions") == 0) {
+        QueueBackgroundWork([]() {
+            ExecuteApp(L"rundll32.exe", L"shell32.dll,Options_RunDLL 0", L"");
+        });
+        return;
+    }
 
     // 2. Create New Text Document & Focus/Select
     if (_wcsicmp(command.c_str(), L"internal:newTextFile") == 0) {
@@ -710,33 +698,36 @@ if (_wcsicmp(command.c_str(), L"internal:folderOptions") == 0) {
         return;
     }
 
-    // 5. Empty Recycle Bin Safely (Using Native OS Confirmation Prompt)
+    // 5. Empty Recycle Bin (Shows native prompt & progress UI)
+    // Note: Showing the native confirmation prompt means this worker thread blocks until
+    // dismissed. If the mod unloads during the dialog, Wh_ModUninit will wait on this thread.
+    // This matches the documented pattern in explorer-command-bar.wh.cpp#L2136.
     if (_wcsicmp(command.c_str(), L"internal:emptyRecycleBin") == 0) {
         QueueBackgroundWork([rootHwnd]() {
-            SHEmptyRecycleBinW(rootHwnd, nullptr, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
+            SHEmptyRecycleBinW(rootHwnd, nullptr, 0);
         });
         return;
     }
 
     // 6. Toggle Hidden Files & Force Refresh Active View
     if (_wcsicmp(command.c_str(), L"internal:toggleHiddenFiles") == 0) {
-    SHELLSTATE ss{};
-    SHGetSetSettings(&ss, SSF_SHOWALLOBJECTS, FALSE);
-    ss.fShowAllObjects = !ss.fShowAllObjects;
-    SHGetSetSettings(&ss, SSF_SHOWALLOBJECTS, TRUE);
-    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
-    return;
-}
+        SHELLSTATE ss{};
+        SHGetSetSettings(&ss, SSF_SHOWALLOBJECTS, FALSE);
+        ss.fShowAllObjects = !ss.fShowAllObjects;
+        SHGetSetSettings(&ss, SSF_SHOWALLOBJECTS, TRUE);
+        SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+        return;
+    }
 
     // 7. Toggle File Name Extensions & Force Refresh Active View
     if (_wcsicmp(command.c_str(), L"internal:toggleFileExtensions") == 0) {
-    SHELLSTATE ss{};
-    SHGetSetSettings(&ss, SSF_SHOWEXTENSIONS, FALSE);
-    ss.fShowExtensions = !ss.fShowExtensions;
-    SHGetSetSettings(&ss, SSF_SHOWEXTENSIONS, TRUE);
-    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
-    return;
-}
+        SHELLSTATE ss{};
+        SHGetSetSettings(&ss, SSF_SHOWEXTENSIONS, FALSE);
+        ss.fShowExtensions = !ss.fShowExtensions;
+        SHGetSetSettings(&ss, SSF_SHOWEXTENSIONS, TRUE);
+        SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+        return;
+    }
 
     Wh_Log(L"Unknown internal command: %s", command.c_str());
 }
@@ -881,44 +872,14 @@ bool ProcessHotKey(HWND hwnd, WPARAM key) {
     }
     
     if (wcscmp(className, L"CabinetWClass") == 0 || wcscmp(className, L"ExploreWClass") == 0) {
-        bool ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-        bool shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
-        bool alt   = (GetKeyState(VK_MENU)    & 0x8000) != 0;
-
-        if (key == VK_ESCAPE && !ctrl && !shift && !alt && g_escAction != L"disabled") {
-            if (!IsInlineEditingActive(rootHwnd)) {
-                if (g_escAction == L"close_tab") {
-                    // Synthesize Ctrl+W to close active tab safely without closing entire window
-                    INPUT inputs[4] = {};
-                    inputs[0].type = INPUT_KEYBOARD;
-                    inputs[0].ki.wVk = VK_CONTROL;
-
-                    inputs[1].type = INPUT_KEYBOARD;
-                    inputs[1].ki.wVk = 'W';
-
-                    inputs[2].type = INPUT_KEYBOARD;
-                    inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
-                    inputs[2].ki.wVk = 'W';
-
-                    inputs[3].type = INPUT_KEYBOARD;
-                    inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
-                    inputs[3].ki.wVk = VK_CONTROL;
-
-                    SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT));
-                    return true;
-                } else if (g_escAction == L"close_window") {
-                    PostMessageW(rootHwnd, WM_SYSCOMMAND, SC_CLOSE, 0);
-                    return true;
-                }
-            }
-            return false;
-        }
-
         if (IsInlineEditingActive(rootHwnd)) {
             return false;
         }
 
-        // thread_local prevents multi-window race conditions across Explorer UI threads
+        bool ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+        bool shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
+        bool alt   = (GetKeyState(VK_MENU)    & 0x8000) != 0;
+
         thread_local ULONGLONG s_lastTriggerTime = 0;
         thread_local WPARAM s_lastTriggerKey = 0;
 
@@ -940,7 +901,6 @@ bool ProcessHotKey(HWND hwnd, WPARAM key) {
     }
     return false;
 }
-
 
 using TranslateAcceleratorW_t = int (WINAPI*)(HWND hWnd, HACCEL hAccTable, LPMSG lpMsg);
 TranslateAcceleratorW_t TranslateAcceleratorW_Original;
@@ -975,7 +935,10 @@ void Wh_ModUninit() {
         threadsToJoin.swap(g_threads);
     }
     for (HANDLE h : threadsToJoin) {
-        WaitForSingleObject(h, INFINITE);
+        if (WaitForSingleObject(h, 2000) == WAIT_TIMEOUT) {
+            Wh_Log(L"Waiting for worker thread to exit (e.g. pending shell dialog)...");
+            WaitForSingleObject(h, INFINITE);
+        }
         CloseHandle(h);
     }
 }
