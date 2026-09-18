@@ -110,9 +110,9 @@ static constexpr UINT kFitStepDelayMs = 40;
 // Elastic mode's verify/correct loop needs settle time for slower-relayout views.
 static constexpr UINT kElasticVerifyDelayMs = 90;
 
-// Wall-clock budget for the folder scan, independent of item count: some property
-// columns (media metadata, network/cloud storage) can make GetDetailsEx a real,
-// possibly slow round trip per call, which item count alone doesn't bound.
+// Wall-clock budget for the folder scan, checked per-column (not just per-item).
+// Kept at 2000ms: legitimately slow metadata reads (e.g. audio tags) can still
+// exceed a small budget on the very first item, losing Full/Elastic entirely.
 static constexpr ULONGLONG kScanTimeBudgetMs = 2000;
 
 // g_cs guards all global map access; g_settingsCs guards the cached-settings snapshot.
@@ -158,11 +158,14 @@ struct TabWidthCache {
 };
 static std::unordered_map<HWND, TabWidthCache> g_tabWidthCache;
 
-// PROPERTYKEY has no operator==, so column-set comparisons are done manually.
+// Per-tab current folder PIDL, so UIActivate can skip re-registering and
+// re-fitting when it fires for focus/tab-switch reasons, not navigation.
+static std::unordered_map<HWND, PIDLIST_ABSOLUTE> g_tabFolderPidl;
+
 static bool SameColumnKeys(const std::vector<PROPERTYKEY>& a, const std::vector<PROPERTYKEY>& b) {
     if (a.size() != b.size()) return false;
     for (size_t i = 0; i < a.size(); i++) {
-        if (!IsEqualGUID(a[i].fmtid, b[i].fmtid) || a[i].pid != b[i].pid)
+        if (!IsEqualPropertyKey(a[i], b[i]))
             return false;
     }
     return true;
@@ -170,12 +173,14 @@ static bool SameColumnKeys(const std::vector<PROPERTYKEY>& a, const std::vector<
 
 // Elastic mode stretches whichever column is actually the Name column, not
 // whichever happens to be first -- a user can reorder columns.
+static constexpr UINT kNoNameColumn = static_cast<UINT>(-1);
+
 static UINT FindNameColumnIndex(const std::vector<PROPERTYKEY>& keys) {
     for (UINT i = 0; i < keys.size(); i++) {
-        if (IsEqualGUID(keys[i].fmtid, PKEY_ItemNameDisplay.fmtid) && keys[i].pid == PKEY_ItemNameDisplay.pid)
+        if (IsEqualPropertyKey(keys[i], PKEY_ItemNameDisplay))
             return i;
     }
-    return 0;  // Name isn't in the visible column set (shouldn't normally happen)
+    return kNoNameColumn;  // Name isn't in the visible column set (shouldn't normally happen)
 }
 
 // A resize-only trigger is downgraded back to a full trigger if a real
@@ -186,9 +191,9 @@ static std::unordered_map<HWND, TriggerKind> g_pendingTriggerKind;
 static void MarkFitTrigger(HWND hwndTimer, bool resizeOnly) {
     TriggerKind newKind = resizeOnly ? TriggerKind::ResizeOnly : TriggerKind::Full;
     EnterCriticalSection(&g_cs);
-    auto it = g_pendingTriggerKind.find(hwndTimer);
-    if (it == g_pendingTriggerKind.end() || newKind == TriggerKind::Full)
-        g_pendingTriggerKind[hwndTimer] = newKind;
+    auto [it, inserted] = g_pendingTriggerKind.try_emplace(hwndTimer, newKind);
+    if (!inserted && newKind == TriggerKind::Full)
+        it->second = newKind;
     LeaveCriticalSection(&g_cs);
 }
 
@@ -391,17 +396,17 @@ static ScanResult ScanForWidestItems(
     ULONGLONG deadline = GetTickCount64() + kScanTimeBudgetMs;
     WCHAR dispBuf[512];
 
-    for (int i = 0; i < itemCount; i++) {
-        if ((i & 0x1F) == 0 && GetTickCount64() > deadline) {
-            result.aborted = true;
-            break;
-        }
-
+    for (int i = 0; i < itemCount && !result.aborted; i++) {
         PITEMID_CHILD pidl = nullptr;
         if (FAILED(pFV2->Item(i, &pidl)) || !pidl)
             continue;
 
         for (UINT c = 0; c < colCount; c++) {
+            if (GetTickCount64() > deadline) {
+                result.aborted = true;
+                break;
+            }
+
             VARIANT v;
             VariantInit(&v);
             if (SUCCEEDED(pFolder2->GetDetailsEx(pidl, reinterpret_cast<const SHCOLUMNID*>(&keys[c]), &v))) {
@@ -463,18 +468,18 @@ static ScanResult ScanForWidestItems(
 
 // Computes Name's width from leftover viewport space after other columns; never returns <= 0 (0 would mean CM_WIDTH_AUTOSIZE to the caller).
 static int ComputeElasticNameWidth(HWND hwndView, HWND hwndListView, IUIAutomationElement* pListElement,
-                                    const std::vector<int>& widths, UINT nameColIndex, UINT dpi, double dpiScale)
+                                    const std::vector<int>& widths, UINT nameColIndex, UINT /*dpi*/, double dpiScale)
 {
     int minNameWidth = static_cast<int>(60 * dpiScale);
 
     int viewportWidth = 0;
-    bool hasVScroll = false;
 
     if (hwndListView) {
+        // GetClientRect already excludes the non-client vertical scrollbar,
+        // so its width isn't subtracted again below.
         RECT rc = {};
         GetClientRect(hwndListView, &rc);
         viewportWidth = rc.right - rc.left;
-        hasVScroll = (GetWindowLongPtrW(hwndListView, GWL_STYLE) & WS_VSCROLL) != 0;
     } else if (pListElement) {
         RECT rcElem = {};
         if (SUCCEEDED(pListElement->get_CurrentBoundingRectangle(&rcElem)))
@@ -497,9 +502,8 @@ static int ComputeElasticNameWidth(HWND hwndView, HWND hwndListView, IUIAutomati
         otherColumnsTotal += (widths[c] < minColWidth) ? minColWidth : widths[c];
     }
 
-    int scrollbarAllowance = hasVScroll ? GetSystemMetricsForDpi(SM_CXVSCROLL, dpi) : 0;
     int initialSafetyMargin = static_cast<int>(8 * dpiScale);
-    int nameWidth = viewportWidth - otherColumnsTotal - scrollbarAllowance - initialSafetyMargin;
+    int nameWidth = viewportWidth - otherColumnsTotal - initialSafetyMargin;
     return (nameWidth < minNameWidth) ? minNameWidth : nameWidth;
 }
 
@@ -539,6 +543,8 @@ struct FitContext {
     std::vector<PITEMID_CHILD> widestPidl;       // owned; per column, from the initial scan
     std::vector<UINT> exactColumnQueue;          // column indices still needing scroll+autosize+read
     size_t exactQueueIndex = 0;
+    int preAutosizeWidth = 0;                    // width just before the current column's autosize
+    bool retriedRead = false;                    // one extra settle tick if the read looked stale
 
     // Real scroll-position restore: captured before the exact-measurement
     // queue starts, re-applied once it's done, so a fit never leaves the
@@ -631,6 +637,13 @@ static void Step_SelectWidest(FitContext* ctx, HWND hwndOwner) {
 // rendering produces, not an approximation from our own font/metric guesses.
 static void Step_ApplyExactAutosize(FitContext* ctx, HWND hwndOwner) {
     UINT c = ctx->exactColumnQueue[ctx->exactQueueIndex];
+    CM_COLUMNINFO ciBefore = {};
+    ciBefore.cbSize = sizeof(ciBefore);
+    ciBefore.dwMask = CM_MASK_WIDTH;
+    ctx->pCM->GetColumnInfo(ctx->keys[c], &ciBefore);
+    ctx->preAutosizeWidth = static_cast<int>(ciBefore.uWidth);
+    ctx->retriedRead = false;
+
     CM_COLUMNINFO ci = {};
     ci.cbSize = sizeof(ci);
     ci.dwMask = CM_MASK_WIDTH;
@@ -648,7 +661,19 @@ static void Step_ReadExactAndRestore(FitContext* ctx, HWND hwndOwner) {
     CM_COLUMNINFO ciResult = {};
     ciResult.cbSize = sizeof(ciResult);
     ciResult.dwMask = CM_MASK_WIDTH;
-    if (SUCCEEDED(ctx->pCM->GetColumnInfo(ctx->keys[c], &ciResult)) && ciResult.uWidth > 0) {
+    bool gotResult = SUCCEEDED(ctx->pCM->GetColumnInfo(ctx->keys[c], &ciResult)) && ciResult.uWidth > 0;
+
+    // A read-back equal to the pre-autosize width likely means the view
+    // hadn't finished relayout yet; wait one more tick and re-read once.
+    if (gotResult && !ctx->retriedRead &&
+        static_cast<int>(ciResult.uWidth) == ctx->preAutosizeWidth) {
+        ctx->retriedRead = true;
+        ctx->phase = FitContext::Phase::WaitExactAutosize;
+        SetTimer(hwndOwner, FITSTEP_TIMER_ID, kFitStepDelayMs, nullptr);
+        return;
+    }
+
+    if (gotResult) {
         int w = static_cast<int>(ciResult.uWidth);
         ctx->maxWidths[c] = (w < ctx->headerFloor[c]) ? ctx->headerFloor[c] : w;
     }
@@ -887,6 +912,11 @@ static void StartAutoFit(IShellView* pShellView, HWND hwndOwner, bool resizeOnly
 
     bool elasticMode = (settings.fitMode == FitMode::Elastic);
     UINT nameColIndex = FindNameColumnIndex(keys);
+    if (elasticMode && nameColIndex == kNoNameColumn) {
+        // No Name column to stretch -- degrade to Full-mode behavior rather
+        // than silently mangling an arbitrary column.
+        elasticMode = false;
+    }
     HWND hwndView = nullptr;
     pShellView->GetWindow(&hwndView);
     HWND hwndListView = hwndView ? FindDescendantByClass(hwndView, L"SysListView32") : nullptr;
@@ -929,8 +959,30 @@ static void StartAutoFit(IShellView* pShellView, HWND hwndOwner, bool resizeOnly
     int itemCount = 0;
     HRESULT hrCount = pFV2->ItemCount(SVGIO_ALLVIEW, &itemCount);
     if (FAILED(hrCount) || itemCount > settings.maxScanItems) {
-        // Folder too large (or count unavailable) for a full/elastic scan
-        // this time -- fall back to the fast built-in autosize.
+        // Folder too large (or count unavailable) for a full scan this time.
+        // Elastic can still stretch Name using native-autosize results for
+        // the other columns, without the exhaustive per-item scan.
+        if (elasticMode) {
+            ApplyColumnWidthsLiteral(pCM, keys, std::vector<int>(colCount, 0));
+            std::vector<int> widths(colCount, 0);
+            for (UINT c = 0; c < colCount; c++) {
+                if (c == nameColIndex) continue;
+                CM_COLUMNINFO ci = {};
+                ci.cbSize = sizeof(ci);
+                ci.dwMask = CM_MASK_WIDTH;
+                if (SUCCEEDED(pCM->GetColumnInfo(keys[c], &ci)))
+                    widths[c] = static_cast<int>(ci.uWidth);
+            }
+            IUIAutomationElement* pListElement = hwndListView ? nullptr : FindListElementViaUIA(hwndView);
+            widths[nameColIndex] = ComputeElasticNameWidth(hwndView, hwndListView, pListElement, widths,
+                                                            nameColIndex, dpi, dpiScale);
+            ApplyColumnWidthsLiteral(pCM, keys, widths);
+            Wh_Log(L"Auto-fitted %u column(s) (elastic, large folder: name-stretch only)", colCount);
+            StartElasticVerify(pShellView, pFV2, pCM, hwndOwner, hwndView, hwndListView, hwndHeader,
+                                std::move(keys), colCount, nameColIndex, dpi, dpiScale,
+                                std::move(widths), pListElement);
+            return;
+        }
         ApplyColumnWidthsLiteral(pCM, keys, std::vector<int>(colCount, 0));
         Wh_Log(L"Auto-fitted %u column(s) (fallback: visible rows only)", colCount);
         pCM->Release();
@@ -1062,14 +1114,7 @@ static void TrackAndSubclass(HWND hwnd, HWND hwndTab) {
     bool alreadyTracked = g_windowToTab.find(hwnd) != g_windowToTab.end();
     LeaveCriticalSection(&g_cs);
 
-    if (alreadyTracked) {
-        EnterCriticalSection(&g_cs);
-        g_windowToTab[hwnd] = hwndTab;
-        LeaveCriticalSection(&g_cs);
-        return;
-    }
-
-    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, ExplorerSubclassProc, 0)) {
+    if (alreadyTracked || WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, ExplorerSubclassProc, 0)) {
         EnterCriticalSection(&g_cs);
         g_windowToTab[hwnd] = hwndTab;
         LeaveCriticalSection(&g_cs);
@@ -1096,25 +1141,31 @@ static BOOL CALLBACK SubclassChildProc(HWND child, LPARAM lp) {
     return TRUE;
 }
 
-// Registers (or re-registers) shell change notifications for hwndTab's current folder.
-static void RegisterFolderChangeNotify(HWND hwndTab, IShellView* pShellView) {
-    if (!hwndTab || !pShellView || g_shellNotifyMsg == 0) return;
-
+// Returns the shell view's current folder as an owned absolute PIDL, or null.
+static PIDLIST_ABSOLUTE GetShellViewFolderPidl(IShellView* pShellView) {
     IFolderView2* pFV2 = nullptr;
     if (FAILED(pShellView->QueryInterface(IID_PPV_ARGS(&pFV2))) || !pFV2)
-        return;
+        return nullptr;
 
     IShellFolder* pShellFolder = nullptr;
     HRESULT hr = pFV2->GetFolder(IID_PPV_ARGS(&pShellFolder));
     pFV2->Release();
     if (FAILED(hr) || !pShellFolder)
-        return;
+        return nullptr;
 
     PIDLIST_ABSOLUTE pidl = nullptr;
     hr = SHGetIDListFromObject(pShellFolder, &pidl);
     pShellFolder->Release();
-    if (FAILED(hr) || !pidl)
+    return SUCCEEDED(hr) ? pidl : nullptr;
+}
+
+// Registers (or re-registers) shell change notifications for hwndTab's current folder.
+// Takes ownership of pidl (caller-provided, already resolved via GetShellViewFolderPidl).
+static void RegisterFolderChangeNotify(HWND hwndTab, PIDLIST_ABSOLUTE pidl) {
+    if (!hwndTab || !pidl || g_shellNotifyMsg == 0) {
+        if (pidl) CoTaskMemFree(pidl);
         return;
+    }
 
     EnterCriticalSection(&g_cs);
     auto it = g_tabNotifyReg.find(hwndTab);
@@ -1129,7 +1180,7 @@ static void RegisterFolderChangeNotify(HWND hwndTab, IShellView* pShellView) {
     SHChangeNotifyEntry entry = { pidl, FALSE };
     ULONG newReg = SHChangeNotifyRegister(
         hwndTab,
-        SHCNRF_ShellLevel | SHCNRF_NewDelivery,
+        SHCNRF_ShellLevel | SHCNRF_InterruptLevel | SHCNRF_NewDelivery,
         SHCNE_UPDATEDIR | SHCNE_MKDIR | SHCNE_RMDIR |
             SHCNE_CREATE | SHCNE_DELETE | SHCNE_RENAMEITEM | SHCNE_RENAMEFOLDER,
         g_shellNotifyMsg,
@@ -1163,15 +1214,57 @@ HRESULT __thiscall CDefView_UIActivate_hook(void* pThis, UINT uState) {
         if (!hwndTab) return hr;  // no tab ancestor -- e.g. the desktop's own CDefView
         HWND hwndTop = GetAncestor(hwndView, GA_ROOT);
 
+        bool viewChanged = false;
         {
             IShellView* pOld = nullptr;
             EnterCriticalSection(&g_cs);
             if (auto it = g_tabShellViews.find(hwndTab); it != g_tabShellViews.end())
                 pOld = it->second;
+            viewChanged = (pOld != pShellView);
             pShellView->AddRef();
             g_tabShellViews[hwndTab] = pShellView;
             LeaveCriticalSection(&g_cs);
             if (pOld) pOld->Release();  // outside the lock -- can run arbitrary shell teardown
+        }
+
+        if (viewChanged) {
+            // Drop any fit still in flight for this tab: it's stepping
+            // against a now-detached view and would cache the wrong widths.
+            std::unique_ptr<FitContext> staleCtx;
+            EnterCriticalSection(&g_cs);
+            if (auto it = g_fitContexts->find(hwndTab); it != g_fitContexts->end()) {
+                staleCtx = std::move(it->second);
+                g_fitContexts->erase(it);
+            }
+            LeaveCriticalSection(&g_cs);
+        }
+
+        PIDLIST_ABSOLUTE currentPidl = GetShellViewFolderPidl(pShellView);
+        bool sameFolder = false;
+        if (!viewChanged && currentPidl) {
+            EnterCriticalSection(&g_cs);
+            auto it = g_tabFolderPidl.find(hwndTab);
+            if (it != g_tabFolderPidl.end() && ILIsEqual(it->second, currentPidl))
+                sameFolder = true;
+            LeaveCriticalSection(&g_cs);
+        }
+
+        if (sameFolder) {
+            CoTaskMemFree(currentPidl);
+            return hr;  // focus/tab-switch activation, folder unchanged: nothing to do
+        }
+
+        if (currentPidl) {
+            PIDLIST_ABSOLUTE ownedCopy = ILCloneFull(currentPidl);
+            EnterCriticalSection(&g_cs);
+            auto it = g_tabFolderPidl.find(hwndTab);
+            if (it != g_tabFolderPidl.end()) {
+                ILFree(it->second);
+                it->second = ownedCopy;
+            } else {
+                g_tabFolderPidl[hwndTab] = ownedCopy;
+            }
+            LeaveCriticalSection(&g_cs);
         }
 
         EnumChildData data = { hwndTab };
@@ -1181,7 +1274,7 @@ HRESULT __thiscall CDefView_UIActivate_hook(void* pThis, UINT uState) {
         TrackAndSubclass(hwndTop, hwndTab);
         TrackAndSubclass(hwndView, hwndTab);
 
-        RegisterFolderChangeNotify(hwndTab, pShellView);
+        RegisterFolderChangeNotify(hwndTab, currentPidl);  // takes ownership
 
         MarkFitTrigger(hwndTab, /*resizeOnly=*/false);
         if (!g_unloading.load(std::memory_order_relaxed))
@@ -1289,6 +1382,10 @@ static void CleanupWindowState(HWND hwnd) {
     }
     g_tabWidthCache.erase(hwnd);
     g_pendingTriggerKind.erase(hwnd);
+    if (auto itPidl = g_tabFolderPidl.find(hwnd); itPidl != g_tabFolderPidl.end()) {
+        ILFree(itPidl->second);
+        g_tabFolderPidl.erase(itPidl);
+    }
     LeaveCriticalSection(&g_cs);
 
     bool wasTabWindow = (pSVToRelease != nullptr);
@@ -1496,11 +1593,18 @@ void Wh_ModUninit() {
     }
 
     EnterCriticalSection(&g_cs);
+    if (!g_tabShellViews.empty())
+        Wh_Log(L"WARNING: %zu shell view(s) leaked at uninit", g_tabShellViews.size());
+    if (!g_tabNotifyReg.empty())
+        Wh_Log(L"WARNING: %zu notify registration(s) leaked at uninit", g_tabNotifyReg.size());
     g_windowToTab.clear();
-    g_tabShellViews.clear();       // already emptied via the cleanup messages above
-    g_tabNotifyReg.clear();        // already emptied via the cleanup messages above
+    g_tabShellViews.clear();       // should already be empty via the cleanup messages above
+    g_tabNotifyReg.clear();        // should already be empty via the cleanup messages above
     g_tabWidthCache.clear();
     g_pendingTriggerKind.clear();
+    for (auto& [hwnd, pidl] : g_tabFolderPidl)
+        ILFree(pidl);
+    g_tabFolderPidl.clear();
     LeaveCriticalSection(&g_cs);
 
     // Reset outside g_cs so a surviving FitContext's COM release (if any) never happens while holding a lock other threads block on.
