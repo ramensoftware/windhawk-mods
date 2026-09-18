@@ -2799,6 +2799,7 @@ void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
     pRT->CreateSolidColorBrush(D2D1::ColorF(0.24f, 0.28f, 0.38f, 0.90f), &pBorderBrush);
     pRT->CreateSolidColorBrush(D2D1::ColorF(0.20f, 0.24f, 0.32f, 0.80f), &pSpokeBrush);
     pRT->CreateSolidColorBrush(D2D1::ColorF(0.32f, 0.85f, 0.69f, 0.50f), &pGlowBrush);
+    pRT->CreateSolidColorBrush(D2D1::ColorF(0.20f, 0.35f, 0.48f, 0.92f), &pHoverBrush);
     pRT->CreateSolidColorBrush(D2D1::ColorF(0.92f, 0.95f, 0.98f, 1.00f), &pTextBrush);
 
     float cx = g_radialX;
@@ -2816,18 +2817,22 @@ void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
     // 1. Draw Action Ring Annulus (between 44px and 96px)
     float ringMidR = (kInnerRingR + kOuterRingR) * 0.5f;
     float ringThick = (kOuterRingR - kInnerRingR);
-    pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), ringMidR, ringMidR), pBgBrush, ringThick);
-    pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), kInnerRingR, kInnerRingR), pBorderBrush, 1.2f);
-    pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), kOuterRingR, kOuterRingR), pBorderBrush, 1.2f);
+    if (pBgBrush) pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), ringMidR, ringMidR), pBgBrush, ringThick);
+    if (pBorderBrush) {
+        pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), kInnerRingR, kInnerRingR), pBorderBrush, 1.2f);
+        pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), kOuterRingR, kOuterRingR), pBorderBrush, 1.2f);
+    }
 
     // 2. Draw 9 Radial Divider Spokes
-    for (int k = 0; k < kRadialSectorCount; ++k) {
-        float spokeAngle = (float)(k * kSectorAngle + kSectorAngle * 0.5f);
-        float x1 = cx + std::cos(spokeAngle) * kInnerRingR;
-        float y1 = cy + std::sin(spokeAngle) * kInnerRingR;
-        float x2 = cx + std::cos(spokeAngle) * kOuterRingR;
-        float y2 = cy + std::sin(spokeAngle) * kOuterRingR;
-        pRT->DrawLine(D2D1::Point2F(x1, y1), D2D1::Point2F(x2, y2), pSpokeBrush, 1.2f);
+    if (pSpokeBrush) {
+        for (int k = 0; k < kRadialSectorCount; ++k) {
+            float spokeAngle = (float)(k * kSectorAngle + kSectorAngle * 0.5f);
+            float x1 = cx + std::cos(spokeAngle) * kInnerRingR;
+            float y1 = cy + std::sin(spokeAngle) * kInnerRingR;
+            float x2 = cx + std::cos(spokeAngle) * kOuterRingR;
+            float y2 = cy + std::sin(spokeAngle) * kOuterRingR;
+            pRT->DrawLine(D2D1::Point2F(x1, y1), D2D1::Point2F(x2, y2), pSpokeBrush, 1.2f);
+        }
     }
 
     // 3. Draw Hovered Sector Highlight
@@ -2838,8 +2843,8 @@ void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
             float secAngle = (float)(g_radialHoverSector * kSectorAngle);
             float hx = cx + std::cos(secAngle) * kActionIconR;
             float hy = cy + std::sin(secAngle) * kActionIconR;
-            pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(hx, hy), 18.0f * scale, 18.0f * scale), pHoverBrush);
-            pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(hx, hy), 18.0f * scale, 18.0f * scale), pGlowBrush, 1.5f);
+            if (pHoverBrush) pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(hx, hy), 18.0f * scale, 18.0f * scale), pHoverBrush);
+            if (pGlowBrush) pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(hx, hy), 18.0f * scale, 18.0f * scale), pGlowBrush, 1.5f);
         }
     }
 
@@ -2890,13 +2895,16 @@ void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
                 if (isSecDisabled) {
                     pRT->CreateSolidColorBrush(D2D1::ColorF(0.40f, 0.44f, 0.52f, 0.38f), &pIconBrush);
                 }
-                pRT->DrawText(
-                    sectorIcons[k], (UINT32)wcslen(sectorIcons[k]),
-                    g_pRadialIconFormat,
-                    iconRect,
-                    pIconBrush ? pIconBrush : pTextBrush,
-                    D2D1_DRAW_TEXT_OPTIONS_NONE
-                );
+                ID2D1SolidColorBrush* pDrawBrush = pIconBrush ? pIconBrush : pTextBrush;
+                if (pDrawBrush) {
+                    pRT->DrawText(
+                        sectorIcons[k], (UINT32)wcslen(sectorIcons[k]),
+                        g_pRadialIconFormat,
+                        iconRect,
+                        pDrawBrush,
+                        D2D1_DRAW_TEXT_OPTIONS_NONE
+                    );
+                }
                 if (pIconBrush) pIconBrush->Release();
             }
         }
@@ -2904,17 +2912,18 @@ void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
 
     // 5. Center Hub: Active Swatch & Pen/Highlighter/Laser Toggle
     bool centerHovered = (g_radialHoverTarget == RadialTarget::Center);
-    if (centerHovered) {
+    if (centerHovered && pGlowBrush) {
         pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), kCenterRadius + 3.0f * scale, kCenterRadius + 3.0f * scale), pGlowBrush);
     }
-    pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), kCenterRadius, kCenterRadius), pBgBrush);
-    pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), kCenterRadius, kCenterRadius), centerHovered ? pGlowBrush : pBorderBrush, centerHovered ? 2.0f : 1.5f);
+    if (pBgBrush) pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), kCenterRadius, kCenterRadius), pBgBrush);
+    ID2D1SolidColorBrush* pCenterBorder = centerHovered ? (pGlowBrush ? pGlowBrush : pBorderBrush) : pBorderBrush;
+    if (pCenterBorder) pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), kCenterRadius, kCenterRadius), pCenterBorder, centerHovered ? 2.0f : 1.5f);
 
     ID2D1SolidColorBrush* pActiveBrush = nullptr;
     pRT->CreateSolidColorBrush(g_activeColor, &pActiveBrush);
     if (pActiveBrush) {
         pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), 16.0f * scale, 16.0f * scale), pActiveBrush);
-        pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), 16.0f * scale, 16.0f * scale), pBorderBrush, 1.2f);
+        if (pBorderBrush) pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), 16.0f * scale, 16.0f * scale), pBorderBrush, 1.2f);
         pActiveBrush->Release();
     }
 
@@ -2930,7 +2939,7 @@ void DrawRadialMenu(ID2D1HwndRenderTarget* pRT) {
     }
 
     // 6. Outer Color Wheel Guide track
-    pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), kOrbitalRadius, kOrbitalRadius), pBorderBrush, 0.8f);
+    if (pBorderBrush) pRT->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), kOrbitalRadius, kOrbitalRadius), pBorderBrush, 0.8f);
 
     // 7. 360-Degree Orbital Color Orbs (16 colors)
     for (size_t i = 0; i < kPresetColorCount; ++i) {
@@ -7338,6 +7347,8 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 g_radialHoverTarget = RadialTarget::None;
                 g_radialHoverSector = -1;
                 g_hoveredOrb = -1;
+                g_hoveredRecentOrb = -1;
+                g_radialRecentFanOpen = false;
             }
             InvalidateOverlay();
         }
