@@ -2,7 +2,7 @@
 // @id              explorer-tags
 // @name            Explorer Tags
 // @description     Colored tags panel at the bottom of File Explorer's navigation pane, plus a Tags submenu in the file context menu
-// @version         0.4.0
+// @version         0.4.1
 // @author          buedgik
 // @github          https://github.com/buedgik
 // @homepage        https://github.com/buedgik/explorer-tags
@@ -3026,16 +3026,22 @@ BOOL TrackWithTagMenu(HMENU menu, UINT flags, HWND owner, Original original) {
     }
     ReleaseSRWLockExclusive(&g_panelsLock);
 
-    RemoveTagMenu(tm);
-
     // The reserved block is chosen from the IDs present when the menu opens,
     // but shell submenus (Send to, Open with) fill themselves in later: check
     // the command really belongs to our submenu before swallowing it.
+    //
+    // This has to happen BEFORE RemoveTagMenu, which destroys the submenu:
+    // asking afterwards always answered "not mine", and picking a tag did
+    // nothing at all (measured on a real Explorer, 2026-09-18).
     UINT id = (UINT)result;
     MENUITEMINFOW ours = {sizeof(ours)};
     ours.fMask = MIIM_ID;
-    bool isOurs = tm.sub && IsMenu(tm.sub) && GetMenuItemInfoW(tm.sub, id, FALSE, &ours);
-    if (result && isOurs && id >= tm.base && id < tm.base + MENU_ID_RANGE) {
+    bool isOurs = result && id >= tm.base && id < tm.base + MENU_ID_RANGE && tm.sub &&
+                  IsMenu(tm.sub) && GetMenuItemInfoW(tm.sub, id, FALSE, &ours);
+
+    RemoveTagMenu(tm);
+
+    if (isOurs) {
         RunTagMenuCommand(tm, id, paths);
         return 0;
     }
