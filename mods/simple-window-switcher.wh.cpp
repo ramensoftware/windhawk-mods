@@ -7,7 +7,7 @@
 // @github          https://github.com/Louis047
 // @include         windhawk.exe
 // @include         explorer.exe
-// @compilerOptions -ldwmapi -luxtheme -lgdi32 -lshlwapi -loleaut32 -lole32 -lcomctl32 -lgdiplus -lversion -lwinmm -ladvapi32
+// @compilerOptions -ldwmapi -luxtheme -lgdi32 -lshlwapi -loleaut32 -lole32 -lcomctl32 -lgdiplus -lversion -lwinmm -ladvapi32 -lmsimg32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -737,7 +737,6 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
 #include <vector>
 #include <atomic>
 #include <map>
-#include <tuple>
 #include <string>
 #include <algorithm>
 #include <gdiplus.h>
@@ -1279,6 +1278,19 @@ static DWORD WINAPI DwmCornerWatchThread(LPVOID lpParam) {
     CloseHandle(hChangeEvt);
     RegCloseKey(hKey);
     return 0;
+}
+
+struct ThumbCacheState {
+    RECT dst;
+    BYTE alpha;
+    BOOL visible;
+};
+static std::map<HTHUMBNAIL, ThumbCacheState> g_lastThumbState;
+
+static inline HRESULT SafeDwmUnregisterThumbnail(HTHUMBNAIL h) {
+    if (!h) return S_OK;
+    g_lastThumbState.erase(h);
+    return DwmUnregisterThumbnail(h);
 }
 
 // Forward declarations
@@ -2002,7 +2014,7 @@ static void FinishAnimations() {
         g_layoutTransition.progress = 1.0f;
         for (auto& item : g_layoutTransition.departingItems) {
             for (const auto& kv : item.hThumbs) {
-                if (kv.second) DwmUnregisterThumbnail(kv.second);
+                if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
             }
         }
         g_layoutTransition.departingItems.clear();
@@ -2024,7 +2036,7 @@ static void FinishAnimations() {
         int curIdx = FindWindowIndexByHwnd(item.hWnd);
         if (curIdx == -1 || IsWindowTruncated(curIdx)) {
             for (const auto& kv : item.hThumbs) {
-                if (kv.second) DwmUnregisterThumbnail(kv.second);
+                if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
             }
             if (curIdx != -1) {
                 g_windows[curIdx].hThumbs.clear();
@@ -2061,12 +2073,17 @@ static void CaptureOutgoingSnapshot() {
         RECT rc; GetClientRect(g_hSwitcher, &rc);
         int w = rc.right, h = rc.bottom;
         if (w > 0 && h > 0 && s_cachedStaticDC && s_cachedStaticW == w && s_cachedStaticH == h) {
-            int radius = GetWindowCornerRadiusPx();
-            if (s_cachedStaticBits) memset(s_cachedStaticBits, 0, (size_t)w * h * sizeof(DWORD));
-            HRGN hClip = GetCachedRoundRectRgn(w, h, radius);
-            SelectClipRgn(s_cachedStaticDC, hClip);
-            DrawSwitcherStaticContent(s_cachedStaticDC, ShouldFillBackground(), g_hSwitcher);
-            g_staticContentDirty = false;
+            if (g_scrollTransition.active && s_cachedScrollToDC && s_cachedScrollToW == w && s_cachedScrollToH == h) {
+                BitBlt(s_cachedStaticDC, 0, 0, w, h, s_cachedScrollToDC, 0, 0, SRCCOPY);
+                g_staticContentDirty = false;
+            } else {
+                int radius = GetWindowCornerRadiusPx();
+                if (s_cachedStaticBits) memset(s_cachedStaticBits, 0, (size_t)w * h * sizeof(DWORD));
+                HRGN hClip = GetCachedRoundRectRgn(w, h, radius);
+                SelectClipRgn(s_cachedStaticDC, hClip);
+                DrawSwitcherStaticContent(s_cachedStaticDC, ShouldFillBackground(), g_hSwitcher);
+                g_staticContentDirty = false;
+            }
         }
     }
     if (g_scrollTransition.active && !g_scrollTransition.outgoingItems.empty()) {
@@ -2074,7 +2091,7 @@ static void CaptureOutgoingSnapshot() {
             int curIdx = FindWindowIndexByHwnd(item.hWnd);
             if (curIdx == -1 || IsWindowTruncated(curIdx)) {
                 for (const auto& kv : item.hThumbs) {
-                    if (kv.second) DwmUnregisterThumbnail(kv.second);
+                    if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
                 }
                 if (curIdx != -1) {
                     g_windows[curIdx].hThumbs.clear();
@@ -2172,7 +2189,7 @@ static void TriggerScrollAnimationEx(int dir, ScrollNavType type) {
             int curIdx = FindWindowIndexByHwnd(item.hWnd);
             if (curIdx == -1) {
                 for (const auto& kv : item.hThumbs) {
-                    if (kv.second) DwmUnregisterThumbnail(kv.second);
+                    if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
                 }
             } else if (IsWindowTruncated(curIdx)) {
                 for (const auto& kv : item.hThumbs) {
@@ -2416,40 +2433,35 @@ static void UpdateThumbnailAnimations() {
     int masterPadY = DpiScale(g_settings.switcherPadding, g_dpiY);
     RECT rcContentClip = { masterPadX, masterPadY, rcClient.right - masterPadX, rcClient.bottom - masterPadY };
 
-    struct ThumbCacheState {
-        RECT dst;
-        BYTE alpha;
-        BOOL visible;
-    };
-    static std::map<HTHUMBNAIL, ThumbCacheState> s_lastThumbState;
+    // Uses global g_lastThumbState tracked by SafeDwmUnregisterThumbnail
 
     auto updateThumb = [&](HTHUMBNAIL hThumb, const RECT& dst, BYTE alpha) {
         if (!hThumb) return;
         if (alpha <= 0) {
-            auto it = s_lastThumbState.find(hThumb);
-            if (it == s_lastThumbState.end() || it->second.visible) {
+            auto it = g_lastThumbState.find(hThumb);
+            if (it == g_lastThumbState.end() || it->second.visible) {
                 DWM_THUMBNAIL_PROPERTIES p = {};
                 p.dwFlags = DWM_TNP_VISIBLE;
                 p.fVisible = FALSE;
                 DwmUpdateThumbnailProperties(hThumb, &p);
-                s_lastThumbState[hThumb] = { {}, 0, FALSE };
+                g_lastThumbState[hThumb] = { {}, 0, FALSE };
             }
             return;
         }
         RECT rcIntersect;
         if (!IntersectRect(&rcIntersect, &rcContentClip, &dst)) {
-            auto it = s_lastThumbState.find(hThumb);
-            if (it == s_lastThumbState.end() || it->second.visible) {
+            auto it = g_lastThumbState.find(hThumb);
+            if (it == g_lastThumbState.end() || it->second.visible) {
                 DWM_THUMBNAIL_PROPERTIES p = {};
                 p.dwFlags = DWM_TNP_VISIBLE;
                 p.fVisible = FALSE;
                 DwmUpdateThumbnailProperties(hThumb, &p);
-                s_lastThumbState[hThumb] = { {}, 0, FALSE };
+                g_lastThumbState[hThumb] = { {}, 0, FALSE };
             }
             return;
         }
-        auto it = s_lastThumbState.find(hThumb);
-        if (it != s_lastThumbState.end() && it->second.visible &&
+        auto it = g_lastThumbState.find(hThumb);
+        if (it != g_lastThumbState.end() && it->second.visible &&
             EqualRect(&it->second.dst, &dst) && it->second.alpha == alpha) {
             return; // Skip redundant IPC
         }
@@ -2459,7 +2471,7 @@ static void UpdateThumbnailAnimations() {
         p.opacity = alpha;
         p.fVisible = TRUE;
         DwmUpdateThumbnailProperties(hThumb, &p);
-        s_lastThumbState[hThumb] = { dst, alpha, TRUE };
+        g_lastThumbState[hThumb] = { dst, alpha, TRUE };
     };
 
     // 1. Incoming items
@@ -2468,8 +2480,8 @@ static void UpdateThumbnailAnimations() {
             w.rcThumbActual.top == 0 && w.rcThumbActual.bottom == 0) {
             for (const auto& kv : w.hThumbs) {
                 if (kv.second) {
-                    auto it = s_lastThumbState.find(kv.second);
-                    if (it == s_lastThumbState.end() || it->second.visible) {
+                    auto it = g_lastThumbState.find(kv.second);
+                    if (it == g_lastThumbState.end() || it->second.visible) {
                         updateThumb(kv.second, { 0, 0, 0, 0 }, 0);
                     }
                 }
@@ -2629,7 +2641,7 @@ static void OnAnimationTick() {
                 int curIdx = FindWindowIndexByHwnd(item.hWnd);
                 if (curIdx == -1) {
                     for (const auto& kv : item.hThumbs) {
-                        if (kv.second) DwmUnregisterThumbnail(kv.second);
+                        if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
                     }
                 } else if (IsWindowTruncated(curIdx)) {
                     for (const auto& kv : item.hThumbs) {
@@ -2854,7 +2866,7 @@ static void OnAnimationTick() {
 
             for (auto& dep : g_layoutTransition.departingItems) {
                 for (const auto& kv : dep.hThumbs) {
-                    if (kv.second) DwmUnregisterThumbnail(kv.second);
+                    if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
                 }
             }
             g_layoutTransition.departingItems.clear();
@@ -3574,9 +3586,7 @@ static HICON LoadWindowIcon(HWND hWnd) {
     // User-assigned custom icon takes priority over everything else.
     HICON hIcon = TryGetCustomIcon(hWnd, GetHeaderIconSizePx());
     if (hIcon) return hIcon;
-    if (g_IsShellFrameWindow && g_IsShellFrameWindow(hWnd)) {
-        hIcon = TryGetUwpIconFromExplorer(hWnd, GetHeaderIconSizePx());
-    }
+
     // A crisp exe icon extracted at the exact target size beats the WM_GETICON
     // result, which is a fixed ~32px frame: blurry when upscaled to 48/64 and
     // pixelated when downscaled to 16 (GDI does no smoothing in DrawIconEx).
@@ -3589,6 +3599,10 @@ static HICON LoadWindowIcon(HWND hWnd) {
     if (!hIcon) SendMessageTimeoutW(hWnd, WM_GETICON, ICON_SMALL, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, (DWORD_PTR*)&hIcon);
     if (!hIcon) hIcon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICON);
     if (!hIcon) hIcon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICONSM);
+    // UWP / Modern Packaged apps: Explorer IPC extracts authentic AUMID/IShellItem icons
+    if (!hIcon) {
+        hIcon = TryGetUwpIconFromExplorer(hWnd, GetHeaderIconSizePx());
+    }
     if (!hIcon) hIcon = LoadIconW(NULL, IDI_APPLICATION);
     return hIcon;
 }
@@ -4002,21 +4016,19 @@ static HICON TryGetUwpIconFromExplorer(HWND hWnd, int desiredSizePx) {
         g_WM_SWS_GET_UWP_ICON = RegisterWindowMessageW(L"Windhawk_SWS_GetUwpIcon");
         Wh_Log(L"TryGetUwpIconFromExplorer: Registered message %u", g_WM_SWS_GET_UWP_ICON);
     }
-    HWND hIpc = FindWindowW(L"WindhawkSWS_IpcWindow", NULL);
+    HWND hIpc = FindWindowExW(HWND_MESSAGE, NULL, L"WindhawkSWS_IpcWindow", NULL);
+    if (!hIpc) {
+        hIpc = FindWindowW(L"WindhawkSWS_IpcWindow", NULL);
+    }
     if (hIpc) {
         DWORD_PTR res = 0;
         LRESULT sendRes = SendMessageTimeoutW(hIpc, g_WM_SWS_GET_UWP_ICON, (WPARAM)hWnd, desiredSizePx, SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &res);
         Wh_Log(L"TryGetUwpIconFromExplorer: SendMessageTimeoutW to %p returned %ld, res = %p", hIpc, sendRes, res);
         if (res) {
             // On Windows 11 explorer returns usable icon handles via IPC in our environment.
-            // Avoid attempting local AUMID->icon resolution on Win11 to preserve that behavior.
             if (g_isWin11OrGreater) {
                 return (HICON)res;
             }
-            // We got an icon handle from Explorer, but HICON handles are process-local —
-            // prefer resolving the AUMID locally and creating an icon in this process.
-            // Try to get the AUMID locally using SHGetPropertyStoreForWindow; if available,
-            // create a local icon via ResolveIconFromAumid and return it.
             std::wstring aumidLocal;
             IPropertyStore* ps = NULL;
             if (SUCCEEDED(SHGetPropertyStoreForWindow(hWnd, IID_PPV_ARGS(&ps))) && ps) {
@@ -4040,12 +4052,49 @@ static HICON TryGetUwpIconFromExplorer(HWND hWnd, int desiredSizePx) {
                 }
                 Wh_Log(L"TryGetUwpIconFromExplorer: Local ResolveIconFromAumid failed for %s", aumidLocal.c_str());
             }
-            // As a last resort, return the handle from explorer (may not be valid across processes)
             return (HICON)res;
         }
-        return NULL;
     } else {
         Wh_Log(L"TryGetUwpIconFromExplorer: WindhawkSWS_IpcWindow not found");
+    }
+
+    // Local fallback if Explorer IPC is unavailable
+    std::wstring aumidLocal;
+    IPropertyStore* ps = NULL;
+    if (SUCCEEDED(SHGetPropertyStoreForWindow(hWnd, IID_PPV_ARGS(&ps))) && ps) {
+        PROPVARIANT pv; PropVariantInit(&pv);
+        if (SUCCEEDED(ps->GetValue(PKEY_AppUserModel_ID, &pv)) && pv.vt == VT_LPWSTR && pv.pwszVal && pv.pwszVal[0]) {
+            aumidLocal = pv.pwszVal;
+        }
+        PropVariantClear(&pv);
+        ps->Release();
+    }
+    if (aumidLocal.empty()) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hWnd, &pid);
+        if (pid) {
+            HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+            if (hProc) {
+                UINT32 aumidLen = 0;
+                if (GetApplicationUserModelId(hProc, &aumidLen, NULL) == ERROR_INSUFFICIENT_BUFFER && aumidLen > 0) {
+                    std::vector<WCHAR> buf(aumidLen);
+                    if (GetApplicationUserModelId(hProc, &aumidLen, buf.data()) == ERROR_SUCCESS) {
+                        aumidLocal = buf.data();
+                    }
+                }
+                CloseHandle(hProc);
+            }
+        }
+    }
+    if (!aumidLocal.empty()) {
+        std::wstring cacheKey = aumidLocal + L"_" + std::to_wstring(desiredSizePx);
+        auto it = g_uwpIconCache.find(cacheKey);
+        if (it != g_uwpIconCache.end()) return it->second;
+        HICON hLocal = ResolveIconFromAumid(aumidLocal.c_str(), desiredSizePx);
+        if (hLocal) {
+            g_uwpIconCache[cacheKey] = hLocal;
+            return hLocal;
+        }
     }
     return NULL;
 }
@@ -4123,7 +4172,7 @@ static void GetAppName(HWND hWnd, WCHAR* out, size_t cch) {
 
 static void BuildWindowList() {
     for (auto& w : g_windows) {
-        for (const auto& kv : w.hThumbs) { if (kv.second) DwmUnregisterThumbnail(kv.second); }
+        for (const auto& kv : w.hThumbs) { if (kv.second) SafeDwmUnregisterThumbnail(kv.second); }
         w.hThumbs.clear();
     }
     g_windows.clear();
@@ -4871,7 +4920,7 @@ static void ComputeLayout(HMONITOR hMon) {
                 }
                 if (!keep) {
                     for (const auto& kv : g_windows[ji].hThumbs) {
-                        if (kv.second) DwmUnregisterThumbnail(kv.second);
+                        if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
                     }
                     g_windows[ji].hThumbs.clear();
                 }
@@ -5326,10 +5375,11 @@ static void RegisterThumbnails() {
 static void UnregisterThumbnails() {
     for (auto& w : g_windows) {
         for (const auto& kv : w.hThumbs) {
-            if (kv.second) DwmUnregisterThumbnail(kv.second);
+            if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
         }
         w.hThumbs.clear();
     }
+    g_lastThumbState.clear();
 }
 
 
@@ -5489,20 +5539,14 @@ static Gdiplus::Bitmap* CreateIconShadowBitmap(HICON hIcon, int width, int heigh
     return shadowBmpCopy;
 }
 
-static std::map<std::tuple<HWND, HICON, int>, Gdiplus::Bitmap*> g_iconBitmapCache;
+static void ClearIconBitmapCache() {}
 
-static void ClearIconBitmapCache() {
-    for (auto& kv : g_iconBitmapCache) {
-        if (kv.second) delete kv.second;
+static void DrawIconWithAlpha(HDC hdc, int x, int y, HICON hIcon, int size, float alpha) {
+    if (!hIcon || size <= 0 || alpha <= 0.001f) return;
+    if (alpha >= 0.999f) {
+        DrawIconEx(hdc, x, y, hIcon, size, size, 0, NULL, DI_NORMAL);
+        return;
     }
-    g_iconBitmapCache.clear();
-}
-
-static Gdiplus::Bitmap* GetCachedIconBitmap(HWND hWnd, HICON hIcon, int size) {
-    if (!hIcon || size <= 0) return nullptr;
-    auto key = std::make_tuple(hWnd, hIcon, size);
-    auto it = g_iconBitmapCache.find(key);
-    if (it != g_iconBitmapCache.end()) return it->second;
 
     BITMAPINFO bmi = {};
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -5512,92 +5556,29 @@ static Gdiplus::Bitmap* GetCachedIconBitmap(HWND hWnd, HICON hIcon, int size) {
     bmi.bmiHeader.biBitCount = 32;
     bmi.bmiHeader.biCompression = BI_RGB;
 
-    void* pBlackBits = nullptr;
-    void* pWhiteBits = nullptr;
-    HDC hdcScreen = GetDC(NULL);
-    HDC hdcMem = CreateCompatibleDC(hdcScreen);
-    HBITMAP hBmpBlack = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, &pBlackBits, NULL, 0);
-    HBITMAP hBmpWhite = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, &pWhiteBits, NULL, 0);
+    void* pBits = nullptr;
+    HDC hdcMem = CreateCompatibleDC(hdc);
+    HBITMAP hDIB = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
+    if (hDIB && pBits) {
+        ZeroMemory(pBits, (size_t)size * size * 4);
+        HBITMAP hOldBmp = (HBITMAP)SelectObject(hdcMem, hDIB);
 
-    if (!hBmpBlack || !hBmpWhite || !pBlackBits || !pWhiteBits) {
-        if (hBmpBlack) DeleteObject(hBmpBlack);
-        if (hBmpWhite) DeleteObject(hBmpWhite);
-        if (hdcMem) DeleteDC(hdcMem);
-        if (hdcScreen) ReleaseDC(NULL, hdcScreen);
-        return nullptr;
-    }
+        DrawIconEx(hdcMem, 0, 0, hIcon, size, size, 0, NULL, DI_NORMAL);
 
-    // Zero-initialize DIB section buffers to prevent dirty page data recycling
-    memset(pBlackBits, 0, (size_t)size * size * 4);
-    memset(pWhiteBits, 0, (size_t)size * size * 4);
-
-    RECT rc = { 0, 0, size, size };
-    HBRUSH blackBrush = CreateSolidBrush(RGB(0, 0, 0));
-    HBITMAP hOld = (HBITMAP)SelectObject(hdcMem, hBmpBlack);
-    FillRect(hdcMem, &rc, blackBrush);
-    DrawIconEx(hdcMem, 0, 0, hIcon, size, size, 0, NULL, DI_NORMAL);
-    DeleteObject(blackBrush);
-
-    HBRUSH whiteBrush = CreateSolidBrush(RGB(255, 255, 255));
-    SelectObject(hdcMem, hBmpWhite);
-    FillRect(hdcMem, &rc, whiteBrush);
-    DrawIconEx(hdcMem, 0, 0, hIcon, size, size, 0, NULL, DI_NORMAL);
-    DeleteObject(whiteBrush);
-
-    SelectObject(hdcMem, hOld);
-    // Crucial: GdiFlush ensures all GDI batched rendering to DIB sections completes
-    // before the CPU accesses pBlackBits and pWhiteBits pointers directly!
-    GdiFlush();
-    DeleteDC(hdcMem);
-    ReleaseDC(NULL, hdcScreen);
-
-    BYTE* pPixels = new BYTE[size * size * 4];
-    const BYTE* blackPtr = (const BYTE*)pBlackBits;
-    const BYTE* whitePtr = (const BYTE*)pWhiteBits;
-
-    for (int i = 0; i < size * size; ++i) {
-        int idx = i * 4;
-        int wb = whitePtr[idx];
-        int bb = blackPtr[idx];
-        int wg = whitePtr[idx + 1];
-        int bg = blackPtr[idx + 1];
-        int wr = whitePtr[idx + 2];
-        int br = blackPtr[idx + 2];
-
-        int deltaB = wb - bb;
-        int deltaG = wg - bg;
-        int deltaR = wr - br;
-        int delta = (deltaB + deltaG + deltaR) / 3;
-        int a = 255 - delta;
-        if (a < 0) a = 0;
-        if (a > 255) a = 255;
-
-        if (a == 0) {
-            pPixels[idx] = 0;
-            pPixels[idx + 1] = 0;
-            pPixels[idx + 2] = 0;
-            pPixels[idx + 3] = 0;
-        } else {
-            int b = (bb * 255) / a;
-            int g = (bg * 255) / a;
-            int r = (br * 255) / a;
-            pPixels[idx] = (BYTE)(b > 255 ? 255 : (b < 0 ? 0 : b));
-            pPixels[idx + 1] = (BYTE)(g > 255 ? 255 : (g < 0 ? 0 : g));
-            pPixels[idx + 2] = (BYTE)(r > 255 ? 255 : (r < 0 ? 0 : r));
-            pPixels[idx + 3] = (BYTE)a;
+        DWORD* pPixels = (DWORD*)pBits;
+        for (int i = 0; i < size * size; ++i) {
+            if ((pPixels[i] & 0x00FFFFFF) != 0 && (pPixels[i] & 0xFF000000) == 0) {
+                pPixels[i] |= 0xFF000000;
+            }
         }
+
+        BLENDFUNCTION bf = { AC_SRC_OVER, 0, (BYTE)roundf(alpha * 255.0f), AC_SRC_ALPHA };
+        AlphaBlend(hdc, x, y, size, size, hdcMem, 0, 0, size, size, bf);
+
+        SelectObject(hdcMem, hOldBmp);
+        DeleteObject(hDIB);
     }
-
-    DeleteObject(hBmpBlack);
-    DeleteObject(hBmpWhite);
-
-    Gdiplus::Bitmap* rawBmp = new Gdiplus::Bitmap(size, size, size * 4, PixelFormat32bppARGB, pPixels);
-    Gdiplus::Bitmap* pFinalBmp = rawBmp->Clone(0, 0, size, size, PixelFormat32bppARGB);
-    delete rawBmp;
-    delete[] pPixels;
-
-    g_iconBitmapCache[key] = pFinalBmp;
-    return pFinalBmp;
+    DeleteDC(hdcMem);
 }
 
 static void DrawDockIconWithAlpha(HDC hdc, const WindowEntry& e, int iconX, int iconY, int iconSz, float alphaMult = 1.0f) {
@@ -5612,28 +5593,7 @@ static void DrawDockIconWithAlpha(HDC hdc, const WindowEntry& e, int iconX, int 
         }
         itemAlpha *= minDim;
     }
-    if (itemAlpha < 0.99f) {
-        Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(e.hWnd, e.hIcon, iconSz);
-        if (pBmp) {
-            Gdiplus::Graphics gfx(hdc);
-            gfx.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-            gfx.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
-            gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-            Gdiplus::ImageAttributes imgAtt;
-            Gdiplus::ColorMatrix cm = {{
-                { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
-                { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
-                { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
-                { 0.0f, 0.0f, 0.0f, itemAlpha, 0.0f },
-                { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
-            }};
-            imgAtt.SetColorMatrix(&cm);
-            gfx.DrawImage(pBmp, Gdiplus::Rect(iconX, iconY, iconSz, iconSz),
-                          0, 0, pBmp->GetWidth(), pBmp->GetHeight(), Gdiplus::UnitPixel, &imgAtt);
-            return;
-        }
-    }
-    DrawIconEx(hdc, iconX, iconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
+    DrawIconWithAlpha(hdc, iconX, iconY, e.hIcon, iconSz, itemAlpha);
 }
 
 static void MaskRectCorners(HDC hdc, const RECT& rc, int radiusPx, bool forceOpaque = false, COLORREF overrideBg = CLR_INVALID) {
@@ -6331,26 +6291,7 @@ static void DrawTaskEntry(HDC hdc, WindowEntry& e, HWND hWnd, int padLeft, int r
         }
 
         if (iconAlpha < 0.99f) {
-            Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(e.hWnd, e.hIcon, iconSz);
-            if (pBmp) {
-                Gdiplus::Graphics gfx(hdc);
-                gfx.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-                gfx.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
-                gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-                Gdiplus::ImageAttributes imgAtt;
-                Gdiplus::ColorMatrix cm = {{
-                    { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
-                    { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
-                    { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
-                    { 0.0f, 0.0f, 0.0f, iconAlpha, 0.0f },
-                    { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
-                }};
-                imgAtt.SetColorMatrix(&cm);
-                gfx.DrawImage(pBmp, Gdiplus::Rect(iconX, iconY, iconSz, iconSz),
-                              0, 0, pBmp->GetWidth(), pBmp->GetHeight(), Gdiplus::UnitPixel, &imgAtt);
-            } else {
-                DrawIconEx(hdc, iconX, iconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
-            }
+            DrawIconWithAlpha(hdc, iconX, iconY, e.hIcon, iconSz, iconAlpha);
         } else {
             DrawIconEx(hdc, iconX, iconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
         }
@@ -6521,26 +6462,7 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
         }
 
         if (itemAlpha < 0.99f) {
-            Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(e.hWnd, e.hIcon, iconSz);
-            if (pBmp) {
-                Gdiplus::Graphics gfx(hdc);
-                gfx.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-                gfx.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
-                gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-                Gdiplus::ImageAttributes imgAtt;
-                Gdiplus::ColorMatrix cm = {{
-                    { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
-                    { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
-                    { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
-                    { 0.0f, 0.0f, 0.0f, itemAlpha, 0.0f },
-                    { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
-                }};
-                imgAtt.SetColorMatrix(&cm);
-                gfx.DrawImage(pBmp, Gdiplus::Rect(iconX, iconY, iconSz, iconSz),
-                              0, 0, pBmp->GetWidth(), pBmp->GetHeight(), Gdiplus::UnitPixel, &imgAtt);
-            } else {
-                DrawIconEx(hdc, iconX, iconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
-            }
+            DrawIconWithAlpha(hdc, iconX, iconY, e.hIcon, iconSz, itemAlpha);
         } else {
             DrawIconEx(hdc, iconX, iconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
         }
@@ -6593,24 +6515,7 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
             int iconX = dep.rcCellCurrent.left + (cellW - iconSz) / 2;
             int iconY = dep.rcCellCurrent.top + (cellH - iconSz) / 2;
 
-            Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(dep.hWnd, dep.hIcon, iconSz);
-            if (pBmp) {
-                Gdiplus::Graphics gfx(hdc);
-                gfx.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-                gfx.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
-                gfx.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-                Gdiplus::ImageAttributes imgAtt;
-                Gdiplus::ColorMatrix cm = {{
-                    { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
-                    { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
-                    { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
-                    { 0.0f, 0.0f, 0.0f, dep.alpha, 0.0f },
-                    { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
-                }};
-                imgAtt.SetColorMatrix(&cm);
-                gfx.DrawImage(pBmp, Gdiplus::Rect(iconX, iconY, iconSz, iconSz),
-                              0, 0, pBmp->GetWidth(), pBmp->GetHeight(), Gdiplus::UnitPixel, &imgAtt);
-            }
+            DrawIconWithAlpha(hdc, iconX, iconY, dep.hIcon, iconSz, dep.alpha);
         }
     }
 
@@ -6859,26 +6764,7 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
             gfx.FillRectangle(&bgBrush, bgX, bgY, bgSize, bgSize);
         }
         if (iconDim < 0.99f) {
-            Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(hWnd, hIcon, iconSz);
-            if (pBmp) {
-                Gdiplus::Graphics gfxIcon(hdc);
-                gfxIcon.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-                gfxIcon.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
-                gfxIcon.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-                Gdiplus::ImageAttributes imgAtt;
-                Gdiplus::ColorMatrix cm = {{
-                    { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
-                    { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
-                    { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
-                    { 0.0f, 0.0f, 0.0f, iconDim, 0.0f },
-                    { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
-                }};
-                imgAtt.SetColorMatrix(&cm);
-                gfxIcon.DrawImage(pBmp, Gdiplus::Rect(bIconX, bIconY, iconSz, iconSz),
-                                  0, 0, pBmp->GetWidth(), pBmp->GetHeight(), Gdiplus::UnitPixel, &imgAtt);
-            } else {
-                DrawIconEx(hdc, bIconX, bIconY, hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
-            }
+            DrawIconWithAlpha(hdc, bIconX, bIconY, hIcon, iconSz, iconDim);
         } else {
             DrawIconEx(hdc, bIconX, bIconY, hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
         }
@@ -6896,26 +6782,7 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
             }
         }
         if (iconDim < 0.99f) {
-            Gdiplus::Bitmap* pBmp = GetCachedIconBitmap(hWnd, hIcon, iconSz);
-            if (pBmp) {
-                Gdiplus::Graphics gfxIcon(hdc);
-                gfxIcon.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-                gfxIcon.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
-                gfxIcon.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-                Gdiplus::ImageAttributes imgAtt;
-                Gdiplus::ColorMatrix cm = {{
-                    { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
-                    { 0.0f, 1.0f, 0.0f, 0.0f, 0.0f },
-                    { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
-                    { 0.0f, 0.0f, 0.0f, iconDim, 0.0f },
-                    { 0.0f, 0.0f, 0.0f, 0.0f, 1.0f }
-                }};
-                imgAtt.SetColorMatrix(&cm);
-                gfxIcon.DrawImage(pBmp, Gdiplus::Rect(bIconX, bIconY, iconSz, iconSz),
-                                  0, 0, pBmp->GetWidth(), pBmp->GetHeight(), Gdiplus::UnitPixel, &imgAtt);
-            } else {
-                DrawIconEx(hdc, bIconX, bIconY, hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
-            }
+            DrawIconWithAlpha(hdc, bIconX, bIconY, hIcon, iconSz, iconDim);
         } else {
             DrawIconEx(hdc, bIconX, bIconY, hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
         }
@@ -8901,7 +8768,7 @@ static void RecomputeAndReposition() {
             HWND h = g_windows[i].hWnd;
             if (!IsWindow(h) || (!IsWindowVisible(h) && !IsIconic(h))) {
                 for (const auto& kv : g_windows[i].hThumbs) {
-                    if (kv.second) DwmUnregisterThumbnail(kv.second);
+                    if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
                 }
                 g_windows[i].hThumbs.clear();
                 g_windows.erase(g_windows.begin() + i);
@@ -9024,7 +8891,7 @@ static void EnterAppGroup() {
             g_layoutTransition.progress = 1.0f;
             for (auto& dep : g_layoutTransition.departingItems) {
                 for (const auto& kv : dep.hThumbs) {
-                    if (kv.second) DwmUnregisterThumbnail(kv.second);
+                    if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
                 }
             }
             g_layoutTransition.departingItems.clear();
@@ -9061,7 +8928,7 @@ static void EnterAppGroup() {
             if (DockLayoutActive()) {
                 // Dock: unregister live thumbnails; icon cross-fade via DrawSwitcherStaticContent
                 for (const auto& kv : w.hThumbs) {
-                    if (kv.second) DwmUnregisterThumbnail(kv.second);
+                    if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
                 }
                 w.hThumbs.clear();
                 snap.hThumbs.clear();
@@ -9249,7 +9116,7 @@ static void ExitAppGroup() {
             g_layoutTransition.progress = 1.0f;
             for (auto& dep : g_layoutTransition.departingItems) {
                 for (const auto& kv : dep.hThumbs) {
-                    if (kv.second) DwmUnregisterThumbnail(kv.second);
+                    if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
                 }
             }
             g_layoutTransition.departingItems.clear();
@@ -9285,7 +9152,7 @@ static void ExitAppGroup() {
             snap.groupWindows    = w.groupWindows;
             if (DockLayoutActive()) {
                 for (const auto& kv : w.hThumbs) {
-                    if (kv.second) DwmUnregisterThumbnail(kv.second);
+                    if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
                 }
                 w.hThumbs.clear();
                 snap.hThumbs.clear();
@@ -9649,12 +9516,16 @@ static void CycleLinear(int delta) {
         int oldStart = g_layoutStartIndex;
         HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
 
-        // Dry-run pass from index 0 to find target line start without churning thumbnails
+        // Dry-run pass to find target line start without churning thumbnails
         g_isDryRunLayout = true;
-        g_layoutStartIndex = 0;
-        ComputeLayout(hMon);
-
         int targetStart = 0;
+        if (delta > 0 && g_selectedIndex > oldStart) {
+            g_layoutStartIndex = oldStart;
+            targetStart = oldStart;
+        } else {
+            g_layoutStartIndex = 0;
+            ComputeLayout(hMon);
+        }
         int n2 = n;
         while (IsWindowTruncated(g_selectedIndex) && n2-- > 0) {
             int firstIdx = g_layoutStartIndex % n;
@@ -10479,7 +10350,7 @@ static void RemoveWindowEntryByHwnd(HWND hDestroyed) {
                     g_windows[i].hWnd = group[0];
                     UpdateEntryForWindow(g_windows[i]);
                     for (const auto& kv : g_windows[i].hThumbs) {
-                        if (kv.second) DwmUnregisterThumbnail(kv.second);
+                        if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
                     }
                     g_windows[i].hThumbs.clear();
                     for (auto& rem : g_windows) {
@@ -10510,7 +10381,7 @@ static void RemoveWindowEntryByHwnd(HWND hDestroyed) {
 
                 if (DockLayoutActive()) {
                     for (const auto& kv : g_windows[i].hThumbs) {
-                        if (kv.second) DwmUnregisterThumbnail(kv.second);
+                        if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
                     }
                     g_windows[i].hThumbs.clear();
                     snap.hThumbs.clear(); // do not preserve thumbnail for departing in dock layout
@@ -10649,7 +10520,7 @@ static void RemoveWindowEntryByHwnd(HWND hDestroyed) {
                 return;
             } else {
                 for (const auto& kv : g_windows[i].hThumbs) {
-                    if (kv.second) DwmUnregisterThumbnail(kv.second);
+                    if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
                 }
                 g_windows[i].hThumbs.clear();
 
@@ -11023,15 +10894,16 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
     }
 
-    if (uMsg == WM_NCCALCSIZE && wParam == TRUE) {
-        return 0; // Remove standard frame for WS_OVERLAPPED
+    if (uMsg == WM_NCCALCSIZE) {
+        return 0; // Remove standard frame for WS_OVERLAPPED and WS_THICKFRAME
     }
-    if (uMsg == WM_NCPAINT && ThemeIs(L"none")) {
-        return 0; // Only suppress default frame painting for layered none theme
+    if (uMsg == WM_NCPAINT) {
+        return 0; // Suppress default non-client frame/border painting for ALL themes
     }
     if (uMsg == WM_NCACTIVATE) {
-        // Force DWM to keep the active visual state (Mica/Backdrop) even when unfocused
-        return DefWindowProcW(hWnd, uMsg, TRUE, lParam);
+        // Pass TRUE for wParam so DWM keeps the Mica backdrop active.
+        // Pass -1 for lParam to prevent DefWindowProc from painting the default border (suppressing the white/gray flash).
+        return DefWindowProcW(hWnd, uMsg, TRUE, -1);
     }
     if (uMsg == WM_MOVE || uMsg == WM_WINDOWPOSCHANGED) {
         UpdateRefreshRateTiming();
