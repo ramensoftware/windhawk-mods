@@ -10696,12 +10696,11 @@ static void AddWindowEntry(HWND hWnd) {
     // If hideMinimizedWindows is enabled and window is iconic, ignore
     if (g_settings.hideMinimizedWindows && IsIconic(hWnd)) return;
 
-    // ── Purge pending-close tracking and departing ghost for this window ──
-    // When a window survives a close attempt (e.g. showed a modal dialog),
-    // HSHELL_REDRAW fires and we re-add it. The immediate RemoveWindowEntryByHwnd
-    // in CloseSwitcherEntry left a DepartingEntrySnapshot that would render as a
-    // ghost at the old cell position. Clear it now before re-inserting so only
-    // one entry exists and no two entries share the same rcCell.
+    // ── Defensive cleanup: purge pending-close tracking and any departing ghost
+    // for this window. With lazy removal (CloseSwitcherEntry no longer removes the
+    // entry eagerly), a surviving window never leaves g_windows, so this is normally
+    // a no-op. It only matters if an entry was removed while the window turned out
+    // to be alive (e.g. an EVENT_OBJECT_DESTROY/HIDE raced a modal dialog).
     {
         auto pcIt = std::find(s_pendingCloseWindows.begin(), s_pendingCloseWindows.end(), hWnd);
         if (pcIt != s_pendingCloseWindows.end()) {
@@ -10989,11 +10988,15 @@ static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND
 }
 
 // Close the window for the entry at idx (posts SC_CLOSE, same as the close
-// button). Window removal initiates immediately with a smooth shallow fade trick,
-// while also tracking via s_pendingCloseWindows and WinEventShowHideProc.
+// button). The entry is kept in the list while the close is pending: actual
+// removal only happens once the window is confirmed gone (HSHELL_WINDOWDESTROYED,
+// WinEvent HIDE/DESTROY, or the close-verify timer). This lazy removal keeps the
+// entry at its exact position and preserves its MRU rank, so a window that
+// survives the close attempt (e.g. it showed a modal "save changes?" dialog)
+// never moves to the minimized boundary and never overlaps other entries.
 static void CloseSwitcherEntry(int idx) {
     if (idx < 0 || idx >= (int)g_windows.size()) return;
-    
+
     HWND targetWnd = g_windows[idx].hWnd;
     if (!CanCloseWindow(targetWnd)) return;
 
@@ -11006,17 +11009,14 @@ static void CloseSwitcherEntry(int idx) {
                     s_pendingCloseWindows.push_back(hw);
                 }
             }
-            RemoveWindowEntryByHwnd(targetWnd);
         } else {
             // closeRecent (Default)
             PostMessage(targetWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
             s_pendingCloseWindows.push_back(targetWnd);
-            RemoveWindowEntryByHwnd(targetWnd);
         }
     } else {
         PostMessage(targetWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
         s_pendingCloseWindows.push_back(targetWnd);
-        RemoveWindowEntryByHwnd(targetWnd);
     }
 
     if (!s_pendingCloseWindows.empty() && g_hSwitcher) {
@@ -11123,15 +11123,17 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             for (auto it = s_pendingCloseWindows.begin(); it != s_pendingCloseWindows.end(); ) {
                 HWND h = *it;
                 if (!IsWindow(h) || !IsWindowVisible(h)) {
-                    // Window truly closed (or hidden) — clean up.
+                    // Window truly closed (or hid itself) — remove its entry now.
+                    // With lazy removal, the entry was never taken out eagerly, so
+                    // this is the single point of removal and the departing fade
+                    // starts from the entry's real position.
                     toRemove.push_back(h);
                     it = s_pendingCloseWindows.erase(it);
                 } else {
-                    // Window is still alive and visible — it showed a modal dialog and
-                    // survived the close attempt. Re-add it at its correct MRU position
-                    // (AddWindowEntry already purges the departing ghost and inserts at
-                    // MRU rank 0). No need to retry this window further.
-                    AddWindowEntry(h);
+                    // Window is still alive and visible — it survived the close
+                    // attempt (e.g. it showed a modal "save changes?" dialog).
+                    // The entry was never removed, so it stays exactly where it
+                    // was; just stop tracking the pending close.
                     it = s_pendingCloseWindows.erase(it);
                 }
             }
@@ -11935,6 +11937,12 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             }
         } else if (code == HSHELL_WINDOWDESTROYED) {
             HWND hS = (HWND)lParam;
+            if (IsWindow(hS)) {
+                // Stale/misfired notification: the window is still alive (e.g. it
+                // survived a close attempt by showing a modal dialog). Do NOT touch
+                // the MRU list or the entry — it must stay exactly where it was.
+                return 0;
+            }
             RemoveMruWindow(hS);
             auto it = std::find(s_pendingCloseWindows.begin(), s_pendingCloseWindows.end(), hS);
             if (it != s_pendingCloseWindows.end()) {
