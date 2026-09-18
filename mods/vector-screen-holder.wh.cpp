@@ -119,8 +119,20 @@ after every reboot, not just the time you ticked the box.
 
 The mod also listens on a named event, `Local\WindhawkVectorScreenHolderToggle`,
 in the per-session namespace, so an ordinary Windows shortcut can toggle the
-overlay without opening Windhawk at all. The one line that drives it is on
-[the site](https://vector.akilluminati47.pages.dev/).
+overlay without opening Windhawk at all. Save this as
+`toggle-screen-holder.vbs` and make a shortcut to it:
+
+```vbs
+CreateObject("WScript.Shell").Run "powershell -nop -w hidden -c ""[Threading.EventWaitHandle]::OpenExisting('Local\WindhawkVectorScreenHolderToggle').Set()""", 0, False
+```
+
+The mod has to be **enabled in Windhawk** for that to do anything, because
+the event only exists while the mod is loaded. The overlay itself does not
+have to be on screen.
+
+[The site](https://vector.akilluminati47.pages.dev/) has the same thing as a
+file you can just download, which also tells you when the mod is disabled
+rather than doing nothing.
 
 If you would rather **Esc** and **Space** reached the overlay from any
 application, turn on **Global Esc and Space** in the settings. It is off by
