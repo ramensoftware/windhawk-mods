@@ -86,6 +86,22 @@ CALLBACK_SIGNATURES: dict[str, list[str]] = {
 }
 
 
+# A tool mod runs in Windhawk's own processes rather than being injected into
+# other programs. Its Windhawk targets must be exactly one of these sets.
+TOOL_MOD_ALLOWED_INCLUDES = [
+    ['windhawk.exe'],
+    ['windhawk.exe', 'windhawk-mod.exe'],
+    ['windhawk.exe', 'windhawk-mod.exe', 'windhawk-mod-uiaccess.exe'],
+    ['windhawk.exe', 'windhawk-mod.exe', 'windhawk-mod-elevated.exe'],
+    [
+        'windhawk.exe',
+        'windhawk-mod.exe',
+        'windhawk-mod-uiaccess.exe',
+        'windhawk-mod-elevated.exe',
+    ],
+]
+
+
 # RFC 3986 unreserved and reserved characters, plus % for percent-encoding.
 # Anything else, whitespace included, has to be percent-encoded.
 URL_ALLOWED_CHARS = r"0-9A-Za-z\-._~:/?#\[\]@!$&'()*+,;=%"
@@ -346,10 +362,12 @@ class ModMetadataValidator:
         path: Path,
         properties: dict[ModPropertyKey, ModPropertyValue],
         expected_author: str,
+        mod_source: str,
     ):
         self.ctx = ValidationContext(path)
         self.properties = properties
         self.expected_author = expected_author
+        self.mod_source = mod_source
         self.mod_author_data = get_mod_author_data()
 
         # Extract mod ID and fetch existing mod data
@@ -413,6 +431,7 @@ class ModMetadataValidator:
         self.validate_name()
         self.validate_description()
         self.validate_architecture()
+        self.validate_tool_mod()
 
         return self.ctx.warning_count()
 
@@ -725,6 +744,35 @@ class ModMetadataValidator:
         if msg:
             prop.warn(msg.rstrip('\n'))
 
+    def validate_tool_mod(self):
+        """Validate the metadata of a tool mod: one that targets windhawk.exe
+        with a WhTool_ModInit entry point, or any windhawk-*.exe process."""
+        prop = self.property('include')
+        if not prop:
+            return
+
+        includes = {x.lower() for x in prop.value.split('\n') if x != ''}
+        windhawk_includes = {
+            x for x in includes if re.fullmatch(r'windhawk(-[\w-]+)?\.exe', x)
+        }
+        is_tool_mod = any(x != 'windhawk.exe' for x in windhawk_includes) or (
+            'windhawk.exe' in windhawk_includes
+            and re.search(r'\bWhTool_ModInit\b', self.mod_source) is not None
+        )
+        if not is_tool_mod:
+            return
+
+        if windhawk_includes not in [set(x) for x in TOOL_MOD_ALLOWED_INCLUDES]:
+            prop.warn(
+                'Tool mods must @@ exactly one of the following combinations of'
+                ' Windhawk processes:\n'
+                + '\n'.join(f'* {", ".join(x)}' for x in TOOL_MOD_ALLOWED_INCLUDES)
+            )
+
+        arch_prop = self.property('architecture')
+        if arch_prop:
+            arch_prop.warn('@@ must not be specified for tool mods')
+
 
 def validate_metadata(path: Path, mod_source: str, expected_author: str) -> int:
     properties, initial_warnings = get_mod_file_metadata(
@@ -733,7 +781,7 @@ def validate_metadata(path: Path, mod_source: str, expected_author: str) -> int:
     )
 
     # Validate metadata properties
-    validator = ModMetadataValidator(path, properties, expected_author)
+    validator = ModMetadataValidator(path, properties, expected_author, mod_source)
     metadata_warnings = validator.validate_all()
 
     # Validate file path
@@ -1381,7 +1429,9 @@ def validate_specific_keywords(path: Path, mod_source: str):
                     continue
 
                 warnings += add_warning(
-                    path, line_num, f'Line requires manual inspection for "{word}": {description}'
+                    path,
+                    line_num,
+                    f'Line requires manual inspection for "{word}": {description}',
                 )
 
         hidden_ws = [
@@ -1449,18 +1499,31 @@ def validate_callback_signatures(path: Path, mod_source: str):
             assert m, sig
             expected.append((m.group(1), normalize_callback_param_types(m.group(2))))
 
-        # Match: previous word + whitespace + callback name + ( params ). The
-        # previous-word check naturally skips function calls (e.g. "= Wh_Mod..."
-        # or "(Wh_Mod...") since those aren't preceded by a bare identifier.
-        pattern = r'\b(\w+)\s+' + re.escape(callback_name) + r'\s*\(([^)]*)\)'
+        # Match: optional specifiers + return type + callback name + ( params ).
+        # Requiring a bare identifier before the name naturally skips function
+        # calls (e.g. "= Wh_Mod..." or "(Wh_Mod...").
+        pattern = (
+            r'((?:\b(?:static|extern(?:\s+"C")?|inline)\s+)*)\b(\w+)\s+'
+            + re.escape(callback_name)
+            + r'\s*\(([^)]*)\)'
+        )
         for match in re.finditer(pattern, mod_source):
             # Skip if inside a single-line comment.
             line_start = mod_source.rfind('\n', 0, match.start()) + 1
             if '//' in mod_source[line_start : match.start()]:
                 continue
 
-            return_type = match.group(1)
-            params = match.group(2)
+            line_num = 1 + mod_source[: match.start()].count('\n')
+            specifiers, return_type, params = match.groups()
+
+            if specifiers:
+                warnings += add_warning(
+                    path,
+                    line_num,
+                    f'Unexpected "{" ".join(specifiers.split())}" before'
+                    f' {callback_name}',
+                )
+
             normalized_return_type = normalize_return_type(return_type)
             normalized_params = normalize_callback_param_types(params)
 
@@ -1470,7 +1533,6 @@ def validate_callback_signatures(path: Path, mod_source: str):
             ):
                 continue
 
-            line_num = 1 + mod_source[: match.start()].count('\n')
             expected_list = ' or '.join(f'"{s}"' for s in expected_signatures)
             warnings += add_warning(
                 path,
