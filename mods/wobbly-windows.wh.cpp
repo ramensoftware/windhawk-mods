@@ -130,6 +130,12 @@ BOOL Wh_ModInit()
 namespace
 {
 
+// Invariants: private visual calls run only on the verified scene owner.
+// Cached window pointers are invalidated by destructor hooks; page probes check
+// accessibility, not lifetime. Slot pins protect proxies across unlocked calls,
+// and generations reject stale results. Each slot owns one factory proxy ref;
+// visuals bind its underlying composition resource, not the wrapper itself.
+
 struct WobblySettings
 {
     bool resizeWobbleEnabled;
@@ -385,6 +391,9 @@ std::atomic<void*> g_dwmCompositor = nullptr;
 std::atomic<void*> g_desktopManager = nullptr;
 void* g_desktopManagerVtableSymbol = nullptr;
 void* g_windowListVtableSymbol = nullptr;
+void* g_compositorVtableSymbol = nullptr;
+static constexpr std::wstring_view COMPOSITOR_PRIMARY_VTABLE_SYMBOL =
+    L"const CCompositor::`vftable'{for `Windows::UI::Composition::IInteropCompositorPartnerCallback'}";
 void* g_topLevelWindowVtableSymbol = nullptr;
 void* g_topLevelWindow3DVtableSymbol = nullptr;
 void* g_visualProxyVtableSymbol = nullptr;
@@ -805,6 +814,19 @@ static bool IsEligibleWindowForStateThrob(HWND hwnd)
 
 static bool IsShellCloakedWindow(HWND hwnd);
 
+static bool CanInitializeMissingWindowVisual(HWND hwnd)
+{
+    if (!IsWindowVisible(hwnd) || IsIconic(hwnd) ||
+        !IsEligibleWindowForStateThrob(hwnd) || !g_dwmGetWindowAttribute)
+    {
+        return false;
+    }
+    constexpr DWORD dwmwaCloaked = 14;
+    DWORD cloaked = 0;
+    return SUCCEEDED(g_dwmGetWindowAttribute(hwnd, dwmwaCloaked, &cloaked, sizeof(cloaked))) &&
+           cloaked == 0;
+}
+
 struct ExistingWindowCollection
 {
     HWND windows[MAX_EXISTING_WINDOW_BACKFILL];
@@ -818,8 +840,7 @@ static BOOL CALLBACK CollectExistingWindowForBackfill(HWND hwnd, LPARAM paramete
     {
         return FALSE;
     }
-    if (IsWindowVisible(hwnd) && !IsShellCloakedWindow(hwnd) &&
-        IsEligibleWindowForStateThrob(hwnd))
+    if (CanInitializeMissingWindowVisual(hwnd))
     {
         collection->windows[collection->count++] = hwnd;
     }
@@ -1622,7 +1643,7 @@ static size_t FindDesktopManagerCompositorOffset(void* initializeFunction,
     const std::regex leaPattern(
         R"(^lea (r[a-z0-9]+), \[(r[a-z0-9]+)\+0x([0-9a-f]{1,8})\]$)",
         std::regex_constants::icase);
-    const std::regex callPattern(R"(^call 0x([0-9a-f]+)$)",
+    const std::regex callPattern(R"(^call 0x([0-9a-f]{1,16})$)",
                                         std::regex_constants::icase);
     BYTE* instruction = static_cast<BYTE*>(initializeFunction);
     size_t bytesRead = 0;
@@ -2450,12 +2471,12 @@ static bool CacheDwmObjectsFromDesktopManager(void* manager)
     void* compositor = *reinterpret_cast<void**>(compositorField);
     void* cachedManager = g_desktopManager.load(std::memory_order_acquire);
     void* cachedCompositor = g_dwmCompositor.load(std::memory_order_acquire);
-    if (cachedManager == manager && cachedCompositor == compositor && cachedCompositor)
+    if (cachedManager == manager && cachedCompositor == compositor &&
+        HasExactDwmVtableTrusted(compositor, g_compositorVtable))
     {
         return true;
     }
-    if (!IsDwmObjectPointerValid(compositor, g_compositorVtable) &&
-        !LearnDwmVtableFromTrustedObject(compositor, g_compositorVtable))
+    if (!IsDwmObjectPointerValid(compositor, g_compositorVtable))
     {
         if (g_dwmCompositor.exchange(nullptr, std::memory_order_acq_rel))
         {
@@ -2722,6 +2743,13 @@ static bool InitializeDwmHooks()
          &g_windowListVtableSymbol,
          nullptr,
          true},
+        // Offset-0 base on both compositor layouts; CBaseObject is at +8.
+        // HookSymbols uses undecorated names by default. Do not reuse the old
+        // decorated-only lookup: its missing-symbol result may already be cached.
+        {{COMPOSITOR_PRIMARY_VTABLE_SYMBOL},
+         &g_compositorVtableSymbol,
+         nullptr,
+         true},
         {{L"const CVisualProxy::`vftable'", L"??_7CVisualProxy@@6B@"},
          &g_visualProxyVtableSymbol,
          nullptr,
@@ -2773,6 +2801,8 @@ static bool InitializeDwmHooks()
         cacheVtableSymbol(g_desktopManagerVtableSymbol, g_desktopManagerVtable);
     bool hasExactWindowListVtable =
         cacheVtableSymbol(g_windowListVtableSymbol, g_windowListVtable);
+    bool hasExactCompositorVtable =
+        cacheVtableSymbol(g_compositorVtableSymbol, g_compositorVtable);
     bool hasExactTopLevelWindowVtable =
         cacheVtableSymbol(g_topLevelWindowVtableSymbol, g_topLevelWindowVtable);
     bool hasExactTopLevelWindow3DVtable =
@@ -2853,6 +2883,7 @@ static bool InitializeDwmHooks()
     RequiredDwmVtable requiredVtables[] = {
         {L"CDesktopManager", hasExactDesktopManagerVtable},
         {L"CWindowList", hasExactWindowListVtable},
+        {L"CCompositor", hasExactCompositorVtable},
         {L"CTopLevelWindow", hasExactTopLevelWindowVtable},
         {L"CMatrixTransformProxy", hasExactMatrixProxyVtable}};
     for (const RequiredDwmVtable& vtable : requiredVtables)
@@ -2867,7 +2898,7 @@ static bool InitializeDwmHooks()
     {
         return false;
     }
-    Wh_Log(L"DWM compatibility: compositor vftable is verified from its exact member");
+    Wh_Log(L"DWM compatibility: compositor primary vftable verified by PDB");
     if (!FindVisualProxyAccessPath(reinterpret_cast<void*>(g_getCanvasRootVisualProxy),
                                    &g_canvasVisualOwnerOffset,
                                    &g_visualProxyOffset))
@@ -3072,8 +3103,10 @@ static void BindPendingAnimationSlotTransforms(bool validateCurrentVisuals)
         }
         else
         {
-            // Already-open/desktop-restored windows can need lazy scene initialization.
+            // Lazy initialization is needed for already-open/desktop-restored
+            // windows, but never force a hidden, minimized or cloaked visual.
             if (!ResolveDwmWindowObjects(windowData, &topLevelWindow, &topLevelWindow3D) &&
+                CanInitializeMissingWindowVisual(hwnd) &&
                 g_ensureTopLevelWindowOriginal(windowList, windowData) >= 0)
             {
                 ResolveDwmWindowObjects(windowData, &topLevelWindow, &topLevelWindow3D);
@@ -3220,13 +3253,13 @@ static void BackfillExistingDwmWindowMappings()
     while (index < count && processed++ < windowsPerPass)
     {
         HWND hwnd = g_existingWindowBackfill[index++];
-        if (!IsWindow(hwnd))
+        // Recheck: desktop/visibility state can change after enumeration.
+        if (!CanInitializeMissingWindowVisual(hwnd))
         {
             continue;
         }
         void* windowData = FindWindowDataByHwnd(windowList, hwnd);
-        if (!windowData ||
-            (g_windowDataHwndOffset != SIZE_MAX && GetHwndFromWindowData(windowData) != hwnd))
+        if (!windowData || GetHwndFromWindowData(windowData) != hwnd)
         {
             continue;
         }
@@ -3423,6 +3456,12 @@ static void __cdecl DesktopManagerHandleThreadMessageHook(UINT message,
         {
         }
     };
+    if (g_unloading.load(std::memory_order_acquire) && !HasAnyAnimationSlots())
+    {
+        // Cleanup can finish through a native scene pass before this wake arrives.
+        acknowledgeWake();
+        return;
+    }
     if (!RegisterDwmSceneThread(true) || g_insideWobblyScenePass)
     {
         g_sceneWakeScheduled.store(false, std::memory_order_release);
@@ -3590,7 +3629,7 @@ static void OffsetMeshPositions(WobbleMesh& mesh, double x, double y)
 static void SetMeshResizeMode(WobbleMesh& mesh, bool resizing)
 {
     mesh.resizing = resizing;
-    // Unlock only the resize edges that actually moved.
+    // Lock all resize edges; UpdateResizeEdges unlocks the moving ones.
     mesh.canWobbleTop = !resizing;
     mesh.canWobbleLeft = !resizing;
     mesh.canWobbleRight = !resizing;
@@ -4258,24 +4297,37 @@ static void FinalizeRetiringSlots()
         void* matrixTransformProxy = nullptr;
         AcquireSRWLockExclusive(&g_animationSlotsLock);
         WindowAnimationSlot& slot = g_animationSlots[i];
-        if (slot.retiring && slot.hookUsers == 0 && slot.identityApplied &&
-            (!slot.matrixTransformProxy || IsOnDwmSceneThread()))
+        if (slot.retiring && slot.hookUsers == 0 && slot.identityApplied)
         {
-            matrixTransformProxy = slot.matrixTransformProxy;
+            if (!slot.matrixTransformProxy)
+            {
+                ULONGLONG generation = slot.generation;
+                slot = {};
+                slot.generation = generation;
+            }
+            else if (IsOnDwmSceneThread() && g_cBaseObjectRelease)
+            {
+                matrixTransformProxy = slot.matrixTransformProxy;
+                slot.matrixTransformProxy = nullptr;
+                // Unload must still see this release; reentry cannot use its proxy.
+                slot.hookUsers++;
+            }
+        }
+        ReleaseSRWLockExclusive(&g_animationSlotsLock);
+        if (matrixTransformProxy)
+        {
+            // Verified on uDWM 22621.6199 / 26100.9032: SetTransform binds
+            // CResource IDs / an IDCompositionTransform, never this wrapper.
+            // The composition graph retains the bound resource; releasing
+            // CResourceProxy drops only our factory ref. Keep it at identity:
+            // the private SetTransform(nullptr) dereferences its argument.
+            g_cBaseObjectRelease(matrixTransformProxy);
+            AcquireSRWLockExclusive(&g_animationSlotsLock);
+            ReleaseAnimationSlotPinLocked(slot);
             ULONGLONG generation = slot.generation;
             slot = {};
             slot.generation = generation;
-        }
-        ReleaseSRWLockExclusive(&g_animationSlotsLock);
-        if (matrixTransformProxy && IsOnDwmSceneThread())
-        {
-            if (g_cBaseObjectRelease)
-            {
-                // SetTransform(nullptr) isn't a valid detach operation on the
-                // supported uDWM builds: it dereferences the transform argument.
-                // Leave the retained transform at identity and release our ref.
-                g_cBaseObjectRelease(matrixTransformProxy);
-            }
+            ReleaseSRWLockExclusive(&g_animationSlotsLock);
         }
     }
 }
@@ -4542,6 +4594,7 @@ static bool CreateMatrixTransformProxy(void** matrixTransformProxy)
     {
         if (validProxy)
         {
+            // Failed factory result: this verified proxy was never bound.
             g_cBaseObjectRelease(*matrixTransformProxy);
         }
         else if (result >= 0)
@@ -4614,12 +4667,15 @@ static void EnsurePendingMatrixTransformProxies()
                 currentSlot.generation++;
             }
         }
-        ReleaseAnimationSlotPinLocked(currentSlot);
         ReleaseSRWLockExclusive(&g_animationSlotsLock);
         if (matrixTransformProxy && !stored)
         {
+            // No slot adopted this factory ref and no visual was bound.
             g_cBaseObjectRelease(matrixTransformProxy);
         }
+        AcquireSRWLockExclusive(&g_animationSlotsLock);
+        ReleaseAnimationSlotPinLocked(currentSlot);
+        ReleaseSRWLockExclusive(&g_animationSlotsLock);
         if (!created)
         {
             Wh_Log(L"DWM safety gate: matrix proxy canary failed for HWND=%p", hwnd);
@@ -5270,8 +5326,11 @@ static void StopAllAnimations()
             }
         }
         ReleaseSRWLockShared(&g_animationSlotsLock);
+        // Natural scene passes can finish cleanup before queued wakes are read.
+        // Wakes carry only an instance token, not pointers; keep their counter
+        // intact for late acknowledgments, but don't mistake them for resources.
         bool wakePending = g_sceneWakeOutstanding.load(std::memory_order_acquire) != 0;
-        if (!hookUsers && !retainedProxies && !wakePending)
+        if (!hookUsers && !retainedProxies)
         {
             break;
         }
@@ -5284,7 +5343,9 @@ static void StopAllAnimations()
             cleanupTimedOut = true;
             break;
         }
-        if (retainedProxies && !wakePending)
+        ULONGLONG lastWakePost = g_sceneWakePostTimestamp.load(std::memory_order_acquire);
+        if (retainedProxies &&
+            (!wakePending || !lastWakePost || now - lastWakePost >= 50))
         {
             PostPendingDwmSceneWake(true);
         }
