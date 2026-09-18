@@ -11157,7 +11157,10 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 
         if (wParam == SWS_TOUCHPAD_IDLE_TIMER_ID) {
             KillTimer(hWnd, SWS_TOUCHPAD_IDLE_TIMER_ID);
-            if (g_isTouchpadGestureActive && (g_isVisible || g_isPendingShow)) {
+            // Don't auto-commit an explicitly sticky session (Alt+Ctrl+Tab): the idle
+            // timeout exists to end a transient touchpad gesture, not to dismiss a
+            // switcher the user pinned open.
+            if (g_isTouchpadGestureActive && (g_isVisible || g_isPendingShow) && !g_isSticky) {
                 Wh_Log(L"SWS: Touchpad idle timeout reached -> committing selection");
                 g_isTouchpadGestureActive = false;
                 SwitchToSelected();
@@ -11681,6 +11684,9 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         if (g_isVisible || g_isPendingShow) HideSwitcher();
         FreeCachedBuffers();
         g_staticContentDirty = true;
+        // Reset the touchpad grace window so a mid-gesture settings reload doesn't
+        // inherit stale scroll timing from before the reload.
+        ResetScrollWheelAccumulators();
         SWS_UnregisterHotkeys();
         LoadSettings();
         if (g_hSwitcher) ApplyThemeToWindow(g_hSwitcher);
