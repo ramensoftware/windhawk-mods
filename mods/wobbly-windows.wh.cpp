@@ -2,7 +2,7 @@
 // @id              wobbly-windows
 // @name            Wobbly Windows
 // @description     The classic Compiz/KDE Plasma style Wobbly Windows effect for Windows 11!
-// @version         0.95
+// @version         1.0
 // @author          lalimatyus
 // @github          https://github.com/lalimatyus
 // @include         dwm.exe
