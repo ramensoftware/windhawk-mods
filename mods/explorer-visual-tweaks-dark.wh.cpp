@@ -127,10 +127,20 @@ struct RgbColor {
 };
 static bool IsThemeClass(HTHEME theme, PCWSTR expected) {
     wchar_t className[64] = {};
-    return g_getThemeClass &&
-           SUCCEEDED(g_getThemeClass(
-               theme, className, static_cast<int>(ARRAYSIZE(className)))) &&
-           _wcsicmp(className, expected) == 0;
+    if (!g_getThemeClass ||
+        FAILED(g_getThemeClass(
+            theme, className, static_cast<int>(ARRAYSIZE(className))))) {
+        return false;
+    }
+    size_t classLength = wcslen(className);
+    size_t expectedLength = wcslen(expected);
+    if (classLength < expectedLength)
+        return false;
+    PCWSTR tail = className + classLength - expectedLength;
+    if (_wcsicmp(tail, expected) != 0)
+        return false;
+    return tail == className ||
+           (tail - className >= 2 && tail[-2] == L':' && tail[-1] == L':');
 }
 static int GetSafeDpi(HDC dc) {
     if (!dc)
@@ -778,11 +788,10 @@ HRESULT HandleDrawThemeBackground(HTHEME theme, HDC dc, int partId,
         if (ctrlOrShift) {
             DrawResources(dc, rect, 1, false);
         }
-        // Suppress the native selected transition outside multiselect.
+        // Suppress Explorer's stale previous-row transition.
     } else if (stateId == TREIS_SELECTEDNOTFOCUS) {
-        g_origDrawThemeBackground(
+        return g_origDrawThemeBackground(
             theme, dc, partId, stateId, rect, clipRect);
-        DrawResources(dc, rect, -1, true);
     } else {  // TREIS_HOTSELECTED
         DrawResources(dc, rect, 0, true);
     }
@@ -798,8 +807,10 @@ static void* GetPendingMouseSelectionElement() {
 }
 static bool IsTransientSingleSelectionGhost() {
     void* oldElement = g_currentPaintElement;
+    if (!oldElement)
+        return false;
     void* newElement = GetPendingMouseSelectionElement();
-    return oldElement && newElement && newElement != oldElement &&
+    return newElement && newElement != oldElement &&
            g_getParent(newElement) == g_getParent(oldElement);
 }
 HRESULT WINAPI DrawThemeBackgroundExHook(HTHEME theme,
@@ -816,9 +827,11 @@ HRESULT WINAPI DrawThemeBackgroundExHook(HTHEME theme,
         IsThemeClass(theme, L"ItemsView")) {
         // Suppress the native transition/focus layer; replace only
         // the matching, non-null pending item.
-        void* pending = stateId == kItemsViewPendingSelectionState
-                            ? GetPendingMouseSelectionElement() : nullptr;
-        if (pending && pending == g_currentPaintElement) {
+        void* currentElement = g_currentPaintElement;
+        void* pending =
+            stateId == kItemsViewPendingSelectionState && currentElement
+                ? GetPendingMouseSelectionElement() : nullptr;
+        if (pending && pending == currentElement) {
             DrawResources(dc, rect, 0, false);
         }
         return S_OK;
