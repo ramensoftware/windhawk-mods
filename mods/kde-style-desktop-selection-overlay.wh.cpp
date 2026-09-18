@@ -2,7 +2,7 @@
 // @id             kde-style-desktop-selection-overlay
 // @name           KDE Style Desktop Selection Overlay
 // @description    Draws a custom KDE-inspired rounded selection box when drag-selecting on the Desktop
-// @version        1.0
+// @version        2.0
 // @author         Xezjk
 // @github         xezjk
 // @include        explorer.exe
@@ -14,7 +14,6 @@
 # KDE Desktop Selection Overlay
 Renders a modern, KDE Breeze-inspired rounded selection box when drag-selecting 
 icons or empty space on the Windows Desktop.
-Automatically hides the default Windows translucent selection box while active.
 */
 // ==/WindhawkModReadme==
 
@@ -23,13 +22,31 @@ Automatically hides the default Windows translucent selection box while active.
 - cornerRadius: 4
   $name: Corner Radius (px)
   $description: Sets the curvature radius of the selection box corners.
+- fillR: 61
+  $name: Fill Red (0-255)
+- fillG: 174
+  $name: Fill Green (0-255)
+- fillB: 233
+  $name: Fill Blue (0-255)
+- fillA: 80
+  $name: Fill Alpha (0-255)
+- borderR: 61
+  $name: Border Red (0-255)
+- borderG: 174
+  $name: Border Green (0-255)
+- borderB: 233
+  $name: Border Blue (0-255)
+- borderA: 220
+  $name: Border Alpha (0-255)
+- borderThickness: 15
+  $name: Border Thickness (x10 px)
 - keepBehindWindows: true
   $name: Render Behind Windows
-  $description: If enabled, the selection box stays behind other active windows instead of rendering on top.
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <commctrl.h>
 #include <gdiplus.h>
 #include <algorithm>
 
@@ -37,6 +54,9 @@ using namespace Gdiplus;
 
 struct {
     int cornerRadius;
+    BYTE fillR, fillG, fillB, fillA;
+    BYTE borderR, borderG, borderB, borderA;
+    float borderThickness;
     BOOL keepBehindWindows;
 } settings;
 
@@ -52,7 +72,6 @@ volatile BOOL g_stopMonitorThread = FALSE;
 
 void ClearOverlayBuffer(HWND hwnd);
 
-// Instantly stops dragging and hides the selection box
 void StopDragging() {
     if (g_isDragging) {
         g_isDragging = FALSE;
@@ -63,11 +82,9 @@ void StopDragging() {
     }
 }
 
-// Dedicated thread for hardware-level mouse state monitoring (100 Hz)
 DWORD WINAPI MouseMonitorThreadProc(LPVOID lpParam) {
     while (!g_stopMonitorThread) {
         if (g_isDragging) {
-            // Check if mouse left button is released globally at the system level
             if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
                 StopDragging();
             }
@@ -77,12 +94,10 @@ DWORD WINAPI MouseMonitorThreadProc(LPVOID lpParam) {
     return 0;
 }
 
-// Finds the appropriate Desktop window handle to position the overlay directly above it
 HWND GetDesktopWindowHandle() {
     HWND hProgman = FindWindowW(L"Progman", NULL);
     HWND hDesktopWnd = hProgman;
 
-    // Search for active WorkerW if animated wallpaper engines or Windows created one
     HWND hWorkerW = NULL;
     do {
         hWorkerW = FindWindowExW(NULL, hWorkerW, L"WorkerW", NULL);
@@ -98,7 +113,38 @@ HWND GetDesktopWindowHandle() {
     return hDesktopWnd;
 }
 
-// Enables or disables the native Windows translucent selection rectangle via Registry
+BOOL IsClickOnEmptyDesktopSpace(HWND hWndUnderMouse, POINT ptScreen) {
+    WCHAR className[256];
+    GetClassNameW(hWndUnderMouse, className, 256);
+
+    HWND hListView = NULL;
+
+    if (wcscmp(className, L"SysListView32") == 0) {
+        hListView = hWndUnderMouse;
+    } else if (wcscmp(className, L"WorkerW") == 0 || wcscmp(className, L"Progman") == 0) {
+        HWND hShellDll = FindWindowExW(hWndUnderMouse, NULL, L"SHELLDLL_DefView", NULL);
+        if (hShellDll) {
+            hListView = FindWindowExW(hShellDll, NULL, L"SysListView32", NULL);
+        }
+    }
+
+    if (!hListView) return FALSE;
+
+    POINT ptClient = ptScreen;
+    ScreenToClient(hListView, &ptClient);
+
+    LVHITTESTINFO hitInfo = {0};
+    hitInfo.pt = ptClient;
+
+    int hitIndex = (int)SendMessageW(hListView, LVM_HITTEST, 0, (LPARAM)&hitInfo);
+
+    if (hitIndex == -1 || (hitInfo.flags & LVHT_NOWHERE)) {
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
 void SetNativeTranslucentSelection(BOOL enable) {
     HKEY hKey;
     if (RegOpenKeyExW(HKEY_CURRENT_USER, 
@@ -127,19 +173,26 @@ void RedrawOverlay(HWND hwnd, RECT rc) {
     int screenLeft = GetSystemMetrics(SM_XVIRTUALSCREEN);
     int screenTop = GetSystemMetrics(SM_YVIRTUALSCREEN);
 
-    // Z-Order management based on user settings
     if (settings.keepBehindWindows) {
         HWND hDesktop = GetDesktopWindowHandle();
-        // Position overlay directly above Desktop window (behind all other active applications)
         SetWindowPos(hwnd, hDesktop, screenLeft, screenTop, screenWidth, screenHeight, SWP_NOACTIVATE | SWP_SHOWWINDOW);
     } else {
-        // Position overlay in the foreground on top of all windows
         SetWindowPos(hwnd, HWND_TOPMOST, screenLeft, screenTop, screenWidth, screenHeight, SWP_NOACTIVATE | SWP_SHOWWINDOW);
     }
 
     HDC hdc = GetDC(hwnd);
     HDC hdcMem = CreateCompatibleDC(hdc);
-    HBITMAP hBitmap = CreateCompatibleBitmap(hdc, screenWidth, screenHeight);
+
+    BITMAPINFO bmi = {0};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = screenWidth;
+    bmi.bmiHeader.biHeight = -screenHeight; // Top-down DIB
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* pBits = NULL;
+    HBITMAP hBitmap = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
     HBITMAP hOldBmp = (HBITMAP)SelectObject(hdcMem, hBitmap);
 
     Graphics graphics(hdcMem);
@@ -148,7 +201,7 @@ void RedrawOverlay(HWND hwnd, RECT rc) {
 
     REAL x = (REAL)(rc.left - screenLeft);
     REAL y = (REAL)(rc.top - screenTop);
-    REAL penWidth = 1.5f;
+    REAL penWidth = settings.borderThickness;
     REAL offset = penWidth / 2.0f;
     REAL w = (REAL)selWidth - penWidth;
     REAL h = (REAL)selHeight - penWidth;
@@ -165,10 +218,11 @@ void RedrawOverlay(HWND hwnd, RECT rc) {
     path.AddArc(x + offset, y + offset + h - diameter, (REAL)diameter, (REAL)diameter, 90.0f, 90.0f);
     path.CloseFigure();
 
-    SolidBrush brush(Color(80, 61, 174, 233));
+    // Costruzione nativa ARGB per GDI+ Bitmap 32bit DIB Section
+    SolidBrush brush(Color(settings.fillA, settings.fillR, settings.fillG, settings.fillB));
     graphics.FillPath(&brush, &path);
 
-    Pen pen(Color(220, 61, 174, 233), penWidth);
+    Pen pen(Color(settings.borderA, settings.borderR, settings.borderG, settings.borderB), penWidth);
     graphics.DrawPath(&pen, &path);
 
     BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
@@ -212,10 +266,8 @@ LRESULT CALLBACK MouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
         if (wParam == WM_LBUTTONDOWN) {
             HWND hWndUnderMouse = WindowFromPoint(pMouse->pt);
-            WCHAR className[256];
-            GetClassNameW(hWndUnderMouse, className, 256);
-
-            if (wcscmp(className, L"SysListView32") == 0 || wcscmp(className, L"WorkerW") == 0 || wcscmp(className, L"Progman") == 0) {
+            
+            if (IsClickOnEmptyDesktopSpace(hWndUnderMouse, pMouse->pt)) {
                 g_ptStart = pMouse->pt;
                 g_isDragging = TRUE;
 
@@ -272,13 +324,27 @@ DWORD WINAPI HookThreadProc(LPVOID lpParam) {
 
 void LoadSettings() {
     settings.cornerRadius = Wh_GetIntSetting(L"cornerRadius");
-    if (settings.cornerRadius <= 0) settings.cornerRadius = 10;
+    if (settings.cornerRadius <= 0) settings.cornerRadius = 4;
+
+    // Lettura valori R, G, B, A separati (evita problemi di parsing esadecimale)
+    settings.fillR = (BYTE)Wh_GetIntSetting(L"fillR");
+    settings.fillG = (BYTE)Wh_GetIntSetting(L"fillG");
+    settings.fillB = (BYTE)Wh_GetIntSetting(L"fillB");
+    settings.fillA = (BYTE)Wh_GetIntSetting(L"fillA");
+
+    settings.borderR = (BYTE)Wh_GetIntSetting(L"borderR");
+    settings.borderG = (BYTE)Wh_GetIntSetting(L"borderG");
+    settings.borderB = (BYTE)Wh_GetIntSetting(L"borderB");
+    settings.borderA = (BYTE)Wh_GetIntSetting(L"borderA");
+
+    int rawThickness = Wh_GetIntSetting(L"borderThickness");
+    settings.borderThickness = (rawThickness > 0) ? ((float)rawThickness / 10.0f) : 1.5f;
 
     settings.keepBehindWindows = Wh_GetIntSetting(L"keepBehindWindows");
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Init KDE Desktop Overlay Mod v2.6");
+    Wh_Log(L"Init KDE Desktop Overlay Mod v2.0.2");
     LoadSettings();
 
     SetNativeTranslucentSelection(FALSE);
@@ -288,7 +354,6 @@ BOOL Wh_ModInit() {
 
     g_hThread = CreateThread(NULL, 0, HookThreadProc, NULL, 0, &g_dwThreadId);
     
-    // Start independent thread for hardware-level mouse polling
     g_stopMonitorThread = FALSE;
     g_hMonitorThread = CreateThread(NULL, 0, MouseMonitorThreadProc, NULL, 0, NULL);
 
