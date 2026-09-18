@@ -95,7 +95,8 @@ You can add your own shortcuts using these templates in the settings:
   * Path: `powershell.exe` | Args: `-WindowStyle Hidden -Command "Set-Clipboard -Value '%n'"` | Mode: `batch`
 
 ### Attribution & Acknowledgments
-Shell window inspection logic and COM GUID declarations adapt techniques from `explorer-command-bar` (m417z, MIT). Settings toggling follows patterns established in `toggle-hidden-files` (m417z, MIT).
+Shell window inspection logic and COM GUID declarations adapt techniques from `explorer-command-bar` (DanRotaru, MIT). Settings toggling follows patterns established in `toggle-hidden-files` (Asteski).
+
 */
 // ==/WindhawkModReadme==
 
@@ -218,7 +219,8 @@ std::wstring ResolveCommandPath(const std::wstring& command) {
     }
 
     WCHAR resolved[MAX_PATH];
-    if (SearchPathW(nullptr, expanded.c_str(), L".exe", ARRAYSIZE(resolved), resolved, nullptr)) {
+    DWORD searchRes = SearchPathW(nullptr, expanded.c_str(), L".exe", ARRAYSIZE(resolved), resolved, nullptr);
+    if (searchRes > 0 && searchRes < ARRAYSIZE(resolved)) {
         return resolved;
     }
 
@@ -284,7 +286,10 @@ void LoadSettings() {
 
     for (int i = 0; i < 100; i++) {
         PCWSTR pathStr = Wh_GetStringSetting(L"shortcuts[%d].path", i);
-        if (!pathStr) break;
+        if (!pathStr || !*pathStr) {
+            if (pathStr) Wh_FreeStringSetting(pathStr);
+            break;
+        }
 
         CustomShortcut sc;
         sc.path = pathStr;
@@ -552,6 +557,7 @@ std::wstring ExpandTokens(
 
 void ExecuteApp(const std::wstring& cmd, const std::wstring& params, const std::wstring& workDir) {
     std::wstring targetPath = ResolveCommandPath(cmd);
+    bool isPath = targetPath.find(L'\\') != std::wstring::npos;
 
     SHELLEXECUTEINFOW sei = { sizeof(sei) };
     sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
@@ -559,7 +565,7 @@ void ExecuteApp(const std::wstring& cmd, const std::wstring& params, const std::
     sei.lpVerb = L"open";
     sei.lpFile = targetPath.c_str();
     sei.lpParameters = params.empty() ? nullptr : params.c_str();
-    sei.lpDirectory = workDir.empty() ? nullptr : workDir.c_str();
+    sei.lpDirectory = (isPath && !workDir.empty()) ? workDir.c_str() : nullptr;
     sei.nShow = SW_SHOWNORMAL;
 
     if (!ShellExecuteExW(&sei)) {
@@ -706,11 +712,11 @@ if (_wcsicmp(command.c_str(), L"internal:folderOptions") == 0) {
 
     // 5. Empty Recycle Bin Safely (Using Native OS Confirmation Prompt)
     if (_wcsicmp(command.c_str(), L"internal:emptyRecycleBin") == 0) {
-    QueueBackgroundWork([rootHwnd]() {
-        SHEmptyRecycleBinW(rootHwnd, nullptr, 0);
-    });
-    return;
-}
+        QueueBackgroundWork([rootHwnd]() {
+            SHEmptyRecycleBinW(rootHwnd, nullptr, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND);
+        });
+        return;
+    }
 
     // 6. Toggle Hidden Files & Force Refresh Active View
     if (_wcsicmp(command.c_str(), L"internal:toggleHiddenFiles") == 0) {
@@ -855,7 +861,7 @@ bool IsInlineEditingActive(HWND rootHwnd) {
 
     GUITHREADINFO gti = { sizeof(gti) };
     if (GetGUIThreadInfo(GetWindowThreadProcessId(hFocus, nullptr), &gti)) {
-        if (gti.flags & GUI_CARETBLINKING) {
+        if (gti.hwndCaret != nullptr) {
             return true;
         }
     }
