@@ -32,7 +32,8 @@ Buttons:
 - Battery -> Control Center or a custom action
 
 Use **Toggle buttons visibility** to choose which buttons appear. Drag items in
-**Button order** to arrange all five buttons, including Battery. The battery
+**Button order** to arrange the buttons, including Battery. Removing an entry
+hides that button; adding it back shows it when its visibility toggle is enabled. The battery
 button appears only when Windows reports a battery.
 
 Sound supports mouse-wheel volume adjustment (unmuting first) and middle-click
@@ -203,7 +204,7 @@ menu presenter receives its name after creation.
   $name: Toggle buttons visibility
 - buttonOrder: [sound, bluetooth, network, controlcenter, battery]
   $name: Button order
-  $description: "Drag the buttons into the desired taskbar order."
+  $description: "Drag to reorder buttons. Remove an entry to hide its button; add it back to show it. The visibility toggles above must also be enabled."
   $options:
   - sound: Sound
   - bluetooth: Bluetooth
@@ -251,6 +252,7 @@ menu presenter receives its name after creation.
 #include <string>
 #include <string_view>
 #include <vector>
+#include <optional>
 
 #undef GetCurrentTime
 
@@ -546,11 +548,7 @@ static std::wstring LoadButtonOrderSetting() {
         order += value;
         Wh_FreeStringSetting(value);
     }
-    // Read the former text setting when upgrading existing installations.
-    return order.empty() ? GetStringSettingWithDefault(
-                               L"buttonOrder",
-                               L"sound,bluetooth,network,controlcenter,battery")
-                         : order;
+    return order;
 }
 
 static void LoadSettings() {
@@ -622,6 +620,8 @@ static wuxm::Brush MakeIconBrush() {
     return wuxm::SolidColorBrush(color);
 }
 
+[[clang::no_destroy]] static wuxm::Brush g_underlayFallback{nullptr};
+
 static wuxm::Brush MakeUnderlayBrush() {
     // Share the native foreground without changing its opacity: the glyph
     // applies the native 20% underlay opacity independently.
@@ -629,17 +629,16 @@ static wuxm::Brush MakeUnderlayBrush() {
         if (auto brush = native.Foreground()) return brush;
     }
     static bool cachedThemeIsLight = false;
-    [[clang::no_destroy]] static wuxm::Brush cachedFallback{nullptr};
     const bool light = IsSystemLightTheme();
-    if (cachedFallback && cachedThemeIsLight == light) return cachedFallback;
+    if (g_underlayFallback && cachedThemeIsLight == light) return g_underlayFallback;
     try {
         auto control = wuxmk::XamlReader::Load(
             LR"(<ContentControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Foreground="{ThemeResource TextFillColorPrimaryBrush}"/>)")
             .as<wuc::ContentControl>();
         if (auto brush = control.Foreground()) {
             cachedThemeIsLight = light;
-            cachedFallback = brush;
-            return cachedFallback;
+            g_underlayFallback = brush;
+            return g_underlayFallback;
         }
     } catch (...) {}
     wu::Color color{};
@@ -649,8 +648,8 @@ static wuxm::Brush MakeUnderlayBrush() {
     color.G = channel;
     color.B = channel;
     cachedThemeIsLight = light;
-    cachedFallback = wuxm::SolidColorBrush(color);
-    return cachedFallback;
+    g_underlayFallback = wuxm::SolidColorBrush(color);
+    return g_underlayFallback;
 }
 
 static winrt::hstring GlyphFromHexSetting(std::wstring const& setting,
@@ -2594,26 +2593,26 @@ struct GridTrayMutation {
     std::vector<wuc::ColumnDefinition> columns;
     std::vector<std::pair<winrt::weak_ref<wux::FrameworkElement>, int>> shiftedChildren;
 };
-[[clang::no_destroy]] static GridTrayMutation g_gridTrayMutation;
+[[clang::no_destroy]] static std::optional<GridTrayMutation> g_gridTrayMutation;
 
 static void RestoreGridTrayMutation() {
-    auto grid = g_gridTrayMutation.grid.get();
-    if (!grid) { g_gridTrayMutation = {}; return; }
+    if (!g_gridTrayMutation) return;
     try {
-        for (auto const& [childRef, column] : g_gridTrayMutation.shiftedChildren) {
-            if (auto child = childRef.get()) wuc::Grid::SetColumn(child, column);
-        }
-        auto columns = grid.ColumnDefinitions();
-        for (auto const& inserted : g_gridTrayMutation.columns) {
-            for (uint32_t i = 0; i < columns.Size(); ++i) {
-                if (columns.GetAt(i) == inserted) { columns.RemoveAt(i); break; }
+        if (auto grid = g_gridTrayMutation->grid.get()) {
+            for (auto const& [childRef, column] : g_gridTrayMutation->shiftedChildren) {
+                if (auto child = childRef.get()) wuc::Grid::SetColumn(child, column);
+            }
+            auto columns = grid.ColumnDefinitions();
+            for (auto const& inserted : g_gridTrayMutation->columns) {
+                for (uint32_t i = 0; i < columns.Size(); ++i) {
+                    if (columns.GetAt(i) == inserted) { columns.RemoveAt(i); break; }
+                }
             }
         }
     } catch (...) {}
-    g_gridTrayMutation = {};
+    // Release strong references even if the tree is gone or restoration fails.
+    g_gridTrayMutation.reset();
 }
-
-
 
 static void RestoreOriginalGroupedButton() {
     if (g_originalGroupedButton) {
@@ -3754,7 +3753,11 @@ static LRESULT CALLBACK TrayRefreshWindowProc(HWND hwnd, UINT message,
         return 1;
     }
     if (message == WM_POWERBROADCAST) {
-        InvalidateEnergySaverRead();
+        if (wp == PBT_POWERSETTINGCHANGE) {
+            auto* setting = reinterpret_cast<POWERBROADCAST_SETTING*>(lp);
+            if (setting && IsEqualGUID(setting->PowerSetting, GUID_ACDC_POWER_SOURCE))
+                InvalidateEnergySaverRead();
+        }
         RequestTrayRefresh(RefreshPower);
         return TRUE;
     }
@@ -3787,20 +3790,44 @@ static LRESULT CALLBACK TrayRefreshWindowProc(HWND hwnd, UINT message,
     return DefWindowProcW(hwnd, message, wp, lp);
 }
 
-static void EnsureTrayRefreshWindow() {
-    if (g_unloading || g_refreshWindow) return;
+static HMODULE GetModModule() {
     HMODULE owner = nullptr;
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-        GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-        reinterpret_cast<PCWSTR>(&TrayRefreshWindowProc), &owner);
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<PCWSTR>(&TrayRefreshWindowProc), &owner)) {
+        Wh_Log(L"Cannot resolve refresh window module: %lu", GetLastError());
+    }
+    return owner;
+}
+
+static bool IsTrayRefreshWindow(HWND hwnd, HMODULE owner) {
+    return owner && hwnd && IsWindow(hwnd) &&
+        reinterpret_cast<HMODULE>(GetClassLongPtrW(hwnd, GCLP_HMODULE)) == owner &&
+        reinterpret_cast<WNDPROC>(GetClassLongPtrW(hwnd, GCLP_WNDPROC)) == TrayRefreshWindowProc;
+}
+
+static void EnsureTrayRefreshWindow() {
+    if (g_unloading) return;
+    const HMODULE owner = GetModModule();
+    if (!owner || IsTrayRefreshWindow(g_refreshWindow, owner)) return;
     WNDCLASSW cls{};
     cls.lpfnWndProc = TrayRefreshWindowProc;
     cls.hInstance = owner;
     cls.lpszClassName = kRefreshWindowClass;
-    if (!RegisterClassW(&cls)) return;
+    if (!RegisterClassW(&cls)) {
+        const DWORD error = GetLastError();
+        WNDCLASSW existing{};
+        if (error != ERROR_CLASS_ALREADY_EXISTS ||
+            !GetClassInfoW(owner, kRefreshWindowClass, &existing) ||
+            existing.lpfnWndProc != TrayRefreshWindowProc) {
+            Wh_Log(L"Refresh window class registration failed: %lu", error);
+            return;
+        }
+    }
     HWND hwnd = CreateWindowExW(0, kRefreshWindowClass, L"", 0, 0, 0, 0, 0,
                                 HWND_MESSAGE, nullptr, owner, nullptr);
     if (!hwnd) {
+        Wh_Log(L"Refresh window creation failed: %lu", GetLastError());
         UnregisterClassW(kRefreshWindowClass, owner);
         return;
     }
@@ -3824,12 +3851,18 @@ static void DestroyTrayRefreshWindow() {
     g_refreshWindow = nullptr;
     g_refreshPending = 0;
     ReleaseSRWLockExclusive(&g_refreshLock);
-    if (hwnd) {
-        auto owner = reinterpret_cast<HINSTANCE>(GetWindowLongPtrW(hwnd, GWLP_HINSTANCE));
+    const HMODULE owner = GetModModule();
+    if (IsTrayRefreshWindow(hwnd, owner)) {
         KillTimer(hwnd, 1);
         KillTimer(hwnd, 2);
-        DestroyWindow(hwnd);
-        UnregisterClassW(kRefreshWindowClass, owner);
+        if (!DestroyWindow(hwnd))
+            Wh_Log(L"Refresh window destruction failed: %lu", GetLastError());
+    }
+    // The HWND can already be gone; the class still belongs to this module.
+    if (owner && !UnregisterClassW(kRefreshWindowClass, owner)) {
+        const DWORD error = GetLastError();
+        if (error != ERROR_CLASS_DOES_NOT_EXIST)
+            Wh_Log(L"Refresh window class cleanup failed: %lu", error);
     }
 }
 
@@ -4843,12 +4876,6 @@ static std::vector<ButtonKind> GetVisibleButtonOrder() {
         start = comma + 1;
     }
 
-    AppendOrderedButtonKind(order, used, ButtonKind::Bluetooth);
-    AppendOrderedButtonKind(order, used, ButtonKind::Network);
-    AppendOrderedButtonKind(order, used, ButtonKind::Sound);
-    AppendOrderedButtonKind(order, used, ButtonKind::ControlCenter);
-    AppendOrderedButtonKind(order, used, ButtonKind::Battery);
-
     std::wstring orderLog;
     for (auto kind : order) {
         if (!orderLog.empty()) {
@@ -5681,7 +5708,8 @@ static void InsertGridTrayButtons(wuc::Grid const& trayGrid,
     }
 
     RestoreGridTrayMutation();
-    g_gridTrayMutation.grid = winrt::make_weak(trayGrid);
+    g_gridTrayMutation.emplace();
+    g_gridTrayMutation->grid = winrt::make_weak(trayGrid);
     for (int i = 0; i < buttonCount; ++i) {
         wuc::ColumnDefinition column;
         column.Width({1.0, wux::GridUnitType::Auto});
@@ -5691,7 +5719,7 @@ static void InsertGridTrayButtons(wuc::Grid const& trayGrid,
         } else {
             trayGrid.ColumnDefinitions().InsertAt(insertCol + i, column);
         }
-        g_gridTrayMutation.columns.push_back(column);
+        g_gridTrayMutation->columns.push_back(column);
     }
 
     for (uint32_t i = 0; i < trayGrid.Children().Size(); ++i) {
@@ -5703,7 +5731,7 @@ static void InsertGridTrayButtons(wuc::Grid const& trayGrid,
 
         int childCol = wuc::Grid::GetColumn(child);
         if (childCol >= insertCol) {
-            g_gridTrayMutation.shiftedChildren.emplace_back(
+            g_gridTrayMutation->shiftedChildren.emplace_back(
                 winrt::make_weak(child), childCol);
             wuc::Grid::SetColumn(child, childCol + buttonCount);
         }
@@ -5925,6 +5953,8 @@ static void RemoveXamlButtons() {
         Wh_Log(L"RemoveXamlButtons error: 0x%08X", winrt::to_hresult());
     }
     // Release cached XAML references on this UI thread, not at DLL destruction.
+    RestoreGridTrayMutation();
+    g_underlayFallback = nullptr;
     g_bluetoothButton = g_networkButton = g_soundButton = g_batteryButton = nullptr;
     g_compactGroupedButton = g_trayControlCenterButton = g_originalGroupedButton = nullptr;
     g_bluetoothIcon = {}; g_networkIcon = {}; g_soundIcon = {};
