@@ -17,6 +17,10 @@
 Adds a `%s%` elastic spacer token to the Windows 11 taskbar clock, so clock items
 can be pushed apart to fill a fixed width instead of bunching together.
 
+![Clock Spacer distributing a custom clock across multiple rows](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/taskbar-clock-spacer/assets/clock-spacer-working.png)
+*User-confirmed working configuration, September 9, 2026, with system stats,
+time, date, and weather arranged across a fixed-width clock.*
+
 ## Two requirements — please read before installing
 
 **1. This mod does nothing on its own.** It is a companion for
@@ -110,6 +114,24 @@ incorrectly.
 - Lines without `%s%` are left completely alone — the mod is a no-op for them.
 - Font, size, and color of the spaced segments follow the original clock text's
   current style, so the clock mod's style settings continue to apply.
+
+## How it works
+
+The mod hooks `DateTimeIconContent::OnApplyTemplate` in the system tray and
+watches the clock's time and date text blocks. When a line contains `%s%`, the
+source text block is collapsed and a generated panel is inserted in its place:
+each line becomes a Grid whose text segments sit in `Auto` columns separated by
+`Star` columns, and the star columns absorb the leftover width. When only the
+text changes — which happens every second — the existing segments are rewritten
+in place rather than rebuilt, so the visual tree stays stable.
+
+## Relationship to Taskbar Clock Customization
+
+The spacer was first offered as a patch to Taskbar Clock Customization itself
+([m417z/my-windhawk-mods#68](https://github.com/m417z/my-windhawk-mods/pull/68)).
+The maintainer preferred an approach that does not add generated layout elements,
+so this companion mod carries the feature separately and leaves that mod
+untouched.
 */
 // ==/WindhawkModReadme==
 
@@ -159,6 +181,588 @@ using namespace winrt::Windows::UI::Xaml::Controls;
 using namespace winrt::Windows::UI::Xaml::Media;
 
 // ============================================================
+// Visual tree walk
+// Template block: _templates/visual-tree-walk.h (verbatim copy —
+// keep in sync with the template; Windhawk mods are single-file).
+// ============================================================
+
+namespace windhawk_mod_templates::visual_tree_walk {
+
+using winrt::Windows::UI::Xaml::FrameworkElement;
+using winrt::Windows::UI::Xaml::Controls::StackPanel;
+using winrt::Windows::UI::Xaml::Media::VisualTreeHelper;
+
+// Depth-first visit of every FrameworkElement descendant (root excluded).
+// The visitor returns true to stop the walk early.
+inline bool ForEachDescendant(
+    FrameworkElement const& root, int maxDepth,
+    std::function<bool(FrameworkElement const&, int)> const& visit,
+    int depth = 0) {
+    if (!root || depth >= maxDepth)
+        return false;
+    int count = VisualTreeHelper::GetChildrenCount(root);
+    for (int i = 0; i < count; ++i) {
+        auto child =
+            VisualTreeHelper::GetChild(root, i).try_as<FrameworkElement>();
+        if (!child)
+            continue;
+        if (visit(child, depth + 1))
+            return true;
+        if (ForEachDescendant(child, maxDepth, visit, depth + 1))
+            return true;
+    }
+    return false;
+}
+
+// First descendant matching the predicate, depth-first document order.
+inline FrameworkElement FindDescendant(
+    FrameworkElement const& root, int maxDepth,
+    std::function<bool(FrameworkElement const&)> const& predicate) {
+    FrameworkElement found = nullptr;
+    ForEachDescendant(root, maxDepth,
+                      [&](FrameworkElement const& element, int) {
+                          if (predicate(element)) {
+                              found = element;
+                              return true;
+                          }
+                          return false;
+                      });
+    return found;
+}
+
+// Every descendant matching the predicate, in depth-first document order —
+// which is also visual order for the tray's horizontal stacks.
+inline void CollectDescendants(
+    FrameworkElement const& root, int maxDepth,
+    std::function<bool(FrameworkElement const&)> const& predicate,
+    std::vector<FrameworkElement>& out) {
+    ForEachDescendant(root, maxDepth,
+                      [&](FrameworkElement const& element, int) {
+                          if (predicate(element))
+                              out.push_back(element);
+                          return false;
+                      });
+}
+
+// The OmniButton battery walk: the first non-items-host StackPanel
+// descendant — the inner panel whose children are the individually
+// addressable native elements (glyph, percent, per-icon views).
+inline StackPanel FindInnerStackPanel(FrameworkElement const& root,
+                                      int maxDepth) {
+    StackPanel found = nullptr;
+    ForEachDescendant(root, maxDepth,
+                      [&](FrameworkElement const& element, int) {
+                          auto panel = element.try_as<StackPanel>();
+                          if (panel && !panel.IsItemsHost()) {
+                              found = panel;
+                              return true;
+                          }
+                          return false;
+                      });
+    return found;
+}
+
+}  // namespace windhawk_mod_templates::visual_tree_walk
+
+namespace vtw = windhawk_mod_templates::visual_tree_walk;
+
+// ============================================================
+// Settings IO
+// Template block: _templates/settings-io.h (verbatim copy —
+// keep in sync with the template; Windhawk mods are single-file).
+// ============================================================
+
+namespace windhawk_mod_templates::settings_io {
+
+inline int Clamp(int value, int low, int high) {
+    return std::max(low, std::min(high, value));
+}
+
+// Frees on every path, including the ones a hand-written loader forgets.
+class StringSetting {
+public:
+    explicit StringSetting(PCWSTR key) : value_(Wh_GetStringSetting(key)) {}
+    ~StringSetting() {
+        if (value_) Wh_FreeStringSetting(value_);
+    }
+    StringSetting(StringSetting const&) = delete;
+    StringSetting& operator=(StringSetting const&) = delete;
+
+    // Never nullptr in practice, but do not rely on that at the call site.
+    PCWSTR Get() const { return value_ ? value_ : L""; }
+    bool Empty() const { return !value_ || !value_[0]; }
+
+private:
+    PCWSTR value_ = nullptr;
+};
+
+// Copy a string setting into a fixed buffer, always NUL-terminated. Fixed
+// buffers rather than std::wstring because a namespace-scope settings struct
+// must not own heap — see the exit-time destructor audit.
+template <size_t N>
+inline void LoadString(PCWSTR key, wchar_t (&buffer)[N]) {
+    StringSetting setting(key);
+    if (setting.Empty()) {
+        buffer[0] = L'\0';
+        return;
+    }
+    wcsncpy(buffer, setting.Get(), N - 1);
+    buffer[N - 1] = L'\0';
+}
+
+// Same, but substitutes `fallback` when the setting is empty.
+template <size_t N>
+inline void LoadString(PCWSTR key, wchar_t (&buffer)[N], PCWSTR fallback) {
+    LoadString(key, buffer);
+    if (!buffer[0] && fallback) {
+        wcsncpy(buffer, fallback, N - 1);
+        buffer[N - 1] = L'\0';
+    }
+}
+
+inline int LoadInt(PCWSTR key, int low, int high) {
+    return Clamp(Wh_GetIntSetting(key), low, high);
+}
+
+inline bool LoadBool(PCWSTR key) {
+    return Wh_GetIntSetting(key) != 0;
+}
+
+// A $options choice, matched case-insensitively against a table of tokens.
+// Returns the matching entry's value, or `fallback` when nothing matches —
+// which also covers the unset case, since an unset string is empty.
+//
+// Use this rather than a chain of _wcsicmp: after ANY option is renamed, a
+// stale literal in a hand-written chain fails silently and the mod quietly
+// falls back. That cost this lab a release (Indicator symbols reverted to
+// numbers because `labelFormat == L"dot"` was never true again).
+template <typename T>
+struct Choice {
+    wchar_t const* token;
+    T value;
+};
+
+template <typename T, size_t N>
+inline T LoadChoice(PCWSTR key, Choice<T> const (&choices)[N], T fallback) {
+    StringSetting setting(key);
+    if (setting.Empty()) return fallback;
+    for (auto const& choice : choices) {
+        if (_wcsicmp(setting.Get(), choice.token) == 0) return choice.value;
+    }
+    return fallback;
+}
+
+}  // namespace windhawk_mod_templates::settings_io
+
+namespace sio = windhawk_mod_templates::settings_io;
+
+// ============================================================
+// Taskbar host
+// Template block: _templates/taskbar-host.h (verbatim copy —
+// keep in sync with the template; Windhawk mods are single-file).
+// ============================================================
+
+namespace windhawk_mod_templates::taskbar_host {
+
+using winrt::Windows::UI::Xaml::FrameworkElement;
+using winrt::Windows::UI::Xaml::XamlRoot;
+
+// ---- Window discovery -------------------------------------------------------
+
+inline HWND FindCurrentProcessTaskbarWnd() {
+    HWND result = nullptr;
+    EnumWindows(
+        [](HWND window, LPARAM parameter) -> BOOL {
+            DWORD processId = 0;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(window, &processId) &&
+                processId == GetCurrentProcessId() &&
+                GetClassName(window, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(parameter) = window;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&result));
+    return result;
+}
+
+// ---- UI-thread marshalling --------------------------------------------------
+//
+// XAML may only be touched from the thread that owns it. This posts work onto
+// the taskbar's thread with a CALLWNDPROC hook and a private registered
+// message, and reports whether the callback actually ran — a caller that
+// assumes it did will corrupt its own state when the dispatch failed.
+
+using ThreadProc = void (*)(void*);
+using ExceptionLogFn = void (*)(PCWSTR context);
+
+inline ExceptionLogFn g_logException = nullptr;
+
+// Point this at the mod's logger once in Wh_ModInit so failures inside a UI
+// callback are reported in the mod's own voice.
+inline void SetExceptionLogger(ExceptionLogFn logger) {
+    g_logException = logger;
+}
+
+inline bool Invoke(ThreadProc proc, void* parameter) {
+    try {
+        proc(parameter);
+        return true;
+    } catch (...) {
+        if (g_logException) g_logException(L"UI callback");
+    }
+    return false;
+}
+
+struct Dispatch {
+    ThreadProc proc;
+    void* parameter;
+    bool succeeded = false;
+};
+
+// The private message this mod dispatches on. Set before the hook is
+// installed, and read by the hook proc to recognise its own message.
+//
+// A CALLWNDPROC HOOK SEES EVERY MESSAGE SENT TO EVERY WINDOW ON THE TASKBAR'S
+// UI THREAD. `lParam` for all of those is arbitrary — an integer, a flag, a
+// pointer to something else entirely. So the message MUST be checked first,
+// against a value that does not come from lParam, and only then may lParam be
+// treated as a Dispatch*. Reading anything out of lParam before that check
+// dereferences whatever happened to be in the message and takes Explorer down
+// with it — which is exactly what an earlier revision of this template did.
+// Atomic because the caller may be the retry thread while the hook proc runs
+// on the taskbar's UI thread. RegisterWindowMessageW returns the same value
+// for the same string for the lifetime of the session, so this settles on one
+// value immediately and never changes again — the pre-template code got the
+// same property from a function-local `static UINT` magic static, which a
+// parameterised template cannot use.
+inline std::atomic<UINT> g_dispatchMessage{0};
+
+// messageName must embed WH_MOD_ID, so two mods cannot collide on the message.
+inline bool RunFromWindowThread(HWND window, ThreadProc proc, void* parameter,
+                                PCWSTR messageName) {
+    UINT message = RegisterWindowMessageW(messageName);
+    if (!message) return false;
+
+    DWORD threadId = GetWindowThreadProcessId(window, nullptr);
+    if (!threadId) return false;
+    if (threadId == GetCurrentThreadId()) return Invoke(proc, parameter);
+
+    g_dispatchMessage.store(message, std::memory_order_release);
+
+    HHOOK hook = SetWindowsHookExW(
+        WH_CALLWNDPROC,
+        [](int code, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (code == HC_ACTION) {
+                auto const* call = reinterpret_cast<CWPSTRUCT const*>(lParam);
+                // Message first. Only our own private message carries a
+                // Dispatch* in lParam; everything else carries something we
+                // must not touch.
+                UINT expected =
+                    g_dispatchMessage.load(std::memory_order_acquire);
+                if (expected && call->message == expected) {
+                    if (auto* dispatch =
+                            reinterpret_cast<Dispatch*>(call->lParam)) {
+                        dispatch->succeeded =
+                            Invoke(dispatch->proc, dispatch->parameter);
+                    }
+                }
+            }
+            return CallNextHookEx(nullptr, code, wParam, lParam);
+        },
+        nullptr, threadId);
+    if (!hook) return false;
+
+    Dispatch dispatch{proc, parameter};
+    SendMessageW(window, message, 0, reinterpret_cast<LPARAM>(&dispatch));
+    UnhookWindowsHookEx(hook);
+    return dispatch.succeeded;
+}
+
+// ---- XamlRoot ---------------------------------------------------------------
+
+using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void*, void*);
+using TaskbarHost_FrameHeight_t = int(WINAPI*)(void*);
+using Ref_count_base_Decref_t = void(WINAPI*)(void*);
+using TrayUI_StartTaskbar_t = void(WINAPI*)(void*);
+
+inline CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original = nullptr;
+inline TaskbarHost_FrameHeight_t TaskbarHost_FrameHeight_Original = nullptr;
+inline Ref_count_base_Decref_t Ref_count_base_Decref_Original = nullptr;
+inline TrayUI_StartTaskbar_t TrayUI_StartTaskbar_Original = nullptr;
+inline void* CTaskBand_ITaskListWndSite_vftable = nullptr;
+
+// The mod's rebuild callback, invoked after Explorer rebuilds the taskbar.
+inline void (*g_onTaskbarRebuilt)() = nullptr;
+
+inline void WINAPI TrayUI_StartTaskbar_Hook(void* self) {
+    TrayUI_StartTaskbar_Original(self);
+    try {
+        if (g_onTaskbarRebuilt) g_onTaskbarRebuilt();
+    } catch (...) {
+        if (g_logException) g_logException(L"TrayUI::StartTaskbar hook");
+    }
+}
+
+inline bool HookTaskbarSymbols(void (*onTaskbarRebuilt)()) {
+    g_onTaskbarRebuilt = onTaskbarRebuilt;
+    HMODULE taskbar = LoadLibraryExW(L"taskbar.dll", nullptr,
+                                     LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!taskbar) return false;
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+        {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
+         &CTaskBand_ITaskListWndSite_vftable},
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
+         &CTaskBand_GetTaskbarHost_Original},
+        {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
+         &TaskbarHost_FrameHeight_Original},
+        {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
+         &Ref_count_base_Decref_Original},
+        {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
+         &TrayUI_StartTaskbar_Original, TrayUI_StartTaskbar_Hook},
+    };
+    return WindhawkUtils::HookSymbols(taskbar, taskbarDllHooks,
+                                      ARRAYSIZE(taskbarDllHooks));
+}
+
+// The FrameworkElement lives at an offset inside TaskbarHost that MOVES
+// between Windows builds, so it is read out of TaskbarHost::FrameHeight's
+// prologue at runtime rather than hardcoded.
+inline size_t FrameworkElementOffset() {
+    size_t offset = 0x10;
+#if defined(_M_X64)
+    BYTE const* code =
+        reinterpret_cast<BYTE const*>(TaskbarHost_FrameHeight_Original);
+    if (code[0] == 0x48 && code[1] == 0x83 && code[2] == 0xEC &&
+        code[4] == 0x48 && code[5] == 0x83 && code[6] == 0xC1 &&
+        code[7] <= 0x7F) {
+        offset = code[7];
+    }
+#elif defined(_M_ARM64)
+    DWORD const* code =
+        reinterpret_cast<DWORD const*>(TaskbarHost_FrameHeight_Original);
+    if (code[0] == 0xD503237F && (code[1] & 0xFFC07FFF) == 0xA9807BFD &&
+        code[2] == 0x910003FD && (code[3] & 0xFFF00FE0) == 0xF8400C00) {
+        offset = (code[3] >> 12) & 0xFF;
+    }
+#else
+#error "Unsupported architecture"
+#endif
+    return offset;
+}
+
+inline XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd) {
+    if (!CTaskBand_GetTaskbarHost_Original ||
+        !TaskbarHost_FrameHeight_Original || !Ref_count_base_Decref_Original ||
+        !CTaskBand_ITaskListWndSite_vftable)
+        return nullptr;
+
+    HWND taskSwWnd = (HWND)GetProp(taskbarWnd, L"TaskbandHWND");
+    if (!taskSwWnd) return nullptr;
+    void* taskBand = (void*)GetWindowLongPtr(taskSwWnd, 0);
+    if (!taskBand) return nullptr;
+
+    void* site = taskBand;
+    for (int i = 0; *(void**)site != CTaskBand_ITaskListWndSite_vftable; ++i) {
+        if (i == 20) return nullptr;
+        site = (void**)site + 1;
+    }
+
+    void* host[2]{};
+    CTaskBand_GetTaskbarHost_Original(site, host);
+    if (!host[0] || !host[1]) {
+        if (host[1]) Ref_count_base_Decref_Original(host[1]);
+        return nullptr;
+    }
+
+    auto* unknown =
+        *(IUnknown**)((BYTE*)host[0] + FrameworkElementOffset());
+    if (!unknown) {
+        Ref_count_base_Decref_Original(host[1]);
+        return nullptr;
+    }
+    FrameworkElement element = nullptr;
+    unknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                            winrt::put_abi(element));
+    auto result = element ? element.XamlRoot() : nullptr;
+    Ref_count_base_Decref_Original(host[1]);
+    return result;
+}
+
+// ---- Taskbar metrics and orientation ----------------------------------------
+//
+// WHERE THE TASKBAR IS, AND WHETHER THIS FAMILY CAN WORK THERE.
+//
+// Windows 11 itself only puts the taskbar at the bottom. Two mods by m417z
+// move it, and both are first-class parts of the ecosystem these mods have to
+// live in:
+//
+//   taskbar-on-top       — bottom -> top. FINE for this family. Everything
+//                          here is positioned relative to the taskbar's own
+//                          XAML tree, never to screen coordinates, so a top
+//                          taskbar is the same tree at a different y.
+//
+//   taskbar-vertical     — bottom -> left/right. NOT COMPATIBLE, and not for
+//                          a reason cooperation can fix. It walks the very
+//                          same path this family walks
+//                          (ControlCenterButton > Grid > ContentPresenter >
+//                          ItemsPresenter > StackPanel) and applies a
+//                          RotateTransform to `RenderTransform` on those
+//                          children. Positioning here sets a
+//                          TranslateTransform on the SAME property of the SAME
+//                          elements. One dependency property, two owners, last
+//                          writer wins — there is no version of this where
+//                          both mods are correct. m417z documents the same
+//                          class of conflict for taskbar-multirow.
+//
+// So: DETECT AND STAND DOWN, loudly, rather than fight and paint garbage. The
+// detection is the taskbar's own rect aspect, not a check for a specific mod —
+// it is the condition that matters, and it stays true however the taskbar got
+// that way.
+//
+// The rect is in PHYSICAL pixels and every XAML size is a DIP, so the DIP
+// conversion lives here too rather than being re-derived per mod. That is the
+// bug that was blocking on PR #4855 and #4843.
+
+enum class Orientation { Horizontal, Vertical };
+
+struct Metrics {
+    bool valid = false;
+    RECT rect{};
+    UINT dpi = 96;
+    Orientation orientation = Orientation::Horizontal;
+    // The extent this family's grid has to fit INTO: the taskbar's height when
+    // it runs across the screen, its width when it runs down the side.
+    double constrainedDip = 0.0;
+    // The extent it can run ALONG.
+    double alongDip = 0.0;
+};
+
+inline Metrics GetMetrics(HWND taskbarWnd) {
+    Metrics metrics;
+    if (!taskbarWnd || !GetWindowRect(taskbarWnd, &metrics.rect))
+        return metrics;
+
+    metrics.valid = true;
+    metrics.dpi = GetDpiForWindow(taskbarWnd);
+    if (!metrics.dpi) metrics.dpi = 96;
+
+    double width = (double)(metrics.rect.right - metrics.rect.left);
+    double height = (double)(metrics.rect.bottom - metrics.rect.top);
+    double scale = 96.0 / (double)metrics.dpi;
+
+    // Taller than wide means it runs down a side. Nothing else can produce
+    // that shape, so this needs no cooperation from whatever moved it.
+    metrics.orientation =
+        height > width ? Orientation::Vertical : Orientation::Horizontal;
+    if (metrics.orientation == Orientation::Horizontal) {
+        metrics.constrainedDip = height * scale;
+        metrics.alongDip = width * scale;
+    } else {
+        metrics.constrainedDip = width * scale;
+        metrics.alongDip = height * scale;
+    }
+    return metrics;
+}
+
+// Whether this family's layout model applies at all. A mod must check this
+// BEFORE touching anything and stand down cleanly if it is false — leaving the
+// taskbar exactly as it found it — rather than arranging into a coordinate
+// space someone else is rotating.
+inline bool LayoutModelApplies(Metrics const& metrics) {
+    return metrics.valid && metrics.orientation == Orientation::Horizontal;
+}
+
+inline wchar_t const* OrientationName(Orientation orientation) {
+    return orientation == Orientation::Vertical ? L"vertical" : L"horizontal";
+}
+
+// ---- Bounded retry ----------------------------------------------------------
+//
+// Stoppable and WAITED during unload. A detached thread that outlives
+// Wh_ModUninit runs mod code out of an unloaded DLL.
+
+class RetryLoop {
+public:
+    // applied: has the work finished? unloading: stop immediately.
+    using AppliedFn = bool (*)();
+    using AttemptFn = void (*)();
+
+    void Start(AttemptFn attempt, AppliedFn applied,
+               std::atomic<bool> const& unloading, int attempts = 5,
+               DWORD intervalMs = 2000) {
+        Stop();
+        if (unloading) return;
+        attempt_ = attempt;
+        applied_ = applied;
+        unloading_ = &unloading;
+        attempts_ = attempts;
+        intervalMs_ = intervalMs;
+        stopEvent_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!stopEvent_) return;
+        thread_ = CreateThread(
+            nullptr, 0,
+            [](void* parameter) -> DWORD {
+                auto* self = static_cast<RetryLoop*>(parameter);
+                for (int i = 0; i < self->attempts_ && !*self->unloading_;
+                     ++i) {
+                    if (self->applied_ && self->applied_()) break;
+                    if (i && WaitForSingleObject(self->stopEvent_,
+                                                 self->intervalMs_) !=
+                                 WAIT_TIMEOUT)
+                        break;
+                    if (self->attempt_) self->attempt_();
+                }
+                return 0;
+            },
+            this, 0, nullptr);
+        if (!thread_) {
+            CloseHandle(stopEvent_);
+            stopEvent_ = nullptr;
+        }
+    }
+
+    // Pumps sent messages while waiting: the retry thread marshals onto the UI
+    // thread with SendMessage, so a plain wait from that same UI thread would
+    // deadlock against the thread it is waiting for.
+    void Stop() {
+        if (stopEvent_) SetEvent(stopEvent_);
+        if (thread_) {
+            DWORD result;
+            do {
+                result = MsgWaitForMultipleObjects(1, &thread_, FALSE, INFINITE,
+                                                   QS_SENDMESSAGE);
+                if (result == WAIT_OBJECT_0 + 1) {
+                    MSG message;
+                    PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
+                }
+            } while (result == WAIT_OBJECT_0 + 1);
+            CloseHandle(thread_);
+            thread_ = nullptr;
+        }
+        if (stopEvent_) {
+            CloseHandle(stopEvent_);
+            stopEvent_ = nullptr;
+        }
+    }
+
+private:
+    HANDLE thread_ = nullptr;
+    HANDLE stopEvent_ = nullptr;
+    AttemptFn attempt_ = nullptr;
+    AppliedFn applied_ = nullptr;
+    std::atomic<bool> const* unloading_ = nullptr;
+    int attempts_ = 5;
+    DWORD intervalMs_ = 2000;
+};
+
+}  // namespace windhawk_mod_templates::taskbar_host
+
+namespace tbh = windhawk_mod_templates::taskbar_host;
+
+// ============================================================
 // Settings
 // ============================================================
 
@@ -170,12 +774,11 @@ struct ModSettings {
 static ModSettings g_settings;
 
 static void LoadSettings() {
-    g_settings.lineWidth = Wh_GetIntSetting(L"lineWidth");
-    g_settings.maxWidth = Wh_GetIntSetting(L"maxWidth");
-    g_settings.minSpacerWidth = Wh_GetIntSetting(L"minSpacerWidth");
-    if (g_settings.lineWidth < 0) g_settings.lineWidth = 0;
-    if (g_settings.maxWidth < 0) g_settings.maxWidth = 0;
-    if (g_settings.minSpacerWidth < 0) g_settings.minSpacerWidth = 0;
+    // sio::LoadInt reads and clamps in one step, so a negative value can never
+    // reach the layout code even if a clamp line is later edited away.
+    g_settings.lineWidth = sio::LoadInt(L"lineWidth", 0, INT_MAX);
+    g_settings.maxWidth = sio::LoadInt(L"maxWidth", 0, INT_MAX);
+    g_settings.minSpacerWidth = sio::LoadInt(L"minSpacerWidth", 0, INT_MAX);
 }
 
 // Generated subtrees are reused across clock ticks. They must be rebuilt when a
@@ -191,81 +794,10 @@ static uint64_t CurrentLayoutKey() {
 // GetTaskbarXamlRoot
 // ============================================================
 
-using CTaskBand_GetTaskbarHost_t = void* (WINAPI*)(void* pThis, void* result);
-CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original;
-
-using TaskbarHost_FrameHeight_t = int (WINAPI*)(void* pThis);
-TaskbarHost_FrameHeight_t TaskbarHost_FrameHeight_Original;
-
-using std__Ref_count_base__Decref_t = void (WINAPI*)(void* pThis);
-std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original;
-
-static void* CTaskBand_ITaskListWndSite_vftable = nullptr;
-
+// The CTaskBand walk, the runtime-disassembled FrameworkElement offset and the
+// taskbar.dll symbol hooks are all _templates/taskbar-host.h now.
 static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
-    // Every one of these is dereferenced below. If symbol resolution failed,
-    // proceeding would call through a null pointer.
-    if (!CTaskBand_GetTaskbarHost_Original ||
-        !TaskbarHost_FrameHeight_Original ||
-        !std__Ref_count_base__Decref_Original ||
-        !CTaskBand_ITaskListWndSite_vftable)
-        return nullptr;
-
-    HWND hTaskSwWnd = (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
-    if (!hTaskSwWnd) return nullptr;
-    void* taskBand = (void*)GetWindowLongPtr(hTaskSwWnd, 0);
-    if (!taskBand) return nullptr;
-
-    void* taskBandForSite = taskBand;
-    for (int i = 0; *(void**)taskBandForSite != CTaskBand_ITaskListWndSite_vftable; i++) {
-        if (i == 20) return nullptr;
-        taskBandForSite = (void**)taskBandForSite + 1;
-    }
-
-    void* taskbarHostSharedPtr[2]{};
-    CTaskBand_GetTaskbarHost_Original(taskBandForSite, taskbarHostSharedPtr);
-    // Either slot being null means we have no usable host; release the control
-    // block if we got one so a partial result doesn't leak a reference.
-    if (!taskbarHostSharedPtr[0] || !taskbarHostSharedPtr[1]) {
-        if (taskbarHostSharedPtr[1])
-            std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
-        return nullptr;
-    }
-
-    size_t offset = 0x10;
-#if defined(_M_X64)
-    {
-        const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
-        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
-            b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F)
-            offset = b[7];
-        else
-            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
-    }
-#elif defined(_M_ARM64)
-    {
-        const DWORD* p = (const DWORD*)TaskbarHost_FrameHeight_Original;
-        if (p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
-            p[2] == 0x910003FD && (p[3] & 0xFFF00FE0) == 0xF8400C00)
-            offset = (p[3] >> 12) & 0xFF;
-        else
-            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
-    }
-#else
-#error "Unsupported architecture"
-#endif
-
-    auto* iunk = *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] + offset);
-    if (!iunk) {
-        std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
-        return nullptr;
-    }
-
-    FrameworkElement taskbarElem = nullptr;
-    iunk->QueryInterface(winrt::guid_of<FrameworkElement>(), winrt::put_abi(taskbarElem));
-    auto result = taskbarElem ? taskbarElem.XamlRoot() : nullptr;
-    std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
-    return result;
+    return tbh::GetTaskbarXamlRoot(hTaskbarWnd);
 }
 
 // ============================================================
@@ -304,23 +836,23 @@ struct SpacerState {
 // Wh_ModUninit is not called when Explorer terminates. Without this the vector's
 // destructor runs on the shutdown thread and releases XAML weak references off
 // their UI thread.
-[[clang::no_destroy]] static std::vector<SpacerState> g_states;
+// SpacerState holds only winrt::weak_ref and integers; weak_ref release is an
+// in-process refcount decrement, safe from any thread at shutdown, so the normal
+// destructor is correct and leak-free. A bare no_destroy here would only leak
+// the vector buffer on every unload (m417z, #4443).
+static std::vector<SpacerState> g_states;  // exit-time-safe: heap-only
 
 // ============================================================
 // XAML helpers
 // ============================================================
 
+// Kept as a thin wrapper: the signature takes its predicate by value and the
+// call sites rely on that. The walk itself is now the template's.
 static FrameworkElement FindChildRecursive(FrameworkElement const& element,
     std::function<bool(FrameworkElement)> const& cb, int maxDepth = 20) {
-    int n = VisualTreeHelper::GetChildrenCount(element);
-    for (int i = 0; i < n && maxDepth > 0; i++) {
-        auto child = VisualTreeHelper::GetChild(element, i).try_as<FrameworkElement>();
-        if (!child) continue;
-        if (cb(child)) return child;
-        auto found = FindChildRecursive(child, cb, maxDepth - 1);
-        if (found) return found;
-    }
-    return nullptr;
+    return vtw::FindDescendant(
+        element, maxDepth,
+        [&cb](FrameworkElement const& child) { return cb(child); });
 }
 
 // ============================================================
@@ -759,45 +1291,22 @@ static void ScanForSpacerTargets(FrameworkElement root) {
     }
 }
 
-using RunFromWindowThreadProc_t = void (*)(void*);
+// A WH_CALLWNDPROC hook sees every message sent to every window on the
+// taskbar's UI thread, so the message must be compared BEFORE lParam is
+// treated as the dispatch record. This mod already got that right; the
+// template states the rule in capitals because reordering it once took
+// Explorer down in OmniButton.
+using RunFromWindowThreadProc_t = tbh::ThreadProc;
 
-static bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* procParam) {
-    static const UINT kMsg = RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-    struct Param { RunFromWindowThreadProc_t proc; void* procParam; };
-    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
-    if (!dwThreadId) return false;
-    if (dwThreadId == GetCurrentThreadId()) { proc(procParam); return true; }
-    HHOOK hook = SetWindowsHookEx(WH_CALLWNDPROC, [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
-        if (nCode == HC_ACTION) {
-            const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
-            if (cwp->message == RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID)) {
-                auto* p = (Param*)cwp->lParam;
-                p->proc(p->procParam);
-            }
-        }
-        return CallNextHookEx(nullptr, nCode, wParam, lParam);
-    }, nullptr, dwThreadId);
-    if (!hook) return false;
-    Param param{ proc, procParam };
-    SendMessage(hWnd, kMsg, 0, (LPARAM)&param);
-    UnhookWindowsHookEx(hook);
-    return true;
+static bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc,
+                                void* procParam) {
+    return tbh::RunFromWindowThread(
+        hWnd, proc, procParam,
+        L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 }
 
 static HWND FindCurrentProcessTaskbarWnd() {
-    HWND result = nullptr;
-    EnumWindows([](HWND hWnd, LPARAM lParam) -> BOOL {
-        DWORD pid = 0;
-        WCHAR cls[32];
-        if (GetWindowThreadProcessId(hWnd, &pid) && pid == GetCurrentProcessId() &&
-            GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) &&
-            _wcsicmp(cls, L"Shell_TrayWnd") == 0) {
-            *reinterpret_cast<HWND*>(lParam) = hWnd;
-            return FALSE;
-        }
-        return TRUE;
-    }, reinterpret_cast<LPARAM>(&result));
-    return result;
+    return tbh::FindCurrentProcessTaskbarWnd();
 }
 
 // ============================================================
@@ -859,15 +1368,15 @@ static HMODULE GetSystemTrayModuleHandle() {
 }
 
 static bool HookSystemTraySymbols(HMODULE h) {
-    // SystemTray.dll, Taskbar.View.dll (pre-2604), ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK systemTrayDllHooks[] = {{
+    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK systemTrayModuleHooks[] = {{
         {LR"(public: void __cdecl winrt::SystemTray::implementation::DateTimeIconContent::OnApplyTemplate(void))"},
         &DateTimeIconContent_OnApplyTemplate_Original,
         DateTimeIconContent_OnApplyTemplate_Hook,
         true,
     }};
-    return WindhawkUtils::HookSymbols(h, systemTrayDllHooks,
-                                      ARRAYSIZE(systemTrayDllHooks));
+    return WindhawkUtils::HookSymbols(h, systemTrayModuleHooks,
+                                      ARRAYSIZE(systemTrayModuleHooks));
 }
 
 static void TryHookSystemTrayModule(PCWSTR reason) {
@@ -885,15 +1394,6 @@ static void TryHookSystemTrayModule(PCWSTR reason) {
 // Preferred wait-for-module path: TrayUI::StartTaskbar runs once the taskbar is
 // actually starting, by which point the system tray module is loaded. This
 // replaces watching every DLL load in the process.
-using TrayUI_StartTaskbar_t = void(WINAPI*)(void* pThis);
-TrayUI_StartTaskbar_t TrayUI_StartTaskbar_Original;
-
-void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
-    TrayUI_StartTaskbar_Original(pThis);
-    if (g_unloading) return;
-    TryHookSystemTrayModule(L"TrayUI::StartTaskbar");
-    StartInitialScan();
-}
 
 // Fallback only, used when the TrayUI::StartTaskbar symbol cannot be resolved.
 using LoadLibraryExW_t = HMODULE (WINAPI*)(LPCWSTR, HANDLE, DWORD);
@@ -915,36 +1415,20 @@ static void HandleLoadedModuleIfSystemTray(HMODULE hModule, LPCWSTR lpLibFileNam
 
 static bool g_trayUiStartTaskbarHooked = false;
 
+// Explorer rebuilt the taskbar. Same work the mod's own StartTaskbar hook did,
+// handed to the template as its rebuild callback.
+static void OnTaskbarRebuilt() {
+    if (g_unloading) return;
+    TryHookSystemTrayModule(L"TrayUI::StartTaskbar");
+    StartInitialScan();
+}
+
 static bool HookTaskbarDllSymbols() {
-    HMODULE h = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!h) return false;
-
-    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
-        { {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
-          &CTaskBand_ITaskListWndSite_vftable },
-        { {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
-          &CTaskBand_GetTaskbarHost_Original },
-        { {LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
-          &TaskbarHost_FrameHeight_Original },
-        { {LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
-          &std__Ref_count_base__Decref_Original },
-    };
-    if (!WindhawkUtils::HookSymbols(h, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks)))
-        return false;
-
-    // Optional: resolution failure falls back to the LoadLibraryExW watcher.
-    // taskbar.dll
-    WindhawkUtils::SYMBOL_HOOK startTaskbarHooks[] = {{
-        {LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
-        &TrayUI_StartTaskbar_Original,
-        TrayUI_StartTaskbar_Hook,
-        true,
-    }};
-    g_trayUiStartTaskbarHooked =
-        WindhawkUtils::HookSymbols(h, startTaskbarHooks,
-                                   ARRAYSIZE(startTaskbarHooks)) &&
-        TrayUI_StartTaskbar_Original != nullptr;
-    return true;
+    // The template hooks StartTaskbar alongside the four XamlRoot symbols, so
+    // a failure here is a failure of the whole set - the LoadLibraryExW
+    // watcher remains the fallback exactly as before.
+    g_trayUiStartTaskbarHooked = tbh::HookTaskbarSymbols(OnTaskbarRebuilt);
+    return g_trayUiStartTaskbarHooked;
 }
 
 // ============================================================
