@@ -4881,7 +4881,15 @@ static void UninstallKbdHook() {
     // remaining work is only UnhookWindowsHookEx and a return, so five seconds
     // is far more than it can honestly need.
     if (WaitForSingleObject(g_hookThread, 5000) != WAIT_OBJECT_0) {
-        Wh_Log(L"Keyboard hook thread did not exit in time; abandoning it");
+        // Deliberately leave g_hookThread set. Clearing it would let the next
+        // InstallKbdHook start a second thread and a second WH_KEYBOARD_LL
+        // hook while this one's is still live, and every press would then be
+        // seen twice: Space would step two palettes at a time. Refusing to
+        // install another is the safe failure, and the global keys are the
+        // only thing lost until the process restarts.
+        Wh_Log(L"Keyboard hook thread did not exit in time; leaving it in "
+               L"place, global keys stay off for this session");
+        return;
     }
     CloseHandle(g_hookThread);
     g_hookThread = nullptr;
