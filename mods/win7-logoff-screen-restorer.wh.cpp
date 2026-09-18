@@ -7,7 +7,7 @@
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
 // @architecture   x86-64
-// @compilerOptions -luser32 -lgdi32 -lmsimg32 -lpsapi -lshell32 -ldwmapi -ladvapi32
+// @compilerOptions -luser32 -lgdi32 -lmsimg32 -lpsapi -lshell32 -ldwmapi -ladvapi32 -lole32
 // ==/WindhawkMod==
 
 
@@ -132,6 +132,7 @@ For any suggestions or problems it is recommended to contact the author of this 
 #include <windowsx.h>
 #include <shellapi.h>
 #include <dwmapi.h>
+#include <objbase.h>  // CoInitializeEx / CoUninitialize
 #include <windhawk_utils.h>
 #include <algorithm>
 #include <vector>
@@ -2076,9 +2077,14 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         // Everything below is drawn into an off-screen buffer and blitted
         // to the window in one shot at the end, still flicker-free.
         HDC dc = CreateCompatibleDC(screenDc);
-        HBITMAP backBmp = CreateCompatibleBitmap(screenDc, dw, dh);
+        // Only try the bitmap once dc itself is valid -- and if backBmp then
+        // fails, the memory DC from CreateCompatibleDC above must still be
+        // deleted before dc is reassigned to screenDc, or it leaks (the
+        // `if (dc != screenDc) DeleteDC(dc)` guard at the end of WM_PAINT can
+        // no longer see it once dc has been overwritten).
+        HBITMAP backBmp = dc ? CreateCompatibleBitmap(screenDc, dw, dh) : nullptr;
         HGDIOBJ oldBackBmp = backBmp ? SelectObject(dc, backBmp) : nullptr;
-        if (!backBmp) dc = screenDc; // Fallback: draw directly if allocation failed.
+        if (!backBmp) { if (dc) DeleteDC(dc); dc = screenDc; } // Fallback: draw directly if allocation failed.
         if (backBmp) {
             // The cached backdrop (desktop + veil) is blitted as one BitBlt of
             // the dirty region; the per-pixel AlphaBlend of the veil and the
@@ -2262,7 +2268,6 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         // reply event last is what lets that outcome be read back safely by
         // the one hook thread that owns this specific request.
         auto* req = reinterpret_cast<ShutdownRequest*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
-        if (req && req->reply) SetEvent(req->reply);
         // Any request that arrived while this screen was up follows its
         // outcome exactly -- same force/proceed the visible screen just
         // decided (whichever handler set them into *req above, including the
@@ -2272,11 +2277,21 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         // req is never null here any more: the preview path now supplies its
         // own ShutdownRequest (with a null reply) instead of nullptr, so this
         // always has an outcome to copy.
+        // The outcome has to be snapshotted before *any* event is signalled:
+        // the moment req->reply is set, the hook thread that owns *req wakes
+        // up and deletes it, so reading req->force/proceed afterwards (e.g.
+        // from the g_waiters loop below) would be a use-after-free.
+        const bool outcomeForce = req ? req->force : false;
+        const bool outcomeProceed = req ? req->proceed : true;
         for (auto* w : g_waiters) {
-            if (req) { w->force = req->force; w->proceed = req->proceed; }
+            w->force = outcomeForce; w->proceed = outcomeProceed;
             if (w->reply) SetEvent(w->reply);
         }
         g_waiters.clear();
+        // req's own reply is signalled last -- each waiter above owns its
+        // own ShutdownRequest, so signalling them first is safe, and *req
+        // must not be touched again after this line.
+        if (req && req->reply) SetEvent(req->reply);
         return 0;
     }
     }
@@ -2336,8 +2351,20 @@ static LRESULT CALLBACK ControlProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         } catch (...) {
             Wh_Log(L"Logoff screen failed: exception contained");
             req->force = false; req->proceed = true;
-            g_dialog = nullptr; FreeDesktopBitmap(); g_openPrograms.clear();
-            SetEvent(req->reply);
+            // If CreateWindowExW already succeeded before the throw, g_dialog
+            // is a live, topmost, virtual-desktop-sized window still holding
+            // *req in GWLP_USERDATA -- clearing g_dialog here without
+            // destroying it would leak that window (running mod code after
+            // unload) and leave *req to be read after free in its eventual
+            // WM_DESTROY. Destroy it and let WM_DESTROY do the signalling,
+            // exactly like the preview path just above already does; only
+            // signal directly when no window was ever created.
+            if (g_dialog) {
+                DestroyWindow(g_dialog);
+            } else {
+                FreeDesktopBitmap(); g_openPrograms.clear();
+                if (req->reply) SetEvent(req->reply);
+            }
         }
         return 0;
     }
@@ -2415,6 +2442,13 @@ static void DrainOnQuit() {
 static DWORD WINAPI UiThreadProc(LPVOID) {
     HINSTANCE hMod = GetModModuleHandle();
 
+    // SHGetFileInfoW(..., SHGFI_ICON) below goes through the shell icon
+    // handlers and documents that COM must be initialized on the calling
+    // thread first; this thread never otherwise touches COM, so init it once
+    // here and release it on every exit path (including the early
+    // class/window-creation failures below).
+    const HRESULT coInit = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+
     // Force this thread's message queue to exist before anything else runs,
     // so PostThreadMessageW(g_uiThreadId, ...) from another thread (Wh_ModInit
     // returns before this line could plausibly run, but Wh_ModBeforeUninit/
@@ -2443,7 +2477,7 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
         ctrl.hInstance = hMod;
         ctrl.lpfnWndProc = ControlProc;
         ctrl.lpszClassName = kCtrlClassName;
-        if (!RegisterModClass(&ctrl)) { Wh_Log(L"Control window class could not be registered"); cleanup(); return 1; }
+        if (!RegisterModClass(&ctrl)) { Wh_Log(L"Control window class could not be registered"); cleanup(); if (SUCCEEDED(coInit)) CoUninitialize(); return 1; }
 
         WNDCLASSW dlg{};
         dlg.hInstance = hMod;
@@ -2451,11 +2485,11 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
         dlg.lpszClassName = kClassName;
         dlg.hCursor = LoadCursor(nullptr, IDC_ARROW);
         dlg.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-        if (!RegisterModClass(&dlg)) { Wh_Log(L"Dialog window class could not be registered"); cleanup(); return 1; }
+        if (!RegisterModClass(&dlg)) { Wh_Log(L"Dialog window class could not be registered"); cleanup(); if (SUCCEEDED(coInit)) CoUninitialize(); return 1; }
 
         g_hotkeyWindow = CreateWindowExW(0, kCtrlClassName, L"", 0, 0, 0, 0, 0,
                                          HWND_MESSAGE, nullptr, hMod, nullptr);
-        if (!g_hotkeyWindow) { Wh_Log(L"Control window could not be created"); cleanup(); return 1; }
+        if (!g_hotkeyWindow) { Wh_Log(L"Control window could not be created"); cleanup(); if (SUCCEEDED(coInit)) CoUninitialize(); return 1; }
 
         // The hotkey only makes sense in the process that owns the desktop;
         // registering it in every injected shell host would make all but the
@@ -2501,6 +2535,9 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
         Wh_Log(L"UI thread exception");
     }
     cleanup();
+    // Release COM last, after cleanup() has finished with anything that
+    // might still touch shell icon handlers.
+    if (SUCCEEDED(coInit)) CoUninitialize();
     return 0;
 }
 
