@@ -2,13 +2,13 @@
 // @id              per-monitor-brightness
 // @name            Per-monitor brightness in Quick Settings
 // @description     Adds a titled brightness slider for every connected monitor to the Windows 11 Quick Settings panel
-// @version         1.6
+// @version         1.8
 // @author          bardelyne
 // @github          https://github.com/bardelyne
 // @include         ShellHost.exe
 // @architecture    x86-64
 // @license         GPL-3.0
-// @compilerOptions -ldxva2 -lole32 -loleaut32 -lwbemuuid -luuid -lruntimeobject -lshlwapi
+// @compilerOptions -ldxva2 -lole32 -loleaut32 -lwbemuuid -luuid -lruntimeobject
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -120,7 +120,6 @@ silently dropped.
 // Not just the .0.h forward declarations: Append/Size have deduced return
 // types and must be defined before use.
 #include <winrt/Windows.Foundation.Collections.h>
-#include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
@@ -129,6 +128,7 @@ silently dropped.
 #pragma pop_macro("GetCurrentTime")
 
 #include <roapi.h>
+#include <windhawk_utils.h>
 
 #include <atomic>
 #include <cmath>
@@ -138,6 +138,7 @@ silently dropped.
 #include <mutex>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace wf = winrt::Windows::Foundation;
@@ -242,6 +243,11 @@ constexpr wchar_t kAnimatedIconClass[] = L"Microsoft.UI.Xaml.Controls.AnimatedIc
 
 namespace brightness {
 
+// Minimum gap between DDC/CI writes. Long enough that the shell's UI thread
+// gets the bus back and a slider tracks the pointer; short enough that an
+// external monitor still visibly follows a drag.
+inline constexpr std::chrono::milliseconds kDdcCooldown{140};
+
 // What other displays do when the internal panel's brightness changes on its
 // own -- function keys, mostly.
 enum class FollowMode {
@@ -276,6 +282,42 @@ struct Display {
 };
 
 namespace detail {
+
+// Reports an exception that escaped a thread body. Deliberately not Wh_Log:
+// this header is testable outside Windhawk, so it uses the debugger channel
+// the mod's own logging ends up on anyway.
+inline void ReportEscaped(const wchar_t* where, const wchar_t* what) {
+    wchar_t line[1024];
+    wsprintfW(line, L"[per-monitor-brightness] %ls threw: %ls", where, what);
+    OutputDebugStringW(line);
+}
+
+// Runs a thread body so that nothing can escape it.
+//
+// This is not defensive tidiness. An exception leaving a thread procedure
+// calls std::terminate(), which aborts the *host* process -- and everything
+// below talks to COM, WMI and I2C, all of which fail in ways that throw when
+// the shell is still starting up and those services are not ready yet. An
+// unguarded throw here takes ShellHost down, and it restarts into the same
+// throw, so the shell never comes back.
+template <class Fn>
+void RunGuarded(const wchar_t* where, Fn&& fn) noexcept {
+    try {
+        fn();
+    } catch (const _com_error& e) {
+        wchar_t buf[512];
+        wsprintfW(buf, L"_com_error %08X (%ls)", static_cast<unsigned>(e.Error()),
+                  e.ErrorMessage() ? e.ErrorMessage() : L"?");
+        ReportEscaped(where, buf);
+    } catch (const std::exception& e) {
+        wchar_t buf[512];
+        MultiByteToWideChar(CP_ACP, 0, e.what(), -1, buf, 512);
+        ReportEscaped(where, buf);
+    } catch (...) {
+        ReportEscaped(where, L"unknown exception");
+    }
+}
+
 
 inline std::wstring GetStrProp(IWbemClassObject* obj, const wchar_t* name) {
     VARIANT v;
@@ -517,29 +559,23 @@ class Engine {
             return;
         }
         quit_ = false;
-        worker_ = std::thread([this] { WorkerMain(); });
+        worker_ = std::thread(
+            [this] { detail::RunGuarded(L"WorkerMain", [this] { WorkerMain(); }); });
 
-        // Block only for the first enumeration, so the caller can render the
-        // UI immediately. Costs one DDC round trip per external display.
+        // Blocking on purpose, and safe because of when this is called.
+        //
+        // The first enumeration talks to WMI and does an I2C round trip per
+        // external monitor, so it is not fast. That is fine here: the mod does
+        // not call Start() from Wh_ModInit -- it waits until the host is up
+        // (see StartEngineIfNeeded in the mod) precisely because touching COM
+        // before then aborts the shell. By the time we get here the host has
+        // finished starting and nothing of its is being delayed.
+        //
+        // Still bounded, so a wedged WMI connection cannot hang the caller.
         {
             std::unique_lock<std::mutex> lock(mutex_);
-            ready_.wait(lock, [this] { return enumerated_ || quit_; });
-        }
-
-        // Only worth a thread if something here reports brightness events;
-        // DDC/CI has no equivalent, so this is the internal panel only.
-        bool haveWmiPanel = false;
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            for (const auto& d : displays_) {
-                if (d.transport == Transport::Wmi) {
-                    haveWmiPanel = true;
-                    break;
-                }
-            }
-        }
-        if (haveWmiPanel) {
-            eventThread_ = std::thread([this] { EventThreadMain(); });
+            ready_.wait_for(lock, std::chrono::seconds(5),
+                            [this] { return enumerated_ || quit_; });
         }
     }
 
@@ -633,11 +669,11 @@ class Engine {
     void WorkerMain() {
         HRESULT comHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
-        // Harmless if the host process already did this (RPC_E_TOO_LATE).
-        CoInitializeSecurity(nullptr, -1, nullptr, nullptr,
-                             RPC_C_AUTHN_LEVEL_DEFAULT,
-                             RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE,
-                             nullptr);
+        // Deliberately no CoInitializeSecurity: it is process-wide and this
+        // thread starts from Wh_ModInit, before the host's own startup code
+        // runs, so we would likely win the race and impose our settings on the
+        // whole process. CoSetProxyBlanket on the IWbemServices proxy is what
+        // actually governs our WMI calls.
 
         // Created here, not as a plain member: these interface pointers belong
         // to this thread's apartment and must not outlive it. Releasing them
@@ -653,6 +689,25 @@ class Engine {
             enumerated_ = true;
         }
         ready_.notify_all();
+        NotifyChanged(true);
+
+        // Only worth a thread if something here reports brightness events;
+        // DDC/CI has no equivalent, so this is the internal panel only.
+        bool haveWmiPanel = false;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            for (const auto& d : displays_) {
+                if (d.transport == Transport::Wmi) {
+                    haveWmiPanel = true;
+                    break;
+                }
+            }
+        }
+        if (haveWmiPanel) {
+            eventThread_ = std::thread([this] {
+                detail::RunGuarded(L"EventThreadMain", [this] { EventThreadMain(); });
+            });
+        }
 
         for (;;) {
             std::map<std::wstring, int> batch;
@@ -686,8 +741,30 @@ class Engine {
             // Each write blocks for tens of ms. Anything the UI posts while
             // we are on the wire lands in pending_ and overwrites its
             // predecessor, so we always resume with the newest value.
+            bool wroteDdc = false;
             for (const auto& entry : batch) {
-                Apply(entry.first, entry.second);
+                if (Apply(entry.first, entry.second) == Transport::DdcCi) {
+                    wroteDdc = true;
+                }
+            }
+
+            // Breathing room after an I2C write, and it is not politeness.
+            //
+            // A DDC/CI transaction serialises against the display driver, and
+            // while one is on the wire the shell's UI thread stalls. Writing
+            // back-to-back for the whole of a slider drag -- which is what
+            // coalescing alone will happily do, one write every ~60 ms --
+            // starves the slider of pointer input, so the thumb falls behind
+            // the cursor and stops short. Drag quickly to the right-hand end
+            // and you land somewhere in the sixties, which reads as the value
+            // "drifting" on its own.
+            //
+            // So cap the write rate and let the queue coalesce in the gap. The
+            // newest value always wins, so the value the user let go of is
+            // still the one that lands, just up to kDdcCooldown later.
+            if (wroteDdc) {
+                std::unique_lock<std::mutex> lock(mutex_);
+                work_.wait_for(lock, kDdcCooldown, [this] { return quit_; });
             }
 
             if (doRefresh) {
@@ -713,8 +790,15 @@ class Engine {
             std::lock_guard<std::mutex> lock(mutex_);
             fn = onChanged_;
         }
-        if (fn) {
+        if (!fn) {
+            return;
+        }
+        try {
             fn(structural);
+        } catch (...) {
+            // Must never escape: this runs on a worker thread, and an
+            // unhandled exception there is std::terminate -> the host aborts.
+            Log(L"change callback threw; ignored");
         }
     }
 
@@ -1123,7 +1207,7 @@ class Engine {
         return attached;
     }
 
-    void Apply(const std::wstring& stableId, int percent) {
+    Transport Apply(const std::wstring& stableId, int percent) {
         HANDLE hPhysical = nullptr;
         DWORD vcpMax = 100;
         Transport transport = Transport::None;
@@ -1169,6 +1253,7 @@ class Engine {
             Log(L"apply %ls -> %d%% ok=%d (%lld ms)", stableId.c_str(), percent,
                 ok ? 1 : 0, ms);
         }
+        return transport;
     }
 
     std::thread worker_;
@@ -1193,6 +1278,10 @@ class Engine {
 
 }  // namespace brightness
 
+// Defined further down with the XAML-diagnostics plumbing; declared here so the
+// watcher's timer can retry it once XAML is up.
+static HRESULT InjectWindhawkTAP() noexcept;
+
 // ===========================================================================
 // Mod state
 // ===========================================================================
@@ -1200,6 +1289,28 @@ class Engine {
 namespace {
 
 brightness::Engine* g_engine = nullptr;
+
+std::atomic<bool> g_engineStarted{false};
+
+// The engine may not touch COM until the host has finished starting.
+//
+// Connecting to WMI activates a COM object, and the first activation in a
+// process implicitly initialises COM security process-wide. Done from
+// Wh_ModInit -- which runs before ShellHost's own startup code -- we win that
+// race, ShellHost's own CoInitializeSecurity then fails RPC_E_TOO_LATE, and it
+// fast-fails. The host aborts, restarts, and does it again, so the shell never
+// comes back. Not throwing our own CoInitializeSecurity call is not enough;
+// any activation is sufficient.
+//
+// Waiting until a XAML window exists means the host is past that point.
+void StartEngineIfNeeded() {
+    if (!g_engine || g_engineStarted.exchange(true)) {
+        return;
+    }
+    g_engine->Start();
+    Wh_Log(L"engine started (%d display(s))",
+           static_cast<int>(g_engine->GetDisplays().size()));
+}
 
 // Guards against double-injection: the visual tree reports the Control Center
 // being built every time it opens, and it is rebuilt on each open.
@@ -1235,10 +1346,6 @@ struct Injection {
     };
     std::vector<Binding> bindings;
 
-    // Fires when the flyout is shown or hidden, which is when values are worth
-    // re-reading.
-    wux::XamlRoot::Changed_revoker xamlRootRevoker;
-
 };
 
 bool g_hideStockBrightness = true;
@@ -1255,7 +1362,7 @@ struct StockSliderState {
     bool hidden = false;
 };
 
-StockSliderState g_stockSlider;
+[[clang::no_destroy]] StockSliderState g_stockSlider;
 bool g_loggedHideMiss = false;
 
 // Set while pushing refreshed values into sliders, so their ValueChanged
@@ -1266,8 +1373,8 @@ bool g_suppressValueChanged = false;
 // sliders can show the real animated sun rather than an imitation. WinUI2
 // exposes no brightness visual source publicly, so lifting the live one is the
 // only way to get it.
-winrt::com_ptr<::IInspectable> g_brightnessSource;
-winrt::com_ptr<IAnimatedIconStaticsAbi> g_animatedIconStatics;
+[[clang::no_destroy]] winrt::com_ptr<::IInspectable> g_brightnessSource;
+[[clang::no_destroy]] winrt::com_ptr<IAnimatedIconStaticsAbi> g_animatedIconStatics;
 bool g_capturedSource = false;
 
 // The shell's Lottie carries two markers, Brightness_at_0 and
@@ -1277,10 +1384,39 @@ double g_progressMin = 0.0;
 double g_progressMax = 1.0;
 
 std::mutex g_injectionsMutex;
-std::vector<Injection> g_injections;
+[[clang::no_destroy]] std::vector<Injection> g_injections;
 
-// The XAML thread to marshal teardown onto. Captured at injection time.
-winrt::Windows::UI::Core::CoreDispatcher g_dispatcher{nullptr};
+// The XAML thread to marshal onto, captured at injection time. A thread id
+// rather than a CoreDispatcher: an id is a plain value with no destructor and
+// no refcount, so it cannot be raced into a use-after-free the way a shared
+// CoreDispatcher reference could, and it is what the synchronous SendMessage
+// hop below needs anyway.
+std::atomic<DWORD> g_xamlThreadId{0};
+
+// Retry subscriptions on the shell's own elements. They must live in mod-owned
+// globals: a revoker owned only by the lambda it is captured in cannot be
+// reached at unload time, and a handler left registered when Windhawk frees
+// this DLL is a crash on the next layout pass.
+struct RetryHandlers {
+    wux::FrameworkElement::Loaded_revoker loaded;
+    wux::FrameworkElement::LayoutUpdated_revoker layout;
+    int attempts = 0;
+
+    void Revoke() {
+        loaded.revoke();
+        layout.revoke();
+        attempts = 0;
+    }
+};
+
+// Bounded on purpose. ArmStockSliderHide looks for an element that only exists
+// when there is an internal panel, so on a desktop it would otherwise retry
+// forever -- re-walking the shell's visual tree on every single layout pass,
+// and adding another permanent handler every time the panel is opened.
+constexpr int kMaxRetryAttempts = 60;
+
+[[clang::no_destroy]] RetryHandlers g_injectRetry;
+[[clang::no_destroy]] RetryHandlers g_hideRetry;
 
 void EngineLog(const wchar_t* msg) {
     Wh_Log(L"engine: %s", msg);
@@ -1769,12 +1905,16 @@ void ArmStockSliderHide(wux::FrameworkElement const& l1Grid) {
         return;
     }
 
-    auto revoker = std::make_shared<wux::FrameworkElement::LayoutUpdated_revoker>();
-    *revoker = l1Grid.LayoutUpdated(
+    g_hideRetry.Revoke();
+    g_hideRetry.layout = l1Grid.LayoutUpdated(
         winrt::auto_revoke,
-        [l1Grid, revoker](wf::IInspectable const&, wf::IInspectable const&) {
-            if (TryHideStockBrightness(l1Grid)) {
-                revoker->revoke();
+        [l1Grid](wf::IInspectable const&, wf::IInspectable const&) {
+            if (TryHideStockBrightness(l1Grid) ||
+                ++g_hideRetry.attempts >= kMaxRetryAttempts) {
+                // On a desktop there is no internal panel and therefore no
+                // BrightnessPlayer to find, so without this it would retry on
+                // every layout pass forever.
+                g_hideRetry.Revoke();
             }
         });
 }
@@ -1845,30 +1985,12 @@ bool InjectInto(wux::FrameworkElement const& l1Grid) {
         g_injections.push_back(std::move(injection));
     }
 
-    // Teardown has to happen on this thread; remember how to get back to it.
-    g_dispatcher = grid.Dispatcher();
-
-    // Secondary signal only. XamlRoot.Changed looked like the right way to
-    // hear about the flyout being shown, but it does not fire for this host on
-    // 26200 -- the WinEvent hook in ShellEventWatcher is what actually works.
-    // Kept because it costs nothing and may fire on other builds; both paths
-    // just ask the engine to refresh, which is idempotent.
-    try {
-        if (auto xamlRoot = grid.XamlRoot()) {
-            injection.xamlRootRevoker = xamlRoot.Changed(
-                winrt::auto_revoke,
-                [](wux::XamlRoot const& sender,
-                   wux::XamlRootChangedEventArgs const&) {
-                    if (sender.IsHostVisible() && g_engine) {
-                        g_engine->RequestRefresh();
-                    }
-                });
-        } else {
-            Wh_Log(L"No XamlRoot; values will not refresh on open");
-        }
-    } catch (...) {
-        Wh_Log(L"XamlRoot subscription failed: %08X", winrt::to_hresult());
-    }
+    // We are on the XAML thread here; this is how everything else gets back to
+    // it. There was also a XamlRoot.Changed subscription here as a secondary
+    // "flyout shown" signal, but it never fires for this host on 26200 and the
+    // revoker was being assigned to a moved-from local anyway, so it was doing
+    // nothing at all. The WinEvent hook in ShellEventWatcher is the real one.
+    g_xamlThreadId.store(GetCurrentThreadId());
 
     Wh_Log(L"Injected per-monitor brightness panel into row %u", rowCount);
     return true;
@@ -1876,6 +1998,11 @@ bool InjectInto(wux::FrameworkElement const& l1Grid) {
 
 // Undoes every injection. Must run on the XAML thread.
 void RemoveInjections() {
+    // First: these live on the shell's own elements and are owned by nothing
+    // else. Left registered, they call into this DLL after Windhawk frees it.
+    g_injectRetry.Revoke();
+    g_hideRetry.Revoke();
+
     std::vector<Injection> injections;
     {
         std::lock_guard<std::mutex> lock(g_injectionsMutex);
@@ -1968,18 +2095,98 @@ void RemoveInjections() {
     Wh_Log(L"Removed %zu injection(s)", injections.size());
 }
 
-void PostToUiThread(std::function<void()> fn) {
-    if (!g_dispatcher) {
-        return;
+// Runs fn on the XAML thread and does not return until it has finished.
+//
+// Deliberately not CoreDispatcher::RunAsync: that queues the work, so there is
+// no point at which we can say nothing of ours is still scheduled -- and
+// Wh_ModUninit must be able to say exactly that before Windhawk frees this
+// DLL. SendMessage is synchronous by construction, so when it returns the
+// callback has already run. This is the same WH_CALLWNDPROC trick the
+// notification center styler uses for the same reason.
+UINT g_runMessage = 0;
+std::function<void()>* g_pendingCallback = nullptr;
+std::mutex g_runMutex;  // one hop at a time; the pending pointer is shared
+
+LRESULT CALLBACK RunCallWndProc(int code, WPARAM wParam, LPARAM lParam) {
+    if (code == HC_ACTION) {
+        auto* msg = reinterpret_cast<CWPSTRUCT*>(lParam);
+        if (msg->message == g_runMessage && g_pendingCallback) {
+            std::function<void()>* callback = g_pendingCallback;
+            g_pendingCallback = nullptr;
+            try {
+                (*callback)();
+            } catch (...) {
+                // This runs inside the shell's own window procedure dispatch;
+                // letting anything escape here takes the process down.
+                Wh_Log(L"marshalled call threw: %08X", winrt::to_hresult());
+            }
+        }
     }
-    auto shared = std::make_shared<std::function<void()>>(std::move(fn));
-    g_dispatcher.RunAsync(
-        winrt::Windows::UI::Core::CoreDispatcherPriority::Normal,
-        [shared]() { (*shared)(); });
+    return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+
+BOOL CALLBACK FindThreadWindow(HWND hwnd, LPARAM lParam) {
+    *reinterpret_cast<HWND*>(lParam) = hwnd;
+    return FALSE;  // first one will do; we only need somewhere to send to
+}
+
+bool RunOnXamlThread(std::function<void()> fn) {
+    DWORD threadId = g_xamlThreadId.load();
+    if (!threadId) {
+        return false;  // nothing was ever injected
+    }
+    if (threadId == GetCurrentThreadId()) {
+        try {
+            fn();
+        } catch (...) {
+            Wh_Log(L"inline call threw: %08X", winrt::to_hresult());
+            return false;
+        }
+        return true;
+    }
+
+    std::lock_guard<std::mutex> lock(g_runMutex);
+
+    HWND target = nullptr;
+    EnumThreadWindows(threadId, FindThreadWindow,
+                      reinterpret_cast<LPARAM>(&target));
+    if (!target) {
+        Wh_Log(L"No window on the XAML thread; cannot marshal");
+        return false;
+    }
+
+    if (!g_runMessage) {
+        g_runMessage = RegisterWindowMessage(L"WindhawkPerMonitorBrightnessRun");
+        if (!g_runMessage) {
+            return false;
+        }
+    }
+
+    HHOOK hook = SetWindowsHookEx(WH_CALLWNDPROC, RunCallWndProc, nullptr,
+                                  threadId);
+    if (!hook) {
+        Wh_Log(L"SetWindowsHookEx failed: %u", GetLastError());
+        return false;
+    }
+
+    g_pendingCallback = &fn;
+    // Timeout rather than a bare SendMessage: during shell startup the XAML
+    // thread may not be pumping yet, and blocking an engine thread on it
+    // forever is worse than reporting failure.
+    DWORD_PTR result = 0;
+    SendMessageTimeout(target, g_runMessage, 0, 0, SMTO_NORMAL, 10000, &result);
+    bool ran = g_pendingCallback == nullptr;
+    g_pendingCallback = nullptr;
+    UnhookWindowsHookEx(hook);
+
+    if (!ran) {
+        Wh_Log(L"Marshalled call did not run");
+    }
+    return ran;
 }
 
 // Pushes freshly read hardware values into the existing sliders. XAML thread.
-void ApplyRefreshedValues() {
+void ApplyRefreshedValues() try {
     if (!g_engine) {
         return;
     }
@@ -2012,11 +2219,13 @@ void ApplyRefreshedValues() {
             }
         }
     }
+} catch (...) {
+    Wh_Log(L"ApplyRefreshedValues threw: %08X", winrt::to_hresult());
 }
 
 // A monitor appeared or vanished, so the rows themselves are wrong. XAML
 // thread. The panel and its grid row are kept; only the contents are redone.
-void RebuildInjectedPanels() {
+void RebuildInjectedPanels() try {
     std::lock_guard<std::mutex> lock(g_injectionsMutex);
     size_t rebuilt = 0;
     for (Injection& injection : g_injections) {
@@ -2032,18 +2241,61 @@ void RebuildInjectedPanels() {
         ++rebuilt;
     }
     Wh_Log(L"Rebuilt %zu panel(s) after a display change", rebuilt);
+} catch (...) {
+    Wh_Log(L"RebuildInjectedPanels threw: %08X", winrt::to_hresult());
 }
 
-void OnEngineChanged(bool structural) {
-    // Called on the engine worker; XAML must be touched on its own thread.
-    PostToUiThread([structural]() {
+void OnEngineChanged(bool structural) try {
+    if (structural && g_engine) {
+        for (const brightness::Display& d : g_engine->GetDisplays()) {
+            Wh_Log(L"display: %s  transport=%d  now=%d%%  vcpMax=%lu  id=%s",
+                   d.name.c_str(), static_cast<int>(d.transport), d.percent,
+                   static_cast<unsigned long>(d.vcpMax), d.stableId.c_str());
+        }
+    }
+
+    // Called on an engine thread; XAML may only be touched on its own. This
+    // blocks until the work has run, which is what lets Wh_ModUninit promise
+    // that nothing of ours is still scheduled.
+    RunOnXamlThread([structural]() {
         if (structural) {
             RebuildInjectedPanels();
         } else {
             ApplyRefreshedValues();
         }
     });
+} catch (...) {
+    Wh_Log(L"OnEngineChanged threw: %08X", winrt::to_hresult());
 }
+
+// XAML diagnostics can only attach once the XAML runtime is actually up. When
+// the mod loads into a *starting* ShellHost that is not true yet, and calling
+// InitializeXamlDiagnosticsEx too early fails every one of its 10000 connection
+// attempts and leaves the host unable to continue -- it exits and gets
+// relaunched, over and over. So: wait for a XAML window to exist first.
+bool XamlWindowExists() {
+    bool found = false;
+    EnumWindows(
+        [](HWND hwnd, LPARAM param) -> BOOL {
+            DWORD pid = 0;
+            GetWindowThreadProcessId(hwnd, &pid);
+            if (pid != GetCurrentProcessId()) {
+                return TRUE;
+            }
+            wchar_t className[128] = {};
+            GetClassNameW(hwnd, className, ARRAYSIZE(className));
+            if (wcsstr(className, L"Windows.UI.Core.CoreWindow") ||
+                wcsstr(className, L"ControlCenter")) {
+                *reinterpret_cast<bool*>(param) = true;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&found));
+    return found;
+}
+
+std::atomic<bool> g_tapInjected{false};
 
 // Owns the mod's Win32 listening. Two jobs, both needing a message loop:
 //   * WM_DISPLAYCHANGE, which is broadcast to top-level windows only, so a
@@ -2078,6 +2330,8 @@ class ShellEventWatcher {
     }
 
    private:
+    static constexpr UINT_PTR kTapTimerId = 1;
+
     static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd,
                                       LONG idObject, LONG idChild, DWORD,
                                       DWORD) {
@@ -2130,7 +2384,36 @@ class ShellEventWatcher {
                     g_engine->RequestRescan();
                 }
                 break;
+            case WM_TIMER: {
+                if (wParam != kTapTimerId) {
+                    break;
+                }
+                if (g_tapInjected.load()) {
+                    KillTimer(hwnd, kTapTimerId);
+                    break;
+                }
+                static int attempts = 0;
+                if (!XamlWindowExists()) {
+                    if (++attempts > 120) {  // ~60 s, then stop trying
+                        Wh_Log(L"XAML never appeared; giving up on the TAP");
+                        KillTimer(hwnd, kTapTimerId);
+                    }
+                    break;
+                }
+                StartEngineIfNeeded();
+                HRESULT hr = InjectWindhawkTAP();
+                if (SUCCEEDED(hr)) {
+                    g_tapInjected.store(true);
+                    Wh_Log(L"TAP injected once XAML was ready");
+                    KillTimer(hwnd, kTapTimerId);
+                } else if (++attempts > 120) {
+                    Wh_Log(L"TAP kept failing (%08X); giving up", hr);
+                    KillTimer(hwnd, kTapTimerId);
+                }
+                break;
+            }
             case WM_DESTROY:
+                KillTimer(hwnd, kTapTimerId);
                 PostQuitMessage(0);
                 break;
         }
@@ -2150,6 +2433,8 @@ class ShellEventWatcher {
                                     0, nullptr, nullptr, wc.hInstance, nullptr);
             if (!hwnd_) {
                 Wh_Log(L"Display sink window failed: %u", GetLastError());
+            } else {
+                SetTimer(hwnd_, kTapTimerId, 500, nullptr);
             }
         } else {
             Wh_Log(L"Display sink class failed: %u", GetLastError());
@@ -2197,7 +2482,7 @@ class ShellEventWatcher {
     HWINEVENTHOOK hook_ = nullptr;
 };
 
-ShellEventWatcher g_shellWatcher;
+[[clang::no_destroy]] ShellEventWatcher g_shellWatcher;
 
 bool TryInject(wux::DependencyObject const& controlCenterView) {
     bool expected = false;
@@ -2239,28 +2524,21 @@ void AttachInjector(wux::FrameworkElement const& view) {
 
     Wh_Log(L"Tree not ready, arming retries");
 
-    auto loaded = std::make_shared<wux::FrameworkElement::Loaded_revoker>();
-    auto layout = std::make_shared<wux::FrameworkElement::LayoutUpdated_revoker>();
+    g_injectRetry.Revoke();  // replaces any earlier arming
+    auto retry = [view]() {
+        if (TryInject(view) || ++g_injectRetry.attempts >= kMaxRetryAttempts) {
+            g_injectRetry.Revoke();
+        }
+    };
 
-    *loaded = view.Loaded(
+    g_injectRetry.loaded = view.Loaded(
         winrt::auto_revoke,
-        [view, loaded, layout](wf::IInspectable const&,
-                               wux::RoutedEventArgs const&) {
-            if (TryInject(view)) {
-                loaded->revoke();
-                layout->revoke();
-            }
+        [retry](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+            retry();
         });
-
-    *layout = view.LayoutUpdated(
+    g_injectRetry.layout = view.LayoutUpdated(
         winrt::auto_revoke,
-        [view, loaded, layout](wf::IInspectable const&,
-                               wf::IInspectable const&) {
-            if (TryInject(view)) {
-                loaded->revoke();
-                layout->revoke();
-            }
-        });
+        [retry](wf::IInspectable const&, wf::IInspectable const&) { retry(); });
 }
 
 }  // namespace
@@ -2349,7 +2627,7 @@ class VisualTreeWatcher
 };
 
 namespace {
-winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
+[[clang::no_destroy]] winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
 }
 
 // {C85D8CC7-5463-40E8-A432-F5916B6427E5}
@@ -2452,16 +2730,26 @@ static HRESULT InjectWindhawkTAP() noexcept {
         return HRESULT_FROM_WIN32(GetLastError());
     }
 
-    // There is no way to know which diagnostics slot is free; try until one
-    // takes. Same approach the XAML framework itself uses.
+    // There is no way to know which diagnostics slot is free, so walk the
+    // connection names until one takes.
+    //
+    // Retry only while the failure is plausibly "this name is in use". When
+    // the XAML runtime is not up in this process yet the call returns
+    // ERROR_NOT_FOUND, and no connection name will change that -- so stop at
+    // once and let the caller try again later.
+    //
+    // This matters far more than it looks. Running the full loop against a
+    // starting shell means ten thousand InitializeXamlDiagnosticsEx calls,
+    // each registering diagnostics state in a process whose own XAML has not
+    // initialised yet. The host aborts a second or so later, when it does.
     HRESULT hr = E_FAIL;
-    for (int i = 0; i < 10000; i++) {
+    for (int i = 0; i < 64; i++) {
         WCHAR connectionName[256];
         wsprintf(connectionName, L"VisualDiagConnection%d", i + 1);
 
         hr = ixde(connectionName, GetCurrentProcessId(), nullptr, location,
                   CLSID_WindhawkTAP, nullptr);
-        if (SUCCEEDED(hr)) {
+        if (SUCCEEDED(hr) || hr == HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) {
             break;
         }
     }
@@ -2476,14 +2764,16 @@ static HRESULT InjectWindhawkTAP() noexcept {
 void LoadSettings() {
     g_hideStockBrightness = Wh_GetIntSetting(L"hideStockBrightness") != 0;
 
+    // Wh_GetStringSetting returns L"" rather than NULL on failure, so a
+    // pointer check would be meaningless; the RAII wrapper also removes the
+    // manual Wh_FreeStringSetting.
     brightness::FollowMode followMode = brightness::FollowMode::Relative;
-    if (PCWSTR setting = Wh_GetStringSetting(L"followInternalBrightness")) {
-        if (wcscmp(setting, L"off") == 0) {
-            followMode = brightness::FollowMode::Off;
-        } else if (wcscmp(setting, L"match") == 0) {
-            followMode = brightness::FollowMode::Match;
-        }
-        Wh_FreeStringSetting(setting);
+    WindhawkUtils::StringSetting follow =
+        WindhawkUtils::StringSetting::make(L"followInternalBrightness");
+    if (wcscmp(follow.get(), L"off") == 0) {
+        followMode = brightness::FollowMode::Off;
+    } else if (wcscmp(follow.get(), L"match") == 0) {
+        followMode = brightness::FollowMode::Match;
     }
 
     if (g_engine) {
@@ -2504,23 +2794,23 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    g_engine->Start();
-
-    for (const brightness::Display& d : g_engine->GetDisplays()) {
-        Wh_Log(L"display: %s  transport=%d  now=%d%%  vcpMax=%lu  id=%s",
-               d.name.c_str(), static_cast<int>(d.transport), d.percent,
-               static_cast<unsigned long>(d.vcpMax), d.stableId.c_str());
-    }
-
+    // Deliberately NOT started here; see StartEngineIfNeeded.
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    HRESULT hr = InjectWindhawkTAP();
-    if (FAILED(hr)) {
-        Wh_Log(L"InjectWindhawkTAP failed: %08X", hr);
+    if (XamlWindowExists()) {
+        StartEngineIfNeeded();
+        HRESULT hr = InjectWindhawkTAP();
+        if (SUCCEEDED(hr)) {
+            g_tapInjected.store(true);
+        } else {
+            Wh_Log(L"InjectWindhawkTAP failed: %08X; will retry", hr);
+        }
+    } else {
+        Wh_Log(L"XAML not up yet; deferring TAP injection");
     }
 
     g_shellWatcher.Start();
@@ -2547,70 +2837,30 @@ void Wh_ModUninit() {
         g_visualTreeWatcher = nullptr;
     }
 
-    // Silence everything that could still post work to the XAML thread before
-    // we start dismantling what that work would touch.
+    // Order matters. Everything that could still call into this DLL has to be
+    // stopped before the UI is dismantled, and all of it has to be finished
+    // before we return -- Windhawk frees the module the moment we do.
+
+    // 1. No more refresh requests.
     g_shellWatcher.Stop();
+
+    // 2. No more engine callbacks, and join both engine threads so none can be
+    //    in flight. After this nothing can ask to run on the XAML thread.
     if (g_engine) {
         g_engine->SetOnChanged(nullptr);
-    }
-
-    // Put the shell's visual tree back the way we found it, before this DLL is
-    // unloaded out from under the handlers we registered. XAML objects may only
-    // be touched on their own thread, and we must not return until it is done.
-    if (g_dispatcher) {
-        try {
-            if (g_dispatcher.HasThreadAccess()) {
-                RemoveInjections();
-            } else {
-                HANDLE done = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-                if (done) {
-                    g_dispatcher.RunAsync(
-                        winrt::Windows::UI::Core::CoreDispatcherPriority::High,
-                        [done]() {
-                            RemoveInjections();
-                            SetEvent(done);
-                        });
-
-                    // Bounded, so a wedged XAML thread cannot hang the shell.
-                    if (WaitForSingleObject(done, 5000) == WAIT_OBJECT_0) {
-                        CloseHandle(done);
-                    } else {
-                        // Deliberately leak the handle: the queued callback may
-                        // still run and signal it, and closing it here would
-                        // turn a timeout into a crash.
-                        Wh_Log(L"TIMED OUT waiting for UI teardown; "
-                               L"leftover sliders may remain");
-                    }
-                }
-            }
-            // A callback posted just before SetOnChanged(nullptr) may still be
-            // queued, and its code lives in this DLL. A no-op at Low priority
-            // only runs once everything queued ahead of it has, so waiting on
-            // it drains the queue.
-            if (!g_dispatcher.HasThreadAccess()) {
-                HANDLE drained = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-                if (drained) {
-                    g_dispatcher.RunAsync(
-                        winrt::Windows::UI::Core::CoreDispatcherPriority::Low,
-                        [drained]() { SetEvent(drained); });
-                    if (WaitForSingleObject(drained, 5000) == WAIT_OBJECT_0) {
-                        CloseHandle(drained);
-                    } else {
-                        Wh_Log(L"TIMED OUT draining the dispatcher");
-                    }
-                }
-            }
-        } catch (...) {
-            Wh_Log(L"Teardown error: %08X", winrt::to_hresult());
-        }
-        g_dispatcher = nullptr;
-    }
-
-    if (g_engine) {
-        // Joins the worker, which releases its COM interfaces inside its own
-        // apartment before CoUninitialize.
         g_engine->Stop();
+    }
+
+    // 3. Put the visual tree back, synchronously, on the thread that owns it.
+    if (!RunOnXamlThread(&RemoveInjections)) {
+        Wh_Log(L"Could not reach the XAML thread; nothing was injected");
+    }
+
+    // 4. Only now is it safe to drop the engine itself.
+    if (g_engine) {
         delete g_engine;
         g_engine = nullptr;
     }
+
+    g_xamlThreadId.store(0);
 }
