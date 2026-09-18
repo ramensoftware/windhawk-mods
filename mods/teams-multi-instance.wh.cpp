@@ -6,7 +6,7 @@
 // @author          Sam Mahdi
 // @github          https://github.com/TSA3000
 // @include         ms-teams.exe
-// @compilerOptions -lshlwapi
+// @compilerOptions -lshlwapi -lshell32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -28,16 +28,19 @@ a client tenant side by side in two full Teams windows.
 3. Start Teams again. Every additional launch opens a new independent
    instance. Sign in to a different account/tenant in each one.
 
-Only the first instance gets a tray icon: Teams registers it with a fixed
-GUID and Windows allows one icon per GUID, so later instances have none.
-Quit additional instances from inside their window (profile picture → Quit),
-or end them from Task Manager. Closing a window only minimises it — that
-instance keeps running in the background.
+Each instance gets its own tray icon, with the process ID in the tooltip
+(e.g. `Microsoft Teams [20680]`) so they can be told apart. Additional icons
+usually land in the tray overflow (the `^` arrow). Quit each instance from
+its own tray icon or from inside its window — closing a window only
+minimises it.
 
-**Restart Teams after enabling or disabling the mod.** A Teams instance that
-was already running when the mod was enabled is deliberately left untouched
-(it created its objects without the salt), and an instance started with the
-mod active will not find its own objects once the mod is disabled.
+**Restart Teams after enabling, disabling, or changing the settings of the
+mod.** The mod decides once, when a Teams process starts, whether and how to
+rewrite names, and keeps that decision for the life of the process. A Teams
+instance that was already running when the mod was enabled is left untouched;
+an instance started with the mod active keeps its salt across mod updates and
+Windhawk restarts; and settings changes only apply to Teams processes started
+afterwards.
 
 ## How it works
 Hooks `NtCreateMutant` / `NtOpenMutant` (and the semaphore equivalents) in
@@ -46,25 +49,37 @@ Only mutexes and semaphores are hooked — sections and events are deliberately
 left alone, since those fire on the DLL-loader path and hooking them
 destabilises the process.
 
-If the process was already running when the mod loaded, no names are
-rewritten in that process, so enabling the mod does not disturb an existing
-Teams instance.
+Each `ms-teams.exe` process uses its own PID as the salt. Only the top-level
+Teams process creates or opens the `Teams-Tfw-*` objects; child
+`ms-teams.exe` processes never touch them, so they need no shared salt.
+
+Teams registers its tray icon with a fixed GUID, and Windows allows only one
+icon per GUID, so a second instance would get no icon at all. The mod hooks
+`Shell_NotifyIconW` in salted processes, drops the GUID so the icon is
+identified by window + per-process id instead, and appends the PID to the
+tooltip.
 
 ## Limitations
-- Only the first instance shows a tray icon (see Usage).
-- All instances share the same profile directory
-  (`%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache`). Reading is
-  fine, but avoid signing in/out or changing settings in one instance while
-  another is running — treat one instance as "primary" for that.
+- **All instances share the same Teams profile**
+  (`%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache`, including the
+  WebView2 user-data folder). Two Teams processes writing it concurrently is
+  exactly what the single-instance lock exists to prevent. This can corrupt
+  the profile, which means signing in again and rebuilding the cache. Avoid
+  signing in/out or changing settings in more than one instance, and use at
+  your own risk.
+- Without the GUID, Windows does not remember each instance's tray icon
+  position (pinned vs. overflow) across restarts.
 - Notification clicks and `teams://` links are routed by Windows activation
   and may land in a different instance than the one you expect.
-- Not supported by Microsoft. Use at your own risk.
+- Not supported by Microsoft.
 
 ## Troubleshooting
-Turn on **Log only** and check the Windhawk log: it lists every named
-mutex/semaphore Teams creates without modifying any of them. If a future
-Teams build renames the single-instance objects, add the new name to
-**Object name patterns**.
+Turn on **Log only**, then quit and restart Teams. The Windhawk log lists
+every named mutex/semaphore the new Teams process creates without modifying
+any of them (the interesting objects are created during startup, so a running
+instance shows nothing useful). If a future Teams build renames the
+single-instance objects, add the new name to **Object name patterns**, turn
+Log only off, and restart Teams again.
 */
 // ==/WindhawkModReadme==
 
@@ -72,27 +87,47 @@ Teams build renames the single-instance objects, add the new name to
 /*
 - namePatterns: "Teams-Tfw-"
   $name: Object name patterns
-  $description: Comma-separated substrings. Named mutexes/semaphores matching any of these get salted.
+  $description: Comma-separated substrings. Named mutexes/semaphores matching any of these get salted. Applies to Teams processes started after the change.
+- fixTrayIcon: true
+  $name: Separate tray icon per instance
+  $description: Drop the fixed tray-icon GUID so every instance gets its own tray icon, and show the process ID in the tooltip. Applies to Teams processes started after the change.
 - logOnly: false
   $name: Log only
-  $description: Log every named mutex/semaphore Teams creates without modifying anything. For troubleshooting.
+  $description: Log every named mutex/semaphore Teams creates without modifying anything. For troubleshooting; restart Teams after changing.
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <winternl.h>
 #include <shlwapi.h>
+#include <shellapi.h>
 #include <string>
 #include <vector>
 
+// Set in the process environment once a process has been salted. Carries the
+// PID so that (a) a mod reload inside the same process (mod update, Windhawk
+// restart) restores the same salt instead of treating the process as
+// "already running", and (b) a child process that inherits the variable sees
+// a PID that isn't its own and ignores it. Never cleared on uninit — an
+// unload is exactly the reload case it needs to survive.
+constexpr PCWSTR kSaltMarker = L"WH_TEAMS_MI_SALTED_PID";
+
+// Settings are read once per process in Wh_ModInit and never updated live:
+// changing them mid-life would desynchronise instances that already created
+// their objects under the old rules.
 struct {
     bool logOnly;
+    bool fixTrayIcon;
     std::vector<std::wstring> patterns;
 } g_settings;
 
-// Empty means "do not salt in this process" (log-only, or the process was
-// already running when the mod loaded).
+// Empty means "do not salt in this process" (log-only, or the mod was loaded
+// into a process that was already running).
 std::wstring g_salt;
+
+// ---------------------------------------------------------------------------
+// Named-object salting
+// ---------------------------------------------------------------------------
 
 bool ShouldSalt(LPCWSTR name) {
     if (!name || g_settings.logOnly || g_salt.empty())
@@ -171,8 +206,50 @@ NTSTATUS NTAPI NtOpenSemaphore_Hook(PHANDLE Handle, ACCESS_MASK Access,
     return NtOpenSemaphore_Original(Handle, Access, _poa);
 }
 
+// ---------------------------------------------------------------------------
+// Tray icon: one icon per instance
+// ---------------------------------------------------------------------------
+
+using Shell_NotifyIconW_t = decltype(&Shell_NotifyIconW);
+Shell_NotifyIconW_t Shell_NotifyIconW_Original;
+BOOL WINAPI Shell_NotifyIconW_Hook(DWORD dwMessage, PNOTIFYICONDATAW lpData) {
+    if (!g_settings.fixTrayIcon || g_salt.empty() || !lpData)
+        return Shell_NotifyIconW_Original(dwMessage, lpData);
+
+    // Work on a copy; never mutate the caller's struct.
+    NOTIFYICONDATAW copy = *lpData;
+
+    // Windows allows only one tray icon per GUID. Drop it so the icon is
+    // identified by (hwnd, uID) instead, which is unique per process.
+    if (copy.uFlags & NIF_GUID) {
+        copy.uFlags &= ~NIF_GUID;
+        copy.guidItem = {};
+    }
+    copy.uID = (UINT)(GetCurrentProcessId() & 0xFFFF);
+
+    // Append the PID to the tooltip so instances can be told apart.
+    if (copy.uFlags & NIF_TIP) {
+        std::wstring tip = copy.szTip;
+        std::wstring suffix = L" [" + g_salt + L"]";
+        if (tip.find(suffix) == std::wstring::npos) {
+            tip += suffix;
+            size_t maxLen = ARRAYSIZE(copy.szTip) - 1;
+            if (tip.size() > maxLen)
+                tip.resize(maxLen);
+            wcscpy_s(copy.szTip, tip.c_str());
+        }
+    }
+
+    return Shell_NotifyIconW_Original(dwMessage, &copy);
+}
+
+// ---------------------------------------------------------------------------
+// Settings / init
+// ---------------------------------------------------------------------------
+
 void LoadSettings() {
     g_settings.logOnly = Wh_GetIntSetting(L"logOnly");
+    g_settings.fixTrayIcon = Wh_GetIntSetting(L"fixTrayIcon");
 
     g_settings.patterns.clear();
     PCWSTR raw = Wh_GetStringSetting(L"namePatterns");
@@ -191,32 +268,37 @@ void LoadSettings() {
     }
 }
 
-// True if this process had already been running for a while when the mod
-// loaded, i.e. the mod was enabled into an existing Teams instance rather
-// than injected at process start.
-bool ProcessStartedBeforeModLoad() {
-    FILETIME create, exit, kernel, user;
-    if (!GetProcessTimes(GetCurrentProcess(), &create, &exit, &kernel, &user))
-        return false;
-
-    FILETIME now;
-    GetSystemTimeAsFileTime(&now);
-
-    ULONGLONG c = ((ULONGLONG)create.dwHighDateTime << 32) | create.dwLowDateTime;
-    ULONGLONG n = ((ULONGLONG)now.dwHighDateTime << 32) | now.dwLowDateTime;
-
-    const ULONGLONG kThreshold = 10ULL * 10000000ULL;  // 10 s in 100-ns units
-    return n > c && (n - c) > kThreshold;
+// True when Wh_ModInit runs on the process's initial thread, i.e. Windhawk
+// loaded the mod before the process started executing. When the mod is
+// loaded into an already-running process, Wh_ModInit runs on the Windhawk
+// engine thread instead. See Windhawk's "Development tips".
+bool IsInitialThread() {
+#ifdef _WIN64
+    const size_t OFFSET_SAME_TEB_FLAGS = 0x17EE;
+#else
+    const size_t OFFSET_SAME_TEB_FLAGS = 0x0FCA;
+#endif
+    return *(USHORT*)((BYTE*)NtCurrentTeb() + OFFSET_SAME_TEB_FLAGS) & 0x0400;
 }
 
 void InitSalt() {
-    if (ProcessStartedBeforeModLoad()) {
-        Wh_Log(L"Process was already running when the mod loaded; object names left untouched");
+    std::wstring pid = std::to_wstring(GetCurrentProcessId());
+
+    WCHAR marker[16];
+    DWORD n = GetEnvironmentVariableW(kSaltMarker, marker, ARRAYSIZE(marker));
+    bool alreadySalted = n > 0 && n < ARRAYSIZE(marker) && pid == marker;
+
+    if (alreadySalted) {
+        Wh_Log(L"Mod reloaded in an already salted process; keeping salt %s", pid.c_str());
+    } else if (!IsInitialThread()) {
+        Wh_Log(L"Loaded into a running process; object names left untouched");
         return;  // g_salt stays empty -> ShouldSalt() is a no-op
+    } else {
+        Wh_Log(L"Salt: %s", pid.c_str());
     }
 
-    g_salt = std::to_wstring(GetCurrentProcessId());
-    Wh_Log(L"Salt: %s", g_salt.c_str());
+    g_salt = pid;
+    SetEnvironmentVariableW(kSaltMarker, pid.c_str());
 }
 
 BOOL Wh_ModInit() {
@@ -225,30 +307,56 @@ BOOL Wh_ModInit() {
     LoadSettings();
     InitSalt();
 
-    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    if (g_salt.empty() && !g_settings.logOnly) {
+        Wh_Log(L"Nothing to do in this process");
+        return FALSE;
+    }
 
-#define HOOK(fn)                                                            \
+    bool ok = true;
+
+#define HOOK(mod, fn)                                                       \
     do {                                                                    \
-        FARPROC p = GetProcAddress(ntdll, #fn);                             \
+        FARPROC p = GetProcAddress(mod, #fn);                               \
         if (!p || !Wh_SetFunctionHook((void*)p, (void*)fn##_Hook,           \
-                                      (void**)&fn##_Original))              \
+                                      (void**)&fn##_Original)) {            \
             Wh_Log(L"Hook FAILED: %S", #fn);                                \
+            ok = false;                                                     \
+        }                                                                   \
     } while (0)
 
-    HOOK(NtCreateMutant);
-    HOOK(NtOpenMutant);
-    HOOK(NtCreateSemaphore);
-    HOOK(NtOpenSemaphore);
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    HOOK(ntdll, NtCreateMutant);
+    HOOK(ntdll, NtOpenMutant);
+    HOOK(ntdll, NtCreateSemaphore);
+    HOOK(ntdll, NtOpenSemaphore);
+
+    if (g_settings.fixTrayIcon && !g_salt.empty()) {
+        HMODULE shell32 = LoadLibraryW(L"shell32.dll");
+        if (shell32) {
+            HOOK(shell32, Shell_NotifyIconW);
+        } else {
+            Wh_Log(L"LoadLibrary shell32.dll failed");
+            ok = false;
+        }
+    }
 #undef HOOK
+
+    // A partial hook set is worse than none: objects could be created under
+    // salted names and looked up under unsalted ones. Bail out entirely.
+    if (!ok)
+        return FALSE;
 
     return TRUE;
 }
 
 void Wh_ModUninit() {
     Wh_Log(L"Uninit");
+    // kSaltMarker is intentionally left in the environment so a reload of the
+    // mod in this process restores the same salt.
 }
 
 void Wh_ModSettingsChanged() {
-    Wh_Log(L"SettingsChanged");
-    LoadSettings();
+    // Deliberately not reloading settings: they apply to Teams processes
+    // started after the change. See the README.
+    Wh_Log(L"Settings changed; they apply to Teams processes started from now on");
 }
