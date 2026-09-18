@@ -51,7 +51,7 @@ immediately — no `dwm.exe` restart, no sign-out, and nothing persisted.
 ## Compatibility
 
 The mod resolves uDWM functions through Microsoft public symbols. Tested on
-Windows 11 25H2 build 26200.9445 / 24H2 26100.9457. On other
+Windows 11 25H2 build 26200.9445. On other
 builds, if the required uDWM shadow function can't be resolved, the mod logs
 this and does not load.
 
