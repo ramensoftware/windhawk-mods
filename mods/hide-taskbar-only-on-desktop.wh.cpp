@@ -15,6 +15,16 @@
 
 Hides selected bottom-docked taskbars when their display is showing only the desktop. Each display is evaluated independently.
 
+## Demo
+
+### Multiple Displays
+
+![Multiple Display](https://raw.githubusercontent.com/Sahil-Dashoni/Hide-Taskbar-Only-on-Desktop-Windhawk-Mod/refs/heads/main/Assets/multiple-display.gif)
+
+### Single Display
+
+![Single Display](https://raw.githubusercontent.com/Sahil-Dashoni/Hide-Taskbar-Only-on-Desktop-Windhawk-Mod/refs/heads/main/Assets/single-display.gif)
+
 ## Features
 
 - Per-display desktop-only hiding
