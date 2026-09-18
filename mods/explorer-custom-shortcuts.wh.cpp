@@ -7,7 +7,7 @@
 // @github          https://github.com/ArvindSaini978
 // @include         explorer.exe
 // @license         MIT
-// @compilerOptions -lole32 -loleaut32 -luuid -lshlwapi -lcomctl32
+// @compilerOptions -lole32 -loleaut32 -luuid -lshlwapi
 // @architecture    x86-64
 // ==/WindhawkMod==
 
@@ -29,9 +29,11 @@ Instead of specifying an executable path, set **Executable Path** to one of the 
 * **`internal:newFolder`**: Creates a `New Folder` in the active folder and enters inline rename mode immediately.
 * **`internal:openRecycleBin`**: Navigates to the Recycle Bin in the current active tab.
 * **`internal:emptyRecycleBin`**: Empties the Recycle Bin with native Windows confirmation dialog and progress display.
-* **`internal:toggleHiddenFiles`**: Instantly toggle visibility of hidden files and folders with immediate view refresh.
-* **`internal:toggleFileExtensions`**: Instantly toggle file name extensions on or off with immediate view refresh.
+* **`internal:toggleHiddenFiles`**: Toggles visibility of hidden files and folders with immediate view refresh. *(Note: Changes persistent system-wide Windows Explorer settings).*
+* **`internal:toggleFileExtensions`**: Toggles file name extensions on or off with immediate view refresh. *(Note: Changes persistent system-wide Windows Explorer settings).*
 * **`internal:folderOptions`**: Opens the native File Explorer Folder Options dialog.
+
+> **Persistent Settings Notice:** `internal:toggleHiddenFiles` and `internal:toggleFileExtensions` flip the native Windows Explorer shell settings directly (`SHGetSetSettings`). These changes affect all File Explorer surfaces globally and persist even if this mod is disabled or uninstalled.
 
 ---
 
@@ -45,7 +47,7 @@ Instead of specifying an executable path, set **Executable Path** to one of the 
 * **`%c`** — Total number of selected items as an integer (`3`).
 * **`%ext`** — File extension of the first selected item (`.png`).
 * **`%s`** — Space-separated paths with **smart-quoting** (automatically adds double-quotes only to paths containing spaces).
-* **`%d`** — Active directory open in the current tab (`C:\Users\Name\Documents`).
+* **`%d`** — Active directory open in the current tab (`C:\Users\Name\Documents`). Virtual folders like *This PC* or *Recycle Bin* resolve to an empty string.
 * **`%d_smart`** — Selected folder if one is highlighted; otherwise falls back to the current active directory.
 * **`%p`** — Parent directory path of the active tab.
 
@@ -62,19 +64,6 @@ Instead of specifying an executable path, set **Executable Path** to one of the 
 
 ---
 
-### Useful Default File Explorer Shortcuts
-
-* **`Alt + P`**: Native toggle for Preview Pane
-* **`Alt + Shift + P`**: Native toggle for Details Pane
-* **`Ctrl + D`** / **`Delete`**: Delete selected item(s)
-* **`Shift + Delete`**: Permanently delete selected item(s)
-* **`Ctrl + Shift + N`**: Create a new folder
-* **`F2`**: Rename selected item
-* **`Ctrl + T`**: Open a new Explorer tab
-* **`Ctrl + W`**: Close current tab
-
----
-
 ### Preset Ideas & External App Examples
 
 You can add your own shortcuts using these templates in the settings:
@@ -84,23 +73,27 @@ You can add your own shortcuts using these templates in the settings:
 * **Open with Notepad**
   * Path: `notepad.exe` | Args: `%1` | Mode: `loop_files`
 * **PowerToys PowerRename** (Bulk rename selected items)
-  * Path: `PowerToys.PowerRename.exe` | Args: `%f` | Mode: `batch`
-* **Search with Everything** (Search current folder or selection)
-  * Path: `C:\Program Files\Everything\Everything.exe` | Args: `-path "%d_smart"` | Mode: `batch`
+  * Path: `C:\Program Files\PowerToys\WinUI3Apps\PowerToys.PowerRename.exe` | Args: `%f` | Mode: `batch`
+* **Search with Everything** (Search current active directory)
+  * Path: `C:\Program Files\Everything\Everything.exe` | Args: `"%d"` | Mode: `batch`
 * **Open in VS Code**
   * Path: `code` | Args: `"%d_smart"` | Mode: `batch`
 * **Queue in VLC Media Player**
   * Path: `vlc.exe` | Args: `%f` | Mode: `batch`
 * **Copy Just File Names to Clipboard**
-  * Path: `powershell.exe` | Args: `-WindowStyle Hidden -Command "Set-Clipboard -Value '%n'"` | Mode: `batch`
+  * Path: `powershell.exe` | Args: `-NoProfile -WindowStyle Hidden -Command "Set-Clipboard -Value $args" -- %n` | Mode: `batch`
 
 ---
 
-### Comparison with Existing Mods
-While single-purpose mods exist for individual actions, **Explorer Custom Shortcuts** provides a single configurable shortcut table with dynamic selection tokens (`%f`, `%d_smart`, `%n`) and internal shell actions.
+### Comparison with Existing Mods & Catalogs
+
+While single-purpose mods exist in the Windhawk repository, **Explorer Custom Shortcuts** unifies external tool launching and shell shortcuts under a single configurable engine with dynamic token expansion:
+* **`keyboard-shortcut-actions`**: Focuses on generalized hotkey triggers; this mod specializes in Explorer-aware context resolution with dynamic token expansion (`%f`, `%files`, `%folders`, `%1`, `%n`, `%c`, `%ext`, `%s`, `%d`, `%d_smart`, `%p`) and item batch looping (`loop_files`, `loop_folders`).
+* **`toggle-hidden-files`**: Focuses solely on toggling hidden items; this mod offers internal shell commands as optional actions alongside custom executable shortcuts.
+* **`explorer-ctrln-newfile` / `explorer-ctrlq-new-folder`**: Single-purpose creation mods; this mod integrates creation and auto-focus commands into a unified shortcut manager table.
 
 ### Attribution & Acknowledgments
-Shell window inspection logic and COM GUID declarations adapt techniques from `explorer-command-bar` (DanRotaru, MIT). Settings toggling follows patterns established in `toggle-hidden-files` (Asteski).
+Process execution (`ResolveCommandPath`, `ExecuteApp`) and shell window inspection adapt implementation techniques from `explorer-command-bar` (DanRotaru, MIT). Settings toggling follows patterns established in `toggle-hidden-files` (Asteski).
 
 */
 // ==/WindhawkModReadme==
@@ -167,6 +160,7 @@ Shell window inspection logic and COM GUID declarations adapt techniques from `e
 #include <exdisp.h>
 #include <shlguid.h>
 #include <shlwapi.h>
+#include <cwctype>
 #include <vector>
 #include <functional>
 #include <mutex>
@@ -174,7 +168,6 @@ Shell window inspection logic and COM GUID declarations adapt techniques from `e
 #include <algorithm>
 #include <atomic>
 #include <shellapi.h>
-#include <commctrl.h>
 #include <memory>
 
 struct CustomShortcut {
@@ -699,9 +692,6 @@ void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd) {
     }
 
     // 5. Empty Recycle Bin (Shows native prompt & progress UI)
-    // Note: Showing the native confirmation prompt means this worker thread blocks until
-    // dismissed. If the mod unloads during the dialog, Wh_ModUninit will wait on this thread.
-    // This matches the documented pattern in explorer-command-bar.wh.cpp#L2136.
     if (_wcsicmp(command.c_str(), L"internal:emptyRecycleBin") == 0) {
         QueueBackgroundWork([rootHwnd]() {
             SHEmptyRecycleBinW(rootHwnd, nullptr, 0);
@@ -934,11 +924,19 @@ void Wh_ModUninit() {
         std::lock_guard<std::mutex> lock(g_threadsMutex);
         threadsToJoin.swap(g_threads);
     }
+
+    // Close any dialog a worker put on screen so joins cannot stall on an open UI prompt
     for (HANDLE h : threadsToJoin) {
-        if (WaitForSingleObject(h, 2000) == WAIT_TIMEOUT) {
-            Wh_Log(L"Waiting for worker thread to exit (e.g. pending shell dialog)...");
-            WaitForSingleObject(h, INFINITE);
-        }
+        EnumThreadWindows(GetThreadId(h),
+                          [](HWND hWnd, LPARAM) -> BOOL {
+                              PostMessageW(hWnd, WM_CLOSE, 0, 0);
+                              return TRUE;
+                          },
+                          0);
+    }
+
+    for (HANDLE h : threadsToJoin) {
+        WaitForSingleObject(h, INFINITE);
         CloseHandle(h);
     }
 }
