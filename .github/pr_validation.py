@@ -86,6 +86,22 @@ CALLBACK_SIGNATURES: dict[str, list[str]] = {
 }
 
 
+# A tool mod runs in Windhawk's own processes rather than being injected into
+# other programs. Its Windhawk targets must be exactly one of these sets.
+TOOL_MOD_ALLOWED_INCLUDES = [
+    ['windhawk.exe'],
+    ['windhawk.exe', 'windhawk-mod.exe'],
+    ['windhawk.exe', 'windhawk-mod.exe', 'windhawk-mod-uiaccess.exe'],
+    ['windhawk.exe', 'windhawk-mod.exe', 'windhawk-mod-elevated.exe'],
+    [
+        'windhawk.exe',
+        'windhawk-mod.exe',
+        'windhawk-mod-uiaccess.exe',
+        'windhawk-mod-elevated.exe',
+    ],
+]
+
+
 # RFC 3986 unreserved and reserved characters, plus % for percent-encoding.
 # Anything else, whitespace included, has to be percent-encoded.
 URL_ALLOWED_CHARS = r"0-9A-Za-z\-._~:/?#\[\]@!$&'()*+,;=%"
@@ -346,10 +362,12 @@ class ModMetadataValidator:
         path: Path,
         properties: dict[ModPropertyKey, ModPropertyValue],
         expected_author: str,
+        mod_source: str,
     ):
         self.ctx = ValidationContext(path)
         self.properties = properties
         self.expected_author = expected_author
+        self.mod_source = mod_source
         self.mod_author_data = get_mod_author_data()
 
         # Extract mod ID and fetch existing mod data
@@ -413,6 +431,7 @@ class ModMetadataValidator:
         self.validate_name()
         self.validate_description()
         self.validate_architecture()
+        self.validate_tool_mod()
 
         return self.ctx.warning_count()
 
@@ -725,6 +744,35 @@ class ModMetadataValidator:
         if msg:
             prop.warn(msg.rstrip('\n'))
 
+    def validate_tool_mod(self):
+        """Validate the metadata of a tool mod: one that targets windhawk.exe
+        with a WhTool_ModInit entry point, or any windhawk-*.exe process."""
+        prop = self.property('include')
+        if not prop:
+            return
+
+        includes = {x.lower() for x in prop.value.split('\n') if x != ''}
+        windhawk_includes = {
+            x for x in includes if re.fullmatch(r'windhawk(-[\w-]+)?\.exe', x)
+        }
+        is_tool_mod = any(x != 'windhawk.exe' for x in windhawk_includes) or (
+            'windhawk.exe' in windhawk_includes
+            and re.search(r'\bWhTool_ModInit\b', self.mod_source) is not None
+        )
+        if not is_tool_mod:
+            return
+
+        if windhawk_includes not in [set(x) for x in TOOL_MOD_ALLOWED_INCLUDES]:
+            prop.warn(
+                'Tool mods must @@ exactly one of the following combinations of'
+                ' Windhawk processes:\n'
+                + '\n'.join(f'* {", ".join(x)}' for x in TOOL_MOD_ALLOWED_INCLUDES)
+            )
+
+        arch_prop = self.property('architecture')
+        if arch_prop:
+            arch_prop.warn('@@ must not be specified for tool mods')
+
 
 def validate_metadata(path: Path, mod_source: str, expected_author: str) -> int:
     properties, initial_warnings = get_mod_file_metadata(
@@ -733,7 +781,7 @@ def validate_metadata(path: Path, mod_source: str, expected_author: str) -> int:
     )
 
     # Validate metadata properties
-    validator = ModMetadataValidator(path, properties, expected_author)
+    validator = ModMetadataValidator(path, properties, expected_author, mod_source)
     metadata_warnings = validator.validate_all()
 
     # Validate file path
