@@ -2,7 +2,7 @@
 // @id              taskbar-volume-percentage
 // @name            Taskbar Volume Percentage Indicator
 // @description     Shows the master volume percentage in the Windows 11 system tray volume icon
-// @version         1.5.9
+// @version         1.6.1
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
@@ -28,10 +28,13 @@ level, updated in real time.
 - **Display style**: Format of the volume indicator in the taskbar:
   - Percentage (`50%`)
   - Number only (`50`)
-  - Prefix and percentage (`Vol 50%`, with custom prefix)
-  - Icon and percentage (`🔊 50%`)
-  - Percentage and native icon
-  - Number and native icon
+  - Prefix and percentage (`50% Vol` or `Vol 50%`, with custom prefix)
+  - Icon and percentage (`50% 🔊` or `🔊 50%`)
+  - Native icon and percentage
+  - Native icon and number
+- **Element position**: Placement of the icon or prefix relative to the volume text for styles that include both:
+  - On the right (default)
+  - On the left
 - **Custom prefix**: Text prefix used with the "Prefix and percentage" style (default: `Vol `).
 - **Mute display style**: Style of the mute indicator when audio is muted:
   - MUT
@@ -65,8 +68,16 @@ level, updated in real time.
   - number: Number only
   - prefix: Prefix and percentage
   - emoji: Icon and percentage
-  - glyphRight: Percentage and native icon
-  - glyphNumber: Number and native icon
+  - glyphRight: Native icon and percentage
+  - glyphNumber: Native icon and number
+- elementPosition: right
+  $name: Element position
+  $description: >-
+    Placement of the icon or prefix relative to the volume text for styles
+    that include an additional element.
+  $options:
+  - right: On the right
+  - left: On the left
 - customPrefix: "Vol "
   $name: Custom prefix
   $description: Used with the "Prefix and percentage" display style.
@@ -124,6 +135,11 @@ enum class DisplayStyle {
     glyphNumber,
 };
 
+enum class ElementPosition {
+    right,
+    left,
+};
+
 enum class MuteStyle {
     mut,
     mute,
@@ -136,6 +152,7 @@ enum class MuteStyle {
 
 struct {
     DisplayStyle displayStyle;
+    ElementPosition elementPosition;
     WindhawkUtils::StringSetting customPrefix;
     MuteStyle muteStyle;
     WindhawkUtils::StringSetting customMuteText;
@@ -210,13 +227,17 @@ struct TrackedVolumeContent {
     winrt::weak_ref<FrameworkElement> baseElement;
     winrt::weak_ref<FrameworkElement> underlayElement;
     winrt::weak_ref<Controls::TextBlock> subBlock;
-    bool isDualBoxConfigured = false;
+    bool isCustomLayoutConfigured = false;
     winrt::Windows::Foundation::IInspectable origUnderlayVisibility{nullptr};
     winrt::Windows::Foundation::IInspectable origBaseVisibility{nullptr};
     winrt::Windows::Foundation::IInspectable origUnderlayAlignment{nullptr};
     winrt::Windows::Foundation::IInspectable origBaseAlignment{nullptr};
     winrt::Windows::Foundation::IInspectable origUnderlayColumn{nullptr};
     winrt::Windows::Foundation::IInspectable origBaseColumn{nullptr};
+    winrt::Windows::Foundation::IInspectable origContainerGridAlignment{nullptr};
+    winrt::Windows::Foundation::IInspectable origTextIconContentAlignment{nullptr};
+    winrt::Windows::Foundation::IInspectable origBaseMargin{nullptr};
+    winrt::Windows::Foundation::IInspectable origUnderlayMargin{nullptr};
 };
 [[clang::no_destroy]] std::optional<std::vector<TrackedVolumeContent>>
     g_trackedVolumeContents{std::in_place};
@@ -375,10 +396,23 @@ std::wstring FormatVolumeText(float volumeLevel, bool isMuted) {
     }
     if (g_settings.displayStyle == DisplayStyle::prefix) {
         PCWSTR prefix = g_settings.customPrefix.get();
-        return (prefix ? prefix : L"") + number + L"%";
+        std::wstring rawPrefix = prefix ? prefix : L"";
+        if (g_settings.elementPosition == ElementPosition::right) {
+            auto start = rawPrefix.find_first_not_of(L" \t\r\n");
+            if (start == std::wstring::npos) {
+                return number + L"%";
+            }
+            auto end = rawPrefix.find_last_not_of(L" \t\r\n");
+            std::wstring trimmed = rawPrefix.substr(start, end - start + 1);
+            return number + L"% " + trimmed;
+        }
+        return rawPrefix + number + L"%";
     }
     if (g_settings.displayStyle == DisplayStyle::emoji) {
-        return L"\U0001F50A " + number + L"%";
+        if (g_settings.elementPosition == ElementPosition::left) {
+            return L"\U0001F50A " + number + L"%";
+        }
+        return number + L"% \U0001F50A";
     }
 
     return number + L"%";
@@ -580,7 +614,7 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
         tracked.subBlock = nullptr;
     }
 
-    if (!tracked.isDualBoxConfigured) {
+    if (!tracked.isCustomLayoutConfigured) {
         return;
     }
 
@@ -603,19 +637,43 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
                     tracked.origBaseVisibility);
         restoreProp(base, FrameworkElement::HorizontalAlignmentProperty(),
                     tracked.origBaseAlignment);
+        restoreProp(base, FrameworkElement::MarginProperty(),
+                    tracked.origBaseMargin);
         restoreProp(base, Controls::Grid::ColumnProperty(),
                     tracked.origBaseColumn);
+        if (FrameworkElement tbEl = FindChildByName(base, L"InnerTextBlock")) {
+            if (auto tb = tbEl.try_as<Controls::TextBlock>()) {
+                tb.ClearValue(Controls::TextBlock::TextAlignmentProperty());
+                tb.ClearValue(FrameworkElement::HorizontalAlignmentProperty());
+            }
+        }
     }
     if (auto underlay = tracked.underlayElement.get()) {
         restoreProp(underlay, UIElement::VisibilityProperty(),
                     tracked.origUnderlayVisibility);
         restoreProp(underlay, FrameworkElement::HorizontalAlignmentProperty(),
                     tracked.origUnderlayAlignment);
+        restoreProp(underlay, FrameworkElement::MarginProperty(),
+                    tracked.origUnderlayMargin);
         restoreProp(underlay, Controls::Grid::ColumnProperty(),
                     tracked.origUnderlayColumn);
+        if (FrameworkElement tbEl =
+                FindChildByName(underlay, L"InnerTextBlock")) {
+            if (auto tb = tbEl.try_as<Controls::TextBlock>()) {
+                tb.ClearValue(Controls::TextBlock::TextAlignmentProperty());
+                tb.ClearValue(FrameworkElement::HorizontalAlignmentProperty());
+            }
+        }
     }
 
-    tracked.isDualBoxConfigured = false;
+    restoreProp(containerGrid, FrameworkElement::HorizontalAlignmentProperty(),
+                tracked.origContainerGridAlignment);
+    if (auto tic = tracked.textIconContent.get()) {
+        restoreProp(tic, FrameworkElement::HorizontalAlignmentProperty(),
+                    tracked.origTextIconContentAlignment);
+    }
+
+    tracked.isCustomLayoutConfigured = false;
 }
 
 void RestoreAllVolumeLayouts() {
@@ -673,8 +731,84 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         tracked->underlayElement = underlayElement;
     }
 
+    auto applyLayout = [](FrameworkElement const& el, int col, Visibility vis,
+                          Thickness margin = Thickness{0.0, 0.0, 0.0, 0.0}) {
+        if (el) {
+            el.Visibility(vis);
+            el.HorizontalAlignment(HorizontalAlignment::Center);
+            el.Margin(margin);
+            Controls::Grid::SetColumn(el, col);
+        }
+    };
+
+    if (!tracked->isCustomLayoutConfigured) {
+        if (auto base = tracked->baseElement.get()) {
+            tracked->origBaseVisibility =
+                base.ReadLocalValue(UIElement::VisibilityProperty());
+            tracked->origBaseAlignment = base.ReadLocalValue(
+                FrameworkElement::HorizontalAlignmentProperty());
+            tracked->origBaseMargin =
+                base.ReadLocalValue(FrameworkElement::MarginProperty());
+            tracked->origBaseColumn =
+                base.ReadLocalValue(Controls::Grid::ColumnProperty());
+        }
+        if (auto underlay = tracked->underlayElement.get()) {
+            tracked->origUnderlayVisibility =
+                underlay.ReadLocalValue(UIElement::VisibilityProperty());
+            tracked->origUnderlayAlignment = underlay.ReadLocalValue(
+                FrameworkElement::HorizontalAlignmentProperty());
+            tracked->origUnderlayMargin =
+                underlay.ReadLocalValue(FrameworkElement::MarginProperty());
+            tracked->origUnderlayColumn =
+                underlay.ReadLocalValue(Controls::Grid::ColumnProperty());
+        }
+        tracked->origContainerGridAlignment = containerGrid.ReadLocalValue(
+            FrameworkElement::HorizontalAlignmentProperty());
+        tracked->origTextIconContentAlignment = textIconContent.ReadLocalValue(
+            FrameworkElement::HorizontalAlignmentProperty());
+    }
+
+    if (GetContainerWidth() > 0) {
+        containerGrid.HorizontalAlignment(HorizontalAlignment::Center);
+        textIconContent.HorizontalAlignment(HorizontalAlignment::Center);
+    }
+
     if (!IsDualBoxStyle()) {
-        RestoreVolumeLayout(*tracked);
+        if (auto subBlock = tracked->subBlock.get()) {
+            uint32_t index = 0;
+            if (containerGrid.Children().IndexOf(subBlock, index)) {
+                containerGrid.Children().RemoveAt(index);
+            }
+            tracked->subBlock = nullptr;
+        }
+
+        if (containerGrid.ColumnDefinitions().Size() > 0) {
+            containerGrid.ColumnDefinitions().Clear();
+        }
+
+        if (GetContainerWidth() > 0) {
+            applyLayout(baseElement, 0, Visibility::Visible,
+                        Thickness{0.0, 0.0, 0.0, 0.0});
+            applyLayout(underlayElement, 0, Visibility::Visible,
+                        Thickness{0.0, 0.0, 0.0, 0.0});
+            if (FrameworkElement textBlockEl =
+                    FindChildByName(baseElement, L"InnerTextBlock")) {
+                if (auto tb = textBlockEl.try_as<Controls::TextBlock>()) {
+                    tb.TextAlignment(TextAlignment::Center);
+                    tb.HorizontalAlignment(HorizontalAlignment::Center);
+                }
+            }
+            if (FrameworkElement underlayTextBlockEl =
+                    FindChildByName(underlayElement, L"InnerTextBlock")) {
+                if (auto tb =
+                        underlayTextBlockEl.try_as<Controls::TextBlock>()) {
+                    tb.TextAlignment(TextAlignment::Center);
+                    tb.HorizontalAlignment(HorizontalAlignment::Center);
+                }
+            }
+        }
+
+        tracked->isCustomLayoutConfigured = true;
         return;
     }
 
@@ -711,33 +845,6 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         }
     }
 
-    auto applyLayout = [](FrameworkElement const& el, int col, Visibility vis) {
-        if (el) {
-            el.Visibility(vis);
-            el.HorizontalAlignment(HorizontalAlignment::Center);
-            Controls::Grid::SetColumn(el, col);
-        }
-    };
-
-    if (!tracked->isDualBoxConfigured) {
-        if (auto base = tracked->baseElement.get()) {
-            tracked->origBaseVisibility =
-                base.ReadLocalValue(UIElement::VisibilityProperty());
-            tracked->origBaseAlignment = base.ReadLocalValue(
-                FrameworkElement::HorizontalAlignmentProperty());
-            tracked->origBaseColumn =
-                base.ReadLocalValue(Controls::Grid::ColumnProperty());
-        }
-        if (auto underlay = tracked->underlayElement.get()) {
-            tracked->origUnderlayVisibility =
-                underlay.ReadLocalValue(UIElement::VisibilityProperty());
-            tracked->origUnderlayAlignment = underlay.ReadLocalValue(
-                FrameworkElement::HorizontalAlignmentProperty());
-            tracked->origUnderlayColumn =
-                underlay.ReadLocalValue(Controls::Grid::ColumnProperty());
-        }
-    }
-
     if (g_isMuted) {
         // In mute state, display a single centered indicator rather than
         // two indicators side-by-side.
@@ -747,6 +854,23 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         if (isMuteGlyph) {
             subBlock.Text(L"");
             subBlock.Visibility(Visibility::Collapsed);
+            if (textBlockEl) {
+                if (auto innerTextBlock =
+                        textBlockEl.try_as<Controls::TextBlock>()) {
+                    innerTextBlock.TextAlignment(TextAlignment::Center);
+                    innerTextBlock.HorizontalAlignment(
+                        HorizontalAlignment::Center);
+                }
+            }
+            if (FrameworkElement underlayTextBlockEl =
+                    FindChildByName(underlayElement, L"InnerTextBlock")) {
+                if (auto underlayTextBlock =
+                        underlayTextBlockEl.try_as<Controls::TextBlock>()) {
+                    underlayTextBlock.TextAlignment(TextAlignment::Center);
+                    underlayTextBlock.HorizontalAlignment(
+                        HorizontalAlignment::Center);
+                }
+            }
         } else {
             subBlock.Text(g_volumeText);
             subBlock.HorizontalAlignment(HorizontalAlignment::Center);
@@ -757,10 +881,11 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
 
         Visibility baseVis =
             isMuteGlyph ? Visibility::Visible : Visibility::Collapsed;
-        applyLayout(baseElement, 0, baseVis);
-        applyLayout(underlayElement, 0, baseVis);
+        applyLayout(baseElement, 0, baseVis, Thickness{0.0, 0.0, 0.0, 0.0});
+        applyLayout(underlayElement, 0, baseVis,
+                    Thickness{0.0, 0.0, 0.0, 0.0});
     } else {
-        // Unmuted: dual-column layout (percentage on left, speaker on right).
+        // Unmuted: dual-column layout with configurable icon position.
         if (containerGrid.ColumnDefinitions().Size() < 2) {
             containerGrid.ColumnDefinitions().Clear();
             Controls::ColumnDefinition col0, col1;
@@ -770,17 +895,34 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
             containerGrid.ColumnDefinitions().Append(col1);
         }
 
-        subBlock.Text(g_volumeText);
-        subBlock.HorizontalAlignment(HorizontalAlignment::Right);
-        subBlock.Margin(Thickness{0.0, 0.0, 4.0, 0.0});
-        subBlock.Visibility(Visibility::Visible);
-        Controls::Grid::SetColumn(subBlock, 0);
+        if (g_settings.elementPosition == ElementPosition::left) {
+            // Native speaker icon on left (col 0), text on right (col 1).
+            applyLayout(baseElement, 0, Visibility::Visible,
+                        Thickness{0.0, 0.0, 4.0, 0.0});
+            applyLayout(underlayElement, 0, Visibility::Visible,
+                        Thickness{0.0, 0.0, 4.0, 0.0});
 
-        applyLayout(baseElement, 1, Visibility::Visible);
-        applyLayout(underlayElement, 1, Visibility::Visible);
+            subBlock.Text(g_volumeText);
+            subBlock.HorizontalAlignment(HorizontalAlignment::Left);
+            subBlock.Margin(Thickness{0.0, 0.0, 0.0, 0.0});
+            subBlock.Visibility(Visibility::Visible);
+            Controls::Grid::SetColumn(subBlock, 1);
+        } else {
+            // Text on left (col 0), native speaker icon on right (col 1).
+            subBlock.Text(g_volumeText);
+            subBlock.HorizontalAlignment(HorizontalAlignment::Right);
+            subBlock.Margin(Thickness{0.0, 0.0, 4.0, 0.0});
+            subBlock.Visibility(Visibility::Visible);
+            Controls::Grid::SetColumn(subBlock, 0);
+
+            applyLayout(baseElement, 1, Visibility::Visible,
+                        Thickness{0.0, 0.0, 0.0, 0.0});
+            applyLayout(underlayElement, 1, Visibility::Visible,
+                        Thickness{0.0, 0.0, 0.0, 0.0});
+        }
     }
 
-    tracked->isDualBoxConfigured = true;
+    tracked->isCustomLayoutConfigured = true;
 }
 
 void UpdateAllVolumeLayouts() {
@@ -1243,7 +1385,21 @@ void LoadSettings() {
                               : (ds == L"emoji")       ? DisplayStyle::emoji
                               : (ds == L"glyphRight")  ? DisplayStyle::glyphRight
                               : (ds == L"glyphNumber") ? DisplayStyle::glyphNumber
-                                                       : DisplayStyle::percentage;
+                              : (ds == L"glyph")       ? DisplayStyle::glyphRight
+                              : (ds == L"nativeIcon")  ? DisplayStyle::glyphRight
+                              : (ds == L"nativeIconNumber")
+                                  ? DisplayStyle::glyphNumber
+                                  : DisplayStyle::percentage;
+
+    auto elementPosition =
+        WindhawkUtils::StringSetting::make(L"elementPosition");
+    std::wstring_view ep = elementPosition.get();
+    if (ep.empty()) {
+        auto iconPos = WindhawkUtils::StringSetting::make(L"iconPosition");
+        ep = iconPos.get();
+    }
+    g_settings.elementPosition =
+        (ep == L"left") ? ElementPosition::left : ElementPosition::right;
 
     g_settings.customPrefix =
         WindhawkUtils::StringSetting::make(L"customPrefix");
