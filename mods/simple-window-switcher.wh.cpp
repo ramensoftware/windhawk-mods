@@ -1308,7 +1308,6 @@ static INT GetCornerPref();
 static int GetWindowCornerRadiusPx();
 static void DrawSwitcherStaticContent(HDC hdc, bool fillBg, HWND hWnd);
 static void PreRenderScrollCanvases();
-static void ClearIconBitmapCache();
 static void UpdateThumbnailAnimations();
 static void UpdateDockThumbnailDwm();
 static void UpdateDockPreviewForSelection();
@@ -1968,7 +1967,6 @@ static void FreeCachedBuffers() {
         s_cachedScrollToW = 0;
         s_cachedScrollToH = 0;
     }
-    ClearIconBitmapCache();
     g_staticContentDirty = true;
 }
 
@@ -3423,8 +3421,7 @@ static bool IsAltTabWindow(HWND h) {
 
 static bool CanCloseWindow(HWND hWnd) {
     if (!IsWindow(hWnd)) return false;
-    if (!IsWindowEnabled(hWnd)) return false;
-    if (GetWindowLongPtrW(hWnd, GWL_STYLE) & WS_DISABLED) return false;
+    if (!IsWindowEnabled(hWnd)) return false; // IsWindowEnabled is exactly !(style & WS_DISABLED)
     HWND hPopup = GetLastActivePopup(hWnd);
     if (hPopup && hPopup != hWnd && IsWindow(hPopup) && IsWindowVisible(hPopup)) {
         return false;
@@ -3470,6 +3467,18 @@ static void RemoveMruWindow(HWND hWnd) {
     if (!hWnd) return;
     auto it = std::remove(g_mruWindows.begin(), g_mruWindows.end(), hWnd);
     g_mruWindows.erase(it, g_mruWindows.end());
+}
+
+// MRU rank used for ordering entries: position in g_mruWindows (lower = more
+// recently activated). Untracked windows sort after all tracked ones, and
+// untracked WS_EX_TOPMOST windows sort last so inactive always-on-top windows
+// don't hijack the front of the list.
+static int GetMruRank(HWND h) {
+    for (size_t i = 0; i < g_mruWindows.size(); i++) {
+        if (g_mruWindows[i] == h) return (int)i;
+    }
+    bool isTopmost = (GetWindowLongPtrW(h, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+    return isTopmost ? 20000 : 10000;
 }
 
 
@@ -4192,14 +4201,7 @@ static void BuildWindowList() {
     // 2. Untracked normal windows follow in their EnumWindows Z-order.
     // 3. Untracked WS_EX_TOPMOST windows appear last, preventing inactive "always on top" windows from hijacking index 0.
     std::stable_sort(g_windows.begin(), g_windows.end(), [](const WindowEntry& a, const WindowEntry& b) {
-        auto getRank = [](HWND h) -> int {
-            for (size_t i = 0; i < g_mruWindows.size(); i++) {
-                if (g_mruWindows[i] == h) return (int)i;
-            }
-            bool isTopmost = (GetWindowLongPtrW(h, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
-            return isTopmost ? 20000 : 10000;
-        };
-        return getRank(a.hWnd) < getRank(b.hWnd);
+        return GetMruRank(a.hWnd) < GetMruRank(b.hWnd);
     });
 
     // App grouping: keep one entry per application. EnumWindows yields windows in
@@ -5539,8 +5541,6 @@ static Gdiplus::Bitmap* CreateIconShadowBitmap(HICON hIcon, int width, int heigh
     
     return shadowBmpCopy;
 }
-
-static void ClearIconBitmapCache() {}
 
 static void DrawIconWithAlpha(HDC hdc, int x, int y, HICON hIcon, int size, float alpha) {
     if (!hIcon || size <= 0 || alpha <= 0.001f) return;
@@ -8363,15 +8363,11 @@ static void ShowMirrorSwitchers() {
 
 static void ApplySwitcherRegion() {
     if (!g_hSwitcher) return;
-    static bool s_hasActiveRgn = false;
 
     // Both Windows 11 (DWM hardware rounding) and Theme: none (per-pixel alpha layered window)
     // do not need GDI SetWindowRgn. Windows 10 Acrylic blur is a 90° rectangle, where SetWindowRgn
-    // would only conflict with DWM composition.
-    if (s_hasActiveRgn) {
-        SetWindowRgn(g_hSwitcher, NULL, TRUE);
-        s_hasActiveRgn = false;
-    }
+    // would only conflict with DWM composition. The only effect needed here is clearing the
+    // DWM border color so no 1px system border is drawn around the switcher.
     if (IsWin11OrGreater()) {
         COLORREF colorNone = 0xFFFFFFFE; // DWMWA_COLOR_NONE
         DwmSetWindowAttribute(g_hSwitcher, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
@@ -10785,15 +10781,8 @@ static void AddWindowEntry(HWND hWnd) {
         // This ensures a re-added window (e.g. after modal dialog) lands at rank 0 (index 0),
         // not at the minimized boundary where the old IsIconic-only loop would place it.
         {
-            auto getRank = [](HWND h) -> int {
-                for (size_t i = 0; i < g_mruWindows.size(); i++) {
-                    if (g_mruWindows[i] == h) return (int)i;
-                }
-                bool isTopmost = (GetWindowLongPtrW(h, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
-                return isTopmost ? 20000 : 10000;
-            };
             bool eMin = g_settings.sortMinimizedWindowsToEnd && IsEntryMinimized(e);
-            int  eRank = getRank(e.hWnd);
+            int  eRank = GetMruRank(e.hWnd);
             auto insertPos = g_windows.end();
             for (auto it = g_windows.begin(); it != g_windows.end(); ++it) {
                 bool itMin = g_settings.sortMinimizedWindowsToEnd && IsEntryMinimized(*it);
@@ -10801,7 +10790,7 @@ static void AddWindowEntry(HWND hWnd) {
                     if (!eMin && itMin) { insertPos = it; break; }
                     continue;
                 }
-                if (eRank < getRank(it->hWnd)) { insertPos = it; break; }
+                if (eRank < GetMruRank(it->hWnd)) { insertPos = it; break; }
             }
             g_windows.insert(insertPos, std::move(e));
         }
@@ -10809,15 +10798,8 @@ static void AddWindowEntry(HWND hWnd) {
         UpdateEntryForWindow(e);
 
         {
-            auto getRank = [](HWND h) -> int {
-                for (size_t i = 0; i < g_mruWindows.size(); i++) {
-                    if (g_mruWindows[i] == h) return (int)i;
-                }
-                bool isTopmost = (GetWindowLongPtrW(h, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
-                return isTopmost ? 20000 : 10000;
-            };
             bool eMin = g_settings.sortMinimizedWindowsToEnd && IsEntryMinimized(e);
-            int  eRank = getRank(e.hWnd);
+            int  eRank = GetMruRank(e.hWnd);
             auto insertPos = g_windows.end();
             for (auto it = g_windows.begin(); it != g_windows.end(); ++it) {
                 bool itMin = g_settings.sortMinimizedWindowsToEnd && IsEntryMinimized(*it);
@@ -10825,7 +10807,7 @@ static void AddWindowEntry(HWND hWnd) {
                     if (!eMin && itMin) { insertPos = it; break; }
                     continue;
                 }
-                if (eRank < getRank(it->hWnd)) { insertPos = it; break; }
+                if (eRank < GetMruRank(it->hWnd)) { insertPos = it; break; }
             }
             g_windows.insert(insertPos, std::move(e));
         }
@@ -10980,7 +10962,11 @@ static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND
             return;
         }
         if (!IsWindowVisible(hwnd) || event == EVENT_OBJECT_DESTROY) {
-            if (!IsIconic(hwnd) || event == EVENT_OBJECT_DESTROY) {
+            // EVENT_OBJECT_DESTROY always satisfies this guard (a destroyed window is
+            // not visible). For a HIDE event, only remove non-minimized windows:
+            // minimizing fires HIDE while IsIconic is already true, and minimized
+            // windows must keep their switcher entry.
+            if (event == EVENT_OBJECT_DESTROY || !IsIconic(hwnd)) {
                 RemoveWindowEntryByHwnd(hwnd);
             }
         }
