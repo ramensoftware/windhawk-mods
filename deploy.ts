@@ -39,6 +39,26 @@ type FileChange = {
     filePath: string;
 };
 
+// A row of the update server's comments/get_all.php: approved comments only,
+// in ascending id.
+type PublicComment = {
+    id: number;
+    modId: string;
+    parentId: number | null;
+    timestamp: number;
+    authorName: string;
+    modVersion: string | null;
+    content: string;
+    votes: number;
+};
+
+type ModComments = {
+    // The number of reviews (top-level comments), what the catalog carries.
+    reviews: number;
+    // The file's entries, in the order the server gave them.
+    comments: Omit<PublicComment, 'modId'>[];
+};
+
 class GitCache {
     commitMeta: Map<string, CommitMeta>;
     commitOrder: string[];
@@ -587,7 +607,56 @@ function generateModsData(cache: GitCache) {
     fs.writeFileSync('mod_author_data.json', JSONstringifyOrder(modAuthorData, 2));
 }
 
-function enrichCatalog(catalog: Record<string, any>, enrichment: any, modTimes: any, cache: GitCache) {
+function groupComments(allComments: PublicComment[], knownModIds: Set<string>): Map<string, ModComments> {
+    const byMod = new Map<string, ModComments>();
+    for (const { modId, ...comment } of allComments) {
+        if (!knownModIds.has(modId)) {
+            // A comment on a mod that is no longer in the repository has no
+            // page to be read on and no file name to trust.
+            console.warn(`Skipping comment ${comment.id} on unknown mod ${modId}`);
+            continue;
+        }
+        let entry = byMod.get(modId);
+        if (!entry) {
+            entry = { reviews: 0, comments: [] };
+            byMod.set(modId, entry);
+        }
+        entry.comments.push(comment);
+        if (comment.parentId === null) {
+            entry.reviews++;
+        }
+    }
+    return byMod;
+}
+
+// Writes comments/<modId>.json for each mod with at least one review. The
+// directory is rebuilt from scratch every run, so a mod that lost its last
+// review loses its file at the deploy step's git add -A.
+function writeModComments(byMod: Map<string, ModComments>) {
+    const commentsDir = 'comments';
+    if (!fs.existsSync(commentsDir)) {
+        fs.mkdirSync(commentsDir);
+    }
+    for (const [modId, { reviews, comments }] of byMod) {
+        if (reviews === 0) {
+            // The server omits replies whose review is unapproved, so this
+            // is unreachable today; kept as the file's own invariant.
+            continue;
+        }
+        fs.writeFileSync(
+            path.join(commentsDir, `${modId}.json`),
+            JSONstringifyOrder({ modId, comments }, 2),
+        );
+    }
+}
+
+function enrichCatalog(
+    catalog: Record<string, any>,
+    enrichment: any,
+    commentsByMod: Map<string, ModComments>,
+    modTimes: any,
+    cache: GitCache,
+) {
     const app = {
         version: enrichment.app.version,
         versionBleedingEdge: enrichment.app.versionBleedingEdge,
@@ -617,6 +686,9 @@ function enrichCatalog(catalog: Record<string, any>, enrichment: any, modTimes: 
                 ratingUsers: 0,
                 ratingBreakdown: [0, 0, 0, 0, 0],
                 ...enrichment.mods[id]?.details,
+                // After the spread: the count must come from the same fetch
+                // as the mod's comments file, whatever the enrichment carries.
+                reviews: commentsByMod.get(id)?.reviews ?? 0,
             },
         };
 
@@ -635,6 +707,15 @@ async function generateModCatalogs(cache: GitCache) {
     const enrichmentUrl = 'https://update.windhawk.net/mods_catalog_enrichment.json';
     const enrichment = await fetchJson(enrichmentUrl);
 
+    // A failed fetch fails the run, like the enrichment: a deploy that went on
+    // with an empty list would delete every comments file and zero every
+    // count for a day.
+    const commentsUrl = 'https://update.windhawk.net/comments/get_all.php';
+    const allComments: PublicComment[] = await fetchJson(commentsUrl);
+    if (!Array.isArray(allComments)) {
+        throw new Error(`Expected an array from ${commentsUrl}`);
+    }
+
     const translateFilesUrl = 'https://api.github.com/repos/ramensoftware/windhawk-translate/contents';
     const translateFiles = await fetchJson(translateFilesUrl, {
         Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
@@ -645,7 +726,10 @@ async function generateModCatalogs(cache: GitCache) {
     const modTimes = {};
 
     const englishCatalog = modSourceUtils.getMetadataOfMods('en-US');
-    const englishCatalogEnriched = enrichCatalog(englishCatalog, enrichment, modTimes, cache);
+    const commentsByMod = groupComments(allComments, new Set(Object.keys(englishCatalog)));
+    writeModComments(commentsByMod);
+
+    const englishCatalogEnriched = enrichCatalog(englishCatalog, enrichment, commentsByMod, modTimes, cache);
     fs.writeFileSync('catalog.json', JSONstringifyOrder(englishCatalogEnriched, 2));
 
     const catalogsDir = 'catalogs';
@@ -661,7 +745,7 @@ async function generateModCatalogs(cache: GitCache) {
 
         const language = translateFileName.slice(0, -'.yml'.length);
         const catalog = modSourceUtils.getMetadataOfMods(language);
-        const catalogEnriched = enrichCatalog(catalog, enrichment, modTimes, cache);
+        const catalogEnriched = enrichCatalog(catalog, enrichment, commentsByMod, modTimes, cache);
 
         // Keep the original (English) name and description for searching,
         // copying each field only if the translation changed it.
