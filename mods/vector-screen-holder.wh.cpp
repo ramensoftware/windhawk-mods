@@ -203,6 +203,11 @@ It does **not** fake keystrokes or mouse movement. Some corporate presence
 tools (Teams, Slack) track real input rather than display state and will still
 mark you away.
 
+The overlay is an ordinary window, so it belongs to the virtual desktop it was
+opened on. Switch desktops and it goes with the rest of them; the screen is
+still held awake, you just will not see the art until you switch back. Windows
+offers no supported way to pin a window across desktops.
+
 For the same reason it will not hold a managed workstation open. Suppressing
 the screen saver also suppresses the lock that rides on it, which covers the
 consumer default, but a machine-inactivity policy measures real input idle
@@ -4593,7 +4598,10 @@ static HANDLE g_toggleEvent = nullptr;
 // cannot fail.
 static HANDLE g_quitEvent = nullptr;
 static std::atomic<DWORD> g_workerThreadId{0};
-static HHOOK g_kbdHook = nullptr;
+// The HHOOK deliberately does not live here. Bounding the join means a thread
+// can in principle be abandoned, and a straggler that still owned this global
+// would unhook whatever hook the next one had installed. It is a local in
+// KbdHookThread instead, so an abandoned thread can only ever unhook its own.
 static bool g_hotkeyRegistered = false;
 static float g_rotateTimer = 0;
 // True only while every overlay reports itself hidden, which drops the loop to
@@ -4655,6 +4663,9 @@ static void FlushState() {
 // so multiple displays stay in step instead of drifting apart.
 static void Controller_CycleStyle(Overlay* ov) {
     int next = NextEnabledStyle(ov->style);
+    // Choosing a style by hand restarts the rotation clock, so a click that
+    // lands near the end of an interval is not rotated away a moment later.
+    g_rotateTimer = 0;
     for (size_t i = 0; i < g_overlays.size(); i++) {
         g_overlays[i]->style = next;
         g_overlays[i]->NewScene();
@@ -4796,13 +4807,13 @@ static DWORD WINAPI KbdHookThread(LPVOID) {
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                        (LPCWSTR)&LowLevelKbdProc, &mod);
-    g_kbdHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKbdProc, mod, 0);
+    HHOOK hook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKbdProc, mod, 0);
     // Published here rather than beside CreateThread: the thread starting says
     // nothing about whether the hook itself took. Setting it early meant that
     // if this call failed, the window proc would still stand aside for a hook
     // that was not there, and Space would be dead in both places.
-    g_kbdHookLive = g_kbdHook != nullptr;
-    if (!g_kbdHook) {
+    g_kbdHookLive = hook != nullptr;
+    if (!hook) {
         Wh_Log(L"SetWindowsHookEx failed (%u)", GetLastError());
     }
 
@@ -4817,11 +4828,11 @@ static DWORD WINAPI KbdHookThread(LPVOID) {
         DispatchMessageW(&msg);
     }
 
-    if (g_kbdHook) {
-        UnhookWindowsHookEx(g_kbdHook);
-        g_kbdHook = nullptr;
+    if (hook) {
+        UnhookWindowsHookEx(hook);
     }
-    g_hookThreadId = 0;
+    // The thread id is cleared by whoever joined this thread, not here: a
+    // straggler clearing it would zero the id of the thread that replaced it.
     return 0;
 }
 
@@ -4874,6 +4885,7 @@ static void UninstallKbdHook() {
     }
     CloseHandle(g_hookThread);
     g_hookThread = nullptr;
+    g_hookThreadId = 0;
     if (g_hookReady) {
         CloseHandle(g_hookReady);
         g_hookReady = nullptr;
@@ -5012,6 +5024,10 @@ static void ShowOverlays() {
     }
     g_active = true;
     g_rotateTimer = 0;
+    // Left set by a session that ended while something covered the overlay,
+    // this would start the next one on the half second poll with its rotation
+    // frozen, until the first render cleared it.
+    g_allOccluded = false;
     if (g_settings.globalKeys) {
         InstallKbdHook();
     }
