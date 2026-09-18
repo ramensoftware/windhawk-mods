@@ -2,7 +2,7 @@
 // @id              translucent-windows
 // @name            Translucent Windows
 // @description     Enables native translucent effects in Windows 11
-// @version         1.8.1
+// @version         1.8.2
 // @author          Undisputed00x
 // @github          https://github.com/Undisputed00x
 // @include         *
@@ -79,6 +79,9 @@ Changing the theme to the default and vice versa fixes the problem. As a last re
 This is caused by default by the AccentBlur API.❕
 
 * ✨The mod works best on the default dark theme.✨
+
+* ⚠️Console windows (cmd.exe, Windows PowerShell 5.1, anything not hosted by Windows Terminal) are styled only by the conhost.exe that hosts them.
+To leave them unstyled, add a process rule for conhost.exe with Background translucent effects set to Default and Windows theme custom rendering disabled, or exclude conhost.exe in Windhawk's process exclusion list.⚠️
 
 */
 // ==/WindhawkModReadme==
@@ -169,12 +172,14 @@ This is caused by default by the AccentBlur API.❕
 
 #include <windhawk_utils.h>
 #include <windowsx.h>
+#include <tlhelp32.h>
 #include <dwmapi.h>
 #include <vssym32.h>
 #include <uxtheme.h>
 #include <cmath>
 #include <string>
 #include <array>
+#include <unordered_set>
 #include <d2d1.h>
 #include <wrl.h>
 #include <ShellScalingApi.h>
@@ -246,6 +251,8 @@ std::wstring g_LastThemePath = GetCurrentWindowsThemePath();
 BOOL g_InsideTaskMgrProc = FALSE;
 
 BOOL g_InsideExplorerProc = FALSE;
+BOOL g_InsideConhostProc = FALSE;
+HWND g_hConsoleWnd = NULL; // conhost.exe: the console window this process created, once known
 
 using PUNICODE_STRING = PVOID;
 constexpr auto MENUPOPUP_CLASS = L"#32768";
@@ -462,8 +469,8 @@ std::wstring GetWindowClass(HWND hWnd)
     if (!hWnd)
         return L"";
     WCHAR buffer[MAX_PATH];
-    GetClassNameW(hWnd, buffer, MAX_PATH);
-    return buffer;
+    int length = GetClassNameW(hWnd, buffer, MAX_PATH);
+    return std::wstring(buffer, length);
 }
 
 BOOL IsWindowClass(HWND hWnd, LPCWSTR className)
@@ -614,6 +621,10 @@ BOOL CheckExplorerProcess() {
 
 BOOL InTaskManagerProcess() {
     return GetCurrProcStr() == L"taskmgr.exe";
+}
+
+BOOL InConhostProcess() {
+    return GetCurrProcStr() == L"conhost.exe";
 }
 
 enum AccentColorShade
@@ -5392,28 +5403,130 @@ VOID RestoreWindowCustomizations(HWND hWnd)
     }
 }
 
+// Per-sweep state of ApplyForExistingWindows. The windows created by the
+// threads of this process are collected lazily and at most once per sweep: the
+// thread snapshot is system-wide, and only conhost.exe ever needs it (see
+// IsOwnConsoleWindow).
+struct ExistingWindowsContext
+{
+    std::unordered_set<HWND> threadWindows;
+    BOOL threadWindowsAttempted = FALSE;
+    BOOL threadWindowsCollected = FALSE;
+    UINT consoleWindowsSeen = 0;
+};
+
+static BOOL CALLBACK CollectThreadWindowProc(HWND hWnd, LPARAM lParam)
+{
+    reinterpret_cast<std::unordered_set<HWND>*>(lParam)->insert(hWnd);
+    return TRUE;
+}
+
+// Collects the top-level windows created by the threads of this process.
+// Unlike GetWindowThreadProcessId, EnumThreadWindows reflects the creating
+// thread for console windows too.
+static BOOL CollectCurrentProcessThreadWindows(std::unordered_set<HWND>& windows)
+{
+    HANDLE hSnapshot = INVALID_HANDLE_VALUE;
+    for (int attempt = 0; attempt < 3; attempt++)
+    {
+        if (attempt > 0)
+            Sleep(0);
+        hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+        if (hSnapshot != INVALID_HANDLE_VALUE)
+            break;
+    }
+    if (hSnapshot == INVALID_HANDLE_VALUE)
+    {
+        Wh_Log(L"CreateToolhelp32Snapshot failed, error 0x%08X", GetLastError());
+        return FALSE;
+    }
+
+    const DWORD dwProcessId = GetCurrentProcessId();
+    THREADENTRY32 te{};
+    te.dwSize = sizeof(te);
+    BOOL result = Thread32First(hSnapshot, &te);
+    if (result)
+    {
+        do
+        {
+            if (te.th32OwnerProcessID == dwProcessId)
+                EnumThreadWindows(te.th32ThreadID, CollectThreadWindowProc, reinterpret_cast<LPARAM>(&windows));
+        } while (Thread32Next(hSnapshot, &te));
+    }
+    else
+        Wh_Log(L"Thread32First failed, error 0x%08X", GetLastError());
+    CloseHandle(hSnapshot);
+    return result;
+}
+
+// Whether a thread of this process created the window.
+static BOOL IsWindowOfCurrentProcessThread(HWND hWnd, ExistingWindowsContext* ctx)
+{
+    if (!ctx->threadWindowsAttempted)
+    {
+        ctx->threadWindowsAttempted = TRUE;
+        ctx->threadWindowsCollected = CollectCurrentProcessThreadWindows(ctx->threadWindows);
+    }
+    return ctx->threadWindows.count(hWnd) != 0;
+}
+
+// A console window reports the console's client process (e.g. cmd.exe) from
+// GetWindowThreadProcessId, not the conhost.exe that created it. The generic
+// same-process check in EnumWindowsProc therefore matches in the client, which
+// would re-style the console with the client's settings on every reload, and
+// never in conhost.exe, the real owner. conhost.exe is started by csrss.exe,
+// which Windhawk never injects, so it gets the mod after the window exists and
+// the sweep is its only way to style, and later restore, its console. Console
+// windows are handled by conhost.exe alone, and only the one that a thread of
+// this process created. A conhost.exe hosts a single console window, so it is
+// remembered once accepted and the unload sweep no longer depends on a
+// thread snapshot.
+static BOOL IsOwnConsoleWindow(HWND hWnd, ExistingWindowsContext* ctx)
+{
+    if (!g_InsideConhostProc)
+        return FALSE;
+    ctx->consoleWindowsSeen++;
+    if (g_hConsoleWnd)
+        return hWnd == g_hConsoleWnd;
+    if (!IsWindowOfCurrentProcessThread(hWnd, ctx))
+        return FALSE;
+    g_hConsoleWnd = hWnd;
+    return TRUE;
+}
+
 BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) 
 {
-    DWORD dwProcessId = 0;
-    // Pass console window, it might be called from other processes like Clink:https://github.com/chrisant996/clink
-    if ((!GetWindowThreadProcessId(hWnd, &dwProcessId) || dwProcessId != GetCurrentProcessId()) && !IsWindowClass(hWnd, L"ConsoleWindowClass")) 
-        return TRUE;
+    // Console windows are handled by conhost.exe alone, see IsOwnConsoleWindow
+    if (IsWindowClass(hWnd, L"ConsoleWindowClass"))
+    {
+        if (!IsOwnConsoleWindow(hWnd, reinterpret_cast<ExistingWindowsContext*>(lParam)))
+            return TRUE;
+    }
     else
     {
-        HWND hParentWnd = GetAncestor(hWnd, GA_PARENT);
-        if (hParentWnd && hParentWnd != GetDesktopWindow())
+        DWORD dwProcessId = 0;
+        if (!GetWindowThreadProcessId(hWnd, &dwProcessId) || dwProcessId != GetCurrentProcessId())
             return TRUE;
-        else if(g_settings.Unload)
-            RestoreWindowCustomizations(hWnd);
-        else
-            NewWindowShown(hWnd);
     }
+
+    HWND hParentWnd = GetAncestor(hWnd, GA_PARENT);
+    if (hParentWnd && hParentWnd != GetDesktopWindow())
+        return TRUE;
+    else if(g_settings.Unload)
+        RestoreWindowCustomizations(hWnd);
+    else
+        NewWindowShown(hWnd);
     return TRUE;
 }
 
 VOID ApplyForExistingWindows()
 {
-    EnumWindows(EnumWindowsProc, 0);
+    ExistingWindowsContext ctx;
+    EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&ctx));
+    if (g_InsideConhostProc)
+        Wh_Log(L"Console sweep (%s): %u console windows seen, own window %p%s",
+               g_settings.Unload ? L"restore" : L"apply", ctx.consoleWindowsSeen, g_hConsoleWnd,
+               (ctx.threadWindowsAttempted && !ctx.threadWindowsCollected) ? L", thread snapshot failed" : L"");
 }
 
 BOOL GetColorSetting(LPCWSTR hexColor, COLORREF& outColor) 
@@ -6544,6 +6657,7 @@ BOOL Wh_ModInit(VOID)
         g_explorerStylerNoBackgroundEffectAtom = AddAtom(L"WindhawkFileExplorerStylerNoBackgroundEffect");
     if (InTaskManagerProcess())
         g_InsideTaskMgrProc = TRUE;
+    g_InsideConhostProc = InConhostProcess();
 
     LoadSettings();
 
