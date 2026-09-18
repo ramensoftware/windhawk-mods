@@ -10,6 +10,15 @@
 // ==WindhawkModReadme==
 /*
 # D3D9 Flip Model Upgrade
+**Important: close the game before this mod gets disabled, updated or
+reloaded.** A game that runs with the mod keeps using the Direct3D 9Ex device
+and the emulated textures, which only work while the mod is loaded, so unloading
+the mod will most likely break or crash the game. That includes disabling the
+mod, changing its process inclusion list, and **mod updates that Windhawk
+installs automatically in the background**. If you play with this mod enabled,
+consider turning off automatic updates for it. Changing the settings is fine,
+they apply the next time the game creates or resets its device.
+
 Direct3D 9 games that run windowed or borderless present with the legacy
 *blt model*: every frame is copied and composed by DWM, which adds latency and
 blocks VRR. Windows 11's "Optimizations for windowed games" only covers
@@ -25,12 +34,6 @@ This mod doesn't target any process by default. In Windhawk, go to the mod's
 "Advanced" tab and scroll down to "Custom process inclusion list". In that box,
 put the filename of the game's `.exe`, then click "Save" and (re)start the game.
 
-**Don't disable, update or change the inclusion list of this mod while a game
-is running.** The game keeps using the Direct3D 9Ex device and the emulated
-textures, which only work with the mod loaded, so it will most likely break or
-crash. Close the game first. Changing the settings is fine, they apply the next
-time the game creates or resets its device.
-
 ## How to verify
 Use [PresentMon](https://github.com/GameTechDev/PresentMon) (or an overlay that
 shows the presentation mode, such as Special K or RTSS). A windowed D3D9 game
@@ -40,6 +43,11 @@ normally shows `Composed: Copy with GPU GDI`. With the mod it should show
 Independent Flip requires the game window to cover the entire monitor with
 nothing drawn on top of it. Run the game in its borderless mode, or turn on
 **Force borderless fullscreen** in the mod settings.
+
+A game that is not DPI aware gets stretched by DWM on a scaled display, which
+prevents Independent Flip as well. If that is the case, open the properties of
+the game executable, and under Compatibility, Change high DPI settings, set the
+high DPI scaling override to Application.
 
 ## Exclusive fullscreen
 Games running in exclusive fullscreen are left untouched by default: Windows'
@@ -62,11 +70,14 @@ instead.
   are created in the default pool. The Ex device is also hidden from D3DX
   (`d3dx9_*.dll`), which otherwise refuses to load managed textures. A few
   games may misbehave or fail to reset their device after a resolution change.
+  Games that often lock or read back managed buffers may run slower.
 - D3D9 replacements that don't use the system `d3d9.dll` (DXVK, d3d9on12
   wrappers) bypass this mod entirely.
-- A Direct3D 9Ex device is never lost, and presenting can return the success
-  codes `S_PRESENT_OCCLUDED` and `S_PRESENT_MODE_CHANGED`. Games that compare
-  the result with `D3D_OK` may misbehave after Alt+Tab.
+- A Direct3D 9Ex device is never reported as lost. Games with logic that
+  depends on losing the device after Alt+Tab may misbehave.
+- Textures restored by a state block are not tracked. If the game modifies
+  such a texture while it stays bound, the change shows up once the texture is
+  bound again.
 - The flip model can only present to the device window. Games that present the
   same swap chain to several windows will only draw to one of them.
 - No guarantees of anti-cheat compatibility.
@@ -93,7 +104,8 @@ changed and any failure codes.
   $name: Force borderless fullscreen
   $description: >-
     Turn both windowed and exclusive fullscreen requests into a borderless window
-    covering the monitor. The game's render resolution is kept and stretched.
+    covering the monitor. The game's render resolution is kept and
+    stretched, so the picture is distorted if the aspect ratios differ.
 - maxFrameLatency: 0
   $name: Maximum frame latency
   $description: >-
@@ -125,17 +137,13 @@ changed and any failure codes.
 #define D3DPRESENTFLAG_VIDEO 0x00000010
 #endif
 
-// Own copies of the IIDs so that no dxguid import library is needed.
-static const GUID kIID_IDirect3D9Ex = {
-    0x02177241,
-    0x69FC,
-    0x400C,
-    {0x8F, 0xF1, 0x93, 0xA4, 0x4D, 0xF6, 0x86, 0x1D}};
-static const GUID kIID_IDirect3DDevice9Ex = {
-    0xB18B10CE,
-    0x2649,
-    0x405A,
-    {0x87, 0x0F, 0x95, 0xF7, 0x77, 0xD4, 0x31, 0x3A}};
+#ifndef S_PRESENT_MODE_CHANGED
+#define S_PRESENT_MODE_CHANGED MAKE_HRESULT(0, _FACD3D, 2167)
+#endif
+
+#ifndef S_PRESENT_OCCLUDED
+#define S_PRESENT_OCCLUDED MAKE_HRESULT(0, _FACD3D, 2168)
+#endif
 
 // Vtable slots (d3d9.h declaration order, IUnknown = 0..2).
 //   IDirect3D9:          16 CreateDevice
@@ -186,8 +194,41 @@ std::mutex g_hookMutex;
 std::atomic<bool> g_exportsHooked;
 bool g_deviceHooked;
 
-SRWLOCK g_flipDevicesLock = SRWLOCK_INIT;
-std::vector<IDirect3DDevice9*> g_flipDevices;
+// Devices are not removed when released, an entry is overwritten once a new
+// device shows up at the same address.
+struct DeviceSet {
+    SRWLOCK lock = SRWLOCK_INIT;
+    std::vector<IDirect3DDevice9*> devices;
+
+    void Set(IDirect3DDevice9* dev, bool contained) {
+        AcquireSRWLockExclusive(&lock);
+        auto it = std::find(devices.begin(), devices.end(), dev);
+        if (contained && it == devices.end()) {
+            devices.push_back(dev);
+        } else if (!contained && it != devices.end()) {
+            devices.erase(it);
+        }
+        ReleaseSRWLockExclusive(&lock);
+    }
+
+    bool Contains(IDirect3DDevice9* dev) {
+        AcquireSRWLockShared(&lock);
+        bool found =
+            std::find(devices.begin(), devices.end(), dev) != devices.end();
+        ReleaseSRWLockShared(&lock);
+        return found;
+    }
+};
+
+// Devices with a FLIPEX implicit swap chain.
+DeviceSet g_flipDevices;
+// Devices which the game created as plain Direct3D 9 devices.
+DeviceSet g_upgradedDevices;
+
+// Set once the managed pool emulation is in use.
+std::atomic<bool> g_emulatedTexturesUsed;
+
+HMODULE g_d3d9Module;
 
 thread_local bool g_inCreateDevice;
 thread_local bool g_inReset;
@@ -201,29 +242,19 @@ void** GetVtbl(void* obj) {
 }
 
 void SetFlipDevice(IDirect3DDevice9* dev, bool flip) {
-    AcquireSRWLockExclusive(&g_flipDevicesLock);
-    auto it = std::find(g_flipDevices.begin(), g_flipDevices.end(), dev);
-    if (flip && it == g_flipDevices.end()) {
-        g_flipDevices.push_back(dev);
-    } else if (!flip && it != g_flipDevices.end()) {
-        g_flipDevices.erase(it);
-    }
-    ReleaseSRWLockExclusive(&g_flipDevicesLock);
+    g_flipDevices.Set(dev, flip);
 }
 
 bool IsFlipDevice(IDirect3DDevice9* dev) {
-    AcquireSRWLockShared(&g_flipDevicesLock);
-    bool found = std::find(g_flipDevices.begin(), g_flipDevices.end(), dev) !=
-                 g_flipDevices.end();
-    ReleaseSRWLockShared(&g_flipDevicesLock);
-    return found;
+    return g_flipDevices.Contains(dev);
 }
 
 bool IsExDevice(IDirect3DDevice9* dev) {
     // The QueryInterface hook must not interfere.
     g_inIsExDevice = true;
     IUnknown* ex = nullptr;
-    HRESULT hr = dev->QueryInterface(kIID_IDirect3DDevice9Ex, (void**)&ex);
+    HRESULT hr =
+        dev->QueryInterface(__uuidof(IDirect3DDevice9Ex), (void**)&ex);
     g_inIsExDevice = false;
     if (FAILED(hr)) {
         return false;
@@ -349,9 +380,13 @@ void MakeBorderless(HWND hWnd) {
     SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle);
 
     const RECT& rc = mi.rcMonitor;
+    // The window may belong to a thread that is waiting for this one.
+    UINT flags = SWP_FRAMECHANGED | SWP_NOACTIVATE;
+    if (GetWindowThreadProcessId(hWnd, nullptr) != GetCurrentThreadId()) {
+        flags |= SWP_ASYNCWINDOWPOS;
+    }
     SetWindowPos(hWnd, HWND_TOP, rc.left, rc.top, rc.right - rc.left,
-                 rc.bottom - rc.top,
-                 SWP_FRAMECHANGED | SWP_NOACTIVATE);
+                 rc.bottom - rc.top, flags);
     Wh_Log(L"Made window %p borderless: %dx%d", hWnd, rc.right - rc.left,
            rc.bottom - rc.top);
 }
@@ -454,6 +489,19 @@ HRESULT STDMETHODCALLTYPE ResetEx_Hook(IDirect3DDevice9Ex* dev,
     return ResetCommon(dev, pp, mode, true);
 }
 
+// Success codes that only a Direct3D 9Ex device returns. A game written for
+// Direct3D 9 never saw them, and may treat anything but D3D_OK as a failure.
+bool IsExPresentStatus(HRESULT hr) {
+    return hr == S_PRESENT_OCCLUDED || hr == S_PRESENT_MODE_CHANGED;
+}
+
+HRESULT MaskExPresentStatus(IDirect3DDevice9* dev, HRESULT hr) {
+    if (IsExPresentStatus(hr) && g_upgradedDevices.Contains(dev)) {
+        return D3D_OK;
+    }
+    return hr;
+}
+
 // FLIPEX requires NULL rects, dirty region and window override.
 
 using Present_t = HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice9*,
@@ -467,10 +515,11 @@ HRESULT STDMETHODCALLTYPE Present_Hook(IDirect3DDevice9* dev,
                                        const RECT* dst,
                                        HWND wndOverride,
                                        const RGNDATA* dirty) {
-    if (IsFlipDevice(dev)) {
-        return Present_Original(dev, nullptr, nullptr, nullptr, nullptr);
-    }
-    return Present_Original(dev, src, dst, wndOverride, dirty);
+    HRESULT hr =
+        IsFlipDevice(dev)
+            ? Present_Original(dev, nullptr, nullptr, nullptr, nullptr)
+            : Present_Original(dev, src, dst, wndOverride, dirty);
+    return MaskExPresentStatus(dev, hr);
 }
 
 using PresentEx_t = HRESULT(STDMETHODCALLTYPE*)(IDirect3DDevice9Ex*,
@@ -508,14 +557,25 @@ HRESULT STDMETHODCALLTYPE SwapChainPresent_Hook(IDirect3DSwapChain9* swapChain,
                                                 DWORD flags) {
     // Additional swap chains of an upgraded device keep the game's swap
     // effect, so check the swap chain itself.
-    D3DPRESENT_PARAMETERS pp;
+    D3DPRESENT_PARAMETERS pp = {};
     if (SUCCEEDED(swapChain->GetPresentParameters(&pp)) &&
         pp.SwapEffect == D3DSWAPEFFECT_FLIPEX) {
-        return SwapChainPresent_Original(swapChain, nullptr, nullptr, nullptr,
-                                         nullptr, flags);
+        src = nullptr;
+        dst = nullptr;
+        wndOverride = nullptr;
+        dirty = nullptr;
     }
-    return SwapChainPresent_Original(swapChain, src, dst, wndOverride, dirty,
-                                     flags);
+
+    HRESULT hr = SwapChainPresent_Original(swapChain, src, dst, wndOverride,
+                                           dirty, flags);
+    if (IsExPresentStatus(hr)) {
+        IDirect3DDevice9* dev = nullptr;
+        if (SUCCEEDED(swapChain->GetDevice(&dev))) {
+            hr = MaskExPresentStatus(dev, hr);
+            dev->Release();
+        }
+    }
+    return hr;
 }
 
 // D3DPOOL_MANAGED isn't valid on an Ex device, so it's emulated: the game gets
@@ -579,6 +639,7 @@ HRESULT CreateManagedEmulation(UINT levels,
         return hr;
     }
 
+    g_emulatedTexturesUsed = true;
     EnsureTextureHooks(systemTexture);
 
     *texture = systemTexture;
@@ -767,7 +828,6 @@ HRESULT UploadTexture(IDirect3DDevice9* dev, IDirect3DBaseTexture9* texture) {
     return hr;
 }
 
-// dev == nullptr clears the textures of all devices.
 void ClearBoundTextures(IDirect3DDevice9* dev) {
     std::vector<IDirect3DBaseTexture9*> dirtyTextures;
 
@@ -832,6 +892,10 @@ SetTexture_t SetTexture_Original;
 HRESULT STDMETHODCALLTYPE SetTexture_Hook(IDirect3DDevice9* dev,
                                           DWORD stage,
                                           IDirect3DBaseTexture9* texture) {
+    if (!g_emulatedTexturesUsed) {
+        return SetTexture_Original(dev, stage, texture);
+    }
+
     IDirect3DBaseTexture9* videoTexture =
         texture ? GetVideoTexture(texture) : nullptr;
 
@@ -1300,46 +1364,72 @@ using DeviceQueryInterface_t = HRESULT(STDMETHODCALLTYPE*)(IUnknown*,
                                                            void**);
 DeviceQueryInterface_t DeviceQueryInterface_Original;
 
-bool IsD3DXAddress(void* address, PCWSTR* moduleNameOut) {
-    static thread_local WCHAR path[MAX_PATH];
-    *moduleNameOut = L"?";
-
+bool IsD3DXAddress(void* address) {
     HMODULE module;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                 GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                            (LPCWSTR)address, &module) ||
-        !GetModuleFileNameW(module, path, ARRAYSIZE(path))) {
+                            (LPCWSTR)address, &module)) {
+        return false;
+    }
+
+    // D3DX asks for every texture it loads, only look at a module once.
+    static std::atomic<HMODULE> d3dxModule, otherModule;
+    if (module == d3dxModule) {
+        return true;
+    }
+    if (module == otherModule) {
+        return false;
+    }
+
+    WCHAR path[MAX_PATH];
+    if (!GetModuleFileNameW(module, path, ARRAYSIZE(path))) {
         return false;
     }
 
     PCWSTR name = wcsrchr(path, L'\\');
     name = name ? name + 1 : path;
-    *moduleNameOut = name;
-    return _wcsnicmp(name, L"d3dx9", 5) == 0;
+    bool isD3DX = _wcsnicmp(name, L"d3dx9", 5) == 0;
+    (isD3DX ? d3dxModule : otherModule) = module;
+
+    static std::atomic<int> logged;
+    if (logged < 30) {
+        logged++;
+        Wh_Log(L"QueryInterface(IDirect3DDevice9Ex) from %s%s", name,
+               isD3DX ? L": hidden" : L"");
+    }
+    return isD3DX;
 }
 
 HRESULT STDMETHODCALLTYPE DeviceQueryInterface_Hook(IUnknown* self,
                                                     REFIID riid,
                                                     void** object) {
     if (!g_inIsExDevice && object &&
-        IsEqualGUID(riid, kIID_IDirect3DDevice9Ex)) {
-        PCWSTR moduleName;
-        bool isD3DX = IsD3DXAddress(__builtin_return_address(0), &moduleName);
-
-        static std::atomic<int> logged;
-        if (logged < 30) {
-            logged++;
-            Wh_Log(L"QueryInterface(IDirect3DDevice9Ex) from %s%s", moduleName,
-                   isD3DX ? L": hidden" : L"");
-        }
-
-        if (isD3DX) {
+        IsEqualGUID(riid, __uuidof(IDirect3DDevice9Ex))) {
+        if (IsD3DXAddress(__builtin_return_address(0))) {
             *object = nullptr;
             return E_NOINTERFACE;
         }
     }
 
     return DeviceQueryInterface_Original(self, riid, object);
+}
+
+// Only one set of device functions is hooked. A device implemented by other
+// functions would miss the managed pool emulation, so it must not be upgraded.
+constexpr int kDeviceGuardSlots[] = {
+    kSlotReset,         kSlotPresent,    kSlotCreateTexture,
+    kSlotUpdateTexture, kSlotSetTexture, kSlotDrawIndexedPrimitive,
+};
+void* g_hookedDeviceFunctions[ARRAYSIZE(kDeviceGuardSlots)];
+
+bool HasHookedDeviceFunctions(IDirect3DDevice9* dev) {
+    void** vtbl = GetVtbl(dev);
+    for (size_t i = 0; i < ARRAYSIZE(kDeviceGuardSlots); i++) {
+        if (vtbl[kDeviceGuardSlots[i]] != g_hookedDeviceFunctions[i]) {
+            return false;
+        }
+    }
+    return true;
 }
 
 void EnsureDeviceHooks(IDirect3DDevice9Ex* dev) {
@@ -1350,6 +1440,10 @@ void EnsureDeviceHooks(IDirect3DDevice9Ex* dev) {
     g_deviceHooked = true;
 
     void** vtbl = GetVtbl(dev);
+    for (size_t i = 0; i < ARRAYSIZE(kDeviceGuardSlots); i++) {
+        g_hookedDeviceFunctions[i] = vtbl[kDeviceGuardSlots[i]];
+    }
+
     WindhawkUtils::SetFunctionHook(
         (DeviceQueryInterface_t)vtbl[kSlotDeviceQueryInterface],
         DeviceQueryInterface_Hook, &DeviceQueryInterface_Original);
@@ -1456,6 +1550,8 @@ HRESULT STDMETHODCALLTYPE CreateDeviceEx_Hook(IDirect3D9Ex* d3d,
 
     if (SUCCEEDED(hr)) {
         EnsureDeviceHooks(*device);
+        g_upgradedDevices.Set(*device, false);
+        ClearBoundTextures(*device);
         SetFlipDevice(*device, local.SwapEffect == D3DSWAPEFFECT_FLIPEX);
         WriteBackPresentParams(pp, local);
         ApplyFrameLatency(*device);
@@ -1467,6 +1563,8 @@ HRESULT STDMETHODCALLTYPE CreateDeviceEx_Hook(IDirect3D9Ex* d3d,
         if (SUCCEEDED(hr) && device && *device) {
             // Still an Ex device, the managed pool conversion is needed.
             EnsureDeviceHooks(*device);
+            g_upgradedDevices.Set(*device, false);
+            ClearBoundTextures(*device);
             SetFlipDevice(*device,
                           pp && pp->SwapEffect == D3DSWAPEFFECT_FLIPEX);
             ApplyFrameLatency(*device);
@@ -1508,6 +1606,8 @@ HRESULT STDMETHODCALLTYPE CreateDevice_Hook(IDirect3D9* d3d,
         if (SUCCEEDED(hr) && device && *device) {
             // In case a stale pointer of a released device is still listed.
             SetFlipDevice(*device, false);
+            g_upgradedDevices.Set(*device, false);
+            ClearBoundTextures(*device);
         }
         return hr;
     };
@@ -1519,7 +1619,8 @@ HRESULT STDMETHODCALLTYPE CreateDevice_Hook(IDirect3D9* d3d,
     }
 
     IDirect3D9Ex* d3dEx = nullptr;
-    if (FAILED(d3d->QueryInterface(kIID_IDirect3D9Ex, (void**)&d3dEx))) {
+    if (FAILED(d3d->QueryInterface(__uuidof(IDirect3D9Ex),
+                                   (void**)&d3dEx))) {
         d3dEx = nullptr;
         HRESULT hr = Direct3DCreate9Ex_Original(D3D_SDK_VERSION, &d3dEx);
         if (FAILED(hr) || !d3dEx) {
@@ -1539,6 +1640,12 @@ HRESULT STDMETHODCALLTYPE CreateDevice_Hook(IDirect3D9* d3d,
         return callOriginal();
     }
 
+    if (!HasHookedDeviceFunctions(deviceEx)) {
+        Wh_Log(L"Unexpected device implementation, creating a regular device");
+        deviceEx->Release();
+        return callOriginal();
+    }
+
     if (g_settings.flipModel && !IsFlipDevice(deviceEx)) {
         // FLIPEX was refused, no reason to keep the Ex device.
         Wh_Log(L"FLIPEX refused, creating a regular device");
@@ -1548,6 +1655,7 @@ HRESULT STDMETHODCALLTYPE CreateDevice_Hook(IDirect3D9* d3d,
 
     Wh_Log(L"CreateDevice upgraded to D3D9Ex%s: %p",
            IsFlipDevice(deviceEx) ? L" + FLIPEX" : L"", deviceEx);
+    g_upgradedDevices.Set(deviceEx, true);
     *device = deviceEx;
     return hr;
 }
@@ -1681,11 +1789,9 @@ bool HookD3D9ExportsIfLoaded() {
         return false;
     }
 
-    // The hooked code must stay around.
-    HMODULE pinned;
-    GetModuleHandleExW(
-        GET_MODULE_HANDLE_EX_FLAG_PIN | GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-        (LPCWSTR)create9, &pinned);
+    // The hooked code must stay around while the mod is loaded.
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCWSTR)create9,
+                       &g_d3d9Module);
 
     g_exportsHooked = true;
     WindhawkUtils::SetFunctionHook(create9, Direct3DCreate9_Hook,
@@ -1764,8 +1870,16 @@ void Wh_ModAfterInit() {
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    // Textures waiting for upload are referenced.
-    ClearBoundTextures(nullptr);
+    // Textures waiting for upload stay referenced. This is not the render
+    // thread of the game, and Direct3D 9 reference counting is only thread safe
+    // for multithreaded devices. The game has to be closed at this point anyway,
+    // see the readme.
+
+    // The hooks are gone by now.
+    if (g_d3d9Module) {
+        FreeLibrary(g_d3d9Module);
+        g_d3d9Module = nullptr;
+    }
 }
 
 void Wh_ModSettingsChanged() {
