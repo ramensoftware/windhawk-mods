@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.
-// @version         0.20.0
+// @version         0.21.0
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -47,10 +47,13 @@ When **Remove identical recent screenshots** is enabled, SnapSentry compares a
 new image with images handled recently by this running instance, within a short
 window of about ten minutes. It works only with the **Image** clipboard mode,
 because that is the mode that makes a durable copy before cleanup. An exact
-byte-for-byte match is always sent to the Recycle Bin on the automatic path,
-even when **Delete the screenshot after copying** is off. The older copy is kept
-when it still exists. The comparison is session-only and does not scan or touch
-files that were already in the folder when watching began.
+byte-for-byte match is cleaned up on the automatic path using the configured
+Recycle Bin choice, even when **Delete the screenshot after copying** is off.
+The older copy is kept when it still exists. If normal automatic deletion is
+on, it usually removes each earlier copy before a later identical image arrives,
+so there may be no keeper for duplicate cleanup to find. The comparison is
+session-only and does not scan or touch files that were already in the folder
+when watching began.
 
 ## Which folder it watches
 
@@ -118,7 +121,7 @@ detection keeps only short-lived hashes, not image data.
   $description: When something is deleted, whether automatically or from the popup buttons, the file goes to the Recycle Bin so you can get it back. Turn this off to delete for good.
 - removeExactDuplicates: false
   $name: Remove identical recent screenshots
-  $description: In Image clipboard mode, recycles an exact byte-for-byte repeat seen in the recent ten-minute window, only on the automatic action. A detected duplicate always goes to the Recycle Bin, even when Delete the screenshot after copying is off. The comparison resets when settings change or folder watching restarts. It never scans or touches older files, and the older copy is kept when it still exists.
+  $description: In Image clipboard mode, cleans up an exact byte-for-byte repeat seen in the recent ten-minute window, only on the automatic action. It follows the Delete to the Recycle Bin choice, even when Delete the screenshot after copying is off. When normal automatic deletion is on, earlier copies are usually gone before a later duplicate arrives. The comparison resets when settings change or folder watching restarts. It never scans or touches older files, and the older copy is kept when it still exists.
 
 # ---- The popup ----
 - showActionPopup: false
@@ -244,6 +247,7 @@ struct RecentContent {
 static std::deque<RecentContent> g_recentContent;
 static constexpr ULONGLONG kContentDuplicateWindowMs = 10 * 60 * 1000;
 static constexpr size_t kMaxRecentContent = 64;
+static BCRYPT_ALG_HANDLE g_hashAlgorithm = nullptr;  // Worker thread only.
 
 // Pre-seed the recent-name set so a file event we cause ourselves (the rename
 // below) is swallowed by the watcher instead of being handled as a brand-new
@@ -1409,6 +1413,18 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action,
         return false;
     }
 
+    // Ask whether the shell was accepting notifications when this toast was
+    // submitted. Checking only at expiry can reverse the answer while the
+    // countdown is running, for example when a full-screen app opens or closes.
+    QUERY_USER_NOTIFICATION_STATE showState = QUNS_ACCEPTS_NOTIFICATIONS;
+    bool notificationsAcceptedAtShow =
+        SUCCEEDED(SHQueryUserNotificationState(&showState)) &&
+        showState == QUNS_ACCEPTS_NOTIFICATIONS;
+    if (!notificationsAcceptedAtShow) {
+        Wh_Log(L"Notifications were held back at show time (state=%d); copy only",
+               (int)showState);
+    }
+
     // Our own timer is authoritative for the automatic action. Remove the toast
     // once the action is settled so stale buttons can't affect a later screenshot.
     //
@@ -1462,15 +1478,9 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action,
             // Focus assist, presentation mode, a full-screen app or the secure
             // desktop all suppress the banner without failing delivery, so the
             // countdown would be deleting for a prompt nobody was shown.
-            QUERY_USER_NOTIFICATION_STATE quns = QUNS_ACCEPTS_NOTIFICATIONS;
-            bool shown = SUCCEEDED(SHQueryUserNotificationState(&quns)) &&
-                         quns == QUNS_ACCEPTS_NOTIFICATIONS;
-            if (!shown) {
-                Wh_Log(L"Notifications are being held back (state=%d); copy only",
-                       (int)quns);
-            }
-            settle(noCountdown || !enabled || !shown ? ACTION_COPY_ONLY
-                                                    : ACTION_AUTO);
+            settle(noCountdown || !enabled || !notificationsAcceptedAtShow
+                       ? ACTION_COPY_ONLY
+                                                     : ACTION_AUTO);
             break;
         }
         // The answer arrives on an event, so wait out the deadline in one go.
@@ -1835,9 +1845,6 @@ static AuditOutcome DeleteWatched(const std::wstring& path, const Settings& s) {
     if (s.recycle) {
         if (RecycleFile(path)) {
             return AuditOutcome::Recycled;
-        } else {
-            Wh_Log(L"Recycle failed, keeping file%s",
-                   s.logDetails ? (L": " + path).c_str() : L"");
         }
         return AuditOutcome::Kept;
     }
@@ -1889,15 +1896,13 @@ static bool WaitForStableFile(const std::wstring& path) {
 }
 
 static bool HashFile(HANDLE file, std::array<BYTE, 32>& digest) {
-    BCRYPT_ALG_HANDLE algorithm = nullptr;
     BCRYPT_HASH_HANDLE hash = nullptr;
     bool ok = false;
     do {
-        if (BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM,
-                                        nullptr, 0) != 0) break;
+        if (!g_hashAlgorithm) break;
         // Windows 7 and later allocate and release the hash object when the
         // caller supplies a null buffer and zero length.
-        if (BCryptCreateHash(algorithm, &hash, nullptr, 0, nullptr, 0, 0) != 0)
+        if (BCryptCreateHash(g_hashAlgorithm, &hash, nullptr, 0, nullptr, 0, 0) != 0)
             break;
         LARGE_INTEGER start{};
         if (file == INVALID_HANDLE_VALUE ||
@@ -1922,7 +1927,6 @@ static bool HashFile(HANDLE file, std::array<BYTE, 32>& digest) {
         }
     } while (false);
     if (hash) BCryptDestroyHash(hash);
-    if (algorithm) BCryptCloseAlgorithmProvider(algorithm, 0);
     return ok;
 }
 
@@ -2004,14 +2008,16 @@ public:
     }
 };
 
-static AuditOutcome RecycleDuplicate(const std::wstring& path,
+static AuditOutcome CleanupDuplicate(const std::wstring& path,
                                      ULONGLONG generation,
-                                     LockedCapture& capture) {
+                                     LockedCapture& capture,
+                                     const Settings& s) {
     capture.Close();
     if (g_generation.load() != generation || WaitStop(0))
         return AuditOutcome::Kept;
-    return RecycleFile(path) ? AuditOutcome::RecycledDuplicate
-                             : AuditOutcome::Kept;
+    AuditOutcome outcome = DeleteWatched(path, s);
+    return outcome == AuditOutcome::Recycled ? AuditOutcome::RecycledDuplicate
+                                             : outcome;
 }
 
 static void ProcessOne(std::wstring path) {
@@ -2140,9 +2146,12 @@ static void ProcessOne(std::wstring path) {
                     return;
                 }
                 AuditOutcome outcome =
-                    RecycleDuplicate(path, generation, again);
+                    CleanupDuplicate(path, generation, again, s);
                 AuditResult(s, outcome, outcome == AuditOutcome::RecycledDuplicate
-                                ? L"exact duplicate" : L"duplicate cleanup did not recycle",
+                                ? L"exact duplicate"
+                                : outcome == AuditOutcome::Kept
+                                      ? L"duplicate cleanup failed; file kept"
+                                      : L"duplicate cleanup completed",
                             path);
                 return;
             }
@@ -2358,6 +2367,11 @@ static void SyncToastRegistration(bool wantPopup, bool unloading = false) {
 static DWORD WINAPI WorkerThread(LPVOID) {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     RoInitialize(RO_INIT_SINGLETHREADED);
+    if (BCryptOpenAlgorithmProvider(&g_hashAlgorithm, BCRYPT_SHA256_ALGORITHM,
+                                    nullptr, 0) != 0) {
+        g_hashAlgorithm = nullptr;
+        Wh_Log(L"SHA-256 provider could not be opened; duplicate checking disabled");
+    }
 
     {
         // Registration is only worth anything when a popup can actually appear.
@@ -2394,6 +2408,11 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     // live, because removing the shortcut has to read its properties through COM;
     // the uninit thread has no apartment. Everything is recreated on the next load.
     SyncToastRegistration(false, /*unloading=*/true);
+
+    if (g_hashAlgorithm) {
+        BCryptCloseAlgorithmProvider(g_hashAlgorithm, 0);
+        g_hashAlgorithm = nullptr;
+    }
 
     RoUninitialize();
     CoUninitialize();
