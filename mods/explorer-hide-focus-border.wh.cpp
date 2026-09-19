@@ -27,7 +27,7 @@ the themed focus border used by the modern File Explorer item view.
 
 ## Before / After
 
-![Before and after](https://raw.githubusercontent.com/NoMorePlz/windhawk-mods/main/assets/explorer-hide-focus-border-before-after.svg)
+![Before and after](https://raw.githubusercontent.com/NoMorePlz/windhawk-mods/main/assets/explorer-hide-focus-border-before-after.png)
 
 ## Notes
 
@@ -37,13 +37,16 @@ the themed focus border used by the modern File Explorer item view.
 - The implementation relies on an undocumented File Explorer theme detail:
   `ItemsView`, part 3, state 1 is used for the focus border on current Windows
   builds. A future Windows update may change this.
-- Resolved theme names that end in `ItemsView` are accepted, covering variants
-  such as `DarkMode_ItemsView` and `Explorer::ItemsView`, while
-  `ItemsView::ListView` is intentionally not matched.
+- The resolved theme class is matched by an `ItemsView` suffix so dark-mode
+  variants such as `DarkMode_ItemsView` are covered without matching unrelated
+  classes such as `ListView`.
 - The mod is scoped to `explorer.exe`; common Open/Save dialogs hosted by other
   applications are not affected.
+- Older Windows versions are untested.
 - The intended targets include regular File Explorer items and
   **This PC > Devices and drives**.
+- The same focus-border effect can also be changed by the **Rounded Selection**
+  option in Win32 UI Modernizer; using both for this effect is redundant.
 */
 // ==/WindhawkModReadme==
 
