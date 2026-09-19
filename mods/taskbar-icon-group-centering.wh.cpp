@@ -4,7 +4,7 @@
 // @name:zh-CN      任务栏图标组居中
 // @description     Center the taskbar icons after a chosen position as one group relative to the whole taskbar. Requires the taskbar to be set to Left alignment.
 // @description:zh-CN 把任务栏中指定位置之后的图标作为一组相对整条任务栏居中。需要把任务栏对齐方式设为左对齐。
-// @version         1.2.0
+// @version         1.2.4
 // @author          Suioio
 // @github          https://github.com/Suioio
 // @license         GPL-3.0
@@ -71,10 +71,13 @@ settings. Whether the taskbar is left-aligned is the value the shell's own
 alignment getter returns, which this mod hooks, and which is seeded once from
 the stored setting when the mod is loaded after the shell has already read it -
 so switching the alignment is picked up in both directions on the fly, without
-a mod reload. Nothing is monitored and no thread is kept alive, and because
-that getter sits above the stored value, the mod also agrees with another mod
-that forces left alignment by hooking the read instead of writing it (Taskbar
-Multirow does exactly that).
+a mod reload. Because that getter sits above the stored value, the mod follows
+the alignment **the shell itself reads**. The one seed covers the case where
+the shell has already read it before the mod was loaded. There is no polling
+and no thread of its own: the layout is watched through an event the shell
+already raises, a switch to the alignment is followed inside a bounded settling
+window instead of being polled for, and where the getter could not be hooked
+the stored value is re-read at most once per second.
 
 ## Differences from the neighbouring mods
 
@@ -173,9 +176,12 @@ Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.
 
 请在 Windows 的任务栏设置里把对齐方式改为**左对齐**。是否左对齐取的是系统自身的
 对齐 getter 返回值（本模组挂钩了它），并在模组晚于系统首次读取才启用时用存储的设置值
-播种一次——因此切换对齐会被实时识别，**双向**响应，无需重新加载模组。模组不再保留
-任何监视线程，也不监听注册表变化，因此对于“通过 hook 读取来强制左对齐”的模组
-（Taskbar Multirow 就是这样）也能得出正确结论。
+播种一次——因此切换对齐会被实时识别，**双向**响应，无需重新加载模组。由于该 getter
+位于存储值之上，本模组跟随的是“shell 自己读到的对齐”。那次播种用于覆盖“shell
+在本模组加载之前就已经读过该值”的情形。模组不轮询、也
+不保留自己的线程：布局只
+通过 shell 本就会触发的事件观察，切换对齐在有界的沉降窗口内跟随而不是靠轮询，getter
+无法挂钩时存储值至多每秒回读一次。
 
 ### 与相邻模组的区别
 
@@ -235,7 +241,7 @@ Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.
 - groupPosition: 2
   $name: Icon group position
   $name:zh-CN: 图标组位置
-  $description: 1-based position counted from the first application button, which is not counted itself. The icons after this position are centered as one group relative to the whole taskbar. Applied only on a left-aligned, horizontal taskbar and never on a mirrored, right-to-left one.
+  $description: 1-based position counted from the first application button (the Start button is not counted). The icons after this position are centered as one group relative to the whole taskbar. Applied only on a left-aligned, horizontal taskbar and never on a mirrored, right-to-left one.
   $description:zh-CN: 从第一个应用按钮算起的 1 基位置（不含开始按钮）。该位置之后的图标作为一组相对整条任务栏居中。只在左对齐且水平的任务栏上生效，镜像（从右到左）的任务栏上不生效。
 - stopCenteringIconCount: 0
   $name: Stop centering when the icon count after the position reaches
@@ -280,15 +286,9 @@ constexpr int kDefaultGroupPosition = 2;
 // The count of icons after the position at which centering stops.
 constexpr int kDefaultStopCenteringIconCount = 0;
 
-struct Settings {
-    // Centering: the icons after this position are centered as one group.
-    int groupPosition = kDefaultGroupPosition;
-    int stopCenteringIconCount = kDefaultStopCenteringIconCount;
-};
-
 // Read on the taskbar UI thread by every reconcile, so they are plain atomics
-// instead of a mutex-protected struct; the generation counter is what tells a
-// reconcile that the snapshot it cached is stale.
+// instead of a value copied around under a lock; the generation counter is what
+// tells a reconcile that the settings it applied are stale.
 std::atomic<int> g_groupPosition{kDefaultGroupPosition};
 std::atomic<int> g_stopCenteringIconCount{kDefaultStopCenteringIconCount};
 std::atomic<unsigned int> g_settingsGeneration{0};
@@ -363,6 +363,10 @@ struct TrackedTaskbarState {
     // margin ledger read centeringApplies, never the taskbar alignment setting.
     bool layoutLeftAligned = false;
     bool centeringApplies = false;
+    // False until the first reconcile has decided the verdict, so that first
+    // pass seeds it instead of reading as an alignment change and arming the
+    // settle window for a taskbar that was simply not looked at yet.
+    bool alignmentVerdictValid = false;
 
     // B1: the split is anchored on the itemIndex of its left boundary button,
     // not on its position in the realized list. boundaryButtonIndex is where
@@ -460,6 +464,11 @@ struct TrackedTaskbarState {
     double frozenDynamicGap = 0;
     bool frozenCenteringGapInEffect = true;
     double lastAppliedDynamicGap = 0;
+    // The tray clamp that came with the last successful measurement. A gap
+    // that is reused while the live geometry cannot be measured is clamped
+    // with it again, so a reused value can never exceed the last known tray
+    // limit and quietly run the group into the tray.
+    double lastMeasuredGapMax = 0;
     bool lastCenteringGapInEffect = true;
     // Consecutive rendering frames in which the released-left-button fallback
     // read the button as up. A single asynchronous false read must not end the
@@ -530,16 +539,6 @@ void LoadSettings() {
         std::memory_order_release);
 
     g_settingsGeneration.fetch_add(1, std::memory_order_release);
-}
-
-// On the taskbar UI thread this is called by every reconcile, so it must not
-// take a lock: the two values are independent and each is atomic on its own.
-Settings GetSettingsSnapshot() {
-    Settings settings;
-    settings.groupPosition = g_groupPosition.load(std::memory_order_acquire);
-    settings.stopCenteringIconCount =
-        g_stopCenteringIconCount.load(std::memory_order_acquire);
-    return settings;
 }
 
 bool ThicknessApproximatelyEqual(Thickness const& left,
@@ -1080,15 +1079,32 @@ void AddButtonGap(ButtonGapContribution* contribution,
 
 // Centering: compute the physical gap needed to center the group that follows
 // the boundary button relative to the whole taskbar. boundaryIndex is the
-// position of the last button of the left group in appButtons.
+// position of the last button of the left group in appButtons, and
+// buttonMargins is the base-margin ledger parallel to appButtons: the gap is
+// written on top of each button's own base margin, so the boundary pair's base
+// margins are part of the distance between the two groups.
 double CalculateDynamicCenteredGap(
     Controls::Grid const& rootGrid,
     std::vector<FrameworkElement> const& appButtons,
+    std::vector<TrackedButtonMarginState> const& buttonMargins,
     int boundaryIndex,
     bool* centeringGapInEffect,
+    bool* measured,
+    double* trayMaxGap,
     winrt::weak_ref<FrameworkElement>* trayFrameCache) {
     if (centeringGapInEffect) {
         *centeringGapInEffect = true;
+    }
+    // measured reports whether real geometry was read here, and trayMaxGap the
+    // clamp that geometry produced. A zero answer therefore has two meanings
+    // the caller has to tell apart: nothing could be measured (the settling
+    // window may then reuse the last applied gap), or a real zero produced by
+    // the centre position or by the tray clamp, which must never be replaced.
+    if (measured) {
+        *measured = false;
+    }
+    if (trayMaxGap) {
+        *trayMaxGap = 0;
     }
 
     if (boundaryIndex < 0 || !rootGrid ||
@@ -1098,9 +1114,10 @@ double CalculateDynamicCenteredGap(
 
     int middleIconCount =
         static_cast<int>(appButtons.size()) - boundaryIndex - 1;
-    Settings settings = GetSettingsSnapshot();
-    if (settings.stopCenteringIconCount > 0 &&
-        middleIconCount >= settings.stopCenteringIconCount) {
+    const int stopCenteringIconCount =
+        g_stopCenteringIconCount.load(std::memory_order_acquire);
+    if (stopCenteringIconCount > 0 &&
+        middleIconCount >= stopCenteringIconCount) {
         if (centeringGapInEffect) {
             *centeringGapInEffect = false;
         }
@@ -1145,8 +1162,24 @@ double CalculateDynamicCenteredGap(
         return 0;
     }
 
+    // The gap is written as base margin + gap on the two buttons that straddle
+    // the boundary, so their own base margins already span part of the distance
+    // between the two groups and must come off the gap; left in, they land the
+    // group exactly that much right of centre. Zero for stock Windows margins,
+    // which is why a theme that sets a button Margin is what shows it.
+    double boundaryBaseMargins = 0;
+    const size_t boundaryPosition = static_cast<size_t>(boundaryIndex);
+    if (boundaryPosition + 1 < buttonMargins.size()) {
+        const Thickness& leftBase = buttonMargins[boundaryPosition].baseMargin;
+        const Thickness& rightBase =
+            buttonMargins[boundaryPosition + 1].baseMargin;
+        if (std::isfinite(leftBase.Right) && std::isfinite(rightBase.Left)) {
+            boundaryBaseMargins = leftBase.Right + rightBase.Left;
+        }
+    }
+
     double desiredLeft = taskbarWidth / 2.0 - rightGroupWidth / 2.0;
-    double desiredGap = desiredLeft - leftGroupRight;
+    double desiredGap = desiredLeft - leftGroupRight - boundaryBaseMargins;
     if (desiredGap < 0) {
         desiredGap = 0;
     }
@@ -1180,9 +1213,22 @@ double CalculateDynamicCenteredGap(
         trayLeft = trayPoint.X;
     }
 
-    double maxGap = trayLeft - rightGroupWidth - leftGroupRight;
+    // The base margins of the boundary pair are part of this distance too, so
+    // the tray clamp has to discount them the same way or it would allow a
+    // group that overlaps the tray by exactly their sum.
+    double maxGap =
+        trayLeft - rightGroupWidth - leftGroupRight - boundaryBaseMargins;
     if (maxGap < 0) {
         maxGap = 0;
+    }
+
+    // The only exit that read real geometry, so it is what reports the
+    // measurement and the clamp that came with it.
+    if (measured) {
+        *measured = true;
+    }
+    if (trayMaxGap) {
+        *trayMaxGap = maxGap;
     }
 
     return std::min(desiredGap, maxGap);
@@ -2325,6 +2371,15 @@ bool CanReuseReconciledTaskbar(TrackedTaskbarState& taskbar,
         return false;
     }
 
+    // A pure alignment change leaves every measured value identical, so the
+    // alignment verdict is part of the reuse test as well: without it the light
+    // path would answer with the cached result and the switch would only be
+    // picked up by whichever layout event happens to arrive.
+    if (taskbar.layoutLeftAligned !=
+        (g_taskbarAlignment.load(std::memory_order_acquire) == 0)) {
+        return false;
+    }
+
     auto reconciledRepeater = taskbar.reconciledRepeater.get();
     auto reconciledRootGrid = taskbar.reconciledRootGrid.get();
     if (!reconciledRepeater || !reconciledRootGrid ||
@@ -2399,13 +2454,16 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
             }
 
             auto snapshot = CaptureTaskbarReconciliationSnapshot(repeater);
-            unsigned int currentSettingsGeneration =
+            // Read once per reconcile: the reuse test, the boundary anchor
+            // generation and the commit must all see the same generation, or a
+            // settings change during the pass could be applied half way.
+            const unsigned int settingsGeneration =
                 g_settingsGeneration.load(std::memory_order_acquire);
             // UpdateVisualStates is a hot path. A matching weak/scalar
             // snapshot proves that nothing we measure has changed.
             if (!forceStructuralReconcile &&
                 CanReuseReconciledTaskbar(taskbar, repeater, snapshot,
-                                          currentSettingsGeneration)) {
+                                          settingsGeneration)) {
                 return taskbar.cachedReconcileResult;
             }
 
@@ -2433,9 +2491,10 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                 !LayoutScalarMatches(taskbar.reconciledRootWidth,
                                      snapshot.rootWidth);
 
-            Settings settings = GetSettingsSnapshot();
-            unsigned int settingsGeneration =
-                g_settingsGeneration.load(std::memory_order_acquire);
+            // Read once per reconcile as well, so every decision in this pass
+            // sees the same position the snapshot was measured with.
+            const int configuredGroupPosition =
+                g_groupPosition.load(std::memory_order_acquire);
 
             std::vector<FrameworkElement> appButtons;
             appButtons.reserve(snapshot.buttons.size());
@@ -2502,17 +2561,39 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                                           horizontalLayoutValid &&
                                           !mirroredOrdering;
 
+            // Only a change against an already known verdict is a change: the
+            // first pass on a left-aligned taskbar would otherwise arm the
+            // settle window even though nothing is sliding.
             const bool alignmentChanged =
+                taskbar.alignmentVerdictValid &&
                 taskbar.centeringApplies != centeringApplies;
             taskbar.layoutLeftAligned = leftAlignedDerived;
             taskbar.centeringApplies = centeringApplies;
+            // Only a snapshot that was really measured makes the verdict
+            // trustworthy: an invalid pass forces centeringApplies false for a
+            // reason that has nothing to do with the alignment, and marking the
+            // verdict known there would read as an alignment change on the next
+            // valid pass and arm the settle window for a row that is not
+            // sliding.
+            if (snapshot.signatureValid) {
+                taskbar.alignmentVerdictValid = true;
+            }
+
+            // An invalid snapshot measured nothing, so this pass must not touch
+            // the margin ledger: rewriting the gap from it would hand every
+            // applied increment back and collapse the spacing for one pass.
+            // The state stays as it is and the next pass retries, exactly like
+            // the other not-ready paths.
+            if (!snapshot.signatureValid) {
+                return ReconcileResult::temporarilyNotReady;
+            }
 
             // B1: the split follows the button that sat at the configured
             // position when the anchor was learned, not whatever realized
             // button carries that index now, so a button that is virtualized
             // away or filtered out for a frame cannot move the split onto its
             // neighbour.
-            const int configuredBoundaryIndex = settings.groupPosition - 1;
+            const int configuredBoundaryIndex = configuredGroupPosition - 1;
             int boundaryIndex = -1;
             for (size_t index = 0; index < snapshot.buttons.size(); index++) {
                 if (snapshot.buttons[index].itemIndex ==
@@ -2578,7 +2659,7 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                     taskbar.positionBeyondButtonsLogged = true;
                     Wh_Log(L"group position %d is past the last of %u "
                            L"application buttons; nothing to center",
-                           settings.groupPosition,
+                           configuredGroupPosition,
                            static_cast<unsigned int>(appButtons.size()));
                 }
             } else {
@@ -2601,24 +2682,31 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                         taskbar.frozenCenteringGapInEffect;
                     fullGap = taskbar.frozenDynamicGap;
                 } else {
+                    bool gapMeasured = false;
+                    double gapTrayMax = 0;
                     fullGap = CalculateDynamicCenteredGap(
-                        rootGrid, appButtons, boundaryIndex,
-                        &centeringGapInEffect, &taskbar.trayFrame);
-                    // The last valid value is reused only inside the
-                    // post-release settling window, where the buttons are still
-                    // animating and the live geometry can be invalid: the gap
-                    // then collapses to ~0 and the spacing would flash. That
-                    // window is armed by the release path alone. Outside it a
-                    // sub-pixel gap is the real answer and the tray clamp holds.
+                        rootGrid, appButtons, taskbar.buttonMargins,
+                        boundaryIndex, &centeringGapInEffect, &gapMeasured,
+                        &gapTrayMax, &taskbar.trayFrame);
+                    if (gapMeasured) {
+                        taskbar.lastMeasuredGapMax = gapTrayMax;
+                    }
+                    // Only a gap that could not be measured is replaced, and
+                    // only inside the post-release settling window where the
+                    // buttons are still animating. A real zero, from the centre
+                    // position or from the tray clamp, is never replaced, and
+                    // the reused value is clamped with the last measured tray
+                    // limit so it cannot run into the tray either.
                     const bool postReleaseSettling =
                         taskbar.postReleaseReconcileFrames > 0 ||
                         (taskbar.postReleaseSettlingUntil !=
                              AnimationClock::time_point{} &&
                          AnimationClock::now() <
                              taskbar.postReleaseSettlingUntil);
-                    if (centeringGapInEffect && fullGap < 1.0 &&
+                    if (centeringGapInEffect && !gapMeasured &&
                         postReleaseSettling) {
-                        fullGap = taskbar.lastAppliedDynamicGap;
+                        fullGap = std::min(taskbar.lastAppliedDynamicGap,
+                                           taskbar.lastMeasuredGapMax);
                     }
                 }
                 taskbar.lastAppliedDynamicGap = fullGap;
@@ -2737,12 +2825,9 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
             }
             RestoreOrphanGapMargins(taskbar, gapHosts, gapHostCount);
 
+            // The invalid-snapshot case returned above, so reaching this point
+            // means the pass really measured the layout.
             result = ReconcileResult::succeeded;
-            if (!snapshot.signatureValid) {
-                // Nothing was measured, so the layout is not ready yet; the
-                // next pass retries instead of caching this as the state.
-                result = ReconcileResult::temporarilyNotReady;
-            }
 
             // The pointer handlers belong to the root grid the margins are
             // written on, so they are attached whenever a root grid exists and
@@ -2950,10 +3035,41 @@ void ReconcileAllTaskbars(bool forceStructuralReconcile) {
 using TaskListButton_UpdateVisualStates_t = void(WINAPI*)(void* pThis);
 TaskListButton_UpdateVisualStates_t TaskListButton_UpdateVisualStates_Original;
 
+// True while any taskbar tracked on this thread still holds a gap increment.
+// Only ledger flags are read and no weak reference is resolved, so this stays a
+// flag scan on the hot path below. It is deliberately a whole-thread question:
+// which taskbar a button belongs to is only known after the ancestor walk this
+// check exists to avoid.
+bool AnyTrackedTaskbarHoldsAppliedMargin() {
+    if (!g_trackedTaskbars) {
+        return false;
+    }
+
+    for (auto const& taskbar : *g_trackedTaskbars) {
+        for (auto const& tracked : taskbar.buttonMargins) {
+            if (tracked.hasAppliedMargin) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
     TaskListButton_UpdateVisualStates_Original(pThis);
 
     if (g_unloading.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    // Nothing is written while the taskbar is centered, and the switch back to
+    // Left is caught by OnTaskbarLayoutUpdated, which compares the alignment
+    // against the one the last reconcile applied and forces the rebuild. So
+    // this hot path can stop here instead of measuring and snapshotting; a
+    // taskbar that still holds an increment keeps the full path.
+    if (g_taskbarAlignment.load(std::memory_order_acquire) != 0 &&
+        !AnyTrackedTaskbarHoldsAppliedMargin()) {
         return;
     }
 
@@ -3074,31 +3190,22 @@ bool HookTaskbarDllSymbols() {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::WindowsUdk::UI::Shell::implementation::TaskbarSettings,struct winrt::WindowsUdk::UI::Shell::ITaskbarSettings>::get_Alignment(int *))"},
             &ITaskbarSettings_get_Alignment_Original,
             ITaskbarSettings_get_Alignment_Hook,
+            true,  // Optional: the stored alignment is read instead when missing.
         },
     };
 
-    const bool hookSymbolsSucceeded =
-        HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
-
-    // Every entry above is required except the alignment getter, the one symbol
-    // Windows has moved between builds. Only when that single getter is the one
-    // that is missing does the mod still load, with the stored alignment read by
-    // the layout monitor instead.
-    const bool allRequiredSymbolsResolved =
-        CTaskBand_ITaskListWndSite_vftable &&
-        CSecondaryTaskBand_ITaskListWndSite_vftable &&
-        CTaskBand_GetTaskbarHost_Original &&
-        TaskbarHost_FrameHeight_Original &&
-        CSecondaryTaskBand_GetTaskbarHost_Original &&
-        std__Ref_count_base__Decref_Original;
-    const bool alignmentGetterHooked =
-        ITaskbarSettings_get_Alignment_Original != nullptr;
-
-    if (!hookSymbolsSucceeded &&
-        !(allRequiredSymbolsResolved && !alignmentGetterHooked)) {
+    if (!HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
         Wh_Log(L"HookSymbols for taskbar.dll failed");
         return false;
     }
+
+    // The alignment getter is the one entry above that may be missing, because
+    // Windows has moved it between builds. Marking it optional lets this call
+    // succeed on such a build, so its symbol cache is persisted and no error is
+    // logged; the mod then loads with the stored alignment read by the layout
+    // monitor instead.
+    const bool alignmentGetterHooked =
+        ITaskbarSettings_get_Alignment_Original != nullptr;
 
     g_taskbarAlignmentHookLoaded.store(alignmentGetterHooked,
                                        std::memory_order_release);
@@ -3169,14 +3276,15 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD flags) {
 BOOL Wh_ModInit() {
     LoadSettings();
 
+    // Seeded before the getter hook is installed, so a value the hook writes is
+    // never overwritten by this read: the shell may have read the alignment
+    // before this mod was loaded, and that is the only case the seed covers. A
+    // failed read keeps the current value.
+    SeedTaskbarAlignmentFromRegistry();
+
     if (!HookTaskbarDllSymbols()) {
         return FALSE;
     }
-
-    // The shell may have read the alignment before this mod was loaded, so the
-    // hook above never saw that call. Seed the tracked value once from the same
-    // stored value the shell reads; a failed read keeps the current value.
-    SeedTaskbarAlignmentFromRegistry();
 
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
         g_taskbarViewDllLoaded = true;
