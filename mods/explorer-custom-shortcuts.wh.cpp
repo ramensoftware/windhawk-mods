@@ -7,7 +7,7 @@
 // @github          https://github.com/ArvindSaini978
 // @include         explorer.exe
 // @license         MIT
-// @compilerOptions -lole32 -loleaut32 -luuid -lshlwapi
+// @compilerOptions -lole32 -loleaut32 -lshlwapi
 // @architecture    x86-64
 // ==/WindhawkMod==
 
@@ -44,7 +44,7 @@ Instead of specifying an executable path, set **Executable Path** to one of the 
 * **`%folders`** — Selected folders only (skips selected regular files).
 * **`%1`** — Quoted path of the first selected file or directory (`"C:\a.txt"`).
 * **`%n`** — File or folder names only without absolute directory paths (`"a.txt"`).
-* **`%c`** — Total number of selected items as an integer (`3`).
+* **`%c`** — Total number of selected items as an integer (`3`). In loop modes, this resolves to `1`.
 * **`%ext`** — File extension of the first selected item (`.png`).
 * **`%s`** — Space-separated paths with **smart-quoting** (automatically adds double-quotes only to paths containing spaces).
 * **`%d`** — Active directory open in the current tab (`C:\Users\Name\Documents`). Virtual folders like *This PC* or *Recycle Bin* resolve to an empty string.
@@ -85,16 +85,15 @@ You can add your own shortcuts using these templates in the settings:
 
 ---
 
-### Comparison with Existing Mods & Catalogs
+### Comparison with Existing Mods
 
-While single-purpose mods exist in the Windhawk repository, **Explorer Custom Shortcuts** unifies external tool launching and shell shortcuts under a single configurable engine with dynamic token expansion:
-* **`keyboard-shortcut-actions`**: Focuses on generalized hotkey triggers; this mod specializes in Explorer-aware context resolution with dynamic token expansion (`%f`, `%files`, `%folders`, `%1`, `%n`, `%c`, `%ext`, `%s`, `%d`, `%d_smart`, `%p`) and item batch looping (`loop_files`, `loop_folders`).
-* **`toggle-hidden-files`**: Focuses solely on toggling hidden items; this mod offers internal shell commands as optional actions alongside custom executable shortcuts.
-* **`explorer-ctrln-newfile` / `explorer-ctrlq-new-folder`**: Single-purpose creation mods; this mod integrates creation and auto-focus commands into a unified shortcut manager table.
+While related mods exist in the Windhawk repository, **Explorer Custom Shortcuts** provides a distinct, keyboard-first workflow engine:
+* **`explorer-command-bar`**: Adds visual custom toolbar buttons to the modern Explorer UI. In contrast, this mod provides a pure, zero-UI, low-latency keyboard shortcut accelerator engine operating across classic and tabbed windows. It introduces specialized batch looping capabilities (`loop_files`, `loop_folders`), rich token expansions (`%n`, `%ext`, `%c`, `%files`, `%folders`), and context-aware suppression during inline edits.
+* **`keyboard-shortcut-actions`**: A general-purpose desktop/window hotkey dispatcher without Explorer context awareness. This mod parses active Explorer tab navigation, item selections, and folder paths directly into CLI parameters.
+* **`toggle-hidden-files` / `explorer-ctrln-newfile` / `explorer-ctrlq-new-folder`**: Single-purpose mods; here, internal shell actions are optional presets within a single hotkey table, allowing users to bind them to whatever key combinations they prefer without installing multiple separate hooks.
 
 ### Attribution & Acknowledgments
-Process execution (`ResolveCommandPath`, `ExecuteApp`) and shell window inspection adapt implementation techniques from `explorer-command-bar` (DanRotaru, MIT). Settings toggling follows patterns established in `toggle-hidden-files` (Asteski).
-
+Process execution concepts (`ResolveCommandPath`, `ExecuteApp`) and shell window inspection adapt techniques from `explorer-command-bar` (DanRotaru, MIT). Settings toggling follows patterns established in `toggle-hidden-files` (Asteski).
 */
 // ==/WindhawkModReadme==
 
@@ -106,7 +105,7 @@ Process execution (`ResolveCommandPath`, `ExecuteApp`) and shell window inspecti
     - enabled: true
       $name: "Enabled"
     - key: "T"
-      $name: "Key (A-Z, 0-9, F1-F12)"
+      $name: "Key (A-Z, 0-9, F1-F12, Delete, Space, Enter, Tab)"
     - ctrl: true
       $name: "Require Ctrl"
     - shift: false
@@ -115,13 +114,16 @@ Process execution (`ResolveCommandPath`, `ExecuteApp`) and shell window inspecti
       $name: "Require Alt"
     - path: "wt.exe"
       $name: "Executable Path or Internal Command"
-      $description: "Executable path, alias, or internal command (e.g. internal:newTextFile, internal:toggleHiddenFiles, wt.exe, notepad.exe)."
+      $description: "Executable path, alias, or internal command. Note: internal:toggleHiddenFiles and internal:toggleFileExtensions flip persistent system-wide Windows settings."
     - args: "-d \"%d\""
       $name: "Arguments / Tokens"
       $description: "Supported tokens: %f, %files, %folders, %1, %n, %c, %ext, %s, %d, %d_smart, %p."
     - mode: "batch"
       $name: "Launch Mode"
-      $description: "batch, loop_files, or loop_folders."
+      $options:
+        - batch: "batch: Run once with all selected items"
+        - loop_files: "loop_files: Run once per selected file"
+        - loop_folders: "loop_folders: Run once per selected folder"
   - - name: "Open with Notepad"
     - enabled: true
     - key: "N"
@@ -132,7 +134,7 @@ Process execution (`ResolveCommandPath`, `ExecuteApp`) and shell window inspecti
     - args: "%1"
     - mode: "loop_files"
   - - name: "Toggle Hidden Files"
-    - enabled: true
+    - enabled: false
     - key: "H"
     - ctrl: true
     - shift: false
@@ -150,7 +152,7 @@ Process execution (`ResolveCommandPath`, `ExecuteApp`) and shell window inspecti
     - args: ""
     - mode: "batch"
   $name: "Custom Shortcuts"
-  $description: "List of customizable shortcuts. Supported keys: A-Z, 0-9, and F1-F12. Letters and digits require at least one modifier key (Ctrl, Shift, or Alt). Function keys (F1-F12) can be used standalone."
+  $description: "List of customizable shortcuts. Supported keys: A-Z, 0-9, F1-F12, Delete/Del, Space, Enter, and Tab. Letters and digits require at least one modifier key (Ctrl, Shift, or Alt)."
 */
 // ==/WindhawkModSettings==
 
@@ -182,19 +184,13 @@ struct CustomShortcut {
     std::wstring launchMode;
 };
 
-std::vector<CustomShortcut> g_shortcuts;
-static std::atomic<bool> g_isExecutingInternal{false};
+// Thread-safe immutable snapshot for concurrent settings access
+static std::shared_ptr<const std::vector<CustomShortcut>> g_shortcutsSnapshot;
+static std::mutex g_settingsMutex;
+
 static std::mutex g_threadsMutex;
 static std::vector<HANDLE> g_threads;
 static std::atomic<bool> g_unloading{false};
-
-static constexpr CLSID kCLSID_ShellWindows = {
-    0x9ba05972, 0xf6a8, 0x11cf, {0xa4, 0x42, 0x00, 0xa0, 0xc9, 0x0a, 0x8f, 0x39}
-};
-
-static constexpr GUID kSID_STopLevelBrowser = {
-    0x4c96be40, 0x915c, 0x11cf, {0x99, 0xd3, 0x00, 0xaa, 0x00, 0x4a, 0xe8, 0x37}
-};
 
 std::wstring ExpandEnv(const std::wstring& input) {
     WCHAR buf[MAX_PATH * 2];
@@ -264,7 +260,7 @@ int ParseKey(std::wstring keyStr) {
 }
 
 void LoadSettings() {
-    g_shortcuts.clear();
+    auto newShortcuts = std::make_shared<std::vector<CustomShortcut>>();
 
     for (int i = 0; i < 100; i++) {
         PCWSTR pathStr = Wh_GetStringSetting(L"shortcuts[%d].path", i);
@@ -300,18 +296,95 @@ void LoadSettings() {
         bool hasModifier = (sc.ctrl || sc.shift || sc.alt);
 
         if (sc.enabled && sc.vkCode != 0 && (hasModifier || isFunctionKey)) {
-            g_shortcuts.push_back(sc);
+            newShortcuts->push_back(sc);
         }
     }
+
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    std::atomic_store(&g_shortcutsSnapshot, std::const_pointer_cast<const std::vector<CustomShortcut>>(newShortcuts));
 }
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
 }
 
-IShellView* GetActiveShellView(HWND hExplorerWnd) {
+void QueueBackgroundWork(std::function<void()> task) {
+    auto* fnPtr = new std::function<void()>(std::move(task));
+
+    HANDLE hThread = CreateThread(nullptr, 0, [](LPVOID param) -> DWORD {
+        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+        std::unique_ptr<std::function<void()>> fn(reinterpret_cast<std::function<void()>*>(param));
+        
+        (*fn)();
+
+        CoUninitialize();
+        return 0;
+    }, fnPtr, 0, nullptr);
+
+    if (hThread) {
+        std::lock_guard<std::mutex> lock(g_threadsMutex);
+        auto it = g_threads.begin();
+        while (it != g_threads.end()) {
+            if (WaitForSingleObject(*it, 0) == WAIT_OBJECT_0) {
+                CloseHandle(*it);
+                it = g_threads.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        g_threads.push_back(hThread);
+    } else {
+        delete fnPtr;
+    }
+}
+
+// Safely quote a path, doubling any trailing backslash (e.g. C:\ -> "C:\\") to prevent escaping the closing quote
+std::wstring SafeQuote(const std::wstring& p) {
+    std::wstring res = L"\"" + p;
+    if (!p.empty() && p.back() == L'\\') {
+        res += L'\\';
+    }
+    res += L'\"';
+    return res;
+}
+
+std::wstring JoinPaths(const std::vector<std::wstring>& paths, bool forceQuotes = true) {
+    std::wstring res;
+    for (const auto& p : paths) {
+        if (!res.empty()) res += L" ";
+        if (forceQuotes || p.find(L' ') != std::wstring::npos) {
+            res += SafeQuote(p);
+        } else {
+            res += p;
+        }
+    }
+    return res;
+}
+
+std::wstring GetFileNamesOnly(const std::vector<std::wstring>& paths, bool forceQuotes = true) {
+    std::wstring res;
+    for (const auto& p : paths) {
+        if (!res.empty()) res += L" ";
+        PCWSTR namePtr = PathFindFileNameW(p.c_str());
+        std::wstring name = namePtr ? namePtr : L"";
+        if (forceQuotes || name.find(L' ') != std::wstring::npos) {
+            res += SafeQuote(name);
+        } else {
+            res += name;
+        }
+    }
+    return res;
+}
+
+std::wstring GetFileExtension(const std::vector<std::wstring>& paths) {
+    if (paths.empty()) return L"";
+    PCWSTR ext = PathFindExtensionW(paths[0].c_str());
+    return ext ? ext : L"";
+}
+
+IShellView* GetActiveShellView(HWND hExplorerWnd, HWND hCapturedFocus) {
     IShellWindows* pShellWindows = nullptr;
-    if (FAILED(CoCreateInstance(kCLSID_ShellWindows, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&pShellWindows))) || !pShellWindows) {
+    if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&pShellWindows))) || !pShellWindows) {
         return nullptr;
     }
 
@@ -322,7 +395,7 @@ IShellView* GetActiveShellView(HWND hExplorerWnd) {
     if (hExplorerWnd) {
         DWORD threadId = GetWindowThreadProcessId(hExplorerWnd, nullptr);
         GUITHREADINFO gti = { sizeof(gti) };
-        HWND hFocus = (GetGUIThreadInfo(threadId, &gti) && gti.hwndFocus) ? gti.hwndFocus : GetFocus();
+        HWND hFocus = (GetGUIThreadInfo(threadId, &gti) && gti.hwndFocus) ? gti.hwndFocus : hCapturedFocus;
 
         for (HWND h = hFocus; h && h != hExplorerWnd; h = GetParent(h)) {
             WCHAR cls[64];
@@ -352,7 +425,7 @@ IShellView* GetActiveShellView(HWND hExplorerWnd) {
                 IServiceProvider* pServiceProvider = nullptr;
                 if (SUCCEEDED(pDispatch->QueryInterface(IID_PPV_ARGS(&pServiceProvider)))) {
                     IShellBrowser* pShellBrowser = nullptr;
-                    if (SUCCEEDED(pServiceProvider->QueryService(kSID_STopLevelBrowser, IID_PPV_ARGS(&pShellBrowser)))) {
+                    if (SUCCEEDED(pServiceProvider->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(&pShellBrowser)))) {
                         HWND hTabWnd = nullptr;
                         if (SUCCEEDED(pShellBrowser->GetWindow(&hTabWnd)) && hTabWnd) {
                             if (hActiveTabWnd && hTabWnd != hActiveTabWnd) {
@@ -440,40 +513,6 @@ std::vector<std::wstring> GetSelectedPaths(IShellView* psv) {
     return files;
 }
 
-std::wstring JoinPaths(const std::vector<std::wstring>& paths, bool forceQuotes = true) {
-    std::wstring res;
-    for (const auto& p : paths) {
-        if (!res.empty()) res += L" ";
-        if (forceQuotes || p.find(L' ') != std::wstring::npos) {
-            res += L"\"" + p + L"\"";
-        } else {
-            res += p;
-        }
-    }
-    return res;
-}
-
-std::wstring GetFileNamesOnly(const std::vector<std::wstring>& paths, bool forceQuotes = true) {
-    std::wstring res;
-    for (const auto& p : paths) {
-        if (!res.empty()) res += L" ";
-        PCWSTR namePtr = PathFindFileNameW(p.c_str());
-        std::wstring name = namePtr ? namePtr : L"";
-        if (forceQuotes || name.find(L' ') != std::wstring::npos) {
-            res += L"\"" + name + L"\"";
-        } else {
-            res += name;
-        }
-    }
-    return res;
-}
-
-std::wstring GetFileExtension(const std::vector<std::wstring>& paths) {
-    if (paths.empty()) return L"";
-    PCWSTR ext = PathFindExtensionW(paths[0].c_str());
-    return ext ? ext : L"";
-}
-
 std::wstring ExpandTokens(
     const std::wstring& pattern,
     const std::wstring& activeDir,
@@ -508,7 +547,7 @@ std::wstring ExpandTokens(
             result += JoinPaths(allItems, true);
             i += 2;
         } else if (pattern.compare(i, 2, L"%1") == 0) {
-            result += allItems.empty() ? L"" : (L"\"" + allItems[0] + L"\"");
+            result += allItems.empty() ? L"" : SafeQuote(allItems[0]);
             i += 2;
         } else if (pattern.compare(i, 2, L"%n") == 0) {
             result += GetFileNamesOnly(allItems, true);
@@ -555,51 +594,59 @@ void ExecuteApp(const std::wstring& cmd, const std::wstring& params, const std::
     }
 }
 
-void QueueBackgroundWork(std::function<void()> task) {
-    auto* fnPtr = new std::function<void()>(std::move(task));
-
-    HANDLE hThread = CreateThread(nullptr, 0, [](LPVOID param) -> DWORD {
-        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-        std::unique_ptr<std::function<void()>> fn(reinterpret_cast<std::function<void()>*>(param));
-        
-        (*fn)();
-
-        CoUninitialize();
-        return 0;
-    }, fnPtr, 0, nullptr);
-
-    if (hThread) {
-        std::lock_guard<std::mutex> lock(g_threadsMutex);
-        auto it = g_threads.begin();
-        while (it != g_threads.end()) {
-            if (WaitForSingleObject(*it, 0) == WAIT_OBJECT_0) {
-                CloseHandle(*it);
-                it = g_threads.erase(it);
-            } else {
-                ++it;
-            }
-        }
-        g_threads.push_back(hThread);
-    } else {
-        delete fnPtr;
-    }
-}
-
-void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd) {
-    // 1. Open Folder Options
+void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd, HWND capturedFocus) {
     if (_wcsicmp(command.c_str(), L"internal:folderOptions") == 0) {
-        QueueBackgroundWork([]() {
-            ExecuteApp(L"rundll32.exe", L"shell32.dll,Options_RunDLL 0", L"");
-        });
+        ExecuteApp(L"rundll32.exe", L"shell32.dll,Options_RunDLL 0", L"");
         return;
     }
 
-    // 2. Create New Text Document & Focus/Select
-    if (_wcsicmp(command.c_str(), L"internal:newTextFile") == 0) {
-        if (g_isExecutingInternal.exchange(true)) return;
-        struct AutoReset { ~AutoReset() { g_isExecutingInternal = false; } } autoReset;
+    if (_wcsicmp(command.c_str(), L"internal:toggleHiddenFiles") == 0) {
+        SHELLSTATE ss{};
+        SHGetSetSettings(&ss, SSF_SHOWALLOBJECTS, FALSE);
+        ss.fShowAllObjects = !ss.fShowAllObjects;
+        SHGetSetSettings(&ss, SSF_SHOWALLOBJECTS, TRUE);
+        SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+        return;
+    }
 
-        IShellView* psv = GetActiveShellView(rootHwnd);
+    if (_wcsicmp(command.c_str(), L"internal:toggleFileExtensions") == 0) {
+        SHELLSTATE ss{};
+        SHGetSetSettings(&ss, SSF_SHOWEXTENSIONS, FALSE);
+        ss.fShowExtensions = !ss.fShowExtensions;
+        SHGetSetSettings(&ss, SSF_SHOWEXTENSIONS, TRUE);
+        SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+        return;
+    }
+
+    if (_wcsicmp(command.c_str(), L"internal:openRecycleBin") == 0 ||
+        _wcsicmp(command.c_str(), L"internal:openRecycleBinTab") == 0) {
+        IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
+        if (psv) {
+            PIDLIST_ABSOLUTE pidlRecycle = nullptr;
+            if (SUCCEEDED(SHGetKnownFolderIDList(FOLDERID_RecycleBinFolder, 0, nullptr, &pidlRecycle)) && pidlRecycle) {
+                IServiceProvider* psp = nullptr;
+                if (SUCCEEDED(psv->QueryInterface(IID_PPV_ARGS(&psp)))) {
+                    IShellBrowser* psb = nullptr;
+                    if (SUCCEEDED(psp->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(&psb)))) {
+                        psb->BrowseObject(pidlRecycle, SBSP_SAMEBROWSER | SBSP_ABSOLUTE);
+                        psb->Release();
+                    }
+                    psp->Release();
+                }
+                CoTaskMemFree(pidlRecycle);
+            }
+            psv->Release();
+        }
+        return;
+    }
+
+    if (_wcsicmp(command.c_str(), L"internal:emptyRecycleBin") == 0) {
+        SHEmptyRecycleBinW(rootHwnd, nullptr, 0);
+        return;
+    }
+
+    if (_wcsicmp(command.c_str(), L"internal:newTextFile") == 0) {
+        IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         if (!psv) return;
 
         std::wstring currentDir = GetActiveFolderPath(psv);
@@ -623,7 +670,12 @@ void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd) {
             if (SUCCEEDED(SHParseDisplayName(targetFilePath.c_str(), nullptr, &pidlTarget, 0, nullptr)) && pidlTarget) {
                 PITEMID_CHILD pidlChild = ILFindLastID(pidlTarget);
                 if (pidlChild) {
-                    psv->SelectItem(pidlChild, SVSI_SELECT | SVSI_FOCUSED | SVSI_DESELECTOTHERS | SVSI_ENSUREVISIBLE);
+                    for (int r = 0; r < 5; ++r) {
+                        if (SUCCEEDED(psv->SelectItem(pidlChild, SVSI_SELECT | SVSI_FOCUSED | SVSI_DESELECTOTHERS | SVSI_ENSUREVISIBLE))) {
+                            break;
+                        }
+                        Sleep(40);
+                    }
                 }
                 CoTaskMemFree(pidlTarget);
             }
@@ -632,12 +684,8 @@ void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd) {
         return;
     }
 
-    // 3. Create New Folder & Enter Inline Rename Mode
     if (_wcsicmp(command.c_str(), L"internal:newFolder") == 0) {
-        if (g_isExecutingInternal.exchange(true)) return;
-        struct AutoReset { ~AutoReset() { g_isExecutingInternal = false; } } autoReset;
-
-        IShellView* psv = GetActiveShellView(rootHwnd);
+        IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         if (!psv) return;
 
         std::wstring currentDir = GetActiveFolderPath(psv);
@@ -659,7 +707,12 @@ void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd) {
             if (SUCCEEDED(SHParseDisplayName(targetFolderPath.c_str(), nullptr, &pidlTarget, 0, nullptr)) && pidlTarget) {
                 PITEMID_CHILD pidlChild = ILFindLastID(pidlTarget);
                 if (pidlChild) {
-                    psv->SelectItem(pidlChild, SVSI_SELECT | SVSI_EDIT | SVSI_DESELECTOTHERS | SVSI_ENSUREVISIBLE);
+                    for (int r = 0; r < 5; ++r) {
+                        if (SUCCEEDED(psv->SelectItem(pidlChild, SVSI_SELECT | SVSI_EDIT | SVSI_DESELECTOTHERS | SVSI_ENSUREVISIBLE))) {
+                            break;
+                        }
+                        Sleep(40);
+                    }
                 }
                 CoTaskMemFree(pidlTarget);
             }
@@ -668,146 +721,57 @@ void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd) {
         return;
     }
 
-    // 4. Open Recycle Bin in Active Tab
-    if (_wcsicmp(command.c_str(), L"internal:openRecycleBin") == 0 ||
-        _wcsicmp(command.c_str(), L"internal:openRecycleBinTab") == 0) {
-        IShellView* psv = GetActiveShellView(rootHwnd);
-        if (psv) {
-            PIDLIST_ABSOLUTE pidlRecycle = nullptr;
-            if (SUCCEEDED(SHGetKnownFolderIDList(FOLDERID_RecycleBinFolder, 0, nullptr, &pidlRecycle)) && pidlRecycle) {
-                IServiceProvider* psp = nullptr;
-                if (SUCCEEDED(psv->QueryInterface(IID_PPV_ARGS(&psp)))) {
-                    IShellBrowser* psb = nullptr;
-                    if (SUCCEEDED(psp->QueryService(kSID_STopLevelBrowser, IID_PPV_ARGS(&psb)))) {
-                        psb->BrowseObject(pidlRecycle, SBSP_SAMEBROWSER | SBSP_ABSOLUTE);
-                        psb->Release();
-                    }
-                    psp->Release();
-                }
-                CoTaskMemFree(pidlRecycle);
-            }
-            psv->Release();
-        }
-        return;
-    }
-
-    // 5. Empty Recycle Bin (Shows native prompt & progress UI)
-    if (_wcsicmp(command.c_str(), L"internal:emptyRecycleBin") == 0) {
-        QueueBackgroundWork([rootHwnd]() {
-            SHEmptyRecycleBinW(rootHwnd, nullptr, 0);
-        });
-        return;
-    }
-
-    // 6. Toggle Hidden Files & Force Refresh Active View
-    if (_wcsicmp(command.c_str(), L"internal:toggleHiddenFiles") == 0) {
-        SHELLSTATE ss{};
-        SHGetSetSettings(&ss, SSF_SHOWALLOBJECTS, FALSE);
-        ss.fShowAllObjects = !ss.fShowAllObjects;
-        SHGetSetSettings(&ss, SSF_SHOWALLOBJECTS, TRUE);
-        SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
-        return;
-    }
-
-    // 7. Toggle File Name Extensions & Force Refresh Active View
-    if (_wcsicmp(command.c_str(), L"internal:toggleFileExtensions") == 0) {
-        SHELLSTATE ss{};
-        SHGetSetSettings(&ss, SSF_SHOWEXTENSIONS, FALSE);
-        ss.fShowExtensions = !ss.fShowExtensions;
-        SHGetSetSettings(&ss, SSF_SHOWEXTENSIONS, TRUE);
-        SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
-        return;
-    }
-
     Wh_Log(L"Unknown internal command: %s", command.c_str());
 }
 
-struct LaunchTask {
-    std::wstring path;
-    std::vector<std::wstring> commands;
-    std::wstring workDir;
-};
+// Dispatches work completely to a worker thread so the Explorer UI thread remains 100% responsive
+void DispatchShortcutExecution(CustomShortcut sc, HWND rootHwnd, HWND capturedFocus) {
+    QueueBackgroundWork([sc = std::move(sc), rootHwnd, capturedFocus]() {
+        if (g_unloading.load()) return;
 
-void RunShortcut(const CustomShortcut& sc, HWND rootHwnd) {
-    // 1. Internal commands execute immediately on UI thread
-    if (sc.path.rfind(L"internal:", 0) == 0) {
-        ExecuteInternalCommand(sc.path, rootHwnd);
-        return;
-    }
-
-    // 2. Query COM/Explorer state ONCE on the UI thread
-    IShellView* psv = GetActiveShellView(rootHwnd);
-    std::wstring activeDir = GetActiveFolderPath(psv);
-    std::vector<std::wstring> allSelected = GetSelectedPaths(psv);
-    if (psv) {
-        psv->Release();
-    }
-
-    std::vector<std::wstring> filesOnly;
-    std::vector<std::wstring> foldersOnly;
-    for (const auto& item : allSelected) {
-        DWORD attr = GetFileAttributesW(item.c_str());
-        if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY)) {
-            foldersOnly.push_back(item);
-        } else {
-            filesOnly.push_back(item);
-        }
-    }
-
-    // 3. Build launch task parameters using single-pass ExpandTokens
-    auto* task = new LaunchTask();
-    task->path = sc.path;
-    task->workDir = activeDir;
-
-    if (sc.launchMode == L"loop_files") {
-        for (const auto& file : filesOnly) {
-            std::vector<std::wstring> cur = { file };
-            task->commands.push_back(ExpandTokens(sc.argsPattern, activeDir, cur, cur, {}));
-        }
-    } else if (sc.launchMode == L"loop_folders") {
-        for (const auto& folder : foldersOnly) {
-            std::vector<std::wstring> cur = { folder };
-            task->commands.push_back(ExpandTokens(sc.argsPattern, folder, cur, {}, cur));
-        }
-    } else {
-        task->commands.push_back(ExpandTokens(sc.argsPattern, activeDir, allSelected, filesOnly, foldersOnly));
-    }
-
-    // 4. Launch safely in worker thread with COM init and unload tracking
-    HANDLE hThread = CreateThread(nullptr, 0, [](LPVOID param) -> DWORD {
-        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-        std::unique_ptr<LaunchTask> t(reinterpret_cast<LaunchTask*>(param));
-
-        for (const auto& cmdArgs : t->commands) {
-            if (g_unloading.load()) {
-                break;
-            }
-            ExecuteApp(t->path, cmdArgs, t->workDir);
+        if (sc.path.rfind(L"internal:", 0) == 0) {
+            ExecuteInternalCommand(sc.path, rootHwnd, capturedFocus);
+            return;
         }
 
-        CoUninitialize();
-        return 0;
-    }, task, 0, nullptr);
+        IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
+        std::wstring activeDir = GetActiveFolderPath(psv);
+        std::vector<std::wstring> allSelected = GetSelectedPaths(psv);
+        if (psv) {
+            psv->Release();
+        }
 
-    if (hThread) {
-        std::lock_guard<std::mutex> lock(g_threadsMutex);
-
-        // Lazily reap handles of threads that finished executing
-        auto it = g_threads.begin();
-        while (it != g_threads.end()) {
-            if (WaitForSingleObject(*it, 0) == WAIT_OBJECT_0) {
-                CloseHandle(*it);
-                it = g_threads.erase(it);
+        std::vector<std::wstring> filesOnly;
+        std::vector<std::wstring> foldersOnly;
+        for (const auto& item : allSelected) {
+            DWORD attr = GetFileAttributesW(item.c_str());
+            if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY)) {
+                foldersOnly.push_back(item);
             } else {
-                ++it;
+                filesOnly.push_back(item);
             }
         }
 
-        // Store active handle so Wh_ModUninit can join safely
-        g_threads.push_back(hThread);
-    } else {
-        delete task;
-    }
+        std::vector<std::wstring> commands;
+        if (sc.launchMode == L"loop_files") {
+            for (const auto& file : filesOnly) {
+                std::vector<std::wstring> cur = { file };
+                commands.push_back(ExpandTokens(sc.argsPattern, activeDir, cur, cur, {}));
+            }
+        } else if (sc.launchMode == L"loop_folders") {
+            for (const auto& folder : foldersOnly) {
+                std::vector<std::wstring> cur = { folder };
+                commands.push_back(ExpandTokens(sc.argsPattern, folder, cur, {}, cur));
+            }
+        } else {
+            commands.push_back(ExpandTokens(sc.argsPattern, activeDir, allSelected, filesOnly, foldersOnly));
+        }
+
+        for (const auto& cmdArgs : commands) {
+            if (g_unloading.load()) break;
+            ExecuteApp(sc.path, cmdArgs, activeDir);
+        }
+    });
 }
 
 bool IsInlineEditingActive(HWND rootHwnd) {
@@ -823,7 +787,9 @@ bool IsInlineEditingActive(HWND rootHwnd) {
 
     WCHAR cls[128] = {};
     if (GetClassNameW(hFocus, cls, ARRAYSIZE(cls))) {
-        if (wcsstr(cls, L"Edit") || wcsstr(cls, L"TextBox") || wcsstr(cls, L"InputSite")) {
+        if (wcscmp(cls, L"Edit") == 0 ||
+            wcscmp(cls, L"RichEditD2DPT") == 0 ||
+            wcsstr(cls, L"TextBox") != nullptr) {
             return true;
         }
     }
@@ -833,8 +799,7 @@ bool IsInlineEditingActive(HWND rootHwnd) {
         if (GetClassNameW(h, parentCls, ARRAYSIZE(parentCls))) {
             if (wcsstr(parentCls, L"Address Band Root") ||
                 wcsstr(parentCls, L"ComboBoxEx32") ||
-                wcsstr(parentCls, L"SearchEditBoxWrapperClass") ||
-                wcsstr(parentCls, L"Windows.UI.Input.InputSite.WindowClass")) {
+                wcsstr(parentCls, L"SearchEditBoxWrapperClass")) {
                 return true;
             }
         }
@@ -842,7 +807,7 @@ bool IsInlineEditingActive(HWND rootHwnd) {
 
     GUITHREADINFO gti = { sizeof(gti) };
     if (GetGUIThreadInfo(GetWindowThreadProcessId(hFocus, nullptr), &gti)) {
-        if (gti.hwndCaret != nullptr) {
+        if (gti.hwndCaret && (gti.hwndCaret == hFocus || IsChild(hFocus, gti.hwndCaret))) {
             return true;
         }
     }
@@ -862,29 +827,24 @@ bool ProcessHotKey(HWND hwnd, WPARAM key) {
     }
     
     if (wcscmp(className, L"CabinetWClass") == 0 || wcscmp(className, L"ExploreWClass") == 0) {
-        if (IsInlineEditingActive(rootHwnd)) {
-            return false;
-        }
+        auto snapshot = std::atomic_load(&g_shortcutsSnapshot);
+        if (!snapshot || snapshot->empty()) return false;
 
         bool ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
         bool shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
         bool alt   = (GetKeyState(VK_MENU)    & 0x8000) != 0;
 
-        thread_local ULONGLONG s_lastTriggerTime = 0;
-        thread_local WPARAM s_lastTriggerKey = 0;
-
-        for (const auto& sc : g_shortcuts) {
+        for (const auto& sc : *snapshot) {
             if (sc.vkCode != 0 && key == (WPARAM)sc.vkCode &&
                 ctrl == sc.ctrl && shift == sc.shift && alt == sc.alt) {
                 
-                ULONGLONG now = GetTickCount64();
-                if (key == s_lastTriggerKey && (now - s_lastTriggerTime) < 400) {
-                    return true;
+                // Do inline editing check only once a shortcut actually matches
+                if (IsInlineEditingActive(rootHwnd)) {
+                    return false;
                 }
-                s_lastTriggerTime = now;
-                s_lastTriggerKey = key;
 
-                RunShortcut(sc, rootHwnd);
+                HWND capturedFocus = GetFocus();
+                DispatchShortcutExecution(sc, rootHwnd, capturedFocus);
                 return true;
             }
         }
@@ -909,8 +869,14 @@ int WINAPI TranslateAcceleratorW_Hook(HWND hWnd, HACCEL hAccTable, LPMSG lpMsg) 
 BOOL Wh_ModInit() {
     LoadSettings();
 
+    HMODULE hUser32 = GetModuleHandle(L"user32.dll");
+    if (!hUser32) return FALSE;
+
+    FARPROC pfnTranslateAcceleratorW = GetProcAddress(hUser32, "TranslateAcceleratorW");
+    if (!pfnTranslateAcceleratorW) return FALSE;
+
     Wh_SetFunctionHook(
-        (void*)GetProcAddress(GetModuleHandle(L"user32.dll"), "TranslateAcceleratorW"),
+        (void*)pfnTranslateAcceleratorW,
         (void*)TranslateAcceleratorW_Hook,
         (void**)&TranslateAcceleratorW_Original
     );
@@ -925,18 +891,17 @@ void Wh_ModUninit() {
         threadsToJoin.swap(g_threads);
     }
 
-    // Close any dialog a worker put on screen so joins cannot stall on an open UI prompt
+    // Safely wait for workers, closing any visible modal dialogs if they stay open
     for (HANDLE h : threadsToJoin) {
-        EnumThreadWindows(GetThreadId(h),
-                          [](HWND hWnd, LPARAM) -> BOOL {
-                              PostMessageW(hWnd, WM_CLOSE, 0, 0);
-                              return TRUE;
-                          },
-                          0);
-    }
-
-    for (HANDLE h : threadsToJoin) {
-        WaitForSingleObject(h, INFINITE);
+        DWORD tid = GetThreadId(h);
+        while (WaitForSingleObject(h, 100) == WAIT_TIMEOUT) {
+            EnumThreadWindows(tid, [](HWND hWnd, LPARAM) -> BOOL {
+                if (IsWindowVisible(hWnd)) {
+                    PostMessageW(hWnd, WM_CLOSE, 0, 0);
+                }
+                return TRUE;
+            }, 0);
+        }
         CloseHandle(h);
     }
 }
