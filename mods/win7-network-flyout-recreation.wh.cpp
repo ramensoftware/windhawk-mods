@@ -2,7 +2,7 @@
 // @id             win7-network-flyout-recreation
 // @name           Windows 7 Network Flyout Recreation
 // @description    This mod accurately recreates the Windows 7 network flyout for Windows 10 and 11 and it restores the Network Sharing Center Control Panel page
-// @version        5.0.0
+// @version        5.1.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
 // @include        explorer.exe
@@ -129,6 +129,7 @@ If any issues are encountered, please report them to the author of the mod.
 */
 // ==/WindhawkModSettings==
 // ## Changelog
+// - 5.1.0: Tried to enhance high contrast theme support
 // - 5.0.0: The tray-info window (used to publish the network tray icon to a
 //   RetroBar instance of this mod, and to receive TaskbarCreated on the
 //   hotkey thread) is now a real, never-shown top-level window instead of an
@@ -185,6 +186,12 @@ If any issues are encountered, please report them to the author of the mod.
 //   registered window message. The periodic retry also honours its
 //   exponential backoff now (it was forced on every 3 s tick), so a setup
 //   where the icon cannot be resolved no longer polls forever.
+// - 5.1.0: High Contrast detection now also recognizes the "Fake High
+//   Contrast" Windhawk mod (id: fake-high-contrast). That mod excludes
+//   explorer.exe/dwm.exe from its own hook, so SPI_GETHIGHCONTRAST and
+//   GetSystemMetrics(SM_HIGHCONTRAST) called from this process never see its
+//   effect; the state is now read directly from the Windhawk registry
+//   settings it persists instead. Reported by OrthodoxToolkits.
 // - 5.0.0: Added High Contrast theme support. When a Windows High Contrast
 //   theme is active, the flyout, the notification popup, the connect button,
 //   the password dialog, and the native controls all switch to system colors
@@ -319,6 +326,7 @@ If any issues are encountered, please report them to the author of the mod.
 #include <stdlib.h>
 #include <cwctype>
 #include <atomic>
+#include <exception>
 
 // Use the mod's own module as the HINSTANCE for every RegisterClass /
 // UnregisterClass / CreateWindowEx call in this file, instead of the host
@@ -430,13 +438,131 @@ void LoadSettings() {
 static bool g_cachedHighContrast = false;
 static DWORD g_lastHCCheckTick = 0;
 
+// ----------------------------------------------------------------------------
+// Compatibility with the "Fake High Contrast" Windhawk mod (id:
+// fake-high-contrast, author: Ingan121).
+//
+// That mod hooks SystemParametersInfoW(SPI_GETHIGHCONTRAST) to make other
+// programs believe HC is on, but its own metadata block explicitly excludes
+// explorer.exe and dwm.exe:
+//   // @exclude explorer.exe
+//   // @exclude dwm.exe
+// (it says so itself: hooking explorer would flip the *real* HC status every
+// time the user switches back to the current desktop, e.g. after UAC/Ctrl+
+// Alt+Del, and hooking dwm adds unwanted HC window borders).
+//
+// Because of that exclusion, the mod's DLL is never even loaded into
+// explorer.exe, so there is no hook to observe from here: SPI_GETHIGHCONTRAST
+// and GetSystemMetrics(SM_HIGHCONTRAST), called from this process, both
+// return the real, unmodified OS state. The only surviving trace of the
+// mod's state is the setting Windhawk itself persists to the registry, so we
+// read that directly. Best-effort: if the mod isn't installed, or the key
+// layout ever changes, this simply reports "not active" and the mod falls
+// back to the real OS High Contrast state as before.
+// RAII guard so a `continue`/`return` out of the loop below can never leak
+// an open HKEY, even if something throws past it.
+struct ScopedRegKey {
+    HKEY hKey = NULL;
+    ~ScopedRegKey() { if (hKey) RegCloseKey(hKey); }
+};
+
+static bool IsFakeHighContrastModConsideredActiveImpl() {
+    static const wchar_t* kModId = L"fake-high-contrast";
+    static const wchar_t* kRoots[] = {
+        L"SOFTWARE\\Windhawk\\Engine\\Mods\\",
+    };
+    static const HKEY kHives[] = { HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE };
+
+    for (HKEY hive : kHives) {
+        for (const wchar_t* root : kRoots) {
+            std::wstring modKeyPath = std::wstring(root) + kModId;
+
+            ScopedRegKey modKey;
+            if (RegOpenKeyExW(hive, modKeyPath.c_str(), 0, KEY_READ, &modKey.hKey) != ERROR_SUCCESS) {
+                continue;
+            }
+
+            // If the mod itself is disabled, its hook isn't running anywhere,
+            // so treat it as inactive. Tolerant of the value being absent
+            // (older/newer Windhawk versions) or of a different type.
+            DWORD disabled = 0, disabledSize = sizeof(disabled), disabledType = 0;
+            if (RegQueryValueExW(modKey.hKey, L"Disabled", NULL, &disabledType,
+                                  (LPBYTE)&disabled, &disabledSize) == ERROR_SUCCESS &&
+                disabledType == REG_DWORD && disabled != 0) {
+                continue;
+            }
+
+            ScopedRegKey settingsKey;
+            if (RegOpenKeyExW(modKey.hKey, L"Settings", 0, KEY_READ, &settingsKey.hKey) != ERROR_SUCCESS) {
+                continue;
+            }
+
+            // Mirror the mod's own "fakeoff" setting: when set, it makes
+            // SPI_GETHIGHCONTRAST report HCF_AVAILABLE (i.e. not faked on) to
+            // the processes it does hook, so treat that the same way here.
+            bool fakeOff = false;
+            DWORD dwVal = 0, dwSize = sizeof(dwVal), dwType = 0;
+            if (RegQueryValueExW(settingsKey.hKey, L"fakeoff", NULL, &dwType,
+                                  (LPBYTE)&dwVal, &dwSize) == ERROR_SUCCESS) {
+                if (dwType == REG_DWORD) {
+                    fakeOff = dwVal != 0;
+                } else if (dwType == REG_SZ || dwType == REG_EXPAND_SZ) {
+                    WCHAR buf[32] = { 0 };
+                    DWORD bufSize = sizeof(buf);
+                    if (RegQueryValueExW(settingsKey.hKey, L"fakeoff", NULL, NULL,
+                                          (LPBYTE)buf, &bufSize) == ERROR_SUCCESS) {
+                        buf[(bufSize / sizeof(WCHAR)) < 31 ? (bufSize / sizeof(WCHAR)) : 31] = L'\0';
+                        fakeOff = _wtoi(buf) != 0;
+                    }
+                }
+            }
+
+            return !fakeOff;
+        }
+    }
+    return false;
+}
+
+// Thin wrapper: never let a failure here (e.g. std::wstring allocation
+// failure under low memory) escape into explorer.exe's message loop. Falls
+// back to "not active", which just means the flyout keeps following the
+// real, unmodified OS High Contrast state.
+static bool IsFakeHighContrastModConsideredActive() {
+    try {
+        return IsFakeHighContrastModConsideredActiveImpl();
+    } catch (const std::exception& e) {
+        Wh_Log(L"[HighContrast] IsFakeHighContrastModConsideredActive threw: %S", e.what());
+        return false;
+    } catch (...) {
+        Wh_Log(L"[HighContrast] IsFakeHighContrastModConsideredActive threw an unknown exception");
+        return false;
+    }
+}
+
+// Shared by IsHighContrastActive/RefreshHighContrastNow. Wrapped in its own
+// try/catch so a problem in either half (the real SPI query or the
+// fake-high-contrast registry lookup) can never leave the cache in a
+// half-updated state or unwind into explorer.exe.
+static bool QueryCombinedHighContrastState() {
+    try {
+        HIGHCONTRASTW hc = { sizeof(hc) };
+        bool realHC =
+            (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) &&
+             (hc.dwFlags & HCF_HIGHCONTRASTON)) != 0;
+        return realHC || IsFakeHighContrastModConsideredActive();
+    } catch (const std::exception& e) {
+        Wh_Log(L"[HighContrast] QueryCombinedHighContrastState threw: %S", e.what());
+        return false;
+    } catch (...) {
+        Wh_Log(L"[HighContrast] QueryCombinedHighContrastState threw an unknown exception");
+        return false;
+    }
+}
+
 static bool IsHighContrastActive() {
     DWORD now = GetTickCount();
     if (now - g_lastHCCheckTick > 2000) {
-        HIGHCONTRASTW hc = { sizeof(hc) };
-        g_cachedHighContrast =
-            (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) &&
-             (hc.dwFlags & HCF_HIGHCONTRASTON)) != 0;
+        g_cachedHighContrast = QueryCombinedHighContrastState();
         g_lastHCCheckTick = now;
     }
     return g_cachedHighContrast;
@@ -444,10 +570,7 @@ static bool IsHighContrastActive() {
 
 // Forces an immediate, non-cached re-check of High Contrast state.
 static void RefreshHighContrastNow() {
-    HIGHCONTRASTW hc = { sizeof(hc) };
-    g_cachedHighContrast =
-        (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) &&
-         (hc.dwFlags & HCF_HIGHCONTRASTON)) != 0;
+    g_cachedHighContrast = QueryCombinedHighContrastState();
     g_lastHCCheckTick = GetTickCount();
 }
 
