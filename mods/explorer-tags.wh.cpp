@@ -2,13 +2,13 @@
 // @id              explorer-tags
 // @name            Explorer Tags
 // @description     Colored tags panel at the bottom of File Explorer's navigation pane, plus a Tags submenu in the file context menu
-// @version         0.5.3
+// @version         0.6.0
 // @author          buedgik
 // @github          https://github.com/buedgik
 // @homepage        https://github.com/buedgik/explorer-tags
 // @license         MIT
 // @include         explorer.exe
-// @compilerOptions -lole32 -luuid -lshell32 -lshlwapi -lcomctl32 -lgdi32 -lgdiplus
+// @compilerOptions -lole32 -luuid -lshell32 -lshlwapi -lcomctl32 -lgdi32 -lgdiplus -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -27,7 +27,8 @@ Windows' own tags only work for file types with a property handler, so `.txt`,
 
 - **Tag something:** drag files or folders onto the tag.
 - **See a tag's files:** click it. The tab opens the tag's folder, with a
-  shortcut for each file.
+  shortcut for each file. Middle-click, or right-click ▸ "Open in new window",
+  opens it in a window of its own.
 - **Remove a tag:** delete the shortcut inside the tag's folder. The original
   file is untouched.
 - **Collapse the panel:** click the "Tags" title.
@@ -50,9 +51,11 @@ Copied to another drive, the copy doesn't carry the tag.
 If you rename a tag in the settings, the old tag stops appearing; putting the
 old name back brings it back.
 
-The tag registry lives in `%LOCALAPPDATA%` in the `WindhawkExplorerTags`
-folder, outside the tags folder: deleting or moving the tags folder doesn't
-lose them, the shortcuts are recreated.
+The record of what is tagged is the mod's own bookkeeping, so it lives in the
+storage Windhawk keeps for the mod, in a folder per user. It stays outside the
+tags folder: deleting or moving the tags folder doesn't lose anything, the
+shortcuts are recreated. Uninstalling the mod (not merely disabling it) takes
+the record with it; the tag folders stay.
 
 ## Worth knowing
 
@@ -64,7 +67,13 @@ lose them, the shortcuts are recreated.
 - **Deleting a shortcut removes the tag; renaming or moving one isn't
   tracked.** A renamed shortcut is left behind as a file the mod no longer
   knows about, and moving a shortcut from one tag's folder into another's
-  removes the first tag without adding the second.
+  removes the first tag without adding the second. Restoring a deleted
+  shortcut from the Recycle Bin doesn't bring the tag back either: the tag
+  went when the shortcut did, and what comes back is a file the mod doesn't
+  know.
+- **A tagged file in the Recycle Bin keeps its tags.** Its shortcut stays,
+  pointing where the file used to be, so restoring the file makes it work
+  again. Emptying the bin is what finally removes the tag.
 - **The tags folder and the record stay after the mod is disabled**, and so do
   your shortcuts. A tag's folder appears the first time you tag something with
   it, or the first time you click it in the panel; the record folder appears
@@ -105,6 +114,7 @@ lose them, the shortcuts are recreated.
 
 #include <windows.h>
 #include <windowsx.h>
+#include <sddl.h>
 #include <commctrl.h>
 #include <shlobj.h>
 #include <shlwapi.h>
@@ -243,7 +253,7 @@ std::wstring FolderNameFor(const std::wstring& tagName) {
     return folder;
 }
 
-std::wstring DbPath();
+std::wstring DbFolder();
 
 void LoadSettings() {
     Settings s;
@@ -312,9 +322,7 @@ void LoadSettings() {
     // the profile, or the mod's own record, means every unrelated write in
     // there triggers a full re-check, forever.
     if (valid) {
-        std::wstring dbFolder = DbPath();
-        size_t slash = dbFolder.rfind(L'\\');
-        dbFolder = slash == std::wstring::npos ? L"" : dbFolder.substr(0, slash);
+        std::wstring dbFolder = DbFolder();
         std::wstring prefix = root + L"\\";
         bool holdsOwnRecord =
             !dbFolder.empty() &&
@@ -351,14 +359,14 @@ void LoadSettings() {
 }
 
 // ---------------------------------------------------------------------------
-// Database: one row per (file, tag), in
-// %LOCALAPPDATA%\WindhawkExplorerTags\tags.tsv. It belongs to the user and
-// stays OUTSIDE the tags folder: inside it, it would get lost when moving the
-// folder (the sync could run mid-copy, with the database already copied but
-// not the shortcuts) or when deleting it. Outside, a deleted or new folder
-// gets rebuilt from it. It's written to a new file that only then replaces
-// the old one. A named mutex serializes all explorer.exe processes in the
-// session.
+// Database: one row per (file, tag), in tags.tsv inside the storage Windhawk
+// keeps for this mod, in a folder per user (that storage is machine-wide, and
+// this isn't: its rows point inside one profile). It stays OUTSIDE the tags
+// folder: inside it, it would get lost when moving the folder (the sync could
+// run mid-copy, with the database already copied but not the shortcuts) or
+// when deleting it. Outside, a deleted or new folder gets rebuilt from it.
+// It's written to a new file that only then replaces the old one. A named
+// mutex serializes all the explorer.exe processes of that user.
 //
 // Only the worker thread touches the disk and the mutex; the window thread
 // never waits.
@@ -401,21 +409,88 @@ class DbLock {
     bool m_ok;
 };
 
-std::wstring DbPath() {
-    WCHAR base[MAX_PATH * 2];
-    DWORD n = ExpandEnvironmentStringsW(L"%LOCALAPPDATA%\\WindhawkExplorerTags", base, ARRAYSIZE(base));
-    if (n == 0 || n > ARRAYSIZE(base)) {
+// The account this Explorer runs as, as a SID string. Windhawk's storage is
+// machine-wide and the record is per user by nature (its rows point inside one
+// profile, and the default tags folder is under it), so each user gets a
+// folder of their own in there.
+std::wstring CurrentUserKey() {
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
         return L"";
     }
+    DWORD needed = 0;
+    GetTokenInformation(token, TokenUser, nullptr, 0, &needed);
+    std::wstring key;
+    if (needed) {
+        std::vector<BYTE> buf(needed);
+        if (GetTokenInformation(token, TokenUser, buf.data(), needed, &needed)) {
+            PWSTR sid = nullptr;
+            if (ConvertSidToStringSidW(((TOKEN_USER*)buf.data())->User.Sid, &sid)) {
+                key = sid;
+                LocalFree(sid);
+            }
+        }
+    }
+    CloseHandle(token);
+    return key;
+}
+
+std::wstring DbFolder() {
+    // Asked once: the answer can't change while the mod is loaded.
+    static std::wstring folder = [] {
+        WCHAR base[MAX_PATH * 2];
+        size_t n = Wh_GetModStoragePath(base, ARRAYSIZE(base));
+        std::wstring user = CurrentUserKey();
+        if (n == 0 || user.empty()) {
+            Wh_Log(L"No storage path for the record");
+            return std::wstring();
+        }
+        return std::wstring(base) + L"\\" + user;
+    }();
+    return folder;
+}
+
+std::wstring DbPath() {
+    std::wstring folder = DbFolder();
     // Not created here: reading a path shouldn't create a folder. The two
     // functions that write call EnsureParentFolder first.
-    return std::wstring(base) + L"\\tags.tsv";
+    return folder.empty() ? L"" : folder + L"\\tags.tsv";
 }
 
 void EnsureParentFolder(const std::wstring& filePath) {
     size_t slash = filePath.rfind(L'\\');
     if (slash != std::wstring::npos) {
         SHCreateDirectoryExW(nullptr, filePath.substr(0, slash).c_str(), nullptr);
+    }
+}
+
+// Up to 0.5.4 the record lived in %LOCALAPPDATA%\WindhawkExplorerTags. Brought
+// over once, or an upgrade would look like every file had lost its tags. Runs
+// on the worker, under the database lock.
+void MigrateOldRecord() {
+    std::wstring folder = DbFolder();
+    WCHAR base[MAX_PATH * 2];
+    DWORD n =
+        ExpandEnvironmentStringsW(L"%LOCALAPPDATA%\\WindhawkExplorerTags", base, ARRAYSIZE(base));
+    if (folder.empty() || n == 0 || n > ARRAYSIZE(base)) {
+        return;
+    }
+    for (PCWSTR name : {L"tags.tsv", L"last-root.txt"}) {
+        std::wstring from = std::wstring(base) + L"\\" + name;
+        std::wstring to = folder + L"\\" + name;
+        if (GetFileAttributesW(to.c_str()) != INVALID_FILE_ATTRIBUTES ||
+            GetFileAttributesW(from.c_str()) == INVALID_FILE_ATTRIBUTES) {
+            continue;
+        }
+        SHCreateDirectoryExW(nullptr, folder.c_str(), nullptr);
+        if (!CopyFileW(from.c_str(), to.c_str(), TRUE)) {
+            Wh_Log(L"Couldn't bring %s over: %u", name, GetLastError());
+            continue;
+        }
+        // The old file stays as a copy, under a name that isn't looked for
+        // again: installing the mod afresh later shouldn't resurrect it.
+        MoveFileExW(from.c_str(), (from + L".old").c_str(), MOVEFILE_REPLACE_EXISTING);
+        Wh_Log(L"Brought %s into the mod's own storage", name);
     }
 }
 
@@ -690,7 +765,11 @@ Resolved ResolveRow(const Row& r, VolumeHandles& volumes, std::wstring& currentP
                 return Resolved::Unknown;
             }
             currentPath = StripLongPathPrefix(buf);
-            return IsInRecycleBin(currentPath) ? Resolved::Gone : Resolved::Found;
+            // In the Recycle Bin the file still exists, so the row and its
+            // shortcut are left alone, pointing where the file used to be:
+            // restoring it brings its tags back. Emptying the bin is what
+            // makes it Gone, by the path below no longer resolving.
+            return IsInRecycleBin(currentPath) ? Resolved::Unknown : Resolved::Found;
         }
         // Measured on NTFS (E: and C:, 2026-09-17): a deleted file's ID gives
         // ERROR_INVALID_PARAMETER (87).
@@ -1001,7 +1080,10 @@ void Commit(const std::wstring& dbPath, const std::vector<Row>& rows, bool chang
 // Copy of what the worker thread last read, so the window thread (panel
 // counts, checkmarks in the menu) never touches the disk or the mutex.
 std::vector<std::pair<std::wstring, int>> g_counts;
-std::vector<std::pair<std::wstring, std::wstring>> g_tagged;      // (tag, path)
+// Lowered path -> its tags. Keyed and lowered by the worker: a right-click
+// then costs one lookup per selected file instead of a walk, and an
+// allocation, over every row there is.
+std::unordered_map<std::wstring, std::vector<std::wstring>> g_taggedByPath;
 std::unordered_map<std::wstring, std::wstring> g_linkTargets;     // lnk -> target
 std::unordered_set<std::wstring> g_readyFolders;  // tag folders known to exist
 SRWLOCK g_countsLock = SRWLOCK_INIT;
@@ -1025,12 +1107,12 @@ void UpdateCounts(const std::vector<Row>& rows, const Settings& s) {
         }
         counts.push_back({t.name, n});
     }
-    std::vector<std::pair<std::wstring, std::wstring>> tagged;
-    tagged.reserve(rows.size());
+    std::unordered_map<std::wstring, std::vector<std::wstring>> taggedByPath;
+    taggedByPath.reserve(rows.size());
     std::unordered_map<std::wstring, std::wstring> linkTargets;
     linkTargets.reserve(rows.size());
     for (const auto& r : rows) {
-        tagged.push_back({r.tag, r.path});
+        taggedByPath[LowerPath(r.path)].push_back(r.tag);
         // The worker already knows where every shortcut it wrote points, so
         // the window thread never has to open a .lnk to find out.
         linkTargets[LowerPath(s.root + L"\\" + FolderNameFor(r.tag) + L"\\" + r.lnk)] = r.path;
@@ -1047,7 +1129,7 @@ void UpdateCounts(const std::vector<Row>& rows, const Settings& s) {
 
     AcquireSRWLockExclusive(&g_countsLock);
     g_counts.swap(counts);
-    g_tagged.swap(tagged);
+    g_taggedByPath.swap(taggedByPath);
     g_linkTargets.swap(linkTargets);
     g_readyFolders.swap(ready);
     ReleaseSRWLockExclusive(&g_countsLock);
@@ -1084,24 +1166,26 @@ struct TagHits {
 // against each would hang Explorer.
 TagHits CountTagHits(const std::vector<std::wstring>& paths) {
     TagHits hits;
-    std::unordered_set<std::wstring> selected;
-    for (const auto& p : paths) {
-        selected.insert(LowerPath(p));
-    }
-    std::unordered_set<std::wstring> seenPerTag;
-    std::unordered_set<std::wstring> seenAny;
+    std::unordered_set<std::wstring> seen;
     AcquireSRWLockShared(&g_countsLock);
-    for (const auto& t : g_tagged) {
-        std::wstring lower = LowerPath(t.second);
-        if (!selected.count(lower)) {
+    for (const auto& p : paths) {
+        std::wstring lower = LowerPath(p);
+        // The same file twice in the selection counts once.
+        if (!seen.insert(lower).second) {
             continue;
         }
-        if (seenPerTag.insert(t.first + L"\t" + lower).second) {
-            hits.perTag[t.first]++;
+        auto it = g_taggedByPath.find(lower);
+        if (it == g_taggedByPath.end() || it->second.empty()) {
+            continue;
         }
-        if (seenAny.insert(lower).second) {
-            hits.withAnyTag++;
+        std::unordered_set<std::wstring> perFile;
+        for (const auto& tag : it->second) {
+            // And so does the same tag twice on one file.
+            if (perFile.insert(tag).second) {
+                hits.perTag[tag]++;
+            }
         }
+        hits.withAnyTag++;
     }
     ReleaseSRWLockShared(&g_countsLock);
     return hits;
@@ -1120,12 +1204,11 @@ int GetCount(const std::wstring& tag) {
 }
 
 // Only a full SyncAll saves the root; until then, any sync ignores the
-// markers (rebuilds instead of removing tags). It lives next to the
-// database, per user: Windhawk's values are machine-wide, and two accounts
-// would overwrite each other's.
+// markers (rebuilds instead of removing tags). It lives next to the database,
+// in the same per-user folder and for the same reason.
 std::wstring LastRootPath() {
-    std::wstring db = DbPath();
-    return db.empty() ? L"" : db.substr(0, db.rfind(L'\\')) + L"\\last-root.txt";
+    std::wstring folder = DbFolder();
+    return folder.empty() ? L"" : folder + L"\\last-root.txt";
 }
 
 bool RootChangedSinceLastSync(const Settings& s) {
@@ -1473,6 +1556,12 @@ DWORD WINAPI WorkerThread(LPVOID) {
     std::wstring root = GetSettings()->root;
     HANDLE change = WatchRoot(root);
 
+    {
+        DbLock lock;
+        if (lock.ok()) {
+            MigrateOldRecord();
+        }
+    }
     SyncAll();
     BroadcastRefresh();
 
@@ -1511,8 +1600,9 @@ DWORD WINAPI WorkerThread(LPVOID) {
             bool stop = false;
             while (true) {
                 if (!FindNextChangeNotification(change)) {
-                    // Folder deleted: release the handle (which would keep
-                    // it mid-deletion) and try again in 5 s.
+                    // Folder deleted: release the handle (which would keep it
+                    // mid-deletion). The watch is armed again by the next
+                    // poll, or by the next piece of work.
                     FindCloseChangeNotification(change);
                     change = INVALID_HANDLE_VALUE;
                     break;
@@ -1617,9 +1707,14 @@ struct Panel {
     TagDropTarget* drop = nullptr;
     int panelHeight = 0;
     std::wstring currentFolder;  // folder shown in the tab, for the open tag row
-    std::wstring pendingOpen;    // tag folder to open once the worker made it
+    std::wstring pendingOpen;     // tag folder to open once the worker made it
+    std::wstring pendingOpenTag;  // and the tag it belongs to, to ask again
     bool pendingOpenNewWindow = false;
     ULONGLONG pendingOpenAt = 0;
+    // Bumped by every click. Opening a folder runs messages, so a second
+    // click can happen inside the first one; whoever comes back and finds a
+    // different number is the older one and keeps its hands off.
+    unsigned openSeq = 0;
     int hot = -1;
     int pressed = -1;
     int dropHot = -1;
@@ -1817,8 +1912,10 @@ std::wstring GetCurrentFolder(Panel* p) {
             if (SUCCEEDED(folderView->GetFolder(IID_PPV_ARGS(&folder)))) {
                 PIDLIST_ABSOLUTE pidl = nullptr;
                 if (SUCCEEDED(folder->GetCurFolder(&pidl)) && pidl) {
-                    WCHAR path[MAX_PATH];
-                    if (SHGetPathFromIDListW(pidl, path)) {
+                    // Not MAX_PATH: a tags folder deeper than that would
+                    // never light up the row for the tag being shown.
+                    WCHAR path[4096];
+                    if (SHGetPathFromIDListEx(pidl, path, ARRAYSIZE(path), GPFIDL_DEFAULT)) {
                         result = path;
                     }
                     CoTaskMemFree(pidl);
@@ -1849,6 +1946,20 @@ bool Navigate(Panel* p, const std::wstring& folder) {
 
 // After Navigate or ShellExecute the Panel may no longer exist (these calls
 // pump messages): only the HWND saved beforehand is used.
+// ShellExecuteW would put up the shell's own "Windows cannot find..." box on
+// this window's thread when the folder isn't there, and that is exactly the
+// case the caller knows how to handle by itself.
+bool OpenFolderWindow(const std::wstring& folder) {
+    SHELLEXECUTEINFOW info = {sizeof(info)};
+    // No SEE_MASK_NOASYNC: that would hold this window's thread until the
+    // shell is done, and there is nothing here that needs to wait.
+    info.fMask = SEE_MASK_FLAG_NO_UI;
+    info.lpVerb = L"open";
+    info.lpFile = folder.c_str();
+    info.nShow = SW_SHOWNORMAL;
+    return ShellExecuteExW(&info) != FALSE;
+}
+
 void OpenTag(Panel* p, int index, bool newWindow) {
     // Count first, then check g_unloading: in the reverse order, unloading
     // could see zero between the two.
@@ -1861,43 +1972,52 @@ void OpenTag(Panel* p, int index, bool newWindow) {
     // This click replaces any earlier one still waiting for its folder:
     // otherwise the old one would open on top of this one when it arrives.
     p->pendingOpen.clear();
+    unsigned seq = ++p->openSeq;
     std::wstring folder = s->root + L"\\" + s->tags[index].folderName;
 
     // Not one disk call on this thread: creating the folder here froze the
     // whole Explorer window when the tags folder lived on a drive that had
     // stopped responding. The worker makes the folder and the panel opens it
     // when the answer comes back.
-    p->pendingOpen = folder;
-    p->pendingOpenNewWindow = newWindow;
-    p->pendingOpenAt = GetTickCount64();
     QueueEnsureFolder(s->tags[index].name);
 
     // Whether the folder exists is the worker's last word on it, which can be
     // out of date: a folder deleted behind its back still reads as ready, and
     // navigating there used to do nothing at all (measured 2026-09-18). So
-    // the open is attempted, and on failure it waits for the worker instead.
-    if (!FolderIsReady(folder)) {
-        return;
-    }
-    bool opened;
-    if (newWindow) {
-        opened = (INT_PTR)ShellExecuteW(nullptr, L"open", folder.c_str(), nullptr, nullptr,
-                                        SW_SHOWNORMAL) > 32;
-    } else {
-        opened = Navigate(p, folder);
+    // the open is attempted, and only on failure does it wait for the worker.
+    bool opened = false;
+    if (FolderIsReady(folder)) {
+        opened = newWindow ? OpenFolderWindow(folder) : Navigate(p, folder);
         if (opened) {
-            SetTimer(panelWnd, TIMER_REPAINT, 350, nullptr);
+            // Fixes shortcuts for files moved since last time. Doesn't touch
+            // the panel, so it is safe before the checks below.
+            QueueSync();
+        }
+        // Both of those run messages: the panel can have been destroyed
+        // inside them, and another click can have been through here.
+        if ((Panel*)GetWindowLongPtrW(panelWnd, GWLP_USERDATA) != p || p->openSeq != seq) {
+            return;
+        }
+        if (opened) {
+            if (!newWindow) {
+                SetTimer(panelWnd, TIMER_REPAINT, 350, nullptr);
+            }
+            return;
         }
     }
-    if (opened) {
-        // Navigate and ShellExecute run messages: the panel can have been
-        // destroyed inside them. Only touch it if it is still the same one.
-        if ((Panel*)GetWindowLongPtrW(panelWnd, GWLP_USERDATA) == p) {
-            p->pendingOpen.clear();
-        }
-        // Fixes shortcuts for files moved since last time.
-        QueueSync();
-    }
+
+    // The folder isn't there, or opening it failed: the panel opens it when
+    // the worker says it is ready. Armed only now, and never before the
+    // attempt above: the worker's answer arriving inside it found a click
+    // still waiting and opened a second window (measured 2026-09-19).
+    p->pendingOpen = folder;
+    p->pendingOpenTag = s->tags[index].name;
+    p->pendingOpenNewWindow = newWindow;
+    p->pendingOpenAt = GetTickCount64();
+    // Asked for again, because the answer to the request above may have come
+    // and gone while the attempt was running, and because a folder that has
+    // just been found missing needs making regardless.
+    QueueEnsureFolder(s->tags[index].name);
 }
 
 struct Colors {
@@ -1929,6 +2049,33 @@ Colors GetColors(Panel* p) {
     return c;
 }
 
+// A lambda here would be a __cdecl function pointer and wouldn't build for
+// x86 or arm64, where FONTENUMPROCW is __stdcall.
+int CALLBACK FoundFontFamily(const LOGFONTW*, const TEXTMETRICW*, DWORD, LPARAM param) {
+    *(bool*)param = true;
+    return 0;
+}
+
+// Segoe Fluent Icons only ships with Windows 11, and CreateFontW quietly
+// picks some other face when a family isn't installed, which draws the three
+// glyphs as missing-glyph boxes. Segoe MDL2 Assets has all three at the same
+// code points. Asked of the system rather than of the build number, which
+// says nothing about a font added or removed by hand.
+PCWSTR IconFontFace() {
+    static PCWSTR face = [] {
+        LOGFONTW lf = {};
+        lf.lfCharSet = DEFAULT_CHARSET;
+        wcscpy_s(lf.lfFaceName, L"Segoe Fluent Icons");
+        bool found = false;
+        if (HDC dc = GetDC(nullptr)) {
+            EnumFontFamiliesExW(dc, &lf, FoundFontFamily, (LPARAM)&found, 0);
+            ReleaseDC(nullptr, dc);
+        }
+        return found ? L"Segoe Fluent Icons" : L"Segoe MDL2 Assets";
+    }();
+    return face;
+}
+
 HFONT GetIconFont(Panel* p, int dpi) {
     if (!p->iconFont || p->iconFontDpi != dpi) {
         if (p->iconFont) {
@@ -1936,7 +2083,7 @@ HFONT GetIconFont(Panel* p, int dpi) {
         }
         p->iconFont = CreateFontW(-Dip(12, dpi), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                  CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe Fluent Icons");
+                                  CLEARTYPE_QUALITY, DEFAULT_PITCH, IconFontFace());
         p->iconFontDpi = dpi;
     }
     return p->iconFont;
@@ -2405,28 +2552,41 @@ LRESULT CALLBACK PanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         if (!p->pendingOpen.empty() && GetTickCount64() - p->pendingOpenAt > 10000) {
             p->pendingOpen.clear();
         }
+        // The count keeps unloading from returning while any of this runs.
+        BusyScope busy;
+        if (g_unloading) {
+            return 0;
+        }
         if (!p->pendingOpen.empty() && FolderIsReady(p->pendingOpen)) {
+            Panel* before = p;
+            unsigned seq = p->openSeq;
             std::wstring folder = p->pendingOpen;
             bool newWindow = p->pendingOpenNewWindow;
+            ULONGLONG since = p->pendingOpenAt;
+            // Cleared while it is being acted on, so that the messages run
+            // below can't find it and open the same folder a second time.
             p->pendingOpen.clear();
-            {
-                // Both of these run messages, so the panel can be destroyed
-                // inside them (the tab closing, or the mod being unloaded).
-                // The count keeps unloading from returning while we are in
-                // there; the Panel is re-read afterwards, never reused.
-                BusyScope busy;
-                if (!g_unloading) {
-                    if (newWindow) {
-                        ShellExecuteW(nullptr, L"open", folder.c_str(), nullptr, nullptr,
-                                      SW_SHOWNORMAL);
-                    } else if (Navigate(p, folder)) {
-                        SetTimer(hWnd, TIMER_REPAINT, 350, nullptr);
-                    }
-                }
-            }
+            bool opened = newWindow ? OpenFolderWindow(folder) : Navigate(p, folder);
+            // Both of those run messages: the panel can be destroyed inside
+            // them (the tab closing, or the mod being unloaded), and a click
+            // can have come through. The Panel is re-read, never reused.
             p = (Panel*)GetWindowLongPtrW(hWnd, GWLP_USERDATA);
-            if (!p) {
+            if (!p || p != before || p->openSeq != seq) {
                 return 0;
+            }
+            if (opened) {
+                if (!newWindow) {
+                    SetTimer(hWnd, TIMER_REPAINT, 350, nullptr);
+                }
+            } else if (p->pendingOpen.empty()) {
+                // The worker's word on the folder was out of date after all:
+                // keep waiting for it, under the same deadline, instead of
+                // dropping the click, and ask for the folder again — nothing
+                // else would bring another answer.
+                p->pendingOpen = folder;
+                p->pendingOpenNewWindow = newWindow;
+                p->pendingOpenAt = since;
+                QueueEnsureFolder(p->pendingOpenTag);
             }
         }
         p->currentFolder = GetCurrentFolder(p);
@@ -2516,12 +2676,14 @@ LRESULT CALLBACK PanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             if (hit < 0) {
                 return 0;
             }
+            // Held over everything below, the menu included: unloading waits
+            // for this count, and between two scopes the module could go.
+            BusyScope busy;
+            if (g_unloading) {
+                return 0;
+            }
             int cmd;
             {
-                BusyScope busy;
-                if (g_unloading) {
-                    return 0;
-                }
                 HMENU menu = CreatePopupMenu();
                 AppendMenuW(menu, MF_STRING, 1, L"Open");
                 AppendMenuW(menu, MF_STRING, 2, L"Open in new window");
@@ -2530,8 +2692,9 @@ LRESULT CALLBACK PanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 DestroyMenu(menu);
             }
             // The menu pumps messages: the window may have closed meanwhile.
+            Panel* before = p;
             p = (Panel*)GetWindowLongPtrW(hWnd, GWLP_USERDATA);
-            if (p && (cmd == 1 || cmd == 2)) {
+            if (p == before && (cmd == 1 || cmd == 2)) {
                 OpenTag(p, hit, cmd == 2);
             }
             return 0;
@@ -3337,7 +3500,17 @@ BOOL Wh_ModInit() {
     LoadSettings();
     g_collapsed = Wh_GetIntValue(L"collapsed", 0) != 0;
 
-    g_dbMutex = CreateMutexW(nullptr, FALSE, L"Local\\WindhawkExplorerTagsDb");
+    // The record is now one file per user under Windhawk's machine-wide
+    // storage, so the same account signed in twice (console and a remote
+    // session) has to take the same lock: that needs the global namespace,
+    // which an ordinary account isn't allowed to create objects in, hence the
+    // fallback. The name carries the user, so accounts don't wait on
+    // each other.
+    std::wstring mutexName = L"WindhawkExplorerTagsDb-" + CurrentUserKey();
+    g_dbMutex = CreateMutexW(nullptr, FALSE, (L"Global\\" + mutexName).c_str());
+    if (!g_dbMutex) {
+        g_dbMutex = CreateMutexW(nullptr, FALSE, (L"Local\\" + mutexName).c_str());
+    }
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_workEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!g_dbMutex || !g_stopEvent || !g_workEvent) {
