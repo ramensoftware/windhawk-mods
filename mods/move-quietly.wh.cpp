@@ -72,19 +72,21 @@ set any, the documented `IFileOperation` defaults are used.
 
 ## Bypassing the mod for one operation
 
-Hold **Shift** (configurable) while pasting or dropping and the mod leaves that
-operation entirely to Explorer, prompt and all. Ctrl is already held during a
-paste and every modifier changes what a drag-and-drop does — Shift forces a
-move, Ctrl forces a copy, Alt creates a shortcut — so Shift is the default: it
-is free during a paste, and during a drop it only matters when the drop would
-otherwise have been a copy across drives (Explorer's cursor shows the change).
-The Caps Lock and Scroll Lock options work as a mode instead of a held key.
+Hold **Shift** (configurable) while dropping, or while clicking Paste in the
+context menu or the command bar, and the mod leaves that operation entirely to
+Explorer, prompt and all. Shift is the default because it is free in all of
+those places; during a drop it only matters when the drop would otherwise have
+copied across drives (Shift turns it into a move, and the cursor says so).
+
+A held key cannot work with **Ctrl+V**: adding any modifier makes it a
+different shortcut that Explorer does not treat as Paste (and Win+Ctrl+V is
+taken by Windows). For keyboard pastes, set the **lock** option instead: while
+Caps Lock or Scroll Lock is on, the mod stands aside.
 
 ## Important behavior and limitations
 
-- Copying an item into its own folder keeps Explorer's normal
-  `name - Copy.ext` behavior; the mod only renames items arriving from a
-  different folder.
+- Copying an item into its own folder is not renamed by the mod; Explorer's
+  own naming applies (normally `name - Copy.ext`).
 - Items that are not file-system objects (for example dragged out of a zip
   folder or a phone) fall back to the Shell's own collision naming.
 - When a folder with the same name already exists in the destination, the
@@ -96,7 +98,15 @@ The Caps Lock and Scroll Lock options work as a mode instead of a held key.
   to Explorer unchanged (conflicts inside prompt as usual) or keep both
   folders side by side as `Folder (2)`.
 - Operations whose caller has already chosen a collision policy (for example
-  "replace all" or "keep newer") are left untouched.
+  "replace all" or "keep newer") before queueing items are left untouched.
+- After a merged **move**, the emptied source folders are removed directly
+  (not via the Recycle Bin, and not covered by Undo). Only empty folders are
+  ever removed. Folders that are junctions or symbolic links are never merged;
+  they are handed to Explorer unchanged.
+- Merging a large folder resolves names for every item up front, before the
+  progress dialog appears, and the dialog then lists the individual items.
+- The hooks apply to every `IFileOperation` copy or move inside `explorer.exe`,
+  which includes third-party shell extensions hosted there.
 - This version targets 64-bit File Explorer.
 - Rename-only and delete operations are not intentionally modified.
 
@@ -132,21 +142,28 @@ log output in the issue report.
   - prompt: Merge, let Explorer handle conflicting files
   - rename: Keep both folders ("Folder (2)")
 - bypassKey: shift
-  $name: Hold this key to get Explorer's normal conflict handling
+  $name: Hold this key for Explorer's normal conflict handling
   $description: >-
-    Checked at the moment you paste or drop. Ctrl is already held during a
-    paste, and Ctrl/Shift/Alt change what a drag-and-drop does (Shift forces a
-    move, Alt makes a shortcut), so Shift is the safest default. The Caps Lock
-    and Scroll Lock options act as a mode: while the lock is on, the mod
-    stands aside.
+    Works with the mouse: drag-and-drop, the context menu, and the command
+    bar. It cannot work with Ctrl+V, because adding a modifier turns it into
+    a different shortcut that Explorer ignores. Shift is the safest default;
+    during a drop it only matters when the drop would otherwise have copied
+    across drives (Shift makes it a move, and the cursor says so).
   $options:
   - shift: Shift
   - ctrl: Ctrl
   - alt: Alt
   - win: Windows key
-  - capslock: Caps Lock (while on)
-  - scrolllock: Scroll Lock (while on)
   - none: Disabled
+- bypassLock: none
+  $name: While this lock is on, use Explorer's normal conflict handling
+  $description: >-
+    The way to bypass the mod for a keyboard paste (Ctrl+V). Acts as a mode
+    rather than a held key.
+  $options:
+  - none: Disabled
+  - capslock: Caps Lock
+  - scrolllock: Scroll Lock
 */
 // ==/WindhawkModSettings==
 
@@ -158,6 +175,7 @@ log output in the issue report.
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <atomic>
 #include <utility>
 #include <vector>
 
@@ -174,7 +192,9 @@ constexpr DWORD kCollisionFlags =
     FOF_RENAMEONCOLLISION | FOFX_PRESERVEFILEEXTENSIONS;
 
 // A caller that set any of these has already decided how collisions are
-// resolved; the mod leaves such operations alone.
+// resolved; the mod leaves such operations alone. Explorer sets flags before
+// queueing items; a caller that queues first and sets flags afterwards still
+// gets the mod's names, though the fallback flags are then withheld.
 constexpr DWORD kCallerCollisionPolicy =
     FOF_NOCONFIRMATION | FOF_RENAMEONCOLLISION | FOFX_KEEPNEWERFILE;
 
@@ -193,6 +213,7 @@ constexpr unsigned kMaxSuffix = 1000;
 // 16 CopyItem
 // 17 CopyItems
 // 21 PerformOperations
+constexpr size_t kReleaseIndex = 2;
 constexpr size_t kSetOperationFlagsIndex = 5;
 constexpr size_t kMoveItemIndex = 14;
 constexpr size_t kMoveItemsIndex = 15;
@@ -200,6 +221,7 @@ constexpr size_t kCopyItemIndex = 16;
 constexpr size_t kCopyItemsIndex = 17;
 constexpr size_t kPerformOperationsIndex = 21;
 
+using Release_t = ULONG(STDMETHODCALLTYPE*)(IFileOperation*);
 using SetOperationFlags_t =
     HRESULT(STDMETHODCALLTYPE*)(IFileOperation*, DWORD);
 // MoveItem / CopyItem: (item, destination folder, new name, per-item sink).
@@ -212,6 +234,7 @@ using ItemsOperation_t =
 using PerformOperations_t =
     HRESULT(STDMETHODCALLTYPE*)(IFileOperation*);
 
+Release_t g_Release_Original = nullptr;
 SetOperationFlags_t g_SetOperationFlags_Original = nullptr;
 ItemOperation_t g_MoveItem_Original = nullptr;
 ItemsOperation_t g_MoveItems_Original = nullptr;
@@ -221,16 +244,17 @@ PerformOperations_t g_PerformOperations_Original = nullptr;
 
 enum class FolderCollision { kMerge, kPrompt, kRename };
 
-struct BypassKey {
-    int virtualKey = 0;    // 0 disables the bypass.
-    bool toggle = false;   // Lock keys: bypass while the lock is on.
-    int secondKey = 0;     // Second virtual key to accept (Win has two).
+struct Settings {
+    FolderCollision folderCollision = FolderCollision::kMerge;
+    int bypassKey = VK_SHIFT;    // Held key; 0 disables.
+    int bypassKeyAlt = 0;        // Second held key to accept (Win has two).
+    int bypassLock = 0;          // Lock key; bypass while on. 0 disables.
 };
 
-struct {
-    FolderCollision folderCollision = FolderCollision::kMerge;
-    BypassKey bypassKey{VK_SHIFT, false, 0};
-} g_settings;
+// Written by Wh_ModSettingsChanged on the engine thread, read by hooks;
+// always copied out whole under g_stateLock so one operation sees one
+// consistent set of values.
+Settings g_settings;
 
 // Guards against junction loops while expanding a folder for merging.
 constexpr int kMaxMergeDepth = 64;
@@ -268,11 +292,36 @@ class SrwExclusiveGuard {
 SRWLOCK g_stateLock = SRWLOCK_INIT;
 
 // Keyed by the IFileOperation interface pointer. Entries are removed in
-// PerformOperations; an operation abandoned without running leaks only its
-// small entry until the mod is unloaded. Never hold this lock across I/O.
+// PerformOperations and, for operations abandoned without running, when the
+// object's refcount reaches zero (Release_Hook), so a recycled address never
+// inherits stale state. Never hold this lock across I/O.
 std::unordered_map<IFileOperation*, OperationState> g_operationStates;
 
+// Number of live entries; lets Release_Hook skip the lock when there is
+// nothing to erase, which is almost always.
+std::atomic<size_t> g_operationStateCount{0};
+
+OperationState& StateLocked(IFileOperation* fileOperation) {
+    auto [it, inserted] = g_operationStates.try_emplace(fileOperation);
+    if (inserted) {
+        g_operationStateCount.fetch_add(1, std::memory_order_relaxed);
+    }
+    return it->second;
+}
+
+void EraseStateLocked(IFileOperation* fileOperation) {
+    if (g_operationStates.erase(fileOperation)) {
+        g_operationStateCount.fetch_sub(1, std::memory_order_relaxed);
+    }
+}
+
+Settings CurrentSettings() {
+    SrwExclusiveGuard guard(&g_stateLock);
+    return g_settings;
+}
+
 struct HookTargets {
+    void* release = nullptr;
     void* setOperationFlags = nullptr;
     void* moveItem = nullptr;
     void* moveItems = nullptr;
@@ -349,9 +398,13 @@ bool EqualsIgnoreCase(const std::wstring& a, const std::wstring& b) {
 
 DWORD PathAttributes(const std::wstring& path) {
     std::wstring probe = path;
-    // Let the check work past MAX_PATH on drive-letter paths.
-    if (probe.size() >= MAX_PATH && probe.size() > 2 && probe[1] == L':') {
-        probe = L"\\\\?\\" + probe;
+    // Let the check work past MAX_PATH.
+    if (probe.size() >= MAX_PATH && probe.compare(0, 4, L"\\\\?\\") != 0) {
+        if (probe.size() > 2 && probe[1] == L':') {
+            probe = L"\\\\?\\" + probe;
+        } else if (probe.compare(0, 2, L"\\\\") == 0) {
+            probe = L"\\\\?\\UNC\\" + probe.substr(2);
+        }
     }
     return GetFileAttributesW(probe.c_str());
 }
@@ -394,7 +447,7 @@ void PruneEmptyDirectories(const std::wstring& path, int depth) {
 bool IsFolderItem(IShellItem* item) {
     SFGAOF attributes = 0;
     if (FAILED(item->GetAttributes(SFGAO_FOLDER | SFGAO_STREAM, &attributes))) {
-        return false;
+        return DirectoryExists(DisplayName(item, SIGDN_FILESYSPATH));
     }
     // Zip files are folders with SFGAO_STREAM; treat those as files so the
     // extension is preserved.
@@ -428,13 +481,23 @@ bool StripNumberSuffix(std::wstring& base, unsigned& number) {
 // Decides the name `item` should get in the folder at `destinationPath`.
 // Returns true and fills `uniqueName` only when the item must be renamed to
 // avoid a collision. `destinationPath` is empty for non-file-system targets.
+// `reservedName` receives the name that was reserved for this item (renamed
+// or not) so the caller can release it if queueing fails.
 bool ChooseUniqueName(IFileOperation* fileOperation,
                       IShellItem* item,
                       const std::wstring& destinationPath,
                       LPCWSTR requestedName,
-                      std::wstring& uniqueName) {
+                      std::wstring& uniqueName,
+                      std::wstring& reservedName) {
     if (destinationPath.empty()) {
-        return false;  // Not a file-system destination; Shell fallback.
+        // Not a file-system destination: the Shell's own rename-on-collision
+        // is the only way to keep both, so make sure it gets armed.
+        SrwExclusiveGuard guard(&g_stateLock);
+        auto& state = StateLocked(fileOperation);
+        if (!(state.callerFlagsKnown && (state.callerFlags & kCallerCollisionPolicy))) {
+            state.wantsFallback = true;
+        }
+        return false;
     }
 
     // Copying into the item's own folder keeps Explorer's "- Copy" naming,
@@ -451,7 +514,7 @@ bool ChooseUniqueName(IFileOperation* fileOperation,
 
     {
         SrwExclusiveGuard guard(&g_stateLock);
-        auto& state = g_operationStates[fileOperation];
+        auto& state = StateLocked(fileOperation);
         if (state.callerFlagsKnown && (state.callerFlags & kCallerCollisionPolicy)) {
             return false;  // Caller already chose a collision policy.
         }
@@ -482,7 +545,7 @@ bool ChooseUniqueName(IFileOperation* fileOperation,
     }
 
     std::wstring candidate = name;
-    for (unsigned n = next; n <= kMaxSuffix; ++n) {
+    for (unsigned n = next;; ++n) {
         std::wstring fullPath = destinationPath + L"\\" + candidate;
 
         // Filesystem I/O outside the lock; the reservation test-and-insert
@@ -491,8 +554,9 @@ bool ChooseUniqueName(IFileOperation* fileOperation,
         if (!PathExists(fullPath)) {
             std::wstring key = ToUpper(fullPath);
             SrwExclusiveGuard guard(&g_stateLock);
-            auto& reserved = g_operationStates[fileOperation].reservedTargets;
+            auto& reserved = StateLocked(fileOperation).reservedTargets;
             if (reserved.insert(std::move(key)).second) {
+                reservedName = candidate;
                 if (candidate == name) {
                     return false;  // No collision; keep the caller's name.
                 }
@@ -501,10 +565,11 @@ bool ChooseUniqueName(IFileOperation* fileOperation,
             }
         }
 
+        if (n > kMaxSuffix) {
+            return false;  // Gave up; Shell fallback.
+        }
         candidate = base + L" (" + std::to_wstring(n) + L")" + extension;
     }
-
-    return false;  // Gave up; Shell fallback.
 }
 
 void Unreserve(IFileOperation* fileOperation, const std::wstring& destinationPath,
@@ -517,22 +582,23 @@ void Unreserve(IFileOperation* fileOperation, const std::wstring& destinationPat
     }
 }
 
-// True when the user is asking, via the bypass key, for Explorer's normal
-// handling. Hooks run on the thread that processed the paste or drop, so
-// GetKeyState reflects the keyboard at that gesture.
+// True when the user is asking, via the bypass key or lock, for Explorer's
+// normal handling. The held key is read with GetAsyncKeyState (physical state
+// right now): the command bar dispatches Paste across threads, so a per-thread
+// GetKeyState snapshot can predate the key press.
+bool KeyHeld(int virtualKey) {
+    return virtualKey != 0 && (GetAsyncKeyState(virtualKey) & 0x8000) != 0;
+}
+
 bool BypassRequested() {
-    const BypassKey& key = g_settings.bypassKey;
-    if (key.virtualKey == 0) {
-        return false;
+    const Settings settings = CurrentSettings();
+    if (KeyHeld(settings.bypassKey) || KeyHeld(settings.bypassKeyAlt)) {
+        return true;
     }
-    if (key.toggle) {
-        return (GetKeyState(key.virtualKey) & 1) != 0;
-    }
-    bool held = (GetKeyState(key.virtualKey) & 0x8000) != 0;
-    if (!held && key.secondKey) {
-        held = (GetKeyState(key.secondKey) & 0x8000) != 0;
-    }
-    return held;
+    // Toggle state has no thread-independent API; GetKeyState's low bit is
+    // the best available and is correct on any thread that receives input.
+    return settings.bypassLock != 0 &&
+           (GetKeyState(settings.bypassLock) & 1) != 0;
 }
 
 // Records the bypass for this operation and reports whether it's active.
@@ -541,7 +607,7 @@ bool MarkBypass(IFileOperation* fileOperation) {
         return false;
     }
     SrwExclusiveGuard guard(&g_stateLock);
-    auto& state = g_operationStates[fileOperation];
+    auto& state = StateLocked(fileOperation);
     if (!state.bypassed) {
         state.bypassed = true;
         Wh_Log(L"Bypass key held; leaving operation to Explorer");
@@ -591,22 +657,36 @@ HRESULT QueueMergedFolder(ItemOperation_t original,
         return hr;
     }
 
+    HRESULT firstFailure = S_OK;
+    size_t queued = 0;
     for (;;) {
         ComPtr<IShellItem> child;
         ULONG fetched = 0;
         hr = children->Next(1, child.Put(), &fetched);
         if (FAILED(hr)) {
-            return hr;
+            Wh_Log(L"Enumerating %s failed: 0x%08X", targetPath.c_str(),
+                   static_cast<unsigned>(hr));
+            if (SUCCEEDED(firstFailure)) {
+                firstFailure = hr;
+            }
+            break;
         }
         if (hr != S_OK || fetched == 0) {
-            return S_OK;
+            break;
         }
         hr = QueueItem(original, fileOperation, child.Get(), target.Get(),
                        targetPath, nullptr, nullptr, depth + 1);
         if (FAILED(hr)) {
-            return hr;
+            Wh_Log(L"Failed to queue an item: 0x%08X", static_cast<unsigned>(hr));
+            if (SUCCEEDED(firstFailure)) {
+                firstFailure = hr;
+            }
+        } else {
+            ++queued;
         }
     }
+    // An empty source folder queues nothing, and that's fine.
+    return (queued || SUCCEEDED(firstFailure)) ? S_OK : firstFailure;
 }
 
 // Queues one copy or move through the original single-item method, with a
@@ -620,6 +700,7 @@ HRESULT QueueItem(ItemOperation_t original,
                   LPCWSTR requestedName,
                   IFileOperationProgressSink* sink,
                   int depth) {
+    const Settings settings = CurrentSettings();
     if (item && destinationFolder && !destinationPath.empty() &&
         IsFolderItem(item) && !CallerChoseCollisionPolicy(fileOperation)) {
         std::wstring name = (requestedName && *requestedName)
@@ -634,24 +715,34 @@ HRESULT QueueItem(ItemOperation_t original,
                         !EqualsIgnoreCase(sourcePath, targetPath) &&
                         DirectoryExists(targetPath);
 
-        if (collides && g_settings.folderCollision == FolderCollision::kMerge) {
+        // A junction or symbolic link must not be merged: the merge would
+        // drain the link's target and then remove the link itself.
+        DWORD sourceAttributes = PathAttributes(sourcePath);
+        bool isReparsePoint = sourceAttributes != INVALID_FILE_ATTRIBUTES &&
+                              (sourceAttributes & FILE_ATTRIBUTE_REPARSE_POINT);
+
+        FolderCollision mode = settings.folderCollision;
+        if (isReparsePoint && mode == FolderCollision::kMerge) {
+            mode = FolderCollision::kPrompt;
+        }
+
+        if (collides && mode == FolderCollision::kMerge) {
             Wh_Log(L"Merging folder: %s -> %s", sourcePath.c_str(),
                    targetPath.c_str());
             if (original == g_MoveItem_Original) {
                 SrwExclusiveGuard guard(&g_stateLock);
-                g_operationStates[fileOperation].mergedMoveSources.push_back(
-                    sourcePath);
+                StateLocked(fileOperation).mergedMoveSources.push_back(sourcePath);
             }
             return QueueMergedFolder(original, fileOperation, item, targetPath,
                                      depth);
         }
 
-        if (g_settings.folderCollision != FolderCollision::kRename) {
+        if (mode != FolderCollision::kRename) {
             // Explorer's own merge. Make sure the fallback flags don't turn
             // it into a rename.
             if (collides) {
                 SrwExclusiveGuard guard(&g_stateLock);
-                g_operationStates[fileOperation].mergeFolderSeen = true;
+                StateLocked(fileOperation).mergeFolderSeen = true;
             }
             return original(fileOperation, item, destinationFolder,
                             requestedName, sink);
@@ -660,10 +751,11 @@ HRESULT QueueItem(ItemOperation_t original,
     }
 
     std::wstring uniqueName;
+    std::wstring reservedName;
     LPCWSTR name = requestedName;
     bool renamed = item && destinationFolder &&
                    ChooseUniqueName(fileOperation, item, destinationPath,
-                                    requestedName, uniqueName);
+                                    requestedName, uniqueName, reservedName);
     if (renamed) {
         Wh_Log(L"Collision: %s -> %s",
                requestedName ? requestedName : L"(item name)",
@@ -672,8 +764,8 @@ HRESULT QueueItem(ItemOperation_t original,
     }
 
     HRESULT hr = original(fileOperation, item, destinationFolder, name, sink);
-    if (FAILED(hr) && renamed) {
-        Unreserve(fileOperation, destinationPath, uniqueName);
+    if (FAILED(hr) && !reservedName.empty()) {
+        Unreserve(fileOperation, destinationPath, reservedName);
     }
     return hr;
 }
@@ -683,12 +775,6 @@ HRESULT QueueItem(ItemOperation_t original,
 // IPersistIDList, or a single IShellItem. Returns E_NOINTERFACE only when
 // the container is none of those, before anything has been collected.
 HRESULT CollectItems(IUnknown* items, std::vector<ComPtr<IShellItem>>& out) {
-    ComPtr<IShellItem> single;
-    if (SUCCEEDED(items->QueryInterface(IID_IShellItem, single.PutVoid()))) {
-        out.push_back(std::move(single));
-        return S_OK;
-    }
-
     ComPtr<IShellItemArray> array;
     HRESULT hr = items->QueryInterface(IID_IShellItemArray, array.PutVoid());
     if (FAILED(hr)) {
@@ -755,6 +841,14 @@ HRESULT CollectItems(IUnknown* items, std::vector<ComPtr<IShellItem>>& out) {
         return S_OK;
     }
 
+    // Single item, tried last so a container that also exposes IShellItem
+    // can't be mistaken for one item.
+    ComPtr<IShellItem> single;
+    if (SUCCEEDED(items->QueryInterface(IID_IShellItem, single.PutVoid()))) {
+        out.push_back(std::move(single));
+        return S_OK;
+    }
+
     return E_NOINTERFACE;
 }
 
@@ -766,27 +860,35 @@ HRESULT QueueItems(ItemOperation_t originalSingle,
     std::vector<ComPtr<IShellItem>> collected;
     HRESULT hr = (items && destinationFolder) ? CollectItems(items, collected)
                                               : E_NOINTERFACE;
-    if (hr == E_NOINTERFACE) {
-        // Unknown container: let the Shell handle it. The fallback flags
-        // still avoid the prompt, but the Shell picks the name.
-        Wh_Log(L"Items hook: unrecognized container; Shell fallback");
+    if (FAILED(hr)) {
+        // Nothing has been queued yet, so any failure to read the container
+        // is safe to hand to the Shell. The fallback flags still avoid the
+        // prompt, but the Shell picks the name.
+        Wh_Log(L"Items hook: couldn't collect items (0x%08X); Shell fallback",
+               static_cast<unsigned>(hr));
         return originalMany(fileOperation, items, destinationFolder);
     }
-    if (FAILED(hr)) {
-        return hr;
-    }
 
-    // Once the container is understood we own the queueing; never fall back
-    // to originalMany from here, or items would be queued twice.
+    // From here we own the queueing; never fall back to originalMany, or
+    // items would be queued twice. Queued items can't be taken back, so a
+    // failing item doesn't stop the rest; failure is reported only when
+    // nothing at all was queued.
     std::wstring destinationPath = FolderPath(destinationFolder);
+    HRESULT firstFailure = S_OK;
+    size_t queued = 0;
     for (auto& item : collected) {
         hr = QueueItem(originalSingle, fileOperation, item.Get(),
                        destinationFolder, destinationPath, nullptr, nullptr, 0);
         if (FAILED(hr)) {
-            return hr;
+            Wh_Log(L"Failed to queue an item: 0x%08X", static_cast<unsigned>(hr));
+            if (SUCCEEDED(firstFailure)) {
+                firstFailure = hr;
+            }
+        } else {
+            ++queued;
         }
     }
-    return S_OK;
+    return queued ? S_OK : firstFailure;
 }
 
 // Decides, once, whether the Shell's rename-on-collision fallback should be
@@ -823,11 +925,22 @@ void ArmCollisionFallback(IFileOperation* fileOperation) {
 // Hooks
 // ---------------------------------------------------------------------------
 
+ULONG STDMETHODCALLTYPE Release_Hook(IFileOperation* fileOperation) {
+    // Never call back into the object here; any COM call re-enters Release.
+    ULONG refs = g_Release_Original(fileOperation);
+    if (refs == 0 &&
+        g_operationStateCount.load(std::memory_order_relaxed) != 0) {
+        SrwExclusiveGuard guard(&g_stateLock);
+        EraseStateLocked(fileOperation);
+    }
+    return refs;
+}
+
 HRESULT STDMETHODCALLTYPE SetOperationFlags_Hook(IFileOperation* fileOperation,
                                                   DWORD flags) {
     {
         SrwExclusiveGuard guard(&g_stateLock);
-        auto& state = g_operationStates[fileOperation];
+        auto& state = StateLocked(fileOperation);
         state.callerFlags = flags;
         state.callerFlagsKnown = true;
     }
@@ -894,7 +1007,7 @@ HRESULT STDMETHODCALLTYPE PerformOperations_Hook(IFileOperation* fileOperation) 
         auto it = g_operationStates.find(fileOperation);
         if (it != g_operationStates.end()) {
             mergedMoveSources = std::move(it->second.mergedMoveSources);
-            g_operationStates.erase(it);
+            EraseStateLocked(fileOperation);
         }
     }
 
@@ -912,18 +1025,20 @@ HRESULT STDMETHODCALLTYPE PerformOperations_Hook(IFileOperation* fileOperation) 
 
 // Keeps the module that implements CFileOperation loaded for the lifetime of
 // the process, so hooked code can never be unmapped underneath us.
-void PinImplementationModule(void* codeAddress) {
+// Hooking without the pin is not safe, so failure here is fatal to init.
+bool PinImplementationModule(void* codeAddress) {
     HMODULE module = nullptr;
-    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_PIN,
-                           reinterpret_cast<LPCWSTR>(codeAddress), &module)) {
-        WCHAR path[MAX_PATH];
-        if (GetModuleFileNameW(module, path, MAX_PATH)) {
-            Wh_Log(L"IFileOperation implemented in %s", path);
-        }
-    } else {
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                GET_MODULE_HANDLE_EX_FLAG_PIN,
+                            reinterpret_cast<LPCWSTR>(codeAddress), &module)) {
         Wh_Log(L"GetModuleHandleExW failed: %u", GetLastError());
+        return false;
     }
+    WCHAR path[MAX_PATH];
+    if (GetModuleFileNameW(module, path, MAX_PATH)) {
+        Wh_Log(L"IFileOperation implemented in %s", path);
+    }
+    return true;
 }
 
 DWORD WINAPI ProbeFileOperationVtable(LPVOID) {
@@ -944,15 +1059,16 @@ DWORD WINAPI ProbeFileOperationVtable(LPVOID) {
     if (SUCCEEDED(hr) && fileOperation) {
         void** vtable = *reinterpret_cast<void***>(fileOperation);
 
+        g_targets.release = vtable[kReleaseIndex];
         g_targets.setOperationFlags = vtable[kSetOperationFlagsIndex];
         g_targets.moveItem = vtable[kMoveItemIndex];
         g_targets.moveItems = vtable[kMoveItemsIndex];
         g_targets.copyItem = vtable[kCopyItemIndex];
         g_targets.copyItems = vtable[kCopyItemsIndex];
         g_targets.performOperations = vtable[kPerformOperationsIndex];
-        g_targets.hr = S_OK;
-
-        PinImplementationModule(g_targets.setOperationFlags);
+        g_targets.hr = PinImplementationModule(g_targets.setOperationFlags)
+                           ? S_OK
+                           : HRESULT_FROM_WIN32(ERROR_MOD_NOT_FOUND);
 
         fileOperation->Release();
     } else {
@@ -986,8 +1102,9 @@ bool ResolveHookTargets() {
     }
 
     void* targets[] = {
-        g_targets.setOperationFlags, g_targets.moveItem,  g_targets.moveItems,
-        g_targets.copyItem,          g_targets.copyItems, g_targets.performOperations,
+        g_targets.release,  g_targets.setOperationFlags, g_targets.moveItem,
+        g_targets.moveItems, g_targets.copyItem,         g_targets.copyItems,
+        g_targets.performOperations,
     };
 
     for (size_t i = 0; i < std::size(targets); ++i) {
@@ -1008,41 +1125,43 @@ bool ResolveHookTargets() {
     return true;
 }
 
-}  // namespace
-
 void LoadSettings() {
-    PCWSTR value = Wh_GetStringSetting(L"folderCollision");
-    FolderCollision mode = FolderCollision::kMerge;
-    if (value) {
-        if (wcscmp(value, L"prompt") == 0) {
-            mode = FolderCollision::kPrompt;
-        } else if (wcscmp(value, L"rename") == 0) {
-            mode = FolderCollision::kRename;
-        }
-        Wh_FreeStringSetting(value);
-    }
-    g_settings.folderCollision = mode;
+    Settings settings;
 
-    BypassKey key{VK_SHIFT, false, 0};
-    value = Wh_GetStringSetting(L"bypassKey");
-    if (value) {
-        if (wcscmp(value, L"ctrl") == 0) {
-            key = {VK_CONTROL, false, 0};
-        } else if (wcscmp(value, L"alt") == 0) {
-            key = {VK_MENU, false, 0};
-        } else if (wcscmp(value, L"win") == 0) {
-            key = {VK_LWIN, false, VK_RWIN};
-        } else if (wcscmp(value, L"capslock") == 0) {
-            key = {VK_CAPITAL, true, 0};
-        } else if (wcscmp(value, L"scrolllock") == 0) {
-            key = {VK_SCROLL, true, 0};
-        } else if (wcscmp(value, L"none") == 0) {
-            key = {0, false, 0};
-        }
-        Wh_FreeStringSetting(value);
+    WindhawkUtils::StringSetting folderCollision =
+        WindhawkUtils::StringSetting::make(L"folderCollision");
+    if (wcscmp(folderCollision.get(), L"prompt") == 0) {
+        settings.folderCollision = FolderCollision::kPrompt;
+    } else if (wcscmp(folderCollision.get(), L"rename") == 0) {
+        settings.folderCollision = FolderCollision::kRename;
     }
-    g_settings.bypassKey = key;
+
+    WindhawkUtils::StringSetting bypassKey =
+        WindhawkUtils::StringSetting::make(L"bypassKey");
+    if (wcscmp(bypassKey.get(), L"ctrl") == 0) {
+        settings.bypassKey = VK_CONTROL;
+    } else if (wcscmp(bypassKey.get(), L"alt") == 0) {
+        settings.bypassKey = VK_MENU;
+    } else if (wcscmp(bypassKey.get(), L"win") == 0) {
+        settings.bypassKey = VK_LWIN;
+        settings.bypassKeyAlt = VK_RWIN;
+    } else if (wcscmp(bypassKey.get(), L"none") == 0) {
+        settings.bypassKey = 0;
+    }
+
+    WindhawkUtils::StringSetting bypassLock =
+        WindhawkUtils::StringSetting::make(L"bypassLock");
+    if (wcscmp(bypassLock.get(), L"capslock") == 0) {
+        settings.bypassLock = VK_CAPITAL;
+    } else if (wcscmp(bypassLock.get(), L"scrolllock") == 0) {
+        settings.bypassLock = VK_SCROLL;
+    }
+
+    SrwExclusiveGuard guard(&g_stateLock);
+    g_settings = settings;
 }
+
+}  // namespace
 
 BOOL Wh_ModInit() {
     Wh_Log(L"Initializing Move Conflicts Quietly");
@@ -1055,6 +1174,9 @@ BOOL Wh_ModInit() {
 
     bool ok = true;
 
+    ok &= !!WindhawkUtils::SetFunctionHook(
+        reinterpret_cast<Release_t>(g_targets.release), Release_Hook,
+        &g_Release_Original);
     ok &= !!WindhawkUtils::SetFunctionHook(
         reinterpret_cast<SetOperationFlags_t>(g_targets.setOperationFlags),
         SetOperationFlags_Hook, &g_SetOperationFlags_Original);
