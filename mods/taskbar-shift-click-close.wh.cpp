@@ -163,7 +163,8 @@ HRESULT WINAPI PointerPressed(void* object, void* eventAbi) {
 }
 
 bool HookTaskbar(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
+    // Taskbar.View.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerPressed(void *)",
           L"public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerPressed(void * __ptr64) __ptr64"},
          &pressedOriginal, PointerPressed},
@@ -171,8 +172,8 @@ bool HookTaskbar(HMODULE module) {
           L"public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskListButton>::get_IsRunning(bool * __ptr64) __ptr64"},
          &runningOriginal},
     };
-    bool ok = WindhawkUtils::HookSymbols(module, taskbarViewDllHooks,
-                                         ARRAYSIZE(taskbarViewDllHooks));
+    bool ok = WindhawkUtils::HookSymbols(module, taskbarViewHooks,
+                                         ARRAYSIZE(taskbarViewHooks));
     Wh_Log(L"TaskListButton Shift+click hooks: %s", ok ? L"ready" : L"unavailable");
     return ok;
 }
