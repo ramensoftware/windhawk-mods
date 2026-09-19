@@ -653,6 +653,14 @@ void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd, HWND cap
     }
 
     if (_wcsicmp(command.c_str(), L"internal:emptyRecycleBin") == 0) {
+        SHQUERYRBINFO rbInfo = { sizeof(rbInfo) };
+        if (SUCCEEDED(SHQueryRecycleBinW(nullptr, &rbInfo))) {
+            // If the Recycle Bin has 0 items, do nothing
+            if (rbInfo.i64NumItems == 0) {
+                return;
+            }
+        }
+
         int res = MessageBoxW(
             nullptr,
             L"Permanently delete all items in the Recycle Bin?",
