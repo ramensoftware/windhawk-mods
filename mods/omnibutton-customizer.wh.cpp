@@ -105,8 +105,8 @@ network[-2,6], volume[0,2], battery[0,0], percent[2,-6]
 
 Version 1.0 was never published — it existed only as a pull request. The 2.0 in
 the version field marks the settings contract, not a history of releases: every
-mod in this family moved to the same grouped layout — Placement, Content,
-Layout, Size, Adjust, Surface — and to the shared **Arrangement** expression
+mod in this family moved to the same grouped layout — Content, Layout,
+Size, Adjust, Surface — and to the shared **Arrangement** expression
 that replaced each mod's homegrown grid settings. This mod arrived at that
 contract second, so its first published version is the one that has it.
 
@@ -212,12 +212,6 @@ use `Item width`.
 
 ## Settings
 
-### Placement
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| Placement: not available in this mod | — | A note, not a control. The OmniButton stays in its native tray position; editing the box does nothing |
-
 ### Content
 
 | Setting | Default | Description |
@@ -319,8 +313,7 @@ The mod deliberately does not move the native `ControlCenterButton` across tray
 columns. Keeping it where Windows put it is what lets other mods' semantic
 anchors — "before OmniButton", "before clock" — keep their established meaning.
 Moving it would need a shared placement lease so two mods couldn't claim
-contradictory anchor order, which is why the Placement group is a note rather
-than a control.
+contradictory anchor order, so this mod offers no placement setting at all.
 
 ## Other taskbar positions
 
@@ -361,17 +354,6 @@ each one's exact prior local value when it unloads.
 
 // ==WindhawkModSettings==
 /*
-- Placement:
-  - Status: "Fixed - native position"
-    $name: "Placement: not available in this mod"
-    $description: >-
-      A note, not a control - this box does nothing and any edit to it is
-      ignored. The OmniButton stays in its native system-tray position, which
-      is what lets other taskbar mods keep using it as their "before
-      OmniButton" anchor. Placement controls may arrive later with the shared
-      taskbar-arrangement system.
-  $name: Placement
-
 - Content:
   - Network: true
     $name: Network
@@ -552,7 +534,7 @@ using winrt::Windows::Foundation::IInspectable;
 
 // ============================================================
 // Nested group layout
-// Template block: _templates/nested-group-layout.h v2.5 (verbatim copy —
+// Template block: _templates/nested-group-layout.h v2.6 (verbatim copy —
 // keep in sync with the template; Windhawk mods are single-file).
 // ============================================================
 
@@ -614,6 +596,7 @@ using winrt::Windows::Foundation::IInspectable;
 #include <cstdlib>
 #include <functional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace windhawk_mod_templates::nested_group_layout {
@@ -735,33 +718,45 @@ private:
         }
     }
 
-    Node ParseExpr() {
+    // Parsing, measuring and arranging all recurse once per nesting level, so
+    // the depth a user can type is the depth three separate recursions reach.
+    // Measure is memoized, so this is no longer a running-time limit — it is a
+    // STACK limit, and it is refused at parse time so the user gets a real
+    // error instead of a crash. Nothing legible needs this many levels; the
+    // deepest arrangement in this family's own documentation uses three.
+    static constexpr int kMaxNestingDepth = 24;
+
+    Node ParseExpr(int depth = 0) {
         Node node;
         node.axis = Axis::Horizontal;
-        node.children.push_back(ParseStack());
+        node.children.push_back(ParseStack(depth));
         while (Peek() == L'|') {
             ++position_;
-            node.children.push_back(ParseStack());
+            node.children.push_back(ParseStack(depth));
         }
         return node;
     }
 
-    Node ParseStack() {
+    Node ParseStack(int depth) {
         Node node;
         node.axis = Axis::Vertical;
-        node.children.push_back(ParseUnit());
+        node.children.push_back(ParseUnit(depth));
         while (Peek() == L',') {
             ++position_;
-            node.children.push_back(ParseUnit());
+            node.children.push_back(ParseUnit(depth));
         }
         return node;
     }
 
-    Node ParseUnit() {
+    Node ParseUnit(int depth) {
         SkipSpace();
         if (position_ < text_.size() && text_[position_] == L'(') {
+            if (depth >= kMaxNestingDepth) {
+                Fail(position_, L"fewer levels of nested parentheses");
+                return {};
+            }
             ++position_;
-            Node inner = ParseExpr();
+            Node inner = ParseExpr(depth + 1);
             SkipSpace();
             if (position_ < text_.size() && text_[position_] == L')')
                 ++position_;
@@ -894,8 +889,36 @@ inline int TokenIndexWithPrefix(std::wstring const& token,
 
 using SizeResolver = std::function<Size(std::wstring const&)>;
 
-inline Size Measure(Node const& node, Config const& config,
-                    SizeResolver const& resolve) {
+// MEASURE IS MEMOIZED, AND HAS TO BE. Each group measures every child twice —
+// once in the single-visible-child scan, once in the accumulation loop — and
+// Arrange measures the same nodes again at every level. Uncached, that doubles
+// per tree level, and since the grammar wraps each unit in its own group, every
+// "(" in the expression adds two levels. A hand-typed expression with ~16
+// nested parentheses reached roughly 4^16 node visits on the Explorer UI
+// thread: a hang with no way out but killing Explorer. Memoizing collapses the
+// whole pass to one visit per node.
+//
+// The cache is keyed on the node's ADDRESS, which is only valid because a Node
+// tree is built once by Parse and never mutated or moved while it is being
+// measured. Do not hold a cache across a re-parse, and do not mutate a tree
+// that a live cache refers to.
+using MeasureCache = std::unordered_map<Node const*, Size>;
+
+inline Size MeasureNode(Node const& node, Config const& config,
+                        SizeResolver const& resolve, MeasureCache& cache);
+
+inline Size MeasureCached(Node const& node, Config const& config,
+                          SizeResolver const& resolve, MeasureCache& cache) {
+    auto found = cache.find(&node);
+    if (found != cache.end())
+        return found->second;
+    Size size = MeasureNode(node, config, resolve, cache);
+    cache.emplace(&node, size);
+    return size;
+}
+
+inline Size MeasureNode(Node const& node, Config const& config,
+                        SizeResolver const& resolve, MeasureCache& cache) {
     if (!node.token.empty())
         return resolve(node.token);
 
@@ -907,14 +930,14 @@ inline Size Measure(Node const& node, Config const& config,
         Node const* only = nullptr;
         int visible = 0;
         for (auto const& child : node.children) {
-            if (Measure(child, config, resolve).Empty())
+            if (MeasureCached(child, config, resolve, cache).Empty())
                 continue;
             only = &child;
             if (++visible > 1)
                 break;
         }
         if (visible == 1)
-            return Measure(*only, config, resolve);
+            return MeasureCached(*only, config, resolve, cache);
     }
 
     double main = 0.0;
@@ -922,7 +945,7 @@ inline Size Measure(Node const& node, Config const& config,
     double fillFallback = 0.0;
     int placed = 0;
     for (auto const& child : node.children) {
-        Size size = Measure(child, config, resolve);
+        Size size = MeasureCached(child, config, resolve, cache);
         if (size.Empty())
             continue;
         double childMain, childCross;
@@ -952,6 +975,15 @@ inline Size Measure(Node const& node, Config const& config,
                                          : Size{cross, main};
 }
 
+// Measure one tree on its own. Prefer Compute(), which shares a single cache
+// across the measure and arrange passes; this overload exists for call sites
+// that measure a tree by itself.
+inline Size Measure(Node const& node, Config const& config,
+                    SizeResolver const& resolve) {
+    MeasureCache cache;
+    return MeasureCached(node, config, resolve, cache);
+}
+
 // Resolve a child's size against its parent group's axis, so an axis-relative
 // item becomes concrete width x height.
 inline Size ConcreteSize(Size const& size, Axis axis, Size const& groupTotal) {
@@ -964,10 +996,10 @@ inline Size ConcreteSize(Size const& size, Axis axis, Size const& groupTotal) {
                                     : Size{cross, size.thickness};
 }
 
-inline void Arrange(Node const& node, Config const& config,
-                    SizeResolver const& resolve, double x, double y,
-                    std::vector<Placement>& out,
-                    Size const* resolvedSize = nullptr) {
+inline void ArrangeCached(Node const& node, Config const& config,
+                          SizeResolver const& resolve, double x, double y,
+                          std::vector<Placement>& out, MeasureCache& cache,
+                          Size const* resolvedSize = nullptr) {
     if (!node.token.empty()) {
         Size size = resolvedSize ? *resolvedSize : resolve(node.token);
         if (!size.Empty())
@@ -976,7 +1008,7 @@ inline void Arrange(Node const& node, Config const& config,
         return;
     }
 
-    Size total = Measure(node, config, resolve);
+    Size total = MeasureCached(node, config, resolve, cache);
     if (total.Empty())
         return;
     // A group's own offset moves everything inside it and nothing outside.
@@ -989,21 +1021,22 @@ inline void Arrange(Node const& node, Config const& config,
         Node const* only = nullptr;
         int visible = 0;
         for (auto const& child : node.children) {
-            if (Measure(child, config, resolve).Empty())
+            if (MeasureCached(child, config, resolve, cache).Empty())
                 continue;
             only = &child;
             if (++visible > 1)
                 break;
         }
         if (visible == 1) {
-            Arrange(*only, config, resolve, x, y, out, resolvedSize);
+            ArrangeCached(*only, config, resolve, x, y, out, cache,
+                          resolvedSize);
             return;
         }
     }
 
     double cursor = node.axis == Axis::Horizontal ? x : y;
     for (auto const& child : node.children) {
-        Size measured = Measure(child, config, resolve);
+        Size measured = MeasureCached(child, config, resolve, cache);
         if (measured.Empty())
             continue;
         Size size = ConcreteSize(measured, node.axis, total);
@@ -1014,15 +1047,25 @@ inline void Arrange(Node const& node, Config const& config,
                              : config.justify == Justify::End  ? unused
                                                                : 0.0;
         if (node.axis == Axis::Horizontal) {
-            Arrange(child, config, resolve, cursor, y + crossOffset, out,
-                    &size);
+            ArrangeCached(child, config, resolve, cursor, y + crossOffset, out,
+                          cache, &size);
             cursor += size.width + config.spacing;
         } else {
-            Arrange(child, config, resolve, x + crossOffset, cursor, out,
-                    &size);
+            ArrangeCached(child, config, resolve, x + crossOffset, cursor, out,
+                          cache, &size);
             cursor += size.height + config.spacing;
         }
     }
+}
+
+// Arrange one tree on its own. Prefer Compute(); this overload exists for call
+// sites that drive the arranger directly.
+inline void Arrange(Node const& node, Config const& config,
+                    SizeResolver const& resolve, double x, double y,
+                    std::vector<Placement>& out,
+                    Size const* resolvedSize = nullptr) {
+    MeasureCache cache;
+    ArrangeCached(node, config, resolve, x, y, out, cache, resolvedSize);
 }
 
 // Parse + measure + arrange in one call. Returns false only on a parse error
@@ -1038,7 +1081,10 @@ inline bool Compute(std::wstring const& text, Config const& config,
     Node root;
     if (!Parse(text, root, error))
         return false;
-    Size inner = Measure(root, config, resolve);
+    // One cache for both passes: Arrange re-measures the same nodes at every
+    // level, so sharing it is what keeps the whole call linear in node count.
+    MeasureCache cache;
+    Size inner = MeasureCached(root, config, resolve, cache);
     placements.clear();
     if (inner.Empty()) {
         // No visible items: an empty group has no padded box either.
@@ -1051,8 +1097,8 @@ inline bool Compute(std::wstring const& text, Config const& config,
         double cross = inner.cross > 0.0 ? inner.cross : inner.thickness;
         inner = Size{inner.thickness, cross};
     }
-    Arrange(root, config, resolve, config.padX, config.padY, placements,
-            &inner);
+    ArrangeCached(root, config, resolve, config.padX, config.padY, placements,
+                  cache, &inner);
     totalSize = {inner.width + config.padX * 2.0,
                  inner.height + config.padY * 2.0};
     return true;
@@ -1937,7 +1983,7 @@ namespace clr = windhawk_mod_templates::color_tokens;
 
 // ============================================================
 // Taskbar host
-// Template block: _templates/taskbar-host.h v1.0 (verbatim copy —
+// Template block: _templates/taskbar-host.h v1.1 (verbatim copy —
 // keep in sync with the template; Windhawk mods are single-file).
 // ============================================================
 
@@ -1965,6 +2011,24 @@ inline HWND FindCurrentProcessTaskbarWnd() {
         },
         reinterpret_cast<LPARAM>(&result));
     return result;
+}
+
+// A CACHED TASKBAR HANDLE IS NOT PROOF THE WINDOW STILL EXISTS. Shell_TrayWnd
+// can be recreated inside the same Explorer process, and every mod here cached
+// it and then preferred the cache unconditionally:
+//
+//     HWND w = g_taskbarWnd ? g_taskbarWnd : FindCurrentProcessTaskbarWnd();
+//
+// After a recreate that hands back a dead handle forever, because the live
+// window is only ever looked up when the cache is null. GetWindowThreadProcessId
+// then returns 0, RunFromWindowThread fails, and the caller silently does
+// nothing — which is survivable on a retry path but not on the unload path,
+// where it means the mod's callbacks are never revoked before its image is
+// freed. Flagged by the AI review on PR #4855. Validate, then fall back.
+inline HWND ResolveTaskbarWnd(HWND cached) {
+    if (cached && IsWindow(cached))
+        return cached;
+    return FindCurrentProcessTaskbarWnd();
 }
 
 // ---- UI-thread marshalling --------------------------------------------------
@@ -3410,7 +3474,18 @@ static void ApplyLayout(StackPanel const& sp, HWND hTaskbarWnd) {
             g_percentWidestDesired =
                 std::max(g_percentWidestDesired, std::ceil(measured) + 2.0);
         g_percentCellWidth = g_percentWidestDesired;
-        if (auto text = g_batteryPercentFE.try_as<TextBlock>())
+        // RECORD FROM THE SAME ELEMENT THE WATCHER READS. OnLayoutUpdatedImpl
+        // compares against g_percentSurface.text, which Probe may have found
+        // several levels below g_batteryPercentFE (an InnerTextBlock inside a
+        // SystemTray.IconView is the exact case the Surface template exists
+        // for). Recording only when the presenter is ITSELF a TextBlock left
+        // this empty in that case, while the watcher kept reading "80%", so the
+        // comparison never matched and every layout pass triggered a full
+        // re-apply — an endless loop on the Explorer UI thread. ApplyAllItemStyles
+        // resolves the surface earlier in this same function, so it is available.
+        if (g_percentSurface.text)
+            SetPercentMeasuredText(g_percentSurface.text.Text().c_str());
+        else if (auto text = g_batteryPercentFE.try_as<TextBlock>())
             SetPercentMeasuredText(text.Text().c_str());
         Wh_Log(L"[Layout] percentage \"%s\" measures %.1f, widest seen %.0f "
                L"-> cell %.0f (ItemWidth %d)",
@@ -3683,31 +3758,13 @@ static void ApplyLayout(StackPanel const& sp, HWND hTaskbarWnd) {
     // Everything above is what the mod intends; this is what the framework
     // did. Log both edges of every container so a mismatch names itself
     // instead of costing another round of theorising.
-    try {
-        if (g_omniButton) g_omniButton.UpdateLayout();
-        auto edgeInButton = [](FrameworkElement const& element) -> double {
-            if (!element || !g_omniButton) return -1.0;
-            try {
-                auto origin = element.TransformToVisual(g_omniButton)
-                                  .TransformPoint({});
-                return origin.X + element.ActualWidth();
-            } catch (...) {
-                return -1.0;
-            }
-        };
-        Wh_Log(L"[Geometry] button=%.1f sp=%.1f battPresenter=%.1f "
-               L"innerPanel=%.1f percent=%.1f | right edge in button space: "
-               L"sp=%.1f battery=%.1f percent=%.1f",
-               g_omniButton ? g_omniButton.ActualWidth() : -1.0,
-               sp.ActualWidth(),
-               g_batteryPresenter ? g_batteryPresenter.ActualWidth() : -1.0,
-               g_batteryInnerPanel ? g_batteryInnerPanel.ActualWidth() : -1.0,
-               g_batteryPercentFE ? g_batteryPercentFE.ActualWidth() : -1.0,
-               edgeInButton(sp), edgeInButton(g_batteryGlyphFE),
-               edgeInButton(g_batteryPercentFE));
-    } catch (...) {
-        Wh_Log(L"[Geometry] Failed to read the final rendered geometry");
-    }
+    // The [Geometry] diagnostic that used to sit here is gone. It served its
+    // purpose — it is what pinned down the clipping arithmetic — but it forced
+    // a synchronous UpdateLayout() purely to read final geometry, and that is
+    // exactly what re-entered this code path from LayoutUpdated. Wh_Log itself
+    // is free when logging is off, but its ARGUMENTS are not: eight
+    // TransformToVisual calls and a full layout pass ran on every apply,
+    // whether anyone was reading the log or not.
 
     Wh_Log(L"[Layout] Applied arrangement (SP children=%d)", n);
 }
@@ -3819,13 +3876,26 @@ static void OnLayoutUpdatedImpl() {
     RegisterLayoutUpdatedMonitor(sp);
 }
 
+// RE-ENTRANCY GUARD. OnLayoutUpdatedImpl reaches ApplyLayout, which calls
+// UpdateLayout() — a SYNCHRONOUS layout pass that raises LayoutUpdated again,
+// re-entering this handler while the outer frame is mid-flight. The nested call
+// starts with CleanupAndResetCurrentElements(), which nulls g_batteryPresenter
+// and friends; the outer frame then carries on and writes to a now-null
+// projected type. The other outcome is XAML's own layout-cycle detector firing,
+// whose catch below revokes the monitor and silently stops item-change
+// detection altogether. One bool closes both.
+static bool g_inLayoutUpdated = false;
+
 static void OnLayoutUpdated(IInspectable const&, IInspectable const&) {
+    if (g_inLayoutUpdated) return;
+    g_inLayoutUpdated = true;
     try {
         OnLayoutUpdatedImpl();
     } catch (...) {
         LogCurrentUiException(L"LayoutUpdated");
         RevokeLayoutUpdated();
     }
+    g_inLayoutUpdated = false;
 }
 
 // ── Taskbar and window thread helpers ─────────────────────────────────────
@@ -4066,8 +4136,12 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dw
 }
 
 static void ApplyOnTaskbarWindowThread() {
-    HWND window = g_taskbarWnd ? g_taskbarWnd
-                               : FindCurrentProcessTaskbarWnd();
+    // Same stale-handle trap as the unload path: if Shell_TrayWnd was recreated
+    // the cached handle is dead, and preferring it makes the retry dispatch to
+    // a dead window forever instead of re-finding the live one.
+    HWND window = (g_taskbarWnd && IsWindow(g_taskbarWnd))
+                      ? g_taskbarWnd
+                      : FindCurrentProcessTaskbarWnd();
     if (!window) return;
     RunFromWindowThread(window, [](void*) {
         if (!g_unloading) g_applied = ApplyPendingSettings();
@@ -4150,9 +4224,15 @@ void Wh_ModUninit() {
     g_unloading = true;
     StopRetryThread();
     Wh_Log(L"[Uninit]");
-    HWND hWnd = g_taskbarWnd ? g_taskbarWnd : FindCurrentProcessTaskbarWnd();
+    // VALIDATE THE CACHED HANDLE. Shell_TrayWnd can be recreated in-process, and
+    // preferring a stale g_taskbarWnd made RunFromWindowThread fail outright
+    // (GetWindowThreadProcessId returns 0), which skipped the whole teardown.
+    HWND hWnd = (g_taskbarWnd && IsWindow(g_taskbarWnd))
+                    ? g_taskbarWnd
+                    : FindCurrentProcessTaskbarWnd();
+    bool tornDown = false;
     if (hWnd) {
-        if (!RunFromWindowThread(hWnd, [](void*) {
+        tornDown = RunFromWindowThread(hWnd, [](void*) {
             // Controlled UI-thread unload: revoke/restore on this thread, then
             // reset() the no_destroy optionals to free their heap buffers.
             g_autoRevokerList->clear();
@@ -4160,11 +4240,34 @@ void Wh_ModUninit() {
             g_autoRevokerList.reset();
             g_lease.reset();
             g_applied = false;
-        }, nullptr)) {
-            Wh_Log(L"[Uninit] Taskbar dispatch failed; retaining XAML state");
+        }, nullptr);
+    }
+
+    if (!tornDown) {
+        // NOTHING THAT CAN CALL INTO THIS MOD MAY OUTLIVE THE UNLOAD. Windhawk
+        // FreeLibrarys this image as soon as Wh_ModUninit returns, and every
+        // IconView that was constructed but never raised Loaded still holds a
+        // Loaded delegate whose code lives in it. Revoking off the UI thread is
+        // not ideal, but a dangling callback into a freed image is worse, so
+        // this runs regardless and swallows whatever the cross-thread revoke
+        // throws. The leased properties are deliberately left written: they are
+        // cosmetic, and restoring them needs the UI thread we just failed to
+        // reach.
+        Wh_Log(L"[Uninit] Taskbar dispatch unavailable; revoking callbacks "
+               L"anyway so nothing outlives the unload");
+        try {
+            if (g_autoRevokerList) g_autoRevokerList->clear();
+        } catch (...) {
         }
-    } else {
-        Wh_Log(L"[Uninit] No taskbar UI thread; retaining XAML state");
+        try {
+            g_autoRevokerList.reset();
+        } catch (...) {
+        }
+        try {
+            g_lease.reset();
+        } catch (...) {
+        }
+        g_applied = false;
     }
 }
 
@@ -4180,7 +4283,7 @@ void Wh_ModSettingsChanged() {
     g_reapplyPending = true;
     g_applied = false;
     Wh_Log(L"[Settings] Updated");
-    HWND hWnd = g_taskbarWnd ? g_taskbarWnd : FindCurrentProcessTaskbarWnd();
+    HWND hWnd = tbh::ResolveTaskbarWnd(g_taskbarWnd);
     if (!hWnd) {
         Wh_Log(L"[Settings] No taskbar window; scheduling retry");
         StartRetryThread();
