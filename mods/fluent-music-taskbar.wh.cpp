@@ -18,6 +18,10 @@
 Puts the currently playing track inside the taskbar itself — a real child of the
 taskbar's own XAML tree, not a window floating over it.
 
+![The strip in the taskbar](https://raw.githubusercontent.com/xabdelrahman/flyout-taskbar/main/docs/taskbar-strip.png)
+
+![The player popover](https://raw.githubusercontent.com/xabdelrahman/flyout-taskbar/main/docs/popover.png)
+
 The strip shows album artwork, the track and the artist, plus a waveform that
 animates only while something is actually playing. Clicking it opens a popover
 with previous / play-pause / next, shuffle and repeat.
