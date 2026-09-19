@@ -2882,7 +2882,7 @@ void InstallDiscoveryHooks(HMODULE controlCenter) {
         return;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK controlCenterDllHooks[] = {
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::ControlCenter::implementation::ControlCenterView,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnGotFocus(void *))"},
             &ControlCenterView_OnGotFocus_Original,
@@ -2890,7 +2890,8 @@ void InstallDiscoveryHooks(HMODULE controlCenter) {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(controlCenter, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(controlCenter, controlCenterDllHooks,
+                                    ARRAYSIZE(controlCenterDllHooks))) {
         Wh_Log(L"Could not hook ControlCenterView::OnGotFocus; the panel will "
                L"not be injected");
         return;
