@@ -11251,6 +11251,40 @@
         "version": "1.0.14"
       }
     },
+    "premiere-pro-theme": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1789838225000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1789838225000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Threshold Editor",
+        "compilerOptions": "-ldwmapi -lgdi32",
+        "description": "Recolors the Adobe Premiere Pro interface — panels, timeline, monitors, window frame and menu bar — with a choice of very dark palettes.",
+        "github": "https://github.com/CakeDev4k",
+        "include": [
+          "Adobe Premiere Pro.exe",
+          "Adobe Premiere Pro (Beta).exe"
+        ],
+        "license": "MIT",
+        "name": "Premiere Pro Theme",
+        "version": "1.0.0"
+      }
+    },
     "prevent-focus-stealing": {
       "details": {
         "defaultSorting": 1530,
