@@ -78,14 +78,16 @@ Requires a Windows 11 build where the Control Center is hosted by
 `ShellHost.exe` -- developed and tested on 25H2 (build 26200).
 
 Earlier builds host it in `ShellExperienceHost.exe` and are **not supported**.
-That process is deliberately not included: it is a XAML host too, so the mod
-would start a second copy of the brightness engine there -- a second WMI
-connection, a second DDC/CI probe of every monitor, and a second subscriber to
-the internal panel's brightness events. With "laptop brightness keys control
-every monitor" on, both copies would answer the same keypress and apply the
-change twice. Supporting those builds properly means starting the engine only
-in the process that actually hosts the Control Center, which is a change worth
-making deliberately rather than by adding an include.
+That process is not included, but the reason has changed and is now only that
+it is untested. The original objection -- that a second XAML host would start a
+second brightness engine, doubling the WMI connection, the DDC/CI probe and the
+response to every brightness keypress -- no longer applies: the engine starts
+only where `ControlCenter.dll` is loaded, so a process that never hosts the
+Control Center never starts one.
+
+What remains unverified is whether the hooked symbol and the `L1Grid` layout
+this mod depends on are the same on those builds. Without one to test on, the
+include stays off.
 
 ## Notes and limitations
 
@@ -1445,12 +1447,6 @@ class Engine {
 
 }  // namespace brightness
 
-// Defined further down; declared here so the watcher's timer can start the
-// engine once XAML is up.
-namespace {
-void StartControlCenterWatch();
-}
-
 // ===========================================================================
 // Mod state
 // ===========================================================================
@@ -1474,7 +1470,7 @@ std::atomic<bool> g_engineStarted{false};
 // Waiting until a XAML window exists means the host is past that point.
 // Joined in Wh_ModUninit, not detached: Start() is still inside the engine
 // when it runs, and Windhawk frees this DLL the moment uninit returns.
-[[clang::no_destroy]] std::thread g_engineStarter;
+[[clang::no_destroy]] std::optional<std::thread> g_engineStarter;
 // The flag alone would leave a gap: a starter that had claimed the flag but
 // not yet assigned the thread would be invisible to a join in uninit, and
 // would then run on into a freed DLL. The mutex closes it.
@@ -1498,7 +1494,7 @@ void StartEngineAsync() {
         return;
     }
     g_engineStarterSpawned = true;
-    g_engineStarter = std::thread([] { StartEngineIfNeeded(); });
+    g_engineStarter.emplace([] { StartEngineIfNeeded(); });
 }
 
 // Guards against double-injection: the visual tree reports the Control Center
@@ -2002,7 +1998,7 @@ void PopulateSliderPanel(wuxc::StackPanel const& panel, Injection& injection) {
                 wuxc::Primitives::RangeBaseValueChangedEventArgs const& args) {
                 SetIconLevel(icon, args.NewValue());
                 title.Text(FormatRowTitle(displayName,
-                                          static_cast<int>(args.NewValue())));
+                                          static_cast<int>(std::lround(args.NewValue()))));
                 if (g_suppressValueChanged) {
                     // Echo of a refresh we just wrote into the slider; writing
                     // it back to the hardware would be a pointless round trip.
@@ -2010,7 +2006,7 @@ void PopulateSliderPanel(wuxc::StackPanel const& panel, Injection& injection) {
                 }
                 if (g_engine) {
                     // Returns immediately; the worker coalesces and writes.
-                    g_engine->SetPercent(id, static_cast<int>(args.NewValue()));
+                    g_engine->SetPercent(id, static_cast<int>(std::lround(args.NewValue())));
                 }
             }));
 
@@ -2457,7 +2453,7 @@ void ApplyRefreshedValues() try {
                 if (d.stableId != binding.id || d.percent < 0) {
                     continue;
                 }
-                if (std::abs(slider.Value() - d.percent) < 0.5) {
+                if (std::lround(slider.Value()) == d.percent) {
                     break;  // already correct, leave the thumb alone
                 }
                 // Scoped: if Value() throws, the outer catch would otherwise
@@ -2835,21 +2831,118 @@ namespace {
 
 std::atomic<bool> g_discoveryHooked{false};
 
-// Windhawk applies registered hooks itself, but only once, when Wh_ModInit
-// returns. Anything registered later sits there unarmed -- which is why five
-// hooks, including a canary that had nothing to do with the view, stayed
-// silent in the very process that was showing the flyout.
-std::atomic<bool> g_inModInit{false};
-
 using ControlCenterView_OnGotFocus_t = int(WINAPI*)(void* pThis, void* args);
 ControlCenterView_OnGotFocus_t ControlCenterView_OnGotFocus_Original;
+
+// Defined below, next to the tree helpers it belongs with.
+wux::FrameworkElement FindContainingView(wux::DependencyObject const& from);
+
+// Injecting before the first paint, via IComponentConnector::Connect.
+//
+// PlayIntroAnimation was the previous attempt and it never fires -- it is
+// hooked optional, so it failed silently and everything kept going through
+// OnGotFocus, which is after the flyout has been drawn. That is the flicker.
+//
+// Connect does fire, once per x:Name, during InitializeComponent. Two things
+// have to be right about how it is used:
+//
+//   * Not `this`. That is the view, half-constructed; taking a reference to
+//     it there destroyed it and took ShellHost down with a call through freed
+//     memory. Only the `target` argument is touched here, which is a child
+//     element the host has already finished building.
+//   * Not immediately. The tree is still being assembled, so walking it now
+//     would find an incomplete one. The work is posted to the dispatcher and
+//     runs once construction has unwound -- still well before the flyout is
+//     shown.
+using Connect_t = int(WINAPI*)(void* pThis, int connectionId, void* target);
+Connect_t ControlCenterView_Connect_Original;
+
+[[clang::no_destroy]] wux::DispatcherTimer g_earlyInject{nullptr};
+
+int WINAPI ControlCenterView_Connect_Hook(void* pThis, int connectionId,
+                                          void* target) {
+    int ret = ControlCenterView_Connect_Original(pThis, connectionId, target);
+
+    if (!target || g_earlyInject) {
+        return ret;  // once per view is enough
+    }
+    try {
+        wux::FrameworkElement child{nullptr};
+        static_cast<::IUnknown*>(target)->QueryInterface(
+            winrt::guid_of<wux::FrameworkElement>(), winrt::put_abi(child));
+        if (!child) {
+            return ret;
+        }
+
+        auto timer = wux::DispatcherTimer();
+        timer.Interval(std::chrono::milliseconds(1));
+        timer.Tick([timer, weak = winrt::make_weak(child)](
+                       wf::IInspectable const&, wf::IInspectable const&) {
+            timer.Stop();
+            g_earlyInject = nullptr;
+            try {
+                auto element = weak.get();
+                if (!element) {
+                    return;
+                }
+                auto view = FindContainingView(element);
+                if (!view) {
+                    return;
+                }
+                StartEngineAsync();
+                if (!g_engine || g_engine->GetDisplays().empty()) {
+                    return;
+                }
+                AttachInjector(view);
+            } catch (...) {
+            }
+        });
+        timer.Start();
+        g_earlyInject = timer;
+    } catch (...) {
+    }
+    return ret;
+}
+
+// Walks up from any element to the ControlCenterView that contains it.
+//
+// Used by the Connect hook, which is handed a child rather than the view --
+// deliberately, because the view is half-built at that point and touching it
+// crashed the host.
+wux::FrameworkElement FindContainingView(wux::DependencyObject const& from) {
+    wux::DependencyObject node = from;
+    for (int up = 0; up < 12 && node; ++up) {
+        try {
+            if (std::wstring_view{winrt::get_class_name(node)} ==
+                L"ControlCenter.ControlCenterView") {
+                return node.try_as<wux::FrameworkElement>();
+            }
+        } catch (...) {
+        }
+        node = wuxm::VisualTreeHelper::GetParent(node);
+    }
+    return nullptr;
+}
 
 int WINAPI ControlCenterView_OnGotFocus_Hook(void* pThis, void* args) {
     int ret = ControlCenterView_OnGotFocus_Original(pThis, args);
 
     try {
+        // QueryInterface, not copy_from_abi.
+        //
+        // copy_from_abi does not QI -- it AddRefs and stores the pointer as
+        // it is. `pThis` is the produce<ControlCenterView, IControlOverrides>
+        // subobject, so the result would be an IControlOverrides* being
+        // treated as an IFrameworkElement*. The happy path hides that, since
+        // passing it as a DependencyObject does a real conversion, but the
+        // retry path calls view.Loaded() and view.LayoutUpdated() straight
+        // through the assumed vtable -- slots far past the end of
+        // IControlOverrides. That is a wild call, not an exception, so the
+        // catch below would not have caught it, and it would have fired on
+        // exactly the builds the retries exist for.
         wux::FrameworkElement view{nullptr};
-        winrt::copy_from_abi(view, pThis);
+        static_cast<::IUnknown*>(pThis)->QueryInterface(
+            winrt::guid_of<wux::FrameworkElement>(), winrt::put_abi(view));
         if (!view) {
             return ret;
         }
@@ -2877,7 +2970,7 @@ int WINAPI ControlCenterView_OnGotFocus_Hook(void* pThis, void* args) {
     return ret;
 }
 
-void InstallDiscoveryHooks(HMODULE controlCenter) {
+void InstallDiscoveryHooks(HMODULE controlCenter, bool applyNow) {
     if (g_discoveryHooked.exchange(true)) {
         return;
     }
@@ -2888,6 +2981,15 @@ void InstallDiscoveryHooks(HMODULE controlCenter) {
             &ControlCenterView_OnGotFocus_Original,
             ControlCenterView_OnGotFocus_Hook,
         },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::ControlCenter::implementation::ControlCenterView,struct winrt::Windows::UI::Xaml::Markup::IComponentConnector>::Connect(int,void *))"},
+            &ControlCenterView_Connect_Original,
+            ControlCenterView_Connect_Hook,
+            // Optional: without it the panel still appears, on the OnGotFocus
+            // path a frame later. That is the visible flicker when Quick
+            // Settings has been closed for a while, not a loss of function.
+            true,
+        },
     };
 
     if (!WindhawkUtils::HookSymbols(controlCenter, controlCenterDllHooks,
@@ -2897,13 +2999,48 @@ void InstallDiscoveryHooks(HMODULE controlCenter) {
         return;
     }
 
-    if (!g_inModInit.load() && !Wh_ApplyHookOperations()) {
+    // Windhawk applies what Wh_ModInit registers, once, when it returns.
+    // A hook registered later -- from inside the load hook -- has to be
+    // applied by hand or it never fires.
+    if (applyNow && !Wh_ApplyHookOperations()) {
         Wh_Log(L"Hook registered but could not be armed");
         return;
     }
 
     Wh_Log(L"ControlCenterView::OnGotFocus hooked");
+
+    // Start the engine now, not when the Control Center is first opened.
+    //
+    // This is what the flicker was. Injecting early is no use if there is
+    // nothing to inject: the panel is built from the engine's display list,
+    // and the first enumeration blocks on WMI and an I2C round trip per
+    // monitor. Opening Quick Settings cold meant the intro-animation hook
+    // found no displays, gave up, and the panel arrived on the later
+    // OnGotFocus path -- after the stock layout had already been drawn. Open
+    // it twice in a row and the engine was warm, so it looked fine, which is
+    // exactly the pattern that was reported.
+    //
+    // Doing it here still honours why the engine was moved out of
+    // Wh_ModAfterInit in the first place. The objection was to starting on
+    // "any XAML window exists", which is true in processes that never host a
+    // Control Center. ControlCenter.dll being loaded is a far tighter gate:
+    // the module is present precisely where the panel can appear, and it is
+    // mapped long before the flyout is first opened.
+    StartEngineAsync();
 }
+
+// ControlCenter.dll is usually mapped before Wh_ModInit runs. When it is not,
+// it has to be caught at the moment it loads, before any of its code runs.
+//
+// The hook goes on kernelbase's LoadLibraryExW, not kernel32's.
+//
+// That distinction is the whole reason an earlier version needed a polling
+// thread: kernel32's export is a forwarder, and the WinRT activation path
+// that maps this DLL calls kernelbase directly, so a hook on kernel32 never
+// saw the load at all. Polling papered over it, and brought a thread that
+// Wh_ModUninit had no way to join -- if the mod were disabled mid-sleep,
+// Windhawk would unmap the image and the thread's next instruction would be
+// in freed memory. Hooking the right function removes the need for both.
 
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 LoadLibraryExW_t LoadLibraryExW_Original;
@@ -2913,34 +3050,32 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR path, HANDLE file, DWORD flags) {
     if (module && path && !g_discoveryHooked.load()) {
         const wchar_t* name = wcsrchr(path, L'\\');
         if (_wcsicmp(name ? name + 1 : path, L"ControlCenter.dll") == 0) {
-            InstallDiscoveryHooks(module);
+            // Applied immediately: this runs inside the load, before anything
+            // in the DLL has executed, so there is no window in which the
+            // host could build the view unhooked.
+            InstallDiscoveryHooks(module, /*applyNow=*/true);
         }
     }
     return module;
 }
 
-// ControlCenter.dll is usually mapped before Wh_ModInit runs, but not always,
-// and when it is not it arrives without a LoadLibraryExW call -- so watch for
-// it both ways and take whichever notices first. Polling alone left a window
-// the host built the view in; the load hook alone never fired.
 void StartControlCenterWatch() {
     if (HMODULE module = GetModuleHandleW(L"ControlCenter.dll")) {
-        InstallDiscoveryHooks(module);
+        // Windhawk arms what Wh_ModInit registers, so nothing to apply here.
+        InstallDiscoveryHooks(module, /*applyNow=*/false);
         return;
     }
 
-    WindhawkUtils::SetFunctionHook(LoadLibraryExW, LoadLibraryExW_Hook,
+    HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+    auto target = kernelBase ? reinterpret_cast<LoadLibraryExW_t>(
+                                   GetProcAddress(kernelBase, "LoadLibraryExW"))
+                             : nullptr;
+    if (!target) {
+        Wh_Log(L"No kernelbase!LoadLibraryExW; the panel will not be injected");
+        return;
+    }
+    WindhawkUtils::SetFunctionHook(target, LoadLibraryExW_Hook,
                                    &LoadLibraryExW_Original);
-
-    std::thread([] {
-        for (int i = 0; i < 400 && !g_discoveryHooked.load(); ++i) {
-            if (HMODULE module = GetModuleHandleW(L"ControlCenter.dll")) {
-                InstallDiscoveryHooks(module);
-                return;
-            }
-            Sleep(25);
-        }
-    }).detach();
 }
 
 }  // namespace
@@ -2986,9 +3121,7 @@ BOOL Wh_ModInit() {
 
     // In Wh_ModInit so that Windhawk arms the hook itself when it returns, and
     // so it is in place before the host can build the view.
-    g_inModInit.store(true);
     StartControlCenterWatch();
-    g_inModInit.store(false);
 
     // The engine is deliberately NOT started here; see StartEngineIfNeeded.
     return TRUE;
@@ -3049,7 +3182,12 @@ void Wh_ModUninit() {
     //    the mod -- unlike a diagnostics connection, which had to be given
     //    back by hand and would otherwise have outlived the DLL.
     if (g_shellWatcher) {
-        g_shellWatcher->Stop();
+        if (g_earlyInject) {
+        g_earlyInject.Stop();
+        g_earlyInject = nullptr;
+    }
+
+    g_shellWatcher->Stop();
         // Explicit, rather than relying on the suppressed destructor: Stop()
         // is what joins the thread and closes the event, so this is the point
         // at which the watcher is provably finished with.
@@ -3060,9 +3198,13 @@ void Wh_ModUninit() {
     //    to be finished before anything below touches the engine.
     {
         std::lock_guard<std::mutex> lock(g_engineStarterMutex);
-        if (g_engineStarter.joinable()) {
-            g_engineStarter.join();
+        if (g_engineStarter && g_engineStarter->joinable()) {
+            g_engineStarter->join();
         }
+        // reset() is the release: there is no assignment to a std::thread
+        // that means "done with this", and move-assigning over a joinable
+        // one terminates.
+        g_engineStarter.reset();
     }
 
     // 3. No more engine callbacks, and join both engine threads so none can be
