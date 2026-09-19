@@ -7,7 +7,7 @@
 // @github          https://github.com/ZainYoussef
 // @homepage        https://github.com/ZainYoussef/WinDraw
 // @include         windhawk.exe
-// @compilerOptions -ld2d1 -ldwrite -lole32 -luser32 -lgdi32 -ldwmapi -lwindowscodecs -lshell32
+// @compilerOptions -ld2d1 -ldwrite -lole32 -luser32 -lgdi32 -ldwmapi -lwindowscodecs -lshell32 -luuid
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -495,10 +495,8 @@ A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite
 #include <dwmapi.h>
 #include <wincodec.h>
 #include <shlobj.h>
+#include <knownfolders.h>
 #include <shellapi.h>
-
-// Explicit definition of FOLDERID_Pictures to ensure clean linking across all MinGW toolchains
-static const GUID kWinDrawFolderID_Pictures = { 0x33e28130, 0x4e3a, 0x468b, { 0xb5, 0x8a, 0x3e, 0x24, 0xbf, 0x20, 0x29, 0xff } };
 
 #ifndef DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
 #define DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 ((DPI_AWARENESS_CONTEXT)-4)
@@ -1027,7 +1025,6 @@ static HWND g_hHotkeyWnd = NULL;
 static HANDLE g_hHotkeyThread = NULL;
 static DWORD g_hotkeyThreadId = 0;
 static bool g_bIsActive = false;
-static float g_dpiScale = 1.0f;
 static float g_toolbarDpiScale = 1.0f;
 static float g_radialDpiScale = 1.0f;
 static float g_toolbarExpandedWidth = 887.0f;
@@ -1083,20 +1080,6 @@ inline float GetFlyoutDpiScale(const D2D1_RECT_F& rect) {
     return g_toolbarDpiScale;
 }
 
-inline float GetDpiScaleForHwnd(HWND hWnd) {
-    UINT dpi = 96;
-    HMODULE hUser = GetModuleHandleW(L"user32.dll");
-    if (hUser) {
-        using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
-        auto pGetDpiForWindow = (GetDpiForWindow_t)GetProcAddress(hUser, "GetDpiForWindow");
-        if (pGetDpiForWindow && hWnd) {
-            dpi = pGetDpiForWindow(hWnd);
-        }
-    }
-    if (dpi == 0) dpi = 96;
-    return (float)dpi / 96.0f;
-}
-
 static ID2D1Factory* g_pD2DFactory = NULL;
 static ID2D1HwndRenderTarget* g_pRenderTarget = NULL;
 static ID2D1StrokeStyle* g_pRoundStrokeStyle = NULL;
@@ -1113,6 +1096,9 @@ static IDWriteTextFormat* g_pCenterBadgeFormat = NULL;
 static IDWriteTextFormat* g_pMenuTextFormat = NULL;
 static IDWriteTextFormat* g_pMenuKeyFormat = NULL;
 static IDWriteTextFormat* g_pToolbarKeyFormat = NULL;
+static IDWriteTextFormat* g_pToastTextFormat = NULL;
+static IDWriteTextFormat* g_pToastIconFormat = NULL;
+static float g_currentToastFontScale = 0.0f;
 static IWICImagingFactory* g_pWICFactory = NULL;
 
 // Radial Satellite Arc Geometry Cache
@@ -1264,7 +1250,6 @@ struct ToolbarButton {
     std::wstring label;
     bool isPen;
     D2D1_COLOR_F penColor;
-    bool isToggled;
     std::wstring shortcut;
     bool isCustomColor = false;
 };
@@ -1562,7 +1547,6 @@ void InvalidateOverlay();
 void ShowToastNotification(const std::wstring& msg);
 void RenderOverlay();
 void DrawZoomPreview(ID2D1HwndRenderTarget* pRT);
-void EraseBrushAt(float x, float y, float radius);
 bool EraseWholeShapeAt(float x, float y, float radius);
 void SaveBitmapToPNG(HBITMAP hBitmap, const std::wstring& filePath);
 void UpdateTrayIcon(HWND hwnd);
@@ -1621,8 +1605,11 @@ void ReleaseTextFormats() {
     SafeRelease(g_pRadialIconFormat);
     SafeRelease(g_pIconFormat);
     SafeRelease(g_pTextFormat);
+    SafeRelease(g_pToastTextFormat);
+    SafeRelease(g_pToastIconFormat);
     g_currentFontScale = 0.0f;
     g_currentRadialFontScale = 0.0f;
+    g_currentToastFontScale = 0.0f;
 }
 
 void CreateRadialTextFormats(float scale) {
@@ -1820,6 +1807,11 @@ void CaptureDesktop() {
     int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
     if (vw <= 0 || vh <= 0) return;
 
+    bool wasVisible = (g_hOverlayWnd && IsWindowVisible(g_hOverlayWnd));
+    if (wasVisible) {
+        ShowWindow(g_hOverlayWnd, SW_HIDE);
+    }
+
     UINT32 maxTexSize = g_pRenderTarget->GetMaximumBitmapSize();
     int capW = vw;
     int capH = vh;
@@ -1835,10 +1827,14 @@ void CaptureDesktop() {
     }
 
     HDC hScreenDC = GetDC(NULL);
-    if (!hScreenDC) return;
+    if (!hScreenDC) {
+        if (wasVisible && g_hOverlayWnd) ShowWindow(g_hOverlayWnd, SW_SHOWNOACTIVATE);
+        return;
+    }
     HDC hMemDC = CreateCompatibleDC(hScreenDC);
     if (!hMemDC) {
         ReleaseDC(NULL, hScreenDC);
+        if (wasVisible && g_hOverlayWnd) ShowWindow(g_hOverlayWnd, SW_SHOWNOACTIVATE);
         return;
     }
 
@@ -1855,6 +1851,7 @@ void CaptureDesktop() {
     if (!hBitmap) {
         DeleteDC(hMemDC);
         ReleaseDC(NULL, hScreenDC);
+        if (wasVisible && g_hOverlayWnd) ShowWindow(g_hOverlayWnd, SW_SHOWNOACTIVATE);
         return;
     }
 
@@ -1865,6 +1862,10 @@ void CaptureDesktop() {
     } else {
         SetStretchBltMode(hMemDC, HALFTONE);
         StretchBlt(hMemDC, 0, 0, capW, capH, hScreenDC, vx, vy, vw, vh, SRCCOPY | CAPTUREBLT);
+    }
+
+    if (wasVisible && g_hOverlayWnd) {
+        ShowWindow(g_hOverlayWnd, SW_SHOWNOACTIVATE);
     }
 
     D2D1_BITMAP_PROPERTIES props = D2D1::BitmapProperties(
@@ -4106,21 +4107,56 @@ void DrawToast(ID2D1HwndRenderTarget* pRT, int screenW, int screenH) {
     pRT->FillRoundedRectangle(D2D1::RoundedRect(toastRect, 6.0f * scale, 6.0f * scale), pBg);
     pRT->DrawRoundedRectangle(D2D1::RoundedRect(toastRect, 6.0f * scale, 6.0f * scale), pBorder, 1.2f * scale);
 
-    if (g_pIconFormat && g_pTextFormat) {
+    if (g_pDWriteFactory && (std::abs(scale - g_currentToastFontScale) > 0.01f || !g_pToastTextFormat || !g_pToastIconFormat)) {
+        SafeRelease(g_pToastTextFormat);
+        SafeRelease(g_pToastIconFormat);
+        g_currentToastFontScale = scale;
+        const wchar_t* iconFont = GetIconFontFamilyName();
+
+        g_pDWriteFactory->CreateTextFormat(
+            L"Segoe UI Variable Display",
+            NULL,
+            DWRITE_FONT_WEIGHT_SEMI_BOLD,
+            DWRITE_FONT_STYLE_NORMAL,
+            DWRITE_FONT_STRETCH_NORMAL,
+            13.0f * scale,
+            L"en-us",
+            &g_pToastTextFormat
+        );
+        if (g_pToastTextFormat) {
+            g_pToastTextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+            g_pToastTextFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        }
+
+        g_pDWriteFactory->CreateTextFormat(
+            iconFont,
+            NULL,
+            DWRITE_FONT_WEIGHT_NORMAL,
+            DWRITE_FONT_STYLE_NORMAL,
+            DWRITE_FONT_STRETCH_NORMAL,
+            16.0f * scale,
+            L"en-us",
+            &g_pToastIconFormat
+        );
+        if (g_pToastIconFormat) {
+            g_pToastIconFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            g_pToastIconFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        }
+    }
+
+    if (g_pToastIconFormat && g_pToastTextFormat) {
         D2D1_RECT_F iconRect = D2D1::RectF(toastRect.left + 12.0f * scale, toastRect.top, toastRect.left + 36.0f * scale, toastRect.bottom);
         D2D1_RECT_F textRect = D2D1::RectF(toastRect.left + 38.0f * scale, toastRect.top, toastRect.right - 12.0f * scale, toastRect.bottom);
 
         ID2D1SolidColorBrush* pCheckBrush = nullptr;
         pRT->CreateSolidColorBrush(D2D1::ColorF(0.32f, 0.85f, 0.69f, 1.00f * alpha), &pCheckBrush);
-        pRT->DrawText(L"\uE73E", 1, g_pIconFormat, iconRect, pCheckBrush ? pCheckBrush : pText);
+        pRT->DrawText(L"\uE73E", 1, g_pToastIconFormat, iconRect, pCheckBrush ? pCheckBrush : pText);
         if (pCheckBrush) pCheckBrush->Release();
 
-        g_pTextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
-        pRT->DrawText(g_toastMessage.c_str(), (UINT32)g_toastMessage.length(), g_pTextFormat, textRect, pText);
-        g_pTextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        pRT->DrawText(g_toastMessage.c_str(), (UINT32)g_toastMessage.length(), g_pToastTextFormat, textRect, pText);
     }
-    else if (g_pTextFormat) {
-        pRT->DrawText(g_toastMessage.c_str(), (UINT32)g_toastMessage.length(), g_pTextFormat, toastRect, pText);
+    else if (g_pToastTextFormat) {
+        pRT->DrawText(g_toastMessage.c_str(), (UINT32)g_toastMessage.length(), g_pToastTextFormat, toastRect, pText);
     }
 
     if (pText) pText->Release();
@@ -5585,10 +5621,6 @@ bool EraseWholeShapeAt(float x, float y, float radius) {
     return changed;
 }
 
-void EraseBrushAt(float x, float y, float radius) {
-    EraseWholeShapeAt(x, y, radius);
-}
-
 // ----------------------------------------------------------------------------
 // Snapshot & PNG Export via WIC
 // ----------------------------------------------------------------------------
@@ -5790,7 +5822,7 @@ void SaveCroppedSnapshot(int left, int top, int width, int height) {
         }
         if (targetDir.empty()) {
             PWSTR pKnownPath = NULL;
-            if (SUCCEEDED(SHGetKnownFolderPath(kWinDrawFolderID_Pictures, 0, NULL, &pKnownPath)) && pKnownPath) {
+            if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Pictures, 0, NULL, &pKnownPath)) && pKnownPath) {
                 targetDir = std::wstring(pKnownPath) + L"\\WinDraw";
                 CoTaskMemFree(pKnownPath);
                 EnsureDirectoryExists(targetDir);
@@ -6021,7 +6053,6 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     }
 
     case WM_DPICHANGED: {
-        g_dpiScale = (float)LOWORD(wParam) / 96.0f;
         int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
         int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
         BuildToolbarLayout(vw, vh);
@@ -6032,7 +6063,6 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     case WM_DISPLAYCHANGE: {
         GetSystemMonitorList(true); // Refresh cached monitor topologies
         InvalidateMonitorBoundsCache();
-        g_dpiScale = GetDpiScaleForHwnd(hwnd);
         int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
         int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
         int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
@@ -6921,7 +6951,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 }
                 else if (hasMulti && relY >= (3.0f * itemH + divH)) {
                     int secIdx = (int)((relY - (3.0f * itemH + divH)) / itemH);
-                    int maxSec = 1 + (int)monitors.size() + 1; // ActiveCursor + N monitors + AllMonitors
+                    int maxSec = 2 + (int)monitors.size() + 1; // ActiveCursor + Primary + N monitors + AllMonitors
                     if (secIdx >= 0 && secIdx < maxSec) {
                         g_hoveredBackdropFlyoutItem = 3 + secIdx;
                     }
@@ -7006,7 +7036,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
         // Active Left-Click Brush Erase Drag (when in Eraser mode)
         if (g_isLeftClickErasing) {
-            EraseBrushAt(g_cursorX, g_cursorY, g_eraserRadius);
+            EraseWholeShapeAt(g_cursorX, g_cursorY, g_eraserRadius);
             InvalidateOverlay();
             return 0;
         }
@@ -7039,7 +7069,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 return 0;
             }
             if (g_isRightClickErasing) {
-                EraseBrushAt(g_cursorX, g_cursorY, g_eraserRadius);
+                EraseWholeShapeAt(g_cursorX, g_cursorY, g_eraserRadius);
                 InvalidateOverlay();
                 return 0;
             }
@@ -7324,24 +7354,26 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 BuildToolbarLayout(GetSystemMetrics(SM_CXVIRTUALSCREEN), GetSystemMetrics(SM_CYVIRTUALSCREEN));
             }
             else if (g_radialHoverTarget == RadialTarget::RecentHub) {
-                int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-                int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-                if (g_toolbarCollapsed) {
-                    g_toolbarCollapsed = false;
-                    float pillCenterX = (g_toolbarRect.left + g_toolbarRect.right) * 0.5f;
-                    g_toolbarCustomX = pillCenterX - g_toolbarExpandedWidth * 0.5f;
-                    if (g_toolbarCustomX < 10.0f) g_toolbarCustomX = 10.0f;
-                    if (g_toolbarCustomX + g_toolbarExpandedWidth > (float)vw - 10.0f) g_toolbarCustomX = (float)vw - g_toolbarExpandedWidth - 10.0f;
-                    g_colorFlyoutOpen = true;
-                } else {
-                    g_colorFlyoutOpen = !g_colorFlyoutOpen;
+                if (g_settings.showBottomToolbar) {
+                    int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+                    int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+                    if (g_toolbarCollapsed) {
+                        g_toolbarCollapsed = false;
+                        float pillCenterX = (g_toolbarRect.left + g_toolbarRect.right) * 0.5f;
+                        g_toolbarCustomX = pillCenterX - g_toolbarExpandedWidth * 0.5f;
+                        if (g_toolbarCustomX < 10.0f) g_toolbarCustomX = 10.0f;
+                        if (g_toolbarCustomX + g_toolbarExpandedWidth > (float)vw - 10.0f) g_toolbarCustomX = (float)vw - g_toolbarExpandedWidth - 10.0f;
+                        g_colorFlyoutOpen = true;
+                    } else {
+                        g_colorFlyoutOpen = !g_colorFlyoutOpen;
+                    }
+                    g_shapesFlyoutOpen = false;
+                    g_gridFlyoutOpen = false;
+                    g_backdropFlyoutOpen = false;
+                    BuildToolbarLayout(vw, vh);
                 }
-                g_shapesFlyoutOpen = false;
-                g_gridFlyoutOpen = false;
-                g_backdropFlyoutOpen = false;
                 g_activeColor = g_customColor.activeColor;
                 SetToolMode(ToolMode::Pen);
-                BuildToolbarLayout(vw, vh);
             }
 
             g_radialActive = false;
@@ -7507,7 +7539,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 }
                 else if (hasMulti && relY >= (3.0f * itemH + divH)) {
                     int secIdx = (int)((relY - (3.0f * itemH + divH)) / itemH);
-                    int maxSec = 1 + (int)monitors.size() + 1;
+                    int maxSec = 2 + (int)monitors.size() + 1;
                     if (secIdx >= 0 && secIdx < maxSec) {
                         clickedIdx = 3 + secIdx;
                     }
@@ -7922,7 +7954,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                     g_toolbarCollapsed = true;
                     {
                         float oldCenterX = (g_toolbarRect.left + g_toolbarRect.right) * 0.5f;
-                        g_toolbarCustomX = oldCenterX - 41.0f; // pillW * 0.5f
+                        g_toolbarCustomX = oldCenterX - g_toolbarPillWidth * 0.5f;
                     }
                     BuildToolbarLayout(GetSystemMetrics(SM_CXVIRTUALSCREEN), GetSystemMetrics(SM_CYVIRTUALSCREEN));
                     SavePersistentToolbarState();
@@ -7971,7 +8003,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             g_hasPushedUndoForCurrentErase = false;
             g_isLeftClickErasing = true;
             SetCapture(hwnd);
-            EraseBrushAt(x, y, g_eraserRadius);
+            EraseWholeShapeAt(x, y, g_eraserRadius);
         }
         else {
             // Start Drawing Stroke or Shape
@@ -8151,18 +8183,23 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     case WM_RBUTTONUP: {
         if (g_isRightMouseDown || g_isRightClickClearing) {
             ReleaseCapture();
-            bool wasErasing = g_isRightClickErasing || g_isRightClickClearing || g_wheelUsedWhileRightMouseDown;
+            float upX = (float)GET_X_LPARAM(lParam);
+            float upY = (float)GET_Y_LPARAM(lParam);
+            float distMoved = std::sqrt(DistanceSq(upX, upY, (float)g_rightMouseDownPos.x, (float)g_rightMouseDownPos.y));
+            ULONGLONG holdDuration = GetTickCount64() - g_rightMouseDownTime;
+            bool wasHeldOrErasing = g_isRightClickErasing || g_isRightClickClearing || g_wheelUsedWhileRightMouseDown || (holdDuration > 180) || (distMoved > 4.0f);
+
             g_isRightMouseDown = false;
             g_isRightClickErasing = false;
             g_isRightClickClearing = false;
             g_hasPushedUndoForCurrentErase = false;
             g_wheelUsedWhileRightMouseDown = false;
 
-            if (!wasErasing) {
+            if (!wasHeldOrErasing) {
                 // Quick right-click tap: Open Radial Menu!
                 g_radialActive = true;
-                g_radialX = (float)GET_X_LPARAM(lParam);
-                g_radialY = (float)GET_Y_LPARAM(lParam);
+                g_radialX = upX;
+                g_radialY = upY;
                 g_radialDpiScale = GetDpiScaleAtPoint(g_radialX, g_radialY);
                 if (g_radialDpiScale <= 0.1f) g_radialDpiScale = 1.0f;
                 CreateRadialTextFormats(g_radialDpiScale);
@@ -8185,6 +8222,9 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         g_isDrawing = false;
         g_isLaserDrawing = false;
         g_isLeftClickErasing = false;
+        g_isRightMouseDown = false;
+        g_isRightClickErasing = false;
+        g_isRightClickClearing = false;
         g_isSnippingDrag = false;
         g_pickerDrag = ColorPickerDrag::None;
         return 0;
@@ -8340,8 +8380,6 @@ void ShowOverlay() {
             NULL, NULL, wc.hInstance, NULL
         );
         SetLayeredWindowAttributes(g_hOverlayWnd, 0, 255, LWA_ALPHA);
-
-        g_dpiScale = GetDpiScaleForHwnd(g_hOverlayWnd);
         CreateD2DResources(g_hOverlayWnd);
     }
     else {
@@ -8849,7 +8887,7 @@ DWORD WINAPI HotkeyThread(LPVOID) {
 
     CoInitialize(NULL);
 
-    HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_MULTI_THREADED, &g_pD2DFactory);
+    HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
     if (FAILED(hr)) {
         Wh_Log(L"Failed to create Direct2D Factory (0x%08X)", hr);
         CoUninitialize();
