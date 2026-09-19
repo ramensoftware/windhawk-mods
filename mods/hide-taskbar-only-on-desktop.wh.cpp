@@ -2,7 +2,7 @@
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Hides selected taskbars while their displays show only the desktop
-// @version         7.2.0
+// @version         7.3.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -35,6 +35,7 @@ Hides selected bottom-docked taskbars when their display is showing only the des
 - Per-display borderless fullscreen tracking
 - Intentional support for up to 16 logical display entries
 - Recovery after taskbar recreation or tool-process restart
+- Optional stable monitor interface-name mapping
 
 ## Settings
 
@@ -46,7 +47,42 @@ Hides selected bottom-docked taskbars when their display is showing only the des
 
 **Taskbars to hide on desktop** selects the displays whose taskbars participate in desktop-only hiding.
 
-Display selections use the current monitor enumeration order. The logical display number may change after display topology changes. The mod intentionally supports up to 16 logical display entries. This limit is part of the current fixed settings/state design and is retained intentionally.
+**Stable monitor interface names** lets you add mappings by selecting a display and pasting its Windows monitor interface name returned by `EnumDisplayDevicesW` with `EDD_GET_DEVICE_INTERFACE_NAME`. Each mapping has its own display selector and text field, so a mapping for Display 10 can be added directly without creating mappings for Displays 1 through 9. Interface mappings reassign the selected display slot to the matching physical monitor. If that monitor replaces another monitor already using that slot, the displaced monitor is automatically assigned to the next available display slot after the currently detected displays; when all 16 slots are occupied, it uses a slot left empty by the remapping.
+
+To find the interface names on Windows, run this in PowerShell:
+
+```powershell
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class DisplayDevices2 {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct DISPLAY_DEVICE {
+        public int cb;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string DeviceName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceString;
+        public int StateFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceID;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceKey;
+    }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "EnumDisplayDevicesW")]
+    public static extern bool EnumDisplayDevices(string lpDevice, uint iDevNum, ref DISPLAY_DEVICE lpDisplayDevice, uint dwFlags);
+}
+'@
+for ($i = 1; $i -le 16; $i++) {
+    $m = New-Object DisplayDevices2+DISPLAY_DEVICE
+    $m.cb = [Runtime.InteropServices.Marshal]::SizeOf($m)
+    if ([DisplayDevices2]::EnumDisplayDevices("\\.\DISPLAY$i", 0, [ref]$m, 1)) {
+        Write-Host "Display $i : $($m.DeviceString)"
+        Write-Host "Interface : $($m.DeviceID)"
+        Write-Host ""
+    }
+}
+```
+
+Paste the full value shown after **Interface :** into the mapping for the display slot you want to attach to that physical monitor.
+
+The mod intentionally supports up to 16 logical display entries. This limit is part of the current fixed settings/state design and is retained intentionally.
 
 ## Difference from `taskbar-fade`
 
@@ -62,19 +98,16 @@ The state logic runs in a dedicated Windhawk tool process. Taskbars are hidden w
 
 Fullscreen ownership is tracked per display for borderless monitor-sized windows. Foreground, move/size, and window-location events are used to update fullscreen transitions promptly, while short validation timers and a periodic safety refresh cover transitions that do not produce a single reliable event.
 
-The 16-display logical monitor limit has been tested with the mod's current display-selection system. In testing, the mod's **Display 2** selection correctly affected a monitor that Windows identified separately as `\\.\DISPLAY9`. This confirms that the mod's logical display numbering is independent of Windows' `DISPLAYn` identifier and that the current selection behavior works correctly across that difference.
-
 ## Limitations
 
 - Desktop-only hiding and hover reveal apply to bottom-docked taskbars.
 - The hidden taskbar remains part of the normal work area and is click-through.
-- Display selections use the current logical display numbering, and those numbers can change after display topology changes.
 - If a taskbar's monitor cannot be resolved during a state refresh, the mod fails safe by leaving that taskbar visible.
 - Flashing taskbar buttons and tray notifications are not visible while the taskbar is transparent.
 - Native Windows taskbar auto-hide remains separate from this mod; when it is enabled, this mod does not take over that taskbar.
 - Other taskbar transparency/style mods can conflict when they modify the same taskbar.
 - A visible, monitor-sized, captionless, non-resizable application may be treated as fullscreen.
-- If the dedicated tool process terminates unexpectedly, a later tool-process startup performs ownership recovery. If the taskbar window itself no longer exists, restarting Windows Explorer recreates it.
+- If the dedicated tool process terminates unexpectedly while a taskbar is hidden, disable and re-enable this mod in Windhawk or restart Windows Explorer to restore it. A later tool-process startup also performs ownership recovery. If the taskbar window itself no longer exists, restarting Windows Explorer recreates it.
 - Windows shell classes/processes can change between Windows releases.
 */
 // ==/WindhawkModReadme==
@@ -95,12 +128,39 @@ The 16-display logical monitor limit has been tested with the mod's current disp
     hover zone, before the taskbar hides again. Only applies to that case
     - other hides (e.g. minimizing the last window) are instant.
     Default 700ms.
+- monitorInterfaceMappings:
+  - - display: none
+      $name: Display
+      $options:
+      - none: No display selected
+      - monitor1: Display 1
+      - monitor2: Display 2
+      - monitor3: Display 3
+      - monitor4: Display 4
+      - monitor5: Display 5
+      - monitor6: Display 6
+      - monitor7: Display 7
+      - monitor8: Display 8
+      - monitor9: Display 9
+      - monitor10: Display 10
+      - monitor11: Display 11
+      - monitor12: Display 12
+      - monitor13: Display 13
+      - monitor14: Display 14
+      - monitor15: Display 15
+      - monitor16: Display 16
+    - interfaceName: ""
+      $name: Monitor interface name
+      $description: >-
+        Paste the full value after "Interface :" from EnumDisplayDevicesW
+        with EDD_GET_DEVICE_INTERFACE_NAME.
 - hoverRevealOnMonitors: ["all"]
   $name: Reveal taskbar on bottom-edge hover
   $description: >-
     Select the displays where bottom-edge hovering should reveal the taskbar.
-    Select the displays by their current logical number (Display 1, Display 2, and so on). Internal Windows device identifiers can differ and are not used for
-    the selection number. Select All displays to enable it everywhere, or replace
+    Select the displays by their current logical number (Display 1, Display 2, and so on).
+    An optional stable interface name can be configured in Stable monitor interface names.
+    Select All displays to enable it everywhere, or replace
     it with individual displays.
   $options:
   - all: All displays
@@ -123,14 +183,14 @@ The 16-display logical monitor limit has been tested with the mod's current disp
 - hideOnMonitors: ["all"]
   $name: Taskbars to hide on desktop
   $description: >-
-    Select one or more displays using their current logical display number. Internal
-    Windows `\\.\DISPLAYn` identifiers are not used for the selection number.
-    These numbers may differ from the display numbers shown in Windows Display
-    Settings. Choose All displays to hide every connected display. Only
-    bottom-docked taskbars participate in desktop-based hiding. Use Add to
-    select multiple displays. Selections use the current logical display
-    numbering, so the selected number may refer to a different physical
-    display after Windows changes the display order.
+    Select one or more displays using their current logical display number.
+    Stable monitor interface names can optionally be assigned in the
+    Stable monitor interface names setting so an individual selection can stay
+    attached to the same physical monitor when the logical display order changes.
+    Choose All displays to hide every connected display. Only bottom-docked taskbars
+    participate in desktop-based hiding. Use Add to select multiple displays.
+    If a selected entry has no interface name configured, its current logical
+    display number is used.
   $options:
   - all: All displays
   - monitor1: Display 1
@@ -158,17 +218,24 @@ The 16-display logical monitor limit has been tested with the mod's current disp
 #include <wchar.h>
 #include <cstdlib>
 constexpr size_t kMaxMonitorNumbers = 16;
+constexpr size_t kMonitorInterfaceNameLength = 128;
 constexpr size_t kMaxTaskbars = 16;
 constexpr UINT WM_APP_REFRESH = WM_APP + 1;
 constexpr UINT WM_APP_SETTINGS = WM_APP + 2;
 constexpr UINT_PTR kHoverExpireTimerId = 2;
 constexpr UINT_PTR kPostMinimizeReassertTimerId = 3;
 constexpr UINT_PTR kFullscreenValidationTimerId = 4;
+struct MonitorInterfaceMapping {
+    int monitorNumber;
+    WCHAR interfaceName[kMonitorInterfaceNameLength];
+};
 struct {
     int extraHoverMarginPx;
     DWORD autoHideDelayMs;
     bool hideAllMonitors;
     bool hideMonitor[kMaxMonitorNumbers + 1];
+    MonitorInterfaceMapping monitorInterfaceMappings[kMaxMonitorNumbers];
+    size_t monitorInterfaceMappingCount;
     bool hoverAllMonitors;
     bool hoverMonitor[kMaxMonitorNumbers + 1];
 } g_settings = {};
@@ -201,6 +268,7 @@ HWINEVENTHOOK g_taskbarFocusHook = nullptr;
 HANDLE g_workerThread = nullptr;
 DWORD g_workerThreadId = 0;
 HANDLE g_workerReadyEvent = nullptr;
+LONG g_workerInitializationResult = 0;
 HANDLE g_cursorThread = nullptr;
 HANDLE g_cursorStopEvent = nullptr;
 struct CursorHoverSnapshot {
@@ -225,6 +293,14 @@ constexpr wchar_t kTaskbarOriginalLayeredAttributesValidProp[] =
     L"windhawk-hide-taskbar-only-on-desktop-original-layered-valid";
 constexpr LONG_PTR kModTaskbarExStyleBits =
     WS_EX_LAYERED | WS_EX_TRANSPARENT;
+bool GetWindowExStyle(HWND hwnd, LONG_PTR* exStyle) {
+    if (!hwnd || !exStyle) {
+        return false;
+    }
+    SetLastError(ERROR_SUCCESS);
+    *exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    return *exStyle != 0 || GetLastError() == ERROR_SUCCESS;
+}
 bool GetWindowUlongPtrProp(HWND hwnd, const wchar_t* name, ULONG_PTR* value) {
     if (!hwnd || !name || !value) {
         return false;
@@ -258,8 +334,20 @@ bool DropStaleTaskbarOwnership(HWND hwnd, LONG_PTR currentExStyle) {
     if (!hwnd) {
         return false;
     }
-    const LONG_PTR restoredExStyle =
-        currentExStyle & ~kModTaskbarExStyleBits;
+    ULONG_PTR originalExStyleValue = 0;
+    const bool haveOriginalExStyle = GetWindowUlongPtrProp(
+        hwnd,
+        kTaskbarOriginalExStyleProp,
+        &originalExStyleValue
+    );
+    LONG_PTR restoredExStyle = currentExStyle;
+    if (haveOriginalExStyle) {
+        const LONG_PTR originalExStyle =
+            static_cast<LONG_PTR>(originalExStyleValue);
+        const LONG_PTR bitsAddedByMod =
+            kModTaskbarExStyleBits & ~originalExStyle;
+        restoredExStyle = currentExStyle & ~bitsAddedByMod;
+    }
     if (restoredExStyle != currentExStyle) {
         SetLastError(ERROR_SUCCESS);
         LONG_PTR previousExStyle = SetWindowLongPtrW(
@@ -282,9 +370,8 @@ bool ForceRestoreTaskbar(HWND hwnd) {
     if (!SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA)) {
         Wh_Log(L"Failed to force taskbar alpha visible for %p", hwnd);
     }
-    SetLastError(ERROR_SUCCESS);
-    LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-    if (exStyle == 0 && GetLastError() != ERROR_SUCCESS) {
+    LONG_PTR exStyle = 0;
+    if (!GetWindowExStyle(hwnd, &exStyle)) {
         return false;
     }
     const LONG_PTR restoredExStyle =
@@ -304,7 +391,8 @@ bool ForceRestoreTaskbar(HWND hwnd) {
     RemoveTaskbarOwnershipProperties(hwnd);
     SetWindowPos(
         hwnd, nullptr, 0, 0, 0, 0,
-        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+        SWP_FRAMECHANGED | SWP_ASYNCWINDOWPOS
     );
     return true;
 }
@@ -312,9 +400,8 @@ bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
     if (!hwnd || !IsWindow(hwnd)) {
         return false;
     }
-    SetLastError(ERROR_SUCCESS);
-    LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-    if (exStyle == 0 && GetLastError() != ERROR_SUCCESS) {
+    LONG_PTR exStyle = 0;
+    if (!GetWindowExStyle(hwnd, &exStyle)) {
         return false;
     }
     if (hide) {
@@ -324,9 +411,7 @@ bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
             if (!DropStaleTaskbarOwnership(hwnd, exStyle)) {
                 return false;
             }
-            SetLastError(ERROR_SUCCESS);
-            exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-            if (exStyle == 0 && GetLastError() != ERROR_SUCCESS) {
+            if (!GetWindowExStyle(hwnd, &exStyle)) {
                 return false;
             }
         } else if (ownedByMod) {
@@ -472,12 +557,8 @@ bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
         haveOriginalColorKey &&
         haveOriginalAlpha &&
         haveOriginalFlags;
-    SetLastError(ERROR_SUCCESS);
-    LONG_PTR currentExStyle = GetWindowLongPtrW(
-        hwnd,
-        GWL_EXSTYLE
-    );
-    if (currentExStyle == 0 && GetLastError() != ERROR_SUCCESS) {
+    LONG_PTR currentExStyle = 0;
+    if (!GetWindowExStyle(hwnd, &currentExStyle)) {
         return false;
     }
     SetLastError(ERROR_SUCCESS);
@@ -521,7 +602,11 @@ bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
             return false;
         }
     }
-    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    SetWindowPos(
+        hwnd, nullptr, 0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+        SWP_FRAMECHANGED | SWP_ASYNCWINDOWPOS
+    );
     RemoveTaskbarOwnershipProperties(hwnd);
     return true;
 }
@@ -638,29 +723,198 @@ MonitorList GetCurrentMonitors() {
     EnumDisplayMonitors(nullptr, nullptr, CollectMonitorProc, reinterpret_cast<LPARAM>(&list));
     return list;
 }
-int GetMonitorNumber(const MonitorList& list, HMONITOR monitor) {
-    for (size_t i = 0; i < list.count; ++i) {
-        if (list.entries[i].monitor == monitor) {
-            return static_cast<int>(i + 1);
+bool GetMonitorInterfaceName(HMONITOR monitor, WCHAR* output, size_t outputCount) {
+    if (!monitor || !output || outputCount == 0) {
+        return false;
+    }
+    output[0] = L'\0';
+    MONITORINFOEXW info = {};
+    info.cbSize = sizeof(info);
+    if (!GetMonitorInfoW(monitor, &info)) {
+        return false;
+    }
+    DISPLAY_DEVICEW device = {};
+    device.cb = sizeof(device);
+    if (!EnumDisplayDevicesW(
+            info.szDevice,
+            0,
+            &device,
+            EDD_GET_DEVICE_INTERFACE_NAME
+        )) {
+        return false;
+    }
+    if (!device.DeviceID[0]) {
+        return false;
+    }
+    wcsncpy_s(output, outputCount, device.DeviceID, _TRUNCATE);
+    return output[0] != L'\0';
+}
+void BuildMonitorSelectionSlots(
+    const MonitorList& monitors,
+    int* selectionSlotForMonitor
+) {
+    if (!selectionSlotForMonitor) {
+        return;
+    }
+
+    for (size_t i = 0; i < monitors.count; ++i) {
+        selectionSlotForMonitor[i] = 0;
+    }
+
+    if (monitors.count == 0) {
+        return;
+    }
+
+    WCHAR interfaceNames[kMaxMonitorNumbers][kMonitorInterfaceNameLength] = {};
+    bool haveInterfaceName[kMaxMonitorNumbers] = {};
+    for (size_t i = 0; i < monitors.count; ++i) {
+        haveInterfaceName[i] = GetMonitorInterfaceName(
+            monitors.entries[i].monitor,
+            interfaceNames[i],
+            ARRAYSIZE(interfaceNames[i])
+        );
+    }
+
+    int targetMonitor[kMaxMonitorNumbers + 1] = {};
+    for (size_t i = 0; i < g_settings.monitorInterfaceMappingCount; ++i) {
+        const MonitorInterfaceMapping& mapping =
+            g_settings.monitorInterfaceMappings[i];
+        if (mapping.monitorNumber < 1 ||
+            mapping.monitorNumber > static_cast<int>(kMaxMonitorNumbers) ||
+            !mapping.interfaceName[0]) {
+            continue;
+        }
+
+        int matchedMonitor = -1;
+        for (size_t monitorIndex = 0; monitorIndex < monitors.count; ++monitorIndex) {
+            if (haveInterfaceName[monitorIndex] &&
+                _wcsicmp(
+                    interfaceNames[monitorIndex],
+                    mapping.interfaceName
+                ) == 0) {
+                matchedMonitor = static_cast<int>(monitorIndex);
+                break;
+            }
+        }
+        if (matchedMonitor >= 0) {
+            // When duplicate targets exist, the last configured mapping wins.
+            targetMonitor[mapping.monitorNumber] = matchedMonitor + 1;
         }
     }
-    return 0;
+
+    // A physical monitor can only occupy one display slot. If duplicate
+    // mappings point the same monitor at multiple slots, the highest slot
+    // processed last wins and the earlier slot becomes available again.
+    int targetForMonitor[kMaxMonitorNumbers] = {};
+    for (int slot = 1; slot <= static_cast<int>(kMaxMonitorNumbers); ++slot) {
+        int monitorNumber = targetMonitor[slot];
+        if (monitorNumber < 1 ||
+            monitorNumber > static_cast<int>(monitors.count)) {
+            continue;
+        }
+
+        const int monitorIndex = monitorNumber - 1;
+        if (targetForMonitor[monitorIndex] != 0) {
+            targetMonitor[targetForMonitor[monitorIndex]] = 0;
+        }
+        targetForMonitor[monitorIndex] = slot;
+    }
+
+    bool slotOccupied[kMaxMonitorNumbers + 1] = {};
+    for (int slot = 1; slot <= static_cast<int>(kMaxMonitorNumbers); ++slot) {
+        int monitorNumber = targetMonitor[slot];
+        if (monitorNumber < 1 ||
+            monitorNumber > static_cast<int>(monitors.count)) {
+            continue;
+        }
+        const int monitorIndex = monitorNumber - 1;
+        selectionSlotForMonitor[monitorIndex] = slot;
+        slotOccupied[slot] = true;
+    }
+
+    // Preserve the original logical slot for monitors that were not moved.
+    // A displaced monitor gets the next slot after the currently detected
+    // displays, so mapping Display 2 to the physical monitor currently
+    // occupying Display 3 moves the old Display 2 to Display 4 on a
+    // three-monitor system instead of colliding with Display 3.
+    int nextOverflowSlot = static_cast<int>(monitors.count) + 1;
+    for (size_t monitorIndex = 0; monitorIndex < monitors.count; ++monitorIndex) {
+        if (selectionSlotForMonitor[monitorIndex] != 0) {
+            continue;
+        }
+
+        const int originalSlot = static_cast<int>(monitorIndex) + 1;
+        if (originalSlot <= static_cast<int>(kMaxMonitorNumbers) &&
+            !slotOccupied[originalSlot]) {
+            selectionSlotForMonitor[monitorIndex] = originalSlot;
+            slotOccupied[originalSlot] = true;
+            continue;
+        }
+
+        while (nextOverflowSlot <= static_cast<int>(kMaxMonitorNumbers) &&
+               slotOccupied[nextOverflowSlot]) {
+            ++nextOverflowSlot;
+        }
+        if (nextOverflowSlot <= static_cast<int>(kMaxMonitorNumbers)) {
+            selectionSlotForMonitor[monitorIndex] = nextOverflowSlot;
+            slotOccupied[nextOverflowSlot] = true;
+            ++nextOverflowSlot;
+            continue;
+        }
+
+        // With all 16 slots occupied, fall back to any slot left empty by a
+        // remap so the displaced monitor remains individually selectable.
+        for (int slot = 1;
+             slot <= static_cast<int>(kMaxMonitorNumbers);
+             ++slot) {
+            if (!slotOccupied[slot]) {
+                selectionSlotForMonitor[monitorIndex] = slot;
+                slotOccupied[slot] = true;
+                break;
+            }
+        }
+    }
 }
 bool IsBottomDockedTaskbar(HWND hTaskbar, HMONITOR monitor);
-bool IsMonitorSelected(int monitorNumber, const bool* selected) {
-    return selected && monitorNumber >= 1 &&
-           monitorNumber <= static_cast<int>(kMaxMonitorNumbers) &&
-           selected[monitorNumber];
+int FindMonitorIndex(const MonitorList& monitors, HMONITOR monitor);
+int ParseMonitorNumber(const WCHAR* value) {
+    if (!value || wcsncmp(value, L"monitor", 7) != 0) {
+        return 0;
+    }
+    wchar_t* endNumber = nullptr;
+    long number = wcstol(value + 7, &endNumber, 10);
+    return endNumber && *endNumber == L'\0' &&
+                   number >= 1 &&
+                   number <= static_cast<long>(kMaxMonitorNumbers)
+               ? static_cast<int>(number)
+               : 0;
+}
+bool IsMonitorSelected(
+    int monitorNumber,
+    const bool* selected
+) {
+    if (!selected ||
+        monitorNumber < 1 ||
+        monitorNumber > static_cast<int>(kMaxMonitorNumbers)) {
+        return false;
+    }
+    return selected[monitorNumber];
 }
 bool ShouldHideMonitor(const TaskbarMonitorState& state) {
     return
         g_settings.hideAllMonitors ||
-        IsMonitorSelected(state.monitorNumber, g_settings.hideMonitor);
+        IsMonitorSelected(
+            state.monitorNumber,
+            g_settings.hideMonitor
+        );
 }
 bool ShouldRevealOnHover(const TaskbarMonitorState& state) {
     return
         g_settings.hoverAllMonitors ||
-        IsMonitorSelected(state.monitorNumber, g_settings.hoverMonitor);
+        IsMonitorSelected(
+            state.monitorNumber,
+            g_settings.hoverMonitor
+        );
 }
 bool GetWindowProcessImageName(DWORD pid, wchar_t* output, size_t outputCount) {
     if (!pid || !output || outputCount == 0) {
@@ -892,6 +1146,9 @@ bool IsApplicationWindowCandidate(HWND hwnd, const WCHAR* className, ShellProces
             processKind
         ) ||
         IsTaskbarPopupClass(className)) {
+        return false;
+    }
+    if (IsShellChromeClass(className) || IsTaskbarWindow(hwnd)) {
         return false;
     }
     if (exStyle & WS_EX_TOOLWINDOW) {
@@ -1325,7 +1582,11 @@ BOOL CALLBACK ScanWindowsWithMonitorsProc(HWND hwnd, LPARAM lParam) {
         return TRUE;
     }
     bool allMonitorsClassified = true;
+    bool anyFullscreenMonitor = false;
     for (size_t i = 0; i < context->monitors->count; ++i) {
+        if (context->result->fullscreenOnMonitor[i]) {
+            anyFullscreenMonitor = true;
+        }
         if (
             !context->result->applicationOnMonitor[i] &&
             !context->result->fullscreenOnMonitor[i]
@@ -1336,6 +1597,7 @@ BOOL CALLBACK ScanWindowsWithMonitorsProc(HWND hwnd, LPARAM lParam) {
     }
     if (
         allMonitorsClassified &&
+        !anyFullscreenMonitor &&
         context->monitors->count != 0
     ) {
         return FALSE;
@@ -1501,6 +1763,9 @@ void ScanWindowsOnce(const MonitorList& monitors, WindowScanResult& result) {
     }
 }
 void RefreshTaskbarMonitorStates(const MonitorList& monitors) {
+    int selectionSlots[kMaxMonitorNumbers] = {};
+    BuildMonitorSelectionSlots(monitors, selectionSlots);
+
     TaskbarMonitorState oldStates[kMaxTaskbars] = {};
     const size_t oldCount =
         g_taskbarStateCount;
@@ -1521,8 +1786,12 @@ void RefreshTaskbarMonitorStates(const MonitorList& monitors) {
         TaskbarMonitorState state = {};
         state.hwnd = hwnd;
         state.monitor = monitor;
+        const int logicalMonitorIndex =
+            FindMonitorIndex(monitors, monitor);
         state.monitorNumber =
-            GetMonitorNumber(monitors, monitor);
+            logicalMonitorIndex >= 0
+                ? selectionSlots[logicalMonitorIndex]
+                : 0;
         state.desktopOnly = false;
         state.hiddenByMod = false;
         for (size_t i = 0; i < oldCount; ++i) {
@@ -1604,12 +1873,8 @@ void SetTaskbarState(TaskbarMonitorState& state, bool show) {
         if (!state.hiddenByMod) {
             return;
         }
-        SetLastError(ERROR_SUCCESS);
-        LONG_PTR exStyle = GetWindowLongPtrW(
-            state.hwnd,
-            GWL_EXSTYLE
-        );
-        if (exStyle == 0 && GetLastError() != ERROR_SUCCESS) {
+        LONG_PTR exStyle = 0;
+        if (!GetWindowExStyle(state.hwnd, &exStyle)) {
             return;
         }
         if (!(exStyle & WS_EX_LAYERED)) {
@@ -1631,12 +1896,8 @@ void SetTaskbarState(TaskbarMonitorState& state, bool show) {
         return;
     }
     if (state.hiddenByMod) {
-        SetLastError(ERROR_SUCCESS);
-        LONG_PTR exStyle = GetWindowLongPtrW(
-            state.hwnd,
-            GWL_EXSTYLE
-        );
-        if (exStyle == 0 && GetLastError() != ERROR_SUCCESS) {
+        LONG_PTR exStyle = 0;
+        if (!GetWindowExStyle(state.hwnd, &exStyle)) {
             return;
         }
         if (!(exStyle & WS_EX_LAYERED) ||
@@ -1661,21 +1922,18 @@ void SetTaskbarState(TaskbarMonitorState& state, bool show) {
                     return;
                 }
             }
-            SetLastError(ERROR_SUCCESS);
-            exStyle = GetWindowLongPtrW(state.hwnd, GWL_EXSTYLE);
-            if (exStyle != 0 || GetLastError() == ERROR_SUCCESS) {
-                if (!(exStyle & WS_EX_TRANSPARENT)) {
-                    SetLastError(ERROR_SUCCESS);
-                    if (SetWindowLongPtrW(
-                            state.hwnd,
-                            GWL_EXSTYLE,
-                            exStyle | WS_EX_LAYERED | WS_EX_TRANSPARENT
-                        ) == 0 &&
-                        GetLastError() != ERROR_SUCCESS) {
-                        Wh_Log(L"Failed to restore taskbar click-through style for %p", state.hwnd);
-                        if (ForceRestoreTaskbar(state.hwnd)) {
-                            state.hiddenByMod = false;
-                        }
+            if (GetWindowExStyle(state.hwnd, &exStyle) &&
+                !(exStyle & WS_EX_TRANSPARENT)) {
+                SetLastError(ERROR_SUCCESS);
+                if (SetWindowLongPtrW(
+                        state.hwnd,
+                        GWL_EXSTYLE,
+                        exStyle | WS_EX_LAYERED | WS_EX_TRANSPARENT
+                    ) == 0 &&
+                    GetLastError() != ERROR_SUCCESS) {
+                    Wh_Log(L"Failed to restore taskbar click-through style for %p", state.hwnd);
+                    if (ForceRestoreTaskbar(state.hwnd)) {
+                        state.hiddenByMod = false;
                     }
                 }
             }
@@ -1748,8 +2006,15 @@ void ScanVisibleShellPopupsOnce(const MonitorList& monitors, ShellPopupScanResul
     EnumWindows(ScanVisibleShellPopupsProc, reinterpret_cast<LPARAM>(&context));
 }
 int FindMonitorIndex(const MonitorList& monitors, HMONITOR monitor) {
-    const int monitorNumber = GetMonitorNumber(monitors, monitor);
-    return monitorNumber > 0 ? monitorNumber - 1 : -1;
+    if (!monitor) {
+        return -1;
+    }
+    for (size_t i = 0; i < monitors.count; ++i) {
+        if (monitors.entries[i].monitor == monitor) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
 }
 int GetHoverZonePx(HWND hTaskbar, UINT dpi) {
     RECT rect = {};
@@ -2478,7 +2743,8 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
         POINT cursorPoint = {};
         bool cursorOverTaskbar = false;
         if (GetCursorPos(&cursorPoint)) {
-            cursorOverTaskbar = WindowFromPoint(cursorPoint) == hwnd;
+            HWND hit = WindowFromPoint(cursorPoint);
+            cursorOverTaskbar = hit && GetAncestor(hit, GA_ROOT) == hwnd;
             if (!cursorOverTaskbar) {
                 RECT taskbarRect = {};
                 if (GetWindowRect(hwnd, &taskbarRect)) {
@@ -2697,11 +2963,18 @@ DWORD WINAPI WorkerThread(LPVOID) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     MSG msg = {};
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
-    if (g_workerReadyEvent) {
-        SetEvent(g_workerReadyEvent);
-    }
     if (!CreateWorkerMessageWindow()) {
         Wh_Log(L"Failed to create worker message window");
+        InterlockedExchange(&g_workerInitializationResult, -1);
+        DestroyWorkerMessageWindow();
+        if (g_workerReadyEvent) {
+            SetEvent(g_workerReadyEvent);
+        }
+        return 0;
+    }
+    InterlockedExchange(&g_workerInitializationResult, 1);
+    if (g_workerReadyEvent) {
+        SetEvent(g_workerReadyEvent);
     }
     g_foregroundHook =
         SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
@@ -2796,6 +3069,7 @@ void LoadSettings() {
         static_cast<DWORD>(delay);
     g_settings.hideAllMonitors = false;
     g_settings.hoverAllMonitors = false;
+    g_settings.monitorInterfaceMappingCount = 0;
     for (
         size_t i = 1;
         i <= kMaxMonitorNumbers;
@@ -2809,6 +3083,48 @@ void LoadSettings() {
         i < kMaxMonitorNumbers;
         ++i
     ) {
+        auto display =
+            WindhawkUtils::StringSetting::make(
+                L"monitorInterfaceMappings[%d].display",
+                static_cast<int>(i)
+            );
+        auto interfaceName =
+            WindhawkUtils::StringSetting::make(
+                L"monitorInterfaceMappings[%d].interfaceName",
+                static_cast<int>(i)
+            );
+
+        if (!*display && !*interfaceName) {
+            continue;
+        }
+
+        const int displayNumber = ParseMonitorNumber(display.get());
+        if (displayNumber == 0 || !*interfaceName) {
+            continue;
+        }
+
+        if (g_settings.monitorInterfaceMappingCount >=
+            kMaxMonitorNumbers) {
+            break;
+        }
+
+        MonitorInterfaceMapping& mapping =
+            g_settings.monitorInterfaceMappings[
+                g_settings.monitorInterfaceMappingCount++
+            ];
+        mapping.monitorNumber = static_cast<int>(displayNumber);
+        wcsncpy_s(
+            mapping.interfaceName,
+            ARRAYSIZE(mapping.interfaceName),
+            interfaceName.get(),
+            _TRUNCATE
+        );
+    }
+    for (
+        size_t i = 0;
+        i < kMaxMonitorNumbers;
+        ++i
+    ) {
         auto value =
             WindhawkUtils::StringSetting::make(L"hideOnMonitors[%d]", static_cast<int>(i));
         if (!*value) {
@@ -2816,20 +3132,9 @@ void LoadSettings() {
         }
         if (wcscmp(value, L"all") == 0) {
             g_settings.hideAllMonitors = true;
-        } else if (
-            wcsncmp(value, L"monitor", 7) == 0
-        ) {
-            wchar_t* endNumber = nullptr;
-            long number =
-                wcstol(value + 7, &endNumber, 10);
-            if (
-                endNumber &&
-                *endNumber == L'\0' &&
-                number >= 1 &&
-                number <= static_cast<long>(
-                    kMaxMonitorNumbers
-                )
-            ) {
+        } else {
+            const int number = ParseMonitorNumber(value);
+            if (number > 0) {
                 g_settings.hideMonitor[number] = true;
             }
         }
@@ -2846,20 +3151,9 @@ void LoadSettings() {
         }
         if (wcscmp(value, L"all") == 0) {
             g_settings.hoverAllMonitors = true;
-        } else if (
-            wcsncmp(value, L"monitor", 7) == 0
-        ) {
-            wchar_t* endNumber = nullptr;
-            long number =
-                wcstol(value + 7, &endNumber, 10);
-            if (
-                endNumber &&
-                *endNumber == L'\0' &&
-                number >= 1 &&
-                number <= static_cast<long>(
-                    kMaxMonitorNumbers
-                )
-            ) {
+        } else {
+            const int number = ParseMonitorNumber(value);
+            if (number > 0) {
                 g_settings.hoverMonitor[number] = true;
             }
         }
@@ -2877,6 +3171,7 @@ BOOL WhTool_ModInit() {
         Wh_Log(L"CreateEvent for worker readiness failed");
         return FALSE;
     }
+    InterlockedExchange(&g_workerInitializationResult, 0);
     g_workerThread =
         CreateThread(nullptr, 0, WorkerThread, nullptr, 0, &g_workerThreadId);
     if (!g_workerThread) {
@@ -2885,6 +3180,8 @@ BOOL WhTool_ModInit() {
     }
     DWORD readyResult =
         WaitForSingleObject(g_workerReadyEvent, 5000);
+    const LONG workerInitializationResult =
+        InterlockedCompareExchange(&g_workerInitializationResult, 0, 0);
     if (readyResult != WAIT_OBJECT_0) {
         EnumWindows(RestoreMarkedTaskbarProc, 0);
         if (g_workerThread) {
@@ -2902,6 +3199,16 @@ BOOL WhTool_ModInit() {
                 5000,
                 L"worker"
             )) {
+            ExitProcess(1);
+        }
+        SafeCloseHandle(g_workerThread);
+        SafeCloseHandle(g_workerReadyEvent);
+        return FALSE;
+    }
+    if (workerInitializationResult != 1) {
+        EnumWindows(RestoreMarkedTaskbarProc, 0);
+        if (g_workerThread &&
+            !WaitForThreadWithTimeout(g_workerThread, 5000, L"worker")) {
             ExitProcess(1);
         }
         SafeCloseHandle(g_workerThread);
