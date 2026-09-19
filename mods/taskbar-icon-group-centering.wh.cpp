@@ -4,7 +4,7 @@
 // @name:zh-CN      任务栏图标组居中
 // @description     Center the taskbar icons after a chosen position as one group relative to the whole taskbar. Requires the taskbar to be set to Left alignment.
 // @description:zh-CN 把任务栏中指定位置之后的图标作为一组相对整条任务栏居中。需要把任务栏对齐方式设为左对齐。
-// @version         1.2.4
+// @version         1.2.5
 // @author          Suioio
 // @github          https://github.com/Suioio
 // @license         GPL-3.0
@@ -1154,6 +1154,18 @@ double CalculateDynamicCenteredGap(
     }
 
     if (rightGroupWidth <= 0) {
+        // No app button follows the boundary: there is nothing to center, so
+        // zero is the measured answer and not a failed measurement. Any other
+        // non-positive width means the two measured edges crossed while the
+        // row was animating, which stays a failed measurement.
+        if (boundaryIndex + 1 >= static_cast<int>(appButtons.size())) {
+            if (measured) {
+                *measured = true;
+            }
+            if (trayMaxGap) {
+                *trayMaxGap = 0;
+            }
+        }
         return 0;
     }
 
@@ -2561,6 +2573,16 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                                           horizontalLayoutValid &&
                                           !mirroredOrdering;
 
+            // An invalid snapshot measured nothing, so this pass must leave the
+            // verdict, the margin ledger and the handlers untouched: rewriting
+            // the gap from it would hand every applied increment back and
+            // collapse the spacing for one pass, and storing the verdict would
+            // read as an alignment change once the snapshot is valid again. The
+            // next pass retries, exactly like the other not-ready paths.
+            if (!snapshot.signatureValid) {
+                return ReconcileResult::temporarilyNotReady;
+            }
+
             // Only a change against an already known verdict is a change: the
             // first pass on a left-aligned taskbar would otherwise arm the
             // settle window even though nothing is sliding.
@@ -2569,24 +2591,7 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                 taskbar.centeringApplies != centeringApplies;
             taskbar.layoutLeftAligned = leftAlignedDerived;
             taskbar.centeringApplies = centeringApplies;
-            // Only a snapshot that was really measured makes the verdict
-            // trustworthy: an invalid pass forces centeringApplies false for a
-            // reason that has nothing to do with the alignment, and marking the
-            // verdict known there would read as an alignment change on the next
-            // valid pass and arm the settle window for a row that is not
-            // sliding.
-            if (snapshot.signatureValid) {
-                taskbar.alignmentVerdictValid = true;
-            }
-
-            // An invalid snapshot measured nothing, so this pass must not touch
-            // the margin ledger: rewriting the gap from it would hand every
-            // applied increment back and collapse the spacing for one pass.
-            // The state stays as it is and the next pass retries, exactly like
-            // the other not-ready paths.
-            if (!snapshot.signatureValid) {
-                return ReconcileResult::temporarilyNotReady;
-            }
+            taskbar.alignmentVerdictValid = true;
 
             // B1: the split follows the button that sat at the configured
             // position when the anchor was learned, not whatever realized
@@ -3065,10 +3070,12 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
 
     // Nothing is written while the taskbar is centered, and the switch back to
     // Left is caught by OnTaskbarLayoutUpdated, which compares the alignment
-    // against the one the last reconcile applied and forces the rebuild. So
-    // this hot path can stop here instead of measuring and snapshotting; a
-    // taskbar that still holds an increment keeps the full path.
+    // against the one the last reconcile applied and forces the rebuild. That
+    // handler only exists once a taskbar is tracked, so this stops only when
+    // this thread already tracks one; a taskbar that still holds an increment
+    // keeps the full path.
     if (g_taskbarAlignment.load(std::memory_order_acquire) != 0 &&
+        g_trackedTaskbars && !g_trackedTaskbars->empty() &&
         !AnyTrackedTaskbarHoldsAppliedMargin()) {
         return;
     }
@@ -3276,10 +3283,10 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD flags) {
 BOOL Wh_ModInit() {
     LoadSettings();
 
-    // Seeded before the getter hook is installed, so a value the hook writes is
-    // never overwritten by this read: the shell may have read the alignment
-    // before this mod was loaded, and that is the only case the seed covers. A
-    // failed read keeps the current value.
+    // The hooks are installed when this function returns, so nothing the hook
+    // stores can be overwritten by this read. The seed covers the one case the
+    // hook cannot see: the shell read the alignment before this mod was
+    // loaded. A failed read keeps the current value.
     SeedTaskbarAlignmentFromRegistry();
 
     if (!HookTaskbarDllSymbols()) {
