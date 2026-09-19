@@ -42,18 +42,25 @@ When both controls are set to 100%, the mod doesn't install any hooks because
 the requested appearance is identical to the original Windows appearance.
 
 ## How it works
- 
+
 The mod hooks a single uDWM function, `CWindowBorder::GetShadowParameters`,
-and scales the radius and alpha values it produces. No overlay windows and no
-DWM cache manipulation, so disabling the mod restores the stock shadows
-immediately — no `dwm.exe` restart, no sign-out, and nothing persisted.
+and scales the radius and alpha values it produces. To apply changes to windows
+that are already open and restore the original shadows when the mod is disabled,
+the mod asks DWM to rebuild its window visuals on load and unload. On the tested
+build, the change and restoration happen immediately without restarting
+`dwm.exe` or signing out. The mod creates no overlay windows and stores no
+persistent state.
 
 ## Compatibility
 
-The mod resolves uDWM functions through Microsoft public symbols. Tested on
-Windows 11 25H2 build 26200.9445. On other
-builds, if the required uDWM shadow function can't be resolved, the mod logs
-this and does not load.
+Tested and supported on Windows 11 25H2 build 26200.9445.
+
+Windows 11 24H2 is currently unsupported: the required uDWM symbol can be
+resolved on build 26100.9457, but an independent test reported no visible
+shadow change.
+
+Other Windows builds haven't been tested. If the required uDWM symbol can't
+be resolved, the mod logs the error and doesn't load.
 
 */
 // ==/WindhawkModReadme==
