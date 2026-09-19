@@ -1,12 +1,12 @@
 // ==WindhawkMod==
 // @id              withered-foxy-jumpscare
 // @name            Withered Foxy Jumpscare
-// @description     Randomly shows the FNAF 2 Withered Foxy jumpscare fullscreen on top of all apps
+// @description     Randomly shows the FNAF 2 Withered Foxy jumpscare fullscreen on top of all apps. Downloads its default image and sound on first run
 // @version         1.0
 // @author          Kismeria
 // @github          https://github.com/Kismeria
 // @include         windhawk.exe
-// @compilerOptions -lgdiplus -lwinmm -lgdi32 -luser32 -lshell32
+// @compilerOptions -lgdiplus -lwinmm -lgdi32 -luser32 -lshell32 -lshlwapi
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -48,15 +48,18 @@ You can use your own files instead:
 
 - Windowed and borderless games: the jumpscare is drawn on top.
 - Exclusive fullscreen games don't allow other windows on top. For them, keep
-  "Steal focus" on: the game is minimized during the jumpscare and gets focus
-  back afterwards.
+  "Steal focus" on: the game is minimized during the jumpscare and the mod
+  tries to give focus back afterwards.
 - While "Steal focus" is on, keys typed during the jumpscare are ignored.
   Mouse clicks pass through.
 
 ## Testing
 
-- Turn on "Test on save" and save the settings.
+- Turn on "Test on save" and save the settings. It doesn't fire on Windhawk
+  start.
 - Or set a "Test hotkey", for example `Ctrl+Alt+F`.
+
+![Preview](https://raw.githubusercontent.com/Kismeria/WindHawk-Foxy-Jumpscare/8b94f89250a280ea926bd90cf3692d5175d14927/assets/preview.png)
 */
 // ==/WindhawkModReadme==
 
@@ -90,7 +93,7 @@ You can use your own files instead:
   $description: 0 = animation length. Max 10000
 - fps: 30
   $name: Default FPS
-  $description: 1-240. For frame folders and GIF frames without a delay
+  $description: 1-60. For frame folders and GIF frames without a delay
 - fitMode: cover
   $name: Fit
   $options:
@@ -108,6 +111,7 @@ You can use your own files instead:
   $name: Steal focus
 - testOnApply: false
   $name: Test on save
+  $description: Show the jumpscare every time the settings are saved
 - testHotkey: ''
   $name: Test hotkey
   $description: For example Ctrl+Alt+F. Empty = off
@@ -119,6 +123,7 @@ You can use your own files instead:
 #include <gdiplus.h>
 #include <mmsystem.h>
 #include <shlobj.h>
+#include <shlwapi.h>
 
 #include <algorithm>
 #include <cmath>
@@ -168,6 +173,7 @@ const wchar_t kMciAlias[] = L"whfoxyscream";
 const PROPID kPropertyTagFrameDelay = 0x5100;
 const int kTestHotkeyId = 1;
 const int kMaxDurationMs = 10000;
+const double kShakeRatio = 0.025;
 const GUID kFrameDimensionTime = {
     0x6aedbd6d,
     0x3fb5,
@@ -175,6 +181,7 @@ const GUID kFrameDimensionTime = {
     {0x83, 0xa6, 0x7f, 0x45, 0x22, 0x9d, 0xc8, 0x72}};
 
 Settings g_settings;
+bool g_downloadAttempted;
 bool g_downloadImage;
 bool g_downloadSound;
 HMODULE g_module;
@@ -196,7 +203,10 @@ std::wstring ReadStringSetting(PCWSTR name, bool expand = true) {
     }
 
     std::wstring expanded(size, L'\0');
-    ExpandEnvironmentStringsW(raw.c_str(), expanded.data(), size);
+    size = ExpandEnvironmentStringsW(raw.c_str(), expanded.data(), size);
+    if (!size || size > expanded.size()) {
+        return raw;
+    }
     expanded.resize(size - 1);
     return expanded;
 }
@@ -225,12 +235,17 @@ void LoadSettings() {
     } else {
         Wh_Log(L"Wh_GetModStoragePath failed");
     }
-    g_settings.imageUrl = ReadStringSetting(L"imageUrl", false);
-    g_settings.soundUrl = ReadStringSetting(L"soundUrl", false);
+    std::wstring imageUrl = ReadStringSetting(L"imageUrl", false);
+    std::wstring soundUrl = ReadStringSetting(L"soundUrl", false);
+    if (imageUrl != g_settings.imageUrl || soundUrl != g_settings.soundUrl) {
+        g_downloadAttempted = false;
+    }
+    g_settings.imageUrl = imageUrl;
+    g_settings.soundUrl = soundUrl;
     g_settings.volume = std::clamp(Wh_GetIntSetting(L"volume"), 0, 100);
     g_settings.durationMs =
         std::clamp(Wh_GetIntSetting(L"durationMs"), 0, kMaxDurationMs);
-    g_settings.fps = std::clamp(Wh_GetIntSetting(L"fps"), 1, 240);
+    g_settings.fps = std::clamp(Wh_GetIntSetting(L"fps"), 1, 60);
     g_settings.scalePercent =
         std::clamp(Wh_GetIntSetting(L"scalePercent"), 10, 500);
 
@@ -503,8 +518,7 @@ std::vector<Frame> LoadFrames() {
 
         std::sort(files.begin(), files.end(),
                   [](const std::wstring& a, const std::wstring& b) {
-                      return CompareStringOrdinal(a.c_str(), -1, b.c_str(), -1,
-                                                  TRUE) == CSTR_LESS_THAN;
+                      return StrCmpLogicalW(a.c_str(), b.c_str()) < 0;
                   });
 
         for (const auto& file : files) {
@@ -600,22 +614,10 @@ void CloseSound() {
     mciSendStringW(command.c_str(), nullptr, 0, nullptr);
 }
 
-LRESULT CALLBACK WindowProc(HWND hwnd,
-                            UINT message,
-                            WPARAM wParam,
-                            LPARAM lParam) {
-    switch (message) {
-        case WM_MOUSEACTIVATE:
-            return MA_NOACTIVATE;
-    }
-
-    return DefWindowProcW(hwnd, message, wParam, lParam);
-}
-
 bool RegisterWindowClass() {
     WNDCLASSEXW windowClass{
         .cbSize = sizeof(WNDCLASSEXW),
-        .lpfnWndProc = WindowProc,
+        .lpfnWndProc = DefWindowProcW,
         .hInstance = g_module,
         .hCursor = LoadCursorW(nullptr, IDC_ARROW),
         .lpszClassName = kWindowClass,
@@ -624,7 +626,7 @@ bool RegisterWindowClass() {
     return RegisterClassExW(&windowClass);
 }
 
-void ForceForeground(HWND hwnd) {
+void ForceForeground(HWND hwnd, bool topmost) {
     HWND foreground = GetForegroundWindow();
     DWORD foregroundThread =
         foreground ? GetWindowThreadProcessId(foreground, nullptr) : 0;
@@ -633,8 +635,10 @@ void ForceForeground(HWND hwnd) {
     bool attached = foregroundThread && foregroundThread != currentThread &&
                     AttachThreadInput(currentThread, foregroundThread, TRUE);
 
-    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    if (topmost) {
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    }
     BringWindowToTop(hwnd);
     SetForegroundWindow(hwnd);
 
@@ -688,15 +692,26 @@ void RunJumpscare(std::vector<Frame>& frames, std::mt19937_64& rng) {
         totalMs = std::clamp(animationMs, 800, kMaxDurationMs);
     }
 
+    int margin = (int)std::ceil(screenHeight * kShakeRatio) + 1;
+    int windowLeft = std::max(0, (screenWidth - targetWidth) / 2 - margin);
+    int windowTop = std::max(0, (screenHeight - targetHeight) / 2 - margin);
+    int windowRight =
+        std::min(screenWidth, (screenWidth + targetWidth + 1) / 2 + margin);
+    int windowBottom =
+        std::min(screenHeight, (screenHeight + targetHeight + 1) / 2 + margin);
+    int windowWidth = windowRight - windowLeft;
+    int windowHeight = windowBottom - windowTop;
+
     DWORD exStyle = WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT |
                     WS_EX_TOOLWINDOW;
     if (!g_settings.forceForeground) {
         exStyle |= WS_EX_NOACTIVATE;
     }
 
-    HWND hwnd = CreateWindowExW(exStyle, kWindowClass, L"", WS_POPUP, rc.left,
-                                rc.top, screenWidth, screenHeight, nullptr,
-                                nullptr, g_module, nullptr);
+    HWND hwnd = CreateWindowExW(
+        exStyle, kWindowClass, L"", WS_POPUP, rc.left + windowLeft,
+        rc.top + windowTop, windowWidth, windowHeight, nullptr, nullptr,
+        g_module, nullptr);
     if (!hwnd) {
         Wh_Log(L"CreateWindowEx failed");
         return;
@@ -707,8 +722,8 @@ void RunJumpscare(std::vector<Frame>& frames, std::mt19937_64& rng) {
 
     BITMAPINFO bitmapInfo{};
     bitmapInfo.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bitmapInfo.bmiHeader.biWidth = screenWidth;
-    bitmapInfo.bmiHeader.biHeight = -screenHeight;
+    bitmapInfo.bmiHeader.biWidth = windowWidth;
+    bitmapInfo.bmiHeader.biHeight = -windowHeight;
     bitmapInfo.bmiHeader.biPlanes = 1;
     bitmapInfo.bmiHeader.biBitCount = 32;
     bitmapInfo.bmiHeader.biCompression = BI_RGB;
@@ -729,7 +744,7 @@ void RunJumpscare(std::vector<Frame>& frames, std::mt19937_64& rng) {
     bool soundOpened = OpenSound();
 
     {
-        Gdiplus::Bitmap canvas(screenWidth, screenHeight, screenWidth * 4,
+        Gdiplus::Bitmap canvas(windowWidth, windowHeight, windowWidth * 4,
                                PixelFormat32bppPARGB, (BYTE*)bits);
         Gdiplus::Graphics graphics(&canvas);
         graphics.SetInterpolationMode(Gdiplus::InterpolationModeBilinear);
@@ -740,13 +755,13 @@ void RunJumpscare(std::vector<Frame>& frames, std::mt19937_64& rng) {
             .SourceConstantAlpha = 255,
             .AlphaFormat = AC_SRC_ALPHA,
         };
-        POINT windowPos{rc.left, rc.top};
+        POINT windowPos{rc.left + windowLeft, rc.top + windowTop};
         POINT sourcePos{0, 0};
-        SIZE windowSize{screenWidth, screenHeight};
+        SIZE windowSize{windowWidth, windowHeight};
 
         std::uniform_real_distribution<double> shakeDistribution(-1.0, 1.0);
         const int zoomMs = 140;
-        const double maxShake = screenHeight * 0.025;
+        const double maxShake = screenHeight * kShakeRatio;
 
         LARGE_INTEGER frequency;
         LARGE_INTEGER startCounter;
@@ -783,8 +798,8 @@ void RunJumpscare(std::vector<Frame>& frames, std::mt19937_64& rng) {
 
             int width = (int)std::lround(targetWidth * scale);
             int height = (int)std::lround(targetHeight * scale);
-            int x = (screenWidth - width) / 2;
-            int y = (screenHeight - height) / 2;
+            int x = (screenWidth - width) / 2 - windowLeft;
+            int y = (screenHeight - height) / 2 - windowTop;
 
             if (g_settings.shake) {
                 double decay = 1.0 - 0.6 * elapsedMs / totalMs;
@@ -801,7 +816,7 @@ void RunJumpscare(std::vector<Frame>& frames, std::mt19937_64& rng) {
 
             if (!shown) {
                 if (g_settings.forceForeground) {
-                    ForceForeground(hwnd);
+                    ForceForeground(hwnd, true);
                 } else {
                     ShowWindow(hwnd, SW_SHOWNOACTIVATE);
                 }
@@ -834,11 +849,11 @@ void RunJumpscare(std::vector<Frame>& frames, std::mt19937_64& rng) {
 
     if (g_settings.forceForeground && previousForeground &&
         IsWindow(previousForeground)) {
-        SetForegroundWindow(previousForeground);
+        ForceForeground(previousForeground, false);
     }
 }
 
-DWORD WINAPI WorkerThread(LPVOID) {
+DWORD WINAPI WorkerThread(LPVOID parameter) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     Gdiplus::GdiplusStartupInput startupInput;
@@ -849,7 +864,8 @@ DWORD WINAPI WorkerThread(LPVOID) {
         return 1;
     }
 
-    if (g_settings.autoDownload) {
+    if (g_settings.autoDownload && !g_downloadAttempted && !IsStopRequested()) {
+        g_downloadAttempted = true;
         if (g_downloadImage) {
             DownloadIfMissing(g_settings.imagePath, g_settings.imageUrl);
         }
@@ -888,7 +904,8 @@ DWORD WINAPI WorkerThread(LPVOID) {
         Wh_Log(L"Invalid hotkey: %s", g_settings.testHotkey.c_str());
     }
 
-    if (g_settings.testOnApply) {
+    bool settingsChanged = parameter != nullptr;
+    if (g_settings.testOnApply && settingsChanged) {
         RunJumpscare(frames, rng);
     }
 
@@ -935,9 +952,10 @@ DWORD WINAPI WorkerThread(LPVOID) {
     return 0;
 }
 
-void StartWorker() {
+void StartWorker(bool settingsChanged) {
     ResetEvent(g_stopEvent);
-    g_thread = CreateThread(nullptr, 0, WorkerThread, nullptr, 0, nullptr);
+    g_thread = CreateThread(nullptr, 0, WorkerThread,
+                            settingsChanged ? (LPVOID)1 : nullptr, 0, nullptr);
     if (!g_thread) {
         Wh_Log(L"CreateThread failed");
     }
@@ -969,14 +987,14 @@ BOOL WhTool_ModInit() {
         return FALSE;
     }
 
-    StartWorker();
+    StartWorker(false);
     return TRUE;
 }
 
 void WhTool_ModSettingsChanged() {
     StopWorker();
     LoadSettings();
-    StartWorker();
+    StartWorker(true);
 }
 
 void WhTool_ModUninit() {
