@@ -174,11 +174,18 @@ The built-in **Tourne** color mode is drawn from these.
 
 **Input Gain (dB)**: A fixed level trim on the captured audio, applied before everything else. Range -24 to +24, default 0.
 
-> **Why this exists.** Loopback capture sees the mix *after* each app's own volume slider but *before* the Windows master slider. So if you keep Spotify at 40% and the system at 80%, the visualizer only ever sees that 40%, and turning the system up does not help it. Input Gain is the control that does. It is also the only setting that scales the **Oscilloscope** waveform, which otherwise has no level control of its own.
+> **Why this exists.** Loopback capture sees the mix *after* each app's own volume slider but *before* the Windows master slider. So if you keep Spotify at 40% and the system at 80%, the visualizer only ever sees that 40%, and turning the system up does not help it. Input Gain is the control that does. It is also the only setting that scales the **Oscilloscope** waveform directly, which otherwise has no level control of its own. Auto Gain scales the trace too when it is on, and the trace clips flat rather than running off the panel.
+>
+> **It moves the idle thresholds with it.** Pause When Silent and Auto-Hide When Idle both key off how far the bars are moving, so raising Input Gain lowers the level that counts as silence, and lowering it raises that level. Sensitivity has always behaved the same way for the same reason. If you push Input Gain a long way up, expect the mod to consider quieter things "playing".
 
 **Auto Gain**: Adapts the level continuously so quiet sources still fill the bars, instead of retuning Sensitivity per app or per track. Off by default.
 
-It only ever boosts, never cuts, so loud material behaves exactly as it does with this off. Through silence it holds its last value rather than winding up, which means the noise floor is never lifted and **idle shutdown still works normally**.
+It only ever boosts, never cuts, so loud material behaves exactly as it does with this off. Through silence it holds its last value rather than winding up, which means the noise floor is never lifted and **idle shutdown still works normally**. The idle test reads the un-boosted level against the same threshold it always used, so turning Auto Gain on neither extends nor shortens how long the mod stays awake.
+
+Two things it does affect, worth knowing before you go hunting for them:
+
+- Because it normalizes the loudest band to a fixed target, **Sensitivity stops doing much for quiet material** while it is on. That is inherent to how a levelling gain works, not a bug.
+- On the **Oscilloscope**, a lower Sensitivity produces a *larger* trace, since a smaller measured peak asks for a bigger boost.
 
 **Auto Gain Max Boost (dB)**: The ceiling on that lift. Range 0-24, default 12. Lower it if quiet passages are being flattened more than you want, raise it if a very quiet source still will not fill the bars.
 
@@ -2834,9 +2841,14 @@ void VizCaptureThreadProc() {
     //
     // Feed-forward, not feedback: the loudest band of each analysed block is
     // measured BEFORE any boost is applied, so the gain is derived from the
-    // signal as captured rather than from its own output. That keeps it from
-    // chasing itself, and it means the silence test below is a test of the real
-    // input level no matter what the gain currently sits at.
+    // block's own level rather than from its own output, and cannot chase
+    // itself.
+    //
+    // What that peak is NOT is the signal as captured. It is read from
+    // rawBand[], which is already through sliderGain and the EQ multipliers, so
+    // both thresholds below are levels on the drawn bars, not on the input.
+    // They therefore move with Sensitivity and the EQ Preset, the same way the
+    // idle test they mirror always has.
     //
     // Boost only. The sensitivity curves already handle hot signal, so this is
     // never allowed below 1.0 and cannot make an existing tuning worse at the
@@ -2844,10 +2856,25 @@ void VizCaptureThreadProc() {
     float agcPeakEnv = 0.f;
     float agcGain = 1.f;
     static constexpr float AGC_TARGET = 0.85f;    // where the loudest band should land
-    static constexpr float AGC_FLOOR = 0.010f;    // under this, a block counts as silence
     static constexpr float AGC_ATTACK = 0.35f;    // envelope rise: fast, so peaks aren't missed
     static constexpr float AGC_RELEASE = 0.012f;  // envelope fall: slow, so quiet bars don't pump
     static constexpr float AGC_GLIDE = 0.04f;     // how fast the applied gain chases the target
+
+    // Two floors, two jobs, deliberately not the same number.
+    //
+    // AGC_FLOOR is anti-windup for the tracker alone: under it the envelope
+    // stops moving, so a noise floor can never wind the gain up to its ceiling
+    // and there is no overshoot when audio returns.
+    //
+    // AGC_IDLE_AUDIBLE gates the idle-shutdown timer, and has to be the same
+    // number that test compares against. Below the knee mag == rawGained, so
+    // "un-boosted peak over 0.03" is what re-armed the timer before Auto Gain
+    // existed. Gating on the lower floor instead would let anything in
+    // [AGC_FLOOR, 0.03] hold the render loop awake once the boost carried it
+    // over the line, which is quiet-but-not-silent audio keeping the mod out
+    // of its idle path for as long as it plays.
+    static constexpr float AGC_FLOOR = 0.010f;
+    static constexpr float AGC_IDLE_AUDIBLE = 0.030f;
 
     int currentFftSize = 0;
     auto ValidFftSize = [](int n) -> int {
@@ -2990,7 +3017,14 @@ void VizCaptureThreadProc() {
                     // Oscilloscope shape is selected. It carries the previous
                     // block's gain, one block of lag, which at these sizes is
                     // around 10 ms and not visible.
-                    waveSnap[w] = ringBuf[idx] * agcGain;
+                    //
+                    // Clamped because nothing downstream does it. The bars are
+                    // held at or under 1.0 by the sensitivity curve, but the
+                    // trace is drawn straight as center + sample * ampScale, so
+                    // an over-driven sample would be plotted off the panel with
+                    // no upper bound. Clipping flat is what a real scope does
+                    // with a signal it cannot fit.
+                    waveSnap[w] = std::clamp(ringBuf[idx] * agcGain, -1.0f, 1.0f);
                 }
                 PublishWaveform(waveSnap);
             }
@@ -3043,6 +3077,7 @@ void VizCaptureThreadProc() {
             // stops the loud overshoot that a decayed gain would produce the
             // instant music comes back.
             bool blockAudible = (blockPeak >= AGC_FLOOR);
+            bool blockIdleAudible = (blockPeak >= AGC_IDLE_AUDIBLE);
             if (g_settings.autoGain) {
                 if (blockAudible) {
                     float k = (blockPeak > agcPeakEnv) ? AGC_ATTACK : AGC_RELEASE;
@@ -3089,11 +3124,14 @@ void VizCaptureThreadProc() {
             PublishBands(bandEnv);
 
             // Idle shutdown is judged on the un-boosted level as well as the drawn
-            // one. Without the second test, Auto Gain sitting at its ceiling would
-            // lift a noise floor past this threshold and the render loop would
-            // never stop, which is the whole power story gone. With Auto Gain off
-            // this reduces to the original single test.
-            if (maxMag > 0.03f && (!g_settings.autoGain || blockAudible)) {
+            // one, against the same 0.03 the drawn test uses. Without the second
+            // clause, Auto Gain would carry anything it could lift over 0.03 into
+            // "audible" and hold the render loop awake, which is the whole power
+            // story gone. Because both clauses compare against the same number,
+            // this is numerically the original test: Auto Gain neither extends
+            // nor shortens how long the mod stays awake. With Auto Gain off it
+            // short-circuits to the original test outright.
+            if (maxMag > 0.03f && (!g_settings.autoGain || blockIdleAudible)) {
                 g_lastAudibleTickMs.store(GetTickCount64(), std::memory_order_relaxed);
             }
 
@@ -3465,9 +3503,16 @@ void PersistOverrideState() {
     if (len > 0) Wh_SetStringValue(L"positionOverride", buf);
 }
 
+void RequestPositionOverrideSave();  // defined with the keyboard-nudge helpers
+
+// Both callers reach this from a low-level input hook: Ctrl+Alt+Home through
+// ResetMoveTarget, and the double-click-in-place path in DragMouseHookProc.
+// Everything in a WH_KEYBOARD_LL / WH_MOUSE_LL callback blocks all system input
+// until it returns, so the write goes through the same deferred save the nudge
+// paths already use rather than calling Wh_SetStringValue inline.
 void ClearPositionOverride() {
     g_dragOverrideActive.store(false, std::memory_order_relaxed);
-    PersistOverrideState();
+    RequestPositionOverrideSave();
 }
 
 UINT DragButtonDownMsg() {
