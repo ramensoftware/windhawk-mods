@@ -9,7 +9,6 @@
 // @github          https://github.com/nerdworldDE
 // @homepage        https://nerdworld.de/
 // @include         explorer.exe
-// @include         StartMenuExperienceHost.exe
 // @include         RuntimeBroker.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -lgdi32
@@ -23,7 +22,7 @@
 Shows an individually configurable countdown before Windows shuts down,
 restarts, enters sleep, or enters hibernation. A value of `0` disables the
 countdown for the corresponding action and executes it immediately. Values
-above 60 seconds are limited to 60 seconds.
+above 30 seconds are limited to 30 seconds.
 
 The countdown is cancelled by:
 
@@ -39,7 +38,7 @@ The countdown is displayed on the primary monitor. Keyboard and mouse-button
 input on other monitors still cancels it.
 
 ## Screenshot
-![Copy dialog](https://i.imgur.com/GpcwW3m.png)
+![Power action countdown](https://i.imgur.com/GpcwW3m.png)
 
 ## Scope and limitations
 
@@ -47,7 +46,6 @@ The mod targets power actions initiated through the Windows shell. It is loaded
 into:
 
 - `explorer.exe` for classic shell power paths
-- `StartMenuExperienceHost.exe` for the Windows 11 Start UI
 - `RuntimeBroker.exe` because current Windows 11 builds can delegate Start-menu
   power actions to a runtime broker
 
@@ -818,7 +816,9 @@ bool RunCountdown(PowerAction action, int seconds) {
         return true;
     }
 
-    if (!WaitForCountdownWithoutPumpingPostedMessages(doneEvent)) {
+    const bool waited =
+        WaitForCountdownWithoutPumpingPostedMessages(doneEvent);
+    if (!waited) {
         SetEvent(g_countdownStopEvent);
     }
 
@@ -831,9 +831,9 @@ bool RunCountdown(PowerAction action, int seconds) {
     CloseHandle(doneEvent);
     ReleaseCountdownMutex(mutex);
 
-    Wh_Log(L"Countdown result: %ls",
-           context.proceed ? L"execute" : L"cancel");
-    return context.proceed;
+    const bool proceed = waited ? context.proceed : true;
+    Wh_Log(L"Countdown result: %ls", proceed ? L"execute" : L"cancel");
+    return proceed;
 }
 
 bool IsLocalMachineName(const wchar_t* machineName) {
@@ -1175,19 +1175,12 @@ void Wh_ModBeforeUninit() {
     if (g_countdownStopEvent) {
         SetEvent(g_countdownStopEvent);
     }
-    HWND hWnd = g_countdownWindow.load(std::memory_order_acquire);
     ReleaseSRWLockExclusive(&g_countdownLifecycleLock);
 
-    if (hWnd) {
-        PostMessageW(hWnd, WM_CLOSE, 0, 0);
-    }
-
     if (g_countdownIdleEvent) {
-        const DWORD waitResult =
-            WaitForSingleObject(g_countdownIdleEvent, 5000);
-        if (waitResult != WAIT_OBJECT_0) {
-            Wh_Log(L"Timed out waiting for the countdown thread to stop: %lu",
-                   waitResult == WAIT_FAILED ? GetLastError() : waitResult);
+        if (WaitForSingleObject(g_countdownIdleEvent, INFINITE) == WAIT_FAILED) {
+            Wh_Log(L"Failed waiting for the countdown thread to stop: %lu",
+                   GetLastError());
         }
     }
 }
