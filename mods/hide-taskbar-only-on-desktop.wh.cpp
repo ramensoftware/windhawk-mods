@@ -2,7 +2,7 @@
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Hides selected taskbars while their displays show only the desktop
-// @version         7.1.0
+// @version         7.2.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -34,7 +34,7 @@ Hides selected bottom-docked taskbars when their display is showing only the des
 - Shell UI, taskbar popups, and desktop context-menu activity handled separately
 - Per-display borderless fullscreen tracking
 - Intentional support for up to 16 logical display entries
-- Recovery after taskbar recreation or unexpected tool-process termination
+- Recovery after taskbar recreation or tool-process restart
 
 ## Settings
 
@@ -74,7 +74,7 @@ The 16-display logical monitor limit has been tested with the mod's current disp
 - Native Windows taskbar auto-hide remains separate from this mod; when it is enabled, this mod does not take over that taskbar.
 - Other taskbar transparency/style mods can conflict when they modify the same taskbar.
 - A visible, monitor-sized, captionless, non-resizable application may be treated as fullscreen.
-- If the dedicated tool process terminates unexpectedly, the launcher watchdog immediately attempts to recover taskbars still marked as owned by this mod. A later tool-process startup also performs ownership recovery; if neither recovery path is available, restarting Windows Explorer recreates the taskbar window.
+- If the dedicated tool process terminates unexpectedly, a later tool-process startup performs ownership recovery. If the taskbar window itself no longer exists, restarting Windows Explorer recreates it.
 - Windows shell classes/processes can change between Windows releases.
 */
 // ==/WindhawkModReadme==
@@ -3017,213 +3017,6 @@ void WhTool_ModUninit() {
     RestoreAllTaskbars();
 }
 ////////////////////////////////////////////////////////////////////////////////
-// Launcher-side recovery watchdog. This is kept outside the official Windhawk
-// tool-mod boilerplate below. The boilerplate text remains unchanged, while
-// the wrapper callbacks let the launcher watch the dedicated tool process and
-// restore marked taskbars immediately if that process terminates unexpectedly.
-using CreateProcessInternalW_t = BOOL(WINAPI*)(
-    HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
-    LPSECURITY_ATTRIBUTES lpProcessAttributes,
-    LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
-    DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
-    LPSTARTUPINFOW lpStartupInfo,
-    LPPROCESS_INFORMATION lpProcessInformation,
-    PHANDLE hRestrictedUserToken);
-
-CreateProcessInternalW_t g_launcherCreateProcessInternalWOriginal = nullptr;
-HANDLE g_launcherWatchdogThread = nullptr;
-HANDLE g_launcherWatchdogStopEvent = nullptr;
-bool g_launcherWatchdogHookInstalled = false;
-
-struct LauncherWatchdogContext {
-    HANDLE process = nullptr;
-    HANDLE stopEvent = nullptr;
-};
-
-DWORD WINAPI LauncherWatchdogThread(LPVOID parameter) {
-    auto* context =
-        reinterpret_cast<LauncherWatchdogContext*>(parameter);
-    if (!context) {
-        return 0;
-    }
-
-    HANDLE handles[2] = {
-        context->process,
-        context->stopEvent,
-    };
-    const DWORD result =
-        WaitForMultipleObjects(ARRAYSIZE(handles), handles, FALSE, INFINITE);
-    if (result == WAIT_OBJECT_0) {
-        // The dedicated tool process ended without a clean restoration.
-        // The ownership-marker sweep is independent of the worker's local
-        // state and therefore also handles a crash/forced termination.
-        EnumWindows(RestoreMarkedTaskbarProc, 0);
-    }
-
-    CloseHandle(context->process);
-    delete context;
-    return 0;
-}
-
-void ReapLauncherWatchdogIfFinished() {
-    if (!g_launcherWatchdogThread) {
-        return;
-    }
-    if (WaitForSingleObject(g_launcherWatchdogThread, 0) != WAIT_OBJECT_0) {
-        return;
-    }
-    CloseHandle(g_launcherWatchdogThread);
-    g_launcherWatchdogThread = nullptr;
-    if (g_launcherWatchdogStopEvent) {
-        CloseHandle(g_launcherWatchdogStopEvent);
-        g_launcherWatchdogStopEvent = nullptr;
-    }
-}
-
-void StopLauncherWatchdog() {
-    if (!g_launcherWatchdogThread) {
-        if (g_launcherWatchdogStopEvent) {
-            CloseHandle(g_launcherWatchdogStopEvent);
-            g_launcherWatchdogStopEvent = nullptr;
-        }
-        return;
-    }
-    if (g_launcherWatchdogStopEvent) {
-        SetEvent(g_launcherWatchdogStopEvent);
-    }
-    WaitForSingleObject(g_launcherWatchdogThread, INFINITE);
-    CloseHandle(g_launcherWatchdogThread);
-    g_launcherWatchdogThread = nullptr;
-    if (g_launcherWatchdogStopEvent) {
-        CloseHandle(g_launcherWatchdogStopEvent);
-        g_launcherWatchdogStopEvent = nullptr;
-    }
-}
-
-void StartLauncherWatchdog(HANDLE processHandle) {
-    if (!processHandle) {
-        return;
-    }
-
-    ReapLauncherWatchdogIfFinished();
-    if (g_launcherWatchdogThread) {
-        return;
-    }
-
-    HANDLE duplicatedProcess = nullptr;
-    if (!DuplicateHandle(
-            GetCurrentProcess(),
-            processHandle,
-            GetCurrentProcess(),
-            &duplicatedProcess,
-            SYNCHRONIZE,
-            FALSE,
-            0)) {
-        Wh_Log(L"Failed to duplicate tool-process handle for recovery watchdog");
-        return;
-    }
-
-    HANDLE stopEvent =
-        CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!stopEvent) {
-        CloseHandle(duplicatedProcess);
-        Wh_Log(L"Failed to create launcher recovery watchdog event");
-        return;
-    }
-
-    auto* context = new LauncherWatchdogContext{
-        duplicatedProcess,
-        stopEvent,
-    };
-    HANDLE thread =
-        CreateThread(nullptr, 0, LauncherWatchdogThread, context, 0, nullptr);
-    if (!thread) {
-        CloseHandle(stopEvent);
-        CloseHandle(duplicatedProcess);
-        delete context;
-        Wh_Log(L"Failed to create launcher recovery watchdog thread");
-        return;
-    }
-
-    g_launcherWatchdogStopEvent = stopEvent;
-    g_launcherWatchdogThread = thread;
-}
-
-BOOL WINAPI LauncherCreateProcessInternalWHook(
-    HANDLE hUserToken,
-    LPCWSTR lpApplicationName,
-    LPWSTR lpCommandLine,
-    LPSECURITY_ATTRIBUTES lpProcessAttributes,
-    LPSECURITY_ATTRIBUTES lpThreadAttributes,
-    WINBOOL bInheritHandles,
-    DWORD dwCreationFlags,
-    LPVOID lpEnvironment,
-    LPCWSTR lpCurrentDirectory,
-    LPSTARTUPINFOW lpStartupInfo,
-    LPPROCESS_INFORMATION lpProcessInformation,
-    PHANDLE hRestrictedUserToken) {
-    BOOL result = g_launcherCreateProcessInternalWOriginal(
-        hUserToken,
-        lpApplicationName,
-        lpCommandLine,
-        lpProcessAttributes,
-        lpThreadAttributes,
-        bInheritHandles,
-        dwCreationFlags,
-        lpEnvironment,
-        lpCurrentDirectory,
-        lpStartupInfo,
-        lpProcessInformation,
-        hRestrictedUserToken
-    );
-
-    if (
-        result &&
-        lpProcessInformation &&
-        lpProcessInformation->hProcess &&
-        lpCommandLine &&
-        wcsstr(lpCommandLine, L"-tool-mod") &&
-        wcsstr(lpCommandLine, WH_MOD_ID)
-    ) {
-        StartLauncherWatchdog(lpProcessInformation->hProcess);
-    }
-
-    return result;
-}
-
-void InstallLauncherRecoveryHook() {
-    if (g_launcherWatchdogHookInstalled) {
-        return;
-    }
-
-    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
-    if (!kernelModule) {
-        kernelModule = GetModuleHandle(L"kernel32.dll");
-    }
-    if (!kernelModule) {
-        Wh_Log(L"No kernelbase.dll/kernel32.dll for launcher recovery hook");
-        return;
-    }
-
-    void* target =
-        (void*)GetProcAddress(kernelModule, "CreateProcessInternalW");
-    if (!target) {
-        Wh_Log(L"No CreateProcessInternalW for launcher recovery hook");
-        return;
-    }
-
-    if (!Wh_SetFunctionHook(
-            target,
-            (void*)LauncherCreateProcessInternalWHook,
-            (void**)&g_launcherCreateProcessInternalWOriginal
-        )) {
-        Wh_Log(L"Failed to install launcher recovery hook");
-        return;
-    }
-    g_launcherWatchdogHookInstalled = true;
-}
-
-////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
@@ -3236,11 +3029,6 @@ void InstallLauncherRecoveryHook() {
 // * WhTool_ModUninit
 //
 // Currently, other callbacks are not supported.
-
-#define Wh_ModInit WhOfficial_ModInit
-#define Wh_ModAfterInit WhOfficial_ModAfterInit
-#define Wh_ModSettingsChanged WhOfficial_ModSettingsChanged
-#define Wh_ModUninit WhOfficial_ModUninit
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
@@ -3404,32 +3192,4 @@ void Wh_ModUninit() {
 
     WhTool_ModUninit();
     ExitProcess(0);
-}
-
-#undef Wh_ModInit
-#undef Wh_ModAfterInit
-#undef Wh_ModSettingsChanged
-#undef Wh_ModUninit
-
-BOOL Wh_ModInit() {
-    BOOL result = WhOfficial_ModInit();
-    if (result && g_isToolModProcessLauncher) {
-        InstallLauncherRecoveryHook();
-    }
-    return result;
-}
-
-void Wh_ModAfterInit() {
-    WhOfficial_ModAfterInit();
-}
-
-void Wh_ModSettingsChanged() {
-    WhOfficial_ModSettingsChanged();
-}
-
-void Wh_ModUninit() {
-    if (g_isToolModProcessLauncher) {
-        StopLauncherWatchdog();
-    }
-    WhOfficial_ModUninit();
 }
