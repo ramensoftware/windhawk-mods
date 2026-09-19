@@ -6,7 +6,7 @@
 // @author          Kismeria
 // @github          https://github.com/Kismeria
 // @include         windhawk.exe
-// @compilerOptions -lgdiplus -lwinmm -lgdi32 -luser32 -lshell32 -lurlmon -lole32 -luuid
+// @compilerOptions -lgdiplus -lwinmm -lgdi32 -luser32 -lshell32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -30,7 +30,12 @@ windows, on the monitor of the active window. Press **Esc** to close it early.
 
 If "Image" or "Sound" is empty, the mod downloads the default file once and
 keeps it in the mod's own storage folder. Windhawk deletes that folder when
-the mod is removed. Turn off "Auto download" to never contact the network.
+the mod is removed. The default files are hosted in the
+[WindHawk-Foxy-Jumpscare](https://github.com/Kismeria/WindHawk-Foxy-Jumpscare)
+repository.
+
+Turn off "Auto download" to never contact the network. In that case, set
+"Image" and "Sound" to your own files, otherwise the mod does nothing.
 
 You can use your own files instead:
 
@@ -61,6 +66,7 @@ You can use your own files instead:
   $name: Chance (1 in N)
 - checkIntervalMs: 1000
   $name: Check interval (ms)
+  $description: Min 50
 - imagePath: ''
   $name: Image
   $description: .gif, .png or folder of .png frames. Empty = default
@@ -72,18 +78,19 @@ You can use your own files instead:
 - autoDownload: true
   $name: Auto download
   $description: Download default files if Image or Sound is empty
-- imageUrl: 'https://media1.tenor.com/m/pC-4acFw1PAAAAAC/fnaf-foxy.gif'
+- imageUrl: 'https://raw.githubusercontent.com/Kismeria/WindHawk-Foxy-Jumpscare/14c4b88287d0799cd8c199be3d272e98aa5c1ef0/assets/foxy.gif'
   $name: Image URL
-- soundUrl: 'https://archive.org/download/fnaf1n2_XScreams_1mar2022/freddy-fazbears-pizza-fandom-wikia_fnaf-2_Xscream2.mp3'
+- soundUrl: 'https://raw.githubusercontent.com/Kismeria/WindHawk-Foxy-Jumpscare/14c4b88287d0799cd8c199be3d272e98aa5c1ef0/assets/scream.mp3'
   $name: Sound URL
 - volume: 100
   $name: Volume
+  $description: 0-100, .mp3 only
 - durationMs: 0
   $name: Duration (ms)
-  $description: 0 = animation length
+  $description: 0 = animation length. Max 10000
 - fps: 30
   $name: Default FPS
-  $description: For frame folders and GIF frames without a delay
+  $description: 1-240. For frame folders and GIF frames without a delay
 - fitMode: cover
   $name: Fit
   $options:
@@ -92,6 +99,7 @@ You can use your own files instead:
   - contain: Fit
 - scalePercent: 100
   $name: Scale (%)
+  $description: 10-500
 - zoomIn: false
   $name: Zoom in
 - shake: true
@@ -111,7 +119,6 @@ You can use your own files instead:
 #include <gdiplus.h>
 #include <mmsystem.h>
 #include <shlobj.h>
-#include <urlmon.h>
 
 #include <algorithm>
 #include <cmath>
@@ -138,8 +145,6 @@ struct Settings {
     std::wstring soundPath;
     bool chromaKey;
     bool autoDownload;
-    bool downloadImage;
-    bool downloadSound;
     std::wstring imageUrl;
     std::wstring soundUrl;
     int volume;
@@ -170,6 +175,8 @@ const GUID kFrameDimensionTime = {
     {0x83, 0xa6, 0x7f, 0x45, 0x22, 0x9d, 0xc8, 0x72}};
 
 Settings g_settings;
+bool g_downloadImage;
+bool g_downloadSound;
 HMODULE g_module;
 HANDLE g_thread;
 HANDLE g_stopEvent;
@@ -202,18 +209,18 @@ void LoadSettings() {
     g_settings.soundPath = ReadStringSetting(L"soundPath");
     g_settings.chromaKey = Wh_GetIntSetting(L"chromaKey");
     g_settings.autoDownload = Wh_GetIntSetting(L"autoDownload");
-    g_settings.downloadImage = false;
-    g_settings.downloadSound = false;
+    g_downloadImage = false;
+    g_downloadSound = false;
 
     WCHAR storagePath[MAX_PATH];
     if (Wh_GetModStoragePath(storagePath, ARRAYSIZE(storagePath))) {
         if (g_settings.imagePath.empty()) {
             g_settings.imagePath = std::wstring(storagePath) + L"\\foxy.gif";
-            g_settings.downloadImage = true;
+            g_downloadImage = true;
         }
         if (g_settings.soundPath.empty()) {
             g_settings.soundPath = std::wstring(storagePath) + L"\\scream.mp3";
-            g_settings.downloadSound = true;
+            g_downloadSound = true;
         }
     } else {
         Wh_Log(L"Wh_GetModStoragePath failed");
@@ -239,7 +246,7 @@ void LoadSettings() {
     g_settings.shake = Wh_GetIntSetting(L"shake");
     g_settings.forceForeground = Wh_GetIntSetting(L"forceForeground");
     g_settings.testOnApply = Wh_GetIntSetting(L"testOnApply");
-    g_settings.testHotkey = ReadStringSetting(L"testHotkey");
+    g_settings.testHotkey = ReadStringSetting(L"testHotkey", false);
 }
 
 bool ParseHotkey(const std::wstring& text, UINT* modifiers, UINT* virtualKey) {
@@ -352,7 +359,7 @@ std::unique_ptr<Gdiplus::Bitmap> RemoveGreenScreen(Gdiplus::Image* source) {
                     (kTransparentAbove - kOpaqueBelow);
             }
 
-            if (g > other) {
+            if (dominance > kOpaqueBelow) {
                 pixel[1] = (BYTE)other;
             }
             pixel[3] = (BYTE)a;
@@ -390,36 +397,6 @@ std::unique_ptr<Gdiplus::Bitmap> CopyScaled(Gdiplus::Image* source,
     return bitmap;
 }
 
-class DownloadCallback : public IBindStatusCallback {
-   public:
-    STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
-        if (riid == IID_IUnknown || riid == IID_IBindStatusCallback) {
-            *ppv = static_cast<IBindStatusCallback*>(this);
-            return S_OK;
-        }
-        *ppv = nullptr;
-        return E_NOINTERFACE;
-    }
-    STDMETHODIMP_(ULONG) AddRef() override { return 1; }
-    STDMETHODIMP_(ULONG) Release() override { return 1; }
-
-    STDMETHODIMP OnStartBinding(DWORD, IBinding*) override { return S_OK; }
-    STDMETHODIMP GetPriority(LONG*) override { return E_NOTIMPL; }
-    STDMETHODIMP OnLowResource(DWORD) override { return S_OK; }
-    STDMETHODIMP OnProgress(ULONG, ULONG, ULONG, LPCWSTR) override {
-        return IsStopRequested() ? E_ABORT : S_OK;
-    }
-    STDMETHODIMP OnStopBinding(HRESULT, LPCWSTR) override { return S_OK; }
-    STDMETHODIMP GetBindInfo(DWORD*, BINDINFO*) override { return S_OK; }
-    STDMETHODIMP OnDataAvailable(DWORD,
-                                 DWORD,
-                                 FORMATETC*,
-                                 STGMEDIUM*) override {
-        return S_OK;
-    }
-    STDMETHODIMP OnObjectAvailable(REFIID, IUnknown*) override { return S_OK; }
-};
-
 bool FileExists(const std::wstring& path) {
     return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
 }
@@ -444,11 +421,21 @@ void DownloadIfMissing(const std::wstring& path, const std::wstring& url) {
     Wh_Log(L"Downloading %s", url.c_str());
 
     std::wstring partPath = path + L".part";
-    DownloadCallback callback;
-    HRESULT hr = URLDownloadToFileW(nullptr, url.c_str(), partPath.c_str(), 0,
-                                    &callback);
-    if (FAILED(hr)) {
-        Wh_Log(L"Download failed (0x%08X): %s", (unsigned)hr, url.c_str());
+    WH_GET_URL_CONTENT_OPTIONS options{
+        .optionsSize = sizeof(options),
+        .targetFilePath = partPath.c_str(),
+    };
+    const WH_URL_CONTENT* content = Wh_GetUrlContent(url.c_str(), &options);
+    if (!content) {
+        Wh_Log(L"Download failed: %s", url.c_str());
+        DeleteFileW(partPath.c_str());
+        return;
+    }
+
+    int statusCode = content->statusCode;
+    Wh_FreeUrlContent(content);
+    if (statusCode != 200 && statusCode != 0) {
+        Wh_Log(L"Download failed (HTTP %d): %s", statusCode, url.c_str());
         DeleteFileW(partPath.c_str());
         return;
     }
@@ -618,8 +605,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd,
                             WPARAM wParam,
                             LPARAM lParam) {
     switch (message) {
-        case WM_NCHITTEST:
-            return HTTRANSPARENT;
         case WM_MOUSEACTIVATE:
             return MA_NOACTIVATE;
     }
@@ -700,7 +685,7 @@ void RunJumpscare(std::vector<Frame>& frames, std::mt19937_64& rng) {
 
     int totalMs = g_settings.durationMs;
     if (totalMs == 0) {
-        totalMs = std::max(animationMs, 800);
+        totalMs = std::clamp(animationMs, 800, kMaxDurationMs);
     }
 
     DWORD exStyle = WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT |
@@ -780,7 +765,7 @@ void RunJumpscare(std::vector<Frame>& frames, std::mt19937_64& rng) {
             }
 
             size_t frameIndex = frames.size() - 1;
-            int frameTime = elapsedMs;
+            int frameTime = animationMs > 0 ? elapsedMs % animationMs : 0;
             for (size_t i = 0; i < frames.size(); i++) {
                 if (frameTime < frames[i].delayMs) {
                     frameIndex = i;
@@ -864,23 +849,22 @@ DWORD WINAPI WorkerThread(LPVOID) {
         return 1;
     }
 
-    HRESULT comResult = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-
     if (g_settings.autoDownload) {
-        if (g_settings.downloadImage) {
+        if (g_downloadImage) {
             DownloadIfMissing(g_settings.imagePath, g_settings.imageUrl);
         }
-        if (g_settings.downloadSound) {
+        if (g_downloadSound) {
             DownloadIfMissing(g_settings.soundPath, g_settings.soundUrl);
         }
     }
 
-    bool classRegistered = RegisterWindowClass();
-    if (!classRegistered) {
+    if (!RegisterWindowClass()) {
         Wh_Log(L"RegisterClassEx failed");
+        Gdiplus::GdiplusShutdown(gdiplusToken);
+        return 1;
     }
 
-    std::vector<Frame> frames;
+    std::vector<Frame> frames = LoadFrames();
 
     std::random_device randomDevice;
     LARGE_INTEGER counter;
@@ -912,7 +896,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
     while (true) {
         ULONGLONG now = GetTickCount64();
         if (now >= nextCheck) {
-            if (roll(rng) == 1) {
+            if (GetForegroundWindow() && roll(rng) == 1) {
                 RunJumpscare(frames, rng);
             }
             nextCheck = GetTickCount64() + g_settings.checkIntervalMs;
@@ -945,13 +929,8 @@ DWORD WINAPI WorkerThread(LPVOID) {
         UnregisterHotKey(nullptr, kTestHotkeyId);
     }
 
-    if (classRegistered) {
-        UnregisterClassW(kWindowClass, g_module);
-    }
+    UnregisterClassW(kWindowClass, g_module);
     frames.clear();
-    if (SUCCEEDED(comResult)) {
-        CoUninitialize();
-    }
     Gdiplus::GdiplusShutdown(gdiplusToken);
     return 0;
 }
