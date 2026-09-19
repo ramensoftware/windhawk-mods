@@ -4,7 +4,7 @@
 // @name:zh-CN      任务栏图标组居中
 // @description     Center the taskbar icons after a chosen position as one group relative to the whole taskbar. Requires the taskbar to be set to Left alignment.
 // @description:zh-CN 把任务栏中指定位置之后的图标作为一组相对整条任务栏居中。需要把任务栏对齐方式设为左对齐。
-// @version         1.0.4
+// @version         1.1.2
 // @author          Suioio
 // @github          https://github.com/Suioio
 // @license         GPL-3.0
@@ -36,9 +36,14 @@
 
 Center the taskbar icons after a chosen position as one group, relative to the
 whole taskbar. There is no line, dot or shape anywhere: the mod only measures
-the buttons and writes the margins that move the group. It keeps one childless,
-invisible canvas in the taskbar root purely as the coordinate reference for
-those measurements, and removes it when the mod unloads.
+the buttons and writes the margins that move the group, and it adds no element
+of its own to the taskbar.
+
+## Preview
+
+![Taskbar Icon Group Centering preview](https://raw.githubusercontent.com/Suioio/taskbar-separators-dynamic-centering/main/preview.png)
+
+![The icon group after the chosen position re-centers as apps open and close](https://raw.githubusercontent.com/Suioio/taskbar-separators-dynamic-centering/main/dynamic-centering.gif)
 
 ## What it does
 
@@ -46,9 +51,9 @@ those measurements, and removes it when the mod unloads.
   relative to the entire taskbar, including the system tray.
 - The group is clamped so it cannot run into the tray: when centering would
   push it under the tray, the gap is reduced instead.
-- **Hide when the icon count after the position is at least** stops centering
-  once that many icons are after the position, which restores the normal
-  left-aligned layout. A value of 0 never stops.
+- **Stop centering when the icon count after the position reaches** stops
+  centering once that many icons are after the position, which restores the
+  normal left-aligned layout. The default 0 never stops.
 - The mod only adds its own delta on top of the button margins that already
   exist, and hands back exactly the value it still owns when centering stops,
   so margins written by Windows or by another mod are never overwritten.
@@ -56,19 +61,20 @@ those measurements, and removes it when the mod unloads.
 ## When it applies
 
 Only while the taskbar is **left-aligned**, **horizontal** and **not mirrored
-(right-to-left)**. The mod never writes the taskbar alignment or any other
-Windows setting: it only reads the stored TaskbarAl value. On a centered
-taskbar Windows centers the whole row itself and this mod stays inactive, and
-nothing is applied on a vertical or mirrored taskbar either.
+(right-to-left)**. On a centered taskbar Windows centers the whole row itself
+and this mod stays inactive, and nothing is applied on a vertical or mirrored
+taskbar either. The mod never writes the taskbar alignment or any other Windows
+setting.
 
 To use it, switch the taskbar to **Left** alignment in Windows' taskbar
-settings. Switching the alignment is picked up on the fly, in both directions,
-without a setting change or a mod reload.
-
-**The mod goes by the stored TaskbarAl value.** If another mod forces left
-alignment by hooking the read instead of changing that stored value - the
-Taskbar Multirow mod does exactly that - this mod still sees a centered taskbar
-and stays inactive.
+settings. Whether the taskbar is left-aligned is read from the layout itself -
+where the button row starts against the two ends of the taskbar - so switching
+the alignment is picked up in both directions on the fly, without a mod reload.
+Only when that measurement cannot tell the two alignments apart, which is a
+button row that fills the taskbar, does the mod fall back to reading the stored
+TaskbarAl value once. Nothing is monitored and no thread is kept alive, and the
+mod therefore also agrees with another mod that forces left alignment by
+hooking that read instead of writing it (Taskbar Multirow does exactly that).
 
 ## Differences from the neighbouring mods
 
@@ -84,8 +90,8 @@ and stays inactive.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| Icon group position | 4 | 1-based position counted from the first application button (the Start button is not counted). The icons *after* this position are the centered group. |
-| Hide when the icon count after the position is at least | 11 | Stop centering once the number of icons after the position reaches this value. Those are all usable application buttons after the position. A value of 0 never stops. |
+| Icon group position | 2 | 1-based position counted from the first application button (the Start button is not counted). The icons *after* this position are the centered group. |
+| Stop centering when the icon count after the position reaches | 0 | Stop centering once this many usable application buttons are after the position, which restores the normal left-aligned layout. The default 0 never stops. |
 
 ## Compatibility
 
@@ -93,10 +99,16 @@ and stays inactive.
 - Compatible with Windows 11 Taskbar Styler in normal configurations
 - Taskbar labels, and uncombined or otherwise variable-width taskbar buttons
 - Mixed multi-monitor layouts with different button modes on each taskbar
-- The only element the mod adds is that childless, invisible measurement canvas,
-  named after the mod id; unload removes it and hands every tracked margin back,
-  so nothing of the mod is left behind
-- Taskbar Separators: both mods rewrite taskbar button margins. Its default Divider gap is 0, in which case it writes no button margins and the two can coexist; if you raise that gap above 0, do not enable both mods at the same time, or the two margin ledgers will keep adding on top of each other. / 与 Taskbar Separators 同时使用时：两者都会改写任务栏按钮边距。它的 Divider gap 默认为 0（此时不写按钮边距，可共存）；若把该值调大于 0，请勿同时启用两个模组，否则两套边距账本会互相叠加。
+- The mod adds no element to the taskbar at all: it only writes button margins,
+  and unload hands every tracked margin back, so nothing of the mod is left
+  behind
+- Layered margin mods: any mod that rewrites taskbar button margins by reading
+  the current value and adding its own gap on top compounds with this one - both
+  ledgers keep adding to each other without bound, so do not run two of those at
+  once. A mod that writes an **absolute** margin is fine: this mod re-bases on
+  top of whatever it finds. Taskbar Separators is the layering kind; its default
+  Divider gap is 0, in which case it writes no button margins and the two
+  coexist, but raise that gap and the two should not be enabled together. / 叠加式边距模组：任何“先读当前值、再把自己的间隙加上去”的模组都会与本模组互相累积，两套账本会无上限地叠加，因此不要同时启用两个这类模组。写**绝对值**边距的模组没有问题——本模组会自动在其之上重设基准。Taskbar Separators 属于叠加式：它的 Divider gap 默认为 0（此时不写按钮边距，可共存）；若把该值调大于 0，请勿同时启用两个模组。
 
 ## Uninstall
 
@@ -119,31 +131,30 @@ Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.
 ## 中文说明
 
 把任务栏中**指定位置之后**的图标作为一组，相对**整条任务栏**（含系统托盘）
-居中。画面里没有任何线条或方块：本模组只测量按钮并写入移动该组所需的边距；它会在
-任务栏根节点保留一个无子元素、不可见的画布，仅作为这些测量的坐标参照，并在模组
-卸载时将它移除。
+居中。画面里没有任何线条或方块：本模组只测量按钮并写入移动该组所需的边距，
+不向任务栏添加任何元素。
 
 ### 功能
 
 - **图标组位置**之后的图标构成一个整体，相对整条任务栏居中。
 - 该组会被钳制，不会压到系统托盘：居中会把组推入托盘时，间距会被减小。
-- **位置之后的图标数量达到此值时停止居中**：达到设定值后停止居中，恢复正常的
-  左对齐排布。设为 0 表示永不停止。
+- **位置之后的图标数量达到该值时停止居中**：达到设定值后停止居中，恢复正常的
+  左对齐排布。默认 0 表示永不停止。
 - 本模组只在已有按钮边距之上叠加自己的增量，并在停止居中时只归还自己仍然持有的
   那个值，因此不会覆盖 Windows 或其它模组写入的边距。
 
 ### 生效条件
 
-只在任务栏**左对齐**、**水平**且**非镜像（从右到左）**时生效。模组从不写入任务栏
-对齐设置或任何其它 Windows 设置，只读取注册表中存储的 TaskbarAl 值。任务栏居中时
-整排按钮由系统居中，本模组保持不生效；垂直任务栏与镜像任务栏上也不生效。
+只在任务栏**左对齐**、**水平**且**非镜像（从右到左）**时生效。任务栏居中时整排按钮
+由系统居中，本模组保持不生效；垂直任务栏与镜像任务栏上也不生效。模组从不写入任务栏
+对齐设置或任何其它 Windows 设置。
 
-请在 Windows 的任务栏设置里把对齐方式改为**左对齐**。切换对齐会被实时识别，**双向**
-响应，无需改动设置或重新加载模组。
-
-**模组以存储的 TaskbarAl 值为准。** 若有另一个模组通过 hook 读取来强制左对齐
-（Taskbar Multirow 就是这么做的）而没有改动这个存储值，本模组仍会认为任务栏居中，
-从而保持不生效。
+请在 Windows 的任务栏设置里把对齐方式改为**左对齐**。是否左对齐直接从布局读出——
+按钮排的起点相对任务栏两端的空档——因此切换对齐会被实时识别，**双向**响应，无需重新
+加载模组。只有当该测量无法区分两种对齐（按钮排填满整条任务栏）时，才会一次性读取
+注册表中存储的 TaskbarAl 值作为兜底。模组不再保留任何监视线程，也不监听注册表变化，
+因此对于“通过 hook 读取来强制左对齐”的模组（Taskbar Multirow 就是这样）也能得出
+正确结论。
 
 ### 与相邻模组的区别
 
@@ -158,8 +169,8 @@ Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.
 
 | 设置项 | 默认 | 说明 |
 | --- | --- | --- |
-| 图标组位置 | 4 | 从第一个应用按钮算起的 1 基位置（不含开始按钮）；该位置**之后**的图标构成居中的那一组。 |
-| 位置之后的图标数量达到此值时停止居中 | 11 | 该位置之后的可用应用按钮数量达到此值时停止居中。设为 0 表示永不停止。 |
+| 图标组位置 | 2 | 从第一个应用按钮算起的 1 基位置（不含开始按钮）；该位置**之后**的图标构成居中的那一组。 |
+| 位置之后的图标数量达到该值时停止居中 | 0 | 该位置之后的可用应用按钮数量达到该值时停止居中，恢复正常左对齐排布。默认 0 表示永不停止。 |
 
 ### 兼容性
 
@@ -167,9 +178,9 @@ Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.
 - 正常情况下与 Windows 11 Taskbar Styler 兼容
 - 任务栏标签，以及不合并或其它可变宽度的任务栏按钮
 - 多显示器下每条任务栏按钮模式不同的混合布局
-- 模组唯一添加的元素就是这个以模组 id 命名的、无子元素且不可见的测量画布；卸载时
-  会移除它并归还全部被跟踪的边距，不留下模组的任何痕迹
-- Taskbar Separators：与它同时使用时，两者都会改写任务栏按钮边距。它的 Divider gap 默认为 0，此时不写按钮边距，可共存；若把该值调大于 0，请勿同时启用两个模组，否则两套边距账本会互相叠加。
+- 模组不向任务栏添加任何元素，只写入按钮边距；卸载时会归还全部被跟踪的边距，
+  不留下模组的任何痕迹
+- 叠加式边距模组：任何“先读当前值、再把自己的间隙加上去”的模组都会与本模组互相累积，两套账本会无上限地叠加，因此不要同时启用两个这类模组。写**绝对值**边距的模组没有问题——本模组会自动在其之上重设基准。Taskbar Separators 属于叠加式：它的 Divider gap 默认为 0（此时不写按钮边距，可共存）；若把该值调大于 0，请勿同时启用两个模组。
 
 ### 卸载
 
@@ -189,7 +200,7 @@ Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.
 
 ### Known limitations / 已知限制
 
-- Closing a pinned-release icon that sits exactly on the split — the last icon of the left group or the first icon of the centered group — can make the spacing flash for a few tens of milliseconds before it settles. The button is being removed from the taskbar tree while the mod measures it; the next layout pass writes the correct spacing again. / 关闭正好位于分割点上的“未固定”图标（左组最后一个、或居中组第一个）时，间距可能出现几十毫秒的闪烁后自行恢复正常。
+- Closing a pinned-release icon that sits exactly on the split — the last icon of the left group or the first icon of the centered group — removes a button the mod is measuring, so the spacing can look one layout pass stale for a few tens of milliseconds before it settles. The split is anchored on that button itself rather than on its position in the realized list, so a button appearing or disappearing anywhere else no longer moves it, and the anchor is relearned only once the boundary button has really been gone for a quarter of a second. / 关闭正好位于分割点上的“未固定”图标（左组最后一个、或居中组第一个）时，被移除的正是模组正在测量的按钮，间距可能有一个布局帧的陈旧感（几十毫秒）后自行恢复正常。分割点锚定在该按钮**本身**、而不是它在“已实现列表”中的位置，因此其它位置出现或消失按钮都不会再让它移位；只有边界按钮确实消失约四分之一秒后才会重新锚定。
 - While an icon is being dragged, Explorer draws the dragged icon as a floating copy that follows the cursor. Holding it inside the spacing makes the spacing look like two halves with the icon in between. The margins the mod writes are unaffected: the spacing returns as soon as the icon is dropped. / 拖动图标时，Explorer 会把被拖图标做成跟随光标的浮动副本；把它停在空隙中间时，视觉上会像“空隙被劈成两半、中间夹着图标”。模组写入的间距并未改变，放下图标即恢复。
 - The taskbar hooks rely on Windows component symbols, vtable slots and a machine-code pattern. A Windows update that changes them can stop the mod from working; the mod log records failed reconciliations in that case. / 任务栏挂钩依赖 Windows 组件的符号、虚表槽位与一段机器码特征；Windows 更新若改变它们，模组可能失效，届时模组日志会记录重排失败。
 - If unload cannot detach its event handlers from the taskbar thread, those handlers stay registered and applied margins may not be handed back; the mod log records it. This limitation is shared with the mod it was derived from. / 若卸载时无法从任务栏线程注销事件处理器，这些处理器会保留、已应用的边距可能未归还；模组日志会记录。这一限制与其来源模组相同。
@@ -200,16 +211,16 @@ Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.
 // clang-format off
 // ==WindhawkModSettings==
 /*
-- groupPosition: 4
+- groupPosition: 2
   $name: Icon group position
   $name:zh-CN: 图标组位置
   $description: 1-based position counted from the first application button, which is not counted itself. The icons after this position are centered as one group relative to the whole taskbar. Applied only on a left-aligned, horizontal taskbar and never on a mirrored, right-to-left one.
   $description:zh-CN: 从第一个应用按钮算起的 1 基位置（不含开始按钮）。该位置之后的图标作为一组相对整条任务栏居中。只在左对齐且水平的任务栏上生效，镜像（从右到左）的任务栏上不生效。
-- hideWhenIconCountAtLeast: 11
-  $name: Hide when the icon count after the position is at least
-  $name:zh-CN: 位置之后的图标数量达到此值时停止居中
-  $description: Stop centering once the number of icons after the position reaches this value. Those are all usable application buttons after the position. Set to 0 to never stop centering because of the icon count.
-  $description:zh-CN: 位置之后的图标数量达到此值时停止居中。该数量指该位置之后所有可用应用按钮的数量。设为 0 表示永不因图标数量而停止居中。
+- hideWhenIconCountAtLeast: 0
+  $name: Stop centering when the icon count after the position reaches
+  $name:zh-CN: 位置之后的图标数量达到该值时停止居中
+  $description: Stop centering once the number of icons after the position reaches this value, which restores the normal left-aligned layout. Those are all usable application buttons after the position. The default 0 never stops centering because of the icon count.
+  $description:zh-CN: 位置之后的图标数量达到该值时停止居中，恢复正常左对齐排布。该数量指该位置之后所有可用应用按钮的数量。默认 0 表示永不因图标数量而停止居中。
 */
 // ==/WindhawkModSettings==
 // clang-format on
@@ -231,7 +242,6 @@ Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.
 #include <atomic>
 #include <chrono>
 #include <cmath>
-#include <mutex>
 #include <vector>
 
 using namespace winrt::Windows::UI::Xaml;
@@ -243,50 +253,36 @@ enum class ReconcileResult {
     temporarilyNotReady,
 };
 
-enum class TaskbarOrientation {
-    horizontal,
-    vertical,
-};
-
-enum class OrientationSetting {
-    automatic,
-    horizontal,
-    vertical,
-};
+// The compiled-in defaults, in one place: LoadSettings falls back to them.
+constexpr int kDefaultGroupPosition = 2;
+// The count of icons after the position at which centering stops. The stored
+// settings key keeps its original name so an existing value survives the
+// upgrade; only what the setting does is what its display name now says.
+constexpr int kDefaultStopCenteringIconCount = 0;
 
 struct Settings {
-    // Centering: the icons after this position are centered as one group. The
-    // count field is read by CalculateDynamicCenteredGap, whose body is kept
-    // from the fork this mod was extracted from.
-    int groupPosition = 4;
-    int hideWhenIconCountAtLeast = 11;
+    // Centering: the icons after this position are centered as one group.
+    int groupPosition = kDefaultGroupPosition;
+    int stopCenteringIconCount = kDefaultStopCenteringIconCount;
 };
 
-std::mutex g_settingsMutex;
-Settings g_settings;
+// Read on the taskbar UI thread by every reconcile, so they are plain atomics
+// instead of a mutex-protected struct; the generation counter is what tells a
+// reconcile that the snapshot it cached is stale.
+std::atomic<int> g_groupPosition{kDefaultGroupPosition};
+std::atomic<int> g_stopCenteringIconCount{kDefaultStopCenteringIconCount};
 std::atomic<unsigned int> g_settingsGeneration{0};
 
 std::atomic<bool> g_taskbarViewDllLoaded{false};
 std::atomic<bool> g_unloading{false};
 
-// Centering is applied only while the taskbar is left-aligned and horizontal.
-// The alignment value (TaskbarAl) is watched through RegNotifyChangeKeyValue;
-// the mod never writes it. The resident monitor reacts in both directions and
-// stops on an event, so uninit never blocks on a long Sleep. The layout code
-// must use g_dynamicCenteringActive rather than re-reading the alignment,
-// because that flag says what is actually applied.
-std::atomic<bool> g_alignMonitorStop{false};
-std::atomic<bool> g_dynamicCenteringActive{false};
-HANDLE g_alignMonitorThread = nullptr;
-HANDLE g_alignStopEvent = nullptr;
-// StartTaskbarAlignMonitor runs on the load/settings-change path (including any
-// explorer thread through LoadLibraryExW_Hook) while StopTaskbarAlignMonitor
-// runs on the unload path, so the monitor handles above are only touched under
-// this mutex.
-std::mutex g_alignMonitorMutex;
-
 using AnimationClock = std::chrono::steady_clock;
 constexpr auto kPostReleaseSettlingTimeout = std::chrono::seconds(1);
+// How long the anchored boundary button may stay unrealized before the split is
+// anchored somewhere else. The close animation that filters that button out
+// lasts a few tens of milliseconds, while a button the user really closed does
+// not come back.
+constexpr auto kBoundaryAnchorMissingTimeout = std::chrono::milliseconds(250);
 
 struct ReconciledButtonSignature {
     int itemIndex = -1;
@@ -317,10 +313,29 @@ struct TrackedTaskbarState {
     winrt::weak_ref<FrameworkElement> repeater;
     winrt::weak_ref<Controls::Grid> rootGrid;
 
-    // Coordinate reference for the locked geometry, which is written against a
-    // canvas that shares the root grid origin. It carries no child and no
-    // brush and is not hit-testable, so it is invisible by construction.
-    winrt::weak_ref<Controls::Canvas> measurementFrame;
+    // What the last reconcile derived from the layout: layoutLeftAligned is the
+    // raw alignment verdict, and centeringApplies additionally requires a
+    // horizontal, non-mirrored taskbar. The pointer handlers and the margin
+    // ledger read centeringApplies, never the taskbar alignment setting.
+    bool layoutLeftAligned = false;
+    bool centeringApplies = false;
+
+    // B1: the split is anchored on the itemIndex of its left boundary button,
+    // not on its position in the realized list. boundaryButtonIndex is where
+    // that button sits in the realized list and in the margin ledger right now,
+    // or -1 while there is no usable boundary.
+    int boundaryButtonIndex = -1;
+    int boundaryAnchorItemIndex = -1;
+    unsigned int boundaryAnchorGeneration = 0;
+    AnimationClock::time_point boundaryAnchorMissingSince{};
+
+    // Set once an out-of-range group position has been reported, so the log
+    // line names the problem when it appears instead of every frame.
+    bool positionBeyondButtonsLogged = false;
+
+    // Set while an alignment change is being followed: the row slides, so the
+    // gap is recomputed per composition frame until the geometry stops moving.
+    bool alignmentSettleActive = false;
 
     // Cached SystemTray.SystemTrayFrame of this taskbar. The centering gap
     // clamps the centered group against the tray, and the lookup is a depth-12
@@ -374,35 +389,29 @@ struct TrackedTaskbarState {
     // Reentrancy guard for the forced reconcile below, not a feedback-loop
     // bound: the flag is cleared before the LayoutUpdated caused by the margins
     // it wrote arrives, so that event does reach this handler. What bounds the
-    // repeats it can cause is kMaxLayoutForcedReconciles, the cap on forced
-    // reconciles per observed realized-button count (at most 3 per observed
-    // count).
+    // repeats is kMaxLayoutForcedReconciles.
     bool layoutForcedReconcileActive = false;
-    // When the flag above was set. A clear that never happens (the tracked
-    // state is pruned while the forced reconcile runs) would otherwise disable
-    // this monitor for good, so a flag older than the watchdog below is treated
-    // as stale and cleared instead.
+    // A guard older than the watchdog below is treated as stale: the clear is
+    // skipped when the tracked state is pruned while the forced reconcile runs.
     AnimationClock::time_point layoutForcedReconcileActiveSince{};
     int layoutForcedReconcileAttempts = 0;
-    // Start of the current budget window for the retries below. The budget is
-    // counted per window as well as per observed realized-button count, so a
-    // count that stops changing while the geometry probe keeps failing cannot
-    // spend the retries for good.
+    // Start of the current budget window for the retries below, so a count that
+    // stops changing cannot spend the retries for good.
     AnimationClock::time_point layoutForcedReconcileWindowStart{};
     size_t layoutObservedButtonCount = 0;
     bool layoutObservedButtonCountValid = false;
-    // Last panel.Children().Size() seen by the LayoutUpdated handler, used as a
-    // cheap pre-filter before the per-child ABI-crossing walk. The invalid
-    // marker means the first pass always walks.
+    // Last panel.Children().Size() seen by the LayoutUpdated handler, a cheap
+    // pre-filter before the per-child ABI-crossing walk. The invalid marker
+    // means the first pass always walks.
     size_t layoutPanelChildCount = static_cast<size_t>(-1);
 
     // Drag freeze state for the centering gap.
     bool reorderDragActive = false;
     bool hasFrozenDynamicGap = false;
     double frozenDynamicGap = 0;
-    bool frozenDynamicGapVisible = true;
+    bool frozenCenteringGapInEffect = true;
     double lastAppliedDynamicGap = 0;
-    bool lastDynamicGapVisible = true;
+    bool lastCenteringGapInEffect = true;
     // Consecutive rendering frames in which the released-left-button fallback
     // read the button as up. A single asynchronous false read must not end the
     // drag, or the gap is recomputed from drag-distorted geometry.
@@ -453,30 +462,35 @@ void DestroyTrackedTaskbars() {
 }
 
 void LoadSettings() {
-    Settings settings;
-
-    // 1-based: the icons after this position are the centered group. A key
-    // that is missing or not positive keeps the default built into Settings.
+    // 1-based: the icons after this position are the centered group. A key that
+    // is missing or not positive keeps the compiled-in default, and says so,
+    // because a configured position of 0 would otherwise look like a setting
+    // that is silently ignored.
     int groupPosition = Wh_GetIntSetting(L"groupPosition");
-    if (groupPosition > 0) {
-        settings.groupPosition = groupPosition;
+    if (groupPosition <= 0) {
+        Wh_Log(L"group position %d is not positive; using the default %d",
+               groupPosition, kDefaultGroupPosition);
+        groupPosition = kDefaultGroupPosition;
     }
+    g_groupPosition.store(groupPosition, std::memory_order_release);
+
     // 0 means never stop: the count check in CalculateDynamicCenteredGap is
     // skipped for 0, so centering keeps running.
-    settings.hideWhenIconCountAtLeast =
-        std::max(0, Wh_GetIntSetting(L"hideWhenIconCountAtLeast"));
-
-    {
-        std::lock_guard<std::mutex> lock(g_settingsMutex);
-        g_settings = settings;
-    }
+    g_stopCenteringIconCount.store(
+        std::max(0, Wh_GetIntSetting(L"hideWhenIconCountAtLeast")),
+        std::memory_order_release);
 
     g_settingsGeneration.fetch_add(1, std::memory_order_release);
 }
 
+// On the taskbar UI thread this is called by every reconcile, so it must not
+// take a lock: the two values are independent and each is atomic on its own.
 Settings GetSettingsSnapshot() {
-    std::lock_guard<std::mutex> lock(g_settingsMutex);
-    return g_settings;
+    Settings settings;
+    settings.groupPosition = g_groupPosition.load(std::memory_order_acquire);
+    settings.stopCenteringIconCount =
+        g_stopCenteringIconCount.load(std::memory_order_acquire);
+    return settings;
 }
 
 bool ThicknessApproximatelyEqual(Thickness const& left,
@@ -886,46 +900,13 @@ Controls::Grid FindRootGridAncestor(FrameworkElement element) {
     return nullptr;
 }
 
-// Name of the coordinate-reference canvas this mod adds to the taskbar root
-// grid. It is suffixed with the mod id, so no other mod - and none of the
-// separator mods, which match their own prefix - can claim or remove it.
-constexpr WCHAR kMeasurementFrameName[] =
-    L"WhIconGroupCenteringMeasure_" WH_MOD_ID;
-
-// Detaches the measurement frame this mod created, and only that one: the name
-// has to match exactly before anything is removed, and there is no child to
-// sweep because this mod never puts anything in the frame.
-void RemoveMeasurementFrame(TrackedTaskbarState& taskbar) {
-    auto frame = taskbar.measurementFrame.get();
-    taskbar.measurementFrame = {};
-    if (!frame) {
-        return;
-    }
-
-    try {
-        if (frame.Name() != kMeasurementFrameName) {
-            return;
-        }
-
-        auto parent =
-            Media::VisualTreeHelper::GetParent(frame).try_as<Controls::Panel>();
-        if (!parent) {
-            return;
-        }
-
-        uint32_t index = 0;
-        auto children = parent.Children();
-        if (children.IndexOf(frame, index)) {
-            children.RemoveAt(index);
-        }
-    } catch (...) {
-    }
-}
-
-bool TryGetElementBounds(Controls::Canvas const& overlayCanvas,
+// Measures an element in the coordinate space of any other element of the same
+// tree, which is what the centering geometry needs: every value it combines is
+// in root-grid coordinates, so the root grid is the reference.
+bool TryGetElementBounds(FrameworkElement const& referenceFrame,
                          FrameworkElement const& element,
                          winrt::Windows::Foundation::Rect* bounds) {
-    if (!overlayCanvas || !element || !bounds) {
+    if (!referenceFrame || !element || !bounds) {
         return false;
     }
 
@@ -937,7 +918,7 @@ bool TryGetElementBounds(Controls::Canvas const& overlayCanvas,
     }
 
     auto transformedBounds =
-        element.TransformToVisual(overlayCanvas)
+        element.TransformToVisual(referenceFrame)
             .TransformBounds(winrt::Windows::Foundation::Rect{
                 0, 0, static_cast<float>(width), static_cast<float>(height)});
     if (!std::isfinite(transformedBounds.X) ||
@@ -952,37 +933,6 @@ bool TryGetElementBounds(Controls::Canvas const& overlayCanvas,
     return true;
 }
 
-double PrimaryStart(winrt::Windows::Foundation::Rect const& bounds,
-                    TaskbarOrientation orientation) {
-    return orientation == TaskbarOrientation::horizontal ? bounds.X : bounds.Y;
-}
-
-double PrimarySize(winrt::Windows::Foundation::Rect const& bounds,
-                   TaskbarOrientation orientation) {
-    return orientation == TaskbarOrientation::horizontal ? bounds.Width
-                                                         : bounds.Height;
-}
-
-double PrimaryCenter(winrt::Windows::Foundation::Rect const& bounds,
-                     TaskbarOrientation orientation) {
-    return PrimaryStart(bounds, orientation) +
-           PrimarySize(bounds, orientation) / 2.0;
-}
-
-double CrossCenter(winrt::Windows::Foundation::Rect const& bounds,
-                   TaskbarOrientation orientation) {
-    return orientation == TaskbarOrientation::horizontal
-               ? bounds.Y + bounds.Height / 2.0
-               : bounds.X + bounds.Width / 2.0;
-}
-
-double ElementPrimarySize(FrameworkElement const& element,
-                          TaskbarOrientation orientation) {
-    return orientation == TaskbarOrientation::horizontal
-               ? element.ActualWidth()
-               : element.ActualHeight();
-}
-
 bool IsUsableApplicationButton(FrameworkElement const& button) {
     if (!button || button.Visibility() != Visibility::Visible) {
         return false;
@@ -994,62 +944,30 @@ bool IsUsableApplicationButton(FrameworkElement const& button) {
            height > 0;
 }
 
-bool TryGetPrimaryOrderingDirection(
-    Controls::Canvas const& overlayCanvas,
-    std::vector<FrameworkElement> const& elements,
-    TaskbarOrientation orientation,
-    double* direction) {
-    if (!direction) {
-        return false;
-    }
-
-    for (size_t index = 1; index < elements.size(); index++) {
-        winrt::Windows::Foundation::Rect previousBounds{};
-        winrt::Windows::Foundation::Rect currentBounds{};
-        if (!elements[index - 1] || !elements[index] ||
-            !TryGetElementBounds(overlayCanvas, elements[index - 1],
-                                 &previousBounds) ||
-            !TryGetElementBounds(overlayCanvas, elements[index],
-                                 &currentBounds)) {
-            continue;
-        }
-
-        double primaryMovement = PrimaryCenter(currentBounds, orientation) -
-                                 PrimaryCenter(previousBounds, orientation);
-        double crossMovement = CrossCenter(currentBounds, orientation) -
-                               CrossCenter(previousBounds, orientation);
-        if (std::isfinite(primaryMovement) && std::isfinite(crossMovement) &&
-            std::fabs(primaryMovement) > 0.1 &&
-            std::fabs(primaryMovement) > std::fabs(crossMovement)) {
-            *direction = primaryMovement;
-            return true;
-        }
-    }
-
-    return false;
-}
-
-bool IsMirroredPrimaryOrdering(
-    Controls::Canvas const& overlayCanvas,
-    std::vector<FrameworkElement> const& elements,
-    TaskbarOrientation orientation) {
+// Safety gate: a mirrored, right-to-left taskbar lays its buttons out along
+// decreasing X, while the centering geometry is written for increasing X, so
+// centering is not applied there instead of collapsing the gap silently.
+bool IsMirroredPrimaryOrdering(FrameworkElement const& referenceFrame,
+                               std::vector<FrameworkElement> const& elements) {
     bool sawQualifyingPair = false;
 
     for (size_t index = 1; index < elements.size(); index++) {
         winrt::Windows::Foundation::Rect previousBounds{};
         winrt::Windows::Foundation::Rect currentBounds{};
         if (!elements[index - 1] || !elements[index] ||
-            !TryGetElementBounds(overlayCanvas, elements[index - 1],
+            !TryGetElementBounds(referenceFrame, elements[index - 1],
                                  &previousBounds) ||
-            !TryGetElementBounds(overlayCanvas, elements[index],
+            !TryGetElementBounds(referenceFrame, elements[index],
                                  &currentBounds)) {
             continue;
         }
 
-        double primaryMovement = PrimaryCenter(currentBounds, orientation) -
-                                 PrimaryCenter(previousBounds, orientation);
-        double crossMovement = CrossCenter(currentBounds, orientation) -
-                               CrossCenter(previousBounds, orientation);
+        double primaryMovement = (currentBounds.X + currentBounds.Width / 2.0) -
+                                 (previousBounds.X +
+                                  previousBounds.Width / 2.0);
+        double crossMovement = (currentBounds.Y + currentBounds.Height / 2.0) -
+                               (previousBounds.Y +
+                                previousBounds.Height / 2.0);
         if (!std::isfinite(primaryMovement) || !std::isfinite(crossMovement) ||
             std::fabs(primaryMovement) <= 0.1 ||
             std::fabs(primaryMovement) <= std::fabs(crossMovement)) {
@@ -1073,86 +991,70 @@ bool IsMirroredPrimaryOrdering(
     return sawQualifyingPair;
 }
 
-void AddDirectionalButtonGap(ButtonGapContribution* contribution,
-                             TaskbarOrientation orientation,
-                             double direction,
-                             bool leading,
-                             double amount) {
-    bool usePrimaryStart = leading == (direction > 0);
-    if (orientation == TaskbarOrientation::horizontal) {
-        (usePrimaryStart ? contribution->left : contribution->right) += amount;
-    } else {
-        (usePrimaryStart ? contribution->top : contribution->bottom) += amount;
-    }
+// The row runs left to right and the boundary gap is split over the two buttons
+// that straddle it: leading picks the side of the button that faces the group.
+void AddButtonGap(ButtonGapContribution* contribution,
+                  bool leading,
+                  double amount) {
+    (leading ? contribution->left : contribution->right) += amount;
 }
 
-// Centering: count the application buttons after the position (1-based
-// position, so the group starts after that button).
-int CountMiddleIcons(std::vector<FrameworkElement> const& appButtons,
-                     int position) {
-    if (position <= 0 || position >= static_cast<int>(appButtons.size())) {
-        return 0;
-    }
-
-    return static_cast<int>(appButtons.size()) - position;
-}
-
-// Centering: compute the physical gap needed to center the right-side group
-// relative to the whole taskbar.
+// Centering: compute the physical gap needed to center the group that follows
+// the boundary button relative to the whole taskbar. boundaryIndex is the
+// position of the last button of the left group in appButtons.
 double CalculateDynamicCenteredGap(
     Controls::Grid const& rootGrid,
-    Controls::Canvas const& overlayCanvas,
     std::vector<FrameworkElement> const& appButtons,
-    int position,
-    TaskbarOrientation orientation,
-    bool* separatorVisible,
+    int boundaryIndex,
+    bool* centeringGapInEffect,
     winrt::weak_ref<FrameworkElement>* trayFrameCache) {
-    if (separatorVisible) {
-        *separatorVisible = true;
+    if (centeringGapInEffect) {
+        *centeringGapInEffect = true;
     }
 
-    if (position <= 0 || !rootGrid) {
+    if (boundaryIndex < 0 || !rootGrid ||
+        boundaryIndex >= static_cast<int>(appButtons.size())) {
         return 0;
     }
 
-    int middleIconCount = CountMiddleIcons(appButtons, position);
+    int middleIconCount =
+        static_cast<int>(appButtons.size()) - boundaryIndex - 1;
     Settings settings = GetSettingsSnapshot();
-    if (settings.hideWhenIconCountAtLeast > 0 &&
-        middleIconCount >= settings.hideWhenIconCountAtLeast) {
-        if (separatorVisible) {
-            *separatorVisible = false;
+    if (settings.stopCenteringIconCount > 0 &&
+        middleIconCount >= settings.stopCenteringIconCount) {
+        if (centeringGapInEffect) {
+            *centeringGapInEffect = false;
         }
         return 0;
     }
 
-    size_t leftIndex = static_cast<size_t>(position - 1);
-    if (leftIndex >= appButtons.size() || !appButtons[leftIndex]) {
+    FrameworkElement leftButton = appButtons[boundaryIndex];
+    if (!leftButton) {
         return 0;
     }
 
-    FrameworkElement leftButton = appButtons[leftIndex];
-    double leftGroupRight = 0;
-    if (overlayCanvas) {
-        winrt::Windows::Foundation::Rect bounds{};
-        if (!TryGetElementBounds(overlayCanvas, leftButton, &bounds)) {
+    // Both ends are measured in root-grid coordinates, the same space the gap
+    // is applied in, so both are transformed against the root grid itself.
+    winrt::Windows::Foundation::Rect leftBounds{};
+    if (!TryGetElementBounds(rootGrid, leftButton, &leftBounds)) {
+        return 0;
+    }
+    double leftGroupRight = leftBounds.X + leftBounds.Width;
+
+    // The group's real extent, interior margins included: summing the button
+    // widths would leave those margins out and place the group that much too
+    // far right, and it under-counts the tray clamp below in the same way.
+    double rightGroupWidth = 0;
+    if (boundaryIndex + 1 < static_cast<int>(appButtons.size())) {
+        winrt::Windows::Foundation::Rect firstBounds{};
+        winrt::Windows::Foundation::Rect lastBounds{};
+        if (!TryGetElementBounds(rootGrid, appButtons[boundaryIndex + 1],
+                                 &firstBounds) ||
+            !TryGetElementBounds(rootGrid, appButtons.back(), &lastBounds)) {
             return 0;
         }
-        leftGroupRight =
-            PrimaryStart(bounds, orientation) + PrimarySize(bounds, orientation);
-    } else {
-        auto point = leftButton.TransformToVisual(rootGrid)
-                         .TransformPoint({0, 0});
-        leftGroupRight =
-            point.X + ElementPrimarySize(leftButton, orientation);
-    }
 
-    double rightGroupWidth = 0;
-    for (size_t index = static_cast<size_t>(position);
-         index < appButtons.size(); index++) {
-        if (appButtons[index]) {
-            rightGroupWidth +=
-                ElementPrimarySize(appButtons[index], orientation);
-        }
+        rightGroupWidth = (lastBounds.X + lastBounds.Width) - firstBounds.X;
     }
 
     if (rightGroupWidth <= 0) {
@@ -1170,7 +1072,9 @@ double CalculateDynamicCenteredGap(
         desiredGap = 0;
     }
 
-    // Avoid pushing the right group into the system tray.
+    // Avoid pushing the right group into the system tray. The clamp uses the
+    // same measured extent as the centring above, so it is not optimistic about
+    // how wide the group is.
     double trayLeft = taskbarWidth;
     FrameworkElement trayFrame =
         trayFrameCache ? trayFrameCache->get() : nullptr;
@@ -1222,66 +1126,115 @@ double SnapToPhysicalPixel(double value, double rasterizationScale) {
     return std::round(value * rasterizationScale) / rasterizationScale;
 }
 
-bool TryGetTaskbarOrientation(OrientationSetting orientationSetting,
-                              Controls::Canvas const& overlayCanvas,
-                              double taskbarWidth,
-                              double taskbarHeight,
-                              std::vector<FrameworkElement> const& icons,
-                              TaskbarOrientation* orientation) {
-    if (!orientation) {
-        return false;
+// Reads the stored taskbar alignment. Only ever read, and only as the fallback
+// for the layout-derived verdict below.
+bool ReadTaskbarAl(DWORD* outValue);
+
+// Where the first realized application button starts, in root-grid
+// coordinates, separates the two alignments: a left-aligned row puts it right
+// after the system buttons on the left (Start, Search, Task view - about 100 to
+// 160 DIP, and close to 0 on a secondary taskbar that has none), while a
+// centred row puts it after the free space the centred group leaves on its
+// left, which is far wider than that on any taskbar that still fits its tray.
+constexpr double kFirstButtonLeftMaxX = 160.0;
+
+// The other end of that reading: a centred row's first application button sits
+// at the system buttons plus the free space left of the centred group, several
+// hundred DIP on every taskbar whose icon group does not nearly fill it. The
+// band between the two thresholds is a dead zone that reports "unknown" on
+// purpose: a row that nearly fills the taskbar reads the same either way, and
+// only the stored setting can decide that case.
+constexpr double kFirstButtonCentredMinX = 320.0;
+
+// The first realized application button, with one child scan that stops at the
+// first match plus one item-index test: the same filters the reconciliation
+// snapshot uses, with no recursive walk over the visual tree.
+FrameworkElement FindFirstRealizedTaskListButton(
+    FrameworkElement const& repeater) {
+    auto panel = repeater ? repeater.try_as<Controls::Panel>() : nullptr;
+    if (!panel) {
+        return nullptr;
     }
 
-    if (orientationSetting == OrientationSetting::horizontal) {
-        *orientation = TaskbarOrientation::horizontal;
-        return true;
-    }
-    if (orientationSetting == OrientationSetting::vertical) {
-        *orientation = TaskbarOrientation::vertical;
-        return true;
-    }
-
-    double totalHorizontalMovement = 0;
-    double totalVerticalMovement = 0;
-    bool foundPair = false;
-    for (size_t index = 1; index < icons.size(); index++) {
-        winrt::Windows::Foundation::Rect previousBounds{};
-        winrt::Windows::Foundation::Rect currentBounds{};
-        if (!icons[index - 1] || !icons[index] ||
-            !TryGetElementBounds(overlayCanvas, icons[index - 1],
-                                 &previousBounds) ||
-            !TryGetElementBounds(overlayCanvas, icons[index], &currentBounds)) {
+    for (auto const& panelChild : panel.Children()) {
+        auto child = panelChild.try_as<FrameworkElement>();
+        if (!child || child.Name() != L"TaskListButton") {
             continue;
         }
-
-        double previousCenterX = previousBounds.X + previousBounds.Width / 2.0;
-        double previousCenterY = previousBounds.Y + previousBounds.Height / 2.0;
-        double currentCenterX = currentBounds.X + currentBounds.Width / 2.0;
-        double currentCenterY = currentBounds.Y + currentBounds.Height / 2.0;
-        totalHorizontalMovement += std::fabs(currentCenterX - previousCenterX);
-        totalVerticalMovement += std::fabs(currentCenterY - previousCenterY);
-        foundPair = true;
-    }
-
-    if (!foundPair) {
-        if (!std::isfinite(taskbarWidth) || !std::isfinite(taskbarHeight) ||
-            taskbarWidth < 0 || taskbarHeight < 0) {
-            return false;
+        if (ItemsRepeater_GetElementIndex(repeater, child) < 0) {
+            continue;
         }
-
-        *orientation = taskbarWidth >= taskbarHeight
-                           ? TaskbarOrientation::horizontal
-                           : TaskbarOrientation::vertical;
-        return true;
+        if (!IsUsableApplicationButton(child)) {
+            continue;
+        }
+        return child;
     }
 
-    if (std::fabs(totalHorizontalMovement - totalVerticalMovement) <= 0.1) {
+    return nullptr;
+}
+
+// Is the taskbar left-aligned? Not from the repeater's own box: Windows
+// stretches that element, so its frame stayed where it was across an alignment
+// switch and reading it answered "left-aligned" every time. The first realized
+// application button is what really moves, so its left edge is measured here.
+bool DeriveTaskbarLeftAligned(FrameworkElement const& repeater,
+                              Controls::Grid const& rootGrid,
+                              FrameworkElement const& firstButton,
+                              bool* leftAligned) {
+    if (!leftAligned || !rootGrid) {
         return false;
     }
 
-    *orientation = totalHorizontalMovement > totalVerticalMovement
-                       ? TaskbarOrientation::horizontal
-                       : TaskbarOrientation::vertical;
+    double rootWidth = rootGrid.ActualWidth();
+    if (!std::isfinite(rootWidth) || rootWidth <= 0) {
+        return false;
+    }
+
+    // -1 means unknown: only an explicit Left or Center counts. A stretched
+    // repeater, which is one that carries no alignment of its own, says nothing
+    // and leaves the geometry below as the only verdict.
+    int declaredAlignment = -1;
+    try {
+        if (repeater) {
+            auto alignment = repeater.HorizontalAlignment();
+            if (alignment == HorizontalAlignment::Left) {
+                declaredAlignment = 1;
+            } else if (alignment == HorizontalAlignment::Center) {
+                declaredAlignment = 0;
+            }
+        }
+    } catch (...) {
+        declaredAlignment = -1;
+    }
+
+    // This is also called from the layout monitor, which is not wrapped in a
+    // try block of its own, so a button that is detached from the root grid
+    // while Explorer rebuilds the taskbar reports "unknown" here instead of
+    // throwing into the layout pass.
+    winrt::Windows::Foundation::Rect buttonBounds{};
+    try {
+        if (!TryGetElementBounds(rootGrid, firstButton, &buttonBounds)) {
+            return false;
+        }
+    } catch (...) {
+        return false;
+    }
+
+    int derived = -1;
+    if (buttonBounds.X <= kFirstButtonLeftMaxX) {
+        derived = 1;
+    } else if (buttonBounds.X >= kFirstButtonCentredMinX) {
+        derived = 0;
+    }
+
+    // Two readings that disagree mean neither is trusted: the caller still has
+    // its own stored REG_DWORD read, which is authoritative.
+    if (derived < 0 ||
+        (declaredAlignment >= 0 && declaredAlignment != derived)) {
+        return false;
+    }
+
+    *leftAligned = derived == 1;
     return true;
 }
 
@@ -1319,10 +1272,6 @@ void UnsubscribeAnimationRendering(TrackedTaskbarState& taskbar) {
     taskbar.animationRenderingSubscribed = false;
 }
 
-void StopAllGeometryTracking(TrackedTaskbarState& taskbar) {
-    UnsubscribeAnimationRendering(taskbar);
-}
-
 // The rendering callback owns the only check that can end a drag whose
 // PointerReleased the shell swallowed, so it must stay subscribed while the
 // gap is frozen: dropping it here would kill that check and leave the freeze
@@ -1337,7 +1286,7 @@ void OnAnimationRendering(size_t taskbarId,
     auto& taskbar = *taskbarState;
 
     if (g_unloading) {
-        StopAllGeometryTracking(taskbar);
+        UnsubscribeAnimationRendering(taskbar);
         return;
     }
 
@@ -1394,13 +1343,25 @@ void OnAnimationRendering(size_t taskbarId,
         // Only drop the callback once the queued forced frames have run: the
         // release path queues two of them and the second is re-armed just
         // above, so testing the freeze alone would cut the remedy down to one
-        // frame. The queue itself is the bound here, not a time window: the
-        // counter is only re-armed while it is still above zero.
+        // frame.
+
+        // The alignment settle re-arms itself for every frame of its bounded
+        // window: a switch slides the whole row, so the gap is recomputed from
+        // the settled geometry and not from the geometry caught mid-slide. The
+        // reconcile that sees the row stop moving clears the flag, and the
+        // settling deadline ends it either way.
         auto* refreshed = FindTrackedTaskbarById(taskbarId);
+        if (refreshed && refreshed->alignmentSettleActive) {
+            if (AnimationClock::now() >= refreshed->postReleaseSettlingUntil) {
+                refreshed->alignmentSettleActive = false;
+            } else {
+                refreshed->reorderStructuralReconcilePending = true;
+            }
+        }
         if (refreshed && !frozenDynamicGap &&
             refreshed->postReleaseReconcileFrames == 0 &&
             !refreshed->reorderStructuralReconcilePending) {
-            StopAllGeometryTracking(*refreshed);
+            UnsubscribeAnimationRendering(*refreshed);
         }
         return;
     }
@@ -1417,12 +1378,13 @@ void OnAnimationRendering(size_t taskbarId,
 
     // Nothing is measured per frame any more, so this callback has one job
     // left: stay alive while the freeze needs the released-button check above,
-    // and drop itself once the freeze is over and the post-release window has
-    // closed. The freeze is checked first, and deliberately so.
+    // and drop itself once the freeze is over, no alignment settle is pending
+    // and the settling window has closed.
     if (!frozenDynamicGap && !taskbar.reorderDragActive &&
+        !taskbar.alignmentSettleActive &&
         taskbar.postReleaseSettlingUntil != AnimationClock::time_point{} &&
         AnimationClock::now() >= taskbar.postReleaseSettlingUntil) {
-        StopAllGeometryTracking(taskbar);
+        UnsubscribeAnimationRendering(taskbar);
     }
 }
 
@@ -1455,87 +1417,89 @@ void OnReorderPointerPressed(
         return;
     }
 
-    // Freeze the gap when a mouse button goes down on the taskbar. This is
-    // intentionally simple: any press freezes until release, which avoids
-    // mid-drag layout feedback loops. A normal click is short enough that the
+    if (taskbarState->reorderDragActive) {
+        return;
+    }
+
+    // A press that did not land on a TaskListButton - Start, the clock, the
+    // tray - can never reorder buttons, so it must neither freeze the gap nor
+    // force a reconcile: doing that on every click rewrote both boundary
+    // margins once on press (the whole gap on one side) and again on release
+    // (two separately snapped halves), which is enough to twitch the group by
+    // one physical pixel.
+    auto source = e.OriginalSource().try_as<FrameworkElement>();
+    auto pressedButton = FindAncestorByName(source, L"TaskListButton");
+    if (!pressedButton) {
+        return;
+    }
+
+    // Freeze the gap for the drag. A normal click is short enough that the
     // deferred reconcile on release is not noticeable.
-    if (!taskbarState->reorderDragActive) {
-        taskbarState->reorderDragActive = true;
-        taskbarState->hasFrozenDynamicGap = true;
-        taskbarState->frozenDynamicGap =
-            taskbarState->lastAppliedDynamicGap;
-        taskbarState->frozenDynamicGapVisible =
-            taskbarState->lastDynamicGapVisible;
+    taskbarState->reorderDragActive = true;
+    taskbarState->hasFrozenDynamicGap = true;
+    taskbarState->frozenDynamicGap = taskbarState->lastAppliedDynamicGap;
+    taskbarState->frozenCenteringGapInEffect =
+        taskbarState->lastCenteringGapInEffect;
 
-        // Drop a release-scheduled reconcile left over from a previous drag.
-        // The forced reconcile below covers the current order anyway and the
-        // released-button check that would have consumed the flag is not
-        // guaranteed to run, so leaving it set would let this drag's first
-        // rendering frame consume it as if it belonged to the previous release.
-        // The settling deadline and frame counter are deliberately untouched.
-        taskbarState->reorderStructuralReconcilePending = false;
+    // Drop a release-scheduled reconcile left over from a previous drag: the
+    // forced reconcile below covers the current order anyway, and leaving the
+    // flag set would let this drag's first rendering frame consume it as if it
+    // belonged to the previous release.
+    taskbarState->reorderStructuralReconcilePending = false;
 
-        // Remember which TaskListButton was pressed so the gap can be kept on
-        // the correct side while dragging.
-        auto source = e.OriginalSource().try_as<FrameworkElement>();
-        auto pressedButton = FindAncestorByName(source, L"TaskListButton");
-        taskbarState->draggedButton =
-            pressedButton ? winrt::make_weak(pressedButton)
-                          : winrt::weak_ref<FrameworkElement>{};
-        taskbarState->draggedButtonIndex = -1;
-        if (pressedButton) {
-            if (auto repeater = taskbarState->repeater.get()) {
-                taskbarState->draggedButtonIndex =
-                    ItemsRepeater_GetElementIndex(repeater, pressedButton);
+    // Remember which TaskListButton was pressed so the gap can be kept on the
+    // correct side while dragging.
+    taskbarState->draggedButton = winrt::make_weak(pressedButton);
+    taskbarState->draggedButtonIndex = -1;
+    if (auto repeater = taskbarState->repeater.get()) {
+        taskbarState->draggedButtonIndex =
+            ItemsRepeater_GetElementIndex(repeater, pressedButton);
+    }
+
+    // Only a drag of the two buttons that straddle the centering boundary keeps
+    // the frozen margins. Any other button releases the freeze so the gap
+    // follows the live order and Windows can still match the button under the
+    // cursor; an unidentified button, or no actively applied centering, falls
+    // back to the old freeze instead of risking the spacing.
+    bool pressedButtonIdentified = false;
+    bool pressedButtonIsBoundary = false;
+    if (taskbarState->centeringApplies &&
+        taskbarState->boundaryButtonIndex >= 0) {
+        const int boundaryIndex = taskbarState->boundaryButtonIndex;
+        const auto& trackedButtons = taskbarState->reconciledButtons;
+        for (size_t index = 0; index < trackedButtons.size(); index++) {
+            auto trackedButton = trackedButtons[index].button.get();
+            if (!trackedButton ||
+                winrt::get_abi(trackedButton) !=
+                    winrt::get_abi(pressedButton)) {
+                continue;
             }
+            pressedButtonIdentified = true;
+            pressedButtonIsBoundary =
+                static_cast<int>(index) == boundaryIndex ||
+                static_cast<int>(index) == boundaryIndex + 1;
+            break;
         }
+    }
+    taskbarState->draggedButtonIsBoundary =
+        !pressedButtonIdentified || pressedButtonIsBoundary;
 
-        // Only a drag of the two buttons that straddle the dynamic centering
-        // boundary keeps the frozen margins. Any other button releases the
-        // freeze so the gap follows the live order and Windows can still match
-        // the button under the cursor; an unidentified button, or no actively
-        // applied centering, falls back to the old freeze instead of risking
-        // the spacing.
-        bool pressedButtonIdentified = false;
-        bool pressedButtonIsBoundary = false;
-        if (pressedButton &&
-            g_dynamicCenteringActive.load(std::memory_order_acquire)) {
-            const size_t boundaryIndex = static_cast<size_t>(
-                GetSettingsSnapshot().groupPosition - 1);
-            const auto& trackedButtons = taskbarState->reconciledButtons;
-            for (size_t index = 0; index < trackedButtons.size(); index++) {
-                auto trackedButton = trackedButtons[index].button.get();
-                if (!trackedButton ||
-                    winrt::get_abi(trackedButton) !=
-                        winrt::get_abi(pressedButton)) {
-                    continue;
-                }
-                pressedButtonIdentified = true;
-                pressedButtonIsBoundary =
-                    index == boundaryIndex || index == boundaryIndex + 1;
-                break;
-            }
-        }
-        taskbarState->draggedButtonIsBoundary =
-            !pressedButtonIdentified || pressedButtonIsBoundary;
+    // The press-time forced reconcile is exempt from the drag freeze (see
+    // ReconcileTrackedTaskbar), so it applies the frozen gap fully onto the
+    // boundary button opposite the pressed one; that shape stays frozen for the
+    // rest of the drag and is recomputed on release.
+    if (auto repeater = taskbarState->repeater.get()) {
+        ReconcileTaskbarRepeater(repeater, true);
+    }
 
-        // The press-time forced reconcile is exempt from the drag freeze (see
-        // ReconcileTrackedTaskbar), so it applies the frozen gap fully onto the
-        // boundary button opposite the pressed one; that shape stays frozen for
-        // the rest of the drag and is recomputed on release.
-        if (auto repeater = taskbarState->repeater.get()) {
-            ReconcileTaskbarRepeater(repeater, true);
-        }
-
-        // The released-button check runs in the rendering callback, so the
-        // subscription is armed here as well: without it a swallowed
-        // PointerReleased would leave the freeze in place until the next press
-        // and release pair. The forced reconcile above prunes the tracked list
-        // and can reallocate it, so the pointer taken at the top may dangle;
-        // resolve the state again by id before it is used.
-        if (auto* refreshed = FindTrackedTaskbarById(taskbarId)) {
-            EnsureGeometryRenderingSubscribed(*refreshed);
-        }
+    // The released-button check runs in the rendering callback, so the
+    // subscription is armed here as well: without it a swallowed
+    // PointerReleased would leave the freeze in place until the next press and
+    // release pair. The forced reconcile above prunes the tracked list and can
+    // reallocate it, so the pointer taken at the top may dangle; resolve the
+    // state again by id before it is used.
+    if (auto* refreshed = FindTrackedTaskbarById(taskbarId)) {
+        EnsureGeometryRenderingSubscribed(*refreshed);
     }
 }
 
@@ -1547,7 +1511,10 @@ void OnReorderPointerReleased(size_t taskbarId,
         return;
     }
 
+    // Cleared here as well as in the rendering fallback at the top of this
+    // file, so both release paths leave the same state behind.
     taskbarState->reorderDragActive = false;
+    taskbarState->hasFrozenDynamicGap = false;
     taskbarState->draggedButton = {};
     taskbarState->draggedButtonIndex = -1;
     taskbarState->draggedButtonIsBoundary = false;
@@ -1600,6 +1567,7 @@ void DetachReorderPointerHandler(TrackedTaskbarState& taskbar) {
     taskbar.draggedButtonIsBoundary = false;
     taskbar.dragEndConfirmFrames = 0;
     taskbar.hasFrozenDynamicGap = false;
+    taskbar.alignmentSettleActive = false;
 }
 
 void AttachReorderPointerHandler(TrackedTaskbarState& taskbar,
@@ -1697,12 +1665,14 @@ size_t RestoreOrphanGapMargins(TrackedTaskbarState& taskbar,
 // orphan by construction.
 size_t CollectLedgerGapHosts(TrackedTaskbarState const& taskbar,
                              FrameworkElement hosts[2]) {
-    if (!g_dynamicCenteringActive.load(std::memory_order_acquire)) {
+    // Centering that is not in effect, or a boundary that is not anchored,
+    // yields an empty set, which makes every tracked increment an orphan.
+    if (!taskbar.centeringApplies || taskbar.boundaryButtonIndex < 0) {
         return 0;
     }
 
     const size_t buttonIndex =
-        static_cast<size_t>(GetSettingsSnapshot().groupPosition - 1);
+        static_cast<size_t>(taskbar.boundaryButtonIndex);
     size_t hostCount = 0;
     if (buttonIndex < taskbar.buttonMargins.size()) {
         if (auto host = taskbar.buttonMargins[buttonIndex].button.get()) {
@@ -1779,6 +1749,7 @@ void OnTaskbarLayoutUpdated(
     // walk, and the weak references are only resolved for entries that still
     // hold an increment. Inside a drag freeze it is skipped entirely, because
     // the frozen single-sided shape belongs to the drag and must not be touched.
+    auto repeater = taskbarState->repeater.get();
     bool layoutInvariantDirty = false;
     if (!taskbarState->reorderDragActive) {
         FrameworkElement gapHosts[2]{nullptr, nullptr};
@@ -1797,6 +1768,34 @@ void OnTaskbarLayoutUpdated(
                 taskbarState->reconciledButtons.size()) {
             layoutInvariantDirty = true;
         }
+
+        // The alignment can change with no button added or removed, so it is
+        // re-derived here, ahead of the count-based pre-filters: a switch
+        // slides the row, which raises LayoutUpdated for as long as it moves,
+        // and a derived value that disagrees with the applied one is what
+        // forces the rebuild below.
+        auto alignmentRootGrid = taskbarState->rootGrid.get();
+        if (repeater && alignmentRootGrid) {
+            bool leftAligned = false;
+            bool alignmentKnown = DeriveTaskbarLeftAligned(
+                repeater, alignmentRootGrid,
+                FindFirstRealizedTaskListButton(repeater), &leftAligned);
+            // Both alignments can leave the geometry in its dead zone, and the
+            // flip still has to be seen here: this handler is what marks the
+            // applied value dirty, so the stored value is read once in that
+            // case, with its REG_DWORD check, exactly as the reconcile does.
+            if (!alignmentKnown) {
+                DWORD taskbarAl = 1;
+                if (ReadTaskbarAl(&taskbarAl)) {
+                    leftAligned = taskbarAl == 0;
+                    alignmentKnown = true;
+                }
+            }
+            if (alignmentKnown &&
+                leftAligned != taskbarState->layoutLeftAligned) {
+                layoutInvariantDirty = true;
+            }
+        }
     }
 
     // While a reorder drag is in flight the realized button set is
@@ -1805,7 +1804,6 @@ void OnTaskbarLayoutUpdated(
         return;
     }
 
-    auto repeater = taskbarState->repeater.get();
     if (!repeater) {
         return;
     }
@@ -1958,7 +1956,7 @@ void ClearAnimationTrackingForUnload() {
     }
 
     for (auto& taskbar : *g_trackedTaskbars) {
-        StopAllGeometryTracking(taskbar);
+        UnsubscribeAnimationRendering(taskbar);
         try {
             DetachReorderPointerHandler(taskbar);
         } catch (...) {
@@ -2084,7 +2082,7 @@ void SynchronizeTrackedButtonMargins(
 void RemoveTrackedTaskbarElements(TrackedTaskbarState& taskbar) {
     RestoreTrackedButtonMargins(taskbar);
     InvalidateReconciliationSignature(taskbar);
-    StopAllGeometryTracking(taskbar);
+    UnsubscribeAnimationRendering(taskbar);
     try {
         DetachLayoutChangeMonitor(taskbar);
     } catch (...) {
@@ -2093,8 +2091,6 @@ void RemoveTrackedTaskbarElements(TrackedTaskbarState& taskbar) {
         DetachReorderPointerHandler(taskbar);
     } catch (...) {
     }
-
-    RemoveMeasurementFrame(taskbar);
 
     taskbar.rootGrid = {};
     // The cached tray frame belongs to the root grid that is being dropped.
@@ -2450,11 +2446,17 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
 
             InvalidateReconciliationSignature(taskbar);
 
+            // The alignment settle ends once the row stops moving: the repeater
+            // box and the root width are the two values a slide changes.
+            // Compared against the last committed ones, which
+            // InvalidateReconciliationSignature deliberately keeps.
+            const bool geometryMoved =
+                !LayoutRectMatches(taskbar.reconciledRepeaterBounds,
+                                   snapshot.repeaterBounds) ||
+                !LayoutScalarMatches(taskbar.reconciledRootWidth,
+                                     snapshot.rootWidth);
+
             Settings settings = GetSettingsSnapshot();
-            // Whether centering is in effect right now; the setting only says
-            // what the mod was asked to do.
-            const bool dynamicCenteringActive =
-                g_dynamicCenteringActive.load(std::memory_order_acquire);
             unsigned int settingsGeneration =
                 g_settingsGeneration.load(std::memory_order_acquire);
 
@@ -2485,91 +2487,137 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                 DetachLayoutChangeMonitor(taskbar);
             }
 
-            // The locked geometry is written against a canvas that shares the
-            // root grid origin, so this mod keeps exactly that: a canvas with no
-            // child, no brush and no hit testing, added to the root grid only
-            // while centering can need to measure. It is created lazily, reused
-            // by name and removed only by this mod.
-            Controls::Canvas measurementFrame = taskbar.measurementFrame.get();
-            if (!measurementFrame && rootGrid && dynamicCenteringActive) {
-                for (auto const& rootChild : rootGrid.Children()) {
-                    auto child = rootChild.try_as<FrameworkElement>();
-                    if (child && child.Name() == kMeasurementFrameName) {
-                        measurementFrame = child.try_as<Controls::Canvas>();
-                        break;
-                    }
-                }
+            // Only the horizontal layout is supported. The gap is written on
+            // the X axis and the tray clamp transforms a point's X, so the
+            // vertical path this mod inherited was never reachable; the axis is
+            // taken from the proportions the snapshot already carries.
+            const bool horizontalLayoutValid =
+                snapshot.signatureValid && std::isfinite(snapshot.rootWidth) &&
+                std::isfinite(snapshot.rootHeight) &&
+                snapshot.rootHeight > 0 &&
+                snapshot.rootWidth >= snapshot.rootHeight;
 
-                if (!measurementFrame) {
-                    try {
-                        Controls::Canvas frame;
-                        frame.Name(winrt::hstring(kMeasurementFrameName));
-                        frame.HorizontalAlignment(
-                            HorizontalAlignment::Stretch);
-                        frame.VerticalAlignment(VerticalAlignment::Stretch);
-                        frame.IsHitTestVisible(false);
-                        rootGrid.Children().Append(frame);
-                        measurementFrame = frame;
-                    } catch (...) {
-                    }
-                }
-
-                if (measurementFrame) {
-                    taskbar.measurementFrame =
-                        winrt::make_weak(measurementFrame);
-                } else {
-                    taskbar.measurementFrame = {};
+            // Left alignment is read from the layout, not from the stored
+            // TaskbarAl value: a switch moves the row, which is exactly what
+            // DeriveTaskbarLeftAligned measures, so this is also right for a mod
+            // that forces left alignment by hooking that read. The stored value
+            // is read once here only when the layout cannot tell the two
+            // alignments apart; nothing is watched and no thread is kept.
+            bool leftAligned = false;
+            bool alignmentKnown = DeriveTaskbarLeftAligned(
+                repeater, rootGrid, FindFirstRealizedTaskListButton(repeater),
+                &leftAligned);
+            if (!alignmentKnown) {
+                DWORD taskbarAl = 1;
+                if (ReadTaskbarAl(&taskbarAl)) {
+                    leftAligned = taskbarAl == 0;
+                    alignmentKnown = true;
                 }
             }
-
-            // The realized icons are only needed by the orientation probe, which
-            // compares adjacent icon movement before falling back to the
-            // taskbar's own proportions.
-            std::vector<FrameworkElement> appIcons;
-            appIcons.reserve(appButtons.size());
-            for (size_t index = 0; index < appButtons.size(); index++) {
-                appIcons.push_back(nullptr);
-            }
-            for (size_t buttonIndex = 0; buttonIndex < appButtons.size();
-                 buttonIndex++) {
-                auto iconPanel =
-                    FindDescendantByName(appButtons[buttonIndex], L"IconPanel")
-                        .try_as<Controls::Panel>();
-                if (!iconPanel) {
-                    continue;
-                }
-                appIcons[buttonIndex] =
-                    FindDescendantByName(iconPanel, L"Icon");
-            }
-
-            TaskbarOrientation taskbarOrientation =
-                TaskbarOrientation::horizontal;
-            bool orientationValid =
-                measurementFrame &&
-                TryGetTaskbarOrientation(OrientationSetting::automatic,
-                                         measurementFrame, snapshot.rootWidth,
-                                         snapshot.rootHeight, appIcons,
-                                         &taskbarOrientation);
-
-            double primaryOrderingDirection = 0;
-            bool primaryOrderingValid =
-                orientationValid &&
-                TryGetPrimaryOrderingDirection(measurementFrame, appButtons,
-                                               taskbarOrientation,
-                                               &primaryOrderingDirection);
+            const bool leftAlignedDerived = alignmentKnown && leftAligned;
 
             // A mirrored, right-to-left taskbar lays its buttons out along
-            // decreasing primary coordinates, while the centering geometry is
-            // written for increasing ones, so centering is not applied there
-            // instead of collapsing the gap silently. A drag in progress
-            // suppresses the test as well, so it is never fed a layout that is
-            // mid-flight.
-            bool mirroredOrdering =
-                orientationValid &&
-                taskbarOrientation == TaskbarOrientation::horizontal &&
+            // decreasing X while the centering geometry is written for
+            // increasing ones, so centering is not applied there instead of
+            // collapsing the gap silently. A drag in progress suppresses the
+            // test as well, so it is never fed a layout that is mid-flight.
+            const bool mirroredOrdering =
+                leftAlignedDerived && horizontalLayoutValid &&
                 !taskbar.reorderDragActive &&
-                IsMirroredPrimaryOrdering(measurementFrame, appButtons,
-                                          taskbarOrientation);
+                IsMirroredPrimaryOrdering(rootGrid, appButtons);
+
+            // The direction of the row is deliberately not probed: on the only
+            // layout this mod supports it runs left to right, so the gap goes on
+            // the trailing side of the left boundary button and on the leading
+            // side of the group. Probing it used to gate the whole feature, so a
+            // taskbar whose adjacent button centres happened to agree within
+            // 0.1 DIP got no centering at all.
+            const bool centeringApplies = leftAlignedDerived &&
+                                          horizontalLayoutValid &&
+                                          !mirroredOrdering;
+
+            const bool alignmentChanged =
+                taskbar.centeringApplies != centeringApplies;
+            taskbar.layoutLeftAligned = leftAlignedDerived;
+            taskbar.centeringApplies = centeringApplies;
+
+            // B1: the split follows the button that sat at the configured
+            // position when the anchor was learned, not whatever realized
+            // button carries that index now, so a button that is virtualized
+            // away or filtered out for a frame cannot move the split onto its
+            // neighbour.
+            const int configuredBoundaryIndex = settings.groupPosition - 1;
+            int boundaryIndex = -1;
+            for (size_t index = 0; index < snapshot.buttons.size(); index++) {
+                if (snapshot.buttons[index].itemIndex ==
+                    taskbar.boundaryAnchorItemIndex) {
+                    boundaryIndex = static_cast<int>(index);
+                    break;
+                }
+            }
+
+            // The anchor is relearned from the configured position when the
+            // position setting changed, when there is none yet, or when the
+            // anchored button has been gone for longer than a close animation -
+            // which is how "the user really closed it" is told apart from a
+            // button that is only filtered out while it animates.
+            bool relearnBoundary =
+                taskbar.boundaryAnchorGeneration != settingsGeneration ||
+                taskbar.boundaryAnchorItemIndex < 0;
+            if (boundaryIndex >= 0) {
+                taskbar.boundaryAnchorMissingSince =
+                    AnimationClock::time_point{};
+            } else if (!taskbar.reorderDragActive) {
+                const auto now = AnimationClock::now();
+                if (taskbar.boundaryAnchorMissingSince ==
+                    AnimationClock::time_point{}) {
+                    taskbar.boundaryAnchorMissingSince = now;
+                } else if (now - taskbar.boundaryAnchorMissingSince >=
+                           kBoundaryAnchorMissingTimeout) {
+                    relearnBoundary = true;
+                }
+            }
+
+            if (boundaryIndex < 0 || relearnBoundary) {
+                // Without a usable anchor the configured position decides,
+                // which is also the correct new boundary right after a button
+                // before it was really removed.
+                boundaryIndex = configuredBoundaryIndex;
+                if (relearnBoundary) {
+                    taskbar.boundaryAnchorItemIndex =
+                        boundaryIndex >= 0 &&
+                                boundaryIndex <
+                                    static_cast<int>(snapshot.buttons.size())
+                            ? snapshot.buttons[boundaryIndex].itemIndex
+                            : -1;
+                    taskbar.boundaryAnchorGeneration = settingsGeneration;
+                    taskbar.boundaryAnchorMissingSince =
+                        AnimationClock::time_point{};
+                }
+            }
+
+            if (boundaryIndex < 0 ||
+                boundaryIndex >= static_cast<int>(appButtons.size()) ||
+                !appButtons[boundaryIndex]) {
+                boundaryIndex = -1;
+            }
+            taskbar.boundaryButtonIndex = boundaryIndex;
+
+            // A position past the last realized button produces no gap at all,
+            // so it is reported once instead of leaving the user with a silent
+            // no-op.
+            if (configuredBoundaryIndex >=
+                static_cast<int>(appButtons.size())) {
+                if (!taskbar.positionBeyondButtonsLogged) {
+                    taskbar.positionBeyondButtonsLogged = true;
+                    Wh_Log(L"group position %d is past the last of %u "
+                           L"application buttons; nothing to center",
+                           settings.groupPosition,
+                           static_cast<unsigned int>(appButtons.size()));
+                }
+            } else {
+                taskbar.positionBeyondButtonsLogged = false;
+            }
 
             // Keep a stable base margin for each realized TaskListButton. The
             // physical gap is then added as our own delta on top of that base,
@@ -2578,24 +2626,18 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
             std::vector<ButtonGapContribution> gapContributions(
                 appButtons.size());
 
-            const bool centeringApplies =
-                dynamicCenteringActive && orientationValid &&
-                taskbarOrientation == TaskbarOrientation::horizontal &&
-                primaryOrderingValid && !mirroredOrdering;
-
             if (centeringApplies) {
-                bool dynamicVisible = true;
+                bool centeringGapInEffect = true;
                 double fullGap = 0;
                 if (taskbar.reorderDragActive &&
                     taskbar.hasFrozenDynamicGap) {
-                    dynamicVisible =
-                        taskbar.frozenDynamicGapVisible;
+                    centeringGapInEffect =
+                        taskbar.frozenCenteringGapInEffect;
                     fullGap = taskbar.frozenDynamicGap;
                 } else {
                     fullGap = CalculateDynamicCenteredGap(
-                        rootGrid, measurementFrame, appButtons,
-                        settings.groupPosition, taskbarOrientation,
-                        &dynamicVisible, &taskbar.trayFrame);
+                        rootGrid, appButtons, boundaryIndex,
+                        &centeringGapInEffect, &taskbar.trayFrame);
                     // The last valid value is reused only inside the
                     // post-release settling window, where the buttons are still
                     // animating and the live geometry can be invalid: the gap
@@ -2608,17 +2650,16 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                              AnimationClock::time_point{} &&
                          AnimationClock::now() <
                              taskbar.postReleaseSettlingUntil);
-                    if (dynamicVisible && fullGap < 1.0 &&
+                    if (centeringGapInEffect && fullGap < 1.0 &&
                         postReleaseSettling) {
                         fullGap = taskbar.lastAppliedDynamicGap;
                     }
                 }
                 taskbar.lastAppliedDynamicGap = fullGap;
-                taskbar.lastDynamicGapVisible = dynamicVisible;
+                taskbar.lastCenteringGapInEffect = centeringGapInEffect;
 
-                if (dynamicVisible) {
-                    size_t buttonIndex =
-                        static_cast<size_t>(settings.groupPosition - 1);
+                if (centeringGapInEffect && boundaryIndex >= 0) {
+                    size_t buttonIndex = static_cast<size_t>(boundaryIndex);
                     if (buttonIndex < appButtons.size()) {
                         bool hasNext = buttonIndex + 1 < appButtons.size();
                         if (hasNext) {
@@ -2665,21 +2706,17 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                                     // The dragged button is currently to the
                                     // right of this boundary: give the full
                                     // gap to the left boundary button.
-                                    AddDirectionalButtonGap(
-                                        &gapContributions[buttonIndex],
-                                        taskbarOrientation,
-                                        primaryOrderingDirection, false,
+                                    AddButtonGap(
+                                        &gapContributions[buttonIndex], false,
                                         alignedGap);
                                 } else {
                                     // The dragged button is currently to the
                                     // left of this boundary (or is its left
                                     // boundary button): give the full gap to
                                     // the right boundary button.
-                                    AddDirectionalButtonGap(
+                                    AddButtonGap(
                                         &gapContributions[buttonIndex + 1],
-                                        taskbarOrientation,
-                                        primaryOrderingDirection, true,
-                                        alignedGap);
+                                        true, alignedGap);
                                 }
                             } else {
                                 // Split the space across the two neighboring
@@ -2689,65 +2726,39 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                                 // sub-pixel margins are rounded differently by
                                 // the layout engine for even and odd counts.
                                 double halfLeft = fullGap / 2.0;
-                                double halfRight = fullGap - halfLeft;
                                 double scale = GetRasterizationScale(rootGrid);
                                 halfLeft = SnapToPhysicalPixel(halfLeft, scale);
-                                halfRight = SnapToPhysicalPixel(
+                                double halfRight = SnapToPhysicalPixel(
                                     fullGap - halfLeft, scale);
-                                AddDirectionalButtonGap(
-                                    &gapContributions[buttonIndex],
-                                    taskbarOrientation,
-                                    primaryOrderingDirection, false, halfLeft);
-                                AddDirectionalButtonGap(
-                                    &gapContributions[buttonIndex + 1],
-                                    taskbarOrientation,
-                                    primaryOrderingDirection, true, halfRight);
+                                AddButtonGap(&gapContributions[buttonIndex],
+                                             false, halfLeft);
+                                AddButtonGap(&gapContributions[buttonIndex + 1],
+                                             true, halfRight);
                             }
                         } else {
                             // The group starts after the final realized app
                             // button, so the whole gap goes on its trailing
                             // side.
-                            AddDirectionalButtonGap(
-                                &gapContributions[buttonIndex],
-                                taskbarOrientation, primaryOrderingDirection,
-                                false, fullGap);
+                            AddButtonGap(&gapContributions[buttonIndex], false,
+                                         fullGap);
                         }
                     }
                 }
             }
 
-            bool hasGapContributions =
-                std::any_of(gapContributions.begin(), gapContributions.end(),
-                            [](ButtonGapContribution const& gap) {
-                                return std::fabs(gap.left) > 0.001 ||
-                                       std::fabs(gap.top) > 0.001 ||
-                                       std::fabs(gap.right) > 0.001 ||
-                                       std::fabs(gap.bottom) > 0.001;
-                            });
-
             // A zero gap, a hidden group, or a position past the last realized
             // button produces a zero contribution and restores our previous
-            // delta. If the ordering probe is temporarily unavailable while
-            // centering is active, the current margin is kept until the next
-            // valid reconciliation rather than guessed away; a lone usable
-            // button needs no direction to drop a tracked contribution.
-            const bool probeUsable = orientationValid && primaryOrderingValid;
-            const bool applySkipped =
-                !(probeUsable || !dynamicCenteringActive || mirroredOrdering ||
-                  (appButtons.size() < 2 && !hasGapContributions));
-            if (!applySkipped) {
-                ApplyTrackedButtonGapMargins(taskbar, appButtons,
-                                             gapContributions, &snapshot);
-            }
+            // delta.
+            ApplyTrackedButtonGapMargins(taskbar, appButtons, gapContributions,
+                                         &snapshot);
 
-            // Keep the margin ledger free of orphans. A tracked button may hold
+            // Keep the margin ledger free of orphans: a tracked button may hold
             // our increment only while it is one of the buttons this shape puts
-            // the gap on, and this is the only sweep that reaches the ledger
-            // when the Apply above was skipped. It writes no new gap: it only
-            // hands a stale increment back.
+            // the gap on. This writes no new gap, it only hands a stale
+            // increment back.
             FrameworkElement gapHosts[2]{nullptr, nullptr};
             size_t gapHostCount = 0;
-            if (dynamicCenteringActive && !mirroredOrdering) {
+            if (centeringApplies) {
                 for (size_t index = 0;
                      index < gapContributions.size() && gapHostCount < 2;
                      index++) {
@@ -2759,24 +2770,6 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                         gapHosts[gapHostCount++] = appButtons[index];
                     }
                 }
-
-                if (gapHostCount == 0 && !centeringApplies) {
-                    // No contribution was produced because the geometry probe
-                    // is unavailable, not because this shape has no gap: the
-                    // buttons still carry the boundary pair the previous
-                    // reconcile wrote. The pair is treated as hosts on purpose;
-                    // while frozen the whole gap sits on one of them and the
-                    // other is the dragged ghost, so it is never rolled back.
-                    const size_t buttonIndex =
-                        static_cast<size_t>(settings.groupPosition - 1);
-                    if (buttonIndex < appButtons.size()) {
-                        gapHosts[gapHostCount++] = appButtons[buttonIndex];
-                        if (buttonIndex + 1 < appButtons.size()) {
-                            gapHosts[gapHostCount++] =
-                                appButtons[buttonIndex + 1];
-                        }
-                    }
-                }
             }
             RestoreOrphanGapMargins(taskbar, gapHosts, gapHostCount);
 
@@ -2785,24 +2778,31 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                 // Nothing was measured, so the layout is not ready yet; the
                 // next pass retries instead of caching this as the state.
                 result = ReconcileResult::temporarilyNotReady;
-            } else if (applySkipped && dynamicCenteringActive &&
-                       (!orientationValid || !primaryOrderingValid)) {
-                // The geometry probe was unavailable while centering is in
-                // effect, so the margins were neither rewritten nor handed
-                // back. Reporting "not ready" keeps that shape out of the
-                // committed signature (CommitReconciledTaskbar refuses it), so
-                // the next layout event recomputes instead of reusing a stale,
-                // half-applied gap.
-                result = ReconcileResult::temporarilyNotReady;
             }
 
             // The pointer handlers belong to the root grid the margins are
             // written on, so they are attached whenever a root grid exists and
-            // the taskbar is in a state where centering can matter.
-            if (rootGrid && dynamicCenteringActive) {
+            // centering can matter for this taskbar.
+            if (rootGrid && centeringApplies) {
                 AttachReorderPointerHandler(taskbar, rootGrid);
             } else {
                 DetachReorderPointerHandler(taskbar);
+            }
+
+            // A change of the applied alignment slides the whole row, so the
+            // gap is rebuilt across a bounded window instead of once: the
+            // rendering callback re-arms the forced reconcile for every frame
+            // until the measured geometry stops moving, and the settling
+            // deadline caps that window at one second.
+            if (alignmentChanged && !taskbar.reorderDragActive) {
+                taskbar.alignmentSettleActive = true;
+                taskbar.postReleaseSettlingUntil =
+                    AnimationClock::now() + kPostReleaseSettlingTimeout;
+                taskbar.postReleaseReconcileFrames = 2;
+                taskbar.reorderStructuralReconcilePending = true;
+                EnsureGeometryRenderingSubscribed(taskbar);
+            } else if (taskbar.alignmentSettleActive && !geometryMoved) {
+                taskbar.alignmentSettleActive = false;
             }
 
             if (result != ReconcileResult::temporarilyNotReady) {
@@ -2888,11 +2888,8 @@ void CleanupAllTaskbarsForUnload() {
         }
 
         // Do not release any tracked weak references or delegates until all
-        // tracked margins have been handed back and the measurement frame has
-        // been detached from the taskbar root grid.
+        // tracked margins have been handed back.
         for (auto& taskbar : *g_trackedTaskbars) {
-            RemoveMeasurementFrame(taskbar);
-
             taskbar.repeater = {};
             taskbar.rootGrid = {};
             taskbar.trayFrame = {};
@@ -3149,11 +3146,6 @@ BOOL ModInitWithTaskbarView(HMODULE taskbarViewModule) {
     return HookTaskbarViewDllSymbols(taskbarViewModule) ? TRUE : FALSE;
 }
 
-// Defined with the taskbar alignment code below. Declared here because the
-// taskbar view can also be loaded after Wh_ModAfterInit, and that is the
-// first moment centering can be applied in this process.
-void ApplyDynamicCenteringSetting();
-
 void HandleLoadedModuleIfTaskbarView(HMODULE module) {
     if (g_unloading.load(std::memory_order_acquire)) {
         return;
@@ -3163,7 +3155,6 @@ void HandleLoadedModuleIfTaskbarView(HMODULE module) {
         !g_taskbarViewDllLoaded.exchange(true)) {
         if (ModInitWithTaskbarView(module)) {
             Wh_ApplyHookOperations();
-            ApplyDynamicCenteringSetting();
         }
     }
 }
@@ -3179,12 +3170,9 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD flags) {
     return module;
 }
 
-// Centering only works on a left-aligned taskbar: center alignment stacks on
-// top of the group and makes the reserved gap look wrong.
-//
-// The mod only *reads* the taskbar alignment (TaskbarAl). It never writes it and
-// never changes what Explorer reads, so the user's own setting is always left
-// alone; with a center-aligned taskbar centering is simply not applied.
+// The stored taskbar alignment is only the fallback for the layout-derived
+// verdict in DeriveTaskbarLeftAligned. The mod only reads this value and never
+// writes it, so the user's own setting is always left alone.
 static const wchar_t kTaskbarAdvancedKey[] =
     L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced";
 
@@ -3213,326 +3201,6 @@ bool ReadTaskbarAl(DWORD* outValue) {
     }
     *outValue = taskbarAl;
     return true;
-}
-
-// Registry watch owned by the alignment monitor thread. Both handles are
-// released by the destructor, including on every early return path.
-struct TaskbarAlignWatch {
-    HKEY key = nullptr;
-    HANDLE changeEvent = nullptr;
-
-    ~TaskbarAlignWatch() {
-        if (key) {
-            RegCloseKey(key);
-        }
-        if (changeEvent) {
-            CloseHandle(changeEvent);
-        }
-    }
-
-    bool Open() {
-        LSTATUS status =
-            RegOpenKeyExW(HKEY_CURRENT_USER, kTaskbarAdvancedKey, 0,
-                          KEY_NOTIFY | KEY_QUERY_VALUE, &key);
-        if (status != ERROR_SUCCESS) {
-            Wh_Log(L"open Advanced key for notifications failed: %ld", status);
-            key = nullptr;
-            return false;
-        }
-
-        // Manual-reset event: it is reset before every re-registration, which
-        // RegNotifyChangeKeyValue requires because its registration is
-        // one-shot.
-        changeEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        if (!changeEvent) {
-            Wh_Log(L"failed to create the registry change event");
-            return false;
-        }
-
-        return true;
-    }
-};
-
-// Called when the user changes the taskbar alignment away from left while
-// centering is active. The mod does not fight the user: centering is turned
-// off and the gap it reserved is dropped. This runs on the alignment monitor
-// thread, which no longer exits right after it, so it never joins itself.
-void YieldDynamicCenteringForUserAlignment() {
-    Wh_Log(L"the user changed the taskbar alignment; centering is off");
-
-    g_dynamicCenteringActive.store(false, std::memory_order_release);
-
-    // The alignment value belongs to the user: this mod never wrote it, so
-    // there is nothing to restore. The rebuild is not run here because the
-    // caller repeats it across the same bounded window as the opposite
-    // direction: the margin is handed back one button per tracked entry, and a
-    // single run taken while the row is still sliding can return only some of
-    // them.
-}
-
-// The bounded rebuild window, shared by both alignment directions: the first
-// rebuild runs immediately and up to eight more follow at 500 ms intervals.
-// Switching the alignment slides the whole button row, so a single rebuild can
-// run while the geometry is still moving. Nothing is guaranteed to rebuild
-// afterwards, so a later attempt taken once the geometry has settled finishes
-// the job. Either stop event ends the window early.
-void RepeatReconcileOnTaskbarThread(HANDLE stopEvent, HANDLE changeEvent) {
-    HANDLE handles[2] = {stopEvent, changeEvent};
-
-    for (int attempt = 0; attempt <= 8; attempt++) {
-        if (attempt > 0) {
-            // The unload path waits for this thread to exit, so neither the
-            // remaining attempts nor the 500 ms wait may hold it up: both
-            // stop conditions end the loop.
-            if (g_alignMonitorStop.load(std::memory_order_acquire) ||
-                g_unloading.load(std::memory_order_acquire)) {
-                break;
-            }
-            // The alignment change event belongs in this wait as well: the
-            // user can switch the alignment again inside this window, and
-            // the loop must end at once instead of rebuilding for an
-            // alignment that is no longer in effect. The monitor reads the
-            // new value on its next iteration and acts on that instead.
-            DWORD retryResult =
-                WaitForMultipleObjects(2, handles, FALSE, 500);
-            if (retryResult != WAIT_TIMEOUT) {
-                break;
-            }
-        }
-        if (g_taskbarViewDllLoaded && !RunReconcileOnTaskbarThread(true)) {
-            Wh_Log(L"the icon group could not be rebuilt on the taskbar UI "
-                   L"thread");
-        }
-    }
-}
-
-DWORD WINAPI TaskbarAlignMonitorThreadProc(LPVOID) {
-    // Event-driven watch instead of registry polling: RegNotifyChangeKeyValue
-    // reports a TaskbarAl change as soon as it happens, and the thread also
-    // waits on the stop event, so unloading wakes it immediately instead of
-    // leaving it in a long Sleep. The thread is resident: it keeps watching in
-    // both directions instead of exiting after the first alignment change.
-    TaskbarAlignWatch watch;
-    if (!watch.Open()) {
-        return 0;
-    }
-
-    // Let AfterInit settle before the first check. StartTaskbarAlignMonitor
-    // returns early when the stop event cannot be created, so the handle is
-    // always valid here.
-    WaitForSingleObject(g_alignStopEvent, 1000);
-
-    HANDLE waitHandles[2] = {g_alignStopEvent, watch.changeEvent};
-
-    while (!g_alignMonitorStop.load(std::memory_order_acquire) &&
-           !g_unloading.load(std::memory_order_acquire)) {
-        // The registration is one-shot, so it is renewed every iteration. It is
-        // registered before the value is read: a change that lands between the
-        // two still signals the event and is handled by the next iteration.
-        ResetEvent(watch.changeEvent);
-
-        // Only this key is watched: TaskbarAl lives in the key itself, not in a
-        // subkey.
-        LSTATUS status = RegNotifyChangeKeyValue(
-            watch.key, FALSE, REG_NOTIFY_CHANGE_LAST_SET, watch.changeEvent,
-            TRUE);
-        if (status != ERROR_SUCCESS) {
-            // A failed registration is not necessarily permanent, so the
-            // resident monitor waits and retries instead of exiting for good.
-            // Only the stop event ends this thread.
-            Wh_Log(L"RegNotifyChangeKeyValue failed: %ld", status);
-            if (WaitForSingleObject(g_alignStopEvent, 1000) != WAIT_TIMEOUT) {
-                break;
-            }
-            continue;
-        }
-
-        // The monitor reacts in both directions. Leaving left turns centering
-        // off; coming back to left turns it on again. The registration above is
-        // one-shot and is renewed by the next iteration, so the loop keeps
-        // waiting here instead of exiting.
-        DWORD taskbarAl = 0;
-        if (ReadTaskbarAl(&taskbarAl)) {
-            if (taskbarAl != 0) {
-                if (g_dynamicCenteringActive.load(std::memory_order_acquire)) {
-                    YieldDynamicCenteringForUserAlignment();
-                    // The margin this mod applied is handed back one button
-                    // per tracked entry, and the row is sliding right now, so a
-                    // single rebuild can return only part of it: the rest would
-                    // linger until some later rebuild that nothing guarantees.
-                    // The same bounded window as the switch back to left
-                    // alignment is therefore run in this direction too.
-                    RepeatReconcileOnTaskbarThread(g_alignStopEvent,
-                                                   watch.changeEvent);
-                }
-            } else if (!g_dynamicCenteringActive.load(
-                           std::memory_order_acquire)) {
-                Wh_Log(L"the taskbar is left-aligned again; centering is "
-                       L"applied again");
-                g_dynamicCenteringActive.store(true, std::memory_order_release);
-                // Both directions share the bounded rebuild window: the
-                // first rebuild is immediate and the later attempts cover
-                // the slide animation, whose geometry has not settled yet.
-                RepeatReconcileOnTaskbarThread(g_alignStopEvent,
-                                               watch.changeEvent);
-            }
-        }
-
-        // The stop event wakes this thread for unloading, and the change event
-        // fires for a TaskbarAl change, which the next iteration handles. The
-        // stop event is created before this thread, so both handles stay valid
-        // for as long as it runs.
-        DWORD waitResult =
-            WaitForMultipleObjects(2, waitHandles, FALSE, INFINITE);
-        if (waitResult != WAIT_OBJECT_0 + 1) {
-            // The stop event, or a wait failure: either way this thread is done
-            // and the cleanup belongs to the unload path.
-            break;
-        }
-    }
-
-    return 0;
-}
-
-void StartTaskbarAlignMonitor() {
-    // Serialized against StopTaskbarAlignMonitor: the monitor is started on the
-    // load/settings-change path and stopped on the unload path, and those can
-    // run on different threads.
-    std::lock_guard<std::mutex> lock(g_alignMonitorMutex);
-
-    // Re-checked under the lock and before CreateThread: a start that raced with
-    // the unload must lose, or the thread would outlive the mod.
-    if (g_unloading.load(std::memory_order_acquire)) {
-        return;
-    }
-
-    if (g_alignMonitorThread) {
-        // The monitor exits on the stop event, so a stale handle is reaped here
-        // instead of blocking a later settings change from starting a new
-        // monitor.
-        if (WaitForSingleObject(g_alignMonitorThread, 0) != WAIT_OBJECT_0) {
-            return;
-        }
-        CloseHandle(g_alignMonitorThread);
-        g_alignMonitorThread = nullptr;
-    }
-
-    g_alignMonitorStop.store(false, std::memory_order_release);
-    if (!g_alignStopEvent) {
-        g_alignStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        if (!g_alignStopEvent) {
-            Wh_Log(L"failed to create align stop event");
-            return;
-        }
-    } else {
-        ResetEvent(g_alignStopEvent);
-    }
-
-    g_alignMonitorThread =
-        CreateThread(nullptr, 0, TaskbarAlignMonitorThreadProc, nullptr, 0,
-                     nullptr);
-    if (!g_alignMonitorThread) {
-        Wh_Log(L"failed to start align monitor thread");
-        CloseHandle(g_alignStopEvent);
-        g_alignStopEvent = nullptr;
-    }
-}
-
-void StopTaskbarAlignMonitor() {
-    // Serialized with StartTaskbarAlignMonitor, but the unbounded wait below is
-    // not held under the mutex. The monitor thread can block on a taskbar UI
-    // thread that is itself waiting for this mutex in
-    // StartTaskbarAlignMonitor, which would deadlock the unload thread. Only
-    // the stop signal and the handle handoff happen under the lock; the wait
-    // itself is lock-free.
-    HANDLE monitorThread = nullptr;
-    {
-        std::lock_guard<std::mutex> lock(g_alignMonitorMutex);
-
-        g_alignMonitorStop.store(true, std::memory_order_release);
-        if (g_alignStopEvent) {
-            SetEvent(g_alignStopEvent);
-        }
-
-        // The handle is taken out from under the lock and the stop event stays
-        // set, so a concurrent start can never create a second monitor thread:
-        // this stop path only runs with g_unloading raised first, and the start
-        // re-checks it under the same lock before CreateThread.
-        monitorThread = g_alignMonitorThread;
-        g_alignMonitorThread = nullptr;
-    }
-
-    if (monitorThread) {
-        // The monitor waits on the stop event, so this returns immediately;
-        // the wait is unbounded so that an unloaded image can never leave a mod
-        // thread running. A failed wait is retried rather than returning with
-        // the handle left set, and waiting outside the mutex is what breaks the
-        // deadlock: the monitor thread can be blocked on the taskbar UI thread,
-        // which can itself be waiting for the mutex in StartTaskbarAlignMonitor.
-        for (;;) {
-            if (WaitForSingleObject(monitorThread, INFINITE) ==
-                WAIT_OBJECT_0) {
-                break;
-            }
-
-            Wh_Log(L"waiting for the alignment monitor thread failed: %lu",
-                   GetLastError());
-            Sleep(1);
-        }
-
-        CloseHandle(monitorThread);
-    }
-
-    // Re-locked only to close the stop event, which happens after the thread
-    // has really exited and together with the handle, never half updated.
-    {
-        std::lock_guard<std::mutex> lock(g_alignMonitorMutex);
-        if (g_alignStopEvent) {
-            CloseHandle(g_alignStopEvent);
-            g_alignStopEvent = nullptr;
-        }
-    }
-}
-
-// Applies centering according to the current taskbar alignment. The mod never
-// writes the alignment, so this is read-only: centering is applied when the
-// taskbar is left-aligned, and it is not applied while it is centered. It is
-// called on load and on every settings change, in the process that hosts the
-// taskbar view.
-void ApplyDynamicCenteringSetting() {
-    if (g_unloading.load(std::memory_order_acquire)) {
-        return;
-    }
-
-    DWORD taskbarAl = 1;
-    if (!ReadTaskbarAl(&taskbarAl)) {
-        Wh_Log(L"could not read the taskbar alignment; centering stays "
-               L"inactive");
-        g_dynamicCenteringActive.store(false, std::memory_order_release);
-        // The monitor stays resident: a readable alignment value is picked up
-        // without changing a setting or reloading the mod.
-        StartTaskbarAlignMonitor();
-        return;
-    }
-
-    if (taskbarAl != 0) {
-        // The taskbar is center-aligned: Windows centers the whole button row
-        // itself there, so centering is not applied. The alignment setting is
-        // not changed; switching the taskbar to Left alignment in Windows'
-        // taskbar settings is what enables centering.
-        Wh_Log(L"the taskbar is center-aligned; centering stays inactive");
-        g_dynamicCenteringActive.store(false, std::memory_order_release);
-        // The monitor stays resident: it is what notices the taskbar being
-        // switched back to left, which turns centering on again.
-        StartTaskbarAlignMonitor();
-        return;
-    }
-
-    // The taskbar is left-aligned: centering is applied, and the monitor
-    // watches in both directions.
-    // StartTaskbarAlignMonitor is a no-op while the thread is already running.
-    g_dynamicCenteringActive.store(true, std::memory_order_release);
-    StartTaskbarAlignMonitor();
 }
 
 }  // namespace
@@ -3581,23 +3249,16 @@ void Wh_ModAfterInit() {
     }
 
     if (g_taskbarViewDllLoaded) {
-        // Only the process that hosts the taskbar view applies centering, so
-        // only it reads the taskbar alignment.
-        ApplyDynamicCenteringSetting();
+        // Only the process that hosts the taskbar view applies centering; the
+        // reconcile derives the alignment itself, on the taskbar UI thread.
         RunReconcileOnTaskbarThread(true);
     }
 }
 
 void Wh_ModBeforeUninit() {
-    // The unloading flag is raised first: a concurrent start of the alignment
-    // monitor must see it and lose the race, and the monitor thread itself stops
-    // at its next iteration.
+    // The unloading flag is raised first, so a queued callback or a later
+    // reconcile sees it and stops.
     g_unloading.store(true, std::memory_order_release);
-    g_dynamicCenteringActive.store(false, std::memory_order_release);
-
-    // Stop the alignment monitor and wait for the thread to really exit:
-    // this mod never writes the alignment, so there is nothing to put back.
-    StopTaskbarAlignMonitor();
 
     if (g_taskbarViewDllLoaded) {
         // On success this stays synchronous, waiting for the taskbar UI
@@ -3612,9 +3273,8 @@ void Wh_ModSettingsChanged() {
     LoadSettings();
 
     if (g_taskbarViewDllLoaded && !g_unloading) {
-        // The setting is re-resolved against the alignment on every
-        // settings change, in the taskbar-view process only.
-        ApplyDynamicCenteringSetting();
+        // LoadSettings raises the settings generation, so the next reconcile
+        // recomputes the gap from the new position on the taskbar UI thread.
         RunReconcileOnTaskbarThread(true);
     }
 }
