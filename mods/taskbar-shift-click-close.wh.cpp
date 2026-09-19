@@ -3,7 +3,7 @@
 // @name Taskbar Shift Click Close
 // @description Close a running taskbar application with Shift + left click
 // @version 1.1.0
-// @author Artllex
+// @author Arkadiusz
 // @github https://github.com/Artllex
 // @include explorer.exe
 // @architecture x86-64
@@ -65,32 +65,43 @@ bool WindowMatches(HWND hwnd, const std::wstring& name) {
     WCHAR title[512]{};
     if (GetWindowTextW(hwnd, title, ARRAYSIZE(title)) > 0 &&
         ContainsInsensitive(title, name)) return true;
+
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
-    HANDLE process = pid ? OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid) : nullptr;
+    HANDLE process = pid ? OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,
+                                       FALSE, pid) : nullptr;
     if (!process) return false;
     WCHAR path[32768]{};
     DWORD length = ARRAYSIZE(path);
     bool found = QueryFullProcessImageNameW(process, 0, path, &length);
     CloseHandle(process);
     if (!found) return false;
-    const wchar_t* fileName = wcsrchr(path, L'\');
+    const wchar_t* fileName = wcsrchr(path, L'\\');
     return ContainsInsensitive(fileName ? fileName + 1 : path, name);
 }
 
 std::vector<HWND> FindWindowsForTaskName(const std::wstring& taskName) {
     if (taskName.empty()) return {};
     const std::wstring name = taskName.substr(0, taskName.find(L" — "));
-    struct Search { const std::wstring& name; std::vector<HWND> results; } search{name};
+    struct Search {
+        const std::wstring& name;
+        std::vector<HWND> results;
+    } search{name};
     EnumWindows([](HWND hwnd, LPARAM data) -> BOOL {
         auto& search = *reinterpret_cast<Search*>(data);
         if (!IsWindowVisible(hwnd) || GetWindow(hwnd, GW_OWNER)) return TRUE;
-        if (WindowMatches(hwnd, search.name)) { search.results.push_back(hwnd); return TRUE; }
+        if (WindowMatches(hwnd, search.name)) {
+            search.results.push_back(hwnd);
+            return TRUE;
+        }
         EnumChildWindows(hwnd, [](HWND child, LPARAM data) -> BOOL {
             auto& search = *reinterpret_cast<Search*>(data);
             if (WindowMatches(child, search.name)) {
                 HWND root = GetAncestor(child, GA_ROOT);
-                if (root && std::find(search.results.begin(), search.results.end(), root) == search.results.end()) search.results.push_back(root);
+                if (root && std::find(search.results.begin(), search.results.end(),
+                                      root) == search.results.end()) {
+                    search.results.push_back(root);
+                }
                 return FALSE;
             }
             return TRUE;
@@ -102,7 +113,8 @@ std::vector<HWND> FindWindowsForTaskName(const std::wstring& taskName) {
 
 FrameworkElement ElementFromAbi(void* object) {
     FrameworkElement result{nullptr};
-    check_hresult(static_cast<::IUnknown*>(object)->QueryInterface(guid_of<FrameworkElement>(), put_abi(result)));
+    check_hresult(static_cast<::IUnknown*>(object)->QueryInterface(
+        guid_of<FrameworkElement>(), put_abi(result)));
     return result;
 }
 
@@ -116,12 +128,15 @@ HRESULT WINAPI PointerPressed(void* object, void* eventAbi) {
     if (!stopping && (GetKeyState(VK_SHIFT) & 0x8000)) {
         try {
             auto button = ElementFromAbi(object);
-            if (get_class_name(button) == L"Taskbar.TaskListButton" && button.IsLoaded() && IsRunning(button)) {
+            if (get_class_name(button) == L"Taskbar.TaskListButton" &&
+                button.IsLoaded() && IsRunning(button)) {
                 Input::PointerRoutedEventArgs args{nullptr};
                 copy_from_abi(args, eventAbi);
                 if (args.GetCurrentPoint(button).Properties().IsLeftButtonPressed()) {
                     args.Handled(true);
-                    std::wstring taskName = Automation::AutomationProperties::GetName(button).c_str();
+                    std::wstring taskName =
+                        Automation::AutomationProperties::GetName(button).c_str();
+                    Wh_Log(L"Shift+click received; task name: %s", taskName.c_str());
                     auto targets = FindWindowsForTaskName(taskName);
                     const bool closeAll = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
                     if (!targets.empty()) {
@@ -130,43 +145,68 @@ HRESULT WINAPI PointerPressed(void* object, void* eventAbi) {
                             HWND root = GetAncestor(targets[i], GA_ROOT);
                             if (!root) root = targets[i];
                             PostMessageW(root, WM_SYSCOMMAND, SC_CLOSE, 0);
+                            Wh_Log(L"SC_CLOSE sent to root %p", root);
                         }
+                        Wh_Log(L"Close mode: %s; windows: %zu",
+                               closeAll ? L"all" : L"single", count);
+                    } else {
+                        Wh_Log(L"No matching HWND");
                     }
                     return S_OK;
                 }
             }
-        } catch (...) { Wh_Log(L"Shift+click handling failed; using native action"); }
+        } catch (...) {
+            Wh_Log(L"Shift+click handling failed; using native action");
+        }
     }
     return pressedOriginal(object, eventAbi);
 }
 
 bool HookTaskbar(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK entries[] = {
-        {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerPressed(void *)", L"public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerPressed(void * __ptr64) __ptr64"}, &pressedOriginal, PointerPressed},
-        {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskListButton>::get_IsRunning(bool *)", L"public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskListButton>::get_IsRunning(bool * __ptr64) __ptr64"}, &runningOriginal},
+    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
+        {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerPressed(void *)",
+          L"public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerPressed(void * __ptr64) __ptr64"},
+         &pressedOriginal, PointerPressed},
+        {{L"public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskListButton>::get_IsRunning(bool *)",
+          L"public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskListButton>::get_IsRunning(bool * __ptr64) __ptr64"},
+         &runningOriginal},
     };
-    return WindhawkUtils::HookSymbols(module, entries, ARRAYSIZE(entries));
+    bool ok = WindhawkUtils::HookSymbols(module, taskbarViewDllHooks,
+                                         ARRAYSIZE(taskbarViewDllHooks));
+    Wh_Log(L"TaskListButton Shift+click hooks: %s", ok ? L"ready" : L"unavailable");
+    return ok;
 }
 
 HMODULE WINAPI Load(PCWSTR name, HANDLE file, DWORD flags) {
     HMODULE result = loadOriginal(name, file, flags);
-    if (result && !stopping && !hooked && result == GetModuleHandleW(L"Taskbar.View.dll")) {
+    if (result && !stopping && !hooked &&
+        result == GetModuleHandleW(L"Taskbar.View.dll")) {
         bool expected = false;
-        if (hooked.compare_exchange_strong(expected, true) && HookTaskbar(result)) Wh_ApplyHookOperations();
+        if (hooked.compare_exchange_strong(expected, true) && HookTaskbar(result))
+            Wh_ApplyHookOperations();
     }
     return result;
 }
 }
 
 BOOL Wh_ModInit() {
-    if (auto module = GetModuleHandleW(L"Taskbar.View.dll")) { hooked = true; return HookTaskbar(module); }
-    return Wh_SetFunctionHook(reinterpret_cast<void*>(&LoadLibraryExW), reinterpret_cast<void*>(&Load), reinterpret_cast<void**>(&loadOriginal));
+    if (auto module = GetModuleHandleW(L"Taskbar.View.dll")) {
+        hooked = true;
+        return HookTaskbar(module);
+    }
+    Wh_Log(L"Waiting for Taskbar.View.dll");
+    return Wh_SetFunctionHook(reinterpret_cast<void*>(&LoadLibraryExW),
+                              reinterpret_cast<void*>(&Load),
+                              reinterpret_cast<void**>(&loadOriginal));
 }
+
 void Wh_ModAfterInit() {
     if (auto module = GetModuleHandleW(L"Taskbar.View.dll")) {
         bool expected = false;
-        if (hooked.compare_exchange_strong(expected, true) && HookTaskbar(module)) Wh_ApplyHookOperations();
+        if (hooked.compare_exchange_strong(expected, true) && HookTaskbar(module))
+            Wh_ApplyHookOperations();
     }
 }
+
 void Wh_ModBeforeUninit() { stopping = true; }
 void Wh_ModUninit() {}
