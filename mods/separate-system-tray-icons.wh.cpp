@@ -4,6 +4,7 @@
 // @description     Replaces the grouped Windows 11 system tray button with separate sound, Bluetooth, network, Control Center, and battery buttons.
 // @version         1.0.0
 // @author          Asteski
+// @license         MIT
 // @github          https://github.com/Asteski
 // @include         explorer.exe
 // @architecture    x86-64
@@ -53,6 +54,10 @@ and change appearance when switched off. Network can
 show Wi-Fi signal strength and open a custom URL for **Perform speed test**.
 
 ## Action formats
+
+The custom-action prefix scheme and action-format documentation are adapted from
+[Ultimate Custom Tray](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/ultimate-custom-tray.wh.cpp)
+by [Salyts](https://github.com/Salyts), licensed under MIT.
 
 Select **Custom action** for **Control Center action** or **Battery click action**, then
 enter an action in that group's **Custom action** field.
@@ -359,6 +364,7 @@ static void DestroyTrayRefreshWindow();
 static void RemoveXamlButtons();
 static void StartStatusEvents(HWND hwnd);
 static void StopStatusEvents();
+static void StopStatusEventsAsync();
 static void RestoreGridTrayMutation();
 static void InvalidateEnergySaverRead();
 static void RefreshMediaTooltipInfoFromStatusWorker();
@@ -3832,8 +3838,8 @@ static void EnsureTrayRefreshWindow() {
     const HMODULE owner = GetModModule();
     if (!owner || IsTrayRefreshWindow(g_refreshWindow, owner)) return;
     // The collector's power/device subscriptions target its original HWND.
-    // Join it before replacing that HWND so startup registers fresh targets.
-    StopStatusEvents();
+    // Retire it off the UI thread; startup waits for its cleanup to finish.
+    StopStatusEventsAsync();
     AcquireSRWLockExclusive(&g_refreshLock);
     g_refreshWindow = nullptr;
     g_refreshPending = 0;
@@ -3929,6 +3935,11 @@ struct StatusEventWork {
 };
 static HANDLE g_statusEventStop = nullptr;
 static HANDLE g_statusEventThread = nullptr;
+// Protected by g_statusEventsLock. Only the latest replacement is started,
+// after the retiring collector has stopped touching shared status caches.
+static bool g_statusEventsStopping = false;
+static HWND g_statusRestartWindow = nullptr;
+static HANDLE g_statusCleanupThread = nullptr;
 
 static DWORD WINAPI StatusEventThread(void* parameter) {
     const auto work = *static_cast<StatusEventWork*>(parameter);
@@ -4122,7 +4133,10 @@ static DWORD WINAPI StatusEventThread(void* parameter) {
 
 static void StartStatusEvents(HWND hwnd) {
     AcquireSRWLockExclusive(&g_statusEventsLock);
-    if (g_statusEventStop || g_unloading) {
+    if (hwnd) g_statusRestartWindow = hwnd;
+    hwnd = g_statusRestartWindow;
+    if (g_statusEventsStopping || g_statusEventStop || g_unloading ||
+        !hwnd || !IsWindow(hwnd)) {
         ReleaseSRWLockExclusive(&g_statusEventsLock);
         return;
     }
@@ -4147,12 +4161,51 @@ static void StartStatusEvents(HWND hwnd) {
     ReleaseSRWLockExclusive(&g_statusEventsLock);
 }
 
+static void StopStatusEventsAsync() {
+    AcquireSRWLockExclusive(&g_statusEventsLock);
+    g_statusRestartWindow = nullptr;
+    if (g_statusEventsStopping || !g_statusEventThread || g_unloading) {
+        ReleaseSRWLockExclusive(&g_statusEventsLock);
+        return;
+    }
+    const HANDLE thread = g_statusEventThread;
+    const HANDLE stop = g_statusEventStop;
+    const HANDLE refresh = g_statusRefreshEvent.load();
+    if (stop) SetEvent(stop);
+    if (refresh) SetEvent(refresh);
+    g_statusEventsStopping = true;
+    HANDLE cleanup = StartOwnedWorker([thread, stop, refresh] {
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+        if (stop) CloseHandle(stop);
+        if (refresh) CloseHandle(refresh);
+        AcquireSRWLockExclusive(&g_statusEventsLock);
+        g_statusEventsStopping = false;
+        ReleaseSRWLockExclusive(&g_statusEventsLock);
+        StartStatusEvents(nullptr);
+    });
+    if (cleanup) {
+        // Transfer ownership only after the cleanup worker is tracked for unload.
+        g_statusEventThread = nullptr;
+        g_statusEventStop = nullptr;
+        g_statusRefreshEvent.store(nullptr);
+        if (g_statusCleanupThread) CloseHandle(g_statusCleanupThread);
+        g_statusCleanupThread = cleanup;
+    } else {
+        // Retain all handles for synchronous unload; never wait on the UI thread.
+        g_statusEventsStopping = false;
+        Wh_Log(L"Could not start status cleanup worker; recovery deferred until reload.");
+    }
+    ReleaseSRWLockExclusive(&g_statusEventsLock);
+}
+
 static void StopStatusEvents() {
     // Unload sets g_unloading before taking this lock. A startup already in
     // progress must publish its handles first; any later startup is rejected.
     AcquireSRWLockExclusive(&g_statusEventsLock);
     HANDLE stop = std::exchange(g_statusEventStop, nullptr);
     HANDLE thread = std::exchange(g_statusEventThread, nullptr);
+    HANDLE cleanup = std::exchange(g_statusCleanupThread, nullptr);
     HANDLE refreshEvent = g_statusRefreshEvent.exchange(nullptr);
     if (stop) SetEvent(stop);
     if (refreshEvent) SetEvent(refreshEvent);
@@ -4163,6 +4216,10 @@ static void StopStatusEvents() {
     }
     if (stop) CloseHandle(stop);
     if (refreshEvent) CloseHandle(refreshEvent);
+    if (cleanup) {
+        WaitForSingleObject(cleanup, INFINITE);
+        CloseHandle(cleanup);
+    }
 }
 
 enum class ButtonKind {
