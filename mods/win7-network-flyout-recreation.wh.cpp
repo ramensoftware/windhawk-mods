@@ -135,21 +135,24 @@ If any issues are encountered, please report them to the author of the mod.
 */
 // ==/WindhawkModSettings==
 // ## Changelog
-// - 5.2.0: Fixed "Follow system colors" (renamed "Follow system theme") so it
-//   really follows the Windows theme instead of forcing the flat classic
-//   palette over Aero: with a real Windows High Contrast theme on it uses the
-//   live HC system colors, with visual styles off (classic theme, Fake High
-//   Contrast, basic msstyles setups) or a customized/hooked system palette it
-//   uses the classic system colors, and otherwise it follows the Aero
-//   light/dark app mode (AppsUseLightTheme). Light/dark switches
-//   (ImmersiveColorSet) and theme on/off (WM_THEMECHANGED) are applied live,
-//   restyle the native controls and re-tint the tooltip without reopening.
-// - 5.2.0: Added four fixed, independent High Contrast themes - White, Black,
+// - 5.1.0: New "Follow system theme" option (the right pick for Fake High
+//   Contrast and other classic/msstyles setups): instead of forcing the flat
+//   classic palette it really tracks Windows - the live High Contrast system
+//   colors when a real High Contrast theme is on, classic system colors when
+//   visual styles are off or the palette was customized/hooked, otherwise the
+//   Aero light/dark app mode (AppsUseLightTheme). An earlier attempt at this
+//   read Fake High Contrast's setting directly out of Windhawk's internal
+//   registry layout to auto-detect it; that coupled this mod to another
+//   mod's undocumented internals for no real benefit over a dedicated
+//   setting, so it was replaced with this option instead. Light/dark
+//   switches (ImmersiveColorSet) and theme on/off (WM_THEMECHANGED) are
+//   applied live, restyle the native controls and re-tint the tooltip
+//   without reopening. Reported by OrthodoxToolkits.
+// - 5.1.0: Added four fixed, independent High Contrast themes - White, Black,
 //   #1 and #2 - using the genuine Windows 7 HC system-color tables, so they
 //   render correctly even when Windows' own High Contrast flag is off, plus
-//   a "Classic system colors" theme preserving the previous always-GetSysColor
-//   behavior for Fake High Contrast users. Reported by OrthodoxToolkits.
-// - 5.2.0: Fixed several drawing paths that ignored High Contrast entirely:
+//   a "Classic system colors" theme that always uses the live system palette.
+// - 5.1.0: Fixed several drawing paths that ignored High Contrast entirely:
 //   the flyout checkbox/label colors, the password-dialog buttons (now
 //   owner-drawn with the fixed HC palette under the fixed HC themes) and
 //   checkbox, the keyboard-focus rectangle (was invisible black-on-black),
@@ -210,16 +213,6 @@ If any issues are encountered, please report them to the author of the mod.
 //   registered window message. The periodic retry also honours its
 //   exponential backoff now (it was forced on every 3 s tick), so a setup
 //   where the icon cannot be resolved no longer polls forever.
-// - 5.1.0: Added a "Follow system colors" theme option. Pick it if you use a
-//   mod like Fake High Contrast, or any classic/msstyles setup, that makes
-//   other programs use system colors without Windows' own High Contrast flag
-//   being on: this makes the flyout follow suit, the same way it already
-//   does automatically for real Windows High Contrast. An earlier attempt at
-//   this read Fake High Contrast's setting directly out of Windhawk's
-//   internal registry layout to auto-detect it; that coupled this mod to
-//   another mod's undocumented internals for no real benefit over a
-//   dedicated setting, so it was replaced with this option instead.
-//   Reported by OrthodoxToolkits.
 // - 5.0.0: Added High Contrast theme support. When a Windows High Contrast
 //   theme is active, the flyout, the notification popup, the connect button,
 //   the password dialog, and the native controls all switch to system colors
@@ -471,7 +464,7 @@ void LoadSettings() {
 
 
 // ----------------------------------------------------------------------------
-// Theme engine (5.2.0)
+// Theme engine (5.1.0)
 //
 // Every color in the flyout, the password dialog, the tooltip and the native
 // controls is resolved through GetEffectiveTheme() below:
@@ -647,45 +640,58 @@ static void RefreshThemeStateNow() {
 
 // ----------------------------------------------------------------------------
 // Fixed Windows 7 High Contrast system-color tables, indexed by the COLOR_*
-// constants 0..29 (COLOR_SCROLLBAR..COLOR_MENUHILIGHT). Captured from the stock
+// constants 0..30 (COLOR_SCROLLBAR..COLOR_MENUBAR, index 25 reserved).
+// Captured from the stock
 // Win7 HC themes: White is black-on-white, Black is white-on-black, #1 is
 // yellow-on-black and #2 is green-on-black, each with its own selection,
 // link and control colors.
 // ----------------------------------------------------------------------------
 static COLORREF FixedHCPaletteColor(EffectiveTheme eff, int nIndex) {
-    // Columns: index, White, Black, #1, #2 (0x00BBGGRR).
-    static const COLORREF kTable[4][30] = {
+    // Rows: White, Black, #1, #2. Columns are the COLOR_* indices 0-30:
+    // 0 SCROLLBAR, 1 BACKGROUND, 2 ACTIVECAPTION, 3 INACTIVECAPTION, 4 MENU,
+    // 5 WINDOW, 6 WINDOWFRAME, 7 MENUTEXT, 8 WINDOWTEXT, 9 CAPTIONTEXT,
+    // 10 ACTIVEBORDER, 11 INACTIVEBORDER, 12 APPWORKSPACE, 13 HIGHLIGHT,
+    // 14 HIGHLIGHTTEXT, 15 BTNFACE, 16 BTNSHADOW, 17 GRAYTEXT, 18 BTNTEXT,
+    // 19 INACTIVECAPTIONTEXT, 20 BTNHIGHLIGHT, 21 3DDKSHADOW, 22 3DLIGHT,
+    // 23 INFOTEXT, 24 INFOBK, 25 reserved (unused filler), 26 HOTLIGHT,
+    // 27 GRADIENTACTIVECAPTION, 28 GRADIENTINACTIVECAPTION, 29 MENUHILIGHT,
+    // 30 MENUBAR.
+    static const COLORREF kTable[4][31] = {
         { // High Contrast White
-            RGB(255,255,255), RGB(128,128,128), RGB(  0,  0,  0), RGB(255,255,255), RGB(255,255,255),
-            RGB(255,255,255), RGB(  0,  0,  0), RGB(  0,  0,  0), RGB(  0,  0,  0), RGB(255,255,255),
-            RGB(128,128,128), RGB(192,192,192), RGB(128,128,128), RGB(  0,  0,  0), RGB(255,255,255),
-            RGB(255,255,255), RGB(128,128,128), RGB(  0,128,  0), RGB(  0,  0,  0), RGB(  0,  0,  0),
-            RGB(192,192,192), RGB(  0,  0,  0), RGB(192,192,192), RGB(  0,  0,  0), RGB(255,255,255),
-            RGB(  0,  0,  0), RGB(  0,  0,  0), RGB(255,255,255), RGB(  0,  0,  0), RGB(255,255,255),
+            RGB(255,255,255), RGB(128,128,128), RGB(  0,  0,  0), RGB(255,255,255), RGB(255,255,255), // 0-4
+            RGB(255,255,255), RGB(  0,  0,  0), RGB(  0,  0,  0), RGB(  0,  0,  0), RGB(255,255,255), // 5-9
+            RGB(128,128,128), RGB(192,192,192), RGB(128,128,128), RGB(  0,  0,  0), RGB(255,255,255), // 10-14
+            RGB(255,255,255), RGB(128,128,128), RGB(  0,128,  0), RGB(  0,  0,  0), RGB(  0,  0,  0), // 15-19
+            RGB(192,192,192), RGB(  0,  0,  0), RGB(192,192,192), RGB(  0,  0,  0), RGB(255,255,255), // 20-24
+            RGB(  0,  0,  0), RGB(  0,  0,  0), RGB(  0,  0,  0), RGB(255,255,255), RGB(  0,  0,  0), // 25 reserved, 26 HOTLIGHT, 27 GRADACTCAP, 28 GRADINACTCAP, 29 MENUHILIGHT
+            RGB(255,255,255), // 30 MENUBAR
         },
         { // High Contrast Black
-            RGB(  0,  0,  0), RGB(  0,  0,  0), RGB(128,  0,128), RGB(  0,128,  0), RGB(  0,  0,  0),
-            RGB(  0,  0,  0), RGB(255,255,255), RGB(255,255,255), RGB(255,255,255), RGB(255,255,255),
-            RGB(255,255,  0), RGB(  0,128,  0), RGB(  0,  0,  0), RGB(128,  0,128), RGB(255,255,255),
-            RGB(  0,  0,  0), RGB(128,128,128), RGB(  0,255,  0), RGB(255,255,255), RGB(255,255,255),
-            RGB(192,192,192), RGB(255,255,255), RGB(255,255,255), RGB(255,255,255), RGB(  0,  0,  0),
-            RGB(128,128,255), RGB(128,  0,128), RGB(  0,128,  0), RGB(128,  0,128), RGB(  0,  0,  0),
+            RGB(  0,  0,  0), RGB(  0,  0,  0), RGB(128,  0,128), RGB(  0,128,  0), RGB(  0,  0,  0), // 0-4
+            RGB(  0,  0,  0), RGB(255,255,255), RGB(255,255,255), RGB(255,255,255), RGB(255,255,255), // 5-9
+            RGB(255,255,  0), RGB(  0,128,  0), RGB(  0,  0,  0), RGB(128,  0,128), RGB(255,255,255), // 10-14
+            RGB(  0,  0,  0), RGB(128,128,128), RGB(  0,255,  0), RGB(255,255,255), RGB(255,255,255), // 15-19
+            RGB(192,192,192), RGB(255,255,255), RGB(255,255,255), RGB(255,255,255), RGB(  0,  0,  0), // 20-24
+            RGB(  0,  0,  0), RGB(128,128,255), RGB(128,  0,128), RGB(  0,128,  0), RGB(128,  0,128), // 25 reserved, 26 HOTLIGHT, 27 GRADACTCAP, 28 GRADINACTCAP, 29 MENUHILIGHT
+            RGB(  0,  0,  0), // 30 MENUBAR
         },
         { // High Contrast #1
-            RGB(  0,  0,  0), RGB(  0,  0,  0), RGB(  0,  0,255), RGB(  0,255,255), RGB(  0,  0,  0),
-            RGB(  0,  0,  0), RGB(255,255,255), RGB(255,255,255), RGB(255,255,  0), RGB(255,255,255),
-            RGB(  0,  0,255), RGB(  0,255,255), RGB(  0,  0,  0), RGB(  0,128,  0), RGB(255,255,255),
-            RGB(  0,  0,  0), RGB(128,128,128), RGB(  0,255,  0), RGB(255,255,255), RGB(  0,  0,  0),
-            RGB(192,192,192), RGB(255,255,255), RGB(255,255,255), RGB(255,255,  0), RGB(  0,  0,  0),
-            RGB(128,128,255), RGB(  0,  0,255), RGB(  0,255,255), RGB(  0,128,  0), RGB(  0,  0,  0),
+            RGB(  0,  0,  0), RGB(  0,  0,  0), RGB(  0,  0,255), RGB(  0,255,255), RGB(  0,  0,  0), // 0-4
+            RGB(  0,  0,  0), RGB(255,255,255), RGB(255,255,255), RGB(255,255,  0), RGB(255,255,255), // 5-9
+            RGB(  0,  0,255), RGB(  0,255,255), RGB(  0,  0,  0), RGB(  0,128,  0), RGB(255,255,255), // 10-14
+            RGB(  0,  0,  0), RGB(128,128,128), RGB(  0,255,  0), RGB(255,255,255), RGB(  0,  0,  0), // 15-19
+            RGB(192,192,192), RGB(255,255,255), RGB(255,255,255), RGB(255,255,  0), RGB(  0,  0,  0), // 20-24
+            RGB(  0,  0,  0), RGB(128,128,255), RGB(  0,  0,255), RGB(  0,255,255), RGB(  0,128,  0), // 25 reserved, 26 HOTLIGHT, 27 GRADACTCAP, 28 GRADINACTCAP, 29 MENUHILIGHT
+            RGB(  0,  0,  0), // 30 MENUBAR
         },
         { // High Contrast #2
-            RGB(  0,  0,  0), RGB(255,255,255), RGB(  0,255,255), RGB(  0,  0,255), RGB(  0,  0,  0),
-            RGB(  0,  0,  0), RGB(255,255,255), RGB(  0,255,  0), RGB(  0,255,  0), RGB(  0,  0,  0),
-            RGB(  0,255,255), RGB(  0,  0,255), RGB(255,255,255), RGB(  0,  0,255), RGB(255,255,255),
-            RGB(  0,  0,  0), RGB(128,128,128), RGB(192,192,192), RGB(  0,255,  0), RGB(255,255,255),
-            RGB(192,192,192), RGB(255,255,255), RGB(255,255,255), RGB(  0,  0,  0), RGB(255,255,  0),
-            RGB(128,128,255), RGB(  0,255,255), RGB(  0,  0,255), RGB(  0,  0,255), RGB(  0,  0,  0),
+            RGB(  0,  0,  0), RGB(255,255,255), RGB(  0,255,255), RGB(  0,  0,255), RGB(  0,  0,  0), // 0-4
+            RGB(  0,  0,  0), RGB(255,255,255), RGB(  0,255,  0), RGB(  0,255,  0), RGB(  0,  0,  0), // 5-9
+            RGB(  0,255,255), RGB(  0,  0,255), RGB(255,255,255), RGB(  0,  0,255), RGB(255,255,255), // 10-14
+            RGB(  0,  0,  0), RGB(128,128,128), RGB(192,192,192), RGB(  0,255,  0), RGB(255,255,255), // 15-19
+            RGB(192,192,192), RGB(255,255,255), RGB(255,255,255), RGB(  0,  0,  0), RGB(255,255,  0), // 20-24
+            RGB(  0,  0,  0), RGB(128,128,255), RGB(  0,255,255), RGB(  0,  0,255), RGB(  0,  0,255), // 25 reserved, 26 HOTLIGHT, 27 GRADACTCAP, 28 GRADINACTCAP, 29 MENUHILIGHT
+            RGB(  0,  0,  0), // 30 MENUBAR
         },
     };
     int row = -1;
@@ -693,7 +699,7 @@ static COLORREF FixedHCPaletteColor(EffectiveTheme eff, int nIndex) {
     else if (eff == EFF_HCBLACK) row = 1;
     else if (eff == EFF_HC1)     row = 2;
     else if (eff == EFF_HC2)     row = 3;
-    if (row < 0 || nIndex < 0 || nIndex >= 30) return (COLORREF)-1;
+    if (row < 0 || nIndex < 0 || nIndex >= 31) return (COLORREF)-1;
     return kTable[row][nIndex];
 }
 
@@ -709,14 +715,14 @@ static COLORREF GetThemedSysColor(int nIndex) {
 // handlers (which must return a brush that stays valid after they return).
 // The cached COLORREF is compared on every call, so a theme switch
 // transparently rebuilds any stale brush. Freed by FreeCachedThemeBrushes().
-static HBRUSH   g_themedBrushCache[30] = {};
-static COLORREF g_themedBrushColor[30];
+static HBRUSH   g_themedBrushCache[31] = {};
+static COLORREF g_themedBrushColor[31];
 static bool     g_themedBrushColorInit = false;
 
 static HBRUSH GetThemedSysColorBrush(int nIndex) {
-    if (nIndex < 0 || nIndex >= 30) return GetSysColorBrush(nIndex);
+    if (nIndex < 0 || nIndex >= 31) return GetSysColorBrush(nIndex);
     if (!g_themedBrushColorInit) {
-        for (int i = 0; i < 30; i++) g_themedBrushColor[i] = (COLORREF)-1;
+        for (int i = 0; i < 31; i++) g_themedBrushColor[i] = (COLORREF)-1;
         g_themedBrushColorInit = true;
     }
     COLORREF want = GetThemedSysColor(nIndex);
@@ -2782,7 +2788,7 @@ static void FreeCachedThemeBrushes() {
     }
     g_lastFlyoutChkBg = g_lastFlyoutChkBgDark = g_lastFlyoutLabelBg =
         g_lastFlyoutChkBtnBg = g_lastFlyoutChkBtnBgDark = (COLORREF)-1;
-    for (int i = 0; i < 30; i++) {
+    for (int i = 0; i < 31; i++) {
         if (g_themedBrushCache[i]) { DeleteObject(g_themedBrushCache[i]); g_themedBrushCache[i] = NULL; }
         g_themedBrushColor[i] = (COLORREF)-1;
     }
@@ -7260,6 +7266,20 @@ static LRESULT CALLBACK TrayInfoWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
         return 0;
     }
+    // Theme broadcasts (sent, so a string lParam arrives marshalled by the
+    // system): refresh the theme caches so the next paint uses the correct
+    // palette even if the flyout was never opened. The flyout itself handles
+    // the same broadcasts when it exists (restyle + repaint); this covers
+    // the not-yet-created case on the thread that owns this window.
+    if (uMsg == WM_THEMECHANGED ||
+        (uMsg == WM_SETTINGCHANGE &&
+         (wParam == SPI_SETHIGHCONTRAST ||
+          (wParam == 0 && lParam &&
+           _wcsicmp((LPCWSTR)lParam, L"ImmersiveColorSet") == 0)))) {
+        RefreshThemeStateNow();
+        if (g_hWndFlyout && IsWindow(g_hWndFlyout) && IsWindowVisible(g_hWndFlyout))
+            InvalidateRect(g_hWndFlyout, NULL, TRUE);
+    }
     return DefWindowProcW(hWnd, uMsg, wParam, lParam);
 }
 
@@ -7957,6 +7977,35 @@ void EnsureRowVisible(int index) {
 // -------------------------------------------------------
 // Flyout Window Procedure
 // -------------------------------------------------------
+// TRUE when the Connect button exists but its creation-time style no longer
+// matches the effective theme: BS_OWNERDRAW vs BS_PUSHBUTTON is fixed when
+// the button is created, while a live system switch (Follow system theme
+// crossing the light/dark boundary, High Contrast toggled) can flip
+// ShouldUseOwnerDrawButtons() underneath it. g_ButtonConnectIsOwnerDraw is
+// assigned at creation and records the style the button was born with;
+// without a recreate the button would be left unpainted (WM_DRAWITEM bails
+// on the current state, DefWindowProc does nothing for it, and the parent
+// has WS_CLIPCHILDREN).
+static bool ConnectButtonStyleIsStale() {
+    return g_hWndButtonConnect && IsWindow(g_hWndButtonConnect) &&
+           (ShouldUseOwnerDrawButtons() ? 1 : 0) != g_ButtonConnectIsOwnerDraw;
+}
+
+// If the Connect button's creation-time style went stale (see above),
+// destroys the flyout and reopens it when it was visible - the same
+// recreate path Wh_ModSettingsChanged uses for a settings-driven theme
+// change. Returns true when it recreated, in which case the caller must
+// not touch the old window anymore.
+static bool RecreateFlyoutForButtonStyleIfStale(HWND hwnd) {
+    if (!ConnectButtonStyleIsStale())
+        return false;
+    BOOL wasVisible = IsWindowVisible(hwnd);
+    SendMessageW(hwnd, WM_SAFE_CLOSE, 0, 0);
+    if (wasVisible)
+        ToggleFlyoutWindow();
+    return true;
+}
+
 LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
     case WM_NCHITTEST: {
@@ -9014,16 +9063,20 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
         if (wParam == SPI_SETHIGHCONTRAST ||
             (wParam == 0 && lParam && _wcsicmp((LPCWSTR)lParam, L"ImmersiveColorSet") == 0)) {
             RefreshThemeStateNow();
-            ApplyNativeControlsTheme();
-            ApplyTooltipTheme();
-            InvalidateRect(hwnd, NULL, TRUE);
+            if (!RecreateFlyoutForButtonStyleIfStale(hwnd)) {
+                ApplyNativeControlsTheme();
+                ApplyTooltipTheme();
+                InvalidateRect(hwnd, NULL, TRUE);
+            }
         }
         break;
     case WM_THEMECHANGED:
         RefreshThemeStateNow();
-        ApplyNativeControlsTheme();
-        ApplyTooltipTheme();
-        InvalidateRect(hwnd, NULL, TRUE);
+        if (!RecreateFlyoutForButtonStyleIfStale(hwnd)) {
+            ApplyNativeControlsTheme();
+            ApplyTooltipTheme();
+            InvalidateRect(hwnd, NULL, TRUE);
+        }
         break;
     case WM_ACTIVATE:
         if (LOWORD(wParam) == WA_INACTIVE) {
@@ -9742,6 +9795,17 @@ void ToggleFlyoutWindow() {
     // consumed under the lock below.
     RECT rcIconForDpi = {};
     BOOL haveIconRect = GetNetworkIconScreenRect(&rcIconForDpi);
+    // A live system switch while the flyout was hidden may have flipped the
+    // Connect button kind underneath its creation-time style (same staleness
+    // the WM_THEMECHANGED handler guards); drop the window now so the create
+    // branch below rebuilds it with the right style. Runs lock-free like
+    // Wh_ModSettingsChanged's recreate, and only when hidden: if the flyout
+    // is up, the toggle means hide.
+    RefreshThemeStateNow();
+    if (g_hWndFlyout && IsWindow(g_hWndFlyout) && !IsWindowVisible(g_hWndFlyout) &&
+        ConnectButtonStyleIsStale()) {
+        SendMessageW(g_hWndFlyout, WM_SAFE_CLOSE, 0, 0);
+    }
     // 5.0.0: CsGuard replaces the manual Enter/LeaveCriticalSection pair.
     // Every early return below used to have to remember to leave the lock;
     // the guard releases it on all paths (including exceptions), and the two
@@ -9991,18 +10055,10 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
                 Wh_Log(L"HotkeyThreadProc: exception while toggling flyout, ignored");
             }
         }
-        // Theme changed while the flyout is not yet open (High Contrast
-        // toggled, Aero light/dark switched, visual styles on/off):
-        // refresh the caches so the next paint uses the correct palette.
-        if ((msg.message == WM_SETTINGCHANGE &&
-             (msg.wParam == SPI_SETHIGHCONTRAST ||
-              (msg.wParam == 0 && msg.lParam &&
-               _wcsicmp((LPCWSTR)msg.lParam, L"ImmersiveColorSet") == 0))) ||
-            msg.message == WM_THEMECHANGED) {
-            RefreshThemeStateNow();
-            if (g_hWndFlyout && IsWindow(g_hWndFlyout) && IsWindowVisible(g_hWndFlyout))
-                InvalidateRect(g_hWndFlyout, NULL, TRUE);
-        }
+        // Theme broadcasts are handled in TrayInfoWndProc, not here:
+        // GetMessage only returns posted messages, so sent broadcasts never
+        // reach this loop, and a posted lParam string pointer would arrive
+        // un-marshalled and unsafe to dereference.
         if (msg.message == WM_UPDATE_HOTKEY && !ctx->isUninitializing)
             UpdateHotkeyRegistration(g_Settings.enableHotkey);
         if (msg.message == WM_UPDATE_REFRESH_TIMER && !ctx->isUninitializing) {
