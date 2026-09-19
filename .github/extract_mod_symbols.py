@@ -196,6 +196,9 @@ SYMBOL_MODULES_SKIP: dict[str, list[str]] = {
     'word-mathtype-dark-fix': ['wwlib.dll'],
     'word-omath-shade-fix': ['wwlib.dll'],
     'word-pdf-lossless-export': ['mso.dll'],
+
+    # Chrome mods, use noUndecoratedSymbols.
+    'chrome-native-ui-tweaks': ['chrome.dll'],
 }
 
 # The architecture macros mods are expected to branch on, with the values
@@ -497,11 +500,14 @@ def get_mod_symbol_blocks(mod_source: str, arch: Architecture):
                                            preprocessed.macros)
         symbol_blocks.append(symbol_block)
 
-    # Verify that no blocks were missed.
-    p = r'SYMBOL_HOOK\s+\w'
-    if len(symbol_blocks) != len(
-        re.findall(p, blank_comments(mod_source), flags=re.MULTILINE)
-    ):
+    # Verify that no blocks were missed. Match every mention apart from the
+    # COMBINED_SH alias, which mods use for an array that is filled from blocks
+    # already read, and a pointer to a block.
+    stripped = blank_comments(mod_source)
+    p = r'^[ \t]*using[ \t]+COMBINED_SH[ \t]*=[ \t]*(?:WindhawkUtils::)?SYMBOL_HOOK[ \t]*;'
+    stripped = re.sub(p, '', stripped, flags=re.MULTILINE)
+    stripped = re.sub(r'\bSYMBOL_HOOK[ \t]*\*', '', stripped)
+    if len(symbol_blocks) != len(re.findall(r'\bSYMBOL_HOOK\b', stripped)):
         raise Exception(f'Unsupported symbol blocks')
 
     return symbol_blocks

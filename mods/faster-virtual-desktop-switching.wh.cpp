@@ -2,9 +2,9 @@
 // @id              faster-virtual-desktop-switching
 // @name            Faster Virtual Desktop Switching
 // @description     Removes the long pre-animation lag caused by oversized wallpaper thumbnail requests on Windows 11.
-// @version         1.0
+// @version         1.0.1
 // @author          meteoni
-// @github          https://github.com/Meteony
+// @github          https://github.com/Meteoni
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -luser32
@@ -16,7 +16,7 @@
 
 Removes the long-standing pre-animation lag caused by oversized wallpaper thumbnail requests on Windows 11.
 
-![GIF](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/faster-virtual-desktop-switching/faster-virtual-desktop-switching.gif)
+![GIF](https://raw.githubusercontent.com/Meteoni/meteoni-assets/main/faster-virtual-desktop-switching/faster-virtual-desktop-switching.gif)
 
 _Note: This can make the wallpaper look softer during the switch. The mod is a no-op on Windows 10._
 

@@ -2,9 +2,9 @@
 // @id              taskbar-icon-separators
 // @name            Taskbar Icon Separators
 // @description     Create tracked icon separators with configurable padding on the taskbar.
-// @version         1.0.32
+// @version         1.0.33
 // @author          meteoni
-// @github          https://github.com/Meteony
+// @github          https://github.com/Meteoni
 // @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
@@ -17,7 +17,7 @@
 
 Create tracked icon separators with configurable padding on the taskbar.
 
-![Screenshot](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/taskbar-icon-separators/SEP2.png)
+![Screenshot](https://raw.githubusercontent.com/Meteoni/meteoni-assets/main/taskbar-icon-separators/SEP2.png)
 _Example for creating separators on the taskbar_
 
 Another mod offers similar functionality; this implementation takes on a more native-first spin.

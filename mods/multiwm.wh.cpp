@@ -2,9 +2,9 @@
 // @id              multiwm
 // @name            MultiWM
 // @description     Lightweight, low-cortisol window manager with true per-virtual-desktop layouts. 
-// @version         1.13.19
+// @version         1.13.20
 // @author          meteoni
-// @github          https://github.com/Meteony
+// @github          https://github.com/Meteoni
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
@@ -20,7 +20,7 @@ MultiWM is a continuation of the original [Tiling Helper](https://windhawk.net/m
 A lightweight, low-cortisol window manager for Windows 11 with true per-virtual-desktop layouts - 
 including floating - and simple, predictable controls. 
 
-![GIF](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/MultiWM/MultiWM.gif)
+![GIF](https://raw.githubusercontent.com/Meteoni/meteoni-assets/main/MultiWM/MultiWM.gif)
 
 ## Notes
 - *Windhawk 2.0 (or higher) users can change the target process (`explorer.exe` -> `windhawk.exe`) for better stability and workspace preservation across Explorer restarts.*

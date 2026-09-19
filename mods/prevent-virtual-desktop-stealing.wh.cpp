@@ -2,9 +2,9 @@
 // @id              prevent-virtual-desktop-stealing
 // @name            Don't Pull Me to Another Desktop
 // @description     Summon existing windows to the current virtual desktop instead of pulling you away.
-// @version         0.4.0
+// @version         0.4.1
 // @author          meteoni
-// @github          https://github.com/Meteony
+// @github          https://github.com/Meteoni
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32
@@ -22,7 +22,7 @@ something that reuses an existing window.
 This mod keeps you on the virtual desktop you're using and brings that activated
 window to you instead.
 
-![Screenshot](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/prevent-virtual-desktop-stealing/prevent-virtual-desktop-stealing.gif)
+![Screenshot](https://raw.githubusercontent.com/Meteoni/meteoni-assets/main/prevent-virtual-desktop-stealing/prevent-virtual-desktop-stealing.gif)
 
 If you haven't seen the problem before, try this:
 

@@ -2,13 +2,13 @@
 // @id              explorer-info-bar
 // @name            Explorer Info Bar+
 // @description     Enhances File Explorer's bottom info bar with drive, content, selection, and single-file details, with customizable styles and colors.
-// @version         1.1.0
+// @version         1.2.0
 // @author          digART
 // @github          https://github.com/digart11
 // @homepage        https://github.com/digart11/explorer-info-bar
 // @license         GPL-3.0-only
 // @include         explorer.exe
-// @compilerOptions -lole32 -lshell32 -luuid -lgdi32 -lcomctl32 -lpropsys -ladvapi32
+// @compilerOptions -lole32 -lshell32 -luuid -lgdi32 -lcomctl32 -lpropsys -ladvapi32 -lmsimg32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -17,13 +17,28 @@
 
 A customizable Windhawk mod that enhances the bottom info bar in Windows 11 File Explorer.
 
-Explorer Info Bar+ adds drive, folder, selection, literal file-extension, and basic media/image metadata information while keeping the native Explorer look and adapting to light, dark, and customized themes.
+Explorer Info Bar+ adds drive, folder, selection, literal file-extension, photo/RAW, and video/audio information while keeping the native Explorer look and adapting to light, dark, and customized themes.
 
 Unlike mods that restore the classic status bar or focus only on metadata, Explorer Info Bar+ combines several information groups in one modern, configurable Windows 11 info bar.
 
 ## Preview
 
 ![Explorer Info Bar+ preview](https://raw.githubusercontent.com/digart11/explorer-info-bar/main/images/explorer-info-bar-preview.png)
+
+
+**Current release: 1.2.0**
+## What's new in 1.2
+
+- Expanded single-file details for photos, RAW files, video, audio, and other file types
+- Standard and Extended detail levels so you can control how much metadata is shown
+- Photo/RAW metadata including camera, lens, ISO, aperture, shutter speed, and focal length when available
+- Video and audio details including duration, resolution, frame rate, sample rate, and channels when available
+- Font family and font size controls
+- Adjustable left padding and spacing between sections
+- Solid or four-direction gradient fills for Flat panes and Soft cards
+- Automatic theme-derived colors or fully custom text and panel colors
+- Optional hiding of Explorer's native bottom-right view buttons
+
 
 ## Features
 
@@ -38,23 +53,28 @@ Unlike mods that restore the classic status bar or focus only on metadata, Explo
   - Selected file size
 - Single-file details when available
   - Real file extension
-  - Image resolution
-  - Video resolution
-  - Media duration
+  - Photo/RAW dimensions, camera and lens metadata
+  - Video/audio duration and video resolution
+  - Optional extended photo and media metadata
 - Three display styles
   - Simple
   - Flat panes
   - Soft cards
+- Solid or four-direction gradient panel fills for Flat panes and Soft cards
 - Configurable section order
 - Individual section visibility controls
+- Configurable font family and safe font-size range
+- Configurable left-edge padding and spacing between sections
 - Custom text and panel colors
 - Automatic theme-derived colors by default
 - Optional hiding of Explorer's native bottom-right view buttons
 - Works with File Explorer's native status area rather than replacing Explorer itself
 
+![Explorer Info Bar+ features](https://raw.githubusercontent.com/digart11/explorer-info-bar/main/images/explorer-info-bar-features.png)
+
 ## Compatibility / Why this mod is separate
 
-Explorer Info Bar+ uses the native Windows 11 bottom status area; it does not restore or create a classic `msctls_statusbar32`-style status bar. It combines drive, content, and selection information with configurable ordering, styles, colors, literal extension display, and basic image/media metadata in one native-style bar. This is a different presentation and design from Classic Explorer Status Bar and PreVista Explorer Status Bar.
+Explorer Info Bar+ uses the native Windows 11 bottom status area; it does not restore or create a classic `msctls_statusbar32`-style status bar. It combines drive, content, and selection information with configurable ordering, styles, colors, literal extension display, and photo/RAW and video/audio metadata in one native-style bar. This is a different presentation and design from Classic Explorer Status Bar and PreVista Explorer Status Bar.
 
 Do not enable Classic Explorer Status Bar or PreVista Explorer Status Bar at the same time as Explorer Info Bar+. Both try to control the same bottom Explorer area and can conflict or overlap.
 
@@ -64,22 +84,20 @@ Explorer Info Bar+ paints over the native status-row text, including output from
 
 Typical information shown by the mod:
 
-```text
 Drive D: 150.7GB free
 Content: 15 folders / 25 files (77.2MB)
 Selected: 2 folders / 4 files (571KB)
-```
+
 
 When one file is selected, additional details can appear:
 
-```text
-.jpg (4032×3024)
-.jpeg (6000×4000)
-.mp4 (1920×1080, 01:23:43)
-.mp3 (00:03:47)
+.jpg  ·  4032×3024  ·  Nikon Z8  ·  NIKKOR Z 24-70mm f/2.8 S
+.cr3  ·  4498×6742  ·  EOS R  ·  ISO 400  ·  f/1.4  ·  1/125s  ·  85mm
+.mp4  ·  3840×2160  ·  01:49:19  ·  24 fps
+.mp3  ·  00:03:47  ·  44.1 kHz  ·  Stereo
 .doc
 .pdf
-```
+
 */
 // ==/WindhawkModReadme==
 
@@ -93,6 +111,16 @@ When one file is selected, additional details can appear:
     - panes: Flat panes
     - cards: Soft cards
 
+- panelFill: solid
+  $name: Panel fill
+  $description: Choose the fill effect and direction used by Flat panes and Soft cards.
+  $options:
+    - solid: Solid (Default)
+    - left-right: Left to Right
+    - right-left: Right to Left
+    - top-bottom: Top to Bottom
+    - bottom-top: Bottom to Top
+
 - order: drive-content-selection
   $name: Section order
   $description: Choose the left-to-right order of Drive, Content and Selected.
@@ -103,6 +131,57 @@ When one file is selected, additional details can appear:
     - content-selection-drive: Content / Selected / Drive
     - selection-drive-content: Selected / Drive / Content
     - selection-content-drive: Selected / Content / Drive
+
+- fontFamily: Segoe UI
+  $name: Font
+  $description: Choose the font used by the custom info bar.
+  $options:
+    - Segoe UI: Segoe UI
+    - Segoe UI Variable Text: Segoe UI Variable Text
+    - Arial: Arial
+    - Tahoma: Tahoma
+    - Verdana: Verdana
+    - Consolas: Consolas
+
+- fontSize: "12"
+  $name: Font size
+  $description: Choose a safe font size that fits within Explorer's native bottom row.
+  $options:
+    - "10": "10"
+    - "11": "11"
+    - "12": "12 (Default)"
+    - "13": "13"
+    - "14": "14"
+    - "15": "15"
+    - "16": "16"
+
+- leftPadding: auto
+  $name: Left edge padding
+  $description: Horizontal spacing from Explorer's left edge. Auto preserves the current spacing for each style.
+  $options:
+    - auto: Auto (Default)
+    - "0": "0 px"
+    - "4": "4 px"
+    - "8": "8 px"
+    - "12": "12 px"
+    - "16": "16 px"
+    - "20": "20 px"
+    - "24": "24 px"
+
+- sectionGap: auto
+  $name: Section spacing
+  $description: Horizontal spacing between info sections. Auto preserves the current spacing for each style.
+  $options:
+    - auto: Auto (Default)
+    - "2": "2 px"
+    - "4": "4 px"
+    - "6": "6 px"
+    - "8": "8 px"
+    - "10": "10 px"
+    - "12": "12 px"
+    - "16": "16 px"
+    - "20": "20 px"
+    - "24": "24 px"
 
 - showDrive: true
   $name: Show Drive
@@ -116,9 +195,33 @@ When one file is selected, additional details can appear:
   $name: Show Selected
   $description: Show information about the current selection.
 
-- singleFileDetails: false
+- singleFileDetails: true
   $name: Show Single File Details
-  $description: Show file extension and details when possible.
+  $description: Show details for a single selected file.
+
+- photoDetails: standard
+  $name: Photo Details
+  $description: Choose how much photo information to show.
+  $options:
+    - off: Off
+    - standard: "Standard — Extension, resolution, camera and lens when available"
+    - extended: "Extended — Standard + ISO, aperture, shutter speed and focal length when available"
+
+- mediaDetails: standard
+  $name: Video / Audio Details
+  $description: Choose how much video and audio information to show.
+  $options:
+    - off: Off
+    - standard: "Standard — Extension, video resolution and duration when available"
+    - extended: "Extended — Standard + frame rate, audio sample rate and channels when available"
+
+- otherFileDetails: basic
+  $name: Other Details
+  $description: Choose how much information to show for other file types.
+  $options:
+    - off: Off
+    - basic: "Basic — Extension"
+    - extended: "Extended — Extension, file type and modified date/time"
 
 - showExplorerViewButtons: true
   $name: Show Explorer view buttons
@@ -192,6 +295,15 @@ enum class InfoBarStyle
     Cards
 };
 
+enum class PanelFillStyle
+{
+    Solid,
+    LeftToRightGradient,
+    RightToLeftGradient,
+    TopToBottomGradient,
+    BottomToTopGradient
+};
+
 enum class InfoBarSection
 {
     Drive,
@@ -220,6 +332,10 @@ struct InfoBarLayoutGeometry
     bool showContent = false;
     bool showSelection = false;
     bool singleFileDetails = false;
+    std::wstring fontFamily;
+    int fontSize = 12;
+    int leftPadding = -1;
+    int sectionGap = -1;
 };
 
 struct TrackedDirectUiState
@@ -233,6 +349,8 @@ struct TrackedDirectUiState
     ULONGLONG lastNativeRowBackgroundSampleTick = 0;
     UINT dpi = 96;
     HFONT infoBarFont = nullptr;
+    std::wstring infoBarFontFamily;
+    int infoBarFontSize = 12;
     HWND shellTab = nullptr;
     DWORD shellBrowserCookie = 0;
     ULONGLONG lastShellBrowserRegistrationRetryTick = 0;
@@ -254,6 +372,7 @@ struct ColorOverride
 struct ModSettings
 {
     InfoBarStyle style = InfoBarStyle::Simple;
+    PanelFillStyle panelFill = PanelFillStyle::Solid;
 
     std::array<InfoBarSection, 3> sectionOrder
     {
@@ -272,8 +391,17 @@ struct ModSettings
     bool showDrive = true;
     bool showContent = true;
     bool showSelection = true;
-    bool singleFileDetails = false;
+    bool singleFileDetails = true;
     bool showExplorerViewButtons = true;
+
+    std::wstring photoDetails = L"standard";
+    std::wstring mediaDetails = L"standard";
+    std::wstring otherFileDetails = L"basic";
+
+    std::wstring fontFamily = L"Segoe UI";
+    int fontSize = 12;
+    int leftPadding = -1;
+    int sectionGap = -1;
 };
 
 static SRWLOCK g_settingsLock = SRWLOCK_INIT;
@@ -343,6 +471,7 @@ struct SingleFileMetadataCache
 {
     bool valid = false;
     std::wstring path;
+    ULONGLONG fileSize = 0;
     std::wstring details;
     ULONGLONG retryAfterTick = 0;
 };
@@ -452,7 +581,6 @@ static ColorOverride ParseColorOverride(
         );
 
     if (
-        !end ||
         *end != L'\0' ||
         rgb > 0xFFFFFF
     )
@@ -469,6 +597,45 @@ static ColorOverride ParseColorOverride(
         );
 
     return result;
+}
+
+static int ParseAutoPixelSetting(
+    const std::wstring& value,
+    int minimum,
+    int maximum
+)
+{
+    if (
+        value.empty() ||
+        _wcsicmp(value.c_str(), L"auto") == 0
+    )
+    {
+        return -1;
+    }
+
+    wchar_t* end = nullptr;
+    const long parsed =
+        wcstol(
+            value.c_str(),
+            &end,
+            10
+        );
+
+    if (
+        *end != L'\0'
+    )
+    {
+        return -1;
+    }
+
+    return
+        std::max(
+            minimum,
+            std::min(
+                maximum,
+                static_cast<int>(parsed)
+            )
+        );
 }
 
 static std::array<InfoBarSection, 3> ParseSectionOrder(
@@ -547,11 +714,65 @@ static void LoadSettings()
     else if (style == L"cards")
         settings.style = InfoBarStyle::Cards;
 
+    const std::wstring panelFill =
+        GetStringSetting(
+            L"panelFill"
+        );
+
+    if (panelFill == L"left-right")
+        settings.panelFill = PanelFillStyle::LeftToRightGradient;
+    else if (panelFill == L"right-left")
+        settings.panelFill = PanelFillStyle::RightToLeftGradient;
+    else if (panelFill == L"top-bottom")
+        settings.panelFill = PanelFillStyle::TopToBottomGradient;
+    else if (panelFill == L"bottom-top")
+        settings.panelFill = PanelFillStyle::BottomToTopGradient;
+
     settings.sectionOrder =
         ParseSectionOrder(
             GetStringSetting(
                 L"order"
             )
+        );
+
+    settings.fontFamily =
+        GetStringSetting(
+            L"fontFamily"
+        );
+
+    if (settings.fontFamily.empty())
+        settings.fontFamily = L"Segoe UI";
+
+    const int parsedFontSize =
+        ParseAutoPixelSetting(
+            GetStringSetting(
+                L"fontSize"
+            ),
+            10,
+            16
+        );
+
+    settings.fontSize =
+        parsedFontSize >= 10
+            ? parsedFontSize
+            : 12;
+
+    settings.leftPadding =
+        ParseAutoPixelSetting(
+            GetStringSetting(
+                L"leftPadding"
+            ),
+            0,
+            24
+        );
+
+    settings.sectionGap =
+        ParseAutoPixelSetting(
+            GetStringSetting(
+                L"sectionGap"
+            ),
+            0,
+            24
         );
 
     settings.textColor =
@@ -615,6 +836,27 @@ static void LoadSettings()
         Wh_GetIntSetting(
             L"singleFileDetails"
         ) != 0;
+
+    settings.photoDetails =
+        GetStringSetting(L"photoDetails");
+    if (settings.photoDetails != L"off" &&
+        settings.photoDetails != L"standard" &&
+        settings.photoDetails != L"extended")
+        settings.photoDetails = L"standard";
+
+    settings.mediaDetails =
+        GetStringSetting(L"mediaDetails");
+    if (settings.mediaDetails != L"off" &&
+        settings.mediaDetails != L"standard" &&
+        settings.mediaDetails != L"extended")
+        settings.mediaDetails = L"standard";
+
+    settings.otherFileDetails =
+        GetStringSetting(L"otherFileDetails");
+    if (settings.otherFileDetails != L"off" &&
+        settings.otherFileDetails != L"basic" &&
+        settings.otherFileDetails != L"extended")
+        settings.otherFileDetails = L"basic";
 
     settings.showExplorerViewButtons =
         Wh_GetIntSetting(
@@ -892,6 +1134,277 @@ static PropertyReadResult ReadUInt64Property(
         : PropertyReadResult::Missing;
 }
 
+static PropertyReadResult ReadStringProperty(
+    IShellItem2* item,
+    REFPROPERTYKEY key,
+    std::wstring* value
+)
+{
+    if (!item || !value)
+        return PropertyReadResult::Failed;
+
+    PWSTR raw = nullptr;
+
+    const HRESULT hr =
+        item->GetString(
+            key,
+            &raw
+        );
+
+    if (FAILED(hr))
+        return PropertyReadResult::Failed;
+
+    if (!raw || !*raw)
+    {
+        if (raw)
+            CoTaskMemFree(raw);
+
+        return PropertyReadResult::Missing;
+    }
+
+    *value = raw;
+    CoTaskMemFree(raw);
+    return PropertyReadResult::Value;
+}
+
+static PropertyReadResult ReadDoubleProperty(
+    IShellItem2* item,
+    REFPROPERTYKEY key,
+    double* value
+)
+{
+    if (!item || !value)
+        return PropertyReadResult::Failed;
+
+    PROPVARIANT property;
+    PropVariantInit(&property);
+
+    HRESULT hr =
+        item->GetProperty(
+            key,
+            &property
+        );
+
+    if (FAILED(hr))
+    {
+        PropVariantClear(&property);
+        return PropertyReadResult::Failed;
+    }
+
+    if (
+        property.vt == VT_EMPTY ||
+        property.vt == VT_NULL
+    )
+    {
+        PropVariantClear(&property);
+        return PropertyReadResult::Missing;
+    }
+
+    double convertedValue = 0.0;
+
+    hr =
+        PropVariantToDouble(
+            property,
+            &convertedValue
+        );
+
+    PropVariantClear(&property);
+
+    if (FAILED(hr))
+        return PropertyReadResult::Missing;
+
+    *value = convertedValue;
+    return PropertyReadResult::Value;
+}
+
+static std::wstring FormatFrameRate(
+    UINT32 frameRateThousandths
+)
+{
+    if (!frameRateThousandths)
+        return L"";
+
+    wchar_t buffer[64] = {};
+
+    if (frameRateThousandths % 1000 == 0)
+    {
+        swprintf(
+            buffer,
+            ARRAYSIZE(buffer),
+            L"%u fps",
+            frameRateThousandths / 1000
+        );
+    }
+    else
+    {
+        swprintf(
+            buffer,
+            ARRAYSIZE(buffer),
+            L"%.2f fps",
+            static_cast<double>(frameRateThousandths) / 1000.0
+        );
+
+        wchar_t* fps = wcsstr(buffer, L" fps");
+
+        if (fps)
+        {
+            wchar_t* end = fps;
+
+            while (
+                end > buffer &&
+                *(end - 1) == L'0'
+            )
+            {
+                --end;
+            }
+
+            if (
+                end > buffer &&
+                *(end - 1) == L'.'
+            )
+            {
+                --end;
+            }
+
+            wcscpy(end, L" fps");
+        }
+    }
+
+    return buffer;
+}
+
+static std::wstring GetFileTypeDescription(
+    const std::wstring& path
+)
+{
+    SHFILEINFOW info{};
+
+    if (
+        SHGetFileInfoW(
+            path.c_str(),
+            FILE_ATTRIBUTE_NORMAL,
+            &info,
+            sizeof(info),
+            SHGFI_USEFILEATTRIBUTES | SHGFI_TYPENAME
+        ) == 0
+    )
+    {
+        return L"";
+    }
+
+    return info.szTypeName;
+}
+
+static std::wstring GetModifiedDateText(
+    const std::wstring& path
+)
+{
+    WIN32_FILE_ATTRIBUTE_DATA data{};
+
+    if (
+        !GetFileAttributesExW(
+            path.c_str(),
+            GetFileExInfoStandard,
+            &data
+        )
+    )
+    {
+        return L"";
+    }
+
+    FILETIME localTime{};
+
+    if (
+        !FileTimeToLocalFileTime(
+            &data.ftLastWriteTime,
+            &localTime
+        )
+    )
+    {
+        return L"";
+    }
+
+    SYSTEMTIME systemTime{};
+
+    if (
+        !FileTimeToSystemTime(
+            &localTime,
+            &systemTime
+        )
+    )
+    {
+        return L"";
+    }
+
+    wchar_t dateBuffer[64] = {};
+    wchar_t timeBuffer[64] = {};
+
+    if (
+        !GetDateFormatEx(
+            LOCALE_NAME_USER_DEFAULT,
+            DATE_SHORTDATE,
+            &systemTime,
+            nullptr,
+            dateBuffer,
+            ARRAYSIZE(dateBuffer),
+            nullptr
+        )
+    )
+    {
+        return L"";
+    }
+
+    if (
+        !GetTimeFormatEx(
+            LOCALE_NAME_USER_DEFAULT,
+            TIME_NOSECONDS,
+            &systemTime,
+            nullptr,
+            timeBuffer,
+            ARRAYSIZE(timeBuffer)
+        )
+    )
+    {
+        return dateBuffer;
+    }
+
+    return
+        std::wstring(dateBuffer) +
+        L" " +
+        timeBuffer;
+}
+
+static void AppendMetadataPart(
+    std::vector<std::wstring>* parts,
+    const std::wstring& value
+)
+{
+    if (
+        parts &&
+        !value.empty()
+    )
+    {
+        parts->push_back(value);
+    }
+}
+
+static std::wstring JoinMetadataParts(
+    const std::vector<std::wstring>& parts
+)
+{
+    std::wstring result;
+
+    for (size_t i = 0; i < parts.size(); i++)
+    {
+        if (i > 0)
+            result += L"  \x00B7  ";
+
+        result += parts[i];
+    }
+
+    return result;
+}
+
 static std::wstring FormatMediaDuration(
     ULONGLONG duration100ns
 )
@@ -932,189 +1445,290 @@ static std::wstring FormatMediaDuration(
     return buffer;
 }
 
+static std::wstring ToLowerCopy(const std::wstring& value)
+{
+    std::wstring result = value;
+    std::transform(result.begin(), result.end(), result.begin(),
+        [](wchar_t ch) { return static_cast<wchar_t>(towlower(ch)); });
+    return result;
+}
+
+static bool ExtensionInList(
+    const std::wstring& extension,
+    const wchar_t* const* values,
+    size_t count
+)
+{
+    const std::wstring lower = ToLowerCopy(extension);
+    for (size_t i = 0; i < count; i++)
+    {
+        if (lower == values[i])
+            return true;
+    }
+    return false;
+}
+
+static bool IsPhotoExtension(const std::wstring& extension)
+{
+    static const wchar_t* const values[] =
+    {
+        L".jpg", L".jpeg", L".jpe", L".png", L".tif", L".tiff",
+        L".bmp", L".gif", L".webp", L".heic", L".heif", L".psd", L".psb",
+        L".dng", L".nef", L".nrw", L".cr2", L".cr3",
+        L".arw", L".srf", L".sr2", L".raf", L".rw2",
+        L".orf", L".pef", L".srw", L".x3f"
+    };
+    return ExtensionInList(extension, values, ARRAYSIZE(values));
+}
+
+static bool IsVideoExtension(const std::wstring& extension)
+{
+    static const wchar_t* const values[] =
+    {
+        L".mp4", L".m4v", L".mov", L".mkv", L".avi", L".wmv",
+        L".webm", L".mpg", L".mpeg", L".mts", L".m2ts", L".ts"
+    };
+    return ExtensionInList(extension, values, ARRAYSIZE(values));
+}
+
+static bool IsAudioExtension(const std::wstring& extension)
+{
+    static const wchar_t* const values[] =
+    {
+        L".mp3", L".m4a", L".aac", L".flac", L".wav", L".wma",
+        L".ogg", L".opus"
+    };
+    return ExtensionInList(extension, values, ARRAYSIZE(values));
+}
+
 static std::wstring BuildSingleFileDetails(
     const std::wstring& path,
+    const ModSettings& settings,
     bool* transientFailure
 )
 {
     if (transientFailure)
         *transientFailure = false;
-
     if (path.empty())
         return L"";
 
-    const std::wstring extension =
-        GetLiteralExtension(path);
+    const std::wstring extension = GetLiteralExtension(path);
+    const bool photo = IsPhotoExtension(extension);
+    const bool video = IsVideoExtension(extension);
+    const bool audio = IsAudioExtension(extension);
+    const bool media = video || audio;
 
-    std::wstring result =
-        extension.empty()
-            ? L"no extension"
-            : extension;
+    const std::wstring level =
+        photo ? settings.photoDetails :
+        media ? settings.mediaDetails :
+                settings.otherFileDetails;
+
+    if (level == L"off")
+        return L"";
+
+    std::vector<std::wstring> parts;
+    AppendMetadataPart(&parts, extension.empty() ? L"no extension" : extension);
+
+    const bool extended = level == L"extended";
+
+    if (!photo && !media)
+    {
+        if (extended)
+        {
+            AppendMetadataPart(&parts, GetFileTypeDescription(path));
+            AppendMetadataPart(&parts, GetModifiedDateText(path));
+        }
+        return JoinMetadataParts(parts);
+    }
 
     if (IsWorkerStopRequested())
-        return result;
+        return JoinMetadataParts(parts);
 
     IShellItem* localItem = nullptr;
-
-    if (
-        FAILED(
-            SHCreateItemFromParsingName(
-                path.c_str(),
-                nullptr,
-                IID_PPV_ARGS(&localItem)
-            )
-        ) ||
-        !localItem
-    )
+    if (FAILED(SHCreateItemFromParsingName(
+            path.c_str(), nullptr, IID_PPV_ARGS(&localItem))) ||
+        !localItem)
     {
         if (transientFailure)
             *transientFailure = true;
-
-        return result;
+        return JoinMetadataParts(parts);
     }
 
     IShellItem2* item2 = nullptr;
-
-    const HRESULT item2Hr =
-        localItem->QueryInterface(
-            IID_PPV_ARGS(&item2)
-        );
-
+    const HRESULT item2Hr = localItem->QueryInterface(IID_PPV_ARGS(&item2));
     localItem->Release();
 
     if (FAILED(item2Hr) || !item2)
     {
         if (transientFailure)
             *transientFailure = true;
-
-        return result;
+        return JoinMetadataParts(parts);
     }
 
     if (IsWorkerStopRequested())
     {
         item2->Release();
-        return result;
+        return JoinMetadataParts(parts);
     }
 
-    UINT32 imageWidth = 0;
-    UINT32 imageHeight = 0;
-    UINT32 videoWidth = 0;
-    UINT32 videoHeight = 0;
+    UINT32 imageWidth = 0, imageHeight = 0;
+    UINT32 videoWidth = 0, videoHeight = 0;
+    UINT32 frameRate = 0;
+    UINT32 iso = 0, audioSampleRate = 0, audioChannels = 0;
     ULONGLONG duration = 0;
+    double aperture = 0.0, exposureTime = 0.0, focalLength = 0.0;
+    std::wstring cameraModel, lensModel;
 
-    const PropertyReadResult imageWidthResult =
-        ReadUInt32Property(
-            item2,
-            PKEY_Image_HorizontalSize,
-            &imageWidth
-        );
+    auto iw = photo ? ReadUInt32Property(item2, PKEY_Image_HorizontalSize, &imageWidth) : PropertyReadResult::Missing;
+    auto ih = photo ? ReadUInt32Property(item2, PKEY_Image_VerticalSize, &imageHeight) : PropertyReadResult::Missing;
+    auto vw = video ? ReadUInt32Property(item2, PKEY_Video_FrameWidth, &videoWidth) : PropertyReadResult::Missing;
+    auto vh = video ? ReadUInt32Property(item2, PKEY_Video_FrameHeight, &videoHeight) : PropertyReadResult::Missing;
+    auto dur = media ? ReadUInt64Property(item2, PKEY_Media_Duration, &duration) : PropertyReadResult::Missing;
+    auto cam = photo ? ReadStringProperty(item2, PKEY_Photo_CameraModel, &cameraModel) : PropertyReadResult::Missing;
+    auto lens = photo ? ReadStringProperty(item2, PKEY_Photo_LensModel, &lensModel) : PropertyReadResult::Missing;
 
-    const PropertyReadResult imageHeightResult =
-        ReadUInt32Property(
-            item2,
-            PKEY_Image_VerticalSize,
-            &imageHeight
-        );
+    if (IsWorkerStopRequested())
+    {
+        item2->Release();
+        return JoinMetadataParts(parts);
+    }
 
-    const PropertyReadResult videoWidthResult =
-        ReadUInt32Property(
-            item2,
-            PKEY_Video_FrameWidth,
-            &videoWidth
-        );
-
-    const PropertyReadResult videoHeightResult =
-        ReadUInt32Property(
-            item2,
-            PKEY_Video_FrameHeight,
-            &videoHeight
-        );
-
-    const PropertyReadResult durationResult =
-        ReadUInt64Property(
-            item2,
-            PKEY_Media_Duration,
-            &duration
-        );
+    auto fr = video && extended ? ReadUInt32Property(item2, PKEY_Video_FrameRate, &frameRate) : PropertyReadResult::Missing;
+    auto isoR = photo && extended ? ReadUInt32Property(item2, PKEY_Photo_ISOSpeed, &iso) : PropertyReadResult::Missing;
+    auto apR = photo && extended ? ReadDoubleProperty(item2, PKEY_Photo_FNumber, &aperture) : PropertyReadResult::Missing;
+    auto expR = photo && extended ? ReadDoubleProperty(item2, PKEY_Photo_ExposureTime, &exposureTime) : PropertyReadResult::Missing;
+    auto focR = photo && extended ? ReadDoubleProperty(item2, PKEY_Photo_FocalLength, &focalLength) : PropertyReadResult::Missing;
+    auto srR = media && extended ? ReadUInt32Property(item2, PKEY_Audio_SampleRate, &audioSampleRate) : PropertyReadResult::Missing;
+    auto chR = media && extended ? ReadUInt32Property(item2, PKEY_Audio_ChannelCount, &audioChannels) : PropertyReadResult::Missing;
 
     item2->Release();
 
     if (transientFailure)
     {
-        *transientFailure =
-            imageWidthResult == PropertyReadResult::Failed ||
-            imageHeightResult == PropertyReadResult::Failed ||
-            videoWidthResult == PropertyReadResult::Failed ||
-            videoHeightResult == PropertyReadResult::Failed ||
-            durationResult == PropertyReadResult::Failed;
+        if (photo)
+        {
+            *transientFailure =
+                iw == PropertyReadResult::Failed &&
+                ih == PropertyReadResult::Failed &&
+                cam == PropertyReadResult::Failed &&
+                lens == PropertyReadResult::Failed;
+        }
+        else if (video)
+        {
+            *transientFailure =
+                vw == PropertyReadResult::Failed &&
+                vh == PropertyReadResult::Failed &&
+                dur == PropertyReadResult::Failed;
+        }
+        else
+        {
+            *transientFailure =
+                dur == PropertyReadResult::Failed;
+        }
     }
 
-    UINT32 width = 0;
-    UINT32 height = 0;
-
-    if (
-        videoWidthResult == PropertyReadResult::Value &&
-        videoHeightResult == PropertyReadResult::Value &&
-        videoWidth > 0 &&
-        videoHeight > 0
-    )
+    if (photo)
     {
-        width = videoWidth;
-        height = videoHeight;
+        if (iw == PropertyReadResult::Value && ih == PropertyReadResult::Value &&
+            imageWidth && imageHeight)
+        {
+            wchar_t value[64]{};
+            swprintf(value, ARRAYSIZE(value), L"%u\x00D7%u", imageWidth, imageHeight);
+            AppendMetadataPart(&parts, value);
+        }
+
+        if (cam == PropertyReadResult::Value)
+            AppendMetadataPart(&parts, cameraModel);
+        if (lens == PropertyReadResult::Value)
+            AppendMetadataPart(&parts, lensModel);
+
+        if (extended && isoR == PropertyReadResult::Value && iso)
+        {
+            wchar_t value[64]{};
+            swprintf(value, ARRAYSIZE(value), L"ISO %u", iso);
+            AppendMetadataPart(&parts, value);
+        }
+        if (extended && apR == PropertyReadResult::Value && aperture > 0.0)
+        {
+            wchar_t value[64]{};
+            swprintf(value, ARRAYSIZE(value), L"f/%.1f", aperture);
+            AppendMetadataPart(&parts, value);
+        }
+        if (extended && expR == PropertyReadResult::Value && exposureTime > 0.0)
+        {
+            wchar_t value[64]{};
+            if (exposureTime < 1.0)
+                swprintf(value, ARRAYSIZE(value), L"1/%us",
+                    std::max(1u, static_cast<unsigned>((1.0 / exposureTime) + 0.5)));
+            else
+                swprintf(value, ARRAYSIZE(value), L"%.1fs", exposureTime);
+            AppendMetadataPart(&parts, value);
+        }
+        if (extended && focR == PropertyReadResult::Value && focalLength > 0.0)
+        {
+            wchar_t value[64]{};
+            swprintf(value, ARRAYSIZE(value), L"%.0fmm", focalLength);
+            AppendMetadataPart(&parts, value);
+        }
     }
-    else if (
-        imageWidthResult == PropertyReadResult::Value &&
-        imageHeightResult == PropertyReadResult::Value &&
-        imageWidth > 0 &&
-        imageHeight > 0
-    )
+    else
     {
-        width = imageWidth;
-        height = imageHeight;
+        if (vw == PropertyReadResult::Value && vh == PropertyReadResult::Value &&
+            videoWidth && videoHeight)
+        {
+            wchar_t value[64]{};
+            swprintf(value, ARRAYSIZE(value), L"%u\x00D7%u", videoWidth, videoHeight);
+            AppendMetadataPart(&parts, value);
+        }
+
+        if (dur == PropertyReadResult::Value && duration)
+            AppendMetadataPart(&parts, FormatMediaDuration(duration));
+
+        if (extended && fr == PropertyReadResult::Value && frameRate)
+            AppendMetadataPart(&parts, FormatFrameRate(frameRate));
+
+        if (extended && srR == PropertyReadResult::Value && audioSampleRate)
+        {
+            wchar_t value[64]{};
+
+            if (audioSampleRate >= 1000)
+            {
+                swprintf(
+                    value,
+                    ARRAYSIZE(value),
+                    L"%.1f kHz",
+                    static_cast<double>(audioSampleRate) / 1000.0
+                );
+            }
+            else
+            {
+                swprintf(
+                    value,
+                    ARRAYSIZE(value),
+                    L"%u Hz",
+                    audioSampleRate
+                );
+            }
+
+            AppendMetadataPart(&parts, value);
+        }
+
+        if (extended && chR == PropertyReadResult::Value && audioChannels)
+        {
+            if (audioChannels == 1)
+                AppendMetadataPart(&parts, L"Mono");
+            else if (audioChannels == 2)
+                AppendMetadataPart(&parts, L"Stereo");
+            else
+            {
+                wchar_t value[64]{};
+                swprintf(value, ARRAYSIZE(value), L"%u channels", audioChannels);
+                AppendMetadataPart(&parts, value);
+            }
+        }
     }
 
-    const std::wstring durationText =
-        (
-            durationResult == PropertyReadResult::Value &&
-            duration > 0
-        )
-            ? FormatMediaDuration(duration)
-            : L"";
-
-    const bool hasDimensions =
-        width > 0 &&
-        height > 0;
-
-    if (!hasDimensions && durationText.empty())
-        return result;
-
-    result += L" (";
-
-    if (hasDimensions)
-    {
-        wchar_t dimensions[64] = {};
-
-        swprintf(
-            dimensions,
-            ARRAYSIZE(dimensions),
-            L"%u\x00D7%u",
-            width,
-            height
-        );
-
-        result += dimensions;
-    }
-
-    if (!durationText.empty())
-    {
-        if (hasDimensions)
-            result += L", ";
-
-        result += durationText;
-    }
-
-    result += L")";
-    return result;
+    return JoinMetadataParts(parts);
 }
 
 static bool GetFilesystemInfo(
@@ -1476,10 +2090,14 @@ static int ScaleForWindow(
     return ScaleForDpi(dpi, value);
 }
 
-static HFONT CreateInfoBarFont(UINT dpi)
+static HFONT CreateInfoBarFont(
+    UINT dpi,
+    const std::wstring& fontFamily,
+    int fontSize
+)
 {
     return CreateFontW(
-        -ScaleForDpi(dpi, 12),
+        -ScaleForDpi(dpi, fontSize),
         0,
         0,
         0,
@@ -1492,7 +2110,9 @@ static HFONT CreateInfoBarFont(UINT dpi)
         CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY,
         DEFAULT_PITCH,
-        L"Segoe UI"
+        fontFamily.empty()
+            ? L"Segoe UI"
+            : fontFamily.c_str()
     );
 }
 
@@ -1502,6 +2122,9 @@ static void RefreshTrackedDpiAndFont(HWND hwnd)
 
     if (!dpi)
         dpi = 96;
+
+    const ModSettings settings =
+        GetSettingsSnapshot();
 
     bool needsFont = false;
 
@@ -1521,7 +2144,9 @@ static void RefreshTrackedDpiAndFont(HWND hwnd)
         existing != g_trackedWindows.end() &&
         (
             existing->dpi != dpi ||
-            !existing->infoBarFont
+            !existing->infoBarFont ||
+            existing->infoBarFontFamily != settings.fontFamily ||
+            existing->infoBarFontSize != settings.fontSize
         )
     )
     {
@@ -1533,7 +2158,12 @@ static void RefreshTrackedDpiAndFont(HWND hwnd)
     if (!needsFont)
         return;
 
-    HFONT newFont = CreateInfoBarFont(dpi);
+    HFONT newFont =
+        CreateInfoBarFont(
+            dpi,
+            settings.fontFamily,
+            settings.fontSize
+        );
     HFONT oldFont = nullptr;
 
     AcquireSRWLockExclusive(&g_subclassLock);
@@ -1552,13 +2182,17 @@ static void RefreshTrackedDpiAndFont(HWND hwnd)
         tracked != g_trackedWindows.end() &&
         (
             tracked->dpi != dpi ||
-            !tracked->infoBarFont
+            !tracked->infoBarFont ||
+            tracked->infoBarFontFamily != settings.fontFamily ||
+            tracked->infoBarFontSize != settings.fontSize
         )
     )
     {
         oldFont = tracked->infoBarFont;
         tracked->dpi = dpi;
         tracked->infoBarFont = newFont;
+        tracked->infoBarFontFamily = settings.fontFamily;
+        tracked->infoBarFontSize = settings.fontSize;
         newFont = nullptr;
     }
 
@@ -2158,10 +2792,19 @@ static void RefreshInfoBarWindow(
     if (!settings.singleFileDetails)
         visibleChanges &= ~CacheChangeFileDetails;
 
-    if (visibleChanges == CacheChangeNone)
-        return;
+if (visibleChanges == CacheChangeNone)
+    return;
 
-    RECT client{};
+// File Details can change width substantially when switching between file
+// types. Repaint the complete status row so pixels from a previously wider
+// metadata panel can't remain visible.
+if (visibleChanges & CacheChangeFileDetails)
+{
+    InvalidateInfoBarWindow(hwnd);
+    return;
+}
+
+RECT client{};
 
     const bool currentClientAvailable =
         GetClientRect(
@@ -2201,6 +2844,10 @@ static void RefreshInfoBarWindow(
         geometry.showContent == settings.showContent &&
         geometry.showSelection == settings.showSelection &&
         geometry.singleFileDetails == settings.singleFileDetails &&
+        geometry.fontFamily == settings.fontFamily &&
+        geometry.fontSize == settings.fontSize &&
+        geometry.leftPadding == settings.leftPadding &&
+        geometry.sectionGap == settings.sectionGap &&
         geometry.usableRight == currentUsableRight;
 
     if (!layoutMatchesSettings)
@@ -3216,7 +3863,9 @@ static void ClearSingleFileMetadataCache(
 
 static std::wstring GetSingleFileDetailsCached(
     SingleFileMetadataCache* cache,
-    const std::wstring& path
+    const std::wstring& path,
+    ULONGLONG fileSize,
+    const ModSettings& settings
 )
 {
     if (!cache)
@@ -3224,7 +3873,10 @@ static std::wstring GetSingleFileDetailsCached(
 
     const ULONGLONG now = GetTickCount64();
 
-    if (path == cache->path)
+    if (
+        path == cache->path &&
+        fileSize == cache->fileSize
+    )
     {
         if (cache->valid)
             return cache->details;
@@ -3238,10 +3890,12 @@ static std::wstring GetSingleFileDetailsCached(
     std::wstring details =
         BuildSingleFileDetails(
             path,
+            settings,
             &transientFailure
         );
 
     cache->path = path;
+    cache->fileSize = fileSize;
     cache->details = details;
     cache->valid = !transientFailure;
     cache->retryAfterTick =
@@ -3368,8 +4022,12 @@ static unsigned ReadCurrentView(
         currentPath[1] == L':'
     )
     {
+        const std::wstring driveRoot =
+            std::wstring(1, static_cast<wchar_t>(towupper(currentPath[0]))) +
+            L":\\";
+
         const bool drivePathChanged =
-            driveCache.path != currentPath;
+            driveCache.path != driveRoot;
 
         const bool driveRefreshDue =
             !driveCache.lastRefreshTick ||
@@ -3381,7 +4039,7 @@ static unsigned ReadCurrentView(
             ULARGE_INTEGER freeAvailable{};
             ULARGE_INTEGER totalBytes{};
 
-            driveCache.path = currentPath;
+            driveCache.path = driveRoot;
             driveCache.freeBytes = 0;
             driveCache.totalBytes = 0;
             driveCache.driveLetter =
@@ -3392,7 +4050,7 @@ static unsigned ReadCurrentView(
 
             if (
                 GetDiskFreeSpaceExW(
-                    currentPath.c_str(),
+                    driveRoot.c_str(),
                     &freeAvailable,
                     &totalBytes,
                     nullptr
@@ -3628,7 +4286,7 @@ static unsigned ReadCurrentView(
             constexpr DWORD kMaxDetailedSelectionItems = 256;
 
             const bool folderChanged =
-                contentCache.folderIdentity != state.contentRefresh.folderIdentity;
+                folderIdentity != state.contentRefresh.folderIdentity;
 
             // A one-item selection needs an identity-sensitive fallback:
             // arrowing to another item keeps the count at one. Resolve that
@@ -3819,7 +4477,9 @@ static unsigned ReadCurrentView(
                                     singleFileDetails =
                                         GetSingleFileDetailsCached(
                                             &metadataCache,
-                                            filesystemPath
+                                            filesystemPath,
+                                            size,
+                                            settings
                                         );
                                 }
                             }
@@ -3832,6 +4492,14 @@ static unsigned ReadCurrentView(
         }
 
         selection->Release();
+     }
+
+    // Single-file details are only valid while exactly one item is selected.
+    if (selected != 1)
+    {
+        singleFileDetails.clear();
+        keepSingleFileMetadataCache = false;
+        singleSelectionCache = SingleSelectionRefreshCache{};
     }
 
     if (!keepSingleFileMetadataCache)
@@ -3894,6 +4562,28 @@ static unsigned ReadCurrentView(
     folderView->Release();
     shellView->Release();
     return changes;
+}
+
+static bool IsWorkerRefreshDue(
+    HWND hwnd,
+    ULONGLONG selectionGeneration,
+    ULONGLONG now
+)
+{
+    bool due = true;
+
+    EnterCriticalSection(&g_cacheLock);
+
+    if (WindowDataCache* cache = FindWindowDataCacheLocked(hwnd))
+    {
+        due =
+            !cache->lastWorkerRefreshTick ||
+            now - cache->lastWorkerRefreshTick >= kRefreshIntervalMs ||
+            selectionGeneration != cache->selectionGeneration;
+    }
+
+    LeaveCriticalSection(&g_cacheLock);
+    return due;
 }
 
 // ============================================================
@@ -4099,6 +4789,17 @@ static DWORD WINAPI WorkerThreadProc(
             )
             {
                 break;
+            }
+
+            if (
+                !IsWorkerRefreshDue(
+                    target.hwnd,
+                    target.selectionGeneration,
+                    now
+                )
+            )
+            {
+                continue;
             }
 
             IShellBrowser* browser = nullptr;
@@ -4459,13 +5160,17 @@ static void DrawFinalSeparator(
     HDC hdc,
     int& x,
     const RECT& row,
-    COLORREF color
+    COLORREF color,
+    int gapWidth = -1
 )
 {
+    const int resolvedGap =
+        gapWidth >= 0
+            ? gapWidth
+            : MeasureGapWidth(hdc);
+
     x +=
-        MeasureGapWidth(
-            hdc
-        );
+        resolvedGap;
 
     DrawFinalPiece(
         hdc,
@@ -4476,9 +5181,7 @@ static void DrawFinalSeparator(
     );
 
     x +=
-        MeasureGapWidth(
-            hdc
-        );
+        resolvedGap;
 }
 
 static int ColorLuminance(
@@ -4524,6 +5227,221 @@ static COLORREF BlendColor(
             GetBValue(target) * targetPercent
         ) / 100
     );
+}
+
+static bool FillGradientRectangle(
+    HDC hdc,
+    const RECT& rect,
+    COLORREF startColor,
+    COLORREF endColor,
+    PanelFillStyle fillStyle
+)
+{
+    if (
+        !hdc ||
+        rect.right <= rect.left ||
+        rect.bottom <= rect.top ||
+        fillStyle == PanelFillStyle::Solid
+    )
+    {
+        return false;
+    }
+
+    const bool horizontal =
+        fillStyle == PanelFillStyle::LeftToRightGradient ||
+        fillStyle == PanelFillStyle::RightToLeftGradient;
+
+    const bool reverse =
+        fillStyle == PanelFillStyle::RightToLeftGradient ||
+        fillStyle == PanelFillStyle::BottomToTopGradient;
+
+    const COLORREF firstColor = reverse ? endColor : startColor;
+    const COLORREF secondColor = reverse ? startColor : endColor;
+
+    TRIVERTEX vertices[2]{};
+
+    vertices[0].x = rect.left;
+    vertices[0].y = rect.top;
+    vertices[0].Red = static_cast<COLOR16>(GetRValue(firstColor) << 8);
+    vertices[0].Green = static_cast<COLOR16>(GetGValue(firstColor) << 8);
+    vertices[0].Blue = static_cast<COLOR16>(GetBValue(firstColor) << 8);
+    vertices[0].Alpha = 0xFF00;
+
+    vertices[1].x = rect.right;
+    vertices[1].y = rect.bottom;
+    vertices[1].Red = static_cast<COLOR16>(GetRValue(secondColor) << 8);
+    vertices[1].Green = static_cast<COLOR16>(GetGValue(secondColor) << 8);
+    vertices[1].Blue = static_cast<COLOR16>(GetBValue(secondColor) << 8);
+    vertices[1].Alpha = 0xFF00;
+
+    GRADIENT_RECT gradientRect{0, 1};
+
+    return GradientFill(
+        hdc,
+        vertices,
+        ARRAYSIZE(vertices),
+        &gradientRect,
+        1,
+        horizontal
+            ? GRADIENT_FILL_RECT_H
+            : GRADIENT_FILL_RECT_V
+    ) != FALSE;
+}
+
+static void DrawPanelBackground(
+    HDC hdc,
+    const RECT& box,
+    UINT dpi,
+    bool cards,
+    COLORREF fill,
+    COLORREF border,
+    COLORREF rowBackground,
+    PanelFillStyle fillStyle
+)
+{
+    const int radius = ScaleForDpi(dpi, 6);
+
+    auto FillSolid = [&]()
+    {
+        if (cards)
+        {
+            HBRUSH fillBrush = CreateSolidBrush(fill);
+            HPEN pen = CreatePen(PS_SOLID, 1, border);
+
+            if (fillBrush && pen)
+            {
+                HBRUSH oldBrush = reinterpret_cast<HBRUSH>(
+                    SelectObject(hdc, fillBrush));
+                HPEN oldPen = reinterpret_cast<HPEN>(
+                    SelectObject(hdc, pen));
+
+                RoundRect(
+                    hdc,
+                    box.left,
+                    box.top,
+                    box.right,
+                    box.bottom,
+                    radius,
+                    radius
+                );
+
+                SelectObject(hdc, oldPen);
+                SelectObject(hdc, oldBrush);
+            }
+
+            if (pen)
+                DeleteObject(pen);
+            if (fillBrush)
+                DeleteObject(fillBrush);
+        }
+        else
+        {
+            HBRUSH fillBrush = CreateSolidBrush(fill);
+            if (fillBrush)
+            {
+                FillRect(hdc, &box, fillBrush);
+                DeleteObject(fillBrush);
+            }
+        }
+    };
+
+    if (fillStyle == PanelFillStyle::Solid)
+    {
+        FillSolid();
+        return;
+    }
+
+    // Use the existing panel color as the strong side and fade it toward
+    // Explorer's row background. No extra start/end color settings needed.
+    const COLORREF gradientEnd =
+        BlendColor(fill, rowBackground, 85);
+
+    if (!cards)
+    {
+        if (!FillGradientRectangle(
+                hdc,
+                box,
+                fill,
+                gradientEnd,
+                fillStyle))
+        {
+            FillSolid();
+        }
+        return;
+    }
+
+    HRGN roundRegion =
+        CreateRoundRectRgn(
+            box.left,
+            box.top,
+            box.right + 1,
+            box.bottom + 1,
+            radius,
+            radius
+        );
+
+    const int savedDc =
+        roundRegion ? SaveDC(hdc) : 0;
+
+    bool gradientDrawn = false;
+
+    if (roundRegion && savedDc)
+    {
+        ExtSelectClipRgn(
+            hdc,
+            roundRegion,
+            RGN_AND
+        );
+
+        gradientDrawn =
+            FillGradientRectangle(
+                hdc,
+                box,
+                fill,
+                gradientEnd,
+                fillStyle
+            );
+
+        RestoreDC(hdc, savedDc);
+    }
+
+    if (roundRegion)
+        DeleteObject(roundRegion);
+
+    if (!gradientDrawn)
+    {
+        FillSolid();
+        return;
+    }
+
+    HPEN pen =
+        CreatePen(
+            PS_SOLID,
+            1,
+            border
+        );
+
+    if (!pen)
+        return;
+
+    HPEN oldPen = reinterpret_cast<HPEN>(
+        SelectObject(hdc, pen));
+    HBRUSH oldBrush = reinterpret_cast<HBRUSH>(
+        SelectObject(hdc, GetStockObject(HOLLOW_BRUSH)));
+
+    RoundRect(
+        hdc,
+        box.left,
+        box.top,
+        box.right,
+        box.bottom,
+        radius,
+        radius
+    );
+
+    SelectObject(hdc, oldBrush);
+    SelectObject(hdc, oldPen);
+    DeleteObject(pen);
 }
 
 static COLORREF GetContrastingTextColor(
@@ -4828,8 +5746,18 @@ static void PaintFinalInfoBar(
             return settings.showSelection;
         };
 
+    const int simpleLeft =
+        settings.leftPadding >= 0
+            ? ScaleForDpi(dpi, settings.leftPadding)
+            : ScaleForDpi(dpi, 14);
+
+    const int simpleGap =
+        settings.sectionGap >= 0
+            ? ScaleForDpi(dpi, settings.sectionGap)
+            : -1;
+
     int x =
-        ScaleForDpi(dpi, 14);
+        simpleLeft;
 
     bool drew =
         false;
@@ -4843,6 +5771,10 @@ static void PaintFinalInfoBar(
     geometry.showContent = settings.showContent;
     geometry.showSelection = settings.showSelection;
     geometry.singleFileDetails = settings.singleFileDetails;
+    geometry.fontFamily = settings.fontFamily;
+    geometry.fontSize = settings.fontSize;
+    geometry.leftPadding = settings.leftPadding;
+    geometry.sectionGap = settings.sectionGap;
 
     if (settings.style == InfoBarStyle::Simple)
     {
@@ -4869,7 +5801,8 @@ static void PaintFinalInfoBar(
                     hdc,
                     x,
                     row,
-                    automaticDividerColor
+                    automaticDividerColor,
+                    simpleGap
                 );
             }
 
@@ -4896,7 +5829,8 @@ static void PaintFinalInfoBar(
                     hdc,
                     x,
                     row,
-                    automaticDividerColor
+                    automaticDividerColor,
+                    simpleGap
                 );
             }
 
@@ -4918,14 +5852,20 @@ static void PaintFinalInfoBar(
             ScaleForDpi(dpi, cards ? 10 : 12);
 
         const int gap =
-            ScaleForDpi(dpi, cards ? 8 : 6);
+            settings.sectionGap >= 0
+                ? ScaleForDpi(dpi, settings.sectionGap)
+                : ScaleForDpi(dpi, cards ? 8 : 6);
 
-        // Flat panes should begin flush with the left edge.
-        // Cards keep a tiny 2 px inset so the rounded border isn't clipped.
+        // Auto preserves the original style-specific starting positions.
+        // A custom value is measured from Explorer's left client edge.
         int paneX =
-            cards
-                ? row.left + ScaleForDpi(dpi, 2)
-                : 0;
+            settings.leftPadding >= 0
+                ? ScaleForDpi(dpi, settings.leftPadding)
+                : (
+                    cards
+                        ? row.left + ScaleForDpi(dpi, 2)
+                        : 0
+                );
 
         auto DrawBox =
             [&](const std::wstring& value,
@@ -4953,66 +5893,16 @@ static void PaintFinalInfoBar(
             if (box.right > row.right)
                 box.right = row.right;
 
-            if (cards)
-            {
-                HBRUSH fillBrush =
-                    CreateSolidBrush(fill);
-
-                HPEN pen =
-                    CreatePen(
-                        PS_SOLID,
-                        1,
-                        border
-                    );
-
-                if (fillBrush && pen)
-                {
-                    HBRUSH oldBrush =
-                        reinterpret_cast<HBRUSH>(
-                            SelectObject(hdc, fillBrush)
-                        );
-
-                    HPEN oldPen =
-                        reinterpret_cast<HPEN>(
-                            SelectObject(hdc, pen)
-                        );
-
-                    RoundRect(
-                        hdc,
-                        box.left,
-                        box.top,
-                        box.right,
-                        box.bottom,
-                        ScaleForDpi(dpi, 6),
-                        ScaleForDpi(dpi, 6)
-                    );
-
-                    SelectObject(hdc, oldPen);
-                    SelectObject(hdc, oldBrush);
-                }
-
-                if (pen)
-                    DeleteObject(pen);
-
-                if (fillBrush)
-                    DeleteObject(fillBrush);
-            }
-            else
-            {
-                HBRUSH fillBrush =
-                    CreateSolidBrush(fill);
-
-                if (fillBrush)
-                {
-                    FillRect(
-                        hdc,
-                        &box,
-                        fillBrush
-                    );
-
-                    DeleteObject(fillBrush);
-                }
-            }
+            DrawPanelBackground(
+                hdc,
+                box,
+                dpi,
+                cards,
+                fill,
+                border,
+                background,
+                settings.panelFill
+            );
 
             RECT textRect =
                 box;
@@ -5427,6 +6317,7 @@ static LRESULT CALLBACK DirectUiSubclassProc(
     {
         if (!g_unloading.load(std::memory_order_acquire))
         {
+            RefreshTrackedDpiAndFont(hwnd);
             EnsureWindowDataCache(hwnd);
             EnsureShellBrowserRegistration(hwnd);
             RefreshValidatedStatusRow(hwnd);
@@ -5889,6 +6780,16 @@ void Wh_ModSettingsChanged()
 {
     LoadSettings();
 
+    EnterCriticalSection(&g_cacheLock);
+
+    for (WindowDataCache& cache : g_windowDataCaches)
+    {
+        cache.metadata = SingleFileMetadataCache{};
+        cache.fileDetailsGroup.clear();
+    }
+
+    LeaveCriticalSection(&g_cacheLock);
+
     // Force one detailed selection refresh because visibility/detail settings
     // may have changed even if the Explorer selection itself did not.
     AcquireSRWLockExclusive(&g_subclassLock);
@@ -5896,7 +6797,42 @@ void Wh_ModSettingsChanged()
     for (TrackedDirectUiState& state : g_trackedWindows)
         state.selectionGeneration++;
 
+    std::vector<HWND> refreshWindows;
+
+    try
+    {
+        refreshWindows.reserve(g_trackedWindows.size());
+
+        for (const TrackedDirectUiState& state : g_trackedWindows)
+            refreshWindows.push_back(state.hwnd);
+    }
+    catch (...)
+    {
+        refreshWindows.clear();
+        Wh_Log(L"DirectUI settings refresh snapshot failed");
+    }
+
     ReleaseSRWLockExclusive(&g_subclassLock);
+
+    for (HWND hwnd : refreshWindows)
+    {
+        if (
+            g_refreshDirectUiMessage &&
+            !PostMessageW(
+                hwnd,
+                g_refreshDirectUiMessage,
+                0,
+                0
+            )
+        )
+        {
+            Wh_Log(
+                L"DirectUI settings refresh post failed hwnd=%p error=%lu",
+                hwnd,
+                GetLastError()
+            );
+        }
+    }
 
     if (g_workerWakeEvent)
         SetEvent(g_workerWakeEvent);
