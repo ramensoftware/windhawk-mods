@@ -20,31 +20,9 @@ desktop, a list of your open programs, and "Force log off"/"Cancel" buttons)
 right before a log off, shut down or restart started from Explorer, whenever
 programs are still open.
 
-## How this differs from win7-bsdr
-
-**Windows Vista/7 Blocked Shutdown UX & Logoff Sequence** (`win7-bsdr`) restores
-the *real* blocked-shutdown screen by hooking `LogonUI.exe`/`winlogon.exe`. It
-appears only when a program is actually blocking the shutdown, lists exactly
-those programs, and covers every way a shutdown can start (`shutdown.exe`,
-Ctrl+Alt+Del, Settings, ...).
-
-This mod is a different thing: a look-alike **confirmation screen shown by
-`explorer.exe` before the shutdown is started**. It is shown every time
-something is open, lists all open programs (whether or not they would block),
-needs no `LogonUI.exe` setup and works on any Windows 10/11 build.
-
-- Want the authentic screen that only appears when something really blocks the
-  shutdown? Use `win7-bsdr`.
-- Want a Vista/7-style "these programs are still open" confirmation on every
-  shell-initiated shutdown, with no `LogonUI.exe` setup? Use this mod.
-- They can be enabled together: this screen appears first, then the real
-  blocked-shutdown screen if something actually blocks.
-
-The files on the system are not modified. After clicking "Force log off"/"Force
-shutdown", the mod only adds `EWX_FORCEIFHUNG` (programs that have stopped
-responding are closed). A program that refuses to close, for example because of
+The files on the system are not modified. A program that refuses to close, for example because of
 unsaved work, is not force-closed, so Windows may still show its own "app is
-preventing shutdown" screen afterwards.
+preventing shutdown" screen afterwards in rare cases.
 
 ## Screenshots
 
@@ -80,6 +58,12 @@ To try the mod without logging off, you can enable a preview shortcut in the mod
 - If the screen is ever left open too long, the mod closes it automatically after 60 seconds and lets the logoff/shutdown continue and it never forces programs to close on its own and never destroys unsaved work.
 - The mod only shows a visual screen and it doesn't touch any system files or settings, and doesn't write anything to the registry.
 - Turning the mod off from Windhawk removes it completely.
+
+---
+
+## Relation to win7-bsdr
+
+Unlike `win7-bsdr`, which hooks `LogonUI.exe` and `winlogon.exe`, this mod runs entirely inside `explorer.exe`: no `LogonUI.exe` setup it is essentially a confirmation on every shell-initiated shutdown.
 
 ---
 
