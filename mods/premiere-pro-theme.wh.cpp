@@ -2,7 +2,7 @@
 // @id              premiere-pro-theme
 // @name            Premiere Pro Theme
 // @description     Recolors the Adobe Premiere Pro interface — panels, timeline, monitors, window frame and menu bar — with a choice of very dark palettes.
-// @version         1.0.0
+// @version         1.0.1
 // @author          Threshold Editor
 // @license         MIT
 // @include         Adobe Premiere Pro.exe
@@ -334,6 +334,19 @@ squeezed very narrow keeps Premiere's own gray while the other one is themed.
 The black *inside* the sequence frame is the rendered picture, not chrome, and
 stays black in every palette.
 
+**The dropdown menus are dark, not palette-colored.** The menu bar itself is
+painted here, item by item; the menus that drop out of it, and the right-click
+menus, are drawn by Windows with the dark menu theme this mod switches on.
+Measured on Windows 11 build 26200: the theme those menus draw with never
+passes through any of the four entry points the mod watches, and their items
+arrive as a theme part it does not paint. So on that build the switch buys
+them dark rather than the palette.
+
+**A menu taller than the screen** grows a small scroll button at each end.
+Windows paints those outside the theme system altogether — no draw the mod can
+see covers that rectangle — so they keep the light system color while the menu
+around them is dark.
+
 ## Compatibility
 
 The mod looks up each color function by name at startup, installs the ones the
@@ -353,6 +366,17 @@ Premiere version: the band is recognized by the module that draws it and the
 shape of the work, not by an address inside it. Native dark
 mode needs Windows 10 build 17763 or newer; below that the mod still themes the
 interface and paints the menus itself.
+
+**What the interface layer needs.** Those functions live in the module Premiere
+has shipped as `dvaui.dll`, and the mod hooks them there — or, if a build
+renames that module or folds it into another, in whichever module still
+exports most of them.
+A build that exports them nowhere cannot be themed that way, and the mod says
+so instead of looking like it worked: turn on **Mod logs** in Windhawk's
+Advanced tab, and a healthy session logs `dvaui: 31 hooks active` as Premiere
+starts. If instead it says the interface layer is not installed, the panels
+will keep Premiere's own colors — the window frame, the menu bar and the native
+dialogs still follow the palette.
 
 ## Questions, bugs and palettes
 
@@ -470,7 +494,10 @@ This mod is MIT as well.
   $description: Immersive dark mode, title bar, border and native dialogs.
 - menuHook: true
   $name: Menu bar and menus
-  $description: Paints the File/Edit/Clip bar and the dropdown menus in the palette, instead of white or the Windows default gray.
+  $description: >-
+    Paints the File/Edit/Clip bar in the palette, and turns the menus that drop
+    out of it dark instead of white. On Windows 11 those menus take Windows'
+    own dark menu style rather than the palette; the readme says why.
 - gdiHook: true
   $name: GDI surfaces
   $description: Darkens GDI brushes, pens and text backgrounds created by Premiere's own modules.
@@ -1076,6 +1103,66 @@ static void NoteDisplaySurface() {
     }
 }
 
+/*
+    The modules mapped right now. False when the process cannot be enumerated,
+    with `error` the reason: zero when the API itself is missing,
+    ERROR_OUTOFMEMORY when the list cannot be held, and otherwise whatever the
+    call set.
+
+    This is the one allocation on the mod's startup path, and the one place it
+    could throw back into Windhawk, so bad_alloc is answered here.
+*/
+static bool EnumerateProcessModules(std::vector<HMODULE>* modules, DWORD* error) {
+    *error = 0;
+    modules->clear();
+
+    HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
+
+    auto enumModules =
+        kernel32 ? reinterpret_cast<EnumProcessModules_t>(
+                       GetProcAddress(kernel32, "K32EnumProcessModules"))
+                 : nullptr;
+
+    if (!enumModules) {
+        return false;
+    }
+
+    HANDLE process = GetCurrentProcess();
+    DWORD needed = 0;
+    DWORD bytes = 0;
+
+    try {
+        modules->resize(1024);
+
+        // Modules can load between two calls, so a retry may still come up short.
+        for (int attempt = 0; attempt < 3; attempt++) {
+            bytes = static_cast<DWORD>(modules->size() * sizeof(HMODULE));
+
+            if (!enumModules(process, modules->data(), bytes, &needed)) {
+                *error = GetLastError();
+                modules->clear();
+                return false;
+            }
+
+            if (needed <= bytes) {
+                break;
+            }
+
+            if (attempt < 2) {
+                modules->resize(needed / sizeof(HMODULE) + 64);
+            }
+        }
+
+        modules->resize(std::min(needed, bytes) / sizeof(HMODULE));
+    } catch (const std::bad_alloc&) {
+        *error = ERROR_OUTOFMEMORY;
+        modules->clear();
+        return false;
+    }
+
+    return true;
+}
+
 static void SnapshotAdobeModules() {
     /*
         These are recorded first, whatever the enumeration below manages. It
@@ -1088,70 +1175,30 @@ static void SnapshotAdobeModules() {
 
     HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
 
-    auto enumModules =
-        kernel32 ? reinterpret_cast<EnumProcessModules_t>(
-                       GetProcAddress(kernel32, "K32EnumProcessModules"))
-                 : nullptr;
-
     auto moduleInformation =
         kernel32 ? reinterpret_cast<GetModuleInformation_t>(
                        GetProcAddress(kernel32, "K32GetModuleInformation"))
                  : nullptr;
 
-    if (!enumModules || !moduleInformation) {
-        Wh_Log(L"cannot enumerate modules; besides the executable, dvaui, "
+    std::vector<HMODULE> modules;
+    DWORD error = 0;
+
+    /*
+        Short of memory, or with no way to ask, the modules noted above are all
+        the mod knows about — the same degradation either way.
+    */
+    if (!moduleInformation || !EnumerateProcessModules(&modules, &error)) {
+        Wh_Log(L"cannot enumerate modules (%u); besides the executable, dvaui, "
                L"dvacore and UIFramework, only dva modules loaded from now on "
-               L"will be recognized as Adobe UI");
+               L"will be recognized as Adobe UI",
+               error);
         return;
     }
 
     HANDLE process = GetCurrentProcess();
     HMODULE executable = GetModuleHandleW(nullptr);
 
-    std::vector<HMODULE> modules;
-    DWORD needed = 0;
-    DWORD bytes = 0;
-
-    /*
-        The one allocation on the mod's startup path, and the one place it
-        could throw back into Windhawk. Short of memory, the four modules
-        noted above are all the mod knows about — the same degradation as an
-        enumeration that fails outright.
-    */
-    try {
-        modules.resize(1024);
-
-        // Modules can load between two calls, so a retry may still come up short.
-        for (int attempt = 0; attempt < 3; attempt++) {
-            bytes = static_cast<DWORD>(modules.size() * sizeof(HMODULE));
-
-            if (!enumModules(process, modules.data(), bytes, &needed)) {
-                Wh_Log(L"module enumeration failed (%u); besides the executable, "
-                       L"dvaui, dvacore and UIFramework, only dva modules loaded "
-                       L"from now on will be recognized as Adobe UI",
-                       GetLastError());
-                return;
-            }
-
-            if (needed <= bytes) {
-                break;
-            }
-
-            if (attempt < 2) {
-                modules.resize(needed / sizeof(HMODULE) + 64);
-            }
-        }
-    } catch (const std::bad_alloc&) {
-        Wh_Log(L"not enough memory to enumerate modules; besides the "
-               L"executable, dvaui, dvacore and UIFramework, only dva modules "
-               L"loaded from now on will be recognized as Adobe UI");
-        return;
-    }
-
-    size_t count = std::min(needed, bytes) / sizeof(HMODULE);
-
-    for (size_t i = 0; i < count; i++) {
-        HMODULE module = modules[i];
+    for (HMODULE module : modules) {
         bool adobe = module == executable;
 
         if (!adobe) {
@@ -2566,7 +2613,190 @@ static bool WantsPremiereHooks() {
     return s.dvauiHook || s.brushHook || s.gdiHook;
 }
 
-static bool HookLoadedModules() {
+/*
+    Premiere has shipped its UI toolkit as dvaui.dll from 2023 through 2026,
+    and every hook below is looked up in it by name. A build that renames the
+    module, or folds the toolkit into another one, still carries Adobe's own
+    mangled names — they spell the dvaui namespaces out — so when the name is
+    gone the module is looked for by symbol instead.
+
+    Nothing here runs while GetModuleHandleW(L"dvaui.dll") answers: on every
+    build that ships the DLL no module is enumerated and no anchor is asked
+    for.
+*/
+static const char* const kColorAnchors[] = {
+    // The Spectrum ramp, which most of the interface is painted from.
+    "?GetGrayColor@ui@dvaui@@YAAEBVColorRGBA@drawbot@2@W4SpectrumGrayColor@12@@Z",
+
+    // The classic theme, which the older builds paint from.
+    "?GetColor@Theme@ui@dvaui@@UEBAAEBVColorRGBA@drawbot@3@_K@Z",
+
+    // The fill path, which is hooked even with the color layer off.
+    ("?NewBrush@OSSupplier@d2d@drawbot@dvaui@@UEBAPEAUBrushInterface@34@"
+     "AEBVColorRGBA@34@@Z"),
+};
+
+static bool ExportsColorAnchor(HMODULE module) {
+    for (const char* anchor : kColorAnchors) {
+        if (GetProcAddress(module, anchor)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// How much of the color surface one module carries; either spelling counts once.
+static int CountColorExports(HMODULE module) {
+    int found = 0;
+
+    for (const ColorSymbol& symbol : kColorSymbols) {
+        if (GetProcAddress(module, symbol.mangled) ||
+            (symbol.before2026 && GetProcAddress(module, symbol.before2026))) {
+            found++;
+        }
+    }
+
+    return found;
+}
+
+/*
+    How much of the color surface a module has to carry to stand in for
+    dvaui.dll. More than one module answers an anchor: measured on Premiere
+    2026, dvaui.dll exports all 26 of the functions, while dvaworkspace.dll
+    carries 11 of them and Frontend.dll 4. Those are copies of part of the
+    toolkit and paint none of the interface, so hooking one in place of the
+    real module would cost the session. Half the surface keeps them out and
+    still accepts a build that dropped a few functions.
+*/
+constexpr int kMinColorExports = static_cast<int>(kColorSymbolCount) / 2;
+
+static bool QualifiesAsColorModule(HMODULE module) {
+    return module && ExportsColorAnchor(module) &&
+           CountColorExports(module) >= kMinColorExports;
+}
+
+/*
+    The richest module in `modules` that qualifies, or null when none does.
+
+    Split from the enumeration so the harness can hand it a set of modules.
+*/
+static HMODULE FindColorModuleIn(const HMODULE* modules, size_t count) {
+    HMODULE best = nullptr;
+    int bestExports = 0;
+
+    for (size_t i = 0; i < count; i++) {
+        if (!modules[i] || !ExportsColorAnchor(modules[i])) {
+            continue;
+        }
+
+        int exports = CountColorExports(modules[i]);
+
+        if (exports >= kMinColorExports && exports > bestExports) {
+            best = modules[i];
+            bestExports = exports;
+        }
+    }
+
+    return best;
+}
+
+volatile LONG g_colorSearchClosed = FALSE;
+volatile LONG g_noColorModuleLogged = FALSE;
+
+/*
+    Said once, from wherever first knows for certain. Not at startup: dvaui is
+    a static dependency of Frontend.dll and the mod can initialize before the
+    loader maps it, so "not there yet" and "not in this build" look alike
+    until Premiere's UI is up.
+*/
+static void ReportNoColorModule() {
+    if (!Claim(&g_noColorModuleLogged)) {
+        return;
+    }
+
+    Wh_Log(L"the interface layer is not installed: no module in this process "
+           L"exports Premiere's color functions, so this build cannot be "
+           L"themed that way. The window frame, the menu bar and the native "
+           L"dialogs still follow the palette; the panels keep Premiere's own "
+           L"colors.");
+}
+
+/*
+    The module named here is hooked for the rest of the process, the way
+    dvaui.dll is. A module carrying most of the color surface is part of
+    Premiere's UI and stays mapped while that UI is up; the hooks would point
+    into unmapped memory if one ever did not.
+*/
+static void ReportColorModule(HMODULE module) {
+    wchar_t path[MAX_PATH]{};
+    const wchar_t* name = L"an unnamed module";
+
+    if (GetModuleFileNameW(module, path, ARRAYSIZE(path))) {
+        const wchar_t* slash = wcsrchr(path, L'\\');
+        name = slash ? slash + 1 : path;
+    }
+
+    Wh_Log(L"this Premiere has no dvaui.dll; the color functions were found in "
+           L"%s, and the interface layer goes in there",
+           name);
+}
+
+// Defined with the window layer, far below; see SearchForColorModule.
+static bool HasFramedWindow();
+
+/*
+    Every module in the process, asked for the color functions. This is the
+    expensive half of the search, so it runs only from the two callers that
+    can afford it — after init, and after a settings change — and never from
+    the loader hook, which Premiere goes through hundreds of times while it
+    starts.
+
+    Failing does not close the search: until Premiere's UI is up, "nothing
+    carries them" only means the toolkit is not mapped yet. Once a framed
+    window is there, every module the UI needs is in, and a build that still
+    answers nothing is one this layer cannot reach — which is said once and
+    not asked again.
+*/
+static HMODULE SearchForColorModule() {
+    if (g_colorSearchClosed) {
+        return nullptr;
+    }
+
+    std::vector<HMODULE> modules;
+    DWORD error = 0;
+
+    if (!EnumerateProcessModules(&modules, &error)) {
+        Wh_Log(L"dvaui.dll is not loaded and the modules could not be "
+               L"enumerated (%u), so the interface layer has nothing to look "
+               L"through",
+               error);
+        return nullptr;
+    }
+
+    HMODULE found = FindColorModuleIn(modules.data(), modules.size());
+
+    if (found) {
+        ReportColorModule(found);
+        return found;
+    }
+
+    if (HasFramedWindow()) {
+        InterlockedExchange(&g_colorSearchClosed, TRUE);
+        ReportNoColorModule();
+    }
+
+    return nullptr;
+}
+
+/*
+    `justLoaded` is the module the loader hook has just mapped, which costs
+    three lookups to ask and covers a renamed toolkit that arrives late.
+    `maySearchProcess` is for the callers that can afford to walk every module
+    in the process; see SearchForColorModule.
+*/
+static bool HookLoadedModules(HMODULE justLoaded = nullptr,
+                              bool maySearchProcess = false) {
     if (!WantsPremiereHooks()) {
         return false;
     }
@@ -2574,6 +2804,15 @@ static bool HookLoadedModules() {
     bool registered = false;
 
     HMODULE dvaui = GetModuleHandleW(L"dvaui.dll");
+
+    if (!dvaui && !g_dvauiHooked && QualifiesAsColorModule(justLoaded)) {
+        dvaui = justLoaded;
+        ReportColorModule(dvaui);
+    }
+
+    if (!dvaui && !g_dvauiHooked && maySearchProcess) {
+        dvaui = SearchForColorModule();
+    }
 
     if (dvaui && Claim(&g_dvauiHooked)) {
         HookCount count;
@@ -2642,7 +2881,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD flags) {
         returned: it usually arrives as a dependency of something else. Once
         both are hooked, this is a couple of plain reads.
     */
-    bool registered = (!g_dvauiHooked || !g_uifHooked) && HookLoadedModules();
+    bool registered =
+        (!g_dvauiHooked || !g_uifHooked) && HookLoadedModules(module);
 
     // And d3d12, whose CreateDevice is how the monitor layer gets in.
     registered = HookD3D12CreateDevice() || registered;
@@ -3956,6 +4196,27 @@ static BOOL CALLBACK ApplyToTopLevel(HWND hwnd, LPARAM) {
 
 static void ApplyThemeToExistingWindows() {
     EnumWindows(ApplyToTopLevel, 0);
+}
+
+static BOOL CALLBACK NoteFramedWindow(HWND hwnd, LPARAM found) {
+    if (!IsOwnWindow(hwnd) ||
+        !(GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_CAPTION)) {
+        return TRUE;
+    }
+
+    *reinterpret_cast<bool*>(found) = true;
+    return FALSE;  // one is the whole answer
+}
+
+/*
+    Whether this process already has a window with a frame, which Premiere's
+    main window and its dialogs have and its tooltips and menu popups do not.
+    It is how the mod tells "the UI is up" from "Premiere is still starting".
+*/
+static bool HasFramedWindow() {
+    bool found = false;
+    EnumWindows(NoteFramedWindow, reinterpret_cast<LPARAM>(&found));
+    return found;
 }
 
 // ============================================================================
@@ -6701,7 +6962,7 @@ void Wh_ModAfterInit() {
         times while it starts, so in practice the next one catches it, but the
         race closes here for nothing.
     */
-    bool registered = HookLoadedModules();
+    bool registered = HookLoadedModules(nullptr, true);
 
     registered = HookD3D12CreateDevice() || registered;
 
@@ -6743,6 +7004,16 @@ void Wh_ModUninit() {
            static_cast<unsigned>(used), static_cast<unsigned>(kSlotCount),
            std::popcount(static_cast<uint64_t>(g_bluesRecolored)),
            static_cast<unsigned>(kInterfaceBlueCount));
+
+    /*
+        A whole session with nothing hooked, and a UI that did come up: every
+        module loaded by then was asked in Wh_ModAfterInit, and every one that
+        arrived through the loader hook after it. Without a window of its own
+        the process never got far enough to tell, so nothing is claimed.
+    */
+    if (WantsPremiereHooks() && !g_dvauiHooked && HasFramedWindow()) {
+        ReportNoColorModule();
+    }
 
     /*
         The layer went in but never recognized a surround — a Premiere that
@@ -6822,7 +7093,7 @@ void Wh_ModSettingsChanged() {
         the export is not hooked when the switch is off, and nothing else
         would come back to it.
     */
-    bool registered = HookLoadedModules();
+    bool registered = HookLoadedModules(nullptr, true);
 
     registered = HookD3D12CreateDevice() || registered;
     registered = InstallMonitorBandFromProbe() || registered;
