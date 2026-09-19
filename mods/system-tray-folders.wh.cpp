@@ -82,7 +82,8 @@ haven't been tested.
       $name: Folder glyph
       $description: >-
         Optional. A Segoe Fluent Icons code point such as U+E7FC, or any short
-        text/emoji. Leave empty to show a preview of the icons in the folder.
+        text/emoji. Leave empty to show a preview of the icons in the folder,
+        or a folder icon when there's nothing to preview.
     - icons: [""]
       $name: Icons
       $description: >-
@@ -115,6 +116,7 @@ haven't been tested.
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -606,6 +608,7 @@ void ReadIconInfo(IconInfo& info) {
 struct Tile {
     Controls::Button button{nullptr};
     winrt::event_token clickToken{};
+    std::optional<std::wstring> contentGlyph;
 };
 
 struct OverflowState : std::enable_shared_from_this<OverflowState> {
@@ -626,6 +629,10 @@ struct OverflowState : std::enable_shared_from_this<OverflowState> {
 
     std::vector<Tile> folderTiles;
     Tile backTile;
+    double tileWidth = 0;
+    double tileHeight = 0;
+
+    std::unordered_map<void*, IconInfo> iconCache;
 
     int openFolder = -1;
     bool settingItemsSource = false;
@@ -639,7 +646,7 @@ struct OverflowState : std::enable_shared_from_this<OverflowState> {
     g_states{std::in_place};
 std::atomic<DWORD> g_overflowThreadId;
 
-void Rebuild(OverflowState& state, bool logIcons = false);
+void Rebuild(OverflowState& state, bool opening = false);
 void SubscribeOriginalIcons(OverflowState& state,
                             wfc::IObservableVector<wf::IInspectable> icons);
 
@@ -700,11 +707,7 @@ void GetItemSize(OverflowState& state, double* width, double* height) {
     }
 }
 
-Controls::Button CreateTileButton(OverflowState& state) {
-    double width;
-    double height;
-    GetItemSize(state, &width, &height);
-
+Controls::Button CreateTileButton(double width, double height) {
     std::wstring xaml = LR"(
 <Button xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -827,24 +830,9 @@ void ClearTiles(OverflowState& state) {
 }
 
 Tile& EnsureFolderTile(OverflowState& state, int folder) {
-    if (state.folderTiles.size() < g_settings.folders.size()) {
-        state.folderTiles.resize(g_settings.folders.size());
-    }
-
     Tile& tile = state.folderTiles[folder];
     if (!tile.button) {
-        double width;
-        double height;
-        GetItemSize(state, &width, &height);
-        double itemSize = std::min(width, height);
-
-        tile.button = CreateTileButton(state);
-        const auto& glyph = g_settings.folders[folder].glyph;
-        if (!glyph.empty()) {
-            tile.button.Content(CreateGlyph(glyph, std::max(itemSize * 0.4, 8.0)));
-        } else {
-            tile.button.Content(CreateFolderPreview(itemSize));
-        }
+        tile.button = CreateTileButton(state.tileWidth, state.tileHeight);
         tile.clickToken = tile.button.Click(
             [weakState = state.weak_from_this(), folder](
                 wf::IInspectable const&, RoutedEventArgs const&) {
@@ -861,13 +849,10 @@ Tile& EnsureFolderTile(OverflowState& state, int folder) {
 Tile& EnsureBackTile(OverflowState& state) {
     Tile& tile = state.backTile;
     if (!tile.button) {
-        double width;
-        double height;
-        GetItemSize(state, &width, &height);
-
-        tile.button = CreateTileButton(state);
-        tile.button.Content(
-            CreateGlyph(L"\uE72B", std::max(std::min(width, height) * 0.35, 8.0)));
+        tile.button = CreateTileButton(state.tileWidth, state.tileHeight);
+        tile.button.Content(CreateGlyph(
+            L"\uE72B",
+            std::max(std::min(state.tileWidth, state.tileHeight) * 0.35, 8.0)));
         tile.clickToken = tile.button.Click(
             [weakState = state.weak_from_this()](
                 wf::IInspectable const&, RoutedEventArgs const&) {
@@ -881,11 +866,27 @@ Tile& EnsureBackTile(OverflowState& state) {
     return tile;
 }
 
-void UpdateFolderTile(Tile& tile,
+void UpdateFolderTile(OverflowState& state,
+                      Tile& tile,
                       FolderConfig const& folder,
                       std::vector<Media::ImageSource> const& images,
                       int iconCount) {
-    if (folder.glyph.empty()) {
+    std::wstring glyph = folder.glyph;
+    if (glyph.empty() && images.empty()) {
+        glyph = L"\uE8B7";
+    }
+
+    if (tile.contentGlyph != glyph) {
+        double itemSize = std::min(state.tileWidth, state.tileHeight);
+        if (glyph.empty()) {
+            tile.button.Content(CreateFolderPreview(itemSize));
+        } else {
+            tile.button.Content(CreateGlyph(glyph, std::max(itemSize * 0.4, 8.0)));
+        }
+        tile.contentGlyph = glyph;
+    }
+
+    if (glyph.empty()) {
         auto previews = tile.button.Content().as<Controls::Panel>().Children();
         for (uint32_t i = 0; i < previews.Size(); i++) {
             previews.GetAt(i).as<Controls::Image>().Source(
@@ -959,7 +960,7 @@ void EnsureItemsSource(OverflowState& state) {
     }
 }
 
-void Rebuild(OverflowState& state, bool logIcons) {
+void Rebuild(OverflowState& state, bool opening) {
     if (state.rebuilding || state.detaching || state.itemsSourceOverridden ||
         g_unloading || !state.displayed) {
         return;
@@ -983,23 +984,42 @@ void Rebuild(OverflowState& state, bool logIcons) {
         }
 
         const auto& folders = g_settings.folders;
-        if (state.folderTiles.size() != folders.size()) {
+        double tileWidth;
+        double tileHeight;
+        GetItemSize(state, &tileWidth, &tileHeight);
+        if (state.folderTiles.size() != folders.size() ||
+            state.tileWidth != tileWidth || state.tileHeight != tileHeight) {
             ClearTiles(state);
             state.folderTiles.resize(folders.size());
+            state.tileWidth = tileWidth;
+            state.tileHeight = tileHeight;
         }
 
+        if (opening) {
+            state.iconCache.clear();
+        }
+        std::unordered_map<void*, IconInfo> iconCache;
         std::vector<IconInfo> icons;
         uint32_t count = state.originalIcons.Size();
         icons.reserve(count);
         for (uint32_t i = 0; i < count; i++) {
+            auto viewModel = state.originalIcons.GetAt(i);
+            void* key = winrt::get_abi(viewModel);
             IconInfo info;
-            info.viewModel = state.originalIcons.GetAt(i);
-            ReadIconInfo(info);
+            if (auto it = state.iconCache.find(key);
+                it != state.iconCache.end()) {
+                info = it->second;
+            } else {
+                info.viewModel = viewModel;
+                ReadIconInfo(info);
+            }
             info.folder = FindFolderForIcon({ToLower(info.appName),
                                              ToLower(info.toolTip),
                                              ToLower(info.name)});
+            iconCache.emplace(key, info);
             icons.push_back(std::move(info));
         }
+        state.iconCache = std::move(iconCache);
 
         std::vector<int> folderCounts(folders.size());
         for (const auto& icon : icons) {
@@ -1014,7 +1034,7 @@ void Rebuild(OverflowState& state, bool logIcons) {
             state.openFolder = -1;
         }
 
-        if (logIcons) {
+        if (opening) {
             for (const auto& icon : icons) {
                 Wh_Log(L"Icon: app=\"%s\" tooltip=\"%s\" name=\"%s\" folder=%d",
                        icon.appName.c_str(),
@@ -1054,7 +1074,8 @@ void Rebuild(OverflowState& state, bool logIcons) {
                     }
                 }
                 Tile& tile = EnsureFolderTile(state, (int)k);
-                UpdateFolderTile(tile, folders[k], images, folderCounts[k]);
+                UpdateFolderTile(state, tile, folders[k], images,
+                                 folderCounts[k]);
                 folderItems.push_back(tile.button);
             }
 
@@ -1202,20 +1223,6 @@ void Attach(OverflowState& state,
         });
     state.itemsSourceCallbackRegistered = true;
 
-    EnumThreadWindows(
-        GetCurrentThreadId(),
-        [](HWND hWnd, LPARAM lParam) -> BOOL {
-            WCHAR className[64];
-            if (GetClassName(hWnd, className, ARRAYSIZE(className)) &&
-                _wcsicmp(className, L"TopLevelWindowForOverflowXamlIsland") ==
-                    0) {
-                *(HWND*)lParam = hWnd;
-                return FALSE;
-            }
-            return TRUE;
-        },
-        (LPARAM)&state.islandWindow);
-
     auto icons = GetOverflowIcons(overflow);
     state.itemsSourceOverridden = itemsControl.ItemsSource() != icons;
     SubscribeOriginalIcons(state, icons);
@@ -1319,10 +1326,6 @@ void Detach(OverflowState& state) {
         }
     });
 
-    if (error) {
-        std::rethrow_exception(error);
-    }
-
     state.overflow = nullptr;
     state.itemsControl = nullptr;
     state.displayed = nullptr;
@@ -1334,6 +1337,13 @@ void Detach(OverflowState& state) {
     state.itemsSourceCallbackToken = 0;
     state.openFolder = -1;
     state.islandWindow = nullptr;
+    state.iconCache.clear();
+    state.tileWidth = 0;
+    state.tileHeight = 0;
+
+    if (error) {
+        std::rethrow_exception(error);
+    }
 }
 
 std::shared_ptr<OverflowState> FindState(void* manager) {
@@ -1355,24 +1365,32 @@ std::shared_ptr<OverflowState> EnsureAttached(void* manager) {
         return nullptr;
     }
 
+    auto state = FindState(manager);
+    if (state && state->detaching) {
+        return nullptr;
+    }
+    if (state && state->attached) {
+        auto overflow = state->overflow.get();
+        auto itemsControl = state->itemsControl.get();
+        if (overflow && itemsControl && overflow.XamlRoot()) {
+            return state;
+        }
+    }
+
     auto overflow = FindOverflowControl(manager);
     if (!overflow) {
         return nullptr;
     }
 
     auto states = *g_states;
-    for (auto& state : states) {
-        if (state->manager != manager && !state->detaching &&
-            !state->overflow.get()) {
-            Detach(*state);
-            std::erase(*g_states, state);
+    for (auto& other : states) {
+        if (other->manager != manager && !other->detaching &&
+            !other->overflow.get()) {
+            std::erase(*g_states, other);
+            Detach(*other);
         }
     }
 
-    auto state = FindState(manager);
-    if (state && state->detaching) {
-        return nullptr;
-    }
     overflow.ApplyTemplate();
     auto itemsControl =
         FindDescendantByName(overflow, L"OverflowItemsControl")
@@ -1433,6 +1451,38 @@ std::shared_ptr<OverflowState> EnsureAttached(void* manager) {
     return state;
 }
 
+SRWLOCK g_pendingSettingsLock = SRWLOCK_INIT;
+std::optional<Settings> g_pendingSettings;
+
+void ApplyPendingSettings() {
+    std::optional<Settings> settings;
+    AcquireSRWLockExclusive(&g_pendingSettingsLock);
+    settings.swap(g_pendingSettings);
+    ReleaseSRWLockExclusive(&g_pendingSettingsLock);
+    if (!settings || g_unloading) {
+        return;
+    }
+
+    g_settings = std::move(*settings);
+    auto states = *g_states;
+    for (auto& state : states) {
+        if (state->detaching) {
+            continue;
+        }
+        try {
+            if (g_settings.folders.empty()) {
+                std::erase(*g_states, state);
+                Detach(*state);
+            } else if (state->attached) {
+                state->openFolder = -1;
+                Rebuild(*state);
+            }
+        } catch (...) {
+            Wh_Log(L"Applying settings failed");
+        }
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Hooks
 
@@ -1448,6 +1498,7 @@ void WINAPI OverflowXamlIslandManager_InitializeIfNeeded_Hook(void* pThis) {
     }
 
     try {
+        ApplyPendingSettings();
         EnsureAttached(pThis);
     } catch (...) {
         Wh_Log(L"InitializeIfNeeded: attach failed");
@@ -1493,11 +1544,14 @@ void WINAPI OverflowXamlIslandManager_Show_Hook(void* pThis,
                                                 int inputDeviceKind) {
     Wh_Log(L"Show %d,%d kind=%d", pt.x, pt.y, inputDeviceKind);
 
+    std::shared_ptr<OverflowState> state;
     try {
-        if (auto state = EnsureAttached(pThis)) {
+        ApplyPendingSettings();
+        state = EnsureAttached(pThis);
+        if (state) {
             // Always open at the top level, and pick up renamed icons.
             state->openFolder = -1;
-            Rebuild(*state, /*logIcons=*/true);
+            Rebuild(*state, /*opening=*/true);
             if (auto overflow = state->overflow.get()) {
                 overflow.UpdateLayout();
             }
@@ -1507,6 +1561,31 @@ void WINAPI OverflowXamlIslandManager_Show_Hook(void* pThis,
     }
 
     OverflowXamlIslandManager_Show_Original(pThis, pt, inputDeviceKind);
+
+    if (state && state->attached) {
+        struct Param {
+            HWND window;
+            int count;
+        } param{};
+        EnumThreadWindows(
+            GetCurrentThreadId(),
+            [](HWND hWnd, LPARAM lParam) -> BOOL {
+                auto& param = *(Param*)lParam;
+                WCHAR className[64];
+                if (IsWindowVisible(hWnd) &&
+                    GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                    _wcsicmp(className,
+                             L"TopLevelWindowForOverflowXamlIsland") == 0) {
+                    param.window = hWnd;
+                    param.count++;
+                }
+                return TRUE;
+            },
+            (LPARAM)&param);
+        if (param.count == 1) {
+            state->islandWindow = param.window;
+        }
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1565,36 +1644,48 @@ bool RunFromWindowThread(HWND hWnd, std::function<void()> proc) {
     return param.succeeded;
 }
 
-HWND GetOverflowThreadWindow() {
-    HWND result = nullptr;
+std::vector<HWND> GetOverflowThreadWindows() {
+    std::vector<HWND> windows;
     if (DWORD threadId = g_overflowThreadId) {
         EnumThreadWindows(
             threadId,
             [](HWND hWnd, LPARAM lParam) -> BOOL {
-                *(HWND*)lParam = hWnd;
-                return FALSE;
-            },
-            (LPARAM)&result);
-    }
-
-    if (!result) {
-        EnumWindows(
-            [](HWND hWnd, LPARAM lParam) -> BOOL {
-                DWORD processId;
-                WCHAR className[32];
-                if (GetWindowThreadProcessId(hWnd, &processId) &&
-                    processId == GetCurrentProcessId() &&
-                    GetClassName(hWnd, className, ARRAYSIZE(className)) &&
-                    _wcsicmp(className, L"Shell_TrayWnd") == 0) {
-                    *(HWND*)lParam = hWnd;
-                    return FALSE;
-                }
+                ((std::vector<HWND>*)lParam)->push_back(hWnd);
                 return TRUE;
             },
-            (LPARAM)&result);
+            (LPARAM)&windows);
     }
 
-    return result;
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD processId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &processId) &&
+                processId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                ((std::vector<HWND>*)lParam)->push_back(hWnd);
+                return FALSE;
+            }
+            return TRUE;
+        },
+        (LPARAM)&windows);
+
+    return windows;
+}
+
+bool RunFromOverflowThread(std::function<void()> const& proc) {
+    for (HWND hWnd : GetOverflowThreadWindows()) {
+        bool ran = false;
+        bool succeeded = RunFromWindowThread(hWnd, [&ran, &proc] {
+            ran = true;
+            proc();
+        });
+        if (ran) {
+            return succeeded;
+        }
+    }
+    return false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1860,15 +1951,10 @@ void Wh_ModBeforeUninit() {
 
     g_unloading = true;
 
-    HWND hWnd = GetOverflowThreadWindow();
-    if (!hWnd) {
-        Wh_Log(L"No window for overflow cleanup");
-        return;
-    }
-
-    if (!RunFromWindowThread(
-        hWnd,
-        [] {
+    if (!RunFromOverflowThread([] {
+            if (!g_states) {
+                return;
+            }
             auto states = std::move(*g_states);
             g_states.reset();
             for (auto& state : states) {
@@ -1882,7 +1968,7 @@ void Wh_ModBeforeUninit() {
             g_configurationMember = nullptr;
             g_overflowIconsMember = nullptr;
         })) {
-        Wh_Log(L"Overflow cleanup could not complete");
+        Wh_Log(L"Overflow cleanup couldn't run on the tray thread");
     }
 }
 
@@ -1890,48 +1976,11 @@ void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
     Settings settings = LoadSettings();
+    AcquireSRWLockExclusive(&g_pendingSettingsLock);
+    g_pendingSettings = std::move(settings);
+    ReleaseSRWLockExclusive(&g_pendingSettingsLock);
 
-    HWND hWnd = GetOverflowThreadWindow();
-    if (hWnd && RunFromWindowThread(
-        hWnd,
-        [settings = std::move(settings)]() mutable {
-            if (g_unloading) {
-                return;
-            }
-
-            bool glyphsChanged =
-                g_settings.folders.size() != settings.folders.size();
-            for (size_t i = 0; !glyphsChanged && i < settings.folders.size();
-                 i++) {
-                glyphsChanged =
-                    g_settings.folders[i].glyph != settings.folders[i].glyph;
-            }
-
-            g_settings = std::move(settings);
-            auto states = *g_states;
-            for (auto& state : states) {
-                if (state->detaching) {
-                    continue;
-                }
-                try {
-                    if (g_settings.folders.empty()) {
-                        Detach(*state);
-                        std::erase(*g_states, state);
-                    } else if (state->attached) {
-                        if (glyphsChanged) {
-                            ClearTiles(*state);
-                        }
-                        state->openFolder = -1;
-                        Rebuild(*state);
-                    }
-                } catch (...) {
-                    Wh_Log(L"Applying settings failed");
-                }
-            }
-        })) {
-        return;
+    if (!RunFromOverflowThread(ApplyPendingSettings)) {
+        Wh_Log(L"Settings will be applied when the flyout opens");
     }
-
-    Wh_Log(L"Applying settings without the overflow thread");
-    g_settings = LoadSettings();
 }
