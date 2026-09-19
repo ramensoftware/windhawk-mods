@@ -249,7 +249,6 @@ constexpr wchar_t kAnimatedIconClass[] = L"Microsoft.UI.Xaml.Controls.AnimatedIc
 
 #include <windows.h>
 
-#include <highlevelmonitorconfigurationapi.h>
 #include <lowlevelmonitorconfigurationapi.h>
 #include <physicalmonitorenumerationapi.h>
 
@@ -257,19 +256,13 @@ constexpr wchar_t kAnimatedIconClass[] = L"Microsoft.UI.Xaml.Controls.AnimatedIc
 #include <wbemidl.h>
 
 #include <algorithm>
-#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstdarg>
 #include <cwctype>
 #include <functional>
 #include <map>
-#include <memory>
-#include <mutex>
-#include <string>
-#include <thread>
 #include <utility>
-#include <vector>
 
 namespace brightness {
 
@@ -856,6 +849,16 @@ class Engine {
             if (doRefresh) {
                 RefreshValues();
                 NotifyChanged(false);
+
+                // Opening the panel is the moment a missing slider is
+                // noticed, and it is also the only regular event this engine
+                // gets -- nothing polls. So that is where an expired DDC/CI
+                // verdict is retried, and only if one has actually expired,
+                // which is a map lookup per display in the common case.
+                if (AnyDdcRetryDue()) {
+                    Rescan();
+                    NotifyChanged(true);
+                }
             }
         }
 
@@ -1217,6 +1220,45 @@ class Engine {
         return TRUE;
     }
 
+    // How long to leave a failed DDC/CI probe alone: 30s, then a minute, then
+    // doubling to a 16-minute ceiling. Short enough that a monitor which was
+    // merely asleep comes back on its own; long enough that a monitor which
+    // genuinely has no DDC/CI is not costing seconds per rescan.
+    static std::chrono::steady_clock::duration DdcRetryDelay(int failures) {
+        int shift = failures - 1;
+        if (shift < 0) {
+            shift = 0;
+        } else if (shift > 5) {
+            shift = 5;
+        }
+        return std::chrono::seconds(30) * (1 << shift);
+    }
+
+    // Whether any display currently written off as uncontrollable is due
+    // another probe. Worker thread.
+    bool AnyDdcRetryDue() {
+        const std::chrono::steady_clock::time_point now =
+            std::chrono::steady_clock::now();
+        std::vector<Display> snapshot;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            snapshot = displays_;
+        }
+        for (const Display& d : snapshot) {
+            if (d.transport != Transport::None) {
+                continue;
+            }
+            std::map<std::wstring, DdcVerdict>::const_iterator known =
+                ddcAnswered_.find(d.stableId);
+            if (known != ddcAnswered_.end() && !known->second.answered &&
+                (now - known->second.taken) >=
+                    DdcRetryDelay(known->second.failures)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     void Rescan() {
         ReleasePhysicalMonitors();
 
@@ -1272,15 +1314,33 @@ class Engine {
             // a laptop it fails fast (ERROR_GEN_FAILURE) for the internal one.
             // Probing DDC/CI is not free: a monitor or dock that does not
             // answer can take seconds to fail, and that cost is paid again on
-            // every rescan -- every hotplug, every WM_DISPLAYCHANGE. A display
-            // that did not answer is not going to start, so remember the
-            // verdict per EDID id for the life of the session.
-            std::map<std::wstring, bool>::const_iterator known =
+            // every rescan -- every hotplug, every WM_DISPLAYCHANGE. So a
+            // failure is remembered per EDID id.
+            //
+            // Remembered, not final. "Did not answer" is not always a property
+            // of the monitor: one asleep at sign-in, behind a dock or KVM that
+            // is still enumerating, or switched to another input all fail the
+            // first probe and would then be written off as uncontrollable for
+            // the rest of the session -- no slider, and no way to get one back
+            // short of reloading the mod. So a failed verdict expires, on a
+            // delay that doubles each time, and a display that goes away drops
+            // its verdict entirely (below) so a replug starts over.
+            std::map<std::wstring, DdcVerdict>::const_iterator known =
                 ddcAnswered_.find(d.stableId);
+            const std::chrono::steady_clock::time_point now =
+                std::chrono::steady_clock::now();
+            bool probe = true;
+            if (known != ddcAnswered_.end() && !known->second.answered) {
+                probe = (now - known->second.taken) >=
+                        DdcRetryDelay(known->second.failures);
+            }
             bool attached = false;
-            if (known == ddcAnswered_.end() || known->second) {
+            if (probe) {
                 attached = TryAttachDdcCi(h, &d);
-                ddcAnswered_[d.stableId] = attached;
+                DdcVerdict& v = ddcAnswered_[d.stableId];
+                v.failures = attached ? 0 : v.failures + 1;
+                v.answered = attached;
+                v.taken = now;
             }
 
             if (attached) {
@@ -1312,6 +1372,20 @@ class Engine {
                       }
                       return a.rect.top < b.rect.top;
                   });
+
+        // A display that is gone takes its DDC/CI verdict with it, so
+        // unplugging and replugging a monitor that failed its first probe
+        // gets a fresh one rather than inheriting the old answer.
+        for (auto it = ddcAnswered_.begin(); it != ddcAnswered_.end();) {
+            bool present = false;
+            for (const Display& d : found) {
+                if (d.stableId == it->first) {
+                    present = true;
+                    break;
+                }
+            }
+            it = present ? std::next(it) : ddcAnswered_.erase(it);
+        }
 
         {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -1423,8 +1497,15 @@ class Engine {
     std::thread worker_;
     std::thread eventThread_;
     std::map<std::wstring, std::chrono::steady_clock::time_point> lastRequest_;
+    // What a DDC/CI probe last said about a display, and when.
+    //
     // Worker thread only, so it needs no lock.
-    std::map<std::wstring, bool> ddcAnswered_;
+    struct DdcVerdict {
+        bool answered = false;
+        int failures = 0;
+        std::chrono::steady_clock::time_point taken{};
+    };
+    std::map<std::wstring, DdcVerdict> ddcAnswered_;
     FollowMode followMode_ = FollowMode::Off;
     std::atomic<bool> stopping_{false};
     std::mutex mutex_;
@@ -1497,8 +1578,19 @@ void StartEngineAsync() {
     g_engineStarter.emplace([] { StartEngineIfNeeded(); });
 }
 
-// Guards against double-injection: the visual tree reports the Control Center
-// being built every time it opens, and it is rebuilt on each open.
+// How long a ControlCenterView lives, since three things here depend on it and
+// they used to each say something different.
+//
+// It is not built at shell start, and it is not rebuilt on every open. It is
+// built the first time Quick Settings is shown and then kept, shown and hidden,
+// across subsequent opens -- which is why a second open is instant and why the
+// first layout pass a live view runs is the one on *close*. Leave it closed for
+// a while, though, and the shell discards it; the next open constructs a new
+// one. That is the reported "flicker after a while, none if I just opened it",
+// and it is why the injection bookkeeping has to prune dead trees rather than
+// assume one view forever.
+//
+// Guards against double-injection within one of those constructions.
 std::atomic<bool> g_injecting{false};
 
 // Injection is retried on every layout pass until it takes, so the diagnostic
@@ -1531,6 +1623,11 @@ struct Injection {
     };
     std::vector<Binding> bindings;
 
+    // The display ids this panel's rows were built from, in order, including
+    // the ones that got a "not supported" label rather than a slider. Compared
+    // against the live list on every refresh so a panel that missed its
+    // structural rebuild can notice and redo itself.
+    std::vector<std::wstring> builtFor;
 };
 
 bool g_hideStockBrightness = true;
@@ -1929,6 +2026,12 @@ void PopulateSliderPanel(wuxc::StackPanel const& panel, Injection& injection) {
     std::vector<brightness::Display> displays = g_engine->GetDisplays();
     Wh_Log(L"Building panel for %zu display(s)", displays.size());
 
+    injection.builtFor.clear();
+    injection.builtFor.reserve(displays.size());
+    for (const brightness::Display& d : displays) {
+        injection.builtFor.push_back(d.stableId);
+    }
+
     for (const brightness::Display& d : displays) {
         std::wstring displayName = d.name;
         // One fallback for both halves of the row. Showing a thumb at 50%
@@ -2231,8 +2334,9 @@ bool InjectInto(wux::FrameworkElement const& l1Grid) {
 
     {
         std::lock_guard<std::mutex> lock(g_injectionsMutex);
-        // The Control Center is rebuilt on every open, so prune the entries
-        // whose tree has already been torn down by the shell.
+        // The shell discards an idle Control Center and builds a new one on
+        // the next open, so prune the entries whose tree it has already torn
+        // down.
         std::erase_if(*g_injections, [](const Injection& i) {
             return !i.grid.get() || !i.panel.get();
         });
@@ -2465,6 +2569,21 @@ bool RunOnXamlThread(std::function<void()> fn) {
     return param.ran;
 }
 
+// Rebuilds one panel's rows from the current display list. Caller holds
+// g_injectionsMutex; XAML thread.
+bool RebuildOneInjection(Injection& injection) {
+    auto panel = injection.panel.get();
+    if (!panel) {
+        return false;
+    }
+    // Detach before discarding the controls the handlers point at.
+    injection.revokers.clear();
+    injection.bindings.clear();
+    panel.Children().Clear();
+    PopulateSliderPanel(panel, injection);
+    return true;
+}
+
 // Pushes freshly read hardware values into the existing sliders. XAML thread.
 void ApplyRefreshedValues() try {
     if (!g_engine) {
@@ -2472,8 +2591,38 @@ void ApplyRefreshedValues() try {
     }
     std::vector<brightness::Display> displays = g_engine->GetDisplays();
 
+    std::vector<std::wstring> currentIds;
+    currentIds.reserve(displays.size());
+    for (const brightness::Display& d : displays) {
+        currentIds.push_back(d.stableId);
+    }
+
     std::lock_guard<std::mutex> lock(g_injectionsMutex);
     for (Injection& injection : *g_injections) {
+        // A panel whose rows do not match the current displays never got its
+        // structural rebuild, and no amount of refreshing will fix that: this
+        // function only writes into bindings that already exist, and a panel
+        // with none stays empty forever.
+        //
+        // The usual way to end up here is the early-inject path. It injects
+        // before the engine has enumerated, on purpose, and relies on the
+        // enumeration's NotifyChanged(true) to fill the panel in -- but that
+        // goes through RunOnXamlThread, which can fail for reasons that have
+        // nothing to do with us (no top-level window on the XAML thread at
+        // that instant, SetWindowsHookEx refused). Nothing else retried it,
+        // so the panel stayed empty until the next hotplug.
+        //
+        // Every open refreshes, so checking here costs one id comparison and
+        // recovers on the next open.
+        if (injection.builtFor != currentIds) {
+            if (RebuildOneInjection(injection)) {
+                Wh_Log(L"Panel was built for %zu display(s) and there are now "
+                       L"%zu; rebuilt it",
+                       injection.builtFor.size(), currentIds.size());
+            }
+            continue;
+        }
+
         for (Injection::Binding& binding : injection.bindings) {
             auto slider = binding.slider.get();
             if (!slider) {
@@ -2516,16 +2665,9 @@ void RebuildInjectedPanels() try {
     std::lock_guard<std::mutex> lock(g_injectionsMutex);
     size_t rebuilt = 0;
     for (Injection& injection : *g_injections) {
-        auto panel = injection.panel.get();
-        if (!panel) {
-            continue;
+        if (RebuildOneInjection(injection)) {
+            ++rebuilt;
         }
-        // Detach before discarding the controls the handlers point at.
-        injection.revokers.clear();
-        injection.bindings.clear();
-        panel.Children().Clear();
-        PopulateSliderPanel(panel, injection);
-        ++rebuilt;
     }
     Wh_Log(L"Rebuilt %zu panel(s) after a display change", rebuilt);
 } catch (...) {
@@ -2780,10 +2922,11 @@ bool TryInject(wux::DependencyObject const& controlCenterView) {
     }
 }
 
-// The Control Center is built once at shell start and merely shown and hidden
-// afterwards, so by the time the view is reported its tree is normally already
-// complete -- inject straight away. Waiting on a layout pass instead meant
-// waiting until the panel was next *closed*, which is the first layout it runs.
+// By the time the view is reported its tree is normally already complete, so
+// inject straight away. Waiting on a layout pass instead meant waiting until
+// the panel was next *closed*: a view the shell is keeping rather than
+// rebuilding runs no layout while it sits open. The comment on g_injecting
+// has the lifetime in full.
 // Loaded/LayoutUpdated remain as retries for the case where it really is not
 // ready yet; both are revoked as soon as one succeeds.
 void AttachInjector(wux::FrameworkElement const& view) {
@@ -2849,11 +2992,16 @@ void AttachInjector(wux::FrameworkElement const& view) {
 //   * It must run after the view is fully constructed. IComponentConnector::
 //     Connect hands over the same element but runs inside InitializeComponent,
 //     and merely taking a reference there destroyed the half-built view.
-//   * It must not be inside a layout pass. Walking the tree from LayoutUpdated
-//     ended in a fastfail.
+//   * A third constraint was recorded -- that it must not run inside a layout
+//     pass, because walking the tree from LayoutUpdated ended in a fastfail --
+//     and it is doubtful. That was measured on the diagnostics build, whose
+//     connection loop produces the identical 0xc0000409 for an entirely
+//     unrelated reason (DEVELOPING.md spells that one out), so the
+//     attribution may well have been wrong. The retry paths above do walk the
+//     tree from LayoutUpdated and have not reproduced it.
 //
-// OnGotFocus satisfies all three: the flyout has been built and is taking
-// focus. OnApplyTemplate would have been the obvious choice and is never
+// OnGotFocus satisfies both of the confirmed ones: the flyout has been built
+// and is taking focus. OnApplyTemplate would have been the obvious choice and is never
 // called at all -- ControlCenterView is compiled XAML with an
 // InitializeComponent, so no ControlTemplate is ever applied to it.
 
@@ -3000,9 +3148,12 @@ int WINAPI ControlCenterView_OnGotFocus_Hook(void* pThis, void* args) {
             return ret;
         }
 
-        // Here, and nowhere earlier, is where the engine starts. It used to
-        // start as soon as any XAML window existed in the process, which on a
-        // build that hosts the Control Center elsewhere meant a WMI
+        // A backstop for starting the engine, not the only place it starts:
+        // the Connect tick and the discovery hook both get there first when
+        // they fire, and StartEngineAsync is idempotent. What matters is that
+        // every one of those gates is "a Control Center exists in this
+        // process". The engine used to start as soon as any XAML window did,
+        // which on a build that hosts the Control Center elsewhere meant a WMI
         // connection, a DDC/CI probe of every monitor and two threads running
         // permanently for a UI that would never appear.
         StartEngineAsync();
@@ -3023,7 +3174,35 @@ int WINAPI ControlCenterView_OnGotFocus_Hook(void* pThis, void* args) {
     return ret;
 }
 
-void InstallDiscoveryHooks(HMODULE controlCenter, bool applyNow) {
+// Whether this process has got as far as owning a window.
+//
+// Used to tell "the mod was just enabled into a running shell" from "the shell
+// is starting with the mod already on", which the module being mapped cannot
+// distinguish on its own. A ShellHost that has not reached its entry point has
+// no top-level window; one that is showing a taskbar has several.
+bool ProcessHasTopLevelWindow() {
+    struct Search {
+        DWORD pid;
+        bool found;
+    } search{GetCurrentProcessId(), false};
+
+    EnumWindows(
+        [](HWND hwnd, LPARAM param) -> BOOL {
+            auto* s = reinterpret_cast<Search*>(param);
+            DWORD pid = 0;
+            GetWindowThreadProcessId(hwnd, &pid);
+            if (pid == s->pid) {
+                s->found = true;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&search));
+    return search.found;
+}
+
+void InstallDiscoveryHooks(HMODULE controlCenter, bool applyNow,
+                           bool startEngine) {
     if (g_discoveryHooked.exchange(true)) {
         return;
     }
@@ -3079,11 +3258,19 @@ void InstallDiscoveryHooks(HMODULE controlCenter, bool applyNow) {
     // Control Center. ControlCenter.dll being loaded is a far tighter gate:
     // the module is present precisely where the panel can appear, and it is
     // mapped long before the flyout is first opened.
-    StartEngineAsync();
+    //
+    // startEngine is false for the one case where "mapped" does not imply "the
+    // host is up": see StartControlCenterWatch.
+    if (startEngine) {
+        StartEngineAsync();
+    }
 }
 
-// ControlCenter.dll is usually mapped before Wh_ModInit runs. When it is not,
-// it has to be caught at the moment it loads, before any of its code runs.
+// Enabling the mod into a running shell usually finds ControlCenter.dll
+// already mapped, and StartControlCenterWatch takes that path. A shell that is
+// starting does not have it yet -- it is pulled in by WinRT activation the
+// first time Quick Settings is opened -- so it has to be caught at the moment
+// it loads, before any of its code runs.
 //
 // The hook goes on kernelbase's LoadLibraryExW, not kernel32's.
 //
@@ -3098,11 +3285,25 @@ void InstallDiscoveryHooks(HMODULE controlCenter, bool applyNow) {
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 LoadLibraryExW_t LoadLibraryExW_Original;
 
+// LoadLibraryEx takes a module name as readily as a path, appends .dll itself,
+// and accepts forward slashes -- so the name has to be matched all three ways
+// or the load is missed for a caller that spells it differently. Same handling
+// as explorer-command-bar's.
+bool IsControlCenterDll(LPCWSTR path) {
+    const wchar_t* name = path;
+    for (const wchar_t* p = path; *p; ++p) {
+        if (*p == L'\\' || *p == L'/') {
+            name = p + 1;
+        }
+    }
+    return _wcsicmp(name, L"ControlCenter.dll") == 0 ||
+           _wcsicmp(name, L"ControlCenter") == 0;
+}
+
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR path, HANDLE file, DWORD flags) {
     HMODULE result = LoadLibraryExW_Original(path, file, flags);
     if (result && path && !g_discoveryHooked.load()) {
-        const wchar_t* name = wcsrchr(path, L'\\');
-        if (_wcsicmp(name ? name + 1 : path, L"ControlCenter.dll") == 0) {
+        if (IsControlCenterDll(path)) {
             // Resolved through the loader rather than trusting what came
             // back.
             //
@@ -3120,7 +3321,13 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR path, HANDLE file, DWORD flags) {
             // Applied immediately: this runs inside the load, before anything
             // in the DLL has executed, so there is no window in which the
             // host could build the view unhooked.
-            InstallDiscoveryHooks(module, /*applyNow=*/true);
+            //
+            // The engine starts here: a lazy load of this DLL is the host
+            // activating the Control Center, which is long past its own COM
+            // startup, and warming the engine now is what keeps the first open
+            // from arriving unpopulated.
+            InstallDiscoveryHooks(module, /*applyNow=*/true,
+                                  /*startEngine=*/true);
         }
     }
     return result;
@@ -3128,8 +3335,28 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR path, HANDLE file, DWORD flags) {
 
 void StartControlCenterWatch() {
     if (HMODULE module = GetModuleHandleW(L"ControlCenter.dll")) {
+        // Already mapped means one of two quite different things, and only a
+        // window tells them apart.
+        //
+        // Today it always means the mod was enabled into a running shell --
+        // ShellHost does not statically import this DLL, so at Wh_ModInit on a
+        // fresh start it is not there yet and the load hook below is what
+        // catches it. If a future build does import it statically, the loader
+        // maps it before the entry point, this branch would be taken on every
+        // cold start, and the engine's first CoCreateInstance would land ahead
+        // of the host's CoInitializeSecurity -- the fast-fail restart loop the
+        // comment above g_engineStarter describes. A process that has not run
+        // its entry point owns no window, so gate on that and leave the start
+        // to the Connect/OnGotFocus hooks, which cannot fire too early.
+        //
         // Windhawk arms what Wh_ModInit registers, so nothing to apply here.
-        InstallDiscoveryHooks(module, /*applyNow=*/false);
+        const bool hostIsUp = ProcessHasTopLevelWindow();
+        Wh_Log(L"ControlCenter.dll already mapped; host %ls",
+               hostIsUp ? L"is up, warming the engine"
+                        : L"is still starting, leaving the engine to the "
+                          L"view hooks");
+        InstallDiscoveryHooks(module, /*applyNow=*/false,
+                              /*startEngine=*/hostIsUp);
         return;
     }
 
@@ -3143,6 +3370,26 @@ void StartControlCenterWatch() {
     }
     WindhawkUtils::SetFunctionHook(target, LoadLibraryExW_Hook,
                                    &LoadLibraryExW_Original);
+}
+
+// Between the GetModuleHandleW above and Windhawk arming that hook -- which it
+// does only once Wh_ModInit returns -- a load of ControlCenter.dll passes
+// unseen, and being a one-shot the mod would then do nothing for the rest of
+// the session. The window is small, but closing it is one call, which is what
+// explorer-command-bar does with its own extension hooks.
+void RecheckControlCenterModule() {
+    if (g_discoveryHooked.load()) {
+        return;
+    }
+    if (HMODULE module = GetModuleHandleW(L"ControlCenter.dll")) {
+        Wh_Log(L"ControlCenter.dll arrived while hooks were being armed");
+        // Hooks are live by now, so this registration has to be applied by
+        // hand. The engine is gated the same way as in StartControlCenterWatch
+        // and for the same reason -- this still runs during injection, which
+        // on a starting shell is before the host has done its COM setup.
+        InstallDiscoveryHooks(module, /*applyNow=*/true,
+                              /*startEngine=*/ProcessHasTopLevelWindow());
+    }
 }
 
 }  // namespace
@@ -3197,9 +3444,12 @@ BOOL Wh_ModInit() {
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    // Nothing is started here on purpose. The engine waits until the Control
-    // Center is actually seen (see the OnGotFocus hook), so a process that
-    // never hosts one never pays for it.
+    // The engine still is not started here. It waits until a Control Center
+    // is actually seen, so a process that never hosts one never pays for it.
+    // This only closes the gap in which the module could have loaded while
+    // Windhawk was arming the hook.
+    RecheckControlCenterModule();
+
     g_shellWatcher.emplace();
     g_shellWatcher->Start();
 }
