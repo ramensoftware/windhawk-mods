@@ -1714,7 +1714,7 @@ public:
 
     void Start(AttemptFn attempt, AppliedFn applied,
                std::atomic<bool> const& unloading, int attempts = 5,
-               DWORD intervalMs = 2000) {
+               DWORD intervalMs = 2000, bool forceFirstAttempt = false) {
         Stop();
         if (unloading) return;
         attempt_ = attempt;
@@ -1722,6 +1722,7 @@ public:
         unloading_ = &unloading;
         attempts_ = attempts;
         intervalMs_ = intervalMs;
+        forceFirstAttempt_ = forceFirstAttempt;
         stopEvent_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         if (!stopEvent_) return;
         thread_ = CreateThread(
@@ -1730,7 +1731,13 @@ public:
                 auto* self = static_cast<RetryLoop*>(parameter);
                 for (int i = 0; i < self->attempts_ && !*self->unloading_;
                      ++i) {
-                    if (self->applied_ && self->applied_()) break;
+                    // A settings reload can need one restore/reapply pass even
+                    // while `applied` truthfully says we still own live XAML.
+                    // Do not overload that ownership flag merely to wake the
+                    // retry loop; request a forced first attempt instead.
+                    if (self->applied_ &&
+                        !(self->forceFirstAttempt_ && i == 0) &&
+                        self->applied_()) break;
                     if (i && WaitForSingleObject(self->stopEvent_,
                                                  self->intervalMs_) !=
                                  WAIT_TIMEOUT)
@@ -1778,6 +1785,7 @@ private:
     std::atomic<bool> const* unloading_ = nullptr;
     int attempts_ = 5;
     DWORD intervalMs_ = 2000;
+    bool forceFirstAttempt_ = false;
 };
 
 }  // namespace windhawk_mod_templates::taskbar_host
@@ -2486,6 +2494,9 @@ struct LayoutItem {
 [[clang::no_destroy]] static std::optional<please::Lease> g_lease{
     std::in_place};
 static std::atomic<bool> g_layoutApplied = false;
+// Only TrayUI::StartTaskbar makes the old XAML tree stale. A settings save
+// still owns live state and must restore it before rebuilding.
+static std::atomic<bool> g_treeStale = false;
 // A settled decision NOT to lay anything out — a vertical taskbar, or every
 // utility switched off. Distinct from "not applied yet": the retry must retire
 // on it, or the stand-down repeats once per attempt. Cleared on every apply
@@ -2566,6 +2577,17 @@ static void ClearHostWatchers() {
         }
     }
     g_hostWatchers->clear();
+}
+
+static void RevokeLayoutCallbacks() {
+    if (g_trayLayoutToken && g_layoutGrid) {
+        try { g_layoutGrid.LayoutUpdated(g_trayLayoutToken); } catch (...) {}
+    }
+    g_trayLayoutToken = {};
+    if (g_startLease.layoutToken && g_startLease.rootGrid) {
+        try { g_startLease.rootGrid.LayoutUpdated(g_startLease.layoutToken); } catch (...) {}
+    }
+    g_startLease.layoutToken = {};
 }
 
 static void WatchHostVisibility(FrameworkElement const& element) {
@@ -3261,17 +3283,12 @@ static void RestoreHostPosition(HostRecord& record) {
 }
 
 static void RestoreLayout() {
+    // Tokens can be live while an apply is pending. Revoke them before the
+    // ownership check so controlled unload cannot leave mod callbacks in XAML.
+    RevokeLayoutCallbacks();
     if (!g_layoutApplied) {
         return;
     }
-
-    if (g_trayLayoutToken && g_layoutGrid) {
-        try {
-            g_layoutGrid.LayoutUpdated(g_trayLayoutToken);
-        } catch (...) {
-        }
-    }
-    g_trayLayoutToken = {};
 
     if (g_startSettleTimer) {
         try {
@@ -3365,24 +3382,12 @@ static bool ApplyLayout() {
 
     // After an in-place taskbar rebuild (TrayUI::StartTaskbar) the old XAML
     // tree is gone; drop stale references instead of restoring into it.
-    if (!g_layoutApplied &&
+    if (g_treeStale.exchange(false) &&
         (!g_hostRecords->empty() || !g_lease->Empty())) {
         // We still own strong references to the old tree here, so revoke its
         // callbacks before releasing those references. Don't attempt full
         // placement restoration into a detached taskbar tree.
-        if (g_trayLayoutToken && g_layoutGrid) {
-            try {
-                g_layoutGrid.LayoutUpdated(g_trayLayoutToken);
-            } catch (...) {
-            }
-        }
-        if (g_startLease.layoutToken && g_startLease.rootGrid) {
-            try {
-                g_startLease.rootGrid.LayoutUpdated(
-                    g_startLease.layoutToken);
-            } catch (...) {
-            }
-        }
+        RevokeLayoutCallbacks();
         g_hostRecords->clear();
         // The elements these snapshots describe no longer exist, so restoring
         // would only throw (property-lease.h Abandon contract).
@@ -3390,7 +3395,6 @@ static bool ApplyLayout() {
         g_columnLease = {};
         g_startLease = {};
         g_group = nullptr;
-        g_trayLayoutToken = {};
         g_layoutGrid = nullptr;
     }
     RestoreLayout();
@@ -4050,9 +4054,9 @@ static void OnTaskbarRebuilt() {
     }
     Wh_Log(L"[Hooks] TrayUI::StartTaskbar; rescheduling layout");
     g_taskbarWnd = nullptr;
-    g_layoutApplied = false;
+    g_treeStale = true;
     g_stoodDown = false;
-    g_retry.Start(RetryAttempt, LayoutIsApplied, g_unloading, 6, 1500);
+    g_retry.Start(RetryAttempt, LayoutIsApplied, g_unloading, 6, 1500, true);
 }
 
 BOOL Wh_ModInit() {
@@ -4078,12 +4082,10 @@ void Wh_ModSettingsChanged() {
     g_retry.Stop();
     LoadSettings();
     Wh_Log(L"[Settings] Reapplying");
-    // Settings can land during a transient taskbar rebuild, so go through the
-    // retry rather than silently losing the reapply. Clearing the applied flag
-    // is what makes the first attempt actually run.
-    g_layoutApplied = false;
+    // Request a retry without lying about ownership of the live layout; the
+    // forced first pass restores it before applying the new settings.
     g_stoodDown = false;
-    g_retry.Start(RetryAttempt, LayoutIsApplied, g_unloading, 6, 1500);
+    g_retry.Start(RetryAttempt, LayoutIsApplied, g_unloading, 6, 1500, true);
 }
 
 void Wh_ModUninit() {
@@ -4094,7 +4096,7 @@ void Wh_ModUninit() {
     HWND hWnd =
         tbh::ResolveTaskbarWnd(g_taskbarWnd);
     if (hWnd) {
-        RunFromWindowThread(
+        bool cleaned = RunFromWindowThread(
             hWnd,
             [](void*) {
                 ClearHostWatchers();
@@ -4118,6 +4120,16 @@ void Wh_ModUninit() {
                 g_hostRecords.reset();
             },
             nullptr);
+        if (!cleaned) {
+            Wh_Log(L"[Uninit] Taskbar cleanup dispatch failed; retrying callback revocation");
+            if (HWND retryWnd = tbh::ResolveTaskbarWnd(g_taskbarWnd)) {
+                RunFromWindowThread(retryWnd, [](void*) {
+                    ClearHostWatchers();
+                    RevokeLayoutCallbacks();
+                    RestoreLayout();
+                }, nullptr);
+            }
+        }
     } else {
         // Intentionally retain all no_destroy XAML/WinRT holders. There is
         // no known UI thread on which releasing them would be safe
