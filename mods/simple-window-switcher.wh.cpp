@@ -11341,10 +11341,18 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     }
 
     if (g_WM_SWS_TOUCHPAD_TRIGGER && uMsg == g_WM_SWS_TOUCHPAD_TRIGGER) {
-        Wh_Log(L"SWS: Received touchpad trigger message (flags=0x%IX, source=%IX, isVisible=%d)", wParam, lParam, g_isVisible);
+        Wh_Log(L"SWS: Touchpad trigger (flags=0x%IX, source=%IX, isVisible=%d, isPending=%d, gestureActive=%d, exitActive=%d)",
+               wParam, lParam, g_isVisible, g_isPendingShow, g_isTouchpadGestureActive, g_animExitActive);
+        // Re-entrant: a new gesture must always be able to (re)open the switcher even if a
+        // previous gesture left stale state. Force a clean slate if we are mid-exit.
+        if (g_animExitActive) {
+            Wh_Log(L"SWS: Touchpad trigger during exit animation -> forcing clean state");
+            FinishAnimations();
+            g_animExitActive = false;
+        }
         g_isTouchpadGestureActive = true;
         s_lastTouchpadScrollTick = GetTickCount64();
-        if (!g_isVisible && !g_animExitActive) {
+        if (!g_isVisible && !g_isPendingShow) {
             ShowSwitcher(false, true);
         } else if (g_isPendingShow) {
             RevealPendingSwitcher();
@@ -11356,7 +11364,9 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 step = -1;
             }
         }
-        CycleLinear(step);
+        if (g_isVisible && !g_windows.empty()) {
+            CycleLinear(step);
+        }
         BringWindowToTop(g_hSwitcher);
         SetForegroundWindow(g_hSwitcher);
         SetTimer(hWnd, SWS_TOUCHPAD_IDLE_TIMER_ID, 1500, NULL);
