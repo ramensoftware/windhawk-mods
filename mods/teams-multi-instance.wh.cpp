@@ -65,8 +65,6 @@ identified by its window instead, and appends the PID to the tooltip.
   the profile, which means signing in again and rebuilding the cache. Avoid
   signing in/out or changing settings in more than one instance, and use at
   your own risk.
-- Without the GUID, Windows may not remember each instance's tray icon
-  position (pinned vs. overflow) across restarts.
 - Notification clicks and `teams://` links are routed by Windows activation
   and may land in a different instance than the one you expect.
 - Helpers that are not `ms-teams.exe` (the Teams Meeting Add-in in Outlook,
