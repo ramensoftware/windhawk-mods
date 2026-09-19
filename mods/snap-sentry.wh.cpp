@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.
-// @version         0.19.7
+// @version         0.19.8
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -191,7 +191,6 @@ DEFINE_GUID(IID_INotificationActivationCallback,
 #include <set>
 #include <string>
 #include <utility>
-#include <vector>
 
 // ============================================================================
 // Settings and shared state
@@ -1423,7 +1422,6 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action,
         noCountdown ? kNoAnswerCapMs : (DWORD)s.delaySeconds * 1000;
     HANDLE waits[] = {g_stopEvent, g_toastActionEvent, g_settingsEvent};
     DWORD start = GetTickCount();
-    bool removeToast = false;
     // An activation callback can be dispatched reentrantly from the message
     // pump below, so settle under the same lock the callbacks take: an answer
     // already accepted is never overwritten by a timeout.
@@ -1440,7 +1438,6 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action,
         g_toastAction = action;
         g_toastAnswered = true;
         LeaveCriticalSection(&g_toastLock);
-        removeToast = true;
     };
     for (;;) {
         DWORD elapsed = GetTickCount() - start;
@@ -1476,10 +1473,9 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action,
                                                     : ACTION_AUTO);
             break;
         }
-        DWORD remaining = timeoutMs - elapsed;
         // The answer arrives on an event, so wait out the deadline in one go.
         DWORD result = MsgWaitForMultipleObjectsEx(
-            ARRAYSIZE(waits), waits, remaining, QS_ALLINPUT,
+            ARRAYSIZE(waits), waits, timeoutMs - elapsed, QS_ALLINPUT,
             MWMO_INPUTAVAILABLE | MWMO_ALERTABLE);
         if (result == WAIT_IO_COMPLETION) {
             continue;  // MWMO_ALERTABLE: an APC ran, keep waiting.
@@ -1522,7 +1518,7 @@ static bool ShowToast(const std::wstring& path, const Settings& s, int& action,
     if (failedHooked) {
         toast->remove_Failed(failedToken);
     }
-    if (removeToast) notifier->Hide(toast.Get());
+    notifier->Hide(toast.Get());
     return true;
 }
 
@@ -1618,13 +1614,14 @@ static HRESULT CALLBACK DialogCallback(HWND hwnd, UINT msg, WPARAM, LPARAM,
     return S_OK;
 }
 
-static int AskAction(const std::wstring& path, const Settings& s) {
+static int AskAction(const std::wstring& path, const Settings& s,
+                     ULONGLONG generation) {
     if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) {
         return ACTION_KEEP;  // Don't put up UI during teardown.
     }
     std::wstring name = BaseName(path);
     DialogState state;
-    state.generation = g_generation.load();
+    state.generation = generation;
     state.started = GetTickCount();
     // Same backstop as the toast: without it, a dialog nobody answers holds the
     // worker and no later screenshot is copied or deleted until someone does.
@@ -1705,7 +1702,7 @@ static int ChooseAction(const std::wstring& path, const Settings& s,
     if (ShowToast(path, s, action, generation)) {
         return action;
     }
-    return AskAction(path, s);
+    return AskAction(path, s, generation);
 }
 
 // Fire-and-forget informational toast, shown when a multi-frame or animated image
@@ -1894,20 +1891,14 @@ static bool WaitForStableFile(const std::wstring& path) {
 static bool HashFile(HANDLE file, std::array<BYTE, 32>& digest) {
     BCRYPT_ALG_HANDLE algorithm = nullptr;
     BCRYPT_HASH_HANDLE hash = nullptr;
-    std::vector<BYTE> object;
     bool ok = false;
     do {
         if (BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM,
                                         nullptr, 0) != 0) break;
-        DWORD objectBytes = 0;
-        ULONG written = 0;
-        if (BCryptGetProperty(algorithm, BCRYPT_OBJECT_LENGTH,
-                              (PUCHAR)&objectBytes, sizeof(objectBytes),
-                              &written, 0) != 0 ||
-            written != sizeof(objectBytes) || objectBytes == 0) break;
-        object.resize(objectBytes);
-        if (BCryptCreateHash(algorithm, &hash, object.data(), objectBytes,
-                             nullptr, 0, 0) != 0) break;
+        // Windows 7 and later allocate and release the hash object when the
+        // caller supplies a null buffer and zero length.
+        if (BCryptCreateHash(algorithm, &hash, nullptr, 0, nullptr, 0, 0) != 0)
+            break;
         LARGE_INTEGER start{};
         if (file == INVALID_HANDLE_VALUE ||
             !SetFilePointerEx(file, start, nullptr, FILE_BEGIN)) break;
