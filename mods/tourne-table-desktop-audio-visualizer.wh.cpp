@@ -5782,6 +5782,14 @@ LRESULT CALLBACK MessageWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                         L"Appearance", L"Now Playing Font", g_settings.nowPlayingFont.c_str(),
                         L"the name of a font installed on this PC, exactly as Windows spells it",
                         L"whatever Windows substitutes (usually Segoe UI)");
+                    // ReportSettingIssue only queues the line. LoadSettings
+                    // normally flushes at its end, but this report happens long
+                    // after that has returned, so without flushing here the
+                    // warning would sit in the vector until the next settings
+                    // change cleared it unseen. Safe from this thread: the flush
+                    // honours showSettingsErrors and puts the dialog on a thread
+                    // of its own.
+                    FlushSettingsIssues();
                 }
             } else if (wParam == TIMER_ID_MSG_FULLSCREEN_WATCH) {
                 // The media strip is a plain layered window living alongside
