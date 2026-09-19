@@ -9555,9 +9555,26 @@ static void ExitAppGroup() {
         g_animHoverAlphaCurrent = 0.0f;
         g_animHoverAlphaTarget  = 0.0f;
 
-        // 5. Compute restored layout to get target rects
+        // 5. Compute restored layout to get target rects.
+        // Restored app-list entries kept their stale sourceSize/effectiveSourceSize from
+        // before drill-in, and their DWM thumbnails were moved into departing snapshots.
+        // Without a refresh, ComputeLayout can emit a zero/1:1 rcThumbTarget for them,
+        // leaving those entries (typically the last row) icon-only after the transition.
+        // RefreshEntrySourceSize (GetWindowRect fallback) gives every entry a real aspect.
         HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
-        for (auto& w : g_windows) RefreshEntrySourceSize(w);
+        for (auto& w : g_windows) {
+            RefreshEntrySourceSize(w);
+            if (w.effectiveSourceSize.cx <= 0 || w.effectiveSourceSize.cy <= 0) {
+                RECT wr = {};
+                if (w.hWnd && IsWindow(w.hWnd) && GetWindowRect(w.hWnd, &wr)) {
+                    int ww = wr.right - wr.left, wh = wr.bottom - wr.top;
+                    if (ww > 0 && wh > 0) {
+                        w.sourceSize = { ww, wh };
+                        w.effectiveSourceSize = { ww, wh };
+                    }
+                }
+            }
+        }
         ComputeLayout(hMon);
         if (DockLayoutActive()) UpdateDockPreviewForSelection();
         g_layoutTransition.rcDockStripTarget = g_rcDockIconStrip;
