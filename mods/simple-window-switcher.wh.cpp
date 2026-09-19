@@ -9103,6 +9103,11 @@ static void EnterAppGroup() {
             GetWindowTextW(hw, e.title, 256);
             if (!e.title[0]) InternalGetWindowText(hw, e.title, 256);
             e.hIcon = LoadWindowIcon(hw);
+            // Freshly-built entries have no DWM thumbnail yet, so RefreshEntrySourceSize
+            // falls back to the live window rect. Pre-populating effectiveSourceSize here
+            // (same fix as the dynamic-addition path) prevents the 1:1-square fallback in
+            // ComputeLayout, which left the last drilled-in thumbnail shrunken.
+            RefreshEntrySourceSize(e);
             g_windows.push_back(std::move(e));
         }
         if (g_windows.empty()) {  // every window closed in the meantime; abort
@@ -9220,6 +9225,7 @@ static void EnterAppGroup() {
             GetWindowTextW(hw, e.title, 256);
             if (!e.title[0]) InternalGetWindowText(hw, e.title, 256);
             e.hIcon = LoadWindowIcon(hw);
+            RefreshEntrySourceSize(e); // avoid 1:1-square fallback for fresh entries
             g_windows.push_back(std::move(e));
         }
         if (g_windows.empty()) {
