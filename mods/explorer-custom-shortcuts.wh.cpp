@@ -51,6 +51,8 @@ Instead of specifying an executable path, set **Executable Path** to one of the 
 * **`%d_smart`** — Selected folder if one is highlighted; otherwise falls back to the current active directory.
 * **`%p`** — Parent directory path of the active tab.
 
+> **Shell Interpreter Security Notice:** Path tokens are quoted according to standard Windows CRT command-line (`argv`) rules. If arguments are passed to script interpreters (e.g. `cmd.exe /c` or `powershell.exe -Command`), parameters may be re-parsed by that interpreter. Use native binary arguments or pass paths directly to target programs.
+
 ---
 
 ### Launch Modes & Use Cases
@@ -80,15 +82,13 @@ You can add your own shortcuts using these templates in the settings:
   * Path: `code` | Args: `"%d_smart"` | Mode: `batch`
 * **Queue in VLC Media Player**
   * Path: `vlc.exe` | Args: `%f` | Mode: `batch`
-* **Copy Just File Names to Clipboard**
-  * Path: `powershell.exe` | Args: `-NoProfile -WindowStyle Hidden -Command "Set-Clipboard -Value $args" -- %n` | Mode: `batch`
 
 ---
 
 ### Comparison with Existing Mods
 
 While related mods exist in the Windhawk repository, **Explorer Custom Shortcuts** provides a distinct, keyboard-first workflow engine:
-* **`explorer-command-bar`**: Adds visual custom toolbar buttons to the modern Explorer UI. In contrast, this mod provides a pure, zero-UI, low-latency keyboard shortcut accelerator engine operating across classic and tabbed windows. It introduces specialized batch looping capabilities (`loop_files`, `loop_folders`), rich token expansions (`%n`, `%ext`, `%c`, `%files`, `%folders`), and context-aware suppression during inline edits.
+* **`explorer-command-bar`**: Adds visual custom toolbar buttons exclusively to the modern Windows 11 command bar. In contrast, this mod provides a pure, zero-UI, low-latency keyboard shortcut accelerator engine operating across both classic and tabbed Explorer windows. It introduces specialized batch looping capabilities (`loop_files`, `loop_folders`), rich token expansions (`%n`, `%ext`, `%c`, `%files`, `%folders`), and context-aware suppression during inline edits.
 * **`keyboard-shortcut-actions`**: A general-purpose desktop/window hotkey dispatcher without Explorer context awareness. This mod parses active Explorer tab navigation, item selections, and folder paths directly into CLI parameters.
 * **`toggle-hidden-files` / `explorer-ctrln-newfile` / `explorer-ctrlq-new-folder`**: Single-purpose mods; here, internal shell actions are optional presets within a single hotkey table, allowing users to bind them to whatever key combinations they prefer without installing multiple separate hooks.
 
@@ -152,7 +152,7 @@ Process execution concepts (`ResolveCommandPath`, `ExecuteApp`) and shell window
     - args: ""
     - mode: "batch"
   $name: "Custom Shortcuts"
-  $description: "List of customizable shortcuts. Supported keys: A-Z, 0-9, F1-F12, Delete/Del, Space, Enter, and Tab. Letters and digits require at least one modifier key (Ctrl, Shift, or Alt)."
+  $description: "List of customizable shortcuts. Supported keys: A-Z, 0-9, F1-F12, Delete/Del, Space, Enter, and Tab. Modifiers (Ctrl, Shift, or Alt) are required for all keys except F1-F12."
 */
 // ==/WindhawkModSettings==
 
@@ -166,11 +166,13 @@ Process execution concepts (`ResolveCommandPath`, `ExecuteApp`) and shell window
 #include <vector>
 #include <functional>
 #include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <algorithm>
 #include <atomic>
 #include <shellapi.h>
 #include <memory>
+#include <windhawk_utils.h>
 
 struct CustomShortcut {
     std::wstring name;
@@ -184,18 +186,22 @@ struct CustomShortcut {
     std::wstring launchMode;
 };
 
-// Thread-safe immutable snapshot for concurrent settings access
-static std::shared_ptr<const std::vector<CustomShortcut>> g_shortcutsSnapshot;
-static std::mutex g_settingsMutex;
+static std::vector<CustomShortcut> g_shortcuts;
+static std::shared_mutex g_shortcutsMutex;
 
 static std::mutex g_threadsMutex;
 static std::vector<HANDLE> g_threads;
 static std::atomic<bool> g_unloading{false};
 
 std::wstring ExpandEnv(const std::wstring& input) {
-    WCHAR buf[MAX_PATH * 2];
-    DWORD len = ExpandEnvironmentStringsW(input.c_str(), buf, ARRAYSIZE(buf));
-    return (len > 0 && len <= ARRAYSIZE(buf)) ? buf : input;
+    DWORD required = ExpandEnvironmentStringsW(input.c_str(), nullptr, 0);
+    if (required > 0) {
+        std::vector<WCHAR> buf(required);
+        if (ExpandEnvironmentStringsW(input.c_str(), buf.data(), required) > 0) {
+            return buf.data();
+        }
+    }
+    return input;
 }
 
 std::wstring ResolveCommandPath(const std::wstring& command) {
@@ -263,33 +269,30 @@ void LoadSettings() {
     auto newShortcuts = std::make_shared<std::vector<CustomShortcut>>();
 
     for (int i = 0; i < 100; i++) {
-        PCWSTR pathStr = Wh_GetStringSetting(L"shortcuts[%d].path", i);
-        if (!pathStr || !*pathStr) {
-            if (pathStr) Wh_FreeStringSetting(pathStr);
+        WindhawkUtils::StringSetting pathStr = WindhawkUtils::StringSetting::make(L"shortcuts[%d].path", i);
+        if (!*pathStr.get()) {
             break;
         }
 
         CustomShortcut sc;
-        sc.path = pathStr;
-        Wh_FreeStringSetting(pathStr);
-
+        sc.path = pathStr.get();
         sc.enabled = Wh_GetIntSetting(L"shortcuts[%d].enabled", i) != 0;
 
-        PCWSTR nameStr = Wh_GetStringSetting(L"shortcuts[%d].name", i);
-        if (nameStr) { sc.name = nameStr; Wh_FreeStringSetting(nameStr); }
+        WindhawkUtils::StringSetting nameStr = WindhawkUtils::StringSetting::make(L"shortcuts[%d].name", i);
+        sc.name = nameStr.get();
 
-        PCWSTR keyStr = Wh_GetStringSetting(L"shortcuts[%d].key", i);
-        if (keyStr) { sc.vkCode = ParseKey(keyStr); Wh_FreeStringSetting(keyStr); }
+        WindhawkUtils::StringSetting keyStr = WindhawkUtils::StringSetting::make(L"shortcuts[%d].key", i);
+        sc.vkCode = ParseKey(keyStr.get());
 
         sc.ctrl = Wh_GetIntSetting(L"shortcuts[%d].ctrl", i) != 0;
         sc.shift = Wh_GetIntSetting(L"shortcuts[%d].shift", i) != 0;
         sc.alt = Wh_GetIntSetting(L"shortcuts[%d].alt", i) != 0;
 
-        PCWSTR argsStr = Wh_GetStringSetting(L"shortcuts[%d].args", i);
-        if (argsStr) { sc.argsPattern = argsStr; Wh_FreeStringSetting(argsStr); }
+        WindhawkUtils::StringSetting argsStr = WindhawkUtils::StringSetting::make(L"shortcuts[%d].args", i);
+        sc.argsPattern = argsStr.get();
 
-        PCWSTR modeStr = Wh_GetStringSetting(L"shortcuts[%d].mode", i);
-        if (modeStr) { sc.launchMode = modeStr; Wh_FreeStringSetting(modeStr); }
+        WindhawkUtils::StringSetting modeStr = WindhawkUtils::StringSetting::make(L"shortcuts[%d].mode", i);
+        sc.launchMode = modeStr.get();
         if (sc.launchMode.empty()) sc.launchMode = L"batch";
 
         bool isFunctionKey = (sc.vkCode >= VK_F1 && sc.vkCode <= VK_F12);
@@ -297,11 +300,15 @@ void LoadSettings() {
 
         if (sc.enabled && sc.vkCode != 0 && (hasModifier || isFunctionKey)) {
             newShortcuts->push_back(sc);
+        } else if (sc.enabled && sc.vkCode != 0 && !hasModifier && !isFunctionKey) {
+            Wh_Log(L"Shortcut '%s' requires at least one modifier key (Ctrl, Shift, Alt). Dropped.", sc.name.c_str());
         }
     }
 
-    std::lock_guard<std::mutex> lock(g_settingsMutex);
-    std::atomic_store(&g_shortcutsSnapshot, std::const_pointer_cast<const std::vector<CustomShortcut>>(newShortcuts));
+    {
+        std::unique_lock<std::shared_mutex> lock(g_shortcutsMutex);
+        g_shortcuts = std::move(*newShortcuts);
+    }
 }
 
 void Wh_ModSettingsChanged() {
@@ -395,7 +402,7 @@ IShellView* GetActiveShellView(HWND hExplorerWnd, HWND hCapturedFocus) {
     if (hExplorerWnd) {
         DWORD threadId = GetWindowThreadProcessId(hExplorerWnd, nullptr);
         GUITHREADINFO gti = { sizeof(gti) };
-        HWND hFocus = (GetGUIThreadInfo(threadId, &gti) && gti.hwndFocus) ? gti.hwndFocus : hCapturedFocus;
+        HWND hFocus = hCapturedFocus ? hCapturedFocus : ((GetGUIThreadInfo(threadId, &gti) && gti.hwndFocus) ? gti.hwndFocus : nullptr);
 
         for (HWND h = hFocus; h && h != hExplorerWnd; h = GetParent(h)) {
             WCHAR cls[64];
@@ -567,7 +574,13 @@ std::wstring ExpandTokens(
             std::wstring parent = activeDir;
             while (!parent.empty() && parent.back() == L'\\') parent.pop_back();
             size_t slash = parent.find_last_of(L'\\');
-            result += (slash == std::wstring::npos) ? std::wstring() : parent.substr(0, slash);
+            if (slash == std::wstring::npos) {
+                result += std::wstring();
+            } else {
+                std::wstring p = parent.substr(0, slash);
+                if (p.length() == 2 && p[1] == L':') p += L'\\';
+                result += p;
+            }
             i += 2;
         } else {
             result.push_back(pattern[i++]);
@@ -618,8 +631,7 @@ void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd, HWND cap
         return;
     }
 
-    if (_wcsicmp(command.c_str(), L"internal:openRecycleBin") == 0 ||
-        _wcsicmp(command.c_str(), L"internal:openRecycleBinTab") == 0) {
+    if (_wcsicmp(command.c_str(), L"internal:openRecycleBin") == 0) {
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         if (psv) {
             PIDLIST_ABSOLUTE pidlRecycle = nullptr;
@@ -641,7 +653,8 @@ void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd, HWND cap
     }
 
     if (_wcsicmp(command.c_str(), L"internal:emptyRecycleBin") == 0) {
-        SHEmptyRecycleBinW(rootHwnd, nullptr, 0);
+        // Pass nullptr instead of rootHwnd to prevent cross-thread window attachment stalls
+        SHEmptyRecycleBinW(nullptr, nullptr, 0);
         return;
     }
 
@@ -724,7 +737,6 @@ void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd, HWND cap
     Wh_Log(L"Unknown internal command: %s", command.c_str());
 }
 
-// Dispatches work completely to a worker thread so the Explorer UI thread remains 100% responsive
 void DispatchShortcutExecution(CustomShortcut sc, HWND rootHwnd, HWND capturedFocus) {
     QueueBackgroundWork([sc = std::move(sc), rootHwnd, capturedFocus]() {
         if (g_unloading.load()) return;
@@ -827,18 +839,17 @@ bool ProcessHotKey(HWND hwnd, WPARAM key) {
     }
     
     if (wcscmp(className, L"CabinetWClass") == 0 || wcscmp(className, L"ExploreWClass") == 0) {
-        auto snapshot = std::atomic_load(&g_shortcutsSnapshot);
-        if (!snapshot || snapshot->empty()) return false;
+        std::shared_lock<std::shared_mutex> lock(g_shortcutsMutex);
+        if (g_shortcuts.empty()) return false;
 
         bool ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
         bool shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
         bool alt   = (GetKeyState(VK_MENU)    & 0x8000) != 0;
 
-        for (const auto& sc : *snapshot) {
+        for (const auto& sc : g_shortcuts) {
             if (sc.vkCode != 0 && key == (WPARAM)sc.vkCode &&
                 ctrl == sc.ctrl && shift == sc.shift && alt == sc.alt) {
                 
-                // Do inline editing check only once a shortcut actually matches
                 if (IsInlineEditingActive(rootHwnd)) {
                     return false;
                 }
@@ -872,15 +883,14 @@ BOOL Wh_ModInit() {
     HMODULE hUser32 = GetModuleHandle(L"user32.dll");
     if (!hUser32) return FALSE;
 
-    FARPROC pfnTranslateAcceleratorW = GetProcAddress(hUser32, "TranslateAcceleratorW");
+    auto pfnTranslateAcceleratorW = (TranslateAcceleratorW_t)GetProcAddress(hUser32, "TranslateAcceleratorW");
     if (!pfnTranslateAcceleratorW) return FALSE;
 
-    Wh_SetFunctionHook(
-        (void*)pfnTranslateAcceleratorW,
-        (void*)TranslateAcceleratorW_Hook,
-        (void**)&TranslateAcceleratorW_Original
+    return WindhawkUtils::SetFunctionHook(
+        pfnTranslateAcceleratorW,
+        TranslateAcceleratorW_Hook,
+        &TranslateAcceleratorW_Original
     );
-    return TRUE;
 }
 
 void Wh_ModUninit() {
@@ -891,16 +901,11 @@ void Wh_ModUninit() {
         threadsToJoin.swap(g_threads);
     }
 
-    // Safely wait for workers, closing any visible modal dialogs if they stay open
+    // Follow explorer-command-bar unload pattern: bounded wait with diagnostic log
     for (HANDLE h : threadsToJoin) {
-        DWORD tid = GetThreadId(h);
-        while (WaitForSingleObject(h, 100) == WAIT_TIMEOUT) {
-            EnumThreadWindows(tid, [](HWND hWnd, LPARAM) -> BOOL {
-                if (IsWindowVisible(hWnd)) {
-                    PostMessageW(hWnd, WM_CLOSE, 0, 0);
-                }
-                return TRUE;
-            }, 0);
+        if (WaitForSingleObject(h, 2000) == WAIT_TIMEOUT) {
+            Wh_Log(L"Waiting for background worker thread to finish...");
+            WaitForSingleObject(h, INFINITE);
         }
         CloseHandle(h);
     }
