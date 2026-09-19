@@ -160,6 +160,11 @@ struct WobblySettings
     double moveFactor;
 };
 
+static constexpr WobblySettings PHYSICS_PRESETS[] = {
+    {false, false, 15.0, 80.0, 10.0}, {false, false, 10.0, 85.0, 10.0},
+    {false, false, 6.0, 90.0, 10.0},  {false, false, 3.0, 92.0, 20.0},
+    {false, false, 1.0, 97.0, 25.0}};
+
 WobblySettings g_settings = {};
 SRWLOCK g_settingsLock = SRWLOCK_INIT;
 
@@ -200,7 +205,7 @@ struct WobbleMesh
     Vec2 dragOffset;
 };
 
-using IsGhostWindow_t = bool(__cdecl*)(void* pThis, HWND** ghostWindow);
+using IsGhostWindow_t = bool(__cdecl*)(void* pThis, HWND* ghostWindow);
 IsGhostWindow_t g_isGhostWindowOriginal = nullptr;
 size_t g_windowDataHwndOffset = SIZE_MAX;
 size_t g_windowDataTopLevelWindowOffset = SIZE_MAX;
@@ -273,6 +278,15 @@ ObservedWindowState g_observedWindows[MAX_OBSERVED_WINDOWS] = {};
 HANDLE g_eventThread = nullptr;
 HANDLE g_eventThreadReady = nullptr;
 HANDLE g_eventThreadStop = nullptr;
+
+static void CloseKernelHandle(HANDLE& handle)
+{
+    if (handle)
+    {
+        CloseHandle(handle);
+        handle = nullptr;
+    }
+}
 std::atomic<DWORD> g_eventThreadMessageTarget = 0;
 std::atomic<HWND> g_pendingMaximizedStateWindow = nullptr;
 std::atomic_bool g_maximizedStateCheckQueued = false;
@@ -466,6 +480,13 @@ SRWLOCK g_existingWindowBackfillLock = SRWLOCK_INIT;
 std::atomic<unsigned int> g_existingWindowBackfillCount = 0;
 std::atomic<unsigned int> g_existingWindowBackfillIndex = 0;
 std::atomic<unsigned int> g_existingWindowBackfillMapped = 0;
+
+static void ResetExistingWindowBackfill()
+{
+    g_existingWindowBackfillCount.store(0, std::memory_order_release);
+    g_existingWindowBackfillIndex.store(0, std::memory_order_release);
+    g_existingWindowBackfillMapped.store(0, std::memory_order_release);
+}
 std::atomic<DWORD> g_dwmSceneThreadId = 0;
 UINT g_dwmSceneWakeMessage = 0;
 static constexpr UINT_PTR DWM_SCENE_WAKE_WPARAM = 0x574F42424C59574BULL;
@@ -671,6 +692,12 @@ static void ReleaseAnimationSlotPinLocked(WindowAnimationSlot& slot)
     }
 }
 
+static void ResetAnimationSlotLocked(WindowAnimationSlot& slot, ULONGLONG generation)
+{
+    slot = {};
+    slot.generation = generation;
+}
+
 int g_dragAnimationSlot = -1;
 ULONGLONG g_animationOrderCounter = 0;
 std::atomic_bool g_unloading = false;
@@ -867,9 +894,7 @@ static void QueueExistingWindowBackfill()
     EnumWindows(CollectExistingWindowForBackfill,
                 reinterpret_cast<LPARAM>(&collection));
     AcquireSRWLockExclusive(&g_existingWindowBackfillLock);
-    g_existingWindowBackfillCount.store(0, std::memory_order_release);
-    g_existingWindowBackfillIndex.store(0, std::memory_order_release);
-    g_existingWindowBackfillMapped.store(0, std::memory_order_release);
+    ResetExistingWindowBackfill();
     std::copy_n(collection.windows, collection.count, g_existingWindowBackfill);
     g_existingWindowBackfillCount.store(collection.count, std::memory_order_release);
     ReleaseSRWLockExclusive(&g_existingWindowBackfillLock);
@@ -2354,9 +2379,7 @@ static void DropAnimationSlotsForStoppedSceneThread()
             continue;
         }
         retainedProxies += slot.matrixTransformProxy != nullptr;
-        ULONGLONG nextGeneration = slot.generation + 1;
-        slot = {};
-        slot.generation = nextGeneration;
+        ResetAnimationSlotLocked(slot, slot.generation + 1);
         droppedSlots++;
     }
     WakeAllConditionVariable(&g_animationSlotsCondition);
@@ -4020,20 +4043,27 @@ static void StopAllAnimations();
 static void MarkObservedWindowTransitionPending(HWND hwnd, bool expectedZoomed);
 static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild);
 
-static bool HasAnyAnimationSlots()
+template<typename Predicate>
+static int FindAnimationSlotMatching(const Predicate& matches)
 {
-    bool anyAnimationSlots = false;
+    int slotIndex = -1;
     AcquireSRWLockShared(&g_animationSlotsLock);
     for (int i = 0; i < MAX_ANIMATION_SLOTS; i++)
     {
-        if (g_animationSlots[i].active || g_animationSlots[i].retiring)
+        if (matches(g_animationSlots[i], i))
         {
-            anyAnimationSlots = true;
+            slotIndex = i;
             break;
         }
     }
     ReleaseSRWLockShared(&g_animationSlotsLock);
-    return anyAnimationSlots;
+    return slotIndex;
+}
+
+static bool HasAnyAnimationSlots()
+{
+    return FindAnimationSlotMatching([](const WindowAnimationSlot& slot, int)
+                                     { return slot.active || slot.retiring; }) >= 0;
 }
 
 static double GetPreferredAnimationRate(HWND hwnd)
@@ -4173,6 +4203,18 @@ static void ResetDragInputState()
     g_lastDraggedWindowRect = {};
     g_lastDraggedWindowZoomed = false;
     g_finalizingMoveSize = false;
+}
+
+static void DisarmAnimationClock()
+{
+    if (g_animationTimer)
+    {
+        CancelWaitableTimer(g_animationTimer);
+    }
+    g_animationClockArmed = false;
+    g_animationTargetHz = 0.0;
+    g_lastAnimationCounter = {};
+    g_nextAnimationCounter = {};
 }
 
 static bool IsInteractiveMoveSizeLoop(HWND hwnd)
@@ -4336,9 +4378,7 @@ static void FinalizeRetiringSlots()
         {
             if (!slot.matrixTransformProxy)
             {
-                ULONGLONG generation = slot.generation;
-                slot = {};
-                slot.generation = generation;
+                ResetAnimationSlotLocked(slot, slot.generation);
             }
             else if (IsOnDwmSceneThread() && g_cBaseObjectRelease)
             {
@@ -4356,12 +4396,32 @@ static void FinalizeRetiringSlots()
             g_cBaseObjectRelease(matrixTransformProxy);
             AcquireSRWLockExclusive(&g_animationSlotsLock);
             ReleaseAnimationSlotPinLocked(slot);
-            ULONGLONG generation = slot.generation;
-            slot = {};
-            slot.generation = generation;
+            ResetAnimationSlotLocked(slot, slot.generation);
             ReleaseSRWLockExclusive(&g_animationSlotsLock);
         }
     }
+}
+
+static int CollectActiveAnimationSlots(int* indices, bool* hasProxy = nullptr)
+{
+    int count = 0;
+    bool proxyFound = false;
+    AcquireSRWLockShared(&g_animationSlotsLock);
+    for (int i = 0; i < MAX_ANIMATION_SLOTS; i++)
+    {
+        const WindowAnimationSlot& slot = g_animationSlots[i];
+        if (slot.active)
+        {
+            indices[count++] = i;
+        }
+        proxyFound |= slot.matrixTransformProxy != nullptr;
+    }
+    ReleaseSRWLockShared(&g_animationSlotsLock);
+    if (hasProxy)
+    {
+        *hasProxy = proxyFound;
+    }
+    return count;
 }
 
 static void AbandonAnimationSlotsAfterSceneStall(const wchar_t* reason)
@@ -4382,22 +4442,13 @@ static void AbandonAnimationSlotsAfterSceneStall(const wchar_t* reason)
             continue;
         }
         retainedProxies += slot.matrixTransformProxy != nullptr;
-        ULONGLONG nextGeneration = slot.generation + 1;
-        slot = {};
-        slot.generation = nextGeneration;
+        ResetAnimationSlotLocked(slot, slot.generation + 1);
         abandonedSlots++;
     }
     WakeAllConditionVariable(&g_animationSlotsCondition);
     ReleaseSRWLockExclusive(&g_animationSlotsLock);
 
-    if (g_animationTimer)
-    {
-        CancelWaitableTimer(g_animationTimer);
-    }
-    g_animationClockArmed = false;
-    g_animationTargetHz = 0.0;
-    g_lastAnimationCounter = {};
-    g_nextAnimationCounter = {};
+    DisarmAnimationClock();
     g_sceneWakeScheduled.store(false, std::memory_order_release);
     g_sceneWakePostTimestamp.store(0, std::memory_order_release);
     g_sceneWakeStallStartedAt.store(0, std::memory_order_release);
@@ -4423,16 +4474,7 @@ static void BeginSceneStallCleanup(const wchar_t* reason)
         return;
     }
     int slotsToRetire[MAX_ANIMATION_SLOTS] = {};
-    int retireCount = 0;
-    AcquireSRWLockShared(&g_animationSlotsLock);
-    for (int i = 0; i < MAX_ANIMATION_SLOTS; i++)
-    {
-        if (g_animationSlots[i].active)
-        {
-            slotsToRetire[retireCount++] = i;
-        }
-    }
-    ReleaseSRWLockShared(&g_animationSlotsLock);
+    int retireCount = CollectActiveAnimationSlots(slotsToRetire);
     for (int i = 0; i < retireCount; i++)
     {
         RetireAnimationSlot(slotsToRetire[i]);
@@ -4451,14 +4493,7 @@ static void StopAnimationClockIfIdle()
     {
         return;
     }
-    if (g_animationTimer)
-    {
-        CancelWaitableTimer(g_animationTimer);
-    }
-    g_animationClockArmed = false;
-    g_animationTargetHz = 0.0;
-    g_lastAnimationCounter = {};
-    g_nextAnimationCounter = {};
+    DisarmAnimationClock();
     g_lastObservedScenePassCounter = g_scenePassCounter.load(std::memory_order_acquire);
     g_lastSceneProgressTimestamp = 0;
     g_sceneRecoveryCleanupPending.store(false, std::memory_order_release);
@@ -4513,18 +4548,8 @@ static void RetireAnimationSlot(int slotIndex)
 
 static int FindAnimationSlotForWindow(HWND hwnd)
 {
-    int slotIndex = -1;
-    AcquireSRWLockShared(&g_animationSlotsLock);
-    for (int i = 0; i < MAX_ANIMATION_SLOTS; i++)
-    {
-        if (g_animationSlots[i].active && g_animationSlots[i].hwnd == hwnd)
-        {
-            slotIndex = i;
-            break;
-        }
-    }
-    ReleaseSRWLockShared(&g_animationSlotsLock);
-    return slotIndex;
+    return FindAnimationSlotMatching([hwnd](const WindowAnimationSlot& slot, int)
+                                     { return slot.active && slot.hwnd == hwnd; });
 }
 
 static bool WaitForRetiringSlotForWindow(HWND hwnd)
@@ -4569,18 +4594,8 @@ static bool WaitForRetiringSlotForWindow(HWND hwnd)
 static int FindFreeAnimationSlot()
 {
     FinalizeRetiringSlots();
-    int slotIndex = -1;
-    AcquireSRWLockShared(&g_animationSlotsLock);
-    for (int i = 0; i < MAX_ANIMATION_SLOTS; i++)
-    {
-        if (!g_animationSlots[i].active && !g_animationSlots[i].retiring)
-        {
-            slotIndex = i;
-            break;
-        }
-    }
-    ReleaseSRWLockShared(&g_animationSlotsLock);
-    return slotIndex;
+    return FindAnimationSlotMatching([](const WindowAnimationSlot& slot, int)
+                                     { return !slot.active && !slot.retiring; });
 }
 
 static int EvictOldestSettlingSlot()
@@ -5317,18 +5332,7 @@ static void StopAllAnimations()
 {
     int slotsToRetire[MAX_ANIMATION_SLOTS] = {};
     bool sceneCleanupNeeded = false;
-    int retireCount = 0;
-    AcquireSRWLockShared(&g_animationSlotsLock);
-    for (int i = 0; i < MAX_ANIMATION_SLOTS; i++)
-    {
-        if (g_animationSlots[i].active)
-        {
-            slotsToRetire[retireCount] = i;
-            retireCount++;
-        }
-        sceneCleanupNeeded |= g_animationSlots[i].matrixTransformProxy != nullptr;
-    }
-    ReleaseSRWLockShared(&g_animationSlotsLock);
+    int retireCount = CollectActiveAnimationSlots(slotsToRetire, &sceneCleanupNeeded);
     for (int i = 0; i < retireCount; i++)
     {
         RetireAnimationSlot(slotsToRetire[i]);
@@ -5390,14 +5394,7 @@ static void StopAllAnimations()
         // retain any unresolved DWM proxies instead of blocking unload forever.
         AbandonAnimationSlotsAfterSceneStall(L"cleanup timeout");
     }
-    if (g_animationTimer)
-    {
-        CancelWaitableTimer(g_animationTimer);
-    }
-    g_animationClockArmed = false;
-    g_animationTargetHz = 0.0;
-    g_lastAnimationCounter = {};
-    g_nextAnimationCounter = {};
+    DisarmAnimationClock();
     ResetDragInputState();
 }
 
@@ -6183,16 +6180,16 @@ static void ForgetObservedWindowState(HWND hwnd)
     }
 }
 
-static void RememberObservedWindowState(HWND hwnd)
+static int RememberObservedWindowState(HWND hwnd)
 {
     if (!IsEligibleWindowForStateThrob(hwnd))
     {
-        return;
+        return -1;
     }
     RECT rect = {};
     if (!GetWindowRect(hwnd, &rect))
     {
-        return;
+        return -1;
     }
     int index = FindObservedWindowState(hwnd);
     if (index < 0)
@@ -6214,39 +6211,26 @@ static void RememberObservedWindowState(HWND hwnd)
     }
     if (index < 0)
     {
-        return;
+        return -1;
     }
     g_observedWindows[index] = {
         hwnd, IsZoomed(hwnd) != FALSE, IsIconic(hwnd) != FALSE,
         IsApproximatelySnapLayoutTarget(rect), false, false,
         rect, GetTickCount64(), 0, 0, 0, 0};
+    return index;
 }
 
 static int EnsureObservedWindowState(HWND hwnd)
 {
     int index = FindObservedWindowState(hwnd);
-    if (index < 0)
-    {
-        RememberObservedWindowState(hwnd);
-        index = FindObservedWindowState(hwnd);
-    }
-    return index;
+    return index >= 0 ? index : RememberObservedWindowState(hwnd);
 }
 
 static void CancelWindowStateThrobForWindow(HWND hwnd)
 {
-    int slotIndex = -1;
-    AcquireSRWLockShared(&g_animationSlotsLock);
-    for (int i = 0; i < MAX_ANIMATION_SLOTS; i++)
-    {
-        const WindowAnimationSlot& slot = g_animationSlots[i];
-        if (slot.active && slot.hwnd == hwnd && slot.windowStateThrob && !slot.dragging)
-        {
-            slotIndex = i;
-            break;
-        }
-    }
-    ReleaseSRWLockShared(&g_animationSlotsLock);
+    int slotIndex = FindAnimationSlotMatching(
+        [hwnd](const WindowAnimationSlot& slot, int)
+        { return slot.active && slot.hwnd == hwnd && slot.windowStateThrob && !slot.dragging; });
     if (slotIndex >= 0)
     {
         RetireAnimationSlot(slotIndex);
@@ -6846,9 +6830,7 @@ static void UninitializeWindowEventHooks()
         g_virtualDesktopRefreshTimer = 0;
     }
     g_virtualDesktopRefreshDeadline = 0;
-    g_existingWindowBackfillCount.store(0, std::memory_order_release);
-    g_existingWindowBackfillIndex.store(0, std::memory_order_release);
-    g_existingWindowBackfillMapped.store(0, std::memory_order_release);
+    ResetExistingWindowBackfill();
     StopAllAnimations();
     for (HWINEVENTHOOK& hook : g_windowEventHooks)
     {
@@ -6882,11 +6864,7 @@ static DWORD WINAPI WindowEventThreadProc(LPVOID)
     if (!g_animationTimer || !QueryPerformanceFrequency(&g_animationFrequency))
     {
         Wh_Log(L"Window event thread: animation clock initialization failed");
-        if (g_animationTimer)
-        {
-            CloseHandle(g_animationTimer);
-            g_animationTimer = nullptr;
-        }
+        CloseKernelHandle(g_animationTimer);
         if (g_eventThreadReady)
         {
             SetEvent(g_eventThreadReady);
@@ -6903,8 +6881,7 @@ static DWORD WINAPI WindowEventThreadProc(LPVOID)
         {
             SetEvent(g_eventThreadReady);
         }
-        CloseHandle(g_animationTimer);
-        g_animationTimer = nullptr;
+        CloseKernelHandle(g_animationTimer);
         g_eventThreadMessageTarget.store(0, std::memory_order_release);
         return 1;
     }
@@ -7014,8 +6991,7 @@ static DWORD WINAPI WindowEventThreadProc(LPVOID)
     g_pendingMaximizedStateWindow.store(nullptr, std::memory_order_release);
     g_maximizedStateCheckQueued.store(false, std::memory_order_release);
     UninitializeWindowEventHooks();
-    CloseHandle(g_animationTimer);
-    g_animationTimer = nullptr;
+    CloseKernelHandle(g_animationTimer);
     g_animationFrequency = {};
     return 0;
 }
@@ -7034,18 +7010,15 @@ static bool StartWindowEventThread()
     if (!g_eventThreadReady)
     {
         Wh_Log(L"Failed to create event thread ready event");
-        CloseHandle(g_eventThreadStop);
-        g_eventThreadStop = nullptr;
+        CloseKernelHandle(g_eventThreadStop);
         return false;
     }
     g_eventThread = CreateThread(nullptr, 0, WindowEventThreadProc, nullptr, 0, nullptr);
     if (!g_eventThread)
     {
         Wh_Log(L"Failed to create window event thread");
-        CloseHandle(g_eventThreadReady);
-        g_eventThreadReady = nullptr;
-        CloseHandle(g_eventThreadStop);
-        g_eventThreadStop = nullptr;
+        CloseKernelHandle(g_eventThreadReady);
+        CloseKernelHandle(g_eventThreadStop);
         return false;
     }
     DWORD waitResult = WaitForSingleObject(g_eventThreadReady, 3000);
@@ -7060,9 +7033,7 @@ static bool StartWindowEventThread()
 
 static void StopWindowEventThread()
 {
-    g_existingWindowBackfillCount.store(0, std::memory_order_release);
-    g_existingWindowBackfillIndex.store(0, std::memory_order_release);
-    g_existingWindowBackfillMapped.store(0, std::memory_order_release);
+    ResetExistingWindowBackfill();
     g_eventThreadMessageTarget.store(0, std::memory_order_release);
     if (g_eventThreadStop)
     {
@@ -7075,40 +7046,10 @@ static void StopWindowEventThread()
         {
             Wh_Log(L"Failed waiting for window event thread");
         }
-        CloseHandle(g_eventThread);
-        g_eventThread = nullptr;
+        CloseKernelHandle(g_eventThread);
     }
-    if (g_eventThreadReady)
-    {
-        CloseHandle(g_eventThreadReady);
-        g_eventThreadReady = nullptr;
-    }
-    if (g_eventThreadStop)
-    {
-        CloseHandle(g_eventThreadStop);
-        g_eventThreadStop = nullptr;
-    }
-}
-
-static void CalculateAutomaticParameters(int wobbliness, double& stiffness, double& drag,
-                                         double& moveFactor)
-{
-    struct Preset
-    {
-        double stiffness;
-        double drag;
-        double moveFactor;
-    };
-
-    static constexpr Preset presets[] = {{15.0, 80.0, 10.0},
-                                         {10.0, 85.0, 10.0},
-                                         {6.0, 90.0, 10.0},
-                                         {3.0, 92.0, 20.0},
-                                         {1.0, 97.0, 25.0}};
-    int presetIndex = std::clamp(wobbliness, 0, static_cast<int>(ARRAYSIZE(presets)) - 1);
-    stiffness = presets[presetIndex].stiffness;
-    drag = presets[presetIndex].drag;
-    moveFactor = presets[presetIndex].moveFactor;
+    CloseKernelHandle(g_eventThreadReady);
+    CloseKernelHandle(g_eventThreadStop);
 }
 
 static WobblySettings GetSettingsSnapshot()
@@ -7121,7 +7062,6 @@ static WobblySettings GetSettingsSnapshot()
 
 static void LoadSettings()
 {
-    WobblySettings settings = {};
     auto wobblinessPresetSetting = WindhawkUtils::StringSetting::make(L"WobblinessPreset");
     PCWSTR wobblinessPreset = wobblinessPresetSetting.get();
     int wobbliness = 2;
@@ -7130,6 +7070,7 @@ static void LoadSettings()
     {
         wobbliness = wobblinessPreset[0] - L'0';
     }
+    WobblySettings settings = PHYSICS_PRESETS[wobbliness];
     bool advancedMode = Wh_GetIntSetting(L"AdvancedMode.enable") != 0;
     settings.resizeWobbleEnabled = Wh_GetIntSetting(L"EnableResizeWobble") != 0;
     settings.windowStateWobbleEnabled =
@@ -7141,11 +7082,6 @@ static void LoadSettings()
         settings.drag = static_cast<double>(Wh_GetIntSetting(L"AdvancedMode.Drag"));
         settings.moveFactor =
             static_cast<double>(Wh_GetIntSetting(L"AdvancedMode.MoveFactor"));
-    }
-    else
-    {
-        CalculateAutomaticParameters(wobbliness, settings.stiffness, settings.drag,
-                                     settings.moveFactor);
     }
     // Clamp imported and current settings at the boundary.
     settings.stiffness = std::clamp(settings.stiffness, 1.0, 100.0);
@@ -7238,9 +7174,7 @@ BOOL Wh_ModInit()
     g_sceneOwnershipResetPending.store(false, std::memory_order_release);
     g_lastBindPrerequisiteLog.store(0, std::memory_order_release);
     g_windowStateThrobSuppressedUntil.store(0, std::memory_order_release);
-    g_existingWindowBackfillCount.store(0, std::memory_order_release);
-    g_existingWindowBackfillIndex.store(0, std::memory_order_release);
-    g_existingWindowBackfillMapped.store(0, std::memory_order_release);
+    ResetExistingWindowBackfill();
     g_lastObservedScenePassCounter = 0;
     g_lastSceneProgressTimestamp = 0;
     Wh_Log(L"Initializing version " WH_MOD_VERSION);
