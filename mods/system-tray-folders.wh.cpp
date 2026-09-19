@@ -48,7 +48,8 @@ Each pattern is compared (case insensitive) with three names of every icon:
   `Docker Desktop` or `PowerToys.Runner`. It doesn't change, so it's the most
   reliable choice.
 * **Tooltip**: the text you see when hovering the icon, e.g. `NVIDIA Settings`.
-  Some apps change it or leave it empty.
+  Some apps change it or leave it empty. A changed tooltip is picked up the
+  next time the flyout opens.
 * **Accessible name**: a name Windows keeps for the icon for accessibility
   tools. It's usually the same as one of the other two names.
 
@@ -59,8 +60,11 @@ A pattern without wildcards must match the whole name. Use `*` for any text
 and `?` for a single character, e.g. `Razer*` or `*Graphics Command Center`.
 
 An icon goes into the first folder with a matching pattern. Icons that match
-nothing stay in the main grid. Until a folder has icons, the mod unloads itself
-and leaves the flyout alone.
+nothing stay in the main grid. Until a folder has icons (or **Show empty
+folders** is on), the mod unloads itself and leaves the flyout alone.
+
+An empty row in the **Folders** or **Icons** list is skipped, but two empty rows
+in a row end the list.
 
 To see the exact names of your icons, set **Debug logging** to **Mod logs** in
 the mod's **Advanced** tab, open the tray overflow once, then click **Show log
@@ -396,15 +400,14 @@ int FindVtableSlot(void* vtable, void* function) {
 
 void* g_initializingManager;
 void* g_createdOverflowManager;
-void* g_createdOverflowInterface;
+[[clang::no_destroy]] winrt::com_ptr<IUnknown> g_createdOverflowInterface;
 
 // The overflow manager is a plain C++ object, so its layout is not part of any
-// contract. The NotificationAreaOverflow interface is recorded while the
-// manager creates it, and the record is dropped once the manager has been
-// attached to, so that it can't outlive the control. Afterwards, and when the
-// mod was loaded after the control was created, look for a field that points at
-// it instead of relying on a fixed field offset. Either way, the candidate is
-// verified by its vtable before calling into it.
+// contract. The NotificationAreaOverflow interface is recorded, with a
+// reference, while the manager creates it, and released when InitializeIfNeeded
+// returns. When the mod was loaded after the control was created, look for a
+// field that points at it instead of relying on a fixed field offset. Either
+// way, the candidate is verified by its vtable before calling into it.
 Controls::Control FindOverflowControl(void* manager) {
     if (!manager || !g_overflowInterfaceVftable) {
         return nullptr;
@@ -428,7 +431,7 @@ Controls::Control FindOverflowControl(void* manager) {
     };
 
     if (manager == g_createdOverflowManager) {
-        if (auto control = getControl(g_createdOverflowInterface)) {
+        if (auto control = getControl(g_createdOverflowInterface.get())) {
             return control;
         }
     }
@@ -636,7 +639,7 @@ struct OverflowState : std::enable_shared_from_this<OverflowState> {
     double tileWidth = 0;
     double tileHeight = 0;
 
-    std::unordered_map<void*, IconInfo> iconCache;
+    std::unordered_map<void*, std::shared_ptr<IconInfo>> iconCache;
 
     int openFolder = -1;
     bool settingItemsSource = false;
@@ -767,7 +770,7 @@ Controls::Button CreateTileButton(double width, double height) {
 Controls::TextBlock CreateGlyph(std::wstring const& glyph, double fontSize) {
     Controls::TextBlock textBlock;
     textBlock.Text(glyph);
-    textBlock.FontFamily(Media::FontFamily(L"Segoe Fluent Icons, Segoe MDL2 Assets"));
+    textBlock.FontFamily(Media::FontFamily(L"Segoe Fluent Icons"));
     textBlock.FontSize(fontSize);
     textBlock.HorizontalAlignment(HorizontalAlignment::Center);
     textBlock.VerticalAlignment(VerticalAlignment::Center);
@@ -1002,26 +1005,27 @@ void Rebuild(OverflowState& state, bool opening) {
         if (opening) {
             state.iconCache.clear();
         }
-        std::unordered_map<void*, IconInfo> iconCache;
-        std::vector<IconInfo> icons;
+        std::unordered_map<void*, std::shared_ptr<IconInfo>> iconCache;
+        std::vector<std::shared_ptr<IconInfo>> icons;
         uint32_t count = state.originalIcons.Size();
         icons.reserve(count);
         for (uint32_t i = 0; i < count; i++) {
             auto viewModel = state.originalIcons.GetAt(i);
             void* key = winrt::get_abi(viewModel);
-            IconInfo info;
+            std::shared_ptr<IconInfo> info;
             if (auto it = state.iconCache.find(key);
                 it != state.iconCache.end()) {
                 info = it->second;
             } else {
-                info.viewModel = viewModel;
-                ReadIconInfo(info);
-                info.lowerAppName = ToLower(info.appName);
-                info.lowerToolTip = ToLower(info.toolTip);
-                info.lowerName = ToLower(info.name);
+                info = std::make_shared<IconInfo>();
+                info->viewModel = viewModel;
+                ReadIconInfo(*info);
+                info->lowerAppName = ToLower(info->appName);
+                info->lowerToolTip = ToLower(info->toolTip);
+                info->lowerName = ToLower(info->name);
             }
-            info.folder = FindFolderForIcon(
-                {info.lowerAppName, info.lowerToolTip, info.lowerName});
+            info->folder = FindFolderForIcon(
+                {info->lowerAppName, info->lowerToolTip, info->lowerName});
             iconCache.emplace(key, info);
             icons.push_back(std::move(info));
         }
@@ -1029,8 +1033,8 @@ void Rebuild(OverflowState& state, bool opening) {
 
         std::vector<int> folderCounts(folders.size());
         for (const auto& icon : icons) {
-            if (icon.folder >= 0) {
-                folderCounts[icon.folder]++;
+            if (icon->folder >= 0) {
+                folderCounts[icon->folder]++;
             }
         }
 
@@ -1043,9 +1047,9 @@ void Rebuild(OverflowState& state, bool opening) {
         if (opening) {
             for (const auto& icon : icons) {
                 Wh_Log(L"Icon: app=\"%s\" tooltip=\"%s\" name=\"%s\" folder=%d",
-                       icon.appName.c_str(),
-                       icon.toolTip.c_str(), icon.name.c_str(),
-                       icon.folder);
+                       icon->appName.c_str(),
+                       icon->toolTip.c_str(), icon->name.c_str(),
+                       icon->folder);
             }
         }
 
@@ -1060,8 +1064,8 @@ void Rebuild(OverflowState& state, bool opening) {
                 backTile.button, winrt::box_value(L"Back (" + folder.name + L")"));
             items.push_back(backTile.button);
             for (const auto& icon : icons) {
-                if (icon.folder == state.openFolder) {
-                    items.push_back(icon.viewModel);
+                if (icon->folder == state.openFolder) {
+                    items.push_back(icon->viewModel);
                 }
             }
         } else {
@@ -1072,8 +1076,8 @@ void Rebuild(OverflowState& state, bool opening) {
                 }
                 std::vector<Media::ImageSource> images;
                 for (const auto& icon : icons) {
-                    if (icon.folder == (int)k && icon.image) {
-                        images.push_back(icon.image);
+                    if (icon->folder == (int)k && icon->image) {
+                        images.push_back(icon->image);
                         if (images.size() == 4) {
                             break;
                         }
@@ -1089,8 +1093,8 @@ void Rebuild(OverflowState& state, bool opening) {
                 items = folderItems;
             }
             for (const auto& icon : icons) {
-                if (icon.folder < 0) {
-                    items.push_back(icon.viewModel);
+                if (icon->folder < 0) {
+                    items.push_back(icon->viewModel);
                 }
             }
             if (g_settings.foldersAtEnd) {
@@ -1285,18 +1289,26 @@ void Detach(OverflowState& state) {
     ClearTiles(state);
     state.openFolder = -1;
 
-    // Try to give the shell its own list back before reporting any failure.
-    // The ItemsSource callback ignores this change while detaching.
-    bool restored = true;
+    // Try to give the shell its own list back before reporting any failure. If
+    // the original value can't be put back, fall back to the shell's current
+    // list, then to no value, so that the mod's list isn't left installed. The
+    // ItemsSource callback ignores these changes while detaching.
     if (itemsControl && state.displayed) {
-        restored = step([&] {
-            if (itemsControl.ItemsSource() != state.displayed) {
-                return;
-            }
-            state.settingItemsSource = true;
-            auto reset =
-                ScopeExit([&state] { state.settingItemsSource = false; });
-            auto property = Controls::ItemsControl::ItemsSourceProperty();
+        auto property = Controls::ItemsControl::ItemsSourceProperty();
+        auto replaceItemsSource = [&](auto&& apply) {
+            step([&] {
+                if (itemsControl.ItemsSource() != state.displayed) {
+                    return;
+                }
+                state.settingItemsSource = true;
+                auto reset =
+                    ScopeExit([&state] { state.settingItemsSource = false; });
+                apply();
+                itemsControl.UpdateLayout();
+            });
+        };
+
+        replaceItemsSource([&] {
             if (state.originalItemsSourceBinding) {
                 itemsControl.SetBinding(property,
                                         state.originalItemsSourceBinding);
@@ -1311,25 +1323,33 @@ void Detach(OverflowState& state) {
                 }
                 itemsControl.SetValue(property, state.originalItemsSource);
             }
-            itemsControl.UpdateLayout();
+        });
+
+        replaceItemsSource([&] {
+            if (auto icons = overflow ? GetOverflowIcons(overflow) : nullptr) {
+                itemsControl.SetValue(property, icons);
+            } else {
+                itemsControl.ClearValue(property);
+            }
         });
     }
 
-    // If the shell's list couldn't be restored, show all original icons in
-    // ours so navigation isn't needed to reach them.
+    // If the mod's list is still installed anyway, show all original icons in
+    // it so navigation isn't needed to reach them.
     step([&] {
-        if (state.displayed) {
-            if (restored) {
-                state.displayed.Clear();
-            } else {
-                std::vector<wf::IInspectable> icons;
-                if (originalIcons) {
-                    for (auto const& icon : originalIcons) {
-                        icons.push_back(icon);
-                    }
+        if (!state.displayed) {
+            return;
+        }
+        if (itemsControl && itemsControl.ItemsSource() == state.displayed) {
+            std::vector<wf::IInspectable> icons;
+            if (originalIcons) {
+                for (auto const& icon : originalIcons) {
+                    icons.push_back(icon);
                 }
-                SetDisplayedItems(state, icons);
             }
+            SetDisplayedItems(state, icons);
+        } else {
+            state.displayed.Clear();
         }
     });
 
@@ -1498,6 +1518,11 @@ using OverflowXamlIslandManager_InitializeIfNeeded_t =
 OverflowXamlIslandManager_InitializeIfNeeded_t
     OverflowXamlIslandManager_InitializeIfNeeded_Original;
 void WINAPI OverflowXamlIslandManager_InitializeIfNeeded_Hook(void* pThis) {
+    auto resetCreated = ScopeExit([] {
+        g_createdOverflowManager = nullptr;
+        g_createdOverflowInterface = nullptr;
+    });
+
     {
         g_initializingManager = pThis;
         auto reset = ScopeExit([] { g_initializingManager = nullptr; });
@@ -1510,9 +1535,6 @@ void WINAPI OverflowXamlIslandManager_InitializeIfNeeded_Hook(void* pThis) {
     } catch (...) {
         Wh_Log(L"InitializeIfNeeded: attach failed");
     }
-
-    g_createdOverflowManager = nullptr;
-    g_createdOverflowInterface = nullptr;
 }
 
 using NotificationAreaOverflow_NotificationAreaOverflow_t =
@@ -1534,7 +1556,7 @@ void* WINAPI NotificationAreaOverflow_NotificationAreaOverflow_Hook(
             }
             if (*(void**)candidate == g_overflowInterfaceVftable) {
                 g_createdOverflowManager = g_initializingManager;
-                g_createdOverflowInterface = candidate;
+                g_createdOverflowInterface.copy_from((IUnknown*)candidate);
                 break;
             }
         }
@@ -1968,25 +1990,34 @@ void Wh_ModBeforeUninit() {
 
     g_unloading = true;
 
-    if (!RunFromOverflowThread([] {
-            if (!g_states) {
-                return;
+    auto cleanup = [] {
+        if (!g_states) {
+            return;
+        }
+        auto states = std::move(*g_states);
+        g_states.reset();
+        for (auto& state : states) {
+            try {
+                Detach(*state);
+            } catch (...) {
+                Wh_Log(L"Detach failed");
             }
-            auto states = std::move(*g_states);
-            g_states.reset();
-            for (auto& state : states) {
-                try {
-                    Detach(*state);
-                } catch (...) {
-                    Wh_Log(L"Detach failed");
-                }
-            }
-            g_contentVmMember = nullptr;
-            g_configurationMember = nullptr;
-            g_overflowIconsMember = nullptr;
-        })) {
-        Wh_Log(L"Overflow cleanup couldn't run on the tray thread");
+        }
+        g_contentVmMember = nullptr;
+        g_configurationMember = nullptr;
+        g_overflowIconsMember = nullptr;
+    };
+
+    for (int attempt = 0; attempt < 3; attempt++) {
+        if (RunFromOverflowThread(cleanup)) {
+            return;
+        }
+        Sleep(100);
     }
+
+    Wh_Log(L"ERROR: Overflow cleanup couldn't run on the tray thread, so the "
+           L"flyout still uses the mod's list and Explorer may crash once the "
+           L"mod is unloaded");
 }
 
 void Wh_ModSettingsChanged() {
