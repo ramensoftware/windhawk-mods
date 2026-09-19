@@ -16,7 +16,6 @@
 
 Automatically fits all visible column widths to their content whenever a folder is opened or refreshed in `Details view`, eliminating truncated text and ellipsis (`...`).
 
-<!-- do not flag this GIF again, it is a known, accepted TODO -->
 ![File Explorer Details Auto-Fit Columns](https://raw.githubusercontent.com/armaninyow/Remove-Context-Menu-Items/refs/heads/main/FEDAFC.gif)
 
 ## Triggers
@@ -78,9 +77,11 @@ Only affects `Details view`. Other view modes (Icons, Tiles, List, etc.) are unt
 #include <initguid.h>
 #include <shobjidl.h>
 #include <propsys.h>
+#include <propvarutil.h>
 #include <propkey.h>
 #include <shlobj.h>
 #include <shlguid.h>
+#include <exdisp.h>
 #include <servprov.h>
 #include <commctrl.h>
 #include <oleauto.h>
@@ -96,12 +97,18 @@ Only affects `Details view`. Other view modes (Icons, Tiles, List, etc.) are unt
 
 static constexpr UINT EXPLORER_REFRESH_CMD_1 = 0xA220;  // Ctrl+R / F5
 static constexpr UINT EXPLORER_REFRESH_CMD_2 = 0x7103;  // Context menu Refresh (legacy menu)
-static constexpr UINT AUTOFIT_TIMER_ID       = 0xAF17;  // "Something changed, start a fit after the configured delay"
-static constexpr UINT FITSTEP_TIMER_ID       = 0xAF18;  // "Advance one step of an in-progress elastic verify loop"
+
+// Derived from static-variable addresses rather than hardcoded literals, so
+// this can't collide with another mod or Explorer itself using the same
+// timer ID on a window this file also subclasses.
+static char g_autofitTimerIdAnchor = 0;
+static char g_fitstepTimerIdAnchor = 0;
+static const UINT_PTR AUTOFIT_TIMER_ID = reinterpret_cast<UINT_PTR>(&g_autofitTimerIdAnchor);  // "start a fit after the configured delay"
+static const UINT_PTR FITSTEP_TIMER_ID = reinterpret_cast<UINT_PTR>(&g_fitstepTimerIdAnchor);  // "advance one step of an in-progress fit"
 
 // Window classes that receive refresh commands. ReBarWindow32/ToolbarWindow32
-// were for the now-replaced WM_NOTIFY -715 path; suggested twice for removal
-// as possibly-redundant with CBrowserHost::Refresh below, not yet verified.
+// were for the now-replaced WM_NOTIFY -715 path; possibly redundant now that
+// CBrowserHost::Refresh is also hooked below, but not yet verified safe to drop.
 static const PCWSTR kSubclassTargets[] = {
     L"ShellTabWindowClass",
     L"ReBarWindow32",
@@ -177,6 +184,10 @@ static std::unordered_map<HWND, TabWidthCache> g_tabWidthCache;
 // Per-tab current folder PIDL, so UIActivate can skip re-registering and
 // re-fitting when it fires for focus/tab-switch reasons, not navigation.
 static std::unordered_map<HWND, PIDLIST_ABSOLUTE> g_tabFolderPidl;
+
+// Per-window minimized state, so a restore-from-minimize WM_SIZE can be told
+// apart from an ordinary resize and always re-fit regardless of Fit Mode.
+static std::unordered_map<HWND, bool> g_windowWasMinimized;
 
 static bool SameColumnKeys(const std::vector<PROPERTYKEY>& a, const std::vector<PROPERTYKEY>& b) {
     if (a.size() != b.size()) return false;
@@ -306,7 +317,7 @@ static HFONT CreateFontFromWindowOrDefault(HWND hwndSource, UINT dpi) {
 
 // UI Automation fallback for Elastic's horizontal-scroll check when there is
 // no classic SysListView32 (stock Explorer can host a DirectUIHWND instead).
-// Confirmed necessary via a real regression when removed -- do not remove again without testing on a machine with no SysListView32.
+// Removing this previously caused a real regression (a persistent scrollbar) -- keep it.
 static thread_local IUIAutomation* tls_pAutomation = nullptr;
 
 static IUIAutomation* GetThreadAutomation() {
@@ -410,46 +421,22 @@ static int MeasureItemColumnWidth(IShellFolder2* pFolder2, PITEMID_CHILD pidl,
     if (FAILED(pFolder2->GetDetailsEx(pidl, reinterpret_cast<const SHCOLUMNID*>(&key), &v)))
         return -1;
 
-    PCWSTR text = nullptr;
-    VARIANT converted;
-    VariantInit(&converted);
-    bool haveConverted = false;
+    // VariantToPropVariant handles both scalars and VT_ARRAY|VT_BSTR (e.g.
+    // Contributing Artists) correctly, unlike a raw VARIANT->PROPVARIANT cast,
+    // and PSFormatForDisplay then joins multi-value properties the same way Explorer does.
+    PROPVARIANT pv;
+    PropVariantInit(&pv);
+    HRESULT hrConv = VariantToPropVariant(&v, &pv);
+    VariantClear(&v);
+    if (FAILED(hrConv))
+        return -1;
 
-    if ((v.vt & VT_ARRAY) && (v.vt & VT_TYPEMASK) == VT_BSTR) {
-        // Multi-value property (e.g. Contributing Artists): PSFormatForDisplay
-        // takes a PROPVARIANT, whose vector representation differs from a
-        // VARIANT SAFEARRAY, so this is joined manually instead of converted.
-        SAFEARRAY* psa = v.parray;
-        if (psa) {
-            LONG lBound = 0, uBound = -1;
-            SafeArrayGetLBound(psa, 1, &lBound);
-            SafeArrayGetUBound(psa, 1, &uBound);
-            dispBuf[0] = L'\0';
-            for (LONG idx = lBound; idx <= uBound; idx++) {
-                BSTR item = nullptr;
-                if (SUCCEEDED(SafeArrayGetElement(psa, &idx, &item)) && item) {
-                    if (dispBuf[0] != L'\0') wcsncat_s(dispBuf, dispBufLen, L"; ", _TRUNCATE);
-                    wcsncat_s(dispBuf, dispBufLen, item, _TRUNCATE);
-                    SysFreeString(item);
-                }
-            }
-            text = dispBuf;
-        }
-    } else if (!(v.vt & VT_ARRAY)) {
-        // Scalar (string, number, date): layout matches between VARIANT and PROPVARIANT here.
-        if (SUCCEEDED(PSFormatForDisplay(key, *reinterpret_cast<const PROPVARIANT*>(&v),
-                                          PDFF_DEFAULT, dispBuf, static_cast<UINT>(dispBufLen))))
-            text = dispBuf;
-        else if (SUCCEEDED(VariantChangeType(&converted, &v, 0, VT_BSTR))) {
-            text = converted.bstrVal;
-            haveConverted = true;
-        }
-    }
+    PCWSTR text = nullptr;
+    if (SUCCEEDED(PSFormatForDisplay(key, pv, PDFF_DEFAULT, dispBuf, static_cast<UINT>(dispBufLen))))
+        text = dispBuf;
 
     int width = text ? MeasureTextWidth(hdc, text) : -1;
-
-    if (haveConverted) VariantClear(&converted);
-    VariantClear(&v);
+    PropVariantClear(&pv);
     return width;
 }
 
@@ -533,7 +520,7 @@ struct FitContext {
     HGDIOBJ hOldFontScan = nullptr;  // restored into hdcScan before hFontItemScan is deleted
     std::vector<int> scanRunningMax;
     int scanIndex = 0;
-    ULONGLONG scanBudgetRemainingMs = 0;  // counts down by time actually spent scanning, not idle time between chunks
+    ULONGLONG scanBudgetRemainingUs = 0;  // counts down (microseconds) by time actually spent scanning, not idle time between chunks
 
     std::vector<int> headerFloor;               // used only as a floor under the measured width
     std::vector<PITEMID_CHILD> widestPidl;       // owned; per column, from the initial scan
@@ -685,6 +672,22 @@ static void Step_FinishScan(FitContext* ctx, HWND hwndOwner) {
     Step_SelectWidest(ctx, hwndOwner);
 }
 
+// Elapsed time in microseconds via QueryPerformanceCounter. GetTickCount64's
+// ~15.6ms resolution let a chunk that starts and ends inside the same tick
+// cost 0 against the scan budget; this doesn't have that gap.
+static ULONGLONG QpcNowUs() {
+    static LARGE_INTEGER freq = [] {
+        LARGE_INTEGER f;
+        QueryPerformanceFrequency(&f);
+        return f;
+    }();
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+    ULONGLONG whole = static_cast<ULONGLONG>(now.QuadPart) / freq.QuadPart;
+    ULONGLONG rem = static_cast<ULONGLONG>(now.QuadPart) % freq.QuadPart;
+    return whole * 1000000ULL + (rem * 1000000ULL) / freq.QuadPart;
+}
+
 // Measures one chunk of items per call so the UI thread is never blocked for
 // longer than kScanChunkMaxBlockMs at a time, regardless of how much budget
 // remains. Only aborts once the total budget is actually exhausted.
@@ -692,13 +695,13 @@ static void Step_ScanChunk(FitContext* ctx, HWND hwndOwner) {
     WCHAR dispBuf[512];
     int end = std::min(ctx->scanIndex + kScanChunkItems, ctx->itemCount);
 
-    ULONGLONG chunkStart = GetTickCount64();
-    ULONGLONG chunkBlockMs = std::min<ULONGLONG>(ctx->scanBudgetRemainingMs, kScanChunkMaxBlockMs);
-    ULONGLONG chunkDeadline = chunkStart + chunkBlockMs;
+    ULONGLONG chunkStartUs = QpcNowUs();
+    ULONGLONG chunkBlockUs = std::min<ULONGLONG>(ctx->scanBudgetRemainingUs, kScanChunkMaxBlockMs * 1000ULL);
+    ULONGLONG chunkDeadlineUs = chunkStartUs + chunkBlockUs;
 
     int i = ctx->scanIndex;
     for (; i < end; i++) {
-        if (GetTickCount64() >= chunkDeadline) break;  // yield; this item is picked up again next tick
+        if (QpcNowUs() >= chunkDeadlineUs) break;  // yield; this item is picked up again next tick
 
         PITEMID_CHILD pidl = nullptr;
         if (FAILED(ctx->pFV2->Item(i, &pidl)) || !pidl)
@@ -716,11 +719,11 @@ static void Step_ScanChunk(FitContext* ctx, HWND hwndOwner) {
         CoTaskMemFree(pidl);
     }
 
-    ULONGLONG elapsed = GetTickCount64() - chunkStart;
-    ctx->scanBudgetRemainingMs = (elapsed >= ctx->scanBudgetRemainingMs) ? 0 : ctx->scanBudgetRemainingMs - elapsed;
+    ULONGLONG elapsedUs = QpcNowUs() - chunkStartUs;
+    ctx->scanBudgetRemainingUs = (elapsedUs >= ctx->scanBudgetRemainingUs) ? 0 : ctx->scanBudgetRemainingUs - elapsedUs;
     ctx->scanIndex = i;
 
-    if (ctx->scanBudgetRemainingMs == 0 && ctx->scanIndex < ctx->itemCount) {
+    if (ctx->scanBudgetRemainingUs == 0 && ctx->scanIndex < ctx->itemCount) {
         Step_AbortScan(ctx, hwndOwner);
         return;
     }
@@ -1201,23 +1204,38 @@ static void StartAutoFit(IShellView* pShellView, HWND hwndOwner, TriggerKind kin
     ctx->hOldFontScan = SelectObject(ctx->hdcScan, ctx->hFontItemScan);
     ctx->scanRunningMax.assign(colCount, 0);
     ctx->scanIndex = 0;
-    ctx->scanBudgetRemainingMs = kScanTimeBudgetMs;
+    ctx->scanBudgetRemainingUs = kScanTimeBudgetMs * 1000ULL;
     ctx->phase = FitContext::Phase::WaitScanChunk;
 
     FitContext* rawCtx = ctx.get();
     EnterCriticalSection(&g_cs);
     (*g_fitContexts)[hwndOwner] = std::move(ctx);
+    rawCtx->inStep = true;
     LeaveCriticalSection(&g_cs);
 
     Step_ScanChunk(rawCtx, hwndOwner);
+
+    // Same re-validation AdvanceFitContext uses: a re-entrant cleanup during
+    // this first chunk defers instead of freeing, so finish that here.
+    std::unique_ptr<FitContext> ctxToDestroy;
+    EnterCriticalSection(&g_cs);
+    auto itSelf = g_fitContexts->find(hwndOwner);
+    if (itSelf != g_fitContexts->end() && itSelf->second.get() == rawCtx) {
+        rawCtx->inStep = false;
+        if (rawCtx->pendingDestroy) {
+            ctxToDestroy = std::move(itSelf->second);
+            g_fitContexts->erase(itSelf);
+        }
+    }
+    LeaveCriticalSection(&g_cs);
 }
 
 // Finds the ShellTabWindowClass ancestor of a HWND. GetAncestor(GA_PARENT) is used rather
 // than GetParent, which returns the owner (not the parent) for top-level windows.
 static HWND FindTabWindow(HWND hwnd) {
-    WCHAR cls[64] = {};
     HWND cur = hwnd;
     while (cur) {
+        WCHAR cls[64] = {};  // cleared each iteration: a failed GetClassNameW must not leave a stale match
         GetClassNameW(cur, cls, ARRAYSIZE(cls));
         if (wcscmp(cls, L"ShellTabWindowClass") == 0)
             return cur;
@@ -1516,8 +1534,8 @@ using CBrowserHost_Refresh_t = HRESULT(__thiscall*)(void* pThis, long param);
 CBrowserHost_Refresh_t CBrowserHost_Refresh_orig = nullptr;
 
 // Now that CDefView::Refresh is also hooked, this may be redundant for the
-// toolbar-button case; suggested for removal twice but not yet confirmed --
-// dropping it would also remove the pThis cast below on an internal explorerframe.dll class.
+// toolbar-button case, but not yet verified safe to drop -- doing so would
+// also remove the pThis cast below on an internal explorerframe.dll class.
 HRESULT __thiscall CBrowserHost_Refresh_hook(void* pThis, long param) {
     HRESULT hr = CBrowserHost_Refresh_orig(pThis, param);
     if (SUCCEEDED(hr))
@@ -1559,6 +1577,7 @@ static void CleanupWindowState(HWND hwnd) {
     }
     g_tabWidthCache.erase(hwnd);
     g_pendingTriggerKind.erase(hwnd);
+    g_windowWasMinimized.erase(hwnd);
     if (auto itPidl = g_tabFolderPidl.find(hwnd); itPidl != g_tabFolderPidl.end()) {
         ILFree(itPidl->second);
         g_tabFolderPidl.erase(itPidl);
@@ -1607,10 +1626,24 @@ static LRESULT CALLBACK ExplorerSubclassProc(
         }
     }
 
-    // SIZE_MINIMIZED gives an empty client rect, which would otherwise
-    // collapse the Name column to CM_WIDTH_AUTOSIZE until the next real fit.
-    if (uMsg == WM_SIZE && wParam != SIZE_MINIMIZED && GetCachedSettings().fitMode == FitMode::Elastic)
-        isResizeRefresh = true;
+    // Restoring from minimize should re-fit in every mode (1.0.0 always did,
+    // via UIActivate); WM_SIZE(SIZE_MINIMIZED) itself must not, since its
+    // empty client rect would otherwise collapse Name to CM_WIDTH_AUTOSIZE.
+    if (uMsg == WM_SIZE) {
+        bool wasMinimized = false;
+        EnterCriticalSection(&g_cs);
+        auto itMin = g_windowWasMinimized.find(hwnd);
+        wasMinimized = (itMin != g_windowWasMinimized.end() && itMin->second);
+        g_windowWasMinimized[hwnd] = (wParam == SIZE_MINIMIZED);
+        LeaveCriticalSection(&g_cs);
+
+        if (wParam != SIZE_MINIMIZED) {
+            if (wasMinimized)
+                isFullRefresh = true;
+            else if (GetCachedSettings().fitMode == FitMode::Elastic)
+                isResizeRefresh = true;
+        }
+    }
 
     if (isFullRefresh || isChangeNotify || isResizeRefresh) {
         HWND hwndTab = nullptr;
@@ -1695,7 +1728,6 @@ BOOL Wh_ModInit() {
         hShell32 = LoadLibraryExW(L"shell32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hShell32) {
         Wh_Log(L"Failed to load shell32.dll");
-        DeleteCriticalSection(&g_cs);
         return FALSE;
     }
 
@@ -1726,7 +1758,6 @@ BOOL Wh_ModInit() {
 
     if (!WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks))) {
         Wh_Log(L"ERROR: Could not hook CDefView::UIActivate");
-        DeleteCriticalSection(&g_cs);
         return FALSE;
     }
 
@@ -1757,6 +1788,78 @@ BOOL Wh_ModInit() {
     }
 
     return TRUE;
+}
+
+// Tracks and fits a shell view discovered by enumeration (Wh_ModAfterInit)
+// rather than via the UIActivate hook -- so this is a plain first-time track,
+// with no prior state to compare against.
+static void TrackAndFitDiscoveredShellView(IShellView* pShellView) {
+    if (!pShellView) return;
+
+    HWND hwndView = nullptr;
+    pShellView->GetWindow(&hwndView);
+    HWND hwndTab = hwndView ? FindTabWindow(hwndView) : nullptr;
+    if (!hwndView || !hwndTab) return;
+
+    HWND hwndTop = GetAncestor(hwndView, GA_ROOT);
+
+    pShellView->AddRef();
+    EnterCriticalSection(&g_cs);
+    g_tabShellViews[hwndTab] = pShellView;
+    LeaveCriticalSection(&g_cs);
+
+    EnumChildData data = { hwndTab };
+    EnumChildWindows(hwndTop, SubclassChildProc, reinterpret_cast<LPARAM>(&data));
+    TrackAndSubclass(hwndTop, hwndTab);
+    TrackAndSubclass(hwndView, hwndTab);
+
+    PIDLIST_ABSOLUTE currentPidl = GetShellViewFolderPidl(pShellView);
+    if (currentPidl) {
+        PIDLIST_ABSOLUTE ownedCopy = ILCloneFull(currentPidl);
+        EnterCriticalSection(&g_cs);
+        g_tabFolderPidl[hwndTab] = ownedCopy;
+        LeaveCriticalSection(&g_cs);
+    }
+
+    RegisterFolderChangeNotify(hwndTab, currentPidl);  // takes ownership
+    ScheduleFit(hwndTab, TriggerKind::Full);
+}
+
+// Enabling the mod mid-session left every already-open Explorer window
+// untracked until its next UIActivate, so even F5 did nothing until then.
+// Enumerate open windows here the same way explorer-force-details-columns does.
+void Wh_ModAfterInit() {
+    IShellWindows* pShellWindows = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_LOCAL_SERVER,
+                                 IID_PPV_ARGS(&pShellWindows))) || !pShellWindows)
+        return;
+
+    long count = 0;
+    pShellWindows->get_Count(&count);
+    for (long i = 0; i < count; i++) {
+        VARIANT vi = {};
+        vi.vt = VT_I4;
+        vi.lVal = i;
+        IDispatch* pDisp = nullptr;
+        if (FAILED(pShellWindows->Item(vi, &pDisp)) || !pDisp)
+            continue;
+
+        IServiceProvider* pSP = nullptr;
+        if (SUCCEEDED(pDisp->QueryInterface(IID_PPV_ARGS(&pSP))) && pSP) {
+            IShellBrowser* pSB = nullptr;
+            if (SUCCEEDED(pSP->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(&pSB))) && pSB) {
+                IShellView* pSV = nullptr;
+                if (SUCCEEDED(pSB->QueryActiveShellView(&pSV)) && pSV) {
+                    TrackAndFitDiscoveredShellView(pSV);
+                    pSV->Release();
+                }
+                pSB->Release();
+            }
+            pSP->Release();
+        }
+        pDisp->Release();
+    }
+    pShellWindows->Release();
 }
 
 void Wh_ModUninit() {
@@ -1794,6 +1897,7 @@ void Wh_ModUninit() {
     g_tabNotifyReg.clear();
     g_tabWidthCache.clear();
     g_pendingTriggerKind.clear();
+    g_windowWasMinimized.clear();
     for (auto& [hwnd, pidl] : g_tabFolderPidl)
         ILFree(pidl);
     g_tabFolderPidl.clear();
@@ -1804,18 +1908,39 @@ void Wh_ModUninit() {
     for (IShellView* pSV : leftoverViews) pSV->Release();
     for (ULONG reg : leftoverRegs) SHChangeNotifyDeregister(reg);
 
+    // A context whose step was mid-flight when cleanup ran is deferred, not
+    // freed (see inStep/pendingDestroy) -- wait for AdvanceFitContext to
+    // finish it before resetting the map out from under that running step.
+    for (int i = 0; i < 200; i++) {
+        EnterCriticalSection(&g_cs);
+        bool busy = !g_fitContexts->empty();
+        LeaveCriticalSection(&g_cs);
+        if (!busy) break;
+        Sleep(5);
+    }
+
     // Reset outside g_cs so a surviving FitContext's COM release (if any) never happens while holding a lock other threads block on.
     g_fitContexts.reset();
 
-    DeleteCriticalSection(&g_cs);
+    // g_cs is intentionally never deleted: a step that outlasted the wait
+    // above could still (rarely) EnterCriticalSection after this returns,
+    // and a plain CRITICAL_SECTION global has no destructor to race with.
 }
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
 
+    std::vector<HWND> tabs;
     EnterCriticalSection(&g_cs);
     g_tabWidthCache.clear();  // fit mode or scan settings may have changed
+    for (auto& [hwndTab, pSV] : g_tabShellViews)
+        if (pSV) tabs.push_back(hwndTab);
     LeaveCriticalSection(&g_cs);
+
+    // Otherwise switching Fit Mode (or leaving Elastic) looks like nothing
+    // happened until the next unrelated trigger fires for that tab.
+    for (HWND hwndTab : tabs)
+        ScheduleFit(hwndTab, TriggerKind::Full);
 
     Settings s = GetCachedSettings();
     Wh_Log(L"SettingsChanged — delay: %ums, fit mode: %d, max scan items: %d",
