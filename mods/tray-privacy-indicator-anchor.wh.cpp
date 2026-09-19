@@ -3637,7 +3637,7 @@ public:
 
     ULONG STDMETHODCALLTYPE Release() override {
         ULONG count = (ULONG)InterlockedDecrement(&m_refCount);
-        if (count == 0) m_refCount = 1; // lifetime is owned by the monitor thread
+        if (count == 0) delete this;
         return count;
     }
 
@@ -4961,6 +4961,11 @@ static bool InjectSyntheticIcons(FrameworkElement root) {
     g_locSlot = nullptr; g_micSlot = nullptr; g_camSlot = nullptr; g_copilotSlot = nullptr;
     g_locGlowIcon = nullptr; g_micGlowIcon = nullptr; g_camGlowIcon = nullptr; g_copilotGlowIcon = nullptr;
     g_locSlashIcon = nullptr; g_micSlashIcon = nullptr; g_camSlashIcon = nullptr; g_copilotSlashIcon = nullptr;
+    // Publish the partially built ownership before adding callbacks. Every
+    // placement failure below can then use one symmetric teardown path instead
+    // of leaving subscriptions, storyboards, or leases for a later retry.
+    g_syntheticGrid = bar;
+    g_syntheticParent = gridElem;
 
     for (auto const& placement : placements) {
         const auto& token = placement.token;
@@ -5197,6 +5202,7 @@ static bool InjectSyntheticIcons(FrameworkElement root) {
                 g_startLease)) {
             Wh_Log(L"[Inject] Start anchor unavailable: %s",
                    PositionName(g_settings.position));
+            RemoveSyntheticIcons();
             return false;
         }
         g_syntheticParent = g_startLease.rootGrid;
@@ -5205,6 +5211,7 @@ static bool InjectSyntheticIcons(FrameworkElement root) {
                 gridParent, insertCol, L"PrivacyAnchorColumnMarker",
                 g_columnLease)) {
             Wh_Log(L"[Inject] Failed to acquire tray column %d", insertCol);
+            RemoveSyntheticIcons();
             return false;
         }
         bool placed = false;
@@ -5217,6 +5224,7 @@ static bool InjectSyntheticIcons(FrameworkElement root) {
         if (!placed) {
             lease_column::Release(gridParent, g_columnLease);
             Wh_Log(L"[Inject] Could not place PrivacyAnchorBar in the lease");
+            RemoveSyntheticIcons();
             return false;
         }
         g_syntheticParent = gridElem;
@@ -5427,11 +5435,21 @@ static void ScanMainStack(FrameworkElement mainStack) {
 
 static void ClearPrivacyStates() {
     for (auto& state : g_privacyStates) {
-        if (auto tb = state.textBlockRef.get())
-            tb.UnregisterPropertyChangedCallback(TextBlock::TextProperty(), state.textToken);
+        try {
+            if (auto tb = state.textBlockRef.get(); state.textToken)
+                tb.UnregisterPropertyChangedCallback(
+                    TextBlock::TextProperty(), state.textToken);
+        } catch (...) {
+            LogCurrentUiException(L"privacy text unregister");
+        }
         if (auto iv = state.iconViewRef.get()) {
-            if (state.visibilityToken)
-                iv.UnregisterPropertyChangedCallback(UIElement::VisibilityProperty(), state.visibilityToken);
+            try {
+                if (state.visibilityToken)
+                    iv.UnregisterPropertyChangedCallback(
+                        UIElement::VisibilityProperty(), state.visibilityToken);
+            } catch (...) {
+                LogCurrentUiException(L"privacy visibility unregister");
+            }
             // Nothing is re-derived here any more: the lease restores each
             // property's exact prior local value below, including "there was
             // no local value", which clears the write and hands the icon back
@@ -5746,7 +5764,11 @@ void Wh_ModAfterInit() {
         // bitmask. Timers are only used for Copilot process activity, a
         // five-minute health reconciliation, and backed-off setup retries.
         if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) return 0;
-        MicPrivacyMonitor micMonitor;
+        // MMDevice owns callback references independently. Keep our own heap
+        // reference until unregistering, then Release it so an in-flight COM
+        // callback keeps the object alive instead of referring to a vanished
+        // worker-stack frame.
+        auto* micMonitor = new (std::nothrow) MicPrivacyMonitor;
         CameraPrivacyMonitor cameraMonitor;
         DeviceStateMonitor deviceMonitor;
         RegistryChangeMonitor registryMonitor;
@@ -5813,7 +5835,7 @@ void Wh_ModAfterInit() {
             L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AppModel",
             RefreshCopilotState, L"HKLM AppModel repository");
 
-        micMonitor.Init();
+        if (micMonitor) micMonitor->Init();
         cameraMonitor.Init();
         deviceMonitor.Init();
         DWORD initialRegistrationFlags = registryMonitor.RefreshRegistrations();
@@ -5899,7 +5921,10 @@ void Wh_ModAfterInit() {
         }
         deviceMonitor.Cleanup();
         cameraMonitor.Cleanup();
-        micMonitor.Cleanup();
+        if (micMonitor) {
+            micMonitor->Cleanup();
+            micMonitor->Release();
+        }
         registryMonitor.Cleanup();
         CoUninitialize();
         return 0;
@@ -5918,7 +5943,7 @@ void Wh_ModUninit() {
     // thread — clear them inside RunFromWindowThread, not here.
     HWND hWnd = tbh::ResolveTaskbarWnd(g_taskbarWnd);
     if (hWnd) {
-        RunFromWindowThread(hWnd, [](void*) {
+        bool cleaned = RunFromWindowThread(hWnd, [](void*) {
             RemoveModUi();
             // Terminal unload: free the no_destroy optional buffers on the UI
             // thread (RemoveModUi already revoked/cleared their elements).
@@ -5927,6 +5952,14 @@ void Wh_ModUninit() {
             g_loadedRevokers.reset();
             g_lease.reset();
         }, nullptr);
+        if (!cleaned) {
+            Wh_Log(L"[Uninit] Taskbar cleanup dispatch failed; retrying callback removal");
+            if (HWND retryWnd = tbh::ResolveTaskbarWnd(g_taskbarWnd)) {
+                RunFromWindowThread(retryWnd, [](void*) {
+                    RemoveModUi();
+                }, nullptr);
+            }
+        }
     } else {
         // No taskbar window means there is no known UI thread on which XAML
         // cleanup is safe. The no_destroy holders intentionally retain their
