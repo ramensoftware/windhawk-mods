@@ -1,4 +1,4 @@
-// ==WindhawkMod==
+﻿// ==WindhawkMod==
 // @id              agenda-in-calendar-view
 // @name            Agenda in Calendar View
 // @description     Show .ics events in the calendar view in the Notification Centre like in Windows 10
@@ -67,15 +67,14 @@ Checking events on other dates:
 
 
 ## FAQ
-* **My local `.ics` file gives an access error (`CreateFileW failed 5`)!**  
-  Windows `ShellExperienceHost` runs inside an AppContainer sandbox.  
-  - **Recommended:** Place your `.ics` file in an accessible directory such as `C:\ProgramData\` (e.g. `C:\ProgramData\calendar.ics`), which is readable by AppContainer packages by default.  
-  - Alternatively, grant read permissions on your file to AppContainers by running:  
-    `icacls "C:\path\to\calendar.ics" /grant "*S-1-15-2-1:(R)"`  
-    in PowerShell. *Note: `*S-1-15-2-1` grants read permissions to ALL APPLICATION PACKAGES (all UWP/packaged apps).*
-* **My local `.ics` file does not work!**  
-  Unblock it from its *Properties* pane in File Explorer.
-* **The bottom corners of the *Notifications* pane (immediately above the agenda) are not rounded!**  
+* **My local `.ics` file does not work!**
+  - First try going to its Properties in File Explorer, and ticking "Unblock".
+  - If that doesn't work, grant read permissions on your file to AppContainers by running:
+    `icacls "C:\path\to\calendar.ics" /grant "*S-1-15-2-1:(R)"`
+    in PowerShell.
+    This allows `ShellExperienceHost.exe`, which is the process hosting the calendar pane, to access your calendar file.
+    *Note: `*S-1-15-2-1` grants read permissions to ALL APPLICATION PACKAGES (all UWP/packaged apps).*
+* **The bottom corners of the *Notifications* pane (immediately above the agenda) are not rounded!**
   Set a maximum height for the Agenda in the mod settings to stop it from clipping the *Notifications* pane.
 
 */
@@ -89,12 +88,25 @@ Checking events on other dates:
   $name: Path to .ics
   $description: |
     Local file path or remote URL to the .ics calendar file.
-    Make sure it is unblocked in File Explorer Properties.
-- maxHeight: 400
-  $name: Max height (in pixels)
+    Read the FAQ if you have issues with local files.
+- groupingMode: inline
+  $name: Calendar pane mode
   $description: |
-    Maximum visible height of the events list in pixels before the list starts to scroll.
-    Set to 0 to disable.
+    When in inline mode, the calendar pane in its own row, rather than as a popup. 
+    Note that this may cause the notifications pane to not be visible on shorter monitors. You can mitigate this by setting a constraint on the height of the calendar pane when it is expanded.
+  $options: 
+  - inline: "Inline: show in separate row"
+  - popup: "Popup: show as dismissable overlay"
+- maxHeightCollapsed: 0
+  $name: Max height of agenda (calendar collapsed/popup)
+  $description: |
+    Maximum visible height of the events list in pixels before the list starts to scroll. Set to 0 for no limit.
+    This constraint applies for when the calendar is collapsed in inline mode or when the calendar is in popup mode.
+- maxHeightExpanded: 200
+  $name: Max height of agenda (calendar expanded)
+  $description: |
+    Maximum visible height of the events list in pixels before the list starts to scroll. Set to 0 for no limit.
+    This constraint applies for when the calendar is expanded in inline mode. It has no effect when the calendar is in popup mode.
 - timeColumnWidth: 65
   $name: Time column width (in pixels)
   $description: |
@@ -924,8 +936,30 @@ std::wstring GetIcsPathSetting() {
     return result;
 }
 
+bool IsInlineCalendarMode() {
+    PCWSTR mode = Wh_GetStringSetting(L"groupingMode");
+    bool isInline = true;
+    if (mode) {
+        if (wcscmp(mode, L"popup") == 0) {
+            isInline = false;
+        }
+        Wh_FreeStringSetting(mode);
+    }
+    return isInline;
+}
+
+int GetMaxHeightCollapsedSetting() {
+    int val = Wh_GetIntSetting(L"maxHeightCollapsed");
+    return (val < 0) ? 0 : val;
+}
+
+int GetMaxHeightExpandedSetting() {
+    int val = Wh_GetIntSetting(L"maxHeightExpanded");
+    return (val < 0) ? 0 : val;
+}
+
 int GetMaxHeightSetting() {
-    return Wh_GetIntSetting(L"maxHeight");
+    return GetMaxHeightCollapsedSetting();
 }
 
 int GetTimeColumnWidthSetting() {
@@ -1479,6 +1513,16 @@ wuxm::Brush GetCardBorderBrush() {
 }
 
 
+std::wstring FormatFilterDate(SYSTEMTIME const& st) {
+    SYSTEMTIME validSt = st;
+    if (validSt.wYear == 0) {
+        GetLocalTime(&validSt);
+    }
+    wchar_t dateBuf[128]{};
+    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &validSt, L"dddd, d MMM, yyyy", dateBuf, ARRAYSIZE(dateBuf), nullptr);
+    return dateBuf;
+}
+
 namespace {
     [[clang::no_destroy]] wuxc::Grid m_rootGrid{nullptr};
     [[clang::no_destroy]] wuxc::Grid m_headerGrid{nullptr};
@@ -1487,11 +1531,17 @@ namespace {
     [[clang::no_destroy]] wuxi::KeyboardAccelerator m_prevDayAccel{nullptr};
     [[clang::no_destroy]] wuxi::KeyboardAccelerator m_nextDayAccel{nullptr};
     [[clang::no_destroy]] wuxc::Button m_refreshButton{nullptr};
+    [[clang::no_destroy]] wuxc::Button m_dateButton{nullptr};
+    [[clang::no_destroy]] wuxc::TextBlock m_dateButtonText{nullptr};
+    [[clang::no_destroy]] wuxc::CalendarView m_calendarView{nullptr};
     [[clang::no_destroy]] wuxc::CalendarDatePicker m_datePicker{nullptr};
+    winrt::event_token m_dateChangedToken{};
     [[clang::no_destroy]] wuxc::ScrollViewer m_eventsScrollViewer{nullptr};
     [[clang::no_destroy]] wuxc::ItemsControl m_itemsControl{nullptr};
     SYSTEMTIME m_currentFilterDate{};
-    winrt::event_token m_dateChangedToken{};
+    winrt::event_token m_calendarViewSelectionChangedToken{};
+    winrt::event_token m_dateBtnClickToken{};
+    bool m_isUpdatingCalendarSelection{false};
     winrt::event_token m_prevBtnToken{};
     winrt::event_token m_nextBtnToken{};
     winrt::event_token m_refreshBtnToken{};
@@ -1560,8 +1610,17 @@ void RestoreCalendarContent() {
         }
     } catch (...) {}
     try {
+        if (m_dateButton && m_dateBtnClickToken.value != 0) {
+            m_dateButton.Click(m_dateBtnClickToken);
+            m_dateBtnClickToken = {};
+        }
+        if (m_calendarView && m_calendarViewSelectionChangedToken.value != 0) {
+            m_calendarView.SelectedDatesChanged(m_calendarViewSelectionChangedToken);
+            m_calendarViewSelectionChangedToken = {};
+        }
         if (m_datePicker && m_dateChangedToken.value != 0) {
-            m_datePicker.DateChanged(m_dateChangedToken); m_dateChangedToken = {};
+            m_datePicker.DateChanged(m_dateChangedToken);
+            m_dateChangedToken = {};
         }
     } catch (...) {}
 
@@ -1595,6 +1654,9 @@ void RestoreCalendarContent() {
     m_prevDayButton = nullptr;
     m_nextDayButton = nullptr;
     m_refreshButton = nullptr;
+    m_dateButton = nullptr;
+    m_dateButtonText = nullptr;
+    m_calendarView = nullptr;
     m_datePicker = nullptr;
     {
         std::lock_guard<std::mutex> lock(g_watcherMutex);
@@ -1733,11 +1795,32 @@ void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
     }
 }
 
+void UpdateDateDisplayAndCalendar(SYSTEMTIME const& st) {
+    if (m_dateButtonText) {
+        m_dateButtonText.Text(FormatFilterDate(st));
+    }
+    if (m_datePicker) {
+        try {
+            m_datePicker.Date(SystemTimeToWinRtDateTime(st));
+        } catch (...) {}
+    }
+    if (m_calendarView) {
+        auto winrtDt = SystemTimeToWinRtDateTime(st);
+        m_isUpdatingCalendarSelection = true;
+        try {
+            m_calendarView.SetDisplayDate(winrtDt);
+            m_calendarView.SelectedDates().Clear();
+            m_calendarView.SelectedDates().Append(winrtDt);
+        } catch (...) {}
+        m_isUpdatingCalendarSelection = false;
+    }
+}
+
 void ChangeSelectedDay(int deltaDays) {
     SYSTEMTIME newDate = ShiftLocalDate(m_currentFilterDate, deltaDays);
     m_currentFilterDate = newDate;
 
-    if (m_datePicker) m_datePicker.Date(SystemTimeToWinRtDateTime(newDate));
+    UpdateDateDisplayAndCalendar(newDate);
 
     std::vector<CalendarEvent> filtered;
     {
@@ -1764,7 +1847,6 @@ void OnDatePickerDateChanged(wf::IReference<wf::DateTime> const& newDate) {
         selected = stLocal;
     } else {
         GetLocalTime(&selected);
-        if (m_datePicker) m_datePicker.Date(winrt::clock::now());
     }
 
     if (selected.wYear == m_currentFilterDate.wYear &&
@@ -1780,16 +1862,53 @@ void OnDatePickerDateChanged(wf::IReference<wf::DateTime> const& newDate) {
     PopulateItemsControl(filtered);
 }
 
+void OnCalendarViewSelectedDatesChanged(wf::IReference<wf::DateTime> const& newDate) {
+    if (m_isUpdatingCalendarSelection) return;
+    SYSTEMTIME selected{};
+    if (newDate) {
+        auto dt = newDate.Value();
+        auto ticks = dt.time_since_epoch().count();
+        ULARGE_INTEGER uli;
+        uli.QuadPart = static_cast<ULONGLONG>(ticks);
+        FILETIME ft;
+        ft.dwLowDateTime = uli.LowPart;
+        ft.dwHighDateTime = uli.HighPart;
+
+        SYSTEMTIME stUtc{}, stLocal{};
+        FileTimeToSystemTime(&ft, &stUtc);
+        SystemTimeToTzSpecificLocalTime(nullptr, &stUtc, &stLocal);
+        selected = stLocal;
+    } else {
+        GetLocalTime(&selected);
+    }
+
+    if (selected.wYear == m_currentFilterDate.wYear &&
+        selected.wMonth == m_currentFilterDate.wMonth &&
+        selected.wDay == m_currentFilterDate.wDay) return;
+
+    m_currentFilterDate = selected;
+    if (m_dateButtonText) {
+        m_dateButtonText.Text(FormatFilterDate(selected));
+    }
+    std::vector<CalendarEvent> filtered;
+    {
+        std::lock_guard<std::mutex> lock(g_eventsMutex);
+        filtered = FilterEventsForDate(g_allParsedEvents, selected);
+    }
+    PopulateItemsControl(filtered);
+}
+
 void ResetDatePickerToToday() {
-    if (!m_datePicker) return;
-    auto dispatcher = m_datePicker.Dispatcher();
+    wuc::CoreDispatcher dispatcher{nullptr};
+    if (m_dateButton) dispatcher = m_dateButton.Dispatcher();
+    else if (m_datePicker) dispatcher = m_datePicker.Dispatcher();
     if (!dispatcher) return;
 
     dispatcher.TryRunAsync(wuc::CoreDispatcherPriority::Normal, []() {
         SYSTEMTIME today;
         GetLocalTime(&today);
         m_currentFilterDate = today;
-        if (m_datePicker) m_datePicker.Date(winrt::clock::now());
+        UpdateDateDisplayAndCalendar(today);
         std::vector<CalendarEvent> events;
         {
             std::lock_guard<std::mutex> lock(g_eventsMutex);
@@ -1835,8 +1954,16 @@ void UpdateMaxHeight(int maxHeight) {
 void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
     if (!host) return;
 
+    if (m_ownerThreadId && m_ownerThreadId != GetCurrentThreadId()) {
+        return;
+    }
+
     m_ownerThreadId = GetCurrentThreadId();
     RegisterCoreWindowEvents();
+
+    if (m_currentFilterDate.wYear == 0) {
+        GetLocalTime(&m_currentFilterDate);
+    }
 
     try {
         if (m_hostScrollViewer && m_hostScrollViewer != host) {
@@ -1854,31 +1981,105 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
             if (!m_itemsControl) m_itemsControl = wuxc::ItemsControl();
         }
 
+        bool isInline = IsInlineCalendarMode();
+
         if (!m_eventsScrollViewer) {
             m_eventsScrollViewer = wuxc::ScrollViewer();
             m_eventsScrollViewer.Name(L"CustomCalendarScrollViewer");
+            if (isInline) {
+                m_eventsScrollViewer.Margin(wux::Thickness{12, 0, 12, 0});
+            }
             m_eventsScrollViewer.VerticalScrollBarVisibility(wuxc::ScrollBarVisibility::Auto);
             m_eventsScrollViewer.HorizontalScrollBarVisibility(wuxc::ScrollBarVisibility::Disabled);
             m_eventsScrollViewer.Content(m_itemsControl);
         }
 
-        int maxHeight = GetMaxHeightSetting();
+        int maxHeight = GetMaxHeightCollapsedSetting();
         if (maxHeight > 0) m_eventsScrollViewer.MaxHeight((double)maxHeight);
         else m_eventsScrollViewer.MaxHeight(std::numeric_limits<double>::infinity());
         m_eventsScrollViewer.Height(std::numeric_limits<double>::quiet_NaN());
 
-        if (!m_datePicker) {
-            m_datePicker = wuxc::CalendarDatePicker();
-            m_datePicker.Name(L"CustomCalendarDatePicker");
-            m_datePicker.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
-            m_datePicker.VerticalAlignment(wux::VerticalAlignment::Center);
-            m_datePicker.Margin(wux::Thickness{0, 0, 0, 6});
-            m_datePicker.IsTodayHighlighted(true);
-            m_datePicker.DateFormat(L"{dayofweek.full}, {month.abbreviated} {day.integer}");
-            m_datePicker.Date(winrt::clock::now());
-            m_dateChangedToken = m_datePicker.DateChanged([](wuxc::CalendarDatePicker const&, wuxc::CalendarDatePickerDateChangedEventArgs const& args) {
-                OnDatePickerDateChanged(args.NewDate());
-            });
+        if (isInline) {
+            if (!m_dateButton) {
+                m_dateButton = wuxc::Button();
+                m_dateButton.Name(L"CustomCalendarDateButton");
+                m_dateButton.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
+                m_dateButton.HorizontalContentAlignment(wux::HorizontalAlignment::Stretch);
+                m_dateButton.VerticalAlignment(wux::VerticalAlignment::Center);
+                m_dateButton.Margin(wux::Thickness{0, 0, 0, 6});
+
+                m_dateButtonText = wuxc::TextBlock();
+                m_dateButtonText.Text(FormatFilterDate(m_currentFilterDate));
+                m_dateButtonText.VerticalAlignment(wux::VerticalAlignment::Center);
+                m_dateButtonText.HorizontalTextAlignment(wux::TextAlignment::Left);
+                m_dateButton.Content(m_dateButtonText);
+
+                m_dateBtnClickToken = m_dateButton.Click([](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                    if (!m_calendarView) return;
+                    if (m_calendarView.Visibility() == wux::Visibility::Visible) {
+                        m_calendarView.Visibility(wux::Visibility::Collapsed);
+                        if (m_headerGrid) m_headerGrid.Margin(wux::Thickness{12, 10, 12, 0});
+                        UpdateMaxHeight(GetMaxHeightCollapsedSetting());
+                    } else {
+                        m_calendarView.Visibility(wux::Visibility::Visible);
+                        if (m_headerGrid) m_headerGrid.Margin(wux::Thickness{12, 2, 12, 0});
+                        UpdateMaxHeight(GetMaxHeightExpandedSetting());
+                    }
+                });
+            }
+
+            if (!m_calendarView) {
+                m_calendarView = wuxc::CalendarView();
+                m_calendarView.Name(L"CustomCalendarView");
+                m_calendarView.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
+                m_calendarView.Margin(wux::Thickness{0, 0, 0, 4});
+                m_calendarView.BorderThickness(wux::Thickness{0, 0, 0, 0});
+                m_calendarView.Background(wuxm::SolidColorBrush(winrt::Windows::UI::Colors::Transparent()));
+                m_calendarView.IsTodayHighlighted(true);
+                m_calendarView.SelectionMode(wuxc::CalendarViewSelectionMode::Single);
+                m_calendarView.Visibility(wux::Visibility::Collapsed);
+                m_calendarViewSelectionChangedToken = m_calendarView.SelectedDatesChanged([](wuxc::CalendarView const& cv, wuxc::CalendarViewSelectedDatesChangedEventArgs const& args) {
+                    if (args.AddedDates().Size() > 0) {
+                        OnCalendarViewSelectedDatesChanged(args.AddedDates().GetAt(0));
+                    }
+                });
+            }
+        } else {
+            if (!m_datePicker) {
+                m_datePicker = wuxc::CalendarDatePicker();
+                m_datePicker.Name(L"CustomCalendarDatePicker");
+                m_datePicker.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
+                m_datePicker.VerticalAlignment(wux::VerticalAlignment::Center);
+                m_datePicker.Margin(wux::Thickness{0, 0, 0, 6});
+                m_datePicker.IsTodayHighlighted(true);
+                m_datePicker.DateFormat(L"{dayofweek.full}, {month.abbreviated} {day.integer}");
+                m_datePicker.Date(winrt::clock::now());
+                m_dateChangedToken = m_datePicker.DateChanged([](wuxc::CalendarDatePicker const&, wuxc::CalendarDatePickerDateChangedEventArgs const& args) {
+                    OnDatePickerDateChanged(args.NewDate());
+                });
+                m_datePicker.Loaded([](wf::IInspectable const& sender, wux::RoutedEventArgs const&) {
+                    try {
+                        if (auto cdp = sender.try_as<wux::FrameworkElement>()) {
+                            std::vector<wux::DependencyObject> queue;
+                            queue.push_back(cdp);
+                            while (!queue.empty()) {
+                                auto current = queue.back();
+                                queue.pop_back();
+                                int count = wuxm::VisualTreeHelper::GetChildrenCount(current);
+                                for (int i = 0; i < count; ++i) {
+                                    auto child = wuxm::VisualTreeHelper::GetChild(current, i);
+                                    if (auto fe = child.try_as<wux::FrameworkElement>()) {
+                                        if (fe.Name() == L"CalendarGlyph") {
+                                            fe.Visibility(wux::Visibility::Collapsed);
+                                        }
+                                    }
+                                    queue.push_back(child);
+                                }
+                            }
+                        }
+                    } catch (...) {}
+                });
+            }
         }
 
         if (!m_prevDayButton) {
@@ -1897,6 +2098,7 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
             m_prevDayAccel.IsEnabled(GetKeyboardShortcutsSetting());
             m_prevDayAccel.Invoked([](wuxi::KeyboardAccelerator const&, wuxi::KeyboardAcceleratorInvokedEventArgs const& args) {
                 if (!GetKeyboardShortcutsSetting()) return;
+                if (m_calendarView && m_calendarView.Visibility() == wux::Visibility::Visible) return;
                 if (m_datePicker && m_datePicker.IsCalendarOpen()) return;
                 ChangeSelectedDay(-1); args.Handled(true);
             });
@@ -1919,6 +2121,7 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
             m_nextDayAccel.IsEnabled(GetKeyboardShortcutsSetting());
             m_nextDayAccel.Invoked([](wuxi::KeyboardAccelerator const&, wuxi::KeyboardAcceleratorInvokedEventArgs const& args) {
                 if (!GetKeyboardShortcutsSetting()) return;
+                if (m_calendarView && m_calendarView.Visibility() == wux::Visibility::Visible) return;
                 if (m_datePicker && m_datePicker.IsCalendarOpen()) return;
                 ChangeSelectedDay(1); args.Handled(true);
             });
@@ -1941,13 +2144,21 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
         if (!m_headerGrid) {
             m_headerGrid = wuxc::Grid();
             m_headerGrid.Name(L"CustomCalendarHeaderGrid");
-            m_headerGrid.Margin(wux::Thickness{0, 6, 0, 0});
+            if (isInline) {
+                m_headerGrid.Margin(wux::Thickness{12, 10, 12, 0});
+            } else {
+                m_headerGrid.Margin(wux::Thickness{0, 6, 0, 0});
+            }
             wuxc::ColumnDefinition col0{}; col0.Width(wux::GridLength{0, wux::GridUnitType::Auto}); m_headerGrid.ColumnDefinitions().Append(col0);
             wuxc::ColumnDefinition col1{}; col1.Width(wux::GridLength{1, wux::GridUnitType::Star}); m_headerGrid.ColumnDefinitions().Append(col1);
             wuxc::ColumnDefinition col2{}; col2.Width(wux::GridLength{0, wux::GridUnitType::Auto}); m_headerGrid.ColumnDefinitions().Append(col2);
             wuxc::ColumnDefinition col3{}; col3.Width(wux::GridLength{0, wux::GridUnitType::Auto}); m_headerGrid.ColumnDefinitions().Append(col3);
             wuxc::Grid::SetColumn(m_prevDayButton, 0); m_headerGrid.Children().Append(m_prevDayButton);
-            wuxc::Grid::SetColumn(m_datePicker, 1); m_headerGrid.Children().Append(m_datePicker);
+            if (isInline) {
+                wuxc::Grid::SetColumn(m_dateButton, 1); m_headerGrid.Children().Append(m_dateButton);
+            } else {
+                wuxc::Grid::SetColumn(m_datePicker, 1); m_headerGrid.Children().Append(m_datePicker);
+            }
             wuxc::Grid::SetColumn(m_nextDayButton, 2); m_headerGrid.Children().Append(m_nextDayButton);
             wuxc::Grid::SetColumn(m_refreshButton, 3); m_headerGrid.Children().Append(m_refreshButton);
         }
@@ -1955,17 +2166,28 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
         if (!m_rootGrid) {
             m_rootGrid = wuxc::Grid();
             m_rootGrid.Name(L"CustomCalendarRootGrid");
-            m_rootGrid.Margin(wux::Thickness{12, 4, 12, 4});
-            wuxc::RowDefinition row0{}; row0.Height(wux::GridLength{0, wux::GridUnitType::Auto}); m_rootGrid.RowDefinitions().Append(row0);
-            wuxc::RowDefinition row1{}; row1.Height(wux::GridLength{0, wux::GridUnitType::Auto}); m_rootGrid.RowDefinitions().Append(row1);
-            wuxc::Grid::SetRow(m_headerGrid, 0); m_rootGrid.Children().Append(m_headerGrid);
-            wuxc::Grid::SetRow(m_eventsScrollViewer, 1); m_rootGrid.Children().Append(m_eventsScrollViewer);
+            if (isInline) {
+                m_rootGrid.Margin(wux::Thickness{0, 0, 0, 4});
+                wuxc::RowDefinition row0{}; row0.Height(wux::GridLength{0, wux::GridUnitType::Auto}); m_rootGrid.RowDefinitions().Append(row0);
+                wuxc::RowDefinition row1{}; row1.Height(wux::GridLength{0, wux::GridUnitType::Auto}); m_rootGrid.RowDefinitions().Append(row1);
+                wuxc::RowDefinition row2{}; row2.Height(wux::GridLength{0, wux::GridUnitType::Auto}); m_rootGrid.RowDefinitions().Append(row2);
+                wuxc::Grid::SetRow(m_calendarView, 0); m_rootGrid.Children().Append(m_calendarView);
+                wuxc::Grid::SetRow(m_headerGrid, 1); m_rootGrid.Children().Append(m_headerGrid);
+                wuxc::Grid::SetRow(m_eventsScrollViewer, 2); m_rootGrid.Children().Append(m_eventsScrollViewer);
+            } else {
+                m_rootGrid.Margin(wux::Thickness{12, 4, 12, 4});
+                wuxc::RowDefinition row0{}; row0.Height(wux::GridLength{0, wux::GridUnitType::Auto}); m_rootGrid.RowDefinitions().Append(row0);
+                wuxc::RowDefinition row1{}; row1.Height(wux::GridLength{0, wux::GridUnitType::Auto}); m_rootGrid.RowDefinitions().Append(row1);
+                wuxc::Grid::SetRow(m_headerGrid, 0); m_rootGrid.Children().Append(m_headerGrid);
+                wuxc::Grid::SetRow(m_eventsScrollViewer, 1); m_rootGrid.Children().Append(m_eventsScrollViewer);
+            }
         }
 
         SYSTEMTIME today; GetLocalTime(&today); m_currentFilterDate = today;
         std::vector<CalendarEvent> currentEvents;
         { std::lock_guard<std::mutex> lock(g_eventsMutex); currentEvents = FilterEventsForDate(g_allParsedEvents, today); }
         PopulateItemsControl(currentEvents);
+        UpdateDateDisplayAndCalendar(m_currentFilterDate);
 
         if (m_rootGrid) {
             if (auto parent = m_rootGrid.Parent()) {
@@ -2537,7 +2759,7 @@ BOOL Wh_ModInit() {
 
     StartWorkerThread();
 
-    
+
 
     HMODULE user32Module = GetModuleHandleW(L"user32.dll");
     if (user32Module) {
