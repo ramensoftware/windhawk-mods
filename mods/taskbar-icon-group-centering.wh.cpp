@@ -4,7 +4,7 @@
 // @name:zh-CN      任务栏图标组居中
 // @description     Center the taskbar icons after a chosen position as one group relative to the whole taskbar. Requires the taskbar to be set to Left alignment.
 // @description:zh-CN 把任务栏中指定位置之后的图标作为一组相对整条任务栏居中。需要把任务栏对齐方式设为左对齐。
-// @version         1.1.2
+// @version         1.2.0
 // @author          Suioio
 // @github          https://github.com/Suioio
 // @license         GPL-3.0
@@ -67,14 +67,14 @@ taskbar either. The mod never writes the taskbar alignment or any other Windows
 setting.
 
 To use it, switch the taskbar to **Left** alignment in Windows' taskbar
-settings. Whether the taskbar is left-aligned is read from the layout itself -
-where the button row starts against the two ends of the taskbar - so switching
-the alignment is picked up in both directions on the fly, without a mod reload.
-Only when that measurement cannot tell the two alignments apart, which is a
-button row that fills the taskbar, does the mod fall back to reading the stored
-TaskbarAl value once. Nothing is monitored and no thread is kept alive, and the
-mod therefore also agrees with another mod that forces left alignment by
-hooking that read instead of writing it (Taskbar Multirow does exactly that).
+settings. Whether the taskbar is left-aligned is the value the shell's own
+alignment getter returns, which this mod hooks, and which is seeded once from
+the stored setting when the mod is loaded after the shell has already read it -
+so switching the alignment is picked up in both directions on the fly, without
+a mod reload. Nothing is monitored and no thread is kept alive, and because
+that getter sits above the stored value, the mod also agrees with another mod
+that forces left alignment by hooking the read instead of writing it (Taskbar
+Multirow does exactly that).
 
 ## Differences from the neighbouring mods
 
@@ -108,7 +108,7 @@ hooking that read instead of writing it (Taskbar Multirow does exactly that).
   once. A mod that writes an **absolute** margin is fine: this mod re-bases on
   top of whatever it finds. Taskbar Separators is the layering kind; its default
   Divider gap is 0, in which case it writes no button margins and the two
-  coexist, but raise that gap and the two should not be enabled together. / 叠加式边距模组：任何“先读当前值、再把自己的间隙加上去”的模组都会与本模组互相累积，两套账本会无上限地叠加，因此不要同时启用两个这类模组。写**绝对值**边距的模组没有问题——本模组会自动在其之上重设基准。Taskbar Separators 属于叠加式：它的 Divider gap 默认为 0（此时不写按钮边距，可共存）；若把该值调大于 0，请勿同时启用两个模组。
+  coexist, but raise that gap and the two should not be enabled together.
 
 ## Uninstall
 
@@ -127,6 +127,28 @@ belong to digART. The centering geometry in this mod is kept from that fork.
 Taskbar hook and UI-thread infrastructure includes code and patterns adapted
 from Windhawk mods by Michael Maltsev (m417z), including Taskbar Labels for
 Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.
+
+## Known limitations
+
+- Closing a pinned-release icon that sits exactly on the split — the last icon of
+  the left group or the first icon of the centered group — removes a button the
+  mod is measuring, so the spacing can look one layout pass stale for a few tens
+  of milliseconds before it settles. The split is anchored on that button itself
+  rather than on its position in the realized list, so a button appearing or
+  disappearing anywhere else no longer moves it, and the anchor is relearned only
+  once the boundary button has really been gone for a quarter of a second.
+- While an icon is being dragged, Explorer draws the dragged icon as a floating
+  copy that follows the cursor. Holding it inside the spacing makes the spacing
+  look like two halves with the icon in between. The margins the mod writes are
+  unaffected: the spacing returns as soon as the icon is dropped.
+- The taskbar hooks rely on Windows component symbols, vtable slots and a
+  machine-code pattern. A Windows update that changes them can stop the mod from
+  working; the mod log records failed reconciliations in that case. If the
+  alignment getter is the one that moved, the mod keeps working and falls back to
+  reading the stored alignment.
+- If unload cannot detach its event handlers from the taskbar thread, those
+  handlers stay registered and applied margins may not be handed back; the mod
+  log records it. This limitation is shared with the mod it was derived from.
 
 ## 中文说明
 
@@ -149,12 +171,11 @@ Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.
 由系统居中，本模组保持不生效；垂直任务栏与镜像任务栏上也不生效。模组从不写入任务栏
 对齐设置或任何其它 Windows 设置。
 
-请在 Windows 的任务栏设置里把对齐方式改为**左对齐**。是否左对齐直接从布局读出——
-按钮排的起点相对任务栏两端的空档——因此切换对齐会被实时识别，**双向**响应，无需重新
-加载模组。只有当该测量无法区分两种对齐（按钮排填满整条任务栏）时，才会一次性读取
-注册表中存储的 TaskbarAl 值作为兜底。模组不再保留任何监视线程，也不监听注册表变化，
-因此对于“通过 hook 读取来强制左对齐”的模组（Taskbar Multirow 就是这样）也能得出
-正确结论。
+请在 Windows 的任务栏设置里把对齐方式改为**左对齐**。是否左对齐取的是系统自身的
+对齐 getter 返回值（本模组挂钩了它），并在模组晚于系统首次读取才启用时用存储的设置值
+播种一次——因此切换对齐会被实时识别，**双向**响应，无需重新加载模组。模组不再保留
+任何监视线程，也不监听注册表变化，因此对于“通过 hook 读取来强制左对齐”的模组
+（Taskbar Multirow 就是这样）也能得出正确结论。
 
 ### 与相邻模组的区别
 
@@ -198,12 +219,12 @@ Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.
 任务栏挂钩与 UI 线程基础设施包含改编自 Michael Maltsev（m417z）模组的代码与模式，
 包括 Taskbar Labels for Windows 11、Taskbar Multirow 与 Windows 11 Taskbar Styler。
 
-### Known limitations / 已知限制
+### 已知限制
 
-- Closing a pinned-release icon that sits exactly on the split — the last icon of the left group or the first icon of the centered group — removes a button the mod is measuring, so the spacing can look one layout pass stale for a few tens of milliseconds before it settles. The split is anchored on that button itself rather than on its position in the realized list, so a button appearing or disappearing anywhere else no longer moves it, and the anchor is relearned only once the boundary button has really been gone for a quarter of a second. / 关闭正好位于分割点上的“未固定”图标（左组最后一个、或居中组第一个）时，被移除的正是模组正在测量的按钮，间距可能有一个布局帧的陈旧感（几十毫秒）后自行恢复正常。分割点锚定在该按钮**本身**、而不是它在“已实现列表”中的位置，因此其它位置出现或消失按钮都不会再让它移位；只有边界按钮确实消失约四分之一秒后才会重新锚定。
-- While an icon is being dragged, Explorer draws the dragged icon as a floating copy that follows the cursor. Holding it inside the spacing makes the spacing look like two halves with the icon in between. The margins the mod writes are unaffected: the spacing returns as soon as the icon is dropped. / 拖动图标时，Explorer 会把被拖图标做成跟随光标的浮动副本；把它停在空隙中间时，视觉上会像“空隙被劈成两半、中间夹着图标”。模组写入的间距并未改变，放下图标即恢复。
-- The taskbar hooks rely on Windows component symbols, vtable slots and a machine-code pattern. A Windows update that changes them can stop the mod from working; the mod log records failed reconciliations in that case. / 任务栏挂钩依赖 Windows 组件的符号、虚表槽位与一段机器码特征；Windows 更新若改变它们，模组可能失效，届时模组日志会记录重排失败。
-- If unload cannot detach its event handlers from the taskbar thread, those handlers stay registered and applied margins may not be handed back; the mod log records it. This limitation is shared with the mod it was derived from. / 若卸载时无法从任务栏线程注销事件处理器，这些处理器会保留、已应用的边距可能未归还；模组日志会记录。这一限制与其来源模组相同。
+- 关闭正好位于分割点上的“未固定”图标（左组最后一个、或居中组第一个）时，被移除的正是模组正在测量的按钮，间距可能有一个布局帧的陈旧感（几十毫秒）后自行恢复正常。分割点锚定在该按钮**本身**、而不是它在“已实现列表”中的位置，因此其它位置出现或消失按钮都不会再让它移位；只有边界按钮确实消失约四分之一秒后才会重新锚定。
+- 拖动图标时，Explorer 会把被拖图标做成跟随光标的浮动副本；把它停在空隙中间时，视觉上会像“空隙被劈成两半、中间夹着图标”。模组写入的间距并未改变，放下图标即恢复。
+- 任务栏挂钩依赖 Windows 组件的符号、虚表槽位与一段机器码特征；Windows 更新若改变它们，模组可能失效，届时模组日志会记录重排失败。若移动的是对齐 getter，模组仍可工作，会退回到读取存储的对齐值。
+- 若卸载时无法从任务栏线程注销事件处理器，这些处理器会保留、已应用的边距可能未归还；模组日志会记录。这一限制与其来源模组相同。
 
 */
 // ==/WindhawkModReadme==
@@ -216,7 +237,7 @@ Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.
   $name:zh-CN: 图标组位置
   $description: 1-based position counted from the first application button, which is not counted itself. The icons after this position are centered as one group relative to the whole taskbar. Applied only on a left-aligned, horizontal taskbar and never on a mirrored, right-to-left one.
   $description:zh-CN: 从第一个应用按钮算起的 1 基位置（不含开始按钮）。该位置之后的图标作为一组相对整条任务栏居中。只在左对齐且水平的任务栏上生效，镜像（从右到左）的任务栏上不生效。
-- hideWhenIconCountAtLeast: 0
+- stopCenteringIconCount: 0
   $name: Stop centering when the icon count after the position reaches
   $name:zh-CN: 位置之后的图标数量达到该值时停止居中
   $description: Stop centering once the number of icons after the position reaches this value, which restores the normal left-aligned layout. Those are all usable application buttons after the position. The default 0 never stops centering because of the icon count.
@@ -233,6 +254,7 @@ Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.Core.h>
+#include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
@@ -255,9 +277,7 @@ enum class ReconcileResult {
 
 // The compiled-in defaults, in one place: LoadSettings falls back to them.
 constexpr int kDefaultGroupPosition = 2;
-// The count of icons after the position at which centering stops. The stored
-// settings key keeps its original name so an existing value survives the
-// upgrade; only what the setting does is what its display name now says.
+// The count of icons after the position at which centering stops.
 constexpr int kDefaultStopCenteringIconCount = 0;
 
 struct Settings {
@@ -275,6 +295,32 @@ std::atomic<unsigned int> g_settingsGeneration{0};
 
 std::atomic<bool> g_taskbarViewDllLoaded{false};
 std::atomic<bool> g_unloading{false};
+
+// The alignment the shell itself reads from TaskbarSettings::get_Alignment:
+// 0 = left, 1 = centered. The hook below keeps it current on every build that
+// exposes that symbol, and Wh_ModInit seeds it once for the case where the
+// shell already read it before this mod was loaded. The mod never writes it.
+std::atomic<int> g_taskbarAlignment{1};
+std::atomic<bool> g_taskbarAlignmentHookLoaded{false};
+
+// The stored alignment, read only where that getter could not be hooked.
+// Missing value is reported as 1, which is the Windows 11 default.
+static const wchar_t kTaskbarAdvancedKey[] =
+    L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced";
+
+// Seeds g_taskbarAlignment from the value the shell itself reads. This is also
+// the exact call shape Taskbar Multirow hooks to force left alignment, so a
+// value it forces seeds identically, and only a successful read is adopted.
+void SeedTaskbarAlignmentFromRegistry() {
+    DWORD alignment = 1;
+    DWORD size = sizeof(alignment);
+    if (RegGetValueW(HKEY_CURRENT_USER, kTaskbarAdvancedKey, L"TaskbarAl",
+                     RRF_RT_REG_DWORD, nullptr, &alignment, &size) ==
+        ERROR_SUCCESS) {
+        g_taskbarAlignment.store(static_cast<int>(alignment),
+                                 std::memory_order_release);
+    }
+}
 
 using AnimationClock = std::chrono::steady_clock;
 constexpr auto kPostReleaseSettlingTimeout = std::chrono::seconds(1);
@@ -303,9 +349,7 @@ struct TrackedButtonMarginState {
 
 struct ButtonGapContribution {
     double left = 0;
-    double top = 0;
     double right = 0;
-    double bottom = 0;
 };
 
 struct TrackedTaskbarState {
@@ -313,10 +357,10 @@ struct TrackedTaskbarState {
     winrt::weak_ref<FrameworkElement> repeater;
     winrt::weak_ref<Controls::Grid> rootGrid;
 
-    // What the last reconcile derived from the layout: layoutLeftAligned is the
-    // raw alignment verdict, and centeringApplies additionally requires a
-    // horizontal, non-mirrored taskbar. The pointer handlers and the margin
-    // ledger read centeringApplies, never the taskbar alignment setting.
+    // What the last reconcile applied: layoutLeftAligned is the raw alignment
+    // verdict the hooked getter returned, and centeringApplies additionally
+    // requires a horizontal, non-mirrored taskbar. The pointer handlers and the
+    // margin ledger read centeringApplies, never the taskbar alignment setting.
     bool layoutLeftAligned = false;
     bool centeringApplies = false;
 
@@ -336,6 +380,11 @@ struct TrackedTaskbarState {
     // Set while an alignment change is being followed: the row slides, so the
     // gap is recomputed per composition frame until the geometry stops moving.
     bool alignmentSettleActive = false;
+
+    // Timestamp of the last fallback read of the stored alignment. It is only
+    // used on builds where the alignment getter could not be hooked, and it is
+    // what keeps that read off the per-frame path.
+    AnimationClock::time_point alignmentFallbackReadAt{};
 
     // Cached SystemTray.SystemTrayFrame of this taskbar. The centering gap
     // clamps the centered group against the tray, and the lookup is a depth-12
@@ -477,7 +526,7 @@ void LoadSettings() {
     // 0 means never stop: the count check in CalculateDynamicCenteredGap is
     // skipped for 0, so centering keeps running.
     g_stopCenteringIconCount.store(
-        std::max(0, Wh_GetIntSetting(L"hideWhenIconCountAtLeast")),
+        std::max(0, Wh_GetIntSetting(L"stopCenteringIconCount")),
         std::memory_order_release);
 
     g_settingsGeneration.fetch_add(1, std::memory_order_release);
@@ -628,6 +677,28 @@ void* TaskbarHost_FrameHeight_Original;
 
 using std__Ref_count_base__Decref_t = void(WINAPI*)(void* pThis);
 std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original;
+
+// Same technique as the taskbar-on-top mod: the alignment the shell itself
+// reads is taken from this getter instead of being guessed from the layout, so
+// the mod cannot mistake one alignment for the other.
+using ITaskbarSettings_get_Alignment_t = HRESULT(WINAPI*)(void* pThis,
+                                                          int* alignment);
+ITaskbarSettings_get_Alignment_t ITaskbarSettings_get_Alignment_Original;
+
+HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis,
+                                                   int* alignment) {
+    HRESULT ret = ITaskbarSettings_get_Alignment_Original(pThis, alignment);
+    if (SUCCEEDED(ret)) {
+        // Any thread: store only, the UI-thread paths read it. One line per
+        // real change, so a switch is visible in the log without spamming it.
+        const int previous = g_taskbarAlignment.exchange(
+            *alignment, std::memory_order_acq_rel);
+        if (previous != *alignment) {
+            Wh_Log(L"taskbar alignment changed to %d", *alignment);
+        }
+    }
+    return ret;
+}
 
 // Adapted from the official Taskbar Multirow mod. This obtains the existing
 // taskbar XamlRoot without installing another XAML diagnostics client, which
@@ -951,39 +1022,47 @@ bool IsMirroredPrimaryOrdering(FrameworkElement const& referenceFrame,
                                std::vector<FrameworkElement> const& elements) {
     bool sawQualifyingPair = false;
 
-    for (size_t index = 1; index < elements.size(); index++) {
-        winrt::Windows::Foundation::Rect previousBounds{};
+    // One measurement per button instead of one per end of every pair: each
+    // button's centre is compared with the previous one's, so a structural
+    // reconcile pays N transforms rather than 2(N-1).
+    winrt::Windows::Foundation::Rect previousBounds{};
+    bool previousValid = false;
+    for (size_t index = 0; index < elements.size(); index++) {
         winrt::Windows::Foundation::Rect currentBounds{};
-        if (!elements[index - 1] || !elements[index] ||
-            !TryGetElementBounds(referenceFrame, elements[index - 1],
-                                 &previousBounds) ||
+        if (!elements[index] ||
             !TryGetElementBounds(referenceFrame, elements[index],
                                  &currentBounds)) {
+            previousValid = false;
             continue;
         }
 
-        double primaryMovement = (currentBounds.X + currentBounds.Width / 2.0) -
-                                 (previousBounds.X +
-                                  previousBounds.Width / 2.0);
-        double crossMovement = (currentBounds.Y + currentBounds.Height / 2.0) -
-                               (previousBounds.Y +
-                                previousBounds.Height / 2.0);
-        if (!std::isfinite(primaryMovement) || !std::isfinite(crossMovement) ||
-            std::fabs(primaryMovement) <= 0.1 ||
-            std::fabs(primaryMovement) <= std::fabs(crossMovement)) {
-            continue;
+        if (previousValid) {
+            double primaryMovement =
+                (currentBounds.X + currentBounds.Width / 2.0) -
+                (previousBounds.X + previousBounds.Width / 2.0);
+            double crossMovement =
+                (currentBounds.Y + currentBounds.Height / 2.0) -
+                (previousBounds.Y + previousBounds.Height / 2.0);
+            if (std::isfinite(primaryMovement) &&
+                std::isfinite(crossMovement) &&
+                std::fabs(primaryMovement) > 0.1 &&
+                std::fabs(primaryMovement) > std::fabs(crossMovement)) {
+                // A single pair moving the other way is enough to disprove a
+                // mirrored ordering, and it is deliberately not enough to
+                // prove one: while a reorder animates, the repeater already
+                // holds the new order while the buttons are still travelling,
+                // so one pair can read as reversed for a frame even on a plain
+                // left-to-right taskbar.
+                if (primaryMovement > 0) {
+                    return false;
+                }
+
+                sawQualifyingPair = true;
+            }
         }
 
-        // A single pair moving the other way is enough to disprove a mirrored
-        // ordering, and it is deliberately not enough to prove one: while a
-        // reorder animates, the repeater already holds the new order while the
-        // buttons are still travelling, so one pair can read as reversed for a
-        // frame even on a plain left-to-right taskbar.
-        if (primaryMovement > 0) {
-            return false;
-        }
-
-        sawQualifyingPair = true;
+        previousBounds = currentBounds;
+        previousValid = true;
     }
 
     // No adjacent pair is laid out far enough to say anything yet, so the
@@ -1124,118 +1203,6 @@ double GetRasterizationScale(FrameworkElement const& element) {
 
 double SnapToPhysicalPixel(double value, double rasterizationScale) {
     return std::round(value * rasterizationScale) / rasterizationScale;
-}
-
-// Reads the stored taskbar alignment. Only ever read, and only as the fallback
-// for the layout-derived verdict below.
-bool ReadTaskbarAl(DWORD* outValue);
-
-// Where the first realized application button starts, in root-grid
-// coordinates, separates the two alignments: a left-aligned row puts it right
-// after the system buttons on the left (Start, Search, Task view - about 100 to
-// 160 DIP, and close to 0 on a secondary taskbar that has none), while a
-// centred row puts it after the free space the centred group leaves on its
-// left, which is far wider than that on any taskbar that still fits its tray.
-constexpr double kFirstButtonLeftMaxX = 160.0;
-
-// The other end of that reading: a centred row's first application button sits
-// at the system buttons plus the free space left of the centred group, several
-// hundred DIP on every taskbar whose icon group does not nearly fill it. The
-// band between the two thresholds is a dead zone that reports "unknown" on
-// purpose: a row that nearly fills the taskbar reads the same either way, and
-// only the stored setting can decide that case.
-constexpr double kFirstButtonCentredMinX = 320.0;
-
-// The first realized application button, with one child scan that stops at the
-// first match plus one item-index test: the same filters the reconciliation
-// snapshot uses, with no recursive walk over the visual tree.
-FrameworkElement FindFirstRealizedTaskListButton(
-    FrameworkElement const& repeater) {
-    auto panel = repeater ? repeater.try_as<Controls::Panel>() : nullptr;
-    if (!panel) {
-        return nullptr;
-    }
-
-    for (auto const& panelChild : panel.Children()) {
-        auto child = panelChild.try_as<FrameworkElement>();
-        if (!child || child.Name() != L"TaskListButton") {
-            continue;
-        }
-        if (ItemsRepeater_GetElementIndex(repeater, child) < 0) {
-            continue;
-        }
-        if (!IsUsableApplicationButton(child)) {
-            continue;
-        }
-        return child;
-    }
-
-    return nullptr;
-}
-
-// Is the taskbar left-aligned? Not from the repeater's own box: Windows
-// stretches that element, so its frame stayed where it was across an alignment
-// switch and reading it answered "left-aligned" every time. The first realized
-// application button is what really moves, so its left edge is measured here.
-bool DeriveTaskbarLeftAligned(FrameworkElement const& repeater,
-                              Controls::Grid const& rootGrid,
-                              FrameworkElement const& firstButton,
-                              bool* leftAligned) {
-    if (!leftAligned || !rootGrid) {
-        return false;
-    }
-
-    double rootWidth = rootGrid.ActualWidth();
-    if (!std::isfinite(rootWidth) || rootWidth <= 0) {
-        return false;
-    }
-
-    // -1 means unknown: only an explicit Left or Center counts. A stretched
-    // repeater, which is one that carries no alignment of its own, says nothing
-    // and leaves the geometry below as the only verdict.
-    int declaredAlignment = -1;
-    try {
-        if (repeater) {
-            auto alignment = repeater.HorizontalAlignment();
-            if (alignment == HorizontalAlignment::Left) {
-                declaredAlignment = 1;
-            } else if (alignment == HorizontalAlignment::Center) {
-                declaredAlignment = 0;
-            }
-        }
-    } catch (...) {
-        declaredAlignment = -1;
-    }
-
-    // This is also called from the layout monitor, which is not wrapped in a
-    // try block of its own, so a button that is detached from the root grid
-    // while Explorer rebuilds the taskbar reports "unknown" here instead of
-    // throwing into the layout pass.
-    winrt::Windows::Foundation::Rect buttonBounds{};
-    try {
-        if (!TryGetElementBounds(rootGrid, firstButton, &buttonBounds)) {
-            return false;
-        }
-    } catch (...) {
-        return false;
-    }
-
-    int derived = -1;
-    if (buttonBounds.X <= kFirstButtonLeftMaxX) {
-        derived = 1;
-    } else if (buttonBounds.X >= kFirstButtonCentredMinX) {
-        derived = 0;
-    }
-
-    // Two readings that disagree mean neither is trusted: the caller still has
-    // its own stored REG_DWORD read, which is authoritative.
-    if (derived < 0 ||
-        (declaredAlignment >= 0 && declaredAlignment != derived)) {
-        return false;
-    }
-
-    *leftAligned = derived == 1;
-    return true;
 }
 
 TrackedTaskbarState* FindTrackedTaskbarById(size_t taskbarId) {
@@ -1430,6 +1397,14 @@ void OnReorderPointerPressed(
     auto source = e.OriginalSource().try_as<FrameworkElement>();
     auto pressedButton = FindAncestorByName(source, L"TaskListButton");
     if (!pressedButton) {
+        return;
+    }
+
+    // A press that did not come from the left button can never reorder: a
+    // right-click opens the context menu and a middle-click opens a new
+    // instance, so the freeze, the forced reconcile and the rendering
+    // subscription are all skipped for those clicks.
+    if (!e.GetCurrentPoint(nullptr).Properties().IsLeftButtonPressed()) {
         return;
     }
 
@@ -1707,6 +1682,12 @@ constexpr auto kLayoutForcedReconcileWindow = std::chrono::milliseconds(1000);
 // synchronous reconcile it guards, so a live guard is never cleared.
 constexpr auto kLayoutForcedReconcileWatchdog = std::chrono::milliseconds(2000);
 
+// Where the alignment getter could not be hooked, the stored value is re-read
+// while the layout keeps changing, at most once per this interval: a layout
+// storm cannot turn the fallback into a registry poll. A hooked getter reads
+// nothing at all.
+constexpr auto kAlignmentFallbackReadInterval = std::chrono::milliseconds(1000);
+
 // Layout-change monitor for the taskbar repeater panel.
 // Closing an app removes its button out from under the centering gap margins,
 // and a removed button never raises UpdateVisualStates again, so no reconcile
@@ -1770,29 +1751,28 @@ void OnTaskbarLayoutUpdated(
         }
 
         // The alignment can change with no button added or removed, so it is
-        // re-derived here, ahead of the count-based pre-filters: a switch
-        // slides the row, which raises LayoutUpdated for as long as it moves,
-        // and a derived value that disagrees with the applied one is what
-        // forces the rebuild below.
+        // read here ahead of the count-based pre-filters: a switch slides the
+        // row, which raises LayoutUpdated for as long as it moves, and a value
+        // that disagrees with the applied one is what forces the rebuild below.
         auto alignmentRootGrid = taskbarState->rootGrid.get();
         if (repeater && alignmentRootGrid) {
-            bool leftAligned = false;
-            bool alignmentKnown = DeriveTaskbarLeftAligned(
-                repeater, alignmentRootGrid,
-                FindFirstRealizedTaskListButton(repeater), &leftAligned);
-            // Both alignments can leave the geometry in its dead zone, and the
-            // flip still has to be seen here: this handler is what marks the
-            // applied value dirty, so the stored value is read once in that
-            // case, with its REG_DWORD check, exactly as the reconcile does.
-            if (!alignmentKnown) {
-                DWORD taskbarAl = 1;
-                if (ReadTaskbarAl(&taskbarAl)) {
-                    leftAligned = taskbarAl == 0;
-                    alignmentKnown = true;
-                }
+            // The hooked getter normally keeps this current and the registry is
+            // never touched. Where that symbol is missing the stored value is
+            // read instead, budgeted to one read per interval so a burst of
+            // layout passes cannot become a registry poll.
+            if (!g_taskbarAlignmentHookLoaded.load(std::memory_order_acquire) &&
+                (taskbarState->alignmentFallbackReadAt ==
+                     AnimationClock::time_point{} ||
+                 AnimationClock::now() -
+                         taskbarState->alignmentFallbackReadAt >=
+                     kAlignmentFallbackReadInterval)) {
+                taskbarState->alignmentFallbackReadAt = AnimationClock::now();
+                SeedTaskbarAlignmentFromRegistry();
             }
-            if (alignmentKnown &&
-                leftAligned != taskbarState->layoutLeftAligned) {
+
+            const bool leftAligned =
+                g_taskbarAlignment.load(std::memory_order_acquire) == 0;
+            if (leftAligned != taskbarState->layoutLeftAligned) {
                 layoutInvariantDirty = true;
             }
         }
@@ -2199,14 +2179,11 @@ void ApplyTrackedButtonGapMargins(
         auto& tracked = taskbar.buttonMargins[index];
         auto const& gap = contributions[index];
         bool hasGap =
-            std::fabs(gap.left) > 0.001 || std::fabs(gap.top) > 0.001 ||
-            std::fabs(gap.right) > 0.001 || std::fabs(gap.bottom) > 0.001;
+            std::fabs(gap.left) > 0.001 || std::fabs(gap.right) > 0.001;
         if (hasGap) {
             Thickness desired = tracked.baseMargin;
             desired.Left += gap.left;
-            desired.Top += gap.top;
             desired.Right += gap.right;
-            desired.Bottom += gap.bottom;
 
             Thickness current = button.Margin();
             if (!ThicknessApproximatelyEqual(current, desired)) {
@@ -2497,24 +2474,13 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                 snapshot.rootHeight > 0 &&
                 snapshot.rootWidth >= snapshot.rootHeight;
 
-            // Left alignment is read from the layout, not from the stored
-            // TaskbarAl value: a switch moves the row, which is exactly what
-            // DeriveTaskbarLeftAligned measures, so this is also right for a mod
-            // that forces left alignment by hooking that read. The stored value
-            // is read once here only when the layout cannot tell the two
-            // alignments apart; nothing is watched and no thread is kept.
-            bool leftAligned = false;
-            bool alignmentKnown = DeriveTaskbarLeftAligned(
-                repeater, rootGrid, FindFirstRealizedTaskListButton(repeater),
-                &leftAligned);
-            if (!alignmentKnown) {
-                DWORD taskbarAl = 1;
-                if (ReadTaskbarAl(&taskbarAl)) {
-                    leftAligned = taskbarAl == 0;
-                    alignmentKnown = true;
-                }
-            }
-            const bool leftAlignedDerived = alignmentKnown && leftAligned;
+            // Left alignment is the value the shell's own alignment getter
+            // returned, which the hook on it keeps current and which Wh_ModInit
+            // seeded once. No geometry is consulted, and a mod that forces left
+            // alignment by hooking the stored value is honored, because that
+            // getter sits above it.
+            const bool leftAlignedDerived =
+                g_taskbarAlignment.load(std::memory_order_acquire) == 0;
 
             // A mirrored, right-to-left taskbar lays its buttons out along
             // decreasing X while the centering geometry is written for
@@ -2764,9 +2730,7 @@ ReconcileResult ReconcileTrackedTaskbar(TrackedTaskbarState& taskbar,
                      index++) {
                     auto const& gap = gapContributions[index];
                     if (std::fabs(gap.left) > 0.001 ||
-                        std::fabs(gap.top) > 0.001 ||
-                        std::fabs(gap.right) > 0.001 ||
-                        std::fabs(gap.bottom) > 0.001) {
+                        std::fabs(gap.right) > 0.001) {
                         gapHosts[gapHostCount++] = appButtons[index];
                     }
                 }
@@ -3106,11 +3070,41 @@ bool HookTaskbarDllSymbols() {
             {LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
             &std__Ref_count_base__Decref_Original,
         },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::WindowsUdk::UI::Shell::implementation::TaskbarSettings,struct winrt::WindowsUdk::UI::Shell::ITaskbarSettings>::get_Alignment(int *))"},
+            &ITaskbarSettings_get_Alignment_Original,
+            ITaskbarSettings_get_Alignment_Hook,
+        },
     };
 
-    if (!HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
+    const bool hookSymbolsSucceeded =
+        HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
+
+    // Every entry above is required except the alignment getter, the one symbol
+    // Windows has moved between builds. Only when that single getter is the one
+    // that is missing does the mod still load, with the stored alignment read by
+    // the layout monitor instead.
+    const bool allRequiredSymbolsResolved =
+        CTaskBand_ITaskListWndSite_vftable &&
+        CSecondaryTaskBand_ITaskListWndSite_vftable &&
+        CTaskBand_GetTaskbarHost_Original &&
+        TaskbarHost_FrameHeight_Original &&
+        CSecondaryTaskBand_GetTaskbarHost_Original &&
+        std__Ref_count_base__Decref_Original;
+    const bool alignmentGetterHooked =
+        ITaskbarSettings_get_Alignment_Original != nullptr;
+
+    if (!hookSymbolsSucceeded &&
+        !(allRequiredSymbolsResolved && !alignmentGetterHooked)) {
         Wh_Log(L"HookSymbols for taskbar.dll failed");
         return false;
+    }
+
+    g_taskbarAlignmentHookLoaded.store(alignmentGetterHooked,
+                                       std::memory_order_release);
+    if (!alignmentGetterHooked) {
+        Wh_Log(L"TaskbarSettings::get_Alignment was not found in taskbar.dll; "
+               L"reading the stored alignment instead");
     }
 
     return true;
@@ -3170,39 +3164,6 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD flags) {
     return module;
 }
 
-// The stored taskbar alignment is only the fallback for the layout-derived
-// verdict in DeriveTaskbarLeftAligned. The mod only reads this value and never
-// writes it, so the user's own setting is always left alone.
-static const wchar_t kTaskbarAdvancedKey[] =
-    L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced";
-
-// Missing value is reported as 1 (Windows 11 default = center). A value stored
-// as anything other than REG_DWORD is treated as a read failure rather than
-// being reinterpreted from raw bytes.
-bool ReadTaskbarAl(DWORD* outValue) {
-    if (!outValue) {
-        return false;
-    }
-    HKEY key = nullptr;
-    LSTATUS status = RegOpenKeyExW(HKEY_CURRENT_USER, kTaskbarAdvancedKey, 0,
-                                   KEY_QUERY_VALUE, &key);
-    if (status != ERROR_SUCCESS) {
-        return false;
-    }
-    DWORD taskbarAl = 1;
-    DWORD valueType = 0;
-    DWORD size = sizeof(taskbarAl);
-    status = RegQueryValueExW(key, L"TaskbarAl", nullptr, &valueType,
-                              reinterpret_cast<LPBYTE>(&taskbarAl), &size);
-    RegCloseKey(key);
-    if (status != ERROR_SUCCESS || valueType != REG_DWORD ||
-        size != sizeof(taskbarAl)) {
-        taskbarAl = 1;
-    }
-    *outValue = taskbarAl;
-    return true;
-}
-
 }  // namespace
 
 BOOL Wh_ModInit() {
@@ -3211,6 +3172,11 @@ BOOL Wh_ModInit() {
     if (!HookTaskbarDllSymbols()) {
         return FALSE;
     }
+
+    // The shell may have read the alignment before this mod was loaded, so the
+    // hook above never saw that call. Seed the tracked value once from the same
+    // stored value the shell reads; a failed read keeps the current value.
+    SeedTaskbarAlignmentFromRegistry();
 
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
         g_taskbarViewDllLoaded = true;
@@ -3250,7 +3216,7 @@ void Wh_ModAfterInit() {
 
     if (g_taskbarViewDllLoaded) {
         // Only the process that hosts the taskbar view applies centering; the
-        // reconcile derives the alignment itself, on the taskbar UI thread.
+        // reconcile reads the tracked alignment on the taskbar UI thread.
         RunReconcileOnTaskbarThread(true);
     }
 }
