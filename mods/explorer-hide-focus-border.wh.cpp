@@ -9,6 +9,7 @@
 // @github       https://github.com/NoMorePlz
 // @include      explorer.exe
 // @architecture x86-64
+// @compilerOptions -luxtheme
 // @license      MIT
 // ==/WindhawkMod==
 
@@ -17,8 +18,8 @@
 # File Explorer Focus Border Remover
 
 Removes the white rectangular focus border around selected files, folders and
-drives in Windows 11 File Explorer while keeping the normal selection highlight
-intact.
+drives in Windows 11 File Explorer while keeping the normal selection and hover
+highlights intact.
 
 This is different from [No Focus Rectangle](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/no-focus-rectangle.wh.cpp):
 that mod suppresses the classic dotted `DrawFocusRect`, while this mod targets
@@ -34,9 +35,15 @@ the themed focus border used by the modern File Explorer item view.
 - The effect is applied at draw time, so it takes effect without restarting
   Explorer when the mod is enabled.
 - The implementation relies on an undocumented File Explorer theme detail:
-  `ItemsView`, part 3, states 1 and 2 are used for the focus border on current
-  Windows builds. A future Windows update may change this.
-- Tested with regular File Explorer items and **This PC > Devices and drives**.
+  `ItemsView`, part 3, state 1 is used for the focus border on current Windows
+  builds. A future Windows update may change this.
+- Resolved theme names that end in `ItemsView` are accepted, covering variants
+  such as `DarkMode_ItemsView` and `Explorer::ItemsView`, while
+  `ItemsView::ListView` is intentionally not matched.
+- The mod is scoped to `explorer.exe`; common Open/Save dialogs hosted by other
+  applications are not affected.
+- The intended targets include regular File Explorer items and
+  **This PC > Devices and drives**.
 */
 // ==/WindhawkModReadme==
 
@@ -44,58 +51,42 @@ the themed focus border used by the modern File Explorer item view.
 #include <uxtheme.h>
 #include <windhawk_utils.h>
 
-#include <string>
+#include <wchar.h>
 
 static decltype(&DrawThemeBackground) DrawThemeBackground_Original = nullptr;
 static decltype(&DrawThemeBackgroundEx) DrawThemeBackgroundEx_Original = nullptr;
 
-static std::wstring GetThemeClass(HTHEME hTheme) {
+static bool IsItemsViewTheme(HTHEME hTheme) {
     using GetThemeClass_t = HRESULT(WINAPI*)(HTHEME, LPWSTR, int);
 
     static auto getThemeClass = reinterpret_cast<GetThemeClass_t>(
         GetProcAddress(GetModuleHandleW(L"uxtheme.dll"), MAKEINTRESOURCEA(74)));
 
     if (!getThemeClass) {
-        return L"";
+        return false;
     }
 
     WCHAR className[64] = {};
-    return SUCCEEDED(getThemeClass(hTheme, className, ARRAYSIZE(className)))
-               ? className
-               : L"";
-}
-
-static bool IsFileExplorerWindow(HDC hdc) {
-    HWND hwnd = WindowFromDC(hdc);
-    if (!hwnd) {
-        // ItemsView is specific enough inside explorer.exe, and some draw paths
-        // don't expose a useful HWND through the DC.
-        return true;
+    if (FAILED(getThemeClass(hTheme, className, ARRAYSIZE(className)))) {
+        return false;
     }
 
-    WCHAR className[64] = {};
-    for (HWND current = hwnd; current;
-         current = GetAncestor(current, GA_PARENT)) {
-        if (GetClassNameW(current, className, ARRAYSIZE(className)) &&
-            _wcsicmp(className, L"CabinetWClass") == 0) {
-            return true;
-        }
-    }
+    constexpr WCHAR kItemsView[] = L"ItemsView";
+    constexpr size_t kItemsViewLength = ARRAYSIZE(kItemsView) - 1;
+    const size_t classNameLength = wcslen(className);
 
-    return false;
+    return classNameLength >= kItemsViewLength &&
+           _wcsicmp(className + classNameLength - kItemsViewLength,
+                    kItemsView) == 0;
 }
 
 static bool ShouldSuppressFocusBorder(HTHEME hTheme,
-                                      HDC hdc,
                                       int partId,
                                       int stateId) {
     // Current File Explorer DirectUI ItemsView behavior:
-    //   part 3, state 1 = normal focus border
-    //   part 3, state 2 = hot focus border
-    // The selection fill is painted separately, so suppressing this part keeps
-    // the normal selected-item highlight intact.
-    return partId == 3 && (stateId == 1 || stateId == 2) &&
-           GetThemeClass(hTheme) == L"ItemsView" && IsFileExplorerWindow(hdc);
+    //   part 3, state 1 = focus border
+    // Other states include hover/selection overlays and must remain visible.
+    return partId == 3 && stateId == 1 && IsItemsViewTheme(hTheme);
 }
 
 HRESULT WINAPI DrawThemeBackground_Hook(HTHEME hTheme,
@@ -104,7 +95,7 @@ HRESULT WINAPI DrawThemeBackground_Hook(HTHEME hTheme,
                                          int iStateId,
                                          LPCRECT pRect,
                                          LPCRECT pClipRect) {
-    if (ShouldSuppressFocusBorder(hTheme, hdc, iPartId, iStateId)) {
+    if (ShouldSuppressFocusBorder(hTheme, iPartId, iStateId)) {
         return S_OK;
     }
 
@@ -118,7 +109,7 @@ HRESULT WINAPI DrawThemeBackgroundEx_Hook(HTHEME hTheme,
                                            int iStateId,
                                            LPCRECT pRect,
                                            const DTBGOPTS* pOptions) {
-    if (ShouldSuppressFocusBorder(hTheme, hdc, iPartId, iStateId)) {
+    if (ShouldSuppressFocusBorder(hTheme, iPartId, iStateId)) {
         return S_OK;
     }
 
@@ -127,14 +118,17 @@ HRESULT WINAPI DrawThemeBackgroundEx_Hook(HTHEME hTheme,
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Initializing File Explorer Focus Border Remover");
+    Wh_Log(L">");
 
-    WindhawkUtils::SetFunctionHook(DrawThemeBackground,
-                                   DrawThemeBackground_Hook,
-                                   &DrawThemeBackground_Original);
-    WindhawkUtils::SetFunctionHook(DrawThemeBackgroundEx,
-                                   DrawThemeBackgroundEx_Hook,
-                                   &DrawThemeBackgroundEx_Original);
+    if (!WindhawkUtils::SetFunctionHook(DrawThemeBackground,
+                                        DrawThemeBackground_Hook,
+                                        &DrawThemeBackground_Original) ||
+        !WindhawkUtils::SetFunctionHook(DrawThemeBackgroundEx,
+                                        DrawThemeBackgroundEx_Hook,
+                                        &DrawThemeBackgroundEx_Original)) {
+        Wh_Log(L"Failed to hook uxtheme drawing functions");
+        return FALSE;
+    }
 
     return TRUE;
 }
