@@ -2335,7 +2335,7 @@ public:
 
     void Start(AttemptFn attempt, AppliedFn applied,
                std::atomic<bool> const& unloading, int attempts = 5,
-               DWORD intervalMs = 2000) {
+               DWORD intervalMs = 2000, bool forceFirstAttempt = false) {
         Stop();
         if (unloading) return;
         attempt_ = attempt;
@@ -2343,6 +2343,7 @@ public:
         unloading_ = &unloading;
         attempts_ = attempts;
         intervalMs_ = intervalMs;
+        forceFirstAttempt_ = forceFirstAttempt;
         stopEvent_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         if (!stopEvent_) return;
         thread_ = CreateThread(
@@ -2351,7 +2352,13 @@ public:
                 auto* self = static_cast<RetryLoop*>(parameter);
                 for (int i = 0; i < self->attempts_ && !*self->unloading_;
                      ++i) {
-                    if (self->applied_ && self->applied_()) break;
+                    // A settings reload can need one restore/reapply pass even
+                    // while `applied` truthfully says we still own live XAML.
+                    // Do not overload that ownership flag merely to wake the
+                    // retry loop; request a forced first attempt instead.
+                    if (self->applied_ &&
+                        !(self->forceFirstAttempt_ && i == 0) &&
+                        self->applied_()) break;
                     if (i && WaitForSingleObject(self->stopEvent_,
                                                  self->intervalMs_) !=
                                  WAIT_TIMEOUT)
@@ -2399,6 +2406,7 @@ private:
     std::atomic<bool> const* unloading_ = nullptr;
     int attempts_ = 5;
     DWORD intervalMs_ = 2000;
+    bool forceFirstAttempt_ = false;
 };
 
 }  // namespace windhawk_mod_templates::taskbar_host
@@ -3892,8 +3900,17 @@ static void OnLayoutUpdated(IInspectable const&, IInspectable const&) {
     try {
         OnLayoutUpdatedImpl();
     } catch (...) {
+        // Clear the guard before cleanup: RevokeLayoutUpdated itself touches
+        // XAML and can throw, and a failed revoke must not permanently turn the
+        // monitor into a no-op for the rest of this Explorer session.
+        g_inLayoutUpdated = false;
         LogCurrentUiException(L"LayoutUpdated");
-        RevokeLayoutUpdated();
+        try {
+            RevokeLayoutUpdated();
+        } catch (...) {
+            LogCurrentUiException(L"LayoutUpdated revoke");
+        }
+        return;
     }
     g_inLayoutUpdated = false;
 }
@@ -4256,6 +4273,14 @@ void Wh_ModUninit() {
         Wh_Log(L"[Uninit] Taskbar dispatch unavailable; revoking callbacks "
                L"anyway so nothing outlives the unload");
         try {
+            // LayoutUpdated is an explicit token rather than an auto-revoker.
+            // It points to OnLayoutUpdated in this image, so it is just as
+            // dangerous as an unrevoked IconView Loaded delegate after
+            // Windhawk unloads the DLL.
+            RevokeLayoutUpdated();
+        } catch (...) {
+        }
+        try {
             if (g_autoRevokerList) g_autoRevokerList->clear();
         } catch (...) {
         }
@@ -4265,6 +4290,12 @@ void Wh_ModUninit() {
         }
         try {
             g_lease.reset();
+        } catch (...) {
+        }
+        try {
+            // Drop cached XAML references even though property restoration
+            // requires the unavailable UI thread.
+            ResetElementRefs();
         } catch (...) {
         }
         g_applied = false;
