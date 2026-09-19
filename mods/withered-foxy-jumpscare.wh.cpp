@@ -6,7 +6,7 @@
 // @author          Kismeria
 // @github          https://github.com/Kismeria
 // @include         windhawk.exe
-// @compilerOptions -lgdiplus -lwinmm -lgdi32 -luser32 -lshell32 -lurlmon -lole32
+// @compilerOptions -lgdiplus -lwinmm -lgdi32 -luser32 -lshell32 -lurlmon -lole32 -luuid
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -14,42 +14,44 @@
 /*
 # Withered Foxy Jumpscare
 
+> **Warning:** this mod is a prank by design. At a random moment it shows a
+> loud fullscreen jumpscare with sudden flashing images. It interrupts whatever
+> you are doing, and exclusive fullscreen games are minimized while it plays.
+> Don't use it if startle or flashing content is a problem for you.
+
 Every check interval (1 second by default) the mod rolls a die. With the
 default chance of **1 in 100000**, the jumpscare happens about once every 28
 hours of uptime.
 
 The jumpscare is drawn in a transparent fullscreen window on top of all other
-windows, on the monitor of the active window. Only Foxy is visible, with no
-background.
+windows, on the monitor of the active window. Press **Esc** to close it early.
 
 ## Files
 
-On start, the mod downloads missing files to `%USERPROFILE%\foxy\`:
+If "Image" or "Sound" is empty, the mod downloads the default file once and
+keeps it in the mod's own storage folder. Windhawk deletes that folder when
+the mod is removed. Turn off "Auto download" to never contact the network.
 
-- `foxy.gif` - Withered Foxy jumpscare on a green screen. The green
-  background is removed automatically.
-- `scream.mp3` - FNAF 2 scream.
-
-You can replace them with your own:
+You can use your own files instead:
 
 - **Image** - animated `.gif`, static `.png`, or a folder of `.png` frames
   (sorted by name). Turn off "Green screen" for images that already have
   transparency.
 - **Sound** - `.wav` or `.mp3`.
 
-To download the files again, delete them and save the settings.
-
-## Fullscreen apps
+## Notes
 
 - Windowed and borderless games: the jumpscare is drawn on top.
 - Exclusive fullscreen games don't allow other windows on top. For them, keep
   "Steal focus" on: the game is minimized during the jumpscare and gets focus
   back afterwards.
+- While "Steal focus" is on, keys typed during the jumpscare are ignored.
+  Mouse clicks pass through.
 
 ## Testing
 
-- Press the test hotkey (`Ctrl+Alt+F` by default).
-- Or turn on "Test on save" and save the settings.
+- Turn on "Test on save" and save the settings.
+- Or set a "Test hotkey", for example `Ctrl+Alt+F`.
 */
 // ==/WindhawkModReadme==
 
@@ -59,32 +61,34 @@ To download the files again, delete them and save the settings.
   $name: Chance (1 in N)
 - checkIntervalMs: 1000
   $name: Check interval (ms)
-- imagePath: '%USERPROFILE%\foxy\foxy.gif'
+- imagePath: ''
   $name: Image
-  $description: .gif, .png or folder of .png frames
-- soundPath: '%USERPROFILE%\foxy\scream.mp3'
+  $description: .gif, .png or folder of .png frames. Empty = default
+- soundPath: ''
   $name: Sound
-  $description: .wav or .mp3
+  $description: .wav or .mp3. Empty = default
 - chromaKey: true
   $name: Green screen
 - autoDownload: true
   $name: Auto download
+  $description: Download default files if Image or Sound is empty
 - imageUrl: 'https://media1.tenor.com/m/pC-4acFw1PAAAAAC/fnaf-foxy.gif'
   $name: Image URL
 - soundUrl: 'https://archive.org/download/fnaf1n2_XScreams_1mar2022/freddy-fazbears-pizza-fandom-wikia_fnaf-2_Xscream2.mp3'
   $name: Sound URL
 - volume: 100
   $name: Volume
-- durationMs: 1500
+- durationMs: 0
   $name: Duration (ms)
   $description: 0 = animation length
 - fps: 30
-  $name: Frame folder FPS
-- fitMode: stretch
+  $name: Default FPS
+  $description: For frame folders and GIF frames without a delay
+- fitMode: cover
   $name: Fit
   $options:
-  - stretch: Stretch
   - cover: Fill
+  - stretch: Stretch
   - contain: Fit
 - scalePercent: 100
   $name: Scale (%)
@@ -96,8 +100,9 @@ To download the files again, delete them and save the settings.
   $name: Steal focus
 - testOnApply: false
   $name: Test on save
-- testHotkey: 'Ctrl+Alt+F'
+- testHotkey: ''
   $name: Test hotkey
+  $description: For example Ctrl+Alt+F. Empty = off
 */
 // ==/WindhawkModSettings==
 
@@ -110,6 +115,8 @@ To download the files again, delete them and save the settings.
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <cwctype>
 #include <memory>
 #include <random>
 #include <string>
@@ -131,6 +138,8 @@ struct Settings {
     std::wstring soundPath;
     bool chromaKey;
     bool autoDownload;
+    bool downloadImage;
+    bool downloadSound;
     std::wstring imageUrl;
     std::wstring soundUrl;
     int volume;
@@ -153,6 +162,7 @@ const wchar_t kWindowClass[] = L"WhWitheredFoxyJumpscare";
 const wchar_t kMciAlias[] = L"whfoxyscream";
 const PROPID kPropertyTagFrameDelay = 0x5100;
 const int kTestHotkeyId = 1;
+const int kMaxDurationMs = 10000;
 const GUID kFrameDimensionTime = {
     0x6aedbd6d,
     0x3fb5,
@@ -160,12 +170,13 @@ const GUID kFrameDimensionTime = {
     {0x83, 0xa6, 0x7f, 0x45, 0x22, 0x9d, 0xc8, 0x72}};
 
 Settings g_settings;
+HMODULE g_module;
 HANDLE g_thread;
 HANDLE g_stopEvent;
 
 std::wstring ReadStringSetting(PCWSTR name, bool expand = true) {
     PCWSTR value = Wh_GetStringSetting(name);
-    std::wstring raw = value ? value : L"";
+    std::wstring raw = value;
     Wh_FreeStringSetting(value);
 
     if (!expand || raw.empty()) {
@@ -191,10 +202,27 @@ void LoadSettings() {
     g_settings.soundPath = ReadStringSetting(L"soundPath");
     g_settings.chromaKey = Wh_GetIntSetting(L"chromaKey");
     g_settings.autoDownload = Wh_GetIntSetting(L"autoDownload");
+    g_settings.downloadImage = false;
+    g_settings.downloadSound = false;
+
+    WCHAR storagePath[MAX_PATH];
+    if (Wh_GetModStoragePath(storagePath, ARRAYSIZE(storagePath))) {
+        if (g_settings.imagePath.empty()) {
+            g_settings.imagePath = std::wstring(storagePath) + L"\\foxy.gif";
+            g_settings.downloadImage = true;
+        }
+        if (g_settings.soundPath.empty()) {
+            g_settings.soundPath = std::wstring(storagePath) + L"\\scream.mp3";
+            g_settings.downloadSound = true;
+        }
+    } else {
+        Wh_Log(L"Wh_GetModStoragePath failed");
+    }
     g_settings.imageUrl = ReadStringSetting(L"imageUrl", false);
     g_settings.soundUrl = ReadStringSetting(L"soundUrl", false);
     g_settings.volume = std::clamp(Wh_GetIntSetting(L"volume"), 0, 100);
-    g_settings.durationMs = std::max(0, Wh_GetIntSetting(L"durationMs"));
+    g_settings.durationMs =
+        std::clamp(Wh_GetIntSetting(L"durationMs"), 0, kMaxDurationMs);
     g_settings.fps = std::clamp(Wh_GetIntSetting(L"fps"), 1, 240);
     g_settings.scalePercent =
         std::clamp(Wh_GetIntSetting(L"scalePercent"), 10, 500);
@@ -273,7 +301,7 @@ bool ParseHotkey(const std::wstring& text, UINT* modifiers, UINT* virtualKey) {
         }
     }
 
-    return *virtualKey != 0;
+    return *modifiers != 0 && *virtualKey != 0;
 }
 
 bool IsStopRequested() {
@@ -343,6 +371,8 @@ std::unique_ptr<Gdiplus::Bitmap> CopyScaled(Gdiplus::Image* source,
         keyed = RemoveGreenScreen(source);
         if (keyed) {
             source = keyed.get();
+        } else {
+            Wh_Log(L"Green screen removal failed");
         }
     }
 
@@ -359,6 +389,36 @@ std::unique_ptr<Gdiplus::Bitmap> CopyScaled(Gdiplus::Image* source,
     graphics.DrawImage(source, Gdiplus::Rect(0, 0, width, height));
     return bitmap;
 }
+
+class DownloadCallback : public IBindStatusCallback {
+   public:
+    STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
+        if (riid == IID_IUnknown || riid == IID_IBindStatusCallback) {
+            *ppv = static_cast<IBindStatusCallback*>(this);
+            return S_OK;
+        }
+        *ppv = nullptr;
+        return E_NOINTERFACE;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return 1; }
+    STDMETHODIMP_(ULONG) Release() override { return 1; }
+
+    STDMETHODIMP OnStartBinding(DWORD, IBinding*) override { return S_OK; }
+    STDMETHODIMP GetPriority(LONG*) override { return E_NOTIMPL; }
+    STDMETHODIMP OnLowResource(DWORD) override { return S_OK; }
+    STDMETHODIMP OnProgress(ULONG, ULONG, ULONG, LPCWSTR) override {
+        return IsStopRequested() ? E_ABORT : S_OK;
+    }
+    STDMETHODIMP OnStopBinding(HRESULT, LPCWSTR) override { return S_OK; }
+    STDMETHODIMP GetBindInfo(DWORD*, BINDINFO*) override { return S_OK; }
+    STDMETHODIMP OnDataAvailable(DWORD,
+                                 DWORD,
+                                 FORMATETC*,
+                                 STGMEDIUM*) override {
+        return S_OK;
+    }
+    STDMETHODIMP OnObjectAvailable(REFIID, IUnknown*) override { return S_OK; }
+};
 
 bool FileExists(const std::wstring& path) {
     return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
@@ -384,8 +444,9 @@ void DownloadIfMissing(const std::wstring& path, const std::wstring& url) {
     Wh_Log(L"Downloading %s", url.c_str());
 
     std::wstring partPath = path + L".part";
+    DownloadCallback callback;
     HRESULT hr = URLDownloadToFileW(nullptr, url.c_str(), partPath.c_str(), 0,
-                                    nullptr);
+                                    &callback);
     if (FAILED(hr)) {
         Wh_Log(L"Download failed (0x%08X): %s", (unsigned)hr, url.c_str());
         DeleteFileW(partPath.c_str());
@@ -428,7 +489,7 @@ void FitSize(UINT srcWidth,
     *height = std::max(1, (int)std::lround(srcHeight * scaleY * percent));
 }
 
-std::vector<Frame> LoadFrames(int screenWidth, int screenHeight) {
+std::vector<Frame> LoadFrames() {
     std::vector<Frame> frames;
     const std::wstring& path = g_settings.imagePath;
     int defaultDelayMs = std::max(1, 1000 / g_settings.fps);
@@ -459,8 +520,6 @@ std::vector<Frame> LoadFrames(int screenWidth, int screenHeight) {
                                                   TRUE) == CSTR_LESS_THAN;
                   });
 
-        int width = 0;
-        int height = 0;
         for (const auto& file : files) {
             Gdiplus::Bitmap source(file.c_str());
             if (source.GetLastStatus() != Gdiplus::Ok) {
@@ -468,12 +527,8 @@ std::vector<Frame> LoadFrames(int screenWidth, int screenHeight) {
                 continue;
             }
 
-            if (frames.empty()) {
-                FitSize(source.GetWidth(), source.GetHeight(), screenWidth,
-                        screenHeight, &width, &height);
-            }
-
-            auto bitmap = CopyScaled(&source, width, height);
+            auto bitmap =
+                CopyScaled(&source, source.GetWidth(), source.GetHeight());
             if (bitmap) {
                 frames.push_back({std::move(bitmap), defaultDelayMs});
             }
@@ -487,11 +542,6 @@ std::vector<Frame> LoadFrames(int screenWidth, int screenHeight) {
         Wh_Log(L"Failed to load image: %s", path.c_str());
         return frames;
     }
-
-    int width;
-    int height;
-    FitSize(source.GetWidth(), source.GetHeight(), screenWidth, screenHeight,
-            &width, &height);
 
     UINT frameCount = source.GetFrameCount(&kFrameDimensionTime);
     if (frameCount == 0) {
@@ -516,7 +566,8 @@ std::vector<Frame> LoadFrames(int screenWidth, int screenHeight) {
             source.SelectActiveFrame(&kFrameDimensionTime, i);
         }
 
-        auto bitmap = CopyScaled(&source, width, height);
+        auto bitmap =
+            CopyScaled(&source, source.GetWidth(), source.GetHeight());
         if (!bitmap) {
             continue;
         }
@@ -538,7 +589,7 @@ bool OpenSound() {
     }
 
     std::wstring command = L"open \"" + g_settings.soundPath +
-                           L"\" type mpegvideo alias " + kMciAlias;
+                           L"\" alias " + kMciAlias;
     MCIERROR error = mciSendStringW(command.c_str(), nullptr, 0, nullptr);
     if (error) {
         Wh_Log(L"Failed to open sound (%u): %s", error,
@@ -580,13 +631,12 @@ bool RegisterWindowClass() {
     WNDCLASSEXW windowClass{
         .cbSize = sizeof(WNDCLASSEXW),
         .lpfnWndProc = WindowProc,
-        .hInstance = GetModuleHandleW(nullptr),
+        .hInstance = g_module,
         .hCursor = LoadCursorW(nullptr, IDC_ARROW),
         .lpszClassName = kWindowClass,
     };
 
-    return RegisterClassExW(&windowClass) ||
-           GetLastError() == ERROR_CLASS_ALREADY_EXISTS;
+    return RegisterClassExW(&windowClass);
 }
 
 void ForceForeground(HWND hwnd) {
@@ -616,7 +666,7 @@ void PumpMessages() {
     }
 }
 
-void RunJumpscare(std::mt19937_64& rng) {
+void RunJumpscare(std::vector<Frame>& frames, std::mt19937_64& rng) {
     Wh_Log(L"Jumpscare!");
 
     HWND previousForeground = GetForegroundWindow();
@@ -631,10 +681,17 @@ void RunJumpscare(std::mt19937_64& rng) {
     int screenWidth = rc.right - rc.left;
     int screenHeight = rc.bottom - rc.top;
 
-    std::vector<Frame> frames = LoadFrames(screenWidth, screenHeight);
     if (frames.empty()) {
-        return;
+        frames = LoadFrames();
+        if (frames.empty()) {
+            return;
+        }
     }
+
+    int targetWidth;
+    int targetHeight;
+    FitSize(frames[0].bitmap->GetWidth(), frames[0].bitmap->GetHeight(),
+            screenWidth, screenHeight, &targetWidth, &targetHeight);
 
     int animationMs = 0;
     for (const auto& frame : frames) {
@@ -646,11 +703,6 @@ void RunJumpscare(std::mt19937_64& rng) {
         totalMs = std::max(animationMs, 800);
     }
 
-    if (!RegisterWindowClass()) {
-        Wh_Log(L"RegisterClassEx failed");
-        return;
-    }
-
     DWORD exStyle = WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT |
                     WS_EX_TOOLWINDOW;
     if (!g_settings.forceForeground) {
@@ -659,7 +711,7 @@ void RunJumpscare(std::mt19937_64& rng) {
 
     HWND hwnd = CreateWindowExW(exStyle, kWindowClass, L"", WS_POPUP, rc.left,
                                 rc.top, screenWidth, screenHeight, nullptr,
-                                nullptr, GetModuleHandleW(nullptr), nullptr);
+                                nullptr, g_module, nullptr);
     if (!hwnd) {
         Wh_Log(L"CreateWindowEx failed");
         return;
@@ -722,7 +774,8 @@ void RunJumpscare(std::mt19937_64& rng) {
             QueryPerformanceCounter(&now);
             int elapsedMs = (int)((now.QuadPart - startCounter.QuadPart) *
                                   1000 / frequency.QuadPart);
-            if (elapsedMs >= totalMs) {
+            if (elapsedMs >= totalMs ||
+                (GetAsyncKeyState(VK_ESCAPE) & 0x8000)) {
                 break;
             }
 
@@ -743,8 +796,8 @@ void RunJumpscare(std::mt19937_64& rng) {
                 scale = 0.45 + 0.55 * (1.0 - (1.0 - t) * (1.0 - t));
             }
 
-            int width = (int)std::lround(frameBitmap->GetWidth() * scale);
-            int height = (int)std::lround(frameBitmap->GetHeight() * scale);
+            int width = (int)std::lround(targetWidth * scale);
+            int height = (int)std::lround(targetHeight * scale);
             int x = (screenWidth - width) / 2;
             int y = (screenHeight - height) / 2;
 
@@ -814,9 +867,20 @@ DWORD WINAPI WorkerThread(LPVOID) {
     HRESULT comResult = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
     if (g_settings.autoDownload) {
-        DownloadIfMissing(g_settings.imagePath, g_settings.imageUrl);
-        DownloadIfMissing(g_settings.soundPath, g_settings.soundUrl);
+        if (g_settings.downloadImage) {
+            DownloadIfMissing(g_settings.imagePath, g_settings.imageUrl);
+        }
+        if (g_settings.downloadSound) {
+            DownloadIfMissing(g_settings.soundPath, g_settings.soundUrl);
+        }
     }
+
+    bool classRegistered = RegisterWindowClass();
+    if (!classRegistered) {
+        Wh_Log(L"RegisterClassEx failed");
+    }
+
+    std::vector<Frame> frames;
 
     std::random_device randomDevice;
     LARGE_INTEGER counter;
@@ -841,7 +905,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
     }
 
     if (g_settings.testOnApply) {
-        RunJumpscare(rng);
+        RunJumpscare(frames, rng);
     }
 
     ULONGLONG nextCheck = GetTickCount64() + g_settings.checkIntervalMs;
@@ -849,7 +913,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
         ULONGLONG now = GetTickCount64();
         if (now >= nextCheck) {
             if (roll(rng) == 1) {
-                RunJumpscare(rng);
+                RunJumpscare(frames, rng);
             }
             nextCheck = GetTickCount64() + g_settings.checkIntervalMs;
             continue;
@@ -873,7 +937,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
         }
 
         if (testRequested) {
-            RunJumpscare(rng);
+            RunJumpscare(frames, rng);
         }
     }
 
@@ -881,7 +945,10 @@ DWORD WINAPI WorkerThread(LPVOID) {
         UnregisterHotKey(nullptr, kTestHotkeyId);
     }
 
-    UnregisterClassW(kWindowClass, GetModuleHandleW(nullptr));
+    if (classRegistered) {
+        UnregisterClassW(kWindowClass, g_module);
+    }
+    frames.clear();
     if (SUCCEEDED(comResult)) {
         CoUninitialize();
     }
@@ -911,6 +978,10 @@ void StopWorker() {
 }  // namespace
 
 BOOL WhTool_ModInit() {
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&WhTool_ModInit, &g_module);
+
     LoadSettings();
 
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
