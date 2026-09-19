@@ -136,9 +136,9 @@ menu presenter receives its name after creation.
       - "1": 1%
       - "5": 5%
       - "10": 10%
-    - soundClickAction: sound_output
+    - soundClickAction: quick_settings
       $name: Sound click action
-      $description: "What happens when the separated sound icon is clicked."
+      $description: "What happens when the separated sound icon is clicked. Open sound output picker simulates Ctrl+Win+V, which can also be received by the focused app."
       $options:
       - quick_settings: Open Control Center
       - sound_output: Open sound output picker
@@ -290,7 +290,7 @@ namespace wuxm = winrt::Windows::UI::Xaml::Media;
 
 
 struct Settings {
-    std::wstring soundClickAction = L"sound_output";
+    std::wstring soundClickAction = L"quick_settings";
     int volumeWheelStep = 0;
     std::wstring controlCenterGlyph = L"F4C3";
     std::wstring controlCenterAction = L"ms-controlcenter:";
@@ -561,7 +561,7 @@ static void LoadSettings() {
         ? GetStringSettingWithDefault(L"battery.customAction", L"ms-controlcenter:")
         : L"ms-controlcenter:";
     g_settings.soundClickAction =
-        GetStringSettingWithDefault(L"sound.soundClickAction", L"sound_output");
+        GetStringSettingWithDefault(L"sound.soundClickAction", L"quick_settings");
     const auto volumeStep = GetStringSettingWithDefault(L"sound.volumeWheelStep", L"0");
     g_settings.volumeWheelStep = volumeStep == L"1" ? 1 :
         volumeStep == L"5" ? 5 : volumeStep == L"10" ? 10 : 0;
@@ -3684,6 +3684,7 @@ static void UpdateDynamicXamlIcons() {
 // Workers post native messages only; all XAML work stays on the owning thread.
 static SRWLOCK g_refreshLock = SRWLOCK_INIT;
 static HWND g_refreshWindow = nullptr;
+static bool g_refreshClassRegistered = false;
 static unsigned g_refreshPending = 0;
 // Protect status-thread publication and refresh-event lifetime. Never join a
 // thread while holding this lock: its notification callbacks can acquire it.
@@ -3736,6 +3737,20 @@ static void RequestBluetoothTooltipRefresh() {
 
 static LRESULT CALLBACK TrayRefreshWindowProc(HWND hwnd, UINT message,
                                              WPARAM wp, LPARAM lp) {
+    if (message == WM_NCDESTROY) {
+        // Runs on the window/hook owner thread, including thread shutdown.
+        AcquireSRWLockExclusive(&g_refreshLock);
+        const bool current = g_refreshWindow == hwnd;
+        if (current) {
+            g_refreshWindow = nullptr;
+            g_refreshPending = 0;
+        }
+        ReleaseSRWLockExclusive(&g_refreshLock);
+        if (current && g_foregroundEventHook) {
+            UnhookWinEvent(g_foregroundEventHook);
+            g_foregroundEventHook = nullptr;
+        }
+    }
     if (message == kRefreshMessage + 1) {
         Wh_Log(L"Status event subscriptions ready: 0x%X", static_cast<unsigned>(wp));
         return 0;
@@ -3816,19 +3831,30 @@ static void EnsureTrayRefreshWindow() {
     if (g_unloading) return;
     const HMODULE owner = GetModModule();
     if (!owner || IsTrayRefreshWindow(g_refreshWindow, owner)) return;
-    WNDCLASSW cls{};
-    cls.lpfnWndProc = TrayRefreshWindowProc;
-    cls.hInstance = owner;
-    cls.lpszClassName = kRefreshWindowClass;
-    if (!RegisterClassW(&cls)) {
-        Wh_Log(L"Refresh window class registration failed: %lu", GetLastError());
-        return;
+    // The collector's power/device subscriptions target its original HWND.
+    // Join it before replacing that HWND so startup registers fresh targets.
+    StopStatusEvents();
+    AcquireSRWLockExclusive(&g_refreshLock);
+    g_refreshWindow = nullptr;
+    g_refreshPending = 0;
+    ReleaseSRWLockExclusive(&g_refreshLock);
+    if (!g_refreshClassRegistered) {
+        WNDCLASSW cls{};
+        cls.lpfnWndProc = TrayRefreshWindowProc;
+        cls.hInstance = owner;
+        cls.lpszClassName = kRefreshWindowClass;
+        if (!RegisterClassW(&cls)) {
+            Wh_Log(L"Refresh window class registration failed: %lu", GetLastError());
+            return;
+        }
+        g_refreshClassRegistered = true;
     }
     HWND hwnd = CreateWindowExW(0, kRefreshWindowClass, L"", 0, 0, 0, 0, 0,
                                 HWND_MESSAGE, nullptr, owner, nullptr);
     if (!hwnd) {
         Wh_Log(L"Refresh window creation failed: %lu", GetLastError());
-        UnregisterClassW(kRefreshWindowClass, owner);
+        if (UnregisterClassW(kRefreshWindowClass, owner))
+            g_refreshClassRegistered = false;
         return;
     }
     AcquireSRWLockExclusive(&g_refreshLock);
@@ -3859,7 +3885,11 @@ static void DestroyTrayRefreshWindow() {
             Wh_Log(L"Refresh window destruction failed: %lu", GetLastError());
     }
     // The HWND can already be gone; the class still belongs to this module.
-    if (owner && !UnregisterClassW(kRefreshWindowClass, owner)) {
+    if (owner && g_refreshClassRegistered) {
+        if (UnregisterClassW(kRefreshWindowClass, owner)) {
+            g_refreshClassRegistered = false;
+            return;
+        }
         const DWORD error = GetLastError();
         if (error != ERROR_CLASS_DOES_NOT_EXIST)
             Wh_Log(L"Refresh window class cleanup failed: %lu", error);
