@@ -1587,6 +1587,11 @@ std::mutex g_injectionsMutex;
 // hop below needs anyway.
 std::atomic<DWORD> g_xamlThreadId{0};
 
+// The timer that injects before the first paint. Declared here because
+// RemoveInjections, far above its use, is the one place allowed to stop it:
+// a DispatcherTimer is UI-thread affine.
+[[clang::no_destroy]] wux::DispatcherTimer g_earlyInject{nullptr};
+
 // Retry subscriptions on the shell's own elements. They must live in mod-owned
 // globals: a revoker owned only by the lambda it is captured in cannot be
 // reached at unload time, and a handler left registered when Windhawk frees
@@ -2250,6 +2255,19 @@ void RemoveInjections() {
     // First: these live on the shell's own elements and are owned by nothing
     // else. Left registered, they call into this DLL after Windhawk frees it.
     g_injectRetry.Revoke();
+
+    // The early-inject timer belongs here too, and only here.
+    //
+    // A DispatcherTimer is UI-thread affine: stopping one from Windhawk's
+    // thread fails with RPC_E_WRONG_THREAD, which C++/WinRT raises as an
+    // exception -- and out of Wh_ModUninit that is a crash, not a log line.
+    // RemoveInjections already runs on the XAML thread for the same reason
+    // the revokers above do, and it is the one place that must also stop a
+    // tick from re-injecting into the tree it has just restored.
+    if (g_earlyInject) {
+        g_earlyInject.Stop();
+        g_earlyInject = nullptr;
+    }
     g_hideRetry.Revoke();
 
     std::vector<Injection> injections;
@@ -2402,15 +2420,27 @@ bool RunOnXamlThread(std::function<void()> fn) {
                 auto* cwp = reinterpret_cast<const CWPSTRUCT*>(lParam);
                 if (cwp->message == kRunMsg && cwp->lParam) {
                     auto* param = reinterpret_cast<RunParam*>(cwp->lParam);
-                    try {
-                        (*param->fn)();
-                    } catch (...) {
-                        // Runs inside the shell's own dispatch; letting
-                        // anything escape here takes the process down.
-                        Wh_Log(L"marshalled call threw: %08X",
-                               winrt::to_hresult());
+                    // Claimed before running, not marked after.
+                    //
+                    // Every hook in the chain sees every message, so with two
+                    // of these installed at once the callback ran twice. That
+                    // happens in ordinary use: opening the Control Center has
+                    // the watcher thread marshalling ReArmStockSliderHide
+                    // while the worker marshals ApplyRefreshedValues. The
+                    // callees are idempotent, so it cost duplicated work
+                    // rather than correctness -- but the primitive should
+                    // only run what it was asked to run, once.
+                    if (!param->ran) {
+                        param->ran = true;
+                        try {
+                            (*param->fn)();
+                        } catch (...) {
+                            // Runs inside the shell's own dispatch; letting
+                            // anything escape here takes the process down.
+                            Wh_Log(L"marshalled call threw: %08X",
+                                   winrt::to_hresult());
+                        }
                     }
-                    param->ran = true;
                 }
             }
             return CallNextHookEx(nullptr, code, wParam, lParam);
@@ -2857,7 +2887,6 @@ wux::FrameworkElement FindContainingView(wux::DependencyObject const& from);
 using Connect_t = int(WINAPI*)(void* pThis, int connectionId, void* target);
 Connect_t ControlCenterView_Connect_Original;
 
-[[clang::no_destroy]] wux::DispatcherTimer g_earlyInject{nullptr};
 
 int WINAPI ControlCenterView_Connect_Hook(void* pThis, int connectionId,
                                           void* target) {
@@ -2874,11 +2903,28 @@ int WINAPI ControlCenterView_Connect_Hook(void* pThis, int connectionId,
             return ret;
         }
 
+        // The XAML thread is recorded here, not only in AttachInjector.
+        //
+        // Otherwise the unload path cannot reach this timer: it decides
+        // whether anything needs undoing from g_xamlThreadId, and between
+        // Connect and the first tick nothing has been injected yet, so it
+        // would conclude there was nothing to do and return -- leaving the
+        // tick to fire into an unmapped image.
+        g_xamlThreadId.store(GetCurrentThreadId());
+
         auto timer = wux::DispatcherTimer();
         timer.Interval(std::chrono::milliseconds(1));
-        timer.Tick([timer, weak = winrt::make_weak(child)](
-                       wf::IInspectable const&, wf::IInspectable const&) {
-            timer.Stop();
+        timer.Tick([weak = winrt::make_weak(child)](
+                       wf::IInspectable const& sender,
+                       wf::IInspectable const&) {
+            // Stopped through the sender, not a captured copy. Capturing the
+            // timer makes a cycle -- the timer owns the handler, the handler
+            // owns the timer -- so clearing g_earlyInject would never release
+            // it and every view construction would leak a timer and a
+            // delegate whose code lives in this DLL.
+            if (auto self = sender.try_as<wux::DispatcherTimer>()) {
+                self.Stop();
+            }
             g_earlyInject = nullptr;
             try {
                 auto element = weak.get();
@@ -2890,9 +2936,16 @@ int WINAPI ControlCenterView_Connect_Hook(void* pThis, int connectionId,
                     return;
                 }
                 StartEngineAsync();
-                if (!g_engine || g_engine->GetDisplays().empty()) {
-                    return;
-                }
+                // Injected whether or not the engine has enumerated yet.
+                //
+                // Bailing on an empty display list made this path useless on
+                // the first open after sign-in -- the enumeration takes a WMI
+                // connect plus a DDC round trip per monitor, so it is rarely
+                // finished this early -- and that open fell through to
+                // OnGotFocus, after the first paint, which is the flicker
+                // this exists to remove. An empty panel is filled in by the
+                // structural rebuild, exactly as the OnGotFocus path already
+                // relies on.
                 AttachInjector(view);
             } catch (...) {
             }
@@ -3046,17 +3099,31 @@ using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 LoadLibraryExW_t LoadLibraryExW_Original;
 
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR path, HANDLE file, DWORD flags) {
-    HMODULE module = LoadLibraryExW_Original(path, file, flags);
-    if (module && path && !g_discoveryHooked.load()) {
+    HMODULE result = LoadLibraryExW_Original(path, file, flags);
+    if (result && path && !g_discoveryHooked.load()) {
         const wchar_t* name = wcsrchr(path, L'\\');
         if (_wcsicmp(name ? name + 1 : path, L"ControlCenter.dll") == 0) {
+            // Resolved through the loader rather than trusting what came
+            // back.
+            //
+            // LOAD_LIBRARY_AS_DATAFILE and friends -- which resource lookups
+            // use -- return a mapping that is not executable code, with its
+            // low bits set. Hooking that would patch a resource view, set the
+            // guard, and leave the real load ignored and the mod silently
+            // dead for the session. A data-file mapping is never in the
+            // loader's module list, so asking for it by name cannot return
+            // one.
+            HMODULE module = GetModuleHandleW(L"ControlCenter.dll");
+            if (!module) {
+                return result;
+            }
             // Applied immediately: this runs inside the load, before anything
             // in the DLL has executed, so there is no window in which the
             // host could build the view unhooked.
             InstallDiscoveryHooks(module, /*applyNow=*/true);
         }
     }
-    return module;
+    return result;
 }
 
 void StartControlCenterWatch() {
@@ -3182,12 +3249,7 @@ void Wh_ModUninit() {
     //    the mod -- unlike a diagnostics connection, which had to be given
     //    back by hand and would otherwise have outlived the DLL.
     if (g_shellWatcher) {
-        if (g_earlyInject) {
-        g_earlyInject.Stop();
-        g_earlyInject = nullptr;
-    }
-
-    g_shellWatcher->Stop();
+        g_shellWatcher->Stop();
         // Explicit, rather than relying on the suppressed destructor: Stop()
         // is what joins the thread and closes the event, so this is the point
         // at which the watcher is provably finished with.
