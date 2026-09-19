@@ -13,9 +13,11 @@
 
 // Source code is published under The GNU General Public License v3.0.
 //
-// The XAML-diagnostics plumbing (VisualTreeWatcher / WindhawkTAP /
-// InjectWindhawkTAP) is adapted from m417z's "Windows 11 Notification Center
-// Styler", which is GPLv3; this mod is GPLv3 for that reason.
+// This mod used to carry XAML-diagnostics plumbing adapted from m417z's
+// "Windows 11 Notification Center Styler". That is gone -- diagnostics allows
+// only one consumer per process, so holding the slot stopped that very mod
+// theming the Control Center -- but the WH_CALLWNDPROC trick in
+// RunOnXamlThread still follows its approach, and the mod remains GPLv3.
 
 // ==WindhawkModReadme==
 /*
@@ -59,9 +61,16 @@ silently dropped.
 
 - **Hide the built-in brightness slider** -- on by default; the stock slider
   only controls the internal panel, which already has its own row here.
-- **Laptop brightness keys control every monitor** -- `relative` (default)
-  shifts other monitors by the same amount, preserving their offset; `match`
-  sets them all to the same percentage; `off` leaves them alone.
+- **Laptop brightness keys control every monitor** -- `off` by default.
+  `relative` shifts other monitors by the same amount, preserving their offset;
+  `match` sets them all to the same percentage.
+
+  It is off by default because Windows raises the same event for a brightness
+  key, for the power plan's AC/battery levels, and for idle dimming, with no
+  way to tell them apart -- so unplugging the charger or walking away would
+  also write to every external monitor. Unlike everything else this mod does,
+  that write survives turning the setting off: the monitor stores the value
+  itself.
 
 ## Compatibility
 
@@ -89,7 +98,8 @@ making deliberately rather than by adding an include.
   asks it. Brightness changed using the monitor's own buttons therefore cannot
   be detected, and only shows up the next time the panel is opened.
 - Not every monitor implements DDC/CI correctly. If a display does not respond,
-  enable verbose logging and check whether its writes report `ok=0`.
+  turn on logging for this mod in Windhawk (the mod's **Advanced** settings ->
+  **Logging**) and check whether its writes report `ok=0`.
 */
 // ==/WindhawkModReadme==
 
@@ -101,25 +111,33 @@ making deliberately rather than by adding an include.
     The stock slider only controls the internal laptop panel, which this mod
     already gives its own labelled slider, so leaving both on shows the same
     display twice. Turn this off to keep the original slider as well.
-- followInternalBrightness: relative
+- followInternalBrightness: "off"
   $name: Laptop brightness keys control every monitor
   $description: >-
     Function keys only reach the built-in panel -- that is a hardware limit, not
     a Windows one. This mirrors those keypresses onto external monitors over
-    DDC/CI, so one keypress dims everything. It follows the keys and anything
-    else that changes the panel itself; dragging the built-in display's own
-    slider here leaves the other monitors alone.
+    DDC/CI, so one keypress dims everything.
+
+    Off by default, because Windows gives no way to tell a keypress apart from
+    any other change to the built-in panel. The same signal is raised by the
+    power plan's AC and battery brightness levels and by "dim the display
+    after N minutes", so with this on, unplugging the charger or leaving the
+    machine idle also writes to every external monitor. That write is not
+    undone by turning this off again or by disabling the mod: a monitor keeps
+    the brightness it was given in its own settings, so its previous value is
+    gone unless you set it back by hand.
+
+    Dragging the built-in display's own slider in this panel leaves the other
+    monitors alone.
   $options:
+  - "off": Leave other monitors alone
   - relative: Shift other monitors by the same amount (keeps their offset)
   - match: Set other monitors to the same percentage
-  - "off": Leave other monitors alone
 */
 // ==/WindhawkModSettings==
 
-#include <initguid.h>  // must precede xamlom.h
 
 #include <inspectable.h>
-#include <xamlom.h>
 
 // winbase.h defines GetCurrentTime as a macro, which collides with
 // Windows.UI.Xaml.Media.Animation's method of the same name.
@@ -148,6 +166,7 @@ making deliberately rather than by adding an include.
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 namespace wf = winrt::Windows::Foundation;
@@ -276,9 +295,7 @@ struct Display {
     // EDID device instance path. HMONITOR is not stable, so it is never a key.
     std::wstring stableId;
     std::wstring name;           // "LS27F32xG", "Built-in display"
-    std::wstring gdiDeviceName;  // "\\.\DISPLAY5"
     RECT rect{};
-    bool isPrimary = false;
     Transport transport = Transport::None;
     int percent = -1;  // last known, -1 if never read
 
@@ -485,8 +502,6 @@ class WmiSession {
         return true;
     }
 
-    bool Ok() const { return services_ != nullptr; }
-
     // Lets a long enumeration give up when the engine is shutting down.
     void SetStopFlag(const std::atomic<bool>* stopping) { stopping_ = stopping; }
 
@@ -656,9 +671,23 @@ class Engine {
 
     // Non-blocking. Repeated calls for the same display collapse into a single
     // hardware write, so a slider drag can never outrun the I2C bus.
+    // Setting a display explicitly -- the slider, or anything else the user
+    // drove -- is what re-bases relative following on that display. Note that
+    // a refresh deliberately does not: the hardware reports the clamped value,
+    // so re-basing on a read would throw away the very offset followRaw_
+    // exists to remember.
     void SetPercent(const std::wstring& stableId, int percent) {
+        SetPercentInternal(stableId, percent, /*rebaseFollow=*/true);
+    }
+
+   private:
+    void SetPercentInternal(const std::wstring& stableId, int percent,
+                            bool rebaseFollow) {
         {
             std::lock_guard<std::mutex> lock(mutex_);
+            if (rebaseFollow) {
+                followRaw_.erase(stableId);
+            }
             // Stamped on request, not on completion: a drag keeps refreshing
             // this, so the whole drag plus its trailing echoes stay covered.
             lastRequest_[stableId] = std::chrono::steady_clock::now();
@@ -673,6 +702,7 @@ class Engine {
         work_.notify_all();
     }
 
+   public:
     void RequestRescan() {
         {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -700,9 +730,6 @@ class Engine {
         onChanged_ = std::move(fn);
     }
 
-    // Diagnostics for the standalone harness.
-    unsigned Writes() const { return writes_.load(); }
-    void ResetWrites() { writes_.store(0); }
 
    private:
     static constexpr BYTE kVcpLuminance = 0x10;
@@ -722,11 +749,10 @@ class Engine {
     void WorkerMain() {
         HRESULT comHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
-        // Deliberately no CoInitializeSecurity: it is process-wide and this
-        // thread starts from Wh_ModInit, before the host's own startup code
-        // runs, so we would likely win the race and impose our settings on the
-        // whole process. CoSetProxyBlanket on the IWbemServices proxy is what
-        // actually governs our WMI calls.
+        // Deliberately no CoInitializeSecurity: it is process-wide, so calling
+        // it would impose this thread's settings on the whole host.
+        // CoSetProxyBlanket on the IWbemServices proxy is what actually governs
+        // our WMI calls.
 
         // Created here, not as a plain member: these interface pointers belong
         // to this thread's apartment and must not outlive it. Releasing them
@@ -1059,10 +1085,34 @@ class Engine {
                         d.transport == Transport::None) {
                         continue;
                     }
-                    int base = (d.percent < 0) ? percent : d.percent;
-                    int want = (followMode_ == FollowMode::Match)
-                                   ? percent
-                                   : std::clamp(base + delta, 0, 100);
+
+                    int want;
+                    if (followMode_ == FollowMode::Match) {
+                        want = percent;
+                        // Nothing to accumulate in match mode, and leaving a
+                        // stale accumulator behind would make a later switch
+                        // back to relative jump.
+                        followRaw_.erase(d.stableId);
+                    } else {
+                        // Clamping the *stored* value destroys the offset this
+                        // mode exists to preserve: panel 50 -> 10 with a
+                        // monitor at 30 stores 0, and panel 10 -> 50 then
+                        // gives 40 rather than 30. Every trip to an end stop
+                        // used to shift that monitor permanently. So the
+                        // accumulator runs unclamped past the ends and only
+                        // what goes to the hardware is clamped.
+                        auto seen = followRaw_.find(d.stableId);
+                        int raw = (seen != followRaw_.end())
+                                      ? seen->second
+                                      : ((d.percent < 0) ? percent : d.percent);
+                        // Bounded so a long run against an end stop cannot
+                        // wander arbitrarily far and take many keypresses to
+                        // come back.
+                        raw = std::clamp(raw + delta, -100, 200);
+                        followRaw_[d.stableId] = raw;
+                        want = std::clamp(raw, 0, 100);
+                    }
+
                     if (want != d.percent) {
                         follow.emplace_back(d.stableId, want);
                     }
@@ -1072,23 +1122,37 @@ class Engine {
 
         Log(L"brightness event: %ls is now %d%%", instanceName.c_str(), percent);
 
-        // Outside the lock: SetPercent takes it.
+        // Outside the lock: SetPercentInternal takes it. Not the public
+        // SetPercent -- that re-bases following, which would erase the
+        // accumulator computed just above.
         for (const auto& entry : follow) {
-            SetPercent(entry.first, entry.second);
+            SetPercentInternal(entry.first, entry.second,
+                               /*rebaseFollow=*/false);
         }
 
         NotifyChanged(false);
     }
 
     void ReleasePhysicalMonitors() {
-        std::lock_guard<std::mutex> lock(mutex_);
-        for (auto& d : displays_) {
-            if (d.hPhysical) {
-                PHYSICAL_MONITOR pm{};
-                pm.hPhysicalMonitor = d.hPhysical;
-                DestroyPhysicalMonitors(1, &pm);
-                d.hPhysical = nullptr;
+        // The handles come out under the lock; the destroying happens without
+        // it. This is the same mutex the XAML thread takes in GetDisplays()
+        // and in SetPercent() from the slider's ValueChanged, so holding it
+        // across DestroyPhysicalMonitors let a slow monitor teardown during a
+        // rescan stall the shell's UI thread.
+        std::vector<HANDLE> handles;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            for (auto& d : displays_) {
+                if (d.hPhysical) {
+                    handles.push_back(d.hPhysical);
+                    d.hPhysical = nullptr;
+                }
             }
+        }
+        for (HANDLE h : handles) {
+            PHYSICAL_MONITOR pm{};
+            pm.hPhysicalMonitor = h;
+            DestroyPhysicalMonitors(1, &pm);
         }
     }
 
@@ -1175,9 +1239,7 @@ class Engine {
             }
 
             Display d;
-            d.gdiDeviceName = mi.szDevice;
             d.rect = mi.rcMonitor;
-            d.isPrimary = (mi.dwFlags & MONITORINFOF_PRIMARY) != 0;
 
             DISPLAY_DEVICEW dd{};
             dd.cb = sizeof(dd);
@@ -1251,6 +1313,20 @@ class Engine {
 
         {
             std::lock_guard<std::mutex> lock(mutex_);
+            // Drop accumulators for displays that are no longer here, so a
+            // monitor that comes back does not inherit an offset from an
+            // earlier session of itself.
+            for (auto it = followRaw_.begin(); it != followRaw_.end();) {
+                bool present = false;
+                for (const auto& d : found) {
+                    if (d.stableId == it->first) {
+                        present = true;
+                        break;
+                    }
+                }
+                it = present ? std::next(it) : followRaw_.erase(it);
+            }
+
             displays_ = std::move(found);
         }
     }
@@ -1335,7 +1411,6 @@ class Engine {
         long long ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                            std::chrono::steady_clock::now() - start)
                            .count();
-        writes_.fetch_add(1);
         // Unconditional: Windhawk's own per-mod logging switch already gates
         // whether any of this is emitted, and it is off by default.
         Log(L"apply %ls -> %d%% ok=%d (%lld ms)", stableId.c_str(), percent,
@@ -1354,10 +1429,13 @@ class Engine {
     std::condition_variable work_;
     std::condition_variable ready_;
     std::map<std::wstring, int> pending_;
+
+    // Where relative following thinks each display would be if brightness had
+    // no end stops. Guarded by mutex_.
+    std::map<std::wstring, int> followRaw_;
     std::vector<Display> displays_;
     std::unique_ptr<WmiSession> wmi_;
     LogFn log_ = nullptr;
-    std::atomic<unsigned> writes_{0};
     std::function<void(bool)> onChanged_;
     bool quit_ = false;
     bool rescan_ = false;
@@ -1367,9 +1445,11 @@ class Engine {
 
 }  // namespace brightness
 
-// Defined further down with the XAML-diagnostics plumbing; declared here so the
-// watcher's timer can retry it once XAML is up.
-static HRESULT InjectWindhawkTAP() noexcept;
+// Defined further down; declared here so the watcher's timer can start the
+// engine once XAML is up.
+namespace {
+void StartControlCenterWatch();
+}
 
 // ===========================================================================
 // Mod state
@@ -1392,6 +1472,15 @@ std::atomic<bool> g_engineStarted{false};
 // any activation is sufficient.
 //
 // Waiting until a XAML window exists means the host is past that point.
+// Joined in Wh_ModUninit, not detached: Start() is still inside the engine
+// when it runs, and Windhawk frees this DLL the moment uninit returns.
+[[clang::no_destroy]] std::thread g_engineStarter;
+// The flag alone would leave a gap: a starter that had claimed the flag but
+// not yet assigned the thread would be invisible to a join in uninit, and
+// would then run on into a freed DLL. The mutex closes it.
+std::mutex g_engineStarterMutex;
+bool g_engineStarterSpawned = false;
+
 void StartEngineIfNeeded() {
     if (!g_engine || g_engineStarted.exchange(true)) {
         return;
@@ -1399,6 +1488,17 @@ void StartEngineIfNeeded() {
     g_engine->Start();
     Wh_Log(L"engine started (%d display(s))",
            static_cast<int>(g_engine->GetDisplays().size()));
+}
+
+// Called from the XAML thread when the Control Center turns up, so it must not
+// block there -- the first enumeration can take seconds.
+void StartEngineAsync() {
+    std::lock_guard<std::mutex> lock(g_engineStarterMutex);
+    if (g_engineStarterSpawned) {
+        return;
+    }
+    g_engineStarterSpawned = true;
+    g_engineStarter = std::thread([] { StartEngineIfNeeded(); });
 }
 
 // Guards against double-injection: the visual tree reports the Control Center
@@ -2028,6 +2128,44 @@ void ArmStockSliderHide(wux::FrameworkElement const& l1Grid) {
         });
 }
 
+// Called when the Control Center is actually opened, which is the event that
+// matters: the sliders are virtualized, so the stock brightness row is created
+// when the panel is first shown, not when the view is built.
+//
+// Arming used to happen only at injection time and was capped at
+// kMaxRetryAttempts layout passes. The whole budget went on guessing when the
+// row would be realized, and if it ran out the default-on setting silently
+// stopped working for the rest of the session with no second chance. Keyed off
+// the open instead, the cap is harmless: every open brings a fresh attempt.
+void ReArmStockSliderHide() {
+    if (!g_hideStockBrightness) {
+        return;
+    }
+    try {
+        wux::FrameworkElement grid{nullptr};
+        {
+            std::lock_guard<std::mutex> lock(g_injectionsMutex);
+            if (!g_injections) {
+                return;
+            }
+            for (const Injection& i : *g_injections) {
+                if (auto live = i.grid.get()) {
+                    grid = live.try_as<wux::FrameworkElement>();
+                    if (grid) {
+                        break;
+                    }
+                }
+            }
+        }
+        if (grid) {
+            g_hideRetry.attempts = 0;
+            ArmStockSliderHide(grid);
+        }
+    } catch (...) {
+        Wh_Log(L"ReArmStockSliderHide threw: %08X", winrt::to_hresult());
+    }
+}
+
 // The Control Center's L1Grid is a Grid whose row layout is not documented and
 // has changed across builds. Appending a row is only safe when it already
 // declares RowDefinitions; otherwise every existing child implicitly lives in
@@ -2043,6 +2181,12 @@ bool InjectInto(wux::FrameworkElement const& l1Grid) {
 
     if (FindDescendant(grid, L"Windows.UI.Xaml.Controls.StackPanel#WindhawkPerMonitorBrightness", 6)) {
         Wh_Log(L"Panel already present, skipping");
+        // Not a no-op: the panel surviving does not mean the stock row was
+        // ever found. This path used to return before arming, so a hide that
+        // had not managed to land yet never got another attempt.
+        if (g_hideStockBrightness) {
+            ArmStockSliderHide(l1Grid);
+        }
         return true;
     }
 
@@ -2385,35 +2529,6 @@ void OnEngineChanged(bool structural) try {
     Wh_Log(L"OnEngineChanged threw: %08X", winrt::to_hresult());
 }
 
-// XAML diagnostics can only attach once the XAML runtime is actually up. When
-// the mod loads into a *starting* ShellHost that is not true yet, and calling
-// InitializeXamlDiagnosticsEx too early fails every one of its 10000 connection
-// attempts and leaves the host unable to continue -- it exits and gets
-// relaunched, over and over. So: wait for a XAML window to exist first.
-bool XamlWindowExists() {
-    bool found = false;
-    EnumWindows(
-        [](HWND hwnd, LPARAM param) -> BOOL {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(hwnd, &pid);
-            if (pid != GetCurrentProcessId()) {
-                return TRUE;
-            }
-            wchar_t className[128] = {};
-            GetClassNameW(hwnd, className, ARRAYSIZE(className));
-            if (wcsstr(className, L"Windows.UI.Core.CoreWindow") ||
-                wcsstr(className, L"ControlCenter")) {
-                *reinterpret_cast<bool*>(param) = true;
-                return FALSE;
-            }
-            return TRUE;
-        },
-        reinterpret_cast<LPARAM>(&found));
-    return found;
-}
-
-std::atomic<bool> g_tapInjected{false};
-
 // Owns the mod's Win32 listening. Two jobs, both needing a message loop:
 //   * WM_DISPLAYCHANGE, which is broadcast to top-level windows only, so a
 //     message-only window would never see it -- hence a real invisible popup.
@@ -2434,9 +2549,24 @@ class ShellEventWatcher {
     }
 
     void Stop() {
+        // Set before anything is posted, so a stop that arrives while the
+        // thread is still starting up is seen by the check before its message
+        // loop rather than being lost.
+        stopRequested_.store(true);
+
         if (thread_.joinable()) {
-            if (hwnd_) {
-                PostMessage(hwnd_, WM_CLOSE, 0, 0);
+            // Both, and unconditionally. Posting only when hwnd_ is already
+            // published meant that if Start()'s 5 s wait had timed out, or
+            // CreateEvent had failed so Start() never waited at all, nothing
+            // was posted and join() blocked forever on a thread sitting in
+            // GetMessageW -- taking Wh_ModUninit with it, so the mod could be
+            // neither disabled nor updated. A narrow window, but wedging
+            // Windhawk is the worst outcome available here.
+            if (HWND hwnd = hwnd_.load()) {
+                PostMessage(hwnd, WM_CLOSE, 0, 0);
+            }
+            if (DWORD threadId = threadId_.load()) {
+                PostThreadMessage(threadId, WM_QUIT, 0, 0);
             }
             thread_.join();
         }
@@ -2444,11 +2574,11 @@ class ShellEventWatcher {
             CloseHandle(ready_);
             ready_ = nullptr;
         }
+        stopRequested_.store(false);
+        threadId_.store(0);
     }
 
    private:
-    static constexpr UINT_PTR kTapTimerId = 1;
-
     static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd,
                                       LONG idObject, LONG idChild, DWORD,
                                       DWORD) {
@@ -2490,6 +2620,9 @@ class ShellEventWatcher {
         if (g_engine) {
             g_engine->RequestRefresh();
         }
+        // Marshalled, because this runs on the watcher thread and the hide
+        // touches XAML. Same hop OnEngineChanged uses.
+        RunOnXamlThread(&ReArmStockSliderHide);
     }
 
     static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
@@ -2501,36 +2634,7 @@ class ShellEventWatcher {
                     g_engine->RequestRescan();
                 }
                 break;
-            case WM_TIMER: {
-                if (wParam != kTapTimerId) {
-                    break;
-                }
-                if (g_tapInjected.load()) {
-                    KillTimer(hwnd, kTapTimerId);
-                    break;
-                }
-                static int attempts = 0;
-                if (!XamlWindowExists()) {
-                    if (++attempts > 120) {  // ~60 s, then stop trying
-                        Wh_Log(L"XAML never appeared; giving up on the TAP");
-                        KillTimer(hwnd, kTapTimerId);
-                    }
-                    break;
-                }
-                StartEngineIfNeeded();
-                HRESULT hr = InjectWindhawkTAP();
-                if (SUCCEEDED(hr)) {
-                    g_tapInjected.store(true);
-                    Wh_Log(L"TAP injected once XAML was ready");
-                    KillTimer(hwnd, kTapTimerId);
-                } else if (++attempts > 120) {
-                    Wh_Log(L"TAP kept failing (%08X); giving up", hr);
-                    KillTimer(hwnd, kTapTimerId);
-                }
-                break;
-            }
             case WM_DESTROY:
-                KillTimer(hwnd, kTapTimerId);
                 PostQuitMessage(0);
                 break;
         }
@@ -2538,6 +2642,10 @@ class ShellEventWatcher {
     }
 
     void ThreadMain() {
+        // Published first: it is the only way Stop() can reach this thread
+        // before the window exists.
+        threadId_.store(GetCurrentThreadId());
+
         WNDCLASSEXW wc{};
         wc.cbSize = sizeof(wc);
         wc.lpfnWndProc = &ShellEventWatcher::WndProc;
@@ -2550,8 +2658,6 @@ class ShellEventWatcher {
                                     0, nullptr, nullptr, wc.hInstance, nullptr);
             if (!hwnd_) {
                 Wh_Log(L"Display sink window failed: %u", GetLastError());
-            } else {
-                SetTimer(hwnd_, kTapTimerId, 500, nullptr);
             }
         } else {
             Wh_Log(L"Display sink class failed: %u", GetLastError());
@@ -2567,6 +2673,23 @@ class ShellEventWatcher {
 
         if (ready_) {
             SetEvent(ready_);
+        }
+        // A Stop() between the window being created and the loop starting
+        // would otherwise leave this thread pumping messages with nothing left
+        // to signal it.
+        if (stopRequested_.load()) {
+            Wh_Log(L"Stop requested during startup; not entering the loop");
+            if (hook_) {
+                UnhookWinEvent(hook_);
+                hook_ = nullptr;
+            }
+            if (HWND hwnd = hwnd_.exchange(nullptr)) {
+                DestroyWindow(hwnd);
+            }
+            if (atom) {
+                UnregisterClassW(MAKEINTATOM(atom), wc.hInstance);
+            }
+            return;
         }
         if (!hwnd_) {
             if (hook_) {
@@ -2596,10 +2719,13 @@ class ShellEventWatcher {
     std::thread thread_;
     HANDLE ready_ = nullptr;
     std::atomic<HWND> hwnd_{nullptr};
+    // So Stop() has something to post to before hwnd_ exists.
+    std::atomic<DWORD> threadId_{0};
+    std::atomic<bool> stopRequested_{false};
     HWINEVENTHOOK hook_ = nullptr;
 };
 
-[[clang::no_destroy]] ShellEventWatcher g_shellWatcher;
+[[clang::no_destroy]] std::optional<ShellEventWatcher> g_shellWatcher;
 
 bool TryInject(wux::DependencyObject const& controlCenterView) {
     bool expected = false;
@@ -2669,214 +2795,154 @@ void AttachInjector(wux::FrameworkElement const& view) {
 }  // namespace
 
 // ===========================================================================
-// XAML diagnostics plumbing (adapted from m417z's Notification Center Styler)
+// Finding the Control Center without XAML diagnostics
 // ===========================================================================
-
-class VisualTreeWatcher
-    : public winrt::implements<VisualTreeWatcher, IVisualTreeServiceCallback2,
-                               winrt::non_agile> {
-   public:
-    explicit VisualTreeWatcher(winrt::com_ptr<IUnknown> site)
-        : m_XamlDiagnostics(site.as<IXamlDiagnostics>()) {
-        Wh_Log(L"Constructing VisualTreeWatcher");
-
-        // Calling AdviseVisualTreeChange on this thread can hang the app in
-        // Advising::RunOnUIThread; doing it from a fresh thread avoids that.
-        HANDLE thread = CreateThread(
-            nullptr, 0,
-            [](LPVOID param) -> DWORD {
-                auto* watcher = reinterpret_cast<VisualTreeWatcher*>(param);
-                auto service = watcher->m_XamlDiagnostics.as<IVisualTreeService3>();
-                HRESULT hr = service->AdviseVisualTreeChange(watcher);
-                watcher->Release();
-                if (FAILED(hr)) {
-                    Wh_Log(L"AdviseVisualTreeChange failed: %08X", hr);
-                }
-                return 0;
-            },
-            this, 0, nullptr);
-        if (thread) {
-            AddRef();
-            CloseHandle(thread);
-        }
-    }
-
-    VisualTreeWatcher(const VisualTreeWatcher&) = delete;
-    VisualTreeWatcher& operator=(const VisualTreeWatcher&) = delete;
-
-    void UnadviseVisualTreeChange() {
-        HRESULT hr =
-            m_XamlDiagnostics.as<IVisualTreeService3>()->UnadviseVisualTreeChange(this);
-        if (FAILED(hr)) {
-            Wh_Log(L"UnadviseVisualTreeChange failed: %08X", hr);
-        }
-    }
-
-   private:
-    HRESULT STDMETHODCALLTYPE OnVisualTreeChange(ParentChildRelation,
-                                                 VisualElement element,
-                                                 VisualMutationType mutationType) override try {
-        if (mutationType != Add || !element.Type) {
-            return S_OK;
-        }
-
-        // The Control Center view is the anchor: it is created fresh each time
-        // the panel opens, which is exactly when we want to (re)inject.
-        if (wcscmp(element.Type, L"ControlCenter.ControlCenterView") != 0) {
-            return S_OK;
-        }
-
-        Wh_Log(L"ControlCenterView added, attempting injection");
-
-        wf::IInspectable obj;
-        winrt::check_hresult(m_XamlDiagnostics->GetIInspectableFromHandle(
-            element.Handle, reinterpret_cast<::IInspectable**>(winrt::put_abi(obj))));
-
-        if (auto fe = obj.try_as<wux::FrameworkElement>()) {
-            AttachInjector(fe);
-        }
-
-        return S_OK;
-    } catch (...) {
-        Wh_Log(L"OnVisualTreeChange error: %08X", winrt::to_hresult());
-        return S_OK;  // never fail the shell's callback
-    }
-
-    HRESULT STDMETHODCALLTYPE OnElementStateChanged(InstanceHandle,
-                                                    VisualElementState,
-                                                    LPCWSTR) noexcept override {
-        return S_OK;
-    }
-
-    winrt::com_ptr<IXamlDiagnostics> m_XamlDiagnostics = nullptr;
-};
+//
+// This used to open an XAML diagnostics connection and watch the visual tree
+// for ControlCenterView being added. It worked, but only one diagnostics
+// consumer can exist per process -- the Windows 11 Taskbar Styler says so in
+// its own README -- so taking that connection stopped the Windows 11
+// Notification Center Styler theming the Control Center, which is what a user
+// reported. Nothing this mod did was at fault beyond holding the slot.
+//
+// So it does what explorer-command-bar does instead, and for the reason that
+// mod gives: hook a function in the host's own DLL, take the element from it,
+// and walk the tree with the public VisualTreeHelper API. No diagnostics, no
+// slot to contend for, and the conflict is gone by construction rather than by
+// winning a fight over a single-consumer resource.
+//
+// The hook is on ControlCenter.dll's
+//
+//   winrt::impl::produce<ControlCenterView, IControlOverrides>::OnGotFocus
+//
+// Three things had to be true and each took a measurement to establish:
+//
+//   * The pointer must really be a COM interface on the view. A produce<>
+//     override's `this` is one. An implementation member's `this` is not, and
+//     calling QueryInterface through it faulted ShellHost outright.
+//   * It must run after the view is fully constructed. IComponentConnector::
+//     Connect hands over the same element but runs inside InitializeComponent,
+//     and merely taking a reference there destroyed the half-built view.
+//   * It must not be inside a layout pass. Walking the tree from LayoutUpdated
+//     ended in a fastfail.
+//
+// OnGotFocus satisfies all three: the flyout has been built and is taking
+// focus. OnApplyTemplate would have been the obvious choice and is never
+// called at all -- ControlCenterView is compiled XAML with an
+// InitializeComponent, so no ControlTemplate is ever applied to it.
 
 namespace {
-[[clang::no_destroy]] winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
-}
 
-// {C85D8CC7-5463-40E8-A432-F5916B6427E5}
-static constexpr CLSID CLSID_WindhawkTAP = {
-    0xc85d8cc7, 0x5463, 0x40e8, {0xa4, 0x32, 0xf5, 0x91, 0x6b, 0x64, 0x27, 0xe5}};
+std::atomic<bool> g_discoveryHooked{false};
 
-class WindhawkTAP : public winrt::implements<WindhawkTAP, IObjectWithSite,
-                                             winrt::non_agile> {
-   public:
-    HRESULT STDMETHODCALLTYPE SetSite(IUnknown* pUnkSite) override try {
-        if (g_visualTreeWatcher) {
-            g_visualTreeWatcher->UnadviseVisualTreeChange();
-            g_visualTreeWatcher = nullptr;
+// Windhawk applies registered hooks itself, but only once, when Wh_ModInit
+// returns. Anything registered later sits there unarmed -- which is why five
+// hooks, including a canary that had nothing to do with the view, stayed
+// silent in the very process that was showing the flyout.
+std::atomic<bool> g_inModInit{false};
+
+using ControlCenterView_OnGotFocus_t = int(WINAPI*)(void* pThis, void* args);
+ControlCenterView_OnGotFocus_t ControlCenterView_OnGotFocus_Original;
+
+int WINAPI ControlCenterView_OnGotFocus_Hook(void* pThis, void* args) {
+    int ret = ControlCenterView_OnGotFocus_Original(pThis, args);
+
+    try {
+        wux::FrameworkElement view{nullptr};
+        winrt::copy_from_abi(view, pThis);
+        if (!view) {
+            return ret;
         }
 
-        site.copy_from(pUnkSite);
+        // Here, and nowhere earlier, is where the engine starts. It used to
+        // start as soon as any XAML window existed in the process, which on a
+        // build that hosts the Control Center elsewhere meant a WMI
+        // connection, a DDC/CI probe of every monitor and two threads running
+        // permanently for a UI that would never appear.
+        StartEngineAsync();
 
-        if (site) {
-            // Balance the refcount taken by InitializeXamlDiagnosticsEx.
-            FreeLibrary(GetCurrentModuleHandle());
-            g_visualTreeWatcher = winrt::make_self<VisualTreeWatcher>(site);
-        }
-
-        return S_OK;
+        // Injected without waiting for the enumeration: an empty panel now is
+        // fine, because the first enumeration ends in NotifyChanged(structural)
+        // and RebuildInjectedPanels fills it in -- the same path hotplug
+        // already uses.
+        //
+        // Cheap when there is nothing to do: InjectInto returns early if the
+        // panel is already in the tree, which matters because focus can be
+        // taken more than once per opening.
+        AttachInjector(view);
     } catch (...) {
-        HRESULT hr = winrt::to_hresult();
-        Wh_Log(L"SetSite error: %08X", hr);
-        return hr;
+        Wh_Log(L"OnGotFocus hook error: %08X", winrt::to_hresult());
     }
 
-    HRESULT STDMETHODCALLTYPE GetSite(REFIID riid, void** ppvSite) noexcept override {
-        return site.as(riid, ppvSite);
-    }
-
-   private:
-    winrt::com_ptr<IUnknown> site;
-};
-
-template <class T>
-struct SimpleFactory
-    : winrt::implements<SimpleFactory<T>, IClassFactory, winrt::non_agile> {
-    HRESULT STDMETHODCALLTYPE CreateInstance(IUnknown* pUnkOuter, REFIID riid,
-                                             void** ppvObject) override try {
-        if (pUnkOuter) {
-            return CLASS_E_NOAGGREGATION;
-        }
-        *ppvObject = nullptr;
-        return winrt::make<T>().as(riid, ppvObject);
-    } catch (...) {
-        return winrt::to_hresult();
-    }
-
-    HRESULT STDMETHODCALLTYPE LockServer(BOOL) noexcept override { return S_OK; }
-};
-
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdll-attribute-on-redeclaration"
-
-__declspec(dllexport) _Use_decl_annotations_ STDAPI
-    DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv) try {
-    if (rclsid == CLSID_WindhawkTAP) {
-        *ppv = nullptr;
-        return winrt::make<SimpleFactory<WindhawkTAP>>().as(riid, ppv);
-    }
-    return CLASS_E_CLASSNOTAVAILABLE;
-} catch (...) {
-    return winrt::to_hresult();
+    return ret;
 }
 
-__declspec(dllexport) _Use_decl_annotations_ STDAPI DllCanUnloadNow() {
-    return winrt::get_module_lock() ? S_FALSE : S_OK;
+void InstallDiscoveryHooks(HMODULE controlCenter) {
+    if (g_discoveryHooked.exchange(true)) {
+        return;
+    }
+
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::ControlCenter::implementation::ControlCenterView,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnGotFocus(void *))"},
+            &ControlCenterView_OnGotFocus_Original,
+            ControlCenterView_OnGotFocus_Hook,
+        },
+    };
+
+    if (!WindhawkUtils::HookSymbols(controlCenter, hooks, ARRAYSIZE(hooks))) {
+        Wh_Log(L"Could not hook ControlCenterView::OnGotFocus; the panel will "
+               L"not be injected");
+        return;
+    }
+
+    if (!g_inModInit.load() && !Wh_ApplyHookOperations()) {
+        Wh_Log(L"Hook registered but could not be armed");
+        return;
+    }
+
+    Wh_Log(L"ControlCenterView::OnGotFocus hooked");
 }
 
-#pragma clang diagnostic pop
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
 
-using PFN_INITIALIZE_XAML_DIAGNOSTICS_EX = decltype(&InitializeXamlDiagnosticsEx);
-
-static HRESULT InjectWindhawkTAP() noexcept {
-    HMODULE module = GetCurrentModuleHandle();
-    if (!module) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    WCHAR location[MAX_PATH];
-    switch (GetModuleFileName(module, location, ARRAYSIZE(location))) {
-        case 0:
-        case ARRAYSIZE(location):
-            return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    const HMODULE wuxDll =
-        LoadLibraryEx(L"Windows.UI.Xaml.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!wuxDll) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    const auto ixde = reinterpret_cast<PFN_INITIALIZE_XAML_DIAGNOSTICS_EX>(
-        GetProcAddress(wuxDll, "InitializeXamlDiagnosticsEx"));
-    if (!ixde) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    // There is no way to know which diagnostics slot is free, so walk the
-    // connection names until one takes. ERROR_NOT_FOUND means "that name is
-    // not available", i.e. keep going -- which is the entire reason the loop
-    // exists. Anything else, success or a real error, ends it.
-    //
-    // Getting this backwards is not academic: the Notification Center Styler
-    // targets ShellHost.exe as well, so if it holds slot 1 and we stop there,
-    // one of the two mods silently does nothing.
-    HRESULT hr = E_FAIL;
-    for (int i = 0; i < 64; i++) {
-        WCHAR connectionName[256];
-        wsprintf(connectionName, L"VisualDiagConnection%d", i + 1);
-
-        hr = ixde(connectionName, GetCurrentProcessId(), L"", location,
-                  CLSID_WindhawkTAP, nullptr);
-        if (hr != HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) {
-            break;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR path, HANDLE file, DWORD flags) {
+    HMODULE module = LoadLibraryExW_Original(path, file, flags);
+    if (module && path && !g_discoveryHooked.load()) {
+        const wchar_t* name = wcsrchr(path, L'\\');
+        if (_wcsicmp(name ? name + 1 : path, L"ControlCenter.dll") == 0) {
+            InstallDiscoveryHooks(module);
         }
     }
-
-    return hr;
+    return module;
 }
+
+// ControlCenter.dll is usually mapped before Wh_ModInit runs, but not always,
+// and when it is not it arrives without a LoadLibraryExW call -- so watch for
+// it both ways and take whichever notices first. Polling alone left a window
+// the host built the view in; the load hook alone never fired.
+void StartControlCenterWatch() {
+    if (HMODULE module = GetModuleHandleW(L"ControlCenter.dll")) {
+        InstallDiscoveryHooks(module);
+        return;
+    }
+
+    WindhawkUtils::SetFunctionHook(LoadLibraryExW, LoadLibraryExW_Hook,
+                                   &LoadLibraryExW_Original);
+
+    std::thread([] {
+        for (int i = 0; i < 400 && !g_discoveryHooked.load(); ++i) {
+            if (HMODULE module = GetModuleHandleW(L"ControlCenter.dll")) {
+                InstallDiscoveryHooks(module);
+                return;
+            }
+            Sleep(25);
+        }
+    }).detach();
+}
+
+}  // namespace
 
 // ===========================================================================
 // Windhawk lifecycle
@@ -2888,11 +2954,14 @@ void LoadSettings() {
     // Wh_GetStringSetting returns L"" rather than NULL on failure, so a
     // pointer check would be meaningless; the RAII wrapper also removes the
     // manual Wh_FreeStringSetting.
-    brightness::FollowMode followMode = brightness::FollowMode::Relative;
+    // Off unless asked for: following writes to monitors that keep the value
+    // in their own settings, and Windows cannot distinguish a brightness key
+    // from power-plan or idle dimming.
+    brightness::FollowMode followMode = brightness::FollowMode::Off;
     WindhawkUtils::StringSetting follow =
         WindhawkUtils::StringSetting::make(L"followInternalBrightness");
-    if (wcscmp(follow.get(), L"off") == 0) {
-        followMode = brightness::FollowMode::Off;
+    if (wcscmp(follow.get(), L"relative") == 0) {
+        followMode = brightness::FollowMode::Relative;
     } else if (wcscmp(follow.get(), L"match") == 0) {
         followMode = brightness::FollowMode::Match;
     }
@@ -2914,26 +2983,24 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    // Deliberately NOT started here; see StartEngineIfNeeded.
+    // In Wh_ModInit so that Windhawk arms the hook itself when it returns, and
+    // so it is in place before the host can build the view.
+    g_inModInit.store(true);
+    StartControlCenterWatch();
+    g_inModInit.store(false);
+
+    // The engine is deliberately NOT started here; see StartEngineIfNeeded.
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    if (XamlWindowExists()) {
-        StartEngineIfNeeded();
-        HRESULT hr = InjectWindhawkTAP();
-        if (SUCCEEDED(hr)) {
-            g_tapInjected.store(true);
-        } else {
-            Wh_Log(L"InjectWindhawkTAP failed: %08X; will retry", hr);
-        }
-    } else {
-        Wh_Log(L"XAML not up yet; deferring TAP injection");
-    }
-
-    g_shellWatcher.Start();
+    // Nothing is started here on purpose. The engine waits until the Control
+    // Center is actually seen (see the OnGotFocus hook), so a process that
+    // never hosts one never pays for it.
+    g_shellWatcher.emplace();
+    g_shellWatcher->Start();
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
@@ -2974,16 +3041,27 @@ void Wh_ModUninit() {
     // stopped before the UI is dismantled, and all of it has to be finished
     // before we return -- Windhawk frees the module the moment we do.
 
-    // 1. The watcher first, and before the unadvise below: its 500 ms timer
-    //    retries InjectWindhawkTAP, and a TAP landing after the unadvise would
-    //    build and advise a brand new VisualTreeWatcher that then survives the
-    //    unload, still registered with XAML diagnostics.
-    g_shellWatcher.Stop();
+    // 1. The watcher first: it owns the timer that can still start the engine.
+    //
+    //    Nothing has to be un-advised any more. The injection hook is a
+    //    function hook, and Windhawk removes those itself as part of unloading
+    //    the mod -- unlike a diagnostics connection, which had to be given
+    //    back by hand and would otherwise have outlived the DLL.
+    if (g_shellWatcher) {
+        g_shellWatcher->Stop();
+        // Explicit, rather than relying on the suppressed destructor: Stop()
+        // is what joins the thread and closes the event, so this is the point
+        // at which the watcher is provably finished with.
+        g_shellWatcher.reset();
+    }
 
-    // 2. Now no more tree notifications can arrive.
-    if (g_visualTreeWatcher) {
-        g_visualTreeWatcher->UnadviseVisualTreeChange();
-        g_visualTreeWatcher = nullptr;
+    // 2. The starter thread may be inside Engine::Start() right now, so it has
+    //    to be finished before anything below touches the engine.
+    {
+        std::lock_guard<std::mutex> lock(g_engineStarterMutex);
+        if (g_engineStarter.joinable()) {
+            g_engineStarter.join();
+        }
     }
 
     // 3. No more engine callbacks, and join both engine threads so none can be
