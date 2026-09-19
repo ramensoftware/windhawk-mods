@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.
-// @version         0.19.9
+// @version         0.20.0
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -2130,7 +2130,11 @@ static void ProcessOne(std::wstring path) {
                     beforeCleanup.dwVolumeSerialNumber !=
                         afterCleanup.dwVolumeSerialNumber ||
                     beforeCleanup.nFileIndexHigh != afterCleanup.nFileIndexHigh ||
-                    beforeCleanup.nFileIndexLow != afterCleanup.nFileIndexLow) {
+                    beforeCleanup.nFileIndexLow != afterCleanup.nFileIndexLow ||
+                    beforeCleanup.nFileSizeHigh != afterCleanup.nFileSizeHigh ||
+                    beforeCleanup.nFileSizeLow != afterCleanup.nFileSizeLow ||
+                    CompareFileTime(&beforeCleanup.ftLastWriteTime,
+                                    &afterCleanup.ftLastWriteTime) != 0) {
                     AuditResult(s, AuditOutcome::Kept,
                                 L"file changed before cleanup", path);
                     return;
