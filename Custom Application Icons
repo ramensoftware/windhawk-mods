@@ -1,0 +1,2387 @@
+// ==WindhawkMod==
+// @id              custom-app-icons
+// @name            Custom Application Icons
+// @description     Replaces the icon of a running program everywhere it is shown - tray, taskbar, window switcher and title bar - and updates it live
+// @name:ru         Свои значки для программ
+// @description:ru  Заменяет значок запущенной программы везде, где он виден - в трее, на панели задач, в переключателе окон и в заголовке окна, с обновлением на лету
+// @version         1.7
+// @author          appEW
+// @include         *
+// @compilerOptions -lgdi32
+// ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+/*
+# Custom Application Icons
+
+Assigns your own icon to a running program. The replacement happens at the
+source - inside the program itself - so every consumer of that icon picks it
+up: the notification area, the taskbar, the Alt+Tab switcher, the classic
+title bar, Task Manager and anything else that asks the window for its icon.
+
+## What it hooks
+
+| Surface | How the icon is obtained | What the mod does |
+| --- | --- | --- |
+| Tray | `Shell_NotifyIcon` called by the program | Swaps `hIcon` in a private copy of the structure before the call reaches the tray |
+| Taskbar, Alt+Tab, title bar | `WM_GETICON` sent to the window | Answers the message with the replacement icon |
+| Switchers that prefer the file icon | `PrivateExtractIcons` / `ExtractIconEx` / `SHGetFileInfo` on the program's `.exe` | Returns the replacement icon for index 0 |
+| Programs Windhawk cannot enter | `SendMessageTimeout(WM_GETICON)` from the taskbar or switcher | Answers on the asking side, so the icon changes even without being inside the program |
+
+Changes take effect immediately after **Save** - no need to restart the
+program, the shell or Explorer. Tray icons that were registered before the mod
+was loaded are refreshed by asking their owner to register them again, the
+same `TaskbarCreated` handshake the shell uses after an Explorer restart.
+
+## Icon syntax
+
+* `C:\Icons\steam.ico` - an icon file, the best matching frame is used
+* `C:\Program Files\App\app.exe,2` - icon number 2 inside a file
+* `%SystemRoot%\System32\shell32.dll,-16` - a negative number is a resource ID
+
+Environment variables are expanded.
+
+## Matching
+
+**Program** accepts an executable name (`steam.exe`) or a full path
+(`C:\Program Files*\steam.exe`); `*` and `?` wildcards are allowed and case is
+ignored. Several programs can share one rule when separated by `|`, which is
+what a modern app usually needs - the window you see on the taskbar often
+belongs to a helper process, not to the executable you started:
+`steam.exe|steamwebhelper.exe`. Task Manager, "Go to details", tells you which
+process owns a window.
+
+**Window class** and **Window title** are optional extra conditions, used to
+give different windows of the same program different icons. They are ignored
+for tray icons, which are matched by program only.
+
+## A different icon for each state
+
+A program with several states does not name them - it simply hands over a
+different icon. That icon is the identity, so the mod fingerprints its pixels
+and a rule can ask for one fingerprint.
+
+1. Add a rule naming the program and leave its icon empty: the program is now
+   watched without anything being changed.
+2. Turn on **Record the icons programs hand out** and use the program until it
+   has been through the states you care about.
+3. Open the capture folder. Every distinct icon is there as
+   `<fingerprint>_<size>.ico`, and `captured.txt` lists where each came from -
+   tray or window - with the tooltip or title at the time.
+4. Put the fingerprint of the state you want to change into **Icon being
+   replaced**, and your own icon next to it. Repeat for the other states.
+5. Turn recording off.
+
+Two shapes of program come out of this:
+
+* **A fixed set of state icons** - Discord's normal, unread and muted logos are
+  three drawings, so three rules cover them exactly.
+* **An icon drawn on the fly** - Telegram paints the unread number into its
+  icon, so every count is its own fingerprint and pinning them all is hopeless.
+  Pin the one plain state instead, and let a second rule with no conditions
+  catch everything else: the first rule is "no mail", the second "some mail".
+  Rules are tried in order, so the specific one has to come first.
+
+For the taskbar and the switcher there is a second lever: the unread count
+usually appears in the window title as well, so **Window title** with `* – (*)`
+tells the states apart without any fingerprint at all.
+
+While a state rule exists, the mod stops assigning icons to windows and only
+answers requests - writing our icon into the window would erase the very thing
+the states are told apart by.
+
+## Known limits
+
+* Store/UWP apps take their icon from their package, not from the window, so
+  they cannot be redirected this way.
+* Windhawk skips some processes entirely - sandboxed programs, and everything a
+  game launcher starts (`Inject into games` is off by default, which is why
+  `steamwebhelper.exe`, the process that owns Steam's window, is never entered).
+  Their taskbar and switcher icons are still replaced, from the asking side,
+  but their own title bar and tray icon are out of reach.
+* Consumers that read the icon out of the system image list
+  (`SHGFI_SYSICONINDEX` - what RetroBar falls back to for a window with no icon
+  at all) are not affected; use `icon-resource-redirect` for those.
+* A consumer that caches the icon handle it received keeps showing the old
+  icon until it re-reads it. Windows are poked after every settings change, so
+  this only shows up in switchers with their own per-executable cache.
+*/
+// ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- rules:
+  - - process: steam.exe|steamwebhelper.exe
+      $name: Program
+      $name:ru: Программа
+      $description: >-
+        Executable name or full path; wildcards * and ? are allowed and case is
+        ignored. Separate several programs with | - the window on the taskbar
+        often belongs to a helper process.
+      $description:ru: >-
+        Имя исполняемого файла или полный путь; допустимы подстановочные знаки
+        * и ?, регистр не важен. Несколько процессов разделяются знаком | -
+        окно на панели задач часто принадлежит вспомогательному процессу.
+    - icon: ""
+      $name: Icon
+      $name:ru: Значок
+      $description: >-
+        An .ico file, or an .exe/.dll followed by ,index - a negative index is
+        a resource ID. Environment variables are expanded.
+      $description:ru: >-
+        Файл .ico либо .exe/.dll с индексом через запятую - отрицательный
+        индекс означает идентификатор ресурса. Переменные среды раскрываются.
+    - originalColor: ""
+      $name: Colour in the icon being replaced (optional)
+      $name:ru: Цвет в заменяемом значке (необязательно)
+      $description: >-
+        Recognises a state by what the program paints, not by the exact
+        drawing: #RRGGBB, optionally followed by ,tolerance and ,minimum
+        pixels (default 40 and 8). Survives a redrawn counter, unlike a
+        fingerprint. Several colours separated by | - any of them matches.
+      $description:ru: >-
+        Опознаёт состояние по тому, чем программа красит значок, а не по
+        точному рисунку: #RRGGBB, при желании через запятую допуск и
+        минимальное число пикселей (по умолчанию 40 и 8). В отличие от
+        отпечатка переживает перерисовку счётчика. Несколько цветов через | -
+        подходит любой.
+    - windowClass: ""
+      $name: Window class (optional)
+      $name:ru: Класс окна (необязательно)
+      $description: Limits the rule to windows of this class. Wildcards allowed.
+      $description:ru: Ограничивает правило окнами этого класса. Допустимы подстановочные знаки.
+    - windowTitle: ""
+      $name: Window title (optional)
+      $name:ru: Заголовок окна (необязательно)
+      $description: >-
+        Limits the rule to windows with this title. Wildcards allowed - an
+        unread count usually shows up here, as in "* - (*)".
+      $description:ru: >-
+        Ограничивает правило окнами с таким заголовком. Допустимы подстановочные
+        знаки - счётчик непрочитанного обычно виден именно здесь: "* – (*)".
+    - trayTooltip: ""
+      $name: Tray tooltip (optional)
+      $name:ru: Подсказка в трее (необязательно)
+      $description: >-
+        Limits the rule to tray icons whose tooltip matches. Wildcards allowed.
+      $description:ru: >-
+        Ограничивает правило значками в трее с такой подсказкой. Допустимы
+        подстановочные знаки.
+    - originalIcon: ""
+      $name: Icon being replaced (optional)
+      $name:ru: Заменяемый значок (необязательно)
+      $description: >-
+        Fingerprint of the program's own icon, which is how one state is told
+        from another. Turn on capture below, watch the program change state,
+        and take the fingerprints from the file names it writes. Several,
+        separated by |, count as one state - useful when the same drawing
+        arrives in two sizes.
+      $description:ru: >-
+        Отпечаток собственного значка программы - именно так одно состояние
+        отличается от другого. Включите запись ниже, дождитесь смены состояния
+        и возьмите отпечатки из имён сохранённых файлов. Несколько отпечатков
+        через | считаются одним состоянием: например, один рисунок в двух
+        размерах.
+  $name: Icon replacements
+  $name:ru: Замены значков
+  $description: The first rule matching a program (and window) wins.
+  $description:ru: Применяется первое подходящее правило.
+- inTray: true
+  $name: Replace tray icons
+  $name:ru: Менять значки в трее
+- inWindows: true
+  $name: Replace window icons (taskbar, Alt+Tab, title bar)
+  $name:ru: Менять значки окон (панель задач, Alt+Tab, заголовок)
+- inFileIcons: true
+  $name: Replace the icon read from the program's file
+  $name:ru: Менять значок, читаемый из файла программы
+  $description: >-
+    Needed by taskbars and window switchers that prefer the executable's icon
+    over the window icon. It also changes how that executable looks in
+    Explorer.
+  $description:ru: >-
+    Нужно панелям задач и переключателям окон, которые предпочитают значок из
+    exe-файла значку окна. Заодно меняет вид этого файла в Проводнике.
+- pushWindowIcons: true
+  $name: Assign the icon to windows, not only answer requests
+  $name:ru: Присваивать значок окнам, а не только отвечать на запросы
+  $description: >-
+    Sends WM_SETICON to the program's windows, so components that read the
+    stored icon directly also see the replacement.
+  $description:ru: >-
+    Отправляет окнам программы WM_SETICON, чтобы замену видели и компоненты,
+    читающие сохранённый значок напрямую.
+- inOtherProcesses: true
+  $name: Replace icons of programs that cannot be modified from inside
+  $name:ru: Менять значки программ, внутрь которых нельзя внедриться
+  $description: >-
+    Windhawk cannot inject into every program - sandboxed apps, and anything a
+    game launcher started, are skipped. Their icon request is then answered on
+    the asking side instead, in the taskbar or the window switcher.
+  $description:ru: >-
+    Windhawk внедряется не во все программы - песочницы и всё, что запущено
+    игровым лаунчером, пропускаются. Тогда запрос значка перехватывается на
+    стороне спрашивающего: в панели задач или переключателе окон.
+- captureIcons: false
+  $name: Record the icons programs hand out
+  $name:ru: Записывать значки, которые выдают программы
+  $description: >-
+    Writes every distinct icon of the listed programs to disk as an .ico named
+    after its fingerprint, with a captured.txt listing size, source and
+    tooltip. This is how the fingerprint for a state is found. A rule with no
+    icon of its own puts a program under capture without changing anything.
+    Turn it off once the states are known.
+  $description:ru: >-
+    Сохраняет каждый неповторяющийся значок перечисленных программ в .ico с
+    отпечатком в имени, рядом кладёт captured.txt с размером, источником и
+    подсказкой. Так и находится отпечаток нужного состояния. Правило без
+    своего значка ставит программу под запись, ничего не меняя. После разбора
+    состояний запись лучше выключить.
+- captureFolder: '%LOCALAPPDATA%\Windhawk\custom-app-icons'
+  $name: Folder for recorded icons
+  $name:ru: Папка для записанных значков
+- retriggerTrayIcons: true
+  $name: Ask programs to register their tray icons again after a change
+  $name:ru: Просить программы заново зарегистрировать значки в трее
+  $description: >-
+    Lets an already running program update its tray icon without a restart.
+  $description:ru: >-
+    Позволяет уже запущенной программе обновить значок в трее без перезапуска.
+*/
+// ==/WindhawkModSettings==
+
+#include <windows.h>
+#include <shellapi.h>
+
+#include <atomic>
+#include <cstdint>
+#include <cwchar>
+#include <map>
+#include <string>
+#include <vector>
+
+// ---------------------------------------------------------------------------
+// Small helpers
+// ---------------------------------------------------------------------------
+
+static inline WCHAR LowerChar(WCHAR c) {
+    return (WCHAR)(ULONG_PTR)CharLowerW((LPWSTR)(ULONG_PTR)(WORD)c);
+}
+
+// Case-insensitive wildcard match supporting * and ?, iterative with
+// backtracking so a pathological pattern can't blow the stack.
+static bool WildcardMatch(PCWSTR pattern, PCWSTR text) {
+    PCWSTR star = nullptr;
+    PCWSTR mark = nullptr;
+    while (*text) {
+        if (*pattern == L'?' ||
+            (*pattern && LowerChar(*pattern) == LowerChar(*text))) {
+            pattern++;
+            text++;
+        } else if (*pattern == L'*') {
+            star = pattern++;
+            mark = text;
+        } else if (star) {
+            pattern = star + 1;
+            text = ++mark;
+        } else {
+            return false;
+        }
+    }
+    while (*pattern == L'*') {
+        pattern++;
+    }
+    return *pattern == L'\0';
+}
+
+static PCWSTR FileNamePart(PCWSTR path) {
+    PCWSTR name = path;
+    for (PCWSTR p = path; *p; p++) {
+        if (*p == L'\\' || *p == L'/') {
+            name = p + 1;
+        }
+    }
+    return name;
+}
+
+static std::wstring ExpandAndTrim(PCWSTR value) {
+    std::wstring s = value ? value : L"";
+    while (!s.empty() && (s.front() == L' ' || s.front() == L'\t')) {
+        s.erase(s.begin());
+    }
+    while (!s.empty() && (s.back() == L' ' || s.back() == L'\t')) {
+        s.pop_back();
+    }
+    if (s.size() >= 2 && s.front() == L'"' && s.back() == L'"') {
+        s = s.substr(1, s.size() - 2);
+    }
+    if (s.find(L'%') != std::wstring::npos) {
+        WCHAR expanded[MAX_PATH * 2];
+        DWORD n =
+            ExpandEnvironmentStringsW(s.c_str(), expanded, ARRAYSIZE(expanded));
+        if (n > 0 && n <= ARRAYSIZE(expanded)) {
+            s = expanded;
+        }
+    }
+    return s;
+}
+
+// ---------------------------------------------------------------------------
+// Configuration and state
+// ---------------------------------------------------------------------------
+
+struct IconSpec {
+    std::wstring path;
+    int index = 0;
+};
+
+struct PaletteEntry {
+    uint32_t rgb;
+    uint32_t count;
+};
+
+// What is known about an icon the mod is about to replace: the exact
+// fingerprint, and how much of each colour it contains. The colours are what
+// survives a program redrawing its icon with a different number in it.
+struct IconSummary {
+    uint64_t hash = 0;
+    std::vector<PaletteEntry> palette;
+};
+
+// "a badge of this colour covers at least this many pixels"
+struct ColorCondition {
+    int r = 0, g = 0, b = 0;
+    int tolerance = 40;
+    int minPixels = 8;
+};
+
+struct Rule {
+    std::vector<std::wstring> processPatterns;  // "a.exe|b.exe" split apart
+    std::wstring windowClass;
+    std::wstring windowTitle;
+    std::wstring trayTooltip;
+    std::vector<uint64_t> originalHashes;  // fingerprints of the icon replaced
+    std::vector<ColorCondition> originalColors;
+    IconSpec icon;
+};
+
+// A rule that applies to the current process, with its icons preloaded.
+struct LocalRule {
+    std::wstring windowClass;
+    std::wstring windowTitle;
+    std::wstring trayTooltip;
+    std::vector<uint64_t> originalHashes;
+    std::vector<ColorCondition> originalColors;
+    HICON hSmall = nullptr;
+    HICON hBig = nullptr;
+};
+
+// What is known about the icon being replaced, for the matchers that look at
+// more than the program name.
+struct MatchContext {
+    PCWSTR className = nullptr;
+    PCWSTR title = nullptr;
+    PCWSTR tooltip = nullptr;
+    const IconSummary* original = nullptr;  // null when the icon was not seen
+};
+
+struct TrayEntry {
+    HWND hWnd = nullptr;
+    UINT uID = 0;
+    bool hasGuid = false;
+    GUID guid = {};
+    HICON hOriginal = nullptr;
+    std::wstring tooltip;  // remembered: NIF_ICON often arrives without NIF_TIP
+};
+
+struct WindowOriginal {
+    HICON hSmall = nullptr;
+    HICON hBig = nullptr;
+    HICON hOurSmall = nullptr;
+    HICON hOurBig = nullptr;
+};
+
+// A window class is patched once, through whichever of its windows was seen
+// first; that window is kept to undo it with.
+struct ClassOriginal {
+    HWND hWnd = nullptr;
+    HICON hSmall = nullptr;
+    HICON hBig = nullptr;
+};
+
+// A window in a process that cannot be hooked from inside. The icon handed to
+// the asking program is replaced on every request: a caller that recognises a
+// handle it already saw destroys it (ManagedShell does), so the previous copy
+// is dropped only once the next one is out.
+struct RemoteWindow {
+    DWORD processId = 0;
+    std::wstring exePath;  // resolved once; the rule is re-picked every time,
+    bool anyRule = false;  // because the program's state can have changed
+    HICON hSmallInFlight = nullptr;
+    HICON hBigInFlight = nullptr;
+};
+
+static SRWLOCK g_stateLock = SRWLOCK_INIT;   // guards everything below
+static std::vector<Rule> g_rules;            // every configured rule
+static std::vector<LocalRule> g_localRules;  // rules matching this process
+static std::map<std::wstring, HICON> g_fileIconCache;
+static std::vector<HICON> g_ownedIcons;  // destroyed on unload only
+static std::vector<TrayEntry> g_trayEntries;
+static std::map<HWND, WindowOriginal> g_windowOriginals;
+static std::map<ATOM, ClassOriginal> g_classOriginals;
+static std::map<HWND, RemoteWindow> g_remoteWindows;
+// The fingerprint of the icon the program itself last set on a window. Once we
+// assign our replacement, the window no longer holds the evidence of the
+// state, so it is remembered here at the moment WM_SETICON passes through.
+struct WindowIcons {
+    uint64_t state = 0;
+    HICON ourSmallCopy = nullptr;
+    HICON ourBigCopy = nullptr;
+};
+static std::map<HWND, WindowIcons> g_windowState;
+static std::map<HICON, IconSummary> g_iconSummaries;  // by icon handle
+static std::map<uint64_t, bool> g_capturedIcons;
+static std::map<std::wstring, uint64_t> g_lastCaptured;  // by source, for the log
+static std::wstring g_captureFolder;
+// Windows answered from inside their own process. The taskbar-side hook skips
+// these, so the state is recognised once, where the real icon is visible.
+static std::map<HWND, bool> g_markedWindows;
+static PCWSTR kHandledProp = L"WhCustomAppIconsHandled";
+
+static std::atomic<bool> g_optTray{true};
+static std::atomic<bool> g_optWindows{true};
+static std::atomic<bool> g_optFileIcons{true};
+static std::atomic<bool> g_optPush{true};
+static std::atomic<bool> g_optRemote{true};
+static std::atomic<bool> g_optRetrigger{true};
+static std::atomic<bool> g_optCapture{false};
+
+static std::atomic<bool> g_activeHere{false};  // a rule names this process
+static std::atomic<bool> g_haveRules{false};
+static std::atomic<bool> g_needWindowInfo{false};  // a rule filters by class or title
+static std::atomic<bool> g_needOriginal{false};    // a rule filters by the icon being replaced
+static std::atomic<bool> g_hasStateRules{false};   // some rule is state-specific
+
+static thread_local bool g_inIconLoad = false;  // guards against self-recursion
+static thread_local bool g_inPush = false;      // our own WM_SETICON, not the program's
+
+static WCHAR g_exePath[MAX_PATH];
+static PCWSTR g_exeName = g_exePath;
+static UINT g_taskbarCreatedMsg;
+static UINT g_shellHookMsg;
+
+// ---------------------------------------------------------------------------
+// Icon loading
+// ---------------------------------------------------------------------------
+
+static IconSpec ParseIconSpec(PCWSTR value) {
+    IconSpec spec;
+    std::wstring s = ExpandAndTrim(value);
+
+    size_t comma = s.find_last_of(L',');
+    if (comma != std::wstring::npos && comma + 1 < s.size()) {
+        PCWSTR numberStart = s.c_str() + comma + 1;
+        WCHAR* end = nullptr;
+        long index = wcstol(numberStart, &end, 10);
+        if (end && *end == L'\0' && end != numberStart) {
+            spec.index = (int)index;
+            s.erase(comma);
+            while (!s.empty() && s.back() == L' ') {
+                s.pop_back();
+            }
+        }
+    }
+
+    spec.path = s;
+    return spec;
+}
+
+// Loads an icon at an exact size. The caller owns the result.
+static HICON LoadIconAtSize(const IconSpec& spec, int cx, int cy) {
+    if (spec.path.empty() || cx <= 0 || cy <= 0) {
+        return nullptr;
+    }
+
+    g_inIconLoad = true;
+
+    HICON hIcon = nullptr;
+    if (PrivateExtractIconsW(spec.path.c_str(), spec.index, cx, cy, &hIcon,
+                             nullptr, 1, 0) != 1) {
+        hIcon = nullptr;
+    }
+    if (!hIcon && spec.index == 0) {
+        hIcon = (HICON)LoadImageW(nullptr, spec.path.c_str(), IMAGE_ICON, cx, cy,
+                                  LR_LOADFROMFILE | LR_DEFAULTCOLOR);
+    }
+
+    g_inIconLoad = false;
+
+    return hIcon;
+}
+
+// ---------------------------------------------------------------------------
+// Recognising the icon a program hands out
+//
+// A program with several states - Discord muted, Telegram with unread mail -
+// simply passes a different icon. Nothing names the state, so the icon itself
+// is the identity: its pixels are fingerprinted, and a rule can ask for one
+// fingerprint. Capture mode writes every icon seen to disk under its
+// fingerprint, which is how one is found in the first place.
+// ---------------------------------------------------------------------------
+
+struct IconBits {
+    int width = 0;
+    int height = 0;
+    std::vector<BYTE> color;  // 32bpp BGRA, bottom-up, as an .ico stores it
+    std::vector<BYTE> mask;   // 1bpp, bottom-up, rows padded to 4 bytes
+    bool valid = false;
+};
+
+static IconBits ReadIconBits(HICON hIcon) {
+    IconBits bits;
+    if (!hIcon) {
+        return bits;
+    }
+
+    ICONINFO info = {};
+    if (!GetIconInfo(hIcon, &info)) {
+        return bits;
+    }
+
+    HBITMAP source = info.hbmColor ? info.hbmColor : info.hbmMask;
+    BITMAP bitmap = {};
+    if (GetObjectW(source, sizeof(bitmap), &bitmap) && bitmap.bmWidth > 0) {
+        // A black and white icon keeps AND and XOR in one bitmap, stacked.
+        int height = info.hbmColor ? bitmap.bmHeight : bitmap.bmHeight / 2;
+        if (height > 0 && bitmap.bmWidth <= 512 && height <= 512) {
+            bits.width = bitmap.bmWidth;
+            bits.height = height;
+
+            HDC hdc = GetDC(nullptr);
+
+            BITMAPINFO colorInfo = {};
+            colorInfo.bmiHeader.biSize = sizeof(colorInfo.bmiHeader);
+            colorInfo.bmiHeader.biWidth = bits.width;
+            colorInfo.bmiHeader.biHeight = bits.height;
+            colorInfo.bmiHeader.biPlanes = 1;
+            colorInfo.bmiHeader.biBitCount = 32;
+            colorInfo.bmiHeader.biCompression = BI_RGB;
+            bits.color.resize((size_t)bits.width * bits.height * 4);
+            if (!GetDIBits(hdc, source, 0, bits.height, bits.color.data(),
+                           &colorInfo, DIB_RGB_COLORS)) {
+                bits.color.clear();
+            }
+
+            size_t stride = (((size_t)bits.width + 31) / 32) * 4;
+            bits.mask.resize(stride * bits.height, 0);
+            if (info.hbmMask) {
+                BYTE buffer[sizeof(BITMAPINFOHEADER) + 2 * sizeof(RGBQUAD)] = {};
+                BITMAPINFO* maskInfo = (BITMAPINFO*)buffer;
+                maskInfo->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+                maskInfo->bmiHeader.biWidth = bits.width;
+                maskInfo->bmiHeader.biHeight = bits.height;
+                maskInfo->bmiHeader.biPlanes = 1;
+                maskInfo->bmiHeader.biBitCount = 1;
+                maskInfo->bmiHeader.biCompression = BI_RGB;
+                if (!GetDIBits(hdc, info.hbmMask, 0, bits.height,
+                               bits.mask.data(), maskInfo, DIB_RGB_COLORS)) {
+                    // An all-zero mask means fully opaque, which is right for
+                    // the 32bpp icons everything uses today.
+                }
+            }
+
+            ReleaseDC(nullptr, hdc);
+            bits.valid = !bits.color.empty();
+        }
+    }
+
+    if (info.hbmColor) {
+        DeleteObject(info.hbmColor);
+    }
+    if (info.hbmMask) {
+        DeleteObject(info.hbmMask);
+    }
+    return bits;
+}
+
+static uint64_t HashBytes(uint64_t hash, const void* data, size_t size) {
+    const BYTE* bytes = (const BYTE*)data;
+    for (size_t i = 0; i < size; i++) {
+        hash ^= bytes[i];
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+// Fingerprint of an icon's pixels, cached by handle. USER handles carry a
+// uniqueness counter, so a value is not reused for a different icon.
+static void BuildPalette(const IconBits& bits, std::vector<PaletteEntry>* out) {
+    std::map<uint32_t, uint32_t> counts;
+    for (int pass = 0; pass < 2 && counts.empty(); pass++) {
+        // Second pass only happens for an old icon with no alpha channel,
+        // where every pixel would otherwise look transparent.
+        for (size_t i = 0; i + 3 < bits.color.size(); i += 4) {
+            if (pass == 0 && bits.color[i + 3] < 200) {
+                continue;
+            }
+            uint32_t rgb = ((uint32_t)bits.color[i + 2] << 16) |
+                           ((uint32_t)bits.color[i + 1] << 8) | bits.color[i];
+            auto it = counts.find(rgb);
+            if (it != counts.end()) {
+                it->second++;
+            } else if (counts.size() < 1024) {
+                counts[rgb] = 1;
+            }
+        }
+    }
+
+    out->clear();
+    out->reserve(counts.size());
+    for (const auto& [rgb, count] : counts) {
+        out->push_back(PaletteEntry{rgb, count});
+    }
+}
+
+// Fingerprint and colours of an icon, cached by handle. USER handles carry a
+// uniqueness counter, so a value is not reused for a different icon.
+static bool SummariseIcon(HICON hIcon, IconSummary* out) {
+    if (!hIcon) {
+        return false;
+    }
+
+    AcquireSRWLockShared(&g_stateLock);
+    auto it = g_iconSummaries.find(hIcon);
+    bool cached = it != g_iconSummaries.end();
+    if (cached) {
+        *out = it->second;
+    }
+    ReleaseSRWLockShared(&g_stateLock);
+    if (cached) {
+        return out->hash != 0;
+    }
+
+    IconBits bits = ReadIconBits(hIcon);
+    if (!bits.valid) {
+        return false;
+    }
+
+    IconSummary summary;
+    summary.hash = HashBytes(1469598103934665603ULL, bits.color.data(),
+                             bits.color.size());
+    summary.hash = HashBytes(summary.hash, bits.mask.data(), bits.mask.size());
+    if (!summary.hash) {
+        summary.hash = 1;
+    }
+    BuildPalette(bits, &summary.palette);
+
+    AcquireSRWLockExclusive(&g_stateLock);
+    if (g_iconSummaries.size() > 128) {
+        g_iconSummaries.clear();
+    }
+    g_iconSummaries[hIcon] = summary;
+    ReleaseSRWLockExclusive(&g_stateLock);
+
+    *out = std::move(summary);
+    return true;
+}
+
+static bool EnsureDirectory(const std::wstring& path) {
+    if (path.empty()) {
+        return false;
+    }
+    for (size_t i = 0; i <= path.size(); i++) {
+        if (i == path.size() || path[i] == L'\\') {
+            if (i < 3) {
+                continue;  // skip the drive letter
+            }
+            std::wstring part = path.substr(0, i);
+            if (!CreateDirectoryW(part.c_str(), nullptr) &&
+                GetLastError() != ERROR_ALREADY_EXISTS) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+#pragma pack(push, 1)
+struct IcoDirectory {
+    WORD reserved;
+    WORD type;
+    WORD count;
+};
+struct IcoEntry {
+    BYTE width;
+    BYTE height;
+    BYTE colorCount;
+    BYTE reserved;
+    WORD planes;
+    WORD bitCount;
+    DWORD bytesInRes;
+    DWORD imageOffset;
+};
+#pragma pack(pop)
+
+static bool WriteIconFile(const std::wstring& path, const IconBits& bits) {
+    if (!bits.valid) {
+        return false;
+    }
+
+    BITMAPINFOHEADER header = {};
+    header.biSize = sizeof(header);
+    header.biWidth = bits.width;
+    header.biHeight = bits.height * 2;  // colour rows plus mask rows
+    header.biPlanes = 1;
+    header.biBitCount = 32;
+    header.biCompression = BI_RGB;
+    header.biSizeImage = (DWORD)bits.color.size();
+
+    IcoDirectory directory = {0, 1, 1};
+    IcoEntry entry = {};
+    entry.width = bits.width >= 256 ? 0 : (BYTE)bits.width;
+    entry.height = bits.height >= 256 ? 0 : (BYTE)bits.height;
+    entry.planes = 1;
+    entry.bitCount = 32;
+    entry.bytesInRes =
+        (DWORD)(sizeof(header) + bits.color.size() + bits.mask.size());
+    entry.imageOffset = sizeof(directory) + sizeof(entry);
+
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ,
+                              nullptr, CREATE_ALWAYS, 0, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+
+    DWORD written = 0;
+    bool ok = WriteFile(file, &directory, sizeof(directory), &written, nullptr) &&
+              WriteFile(file, &entry, sizeof(entry), &written, nullptr) &&
+              WriteFile(file, &header, sizeof(header), &written, nullptr) &&
+              WriteFile(file, bits.color.data(), (DWORD)bits.color.size(),
+                        &written, nullptr) &&
+              WriteFile(file, bits.mask.data(), (DWORD)bits.mask.size(),
+                        &written, nullptr);
+    CloseHandle(file);
+    return ok;
+}
+
+static void AppendIndexLine(const std::wstring& folder,
+                            const std::wstring& line) {
+    HANDLE file = CreateFileW((folder + L"\\captured.txt").c_str(),
+                              FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                              nullptr, OPEN_ALWAYS, 0, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        return;
+    }
+
+    int size = WideCharToMultiByte(CP_UTF8, 0, line.c_str(), (int)line.size(),
+                                   nullptr, 0, nullptr, nullptr);
+    if (size > 0) {
+        std::vector<char> utf8(size);
+        WideCharToMultiByte(CP_UTF8, 0, line.c_str(), (int)line.size(),
+                            utf8.data(), size, nullptr, nullptr);
+        DWORD written = 0;
+        WriteFile(file, utf8.data(), (DWORD)utf8.size(), &written, nullptr);
+        WriteFile(file, "\r\n", 2, &written, nullptr);
+    }
+    CloseHandle(file);
+}
+
+// Writes an icon the program handed out to disk, once per fingerprint, so its
+// states can be told apart by eye and addressed by rule.
+static void CaptureIcon(HICON hIcon, uint64_t hash, PCWSTR source,
+                        PCWSTR detail) {
+    if (!g_optCapture.load(std::memory_order_relaxed) || !hIcon || !hash) {
+        return;
+    }
+
+    // The .ico is written once per distinct icon, but the log gets a line
+    // every time the icon *changes*: what a state sequence looks like is the
+    // point of recording, and the second appearance of an icon matters as much
+    // as the first.
+    std::wstring folder;
+    bool isNewIcon = false;
+    bool changed = false;
+
+    AcquireSRWLockExclusive(&g_stateLock);
+    auto last = g_lastCaptured.find(source);
+    changed = last == g_lastCaptured.end() || last->second != hash;
+    if (changed) {
+        g_lastCaptured[source] = hash;
+    }
+    isNewIcon = g_capturedIcons.find(hash) == g_capturedIcons.end() &&
+                g_capturedIcons.size() < 200;
+    if (isNewIcon) {
+        g_capturedIcons[hash] = true;
+    }
+    if (changed || isNewIcon) {
+        folder = g_captureFolder;
+    }
+    ReleaseSRWLockExclusive(&g_stateLock);
+
+    if (folder.empty()) {
+        return;
+    }
+
+    folder += L"\\";
+    folder += g_exeName;
+    if (!EnsureDirectory(folder)) {
+        return;
+    }
+
+    IconBits bits = ReadIconBits(hIcon);
+    if (!bits.valid) {
+        return;
+    }
+
+    WCHAR name[128];
+    wsprintfW(name, L"%08X%08X_%dx%d.ico", (DWORD)(hash >> 32), (DWORD)hash,
+              bits.width, bits.height);
+    if (isNewIcon) {
+        WriteIconFile(folder + L"\\" + name, bits);
+    }
+
+    if (changed) {
+        SYSTEMTIME now;
+        GetLocalTime(&now);
+        WCHAR line[512];
+        wsprintfW(line, L"%02d:%02d:%02d  %08X%08X  %2dx%-2d  %-6s  %s",
+                  now.wHour, now.wMinute, now.wSecond, (DWORD)(hash >> 32),
+                  (DWORD)hash, bits.width, bits.height, source,
+                  detail ? detail : L"");
+        AppendIndexLine(folder, line);
+    }
+
+    Wh_Log(L"captured %s icon %08X%08X (%s)", source, (DWORD)(hash >> 32),
+           (DWORD)hash, detail ? detail : L"");
+}
+
+// ---------------------------------------------------------------------------
+// Rule lookup
+// ---------------------------------------------------------------------------
+
+// "steam.exe|steamwebhelper.exe" -> two patterns. Split once, at load time.
+static std::vector<std::wstring> SplitPatterns(const std::wstring& value) {
+    std::vector<std::wstring> patterns;
+    size_t start = 0;
+    while (start <= value.size()) {
+        size_t end = value.find(L'|', start);
+        if (end == std::wstring::npos) {
+            end = value.size();
+        }
+        std::wstring one = value.substr(start, end - start);
+        while (!one.empty() && (one.front() == L' ' || one.front() == L'\t')) {
+            one.erase(one.begin());
+        }
+        while (!one.empty() && (one.back() == L' ' || one.back() == L'\t')) {
+            one.pop_back();
+        }
+        if (!one.empty()) {
+            patterns.push_back(std::move(one));
+        }
+        if (end == value.size()) {
+            break;
+        }
+        start = end + 1;
+    }
+    return patterns;
+}
+
+static bool ProcessMatches(const std::vector<std::wstring>& patterns,
+                           PCWSTR fullPath,
+                           PCWSTR fileName) {
+    for (const std::wstring& pattern : patterns) {
+        if (WildcardMatch(pattern.c_str(), fileName)) {
+            return true;
+        }
+        if (pattern.find(L'\\') != std::wstring::npos &&
+            WildcardMatch(pattern.c_str(), fullPath)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// The window properties a rule may filter on. Collected without holding the
+// lock - GetWindowTextW can send WM_GETTEXT to another thread.
+struct WindowInfo {
+    WCHAR className[128];
+    WCHAR title[256];
+    bool valid;
+};
+
+static void GetWindowInfo(HWND hWnd, WindowInfo* info) {
+    info->className[0] = L'\0';
+    info->title[0] = L'\0';
+    info->valid = false;
+
+    if (!hWnd || (!g_needWindowInfo.load(std::memory_order_relaxed) &&
+                  !g_optCapture.load(std::memory_order_relaxed))) {
+        return;
+    }
+
+    GetClassNameW(hWnd, info->className, ARRAYSIZE(info->className));
+    GetWindowTextW(hWnd, info->title, ARRAYSIZE(info->title));
+    info->valid = true;
+}
+
+static bool MatchesText(const std::wstring& pattern, PCWSTR text) {
+    if (pattern.empty()) {
+        return true;  // no condition
+    }
+    return text && WildcardMatch(pattern.c_str(), text);
+}
+
+static bool MatchesOriginal(const std::vector<uint64_t>& wanted,
+                            const IconSummary* seen) {
+    if (wanted.empty()) {
+        return true;  // rule does not care which icon is being replaced
+    }
+    if (!seen) {
+        return false;  // rule asks for a specific icon and none was seen
+    }
+    for (uint64_t hash : wanted) {
+        if (hash == seen->hash) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// A program that redraws its icon - Telegram paints the unread count into it -
+// has a different fingerprint every time, but the colour of the badge stays
+// put. Counting pixels of that colour recognises the state whatever the number.
+static bool MatchesColors(const std::vector<ColorCondition>& wanted,
+                          const IconSummary* seen) {
+    if (wanted.empty()) {
+        return true;
+    }
+    if (!seen) {
+        return false;
+    }
+
+    for (const ColorCondition& want : wanted) {
+        uint32_t found = 0;
+        for (const PaletteEntry& entry : seen->palette) {
+            int r = (int)((entry.rgb >> 16) & 0xFF);
+            int g = (int)((entry.rgb >> 8) & 0xFF);
+            int b = (int)(entry.rgb & 0xFF);
+            if (abs(r - want.r) <= want.tolerance &&
+                abs(g - want.g) <= want.tolerance &&
+                abs(b - want.b) <= want.tolerance) {
+                found += entry.count;
+            }
+        }
+        if (found >= (uint32_t)want.minPixels) {
+            return true;  // any listed colour is enough
+        }
+    }
+    return false;
+}
+
+// Call with the state lock held. The first rule that fits wins, so a rule
+// naming a state must come before the catch-all one.
+static const LocalRule* FindLocalRule(const MatchContext& context) {
+    for (const LocalRule& rule : g_localRules) {
+        if (!MatchesText(rule.windowClass, context.className) ||
+            !MatchesText(rule.windowTitle, context.title) ||
+            !MatchesText(rule.trayTooltip, context.tooltip) ||
+            !MatchesOriginal(rule.originalHashes, context.original) ||
+            !MatchesColors(rule.originalColors, context.original)) {
+            continue;
+        }
+        return &rule;
+    }
+    return nullptr;
+}
+
+static HICON PickIcon(const LocalRule* rule, bool big) {
+    if (!rule) {
+        return nullptr;
+    }
+    HICON result = big ? rule->hBig : rule->hSmall;
+    if (!result) {
+        result = big ? rule->hSmall : rule->hBig;
+    }
+    return result;
+}
+
+// The icon this window should show, or NULL. `original` is what the program
+// itself answers with - the state it is in. The returned handle stays owned by
+// the mod and is never destroyed before unload.
+static HICON IconForWindow(HWND hWnd, bool big, HICON original,
+                           bool remember = false) {
+    WindowInfo info;
+    GetWindowInfo(hWnd, &info);
+
+    MatchContext context;
+    context.className = info.valid ? info.className : nullptr;
+    context.title = info.valid ? info.title : nullptr;
+
+    IconSummary summary;
+    if (original && (g_needOriginal.load(std::memory_order_relaxed) ||
+                     g_optCapture.load(std::memory_order_relaxed)) &&
+        SummariseIcon(original, &summary)) {
+        context.original = &summary;
+        CaptureIcon(original, summary.hash, L"window",
+                    info.valid ? info.title : nullptr);
+        if (remember) {
+            AcquireSRWLockExclusive(&g_stateLock);
+            g_windowState[hWnd].state = summary.hash;
+            ReleaseSRWLockExclusive(&g_stateLock);
+        }
+    } else if (!remember && g_needOriginal.load(std::memory_order_relaxed)) {
+        // our own icon is in the window by now, so the state comes from what
+        // the program set the last time it changed it
+        uint64_t remembered = 0;
+        AcquireSRWLockShared(&g_stateLock);
+        auto it = g_windowState.find(hWnd);
+        if (it != g_windowState.end()) {
+            remembered = it->second.state;
+        }
+        ReleaseSRWLockShared(&g_stateLock);
+        if (remembered) {
+            summary.hash = remembered;
+            context.original = &summary;
+        }
+    }
+
+    AcquireSRWLockShared(&g_stateLock);
+    HICON result = PickIcon(FindLocalRule(context), big);
+    ReleaseSRWLockShared(&g_stateLock);
+
+    return result;
+}
+
+// The tray is matched without the window conditions - a tray icon normally
+// belongs to a hidden helper window whose class and title mean nothing - but
+// the icon being replaced and the tooltip both carry the state.
+static HICON IconForTray(HICON original, PCWSTR tooltip) {
+    MatchContext context;
+    context.tooltip = tooltip;
+
+    IconSummary summary;
+    if (original && (g_needOriginal.load(std::memory_order_relaxed) ||
+                     g_optCapture.load(std::memory_order_relaxed)) &&
+        SummariseIcon(original, &summary)) {
+        context.original = &summary;
+        CaptureIcon(original, summary.hash, L"tray", tooltip);
+    }
+
+    AcquireSRWLockShared(&g_stateLock);
+    HICON result = PickIcon(FindLocalRule(context), false);
+    ReleaseSRWLockShared(&g_stateLock);
+
+    return result;
+}
+
+// Which rule covers this program, or -1. Call without the lock held. With a
+// context, the state conditions are applied as well; without one, only the
+// program name is looked at.
+// `unconditionalOnly` is for a plain file on disk: it has no state, so a rule
+// that names one must not claim it - that is what the catch-all rule is for.
+static int RuleIndexForPath(PCWSTR path, const MatchContext* context,
+                            bool unconditionalOnly) {
+    if (!path || !*path) {
+        return -1;
+    }
+
+    PCWSTR fileName = FileNamePart(path);
+    int matched = -1;
+
+    AcquireSRWLockShared(&g_stateLock);
+    for (size_t i = 0; i < g_rules.size(); i++) {
+        const Rule& rule = g_rules[i];
+        if (!ProcessMatches(rule.processPatterns, path, fileName)) {
+            continue;
+        }
+        if (unconditionalOnly &&
+            (!rule.originalHashes.empty() || !rule.originalColors.empty() ||
+             !rule.trayTooltip.empty() || !rule.windowClass.empty() ||
+             !rule.windowTitle.empty())) {
+            continue;
+        }
+        if (context && (!MatchesText(rule.windowClass, context->className) ||
+                        !MatchesText(rule.windowTitle, context->title) ||
+                        !MatchesText(rule.trayTooltip, context->tooltip) ||
+                        !MatchesOriginal(rule.originalHashes,
+                                         context->original) ||
+                        !MatchesColors(rule.originalColors,
+                                       context->original))) {
+            continue;
+        }
+        matched = (int)i;
+        break;
+    }
+    ReleaseSRWLockShared(&g_stateLock);
+
+    return matched;
+}
+
+// A rule's icon at an arbitrary size, loaded once and kept until unload. The
+// handle stays owned by the mod.
+static HICON IconForRuleIndex(int ruleIndex, int cx, int cy) {
+    if (ruleIndex < 0 || cx <= 0 || cy <= 0) {
+        return nullptr;
+    }
+
+    WCHAR key[64];
+    wsprintfW(key, L"%d|%d|%d", ruleIndex, cx, cy);
+
+    HICON hIcon = nullptr;
+    bool cached = false;
+
+    AcquireSRWLockShared(&g_stateLock);
+    auto it = g_fileIconCache.find(key);
+    if (it != g_fileIconCache.end()) {
+        hIcon = it->second;
+        cached = true;
+    }
+    ReleaseSRWLockShared(&g_stateLock);
+
+    if (cached) {
+        return hIcon;
+    }
+
+    AcquireSRWLockExclusive(&g_stateLock);
+    auto existing = g_fileIconCache.find(key);
+    if (existing != g_fileIconCache.end()) {
+        hIcon = existing->second;
+    } else if (ruleIndex < (int)g_rules.size()) {
+        hIcon = LoadIconAtSize(g_rules[ruleIndex].icon, cx, cy);
+        g_fileIconCache[key] = hIcon;  // a failure is cached as NULL
+        if (hIcon) {
+            g_ownedIcons.push_back(hIcon);
+        }
+    }
+    ReleaseSRWLockExclusive(&g_stateLock);
+
+    return hIcon;
+}
+
+// The icon for a file path, for the extraction hooks. Returns a copy which the
+// caller owns, matching the API contract.
+static HICON IconForFile(PCWSTR path, int cx, int cy) {
+    if (!path || !*path || cx <= 0 || cy <= 0 || g_inIconLoad) {
+        return nullptr;
+    }
+
+    // The common case - a file no rule mentions - costs a shared lock and a
+    // name comparison, nothing more: SHGetFileInfoW is a hot path.
+    int ruleIndex = RuleIndexForPath(path, nullptr, true);
+    if (ruleIndex < 0) {
+        return nullptr;
+    }
+
+    HICON hIcon = IconForRuleIndex(ruleIndex, cx, cy);
+    return hIcon ? CopyIcon(hIcon) : nullptr;
+}
+
+// The program behind a window in another process.
+static bool PathOfWindowProcess(HWND hWnd, DWORD processId,
+                                std::wstring* exePath) {
+    HANDLE process =
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    if (!process) {
+        return false;
+    }
+
+    WCHAR path[MAX_PATH] = L"";
+    DWORD size = ARRAYSIZE(path);
+    BOOL ok = QueryFullProcessImageNameW(process, 0, path, &size);
+    CloseHandle(process);
+
+    if (ok) {
+        *exePath = path;
+    }
+    return ok;
+}
+
+// The icon to hand to a program asking another process's window for its icon.
+// A fresh handle every time, because ManagedShell destroys an icon handle it
+// recognises from the previous query.
+static HICON IconForRemoteWindow(HWND hWnd, bool big, HICON original) {
+    if (!hWnd) {
+        return nullptr;
+    }
+
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hWnd, &processId);
+    if (!processId || processId == GetCurrentProcessId()) {
+        return nullptr;
+    }
+
+    std::wstring exePath;
+    bool anyRule = false;
+    bool known = false;
+
+    AcquireSRWLockShared(&g_stateLock);
+    auto it = g_remoteWindows.find(hWnd);
+    if (it != g_remoteWindows.end() && it->second.processId == processId) {
+        exePath = it->second.exePath;
+        anyRule = it->second.anyRule;
+        known = true;
+    }
+    ReleaseSRWLockShared(&g_stateLock);
+
+    if (!known) {
+        if (PathOfWindowProcess(hWnd, processId, &exePath)) {
+            anyRule = RuleIndexForPath(exePath.c_str(), nullptr, false) >= 0;
+        }
+
+        AcquireSRWLockExclusive(&g_stateLock);
+        if (g_remoteWindows.size() > 512) {
+            for (auto& [staleWnd, stale] : g_remoteWindows) {
+                if (stale.hSmallInFlight) {
+                    g_ownedIcons.push_back(stale.hSmallInFlight);
+                }
+                if (stale.hBigInFlight) {
+                    g_ownedIcons.push_back(stale.hBigInFlight);
+                }
+            }
+            g_remoteWindows.clear();
+        }
+        RemoteWindow& entry = g_remoteWindows[hWnd];
+        entry.processId = processId;
+        entry.exePath = exePath;
+        entry.anyRule = anyRule;
+        ReleaseSRWLockExclusive(&g_stateLock);
+    }
+
+    if (!anyRule) {
+        return nullptr;
+    }
+
+    // The rule is picked afresh on every request: the program may have changed
+    // state since the last one.
+    WindowInfo info;
+    GetWindowInfo(hWnd, &info);
+
+    MatchContext context;
+    context.className = info.valid ? info.className : nullptr;
+    context.title = info.valid ? info.title : nullptr;
+    IconSummary summary;
+    if (original && (g_needOriginal.load(std::memory_order_relaxed) ||
+                     g_optCapture.load(std::memory_order_relaxed)) &&
+        SummariseIcon(original, &summary)) {
+        context.original = &summary;
+        CaptureIcon(original, summary.hash, L"remote",
+                    info.valid ? info.title : nullptr);
+    }
+
+    int ruleIndex = RuleIndexForPath(exePath.c_str(), &context, false);
+    if (ruleIndex < 0) {
+        return nullptr;
+    }
+
+    HICON master = IconForRuleIndex(
+        ruleIndex, GetSystemMetrics(big ? SM_CXICON : SM_CXSMICON),
+        GetSystemMetrics(big ? SM_CYICON : SM_CYSMICON));
+    if (!master) {
+        return nullptr;
+    }
+
+    HICON copy = CopyIcon(master);
+    if (!copy) {
+        return nullptr;
+    }
+
+    HICON previous = nullptr;
+    AcquireSRWLockExclusive(&g_stateLock);
+    RemoteWindow& entry = g_remoteWindows[hWnd];
+    entry.processId = processId;
+    entry.exePath = exePath;
+    entry.anyRule = true;
+    HICON& inFlight = big ? entry.hBigInFlight : entry.hSmallInFlight;
+    previous = inFlight;
+    inFlight = copy;
+    ReleaseSRWLockExclusive(&g_stateLock);
+
+    // The previous handle was read and converted during the earlier call.
+    if (previous) {
+        DestroyIcon(previous);
+    }
+
+    return copy;
+}
+
+// ---------------------------------------------------------------------------
+// Hooks: window icons
+// ---------------------------------------------------------------------------
+
+// Leaves a mark on the window saying the replacement happens in here, so the
+// hook on the taskbar side does not answer over the top of it with a state it
+// cannot see.
+static void MarkWindowHandled(HWND hWnd) {
+    bool known = false;
+    AcquireSRWLockShared(&g_stateLock);
+    known = g_markedWindows.find(hWnd) != g_markedWindows.end();
+    ReleaseSRWLockShared(&g_stateLock);
+    if (known) {
+        return;
+    }
+
+    SetPropW(hWnd, kHandledProp, (HANDLE)1);
+
+    AcquireSRWLockExclusive(&g_stateLock);
+    if (g_markedWindows.size() < 512) {
+        g_markedWindows[hWnd] = true;
+    }
+    ReleaseSRWLockExclusive(&g_stateLock);
+}
+
+// The program answers first: its own icon is the only evidence of which state
+// it is in.
+// The program setting its own icon is the one moment when both things are at
+// hand: the state it is in, and the chance to put our icon where the caption
+// reads it from. A copy is handed over and the previous one released, because
+// whoever calls WM_SETICON owns the icon it passes.
+static bool SubstituteSetIcon(HWND hWnd, WPARAM which, LPARAM* lParam) {
+    if (!g_activeHere.load(std::memory_order_relaxed) ||
+        !g_optWindows.load(std::memory_order_relaxed) || g_inPush) {
+        return false;
+    }
+
+    bool big = (which == ICON_BIG);
+    HICON ours = IconForWindow(hWnd, big, (HICON)*lParam, true);
+    if (!ours) {
+        return false;
+    }
+
+    HICON copy = CopyIcon(ours);
+    if (!copy) {
+        return false;
+    }
+
+    HICON previous = nullptr;
+    AcquireSRWLockExclusive(&g_stateLock);
+    WindowIcons& entry = g_windowState[hWnd];
+    HICON& slot = big ? entry.ourBigCopy : entry.ourSmallCopy;
+    previous = slot;
+    slot = copy;
+    ReleaseSRWLockExclusive(&g_stateLock);
+    if (previous) {
+        DestroyIcon(previous);
+    }
+
+    *lParam = (LPARAM)copy;
+    return true;
+}
+
+#define DEFINE_DEFPROC_HOOK(name)                                            \
+    using name##_t = decltype(&name);                                        \
+    static name##_t name##_orig;                                             \
+    static LRESULT WINAPI name##_hook(HWND hWnd, UINT uMsg, WPARAM wParam,   \
+                                      LPARAM lParam) {                       \
+        if (uMsg == WM_SETICON) {                                            \
+            MarkWindowHandled(hWnd);                                         \
+            SubstituteSetIcon(hWnd, wParam, &lParam);                        \
+        }                                                                    \
+        LRESULT result = name##_orig(hWnd, uMsg, wParam, lParam);            \
+        if (uMsg == WM_GETICON &&                                            \
+            g_activeHere.load(std::memory_order_relaxed) &&                  \
+            g_optWindows.load(std::memory_order_relaxed)) {                  \
+            MarkWindowHandled(hWnd);                                         \
+            HICON replacement =                                              \
+                IconForWindow(hWnd, wParam == ICON_BIG, (HICON)result);      \
+            if (replacement) {                                               \
+                return (LRESULT)replacement;                                 \
+            }                                                                \
+        }                                                                    \
+        return result;                                                       \
+    }
+
+DEFINE_DEFPROC_HOOK(DefWindowProcW)
+DEFINE_DEFPROC_HOOK(DefWindowProcA)
+DEFINE_DEFPROC_HOOK(DefDlgProcW)
+DEFINE_DEFPROC_HOOK(DefDlgProcA)
+
+// ---------------------------------------------------------------------------
+// Hooks: icon requests aimed at another process
+// ---------------------------------------------------------------------------
+
+// A shell asks a window for its icon with SendMessageTimeout, never plain
+// SendMessage - it must not hang on an unresponsive program. Both RetroBar and
+// the window switcher go through here.
+#define DEFINE_SENDMESSAGETIMEOUT_HOOK(name)                                   \
+    using name##_t = decltype(&name);                                          \
+    static name##_t name##_orig;                                               \
+    static LRESULT WINAPI name##_hook(HWND hWnd, UINT Msg, WPARAM wParam,      \
+                                      LPARAM lParam, UINT fuFlags,             \
+                                      UINT uTimeout, PDWORD_PTR lpdwResult) {  \
+        if (Msg == WM_GETICON && g_haveRules.load(std::memory_order_relaxed) && \
+            g_optRemote.load(std::memory_order_relaxed) &&                     \
+            !GetPropW(hWnd, kHandledProp)) {                                   \
+            DWORD_PTR answer = 0;                                              \
+            LRESULT delivered = name##_orig(hWnd, Msg, wParam, lParam,         \
+                                            fuFlags, uTimeout, &answer);       \
+            HICON hIcon = IconForRemoteWindow(                                 \
+                hWnd, wParam == ICON_BIG, (HICON)(delivered ? answer : 0));    \
+            if (lpdwResult) {                                                  \
+                *lpdwResult = hIcon ? (DWORD_PTR)hIcon : answer;               \
+            }                                                                  \
+            return hIcon ? 1 : delivered;                                      \
+        }                                                                      \
+        return name##_orig(hWnd, Msg, wParam, lParam, fuFlags, uTimeout,       \
+                           lpdwResult);                                        \
+    }
+
+DEFINE_SENDMESSAGETIMEOUT_HOOK(SendMessageTimeoutW)
+DEFINE_SENDMESSAGETIMEOUT_HOOK(SendMessageTimeoutA)
+
+// ---------------------------------------------------------------------------
+// Hooks: tray icons
+// ---------------------------------------------------------------------------
+
+using Shell_NotifyIconW_t = decltype(&Shell_NotifyIconW);
+static Shell_NotifyIconW_t Shell_NotifyIconW_orig;
+using Shell_NotifyIconA_t = decltype(&Shell_NotifyIconA);
+static Shell_NotifyIconA_t Shell_NotifyIconA_orig;
+
+// Remembering every icon the program registered is what lets a settings change
+// reach a program that is already running.
+static std::wstring TrackTrayIcon(DWORD dwMessage,
+                                  HWND hWnd,
+                                  UINT uID,
+                                  UINT uFlags,
+                                  const GUID* guid,
+                                  HICON hOriginal,
+                                  PCWSTR tooltip) {
+    bool hasGuid = (uFlags & NIF_GUID) && guid;
+    std::wstring known;
+
+    AcquireSRWLockExclusive(&g_stateLock);
+
+    auto it = g_trayEntries.begin();
+    for (; it != g_trayEntries.end(); ++it) {
+        if (hasGuid && it->hasGuid) {
+            if (IsEqualGUID(it->guid, *guid)) {
+                break;
+            }
+        } else if (it->hWnd == hWnd && it->uID == uID) {
+            break;
+        }
+    }
+
+    if (dwMessage == NIM_DELETE) {
+        if (it != g_trayEntries.end()) {
+            g_trayEntries.erase(it);
+        }
+    } else if (dwMessage == NIM_ADD || dwMessage == NIM_MODIFY) {
+        if (it == g_trayEntries.end()) {
+            g_trayEntries.push_back(TrayEntry{});
+            it = g_trayEntries.end() - 1;
+        }
+        it->hWnd = hWnd;
+        it->uID = uID;
+        it->hasGuid = hasGuid;
+        if (hasGuid) {
+            it->guid = *guid;
+        }
+        if (hOriginal) {
+            it->hOriginal = hOriginal;
+        }
+        if (tooltip && *tooltip) {
+            it->tooltip = tooltip;
+        }
+        known = it->tooltip;
+    }
+
+    ReleaseSRWLockExclusive(&g_stateLock);
+    return known;
+}
+
+static BOOL WINAPI Shell_NotifyIconW_hook(DWORD dwMessage,
+                                          PNOTIFYICONDATAW lpData) {
+    if (!lpData || !g_activeHere.load(std::memory_order_relaxed) ||
+        !g_optTray.load(std::memory_order_relaxed) ||
+        lpData->cbSize > sizeof(NOTIFYICONDATAW) ||
+        lpData->cbSize < offsetof(NOTIFYICONDATAW, hIcon) + sizeof(HICON)) {
+        return Shell_NotifyIconW_orig(dwMessage, lpData);
+    }
+
+    NOTIFYICONDATAW data = {};
+    memcpy(&data, lpData, lpData->cbSize);
+
+    const GUID* guid = nullptr;
+    if (lpData->cbSize >= offsetof(NOTIFYICONDATAW, guidItem) + sizeof(GUID)) {
+        guid = &data.guidItem;
+    }
+
+    std::wstring tooltip = TrackTrayIcon(
+        dwMessage, data.hWnd, data.uID, data.uFlags, guid,
+        (data.uFlags & NIF_ICON) ? data.hIcon : nullptr,
+        (data.uFlags & NIF_TIP) ? data.szTip : nullptr);
+
+    if (data.uFlags & NIF_ICON) {
+        HICON hIcon = IconForTray(data.hIcon, tooltip.c_str());
+        if (hIcon) {
+            data.hIcon = hIcon;
+        }
+    }
+
+    return Shell_NotifyIconW_orig(dwMessage, &data);
+}
+
+static BOOL WINAPI Shell_NotifyIconA_hook(DWORD dwMessage,
+                                          PNOTIFYICONDATAA lpData) {
+    if (!lpData || !g_activeHere.load(std::memory_order_relaxed) ||
+        !g_optTray.load(std::memory_order_relaxed) ||
+        lpData->cbSize > sizeof(NOTIFYICONDATAA) ||
+        lpData->cbSize < offsetof(NOTIFYICONDATAA, hIcon) + sizeof(HICON)) {
+        return Shell_NotifyIconA_orig(dwMessage, lpData);
+    }
+
+    NOTIFYICONDATAA data = {};
+    memcpy(&data, lpData, lpData->cbSize);
+
+    const GUID* guid = nullptr;
+    if (lpData->cbSize >= offsetof(NOTIFYICONDATAA, guidItem) + sizeof(GUID)) {
+        guid = &data.guidItem;
+    }
+
+    WCHAR wideTip[128] = L"";
+    if (data.uFlags & NIF_TIP) {
+        MultiByteToWideChar(CP_ACP, 0, data.szTip, -1, wideTip,
+                            ARRAYSIZE(wideTip));
+    }
+
+    std::wstring tooltip = TrackTrayIcon(
+        dwMessage, data.hWnd, data.uID, data.uFlags, guid,
+        (data.uFlags & NIF_ICON) ? data.hIcon : nullptr,
+        (data.uFlags & NIF_TIP) ? wideTip : nullptr);
+
+    if (data.uFlags & NIF_ICON) {
+        HICON hIcon = IconForTray(data.hIcon, tooltip.c_str());
+        if (hIcon) {
+            data.hIcon = hIcon;
+        }
+    }
+
+    return Shell_NotifyIconA_orig(dwMessage, &data);
+}
+
+// ---------------------------------------------------------------------------
+// Hooks: the icon read out of the program's file
+// ---------------------------------------------------------------------------
+
+using PrivateExtractIconsW_t = decltype(&PrivateExtractIconsW);
+static PrivateExtractIconsW_t PrivateExtractIconsW_orig;
+
+static UINT WINAPI PrivateExtractIconsW_hook(LPCWSTR szFileName,
+                                             int nIconIndex,
+                                             int cxIcon,
+                                             int cyIcon,
+                                             HICON* phicon,
+                                             UINT* piconid,
+                                             UINT nIcons,
+                                             UINT flags) {
+    if (phicon && nIcons == 1 && nIconIndex == 0 &&
+        g_haveRules.load(std::memory_order_relaxed) &&
+        g_optFileIcons.load(std::memory_order_relaxed)) {
+        HICON hIcon = IconForFile(szFileName, cxIcon, cyIcon);
+        if (hIcon) {
+            *phicon = hIcon;
+            if (piconid) {
+                *piconid = 0;
+            }
+            return 1;
+        }
+    }
+
+    return PrivateExtractIconsW_orig(szFileName, nIconIndex, cxIcon, cyIcon,
+                                     phicon, piconid, nIcons, flags);
+}
+
+using ExtractIconExW_t = decltype(&ExtractIconExW);
+static ExtractIconExW_t ExtractIconExW_orig;
+
+static UINT WINAPI ExtractIconExW_hook(LPCWSTR lpszFile,
+                                       int nIconIndex,
+                                       HICON* phiconLarge,
+                                       HICON* phiconSmall,
+                                       UINT nIcons) {
+    if (nIconIndex == 0 && nIcons == 1 && (phiconLarge || phiconSmall) &&
+        g_haveRules.load(std::memory_order_relaxed) &&
+        g_optFileIcons.load(std::memory_order_relaxed)) {
+        HICON hLarge = phiconLarge
+                           ? IconForFile(lpszFile, GetSystemMetrics(SM_CXICON),
+                                         GetSystemMetrics(SM_CYICON))
+                           : nullptr;
+        HICON hSmall =
+            phiconSmall ? IconForFile(lpszFile, GetSystemMetrics(SM_CXSMICON),
+                                      GetSystemMetrics(SM_CYSMICON))
+                        : nullptr;
+        if (hLarge || hSmall) {
+            if (phiconLarge) {
+                *phiconLarge = hLarge;
+            }
+            if (phiconSmall) {
+                *phiconSmall = hSmall;
+            }
+            return 1;
+        }
+    }
+
+    return ExtractIconExW_orig(lpszFile, nIconIndex, phiconLarge, phiconSmall,
+                               nIcons);
+}
+
+using SHGetFileInfoW_t = decltype(&SHGetFileInfoW);
+static SHGetFileInfoW_t SHGetFileInfoW_orig;
+
+static DWORD_PTR WINAPI SHGetFileInfoW_hook(LPCWSTR pszPath,
+                                            DWORD dwFileAttributes,
+                                            SHFILEINFOW* psfi,
+                                            UINT cbFileInfo,
+                                            UINT uFlags) {
+    DWORD_PTR result = SHGetFileInfoW_orig(pszPath, dwFileAttributes, psfi,
+                                           cbFileInfo, uFlags);
+
+    if (result && psfi && (uFlags & SHGFI_ICON) && !(uFlags & SHGFI_PIDL) &&
+        cbFileInfo >= sizeof(SHFILEINFOW) &&
+        g_haveRules.load(std::memory_order_relaxed) &&
+        g_optFileIcons.load(std::memory_order_relaxed)) {
+        bool wantSmall = (uFlags & SHGFI_SMALLICON) != 0;
+        HICON hIcon =
+            IconForFile(pszPath, GetSystemMetrics(wantSmall ? SM_CXSMICON : SM_CXICON),
+                        GetSystemMetrics(wantSmall ? SM_CYSMICON : SM_CYICON));
+        if (hIcon) {
+            if (psfi->hIcon) {
+                DestroyIcon(psfi->hIcon);
+            }
+            psfi->hIcon = hIcon;
+        }
+    }
+
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// Applying and refreshing
+// ---------------------------------------------------------------------------
+
+static void RememberOriginal(HWND hWnd, bool big, HICON hOriginal,
+                             HICON hOurs) {
+    AcquireSRWLockExclusive(&g_stateLock);
+    WindowOriginal& entry = g_windowOriginals[hWnd];
+    if (big) {
+        if (!entry.hOurBig) {
+            entry.hBig = hOriginal;
+        }
+        entry.hOurBig = hOurs;
+    } else {
+        if (!entry.hOurSmall) {
+            entry.hSmall = hOriginal;
+        }
+        entry.hOurSmall = hOurs;
+    }
+    ReleaseSRWLockExclusive(&g_stateLock);
+}
+
+// A copy is handed to the window: a program is free to destroy the icon a
+// WM_SETICON call returned to it, and that must not take out the master.
+static void PushWindowIcon(HWND hWnd, bool big, HICON hIcon) {
+    HICON hCopy = CopyIcon(hIcon);
+    if (!hCopy) {
+        return;
+    }
+
+    AcquireSRWLockExclusive(&g_stateLock);
+    g_ownedIcons.push_back(hCopy);
+    ReleaseSRWLockExclusive(&g_stateLock);
+
+    DWORD_PTR previous = 0;
+    g_inPush = true;
+    BOOL sent = SendMessageTimeoutW(hWnd, WM_SETICON, big ? ICON_BIG : ICON_SMALL,
+                                    (LPARAM)hCopy, SMTO_ABORTIFHUNG | SMTO_NORMAL,
+                                    300, &previous);
+    g_inPush = false;
+    if (sent) {
+        RememberOriginal(hWnd, big, (HICON)previous, hCopy);
+    }
+}
+
+// Some windows never pass WM_GETICON to DefWindowProc - a program built on
+// SDL, for instance, keeps its icon in the window class. Consumers fall back
+// to GCLP_HICON when the message returns nothing, so the class is patched too,
+// once per class, through the first window seen from it.
+static void PushClassIcon(HWND hWnd, HICON hSmall, HICON hBig) {
+    ATOM atom = (ATOM)GetClassLongPtrW(hWnd, GCW_ATOM);
+    if (!atom) {
+        return;
+    }
+
+    AcquireSRWLockShared(&g_stateLock);
+    bool alreadyPatched = g_classOriginals.find(atom) != g_classOriginals.end();
+    ReleaseSRWLockShared(&g_stateLock);
+    if (alreadyPatched) {
+        return;
+    }
+
+    ClassOriginal original;
+    original.hWnd = hWnd;
+
+    HICON copySmall = hSmall ? CopyIcon(hSmall) : nullptr;
+    HICON copyBig = hBig ? CopyIcon(hBig) : nullptr;
+    if (copySmall) {
+        original.hSmall = (HICON)SetClassLongPtrW(hWnd, GCLP_HICONSM,
+                                                  (LONG_PTR)copySmall);
+    }
+    if (copyBig) {
+        original.hBig =
+            (HICON)SetClassLongPtrW(hWnd, GCLP_HICON, (LONG_PTR)copyBig);
+    }
+
+    AcquireSRWLockExclusive(&g_stateLock);
+    if (g_classOriginals.find(atom) == g_classOriginals.end()) {
+        g_classOriginals[atom] = original;
+        if (copySmall) {
+            g_ownedIcons.push_back(copySmall);
+        }
+        if (copyBig) {
+            g_ownedIcons.push_back(copyBig);
+        }
+        copySmall = copyBig = nullptr;
+    }
+    ReleaseSRWLockExclusive(&g_stateLock);
+
+    // Lost a race with another thread patching the same class.
+    if (copySmall) {
+        DestroyIcon(copySmall);
+    }
+    if (copyBig) {
+        DestroyIcon(copyBig);
+    }
+}
+
+static void RestoreClassIcons() {
+    std::map<ATOM, ClassOriginal> originals;
+    AcquireSRWLockExclusive(&g_stateLock);
+    originals.swap(g_classOriginals);
+    ReleaseSRWLockExclusive(&g_stateLock);
+
+    for (const auto& [atom, original] : originals) {
+        if (!original.hWnd || !IsWindow(original.hWnd)) {
+            continue;
+        }
+        SetClassLongPtrW(original.hWnd, GCLP_HICONSM, (LONG_PTR)original.hSmall);
+        SetClassLongPtrW(original.hWnd, GCLP_HICON, (LONG_PTR)original.hBig);
+    }
+}
+
+// Re-setting the title makes the shell re-read the window: RetroBar, the
+// Windows taskbar and anything else on the shell hook reload the icon when
+// HSHELL_REDRAW arrives.
+static void PokeShell(HWND hWnd) {
+    WCHAR title[512];
+    if (GetWindowTextW(hWnd, title, ARRAYSIZE(title)) >= 0) {
+        DWORD_PTR unused = 0;
+        SendMessageTimeoutW(hWnd, WM_SETTEXT, 0, (LPARAM)title,
+                            SMTO_ABORTIFHUNG | SMTO_NORMAL, 300, &unused);
+    }
+}
+
+struct SweepContext {
+    DWORD processId;
+    bool push;
+    bool poke;
+    bool retrigger;
+};
+
+static BOOL CALLBACK SweepWindowProc(HWND hWnd, LPARAM lParam) {
+    SweepContext* context = (SweepContext*)lParam;
+
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hWnd, &processId);
+    if (processId != context->processId) {
+        return TRUE;
+    }
+
+    if (context->retrigger && g_taskbarCreatedMsg) {
+        DWORD_PTR unused = 0;
+        SendMessageTimeoutW(hWnd, g_taskbarCreatedMsg, 0, 0,
+                            SMTO_ABORTIFHUNG | SMTO_NORMAL, 300, &unused);
+    }
+
+    HICON hSmall = IconForWindow(hWnd, false, nullptr);
+    HICON hBig = IconForWindow(hWnd, true, nullptr);
+    if (!hSmall && !hBig) {
+        return TRUE;
+    }
+
+    if (context->push) {
+        if (hSmall) {
+            PushWindowIcon(hWnd, false, hSmall);
+        }
+        if (hBig) {
+            PushWindowIcon(hWnd, true, hBig);
+        }
+        PushClassIcon(hWnd, hSmall, hBig);
+    }
+    if (context->poke) {
+        PokeShell(hWnd);
+    }
+
+    return TRUE;
+}
+
+static void ApplyToExistingWindows(bool poke, bool retrigger) {
+    if (!g_activeHere.load()) {
+        return;
+    }
+
+    SweepContext context = {};
+    context.processId = GetCurrentProcessId();
+    // Assigning our icon to the window would overwrite the icon that tells the
+    // states apart, so a state-specific setup answers requests instead.
+    context.push = g_optWindows.load() && g_optPush.load();
+    context.poke = poke && g_optWindows.load();
+    context.retrigger = retrigger && g_optTray.load() && g_optRetrigger.load();
+
+    if (!context.push && !context.poke && !context.retrigger) {
+        return;
+    }
+
+    EnumWindows(SweepWindowProc, (LPARAM)&context);
+}
+
+// For a window the mod cannot reach from inside, nothing tells the taskbar its
+// icon changed. A shell learns that from the shell hook, so the notification is
+// posted here, from inside the shell's own process - which is where this code
+// runs when the taskbar is the one asking.
+struct RemoteRefresh {
+    DWORD ownProcessId;
+    std::vector<HWND> targets;
+    std::vector<HWND> listeners;
+};
+
+static BOOL CALLBACK CollectRemoteProc(HWND hWnd, LPARAM lParam) {
+    RemoteRefresh* refresh = (RemoteRefresh*)lParam;
+
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hWnd, &processId);
+    if (processId == refresh->ownProcessId) {
+        refresh->listeners.push_back(hWnd);
+        return TRUE;
+    }
+
+    if (!IsWindowVisible(hWnd)) {
+        return TRUE;
+    }
+
+    std::wstring exePath;
+    if (PathOfWindowProcess(hWnd, processId, &exePath) &&
+        RuleIndexForPath(exePath.c_str(), nullptr, false) >= 0) {
+        refresh->targets.push_back(hWnd);
+    }
+    return TRUE;
+}
+
+static void RefreshRemoteWindows() {
+    if (!g_haveRules.load() || !g_optRemote.load() || !g_shellHookMsg) {
+        return;
+    }
+
+    RemoteRefresh refresh;
+    refresh.ownProcessId = GetCurrentProcessId();
+    EnumWindows(CollectRemoteProc, (LPARAM)&refresh);
+
+    if (refresh.targets.empty()) {
+        return;
+    }
+
+    for (HWND listener : refresh.listeners) {
+        for (HWND target : refresh.targets) {
+            PostMessageW(listener, g_shellHookMsg, HSHELL_REDRAW,
+                         (LPARAM)target);
+        }
+    }
+}
+
+// Re-sends every tray icon this process registered, with the new image.
+static void RefreshTrayIcons() {
+    if (!Shell_NotifyIconW_orig || !g_activeHere.load() || !g_optTray.load()) {
+        return;
+    }
+
+    std::vector<TrayEntry> entries;
+    AcquireSRWLockShared(&g_stateLock);
+    entries = g_trayEntries;
+    ReleaseSRWLockShared(&g_stateLock);
+
+    for (const TrayEntry& entry : entries) {
+        // The icon the program last handed over says which state it is in, so
+        // a state rule survives a settings change without waiting for the
+        // program to update its icon on its own.
+        HICON hIcon = IconForTray(entry.hOriginal, entry.tooltip.c_str());
+        if (!hIcon) {
+            // No rule covers this icon any more - put the program's own back,
+            // so removing a rule is visible at once instead of at the next
+            // time the program happens to redraw.
+            hIcon = entry.hOriginal;
+        }
+        if (!hIcon) {
+            continue;
+        }
+
+        NOTIFYICONDATAW data = {};
+        data.cbSize = sizeof(data);
+        data.hWnd = entry.hWnd;
+        data.uID = entry.uID;
+        data.uFlags = NIF_ICON;
+        data.hIcon = hIcon;
+        if (entry.hasGuid) {
+            data.uFlags |= NIF_GUID;
+            data.guidItem = entry.guid;
+        }
+        Shell_NotifyIconW_orig(NIM_MODIFY, &data);
+    }
+}
+
+static void RestoreTrayIcons() {
+    if (!Shell_NotifyIconW_orig) {
+        return;
+    }
+
+    std::vector<TrayEntry> entries;
+    AcquireSRWLockShared(&g_stateLock);
+    entries = g_trayEntries;
+    ReleaseSRWLockShared(&g_stateLock);
+
+    for (const TrayEntry& entry : entries) {
+        if (!entry.hOriginal) {
+            continue;
+        }
+        NOTIFYICONDATAW data = {};
+        data.cbSize = sizeof(data);
+        data.hWnd = entry.hWnd;
+        data.uID = entry.uID;
+        data.uFlags = NIF_ICON;
+        data.hIcon = entry.hOriginal;
+        if (entry.hasGuid) {
+            data.uFlags |= NIF_GUID;
+            data.guidItem = entry.guid;
+        }
+        Shell_NotifyIconW_orig(NIM_MODIFY, &data);
+    }
+}
+
+static void RestoreWindowIcons() {
+    std::map<HWND, WindowOriginal> originals;
+    AcquireSRWLockExclusive(&g_stateLock);
+    originals.swap(g_windowOriginals);
+    ReleaseSRWLockExclusive(&g_stateLock);
+
+    for (const auto& [hWnd, entry] : originals) {
+        if (!IsWindow(hWnd)) {
+            continue;
+        }
+        DWORD_PTR unused = 0;
+        if (entry.hOurSmall) {
+            SendMessageTimeoutW(hWnd, WM_SETICON, ICON_SMALL,
+                                (LPARAM)entry.hSmall,
+                                SMTO_ABORTIFHUNG | SMTO_NORMAL, 300, &unused);
+        }
+        if (entry.hOurBig) {
+            SendMessageTimeoutW(hWnd, WM_SETICON, ICON_BIG, (LPARAM)entry.hBig,
+                                SMTO_ABORTIFHUNG | SMTO_NORMAL, 300, &unused);
+        }
+        PokeShell(hWnd);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
+
+static void LoadSettings() {
+    std::vector<Rule> rules;
+    // A row left blank in the middle of the list must not cut the rest off, so
+    // the scan only gives up after a run of empty entries.
+    int emptyInARow = 0;
+    for (int i = 0; i < 200 && emptyInARow < 5; i++) {
+        PCWSTR process = Wh_GetStringSetting(L"rules[%d].process", i);
+        PCWSTR icon = Wh_GetStringSetting(L"rules[%d].icon", i);
+        PCWSTR windowClass = Wh_GetStringSetting(L"rules[%d].windowClass", i);
+        PCWSTR windowTitle = Wh_GetStringSetting(L"rules[%d].windowTitle", i);
+        PCWSTR trayTooltip = Wh_GetStringSetting(L"rules[%d].trayTooltip", i);
+        PCWSTR originalIcon = Wh_GetStringSetting(L"rules[%d].originalIcon", i);
+        PCWSTR originalColor = Wh_GetStringSetting(L"rules[%d].originalColor", i);
+
+        bool empty = !*process && !*icon && !*windowClass && !*windowTitle &&
+                     !*trayTooltip && !*originalIcon && !*originalColor;
+        emptyInARow = empty ? emptyInARow + 1 : 0;
+        if (!empty) {
+            Rule rule;
+            rule.processPatterns = SplitPatterns(ExpandAndTrim(process));
+            rule.windowClass = ExpandAndTrim(windowClass);
+            rule.windowTitle = ExpandAndTrim(windowTitle);
+            rule.trayTooltip = ExpandAndTrim(trayTooltip);
+            for (const std::wstring& hash :
+                 SplitPatterns(ExpandAndTrim(originalIcon))) {
+                WCHAR* end = nullptr;
+                uint64_t value = wcstoull(hash.c_str(), &end, 16);
+                if (value && end && !*end) {
+                    rule.originalHashes.push_back(value);
+                } else {
+                    Wh_Log(L"Not a fingerprint: %s", hash.c_str());
+                }
+            }
+            for (const std::wstring& spec :
+                 SplitPatterns(ExpandAndTrim(originalColor))) {
+                std::wstring text = spec;
+                if (!text.empty() && text.front() == L'#') {
+                    text.erase(text.begin());
+                }
+                ColorCondition color;
+                WCHAR* end = nullptr;
+                unsigned long value = wcstoul(text.c_str(), &end, 16);
+                if (!end || (end - text.c_str()) < 6) {
+                    Wh_Log(L"Not a colour: %s", spec.c_str());
+                    continue;
+                }
+                color.r = (int)((value >> 16) & 0xFF);
+                color.g = (int)((value >> 8) & 0xFF);
+                color.b = (int)(value & 0xFF);
+                if (*end == L',') {
+                    color.tolerance = (int)wcstol(end + 1, &end, 10);
+                    if (*end == L',') {
+                        color.minPixels = (int)wcstol(end + 1, &end, 10);
+                    }
+                }
+                if (color.tolerance < 0) {
+                    color.tolerance = 0;
+                }
+                if (color.minPixels < 1) {
+                    color.minPixels = 1;
+                }
+                rule.originalColors.push_back(color);
+            }
+            rule.icon = ParseIconSpec(icon);
+            // A rule with no icon is legitimate: it puts the program under
+            // capture without changing anything yet.
+            if (!rule.processPatterns.empty()) {
+                rules.push_back(std::move(rule));
+            }
+        }
+
+        Wh_FreeStringSetting(process);
+        Wh_FreeStringSetting(icon);
+        Wh_FreeStringSetting(windowClass);
+        Wh_FreeStringSetting(windowTitle);
+        Wh_FreeStringSetting(trayTooltip);
+        Wh_FreeStringSetting(originalIcon);
+        Wh_FreeStringSetting(originalColor);
+    }
+
+    g_optTray = Wh_GetIntSetting(L"inTray") != 0;
+    g_optWindows = Wh_GetIntSetting(L"inWindows") != 0;
+    g_optFileIcons = Wh_GetIntSetting(L"inFileIcons") != 0;
+    g_optPush = Wh_GetIntSetting(L"pushWindowIcons") != 0;
+    g_optRemote = Wh_GetIntSetting(L"inOtherProcesses") != 0;
+    g_optRetrigger = Wh_GetIntSetting(L"retriggerTrayIcons") != 0;
+    g_optCapture = Wh_GetIntSetting(L"captureIcons") != 0;
+
+    PCWSTR captureFolder = Wh_GetStringSetting(L"captureFolder");
+    std::wstring folder = ExpandAndTrim(captureFolder);
+    Wh_FreeStringSetting(captureFolder);
+    while (!folder.empty() && folder.back() == L'\\') {
+        folder.pop_back();
+    }
+
+    int smallCx = GetSystemMetrics(SM_CXSMICON);
+    int smallCy = GetSystemMetrics(SM_CYSMICON);
+    int bigCx = GetSystemMetrics(SM_CXICON);
+    int bigCy = GetSystemMetrics(SM_CYICON);
+
+    std::vector<LocalRule> localRules;
+    for (const Rule& rule : rules) {
+        if (!ProcessMatches(rule.processPatterns, g_exePath, g_exeName)) {
+            continue;
+        }
+
+        LocalRule local;
+        local.windowClass = rule.windowClass;
+        local.windowTitle = rule.windowTitle;
+        local.trayTooltip = rule.trayTooltip;
+        local.originalHashes = rule.originalHashes;
+        local.originalColors = rule.originalColors;
+        if (!rule.icon.path.empty()) {
+            local.hSmall = LoadIconAtSize(rule.icon, smallCx, smallCy);
+            local.hBig = LoadIconAtSize(rule.icon, bigCx, bigCy);
+            if (!local.hSmall && !local.hBig) {
+                Wh_Log(L"No icon in %s", rule.icon.path.c_str());
+                continue;
+            }
+        }
+        localRules.push_back(std::move(local));
+    }
+
+    // Computed over every rule, not just the local ones: the taskbar-side path
+    // matches windows of programs this process knows nothing about.
+    bool needWindowInfo = false;
+    bool needOriginal = false;
+    bool anyStateRule = false;
+    for (const Rule& rule : rules) {
+        if (!rule.windowClass.empty() || !rule.windowTitle.empty()) {
+            needWindowInfo = true;
+        }
+        if (!rule.originalHashes.empty() || !rule.originalColors.empty()) {
+            needOriginal = true;
+        }
+        if (!rule.originalHashes.empty() || !rule.originalColors.empty() ||
+            !rule.trayTooltip.empty()) {
+            anyStateRule = true;
+        }
+    }
+
+    if (needOriginal) {
+        g_needOriginal = true;
+    }
+    if (needWindowInfo) {
+        // Raise it before the new rules land, so no lookup can run against a
+        // filtered rule without having collected the class and title.
+        g_needWindowInfo = true;
+    }
+
+    AcquireSRWLockExclusive(&g_stateLock);
+    // The previous icons are kept alive until unload: another process may
+    // still be drawing a handle handed out a moment ago.
+    for (const LocalRule& local : g_localRules) {
+        if (local.hSmall) {
+            g_ownedIcons.push_back(local.hSmall);
+        }
+        if (local.hBig) {
+            g_ownedIcons.push_back(local.hBig);
+        }
+    }
+    g_fileIconCache.clear();
+    // Rule indices are about to change, so the per-window answers cached for
+    // other processes are stale. Their handles may still be in use.
+    for (auto& [staleWnd, stale] : g_remoteWindows) {
+        if (stale.hSmallInFlight) {
+            g_ownedIcons.push_back(stale.hSmallInFlight);
+        }
+        if (stale.hBigInFlight) {
+            g_ownedIcons.push_back(stale.hBigInFlight);
+        }
+    }
+    g_remoteWindows.clear();
+    g_rules = std::move(rules);
+    g_localRules = std::move(localRules);
+    size_t ruleCount = g_rules.size();
+    size_t localCount = g_localRules.size();
+    ReleaseSRWLockExclusive(&g_stateLock);
+
+    AcquireSRWLockExclusive(&g_stateLock);
+    g_captureFolder = folder;
+    g_capturedIcons.clear();
+    g_lastCaptured.clear();
+    g_iconSummaries.clear();
+    ReleaseSRWLockExclusive(&g_stateLock);
+
+    g_needWindowInfo = needWindowInfo;
+    g_needOriginal = needOriginal;
+    g_hasStateRules = anyStateRule;
+    g_activeHere = localCount != 0;
+    g_haveRules = ruleCount != 0;
+
+    Wh_Log(L"%s: %d rules, %d for this process", g_exeName, (int)ruleCount,
+           (int)localCount);
+}
+
+// ---------------------------------------------------------------------------
+// Hook installation
+// ---------------------------------------------------------------------------
+
+static bool g_windowHooksInstalled;
+static bool g_trayHooksInstalled;
+static bool g_remoteHooksInstalled;
+static bool g_user32FileHooksInstalled;
+static bool g_shell32FileHooksInstalled;
+
+// Returns true when new hooks were registered. Called again after a settings
+// change, because a rule may have just named this process for the first time.
+static bool InstallHooks() {
+    bool added = false;
+
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
+
+    // Only worth pulling shell32 into a process the user actually named.
+    if (!shell32 && g_activeHere.load() && g_optTray.load()) {
+        shell32 = LoadLibraryW(L"shell32.dll");
+    }
+
+    if (user32 && g_activeHere.load() && !g_windowHooksInstalled) {
+        Wh_SetFunctionHook((void*)DefWindowProcW, (void*)DefWindowProcW_hook,
+                           (void**)&DefWindowProcW_orig);
+        Wh_SetFunctionHook((void*)DefWindowProcA, (void*)DefWindowProcA_hook,
+                           (void**)&DefWindowProcA_orig);
+        Wh_SetFunctionHook((void*)DefDlgProcW, (void*)DefDlgProcW_hook,
+                           (void**)&DefDlgProcW_orig);
+        Wh_SetFunctionHook((void*)DefDlgProcA, (void*)DefDlgProcA_hook,
+                           (void**)&DefDlgProcA_orig);
+        g_windowHooksInstalled = true;
+        added = true;
+    }
+
+    if (shell32 && g_activeHere.load() && !g_trayHooksInstalled) {
+        void* notifyW = (void*)GetProcAddress(shell32, "Shell_NotifyIconW");
+        void* notifyA = (void*)GetProcAddress(shell32, "Shell_NotifyIconA");
+        if (notifyW) {
+            Wh_SetFunctionHook(notifyW, (void*)Shell_NotifyIconW_hook,
+                               (void**)&Shell_NotifyIconW_orig);
+            g_trayHooksInstalled = true;
+            added = true;
+        }
+        if (notifyA) {
+            Wh_SetFunctionHook(notifyA, (void*)Shell_NotifyIconA_hook,
+                               (void**)&Shell_NotifyIconA_orig);
+        }
+    }
+
+    if (user32 && g_haveRules.load() && g_optRemote.load() &&
+        !g_remoteHooksInstalled) {
+        void* timeoutW = (void*)GetProcAddress(user32, "SendMessageTimeoutW");
+        void* timeoutA = (void*)GetProcAddress(user32, "SendMessageTimeoutA");
+        if (timeoutW) {
+            Wh_SetFunctionHook(timeoutW, (void*)SendMessageTimeoutW_hook,
+                               (void**)&SendMessageTimeoutW_orig);
+            g_remoteHooksInstalled = true;
+            added = true;
+        }
+        if (timeoutA) {
+            Wh_SetFunctionHook(timeoutA, (void*)SendMessageTimeoutA_hook,
+                               (void**)&SendMessageTimeoutA_orig);
+            g_remoteHooksInstalled = true;
+            added = true;
+        }
+    }
+
+    if (user32 && g_haveRules.load() && g_optFileIcons.load() &&
+        !g_user32FileHooksInstalled) {
+        void* extractIcons = (void*)GetProcAddress(user32, "PrivateExtractIconsW");
+        if (extractIcons) {
+            Wh_SetFunctionHook(extractIcons, (void*)PrivateExtractIconsW_hook,
+                               (void**)&PrivateExtractIconsW_orig);
+            g_user32FileHooksInstalled = true;
+            added = true;
+        }
+    }
+
+    if (shell32 && g_haveRules.load() && g_optFileIcons.load() &&
+        !g_shell32FileHooksInstalled) {
+        void* extractIconEx = (void*)GetProcAddress(shell32, "ExtractIconExW");
+        void* fileInfo = (void*)GetProcAddress(shell32, "SHGetFileInfoW");
+        if (extractIconEx) {
+            Wh_SetFunctionHook(extractIconEx, (void*)ExtractIconExW_hook,
+                               (void**)&ExtractIconExW_orig);
+            g_shell32FileHooksInstalled = true;
+            added = true;
+        }
+        if (fileInfo) {
+            Wh_SetFunctionHook(fileInfo, (void*)SHGetFileInfoW_hook,
+                               (void**)&SHGetFileInfoW_orig);
+            g_shell32FileHooksInstalled = true;
+            added = true;
+        }
+    }
+
+    return added;
+}
+
+// ---------------------------------------------------------------------------
+// Mod entry points
+// ---------------------------------------------------------------------------
+
+BOOL Wh_ModInit() {
+    GetModuleFileNameW(nullptr, g_exePath, ARRAYSIZE(g_exePath));
+    g_exeName = FileNamePart(g_exePath);
+    g_taskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
+    g_shellHookMsg = RegisterWindowMessageW(L"SHELLHOOK");
+
+    LoadSettings();
+    InstallHooks();
+
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    ApplyToExistingWindows(true, true);
+    RefreshRemoteWindows();
+}
+
+void Wh_ModSettingsChanged() {
+    LoadSettings();
+
+    if (InstallHooks()) {
+        Wh_ApplyHookOperations();
+    }
+
+    ApplyToExistingWindows(true, true);
+    RefreshTrayIcons();
+    RefreshRemoteWindows();
+}
+
+// The mark saying "answered inside this process" must not outlive the mod, or
+// the taskbar-side hook would keep stepping around a window nobody handles.
+static void ClearWindowMarks() {
+    std::map<HWND, bool> marked;
+    AcquireSRWLockExclusive(&g_stateLock);
+    marked.swap(g_markedWindows);
+    ReleaseSRWLockExclusive(&g_stateLock);
+
+    for (const auto& [hWnd, unused] : marked) {
+        if (IsWindow(hWnd)) {
+            RemovePropW(hWnd, kHandledProp);
+        }
+    }
+}
+
+void Wh_ModBeforeUninit() {
+    g_activeHere = false;
+    g_haveRules = false;
+
+    RestoreWindowIcons();
+    RestoreClassIcons();
+    RestoreTrayIcons();
+    ClearWindowMarks();
+}
+
+void Wh_ModUninit() {
+    AcquireSRWLockExclusive(&g_stateLock);
+    for (const LocalRule& local : g_localRules) {
+        if (local.hSmall) {
+            g_ownedIcons.push_back(local.hSmall);
+        }
+        if (local.hBig) {
+            g_ownedIcons.push_back(local.hBig);
+        }
+    }
+    g_localRules.clear();
+    for (auto& [remoteWnd, remote] : g_remoteWindows) {
+        if (remote.hSmallInFlight) {
+            g_ownedIcons.push_back(remote.hSmallInFlight);
+        }
+        if (remote.hBigInFlight) {
+            g_ownedIcons.push_back(remote.hBigInFlight);
+        }
+    }
+    g_remoteWindows.clear();
+    for (auto& [stateWnd, icons] : g_windowState) {
+        if (icons.ourSmallCopy) { g_ownedIcons.push_back(icons.ourSmallCopy); }
+        if (icons.ourBigCopy) { g_ownedIcons.push_back(icons.ourBigCopy); }
+    }
+    g_windowState.clear();
+    g_iconSummaries.clear();
+    g_capturedIcons.clear();
+    g_lastCaptured.clear();
+    for (HICON hIcon : g_ownedIcons) {
+        DestroyIcon(hIcon);
+    }
+    g_ownedIcons.clear();
+    g_fileIconCache.clear();
+    g_trayEntries.clear();
+    ReleaseSRWLockExclusive(&g_stateLock);
+}
