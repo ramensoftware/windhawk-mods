@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.
-// @version         0.19.8
+// @version         0.19.9
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -1928,7 +1928,8 @@ static bool HashFile(HANDLE file, std::array<BYTE, 32>& digest) {
 
 static bool SeenRecentContentAndRemember(const std::array<BYTE, 32>& hash,
                                          const std::wstring& path,
-                                         ULONGLONG now) {
+                                         ULONGLONG now,
+                                         std::wstring& keeper) {
     while (!g_recentContent.empty() && g_recentContent.front().expires <= now)
         g_recentContent.pop_front();
     for (auto it = g_recentContent.begin(); it != g_recentContent.end();) {
@@ -1936,7 +1937,9 @@ static bool SeenRecentContentAndRemember(const std::array<BYTE, 32>& hash,
             ++it;
             continue;
         }
-        if (GetFileAttributesW(it->keeper.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        if (_wcsicmp(it->keeper.c_str(), path.c_str()) != 0 &&
+            GetFileAttributesW(it->keeper.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            keeper = it->keeper;
             return true;
         }
         it = g_recentContent.erase(it);
@@ -1955,8 +1958,12 @@ public:
     LockedCapture(const LockedCapture&) = delete;
     LockedCapture& operator=(const LockedCapture&) = delete;
     ~LockedCapture() {
+        Close();
+    }
+    void Close() {
         CloseFile();
         if (folder != INVALID_HANDLE_VALUE) CloseHandle(folder);
+        folder = INVALID_HANDLE_VALUE;
     }
     void CloseFile() {
         if (file != INVALID_HANDLE_VALUE) CloseHandle(file);
@@ -2000,9 +2007,7 @@ public:
 static AuditOutcome RecycleDuplicate(const std::wstring& path,
                                      ULONGLONG generation,
                                      LockedCapture& capture) {
-    if (WaitStop(0)) return AuditOutcome::Kept;
-    if (capture.file == INVALID_HANDLE_VALUE) return AuditOutcome::Kept;
-    capture.CloseFile();
+    capture.Close();
     if (g_generation.load() != generation || WaitStop(0))
         return AuditOutcome::Kept;
     return RecycleFile(path) ? AuditOutcome::RecycledDuplicate
@@ -2090,8 +2095,9 @@ static void ProcessOne(std::wstring path) {
         if (HashFile(capture.file, digest)) {
             EnterCriticalSection(&g_lock);
             bool current = generation == g_generation.load();
+            std::wstring keeper;
             bool duplicate = current && SeenRecentContentAndRemember(
-                digest, path, GetTickCount64());
+                digest, path, GetTickCount64(), keeper);
             LeaveCriticalSection(&g_lock);
             if (!current) {
                 AuditResult(s, AuditOutcome::Copied,
@@ -2106,10 +2112,15 @@ static void ProcessOne(std::wstring path) {
                                 L"file changed before cleanup", path);
                     return;
                 }
-                capture.CloseFile();
+                capture.Close();
                 if (WaitStop(delay) || g_generation.load() != generation) {
                     AuditResult(s, AuditOutcome::Kept,
                                 L"duplicate cleanup cancelled or stopped", path);
+                    return;
+                }
+                if (GetFileAttributesW(keeper.c_str()) == INVALID_FILE_ATTRIBUTES) {
+                    AuditResult(s, AuditOutcome::Kept,
+                                L"earlier copy is gone", path);
                     return;
                 }
                 LockedCapture again;
@@ -2136,7 +2147,7 @@ static void ProcessOne(std::wstring path) {
                    s.logDetails ? (L": " + path).c_str() : L"");
         }
     }
-    capture.CloseFile();
+    capture.Close();
     // Deletion only makes sense for self-contained payloads (image / none).
     // File and Path payloads reference the file, so deleting would break them.
     bool payloadReferencesFile =
