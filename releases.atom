@@ -2,12 +2,43 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-19T17:17:05.000Z</updated>
+    <updated>2026-09-19T20:54:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Better Volume Mixer 1.0]]></title>
+        <id>https://windhawk.net/mods/better-volume-mixer#1d987911606d7b61a85fd941f78e1bc6a6fee6d4</id>
+        <link href="https://windhawk.net/mods/better-volume-mixer"/>
+        <updated>2026-09-19T20:54:08.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="bettervolumemixer">Better Volume Mixer</h1>
+<p>A simple volume mixer for Windows 11. Control your overall volume and individual
+apps from one small window.</p>
+<p><img src="https://raw.githubusercontent.com/0Allu/better-volume-mixer/main/assets/better-volume-mixer-demo.png" alt="Better Volume Mixer demo" /></p>
+<p>Click the speaker icon in the system tray to open or close the mixer. If it is
+hidden, open the tray overflow menu and drag the icon onto the taskbar.</p>
+<ul>
+<li>Adjust each app's volume with its slider or mute button.</li>
+<li>Scroll over a slider to change the volume with your mouse wheel.</li>
+<li>Click the pin beside an app to keep it at the top.</li>
+<li>Use Previous and Next when there are more apps than fit on one page.</li>
+</ul>
+<p>Choose your theme, background transparency, animations, and apps per page in
+the mod settings. If an app is missing, keep the mixer open and play some audio
+in it. Apps on other output devices are remembered after playing while the mixer
+is open, until their audio session ends.</p>
+<h2 id="hidethewindowsvolumeicon">Hide the Windows volume icon</h2>
+<p>To avoid having two volume icons, install
+<a href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks">Taskbar tray system icon tweaks</a>
+and enable <strong>Hide volume icon</strong> in its settings. This hides the Windows 11
+volume icon while keeping Better Volume Mixer's icon visible.</p>]]></content>
+        <author>
+            <name>0Allu</name>
+            <uri>https://github.com/0Allu</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Premiere Pro Theme 1.0.0]]></title>
         <id>https://windhawk.net/mods/premiere-pro-theme#c2b85a85429190b8aa1e544da5a845d9abf8ed01</id>
@@ -1474,41 +1505,6 @@ mixes those with <code>SM_CXVSCROLL</code> may lay out slightly oddly.</li>
         <author>
             <name>AmazingBodilyFluids</name>
             <uri>https://github.com/AmazingBodilyFluids</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Control Panel Revival 1.0.0]]></title>
-        <id>https://windhawk.net/mods/control-panel-revival#45a16be6974ea488dcd5464d0a8bd3aebd01bae7</id>
-        <link href="https://windhawk.net/mods/control-panel-revival"/>
-        <updated>2026-09-10T13:26:14.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="controlpanelrevival">Control Panel Revival</h1>
-<h3 id="whatdoesthismoddo">What does this mod do?</h3>
-<p>This mod restores Control Panel applets - Troubleshooting, Installed Updates,
-Default Programs, Devices and Printers, Fonts, and System - that Windows 11
-(23H2 and later) redirects to the Settings app instead of opening directly,
-even when launched via a shell command. You can also add your own applet IDs
-to protect them from being redirected. Each of the six built-in applets can
-also be individually toggled off in the settings if you don't want this mod
-to affect it.</p>
-<p><strong>Note:</strong> This mod does not reveal hidden Control Panel applets. It only
-restores applets that are already present in Control Panel but currently
-redirect to Settings(e.g troubleshooting,default programs,installed updates and more).</p>
-<h3 id="examplecustomappletsconfiguration">Example CustomApplets configuration:</h3>
-<pre><code class="yaml language-yaml">- "{BB06C0E4-D293-4f75-8A90-CB05B6477EEE}"  # System
-- "Microsoft.Troubleshooting"              # Troubleshooting
-- "BB06C0E4-D293-4f75-8A90-CB05B6477EEE"    # System (bare GUID, no braces)
-</code></pre>
-<p><strong>Before:</strong>
-<img src="https://raw.githubusercontent.com/AdmXP8/assets/main/Screen%20Recording%202026-08-27%20124304.gif" alt="Before" /></p>
-<p><strong>After:</strong>
-<img src="https://raw.githubusercontent.com/AdmXP8/assets/main/Screen%20Recording%202026-08-27%20124458.gif" alt="After" /></p>
-<p><strong>Difference from other mods</strong> Other mods hook this same function but within a new window, so they cannot intercept new applet redirects—such as those for troubleshooting, installed updates, default programs, and so on.</p>
-<p><strong>Relationship to <code>settings-to-control-panel</code> ("Redirect Settings to Control Panel"):</strong> that mod also hooks the same private <code>COpenControlPanel::_MapLegacyName</code> function, but opens its targeted applets in a <strong>new, separate window</strong> rather than preventing the redirect entirely. This mod loads the applet <strong>in-place, inside the existing Control Panel window</strong>, which is what allows it to also cover Troubleshooting, Installed Updates, and Default Programs - three applets that, on 23H2+, can no longer be launched in a new window at all (not even via <code>shell:::</code>), so <code>settings-to-control-panel</code>'s mechanism cannot restore them. Both mods hooking the same private symbol is expected; if you run both together, only one mod's outcome will apply for any applet targeted by both.</p>
-<p><strong>Known limitations</strong>  Clicking on task links that lead to applets currently in the mod results in no action being taken. This issue will be fixed in future versions.</p>
-<p><strong>If there are any bugs in the mod, please report them to me</strong></p>]]></content>
-        <author>
-            <name>AdmXP8</name>
-            <uri>https://github.com/AdmXP8</uri>
         </author>
     </entry>
 </feed>

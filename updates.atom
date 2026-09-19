@@ -2,12 +2,43 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-19T20:40:20.000Z</updated>
+    <updated>2026-09-19T20:54:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Better Volume Mixer 1.0]]></title>
+        <id>https://windhawk.net/mods/better-volume-mixer#1d987911606d7b61a85fd941f78e1bc6a6fee6d4</id>
+        <link href="https://windhawk.net/mods/better-volume-mixer"/>
+        <updated>2026-09-19T20:54:08.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="bettervolumemixer">Better Volume Mixer</h1>
+<p>A simple volume mixer for Windows 11. Control your overall volume and individual
+apps from one small window.</p>
+<p><img src="https://raw.githubusercontent.com/0Allu/better-volume-mixer/main/assets/better-volume-mixer-demo.png" alt="Better Volume Mixer demo" /></p>
+<p>Click the speaker icon in the system tray to open or close the mixer. If it is
+hidden, open the tray overflow menu and drag the icon onto the taskbar.</p>
+<ul>
+<li>Adjust each app's volume with its slider or mute button.</li>
+<li>Scroll over a slider to change the volume with your mouse wheel.</li>
+<li>Click the pin beside an app to keep it at the top.</li>
+<li>Use Previous and Next when there are more apps than fit on one page.</li>
+</ul>
+<p>Choose your theme, background transparency, animations, and apps per page in
+the mod settings. If an app is missing, keep the mixer open and play some audio
+in it. Apps on other output devices are remembered after playing while the mixer
+is open, until their audio session ends.</p>
+<h2 id="hidethewindowsvolumeicon">Hide the Windows volume icon</h2>
+<p>To avoid having two volume icons, install
+<a href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks">Taskbar tray system icon tweaks</a>
+and enable <strong>Hide volume icon</strong> in its settings. This hides the Windows 11
+volume icon while keeping Better Volume Mixer's icon visible.</p>]]></content>
+        <author>
+            <name>0Allu</name>
+            <uri>https://github.com/0Allu</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Translucent Windows 1.8.2]]></title>
         <id>https://windhawk.net/mods/translucent-windows#0d049bfe7e7d9cd8da6d84d260874ad3c78aa370</id>
@@ -1108,19 +1139,6 @@ monitor bounds.</li>
         <author>
             <name>Hamid</name>
             <uri>https://github.com/nh4700-ai</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 Native Four Column Snap Layout 1.1]]></title>
-        <id>https://windhawk.net/mods/windows-11-native-four-column-snap-layout#81d32eea1d5d2e9656c2e39c51188c471f6b2cec</id>
-        <link href="https://windhawk.net/mods/windows-11-native-four-column-snap-layout"/>
-        <updated>2026-09-15T17:34:37.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the Snap Layout picker height for varying suggestion counts when only one or two windows are available</li>
-</ul>]]></content>
-        <author>
-            <name>Hoffelhas</name>
-            <uri>https://github.com/Hoffelhas</uri>
         </author>
     </entry>
 </feed>
