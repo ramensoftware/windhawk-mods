@@ -1523,11 +1523,17 @@ namespace {
     [[clang::no_destroy]] winrt::Windows::Foundation::IInspectable m_originalCalendarContent{nullptr};
     [[clang::no_destroy]] wux::FrameworkElement g_layoutUpdatedFe{nullptr};
     winrt::event_token g_layoutUpdatedToken{};
+    std::mutex g_pendingActionsMutex;
+    [[clang::no_destroy]] std::vector<winrt::Windows::Foundation::IAsyncOperation<bool>> g_pendingDispatcherActions;
 
     wuxc::ScrollBarVisibility m_originalVerticalScrollBarVisibility{wuxc::ScrollBarVisibility::Auto};
     wuxc::ScrollBarVisibility m_originalHorizontalScrollBarVisibility{wuxc::ScrollBarVisibility::Disabled};
     wux::Visibility m_originalFocusSessionVisibility{wux::Visibility::Visible};
     std::atomic<DWORD> g_ownerThreadId{0};
+    std::atomic<HANDLE> g_hWorkerThread{nullptr};
+    std::atomic<HANDLE> g_hWorkEvent{nullptr};
+    std::atomic<HANDLE> g_hStopEvent{nullptr};
+    std::atomic<bool> g_workerForceFetch{false};
 }
 
 void UnregisterFocusSessionControl();
@@ -1538,8 +1544,6 @@ void ResetDatePickerToToday();
 void DispatchUpdateEvents();
 void UpdateMaxHeight(int maxHeight);
 void ReplaceCalendarContent(wuxc::ScrollViewer const& host);
-void UpdateFocusSessionVisibility();
-void UpdateKeyboardShortcuts(bool enabled);
 void HandleFocusSessionControl(wux::FrameworkElement const& element);
 void WalkVisualTree(winrt::Windows::UI::Xaml::DependencyObject const& root);
 void RegisterCoreWindowEvents();
@@ -1549,6 +1553,11 @@ void RevokeLayoutUpdated();
 void RevokeLayoutUpdated() {
     if (g_layoutUpdatedFe && g_layoutUpdatedToken.value != 0) {
         try {
+            if (auto dispatcher = g_layoutUpdatedFe.Dispatcher()) {
+                if (!dispatcher.HasThreadAccess()) {
+                    return;
+                }
+            }
             g_layoutUpdatedFe.LayoutUpdated(g_layoutUpdatedToken);
         } catch (...) {}
         g_layoutUpdatedToken = {};
@@ -1559,6 +1568,11 @@ void RevokeLayoutUpdated() {
 void UnregisterFocusSessionControl() {
     if (m_focusSessionControl && m_focusSessionVisibilityToken != 0) {
         try {
+            if (auto dispatcher = m_focusSessionControl.Dispatcher()) {
+                if (!dispatcher.HasThreadAccess()) {
+                    return;
+                }
+            }
             m_focusSessionControl.UnregisterPropertyChangedCallback(
                 wux::UIElement::VisibilityProperty(),
                 m_focusSessionVisibilityToken);
@@ -1662,6 +1676,7 @@ void RestoreCalendarContent() {
         m_nextDayAccel = nullptr;
     }
     g_ownerThreadId.store(0);
+    g_lastOpenTick = 0;
 }
 
 void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
@@ -1898,23 +1913,16 @@ void OnCalendarViewSelectedDatesChanged(wf::IReference<wf::DateTime> const& newD
 }
 
 void ResetDatePickerToToday() {
-    wuc::CoreDispatcher dispatcher{nullptr};
-    if (m_dateButton) dispatcher = m_dateButton.Dispatcher();
-    else if (m_datePicker) dispatcher = m_datePicker.Dispatcher();
-    if (!dispatcher) return;
-
-    dispatcher.TryRunAsync(wuc::CoreDispatcherPriority::Normal, []() {
-        SYSTEMTIME today;
-        GetLocalTime(&today);
-        m_currentFilterDate = today;
-        UpdateDateDisplayAndCalendar(today);
-        std::vector<CalendarEvent> events;
-        {
-            std::lock_guard<std::mutex> lock(g_eventsMutex);
-            events = FilterEventsForDate(g_allParsedEvents, today);
-        }
-        PopulateItemsControl(events);
-    });
+    SYSTEMTIME today;
+    GetLocalTime(&today);
+    m_currentFilterDate = today;
+    UpdateDateDisplayAndCalendar(today);
+    std::vector<CalendarEvent> events;
+    {
+        std::lock_guard<std::mutex> lock(g_eventsMutex);
+        events = FilterEventsForDate(g_allParsedEvents, today);
+    }
+    PopulateItemsControl(events);
 }
 
 void DispatchUpdateEvents() {
@@ -1927,7 +1935,10 @@ void DispatchUpdateEvents() {
     auto dispatcher = itemsControl.Dispatcher();
     if (!dispatcher) return;
 
-    dispatcher.TryRunAsync(wuc::CoreDispatcherPriority::Normal, []() {
+    auto action = dispatcher.TryRunAsync(wuc::CoreDispatcherPriority::Normal, []() {
+        if (HANDLE s = g_hStopEvent.load(); s && WaitForSingleObject(s, 0) == WAIT_OBJECT_0) {
+            return;
+        }
         std::vector<CalendarEvent> filtered;
         {
             std::lock_guard<std::mutex> lock(g_eventsMutex);
@@ -1935,6 +1946,17 @@ void DispatchUpdateEvents() {
         }
         try { PopulateItemsControl(filtered); } catch (...) {}
     });
+
+    if (action) {
+        std::lock_guard<std::mutex> lock(g_pendingActionsMutex);
+        std::erase_if(
+            g_pendingDispatcherActions,
+            [](winrt::Windows::Foundation::IAsyncOperation<bool> const& a) {
+                return !a || a.Status() !=
+                                 winrt::Windows::Foundation::AsyncStatus::Started;
+            });
+        g_pendingDispatcherActions.push_back(std::move(action));
+    }
 }
 
 void UpdateMaxHeight(int maxHeight) {
@@ -1943,26 +1965,19 @@ void UpdateMaxHeight(int maxHeight) {
         std::lock_guard<std::mutex> lock(g_watcherMutex);
         sv = m_eventsScrollViewer;
     }
-    if (!sv) return;
-    auto dispatcher = sv.Dispatcher();
-    if (!dispatcher) return;
-
-    dispatcher.TryRunAsync(wuc::CoreDispatcherPriority::Normal, [sv, maxHeight]() {
-        if (sv) {
-            sv.MaxHeight(maxHeight > 0 ? (double)maxHeight : std::numeric_limits<double>::infinity());
-            sv.Height(std::numeric_limits<double>::quiet_NaN());
-        }
-    });
+    if (sv) {
+        sv.MaxHeight(maxHeight > 0 ? (double)maxHeight : std::numeric_limits<double>::infinity());
+        sv.Height(std::numeric_limits<double>::quiet_NaN());
+    }
 }
 
 void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
     if (!host) return;
     DWORD currentThread = GetCurrentThreadId();
-    DWORD owner = g_ownerThreadId.load();
-    if (owner != 0 && owner != currentThread) {
+    DWORD expected = 0;
+    if (!g_ownerThreadId.compare_exchange_strong(expected, currentThread) && expected != currentThread) {
         return;
     }
-    g_ownerThreadId.store(currentThread);
     RegisterCoreWindowEvents();
 
     if (m_currentFilterDate.wYear == 0) {
@@ -2219,51 +2234,13 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
     } catch (...) {}
 }
 
-void UpdateFocusSessionVisibility() {
-    wux::FrameworkElement fsControl{nullptr};
-    {
-        std::lock_guard<std::mutex> lock(g_watcherMutex);
-        fsControl = m_focusSessionControl;
-    }
-    if (!fsControl) return;
-    auto dispatcher = fsControl.Dispatcher();
-    if (!dispatcher) return;
-
-    dispatcher.TryRunAsync(wuc::CoreDispatcherPriority::Normal, []() {
-        wux::FrameworkElement ctrl{nullptr};
-        wux::Visibility origVis{wux::Visibility::Visible};
-        {
-            std::lock_guard<std::mutex> lock(g_watcherMutex);
-            ctrl = m_focusSessionControl;
-            origVis = m_originalFocusSessionVisibility;
-        }
-        if (ctrl) {
-            try {
-                bool hide = ShouldHideFocusSession();
-                ctrl.Visibility(hide ? wux::Visibility::Collapsed : origVis);
-            } catch (...) {}
-        }
-    });
-}
-
-void UpdateKeyboardShortcuts(bool enabled) {
-    wuxc::Button btn{nullptr};
-    { std::lock_guard<std::mutex> lock(g_watcherMutex); btn = m_prevDayButton; }
-    if (!btn) return;
-    auto dispatcher = btn.Dispatcher();
-    if (!dispatcher) return;
-
-    dispatcher.TryRunAsync(wuc::CoreDispatcherPriority::Normal, [enabled]() {
-        std::lock_guard<std::mutex> lock(g_watcherMutex);
-        if (m_prevDayAccel) m_prevDayAccel.IsEnabled(enabled);
-        if (m_nextDayAccel) m_nextDayAccel.IsEnabled(enabled);
-    });
-}
-
 void HandleFocusSessionControl(wux::FrameworkElement const& element) {
     if (!element || m_focusSessionControl == element) return;
-    DWORD owner = g_ownerThreadId.load();
-    if (owner != 0 && owner != GetCurrentThreadId()) return;
+    DWORD currentThread = GetCurrentThreadId();
+    DWORD expected = 0;
+    if (!g_ownerThreadId.compare_exchange_strong(expected, currentThread) && expected != currentThread) {
+        return;
+    }
 
     UnregisterFocusSessionControl();
     m_focusSessionControl = element;
@@ -2307,11 +2284,6 @@ void WalkVisualTree(winrt::Windows::UI::Xaml::DependencyObject const& root) {
         for (int i = 0; i < count; i++) WalkVisualTree(wuxm::VisualTreeHelper::GetChild(root, i));
     } catch (...) {}
 }
-
-std::atomic<HANDLE> g_hWorkerThread{nullptr};
-std::atomic<HANDLE> g_hWorkEvent{nullptr};
-std::atomic<HANDLE> g_hStopEvent{nullptr};
-std::atomic<bool> g_workerForceFetch{false};
 
 DWORD WINAPI WorkerThreadProc(LPVOID) {
     while (true) {
@@ -2438,7 +2410,7 @@ void OnCalendarOpened() {
     }
 
     ULONGLONG currentTick = GetTickCount64();
-    if (currentTick - g_lastOpenTick < 500) {
+    if (m_rootGrid && currentTick - g_lastOpenTick < 500) {
         return;
     }
     g_lastOpenTick = currentTick;
@@ -2794,27 +2766,23 @@ BOOL Wh_ModInit() {
 
     StartWorkerThread();
 
-    static bool hooksInstalled = false;
-    if (!hooksInstalled) {
-        HMODULE user32Module = GetModuleHandleW(L"user32.dll");
-        if (user32Module) {
-            auto pCreateWindowInBand = (CreateWindowInBand_t)GetProcAddress(
-                user32Module, "CreateWindowInBand");
-            if (pCreateWindowInBand) {
-                WindhawkUtils::SetFunctionHook(pCreateWindowInBand,
-                                               CreateWindowInBand_Hook,
-                                               &CreateWindowInBand_Original);
-            }
-
-            auto pCreateWindowInBandEx = (CreateWindowInBandEx_t)GetProcAddress(
-                user32Module, "CreateWindowInBandEx");
-            if (pCreateWindowInBandEx) {
-                WindhawkUtils::SetFunctionHook(pCreateWindowInBandEx,
-                                               CreateWindowInBandEx_Hook,
-                                               &CreateWindowInBandEx_Original);
-            }
+    HMODULE user32Module = GetModuleHandleW(L"user32.dll");
+    if (user32Module) {
+        auto pCreateWindowInBand = (CreateWindowInBand_t)GetProcAddress(
+            user32Module, "CreateWindowInBand");
+        if (pCreateWindowInBand) {
+            WindhawkUtils::SetFunctionHook(pCreateWindowInBand,
+                                           CreateWindowInBand_Hook,
+                                           &CreateWindowInBand_Original);
         }
-        hooksInstalled = true;
+
+        auto pCreateWindowInBandEx = (CreateWindowInBandEx_t)GetProcAddress(
+            user32Module, "CreateWindowInBandEx");
+        if (pCreateWindowInBandEx) {
+            WindhawkUtils::SetFunctionHook(pCreateWindowInBandEx,
+                                           CreateWindowInBandEx_Hook,
+                                           &CreateWindowInBandEx_Original);
+        }
     }
 
     return TRUE;
@@ -2840,13 +2808,26 @@ void Wh_ModUninit() {
     Wh_Log(L">");
 
     StopWorkerThread();
-    RevokeLayoutUpdated();
+
+    {
+        std::lock_guard<std::mutex> lock(g_pendingActionsMutex);
+        for (auto const& action : g_pendingDispatcherActions) {
+            if (action && action.Status() ==
+                              winrt::Windows::Foundation::AsyncStatus::Started) {
+                try {
+                    action.Cancel();
+                } catch (...) {}
+            }
+        }
+        g_pendingDispatcherActions.clear();
+    }
 
     for (HWND hCoreWnd : GetCoreWnds()) {
         Wh_Log(L"Uninitializing for %08X", (DWORD)(ULONG_PTR)hCoreWnd);
         RunFromWindowThread(
             hCoreWnd,
             [](PVOID) {
+                RevokeLayoutUpdated();
                 UnregisterCoreWindowEvents();
                 RestoreCalendarContent();
             },
@@ -2854,9 +2835,8 @@ void Wh_ModUninit() {
     }
 }
 
-void Wh_ModSettingsChanged() {
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L">");
-    Wh_ModUninit();
-    Wh_ModInit();
-    Wh_ModAfterInit();
+    *bReload = TRUE;
+    return TRUE;
 }
