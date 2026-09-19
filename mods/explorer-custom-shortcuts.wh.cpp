@@ -28,7 +28,7 @@ Instead of specifying an executable path, set **Executable Path** to one of the 
 * **`internal:newTextFile`**: Creates a `New Text Document.txt` in the active folder and automatically selects/focuses it without UI freezes.
 * **`internal:newFolder`**: Creates a `New Folder` in the active folder and enters inline rename mode immediately.
 * **`internal:openRecycleBin`**: Navigates to the Recycle Bin in the current active tab.
-* **`internal:emptyRecycleBin`**: Empties the Recycle Bin with native Windows confirmation dialog and progress display.
+* **`internal:emptyRecycleBin`**: Empties the Recycle Bin with confirmation dialog.
 * **`internal:toggleHiddenFiles`**: Toggles visibility of hidden files and folders with immediate view refresh. *(Note: Changes persistent system-wide Windows Explorer settings).*
 * **`internal:toggleFileExtensions`**: Toggles file name extensions on or off with immediate view refresh. *(Note: Changes persistent system-wide Windows Explorer settings).*
 * **`internal:folderOptions`**: Opens the native File Explorer Folder Options dialog.
@@ -266,7 +266,7 @@ int ParseKey(std::wstring keyStr) {
 }
 
 void LoadSettings() {
-    auto newShortcuts = std::make_shared<std::vector<CustomShortcut>>();
+    std::vector<CustomShortcut> newShortcuts;
 
     for (int i = 0; i < 100; i++) {
         WindhawkUtils::StringSetting pathStr = WindhawkUtils::StringSetting::make(L"shortcuts[%d].path", i);
@@ -299,7 +299,7 @@ void LoadSettings() {
         bool hasModifier = (sc.ctrl || sc.shift || sc.alt);
 
         if (sc.enabled && sc.vkCode != 0 && (hasModifier || isFunctionKey)) {
-            newShortcuts->push_back(sc);
+            newShortcuts.push_back(sc);
         } else if (sc.enabled && sc.vkCode != 0 && !hasModifier && !isFunctionKey) {
             Wh_Log(L"Shortcut '%s' requires at least one modifier key (Ctrl, Shift, Alt). Dropped.", sc.name.c_str());
         }
@@ -307,7 +307,7 @@ void LoadSettings() {
 
     {
         std::unique_lock<std::shared_mutex> lock(g_shortcutsMutex);
-        g_shortcuts = std::move(*newShortcuts);
+        g_shortcuts = std::move(newShortcuts);
     }
 }
 
@@ -653,8 +653,16 @@ void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd, HWND cap
     }
 
     if (_wcsicmp(command.c_str(), L"internal:emptyRecycleBin") == 0) {
-        // Pass nullptr instead of rootHwnd to prevent cross-thread window attachment stalls
-        SHEmptyRecycleBinW(nullptr, nullptr, 0);
+        int res = MessageBoxW(
+            nullptr,
+            L"Permanently delete all items in the Recycle Bin?",
+            L"Explorer Custom Shortcuts",
+            MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2 | MB_SETFOREGROUND
+        );
+
+        if (res == IDOK && !g_unloading.load()) {
+            SHEmptyRecycleBinW(nullptr, nullptr, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI);
+        }
         return;
     }
 
@@ -880,14 +888,8 @@ int WINAPI TranslateAcceleratorW_Hook(HWND hWnd, HACCEL hAccTable, LPMSG lpMsg) 
 BOOL Wh_ModInit() {
     LoadSettings();
 
-    HMODULE hUser32 = GetModuleHandle(L"user32.dll");
-    if (!hUser32) return FALSE;
-
-    auto pfnTranslateAcceleratorW = (TranslateAcceleratorW_t)GetProcAddress(hUser32, "TranslateAcceleratorW");
-    if (!pfnTranslateAcceleratorW) return FALSE;
-
     return WindhawkUtils::SetFunctionHook(
-        pfnTranslateAcceleratorW,
+        TranslateAcceleratorW,
         TranslateAcceleratorW_Hook,
         &TranslateAcceleratorW_Original
     );
@@ -901,11 +903,16 @@ void Wh_ModUninit() {
         threadsToJoin.swap(g_threads);
     }
 
-    // Follow explorer-command-bar unload pattern: bounded wait with diagnostic log
+    // Dismiss any modal dialogs (such as emptyRecycleBin) so unload never stalls
     for (HANDLE h : threadsToJoin) {
-        if (WaitForSingleObject(h, 2000) == WAIT_TIMEOUT) {
-            Wh_Log(L"Waiting for background worker thread to finish...");
-            WaitForSingleObject(h, INFINITE);
+        DWORD tid = GetThreadId(h);
+        while (WaitForSingleObject(h, 100) == WAIT_TIMEOUT) {
+            EnumThreadWindows(tid, [](HWND hWnd, LPARAM) -> BOOL {
+                if (IsWindowVisible(hWnd)) {
+                    PostMessageW(hWnd, WM_CLOSE, 0, 0);
+                }
+                return TRUE;
+            }, 0);
         }
         CloseHandle(h);
     }
