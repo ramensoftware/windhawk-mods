@@ -888,6 +888,7 @@ using Microsoft::WRL::ComPtr;
 #define TIMER_ID_MSG_WALLPAPER_REFRESH 3
 #define TIMER_ID_MSG_FULLSCREEN_WATCH 4
 #define TIMER_ID_MSG_SAVE_POSITION 5
+#define TIMER_ID_MSG_FONT_RECHECK 6
 
 #define WM_APP_CLEANUP (WM_APP + 1)
 #define WM_APP_SETTINGS_CHANGED (WM_APP + 2)
@@ -1493,6 +1494,19 @@ std::wstring ReadIconPathSetting(PCWSTR key, PCWSTR group, PCWSTR name) {
     return path;
 }
 
+// A font that really is installed can still enumerate as missing right after a
+// cold boot: mods start before the font service has finished registering
+// everything, so the check runs against an incomplete list and warns about a
+// font that works perfectly the moment anything draws with it.
+//
+// So a failed check does not report straight away. It arms a one-second retry
+// on the message window and only reports if the font is still missing once the
+// system has had time to settle. A genuinely wrong name still gets flagged,
+// just ten seconds later than it used to.
+static bool g_fontCheckPending = false;
+static int g_fontCheckAttempts = 0;
+static constexpr int FONT_CHECK_MAX_ATTEMPTS = 10;
+
 // Checks a font family name is actually installed. A missing font falls back to
 // whatever DirectWrite substitutes, which is silently not what was asked for.
 bool IsFontInstalled(const std::wstring& family) {
@@ -1684,8 +1698,30 @@ bool IsFullscreenOrGameActive() {
 // each being judged on its own -- two windows covering opposite halves read as
 // 100%, which is what you see on screen. GetRegionData hands back a set of
 // non-overlapping rectangles, so summing their areas double-counts nothing.
-int ComputeRectCoveragePercent(const RECT& target) {
-    if (target.right <= target.left || target.bottom <= target.top) return 0;
+int ComputeRectCoveragePercent(const RECT& targetIn) {
+    if (targetIn.right <= targetIn.left || targetIn.bottom <= targetIn.top) return 0;
+
+    // Judge only the part that is actually on a screen.
+    //
+    // Area hanging off an edge can never intersect a window rect, so leaving it
+    // in the denominator permanently caps the result below 100%. At the default
+    // "100% covered" threshold that makes Pause When Covered unreachable for any
+    // visualizer positioned partly off-screen, which is a common placement along
+    // the bottom edge, and the feature simply appears to do nothing.
+    RECT screen;
+    screen.left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    screen.top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    screen.right = screen.left + GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    screen.bottom = screen.top + GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+    RECT target;
+    if (!IntersectRect(&target, &targetIn, &screen)) {
+        // Nothing of it is on screen at all. Reported as uncovered rather than
+        // fully covered, staying with this function's existing bias: a wrong
+        // answer that keeps drawing is a far smaller problem than one that makes
+        // the visualizer vanish.
+        return 0;
+    }
 
     HRGN coveredRgn = CreateRectRgn(0, 0, 0, 0);
     if (!coveredRgn) return 0;
@@ -5726,6 +5762,27 @@ LRESULT CALLBACK MessageWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
             } else if (wParam == TIMER_ID_MSG_SAVE_POSITION) {
                 KillTimer(hWnd, TIMER_ID_MSG_SAVE_POSITION);
                 PersistOverrideState();
+            } else if (wParam == TIMER_ID_MSG_FONT_RECHECK) {
+                // Re-run the font lookup that failed during settings load. A
+                // cold boot resolves this within a few seconds; a name that is
+                // actually wrong never will, and gets reported once the
+                // attempts run out.
+                if (!g_fontCheckPending || !g_settings.nowPlayingEnabled) {
+                    g_fontCheckPending = false;
+                    KillTimer(hWnd, TIMER_ID_MSG_FONT_RECHECK);
+                } else if (IsFontInstalled(g_settings.nowPlayingFont)) {
+                    Wh_Log(L"Now Playing Font resolved after %d s, no issue to report",
+                           g_fontCheckAttempts + 1);
+                    g_fontCheckPending = false;
+                    KillTimer(hWnd, TIMER_ID_MSG_FONT_RECHECK);
+                } else if (++g_fontCheckAttempts >= FONT_CHECK_MAX_ATTEMPTS) {
+                    g_fontCheckPending = false;
+                    KillTimer(hWnd, TIMER_ID_MSG_FONT_RECHECK);
+                    ReportSettingIssue(
+                        L"Appearance", L"Now Playing Font", g_settings.nowPlayingFont.c_str(),
+                        L"the name of a font installed on this PC, exactly as Windows spells it",
+                        L"whatever Windows substitutes (usually Segoe UI)");
+                }
             } else if (wParam == TIMER_ID_MSG_FULLSCREEN_WATCH) {
                 // The media strip is a plain layered window living alongside
                 // whatever else is topmost, and it's the one piece of this mod
@@ -5919,6 +5976,11 @@ void CreateMessageWindow() {
                                   nullptr, hInstance, nullptr);
     if (g_messageWnd) {
         SetTimer(g_messageWnd, TIMER_ID_MSG_FULLSCREEN_WATCH, 1000, nullptr);
+        // Settings are loaded before this window exists on the init path, so a
+        // font check that already failed has nowhere to arm its retry until now.
+        if (g_fontCheckPending) {
+            SetTimer(g_messageWnd, TIMER_ID_MSG_FONT_RECHECK, 1000, nullptr);
+        }
     }
 }
 
@@ -6174,10 +6236,17 @@ void LoadSettings() {
     g_settings.nowPlayingFont = (nowPlayingFont && *nowPlayingFont) ? nowPlayingFont : L"Segoe UI";
     // Only worth checking when the text is actually going to be drawn -- an
     // unused font name being wrong isn't something to interrupt anyone over.
+    //
+    // A failure here is not reported yet: on a cold boot the font service may
+    // not have registered everything, so this arms the retry instead and the
+    // warning only happens if it is still missing once things have settled.
     if (g_settings.nowPlayingEnabled && !IsFontInstalled(g_settings.nowPlayingFont)) {
-        ReportSettingIssue(L"Appearance", L"Now Playing Font", g_settings.nowPlayingFont.c_str(),
-                           L"the name of a font installed on this PC, exactly as Windows spells it",
-                           L"whatever Windows substitutes (usually Segoe UI)");
+        g_fontCheckPending = true;
+        g_fontCheckAttempts = 0;
+        if (g_messageWnd) SetTimer(g_messageWnd, TIMER_ID_MSG_FONT_RECHECK, 1000, nullptr);
+    } else {
+        g_fontCheckPending = false;
+        if (g_messageWnd) KillTimer(g_messageWnd, TIMER_ID_MSG_FONT_RECHECK);
     }
     Wh_FreeStringSetting(nowPlayingFont);
     g_settings.nowPlayingFontSize = std::max(6, Wh_GetIntSetting(L"appearance.nowPlayingFontSize"));
