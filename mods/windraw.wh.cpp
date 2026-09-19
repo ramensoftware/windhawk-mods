@@ -610,16 +610,16 @@ RadialAction ParseRadialAction(PCWSTR str, RadialAction defaultAction) {
 void LoadSettings() {
     PCWSTR modStr = Wh_GetStringSetting(L"hotkeyMod");
     if (modStr) {
-        if (_wcsicmp(modStr, L"alt") == 0 || wcscmp(modStr, L"1") == 0) g_settings.hotkeyMod = MOD_ALT;
-        else if (_wcsicmp(modStr, L"ctrl") == 0 || wcscmp(modStr, L"2") == 0) g_settings.hotkeyMod = MOD_CONTROL;
-        else if (_wcsicmp(modStr, L"shift") == 0 || wcscmp(modStr, L"4") == 0) g_settings.hotkeyMod = MOD_SHIFT;
-        else if (_wcsicmp(modStr, L"shift_alt") == 0 || wcscmp(modStr, L"5") == 0) g_settings.hotkeyMod = MOD_SHIFT | MOD_ALT;
-        else if (_wcsicmp(modStr, L"ctrl_shift") == 0 || wcscmp(modStr, L"6") == 0) g_settings.hotkeyMod = MOD_CONTROL | MOD_SHIFT;
-        else if (_wcsicmp(modStr, L"ctrl_shift_alt") == 0 || wcscmp(modStr, L"7") == 0) g_settings.hotkeyMod = MOD_CONTROL | MOD_SHIFT | MOD_ALT;
-        else if (_wcsicmp(modStr, L"win") == 0 || wcscmp(modStr, L"8") == 0) g_settings.hotkeyMod = MOD_WIN;
-        else if (_wcsicmp(modStr, L"win_alt") == 0 || wcscmp(modStr, L"9") == 0) g_settings.hotkeyMod = MOD_WIN | MOD_ALT;
-        else if (_wcsicmp(modStr, L"win_ctrl") == 0 || wcscmp(modStr, L"10") == 0) g_settings.hotkeyMod = MOD_WIN | MOD_CONTROL;
-        else if (_wcsicmp(modStr, L"win_ctrl_alt") == 0 || wcscmp(modStr, L"11") == 0) g_settings.hotkeyMod = MOD_WIN | MOD_CONTROL | MOD_ALT;
+        if (_wcsicmp(modStr, L"alt") == 0) g_settings.hotkeyMod = MOD_ALT;
+        else if (_wcsicmp(modStr, L"ctrl") == 0) g_settings.hotkeyMod = MOD_CONTROL;
+        else if (_wcsicmp(modStr, L"shift") == 0) g_settings.hotkeyMod = MOD_SHIFT;
+        else if (_wcsicmp(modStr, L"shift_alt") == 0) g_settings.hotkeyMod = MOD_SHIFT | MOD_ALT;
+        else if (_wcsicmp(modStr, L"ctrl_shift") == 0) g_settings.hotkeyMod = MOD_CONTROL | MOD_SHIFT;
+        else if (_wcsicmp(modStr, L"ctrl_shift_alt") == 0) g_settings.hotkeyMod = MOD_CONTROL | MOD_SHIFT | MOD_ALT;
+        else if (_wcsicmp(modStr, L"win") == 0) g_settings.hotkeyMod = MOD_WIN;
+        else if (_wcsicmp(modStr, L"win_alt") == 0) g_settings.hotkeyMod = MOD_WIN | MOD_ALT;
+        else if (_wcsicmp(modStr, L"win_ctrl") == 0) g_settings.hotkeyMod = MOD_WIN | MOD_CONTROL;
+        else if (_wcsicmp(modStr, L"win_ctrl_alt") == 0) g_settings.hotkeyMod = MOD_WIN | MOD_CONTROL | MOD_ALT;
         else g_settings.hotkeyMod = MOD_CONTROL | MOD_ALT;
         Wh_FreeStringSetting(modStr);
     } else {
@@ -638,6 +638,7 @@ void LoadSettings() {
         Wh_FreeStringSetting(keyStr);
     } else {
         g_settings.hotkeyKey = 'G';
+        if (keyStr) Wh_FreeStringSetting(keyStr);
     }
 
     // Safely parse decimals for accurate brush widths
@@ -652,42 +653,29 @@ void LoadSettings() {
 
     PCWSTR radiusStr = Wh_GetStringSetting(L"cornerRadius");
     if (radiusStr) {
-        if (_wcsicmp(radiusStr, L"square") == 0 || wcscmp(radiusStr, L"0") == 0) g_settings.cornerRadius = 0;
-        else if (_wcsicmp(radiusStr, L"subtle") == 0 || wcscmp(radiusStr, L"3") == 0) g_settings.cornerRadius = 3;
-        else if (_wcsicmp(radiusStr, L"round") == 0 || wcscmp(radiusStr, L"8") == 0) g_settings.cornerRadius = 8;
-        else if (_wcsicmp(radiusStr, L"pill") == 0 || wcscmp(radiusStr, L"12") == 0) g_settings.cornerRadius = 12;
-        else if (_wcsicmp(radiusStr, L"fluent") == 0 || wcscmp(radiusStr, L"5") == 0) g_settings.cornerRadius = 5;
-        else {
-            try {
-                int customR = std::stoi(radiusStr);
-                g_settings.cornerRadius = (customR < 0) ? 5 : customR;
-            } catch (...) {
-                g_settings.cornerRadius = 5;
-            }
-        }
+        if (_wcsicmp(radiusStr, L"square") == 0) g_settings.cornerRadius = 0;
+        else if (_wcsicmp(radiusStr, L"subtle") == 0) g_settings.cornerRadius = 3;
+        else if (_wcsicmp(radiusStr, L"round") == 0) g_settings.cornerRadius = 8;
+        else if (_wcsicmp(radiusStr, L"pill") == 0) g_settings.cornerRadius = 12;
+        else g_settings.cornerRadius = 5; // fluent (default)
         Wh_FreeStringSetting(radiusStr);
     } else {
-        int rInt = Wh_GetIntSetting(L"cornerRadius");
-        g_settings.cornerRadius = (rInt < 0) ? 5 : rInt;
+        g_settings.cornerRadius = 5;
     }
 
     g_settings.autoSaveSnapshot = Wh_GetIntSetting(L"autoSaveSnapshot") != 0;
     g_settings.freezeScreen = Wh_GetIntSetting(L"freezeScreen") != 0;
 
     PCWSTR pathStr = Wh_GetStringSetting(L"customSnapshotPath");
-    if (pathStr) {
-        g_settings.customSnapshotPath = pathStr;
-        Wh_FreeStringSetting(pathStr);
-    } else {
-        g_settings.customSnapshotPath = L"";
-    }
+    g_settings.customSnapshotPath = pathStr ? pathStr : L"";
+    if (pathStr) Wh_FreeStringSetting(pathStr);
 
     PCWSTR startupToolStr = Wh_GetStringSetting(L"defaultStartupTool");
     if (startupToolStr) {
-        if (_wcsicmp(startupToolStr, L"highlighter") == 0 || wcscmp(startupToolStr, L"2") == 0) g_settings.defaultStartupTool = 2;
-        else if (_wcsicmp(startupToolStr, L"laser") == 0 || wcscmp(startupToolStr, L"3") == 0) g_settings.defaultStartupTool = 3;
-        else if (_wcsicmp(startupToolStr, L"pointer") == 0 || wcscmp(startupToolStr, L"4") == 0) g_settings.defaultStartupTool = 4;
-        else g_settings.defaultStartupTool = 1;
+        if (_wcsicmp(startupToolStr, L"highlighter") == 0) g_settings.defaultStartupTool = 2;
+        else if (_wcsicmp(startupToolStr, L"laser") == 0) g_settings.defaultStartupTool = 3;
+        else if (_wcsicmp(startupToolStr, L"pointer") == 0) g_settings.defaultStartupTool = 4;
+        else g_settings.defaultStartupTool = 1; // pen
         Wh_FreeStringSetting(startupToolStr);
     } else {
         g_settings.defaultStartupTool = 1;
@@ -697,13 +685,13 @@ void LoadSettings() {
 
     PCWSTR laserStr = Wh_GetStringSetting(L"laserTrailDuration");
     if (laserStr) {
-        if (_wcsicmp(laserStr, L"200ms") == 0 || wcscmp(laserStr, L"200") == 0) g_settings.laserTrailDuration = 200;
-        else if (_wcsicmp(laserStr, L"400ms") == 0 || wcscmp(laserStr, L"400") == 0) g_settings.laserTrailDuration = 400;
-        else if (_wcsicmp(laserStr, L"600ms") == 0 || wcscmp(laserStr, L"600") == 0) g_settings.laserTrailDuration = 600;
-        else if (_wcsicmp(laserStr, L"1200ms") == 0 || wcscmp(laserStr, L"1200") == 0) g_settings.laserTrailDuration = 1200;
-        else if (_wcsicmp(laserStr, L"2000ms") == 0 || wcscmp(laserStr, L"2000") == 0) g_settings.laserTrailDuration = 2000;
-        else if (_wcsicmp(laserStr, L"3500ms") == 0 || wcscmp(laserStr, L"3500") == 0) g_settings.laserTrailDuration = 3500;
-        else if (_wcsicmp(laserStr, L"5000ms") == 0 || wcscmp(laserStr, L"5000") == 0) g_settings.laserTrailDuration = 5000;
+        if (_wcsicmp(laserStr, L"200ms") == 0) g_settings.laserTrailDuration = 200;
+        else if (_wcsicmp(laserStr, L"400ms") == 0) g_settings.laserTrailDuration = 400;
+        else if (_wcsicmp(laserStr, L"600ms") == 0) g_settings.laserTrailDuration = 600;
+        else if (_wcsicmp(laserStr, L"1200ms") == 0) g_settings.laserTrailDuration = 1200;
+        else if (_wcsicmp(laserStr, L"2000ms") == 0) g_settings.laserTrailDuration = 2000;
+        else if (_wcsicmp(laserStr, L"3500ms") == 0) g_settings.laserTrailDuration = 3500;
+        else if (_wcsicmp(laserStr, L"5000ms") == 0) g_settings.laserTrailDuration = 5000;
         else g_settings.laserTrailDuration = 800;
         Wh_FreeStringSetting(laserStr);
     } else {
@@ -724,11 +712,11 @@ void LoadSettings() {
 
     PCWSTR cSizeStr = Wh_GetStringSetting(L"crossSize");
     if (cSizeStr) {
-        if (_wcsicmp(cSizeStr, L"8px") == 0 || wcscmp(cSizeStr, L"8") == 0) g_settings.crossSize = 8;
-        else if (_wcsicmp(cSizeStr, L"12px") == 0 || wcscmp(cSizeStr, L"12") == 0) g_settings.crossSize = 12;
-        else if (_wcsicmp(cSizeStr, L"20px") == 0 || wcscmp(cSizeStr, L"20") == 0) g_settings.crossSize = 20;
-        else if (_wcsicmp(cSizeStr, L"24px") == 0 || wcscmp(cSizeStr, L"24") == 0) g_settings.crossSize = 24;
-        else if (_wcsicmp(cSizeStr, L"32px") == 0 || wcscmp(cSizeStr, L"32") == 0) g_settings.crossSize = 32;
+        if (_wcsicmp(cSizeStr, L"8px") == 0) g_settings.crossSize = 8;
+        else if (_wcsicmp(cSizeStr, L"12px") == 0) g_settings.crossSize = 12;
+        else if (_wcsicmp(cSizeStr, L"20px") == 0) g_settings.crossSize = 20;
+        else if (_wcsicmp(cSizeStr, L"24px") == 0) g_settings.crossSize = 24;
+        else if (_wcsicmp(cSizeStr, L"32px") == 0) g_settings.crossSize = 32;
         else g_settings.crossSize = 16;
         Wh_FreeStringSetting(cSizeStr);
     } else {
@@ -1068,7 +1056,7 @@ inline float GetDpiScaleForMonitor(HMONITOR hMon) {
     if (!hMon) return 1.0f;
     static auto pGetDpiForMonitor = []() -> HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*) {
         HMODULE hShcore = GetModuleHandleW(L"shcore.dll");
-        if (!hShcore) hShcore = LoadLibraryW(L"shcore.dll");
+        if (!hShcore) hShcore = LoadLibraryExW(L"shcore.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         return hShcore ? (HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*))GetProcAddress(hShcore, "GetDpiForMonitor") : nullptr;
     }();
     if (pGetDpiForMonitor) {
@@ -1217,6 +1205,16 @@ static D2D1_COLOR_F g_activeColor = kPresetColors[0];
 static float g_currentPenWidth = 3.5f;
 static bool g_inkVisible = true;
 
+// Unified Brush Sizing Constants
+constexpr float kMinPenWidth = 1.0f;
+constexpr float kMaxPenWidth = 60.0f;
+constexpr float kMinHighlighterWidth = 4.0f;
+constexpr float kMaxHighlighterWidth = 80.0f;
+constexpr int   kMinLaserTrailMs = 200;
+constexpr int   kMaxLaserTrailMs = 5000;
+constexpr float kMinEraserRadius = 6.0f;
+constexpr float kMaxEraserRadius = 150.0f;
+
 // Pan & Zoom state
 static float g_panOffsetX = 0.0f;
 static float g_panOffsetY = 0.0f;
@@ -1238,7 +1236,7 @@ static float g_eraserRadius = 24.0f;
 
 // Timer IDs
 const UINT_PTR TIMER_ID_UI_ANIMATION  = 1; // 30ms: Toast fade, size preview, zoom preview
-const UINT_PTR TIMER_ID_POINTER_WATCH = 2; // 20ms: Pointer (click-through) mode toolbar interaction
+const UINT_PTR TIMER_ID_POINTER_WATCH = 2; // 100ms: Pointer (click-through) mode toolbar interaction
 const UINT_PTR TIMER_ID_LASER         = 3; // 16ms: High-precision laser trail physics & erosion
 
 // Radial Menu State
@@ -1632,6 +1630,7 @@ void CreateRadialTextFormats(float scale) {
     if (scale <= 0.1f) scale = 1.0f;
     if (std::abs(scale - g_currentRadialFontScale) < 0.01f && g_pRadialIconFormat && g_pCenterBadgeFormat) return;
 
+    ClearTextLayoutCache();
     if (g_pRadialIconFormat) { g_pRadialIconFormat->Release(); g_pRadialIconFormat = nullptr; }
     if (g_pCenterBadgeFormat) { g_pCenterBadgeFormat->Release(); g_pCenterBadgeFormat = nullptr; }
     g_currentRadialFontScale = scale;
@@ -1675,6 +1674,7 @@ void CreateTextFormats(float scale) {
     if (scale <= 0.1f) scale = 1.0f;
     if (std::abs(scale - g_currentFontScale) < 0.01f && g_pTextFormat) return;
 
+    ClearTextLayoutCache();
     if (g_pToolbarKeyFormat) { g_pToolbarKeyFormat->Release(); g_pToolbarKeyFormat = nullptr; }
     if (g_pMenuKeyFormat) { g_pMenuKeyFormat->Release(); g_pMenuKeyFormat = nullptr; }
     if (g_pMenuTextFormat) { g_pMenuTextFormat->Release(); g_pMenuTextFormat = nullptr; }
@@ -2046,13 +2046,18 @@ struct MonitorBounds {
     float bottom;
 };
 
+static float s_cachedMonL = 0.0f, s_cachedMonT = 0.0f, s_cachedMonR = 0.0f, s_cachedMonB = 0.0f;
+
+inline void InvalidateMonitorBoundsCache() {
+    s_cachedMonL = s_cachedMonT = s_cachedMonR = s_cachedMonB = 0.0f;
+}
+
 inline void GetMonitorBoundsAt(float clientX, float clientY, float& outLeft, float& outTop, float& outRight, float& outBottom) {
-    static float s_cachedL = 0, s_cachedT = 0, s_cachedR = 0, s_cachedB = 0;
-    if (s_cachedR > s_cachedL && clientX >= s_cachedL && clientX < s_cachedR && clientY >= s_cachedT && clientY < s_cachedB) {
-        outLeft   = s_cachedL;
-        outTop    = s_cachedT;
-        outRight  = s_cachedR;
-        outBottom = s_cachedB;
+    if (s_cachedMonR > s_cachedMonL && clientX >= s_cachedMonL && clientX < s_cachedMonR && clientY >= s_cachedMonT && clientY < s_cachedMonB) {
+        outLeft   = s_cachedMonL;
+        outTop    = s_cachedMonT;
+        outRight  = s_cachedMonR;
+        outBottom = s_cachedMonB;
         return;
     }
 
@@ -2062,20 +2067,20 @@ inline void GetMonitorBoundsAt(float clientX, float clientY, float& outLeft, flo
     HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi = { sizeof(MONITORINFO) };
     if (hMon && GetMonitorInfo(hMon, &mi)) {
-        s_cachedL = (float)(mi.rcMonitor.left - vx);
-        s_cachedT = (float)(mi.rcMonitor.top - vy);
-        s_cachedR = (float)(mi.rcMonitor.right - vx);
-        s_cachedB = (float)(mi.rcMonitor.bottom - vy);
+        s_cachedMonL = (float)(mi.rcMonitor.left - vx);
+        s_cachedMonT = (float)(mi.rcMonitor.top - vy);
+        s_cachedMonR = (float)(mi.rcMonitor.right - vx);
+        s_cachedMonB = (float)(mi.rcMonitor.bottom - vy);
     } else {
-        s_cachedL = 0.0f;
-        s_cachedT = 0.0f;
-        s_cachedR = (float)GetSystemMetrics(SM_CXVIRTUALSCREEN);
-        s_cachedB = (float)GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        s_cachedMonL = 0.0f;
+        s_cachedMonT = 0.0f;
+        s_cachedMonR = (float)GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        s_cachedMonB = (float)GetSystemMetrics(SM_CYVIRTUALSCREEN);
     }
-    outLeft   = s_cachedL;
-    outTop    = s_cachedT;
-    outRight  = s_cachedR;
-    outBottom = s_cachedB;
+    outLeft   = s_cachedMonL;
+    outTop    = s_cachedMonT;
+    outRight  = s_cachedMonR;
+    outBottom = s_cachedMonB;
 }
 
 struct MonitorEntry {
@@ -3802,7 +3807,8 @@ void DrawInkingCursor(ID2D1HwndRenderTarget* pRT) {
     }
     else {
         // --- Precision Crosshair Cursor with Customizable Size ---
-        float arm = (float)std::max(4, g_settings.crossSize);
+        float scale = GetDpiScaleAtPoint(g_cursorX, g_cursorY);
+        float arm = (float)std::max(4, g_settings.crossSize) * scale;
 
         ID2D1SolidColorBrush* pShadowBrush = nullptr;
         ID2D1SolidColorBrush* pWhiteBrush = nullptr;
@@ -3819,24 +3825,24 @@ void DrawInkingCursor(ID2D1HwndRenderTarget* pRT) {
 
         // 1. Dual-contrast shadow lines (2.5px dark background for universal contrast)
         if (pShadowBrush) {
-            pRT->DrawLine(pLeft, pRight, pShadowBrush, 2.5f);
-            pRT->DrawLine(pTop, pBottom, pShadowBrush, 2.5f);
+            pRT->DrawLine(pLeft, pRight, pShadowBrush, 2.5f * scale);
+            pRT->DrawLine(pTop, pBottom, pShadowBrush, 2.5f * scale);
         }
 
         // 2. Crisp 1.2px white crosshair core
         if (pWhiteBrush) {
-            pRT->DrawLine(pLeft, pRight, pWhiteBrush, 1.2f);
-            pRT->DrawLine(pTop, pBottom, pWhiteBrush, 1.2f);
+            pRT->DrawLine(pLeft, pRight, pWhiteBrush, 1.2f * scale);
+            pRT->DrawLine(pTop, pBottom, pWhiteBrush, 1.2f * scale);
             pWhiteBrush->Release();
         }
 
         // 3. Pinpoint center dot in active brush color
         if (pShadowBrush) {
-            pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(g_cursorX, g_cursorY), 2.2f, 2.2f), pShadowBrush);
+            pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(g_cursorX, g_cursorY), 2.2f * scale, 2.2f * scale), pShadowBrush);
             pShadowBrush->Release();
         }
         if (pAccentBrush) {
-            pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(g_cursorX, g_cursorY), 1.4f, 1.4f), pAccentBrush);
+            pRT->FillEllipse(D2D1::Ellipse(D2D1::Point2F(g_cursorX, g_cursorY), 1.4f * scale, 1.4f * scale), pAccentBrush);
             pAccentBrush->Release();
         }
     }
@@ -3913,14 +3919,15 @@ void DrawZoomPreview(ID2D1HwndRenderTarget* pRT) {
     int zoomPct = (int)std::round(g_zoomScale * 100.0f);
     std::wstring text = L"Zoom: " + std::to_wstring(zoomPct) + L"%";
 
-    const float badgeW = 110.0f;
-    const float badgeH = 26.0f;
+    float scale = GetDpiScaleAtPoint((g_toolbarRect.left + g_toolbarRect.right) * 0.5f, g_toolbarRect.top);
+    const float badgeW = 110.0f * scale;
+    const float badgeH = 26.0f * scale;
     float badgeX = (g_toolbarRect.left + g_toolbarRect.right - badgeW) * 0.5f;
-    float badgeY = g_toolbarRect.top - badgeH - 8.0f;
+    float badgeY = g_toolbarRect.top - badgeH - 8.0f * scale;
     if (!g_settings.showBottomToolbar || badgeY < 10.0f) {
         D2D1_SIZE_F rtSize = pRT->GetSize();
         badgeX = (rtSize.width - badgeW) * 0.5f;
-        badgeY = rtSize.height - 60.0f;
+        badgeY = rtSize.height - 60.0f * scale;
     }
 
     D2D1_RECT_F rect = D2D1::RectF(badgeX, badgeY, badgeX + badgeW, badgeY + badgeH);
@@ -3934,8 +3941,8 @@ void DrawZoomPreview(ID2D1HwndRenderTarget* pRT) {
     pRT->CreateSolidColorBrush(D2D1::ColorF(0.95f, 0.96f, 0.98f, 0.95f * alpha), &pTextBrush);
 
     if (pBgBrush && pBorderBrush && pTextBrush && g_pTextFormat) {
-        pRT->FillRoundedRectangle(D2D1::RoundedRect(rect, 5.0f, 5.0f), pBgBrush);
-        pRT->DrawRoundedRectangle(D2D1::RoundedRect(rect, 5.0f, 5.0f), pBorderBrush, 1.0f);
+        pRT->FillRoundedRectangle(D2D1::RoundedRect(rect, 5.0f * scale, 5.0f * scale), pBgBrush);
+        pRT->DrawRoundedRectangle(D2D1::RoundedRect(rect, 5.0f * scale, 5.0f * scale), pBorderBrush, 1.0f);
         pRT->DrawText(text.c_str(), (UINT32)text.length(), g_pTextFormat, rect, pTextBrush);
     }
 
@@ -3961,10 +3968,11 @@ void DrawSnippingOverlay(ID2D1HwndRenderTarget* pRT) {
         }
 
         // Instruction badge near top center
-        const float badgeW = 380.0f;
-        const float badgeH = 36.0f;
+        float scale = GetDpiScaleAtPoint(w * 0.5f, 32.0f);
+        const float badgeW = 380.0f * scale;
+        const float badgeH = 36.0f * scale;
         float badgeX = (w - badgeW) * 0.5f;
-        float badgeY = 32.0f;
+        float badgeY = 32.0f * scale;
         D2D1_RECT_F badgeRect = D2D1::RectF(badgeX, badgeY, badgeX + badgeW, badgeY + badgeH);
 
         ID2D1SolidColorBrush* pBadgeBg = nullptr;
@@ -3975,8 +3983,8 @@ void DrawSnippingOverlay(ID2D1HwndRenderTarget* pRT) {
         pRT->CreateSolidColorBrush(D2D1::ColorF(0.95f, 0.98f, 1.00f, 1.00f), &pBadgeText);
 
         if (pBadgeBg && pBadgeBorder && pBadgeText && g_pTextFormat) {
-            pRT->FillRoundedRectangle(D2D1::RoundedRect(badgeRect, 6.0f, 6.0f), pBadgeBg);
-            pRT->DrawRoundedRectangle(D2D1::RoundedRect(badgeRect, 6.0f, 6.0f), pBadgeBorder, 1.2f);
+            pRT->FillRoundedRectangle(D2D1::RoundedRect(badgeRect, 6.0f * scale, 6.0f * scale), pBadgeBg);
+            pRT->DrawRoundedRectangle(D2D1::RoundedRect(badgeRect, 6.0f * scale, 6.0f * scale), pBadgeBorder, 1.2f * scale);
 
             std::wstring hint = L"Click and drag to snip a region  \u2022  ESC to cancel";
             pRT->DrawText(hint.c_str(), (UINT32)hint.length(), g_pTextFormat, badgeRect, pBadgeText);
@@ -4016,12 +4024,13 @@ void DrawSnippingOverlay(ID2D1HwndRenderTarget* pRT) {
         int cropW = (int)std::round(selRight - selLeft);
         int cropH = (int)std::round(selBottom - selTop);
         if (cropW > 30 && cropH > 20 && g_pTextFormat) {
+            float dimScale = GetDpiScaleAtPoint(selRight, selBottom);
             std::wstring dimText = std::to_wstring(cropW) + L" \u00D7 " + std::to_wstring(cropH);
-            float dimW = 90.0f;
-            float dimH = 22.0f;
+            float dimW = 90.0f * dimScale;
+            float dimH = 22.0f * dimScale;
             float dimX = selRight - dimW;
-            float dimY = selBottom + 6.0f;
-            if (dimY + dimH > h - 8.0f) dimY = selTop - dimH - 6.0f;
+            float dimY = selBottom + 6.0f * dimScale;
+            if (dimY + dimH > h - 8.0f) dimY = selTop - dimH - 6.0f * dimScale;
             if (dimX < 8.0f) dimX = selLeft;
 
             D2D1_RECT_F dimRect = D2D1::RectF(dimX, dimY, dimX + dimW, dimY + dimH);
@@ -4032,7 +4041,7 @@ void DrawSnippingOverlay(ID2D1HwndRenderTarget* pRT) {
             pRT->CreateSolidColorBrush(D2D1::ColorF(0.95f, 0.98f, 1.00f, 0.95f), &pDimText);
 
             if (pDimBg && pDimText) {
-                pRT->FillRoundedRectangle(D2D1::RoundedRect(dimRect, 4.0f, 4.0f), pDimBg);
+                pRT->FillRoundedRectangle(D2D1::RoundedRect(dimRect, 4.0f * dimScale, 4.0f * dimScale), pDimBg);
                 pRT->DrawText(dimText.c_str(), (UINT32)dimText.length(), g_pTextFormat, dimRect, pDimText);
             }
 
@@ -4066,22 +4075,25 @@ void DrawToast(ID2D1HwndRenderTarget* pRT, int screenW, int screenH) {
     pRT->CreateSolidColorBrush(D2D1::ColorF(0.32f, 0.85f, 0.69f, 0.90f * alpha), &pBorder);
     pRT->CreateSolidColorBrush(D2D1::ColorF(0.95f, 0.98f, 1.00f, 1.00f * alpha), &pText);
 
-    const float tw = 340.0f;
-    const float th = 40.0f;
+    HMONITOR hPrimaryMon = MonitorFromWindow(NULL, MONITOR_DEFAULTTOPRIMARY);
+    float scale = GetDpiScaleForMonitor(hPrimaryMon);
+    if (scale <= 0.1f) scale = 1.0f;
+
+    const float tw = 340.0f * scale;
+    const float th = 40.0f * scale;
 
     int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
     int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
     float toastX = (screenW - tw) * 0.5f;
-    float toastY = 40.0f;
+    float toastY = 40.0f * scale;
 
-    HMONITOR hPrimaryMon = MonitorFromWindow(NULL, MONITOR_DEFAULTTOPRIMARY);
     MONITORINFO mi = { sizeof(MONITORINFO) };
     if (hPrimaryMon && GetMonitorInfo(hPrimaryMon, &mi)) {
         float clientLeft = (float)(mi.rcMonitor.left - vx);
         float monW = (float)(mi.rcMonitor.right - mi.rcMonitor.left);
         float workTop = (float)(mi.rcWork.top - vy);
         toastX = clientLeft + (monW - tw) * 0.5f;
-        toastY = workTop + 24.0f;
+        toastY = workTop + 24.0f * scale;
     }
 
     D2D1_RECT_F toastRect = D2D1::RectF(
@@ -4091,12 +4103,12 @@ void DrawToast(ID2D1HwndRenderTarget* pRT, int screenW, int screenH) {
         toastY + th
     );
 
-    pRT->FillRoundedRectangle(D2D1::RoundedRect(toastRect, 6.0f, 6.0f), pBg);
-    pRT->DrawRoundedRectangle(D2D1::RoundedRect(toastRect, 6.0f, 6.0f), pBorder, 1.2f);
+    pRT->FillRoundedRectangle(D2D1::RoundedRect(toastRect, 6.0f * scale, 6.0f * scale), pBg);
+    pRT->DrawRoundedRectangle(D2D1::RoundedRect(toastRect, 6.0f * scale, 6.0f * scale), pBorder, 1.2f * scale);
 
     if (g_pIconFormat && g_pTextFormat) {
-        D2D1_RECT_F iconRect = D2D1::RectF(toastRect.left + 12.0f, toastRect.top, toastRect.left + 36.0f, toastRect.bottom);
-        D2D1_RECT_F textRect = D2D1::RectF(toastRect.left + 38.0f, toastRect.top, toastRect.right - 12.0f, toastRect.bottom);
+        D2D1_RECT_F iconRect = D2D1::RectF(toastRect.left + 12.0f * scale, toastRect.top, toastRect.left + 36.0f * scale, toastRect.bottom);
+        D2D1_RECT_F textRect = D2D1::RectF(toastRect.left + 38.0f * scale, toastRect.top, toastRect.right - 12.0f * scale, toastRect.bottom);
 
         ID2D1SolidColorBrush* pCheckBrush = nullptr;
         pRT->CreateSolidColorBrush(D2D1::ColorF(0.32f, 0.85f, 0.69f, 1.00f * alpha), &pCheckBrush);
@@ -4588,7 +4600,7 @@ void DrawBackdropFlyout(ID2D1HwndRenderTarget* pRT) {
     }
     if (!foundBtn) return;
 
-    auto monitors = GetSystemMonitorList();
+    const auto& monitors = GetSystemMonitorList();
     bool hasMultipleMonitors = (monitors.size() > 1);
 
     struct BackdropOptionItem {
@@ -5084,7 +5096,7 @@ void DrawColorFlyout(ID2D1HwndRenderTarget* pRT) {
     std::wstring hexStr = ColorToHex(g_customColor.activeColor, false);
     if (g_pMenuKeyFormat && pTextBrush) {
         D2D1_RECT_F hexTextR = D2D1::RectF(hexRect.left + 6.0f * scale, hexRect.top + 6.0f * scale, hexRect.right - 4.0f * scale, hexRect.bottom - 4.0f * scale);
-        DrawCachedText(pRT, hexStr, g_pMenuKeyFormat, hexTextR, pTextBrush);
+        pRT->DrawText(hexStr.c_str(), (UINT32)hexStr.length(), g_pMenuKeyFormat, hexTextR, pTextBrush);
     }
 
     // Preview Swatch Box
@@ -5294,20 +5306,21 @@ void DrawLaserCursor(ID2D1HwndRenderTarget* pRT) {
     pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.95f, 0.98f, 1.00f), &pSparkBrush);
 
     D2D1_POINT_2F pt = D2D1::Point2F(g_cursorX, g_cursorY);
+    float scale = GetDpiScaleAtPoint(g_cursorX, g_cursorY);
 
     if (pHaloBrush) {
         // Broad outer neon aura
-        pRT->FillEllipse(D2D1::Ellipse(pt, 9.0f, 9.0f), pHaloBrush);
+        pRT->FillEllipse(D2D1::Ellipse(pt, 9.0f * scale, 9.0f * scale), pHaloBrush);
         pHaloBrush->Release();
     }
     if (pCoreBrush) {
         // Vivid crimson core
-        pRT->FillEllipse(D2D1::Ellipse(pt, 4.5f, 4.5f), pCoreBrush);
+        pRT->FillEllipse(D2D1::Ellipse(pt, 4.5f * scale, 4.5f * scale), pCoreBrush);
         pCoreBrush->Release();
     }
     if (pSparkBrush) {
         // High-intensity white laser center spark
-        pRT->FillEllipse(D2D1::Ellipse(pt, 2.0f, 2.0f), pSparkBrush);
+        pRT->FillEllipse(D2D1::Ellipse(pt, 2.0f * scale, 2.0f * scale), pSparkBrush);
         pSparkBrush->Release();
     }
 }
@@ -5833,6 +5846,12 @@ void SaveCroppedSnapshot(int left, int top, int width, int height) {
                 if (pDIBV5) {
                     memcpy(pDIBV5, &bi5, sizeof(BITMAPV5HEADER));
                     GetDIBits(hDstDC, hCroppedBmp, 0, height, pDIBV5 + sizeof(BITMAPV5HEADER), (BITMAPINFO*)&bi5, DIB_RGB_COLORS);
+                    // Screen captures are fully opaque: force the alpha byte of each pixel to 0xFF
+                    // so applications honoring bV5AlphaMask (Paint.NET, GIMP, Office) do not paste a blank/transparent image.
+                    BYTE* px = pDIBV5 + sizeof(BITMAPV5HEADER);
+                    for (DWORD i = 3; i < dib5ImageSize; i += 4) {
+                        px[i] = 0xFF;
+                    }
                     GlobalUnlock(hDIBV5);
                     if (!SetClipboardData(CF_DIBV5, hDIBV5)) {
                         GlobalFree(hDIBV5);
@@ -5937,7 +5956,7 @@ void SetToolMode(ToolMode newMode) {
             LONG_PTR exStyle = GetWindowLongPtr(g_hOverlayWnd, GWL_EXSTYLE);
             SetWindowLongPtr(g_hOverlayWnd, GWL_EXSTYLE, exStyle | WS_EX_TRANSPARENT);
             SetWindowPos(g_hOverlayWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
-            SetTimer(g_hOverlayWnd, TIMER_ID_POINTER_WATCH, 20, NULL);
+            SetTimer(g_hOverlayWnd, TIMER_ID_POINTER_WATCH, 100, NULL);
 
             if (g_settings.showToastNotifications) {
                 g_toastMessage = L"Pointer Mode: Click-through active";
@@ -6012,13 +6031,14 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
     case WM_DISPLAYCHANGE: {
         GetSystemMonitorList(true); // Refresh cached monitor topologies
+        InvalidateMonitorBoundsCache();
         g_dpiScale = GetDpiScaleForHwnd(hwnd);
         int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
         int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
         int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
         int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
-        SetWindowPos(hwnd, HWND_TOPMOST, vx, vy, vw, vh, SWP_NOZORDER | SWP_NOACTIVATE);
+        SetWindowPos(hwnd, HWND_TOPMOST, vx, vy, vw, vh, SWP_NOACTIVATE);
         if (g_pRenderTarget) {
             g_pRenderTarget->Resize(D2D1::SizeU(vw, vh));
         }
@@ -6109,7 +6129,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 }
             }
             if (isHoveringWhiteboard) {
-                auto mons = GetSystemMonitorList();
+                const auto& mons = GetSystemMonitorList();
                 std::vector<CanvasMonitorScope> scopes = {
                     CanvasMonitorScope::ActiveCursor,
                     CanvasMonitorScope::AllMonitors,
@@ -6151,7 +6171,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         // Holding Right-click OR in Eraser Mode: Scroll wheel resizes eraser radius!
         if (g_isRightMouseDown || g_isRightClickErasing || g_currentTool == ToolMode::Eraser) {
             g_wheelUsedWhileRightMouseDown = true;
-            g_eraserRadius = std::max(6.0f, std::min(150.0f, g_eraserRadius + step * 3.0f));
+            g_eraserRadius = std::max(kMinEraserRadius, std::min(kMaxEraserRadius, g_eraserRadius + step * 3.0f));
             InvalidateOverlay();
             return 0;
         }
@@ -6183,7 +6203,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         // Laser Mode: Scroll wheel adjusts laser trail duration between 200ms (min) and 5000ms (max)!
         if (g_currentTool == ToolMode::Laser) {
             int stepMs = (delta > 0) ? 100 : -100;
-            g_settings.laserTrailDuration = std::max(200, std::min(5000, g_settings.laserTrailDuration + stepMs));
+            g_settings.laserTrailDuration = std::max(kMinLaserTrailMs, std::min(kMaxLaserTrailMs, g_settings.laserTrailDuration + stepMs));
             if (g_settings.showToastNotifications) {
                 wchar_t buf[64];
                 wsprintfW(buf, L"Laser Trail: %d ms (Min: 200ms, Max: 5000ms)", g_settings.laserTrailDuration);
@@ -6196,11 +6216,11 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         }
 
         if (g_currentTool == ToolMode::Highlighter) {
-            g_settings.defaultHighlighterWidth = std::max(4.0f, std::min(80.0f, g_settings.defaultHighlighterWidth + step * 2.0f));
+            g_settings.defaultHighlighterWidth = std::max(kMinHighlighterWidth, std::min(kMaxHighlighterWidth, g_settings.defaultHighlighterWidth + step * 2.0f));
             g_currentPenWidth = g_settings.defaultHighlighterWidth;
         }
         else {
-            g_settings.defaultPenWidth = std::max(1.0f, std::min(50.0f, g_settings.defaultPenWidth + step));
+            g_settings.defaultPenWidth = std::max(kMinPenWidth, std::min(kMaxPenWidth, g_settings.defaultPenWidth + step));
             g_currentPenWidth = g_settings.defaultPenWidth;
         }
         g_sizePreviewTime = GetTickCount64();
@@ -6387,16 +6407,20 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             return 0;
         }
         if (wParam == 'Z') {
-            if (GetKeyState(VK_SHIFT) & 0x8000) {
-                PerformRedo();
-            }
-            else {
-                PerformUndo();
+            if (GetKeyState(VK_CONTROL) & 0x8000) {
+                if (GetKeyState(VK_SHIFT) & 0x8000) {
+                    PerformRedo();
+                }
+                else {
+                    PerformUndo();
+                }
             }
             return 0;
         }
         if (wParam == 'Y') {
-            PerformRedo();
+            if (GetKeyState(VK_CONTROL) & 0x8000) {
+                PerformRedo();
+            }
             return 0;
         }
         if (wParam == 'S') {
@@ -6450,14 +6474,22 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         if (wParam == 'P') { SetToolMode((g_currentTool == ToolMode::Pan) ? ToolMode::Pen : ToolMode::Pan); return 0; }
         if (wParam == 'M') { SetToolMode((g_currentTool == ToolMode::Pointer) ? ToolMode::Pen : ToolMode::Pointer); return 0; }
         if (wParam == 'H') { SetToolMode(ToolMode::Highlighter); return 0; }
-        if (wParam == 'V') { g_inkVisible = !g_inkVisible; InvalidateOverlay(); return 0; }
-        if (wParam == 'C') {
-            if (!g_strokes.empty() || !g_laserStrokes.empty()) {
-                if (!g_strokes.empty()) PushUndoState();
-                g_strokes.clear();
-                g_laserStrokes.clear();
-                if (!g_isLaserDrawing) KillTimer(hwnd, TIMER_ID_LASER);
+        if (wParam == 'V') {
+            if (!(GetKeyState(VK_CONTROL) & 0x8000)) {
+                g_inkVisible = !g_inkVisible;
                 InvalidateOverlay();
+            }
+            return 0;
+        }
+        if (wParam == 'C') {
+            if (!(GetKeyState(VK_CONTROL) & 0x8000)) {
+                if (!g_strokes.empty() || !g_laserStrokes.empty()) {
+                    if (!g_strokes.empty()) PushUndoState();
+                    g_strokes.clear();
+                    g_laserStrokes.clear();
+                    if (!g_isLaserDrawing) KillTimer(hwnd, TIMER_ID_LASER);
+                    InvalidateOverlay();
+                }
             }
             return 0;
         }
@@ -6476,18 +6508,20 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             return 0;
         }
         if (wParam == '5') {
-            g_activeColor = g_customColor.activeColor;
-            g_colorFlyoutOpen = !g_colorFlyoutOpen;
-            g_shapesFlyoutOpen = false;
-            g_gridFlyoutOpen = false;
-            g_backdropFlyoutOpen = false;
-            if (g_colorFlyoutOpen && g_toolbarCollapsed) {
-                g_toolbarCollapsed = false;
-                BuildToolbarLayout(GetSystemMetrics(SM_CXVIRTUALSCREEN), GetSystemMetrics(SM_CYVIRTUALSCREEN));
-                SavePersistentToolbarState();
+            if (g_settings.showBottomToolbar) {
+                g_activeColor = g_customColor.activeColor;
+                g_colorFlyoutOpen = !g_colorFlyoutOpen;
+                g_shapesFlyoutOpen = false;
+                g_gridFlyoutOpen = false;
+                g_backdropFlyoutOpen = false;
+                if (g_colorFlyoutOpen && g_toolbarCollapsed) {
+                    g_toolbarCollapsed = false;
+                    BuildToolbarLayout(GetSystemMetrics(SM_CXVIRTUALSCREEN), GetSystemMetrics(SM_CYVIRTUALSCREEN));
+                    SavePersistentToolbarState();
+                }
+                SetToolMode(ToolMode::Pen);
+                InvalidateOverlay();
             }
-            SetToolMode(ToolMode::Pen);
-            InvalidateOverlay();
             return 0;
         }
         if (wParam == 'B') {
@@ -6527,7 +6561,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         }
         if (wParam == VK_OEM_4) { // '['
             if (g_currentTool == ToolMode::Laser) {
-                g_settings.laserTrailDuration = std::max(200, g_settings.laserTrailDuration - 100);
+                g_settings.laserTrailDuration = std::max(kMinLaserTrailMs, g_settings.laserTrailDuration - 100);
                 if (g_settings.showToastNotifications) {
                     wchar_t buf[64];
                     wsprintfW(buf, L"Laser Trail: %d ms (Min: 200ms, Max: 5000ms)", g_settings.laserTrailDuration);
@@ -6539,10 +6573,10 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 return 0;
             }
             if (g_currentTool == ToolMode::Highlighter) {
-                g_settings.defaultHighlighterWidth = std::max(4.0f, g_settings.defaultHighlighterWidth - 2.0f);
+                g_settings.defaultHighlighterWidth = std::max(kMinHighlighterWidth, g_settings.defaultHighlighterWidth - 2.0f);
                 g_currentPenWidth = g_settings.defaultHighlighterWidth;
             } else {
-                g_settings.defaultPenWidth = std::max(1.0f, g_settings.defaultPenWidth - 1.0f);
+                g_settings.defaultPenWidth = std::max(kMinPenWidth, g_settings.defaultPenWidth - 1.0f);
                 g_currentPenWidth = g_settings.defaultPenWidth;
             }
             g_sizePreviewTime = GetTickCount64();
@@ -6551,7 +6585,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         }
         if (wParam == VK_OEM_6) { // ']'
             if (g_currentTool == ToolMode::Laser) {
-                g_settings.laserTrailDuration = std::min(5000, g_settings.laserTrailDuration + 100);
+                g_settings.laserTrailDuration = std::min(kMaxLaserTrailMs, g_settings.laserTrailDuration + 100);
                 if (g_settings.showToastNotifications) {
                     wchar_t buf[64];
                     wsprintfW(buf, L"Laser Trail: %d ms (Min: 200ms, Max: 5000ms)", g_settings.laserTrailDuration);
@@ -6563,10 +6597,10 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 return 0;
             }
             if (g_currentTool == ToolMode::Highlighter) {
-                g_settings.defaultHighlighterWidth = std::min(80.0f, g_settings.defaultHighlighterWidth + 2.0f);
+                g_settings.defaultHighlighterWidth = std::min(kMaxHighlighterWidth, g_settings.defaultHighlighterWidth + 2.0f);
                 g_currentPenWidth = g_settings.defaultHighlighterWidth;
             } else {
-                g_settings.defaultPenWidth = std::min(60.0f, g_settings.defaultPenWidth + 1.0f);
+                g_settings.defaultPenWidth = std::min(kMaxPenWidth, g_settings.defaultPenWidth + 1.0f);
                 g_currentPenWidth = g_settings.defaultPenWidth;
             }
             g_sizePreviewTime = GetTickCount64();
@@ -6880,7 +6914,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             if (g_cursorX >= g_backdropFlyoutRect.left && g_cursorX <= g_backdropFlyoutRect.right &&
                 g_cursorY >= (g_backdropFlyoutRect.top + padY) && g_cursorY <= (g_backdropFlyoutRect.bottom - padY)) {
                 float relY = g_cursorY - (g_backdropFlyoutRect.top + padY);
-                auto monitors = GetSystemMonitorList();
+                const auto& monitors = GetSystemMonitorList();
                 bool hasMulti = (monitors.size() > 1);
                 if (relY >= 0.0f && relY < 3.0f * itemH) {
                     g_hoveredBackdropFlyoutItem = (int)(relY / itemH);
@@ -7465,7 +7499,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 float itemH = 30.0f * scale;
                 float divH = 8.0f * scale;
                 float relY = y - (g_backdropFlyoutRect.top + padY);
-                auto monitors = GetSystemMonitorList();
+                const auto& monitors = GetSystemMonitorList();
                 bool hasMulti = (monitors.size() > 1);
                 int clickedIdx = -1;
                 if (relY >= 0.0f && relY < 3.0f * itemH) {
@@ -8544,6 +8578,56 @@ HICON CreateGlyphIcon(WCHAR glyph, int size) {
     return hIcon;
 }
 
+static bool g_hotkeyRegistered = false;
+
+std::wstring GetConfiguredHotkeyString() {
+    std::wstring s;
+    if (g_settings.hotkeyMod & MOD_CONTROL) {
+        if (!s.empty()) s += L"+";
+        s += L"Ctrl";
+    }
+    if (g_settings.hotkeyMod & MOD_ALT) {
+        if (!s.empty()) s += L"+";
+        s += L"Alt";
+    }
+    if (g_settings.hotkeyMod & MOD_SHIFT) {
+        if (!s.empty()) s += L"+";
+        s += L"Shift";
+    }
+    if (g_settings.hotkeyMod & MOD_WIN) {
+        if (!s.empty()) s += L"+";
+        s += L"Win";
+    }
+
+    std::wstring keyPart;
+    if (g_settings.hotkeyKey >= 'A' && g_settings.hotkeyKey <= 'Z') {
+        keyPart += (wchar_t)g_settings.hotkeyKey;
+    } else if (g_settings.hotkeyKey >= '0' && g_settings.hotkeyKey <= '9') {
+        keyPart += (wchar_t)g_settings.hotkeyKey;
+    } else if (g_settings.hotkeyKey >= VK_F1 && g_settings.hotkeyKey <= VK_F24) {
+        keyPart = L"F" + std::to_wstring(g_settings.hotkeyKey - VK_F1 + 1);
+    } else {
+        UINT scanCode = MapVirtualKeyW(g_settings.hotkeyKey, MAPVK_VK_TO_VSC);
+        if (scanCode != 0) {
+            wchar_t keyName[32] = { 0 };
+            LONG lP = (scanCode << 16);
+            if (GetKeyNameTextW(lP, keyName, ARRAYSIZE(keyName)) > 0) {
+                keyPart = keyName;
+            }
+        }
+        if (keyPart.empty()) {
+            keyPart = L"Key";
+        }
+    }
+
+    if (!s.empty()) {
+        s += L"+" + keyPart;
+    } else {
+        s = keyPart;
+    }
+    return s;
+}
+
 void RemoveTrayIcon() {
     if (g_bTrayIconVisible) {
         Shell_NotifyIconW(NIM_DELETE, &g_nid);
@@ -8576,7 +8660,13 @@ void UpdateTrayIcon(HWND hwnd) {
     g_nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
     g_nid.uCallbackMessage = WM_USER_TRAYICON;
     g_nid.hIcon = g_hTrayIcon;
-    wcscpy_s(g_nid.szTip, L"WinDraw - Screen Inking & Annotation (Ctrl+Alt+G)");
+
+    std::wstring hotkeyStr = GetConfiguredHotkeyString();
+    if (!g_hotkeyRegistered) {
+        swprintf_s(g_nid.szTip, ARRAYSIZE(g_nid.szTip), L"WinDraw - Screen Inking & Annotation (Conflict: %s)", hotkeyStr.c_str());
+    } else {
+        swprintf_s(g_nid.szTip, ARRAYSIZE(g_nid.szTip), L"WinDraw - Screen Inking & Annotation (%s)", hotkeyStr.c_str());
+    }
 
     if (!g_bTrayIconVisible) {
         if (Shell_NotifyIconW(NIM_ADD, &g_nid)) {
@@ -8628,8 +8718,18 @@ LRESULT CALLBACK HotkeyWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             GetCursorPos(&pt);
             HMENU hMenu = CreatePopupMenu();
             if (hMenu) {
+                std::wstring hotkeyStr = GetConfiguredHotkeyString();
+                std::wstring openLabel;
+                if (g_bIsActive) {
+                    openLabel = L"Hide WinDraw\tEsc";
+                } else if (!g_hotkeyRegistered) {
+                    openLabel = L"Open WinDraw (Conflict)\t" + hotkeyStr;
+                } else {
+                    openLabel = L"Open WinDraw\t" + hotkeyStr;
+                }
+
                 // Header & Primary Toggle
-                AppendMenuW(hMenu, MF_STRING, 1, g_bIsActive ? L"Hide WinDraw\tEsc" : L"Open WinDraw\tCtrl+Alt+G");
+                AppendMenuW(hMenu, MF_STRING, 1, openLabel.c_str());
                 SetMenuDefaultItem(hMenu, 1, FALSE);
                 AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
 
@@ -8640,6 +8740,9 @@ LRESULT CALLBACK HotkeyWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 
                 UINT clearFlags = (g_bIsActive && (!g_strokes.empty() || !g_laserStrokes.empty())) ? MF_STRING : (MF_STRING | MF_GRAYED | MF_DISABLED);
                 AppendMenuW(hMenu, clearFlags, 3, L"Clear Canvas\tC");
+
+                AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
+                AppendMenuW(hMenu, MF_STRING, 7, L"Reset Toolbar Position\tCtrl+Shift+B");
 
                 if (g_bIsActive) {
                     AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
@@ -8674,6 +8777,18 @@ LRESULT CALLBACK HotkeyWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
                         InvalidateOverlay();
                     }
                 }
+                else if (cmd == 7) {
+                    g_toolbarCustomX = -1.0f;
+                    g_toolbarCustomY = -1.0f;
+                    SavePersistentToolbarState();
+                    if (g_hOverlayWnd && IsWindow(g_hOverlayWnd)) {
+                        int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+                        int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+                        BuildToolbarLayout(vw, vh);
+                        InvalidateOverlay();
+                    }
+                    ShowToastNotification(L"Toolbar Position Reset to Center");
+                }
             }
             return 0;
         }
@@ -8697,7 +8812,7 @@ LRESULT CALLBACK HotkeyWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
         LoadSettings();
         g_currentPenWidth = (g_currentTool == ToolMode::Highlighter) ? g_settings.defaultHighlighterWidth : g_settings.defaultPenWidth;
         UnregisterHotKey(hwnd, kHotkeyId);
-        RegisterHotKey(hwnd, kHotkeyId, g_settings.hotkeyMod | MOD_NOREPEAT, g_settings.hotkeyKey);
+        g_hotkeyRegistered = (RegisterHotKey(hwnd, kHotkeyId, g_settings.hotkeyMod | MOD_NOREPEAT, g_settings.hotkeyKey) != FALSE);
         UpdateTrayIcon(hwnd);
         if (g_hOverlayWnd && IsWindow(g_hOverlayWnd)) {
             int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
@@ -8770,8 +8885,8 @@ DWORD WINAPI HotkeyThread(LPVOID) {
         NULL, NULL, wc.hInstance, NULL
     );
 
-    BOOL bHotOk = RegisterHotKey(g_hHotkeyWnd, kHotkeyId, g_settings.hotkeyMod | MOD_NOREPEAT, g_settings.hotkeyKey);
-    if (!bHotOk) {
+    g_hotkeyRegistered = (RegisterHotKey(g_hHotkeyWnd, kHotkeyId, g_settings.hotkeyMod | MOD_NOREPEAT, g_settings.hotkeyKey) != FALSE);
+    if (!g_hotkeyRegistered) {
         Wh_Log(L"Warning - RegisterHotKey failed (error %lu)", GetLastError());
     } else {
         Wh_Log(L"Hotkey registered successfully");
