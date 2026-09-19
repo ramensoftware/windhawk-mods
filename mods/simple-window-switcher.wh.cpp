@@ -1083,6 +1083,9 @@ static std::vector<WindowEntry> g_savedAppList;
 static int g_savedSelectedIndex = 0;
 static int g_savedLayoutStartIndex = 0;
 static bool g_consumeEscUp = false;
+// Deferred auto-drill for Alt+Backtick "sameApp" + grouping (issue #5532): set when
+// the switcher is in its show-delay pending phase, consumed by RevealPendingSwitcher.
+static bool g_drillInAfterReveal = false;
 static bool g_isVisible = false, g_isSticky = false, g_isDarkMode = false;
 static HFONT g_hFont = NULL;
 static HTHEME g_hTheme = NULL;
@@ -1320,6 +1323,7 @@ static void UpdateChevronLayout(HWND hWnd);
 static void RestoreWindowIfIconic(HWND hWnd);
 static void UpdateChevronAnimationTargets(bool immediate = false);
 static int HitTestChevron(HWND hWnd, int x, int y);
+static void EnterAppGroup();
 
 static inline int DpiScale(int val, int dpi) { return MulDiv(val, dpi, 96); }
 
@@ -8230,6 +8234,17 @@ static void RevealPendingSwitcher() {
         KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
     }
     SetTimer(g_hSwitcher, SWS_DYNAMIC_RESIZE_TIMER_ID, 120, NULL);
+    // Deferred auto-drill for Alt+Backtick "sameApp" + grouping (issue #5532). The
+    // reveal is complete now, so it is safe to expand the current app's group.
+    if (g_drillInAfterReveal) {
+        g_drillInAfterReveal = false;
+        if (g_settings.showApplications && !g_drilledIn &&
+            g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size() &&
+            g_windows[g_selectedIndex].groupWindows.size() > 1) {
+            EnterAppGroup();
+        }
+    }
+
 }
 
 static void ApplyThemeToWindow(HWND hWnd) {
@@ -8468,6 +8483,7 @@ static void ShowSwitcher(bool sticky, bool immediate = false) {
     g_drilledIn = false;
     g_savedAppList.clear();
     g_consumeEscUp = false;
+    g_drillInAfterReveal = false;
     g_selectedIndex = (g_windows.size() > 1) ? 1 : 0;
     g_hoverIndex = -1;
     g_hoverThumbIndex = -1;
@@ -8729,6 +8745,7 @@ static void HideSwitcher() {
     g_drilledIn = false;
     g_savedAppList.clear();
     g_consumeEscUp = false;
+    g_drillInAfterReveal = false;
     g_isPaginatedView = false;
     g_isTouchpadGestureActive = false;
     if (g_hSwitcher) {
@@ -11300,6 +11317,22 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             }
             if (isAltBacktickTrigger) g_isAltBacktickSameApp = true;
             ShowSwitcher(isCtrl);
+
+            // When "Cycle Between Windows of Current Application" is combined with
+            // "Group Windows by Application", skip the collapsed group entry and open
+            // the current app's windows directly (issue #5532) — no extra Ctrl tap.
+            if (isAltBacktickTrigger && g_settings.showApplications && !g_drilledIn &&
+                g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size() &&
+                g_windows[g_selectedIndex].groupWindows.size() > 1) {
+                if (!g_isPendingShow) {
+                    // Immediate reveal: drill in now.
+                    EnterAppGroup();
+                } else {
+                    // Show-delay path: defer the drill until the pending reveal runs.
+                    // (RevealPendingSwitcher -> g_drillInAfterReveal consumed below.)
+                    g_drillInAfterReveal = true;
+                }
+            }
 
             if (isBackward && g_windows.size() > 1) {
                 g_selectedIndex = (int)g_windows.size() - 1;
