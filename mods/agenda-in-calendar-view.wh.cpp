@@ -1490,7 +1490,7 @@ std::wstring FormatFilterDate(SYSTEMTIME const& st) {
         GetLocalTime(&validSt);
     }
     wchar_t dateBuf[128]{};
-    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &validSt, L"dddd, MMM d", dateBuf, ARRAYSIZE(dateBuf), nullptr);
+    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &validSt, L"dddd, MMMM d", dateBuf, ARRAYSIZE(dateBuf), nullptr);
     return dateBuf;
 }
 
@@ -2071,7 +2071,7 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
                 m_datePicker.VerticalAlignment(wux::VerticalAlignment::Center);
                 m_datePicker.Margin(wux::Thickness{0, 0, 0, 6});
                 m_datePicker.IsTodayHighlighted(true);
-                m_datePicker.DateFormat(L"{dayofweek.full}, {month.abbreviated} {day.integer}");
+                m_datePicker.DateFormat(L"{dayofweek.full}, {month.full} {day.integer}");
                 m_datePicker.Date(winrt::clock::now());
                 m_dateChangedToken = m_datePicker.DateChanged([](wuxc::CalendarDatePicker const&, wuxc::CalendarDatePickerDateChangedEventArgs const& args) {
                     OnDatePickerDateChanged(args.NewDate());
@@ -2084,12 +2084,23 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
                             while (!queue.empty()) {
                                 auto current = queue.back();
                                 queue.pop_back();
+
+                                if (auto grid = current.try_as<wuxc::Grid>()) {
+                                    if (grid.ColumnDefinitions().Size() >= 3) {
+                                        grid.ColumnDefinitions().GetAt(2).Width(
+                                            wux::GridLength{0.0, wux::GridUnitType::Pixel}
+                                        );
+                                    }
+                                }
+
                                 int count = wuxm::VisualTreeHelper::GetChildrenCount(current);
                                 for (int i = 0; i < count; ++i) {
                                     auto child = wuxm::VisualTreeHelper::GetChild(current, i);
                                     if (auto fe = child.try_as<wux::FrameworkElement>()) {
                                         if (fe.Name() == L"CalendarGlyph") {
                                             fe.Visibility(wux::Visibility::Collapsed);
+                                        } else if (fe.Name() == L"DateText") {
+                                            wuxc::Grid::SetColumnSpan(fe, 2);
                                         }
                                     }
                                     queue.push_back(child);
