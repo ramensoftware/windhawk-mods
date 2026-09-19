@@ -45,8 +45,8 @@ The mod has been tested on Windows 10 1809, Windows 10 21H2, Windows 11 23H2, Wi
 - **DPI aware**: Opens at the correct DPI on high-DPI and mixed-DPI setups, using the monitor that hosts the network tray icon. If the flyout is moved to another monitor while it is open, close and reopen it to recalculate the DPI.
 - **Icon-relative placement**: The flyout appears next to the network tray icon on any taskbar edge (bottom, top, left or right) and follows the icon if you drag it to another slot.
 - **Rounded corners**: Optional modern look for Windows 11 or Aero theme
-- **Dual Theme Support**: Includes both light and dark themes, with the dark theme created specifically for late-night use and, if present, dark Aero theme.
-- **High Contrast support**: The flyout and the native controls automatically switch to system colors when a Windows High Contrast theme is active, ensuring readability with any HC scheme (HC#1, HC#2, etc.). Switching into or out of High Contrast is applied immediately without requiring the flyout to be reopened.
+- **Theme Support**: Light (classic Windows 7), Dark (custom late-night), Follow system theme (tracks Windows automatically: real High Contrast colors when HC is on, classic system colors when visual styles are off, otherwise the Aero light/dark app mode), Classic system colors, plus four fixed High Contrast themes (White, Black, #1, #2) that work even when Windows High Contrast is off.
+- **High Contrast support**: The flyout and the native controls automatically switch to system colors when a Windows High Contrast theme is active, ensuring readability with any HC scheme. Four fixed High Contrast themes (White, Black, #1, #2, using the genuine Windows 7 HC palettes) are also available as explicit choices. Switching themes is applied immediately without requiring the flyout to be reopened.
 - **Ethernet Support**: The mod should now properly show the flyout for Ethernet connection.
 - **Classic Network Center links**: Optionally restores the Windows 7 “Connect to a network” and HomeGroup/sharing links with their custom artwork.
 - **Restored classic Home/Public/Work network location icons**: The location icon shown in the flyout now matches the type of network (Public, Home, Work) and can be configured in the mod's options. 
@@ -122,14 +122,38 @@ If any issues are encountered, please report them to the author of the mod.
   $description: This setting shows the classic Windows 7 network location icon in the flyout header based on the active network profile (house = Home, bench = Public, buildings = Work). Disable it to restore the original generic network icon.
 - theme: light
   $name: Theme
-  $description: This setting allows to select the network flyout's theme.
+  $description: This setting selects the flyout color theme. Follow system theme tracks Windows automatically, Classic system colors always uses the live system palette, and the four High Contrast entries are fixed Windows 7 palettes.
   $options:
     - light: Light (Classic Windows 7)
     - dark: Dark (Custom)
+    - system: Follow system theme
+    - classic: Classic system colors
+    - hc-white: High Contrast White
+    - hc-black: High Contrast Black
+    - hc1: "High Contrast #1"
+    - hc2: "High Contrast #2"
 */
 // ==/WindhawkModSettings==
 // ## Changelog
-// - 5.1.0: Tried to enhance high contrast theme support
+// - 5.2.0: Fixed "Follow system colors" (renamed "Follow system theme") so it
+//   really follows the Windows theme instead of forcing the flat classic
+//   palette over Aero: with a real Windows High Contrast theme on it uses the
+//   live HC system colors, with visual styles off (classic theme, Fake High
+//   Contrast, basic msstyles setups) or a customized/hooked system palette it
+//   uses the classic system colors, and otherwise it follows the Aero
+//   light/dark app mode (AppsUseLightTheme). Light/dark switches
+//   (ImmersiveColorSet) and theme on/off (WM_THEMECHANGED) are applied live,
+//   restyle the native controls and re-tint the tooltip without reopening.
+// - 5.2.0: Added four fixed, independent High Contrast themes - White, Black,
+//   #1 and #2 - using the genuine Windows 7 HC system-color tables, so they
+//   render correctly even when Windows' own High Contrast flag is off, plus
+//   a "Classic system colors" theme preserving the previous always-GetSysColor
+//   behavior for Fake High Contrast users. Reported by OrthodoxToolkits.
+// - 5.2.0: Fixed several drawing paths that ignored High Contrast entirely:
+//   the flyout checkbox/label colors, the password-dialog buttons (now
+//   owner-drawn with the fixed HC palette under the fixed HC themes) and
+//   checkbox, the keyboard-focus rectangle (was invisible black-on-black),
+//   and the refresh/chevron artwork that used light-theme assets under HC.
 // - 5.0.0: The tray-info window (used to publish the network tray icon to a
 //   RetroBar instance of this mod, and to receive TaskbarCreated on the
 //   hotkey thread) is now a real, never-shown top-level window instead of an
@@ -186,12 +210,16 @@ If any issues are encountered, please report them to the author of the mod.
 //   registered window message. The periodic retry also honours its
 //   exponential backoff now (it was forced on every 3 s tick), so a setup
 //   where the icon cannot be resolved no longer polls forever.
-// - 5.1.0: High Contrast detection now also recognizes the "Fake High
-//   Contrast" Windhawk mod (id: fake-high-contrast). That mod excludes
-//   explorer.exe/dwm.exe from its own hook, so SPI_GETHIGHCONTRAST and
-//   GetSystemMetrics(SM_HIGHCONTRAST) called from this process never see its
-//   effect; the state is now read directly from the Windhawk registry
-//   settings it persists instead. Reported by OrthodoxToolkits.
+// - 5.1.0: Added a "Follow system colors" theme option. Pick it if you use a
+//   mod like Fake High Contrast, or any classic/msstyles setup, that makes
+//   other programs use system colors without Windows' own High Contrast flag
+//   being on: this makes the flyout follow suit, the same way it already
+//   does automatically for real Windows High Contrast. An earlier attempt at
+//   this read Fake High Contrast's setting directly out of Windhawk's
+//   internal registry layout to auto-detect it; that coupled this mod to
+//   another mod's undocumented internals for no real benefit over a
+//   dedicated setting, so it was replaced with this option instead.
+//   Reported by OrthodoxToolkits.
 // - 5.0.0: Added High Contrast theme support. When a Windows High Contrast
 //   theme is active, the flyout, the notification popup, the connect button,
 //   the password dialog, and the native controls all switch to system colors
@@ -375,6 +403,15 @@ static inline int GetRefreshButtonLeftOffset() {
     return (WINDOW_WIDTH * 7) / 1000;
 }
 
+#define THEME_LIGHT  0
+#define THEME_DARK   1
+#define THEME_SYSTEM 2
+#define THEME_CLASSIC 3
+#define THEME_HCWHITE 4
+#define THEME_HCBLACK 5
+#define THEME_HC1     6
+#define THEME_HC2     7
+
 // Define settings early so they are available to RecalcDpiMetrics and UI helpers
 struct ModSettings {
     BOOL interceptNativeFlyout;
@@ -384,8 +421,8 @@ struct ModSettings {
     BOOL enableHotkey;
     BOOL useRoundedCorners;
     BOOL useNetworkLocationIcons;  // TRUE = show Home/Public/Work icons; FALSE = original generic icon
-    int  theme;          // 0=light, 1=dark
-} g_Settings = { TRUE, FALSE, 3000, 0, FALSE, TRUE, TRUE, 0 };
+    int  theme;          // THEME_LIGHT, THEME_DARK, THEME_SYSTEM, THEME_CLASSIC, THEME_HCWHITE, THEME_HCBLACK, THEME_HC1 or THEME_HC2
+} g_Settings = { TRUE, FALSE, 3000, 0, FALSE, TRUE, TRUE, THEME_LIGHT };
 
 void LoadSettings() {
     int raw_intercept  = Wh_GetIntSetting(L"interceptNativeFlyout");
@@ -409,7 +446,14 @@ void LoadSettings() {
     int raw_roundedCorners = Wh_GetIntSetting(L"useRoundedCorners");
     int raw_netLocIcons = Wh_GetIntSetting(L"useNetworkLocationIcons");
     WindhawkUtils::StringSetting theme = WindhawkUtils::StringSetting::make(L"theme");
-    int raw_theme = (_wcsicmp(theme.get(), L"dark") == 0) ? 1 : 0;
+    int raw_theme = THEME_LIGHT;
+    if (_wcsicmp(theme.get(), L"dark") == 0)        raw_theme = THEME_DARK;
+    else if (_wcsicmp(theme.get(), L"system") == 0) raw_theme = THEME_SYSTEM;
+    else if (_wcsicmp(theme.get(), L"classic") == 0)   raw_theme = THEME_CLASSIC;
+    else if (_wcsicmp(theme.get(), L"hc-white") == 0)  raw_theme = THEME_HCWHITE;
+    else if (_wcsicmp(theme.get(), L"hc-black") == 0)  raw_theme = THEME_HCBLACK;
+    else if (_wcsicmp(theme.get(), L"hc1") == 0)       raw_theme = THEME_HC1;
+    else if (_wcsicmp(theme.get(), L"hc2") == 0)       raw_theme = THEME_HC2;
     
     g_Settings.interceptNativeFlyout     = raw_intercept   != 0;
     g_Settings.privacyMode              = raw_privacy     != 0;
@@ -425,154 +469,266 @@ void LoadSettings() {
     }
 }
 
-// ----------------------------------------------------------------------------
-// High Contrast support
-// When a High Contrast theme is active, the flyout abandons its custom
-// light/dark palettes and follows the system colors, matching the behaviour
-// of the classic Windows 7 UI and the Action Center Recreation mod.
-// The state is cached with a short TTL so the paint path does not pay a
-// SystemParametersInfo call on every redraw. A dedicated WM_SETTINGCHANGE/
-// SPI_SETHIGHCONTRAST handler force-refreshes the cache and invalidates
-// any open flyout, so switching into/out of High Contrast is immediate.
-// ----------------------------------------------------------------------------
-static bool g_cachedHighContrast = false;
-static DWORD g_lastHCCheckTick = 0;
 
 // ----------------------------------------------------------------------------
-// Compatibility with the "Fake High Contrast" Windhawk mod (id:
-// fake-high-contrast, author: Ingan121).
+// Theme engine (5.2.0)
 //
-// That mod hooks SystemParametersInfoW(SPI_GETHIGHCONTRAST) to make other
-// programs believe HC is on, but its own metadata block explicitly excludes
-// explorer.exe and dwm.exe:
-//   // @exclude explorer.exe
-//   // @exclude dwm.exe
-// (it says so itself: hooking explorer would flip the *real* HC status every
-// time the user switches back to the current desktop, e.g. after UAC/Ctrl+
-// Alt+Del, and hooking dwm adds unwanted HC window borders).
+// Every color in the flyout, the password dialog, the tooltip and the native
+// controls is resolved through GetEffectiveTheme() below:
 //
-// Because of that exclusion, the mod's DLL is never even loaded into
-// explorer.exe, so there is no hook to observe from here: SPI_GETHIGHCONTRAST
-// and GetSystemMetrics(SM_HIGHCONTRAST), called from this process, both
-// return the real, unmodified OS state. The only surviving trace of the
-// mod's state is the setting Windhawk itself persists to the registry, so we
-// read that directly. Best-effort: if the mod isn't installed, or the key
-// layout ever changes, this simply reports "not active" and the mod falls
-// back to the real OS High Contrast state as before.
-// RAII guard so a `continue`/`return` out of the loop below can never leak
-// an open HKEY, even if something throws past it.
-struct ScopedRegKey {
-    HKEY hKey = NULL;
-    ~ScopedRegKey() { if (hKey) RegCloseKey(hKey); }
+// - THEME_LIGHT / THEME_DARK: fixed palettes, except that a real Windows
+//   High Contrast theme always wins and switches them to the live HC system
+//   colors (same automatic behavior as before).
+// - THEME_SYSTEM ("Follow system theme"): tracks Windows for real. With a
+//   real High Contrast theme on it uses the live HC system colors; with
+//   visual styles off (classic theme, Fake High Contrast, basic msstyles
+//   setups) or a customized/hooked system palette it uses the classic system
+//   colors; otherwise it follows the Aero light/dark app mode
+//   (AppsUseLightTheme). Previously this option forced the flat classic
+//   palette even over Aero, which is why it never matched the Aero theme.
+// - THEME_CLASSIC: always the live system palette (the previous
+//   "Follow system colors" behavior), for Fake High Contrast users.
+// - THEME_HCWHITE / THEME_HCBLACK / THEME_HC1 / THEME_HC2: fixed,
+//   independent palettes using the genuine Windows 7 High Contrast
+//   system-color tables, so they render correctly even when Windows' own
+//   High Contrast flag is off.
+//
+// The SPI/registry queries are cached with a short TTL so the paint path
+// stays cheap. WM_SETTINGCHANGE (SPI_SETHIGHCONTRAST, ImmersiveColorSet)
+// and WM_THEMECHANGED force-refresh the caches, restyle the native
+// controls and repaint, so every switch is immediate.
+// ----------------------------------------------------------------------------
+enum EffectiveTheme {
+    EFF_LIGHT = 0,
+    EFF_DARK,
+    EFF_SYSTEM_HC,    // real Windows High Contrast: live GetSysColor() palette
+    EFF_CLASSIC_SYS,  // classic system colors: live GetSysColor(), no HC flag
+    EFF_HCWHITE,      // fixed Windows 7 High Contrast White table
+    EFF_HCBLACK,      // fixed Windows 7 High Contrast Black table
+    EFF_HC1,          // fixed Windows 7 High Contrast #1 table
+    EFF_HC2           // fixed Windows 7 High Contrast #2 table
 };
 
-static bool IsFakeHighContrastModConsideredActiveImpl() {
-    static const wchar_t* kModId = L"fake-high-contrast";
-    static const wchar_t* kRoots[] = {
-        L"SOFTWARE\\Windhawk\\Engine\\Mods\\",
-    };
-    static const HKEY kHives[] = { HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE };
+static bool  g_cachedRealHC = false;
+static DWORD g_lastRealHCCheckTick = 0;
+static bool  g_cachedDarkMode = false;
+static DWORD g_lastDarkModeCheckTick = 0;
 
-    for (HKEY hive : kHives) {
-        for (const wchar_t* root : kRoots) {
-            std::wstring modKeyPath = std::wstring(root) + kModId;
-
-            ScopedRegKey modKey;
-            if (RegOpenKeyExW(hive, modKeyPath.c_str(), 0, KEY_READ, &modKey.hKey) != ERROR_SUCCESS) {
-                continue;
-            }
-
-            // If the mod itself is disabled, its hook isn't running anywhere,
-            // so treat it as inactive. Tolerant of the value being absent
-            // (older/newer Windhawk versions) or of a different type.
-            DWORD disabled = 0, disabledSize = sizeof(disabled), disabledType = 0;
-            if (RegQueryValueExW(modKey.hKey, L"Disabled", NULL, &disabledType,
-                                  (LPBYTE)&disabled, &disabledSize) == ERROR_SUCCESS &&
-                disabledType == REG_DWORD && disabled != 0) {
-                continue;
-            }
-
-            ScopedRegKey settingsKey;
-            if (RegOpenKeyExW(modKey.hKey, L"Settings", 0, KEY_READ, &settingsKey.hKey) != ERROR_SUCCESS) {
-                continue;
-            }
-
-            // Mirror the mod's own "fakeoff" setting: when set, it makes
-            // SPI_GETHIGHCONTRAST report HCF_AVAILABLE (i.e. not faked on) to
-            // the processes it does hook, so treat that the same way here.
-            bool fakeOff = false;
-            DWORD dwVal = 0, dwSize = sizeof(dwVal), dwType = 0;
-            if (RegQueryValueExW(settingsKey.hKey, L"fakeoff", NULL, &dwType,
-                                  (LPBYTE)&dwVal, &dwSize) == ERROR_SUCCESS) {
-                if (dwType == REG_DWORD) {
-                    fakeOff = dwVal != 0;
-                } else if (dwType == REG_SZ || dwType == REG_EXPAND_SZ) {
-                    WCHAR buf[32] = { 0 };
-                    DWORD bufSize = sizeof(buf);
-                    if (RegQueryValueExW(settingsKey.hKey, L"fakeoff", NULL, NULL,
-                                          (LPBYTE)buf, &bufSize) == ERROR_SUCCESS) {
-                        buf[(bufSize / sizeof(WCHAR)) < 31 ? (bufSize / sizeof(WCHAR)) : 31] = L'\0';
-                        fakeOff = _wtoi(buf) != 0;
-                    }
-                }
-            }
-
-            return !fakeOff;
-        }
-    }
-    return false;
-}
-
-// Thin wrapper: never let a failure here (e.g. std::wstring allocation
-// failure under low memory) escape into explorer.exe's message loop. Falls
-// back to "not active", which just means the flyout keeps following the
-// real, unmodified OS High Contrast state.
-static bool IsFakeHighContrastModConsideredActive() {
-    try {
-        return IsFakeHighContrastModConsideredActiveImpl();
-    } catch (const std::exception& e) {
-        Wh_Log(L"[HighContrast] IsFakeHighContrastModConsideredActive threw: %S", e.what());
-        return false;
-    } catch (...) {
-        Wh_Log(L"[HighContrast] IsFakeHighContrastModConsideredActive threw an unknown exception");
-        return false;
-    }
-}
-
-// Shared by IsHighContrastActive/RefreshHighContrastNow. Wrapped in its own
-// try/catch so a problem in either half (the real SPI query or the
-// fake-high-contrast registry lookup) can never leave the cache in a
-// half-updated state or unwind into explorer.exe.
-static bool QueryCombinedHighContrastState() {
+// Real Windows High Contrast flag only (HCF_HIGHCONTRASTON). Wrapped in a
+// try/catch so a problem in the SPI query can never unwind into explorer.exe.
+static bool QueryRealHighContrastState() {
     try {
         HIGHCONTRASTW hc = { sizeof(hc) };
-        bool realHC =
-            (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) &&
-             (hc.dwFlags & HCF_HIGHCONTRASTON)) != 0;
-        return realHC || IsFakeHighContrastModConsideredActive();
+        return (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) &&
+                (hc.dwFlags & HCF_HIGHCONTRASTON)) != 0;
     } catch (const std::exception& e) {
-        Wh_Log(L"[HighContrast] QueryCombinedHighContrastState threw: %S", e.what());
+        Wh_Log(L"[Theme] QueryRealHighContrastState threw: %S", e.what());
         return false;
     } catch (...) {
-        Wh_Log(L"[HighContrast] QueryCombinedHighContrastState threw an unknown exception");
+        Wh_Log(L"[Theme] QueryRealHighContrastState threw an unknown exception");
         return false;
     }
 }
 
-static bool IsHighContrastActive() {
+static bool IsRealHighContrastActive() {
     DWORD now = GetTickCount();
-    if (now - g_lastHCCheckTick > 2000) {
-        g_cachedHighContrast = QueryCombinedHighContrastState();
-        g_lastHCCheckTick = now;
+    if (now - g_lastRealHCCheckTick > 2000) {
+        g_cachedRealHC = QueryRealHighContrastState();
+        g_lastRealHCCheckTick = now;
     }
-    return g_cachedHighContrast;
+    return g_cachedRealHC;
 }
 
-// Forces an immediate, non-cached re-check of High Contrast state.
-static void RefreshHighContrastNow() {
-    g_cachedHighContrast = QueryCombinedHighContrastState();
-    g_lastHCCheckTick = GetTickCount();
+static inline int SysColorLuminance(COLORREF c) {
+    return (GetRValue(c) * 299 + GetGValue(c) * 587 + GetBValue(c) * 114) / 1000;
 }
+
+// Aero light/dark app mode (Windows 10+): "Settings > Personalization >
+// Colors > Choose your default app mode". Falls back to the luminance of
+// the window background when the value was never created (user never
+// opened Settings) or on older systems.
+static bool QuerySystemDarkMode() {
+    DWORD value = 1;
+    DWORD size = sizeof(value);
+    if (RegGetValueW(HKEY_CURRENT_USER,
+            L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+            L"AppsUseLightTheme", RRF_RT_REG_DWORD, NULL, &value, &size) == ERROR_SUCCESS) {
+        return value == 0;
+    }
+    return SysColorLuminance(GetSysColor(COLOR_WINDOW)) < 128;
+}
+
+static bool IsSystemDarkMode() {
+    DWORD now = GetTickCount();
+    if (now - g_lastDarkModeCheckTick > 2000) {
+        g_cachedDarkMode = QuerySystemDarkMode();
+        g_lastDarkModeCheckTick = now;
+    }
+    return g_cachedDarkMode;
+}
+
+// TRUE when the live system palette was customized away from stock themed
+// Aero. Stock Aero (Win7/10/11, non-HC) always has a white window
+// background, so a dark COLOR_WINDOW means something redefined the palette
+// (Fake High Contrast mod, SetSysColors, a dark classic color scheme) and
+// THEME_SYSTEM honors it instead of the fixed Aero palette. This keeps Fake
+// High Contrast working without coupling this mod to that mod's
+// undocumented settings (see the 5.1.0 changelog note).
+static bool SystemColorsLookCustomized() {
+    return SysColorLuminance(GetSysColor(COLOR_WINDOW)) < 128;
+}
+
+static EffectiveTheme GetEffectiveTheme() {
+    switch (g_Settings.theme) {
+        case THEME_HCWHITE: return EFF_HCWHITE;
+        case THEME_HCBLACK: return EFF_HCBLACK;
+        case THEME_HC1:     return EFF_HC1;
+        case THEME_HC2:     return EFF_HC2;
+        case THEME_CLASSIC: return EFF_CLASSIC_SYS;
+        case THEME_DARK:
+            if (IsRealHighContrastActive()) return EFF_SYSTEM_HC;
+            return EFF_DARK;
+        case THEME_LIGHT:
+            if (IsRealHighContrastActive()) return EFF_SYSTEM_HC;
+            return EFF_LIGHT;
+        case THEME_SYSTEM:
+        default:
+            if (IsRealHighContrastActive()) return EFF_SYSTEM_HC;
+            // No visual styles: classic theme, Fake High Contrast or a basic
+            // msstyles setup - every other program draws with system colors.
+            if (!IsThemeActive()) return EFF_CLASSIC_SYS;
+            // Visual styles on but the palette was redefined/hooked (Fake
+            // High Contrast keeps themes enabled on some setups).
+            if (SystemColorsLookCustomized()) return EFF_CLASSIC_SYS;
+            return IsSystemDarkMode() ? EFF_DARK : EFF_LIGHT;
+    }
+}
+
+static inline bool IsDarkEffective() {
+    return GetEffectiveTheme() == EFF_DARK;
+}
+
+static inline bool IsFixedHighContrastTheme() {
+    EffectiveTheme eff = GetEffectiveTheme();
+    return eff == EFF_HCWHITE || eff == EFF_HCBLACK ||
+           eff == EFF_HC1 || eff == EFF_HC2;
+}
+
+// TRUE when all drawing must come from a system/HC palette (live or fixed)
+// instead of the custom light/dark artwork. This is the single predicate
+// the paint code, the dialogs and the native-control theming branch on.
+static bool IsHighContrastActive() {
+    EffectiveTheme eff = GetEffectiveTheme();
+    return eff == EFF_SYSTEM_HC || eff == EFF_CLASSIC_SYS ||
+           IsFixedHighContrastTheme();
+}
+
+static inline bool IsLightEffective() {
+    return !IsDarkEffective() && !IsHighContrastActive();
+}
+
+// The Connect/password buttons are custom owner-drawn in dark mode (the
+// original dark artwork) and under the fixed HC themes (flat themed
+// drawing, since a native button would use the real system palette, not
+// the fixed one). Everywhere else they stay native so they match the
+// live system - including real High Contrast, which styles them itself.
+static inline bool ShouldUseOwnerDrawButtons() {
+    return IsDarkEffective() || IsFixedHighContrastTheme();
+}
+
+// Forces an immediate, non-cached re-check of the theme state.
+static void RefreshThemeStateNow() {
+    g_cachedRealHC = QueryRealHighContrastState();
+    g_lastRealHCCheckTick = GetTickCount();
+    g_cachedDarkMode = QuerySystemDarkMode();
+    g_lastDarkModeCheckTick = g_lastRealHCCheckTick;
+}
+
+
+// ----------------------------------------------------------------------------
+// Fixed Windows 7 High Contrast system-color tables, indexed by the COLOR_*
+// constants 0..29 (COLOR_SCROLLBAR..COLOR_MENUHILIGHT). Captured from the stock
+// Win7 HC themes: White is black-on-white, Black is white-on-black, #1 is
+// yellow-on-black and #2 is green-on-black, each with its own selection,
+// link and control colors.
+// ----------------------------------------------------------------------------
+static COLORREF FixedHCPaletteColor(EffectiveTheme eff, int nIndex) {
+    // Columns: index, White, Black, #1, #2 (0x00BBGGRR).
+    static const COLORREF kTable[4][30] = {
+        { // High Contrast White
+            RGB(255,255,255), RGB(128,128,128), RGB(  0,  0,  0), RGB(255,255,255), RGB(255,255,255),
+            RGB(255,255,255), RGB(  0,  0,  0), RGB(  0,  0,  0), RGB(  0,  0,  0), RGB(255,255,255),
+            RGB(128,128,128), RGB(192,192,192), RGB(128,128,128), RGB(  0,  0,  0), RGB(255,255,255),
+            RGB(255,255,255), RGB(128,128,128), RGB(  0,128,  0), RGB(  0,  0,  0), RGB(  0,  0,  0),
+            RGB(192,192,192), RGB(  0,  0,  0), RGB(192,192,192), RGB(  0,  0,  0), RGB(255,255,255),
+            RGB(  0,  0,  0), RGB(  0,  0,  0), RGB(255,255,255), RGB(  0,  0,  0), RGB(255,255,255),
+        },
+        { // High Contrast Black
+            RGB(  0,  0,  0), RGB(  0,  0,  0), RGB(128,  0,128), RGB(  0,128,  0), RGB(  0,  0,  0),
+            RGB(  0,  0,  0), RGB(255,255,255), RGB(255,255,255), RGB(255,255,255), RGB(255,255,255),
+            RGB(255,255,  0), RGB(  0,128,  0), RGB(  0,  0,  0), RGB(128,  0,128), RGB(255,255,255),
+            RGB(  0,  0,  0), RGB(128,128,128), RGB(  0,255,  0), RGB(255,255,255), RGB(255,255,255),
+            RGB(192,192,192), RGB(255,255,255), RGB(255,255,255), RGB(255,255,255), RGB(  0,  0,  0),
+            RGB(128,128,255), RGB(128,  0,128), RGB(  0,128,  0), RGB(128,  0,128), RGB(  0,  0,  0),
+        },
+        { // High Contrast #1
+            RGB(  0,  0,  0), RGB(  0,  0,  0), RGB(  0,  0,255), RGB(  0,255,255), RGB(  0,  0,  0),
+            RGB(  0,  0,  0), RGB(255,255,255), RGB(255,255,255), RGB(255,255,  0), RGB(255,255,255),
+            RGB(  0,  0,255), RGB(  0,255,255), RGB(  0,  0,  0), RGB(  0,128,  0), RGB(255,255,255),
+            RGB(  0,  0,  0), RGB(128,128,128), RGB(  0,255,  0), RGB(255,255,255), RGB(  0,  0,  0),
+            RGB(192,192,192), RGB(255,255,255), RGB(255,255,255), RGB(255,255,  0), RGB(  0,  0,  0),
+            RGB(128,128,255), RGB(  0,  0,255), RGB(  0,255,255), RGB(  0,128,  0), RGB(  0,  0,  0),
+        },
+        { // High Contrast #2
+            RGB(  0,  0,  0), RGB(255,255,255), RGB(  0,255,255), RGB(  0,  0,255), RGB(  0,  0,  0),
+            RGB(  0,  0,  0), RGB(255,255,255), RGB(  0,255,  0), RGB(  0,255,  0), RGB(  0,  0,  0),
+            RGB(  0,255,255), RGB(  0,  0,255), RGB(255,255,255), RGB(  0,  0,255), RGB(255,255,255),
+            RGB(  0,  0,  0), RGB(128,128,128), RGB(192,192,192), RGB(  0,255,  0), RGB(255,255,255),
+            RGB(192,192,192), RGB(255,255,255), RGB(255,255,255), RGB(  0,  0,  0), RGB(255,255,  0),
+            RGB(128,128,255), RGB(  0,255,255), RGB(  0,  0,255), RGB(  0,  0,255), RGB(  0,  0,  0),
+        },
+    };
+    int row = -1;
+    if (eff == EFF_HCWHITE)      row = 0;
+    else if (eff == EFF_HCBLACK) row = 1;
+    else if (eff == EFF_HC1)     row = 2;
+    else if (eff == EFF_HC2)     row = 3;
+    if (row < 0 || nIndex < 0 || nIndex >= 30) return (COLORREF)-1;
+    return kTable[row][nIndex];
+}
+
+// System color lookup for themed drawing: the fixed Win7 HC tables above
+// under the fixed HC themes, otherwise the live system palette.
+static COLORREF GetThemedSysColor(int nIndex) {
+    COLORREF fixed = FixedHCPaletteColor(GetEffectiveTheme(), nIndex);
+    if (fixed != (COLORREF)-1) return fixed;
+    return GetSysColor(nIndex);
+}
+
+// Cached solid brushes of GetThemedSysColor(), for the WM_CTLCOLOR*
+// handlers (which must return a brush that stays valid after they return).
+// The cached COLORREF is compared on every call, so a theme switch
+// transparently rebuilds any stale brush. Freed by FreeCachedThemeBrushes().
+static HBRUSH   g_themedBrushCache[30] = {};
+static COLORREF g_themedBrushColor[30];
+static bool     g_themedBrushColorInit = false;
+
+static HBRUSH GetThemedSysColorBrush(int nIndex) {
+    if (nIndex < 0 || nIndex >= 30) return GetSysColorBrush(nIndex);
+    if (!g_themedBrushColorInit) {
+        for (int i = 0; i < 30; i++) g_themedBrushColor[i] = (COLORREF)-1;
+        g_themedBrushColorInit = true;
+    }
+    COLORREF want = GetThemedSysColor(nIndex);
+    if (!g_themedBrushCache[nIndex] || g_themedBrushColor[nIndex] != want) {
+        if (g_themedBrushCache[nIndex]) DeleteObject(g_themedBrushCache[nIndex]);
+        g_themedBrushCache[nIndex] = CreateSolidBrush(want);
+        g_themedBrushColor[nIndex] = want;
+    }
+    return g_themedBrushCache[nIndex];
+}
+
+
 
 // Global network count defined early for RecalcDpiMetrics
 int g_NetworkCount = 0;
@@ -2381,58 +2537,58 @@ void Uninit() {
 // HC#2 black-on-white, etc.) without any custom override.
 // -------------------------------------------------------
 COLORREF GetHeaderBgColor() {
-    if (IsHighContrastActive()) return GetSysColor(COLOR_WINDOW);
-    return (g_Settings.theme == 1) ? RGB(20, 20, 20) : RGB(255, 255, 255);
+    if (IsHighContrastActive()) return GetThemedSysColor(COLOR_WINDOW);
+    return (IsDarkEffective()) ? RGB(20, 20, 20) : RGB(255, 255, 255);
 }
 
 COLORREF GetContentBgColor() {
-    if (IsHighContrastActive()) return GetSysColor(COLOR_WINDOW);
-    return (g_Settings.theme == 1) ? RGB(20, 20, 20) : RGB(255, 255, 255);
+    if (IsHighContrastActive()) return GetThemedSysColor(COLOR_WINDOW);
+    return (IsDarkEffective()) ? RGB(20, 20, 20) : RGB(255, 255, 255);
 }
 
 COLORREF GetFooterBgColor() {
-    if (IsHighContrastActive()) return GetSysColor(COLOR_BTNFACE);
-    return (g_Settings.theme == 1) ? RGB(30, 30, 30) : RGB(241, 245, 253);
+    if (IsHighContrastActive()) return GetThemedSysColor(COLOR_BTNFACE);
+    return (IsDarkEffective()) ? RGB(30, 30, 30) : RGB(241, 245, 253);
 }
 
 COLORREF GetTextColor() {
-    if (IsHighContrastActive()) return GetSysColor(COLOR_WINDOWTEXT);
-    return (g_Settings.theme == 1) ? RGB(100, 200, 255) : RGB(0, 0, 0);
+    if (IsHighContrastActive()) return GetThemedSysColor(COLOR_WINDOWTEXT);
+    return (IsDarkEffective()) ? RGB(100, 200, 255) : RGB(0, 0, 0);
 }
 
 COLORREF GetSecondaryTextColor() {
-    if (IsHighContrastActive()) return GetSysColor(COLOR_WINDOWTEXT);
-    return (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(110, 110, 110);
+    if (IsHighContrastActive()) return GetThemedSysColor(COLOR_WINDOWTEXT);
+    return (IsDarkEffective()) ? RGB(255, 255, 255) : RGB(110, 110, 110);
 }
 
 COLORREF GetLinkColor() {
-    if (IsHighContrastActive()) return GetSysColor(COLOR_HOTLIGHT);
-    return (g_Settings.theme == 1) ? RGB(100, 200, 255) : RGB(14, 75, 184);
+    if (IsHighContrastActive()) return GetThemedSysColor(COLOR_HOTLIGHT);
+    return (IsDarkEffective()) ? RGB(100, 200, 255) : RGB(14, 75, 184);
 }
 
 COLORREF GetRowSelectedColor() {
-    if (IsHighContrastActive()) return GetSysColor(COLOR_HIGHLIGHT);
-    return (g_Settings.theme == 1) ? RGB(40, 40, 50) : RGB(228, 241, 252);
+    if (IsHighContrastActive()) return GetThemedSysColor(COLOR_HIGHLIGHT);
+    return (IsDarkEffective()) ? RGB(40, 40, 50) : RGB(228, 241, 252);
 }
 
 COLORREF GetRowHoverColor() {
-    if (IsHighContrastActive()) return GetSysColor(COLOR_HIGHLIGHT);
-    return (g_Settings.theme == 1) ? RGB(35, 35, 45) : RGB(242, 247, 253);
+    if (IsHighContrastActive()) return GetThemedSysColor(COLOR_HIGHLIGHT);
+    return (IsDarkEffective()) ? RGB(35, 35, 45) : RGB(242, 247, 253);
 }
 
 COLORREF GetRowSelectedBorderColor() {
-    if (IsHighContrastActive()) return GetSysColor(COLOR_WINDOWFRAME);
-    return (g_Settings.theme == 1) ? RGB(60, 80, 120) : RGB(174, 212, 243);
+    if (IsHighContrastActive()) return GetThemedSysColor(COLOR_WINDOWFRAME);
+    return (IsDarkEffective()) ? RGB(60, 80, 120) : RGB(174, 212, 243);
 }
 
 COLORREF GetRowHoverBorderColor() {
-    if (IsHighContrastActive()) return GetSysColor(COLOR_WINDOWFRAME);
-    return (g_Settings.theme == 1) ? RGB(50, 70, 100) : RGB(216, 231, 248);
+    if (IsHighContrastActive()) return GetThemedSysColor(COLOR_WINDOWFRAME);
+    return (IsDarkEffective()) ? RGB(50, 70, 100) : RGB(216, 231, 248);
 }
 
 COLORREF GetNetworkNameColor() {
-    if (IsHighContrastActive()) return GetSysColor(COLOR_WINDOWTEXT);
-    return (g_Settings.theme == 1) ? RGB(100, 200, 255) : RGB(14, 75, 184);
+    if (IsHighContrastActive()) return GetThemedSysColor(COLOR_WINDOWTEXT);
+    return (IsDarkEffective()) ? RGB(100, 200, 255) : RGB(14, 75, 184);
 }
 
 // -------------------------------------------------------
@@ -2626,6 +2782,11 @@ static void FreeCachedThemeBrushes() {
     }
     g_lastFlyoutChkBg = g_lastFlyoutChkBgDark = g_lastFlyoutLabelBg =
         g_lastFlyoutChkBtnBg = g_lastFlyoutChkBtnBgDark = (COLORREF)-1;
+    for (int i = 0; i < 30; i++) {
+        if (g_themedBrushCache[i]) { DeleteObject(g_themedBrushCache[i]); g_themedBrushCache[i] = NULL; }
+        g_themedBrushColor[i] = (COLORREF)-1;
+    }
+    g_themedBrushColorInit = false;
 }
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
@@ -2634,26 +2795,39 @@ static void FreeCachedThemeBrushes() {
 
 static BOOL g_IsHoveringConnectButton = FALSE;
 
+// SetWindowTheme() synchronously sends WM_THEMECHANGED to the window it
+// touches (documented MSDN behavior), and the flyout's WM_THEMECHANGED /
+// WM_SETTINGCHANGE handlers call back into ApplyNativeControlsTheme().
+// Without this reentrancy guard that is unbounded recursion (stack
+// overflow in explorer.exe) as soon as the flyout opens.
+static bool g_applyingNativeControlsTheme = false;
+
 void ApplyNativeControlsTheme() {
-    // In High Contrast mode, use "" (empty string) as the theme name so
-    // native controls fall back to the system color palette instead of
-    // picking up the visual-styles dark/light theme.
-    BOOL hc = IsHighContrastActive();
-    LPCWSTR themeName = hc ? L"" : ((g_Settings.theme == 1) ? L"DarkMode_Explorer" : L"Explorer");
-    
+    if (g_applyingNativeControlsTheme) return;
+    g_applyingNativeControlsTheme = true;
+    // In a system/HC palette mode, use "" (empty string) as the theme name
+    // so native controls fall back to the system color palette instead of
+    // picking up the visual-styles dark/light theme. Otherwise follow the
+    // effective Aero light/dark mode (this is what makes THEME_SYSTEM track
+    // the system instead of forcing one fixed style).
+    BOOL sysPal = IsHighContrastActive();
+    BOOL dark = IsDarkEffective();
+    LPCWSTR themeName = sysPal ? L"" : (dark ? L"DarkMode_Explorer" : L"Explorer");
+
     if (g_hWndFlyout && IsWindow(g_hWndFlyout)) {
         SetWindowTheme(g_hWndFlyout, themeName, NULL);
-        BOOL useDark = hc ? FALSE : (g_Settings.theme == 1);
+        BOOL useDark = (!sysPal && dark);
         DwmSetWindowAttribute(g_hWndFlyout, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDark, sizeof(useDark));
         SetWindowPos(g_hWndFlyout, NULL, 0, 0, 0, 0,
                      SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_FRAMECHANGED|SWP_NOACTIVATE);
     }
-    
+
     if (g_hWndCheckboxConnect && IsWindow(g_hWndCheckboxConnect))
         SetWindowTheme(g_hWndCheckboxConnect, themeName, NULL);
     if (g_hWndButtonConnect && IsWindow(g_hWndButtonConnect)) {
-        SetWindowTheme(g_hWndButtonConnect, hc ? L"" : ((g_Settings.theme == 1) ? L"DarkMode_Explorer" : L"Explorer"), NULL);
+        SetWindowTheme(g_hWndButtonConnect, themeName, NULL);
     }
+    g_applyingNativeControlsTheme = false;
 }
 
 HFONT g_hFontNormal    = NULL;
@@ -3558,6 +3732,7 @@ void ToggleFlyoutWindow(void);
 void ShowFlyoutWindow(void);
 void HideFlyoutWindow(void);
 void InitTooltip(HWND hwnd);
+void ApplyTooltipTheme();
 void UpdateTooltipForRow(HWND hwnd, int index);
 BOOL GetRowRect(int index, RECT* rcRow);
 BOOL InstallTrayInterception(void);
@@ -4541,7 +4716,9 @@ void DrawFocusRectangle(HDC hdc, const RECT* rcRow) {
     rcFocus.right -= 8;
     rcFocus.top += 2;
     rcFocus.bottom -= 2;
-    HPEN hPen = CreatePen(PS_DOT, 1, RGB(0, 0, 0));
+    COLORREF focusColor = IsHighContrastActive() ? GetThemedSysColor(COLOR_WINDOWTEXT)
+                        : IsDarkEffective() ? RGB(180, 180, 180) : RGB(0, 0, 0);
+    HPEN hPen = CreatePen(PS_DOT, 1, focusColor);
     HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
     HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
     Rectangle(hdc, rcFocus.left, rcFocus.top, rcFocus.right, rcFocus.bottom);
@@ -5482,13 +5659,13 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
     switch (uMsg) {
     case WM_ERASEBKGND: {
         HDC hdc = (HDC)wParam;
-        COLORREF bg = IsHighContrastActive() ? GetSysColor(COLOR_BTNFACE) : (g_Settings.theme == 1) ? RGB(20, 20, 20) : GetSysColor(COLOR_BTNFACE);
+        COLORREF bg = IsHighContrastActive() ? GetThemedSysColor(COLOR_BTNFACE) : IsDarkEffective() ? RGB(20, 20, 20) : GetSysColor(COLOR_BTNFACE);
         HBRUSH hBr = CreateSolidBrush(bg);
         RECT rc;
         GetClientRect(hwnd, &rc);
         FillRect(hdc, &rc, hBr);
         DeleteObject(hBr);
-        if (g_Settings.theme == 1 && !IsHighContrastActive()) {
+        if (IsDarkEffective() && !IsHighContrastActive()) {
             HPEN hPen = CreatePen(PS_SOLID, 1, RGB(75, 75, 85)); 
             HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
             HBRUSH hOldBr = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
@@ -5509,7 +5686,7 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
         return r;
     }
     case WM_MOUSEMOVE: {
-        if (g_Settings.theme == 1) {
+        if (ShouldUseOwnerDrawButtons()) {
             HWND hBtnOk = GetDlgItem(hwnd, IDOK);
             HWND hBtnCancel = GetDlgItem(hwnd, IDCANCEL);
             POINT pt = { LOWORD(lParam), HIWORD(lParam) };
@@ -5583,7 +5760,8 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
             WS_CHILD|WS_VISIBLE, ScaleDpi(15), ScaleDpi(53), ScaleDpi(125), ScaleDpi(18), hwnd, NULL, cs->hInstance, NULL);
         SendMessageW(hLabel, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
         
-        BOOL bDarkPwd = (g_Settings.theme == 1) && !IsHighContrastActive();
+        BOOL bDarkPwd = IsDarkEffective();
+        BOOL bOwnerDrawPwdBtn = ShouldUseOwnerDrawButtons();
         DWORD dwEditExStyle = bDarkPwd ? 0 : WS_EX_CLIENTEDGE;
         
         HWND hEdit = CreateWindowExW(dwEditExStyle, WC_EDITW, L"",
@@ -5612,12 +5790,12 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
         RECT rcClient; GetClientRect(hwnd, &rcClient);
         int btnW = ScaleDpi(85), btnH = ScaleDpi(24), btnY = rcClient.bottom - ScaleDpi(35);
         HWND hBtnOk = CreateWindowExW(0, WC_BUTTONW, LOC(STR_PWD_OK),
-            WS_CHILD|WS_VISIBLE|(bDarkPwd ? BS_OWNERDRAW : BS_DEFPUSHBUTTON),
+            WS_CHILD|WS_VISIBLE|(bOwnerDrawPwdBtn ? BS_OWNERDRAW : BS_DEFPUSHBUTTON),
             rcClient.right - btnW - ScaleDpi(15), btnY, btnW, btnH, hwnd, (HMENU)IDOK, cs->hInstance, NULL);
         SendMessageW(hBtnOk, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
         if (bDarkPwd) SetWindowTheme(hBtnOk, L"DarkMode_Explorer", NULL);
         HWND hBtnCancel = CreateWindowExW(0, WC_BUTTONW, LOC(STR_PWD_CANCEL),
-            WS_CHILD|WS_VISIBLE|(bDarkPwd ? BS_OWNERDRAW : 0),
+            WS_CHILD|WS_VISIBLE|(bOwnerDrawPwdBtn ? BS_OWNERDRAW : 0),
             rcClient.right - (btnW * 2) - ScaleDpi(25), btnY, btnW, btnH,
             hwnd, (HMENU)IDCANCEL, cs->hInstance, NULL);
         SendMessageW(hBtnCancel, WM_SETFONT, (WPARAM)hFontDlg, TRUE);
@@ -5628,7 +5806,7 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
         LPDRAWITEMSTRUCT pdis = (LPDRAWITEMSTRUCT)lParam;
         if (!pdis) break;
         if (pdis->CtlID != IDOK && pdis->CtlID != IDCANCEL) break;
-        if (g_Settings.theme != 1 && !IsHighContrastActive()) break;
+        if (!ShouldUseOwnerDrawButtons()) break;
         BOOL isPressed  = (pdis->itemState & ODS_SELECTED) != 0;
         BOOL isDisabled = (pdis->itemState & ODS_DISABLED) != 0;
         BOOL isFocused  = (pdis->itemState & ODS_FOCUS) != 0;
@@ -5642,15 +5820,23 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
         if (w <= 0 || h <= 0) break;
         WCHAR szText[64];
         int textLen = GetWindowTextW(pdis->hwndItem, szText, 64);
+        // Fixed HC themes owner-draw with the fixed palette (a native button
+        // would use the real system colors instead); dark mode keeps its
+        // original artwork. Native buttons (light / real-HC / classic)
+        // never reach this handler.
+        bool hc = IsHighContrastActive();
         COLORREF bgColor;
-        if (isDisabled) bgColor = RGB(50, 50, 58);
+        if (hc) bgColor = isPressed ? GetThemedSysColor(COLOR_BTNSHADOW) :
+                         isHovering ? GetThemedSysColor(COLOR_HIGHLIGHT) :
+                                      GetThemedSysColor(COLOR_BTNFACE);
+        else if (isDisabled) bgColor = RGB(50, 50, 58);
         else if (isPressed) bgColor = RGB(35, 35, 45);
         else if (isHovering) bgColor = RGB(70, 70, 85);
         else bgColor = RGB(60, 60, 72);
-        COLORREF lightColor = isPressed ? RGB(25, 25, 32) : (isHovering ? RGB(95, 95, 115) : RGB(85, 85, 100));
-        COLORREF darkColor  = isPressed ? RGB(60, 60, 72) : (isHovering ? RGB(35, 35, 45)  : RGB(25, 25, 32));
-        COLORREF textColor  = isDisabled ? RGB(130, 130, 140) : RGB(255, 255, 255);
-        COLORREF hoverBorder = isHovering ? RGB(90, 90, 120) : RGB(0, 0, 0);
+        COLORREF lightColor = hc ? GetThemedSysColor(COLOR_BTNHIGHLIGHT) : (isPressed ? RGB(25, 25, 32) : (isHovering ? RGB(95, 95, 115) : RGB(85, 85, 100)));
+        COLORREF darkColor  = hc ? GetThemedSysColor(COLOR_BTNSHADOW) : (isPressed ? RGB(60, 60, 72) : (isHovering ? RGB(35, 35, 45)  : RGB(25, 25, 32)));
+        COLORREF textColor  = hc ? GetThemedSysColor(isHovering ? COLOR_HIGHLIGHTTEXT : COLOR_BTNTEXT) : (isDisabled ? RGB(130, 130, 140) : RGB(255, 255, 255));
+        COLORREF hoverBorder = hc ? GetThemedSysColor(COLOR_WINDOWFRAME) : (isHovering ? RGB(90, 90, 120) : RGB(0, 0, 0));
         HDC hdcMem = CreateCompatibleDC(hdcReal);
         HBITMAP hBmpMem = CreateCompatibleBitmap(hdcReal, w, h);
         HBITMAP hOldBmpMem = (HBITMAP)SelectObject(hdcMem, hBmpMem);
@@ -5674,7 +5860,7 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
         if (isFocused) {
             RECT rcFocus = rcLocal; InflateRect(&rcFocus, -3, -3);
             HBRUSH hOldBr = (HBRUSH)SelectObject(hdcMem, GetStockObject(NULL_BRUSH));
-            SetTextColor(hdcMem, RGB(150, 150, 165)); DrawFocusRect(hdcMem, &rcFocus);
+            SetTextColor(hdcMem, hc ? GetThemedSysColor(COLOR_WINDOWTEXT) : RGB(150, 150, 165)); DrawFocusRect(hdcMem, &rcFocus);
             SelectObject(hdcMem, hOldBr);
         }
         SetBkMode(hdcMem, TRANSPARENT); SetTextColor(hdcMem, textColor);
@@ -5690,13 +5876,13 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
         HDC hdc = (HDC)wParam;
         HWND hwndCtrl = (HWND)lParam;
         if (IsHighContrastActive()) {
-            SetBkColor(hdc, GetSysColor(COLOR_BTNFACE));
-            SetTextColor(hdc, GetSysColor(COLOR_WINDOWTEXT));
+            SetBkColor(hdc, GetThemedSysColor(COLOR_BTNFACE));
+            SetTextColor(hdc, GetThemedSysColor(COLOR_WINDOWTEXT));
             SetBkMode(hdc, OPAQUE);
-            return (INT_PTR)GetSysColorBrush(COLOR_BTNFACE);
+            return (INT_PTR)GetThemedSysColorBrush(COLOR_BTNFACE);
         }
         if (hwndCtrl == GetDlgItem(hwnd, 102) || hwndCtrl == GetDlgItem(hwnd, 103)) {
-            if (g_Settings.theme == 1) {
+            if (IsDarkEffective()) {
                 SetBkColor(hdc, RGB(20, 20, 20)); SetBkMode(hdc, OPAQUE); SetTextColor(hdc, RGB(255, 255, 255));
                 if (!g_hBrPwdHideStaticDark) g_hBrPwdHideStaticDark = CreateSolidBrush(RGB(20, 20, 20));
                 return (INT_PTR)g_hBrPwdHideStaticDark;
@@ -5709,12 +5895,12 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
         ConnectionState connState = CONN_STATE_IDLE;
         if (hwndCtrl == g_hWndCheckboxConnect && GetSelectedRowConnState(&connState)) {
             if (connState == CONN_STATE_IDLE || connState == CONN_STATE_ERROR) {
-                COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
-                COLORREF chkText = (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(0, 0, 0);
+                COLORREF chkBg   = (IsDarkEffective()) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
+                COLORREF chkText = (IsDarkEffective()) ? RGB(255, 255, 255) : RGB(0, 0, 0);
                 SetBkColor(hdc, chkBg); SetBkMode(hdc, OPAQUE); SetTextColor(hdc, chkText);
                 if (!g_hBrPwdCheckboxStatic) g_hBrPwdCheckboxStatic = CreateSolidBrush(chkBg);
                 return (INT_PTR)g_hBrPwdCheckboxStatic;
-            } else if (g_Settings.theme == 1) {
+            } else if (IsDarkEffective()) {
                 COLORREF chkBg = GetFooterBgColor();
                 SetBkColor(hdc, chkBg); SetBkMode(hdc, OPAQUE); SetTextColor(hdc, RGB(255, 255, 255));
                 if (!g_hBrPwdCheckboxStaticDark) g_hBrPwdCheckboxStaticDark = CreateSolidBrush(chkBg);
@@ -5724,7 +5910,7 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
                 return (INT_PTR)GetStockObject(HOLLOW_BRUSH);
             }
         }
-        if (g_Settings.theme == 1) {
+        if (IsDarkEffective()) {
             SetBkColor(hdc, RGB(20, 20, 20)); SetTextColor(hdc, RGB(100, 200, 255)); SetBkMode(hdc, OPAQUE);
             if (!g_hBrPwdLabelStatic) g_hBrPwdLabelStatic = CreateSolidBrush(RGB(20, 20, 20));
             return (INT_PTR)g_hBrPwdLabelStatic;
@@ -5736,12 +5922,12 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
     case WM_CTLCOLOREDIT: {
         HDC hdc = (HDC)wParam;
         if (IsHighContrastActive()) {
-            SetBkColor(hdc, GetSysColor(COLOR_WINDOW));
-            SetTextColor(hdc, GetSysColor(COLOR_WINDOWTEXT));
+            SetBkColor(hdc, GetThemedSysColor(COLOR_WINDOW));
+            SetTextColor(hdc, GetThemedSysColor(COLOR_WINDOWTEXT));
             SetBkMode(hdc, OPAQUE);
-            return (INT_PTR)GetSysColorBrush(COLOR_WINDOW);
+            return (INT_PTR)GetThemedSysColorBrush(COLOR_WINDOW);
         }
-        if (g_Settings.theme == 1) {
+        if (IsDarkEffective()) {
             SetBkColor(hdc, RGB(40, 40, 50));
             SetTextColor(hdc, RGB(255, 255, 255));
             SetBkMode(hdc, OPAQUE);
@@ -5755,8 +5941,8 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
         ConnectionState connState = CONN_STATE_IDLE;
         if (hwndBtn == g_hWndCheckboxConnect && GetSelectedRowConnState(&connState)) {
             if (connState == CONN_STATE_IDLE || connState == CONN_STATE_ERROR) {
-                COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
-                COLORREF chkText = (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(0, 0, 0);
+                COLORREF chkBg   = (IsDarkEffective()) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
+                COLORREF chkText = (IsDarkEffective()) ? RGB(255, 255, 255) : RGB(0, 0, 0);
                 SetBkColor(hdc, chkBg); SetBkMode(hdc, OPAQUE); SetTextColor(hdc, chkText);
                 if (!g_hBrPwdCheckboxBtn) g_hBrPwdCheckboxBtn = CreateSolidBrush(chkBg);
                 return (INT_PTR)g_hBrPwdCheckboxBtn;
@@ -5766,7 +5952,12 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
             }
         }
         if (hwndBtn == GetDlgItem(hwnd, 102)) {
-            if (g_Settings.theme == 1) {
+            if (IsHighContrastActive()) {
+                COLORREF hcBg = GetThemedSysColor(COLOR_BTNFACE);
+                SetBkColor(hdc, hcBg); SetBkMode(hdc, OPAQUE);
+                SetTextColor(hdc, GetThemedSysColor(COLOR_WINDOWTEXT));
+                return (INT_PTR)GetThemedSysColorBrush(COLOR_BTNFACE);
+            } else if (IsDarkEffective()) {
                 SetBkColor(hdc, RGB(20, 20, 20)); SetBkMode(hdc, OPAQUE);
                 if (!g_hBrPwdHideBtnDark) g_hBrPwdHideBtnDark = CreateSolidBrush(RGB(20, 20, 20));
                 return (INT_PTR)g_hBrPwdHideBtnDark;
@@ -5777,7 +5968,7 @@ LRESULT CALLBACK Win7PasswordWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM
             }
         }
         if (hwndBtn == GetDlgItem(hwnd, IDOK) || hwndBtn == GetDlgItem(hwnd, IDCANCEL)) {
-            if (g_Settings.theme == 1) {
+            if (IsDarkEffective()) {
                 SetBkColor(hdc, RGB(50, 50, 60)); SetTextColor(hdc, RGB(255, 255, 255)); SetBkMode(hdc, OPAQUE);
                 if (!g_hBrPwdOkCancelBtn) g_hBrPwdOkCancelBtn = CreateSolidBrush(RGB(50, 50, 60));
                 return (INT_PTR)g_hBrPwdOkCancelBtn;
@@ -5879,7 +6070,7 @@ BOOL PromptNetworkPassword(HWND hParent, WCHAR* passwordBuffer, DWORD bufferSize
         g_inPasswordPrompt = FALSE;
         return FALSE;
     }
-    if (g_Settings.theme == 1) {
+    if (IsDarkEffective()) {
         BOOL useDark = TRUE;
         DwmSetWindowAttribute(hDlg, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDark, sizeof(useDark));
         SetWindowPos(hDlg, NULL, 0, 0, 0, 0,
@@ -6690,13 +6881,31 @@ void InitTooltip(HWND hwnd) {
     SendMessage(g_hTooltip, TTM_SETDELAYTIME, TTDT_AUTOPOP, 10000);
     SendMessage(g_hTooltip, TTM_SETDELAYTIME, TTDT_INITIAL, 400);
     SendMessage(g_hTooltip, TTM_SETDELAYTIME, TTDT_RESHOW,  200);
-    if (g_Settings.theme == 1) {
+    ApplyTooltipTheme();
+}
+
+// Applies the effective theme to the tooltip. Called at creation and again
+// on every live theme switch (WM_SETTINGCHANGE/WM_THEMECHANGED) so the
+// tooltip never keeps stale dark/light/HC colors while the flyout is open.
+void ApplyTooltipTheme() {
+    if (!g_hTooltip) return;
+    if (IsHighContrastActive()) {
+        SendMessage(g_hTooltip, TTM_SETTIPBKCOLOR,   (WPARAM)GetThemedSysColor(COLOR_INFOBK),    0);
+        SendMessage(g_hTooltip, TTM_SETTIPTEXTCOLOR, (WPARAM)GetThemedSysColor(COLOR_INFOTEXT), 0);
+        DarkContextMenu::AllowDarkModeForWindow(g_hTooltip, false);
+        SetWindowTheme(g_hTooltip, L"", NULL);
+    } else if (IsDarkEffective()) {
         SendMessage(g_hTooltip, TTM_SETTIPBKCOLOR,   (WPARAM)RGB(30, 30, 30),   0);
         SendMessage(g_hTooltip, TTM_SETTIPTEXTCOLOR, (WPARAM)RGB(100, 200, 255), 0);
         DarkContextMenu::AllowDarkModeForWindow(g_hTooltip, true);
         SetWindowTheme(g_hTooltip, L"DarkMode_Explorer", NULL);
-        SendMessageW(g_hTooltip, WM_THEMECHANGED, 0, 0);
+    } else {
+        SendMessage(g_hTooltip, TTM_SETTIPBKCOLOR,   (WPARAM)CLR_DEFAULT, 0);
+        SendMessage(g_hTooltip, TTM_SETTIPTEXTCOLOR, (WPARAM)CLR_DEFAULT, 0);
+        DarkContextMenu::AllowDarkModeForWindow(g_hTooltip, false);
+        SetWindowTheme(g_hTooltip, L"Explorer", NULL);
     }
+    SendMessageW(g_hTooltip, WM_THEMECHANGED, 0, 0);
 }
 
 // Track the last tooltip uId so we can delete just that one instead of all 50
@@ -7544,11 +7753,11 @@ void ShowContextMenu(HWND hwnd, int itemIndex, POINT pt) {
     if (menuItem.hasProfile) {
         AppendMenuW(hMenu, MF_STRING, IDM_PROPERTIES, LOC(STR_CTX_PROPERTIES));
     }
-    if (g_Settings.theme == 1) {
+    if (IsDarkEffective()) {
         DarkContextMenu::Apply(TRUE);
     }
     int cmd = TrackPopupMenu(hMenu, TPM_LEFTALIGN|TPM_RIGHTBUTTON|TPM_RETURNCMD, pt.x, pt.y, 0, hwnd, NULL);
-    if (g_Settings.theme == 1) {
+    if (IsDarkEffective()) {
         DarkContextMenu::Restore();
     }
     if (cmd > 0) {
@@ -7777,10 +7986,10 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         }
         
         g_hWndButtonConnect = CreateWindowExW(0, WC_BUTTONW, L"",
-            WS_CHILD | (g_Settings.theme == 1 ? BS_OWNERDRAW : BS_PUSHBUTTON),
+            WS_CHILD | (ShouldUseOwnerDrawButtons() ? BS_OWNERDRAW : BS_PUSHBUTTON),
             0,0,0,0, hwnd,(HMENU)IDC_CONN_BUTTON,GetModuleHandle(NULL),NULL);
         SendMessageW(g_hWndButtonConnect, WM_SETFONT, (WPARAM)g_hFontButton, TRUE);
-        g_ButtonConnectIsOwnerDraw = (g_Settings.theme == 1);
+        g_ButtonConnectIsOwnerDraw = ShouldUseOwnerDrawButtons() ? 1 : 0;
         
         g_hWndCheckboxConnect = CreateWindowExW(0, WC_BUTTONW, L"",
             WS_CHILD|BS_AUTOCHECKBOX, 0,0,0,0, hwnd,(HMENU)IDC_AUTO_CHECKBOX,GetModuleHandle(NULL),NULL);
@@ -8078,13 +8287,13 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
         // Separator line between connection info and the WiFi list header label.
         // Drawn ABOVE the "Wireless Network Connection" label.
         int separatorY = showWifiList ? (WIFI_LABEL_Y - ScaleDpi(4)) : HEADER_HEIGHT;
-        HPEN hPenSep = CreatePen(PS_SOLID, 1, IsHighContrastActive() ? GetSysColor(COLOR_GRAYTEXT) : (g_Settings.theme == 1) ? RGB(70,70,75) : RGB(214,223,234));
+        HPEN hPenSep = CreatePen(PS_SOLID, 1, IsHighContrastActive() ? GetThemedSysColor(COLOR_GRAYTEXT) : (IsDarkEffective()) ? RGB(70,70,75) : RGB(214,223,234));
         HPEN hOldPen = (HPEN)SelectObject(hdc, hPenSep);
         MoveToEx(hdc, 0, separatorY, NULL); LineTo(hdc, WINDOW_WIDTH, separatorY);
         SelectObject(hdc, hOldPen); DeleteObject(hPenSep);
         
-        HPEN hPenBevelDark  = CreatePen(PS_SOLID, 1, IsHighContrastActive() ? GetSysColor(COLOR_WINDOWFRAME) : (g_Settings.theme == 1) ? RGB(55,55,60)  : RGB(180,193,210));
-        HPEN hPenBevelLight = CreatePen(PS_SOLID, 1, IsHighContrastActive() ? GetSysColor(COLOR_BTNHIGHLIGHT) : (g_Settings.theme == 1) ? RGB(80,80,85)  : RGB(255,255,255));
+        HPEN hPenBevelDark  = CreatePen(PS_SOLID, 1, IsHighContrastActive() ? GetThemedSysColor(COLOR_WINDOWFRAME) : (IsDarkEffective()) ? RGB(55,55,60)  : RGB(180,193,210));
+        HPEN hPenBevelLight = CreatePen(PS_SOLID, 1, IsHighContrastActive() ? GetThemedSysColor(COLOR_BTNHIGHLIGHT) : (IsDarkEffective()) ? RGB(80,80,85)  : RGB(255,255,255));
         SelectObject(hdc, hPenBevelDark);
         MoveToEx(hdc, 0, LIST_Y_END,     NULL); LineTo(hdc, WINDOW_WIDTH, LIST_Y_END);
         SelectObject(hdc, hPenBevelLight);
@@ -8121,7 +8330,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             
             DrawTextWithWrap(hdc, displayName, ScaleDpi(56), ScaleDpi(36), WINDOW_WIDTH - ScaleDpi(70), ScaleDpi(18));
             SelectObject(hdc, g_hFontNormal);
-            SetTextColor(hdc, IsHighContrastActive() ? GetSysColor(COLOR_WINDOWTEXT) : (g_Settings.theme == 1) ? RGB(200, 200, 200) : RGB(0, 0, 0));
+            SetTextColor(hdc, IsHighContrastActive() ? GetThemedSysColor(COLOR_WINDOWTEXT) : (IsDarkEffective()) ? RGB(200, 200, 200) : RGB(0, 0, 0));
             TextOutW(hdc, ScaleDpi(56), ScaleDpi(52), LOC(STR_INTERNET_ACCESS), lstrlenW(LOC(STR_INTERNET_ACCESS)));
         } else {
             SelectObject(hdc, g_hFontNormal); SetTextColor(hdc, GetTextColor());
@@ -8193,7 +8402,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             }
 
             BOOL drewRefreshHoverImage = FALSE;
-            if (g_IsHoveringRefresh && g_Settings.theme == 0) {
+            if (g_IsHoveringRefresh && IsLightEffective()) {
                 if (!g_hIconRefreshHover)
                     g_hIconRefreshHover = CreateIconFromBase64PNG(REFRESH_ICON_HOVER_BASE64, ScaleDpi(22), ScaleDpi(22));
                 if (g_hIconRefreshHover) {
@@ -8204,8 +8413,8 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
             }
             if (g_IsHoveringRefresh && !drewRefreshHoverImage) {
                 RECT rcBtn = g_rcRefreshButton;
-                COLORREF refreshHoverBg = IsHighContrastActive() ? GetSysColor(COLOR_HIGHLIGHT) : (g_Settings.theme == 1) ? RGB(40, 40, 60) : RGB(220, 238, 252);
-                COLORREF refreshHoverBorder = IsHighContrastActive() ? GetSysColor(COLOR_WINDOWFRAME) : (g_Settings.theme == 1) ? RGB(60, 60, 120) : RGB(174, 212, 243);
+                COLORREF refreshHoverBg = IsHighContrastActive() ? GetThemedSysColor(COLOR_HIGHLIGHT) : (IsDarkEffective()) ? RGB(40, 40, 60) : RGB(220, 238, 252);
+                COLORREF refreshHoverBorder = IsHighContrastActive() ? GetThemedSysColor(COLOR_WINDOWFRAME) : (IsDarkEffective()) ? RGB(60, 60, 120) : RGB(174, 212, 243);
                 HBRUSH hBrBg = CreateSolidBrush(refreshHoverBg);
                 HPEN   hPenBorder = CreatePen(PS_SOLID, 1, refreshHoverBorder);
                 HPEN   hOldPen = (HPEN)SelectObject(hdc, hPenBorder);
@@ -8222,7 +8431,7 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                     g_hIconRefreshNormal = CreateIconFromBase64PNG(REFRESH_ICON_NORMAL_BASE64,
                                                                    ScaleDpi(16), ScaleDpi(16));
                 if (g_hIconRefreshNormal) {
-                    if (g_Settings.theme == 0) {
+                    if (IsLightEffective()) {
                         int normalIconSize = ScaleDpi(16);
                         DrawIconEx(hdc, g_rcRefreshButton.left+2, g_rcRefreshButton.top+3,
                                    g_hIconRefreshNormal, normalIconSize, normalIconSize, 0, NULL, DI_NORMAL);
@@ -8257,10 +8466,11 @@ LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPara
                             if (abs((int)pr - bgR) < 25 && abs((int)pg - bgG) < 25 && abs((int)pb - bgB) < 25)
                                 continue;
                             int lum = ((int)pr  *299 + (int)pg*  587 + (int)pb * 114) / 1000;
-                            int t = 255 - lum; 
-                            BYTE nr = (BYTE)(100 * t / 255);
-                            BYTE ng = (BYTE)(200 * t / 255);
-                            BYTE nb = (BYTE)(255 * t / 255);
+                            int t = 255 - lum;
+                            COLORREF iconTint = IsHighContrastActive() ? GetThemedSysColor(COLOR_WINDOWTEXT) : RGB(100, 200, 255);
+                            BYTE nr = (BYTE)(GetRValue(iconTint) * t / 255);
+                            BYTE ng = (BYTE)(GetGValue(iconTint) * t / 255);
+                            BYTE nb = (BYTE)(GetBValue(iconTint) * t / 255);
                             pixels[p] = (pixels[p] & 0xFF000000) | ((DWORD)nr << 16) | ((DWORD)ng << 8) | nb;
                         }
                         BitBlt(hdc, g_rcRefreshButton.left+2, g_rcRefreshButton.top+3, iw, ih, hdcTmp, 0, 0, SRCCOPY);
@@ -8277,8 +8487,8 @@ int wifiLabelY = separatorY + ScaleDpi(7);
 TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_WIFI_HEADER)));
             
             if (g_IsHoveringArrow) {
-                COLORREF arrowHoverBg = IsHighContrastActive() ? GetSysColor(COLOR_HIGHLIGHT) : (g_Settings.theme == 1) ? RGB(40, 40, 60) : RGB(230, 240, 255);
-                COLORREF arrowHoverBorder = IsHighContrastActive() ? GetSysColor(COLOR_WINDOWFRAME) : (g_Settings.theme == 1) ? RGB(60, 60, 120) : RGB(180, 210, 245);
+                COLORREF arrowHoverBg = IsHighContrastActive() ? GetThemedSysColor(COLOR_HIGHLIGHT) : (IsDarkEffective()) ? RGB(40, 40, 60) : RGB(230, 240, 255);
+                COLORREF arrowHoverBorder = IsHighContrastActive() ? GetThemedSysColor(COLOR_WINDOWFRAME) : (IsDarkEffective()) ? RGB(60, 60, 120) : RGB(180, 210, 245);
                 HBRUSH hBrA  = CreateSolidBrush(arrowHoverBg);
                 HPEN   hPenA = CreatePen(PS_SOLID, 1, arrowHoverBorder);
                 HPEN   hOldPA = (HPEN)SelectObject(hdc, hPenA);
@@ -8289,11 +8499,13 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
                 DeleteObject(hBrA); DeleteObject(hPenA);
             }
             RecalcArrowRect();
-            if (g_Settings.theme == 1) {
-                // Dark theme: use Marlett font character (manual style)
+            if (IsDarkEffective() || IsHighContrastActive()) {
+                // Dark and High Contrast themes: use the Marlett chevron
+                // tinted with the themed text color (the light PNG chevrons
+                // would be near-invisible on dark/HC backgrounds)
                 SelectObject(hdc, g_hFontArrow);
                 SetTextColor(hdc, IsHighContrastActive()
-                    ? (g_IsHoveringArrow ? GetSysColor(COLOR_HIGHLIGHTTEXT) : GetSysColor(COLOR_WINDOWTEXT))
+                    ? (g_IsHoveringArrow ? GetThemedSysColor(COLOR_HIGHLIGHTTEXT) : GetThemedSysColor(COLOR_WINDOWTEXT))
                     : RGB(180, 180, 180));
                 LPCWSTR arrowChar = g_bListExpanded ? L"6" : L"5";
                 RECT rcArrowText = g_rcArrowButton; rcArrowText.top += 2;
@@ -8365,7 +8577,7 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
                     {
                         COLORREF rowTextColor = GetNetworkNameColor();
                         if (IsHighContrastActive() && (isSelected || isHovered))
-                            rowTextColor = GetSysColor(COLOR_HIGHLIGHTTEXT);
+                            rowTextColor = GetThemedSysColor(COLOR_HIGHLIGHTTEXT);
                         SetTextColor(hdc, rowTextColor);
                     }
                     // ROW_TEXT_Y_OFFSET is the ~1% row-text nudge (was
@@ -8381,8 +8593,8 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
                     if (item->connState == CONN_STATE_CONNECTED) {
                         SelectObject(hdc, g_hFontBold);
                         SetTextColor(hdc, IsHighContrastActive()
-                            ? ((isSelected || isHovered) ? GetSysColor(COLOR_HIGHLIGHTTEXT) : GetSysColor(COLOR_WINDOWTEXT))
-                            : (g_Settings.theme == 1) ? GetTextColor() : RGB(0, 0, 0));
+                            ? ((isSelected || isHovered) ? GetThemedSysColor(COLOR_HIGHLIGHTTEXT) : GetThemedSysColor(COLOR_WINDOWTEXT))
+                            : (IsDarkEffective()) ? GetTextColor() : RGB(0, 0, 0));
                         RECT rcStatus;
                         rcStatus.right  = rcRow.right - 39 - scrollbarOffset;
                         rcStatus.left   = rcRow.left + 80;
@@ -8433,7 +8645,7 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
         
         if (g_bShowCheckboxLabel) {
             SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, IsHighContrastActive() ? GetSysColor(COLOR_WINDOWTEXT) : (g_Settings.theme == 1) ? RGB(255,255,255) : RGB(0,0,0));
+            SetTextColor(hdc, IsHighContrastActive() ? GetThemedSysColor(COLOR_WINDOWTEXT) : (IsDarkEffective()) ? RGB(255,255,255) : RGB(0,0,0));
             HFONT hOldFontChk = (HFONT)SelectObject(hdc, g_hFontCheckbox);
             DrawTextW(hdc, LOC(STR_CHK_CONNECT_AUTO), -1, &g_rcCheckboxLabel, DT_LEFT|DT_VCENTER|DT_SINGLELINE);
             SelectObject(hdc, hOldFontChk);
@@ -8452,7 +8664,7 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
     case WM_DRAWITEM: {
         LPDRAWITEMSTRUCT pdis = (LPDRAWITEMSTRUCT)lParam;
         if (!pdis || pdis->CtlID != IDC_CONN_BUTTON) break;
-        if (g_Settings.theme != 1 && !IsHighContrastActive()) break;
+        if (!IsDarkEffective() && !IsHighContrastActive()) break;
         BOOL isPressed  = (pdis->itemState & ODS_SELECTED) != 0;
         BOOL isDisabled = (pdis->itemState & ODS_DISABLED) != 0;
         BOOL isHovering = g_IsHoveringConnectButton && !isPressed && !isDisabled;
@@ -8467,9 +8679,9 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
         bool hc = IsHighContrastActive();
         COLORREF bgColor;
         if (hc) {
-            bgColor = isPressed ? GetSysColor(COLOR_BTNSHADOW) :
-                      isHovering ? GetSysColor(COLOR_HIGHLIGHT) :
-                      GetSysColor(COLOR_BTNFACE);
+            bgColor = isPressed ? GetThemedSysColor(COLOR_BTNSHADOW) :
+                      isHovering ? GetThemedSysColor(COLOR_HIGHLIGHT) :
+                      GetThemedSysColor(COLOR_BTNFACE);
         } else if (isDisabled) {
             bgColor = RGB(50, 50, 58);
         } else if (isPressed) {
@@ -8480,10 +8692,10 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
             bgColor = RGB(60, 60, 72);
         }
         
-        COLORREF lightColor = hc ? GetSysColor(COLOR_BTNHIGHLIGHT) : (isPressed ? RGB(25, 25, 32) : (isHovering ? RGB(95, 95, 115) : RGB(85, 85, 100)));
-        COLORREF darkColor  = hc ? GetSysColor(COLOR_BTNSHADOW) : (isPressed ? RGB(60, 60, 72) : (isHovering ? RGB(35, 35, 45) : RGB(25, 25, 32)));
-        COLORREF textColor  = hc ? GetSysColor(hc && isHovering ? COLOR_HIGHLIGHTTEXT : COLOR_BTNTEXT) : (isDisabled ? RGB(130, 130, 140) : RGB(255, 255, 255));
-        COLORREF hoverBorder = hc ? GetSysColor(COLOR_WINDOWFRAME) : (isHovering ? RGB(90, 90, 120) : RGB(0,0,0));
+        COLORREF lightColor = hc ? GetThemedSysColor(COLOR_BTNHIGHLIGHT) : (isPressed ? RGB(25, 25, 32) : (isHovering ? RGB(95, 95, 115) : RGB(85, 85, 100)));
+        COLORREF darkColor  = hc ? GetThemedSysColor(COLOR_BTNSHADOW) : (isPressed ? RGB(60, 60, 72) : (isHovering ? RGB(35, 35, 45) : RGB(25, 25, 32)));
+        COLORREF textColor  = hc ? GetThemedSysColor(isHovering ? COLOR_HIGHLIGHTTEXT : COLOR_BTNTEXT) : (isDisabled ? RGB(130, 130, 140) : RGB(255, 255, 255));
+        COLORREF hoverBorder = hc ? GetThemedSysColor(COLOR_WINDOWFRAME) : (isHovering ? RGB(90, 90, 120) : RGB(0,0,0));
         
         HDC hdcMem = CreateCompatibleDC(hdcReal);
         HBITMAP hBmpMem = CreateCompatibleBitmap(hdcReal, w, h);
@@ -8539,8 +8751,17 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
         ConnectionState connState = CONN_STATE_IDLE;
         if (hwndCtrl == g_hWndCheckboxConnect && GetSelectedRowConnState(&connState)) {
             if (connState == CONN_STATE_IDLE || connState == CONN_STATE_ERROR) {
-                COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
-                COLORREF chkText = (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(0, 0, 0);
+                COLORREF chkBg, chkText;
+                if (IsHighContrastActive()) {
+                    chkBg   = GetThemedSysColor(COLOR_HIGHLIGHT);
+                    chkText = GetThemedSysColor(COLOR_HIGHLIGHTTEXT);
+                } else if (IsDarkEffective()) {
+                    chkBg   = RGB(40, 40, 50);
+                    chkText = RGB(255, 255, 255);
+                } else {
+                    chkBg   = RGB(228, 241, 252);
+                    chkText = RGB(0, 0, 0);
+                }
                 SetBkColor(hdc, chkBg);
                 SetBkMode(hdc, OPAQUE);
                 SetTextColor(hdc, chkText);
@@ -8550,11 +8771,11 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
                     g_lastFlyoutChkBg = chkBg;
                 }
                 return (INT_PTR)g_hBrFlyoutCheckboxStatic;
-            } else if (g_Settings.theme == 1) {
+            } else if (IsDarkEffective() || IsHighContrastActive()) {
                 COLORREF chkBg = GetFooterBgColor();
                 SetBkColor(hdc, chkBg);
                 SetBkMode(hdc, OPAQUE);
-                SetTextColor(hdc, RGB(255, 255, 255));
+                SetTextColor(hdc, IsHighContrastActive() ? GetThemedSysColor(COLOR_WINDOWTEXT) : RGB(255, 255, 255));
                 if (!g_hBrFlyoutCheckboxStaticDark || g_lastFlyoutChkBgDark != chkBg) {
                     if (g_hBrFlyoutCheckboxStaticDark) DeleteObject(g_hBrFlyoutCheckboxStaticDark);
                     g_hBrFlyoutCheckboxStaticDark = CreateSolidBrush(chkBg);
@@ -8567,7 +8788,18 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
                 return (INT_PTR)GetStockObject(HOLLOW_BRUSH);
             }
         }
-        if (g_Settings.theme == 1) {
+        if (IsHighContrastActive()) {
+            COLORREF bg = GetThemedSysColor(COLOR_WINDOW);
+            SetBkColor(hdc, bg);
+            SetTextColor(hdc, GetThemedSysColor(COLOR_WINDOWTEXT));
+            SetBkMode(hdc, OPAQUE);
+            if (!g_hBrFlyoutLabelStatic || g_lastFlyoutLabelBg != bg) {
+                if (g_hBrFlyoutLabelStatic) DeleteObject(g_hBrFlyoutLabelStatic);
+                g_hBrFlyoutLabelStatic = CreateSolidBrush(bg);
+                g_lastFlyoutLabelBg = bg;
+            }
+            return (INT_PTR)g_hBrFlyoutLabelStatic;
+        } else if (IsDarkEffective()) {
             SetBkColor(hdc, RGB(20, 20, 20));
             SetTextColor(hdc, RGB(100, 200, 255));
             SetBkMode(hdc, OPAQUE);
@@ -8590,8 +8822,17 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
         ConnectionState connState = CONN_STATE_IDLE;
         if (hwndBtn == g_hWndCheckboxConnect && GetSelectedRowConnState(&connState)) {
             if (connState == CONN_STATE_IDLE || connState == CONN_STATE_ERROR) {
-                COLORREF chkBg   = (g_Settings.theme == 1) ? RGB(40, 40, 50)    : RGB(228, 241, 252);
-                COLORREF chkText = (g_Settings.theme == 1) ? RGB(255, 255, 255) : RGB(0, 0, 0);
+                COLORREF chkBg, chkText;
+                if (IsHighContrastActive()) {
+                    chkBg   = GetThemedSysColor(COLOR_HIGHLIGHT);
+                    chkText = GetThemedSysColor(COLOR_HIGHLIGHTTEXT);
+                } else if (IsDarkEffective()) {
+                    chkBg   = RGB(40, 40, 50);
+                    chkText = RGB(255, 255, 255);
+                } else {
+                    chkBg   = RGB(228, 241, 252);
+                    chkText = RGB(0, 0, 0);
+                }
                 SetBkColor(hdc, chkBg);
                 SetBkMode(hdc, OPAQUE);
                 SetTextColor(hdc, chkText);
@@ -8601,11 +8842,11 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
                     g_lastFlyoutChkBtnBg = chkBg;
                 }
                 return (INT_PTR)g_hBrFlyoutCheckboxBtn;
-            } else if (g_Settings.theme == 1) {
+            } else if (IsDarkEffective() || IsHighContrastActive()) {
                 COLORREF chkBg = GetFooterBgColor();
                 SetBkColor(hdc, chkBg);
                 SetBkMode(hdc, OPAQUE);
-                SetTextColor(hdc, RGB(255, 255, 255));
+                SetTextColor(hdc, IsHighContrastActive() ? GetThemedSysColor(COLOR_WINDOWTEXT) : RGB(255, 255, 255));
                 if (!g_hBrFlyoutCheckboxBtnDark || g_lastFlyoutChkBtnBgDark != chkBg) {
                     if (g_hBrFlyoutCheckboxBtnDark) DeleteObject(g_hBrFlyoutCheckboxBtnDark);
                     g_hBrFlyoutCheckboxBtnDark = CreateSolidBrush(chkBg);
@@ -8764,14 +9005,25 @@ TextOutW(hdc, ScaleDpi(11), wifiLabelY, LOC(STR_WIFI_HEADER), lstrlenW(LOC(STR_W
         break;
     }
     case WM_SETTINGCHANGE:
-        // High Contrast toggled while the flyout is open (e.g. Left Alt +
-        // Left Shift + Print Screen). Force-refresh the HC cache and
-        // repaint immediately so the new system palette takes effect
-        // without waiting for the 2 s TTL to expire on the next timer tick.
-        if (wParam == SPI_SETHIGHCONTRAST) {
-            RefreshHighContrastNow();
+        // Theme changed while the flyout is open: High Contrast toggled
+        // (e.g. Left Alt + Left Shift + Print Screen), the Aero light/dark
+        // app mode switched, or visual styles turned on/off.
+        // Force-refresh the theme caches, restyle the native controls and
+        // the tooltip, and repaint immediately instead of waiting for the
+        // TTL to expire on the next timer tick.
+        if (wParam == SPI_SETHIGHCONTRAST ||
+            (wParam == 0 && lParam && _wcsicmp((LPCWSTR)lParam, L"ImmersiveColorSet") == 0)) {
+            RefreshThemeStateNow();
+            ApplyNativeControlsTheme();
+            ApplyTooltipTheme();
             InvalidateRect(hwnd, NULL, TRUE);
         }
+        break;
+    case WM_THEMECHANGED:
+        RefreshThemeStateNow();
+        ApplyNativeControlsTheme();
+        ApplyTooltipTheme();
+        InvalidateRect(hwnd, NULL, TRUE);
         break;
     case WM_ACTIVATE:
         if (LOWORD(wParam) == WA_INACTIVE) {
@@ -9739,10 +9991,15 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParam) {
                 Wh_Log(L"HotkeyThreadProc: exception while toggling flyout, ignored");
             }
         }
-        // High Contrast toggled while the flyout is not yet open:
-        // refresh the cache so the next paint uses the correct palette.
-        if (msg.message == WM_SETTINGCHANGE && msg.wParam == SPI_SETHIGHCONTRAST) {
-            RefreshHighContrastNow();
+        // Theme changed while the flyout is not yet open (High Contrast
+        // toggled, Aero light/dark switched, visual styles on/off):
+        // refresh the caches so the next paint uses the correct palette.
+        if ((msg.message == WM_SETTINGCHANGE &&
+             (msg.wParam == SPI_SETHIGHCONTRAST ||
+              (msg.wParam == 0 && msg.lParam &&
+               _wcsicmp((LPCWSTR)msg.lParam, L"ImmersiveColorSet") == 0))) ||
+            msg.message == WM_THEMECHANGED) {
+            RefreshThemeStateNow();
             if (g_hWndFlyout && IsWindow(g_hWndFlyout) && IsWindowVisible(g_hWndFlyout))
                 InvalidateRect(g_hWndFlyout, NULL, TRUE);
         }
