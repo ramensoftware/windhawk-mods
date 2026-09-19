@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id             win7-logoff-screen-restorer
 // @name           Windows Vista/7 Logoff Screen Restorer
-// @description    This mod restores the classic Windows Vista/7 full-screen "programs still need to close" logoff and shutdown screen for Windows 10 and 11
+// @description    Shows a Windows Vista/7-style full-screen confirmation listing your open programs before log off, shut down or restart on Windows 10 and 11
 // @version        1.0.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
@@ -15,13 +15,36 @@
 /*
 # Windows Vista/7 Logoff Screen Restorer
 
-This mod restores the classic Windows Vista/7 screen that shows up when logging off,
-shut down, or restart while programs are still open (the one with the dimmed
-desktop, the list of running programs, and the "Force log off"/"Cancel"
-buttons)
+This mod shows a Windows Vista/7-style full-screen confirmation (dimmed
+desktop, a list of your open programs, and "Force log off"/"Cancel" buttons)
+right before a log off, shut down or restart started from Explorer, whenever
+programs are still open.
 
-The files on the system are not modified. The mod just shows this screen right
-before Windows does the actual shutdown/restart/logoff. After clicking "Force log off"/"Force shutdown", Windows continues as normal.
+## How this differs from win7-bsdr
+
+**Windows Vista/7 Blocked Shutdown UX & Logoff Sequence** (`win7-bsdr`) restores
+the *real* blocked-shutdown screen by hooking `LogonUI.exe`/`winlogon.exe`. It
+appears only when a program is actually blocking the shutdown, lists exactly
+those programs, and covers every way a shutdown can start (`shutdown.exe`,
+Ctrl+Alt+Del, Settings, ...).
+
+This mod is a different thing: a look-alike **confirmation screen shown by
+`explorer.exe` before the shutdown is started**. It is shown every time
+something is open, lists all open programs (whether or not they would block),
+needs no `LogonUI.exe` setup and works on any Windows 10/11 build.
+
+- Want the authentic screen that only appears when something really blocks the
+  shutdown? Use `win7-bsdr`.
+- Want a Vista/7-style "these programs are still open" confirmation on every
+  shell-initiated shutdown, with no `LogonUI.exe` setup? Use this mod.
+- They can be enabled together: this screen appears first, then the real
+  blocked-shutdown screen if something actually blocks.
+
+The files on the system are not modified. After clicking "Force log off"/"Force
+shutdown", the mod only adds `EWX_FORCEIFHUNG` (programs that have stopped
+responding are closed). A program that refuses to close, for example because of
+unsaved work, is not force-closed, so Windows may still show its own "app is
+preventing shutdown" screen afterwards.
 
 ## Screenshots
 
@@ -31,7 +54,7 @@ before Windows does the actual shutdown/restart/logoff. After clicking "Force lo
 
 ## Features
 
-- The mod shows every open program in a scrollable list, with icons just like Windows Vista/7 did.
+- The mod shows every open program in a scrollable list, with icons just like Windows Vista/7 did. Programs that have stopped responding are marked "not responding" and listed first.
 - If nothing is open, the screen doesn't show up at all and the system goes straight to shutdown.
 - The mod includes two skins to choose in the settings: **Windows 7** (blue Aero) or **Windows Vista** (red button) and the changes apply instantly.
 - The mod is translated into 21 languages, matched automatically the system language (or pick one manually in settings).
@@ -1163,19 +1186,22 @@ static BOOL CALLBACK CollectVisibleWindows(HWND w, LPARAM) {
         BOOL cloaked = FALSE;
         if (SUCCEEDED(DwmGetWindowAttribute(w, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked)
             return TRUE;
-        wchar_t title[256]{};
-        // GetWindowTextW on a foreign window already applies USER32's
-        // internal hang timeout, so it cannot deadlock the way a plain
-        // SendMessage would.
-        if (!GetWindowTextW(w, title, ARRAYSIZE(title)) || !title[0]) return TRUE;
         // Shell surfaces (the Start menu, the taskbar, composited UWP hosts)
         // are not programs that must be closed. Match them by window class,
         // never by caption: a caption like "Start" is localized, so a German
         // or Japanese system would otherwise list the Start menu here, and any
         // user window literally titled "Start" would be silently dropped. The
         // host processes are covered by IsSystemHostProcess below; this catches
-        // the remaining explorer-owned surfaces.
+        // the remaining explorer-owned surfaces. Done before the caption is
+        // read so shell windows are never messaged at all.
         if (IsShellSurfaceClass(w)) return TRUE;
+        wchar_t title[256]{};
+        // GetWindowTextW on a window of *this* process is a plain synchronous
+        // WM_GETTEXT with no timeout, and this mod runs in explorer.exe, which
+        // hosts every File Explorer window: a stalled one would freeze the UI
+        // thread. InternalGetWindowText copies the caption straight from the
+        // window structure and never sends a message.
+        if (!InternalGetWindowText(w, title, ARRAYSIZE(title)) || !title[0]) return TRUE;
         DWORD pid=0; GetWindowThreadProcessId(w, &pid);
         wchar_t path[MAX_PATH]{}; DWORD n=ARRAYSIZE(path);
         HANDLE h=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
@@ -1273,7 +1299,7 @@ static int RefreshOpenPrograms(){
 }
 static const wchar_t* GetActionText()  { return GetUiText()->force[g_action]; }
 static const wchar_t* GetActionBody()  { return GetUiText()->body[g_action]; }
-static const wchar_t* GetBlockedNote() { return GetUiText()->blocked[g_action]; }
+[[maybe_unused]] static const wchar_t* GetBlockedNote() { return GetUiText()->blocked[g_action]; }
 static const wchar_t* GetNotRespondingNote() { return GetUiText()->notResponding; }
 
 // Picks the grammatically-agreeing suffix for the given count, so the
@@ -2172,13 +2198,16 @@ static LRESULT CALLBACK DialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 // A program that stopped responding is what actually holds
                 // the shutdown back, so it gets its own emphasised note.
                 const bool blocking = g_openPrograms[i].blocking;
-                HFONT rowNote = blocking ? blockFont : noteFont;
+                // Only a window that stopped responding gets a note: the screen
+                // lists every open program, so "this program is preventing
+                // Windows from shutting down" would be untrue for most rows.
+                HFONT rowNote = blocking ? blockFont : nullptr;
                 if (rowNote) {
                     SetTextColor(dc, blocking ? g_skin->blockingNoteText : g_skin->noteText);
                     SelectObject(dc, rowNote);
                     RECT noteR{textLeft, rowTop + nameH, L.contentRight,
                               rowTop + nameH + (L.compact ? DpiScale(17) : DpiScale(22))};
-                    DrawTextW(dc, blocking ? GetNotRespondingNote() : GetBlockedNote(),
+                    DrawTextW(dc, GetNotRespondingNote(),
                               -1, &noteR, DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS);
                 }
             }
