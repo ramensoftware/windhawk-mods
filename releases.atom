@@ -2,12 +2,90 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-19T20:54:08.000Z</updated>
+    <updated>2026-09-19T21:55:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[D3D9 Flip Model Upgrade 1.0]]></title>
+        <id>https://windhawk.net/mods/d3d9-flip-model-upgrade#68ea89198430663374733ef5f9ce360c04ef5695</id>
+        <link href="https://windhawk.net/mods/d3d9-flip-model-upgrade"/>
+        <updated>2026-09-19T21:55:59.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="d3d9flipmodelupgrade">D3D9 Flip Model Upgrade</h1>
+<p><strong>Important: close the game before this mod gets disabled, updated or
+reloaded.</strong> A game that runs with the mod keeps using the Direct3D 9Ex device
+and the emulated textures, which only work while the mod is loaded, so unloading
+the mod will most likely break or crash the game. That includes disabling the
+mod, changing its process inclusion list, and <strong>mod updates that Windhawk
+installs automatically in the background</strong>. If you play with this mod enabled,
+consider turning off automatic updates for it. Changing the settings is fine,
+they apply the next time the game creates or resets its device.</p>
+<p>Direct3D 9 games that run windowed or borderless present with the legacy
+<em>blt model</em>: every frame is copied and composed by DWM, which adds latency and
+blocks VRR. Windows 11's "Optimizations for windowed games" only covers
+DirectX 10/11, so D3D9 games are left behind.</p>
+<p>This mod transparently creates the game's device as a <strong>Direct3D 9Ex</strong> device
+with a <strong><code>D3DSWAPEFFECT_FLIPEX</code></strong> swap chain (the D3D9 flip model). Once the
+game window covers the whole screen (borderless fullscreen), DWM can promote it
+to <strong>Independent Flip</strong>, the same presentation path exclusive fullscreen uses.</p>
+<h2 id="howtoenablethemodforaprogram">How to enable the mod for a program</h2>
+<p>This mod doesn't target any process by default. In Windhawk, go to the mod's
+"Advanced" tab and scroll down to "Custom process inclusion list". In that box,
+put the filename of the game's <code>.exe</code>, then click "Save" and (re)start the game.</p>
+<h2 id="howtoverify">How to verify</h2>
+<p>Use <a href="https://github.com/GameTechDev/PresentMon">PresentMon</a> (or an overlay that
+shows the presentation mode, such as Special K or RTSS). A windowed D3D9 game
+normally shows <code>Composed: Copy with GPU GDI</code>. With the mod it should show
+<code>Hardware: Independent Flip</code> or <code>Hardware Composed: Independent Flip</code>.</p>
+<p>Independent Flip requires the game window to cover the entire monitor with
+nothing drawn on top of it. Run the game in its borderless mode, or turn on
+<strong>Force borderless fullscreen</strong> in the mod settings.</p>
+<p>A game that is not DPI aware gets stretched by DWM on a scaled display, which
+prevents Independent Flip as well. If that is the case, open the properties of
+the game executable, and under Compatibility, Change high DPI settings, set the
+high DPI scaling override to Application.</p>
+<h2 id="exclusivefullscreen">Exclusive fullscreen</h2>
+<p>Games running in exclusive fullscreen are left untouched by default: Windows'
+Fullscreen Optimizations already give them flip presentation. Turn on <strong>Force
+borderless fullscreen</strong> to convert them to an upgraded borderless window
+instead.</p>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>Back buffer multisampling (MSAA requested directly on the swap chain) isn't
+supported by the flip model and is dropped. Use the <strong>Keep MSAA</strong> setting to
+skip the upgrade for such games instead.</li>
+<li>Games that lock the back buffer (some screenshot/readback code) lose that
+ability.</li>
+<li>Anything drawn into the game window with GDI disappears; the flip model only
+shows the Direct3D content.</li>
+<li>Games relying on <code>D3DSWAPEFFECT_COPY</code> keeping the previous frame's content
+may flicker.</li>
+<li><code>D3DPOOL_MANAGED</code> doesn't exist in D3D9Ex, so managed textures are emulated
+with a system memory texture plus a default pool copy, and managed buffers
+are created in the default pool. The Ex device is also hidden from D3DX
+(<code>d3dx9_*.dll</code>), which otherwise refuses to load managed textures. A few
+games may misbehave or fail to reset their device after a resolution change.
+Games that often lock or read back managed buffers may run slower.</li>
+<li>D3D9 replacements that don't use the system <code>d3d9.dll</code> (DXVK, d3d9on12
+wrappers) bypass this mod entirely.</li>
+<li>A Direct3D 9Ex device is never reported as lost. Games with logic that
+depends on losing the device after Alt+Tab may misbehave.</li>
+<li>Textures restored by a state block are not tracked. If the game modifies
+such a texture while it stays bound, the change shows up once the texture is
+bound again.</li>
+<li>The flip model can only present to the device window. Games that present the
+same swap chain to several windows will only draw to one of them.</li>
+<li>No guarantees of anti-cheat compatibility.</li>
+</ul>
+<p>Enable the mod's logging (Advanced → Debug logging) to see exactly what was
+changed and any failure codes.</p>]]></content>
+        <author>
+            <name>tria</name>
+            <uri>https://github.com/triatomic</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better Volume Mixer 1.0]]></title>
         <id>https://windhawk.net/mods/better-volume-mixer#1d987911606d7b61a85fd941f78e1bc6a6fee6d4</id>
@@ -1445,66 +1523,6 @@ Windhawk may be unable to load the mod until it is updated.</p>]]></content>
         <author>
             <name>Hoffelhas</name>
             <uri>https://github.com/Hoffelhas</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide Scrollbars 1.0.0]]></title>
-        <id>https://windhawk.net/mods/hide-scrollbars#ee6f6c54fbf9168becf6c4a801a1fd2b634c4954</id>
-        <link href="https://windhawk.net/mods/hide-scrollbars"/>
-        <updated>2026-09-11T13:13:00.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="hidescrollbars">Hide Scrollbars</h1>
-<p>Shrinks the vertical and/or horizontal scrollbars away in the target
-process. By default it targets <code>explorer.exe</code>, so the File Explorer file
-list loses its scrollbar and the freed strip is used by the content
-instead of sitting empty.</p>
-<p>To apply it to other programs, add them to the mod's <strong>Custom process
-inclusion list</strong> under the mod's Advanced settings in Windhawk.</p>
-<p>Mouse-wheel and keyboard scrolling are unaffected.</p>
-<h2 id="screenshots">Screenshots</h2>
-<p>Windows default (slim scrollbar in its own gutter):</p>
-<p><img src="https://raw.githubusercontent.com/AmazingBodilyFluids/windhawk-mods/assets/hide-scrollbars-default.png" alt="Default" /></p>
-<p>With the mod (1px sliver, gutter reclaimed):</p>
-<p><img src="https://raw.githubusercontent.com/AmazingBodilyFluids/windhawk-mods/assets/hide-scrollbars-1px.png" alt="With the mod" /></p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod hooks <code>GetSystemMetrics</code>, <code>GetSystemMetricsForDpi</code> and
-<code>GetThemeSysSize</code>, and reports a size of 1px for <code>SM_CXVSCROLL</code> /
-<code>SM_CYHSCROLL</code> (the vertical/horizontal scrollbar thickness). Code that
-lays itself out from that metric - such as Explorer's DirectUI file list</p>
-<ul>
-<li>then shrinks the scrollbar to a 1px sliver. Plain Win32 windows that
-draw standard non-client scrollbars are mostly unaffected, because
-user32 lays those out from an internal metric table rather than the
-exported function.</li>
-</ul>
-<h2 id="why1pxandnot0">Why 1px and not 0</h2>
-<p>Reporting 0 makes the scrollbar disappear entirely, but a 0-width
-scrollbar reads as "not scrollable" to the Windows precision-touchpad
-pan handler, so two-finger scrolling stops working in the affected
-windows. A 1px sliver is visually negligible and keeps precision-touchpad
-scrolling working, so the mod uses 1px and does not expose a 0 option.
-Mouse wheel and keyboard scrolling (arrows, PageUp/PageDown, Home/End)
-work either way.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The override is process-wide. Other mods running in the same process
-that read <code>SM_CXVSCROLL</code> / <code>SM_CYHSCROLL</code> (for example to hit-test the
-scrollbar strip) will see the reduced value too.</li>
-<li><code>SM_CXVSCROLL</code> also drives the width of combo-box drop-down buttons
-and the status-bar sizing grip. Code that reads the exported metric
-(rather than user32's internal table) shrinks those too.</li>
-<li>The scrollbar <em>arrow button</em> metrics (<code>SM_CXHSCROLL</code> / <code>SM_CYVSCROLL</code>)
-and <code>SPI_GETNONCLIENTMETRICS</code> are left untouched, so a control that
-mixes those with <code>SM_CXVSCROLL</code> may lay out slightly oddly.</li>
-<li>If a targeted process misbehaves, remove it from the inclusion list.</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Hide vertical scrollbars</strong> - toggle the vertical bar.</li>
-<li><strong>Hide horizontal scrollbars</strong> - toggle the horizontal bar.</li>
-</ul>]]></content>
-        <author>
-            <name>AmazingBodilyFluids</name>
-            <uri>https://github.com/AmazingBodilyFluids</uri>
         </author>
     </entry>
 </feed>
