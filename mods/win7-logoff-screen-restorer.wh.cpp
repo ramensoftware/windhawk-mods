@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id             win7-logoff-screen-restorer
 // @name           Windows Vista/7 Logoff Screen Restorer
-// @description    Shows a Windows Vista/7-style full-screen confirmation listing your open programs before log off, shut down or restart on Windows 10 and 11
+// @description    This mod shows a Windows Vista/7-style full-screen confirmation listing your open programs before log off, shut down or restart on Windows 10 and 11
 // @version        1.0.0
 // @author         babamohammed
 // @github         https://github.com/babamohammed2022
