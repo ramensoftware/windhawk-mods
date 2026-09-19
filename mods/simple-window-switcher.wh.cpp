@@ -83,6 +83,16 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
       - system: Follow system setting
       - light: Light
       - dark: Dark
+    - backdropBlurEffect: off
+      $name: Backdrop Blur
+      $description: Blur the desktop behind the switcher while it is open. Off by default. Acrylic blurs the live desktop; Wallpaper adds the desktop wallpaper as a tinted underlay.
+      $options:
+      - off: Off
+      - acrylic: Acrylic Blur
+      - acrylicWallpaper: Acrylic Blur + Wallpaper
+    - backdropBlurOpacity: 60
+      $name: Backdrop Dim Opacity (%)
+      $description: How much the blurred backdrop is darkened (0-100). Higher = darker. Only applies when Backdrop Blur is enabled.
     - highlightStyle: auto
       $name: Task Highlight Style
       $description: Style used for the selected task row/tile. Auto uses Background fill only on Windows 11 and Border only on Windows 10.
@@ -855,6 +865,8 @@ struct WindowEntry {
 struct Settings {
     WCHAR theme[32]; WCHAR colorScheme[32]; WCHAR cornerPreference[32]; WCHAR scrollWheelBehavior[32]; WCHAR scrollWheelAction[32]; WCHAR scrollSecondaryAction[32]; WCHAR scrollSecondaryModifier[32]; WCHAR taskListOrientation[32]; WCHAR headerContentOrientation[32]; WCHAR iconSize[32]; WCHAR backwardShortcut[32]; WCHAR altBacktickBehavior[32]; WCHAR thumbnailPosition[32]; WCHAR thumbnailAlignment[32]; WCHAR switcherDisplayBehavior[32];
     WCHAR virtualDesktopBehavior[32];
+    WCHAR backdropBlurEffect[32];
+    int backdropBlurOpacity;
     // Global theme settings (apply to both light and dark)
     WCHAR highlightStyle[32]; int opacity; bool showSwitcherBorder;
     // Dark Mode color settings
@@ -944,11 +956,12 @@ static std::vector<std::wstring> g_excludeExePatterns;
 static std::vector<HWND> g_hMirrorSwitchers;
 
 static HWND g_hSwitcher = NULL;
+static HWND g_hBackdropWnd = NULL; // Backdrop Blur full-screen window (state block further below)
 static HWND g_hCloseBtnWnd = NULL;
 
 static bool IsSwitcherWindow(HWND hWnd) {
     if (!hWnd) return false;
-    if (hWnd == g_hSwitcher || hWnd == g_hCloseBtnWnd) return true;
+    if (hWnd == g_hSwitcher || hWnd == g_hCloseBtnWnd || hWnd == g_hBackdropWnd) return true;
     for (HWND h : g_hMirrorSwitchers) {
         if (hWnd == h) return true;
     }
@@ -1101,6 +1114,205 @@ static bool g_hotkeysRegistered = false;
 static bool g_isAltBacktickSameApp = false;
 static HMONITOR g_hCurrentMonitor = NULL;
 static Settings g_settings;
+
+// ============================================================================
+// Backdrop Blur (opt-in): a full-screen, click-through window shown *behind*
+// the switcher while it is open.
+//   - "blur"      : live Acrylic blur of the real desktop (DWM accent policy)
+//   - "wallpaper" : a GDI+ blurred copy of the desktop wallpaper
+// Both are dimmed by Style.backdropBlurOpacity. Painted once per show, never
+// per-frame. Off by default; zero cost when disabled.
+// ============================================================================
+#define SWS_BACKDROP_CLASSNAME L"WindhawkSWS_Backdrop"
+// g_hBackdropWnd is declared above, near the other switcher window handles.
+static bool g_backdropClassRegistered = false;
+static Gdiplus::Bitmap* g_backdropBitmap = NULL; // blurred content for "wallpaper" mode
+
+// Resolved lazily so this block doesn't depend on the later declaration site.
+static SetWindowCompositionAttribute_t GetSetWindowCompositionAttribute() {
+    static SetWindowCompositionAttribute_t fn = (SetWindowCompositionAttribute_t)GetProcAddress(
+        GetModuleHandleW(L"user32.dll"), "SetWindowCompositionAttribute");
+    return fn;
+}
+
+static bool BackdropBlurEnabled() { return wcscmp(g_settings.backdropBlurEffect, L"off") != 0; }
+static bool BackdropBlurIsLive()  { return wcscmp(g_settings.backdropBlurEffect, L"acrylic") == 0; }
+
+static LRESULT CALLBACK BackdropWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    switch (uMsg) {
+        case WM_NCHITTEST:
+            return HTTRANSPARENT; // fully click-through
+        case WM_ERASEBKGND:
+            return 1; // never let GDI flash a black background
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hWnd, &ps);
+            if (g_backdropBitmap) {
+                RECT rc; GetClientRect(hWnd, &rc);
+                Gdiplus::Graphics g(hdc);
+                g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+                g.DrawImage(g_backdropBitmap, 0, 0, rc.right - rc.left, rc.bottom - rc.top);
+            } else if (!BackdropBlurIsLive()) {
+                HBRUSH br = CreateSolidBrush(RGB(16, 16, 16));
+                FillRect(hdc, &ps.rcPaint, br);
+                DeleteObject(br);
+            }
+            // Live Acrylic mode paints nothing: the DWM accent effect supplies the blur.
+            EndPaint(hWnd, &ps);
+            return 0;
+        }
+    }
+    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+}
+
+static void EnsureBackdropWindow() {
+    if (g_hBackdropWnd) return;
+    if (!g_backdropClassRegistered) {
+        WNDCLASSEXW wc = { sizeof(wc) };
+        wc.lpfnWndProc = BackdropWndProc;
+        wc.hInstance = GetModuleHandleW(NULL);
+        wc.lpszClassName = SWS_BACKDROP_CLASSNAME;
+        wc.hCursor = LoadCursorW(NULL, IDC_ARROW);
+        wc.hbrBackground = (HBRUSH)GetStockObject(NULL_BRUSH);
+        if (RegisterClassExW(&wc)) g_backdropClassRegistered = true;
+    }
+    if (!g_backdropClassRegistered) return;
+    // No WS_EX_LAYERED: wallpaper mode paints via WM_PAINT, blur mode via DWM accent.
+    g_hBackdropWnd = CreateSWSWindow(
+        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
+        SWS_BACKDROP_CLASSNAME, L"",
+        WS_POPUP, 0, 0, 0, 0, NULL, NULL, GetModuleHandleW(NULL), NULL);
+}
+
+// Build the blurred wallpaper bitmap once per show ("wallpaper" mode).
+static void BuildBackdropWallpaper(int w, int h) {
+    if (g_backdropBitmap) { delete g_backdropBitmap; g_backdropBitmap = NULL; }
+    if (w <= 0 || h <= 0) return;
+    WCHAR wp[MAX_PATH] = L"";
+    if (!SystemParametersInfoW(SPI_GETDESKWALLPAPER, MAX_PATH, wp, 0) || !wp[0]) return;
+    Gdiplus::Bitmap src(wp);
+    if (src.GetLastStatus() != Gdiplus::Ok || src.GetWidth() == 0 || src.GetHeight() == 0) return;
+
+    // Downscale, then blur at low res (cheap), then upscale at draw time.
+    int sw = w / 8 > 0 ? w / 8 : 1, sh = h / 8 > 0 ? h / 8 : 1;
+    Gdiplus::Bitmap* blurred = new Gdiplus::Bitmap(sw, sh, PixelFormat32bppARGB);
+    {
+        Gdiplus::Graphics g(blurred);
+        g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+        g.DrawImage(&src, 0, 0, sw, sh);
+    }
+    // Separable box blur (2 passes, horizontal + vertical) directly on the 32bpp
+    // pixels. Toolchain-safe (no GDI+ 1.1 effect classes in MinGW) and done once per show.
+    {
+        Gdiplus::Rect full(0, 0, sw, sh);
+        Gdiplus::BitmapData bd = {};
+        if (blurred->LockBits(&full, Gdiplus::ImageLockModeRead | Gdiplus::ImageLockModeWrite,
+                              PixelFormat32bppARGB, &bd) == Gdiplus::Ok && bd.Scan0) {
+            const int R = 6; // blur radius (px, at downscaled res)
+            std::vector<BYTE> tmp((size_t)sw * sh * 4);
+            BYTE* srcPx = (BYTE*)bd.Scan0;
+            // Horizontal pass into tmp.
+            for (int y = 0; y < sh; y++) {
+                const BYTE* row = srcPx + (size_t)y * bd.Stride;
+                BYTE* orow = tmp.data() + (size_t)y * sw * 4;
+                for (int x = 0; x < sw; x++) {
+                    int b = 0, g = 0, r = 0, a = 0, n = 0;
+                    for (int k = -R; k <= R; k++) {
+                        int xx = x + k; if (xx < 0) xx = 0; if (xx >= sw) xx = sw - 1;
+                        const BYTE* p = row + (size_t)xx * 4;
+                        b += p[0]; g += p[1]; r += p[2]; a += p[3]; n++;
+                    }
+                    BYTE* o = orow + (size_t)x * 4;
+                    o[0] = (BYTE)(b / n); o[1] = (BYTE)(g / n); o[2] = (BYTE)(r / n); o[3] = (BYTE)(a / n);
+                }
+            }
+            // Vertical pass from tmp back into the bitmap.
+            for (int x = 0; x < sw; x++) {
+                for (int y = 0; y < sh; y++) {
+                    int b = 0, g = 0, r = 0, a = 0, n = 0;
+                    for (int k = -R; k <= R; k++) {
+                        int yy = y + k; if (yy < 0) yy = 0; if (yy >= sh) yy = sh - 1;
+                        const BYTE* p = tmp.data() + ((size_t)yy * sw + x) * 4;
+                        b += p[0]; g += p[1]; r += p[2]; a += p[3]; n++;
+                    }
+                    BYTE* o = srcPx + (size_t)y * bd.Stride + (size_t)x * 4;
+                    o[0] = (BYTE)(b / n); o[1] = (BYTE)(g / n); o[2] = (BYTE)(r / n); o[3] = (BYTE)(a / n);
+                }
+            }
+            blurred->UnlockBits(&bd);
+        }
+    }
+
+    // Dark veil baked in via alpha-blended black rectangle.
+    {
+        Gdiplus::Graphics g(blurred);
+        int a = g_settings.backdropBlurOpacity * 255 / 100;
+        Gdiplus::SolidBrush veil(Gdiplus::Color(a, 0, 0, 0));
+        Gdiplus::Rect full(0, 0, sw, sh);
+        g.FillRectangle(&veil, full);
+    }
+    g_backdropBitmap = blurred;
+}
+
+static void ShowBackdropBlur() {
+    if (!BackdropBlurEnabled()) return;
+    EnsureBackdropWindow();
+    if (!g_hBackdropWnd) return;
+
+    int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    int w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    int h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+    if (BackdropBlurIsLive()) {
+        // Live Acrylic blur of the real desktop, tinted by the veil opacity.
+        auto pSetWCA = GetSetWindowCompositionAttribute();
+        if (pSetWCA) {
+            ACCENT_POLICY a = {};
+            a.AccentState = 4; // ACCENT_ENABLE_ACRYLICBLURBEHIND
+            a.AccentFlags = 2; // draw all borders
+            int alpha = g_settings.backdropBlurOpacity * 255 / 100;
+            a.GradientColor = (DWORD)((alpha << 24) | 0x000000); // ABGR black tint
+            WINDOWCOMPOSITIONATTRIBDATA d = { 19, &a, sizeof(a) };
+            pSetWCA(g_hBackdropWnd, &d);
+        }
+        if (g_backdropBitmap) { delete g_backdropBitmap; g_backdropBitmap = NULL; }
+    } else {
+        BuildBackdropWallpaper(w, h);
+        auto pSetWCA = GetSetWindowCompositionAttribute();
+        if (pSetWCA) {
+            ACCENT_POLICY a = {};
+            a.AccentState = 0; // ACCENT_DISABLED — we paint the blurred bitmap ourselves
+            WINDOWCOMPOSITIONATTRIBDATA d = { 19, &a, sizeof(a) };
+            pSetWCA(g_hBackdropWnd, &d);
+        }
+    }
+
+    SetWindowPos(g_hBackdropWnd, HWND_BOTTOM, vx, vy, w, h,
+                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    if (!BackdropBlurIsLive()) InvalidateRect(g_hBackdropWnd, NULL, FALSE);
+}
+
+static void HideBackdropBlur() {
+    if (g_hBackdropWnd && IsWindow(g_hBackdropWnd)) {
+        ShowWindow(g_hBackdropWnd, SW_HIDE);
+    }
+    if (g_backdropBitmap) { delete g_backdropBitmap; g_backdropBitmap = NULL; }
+    auto pSetWCA = GetSetWindowCompositionAttribute();
+    if (g_hBackdropWnd && pSetWCA) {
+        ACCENT_POLICY a = {}; // ACCENT_DISABLED
+        WINDOWCOMPOSITIONATTRIBDATA d = { 19, &a, sizeof(a) };
+        pSetWCA(g_hBackdropWnd, &d);
+    }
+}
+
+static void DestroyBackdropWindow() {
+    if (g_backdropBitmap) { delete g_backdropBitmap; g_backdropBitmap = NULL; }
+    if (g_hBackdropWnd) {
+        if (IsWindow(g_hBackdropWnd)) DestroyWindow(g_hBackdropWnd);
+        g_hBackdropWnd = NULL;
+    }
+}
 static HANDLE g_hSwitcherThread = NULL;
 static DWORD g_dwSwitcherThreadId = 0;
 static bool g_isExplorer = false;
@@ -1305,6 +1517,9 @@ static void ApplyThemeToWindow(HWND hWnd);
 static void CreateMirrorSwitchers();
 static void ShowMirrorSwitchers();
 static void HideSwitcher();
+static void ShowBackdropBlur();
+static void HideBackdropBlur();
+static void DestroyBackdropWindow();
 static void PaintSwitcher();
 static void PaintSwitcherOverlay();
 static INT GetCornerPref();
@@ -8210,6 +8425,8 @@ static void RevealPendingSwitcher() {
     if (g_hCloseBtnWnd) {
         ShowWindow(g_hCloseBtnWnd, SW_SHOWNA);
     }
+    ShowBackdropBlur(); // blurred backdrop behind the switcher (opt-in)
+    ShowWindow(g_hSwitcher, SW_SHOWNA);
     ShowWindow(g_hSwitcher, SW_SHOWNA);
     BringWindowToTop(g_hSwitcher);
     SetForegroundWindow(g_hSwitcher);
@@ -8635,6 +8852,7 @@ static void ShowSwitcher(bool sticky, bool immediate = false) {
     if (g_hCloseBtnWnd) {
         ShowWindow(g_hCloseBtnWnd, SW_SHOWNA);
     }
+    ShowBackdropBlur(); // blurred backdrop behind the switcher (opt-in)
     ShowWindow(g_hSwitcher, SW_SHOWNA);
     BringWindowToTop(g_hSwitcher);
     SetForegroundWindow(g_hSwitcher);
@@ -8663,6 +8881,8 @@ static void HideSwitcher() {
     if (g_hSwitcher) {
         KillTimer(g_hSwitcher, SWS_DYNAMIC_RESIZE_TIMER_ID);
     }
+    // Hide the backdrop first so it never outlives the switcher on screen.
+    HideBackdropBlur();
     // Hide every switcher window FIRST, before any teardown or WS_EX_LAYERED /
     // DWM attribute juggling below, so DWM can never compose an intermediate
     // (white border / unpainted / half-torn-down) frame on exit.
@@ -12176,6 +12396,15 @@ static void LoadSettings() {
     }
     DetectSystemDwmCornerRadius();
     LoadStringSetting(L"Style.colorScheme", g_settings.colorScheme, L"system");
+    LoadStringSetting(L"Style.backdropBlurEffect", g_settings.backdropBlurEffect, L"off");
+    if (wcscmp(g_settings.backdropBlurEffect, L"off") != 0 &&
+        wcscmp(g_settings.backdropBlurEffect, L"acrylic") != 0 &&
+        wcscmp(g_settings.backdropBlurEffect, L"acrylicWallpaper") != 0) {
+        wcsncpy_s(g_settings.backdropBlurEffect, L"off", _TRUNCATE);
+    }
+    g_settings.backdropBlurOpacity = Wh_GetIntSetting(L"Style.backdropBlurOpacity");
+    if (g_settings.backdropBlurOpacity < 0) g_settings.backdropBlurOpacity = 0;
+    if (g_settings.backdropBlurOpacity > 100) g_settings.backdropBlurOpacity = 100;
     LoadStringSetting(L"Appearance.Corners.cornerPreference", g_settings.cornerPreference, L"default");
     if (wcscmp(g_settings.cornerPreference, L"auto") == 0) {
         wcsncpy_s(g_settings.cornerPreference, L"default", _TRUNCATE);
@@ -12876,6 +13105,7 @@ thread_exit:
     UnregisterThumbnails();
     g_windows.clear();
     g_mruWindows.clear();
+    DestroyBackdropWindow();
     if (g_hCloseBtnWnd) { DestroyWindow(g_hCloseBtnWnd); g_hCloseBtnWnd = NULL; }
     if (g_hSwitcher) { DeregisterShellHookWindow(g_hSwitcher); DestroyWindow(g_hSwitcher); g_hSwitcher = NULL; }
     UnregisterClassW(SWS_CLASSNAME, GetModuleHandleW(NULL));
