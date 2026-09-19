@@ -90,17 +90,16 @@ Windhawk log the first time it detects this.
 enabled, and that `%s%` is in its **Top line** or **Bottom line** setting — not in
 the tooltip, the middle line, or the weather format.
 
-**The spacer works but the clock is the wrong width.** Adjust the same Max width
-value. Use **Line width override** only if the automatic width is being read
-incorrectly.
+**The spacer works but the clock is the wrong width.** Adjust either the clock
+mod's **Max width** or this mod's **Max clock width**. The latter applies only
+to generated spacer rows, so leave it at `0` when you want the clock mod to
+own the whole clock width.
 
 ## Settings
 
-- **Line width override** — explicit width for the spacer grid. Usually `0`
-  (automatic) is correct; the width is inherited from the clock's Max width.
-- **Max clock width** — fixed width for the generated spacer rows. Equivalent
-  to setting Max width in Taskbar Clock Customization; that mod's own Max width
-  is respected automatically when this is `0`.
+- **Max clock width** — fixed width for generated spacer rows. When it is `0`,
+  the mod uses a finite **Max width** already set on the shared clock panel by
+  Taskbar Clock Customization. It does not constrain an unspaced native line.
 - **Minimum spacer width** — a floor, in pixels, for every gap. `0` (the default)
   leaves gaps fully elastic. A small value such as `8` guarantees a visible gap
   even before a fixed clock width is configured.
@@ -137,19 +136,12 @@ untouched.
 
 // ==WindhawkModSettings==
 /*
-- lineWidth: 0
-  $name: Line width override (px, 0 = auto)
-  $description: >-
-    Explicit width for the spacer grid. Usually 0 is correct — the clock area
-    inherits its width from the Max width set in Taskbar Clock Customization.
-    Set this only if the spacer doesn't expand as expected.
-
 - maxWidth: 0
   $name: Max clock width (px, 0 = off)
   $description: >-
-    Fixed width for the generated spacer rows. Equivalent to setting Max width
-    in Taskbar Clock Customization — use whichever you prefer; that mod's own
-    Max width is respected automatically when this is 0.
+    Fixed width for the generated spacer rows. When this is 0, the mod uses a
+    finite Max width already set on the shared clock panel by Taskbar Clock
+    Customization. This setting does not constrain an unspaced native line.
 
 - minSpacerWidth: 0
   $name: Minimum spacer width (px, 0 = off)
@@ -170,6 +162,7 @@ untouched.
 #include <atomic>
 #include <cmath>
 #include <functional>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -710,7 +703,7 @@ public:
 
     void Start(AttemptFn attempt, AppliedFn applied,
                std::atomic<bool> const& unloading, int attempts = 5,
-               DWORD intervalMs = 2000) {
+               DWORD intervalMs = 2000, bool forceFirstAttempt = false) {
         Stop();
         if (unloading) return;
         attempt_ = attempt;
@@ -718,6 +711,7 @@ public:
         unloading_ = &unloading;
         attempts_ = attempts;
         intervalMs_ = intervalMs;
+        forceFirstAttempt_ = forceFirstAttempt;
         stopEvent_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         if (!stopEvent_) return;
         thread_ = CreateThread(
@@ -726,7 +720,13 @@ public:
                 auto* self = static_cast<RetryLoop*>(parameter);
                 for (int i = 0; i < self->attempts_ && !*self->unloading_;
                      ++i) {
-                    if (self->applied_ && self->applied_()) break;
+                    // A settings reload can need one restore/reapply pass even
+                    // while `applied` truthfully says we still own live XAML.
+                    // Do not overload that ownership flag merely to wake the
+                    // retry loop; request a forced first attempt instead.
+                    if (self->applied_ &&
+                        !(self->forceFirstAttempt_ && i == 0) &&
+                        self->applied_()) break;
                     if (i && WaitForSingleObject(self->stopEvent_,
                                                  self->intervalMs_) !=
                                  WAIT_TIMEOUT)
@@ -774,6 +774,7 @@ private:
     std::atomic<bool> const* unloading_ = nullptr;
     int attempts_ = 5;
     DWORD intervalMs_ = 2000;
+    bool forceFirstAttempt_ = false;
 };
 
 }  // namespace windhawk_mod_templates::taskbar_host
@@ -785,7 +786,6 @@ namespace tbh = windhawk_mod_templates::taskbar_host;
 // ============================================================
 
 struct ModSettings {
-    int lineWidth = 0;
     int maxWidth = 0;
     int minSpacerWidth = 0;
 };
@@ -794,7 +794,6 @@ static ModSettings g_settings;
 static void LoadSettings() {
     // sio::LoadInt reads and clamps in one step, so a negative value can never
     // reach the layout code even if a clamp line is later edited away.
-    g_settings.lineWidth = sio::LoadInt(L"lineWidth", 0, INT_MAX);
     g_settings.maxWidth = sio::LoadInt(L"maxWidth", 0, INT_MAX);
     g_settings.minSpacerWidth = sio::LoadInt(L"minSpacerWidth", 0, INT_MAX);
 }
@@ -804,8 +803,7 @@ static void LoadSettings() {
 // into a key that is stored alongside each generated panel.
 static uint64_t CurrentLayoutKey() {
     return (static_cast<uint64_t>(static_cast<uint32_t>(g_settings.maxWidth))) |
-           (static_cast<uint64_t>(static_cast<uint32_t>(g_settings.lineWidth)) << 20) |
-           (static_cast<uint64_t>(static_cast<uint32_t>(g_settings.minSpacerWidth)) << 40);
+           (static_cast<uint64_t>(static_cast<uint32_t>(g_settings.minSpacerWidth)) << 32);
 }
 
 // ============================================================
@@ -828,6 +826,8 @@ static std::atomic<bool> g_systemTrayModuleHooked{false};
 static std::atomic<bool> g_warnedNoElasticRoom{false};
 static HANDLE g_scanThread = nullptr;
 static HANDLE g_scanStopEvent = nullptr;
+[[clang::no_destroy]] static std::mutex g_scanMutex;
+static bool g_scanRequested = false;
 
 static void HandleLoadedModuleIfSystemTray(HMODULE hModule, LPCWSTR lpLibFileName);
 static void StartInitialScan();
@@ -849,6 +849,7 @@ struct SpacerState {
     winrt::weak_ref<StackPanel> generatedRef;
     uint64_t                    generatedLayoutKey = 0;
     int64_t                     textToken = 0;
+    bool                        sourceCollapsed = false;
 };
 
 // Wh_ModUninit is not called when Explorer terminates. Without this the vector's
@@ -958,9 +959,7 @@ static void ApplySegmentAlignment(TextBlock textBlock, int index, int count) {
     }
 }
 
-static double EffectiveLineWidth(TextBlock original, StackPanel parent) {
-    if (g_settings.lineWidth > 0)
-        return (double)g_settings.lineWidth;
+static double EffectiveLineWidth(StackPanel parent) {
     if (g_settings.maxWidth > 0)
         return (double)g_settings.maxWidth;
     // Taskbar Clock Customization applies its "Max width" setting as MaxWidth
@@ -1067,7 +1066,7 @@ static FrameworkElement BuildLineElement(winrt::hstring const& baseName,
                                          StackPanel parent,
                                          int lineIndex) {
     auto segments = SplitOnSpacer(line);
-    double width = EffectiveLineWidth(styleSource, parent);
+    double width = EffectiveLineWidth(parent);
 
     if (segments.size() > 1)
         return BuildSpacerGrid(baseName + L"_Line" + winrt::to_hstring(lineIndex),
@@ -1141,7 +1140,7 @@ static bool UpdateGeneratedPanelText(StackPanel generatedPanel,
 // Zero both axes: Taskbar Clock Customization re-sets Visibility on its own
 // schedule, and a nonzero-width collapsed block would still widen the shared
 // StackPanel past the generated rows.
-static void CollapseSourceTextBlock(TextBlock original) {
+static void CollapseSourceTextBlock(SpacerState& state, TextBlock original) {
     if (!original) return;
     original.Height(0.0);
     original.MinHeight(0.0);
@@ -1149,16 +1148,20 @@ static void CollapseSourceTextBlock(TextBlock original) {
     original.Width(0.0);
     original.MinWidth(0.0);
     original.Visibility(Visibility::Collapsed);
+    state.sourceCollapsed = true;
 }
 
-static void RestoreSourceTextBlock(TextBlock original) {
-    if (!original) return;
+static void RestoreSourceTextBlock(SpacerState& state, TextBlock original) {
+    // Do not overwrite a Visibility value owned by the clock template or Taskbar
+    // Clock Customization. This mod restores only a block it collapsed itself.
+    if (!original || !state.sourceCollapsed) return;
     original.ClearValue(FrameworkElement::HeightProperty());
     original.ClearValue(FrameworkElement::MinHeightProperty());
     original.ClearValue(FrameworkElement::MaxHeightProperty());
     original.ClearValue(FrameworkElement::WidthProperty());
     original.ClearValue(FrameworkElement::MinWidthProperty());
-    original.Visibility(Visibility::Visible);
+    original.ClearValue(UIElement::VisibilityProperty());
+    state.sourceCollapsed = false;
 }
 
 static void RemoveGeneratedPanel(SpacerState& state) {
@@ -1192,11 +1195,11 @@ static void UpdateSpacerLine(SpacerState& state) {
 
     if (!HasSpacerToken(fullText)) {
         RemoveGeneratedPanel(state);
-        RestoreSourceTextBlock(original);
+        RestoreSourceTextBlock(state, original);
         return;
     }
 
-    double width = EffectiveLineWidth(original, parent);
+    double width = EffectiveLineWidth(parent);
     WarnIfNoElasticRoom(width > 1.0);
     auto lines = SplitLines(fullText);
     uint64_t layoutKey = CurrentLayoutKey();
@@ -1205,7 +1208,7 @@ static void UpdateSpacerLine(SpacerState& state) {
     if (auto generated = state.generatedRef.get();
         generated && state.generatedLayoutKey == layoutKey &&
         UpdateGeneratedPanelText(generated, lines, width)) {
-        CollapseSourceTextBlock(original);
+        CollapseSourceTextBlock(state, original);
         return;
     }
 
@@ -1230,7 +1233,7 @@ static void UpdateSpacerLine(SpacerState& state) {
 
     state.generatedRef = winrt::make_weak(generated);
     state.generatedLayoutKey = layoutKey;
-    CollapseSourceTextBlock(original);
+    CollapseSourceTextBlock(state, original);
     generated.Visibility(Visibility::Visible);
 }
 
@@ -1413,7 +1416,8 @@ static void TryHookSystemTrayModule(PCWSTR reason) {
 // actually starting, by which point the system tray module is loaded. This
 // replaces watching every DLL load in the process.
 
-// Fallback only, used when the TrayUI::StartTaskbar symbol cannot be resolved.
+// A late-load fallback. TrayUI::StartTaskbar is a rebuild signal, not a
+// guarantee that SystemTray.dll was loaded before this mod initialized.
 using LoadLibraryExW_t = HMODULE (WINAPI*)(LPCWSTR, HANDLE, DWORD);
 LoadLibraryExW_t LoadLibraryExW_Original;
 
@@ -1442,9 +1446,8 @@ static void OnTaskbarRebuilt() {
 }
 
 static bool HookTaskbarDllSymbols() {
-    // The template hooks StartTaskbar alongside the four XamlRoot symbols, so
-    // a failure here is a failure of the whole set - the LoadLibraryExW
-    // watcher remains the fallback exactly as before.
+    // StartTaskbar is used to re-scan after a rebuild; late system-tray module
+    // discovery is handled independently by LoadLibraryExW below.
     g_trayUiStartTaskbarHooked = tbh::HookTaskbarSymbols(OnTaskbarRebuilt);
     return g_trayUiStartTaskbarHooked;
 }
@@ -1465,35 +1468,57 @@ static void WaitForThreadWithSentMessagePump(HANDLE thread) {
 }
 
 static void StartInitialScan() {
-    if (g_unloading || g_scanThread || g_scanDone) return;
+    std::lock_guard lock(g_scanMutex);
+    if (g_unloading) return;
+
+    // A completed worker leaves a signalled handle behind. Reap it before
+    // starting the next taskbar-rebuild scan; never overwrite a live handle.
+    if (g_scanThread && WaitForSingleObject(g_scanThread, 0) == WAIT_OBJECT_0) {
+        CloseHandle(g_scanThread);
+        g_scanThread = nullptr;
+        CloseHandle(g_scanStopEvent);
+        g_scanStopEvent = nullptr;
+    }
+    g_scanDone = false;
+    if (g_scanThread) {
+        // The existing worker will perform another bounded pass after its
+        // current attempt. Waiting here can deadlock the taskbar UI thread.
+        g_scanRequested = true;
+        return;
+    }
 
     g_scanStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_scanStopEvent) {
         Wh_Log(L"[Spacer] Failed to create scan stop event");
         return;
     }
-
+    HANDLE stopEvent = g_scanStopEvent;
     g_scanThread = CreateThread(nullptr, 0, [](void* param) -> DWORD {
-        HANDLE stopEvent = static_cast<HANDLE>(param);
-        for (int i = 0; i < 5 && !g_unloading && !g_scanDone; i++) {
-            if (i > 0 && WaitForSingleObject(stopEvent, 2000) != WAIT_TIMEOUT)
-                break;
-            HWND hWnd = FindCurrentProcessTaskbarWnd();
-            if (!hWnd) continue;
-            RunFromWindowThread(hWnd, [](void* param) {
-                HWND h = (HWND)param;
-                auto xamlRoot = GetTaskbarXamlRoot(h);
-                if (!xamlRoot) return;
-                auto root = xamlRoot.Content().try_as<FrameworkElement>();
-                if (!root) return;
-                g_scanDone = true;
-                ScanForSpacerTargets(root);
-                Wh_Log(L"[Spacer] Scan done, states=%d", (int)g_states.size());
-            }, hWnd);
-            if (g_scanDone) break;
-        }
+        HANDLE stop = static_cast<HANDLE>(param);
+        do {
+            for (int i = 0; i < 5 && !g_unloading && !g_scanDone; ++i) {
+                if (i && WaitForSingleObject(stop, 2000) != WAIT_TIMEOUT)
+                    return 0;
+                HWND hWnd = FindCurrentProcessTaskbarWnd();
+                if (!hWnd) continue;
+                RunFromWindowThread(hWnd, [](void* parameter) {
+                    HWND h = static_cast<HWND>(parameter);
+                    auto xamlRoot = GetTaskbarXamlRoot(h);
+                    if (!xamlRoot) return;
+                    auto root = xamlRoot.Content().try_as<FrameworkElement>();
+                    if (!root) return;
+                    g_scanDone = true;
+                    ScanForSpacerTargets(root);
+                    Wh_Log(L"[Spacer] Scan done, states=%d", (int)g_states.size());
+                }, hWnd);
+            }
+            std::lock_guard lock(g_scanMutex);
+            if (!g_scanRequested || g_unloading) break;
+            g_scanRequested = false;
+            g_scanDone = false;
+        } while (WaitForSingleObject(stop, 0) == WAIT_TIMEOUT);
         return 0;
-    }, g_scanStopEvent, 0, nullptr);
+    }, stopEvent, 0, nullptr);
 
     if (!g_scanThread) {
         CloseHandle(g_scanStopEvent);
@@ -1512,8 +1537,7 @@ static void ClearSpacerStates() {
             if (state.textToken)
                 textBlock.UnregisterPropertyChangedCallback(
                     TextBlock::TextProperty(), state.textToken);
-            textBlock.ClearValue(FrameworkElement::MaxWidthProperty());
-            RestoreSourceTextBlock(textBlock);
+            RestoreSourceTextBlock(state, textBlock);
         }
         // The parent StackPanel is intentionally untouched: this mod no longer
         // sets anything on it, and clearing MaxWidth here would erase Taskbar
@@ -1545,9 +1569,8 @@ BOOL Wh_ModInit() {
             Wh_Log(L"[Init] System tray symbol hooks failed");
             return FALSE;
         }
-    } else if (!g_trayUiStartTaskbarHooked) {
-        Wh_Log(L"[Init] System tray module not loaded and TrayUI::StartTaskbar "
-               L"unavailable — falling back to LoadLibraryExW");
+    } else {
+        Wh_Log(L"[Init] System tray module not loaded — watching LoadLibraryExW");
         HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
         auto pLoadLibraryExW = kernelbase
             ? reinterpret_cast<LoadLibraryExW_t>(GetProcAddress(kernelbase, "LoadLibraryExW"))
@@ -1559,9 +1582,6 @@ BOOL Wh_ModInit() {
             Wh_Log(L"[Init] LoadLibraryExW hook unavailable");
             return FALSE;
         }
-    } else {
-        Wh_Log(L"[Init] System tray module not loaded — waiting for "
-               L"TrayUI::StartTaskbar");
     }
 
     return TRUE;
@@ -1582,30 +1602,45 @@ void Wh_ModUninit() {
     g_unloading = true;
     Wh_Log(L"[Uninit]");
 
-    if (g_scanStopEvent)
-        SetEvent(g_scanStopEvent);
-    if (g_scanThread) {
-        WaitForThreadWithSentMessagePump(g_scanThread);
-        CloseHandle(g_scanThread);
-        g_scanThread = nullptr;
+    HANDLE scanThread = nullptr;
+    HANDLE scanStopEvent = nullptr;
+    {
+        std::lock_guard lock(g_scanMutex);
+        g_scanRequested = false;
+        scanThread = g_scanThread;
+        scanStopEvent = g_scanStopEvent;
+        if (scanStopEvent) SetEvent(scanStopEvent);
     }
-    if (g_scanStopEvent) {
-        CloseHandle(g_scanStopEvent);
-        g_scanStopEvent = nullptr;
+    if (scanThread) WaitForThreadWithSentMessagePump(scanThread);
+    {
+        std::lock_guard lock(g_scanMutex);
+        if (g_scanThread == scanThread) {
+            if (g_scanThread) CloseHandle(g_scanThread);
+            if (g_scanStopEvent) CloseHandle(g_scanStopEvent);
+            g_scanThread = nullptr;
+            g_scanStopEvent = nullptr;
+        }
     }
 
-    // ClearSpacerStates touches WinRT objects — must run on the UI thread.
-    if (HWND hWnd = FindCurrentProcessTaskbarWnd())
-        RunFromWindowThread(hWnd, [](void*) { ClearSpacerStates(); }, nullptr);
-    else
-        ClearSpacerStates();
+    // ClearSpacerStates owns XAML registrations and must never run from an
+    // arbitrary Windhawk thread. Retry a taskbar-thread dispatch briefly; when
+    // none exists the tree is already gone, so retain only weak state safely.
+    bool cleared = false;
+    for (int i = 0; i < 5 && !cleared; ++i) {
+        if (HWND hWnd = FindCurrentProcessTaskbarWnd())
+            cleared = RunFromWindowThread(
+                hWnd, [](void*) { ClearSpacerStates(); }, nullptr);
+        if (!cleared) Sleep(100);
+    }
+    if (!cleared)
+        Wh_Log(L"[Uninit] Failed to dispatch XAML cleanup; taskbar tree is unavailable");
 }
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
     g_warnedNoElasticRoom.store(false);
-    Wh_Log(L"[Settings] lineWidth=%d maxWidth=%d minSpacerWidth=%d",
-           g_settings.lineWidth, g_settings.maxWidth, g_settings.minSpacerWidth);
+    Wh_Log(L"[Settings] maxWidth=%d minSpacerWidth=%d",
+           g_settings.maxWidth, g_settings.minSpacerWidth);
 
     HWND hWnd = FindCurrentProcessTaskbarWnd();
     if (!hWnd) {
