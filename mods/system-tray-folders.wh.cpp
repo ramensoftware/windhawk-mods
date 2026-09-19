@@ -62,8 +62,9 @@ An icon goes into the first folder with a matching pattern. Icons that match
 nothing stay in the main grid. Until a folder has icons, the mod unloads itself
 and leaves the flyout alone.
 
-To see the exact names of your icons, turn on **Debug logging** in the mod's
-**Advanced** tab, open the tray overflow once, then click **Show log output**.
+To see the exact names of your icons, set **Debug logging** to **Mod logs** in
+the mod's **Advanced** tab, open the tray overflow once, then click **Show log
+output**.
 Each icon is listed as `Icon: app="..." tooltip="..." name="..." folder=N`,
 where `N` is the folder it went into, counting from 0, or -1 for none.
 
@@ -432,7 +433,7 @@ Controls::Control FindOverflowControl(void* manager) {
         }
     }
 
-    for (size_t offset = 0; offset < 0x100; offset += sizeof(void*)) {
+    for (size_t offset = 0; offset < 0x80; offset += sizeof(void*)) {
         void** field = (void**)((BYTE*)manager + offset);
         if (!IsReadable(field, sizeof(void*))) {
             break;
@@ -464,6 +465,9 @@ struct IconInfo {
     std::wstring appName;
     std::wstring toolTip;
     std::wstring name;
+    std::wstring lowerAppName;
+    std::wstring lowerToolTip;
+    std::wstring lowerName;
     Media::ImageSource image{nullptr};
     int folder = -1;
 };
@@ -1012,10 +1016,12 @@ void Rebuild(OverflowState& state, bool opening) {
             } else {
                 info.viewModel = viewModel;
                 ReadIconInfo(info);
+                info.lowerAppName = ToLower(info.appName);
+                info.lowerToolTip = ToLower(info.toolTip);
+                info.lowerName = ToLower(info.name);
             }
-            info.folder = FindFolderForIcon({ToLower(info.appName),
-                                             ToLower(info.toolTip),
-                                             ToLower(info.name)});
+            info.folder = FindFolderForIcon(
+                {info.lowerAppName, info.lowerToolTip, info.lowerName});
             iconCache.emplace(key, info);
             icons.push_back(std::move(info));
         }
@@ -1244,7 +1250,8 @@ void Detach(OverflowState& state) {
     auto originalIcons = state.originalIcons;
 
     // Cleanup steps that can fail don't stop the ones after them; the first
-    // failure is reported at the end. (Event handler removal can't fail.)
+    // failure is reported at the end. (Removing an event handler doesn't
+    // throw, the C++/WinRT event removers are noexcept.)
     std::exception_ptr error;
     auto step = [&error](auto&& function) {
         try {
@@ -1554,6 +1561,14 @@ void WINAPI OverflowXamlIslandManager_Show_Hook(void* pThis,
             Rebuild(*state, /*opening=*/true);
             if (auto overflow = state->overflow.get()) {
                 overflow.UpdateLayout();
+
+                double width;
+                double height;
+                GetItemSize(*state, &width, &height);
+                if (width != state->tileWidth || height != state->tileHeight) {
+                    Rebuild(*state);
+                    overflow.UpdateLayout();
+                }
             }
         }
     } catch (...) {
@@ -1582,9 +1597,7 @@ void WINAPI OverflowXamlIslandManager_Show_Hook(void* pThis,
                 return TRUE;
             },
             (LPARAM)&param);
-        if (param.count == 1) {
-            state->islandWindow = param.window;
-        }
+        state->islandWindow = param.count == 1 ? param.window : nullptr;
     }
 }
 
@@ -1924,9 +1937,13 @@ BOOL Wh_ModInit() {
         auto pKernelBaseLoadLibraryExW =
             (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
                                                       "LoadLibraryExW");
-        WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
-                                       LoadLibraryExW_Hook,
-                                       &LoadLibraryExW_Original);
+        if (!pKernelBaseLoadLibraryExW ||
+            !WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
+                                            LoadLibraryExW_Hook,
+                                            &LoadLibraryExW_Original)) {
+            Wh_Log(L"Couldn't hook LoadLibraryExW");
+            return FALSE;
+        }
     }
 
     return TRUE;
