@@ -131,7 +131,7 @@ Dimensions use device-independent pixels (DIP) and scale with Windows display sc
 | Surface.BorderThickness / CornerRadius | −1 / −1 | System default; 0 removes border or makes corners square |
 | Surface.Opacity | 100 | Button opacity, 0–100% |
 | Surface.ShineEffect | off | Gradient highlight on custom background colors |
-| Behavior.MaxMenuItems / MaxDepth | 0 / 0 | Unlimited; positive values limit items per folder or submenu depth |
+| Behavior.MaxMenuItems / MaxDepth | 150 / 0 | Limits each menu to 150 items by default; 0 remains unlimited. Submenu depth is unlimited by default. |
 | Behavior.ShowHidden | off | Include hidden and system items |
 
 All color settings accept `#RRGGBB` or `#AARRGGBB` hex (the alpha byte is
@@ -283,9 +283,9 @@ caching, a tray-edge limit, and shared layout, settings, surface and tray-column
   $name: Surface
 
 - Behavior:
-  - MaxMenuItems: 0
+  - MaxMenuItems: 150
     $name: Max menu items per folder
-    $description: Limit menu size for very large folders. 0 = unlimited.
+    $description: Limit menu size for very large folders. 0 = unlimited; 150 is the safe default.
   - MaxDepth: 0
     $name: Subfolder depth
     $description: How many subfolder levels to include as nested menus. 0 = unlimited.
@@ -318,6 +318,7 @@ caching, a tray-edge limit, and shared layout, settings, surface and tray-column
 #include <climits>
 #include <cwctype>
 #include <functional>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -2302,7 +2303,7 @@ struct ModSettings {
     int buttonWidth = 24;
     int buttonHeight = 22;
     int buttonSpacing = 4;
-    int maxMenuItems = 0;
+    int maxMenuItems = 150;
     int maxDepth = 0;
     bool showHidden = false;
     int fontSize = 10;
@@ -2417,7 +2418,8 @@ static void LoadSettings() {
     g_settings.buttonWidth = sio::LoadInt(L"Size.ItemWidth", 10, 256);
     g_settings.buttonHeight = sio::LoadInt(L"Size.ItemHeight", 10, 256);
     g_settings.buttonSpacing = sio::LoadInt(L"Size.ItemSpacing", 0, 80);
-    g_settings.maxMenuItems = std::max(0, Wh_GetIntSetting(L"Behavior.MaxMenuItems"));
+    g_settings.maxMenuItems = std::clamp(
+        Wh_GetIntSetting(L"Behavior.MaxMenuItems"), 0, 2000);
     g_settings.maxDepth = std::max(0, Wh_GetIntSetting(L"Behavior.MaxDepth"));
     g_settings.showHidden = Wh_GetIntSetting(L"Behavior.ShowHidden") != 0;
     g_settings.fontSize = std::max(1, Wh_GetIntSetting(L"Surface.FontSize"));
@@ -2457,6 +2459,12 @@ struct ButtonEventState {
 static HANDLE g_retryThread = nullptr;
 static HANDLE g_retryStopEvent = nullptr;
 static SRWLOCK g_retryLock = SRWLOCK_INIT;
+
+// TrackPopupMenu owns a nested UI loop with two mod callbacks installed into
+// it. Unload ends that loop on its owning thread and waits for this event
+// before Windhawk can unload the code those callbacks execute.
+static std::atomic<int> g_menuLoopDepth{0};
+static HANDLE g_menuIdleEvent = nullptr;
 
 // Lazy Shell menu loading state (per-ShowFolderMenu call, single-threaded UI).
 static UINT g_menuNextId = 1000;
@@ -3223,7 +3231,11 @@ static void ShowFolderMenu(FolderEntry folder) {
     if (!menuHook) {
         Wh_Log(L"[Menu] WH_MSGFILTER hook failed error=%u", GetLastError());
     }
+    g_menuLoopDepth.fetch_add(1);
+    if (g_menuIdleEvent) ResetEvent(g_menuIdleEvent);
     UINT cmd = TrackPopupMenu(menu, tpmAlign, pt.x, pt.y, 0, owner, nullptr);
+    if (g_menuLoopDepth.fetch_sub(1) == 1 && g_menuIdleEvent)
+        SetEvent(g_menuIdleEvent);
     PostMessageW(owner, WM_NULL, 0, 0);
     if (menuHook)
         UnhookWindowsHookEx(menuHook);
@@ -3275,9 +3287,10 @@ struct FolderIconPixels {
     std::vector<BYTE> pixels;
 };
 static std::vector<FolderIconPixels> g_folderIcons; // exit-time-safe: heap-only
+[[clang::no_destroy]] static std::mutex g_folderIconsMutex;
 
 static int FolderIconSize() {
-    HWND taskbar = FindCurrentProcessTaskbarWnd();
+    HWND taskbar = tbh::ResolveTaskbarWnd(g_taskbarWnd);
     UINT dpi = taskbar ? GetDpiForWindow(taskbar) : 96;
     return std::clamp(MulDiv(std::max(1, std::min(g_settings.buttonWidth,
         g_settings.buttonHeight) - 4), dpi ? dpi : 96, 96), 8, 256);
@@ -3323,6 +3336,7 @@ static FolderIconPixels const* CacheFolderIcon(std::wstring const& target, int s
 }
 
 static void PrepareFolderIcons() {
+    std::lock_guard lock(g_folderIconsMutex);
     HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     try {
         int size = FolderIconSize();
@@ -3333,6 +3347,7 @@ static void PrepareFolderIcons() {
 }
 
 static Image NativeFolderIcon(FolderEntry const& entry) {
+    std::lock_guard lock(g_folderIconsMutex);
     FolderIconPixels const* cached = nullptr;
     int size = FolderIconSize();
     for (auto const& item : g_folderIcons) {
@@ -3942,6 +3957,10 @@ static void StartRetryThread() {
                 WaitForSingleObject(stopEvent, kRetryDelaysMs[i]) != WAIT_TIMEOUT)
                 break;
             Wh_Log(L"[Inject] Reconcile attempt %d", i + 1);
+            // Extract Shell icons only after Explorer has a live taskbar and
+            // only on this worker, never in Wh_ModInit or the XAML UI callback.
+            // This makes the requested bitmap DPI correct after boot/restart.
+            PrepareFolderIcons();
             ApplyAllSettingsOnWindowThread();
             if (g_injectionLive.load() || g_unloading)
                 break;
@@ -3963,7 +3982,11 @@ static void StartRetryThread() {
 BOOL Wh_ModInit() {
     Wh_Log(L"[Init] Taskbar Folder Menus v2.0");
     LoadSettings();
-    PrepareFolderIcons();
+    g_menuIdleEvent = CreateEventW(nullptr, TRUE, TRUE, nullptr);
+    if (!g_menuIdleEvent) {
+        Wh_Log(L"[Init] Failed to create menu-idle event");
+        return FALSE;
+    }
 
     if (!HookTaskbarDllSymbols()) {
         Wh_Log(L"[Init] taskbar.dll hooks failed - XamlRoot unavailable");
@@ -3977,7 +4000,9 @@ void Wh_ModAfterInit() {
     // One attempt covers loading the mod into an already-running taskbar.
     // Taskbar startup and rebuilds use the bounded StartTaskbar retry path.
     ApplyAllSettingsOnWindowThread();
-    if (!g_injectionLive) StartRetryThread();
+    // The worker also refreshes the cache at the live taskbar DPI. It performs
+    // one reconciliation even if the initial label-only injection succeeded.
+    StartRetryThread();
 }
 
 void Wh_ModUninit() {
@@ -3988,6 +4013,19 @@ void Wh_ModUninit() {
 
     HWND hWnd = FindCurrentProcessTaskbarWnd();
     if (hWnd) {
+        // EndMenu has to execute on the taskbar thread. It only requests that
+        // TrackPopupMenu unwind, so wait for the loop to actually return
+        // before unloading its msg-filter hook and subclass procedures.
+        RunFromWindowThread(hWnd, [](void* parameter) {
+            HWND owner = static_cast<HWND>(parameter);
+            EndMenu();
+            RemoveWindowSubclass(owner, MenuOwnerSubclassProc, 1);
+            ClearPendingShellCommand();
+        }, hWnd);
+        if (g_menuIdleEvent &&
+            WaitForSingleObject(g_menuIdleEvent, 5000) != WAIT_OBJECT_0) {
+            Wh_Log(L"[Uninit] Folder menu did not unwind within 5 seconds");
+        }
         RunFromWindowThread(hWnd, [](void*) {
             RemoveButtonGrid();
             g_buttonEventStates.reset();
@@ -3996,6 +4034,10 @@ void Wh_ModUninit() {
         // No known taskbar UI thread: retain no_destroy XAML state rather than
         // releasing it from Windhawk's callback thread after framework teardown.
         Wh_Log(L"[Uninit] No taskbar UI thread; retaining XAML state");
+    }
+    if (g_menuIdleEvent) {
+        CloseHandle(g_menuIdleEvent);
+        g_menuIdleEvent = nullptr;
     }
 }
 
@@ -4009,7 +4051,6 @@ void Wh_ModSettingsChanged() {
         return;
     }
     LoadSettings();
-    PrepareFolderIcons();
     g_updatingSettings = false;
     Wh_Log(L"[Settings] Changed");
     if (!hWnd) {
@@ -4020,5 +4061,5 @@ void Wh_ModSettingsChanged() {
     RunFromWindowThread(hWnd, [](void*) {
         ApplyAllSettings();
     }, nullptr);
-    if (!g_injectionLive) StartRetryThread();
+    StartRetryThread();
 }
