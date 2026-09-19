@@ -565,6 +565,7 @@ This mod builds directly on patterns established by several community mods:
 #include <winrt/Windows.UI.Xaml.Media.h>
 
 #include <atomic>
+#include <mutex>
 #include <list>
 #include <optional>
 #include <string>
@@ -1946,7 +1947,7 @@ public:
 
     void Start(AttemptFn attempt, AppliedFn applied,
                std::atomic<bool> const& unloading, int attempts = 5,
-               DWORD intervalMs = 2000) {
+               DWORD intervalMs = 2000, bool forceFirstAttempt = false) {
         Stop();
         if (unloading) return;
         attempt_ = attempt;
@@ -1954,6 +1955,7 @@ public:
         unloading_ = &unloading;
         attempts_ = attempts;
         intervalMs_ = intervalMs;
+        forceFirstAttempt_ = forceFirstAttempt;
         stopEvent_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         if (!stopEvent_) return;
         thread_ = CreateThread(
@@ -1962,7 +1964,13 @@ public:
                 auto* self = static_cast<RetryLoop*>(parameter);
                 for (int i = 0; i < self->attempts_ && !*self->unloading_;
                      ++i) {
-                    if (self->applied_ && self->applied_()) break;
+                    // A settings reload can need one restore/reapply pass even
+                    // while `applied` truthfully says we still own live XAML.
+                    // Do not overload that ownership flag merely to wake the
+                    // retry loop; request a forced first attempt instead.
+                    if (self->applied_ &&
+                        !(self->forceFirstAttempt_ && i == 0) &&
+                        self->applied_()) break;
                     if (i && WaitForSingleObject(self->stopEvent_,
                                                  self->intervalMs_) !=
                                  WAIT_TIMEOUT)
@@ -2010,6 +2018,7 @@ private:
     std::atomic<bool> const* unloading_ = nullptr;
     int attempts_ = 5;
     DWORD intervalMs_ = 2000;
+    bool forceFirstAttempt_ = false;
 };
 
 }  // namespace windhawk_mod_templates::taskbar_host
@@ -2315,7 +2324,11 @@ static HANDLE g_retryThread    = nullptr;
 static HANDLE g_retryStopEvent = nullptr;
 
 static std::atomic<bool> g_systemTrayModuleHooked{false};
-static std::atomic<int>  g_activeSwitchThreads{0};
+// Desktop-switch workers must finish before Windhawk unloads this image.
+// Handles, unlike a counter decremented inside a thread proc, establish that.
+[[clang::no_destroy]] static std::mutex g_switchThreadsMutex;
+[[clang::no_destroy]] static std::optional<std::vector<HANDLE>>
+    g_switchThreads{std::in_place};
 [[clang::no_destroy]] static std::optional<std::list<FrameworkElement::Loaded_revoker>>
     g_autoRevokerList{std::in_place};
 
@@ -2336,6 +2349,7 @@ static void RemoveButtonGrid();
 static void StopNotificationThread();
 static void StopRetryThread();
 static void HandleLoadedModuleIfSystemTray(HMODULE hModule, LPCWSTR lpLibFileName);
+static void WaitForSwitchThreads();
 
 // ============================================================
 // Explorer / twinui build detection
@@ -2538,8 +2552,9 @@ static ULONG STDMETHODCALLTYPE Notif_Release(NotifObject* p) {
     return (ULONG)std::max(r, 0L);
 }
 static HRESULT STDMETHODCALLTYPE Notif_HandleUpdate() {
-    if (g_unloading || !g_taskbarWnd) return S_OK;
-    RunFromWindowThread(g_taskbarWnd, [](void*) {
+    HWND hWnd = tbh::ResolveTaskbarWnd(g_taskbarWnd);
+    if (g_unloading || !hWnd) return S_OK;
+    RunFromWindowThread(hWnd, [](void*) {
         if (!g_unloading) RebuildButtonGrid();
     }, nullptr);
     return S_OK;
@@ -2664,6 +2679,26 @@ static void StopRetryThread() {
     }
     if (g_retryStopEvent) {
         CloseHandle(g_retryStopEvent); g_retryStopEvent = nullptr;
+    }
+}
+
+static void WaitForSwitchThreads() {
+    std::vector<HANDLE> threads;
+    {
+        std::lock_guard lock(g_switchThreadsMutex);
+        threads.swap(*g_switchThreads);
+    }
+    for (HANDLE thread : threads) {
+        DWORD result;
+        do {
+            result = MsgWaitForMultipleObjects(
+                1, &thread, FALSE, INFINITE, QS_SENDMESSAGE);
+            if (result == WAIT_OBJECT_0 + 1) {
+                MSG message;
+                PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
+            }
+        } while (result == WAIT_OBJECT_0 + 1);
+        CloseHandle(thread);
     }
 }
 
@@ -3085,7 +3120,9 @@ static void Schedule(FrameworkElement const& button, int desktopIndex, int width
         wc.hInstance = state.module;
         wc.lpfnWndProc = WindowProc;
         wc.lpszClassName = kClass;
-        if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) return;
+        // This class belongs to this module. An existing copy can only be a
+        // failed prior teardown, whose WndProc may be dangling; never reuse it.
+        if (!RegisterClassW(&wc)) return;
         state.popup = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST,
             kClass, L"Desktop preview", WS_POPUP, 0, 0, state.width, state.height,
             taskbar, nullptr, state.module, nullptr);
@@ -3862,17 +3899,21 @@ static Grid BuildButtonGrid(int count, int current) {
             // SwitchToDesktop makes a LOCAL_SERVER COM call on the UI thread,
             // the STA message pump runs and can deliver the notification thread's
             // SendMessage re-entrantly, corrupting XAML state mid-click.
-            g_activeSwitchThreads.fetch_add(1);
+            // Serialize creation with Wh_ModUninit so every successful worker
+            // handle is retained and waited before the mod image is freed.
+            std::lock_guard lock(g_switchThreadsMutex);
+            if (g_unloading) return;
             HANDLE h = CreateThread(nullptr, 0, [](LPVOID p2) -> DWORD {
                 int i2 = (int)(INT_PTR)p2;
                 CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
                 if (!g_unloading) SwitchToDesktop(i2);
                 CoUninitialize();
-                g_activeSwitchThreads.fetch_sub(1);
                 return 0;
             }, (LPVOID)(INT_PTR)capturedIdx, 0, nullptr);
-            if (h) CloseHandle(h);
-            else g_activeSwitchThreads.fetch_sub(1);
+            if (h)
+                g_switchThreads->push_back(h);
+            else
+                Wh_Log(L"[Switch] Failed to create desktop-switch thread");
         });
         previewEvents.owner = grid;
         previewEvents.button = btn;
@@ -4493,7 +4534,14 @@ static void RemoveButtonGrid() {
 
     auto gridParent = FindLiveSystemTrayFrameGrid();
     if (!gridParent) {
-        Wh_Log(L"[Remove] No live tray grid; retaining VdSwitcherBar state");
+        // The tree may already be detaching, but the button handlers still
+        // point into this DLL. Revoke them even when there is no live parent
+        // left to perform the physical removal.
+        Wh_Log(L"[Remove] No live tray grid; revoking VdSwitcherBar callbacks");
+        ClearButtonEventState(g_buttonGrid);
+        g_buttonGrid      = nullptr;
+        g_injectionParent = nullptr;
+        g_injectedColumn  = -1;
         return;
     }
     if (!RemoveButtonGridFrom(gridParent, g_injectedColumn)) {
@@ -4593,9 +4641,9 @@ static void RegisterSecondaryTrayFromElement(FrameworkElement const& element) {
     if (!root) return;
 
     // Never treat the primary taskbar as secondary.
-    if (g_taskbarWnd) {
+    if (HWND hWnd = tbh::ResolveTaskbarWnd(g_taskbarWnd)) {
         try {
-            if (auto primaryRoot = GetTaskbarXamlRoot(g_taskbarWnd))
+            if (auto primaryRoot = GetTaskbarXamlRoot(hWnd))
                 if (primaryRoot.Content() == xamlRoot.Content())
                     return;
         } catch (...) {
@@ -4951,11 +4999,15 @@ void Wh_ModUninit() {
     g_unloading = true;
     Wh_Log(L"[Uninit]");
 
-    // Drain any in-flight SwitchToDesktop background threads before stopping
-    // the notification thread. Those threads access COM and mod globals; if they
-    // outlive the DLL they crash. The click handler already guards with g_unloading,
-    // so threads entering after this point exit immediately.
-    while (g_activeSwitchThreads.load() > 0) Sleep(20);
+    // Waiting on each handle establishes that the worker has returned fully
+    // out of mod code. A counter decremented inside its thread proc cannot.
+    WaitForSwitchThreads();
+    // Every handle was closed above; free the vector buffer on this controlled
+    // unload path instead of retaining it behind no_destroy.
+    {
+        std::lock_guard lock(g_switchThreadsMutex);
+        g_switchThreads.reset();
+    }
 
     StopRetryThread();
     StopNotificationThread();
@@ -4965,14 +5017,10 @@ void Wh_ModUninit() {
     // Clear pending Loaded revokers on the UI thread so WinRT auto-revoke objects
     // are destroyed on the correct thread before the DLL is unloaded.
     HWND hWnd = tbh::ResolveTaskbarWnd(g_taskbarWnd);
+    bool tornDown = false;
     if (hWnd) {
-        RunFromWindowThread(hWnd, [](void* parameter) {
-            HWND hWnd = static_cast<HWND>(parameter);
+        tornDown = RunFromWindowThread(hWnd, [](void*) {
             desktop_preview::Destroy();
-            if (!GetTaskbarXamlRoot(hWnd)) {
-                Wh_Log(L"[Uninit] No live XAML root; retaining XAML state");
-                return;
-            }
             // Controlled UI-thread unload: revoke/release on this thread, then
             // reset() the no_destroy optionals so their heap buffers are freed
             // (a bare no_destroy container would keep its capacity forever).
@@ -4983,12 +5031,21 @@ void Wh_ModUninit() {
             g_autoRevokerList.reset();
             g_buttonEventStates.reset();
             g_secondaryBars.reset();  // release WinRT refs on the UI thread
-        }, hWnd);
-    } else {
+        }, nullptr);
+    }
+    if (!tornDown) {
+        // The popup has its own UI thread and WndProc. Tear it down through its
+        // own window even if Shell_TrayWnd was recreated or is briefly absent.
+        HWND popup = desktop_preview::state.popup;
+        if (popup && !RunFromWindowThread(popup, [](void*) {
+                desktop_preview::Destroy();
+            }, nullptr)) {
+            Wh_Log(L"[Uninit] Failed to dispatch desktop-preview cleanup");
+        }
         // Explorer shutdown doesn't guarantee a usable XAML/UI thread. The
-        // no_destroy owners deliberately retain state rather than releasing it
-        // from Windhawk's unload thread after framework teardown.
-        Wh_Log(L"[Uninit] No taskbar UI thread; retaining XAML state");
+        // XAML owners deliberately retain state rather than releasing it from
+        // Windhawk's arbitrary unload thread after framework teardown.
+        Wh_Log(L"[Uninit] No taskbar UI dispatch; XAML tree was unavailable");
     }
 }
 
