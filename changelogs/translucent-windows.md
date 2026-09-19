@@ -1,3 +1,8 @@
+## 1.8.2 ([Sep 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/0d049bfe7e7d9cd8da6d84d260874ad3c78aa370/mods/translucent-windows.wh.cpp))
+
+* Fixed text alignment bug reported in some programs (e.g. YASB, Telegram Desktop etc.) introduced in the previous update.
+* Fix the mod's accent color when changing the system accent color.
+
 ## 1.8.1 ([Sep 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6379a92608ab0d1a78ed556a326c30f1b3a6c942/mods/translucent-windows.wh.cpp))
 
 * Fixed an issue where explorer.exe would crash when middle-clicking items in the navigation pane.

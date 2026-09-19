@@ -16097,7 +16097,7 @@
         ],
         "ratingUsers": 2482,
         "reviews": 0,
-        "updated": 1789047744000,
+        "updated": 1789850420000,
         "users": 139574
       },
       "metadata": {
@@ -16109,7 +16109,7 @@
           "*"
         ],
         "name": "Translucent Windows",
-        "version": "1.8.1"
+        "version": "1.8.2"
       }
     },
     "transparent-desktop-icons-spotlight": {
@@ -17697,7 +17697,7 @@
         ],
         "ratingUsers": 5,
         "reviews": 0,
-        "updated": 1788112151000,
+        "updated": 1789850256000,
         "users": 151
       },
       "metadata": {
@@ -17711,8 +17711,8 @@
         "include": [
           "explorer.exe"
         ],
-        "name": "Windows 7 Classic AutoPlay Dialog",
-        "version": "1.0.0"
+        "name": "Windows 7 Classic AutoPlay Dialog Restorer",
+        "version": "1.1.0"
       }
     },
     "win7-command-bar": {
@@ -18622,7 +18622,7 @@
           12430
         ],
         "ratingUsers": 14811,
-        "reviews": 0,
+        "reviews": 1,
         "updated": 1789258767000,
         "users": 917225
       },

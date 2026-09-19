@@ -2,12 +2,42 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-19T17:17:05.000Z</updated>
+    <updated>2026-09-19T20:40:20.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Translucent Windows 1.8.2]]></title>
+        <id>https://windhawk.net/mods/translucent-windows#0d049bfe7e7d9cd8da6d84d260874ad3c78aa370</id>
+        <link href="https://windhawk.net/mods/translucent-windows"/>
+        <updated>2026-09-19T20:40:20.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed text alignment bug reported in some programs (e.g. YASB, Telegram Desktop etc.) introduced in the previous update.</li>
+<li>Fix the mod's accent color when changing the system accent color.</li>
+</ul>]]></content>
+        <author>
+            <name>Undisputed00x</name>
+            <uri>https://github.com/Undisputed00x</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Classic AutoPlay Dialog Restorer 1.1.0]]></title>
+        <id>https://windhawk.net/mods/win7-classic-autoplay-restorer#7e06ac1de042e15b1ce2c71b54a83eeec927159f</id>
+        <link href="https://windhawk.net/mods/win7-classic-autoplay-restorer"/>
+        <updated>2026-09-19T20:37:36.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Mitigated a potential cause of empty drives and generic "CD Drive"/"USB
+Drive" names appearing in the Navigation Pane after login (possible
+fix for #5463,  please report back if this persists).</li>
+<li>Updated the README</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Premiere Pro Theme 1.0.0]]></title>
         <id>https://windhawk.net/mods/premiere-pro-theme#c2b85a85429190b8aa1e544da5a845d9abf8ed01</id>
@@ -1091,36 +1121,6 @@ monitor bounds.</li>
         <author>
             <name>Hoffelhas</name>
             <uri>https://github.com/Hoffelhas</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AltDrag 1.0]]></title>
-        <id>https://windhawk.net/mods/alt-drag#cade2e296c8b0d782b05940db9585aed8a438680</id>
-        <link href="https://windhawk.net/mods/alt-drag"/>
-        <updated>2026-09-14T23:29:05.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="altdrag">AltDrag</h1>
-<p>Move any window by holding Alt and dragging it from anywhere, without having to
-grab the title bar.</p>
-<p>The idea was inspired by <a href="https://stefansundin.github.io/altdrag/">the original AltDrag
-tool</a>.</p>
-<p><img src="https://i.imgur.com/PY0arDE.gif" alt="Demonstration" /></p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Blob Shape 1.2.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-blob-shape#385cf86c8212f3e82eac5b34c432a3fe22fb5689</id>
-        <link href="https://windhawk.net/mods/taskbar-blob-shape"/>
-        <updated>2026-09-14T20:18:04.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Supports the taskbar position feature: on top-docked taskbars the blob is flipped, with its flat edge anchored to the taskbar's bottom edge; on vertical (left/right) taskbars blobs are hidden and the native indicator stays in charge. Position changes apply live. Older builds without the feature are unaffected.</li>
-<li>Vertical margins are now relative to the taskbar's anchored edge (Top pushes the blob deeper into the bar on both bottom and top docks).</li>
-</ul>]]></content>
-        <author>
-            <name>Deen-0x</name>
-            <uri>https://github.com/Deen-0x</uri>
         </author>
     </entry>
 </feed>
