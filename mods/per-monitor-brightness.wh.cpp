@@ -99,9 +99,17 @@ include stays off.
 - DDC/CI has no notification channel: a monitor only ever answers what the host
   asks it. Brightness changed using the monitor's own buttons therefore cannot
   be detected, and only shows up the next time the panel is opened.
-- Not every monitor implements DDC/CI correctly. If a display does not respond,
-  turn on logging for this mod in Windhawk (the mod's **Advanced** settings ->
-  **Logging**) and check whether its writes report `ok=0`.
+- Not every monitor implements DDC/CI correctly. A display that does not answer
+  at all is listed as uncontrollable and gets no slider; one that answers but
+  misbehaves shows up as writes reporting `ok=0`. Either way, turn on logging
+  for this mod in Windhawk (the mod's **Advanced** settings -> **Logging**) to
+  see which.
+- A monitor that was asleep, switched to another input, or behind a dock that
+  was still enumerating when you signed in will fail that first check through
+  no fault of its own. It is retried rather than written off for the session:
+  opening the panel again re-probes it, backing off from 30 seconds to at most
+  16 minutes between attempts, and unplugging and replugging it starts over
+  immediately.
 */
 // ==/WindhawkModReadme==
 
