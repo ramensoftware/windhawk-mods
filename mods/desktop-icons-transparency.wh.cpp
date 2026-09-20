@@ -19,7 +19,7 @@ Unlike **Transparent Desktop Icons with Spotlight**, this mod applies a fixed op
 ### Features
 - Synchronously fades icon images, labels, and text shadows.
 - Does not darken wallpaper or cause black background artifacts.
-- Scoped strictly to desktop repainting: does not affect taskbar, tooltips, context menus, or icon renaming.
+- Scoped strictly to desktop repainting: does not affect taskbar, tooltips, context menus, Explorer folder windows, or icon renaming.
 - Zero CPU and RAM overhead in idle.
 */
 // ==/WindhawkModReadme==
@@ -49,13 +49,14 @@ static thread_local bool g_inDesktopPaint = false;
 static thread_local bool g_inDirectHook = false;
 static thread_local bool g_inTextHook = false;
 
+static HWND g_hDesktopListView = NULL;
+
 // Subclass procedure: activates hooks strictly during desktop rendering
 LRESULT CALLBACK DesktopListSubclass(
     HWND hWnd,
     UINT uMsg,
     WPARAM wParam,
     LPARAM lParam,
-    UINT_PTR uIdSubclass,
     DWORD_PTR dwRefData
 ) {
     if (uMsg == WM_PAINT || uMsg == WM_PRINTCLIENT) {
@@ -64,36 +65,72 @@ LRESULT CALLBACK DesktopListSubclass(
         g_inDesktopPaint = false;
         return result;
     }
+
+    if (uMsg == WM_NCDESTROY) {
+        if (hWnd == g_hDesktopListView) {
+            g_hDesktopListView = NULL;
+        }
+    }
+
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-// Locate SysListView32 belonging to current Explorer process
-HWND GetDesktopListView() {
-    HWND hProgman = FindWindowW(L"Progman", L"Program Manager");
-    HWND hDefView = NULL;
+// Checks if window is a valid desktop shell root
+bool IsDesktopParent(HWND hWnd) {
+    if (!hWnd) return false;
+    if (hWnd == GetShellWindow()) return true;
 
-    if (hProgman) {
-        hDefView = FindWindowExW(hProgman, NULL, L"SHELLDLL_DefView", NULL);
+    WCHAR className[64] = {0};
+    if (GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
+        if (_wcsicmp(className, L"Progman") == 0 || _wcsicmp(className, L"WorkerW") == 0) {
+            return true;
+        }
     }
+    return false;
+}
 
-    if (!hDefView) {
-        HWND hWorkerW = NULL;
-        while ((hWorkerW = FindWindowExW(NULL, hWorkerW, L"WorkerW", NULL)) != NULL) {
-            hDefView = FindWindowExW(hWorkerW, NULL, L"SHELLDLL_DefView", NULL);
-            if (hDefView) break;
+// Locate SysListView32 belonging to desktop in current Explorer process
+HWND FindDesktopListView() {
+    HWND hShell = GetShellWindow();
+    if (hShell) {
+        HWND hDefView = FindWindowExW(hShell, NULL, L"SHELLDLL_DefView", NULL);
+        if (hDefView) {
+            HWND hList = FindWindowExW(hDefView, NULL, L"SysListView32", NULL);
+            if (hList) return hList;
         }
     }
 
-    if (!hDefView) return NULL;
-    HWND hListView = FindWindowExW(hDefView, NULL, L"SysListView32", NULL);
+    HWND hProgman = FindWindowW(L"Progman", L"Program Manager");
+    if (hProgman && hProgman != hShell) {
+        HWND hDefView = FindWindowExW(hProgman, NULL, L"SHELLDLL_DefView", NULL);
+        if (hDefView) {
+            HWND hList = FindWindowExW(hDefView, NULL, L"SysListView32", NULL);
+            if (hList) return hList;
+        }
+    }
+
+    HWND hWorkerW = NULL;
+    while ((hWorkerW = FindWindowExW(NULL, hWorkerW, L"WorkerW", NULL)) != NULL) {
+        HWND hDefView = FindWindowExW(hWorkerW, NULL, L"SHELLDLL_DefView", NULL);
+        if (hDefView) {
+            HWND hList = FindWindowExW(hDefView, NULL, L"SysListView32", NULL);
+            if (hList) return hList;
+        }
+    }
+
+    return NULL;
+}
+
+HWND GetDesktopListView() {
+    HWND hListView = FindDesktopListView();
     if (hListView) {
         DWORD pid = 0;
         GetWindowThreadProcessId(hListView, &pid);
-        if (pid != GetCurrentProcessId()) {
-            return NULL;
+        if (pid == GetCurrentProcessId()) {
+            return hListView;
         }
     }
-    return hListView;
+    return NULL;
 }
 
 // 1. Hook for ImageList_DrawIndirect
@@ -104,6 +141,9 @@ BOOL WINAPI ImageList_DrawIndirect_Hook(IMAGELISTDRAWPARAMS* pimldp) {
     if (pimldp && g_inDesktopPaint) {
         if (settings.opacity <= 0) {
             return TRUE;
+        }
+        if (settings.opacity >= 100) {
+            return ImageList_DrawIndirect_Original(pimldp);
         }
 
         IMAGELISTDRAWPARAMS params = {};
@@ -320,7 +360,7 @@ BOOL WINAPI ExtTextOutW_Hook(
     return ExtTextOutW_Original(hdc, x, y, options, lprect, lpString, c, lpDx);
 }
 
-// 6. Hook for CreateWindowExW (subclass newly created desktop list view)
+// 6. Hook for CreateWindowExW (strictly target desktop list view)
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_Original = nullptr;
 
@@ -348,9 +388,17 @@ HWND WINAPI CreateWindowExW_Hook(
             WCHAR parentClass[64] = {0};
             if (GetClassNameW(hWndParent, parentClass, ARRAYSIZE(parentClass)) &&
                 _wcsicmp(parentClass, L"SHELLDLL_DefView") == 0) {
-                WindhawkUtils::SetWindowSubclassFromAnyThread(
-                    hWnd, DesktopListSubclass, 0
-                );
+                HWND hGrandParent = GetAncestor(hWndParent, GA_PARENT);
+                if (IsDesktopParent(hGrandParent)) {
+                    DWORD pid = 0;
+                    GetWindowThreadProcessId(hWnd, &pid);
+                    if (pid == GetCurrentProcessId()) {
+                        g_hDesktopListView = hWnd;
+                        WindhawkUtils::SetWindowSubclassFromAnyThread(
+                            hWnd, DesktopListSubclass, 0
+                        );
+                    }
+                }
             }
         }
     }
@@ -359,7 +407,7 @@ HWND WINAPI CreateWindowExW_Hook(
 }
 
 void RepaintDesktop() {
-    HWND hListView = GetDesktopListView();
+    HWND hListView = g_hDesktopListView ? g_hDesktopListView : GetDesktopListView();
     if (!hListView || !IsWindow(hListView)) return;
 
     int count = (int)SendMessageW(hListView, LVM_GETITEMCOUNT, 0, 0);
@@ -432,6 +480,7 @@ void Wh_ModAfterInit() {
 
     HWND hListView = GetDesktopListView();
     if (hListView) {
+        g_hDesktopListView = hListView;
         WindhawkUtils::SetWindowSubclassFromAnyThread(
             hListView, DesktopListSubclass, 0
         );
@@ -442,13 +491,12 @@ void Wh_ModAfterInit() {
 void Wh_ModUninit() {
     Wh_Log(L"Desktop Icons Transparency Uninit");
 
-    HWND hListView = GetDesktopListView();
-    if (hListView) {
+    if (g_hDesktopListView && IsWindow(g_hDesktopListView)) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-            hListView, DesktopListSubclass, 0
+            g_hDesktopListView, DesktopListSubclass
         );
-        RepaintDesktop();
     }
+    RepaintDesktop();
 }
 
 void Wh_ModSettingsChanged() {
