@@ -1,3 +1,9 @@
+## 3.2.0 ([Sep 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1f9d3157e8c45e84587aae688b4e6a2d8eeae6ac/mods/win7-legacy-applet-restorer.wh.cpp))
+
+- Restored the "Offline Files" applet (cscui.dll)
+- Restored the corresponding task links
+- Updated the README
+
 ## 3.1.0 ([Sep 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4bc0c8b1cc92febe0bdadacb4330bb09d8669550/mods/win7-legacy-applet-restorer.wh.cpp))
 
 - Added "In-place Personalization navigation" setting to keep "Desktop Background" and "Window Color" inside the Control Panel window

@@ -15235,7 +15235,7 @@
         ],
         "ratingUsers": 22,
         "reviews": 0,
-        "updated": 1788003811000,
+        "updated": 1789924662000,
         "users": 517
       },
       "metadata": {
@@ -15243,7 +15243,7 @@
           "x86-64"
         ],
         "author": "Yevhenii Starychenko",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lpdh -ldxgi -DWIN32_LEAN_AND_MEAN",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lpdh -ldxgi -lcomctl32 -DWIN32_LEAN_AND_MEAN",
         "description": "A quiet two-column CPU, GPU, RAM and VRAM monitor with 60-second history graphs for the Windows 11 taskbar.",
         "github": "https://github.com/starychenko",
         "homepage": "https://github.com/starychenko/windhawk-taskbar-system-info",
@@ -15252,7 +15252,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Taskbar System Info",
-        "version": "1.3.3"
+        "version": "1.5.0"
       }
     },
     "taskbar-thumbnail-hover-fix": {
@@ -16110,7 +16110,7 @@
         ],
         "ratingUsers": 5,
         "reviews": 0,
-        "updated": 1789692389000,
+        "updated": 1789924597000,
         "users": 20
       },
       "metadata": {
@@ -16124,7 +16124,7 @@
         ],
         "license": "MIT",
         "name": "Tourne'Table [Audio Visualizer]",
-        "version": "1.2.0"
+        "version": "1.3.0"
       }
     },
     "translucent-flyouts-controller": {
@@ -18006,7 +18006,7 @@
         ],
         "ratingUsers": 11,
         "reviews": 0,
-        "updated": 1788370054000,
+        "updated": 1789924580000,
         "users": 403
       },
       "metadata": {
@@ -18021,8 +18021,8 @@
           "explorer.exe",
           "control.exe"
         ],
-        "name": "Windows 7 Legacy Applet Restorer",
-        "version": "3.1.0"
+        "name": "Windows Vista/7 Legacy Applet Restorer",
+        "version": "3.2.0"
       }
     },
     "win7-login-fade": {
@@ -18073,7 +18073,7 @@
         ],
         "ratingUsers": 17,
         "reviews": 0,
-        "updated": 1788803887000,
+        "updated": 1789924557000,
         "users": 575
       },
       "metadata": {
@@ -18087,7 +18087,7 @@
           "RetroBar.exe"
         ],
         "name": "Windows 7 Network Flyout Recreation",
-        "version": "5.0.0"
+        "version": "5.1.0"
       }
     },
     "win7-open-with-dialog": {
@@ -18778,19 +18778,26 @@
         ],
         "ratingUsers": 467,
         "reviews": 0,
-        "updated": 1786701197000,
+        "updated": 1789924714000,
         "users": 31867
       },
       "metadata": {
         "author": "ReDrag",
-        "compilerOptions": "-ladvapi32 -ldwmapi -lgdi32 -lole32 -loleaut32 -lshell32 -luuid -luser32",
+        "compilerOptions": "-ladvapi32 -ld3d11 -ldcomp -ldwmapi -ldxgi -lgdi32 -lole32 -loleaut32 -lshell32 -luuid -luser32",
         "description": "Smooth minimize, restore, close, switch animations for windows.",
+        "donateUrl": "https://ko-fi.com/redrag2105",
         "exclude": [
           "TextInputHost.exe",
           "ShellExperienceHost.exe",
           "StartMenuExperienceHost.exe",
           "SearchHost.exe",
-          "dwm.exe"
+          "dwm.exe",
+          "git.exe",
+          "git-remote-https.exe",
+          "AudioCaptureService.exe",
+          "AIVisualPIPESvr.exe",
+          "GimateServiceHelper.exe",
+          "NVIDIA Web Helper.exe"
         ],
         "github": "https://github.com/redrag2105",
         "include": [
@@ -18798,7 +18805,7 @@
         ],
         "license": "MIT",
         "name": "Windows Animations",
-        "version": "1.2.0"
+        "version": "1.3.5"
       }
     },
     "windows-update-control-panel-restorer": {

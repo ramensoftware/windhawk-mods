@@ -2,12 +2,103 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-19T21:55:59.000Z</updated>
+    <updated>2026-09-20T17:18:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows Animations 1.3.5]]></title>
+        <id>https://windhawk.net/mods/windows-animations#9b0af5f09f130af8d7f59d90f4133bc0e019588e</id>
+        <link href="https://windhawk.net/mods/windows-animations"/>
+        <updated>2026-09-20T17:18:34.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Added smart hybrid GPU acceleration:</strong> Restores and compatible launches can use DirectComposition GPU rendering, while qualifying large 1 px Thanos/Perlin closes can use GPU rendering. Minimize, ordinary close, Square Shatter, and unsupported cases use the faster or safer optimized CPU path.</li>
+<li><strong>Improved performance:</strong> Optimized Perlin, Shatter, and Thanos CPU effects, reduced temporary memory usage, right-sized rendering surfaces, added refresh-aware frame pacing, and safely pre-warmed only the GPU effects likely to be used next.</li>
+<li><strong>Improved minimize, restore, and launch animations:</strong> Fixed content flicker, blank or invisible windows, cursor stalls, incorrect taskbar targets, and rapid-click/reversal problems. Non-maximized animations now preserve the Windows 11 rounded-window silhouette.</li>
+<li><strong>Added taskbar support on every edge:</strong> Genie and Windows 10 animations now target bottom, top, left, and right taskbars on primary or secondary monitors, including auto-hidden taskbars. Windows Terminal targeting was also improved.</li>
+<li><strong>Added the optional Optimize Show Desktop mode:</strong> Win+D custom-animates only the foreground window while background windows minimize immediately, avoiding long sequential waits. Matching background restores stay native, while the foreground restore keeps its custom animation without duplicate windows or pre-animation flashes.</li>
+<li><strong>Reworked random styles into true shuffle:</strong> Close and minimize/restore animations use separate session-wide shuffle cycles shared by all apps. Every style plays once before reshuffling, consecutive cycles do not repeat the same boundary style, and launch/minimize plus rapid reversal pairings stay visually consistent.</li>
+<li><strong>Improved Alt+Tab:</strong> The switch effect now runs only for genuine Alt+Tab switches and no longer leaves File Explorer headers or backdrop areas black, opaque, or incorrectly styled.</li>
+<li><strong>Improved close and tray-hide behavior:</strong> Long animations can finish fully, close-time flicker was reduced, console windows animate correctly, and GPU resources no longer keep closed Chrome or Task Manager processes alive.</li>
+<li><strong>Improved compatibility and stability:</strong> Added safer automatic CPU fallback, better handling for File Explorer/backdrop windows and Chromium/Electron apps, support for windows already open when the mod is re-enabled, and protection against whole-screen animations after sleep or resume. Background-only helper processes are skipped.</li>
+<li><strong>Added optional performance telemetry:</strong> When enabled, one compact summary per animation reports renderer choice, adapter, timing, frame coverage, memory, pacing, and CPU rendering breakdown. Normal logging remains quiet when telemetry is disabled.</li>
+<li><strong>Updated the README and settings:</strong> Added a clear explanation of the hybrid renderer, performance guidance, GPU routing and fallback behavior, Show Desktop behavior, taskbar placement, rounded corners, and shuffle semantics.</li>
+</ul>]]></content>
+        <author>
+            <name>ReDrag</name>
+            <uri>https://github.com/redrag2105</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar System Info 1.5.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-system-info#e81aaa5fd7a81fb12eb0ebde2ce65a435be0d936</id>
+        <link href="https://windhawk.net/mods/taskbar-system-info"/>
+        <updated>2026-09-20T17:17:42.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add a <strong>Taskbar monitor</strong> setting to place the widget on the primary or a secondary display. If the selected display is unavailable, use the primary taskbar and retry the selected display automatically.</li>
+<li>Add <strong>adaptive colors</strong> for light, dark and Windows high-contrast themes, while retaining manual color settings.</li>
+<li>Scale the widget down on short taskbars so its two rows fit without clipping.</li>
+<li>Use the Windows Processor Utility counter for CPU usage when available, aligning the reading with Task Manager's frequency-aware measurement. Keep the existing CPU counter as a fallback.</li>
+<li>Add <strong>Automatic / Dedicated / Shared</strong> GPU-memory selection and improve automatic handling of integrated GPUs with a small dedicated-memory reservation.</li>
+<li>Improve recovery when GPU/VRAM counters stop returning data, while keeping CPU and RAM readings visible. Show unavailable GPU readings as <code>--%</code> instead of treating them as idle.</li>
+<li>Keep CPU/GPU graph history when samples are missing, show gaps for unavailable data, and use measurement timestamps to preserve the selected history duration.</li>
+<li>Improve HWiNFO temperature-sensor matching when sensor records change, and fix temperature parsing with comma decimal separators.</li>
+<li>Expand the built-in guide with a quick start, explanations of each setting, HWiNFO setup instructions and troubleshooting for missing temperatures.</li>
+</ul>]]></content>
+        <author>
+            <name>Yevhenii Starychenko</name>
+            <uri>https://github.com/starychenko</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Tourne'Table [Audio Visualizer] 1.3.0]]></title>
+        <id>https://windhawk.net/mods/tourne-table-desktop-audio-visualizer#e4bfa7249dca8ae600280c33614715815211823b</id>
+        <link href="https://windhawk.net/mods/tourne-table-desktop-audio-visualizer"/>
+        <updated>2026-09-20T17:16:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><p><strong>New: Input Gain (dB)</strong>, a fixed level trim on the captured audio, range -24 to +24. Loopback capture sees each app's own volume slider but not the Windows master slider, so a music app held at a low volume reads as quiet no matter how loud the system is. This is the control for that, and it is also the only setting that scales the Oscilloscope waveform directly.</p></li>
+<li><p><strong>New: Auto Gain</strong>, off by default, with <strong>Auto Gain Max Boost (dB)</strong>, range 0 to 24. Adapts the level so quiet sources still fill the bars without retuning Sensitivity per app or per track. Boost only, held steady through silence, and idle shutdown behaves exactly as it did before.</p></li>
+<li><p><strong>Fixed:</strong> Pause When Covered never triggered for a visualizer positioned near a screen edge. Coverage was measured against the whole visualizer including any part hanging off-screen, which can never be covered by a window, so the reading could never reach the default 100% threshold.</p></li>
+<li><p><strong>Fixed:</strong> the Now Playing Font check could warn about a font that is genuinely installed, after a cold boot. Mods start before Windows has finished registering fonts, so the check now retries for ten seconds before reporting anything.</p></li>
+<li><p><strong>Fixed:</strong> the Oscilloscope trace could be drawn past the edge of its panel on a hot signal. It now clips flat at full scale.</p></li>
+<li><p><strong>Fixed:</strong> clearing a saved position wrote to storage synchronously from inside a low-level input hook, where everything blocks all system input until it returns. It now uses the same deferred save the keyboard nudges already did.</p></li>
+<li><p><strong>Changed:</strong> removed the one-shot import of the position file that pre-catalog builds wrote. The mod now performs no file I/O at all.</p></li>
+</ul>]]></content>
+        <author>
+            <name>USER-TOURNE</name>
+            <uri>https://github.com/USER-TOURNE</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows Vista/7 Legacy Applet Restorer 3.2.0]]></title>
+        <id>https://windhawk.net/mods/win7-legacy-applet-restorer#1f9d3157e8c45e84587aae688b4e6a2d8eeae6ac</id>
+        <link href="https://windhawk.net/mods/win7-legacy-applet-restorer"/>
+        <updated>2026-09-20T17:16:20.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Restored the "Offline Files" applet (cscui.dll)</li>
+<li>Restored the corresponding task links</li>
+<li>Updated the README</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 7 Network Flyout Recreation 5.1.0]]></title>
+        <id>https://windhawk.net/mods/win7-network-flyout-recreation#3cd24569eaf0a887463b47d98a3dee6579e383b3</id>
+        <link href="https://windhawk.net/mods/win7-network-flyout-recreation"/>
+        <updated>2026-09-20T17:15:57.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Tried to enhance the support for high contrast theme (credits to OrthodoxToolkits for the suggestion)</li>
+</ul>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[D3D9 Flip Model Upgrade 1.0]]></title>
         <id>https://windhawk.net/mods/d3d9-flip-model-upgrade#68ea89198430663374733ef5f9ce360c04ef5695</id>
@@ -886,292 +977,6 @@ mod by m417z (GPL-3.0).</p>]]></content>
         <author>
             <name>Cleroth</name>
             <uri>https://github.com/Cleroth</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AltDrag 1.1]]></title>
-        <id>https://windhawk.net/mods/alt-drag#09d24cc8eb03bb94ebb7d7f79158dacc9c9d2902</id>
-        <link href="https://windhawk.net/mods/alt-drag"/>
-        <updated>2026-09-15T19:53:13.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added the ability to resize any window by holding Alt and dragging it with the right mouse button.</li>
-<li>The mouse buttons and the keys can now be changed in the mod settings.</li>
-<li>A delay can now be configured, such that move/resize only start when the mouse is held for the specified amount of time. A shorter press behaves as a regular click.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Tray Keyboard Layout Indicator 6.1.0]]></title>
-        <id>https://windhawk.net/mods/classic-tray-keyboard-layout-indicator#5c768b0801763b3a8374c9bed5a0f2de49690b82</id>
-        <link href="https://windhawk.net/mods/classic-tray-keyboard-layout-indicator"/>
-        <updated>2026-09-15T18:23:09.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="keyboardlayouttrayindicator">Keyboard Layout Tray Indicator</h1>
-<p><img src="https://i.imgur.com/L4i2WhE.png" alt="Screenshot" /></p>
-<p>Displays current keyboard layout in the system tray as a two-letter code, 
-in the style of Windows 2000. This is an alternative to the default indicator.
-On right click a menu with layout selection is displayed.</p>
-<ul>
-<li><strong>Left click</strong> — cycle through installed layouts</li>
-<li><strong>Right click</strong> — pick layout from list</li>
-</ul>
-<p>The mod may go out on sync in elevated windows if you're using more than two layouts.</p>
-<p><strong>Note:</strong> This mod only works with the classic taskbar.</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Minimize to tray 1.0]]></title>
-        <id>https://windhawk.net/mods/minimize-to-tray#0917d9c94623b841e260a07b9cf02ac6d6b5cadf</id>
-        <link href="https://windhawk.net/mods/minimize-to-tray"/>
-        <updated>2026-09-15T18:20:32.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="minimizetotray">Minimize to tray</h1>
-<p>Right-click a window's minimize button to hide the window in the system tray.</p>
-<p><img src="https://raw.githubusercontent.com/0Allu/minimize-to-tray/main/assets/minimize-to-tray-demo.gif" alt="Minimize to tray demo" /></p>
-<h2 id="usage">Usage</h2>
-<ul>
-<li>Right-click a window's minimize button to send it to the tray.</li>
-<li>Left-click its tray icon to restore it.</li>
-<li>Right-click its tray icon to restore or close the window.</li>
-</ul>
-<p>The application continues running while its window is hidden.</p>
-<h2 id="customtitlebars">Custom title bars</h2>
-<p>Standard Windows minimize buttons work automatically. For applications which
-draw their own title bar, the mod also uses an approximate Windows-style caption
-button layout. This compatibility detection is enabled by default and can be
-disabled in the mod settings if it conflicts with a particular application.</p>
-<p>Custom rules can override the generic geometry for applications with unusual
-title bars, such as Steam. A custom rule uses this format:</p>
-<p><code>executable|window class|height|min right|max right</code></p>
-<p>The three numeric values are in DPI-independent pixels. <code>height</code> is the maximum
-distance below the top of the window, and <code>min right</code> / <code>max right</code> define the
-button's distance from the right edge.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>Windows 10 version 1703 or later is required.</p>
-<p>Applications running with administrator privileges are not supported when the
-mod is running at normal user privileges. This is due to Windows User Interface
-Privilege Isolation (UIPI).</p>
-<p>Custom title bar compatibility detection applies only to unowned top-level
-application windows. Tool windows, non-activating windows, child windows,
-dialogs and owned popups are ignored.</p>
-<h2 id="safety">Safety</h2>
-<p>A tray icon is created before a window is hidden. If the tray icon cannot be
-created, the window is left visible. If the mod is disabled or unloaded
-normally, restore requests are posted for all windows hidden by the mod. Hidden
-windows are also recovered if the dedicated mod process restarts.</p>
-<p>If the dedicated tool process is forcibly terminated and the mod is then
-disabled before it can restart, recovery code cannot run. In that unusual case,
-the affected application may need to be restarted manually.</p>]]></content>
-        <author>
-            <name>0Allu</name>
-            <uri>https://github.com/0Allu</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[HWiNFO Registry Live Overlay 1.5.0]]></title>
-        <id>https://windhawk.net/mods/hwinfo-registry-live-overlay#ef8174354647d2f0af22d3e6ecf9e12d246a3b70</id>
-        <link href="https://windhawk.net/mods/hwinfo-registry-live-overlay"/>
-        <updated>2026-09-15T18:06:14.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="hwinforegistryliveoverlay">HWiNFO Registry Live Overlay</h1>
-<p>A lightweight desktop overlay for displaying selected HWiNFO sensor values from the HWiNFO Gadget/VSB Registry output.</p>
-<p>The mod can be used to monitor values such as CPU power, GPU power, GPU temperature, VRAM usage, water-cooling pump RPM, coolant temperature, flow rate, PSU power, and other sensor values exposed by HWiNFO.</p>
-<h2 id="screenshots">Screenshots</h2>
-<p><img src="https://i.imgur.com/tajpyvb.png" alt="HWiNFO Registry Live Overlay desktop overlay less sensors" /></p>
-<p><em>Shows the desktop overlay with selected HWiNFO Gadget/VSB sensor values, auto height, background gradient, and optional Water Age.</em></p>
-<p><img src="https://i.imgur.com/8yz5LV6.png" alt="HWiNFO Registry Live Overlay desktop overlay more sensors" /></p>
-<p><em>Shows the desktop overlay with more selected HWiNFO Gadget/VSB sensor values, auto height, background gradient, and optional Water Age.</em></p>
-<p><img src="https://i.imgur.com/StZ9Mum.png" alt="HWiNFO Registry Live Overlay export helper" /></p>
-<p><em>Shows the HTML registry export helper.</em></p>
-<p><img src="https://i.imgur.com/a2a69Gh.png" alt="HWiNFO64 Sensor Settings Gadget setup" /></p>
-<p><em>Shows where to enable HWiNFO Gadget reporting: enable reporting to Gadget, select a sensor, enable “Report value in Gadget”, note the index number, and click OK.</em></p>
-<p><em>Alternatively, use the built-in registry export helper to look up the Label and Registry value name for each sensor, then add a row for it in the Rows setting.</em></p>
-<p><img src="https://i.imgur.com/D9D4hVT.png" alt="HWiNFO Registry Live Overlay Rows input field" /></p>
-<p><em>Shows the Rows setting. Each row has a Label and a Registry value name, managed with Add/Remove/Reorder. Use Ctrl+Alt+R to export available HWiNFO Gadget/VSB values as HTML.</em></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Displays selected HWiNFO Gadget/VSB Registry values on the desktop</li>
-<li>Configurable sensor rows using a native array setting (Label + Registry value name)</li>
-<li>Custom font family, size, weight, and style</li>
-<li>Separate label and value colors</li>
-<li>Left/right alignment for label and value columns</li>
-<li>Optional background with opacity</li>
-<li>Optional gradient background</li>
-<li>Optional rounded corners and border</li>
-<li>Optional always-on-top mode</li>
-<li>Toggle hotkey to show or hide the overlay</li>
-<li>Drag hotkey for live positioning</li>
-<li>Optional remembered drag position</li>
-<li>Auto height based on visible rows and Water Age</li>
-<li>Optional Water Age display based on a configured coolant fill date</li>
-<li>HTML export of the current HWiNFO Gadget/VSB Registry sensor list</li>
-<li>Helpful message and HTML page when no HWiNFO Gadget/VSB sensors are found</li>
-</ul>
-<h2 id="hwinfosetup">HWiNFO setup</h2>
-<p>This mod reads the HWiNFO Gadget/VSB Registry output.</p>
-<p>In HWiNFO:</p>
-<ol>
-<li>Open the Sensors window.</li>
-<li>Click Configure Sensors.</li>
-<li>Open the HWiNFO Gadget tab.</li>
-<li>Enable reporting to Gadget globally.</li>
-<li>Select the sensor values you want to use.</li>
-<li>Enable Report value in Gadget for each selected value.</li>
-<li>Press OK.</li>
-<li>Use the registry export hotkey to create an HTML sensor list.</li>
-</ol>
-<p>The default registry path is:</p>
-<pre><code class="txt language-txt">HKCU\SOFTWARE\HWiNFO64\VSB
-</code></pre>
-<p>Typical value names are:</p>
-<pre><code class="txt language-txt">Sensor0 / Label0 / Value0 / ValueRaw0 / Color0
-Sensor1 / Label1 / Value1 / ValueRaw1 / Color1
-...
-</code></pre>
-<p>Rows are configured using the native Rows array setting. Each row has two fields:</p>
-<pre><code class="txt language-txt">Label:                Example Sensor
-Registry value name:  Value0
-</code></pre>
-<p>Use Add/Remove/Reorder in the Rows setting to manage rows. Use the export hotkey to find out which registry value name (<code>ValueN</code>) belongs to which HWiNFO sensor.</p>
-<h2 id="hotkeys">Hotkeys</h2>
-<p>Default hotkeys:</p>
-<pre><code class="txt language-txt">Ctrl + Alt + H = Show/hide overlay
-Ctrl + Alt + D = Toggle drag mode
-Ctrl + Alt + R = Export HWiNFO Gadget/VSB Registry sensor list as HTML
-</code></pre>
-<p>The hotkeys can be changed in the mod settings.</p>
-<h2 id="waterage">Water Age</h2>
-<p>The optional Water Age feature calculates the number of days since a configured coolant fill date.</p>
-<p>Example:</p>
-<pre><code class="txt language-txt">Water fill date: 2024-11-18
-Water max age: 730 days
-</code></pre>
-<p>The Water Age text can change color based on warning and alarm percentage thresholds.</p>
-<h2 id="notes">Notes</h2>
-<p>This mod does not read all HWiNFO sensors directly. It only reads values that HWiNFO exposes through its Gadget/VSB Registry reporting feature.</p>
-<p>This mod does not use HWiNFO Shared Memory.</p>
-<p>This is a separate mod from Taskbar System Info and Desktop Live Overlay because it is focused on arbitrary user-selected HWiNFO Gadget/VSB Registry values. Taskbar System Info can use the HWiNFO Gadget Registry for limited taskbar temperature display, while Desktop Live Overlay provides generic desktop metrics. This mod instead provides a dedicated multi-row desktop table for HWiNFO ValueN entries, an HTML registry export helper for mapping those entries to Windhawk rows, and the optional Water Age row.</p>
-<p>HWiNFO must be installed and running, and the desired sensor values must be enabled for Gadget reporting in HWiNFO.</p>
-<h2 id="creditsandthanks">Credits and thanks</h2>
-<p>Special thanks to Martin Malik / REALiX, the developer of HWiNFO, for creating HWiNFO and for providing the HWiNFO Gadget/VSB Registry reporting feature.</p>
-<p>Martin Malik kindly granted permission to go ahead with this mod.</p>
-<p>This mod is not affiliated with HWiNFO / REALiX. All sensor data is provided by HWiNFO. The mod only reads the registry values that the user explicitly enables in HWiNFO Sensor Settings.</p>
-<p>Please respect the HWiNFO license terms. If you like HWiNFO and use it regularly, please consider supporting development by purchasing a HWiNFO license, especially for professional or commercial use.</p>
-<h2 id="development">Development</h2>
-<p>Created by SilverAmd / Zarko.</p>
-<p>Development assistance:</p>
-<ul>
-<li>ChatGPT by OpenAI</li>
-<li>Claude by Anthropic</li>
-<li>Mistral Vibe</li>
-</ul>
-<h2 id="license">License</h2>
-<p>MIT</p>]]></content>
-        <author>
-            <name>SilverAmd</name>
-            <uri>https://github.com/SilverAmd</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Chromium Cursor Remap 1.0]]></title>
-        <id>https://windhawk.net/mods/chromium-cursor-remap#e180d87d310cc4a74135669933034a8185ebc852</id>
-        <link href="https://windhawk.net/mods/chromium-cursor-remap"/>
-        <updated>2026-09-15T17:59:54.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="chromiumcursorremap">Chromium Cursor Remap</h1>
-<p>Chromium browsers and Electron apps draw ten CSS cursors from bitmaps of their
-own instead of asking Windows: <code>grab</code>, <code>grabbing</code>, <code>zoom-in</code>, <code>zoom-out</code>,
-<code>cell</code>, <code>vertical-text</code>, <code>alias</code>, <code>copy</code>, <code>col-resize</code> and <code>row-resize</code>. Those
-bitmaps don't follow your Windows cursor scheme. This mod replaces them with
-cursors from that scheme, or with <code>.cur</code> / <code>.ani</code> files of your choice.</p>
-<p><img src="https://raw.githubusercontent.com/mazany/windhawk-images/5d2c26f93a023738d3597a6a7c8805a9124dc9b2/chromium-cursor-remap/before-after.png" alt="Chromium's own cursors (top) and the Windows cursors that replace them (bottom), in Microsoft Edge at 150% display scale" /></p>
-<p>Cursors that Chromium already takes from Windows (<code>default</code>, <code>pointer</code>, <code>text</code>,
-<code>wait</code>, <code>not-allowed</code>, the directional resize cursors and so on) are not
-touched, and neither are cursor images that a web page sets itself with
-<code>cursor: url(...)</code>.</p>
-<h2 id="defaultreplacements">Default replacements</h2>
-<p>| CSS cursor              | Replaced with                        |
-|-------------------------|--------------------------------------|
-| grab                    | Link select (<code>IDC_HAND</code>)             |
-| grabbing                | Move (<code>IDC_SIZEALL</code>)                 |
-| zoom-in, zoom-out, cell | Precision select (<code>IDC_CROSS</code>)       |
-| vertical-text           | Text select (<code>IDC_IBEAM</code>)            |
-| alias, copy             | Normal select (<code>IDC_ARROW</code>)          |
-| col-resize              | Horizontal resize (<code>IDC_SIZEWE</code>)     |
-| row-resize              | Vertical resize (<code>IDC_SIZENS</code>)       |</p>
-<h2 id="settings">Settings</h2>
-<p>Each cursor type has two settings:</p>
-<ul>
-<li><strong>Keep Chromium's own cursor</strong> leaves that type alone.</li>
-<li><strong>Custom cursor source</strong> takes either an <code>IDC_*</code> name - <code>IDC_ARROW</code>,
-<code>IDC_IBEAM</code>, <code>IDC_WAIT</code>, <code>IDC_CROSS</code>, <code>IDC_UPARROW</code>, <code>IDC_SIZENWSE</code>,
-<code>IDC_SIZENESW</code>, <code>IDC_SIZEWE</code>, <code>IDC_SIZENS</code>, <code>IDC_SIZEALL</code>, <code>IDC_NO</code>,
-<code>IDC_HAND</code>, <code>IDC_APPSTARTING</code>, <code>IDC_HELP</code>, <code>IDC_PIN</code>, <code>IDC_PERSON</code> - or the
-full path of a <code>.cur</code> or <code>.ani</code> file, such as <code>C:\Cursors\grab.ani</code>. Leave it
-empty for the default above; a source that cannot be loaded also falls back
-to the default.</li>
-</ul>
-<p><strong>Test mode</strong> puts one cursor (by default the busy cursor, <code>IDC_WAIT</code>) on every
-cursor the mod recognises, whatever the per-type settings say, so you can see at
-a glance which ones it catches. If the test cursor cannot be loaded, the
-per-type settings stay in force.</p>
-<p>Settings take effect without restarting the app.</p>
-<h2 id="testedwith">Tested with</h2>
-<ul>
-<li>Microsoft Edge 152 and 153, and Google Chrome 152: all ten cursor types replaced.</li>
-<li>MarkText 0.19.1, an Electron app.</li>
-<li>A 32-bit NW.js app: the mod stays in its main process and leaves its helper
-processes, and its bundled cursor images were checked to be recognised by
-the 32-bit build.</li>
-<li>The cursor images bundled with VS Code, Obsidian, Vivaldi and Steam's built-in
-browser (CEF) were checked to be recognised. Windhawk does not load mods into
-Steam installed under <code>Program Files</code> unless it is removed from Windhawk's
-process exclusion list, which lists it by default as a game folder.</li>
-</ul>
-<p>Other Chromium-based browsers and Electron or CEF apps should work the same way.</p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod is set to load into every program, because Electron and CEF apps can
-have any file name and a list of names misses most of them. It stays only in
-the main process of a Chromium-based app, which it recognises from the program
-file itself before installing any hook; anywhere else, including Chromium's own
-helper processes, it unloads again at once.</p>
-<p>In the processes where it stays, it watches <code>SetCursor</code>. The first time a cursor
-appears, the mod asks Windows which module and resource it was loaded from,
-loads that resource again at 32x32 and compares it with Chromium's ten bundled
-images. The answer does not depend on the size the app loaded the cursor at
-(checked from 32 to 72 px, which covers display scaling from 100% to 225%). A
-web page's own cursor image has no resource behind it and is left alone.</p>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li>The mod is also built for ARM64 apps; that build has not been tested.</li>
-<li>On screen, only 150% display scaling has been checked; other sizes were
-checked by loading the cursors at those sizes.</li>
-<li>Apps that host WebView2 in visual (composition) mode set the cursor from
-their own process, so their web content keeps Chromium's cursors.</li>
-<li>A CEF app that loads <code>libcef.dll</code> only after it has started is not
-recognised.</li>
-<li>Chromium's middle-click autoscroll cursors are not replaced.</li>
-<li>A <code>.cur</code> / <code>.ani</code> file is read once per app session. After editing a file in
-place, restart the app, or turn the mod off and on again.</li>
-<li>Custom files are loaded at the cursor size set in Windows.</li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<p><strong>Icon Resource Redirect</strong> can also theme cursors, by redirecting the resources
-apps load them from; this mod was tested with it enabled. A Chromium cursor that
-Icon Resource Redirect has already redirected no longer matches Chromium's own
-images, so this mod leaves it as Icon Resource Redirect drew it.</p>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<p>Turn on logging for this mod in Windhawk. Each new cursor gets one log line
-naming the module and resource it came from, a hash of its image and the
-verdict. If a Chromium cursor stops being replaced after a browser update,
-Chromium has probably redrawn it: please report that log line together with the
-CSS cursor type in the Windhawk mods repository on GitHub
-(ramensoftware/windhawk-mods).</p>]]></content>
-        <author>
-            <name>mazany</name>
-            <uri>https://github.com/mazany</uri>
         </author>
     </entry>
 </feed>

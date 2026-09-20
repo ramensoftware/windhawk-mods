@@ -1,3 +1,7 @@
+## 5.1.0 ([Sep 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3cd24569eaf0a887463b47d98a3dee6579e383b3/mods/win7-network-flyout-recreation.wh.cpp))
+
+- Tried to enhance the support for high contrast theme (credits to OrthodoxToolkits for the suggestion)
+
 ## 5.0.0 ([Sep 7, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f7c5a612538e9b6187778e7718cd96a403c1c554/mods/win7-network-flyout-recreation.wh.cpp))
 
 - Added support for RetroBar
